@@ -11,10 +11,13 @@
   "scripts": {
     "dev": "pnpm -r --parallel run dev",
     "build": "pnpm -r build",
+    "lint": "eslint .",
     "typecheck": "pnpm -r exec tsc --noEmit -p tsconfig.json",
     "test": "pnpm -r test"
   },
   "devDependencies": {
-    "typescript": "^5.8.0"
+    "eslint": "^9.39.5",
+    "typescript": "^5.8.0",
+    "typescript-eslint": "^8.65.0"
   }
 }
