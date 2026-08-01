@@ -1,17 +1,25 @@
 // 项目状态（doc/ui/layout.md §3.1：config + outline 树——顶栏标题映射、多页共用，避免重复请求）
+// S1.4 扩展：loadError（区分「未打开项目」与网络失败）、openProjectAt/createProjectAt/closeProject
 import { create } from "zustand";
-import type { OutlineNode, OutlineTree, ProjectConfig } from "@ai-editor/shared";
+import type { OutlineNode, OutlineTree, ProjectConfig, ProjectLanguage } from "@ai-editor/shared";
 import {
+  ApiError,
+  closeProject as apiCloseProject,
+  createProject as apiCreateProject,
   getOutline,
   getProjectConfig,
+  openProject as apiOpenProject,
   updateProjectConfig as apiUpdateConfig,
   type UpdateProjectConfigBody,
 } from "../lib/api";
+import { useUiStore } from "./ui";
 
 interface ProjectState {
   /** 项目配置（GET /project/config）；null = 未加载/加载失败 */
   config: ProjectConfig | null;
   configLoading: boolean;
+  /** 配置加载失败的错误码（"NO_PROJECT_OPEN" / CLIENT_NETWORK_ERROR 等；null = 无错误/未加载） */
+  loadError: string | null;
   /** 大纲树（GET /outline）；null = 未加载/加载失败 */
   outline: OutlineTree | null;
   outlineLoading: boolean;
@@ -19,11 +27,18 @@ interface ProjectState {
   /** 更新配置（PUT /project/config，请求体 snake_case）；成功后重新拉取最新配置 */
   updateConfig: (patch: UpdateProjectConfigBody) => Promise<void>;
   loadOutline: () => Promise<void>;
+  /** 打开项目（POST /project/open）：成功刷新 config/outline；rebuilt 时 toast 提示（决策 13） */
+  openProjectAt: (path: string) => Promise<void>;
+  /** 创建项目（POST /project/create）后打开；config 可选（名称/语言/提示词） */
+  createProjectAt: (path: string, config?: { name?: string; language?: ProjectLanguage; prompt?: string }) => Promise<void>;
+  /** 关闭当前项目（POST /project/close）：清空本地 config/outline */
+  closeProject: () => Promise<void>;
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
   config: null,
   configLoading: false,
+  loadError: null,
   outline: null,
   outlineLoading: false,
 
@@ -33,10 +48,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set({ configLoading: true });
     try {
       const config = await getProjectConfig();
-      set({ config });
-    } catch {
-      // 加载失败保持 null（顶栏显示「未加载」，不阻塞 UI）
-      set({ config: null });
+      set({ config, loadError: null });
+    } catch (err) {
+      // 区分「未打开项目」（NO_PROJECT_OPEN，页面显示开/建引导）与网络/其他失败
+      const code = err instanceof ApiError ? err.code : "CLIENT_NETWORK_ERROR";
+      set({ config: null, loadError: code });
     } finally {
       set({ configLoading: false });
     }
@@ -59,6 +75,30 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     } finally {
       set({ outlineLoading: false });
     }
+  },
+
+  openProjectAt: async (path) => {
+    const res = await apiOpenProject(path);
+    // open 响应含完整 config（S1.2），直接用省一次请求；outline 需重新拉取（新项目树不同）
+    set({ config: res.config, loadError: null });
+    if (res.rebuilt) {
+      // 删库重建提示（决策 13 修订 + endpoints.md「向客户端提示已重建」）
+      useUiStore
+        .getState()
+        .showToast(`项目已按新版本重建${res.fromVersion !== undefined ? `（v${res.fromVersion}）` : ""}，备份已保留`);
+    }
+    await get().loadOutline();
+  },
+
+  createProjectAt: async (path, config) => {
+    // create 不打开项目（S1.2：open 才打开）；创建成功 → open 进入项目
+    await apiCreateProject(path, config);
+    await get().openProjectAt(path);
+  },
+
+  closeProject: async () => {
+    await apiCloseProject();
+    set({ config: null, loadError: null, outline: null });
   },
 }));
 

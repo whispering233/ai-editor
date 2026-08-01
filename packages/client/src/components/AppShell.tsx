@@ -29,6 +29,7 @@ const NAV_ITEMS: NavItem[] = [
 export function AppShell({ route, children }: { route: Route; children: ReactNode }) {
   const active = route.segments[0] ?? null;
   const config = useProjectStore((s) => s.config);
+  const configLoading = useProjectStore((s) => s.configLoading);
   const outline = useProjectStore((s) => s.outline);
   const loadConfig = useProjectStore((s) => s.loadConfig);
 
@@ -43,12 +44,15 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
       ? (findOutlineNodeTitle(outline, config.currentPosition) ?? config.currentPosition)
       : null;
 
+  // 顶栏项目名：加载中 → 「加载中…」；未打开/加载失败 → 「未打开项目」（S1.4 降级展示）
+  const projectTitle = configLoading ? "加载中…" : (config?.name ?? "未打开项目");
+
   return (
     <div className="flex h-screen flex-col">
       {/* 顶栏（约 56px） */}
       <header className="flex h-14 shrink-0 items-center gap-4 border-b border-zinc-200 px-4">
         <a href="#/" className="text-base font-semibold hover:text-zinc-600">
-          ◈ {config?.name ?? "未加载"}
+          ◈ {projectTitle}
         </a>
         <span className="text-sm text-zinc-500">
           当前位置:{" "}

@@ -120,3 +120,87 @@ export function updateProjectConfig(patch: UpdateProjectConfigBody): Promise<Upd
 export function getOutline(): Promise<OutlineTree> {
   return apiFetch<OutlineTree>("/outline");
 }
+
+// ============ 项目开/建/关（S1.4；契约：endpoints.md「项目管理」+ S1.2 server 路由） ============
+
+/** POST /api/v1/project/create 请求体（snake_case；config 可选） */
+export interface CreateProjectBody {
+  path: string;
+  config?: {
+    name?: string;
+    language?: ProjectLanguage;
+    prompt?: string;
+  };
+}
+
+/** POST /api/v1/project/create 响应（endpoints.md L36-41） */
+export interface CreateProjectRes {
+  id: string;
+  path: string;
+  created: true;
+}
+
+/** 创建项目（错误：400 INVALID_PROJECT_PATH / 409 PROJECT_ALREADY_EXISTS） */
+export function createProject(path: string, config?: CreateProjectBody["config"]): Promise<CreateProjectRes> {
+  return apiFetch<CreateProjectRes>("/project/create", {
+    method: "POST",
+    body: { path, ...(config !== undefined ? { config } : {}) },
+  });
+}
+
+/** POST /api/v1/project/open 响应（S1.2：openResSchema 核心字段 + rebuilt/fromVersion 附加字段） */
+export interface OpenProjectRes {
+  id: string;
+  name: string;
+  language: ProjectLanguage;
+  config: ProjectConfig;
+  /** schema 版本不匹配时删库重建提示（决策 13 修订，endpoints.md「向客户端提示已重建」） */
+  rebuilt?: boolean;
+  /** 重建前的 schema 版本号（决策 13：备份文件命名 v{n}） */
+  fromVersion?: number;
+}
+
+/** 打开项目（错误：400 INVALID_PROJECT_PATH——目录不存在/不含 project.json/链接跳转） */
+export function openProject(path: string): Promise<OpenProjectRes> {
+  return apiFetch<OpenProjectRes>("/project/open", { method: "POST", body: { path } });
+}
+
+/** POST /api/v1/project/close 响应（无当前项目时幂等 saved:true） */
+export interface CloseProjectRes {
+  saved: true;
+}
+
+/** 关闭当前项目（释放数据库连接，data-flow.md 第 46 行） */
+export function closeProject(): Promise<CloseProjectRes> {
+  return apiFetch<CloseProjectRes>("/project/close", { method: "POST" });
+}
+
+// ============ 设置（S1.4；契约：endpoints.md「系统设置」+ S1.3 server 路由） ============
+
+/** GET /api/v1/settings/llm 响应（决策 17：key 不回传明文，仅掩码） */
+export interface SettingsLlmConfig {
+  model: string;
+  apiKeySet: boolean;
+  apiKeyMasked?: string;
+}
+
+/** 读取 LLM 配置（默认模型 deepseek-v4-flash；key 状态与掩码） */
+export function getSettingsLlm(): Promise<SettingsLlmConfig> {
+  return apiFetch<SettingsLlmConfig>("/settings/llm");
+}
+
+/** PUT /api/v1/settings/llm 请求体（api_key 空字符串 = 清除已保存 key） */
+export interface UpdateSettingsLlmBody {
+  model?: string;
+  api_key?: string;
+}
+
+/** PUT /api/v1/settings/llm 响应 */
+export interface UpdateSettingsLlmRes {
+  saved: true;
+}
+
+/** 更新 LLM 配置（写入 ~/.ai-editor/config.json，绝不入项目文件，决策 17） */
+export function updateSettingsLlm(patch: UpdateSettingsLlmBody): Promise<UpdateSettingsLlmRes> {
+  return apiFetch<UpdateSettingsLlmRes>("/settings/llm", { method: "PUT", body: patch });
+}
