@@ -9,7 +9,7 @@ import {
   generateOutlineNodeId,
   generateProjectId,
   generateRuntimeId,
-} from "./id";
+} from "./id.js";
 
 describe("generateId", () => {
   it("生成 {prefix}{nanoid} 形状（连字符前缀 + 21 字符 nanoid）", () => {

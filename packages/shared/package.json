@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./schemas": {
+      "types": "./dist/types/api.d.ts",
+      "import": "./dist/types/api.js"
     }
   },
   "files": ["dist"],

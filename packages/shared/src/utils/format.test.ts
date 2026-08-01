@@ -1,6 +1,6 @@
 // 文本格式化测试（T1.3）：时间戳 / 截断 / key 掩码的边界行为
 import { describe, expect, it } from "vitest";
-import { formatTimestamp, maskApiKey, truncate } from "./format";
+import { formatTimestamp, maskApiKey, truncate } from "./format.js";
 
 describe("formatTimestamp", () => {
   it("合法 ISO 8601 → YYYY-MM-DD HH:mm 格式（本地时区）", () => {

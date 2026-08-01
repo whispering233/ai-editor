@@ -8,8 +8,9 @@
 // zod 版本：^4（注意 v4 API：z.record 必须两参、z.enum 接受 readonly 数组）
 
 import { z } from "zod";
-import { ENTITY_TYPES, HOOK_STATUSES, PAYOFF_TIMING, RELATION_TYPES } from "../constants";
-import type { ComputeStateResult, DeltaRecord, EntitySummary, ProjectConfig, RelationRecord } from "./index";
+import { ENTITY_TYPES, RELATION_TYPES } from "../constants/entity.js";
+import { HOOK_STATUSES, PAYOFF_TIMING } from "../constants/hook.js";
+import type { ComputeStateResult, DeltaRecord, EntitySummary, ProjectConfig, RelationRecord } from "./index.js";
 
 // ============ 基础 schema ============
 

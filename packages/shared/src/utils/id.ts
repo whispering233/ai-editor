@@ -4,8 +4,8 @@
 // nanoid 为环境无关包（浏览器可用），仅在本模块引入，无副作用
 
 import { nanoid } from "nanoid";
-import type { EntityType } from "../types/entity";
-import type { OutlineNodeType } from "../types/outline";
+import type { EntityType } from "../types/entity.js";
+import type { OutlineNodeType } from "../types/outline.js";
 
 /** 实体类型 → id 前缀（endpoints.md id 约定） */
 export const ENTITY_ID_PREFIX: Record<EntityType, string> = {

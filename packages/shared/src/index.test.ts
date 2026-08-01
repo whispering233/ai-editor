@@ -1,6 +1,6 @@
 // 冒烟测试：验证 @ai-editor/shared 入口可正常导入（T0.3）+ 契约类型断言（T1.1）
 import { describe, expect, expectTypeOf, it } from "vitest";
-import * as m from "./index";
+import * as m from "./index.js";
 import type {
   ComputeStateResult,
   DeltaChange,
@@ -9,13 +9,27 @@ import type {
   OutlineTree,
   ProjectConfig,
   RelationRecord,
-} from "./index";
+} from "./index.js";
 
 describe("@ai-editor/shared 入口冒烟", () => {
   it("可正常导入且导出包名常量", () => {
     expect(m).toBeDefined();
     expect(m.SHARED_PKG_NAME).toBe("@ai-editor/shared");
     expect(m.SHARED_PKG_VERSION).toBe("0.1.0");
+  });
+
+  it("根 barrel 不含运行时 Zod schema（客户端打包安全，2026-08 修订）", () => {
+    expect(m).not.toHaveProperty("entityCreateReqSchema");
+    expect(m).not.toHaveProperty("deltaRecordSchema");
+    expect(m).not.toHaveProperty("apiSuccessSchema");
+    expect(m).not.toHaveProperty("ENTITY_DATA_SCHEMAS");
+    expect(m).not.toHaveProperty("errorCodeSchema");
+  });
+
+  it("运行时常量与纯函数仍从根导出", () => {
+    expect(m.ENTITY_TYPES).toBeDefined();
+    expect(m.truncate).toBeTypeOf("function");
+    expect(m.generateId).toBeTypeOf("function");
   });
 });
 

@@ -1,7 +1,7 @@
 // 常量断言测试（T1.2）：常量集与文档逐一核对
 // 文档来源：schema.md 关系类型表、hooks.md hook 字段、决策 21 half_life 映射、tools.md 工具目录
 import { describe, expect, expectTypeOf, it } from "vitest";
-import type { EntityType } from "../types/entity";
+import type { EntityType } from "../types/entity.js";
 import {
   ANALYSIS_TOOLS,
   AUTO_TOOLS,
@@ -19,7 +19,7 @@ import {
   RELATION_TYPES,
   TOOL_NAMES,
   TOOL_PERMISSION,
-} from "./index";
+} from "./index.js";
 
 describe("实体 / 关系常量（schema.md）", () => {
   it("ENTITY_TYPES 为 4 种实体类型，且与 types 的 EntityType 一致", () => {

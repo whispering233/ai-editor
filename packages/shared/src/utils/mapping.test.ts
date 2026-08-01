@@ -1,9 +1,9 @@
 // 文件 ↔ API 字段映射测试（T1.3）
 // 核心断言：往返一致性、嵌套 data 原样透传（2026-08 修订）、outline 递归 children 与软删字段
 import { describe, expect, it } from "vitest";
-import type { DeltaRow, EntityRow, RelationRow } from "../types/entity";
-import type { OutlineFileTree } from "../types/outline";
-import type { ProjectFileConfig } from "../types/project";
+import type { DeltaRow, EntityRow, RelationRow } from "../types/entity.js";
+import type { OutlineFileTree } from "../types/outline.js";
+import type { ProjectFileConfig } from "../types/project.js";
 import {
   camelToSnakeKey,
   mapConfigToProjectFile,
@@ -15,7 +15,7 @@ import {
   mapRowToRelation,
   mapTreeToOutlineFile,
   snakeToCamelKey,
-} from "./mapping";
+} from "./mapping.js";
 
 describe("单层键映射", () => {
   it("snakeToCamelKey / camelToSnakeKey 互逆", () => {

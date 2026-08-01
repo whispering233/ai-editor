@@ -5,7 +5,7 @@
 //   camelCase 映射仅应用于 API 顶层契约字段。
 // 两侧锚点：T1.1 定义的双套类型（*Row / OutlineFile* / ProjectFileConfig ↔ API 形态）
 
-import type { DeltaRecord, DeltaRow, Entity, EntityRow, RelationRecord, RelationRow } from "../types/entity";
+import type { DeltaRecord, DeltaRow, Entity, EntityRow, RelationRecord, RelationRow } from "../types/entity.js";
 import type {
   OutlineChapter,
   OutlineFileChapter,
@@ -15,8 +15,8 @@ import type {
   OutlineScene,
   OutlineTree,
   OutlineVolume,
-} from "../types/outline";
-import type { ProjectConfig, ProjectFileConfig } from "../types/project";
+} from "../types/outline.js";
+import type { ProjectConfig, ProjectFileConfig } from "../types/project.js";
 
 /** 单层键映射：snake_case → camelCase（仅用于顶层契约字段，不递归 data） */
 export function snakeToCamelKey(key: string): string {

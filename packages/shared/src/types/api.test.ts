@@ -21,7 +21,7 @@ import {
   sseProposalEventSchema,
   sseToolCallEventSchema,
   sseToolResultEventSchema,
-} from "./api";
+} from "./api.js";
 
 describe("ErrorCode 完整性（endpoints.md 错误码对照）", () => {
   it("包含 endpoints.md 全部 10 个现行错误码", () => {
