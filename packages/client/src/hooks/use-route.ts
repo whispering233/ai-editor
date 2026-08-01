@@ -30,7 +30,9 @@ export const KNOWN_ROUTE_SEGMENTS = [
  */
 export function parseHashRoute(hash: string): Route {
   const raw = hash.replace(/^#/, "").replace(/^\/+/, "");
-  const segments = raw === "" ? [] : raw.split("/");
+  // 过滤空段：尾斜杠（如 #/entities/character/）不产生空 id 段（T7.2）
+  const segments = raw === "" ? [] : raw.split("/").filter((s) => s !== "");
+  // 首段回退判定（宽容解释）：已知首段集合之外的 hash 一律回退根路由
   const isFallback =
     segments.length > 0 && !(KNOWN_ROUTE_SEGMENTS as readonly string[]).includes(segments[0]);
   if (isFallback) return { path: "/", segments: [], isFallback: true };
@@ -42,7 +44,7 @@ export function useHashRoute(): Route {
   const [route, setRoute] = useState<Route>(() => parseHashRoute(window.location.hash));
 
   useEffect(() => {
-    const onHashChange = () => {
+    const normalize = () => {
       const next = parseHashRoute(window.location.hash);
       setRoute(next);
       // 未知 hash 回退 #/（replace 避免污染历史记录）
@@ -50,8 +52,10 @@ export function useHashRoute(): Route {
         window.location.replace("#/");
       }
     };
-    window.addEventListener("hashchange", onHashChange);
-    return () => window.removeEventListener("hashchange", onHashChange);
+    window.addEventListener("hashchange", normalize);
+    // 初始加载兜底：hashchange 不会在挂载时触发，直接检查一次（T7.2）
+    normalize();
+    return () => window.removeEventListener("hashchange", normalize);
   }, []);
 
   return route;

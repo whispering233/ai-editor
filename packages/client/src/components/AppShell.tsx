@@ -1,8 +1,11 @@
-// 应用外壳（doc/ui/layout.md §2）：顶栏（项目信息占位）+ 侧栏导航 + 页面内容区
-// 数据占位说明：顶栏项目名/当前位置/语言来自 GET /api/v1/project/config，T7.2/S1.x 接入真实 API 后替换
+// 应用外壳（doc/ui/layout.md §2）：顶栏（项目信息）+ 侧栏导航 + 页面内容区
+// 顶栏数据流（T7.2）：项目名/当前位置/语言来自 stores/project.ts（GET /api/v1/project/config）；
+//   加载失败保持 null，显示「未加载」不阻塞；当前位置标题由 outline 树 id→title 映射（layout.md §2.1）
+import { useEffect } from "react";
 import type { ReactNode } from "react";
 import { cn } from "../lib/utils";
 import type { Route } from "../hooks/use-route";
+import { findOutlineNodeTitle, useProjectStore } from "../stores/project";
 
 interface NavItem {
   label: string;
@@ -25,18 +28,33 @@ const NAV_ITEMS: NavItem[] = [
 
 export function AppShell({ route, children }: { route: Route; children: ReactNode }) {
   const active = route.segments[0] ?? null;
+  const config = useProjectStore((s) => s.config);
+  const outline = useProjectStore((s) => s.outline);
+  const loadConfig = useProjectStore((s) => s.loadConfig);
+
+  // 挂载时拉取项目配置（失败静默，顶栏显示「未加载」）
+  useEffect(() => {
+    void loadConfig();
+  }, [loadConfig]);
+
+  // 当前位置：null → 「未设置」；有 id 时优先 outline 树映射标题，未加载 outline 则显示 id 占位
+  const positionTitle =
+    config?.currentPosition != null
+      ? (findOutlineNodeTitle(outline, config.currentPosition) ?? config.currentPosition)
+      : null;
 
   return (
     <div className="flex h-screen flex-col">
       {/* 顶栏（约 56px） */}
       <header className="flex h-14 shrink-0 items-center gap-4 border-b border-zinc-200 px-4">
         <a href="#/" className="text-base font-semibold hover:text-zinc-600">
-          ◈ 我的小说
+          ◈ {config?.name ?? "未加载"}
         </a>
         <span className="text-sm text-zinc-500">
-          当前位置: <span className="text-zinc-700">第3章·灵根测试失败</span>（占位）
+          当前位置:{" "}
+          <span className="text-zinc-700">{positionTitle ?? "未设置"}</span>
         </span>
-        <span className="ml-auto text-sm text-zinc-500">语言: 中文（占位）</span>
+        <span className="ml-auto text-sm text-zinc-500">语言: {config?.language ?? "—"}</span>
       </header>
 
       <div className="flex min-h-0 flex-1">

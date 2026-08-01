@@ -27,6 +27,14 @@ describe("parseHashRoute", () => {
     });
   });
 
+  it("尾斜杠不产生空段", () => {
+    expect(parseHashRoute("#/entities/character/")).toEqual({
+      path: "/entities/character",
+      segments: ["entities", "character"],
+      isFallback: false,
+    });
+  });
+
   it("未知 hash 回退根路由", () => {
     const route = parseHashRoute("#/unknown-page");
     expect(route.isFallback).toBe(true);
