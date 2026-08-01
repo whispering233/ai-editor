@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // @ai-editor/server 入口（T6.1 服务骨架）
 //
 // 职责（doc/design/architecture.md 第 307-336 行「构建与部署」）：
@@ -7,8 +8,12 @@
 //   - SPA 静态托管：client/dist 静态文件 + 非 /api GET fallback 到 index.html（决策 8 单进程架构）
 //   - 直接执行（node packages/server/dist/index.js [projectRoot]）时自动启动；业务路由（routes/）
 //     留到切片 1 挂载（结构预留：health 旁并列注册即可）
+//   - bin 入口（打包安装）：package.json "bin": {"ai-editor": "dist/index.js"}——
+//     shebang 必须是文件首行（tsc 构建保留），npm 全局/本地安装后生成 ai-editor 命令；
+//     argv[2] 为项目根（缺省 cwd），NODE_ENV 非 development 即生产态（端口占用自动 +1）
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { realpathSync } from "node:fs";
 import { dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
@@ -220,15 +225,23 @@ export async function openBrowserUrl(url: string): Promise<void> {
   }
 }
 
-// ============ 直接执行入口（生产态：node packages/server/dist/index.js [projectRoot]） ============
-
+// ============ 直接执行入口（bin/生产态：ai-editor [projectRoot]） ============
+//
+// isDirectRun 判定（打包安装实测修复）：npm 安装 bin 后 node_modules/.bin/ai-editor 是指向
+// dist/index.js 的**符号链接**——经 bin 执行时 process.argv[1] 是 symlink 路径而非真实文件路径，
+// 直接与 import.meta.url 比较会误判为「非直接执行」导致进程静默退出（无输出、exit 0）。
+// 因此两侧都经 realpathSync 归一化后再比较。
 const isDirectRun =
-  process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+  process.argv[1] !== undefined &&
+  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
 
 if (isDirectRun) {
   const projectRoot = process.argv[2] ?? process.cwd();
   const dev = process.env.NODE_ENV === "development";
-  const handle = await startServer(projectRoot, { dev });
+  // AI_EDITOR_PORT 环境变量可覆盖默认端口（决策 8 端口策略；测试/多实例场景用，
+  // 如打包安装冒烟与 dev server 并存时指定独立端口）
+  const port = process.env.AI_EDITOR_PORT ? Number(process.env.AI_EDITOR_PORT) : undefined;
+  const handle = await startServer(projectRoot, { dev, ...(port !== undefined ? { port } : {}) });
   console.log(`[ai-editor] 服务已启动: http://127.0.0.1:${handle.port}（项目: ${projectRoot}）`);
 
   const shutdown = () => {
