@@ -3,6 +3,7 @@
 // 内容划分：types/（数据类型，T1.1 起）+ constants/ + utils/（后续卡）
 export * from "./types";
 export * from "./constants";
+export * from "./utils";
 
 export const SHARED_PKG_NAME = "@ai-editor/shared";
 export const SHARED_PKG_VERSION = "0.1.0";

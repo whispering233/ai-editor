@@ -24,6 +24,10 @@ export interface OutlineNodeBase {
   summary?: string;
   /** 节点版本戳（决策 19，提案快照比对） */
   updatedAt: string;
+  /** 软删标记（决策 12）：常规查询默认过滤软删节点；字段供回收站等管理视图与映射完整性（endpoints.md 契约未列） */
+  deleted?: boolean;
+  /** 软删时间（决策 12） */
+  deletedAt?: string;
   metadata?: OutlineNodeMetadata;
 }
 
