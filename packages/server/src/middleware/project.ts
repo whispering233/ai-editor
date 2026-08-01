@@ -1,8 +1,9 @@
 // 项目上下文中间件（T6.1 + S1.2）
 //
 // 职责（doc/design/architecture.md 第 121-122 行 middleware/project.ts「项目路径注入」）：
-//   1. ensureProject：检测 project.json，不存在则按决策 8 自动初始化
-//      （project.json + data.db + outline.json，三文件带 schema_version，衔接决策 13）
+//   1. detectProject：检测 project.json——存在则打开（部署场景「启动即用」）；不存在返回
+//      null 待命（不初始化、不建文件，由前端 Dashboard 引导 create/open；S1.4 开/建页依赖）
+//      initProject：显式初始化三文件（S1.2 create 路由专用，含建目录 + user_version）
 //   2. currentProject 内存单例（S1.2，data-flow.md 第 46 行）：create/open 切换、close 清空，
 //      模块级可变状态由路由（routes/project.ts）读写，projectMiddleware 从状态注入 Hono 上下文
 //   3. 来源校验（决策 17 修订）：全部请求校验 Origin（缺失时退化为 Host）的 host
@@ -74,23 +75,40 @@ export function requireCurrentProject(): ProjectContext {
 }
 
 /**
- * 检测 + 初始化项目（决策 8 启动流程 ④）：
- * project.json 存在 → 直接加载；不存在 → 自动创建 project.json + data.db + outline.json。
+ * 检测并打开项目（决策 8 启动流程 ④ 修订——设计缺陷修复）：
+ * project.json 存在 → openDatabase 打开，返回项目上下文（打开语义，部署场景「启动即用」）；
+ * project.json 不存在 → **返回 null（待命）**——不初始化、不建任何文件（含目录），
+ * 由前端 Dashboard 引导走 POST /project/create 或 /project/open（S1.4 开/建页；
+ * 此前无条件初始化导致引导永不显示、dev 态污染 packages/server 包目录）。
  * project.json 损坏（JSON 解析失败）→ 抛错（readProjectFile 语义：不静默重建，防数据误伤）。
- * 初始化分支立即写 data.db user_version（S1.1 审核建议）——brand-new 库 version=0 会让
- * open 时的 ensureSchemaCompatible 触发无意义重建并留下空库 data.db.v0.bak。
- * **目录不存在时先创建**（验收缺陷修复）：writeProjectFile 的原子写（临时文件 + rename）
- * 要求目录存在——启动路径（node dist/index.js <目录>）与 create 路由不同，没有 mkdir，
- * 不存在的目录会导致原子写 ENOENT 崩溃（决策 8：启动时自动初始化，含建目录）。
+ * 打开时不写 user_version——版本检测交给 open 路由的 ensureSchemaCompatible（S1.1）；
+ * 显式初始化（create 路由）用 initProject（内部写 user_version=SCHEMA_VERSION）。
  */
-export function ensureProject(root: string): ProjectContext {
-  // 与 S1.2 create 路由一致：mkdir recursive 幂等，已存在目录不报错
-  mkdirSync(root, { recursive: true });
+export function detectProject(root: string): ProjectContext | null {
   const existing = readProjectFile(root);
-  if (existing) {
-    return { root, config: existing, db: openDatabase(join(root, DATA_DB_FILE_NAME)) };
+  if (existing === null) {
+    return null;
   }
-  // 首次初始化：三个数据文件都带 schema_version（决策 8 / 决策 13）
+  return { root, config: existing, db: openDatabase(join(root, DATA_DB_FILE_NAME)) };
+}
+
+/**
+ * 显式初始化新项目（S1.2 create 路由专用，决策 8「首次初始化三文件」语义）：
+ * 建目录（mkdir recursive，含嵌套不存在的父目录）→ 写 project.json（id=proj- 前缀 nanoid、
+ * name 默认取目录名、language 默认 zh、schema_version=SCHEMA_VERSION，created_at/updated_at
+ * 应用层写当前 ISO 时间）→ 写 outline.json 最小空树 → openDatabase 建 data.db（自动建表）
+ * → setUserVersion(SCHEMA_VERSION)（S1.1 审核建议：brand-new 库立即写版本号，
+ * 避免后续 open 时 ensureSchemaCompatible 触发无意义重建并留空库 data.db.v0.bak）。
+ *
+ * @param configOverride 可选覆盖 {name?, language?, prompt?}（create 请求的 config 字段）；
+ *   传入时 updated_at 一并刷新
+ * @returns 已打开的项目上下文（调用方负责 closeProject；create 路由创建后即关闭）
+ */
+export function initProject(
+  root: string,
+  configOverride?: Partial<Pick<ProjectFileConfig, "name" | "language" | "prompt">>,
+): ProjectContext {
+  mkdirSync(root, { recursive: true });
   const now = nowIso();
   const config: ProjectFileConfig = {
     id: generateProjectId(), // proj- 前缀（endpoints.md id 约定）
@@ -101,6 +119,7 @@ export function ensureProject(root: string): ProjectContext {
     current_position: null,
     created_at: now,
     updated_at: now,
+    ...configOverride, // 覆盖参数（若有）；updated_at 已含当前时间
   };
   writeProjectFile(root, config);
   writeOutlineFile(root, { id: "root", type: "root", schema_version: SCHEMA_VERSION, children: [] });

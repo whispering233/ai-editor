@@ -23,7 +23,7 @@ import { errorHandler, fail, ok } from "./middleware/error.js";
 import { settingsRoutes } from "./routes/settings.js";
 import {
   closeProject,
-  ensureProject,
+  detectProject,
   originCheckMiddleware,
   projectMiddleware,
   setCurrentProject,
@@ -75,7 +75,8 @@ export interface ServerHandle {
   server: ServerType;
   /** 实际监听端口（port=0 时为系统分配值） */
   port: number;
-  project: ProjectContext;
+  /** 启动时检测到的项目（目录含 project.json）；null = 待命（前端引导 create/open） */
+  project: ProjectContext | null;
   /** 关闭服务并释放数据库连接（data-flow.md 第 46 行） */
   close: () => Promise<void>;
 }
@@ -100,8 +101,9 @@ async function readFileSafe(filePath: string): Promise<Buffer | null> {
 
 /**
  * 启动服务（决策 8 / 17）：
- * 1. 检测/初始化项目（project.json 缺失自动创建，含 data.db + outline.json）
- * 2. 装配 Hono：errorHandler → originCheck → projectMiddleware → 路由（health + SPA）
+ * 1. 检测项目（detectProject）：目录含 project.json → 打开并设为当前项目（部署场景「启动即用」）；
+ *    无 project.json → 待命（不初始化、不建文件——前端 Dashboard 引导 create/open，S1.4）
+ * 2. 装配 Hono：errorHandler → originCheck → projectMiddleware → 路由（health + project + settings + SPA）
  * 3. 监听端口：dev 被占直接报错；生产被占自动 +1 重试
  * 4. 非 dev 且 openBrowser 默认开启时，打开 http://127.0.0.1:{实际端口}
  */
@@ -111,8 +113,12 @@ export async function startServer(projectRoot: string, options: StartServerOptio
   const openBrowser = options.openBrowser ?? !dev;
   const clientDist = options.clientDist ?? defaultClientDist();
 
-  const project = ensureProject(projectRoot);
-  setCurrentProject(project); // 初始项目即当前项目（S1.2：create/open 可切换、close 清空）
+  // 检测语义（设计缺陷修复）：不再无条件初始化——待命态下 GET /project/config → 409
+  // NO_PROJECT_OPEN，前端引导「新建/打开项目」（client store loadConfig 已处理该错误码）
+  const project = detectProject(projectRoot);
+  if (project !== null) {
+    setCurrentProject(project); // 启动即打开（决策 8 部署场景）；null 则保持待命
+  }
 
   const app = new Hono<{ Variables: ProjectVariables }>();
 
@@ -194,7 +200,9 @@ export async function startServer(projectRoot: string, options: StartServerOptio
     project,
     close: async () => {
       await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
-      closeProject(project);
+      if (project !== null) {
+        closeProject(project); // 待命态（project=null）无连接可释放
+      }
     },
   };
 }
@@ -242,7 +250,11 @@ if (isDirectRun) {
   // 如打包安装冒烟与 dev server 并存时指定独立端口）
   const port = process.env.AI_EDITOR_PORT ? Number(process.env.AI_EDITOR_PORT) : undefined;
   const handle = await startServer(projectRoot, { dev, ...(port !== undefined ? { port } : {}) });
-  console.log(`[ai-editor] 服务已启动: http://127.0.0.1:${handle.port}（项目: ${projectRoot}）`);
+  console.log(
+    handle.project === null
+      ? `[ai-editor] 服务已启动: http://127.0.0.1:${handle.port}（未打开项目，等待创建或打开: ${projectRoot}）`
+      : `[ai-editor] 服务已启动: http://127.0.0.1:${handle.port}（已打开项目: ${handle.project.root}）`,
+  );
 
   const shutdown = () => {
     void handle.close().finally(() => process.exit(0));

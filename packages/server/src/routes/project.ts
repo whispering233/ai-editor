@@ -20,8 +20,8 @@ import {
 import { HttpError, ok } from "../middleware/error.js";
 import {
   closeProject,
-  ensureProject,
   getCurrentProject,
+  initProject,
   requireCurrentProject,
   setCurrentProject,
 } from "../middleware/project.js";
@@ -94,24 +94,11 @@ projectRoutes.post("/create", async (c) => {
   }
 
   // 初始化三文件（决策 8：project.json + data.db + outline.json，schema_version 同步写入，决策 13）
-  // ensureProject 初始化分支已写 user_version=SCHEMA_VERSION（S1.1 审核建议：避免 brand-new 库
-  // 在 open 时触发无意义删库重建并留下空库 data.db.v0.bak）
-  const project = ensureProject(dir);
+  // initProject 内置：建目录（幂等）+ 三文件 + config 覆盖参数 + user_version=SCHEMA_VERSION
+  // （S1.1 审核建议：避免 brand-new 库在 open 时触发无意义删库重建并留下空库 data.db.v0.bak）
+  const project = initProject(dir, config);
 
   // create 不打开项目（不设 currentProject；open 才打开），创建的 db 连接即刻释放
-  const configOverride: Partial<Pick<ProjectFileConfig, "name" | "language" | "prompt">> =
-    config ?? {};
-  if (configOverride.name !== undefined || configOverride.language !== undefined || configOverride.prompt !== undefined) {
-    const next: ProjectFileConfig = {
-      ...project.config,
-      ...(configOverride.name !== undefined ? { name: configOverride.name } : {}),
-      ...(configOverride.language !== undefined ? { language: configOverride.language } : {}),
-      ...(configOverride.prompt !== undefined ? { prompt: configOverride.prompt } : {}),
-      updated_at: nowIso(),
-    };
-    writeProjectFile(dir, next);
-    project.config = next;
-  }
   closeProject(project);
 
   return c.json(
