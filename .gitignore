@@ -22,3 +22,10 @@ logs/
 
 # coverage
 coverage/
+
+# runtime data（运行时生成的项目数据文件，冒烟/开发会产生，不入库）
+*.db
+*.db-shm
+*.db-wal
+outline.json
+project.json
