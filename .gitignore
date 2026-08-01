@@ -4,6 +4,8 @@ node_modules/
 # build output
 dist/
 *.tsbuildinfo
+# server 包内 SPA 拷贝（prepack 时由 scripts/copy-client-dist.mjs 生成，随 tarball 携带——gitignore 不影响 pack）
+client-dist/
 
 # logs
 *.log

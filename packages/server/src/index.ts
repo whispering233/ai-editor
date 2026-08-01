@@ -13,7 +13,7 @@
 //     argv[2] 为项目根（缺省 cwd），NODE_ENV 非 development 即生产态（端口占用自动 +1）
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { realpathSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
@@ -81,9 +81,21 @@ export interface ServerHandle {
   close: () => Promise<void>;
 }
 
-/** client/dist 默认位置：packages/server/{dist,src} → packages/client/dist（monorepo 布局） */
+/**
+ * client/dist 默认位置（双路径解析）：
+ * 1. **monorepo 开发态**：packages/server/{dist,src} → ../../client/dist（Vite 构建产物原位）
+ * 2. **打包安装态**（fallback）：node_modules/@ai-editor/server/dist → ../client-dist
+ *    （prepack 时由 scripts/copy-client-dist.mjs 复制到包根，随 tarball 携带）
+ * 探测优先：源存在即用（开发态 client/dist 已构建时走 1）；都不存在返回 2 的路径，
+ * SPA fallback 优雅降级（404 JSON 提示「client/dist 未构建」，不崩溃）。
+ */
 function defaultClientDist(): string {
-  return resolve(dirname(fileURLToPath(import.meta.url)), "../../client/dist");
+  const dir = dirname(fileURLToPath(import.meta.url));
+  const monoDist = resolve(dir, "../../client/dist");
+  if (existsSync(monoDist)) {
+    return monoDist;
+  }
+  return resolve(dir, "../client-dist");
 }
 
 function contentTypeFor(file: string): string {
