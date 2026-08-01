@@ -644,8 +644,8 @@ nodeId: string;
 ```typescript
 // Res: 200
 {
-  entities: { id: string; type: string; name: string; deleted_at: string }[];
-  nodes:    { id: string; type: string; title: string; deleted_at: string }[];
+  entities: { id: string; type: string; name: string; deletedAt: string }[];
+  nodes:    { id: string; type: string; title: string; deletedAt: string }[];
 }
 ```
 

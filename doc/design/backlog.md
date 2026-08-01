@@ -16,3 +16,4 @@ MVP 明确不做、延后迭代的事项。每项记录：现状、优化方案�
 | 10 | ~~项目切换残留状态~~ | **已解决（2026-08）**：服务端部分已定义（决策 14 修订）——提案绑定 `project_id`、切换项目清空全部提案并强制结束 SSE/agent 循环 | 剩余：客户端缓存失效随项目管理 UI 实现 | 实现项目管理 UI 时 |
 | 11 | ~~孤儿节点层级限制~~ | **已取消（2026-08）**：游离节点设计整体删除（决策 19），move 不再支持 `__orphan__`，创建必须显式指定父节点（volume→root、chapter→volume/root、scene→chapter） | — | — |
 | 12 | schema 演进策略复审 | 删库重建仅限 MVP | 首次发布前重新评估（用户已有真实数据） | 首次发布前 |
+| 13 | 伏笔面板健康指标展示 | **MVP 简化（2026-08 决策）**：`_health` REST 附加字段契约未定义，伏笔面板只列基础字段与生命周期操作（`doc/ui/pages/hook-panel.md`），章节序展示（「第5章 → 预计第45章」）不做 | 补充 hook 查询响应 `_health` 附加字段契约（决策 21 口径：age/dormancy/stale/overdue/ready_to_resolve/blocked）与 plants/advances/resolves 章节序现推 → 面板徽标与位置展示 | 伏笔面板 MVP 上线后 |
