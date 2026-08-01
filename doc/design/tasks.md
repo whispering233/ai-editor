@@ -22,7 +22,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 | **阶段 A · 迭代 0** | 工程脚手架 | | | |
 | T0.1 | pnpm monorepo 脚手架 | ✅ | 7 包构建/typecheck/better-sqlite3 加载/dev watch 全通过 | 见 commit |
 | T0.2 | 根脚本与静态检查 | ✅ | lint/typecheck/build 全绿 | 见 commit |
-| T0.3 | 测试框架接入（vitest） | ⬜ | | |
+| T0.3 | 测试框架接入（vitest） | ✅ | 7 包各 1 测试通过；lint/typecheck 全绿 | 见 commit |
 | T0.4 | doc/ui 原型 | ⬜ | | |
 | **阶段 A · 迭代 1** | shared 包 | | | |
 | T1.1 | 数据类型定义 | ⬜ | | |

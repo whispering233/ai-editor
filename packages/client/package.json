@@ -14,7 +14,7 @@
   "files": ["dist"],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "echo \"no tests yet\""
+    "test": "vitest run"
   },
   "dependencies": {
     "@ai-editor/shared": "workspace:*",
