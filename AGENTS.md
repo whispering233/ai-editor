@@ -4,7 +4,6 @@
 
 - 目前**只有设计文档，没有任何代码**：不存在 package.json、pnpm-workspace.yaml、tsconfig 等文件。
 - 一切实现工作必须按 `doc/design/architecture.md` 的分包方案从零脚手架搭建，不得擅自改变包划分或依赖方向。
-- ⚠️ git 仓库对象当前损坏（`.git/objects/c0/ab52…` 为空文件，HEAD 无法解析），`git log`/`git status` 等命令会报错，属环境问题而非操作失误；如需版本控制先修复仓库（如重新 clone）。
 
 ## 文档即契约
 
