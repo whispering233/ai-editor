@@ -1,5 +1,5 @@
 // 项目上下文中间件测试（T6.1）：来源校验（决策 17 修订）+ 自动初始化（决策 8）
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -113,6 +113,25 @@ describe("项目自动初始化（决策 8）", () => {
       const config = JSON.parse(readFileSync(join(dir, "project.json"), "utf8"));
       // 两次初始化 id 一致（未重建）
       expect(project.config.id).toBe(config.id);
+    } finally {
+      closeProject(project);
+    }
+  });
+
+  it("不存在的嵌套目录：ensureProject 先建目录再初始化三文件（验收缺陷修复）", () => {
+    // 两级不存在的目录（父目录也不存在）——修复前 writeProjectFile 原子写 ENOENT 崩溃
+    const dir = join(makeTmpDir(), "nested", "deep", "proj");
+    const project = ensureProject(dir);
+    try {
+      // 目录被创建
+      expect(existsSync(dir)).toBe(true);
+      // 三文件初始化完成（project.json 可读、outline.json 空树、data.db 是 SQLite 文件）
+      const config = JSON.parse(readFileSync(join(dir, "project.json"), "utf8"));
+      expect(config.id).toMatch(/^proj-/);
+      const outline = JSON.parse(readFileSync(join(dir, "outline.json"), "utf8"));
+      expect(outline).toEqual({ id: "root", type: "root", schema_version: config.schema_version, children: [] });
+      const dbHead = readFileSync(join(dir, "data.db"));
+      expect(dbHead.subarray(0, 15).toString("utf8")).toBe("SQLite format 3");
     } finally {
       closeProject(project);
     }

@@ -9,6 +9,7 @@
 //      ∈ {127.0.0.1, localhost, ::1}，不匹配拒绝 403；**不校验端口**
 //      （端口 +1 可变；dev 态 Vite proxy 转发后端口为 5173，校验端口会误杀开发请求）
 import { basename, join } from "node:path";
+import { mkdirSync } from "node:fs";
 import type { Context, MiddlewareHandler } from "hono";
 import type { ProjectFileConfig } from "@ai-editor/shared";
 import { generateProjectId } from "@ai-editor/shared";
@@ -78,8 +79,13 @@ export function requireCurrentProject(): ProjectContext {
  * project.json 损坏（JSON 解析失败）→ 抛错（readProjectFile 语义：不静默重建，防数据误伤）。
  * 初始化分支立即写 data.db user_version（S1.1 审核建议）——brand-new 库 version=0 会让
  * open 时的 ensureSchemaCompatible 触发无意义重建并留下空库 data.db.v0.bak。
+ * **目录不存在时先创建**（验收缺陷修复）：writeProjectFile 的原子写（临时文件 + rename）
+ * 要求目录存在——启动路径（node dist/index.js <目录>）与 create 路由不同，没有 mkdir，
+ * 不存在的目录会导致原子写 ENOENT 崩溃（决策 8：启动时自动初始化，含建目录）。
  */
 export function ensureProject(root: string): ProjectContext {
+  // 与 S1.2 create 路由一致：mkdir recursive 幂等，已存在目录不报错
+  mkdirSync(root, { recursive: true });
   const existing = readProjectFile(root);
   if (existing) {
     return { root, config: existing, db: openDatabase(join(root, DATA_DB_FILE_NAME)) };
