@@ -1,11 +1,58 @@
-// 冒烟测试：验证 @ai-editor/shared 入口可正常导入（T0.3）
-import { describe, expect, it } from "vitest";
+// 冒烟测试：验证 @ai-editor/shared 入口可正常导入（T0.3）+ 契约类型断言（T1.1）
+import { describe, expect, expectTypeOf, it } from "vitest";
 import * as m from "./index";
+import type {
+  ComputeStateResult,
+  DeltaChange,
+  Entity,
+  EntitySummary,
+  OutlineTree,
+  ProjectConfig,
+  RelationRecord,
+} from "./index";
 
 describe("@ai-editor/shared 入口冒烟", () => {
   it("可正常导入且导出包名常量", () => {
     expect(m).toBeDefined();
     expect(m.SHARED_PKG_NAME).toBe("@ai-editor/shared");
     expect(m.SHARED_PKG_VERSION).toBe("0.1.0");
+  });
+});
+
+// T1.1 契约类型断言：字段形态与文档（endpoints.md / schema.md）一致
+describe("@ai-editor/shared 契约类型（T1.1）", () => {
+  it("Entity / EntitySummary 字段为 API 形态（camelCase）", () => {
+    expectTypeOf<Entity>().toMatchTypeOf<{
+      id: string;
+      type: "character" | "setting" | "location" | "hook";
+      name: string;
+      data: Record<string, unknown>;
+      createdAt: string;
+      updatedAt: string;
+    }>();
+    expectTypeOf<EntitySummary>().toHaveProperty("summary").toEqualTypeOf<Record<string, unknown>>();
+  });
+
+  it("RelationRecord / DeltaChange / ComputeStateResult 契约字段", () => {
+    expectTypeOf<RelationRecord>().toMatchTypeOf<{
+      id: string;
+      sourceType: string;
+      sourceId: string;
+      targetType: string;
+      targetId: string;
+      relationType: string;
+      createdAt: string;
+    }>();
+    expectTypeOf<DeltaChange["op"]>().toEqualTypeOf<"set" | "update" | "add" | "remove">();
+    expectTypeOf<ComputeStateResult["state"]>().toMatchTypeOf<Record<string, unknown>>();
+    expectTypeOf<ComputeStateResult["conflicts"]>().toMatchTypeOf<
+      { deltaId: string; field: string; expected: unknown; actual: unknown }[]
+    >();
+  });
+
+  it("OutlineTree 严格三层（决策 19）：根下卷、卷下章、章下场景、场景无 children", () => {
+    expectTypeOf<OutlineTree["id"]>().toEqualTypeOf<"root">();
+    expectTypeOf<OutlineTree["children"][number]["type"]>().toEqualTypeOf<"volume">();
+    expectTypeOf<ProjectConfig["language"]>().toEqualTypeOf<"zh" | "en">();
   });
 });
