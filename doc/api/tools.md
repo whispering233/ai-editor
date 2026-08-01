@@ -50,9 +50,11 @@ get_outline_path(node_id)
 compute_state(target_type, target_id, at_node_id)
   → 实体到达指定节点时的累积状态
   用途：AI 说"张三在第30章时的战力是多少"
-  语义：只沿大纲树父链（根 → at_node_id）累积已确认 Delta（决策 9/19）：
+  语义：只沿大纲树父链（根 → at_node_id）累积已确认 Delta（决策 9/19 修订）：
         节点间按树路径顺序、同一节点内按 order 双层排序；plot_edge 连线不参与；
-        op=update 校验当前值等于 from，不匹配返回 409 DELTA_CONFLICT
+        op=update 校验当前值等于 from，不匹配**跳过该 change 并继续累积**，结果在
+        conflicts 中标注 { field, expected, actual }（不再返回 409——手动编辑 data 是
+        正常用户行为，AI 应感知 conflicts 并向用户提示修复）
 
 get_delta_history(target_type, target_id)
   → 该实体的所有属性变更记录（按时间/节点排序）
@@ -85,10 +87,11 @@ trace_plot_paths(from_node_id, to_node_id)
   用途：从节点A到节点B推演可能的剧情路径
 
 find_orphan_elements()
-  → { unused_characters: [], unresolved_deltas: [], dangling_relations: [] }
+  → { unused_characters: [], unresolved_deltas: [], dangling_relations: [], inconsistent_soft_deletes: [] }
   用途：发现"写到第30章，但角色C第10章后就没出现"
-  另：跨存储（data.db / outline.json）不一致的兜底修复入口（决策 16 修订）——
-      取消/断电可能造成「DB 已写、JSON 未写」的不一致，由本工具检测并引导修复
+  inconsistent_soft_deletes：诊断跨存储软删不一致（outline.json 节点未标 deleted 但关联
+      relation/delta 已软删）。兜底修复已由**启动一致性校验**承担（决策 16 修订：打开项目时
+      自动比对并以 DB 为准补标，写日志），本工具保留诊断与引导修复用途
 
 // === 关系发现 ===
 suggest_connections(entity_id)
@@ -146,8 +149,10 @@ move_node(node_id, parent, order)     → void
 delete_node(node_id)                  → void
 advance_hook(hook_id, node_id, description)  → id   // 复合写（2026-08 修订，🟠-7）：
                                                      // delta_records 记 status 变化 + relation_records 插 advances
-                                                     // 一次提交，幂等（重复确认不重复推进）
+                                                     // 一次提交，幂等（按 (node_id, hook_id, relation_type)
+                                                     // 判重：重复确认或重复提案均不重复推进）
 resolve_hook(hook_id, node_id, description)  → id   // 复合写：delta 记 status=resolved + relation 插 resolves
+abandon_hook(hook_id, description)          → id   // 复合写：delta 记 status=abandoned（2026-08 修订）
 ```
 
 > **复合写说明（2026-08 修订）**：`advance_hook` / `resolve_hook` 对应 hooks.md 伏笔生命周期的推进/回收动作，确认后由 Tool Executor 调用，封装「delta + relation」两步写为一次提交，失败不产生半状态。

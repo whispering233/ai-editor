@@ -7,7 +7,7 @@
 - 成功响应：`{ success: true, data: T }`
 - 错误响应：`{ success: false, error: { code: string, message: string } }`
 - 统一 HTTP 状态码：200 成功、400 参数错误、404 不存在、409 冲突、500 服务端错误
-- **命名约定**：请求体/查询参数用 snake_case，响应体用 camelCase，outline.json 内部字段用 snake_case；文件字段与 API 字段的显式映射函数定义于 `@ai-editor/shared/utils`（backlog #7）。
+- **命名约定**：请求体/查询参数用 snake_case，响应体用 camelCase，outline.json 内部字段用 snake_case；文件字段与 API 字段的显式映射函数定义于 `@ai-editor/shared/utils`（backlog #7）。**嵌套 `data` 对象内部字段原样透传**（保持 snake_case，如 `expected_payoff`）——camelCase 映射仅应用于 API 顶层契约字段（2026-08 修订）。
 - **id 约定**：`{前缀}-{nanoid}`（如 `char-9f3k2m`）。前缀表：`char-`/`set-`/`loc-`/`hook-`（实体）、`sc-`/`ch-`/`vol-`（大纲）、`proj-`（项目）、`prop_`/`sess_`/`call_`（运行时对象）。本文示例中的 `char-9` 等为形状示意，**非自增序号**。
 - **错误码**：所有错误码统一枚举 `ErrorCode`（单一来源：`@ai-editor/shared/types/api.ts`），REST 响应、SSE error 事件、工具结果截断提示共用。
 
@@ -66,7 +66,7 @@
 - 校验失败返回 `{ code: "INVALID_PROJECT_PATH" }`（400）。
 
 **schema 版本检测（open 时，决策 13 修订）**：
-- 以 data.db 的 `user_version` 为准判定是否重建；与当前版本不匹配时执行**删库重建**，并同步重置 outline.json（先备份为 `outline.json.bak`）、清空回收站；完成后向客户端提示已重建。
+- 以 data.db 的 `user_version` 为准判定是否重建；与当前版本不匹配时执行**删库重建**，并同步重置 outline.json（先备份为 `outline.json.v{n}.bak`，n=旧版本号）、清空回收站；完成后向客户端提示已重建。
 - `project.json` 的 `schema_version` 仅用于 JSON 结构判断。
 
 ### POST /api/v1/project/close
@@ -389,6 +389,9 @@ id: string;
   }[];
   description: string;            // 人类可读描述
   // 注意：无 order 入参——order 由服务端生成，全局单调递增（与 schema.md 一致）
+  // op 语义（2026-08 修订）：set=直接替换；update=旧值→新值（写入端不校验 from，
+  //   冲突在 computeState 时以跳过+conflicts 呈现，决策 9 修订）；add=按 value 向数组追加；
+  //   remove=按值匹配从数组移除（不存在的值静默忽略）
 }
 
 // Res: 201
@@ -456,19 +459,30 @@ nodeId: string;
     nodeId: string;
     description: string;
     changes: unknown[];
+    skipped?: { index: number; field: string; expected: unknown; actual: unknown }[];
+    // skipped：该 delta 中被跳过的 change（决策 9 修订：op=update 且当前值 ≠ from）
+  }[];
+  conflicts: {                       // 汇总的冲突字段（2026-08 修订，替代原 409 DELTA_CONFLICT）
+    deltaId: string;
+    field: string;
+    expected: unknown;               // delta 中 from
+    actual: unknown;                 // 应用时实际值
   }[];
 }
 
-// Res: 409
-{ error: { code: "DELTA_CONFLICT", message: "..." } }  // op=update 且当前值 ≠ from
+// Res: 404
+{ error: { code: "OUTLINE_NODE_NOT_FOUND" } }  // at_node_id 不存在（已 purge）
 
-// Delta 累积规则（决策 9）：
+// Delta 累积规则（决策 9 修订）：
 //   到达目标节点的状态 = 实体初始 data + 树路径上所有 Delta 累积
 //   双层排序：节点间按树路径顺序（根 → at_node）；同一节点内按 order 递增
 //   set:     直接替换值
-//   update:  旧值→新值（验证当前值等于 from，不匹配返回 409 DELTA_CONFLICT）
+//   update:  旧值→新值（校验当前值等于 from；不匹配**跳过该 change 并继续累积**，
+//            在 skipped / conflicts 中标注——手动编辑 data 不产生 Delta 属正常用户
+//            行为，不再返回 409，2026-08 修订）
 //   add:     向数组追加
-//   remove:  从数组中移除
+//   remove:  按值匹配从数组移除
+//   Delta 可见性：触发节点或目标实体任一软删即不参与计算（决策 12 修订）
 ```
 
 ---
@@ -666,6 +680,10 @@ nodeId: string;
 
 // Res: 404
 { error: { code: "OUTLINE_NODE_NOT_FOUND" } }
+
+// Res: 409
+{ error: { code: "OUTLINE_ANCESTOR_DELETED", message: "..." } }
+// 存在软删祖先：需先还原祖先（决策 12 修订），杜绝「可见节点挂在不可见父」的畸形树
 ```
 
 ### DELETE /api/v1/trash/entity/:type/:id
@@ -739,11 +757,16 @@ nodeId: string;
 //
 // event: error
 // data: { "code": "...", "message": "..." }
+//
+// 顺序与生命周期约定（2026-08 修订）：
+//   - proposal 事件在对应 tool_result 之后、循环继续之前发送；前端以 proposal 事件渲染提案卡片
+//   - error 事件后流立即关闭（客户端收到 error 即终止解析）
+//   - 确认/拒绝提案的 HTTP 请求与 SSE 流生命周期解耦：流关闭后确认仍有效（TTL 内）
 ```
 
 **客户端解析约束（决策 20）**：本端点返回 POST + SSE，浏览器原生 `EventSource` 只支持 GET，客户端必须用 `fetch` + `ReadableStream` 自写 SSE 解析（`client/src/hooks/use-sse.ts`），并处理：跨 chunk 的 `data:` 行拼接、注释行（`:` 开头）跳过、`[DONE]` 哨兵；**心跳期间若有写操作失败即视为连接断开**，触发全链路取消提示。
 
-**取消语义（决策 16）**：SSE 断开（浏览器刷新/断网）即触发全链路取消——服务端通过 AbortController 终止 agent 循环、中止 DeepSeek fetch；未确认提案作废；正在执行的写操作完成当前一步后停止，操作顺序固定「先 DB 后 JSON」，两存储间不一致由 `find_orphan_elements` 工具兜底修复。断开检测三路并用（决策 20）：`stream.onAbort` + `c.req.raw` 的 close/error 监听 + 心跳写失败。客户端重连后提示「上次会话已取消」。
+**取消语义（决策 16）**：SSE 断开（浏览器刷新/断网）即触发全链路取消——服务端通过 AbortController 终止 agent 循环、中止 DeepSeek fetch；未确认提案按会话作废；正在执行的写操作完成当前一步后停止，操作顺序固定「先 DB 后 JSON」，两存储间不一致由**启动一致性校验**兜底补标（决策 16 修订）。断开检测三路并用（决策 20）：`stream.onAbort` + `c.req.raw` 的 close/error 监听 + 心跳写失败。客户端重连后提示「上次会话已取消」。
 
 ### GET /api/v1/chat/sessions
 
@@ -810,6 +833,10 @@ proposalId: string;
 
 // Res: 404
 { error: { code: "PROPOSAL_NOT_FOUND" } }  // proposal_id 不存在（已过期清除/SSE 断开作废）
+
+// Res: 409
+{ error: { code: "PROPOSAL_PROJECT_MISMATCH" } }
+// 提案所属项目 ≠ 当前项目（决策 14 修订；切换项目时提案已清空，此为防御性校验）
 ```
 
 ### POST /api/v1/proposal/:proposalId/reject

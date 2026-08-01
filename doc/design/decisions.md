@@ -213,7 +213,7 @@ export async function ensureProjectInitialized(dir: string): Promise<boolean> {
   ));
   initDatabaseSchema(db, schemaVersion);      // 建表（含 chat_messages）+ 写入 PRAGMA user_version
   writeFile('outline.json',
-    '{"id":"root","type":"root","schema_version":1,"children":[]}');
+    `{"id":"root","type":"root","schema_version":${SCHEMA_VERSION},"children":[]}`);
   return true;  // 新初始化
 }
 ```
@@ -234,7 +234,7 @@ AI Editor 的目标用户是**写小说的人**，不是开发者。纯 GUI 交�
 
 - 状态计算 `computeState(target, at_node_id)` 只沿**大纲树父链**（根 → 目标节点）累积已确认的 Delta；树路径唯一，结果确定可复现。
 - **双层排序**：节点间按树路径顺序（根 → 目标节点）；同一节点内的多个 Delta 按 `order` 递增应用。节点移动（move）后路径顺序天然正确，不依赖全局 `order`。
-- Delta 的 `op=update` 应用时**校验当前值等于 `from`**，不匹配返回 409 `DELTA_CONFLICT`，由调用方感知不一致，不静默跳过。
+- Delta 的 `op=update` 应用时**校验当前值等于 `from`**；不匹配则**跳过该 change 并继续累积**，不再返回 409——手动编辑实体 data（PUT /entity 自由合并）不产生 Delta，旧 Delta 的 `from` 与实际值断裂是正常用户行为而非异常，跳过+标注让状态计算保持可用；computeState 响应在 `appliedDeltas` 中标注 skipped、在新增 `conflicts` 字段给出 `{ field, expected, actual, deltaId }` 供用户/AI 感知不一致并修复（2026-08 修订：原『返回 409 `DELTA_CONFLICT`，由调用方感知不一致，不静默跳过』作废）。
 - 画布上的推演连线（`plot_edge`）不参与状态计算。
 - 推演（what-if 分析）是「只读路径计算 + 提案生成器」：AI 推演产生的状态变化**不落库、不进入主状态**，只以提案形式呈现，用户确认后由 executor 写入 `delta_records` 成为事实。推演永不直接写数据。
 
@@ -262,6 +262,9 @@ AI Editor 的目标用户是**写小说的人**，不是开发者。纯 GUI 交�
 - **手动删关系 = 物理删**：用户/画布直接删除关系（`DELETE /relation/:id`）立即物理清除，不进入回收站——关系是轻量可重建对象（随时可重新建立），`deleted_at` 标记仅服务于级联软删场景。
 - **关系可见性联动端点状态**：常规查询过滤关系时校验其 source/target 端点均未软删（任一端点软删即不可见）；**restore 级联还原全部关系**（不因端点仍软删而跳过），端点还原后关系自动可见——数据永不丢失，也不会出现指向回收站对象的「幽灵关系」。
 - **级联还原**：restore 时还原本体 + 关联的关系与 Delta；**purge** 时才物理清除（实体连同其关系与 Delta，节点连同递归子树）。
+- **restore 父链约束（2026-08 修订）**：还原大纲节点时校验其祖先链——存在软删祖先则拒绝并返回 409 `OUTLINE_ANCESTOR_DELETED`（提示先还原祖先），杜绝「可见节点挂在不可见父」的畸形树。
+- **Delta 可见性联动触发节点与目标实体（2026-08 修订）**：与关系同规则——触发节点或目标实体任一软删，该 Delta 在常规查询与 computeState 中均不可见；restore 级联还原后若任一端仍软删，同样暂不可见。
+- **软删/还原更新 `updated_at`（2026-08 修订）**：实体与节点的软删、还原均更新 `updated_at`（与常规编辑一致），保证提案快照比对（决策 14）语义统一——删除/还原后基于旧快照的提案必然 `PROPOSAL_STALE`。
 - UI 提供回收站与还原入口；回收站定期清理（按 `deleted_at` 判定保留时长）。
 
 **为什么**：创作场景误删成本高，软删为还原留余地；关系与 Delta 随本体一并软删，避免悬挂引用，还原时数据完整恢复；关系高频可重建故手动删除走物理删；可见性联动端点状态保证「还原必可见、可见必有效」。
@@ -270,7 +273,8 @@ AI Editor 的目标用户是**写小说的人**，不是开发者。纯 GUI 交�
 
 - MVP 不做数据迁移：`data.db` 通过 `PRAGMA user_version` 记录 schema 版本，启动时检测不匹配则**删除重建**并提示用户；`project.json` 增加 `schema_version` 字段。
 - **版本判定规则**：以 data.db 的 `user_version` 为准判定是否重建；`project.json` 的 `schema_version` 仅用于 JSON 结构判断；首次初始化时两个版本号都写入（见决策 8 初始化流程）。
-- **重建时同步重置 outline.json**（先备份为 `outline.json.bak`）并清空回收站，避免「大纲完整、实体全空」的半状态；**旧 data.db 一并备份为 `data.db.bak`**——对话历史属创作数据（决策 18），重建不可静默丢弃，用户可从备份手动恢复。
+- **重建时同步重置 outline.json**（先备份为 `outline.json.v{n}.bak`，n=旧 schema 版本号）并清空回收站，避免「大纲完整、实体全空」的半状态；**旧 data.db 一并备份为 `data.db.v{n}.bak`**——对话历史属创作数据（决策 18），重建不可静默丢弃。
+- **备份带版本号、不覆盖旧备份（2026-08 修订）**：多次重建各自留档；手动恢复 .bak 仅用于配合**旧版本程序**回滚——当前版本下 user_version 仍不匹配、再次重建属预期行为。
 - outline.json 顶层携带 `schema_version` 字段（与 project.json 同步写入，用于文件格式演进判定）。
 - 不写迁移脚本（YAGNI）。
 - **约束**：此策略仅在正式发布前可接受；首次发布前必须重新评估（发布后用户持有真实创作数据，删库不可接受）。
@@ -282,6 +286,7 @@ AI Editor 的目标用户是**写小说的人**，不是开发者。纯 GUI 交�
 - 提案（proposal）仅存服务端内存，随 SSE 事件推送，不落盘。
 - 确认（confirm）时服务端**重新校验**：提案引用的实体/大纲节点仍存在，且快照一致——entities / relation_records / delta_records 用自身 `updated_at`；大纲节点用 outline.json 节点级 `updated_at`（决策 19）；校验失败返回 409 `PROPOSAL_STALE`，前端提示重新生成提案；proposal_id 不存在返回 404 `PROPOSAL_NOT_FOUND`。
 - 提案 Map 加 **TTL（10 分钟）与条数上限**，超期/超限自动清除；无跨会话恢复（提案是瞬态交互对象）。
+- **提案绑定项目（2026-08 修订）**：提案对象携带 `project_id`；confirm/reject 时校验与当前项目一致，不匹配返回 409 `PROPOSAL_PROJECT_MISMATCH`；create/open/close 切换项目时**清空全部内存提案**并强制结束进行中的 SSE/agent 循环（衔接决策 16 取消语义；原 backlog #10 服务端部分提前到 MVP）。
 
 **为什么**：提案是毫秒级的交互对象，落盘与恢复机制收益为零；「存在性 + updated_at 快照比对」的双重校验防止「提案生成后数据已被其他操作改变」导致的脏写入；TTL/上限防止用户挂卡不确认导致内存无限增长。
 
@@ -297,7 +302,9 @@ AI Editor 的目标用户是**写小说的人**，不是开发者。纯 GUI 交�
 
 - 浏览器刷新/断网导致 SSE 断开时，服务端通过 AbortController 全链路取消：agent 循环终止、DeepSeek fetch 中止。
 - 未确认提案作废；正在执行的写操作完成当前一步后停止。
-- 写操作顺序固定为**先 DB 后 JSON**（data.db 先行、outline.json 随后）；两存储间无原子性，断电/取消可能造成「DB 已写、JSON 未写」的不一致，由 `find_orphan_elements` 工具兜底修复。
+- 写操作顺序固定为**先 DB 后 JSON**（data.db 先行、outline.json 随后）；两存储间无原子性，断电/取消可能造成「DB 已写、JSON 未写」的不一致。
+- **启动一致性校验兜底（2026-08 修订）**：打开/创建项目时自动比对 outline.json 节点软删标记与 data.db 中 relation/delta 软删状态，以 DB 为准补标缺失的节点 `deleted` 并写日志；检测工具 `find_orphan_elements` 保留为诊断用途，返回 `inconsistent_soft_deletes` 形态并引导修复。
+- 未确认提案**按产生它的会话作废**（提案记录来源 session_id；SSE 流取消或项目切换时一并清除）。
 - 客户端重连后提示「上次会话已取消」。
 
 **为什么**：SSE 断开后继续跑 agent 是纯浪费（结果无处可送），且未确认提案残留会造成状态不一致；全链路取消保证资源及时释放。跨 data.db 与 outline.json 两存储无法做到事务性回滚，故不承诺回滚，改为固定写序 + 检测工具兜底。
@@ -305,7 +312,8 @@ AI Editor 的目标用户是**写小说的人**，不是开发者。纯 GUI 交�
 ## 决策 17：安全基线
 
 - 服务默认绑定 `127.0.0.1`，不对外网开放；端口占用时自动 +1 递增并打开实际端口（与决策 8 统一；**dev 态除外**——开发环境端口被占直接报错提示手动指定 PORT，见 architecture.md 开发态说明）。
-- 中间件对**全部请求**（含读）校验来源：`Origin` 头存在时校验其为本机来源（`http://127.0.0.1[:port]` / `http://localhost[:port]` / `http://[::1][:port]`）；**Origin 缺失**（地址栏直接导航打开首页的常规浏览器行为）时退化为校验 `Host` 头 ∈ {`127.0.0.1`, `localhost`, `::1`} 且端口匹配。两者皆拒则拒绝（DNS rebinding 下读操作同样是敏感操作，防 CSRF / DNS rebinding）。
+- 中间件对**全部请求**（含读）校验来源：`Origin` 头存在时校验其 **host ∈ {`127.0.0.1`, `localhost`, `::1`}**；**Origin 缺失**（地址栏直接导航打开首页的常规浏览器行为）时退化为校验 `Host` 头 host ∈ 同一白名单。两者皆拒则拒绝（DNS rebinding 下读操作同样是敏感操作，防 CSRF / DNS rebinding）。
+- **不校验端口（2026-08 修订）**：端口因占用自动 +1 可变；dev 态 Vite proxy 转发后 Origin/Host 端口为 5173，校验端口会误杀全部开发请求。DNS rebinding 防护的关键是 host 白名单，端口校验无安全增益。
 - DeepSeek API key：环境变量 `DEEPSEEK_API_KEY` 为主；设置页可配置并写入用户级配置文件（如 `~/.ai-editor/config.json`）。**key 不进入项目文件**（project.json / outline.json / data.db），保持「代码与数据物理隔离」。
 - 项目路径校验：create/open 时路径需规范化（resolve）、防护符号链接逃逸；open 必须校验 `project.json` 存在。
 
@@ -316,6 +324,7 @@ AI Editor 的目标用户是**写小说的人**，不是开发者。纯 GUI 交�
 - 新建 `chat_messages` 表入 data.db：session_id、project_id（会话按项目隔离）、role（user/assistant/tool）、content、tool_calls（JSON）、**tool_call_id**（tool 消息关联其 assistant 工具调用的 id）、created_at（见 `doc/database/schema.md`）。
 - MVP 只存原始消息，不做摘要持久化；会话级滑动窗口裁剪与摘要压缩仍在 agent/session.ts 运行时完成（决策 6 分层上下文策略）。
 - **历史重建规则**：续聊时按 `assistant.tool_calls[].id` ↔ `tool.tool_call_id` **成对重组**喂回模型（DeepSeek 要求严格配对，缺一即拒绝请求）；滑动窗口裁剪**必须成对**（tool_call 与对应 tool_result 同裁同留）。
+- **孤儿半对处理（2026-08 修订）**：中断若落在 tool_call 已写、tool_result 未写（或反之）之间，历史重建与裁剪时**整对丢弃**，不喂回模型。
 - 服务重启后通过 session_id 重建「继续上次对话」；会话列表/历史查询走 `GET /api/v1/chat/sessions` 与 `GET /api/v1/chat/sessions/:id/messages`（见 `doc/api/endpoints.md`）。
 - 兑现 product.md「对话历史在本地保存」的承诺。
 
@@ -338,3 +347,17 @@ AI Editor 的目标用户是**写小说的人**，不是开发者。纯 GUI 交�
 - 客户端侧同样监听流结束/`onAbort`，显示「上次会话已取消」并清理未确认提案卡片。
 
 **为什么**：@hono/node-server 只能靠写失败感知客户端断开；agent 等待模型响应期间（单轮最长 120s，决策 15）无任何写操作，无心跳则断网后取消延迟可达 120s，「断开即取消」（决策 16）名存实亡。心跳让探活与取消时延收敛到秒级。
+
+**已知限制（2026-08 补充）**：心跳对 **TCP 半开连接**（客户端断电而非正常关闭）无法即时感知——写进内核缓冲不失败，感知延迟回到 TCP 重传超时（分钟级）；客户端需自身超时兜底（如 60s 无任何事件即提示连接断开）。
+
+## 决策 21：伏笔健康指标口径（2026-08 新增）
+
+伏笔系统（`doc/database/hooks.md`）的年龄/休眠类指标依赖「章节序」与「预计回收节点」，原文档未定义推导规则，实现必返工。统一如下：
+
+- **章节序推导**：全局**章**序号（跨卷连续累计），按大纲树先序遍历编号（root → 卷 → 章，直接挂 root 的 chapter 按兄弟顺序编号）；scene 归入所属 chapter，不单独编号；`current_position` 指向 scene 时取其所属章序号。
+- **chapter 不落库**：`plants` / `advances` / `resolves` 关系**不存 chapter 元数据**——由服务端基于关系 `source_id` 从大纲树**查询时现推**（节点 move 后不陈旧，原 metadata.chapter 反规范化作废）。
+- **ready_to_resolve 数据来源**：hook data 新增可选字段 `expected_resolve_node_id`（大纲节点 id）；指标 = `current_position` 章节序 ≥ 该节点章节序；未设置时该指标返回未计算，不猜测。
+- **half_life 缺省映射**：显式 `half_life` 优先；未设置时按 `payoff_timing` 映射默认值（章）：`immediate`=3、`near_term`=8、`mid_arc`=15、`slow_burn`=25、`endgame`=40。
+- **`_health` 不入库**：运行时计算，仅作为 API 响应附加字段返回，绝不写回 `data`（避免 GET/PUT 把它当持久字段）。
+
+**为什么**：健康指标是伏笔系统（产品差异化卖点）的数值基础，口径不定则所有指标语义漂移；一次性定死推导规则，避免实现者各选一套。

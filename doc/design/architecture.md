@@ -318,6 +318,8 @@ export interface Entity { id: string; type: EntityType; name: string; }
   packages/agent:   tsc --watch
   # dev 态端口被占直接报错（不自动 +1）——Vite proxy 写死 3456，
   # 自动 +1 会造成 proxy 与实际监听不一致（与生产态行为不同，2026-08 修订）
+  # 来源校验（决策 17 修订）：仅校验 host ∈ {127.0.0.1, localhost, ::1}，不校验端口；
+  # Vite proxy 无需 changeOrigin（转发后 Origin/Host 端口为 5173，不影响校验）
 
 发布态（pnpm build）:
   pnpm -r build  # 按依赖顺序自动构建

@@ -38,25 +38,21 @@ CREATE TABLE entities (
   "half_life": 8,
   "is_core": true,
   "notes": "通过梦境暗示",
-
-  "_health": {
-    "age": 15,
-    "dormancy": 7,
-    "stale": false,
-    "overdue": false
-  }
+  "expected_resolve_node_id": "sc-45"
 }
 ```
+（2026-08 修订：示例不再包含 `_health`——健康指标为运行时计算，仅作为响应附加字段返回，不写回 data，见下文。）
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `status` | enum | `planted` → `progressing` → `resolved` 或 `abandoned` |
 | `category` | string | 自由填，例如：`mystery` / `relationship` / `item` / `character_growth` / `world_building` |
 | `expected_payoff` | string | 预期回收方式描述 |
-| `payoff_timing` | enum | `immediate` / `near_term` / `mid_arc` / `slow_burn` / `endgame`（控制半衰期阈值） |
-| `half_life` | number | 超过此章数未推进算"遗忘"（stale） |
+| `payoff_timing` | enum | `immediate` / `near_term` / `mid_arc` / `slow_burn` / `endgame`（`half_life` 未设置时的缺省映射来源，见决策 21） |
+| `half_life` | number | 超过此章数未推进算"遗忘"（stale）；显式值优先，缺省按 `payoff_timing` 映射（决策 21） |
 | `is_core` | boolean | 主线伏笔 |
 | `notes` | string | 自由备注 |
+| `expected_resolve_node_id` | string \| null | 可选：预计回收的大纲节点 id（`ready_to_resolve` 指标依据，决策 21） |
 
 ### 伏笔关系约定（relation_records）
 
@@ -84,7 +80,7 @@ VALUES ('hook', 'hook-1', 'character', 'char-3', 'involves', '{}');
 VALUES ('hook', 'hook-1', 'setting', 'set-7', 'involves', '{}');
 ```
 
-> **chapter 元数据（2026-08 修订）**：`plants` / `advances` / `resolves` 关系中的 `chapter` 由**服务端根据节点在大纲树中的位置推导**（严格三层，决策 19），调用方（AI 工具 / 前端）不必手工填写。
+> **chapter 不落库（2026-08 修订）**：`plants` / `advances` / `resolves` 关系的章节信息**不写入 metadata**——由服务端基于 `source_id` 从大纲树**查询时现推**（章节序推导规则见决策 21；节点 move 后不陈旧），调用方（AI 工具 / 前端）不必手工填写。
 
 ### 伏笔状态变化（delta_records）
 
@@ -121,20 +117,21 @@ VALUES ('sc-45', 'hook', 'hook-1',
   │             + relation 插 resolves 关系，见 tools.md）
   │  _health.dormancy 重置
 废弃（主动放弃）
-  │  status = abandoned
+  │  AI 提案 propose_abandon_hook → 用户确认 → executor abandon_hook
+  │  （delta_records 记 status = abandoned，见 tools.md）
 ```
 
 ## 健康指标（运行时计算，不持久化）
 
-每次查询伏笔时实时计算 `_health`。**「当前章节」来源于 project.json 的 `current_position`**（2026-08 修订：已纳入 project.json 契约，见 `schema.md`；`current_position` 指向某大纲节点，其章节序由服务端从树中推导；未设置时为 null，相关指标返回未计算）。
+每次查询伏笔时实时计算 `_health`，**仅作为响应附加字段返回，不写回 data**。**「当前章节」来源于 project.json 的 `current_position`**（已纳入 project.json 契约，见 `schema.md`；`current_position` 指向某大纲节点，**章节序推导规则见决策 21**：全局章序号、scene 归入所属章）；未设置时为 null，相关指标返回未计算。
 
 | 指标 | 计算方式 |
 |------|---------|
-| `age` | 当前章节 - 埋下章节（`plants` 关系的 chapter） |
-| `dormancy` | 当前章节 - 最近推进章节（`advances` 关系的最新 chapter） |
-| `stale` | `dormancy > half_life` |
+| `age` | 当前章节 - 埋下章节（`plants` 关系的节点现推章节序） |
+| `dormancy` | 当前章节 - 最近推进章节（`advances` 关系的最新节点章节序） |
+| `stale` | `dormancy > half_life`（`half_life` 缺省映射见决策 21） |
 | `overdue` | `age > half_life * 2` |
-| `ready_to_resolve` | 当前章节 >= 大纲中预计回收节点的章节号 |
+| `ready_to_resolve` | `expected_resolve_node_id` 已设置时：当前章节 >= 该节点章节序；未设置返回未计算 |
 | `blocked` | 存在 `depends_on` 关系的伏笔尚未 resolved |
 
 ## 工具扩展
@@ -164,6 +161,7 @@ propose_create_hook(name, data, plant_at_node_id?)
 propose_update_hook(hook_id, patches)
 propose_advance_hook(hook_id, node_id, description)
 propose_resolve_hook(hook_id, node_id, description)
+propose_abandon_hook(hook_id, description)
 ```
 
 ## GUI 中的伏笔视图

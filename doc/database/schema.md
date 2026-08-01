@@ -43,14 +43,14 @@ CREATE TABLE entities (
 ```sql
 CREATE TABLE relation_records (
   id            TEXT PRIMARY KEY,
-  source_type   TEXT NOT NULL,
+  source_type   TEXT NOT NULL,             -- 端点类型：实体 'character'|'setting'|'location'|'hook'，大纲节点 'outline_node'
   source_id     TEXT NOT NULL,
   target_type   TEXT NOT NULL,
   target_id     TEXT NOT NULL,
   relation_type TEXT NOT NULL,
   metadata      TEXT,             -- JSON 扩展元数据
   created_at    TEXT NOT NULL,               -- ISO 8601，应用层写入
-  updated_at    TEXT NOT NULL,               -- ISO 8601，应用层写入（提案快照比对，决策 14）
+  updated_at  TEXT NOT NULL,               -- ISO 8601，应用层写入（提案快照比对，决策 14；软删/还原亦更新，决策 12 修订）
   deleted_at    TEXT              -- 级联软删标记（决策 12）：仅实体/节点级联删除时写入；
                                   -- 手动删除关系 = 物理删（不置 deleted_at，不进入回收站）
 );
@@ -92,7 +92,8 @@ CREATE TABLE delta_records (
   "order"     INTEGER NOT NULL DEFAULT 0,  -- 同一节点内多个 Delta 的排序（全局单调递增，服务端生成）
   created_at  TEXT NOT NULL,               -- ISO 8601，应用层写入
   updated_at  TEXT NOT NULL,               -- ISO 8601，应用层写入（提案快照比对，决策 14）
-  deleted_at  TEXT              -- 级联软删标记（决策 12）：仅实体/节点级联删除时写入
+  deleted_at  TEXT              -- 级联软删标记（决策 12）：仅实体/节点级联删除时写入。
+                                -- 可见性联动触发节点与目标实体（决策 12 修订）：任一端软删即不可见
 );
 ```
 
@@ -136,7 +137,7 @@ CREATE INDEX idx_chat_session ON chat_messages(session_id, created_at);
           "updated_at": "2026-08-01T10:00:00Z",
           "children": [
             { "id": "sc-1", "type": "scene", "title": "灵根测试失败",
-              "updated_at": "2026-08-01T10:00:00Z", "deleted": false }
+              "updated_at": "2026-08-01T10:00:00Z" }
           ]
         }
       ]
