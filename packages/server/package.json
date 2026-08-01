@@ -1,0 +1,28 @@
+{
+  "name": "@ai-editor/server",
+  "version": "0.1.0",
+  "description": "Hono API 服务端",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "echo \"no tests yet\""
+  },
+  "dependencies": {
+    "@ai-editor/agent": "workspace:*",
+    "@ai-editor/db": "workspace:*",
+    "@ai-editor/shared": "workspace:*",
+    "hono": "^4.7.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  }
+}

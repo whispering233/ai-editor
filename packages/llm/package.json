@@ -1,0 +1,26 @@
+{
+  "name": "@ai-editor/llm",
+  "version": "0.1.0",
+  "description": "模型接入层：封装 fetch → DeepSeek API",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc --watch",
+    "test": "echo \"no tests yet\""
+  },
+  "dependencies": {
+    "@ai-editor/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  }
+}

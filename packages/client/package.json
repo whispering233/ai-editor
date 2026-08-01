@@ -1,0 +1,27 @@
+{
+  "name": "@ai-editor/client",
+  "version": "0.1.0",
+  "description": "React SPA 前端（仅依赖 @ai-editor/shared）",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "echo \"no tests yet\""
+  },
+  "dependencies": {
+    "@ai-editor/shared": "workspace:*",
+    "react": "^19.0.0",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  }
+}

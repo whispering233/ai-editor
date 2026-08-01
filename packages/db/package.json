@@ -1,0 +1,27 @@
+{
+  "name": "@ai-editor/db",
+  "version": "0.1.0",
+  "description": "数据库层：better-sqlite3 连接 / 建表 / 查询",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc --watch",
+    "test": "echo \"no tests yet\""
+  },
+  "dependencies": {
+    "@ai-editor/shared": "workspace:*",
+    "better-sqlite3": "^13.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  }
+}

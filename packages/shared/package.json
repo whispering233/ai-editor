@@ -1,0 +1,27 @@
+{
+  "name": "@ai-editor/shared",
+  "version": "0.1.0",
+  "description": "前后端共享层：纯类型 + 常量 + 纯函数（零 Node 依赖）",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc --watch",
+    "test": "echo \"no tests yet\""
+  },
+  "dependencies": {
+    "nanoid": "^5.1.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  }
+}

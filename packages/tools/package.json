@@ -1,0 +1,27 @@
+{
+  "name": "@ai-editor/tools",
+  "version": "0.1.0",
+  "description": "AI 工具目录：工具定义 + 执行器",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc --watch",
+    "test": "echo \"no tests yet\""
+  },
+  "dependencies": {
+    "@ai-editor/db": "workspace:*",
+    "@ai-editor/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  }
+}

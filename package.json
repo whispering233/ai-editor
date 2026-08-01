@@ -1,0 +1,20 @@
+{
+  "name": "ai-editor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI 小说创作编辑器（monorepo 根）",
+  "type": "module",
+  "packageManager": "pnpm@11.8.0",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel run dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r exec tsc --noEmit -p tsconfig.json",
+    "test": "pnpm -r test"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  }
+}
