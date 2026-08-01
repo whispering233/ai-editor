@@ -84,6 +84,8 @@ VALUES ('hook', 'hook-1', 'character', 'char-3', 'involves', '{}');
 VALUES ('hook', 'hook-1', 'setting', 'set-7', 'involves', '{}');
 ```
 
+> **chapter 元数据（2026-08 修订）**：`plants` / `advances` / `resolves` 关系中的 `chapter` 由**服务端根据节点在大纲树中的位置推导**（严格三层，决策 19），调用方（AI 工具 / 前端）不必手工填写。
+
 ### 伏笔状态变化（delta_records）
 
 ```sql
@@ -109,22 +111,22 @@ VALUES ('sc-45', 'hook', 'hook-1',
   ▼
 推进（大纲推进到新节点时触发）
   │  AI 提案: "主角在大纲第20章获得玉佩，伏笔『身世之谜』应该推进了"
-  │  用户确认 → delta_records 记录 status = progressing
-  │  relation_records 插入 advances 关系
+  │  用户确认 → Tool Executor 调用 advance_hook（复合写：delta_records 记 status = progressing
+  │             + relation_records 插入 advances 关系，一次提交，见 tools.md）
   │  _health.dormancy 重置
   ▼
 回收（大纲到达回收节点）
   │  AI 提案: "第45章达到了回收『身世之谜』的条件"
-  │  用户确认 → delta_records 记录 status = resolved
-  │  relation_records 插入 resolves 关系
-  ▼
+  │  用户确认 → Tool Executor 调用 resolve_hook（复合写：delta 记 status = resolved
+  │             + relation 插 resolves 关系，见 tools.md）
+  │  _health.dormancy 重置
 废弃（主动放弃）
   │  status = abandoned
 ```
 
 ## 健康指标（运行时计算，不持久化）
 
-每次查询伏笔时实时计算 `_health`：
+每次查询伏笔时实时计算 `_health`。**「当前章节」来源于 project.json 的 `current_position`**（2026-08 修订：已纳入 project.json 契约，见 `schema.md`；`current_position` 指向某大纲节点，其章节序由服务端从树中推导；未设置时为 null，相关指标返回未计算）。
 
 | 指标 | 计算方式 |
 |------|---------|

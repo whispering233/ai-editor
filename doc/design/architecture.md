@@ -5,15 +5,16 @@
 | 层 | 技术选型 | 理由 |
 |---|---------|------|
 | **包管理** | pnpm workspace (monorepo) | 多包共享，依赖隔离，构建解耦 |
+| **运行时** | Node ≥ 22.12，**全仓 ESM** | nanoid v5 ESM-only 消费、`require(esm)` 默认开启；避免 CJS/ESM 混合坑 |
 | **语言** | TypeScript (strict mode) | 全栈统一类型，减少运行时错误 |
 | **API 服务端** | Hono 4 + `@hono/node-server` | 轻量、TypeScript 友好、SSE 原生支持 |
-| **数据库** | better-sqlite3 (WAL mode) | 同步 API 简单可靠，零配置，内嵌 |
+| **数据库** | better-sqlite3 ^13 (WAL mode) | N-API 重写（v13），全局安装无 ABI 失配；同步 API 简单可靠，零配置，内嵌 |
 | **前端框架** | React 19 | 生态成熟，组件化 |
-| **前端构建** | Vite 6 | 快速 HMR，Tree-shaking |
+| **前端构建** | Vite 7 | 快速 HMR，Tree-shaking（Vite 6 已停止常规维护） |
 | **状态管理** | Zustand 5 | 轻量、TypeScript 优秀、selector 自动优化 |
-| **样式** | Tailwind CSS 4 + shadcn/ui | 原子化 CSS 灵活度 + 组件开箱即用 |
-| **AI 调用** | 原生 fetch → DeepSeek API | 零依赖，直接控制工具循环 |
-| **Schema 验证** | Zod | 运行时类型安全，API 入参校验 |
+| **样式** | Tailwind CSS 4 + shadcn/ui | 原子化 CSS 灵活度 + 组件开箱即用（v4 CSS-first 配置，无 tailwind.config.js） |
+| **AI 调用** | 原生 fetch → DeepSeek API（模型名可配置，默认 `deepseek-v4-flash`） | 零依赖，直接控制工具循环 |
+| **Schema 验证** | Zod 4 | 运行时类型安全，API 入参校验（v4 API，注意迁移破坏项） |
 | **路由** | 轻量 hash-based（自制 `useHashRoute`） | 单页桌面应用不需要 React Router |
 
 ## 分包方案
@@ -22,9 +23,9 @@
 
 ```
 ai-editor/
-├── pnpm-workspace.yaml
-├── package.json                   # 根：dev 脚本、lint、typecheck
-├── tsconfig.base.json             # 公共 TS 配置
+├── pnpm-workspace.yaml           # 含 onlyBuiltDependencies: [better-sqlite3]（pnpm 10 构建批准）
+├── package.json                   # 根：dev 脚本、lint、typecheck（"type": "module"）
+├── tsconfig.base.json             # 公共 TS 配置（ESM: module/moduleResolution 统一）
 │
 ├── packages/
 │   ├── shared/                    # @ai-editor/shared（前后端共享层，零 Node 依赖）
@@ -213,7 +214,7 @@ shared ← client（仅类型/常量，零运行时）
 // packages/shared/package.json
 {
   "name": "@ai-editor/shared",
-  "dependencies": { "zod": "^3.24.0", "nanoid": "^5.1.0" }
+  "dependencies": { "zod": "^4.0.0", "nanoid": "^5.1.0" }
 }
 
 // packages/llm/package.json
@@ -227,7 +228,7 @@ shared ← client（仅类型/常量，零运行时）
   "name": "@ai-editor/db",
   "dependencies": {
     "@ai-editor/shared": "workspace:*",
-    "better-sqlite3": "^11.0.0"
+    "better-sqlite3": "^13.0.0"
   }
 }
 
@@ -299,7 +300,9 @@ export interface Entity { id: string; type: EntityType; name: string; }
 |------|------|------|
 | **类型 + Zod** | 所有数据类型的 TypeScript 定义和 Zod schema | `Entity`, `RelationRecord`, `DeltaRecord` |
 | **常量** | 枚举值、工具名列表、权限级别 | `ENTITY_TYPES`, `RELATION_TYPES`, `HOOK_STATUSES` |
-| **纯工具** | 不依赖 Node API 的辅助函数 | `generateId()`, `validateEntityData()`, `formatTiming()` |
+| **纯工具** | 不依赖 Node API 的辅助函数 | `generateId()`, `formatTiming()` |
+
+> **校验执行边界（2026-08 修订）**：Zod 校验**仅在服务端执行**（server/db 层）；client 只消费 `shared` 的类型与常量，不打包 zod 校验函数——避免 50KB 级运行时依赖进浏览器包，「仅类型+常量、编译期消失」的承诺才成立。
 
 ## 构建与部署
 
@@ -313,17 +316,19 @@ export interface Entity { id: string; type: EntityType; name: string; }
   packages/db:      tsc --watch
   packages/tools:   tsc --watch
   packages/agent:   tsc --watch
+  # dev 态端口被占直接报错（不自动 +1）——Vite proxy 写死 3456，
+  # 自动 +1 会造成 proxy 与实际监听不一致（与生产态行为不同，2026-08 修订）
 
 发布态（pnpm build）:
   pnpm -r build  # 按依赖顺序自动构建
     → shared → llm → db → tools → agent → server
     → client（vite build，独立）
 
-启动流程:
+启动流程（Node ≥ 22.12，产物为全仓 ESM）:
   node packages/server/dist/index.js
     → 参数: projectRoot（当前目录）
     → 自动检测 project.json, 不存在则初始化
-    → 启动 Hono (port 3456)
+    → 启动 Hono (port 3456，占用时生产态自动 +1)
     → 加载 client/dist/index.html 为 SPA fallback
     → 打开浏览器
 ```

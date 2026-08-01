@@ -7,6 +7,9 @@
 - 成功响应：`{ success: true, data: T }`
 - 错误响应：`{ success: false, error: { code: string, message: string } }`
 - 统一 HTTP 状态码：200 成功、400 参数错误、404 不存在、409 冲突、500 服务端错误
+- **命名约定**：请求体/查询参数用 snake_case，响应体用 camelCase，outline.json 内部字段用 snake_case；文件字段与 API 字段的显式映射函数定义于 `@ai-editor/shared/utils`（backlog #7）。
+- **id 约定**：`{前缀}-{nanoid}`（如 `char-9f3k2m`）。前缀表：`char-`/`set-`/`loc-`/`hook-`（实体）、`sc-`/`ch-`/`vol-`（大纲）、`proj-`（项目）、`prop_`/`sess_`/`call_`（运行时对象）。本文示例中的 `char-9` 等为形状示意，**非自增序号**。
+- **错误码**：所有错误码统一枚举 `ErrorCode`（单一来源：`@ai-editor/shared/types/api.ts`），REST 响应、SSE error 事件、工具结果截断提示共用。
 
 **类型定义**：以下 `Req` / `Res` 类型对应 `@ai-editor/shared` 包中 `types/api.ts` 的 Zod schema。
 
@@ -93,6 +96,7 @@
   language: "zh" | "en";
   prompt: string;            // 项目提示词
   schemaVersion: number;     // schema 版本（对应 project.json 的 schema_version，决策 13）
+  currentPosition: string | null;  // 大纲「当前位置」节点 id（project.json，伏笔健康指标依赖）
   createdAt: string;         // ISO datetime
   updatedAt: string;
 }
@@ -108,6 +112,7 @@
   name?: string;
   language?: "zh" | "en";
   prompt?: string;
+  current_position?: string | null;  // 更新「当前位置」（须指向存在的非软删大纲节点）
 }
 
 // Res: 200
@@ -346,7 +351,7 @@ id: string;
 
 ### DELETE /api/v1/relation/:id
 
-删除关系。
+删除关系。**物理删除，不进入回收站**（决策 12 修订：关系是轻量可重建对象；`deleted_at` 软删仅服务于实体/节点级联删除场景）。
 
 ```typescript
 // Path
@@ -438,9 +443,7 @@ nodeId: string;
 {
   target_type: string;          // 目标实体类型
   target_id: string;            // 目标实体 ID
-  at_node_id: string;           // 到达的大纲节点 ID
-  path_ids?: string[];          // 可选，显式指定路径节点列表
-                                // 不传则自动计算从根到 at_node 的路径
+  at_node_id: string;           // 到达的大纲节点 ID（服务端自动计算根 → at_node 的树路径，决策 9/19）
 }
 
 // Res: 200
@@ -456,11 +459,14 @@ nodeId: string;
   }[];
 }
 
-// Delta 累积规则：
-//   到达目标节点的状态 = 实体初始 data
-//     + path_ids 路径上所有 node_id 的 Delta 按 order 顺序应用
+// Res: 409
+{ error: { code: "DELTA_CONFLICT", message: "..." } }  // op=update 且当前值 ≠ from
+
+// Delta 累积规则（决策 9）：
+//   到达目标节点的状态 = 实体初始 data + 树路径上所有 Delta 累积
+//   双层排序：节点间按树路径顺序（根 → at_node）；同一节点内按 order 递增
 //   set:     直接替换值
-//   update:  旧值→新值（验证当前值等于 from）
+//   update:  旧值→新值（验证当前值等于 from，不匹配返回 409 DELTA_CONFLICT）
 //   add:     向数组追加
 //   remove:  从数组中移除
 ```
@@ -471,15 +477,20 @@ nodeId: string;
 
 ### GET /api/v1/outline
 
-获取完整大纲树。
+获取完整大纲树（严格三层，无游离节点，决策 19）。
 
 ```typescript
+// Query
+{
+  with_metadata?: boolean;   // 为 true 时计算节点 metadata 统计（跨 outline.json × data.db 联查，默认 false）
+}
+
 // Res: 200
 {
   id: "root";
   type: "root";
+  schemaVersion: number;     // outline.json 顶层 schema_version（决策 13）
   children: OutlineNode[];
-  orphanNodes: OutlineNode[];
 }
 
 // OutlineNode
@@ -489,7 +500,8 @@ nodeId: string;
   title: string;
   summary?: string;              // 可选描述
   children?: OutlineNode[];      // 卷下有章，章下有场景
-  metadata?: {
+  updatedAt: string;             // 节点版本戳（决策 19，提案快照比对）
+  metadata?: {                   // 仅 with_metadata=true 时返回
     hookCount?: number;          // 关联的伏笔数
     charCount?: number;          // 关联角色数
     deltaCount?: number;         // 此节点触发的 Delta 数
@@ -499,27 +511,31 @@ nodeId: string;
 
 ### POST /api/v1/outline
 
-创建新大纲节点。
+创建新大纲节点。**严格三层，parent_id 必填**（决策 19，无游离节点）。
 
 ```typescript
 // Req
 {
   type: "volume" | "chapter" | "scene";
   title: string;                 // 1-200 字符
-  parent_id?: string;            // 父节点 ID
-                                 // volume 不传 parent → 挂到 root
-                                 // chapter 不传 parent → 挂到 root（变为游离卷）
-                                 // scene 必须传 parent（属于某章）
+  parent_id: string;             // 必填，无默认值
+                                 // volume → 挂 root
+                                 // chapter → 挂 volume 或 root
+                                 // scene → 必须挂 chapter
   summary?: string;
 }
 
 // Res: 201
 {
-  id: string;                    // 自动生成 "vol-2", "ch-8" 等
+  id: string;                    // "vol-2", "ch-8" 等（前缀 + nanoid）
   type: string;
   title: string;
   parentId: string | null;
+  updatedAt: string;             // 创建时间戳（节点版本戳，决策 19）
 }
+
+// Res: 400
+{ error: { code: "VALIDATION_ERROR", message: "parent_id is required" } }
 ```
 
 ### PUT /api/v1/outline/:nodeId
@@ -552,10 +568,8 @@ nodeId: string;
 
 // Req
 {
-  parent_id: string;             // 新的父节点 ID
+  parent_id: string;             // 新的父节点 ID（严格三层约束同 POST /outline，决策 19）
   order: number;                 // 在兄弟节点中的位置（0-based）
-                                 // 移入 root: parent_id="root"
-                                 // 移入 orphan_nodes: parent_id="__orphan__"
 }
 
 // Res: 200
@@ -565,7 +579,7 @@ nodeId: string;
   newParentId: string;
 }
 
-// 画布视图中的连线自动从新的父子关系推导
+// 画布视图中的投影自动更新（决策 1）
 ```
 
 ### DELETE /api/v1/outline/:nodeId
@@ -637,9 +651,11 @@ id: string;
 { error: { code: "ENTITY_NOT_FOUND" } }
 ```
 
+> **可见性（决策 12 修订）**：级联还原全部关系（不因另一端仍软删而跳过）；还原后若某关系的端点仍软删，该关系暂不可见，端点还原后自动可见。
+
 ### POST /api/v1/trash/outline/:nodeId/restore
 
-还原软删大纲节点（恢复 `deleted`/`deleted_at` 标记），并**级联还原**其关联的关系与 Delta；子节点若仍在回收站则一并还原（决策 12 修订）。
+还原软删大纲节点（恢复 `deleted`/`deleted_at` 标记），并**级联还原**其关联的关系与 Delta；子节点若仍在回收站则一并还原（决策 12 修订）。可见性规则同实体 restore（端点仍软删的关系暂不可见）。
 
 ```typescript
 // Path
@@ -703,6 +719,9 @@ nodeId: string;
 // Res: SSE stream
 // 消息格式（SSE event stream, text/event-stream）:
 //
+// event: ping             // 心跳（每 15-30s，决策 20）：探活 + 断开检测
+// data: {}
+//
 // event: tool_call         // AI 调用了工具
 // data: { "tool": "get_entity", "args": {...}, "id": "call_xxx" }
 //
@@ -722,7 +741,50 @@ nodeId: string;
 // data: { "code": "...", "message": "..." }
 ```
 
-**取消语义（决策 16）**：SSE 断开（浏览器刷新/断网）即触发全链路取消——服务端通过 AbortController 终止 agent 循环、中止 DeepSeek fetch；未确认提案作废；正在执行的写操作完成当前一步后停止，操作顺序固定「先 DB 后 JSON」，两存储间不一致由 `find_orphan_elements` 工具兜底修复。客户端重连后提示「上次会话已取消」。
+**客户端解析约束（决策 20）**：本端点返回 POST + SSE，浏览器原生 `EventSource` 只支持 GET，客户端必须用 `fetch` + `ReadableStream` 自写 SSE 解析（`client/src/hooks/use-sse.ts`），并处理：跨 chunk 的 `data:` 行拼接、注释行（`:` 开头）跳过、`[DONE]` 哨兵；**心跳期间若有写操作失败即视为连接断开**，触发全链路取消提示。
+
+**取消语义（决策 16）**：SSE 断开（浏览器刷新/断网）即触发全链路取消——服务端通过 AbortController 终止 agent 循环、中止 DeepSeek fetch；未确认提案作废；正在执行的写操作完成当前一步后停止，操作顺序固定「先 DB 后 JSON」，两存储间不一致由 `find_orphan_elements` 工具兜底修复。断开检测三路并用（决策 20）：`stream.onAbort` + `c.req.raw` 的 close/error 监听 + 心跳写失败。客户端重连后提示「上次会话已取消」。
+
+### GET /api/v1/chat/sessions
+
+获取会话列表（决策 18：「继续上次对话」入口）。
+
+```typescript
+// Res: 200
+{
+  sessions: {
+    id: string;              // session_id
+    lastMessage: string;     // 最后一条消息摘要（截断）
+    messageCount: number;
+    createdAt: string;
+    updatedAt: string;       // 最后活动时间
+  }[];
+}
+// 按最后活动时间倒序；仅返回当前项目的会话（按 project_id 隔离，决策 18）
+```
+
+### GET /api/v1/chat/sessions/:id/messages
+
+获取指定会话的消息历史（供 UI 恢复聊天记录）。
+
+```typescript
+// Path
+id: string;                  // session_id
+
+// Res: 200
+{
+  sessionId: string;
+  messages: {
+    id: string;
+    role: "user" | "assistant" | "tool";
+    content?: string | null;
+    toolCalls?: unknown[];    // assistant 消息的工具调用数组
+    toolCallId?: string | null;  // tool 消息关联的调用 id
+    createdAt: string;
+  }[];
+}
+// 按 created_at 升序；仅返回当前项目的会话
+```
 
 ---
 
@@ -743,8 +805,11 @@ proposalId: string;
 }
 
 // Res: 409 — 提案过期（决策 14）
-// 确认时服务端重新校验提案引用的实体/大纲节点仍存在且无冲突；
+// 确认时服务端重新校验提案引用的实体/大纲节点仍存在且快照一致；
 // 校验失败返回 { code: "PROPOSAL_STALE" }，前端提示重新生成提案。
+
+// Res: 404
+{ error: { code: "PROPOSAL_NOT_FOUND" } }  // proposal_id 不存在（已过期清除/SSE 断开作废）
 ```
 
 ### POST /api/v1/proposal/:proposalId/reject
@@ -759,4 +824,40 @@ proposalId: string;
 {
   rejected: true;
 }
+```
+
+---
+
+## 系统设置
+
+### GET /api/v1/settings/llm
+
+读取 LLM 配置（决策 17：设置页可配置 DeepSeek key）。
+
+```typescript
+// Res: 200
+{
+  model: string;            // 当前模型名（默认 "deepseek-v4-flash"）
+  apiKeySet: boolean;       // 是否已配置 key（不回传明文）
+  apiKeyMasked?: string;    // 掩码展示，如 "sk-****1234"
+}
+// 来源优先级：环境变量 DEEPSEEK_API_KEY > ~/.ai-editor/config.json
+```
+
+### PUT /api/v1/settings/llm
+
+更新 LLM 配置（写入用户级配置文件 `~/.ai-editor/config.json`，**绝不写入项目文件**，决策 17）。
+
+```typescript
+// Req
+{
+  model?: string;           // 模型名（默认 "deepseek-v4-flash"）
+  api_key?: string;         // 新 key；空字符串 = 清除已保存 key
+}
+
+// Res: 200
+{
+  saved: true;
+}
+// 配置变更仅影响新请求；运行中的 agent 循环不受扰动
 ```

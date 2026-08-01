@@ -2,13 +2,14 @@
 
 ## 工具分级
 
-InkOS 按 sessionKind 切换工具集（chat/play/write 各有不同工具），而 AI Editor 是**单一交互场景**——始终是"创作者对话创作顾问"。所以不切换工具集，而是按操作风险分为三级权限：
+InkOS 按 sessionKind 切换工具集（chat/play/write 各有不同工具），而 AI Editor 是**单一交互场景**——始终是"创作者对话创作顾问"。所以不切换工具集，而是按操作风险分为两级权限：
 
 | 级别 | 行为 | 用户感知 |
 |------|------|---------|
 | **自动** | 直接执行，结果返回 LLM | 无感 |
 | **提案确认** | 展示提案卡片，用户审阅后确认/拒绝修改后再执行 | 弹窗卡片 |
-| **二次确认** | 展示 diff + 警告，用户二次确认 | 强警告弹窗 |
+
+（2026-08 修订：原「二次确认」级无任何工具挂靠，删除。删除操作由提案确认 + 回收站软删兜底覆盖——决策 12 软删可还原、决策 14 提案确认，用户始终是最终决策者。）
 
 ## 工具目录
 
@@ -16,7 +17,7 @@ InkOS 按 sessionKind 切换工具集（chat/play/write 各有不同工具），
 
 目标是让 AI 有能力探索整个创作数据库，不需要用户干预。
 
-> 所有查询类工具**默认过滤软删对象**（决策 12 修订）：`get_entity` / `search_entities` / `query_relationships` 等不会返回或遍历回收站中的对象。
+> 所有查询类工具**默认过滤软删对象**（决策 12 修订）：`get_entity` / `search_entities` / `query_relationships` 等不会返回或遍历回收站中的对象；`query_relationships` 额外校验关系端点均未软删（任一端点软删即不可见，决策 12 修订）。
 
 ```typescript
 // === 实体查询 ===
@@ -38,18 +39,20 @@ query_relationships(opts: {
 
 // === 大纲查询 ===
 get_outline()
-  → 完整大纲树
+  → 完整大纲树（严格三层，无游离节点，决策 19）
+  注意：默认不含 metadata 统计（省 token）；需统计走 API `GET /outline?with_metadata=`
 
 get_outline_path(node_id)
   → 从根到该节点的路径 ID 列表
   用途：AI 说"从卷1第3章到结局有哪几条路径"
 
 // === 状态查询（Delta 相关）===
-compute_state(target_type, target_id, at_node_id?)
+compute_state(target_type, target_id, at_node_id)
   → 实体到达指定节点时的累积状态
   用途：AI 说"张三在第30章时的战力是多少"
-  语义：只沿大纲树父链（根 → at_node_id）累积已确认 Delta（决策 9）；
-        plot_edge 连线不参与；游离节点仅累积直接挂载在它上面的 Delta
+  语义：只沿大纲树父链（根 → at_node_id）累积已确认 Delta（决策 9/19）：
+        节点间按树路径顺序、同一节点内按 order 双层排序；plot_edge 连线不参与；
+        op=update 校验当前值等于 from，不匹配返回 409 DELTA_CONFLICT
 
 get_delta_history(target_type, target_id)
   → 该实体的所有属性变更记录（按时间/节点排序）
@@ -101,6 +104,8 @@ suggest_connections(entity_id)
 
 AI **不能直接修改数据**，而是通过 `propose_*` 工具向用户提案，用户在 GUI 中审阅后确认。
 
+> **返回语义（2026-08 修订）**：`propose_*` 的 tool_result 仅返回「提案已发出」提示（proposal_id + 一句话摘要），**不含预览细节**——避免 LLM 误以为提案已生效而重复提案；完整预览只通过 SSE `proposal` 事件推送给 GUI 展示。
+
 ```typescript
 propose_create_entity(type, name, data)
   → { proposal_id, preview, conflicts_with? }
@@ -139,7 +144,13 @@ add_delta(node_id, target, changes)   → id
 create_outline_node(type, title, parent) → id
 move_node(node_id, parent, order)     → void
 delete_node(node_id)                  → void
+advance_hook(hook_id, node_id, description)  → id   // 复合写（2026-08 修订，🟠-7）：
+                                                     // delta_records 记 status 变化 + relation_records 插 advances
+                                                     // 一次提交，幂等（重复确认不重复推进）
+resolve_hook(hook_id, node_id, description)  → id   // 复合写：delta 记 status=resolved + relation 插 resolves
 ```
+
+> **复合写说明（2026-08 修订）**：`advance_hook` / `resolve_hook` 对应 hooks.md 伏笔生命周期的推进/回收动作，确认后由 Tool Executor 调用，封装「delta + relation」两步写为一次提交，失败不产生半状态。
 
 ## 与 InkOS 的关键差异对比
 

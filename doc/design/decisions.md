@@ -2,19 +2,20 @@
 
 ## 决策 1：节点即大纲（统一模型）
 
-大纲的树状结构和剧情探索的图状结构共享同一数据中心。
+大纲的树状结构和剧情探索的图状结构共享同一数据中心。**所有节点都挂在大纲树上**，不存在游离节点（决策 19）；画布上的剧情连线是关系数据 `plot_edge`（决策 10），不是独立存储。
 
 ```
 大纲视图（树）         画布视图（图）
- 卷1                       🎯 结局(游离)
+ 卷1                       🎯 结局
  ├ 第1章              ┌────┘
  │ ├ 场景A ←──────────┤ 同一数据
  │ └ 场景B            └────┐
  └ 第2章                   路径A ─→ 路径B
+                        （plot_edge 剧情连线）
 ```
 
-- 在大纲里拖拽重排 → 画布上的连线自动更新
-- 在画布上把游离节点拖入卷 → 大纲里自动归位
+- 在大纲里拖拽重排 → 画布上的投影自动更新
+- 画布上可自由摆放节点（坐标/缩放存 localStorage，决策 10）与绘制推演连线（`plot_edge`，决策 10）
 - 两个视图不是「同步」关系，而是同一数据的两种**投影**
 
 ## 决策 2：通用关系表
@@ -212,7 +213,7 @@ export async function ensureProjectInitialized(dir: string): Promise<boolean> {
   ));
   initDatabaseSchema(db, schemaVersion);      // 建表（含 chat_messages）+ 写入 PRAGMA user_version
   writeFile('outline.json',
-    '{"id":"root","type":"root","children":[],"orphan_nodes":[]}');
+    '{"id":"root","type":"root","schema_version":1,"children":[]}');
   return true;  // 新初始化
 }
 ```
@@ -232,11 +233,12 @@ AI Editor 的目标用户是**写小说的人**，不是开发者。纯 GUI 交�
 ## 决策 9：Delta 只沿大纲树父链累积（含推演语义）
 
 - 状态计算 `computeState(target, at_node_id)` 只沿**大纲树父链**（根 → 目标节点）累积已确认的 Delta；树路径唯一，结果确定可复现。
+- **双层排序**：节点间按树路径顺序（根 → 目标节点）；同一节点内的多个 Delta 按 `order` 递增应用。节点移动（move）后路径顺序天然正确，不依赖全局 `order`。
+- Delta 的 `op=update` 应用时**校验当前值等于 `from`**，不匹配返回 409 `DELTA_CONFLICT`，由调用方感知不一致，不静默跳过。
 - 画布上的推演连线（`plot_edge`）不参与状态计算。
 - 推演（what-if 分析）是「只读路径计算 + 提案生成器」：AI 推演产生的状态变化**不落库、不进入主状态**，只以提案形式呈现，用户确认后由 executor 写入 `delta_records` 成为事实。推演永不直接写数据。
-- 游离节点（`orphan_nodes`）不在树父链上，其状态 = 初始状态 + 直接挂在该节点上的 Delta；归位进大纲树后自动获得完整路径累积语义。
 
-**为什么**：路径唯一才能保证状态计算结果确定可复现；推演与事实分离，避免 AI 的假设污染创作数据。
+**为什么**：树路径唯一才能保证状态计算结果确定可复现；推演与事实分离，避免 AI 的假设污染创作数据。
 
 ## 决策 10：画布连线用 plot_edge 关系类型
 
@@ -256,17 +258,20 @@ AI Editor 的目标用户是**写小说的人**，不是开发者。纯 GUI 交�
 ## 决策 12：软删 + 回收站
 
 - 实体与大纲节点删除采用**软删**：entities 表标 `deleted_at`；大纲节点标 `deleted` + `deleted_at`（时间戳支撑回收站列表与定期清理），不物理删除。
-- **级联软删**：软删实体/节点时，其关联的关系与 Delta **一并软删**——`relation_records` / `delta_records` 增加 `deleted_at` 标记；常规查询默认过滤软删对象，回收站 API 是访问软删对象的唯一入口。
+- **级联软删**：软删实体/节点时，其关联的关系与 Delta **一并软删**——`relation_records` / `delta_records` 标 `deleted_at`；常规查询默认过滤软删对象，回收站 API 是访问软删对象的唯一入口。
+- **手动删关系 = 物理删**：用户/画布直接删除关系（`DELETE /relation/:id`）立即物理清除，不进入回收站——关系是轻量可重建对象（随时可重新建立），`deleted_at` 标记仅服务于级联软删场景。
+- **关系可见性联动端点状态**：常规查询过滤关系时校验其 source/target 端点均未软删（任一端点软删即不可见）；**restore 级联还原全部关系**（不因端点仍软删而跳过），端点还原后关系自动可见——数据永不丢失，也不会出现指向回收站对象的「幽灵关系」。
 - **级联还原**：restore 时还原本体 + 关联的关系与 Delta；**purge** 时才物理清除（实体连同其关系与 Delta，节点连同递归子树）。
 - UI 提供回收站与还原入口；回收站定期清理（按 `deleted_at` 判定保留时长）。
 
-**为什么**：创作场景误删成本高，软删为还原留余地；关系与 Delta 随本体一并软删，避免悬挂引用，还原时数据完整恢复；purge 兜底释放空间。
+**为什么**：创作场景误删成本高，软删为还原留余地；关系与 Delta 随本体一并软删，避免悬挂引用，还原时数据完整恢复；关系高频可重建故手动删除走物理删；可见性联动端点状态保证「还原必可见、可见必有效」。
 
 ## 决策 13：schema 演进 —— MVP 删库重建
 
 - MVP 不做数据迁移：`data.db` 通过 `PRAGMA user_version` 记录 schema 版本，启动时检测不匹配则**删除重建**并提示用户；`project.json` 增加 `schema_version` 字段。
 - **版本判定规则**：以 data.db 的 `user_version` 为准判定是否重建；`project.json` 的 `schema_version` 仅用于 JSON 结构判断；首次初始化时两个版本号都写入（见决策 8 初始化流程）。
-- **重建时同步重置 outline.json**（先备份为 `outline.json.bak`）并清空回收站，避免「大纲完整、实体全空」的半状态。
+- **重建时同步重置 outline.json**（先备份为 `outline.json.bak`）并清空回收站，避免「大纲完整、实体全空」的半状态；**旧 data.db 一并备份为 `data.db.bak`**——对话历史属创作数据（决策 18），重建不可静默丢弃，用户可从备份手动恢复。
+- outline.json 顶层携带 `schema_version` 字段（与 project.json 同步写入，用于文件格式演进判定）。
 - 不写迁移脚本（YAGNI）。
 - **约束**：此策略仅在正式发布前可接受；首次发布前必须重新评估（发布后用户持有真实创作数据，删库不可接受）。
 
@@ -275,10 +280,10 @@ AI Editor 的目标用户是**写小说的人**，不是开发者。纯 GUI 交�
 ## 决策 14：提案生命周期 —— 仅内存
 
 - 提案（proposal）仅存服务端内存，随 SSE 事件推送，不落盘。
-- 确认（confirm）时服务端**重新校验**：提案引用的实体/大纲节点仍存在，且其 `updated_at`（或版本号）与提案生成时的快照一致；存在性失败或无快照比对失败返回 409，前端提示重新生成提案。
-- 无过期清理机制、无跨会话恢复（提案是瞬态交互对象）。
+- 确认（confirm）时服务端**重新校验**：提案引用的实体/大纲节点仍存在，且快照一致——entities / relation_records / delta_records 用自身 `updated_at`；大纲节点用 outline.json 节点级 `updated_at`（决策 19）；校验失败返回 409 `PROPOSAL_STALE`，前端提示重新生成提案；proposal_id 不存在返回 404 `PROPOSAL_NOT_FOUND`。
+- 提案 Map 加 **TTL（10 分钟）与条数上限**，超期/超限自动清除；无跨会话恢复（提案是瞬态交互对象）。
 
-**为什么**：提案是毫秒级的交互对象，落盘与恢复机制收益为零；「存在性 + updated_at 快照比对」的双重校验防止「提案生成后数据已被其他操作改变」导致的脏写入。
+**为什么**：提案是毫秒级的交互对象，落盘与恢复机制收益为零；「存在性 + updated_at 快照比对」的双重校验防止「提案生成后数据已被其他操作改变」导致的脏写入；TTL/上限防止用户挂卡不确认导致内存无限增长。
 
 ## 决策 15：agent 循环终止与失败处理
 
@@ -299,8 +304,8 @@ AI Editor 的目标用户是**写小说的人**，不是开发者。纯 GUI 交�
 
 ## 决策 17：安全基线
 
-- 服务默认绑定 `127.0.0.1`，不对外网开放；端口占用时自动 +1 递增并打开实际端口（与决策 8 统一）。
-- 中间件对**全部请求**（含读）统一校验 `Origin`/`Host` 头，拒绝非本机来源（DNS rebinding 下读操作同样是敏感操作，防 CSRF / DNS rebinding）。
+- 服务默认绑定 `127.0.0.1`，不对外网开放；端口占用时自动 +1 递增并打开实际端口（与决策 8 统一；**dev 态除外**——开发环境端口被占直接报错提示手动指定 PORT，见 architecture.md 开发态说明）。
+- 中间件对**全部请求**（含读）校验来源：`Origin` 头存在时校验其为本机来源（`http://127.0.0.1[:port]` / `http://localhost[:port]` / `http://[::1][:port]`）；**Origin 缺失**（地址栏直接导航打开首页的常规浏览器行为）时退化为校验 `Host` 头 ∈ {`127.0.0.1`, `localhost`, `::1`} 且端口匹配。两者皆拒则拒绝（DNS rebinding 下读操作同样是敏感操作，防 CSRF / DNS rebinding）。
 - DeepSeek API key：环境变量 `DEEPSEEK_API_KEY` 为主；设置页可配置并写入用户级配置文件（如 `~/.ai-editor/config.json`）。**key 不进入项目文件**（project.json / outline.json / data.db），保持「代码与数据物理隔离」。
 - 项目路径校验：create/open 时路径需规范化（resolve）、防护符号链接逃逸；open 必须校验 `project.json` 存在。
 
@@ -308,9 +313,28 @@ AI Editor 的目标用户是**写小说的人**，不是开发者。纯 GUI 交�
 
 ## 决策 18：对话历史持久化
 
-- 新建 `chat_messages` 表入 data.db：session_id、role（user/assistant/tool）、content、tool_calls（JSON）、created_at（见 `doc/database/schema.md`）。
+- 新建 `chat_messages` 表入 data.db：session_id、project_id（会话按项目隔离）、role（user/assistant/tool）、content、tool_calls（JSON）、**tool_call_id**（tool 消息关联其 assistant 工具调用的 id）、created_at（见 `doc/database/schema.md`）。
 - MVP 只存原始消息，不做摘要持久化；会话级滑动窗口裁剪与摘要压缩仍在 agent/session.ts 运行时完成（决策 6 分层上下文策略）。
-- 服务重启后通过 session_id 重建「继续上次对话」。
+- **历史重建规则**：续聊时按 `assistant.tool_calls[].id` ↔ `tool.tool_call_id` **成对重组**喂回模型（DeepSeek 要求严格配对，缺一即拒绝请求）；滑动窗口裁剪**必须成对**（tool_call 与对应 tool_result 同裁同留）。
+- 服务重启后通过 session_id 重建「继续上次对话」；会话列表/历史查询走 `GET /api/v1/chat/sessions` 与 `GET /api/v1/chat/sessions/:id/messages`（见 `doc/api/endpoints.md`）。
 - 兑现 product.md「对话历史在本地保存」的承诺。
 
-**为什么**：对话历史是本地创作数据的一部分，落库后重启不丢、可续聊；摘要持久化属优化项，MVP 不做（YAGNI），裁剪压缩留在运行时即可。
+**为什么**：对话历史是本地创作数据的一部分，落库后重启不丢、可续聊；工具调用成对性是模型 API 的硬约束，不落盘 id 则续聊必然失败；摘要持久化属优化项，MVP 不做（YAGNI），裁剪压缩留在运行时即可。
+
+## 决策 19：大纲严格三层，无游离节点
+
+- 大纲树固定三层：**volume（卷）→ chapter（章）→ scene（场景）**，所有节点必须挂在大纲树上，**不存在游离节点（orphan_nodes）**。
+- 创建规则：`volume` 挂 `root`；`chapter` 挂 `volume` 或 `root`；`scene` 必须挂 `chapter`。创建时必须显式指定 `parent_id`，无默认值。
+- outline.json 不再有 `orphan_nodes` 字段；move 接口不再支持 `__orphan__` 目标。
+- **节点版本戳**：outline.json 每个节点携带 `updated_at`（ISO 时间戳），节点任何字段变更（title/summary/children 重排）时由服务端原子写时统一更新；顶层携带 `schema_version`（文件格式演进判定，衔接决策 13）。节点级 `updated_at` 同时支撑决策 14 的提案快照比对。
+- 关联影响：决策 9 删除「游离节点仅累积直接挂载 Delta」规则（树路径唯一即涵盖全部语义）；画布不再有「游离节点拖入归位」交互（决策 1）；backlog #11（孤儿节点层级限制）取消。
+
+**为什么**：游离节点制造了「树外状态」的语义裂缝——状态计算、软删级联、提案快照都要为它开特例，且与「节点即大纲」的统一模型冲突；取消后路径唯一、规则单一，全链路简化。
+
+## 决策 20：SSE 心跳与断开检测
+
+- `/api/v1/chat` 的 SSE 流每 15-30 秒发送一次 `ping` 事件（空 payload，仅维持连接活性与探活）。
+- **三路断开检测**：`stream.onAbort` 回调 + `c.req.raw` 的 close/error 监听 + 心跳写失败，任一触发即通过 AbortController 全链路取消（agent 循环终止、DeepSeek fetch 中止，衔接决策 16）。
+- 客户端侧同样监听流结束/`onAbort`，显示「上次会话已取消」并清理未确认提案卡片。
+
+**为什么**：@hono/node-server 只能靠写失败感知客户端断开；agent 等待模型响应期间（单轮最长 120s，决策 15）无任何写操作，无心跳则断网后取消延迟可达 120s，「断开即取消」（决策 16）名存实亡。心跳让探活与取消时延收敛到秒级。
