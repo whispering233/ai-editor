@@ -1,17 +1,25 @@
-// 统一错误处理（T6.1）
+// 统一错误处理（T6.1 + S1.2）
 //
 // 契约来源：doc/api/endpoints.md「通用约定」——
 //   成功响应 { success: true, data: T }；错误响应 { success: false, error: { code, message } }。
-// ErrorCode 单一来源为 @ai-editor/shared（types/api.ts）；本文件补充三个服务端侧错误码
+// ErrorCode 单一来源为 @ai-editor/shared（types/api.ts）；本文件补充服务端侧错误码
 // （不在 shared 枚举内，与 client 的 CLIENT_NETWORK_ERROR 同类做法）：
-//   INTERNAL_ERROR（未处理异常 500）、FORBIDDEN（来源校验拒绝 403）、NOT_FOUND（未知端点 404）
+//   INTERNAL_ERROR（未处理异常 500）、FORBIDDEN（来源校验拒绝 403）、NOT_FOUND（未知端点 404）、
+//   NO_PROJECT_OPEN（S1.2：无当前项目时业务操作 409）、PROJECT_ALREADY_EXISTS（S1.2：create 目录已是项目 409）
+// 记录：错误码分散（shared 枚举 + 服务端补充 + client 补充）为已知技术债，MVP 不收敛
 import { ZodError } from "zod";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { ErrorHandler } from "hono";
 import type { ErrorCode } from "@ai-editor/shared";
 
 /** 服务端补充错误码（不在 shared ErrorCode 枚举内） */
-export const SERVER_ERROR_CODES = ["INTERNAL_ERROR", "FORBIDDEN", "NOT_FOUND"] as const;
+export const SERVER_ERROR_CODES = [
+  "INTERNAL_ERROR",
+  "FORBIDDEN",
+  "NOT_FOUND",
+  "NO_PROJECT_OPEN",
+  "PROJECT_ALREADY_EXISTS",
+] as const;
 export type ServerErrorCode = (typeof SERVER_ERROR_CODES)[number];
 
 export type ApiErrorCode = ErrorCode | ServerErrorCode;

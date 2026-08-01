@@ -10,6 +10,7 @@ import {
   ensureProject,
   originCheckMiddleware,
   projectMiddleware,
+  setCurrentProject,
   type ProjectVariables,
 } from "./project.js";
 
@@ -22,18 +23,20 @@ function makeTmpDir(): string {
 }
 
 afterEach(() => {
+  setCurrentProject(null); // 清理模块级 currentProject 单例（S1.2），防跨测试泄漏
   for (const dir of tmpDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-/** 组装带中间件的测试 app */
+/** 组装带中间件的测试 app（projectMiddleware 从 currentProject 单例注入） */
 function buildApp(root: string) {
   const project = ensureProject(root);
+  setCurrentProject(project);
   const app = new Hono<{ Variables: ProjectVariables }>();
   app.onError(errorHandler());
   app.use("*", originCheckMiddleware());
-  app.use("*", projectMiddleware(project));
+  app.use("*", projectMiddleware());
   app.get("/api/v1/health", (c) => c.json({ ok: true, root: c.get("project").root }));
   return { app, project };
 }

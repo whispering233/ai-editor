@@ -1,22 +1,23 @@
-// 项目上下文中间件（T6.1）
+// 项目上下文中间件（T6.1 + S1.2）
 //
 // 职责（doc/design/architecture.md 第 121-122 行 middleware/project.ts「项目路径注入」）：
 //   1. ensureProject：检测 project.json，不存在则按决策 8 自动初始化
 //      （project.json + data.db + outline.json，三文件带 schema_version，衔接决策 13）
-//   2. 来源校验（决策 17 修订）：全部请求校验 Origin（缺失时退化为 Host）的 host
+//   2. currentProject 内存单例（S1.2，data-flow.md 第 46 行）：create/open 切换、close 清空，
+//      模块级可变状态由路由（routes/project.ts）读写，projectMiddleware 从状态注入 Hono 上下文
+//   3. 来源校验（决策 17 修订）：全部请求校验 Origin（缺失时退化为 Host）的 host
 //      ∈ {127.0.0.1, localhost, ::1}，不匹配拒绝 403；**不校验端口**
 //      （端口 +1 可变；dev 态 Vite proxy 转发后端口为 5173，校验端口会误杀开发请求）
-//   3. 项目上下文挂到 Hono 上下文（c.set("project", ...)），关闭时释放 db 连接（data-flow.md 第 46 行）
 import { basename, join } from "node:path";
 import type { Context, MiddlewareHandler } from "hono";
 import type { ProjectFileConfig } from "@ai-editor/shared";
 import { generateProjectId } from "@ai-editor/shared";
-import { closeDatabase, openDatabase, type Db } from "@ai-editor/db";
+import { closeDatabase, openDatabase, setUserVersion, type Db } from "@ai-editor/db";
 import { readProjectFile, writeProjectFile } from "@ai-editor/db";
 import { writeOutlineFile } from "@ai-editor/db";
 import { SCHEMA_VERSION } from "@ai-editor/db";
 import { nowIso } from "@ai-editor/db";
-import { fail } from "./error.js";
+import { HttpError, fail, type ApiErrorCode } from "./error.js";
 
 /** data.db 文件名（决策 8：项目根目录） */
 export const DATA_DB_FILE_NAME = "data.db";
@@ -41,10 +42,42 @@ export function getProject(c: Context<{ Variables: ProjectVariables }>): Project
   return c.get("project");
 }
 
+// ============ currentProject 内存单例（S1.2） ============
+//
+// 语义（data-flow.md 第 46 行）：单进程内存中只有一个 currentProject，所有 API 调用共享；
+// create/open 切换它、close 清空它。多项目并发打开不在 MVP 范围（backlog）。
+// 模块级可变状态 + 显式读写函数：路由层可读可写，中间件只读注入。
+
+/** 当前打开的项目（null = 无） */
+let currentProject: ProjectContext | null = null;
+
+/** 设置当前项目（create/open 成功后调用；传 null 清空——close 时） */
+export function setCurrentProject(project: ProjectContext | null): void {
+  currentProject = project;
+}
+
+/** 读取当前项目（可能为 null） */
+export function getCurrentProject(): ProjectContext | null {
+  return currentProject;
+}
+
+/**
+ * 路由内取当前项目；无已打开项目 → 409 NO_PROJECT_OPEN。
+ * （错误码为服务端补充码，不在 shared ErrorCode——记录待收敛，见 error.ts 注释）
+ */
+export function requireCurrentProject(): ProjectContext {
+  if (currentProject === null) {
+    throw new HttpError(409, "NO_PROJECT_OPEN" as ApiErrorCode, "当前无已打开的项目，请先 POST /api/v1/project/open");
+  }
+  return currentProject;
+}
+
 /**
  * 检测 + 初始化项目（决策 8 启动流程 ④）：
  * project.json 存在 → 直接加载；不存在 → 自动创建 project.json + data.db + outline.json。
  * project.json 损坏（JSON 解析失败）→ 抛错（readProjectFile 语义：不静默重建，防数据误伤）。
+ * 初始化分支立即写 data.db user_version（S1.1 审核建议）——brand-new 库 version=0 会让
+ * open 时的 ensureSchemaCompatible 触发无意义重建并留下空库 data.db.v0.bak。
  */
 export function ensureProject(root: string): ProjectContext {
   const existing = readProjectFile(root);
@@ -66,6 +99,7 @@ export function ensureProject(root: string): ProjectContext {
   writeProjectFile(root, config);
   writeOutlineFile(root, { id: "root", type: "root", schema_version: SCHEMA_VERSION, children: [] });
   const db = openDatabase(join(root, DATA_DB_FILE_NAME)); // 文件不存在则创建 + 自动建表
+  setUserVersion(db, SCHEMA_VERSION); // 与 project.json/outline.json 的 schema_version 同步（决策 13）
   return { root, config, db };
 }
 
@@ -100,10 +134,17 @@ export function originCheckMiddleware(): MiddlewareHandler {
   };
 }
 
-/** 项目上下文注入中间件：c.set("project", context)，路由经 getProject 读取 */
-export function projectMiddleware(project: ProjectContext): MiddlewareHandler {
+/**
+ * 项目上下文注入中间件：从 currentProject 单例读取并 c.set("project", ...)，
+ * 路由经 getProject / requireCurrentProject 读取。create/open 切换单例后新请求自动生效；
+ * 无当前项目时 c.set 不执行（业务路由由 requireCurrentProject 兜底 409）。
+ */
+export function projectMiddleware(): MiddlewareHandler {
   return async (c, next) => {
-    c.set("project", project);
+    const project = getCurrentProject();
+    if (project !== null) {
+      c.set("project", project);
+    }
     await next();
   };
 }

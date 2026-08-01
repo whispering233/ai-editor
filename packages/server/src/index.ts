@@ -21,9 +21,11 @@ import {
   ensureProject,
   originCheckMiddleware,
   projectMiddleware,
+  setCurrentProject,
   type ProjectContext,
   type ProjectVariables,
 } from "./middleware/project.js";
+import { projectRoutes } from "./routes/project.js";
 
 /** 默认端口（决策 8 / 17；dev 态 Vite proxy 写死 3456） */
 export const DEFAULT_PORT = 3456;
@@ -105,19 +107,23 @@ export async function startServer(projectRoot: string, options: StartServerOptio
   const clientDist = options.clientDist ?? defaultClientDist();
 
   const project = ensureProject(projectRoot);
+  setCurrentProject(project); // 初始项目即当前项目（S1.2：create/open 可切换、close 清空）
 
   const app = new Hono<{ Variables: ProjectVariables }>();
 
-  // 中间件装配顺序：错误兜底 → 来源校验 → 项目上下文注入
+  // 中间件装配顺序：错误兜底 → 来源校验 → 项目上下文注入（从 currentProject 单例读取）
   app.onError(errorHandler());
   app.use("*", originCheckMiddleware());
-  app.use("*", projectMiddleware(project));
+  app.use("*", projectMiddleware());
 
   // 探活路由（本卡基础路由；切片 1 起在下方并列挂载 routes/ 业务路由）
   app.get("/api/v1/health", (c) => c.json(ok({ status: "ok" })));
 
   // 设置路由（S1.3）：GET/PUT /api/v1/settings/llm（用户级配置，决策 17）
   app.route("/api/v1/settings", settingsRoutes);
+
+  // 项目路由（S1.2）：create/open/close/config（项目管理，决策 8/13/17）
+  app.route("/api/v1/project", projectRoutes);
 
   // 兜底：/api/* → JSON 404；其他 GET/HEAD → 静态文件 → SPA fallback index.html（决策 8）
   app.notFound(async (c) => {
