@@ -8,7 +8,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - 卡内不做卡外顺手改动；backlog.md 事项一律不做。
 - 每个切片结束时功能端到端可用；切片间严格按依赖序，不跳卡。
 - 契约以 `doc/api`、`doc/database` 为准，发现文档矛盾先停下提问，不要自行发明。
-- 环境：Node 22.23 / pnpm 11.8（满足 Node ≥ 22.12 / pnpm 10+，workspace 需配 `onlyBuiltDependencies: [better-sqlite3]`）。无 git 远端，CI 任务不做。
+- 环境：Node 22.23 / pnpm 11.8（满足 Node ≥ 22.12 / pnpm 10+，workspace 需配 `allowBuilds: { better-sqlite3: true }`（pnpm 11+；pnpm 10 旧格式 `onlyBuiltDependencies`））。无 git 远端，CI 任务不做。
 - 测试框架：vitest（各包独立 `test` script，`pnpm --filter <包> test`）。
 
 ---

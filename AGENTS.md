@@ -36,7 +36,7 @@
 - agent 循环有硬性终止：max 8 轮 / 单轮 120s / token 预算（工具结果也有 token 上限）；SSE 断开即全链路取消——**心跳（15-30s ping）+ 三路断开检测**（onAbort + req close/error + 心跳写失败，决策 20）；心跳对 **TCP 半开连接**（客户端断电）无法即时感知，客户端需自身超时兜底（60s 无任何事件即提示断开）；跨 data.db / outline.json 的写操作**先 DB 后 JSON**，不一致由**启动一致性校验**兜底补标（决策 16 修订）。
 - `/api/v1/chat` 是 **POST + SSE**：浏览器原生 `EventSource` 只支持 GET，客户端必须用 `fetch` + `ReadableStream` 自写 SSE 解析（`client/src/hooks/use-sse.ts`），处理跨 chunk 的 `data:` 行拼接与注释行。
 - 服务默认绑定 `127.0.0.1`，**全部请求**（含读）校验来源：仅校验 host ∈ {127.0.0.1, localhost, ::1}（**不校验端口**——端口自动 +1 与 dev proxy 依赖此规则，决策 17 修订）；DeepSeek key 走环境变量或用户级配置（`~/.ai-editor/config.json`），**不入项目文件**；生产态端口占用自动 +1 并打开实际端口（**dev 态被占直接报错**，Vite proxy 写死 3456）；打开浏览器/提示 URL 一律用 `127.0.0.1` 而非 `localhost`（IPv6 优先系统上 localhost 可能解析为 `::1` 导致连接被拒）（决策 8）。
-- 运行环境（2026-08 修订，以 architecture.md 版本声明为准）：Node ≥ 22.12、**全仓 ESM**；better-sqlite3 `^13`（N-API 重写，全局安装无 ABI 失配）、zod `^4`、Vite 7、Hono 4；pnpm-workspace.yaml 需配 `onlyBuiltDependencies: [better-sqlite3]`（pnpm 10 构建批准）。
+- 运行环境（2026-08 修订，以 architecture.md 版本声明为准）：Node ≥ 22.12、**全仓 ESM**；better-sqlite3 `^13`（N-API 重写，全局安装无 ABI 失配）、zod `^4`、Vite 7、Hono 4；pnpm-workspace.yaml 需配 `allowBuilds: { better-sqlite3: true }`（pnpm 11+ 构建批准；pnpm 10 旧格式为 `onlyBuiltDependencies`，pnpm 11 会自动迁移为哨兵值导致构建被忽略）。
 - schema 演进 MVP 用**删库重建**（`PRAGMA user_version` 为准判定，`schema_version` 管 JSON，重建时同步重置 outline.json 并备份 `.bak`，**data.db 也备份 `.bak`**），无迁移脚本；首次发布前必须复审此策略（决策 13）。
 - 部署：单命令 `ai-editor`，单进程 Hono `:3456` 同时服务 `/api/v1` 与 SPA 静态文件；dev 态 Vite `:5173` 通过 proxy 转发 `/api` 到 `:3456`。命令约定（architecture.md）：根 `pnpm dev` = client Vite `:5173` + server `tsx watch :3456` + 各库 `tsc --watch`；`pnpm -r build` 按依赖序构建（shared → llm → db → tools → agent → server → client）。
 

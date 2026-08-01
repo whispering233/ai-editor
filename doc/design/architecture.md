@@ -23,7 +23,7 @@
 
 ```
 ai-editor/
-├── pnpm-workspace.yaml           # 含 onlyBuiltDependencies: [better-sqlite3]（pnpm 10 构建批准）
+├── pnpm-workspace.yaml           # 含 allowBuilds: { better-sqlite3: true }（pnpm 11+ 构建批准）
 ├── package.json                   # 根：dev 脚本、lint、typecheck（"type": "module"）
 ├── tsconfig.base.json             # 公共 TS 配置（ESM: module/moduleResolution 统一）
 │
