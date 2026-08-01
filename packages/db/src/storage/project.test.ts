@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { ProjectFileConfig } from "@ai-editor/shared";
-import { PROJECT_FILE_NAME, readProjectFile, writeProjectFile } from "./project";
+import { PROJECT_FILE_NAME, readProjectFile, writeProjectFile } from "./project.js";
 
 let dir: string;
 

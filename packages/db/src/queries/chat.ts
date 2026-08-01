@@ -8,7 +8,7 @@
 
 import { nanoid } from "nanoid";
 import { truncate, type ChatMessage, type ChatMessageRow, type ChatRole, type ChatSessionSummary } from "@ai-editor/shared";
-import type { Db } from "../connection";
+import type { Db } from "../connection.js";
 
 /** 会话列表 lastMessage 截断长度（endpoints.md 仅要求「截断」，长度为本实现约定，未入文档契约） */
 export const SESSION_LAST_MESSAGE_MAX_LEN = 50;

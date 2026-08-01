@@ -5,8 +5,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { openDatabase, closeDatabase, type Db } from "./connection";
-import { createTables, getUserVersion, SCHEMA_VERSION, setUserVersion } from "./schema";
+import { openDatabase, closeDatabase, type Db } from "./connection.js";
+import { createTables, getUserVersion, SCHEMA_VERSION, setUserVersion } from "./schema.js";
 
 let dir: string;
 let dbPath: string;

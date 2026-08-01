@@ -8,8 +8,8 @@
 
 import { join } from "node:path";
 import type { OutlineFileNode, OutlineFileNodeBase, OutlineFileTree } from "@ai-editor/shared";
-import { SCHEMA_VERSION } from "../schema";
-import { readTextFileOrNull, writeJsonAtomic } from "./atomic";
+import { SCHEMA_VERSION } from "../schema.js";
+import { readTextFileOrNull, writeJsonAtomic } from "./atomic.js";
 
 /** outline.json 文件名（决策 8：项目根目录） */
 export const OUTLINE_FILE_NAME = "outline.json";

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { OutlineFileNode, OutlineFileTree } from "@ai-editor/shared";
-import { SCHEMA_VERSION } from "../schema";
+import { SCHEMA_VERSION } from "../schema.js";
 import {
   findOutlineNode,
   getOutlinePathIds,
@@ -14,7 +14,7 @@ import {
   touchOutlineNode,
   updateOutlineNode,
   writeOutlineFile,
-} from "./outline";
+} from "./outline.js";
 
 let dir: string;
 

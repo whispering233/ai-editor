@@ -6,7 +6,7 @@
 
 import { join } from "node:path";
 import type { ProjectFileConfig } from "@ai-editor/shared";
-import { readTextFileOrNull, writeJsonAtomic } from "./atomic";
+import { readTextFileOrNull, writeJsonAtomic } from "./atomic.js";
 
 /** project.json 文件名（决策 8：项目根目录） */
 export const PROJECT_FILE_NAME = "project.json";

@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { nowIso, writeJsonAtomic } from "./atomic";
+import { nowIso, writeJsonAtomic } from "./atomic.js";
 
 let dir: string;
 

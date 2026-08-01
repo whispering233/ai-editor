@@ -4,7 +4,7 @@
 // 持久化语义（doc/api/data-flow.md 第 51 行）：WAL 模式 + synchronous=FULL，写入即时落盘。
 
 import Database from "better-sqlite3";
-import { createTables } from "./schema";
+import { createTables } from "./schema.js";
 
 /** better-sqlite3 连接实例类型 */
 export type Db = Database.Database;
