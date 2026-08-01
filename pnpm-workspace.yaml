@@ -6,3 +6,4 @@ packages:
 # 后者会被 pnpm 自动迁移为哨兵值 "set this to true or false" 导致构建被忽略。
 allowBuilds:
   better-sqlite3: true
+  esbuild: true

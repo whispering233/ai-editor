@@ -3,25 +3,27 @@
   "version": "0.1.0",
   "description": "React SPA 前端（仅依赖 @ai-editor/shared）",
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
-  },
-  "files": ["dist"],
+  "private": true,
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "test": "vitest run"
+    "dev": "vite",
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "test": "vitest run",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@ai-editor/shared": "workspace:*",
     "react": "^19.0.0",
+    "react-dom": "^19.0.0",
     "zustand": "^5.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.8.0"
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.8.0",
+    "vite": "^7.3.6",
+    "vitest": "^4.1.10"
   }
 }
