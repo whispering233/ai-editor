@@ -16,6 +16,8 @@ InkOS 按 sessionKind 切换工具集（chat/play/write 各有不同工具），
 
 目标是让 AI 有能力探索整个创作数据库，不需要用户干预。
 
+> 所有查询类工具**默认过滤软删对象**（决策 12 修订）：`get_entity` / `search_entities` / `query_relationships` 等不会返回或遍历回收站中的对象。
+
 ```typescript
 // === 实体查询 ===
 get_entity(type, id)
@@ -46,6 +48,8 @@ get_outline_path(node_id)
 compute_state(target_type, target_id, at_node_id?)
   → 实体到达指定节点时的累积状态
   用途：AI 说"张三在第30章时的战力是多少"
+  语义：只沿大纲树父链（根 → at_node_id）累积已确认 Delta（决策 9）；
+        plot_edge 连线不参与；游离节点仅累积直接挂载在它上面的 Delta
 
 get_delta_history(target_type, target_id)
   → 该实体的所有属性变更记录（按时间/节点排序）
@@ -80,6 +84,8 @@ trace_plot_paths(from_node_id, to_node_id)
 find_orphan_elements()
   → { unused_characters: [], unresolved_deltas: [], dangling_relations: [] }
   用途：发现"写到第30章，但角色C第10章后就没出现"
+  另：跨存储（data.db / outline.json）不一致的兜底修复入口（决策 16 修订）——
+      取消/断电可能造成「DB 已写、JSON 未写」的不一致，由本工具检测并引导修复
 
 // === 关系发现 ===
 suggest_connections(entity_id)
@@ -163,3 +169,20 @@ AI 不可以：
 
 用户始终是最终决策者。
 ```
+
+## agent 循环终止与失败处理
+
+对应 [`../design/decisions.md`](../design/decisions.md) 决策 15。主循环设三重保险，任一超限即终止：
+
+| 保险 | 上限 | 超限行为 |
+|------|------|---------|
+| max iterations | 8 轮 | 发 `error` 事件终止循环 |
+| 单轮超时 | 120s | 同上 |
+| token 预算 | 上下文窗口内预算上限 | 同上 |
+| 工具结果 token 预算 | 工具返回值序列化后估算 token 上限 | 截断/拒绝该工具结果并提示 LLM 缩小范围 |
+
+失败处理：
+- **工具执行失败**：以结构化文本（工具名 + 参数 + 错误信息）喂回 LLM 自纠，不直接终止。
+- **模型调用失败**（429/5xx/超时）：按 `llm/retry.ts` 的退避重试策略重试，最终失败以 `error` 事件呈现给用户。
+- **工具结果过大**：`get_outline` 整树或 `depth=3` 全图可能撑爆上下文窗口，工具结果序列化后先估算 token，超限即截断/拒绝（决策 15 补充）。
+- SSE 断开时全链路取消见 [`endpoints.md`](./endpoints.md) chat 端点（决策 16）。

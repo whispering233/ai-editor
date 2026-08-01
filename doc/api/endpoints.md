@@ -53,8 +53,18 @@
   name: string;
   language: "zh" | "en";
   config: ProjectConfig;  // 完整项目配置
+  // ProjectConfig 含 schema_version: number（对应 project.json 的 schema_version，决策 13）
 }
 ```
+
+**路径校验（create/open 通用，决策 17）**：
+- 路径需规范化（`path.resolve`），拒绝相对路径逃逸与符号链接指向项目目录之外（防越权读写任意目录）。
+- open 必须校验目标目录包含 `project.json`，否则拒绝。
+- 校验失败返回 `{ code: "INVALID_PROJECT_PATH" }`（400）。
+
+**schema 版本检测（open 时，决策 13 修订）**：
+- 以 data.db 的 `user_version` 为准判定是否重建；与当前版本不匹配时执行**删库重建**，并同步重置 outline.json（先备份为 `outline.json.bak`）、清空回收站；完成后向客户端提示已重建。
+- `project.json` 的 `schema_version` 仅用于 JSON 结构判断。
 
 ### POST /api/v1/project/close
 
@@ -82,6 +92,7 @@
   name: string;
   language: "zh" | "en";
   prompt: string;            // 项目提示词
+  schemaVersion: number;     // schema 版本（对应 project.json 的 schema_version，决策 13）
   createdAt: string;         // ISO datetime
   updatedAt: string;
 }
@@ -108,6 +119,8 @@
 ---
 
 ## 实体 CRUD
+
+> **软删过滤（决策 12 修订）**：常规查询端点（GET 列表/详情、关系查询、Delta 查询等）**默认过滤软删对象**；回收站 API（`/api/v1/trash/*`）是访问软删对象的唯一入口。
 
 ### GET /api/v1/entity/:type
 
@@ -237,7 +250,7 @@ id: string;
 
 ### DELETE /api/v1/entity/:type/:id
 
-删除实体及其所有关联关系和 Delta 记录。
+软删实体（决策 12）：标记 `deleted_at`，**本体保留**可还原；级联移除其关联的关系与 Delta 记录。
 
 ```typescript
 // Path
@@ -246,10 +259,10 @@ id: string;
 
 // Res: 200
 {
-  deleted: true;
+  deleted: true;                // 软删：仅标记 deleted_at，实体本体仍保留（可还原）
   cascaded: {
-    relations: number;    // 删除的关系数
-    deltas: number;       // 删除的 Delta 数
+    relations: number;    // 一并软删的关系数
+    deltas: number;       // 一并软删的 Delta 数
   };
 }
 
@@ -370,7 +383,7 @@ id: string;
     value?: string | number;         // 值（op=add 时使用）
   }[];
   description: string;            // 人类可读描述
-  order?: number;                 // 可选排序号，默认追加到末尾
+  // 注意：无 order 入参——order 由服务端生成，全局单调递增（与 schema.md 一致）
 }
 
 // Res: 201
@@ -557,7 +570,7 @@ nodeId: string;
 
 ### DELETE /api/v1/outline/:nodeId
 
-删除大纲节点（级联删除子节点、关联的 Delta 和关系）。
+软删大纲节点（决策 12）：标记 `deleted`，**本体保留**可还原；级联移除子节点、关联的 Delta 和关系（仅移除关联数据，被删对象本体保留）。
 
 ```typescript
 // Path
@@ -565,11 +578,11 @@ nodeId: string;
 
 // Res: 200
 {
-  deleted: true;
+  deleted: true;                // 软删：仅标记 deleted + deleted_at，节点本体保留（可还原）
   cascaded: {
-    children: number;       // 递归删除的子节点数
-    relations: number;      // 删除的关联关系数
-    deltas: number;         // 删除的 Delta 数
+    children: number;       // 递归软删的子节点数
+    relations: number;      // 一并软删的关联关系数
+    deltas: number;         // 一并软删的 Delta 数
   };
 }
 ```
@@ -592,6 +605,80 @@ nodeId: string;
 
 ---
 
+## 回收站
+
+软删（决策 12）的实体与大纲节点进入回收站，本体保留可还原；回收站定期清理（实现期定义保留时长）。
+
+### GET /api/v1/trash
+
+列出回收站中的软删对象。
+
+```typescript
+// Res: 200
+{
+  entities: { id: string; type: string; name: string; deleted_at: string }[];
+  nodes:    { id: string; type: string; title: string; deleted_at: string }[];
+}
+```
+
+### POST /api/v1/trash/entity/:type/:id/restore
+
+还原软删实体（恢复 `deleted_at` 为 NULL），并**级联还原**其关联的关系与 Delta（决策 12 修订）。
+
+```typescript
+// Path
+type: string;
+id: string;
+
+// Res: 200
+{ restored: true; restoredRelations: number; restoredDeltas: number }
+
+// Res: 404
+{ error: { code: "ENTITY_NOT_FOUND" } }
+```
+
+### POST /api/v1/trash/outline/:nodeId/restore
+
+还原软删大纲节点（恢复 `deleted`/`deleted_at` 标记），并**级联还原**其关联的关系与 Delta；子节点若仍在回收站则一并还原（决策 12 修订）。
+
+```typescript
+// Path
+nodeId: string;
+
+// Res: 200
+{ restored: true; restoredChildren: number; restoredRelations: number; restoredDeltas: number }
+
+// Res: 404
+{ error: { code: "OUTLINE_NODE_NOT_FOUND" } }
+```
+
+### DELETE /api/v1/trash/entity/:type/:id
+
+彻底删除（purge，物理清除且不可恢复）：清除实体本体及其关联的关系与 Delta。仅用于回收站清理。
+
+```typescript
+// Path
+type: string;
+id: string;
+
+// Res: 200
+{ purged: true }
+```
+
+### DELETE /api/v1/trash/outline/:nodeId
+
+彻底删除大纲节点（purge，物理清除且不可恢复）：**递归物理删除整棵子树**（子节点一并清除），并清除其关联的关系与 Delta。仅用于回收站清理。
+
+```typescript
+// Path
+nodeId: string;
+
+// Res: 200
+{ purged: true }
+```
+
+---
+
 ## AI 对话
 
 ### POST /api/v1/chat
@@ -609,6 +696,9 @@ nodeId: string;
     focus_node_id?: string;      // 当前聚焦的大纲节点 ID
   };
 }
+
+// 对话历史持久化（决策 18）：本会话的消息写入 data.db 的 chat_messages 表；
+// 服务重启后携带同一 session_id 即可继续上次对话。
 
 // Res: SSE stream
 // 消息格式（SSE event stream, text/event-stream）:
@@ -632,6 +722,8 @@ nodeId: string;
 // data: { "code": "...", "message": "..." }
 ```
 
+**取消语义（决策 16）**：SSE 断开（浏览器刷新/断网）即触发全链路取消——服务端通过 AbortController 终止 agent 循环、中止 DeepSeek fetch；未确认提案作废；正在执行的写操作完成当前一步后停止，操作顺序固定「先 DB 后 JSON」，两存储间不一致由 `find_orphan_elements` 工具兜底修复。客户端重连后提示「上次会话已取消」。
+
 ---
 
 ## 提案确认
@@ -649,6 +741,10 @@ proposalId: string;
   confirmed: true;
   result: unknown;              // 执行结果（如新创建的 entity id）
 }
+
+// Res: 409 — 提案过期（决策 14）
+// 确认时服务端重新校验提案引用的实体/大纲节点仍存在且无冲突；
+// 校验失败返回 { code: "PROPOSAL_STALE" }，前端提示重新生成提案。
 ```
 
 ### POST /api/v1/proposal/:proposalId/reject
