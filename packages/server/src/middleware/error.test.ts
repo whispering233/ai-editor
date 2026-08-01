@@ -1,6 +1,7 @@
 // 统一错误中间件测试（T6.1）：500 包裹格式 / HttpError 透传 / ok/fail 形状
 import { describe, expect, it } from "vitest";
 import { Hono } from "hono";
+import { z } from "zod";
 import { errorHandler, fail, HttpError, ok } from "./error.js";
 
 describe("ok / fail 帮助函数（endpoints.md 通用约定）", () => {
@@ -42,6 +43,21 @@ describe("errorHandler", () => {
     expect(await res.json()).toEqual({
       success: false,
       error: { code: "PROPOSAL_STALE", message: "快照不一致" },
+    });
+  });
+
+  it("ZodError → 400 VALIDATION_ERROR（含 fields，endpoints.md L228）", async () => {
+    const app = new Hono();
+    app.onError(errorHandler());
+    app.get("/zod", () => {
+      // 路由层 schema 校验失败的真实路径（如 S1.3 settings PUT 的 safeParse 抛错）
+      throw z.object({ name: z.string() }).parse({}); // name 缺失 → ZodError
+    });
+    const res = await app.request("http://127.0.0.1/zod");
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      success: false,
+      error: { code: "VALIDATION_ERROR", message: expect.any(String), fields: ["name"] },
     });
   });
 

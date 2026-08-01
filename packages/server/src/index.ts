@@ -15,6 +15,7 @@ import { Hono } from "hono";
 import { createAdaptorServer, type ServerType } from "@hono/node-server";
 import type { AddressInfo } from "node:net";
 import { errorHandler, fail, ok } from "./middleware/error.js";
+import { settingsRoutes } from "./routes/settings.js";
 import {
   closeProject,
   ensureProject,
@@ -114,6 +115,9 @@ export async function startServer(projectRoot: string, options: StartServerOptio
 
   // 探活路由（本卡基础路由；切片 1 起在下方并列挂载 routes/ 业务路由）
   app.get("/api/v1/health", (c) => c.json(ok({ status: "ok" })));
+
+  // 设置路由（S1.3）：GET/PUT /api/v1/settings/llm（用户级配置，决策 17）
+  app.route("/api/v1/settings", settingsRoutes);
 
   // 兜底：/api/* → JSON 404；其他 GET/HEAD → 静态文件 → SPA fallback index.html（决策 8）
   app.notFound(async (c) => {

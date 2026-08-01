@@ -5,6 +5,7 @@
 // ErrorCode 单一来源为 @ai-editor/shared（types/api.ts）；本文件补充三个服务端侧错误码
 // （不在 shared 枚举内，与 client 的 CLIENT_NETWORK_ERROR 同类做法）：
 //   INTERNAL_ERROR（未处理异常 500）、FORBIDDEN（来源校验拒绝 403）、NOT_FOUND（未知端点 404）
+import { ZodError } from "zod";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { ErrorHandler } from "hono";
 import type { ErrorCode } from "@ai-editor/shared";
@@ -20,12 +21,13 @@ export function ok<T>(data: T): { success: true; data: T } {
   return { success: true, data };
 }
 
-/** 错误响应包裹（endpoints.md） */
+/** 错误响应包裹（endpoints.md）；fields 仅 VALIDATION_ERROR 附带（校验失败字段路径） */
 export function fail(
   code: ApiErrorCode,
   message: string,
-): { success: false; error: { code: ApiErrorCode; message: string } } {
-  return { success: false, error: { code, message } };
+  fields?: string[],
+): { success: false; error: { code: ApiErrorCode; message: string; fields?: string[] } } {
+  return { success: false, error: { code, message, ...(fields ? { fields } : {}) } };
 }
 
 /**
@@ -45,7 +47,8 @@ export class HttpError extends Error {
 
 /**
  * 统一错误处理（Hono 4 onError 处理器，**必须注册为 app.onError 而非 app.use**）：
- * 捕获未处理异常 → 500 包裹；HttpError → 按 status/code 透传。
+ * HttpError → 按 status/code 透传；ZodError（路由内 schema.parse 抛出）→ 400 VALIDATION_ERROR（含 fields）；
+ * 未处理异常 → 500 包裹。
  * 说明：Hono 4 的 compose 在 dispatch 内部捕获路由错误并直接调用 onError，
  *   错误不会沿 next() 链传播——middleware 内的 try/catch 捕获不到下游错误
  *   （实测 hono@4.12 compose.js），因此本处理器以 ErrorHandler 形式导出。
@@ -54,6 +57,14 @@ export function errorHandler(): ErrorHandler {
   return (err, c) => {
     if (err instanceof HttpError) {
       return c.json(fail(err.code, err.message), err.status);
+    }
+    if (err instanceof ZodError) {
+      // 路由层 schema 校验失败（S1.3 settings PUT 等）→ 400 VALIDATION_ERROR，fields 为出错字段路径
+      const fields = err.issues.map((issue) => issue.path.join("."));
+      return c.json(
+        fail("VALIDATION_ERROR", err.issues[0]?.message ?? "参数校验失败", fields),
+        400,
+      );
     }
     console.error("[server] 未处理异常:", err);
     return c.json(fail("INTERNAL_ERROR", err instanceof Error ? err.message : "服务器内部错误"), 500);
