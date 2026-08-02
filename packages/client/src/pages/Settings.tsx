@@ -4,8 +4,8 @@
 //   常驻说明：key 只存本机用户配置（~/.ai-editor/config.json），不入项目文件（决策 17）；
 //   环境变量 DEEPSEEK_API_KEY 优先于此处配置（页面仍可保存，实际生效以环境变量为准）
 import { useEffect, useState } from "react";
-import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ApiError, CLIENT_NETWORK_ERROR, getSettingsLlm, updateSettingsLlm } from "../lib/api";
 import { useUiStore, type ErrorBanner } from "../stores/ui";
 

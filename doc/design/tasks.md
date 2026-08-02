@@ -435,7 +435,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 > 依据：`doc/ui/layout.md`（2026-08 重写：三栏 1:5:4 固定、中栏 6 tab、右栏聊天常驻、主题系统契约）；验收：三栏工作台可完整使用，双主题可切换，聊天常驻右栏且会话归属项目。
 
 **U1 shadcn 集成 + 主题 tokens**
-- 范围：`components.json`（new-york-v4 / cssVariables / aliases `@`）+ client tsconfig/vite.config 配 `@` 别名 + 装 lucide-react 与 shadcn 依赖；`index.css` 重写（`@custom-variant dark` + `@theme inline` + `:root`/`.dark` oklch 双主题 tokens（暖羊皮纸+牛血红+金箔 ↔ 蓝黑曜石+琥珀烛光）+ 系统字体栈 + `--radius: 0.6rem`）；shadcn add 基础组件（button/input/dialog/dropdown-menu/tabs/sonner/separator/tooltip 等）**替换自研 button/input/modal 三件套并迁移全部调用点**；`useTheme` hook（localStorage `ai-editor:theme` + classList toggle）
+- 范围：`components.json`（base-nova / cssVariables / aliases `@`）+ client tsconfig/vite.config 配 `@` 别名 + 装 lucide-react 与 shadcn 依赖（CLI 入 devDependencies，2026-08 实现修订）；`index.css` 重写（`@custom-variant dark` + `@theme inline` + `:root`/`.dark` oklch 双主题 tokens（暖羊皮纸+牛血红+金箔 ↔ 蓝黑曜石+琥珀烛光）+ 系统字体栈 + `--radius: 0.6rem` + `color-scheme`）；shadcn add 基础组件（button/input/dialog/dropdown-menu/tabs/sonner/separator/tooltip 等）**替换自研 button/input/modal 三件套并迁移全部调用点**；`useTheme` hook（localStorage `ai-editor:theme` + classList toggle）；删除未使用的 `@fontsource-variable/geist`（系统字体栈，不下载 web 字体）
 - 依赖：T7.1
 - 验证：typecheck + lint + vitest 全绿；双主题手动切换走查
 - 回滚：单 commit

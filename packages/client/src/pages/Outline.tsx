@@ -11,7 +11,7 @@ import type { DragEvent, KeyboardEvent, ReactNode } from "react";
 import { formatTimestamp } from "@ai-editor/shared";
 import type { OutlineNode } from "@ai-editor/shared";
 import { CHILD_TYPE, ConfirmDialog, MoveNodeDialog, TYPE_LABEL } from "../components/outline/dialogs";
-import { Button } from "../components/ui/button";
+import { Button } from "@/components/ui/button";
 import {
   ApiError,
   createOutlineNode,

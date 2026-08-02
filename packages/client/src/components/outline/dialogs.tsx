@@ -11,8 +11,8 @@ import { moveOutlineNode, type OutlineNodeType } from "../../lib/api";
 import { ApiError } from "../../lib/api";
 import { findNodeChildren, parentOptionsForType } from "../../lib/outline-tree";
 import { useUiStore } from "../../stores/ui";
-import { Button } from "../ui/button";
-import { Modal } from "../ui/modal";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 /** 类型徽标/按钮文案（卷/章/场） */
 export const TYPE_LABEL: Record<OutlineNodeType, string> = {
@@ -97,21 +97,12 @@ export function MoveNodeDialog({
   }
 
   return (
-    <Modal
-      title={`移动到…：《${node.title}》`}
-      onClose={onClose}
-      footer={
-        <>
-          <Button variant="outline" type="button" onClick={onClose} disabled={submitting}>
-            取消
-          </Button>
-          <Button type="submit" form="move-node-form" disabled={submitting}>
-            移动
-          </Button>
-        </>
-      }
-    >
-      <form id="move-node-form" onSubmit={handleSubmit} className="flex flex-col gap-3">
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>移动到…：《{node.title}》</DialogTitle>
+        </DialogHeader>
+        <form id="move-node-form" onSubmit={handleSubmit} className="flex flex-col gap-3">
         <div>
           <p className="mb-1 text-sm font-medium text-zinc-700">目标父节点（按层级过滤）</p>
           <select
@@ -142,8 +133,17 @@ export function MoveNodeDialog({
           </select>
         </div>
         {error && <p className="text-sm text-red-600">{error}</p>}
-      </form>
-    </Modal>
+        </form>
+        <DialogFooter>
+          <Button variant="outline" type="button" onClick={onClose} disabled={submitting}>
+            取消
+          </Button>
+          <Button type="submit" form="move-node-form" disabled={submitting}>
+            移动
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -180,11 +180,14 @@ export function ConfirmDialog({
   }
 
   return (
-    <Modal
-      title={title}
-      onClose={onClose}
-      footer={
-        <>
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-zinc-600">{description}</p>
+        {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+        <DialogFooter>
           <Button variant="outline" type="button" onClick={onClose} disabled={submitting}>
             取消
           </Button>
@@ -196,11 +199,8 @@ export function ConfirmDialog({
           >
             {confirmLabel}
           </Button>
-        </>
-      }
-    >
-      <p className="text-sm text-zinc-600">{description}</p>
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-    </Modal>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

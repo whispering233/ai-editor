@@ -11,9 +11,9 @@ import { RELATION_TYPES } from "@ai-editor/shared";
 import { formatTimestamp } from "@ai-editor/shared";
 import type { EntitySummary, EntityType } from "@ai-editor/shared";
 import { ConfirmDialog } from "../components/outline/dialogs";
-import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
-import { Modal } from "../components/ui/modal";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   ApiError,
   CLIENT_NETWORK_ERROR,
@@ -225,21 +225,12 @@ function CreateRelationDialog({
   }
 
   return (
-    <Modal
-      title="新增关联"
-      onClose={onClose}
-      footer={
-        <>
-          <Button variant="outline" type="button" onClick={onClose} disabled={submitting}>
-            取消
-          </Button>
-          <Button type="submit" form="create-relation-form" disabled={submitting}>
-            建立
-          </Button>
-        </>
-      }
-    >
-      <form id="create-relation-form" onSubmit={handleSubmit} className="flex flex-col gap-3">
+    <Dialog open onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>新增关联</DialogTitle>
+        </DialogHeader>
+        <form id="create-relation-form" onSubmit={handleSubmit} className="flex flex-col gap-3">
         <div>
           <p className="mb-1 text-sm font-medium text-zinc-700">关联对象类型</p>
           <select
@@ -301,8 +292,17 @@ function CreateRelationDialog({
         </div>
         <p className="text-xs text-zinc-400">方向：本实体 → 关联对象</p>
         {error && <p className="text-sm text-red-600">{error}</p>}
-      </form>
-    </Modal>
+        </form>
+        <DialogFooter>
+          <Button variant="outline" type="button" onClick={onClose} disabled={submitting}>
+            取消
+          </Button>
+          <Button type="submit" form="create-relation-form" disabled={submitting}>
+            建立
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

@@ -6,8 +6,8 @@
 //   - 概览形态（项目已打开）：占位 + [回到书架] 入口（closeProject → 回书架形态，S1.6 补齐切换缺口）
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ApiError, CLIENT_NETWORK_ERROR } from "../lib/api";
 import { bookCoverHue, bookCoverStyle } from "../lib/book-cover";
 import { describeOpenError } from "../lib/error-messages";

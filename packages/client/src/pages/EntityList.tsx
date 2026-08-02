@@ -9,9 +9,9 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { ENTITY_TYPES } from "@ai-editor/shared";
 import type { EntitySummary, EntityType } from "@ai-editor/shared";
-import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
-import { Modal } from "../components/ui/modal";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   ApiError,
   CLIENT_NETWORK_ERROR,
@@ -337,21 +337,11 @@ export default function EntityList({ type }: { type: string }) {
       )}
 
       {/* 新建对话框：name 必填 + 该类型首字段（原型交互） */}
-      {createOpen && (
-        <Modal
-          title={`新建${TYPE_LABEL[entityType]}`}
-          onClose={() => setCreateOpen(false)}
-          footer={
-            <>
-              <Button variant="outline" type="button" onClick={() => setCreateOpen(false)} disabled={createSubmitting}>
-                取消
-              </Button>
-              <Button type="submit" form="create-entity-form" disabled={createSubmitting}>
-                创建
-              </Button>
-            </>
-          }
-        >
+      <Dialog open={createOpen} onOpenChange={(v) => !v && setCreateOpen(false)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>新建{TYPE_LABEL[entityType]}</DialogTitle>
+          </DialogHeader>
           <form id="create-entity-form" onSubmit={handleCreate} className="flex flex-col gap-3">
             <div>
               <p className="mb-1 text-sm font-medium text-zinc-700">名称（必填）</p>
@@ -381,8 +371,16 @@ export default function EntityList({ type }: { type: string }) {
             </div>
             {createError && <p className="text-sm text-red-600">{createError}</p>}
           </form>
-        </Modal>
-      )}
+          <DialogFooter>
+            <Button variant="outline" type="button" onClick={() => setCreateOpen(false)} disabled={createSubmitting}>
+              取消
+            </Button>
+            <Button type="submit" form="create-entity-form" disabled={createSubmitting}>
+              创建
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
