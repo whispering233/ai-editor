@@ -7,3 +7,4 @@ export * from "./storage/outline.js";
 export * from "./storage/project.js";
 export * from "./queries/chat.js";
 export * from "./queries/migration.js";
+export * from "./queries/outline-ops.js";
