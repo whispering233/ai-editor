@@ -2,8 +2,9 @@
 
 ## 项目状态
 
-- **脚手架已建成（T0.1-T0.3 完成）**：pnpm monorepo 7 包（`packages/shared|llm|db|tools|agent|server|client`）+ 全仓 ESM + TS strict + ESLint 9 + vitest 已接入，各包为空壳（`src/index.ts` 极简导出），**业务代码尚未开发**。
-- 任务执行以 `doc/design/tasks.md` 为清单（56 张卡 + checkbox 进度），按卡开发、一卡一 commit、每卡完成后向用户汇报再开下一卡；**backlog.md 事项一律不做**。
+- **阶段 A 全部完成 + 切片 1（项目管理）完成**：7 包已实现共享契约（shared 类型/常量/工具/API 契约）、数据层（db 建表/JSON 存储/对话历史/schema 演进）、服务骨架（server 错误处理/来源校验/项目路由/设置路由）、前端基础（client 脚手架/API 层/项目开建页/设置页）。测试全仓 240 个（shared 65 / db 68 / client 45 / server 59 等）。
+- **打包安装测试已打通（backlog #8 演练，借鉴 inkos 机制）**：6 包 `pnpm pack`（prepack/postpack 钩子替换 `workspace:*`）+ tarball 安装到测试目录 + `npx ai-editor` 命令可用 + SPA 随包（`copy-client-dist`）；**dev 态启动待命**（无 project.json 不建文件，Dashboard 引导 create/open——决策 8 修订）。
+- 任务执行以 `doc/design/tasks.md` 为清单（checkbox 进度），按卡开发、一卡一 commit、每卡「实现 fixer + 验证 oracle」双代理、完成后向用户汇报；**backlog.md 事项一律不做**（#8 已演练完成）。
 - 一切实现工作必须按 `doc/design/architecture.md` 的分包方案搭建，不得擅自改变包划分或依赖方向。
 
 ## 文档即契约
@@ -16,6 +17,7 @@
 | `doc/api/` | `endpoints.md` 端点契约、`tools.md` AI 工具目录、`data-flow.md` 数据流 | 前后端改动 |
 | `doc/database/` | `schema.md` 表结构与 outline.json/project.json 契约、`hooks.md` 伏笔系统与健康指标 | 数据/后端改动 |
 | `doc/ui/` | MVP 功能原型：`layout.md` 布局与路由、`pages/*.md` 各页面（字段标注 API 响应字段） | 前端改动 |
+| `test-project/` | 测试项目目录（借鉴 inkos test-project 模式，运行时数据不入库），日常开发测试用 | 测试/联调前 |
 
 阅读顺序（见 `doc/README.md`）：`design/product.md` → `design/architecture.md` → `design/decisions.md`（决策 9-19 是数据模型与安全基线，20/21 为 SSE 断开检测与伏笔健康指标）→ 按职责读 `api/` 与 `database/`。
 
@@ -40,6 +42,8 @@
 - 运行环境（2026-08 实测修订，以 architecture.md 版本声明为准）：Node ≥ 22.12（实测 22.23）、**全仓 ESM**；better-sqlite3 `^13`（N-API 重写，自带预编译二进制，全局安装无 ABI 失配）、zod `^4`、Vite 7、Hono 4；pnpm 实测 11.8——pnpm-workspace.yaml 需配 `allowBuilds: { better-sqlite3: true }`（pnpm 11+ 格式；pnpm 10 旧格式 `onlyBuiltDependencies` 会被 pnpm 11 自动迁移为哨兵值导致构建被忽略）。
 - schema 演进 MVP 用**删库重建**（`PRAGMA user_version` 为准判定，`schema_version` 管 JSON，重建时同步重置 outline.json 并备份 `.bak`，**data.db 也备份 `.bak`**），无迁移脚本；首次发布前必须复审此策略（决策 13）。
 - 部署：单命令 `ai-editor`，单进程 Hono `:3456` 同时服务 `/api/v1` 与 SPA 静态文件；dev 态 Vite `:5173` 通过 proxy 转发 `/api` 到 `:3456`。命令约定（architecture.md + 根 package.json 实测）：根 `pnpm dev` = `pnpm -r --parallel run dev`（client Vite `:5173` + server `tsx watch :3456` + 各库 `tsc --watch`，server/client 的 dev 脚本随对应任务卡补齐）；`pnpm -r build` 按依赖序构建（shared → llm → db → tools → agent → server → client）；另有 `pnpm typecheck` / `pnpm lint`（ESLint 9 flat config + typescript-eslint）/ `pnpm test`（vitest，`pnpm --filter <包> test` 跑单包）。
+- **启动待命语义（决策 8 修订）**：`startServer(projectRoot)` 启动时 `detectProject`——目录已有 project.json → 自动打开（部署场景「启动即用」）；**无 → 待命（不初始化、不建任何文件）**，前端 Dashboard 引导 create/open（`GET /project/config` 返回 409 NO_PROJECT_OPEN 是引导触发条件）。dev 态（cwd=packages/server）因此不污染代码包。初始化（mkdir + 三文件 + user_version）只在 create 路由（`initProject`）发生。
+- **打包安装测试（backlog #8，借鉴 inkos）**：6 包 `pnpm pack` 前 prepack 钩子自动执行（`copy-client-dist` 复制 SPA 进包 → `prepare-package-for-publish` 替换 `workspace:*` 为真实版本号），postpack 恢复原 package.json；测试目录 `npm install <6 个 tarball>`（npm 对同批 tarball 复用依赖，未发布 registry 也能装）→ `npx ai-editor <项目目录>` 启动完整界面（SPA 随包，`defaultClientDist` 双路径：monorepo `../../client/dist` 优先，安装态 fallback 包内 `client-dist`）。日常测试用仓库内 `test-project/`（运行时数据不入库）。
 
 ## 约定
 

@@ -138,8 +138,10 @@ System Prompt 不是一成不变的，而是可编辑的分层结构：
 CLI 入口:
   ③ 拿到 process.cwd() → ~/projects/my-novel
   ④ 检测 project.json 是否存在
-     不存在 → 自动创建 project.json + data.db + outline.json
-     存在   → 直接加载
+     存在   → 直接加载（部署场景「启动即用」）
+     不存在 → 待命：不初始化、不建任何文件，前端 Dashboard 引导 create/open
+              （2026-08 修订：原「不存在 → 自动创建三文件」取消——空目录不应被替用户
+               决定初始化，且 dev 态（cwd=包目录）会污染代码包；初始化收敛到显式 create 动作）
   ⑤ 启动 Hono 服务端，传入项目路径
   ⑥ 自动打开浏览器 → http://127.0.0.1:3456
 

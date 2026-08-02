@@ -11,7 +11,7 @@ MVP 明确不做、延后迭代的事项。每项记录：现状、优化方案�
 | 5 | 大项目性能 | 大纲整树全量读写 O(n)、computeState 每次从根重算；关系查询校验端点软删状态需访问 outline.json（可能每查询整树读文件） | 标注设计上限（如 5000 节点）或增量写/缓存；**建议启动时缓存大纲树内存投影**（失效时刷新） | 实测性能瓶颈 |
 | 6 | 静态资源缓存 | /assets/* 无缓存策略 | cache-control + 版本 hash 文件名 | 发布优化 |
 | 7 | ~~命名统一~~ | **已解决（2026-08）**：映射规则已落定（endpoints.md 通用约定）——嵌套 `data` 内部字段原样透传，camelCase 仅应用于 API 顶层契约字段 | 映射函数仍按约定定义于 `@ai-editor/shared/utils` | 实现时按 endpoints.md 通用约定执行 |
-| 8 | better-sqlite3 全局安装 | 已随 ^13（N-API 重写）解决 ABI 失配；但 7 包 `workspace:*` 依赖发布为 npm 包 + `npm -g` 安装的完整管道**未演练** | 发布前用 `pnpm pack`/`pnpm deploy` 演练一次全局安装；声明最低 Node ≥ 22.12；pnpm 11+ 需 `allowBuilds: { better-sqlite3: true }`（pnpm 10 旧格式为 `onlyBuiltDependencies`，pnpm 11 会自动迁移为哨兵值导致构建被忽略） | 发布打包阶段 |
+| 8 | ~~better-sqlite3 全局安装~~ | **已解决（2026-08 实测）**：打包安装管道已演练——借鉴 inkos 发布机制（prepack/postpack 钩子 + `pnpm pack`），6 包 tarball 安装到测试目录、`npx ai-editor` 命令可用、SPA 随包、better-sqlite3 ^13 预编译无 ABI 问题（见 `doc/design/architecture.md` 打包发布章节） | 剩余：正式发布到 npm registry 的流程（`npm publish` + 版本管理） | 正式发布前 |
 | 9 | ~~伏笔健康指标「当前章节」参照~~ | **已解决（2026-08）**：`current_position` 已纳入 project.json 契约（`doc/database/schema.md`），config 端点支持读写；「当前章节」口径 = current_position 指向节点的章节序 | — | — |
 | 10 | ~~项目切换残留状态~~ | **已解决（2026-08）**：服务端部分已定义（决策 14 修订）——提案绑定 `project_id`、切换项目清空全部提案并强制结束 SSE/agent 循环 | 剩余：客户端缓存失效随项目管理 UI 实现 | 实现项目管理 UI 时 |
 | 11 | ~~孤儿节点层级限制~~ | **已取消（2026-08）**：游离节点设计整体删除（决策 19），move 不再支持 `__orphan__`，创建必须显式指定父节点（volume→root、chapter→volume/root、scene→chapter） | — | — |

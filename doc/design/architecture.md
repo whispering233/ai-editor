@@ -326,13 +326,27 @@ export interface Entity { id: string; type: EntityType; name: string; }
     → shared → llm → db → tools → agent → server
     → client（vite build，独立）
 
+打包发布（2026-08 实测，backlog #8 演练）:
+  借鉴 @actalk/inkos 的发布机制（scripts/prepare-package-for-publish.mjs + restore-package-json.mjs）:
+    pnpm --filter @ai-editor/<pkg> pack --pack-destination <目录>
+      → prepack 钩子：copy-client-dist（SPA 进包）→ workspace:* 替换为真实版本号
+      → postpack 钩子：恢复原 package.json
+    6 个可发布包（shared/llm/db/tools/agent/server）统一挂 prepack/postpack；
+    server 包 bin: {"ai-editor": "dist/index.js"}，tarball 含 dist/ + client-dist/（SPA）
+  安装（未发布 registry 也能装——npm 对同批 tarball 复用依赖）:
+    npm install <server.tgz + 依赖 tgz>
+  运行: npx ai-editor <项目目录> → 服务 + 自动打开浏览器界面（SPA 随包）
+
 启动流程（Node ≥ 22.12，产物为全仓 ESM）:
-  node packages/server/dist/index.js
-    → 参数: projectRoot（当前目录）
-    → 自动检测 project.json, 不存在则初始化
-    → 启动 Hono (port 3456，占用时生产态自动 +1)
-    → 加载 client/dist/index.html 为 SPA fallback
-    → 打开浏览器
+  node packages/server/dist/index.js [projectRoot]
+    → 参数: projectRoot（缺省 process.cwd()）
+    → detectProject：有 project.json → 打开；无 → 待命（不初始化，前端引导 create/open，
+      2026-08 修订——原「不存在则初始化」改为待命，避免空目录被替用户决定初始化/污染代码包）
+    → 启动 Hono (port 3456，占用时生产态自动 +1；AI_EDITOR_PORT 可覆盖)
+    → 加载 SPA（defaultClientDist 双路径：monorepo 开发态 ../../client/dist /
+      打包安装态 ../client-dist——随 tarball 携带）为 SPA fallback
+    → 打开浏览器（127.0.0.1，决策 8）
+  测试项目目录: test-project/（借鉴 inkos test-project 模式，运行时数据不入库，见其 README）
 ```
 
 ## 为什么拆七包
