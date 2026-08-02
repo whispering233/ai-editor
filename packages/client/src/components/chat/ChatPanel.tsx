@@ -482,7 +482,7 @@ export function ChatPanel({ open, onClose }: { open: boolean; onClose: () => voi
   // 桌面（≥1024px）：右栏 40% 静态列（1:5:4 严格比例，layout.md §0）
   if (isDesktop) {
     return (
-      <aside className="flex min-w-0 flex-[4_1_40%] flex-col border-l border-border bg-card">
+      <aside className="flex min-w-0 flex-[4_1_40%] flex-col border-l border-border bg-background">
         <ChatPanelBody />
       </aside>
     );
@@ -495,7 +495,7 @@ export function ChatPanel({ open, onClose }: { open: boolean; onClose: () => voi
       {/* 遮罩：点击关闭 */}
       <div className="absolute inset-0 bg-foreground/40 animate-in fade-in" onClick={onClose} />
       {/* 抽屉：右侧滑入 */}
-      <div className="absolute inset-y-0 right-0 w-[85vw] max-w-md border-l border-border bg-card shadow-xl animate-in slide-in-from-right duration-300">
+      <div className="absolute inset-y-0 right-0 w-[85vw] max-w-md border-l border-border bg-background shadow-xl animate-in slide-in-from-right duration-300">
         <ChatPanelBody onClose={onClose} />
       </div>
     </div>
