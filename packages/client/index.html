@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AI 小说编辑器</title>
+    <script>
+      // FOUC 防护（layout.md §3.4）：深色主题用户在首帧渲染前加 .dark class，避免闪白
+      try {
+        localStorage.getItem("ai-editor:theme") === "dark" &&
+          document.documentElement.classList.add("dark");
+      } catch {
+        // localStorage 不可用（隐私模式等）时静默跳过，默认浅色
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

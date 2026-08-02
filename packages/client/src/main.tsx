@@ -1,5 +1,5 @@
 // @ai-editor/client 入口（architecture.md：main.tsx 挂载 + App 路由分发）
-// 路由表见 doc/ui/layout.md §1（9 路由）；本卡为路由骨架，页面内容占位壳，业务在后续切片卡实现
+// 路由表见 doc/ui/layout.md §1（8 路由，#/chat 已移除——聊天常驻右栏 ChatPanel，U2 起不再作为独立页渲染）
 import { StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { ENTITY_TYPES } from "@ai-editor/shared";
@@ -10,7 +10,6 @@ import Outline from "./pages/Outline";
 import Canvas from "./pages/Canvas";
 import EntityList from "./pages/EntityList";
 import EntityDetail from "./pages/EntityDetail";
-import Chat from "./pages/Chat";
 import HookPanel from "./pages/HookPanel";
 import Trash from "./pages/Trash";
 import Settings from "./pages/Settings";
@@ -35,8 +34,6 @@ function renderPage(route: Route): ReactNode {
           : "character";
       return third !== undefined ? <EntityDetail type={type} id={third} /> : <EntityList type={type} />;
     }
-    case "chat":
-      return <Chat />;
     case "hooks":
       return <HookPanel />;
     case "trash":
