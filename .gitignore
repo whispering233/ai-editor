@@ -35,3 +35,5 @@ project.json
 # pack 产物与发布备份（打包安装测试 / pnpm pack 产生）
 *.tgz
 .package.json.publish-backup
+
+test-project/
