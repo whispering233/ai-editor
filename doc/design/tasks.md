@@ -446,13 +446,13 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - 验证：typecheck/lint/test + 手工走查各路由三栏渲染与抽屉
 - 回滚：单 commit
 
-**U3 左栏 Sidebar（书架 + 会话树）**
+**U3 左栏 Sidebar（书架 + 会话树）** ✅（1ce5bb4，经 oracle 审核放行；L1/L2/L4 记后续）
 - 范围：产品标识（点击回 `#/`）；书架树：项目行（`GET /project/list`，书名+更新时间）chevron 展开会话列表（`GET /chat/sessions`，点击 → 右栏切换会话并恢复历史）；打开项目（openProjectAt）、新建项目入口；底部设置入口 + 主题切换按钮；无项目态
 - 依赖：U2
 - 验证：手工走查书架展开/会话切换/打开项目
 - 回滚：单 commit
 
-**U4 中栏 TabBar + 概览页**
+**U4 中栏 TabBar + 概览页** ✅（3c27254，经 oracle 审核放行；M1 补 AI 入口/M2 book-cover 注释/L1 formatRelativeTime 抽 shared/L2 首帧骨架/L3 切项目清 focus/L4 新建 toast 均已处理）
 - 范围：TabBar 6 tab 高亮（路由首段驱动，实体列表/详情共用高亮）；概览页 `#/`（原 Dashboard 概览形态移入：项目信息/四类统计/大纲概览/最近会话 + 无项目引导态：新建/打开表单，dashboard.md）；信息条当前位置点击 → `#/outline` 定位
 - 依赖：U2
 - 验证：手工走查 + vitest 更新
