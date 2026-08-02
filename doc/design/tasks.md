@@ -458,7 +458,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - 验证：手工走查 + vitest 更新
 - 回滚：单 commit
 
-**U5 右栏 ChatPanel（常驻聊天）**
+**U5 右栏 ChatPanel（常驻聊天）** ✅（c1e1bd6，经 oracle 审核；UI 先行/发送接 S7，S7 接入点清单见报告）
 - 范围：会话标题行（下拉切换同项目会话 + [+ 新会话]）；消息流（user 气泡/assistant 排版）、工具调用折叠记录、提案卡（`border-primary/25 bg-primary/5` 双按钮锁定态）、focus 小条（跨页「问 AI」注入 context，layout.md §4.2）、断连横幅、无项目禁用态；`pages/Chat.tsx` 占位页移除；chat store 扩展 `currentProjectId` + `currentSessionId`
 - 依赖：U2、U3
 - 验证：手工走查 SSE 发送/流式/提案确认/断连 + 会话切换
