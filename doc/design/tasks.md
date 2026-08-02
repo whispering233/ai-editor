@@ -430,7 +430,41 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 
 ---
 
-## 阶段 C：收尾
+## 阶段 U：UI 工作台重构（三栏布局，2026-08，决策 22）
+
+> 依据：`doc/ui/layout.md`（2026-08 重写：三栏 1:5:4 固定、中栏 6 tab、右栏聊天常驻、主题系统契约）；验收：三栏工作台可完整使用，双主题可切换，聊天常驻右栏且会话归属项目。
+
+**U1 shadcn 集成 + 主题 tokens**
+- 范围：`components.json`（new-york-v4 / cssVariables / aliases `@`）+ client tsconfig/vite.config 配 `@` 别名 + 装 lucide-react 与 shadcn 依赖；`index.css` 重写（`@custom-variant dark` + `@theme inline` + `:root`/`.dark` oklch 双主题 tokens（暖羊皮纸+牛血红+金箔 ↔ 蓝黑曜石+琥珀烛光）+ 系统字体栈 + `--radius: 0.6rem`）；shadcn add 基础组件（button/input/dialog/dropdown-menu/tabs/sonner/separator/tooltip 等）**替换自研 button/input/modal 三件套并迁移全部调用点**；`useTheme` hook（localStorage `ai-editor:theme` + classList toggle）
+- 依赖：T7.1
+- 验证：typecheck + lint + vitest 全绿；双主题手动切换走查
+- 回滚：单 commit
+
+**U2 三栏外壳 AppShell**
+- 范围：AppShell 拆三栏（flex 1:5:4 固定，左右不可拖拽）——Sidebar / MainPanel（信息条：项目名/当前位置/语言 + TabBar 6 tab：概览|大纲|画布|实体关系|伏笔|回收站，药丸分段控件）/ ChatPanel 骨架；`<1024px` 右栏折叠为抽屉（useMediaQuery + 开关）；路由对齐（`#/chat` 移除、settings 归左栏，layout.md §1）
+- 依赖：U1
+- 验证：typecheck/lint/test + 手工走查各路由三栏渲染与抽屉
+- 回滚：单 commit
+
+**U3 左栏 Sidebar（书架 + 会话树）**
+- 范围：产品标识（点击回 `#/`）；书架树：项目行（`GET /project/list`，书名+更新时间）chevron 展开会话列表（`GET /chat/sessions`，点击 → 右栏切换会话并恢复历史）；打开项目（openProjectAt）、新建项目入口；底部设置入口 + 主题切换按钮；无项目态
+- 依赖：U2
+- 验证：手工走查书架展开/会话切换/打开项目
+- 回滚：单 commit
+
+**U4 中栏 TabBar + 概览页**
+- 范围：TabBar 6 tab 高亮（路由首段驱动，实体列表/详情共用高亮）；概览页 `#/`（原 Dashboard 概览形态移入：项目信息/四类统计/大纲概览/最近会话 + 无项目引导态：新建/打开表单，dashboard.md）；信息条当前位置点击 → `#/outline` 定位
+- 依赖：U2
+- 验证：手工走查 + vitest 更新
+- 回滚：单 commit
+
+**U5 右栏 ChatPanel（常驻聊天）**
+- 范围：会话标题行（下拉切换同项目会话 + [+ 新会话]）；消息流（user 气泡/assistant 排版）、工具调用折叠记录、提案卡（`border-primary/25 bg-primary/5` 双按钮锁定态）、focus 小条（跨页「问 AI」注入 context，layout.md §4.2）、断连横幅、无项目禁用态；`pages/Chat.tsx` 占位页移除；chat store 扩展 `currentProjectId` + `currentSessionId`
+- 依赖：U2、U3
+- 验证：手工走查 SSE 发送/流式/提案确认/断连 + 会话切换
+- 回滚：单 commit
+
+---
 
 **S11.1 生产构建全链路**
 - 范围：`pnpm -r build` → `node packages/server/dist/index.js` 启动（项目初始化、SPA fallback、端口 +1、127.0.0.1 打开浏览器）

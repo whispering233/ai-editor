@@ -55,7 +55,7 @@
 - **新增关联**：对话框（另一端类型 + 实体搜索选择 + 关系类型下拉，如 ally/rival/appears_in 等）→ `POST /relation`；`RELATION_EXISTS` → 提示「这条关系已经存在」。
 - **删关系**：确认框（提示：物理删除不可恢复，可重新建立）→ `DELETE /relation/:id`。
 - **软删**：⋯ 菜单 → 确认框展示级联（响应 `cascaded.relations` / `cascaded.deltas`）→ 删除 → 跳回列表 + toast「已移入回收站，可随时还原」。
-- **问 AI**：跳 `#/chat`，注入 context `{ focus_entity_type, focus_entity_id }`；Chat 显示「正在讨论：张三」小条。
+- **问 AI**：注入右栏 ChatPanel 当前会话 context `{ focus_entity_type, focus_entity_id }`（不再跳独立聊天页，layout.md §4.2）；右栏显示「正在讨论：张三」focus 小条。
 - **变更记录**：`deltaCount` 数字点击（可选）→ 展开提示「查看状态变化请在大纲中按节点查看，或在聊天中让 AI 计算」（MVP 无对应 REST 明细端点）。
 
 ## 状态

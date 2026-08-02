@@ -128,25 +128,28 @@ ai-editor/
 │       ├── src/
 │       │   ├── main.tsx
 │       │   ├── pages/
-│       │   │   ├── Dashboard.tsx
+│       │   │   ├── Overview.tsx    # 中栏「概览」tab（含无项目引导态）
 │       │   │   ├── Outline.tsx
 │       │   │   ├── Canvas.tsx
 │       │   │   ├── EntityList.tsx
 │       │   │   ├── EntityDetail.tsx
-│       │   │   ├── Chat.tsx
 │       │   │   ├── HookPanel.tsx
+│       │   │   ├── Trash.tsx
 │       │   │   └── Settings.tsx
 │       │   ├── components/
-│       │   │   ├── ui/            # shadcn 基础组件
+│       │   │   ├── ui/            # shadcn CLI 生成基础组件
+│       │   │   ├── sidebar/       # 左栏：产品标识、书架（项目→会话树）、设置、主题切换
+│       │   │   ├── main-panel/    # 中栏外壳：信息条、TabBar
+│       │   │   ├── chat/          # 右栏常驻 ChatPanel（会话/消息/提案卡/focus 小条）
+│       │   │   ├── overview/      # 概览 tab 区块组件
 │       │   │   ├── entity/
 │       │   │   ├── outline/
 │       │   │   ├── canvas/        # 画布（拖拽/连线）
-│       │   │   ├── chat/
 │       │   │   └── hook/
 │       │   ├── stores/            # Zustand
-│       │   │   ├── chat.ts
+│       │   │   ├── chat.ts        # 会话归属项目：currentProjectId + currentSessionId
 │       │   │   ├── project.ts
-│       │   │   └── ui.ts
+│       │   │   └── ui.ts          # 含主题态（light/dark）
 │       │   ├── hooks/
 │       │   │   ├── use-api.ts
 │       │   │   ├── use-sse.ts
