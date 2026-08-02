@@ -2,15 +2,22 @@
 
 ## 项目文件结构
 
+**书架模型（2026-08，参考 inkos）**：启动目录 = 创作根（书架），每本书一个子目录（`books/<书名>/`），书的数据文件在该子目录下。旧单项目部署（启动目录本身是书）仍兼容。
+
 ```
-项目文件夹/
-├── project.json       # 项目配置（id/schema_version/current_position 等，见下文契约）
-├── outline.json       # 大纲树（卷 → 章 → 场景，严格三层，无游离节点）
-└── data.db            # SQLite
-    ├── entities       # 人物 / 设定 / 地点 / 伏笔
-    ├── relation_records  # 通用关系表
-    ├── delta_records    # 属性变更记录
-    └── chat_messages    # 对话历史（决策 18）
+创作根（书架，启动目录）/
+├── books/                    # 书架子目录（S1.5 起）
+│   └── <书名>/               # 每本书一个目录（创建书 = 新建子目录）
+│       ├── project.json       # 项目配置（id/schema_version/current_position 等，见下文契约）
+│       ├── outline.json       # 大纲树（卷 → 章 → 场景，严格三层，无游离节点）
+│       └── data.db            # SQLite
+│           ├── entities       # 人物 / 设定 / 地点 / 伏笔
+│           ├── relation_records  # 通用关系表
+│           ├── delta_records    # 属性变更记录
+│           └── chat_messages    # 对话历史（决策 18）
+
+# 兼容：启动目录本身含 project.json 时按旧语义打开（决策 8 修订）；
+# 无 project.json 时进入书架模式——Dashboard 引导创建（自动建 books/<书名>/）或打开
 ```
 
 **时间约定**：所有时间列/字段统一 ISO 8601 字符串（如 `2026-08-01T10:00:00Z`），由应用层写入，不使用 SQLite 内置 `datetime('now')`——回收站按 `deleted_at` 排序需跨 SQLite 与 outline.json 统一格式。

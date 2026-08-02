@@ -339,9 +339,12 @@ export interface Entity { id: string; type: EntityType; name: string; }
 
 启动流程（Node ≥ 22.12，产物为全仓 ESM）:
   node packages/server/dist/index.js [projectRoot]
-    → 参数: projectRoot（缺省 process.cwd()）
-    → detectProject：有 project.json → 打开；无 → 待命（不初始化，前端引导 create/open，
-      2026-08 修订——原「不存在则初始化」改为待命，避免空目录被替用户决定初始化/污染代码包）
+    → 参数: projectRoot = 创作根（缺省 process.cwd()）
+    → detectProject：根自身有 project.json → 打开（旧单项目部署兼容）；无 → 待命
+      （2026-08 修订——原「不存在则初始化」改为待命，避免空目录被替用户决定初始化/污染代码包）
+    → 书架模式（2026-08，参考 inkos）：创建书 = 创作根/books/<书名>/ 子目录（三文件），
+      GET /api/v1/project/list 扫描 books/ 列书（不依赖当前项目，待命态可用）；
+      create/open 契约不变，前端拼 创作根/books/<书名>/ 路径调用
     → 启动 Hono (port 3456，占用时生产态自动 +1；AI_EDITOR_PORT 可覆盖)
     → 加载 SPA（defaultClientDist 双路径：monorepo 开发态 ../../client/dist /
       打包安装态 ../client-dist——随 tarball 携带）为 SPA fallback

@@ -91,7 +91,7 @@
 
 | 页面 | 路由 | 核心 API | 细案 |
 |------|------|---------|------|
-| Dashboard | `#/` | project/config、entity/:type ×4、outline、chat/sessions | pages/dashboard.md |
+| Dashboard | `#/` | project/config、project/list（书架）、entity/:type ×4、outline、chat/sessions | pages/dashboard.md |
 | Outline | `#/outline` | outline CRUD、project/config（设当前位置） | pages/outline.md |
 | Canvas | `#/canvas` | outline、relation（plot_edge）、localStorage 布局 | pages/canvas.md |
 | EntityList | `#/entities/:type` | entity/:type（列表） | pages/entity-list.md |
