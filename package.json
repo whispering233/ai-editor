@@ -13,7 +13,10 @@
     "build": "pnpm -r build",
     "lint": "eslint .",
     "typecheck": "pnpm -r exec tsc --noEmit -p tsconfig.json",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "pack:test": "node scripts/pack-test-install.mjs",
+    "start:test": "node scripts/start-test-install.mjs",
+    "test:packed": "pnpm pack:test && pnpm start:test"
   },
   "devDependencies": {
     "eslint": "^9.39.5",
