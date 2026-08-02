@@ -573,7 +573,7 @@ export default function Outline() {
                 {node.title}
               </span>
             )}
-            {/* 摘要：点击就地编辑（非高频但同样行内，不弹窗） */}
+            {/* 摘要：点击就地编辑（非高频但同样行内，不弹窗）；max-w 限制防过长挤压操作区 */}
             {editingSummary ? (
               inlineInput(
                 editingValue,
@@ -584,22 +584,14 @@ export default function Outline() {
               )
             ) : node.summary ? (
               <span
-                className="hidden min-w-0 flex-1 cursor-text truncate text-xs text-zinc-400 hover:underline md:inline"
+                className="hidden min-w-0 max-w-[45%] cursor-text truncate text-xs text-zinc-400 hover:underline md:inline"
                 title="点击编辑摘要"
                 onClick={() => startEdit(node, "summary")}
               >
                 {node.summary}
               </span>
-            ) : (
-              <span className="hidden min-w-0 flex-1 md:inline" />
-            )}
-            <span className="ml-auto shrink-0 text-xs text-zinc-400">{formatTimestamp(node.updatedAt)}</span>
-            {isCurrent && (
-              <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700">
-                当前位置
-              </span>
-            )}
-            {/* 行尾「＋」就地新建（父类型决定子类型；scene 是叶子无此入口） */}
+            ) : null}
+            {/* 右侧操作区：跟随节点内容（不推远、不两端对齐）；顺序：＋ → ⋯ → 当前位置徽标 → 时间戳 */}
             {childType !== null && (
               <button
                 type="button"
@@ -619,6 +611,13 @@ export default function Outline() {
             >
               ⋯
             </button>
+            {isCurrent && (
+              <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700">
+                当前位置
+              </span>
+            )}
+            {/* 时间戳收尾（跟随内容，不推远） */}
+            <span className="shrink-0 text-xs text-zinc-400">{formatTimestamp(node.updatedAt)}</span>
           </div>
           {/* ⋯ 操作条（行内展开；编辑已就地化，此处保留：新建子节点/移动到…/设为当前位置/移入回收站） */}
           {actionsOpen && (
