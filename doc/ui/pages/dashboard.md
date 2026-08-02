@@ -14,7 +14,7 @@
 | 大纲概览 | `GET /api/v1/outline`（递归统计卷/章/场景数） |
 | 最近会话 | `GET /api/v1/chat/sessions`（取前 5 条） |
 
-## 书架形态（S1.5 新增；S1.6 显示方案修订：卡片网格 + 封面占位）
+## 书架形态（S1.5 新增；S1.6 显示方案修订并已实现：卡片网格 + 封面占位）
 
 > 形态判定：`config === null && !configLoading`（loadError=NO_PROJECT_OPEN 或网络失败）。
 > 数据 `GET /api/v1/project/list` → `{ rootPath, books: [{ name, path, updatedAt }] }`（按 updatedAt 倒序）。
@@ -45,7 +45,7 @@
 
 | 展示 | 数据来源 | 状态 |
 |------|---------|------|
-| 封面占位：渐变底色块（aspect 4:3）+ 书名首字居中 | **前端派生**：书名 hash → HSL 色相（同书同色、稳定），无任何数据依赖 | 可立即实施 |
+| 封面占位：渐变底色块（aspect 4:3）+ 书名首字居中 | **前端派生**：`bookCoverHue(name)`（djb2 31 倍变体 → 0-360 色相，同书同色、稳定），无任何数据依赖 | **已实现（S1.6）** |
 | 书名（卡片主标题，超长截断） | `books[].name` | 现有 |
 | 更新时间 | `books[].updatedAt`（ISO → `YYYY-MM-DD HH:mm`，formatTimestamp） | 现有 |
 | 章节数 / 大纲进度条（卡片副行） | 无——list 未返回；需 open 后 `GET /outline` 递归统计或未来 list 扩展字段 | 未来扩展 |
@@ -57,7 +57,7 @@
 
 ### 关键交互
 
-- **打开**：整卡可点（卡片即按钮）→ `openProjectAt(path)` → 刷新 config/outline；rebuilt 时 toast（决策 13）。hover 态：卡片提亮 + 「打开」提示浮现（或右上角出现打开按钮）。
+- **打开**：整卡可点（卡片即按钮）→ `openProjectAt(path)` → 刷新 config/outline；rebuilt 时 toast（决策 13）。hover 态：封面遮罩浮现「打开」（已实现，S1.6）。
 - **新建**：表单在网格下方；**空态时表单上升为页面主操作**（引导卡内）。书名去首尾空白、非空校验（内联提示）；成功 → `loadBookshelf` 刷新列表 + 打开新书（现状不变）。
 - **打开其他路径**：保留 S1.4 折叠区（绝对路径 → `POST /project/open`）。
 - **排序**：现状服务端按 `updatedAt` 倒序。前端排序切换（最近更新 / 书名 A-Z）纯前端可实现，**MVP 可选**，不强制。
@@ -76,8 +76,8 @@
 
 ### 与 AppShell / 全局布局的关系
 
-- 书架形态下顶栏项目名显示「**未打开项目**」→ 建议改为「**书架**」（无项目时所在即书架，语义更准；layout.md §2.1 同步）。侧栏 7 项照常显示，无项目时点击进入各页错误态（现状行为，MVP 接受，不处理）。
-- **回到书架入口（实现缺口）**：store 已有 `closeProject`（POST /project/close）但 UI 无入口——打开书后无法返回书架。方案：概览形态页头加「回到书架」按钮（closeProject → 回 `#/` 重新进入书架形态，Dashboard 按 config=null 自动 loadBookshelf）。放 Dashboard 概览形态内，不动 AppShell 顶栏。
+- 书架形态下顶栏项目名显示「**书架**」（已实现，S1.6；layout.md §2.1 同步）。侧栏 7 项照常显示，无项目时点击进入各页错误态（现状行为，MVP 接受，不处理）。
+- **回到书架入口（已实现，S1.6）**：概览形态页头「回到书架」按钮（`closeProject` → 回 `#/` 重新进入书架形态，Dashboard 按 config=null 自动 loadBookshelf；显式 `loadBookshelf` 刷新保证 updatedAt 最新——closeProject 只清 config 不清 bookshelf 缓存）。放 Dashboard 概览形态内，不动 AppShell 顶栏。
 - 书架形态不渲染概览区块；`#/` 下其他路由（设置等）在无项目时照常可达（设置页与项目无关，合理）。
 
 ### 未来扩展（不实现，backlog 候选）
@@ -124,7 +124,7 @@
 ## 关键交互状态
 
 - **空态（新项目）**：整页引导卡「项目还是空的」→ 主按钮 [先搭大纲]（跳 `#/outline`）、次按钮 [和 AI 聊聊设定]（跳 `#/chat`）；各区块显示对应空文案（「还没有会话」等）。
-- **回到书架**：页头右上角 [回到书架]（`closeProject` → 回 `#/`，书架形态）。这是概览 ↔ 书架切换的唯一入口（实现缺口，S1.6 补齐）。
+- **回到书架**：页头右上角 [回到书架]（`closeProject` → 回 `#/`，书架形态）。概览 ↔ 书架切换的唯一入口（已实现，S1.6）。
 - **加载态**：各区块骨架。
 - **错误态**：单区块失败 → 区块内「加载失败 [重试]」；全量失败 → 全局错误横幅。本页理论上不会出现业务错误码（项目已打开）。
 - **操作流**：点会话行 → 跳 `#/chat` 并恢复该会话（chat store 注入 `session_id`）；点统计卡 → 跳 `#/entities/:type`；点「去大纲」→ `#/outline` 并定位当前位置节点。
