@@ -1,7 +1,7 @@
 // 项目路由测试（S1.2）：create / open（含 schema 删库重建）/ close / config GET/PUT
 // 覆盖：三文件初始化与版本号写入、路径校验（相对路径/符号链接）、版本不匹配重建 + 备份、
 //       currentProject 单例切换与清空、current_position 非软删节点校验
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -17,7 +17,7 @@ import {
   projectMiddleware,
   setCurrentProject,
 } from "../middleware/project.js";
-import { projectRoutes } from "./project.js";
+import { projectRoutes, setProjectRoot } from "./project.js";
 
 const HOST_HEADERS = { host: "127.0.0.1:3456" }; // 来源校验 host 白名单（决策 17 修订）
 const T0 = "2026-08-01T10:00:00Z";
@@ -118,6 +118,7 @@ function initProjectDir(dir: string, config: ProjectFileConfig, outline: Outline
 beforeEach(() => {
   tmpRoot = mkdtempSync(join(tmpdir(), "ai-editor-project-"));
   setCurrentProject(null);
+  setProjectRoot(null);
 });
 
 afterEach(() => {
@@ -127,6 +128,7 @@ afterEach(() => {
     closeProject(cur);
     setCurrentProject(null);
   }
+  setProjectRoot(null); // 清理创作根模块状态（S1.5），防跨测试泄漏
   for (const dir of tmpDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -571,5 +573,124 @@ describe("GET/PUT /project/config", () => {
       body: JSON.stringify({ name: "x" }),
     });
     expect(res.status).toBe(409);
+  });
+});
+
+// ============ GET /api/v1/project/list（书架模式 S1.5） ============
+
+describe("GET /project/list（书架：创作根 books/ 扫描）", () => {
+  /** 在创作根下造一本书（books/<name>/ 含 project.json，updated_at 可控） */
+  function seedBook(root: string, name: string, updatedAt: string): string {
+    const dir = join(root, "books", name);
+    mkdirSync(dir, { recursive: true });
+    writeProjectFile(dir, { ...makeConfig(`proj-${name}`, name), updated_at: updatedAt });
+    return dir;
+  }
+
+  it("books/ 下两本书 → 返回两条（name/path/updatedAt），按 updatedAt 倒序", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    seedBook(root, "第一本", "2026-08-01T10:00:00Z");
+    seedBook(root, "第二本", "2026-08-02T10:00:00Z");
+
+    const res = await buildApp().request("/api/v1/project/list", { headers: HOST_HEADERS });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.success).toBe(true);
+    expect(body.data.rootPath).toBe(root);
+    expect(body.data.books).toEqual([
+      { name: "第二本", path: join(root, "books", "第二本"), updatedAt: "2026-08-02T10:00:00Z" },
+      { name: "第一本", path: join(root, "books", "第一本"), updatedAt: "2026-08-01T10:00:00Z" },
+    ]);
+  });
+
+  it("books/ 不存在 → 空数组（不报错），rootPath 仍返回创作根", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    const res = await buildApp().request("/api/v1/project/list", { headers: HOST_HEADERS });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ success: true, data: { rootPath: root, books: [] } });
+  });
+
+  it("非书目录（无 project.json）与普通文件被过滤", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    seedBook(root, "真书", "2026-08-01T10:00:00Z");
+    mkdirSync(join(root, "books", "草稿箱"), { recursive: true }); // 无 project.json
+    writeFileSync(join(root, "books", "笔记.txt"), "不是书", "utf8"); // 非目录
+
+    const res = await buildApp().request("/api/v1/project/list", { headers: HOST_HEADERS });
+    const body = await res.json();
+    expect(body.data.books).toEqual([
+      { name: "真书", path: join(root, "books", "真书"), updatedAt: "2026-08-01T10:00:00Z" },
+    ]);
+  });
+
+  it("无当前项目（待命态）时 list 可用，不 409——书架模式核心语义", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    seedBook(root, "书", "2026-08-01T10:00:00Z");
+    // 不 open/create 任何项目（currentProject = null）
+    const res = await buildApp().request("/api/v1/project/list", { headers: HOST_HEADERS });
+    expect(res.status).toBe(200);
+    expect((await res.json()).data.books).toHaveLength(1);
+  });
+
+  it("创作根自身有 project.json 时，list 仍只列 books/（根自身不是书，兼容旧语义）", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    // 根自身是旧语义项目（含 project.json）
+    writeProjectFile(root, makeConfig("proj-root", "根项目"));
+    seedBook(root, "书架上的书", "2026-08-01T10:00:00Z");
+
+    const res = await buildApp().request("/api/v1/project/list", { headers: HOST_HEADERS });
+    const body = await res.json();
+    // 根自身不出现在 books 列表（books 只列 books/ 子目录）
+    expect(body.data.books).toEqual([
+      { name: "书架上的书", path: join(root, "books", "书架上的书"), updatedAt: "2026-08-01T10:00:00Z" },
+    ]);
+  });
+
+  it("创作根未注入（setProjectRoot 未调用）→ 500 INTERNAL_ERROR（防御）", async () => {
+    // beforeEach 已 setProjectRoot(null)
+    const res = await buildApp().request("/api/v1/project/list", { headers: HOST_HEADERS });
+    expect(res.status).toBe(500);
+    expect((await res.json()).error.code).toBe("INTERNAL_ERROR");
+  });
+
+  it("端到端联动：POST /project/create 创建书到 创作根/books/<书名>/ → list 扫到该书（书架主链路）", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    const app = buildApp();
+
+    // 走真实 create 路由（mkdir recursive + 三文件 + user_version），前端拼 books/ 路径语义
+    const bookDir = join(root, "books", "联动书");
+    const createRes = await app.request("/api/v1/project/create", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: bookDir, config: { name: "联动书" } }),
+    });
+    expect(createRes.status).toBe(200);
+    // 三文件已创建（create 语义不回归）
+    expect(readProjectFile(bookDir)?.name).toBe("联动书");
+
+    // list 扫到该书：name/path/updatedAt 与盘上 project.json 一致（不依赖 open/currentProject）
+    const listRes = await app.request("/api/v1/project/list", { headers: HOST_HEADERS });
+    expect(listRes.status).toBe(200);
+    const body = await listRes.json();
+    expect(body.data.rootPath).toBe(root);
+    expect(body.data.books).toEqual([
+      { name: "联动书", path: bookDir, updatedAt: readProjectFile(bookDir)?.updated_at },
+    ]);
+
+    // 再建一本 → 仍可扫到（两本）
+    const bookDir2 = join(root, "books", "第二本联动");
+    await app.request("/api/v1/project/create", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: bookDir2 }),
+    });
+    const listRes2 = await app.request("/api/v1/project/list", { headers: HOST_HEADERS });
+    expect((await listRes2.json()).data.books).toHaveLength(2);
   });
 });

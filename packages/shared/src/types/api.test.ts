@@ -15,6 +15,7 @@ import {
   outlineGetQuerySchema,
   outlineTreeSchema,
   projectConfigSchema,
+  projectListResSchema,
   relationCreateReqSchema,
   relationQuerySchema,
   sseDoneEventSchema,
@@ -79,6 +80,33 @@ describe("project 端点", () => {
   it("language 非法拒绝；currentPosition null 允许", () => {
     expect(projectConfigSchema.safeParse({ ...validConfig(), language: "fr" }).success).toBe(false);
     expect(projectConfigSchema.parse({ ...validConfig(), currentPosition: null }).currentPosition).toBeNull();
+  });
+
+  it("projectListResSchema：合法响应 parse 通过（books 数组、倒序语义由服务端保证）", () => {
+    const res = projectListResSchema.parse({
+      rootPath: "/home/me/bookshelf",
+      books: [
+        { name: "第二本", path: "/home/me/bookshelf/books/第二本", updatedAt: "2026-08-02T10:00:00Z" },
+        { name: "第一本", path: "/home/me/bookshelf/books/第一本", updatedAt: "2026-08-01T10:00:00Z" },
+      ],
+    });
+    expect(res.rootPath).toBe("/home/me/bookshelf");
+    expect(res.books).toHaveLength(2);
+    expect(res.books[0].name).toBe("第二本");
+  });
+
+  it("projectListResSchema：books 为空数组合法；缺字段/类型不符拒绝", () => {
+    // 空书架合法
+    expect(projectListResSchema.parse({ rootPath: "/x", books: [] }).books).toEqual([]);
+    // 书缺 updatedAt → 拒绝
+    expect(
+      projectListResSchema.safeParse({
+        rootPath: "/x",
+        books: [{ name: "书", path: "/x/books/书" }],
+      }).success,
+    ).toBe(false);
+    // rootPath 非 string → 拒绝
+    expect(projectListResSchema.safeParse({ rootPath: 1, books: [] }).success).toBe(false);
   });
 });
 

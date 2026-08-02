@@ -197,6 +197,24 @@ export const projectCloseResSchema = z.object({
   saved: z.literal(true),
 });
 
+// GET /api/v1/project/list（书架模式 S1.5：列出创作根 books/ 下的书，供 Dashboard 书架展示）
+export const projectListResSchema = z.object({
+  /** 创作根（server 启动参数 projectRoot） */
+  rootPath: z.string(),
+  /** books/ 下含 project.json 的书，按 updatedAt 倒序（最近更新在前） */
+  books: z.array(
+    z.object({
+      /** 目录名（书名） */
+      name: z.string(),
+      /** 书目录绝对路径（books/<name>） */
+      path: z.string(),
+      /** project.json 的 updated_at（ISO 8601，应用层写入） */
+      updatedAt: z.string(),
+    }),
+  ),
+});
+export type ProjectListBook = z.infer<typeof projectListResSchema>["books"][number];
+
 // GET /api/v1/project/config
 export const projectConfigResSchema = projectConfigSchema;
 

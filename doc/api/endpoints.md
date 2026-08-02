@@ -82,6 +82,30 @@
 }
 ```
 
+### GET /api/v1/project/list
+
+书架列表（S1.5 书架模式）：扫描创作根 `books/` 下含 `project.json` 的子目录，供 Dashboard 书架展示。
+
+```typescript
+// Query: (none)
+
+// Res: 200
+{
+  rootPath: string;   // 创作根（server 启动参数 projectRoot）
+  books: Array<{
+    name: string;      // 目录名（书名）
+    path: string;      // 书目录绝对路径（创作根/books/<书名>/）
+    updatedAt: string; // project.json 的 updated_at（ISO 8601）
+  }>;
+}
+```
+
+**语义**：
+- **不依赖当前项目**——书架模式待命（无 currentProject）时同样可用；`books/` 不存在返回空数组（不报错）。
+- 排序按 `updatedAt` 倒序（最近更新在前）。
+- 过滤规则：仅目录 + 含 `project.json`（`readProjectFile` 探测）；`books/` 下无 project.json 的目录（如草稿箱）与普通文件不列出。
+- 兼容旧语义：创作根自身若有 `project.json`（旧部署模式）仍按 `detectProject` 打开，`list` 只列 `books/` 子目录（根自身不是书）。
+
 ### GET /api/v1/project/config
 
 获取当前项目配置。

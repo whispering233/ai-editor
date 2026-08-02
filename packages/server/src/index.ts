@@ -30,7 +30,7 @@ import {
   type ProjectContext,
   type ProjectVariables,
 } from "./middleware/project.js";
-import { projectRoutes } from "./routes/project.js";
+import { projectRoutes, setProjectRoot } from "./routes/project.js";
 
 /** 默认端口（决策 8 / 17；dev 态 Vite proxy 写死 3456） */
 export const DEFAULT_PORT = 3456;
@@ -131,6 +131,11 @@ export async function startServer(projectRoot: string, options: StartServerOptio
   if (project !== null) {
     setCurrentProject(project); // 启动即打开（决策 8 部署场景）；null 则保持待命
   }
+
+  // 书架模式（S1.5）：projectRoot = 创作根，GET /api/v1/project/list 扫描 books/ 子目录
+  // 需要创作根路径（与 currentProject 无关——待命态也要能列书）；兼容旧语义：
+  // 创作根自身有 project.json 仍按 detectProject 打开，list 只列 books/（根自身不是书）
+  setProjectRoot(projectRoot);
 
   const app = new Hono<{ Variables: ProjectVariables }>();
 

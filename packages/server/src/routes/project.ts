@@ -4,8 +4,8 @@
 //   决策 8（单进程 currentProject）、决策 13 修订（open 时 user_version 判定删库重建）、决策 17（路径校验防越权）。
 // 校验失败统一 400 INVALID_PROJECT_PATH（shared ErrorCode，endpoints.md 第 66 行）。
 import { isAbsolute, join, resolve } from "node:path";
-import { mkdirSync, realpathSync } from "node:fs";
-import { Hono } from "hono";
+import { mkdirSync, readdirSync, realpathSync, type Dirent } from "node:fs";
+import { Hono, type Context } from "hono";
 import type { ProjectFileConfig } from "@ai-editor/shared";
 import { mapProjectFileToConfig } from "@ai-editor/shared";
 import { openDatabase } from "@ai-editor/db";
@@ -15,6 +15,7 @@ import { nowIso } from "@ai-editor/db";
 import {
   projectConfigUpdateReqSchema,
   projectCreateReqSchema,
+  projectListResSchema,
   projectOpenReqSchema,
 } from "@ai-editor/shared/schemas";
 import { HttpError, ok } from "../middleware/error.js";
@@ -25,6 +26,24 @@ import {
   requireCurrentProject,
   setCurrentProject,
 } from "../middleware/project.js";
+
+// ============ 创作根（书架模式 S1.5） ============
+//
+// 语义：启动目录 = 创作根（书架），每本书 = 创作根/books/<书名>/（含 project.json 等三文件）。
+// 创作根是 server 启动参数（index.ts startServer 的 projectRoot），与 currentProject（运行态）
+// 不同维度——list 端点**不依赖 currentProject**（书架模式待命时无当前项目也要能列书），
+// 因此以模块级状态持有，startServer 挂载路由前经 setProjectRoot 注入。
+
+/** 创作根绝对路径（startServer 注入；null = 未初始化，list 端点防御性 500） */
+let projectRoot: string | null = null;
+
+/** 设置创作根（index.ts startServer 调用；测试隔离用传 null 重置） */
+export function setProjectRoot(root: string | null): void {
+  projectRoot = root;
+}
+
+/** books/ 子目录名（书架模式：创作根/books/<书名>/） */
+export const BOOKS_DIR_NAME = "books";
 
 /**
  * 规范化并校验项目路径（决策 17，create/open 通用）：
@@ -167,6 +186,58 @@ projectRoutes.post("/open", async (c) => {
     throw err;
   }
 });
+
+// GET /api/v1/project/list —— 书架列表（S1.5）：扫描创作根 books/ 下含 project.json 的书
+projectRoutes.get("/list", (c) => {
+  if (projectRoot === null) {
+    throw new HttpError(500, "INTERNAL_ERROR", "创作根未初始化（startServer 未调用 setProjectRoot）");
+  }
+  const booksDir = join(projectRoot, BOOKS_DIR_NAME);
+  // books/ 不存在 → 空书架（不报错——新创作根首次启动的正常状态）
+  let entries: Dirent[];
+  try {
+    entries = readdirSync(booksDir, { withFileTypes: true });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return listResponse(c, { rootPath: projectRoot, books: [] });
+    }
+    throw err;
+  }
+  // 过滤：仅目录 + 含 project.json（readProjectFile 探测——损坏的 project.json 抛错向上传播，
+  // 与 open 语义一致：坏数据不静默吞）
+  const books = entries
+    .filter((e) => e.isDirectory())
+    .map((e) => ({ name: e.name, dir: join(booksDir, e.name) }))
+    .map((b) => {
+      const config = readProjectFile(b.dir);
+      return config === null ? null : { name: b.name, path: b.dir, updatedAt: config.updated_at };
+    })
+    .filter((b): b is { name: string; path: string; updatedAt: string } => b !== null)
+    // 倒序：最近更新在前（ISO 8601 字符串字典序 = 时间序）
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return listResponse(c, { rootPath: projectRoot, books });
+});
+
+/**
+ * list 响应统一出口：经 projectListResSchema 自检后返回（oracle 审核建议 1——
+ * endpoints.md 第 14 行「类型对应 types/api.ts 的 Zod schema」）。
+ *
+ * **ZodError 处理取舍**：errorHandler 对 ZodError 统一转 400 VALIDATION_ERROR（路由入参校验语义）；
+ * 但此处 parse 的是**服务端自检**（构造的响应是否符合契约）——失败是服务端 bug 而非客户端
+ * 参数错误，直接让 ZodError 冒泡会误报 400。故 catch 后重新抛 HttpError(500, INTERNAL_ERROR)，
+ * 保持「入参 ZodError → 400、服务端自检 ZodError → 500」的语义边界。
+ */
+function listResponse(c: Context, result: { rootPath: string; books: Array<{ name: string; path: string; updatedAt: string }> }) {
+  try {
+    return c.json(ok(projectListResSchema.parse(result)));
+  } catch (err) {
+    throw new HttpError(
+      500,
+      "INTERNAL_ERROR",
+      `list 响应不符合契约: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
 
 // POST /api/v1/project/close —— 关闭当前项目（释放数据库连接）
 projectRoutes.post("/close", (c) => {
