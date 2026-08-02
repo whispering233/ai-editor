@@ -20,6 +20,7 @@ import { Hono } from "hono";
 import { createAdaptorServer, type ServerType } from "@hono/node-server";
 import type { AddressInfo } from "node:net";
 import { errorHandler, fail, ok } from "./middleware/error.js";
+import { entityRoutes } from "./routes/entity.js";
 import { settingsRoutes } from "./routes/settings.js";
 import {
   closeProject,
@@ -151,6 +152,9 @@ export async function startServer(projectRoot: string, options: StartServerOptio
 
   // 设置路由（S1.3）：GET/PUT /api/v1/settings/llm（用户级配置，决策 17）
   app.route("/api/v1/settings", settingsRoutes);
+
+  // 实体路由（S3.3）：GET/POST /api/v1/entity/:type、GET/PUT/DELETE /:type/:id
+  app.route("/api/v1/entity", entityRoutes);
 
   // 项目路由（S1.2）：create/open/close/config（项目管理，决策 8/13/17）
   app.route("/api/v1/project", projectRoutes);

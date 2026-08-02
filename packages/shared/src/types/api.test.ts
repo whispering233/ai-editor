@@ -8,8 +8,12 @@ import {
   deltaComputeReqSchema,
   deltaCreateReqSchema,
   entityCreateReqSchema,
+  entityDeleteResSchema,
+  entityDetailResSchema,
   entityListQuerySchema,
+  entityListResSchema,
   entitySummarySchema,
+  entityUpdateResSchema,
   errorCodeSchema,
   outlineCreateReqSchema,
   outlineGetQuerySchema,
@@ -147,6 +151,60 @@ describe("entity 端点", () => {
         updatedAt: "2026-08-01T10:00:00Z",
       }).summary.role,
     ).toBe("主角");
+  });
+
+  it("详情响应 parse：entityDetailResSchema（relations/deltaCount 形状，S3.3 锁定）", () => {
+    const detail = entityDetailResSchema.parse({
+      id: "char-1",
+      type: "character",
+      name: "张三",
+      data: { role: "主角" },
+      relations: [
+        {
+          id: "rel-1",
+          sourceType: "character",
+          sourceId: "char-1",
+          sourceName: "张三",
+          targetType: "character",
+          targetId: "char-2",
+          targetName: "李四",
+          relationType: "ally",
+          createdAt: "2026-08-01T10:00:00Z",
+        },
+      ],
+      deltaCount: 3,
+      createdAt: "2026-08-01T10:00:00Z",
+      updatedAt: "2026-08-01T10:00:00Z",
+    });
+    expect(detail.relations).toHaveLength(1);
+    expect(detail.deltaCount).toBe(3);
+    // relations 元素按 relationRecordSchema 校验（双向紧邻查询的两种方向同构）
+    expect(detail.relations[0]).toMatchObject({ sourceId: "char-1", targetId: "char-2", relationType: "ally" });
+  });
+
+  it("列表响应 parse：entityListResSchema（items/total/offset/limit）", () => {
+    const list = entityListResSchema.parse({
+      items: [
+        { id: "char-1", type: "character", name: "张三", summary: {}, createdAt: "2026-08-01T10:00:00Z", updatedAt: "2026-08-01T10:00:00Z" },
+      ],
+      total: 1,
+      offset: 0,
+      limit: 50,
+    });
+    expect(list.total).toBe(1);
+    expect(list.items[0].name).toBe("张三");
+  });
+
+  it("删除响应 parse：entityDeleteResSchema（cascaded 级联计数形状）", () => {
+    const del = entityDeleteResSchema.parse({
+      deleted: true,
+      cascaded: { relations: 2, deltas: 1 },
+    });
+    expect(del.cascaded).toEqual({ relations: 2, deltas: 1 });
+  });
+
+  it("更新响应 parse：entityUpdateResSchema", () => {
+    expect(entityUpdateResSchema.parse({ id: "char-1", updated: true }).updated).toBe(true);
   });
 });
 
