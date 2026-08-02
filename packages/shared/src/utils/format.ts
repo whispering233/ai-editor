@@ -31,3 +31,21 @@ export function maskApiKey(key: string): string {
   if (key.length <= 7) return "****";
   return `${key.slice(0, 3)}****${key.slice(-4)}`;
 }
+
+/**
+ * 相对时间（会话行/概览最近更新展示）：刚刚 / n 分钟前 / n 小时前 / n 天前；
+ * ≥30 天回退绝对时间（formatTimestamp）；非法输入（含空串）原样返回
+ * 说明：从 client Dashboard/Sidebar 抽离（U4 oracle L1：两处重复实现 → shared 共享可单测）
+ */
+export function formatRelativeTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  const diffMin = Math.floor((Date.now() - date.getTime()) / 60_000);
+  if (diffMin < 1) return "刚刚";
+  if (diffMin < 60) return `${diffMin} 分钟前`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return `${diffHours} 小时前`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 30) return `${diffDays} 天前`;
+  return formatTimestamp(iso);
+}

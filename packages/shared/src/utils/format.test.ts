@@ -1,6 +1,6 @@
 // 文本格式化测试（T1.3）：时间戳 / 截断 / key 掩码的边界行为
 import { describe, expect, it } from "vitest";
-import { formatTimestamp, maskApiKey, truncate } from "./format.js";
+import { formatRelativeTime, formatTimestamp, maskApiKey, truncate } from "./format.js";
 
 describe("formatTimestamp", () => {
   it("合法 ISO 8601 → YYYY-MM-DD HH:mm 格式（本地时区）", () => {
@@ -48,5 +48,24 @@ describe("maskApiKey", () => {
     expect(maskApiKey("abc123")).toBe("****");
     expect(maskApiKey("sk-1234")).toBe("****");
     expect(maskApiKey("")).toBe("****");
+  });
+});
+
+describe("formatRelativeTime", () => {
+  it("非法输入原样返回", () => {
+    expect(formatRelativeTime("not-a-date")).toBe("not-a-date");
+    expect(formatRelativeTime("")).toBe("");
+  });
+  it("刚刚 / 分钟 / 小时 / 天前", () => {
+    const now = Date.now();
+    expect(formatRelativeTime(new Date(now - 30_000).toISOString())).toBe("刚刚");
+    expect(formatRelativeTime(new Date(now - 5 * 60_000).toISOString())).toBe("5 分钟前");
+    expect(formatRelativeTime(new Date(now - 3 * 3_600_000).toISOString())).toBe("3 小时前");
+    expect(formatRelativeTime(new Date(now - 2 * 86_400_000).toISOString())).toBe("2 天前");
+  });
+  it("≥30 天回退绝对时间（formatTimestamp）", () => {
+    expect(formatRelativeTime(new Date(Date.now() - 40 * 86_400_000).toISOString())).toMatch(
+      /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/,
+    );
   });
 });

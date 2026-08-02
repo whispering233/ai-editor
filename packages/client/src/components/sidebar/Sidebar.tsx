@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { BookOpen, ChevronRight, MessageSquare, Moon, Plus, Settings, Sun } from "lucide-react";
-import { formatTimestamp } from "@ai-editor/shared";
+import { formatRelativeTime, formatTimestamp } from "@ai-editor/shared";
 import { useTheme } from "../../hooks/use-theme";
 import { ApiError, CLIENT_NETWORK_ERROR } from "../../lib/api";
 import { describeOpenError } from "../../lib/error-messages";
@@ -26,20 +26,6 @@ function formatShortTimestamp(iso: string): string {
   const sameYear = date.getFullYear() === new Date().getFullYear();
   if (sameYear) return `${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
   return `${String(date.getFullYear()).slice(-2)}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
-
-/** 相对时间（会话行）：刚刚 / n 分钟前 / n 小时前 / n 天前；≥30 天回退绝对时间；非法输入原样返回 */
-function formatRelativeTime(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  const diffMin = Math.floor((Date.now() - date.getTime()) / 60_000);
-  if (diffMin < 1) return "刚刚";
-  if (diffMin < 60) return `${diffMin} 分钟前`;
-  const diffHours = Math.floor(diffMin / 60);
-  if (diffHours < 24) return `${diffHours} 小时前`;
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 30) return `${diffDays} 天前`;
-  return formatTimestamp(iso);
 }
 
 /** 会话子列表（展开的项目行下方渲染）：未加载/失败/空态各自呈现；点击会话 → 右栏切换 */

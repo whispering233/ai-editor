@@ -58,6 +58,22 @@ export function findNode(nodes: OutlineNode[], nodeId: string): OutlineNode | nu
   return null;
 }
 
+/**
+ * 根到节点的祖先链（含节点自身，不含虚拟 root），如 ["vol-1","ch-3","sc-9"]；
+ * 找不到返回 null。跨页定位用（U4）：展开折叠祖先使节点进入 DOM + 确认节点存在。
+ */
+export function findNodePath(nodes: OutlineNode[], nodeId: string, path: string[] = []): string[] | null {
+  for (const n of nodes) {
+    const next = [...path, n.id];
+    if (n.id === nodeId) return next;
+    if (n.type !== "scene" && n.children) {
+      const found = findNodePath(n.children, nodeId, next);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
 /** 树扁平化选项（S3.6 大纲节点选择器用）：树序遍历 { id, title, depth }（root=0、卷=1、章=2） */
 export interface FlatNodeOption {
   id: string;

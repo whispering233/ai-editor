@@ -24,7 +24,7 @@ import {
   type OutlineNodeType,
   type TrashOutlineNode,
 } from "../lib/api";
-import { canMoveTo, editFailureRecovery, findNode, findNodeChildren, ROOT_NODE_ID, shouldCommitSummary, shouldCommitTitle } from "../lib/outline-tree";
+import { canMoveTo, editFailureRecovery, findNode, findNodeChildren, findNodePath, ROOT_NODE_ID, shouldCommitSummary, shouldCommitTitle } from "../lib/outline-tree";
 import { cn } from "../lib/utils";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
@@ -127,6 +127,10 @@ export default function Outline() {
   const configLoading = useProjectStore((s) => s.configLoading);
   const loadOutline = useProjectStore((s) => s.loadOutline);
   const updateConfig = useProjectStore((s) => s.updateConfig);
+  // 跨页定位（U4 方案 A）：ui store 的 transient 目标节点 id——InfoBar/概览页点击「当前位置」
+  // 设置后跳转本页；本页消费（展开祖先+滚动+高亮）后清除，不侵入 hash 路由
+  const focusOutlineNodeId = useUiStore((s) => s.focusOutlineNodeId);
+  const clearFocusOutlineNode = useUiStore((s) => s.clearFocusOutlineNode);
 
   // 首次加载标记：loadOutline 在 store 内静默吞错，用 loadAttempted 呈现「加载失败 + 重试」
   const [loadAttempted, setLoadAttempted] = useState(false);
@@ -143,6 +147,8 @@ export default function Outline() {
   const [busy, setBusy] = useState(false);
   /** 新创建节点高亮（原型「成功后新节点高亮」；3s 自动消失） */
   const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null);
+  /** 跨页定位节点高亮（U4：InfoBar 点击当前位置 → 跳转定位，bg-accent 临时高亮几秒） */
+  const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
 
   // S2.4 就地交互状态
   const [editing, setEditing] = useState<EditingState>(null);
@@ -178,6 +184,44 @@ export default function Outline() {
     const t = setTimeout(() => setHighlightedNodeId(null), 3000);
     return () => clearTimeout(t);
   }, [highlightedNodeId]);
+
+  // 跨页定位消费（U4 方案 A，layout.md §2.1「点击当前位置 → 跳 #/outline 并定位该节点」）：
+  // 读取 ui store 的 transient 目标——展开折叠祖先使节点进入 DOM（折叠态节点不渲染无法滚动），
+  // 渲染完成后再 scrollIntoView + 临时高亮（bg-accent 3s），最后清除 store（一次性请求）；
+  // 节点不存在（软删/purge 后）直接放弃定位
+  useEffect(() => {
+    if (focusOutlineNodeId === null || outline === null) return;
+    const targetId = focusOutlineNodeId;
+    const path = findNodePath(outline.children, targetId);
+    if (path === null) {
+      clearFocusOutlineNode();
+      return;
+    }
+    // 展开全部祖先（含节点自身——目标不可能是折叠父，无害）
+    setCollapsed((prev) => {
+      if (path.every((id) => !prev.has(id))) return prev;
+      const next = new Set(prev);
+      for (const id of path) next.delete(id);
+      return next;
+    });
+    // 展开是异步状态更新：等本轮渲染完成后再查 DOM 定位（setTimeout 0 落下一帧）
+    const t = setTimeout(() => {
+      const el = document.querySelector<HTMLElement>(`[data-node-id="${targetId}"]`);
+      if (el) {
+        el.scrollIntoView({ block: "center" });
+        setFocusedNodeId(targetId);
+      }
+      clearFocusOutlineNode();
+    }, 0);
+    return () => clearTimeout(t);
+  }, [focusOutlineNodeId, outline, clearFocusOutlineNode]);
+
+  // 定位高亮自动消失（3s，同新节点高亮模式）
+  useEffect(() => {
+    if (focusedNodeId === null) return;
+    const t = setTimeout(() => setFocusedNodeId(null), 3000);
+    return () => clearTimeout(t);
+  }, [focusedNodeId]);
 
   /** 加载回收站大纲节点列表 */
   async function loadTrash() {
@@ -520,10 +564,13 @@ export default function Outline() {
       const isDropTarget = dragOverParentId === node.id;
       const isDragging = dragNodeId === node.id;
       const creatingHere = creatingAt?.parentId === node.id;
+      const focused = node.id === focusedNodeId;
       return (
         <div key={node.id}>
-          {/* 行（整行可拖拽：编辑态/自身拖拽中禁用 draggable，避免文本选择与嵌套拖动） */}
+          {/* 行（整行可拖拽：编辑态/自身拖拽中禁用 draggable，避免文本选择与嵌套拖动）；
+              data-node-id 为跨页定位锚点（U4：InfoBar 点击当前位置 → scrollIntoView 定位） */}
           <div
+            data-node-id={node.id}
             draggable={!editingTitle && !editingSummary && !isDragging && !busy}
             onDragStart={(e) => handleDragStart(e, node)}
             onDragEnd={handleDragEnd}
@@ -534,6 +581,7 @@ export default function Outline() {
               "flex cursor-grab items-center gap-2 rounded-md px-2 py-1.5 hover:bg-zinc-50 active:cursor-grabbing",
               actionsOpen && "bg-zinc-50",
               node.id === highlightedNodeId && "bg-amber-50",
+              focused && "bg-accent ring-1 ring-inset ring-ring", // 跨页定位临时高亮（U4，3s 消失）
               isDropTarget && "bg-zinc-100 ring-1 ring-inset ring-zinc-400",
               isDragging && "opacity-50",
             )}
@@ -566,7 +614,10 @@ export default function Outline() {
               )
             ) : (
               <span
-                className="min-w-0 cursor-text truncate text-sm text-zinc-800 hover:underline"
+                className={cn(
+                  "min-w-0 cursor-text truncate text-sm hover:underline",
+                  focused ? "text-accent-foreground" : "text-zinc-800", // 定位高亮时切换前景色保对比度（深色主题 bg-accent 是暗底）
+                )}
                 title="点击编辑标题"
                 onClick={() => startEdit(node, "title")}
               >

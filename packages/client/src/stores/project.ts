@@ -108,6 +108,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const res = await apiOpenProject(path);
     // open 响应含完整 config（S1.2），直接用省一次请求；outline 需重新拉取（新项目树不同）
     set({ config: res.config, loadError: null });
+    // L3（oracle U4 审核）：切项目后清除未消费的大纲定位目标（旧 id 对新树无意义，防残留）
+    useUiStore.getState().clearFocusOutlineNode();
     if (res.rebuilt) {
       // 删库重建提示（决策 13 修订 + endpoints.md「向客户端提示已重建」）
       useUiStore
@@ -126,6 +128,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   closeProject: async () => {
     await apiCloseProject();
     set({ config: null, loadError: null, outline: null });
+    // L3（oracle U4 审核）：关闭项目同样清除未消费的大纲定位目标
+    useUiStore.getState().clearFocusOutlineNode();
   },
 }));
 

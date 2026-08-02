@@ -43,6 +43,15 @@ interface UiState {
   confirm: (options: ConfirmOptions) => Promise<boolean>;
   /** 结束对话框（由 ConfirmDialog 组件调用） */
   resolveConfirm: (ok: boolean) => void;
+
+  /**
+   * 大纲定位目标节点 id（transient，U4 方案 A：跨页传参不侵入 hash 路由）：
+   * InfoBar/概览页点击「当前位置」→ 设置后跳 #/outline；Outline 页消费（展开祖先 +
+   * 滚动 + 临时高亮）后 clear。同一时刻仅一个定位请求，页面未消费前保留。
+   */
+  focusOutlineNodeId: string | null;
+  setFocusOutlineNode: (id: string) => void;
+  clearFocusOutlineNode: () => void;
 }
 
 const TOAST_DURATION_MS = 3_000;
@@ -75,4 +84,8 @@ export const useUiStore = create<UiState>((set, get) => ({
     state.resolve(ok);
     set({ confirmState: null });
   },
+
+  focusOutlineNodeId: null,
+  setFocusOutlineNode: (id) => set({ focusOutlineNodeId: id }),
+  clearFocusOutlineNode: () => set({ focusOutlineNodeId: null }),
 }));

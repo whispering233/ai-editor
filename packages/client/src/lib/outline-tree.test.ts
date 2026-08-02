@@ -7,6 +7,7 @@ import {
   editFailureRecovery,
   findNode,
   findNodeChildren,
+  findNodePath,
   flattenTree,
   isDescendant,
   parentOptionsForType,
@@ -109,6 +110,22 @@ describe("findNode / isDescendant（拖拽「不能挂自己/后代」判定）"
     expect(isDescendant(tree, "ch-1", "vol-1")).toBe(false); // 祖先不是后代
     expect(isDescendant(tree, "vol-1", "vol-2")).toBe(false); // 无关节点
     expect(isDescendant(tree, "vol-999", "ch-1")).toBe(false); // node 不存在
+  });
+});
+
+describe("findNodePath（根到节点祖先链，U4 跨页定位）", () => {
+  it("深层节点 → [卷, 章, 场] 全链（含自身，不含 root）", () => {
+    expect(findNodePath(tree, "sc-2")).toEqual(["vol-1", "ch-1", "sc-2"]);
+    expect(findNodePath(tree, "ch-3")).toEqual(["vol-2", "ch-3"]);
+  });
+
+  it("顶层节点 → 仅自身", () => {
+    expect(findNodePath(tree, "vol-1")).toEqual(["vol-1"]);
+  });
+
+  it("未找到 → null；空树 → null", () => {
+    expect(findNodePath(tree, "sc-99")).toBeNull();
+    expect(findNodePath([], "vol-1")).toBeNull();
   });
 });
 
