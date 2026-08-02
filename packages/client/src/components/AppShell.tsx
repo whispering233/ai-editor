@@ -44,8 +44,9 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
       ? (findOutlineNodeTitle(outline, config.currentPosition) ?? config.currentPosition)
       : null;
 
-  // 顶栏项目名：加载中 → 「加载中…」；未打开/加载失败 → 「未打开项目」（S1.4 降级展示）
-  const projectTitle = configLoading ? "加载中…" : (config?.name ?? "未打开项目");
+  // 顶栏项目名：加载中 → 「加载中…」；未打开/加载失败 → 「书架」（S1.6 修订：
+  // 无项目时所在即书架形态，layout.md §2.1；此前「未打开项目」语义含糊）
+  const projectTitle = configLoading ? "加载中…" : (config?.name ?? "书架");
 
   return (
     <div className="flex h-screen flex-col">

@@ -10,10 +10,8 @@
  */
 import { existsSync } from "node:fs";
 import { spawn } from "node:child_process";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 
-const workspaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 /** 安装目录（与 pack-test-install.mjs 同一默认值/覆盖变量） */
 const installDir = process.env.AI_EDITOR_TEST_DIR ?? "/tmp/opencode/ai-editor-install-test";
 
