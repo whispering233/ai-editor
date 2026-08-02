@@ -8,7 +8,7 @@
 - 错误响应：`{ success: false, error: { code: string, message: string } }`
 - 统一 HTTP 状态码：200 成功、400 参数错误、404 不存在、409 冲突、500 服务端错误
 - **命名约定**：请求体/查询参数用 snake_case，响应体用 camelCase，outline.json 内部字段用 snake_case；文件字段与 API 字段的显式映射函数定义于 `@ai-editor/shared/utils`（backlog #7）。**嵌套 `data` 对象内部字段原样透传**（保持 snake_case，如 `expected_payoff`）——camelCase 映射仅应用于 API 顶层契约字段（2026-08 修订）。
-- **id 约定**：`{前缀}-{nanoid}`（如 `char-9f3k2m`）。前缀表：`char-`/`set-`/`loc-`/`hook-`（实体）、`sc-`/`ch-`/`vol-`（大纲）、`proj-`（项目）、`prop_`/`sess_`/`call_`（运行时对象）。本文示例中的 `char-9` 等为形状示意，**非自增序号**。
+- **id 约定**：`{前缀}-{nanoid}`（如 `char-9f3k2m`）。前缀表：`char-`/`set-`/`loc-`/`hook-`（实体）、`sc-`/`ch-`/`vol-`（大纲）、`rel-`（关系，S3.2 补充）、`proj-`（项目）、`prop_`/`sess_`/`call_`（运行时对象）。本文示例中的 `char-9` 等为形状示意，**非自增序号**。
 - **错误码**：所有错误码统一枚举 `ErrorCode`（单一来源：`@ai-editor/shared/types/api.ts`），REST 响应、SSE error 事件、工具结果截断提示共用。
 
 **类型定义**：以下 `Req` / `Res` 类型对应 `@ai-editor/shared` 包中 `types/api.ts` 的 Zod schema。
@@ -315,7 +315,7 @@ id: string;
   target_type?: string;   // 终点类型过滤
   target_id?: string;     // 终点 ID 过滤
   relation_type?: string; // 关系类型过滤
-  depth: 1 | 2 | 3;      // 1=紧邻, 2=k跳, 3=全量遍历
+  depth: 1 | 2 | 3;      // 1=紧邻, 2=k跳, 3=3 层上限（有向 BFS + 路径级防环；2026-08 修订：文档「全量遍历」对齐实现语义，避免图爆炸）
 }
 
 // Res: 200
