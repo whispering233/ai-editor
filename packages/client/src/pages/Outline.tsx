@@ -1,35 +1,47 @@
-// 大纲树页面（S2.3；替换 T7.1 占位壳）
+// 大纲树页面（S2.4 修订：就地编辑/就地新建/拖拽移动为主，弹窗仅保留必要场景）
 // 路由：#/outline；数据：GET /api/v1/outline（整树）；操作：POST/PUT/DELETE /outline、PUT /project/config（设当前位置）
-// 设计契约：doc/ui/pages/outline.md——整树渲染（卷→章→场景缩进 + 折叠）、⋯ 菜单（编辑/新建子节点/移动到…/
-//   设为当前位置/移入回收站）、MVP 拖拽兜底用「移动到…」对话框、软删确认 + 级联计数 toast、回收站折叠区
+// 设计契约：doc/ui/pages/outline.md（S2.4 修订版）——行内编辑标题/摘要（Enter 保存/Esc 取消/失焦保存）、
+//   行尾「＋ 新建」就地插入子节点（类型由父决定，root 可切卷/章）、拖拽移动（原生 HTML5 DnD，目标父按
+//   决策 19 过滤，MVP 落点 = 目标父末尾）、弹窗仅保留：软删/purge 确认（layout.md §3.2）、移动兜底对话框
 // 刷新策略：所有写操作成功后统一 loadOutline() 重拉整树（服务端权威——move 重排 order、软删级联子树、
 //   还原级联；本地补丁易与服务端不一致；本地文件读取毫秒级，重拉成本可忽略）。outline 树数据仍在
-//   project store（跨页共用：顶栏当前位置标题映射、画布投影），本页只持有 UI 态（折叠/操作条/对话框/回收站）
+//   project store（跨页共用：顶栏当前位置标题映射、画布投影），本页只持有 UI 态
 import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
+import type { DragEvent, KeyboardEvent, ReactNode } from "react";
 import { formatTimestamp } from "@ai-editor/shared";
 import type { OutlineNode } from "@ai-editor/shared";
-import { CHILD_TYPE, ConfirmDialog, CreateNodeDialog, EditNodeDialog, MoveNodeDialog, TYPE_LABEL } from "../components/outline/dialogs";
+import { CHILD_TYPE, ConfirmDialog, MoveNodeDialog, TYPE_LABEL } from "../components/outline/dialogs";
 import { Button } from "../components/ui/button";
 import {
   ApiError,
+  createOutlineNode,
   deleteOutlineNode,
   getTrashList,
+  moveOutlineNode,
   purgeOutlineNode,
   restoreOutlineNode,
+  updateOutlineNode,
   type OutlineNodeType,
   type TrashOutlineNode,
 } from "../lib/api";
+import { canMoveTo, editFailureRecovery, findNode, findNodeChildren, ROOT_NODE_ID, shouldCommitSummary, shouldCommitTitle } from "../lib/outline-tree";
 import { cn } from "../lib/utils";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
 
-/** 页面级对话框状态（创建/编辑/移动） */
-type DialogState =
-  | { kind: "create"; type?: OutlineNodeType; parentId?: string; lockedType?: OutlineNodeType }
-  | { kind: "edit"; node: OutlineNode }
-  | { kind: "move"; node: OutlineNode }
-  | null;
+/** 页面级对话框状态（S2.4 起仅移动兜底用对话框；创建/编辑已就地化） */
+type DialogState = { kind: "move"; node: OutlineNode } | null;
+
+/** 就地编辑目标（一次只编辑一个字段） */
+type EditingState = { nodeId: string; field: "title" | "summary" } | null;
+
+/** 就地新建目标：parentId "root" = 顶层（卷/章可切），否则父节点决定子类型（CHILD_TYPE） */
+type CreatingState = { parentId: string; type: OutlineNodeType } | null;
+
+/** 提取错误码（ApiError → 服务端码；未知 → null 走兜底文案） */
+function errorCode(err: unknown): string | null {
+  return err instanceof ApiError ? err.code : null;
+}
 
 /** 错误码 → 页级横幅文案（layout.md §3.2：各页定义映射） */
 function describeOutlineError(code: string | null): string {
@@ -41,6 +53,71 @@ function describeOutlineError(code: string | null): string {
     default:
       return "操作失败，请稍后重试";
   }
+}
+
+/** 就地输入行（标题/摘要/新建共用样式；autoFocus 进入即聚焦——组件级复用，无页面 state 依赖） */
+function inlineInput(
+  value: string,
+  onChange: (v: string) => void,
+  onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void,
+  onBlur: () => void,
+  placeholder: string,
+) {
+  return (
+    <input
+      autoFocus
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={onKeyDown}
+      onBlur={onBlur}
+      maxLength={200}
+      placeholder={placeholder}
+      className="min-w-0 flex-1 rounded border border-zinc-300 bg-white px-1.5 py-0.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+    />
+  );
+}
+
+/** root 顶层就地新建行：卷/章切换（决策 19 chapter 可挂 root）+ 输入行。
+ * 树容器（renderRootCreateRow）与空态引导卡共用，避免两处重复（S2.4 oracle 补丁） */
+function RootCreateRow({
+  type,
+  onTypeChange,
+  value,
+  onChange,
+  onKeyDown,
+  onCancel,
+  className,
+}: {
+  type: OutlineNodeType;
+  onTypeChange: (t: OutlineNodeType) => void;
+  value: string;
+  onChange: (v: string) => void;
+  onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void;
+  onCancel: () => void;
+  className?: string;
+}) {
+  return (
+    <div className={cn("flex items-center gap-2 rounded-md px-2 py-1", className)}>
+      <div className="flex shrink-0 gap-1">
+        {(["volume", "chapter"] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => onTypeChange(t)}
+            className={cn(
+              "rounded border px-2 py-0.5 text-xs",
+              type === t
+                ? "border-zinc-900 bg-zinc-900 text-white"
+                : "border-zinc-300 text-zinc-600 hover:bg-zinc-100",
+            )}
+          >
+            {TYPE_LABEL[t]}
+          </button>
+        ))}
+      </div>
+      {inlineInput(value, onChange, onKeyDown, onCancel, `新${TYPE_LABEL[type]}标题，Enter 创建`)}
+    </div>
+  );
 }
 
 export default function Outline() {
@@ -66,6 +143,16 @@ export default function Outline() {
   const [busy, setBusy] = useState(false);
   /** 新创建节点高亮（原型「成功后新节点高亮」；3s 自动消失） */
   const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null);
+
+  // S2.4 就地交互状态
+  const [editing, setEditing] = useState<EditingState>(null);
+  const [editingValue, setEditingValue] = useState("");
+  const [creatingAt, setCreatingAt] = useState<CreatingState>(null);
+  const [createValue, setCreateValue] = useState("");
+  /** 拖拽中的节点 id；null = 无 */
+  const [dragNodeId, setDragNodeId] = useState<string | null>(null);
+  /** 当前可放置的目标父 id（高亮用）；null = 无 */
+  const [dragOverParentId, setDragOverParentId] = useState<string | null>(null);
 
   // 回收站（大纲节点）折叠区状态
   const [trashOpen, setTrashOpen] = useState(false);
@@ -144,6 +231,162 @@ export default function Outline() {
       }
     }
     return acc;
+  }
+
+  // ============ 就地编辑（标题/摘要：点击进入，Enter 保存 / Esc 取消 / 失焦保存） ============
+
+  function startEdit(node: OutlineNode, field: "title" | "summary") {
+    cancelCreate();
+    setEditing({ nodeId: node.id, field });
+    setEditingValue(field === "title" ? node.title : (node.summary ?? ""));
+    setOpenActionsFor(null);
+  }
+
+  function cancelEdit() {
+    setEditing(null);
+    setEditingValue("");
+  }
+
+  /** 提交判定走纯函数（shouldCommitTitle/Summary：无变化不发请求、空标题不提交、摘要允许清空）。
+   * 悲观提交（oracle 补丁）：提交期间保持编辑态，成功后退出；失败按 editFailureRecovery 决策——
+   *   节点已不存在（NOT_FOUND）→ 放弃编辑 + 重拉树；其余 → 保持编辑态与输入值（不重拉树），
+   *   用户可修正后重试（Enter 再提交）。busy 防重入（提交中重复 Enter/blur 不重复请求） */
+  async function commitEdit(node: OutlineNode, field: "title" | "summary") {
+    if (!editing || editing.nodeId !== node.id || editing.field !== field || busy) return;
+    const value = editingValue;
+    const commit =
+      field === "title" ? shouldCommitTitle(node.title, value) : shouldCommitSummary(node.summary, value);
+    if (!commit) {
+      cancelEdit(); // 无变化/空值：直接退出编辑态，不发请求
+      return;
+    }
+    setBusy(true);
+    try {
+      await updateOutlineNode(node.id, field === "title" ? { title: value.trim() } : { summary: value.trim() || undefined });
+      cancelEdit();
+      useUiStore.getState().showToast("已保存");
+      await afterTreeChanged();
+    } catch (err) {
+      const code = errorCode(err);
+      if (editFailureRecovery(code) === "abandon") {
+        // 节点已不存在（被 purge/并发删除）：放弃编辑，重拉树同步视图
+        cancelEdit();
+        setError(describeOutlineError(code));
+        await afterTreeChanged();
+        return;
+      }
+      // 恢复编辑态并保留输入值（editing/editingValue 未动）；输入框已失焦，用户点击即可修正重试
+      setError(describeOutlineError(code));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handleEditKeyDown(node: OutlineNode, field: "title" | "summary") {
+    return (e: KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        void commitEdit(node, field);
+      } else if (e.key === "Escape") {
+        cancelEdit();
+      }
+    };
+  }
+
+  // ============ 就地新建（行尾「＋」/顶部按钮 → 行内输入，Enter 创建 / Esc 或失焦取消） ============
+
+  function startCreate(parentId: string, type: OutlineNodeType) {
+    cancelEdit();
+    setCreatingAt({ parentId, type });
+    setCreateValue("");
+    setOpenActionsFor(null);
+    if (parentId !== ROOT_NODE_ID) expand(parentId); // 新建输入显示在父 children 末尾
+  }
+
+  function cancelCreate() {
+    setCreatingAt(null);
+    setCreateValue("");
+  }
+
+  /** 空值 = 取消（不误建）；成功 → 展开父 + 高亮新节点（afterTreeChanged 第二参） */
+  async function commitCreate() {
+    if (!creatingAt) return;
+    const title = createValue.trim();
+    const { parentId, type } = creatingAt;
+    if (!title) {
+      cancelCreate();
+      return;
+    }
+    cancelCreate();
+    try {
+      const res = await createOutlineNode({ type, title, parent_id: parentId });
+      useUiStore.getState().showToast(`已创建${TYPE_LABEL[type]}《${title}》`);
+      await afterTreeChanged(parentId, res.id);
+    } catch (err) {
+      setError(describeOutlineError(errorCode(err)));
+    }
+  }
+
+  function handleCreateKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      void commitCreate();
+    } else if (e.key === "Escape") {
+      cancelCreate();
+    }
+  }
+
+  // ============ 拖拽移动（原生 HTML5 DnD：合法目标高亮，drop = 排目标父末尾；对话框兜底入口保留） ============
+
+  function handleDragStart(e: DragEvent, node: OutlineNode) {
+    e.dataTransfer.setData("text/plain", node.id);
+    e.dataTransfer.effectAllowed = "move";
+    setDragNodeId(node.id);
+    setDragOverParentId(null);
+  }
+
+  function handleDragEnd() {
+    setDragNodeId(null);
+    setDragOverParentId(null);
+  }
+
+  /** 目标行/顶层容器 dragover：按 canMoveTo 过滤（决策 19 + 不自挂/子树），合法才允许 drop 并高亮 */
+  function handleDragOver(e: DragEvent, targetParentId: string) {
+    e.stopPropagation(); // 行内事件不冒泡到顶层容器（避免目标高亮错乱）
+    const dragNode = dragNodeId ? findNode(outline?.children ?? [], dragNodeId) : null;
+    if (!dragNode || !canMoveTo(dragNode, targetParentId, outline?.children ?? [])) return;
+    e.preventDefault(); // 允许 drop
+    e.dataTransfer.dropEffect = "move";
+    if (dragOverParentId !== targetParentId) setDragOverParentId(targetParentId);
+  }
+
+  function handleDragLeave(e: DragEvent, targetParentId: string) {
+    // 子元素间移动也会触发 dragleave：仅真正离开该行才清除
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setDragOverParentId((prev) => (prev === targetParentId ? null : prev));
+    }
+  }
+
+  /** drop：排目标父末尾（MVP 简化——精确插入位置留「移动到…」对话框或后续增强） */
+  async function handleDrop(e: DragEvent, targetParentId: string) {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!dragNodeId) return;
+    const dragNode = findNode(outline?.children ?? [], dragNodeId);
+    if (!dragNode || !canMoveTo(dragNode, targetParentId, outline?.children ?? [])) return;
+    setBusy(true);
+    try {
+      const targetChildren = findNodeChildren(outline?.children ?? [], targetParentId) ?? [];
+      await moveOutlineNode(dragNode.id, { parent_id: targetParentId, order: targetChildren.length });
+      useUiStore.getState().showToast(`已移动《${dragNode.title}》`);
+      await afterTreeChanged(targetParentId);
+    } catch (err) {
+      setError(describeOutlineError(errorCode(err)));
+    } finally {
+      setBusy(false);
+      setDragNodeId(null);
+      setDragOverParentId(null);
+    }
   }
 
   /** ⋯ 菜单「设为当前位置」→ PUT /project/config（顶栏同步联动，layout.md §2.1） */
@@ -225,7 +468,46 @@ export default function Outline() {
     }
   }
 
-  /** 整树渲染（内部递归函数，闭包共享页面 state，避免 props 爆炸；行结构见原型「行结构」注释） */
+  /** 就地输入行（标题/摘要/新建共用样式；用于复用行结构） */
+  function inlineInput(
+    value: string,
+    onChange: (v: string) => void,
+    onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void,
+    onBlur: () => void,
+    placeholder: string,
+  ) {
+    return (
+      <input
+        autoFocus
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={onKeyDown}
+        onBlur={onBlur}
+        maxLength={200}
+        placeholder={placeholder}
+        className="min-w-0 flex-1 rounded border border-zinc-300 bg-white px-1.5 py-0.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+      />
+    );
+  }
+
+  /** root 创建行（树容器内顶部；空态引导卡复用 RootCreateRow，见空态分支） */
+  function renderRootCreateRow() {
+    if (creatingAt?.parentId !== ROOT_NODE_ID) return null;
+    return (
+      <RootCreateRow
+        className="mb-1"
+        type={creatingAt.type}
+        onTypeChange={(t) => setCreatingAt({ parentId: ROOT_NODE_ID, type: t })}
+        value={createValue}
+        onChange={setCreateValue}
+        onKeyDown={handleCreateKeyDown}
+        onCancel={cancelCreate}
+      />
+    );
+  }
+
+  /** 整树渲染（内部递归函数，闭包共享页面 state；行结构：折叠箭头 | 类型徽标 | 标题 | 摘要 | 更新于 |
+   * 当前位置徽标 | ＋新建 | ⋯；标题/摘要点击就地编辑，整行可拖拽到合法目标父） */
   function renderNodes(nodes: OutlineNode[], depth: number): ReactNode {
     return nodes.map((node) => {
       const hasChildren = node.type !== "scene" && (node.children?.length ?? 0) > 0;
@@ -233,16 +515,30 @@ export default function Outline() {
       const isCurrent = config?.currentPosition === node.id;
       const actionsOpen = openActionsFor === node.id;
       const childType = CHILD_TYPE[node.type];
+      const editingTitle = editing?.nodeId === node.id && editing.field === "title";
+      const editingSummary = editing?.nodeId === node.id && editing.field === "summary";
+      const isDropTarget = dragOverParentId === node.id;
+      const isDragging = dragNodeId === node.id;
+      const creatingHere = creatingAt?.parentId === node.id;
       return (
         <div key={node.id}>
-          {/* 行：折叠箭头 | 类型徽标 | 标题 | 摘要 | 更新于 | 当前位置徽标 | ⋯ */}
+          {/* 行（整行可拖拽：编辑态/自身拖拽中禁用 draggable，避免文本选择与嵌套拖动） */}
           <div
+            draggable={!editingTitle && !editingSummary && !isDragging && !busy}
+            onDragStart={(e) => handleDragStart(e, node)}
+            onDragEnd={handleDragEnd}
+            onDragOver={(e) => handleDragOver(e, node.id)}
+            onDragLeave={(e) => handleDragLeave(e, node.id)}
+            onDrop={(e) => void handleDrop(e, node.id)}
             className={cn(
-              "flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-zinc-50",
+              "flex cursor-grab items-center gap-2 rounded-md px-2 py-1.5 hover:bg-zinc-50 active:cursor-grabbing",
               actionsOpen && "bg-zinc-50",
               node.id === highlightedNodeId && "bg-amber-50",
+              isDropTarget && "bg-zinc-100 ring-1 ring-inset ring-zinc-400",
+              isDragging && "opacity-50",
             )}
             style={{ paddingLeft: depth * 20 + 8 }}
+            title={isDropTarget ? "松开即移动到此处" : "拖动到目标行即可移动"}
           >
             {hasChildren ? (
               <button
@@ -259,17 +555,61 @@ export default function Outline() {
             <span className="shrink-0 rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-500">
               {TYPE_LABEL[node.type]}
             </span>
-            <span className="min-w-0 truncate text-sm text-zinc-800">{node.title}</span>
-            {node.summary && (
-              <span className="hidden min-w-0 flex-1 truncate text-xs text-zinc-400 md:inline">
+            {/* 标题：点击就地编辑（Enter 保存 / Esc 取消 / 失焦保存） */}
+            {editingTitle ? (
+              inlineInput(
+                editingValue,
+                setEditingValue,
+                handleEditKeyDown(node, "title"),
+                () => void commitEdit(node, "title"),
+                "标题",
+              )
+            ) : (
+              <span
+                className="min-w-0 cursor-text truncate text-sm text-zinc-800 hover:underline"
+                title="点击编辑标题"
+                onClick={() => startEdit(node, "title")}
+              >
+                {node.title}
+              </span>
+            )}
+            {/* 摘要：点击就地编辑（非高频但同样行内，不弹窗） */}
+            {editingSummary ? (
+              inlineInput(
+                editingValue,
+                setEditingValue,
+                handleEditKeyDown(node, "summary"),
+                () => void commitEdit(node, "summary"),
+                "摘要",
+              )
+            ) : node.summary ? (
+              <span
+                className="hidden min-w-0 flex-1 cursor-text truncate text-xs text-zinc-400 hover:underline md:inline"
+                title="点击编辑摘要"
+                onClick={() => startEdit(node, "summary")}
+              >
                 {node.summary}
               </span>
+            ) : (
+              <span className="hidden min-w-0 flex-1 md:inline" />
             )}
             <span className="ml-auto shrink-0 text-xs text-zinc-400">{formatTimestamp(node.updatedAt)}</span>
             {isCurrent && (
               <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700">
                 当前位置
               </span>
+            )}
+            {/* 行尾「＋」就地新建（父类型决定子类型；scene 是叶子无此入口） */}
+            {childType !== null && (
+              <button
+                type="button"
+                className="shrink-0 rounded px-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+                title={`就地新建${TYPE_LABEL[childType]}`}
+                aria-label={`新建${TYPE_LABEL[childType]}`}
+                onClick={() => startCreate(node.id, childType)}
+              >
+                ＋
+              </button>
             )}
             <button
               type="button"
@@ -280,30 +620,17 @@ export default function Outline() {
               ⋯
             </button>
           </div>
-          {/* ⋯ 操作条（行内展开，替代浮层菜单——MVP 简化，交互语义与原型 ⋯ 菜单一致） */}
+          {/* ⋯ 操作条（行内展开；编辑已就地化，此处保留：新建子节点/移动到…/设为当前位置/移入回收站） */}
           {actionsOpen && (
             <div
               className="mb-1 flex flex-wrap items-center gap-1.5 py-1"
               style={{ paddingLeft: depth * 20 + 44 }}
             >
-              <button
-                type="button"
-                className="rounded border border-zinc-200 px-2 py-0.5 text-xs text-zinc-600 hover:bg-zinc-100"
-                onClick={() => {
-                  setDialog({ kind: "edit", node });
-                  setOpenActionsFor(null);
-                }}
-              >
-                编辑
-              </button>
               {childType !== null && (
                 <button
                   type="button"
                   className="rounded border border-zinc-200 px-2 py-0.5 text-xs text-zinc-600 hover:bg-zinc-100"
-                  onClick={() => {
-                    setDialog({ kind: "create", type: childType, parentId: node.id });
-                    setOpenActionsFor(null);
-                  }}
+                  onClick={() => startCreate(node.id, childType)}
                 >
                   新建{TYPE_LABEL[childType]}
                 </button>
@@ -341,6 +668,19 @@ export default function Outline() {
           {hasChildren && !isCollapsed && (
             <div>{renderNodes(node.children ?? [], depth + 1)}</div>
           )}
+          {/* 就地新建输入行（父 children 末尾；父折叠时 startCreate 已自动展开） */}
+          {creatingHere && (
+            <div
+              className="flex items-center gap-2 rounded-md px-2 py-1"
+              style={{ paddingLeft: (depth + 1) * 20 + 8 }}
+            >
+              <span className="w-4 shrink-0" />
+              <span className="shrink-0 rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-500">
+                {TYPE_LABEL[creatingAt.type]}
+              </span>
+              {inlineInput(createValue, setCreateValue, handleCreateKeyDown, cancelCreate, `新${TYPE_LABEL[creatingAt.type]}标题，Enter 创建`)}
+            </div>
+          )}
         </div>
       );
     });
@@ -362,8 +702,8 @@ export default function Outline() {
           <Button variant="outline" type="button" onClick={toggleAllCollapse} disabled={!outline || outline.children.length === 0}>
             {collapsed.size > 0 ? "全部展开" : "全部折叠"}
           </Button>
-          <Button type="button" onClick={() => setDialog({ kind: "create" })}>
-            + 新建节点
+          <Button type="button" onClick={() => startCreate(ROOT_NODE_ID, "volume")}>
+            + 新建
           </Button>
         </div>
       </div>
@@ -408,17 +748,44 @@ export default function Outline() {
           </Button>
         </div>
       ) : outline.children.length === 0 ? (
-        /* 空态：主按钮「新建第一卷」（类型锁定 volume，原型） */
-        <div className="rounded-lg border border-dashed border-zinc-300 px-6 py-12 text-center">
-          <p className="text-sm text-zinc-600">大纲还是空的，先建第一卷</p>
-          <p className="mt-1 text-xs text-zinc-400">大纲是三层结构：卷 → 章 → 场景</p>
-          <Button className="mt-4" type="button" onClick={() => setDialog({ kind: "create", lockedType: "volume" })}>
-            新建第一卷
-          </Button>
-        </div>
+        /* 空态：就地新建（输入行内嵌引导卡，替代原「新建第一卷」弹窗按钮） */
+        creatingAt?.parentId === ROOT_NODE_ID ? (
+          <div className="rounded-lg border border-dashed border-zinc-300 px-6 py-12 text-center">
+            <p className="text-sm text-zinc-600">输入第一卷标题，Enter 创建</p>
+            <div className="mx-auto mt-4 max-w-sm">
+              <RootCreateRow
+                type={creatingAt.type}
+                onTypeChange={(t) => setCreatingAt({ parentId: ROOT_NODE_ID, type: t })}
+                value={createValue}
+                onChange={setCreateValue}
+                onKeyDown={handleCreateKeyDown}
+                onCancel={cancelCreate}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-zinc-300 px-6 py-12 text-center">
+            <p className="text-sm text-zinc-600">大纲还是空的，先建第一卷</p>
+            <p className="mt-1 text-xs text-zinc-400">大纲是三层结构：卷 → 章 → 场景</p>
+            <Button className="mt-4" type="button" onClick={() => startCreate(ROOT_NODE_ID, "volume")}>
+              新建第一卷
+            </Button>
+          </div>
+        )
       ) : (
-        /* 整树渲染 */
-        <div className="rounded-md border border-zinc-200 p-2">{renderNodes(outline.children, 0)}</div>
+        /* 整树渲染（容器同时是 root 拖放目标：拖到空白处 = 移到顶层；scene 会被 canMoveTo 拒绝） */
+        <div
+          className={cn(
+            "rounded-md border border-zinc-200 p-2",
+            dragOverParentId === ROOT_NODE_ID && "ring-1 ring-inset ring-zinc-400",
+          )}
+          onDragOver={(e) => handleDragOver(e, ROOT_NODE_ID)}
+          onDragLeave={(e) => handleDragLeave(e, ROOT_NODE_ID)}
+          onDrop={(e) => void handleDrop(e, ROOT_NODE_ID)}
+        >
+          {renderRootCreateRow()}
+          {renderNodes(outline.children, 0)}
+        </div>
       )}
 
       {/* 回收站折叠区（大纲节点侧；#/trash 完整回收站页面由后续卡实现） */}
@@ -484,20 +851,7 @@ export default function Outline() {
         )}
       </div>
 
-      {/* 对话框 */}
-      {dialog?.kind === "create" && (
-        <CreateNodeDialog
-          nodes={outline?.children ?? []}
-          initialType={dialog.type}
-          initialParentId={dialog.parentId}
-          lockedType={dialog.lockedType}
-          onCreated={afterTreeChanged}
-          onClose={() => setDialog(null)}
-        />
-      )}
-      {dialog?.kind === "edit" && (
-        <EditNodeDialog node={dialog.node} onSaved={afterTreeChanged} onClose={() => setDialog(null)} />
-      )}
+      {/* 保留的对话框：移动兜底 + 危险操作确认 */}
       {dialog?.kind === "move" && (
         <MoveNodeDialog
           node={dialog.node}

@@ -45,22 +45,62 @@ export function parentOptionsForType(nodes: OutlineNode[], type: OutlineNodeType
 }
 
 /**
- * 创建对话框父节点选择规则（S2.3 oracle 修复）：当前选中值（含入口 initialParentId）合法则保留，
- * 否则回退到第一个合法选项（或空）。
- * - volume → 固定 root（忽略 current）
- * - 其余 → current 在 parentOptionsForType 选项中 → 保留；不在（类型切换后旧父失效/入口给了非法父）→ 回退 options[0]
- * 这样「卷行→新建章」「章行→新建场景」入口指定的父节点不会被挂载重置覆盖
+ * 在树中查找节点（按 id；含 root 虚拟 id 时返回 null——root 不是 OutlineNode）
  */
-export function resolveParentId(
-  current: string | undefined,
-  type: OutlineNodeType,
-  nodes: OutlineNode[],
-): string {
-  if (type === "volume") return ROOT_NODE_ID;
-  const options = parentOptionsForType(nodes, type);
-  const validIds = new Set(options.map((o) => o.id));
-  if (current !== undefined && validIds.has(current)) return current;
-  return options.length > 0 ? options[0].id : "";
+export function findNode(nodes: OutlineNode[], nodeId: string): OutlineNode | null {
+  for (const n of nodes) {
+    if (n.id === nodeId) return n;
+    if (n.type !== "scene" && n.children) {
+      const found = findNode(n.children, nodeId);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+/** targetId 是否在 nodeId 的子树中（含 nodeId 自身）——拖拽「不能挂自己/后代」判定 */
+export function isDescendant(nodes: OutlineNode[], nodeId: string, targetId: string): boolean {
+  const node = findNode(nodes, nodeId);
+  if (!node) return false;
+  const search = (n: OutlineNode): boolean => {
+    if (n.id === targetId) return true;
+    if (n.type !== "scene" && n.children) {
+      return n.children.some((c) => search(c));
+    }
+    return false;
+  };
+  return search(node);
+}
+
+/**
+ * 拖拽移动合法性（严格三层 + 不自挂/不挂子树）：
+ * - 目标父必须是该节点类型的合法父（parentOptionsForType，决策 19）
+ * - 不能挂到自己（targetId === nodeId）或自己的后代（子树）
+ */
+export function canMoveTo(node: OutlineNode, targetParentId: string, nodes: OutlineNode[]): boolean {
+  if (targetParentId === node.id) return false;
+  if (isDescendant(nodes, node.id, targetParentId)) return false;
+  return parentOptionsForType(nodes, node.type).some((o) => o.id === targetParentId);
+}
+
+/** 行内标题编辑提交判定：非空且有变化才提交（空标题不合法；无变化不发请求） */
+export function shouldCommitTitle(original: string, value: string): boolean {
+  const v = value.trim();
+  return v !== "" && v !== original.trim();
+}
+
+/** 行内摘要编辑提交判定：有变化才提交（允许清空 = 清除摘要；无变化不发请求） */
+export function shouldCommitSummary(original: string | undefined, value: string): boolean {
+  return value.trim() !== (original ?? "").trim();
+}
+
+/**
+ * 行内编辑提交失败后的恢复决策（S2.4 oracle 补丁）：
+ * - OUTLINE_NODE_NOT_FOUND → "abandon"：节点已不存在（被 purge/并发删除），编辑无意义，放弃并重拉树
+ * - 其余错误 → "restore"：恢复编辑态并保留用户输入，可修正后重试
+ */
+export function editFailureRecovery(code: string | null): "abandon" | "restore" {
+  return code === "OUTLINE_NODE_NOT_FOUND" ? "abandon" : "restore";
 }
 
 /**
