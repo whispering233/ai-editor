@@ -121,6 +121,131 @@ export function getOutline(): Promise<OutlineTree> {
   return apiFetch<OutlineTree>("/outline");
 }
 
+// ============ 大纲操作（S2.3；契约：endpoints.md「大纲操作」L514-656，严格三层决策 19） ============
+
+/** 大纲节点类型（严格三层：volume → chapter → scene，决策 19） */
+export type OutlineNodeType = "volume" | "chapter" | "scene";
+
+/** POST /api/v1/outline 请求体（parent_id 必填：volume→root、chapter→volume/root、scene→chapter） */
+export interface CreateOutlineBody {
+  type: OutlineNodeType;
+  title: string; // 1-200 字符
+  parent_id: string;
+  summary?: string;
+}
+
+/** POST /api/v1/outline 响应（201） */
+export interface CreateOutlineRes {
+  id: string;
+  type: string;
+  title: string;
+  parentId: string | null;
+  updatedAt: string;
+}
+
+/** 创建大纲节点（错误：400 VALIDATION_ERROR——parent_id 缺失/层级非法） */
+export function createOutlineNode(body: CreateOutlineBody): Promise<CreateOutlineRes> {
+  return apiFetch<CreateOutlineRes>("/outline", { method: "POST", body });
+}
+
+/** PUT /api/v1/outline/:nodeId 请求体（标题/摘要可部分更新） */
+export interface UpdateOutlineBody {
+  title?: string;
+  summary?: string;
+}
+
+/** 更新大纲节点标题/摘要 */
+export function updateOutlineNode(nodeId: string, patch: UpdateOutlineBody): Promise<{ updated: true }> {
+  return apiFetch<{ updated: true }>(`/outline/${nodeId}`, { method: "PUT", body: patch });
+}
+
+/** PUT /api/v1/outline/:nodeId/move 请求体（order：兄弟位置 0-based；层级约束同创建） */
+export interface MoveOutlineBody {
+  parent_id: string;
+  order: number;
+}
+
+/** PUT /api/v1/outline/:nodeId/move 响应 */
+export interface MoveOutlineRes {
+  moved: true;
+  previousParentId: string;
+  newParentId: string;
+}
+
+/** 移动大纲节点（画布投影自动更新，决策 1；错误：404 OUTLINE_NODE_NOT_FOUND / 400 VALIDATION_ERROR） */
+export function moveOutlineNode(nodeId: string, body: MoveOutlineBody): Promise<MoveOutlineRes> {
+  return apiFetch<MoveOutlineRes>(`/outline/${nodeId}/move`, { method: "PUT", body });
+}
+
+/** DELETE /api/v1/outline/:nodeId 响应（软删，决策 12；cascaded = 级联移除的子节点/关系/Delta 计数） */
+export interface DeleteOutlineRes {
+  deleted: true;
+  cascaded: {
+    children: number;
+    relations: number;
+    deltas: number;
+  };
+}
+
+/** 软删大纲节点（标记 deleted，本体保留可还原；级联子节点/关系/Delta） */
+export function deleteOutlineNode(nodeId: string): Promise<DeleteOutlineRes> {
+  return apiFetch<DeleteOutlineRes>(`/outline/${nodeId}`, { method: "DELETE" });
+}
+
+/** GET /api/v1/outline/:nodeId/path 响应（从根到节点的 ID 链，如 ["root","vol-1","ch-3"]） */
+export interface OutlinePathRes {
+  nodeId: string;
+  path: string[];
+}
+
+/** 获取节点路径（从根到指定节点；404 = 节点已 purge） */
+export function getOutlinePath(nodeId: string): Promise<OutlinePathRes> {
+  return apiFetch<OutlinePathRes>(`/outline/${nodeId}/path`);
+}
+
+// ============ 回收站（大纲节点侧，S2.3；契约：endpoints.md「回收站」L660-736） ============
+
+/** GET /api/v1/trash 响应（实体与大纲节点；本卡只消费 nodes） */
+export interface TrashOutlineNode {
+  id: string;
+  type: OutlineNodeType;
+  title: string;
+  deletedAt: string;
+}
+
+export interface TrashListRes {
+  entities: Array<{ id: string; type: string; name: string; deletedAt: string }>;
+  nodes: TrashOutlineNode[];
+}
+
+/** 列出回收站软删对象 */
+export function getTrashList(): Promise<TrashListRes> {
+  return apiFetch<TrashListRes>("/trash");
+}
+
+/** POST /api/v1/trash/outline/:nodeId/restore 响应（级联还原子节点/关系/Delta，决策 12 修订） */
+export interface RestoreOutlineRes {
+  restored: true;
+  restoredChildren: number;
+  restoredRelations: number;
+  restoredDeltas: number;
+}
+
+/** 还原软删大纲节点（错误：404 OUTLINE_NODE_NOT_FOUND / 409 OUTLINE_ANCESTOR_DELETED——需先还原祖先） */
+export function restoreOutlineNode(nodeId: string): Promise<RestoreOutlineRes> {
+  return apiFetch<RestoreOutlineRes>(`/trash/outline/${nodeId}/restore`, { method: "POST" });
+}
+
+/** DELETE /api/v1/trash/outline/:nodeId 响应（purge：递归物理清除整棵子树，不可恢复） */
+export interface PurgeOutlineRes {
+  purged: true;
+}
+
+/** 彻底删除大纲节点（仅回收站清理用；物理清除不可恢复） */
+export function purgeOutlineNode(nodeId: string): Promise<PurgeOutlineRes> {
+  return apiFetch<PurgeOutlineRes>(`/trash/outline/${nodeId}`, { method: "DELETE" });
+}
+
 // ============ 书架（S1.5；契约：GET /api/v1/project/list，服务端扫描 books/ 子目录） ============
 
 /** GET /api/v1/project/list 响应（books 元素类型复用 shared ProjectListBook——契约单一来源；

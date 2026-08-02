@@ -5,10 +5,18 @@ import {
   ApiError,
   CLIENT_NETWORK_ERROR,
   closeProject,
+  createOutlineNode,
   createProject,
+  deleteOutlineNode,
+  getOutlinePath,
   getSettingsLlm,
+  getTrashList,
   listProjects,
+  moveOutlineNode,
   openProject,
+  purgeOutlineNode,
+  restoreOutlineNode,
+  updateOutlineNode,
   updateSettingsLlm,
 } from "./api";
 
@@ -173,5 +181,136 @@ describe("settings/llm（S1.3 端点）", () => {
     } catch (err) {
       expect(err).toBeInstanceOf(ApiError);
     }
+  });
+});
+
+describe("大纲端点（S2.3，严格三层决策 19）", () => {
+  it("createOutlineNode：POST /outline，body snake_case（type/title/parent_id/summary）", async () => {
+    const calls = mockFetchOnce({
+      body: {
+        success: true,
+        data: { id: "vol-2", type: "volume", title: "第二卷", parentId: "root", updatedAt: "2026-08-02T00:00:00Z" },
+      },
+    });
+    const res = await createOutlineNode({ type: "volume", title: "第二卷", parent_id: "root", summary: "主线" });
+    expect(res).toMatchObject({ id: "vol-2", parentId: "root" });
+    expect(calls[0].url).toBe("/api/v1/outline");
+    expect(calls[0].init?.method).toBe("POST");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({
+      type: "volume",
+      title: "第二卷",
+      parent_id: "root",
+      summary: "主线",
+    });
+  });
+
+  it("createOutlineNode：scene 挂 chapter（parent_id 必填透传）；400 VALIDATION_ERROR → ApiError", async () => {
+    const calls = mockFetchOnce({
+      body: { success: true, data: { id: "sc-9", type: "scene", title: "新场景", parentId: "ch-1", updatedAt: "t" } },
+    });
+    await createOutlineNode({ type: "scene", title: "新场景", parent_id: "ch-1" });
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({
+      type: "scene",
+      title: "新场景",
+      parent_id: "ch-1",
+    });
+    mockFetchOnce({
+      status: 400,
+      body: { success: false, error: { code: "VALIDATION_ERROR", message: "parent_id is required" } },
+    });
+    await expect(createOutlineNode({ type: "scene", title: "x", parent_id: "" })).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+    });
+  });
+
+  it("updateOutlineNode：PUT /outline/:nodeId，body 部分更新（title/summary）", async () => {
+    const calls = mockFetchOnce({ body: { success: true, data: { updated: true } } });
+    await expect(updateOutlineNode("ch-3", { title: "新标题" })).resolves.toEqual({ updated: true });
+    expect(calls[0].url).toBe("/api/v1/outline/ch-3");
+    expect(calls[0].init?.method).toBe("PUT");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ title: "新标题" });
+  });
+
+  it("moveOutlineNode：PUT /outline/:nodeId/move，body { parent_id, order }；响应透传 newParentId", async () => {
+    const calls = mockFetchOnce({
+      body: {
+        success: true,
+        data: { moved: true, previousParentId: "vol-1", newParentId: "vol-2" },
+      },
+    });
+    const res = await moveOutlineNode("ch-3", { parent_id: "vol-2", order: 0 });
+    expect(res.newParentId).toBe("vol-2");
+    expect(calls[0].url).toBe("/api/v1/outline/ch-3/move");
+    expect(calls[0].init?.method).toBe("PUT");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ parent_id: "vol-2", order: 0 });
+  });
+
+  it("deleteOutlineNode：DELETE；响应 cascaded 计数透传（软删级联提示用）", async () => {
+    const calls = mockFetchOnce({
+      body: {
+        success: true,
+        data: { deleted: true, cascaded: { children: 3, relations: 2, deltas: 1 } },
+      },
+    });
+    const res = await deleteOutlineNode("vol-1");
+    expect(res.cascaded).toEqual({ children: 3, relations: 2, deltas: 1 });
+    expect(calls[0].url).toBe("/api/v1/outline/vol-1");
+    expect(calls[0].init?.method).toBe("DELETE");
+    expect(calls[0].init?.body).toBeUndefined();
+  });
+
+  it("getOutlinePath：GET /outline/:nodeId/path；path 数组透传", async () => {
+    const calls = mockFetchOnce({
+      body: { success: true, data: { nodeId: "sc-15", path: ["root", "vol-1", "ch-3", "sc-15"] } },
+    });
+    const res = await getOutlinePath("sc-15");
+    expect(res.path).toEqual(["root", "vol-1", "ch-3", "sc-15"]);
+    expect(calls[0].url).toBe("/api/v1/outline/sc-15/path");
+  });
+});
+
+describe("回收站端点（S2.3，决策 12）", () => {
+  it("getTrashList：GET /trash；nodes（大纲节点）解析", async () => {
+    const calls = mockFetchOnce({
+      body: {
+        success: true,
+        data: {
+          entities: [],
+          nodes: [{ id: "ch-2", type: "chapter", title: "已删章", deletedAt: "2026-08-01T00:00:00Z" }],
+        },
+      },
+    });
+    const res = await getTrashList();
+    expect(res.nodes).toHaveLength(1);
+    expect(res.nodes[0]).toMatchObject({ id: "ch-2", title: "已删章" });
+    expect(calls[0].url).toBe("/api/v1/trash");
+  });
+
+  it("restoreOutlineNode：POST /trash/outline/:nodeId/restore；restoredChildren 透传", async () => {
+    const calls = mockFetchOnce({
+      body: {
+        success: true,
+        data: { restored: true, restoredChildren: 2, restoredRelations: 1, restoredDeltas: 0 },
+      },
+    });
+    const res = await restoreOutlineNode("vol-1");
+    expect(res.restoredChildren).toBe(2);
+    expect(calls[0].url).toBe("/api/v1/trash/outline/vol-1/restore");
+    expect(calls[0].init?.method).toBe("POST");
+  });
+
+  it("restoreOutlineNode：409 OUTLINE_ANCESTOR_DELETED → ApiError（祖先软删提示）", async () => {
+    mockFetchOnce({
+      status: 409,
+      body: { success: false, error: { code: "OUTLINE_ANCESTOR_DELETED", message: "存在软删祖先" } },
+    });
+    await expect(restoreOutlineNode("ch-3")).rejects.toMatchObject({ code: "OUTLINE_ANCESTOR_DELETED" });
+  });
+
+  it("purgeOutlineNode：DELETE /trash/outline/:nodeId；{ purged: true }", async () => {
+    const calls = mockFetchOnce({ body: { success: true, data: { purged: true } } });
+    await expect(purgeOutlineNode("sc-1")).resolves.toEqual({ purged: true });
+    expect(calls[0].url).toBe("/api/v1/trash/outline/sc-1");
+    expect(calls[0].init?.method).toBe("DELETE");
   });
 });
