@@ -5,17 +5,22 @@ import {
   ApiError,
   CLIENT_NETWORK_ERROR,
   closeProject,
+  createEntity,
   createOutlineNode,
   createProject,
+  deleteEntity,
   deleteOutlineNode,
+  getEntityDetail,
   getOutlinePath,
   getSettingsLlm,
   getTrashList,
+  listEntities,
   listProjects,
   moveOutlineNode,
   openProject,
   purgeOutlineNode,
   restoreOutlineNode,
+  updateEntity,
   updateOutlineNode,
   updateSettingsLlm,
 } from "./api";
@@ -312,5 +317,78 @@ describe("回收站端点（S2.3，决策 12）", () => {
     await expect(purgeOutlineNode("sc-1")).resolves.toEqual({ purged: true });
     expect(calls[0].url).toBe("/api/v1/trash/outline/sc-1");
     expect(calls[0].init?.method).toBe("DELETE");
+  });
+});
+
+describe("实体端点（S3.5，契约 endpoints.md「实体 CRUD」）", () => {
+  it("listEntities：GET /entity/:type + snake_case query（q/offset/limit/sort/order）", async () => {
+    const calls = mockFetchOnce({
+      body: {
+        success: true,
+        data: {
+          items: [
+            { id: "char-1", type: "character", name: "张三", summary: { role: "主角", status: "活跃" }, createdAt: "t0", updatedAt: "t1" },
+          ],
+          total: 1,
+          offset: 0,
+          limit: 20,
+        },
+      },
+    });
+    const res = await listEntities("character", { q: "张", offset: 0, limit: 20, sort: "updated_at", order: "desc" });
+    expect(res.items[0].name).toBe("张三");
+    expect(res.total).toBe(1);
+    expect(calls[0].url).toBe("/api/v1/entity/character?q=%E5%BC%A0&offset=0&limit=20&sort=updated_at&order=desc");
+    expect(calls[0].init?.method).toBe("GET");
+  });
+
+  it("listEntities：空 query 不拼多余参数（undefined 跳过）", async () => {
+    const calls = mockFetchOnce({ body: { success: true, data: { items: [], total: 0, offset: 0, limit: 50 } } });
+    await listEntities("hook");
+    expect(calls[0].url).toBe("/api/v1/entity/hook");
+  });
+
+  it("getEntityDetail：GET /entity/:type/:id；解析 data/relations/deltaCount", async () => {
+    const calls = mockFetchOnce({
+      body: {
+        success: true,
+        data: { id: "char-1", type: "character", name: "张三", data: { role: "主角" }, relations: [], deltaCount: 2, createdAt: "t0", updatedAt: "t1" },
+      },
+    });
+    const res = await getEntityDetail("character", "char-1");
+    expect(res.data).toEqual({ role: "主角" });
+    expect(res.deltaCount).toBe(2);
+    expect(calls[0].url).toBe("/api/v1/entity/character/char-1");
+  });
+
+  it("createEntity：POST body { name, data }；201 响应透传 id", async () => {
+    const calls = mockFetchOnce({
+      body: { success: true, data: { id: "char-9", type: "character", name: "李四", data: { role: "配角" }, createdAt: "t" } },
+    });
+    const res = await createEntity("character", { name: "李四", data: { role: "配角" } });
+    expect(res.id).toBe("char-9");
+    expect(calls[0].url).toBe("/api/v1/entity/character");
+    expect(calls[0].init?.method).toBe("POST");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ name: "李四", data: { role: "配角" } });
+  });
+
+  it("updateEntity：PUT body partial（仅传修改字段）", async () => {
+    const calls = mockFetchOnce({ body: { success: true, data: { id: "char-1", updated: true } } });
+    await expect(updateEntity("character", "char-1", { data: { status: "退场" } })).resolves.toEqual({ id: "char-1", updated: true });
+    expect(calls[0].url).toBe("/api/v1/entity/character/char-1");
+    expect(calls[0].init?.method).toBe("PUT");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ data: { status: "退场" } });
+  });
+
+  it("deleteEntity：DELETE 软删；cascaded 计数透传；404 ENTITY_NOT_FOUND → ApiError", async () => {
+    const calls = mockFetchOnce({
+      body: { success: true, data: { deleted: true, cascaded: { relations: 3, deltas: 1 } } },
+    });
+    const res = await deleteEntity("location", "loc-1");
+    expect(res.cascaded).toEqual({ relations: 3, deltas: 1 });
+    expect(calls[0].url).toBe("/api/v1/entity/location/loc-1");
+    expect(calls[0].init?.method).toBe("DELETE");
+    mockFetchOnce({ status: 404, body: { success: false, error: { code: "ENTITY_NOT_FOUND", message: "不存在" } } });
+    await expect(deleteEntity("location", "loc-999")).rejects.toMatchObject({ code: "ENTITY_NOT_FOUND" });
   });
 });

@@ -3,7 +3,8 @@
 //   成功 {success:true,data:T} / 失败 {success:false,error:{code,message}} 包裹、ErrorCode 枚举统一
 // 响应类型沿用 @ai-editor/shared 的导出类型（z.infer 的结果，仅类型、编译期消失）；
 // 本文件不 import zod 运行时（校验执行边界：zod 校验仅在服务端执行，避免 50KB 级依赖进浏览器包）
-import type { ErrorCode, OutlineTree, ProjectConfig, ProjectLanguage, ProjectListBook } from "@ai-editor/shared";
+import type { EntitySummary, ErrorCode, OutlineTree, ProjectConfig, ProjectLanguage, ProjectListBook } from "@ai-editor/shared";
+import type { EntityType } from "@ai-editor/shared";
 
 const API_BASE = "/api/v1";
 
@@ -244,6 +245,97 @@ export interface PurgeOutlineRes {
 /** 彻底删除大纲节点（仅回收站清理用；物理清除不可恢复） */
 export function purgeOutlineNode(nodeId: string): Promise<PurgeOutlineRes> {
   return apiFetch<PurgeOutlineRes>(`/trash/outline/${nodeId}`, { method: "DELETE" });
+}
+
+// ============ 实体 CRUD（S3.5；契约：endpoints.md「实体 CRUD」L150-283，软删过滤决策 12） ============
+
+/** GET /api/v1/entity/:type 查询参数（snake_case；q 模糊匹配 name，limit 默认 50 最大 200） */
+export interface ListEntitiesQuery {
+  q?: string;
+  offset?: number;
+  limit?: number;
+  sort?: "name" | "created_at" | "updated_at";
+  order?: "asc" | "desc";
+}
+
+/** GET /api/v1/entity/:type 响应（列表摘要，不含完整 data） */
+export interface EntityListRes {
+  items: EntitySummary[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+/** 列出实体（软删对象默认过滤——决策 12 修订，回收站是唯一访问入口） */
+export function listEntities(type: EntityType, query: ListEntitiesQuery = {}): Promise<EntityListRes> {
+  // ListEntitiesQuery（interface）无索引签名，赋给 ApiQuery（Record）需断言——字段均为 ApiQuery 值子集
+  return apiFetch<EntityListRes>(`/entity/${type}`, { query: query as ApiQuery });
+}
+
+/** GET /api/v1/entity/:type/:id 响应（详情：完整 data + 紧邻 1 跳关系 + Delta 计数；404 ENTITY_NOT_FOUND） */
+export interface EntityDetailRes {
+  id: string;
+  type: EntityType;
+  name: string;
+  data: Record<string, unknown>;
+  relations: Array<Record<string, unknown>>;
+  deltaCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 获取实体详情（S3.6 详情页同样使用） */
+export function getEntityDetail(type: EntityType, id: string): Promise<EntityDetailRes> {
+  return apiFetch<EntityDetailRes>(`/entity/${type}/${id}`);
+}
+
+/** POST /api/v1/entity/:type 请求体（name 必填 1-100；data 按 type 的字段 schema） */
+export interface CreateEntityBody {
+  name: string;
+  data?: Record<string, unknown>;
+}
+
+/** POST /api/v1/entity/:type 响应（201；400 VALIDATION_ERROR） */
+export interface CreateEntityRes {
+  id: string;
+  type: EntityType;
+  name: string;
+  data: Record<string, unknown>;
+  createdAt: string;
+}
+
+/** 创建实体 */
+export function createEntity(type: EntityType, body: CreateEntityBody): Promise<CreateEntityRes> {
+  return apiFetch<CreateEntityRes>(`/entity/${type}`, { method: "POST", body });
+}
+
+/** PUT /api/v1/entity/:type/:id 请求体（partial update：仅合并传入的 data 字段） */
+export interface UpdateEntityBody {
+  name?: string;
+  data?: Record<string, unknown>;
+}
+
+/** 更新实体（404 ENTITY_NOT_FOUND） */
+export function updateEntity(
+  type: EntityType,
+  id: string,
+  patch: UpdateEntityBody,
+): Promise<{ id: string; updated: true }> {
+  return apiFetch<{ id: string; updated: true }>(`/entity/${type}/${id}`, { method: "PUT", body: patch });
+}
+
+/** DELETE /api/v1/entity/:type/:id 响应（软删 + 级联计数，决策 12） */
+export interface DeleteEntityRes {
+  deleted: true;
+  cascaded: {
+    relations: number;
+    deltas: number;
+  };
+}
+
+/** 软删实体（标记 deleted_at，本体保留可还原；级联移除关系与 Delta） */
+export function deleteEntity(type: EntityType, id: string): Promise<DeleteEntityRes> {
+  return apiFetch<DeleteEntityRes>(`/entity/${type}/${id}`, { method: "DELETE" });
 }
 
 // ============ 书架（S1.5；契约：GET /api/v1/project/list，服务端扫描 books/ 子目录） ============
