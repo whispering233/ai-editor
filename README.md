@@ -50,8 +50,9 @@ pnpm -r build        # 按依赖序构建 7 包
 pnpm dev
 
 # 测试项目（借鉴 inkos test-project 模式，运行时数据不入库）
-node packages/server/dist/index.js test-project
-# → 浏览器自动打开 http://127.0.0.1:3456 → 无项目时左栏书架 + 中栏引导创建/打开项目
+pnpm start:test-project
+# → 生产态启动（需先 pnpm -r build）：浏览器自动打开 http://127.0.0.1:3456
+# → 无项目时左栏书架 + 中栏引导创建/打开项目（落盘 test-project/books/<书名>/）
 
 # 验证
 pnpm typecheck && pnpm lint && pnpm -r test
