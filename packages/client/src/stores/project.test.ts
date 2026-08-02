@@ -1,4 +1,5 @@
-// project store 测试（S1.4）：openProjectAt 的 rebuilt toast、loadConfig 的 loadError 区分
+// project store 测试（S1.4：openProjectAt 的 rebuilt toast、loadConfig 的 loadError 区分）
+// + S1.5：书架 loadBookshelf 成功/失败、buildBookPath 路径拼接
 // mock lib/api 模块（保留 ApiError 类真实实现）
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ProjectConfig } from "@ai-editor/shared";
@@ -15,6 +16,7 @@ vi.mock("../lib/api", async (importOriginal) => {
     closeProject: vi.fn(),
     getOutline: vi.fn(),
     updateProjectConfig: vi.fn(),
+    listProjects: vi.fn(),
   };
 });
 
@@ -23,9 +25,10 @@ import {
   createProject as apiCreateProject,
   getOutline as apiGetOutline,
   getProjectConfig as apiGetProjectConfig,
+  listProjects as apiListProjects,
   openProject as apiOpenProject,
 } from "../lib/api";
-import { useProjectStore } from "./project";
+import { buildBookPath, useProjectStore } from "./project";
 import { useUiStore } from "./ui";
 
 const mocked = {
@@ -34,6 +37,7 @@ const mocked = {
   createProject: vi.mocked(apiCreateProject),
   closeProject: vi.mocked(apiCloseProject),
   getOutline: vi.mocked(apiGetOutline),
+  listProjects: vi.mocked(apiListProjects),
 };
 
 const sampleConfig: ProjectConfig = {
@@ -49,7 +53,16 @@ const sampleConfig: ProjectConfig = {
 
 afterEach(() => {
   vi.clearAllMocks();
-  useProjectStore.setState({ config: null, loadError: null, outline: null, configLoading: false, outlineLoading: false });
+  useProjectStore.setState({
+    config: null,
+    loadError: null,
+    outline: null,
+    configLoading: false,
+    outlineLoading: false,
+    bookshelf: null,
+    bookshelfLoading: false,
+    bookshelfError: null,
+  });
   useUiStore.setState({ toast: null, error: null });
 });
 
@@ -127,5 +140,42 @@ describe("createProjectAt / closeProject", () => {
     expect(s.config).toBeNull();
     expect(s.outline).toBeNull();
     expect(s.loadError).toBeNull();
+  });
+});
+
+describe("书架 loadBookshelf（S1.5）", () => {
+  it("成功 → bookshelf 设置 + bookshelfError 清空", async () => {
+    mocked.listProjects.mockResolvedValue({
+      rootPath: "/home/me/novels",
+      books: [{ name: "我的小说", path: "/home/me/novels/books/我的小说", updatedAt: "2026-08-01T22:30:00Z" }],
+    });
+    await useProjectStore.getState().loadBookshelf();
+    const s = useProjectStore.getState();
+    expect(s.bookshelf?.rootPath).toBe("/home/me/novels");
+    expect(s.bookshelf?.books).toHaveLength(1);
+    expect(s.bookshelfError).toBeNull();
+  });
+
+  it("失败（网络）→ bookshelf=null + bookshelfError=CLIENT_NETWORK_ERROR", async () => {
+    mocked.listProjects.mockRejectedValue(new ApiError("CLIENT_NETWORK_ERROR", "网络请求失败"));
+    await useProjectStore.getState().loadBookshelf();
+    const s = useProjectStore.getState();
+    expect(s.bookshelf).toBeNull();
+    expect(s.bookshelfError).toBe("CLIENT_NETWORK_ERROR");
+  });
+});
+
+describe("buildBookPath（S1.5 书架路径拼接）", () => {
+  it("{rootPath}/books/{书名}（中文书名原样）", () => {
+    expect(buildBookPath("/home/me/novels", "我的小说")).toBe("/home/me/novels/books/我的小说");
+  });
+
+  it("rootPath 尾斜杠归一化", () => {
+    expect(buildBookPath("/home/me/novels/", "修仙")).toBe("/home/me/novels/books/修仙");
+    expect(buildBookPath("/home/me/novels///", "修仙")).toBe("/home/me/novels/books/修仙");
+  });
+
+  it("书名去首尾空白", () => {
+    expect(buildBookPath("/home/me/novels", "  我的小说  ")).toBe("/home/me/novels/books/我的小说");
   });
 });

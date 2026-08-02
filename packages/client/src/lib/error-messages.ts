@@ -13,7 +13,8 @@ export function describeOpenError(code: string | null): string {
     case "INVALID_PROJECT_PATH":
       return "路径无效：请使用绝对路径，且目标目录须已含 project.json（不是项目目录）";
     case "PROJECT_ALREADY_EXISTS":
-      return "该目录已是项目，请用「打开项目」进入";
+      // S1.5 修订：书架形态下对应动作是列表行「打开」或折叠区「打开其他路径」
+      return "该目录已是项目，请直接打开（书架列表或「打开其他路径」）";
     case "NO_PROJECT_OPEN":
       return "";
     case "CLIENT_NETWORK_ERROR":

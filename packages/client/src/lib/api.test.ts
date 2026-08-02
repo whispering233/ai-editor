@@ -7,6 +7,7 @@ import {
   closeProject,
   createProject,
   getSettingsLlm,
+  listProjects,
   openProject,
   updateSettingsLlm,
 } from "./api";
@@ -106,6 +107,39 @@ describe("closeProject（POST /api/v1/project/close）", () => {
     expect(calls[0].url).toBe("/api/v1/project/close");
     expect(calls[0].init?.method).toBe("POST");
     expect(calls[0].init?.body).toBeUndefined();
+  });
+});
+
+describe("listProjects（GET /api/v1/project/list，S1.5 书架）", () => {
+  it("请求路径与方法；响应解析 rootPath + books（name/path/updatedAt）", async () => {
+    const calls = mockFetchOnce({
+      body: {
+        success: true,
+        data: {
+          rootPath: "/home/me/novels",
+          books: [
+            { name: "我的小说", path: "/home/me/novels/books/我的小说", updatedAt: "2026-08-01T22:30:00Z" },
+            { name: "第二本", path: "/home/me/novels/books/第二本", updatedAt: "2026-07-30T10:12:00Z" },
+          ],
+        },
+      },
+    });
+    const res = await listProjects();
+    expect(res.rootPath).toBe("/home/me/novels");
+    expect(res.books).toHaveLength(2);
+    expect(res.books[0]).toEqual({
+      name: "我的小说",
+      path: "/home/me/novels/books/我的小说",
+      updatedAt: "2026-08-01T22:30:00Z",
+    });
+    expect(calls[0].url).toBe("/api/v1/project/list");
+    expect(calls[0].init?.method).toBe("GET");
+  });
+
+  it("空书架 → books 空数组（空态「还没有书」）", async () => {
+    mockFetchOnce({ body: { success: true, data: { rootPath: "/home/me/novels", books: [] } } });
+    const res = await listProjects();
+    expect(res.books).toEqual([]);
   });
 });
 

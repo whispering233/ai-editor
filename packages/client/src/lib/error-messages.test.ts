@@ -8,8 +8,8 @@ describe("describeOpenError（项目开/建错误码映射）", () => {
     expect(describeOpenError("INVALID_PROJECT_PATH")).toContain("project.json");
   });
 
-  it("PROJECT_ALREADY_EXISTS → 提示改用打开", () => {
-    expect(describeOpenError("PROJECT_ALREADY_EXISTS")).toContain("打开项目");
+  it("PROJECT_ALREADY_EXISTS → 提示直接打开（书架形态，S1.5 修订文案）", () => {
+    expect(describeOpenError("PROJECT_ALREADY_EXISTS")).toContain("打开");
   });
 
   it("NO_PROJECT_OPEN → 空串（页面分支处理，不产生表单错误）", () => {

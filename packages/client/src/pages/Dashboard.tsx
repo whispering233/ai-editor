@@ -1,71 +1,107 @@
-// Dashboard 首页（S1.4：无项目引导开/建；完整统计留后续卡）
-// 路由：#/（默认落地页）；数据：GET /api/v1/project/config（project store）
-// 无项目（config=null 且非加载中）时落地为「项目开/建」引导：
-//   - loadError=NO_PROJECT_OPEN → 开/建表单（路径 + 名称/语言可选，创建时）
-//   - loadError=CLIENT_NETWORK_ERROR（服务未启动）→ 连接失败提示 + 重试
-// 项目已打开 → 保持占位（完整概览统计见 doc/ui/pages/dashboard.md，后续卡实现）
-import { useState } from "react";
+// Dashboard 首页（S1.5：书架形态 + 无项目引导；概览统计留后续卡）
+// 路由：#/（默认落地页）
+// 两种形态：
+//   - 书架形态（无项目打开，loadError=NO_PROJECT_OPEN）：书籍列表（GET /project/list 扫描
+//     创作根/books/）+ 新建书籍（书名 → 创作根/books/<书名>/）+ 打开其他路径（保留 S1.4 能力）
+//   - 概览形态（项目已打开）：占位（完整统计见 doc/ui/pages/dashboard.md，后续卡实现）
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
-import { ApiError } from "../lib/api";
+import { ApiError, CLIENT_NETWORK_ERROR } from "../lib/api";
 import { describeOpenError } from "../lib/error-messages";
-import { useProjectStore } from "../stores/project";
+import { buildBookPath, useProjectStore } from "../stores/project";
+import { formatTimestamp } from "@ai-editor/shared";
 
 /** 从任意错误提取错误码（ApiError → 服务端/客户端码；未知 → null 走兜底文案） */
 function openErrorCode(err: unknown): string | null {
   return err instanceof ApiError ? err.code : null;
 }
 
-/** 表单前置校验：路径为空时提示并返回 false */
-function validatePath(path: string, setFormError: (msg: string | null) => void): boolean {
-  if (!path.trim()) {
-    setFormError("请输入项目目录路径（绝对路径）");
-    return false;
-  }
-  return true;
-}
-
 export default function Dashboard() {
   const config = useProjectStore((s) => s.config);
   const configLoading = useProjectStore((s) => s.configLoading);
-  const loadError = useProjectStore((s) => s.loadError);
-  const loadConfig = useProjectStore((s) => s.loadConfig);
+  const bookshelf = useProjectStore((s) => s.bookshelf);
+  const bookshelfLoading = useProjectStore((s) => s.bookshelfLoading);
+  const bookshelfError = useProjectStore((s) => s.bookshelfError);
+  const loadBookshelf = useProjectStore((s) => s.loadBookshelf);
   const openProjectAt = useProjectStore((s) => s.openProjectAt);
   const createProjectAt = useProjectStore((s) => s.createProjectAt);
 
+  // 新建书籍表单
+  const [bookName, setBookName] = useState("");
+  const [bookError, setBookError] = useState<string | null>(null);
+  // 书籍行「打开」失败（独立于折叠区 pathError：打开失败需在列表区立即可见）
+  const [bookOpenError, setBookOpenError] = useState<string | null>(null);
+  // 打开其他路径（折叠区）
+  const [showPathForm, setShowPathForm] = useState(false);
   const [path, setPath] = useState("");
-  const [name, setName] = useState("");
-  const [language, setLanguage] = useState<"zh" | "en">("zh");
+  const [pathError, setPathError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
 
   const noProject = config === null && !configLoading;
 
-  /** 创建项目（表单 submit：preventDefault + 校验；创建成功 → store 内自动 open） */
-  async function handleCreate(e: FormEvent) {
+  // 无项目时自动加载书架（list 失败由 bookshelfError 呈现 + 重试）
+  useEffect(() => {
+    if (noProject && !bookshelfLoading && bookshelf === null && bookshelfError === null) {
+      void loadBookshelf();
+    }
+  }, [noProject, bookshelfLoading, bookshelf, bookshelfError, loadBookshelf]);
+
+  /** 新建书籍：书名 → 创作根/books/<书名>/，create（不打开）→ open 进入新书 */
+  async function handleCreateBook(e: FormEvent) {
     e.preventDefault();
-    if (!validatePath(path, setFormError)) return;
+    const name = bookName.trim();
+    if (!name) {
+      setBookError("请输入书名");
+      return;
+    }
+    if (!bookshelf) {
+      setBookError("书架未加载，请稍后重试");
+      return;
+    }
     setSubmitting(true);
-    setFormError(null);
+    setBookError(null);
     try {
-      await createProjectAt(path.trim(), name.trim() ? { name: name.trim(), language } : undefined);
+      const bookPath = buildBookPath(bookshelf.rootPath, name);
+      await createProjectAt(bookPath, { name, language: "zh" });
+      // 成功后书架需要刷新（新书出现在列表）；config 已由 openProjectAt 刷新
+      await loadBookshelf();
+      setBookName("");
     } catch (err) {
-      setFormError(describeOpenError(openErrorCode(err)));
+      setBookError(describeOpenError(openErrorCode(err)));
     } finally {
       setSubmitting(false);
     }
   }
 
-  /** 打开项目（按钮 onClick，无事件参数） */
-  async function handleOpen() {
-    if (!validatePath(path, setFormError)) return;
+  /** 打开书籍（走现有 openProjectAt：刷新 config/outline；rebuilt 时 store 内 toast）；
+   * 失败错误渲染在书籍列表区（bookOpenError），不藏在「打开其他路径」折叠区 */
+  async function handleOpenBook(bookPath: string) {
     setSubmitting(true);
-    setFormError(null);
+    setBookOpenError(null);
+    try {
+      await openProjectAt(bookPath);
+    } catch (err) {
+      setBookOpenError(describeOpenError(openErrorCode(err)));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  /** 打开其他路径（S1.4 保留能力） */
+  async function handleOpenPath(e: FormEvent) {
+    e.preventDefault();
+    if (!path.trim()) {
+      setPathError("请输入项目目录路径（绝对路径）");
+      return;
+    }
+    setSubmitting(true);
+    setPathError(null);
     try {
       await openProjectAt(path.trim());
     } catch (err) {
-      setFormError(describeOpenError(openErrorCode(err)));
+      setPathError(describeOpenError(openErrorCode(err)));
     } finally {
       setSubmitting(false);
     }
@@ -77,58 +113,101 @@ export default function Dashboard() {
 
       {configLoading && <p className="text-sm text-zinc-500">加载中…</p>}
 
-      {noProject && loadError === "CLIENT_NETWORK_ERROR" && (
+      {/* 无项目：书架形态；list 失败（网络或其他错误）统一渲染错误 + 重试 */}
+      {noProject && bookshelfError !== null && (
         <div className="mt-4 max-w-md rounded-md border border-zinc-200 p-4">
-          <p className="text-sm text-zinc-700">无法连接服务，请确认 ai-editor 服务已启动后重试。</p>
-          <Button className="mt-3" onClick={() => void loadConfig()} type="button">
+          <p className="text-sm text-zinc-700">
+            {bookshelfError === CLIENT_NETWORK_ERROR
+              ? "无法连接服务，请确认 ai-editor 服务已启动后重试。"
+              : "书架加载失败，请重试。"}
+          </p>
+          <Button className="mt-3" onClick={() => void loadBookshelf()} type="button">
             重试
           </Button>
         </div>
       )}
 
-      {noProject && loadError !== "CLIENT_NETWORK_ERROR" && (
-        <div className="mt-4 max-w-md rounded-md border border-zinc-200 p-4">
-          <h2 className="mb-1 text-base font-semibold">打开或创建项目</h2>
-          <p className="mb-3 text-sm text-zinc-500">
-            未打开项目。输入项目目录的绝对路径（目录须已含 project.json），或指定路径创建新项目。
-          </p>
-          <form onSubmit={handleCreate} className="flex flex-col gap-3">
-            <label className="text-sm">
-              <span className="mb-1 block text-zinc-600">项目路径（绝对路径）</span>
-              <Input
-                value={path}
-                onChange={(e) => setPath(e.target.value)}
-                placeholder="/home/me/novels/my-story"
-              />
-            </label>
-            <label className="text-sm">
-              <span className="mb-1 block text-zinc-600">项目名称（仅创建时，可选）</span>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="我的小说" />
-            </label>
-            <label className="text-sm">
-              <span className="mb-1 block text-zinc-600">语言（仅创建时，可选）</span>
-              <select
-                value={language}
-                onChange={(e) => setLanguage(e.target.value as "zh" | "en")}
-                className="h-9 w-full rounded-md border border-zinc-300 bg-white px-3 text-sm"
-              >
-                <option value="zh">中文</option>
-                <option value="en">English</option>
-              </select>
-            </label>
-            {formError && <p className="text-sm text-red-600">{formError}</p>}
+      {noProject && bookshelfError === null && (
+        <div className="mt-4 max-w-lg rounded-md border border-zinc-200 p-4">
+          <h2 className="mb-1 text-base font-semibold">书架</h2>
+          <p className="mb-3 text-sm text-zinc-500">创作根下的书籍（每本书一个目录：books/&lt;书名&gt;/）</p>
+
+          {/* 书籍列表 */}
+          {bookshelfLoading && bookshelf === null ? (
+            <p className="text-sm text-zinc-500">加载中…</p>
+          ) : bookshelf && bookshelf.books.length === 0 ? (
+            <p className="rounded-md border border-dashed border-zinc-300 px-3 py-4 text-center text-sm text-zinc-500">
+              还没有书，先创建一本
+            </p>
+          ) : (
+            <ul className="divide-y divide-zinc-100 rounded-md border border-zinc-200">
+              {bookshelf?.books.map((book) => (
+                <li key={book.path} className="flex items-center gap-3 px-3 py-2">
+                  <span className="min-w-0 flex-1 truncate text-sm text-zinc-800">{book.name}</span>
+                  <span className="shrink-0 text-xs text-zinc-400">
+                    {formatTimestamp(book.updatedAt)}
+                  </span>
+                  <Button
+                    variant="outline"
+                    disabled={submitting}
+                    type="button"
+                    onClick={() => void handleOpenBook(book.path)}
+                  >
+                    打开
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {/* 书籍行打开失败：列表区立即可见（不藏在「打开其他路径」折叠区） */}
+          {bookOpenError && <p className="mt-2 text-sm text-red-600">{bookOpenError}</p>}
+
+          {/* 新建书籍 */}
+          <form onSubmit={handleCreateBook} className="mt-4 flex flex-col gap-2">
+            <p className="text-sm font-medium text-zinc-700">新建书籍</p>
             <div className="flex gap-2">
-              <Button type="submit" disabled={submitting}>
-                创建项目
-              </Button>
-              <Button type="button" variant="outline" disabled={submitting} onClick={() => void handleOpen()}>
-                打开项目
+              <Input
+                value={bookName}
+                onChange={(e) => setBookName(e.target.value)}
+                placeholder="书名（创建于 books/书名/ 目录）"
+              />
+              <Button type="submit" disabled={submitting || bookshelf === null}>
+                新建
               </Button>
             </div>
+            {bookError && <p className="text-sm text-red-600">{bookError}</p>}
           </form>
+
+          {/* 打开其他路径（S1.4 保留能力，折叠） */}
+          <div className="mt-4 border-t border-zinc-100 pt-3">
+            <button
+              type="button"
+              className="text-sm text-zinc-500 hover:text-zinc-700"
+              onClick={() => setShowPathForm((v) => !v)}
+            >
+              {showPathForm ? "收起" : "打开其他路径…"}
+            </button>
+            {showPathForm && (
+              <form onSubmit={handleOpenPath} className="mt-2 flex flex-col gap-2">
+                <Input
+                  value={path}
+                  onChange={(e) => setPath(e.target.value)}
+                  placeholder="/absolute/path/to/project（须含 project.json）"
+                />
+                <div>
+                  <Button type="submit" variant="outline" disabled={submitting}>
+                    打开
+                  </Button>
+                </div>
+                {pathError && <p className="text-sm text-red-600">{pathError}</p>}
+              </form>
+            )}
+          </div>
         </div>
       )}
 
+      {/* 有项目：概览占位（书架切换入口后置，完整统计后续卡实现） */}
       {config !== null && (
         <p className="text-sm text-zinc-500">
           项目概览：项目信息、四类要素统计、大纲概览、最近会话（后续卡实现）

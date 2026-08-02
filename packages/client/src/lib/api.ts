@@ -3,7 +3,7 @@
 //   成功 {success:true,data:T} / 失败 {success:false,error:{code,message}} 包裹、ErrorCode 枚举统一
 // 响应类型沿用 @ai-editor/shared 的导出类型（z.infer 的结果，仅类型、编译期消失）；
 // 本文件不 import zod 运行时（校验执行边界：zod 校验仅在服务端执行，避免 50KB 级依赖进浏览器包）
-import type { ErrorCode, OutlineTree, ProjectConfig, ProjectLanguage } from "@ai-editor/shared";
+import type { ErrorCode, OutlineTree, ProjectConfig, ProjectLanguage, ProjectListBook } from "@ai-editor/shared";
 
 const API_BASE = "/api/v1";
 
@@ -119,6 +119,21 @@ export function updateProjectConfig(patch: UpdateProjectConfigBody): Promise<Upd
 /** GET /api/v1/outline（契约：shared types/api.ts outlineTreeSchema） */
 export function getOutline(): Promise<OutlineTree> {
   return apiFetch<OutlineTree>("/outline");
+}
+
+// ============ 书架（S1.5；契约：GET /api/v1/project/list，服务端扫描 books/ 子目录） ============
+
+/** GET /api/v1/project/list 响应（books 元素类型复用 shared ProjectListBook——契约单一来源；
+ * shared 未导出响应根类型命名，本地组合 ProjectList，字段契约同 projectListResSchema） */
+export interface ProjectList {
+  /** 创作根（启动目录）绝对路径 */
+  rootPath: string;
+  books: ProjectListBook[];
+}
+
+/** 列出书架书籍（扫描 创作根/books/ 下含 project.json 的子目录） */
+export function listProjects(): Promise<ProjectList> {
+  return apiFetch<ProjectList>("/project/list");
 }
 
 // ============ 项目开/建/关（S1.4；契约：endpoints.md「项目管理」+ S1.2 server 路由） ============

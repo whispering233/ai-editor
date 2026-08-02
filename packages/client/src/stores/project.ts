@@ -8,8 +8,10 @@ import {
   createProject as apiCreateProject,
   getOutline,
   getProjectConfig,
+  listProjects,
   openProject as apiOpenProject,
   updateProjectConfig as apiUpdateConfig,
+  type ProjectList,
   type UpdateProjectConfigBody,
 } from "../lib/api";
 import { useUiStore } from "./ui";
@@ -23,10 +25,17 @@ interface ProjectState {
   /** 大纲树（GET /outline）；null = 未加载/加载失败 */
   outline: OutlineTree | null;
   outlineLoading: boolean;
+  /** 书架（GET /project/list）；null = 未加载/加载失败 */
+  bookshelf: ProjectList | null;
+  bookshelfLoading: boolean;
+  /** 书架加载失败的错误码（CLIENT_NETWORK_ERROR 等；null = 无错误/未加载） */
+  bookshelfError: string | null;
   loadConfig: () => Promise<void>;
   /** 更新配置（PUT /project/config，请求体 snake_case）；成功后重新拉取最新配置 */
   updateConfig: (patch: UpdateProjectConfigBody) => Promise<void>;
   loadOutline: () => Promise<void>;
+  /** 刷新书架（GET /project/list）；失败记录 bookshelfError */
+  loadBookshelf: () => Promise<void>;
   /** 打开项目（POST /project/open）：成功刷新 config/outline；rebuilt 时 toast 提示（决策 13） */
   openProjectAt: (path: string) => Promise<void>;
   /** 创建项目（POST /project/create）后打开；config 可选（名称/语言/提示词） */
@@ -41,6 +50,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   loadError: null,
   outline: null,
   outlineLoading: false,
+  bookshelf: null,
+  bookshelfLoading: false,
+  bookshelfError: null,
 
   loadConfig: async () => {
     // 并发防抖：已在加载中则跳过
@@ -74,6 +86,21 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       set({ outline: null });
     } finally {
       set({ outlineLoading: false });
+    }
+  },
+
+  loadBookshelf: async () => {
+    if (get().bookshelfLoading) return;
+    set({ bookshelfLoading: true });
+    try {
+      const bookshelf = await listProjects();
+      set({ bookshelf, bookshelfError: null });
+    } catch (err) {
+      // list 失败（网络等）：记录错误码，书架区显示重试
+      const code = err instanceof ApiError ? err.code : "CLIENT_NETWORK_ERROR";
+      set({ bookshelf: null, bookshelfError: code });
+    } finally {
+      set({ bookshelfLoading: false });
     }
   },
 
@@ -122,4 +149,13 @@ export function findOutlineNodeTitle(tree: OutlineTree | null, id: string | null
     if (found) return found.title;
   }
   return null;
+}
+
+/**
+ * 书籍目录路径：{rootPath}/books/{书名}（S1.5 书架约定：每本书 = 创作根/books/<书名>/）
+ * 书名去首尾空白后直接作为目录名（中文/空格均可，服务端 create 支持任意目录名）；
+ * rootPath 尾斜杠归一化
+ */
+export function buildBookPath(rootPath: string, name: string): string {
+  return `${rootPath.replace(/\/+$/, "")}/books/${name.trim()}`;
 }
