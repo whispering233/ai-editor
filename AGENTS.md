@@ -2,9 +2,9 @@
 
 ## 项目状态
 
-- **阶段 A 全部完成 + 切片 1（项目管理）完成**：7 包已实现共享契约（shared 类型/常量/工具/API 契约）、数据层（db 建表/JSON 存储/对话历史/schema 演进）、服务骨架（server 错误处理/来源校验/项目路由/设置路由）、前端基础（client 脚手架/API 层/项目开建页/设置页）。测试全仓 240 个（shared 65 / db 68 / client 45 / server 59 等）。
-- **打包安装测试已打通（backlog #8 演练，借鉴 inkos 机制）**：6 包 `pnpm pack`（prepack/postpack 钩子替换 `workspace:*`）+ tarball 安装到测试目录 + `npx ai-editor` 命令可用 + SPA 随包（`copy-client-dist`）；**dev 态启动待命**（无 project.json 不建文件，Dashboard 引导 create/open——决策 8 修订）。
-- 任务执行以 `doc/design/tasks.md` 为清单（checkbox 进度），按卡开发、一卡一 commit、每卡「实现 fixer + 验证 oracle」双代理、完成后向用户汇报；**backlog.md 事项一律不做**（#8 已演练完成）。
+- **阶段 A 全部完成 + 切片 1-3 完成**：项目管理（create/open/close/config + 书架模式 books/ 子目录）、大纲（严格三层操作层/路由/就地编辑页）、实体与关系（CRUD/k 跳遍历/双向 relations/列表与详情页）。测试全仓 435+ 个（shared 72 / db 125 / server 117 / client 121 等）。
+- **打包安装测试已打通（backlog #8 演练，借鉴 inkos 机制）**：6 包 `pnpm pack`（prepack/postpack 钩子替换 `workspace:*`）+ tarball 安装到测试目录 + `npx ai-editor` 命令可用 + SPA 随包（`copy-client-dist`）；**dev 态启动待命**（无 project.json 不建文件，Dashboard 书架引导——决策 8 修订）。
+- 任务执行以 `doc/design/tasks.md` 为清单（checkbox 进度），按卡开发、一卡一 commit、每卡「实现 fixer/designer + 验证 oracle」双代理、完成后向用户汇报；**backlog.md 事项一律不做**（#8 已演练完成）。
 - 一切实现工作必须按 `doc/design/architecture.md` 的分包方案搭建，不得擅自改变包划分或依赖方向。
 
 ## 文档即契约
