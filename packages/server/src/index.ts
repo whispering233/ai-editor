@@ -31,6 +31,8 @@ import {
   type ProjectVariables,
 } from "./middleware/project.js";
 import { projectRoutes, setProjectRoot } from "./routes/project.js";
+import { outlineRoutes } from "./routes/outline.js";
+import { trashRoutes } from "./routes/trash.js";
 
 /** 默认端口（决策 8 / 17；dev 态 Vite proxy 写死 3456） */
 export const DEFAULT_PORT = 3456;
@@ -152,6 +154,12 @@ export async function startServer(projectRoot: string, options: StartServerOptio
 
   // 项目路由（S1.2）：create/open/close/config（项目管理，决策 8/13/17）
   app.route("/api/v1/project", projectRoutes);
+
+  // 大纲路由（S2.2）：整树/创建/更新/移动/软删/路径（严格三层，决策 19）
+  app.route("/api/v1/outline", outlineRoutes);
+
+  // 回收站路由（S2.2 大纲侧；实体侧 S4 扩展）：列表/还原/物理清除（决策 12）
+  app.route("/api/v1/trash", trashRoutes);
 
   // 兜底：/api/* → JSON 404；其他 GET/HEAD → 静态文件 → SPA fallback index.html（决策 8）
   app.notFound(async (c) => {

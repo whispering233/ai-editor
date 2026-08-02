@@ -15,7 +15,8 @@
 //
 // 错误约定：抛 OutlineError（带 code），server 层 catch 映射 HttpError：
 //   NODE_NOT_FOUND             → 404 OUTLINE_NODE_NOT_FOUND
-//   PARENT_NOT_FOUND           → 404 OUTLINE_NODE_NOT_FOUND（父不存在）
+//   PARENT_NOT_FOUND           → 400 OUTLINE_NODE_NOT_FOUND（父不存在是请求参数错误——
+//                                S2.2 实际映射为 400，2026-08 审核同步注释）
 //   INVALID_HIERARCHY          → 400 VALIDATION_ERROR（严格三层违反，决策 19）
 //   OUTLINE_ANCESTOR_DELETED   → 409 OUTLINE_ANCESTOR_DELETED（决策 12 修订）
 
