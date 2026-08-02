@@ -1,22 +1,38 @@
-// 右栏 ChatPanel（doc/ui/layout.md §2.4）：本期骨架——会话标题行占位 + 灰显内容（U5 实现消息流/提案卡/输入区）
+// 右栏 ChatPanel（doc/ui/layout.md §2.4）：本期骨架——会话标题行（currentSessionId 对应会话）+ 灰显内容
+// （U5 实现消息流/提案卡/输入区）；会话归属项目（决策 22：标题从 chat store 当前项目会话列表查找）
 // <1024px 折叠为抽屉（layout.md §0）：fixed + 遮罩 + 开关按钮（开关在信息条右侧，open 状态由 AppShell 持有）
 // 无项目打开时整体禁用提示（layout.md §2.4：打开项目后可用）
 // 待补（oracle U2 审核 M2，U5 实现真实交互时处理）：抽屉 Escape 关闭 + 焦点 trap + 开关按钮 aria-expanded/aria-controls
 import { MessageSquare, X } from "lucide-react";
 import { useMediaQuery } from "../../hooks/use-media-query";
 import { useProjectStore } from "../../stores/project";
+import { useChatStore } from "../../stores/chat";
+import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
 
 /** 面板内部内容：会话标题行 + 占位区（桌面静态栏与抽屉共用，避免双份实现） */
 function ChatPanelBody({ onClose }: { onClose?: () => void }) {
   const config = useProjectStore((s) => s.config);
+  const sessions = useChatStore((s) => s.sessions);
+  const currentSessionId = useChatStore((s) => s.currentSessionId);
+  // 当前会话 = 列表中 id 匹配项；未选（null）/ 列表未加载 / 不在列表 → 新会话
+  const currentSession = sessions?.find((s) => s.id === currentSessionId) ?? null;
+  const title = currentSession ? currentSession.lastMessage || "（空会话）" : "新会话";
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* 会话标题行（U5 实现下拉切换同项目会话；layout.md §2.4） */}
       <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
         <MessageSquare className="size-4 shrink-0 text-muted-foreground" />
-        <span className="truncate text-sm font-medium text-muted-foreground">会话标题</span>
+        <span
+          className={cn(
+            "truncate text-sm font-medium",
+            currentSession ? "text-foreground" : "text-muted-foreground",
+          )}
+          title={title}
+        >
+          {title}
+        </span>
         {onClose && (
           <Button
             variant="ghost"

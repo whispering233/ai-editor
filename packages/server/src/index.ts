@@ -20,6 +20,7 @@ import { Hono } from "hono";
 import { createAdaptorServer, type ServerType } from "@hono/node-server";
 import type { AddressInfo } from "node:net";
 import { errorHandler, fail, ok } from "./middleware/error.js";
+import { chatRoutes } from "./routes/chat.js";
 import { entityRoutes } from "./routes/entity.js";
 import { settingsRoutes } from "./routes/settings.js";
 import {
@@ -168,6 +169,9 @@ export async function startServer(projectRoot: string, options: StartServerOptio
 
   // 关系路由（S3.4）：查询（k 跳）/创建（判重）/物理删（决策 2/12）
   app.route("/api/v1/relation", relationRoutes);
+
+  // 对话路由（U3）：会话列表 / 消息历史（决策 18 按项目隔离；POST SSE 端点属后续切片）
+  app.route("/api/v1/chat", chatRoutes);
 
   // 兜底：/api/* → JSON 404；其他 GET/HEAD → 静态文件 → SPA fallback index.html（决策 8）
   app.notFound(async (c) => {

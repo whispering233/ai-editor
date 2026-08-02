@@ -3,7 +3,16 @@
 //   成功 {success:true,data:T} / 失败 {success:false,error:{code,message}} 包裹、ErrorCode 枚举统一
 // 响应类型沿用 @ai-editor/shared 的导出类型（z.infer 的结果，仅类型、编译期消失）；
 // 本文件不 import zod 运行时（校验执行边界：zod 校验仅在服务端执行，避免 50KB 级依赖进浏览器包）
-import type { EntitySummary, ErrorCode, OutlineTree, ProjectConfig, ProjectLanguage, ProjectListBook } from "@ai-editor/shared";
+import type {
+  ChatRole,
+  ChatSessionSummary,
+  EntitySummary,
+  ErrorCode,
+  OutlineTree,
+  ProjectConfig,
+  ProjectLanguage,
+  ProjectListBook,
+} from "@ai-editor/shared";
 import type { EntityType } from "@ai-editor/shared";
 
 const API_BASE = "/api/v1";
@@ -515,4 +524,42 @@ export interface UpdateSettingsLlmRes {
 /** 更新 LLM 配置（写入 ~/.ai-editor/config.json，绝不入项目文件，决策 17） */
 export function updateSettingsLlm(patch: UpdateSettingsLlmBody): Promise<UpdateSettingsLlmRes> {
   return apiFetch<UpdateSettingsLlmRes>("/settings/llm", { method: "PUT", body: patch });
+}
+
+// ============ 会话（U3；契约：endpoints.md「chat/sessions」L795-834，决策 18 按项目隔离） ============
+
+/** GET /api/v1/chat/sessions 响应（契约：{sessions: ChatSessionSummary[]}，按最后活动倒序、仅当前项目） */
+export interface ChatSessionListRes {
+  sessions: ChatSessionSummary[];
+}
+
+/** 列出当前项目会话（无项目打开时 409 NO_PROJECT_OPEN） */
+export function listSessions(): Promise<ChatSessionSummary[]> {
+  return apiFetch<ChatSessionListRes>("/chat/sessions").then((res) => res.sessions);
+}
+
+/**
+ * GET /api/v1/chat/sessions/:id/messages 消息条目（契约：chatMessagesResSchema.messages 元素，
+ * endpoints.md L813-834——响应不含 sessionId；shared 未导出该元素类型，本地组合，参照 ProjectList 先例）
+ */
+export interface ChatSessionMessage {
+  id: string;
+  role: ChatRole;
+  content?: string | null;
+  /** assistant 消息的工具调用数组 */
+  toolCalls?: unknown[];
+  /** tool 消息关联的 assistant 工具调用 id（决策 18 修订） */
+  toolCallId?: string | null;
+  createdAt: string;
+}
+
+/** GET /api/v1/chat/sessions/:id/messages 响应（U5 恢复聊天记录用） */
+export interface ChatSessionMessagesRes {
+  sessionId: string;
+  messages: ChatSessionMessage[];
+}
+
+/** 获取会话消息历史（按 created_at 升序；仅当前项目会话；本卡仅预留导出） */
+export function getSessionMessages(sessionId: string): Promise<ChatSessionMessagesRes> {
+  return apiFetch<ChatSessionMessagesRes>(`/chat/sessions/${sessionId}/messages`);
 }
