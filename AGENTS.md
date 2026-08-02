@@ -2,8 +2,8 @@
 
 ## 项目状态
 
-- **阶段 A 全部完成 + 切片 1-3 完成**：项目管理（create/open/close/config + 书架模式 books/ 子目录）、大纲（严格三层操作层/路由/就地编辑页）、实体与关系（CRUD/k 跳遍历/双向 relations/列表与详情页）。测试全仓 435+ 个（shared 72 / db 125 / server 117 / client 121 等）。
-- **打包安装测试已打通（backlog #8 演练，借鉴 inkos 机制）**：6 包 `pnpm pack`（prepack/postpack 钩子替换 `workspace:*`）+ tarball 安装到测试目录 + `npx ai-editor` 命令可用 + SPA 随包（`copy-client-dist`）；**dev 态启动待命**（无 project.json 不建文件，Dashboard 书架引导——决策 8 修订）。
+- **阶段 A 全部完成 + 切片 1-3 完成 + 阶段 U（UI 工作台重构）U1-U5 全部完成**：项目管理（create/open/close/config + 书架模式 books/ 子目录）、大纲（严格三层操作层/路由/就地编辑页）、实体与关系（CRUD/k 跳遍历/双向 relations/列表与详情页）；UI 重构——shadcn 集成 + oklch 文学氛围双主题（U1）、三栏 1:5:4 工作台外壳（U2）、左栏书架树（项目→会话二级树 + server 会话路由，U3）、中栏概览页 + 信息条定位（U4）、右栏 ChatPanel 完整 UI（U5，发送接 S7）。测试全仓 487 个（shared 75 / db 125 / server 125 / client 159 / llm·tools·agent 各 1）。
+- **打包安装测试已打通（backlog #8 演练，借鉴 inkos 机制）**：6 包 `pnpm pack`（prepack/postpack 钩子替换 `workspace:*`）+ tarball 安装到测试目录 + `npx ai-editor` 命令可用 + SPA 随包（`copy-client-dist`）；**dev 态启动待命**（无 project.json 不建文件，前端书架引导——决策 8 修订）。
 - 任务执行以 `doc/design/tasks.md` 为清单（checkbox 进度），按卡开发、一卡一 commit、每卡「实现 fixer/designer + 验证 oracle」双代理、完成后向用户汇报；**backlog.md 事项一律不做**（#8 已演练完成）。
 - 一切实现工作必须按 `doc/design/architecture.md` 的分包方案搭建，不得擅自改变包划分或依赖方向。
 
@@ -16,10 +16,10 @@
 | `doc/design/` | `product.md` 产品定位、`architecture.md` 架构与分包、`decisions.md` 关键决策 1-21、`backlog.md` 迭代优化清单（MVP 不做）、`tasks.md` 开发任务清单与进度 | 任何改动前 |
 | `doc/api/` | `endpoints.md` 端点契约、`tools.md` AI 工具目录、`data-flow.md` 数据流 | 前后端改动 |
 | `doc/database/` | `schema.md` 表结构与 outline.json/project.json 契约、`hooks.md` 伏笔系统与健康指标 | 数据/后端改动 |
-| `doc/ui/` | MVP 功能原型：`layout.md` 布局与路由、`pages/*.md` 各页面（字段标注 API 响应字段） | 前端改动 |
+| `doc/ui/` | **当前 UI 布局样式设计**：`layout.md` 三栏工作台外壳与样式规范（2026-08 已从原型更新为实现样式）、`pages/*.md` 各页面（字段标注 API 响应字段） | 前端改动 |
 | `test-project/` | 测试项目目录（借鉴 inkos test-project 模式，运行时数据不入库），日常开发测试用 | 测试/联调前 |
 
-阅读顺序（见 `doc/README.md`）：`design/product.md` → `design/architecture.md` → `design/decisions.md`（决策 9-19 是数据模型与安全基线，20/21 为 SSE 断开检测与伏笔健康指标）→ 按职责读 `api/` 与 `database/`。
+阅读顺序（见 `doc/README.md`）：`design/product.md` → `design/architecture.md` → `design/decisions.md`（决策 9-19 是数据模型与安全基线，20/21 为 SSE 断开检测与伏笔健康指标，22 为三栏工作台布局与会话归属模型）→ 按职责读 `api/` 与 `database/`；前端实现前必读 `doc/ui/layout.md`（当前实现样式，含组件结构与样式细节规范）。
 
 ## 易踩坑的架构约束
 
@@ -32,12 +32,14 @@
 - 删除走**软删 + 回收站**：实体/关系/Delta 标 `deleted_at`、节点标 `deleted`，**级联一并软删**（purge 才物理清除），常规查询默认过滤，restore 级联还原；还原/清理走 `/api/v1/trash/*`。**手动删关系 = 物理删**（不进回收站）；关系可见性联动端点状态（任一端点软删即不可见）；restore 大纲节点校验祖先链——存在软删祖先返回 409 `OUTLINE_ANCESTOR_DELETED`；Delta 可见性同规则联动触发节点/目标实体（任一端软删，computeState 与常规查询均不可见）（决策 12 修订）。
 - 伏笔系统（决策 21）：**健康指标 `_health` 仅运行时计算，作为响应附加字段返回，绝不写回 data**；`plants`/`advances`/`resolves` 关系**不存 chapter 元数据**——章节序由服务端基于 source_id 从大纲树查询时现推（节点 move 后不陈旧）；「当前章节」= project.json 的 `current_position`；`ready_to_resolve` 依据 hook 的 `expected_resolve_node_id`（未设置返回未计算，不猜测）。**MVP 简化（2026-08 决策）**：`_health` REST 附加字段契约未定义，伏笔面板不展示健康指标与章节序（backlog #13）。
 - 画布节点坐标/缩放存**浏览器 localStorage**（纯展示层，不进数据文件，决策 10）。
-- 前端技术栈已定（architecture.md）：React 19 + Zustand 5 + Tailwind 4 + shadcn/ui；路由用自制 hash 路由（`useHashRoute`），**不要引入 React Router**。
+- 前端技术栈已定（architecture.md + 决策 22）：React 19 + Zustand 5 + Tailwind 4 + shadcn/ui（**base-nova/Base UI 风格，已 CLI 集成**：components.json + `@` 别名 + `pnpm dlx shadcn add <组件>` 增补组件，CLI 在 devDependencies）；路由用自制 hash 路由（`useHashRoute`），**不要引入 React Router**。
+- **UI 三栏工作台布局（决策 22，layout.md §0/§2）**：左 10%（Sidebar：产品标识 + 书架树 + 设置/主题切换）/ 中 50%（InfoBar + 6 tab：概览|大纲|画布|实体关系|伏笔|回收站 + 内容区）/ 右 40%（ChatPanel 常驻，`<1024px` 折叠抽屉），`flex-basis` 百分比固定不可拖拽；**`#/chat` 独立页已移除**——聊天常驻右栏，跨页「问 AI」注入当前会话 focus context（`ui store focusOutlineNodeId` 或 `chat store focusContext`）；**会话归属项目**（chat store 订阅 project store 切换联动，决策 22）。
+- **主题系统（layout.md §3，U1）**：oklch 文学氛围双主题 tokens 集中在 `client/src/index.css`（`@custom-variant dark` + `@theme inline` + `:root`/`.dark`，浅色暖羊皮纸+牛血红 ↔ 深色蓝黑曜石+琥珀烛光）+ 系统字体栈（标题/聊天衬线 `font-serif`）+ `--radius: 0.6rem` + `color-scheme`；**组件一律用 token 类（bg-background/bg-card/border-border/text-muted-foreground 等），禁止硬编码 zinc/white/black 色类**（oracle 审核红线）；主题切换 `hooks/use-theme.ts`（localStorage `ai-editor:theme`）+ index.html FOUC 内联脚本（深色首帧防闪白）。
+- **聊天发送状态（U5）**：POST /api/v1/chat 是 **POST + SSE**——浏览器原生 `EventSource` 只支持 GET，客户端必须用 `fetch` + `ReadableStream` 自写 SSE 解析（`client/src/hooks/use-sse.ts`，`fetchSSE` 是 POST /chat 的事实契约来源——**勿另起炉灶**），处理跨 chunk 的 `data:` 行拼接与注释行；**端点属 S7 切片未实现**（当前 404 → 错误条「聊天服务未就绪」）；chat store 有 loadSeq/msgSeq 竞态 + 中止在途 SSE 的约定，改动时保持。
 - `outline.json` 保存必须**原子写**（临时文件 + fsync + rename），禁止直接覆盖（决策 11）。
 - 大纲树与画布是**同一数据的两种投影**（节点即大纲），不是需同步的两份数据。
 - AI 是创作顾问**不生成正文**；AI 工具按风险分**两级权限**（自动 / 提案确认），写操作必须走提案；**提案仅存内存**（TTL 10 分钟 + 条数上限），确认时服务端重新校验引用（存在性 + updated_at 快照比对，大纲节点用节点级 `updated_at`），失败返回 409 `PROPOSAL_STALE`，proposal_id 不存在返回 404 `PROPOSAL_NOT_FOUND`（决策 14/19）。
 - agent 循环有硬性终止：max 8 轮 / 单轮 120s / token 预算（工具结果也有 token 上限）；SSE 断开即全链路取消——**心跳（15-30s ping）+ 三路断开检测**（onAbort + req close/error + 心跳写失败，决策 20）；心跳对 **TCP 半开连接**（客户端断电）无法即时感知，客户端需自身超时兜底（60s 无任何事件即提示断开）；跨 data.db / outline.json 的写操作**先 DB 后 JSON**，不一致由**启动一致性校验**兜底补标（决策 16 修订）。
-- `/api/v1/chat` 是 **POST + SSE**：浏览器原生 `EventSource` 只支持 GET，客户端必须用 `fetch` + `ReadableStream` 自写 SSE 解析（`client/src/hooks/use-sse.ts`），处理跨 chunk 的 `data:` 行拼接与注释行。
 - 服务默认绑定 `127.0.0.1`，**全部请求**（含读）校验来源：仅校验 host ∈ {127.0.0.1, localhost, ::1}（**不校验端口**——端口自动 +1 与 dev proxy 依赖此规则，决策 17 修订）；DeepSeek key 走环境变量或用户级配置（`~/.ai-editor/config.json`），**不入项目文件**；生产态端口占用自动 +1 并打开实际端口（**dev 态被占直接报错**，Vite proxy 写死 3456）；打开浏览器/提示 URL 一律用 `127.0.0.1` 而非 `localhost`（IPv6 优先系统上 localhost 可能解析为 `::1` 导致连接被拒）（决策 8）。
 - 运行环境（2026-08 实测修订，以 architecture.md 版本声明为准）：Node ≥ 22.12（实测 22.23）、**全仓 ESM**；better-sqlite3 `^13`（N-API 重写，自带预编译二进制，全局安装无 ABI 失配）、zod `^4`、Vite 7、Hono 4；pnpm 实测 11.8——pnpm-workspace.yaml 需配 `allowBuilds: { better-sqlite3: true, esbuild: true }`（两者都有 postinstall 脚本，pnpm 11+ 格式；pnpm 10 旧格式 `onlyBuiltDependencies` 会被 pnpm 11 自动迁移为哨兵值导致构建被忽略）。
 - schema 演进 MVP 用**删库重建**（`PRAGMA user_version` 为准判定，`schema_version` 管 JSON，重建时同步重置 outline.json 并备份 `.bak`，**data.db 也备份 `.bak`**），无迁移脚本；首次发布前必须复审此策略（决策 13）。
