@@ -17,7 +17,7 @@
     "pack:test": "node scripts/pack-test-install.mjs",
     "start:test": "node scripts/start-test-install.mjs",
     "test:packed": "pnpm pack:test && pnpm start:test",
-    "start:test-project": "node packages/server/dist/index.js test-project"
+    "start:test-project": "pnpm -r build && node packages/server/dist/index.js test-project"
   },
   "devDependencies": {
     "eslint": "^9.39.5",

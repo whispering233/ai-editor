@@ -51,7 +51,8 @@ pnpm dev
 
 # 测试项目（借鉴 inkos test-project 模式，运行时数据不入库）
 pnpm start:test-project
-# → 生产态启动（需先 pnpm -r build）：浏览器自动打开 http://127.0.0.1:3456
+# → 先 pnpm -r build（代码变动自动构建最新），再生产态启动
+# → 浏览器自动打开 http://127.0.0.1:3456
 # → 无项目时左栏书架 + 中栏引导创建/打开项目（落盘 test-project/books/<书名>/）
 
 # 验证
