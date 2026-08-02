@@ -20,7 +20,7 @@ import {
   updateOutlineNodeInfo,
 } from "@ai-editor/db";
 import type { OutlineFileNode, OutlineFileTree, OutlineNode, OutlineTree } from "@ai-editor/shared";
-import { HOOK_RELATION_TYPES } from "@ai-editor/shared";
+import { HOOK_RELATION_TYPES, mapOutlineFileToTree } from "@ai-editor/shared";
 import { nowIso } from "@ai-editor/db";
 import {
   outlineCreateReqSchema,
@@ -110,32 +110,6 @@ export function cascadePurge(db: Db, subtreeIds: string[]): void {
   db.prepare(`DELETE FROM delta_records WHERE node_id IN ${inPlaceholders(subtreeIds)}`).run(...subtreeIds);
 }
 
-/** OutlineFileNode → API OutlineNode 递归映射（**替代 shared 的 mapOutlineFileToTree**）：
- * shared 映射按「卷→章→场景」硬编码（root.children 一律 map 为 volume），不支持决策 19
- * 允许的「chapter 直挂 root」——直挂章会被误映射为 volume（冒烟发现，已向 oracle 说明，
- * shared 修订后可换回 mapOutlineFileToTree；server 侧自写不影响 client——client 只消费响应 JSON） */
-function mapTreeToApi(tree: OutlineFileTree): OutlineTree {
-  const toNode = (node: OutlineFileNode): OutlineNode => {
-    const kids = (node as { children?: OutlineFileNode[] }).children;
-    const base: OutlineNode = {
-      id: node.id,
-      type: node.type,
-      title: node.title,
-      ...(node.summary !== undefined ? { summary: node.summary } : {}),
-      updatedAt: node.updated_at,
-    };
-    return (kids === undefined ? base : { ...base, children: kids.map(toNode) }) as OutlineNode;
-  };
-  // 双断言：递归产物为宽 OutlineNode[]，结构上满足 strict 三层（决策 19 允许直挂 chapter，
-  // 该形态在 shared 的 OutlineVolume[] 类型中无对应——已知类型缺口，运行时结构合法）
-  return {
-    id: "root",
-    type: "root",
-    schemaVersion: tree.schema_version,
-    children: tree.children.map(toNode),
-  } as unknown as OutlineTree;
-}
-
 // GET /api/v1/outline —— 完整大纲树（软删过滤；with_metadata=true 联查统计）
 outlineRoutes.get("/", (c) => {
   const project = requireCurrentProject();
@@ -144,7 +118,9 @@ outlineRoutes.get("/", (c) => {
     throw query.error;
   }
   const tree = readOutlineFile(project.root);
-  const apiTree = mapTreeToApi(filterDeletedTree(tree));
+  // shared 映射（oracle 回修后支持决策 19「chapter 直挂 root」——换回 mapOutlineFileToTree，
+  // 删除 S2.2 的自写 mapTreeToApi 绕过）
+  const apiTree = mapOutlineFileToTree(filterDeletedTree(tree));
   if (query.data.with_metadata === true) {
     attachMetadata(apiTree, project.db);
   }

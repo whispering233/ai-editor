@@ -57,8 +57,8 @@ export interface OutlineTree {
   type: "root";
   /** outline.json 顶层 schema_version（决策 13） */
   schemaVersion: number;
-  /** 根下只能是卷（严格三层，决策 19） */
-  children: OutlineVolume[];
+  /** 根下可挂卷或直挂章（决策 19：chapter → volume 或 root）；卷下只有章、章下只有场景 */
+  children: (OutlineVolume | OutlineChapter)[];
 }
 
 // ============ outline.json 存储形态（snake_case，schema.md） ============
@@ -102,5 +102,6 @@ export interface OutlineFileTree {
   type: "root";
   /** 与 project.json 的 schema_version 同步写入（决策 13 修订） */
   schema_version: number;
-  children: OutlineFileVolume[];
+  /** 根下可挂卷或直挂章（决策 19：chapter → volume 或 root） */
+  children: (OutlineFileVolume | OutlineFileChapter)[];
 }

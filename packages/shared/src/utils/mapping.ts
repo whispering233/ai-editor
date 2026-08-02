@@ -9,9 +9,11 @@ import type { DeltaRecord, DeltaRow, Entity, EntityRow, RelationRecord, Relation
 import type {
   OutlineChapter,
   OutlineFileChapter,
+  OutlineFileNode,
   OutlineFileScene,
   OutlineFileTree,
   OutlineFileVolume,
+  OutlineNode,
   OutlineScene,
   OutlineTree,
   OutlineVolume,
@@ -135,13 +137,26 @@ function mapFileSceneToScene(file: OutlineFileScene): OutlineScene {
   };
 }
 
+/** OutlineFileNode → OutlineNode（按 type 分派递归映射；支持决策 19「chapter 直挂 root」） */
+function mapFileNodeToNode(file: OutlineFileNode): OutlineNode {
+  switch (file.type) {
+    case "volume":
+      return mapFileVolumeToVolume(file);
+    case "chapter":
+      return mapFileChapterToChapter(file);
+    case "scene":
+      return mapFileSceneToScene(file);
+  }
+}
+
 /** OutlineFileTree → OutlineTree（schema_version → schemaVersion；软删字段 deleted_at ↔ deletedAt 一并映射） */
 export function mapOutlineFileToTree(file: OutlineFileTree): OutlineTree {
   return {
     id: file.id,
     type: "root",
     schemaVersion: file.schema_version,
-    children: file.children.map(mapFileVolumeToVolume),
+    // root.children 为 (volume|chapter) 联合（决策 19 允许直挂章），按 type 分派映射
+    children: file.children.map(mapFileNodeToNode) as OutlineTree["children"],
   };
 }
 
@@ -186,13 +201,25 @@ function mapSceneToFileScene(node: OutlineScene): OutlineFileScene {
   };
 }
 
+/** OutlineNode → OutlineFileNode（按 type 分派递归映射；支持决策 19「chapter 直挂 root」） */
+function mapNodeToFileNode(node: OutlineNode): OutlineFileNode {
+  switch (node.type) {
+    case "volume":
+      return mapVolumeToFileVolume(node);
+    case "chapter":
+      return mapChapterToFileChapter(node);
+    case "scene":
+      return mapSceneToFileScene(node);
+  }
+}
+
 /** OutlineTree → OutlineFileTree（updatedAt ↔ updated_at、schemaVersion ↔ schema_version） */
 export function mapTreeToOutlineFile(tree: OutlineTree): OutlineFileTree {
   return {
     id: tree.id,
     type: "root",
     schema_version: tree.schemaVersion,
-    children: tree.children.map(mapVolumeToFileVolume),
+    children: tree.children.map(mapNodeToFileNode) as OutlineFileTree["children"],
   };
 }
 

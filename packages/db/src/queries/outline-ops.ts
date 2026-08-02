@@ -369,10 +369,9 @@ export function deriveChapterOrder(dir: string): ChapterOrderInfo[] {
   const tree = readOutlineFile(dir);
   const result: ChapterOrderInfo[] = [];
   let number = 0;
-  // root.children 类型为 OutlineFileVolume[]，但决策 19 允许 chapter 直挂 root——
-  // 以 OutlineFileNode 视图遍历，运行时按 type 分支（volume → 卷内章；chapter → 直挂章）
-  const children = tree.children as OutlineFileNode[];
-  for (const child of children) {
+  // root.children 类型已放宽为 (volume|chapter) 联合（决策 19 允许 chapter 直挂 root，
+  // oracle 回修 shared 类型后此处无需断言），按 type 分支：volume → 卷内章；chapter → 直挂章
+  for (const child of tree.children) {
     if (child.type === "chapter") {
       result.push({ chapterId: child.id, chapterNumber: ++number });
     } else {

@@ -152,6 +152,33 @@ describe("大纲映射（递归 children + 软删字段）", () => {
   it("往返一致：mapOutlineFileToTree → mapTreeToOutlineFile 结构不丢", () => {
     expect(mapTreeToOutlineFile(mapOutlineFileToTree(fileTree))).toEqual(fileTree);
   });
+
+  it("直挂 root 的 chapter 映射正确（决策 19：chapter → volume 或 root；oracle 回修）", () => {
+    const file: OutlineFileTree = {
+      id: "root",
+      type: "root",
+      schema_version: 1,
+      children: [
+        { id: "vol-1", type: "volume", title: "第一卷", updated_at: "2026-08-01T10:00:00Z", children: [] },
+        {
+          id: "ch-root",
+          type: "chapter",
+          title: "直挂章",
+          updated_at: "2026-08-01T10:00:00Z",
+          children: [{ id: "sc-9", type: "scene", title: "场景", updated_at: "2026-08-01T10:00:00Z" }],
+        },
+      ],
+    };
+    // 正向：直挂章不被误映射为 volume，递归 children 正确
+    const tree = mapOutlineFileToTree(file);
+    expect(tree.children).toHaveLength(2);
+    expect(tree.children[0].type).toBe("volume");
+    expect(tree.children[1].type).toBe("chapter");
+    expect(tree.children[1].title).toBe("直挂章");
+    expect(tree.children[1].children?.[0].type).toBe("scene");
+    // 反向：往返一致
+    expect(mapTreeToOutlineFile(tree)).toEqual(file);
+  });
 });
 
 describe("项目映射", () => {
