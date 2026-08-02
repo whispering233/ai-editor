@@ -26,15 +26,15 @@ export const SUMMARY_COLUMNS: Record<EntityType, SummaryColumnConfig> = {
   hook: { key1: "status", label1: "状态", key2: "payoff_timing", label2: "回收时机" },
 };
 
-/** hook 枚举值 → 中文（展示映射；未收录的原样显示） */
-const HOOK_STATUS_LABEL: Record<string, string> = {
+/** hook 枚举值 → 中文（展示映射；未收录的原样显示）；详情页表单下拉复用（S3.6） */
+export const HOOK_STATUS_LABEL: Record<string, string> = {
   planted: "已埋设",
   progressing: "推进中",
   resolved: "已回收",
   abandoned: "已弃用",
 };
 
-const HOOK_TIMING_LABEL: Record<string, string> = {
+export const HOOK_TIMING_LABEL: Record<string, string> = {
   immediate: "立即",
   near_term: "近期",
   mid_arc: "中段",

@@ -278,7 +278,8 @@ export interface EntityDetailRes {
   type: EntityType;
   name: string;
   data: Record<string, unknown>;
-  relations: Array<Record<string, unknown>>;
+  /** 双向紧邻关系（形状同 RelationSummaryItem，见关系段定义——联表填充端点名称） */
+  relations: RelationSummaryItem[];
   deltaCount: number;
   createdAt: string;
   updatedAt: string;
@@ -336,6 +337,85 @@ export interface DeleteEntityRes {
 /** 软删实体（标记 deleted_at，本体保留可还原；级联移除关系与 Delta） */
 export function deleteEntity(type: EntityType, id: string): Promise<DeleteEntityRes> {
   return apiFetch<DeleteEntityRes>(`/entity/${type}/${id}`, { method: "DELETE" });
+}
+
+// ============ 关系（S3.6；契约：endpoints.md「关系」L300-391，物理删决策 12 修订） ============
+
+/** GET /api/v1/relation 列表项（联表填充的端点名称；depth=1 紧邻展示用） */
+export interface RelationSummaryItem {
+  id: string;
+  sourceType: string;
+  sourceId: string;
+  sourceName?: string;
+  targetType: string;
+  targetId: string;
+  targetName?: string;
+  relationType: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+}
+
+/** GET /api/v1/relation 查询（depth 必填 1|2|3；其余可选过滤） */
+export interface ListRelationsQuery {
+  source_type?: string;
+  source_id?: string;
+  target_type?: string;
+  target_id?: string;
+  relation_type?: string;
+  depth: 1 | 2 | 3;
+}
+
+/** GET /api/v1/relation 响应（MVP 用 depth=1：直接关系；paths 是 depth>=2 附加） */
+export interface ListRelationsRes {
+  relations: RelationSummaryItem[];
+  paths?: Array<{ nodes: Array<{ type: string; id: string; name: string }>; edges: Array<{ from: string; to: string; relationType: string }> }>;
+}
+
+/** 查询关系（端点过滤可选；详情页用 source 或 target = 当前实体查 1 跳）。
+ * 显式构造 query 字面量：ListRelationsQuery 接口无 index signature，直接透传不满足 ApiQuery（Record） */
+export function listRelations(query: ListRelationsQuery): Promise<ListRelationsRes> {
+  return apiFetch<ListRelationsRes>("/relation", {
+    query: {
+      source_type: query.source_type,
+      source_id: query.source_id,
+      target_type: query.target_type,
+      target_id: query.target_id,
+      relation_type: query.relation_type,
+      depth: query.depth,
+    },
+  });
+}
+
+/** POST /api/v1/relation 请求体（snake_case；metadata 可选） */
+export interface CreateRelationBody {
+  source_type: string;
+  source_id: string;
+  target_type: string;
+  target_id: string;
+  relation_type: string;
+  metadata?: Record<string, unknown>;
+}
+
+/** POST /api/v1/relation 响应（201；409 RELATION_EXISTS——已存在） */
+export interface CreateRelationRes {
+  id: string;
+  relation: {
+    sourceType: string;
+    sourceId: string;
+    targetType: string;
+    targetId: string;
+    relationType: string;
+  };
+}
+
+/** 建立关系（409 RELATION_EXISTS → 提示「这条关系已经存在」） */
+export function createRelation(body: CreateRelationBody): Promise<CreateRelationRes> {
+  return apiFetch<CreateRelationRes>("/relation", { method: "POST", body });
+}
+
+/** DELETE /api/v1/relation/:id 响应（物理删除，不进入回收站；404 RELATION_NOT_FOUND） */
+export function deleteRelation(id: string): Promise<{ deleted: true }> {
+  return apiFetch<{ deleted: true }>(`/relation/${id}`, { method: "DELETE" });
 }
 
 // ============ 书架（S1.5；契约：GET /api/v1/project/list，服务端扫描 books/ 子目录） ============

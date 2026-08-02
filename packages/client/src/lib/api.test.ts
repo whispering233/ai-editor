@@ -5,6 +5,9 @@ import {
   ApiError,
   CLIENT_NETWORK_ERROR,
   closeProject,
+  createRelation,
+  deleteRelation,
+  listRelations,
   createEntity,
   createOutlineNode,
   createProject,
@@ -390,5 +393,50 @@ describe("实体端点（S3.5，契约 endpoints.md「实体 CRUD」）", () => 
     expect(calls[0].init?.method).toBe("DELETE");
     mockFetchOnce({ status: 404, body: { success: false, error: { code: "ENTITY_NOT_FOUND", message: "不存在" } } });
     await expect(deleteEntity("location", "loc-999")).rejects.toMatchObject({ code: "ENTITY_NOT_FOUND" });
+  });
+});
+
+describe("关系端点（S3.6，契约 endpoints.md「关系」）", () => {
+  it("listRelations：GET /relation，query snake_case（depth 必填 + 端点过滤）", async () => {
+    const calls = mockFetchOnce({
+      body: {
+        success: true,
+        data: {
+          relations: [
+            { id: "rel-1", sourceType: "character", sourceId: "char-1", sourceName: "张三", targetType: "outline_node", targetId: "sc-1", targetName: "灵根测试", relationType: "appears_in", createdAt: "t" },
+          ],
+        },
+      },
+    });
+    const res = await listRelations({ source_type: "character", source_id: "char-1", depth: 1 });
+    expect(res.relations[0]).toMatchObject({ relationType: "appears_in", sourceName: "张三" });
+    expect(calls[0].url).toBe("/api/v1/relation?source_type=character&source_id=char-1&depth=1");
+  });
+
+  it("createRelation：POST body snake_case；201 响应透传；409 RELATION_EXISTS → ApiError", async () => {
+    const calls = mockFetchOnce({
+      body: {
+        success: true,
+        data: { id: "rel-9", relation: { sourceType: "character", sourceId: "char-1", targetType: "hook", targetId: "hook-1", relationType: "plants" } },
+      },
+    });
+    const res = await createRelation({ source_type: "character", source_id: "char-1", target_type: "hook", target_id: "hook-1", relation_type: "plants" });
+    expect(res.id).toBe("rel-9");
+    expect(calls[0].url).toBe("/api/v1/relation");
+    expect(calls[0].init?.method).toBe("POST");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({
+      source_type: "character", source_id: "char-1", target_type: "hook", target_id: "hook-1", relation_type: "plants",
+    });
+    mockFetchOnce({ status: 409, body: { success: false, error: { code: "RELATION_EXISTS", message: "已存在" } } });
+    await expect(createRelation({ source_type: "character", source_id: "char-1", target_type: "hook", target_id: "hook-1", relation_type: "plants" })).rejects.toMatchObject({ code: "RELATION_EXISTS" });
+  });
+
+  it("deleteRelation：DELETE /relation/:id（物理删）；404 → ApiError", async () => {
+    const calls = mockFetchOnce({ body: { success: true, data: { deleted: true } } });
+    await expect(deleteRelation("rel-1")).resolves.toEqual({ deleted: true });
+    expect(calls[0].url).toBe("/api/v1/relation/rel-1");
+    expect(calls[0].init?.method).toBe("DELETE");
+    mockFetchOnce({ status: 404, body: { success: false, error: { code: "RELATION_NOT_FOUND", message: "不存在" } } });
+    await expect(deleteRelation("rel-999")).rejects.toMatchObject({ code: "RELATION_NOT_FOUND" });
   });
 });

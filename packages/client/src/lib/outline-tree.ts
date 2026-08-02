@@ -58,6 +58,25 @@ export function findNode(nodes: OutlineNode[], nodeId: string): OutlineNode | nu
   return null;
 }
 
+/** 树扁平化选项（S3.6 大纲节点选择器用）：树序遍历 { id, title, depth }（root=0、卷=1、章=2） */
+export interface FlatNodeOption {
+  id: string;
+  label: string;
+  depth: number;
+}
+
+export function flattenTree(
+  nodes: OutlineNode[],
+  depth = 0,
+  acc: FlatNodeOption[] = [],
+): FlatNodeOption[] {
+  for (const n of nodes) {
+    acc.push({ id: n.id, label: n.title, depth });
+    if (n.type !== "scene" && n.children) flattenTree(n.children, depth + 1, acc);
+  }
+  return acc;
+}
+
 /** targetId 是否在 nodeId 的子树中（含 nodeId 自身）——拖拽「不能挂自己/后代」判定 */
 export function isDescendant(nodes: OutlineNode[], nodeId: string, targetId: string): boolean {
   const node = findNode(nodes, nodeId);

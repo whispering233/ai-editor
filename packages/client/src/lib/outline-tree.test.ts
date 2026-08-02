@@ -7,6 +7,7 @@ import {
   editFailureRecovery,
   findNode,
   findNodeChildren,
+  flattenTree,
   isDescendant,
   parentOptionsForType,
   ROOT_NODE_ID,
@@ -181,5 +182,19 @@ describe("editFailureRecovery（行内编辑失败恢复决策，S2.4 oracle 补
     expect(editFailureRecovery("CLIENT_NETWORK_ERROR")).toBe("restore");
     expect(editFailureRecovery("SOME_UNKNOWN")).toBe("restore");
     expect(editFailureRecovery(null)).toBe("restore");
+  });
+});
+
+describe("flattenTree（大纲节点选择器选项，S3.6）", () => {
+  it("树序遍历展开（卷→章→场），带深度（root=0、卷=1、章=2）", () => {
+    const flat = flattenTree(tree);
+    expect(flat.map((o) => o.id)).toEqual(["vol-1", "ch-1", "sc-1", "sc-2", "ch-2", "vol-2", "ch-3"]);
+    expect(flat[0]).toEqual({ id: "vol-1", label: "第一卷", depth: 0 });
+    expect(flat[1].depth).toBe(1);
+    expect(flat[2].depth).toBe(2);
+  });
+
+  it("空树 → 空数组", () => {
+    expect(flattenTree([])).toEqual([]);
   });
 });
