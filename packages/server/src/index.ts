@@ -130,17 +130,25 @@ export async function startServer(projectRoot: string, options: StartServerOptio
   const openBrowser = options.openBrowser ?? !dev;
   const clientDist = options.clientDist ?? defaultClientDist();
 
+  // 创作根归一化（2026-08 修复）：CLI 以相对路径启动（node packages/server/dist/index.js
+  // test-project）时，原值直接注入会导致 GET /api/v1/project/list 返回相对 rootPath，
+  // 前端 buildBookPath(rootPath, name) 拼出相对路径后，POST /project/create 的
+  // resolveProjectDir 中 isAbsolute 校验失败 → 400 INVALID_PROJECT_PATH。此处统一基于
+  // process.cwd() resolve 为绝对路径（对绝对输入幂等），detectProject/setProjectRoot
+  // 及其下游消费方全部使用归一化值；create/open 请求体 path 仍要求绝对（安全校验不变）。
+  const root = resolve(projectRoot);
+
   // 检测语义（设计缺陷修复）：不再无条件初始化——待命态下 GET /project/config → 409
   // NO_PROJECT_OPEN，前端引导「新建/打开项目」（client store loadConfig 已处理该错误码）
-  const project = detectProject(projectRoot);
+  const project = detectProject(root);
   if (project !== null) {
     setCurrentProject(project); // 启动即打开（决策 8 部署场景）；null 则保持待命
   }
 
-  // 书架模式（S1.5）：projectRoot = 创作根，GET /api/v1/project/list 扫描 books/ 子目录
+  // 书架模式（S1.5）：root = 创作根，GET /api/v1/project/list 扫描 books/ 子目录
   // 需要创作根路径（与 currentProject 无关——待命态也要能列书）；兼容旧语义：
   // 创作根自身有 project.json 仍按 detectProject 打开，list 只列 books/（根自身不是书）
-  setProjectRoot(projectRoot);
+  setProjectRoot(root);
 
   const app = new Hono<{ Variables: ProjectVariables }>();
 

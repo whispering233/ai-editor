@@ -4,7 +4,7 @@
 import { createServer, type Server } from "node:http";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { startServer } from "./index.js";
 
@@ -67,6 +67,23 @@ describe("startServer 基础路由", () => {
         success: false,
         error: { code: "NOT_FOUND", message: expect.stringContaining("未知 API 端点") },
       });
+    } finally {
+      await handle.close();
+    }
+  });
+
+  it("相对路径创作根 → list 返回绝对 rootPath（2026-08 修复：前端拼路径可过 isAbsolute 校验）", async () => {
+    // 模拟 CLI 相对路径启动（node dist/index.js test-project）：startServer 内部须归一化为
+    // 绝对路径（基于 process.cwd() resolve），否则 list 返回相对 rootPath → 前端
+    // buildBookPath 拼出相对路径 → POST /project/create 的 resolveProjectDir 400 拒绝
+    const dir = makeTmpDir();
+    const handle = await startServer(relative(process.cwd(), dir), { port: 0, openBrowser: false });
+    try {
+      const res = await handle.app.request("http://127.0.0.1/api/v1/project/list", { headers: { host: "127.0.0.1" } });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.success).toBe(true);
+      expect(body.data.rootPath).toBe(resolve(dir)); // 绝对路径（resolve 对绝对输入幂等）
     } finally {
       await handle.close();
     }
