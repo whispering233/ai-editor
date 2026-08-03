@@ -1,10 +1,11 @@
 // 建立关联对话框（U8 抽共用；契约 doc/ui/pages/entity-detail.md「新增关联」+ entity-list.md「关联 Tab」）
 // 两模式：
-// - 详情模式（source 非 null）：源固定为本实体（顶部显示「本实体：{name}」），方向「本实体 → 关联对象」——
-//   原 EntityDetail 内嵌 CreateRelationDialog 原样迁出，行为不变
+// - 详情模式（source 非 null）：源固定为本实体（左列禁选卡片「本实体：{name}」），方向「本实体 → 关联对象」
 // - 列表模式（source 为 null）：暴露源实体选择（类型下拉默认 character + 实体下拉 listEntities limit 100），方向「源 → 目标」
 // 目标端类型支持四类实体 + 大纲节点（outline store 树，无需请求）；409 RELATION_EXISTS → 内联「这条关系已经存在」；
 // 成功 → toast「已建立关系」→ onCreated() → onClose()。样式 token 类（layout.md §3）。
+// 布局：左右三段式「源 -关系-> 目标」——grid-cols-[1fr_auto_1fr]（sm 起），窄屏垂直堆叠；
+//   中列关系类型下拉 + 「→」箭头（mt-auto 沉底对齐两端实体下拉），三列各有小标题（源实体/关系类型/目标实体）。
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { ENTITY_TYPES, RELATION_TYPES } from "@ai-editor/shared";
@@ -119,100 +120,100 @@ export function CreateRelationDialog({
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>新增关联</DialogTitle>
         </DialogHeader>
         <form id="create-relation-form" onSubmit={handleSubmit} className="flex flex-col gap-3">
-          {source ? (
-            <p className="text-xs text-muted-foreground">本实体：{source.name}</p>
-          ) : (
-            <>
-              <div>
-                <p className="mb-1 text-sm font-medium text-foreground">源实体类型</p>
-                <select
-                  value={sourceType}
-                  onChange={(e) => setSourceType(e.target.value as EntityType)}
-                  className={SELECT_CLASS}
+          {/* 左右布局：源 -关系-> 目标 一行三段式；窄屏（sm 以下）垂直堆叠 */}
+          <div className="grid grid-cols-1 items-start gap-3 sm:grid-cols-[1fr_auto_1fr]">
+            {/* 左列：源实体（详情模式固定本实体禁选卡片；列表模式自由选择） */}
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-medium text-foreground">源实体</p>
+              {source ? (
+                <div
+                  title={source.name}
+                  className="min-w-0 truncate rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground"
                 >
-                  {ENTITY_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {TYPE_LABEL[t]}
+                  本实体：{source.name}
+                </div>
+              ) : (
+                <>
+                  <select
+                    value={sourceType}
+                    onChange={(e) => setSourceType(e.target.value as EntityType)}
+                    className={SELECT_CLASS}
+                  >
+                    {ENTITY_TYPES.map((t) => (
+                      <option key={t} value={t}>
+                        {TYPE_LABEL[t]}
+                      </option>
+                    ))}
+                  </select>
+                  <select value={sourceId} onChange={(e) => setSourceId(e.target.value)} className={SELECT_CLASS}>
+                    <option value="">选择{TYPE_LABEL[sourceType]}…</option>
+                    {(sourceEntities ?? []).map((it) => (
+                      <option key={it.id} value={it.id}>
+                        {it.name}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
+            </div>
+            {/* 中列：关系类型 + 方向箭头（mt-auto 沉底与两端实体下拉对齐，表达「源 关系→ 目标」） */}
+            <div className="flex flex-col gap-2 sm:w-44">
+              <p className="text-sm font-medium text-foreground">关系类型</p>
+              <select value={relationType} onChange={(e) => setRelationType(e.target.value)} className={SELECT_CLASS}>
+                {RELATION_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {relationTypeLabel(t)}
+                  </option>
+                ))}
+              </select>
+              <span
+                aria-hidden="true"
+                className="mt-auto select-none pb-1 text-center text-xl leading-none text-muted-foreground"
+              >
+                →
+              </span>
+            </div>
+            {/* 右列：目标实体（大纲节点用 outline store 树） */}
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-medium text-foreground">目标实体</p>
+              <select
+                value={otherType}
+                onChange={(e) => setOtherType(e.target.value as EntityType | "outline_node")}
+                className={SELECT_CLASS}
+              >
+                <option value="character">人物</option>
+                <option value="setting">设定</option>
+                <option value="location">地点</option>
+                <option value="hook">伏笔</option>
+                <option value="outline_node">大纲节点</option>
+              </select>
+              {otherType === "outline_node" ? (
+                <select value={otherId} onChange={(e) => setOtherId(e.target.value)} className={SELECT_CLASS}>
+                  <option value="">选择大纲节点…</option>
+                  {outlineOptions.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {"　".repeat(o.depth)}
+                      {o.label}
                     </option>
                   ))}
                 </select>
-              </div>
-              <div>
-                <p className="mb-1 text-sm font-medium text-foreground">源实体</p>
-                <select
-                  value={sourceId}
-                  onChange={(e) => setSourceId(e.target.value)}
-                  className={SELECT_CLASS}
-                >
-                  <option value="">选择{TYPE_LABEL[sourceType]}…</option>
-                  {(sourceEntities ?? []).map((it) => (
+              ) : (
+                <select value={otherId} onChange={(e) => setOtherId(e.target.value)} className={SELECT_CLASS}>
+                  <option value="">选择{TYPE_LABEL[otherType]}…</option>
+                  {(otherEntities ?? []).map((it) => (
                     <option key={it.id} value={it.id}>
                       {it.name}
                     </option>
                   ))}
                 </select>
-              </div>
-            </>
-          )}
-          <div>
-            <p className="mb-1 text-sm font-medium text-foreground">关联对象类型</p>
-            <select
-              value={otherType}
-              onChange={(e) => setOtherType(e.target.value as EntityType | "outline_node")}
-              className={SELECT_CLASS}
-            >
-              <option value="character">人物</option>
-              <option value="setting">设定</option>
-              <option value="location">地点</option>
-              <option value="hook">伏笔</option>
-              <option value="outline_node">大纲节点</option>
-            </select>
+              )}
+            </div>
           </div>
-          <div>
-            <p className="mb-1 text-sm font-medium text-foreground">关联对象</p>
-            {otherType === "outline_node" ? (
-              <select value={otherId} onChange={(e) => setOtherId(e.target.value)} className={SELECT_CLASS}>
-                <option value="">选择大纲节点…</option>
-                {outlineOptions.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {"　".repeat(o.depth)}
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <select value={otherId} onChange={(e) => setOtherId(e.target.value)} className={SELECT_CLASS}>
-                <option value="">选择{TYPE_LABEL[otherType]}…</option>
-                {(otherEntities ?? []).map((it) => (
-                  <option key={it.id} value={it.id}>
-                    {it.name}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-          <div>
-            <p className="mb-1 text-sm font-medium text-foreground">关系类型</p>
-            <select
-              value={relationType}
-              onChange={(e) => setRelationType(e.target.value)}
-              className={SELECT_CLASS}
-            >
-              {RELATION_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {relationTypeLabel(t)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {source ? "方向：本实体 → 关联对象" : "方向：源 → 目标"}
-          </p>
           {error && <p className="text-sm text-destructive">{error}</p>}
         </form>
         <DialogFooter>
