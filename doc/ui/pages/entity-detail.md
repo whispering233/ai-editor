@@ -60,7 +60,7 @@
 ## 关键交互
 
 - **编辑**：字段直接编辑，[保存] → `PUT` partial → toast「已保存」；保存中禁用按钮。
-- **新增关联**：对话框（另一端类型 + 实体搜索选择 + 关系类型下拉，如 ally/rival/appears_in 等）→ `POST /relation`；`RELATION_EXISTS` → 提示「这条关系已经存在」。
+- **新增关联**：对话框（左右布局「本实体 —关系→ 目标」：左列固定本实体禁选卡片，中列关系类型下拉 + 箭头，右列另一端类型 + 实体搜索选择 + 大纲节点选项，如 ally/rival/appears_in 等）→ `POST /relation`；`RELATION_EXISTS` → 提示「这条关系已经存在」。
 - **删关系**：确认框（提示：物理删除不可恢复，可重新建立）→ `DELETE /relation/:id`。
 - **软删**：⋯ 菜单 → 确认框展示级联（响应 `cascaded.relations` / `cascaded.deltas`）→ 删除 → 跳回列表 + toast「已移入回收站，可随时还原」。
 - **问 AI**：注入右栏 ChatPanel 当前会话 context `{ focus_entity_type, focus_entity_id }`（不再跳独立聊天页，layout.md §4.2）；右栏显示「正在讨论：张三」focus 小条。
