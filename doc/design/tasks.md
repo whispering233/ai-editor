@@ -474,6 +474,12 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - 验证：typecheck + lint + client/server test + 手工走查（表单无大纲节点选项、POST 非法 target_type 400）
 - 回滚：单 commit
 
+**S13.4 概览页引导形态修复（用户反馈：有书仍显示「还没有书」）** ✅（3430472，经 oracle 审核放行）
+- 范围：Dashboard.tsx 引导形态（noProject）改造——书架有书（books.length > 0）时引导卡**直接列出书籍**（书名 + 更新时间，点击 openProjectAt 打开）+ 底部「新建一本」次级入口；空书架才显示「还没有书，先创建一本」+ 新建表单；加载中骨架；加载失败保留错误 + 重试；doc/ui/pages/dashboard.md 引导形态描述同步
+- 依赖：U4、S1.5
+- 验证：typecheck + lint + client test + 手工走查（test-project 有书启动 → 概览页列出书籍点击打开；空书架 → 创建引导）
+- 回滚：单 commit
+
 ---
 
 ## 阶段 U：UI 工作台重构（三栏布局，2026-08，决策 22）
