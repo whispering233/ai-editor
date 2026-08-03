@@ -1,7 +1,8 @@
 // @ai-editor/tools 入口：导出工具上下文 / 注册表 / 查询类与分析类工具实现
 // S6.3 查询类工具（自动权限，8 个）+ S6.4 分析类工具（自动权限，5 个）在此注册；
-// S6.5 伏笔 / S6.6 提案 / S6.7 执行 + executor 通过 registry.registerTool(s) 继续挂载
-// （注册表是唯一事实来源）。
+// S6.5 伏笔 / S6.6 提案通过 registry.registerTool(s) 继续挂载（注册表是唯一事实来源）。
+// S6.7 执行类 12 个**不注册 registry**（LLM 不可见，tools.md「核心设计原则」）——
+// 仅经 executor 门面（executeProposal）导出，S7.5 提案确认后调用。
 //
 // 注册语义：模块副作用注册（import 即挂载）——S7.4 executor 直接 getTool(name) 调度；
 // 工具定义集中在各 query/analysis 模块（name/description/argsSchema/permission/run），
@@ -30,6 +31,8 @@ export * from "./proposal/relation.js";
 export * from "./proposal/delta.js";
 export * from "./proposal/outline.js";
 export * from "./proposal/hook.js";
+// S6.7 执行层：导出 executor 门面与 12 个执行函数（不注册工具——见文件头注释）
+export * from "./executor/index.js";
 
 import { TOOL_PERMISSION } from "@ai-editor/shared";
 import {
