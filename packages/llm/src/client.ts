@@ -54,8 +54,8 @@ const MAX_ERROR_BODY_LENGTH = 2000;
 /** 归一化错误 message 上限 */
 const MAX_ERROR_MESSAGE_LENGTH = 200;
 
-/** abort 归一化错误（决策 16 消息原文 "Request was aborted"；abort 永不重试） */
-const ABORT_ERROR: LLMError = {
+/** abort 归一化错误（决策 16 消息原文 "Request was aborted"；abort 永不重试；retry.ts 复用） */
+export const ABORT_ERROR: LLMError = {
   status: 0,
   code: LLM_TRANSPORT_ERROR_CODES.ABORTED,
   message: "Request was aborted",
