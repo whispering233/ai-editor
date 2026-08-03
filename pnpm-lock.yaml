@@ -138,6 +138,9 @@ importers:
       '@ai-editor/db':
         specifier: workspace:*
         version: link:../db
+      '@ai-editor/llm':
+        specifier: workspace:*
+        version: link:../llm
       '@ai-editor/shared':
         specifier: workspace:*
         version: link:../shared

@@ -19,6 +19,7 @@ export const SERVER_ERROR_CODES = [
   "NOT_FOUND",
   "NO_PROJECT_OPEN",
   "PROJECT_ALREADY_EXISTS",
+  "LLM_API_KEY_MISSING", // S7.6：POST /chat 未配置 DeepSeek key（决策 17）——400
 ] as const;
 export type ServerErrorCode = (typeof SERVER_ERROR_CODES)[number];
 

@@ -276,8 +276,11 @@ shared ← client（仅类型/常量，零运行时）
     "@ai-editor/shared": "workspace:*",
     "@ai-editor/db": "workspace:*",
     "@ai-editor/agent": "workspace:*",
+    "@ai-editor/tools": "workspace:*",  // S7.5 提案路由 executeProposal 消费入口
+    "@ai-editor/llm": "workspace:*",    // S7.6 chat 流 produce 闭包直连 chatStream
     "hono": "^4.7.0"
   }
+  // server 是顶层装配包：依赖任一下层（shared/db/llm/tools/agent）方向均合规、无环
 }
 
 // packages/client/package.json

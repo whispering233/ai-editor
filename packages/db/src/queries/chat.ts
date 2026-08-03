@@ -142,6 +142,37 @@ export function listMessages(db: Db, sessionId: string, projectId: string): Chat
   }));
 }
 
+/**
+ * 消息历史原始行（S7.6 续聊重建专用）：
+ * - listMessages 输出 API 形态（camelCase，供 GET /messages）；本函数输出**存储形态**
+ *   （snake_case ChatMessageRow，tool_calls 已解析为数组）——直供 agent 包
+ *   loadHistory/restoreSession（决策 18 成对重组），避免 server 层做 API→存储形态反映射。
+ * - 查询语义与 listMessages 一致：按 project_id 隔离、created_at 升序 + rowid 稳定序。
+ */
+export function listMessageRows(db: Db, sessionId: string, projectId: string): ChatMessageRow[] {
+  const rows = db
+    .prepare(
+      `SELECT id, session_id, project_id, role, content, tool_calls, tool_call_id, created_at
+       FROM chat_messages
+       WHERE session_id = ? AND project_id = ?
+       ORDER BY created_at ASC, rowid ASC`,
+    )
+    .all(sessionId, projectId) as Array<{
+    id: string;
+    session_id: string;
+    project_id: string;
+    role: ChatRole;
+    content: string | null;
+    tool_calls: string | null;
+    tool_call_id: string | null;
+    created_at: string;
+  }>;
+  return rows.map((r) => ({
+    ...r,
+    tool_calls: parseToolCalls(r.tool_calls), // TEXT 列 → 解析后的数组（NULL/损坏 → null）
+  }));
+}
+
 /** 成对重组后喂给 LLM 的历史消息形态（决策 18 修订：DeepSeek 要求 tool_call 与 tool 结果严格配对） */
 export interface ReassembledChatMessage {
   role: ChatRole;
