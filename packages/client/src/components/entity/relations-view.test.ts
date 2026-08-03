@@ -45,6 +45,12 @@ describe("filterRelations（关联总览前端过滤）", () => {
     expect(out.map((r) => r.id)).toEqual(["r1"]);
     const upper = filterRelations(SAMPLE, { ...EMPTY_RELATION_FILTER, nameQuery: "灵根" });
     expect(upper.map((r) => r.id)).toEqual(["r1"]);
+    // 拉丁字母真正触达 toLowerCase 分支（中文无大小写概念）
+    const latin = [
+      makeRel({ id: "r6", sourceType: "character", sourceName: "Avatar", targetType: "character", targetName: "Zhong San", relationType: "ally" }),
+    ];
+    expect(filterRelations(latin, { ...EMPTY_RELATION_FILTER, nameQuery: "avatar" })).toHaveLength(1);
+    expect(filterRelations(latin, { ...EMPTY_RELATION_FILTER, nameQuery: "zhong" })).toHaveLength(1);
   });
 
   it("名称搜索：目标名命中", () => {

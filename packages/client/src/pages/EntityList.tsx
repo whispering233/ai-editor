@@ -92,6 +92,7 @@ export default function EntityList({ type }: { type: string }) {
     setOrder("desc");
     setItems(null);
     setError(null);
+    setCreateOpen(false);
   }, [type]);
 
   // 搜索防抖 300ms；关键词变化时页码重置 0（同批 setState，只发一次请求）
