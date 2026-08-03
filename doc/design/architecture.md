@@ -114,8 +114,10 @@ ai-editor/
 │   │   │   ├── routes/
 │   │   │   │   ├── entity.ts      # 实体 CRUD 路由
 │   │   │   │   ├── relation.ts    # 关系管理路由
-│   │   │   │   ├── delta.ts       # Delta 路由
-│   │   │   │   ├── outline.ts     # 大纲操作路由
+│   │   │   │   ├── delta.ts       # Delta 路由（含 target_type 白名单校验，S13.3）
+│   │   │   │   ├── outline.ts     # 大纲操作路由（含节点 data 按层级校验，S12.1）
+│   │   │   │   ├── trash.ts       # 回收站路由（S4.3）
+│   │   │   │   ├── settings.ts    # 设置路由（S1.3）
 │   │   │   │   ├── chat.ts        # AI 对话（SSE 流式响应）
 │   │   │   │   └── project.ts     # 项目配置路由
 │   │   │   └── middleware/
@@ -128,8 +130,9 @@ ai-editor/
 │       ├── src/
 │       │   ├── main.tsx
 │       │   ├── pages/
-│       │   │   ├── Overview.tsx    # 中栏「概览」tab（含无项目引导态）
+│       │   │   ├── Dashboard.tsx    # 中栏「概览」tab（含无项目引导态：有书列出可打开）
 │       │   │   ├── Outline.tsx
+│       │   │   ├── OutlineDetail.tsx # 大纲节点详情页（S12.2：结构化 data 表单/变更记录/相关实体）
 │       │   │   ├── Canvas.tsx
 │       │   │   ├── EntityList.tsx
 │       │   │   ├── EntityDetail.tsx
@@ -137,25 +140,37 @@ ai-editor/
 │       │   │   ├── Trash.tsx
 │       │   │   └── Settings.tsx
 │       │   ├── components/
+│       │   │   ├── AppShell.tsx   # 三栏工作台外壳（U2）
 │       │   │   ├── ui/            # shadcn CLI 生成基础组件
 │       │   │   ├── sidebar/       # 左栏：产品标识、书架（项目→会话树）、设置、主题切换
 │       │   │   ├── main-panel/    # 中栏外壳：信息条、TabBar
 │       │   │   ├── chat/          # 右栏常驻 ChatPanel（会话/消息/提案卡/focus 小条）
-│       │   │   ├── overview/      # 概览 tab 区块组件
-│       │   │   ├── entity/
-│       │   │   ├── outline/
-│       │   │   ├── canvas/        # 画布（拖拽/连线）
-│       │   │   └── hook/
+│       │   │   ├── delta/         # 变更记录展示与创建（S5.4/S12.3：列表/创建表单/chips）
+│       │   │   ├── feedback/      # 全局反馈（U6：toast 桥接 + ErrorBanner）
+│       │   │   ├── page-nav/      # 页面导航（U7：面包屑）
+│       │   │   ├── entity/        # 实体列表/详情/关联组件
+│       │   │   ├── outline/       # 大纲组件（dialogs 等）
+│       │   │   ├── canvas/        # 画布（拖拽/连线，S10 规划）
+│       │   │   └── hook/          # 伏笔面板（S9 规划）
 │       │   ├── stores/            # Zustand
 │       │   │   ├── chat.ts        # 会话归属项目：currentProjectId + currentSessionId
 │       │   │   ├── project.ts
 │       │   │   └── ui.ts          # 含主题态（light/dark）
 │       │   ├── hooks/
 │       │   │   ├── use-api.ts
-│       │   │   ├── use-sse.ts
-│       │   │   └── use-route.ts
+│       │   │   ├── use-sse.ts      # fetch + ReadableStream 自写 SSE（POST /chat 专用）
+│       │   │   ├── use-route.ts    # 自制 hash 路由
+│       │   │   ├── use-theme.ts    # 主题切换（localStorage ai-editor:theme）
+│       │   │   └── use-media-query.ts # <1024px 抽屉判定
 │       │   └── lib/
-│       │       └── api.ts
+│       │       ├── api.ts          # 全部端点 fetch 封装
+│       │       ├── outline-tree.ts # 大纲树纯函数（findNode/canMoveTo/dropInsertOrder 等）
+│       │       ├── entity-detail.ts # 实体 data 字段配置与表单辅助
+│       │       ├── delta.ts        # 变更记录展示纯函数（op 摘要/值格式化）
+│       │       ├── delta-create.ts # 变更记录创建纯函数（字段选项/op 推断/changes 构造）
+│       │       ├── outline-detail.ts # 节点详情页字段配置（决策 23 麦基字段集）
+│       │       ├── error-messages.ts # 错误码 → 中文文案
+│       │       └── utils.ts
 │       ├── index.html
 │       ├── vite.config.ts
 │       ├── package.json
