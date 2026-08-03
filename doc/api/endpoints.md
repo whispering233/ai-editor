@@ -402,7 +402,10 @@ id: string;
 // Req
 {
   node_id: string;                // 触发变更的大纲节点 ID
-  target_type: string;            // 变更目标类型
+  target_type: string;            // 变更目标类型——**仅实体类型**：character/setting/location/hook
+                                  //   （2026-08 收紧：大纲节点不可作为变更目标——节点代表的故事导致实体
+                                  //   发生变更，节点结构化信息不出现在变更记录中；历史 outline_node 目标
+                                  //   数据保留展示，仅创建路径拒绝；校验在路由层，shared schema 不动）
   target_id: string;              // 变更目标 ID
   changes: {
     field: string;                // 字段名
@@ -425,7 +428,9 @@ id: string;
 }
 
 // Res: 400
-{ error: { code: "VALIDATION_ERROR" } }
+// { error: { code: "VALIDATION_ERROR" } }
+// 触发条件：schema 校验失败（含 fields）；per-op 必填缺失（set→to、update→from+to、add/remove→value）；
+//   target_type 非实体类型（2026-08 收紧：仅 character/setting/location/hook，路由层白名单校验）
 
 // 示例
 // Req: { node_id: "sc-37", target_type: "character", target_id: "char-3",

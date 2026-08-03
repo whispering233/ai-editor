@@ -1,6 +1,7 @@
 // Delta 路由测试（S5.3）：POST 追加 / GET /node/:nodeId / POST /compute
 // 覆盖：201 ok 包裹与 applied 全字段、order 全局单调递增、空 changes/非法 op/per-op 缺必填（400，
 //       四 op 全表驱动）、触发节点前置校验（404 OUTLINE_NODE_NOT_FOUND，防死记录，含软删）、
+//       S13.3 target_type 白名单（outline_node/未知类型 → 400 VALIDATION_ERROR；character → 201 回归）、
 //       GET 可见性（软删触发节点 → 空数组）与 order 升序、
 //       compute 树路径累积（决策 9 双层排序）+ 回显（targetType/targetId/atNodeId）、
 //       update 冲突（conflicts + 保持手动值）、compute 404 映射（OUTLINE_NODE_NOT_FOUND /
@@ -279,6 +280,59 @@ describe("POST /api/v1/delta 追加", () => {
     });
     expect(status).toBe(404);
     expect(body.error?.code).toBe("OUTLINE_NODE_NOT_FOUND");
+  });
+
+  it("target_type=outline_node → 400 VALIDATION_ERROR（S13.3 收紧：变更目标仅实体类型）", async () => {
+    const { app } = await seed();
+    const { status, body } = await postDelta(app, {
+      node_id: "sc-1",
+      target_type: "outline_node",
+      target_id: "sc-1",
+      changes: [{ field: "status", op: "set", to: "active" }],
+      description: "x",
+    });
+    expect(status).toBe(400);
+    expect(body.error?.code).toBe("VALIDATION_ERROR");
+    expect(body.error?.message).toContain("outline_node");
+    // oracle 可选建议：锁定合法类型列表措辞，防未来列表变更与 endpoints.md 漂移无感
+    expect(body.error?.message).toContain("character/setting/location/hook");
+  });
+
+  it("target_type 白名单先于节点存在性校验（outline_node + 不存在节点 → 400 而非 404）", async () => {
+    const { app, charId } = await seed();
+    const { status, body } = await postDelta(app, {
+      node_id: "sc-999", // 不存在：若 target_type 校验在后，这里会先 404
+      target_type: "outline_node",
+      target_id: charId,
+      changes: [{ field: "a", op: "set", to: 1 }],
+      description: "x",
+    });
+    expect(status).toBe(400);
+    expect(body.error?.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("target_type=未知类型 → 400 VALIDATION_ERROR；character → 201（白名单回归）", async () => {
+    const { app, charId } = await seed();
+    const unknown = await postDelta(app, {
+      node_id: "sc-1",
+      target_type: "weird_type",
+      target_id: charId,
+      changes: [{ field: "a", op: "set", to: 1 }],
+      description: "x",
+    });
+    expect(unknown.status).toBe(400);
+    expect(unknown.body.error?.code).toBe("VALIDATION_ERROR");
+    expect(unknown.body.error?.message).toContain("weird_type");
+
+    const character = await postDelta(app, {
+      node_id: "sc-1",
+      target_type: "character",
+      target_id: charId,
+      changes: [{ field: "a", op: "set", to: 1 }],
+      description: "回归",
+    });
+    expect(character.status).toBe(201);
+    expect(character.body.data?.applied).toMatchObject({ targetType: "character", targetId: charId });
   });
 
   it("node_id 指向软删节点 → 404 OUTLINE_NODE_NOT_FOUND（防死记录）", async () => {

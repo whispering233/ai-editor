@@ -1,11 +1,14 @@
 // Delta 路由（S5.3）：POST /api/v1/delta（追加）/ GET /node/:nodeId（按节点查询）/ POST /compute（状态计算）
 //
 // 契约来源：doc/api/endpoints.md 第 395-510 行（Delta 变更追踪）、决策 9（computeState 累积规则）、
-// 决策 12 修订（可见性联动）。
+// 决策 12 修订（可见性联动）、S13.3 收紧（变更目标仅实体类型——大纲节点不可作为变更目标，
+//   历史 outline_node 目标数据保留展示，创建路径拒绝）。
 // 错误映射（对照 endpoints.md 错误码）：
 //   参数校验失败 → 400 VALIDATION_ERROR（zod 抛错由 errorHandler 统一映射，含 fields；
 //     per-op 必填字段（endpoints.md 第 407-418 行）因 op 而异、zod 无法表达，路由层补校验
-//     → HttpError 400 VALIDATION_ERROR，与 entity.ts validateDataByType 同思路）
+//     → HttpError 400 VALIDATION_ERROR，与 entity.ts validateDataByType 同思路；
+//     S13.3 target_type 白名单校验同此 400——schema 层 target_type 为宽松 z.string()，
+//     收紧在路由层（shared schema 不动，同 S12.1 节点 data 校验模式））
 //   触发节点不存在或已软删 → 404 OUTLINE_NODE_NOT_FOUND（POST /delta 与 /delta/compute 路由层前置校验；
 //     POST /delta 契约虽未定义该错误码，但 db 层 insertDelta 不校验节点（delta.ts 注释：缺失节点记录
 //     因可见性规则永久不可见），路由层拦截防死记录——oracle 建议）
@@ -13,7 +16,7 @@
 import { Hono } from "hono";
 import { computeState, findOutlineNode, getEntity, insertDelta, listDeltasByNode, readOutlineFile } from "@ai-editor/db";
 import type { DeltaChange } from "@ai-editor/shared";
-import { mapRowToDelta } from "@ai-editor/shared";
+import { ENTITY_TYPES, mapRowToDelta } from "@ai-editor/shared";
 import { deltaComputeReqSchema, deltaCreateReqSchema } from "@ai-editor/shared/schemas";
 import { HttpError, ok } from "../middleware/error.js";
 import { requireCurrentProject, type ProjectContext } from "../middleware/project.js";
@@ -68,8 +71,25 @@ function validateChangesByOp(changes: DeltaChange[]): void {
   }
 }
 
+/**
+ * 变更目标类型白名单校验（S13.3 收紧：仅实体类型 character/setting/location/hook——大纲节点代表的
+ * 故事导致实体发生变更，节点结构化信息不应出现在变更记录中；历史 outline_node 目标数据保留展示，
+ * 仅创建路径拒绝）。schema 层 target_type 为宽松 z.string()（shared 不动），收紧在路由层
+ * （与 S12.1 节点 data 按层级校验同模式）。不通过 → 400 VALIDATION_ERROR（参照 entity.ts parseTypeParam 错误风格）。
+ */
+function assertDeltaTargetType(targetType: string): void {
+  if (!(ENTITY_TYPES as readonly string[]).includes(targetType)) {
+    throw new HttpError(
+      400,
+      "VALIDATION_ERROR",
+      `非法变更目标类型: ${targetType}（变更目标仅限实体类型: ${ENTITY_TYPES.join("/")}）`,
+    );
+  }
+}
+
 // POST /api/v1/delta —— 追加属性变更（201；order 服务端全局单调生成）
-// 校验顺序（oracle 建议）：schema → 触发节点存在性（404）→ per-op 必填（400）→ insert
+// 校验顺序（oracle 建议）：schema → target_type 白名单（400，S13.3 请求形状校验，无 DB 读）→
+//   触发节点存在性（404）→ per-op 必填（400）→ insert
 deltaRoutes.post("/", async (c) => {
   const project = requireCurrentProject();
   const raw = await c.req.json().catch(() => null);
@@ -78,6 +98,7 @@ deltaRoutes.post("/", async (c) => {
     throw parsed.error; // → 400 VALIDATION_ERROR（含 fields）
   }
   const { node_id, target_type, target_id, changes, description } = parsed.data;
+  assertDeltaTargetType(target_type); // S13.3：变更目标仅实体类型（shared schema 不动，路由层收紧）
   assertOutlineNode(project, node_id); // 触发节点必须存在且未软删（防死记录）
   validateChangesByOp(changes); // per-op 必填字段（endpoints.md 第 407-418 行）
   const row = insertDelta(project.db, {

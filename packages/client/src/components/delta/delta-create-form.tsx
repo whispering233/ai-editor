@@ -1,8 +1,9 @@
-// 变更记录创建表单（S12.3；契约 doc/ui/pages/outline.md「变更记录 · 新建变更」+ endpoints.md L395-434）
+// 变更记录创建表单（S12.3；S13.3 收紧：变更目标仅实体类型——「大纲节点」选项已移除，目标类型默认空需选择）
+// 契约 doc/ui/pages/outline.md「变更记录 · 新建变更」+ endpoints.md L395-434
 // 数据：POST /api/v1/delta（createDelta）——node_id = 当前节点，目标/字段/op/值/描述由作者填写；
 //   目标实体列表 GET /entity/:type；目标实体详情 GET /entity/:type/:id（update 自动取 from）
-// 交互：内联展开（就地为主不弹窗）；目标类型默认「大纲节点」、目标默认当前节点；字段下拉按目标类型
-//   （实体 = ENTITY_DATA_SCHEMAS keys、节点 = 决策 23 字段集）；op 推断纯函数（数组 add/remove、
+// 交互：内联展开（就地为主不弹窗）；目标类型默认空（占位「请选择目标类型」，用户确认选择——S13.3）；
+//   字段下拉按目标实体类型 = ENTITY_DATA_SCHEMAS keys；op 推断纯函数（数组 add/remove、
 //   标量 set/update——update 的 from 自动取目标当前 data 值并标注「旧值：xxx」，作者无需手填；
 //   data 后续被改 → compute 时跳过 + conflicts 标注，决策 9 修订机制兜底）；值/描述必填校验；
 //   成功 → onCreated（父刷新列表 + 收起）；VALIDATION_ERROR → 行内提示；OUTLINE_NODE_NOT_FOUND → toast + 收起
@@ -17,12 +18,9 @@ import {
   inferOpOptions,
   isArrayField,
   isNumericField,
-  nodeDeltaFieldOptions,
 } from "../../lib/delta-create";
 import { formatDeltaValue, targetTypeLabel } from "../../lib/delta";
-import { findNode, flattenTree } from "../../lib/outline-tree";
 import { cn } from "../../lib/utils";
-import { useProjectStore } from "../../stores/project";
 import { useUiStore } from "../../stores/ui";
 import { Button } from "@/components/ui/button";
 
@@ -49,13 +47,11 @@ export function DeltaCreateForm({
   onCreated: () => void;
   onClose: () => void;
 }) {
-  const outline = useProjectStore((s) => s.outline);
-
   // ============ 表单草稿状态 ============
-  /** 目标类型（默认大纲节点——最常见的「本节点触发了什么变化」场景） */
-  const [targetType, setTargetType] = useState<string>("outline_node");
-  /** 目标 id（outline_node 默认当前节点；实体待选） */
-  const [targetId, setTargetId] = useState<string>(nodeId);
+  /** 目标类型（S13.3 收紧：默认空——用户确认选择实体类型；大纲节点不再可选） */
+  const [targetType, setTargetType] = useState<string>("");
+  /** 目标实体 id（待选） */
+  const [targetId, setTargetId] = useState<string>("");
   const [field, setField] = useState("");
   const [op, setOp] = useState<DeltaOp>("add");
   const [value, setValue] = useState("");
@@ -70,19 +66,16 @@ export function DeltaCreateForm({
   const [targetData, setTargetData] = useState<Record<string, unknown> | null>(null);
   const [dataError, setDataError] = useState<string | null>(null);
 
-  // 目标类型切换：outline_node → 目标重置为当前节点；实体 → 清空目标等待选择 + 拉列表
+  // 目标类型切换：重置目标等待选择 + 拉该类型实体列表（S13.3 起仅实体类型）
   useEffect(() => {
-    if (targetType === "outline_node") {
-      setTargetId(nodeId);
-      setEntityList(null);
-      setEntityListError(null);
-      setTargetData(null);
-      setDataError(null);
-      return;
-    }
     setTargetId("");
     setTargetData(null);
     setDataError(null);
+    if (targetType === "") {
+      setEntityList(null);
+      setEntityListError(null);
+      return;
+    }
     let cancelled = false;
     setEntityList(null);
     setEntityListError(null);
@@ -99,11 +92,11 @@ export function DeltaCreateForm({
     return () => {
       cancelled = true;
     };
-  }, [targetType, nodeId, entityListTick]);
+  }, [targetType, entityListTick]);
 
   // 目标实体详情（op=update 的 from 数据源）；目标变更时重拉
   useEffect(() => {
-    if (targetType === "outline_node" || targetId === "") return;
+    if (targetType === "" || targetId === "") return;
     let cancelled = false;
     setTargetData(null);
     setDataError(null);
@@ -131,29 +124,24 @@ export function DeltaCreateForm({
 
   // ============ 派生值（字段选项 / 当前值 / op 可用集） ============
 
-  const targetNode = targetType === "outline_node" && targetId !== "" ? findNode(outline?.children ?? [], targetId) : null;
-  /** 字段下拉项（实体按类型 schema keys；节点按选中节点层级字段，节点缺失 → 并集兜底） */
-  const fieldOptions =
-    targetType === "outline_node" ? nodeDeltaFieldOptions(targetNode?.type ?? null) : entityDeltaFieldOptions(targetType);
-  /** 字段作用域（isArrayField/isNumericField 查表用） */
-  const fieldScope = targetType === "outline_node" ? (targetNode?.type ?? "scene") : targetType;
-  /** 目标当前值（update from 来源：实体 → 详情 data；节点 → 树中 node.data） */
-  const currentValue = targetType === "outline_node" ? targetNode?.data?.[field] : targetData?.[field];
+  /** 字段下拉项（实体按类型 schema keys——S13.3 起仅实体目标） */
+  const fieldOptions = entityDeltaFieldOptions(targetType);
+  /** 目标当前值（update from 来源：实体详情 data） */
+  const currentValue = targetData?.[field];
   /** 当前字段的 op 可用集（数组 add/remove、标量 update/set 或仅 set） */
-  const opInfo = inferOpOptions({ array: isArrayField(fieldScope, field), currentValue });
+  const opInfo = inferOpOptions({ array: isArrayField(targetType, field), currentValue });
 
   /** 字段切换 → 按推断重置 op（作者随后可手动切换）；currentValue 须取新字段的目标当前值（闭包内是旧字段） */
   function handleFieldChange(next: string) {
     setField(next);
-    const nextValue = targetType === "outline_node" ? targetNode?.data?.[next] : targetData?.[next];
-    setOp(inferOpOptions({ array: isArrayField(fieldScope, next), currentValue: nextValue }).default);
+    setOp(inferOpOptions({ array: isArrayField(targetType, next), currentValue: targetData?.[next] }).default);
   }
 
   // ============ 提交 ============
 
   async function handleSubmit() {
     if (submitting) return;
-    if (targetId === "") {
+    if (targetType === "" || targetId === "") {
       setSubmitError("请选择变更目标");
       return;
     }
@@ -166,7 +154,7 @@ export function DeltaCreateForm({
       setSubmitError("请填写描述（本节点触发了什么变化）");
       return;
     }
-    const built = buildDeltaChange({ field, op, rawValue: value, numeric: isNumericField(fieldScope, field), currentValue });
+    const built = buildDeltaChange({ field, op, rawValue: value, numeric: isNumericField(targetType, field), currentValue });
     if ("error" in built) {
       setSubmitError(built.error);
       return;
@@ -198,16 +186,23 @@ export function DeltaCreateForm({
 
   // ============ 渲染 ============
 
+  // S13.3：targetType 仅四类实体（默认 "" 未选态）；cast 到 EntityType 仅在非空分支使用
+  //（targetId 守卫/字段选项均以空串短路），运行时安全——渲染分支才做实体化处理
   const entityType = targetType as EntityType;
-  const isEntity = targetType !== "outline_node";
 
   return (
     <div className="mb-3 space-y-3 rounded-md border border-border bg-muted/40 p-3">
-      {/* ① 目标：类型 + 实体/节点选择 */}
+      {/* ① 目标：类型 + 实体选择（S13.3 收紧：仅实体类型，无默认——用户先选类型） */}
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <p className="mb-1 text-xs font-medium text-foreground">目标类型</p>
-          <select value={targetType} onChange={(e) => setTargetType(e.target.value)} className={FIELD_CLASS} aria-label="目标类型">
+          <select
+            value={targetType}
+            onChange={(e) => setTargetType(e.target.value)}
+            className={cn(FIELD_CLASS, targetType === "" && "text-muted-foreground")}
+            aria-label="目标类型"
+          >
+            <option value="">请选择目标类型</option>
             {DELTA_TARGET_TYPE_OPTIONS.map((t) => (
               <option key={t.value} value={t.value}>
                 {t.label}
@@ -217,48 +212,34 @@ export function DeltaCreateForm({
         </div>
         <div>
           <p className="mb-1 text-xs font-medium text-foreground">目标</p>
-          {isEntity ? (
-            entityListError !== null ? (
-              <div className="flex items-center gap-2 text-xs text-destructive">
-                <span>
-                  {entityListError === CLIENT_NETWORK_ERROR
-                    ? "无法连接服务，请确认 ai-editor 服务已启动"
-                    : "实体列表加载失败"}
-                </span>
-                <Button variant="outline" size="xs" type="button" onClick={() => setEntityListTick((t) => t + 1)}>
-                  重试
-                </Button>
-              </div>
-            ) : entityList === null ? (
-              <p className="py-1 text-xs text-muted-foreground">加载中…</p>
-            ) : entityList.length === 0 ? (
-              <p className="py-1 text-xs text-muted-foreground">暂无{targetTypeLabelOf(entityType)}</p>
-            ) : (
-              <select
-                value={targetId}
-                onChange={(e) => setTargetId(e.target.value)}
-                className={cn(FIELD_CLASS, targetId === "" && "text-muted-foreground")}
-                aria-label="目标实体"
-              >
-                <option value="">请选择{targetTypeLabelOf(entityType)}</option>
-                {entityList.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.name}
-                  </option>
-                ))}
-              </select>
-            )
+          {targetType === "" ? (
+            <p className="py-1 text-xs text-muted-foreground">请先选择目标类型</p>
+          ) : entityListError !== null ? (
+            <div className="flex items-center gap-2 text-xs text-destructive">
+              <span>
+                {entityListError === CLIENT_NETWORK_ERROR
+                  ? "无法连接服务，请确认 ai-editor 服务已启动"
+                  : "实体列表加载失败"}
+              </span>
+              <Button variant="outline" size="xs" type="button" onClick={() => setEntityListTick((t) => t + 1)}>
+                重试
+              </Button>
+            </div>
+          ) : entityList === null ? (
+            <p className="py-1 text-xs text-muted-foreground">加载中…</p>
+          ) : entityList.length === 0 ? (
+            <p className="py-1 text-xs text-muted-foreground">暂无{targetTypeLabelOf(entityType)}</p>
           ) : (
             <select
               value={targetId}
               onChange={(e) => setTargetId(e.target.value)}
-              className={FIELD_CLASS}
-              aria-label="目标大纲节点"
+              className={cn(FIELD_CLASS, targetId === "" && "text-muted-foreground")}
+              aria-label="目标实体"
             >
-              {flattenTree(outline?.children ?? []).map((o) => (
-                <option key={o.id} value={o.id}>
-                  {"　".repeat(o.depth)}
-                  {o.label}
+              <option value="">请选择{targetTypeLabelOf(entityType)}</option>
+              {entityList.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.name}
                 </option>
               ))}
             </select>

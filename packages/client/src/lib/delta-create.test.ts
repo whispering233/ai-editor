@@ -1,15 +1,27 @@
-// lib/delta-create 纯函数测试（S12.3）：字段选项（实体 schema keys / 节点决策 23 字段集）、
-//   op 推断（数组 add/remove、标量 set/update）、changes 构造（update 自动 from）、值解析（数字字段）
+// lib/delta-create 纯函数测试（S12.3；S13.3 收紧：变更目标仅实体类型——DELTA_TARGET_TYPE_OPTIONS
+//   不含 outline_node、节点字段选项已删除）：字段选项（实体 schema keys）、op 推断
+//   （数组 add/remove、标量 set/update）、changes 构造（update 自动 from）、值解析（数字字段）
 import { describe, expect, it } from "vitest";
 import {
+  DELTA_TARGET_TYPE_OPTIONS,
   buildDeltaChange,
   entityDeltaFieldOptions,
   inferOpOptions,
   isArrayField,
   isNumericField,
-  nodeDeltaFieldOptions,
   resolvableFromValue,
 } from "./delta-create";
+
+describe("DELTA_TARGET_TYPE_OPTIONS（S13.3 收紧：仅实体类型）", () => {
+  it("四类实体齐备（character/setting/location/hook）", () => {
+    expect(DELTA_TARGET_TYPE_OPTIONS.map((o) => o.value)).toEqual(["character", "setting", "location", "hook"]);
+    expect(DELTA_TARGET_TYPE_OPTIONS.map((o) => o.label)).toEqual(["人物", "设定", "地点", "伏笔"]);
+  });
+
+  it("不含 outline_node（大纲节点不可作为变更目标——历史数据展示保留，创建路径收紧）", () => {
+    expect(DELTA_TARGET_TYPE_OPTIONS.some((o) => o.value === "outline_node")).toBe(false);
+  });
+});
 
 describe("entityDeltaFieldOptions（字段名 = shared ENTITY_DATA_SCHEMAS keys，编译期断言）", () => {
   it("character：全量字段（除 custom_fields）+ label + 数组标记", () => {
@@ -40,37 +52,12 @@ describe("entityDeltaFieldOptions（字段名 = shared ENTITY_DATA_SCHEMAS keys�
   });
 });
 
-describe("nodeDeltaFieldOptions（决策 23 字段集）", () => {
-  it("scene 层级字段：goal/conflict_levels/value_from/value_to，conflict_levels 为数组", () => {
-    const opts = nodeDeltaFieldOptions("scene");
-    expect(opts.map((o) => o.key)).toEqual(["goal", "conflict_levels", "value_from", "value_to"]);
-    expect(opts.find((o) => o.key === "conflict_levels")?.array).toBe(true);
-  });
-
-  it("chapter 层级字段", () => {
-    expect(nodeDeltaFieldOptions("chapter").map((o) => o.key)).toEqual(["reversal", "climax_scene"]);
-  });
-
-  it("节点类型未知（目标不在树中）→ 三层字段集并集兜底", () => {
-    const keys = nodeDeltaFieldOptions(null).map((o) => o.key);
-    expect(keys).toEqual([
-      "goal",
-      "conflict_levels",
-      "value_from",
-      "value_to",
-      "reversal",
-      "climax_scene",
-      "inciting_scene",
-    ]);
-  });
-});
-
 describe("isArrayField / isNumericField", () => {
-  it("数组字段：character.personality/abilities、setting.rules、scene.conflict_levels", () => {
+  it("数组字段：character.personality/abilities、setting.rules（S13.3 起仅实体字段——scene 项已删）", () => {
     expect(isArrayField("character", "personality")).toBe(true);
     expect(isArrayField("character", "abilities")).toBe(true);
     expect(isArrayField("setting", "rules")).toBe(true);
-    expect(isArrayField("scene", "conflict_levels")).toBe(true);
+    expect(isArrayField("scene", "conflict_levels")).toBe(false);
     expect(isArrayField("character", "role")).toBe(false);
   });
 

@@ -1,24 +1,24 @@
-// 变更记录创建表单辅助纯函数与配置（S12.3）
-// 契约：endpoints.md L395-434（POST /delta per-op 必填语义：set→to、update→from+to、add/remove→value）、
+// 变更记录创建表单辅助纯函数与配置（S12.3；S13.3 收紧：变更目标仅实体类型——大纲节点代表的故事
+//   导致实体发生变更，节点结构化信息不应出现在变更记录中，决策 2026-08）
+// 契约：endpoints.md L395-434（POST /delta per-op 必填语义：set→to、update→from+to、add/remove→value；
+//   S13.3 target_type 注释：仅 character/setting/location/hook）、
 //   决策 9 修订（update 的 from 由客户端自动取目标当前 data 值——作者无需手填；data 后续被改 →
-//   compute 时跳过 + conflicts 标注，机制兜底）、决策 23（大纲节点字段集，载体 node.data）、
+//   compute 时跳过 + conflicts 标注，机制兜底）、
 //   shared ENTITY_DATA_SCHEMAS（字段名编译期断言：client 只消费类型不打包 zod，schema 变更即编译报错防漂移）
 import type { DeltaChange, DeltaOp, EntityType } from "@ai-editor/shared";
 import { ENTITY_TYPES } from "@ai-editor/shared";
 // 类型-only 导入 schema 常量（编译期擦除，不打包 zod；用于断言本地字段清单 = shared schema keys）
 import type { ENTITY_DATA_SCHEMAS } from "@ai-editor/shared/schemas";
-import type { OutlineNodeType } from "./api";
 import { detailFieldsForType } from "./entity-detail";
-import { detailFieldsForNodeType } from "./outline-detail";
 import { targetTypeLabel } from "./delta";
 
 // ============ 目标类型选项（复用 lib/delta targetTypeLabel，不自行定义标签） ============
 
-/** 变更目标类型下拉（四类实体 + 大纲节点） */
-export const DELTA_TARGET_TYPE_OPTIONS = [
-  ...ENTITY_TYPES.map((t) => ({ value: t, label: targetTypeLabel(t) })),
-  { value: "outline_node", label: targetTypeLabel("outline_node") },
-] as const;
+/** 变更目标类型下拉（S13.3 收紧：仅四类实体——大纲节点不可作为变更目标；历史 outline_node 目标数据保留展示） */
+export const DELTA_TARGET_TYPE_OPTIONS: ReadonlyArray<{ value: string; label: string }> = ENTITY_TYPES.map((t) => ({
+  value: t,
+  label: targetTypeLabel(t),
+}));
 
 // ============ 字段清单（编译期断言 = shared ENTITY_DATA_SCHEMAS 的 keys） ============
 
@@ -68,7 +68,6 @@ function labelsOf(t: EntityType): Record<string, string> {
 const ARRAY_FIELDS: Record<string, readonly string[]> = {
   character: ["personality", "abilities"],
   setting: ["rules"],
-  scene: ["conflict_levels"],
 };
 
 /** 数字字段（值输入解析为 number；余下保持字符串——服务端 delta value 类型 string|number） */
@@ -77,7 +76,7 @@ const NUMERIC_FIELDS: Record<string, readonly string[]> = {
   hook: ["half_life"],
 };
 
-/** 字段是否数组（决定 op 选项）；scope = 实体类型或大纲层级（scene） */
+/** 字段是否数组（决定 op 选项）；scope = 实体类型 */
 export function isArrayField(scope: string, key: string): boolean {
   return (ARRAY_FIELDS[scope] ?? []).includes(key);
 }
@@ -103,29 +102,6 @@ export function entityDeltaFieldOptions(type: string): DeltaFieldOption[] {
   return keys
     .filter((k) => k !== "custom_fields")
     .map((k) => ({ key: k, label: ENTITY_FIELD_LABELS[type]?.[k] ?? k, array: isArrayField(type, k) }));
-}
-
-/**
- * 大纲节点目标字段选项（决策 23 字段集，复用 lib/outline-detail detailFieldsForNodeType）：
- * 目标节点类型已知 → 该层级字段；未知（节点不在树中/已删）→ 三层字段集并集兜底
- */
-export function nodeDeltaFieldOptions(nodeType: OutlineNodeType | null): DeltaFieldOption[] {
-  const configs = nodeType === null ? [] : detailFieldsForNodeType(nodeType);
-  const list = configs.length > 0 ? configs : unionNodeFieldConfigs();
-  return list.map((f) => ({ key: f.key, label: f.label, array: isArrayField("scene", f.key) }));
-}
-
-/** 决策 23 三层字段集并集（scene → chapter → volume 顺序；label 冲突时后写覆盖） */
-function unionNodeFieldConfigs() {
-  const union: Array<{ key: string; label: string }> = [];
-  for (const t of ["scene", "chapter", "volume"] as const) {
-    for (const f of detailFieldsForNodeType(t)) {
-      const i = union.findIndex((u) => u.key === f.key);
-      if (i >= 0) union[i] = f;
-      else union.push(f);
-    }
-  }
-  return union;
 }
 
 // ============ op 推断与 changes 构造 ============
@@ -161,7 +137,7 @@ export interface BuildDeltaChangeArgs {
   /** 值输入原文（trim 后非空校验；数字字段解析 Number，NaN 回退字符串） */
   rawValue: string;
   numeric: boolean;
-  /** op=update 用：目标当前值（实体详情 data / 节点 data；自动取 from，决策 9 修订） */
+  /** op=update 用：目标当前值（实体详情 data；自动取 from，决策 9 修订） */
   currentValue: unknown;
 }
 
