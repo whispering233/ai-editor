@@ -8,4 +8,12 @@ describe("@ai-editor/agent 入口冒烟", () => {
     expect(m.AGENT_PKG_NAME).toBe("@ai-editor/agent");
     expect(m.TOOLS_DEP).toBe("@ai-editor/tools");
   });
+
+  it("S7.4 导出工具调度器与提案仓（createToolDispatcher / createProposalStore / 常量）", () => {
+    expect(typeof m.createToolDispatcher).toBe("function");
+    expect(typeof m.createProposalStore).toBe("function");
+    expect(typeof m.defaultProposalStore.clear).toBe("function");
+    expect(m.PROPOSAL_TTL_MS).toBe(10 * 60_000);
+    expect(m.PROPOSAL_MAX_COUNT).toBeGreaterThan(0);
+  });
 });

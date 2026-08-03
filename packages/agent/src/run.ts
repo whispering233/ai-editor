@@ -40,6 +40,7 @@ import {
   type LLMUsage,
   type RetryOutcome,
 } from "@ai-editor/llm";
+import { AbortedError } from "@ai-editor/tools";
 import {
   buildContext,
   type AssembledContext,
@@ -127,7 +128,11 @@ export interface DispatchResult {
  * - 输入按原 tool_call 顺序；输出**必须同序等长**（防御：条数不符 → AGENT_DISPATCH_ERROR 终止，
  *   防止 tool_call ↔ tool_result 错位配对——决策 18）
  * - signal：决策 16 ③「工具执行中检查取消」（S7.4 executor 承担；长工具执行须监听）
- * - 本层不抛错（失败编码进 isError 结果）；抛错视为调度器缺陷 → 循环终止
+ * - 本层不抛错（失败编码进 isError 结果）；抛错视为调度器缺陷 → 循环终止。
+ *   **例外：AbortedError（tools analysis/utils，决策 16 ③ 取消语义）→ 原样抛穿**——
+ *   S7.4 executor 在工具执行中检查 signal，命中取消即抛 AbortedError；本层 dispatcher
+ *   catch 识别后按用户取消终止（aborted=true、不重试、不视为缺陷），与循环其他环节的
+ *   取消语义一致（决策 16：取消不喂回）
  */
 export type ToolDispatcher = (
   calls: DispatchToolCall[],
@@ -581,7 +586,16 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
       try {
         dispatched = await deps.dispatcher(toDispatch, signal); // 决策 16 ③：工具执行中检查取消（S7.4 承担）
       } catch (err) {
-        // 调度器抛错视为缺陷：终止（不喂回——避免把内部错误当工具结果循环重试）
+        // 取消语义传播（决策 16 ③ + S7.4 约定）：executor 在工具执行中检查 signal，
+        // 命中取消抛 AbortedError（tools analysis/utils）——此处识别并按**用户取消**终止
+        // （aborted=true、不重试、不喂回），不得落入调度器缺陷分支（否则取消会被误报为
+        // AGENT_DISPATCH_ERROR 且 aborted=false，与决策 16「取消不重试」语义冲突）
+        const cancelled = signal?.aborted === true || err instanceof AbortedError;
+        if (cancelled) {
+          emit({ type: "error", code: ABORT_ERROR.code ?? "ABORTED", message: ABORT_ERROR.message, aborted: true });
+          return { ok: false, aborted: true, error: ABORT_ERROR, rounds, retries };
+        }
+        // 其余抛错视为调度器缺陷：终止（不喂回——避免把内部错误当工具结果循环重试）
         const message = `工具调度器抛错：${err instanceof Error ? err.message : String(err)}`;
         emit({ type: "error", code: CODE_DISPATCH, message, aborted: false });
         return {

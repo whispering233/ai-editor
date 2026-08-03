@@ -6,6 +6,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AbortSignalLike, ChatStreamResult, LLMMessage, LLMStreamEvent, LLMUsage } from "@ai-editor/llm";
 import { ABORT_ERROR } from "@ai-editor/llm";
+import { AbortedError } from "@ai-editor/tools";
 import {
   DEFAULT_MAX_ROUNDS,
   runAgent,
@@ -478,6 +479,54 @@ describe("工具失败结构化喂回", () => {
     const result = await runBasic({ produce, dispatcher });
     expect(result.ok).toBe(false);
     expect(result.error?.code).toBe("AGENT_DISPATCH_ERROR");
+  });
+});
+
+// ============ dispatcher 取消传播（S7.4 契约：AbortedError → 用户取消语义） ============
+
+describe("dispatcher 取消传播（S7.4 executor 抛 AbortedError）", () => {
+  it("工具执行中取消 → 按用户取消终止（aborted=true，非 AGENT_DISPATCH_ERROR、不重试）", async () => {
+    const { produce } = createMockProduce([
+      { result: okResult("tool_calls"), events: [toolCallEvent("call_1")] },
+    ]);
+    // S7.4 真实现契约：executor 在工具执行中检查 signal，命中取消抛 AbortedError（tools analysis/utils）
+    const dispatcher = vi.fn(async (): Promise<DispatchResult[]> => {
+      throw new AbortedError();
+    });
+    const events: AgentEvent[] = [];
+    const result = await runBasic({ produce, dispatcher, onEvent: (e) => events.push(e) });
+    expect(result.ok).toBe(false);
+    expect(result.aborted).toBe(true);
+    expect(result.error).toEqual(ABORT_ERROR);
+    expect(result.error?.code).not.toBe("AGENT_DISPATCH_ERROR"); // 取消不是调度器缺陷
+    expect(events[events.length - 1]).toMatchObject({ type: "error", aborted: true });
+    expect(produce).toHaveBeenCalledTimes(1); // 不重试（决策 16：取消不重试）
+  });
+
+  it("signal 在 LLM 调用期间中止且 dispatcher 抛普通错误 → 按取消终止（signal 识别兜底）", async () => {
+    // 场景：produce 期间用户取消（决策 16 ① fetch abort），但竞态下 produce 仍 resolve ok；
+    // dispatcher 抛普通错误（未抛 AbortedError）——run.ts catch 以 signal.aborted 双保险识别
+    const controller = new AbortController();
+    const produce = vi.fn(
+      async (_m: LLMMessage[], _s?: AbortSignalLike, onEvent?: (e: LLMStreamEvent) => void): Promise<ChatStreamResult> => {
+        controller.abort();
+        onEvent?.({ type: "tool_call", toolCall: { id: "call_1", name: "get_entity", arguments: {}, rawArguments: "{}" } });
+        return okResult("tool_calls");
+      },
+    );
+    const dispatcher = vi.fn(async (): Promise<DispatchResult[]> => {
+      throw new Error("executor 内部错误");
+    });
+    const result = await runAgent({
+      userMessage: "hi",
+      session: [],
+      deps: { produce, dispatcher },
+      signal: controller.signal,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.aborted).toBe(true);
+    expect(result.error).toEqual(ABORT_ERROR);
+    expect(result.error?.code).not.toBe("AGENT_DISPATCH_ERROR");
   });
 });
 
