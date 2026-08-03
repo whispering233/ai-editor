@@ -28,8 +28,8 @@
 
 | 分栏 | API 字段 |
 |------|---------|
-| 实体 | `entities[].{ id, type, name, deleted_at }`（按 `deleted_at` 倒序） |
-| 节点 | `nodes[].{ id, type, title, deleted_at }`（按 `deleted_at` 倒序；purge 时含整棵子树） |
+| 实体 | `entities[].{ id, type, name, deletedAt }`（按 `deletedAt` 倒序） |
+| 节点 | `nodes[].{ id, type, title, deletedAt }`（按 `deletedAt` 倒序；purge 时含整棵子树） |
 | 还原结果 | `restored` / `restoredChildren` / `restoredRelations` / `restoredDeltas`（toast 摘要） |
 
 ## 关键交互

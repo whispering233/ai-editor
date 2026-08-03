@@ -10,6 +10,7 @@ import { Hono } from "hono";
 import { createRelation } from "@ai-editor/db";
 import { errorHandler } from "../middleware/error.js";
 import {
+  closeProject,
   getCurrentProject,
   initProject,
   originCheckMiddleware,
@@ -83,6 +84,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  const project = getCurrentProject();
+  if (project) closeProject(project);
   setCurrentProject(null);
   for (const dir of tmpDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });
