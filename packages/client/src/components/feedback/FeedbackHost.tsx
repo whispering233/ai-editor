@@ -9,7 +9,7 @@
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { CircleAlert, X } from "lucide-react";
-import { useUiStore, type Toast } from "../../stores/ui";
+import { useUiStore, TOAST_DURATION_MS, type Toast } from "../../stores/ui";
 import { Toaster } from "../ui/sonner";
 
 /**
@@ -32,9 +32,9 @@ export function FeedbackHost() {
     if (!toastState || !shouldNotifyToast(toastState, lastHandledToastId.current)) return;
     lastHandledToastId.current = toastState.id;
     if (toastState.kind === "error") {
-      toast.error(toastState.text);
+      toast.error(toastState.text, { duration: TOAST_DURATION_MS });
     } else {
-      toast.success(toastState.text);
+      toast.success(toastState.text, { duration: TOAST_DURATION_MS });
     }
   }, [toastState]);
 

@@ -54,7 +54,8 @@ interface UiState {
   clearFocusOutlineNode: () => void;
 }
 
-const TOAST_DURATION_MS = 3_000;
+/** toast 快照保留时长（FeedbackHost 桥接 sonner 时同步作为视觉时长，契约见 layout.md §4.3） */
+export const TOAST_DURATION_MS = 3_000;
 let toastSeq = 0;
 
 export const useUiStore = create<UiState>((set, get) => ({
