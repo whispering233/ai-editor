@@ -14,8 +14,8 @@ import { requireCurrentProject } from "../middleware/project.js";
 /** 实体路由（挂载于 /api/v1/entity，index.ts） */
 export const entityRoutes = new Hono();
 
-/** 校验 :type 路径参数为合法实体类型（非法 → 400 VALIDATION_ERROR） */
-function parseTypeParam(type: string): EntityType {
+/** 校验 :type 路径参数为合法实体类型（非法 → 400 VALIDATION_ERROR；trash 路由复用） */
+export function parseTypeParam(type: string): EntityType {
   const parsed = entityTypeSchema.safeParse(type);
   if (!parsed.success) {
     throw new HttpError(400, "VALIDATION_ERROR", `非法实体类型: ${type}`);
