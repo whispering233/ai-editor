@@ -1,3 +1,8 @@
+// Base UI Menu 封装（shadcn base-nova 风格；@base-ui/react/menu）
+// 契约红线（曾踩坑，Base UI error #31）：DropdownMenuLabel（= Menu.GroupLabel）**必须**由
+// DropdownMenuGroup（= Menu.Group）包裹——GroupLabel 读取 Group 上下文，缺失即抛
+// 「MenuGroupContext is missing」（生产态显示 Base UI error #31 并白屏，见
+// components/chat/chat-panel.test.tsx「Base UI Menu 契约」护栏用例）。Item/Separator 无此要求。
 import * as React from "react"
 import { Menu as MenuPrimitive } from "@base-ui/react/menu"
 

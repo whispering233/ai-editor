@@ -237,3 +237,60 @@ describe("ErrorBoundary 兜底（问题 3 防护：渲染异常 → 可恢复错
     expect(html).not.toContain("界面出现异常");
   });
 });
+
+// ============ Base UI Menu 契约护栏（问题 3 实机根因：error #31） ============
+// 根因（已确证）：SessionTitleBar 曾把 DropdownMenuLabel（= Menu.GroupLabel）**裸**放在
+// DropdownMenuContent（Popup）内——点击 trigger 打开菜单 → Popup 挂载 → GroupLabel 读
+// MenuGroupContext 缺失 → 抛「Base UI error #31; visit https://base-ui.com/production-error?code=31」
+// （dev 消息：MenuGroupContext is missing. Menu group parts must be used within <Menu.Group> or
+// <Menu.RadioGroup>.）。此前无 ErrorBoundary 时 = 整页白屏（原始问题 3 现象），ErrorBoundary 落地后
+// = 错误卡（用户实测确认）。修复：Label 用 DropdownMenuGroup（= Menu.Group）包裹（ChatPanel.tsx）。
+// 护栏说明：打开态菜单无法在 SSR 复现（Menu 的 mounted 状态由 effect 驱动，SSR 不执行 effect →
+// Portal 返回 null 不渲染 Popup），故直接渲染 GroupLabel 本体命中同一契约（hooks 在 SSR 同样执行）。
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
+
+describe("Base UI Menu 契约（error #31 根因护栏）", () => {
+  it("裸 DropdownMenuLabel（无 Group）→ 抛 MenuGroupContext is missing（#31 契约）", () => {
+    // 生产态压缩为「Base UI error #31; visit ...code=31」；测试环境 NODE_ENV=test → dev 完整消息
+    expect(() => renderToString(<DropdownMenuLabel>会话（本项目）</DropdownMenuLabel>)).toThrow(
+      /MenuGroupContext is missing/,
+    );
+  });
+
+  it("DropdownMenuGroup 包裹 DropdownMenuLabel → 正常渲染（修复后的正确结构）", () => {
+    const html = renderToString(
+      <DropdownMenuGroup>
+        <DropdownMenuLabel>会话（本项目）</DropdownMenuLabel>
+      </DropdownMenuGroup>,
+    );
+    expect(html).toContain("会话（本项目）");
+  });
+
+  it("完整菜单结构（Trigger + Content + Group/Label + Item + Separator）渲染不抛异常", () => {
+    // open 受控传入：SSR 下 mounted 由 effect 驱动不执行 → Portal 不挂载 Popup（MenuPortal 返回
+    // null），此用例验证结构合法性；打开态崩溃由上面两个契约用例覆盖
+    expect(() =>
+      renderToString(
+        <DropdownMenu open>
+          <DropdownMenuTrigger render={<button>触发</button>} />
+          <DropdownMenuContent>
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>会话（本项目）</DropdownMenuLabel>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem>会话一</DropdownMenuItem>
+            <DropdownMenuItem>会话二</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>,
+      ),
+    ).not.toThrow();
+  });
+});

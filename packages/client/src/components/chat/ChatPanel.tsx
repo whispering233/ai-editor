@@ -31,6 +31,7 @@ import { Button } from "../ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -102,7 +103,12 @@ function SessionTitleBar({ disabled, onClose }: { disabled: boolean; onClose?: (
           }
         />
         <DropdownMenuContent align="start" className="w-64">
-          <DropdownMenuLabel>会话（本项目）</DropdownMenuLabel>
+          {/* GroupLabel 必须由 <Menu.Group> 提供上下文（Base UI 契约，缺失抛 error #31——
+              曾导致点击下拉整页白屏，见 chat-panel.test.tsx「Base UI Menu 契约」护栏用例）；
+              外层 div 的 aria-labelledby 关联也由 Group 的 role="group" 提供（无障碍） */}
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>会话（本项目）</DropdownMenuLabel>
+          </DropdownMenuGroup>
           <DropdownMenuSeparator />
           {sessions && sessions.length === 0 && (
             <div className="px-2 py-2 text-xs text-muted-foreground">暂无历史会话</div>
