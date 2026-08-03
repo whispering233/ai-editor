@@ -534,9 +534,10 @@ describe("节点 data（决策 23）", () => {
   it("GET 无 data 节点响应不含 data 键（省略而非输出 null/undefined）", async () => {
     const app = buildApp();
     await openProject();
-    const vol = (await (await app.request("/api/v1/outline", {
+    // 仅副作用：建一个卷节点，便于断言 GET 响应中无 data 键（卷创建不返回 data）
+    await app.request("/api/v1/outline", {
       method: "POST", headers: HOST_HEADERS, body: JSON.stringify({ type: "volume", title: "卷", parent_id: "root" }),
-    })).json()).data;
+    });
 
     const res = await app.request("/api/v1/outline", { headers: HOST_HEADERS });
     expect(res.status).toBe(200);
