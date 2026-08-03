@@ -1,8 +1,8 @@
-// 大纲节点「变更记录」面板（S5.4；契约 doc/ui/pages/outline.md「变更记录」）
-// 数据：GET /api/v1/delta/node/:nodeId → { nodeId, deltas: DeltaRecord[] }（endpoints.md L436-462）
-// 交互：⋯ 菜单「变更记录」行内展开（就地为主、不弹窗）；列表按 order 升序（客户端兜底排序）；
-//   行 = description + 创建时间 + 目标徽标（targetType 中文 + targetName ?? targetId）+ changes 紧凑 chips；
-//   空态轻提示；网络失败 → 行内错误 + [重试]，不阻塞树操作
+// 大纲节点「变更记录」列表区块（S12.2：自 S5.4 行内面板 node-delta-panel 迁移——详情页整区块形态，
+//   无树缩进；契约 doc/ui/pages/outline.md「节点详情页」+ endpoints.md L436-462）
+// 数据：GET /api/v1/delta/node/:nodeId → { nodeId, deltas: DeltaRecord[] }
+// 交互：列表按 order 升序（客户端兜底排序）；行 = description + 创建时间 + 目标徽标
+//   （targetType 中文 + targetName ?? targetId）+ changes 紧凑 chips；空态轻提示；网络失败 → 行内错误 + [重试]
 // 防御分支：OUTLINE_NODE_NOT_FOUND 分支当前**不可达**——契约（endpoints.md L436-462）未定义该端点
 //   404，节点缺失/软删 → 200 空数组（server delta.ts 三态过滤），缺失即空态；分支保留以防契约未来变化
 import { useEffect, useState } from "react";
@@ -13,16 +13,7 @@ import { targetTypeLabel } from "../../lib/delta";
 import { Button } from "@/components/ui/button";
 import { ChangeSummary } from "./change-summary";
 
-export function NodeDeltaPanel({
-  nodeId,
-  depth,
-  onClose,
-}: {
-  nodeId: string;
-  /** 树层级（对齐操作条缩进：depth * 20 + 44，outline.md 行结构约定） */
-  depth: number;
-  onClose: () => void;
-}) {
+export function NodeDeltaList({ nodeId }: { nodeId: string }) {
   const [deltas, setDeltas] = useState<DeltaRecord[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,23 +43,7 @@ export function NodeDeltaPanel({
   }, [nodeId, tick]);
 
   return (
-    <div
-      className="mb-1 rounded-md border border-border bg-muted/40 p-2"
-      style={{ paddingLeft: depth * 20 + 44 }}
-    >
-      {/* 面板头：标题 + 计数 + 关闭 */}
-      <div className="mb-1.5 flex items-center gap-2">
-        <span className="text-xs font-medium text-foreground">变更记录</span>
-        {deltas !== null && <span className="text-xs text-muted-foreground">{deltas.length} 条</span>}
-        <button
-          type="button"
-          className="ml-auto text-xs text-muted-foreground hover:text-foreground"
-          onClick={onClose}
-        >
-          关闭
-        </button>
-      </div>
-
+    <div>
       {/* 加载骨架（首次） */}
       {loading && deltas === null && error === null && (
         <div className="space-y-2 py-1">
@@ -105,7 +80,7 @@ export function NodeDeltaPanel({
       {!loading && error === null && deltas !== null && deltas.length > 0 && (
         <ul className="divide-y divide-border/70">
           {deltas.map((d) => (
-            <li key={d.id} className="py-1.5 first:pt-0.5 last:pb-0.5">
+            <li key={d.id} className="py-2 first:pt-0 last:pb-0">
               <div className="flex items-baseline gap-2">
                 <span className="min-w-0 flex-1 truncate text-sm text-foreground" title={d.description}>
                   {d.description}

@@ -7,6 +7,7 @@ import { useHashRoute, type Route } from "./hooks/use-route";
 import { AppShell } from "./components/AppShell";
 import Dashboard from "./pages/Dashboard";
 import Outline from "./pages/Outline";
+import OutlineDetail from "./pages/OutlineDetail";
 import Canvas from "./pages/Canvas";
 import EntityList from "./pages/EntityList";
 import EntityDetail from "./pages/EntityDetail";
@@ -22,7 +23,9 @@ function renderPage(route: Route): ReactNode {
     case undefined:
       return <Dashboard />;
     case "outline":
-      return <Outline />;
+      // S12.2：按段数区分——1 段（#/outline）→ 大纲树；2 段（#/outline/:nodeId）→ 节点详情
+      // （二级路由，仿实体详情分支；key = nodeId 变化强制卸载重挂，详情页表单按节点重置）
+      return second !== undefined ? <OutlineDetail key={second} nodeId={second} /> : <Outline />;
     case "canvas":
       return <Canvas />;
     case "entities": {

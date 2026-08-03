@@ -160,10 +160,12 @@ export function createOutlineNode(body: CreateOutlineBody): Promise<CreateOutlin
   return apiFetch<CreateOutlineRes>("/outline", { method: "POST", body });
 }
 
-/** PUT /api/v1/outline/:nodeId 请求体（标题/摘要可部分更新） */
+/** PUT /api/v1/outline/:nodeId 请求体（标题/摘要/结构化 data 可部分更新；data 浅合并——未传字段保留，决策 23） */
 export interface UpdateOutlineBody {
   title?: string;
   summary?: string;
+  /** 节点结构化信息（决策 23）：按节点层级的 OUTLINE_NODE_DATA_SCHEMAS 校验（服务端），失败 400 VALIDATION_ERROR */
+  data?: Record<string, unknown>;
 }
 
 /** 更新大纲节点标题/摘要 */
@@ -464,7 +466,7 @@ export interface DeltaByNodeRes {
 
 /** 获取大纲节点触发的变更记录。
  * 契约（endpoints.md L436-462）未定义该端点 404：节点缺失/软删 → 200 空数组（server 三态过滤）；
- * 调用方无需处理 OUTLINE_NODE_NOT_FOUND（面板错误分支仅为防御，见 node-delta-panel.tsx） */
+ * 调用方无需处理 OUTLINE_NODE_NOT_FOUND（node-delta-list.tsx 错误分支仅为防御） */
 export function getDeltasByNode(nodeId: string): Promise<DeltaByNodeRes> {
   return apiFetch<DeltaByNodeRes>(`/delta/node/${nodeId}`);
 }

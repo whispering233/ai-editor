@@ -1,6 +1,7 @@
 // 建立关联对话框（U8 抽共用；契约 doc/ui/pages/entity-detail.md「新增关联」+ entity-list.md「关联 Tab」）
 // 两模式：
-// - 详情模式（source 非 null）：源固定为本实体（左列禁选卡片「本实体：{name}」），方向「本实体 → 关联对象」
+// - 详情模式（source 非 null）：源固定为本端点——实体详情页「本实体：{name}」、大纲节点详情页（S12.2）
+//   「本节点：{name}」（source.type 支持 outline_node，schema.md 端点类型），方向「本端点 → 关联对象」
 // - 列表模式（source 为 null）：暴露源实体选择（类型下拉默认 character + 实体下拉 listEntities limit 100），方向「源 → 目标」
 // 目标端类型支持四类实体 + 大纲节点（outline store 树，无需请求）；409 RELATION_EXISTS → 内联「这条关系已经存在」；
 // 成功 → toast「已建立关系」→ onCreated() → onClose()。样式 token 类（layout.md §3）。
@@ -29,9 +30,10 @@ const TYPE_LABEL: Record<EntityType, string> = {
 const SELECT_CLASS =
   "w-full rounded-md border border-border bg-card px-3 py-1.5 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-/** 源实体（详情模式传入；null = 列表模式自由选择源） */
+/** 源端点（详情模式传入；null = 列表模式自由选择源）。
+ * 四类实体（EntityType）+ 大纲节点（outline_node，S12.2 节点详情页作为源建立关系——schema.md 端点类型） */
 export interface RelationSource {
-  type: EntityType;
+  type: EntityType | "outline_node";
   id: string;
   name: string;
 }
@@ -135,7 +137,7 @@ export function CreateRelationDialog({
                   title={source.name}
                   className="min-w-0 truncate rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground"
                 >
-                  本实体：{source.name}
+                  {source.type === "outline_node" ? "本节点" : "本实体"}：{source.name}
                 </div>
               ) : (
                 <>

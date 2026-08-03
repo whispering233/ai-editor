@@ -61,6 +61,7 @@
 |------|------|------|
 | `#/` | Dashboard 概览（默认落地；无项目时为引导形态） | 中栏 tab「概览」 |
 | `#/outline` | Outline 大纲树 | 中栏 tab「大纲」 |
+| `#/outline/:nodeId` | OutlineDetail 节点详情（S12.2） | 中栏 tab「大纲」 |
 | `#/canvas` | Canvas 画布 | 中栏 tab「画布」 |
 | `#/entities/:type?` | EntityList 实体列表 | 中栏 tab「实体关系」 |
 | `#/entities/:type/:id` | EntityDetail 实体详情 | 中栏 tab「实体关系」 |
@@ -71,7 +72,7 @@
 说明：
 
 - **tab 与路由一一对应**：`KNOWN_ROUTE_SEGMENTS = [outline, entities, canvas, hooks, trash, settings]`；TabBar 高亮由路由首段驱动（根路由 `#/` 用 `null` 表达），「实体关系」tab 在实体列表/详情路由下均保持高亮。
-- 路由解析按段数区分：`#/entities/character`（2 段）→ 列表页；`#/entities/character/char-abc`（3 段）→ 详情页；type 缺省回退 `character`。
+- 路由解析按段数区分：`#/entities/character`（2 段）→ 列表页；`#/entities/character/char-abc`（3 段）→ 详情页；type 缺省回退 `character`。大纲同款二级路由（S12.2）：`#/outline`（1 段）→ 大纲树；`#/outline/:nodeId`（2 段）→ 节点详情页（main.tsx outline 分支拦截第二段，仿实体详情分支）。
 - 未知首段 hash 回退 `#/`（`window.location.replace` 拉回 URL，不污染历史）。
 - **`#/chat` 已移除**：聊天常驻右栏，无独立页；原「带上下文进聊天」改为注入右栏当前会话 focus 小条（见 §4.2）。
 - 导航跳转统一走 `<a href="#/...">` 或 `navigate(path)` 辅助函数，保证 hash 变更触发重渲染。
@@ -266,7 +267,7 @@ client/src/
 | 页面 | 路由 | 核心 API | 细案 |
 |------|------|---------|------|
 | Dashboard（概览/引导） | `#/` | project/config、project/list、entity/:type ×4、outline、chat/sessions | pages/dashboard.md |
-| Outline | `#/outline` | outline CRUD、project/config（设当前位置）、delta/node | pages/outline.md |
+| Outline | `#/outline`、`#/outline/:nodeId`（节点详情） | outline CRUD、project/config（设当前位置）、delta/node、relation | pages/outline.md |
 | Canvas | `#/canvas` | outline、relation（plot_edge）、localStorage 布局 | pages/canvas.md |
 | EntityList | `#/entities/:type`、`#/entities/relations`（关联 tab） | entity/:type（列表）、relation（depth=1） | pages/entity-list.md |
 | EntityDetail | `#/entities/:type/:id` | entity/:type/:id、relation、delta/compute | pages/entity-detail.md |

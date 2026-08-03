@@ -1,5 +1,5 @@
-// 大纲树页面（S2.4 修订：就地编辑/就地新建/拖拽移动为主，弹窗仅保留必要场景；S5.4：⋯ 菜单「变更记录」
-//   行内展开节点触发的 Delta 面板——GET /api/v1/delta/node/:nodeId，components/delta/node-delta-panel）
+// 大纲树页面（S2.4 修订：就地编辑/就地新建/拖拽移动为主，弹窗仅保留必要场景；
+//   S12.2：⋯ 菜单「变更记录」→「详情」（跳 #/outline/:nodeId 节点详情页），行内 Delta 面板随详情页落地移除）
 // 路由：#/outline；数据：GET /api/v1/outline（整树）；操作：POST/PUT/DELETE /outline、PUT /project/config（设当前位置）
 // 设计契约：doc/ui/pages/outline.md（S2.4 修订版）——行内编辑标题/摘要（Enter 保存/Esc 取消/失焦保存）、
 //   行尾「＋ 新建」就地插入子节点（类型由父决定，root 可切卷/章）、拖拽移动（原生 HTML5 DnD，目标父按
@@ -12,7 +12,6 @@ import type { DragEvent, KeyboardEvent, ReactNode } from "react";
 import { formatTimestamp } from "@ai-editor/shared";
 import type { OutlineNode } from "@ai-editor/shared";
 import { CHILD_TYPE, ConfirmDialog, MoveNodeDialog, TYPE_LABEL } from "../components/outline/dialogs";
-import { NodeDeltaPanel } from "../components/delta/node-delta-panel";
 import { Button } from "@/components/ui/button";
 import {
   ApiError,
@@ -28,6 +27,7 @@ import {
 } from "../lib/api";
 import { canMoveTo, editFailureRecovery, findNode, findNodeChildren, findNodePath, ROOT_NODE_ID, shouldCommitSummary, shouldCommitTitle } from "../lib/outline-tree";
 import { cn } from "../lib/utils";
+import { navigate } from "../hooks/use-route";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
 
@@ -141,8 +141,6 @@ export default function Outline() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   /** 当前展开操作条（⋯）的节点 id；null = 无 */
   const [openActionsFor, setOpenActionsFor] = useState<string | null>(null);
-  /** 变更记录面板展开的节点 id（⋯ 菜单「变更记录」行内展开）；null = 无 */
-  const [deltaPanelFor, setDeltaPanelFor] = useState<string | null>(null);
   const [dialog, setDialog] = useState<DialogState>(null);
   /** 软删确认目标（⋯ 菜单「移入回收站」） */
   const [deleteTarget, setDeleteTarget] = useState<OutlineNode | null>(null);
@@ -707,16 +705,17 @@ export default function Outline() {
               >
                 设为当前位置
               </button>
-              {/* 变更记录（S5.4）：行内展开节点触发的 Delta 面板；再点收起 */}
+              {/* 详情（S12.2）：跳 #/outline/:nodeId 节点详情页——标题/摘要/结构化 data 表单、
+                  变更记录列表与相关实体（原行内「变更记录」面板随详情页落地移除） */}
               <button
                 type="button"
                 className="rounded border border-border px-2 py-0.5 text-xs text-foreground hover:bg-muted"
                 onClick={() => {
-                  setDeltaPanelFor(deltaPanelFor === node.id ? null : node.id);
+                  navigate(`/outline/${node.id}`);
                   setOpenActionsFor(null);
                 }}
               >
-                变更记录
+                详情
               </button>
               <button
                 type="button"
@@ -730,10 +729,7 @@ export default function Outline() {
               </button>
             </div>
           )}
-          {/* 变更记录面板（⋯ 菜单「变更记录」行内展开；缩进对齐操作条） */}
-          {deltaPanelFor === node.id && (
-            <NodeDeltaPanel nodeId={node.id} depth={depth} onClose={() => setDeltaPanelFor(null)} />
-          )}
+          {/* 子节点递归渲染（折叠态不渲染） */}
           {hasChildren && !isCollapsed && (
             <div>{renderNodes(node.children ?? [], depth + 1)}</div>
           )}
