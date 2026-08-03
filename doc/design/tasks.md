@@ -48,10 +48,10 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - [x] S4.2 启动一致性校验
 - [x] S4.3 回收站路由
 - [x] S4.4 回收站页面
-- [ ] S5.1 Delta 增删查
-- [ ] S5.2 computeState
-- [ ] S5.3 Delta 路由
-- [ ] S5.4 Delta 展示
+- [x] S5.1 Delta 增删查
+- [x] S5.2 computeState
+- [x] S5.3 Delta 路由
+- [x] S5.4 Delta 展示
 - [ ] S6.1 LLM 客户端
 - [ ] S6.2 重试与 token
 - [ ] S6.3 查询类工具
@@ -286,28 +286,28 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 
 ### 切片 5：Delta（验收：可记录变更、查看历史、计算到达状态）
 
-**S5.1 Delta 增删查**
+**S5.1 Delta 增删查** ✅（7dd5207，经 oracle 审核放行；含坏行防御/脏引用测试）
 - 范围：插入（order 服务端全局单调生成）、按节点查询（联表 target_name）、级联软删、可见性联动（触发节点/目标实体任一软删不可见）
 - 依赖：S2.1、S3.1
-- 验证：vitest 断言 order 递增与可见性
+- 验证：vitest 断言 order 递增与可见性（db 147 全绿 +10）
 - 回滚：单 commit
 
-**S5.2 computeState**
+**S5.2 computeState** ✅（633d0e4，经 oracle 审核放行；深拷贝断言按审核建议补齐）
 - 范围：根→at_node 树路径收集 + 双层排序（节点间树路径序、节点内 order）；op 语义 set/update/add/remove；update from 校验失败 → 跳过 + skipped/conflicts 标注（不抛 409——决策 9 修订）；plot_edge 不参与；软删过滤
 - 依赖：S2.1、S5.1
-- 验证：vitest 覆盖四 op、冲突跳过、双层排序、软删过滤
+- 验证：vitest 覆盖四 op、冲突跳过、双层排序、软删过滤（db 159 全绿 +12）
 - 回滚：单 commit
 
-**S5.3 Delta 路由**
-- 范围：POST 追加、GET /node/:nodeId、POST /compute（含 conflicts 返回；OUTLINE_NODE_NOT_FOUND）
+**S5.3 Delta 路由** ✅（a25e0aa，经 oracle 审核放行；to/value 契约注释随卡修正——endpoints.md/api.ts/entity.ts）
+- 范围：POST 追加、GET /node/:nodeId、POST /compute（含 conflicts 返回；OUTLINE_NODE_NOT_FOUND）；路由层补节点存在校验（防死记录）+ per-op 必填校验
 - 依赖：S5.2
-- 验证：集成测试含冲突场景
+- 验证：集成测试含冲突场景（server 155 全绿 +17）
 - 回滚：单 commit
 
-**S5.4 Delta 展示**
+**S5.4 Delta 展示** ✅（e305e4b，经 oracle 审核放行；修补：EntityDetail key 防跨实体残留 + 大纲操作条 token 统一 + 404 防御分支注释）
 - 范围：大纲节点/实体详情内 Delta 列表与变更摘要、compute 状态预览（含 conflicts 标注）
 - 依赖：S3.6、S5.3
-- 验证：手工走查冲突场景
+- 验证：手工走查冲突场景（client 197 全绿 +18；端到端走查清单见卡内交付）
 - 回滚：单 commit
 
 ### 切片 6：模型与工具层（验收：工具目录全部注册、权限分级正确、测试全绿）
