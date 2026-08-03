@@ -185,8 +185,8 @@ export function ConfirmDialog({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
-        <p className="text-sm text-zinc-600">{description}</p>
-        {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+        <p className="text-sm text-muted-foreground">{description}</p>
+        {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
         <DialogFooter>
           <Button variant="outline" type="button" onClick={onClose} disabled={submitting}>
             取消

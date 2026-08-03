@@ -7,8 +7,8 @@
 // - 还原实体：toast 连带恢复计数（lib/trash restoreEntityToast，计数 0 省略）；404 残留 → 刷新 + toast「该对象已不存在」
 // - 还原节点：409 OUTLINE_ANCESTOR_DELETED → 行内「上级节点也在回收站」+ 祖先名 + [还原上级] 快捷按钮——
 //   祖先 id 从 409 message 解析（lib/trash parseAncestorId），名字从当前列表 nodes 匹配（软删祖先必在列表）；
-//   还原祖先成功自动重试当前节点，更上级仍软删会再次 409 更新提示（服务端一次只报路径上最近一个软删祖先，
-//   逐个还原天然解链）；解析失败降级为纯提示无按钮
+//   还原祖先成功自动重试当前节点，更上级仍软删会再次 409 更新提示（服务端路径自顶向下首遇即抛——报
+//   **最顶层**软删祖先，级联还原一次解整条链，重试必收敛）；解析失败降级为纯提示无按钮
 // - purge：ConfirmDialog danger + 「确认彻底删除」文案（trash.md 44-49 行 MVP 语义：单次确认 + 明确文案）
 //   → 行移除 + toast「已彻底删除」；404 残留同还原（刷新 + toast）；其他错误冒泡 ConfirmDialog 内联显示
 import { useEffect, useState } from "react";
