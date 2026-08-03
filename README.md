@@ -76,7 +76,7 @@ npx ai-editor <项目目录>
 
 | 目录 | 内容 |
 |------|------|
-| `doc/design/` | 产品定位、架构与分包、关键决策 1-21、backlog、任务清单与进度 |
+| `doc/design/` | 产品定位、架构与分包、关键决策 1-23、backlog、任务清单与进度 |
 | `doc/api/` | 端点契约、AI 工具目录、数据流 |
 | `doc/database/` | 表结构 / outline.json / project.json 契约、伏笔系统 |
 | `doc/ui/` | 当前 UI 布局样式设计（三栏工作台 `layout.md` + 各页面细案） |
