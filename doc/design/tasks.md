@@ -52,13 +52,13 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - [x] S5.2 computeState
 - [x] S5.3 Delta 路由
 - [x] S5.4 Delta 展示
-- [ ] S6.1 LLM 客户端
-- [ ] S6.2 重试与 token
-- [ ] S6.3 查询类工具
-- [ ] S6.4 分析类工具
-- [ ] S6.5 伏笔工具与健康指标
-- [ ] S6.6 提案类工具
-- [ ] S6.7 执行类工具 + executor
+- [x] S6.1 LLM 客户端
+- [x] S6.2 重试与 token
+- [x] S6.3 查询类工具
+- [x] S6.4 分析类工具
+- [x] S6.5 伏笔工具与健康指标
+- [x] S6.6 提案类工具
+- [x] S6.7 执行类工具 + executor
 - [ ] S7.1 会话管理
 - [ ] S7.2 上下文组装
 - [ ] S7.3 主循环
@@ -312,43 +312,43 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 
 ### 切片 6：模型与工具层（验收：工具目录全部注册、权限分级正确、测试全绿）
 
-**S6.1 LLM 客户端**
+**S6.1 LLM 客户端** ✅（73e3291，经 oracle 审核放行）
 - 范围：`client.ts`（fetch → DeepSeek、流式 SSE 解析、模型名可配置、key 注入源）、`types.ts`。SSE 解码器细节（2026-08 补充，借鉴 pi）：跨 chunk `data:` 行拼接、注释行跳过、`[DONE]` 哨兵校验（**流中途终止无 `[DONE]` = 错误**）、**逐 chunk 检查 abort signal**；流式 tool_call 参数按 index 累积增量片段、结束收尾 parse；错误响应归一化（status/code/message，body 截断）
 - 依赖：T1.4
 - 验证：mock fetch 单测（流式分片、错误响应、**流中途终止无 [DONE] → 错误路径**、abort 中断）；无 key 可全测
 - 回滚：单 commit
 
-**S6.2 重试与 token**
+**S6.2 重试与 token** ✅（11d5f16，经 oracle 审核放行）
 - 范围：`retry.ts`（429/5xx/超时退避重试）、`token.ts`（估算）、工具结果 token 截断（决策 15）。重试分类（2026-08 补充，借鉴 pi）：**配额/计费类（402/insufficient_quota/billing）不可重试快失败**，传输类（429/5xx/超时/网络断开）指数退避 `base*2^(n-1)`（参考默认 maxRetries=3、base=2s）；**abort 永不重试**，退避 sleep 监听 abort；token 估算 chars/4 + 优先最近一次成功响应的真实 usage
 - 依赖：S6.1
 - 验证：vitest mock 断言重试次数与退避、**配额错误不重试**、估算边界
 - 回滚：单 commit
 
-**S6.3 查询类工具**
+**S6.3 查询类工具** ✅（4aca950，经 oracle 审核放行）
 - 范围：registry + get_entity / search_entities / query_relationships / get_outline / get_outline_path / compute_state / get_delta_history / get_entity_summary（自动权限、过滤软删）
 - 依赖：S3.2、S5.2、S2.1
 - 验证：vitest fixture 库逐一断言返回结构
 - 回滚：单 commit
 
-**S6.4 分析类工具**
+**S6.4 分析类工具** ✅（e4a6296，经 oracle 审核放行）
 - 范围：analyze_consistency / detect_conflicts / trace_plot_paths / find_orphan_elements（含 inconsistent_soft_deletes）/ suggest_connections
 - 依赖：S6.3
 - 验证：vitest 构造已知矛盾/孤立 fixture 断言检出
 - 回滚：单 commit
 
-**S6.5 伏笔工具与健康指标**
+**S6.5 伏笔工具与健康指标** ✅（d425d4e，经 oracle 审核放行）
 - 范围：analyze_hook_health / trace_hook_lifecycle / suggest_hook_payoff / find_hook_opportunities / detect_hook_conflicts；`_health` 运行时计算（age/dormancy/stale/overdue/ready_to_resolve/blocked——决策 21 口径：current_position 章节序、half_life 缺省映射、expected_resolve_node_id 未设置不猜测），绝不写回 data
 - 依赖：S2.1、S6.3
 - 验证：vitest 构造伏笔生命周期 fixture 断言全部指标；断言 data 未写回
 - 回滚：单 commit
 
-**S6.6 提案类工具**
+**S6.6 提案类工具** ✅（d5c0f90，经 oracle 审核放行）
 - 范围：propose_create/update/delete_entity、propose_add/remove_relation、propose_add_delta、propose_outline/move/delete_node、propose_create/update/advance/resolve/abandon_hook——仅产出提案对象（含 project_id），tool_result 不含预览细节
 - 依赖：S6.3
 - 验证：vitest 断言提案结构、不落盘、无预览
 - 回滚：单 commit
 
-**S6.7 执行类工具 + executor**
+**S6.7 执行类工具 + executor** ✅（ba0a6fe，经 oracle 审核放行）
 - 范围：create/update/delete_entity、add/remove_relation、add_delta、create/move/delete_outline_node、advance_hook/resolve_hook/abandon_hook 复合写（delta+relation 一次提交、幂等按 (node_id, hook_id, relation_type) 判重）
 - 依赖：S3.1-S4.1、S6.6
 - 验证：vitest 断言复合写原子性与幂等
