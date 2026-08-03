@@ -91,6 +91,8 @@ DeepSeek 有 64K token 上下文窗口，但不能每次把整个世界发给 AI
 对话历史 (~6000 tokens)      # 滑动窗口 + 超限压缩摘要
 ```
 
+- **usage 基线（2026-08 补充，借鉴 pi）**：预算计算优先采用「最近一次成功响应的真实 usage」，其后消息按 `chars/4` 估算；**裁剪/重排历史后必须重置 usage 基线**——旧 usage 描述的是裁剪前的前缀，直接沿用会导致预算漂移（pi `latestPrefixTimestamp` 同类问题）。
+
 ## 决策 7：提示词三层注入
 
 System Prompt 不是一成不变的，而是可编辑的分层结构：
@@ -302,12 +304,17 @@ AI Editor 的目标用户是**写小说的人**，不是开发者。纯 GUI 交�
 - 主循环设三重保险：max iterations（8 轮）、单轮超时（120s）、token 预算上限。
 - 工具执行失败时以**结构化文本喂回 LLM 自纠**；超限则发 `error` 事件终止循环。
 - 模型调用失败（429/5xx/超时）按重试策略（`llm/retry.ts`）退避重试，最终失败以 error 事件呈现。
+- **重试分类（2026-08 补充，借鉴 pi）**：`retry.ts` 区分两类错误——**不可重试**：配额/计费类（402、`insufficient_quota`、billing 等），确定性错误**快速失败**直接发 error 事件，重试纯浪费；**可重试**：传输与瞬时类（429/5xx/超时/网络断开），指数退避 `baseDelay * 2^(n-1)`（参考默认 maxRetries=3、baseDelay=2s，即 2s/4s/8s）。**abort 永不重试**；退避 sleep 期间监听 abort 即时中断。
+- **重试计数（2026-08 补充）**：单轮内多次 LLM 调用共享重试计数，但**成功即清零**（防网络抖动累计吃满 8 轮预算）；重试次数与轮次分开计量，不互相消耗。
+- **超时口径（2026-08 补充）**：120s 为**单轮总预算**（含 LLM 重试退避与工具执行），LLM 单次 attempt 另有自身 fetch 超时；预算耗尽发 `error` 事件终止。
+- **length 截断不执行工具（2026-08 补充，借鉴 pi）**：`finish_reason === "length"`（max_tokens 截断）时**一律不执行任何 tool_call**——流式拼接的 tool_call 参数可能「解析且校验通过但静默不完整」，全部标记为错误让模型重发（pi `failToolCallsFromTruncatedMessage` 同款语义）。
 
 **为什么**：LLM 可能陷入死循环或失控调用，必须用硬性预算兜底；失败语义对用户可见（error 事件），不静默吞掉。
 
 ## 决策 16：SSE 中断全链路取消
 
 - 浏览器刷新/断网导致 SSE 断开时，服务端通过 AbortController 全链路取消：agent 循环终止、DeepSeek fetch 中止。
+- **取消信号四层穿透（2026-08 补充，借鉴 pi）**：同一 AbortController 必须贯穿四层——① DeepSeek fetch 的 signal；② SSE 读循环**逐 chunk 检查** aborted（命中即抛 "Request was aborted"）；③ 工具执行（长分析工具执行中检查 signal，参照 pi bash 监听 abort 杀进程树的思路）；④ 重试退避 sleep（abort 即时唤醒且该次重试取消）。任一层缺失都会让取消延迟到单轮 120s 超时（决策 20 同类问题）。
 - 未确认提案作废；正在执行的写操作完成当前一步后停止。
 - 写操作顺序固定为**先 DB 后 JSON**（data.db 先行、outline.json 随后）；两存储间无原子性，断电/取消可能造成「DB 已写、JSON 未写」的不一致。
 - **启动一致性校验兜底（2026-08 修订）**：打开项目时自动比对 outline.json 节点软删标记与 data.db 中 relation/delta 软删状态，**以大纲节点软删为准**补标 DB 侧缺失的 relation/delta `deleted_at`（决策 12 单向不变式：节点软删 ⇒ 关联记录必软删，无误报）并写日志；反向（DB 记录已软删、节点未软删）推断受实体侧级联干扰不可靠，不在补标范围。检测工具 `find_orphan_elements` 保留为诊断用途，返回 `inconsistent_soft_deletes` 形态并引导修复。
@@ -332,6 +339,7 @@ AI Editor 的目标用户是**写小说的人**，不是开发者。纯 GUI 交�
 - MVP 只存原始消息，不做摘要持久化；会话级滑动窗口裁剪与摘要压缩仍在 agent/session.ts 运行时完成（决策 6 分层上下文策略）。
 - **历史重建规则**：续聊时按 `assistant.tool_calls[].id` ↔ `tool.tool_call_id` **成对重组**喂回模型（DeepSeek 要求严格配对，缺一即拒绝请求）；滑动窗口裁剪**必须成对**（tool_call 与对应 tool_result 同裁同留）。
 - **孤儿半对处理（2026-08 修订）**：中断若落在 tool_call 已写、tool_result 未写（或反之）之间，历史重建与裁剪时**整对丢弃**，不喂回模型。
+- **重试/续聊末条约束（2026-08 补充，借鉴 pi）**：喂回模型的消息序列末条**必须是 user 或 tool 消息**——assistant 结尾的序列 DeepSeek 直接拒绝（pi 重试入口同款约束：assistant 结尾抛错）；模型调用失败重试时**复用原请求的 messages 数组**，绝不追加失败轮的半条 assistant 产物。
 - 服务重启后通过 session_id 重建「继续上次对话」；会话列表/历史查询走 `GET /api/v1/chat/sessions` 与 `GET /api/v1/chat/sessions/:id/messages`（见 `doc/api/endpoints.md`）。
 - 兑现 product.md「对话历史在本地保存」的承诺。
 

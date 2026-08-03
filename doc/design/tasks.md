@@ -313,15 +313,15 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 ### 切片 6：模型与工具层（验收：工具目录全部注册、权限分级正确、测试全绿）
 
 **S6.1 LLM 客户端**
-- 范围：`client.ts`（fetch → DeepSeek、流式 SSE 解析、模型名可配置、key 注入源）、`types.ts`
+- 范围：`client.ts`（fetch → DeepSeek、流式 SSE 解析、模型名可配置、key 注入源）、`types.ts`。SSE 解码器细节（2026-08 补充，借鉴 pi）：跨 chunk `data:` 行拼接、注释行跳过、`[DONE]` 哨兵校验（**流中途终止无 `[DONE]` = 错误**）、**逐 chunk 检查 abort signal**；流式 tool_call 参数按 index 累积增量片段、结束收尾 parse；错误响应归一化（status/code/message，body 截断）
 - 依赖：T1.4
-- 验证：mock fetch 单测（流式分片、错误响应）；无 key 可全测
+- 验证：mock fetch 单测（流式分片、错误响应、**流中途终止无 [DONE] → 错误路径**、abort 中断）；无 key 可全测
 - 回滚：单 commit
 
 **S6.2 重试与 token**
-- 范围：`retry.ts`（429/5xx/超时退避重试）、`token.ts`（估算）、工具结果 token 截断（决策 15）
+- 范围：`retry.ts`（429/5xx/超时退避重试）、`token.ts`（估算）、工具结果 token 截断（决策 15）。重试分类（2026-08 补充，借鉴 pi）：**配额/计费类（402/insufficient_quota/billing）不可重试快失败**，传输类（429/5xx/超时/网络断开）指数退避 `base*2^(n-1)`（参考默认 maxRetries=3、base=2s）；**abort 永不重试**，退避 sleep 监听 abort；token 估算 chars/4 + 优先最近一次成功响应的真实 usage
 - 依赖：S6.1
-- 验证：vitest mock 断言重试次数与退避；估算边界
+- 验证：vitest mock 断言重试次数与退避、**配额错误不重试**、估算边界
 - 回滚：单 commit
 
 **S6.3 查询类工具**
@@ -357,27 +357,27 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 ### 切片 7：对话服务（验收：SSE 流、心跳断连、提案确认全链路服务端就绪）
 
 **S7.1 会话管理**
-- 范围：`session.ts` 历史维护、滑动窗口成对裁剪（tool_call/tool_result 同裁同留）、历史重建喂回格式（决策 18）
+- 范围：`session.ts` 历史维护、滑动窗口成对裁剪（tool_call/tool_result 同裁同留）、历史重建喂回格式（决策 18）；**重试/续聊末条约束**（2026-08 补充，借鉴 pi）：喂回序列末条必须 user/tool，失败轮半条 assistant 不喂回，重试复用原 payload
 - 依赖：T2.3
-- 验证：vitest mock 消息序列断言成对裁剪与孤儿丢弃
+- 验证：vitest mock 消息序列断言成对裁剪与孤儿丢弃、**重试 payload 不含失败轮半条**
 - 回滚：单 commit
 
 **S7.2 上下文组装**
-- 范围：`context.ts` 三层提示词注入（决策 7）+ 聚焦上下文（focus_entity/node）+ 工具列表注入 + token 预算
+- 范围：`context.ts` 三层提示词注入（决策 7）+ 聚焦上下文（focus_entity/node）+ 工具列表注入 + token 预算；**usage 基线**（2026-08 补充，借鉴 pi）：优先最近真实 usage，**裁剪历史后重置基线**（决策 6）
 - 依赖：S7.1
-- 验证：vitest 断言上下文结构与预算截断
+- 验证：vitest 断言上下文结构与预算截断、**裁剪后预算不漂移**
 - 回滚：单 commit
 
 **S7.3 主循环**
-- 范围：`run.ts` runAgent()——8 轮/120s/token 三重保险（决策 15）、工具失败结构化喂回自纠、模型失败重试、SSE 事件序列（tool_call/tool_result/proposal/text/done/error，proposal 在 tool_result 后、循环继续前）
+- 范围：`run.ts` runAgent()——8 轮/120s/token 三重保险（决策 15）、工具失败结构化喂回自纠、模型失败重试、SSE 事件序列（tool_call/tool_result/proposal/text/done/error，proposal 在 tool_result 后、循环继续前）；**length 截断不执行任何 tool_call 全部标错重发**、**重试与轮次分开计量、120s 含重试退避**（2026-08 补充，借鉴 pi）
 - 依赖：S6.7、S7.2
-- 验证：vitest mock LLM 固定响应断言终止条件与事件顺序
+- 验证：vitest mock LLM 固定响应断言终止条件与事件顺序、**finish_reason=length 用例**、**半条 assistant 不重发用例**
 - 回滚：单 commit
 
 **S7.4 工具调度 + 提案内存仓**
-- 范围：`executor.ts` 收到 LLM tool_call → 调度 query/analysis/proposal；提案仓（TTL 10 分钟 + 条数上限 + project_id 绑定，切换项目清空——决策 14 修订）
+- 范围：`executor.ts` 收到 LLM tool_call → 调度 query/analysis/proposal；提案仓（TTL 10 分钟 + 条数上限 + project_id 绑定，切换项目清空——决策 14 修订）；**批量 tool_call 先全部校验再执行、错误统一结构化回填、执行中检查取消 signal**（2026-08 补充，借鉴 pi）
 - 依赖：S6.6、S7.3
-- 验证：vitest 假时钟断言 TTL 过期与上限淘汰；调度错误路径
+- 验证：vitest 假时钟断言 TTL 过期与上限淘汰；调度错误路径；**批量校验 fail fast**
 - 回滚：单 commit
 
 **S7.5 提案路由**
@@ -387,9 +387,9 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - 回滚：单 commit
 
 **S7.6 chat SSE 路由**
-- 范围：POST /chat（SSE 流：ping 15-30s 心跳 + 六类事件）、三路断开检测（onAbort + req close/error + 心跳写失败）、全链路取消（AbortController 终止 agent + DeepSeek fetch）。**会话列表/历史端点已由 U3 实现**（GET /chat/sessions、GET /chat/sessions/:id/messages，2026-08 标注——本卡不再重复）
+- 范围：POST /chat（SSE 流：ping 15-30s 心跳 + 六类事件）、三路断开检测（onAbort + req close/error + 心跳写失败）、全链路取消（AbortController 终止 agent + DeepSeek fetch）；**取消信号四层穿透**（fetch signal / SSE 读循环逐 chunk / 工具执行 / 重试 sleep——2026-08 补充，借鉴 pi）。**会话列表/历史端点已由 U3 实现**（GET /chat/sessions、GET /chat/sessions/:id/messages，2026-08 标注——本卡不再重复）
 - 依赖：S7.5
-- 验证：集成测试读取 SSE 流断言事件序列；模拟断开断言取消；心跳间隔断言
+- 验证：集成测试读取 SSE 流断言事件序列；模拟断开断言取消（**含四层穿透各环节**）；心跳间隔断言
 - 回滚：单 commit
 
 ### 切片 8：聊天联调（验收：能对话、能看流式回复、能处理断连）

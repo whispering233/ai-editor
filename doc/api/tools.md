@@ -187,6 +187,12 @@ AI 不可以：
 用户始终是最终决策者。
 ```
 
+## 工具执行契约（2026-08 补充，借鉴 pi）
+
+- **抛错即失败，不抛穿循环**：executor 对每个工具统一 try/catch——工具执行抛错 = 失败，错误统一转换为结构化 tool_result（`isError: true` + 工具名 + 参数 + 错误信息）喂回 LLM 自纠；工具自身**不得把失败编码进正常 content**（pi：execute 抛错即失败，不要编码进 content）。
+- **批量 tool_call 先校验后执行**：一条 assistant 消息含多个 tool_call 时，executor **先全部参数校验（fail fast）再逐个执行**，结果按 `tool_call_id` 一一回填（pi：preflight 全部通过才执行，结果按源顺序回填）。
+- **截断必须显式告知**：工具结果超 token 预算截断时，返回内容注明「已截断 + 提示缩小范围」——静默截断会让 LLM 基于残缺数据继续推理（如 get_outline 整树、query_relationships depth=3，决策 15）。
+
 ## agent 循环终止与失败处理
 
 对应 [`../design/decisions.md`](../design/decisions.md) 决策 15。主循环设三重保险，任一超限即终止：
