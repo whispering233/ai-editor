@@ -45,6 +45,8 @@ export const ERROR_CODES = [
   "DELTA_CONFLICT", // 已废弃（2026-08 修订：computeState 以 conflicts 字段替代 409）
   // ---- tools.md 决策 15/16 补充命名（SSE error 事件用）----
   "TOOL_RESULT_TOO_LARGE", // 工具结果 token 预算超限：截断/拒绝该工具结果（决策 15）
+  "AGENT_DISPATCH_ERROR", // 工具调度器缺陷（S7.3 防御：结果条数不符 / id 错位 / 调度器抛错），终止循环（决策 15）
+  "AGENT_INTERNAL_ERROR", // agent 循环内部未知异常（S7.3 防御路径——chatStream 契约不 throw，理论不可达）
   "AGENT_MAX_ITERATIONS", // agent 循环超 8 轮上限，发 error 事件终止（决策 15）
   "AGENT_TIMEOUT", // 单轮 120s 超时终止（决策 15）
   "AGENT_TOKEN_BUDGET", // 上下文 token 预算超限终止（决策 15）

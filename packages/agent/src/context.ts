@@ -72,11 +72,11 @@ export interface BuildContextInput {
   tools?: ToolListEntry[];
   /**
    * 最近一次成功响应的 usage 基线（决策 6；本层触发裁剪后重置为 null）。
-   * **口径**：本层把 lastUsage 当作「历史段」基线（与 token.ts estimateMessagesTokens 的
-   * lastUsage 语义一致）——调用方（S7.3）须以 `usage.prompt_tokens - (system + toolList +
-   * focus + completion 估算)` 换算传入，即只保留历史段分量；meta.tokens 已提供
-   * system/toolList/focus 各层估算可供换算（completion 为上一轮输出，可直接从
-   * usage.completion_tokens 扣除）。直接传原始 total_tokens 会与非历史层重复计费
+   * **口径**（ora S7.3 审核 S1，与 run.ts toHistoryBaseline / llm token.ts 三处等价表述）：
+   * 调用方（S7.3）须换算为「历史段」真实分量传入——以 usage.prompt_tokens 为起点减
+   * system + toolList + focus 估算（completion 属输出、不占 prompt_tokens，无需扣除）；
+   * 若以 total_tokens 为起点则再减 completion（两式等价）。meta.tokens 已提供
+   * system/toolList/focus 各层估算可供换算；直接传原始 total_tokens 会与非历史层重复计费
    */
   lastUsage?: LLMUsage | null;
   /** 分层预算覆盖（缺省用决策 6 常量） */

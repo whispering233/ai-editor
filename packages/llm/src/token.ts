@@ -26,11 +26,12 @@ function estimateMessageTokens(message: LLMMessage): number {
 export interface EstimateMessagesTokensOptions {
   /**
    * 最近一次成功响应的真实 usage 基线（决策 6：作为基线优先采用）。
-   * **口径**：lastUsage.total_tokens 是上一轮完整 prompt（system+聚焦+工具清单+历史+completion）
-   * 的真实用量——而本函数把它当作「历史段基线」叠加到 messages 估算上。因此调用方传入前
-   * **必须换算为可复用历史前缀的真实 token 数**：`usage.prompt_tokens - (system + toolList +
-   * focus + completion 各层估算)`，即只保留「历史段」分量；直接传原始 total_tokens 会与
-   * 非历史层重复计费（有聚焦/工具清单后每轮恒超限，基线形同虚设）。
+   * **口径**（ora S7.3 审核 S1，与 agent/run.ts toHistoryBaseline / agent/context.ts 三处
+   * 等价表述）：调用方传入前必须换算为「可复用历史前缀」的真实 token 数——
+   * 以 usage.prompt_tokens 为起点减 system + toolList + focus 各层估算（completion 属输出、
+   * 不占 prompt_tokens，无需扣除）；若以 total_tokens 为起点则再减 completion（两式等价：
+   * total - (system+toolList+focus+completion) = prompt - (system+toolList+focus)）。
+   * 直接传原始 total_tokens 会与非历史层重复计费（有聚焦/工具清单后每轮恒超限，基线形同虚设）。
    * 调用方负责语义正确：裁剪/重排历史后必须重置为 null——旧 usage 描述的是裁剪前的
    * 前缀，直接沿用会导致预算漂移
    */
