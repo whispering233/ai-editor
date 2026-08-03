@@ -385,6 +385,7 @@ UI 布局从「顶栏 + 侧栏 + 内容区」重构为**三栏工作台**（借�
 - **中栏 tab 与路由一一对应**：概览 `#/`、大纲 `#/outline`、画布 `#/canvas`、实体关系 `#/entities/:type/:id`、伏笔 `#/hooks`、回收站 `#/trash`；设置 `#/settings` 移入左栏底部。
 - **`#/chat` 独立页移除**：聊天常驻右栏；跨页「问 AI」不再跳页，改为注入右栏当前会话的 focus context（`focus_entity_type` / `focus_entity_id` / `focus_node_id`）。
 - **会话归属项目**：会话不是全局的——每个项目有自己的会话列表（chat store 持有 `currentProjectId` + `currentSessionId`），左栏书架项目可展开会话列表切换；切项目重置会话上下文。数据层无需变更（`chat_messages` 已有 `project_id` 列，决策 18）。
+- **会话恢复（2026-08 补充）**：刷新页面/打开项目时，会话列表加载后若无当前会话且列表非空 → **自动激活最近会话**（服务端按最后活动倒序第一条），符合「一项目一会话」的恢复心智；`newSession` 作废在途列表请求，防止自动激活把「开新会话」意图拉回。
 - **主题系统**：shadcn 官方 oklch tokens（`@theme inline` + `@custom-variant dark`），双主题（浅：暖羊皮纸+牛血红+金箔 / 深：蓝黑曜石+琥珀烛光），手动切换 + localStorage 持久化；字体用系统字体栈（不下载 web 字体，本地优先离线可用）。
 
 **为什么**：创作工具的核心工作流是「边写边问 AI」——聊天常驻右栏消除页间跳转摩擦（原 layout.md 的「带上下文进聊天」需跳 `#/chat`）；会话归属项目符合「一项目一创作语境」的心智模型（inkos 书→会话树已验证）；主题 tokens 标准化是 shadcn/ui 组件的先决条件（原自研 zinc 硬编码无法支撑后续组件库）。

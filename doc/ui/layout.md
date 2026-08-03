@@ -119,7 +119,7 @@
 - **会话归属项目**：会话列表与当前会话（chat store `currentSessionId`）随项目切换（`clearSessions` + 自动重载）；**无项目打开时整体禁用**——消息区居中灰显（MessageSquare `size-8 text-muted-foreground/40` + 「打开项目后可用」`text-sm text-muted-foreground/70`），标题下拉/输入区 `disabled`，不请求会话数据。
 - 面板结构（自上而下，`flex h-full min-h-0 flex-col`）：
 
-**① 会话标题行**（`h-12 shrink-0 border-b border-border px-2.5`）：MessageSquare `size-4 text-muted-foreground` + 下拉切换（`Button ghost sm max-w-44 justify-start`，标题 `truncate text-sm font-medium` + ChevronDown `size-3.5`；菜单 `w-64`，label「会话（本项目）」+ 分隔线，项为 lastMessage + `text-xs text-muted-foreground`「{n} 条 · {相对时间}」，当前项 `bg-accent text-accent-foreground`；无历史显示「暂无历史会话」）+ `[+]` 新会话（`ghost icon-sm`）+ 小屏抽屉时右侧 X 关闭。
+**① 会话标题行**（`h-12 shrink-0 border-b border-border px-2.5`）：MessageSquare `size-4 text-muted-foreground` + 下拉切换（`Button ghost sm max-w-44 justify-start`，标题 `truncate text-sm font-medium` + ChevronDown `size-3.5`；菜单 `w-64`，label「会话（本项目）」+ 分隔线，项为 lastMessage + `text-xs text-muted-foreground`「{n} 条 · {相对时间}」，当前项 `bg-accent text-accent-foreground`；无历史显示「暂无历史会话」；**刷新/打开项目自动激活最近会话**——loadSessions 成功且无当前会话时取列表首条，2026-08）+ `[+]` 新会话（`ghost icon-sm`）+ 小屏抽屉时右侧 X 关闭。
 
 **② 断连横幅 / 错误条**（无项目时隐藏）：`flex shrink-0 items-center gap-2 border-b border-destructive/30 bg-destructive/10 px-3 py-1.5 text-xs text-destructive`——断连横幅 TriangleAlert「上次会话已取消」+ [重新发送]（`outline xs`，重发清理断连残留半截消息）+ 关闭 X；错误条 CircleAlert + 错误文案 + 关闭 X。
 
@@ -127,7 +127,7 @@
 - **user 气泡**：右对齐 `flex justify-end` + 气泡 `max-w-[85%] rounded-lg bg-secondary px-3 py-2 text-sm text-secondary-foreground`。
 - **assistant 纯排版**：无气泡；正文 `whitespace-pre-wrap font-serif text-[17px] leading-[1.72] text-foreground`（**宋体排版**，§3.3 字体约定）；toolCalls 渲染为折叠工具记录。
 - **工具调用折叠行**（历史 `toolCalls` 与运行时 `streamTools` 共用）：`rounded-md border border-border/70 bg-muted/40 px-2 py-1`；折叠态「调用了 {toolName}」`text-xs text-muted-foreground`（Wrench `size-3` + ChevronRight 展开 `rotate-90`）；结果标记：成功 ✓ `text-primary` / 失败 ✗ `text-destructive`；展开显示 args JSON 摘要（`pre` `mt-1 max-h-40 overflow-auto whitespace-pre-wrap text-xs`）。
-- **提案卡**（SSE proposal 事件，瞬态）：`rounded-lg border border-primary/25 bg-primary/5 p-2.5`；标题行 `text-sm font-medium` + Sparkles `size-3.5 text-primary`「提案：{type 中文}」（新建实体/更新实体/新增关系/新建大纲节点）；状态徽记：✓ 已确认 `text-primary` / 已拒绝 `text-muted-foreground` / ⚠ 数据已变化，此提案已失效 `text-destructive`；preview JSON 摘要 `pre mt-1 max-h-32`；底部 `mt-2 flex gap-1.5` [确认]（默认）/ [拒绝]（`outline`）——**当前为锁定态（disabled），S7 接入确认/拒绝 API 后启用**。
+- **提案卡**（SSE proposal 事件，瞬态）：`rounded-lg border border-primary/25 bg-primary/5 p-2.5`；标题行 `text-sm font-medium` + Sparkles `size-3.5 text-primary`「提案：{type 中文}」（新建实体/更新实体/新增关系/新建大纲节点）；状态徽记：✓ 已确认 `text-primary` / 已拒绝 `text-muted-foreground` / ⚠ 数据已变化，此提案已失效 `text-destructive`；preview JSON 摘要 `pre mt-1 max-h-32`；底部 `mt-2 flex gap-1.5` [确认]（默认）/ [拒绝]（`outline`）——**已接 S7.5 confirm/reject 真实调用（S8.2 解锁）**：pending 可点（processing 在途禁用防连点）、409 PROPOSAL_STALE → 卡标「数据已变化，此提案已失效」+ 按钮禁用、404 → 移除卡片、409 MISMATCH → 防御移除、其他错误 → toast + 保留 pending 可重试。
 
 **④ focus 小条**（输入区上方，无 focusContext 不渲染）：`flex shrink-0 items-center gap-1.5 border-t border-border bg-accent/40 px-3 py-1.5 text-xs`；Sparkles `size-3.5 text-primary` + 「正在讨论：{类型} {id}」`text-muted-foreground truncate`（MVP 简化：不查实体名，显示 id 原文）+ 关闭 X。
 
@@ -210,7 +210,7 @@
 |-------|------|------|
 | `stores/project.ts` | `config`（GET /project/config）、outline 树、bookshelf 书架 | 信息条标题映射、多页共用；`currentPosition` 变更后同步刷新 |
 | `stores/chat.ts` | **会话归属项目**：`currentProjectId`（订阅联动）+ `currentSessionId`、会话列表、消息流（messages/loadMessages）、SSE 运行态（streaming/streamError/disconnected + resendLast）、focus context、瞬态渲染数据（proposals/streamTools） | 跨 tab 跳转保留；切项目清空并重载（订阅 project store 的 config.id） |
-| `stores/ui.ts` | 错误横幅（error/showError，渲染组件 `ErrorBanner` 挂 AppShell）、toast（`showToast` 3s 自动消失，sonner `<Toaster>` 桥接渲染）、确认对话框（confirm/resolveConfirm，ConfirmDialog 实现于 `components/outline/dialogs.tsx`）、大纲定位 transient `focusOutlineNodeId` | 通用交互 |
+| `stores/ui.ts` | 错误横幅（error/showError，渲染组件 `ErrorBanner` 挂 AppShell）、toast（`showToast` 3s 自动消失，sonner `<Toaster>` 桥接渲染）、确认对话框（confirm/resolveConfirm，ConfirmDialog 实现于 `components/outline/dialogs.tsx`）、大纲定位 transient `focusOutlineNodeId`、**数据变更信号**（`dataVersion`/`notifyDataChanged`——AI 提案确认后或 InfoBar 全局刷新按钮触发，中栏数据页订阅重拉，2026-08） | 通用交互 |
 | `hooks/use-theme.ts` | 主题态（localStorage 持久化） | 见 §3.4（主题态独立于 ui store） |
 
 ### 4.2 跨页跳转约定
@@ -227,6 +227,7 @@
 - **toast**：轻提示（保存成功、已移入回收站等），`showToast` 3s 自动消失；渲染 = sonner `<Toaster>`（`components/ui/sonner.tsx`，主题随 useTheme 适配），`components/feedback/` 内订阅 ui store 桥接（U6 起实现）。
 - **确认对话框**：危险操作（软删、purge、删关系）必须二次确认并说明影响范围（`confirm()`，ConfirmDialog 渲染组件后续切片实现）。
 - **对话框宽度（DialogContent）**：基座 `max-w-lg`（**无变体**，shadcn 标准写法）；调用点按需 `sm:max-w-sm|md|2xl` 覆盖（Sidebar 新建项目 384px / 新建实体·大纲 448px / 建立关联 672px）。⚠ 基座**禁止改回 `sm:max-w-*`**——Tailwind 4 同变体、同特异性规则按生成 CSS 顺序决胜，基座 `sm:max-w-sm` 会压掉所有调用点的 `sm:max-w-*` 覆盖（2026-08 曾因此全仓对话框静默 384px，三段式建立关联被压碎；`f653058` 根因修复）。
+- **Base UI 菜单契约（2026-08 踩坑）**：`DropdownMenuLabel`（= `Menu.GroupLabel`）**必须**用 `DropdownMenuGroup` 包裹——裸放 `DropdownMenuContent` 内，菜单打开时抛 Base UI error #31（`MenuGroupContext is missing`），曾致点击会话标题下拉整页白屏（`3e877a1` 根因修复）；新增菜单时遵守，封装文件（`components/ui/dropdown-menu.tsx`）头部有红线注释。
 - **焦点可见性**：全局 `* { outline-ring/50 }`；输入控件聚焦 `focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50`。
 - **动画**：仅三处高影响动效——抽屉滑入（`animate-in fade-in` / `slide-in-from-right duration-300`，tw-animate-css）、chevron 展开旋转（`transition-transform duration-200` + `rotate-90`）、骨架脉冲（`animate-pulse`）/流式加载旋转（`animate-spin`）；行级 hover 一律 `transition-colors`。其余保持克制，不叠加装饰动画。
 - **阴影**：`shadow-sm`（TabBar 激活项）、`shadow-xl`（抽屉）；卡片默认**无阴影**，以 `border-border` 分隔层级（`bg-card` 用于浮起的面）。
