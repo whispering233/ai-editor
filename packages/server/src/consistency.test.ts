@@ -5,10 +5,10 @@
 //   (d) 无软删节点 → 零补标（常规启动）；无关关系不受影响
 // fixture 风格与 routes/outline.test.ts seedVolWithRelation 一致（直接 INSERT，绕过端点校验）；
 // 项目装配沿用 middleware/project.test.ts（initProject + 临时目录）。
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createOutlineNode, deleteOutlineNode, nowIso, type Db } from "@ai-editor/db";
 import { closeProject, initProject, type ProjectContext } from "./middleware/project.js";
 import { reconcileSoftDelete } from "./consistency.js";
@@ -163,6 +163,22 @@ describe("reconcileSoftDelete（S4.2，决策 16 修订）", () => {
       expect(deletedAtOf(project.db, "relation_records", "rel-tgt")).toMatch(/^\d{4}-\d{2}-\d{2}T/);
       expect(deletedAtOf(project.db, "delta_records", "delta-ch")).toMatch(/^\d{4}-\d{2}-\d{2}T/);
       expect(deletedAtOf(project.db, "relation_records", "rel-other")).toBeNull(); // 不在节点集内，保持原状
+    } finally {
+      closeProject(project);
+    }
+  });
+
+  it("outline.json 损坏 → 跳过校验零返回，不阻塞打开（兜底语义）", () => {
+    const project = initProject(makeTmpDir());
+    try {
+      writeFileSync(join(project.root, "outline.json"), "{ 非法 JSON", "utf8");
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        expect(reconcileSoftDelete(project)).toEqual({ deletedNodes: 0, relations: 0, deltas: 0 });
+        expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("[consistency]"));
+      } finally {
+        errorSpy.mockRestore();
+      }
     } finally {
       closeProject(project);
     }

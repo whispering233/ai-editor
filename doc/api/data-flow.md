@@ -49,5 +49,5 @@ Browser                  Server                   agent               ai        
 | 软删 + 回收站 | 软删实体/节点时其关联的关系与 Delta **一并软删**（relation_records / delta_records 标 `deleted_at`），常规查询默认过滤；restore **级联还原**（本体 + 关系 + Delta）；purge 才物理清除。**手动删关系 = 物理删**（不进入回收站，决策 12 修订）；关系可见性**联动端点状态**（source/target 任一软删即不可见，端点还原后自动可见） |
 | Delta 累积计算 | `computeState` 通过 `getNodePathIds` 获取从根到目标节点的树路径（严格三层，无游离节点，决策 19），收集路径上所有 Delta，**节点间按树路径顺序、同一节点内按 `order`** 双层排序应用（决策 9） |
 | 数据库持久化 | 每个 API 调用直接操作 `better-sqlite3` 的同步 API，写入即时落盘（WAL 模式 + `synchronous=FULL`） |
-| SSE 全链路取消 | 浏览器刷新/断网导致 SSE 断开时，AbortController 终止 agent 循环并中止 DeepSeek fetch；未确认提案按会话作废；写操作顺序固定「先 DB 后 JSON」，不一致由**启动一致性校验**兜底补标（决策 16 修订）。断开检测三路并用（决策 20）：`stream.onAbort` + `c.req.raw` close/error 监听 + 心跳写失败（SSE 每 15-30s 发 `ping` 事件探活） |
+| SSE 全链路取消 | 浏览器刷新/断网导致 SSE 断开时，AbortController 终止 agent 循环并中止 DeepSeek fetch；未确认提案按会话作废；写操作顺序固定「先 DB 后 JSON」，不一致由**启动一致性校验**兜底补标（以大纲节点软删为准补标关联记录，决策 16 修订）。断开检测三路并用（决策 20）：`stream.onAbort` + `c.req.raw` close/error 监听 + 心跳写失败（SSE 每 15-30s 发 `ping` 事件探活） |
 | 对话历史持久化 | 会话消息写入 data.db 的 `chat_messages` 表（session_id / project_id / role / content / tool_calls / tool_call_id，决策 18 修订），服务重启后同 session_id 可继续对话；历史按 `assistant.tool_calls[].id` ↔ `tool.tool_call_id` 成对重组喂回模型，滑动窗口裁剪必须成对；会话列表走 `GET /api/v1/chat/sessions`；滑动窗口裁剪与摘要压缩在 agent/session.ts 运行时完成 |
