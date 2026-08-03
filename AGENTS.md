@@ -2,8 +2,7 @@
 
 ## 项目状态
 
-- **阶段 A 全部完成 + 切片 1-3 完成 + 阶段 U（UI 工作台重构）U1-U5 全部完成**：项目管理（create/open/close/config + 书架模式 books/ 子目录）、大纲（严格三层操作层/路由/就地编辑页）、实体与关系（CRUD/k 跳遍历/双向 relations/列表与详情页）；UI 重构——shadcn 集成 + oklch 文学氛围双主题（U1）、三栏 1:5:4 工作台外壳（U2）、左栏书架树（项目→会话二级树 + server 会话路由，U3）、中栏概览页 + 信息条定位（U4）、右栏 ChatPanel 完整 UI（U5，发送接 S7）。测试全仓 487 个（shared 75 / db 125 / server 125 / client 159 / llm·tools·agent 各 1）。
-- **打包安装测试已打通（backlog #8 演练，借鉴 inkos 机制）**：6 包 `pnpm pack`（prepack/postpack 钩子替换 `workspace:*`）+ tarball 安装到测试目录 + `npx ai-editor` 命令可用 + SPA 随包（`copy-client-dist`）；**dev 态启动待命**（无 project.json 不建文件，前端书架引导——决策 8 修订）。
+- **阶段 A 全部完成 + 切片 1-3 完成 + 阶段 U（UI 工作台重构）U1-U5 全部完成**：项目管理（create/open/close/config + 书架模式 books/ 子目录）、大纲（严格三层操作层/路由/就地编辑页）、实体与关系（CRUD/k 跳遍历/双向 relations/列表与详情页）；UI 重构——shadcn 集成 + oklch 文学氛围双主题（U1）、三栏 1:5:4 工作台外壳（U2）、左栏书架树（项目→会话二级树 + server 会话路由，U3）、中栏概览页 + 信息条定位（U4）、右栏 ChatPanel 完整 UI（U5，发送接 S7）。测试全仓 488 个（shared 75 / db 125 / server 126 / client 159 / llm·tools·agent 各 1）。
 - 任务执行以 `doc/design/tasks.md` 为清单（checkbox 进度），按卡开发、一卡一 commit、每卡「实现 fixer/designer + 验证 oracle」双代理、完成后向用户汇报；**backlog.md 事项一律不做**（#8 已演练完成）。
 - 一切实现工作必须按 `doc/design/architecture.md` 的分包方案搭建，不得擅自改变包划分或依赖方向。
 
@@ -13,7 +12,7 @@
 
 | 目录 | 内容 | 何时读 |
 |------|------|--------|
-| `doc/design/` | `product.md` 产品定位、`architecture.md` 架构与分包、`decisions.md` 关键决策 1-21、`backlog.md` 迭代优化清单（MVP 不做）、`tasks.md` 开发任务清单与进度 | 任何改动前 |
+| `doc/design/` | `product.md` 产品定位、`architecture.md` 架构与分包、`decisions.md` 关键决策 1-22、`backlog.md` 迭代优化清单（MVP 不做）、`tasks.md` 开发任务清单与进度 | 任何改动前 |
 | `doc/api/` | `endpoints.md` 端点契约、`tools.md` AI 工具目录、`data-flow.md` 数据流 | 前后端改动 |
 | `doc/database/` | `schema.md` 表结构与 outline.json/project.json 契约、`hooks.md` 伏笔系统与健康指标 | 数据/后端改动 |
 | `doc/ui/` | **当前 UI 布局样式设计**：`layout.md` 三栏工作台外壳与样式规范（2026-08 已从原型更新为实现样式）、`pages/*.md` 各页面（字段标注 API 响应字段） | 前端改动 |

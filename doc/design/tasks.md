@@ -466,6 +466,27 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - 验证：手工走查 SSE 发送/流式/提案确认/断连 + 会话切换
 - 回滚：单 commit
 
+**U6 全局反馈组件（toast 渲染 + 错误横幅）**
+- 背景：ui store 的 `showToast`/`showError` 已有多个调用点（实体创建/保存/删关系/软删、新建项目、设置保存），但 AppShell 从未渲染反馈——操作成功/失败均无提示（用户反馈）。
+- 范围：新增 `components/feedback/`——`FeedbackHost`（挂 AppShell：sonner `<Toaster />` + 订阅 ui store `toast` → sonner `toast()` 桥接（kind success/error 映射，主题随 useTheme）+ `ErrorBanner` 渲染 ui store `error` 红色横幅（`bg-destructive/10 border-destructive/30 text-destructive` + 关闭按钮））；现有 `showToast`/`showError` 调用点零改动；layout.md §4.1/§4.3 同步（已更新）
+- 依赖：U2
+- 验证：typecheck + lint + vitest 全绿；手工走查创建实体/保存/删关系/软删/新建项目均出现 toast、设置保存失败出现错误横幅
+- 回滚：单 commit
+
+**U7 详情页面包屑导航**
+- 背景：实体详情页（三级）无返回上级入口，深页面容易迷失（用户反馈）。
+- 范围：新增共用组件 `components/page-nav/Breadcrumb.tsx`（tab 化分段，样式与列表页类型 tab 一致）；EntityDetail header 替换原类型徽标为「实体 › 人物 › 张三」——「实体」「人物」可点击返回列表（`#/entities/character`），当前实体名不可点高亮；entity-detail.md 同步（已更新）
+- 依赖：U6（可选，无强依赖）
+- 验证：typecheck + lint + vitest 全绿；手工走查详情页面包屑逐级返回
+- 回滚：单 commit
+
+**U8 关联 tab（实体关系总览）**
+- 背景：建立关联必须进入详情页点击条目，列表层无关系总览与快捷建立入口（用户反馈）。
+- 范围：`#/entities/relations` 第 5 个 tab（main.tsx 实体分支拦截 `relations` 段）——关联列表（`GET /relation?depth=1`，端点类型/关系类型下拉过滤 + 名称前端过滤）、行内 [删除]（ConfirmDialog 物理删确认）、端点名点击跳详情；「+ 新建」在关联 tab 下变「+ 建立关联」——抽 `CreateRelationDialog` 为共用组件（`components/entity/create-relation-dialog.tsx`），列表模式暴露源实体选择（类型+实体），详情页模式源固定当前实体（原行为不变）；entity-list.md 同步（已更新）
+- 依赖：U6（toast 反馈）
+- 验证：typecheck + lint + vitest 全绿；手工走查关联 tab 过滤/建立（含 RELATION_EXISTS）/删除/跳详情 + 详情页新增关联回归
+- 回滚：单 commit
+
 ---
 
 **S11.1 生产构建全链路**

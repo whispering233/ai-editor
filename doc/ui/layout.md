@@ -209,7 +209,7 @@
 |-------|------|------|
 | `stores/project.ts` | `config`（GET /project/config）、outline 树、bookshelf 书架 | 信息条标题映射、多页共用；`currentPosition` 变更后同步刷新 |
 | `stores/chat.ts` | **会话归属项目**：`currentProjectId`（订阅联动）+ `currentSessionId`、会话列表、消息流（messages/loadMessages）、SSE 运行态（streaming/streamError/disconnected + resendLast）、focus context、瞬态渲染数据（proposals/streamTools） | 跨 tab 跳转保留；切项目清空并重载（订阅 project store 的 config.id） |
-| `stores/ui.ts` | 错误横幅（error/showError）、toast（3s 自动消失）、确认对话框（confirm/resolveConfirm，渲染组件 ConfirmDialog 由后续切片实现）、大纲定位 transient `focusOutlineNodeId` | 通用交互 |
+| `stores/ui.ts` | 错误横幅（error/showError，渲染组件 `ErrorBanner` 挂 AppShell）、toast（`showToast` 3s 自动消失，sonner `<Toaster>` 桥接渲染）、确认对话框（confirm/resolveConfirm，ConfirmDialog 实现于 `components/outline/dialogs.tsx`）、大纲定位 transient `focusOutlineNodeId` | 通用交互 |
 | `hooks/use-theme.ts` | 主题态（localStorage 持久化） | 见 §3.4（主题态独立于 ui store） |
 
 ### 4.2 跨页跳转约定
@@ -223,7 +223,7 @@
 - **骨架（加载态）**：区块级 `animate-pulse bg-muted`（高度按内容自定，如 h-8/h-20）；聊天消息区骨架 `bg-muted/60`。不出现闪跳「加载失败」文案（用 attempted 标记防首帧误报）。
 - **错误态**：区块内 `text-xs/text-sm` 文案 + [重试]（`outline xs`），单区块失败不阻塞其他区块；全局/流错误用红色横幅（`bg-destructive/10 border-destructive/30 text-destructive`）；错误文案按错误码映射（`lib/error-messages.ts` / `describeStreamError`）。
 - **空态**：一句说明 + 一个主操作按钮；可配图标（`size-7/8 text-muted-foreground/40`）。
-- **toast**：轻提示（保存成功、已移入回收站等），`showToast` 3s 自动消失。
+- **toast**：轻提示（保存成功、已移入回收站等），`showToast` 3s 自动消失；渲染 = sonner `<Toaster>`（`components/ui/sonner.tsx`，主题随 useTheme 适配），`components/feedback/` 内订阅 ui store 桥接（U6 起实现）。
 - **确认对话框**：危险操作（软删、purge、删关系）必须二次确认并说明影响范围（`confirm()`，ConfirmDialog 渲染组件后续切片实现）。
 - **焦点可见性**：全局 `* { outline-ring/50 }`；输入控件聚焦 `focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50`。
 - **动画**：仅三处高影响动效——抽屉滑入（`animate-in fade-in` / `slide-in-from-right duration-300`，tw-animate-css）、chevron 展开旋转（`transition-transform duration-200` + `rotate-90`）、骨架脉冲（`animate-pulse`）/流式加载旋转（`animate-spin`）；行级 hover 一律 `transition-colors`。其余保持克制，不叠加装饰动画。
@@ -242,7 +242,9 @@ client/src/
     main-panel/    # MainPanel（信息条 + TabBar + 内容区装配）、InfoBar、TabBar
     chat/          # ChatPanel：会话标题/下拉、断连横幅/错误条、消息流、工具折叠行、
                    #   提案卡、focus 小条、输入区
-    outline/       # 大纲树相关对话框（dialogs.tsx）
+    outline/       # 大纲树相关对话框（dialogs.tsx，含 ConfirmDialog）
+    page-nav/      # Breadcrumb 面包屑（tab 化分段，跨页复用）
+    feedback/      # 全局反馈宿主：Toaster 挂载 + ui store toast→sonner 桥接 + ErrorBanner 错误横幅
   pages/           # 页面级组件（只做数据编排与状态绑定）：Dashboard / Outline / Canvas /
                    #   EntityList / EntityDetail / HookPanel / Trash / Settings
   hooks/           # use-route（hash 路由）、use-theme、use-media-query、use-sse（SSE 解析）、use-api
@@ -262,7 +264,7 @@ client/src/
 | Dashboard（概览/引导） | `#/` | project/config、project/list、entity/:type ×4、outline、chat/sessions | pages/dashboard.md |
 | Outline | `#/outline` | outline CRUD、project/config（设当前位置） | pages/outline.md |
 | Canvas | `#/canvas` | outline、relation（plot_edge）、localStorage 布局 | pages/canvas.md |
-| EntityList | `#/entities/:type` | entity/:type（列表） | pages/entity-list.md |
+| EntityList | `#/entities/:type`、`#/entities/relations`（关联 tab） | entity/:type（列表）、relation（depth=1） | pages/entity-list.md |
 | EntityDetail | `#/entities/:type/:id` | entity/:type/:id、relation | pages/entity-detail.md |
 | ChatPanel（右栏常驻） | —（无独立路由） | chat（SSE）、chat/sessions、proposal | pages/chat.md |
 | HookPanel | `#/hooks` | entity/hook、outline、relation、delta | pages/hook-panel.md |
