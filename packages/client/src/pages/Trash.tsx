@@ -30,6 +30,7 @@ import {
   type TrashOutlineNode,
 } from "../lib/api";
 import { parseAncestorId, restoreEntityToast, restoreNodeToast } from "../lib/trash";
+import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
 
 const ENTITY_TYPE_LABEL: Record<EntityType, string> = {
@@ -129,6 +130,8 @@ export default function Trash() {
       const res = await restoreOutlineNode(node.id);
       useUiStore.getState().showToast(restoreNodeToast(res.restoredChildren));
       await reload();
+      // 大纲 tab 联动：outline 树是 project store 全局快照，还原后重拉（Outline 页订阅自动刷新）
+      useProjectStore.getState().loadOutline();
     } catch (err) {
       if (err instanceof ApiError && err.code === "OUTLINE_ANCESTOR_DELETED") {
         const ancestorId = parseAncestorId(err.message);
@@ -159,6 +162,8 @@ export default function Trash() {
     if (!conflict) return;
     try {
       await restoreOutlineNode(conflict.ancestorId);
+      // 祖先恢复立即可见（即使重试当前节点再次 409 报更上级，树也已变化）
+      useProjectStore.getState().loadOutline();
       await handleRestoreNode(conflict.node);
     } catch (err) {
       if (isGone(err)) {
@@ -180,6 +185,8 @@ export default function Trash() {
         await purgeTrashEntity(purgeTarget.item.type, purgeTarget.item.id);
       } else {
         await purgeOutlineNode(purgeTarget.item.id);
+        // 大纲 tab 联动：purge 后节点从全局树移除
+        useProjectStore.getState().loadOutline();
       }
       useUiStore.getState().showToast("已彻底删除");
       await reload();
