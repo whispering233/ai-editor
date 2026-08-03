@@ -74,7 +74,7 @@ pnpm typecheck && pnpm lint && pnpm -r test
 - **大纲**：严格三层（卷→章→场景）增删改移、节点详情（麦基《故事》结构化字段）
 - **实体与关系**：四类实体（人物/设定/地点/伏笔）CRUD、k 跳关系遍历、Delta 变更追踪与状态计算（computeState）
 - **回收站**：软删还原 / 彻底清除 + 启动一致性校验兜底
-- **AI 对话链路（S6-S7 已就绪）**：DeepSeek SSE 流式客户端、44 个工具（查询 8 / 分析 5 / 伏笔 5 / 提案 14 / 执行 12）、agent 主循环（8 轮 / 120s / token 三重保险）、提案确认流程、chat SSE 路由（心跳 15-30s / 断连检测 / 全链路取消）——配置 key 后右栏 ChatPanel 可直接对话
+- **AI 对话链路（S6-S8 已就绪）**：DeepSeek SSE 流式客户端、44 个工具（查询 8 / 分析 5 / 伏笔 5 / 提案 14 / 执行 12）、agent 主循环（8 轮 / 120s / token 三重保险）、提案确认流程（卡片确认/拒绝 + 失效处理，全链路可用）、chat SSE 路由（心跳 15-30s / 断连检测 / 全链路取消）——配置 key 后右栏 ChatPanel 可直接对话
 - **调试**：创作根 `.ai-editor/config.json` 细粒度五类别（chat/request/stream/usage/http，见上文示例；无配置文件默认关闭）
 
 ## 打包安装（借鉴 inkos 发布机制）
