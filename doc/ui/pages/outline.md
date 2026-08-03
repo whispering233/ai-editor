@@ -67,10 +67,10 @@
 - 行尾**详情图标**（BookOpen）→ `#/outline/:nodeId` 节点详情页（变更记录列表 + 结构化 data 表单 + 相关实体）。
 - 行尾**回收站图标**（Trash2）→ 确认对话框（危险操作必须确认，layout.md §3.2），展示级联影响：`DELETE /outline/:nodeId` 响应 `cascaded.{ children, relations, deltas }` → 确认后行消失 + toast「已移入回收站（含 N 个子节点）」。
 
-### 当前位置（S13.1 修订）
+### 当前位置（S13.1/S13.2 修订）
 
-- **入口迁往节点详情页（S13.2）**——大纲列表页不再提供「设为当前位置」；行尾徽标保留（`bg-accent text-accent-foreground` token 类，已去 amber 硬编码）。
-- 生效后行尾显示「当前位置」徽标，顶栏同步更新（project store 广播）；伏笔面板健康指标依赖此值（决策 21）；未设置时该节点行无徽标。
+- **入口已迁往节点详情页（S13.2）**——详情页 header「设为当前位置」按钮（`PUT /project/config { current_position: nodeId }`）；大纲列表页不再提供入口。
+- 生效后行尾显示「当前位置」徽标（`bg-accent text-accent-foreground` token 类，已去 amber 硬编码），顶栏同步更新（project store 广播）；伏笔面板健康指标依赖此值（决策 21）；未设置时该节点行无徽标。
 
 ### 变更记录（节点触发的 Delta，S5.4）
 
@@ -174,6 +174,7 @@
   - summary：有变化才提交，允许清空（提交空串 `""`——服务端 `patch.summary !== undefined` 即写入，真正清除摘要）。
   - data：`diffData`（lib/entity-detail，JSON 序列化 + 空值规约）只提交变更字段 → `PUT { data }` 浅合并。
   - 成功 → toast「已保存」+ 重拉 outline 树（节点 updatedAt 刷新，表单重置为服务端权威值）；`VALIDATION_ERROR`（字段超长/非法枚举）→ 表单卡底部行内错误横幅；`OUTLINE_NODE_NOT_FOUND`（节点已被 purge）→ 404 态。
+- **设为当前位置（S13.2，入口自大纲页迁入）**：header 操作区「设为当前位置」按钮（保存按钮左侧，`variant="outline"`）——`PUT /project/config { current_position: nodeId }` → toast「已设为当前位置」；**已是当前位置**（`config.currentPosition === nodeId`）→ 按钮禁用 + 文案变「当前位置」（动作入口与元信息行状态徽标共存，参照 S13.1 前大纲页 `disabled={isCurrent || busy}` 语义）；`settingCurrent` 提交态防重复。**联动**：project store `updateConfig` 成功自动重拉 config——InfoBar「当前位置」（标题 + 点击跳转定位）、大纲行尾「当前位置」徽标、compute 预览默认 at_node（S5.4）、S9 伏笔健康指标基准（决策 21）同步刷新。失败 → error toast「设置失败：该节点可能已删除，无法设为当前位置」。
 - **变更记录区块**：`components/delta/node-delta-list.tsx`（S5.4 行内面板逻辑迁移：加载/错误重试/空态/列表行 + changes chips）；「+ 新建变更」入口 S12.3 提供，见下「新建变更」。
 
 ### 变更记录 · 新建变更（S12.3）

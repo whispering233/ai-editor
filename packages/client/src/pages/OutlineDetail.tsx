@@ -1,4 +1,6 @@
-// 大纲节点详情页（S12.2；决策 23 麦基字段集；契约 doc/ui/pages/outline.md「节点详情页」）
+// 大纲节点详情页（S12.2；决策 23 麦基字段集；契约 doc/ui/pages/outline.md「节点详情页」；
+//   S13.2：header 加「设为当前位置」——入口自大纲页迁入，PUT /project/config { current_position }，
+//   已是当前位置禁用；store updateConfig 自动重拉 config 联动 InfoBar/行尾徽标/compute 默认节点）
 // 路由：#/outline/:nodeId（中栏大纲 tab 二级路由，main.tsx outline 分支拦截第二段，仿实体详情）
 // 数据：节点本体来自 project store 的 outline 树（GET /outline 已含 data）——findNode 按 id 查找，
 //   软删/缺失 → 404 态；变更记录 GET /delta/node/:nodeId（NodeDeltaList 区块）；
@@ -73,6 +75,8 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
   const config = useProjectStore((s) => s.config);
   const configLoading = useProjectStore((s) => s.configLoading);
   const loadOutline = useProjectStore((s) => s.loadOutline);
+  // S13.2：设为当前位置（写 project.json current_position；store 内部自动重拉 config，联动 InfoBar/行尾徽标/compute 默认节点）
+  const updateConfig = useProjectStore((s) => s.updateConfig);
 
   // 首次加载标记：loadOutline 在 store 内静默吞错，用 loadAttempted 呈现「加载失败 + 重试」（同大纲列表页）
   const [loadAttempted, setLoadAttempted] = useState(false);
@@ -82,6 +86,8 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
   const [dataForm, setDataForm] = useState<Record<string, unknown> | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // 设为当前位置提交态（防重复提交）
+  const [settingCurrent, setSettingCurrent] = useState(false);
   // 相关实体：新建关系对话框 + 重载信号
   const [relationDialogOpen, setRelationDialogOpen] = useState(false);
   const [relKey, setRelKey] = useState(0);
@@ -150,6 +156,25 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
     setDataForm((prev) => (prev ? { ...prev, [key]: value } : prev));
   }
 
+  /**
+   * 设为当前位置（S13.2，自大纲页迁入）：PUT /project/config { current_position: nodeId }——
+   * store 内部 updateConfig 成功后自动重拉 config，联动 InfoBar「当前位置」/大纲行尾徽标/
+   * compute 预览默认节点（S5.4）/S9 伏笔健康指标基准（决策 21）。已是当前位置 → 按钮禁用不触发。
+   * 失败：泛化 error toast（与 S13.1 前大纲页语义一致；节点能渲染说明在树中，失败主要为网络/服务端拒绝）
+   */
+  async function handleSetCurrent() {
+    if (node === null || settingCurrent || isCurrent) return;
+    setSettingCurrent(true);
+    try {
+      await updateConfig({ current_position: node.id });
+      useUiStore.getState().showToast("已设为当前位置");
+    } catch {
+      useUiStore.getState().showToast("设置失败：该节点可能已删除，无法设为当前位置", "error");
+    } finally {
+      setSettingCurrent(false);
+    }
+  }
+
   // ============ 渲染 ============
 
   if (notFound) {
@@ -188,11 +213,22 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
 
   return (
     <section>
-      {/* header：面包屑（返回上级）+ 标题 + 保存 */}
+      {/* header：面包屑（返回上级）+ 标题 + 操作区（设为当前位置 / 保存） */}
       <div className="mb-1 flex items-center gap-3">
         <Breadcrumb items={breadcrumbItems} />
         <h1 className="min-w-0 truncate text-xl font-semibold">{node?.title ?? "…"}</h1>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          {/* S13.2 设为当前位置（动作入口；状态徽标在元信息行）：已是当前位置 → 禁用 + 「当前位置」标记，
+              与 S13.1 前大纲页 disabled={isCurrent || busy} 语义一致 */}
+          <Button
+            variant="outline"
+            type="button"
+            disabled={node === null || isCurrent || settingCurrent}
+            title={isCurrent ? "当前节点已是创作进度位置" : "标记为创作进度位置（InfoBar 展示 + 定位跳转基准）"}
+            onClick={() => void handleSetCurrent()}
+          >
+            {isCurrent ? "当前位置" : "设为当前位置"}
+          </Button>
           <Button type="button" onClick={() => void handleSave()} disabled={node === null || saving}>
             {saving ? "保存中…" : "保存"}
           </Button>
