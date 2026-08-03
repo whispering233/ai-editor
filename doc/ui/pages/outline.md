@@ -114,12 +114,25 @@
 │ 开场价值: [希望            ]            │                          │
 │ 收场价值: [绝望            ]            │                          │
 ├────────────────────────────────────────┤                          │
-│ 变更记录（N 条）                         │                          │
+│ 变更记录（N 条）              [+ 新建变更]│                          │
 │ · 灵根测试失败被逐出师门  8-02           │                          │
 │   人物《张三》 [更新 状态 活跃→中立]      │                          │
+│  （新建表单内联展开，见「新建变更」）      │                          │
 ├────────────────────────────────────────┤                          │
 │ 伏笔标记（占位）                         │                          │
 └────────────────────────────────────────┴─────────────────────────┘
+```
+
+新建变更表单（内联展开于变更记录卡内、列表上方；就地为主不弹窗）
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ 目标类型 [大纲节点 ▾]        目标 [▾ 灵根测试（默认当前节点）]       │
+│ 字段     [状态 ▾]           操作 [更新 ▾]      新值 [中立]          │
+│ 旧值：活跃（自动取自目标当前数据，无需手填）                        │
+│ 描述 [本节点触发了什么变化，如：张三获得断剑认可       ]            │
+│                                              [取消] [创建变更]    │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ## 信息层级
@@ -155,7 +168,26 @@
   - summary：有变化才提交，允许清空（提交空串 `""`——服务端 `patch.summary !== undefined` 即写入，真正清除摘要）。
   - data：`diffData`（lib/entity-detail，JSON 序列化 + 空值规约）只提交变更字段 → `PUT { data }` 浅合并。
   - 成功 → toast「已保存」+ 重拉 outline 树（节点 updatedAt 刷新，表单重置为服务端权威值）；`VALIDATION_ERROR`（字段超长/非法枚举）→ 表单卡底部行内错误横幅；`OUTLINE_NODE_NOT_FOUND`（节点已被 purge）→ 404 态。
-- **变更记录区块**：`components/delta/node-delta-list.tsx`（S5.4 行内面板逻辑迁移：加载/错误重试/空态/列表行 + changes chips）；「+ 新建变更」入口 S12.3 提供，本页暂无。
+- **变更记录区块**：`components/delta/node-delta-list.tsx`（S5.4 行内面板逻辑迁移：加载/错误重试/空态/列表行 + changes chips）；「+ 新建变更」入口 S12.3 提供，见下「新建变更」。
+
+### 变更记录 · 新建变更（S12.3）
+
+- **入口**：变更记录卡标题行右侧「+ 新建变更」→ **内联展开表单**（就地为主不弹窗泛滥；按钮变「收起」可再点收起，表单内 [取消] 同效）。提交成功 → toast「已记录变更」+ 收起表单 + 重拉列表（`NodeDeltaList reloadKey` 信号，同 RelationsView 模式）。
+- **目标**（`target_type` / `target_id`）：
+  - 类型下拉：人物/设定/地点/伏笔/大纲节点（`DELTA_TARGET_TYPE_OPTIONS`：`ENTITY_TYPES` + outline_node，标签复用 `lib/delta targetTypeLabel`）。
+  - **默认大纲节点 + 目标 = 当前节点**（最常见的「本节点触发了什么变化」场景）；大纲节点目标用树下拉（flattenTree 缩进，可切换任意卷/章/场）。
+  - 实体目标：按类型拉列表（`GET /entity/:type`，加载中/失败重试/空态提示）；选择后拉详情 `GET /entity/:type/:id`（update 自动 from 的数据源）。
+- **字段**（`field`）：按目标类型生成下拉——
+  - 实体：`ENTITY_DATA_SCHEMAS` 的字段名（**client 只消费类型不打包 zod**：本地字段清单经 `import type` + `keyof ...["shape"]` 编译期断言 = shared schema keys，schema 增删字段即编译报错防漂移）；排除 `custom_fields`（record 无法用标量值表达）；标签复用 `lib/entity-detail detailFieldsForType`。
+  - 大纲节点：决策 23 字段集（`lib/outline-detail detailFieldsForNodeType`，按选中节点层级；节点缺失 → 三层并集兜底）。
+- **操作**（`op`，可手动切换；推断逻辑 = `lib/delta-create.ts inferOpOptions` 纯函数）：
+  - 数组字段（character.personality/abilities、setting.rules、scene.conflict_levels）→ [追加 add / 移除 remove]，默认 add。
+  - 标量字段 → 当前值可作 from 时 [更新 update / 设为 set] 默认 update；**值不可表达（字段缺失/布尔/数组/对象）时仅 [设为]**——避免提交被 400 拒绝。
+- **值**：set/update → 「新值」输入；add → 「追加值」；remove → 「移除值（按值匹配删除）」。数字字段（character.age、hook.half_life）提交时解析为 number，NaN 回退字符串（`buildDeltaChange`）。
+- **旧值自动取值**（决策 9 修订）：op=update 时表单标注「旧值：xxx（自动取自目标当前数据，无需手填）」——实体目标取详情 data、节点目标取树中 node.data；作者不手填 from，**data 后续被手动编辑 → compute 时跳过 + conflicts 标注，机制兜底**。目标数据获取失败（`ENTITY_NOT_FOUND`/网络）→ 行内提示并引导改「设为」。
+- **描述**：必填（trim 非空校验），placeholder「本节点触发了什么变化，如：张三获得断剑认可」。
+- **提交**：`POST /api/v1/delta { node_id: 当前节点, target_type, target_id, changes: [单条], description }`（per-op 必填语义 set→to / update→from+to / add·remove→value 由 `buildDeltaChange` 构造保证）。
+- **错误态**：`VALIDATION_ERROR`（per-op 字段缺失等）→ 表单内行内提示（服务端 message）；`OUTLINE_NODE_NOT_FOUND`（节点已被 purge）→ toast「节点不存在…」+ 收起表单（树刷新后页面进入 404 态）；网络失败 → 行内提示。
 - **相关实体区块**：复用 `components/entity/relations-view.tsx`（新增 `scope` prop：仅查本节点作为 source 的 1 跳关系、隐藏过滤区）；[+ 新增关联] → `CreateRelationDialog`（`RelationSource` 扩展支持 `outline_node`，源固定为本节点，目标端四类实体或大纲节点）。行内端点链接：四类实体跳 `#/entities/:type/:id`，大纲节点跳 `#/outline/:nodeId`（U8 关联 tab 同效）。删除关系物理删确认（同 U8）。
 - **伏笔标记**：占位区（空态说明「伏笔标记将在伏笔面板（S9）落地」），S9 后接入 plants/advances/resolves 标记。
 
@@ -165,3 +197,4 @@
 - **加载态**：大纲树骨架（outline store 未就绪时触发 loadOutline；加载中显示树骨架，不闪「加载失败」）。
 - **树加载失败**：区块内「大纲加载失败」+ [重试]（loadOutline 静默吞错后的兜底呈现，同大纲列表页）。
 - **表单无项目**：`config === null` 未打开项目 → 引导回首页（同大纲列表页）。
+- **新建变更表单**：目标实体列表加载失败 → 行内 [重试]；目标详情获取失败 → 「旧值」提示 + 引导改「设为」；提交 `VALIDATION_ERROR` → 行内错误（表单保持展开可修正）；`OUTLINE_NODE_NOT_FOUND` → toast + 收起；`deltaCount=0` 时列表空态不变，表单仍可创建首条变更。

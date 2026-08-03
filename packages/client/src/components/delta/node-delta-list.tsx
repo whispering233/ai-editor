@@ -13,7 +13,7 @@ import { targetTypeLabel } from "../../lib/delta";
 import { Button } from "@/components/ui/button";
 import { ChangeSummary } from "./change-summary";
 
-export function NodeDeltaList({ nodeId }: { nodeId: string }) {
+export function NodeDeltaList({ nodeId, reloadKey }: { nodeId: string; /** 外部刷新信号（S12.3：新建变更成功后 +1 重拉，同 RelationsView reloadKey 模式） */ reloadKey?: number }) {
   const [deltas, setDeltas] = useState<DeltaRecord[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +40,7 @@ export function NodeDeltaList({ nodeId }: { nodeId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [nodeId, tick]);
+  }, [nodeId, tick, reloadKey]);
 
   return (
     <div>

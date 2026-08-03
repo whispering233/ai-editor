@@ -8,13 +8,15 @@
 //   服务端 patch.summary !== undefined 即写入）、data diffData（lib/entity-detail，空值规约）；
 //   引用字段（climax_scene/inciting_scene）「未设置」→ 空串（服务端 z.string().optional() 不接受 null）
 // 交互：面包屑「大纲 › … › 节点名」（父级段跳 #/outline/:parentId）；header [保存] 整表单一次提交；
-//   VALIDATION_ERROR → 结构化信息卡底部行内错误；「+ 新建变更」留 S12.3（本卡不建）
+//   VALIDATION_ERROR → 结构化信息卡底部行内错误；「+ 新建变更」（S12.3）→ 内联表单（目标/字段/op/值/
+//   描述，update 自动取旧值）→ 成功后 toast + 重拉变更记录列表
 // 样式 token 类（layout.md §3，oracle 红线：禁止硬编码色类）
 import { useEffect, useState } from "react";
 import { formatTimestamp } from "@ai-editor/shared";
 import { CreateRelationDialog } from "../components/entity/create-relation-dialog";
 import { RelationsView } from "../components/entity/relations-view";
 import { NodeDeltaList } from "../components/delta/node-delta-list";
+import { DeltaCreateForm } from "../components/delta/delta-create-form";
 import { TYPE_LABEL } from "../components/outline/dialogs";
 import { Breadcrumb, type BreadcrumbItem } from "../components/page-nav/Breadcrumb";
 import { Button } from "@/components/ui/button";
@@ -42,11 +44,24 @@ import { useUiStore } from "../stores/ui";
 const FIELD_CLASS =
   "w-full rounded-md border border-border bg-card px-3 py-1.5 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
-/** 区块卡样式（layout.md §2.5：rounded-xl border bg-card p-4 + font-serif 标题） */
-function Card({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {
+/** 区块卡样式（layout.md §2.5：rounded-xl border bg-card p-4 + font-serif 标题；action = 标题行右侧操作区） */
+function Card({
+  title,
+  children,
+  className,
+  action,
+}: {
+  title: string;
+  children: React.ReactNode;
+  className?: string;
+  action?: React.ReactNode;
+}) {
   return (
     <div className={cn("rounded-xl border border-border bg-card p-4", className)}>
-      <h2 className="mb-3 font-serif text-base">{title}</h2>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 className="font-serif text-base">{title}</h2>
+        {action}
+      </div>
       {children}
     </div>
   );
@@ -70,6 +85,9 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
   // 相关实体：新建关系对话框 + 重载信号
   const [relationDialogOpen, setRelationDialogOpen] = useState(false);
   const [relKey, setRelKey] = useState(0);
+  // 变更记录：新建表单展开态 + 列表重载信号（S12.3）
+  const [deltaFormOpen, setDeltaFormOpen] = useState(false);
+  const [deltaReloadKey, setDeltaReloadKey] = useState(0);
 
   useEffect(() => {
     if (outline === null && !outlineLoading && !loadAttempted) {
@@ -270,9 +288,31 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
               {saveError && <p className="mt-3 text-sm text-destructive">{saveError}</p>}
             </Card>
 
-            {/* 变更记录（S5.4 行内面板逻辑迁入；「+ 新建变更」留 S12.3） */}
-            <Card title="变更记录">
-              <NodeDeltaList nodeId={nodeId} />
+            {/* 变更记录（S5.4 行内面板逻辑迁入；「+ 新建变更」S12.3：内联表单 + 成功后重拉列表） */}
+            <Card
+              title="变更记录"
+              action={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  type="button"
+                  onClick={() => setDeltaFormOpen((v) => !v)}
+                >
+                  {deltaFormOpen ? "收起" : "+ 新建变更"}
+                </Button>
+              }
+            >
+              {deltaFormOpen && (
+                <DeltaCreateForm
+                  nodeId={nodeId}
+                  onCreated={() => {
+                    setDeltaFormOpen(false);
+                    setDeltaReloadKey((k) => k + 1);
+                  }}
+                  onClose={() => setDeltaFormOpen(false)}
+                />
+              )}
+              <NodeDeltaList nodeId={nodeId} reloadKey={deltaReloadKey} />
             </Card>
 
             {/* 伏笔标记占位（S9 伏笔面板落地后接入 plants/advances/resolves 标记） */}

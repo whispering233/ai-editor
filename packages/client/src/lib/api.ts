@@ -7,6 +7,7 @@ import type {
   ChatRole,
   ChatSessionSummary,
   ComputeStateResult,
+  DeltaChange,
   DeltaRecord,
   EntitySummary,
   ErrorCode,
@@ -484,6 +485,27 @@ export interface ComputeDeltaBody {
  */
 export function computeDeltaState(body: ComputeDeltaBody): Promise<ComputeStateResult> {
   return apiFetch<ComputeStateResult>("/delta/compute", { method: "POST", body });
+}
+
+/** POST /api/v1/delta 请求体（snake_case；契约 deltaCreateReqSchema：changes min 1、无 order 入参——服务端生成；
+ *  per-op 必填语义：set→to、update→from+to、add→value、remove→value，缺失 400 VALIDATION_ERROR） */
+export interface CreateDeltaBody {
+  node_id: string; // 触发变更的大纲节点 ID
+  target_type: string;
+  target_id: string;
+  changes: DeltaChange[];
+  description: string;
+}
+
+/** POST /api/v1/delta 响应（201；404 OUTLINE_NODE_NOT_FOUND——node_id 不存在/软删） */
+export interface CreateDeltaRes {
+  id: string;
+  applied: DeltaRecord;
+}
+
+/** 追加属性变更记录（S12.3 变更记录创建入口用） */
+export function createDelta(body: CreateDeltaBody): Promise<CreateDeltaRes> {
+  return apiFetch<CreateDeltaRes>("/delta", { method: "POST", body });
 }
 
 // ============ 书架（S1.5；契约：GET /api/v1/project/list，服务端扫描 books/ 子目录） ============

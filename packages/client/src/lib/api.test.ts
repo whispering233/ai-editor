@@ -6,6 +6,7 @@ import {
   CLIENT_NETWORK_ERROR,
   closeProject,
   computeDeltaState,
+  createDelta,
   createRelation,
   deleteRelation,
   listRelations,
@@ -497,6 +498,45 @@ describe("delta 端点（S5.4；契约 endpoints.md「Delta 变更追踪」）",
     mockFetchOnce({ status: 404, body: { success: false, error: { code: "OUTLINE_NODE_NOT_FOUND", message: "节点不存在" } } });
     await expect(
       computeDeltaState({ target_type: "character", target_id: "char-3", at_node_id: "sc-999" }),
+    ).rejects.toMatchObject({ code: "OUTLINE_NODE_NOT_FOUND" });
+  });
+
+  it("createDelta：POST /delta body snake_case（node_id/target_type/target_id/changes/description）；201 响应透传；404 → ApiError", async () => {
+    const body = {
+      id: "delta-9",
+      applied: {
+        id: "delta-9",
+        nodeId: "sc-37",
+        targetType: "character",
+        targetId: "char-3",
+        targetName: "张三",
+        changes: [{ field: "status", op: "update", from: "活跃", to: "中立" }],
+        description: "张三获得断剑认可",
+        order: 1,
+        createdAt: "2026-08-01T10:00:00Z",
+      },
+    };
+    const calls = mockFetchOnce({ status: 201, body: { success: true, data: body } });
+    const res = await createDelta({
+      node_id: "sc-37",
+      target_type: "character",
+      target_id: "char-3",
+      changes: [{ field: "status", op: "update", from: "活跃", to: "中立" }],
+      description: "张三获得断剑认可",
+    });
+    expect(res).toEqual(body);
+    expect(calls[0].url).toBe("/api/v1/delta");
+    expect(calls[0].init?.method).toBe("POST");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({
+      node_id: "sc-37",
+      target_type: "character",
+      target_id: "char-3",
+      changes: [{ field: "status", op: "update", from: "活跃", to: "中立" }],
+      description: "张三获得断剑认可",
+    });
+    mockFetchOnce({ status: 404, body: { success: false, error: { code: "OUTLINE_NODE_NOT_FOUND", message: "节点不存在" } } });
+    await expect(
+      createDelta({ node_id: "sc-999", target_type: "character", target_id: "char-3", changes: [{ field: "status", op: "set", to: "x" }], description: "d" }),
     ).rejects.toMatchObject({ code: "OUTLINE_NODE_NOT_FOUND" });
   });
 });
