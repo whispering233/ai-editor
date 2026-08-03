@@ -9,7 +9,7 @@ import { join } from "node:path";
 import type { DeltaChange, OutlineFileTree } from "@ai-editor/shared";
 import { closeDatabase, openDatabase, type Db } from "../connection.js";
 import { createEntity } from "./entity.js";
-import { insertDelta, listDeltasByNode, listDeltasByTarget } from "./delta.js";
+import { insertDelta, listDanglingDeltas, listDeltasByNode, listDeltasByTarget } from "./delta.js";
 import { findOutlineNode, readOutlineFile, writeOutlineFile } from "../storage/outline.js";
 
 let dir: string;
@@ -338,5 +338,67 @@ describe("listDeltasByTarget（S6.3 工具 get_delta_history 下沉）", () => {
     chapter.children = chapter.children!.filter((c) => c.id !== "sc-1");
     writeOutlineFile(dir, tree);
     expect(listDeltasByTarget(db, charA, dir)).toEqual([]);
+  });
+});
+
+describe("listDanglingDeltas（S6.4 工具 find_orphan_elements 下沉）", () => {
+  /** 移除大纲中指定节点（模拟 purge：物理删除） */
+  function purgeNode(nodeId: string): void {
+    const tree = readOutlineFile(dir);
+    const chapter = findOutlineNode(tree, "ch-1");
+    if (chapter?.type !== "chapter") throw new Error("fixture 缺失 ch-1");
+    chapter.children = chapter.children!.filter((c) => c.id !== nodeId);
+    writeOutlineFile(dir, tree);
+  }
+
+  it("正常 delta（触发/目标均健在）不列入；触发节点软删 / 缺失分别标注 trigger_deleted / trigger_missing", () => {
+    const { charA } = seedBase();
+    insertDelta(db, { nodeId: "vol-1", targetType: "character", targetId: charA, changes: change("a", "1", "2"), description: "正常" });
+    const soft = insertDelta(db, { nodeId: "sc-1", targetType: "character", targetId: charA, changes: change("b", "1", "2"), description: "触发已软删" });
+    insertDelta(db, { nodeId: "sc-2", targetType: "character", targetId: charA, changes: change("c", "1", "2"), description: "触发已缺失" });
+
+    softDeleteScene("sc-1"); // 触发节点软删，delta 未级联 → trigger_deleted
+    purgeNode("sc-2"); // 触发节点物理删除 → trigger_missing
+
+    const dangling = listDanglingDeltas(db, dir);
+    expect(dangling).toHaveLength(2);
+    const byDesc = new Map(dangling.map((d) => [d.description, d]));
+    expect(byDesc.get("触发已软删")).toMatchObject({ id: soft.id, reason: "trigger_deleted" });
+    expect(byDesc.get("触发已缺失")).toMatchObject({ reason: "trigger_missing" });
+  });
+
+  it("目标端点软删/缺失分别标注 target_deleted / target_missing；delta 自身软删不列入", () => {
+    const { charA } = seedBase();
+    const charB = createEntity(db, { type: "character", name: "阿珍" }).id;
+    const targetSoft = insertDelta(db, { nodeId: "sc-1", targetType: "character", targetId: charA, changes: change("a", "1", "2"), description: "目标已软删" });
+    insertDelta(db, { nodeId: "sc-1", targetType: "character", targetId: charB, changes: change("b", "1", "2"), description: "目标已缺失" });
+    const selfSoft = insertDelta(db, { nodeId: "sc-1", targetType: "character", targetId: charA, changes: change("c", "1", "2"), description: "自身软删" });
+
+    db.prepare("UPDATE entities SET deleted_at = ? WHERE id = ?").run(T0, charA); // 目标实体软删
+    db.prepare("UPDATE entities SET deleted_at = NULL WHERE id = ?").run(charB); // charB 存在
+    db.prepare("DELETE FROM entities WHERE id = ?").run(charB); // 物理删除 → 目标缺失
+    db.prepare("UPDATE delta_records SET deleted_at = ? WHERE id = ?").run(T0, selfSoft.id); // 自身软删 → 不列入
+
+    const dangling = listDanglingDeltas(db, dir);
+    const byDesc = new Map(dangling.map((d) => [d.description, d]));
+    expect(dangling).toHaveLength(2);
+    expect(byDesc.get("目标已软删")).toMatchObject({ id: targetSoft.id, reason: "target_deleted" });
+    expect(byDesc.get("目标已缺失")).toMatchObject({ reason: "target_missing" });
+    expect(byDesc.get("自身软删")).toBeUndefined(); // 回收站对象非悬空
+  });
+
+  it("大纲节点目标：节点软删 → target_deleted（未级联）", () => {
+    seedBase();
+    insertDelta(db, { nodeId: "sc-1", targetType: "outline_node", targetId: "sc-2", changes: change("a", "1", "2"), description: "指向场景二" });
+    softDeleteScene("sc-2");
+    const dangling = listDanglingDeltas(db, dir);
+    expect(dangling).toHaveLength(1);
+    expect(dangling[0]).toMatchObject({ targetId: "sc-2", reason: "target_deleted" });
+  });
+
+  it("无悬空 → 空数组", () => {
+    const { charA } = seedBase();
+    insertDelta(db, { nodeId: "sc-1", targetType: "character", targetId: charA, changes: change("a", "1", "2"), description: "正常" });
+    expect(listDanglingDeltas(db, dir)).toEqual([]);
   });
 });

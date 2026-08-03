@@ -17,7 +17,7 @@
 import { findOutlineNode, readOutlineFile } from "../storage/outline.js";
 import { getEntity } from "./entity.js";
 import type { Db } from "../connection.js";
-import type { OutlineFileNode, RelationQueryResult, RelationRecord, RelationRow } from "@ai-editor/shared";
+import type { OutlineFileNode, OutlineFileTree, RelationQueryResult, RelationRecord, RelationRow } from "@ai-editor/shared";
 import { RELATION_TYPES, generateId } from "@ai-editor/shared";
 import { nowIso } from "../storage/atomic.js";
 
@@ -397,4 +397,110 @@ function assertEndpointExists(db: Db, outlineDir: string, type: string, id: stri
  */
 export function deleteRelation(db: Db, id: string): number {
   return db.prepare("DELETE FROM relation_records WHERE id = ?").run(id).changes;
+}
+
+// ============ 悬空关系诊断（S6.4 工具 find_orphan_elements 下沉） ============
+
+/** 悬空关系的端点异常原因（端点物理缺失 / 端点软删未级联） */
+export type DanglingRelationReason = "source_missing" | "target_missing" | "source_deleted" | "target_deleted";
+
+/** 悬空关系记录摘要（关系自身未软删但端点异常——每端点一条） */
+export interface DanglingRelationInfo {
+  id: string;
+  sourceType: string;
+  sourceId: string;
+  targetType: string;
+  targetId: string;
+  relationType: string;
+  reason: DanglingRelationReason;
+}
+
+/** 端点状态判定（实体查预构建批量 Map / 大纲节点查树；root 恒为正常——树根非关系端点但无害） */
+function checkEndpointState(
+  entityStates: ReadonlyMap<string, "ok" | "missing" | "deleted">,
+  tree: OutlineFileTree,
+  type: string,
+  id: string,
+): "ok" | "missing" | "deleted" {
+  if (id === "root") return "ok";
+  if ((ENTITY_ENDPOINT_TYPES as readonly string[]).includes(type)) {
+    return entityStates.get(id) ?? "missing";
+  }
+  if (type === OUTLINE_ENDPOINT_TYPE) {
+    const node = findOutlineNode(tree, id);
+    return node === undefined ? "missing" : node.deleted === true ? "deleted" : "ok";
+  }
+  return "missing"; // 未知端点类型（脏数据）
+}
+
+/**
+ * 全量悬空关系诊断（S6.4 工具 find_orphan_elements 下沉，tools.md「孤立元素」）：
+ * 关系自身未软删，但端点异常——**每端点一条**记录（同一关系两端点异常时出两条）：
+ * - *_missing：端点已物理删除（实体 purge / 大纲节点 purge）——dangling_relations 侧
+ * - *_deleted：端点已软删但关系未级联软删（跨存储不一致的 relation 侧，决策 12 修订
+ *   级联软删/启动一致性校验（决策 16 修订）兜底的对象同源）——inconsistent_soft_deletes 侧
+ * 软删自身的关系（回收站对象）**不在此列**——由回收站管理，非悬空。
+ * 实体端点状态一次 IN 批量收集（避免逐行查询——buildEndpointContext 同款先例）。
+ * @param outlineDir 项目根（大纲端点存在性/软删校验读 outline.json）
+ */
+export function listDanglingRelations(db: Db, outlineDir: string): DanglingRelationInfo[] {
+  const rows = db
+    .prepare("SELECT * FROM relation_records WHERE deleted_at IS NULL ORDER BY created_at")
+    .all() as Array<Record<string, unknown>>;
+  if (rows.length === 0) return [];
+
+  const tree = readOutlineFile(outlineDir);
+  // 实体端点 id 集合（一次 IN 批量收集状态）
+  const entityIds = new Set<string>();
+  for (const raw of rows) {
+    const r = rowToRelationRow(raw);
+    if ((ENTITY_ENDPOINT_TYPES as readonly string[]).includes(r.source_type)) entityIds.add(r.source_id);
+    if ((ENTITY_ENDPOINT_TYPES as readonly string[]).includes(r.target_type)) entityIds.add(r.target_id);
+  }
+  const entityStates = new Map<string, "ok" | "missing" | "deleted">();
+  if (entityIds.size > 0) {
+    const placeholders = [...entityIds].map(() => "?").join(",");
+    const found = db
+      .prepare(`SELECT id, deleted_at FROM entities WHERE id IN (${placeholders})`)
+      .all(...entityIds) as Array<{ id: string; deleted_at: string | null }>;
+    const foundIds = new Set(found.map((f) => f.id));
+    for (const id of entityIds) {
+      if (!foundIds.has(id)) {
+        entityStates.set(id, "missing");
+      } else {
+        const f = found.find((x) => x.id === id)!;
+        entityStates.set(id, f.deleted_at !== null ? "deleted" : "ok");
+      }
+    }
+  }
+
+  const out: DanglingRelationInfo[] = [];
+  for (const raw of rows) {
+    const r = rowToRelationRow(raw);
+    const source = checkEndpointState(entityStates, tree, r.source_type, r.source_id);
+    if (source !== "ok") {
+      out.push({
+        id: r.id,
+        sourceType: r.source_type,
+        sourceId: r.source_id,
+        targetType: r.target_type,
+        targetId: r.target_id,
+        relationType: r.relation_type,
+        reason: source === "missing" ? "source_missing" : "source_deleted",
+      });
+    }
+    const target = checkEndpointState(entityStates, tree, r.target_type, r.target_id);
+    if (target !== "ok") {
+      out.push({
+        id: r.id,
+        sourceType: r.source_type,
+        sourceId: r.source_id,
+        targetType: r.target_type,
+        targetId: r.target_id,
+        relationType: r.relation_type,
+        reason: target === "missing" ? "target_missing" : "target_deleted",
+      });
+    }
+  }
+  return out;
 }

@@ -1,9 +1,10 @@
-// @ai-editor/tools 入口：导出工具上下文 / 注册表 / 查询类工具实现
-// S6.3 查询类工具（自动权限，8 个）在此注册；S6.4 分析类 / S6.5 伏笔 / S6.6 提案 /
-// S6.7 执行 + executor 通过 registry.registerTool(s) 继续挂载（注册表是唯一事实来源）。
+// @ai-editor/tools 入口：导出工具上下文 / 注册表 / 查询类与分析类工具实现
+// S6.3 查询类工具（自动权限，8 个）+ S6.4 分析类工具（自动权限，5 个）在此注册；
+// S6.5 伏笔 / S6.6 提案 / S6.7 执行 + executor 通过 registry.registerTool(s) 继续挂载
+// （注册表是唯一事实来源）。
 //
 // 注册语义：模块副作用注册（import 即挂载）——S7.4 executor 直接 getTool(name) 调度；
-// 工具定义集中在各 query 模块的 *_TOOL_DEFS 数组（name/description/argsSchema/permission/run），
+// 工具定义集中在各 query/analysis 模块（name/description/argsSchema/permission/run），
 // 本入口统一注册并导出全部 API。
 
 // 包标识常量（与 shared/llm 包风格一致：SHARED_PKG_NAME/LLM_PKG_NAME；agent 冒烟依赖）
@@ -16,6 +17,12 @@ export * from "./query/entity.js";
 export * from "./query/relation.js";
 export * from "./query/outline.js";
 export * from "./query/delta.js";
+export * from "./analysis/utils.js";
+export * from "./analysis/consistency.js";
+export * from "./analysis/conflict.js";
+export * from "./analysis/path.js";
+export * from "./analysis/orphan.js";
+export * from "./analysis/suggest.js";
 
 import { TOOL_PERMISSION } from "@ai-editor/shared";
 import {
@@ -115,3 +122,74 @@ const queryToolDefs: ToolDefinition[] = [
 ];
 
 registerTools(queryToolDefs);
+
+import {
+  analyzeConsistencyArgsSchema,
+  detectConflictsArgsSchema,
+  findOrphanElementsArgsSchema,
+  suggestConnectionsArgsSchema,
+  tracePlotPathsArgsSchema,
+} from "@ai-editor/shared/schemas/tools";
+import { runAnalyzeConsistency } from "./analysis/consistency.js";
+import { runDetectConflicts } from "./analysis/conflict.js";
+import { runTracePlotPaths } from "./analysis/path.js";
+import { runFindOrphanElements } from "./analysis/orphan.js";
+import { runSuggestConnections } from "./analysis/suggest.js";
+
+/** 分析类工具定义（S6.4，tools.md「分析类（自动）」5 个；权限全为 AUTO，长任务执行中检查 signal） */
+const analysisToolDefs: ToolDefinition[] = [
+  {
+    name: "analyze_consistency",
+    description:
+      "实体档案一致性检查：检查单个实体 data 内部的矛盾（如性格反义词对并存、负年龄、" +
+      "伏笔已兑现但未标注兑现节点、expected_resolve_node_id/parent_id 悬空引用）。" +
+      "返回 issues: [{ severity: error|warning, field, description }]；实体不存在或已软删返回 null。",
+    argsSchema: analyzeConsistencyArgsSchema,
+    permission: TOOL_PERMISSION.AUTO,
+    run: runAnalyzeConsistency,
+  },
+  {
+    name: "detect_conflicts",
+    description:
+      "跨实体设定矛盾检测：扫描关系图发现不一致——对称关系（ally/family）单向缺失、" +
+      "同一对实体互斥关系并存（ally+rival）、互相击杀（双向 kills）。" +
+      "types 限定实体类型、relation_filter 限定参与检测的关系类型（缺省全量）。" +
+      "返回 conflicts: [{ entity_a, entity_b, field, description }]。",
+    argsSchema: detectConflictsArgsSchema,
+    permission: TOOL_PERMISSION.AUTO,
+    run: runDetectConflicts,
+  },
+  {
+    name: "trace_plot_paths",
+    description:
+      "剧情路径推演：从 from_node_id 到 to_node_id 推演可能的推进路径——沿大纲树的直接链" +
+      "（祖先后裔）与沿 plot_edge 剧情连线的 k 跳路径。每条路径含 nodes/description/risk_factors" +
+      "（过长路径、场景缺目标、章节缺反转等风险）。节点不存在或已软删返回 null。",
+    argsSchema: tracePlotPathsArgsSchema,
+    permission: TOOL_PERMISSION.AUTO,
+    run: runTracePlotPaths,
+  },
+  {
+    name: "find_orphan_elements",
+    description:
+      "全项目孤立元素诊断（无参）：unused_characters（从未出场或最后活跃章早于当前最新章的角色）、" +
+      "unresolved_deltas（触发节点缺失/目标端点软删或缺失的永不生效变更）、" +
+      "dangling_relations（端点已物理删除的悬空关系）、" +
+      "inconsistent_soft_deletes（大纲节点已软删但关联 relation/delta 未级联软删的跨存储不一致，诊断用途）。",
+    argsSchema: findOrphanElementsArgsSchema,
+    permission: TOOL_PERMISSION.AUTO,
+    run: runFindOrphanElements,
+  },
+  {
+    name: "suggest_connections",
+    description:
+      "潜在关系发现：为指定实体建议同类型实体的潜在关联——共同出现于同一场景（同场戏）、" +
+      "共享关联实体（朋友的朋友）。返回 suggestions: [{ target_id, relation_type: ally, reason }]" +
+      "（已有直接关系的候选跳过）。实体不存在或已软删返回 null。",
+    argsSchema: suggestConnectionsArgsSchema,
+    permission: TOOL_PERMISSION.AUTO,
+    run: runSuggestConnections,
+  },
+];
+
+registerTools(analysisToolDefs);

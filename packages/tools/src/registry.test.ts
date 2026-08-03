@@ -78,15 +78,16 @@ describe("registry 注册/查询 API", () => {
   });
 });
 
-describe("S6.3 查询工具注册（入口副作用，import ./index.js 触发）", () => {
+describe("S6.3+S6.4 工具注册（入口副作用，import ./index.js 触发）", () => {
   beforeEach(async () => {
     // 确保 index.ts 的注册副作用已执行（vitest 按文件隔离模块图，显式导入）
     await import("./index.js");
   });
 
-  it("8 个查询工具全部注册且权限为 AUTO（tools.md「查询类（自动）」）", () => {
+  it("13 个工具全部注册（8 查询 + 5 分析）且权限为 AUTO、description 非空", () => {
     const names = listTools().map((t) => t.name);
     for (const expected of [
+      // S6.3 查询类（tools.md「查询类（自动）」）
       "get_entity",
       "search_entities",
       "query_relationships",
@@ -95,11 +96,33 @@ describe("S6.3 查询工具注册（入口副作用，import ./index.js 触发�
       "compute_state",
       "get_delta_history",
       "get_entity_summary",
+      // S6.4 分析类（tools.md「分析类（自动）」）
+      "analyze_consistency",
+      "detect_conflicts",
+      "trace_plot_paths",
+      "find_orphan_elements",
+      "suggest_connections",
     ]) {
       expect(names).toContain(expected);
       expect(getTool(expected)!.permission).toBe(TOOL_PERMISSION.AUTO);
       expect(getTool(expected)!.description.length).toBeGreaterThan(0);
     }
+    expect(toolCount()).toBeGreaterThanOrEqual(13); // 本文件注册辅助测试工具，故用下限断言（8 查询 + 5 分析）
+  });
+
+  it("分析工具 schema：参数必填校验（detect_conflicts 的 types/relation_filter 复用既有枚举）", () => {
+    expect(getTool("analyze_consistency")!.argsSchema.safeParse({ entity_id: "char-1" }).success).toBe(true);
+    expect(getTool("analyze_consistency")!.argsSchema.safeParse({}).success).toBe(false);
+    const detect = getTool("detect_conflicts")!.argsSchema;
+    expect(detect.safeParse({}).success).toBe(true); // 全部可选
+    expect(detect.safeParse({ types: ["character"], relation_filter: ["ally"] }).success).toBe(true);
+    expect(detect.safeParse({ types: ["精灵"] }).success).toBe(false); // 实体类型枚举外
+    expect(detect.safeParse({ relation_filter: ["自定义"] }).success).toBe(false); // 关系类型枚举外
+    expect(getTool("trace_plot_paths")!.argsSchema.safeParse({ from_node_id: "sc-1", to_node_id: "sc-2" }).success).toBe(true);
+    expect(getTool("trace_plot_paths")!.argsSchema.safeParse({ from_node_id: "sc-1" }).success).toBe(false);
+    expect(getTool("find_orphan_elements")!.argsSchema.safeParse({}).success).toBe(true);
+    expect(getTool("find_orphan_elements")!.argsSchema.safeParse({ x: 1 }).success).toBe(false); // strict
+    expect(getTool("suggest_connections")!.argsSchema.safeParse({ entity_id: "char-1" }).success).toBe(true);
   });
 
   it("argsSchema 严格校验：未知参数拒绝（strict），合法参数通过", () => {

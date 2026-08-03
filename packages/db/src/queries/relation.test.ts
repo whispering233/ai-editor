@@ -13,10 +13,11 @@ import {
   createRelation,
   deleteRelation,
   getRelation,
+  listDanglingRelations,
   listRelations,
   RelationError,
 } from "./relation.js";
-import { readOutlineFile, writeOutlineFile } from "../storage/outline.js";
+import { findOutlineNode, readOutlineFile, writeOutlineFile } from "../storage/outline.js";
 
 let dir: string;
 let db: Db;
@@ -349,5 +350,91 @@ describe("deleteRelation（物理删，决策 12 修订）", () => {
     expect(
       (db.prepare("SELECT COUNT(*) AS c FROM relation_records").get() as { c: number }).c,
     ).toBe(0);
+  });
+});
+
+describe("listDanglingRelations（S6.4 工具 find_orphan_elements 下沉）", () => {
+  /** 实体物理删除（purge 语义：直接 DELETE） */
+  function purgeEntity(id: string): void {
+    db.prepare("DELETE FROM entities WHERE id = ?").run(id);
+  }
+
+  /**
+   * 直接 SQL 插入关系行（绕过 createRelation 的端点存在性校验）——
+   * 悬空关系无法经正常 API 构造，需模拟「端点已 purge 但关系残留」的脏数据形态
+   */
+  function insertRelationRaw(
+    db: Db,
+    input: { sourceType: string; sourceId: string; targetType: string; targetId: string; relationType: string },
+  ): { id: string } {
+    const id = `rel-test-${Math.random().toString(36).slice(2, 8)}`;
+    db.prepare(
+      `INSERT INTO relation_records (id, source_type, source_id, target_type, target_id, relation_type, metadata, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)`,
+    ).run(id, input.sourceType, input.sourceId, input.targetType, input.targetId, input.relationType, T0, T0);
+    return { id };
+  }
+
+  /** 直接改 outline.json 软删指定节点 */
+  function softDeleteNode(nodeId: string): void {
+    const tree = readOutlineFile(dir);
+    const node = findOutlineNode(tree, nodeId)!;
+    node.deleted = true;
+    node.deleted_at = T0;
+    writeOutlineFile(dir, tree);
+  }
+
+  it("正常关系（端点健在）不列入；端点物理删除 → source/target_missing", () => {
+    const { charA, charB } = seedBase();
+    createRelation(db, { sourceType: "character", sourceId: charA, targetType: "character", targetId: charB, relationType: "ally" }, dir);
+    // 悬空关系无法经 createRelation 构造（端点存在性校验）——直接 INSERT 模拟 purge 后残留
+    const missing = insertRelationRaw(db, { sourceType: "character", sourceId: charA, targetType: "character", targetId: "char-gone", relationType: "ally" });
+    const outlineMissing = insertRelationRaw(db, { sourceType: "character", sourceId: charA, targetType: "outline_node", targetId: "sc-gone", relationType: "appears_in" });
+
+    const dangling = listDanglingRelations(db, dir);
+    const byId = new Map(dangling.map((d) => [d.id, d]));
+    expect(byId.get(missing.id)).toMatchObject({ relationType: "ally", reason: "target_missing" });
+    expect(byId.get(outlineMissing.id)).toMatchObject({ reason: "target_missing" });
+    expect(byId.get(missing.id)).toBeDefined();
+    expect(dangling.filter((d) => d.relationType === "ally" && d.id === missing.id)).toHaveLength(1);
+    expect(dangling.filter((d) => d.id === missing.id && d.reason === "source_missing")).toEqual([]); // source 健在
+  });
+
+  it("端点软删但关系未级联 → *_deleted（inconsistent_soft_deletes 侧）；关系自身软删不列入", () => {
+    const { charA, charB } = seedBase();
+    const toDeleted = createRelation(db, { sourceType: "character", sourceId: charA, targetType: "character", targetId: charB, relationType: "ally" }, dir);
+    const nodeDeleted = createRelation(db, { sourceType: "character", sourceId: charA, targetType: "outline_node", targetId: "sc-1", relationType: "appears_in" }, dir);
+    const selfSoft = insertRelationRaw(db, { sourceType: "character", sourceId: charA, targetType: "outline_node", targetId: "sc-2", relationType: "appears_in" });
+
+    // 直接 UPDATE 实体软删（绕过 softDeleteEntity 的级联软删——级联会把关系一并标删，
+    // 无法构造「端点软删但关系未级联」的幽灵形态）
+    db.prepare("UPDATE entities SET deleted_at = ? WHERE id = ?").run(T0, charB);
+    softDeleteNode("sc-1");
+    db.prepare("UPDATE relation_records SET deleted_at = ? WHERE id = ?").run(T0, selfSoft.id);
+
+    const dangling = listDanglingRelations(db, dir);
+    const byId = new Map(dangling.map((d) => [d.id, d]));
+    expect(byId.get(toDeleted.id)).toMatchObject({ reason: "target_deleted" });
+    expect(byId.get(nodeDeleted.id)).toMatchObject({ reason: "target_deleted" });
+    expect(byId.get(selfSoft.id)).toBeUndefined(); // 自身软删 = 回收站对象，非悬空
+  });
+
+  it("同一关系两端点异常时各出一条（每端点一条记录）", () => {
+    const { charA } = seedBase();
+    const rel = insertRelationRaw(db, { sourceType: "character", sourceId: charA, targetType: "character", targetId: "char-gone", relationType: "ally" });
+    const rows = listDanglingRelations(db, dir);
+    expect(rows.filter((r) => r.id === rel.id)).toHaveLength(1); // 仅 target 异常
+    // 再 purge source → 两端点各一条
+    purgeEntity(charA);
+    const rows2 = listDanglingRelations(db, dir);
+    const mine = rows2.filter((r) => r.id === rel.id);
+    expect(mine).toHaveLength(2);
+    expect(mine.map((r) => r.reason).sort()).toEqual(["source_missing", "target_missing"]);
+  });
+
+  it("无悬空 → 空数组", () => {
+    const { charA, charB } = seedBase();
+    createRelation(db, { sourceType: "character", sourceId: charA, targetType: "character", targetId: charB, relationType: "ally" }, dir);
+    expect(listDanglingRelations(db, dir)).toEqual([]);
   });
 });

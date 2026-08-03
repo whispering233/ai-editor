@@ -221,3 +221,96 @@ export function listDeltasByTarget(db: Db, targetId: string, outlineDir: string)
   const tree = readOutlineFile(outlineDir);
   return filterVisibleDeltas(db, rows, tree);
 }
+
+// ============ 悬空 Delta 诊断（S6.4 工具 find_orphan_elements 下沉） ============
+
+/** 悬空 Delta 的不可见原因（决策 12 修订三态的后两态 + 脏引用兜底） */
+export type DanglingDeltaReason = "trigger_missing" | "trigger_deleted" | "target_missing" | "target_deleted";
+
+/** 悬空 Delta 记录摘要（delta 自身未软删但已不可见——「幽灵变更」） */
+export interface DanglingDeltaInfo {
+  id: string;
+  nodeId: string;
+  targetType: string;
+  targetId: string;
+  description: string;
+  reason: DanglingDeltaReason;
+}
+
+/**
+ * 全量悬空 Delta 诊断（S6.4 工具 find_orphan_elements 下沉，tools.md「孤立元素」）：
+ * delta 自身未软删，但三态可见性（决策 12 修订）后两态命中——该记录永不生效：
+ * - trigger_missing：触发节点已物理删除（purge 后脏引用）
+ * - trigger_deleted：触发节点已软删但本 delta 未级联软删（跨存储不一致的 delta 侧，
+ *   与 outline-ops 级联软删/启动一致性校验（决策 16 修订）兜底的对象同源）
+ * - target_missing：目标端点已物理删除（实体 purge / 大纲节点 purge）
+ * - target_deleted：目标端点已软删但本 delta 未级联软删
+ * 软删自身的 delta（回收站对象）**不在此列**——由回收站管理，非悬空。
+ * @param outlineDir 项目根（触发节点与大纲 target 的存在性/软删校验读 outline.json）
+ */
+export function listDanglingDeltas(db: Db, outlineDir: string): DanglingDeltaInfo[] {
+  const rows = db
+    .prepare('SELECT * FROM delta_records WHERE deleted_at IS NULL ORDER BY "order" ASC')
+    .all() as Array<Record<string, unknown>>;
+  if (rows.length === 0) return [];
+
+  const tree = readOutlineFile(outlineDir);
+  // 实体目标端点状态：一次 IN 批量收集（避免逐行查询——relation.ts buildEndpointContext 同款先例）
+  const entityIds = [
+    ...new Set(
+      rows
+        .filter((r) => (ENTITY_TARGET_TYPES as readonly string[]).includes(r.target_type as string))
+        .map((r) => r.target_id as string),
+    ),
+  ];
+  const entityStates = new Map<string, "ok" | "missing" | "deleted">();
+  if (entityIds.length > 0) {
+    const placeholders = entityIds.map(() => "?").join(",");
+    const found = db
+      .prepare(`SELECT id, deleted_at FROM entities WHERE id IN (${placeholders})`)
+      .all(...entityIds) as Array<{ id: string; deleted_at: string | null }>;
+    const foundIds = new Set(found.map((f) => f.id));
+    for (const id of entityIds) {
+      if (!foundIds.has(id)) {
+        entityStates.set(id, "missing");
+      } else {
+        const f = found.find((x) => x.id === id)!;
+        entityStates.set(id, f.deleted_at !== null ? "deleted" : "ok");
+      }
+    }
+  }
+
+  const out: DanglingDeltaInfo[] = [];
+  for (const raw of rows) {
+    const row = rowToDeltaRow(raw);
+    // 触发节点：缺失 → 脏引用；软删 → 未级联
+    const trigger = findOutlineNode(tree, row.node_id);
+    if (trigger === undefined) {
+      out.push({ id: row.id, nodeId: row.node_id, targetType: row.target_type, targetId: row.target_id, description: row.description, reason: "trigger_missing" });
+      continue;
+    }
+    if (trigger.deleted === true) {
+      out.push({ id: row.id, nodeId: row.node_id, targetType: row.target_type, targetId: row.target_id, description: row.description, reason: "trigger_deleted" });
+      continue;
+    }
+    // 目标端点：实体查批量 Map / 大纲节点查树
+    let targetState: "ok" | "missing" | "deleted";
+    if ((ENTITY_TARGET_TYPES as readonly string[]).includes(row.target_type)) {
+      targetState = entityStates.get(row.target_id) ?? "missing";
+    } else {
+      const node = findOutlineNode(tree, row.target_id);
+      targetState = node === undefined ? "missing" : node.deleted === true ? "deleted" : "ok";
+    }
+    if (targetState !== "ok") {
+      out.push({
+        id: row.id,
+        nodeId: row.node_id,
+        targetType: row.target_type,
+        targetId: row.target_id,
+        description: row.description,
+        reason: targetState === "missing" ? "target_missing" : "target_deleted",
+      });
+    }
+  }
+  return out;
+}

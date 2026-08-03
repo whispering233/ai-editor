@@ -120,3 +120,62 @@ export const getEntitySummaryArgsSchema = z
   .strict();
 
 export type GetEntitySummaryArgs = z.infer<typeof getEntitySummaryArgsSchema>;
+
+// ============ 分析类工具（tools.md「分析类（自动）」，S6.4） ============
+
+// === analyze_consistency（一致性分析） ===
+
+/** analyze_consistency 入参：entity_id（检查该实体档案内部的矛盾，如性格反义词对/状态冲突） */
+export const analyzeConsistencyArgsSchema = z
+  .object({
+    entity_id: z.string(),
+  })
+  .strict();
+
+export type AnalyzeConsistencyArgs = z.infer<typeof analyzeConsistencyArgsSchema>;
+
+// === detect_conflicts（跨实体矛盾检测） ===
+
+/**
+ * detect_conflicts 入参：types 限定参与检测的实体类型（缺省全部）；
+ * relation_filter 限定参与检测的关系类型（缺省用内置对称/互斥/互杀规则集）。
+ * 检测对象：对称关系单向缺失（ally/family）、互斥关系并存（ally+rival）、互杀（kills×2）。
+ */
+export const detectConflictsArgsSchema = z
+  .object({
+    types: z.array(z.enum(ENTITY_TYPES)).optional(),
+    relation_filter: z.array(z.enum(RELATION_TYPES)).optional(),
+  })
+  .strict();
+
+export type DetectConflictsArgs = z.infer<typeof detectConflictsArgsSchema>;
+
+// === trace_plot_paths（剧情路径推演） ===
+
+/** trace_plot_paths 入参：from_node_id → to_node_id（大纲节点；输出树路径 + plot_edge 连线路径） */
+export const tracePlotPathsArgsSchema = z
+  .object({
+    from_node_id: z.string(),
+    to_node_id: z.string(),
+  })
+  .strict();
+
+export type TracePlotPathsArgs = z.infer<typeof tracePlotPathsArgsSchema>;
+
+// === find_orphan_elements（孤立元素诊断） ===
+
+/** find_orphan_elements 入参：无参（全项目扫描：闲置角色/未解决变更/悬空关系/跨存储软删不一致） */
+export const findOrphanElementsArgsSchema = z.object({}).strict();
+
+export type FindOrphanElementsArgs = z.infer<typeof findOrphanElementsArgsSchema>;
+
+// === suggest_connections（关系发现） ===
+
+/** suggest_connections 入参：entity_id（基于共享场景/共同邻居/同分类等信号建议潜在关联） */
+export const suggestConnectionsArgsSchema = z
+  .object({
+    entity_id: z.string(),
+  })
+  .strict();
+
+export type SuggestConnectionsArgs = z.infer<typeof suggestConnectionsArgsSchema>;
