@@ -37,7 +37,10 @@ export function Breadcrumb({
                 {item.label}
               </button>
             ) : (
-              <span className="rounded-md bg-foreground px-2.5 py-1 text-sm font-medium text-background">
+              <span
+                aria-current="page"
+                className="max-w-40 truncate rounded-md bg-foreground px-2.5 py-1 text-sm font-medium text-background"
+              >
                 {item.label}
               </span>
             )}
