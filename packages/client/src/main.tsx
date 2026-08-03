@@ -36,7 +36,14 @@ function renderPage(route: Route): ReactNode {
         second !== undefined && (ENTITY_TYPES as readonly string[]).includes(second)
           ? second
           : "character";
-      return third !== undefined ? <EntityDetail type={type} id={third} /> : <EntityList type={type} />;
+      // key = 实体身份：type/id 变化强制卸载重挂——详情页本地 state（deltaOpen、ComputePreview
+      //   result/atNodeId 等）跨实体复用会残留错位（S5.4 审核 M1：关系行跳详情 A→B 用 A 的 result 做 diff）；
+      //   重挂同时让 ComputePreview 的 atNodeId 惰性初始化重新读取 currentPosition
+      return third !== undefined ? (
+        <EntityDetail key={`${type}:${third}`} type={type} id={third} />
+      ) : (
+        <EntityList type={type} />
+      );
     }
     case "hooks":
       return <HookPanel />;

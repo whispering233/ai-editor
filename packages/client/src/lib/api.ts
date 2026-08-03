@@ -6,6 +6,8 @@
 import type {
   ChatRole,
   ChatSessionSummary,
+  ComputeStateResult,
+  DeltaRecord,
   EntitySummary,
   ErrorCode,
   OutlineTree,
@@ -450,6 +452,36 @@ export function createRelation(body: CreateRelationBody): Promise<CreateRelation
 /** DELETE /api/v1/relation/:id 响应（物理删除，不进入回收站；404 RELATION_NOT_FOUND） */
 export function deleteRelation(id: string): Promise<{ deleted: true }> {
   return apiFetch<{ deleted: true }>(`/relation/${id}`, { method: "DELETE" });
+}
+
+// ============ Delta（S5.4；契约：endpoints.md「Delta 变更追踪」L395-510 + shared delta*Schema） ============
+
+/** GET /api/v1/delta/node/:nodeId 响应（按节点查该节点触发的全部 Delta，endpoints.md L436-462） */
+export interface DeltaByNodeRes {
+  nodeId: string;
+  deltas: DeltaRecord[];
+}
+
+/** 获取大纲节点触发的变更记录。
+ * 契约（endpoints.md L436-462）未定义该端点 404：节点缺失/软删 → 200 空数组（server 三态过滤）；
+ * 调用方无需处理 OUTLINE_NODE_NOT_FOUND（面板错误分支仅为防御，见 node-delta-panel.tsx） */
+export function getDeltasByNode(nodeId: string): Promise<DeltaByNodeRes> {
+  return apiFetch<DeltaByNodeRes>(`/delta/node/${nodeId}`);
+}
+
+/** POST /api/v1/delta/compute 请求体（snake_case；决策 9/19：服务端自动计算根 → at_node 的树路径） */
+export interface ComputeDeltaBody {
+  target_type: string;
+  target_id: string;
+  at_node_id: string;
+}
+
+/**
+ * 计算实体到达指定大纲节点时的累积状态（决策 9 修订：op=update from 不匹配 → 跳过 +
+ * conflicts 标注，非 409；404 OUTLINE_NODE_NOT_FOUND——at_node 已 purge）
+ */
+export function computeDeltaState(body: ComputeDeltaBody): Promise<ComputeStateResult> {
+  return apiFetch<ComputeStateResult>("/delta/compute", { method: "POST", body });
 }
 
 // ============ 书架（S1.5；契约：GET /api/v1/project/list，服务端扫描 books/ 子目录） ============

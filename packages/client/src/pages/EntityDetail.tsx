@@ -1,16 +1,18 @@
-// 实体详情/编辑页（S3.6；替换 T7.1 占位壳；U8 起「新增关联」用共用 CreateRelationDialog）
+// 实体详情/编辑页（S3.6；替换 T7.1 占位壳；U8 起「新增关联」用共用 CreateRelationDialog；
+//   S5.4 起元信息行「变更记录 N 条」展开「状态预览」区块——POST /delta/compute + conflicts 标注）
 // 路由：#/entities/:type/:id；数据：GET /api/v1/entity/:type/:id（含双向 relations + deltaCount）
 // 契约：doc/ui/pages/entity-detail.md——data 表单按类型差异化（lib/entity-detail.ts detailFieldsForType）、
 //   PUT partial 浅合并（diffData 只提交变更字段）、关系 1 跳双向展示 + 创建对话框（409 RELATION_EXISTS 提示，
 //   组件抽至 components/entity/create-relation-dialog.tsx，详情模式 source 固定本实体）、
 //   删关系物理删确认（决策 12 修订：轻量可重建）、软删确认 + 级联计数、404 引导
 // 边界：custom_fields 仅在响应 data 已有该键时显示（MVP 无法新增键）；「问 AI」入口待 chat store
-//   就绪后补（layout.md §3.3 带上下文进聊天）；Delta 明细无 REST 端点（原型注释），deltaCount 仅数字
+//   就绪后补（layout.md §3.3 带上下文进聊天）
 import { useEffect, useState } from "react";
 import { formatTimestamp } from "@ai-editor/shared";
 import type { EntityType } from "@ai-editor/shared";
 import { ConfirmDialog } from "../components/outline/dialogs";
 import { CreateRelationDialog } from "../components/entity/create-relation-dialog";
+import { ComputePreview } from "../components/delta/compute-preview";
 import { Breadcrumb } from "../components/page-nav/Breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -168,6 +170,8 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
   const [relationDialogOpen, setRelationDialogOpen] = useState(false);
   const [deleteRelationTarget, setDeleteRelationTarget] = useState<RelationSummaryItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState(false);
+  /** 「变更记录 N 条」展开状态（S5.4：下方渲染状态预览区块） */
+  const [deltaOpen, setDeltaOpen] = useState(false);
 
   const fields = detailFieldsForType(entityType);
 
@@ -316,14 +320,24 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
           </Button>
         </div>
       </div>
-      {/* 元信息行 */}
+      {/* 元信息行（文字与「变更记录 N 条」入口同用 muted-foreground，双主题一致） */}
       {detail && (
-        <p className="mb-4 text-xs text-zinc-400">
+        <p className="mb-4 text-xs text-muted-foreground">
           创建于 {formatTimestamp(detail.createdAt)} · 更新于 {formatTimestamp(detail.updatedAt)} ·{" "}
-          <span title="MVP 无按实体查 Delta 明细的 REST 端点；查看状态变化请在大纲中按节点查看，或在聊天中让 AI 计算">
+          <button
+            type="button"
+            onClick={() => setDeltaOpen((v) => !v)}
+            title="展开状态预览：计算该实体在任意大纲节点处的累积状态"
+            className="text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
+          >
             变更记录 {detail.deltaCount} 条
-          </span>
+          </button>
         </p>
+      )}
+
+      {/* 状态预览区块（S5.4：元信息行入口展开；位于表单上方） */}
+      {detail && deltaOpen && (
+        <ComputePreview type={entityType} id={id} currentData={detail.data} deltaCount={detail.deltaCount} />
       )}
 
       {/* 加载骨架 */}

@@ -244,6 +244,9 @@ client/src/
     chat/          # ChatPanel：会话标题/下拉、断连横幅/错误条、消息流、工具折叠行、
                    #   提案卡、focus 小条、输入区
     outline/       # 大纲树相关对话框（dialogs.tsx，含 ConfirmDialog）
+    entity/        # 实体侧对话框与视图（create-relation-dialog、relations-view）
+    delta/         # Delta 展示：change-summary（changes 紧凑 chips，跨页复用）、
+                   #   node-delta-panel（大纲节点变更记录）、compute-preview（实体状态预览）
     page-nav/      # Breadcrumb 面包屑（tab 化分段，跨页复用）
     feedback/      # 全局反馈宿主：Toaster 挂载 + ui store toast→sonner 桥接 + ErrorBanner 错误横幅
   pages/           # 页面级组件（只做数据编排与状态绑定）：Dashboard / Outline / Canvas /
@@ -263,10 +266,10 @@ client/src/
 | 页面 | 路由 | 核心 API | 细案 |
 |------|------|---------|------|
 | Dashboard（概览/引导） | `#/` | project/config、project/list、entity/:type ×4、outline、chat/sessions | pages/dashboard.md |
-| Outline | `#/outline` | outline CRUD、project/config（设当前位置） | pages/outline.md |
+| Outline | `#/outline` | outline CRUD、project/config（设当前位置）、delta/node | pages/outline.md |
 | Canvas | `#/canvas` | outline、relation（plot_edge）、localStorage 布局 | pages/canvas.md |
 | EntityList | `#/entities/:type`、`#/entities/relations`（关联 tab） | entity/:type（列表）、relation（depth=1） | pages/entity-list.md |
-| EntityDetail | `#/entities/:type/:id` | entity/:type/:id、relation | pages/entity-detail.md |
+| EntityDetail | `#/entities/:type/:id` | entity/:type/:id、relation、delta/compute | pages/entity-detail.md |
 | ChatPanel（右栏常驻） | —（无独立路由） | chat（SSE）、chat/sessions、proposal | pages/chat.md |
 | HookPanel | `#/hooks` | entity/hook、outline、relation、delta | pages/hook-panel.md |
 | Trash | `#/trash` | trash/* | pages/trash.md |

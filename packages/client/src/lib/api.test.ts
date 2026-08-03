@@ -5,6 +5,7 @@ import {
   ApiError,
   CLIENT_NETWORK_ERROR,
   closeProject,
+  computeDeltaState,
   createRelation,
   deleteRelation,
   listRelations,
@@ -13,6 +14,7 @@ import {
   createProject,
   deleteEntity,
   deleteOutlineNode,
+  getDeltasByNode,
   getEntityDetail,
   getOutlinePath,
   getSettingsLlm,
@@ -438,5 +440,63 @@ describe("关系端点（S3.6，契约 endpoints.md「关系」）", () => {
     expect(calls[0].init?.method).toBe("DELETE");
     mockFetchOnce({ status: 404, body: { success: false, error: { code: "RELATION_NOT_FOUND", message: "不存在" } } });
     await expect(deleteRelation("rel-999")).rejects.toMatchObject({ code: "RELATION_NOT_FOUND" });
+  });
+});
+
+describe("delta 端点（S5.4；契约 endpoints.md「Delta 变更追踪」）", () => {
+  it("getDeltasByNode：GET /delta/node/:nodeId；响应透传；404 → ApiError", async () => {
+    const body = {
+      nodeId: "sc-37",
+      deltas: [
+        {
+          id: "delta-1",
+          nodeId: "sc-37",
+          targetType: "character",
+          targetId: "char-3",
+          targetName: "张三",
+          changes: [{ field: "combat_power", op: "update", from: "100", to: "150" }],
+          description: "张三获得断剑认可",
+          order: 1,
+          createdAt: "2026-08-01T10:00:00Z",
+        },
+      ],
+    };
+    const calls = mockFetchOnce({ body: { success: true, data: body } });
+    const res = await getDeltasByNode("sc-37");
+    expect(res).toEqual(body);
+    expect(calls[0].url).toBe("/api/v1/delta/node/sc-37");
+    expect(calls[0].init?.method).toBe("GET");
+    mockFetchOnce({ status: 404, body: { success: false, error: { code: "OUTLINE_NODE_NOT_FOUND", message: "节点不存在" } } });
+    await expect(getDeltasByNode("sc-999")).rejects.toMatchObject({ code: "OUTLINE_NODE_NOT_FOUND" });
+  });
+
+  it("computeDeltaState：POST /delta/compute body snake_case；响应透传（state/appliedDeltas/conflicts）", async () => {
+    const body = {
+      targetType: "character",
+      targetId: "char-3",
+      atNodeId: "sc-37",
+      state: { combat_power: 150 },
+      appliedDeltas: [
+        { nodeId: "sc-37", description: "张三获得断剑认可", changes: [], skipped: [{ index: 0, field: "combat_power", expected: "100", actual: "999" }] },
+      ],
+      conflicts: [{ deltaId: "delta-1", field: "combat_power", expected: "100", actual: "999" }],
+    };
+    const calls = mockFetchOnce({ body: { success: true, data: body } });
+    const res = await computeDeltaState({ target_type: "character", target_id: "char-3", at_node_id: "sc-37" });
+    expect(res).toEqual(body);
+    expect(calls[0].url).toBe("/api/v1/delta/compute");
+    expect(calls[0].init?.method).toBe("POST");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({
+      target_type: "character",
+      target_id: "char-3",
+      at_node_id: "sc-37",
+    });
+  });
+
+  it("computeDeltaState：404 OUTLINE_NODE_NOT_FOUND（at_node 已 purge）→ ApiError", async () => {
+    mockFetchOnce({ status: 404, body: { success: false, error: { code: "OUTLINE_NODE_NOT_FOUND", message: "节点不存在" } } });
+    await expect(
+      computeDeltaState({ target_type: "character", target_id: "char-3", at_node_id: "sc-999" }),
+    ).rejects.toMatchObject({ code: "OUTLINE_NODE_NOT_FOUND" });
   });
 });

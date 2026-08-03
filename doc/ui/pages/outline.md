@@ -27,7 +27,7 @@
 > **操作区布局（2026-08 修订）**：右侧操作区（＋ / ⋯ / 位置徽标 / 时间戳）**紧凑跟随节点内容**，不做两端对齐（避免中间大片空白）；顺序固定为 ＋ → ⋯ → 位置徽标 → 时间戳。摘要限宽（`max-w-[45%]`）防止挤压操作区。
 
 - 整行可**拖拽**（编辑态除外）；标题/摘要点击进入行内编辑。
-- ⋯ 菜单：新建子节点 · 移动到… · 设为当前位置 · 移入回收站（软删）。
+- ⋯ 菜单：新建子节点 · 移动到… · 设为当前位置 · 变更记录 · 移入回收站（软删）。
 
 ## 信息层级
 
@@ -66,6 +66,14 @@
 
 - ⋯ 菜单 → 确认对话框（危险操作必须确认，layout.md §3.2），展示级联影响：`DELETE /outline/:nodeId` 响应 `cascaded.{ children, relations, deltas }` → 确认后行消失 + toast「已移入回收站（含 N 个子节点）」。
 
+### 变更记录（节点触发的 Delta，S5.4）
+
+- **入口**：⋯ 菜单「变更记录」→ **行内展开面板**（就地为主、不弹窗；再点收起；面板内 [关闭] 同效）。面板缩进对齐操作条（`depth * 20 + 44`）。
+- **数据**：`GET /api/v1/delta/node/:nodeId` → `{ nodeId, deltas: DeltaRecord[] }`（客户端按 `order` 升序兜底排序）。
+- **行结构**：主行 = `description`（主文案）+ 创建时间（`formatTimestamp`）；次行 = 目标徽标（`targetType` 中文 + `targetName ?? targetId`）+ changes 紧凑 chips（`lib/delta.ts describeChange`：set=`field = to`、update=`field from → to`、add=`field +value`、remove=`field -value`；chip 底色 `bg-muted`）。
+- **空态**：该节点没有变更记录（轻量文案，不打断树操作）。
+- **错误态**：契约未定义该端点 404（endpoints.md L436-462）——节点缺失/软删 → 200 空数组（缺失即空态）；`OUTLINE_NODE_NOT_FOUND` 分支为**防御分支**（当前不可达，保留防契约变化）；网络失败 → 提示 + [重试]。
+
 ## 状态
 
 - **空态**：无任何节点 → 居中「大纲还是空的，先建第一卷」+ 主按钮 [新建第一卷]（点击直接进入就地输入，类型锁定卷；空态输入行同样支持卷/章切换）。
@@ -74,3 +82,4 @@
   - `VALIDATION_ERROR`（如 scene 挂 volume 下、parent_id 缺失）→ 就地操作失败横幅。
   - `OUTLINE_NODE_NOT_FOUND`（节点已被 purge）→ 错误横幅 + 刷新树。
   - `PUT /project/config` 失败（`current_position` 指向软删节点，服务端拒绝）→ toast「该节点已删除，无法设为当前位置」。
+  - `GET /delta/node/:nodeId` 失败（网络；防御分支 `OUTLINE_NODE_NOT_FOUND` 当前不可达——缺失即 200 空态）→ 面板内错误 + [重试]，不阻塞树操作。
