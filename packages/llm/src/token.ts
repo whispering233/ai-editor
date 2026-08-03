@@ -25,7 +25,12 @@ function estimateMessageTokens(message: LLMMessage): number {
 /** estimateMessagesTokens 选项 */
 export interface EstimateMessagesTokensOptions {
   /**
-   * 最近一次成功响应的真实 usage（决策 6：作为基线优先采用）。
+   * 最近一次成功响应的真实 usage 基线（决策 6：作为基线优先采用）。
+   * **口径**：lastUsage.total_tokens 是上一轮完整 prompt（system+聚焦+工具清单+历史+completion）
+   * 的真实用量——而本函数把它当作「历史段基线」叠加到 messages 估算上。因此调用方传入前
+   * **必须换算为可复用历史前缀的真实 token 数**：`usage.prompt_tokens - (system + toolList +
+   * focus + completion 各层估算)`，即只保留「历史段」分量；直接传原始 total_tokens 会与
+   * 非历史层重复计费（有聚焦/工具清单后每轮恒超限，基线形同虚设）。
    * 调用方负责语义正确：裁剪/重排历史后必须重置为 null——旧 usage 描述的是裁剪前的
    * 前缀，直接沿用会导致预算漂移
    */
