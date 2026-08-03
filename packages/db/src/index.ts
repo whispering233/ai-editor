@@ -11,4 +11,5 @@ export * from "./queries/outline-ops.js";
 export * from "./queries/entity.js";
 export * from "./queries/relation.js";
 export * from "./queries/delta.js";
+export * from "./queries/compute-state.js";
 export * from "./queries/trash.js";
