@@ -244,7 +244,7 @@ client/src/
     main-panel/    # MainPanel（信息条 + TabBar + 内容区装配）、InfoBar、TabBar
     chat/          # ChatPanel：会话标题/下拉、断连横幅/错误条、消息流、工具折叠行、
                    #   提案卡、focus 小条、输入区
-    outline/       # 大纲树相关对话框（dialogs.tsx，含 ConfirmDialog）
+    outline/       # 大纲对话框（dialogs.tsx：ConfirmDialog 危险操作确认；MoveNodeDialog 已随 S13.1 删除）
     entity/        # 实体侧对话框与视图（create-relation-dialog、relations-view）
     delta/         # Delta 展示：change-summary（changes 紧凑 chips，跨页复用）、
                    #   node-delta-panel（大纲节点变更记录）、compute-preview（实体状态预览）

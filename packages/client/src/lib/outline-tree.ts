@@ -156,3 +156,87 @@ export function findNodeChildren(nodes: OutlineNode[], nodeId: string): OutlineN
   };
   return search(nodes as TreeNode[]);
 }
+
+// ============ 拖拽插入位置（S13.1：上下半判定 + 插入指示线，同级排序可用） ============
+
+/** 拖拽插入目标（行锚点前后 / 顶层空白区末尾）；null = 无有效目标 */
+export type DragTarget =
+  | { kind: "before"; nodeId: string } // 插到该节点前（该行上边缘指示线）
+  | { kind: "after"; nodeId: string } // 插到该节点后（该行下边缘指示线）
+  | { kind: "root-end" } // 顶层空白区：排 root 末尾
+  | null;
+
+/** 拖拽插入位置（order 计算输入；end = 目标父 children 末尾） */
+export type DropInsert =
+  | { kind: "before"; nodeId: string }
+  | { kind: "after"; nodeId: string }
+  | { kind: "end" };
+
+/**
+ * 插入位置 → order（0-based）：before = 目标 index；after = index + 1；end = siblings.length（末尾）。
+ * **剔除拖拽节点后计算**（oracle M1 修复，方案 B）：服务端 move 语义 = 先从原父 children 移除节点、
+ * 再插入 order（clamp）——order 必须在**剔除拖拽节点后的数组**上计算；否则同父重排锚点在拖拽节点
+ * 下方时会错位 1 位（兄弟 [A,B,C,D] 拖 B 到 C 后，pre-removal 数组算得 order 3 → 实际插入 3 得
+ * [A,C,D,B] 而非期望 [A,C,B,D]）。交叉父移动时目标父不含拖拽节点，剔除无效果。
+ * 目标不在 siblings 中（异常/已移动）→ 回退末尾（不 +1——防越界）。
+ */
+export function dropInsertOrder(
+  children: OutlineNode[],
+  insert: DropInsert,
+  /** 拖拽节点 id（同父重排时剔除；交叉父/顶层 end 时数组不含它，剔除无效果） */
+  excludeId?: string,
+): number {
+  const siblings = excludeId === undefined ? children : children.filter((n) => n.id !== excludeId);
+  if (insert.kind === "end") return siblings.length;
+  const idx = siblings.findIndex((n) => n.id === insert.nodeId);
+  if (idx === -1) return siblings.length;
+  return insert.kind === "before" ? idx : idx + 1;
+}
+
+/** 两个拖拽目标是否等价（dragover 高频触发用：等价则不更新 state，避免无谓重渲染） */
+export function sameDragTarget(a: DragTarget, b: DragTarget): boolean {
+  if (a === null || b === null) return a === b;
+  if (a.kind === "root-end" || b.kind === "root-end") return a.kind === b.kind;
+  return a.kind === b.kind && a.nodeId === b.nodeId;
+}
+
+/** 节点在树中的直接父 id（root 下的节点 → ROOT_NODE_ID）；找不到 → null。
+ * 拖拽插入锚点的目标父计算用：插到某行前/后 = 目标父 = 该行的父。 */
+export function findParentIdOf(nodes: OutlineNode[], nodeId: string): string | null {
+  const search = (children: TreeNode[], parentId: string): string | null => {
+    for (const node of children) {
+      if (node.id === nodeId) return parentId;
+      if (node.children) {
+        const found = search(node.children, node.id);
+        if (found !== null) return found;
+      }
+    }
+    return null;
+  };
+  return search(nodes as TreeNode[], ROOT_NODE_ID);
+}
+
+/** 节点当前位置（父 id + 兄弟序号 index）；找不到 → null。
+ * 拖拽 drop 前的「原地放置」判定：父不变且移动后位置不变 → 不发请求（避免无意义移动与误导 toast）。 */
+export function findNodePosition(
+  nodes: OutlineNode[],
+  nodeId: string,
+): { parentId: string; index: number } | null {
+  const parentId = findParentIdOf(nodes, nodeId);
+  if (parentId === null) return null;
+  const children = findNodeChildren(nodes, parentId) ?? [];
+  const index = children.findIndex((n) => n.id === nodeId);
+  return index === -1 ? null : { parentId, index };
+}
+
+/**
+ * 拖放是否为**原地放置**（父不变且移动后位置不变 → 无需请求）。
+ * order 为**剔除拖拽节点后**的插入位置（dropInsertOrder 第三参语义）——服务端移除节点后插入该 order
+ * 的位置恰与当前 index 相同即原地；order 与当前 index 的偏差即真实位移，无需再模拟服务端 clamp。
+ * 跨父移动 → false（必然移动）。
+ */
+export function isNoopDrop(nodes: OutlineNode[], dragNodeId: string, targetParentId: string, order: number): boolean {
+  const pos = findNodePosition(nodes, dragNodeId);
+  if (pos === null || pos.parentId !== targetParentId) return false;
+  return order === pos.index;
+}

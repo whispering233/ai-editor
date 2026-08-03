@@ -1,9 +1,13 @@
 // 大纲树页面（S2.4 修订：就地编辑/就地新建/拖拽移动为主，弹窗仅保留必要场景；
-//   S12.2：⋯ 菜单「变更记录」→「详情」（跳 #/outline/:nodeId 节点详情页），行内 Delta 面板随详情页落地移除）
+//   S12.2：⋯ 菜单「变更记录」→「详情」（跳 #/outline/:nodeId 节点详情页），行内 Delta 面板随详情页落地移除；
+//   S13.1 交互重构：取消 ⋯ 操作条 → 行尾平铺图标（＋ 新建 / 详情 / 移入回收站）；删除「移动到…」对话框
+//   （拖拽修复后已覆盖）；拖拽上下半判定 + 插入指示线（同级排序可用）；摘要移到标题下方独立行（默认显示）；
+//   删除底部回收站折叠区（Trash tab 已覆盖）；「设为当前位置」入口迁往详情页（S13.2）；当前位置徽标 token 化）
 // 路由：#/outline；数据：GET /api/v1/outline（整树）；操作：POST/PUT/DELETE /outline、PUT /project/config（设当前位置）
-// 设计契约：doc/ui/pages/outline.md（S2.4 修订版）——行内编辑标题/摘要（Enter 保存/Esc 取消/失焦保存）、
-//   行尾「＋ 新建」就地插入子节点（类型由父决定，root 可切卷/章）、拖拽移动（原生 HTML5 DnD，目标父按
-//   决策 19 过滤，MVP 落点 = 目标父末尾）、弹窗仅保留：软删/purge 确认（layout.md §3.2）、移动兜底对话框
+// 设计契约：doc/ui/pages/outline.md（S2.4 + S13.1 修订版）——行内编辑标题/摘要（Enter 保存/Esc 取消/失焦保存）、
+//   行尾「＋ 新建」就地插入子节点（类型由父决定，root 可切卷/章）、拖拽移动（原生 HTML5 DnD，上下半判定：
+//   目标行上半 = 插到该节点前、下半 = 插到该节点后，跨父移动按决策 19 过滤，顶层空白区 = 排末尾）、
+//   弹窗仅保留：软删确认（layout.md §3.2）
 // 刷新策略：所有写操作成功后统一 loadOutline() 重拉整树（服务端权威——move 重排 order、软删级联子树、
 //   还原级联；本地补丁易与服务端不一致；本地文件读取毫秒级，重拉成本可忽略）。outline 树数据仍在
 //   project store（跨页共用：顶栏当前位置标题映射、画布投影），本页只持有 UI 态
@@ -11,28 +15,36 @@ import { useEffect, useState } from "react";
 import type { DragEvent, KeyboardEvent, ReactNode } from "react";
 import { formatTimestamp } from "@ai-editor/shared";
 import type { OutlineNode } from "@ai-editor/shared";
-import { CHILD_TYPE, ConfirmDialog, MoveNodeDialog, TYPE_LABEL } from "../components/outline/dialogs";
+import { BookOpen, Trash2 } from "lucide-react";
+import { CHILD_TYPE, ConfirmDialog, TYPE_LABEL } from "../components/outline/dialogs";
 import { Button } from "@/components/ui/button";
 import {
   ApiError,
   createOutlineNode,
   deleteOutlineNode,
-  getTrashList,
   moveOutlineNode,
-  purgeOutlineNode,
-  restoreOutlineNode,
   updateOutlineNode,
   type OutlineNodeType,
-  type TrashOutlineNode,
 } from "../lib/api";
-import { canMoveTo, editFailureRecovery, findNode, findNodeChildren, findNodePath, ROOT_NODE_ID, shouldCommitSummary, shouldCommitTitle } from "../lib/outline-tree";
+import {
+  canMoveTo,
+  dropInsertOrder,
+  editFailureRecovery,
+  findNode,
+  findNodeChildren,
+  findNodePath,
+  findParentIdOf,
+  isNoopDrop,
+  ROOT_NODE_ID,
+  sameDragTarget,
+  shouldCommitSummary,
+  shouldCommitTitle,
+  type DragTarget,
+} from "../lib/outline-tree";
 import { cn } from "../lib/utils";
 import { navigate } from "../hooks/use-route";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
-
-/** 页面级对话框状态（S2.4 起仅移动兜底用对话框；创建/编辑已就地化） */
-type DialogState = { kind: "move"; node: OutlineNode } | null;
 
 /** 就地编辑目标（一次只编辑一个字段） */
 type EditingState = { nodeId: string; field: "title" | "summary" } | null;
@@ -74,7 +86,7 @@ function inlineInput(
       onBlur={onBlur}
       maxLength={200}
       placeholder={placeholder}
-      className="min-w-0 flex-1 rounded border border-zinc-300 bg-white px-1.5 py-0.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+      className="min-w-0 flex-1 rounded border border-border bg-card px-1.5 py-0.5 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     />
   );
 }
@@ -107,10 +119,10 @@ function RootCreateRow({
             type="button"
             onClick={() => onTypeChange(t)}
             className={cn(
-              "rounded border px-2 py-0.5 text-xs",
+              "rounded border px-2 py-0.5 text-xs transition-colors",
               type === t
-                ? "border-zinc-900 bg-zinc-900 text-white"
-                : "border-zinc-300 text-zinc-600 hover:bg-zinc-100",
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
             )}
           >
             {TYPE_LABEL[t]}
@@ -128,7 +140,6 @@ export default function Outline() {
   const config = useProjectStore((s) => s.config);
   const configLoading = useProjectStore((s) => s.configLoading);
   const loadOutline = useProjectStore((s) => s.loadOutline);
-  const updateConfig = useProjectStore((s) => s.updateConfig);
   // 跨页定位（U4 方案 A）：ui store 的 transient 目标节点 id——InfoBar/概览页点击「当前位置」
   // 设置后跳转本页；本页消费（展开祖先+滚动+高亮）后清除，不侵入 hash 路由
   const focusOutlineNodeId = useUiStore((s) => s.focusOutlineNodeId);
@@ -139,13 +150,8 @@ export default function Outline() {
   const [error, setError] = useState<string | null>(null);
   /** 折叠的节点 id 集合（空集 = 全部展开） */
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  /** 当前展开操作条（⋯）的节点 id；null = 无 */
-  const [openActionsFor, setOpenActionsFor] = useState<string | null>(null);
-  const [dialog, setDialog] = useState<DialogState>(null);
-  /** 软删确认目标（⋯ 菜单「移入回收站」） */
+  /** 软删确认目标（行尾回收站图标） */
   const [deleteTarget, setDeleteTarget] = useState<OutlineNode | null>(null);
-  /** 彻底删除确认目标（回收站列表） */
-  const [purgeTarget, setPurgeTarget] = useState<TrashOutlineNode | null>(null);
   const [busy, setBusy] = useState(false);
   /** 新创建节点高亮（原型「成功后新节点高亮」；3s 自动消失） */
   const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null);
@@ -159,16 +165,8 @@ export default function Outline() {
   const [createValue, setCreateValue] = useState("");
   /** 拖拽中的节点 id；null = 无 */
   const [dragNodeId, setDragNodeId] = useState<string | null>(null);
-  /** 当前可放置的目标父 id（高亮用）；null = 无 */
-  const [dragOverParentId, setDragOverParentId] = useState<string | null>(null);
-
-  // 回收站（大纲节点）折叠区状态
-  const [trashOpen, setTrashOpen] = useState(false);
-  const [trashNodes, setTrashNodes] = useState<TrashOutlineNode[] | null>(null);
-  const [trashLoading, setTrashLoading] = useState(false);
-  const [trashError, setTrashError] = useState<string | null>(null);
-  /** 还原失败行内错误（如 409 OUTLINE_ANCESTOR_DELETED「需先还原祖先」） */
-  const [trashActionError, setTrashActionError] = useState<string | null>(null);
+  /** 拖拽插入目标（S13.1：行上下半判定 + 顶层空白末尾）；null = 无有效目标 */
+  const [dragTarget, setDragTarget] = useState<DragTarget>(null);
 
   const noProject = config === null && !configLoading;
 
@@ -225,22 +223,6 @@ export default function Outline() {
     return () => clearTimeout(t);
   }, [focusedNodeId]);
 
-  /** 加载回收站大纲节点列表 */
-  async function loadTrash() {
-    if (trashLoading) return;
-    setTrashLoading(true);
-    setTrashError(null);
-    try {
-      const res = await getTrashList();
-      setTrashNodes(res.nodes);
-    } catch (err) {
-      setTrashNodes(null);
-      setTrashError(err instanceof ApiError ? err.message : "回收站加载失败，请重试");
-    } finally {
-      setTrashLoading(false);
-    }
-  }
-
   /** 树变更后的统一刷新：展开目标父 + 重拉整树（刷新策略注释见文件头）；
    * highlightNodeId：创建成功后高亮新节点（原型「成功后自动展开父节点、新节点高亮」） */
   async function afterTreeChanged(expandParentId?: string, highlightNodeId?: string) {
@@ -285,7 +267,6 @@ export default function Outline() {
     cancelCreate();
     setEditing({ nodeId: node.id, field });
     setEditingValue(field === "title" ? node.title : (node.summary ?? ""));
-    setOpenActionsFor(null);
   }
 
   function cancelEdit() {
@@ -308,7 +289,9 @@ export default function Outline() {
     }
     setBusy(true);
     try {
-      await updateOutlineNode(node.id, field === "title" ? { title: value.trim() } : { summary: value.trim() || undefined });
+      // summary 显式提交空串（S13.1 oracle S2：`|| undefined` 会被 JSON.stringify 丢弃导致清空不生效；
+      // 服务端 patch.summary !== undefined 即写入，空串真正清除——与 S12.2 详情页语义一致）
+      await updateOutlineNode(node.id, field === "title" ? { title: value.trim() } : { summary: value.trim() });
       cancelEdit();
       useUiStore.getState().showToast("已保存");
       await afterTreeChanged();
@@ -345,7 +328,6 @@ export default function Outline() {
     cancelEdit();
     setCreatingAt({ parentId, type });
     setCreateValue("");
-    setOpenActionsFor(null);
     if (parentId !== ROOT_NODE_ID) expand(parentId); // 新建输入显示在父 children 末尾
   }
 
@@ -382,70 +364,135 @@ export default function Outline() {
     }
   }
 
-  // ============ 拖拽移动（原生 HTML5 DnD：合法目标高亮，drop = 排目标父末尾；对话框兜底入口保留） ============
+  // ============ 拖拽移动（S13.1：原生 HTML5 DnD，上下半判定 + 插入指示线，同级排序可用） ============
+  // 语义：拖到目标行上半 = 插到该节点前（该行上边缘指示线）、下半 = 插到该节点后（下边缘指示线）；
+  //   目标父 = 目标行的父（canMoveTo 过滤：决策 19 层级约束 + 不自挂/子树）；顶层空白区 = 排 root 末尾（保留原语义）
 
   function handleDragStart(e: DragEvent, node: OutlineNode) {
     e.dataTransfer.setData("text/plain", node.id);
     e.dataTransfer.effectAllowed = "move";
     setDragNodeId(node.id);
-    setDragOverParentId(null);
+    setDragTarget(null);
   }
 
   function handleDragEnd() {
     setDragNodeId(null);
-    setDragOverParentId(null);
+    setDragTarget(null);
   }
 
-  /** 目标行/顶层容器 dragover：按 canMoveTo 过滤（决策 19 + 不自挂/子树），合法才允许 drop 并高亮 */
-  function handleDragOver(e: DragEvent, targetParentId: string) {
+  /** 拖拽点相对目标行的位置：上半 → before、下半 → after（e.clientY 与行 rect 中点比较） */
+  function insertSideFromEvent(e: DragEvent): "before" | "after" {
+    const rect = e.currentTarget.getBoundingClientRect();
+    return e.clientY < rect.top + rect.height / 2 ? "before" : "after";
+  }
+
+  /** 行 dragover：canMoveTo 过滤（**目标父 = 目标行的父**，决策 19）→ 设置插入目标（去重防高频重渲染） */
+  function handleDragOver(e: DragEvent, targetNodeId: string) {
     e.stopPropagation(); // 行内事件不冒泡到顶层容器（避免目标高亮错乱）
     const dragNode = dragNodeId ? findNode(outline?.children ?? [], dragNodeId) : null;
-    if (!dragNode || !canMoveTo(dragNode, targetParentId, outline?.children ?? [])) return;
+    if (!dragNode) return;
+    // 目标父 = 目标行的父（root 下的行 → ROOT_NODE_ID）——插到该行前/后 = 作为该行父的子节点；
+    // 注意不能检查 canMoveTo(dragNode, targetNodeId)：那会让 scene 拖到 chapter 行通过（scene 可挂
+    // chapter）但实际插入目标父是 volume（400 INVALID_HIERARCHY）
+    const targetParentId = findParentIdOf(outline?.children ?? [], targetNodeId) ?? ROOT_NODE_ID;
+    if (!canMoveTo(dragNode, targetParentId, outline?.children ?? [])) return;
     e.preventDefault(); // 允许 drop
     e.dataTransfer.dropEffect = "move";
-    if (dragOverParentId !== targetParentId) setDragOverParentId(targetParentId);
+    const next: DragTarget = { kind: insertSideFromEvent(e), nodeId: targetNodeId };
+    setDragTarget((prev) => (sameDragTarget(prev, next) ? prev : next));
   }
 
-  function handleDragLeave(e: DragEvent, targetParentId: string) {
-    // 子元素间移动也会触发 dragleave：仅真正离开该行才清除
+  /** 行 dragleave：仅真正离开该行才清除该行的插入目标（子元素间移动不触发） */
+  function handleDragLeave(e: DragEvent, targetNodeId: string) {
     if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-      setDragOverParentId((prev) => (prev === targetParentId ? null : prev));
+      setDragTarget((prev) =>
+        prev !== null && prev.kind !== "root-end" && prev.nodeId === targetNodeId ? null : prev,
+      );
     }
   }
 
-  /** drop：排目标父末尾（MVP 简化——精确插入位置留「移动到…」对话框或后续增强） */
-  async function handleDrop(e: DragEvent, targetParentId: string) {
+  /** 行 drop：按插入位置计算 order → PUT /move（原地放置不发请求） */
+  async function handleDrop(e: DragEvent, targetNodeId: string) {
     e.stopPropagation();
     e.preventDefault();
     if (!dragNodeId) return;
     const dragNode = findNode(outline?.children ?? [], dragNodeId);
-    if (!dragNode || !canMoveTo(dragNode, targetParentId, outline?.children ?? [])) return;
+    if (!dragNode) return;
+    const parentId = findParentIdOf(outline?.children ?? [], targetNodeId) ?? ROOT_NODE_ID;
+    if (!canMoveTo(dragNode, parentId, outline?.children ?? [])) return;
+    // 锚点 = 拖拽节点自身：插到自己前/后 = 原地放置（剔除后锚点消失会误回退末尾，需提前拦截）
+    if (targetNodeId === dragNode.id) {
+      setDragNodeId(null);
+      setDragTarget(null);
+      return;
+    }
+    // order 按 drop 瞬间的上下半重新判定（防异步渲染滞后）；剔除拖拽节点后计算（oracle M1 方案 B——
+    // 同父重排锚点在下方时 pre-removal 数组会错位 1 位）
+    const parentChildren = findNodeChildren(outline?.children ?? [], parentId) ?? [];
+    const order = dropInsertOrder(
+      parentChildren,
+      { kind: insertSideFromEvent(e), nodeId: targetNodeId },
+      dragNode.id,
+    );
+    // 原地放置（父不变且移动后位置不变）：不发请求，直接清理拖拽态（避免误导 toast「已移动」）
+    if (isNoopDrop(outline?.children ?? [], dragNode.id, parentId, order)) {
+      setDragNodeId(null);
+      setDragTarget(null);
+      return;
+    }
     setBusy(true);
     try {
-      const targetChildren = findNodeChildren(outline?.children ?? [], targetParentId) ?? [];
-      await moveOutlineNode(dragNode.id, { parent_id: targetParentId, order: targetChildren.length });
+      await moveOutlineNode(dragNode.id, { parent_id: parentId, order });
       useUiStore.getState().showToast(`已移动《${dragNode.title}》`);
-      await afterTreeChanged(targetParentId);
+      await afterTreeChanged(parentId);
     } catch (err) {
       setError(describeOutlineError(errorCode(err)));
     } finally {
       setBusy(false);
       setDragNodeId(null);
-      setDragOverParentId(null);
+      setDragTarget(null);
     }
   }
 
-  /** ⋯ 菜单「设为当前位置」→ PUT /project/config（顶栏同步联动，layout.md §2.1） */
-  async function handleSetCurrent(node: OutlineNode) {
+  /** 顶层容器 dragover（空白区）：排 root 末尾（保留原语义；scene 会被 canMoveTo 拒绝） */
+  function handleRootDragOver(e: DragEvent) {
+    const dragNode = dragNodeId ? findNode(outline?.children ?? [], dragNodeId) : null;
+    if (!dragNode || !canMoveTo(dragNode, ROOT_NODE_ID, outline?.children ?? [])) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragTarget((prev) => (sameDragTarget(prev, { kind: "root-end" }) ? prev : { kind: "root-end" }));
+  }
+
+  function handleRootDragLeave(e: DragEvent) {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setDragTarget((prev) => (prev?.kind === "root-end" ? null : prev));
+    }
+  }
+
+  /** 顶层容器 drop：排 root 末尾（剔除拖拽节点后计算 order；原地放置同样跳过） */
+  async function handleRootDrop(e: DragEvent) {
+    e.preventDefault();
+    if (!dragNodeId) return;
+    const dragNode = findNode(outline?.children ?? [], dragNodeId);
+    if (!dragNode || !canMoveTo(dragNode, ROOT_NODE_ID, outline?.children ?? [])) return;
+    // 末尾语义 = 剔除拖拽节点后的 children.length（拖自身到空白区 → order === 自身 index → noop）
+    const order = dropInsertOrder(outline?.children ?? [], { kind: "end" }, dragNode.id);
+    if (isNoopDrop(outline?.children ?? [], dragNode.id, ROOT_NODE_ID, order)) {
+      setDragNodeId(null);
+      setDragTarget(null);
+      return;
+    }
     setBusy(true);
     try {
-      await updateConfig({ current_position: node.id });
-      useUiStore.getState().showToast("已设为当前位置");
-      setOpenActionsFor(null);
-    } catch {
-      useUiStore.getState().showToast("设置失败：该节点可能已删除，无法设为当前位置", "error");
+      await moveOutlineNode(dragNode.id, { parent_id: ROOT_NODE_ID, order });
+      useUiStore.getState().showToast(`已移动《${dragNode.title}》`);
+      await afterTreeChanged();
+    } catch (err) {
+      setError(describeOutlineError(errorCode(err)));
     } finally {
       setBusy(false);
+      setDragNodeId(null);
+      setDragTarget(null);
     }
   }
 
@@ -463,77 +510,16 @@ export default function Outline() {
         `已移入回收站${parts.length > 0 ? `（含 ${parts.join("、")}）` : ""}`,
       );
       setDeleteTarget(null);
-      setOpenActionsFor(null);
       await afterTreeChanged();
     } catch (err) {
       if (err instanceof ApiError && err.code === "OUTLINE_NODE_NOT_FOUND") {
         setError(describeOutlineError("OUTLINE_NODE_NOT_FOUND"));
         setDeleteTarget(null);
-        setOpenActionsFor(null);
         await afterTreeChanged();
         return; // 已处理，不冒泡
       }
       throw err; // 冒泡给 ConfirmDialog 内联显示
     }
-  }
-
-  /** 回收站「还原」；409 OUTLINE_ANCESTOR_DELETED → 行内提示「需先还原祖先」。
-   * MVP 边界（oracle 标注）：TrashOutlineNode 无 parentId 字段，还原后无法定位祖先展开——
-   *   树重拉后还原的节点若在折叠祖先下需手动展开；未来 Trash 列表扩展 parentId 或展开全部后处理 */
-  async function handleRestore(node: TrashOutlineNode) {
-    setTrashActionError(null);
-    setBusy(true);
-    try {
-      const res = await restoreOutlineNode(node.id);
-      useUiStore.getState().showToast(
-        `已还原《${node.title}》${res.restoredChildren > 0 ? `（含 ${res.restoredChildren} 个子节点）` : ""}`,
-      );
-      await afterTreeChanged();
-      await loadTrash();
-    } catch (err) {
-      if (err instanceof ApiError && err.code === "OUTLINE_ANCESTOR_DELETED") {
-        setTrashActionError("该节点的祖先仍在回收站，需先还原祖先");
-      } else {
-        setTrashActionError(err instanceof ApiError ? err.message : "还原失败，请重试");
-      }
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  /** 回收站「彻底删除」（purge 不可恢复）；错误冒泡给确认框显示 */
-  async function handlePurge() {
-    if (!purgeTarget) return;
-    try {
-      await purgeOutlineNode(purgeTarget.id);
-      useUiStore.getState().showToast("已彻底删除");
-      setPurgeTarget(null);
-      await loadTrash();
-    } catch (err) {
-      throw err;
-    }
-  }
-
-  /** 就地输入行（标题/摘要/新建共用样式；用于复用行结构） */
-  function inlineInput(
-    value: string,
-    onChange: (v: string) => void,
-    onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void,
-    onBlur: () => void,
-    placeholder: string,
-  ) {
-    return (
-      <input
-        autoFocus
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={onKeyDown}
-        onBlur={onBlur}
-        maxLength={200}
-        placeholder={placeholder}
-        className="min-w-0 flex-1 rounded border border-zinc-300 bg-white px-1.5 py-0.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
-      />
-    );
   }
 
   /** root 创建行（树容器内顶部；空态引导卡复用 RootCreateRow，见空态分支） */
@@ -552,24 +538,26 @@ export default function Outline() {
     );
   }
 
-  /** 整树渲染（内部递归函数，闭包共享页面 state；行结构：折叠箭头 | 类型徽标 | 标题 | 摘要 | 更新于 |
-   * 当前位置徽标 | ＋新建 | ⋯；标题/摘要点击就地编辑，整行可拖拽到合法目标父） */
+  /** 整树渲染（内部递归函数，闭包共享页面 state；S13.1 两行结构：
+   * 第一行 = 折叠箭头 | 类型徽标（w-7 固定宽，第二行占位精确对齐）| 标题 | 操作区 | 当前位置徽标 | 时间戳；
+   * 第二行 = 摘要（缩进对齐标题下方，默认显示、空不渲染、点击就地编辑）；
+   * 拖拽：整节点块可拖，目标行上半/下半 → 插入指示线（accent 2px 绝对定位层，pointer-events-none 不拦截事件） */
   function renderNodes(nodes: OutlineNode[], depth: number): ReactNode {
     return nodes.map((node) => {
       const hasChildren = node.type !== "scene" && (node.children?.length ?? 0) > 0;
       const isCollapsed = collapsed.has(node.id);
       const isCurrent = config?.currentPosition === node.id;
-      const actionsOpen = openActionsFor === node.id;
       const childType = CHILD_TYPE[node.type];
       const editingTitle = editing?.nodeId === node.id && editing.field === "title";
       const editingSummary = editing?.nodeId === node.id && editing.field === "summary";
-      const isDropTarget = dragOverParentId === node.id;
+      const insertBefore = dragTarget?.kind === "before" && dragTarget.nodeId === node.id;
+      const insertAfter = dragTarget?.kind === "after" && dragTarget.nodeId === node.id;
       const isDragging = dragNodeId === node.id;
       const creatingHere = creatingAt?.parentId === node.id;
       const focused = node.id === focusedNodeId;
       return (
         <div key={node.id}>
-          {/* 行（整行可拖拽：编辑态/自身拖拽中禁用 draggable，避免文本选择与嵌套拖动）；
+          {/* 节点块（第一行 + 摘要第二行；整块可拖拽：编辑态/自身拖拽中禁用 draggable，避免文本选择与嵌套拖动）；
               data-node-id 为跨页定位锚点（U4：InfoBar 点击当前位置 → scrollIntoView 定位） */}
           <div
             data-node-id={node.id}
@@ -580,155 +568,121 @@ export default function Outline() {
             onDragLeave={(e) => handleDragLeave(e, node.id)}
             onDrop={(e) => void handleDrop(e, node.id)}
             className={cn(
-              "flex cursor-grab items-center gap-2 rounded-md px-2 py-1.5 hover:bg-zinc-50 active:cursor-grabbing",
-              actionsOpen && "bg-zinc-50",
-              node.id === highlightedNodeId && "bg-amber-50",
+              "relative cursor-grab rounded-md px-2 py-1 transition-colors hover:bg-muted/60 active:cursor-grabbing",
+              node.id === highlightedNodeId && "bg-accent/40", // 新建成功临时高亮（3s）
               focused && "bg-accent ring-1 ring-inset ring-ring", // 跨页定位临时高亮（U4，3s 消失）
-              isDropTarget && "bg-zinc-100 ring-1 ring-inset ring-zinc-400",
               isDragging && "opacity-50",
             )}
             style={{ paddingLeft: depth * 20 + 8 }}
-            title={isDropTarget ? "松开即移动到此处" : "拖动到目标行即可移动"}
+            title="拖动到目标行即可移动（上半=插前、下半=插后）"
           >
-            {hasChildren ? (
-              <button
-                type="button"
-                className="w-4 shrink-0 text-zinc-400 hover:text-zinc-600"
-                onClick={() => toggleCollapsed(node.id)}
-                aria-label={isCollapsed ? "展开" : "折叠"}
-              >
-                {isCollapsed ? "▸" : "▾"}
-              </button>
-            ) : (
-              <span className="w-4 shrink-0" />
-            )}
-            <span className="shrink-0 rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-500">
-              {TYPE_LABEL[node.type]}
-            </span>
-            {/* 标题：点击就地编辑（Enter 保存 / Esc 取消 / 失焦保存） */}
-            {editingTitle ? (
-              inlineInput(
-                editingValue,
-                setEditingValue,
-                handleEditKeyDown(node, "title"),
-                () => void commitEdit(node, "title"),
-                "标题",
-              )
-            ) : (
-              <span
-                className={cn(
-                  "min-w-0 cursor-text truncate text-sm hover:underline",
-                  focused ? "text-accent-foreground" : "text-zinc-800", // 定位高亮时切换前景色保对比度（深色主题 bg-accent 是暗底）
-                )}
-                title="点击编辑标题"
-                onClick={() => startEdit(node, "title")}
-              >
-                {node.title}
+            {/* 第一行：折叠箭头 | 类型徽标 | 标题 | 操作区 | 当前位置徽标 | 时间戳 */}
+            <div className="flex items-center gap-2">
+              {hasChildren ? (
+                <button
+                  type="button"
+                  className="w-4 shrink-0 text-muted-foreground hover:text-foreground"
+                  onClick={() => toggleCollapsed(node.id)}
+                  aria-label={isCollapsed ? "展开" : "折叠"}
+                >
+                  {isCollapsed ? "▸" : "▾"}
+                </button>
+              ) : (
+                <span className="w-4 shrink-0" />
+              )}
+              <span className="flex h-5 w-7 shrink-0 items-center justify-center rounded bg-muted text-xs text-muted-foreground">
+                {TYPE_LABEL[node.type]}
               </span>
-            )}
-            {/* 摘要：点击就地编辑（非高频但同样行内，不弹窗）；max-w 限制防过长挤压操作区 */}
-            {editingSummary ? (
-              inlineInput(
-                editingValue,
-                setEditingValue,
-                handleEditKeyDown(node, "summary"),
-                () => void commitEdit(node, "summary"),
-                "摘要",
-              )
-            ) : node.summary ? (
-              <span
-                className="hidden min-w-0 max-w-[45%] cursor-text truncate text-xs text-zinc-400 hover:underline md:inline"
-                title="点击编辑摘要"
-                onClick={() => startEdit(node, "summary")}
-              >
-                {node.summary}
-              </span>
-            ) : null}
-            {/* 右侧操作区：跟随节点内容（不推远、不两端对齐）；顺序：＋ → ⋯ → 当前位置徽标 → 时间戳 */}
-            {childType !== null && (
-              <button
-                type="button"
-                className="shrink-0 rounded px-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
-                title={`就地新建${TYPE_LABEL[childType]}`}
-                aria-label={`新建${TYPE_LABEL[childType]}`}
-                onClick={() => startCreate(node.id, childType)}
-              >
-                ＋
-              </button>
-            )}
-            <button
-              type="button"
-              className="shrink-0 px-1 text-zinc-400 hover:text-zinc-700"
-              onClick={() => setOpenActionsFor(actionsOpen ? null : node.id)}
-              aria-label="操作菜单"
-            >
-              ⋯
-            </button>
-            {isCurrent && (
-              <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-700">
-                当前位置
-              </span>
-            )}
-            {/* 时间戳收尾（跟随内容，不推远） */}
-            <span className="shrink-0 text-xs text-zinc-400">{formatTimestamp(node.updatedAt)}</span>
-          </div>
-          {/* ⋯ 操作条（行内展开；编辑已就地化，此处保留：新建子节点/移动到…/设为当前位置/移入回收站） */}
-          {actionsOpen && (
-            <div
-              className="mb-1 flex flex-wrap items-center gap-1.5 py-1"
-              style={{ paddingLeft: depth * 20 + 44 }}
-            >
+              {/* 标题：点击就地编辑（Enter 保存 / Esc 取消 / 失焦保存） */}
+              {editingTitle ? (
+                inlineInput(
+                  editingValue,
+                  setEditingValue,
+                  handleEditKeyDown(node, "title"),
+                  () => void commitEdit(node, "title"),
+                  "标题",
+                )
+              ) : (
+                <span
+                  className={cn(
+                    "min-w-0 cursor-text truncate text-sm hover:underline",
+                    focused ? "text-accent-foreground" : "text-foreground", // 定位高亮时切换前景色保对比度（深色主题 bg-accent 是暗底）
+                  )}
+                  title="点击编辑标题"
+                  onClick={() => startEdit(node, "title")}
+                >
+                  {node.title}
+                </span>
+              )}
+              {/* 操作区：紧凑跟随节点内容（不推远）；顺序：＋ → 详情图标 → 回收站图标 → 当前位置徽标 → 时间戳 */}
               {childType !== null && (
                 <button
                   type="button"
-                  className="rounded border border-border px-2 py-0.5 text-xs text-foreground hover:bg-muted"
+                  className="shrink-0 rounded px-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  title={`就地新建${TYPE_LABEL[childType]}`}
+                  aria-label={`新建${TYPE_LABEL[childType]}`}
                   onClick={() => startCreate(node.id, childType)}
                 >
-                  新建{TYPE_LABEL[childType]}
+                  ＋
                 </button>
               )}
               <button
                 type="button"
-                className="rounded border border-border px-2 py-0.5 text-xs text-foreground hover:bg-muted"
-                onClick={() => {
-                  setDialog({ kind: "move", node });
-                  setOpenActionsFor(null);
-                }}
+                className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                title="详情"
+                aria-label="详情"
+                onClick={() => navigate(`/outline/${node.id}`)}
               >
-                移动到…
+                <BookOpen className="size-3.5" />
               </button>
               <button
                 type="button"
-                disabled={isCurrent || busy}
-                className="rounded border border-border px-2 py-0.5 text-xs text-foreground hover:bg-muted disabled:opacity-40"
-                onClick={() => void handleSetCurrent(node)}
+                className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive"
+                title="移入回收站"
+                aria-label="移入回收站"
+                onClick={() => setDeleteTarget(node)}
               >
-                设为当前位置
+                <Trash2 className="size-3.5" />
               </button>
-              {/* 详情（S12.2）：跳 #/outline/:nodeId 节点详情页——标题/摘要/结构化 data 表单、
-                  变更记录列表与相关实体（原行内「变更记录」面板随详情页落地移除） */}
-              <button
-                type="button"
-                className="rounded border border-border px-2 py-0.5 text-xs text-foreground hover:bg-muted"
-                onClick={() => {
-                  navigate(`/outline/${node.id}`);
-                  setOpenActionsFor(null);
-                }}
-              >
-                详情
-              </button>
-              <button
-                type="button"
-                className="rounded border border-destructive/30 px-2 py-0.5 text-xs text-destructive hover:bg-destructive/10"
-                onClick={() => {
-                  setDeleteTarget(node);
-                  setOpenActionsFor(null);
-                }}
-              >
-                移入回收站
-              </button>
+              {isCurrent && (
+                <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-xs text-accent-foreground">
+                  当前位置
+                </span>
+              )}
+              <span className="shrink-0 text-xs text-muted-foreground">{formatTimestamp(node.updatedAt)}</span>
             </div>
-          )}
+            {/* 第二行：摘要（缩进对齐标题下方——w-4/w-7 占位与第一行同列；默认显示、空不渲染；点击就地编辑） */}
+            {editingSummary || node.summary ? (
+              <div className="mt-0.5 flex items-center gap-2">
+                <span className="w-4 shrink-0" />
+                <span className="w-7 shrink-0" />
+                {editingSummary ? (
+                  inlineInput(
+                    editingValue,
+                    setEditingValue,
+                    handleEditKeyDown(node, "summary"),
+                    () => void commitEdit(node, "summary"),
+                    "摘要",
+                  )
+                ) : (
+                  <span
+                    className="min-w-0 cursor-text truncate text-xs text-muted-foreground hover:underline"
+                    title="点击编辑摘要"
+                    onClick={() => startEdit(node, "summary")}
+                  >
+                    {node.summary}
+                  </span>
+                )}
+              </div>
+            ) : null}
+            {/* 插入指示线（S13.1）：目标行上边缘（插前）/下边缘（插后），accent 2px；绝对定位层不遮挡内容 */}
+            {insertBefore && (
+              <span className="pointer-events-none absolute inset-x-0 -top-px h-0.5 rounded bg-accent" />
+            )}
+            {insertAfter && (
+              <span className="pointer-events-none absolute inset-x-0 -bottom-px h-0.5 rounded bg-accent" />
+            )}
+          </div>
           {/* 子节点递归渲染（折叠态不渲染） */}
           {hasChildren && !isCollapsed && (
             <div>{renderNodes(node.children ?? [], depth + 1)}</div>
@@ -740,7 +694,7 @@ export default function Outline() {
               style={{ paddingLeft: (depth + 1) * 20 + 8 }}
             >
               <span className="w-4 shrink-0" />
-              <span className="shrink-0 rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-500">
+              <span className="flex h-5 w-7 shrink-0 items-center justify-center rounded bg-muted text-xs text-muted-foreground">
                 {TYPE_LABEL[creatingAt.type]}
               </span>
               {inlineInput(createValue, setCreateValue, handleCreateKeyDown, cancelCreate, `新${TYPE_LABEL[creatingAt.type]}标题，Enter 创建`)}
@@ -773,9 +727,9 @@ export default function Outline() {
         </div>
       </div>
 
-      {/* 页级错误横幅 */}
+      {/* 页级错误横幅（layout.md §4.3：destructive token 类） */}
       {error && (
-        <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}
         </div>
       )}
@@ -838,93 +792,22 @@ export default function Outline() {
           </div>
         )
       ) : (
-        /* 整树渲染（容器同时是 root 拖放目标：拖到空白处 = 移到顶层；scene 会被 canMoveTo 拒绝） */
+        /* 整树渲染（容器同时是 root 拖放目标：拖到空白处 = 排顶层末尾；scene 会被 canMoveTo 拒绝） */
         <div
           className={cn(
-            "rounded-md border border-zinc-200 p-2",
-            dragOverParentId === ROOT_NODE_ID && "ring-1 ring-inset ring-zinc-400",
+            "rounded-md border border-border p-2",
+            dragTarget?.kind === "root-end" && "ring-1 ring-inset ring-accent",
           )}
-          onDragOver={(e) => handleDragOver(e, ROOT_NODE_ID)}
-          onDragLeave={(e) => handleDragLeave(e, ROOT_NODE_ID)}
-          onDrop={(e) => void handleDrop(e, ROOT_NODE_ID)}
+          onDragOver={handleRootDragOver}
+          onDragLeave={handleRootDragLeave}
+          onDrop={(e) => void handleRootDrop(e)}
         >
           {renderRootCreateRow()}
           {renderNodes(outline.children, 0)}
         </div>
       )}
 
-      {/* 回收站折叠区（大纲节点侧；#/trash 完整回收站页面由后续卡实现） */}
-      <div className="mt-6 border-t border-zinc-100 pt-3">
-        <button
-          type="button"
-          className="text-sm text-zinc-500 hover:text-zinc-700"
-          onClick={() => {
-            setTrashOpen((v) => !v);
-            if (!trashOpen && trashNodes === null && !trashLoading) void loadTrash();
-          }}
-        >
-          {trashOpen ? "▾ " : "▸ "}回收站（大纲节点）
-        </button>
-        {trashOpen && (
-          <div className="mt-2">
-            {trashLoading && <p className="text-sm text-zinc-500">加载中…</p>}
-            {trashError !== null && (
-              <p className="text-sm text-red-600">
-                {trashError}{" "}
-                <button type="button" className="underline" onClick={() => void loadTrash()}>
-                  重试
-                </button>
-              </p>
-            )}
-            {!trashLoading && trashError === null && trashNodes !== null && (
-              trashNodes.length === 0 ? (
-                <p className="text-sm text-zinc-500">回收站没有大纲节点</p>
-              ) : (
-                <ul className="divide-y divide-zinc-100 rounded-md border border-zinc-200">
-                  {trashNodes.map((n) => (
-                    <li key={n.id} className="flex items-center gap-2 px-3 py-2">
-                      <span className="shrink-0 rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-500">
-                        {TYPE_LABEL[n.type]}
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-sm text-zinc-700">{n.title}</span>
-                      <span className="shrink-0 text-xs text-zinc-400">{formatTimestamp(n.deletedAt)}</span>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        className="shrink-0 rounded border border-zinc-200 px-2 py-0.5 text-xs text-zinc-600 hover:bg-zinc-100 disabled:opacity-40"
-                        onClick={() => void handleRestore(n)}
-                      >
-                        还原
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        className="shrink-0 rounded border border-red-200 px-2 py-0.5 text-xs text-red-600 hover:bg-red-50 disabled:opacity-40"
-                        onClick={() => setPurgeTarget(n)}
-                      >
-                        彻底删除
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )
-            )}
-            {trashActionError !== null && (
-              <p className="mt-2 text-sm text-red-600">{trashActionError}</p>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* 保留的对话框：移动兜底 + 危险操作确认 */}
-      {dialog?.kind === "move" && (
-        <MoveNodeDialog
-          node={dialog.node}
-          nodes={outline?.children ?? []}
-          onMoved={afterTreeChanged}
-          onClose={() => setDialog(null)}
-        />
-      )}
+      {/* 对话框：软删确认（危险操作必须确认，layout.md §3.2） */}
       {deleteTarget && (
         <ConfirmDialog
           title="移入回收站"
@@ -933,16 +816,6 @@ export default function Outline() {
           danger
           onConfirm={handleDelete}
           onClose={() => setDeleteTarget(null)}
-        />
-      )}
-      {purgeTarget && (
-        <ConfirmDialog
-          title="彻底删除"
-          description={`将《${purgeTarget.title}》及其全部子节点彻底删除，不可恢复。此操作仅用于回收站清理，请确认。`}
-          confirmLabel="彻底删除"
-          danger
-          onConfirm={handlePurge}
-          onClose={() => setPurgeTarget(null)}
         />
       )}
     </section>
