@@ -15,17 +15,14 @@
 // signal：多角色 × 多记录的遍历为长任务候选，循环中检查（决策 16 ③）。
 
 import {
-  deriveChapterOrder,
-  getChapterNumber,
   listDanglingDeltas,
   listDanglingRelations,
   listDeltasByTarget,
   listEntities,
   listRelations,
-  readProjectFile,
 } from "@ai-editor/db";
 import type { ToolContext } from "../context.js";
-import { throwIfAborted } from "./utils.js";
+import { buildChapterIndex, throwIfAborted } from "./utils.js";
 import type { FindOrphanElementsArgs } from "@ai-editor/shared";
 
 /** 闲置角色条目 */
@@ -80,9 +77,11 @@ export interface OrphanElementsResult {
  * 角色活跃度：appears_in 目标节点 + Delta 触发节点合并去重（卷级节点无章号，跳过）。
  * @returns { active, lastChapter }——active=false 表示从未出场；lastChapter 为最后活跃
  *   章序号（活跃点均在卷级等无章号节点时为 null，不做宽松猜测）。
+ * 章序号经共享 ChapterIndex（决策 21 口径，S6.5 与伏笔工具同源）。
  */
 function activityOf(
   ctx: ToolContext,
+  chapterIndex: ReturnType<typeof buildChapterIndex>,
   characterId: string,
   appearsIn: Map<string, string[]>,
 ): { active: boolean; lastChapter: number | null } {
@@ -93,37 +92,20 @@ function activityOf(
 
   let last: number | null = null;
   for (const nodeId of activeNodeIds) {
-    const chapter = getChapterNumber(ctx.outlineDir, nodeId);
+    const chapter = chapterIndex.chapterOf(nodeId);
     if (chapter !== null) {
-      last = last === null ? chapter.chapterNumber : Math.max(last, chapter.chapterNumber);
+      last = last === null ? chapter : Math.max(last, chapter);
     }
   }
   return { active: true, lastChapter: last };
 }
 
 /**
- * 「当前最新章」推导（决策 21 口径：**当前章节 = project.json 的 current_position**，
- * 写作进度而非规划终点——与 S6.5 伏笔健康指标同口径，同一项目两个工具判定必须一致）：
- * 1. current_position 已设置且指向可推导章号的节点（scene 取所属章、chapter 取自身）→ 取该章序号
- * 2. 未设置 / 节点不存在 / 无章号（volume/root）→ 退化树末章（deriveChapterOrder 末尾，合理默认）
- * 退化意义：current_position 未维护的项目退化为「规划终点」，不因配置缺失而漏报。
- */
-function latestChapterOf(ctx: ToolContext): number | null {
-  const config = readProjectFile(ctx.outlineDir);
-  if (config !== null && config.current_position !== null && config.current_position !== "") {
-    const chapter = getChapterNumber(ctx.outlineDir, config.current_position);
-    if (chapter !== null) return chapter.chapterNumber;
-  }
-  const order = deriveChapterOrder(ctx.outlineDir);
-  return order.length > 0 ? order[order.length - 1].chapterNumber : null;
-}
-
-/**
  * 闲置角色诊断（tools.md「写到第30章但角色C第10章后就没出现」）：
  * - 从未出场：无 appears_in 关系且无 Delta 记录
  * - 掉线角色：最后活跃章 < 当前最新章（「当前最新章」= current_position 所属章，
- *   决策 21 口径——规划 40 章只写到 30 章时，活跃于第 35 章（未写章节）的角色不算闲置；
- *   大纲无章或角色活跃点无章号时不下结论——不做宽松猜测）
+ *   决策 21 口径，经共享 ChapterIndex 推导——规划 40 章只写到 30 章时，活跃于第 35 章
+ *   （未写章节）的角色不算闲置；大纲无章或角色活跃点无章号时不下结论——不做宽松猜测）
  * 输出按 id 升序（稳定排序，跨维度可预测）。
  */
 function collectUnusedCharacters(ctx: ToolContext, signal?: AbortSignal): UnusedCharacter[] {
@@ -135,12 +117,13 @@ function collectUnusedCharacters(ctx: ToolContext, signal?: AbortSignal): Unused
     list.push(r.targetId);
     appearsIn.set(r.sourceId, list);
   }
-  const latestChapter = latestChapterOf(ctx);
+  const chapterIndex = buildChapterIndex(ctx); // 一次读树支撑全量活跃度查询
+  const latestChapter = chapterIndex.currentChapter;
 
   const out: UnusedCharacter[] = [];
   for (const c of characters) {
     throwIfAborted(signal);
-    const { active, lastChapter } = activityOf(ctx, c.id, appearsIn);
+    const { active, lastChapter } = activityOf(ctx, chapterIndex, c.id, appearsIn);
     if (!active) {
       out.push({ id: c.id, name: c.name, lastActiveChapter: null, description: "从未出场（无 appears_in 关系且无属性变更记录）" });
       continue;

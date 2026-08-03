@@ -179,3 +179,52 @@ export const suggestConnectionsArgsSchema = z
   .strict();
 
 export type SuggestConnectionsArgs = z.infer<typeof suggestConnectionsArgsSchema>;
+
+// ============ 伏笔分析工具（hooks.md「工具扩展」+ 决策 21，S6.5） ============
+
+// === analyze_hook_health（伏笔健康总览） ===
+
+/** analyze_hook_health 入参：无参（全项目活跃伏笔健康总览：stale/overdue/blocked/warnings） */
+export const analyzeHookHealthArgsSchema = z.object({}).strict();
+
+export type AnalyzeHookHealthArgs = z.infer<typeof analyzeHookHealthArgsSchema>;
+
+// === trace_hook_lifecycle（生命周期追踪） ===
+
+/** trace_hook_lifecycle 入参：hook_id（埋设/推进/回收节点 + 休眠章数 + 时间线图） */
+export const traceHookLifecycleArgsSchema = z
+  .object({
+    hook_id: z.string(),
+  })
+  .strict();
+
+export type TraceHookLifecycleArgs = z.infer<typeof traceHookLifecycleArgsSchema>;
+
+// === suggest_hook_payoff（回收建议） ===
+
+/** suggest_hook_payoff 入参：hook_id（基于埋设章节与半衰期推荐理想回收场景，top 3） */
+export const suggestHookPayoffArgsSchema = z
+  .object({
+    hook_id: z.string(),
+  })
+  .strict();
+
+export type SuggestHookPayoffArgs = z.infer<typeof suggestHookPayoffArgsSchema>;
+
+// === find_hook_opportunities（埋设机会发现） ===
+
+/** find_hook_opportunities 入参：outline_node_id（分析节点叙事特征，建议适合的伏笔类别） */
+export const findHookOpportunitiesArgsSchema = z
+  .object({
+    outline_node_id: z.string(),
+  })
+  .strict();
+
+export type FindHookOpportunitiesArgs = z.infer<typeof findHookOpportunitiesArgsSchema>;
+
+// === detect_hook_conflicts（伏笔矛盾检测） ===
+
+/** detect_hook_conflicts 入参：无参（依赖循环/依赖废弃/时间悖论检测） */
+export const detectHookConflictsArgsSchema = z.object({}).strict();
+
+export type DetectHookConflictsArgs = z.infer<typeof detectHookConflictsArgsSchema>;

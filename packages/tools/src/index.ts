@@ -23,6 +23,7 @@ export * from "./analysis/conflict.js";
 export * from "./analysis/path.js";
 export * from "./analysis/orphan.js";
 export * from "./analysis/suggest.js";
+export * from "./analysis/hook.js";
 
 import { TOOL_PERMISSION } from "@ai-editor/shared";
 import {
@@ -193,3 +194,68 @@ const analysisToolDefs: ToolDefinition[] = [
 ];
 
 registerTools(analysisToolDefs);
+
+import {
+  analyzeHookHealthArgsSchema,
+  detectHookConflictsArgsSchema,
+  findHookOpportunitiesArgsSchema,
+  suggestHookPayoffArgsSchema,
+  traceHookLifecycleArgsSchema,
+} from "@ai-editor/shared/schemas/tools";
+import { runAnalyzeHookHealth, runDetectHookConflicts, runFindHookOpportunities, runSuggestHookPayoff, runTraceHookLifecycle } from "./analysis/hook.js";
+
+/** 伏笔分析工具定义（S6.5，hooks.md「工具扩展」+ 决策 21；权限全为 AUTO） */
+const hookToolDefs: ToolDefinition[] = [
+  {
+    name: "analyze_hook_health",
+    description:
+      "伏笔健康总览（无参）：统计全部活跃伏笔（planted/progressing）——stale（休眠超过半衰期）、" +
+      "overdue（埋设超过两倍半衰期）、blocked（依赖尚未回收）及人类可读 warnings。" +
+      "返回 { current_chapter, active_count, stale, overdue, blocked_chains, warnings }；" +
+      "半衰期显式 half_life 优先、缺省按 payoff_timing 映射（immediate=3/near_term=8/mid_arc=15/slow_burn=25/endgame=40，决策 21）。",
+    argsSchema: analyzeHookHealthArgsSchema,
+    permission: TOOL_PERMISSION.AUTO,
+    run: runAnalyzeHookHealth,
+  },
+  {
+    name: "trace_hook_lifecycle",
+    description:
+      "伏笔生命周期追踪：返回 hook 详情 + 埋设节点（plant，最早埋设）+ 全部推进节点（advances，按章节序）+ " +
+      "回收节点（resolve，最新）+ 当前休眠章数（dormancy）+ 时间线图（timeline_graph.events 按章节序合并）。" +
+      "hook 不存在或已软删返回 null。",
+    argsSchema: traceHookLifecycleArgsSchema,
+    permission: TOOL_PERMISSION.AUTO,
+    run: runTraceHookLifecycle,
+  },
+  {
+    name: "suggest_hook_payoff",
+    description:
+      "伏笔回收建议：基于埋设章节与半衰期（显式优先、缺省按 payoff_timing 映射）推荐理想回收场景" +
+      "（节奏匹配 top 3，候选为当前章节之后的未回收场景）。返回 { suggestions: [{ at_node, reason }] }；" +
+      "hook 不存在/已软删返回 null，无埋设记录或大纲无候选场景返回空建议。",
+    argsSchema: suggestHookPayoffArgsSchema,
+    permission: TOOL_PERMISSION.AUTO,
+    run: runSuggestHookPayoff,
+  },
+  {
+    name: "find_hook_opportunities",
+    description:
+      "伏笔埋设机会发现：分析指定大纲节点的叙事特征（尚无伏笔埋设、角色在场数、场景冲突层次、价值转向）" +
+      "建议适合的伏笔类别（mystery/relationship/world_building/character_growth）。" +
+      "返回 { opportunities: [{ category, reason }] }；节点不存在或已软删返回 null。",
+    argsSchema: findHookOpportunitiesArgsSchema,
+    permission: TOOL_PERMISSION.AUTO,
+    run: runFindHookOpportunities,
+  },
+  {
+    name: "detect_hook_conflicts",
+    description:
+      "伏笔矛盾检测（无参）：依赖循环（A↔B 互相 depends_on）、依赖已废弃（depends_on 指向 abandoned 伏笔）、" +
+      "时间悖论（推进/回收节点章节早于埋设节点章节）。返回 { conflicts: [{ hook_a, hook_b, field, description }] }。",
+    argsSchema: detectHookConflictsArgsSchema,
+    permission: TOOL_PERMISSION.AUTO,
+    run: runDetectHookConflicts,
+  },
+];
+
+registerTools(hookToolDefs);
