@@ -59,12 +59,12 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - [x] S6.5 伏笔工具与健康指标
 - [x] S6.6 提案类工具
 - [x] S6.7 执行类工具 + executor
-- [ ] S7.1 会话管理
-- [ ] S7.2 上下文组装
-- [ ] S7.3 主循环
-- [ ] S7.4 工具调度 + 提案内存仓
-- [ ] S7.5 提案路由
-- [ ] S7.6 chat SSE 路由
+- [x] S7.1 会话管理
+- [x] S7.2 上下文组装
+- [x] S7.3 主循环
+- [x] S7.4 工具调度 + 提案内存仓
+- [x] S7.5 提案路由
+- [x] S7.6 chat SSE 路由
 - [ ] S8.1 聊天页（文本流）
 - [ ] S8.2 提案卡片
 - [ ] S9.1 伏笔面板
@@ -356,37 +356,37 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 
 ### 切片 7：对话服务（验收：SSE 流、心跳断连、提案确认全链路服务端就绪）
 
-**S7.1 会话管理**
+**S7.1 会话管理** ✅（8cb278d，经 oracle 审核放行）
 - 范围：`session.ts` 历史维护、滑动窗口成对裁剪（tool_call/tool_result 同裁同留）、历史重建喂回格式（决策 18）；**重试/续聊末条约束**（2026-08 补充，借鉴 pi）：喂回序列末条必须 user/tool，失败轮半条 assistant 不喂回，重试复用原 payload
 - 依赖：T2.3
 - 验证：vitest mock 消息序列断言成对裁剪与孤儿丢弃、**重试 payload 不含失败轮半条**
 - 回滚：单 commit
 
-**S7.2 上下文组装**
+**S7.2 上下文组装** ✅（25f8c5f，经 oracle 审核放行）
 - 范围：`context.ts` 三层提示词注入（决策 7）+ 聚焦上下文（focus_entity/node）+ 工具列表注入 + token 预算；**usage 基线**（2026-08 补充，借鉴 pi）：优先最近真实 usage，**裁剪历史后重置基线**（决策 6）
 - 依赖：S7.1
 - 验证：vitest 断言上下文结构与预算截断、**裁剪后预算不漂移**
 - 回滚：单 commit
 
-**S7.3 主循环**
+**S7.3 主循环** ✅（123e69d，经 oracle 审核放行）
 - 范围：`run.ts` runAgent()——8 轮/120s/token 三重保险（决策 15）、工具失败结构化喂回自纠、模型失败重试、SSE 事件序列（tool_call/tool_result/proposal/text/done/error，proposal 在 tool_result 后、循环继续前）；**length 截断不执行任何 tool_call 全部标错重发**、**重试与轮次分开计量、120s 含重试退避**（2026-08 补充，借鉴 pi）；**超时信号与用户取消分离**（决策 15 超时可重试 vs 决策 16 取消不重试——单次 attempt 超时须独立 signal 并映射为可重试错误，勿将 AbortSignal.timeout 直挂用户取消链路）；**abort 双形态归一化**（chatStream 流中返回 `{ok:false, aborted}` vs withRetry 抛 `ABORT_ERROR`，主循环包 helper 归一双通道）（ora S6.2 审核 2026-08）
 - 依赖：S6.7、S7.2
 - 验证：vitest mock LLM 固定响应断言终止条件与事件顺序、**finish_reason=length 用例**、**半条 assistant 不重发用例**
 - 回滚：单 commit
 
-**S7.4 工具调度 + 提案内存仓**
+**S7.4 工具调度 + 提案内存仓** ✅（de6d717，经 oracle 审核放行）
 - 范围：`executor.ts` 收到 LLM tool_call → 调度 query/analysis/proposal；提案仓（TTL 10 分钟 + 条数上限 + project_id 绑定，切换项目清空——决策 14 修订）；**批量 tool_call 先全部校验再执行、错误统一结构化回填、执行中检查取消 signal**（2026-08 补充，借鉴 pi）
 - 依赖：S6.6、S7.3
 - 验证：vitest 假时钟断言 TTL 过期与上限淘汰；调度错误路径；**批量校验 fail fast**
 - 回滚：单 commit
 
-**S7.5 提案路由**
+**S7.5 提案路由** ✅（2fa0061，经 oracle 审核放行）
 - 范围：confirm/reject——快照重校验（存在性 + updated_at，大纲节点用节点级 updated_at）、409 PROPOSAL_STALE / 404 PROPOSAL_NOT_FOUND / 409 PROPOSAL_PROJECT_MISMATCH
 - 依赖：S7.4
 - 验证：集成测试含快照过期场景
 - 回滚：单 commit
 
-**S7.6 chat SSE 路由**
+**S7.6 chat SSE 路由** ✅（77eb11a，经 oracle 审核放行）
 - 范围：POST /chat（SSE 流：ping 15-30s 心跳 + 六类事件）、三路断开检测（onAbort + req close/error + 心跳写失败）、全链路取消（AbortController 终止 agent + DeepSeek fetch）；**取消信号四层穿透**（fetch signal / SSE 读循环逐 chunk / 工具执行 / 重试 sleep——2026-08 补充，借鉴 pi）。**会话列表/历史端点已由 U3 实现**（GET /chat/sessions、GET /chat/sessions/:id/messages，2026-08 标注——本卡不再重复）
 - 依赖：S7.5
 - 验证：集成测试读取 SSE 流断言事件序列；模拟断开断言取消（**含四层穿透各环节**）；心跳间隔断言
