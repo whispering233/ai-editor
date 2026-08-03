@@ -59,8 +59,9 @@ pnpm start:test-project
 pnpm typecheck && pnpm lint && pnpm -r test
 
 # 调试（服务端日志，纯配置文件方式；无配置文件 = 默认关闭防刷屏）
-# 配置文件：创作根/.ai-editor/config.json（start:test-project 时创作根 = test-project/，已含示例）
-#   { "debug": { "enabled": true, "categories": ["request", "usage"] } }   # 只显示请求和 tokens 统计
+# 配置文件：创作根/.ai-editor/config.json（start:test-project 时创作根 = test-project/，已含默认示例）
+#   默认示例（五类别全开）：{ "debug": { "enabled": true, "categories": ["chat", "request", "stream", "usage", "http"] } }
+#   自定义示例（只显示请求和 tokens 统计）：{ "debug": { "enabled": true, "categories": ["request", "usage"] } }
 #   五类别：chat（agent 事件）/ request（LLM 完整 prompt）/ stream（原始 SSE chunk）/
 #          usage（tokens 统计）/ http（hono 请求日志）；categories 缺失 = 全部类别；
 #          enabled=false 或缺失 = 全关；文件不存在/非法 JSON/结构不符 = 全关
