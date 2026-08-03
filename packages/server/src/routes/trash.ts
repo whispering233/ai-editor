@@ -72,7 +72,8 @@ trashRoutes.delete("/outline/:nodeId", (c) => {
   // 1. DB 物理清除关联关系与 Delta
   cascadePurge(project.db, subtreeIds);
   // 2. JSON 原子写（移除整棵子树；物理删除的极端崩溃窗口：DB 已清、JSON 未清，
-  //    补标以 DB 为准属物理删除场景的已知极限——同步操作中途崩溃概率极低，注释明示）
+  //    不在 S4.2 一致性校验范围——其只兜软删联动（决策 16 修订），同步操作中途
+  //    崩溃概率极低，注释明示）
   purgeOutlineNode(project.root, nodeId);
   return c.json(ok({ purged: true as const }));
 });

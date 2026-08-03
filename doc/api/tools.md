@@ -89,9 +89,10 @@ trace_plot_paths(from_node_id, to_node_id)
 find_orphan_elements()
   → { unused_characters: [], unresolved_deltas: [], dangling_relations: [], inconsistent_soft_deletes: [] }
   用途：发现"写到第30章，但角色C第10章后就没出现"
-  inconsistent_soft_deletes：诊断跨存储软删不一致（outline.json 节点未标 deleted 但关联
-      relation/delta 已软删）。兜底修复已由**启动一致性校验**承担（决策 16 修订：打开项目时
-      自动比对并以 DB 为准补标，写日志），本工具保留诊断与引导修复用途
+  inconsistent_soft_deletes：诊断跨存储软删不一致（outline.json 节点已标 deleted 但关联
+      relation/delta 未软删——「可见记录指向已软删节点」的幽灵形态）。兜底修复已由**启动
+      一致性校验**承担（决策 16 修订：打开项目时自动比对，以大纲节点软删为准补标 DB 记录
+      deleted_at，写日志），本工具保留诊断与引导修复用途
 
 // === 关系发现 ===
 suggest_connections(entity_id)

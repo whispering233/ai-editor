@@ -206,8 +206,10 @@ outlineRoutes.put("/:nodeId/move", async (c) => {
 
 // DELETE /api/v1/outline/:nodeId —— 软删 + 递归级联（决策 12）
 // 写序（决策 16）：**先 DB 后 JSON**——先级联软删 relation/delta，再原子写 outline.json；
-// 崩溃残留方向（DB 已级联、JSON 未标）落入启动一致性校验以 DB 为准补标（自愈）；
-// 反序会留下「可见关系/Delta 指向已软删节点」的幽灵形态，不在补标范围
+// 崩溃残留方向（DB 已级联、JSON 未标，节点未标 deleted）：无法从 DB 记录可靠反推
+// （实体侧级联会软删节点↔实体关系而节点仍存活），不在 S4.2 补标范围；
+// S4.2 启动一致性校验（consistency.ts）兜底幽灵反向：节点已软删而关联 relation/delta
+// 未软删 → 以节点软删为准补标 DB 记录（决策 16 修订，幂等自愈）
 outlineRoutes.delete("/:nodeId", (c) => {
   const project = requireCurrentProject();
   const nodeId = c.req.param("nodeId");

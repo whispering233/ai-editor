@@ -36,6 +36,7 @@ import { projectRoutes, setProjectRoot } from "./routes/project.js";
 import { outlineRoutes } from "./routes/outline.js";
 import { trashRoutes } from "./routes/trash.js";
 import { relationRoutes } from "./routes/relation.js";
+import { logSoftDeleteReconcile, reconcileSoftDelete } from "./consistency.js";
 
 /** 默认端口（决策 8 / 17；dev 态 Vite proxy 写死 3456） */
 export const DEFAULT_PORT = 3456;
@@ -143,6 +144,9 @@ export async function startServer(projectRoot: string, options: StartServerOptio
   const project = detectProject(root);
   if (project !== null) {
     setCurrentProject(project); // 启动即打开（决策 8 部署场景）；null 则保持待命
+    // S4.2 启动一致性校验（决策 16 修订）：以大纲节点软删为准补标 DB 关联记录
+    //（先 DB 后 JSON 崩溃窗口的幽灵形态兜底，幂等；无软删节点不输出日志）
+    logSoftDeleteReconcile(reconcileSoftDelete(project));
   }
 
   // 书架模式（S1.5）：root = 创作根，GET /api/v1/project/list 扫描 books/ 子目录

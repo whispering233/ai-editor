@@ -25,7 +25,9 @@ import {
   initProject,
   requireCurrentProject,
   setCurrentProject,
+  type ProjectContext,
 } from "../middleware/project.js";
+import { logSoftDeleteReconcile, reconcileSoftDelete } from "../consistency.js";
 
 // ============ 创作根（书架模式 S1.5） ============
 //
@@ -161,7 +163,11 @@ projectRoutes.post("/open", async (c) => {
     if (prev !== null && prev.db !== activeDb) {
       closeProject(prev);
     }
-    setCurrentProject({ root: dir, config, db: activeDb });
+    const project: ProjectContext = { root: dir, config, db: activeDb };
+    setCurrentProject(project);
+    // S4.2 启动一致性校验（决策 16 修订）：打开项目即以大纲节点软删为准补标 DB 关联记录
+    //（先 DB 后 JSON 崩溃窗口的幽灵形态兜底，幂等；无软删节点不输出日志）
+    logSoftDeleteReconcile(reconcileSoftDelete(project));
 
     // 响应：openResSchema 核心字段 + rebuilt 提示（端到端文档「向客户端提示已重建」，endpoints.md 第 69 行；
     // rebuilt/fromVersion 为附加字段——shared 的 projectOpenResSchema 未含（shared 冻结约束），

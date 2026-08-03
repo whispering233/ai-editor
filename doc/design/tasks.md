@@ -267,7 +267,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - 回滚：单 commit
 
 **S4.2 启动一致性校验**
-- 范围：打开项目比对 outline.json 节点软删与 relation/delta 软删，以 DB 为准补标并写日志（决策 16 修订）
+- 范围：打开项目比对 outline.json 节点软删与 relation/delta 软删，以大纲节点软删为准补标 DB 记录并写日志（决策 16 修订）
 - 依赖：S4.1
 - 验证：vitest 构造不一致 fixture 断言补标
 - 回滚：单 commit
