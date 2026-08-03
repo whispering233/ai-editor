@@ -213,9 +213,17 @@ export function getOutlinePath(nodeId: string): Promise<OutlinePathRes> {
   return apiFetch<OutlinePathRes>(`/outline/${nodeId}/path`);
 }
 
-// ============ 回收站（大纲节点侧，S2.3；契约：endpoints.md「回收站」L660-736） ============
+// ============ 回收站（S2.3 大纲侧 + S4.4 实体侧补齐；契约：endpoints.md「回收站」L660-736） ============
 
-/** GET /api/v1/trash 响应（实体与大纲节点；本卡只消费 nodes） */
+/** GET /api/v1/trash 响应（实体侧条目；type 为四类实体之一） */
+export interface TrashEntity {
+  id: string;
+  type: EntityType;
+  name: string;
+  deletedAt: string;
+}
+
+/** 软删大纲节点（回收站列表条目） */
 export interface TrashOutlineNode {
   id: string;
   type: OutlineNodeType;
@@ -224,13 +232,30 @@ export interface TrashOutlineNode {
 }
 
 export interface TrashListRes {
-  entities: Array<{ id: string; type: string; name: string; deletedAt: string }>;
+  entities: TrashEntity[];
   nodes: TrashOutlineNode[];
 }
 
 /** 列出回收站软删对象 */
 export function getTrashList(): Promise<TrashListRes> {
   return apiFetch<TrashListRes>("/trash");
+}
+
+/** POST /api/v1/trash/entity/:type/:id/restore 响应（级联还原关系/Delta，决策 12 修订） */
+export interface RestoreTrashEntityRes {
+  restored: true;
+  restoredRelations: number;
+  restoredDeltas: number;
+}
+
+/** 还原软删实体（错误：404 ENTITY_NOT_FOUND——目标已被 purge 的残留请求） */
+export function restoreTrashEntity(type: EntityType, id: string): Promise<RestoreTrashEntityRes> {
+  return apiFetch<RestoreTrashEntityRes>(`/trash/entity/${type}/${id}/restore`, { method: "POST" });
+}
+
+/** 彻底删除实体（仅回收站清理用；物理清除不可恢复；错误：404 ENTITY_NOT_FOUND / 400 VALIDATION_ERROR 未软删） */
+export function purgeTrashEntity(type: EntityType, id: string): Promise<PurgeOutlineRes> {
+  return apiFetch<PurgeOutlineRes>(`/trash/entity/${type}/${id}`, { method: "DELETE" });
 }
 
 /** POST /api/v1/trash/outline/:nodeId/restore 响应（级联还原子节点/关系/Delta，决策 12 修订） */
