@@ -14,9 +14,9 @@
 ├──────────────────────────────────────────────────────────┤
 │ ▾ 卷 第一卷            +  📖  🗑  [当前位置]  更新于 8-01    │
 │   摘要：全书三卷结构，第一卷为入门试炼                     │
-│   ▾ 章 第一章                 +  📖  🗑    更新于 8-01      │
+│   ▾ 章 第一章                 +  📖  🗑    更新于 8-02      │
 │     摘要：灵根测试与逐出师门                               │
-│     · 场 灵根测试失败          +  📖  🗑    更新于 8-02      │
+│     · 场 灵根测试失败  📌⏩    +  📖  🗑    更新于 8-02      │
 │       灵根品质为杂灵根，测试失败被逐出师门                  │
 │     · 场 被逐出师门           +  📖  🗑                     │
 │ ▸ 卷 第二卷                  +  📖  🗑                     │
@@ -36,6 +36,7 @@
 | 展示 | API 字段 |
 |------|---------|
 | 树 | `GET /outline` → `children[]`（OutlineNode：`id` / `type` / `title` / `summary` / `children` / `updatedAt`） |
+| 伏笔标记（S9.2） | `GET /relation`（source_type=outline_node × 三类并行）→ `lib/outline-hooks buildNodeHookMarks` 聚合（targetName ?? targetId） |
 | 层级约束 | 严格三层 volume → chapter → scene，无游离节点（决策 19）；渲染层不做任何「容错展示」 |
 
 ## 关键交互（S2.4 修订：就地为主，弹窗仅保留必要场景）
@@ -79,6 +80,14 @@
 - **行结构**：主行 = `description`（主文案）+ 创建时间（`formatTimestamp`）；次行 = 目标徽标（`targetType` 中文 + `targetName ?? targetId`）+ changes 紧凑 chips（`lib/delta.ts describeChange`：set=`field = to`、update=`field from → to`、add=`field +value`、remove=`field -value`；chip 底色 `bg-muted`）。
 - **空态**：该节点没有变更记录（轻量文案，不打断树操作）。
 - **错误态**：契约未定义该端点 404（endpoints.md L436-462）——节点缺失/软删 → 200 空数组（缺失即空态）；`OUTLINE_NODE_NOT_FOUND` 分支为**防御分支**（当前不可达，保留防契约变化）；网络失败 → 提示 + [重试]。
+
+### 伏笔标记（S9.2）
+
+- **展示**：节点行 **title 行尾紧凑徽标**（标题与操作区之间）——`plants`/`advances`/`resolves` 三类 lucide 图标（Pin 📌 / FastForward ⏩ / CheckCircle2 ✅）+ 原生 title tooltip 显示「埋设/推进/回收伏笔：<伏笔名>」（`text-muted-foreground` token 类，禁硬编码色；多标记按类型序 plants → advances → resolves、再名称/id 排列）。
+- **数据**：`GET /api/v1/relation`（source_type=outline_node，relation_type 三类**并行**单值查询，depth=1）→ `lib/outline-hooks.ts buildNodeHookMarks` 按 source_id 聚合为「节点 → 标记列表」（targetName 联表名优先、缺省 targetId 兜底——hooks.md 关系 target 为伏笔侧）。
+- **刷新**：依赖 outline store 树对象——树重拉（写操作 afterTreeChanged）后自动重拉标记。
+- **降级**：任一类型请求失败 → 该类型空集；全部失败 → 标记列隐藏（`hookMarks=null`），不阻塞大纲渲染、无错误横幅（纯展示增强）。
+- **范围**：标记随行渲染、**不聚合后代**——折叠父行自身标记仍显示，子树标记随展开可见；画布节点标记留 S10。
 
 ## 状态
 

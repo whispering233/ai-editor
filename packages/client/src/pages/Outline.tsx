@@ -2,8 +2,10 @@
 //   S12.2：⋯ 菜单「变更记录」→「详情」（跳 #/outline/:nodeId 节点详情页），行内 Delta 面板随详情页落地移除；
 //   S13.1 交互重构：取消 ⋯ 操作条 → 行尾平铺图标（＋ 新建 / 详情 / 移入回收站）；删除「移动到…」对话框
 //   （拖拽修复后已覆盖）；拖拽上下半判定 + 插入指示线（同级排序可用）；摘要移到标题下方独立行（默认显示）；
-//   删除底部回收站折叠区（Trash tab 已覆盖）；「设为当前位置」入口迁往详情页（S13.2）；当前位置徽标 token 化）
-// 路由：#/outline；数据：GET /api/v1/outline（整树）；操作：POST/PUT/DELETE /outline、PUT /project/config（设当前位置）
+//   删除底部回收站折叠区（Trash tab 已覆盖）；「设为当前位置」入口迁往详情页（S13.2）；当前位置徽标 token 化；
+//   S9.2 伏笔标记：title 行尾紧凑徽标（plants/advances/resolves 图标 + title tooltip 伏笔名），
+//   数据 = GET /relation（source_type=outline_node）三类并行拉取聚合（lib/outline-hooks）；画布标记留 S10）
+// 路由：#/outline；数据：GET /api/v1/outline（整树）+ GET /api/v1/relation（伏笔标记，S9.2）；操作：POST/PUT/DELETE /outline、PUT /project/config（设当前位置）
 // 设计契约：doc/ui/pages/outline.md（S2.4 + S13.1 修订版）——行内编辑标题/摘要（Enter 保存/Esc 取消/失焦保存）、
 //   行尾「＋ 新建」就地插入子节点（类型由父决定，root 可切卷/章）、拖拽移动（原生 HTML5 DnD，上下半判定：
 //   目标行上半 = 插到该节点前、下半 = 插到该节点后，跨父移动按决策 19 过滤，顶层空白区 = 排末尾）、
@@ -15,17 +17,19 @@ import { useEffect, useState } from "react";
 import type { DragEvent, KeyboardEvent, ReactNode } from "react";
 import { formatTimestamp } from "@ai-editor/shared";
 import type { OutlineNode } from "@ai-editor/shared";
-import { BookOpen, Trash2 } from "lucide-react";
+import { BookOpen, CheckCircle2, FastForward, Pin, Trash2 } from "lucide-react";
 import { CHILD_TYPE, ConfirmDialog, TYPE_LABEL } from "../components/outline/dialogs";
 import { Button } from "@/components/ui/button";
 import {
   ApiError,
   createOutlineNode,
   deleteOutlineNode,
+  listRelations,
   moveOutlineNode,
   updateOutlineNode,
   type OutlineNodeType,
 } from "../lib/api";
+import { buildNodeHookMarks, HOOK_MARK_TYPES, type NodeHookMark } from "../lib/outline-hooks";
 import {
   canMoveTo,
   dropInsertOrder,
@@ -134,6 +138,40 @@ function RootCreateRow({
   );
 }
 
+// ============ 伏笔标记徽标（S9.2） ============
+
+/** 标记类型 → 文案（title tooltip 前缀；hooks.md 生命周期动作：埋下 → 推进 → 回收） */
+const HOOK_MARK_LABEL: Record<NodeHookMark["relationType"], string> = {
+  plants: "埋设",
+  advances: "推进",
+  resolves: "回收",
+};
+
+/** 标记类型 → lucide 图标（📌 / ⏩ / ✅ 对应物；样式一律 token 类，禁硬编码色——oracle 红线） */
+const HOOK_MARK_ICON: Record<NodeHookMark["relationType"], typeof Pin> = {
+  plants: Pin,
+  advances: FastForward,
+  resolves: CheckCircle2,
+};
+
+/**
+ * 单个伏笔标记小徽标（title 行尾紧凑排列）：图标 + 原生 title tooltip 显示伏笔名。
+ * 用原生 title 而非 Tooltip 组件：与全页既有 hover 提示模式一致（各操作图标同为 title 属性），
+ * 且行容器已有拖拽提示 title——徽标自带 title 可遮蔽父级提示，避免双 tooltip 叠加
+ */
+function NodeHookMarkBadge({ mark }: { mark: NodeHookMark }) {
+  const Icon = HOOK_MARK_ICON[mark.relationType];
+  return (
+    <span
+      className="shrink-0 rounded px-0.5 text-muted-foreground hover:text-foreground"
+      title={`${HOOK_MARK_LABEL[mark.relationType]}伏笔：${mark.hookName}`}
+      aria-label={`${HOOK_MARK_LABEL[mark.relationType]}伏笔：${mark.hookName}`}
+    >
+      <Icon className="size-3" />
+    </span>
+  );
+}
+
 export default function Outline() {
   const outline = useProjectStore((s) => s.outline);
   const outlineLoading = useProjectStore((s) => s.outlineLoading);
@@ -167,6 +205,8 @@ export default function Outline() {
   const [dragNodeId, setDragNodeId] = useState<string | null>(null);
   /** 拖拽插入目标（S13.1：行上下半判定 + 顶层空白末尾）；null = 无有效目标 */
   const [dragTarget, setDragTarget] = useState<DragTarget>(null);
+  /** 伏笔标记映射（S9.2）：节点 id → 标记列表；null = 未加载/树置空；加载失败 → 空 Map（等效隐藏降级，不阻塞大纲） */
+  const [hookMarks, setHookMarks] = useState<Map<string, NodeHookMark[]> | null>(null);
 
   const noProject = config === null && !configLoading;
 
@@ -177,6 +217,33 @@ export default function Outline() {
       void loadOutline();
     }
   }, [outline, outlineLoading, loadAttempted, loadOutline]);
+
+  // 伏笔标记（S9.2，数据流 API → 映射 → 渲染）：大纲树就绪后并行拉取三类标记关系
+  // （GET /relation，source_type=outline_node，relation_type 单值过滤，depth=1——endpoints.md「关系」）→
+  // buildNodeHookMarks 按 source_id 聚合为「节点 → 标记列表」；任一类型失败降级为该类型空集、
+  // 全部失败 → 标记列整体隐藏（纯展示增强，不阻塞大纲渲染、无错误横幅——注释见 hookMarks 定义）。
+  // 依赖 outline 对象：树重拉（afterTreeChanged）后自动刷新，跨项目切换同效
+  useEffect(() => {
+    if (outline === null) {
+      // 树置空（未打开项目/加载失败/切换项目间隙）：清空标记防跨项目残留（旧树 id 对新树无意义）
+      setHookMarks(null);
+      return;
+    }
+    let cancelled = false;
+    void Promise.all(
+      HOOK_MARK_TYPES.map((relationType) =>
+        listRelations({ source_type: "outline_node", relation_type: relationType, depth: 1 })
+          .then((res) => res.relations)
+          .catch(() => []),
+      ),
+    ).then((groups) => {
+      if (cancelled) return;
+      setHookMarks(buildNodeHookMarks(groups.flat()));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [outline]);
 
   // 新节点高亮自动消失（3s；每次设置高亮重开定时器）
   useEffect(() => {
@@ -612,6 +679,16 @@ export default function Outline() {
                   onClick={() => startEdit(node, "title")}
                 >
                   {node.title}
+                </span>
+              )}
+              {/* 伏笔标记（S9.2）：title 行尾紧凑徽标——plants/advances/resolves 图标 + title tooltip
+                  伏笔名（多标记按 lib/outline-hooks 排序排列）；标记随行渲染：折叠父行自身标记仍显示、
+                  子树标记随展开可见（数据为节点自身关系，不聚合后代）；加载失败 hookMarks=null 不渲染 */}
+              {hookMarks !== null && (hookMarks.get(node.id)?.length ?? 0) > 0 && (
+                <span className="flex shrink-0 items-center gap-0.5">
+                  {(hookMarks.get(node.id) ?? []).map((mark) => (
+                    <NodeHookMarkBadge key={`${mark.relationType}-${mark.hookId}`} mark={mark} />
+                  ))}
                 </span>
               )}
               {/* 操作区：紧凑跟随节点内容（不推远）；顺序：＋ → 详情图标 → 回收站图标 → 当前位置徽标 → 时间戳 */}
