@@ -24,6 +24,12 @@ export * from "./analysis/path.js";
 export * from "./analysis/orphan.js";
 export * from "./analysis/suggest.js";
 export * from "./analysis/hook.js";
+export * from "./proposal/types.js";
+export * from "./proposal/entity.js";
+export * from "./proposal/relation.js";
+export * from "./proposal/delta.js";
+export * from "./proposal/outline.js";
+export * from "./proposal/hook.js";
 
 import { TOOL_PERMISSION } from "@ai-editor/shared";
 import {
@@ -259,3 +265,190 @@ const hookToolDefs: ToolDefinition[] = [
 ];
 
 registerTools(hookToolDefs);
+
+import {
+  proposeAbandonHookArgsSchema,
+  proposeAddDeltaArgsSchema,
+  proposeAddRelationArgsSchema,
+  proposeAdvanceHookArgsSchema,
+  proposeCreateEntityArgsSchema,
+  proposeCreateHookArgsSchema,
+  proposeDeleteEntityArgsSchema,
+  proposeDeleteNodeArgsSchema,
+  proposeMoveNodeArgsSchema,
+  proposeOutlineNodeArgsSchema,
+  proposeRemoveRelationArgsSchema,
+  proposeResolveHookArgsSchema,
+  proposeUpdateEntityArgsSchema,
+  proposeUpdateHookArgsSchema,
+} from "@ai-editor/shared/schemas/tools";
+import {
+  runProposeAbandonHook,
+  runProposeAdvanceHook,
+  runProposeCreateHook,
+  runProposeResolveHook,
+  runProposeUpdateHook,
+} from "./proposal/hook.js";
+import {
+  runProposeCreateEntity,
+  runProposeDeleteEntity,
+  runProposeUpdateEntity,
+} from "./proposal/entity.js";
+import {
+  runProposeAddRelation,
+  runProposeRemoveRelation,
+} from "./proposal/relation.js";
+import { runProposeAddDelta } from "./proposal/delta.js";
+import {
+  runProposeDeleteNode,
+  runProposeMoveNode,
+  runProposeOutlineNode,
+} from "./proposal/outline.js";
+
+/** 提案类工具定义（S6.6，tools.md「提案类」+ hooks.md「工具扩展」提案类，共 14 个；权限全为 PROPOSAL）
+ * 语义：AI 不能直接修改数据——propose_* 仅产出提案（tool_result 只有 proposal_id + 一句话摘要，
+ * 不含预览细节，2026-08 修订；完整预览经 SSE proposal 事件推送 GUI）；用户确认后由 S7.5 路由
+ * 快照重校验并调用 S6.7 执行工具落库。 */
+const proposalToolDefs: ToolDefinition[] = [
+  {
+    name: "propose_create_entity",
+    description:
+      "创建实体提案：向用户提议新建实体。type 取值 character|setting|location|hook，name 必填，" +
+      "data 可选（自定义字段，如角色 role/status、伏笔 payoff_timing）。" +
+      "仅生成提案（返回 proposal_id + 一句话摘要），需用户在界面确认后才生效——请勿重复提案或视为已创建。",
+    argsSchema: proposeCreateEntityArgsSchema,
+    permission: TOOL_PERMISSION.PROPOSAL,
+    run: runProposeCreateEntity,
+  },
+  {
+    name: "propose_update_entity",
+    description:
+      "更新实体提案：entity_id 指定实体，patches 为要修改的 data 字段（至少一项，浅合并——未传字段保留）。" +
+      "仅生成提案，需用户确认后生效；确认时服务端校验实体未被他人改动（updated_at 快照比对），" +
+      "实体不存在或已软删返回错误。",
+    argsSchema: proposeUpdateEntityArgsSchema,
+    permission: TOOL_PERMISSION.PROPOSAL,
+    run: runProposeUpdateEntity,
+  },
+  {
+    name: "propose_delete_entity",
+    description:
+      "删除实体提案：软删指定实体及其关联关系与 Delta（可回收站还原，非物理清除）。" +
+      "仅生成提案，需用户确认后生效；实体不存在或已软删返回错误。",
+    argsSchema: proposeDeleteEntityArgsSchema,
+    permission: TOOL_PERMISSION.PROPOSAL,
+    run: runProposeDeleteEntity,
+  },
+  {
+    name: "propose_add_relation",
+    description:
+      "新增关系提案：source/target 为端点 id（实体 id 如 char-xxx，或大纲节点 id 如 ch-xxx，" +
+      "类型自动识别），type 为预定义关系类型（belongs_to/owns/masters/ally/rival/mentor/family/" +
+      "kills/appears_in/occurs_at/plot_edge/plants/advances/resolves/depends_on/involves），" +
+      "metadata 可选。仅生成提案，需用户确认后生效；端点不存在或已软删返回错误。",
+    argsSchema: proposeAddRelationArgsSchema,
+    permission: TOOL_PERMISSION.PROPOSAL,
+    run: runProposeAddRelation,
+  },
+  {
+    name: "propose_remove_relation",
+    description:
+      "移除关系提案：relation_id 指定要移除的关系（确认后物理删除，不进回收站）。" +
+      "仅生成提案，需用户确认后生效；关系不存在或端点已软删返回错误。",
+    argsSchema: proposeRemoveRelationArgsSchema,
+    permission: TOOL_PERMISSION.PROPOSAL,
+    run: runProposeRemoveRelation,
+  },
+  {
+    name: "propose_add_delta",
+    description:
+      "追加属性变更提案：node_id 为触发变更的大纲节点，target 为变更目标（实体 id 或大纲节点 id，" +
+      "类型自动识别），changes 为变更列表（op 取值 set/update/add/remove，至少一项；" +
+      "update 需 from 旧值，add/remove 用 value）。仅生成提案，需用户确认后生效；" +
+      "触发节点或目标不存在/已软删返回错误。",
+    argsSchema: proposeAddDeltaArgsSchema,
+    permission: TOOL_PERMISSION.PROPOSAL,
+    run: runProposeAddDelta,
+  },
+  {
+    name: "propose_outline_node",
+    description:
+      "新增大纲节点提案：type 取值 volume|chapter|scene（严格三层：卷挂根、章挂卷或根、" +
+      "场景必须挂章），title 必填，parent_id 指定父节点（缺省挂根）。" +
+      "仅生成提案，需用户确认后生效；父节点不存在/已软删或层级非法返回错误。",
+    argsSchema: proposeOutlineNodeArgsSchema,
+    permission: TOOL_PERMISSION.PROPOSAL,
+    run: runProposeOutlineNode,
+  },
+  {
+    name: "propose_move_node",
+    description:
+      "移动大纲节点提案：node_id 移到 parent_id 下的 order 位置（0 起计数）。" +
+      "仅生成提案，需用户确认后生效；目标父层级非法（严格三层，决策 19）、" +
+      "节点或父不存在/已软删返回错误。",
+    argsSchema: proposeMoveNodeArgsSchema,
+    permission: TOOL_PERMISSION.PROPOSAL,
+    run: runProposeMoveNode,
+  },
+  {
+    name: "propose_delete_node",
+    description:
+      "删除大纲节点提案：软删指定节点及其整棵子树（可回收站还原，非物理清除）。" +
+      "仅生成提案，需用户确认后生效；节点不存在或已软删返回错误。",
+    argsSchema: proposeDeleteNodeArgsSchema,
+    permission: TOOL_PERMISSION.PROPOSAL,
+    run: runProposeDeleteNode,
+  },
+  {
+    name: "propose_create_hook",
+    description:
+      "创建伏笔提案：name 必填，data 可选（伏笔字段：payoff_timing、half_life、expected_resolve_node_id、category 等），" +
+      "plant_at_node_id 可选指定埋设节点（确认后建立 plants 关系）。" +
+      "仅生成提案，需用户确认后生效；埋设节点不存在/已软删返回错误。",
+    argsSchema: proposeCreateHookArgsSchema,
+    permission: TOOL_PERMISSION.PROPOSAL,
+    run: runProposeCreateHook,
+  },
+  {
+    name: "propose_update_hook",
+    description:
+      "更新伏笔提案：hook_id 指定伏笔，patches 为要修改的 data 字段（至少一项，浅合并——未传字段保留）。" +
+      "仅生成提案，需用户确认后生效；确认时服务端校验伏笔未被改动（updated_at 快照比对），" +
+      "伏笔不存在或已软删返回错误。",
+    argsSchema: proposeUpdateHookArgsSchema,
+    permission: TOOL_PERMISSION.PROPOSAL,
+    run: runProposeUpdateHook,
+  },
+  {
+    name: "propose_advance_hook",
+    description:
+      "推进伏笔提案：hook_id 指定伏笔，node_id 为推进发生的节点，description 描述推进内容。" +
+      "确认后复合写一次提交（Delta 记 status=progressing + advances 关系，幂等）。" +
+      "仅生成提案，需用户确认后生效；伏笔或节点不存在/已软删返回错误。",
+    argsSchema: proposeAdvanceHookArgsSchema,
+    permission: TOOL_PERMISSION.PROPOSAL,
+    run: runProposeAdvanceHook,
+  },
+  {
+    name: "propose_resolve_hook",
+    description:
+      "回收伏笔提案：hook_id 指定伏笔，node_id 为回收节点，description 描述回收内容。" +
+      "确认后复合写一次提交（Delta 记 status=resolved + resolves 关系，幂等）。" +
+      "仅生成提案，需用户确认后生效；伏笔或节点不存在/已软删返回错误。",
+    argsSchema: proposeResolveHookArgsSchema,
+    permission: TOOL_PERMISSION.PROPOSAL,
+    run: runProposeResolveHook,
+  },
+  {
+    name: "propose_abandon_hook",
+    description:
+      "废弃伏笔提案：hook_id 指定伏笔，description 说明废弃原因。" +
+      "确认后复合写一次提交（Delta 记 status=abandoned）。" +
+      "仅生成提案，需用户确认后生效；伏笔不存在或已软删返回错误。",
+    argsSchema: proposeAbandonHookArgsSchema,
+    permission: TOOL_PERMISSION.PROPOSAL,
+    run: runProposeAbandonHook,
+  },
+];
+
+registerTools(proposalToolDefs);

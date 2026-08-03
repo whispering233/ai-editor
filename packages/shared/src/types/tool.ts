@@ -9,6 +9,7 @@
 
 import { z } from "zod";
 import { ENTITY_TYPES, RELATION_TYPES } from "../constants/entity.js";
+import { deltaChangeSchema } from "./api.js"; // 复用 delta 单条变更 schema（api.ts 已导出）
 
 // ============ get_entity（实体详情，tools.md「实体查询」） ============
 
@@ -228,3 +229,199 @@ export type FindHookOpportunitiesArgs = z.infer<typeof findHookOpportunitiesArgs
 export const detectHookConflictsArgsSchema = z.object({}).strict();
 
 export type DetectHookConflictsArgs = z.infer<typeof detectHookConflictsArgsSchema>;
+
+// ============ 提案类工具（tools.md「提案类（需确认）」+ hooks.md「工具扩展」提案类，S6.6） ============
+//
+// 语义（tools.md「返回语义」2026-08 修订）：AI **不能直接修改数据**——propose_* 仅产出
+// 提案对象（proposal_id + 一句话摘要），tool_result 不含预览细节（避免 LLM 误以为提案已生效
+// 而重复提案）；完整预览只经 SSE proposal 事件推送 GUI（S7 实现）。
+// 参数签名与 tools.md 逐字对齐（propose_add_relation(source, target, type, metadata?) 等）：
+// 端点 id（source/target/plant_at_node_id 等）由服务端在生成时自动识别实体/大纲节点类型
+// 并采集 updated_at 快照（决策 14/19），故入参只需 id 字符串。
+// patches（部分更新字段）拒绝空对象——空补丁提案无意义（生成时校验）。
+
+// === propose_create_entity（创建实体提案） ===
+
+/** 入参：type（实体类型）+ name（必填）+ data（可选自定义字段） */
+export const proposeCreateEntityArgsSchema = z
+  .object({
+    type: z.enum(ENTITY_TYPES),
+    name: z.string().min(1),
+    data: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict();
+
+export type ProposeCreateEntityArgs = z.infer<typeof proposeCreateEntityArgsSchema>;
+
+// === propose_update_entity（更新实体提案） ===
+
+/** 入参：entity_id + patches（data 部分字段，至少一项）；快照校验基于实体自身 updated_at（决策 14） */
+export const proposeUpdateEntityArgsSchema = z
+  .object({
+    entity_id: z.string(),
+    patches: z.record(z.string(), z.unknown()).refine((p) => Object.keys(p).length > 0, {
+      message: "patches 不能为空（至少一项变更）",
+    }),
+  })
+  .strict();
+
+export type ProposeUpdateEntityArgs = z.infer<typeof proposeUpdateEntityArgsSchema>;
+
+// === propose_delete_entity（删除实体提案） ===
+
+/** 入参：entity_id（软删 + 级联，可回收站还原，决策 12） */
+export const proposeDeleteEntityArgsSchema = z
+  .object({
+    entity_id: z.string(),
+  })
+  .strict();
+
+export type ProposeDeleteEntityArgs = z.infer<typeof proposeDeleteEntityArgsSchema>;
+
+// === propose_add_relation（新增关系提案） ===
+
+/**
+ * 入参：source/target 为端点 id（实体 id 或大纲节点 id，类型生成时自动识别）；
+ * type 白名单（RELATION_TYPES 16 种，含 plot_edge/plants/advances/resolves）；metadata 可选
+ */
+export const proposeAddRelationArgsSchema = z
+  .object({
+    source: z.string(),
+    target: z.string(),
+    type: z.enum(RELATION_TYPES),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict();
+
+export type ProposeAddRelationArgs = z.infer<typeof proposeAddRelationArgsSchema>;
+
+// === propose_remove_relation（移除关系提案） ===
+
+/** 入参：relation_id（手动删关系 = 物理删，不进回收站，决策 12） */
+export const proposeRemoveRelationArgsSchema = z
+  .object({
+    relation_id: z.string(),
+  })
+  .strict();
+
+export type ProposeRemoveRelationArgs = z.infer<typeof proposeRemoveRelationArgsSchema>;
+
+// === propose_add_delta（追加属性变更提案） ===
+
+/** 入参：node_id（触发节点）+ target（变更目标 id，实体或大纲节点）+ changes（至少一项，复用 deltaChangeSchema） */
+export const proposeAddDeltaArgsSchema = z
+  .object({
+    node_id: z.string(),
+    target: z.string(),
+    changes: z.array(deltaChangeSchema).min(1),
+  })
+  .strict();
+
+export type ProposeAddDeltaArgs = z.infer<typeof proposeAddDeltaArgsSchema>;
+
+// === propose_outline_node（新增大纲节点提案） ===
+
+/** 入参：type（volume|chapter|scene）+ title + parent_id（缺省挂根；scene 必须挂 chapter，决策 19） */
+export const proposeOutlineNodeArgsSchema = z
+  .object({
+    type: z.enum(["volume", "chapter", "scene"]),
+    title: z.string().min(1),
+    parent_id: z.string().optional(),
+  })
+  .strict();
+
+export type ProposeOutlineNodeArgs = z.infer<typeof proposeOutlineNodeArgsSchema>;
+
+// === propose_move_node（移动大纲节点提案） ===
+
+/**
+ * 入参：node_id + parent_id（目标父节点，**可为 "root"**——决策 19 允许 volume/chapter 挂根，
+ * db moveOutlineNode 支持 parentId === "root"）+ order（目标位置，0 起）。
+ * order 无范围上限：超出目标父 children 长度的行为（clamp 或抛错）由 S6.7/db 执行时定义，
+ * 生成时校验不做上限（提案只承载意图，合法性由执行层兜底）。
+ */
+export const proposeMoveNodeArgsSchema = z
+  .object({
+    node_id: z.string(),
+    parent_id: z.string(),
+    order: z.number().int().min(0),
+  })
+  .strict();
+
+export type ProposeMoveNodeArgs = z.infer<typeof proposeMoveNodeArgsSchema>;
+
+// === propose_delete_node（删除大纲节点提案） ===
+
+/** 入参：node_id（软删 + 递归子树，可回收站还原，决策 12） */
+export const proposeDeleteNodeArgsSchema = z
+  .object({
+    node_id: z.string(),
+  })
+  .strict();
+
+export type ProposeDeleteNodeArgs = z.infer<typeof proposeDeleteNodeArgsSchema>;
+
+// === propose_create_hook（创建伏笔提案，hooks.md「工具扩展」提案类） ===
+
+/** 入参：name + data（可选伏笔字段，如 payoff_timing/half_life/expected_resolve_node_id）+ plant_at_node_id（可选埋设节点） */
+export const proposeCreateHookArgsSchema = z
+  .object({
+    name: z.string().min(1),
+    data: z.record(z.string(), z.unknown()).optional(),
+    plant_at_node_id: z.string().optional(),
+  })
+  .strict();
+
+export type ProposeCreateHookArgs = z.infer<typeof proposeCreateHookArgsSchema>;
+
+// === propose_update_hook（更新伏笔提案） ===
+
+/** 入参：hook_id + patches（data 部分字段，至少一项）；快照校验基于伏笔实体自身 updated_at（决策 14） */
+export const proposeUpdateHookArgsSchema = z
+  .object({
+    hook_id: z.string(),
+    patches: z.record(z.string(), z.unknown()).refine((p) => Object.keys(p).length > 0, {
+      message: "patches 不能为空（至少一项变更）",
+    }),
+  })
+  .strict();
+
+export type ProposeUpdateHookArgs = z.infer<typeof proposeUpdateHookArgsSchema>;
+
+// === propose_advance_hook（推进伏笔提案） ===
+
+/** 入参：hook_id + node_id（推进发生的节点）+ description（推进内容描述；确认后复合写 delta+relations，tools.md） */
+export const proposeAdvanceHookArgsSchema = z
+  .object({
+    hook_id: z.string(),
+    node_id: z.string(),
+    description: z.string().min(1),
+  })
+  .strict();
+
+export type ProposeAdvanceHookArgs = z.infer<typeof proposeAdvanceHookArgsSchema>;
+
+// === propose_resolve_hook（回收伏笔提案） ===
+
+/** 入参：hook_id + node_id（回收节点）+ description（回收内容描述；确认后复合写 delta+relations，tools.md） */
+export const proposeResolveHookArgsSchema = z
+  .object({
+    hook_id: z.string(),
+    node_id: z.string(),
+    description: z.string().min(1),
+  })
+  .strict();
+
+export type ProposeResolveHookArgs = z.infer<typeof proposeResolveHookArgsSchema>;
+
+// === propose_abandon_hook（废弃伏笔提案） ===
+
+/** 入参：hook_id + description（废弃原因；确认后复合写 delta 记 status=abandoned，tools.md） */
+export const proposeAbandonHookArgsSchema = z
+  .object({
+    hook_id: z.string(),
+    description: z.string().min(1),
+  })
+  .strict();
+
+export type ProposeAbandonHookArgs = z.infer<typeof proposeAbandonHookArgsSchema>;
