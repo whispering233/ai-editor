@@ -183,7 +183,16 @@ export function fetchSSE(url: string, options: SSEOptions): () => void {
         if (msg && !dispatch(msg)) done = true;
       }
     } catch {
-      // AbortError（超时 / 手动取消）或网络错误：由 onTimeout / abort 调用方感知
+      // 区分终止原因（S8.1 oracle S1 补丁）：
+      // - timedOut / manualAbort（AbortError 已由超时/手动取消置位）→ 静默：
+      //   超时走 onTimeout、手动取消由 abort 调用方感知（既有语义）
+      // - 其他错误（fetch 网络层失败——服务未起/断网/DNS，或读流中途连接重置）→ 补发
+      //   error 事件 + failed 置位：避免「气泡无回复无提示」静默失败；onEnd 不被误触发
+      if (!timedOut && !manualAbort) {
+        done = true;
+        failed = true;
+        onEvent("error", { code: CLIENT_NETWORK_ERROR, message: "网络请求失败" });
+      }
     } finally {
       clearTimer();
       if (signal) signal.removeEventListener("abort", onExternalAbort);

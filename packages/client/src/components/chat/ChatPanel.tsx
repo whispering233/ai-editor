@@ -4,8 +4,8 @@
 //   消息流（user 气泡 / assistant 无气泡宋体排版 / 历史工具折叠记录 / 运行时工具行 / 提案卡）→
 //   focus 小条 → 输入区（Enter 发送 / Shift+Enter 换行）
 // 无项目打开时整体禁用（灰显 + 「打开项目后可用」，不请求会话数据，chat.md「位置与形态」）
-// S7 接入点：proposals（提案卡）/ streamTools（运行时工具行）数据源为 store 瞬态字段，
-//   服务端 SSE 实现后自动填充渲染；提案确认/拒绝按钮当前为锁定态（disabled）
+// S7 数据源已接入（S8.1 联调完成）：proposals（提案卡）/ streamTools（运行时工具行）
+//   由 SSE 事件经 store 瞬态字段自动填充渲染；提案确认/拒绝按钮仍为锁定态（S8.2 解锁）
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronDown,

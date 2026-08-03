@@ -203,6 +203,21 @@ describe("fetchSSE（流式分发）", () => {
     expect(events.filter(([e]) => e === "ping")).toHaveLength(3);
   });
 
+  it("fetch 抛错（网络失败）→ 补发 error 事件 + 不触发 onEnd（S8.1 oracle S1：消除静默失败）", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("fetch failed"); // 服务未起/断网等网络层失败（非 AbortError）
+      }),
+    );
+    const events: Array<[string, unknown]> = [];
+    let ended = false;
+    fetchSSE("/api/v1/chat", { onEvent: (e, d) => events.push([e, d]), onEnd: () => (ended = true) });
+    await flush();
+    expect(events).toEqual([["error", { code: "CLIENT_NETWORK_ERROR", message: "网络请求失败" }]]);
+    expect(ended).toBe(false); // 网络失败 ≠ 正常关闭：onEnd 语义（正常结束才触发）不得误触发
+  });
+
   it("返回的 abort 函数取消流，不触发 onTimeout / onEnd", async () => {
     vi.useFakeTimers();
     vi.stubGlobal("fetch", vi.fn(async () => new Response(neverEndingStream())));

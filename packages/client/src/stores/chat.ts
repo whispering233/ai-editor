@@ -93,13 +93,16 @@ interface ChatState {
 
 /**
  * 流错误文案映射（chat.md「错误态」）
- * - S7 未实现时 POST /chat 未注册 → HTTP 404（fetchSSE 透传 code=CLIENT_NETWORK_ERROR + "SSE 请求失败（HTTP 404）"）
+ * - HTTP 404 → 通用防御文案「聊天服务暂不可用」（S8.1 更新：S7 已实现 POST /chat，
+ *   该分支仅作防御——旧构建/服务未起时 fetchSSE 透传 code=CLIENT_NETWORK_ERROR + "SSE 请求失败（HTTP 404）"）
  * - 网络层失败（服务未启动/断网）→ 「连接失败，请确认服务已启动」
- * - 服务端 error 事件（模型失败/超限，决策 15）→ 透传服务端 message
+ * - 服务端/中间层错误（非 2xx 且无 REST 包裹，如 proxy 500，message 含 "HTTP "）→ 透传 message，
+ *   不落入「连接失败」误判（S8.1 oracle S2：CLIENT_NETWORK_ERROR 仅纯网络错误才映射连接失败文案）
+ * - 服务端 error 事件（模型失败/超限，决策 15）→ 透传服务端 message（真实链路错误一律走此分支）
  */
 export function describeStreamError(code: string, message: string): string {
-  if (message.includes("HTTP 404")) return "聊天服务未就绪（S7 实现）";
-  if (code === "CLIENT_NETWORK_ERROR") return "连接失败，请确认服务已启动";
+  if (message.includes("HTTP 404")) return "聊天服务暂不可用";
+  if (code === "CLIENT_NETWORK_ERROR" && !message.includes("HTTP ")) return "连接失败，请确认服务已启动";
   return message;
 }
 
@@ -284,8 +287,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
             break;
           }
           case "tool_result": {
-            // 注：SSE 契约目前无失败标志，此处无条件置 ok，error 状态不可达——
-            // S7 前需定契约（result 携带 ok:false 或新增 error 字段），error 分支为预留
+            // 契约确认（S8.1）：AgentEvent tool_result 仅 { tool, result, id }，无 ok/isError 字段——
+            // 工具失败编码进 result 字符串内容（如「错误：实体 char-9 不存在」，决策 15 结构化喂回自纠），
+            // SSE 帧与 AgentEvent 同构（chat.ts onEvent 直通 writeEvent）。故无条件置 ok，
+            // status: "error" 为历史预留（UI 渲染已支持），当前契约下不可达；result 按字符串原文挂载
             const { id } = data as { id?: string };
             if (!id) break;
             set((s) => ({

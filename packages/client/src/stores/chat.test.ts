@@ -267,12 +267,16 @@ describe("focus context 与断连标记（U5）", () => {
 });
 
 describe("describeStreamError（U5：错误文案映射）", () => {
-  it("HTTP 404 → 聊天服务未就绪（S7 未实现）", () => {
-    expect(describeStreamError("CLIENT_NETWORK_ERROR", "SSE 请求失败（HTTP 404）")).toBe("聊天服务未就绪（S7 实现）");
+  it("HTTP 404 → 通用防御文案「聊天服务暂不可用」（S8.1：S7 已实现，分支仅防旧构建/服务未起）", () => {
+    expect(describeStreamError("CLIENT_NETWORK_ERROR", "SSE 请求失败（HTTP 404）")).toBe("聊天服务暂不可用");
   });
 
   it("网络失败 → 连接失败提示", () => {
     expect(describeStreamError("CLIENT_NETWORK_ERROR", "fetch failed")).toBe("连接失败，请确认服务已启动");
+  });
+
+  it("非 2xx 无 REST 包裹（proxy 500）→ 透传 HTTP 状态文案，不误判「连接失败」（S8.1 oracle S2）", () => {
+    expect(describeStreamError("CLIENT_NETWORK_ERROR", "SSE 请求失败（HTTP 500）")).toBe("SSE 请求失败（HTTP 500）");
   });
 
   it("服务端 error 事件 → 透传 message", () => {
@@ -334,15 +338,19 @@ describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
     expect(useChatStore.getState().messages[1]).toMatchObject({ role: "assistant", content: "我好" });
   });
 
-  it("tool_call / tool_result 事件 → 运行时工具记录（成对更新）", () => {
+  it("tool_call / tool_result 事件 → 运行时工具记录（成对更新；result 为字符串——S8.1 对齐 S7.6 帧契约）", () => {
     useChatStore.getState().sendMessage("你好");
     const { onEvent } = sseOptions();
     onEvent("tool_call", { tool: "get_entity", args: { id: "char-1" }, id: "call-1" });
     expect(useChatStore.getState().streamTools).toEqual([
       { id: "call-1", tool: "get_entity", args: { id: "char-1" }, status: "running" },
     ]);
-    onEvent("tool_result", { tool: "get_entity", result: { name: "张三" }, id: "call-1" });
-    expect(useChatStore.getState().streamTools[0]).toMatchObject({ status: "ok", result: { name: "张三" } });
+    // S7.6 帧事实契约（chat.test.ts）：result 为字符串——JSON.stringify 结果或错误文案，非对象
+    onEvent("tool_result", { tool: "get_entity", result: JSON.stringify({ name: "张三" }), id: "call-1" });
+    expect(useChatStore.getState().streamTools[0]).toMatchObject({
+      status: "ok",
+      result: JSON.stringify({ name: "张三" }),
+    });
   });
 
   it("proposal 事件 → 提案卡累积（pending）", () => {
@@ -365,6 +373,60 @@ describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
     await vi.waitFor(() => expect(mocked.listSessions).toHaveBeenCalled());
   });
 
+  it("S8.1 联调：ping+text×n+tool_call+tool_result+proposal+done 全序列（对齐 chat.test.ts 帧断言）", async () => {
+    mocked.listSessions.mockResolvedValue([sampleSession]);
+    useChatStore.getState().sendMessage("你好");
+    const { onEvent } = sseOptions();
+    // 心跳（空 payload，决策 20）：不产生任何状态变化
+    onEvent("ping", {});
+    // text 流式追加（多段；与 tool 轮次交错）
+    onEvent("text", { delta: "第一段" });
+    onEvent("text", { delta: "第二段" });
+    // tool_call → 工具行 running
+    onEvent("tool_call", { tool: "propose_create_entity", args: { type: "character", name: "张三" }, id: "call_1" });
+    // tool_result（S7.6 帧契约：result 为字符串；proposal 在对应 tool_result 之后）
+    onEvent("tool_result", {
+      tool: "propose_create_entity",
+      result: JSON.stringify({ proposal_id: "prop_1", summary: "创建角色张三" }),
+      id: "call_1",
+    });
+    onEvent("proposal", {
+      proposal_id: "prop_1",
+      type: "propose_create_entity",
+      preview: { type: "propose_create_entity", summary: "创建角色张三", args: { type: "character", name: "张三" } },
+    });
+    // 收尾文本 + done（新会话 sess_ 前缀，endpoints.md id 约定）
+    onEvent("text", { delta: "完成" });
+    onEvent("done", { session_id: "sess_1" });
+
+    const s = useChatStore.getState();
+    // 文本流式追加累积（含工具轮之间的段落）
+    expect(s.messages[1]).toMatchObject({ role: "assistant", content: "第一段第二段完成" });
+    // 工具行状态迁移 running → ok，result 按字符串原文挂载
+    expect(s.streamTools).toEqual([
+      {
+        id: "call_1",
+        tool: "propose_create_entity",
+        args: { type: "character", name: "张三" },
+        result: JSON.stringify({ proposal_id: "prop_1", summary: "创建角色张三" }),
+        status: "ok",
+      },
+    ]);
+    // 提案卡填充（pending）
+    expect(s.proposals).toEqual([
+      {
+        proposalId: "prop_1",
+        type: "propose_create_entity",
+        preview: { type: "propose_create_entity", summary: "创建角色张三", args: { type: "character", name: "张三" } },
+        status: "pending",
+      },
+    ]);
+    // done：流结束 + currentSessionId 更新 + 会话列表刷新
+    expect(s.streaming).toBe(false);
+    expect(s.currentSessionId).toBe("sess_1");
+    await vi.waitFor(() => expect(mocked.listSessions).toHaveBeenCalled());
+  });
+
   it("error 事件 → streamError 文案（透传 message）+ streaming=false + 输入恢复", () => {
     useChatStore.getState().sendMessage("你好");
     const { onEvent } = sseOptions();
@@ -374,11 +436,22 @@ describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
     expect(s.streamError).toBe("单轮超时");
   });
 
-  it("S7 未实现（HTTP 404）→ 错误条文案「聊天服务未就绪」", () => {
+  it("S8.1 联调：服务端真实错误码（LLM 层非 ErrorCode 枚举）→ 文案透传 message（帧契约 chat.test.ts）", () => {
+    useChatStore.getState().sendMessage("你好");
+    const { onEvent } = sseOptions();
+    // S7.6 帧事实契约：配额类错误帧 { code: "insufficient_quota", message: "余额不足" }——
+    // code 不经 ErrorCode 枚举，文案映射只认 message（describeStreamError 透传分支）
+    onEvent("error", { code: "insufficient_quota", message: "余额不足" });
+    const s = useChatStore.getState();
+    expect(s.streaming).toBe(false);
+    expect(s.streamError).toBe("余额不足");
+  });
+
+  it("旧构建/服务未起（HTTP 404）→ 错误条通用防御文案「聊天服务暂不可用」", () => {
     useChatStore.getState().sendMessage("你好");
     const { onEvent } = sseOptions();
     onEvent("error", { code: "CLIENT_NETWORK_ERROR", message: "SSE 请求失败（HTTP 404）" });
-    expect(useChatStore.getState().streamError).toBe("聊天服务未就绪（S7 实现）");
+    expect(useChatStore.getState().streamError).toBe("聊天服务暂不可用");
   });
 
   it("onTimeout（60s 无事件）→ disconnected=true + streaming=false + 清空提案（决策 16）", () => {

@@ -651,7 +651,7 @@ export function getSessionMessages(sessionId: string): Promise<ChatSessionMessag
  * POST /api/v1/chat 请求体（snake_case；message 必填，session_id 不传则创建新会话）。
  * 注意：实际发送由 use-sse 的 fetchSSE 承担（chat store 内联调用 fetchSSE("/api/v1/chat", …)，
  * 返回 SSE 事件流，不走 apiFetch 的 JSON 包裹）——本文件只保留请求体契约（事实来源），
- * 不再提供发送函数；S7 实现服务端端点（endpoints.md L742-793）时以本契约为准
+ * 不再提供发送函数；请求体契约已与 S7.6 实现对齐（endpoints.md L742-793），以本契约为准
  */
 export interface SendChatMessageBody {
   message: string;
