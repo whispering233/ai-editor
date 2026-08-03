@@ -1,8 +1,9 @@
-// 概览页（U4，2026-08 修订版契约 doc/ui/pages/dashboard.md）：中栏默认 tab（#/）
+// 概览页（U4，2026-08 修订版契约 doc/ui/pages/dashboard.md；S13.4 引导形态修复）：中栏默认 tab（#/）
 // 两种形态：
-//   - 引导形态（无项目，config === null && !configLoading）：引导卡「还没有书，先创建一本」+
-//     新建表单（书名 → buildBookPath + createProjectAt）+ [打开其他路径…] 折叠（绝对路径 openProjectAt）。
-//     书架卡片网格已移入左栏 Sidebar 书架树（U3），本页不再渲染书籍列表；书架数据仅用于 rootPath
+//   - 引导形态（无项目，config === null && !configLoading）：按书架状态分派——**有书 → 卡内列出书籍
+//     可直接打开**（+ 新建次级折叠 + 打开其他路径折叠）；空书架 → 创建引导（原样）；加载中 → 骨架
+//     （防「还没有书」误闪）；加载失败 → 错误块 + 卡内中性占位。修复：书架有书未打开时不再显示误导性
+//     「还没有书，先创建一本」（books 列表此前只展示在左栏 Sidebar，本页无条件渲染空态卡）
 //   - 概览形态（项目已打开）：四个区块——项目信息（config）/ 创作要素（GET /entity/:type ×4 并行取 total）/
 //     大纲概览（GET /outline 前端递归统计卷章场 + 最近更新）/ 最近会话（chat store 前 5 条，点击注入右栏）
 // 交互：当前位置/去大纲 → #/outline 并定位节点（ui store focusOutlineNodeId，方案 A 跨页传参）；
@@ -12,6 +13,7 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { formatRelativeTime } from "@ai-editor/shared";
 import type { EntityType, OutlineNode } from "@ai-editor/shared";
+import { BookOpen } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiError, CLIENT_NETWORK_ERROR, listEntities } from "../lib/api";
@@ -66,7 +68,8 @@ export default function Dashboard() {
   const outline = useProjectStore((s) => s.outline);
   const outlineLoading = useProjectStore((s) => s.outlineLoading);
   const loadOutline = useProjectStore((s) => s.loadOutline);
-  // 书架仅用于引导表单的 rootPath（buildBookPath）；列表展示已移入左栏 Sidebar
+  // 书架用于 rootPath（buildBookPath）+ 引导卡书籍列表（S13.4：有书时列出可打开）；
+  // 左栏 Sidebar 书架树与左栏 store 同源数据
   const bookshelf = useProjectStore((s) => s.bookshelf);
   const bookshelfLoading = useProjectStore((s) => s.bookshelfLoading);
   const bookshelfError = useProjectStore((s) => s.bookshelfError);
@@ -86,6 +89,10 @@ export default function Dashboard() {
   // 引导表单状态
   const [bookName, setBookName] = useState("");
   const [bookError, setBookError] = useState<string | null>(null);
+  /** 有书形态下书籍点击打开失败的行内错误（S13.4；describeOpenError 映射，同 pathError 模式） */
+  const [bookOpenError, setBookOpenError] = useState<string | null>(null);
+  /** 有书形态「新建一本…」折叠表单展开态 */
+  const [showCreateForm, setShowCreateForm] = useState(false);
   const [showPathForm, setShowPathForm] = useState(false);
   const [path, setPath] = useState("");
   const [pathError, setPathError] = useState<string | null>(null);
@@ -119,6 +126,11 @@ export default function Dashboard() {
   // 项目切换（同页不卸载场景：Sidebar 开新项目）时重置大纲加载标记，使新项目树重新拉取
   useEffect(() => {
     setOutlineAttempted(false);
+  }, [config?.id]);
+
+  // 项目切换同样清除书籍打开错误（防下次进入引导形态时残留上次失败文案）
+  useEffect(() => {
+    setBookOpenError(null);
   }, [config?.id]);
 
   // 概览态：大纲树未加载则补拉（outlineLoading 由 store 管理；attempted 防重复）
@@ -216,6 +228,17 @@ export default function Dashboard() {
     }
   }
 
+  /** 打开书籍（S13.4 引导卡书籍行；openProjectAt → store 刷新 config/outline，本页切概览形态；
+   * 失败行内展示 describeOpenError（同 handleOpenPath 模式——侧栏用 toast，页内表单区用行内） */
+  async function handleOpenBook(path: string) {
+    setBookOpenError(null);
+    try {
+      await openProjectAt(path);
+    } catch (err) {
+      setBookOpenError(describeOpenError(openErrorCode(err)));
+    }
+  }
+
   /** 跳大纲并定位当前位置节点（当前位置未设置时仅跳转；dashboard.md「操作流」） */
   function goOutline() {
     if (config?.currentPosition != null) setFocusOutlineNode(config.currentPosition);
@@ -230,8 +253,33 @@ export default function Dashboard() {
     );
   }
 
-  // ============ 引导形态（无项目：创建/打开引导卡，书架列表在左栏） ============
+  // ============ 引导形态（无项目：按书架状态分派——有书列出书籍 / 空书架创建引导 / 加载中骨架 / 失败占位） ============
   if (noProject) {
+    const shelfLoading = bookshelf === null && bookshelfLoading;
+    const shelfError = bookshelfError !== null;
+    const shelfHasBooks = bookshelf !== null && bookshelf.books.length > 0;
+
+    /** 新建表单（空书架主操作 / 有书折叠次级共用；错误与提交态由页面持有） */
+    function renderCreateBookForm(className: string) {
+      return (
+        <form onSubmit={handleCreateBook} className={className}>
+          <div className="flex gap-2">
+            <Input
+              value={bookName}
+              onChange={(e) => setBookName(e.target.value)}
+              placeholder="书名"
+              maxLength={60}
+              disabled={submitting}
+            />
+            <Button type="submit" disabled={submitting || bookshelf === null}>
+              新建
+            </Button>
+          </div>
+          {bookError && <p className="text-left text-sm text-destructive">{bookError}</p>}
+        </form>
+      );
+    }
+
     return (
       <section>
         {bookshelfError !== null && (
@@ -247,54 +295,100 @@ export default function Dashboard() {
           </div>
         )}
 
-        <div className="mx-auto mt-10 max-w-md rounded-2xl border border-dashed border-border bg-card px-6 py-10 text-center">
-          <h1 className="font-serif text-lg text-foreground">还没有书，先创建一本</h1>
-          <p className="mt-1 text-xs text-muted-foreground">
-            每本书一个独立目录（books/书名/），写作数据互不干扰
-          </p>
-          <form onSubmit={handleCreateBook} className="mx-auto mt-5 flex flex-col gap-2">
-            <div className="flex gap-2">
-              <Input
-                value={bookName}
-                onChange={(e) => setBookName(e.target.value)}
-                placeholder="书名"
-                maxLength={60}
-                disabled={submitting}
-              />
-              <Button type="submit" disabled={submitting || bookshelf === null}>
-                新建
-              </Button>
+        <div className="mx-auto mt-10 max-w-md rounded-2xl border border-dashed border-border bg-card px-6 py-8 text-center">
+          {shelfLoading ? (
+            /* 加载中骨架（防「还没有书」误闪——bookshelf 未就绪前不渲染任何文案分支） */
+            <div className="py-2">
+              <div className="mx-auto h-6 w-2/3 animate-pulse rounded bg-muted" />
+              <div className="mx-auto mt-2 h-4 w-1/2 animate-pulse rounded bg-muted" />
+              <div className="mt-5 space-y-2">
+                <div className="h-10 animate-pulse rounded-lg bg-muted" />
+                <div className="h-10 animate-pulse rounded-lg bg-muted" />
+              </div>
             </div>
-            {bookError && <p className="text-left text-sm text-destructive">{bookError}</p>}
-          </form>
-          <p className="mt-2 text-xs text-muted-foreground">创建于 创作根/books/书名/ 目录</p>
+          ) : (
+            <>
+              {shelfHasBooks ? (
+                /* 有书：卡内列出书籍（点击打开；「还没有书」语义仅剩空书架分支） */
+                <>
+                  <h1 className="font-serif text-lg text-foreground">书架里有书，打开即可写作</h1>
+                  <p className="mt-1 text-xs text-muted-foreground">选择一本书打开，或新建一本</p>
+                  <ul className="mt-5 divide-y divide-border overflow-hidden rounded-lg border border-border text-left">
+                    {bookshelf.books.map((book) => (
+                      <li key={book.path}>
+                        <button
+                          type="button"
+                          title={`打开《${book.name}》`}
+                          onClick={() => void handleOpenBook(book.path)}
+                          className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted"
+                        >
+                          <BookOpen className="size-4 shrink-0 text-muted-foreground/60" />
+                          <span className="min-w-0 flex-1 truncate text-sm text-foreground">{book.name}</span>
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            {formatRelativeTime(book.updatedAt)}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  {bookOpenError !== null && <p className="mt-3 text-left text-sm text-destructive">{bookOpenError}</p>}
+                  {/* 新建次级入口（折叠表单，不删创建能力） */}
+                  <div className="mt-4 border-t border-border pt-3">
+                    <button
+                      type="button"
+                      className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                      onClick={() => setShowCreateForm((v) => !v)}
+                    >
+                      {showCreateForm ? "收起" : "新建一本…"}
+                    </button>
+                    {showCreateForm && renderCreateBookForm("mt-2 flex flex-col gap-2 text-left")}
+                  </div>
+                </>
+              ) : shelfError ? (
+                /* 书架加载失败：卡内中性占位（错误块在上方提供重试；不显示「还没有书」误导） */
+                <p className="py-6 text-sm text-muted-foreground">
+                  书架加载失败，重试后可查看书籍或新建
+                </p>
+              ) : (
+                /* 空书架：创建引导（原样保留；「还没有书」仅此分支） */
+                <>
+                  <h1 className="font-serif text-lg text-foreground">还没有书，先创建一本</h1>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    每本书一个独立目录（books/书名/），写作数据互不干扰
+                  </p>
+                  {renderCreateBookForm("mx-auto mt-5 flex flex-col gap-2")}
+                  <p className="mt-2 text-xs text-muted-foreground">创建于 创作根/books/书名/ 目录</p>
+                </>
+              )}
 
-          {/* 打开其他路径（S1.4 保留能力，折叠；次级操作） */}
-          <div className="mt-4 border-t border-border pt-3">
-            <button
-              type="button"
-              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-              onClick={() => setShowPathForm((v) => !v)}
-            >
-              {showPathForm ? "收起" : "打开其他路径…"}
-            </button>
-            {showPathForm && (
-              <form onSubmit={handleOpenPath} className="mt-2 flex flex-col gap-2 text-left">
-                <Input
-                  value={path}
-                  onChange={(e) => setPath(e.target.value)}
-                  placeholder="/absolute/path/to/project（须含 project.json）"
-                  disabled={submitting}
-                />
-                <div>
-                  <Button type="submit" variant="outline" disabled={submitting}>
-                    打开
-                  </Button>
-                </div>
-                {pathError && <p className="text-sm text-destructive">{pathError}</p>}
-              </form>
-            )}
-          </div>
+              {/* 打开其他路径（S1.4 保留能力，折叠；次级操作；不依赖书架，错误形态同样可用） */}
+              <div className="mt-4 border-t border-border pt-3">
+                <button
+                  type="button"
+                  className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                  onClick={() => setShowPathForm((v) => !v)}
+                >
+                  {showPathForm ? "收起" : "打开其他路径…"}
+                </button>
+                {showPathForm && (
+                  <form onSubmit={handleOpenPath} className="mt-2 flex flex-col gap-2 text-left">
+                    <Input
+                      value={path}
+                      onChange={(e) => setPath(e.target.value)}
+                      placeholder="/absolute/path/to/project（须含 project.json）"
+                      disabled={submitting}
+                    />
+                    <div>
+                      <Button type="submit" variant="outline" disabled={submitting}>
+                        打开
+                      </Button>
+                    </div>
+                    {pathError && <p className="text-sm text-destructive">{pathError}</p>}
+                  </form>
+                )}
+              </div>
+            </>
+          )}
         </div>
       </section>
     );
