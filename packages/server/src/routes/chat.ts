@@ -250,7 +250,7 @@ function sleepAbortable(ms: number, signals: readonly AbortSignal[]): Promise<vo
   });
 }
 
-// ============ [chat] 事件调试日志（AI_EDITOR_DEBUG=1） ============
+// ============ [chat] 事件调试日志（配置文件 chat 类别） ============
 
 /** 调试日志字段摘要长度上限（tool_call args / tool_result 长文本截断，防刷屏） */
 const DEBUG_FIELD_MAX = 200;
@@ -421,7 +421,7 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
         // ---- 7. onEvent → SSE 帧（AgentEvent 六类 + turn_start；proposal 顺序由 runAgent 保证） ----
         // 帧写入经 void 异步排入 writer（WritableStream FIFO 保证顺序，await 仅背压）——
         // 事件回调恒同步返回，不阻塞 runAgent 循环
-        const logChatEvent = createChatEventLogger(); // [chat] 调试日志（AI_EDITOR_DEBUG=1；关闭时零开销）
+        const logChatEvent = createChatEventLogger(); // [chat] 调试日志（chat 类别；关闭时零开销）
         const onEvent = (event: AgentEvent): void => {
           logChatEvent(event); // 对话链路调试：工具调用/提案/文本增量长度等打到服务端终端
           switch (event.type) {

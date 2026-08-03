@@ -8,7 +8,6 @@ import {
   buildChatRequestBody,
   chatStream,
   DEEPSEEK_BASE_URL,
-  isLLMDebug,
   LLM_TRANSPORT_ERROR_CODES,
   parseSSEFrame,
   splitSSEFrames,
@@ -60,7 +59,7 @@ function controllableResponse(): {
 /** 标准参数跑一次 chatStream（固定 SSE 分片），收集事件与结果 */
 async function runStream(
   chunks: string[],
-  opts?: { signal?: AbortSignal },
+  opts?: { signal?: AbortSignal; debugStream?: boolean },
 ): Promise<{ result: ChatStreamResult; events: LLMStreamEvent[] }> {
   const events: LLMStreamEvent[] = [];
   const result = await chatStream({
@@ -69,6 +68,7 @@ async function runStream(
     messages: [{ role: "user", content: "hi" }],
     fetchImpl: async () => sseResponse(chunks),
     ...(opts?.signal ? { signal: opts.signal } : {}),
+    ...(opts?.debugStream !== undefined ? { debugStream: opts.debugStream } : {}),
     onEvent: (e) => events.push(e),
   });
   return { result, events };
@@ -612,27 +612,15 @@ describe("chatStream 消费者异常隔离（onEvent 抛错）", () => {
   });
 });
 
-// ============ [llm] stream 调试日志（AI_EDITOR_DEBUG=1，原始 SSE 事件流） ============
-// 覆盖：开关判定（isLLMDebug）、摘要格式（序号/delta 摘要/finish 完整保留、usage 完整打印、
+// ============ [llm] stream 调试日志（debugStream 选项，原始 SSE 事件流） ============
+// 覆盖：摘要格式（序号/delta 摘要/finish 完整保留、usage 完整打印、
 //   content/tool_call 参数片段截断 120 字符 + 原长标注、[DONE] 原样）、
-//   chatStream 集成（开启逐 data 行打 [llm] stream、关闭 console.debug 零调用）
+//   chatStream 集成（debugStream=true 逐 data 行打 [llm] stream；缺省/显式 false → 零调用；
+//   **显式 true 才开**——无 env 回退，本包不读任何环境变量）
 
-describe("[llm] stream 调试日志（AI_EDITOR_DEBUG=1）", () => {
-  const originalDebug = process.env.AI_EDITOR_DEBUG;
-
+describe("[llm] stream 调试日志（debugStream 选项）", () => {
   afterEach(() => {
     vi.restoreAllMocks();
-    if (originalDebug !== undefined) process.env.AI_EDITOR_DEBUG = originalDebug;
-    else delete process.env.AI_EDITOR_DEBUG;
-  });
-
-  it("isLLMDebug：AI_EDITOR_DEBUG=1 开启，未设置/其他值关闭", () => {
-    process.env.AI_EDITOR_DEBUG = "1";
-    expect(isLLMDebug()).toBe(true);
-    process.env.AI_EDITOR_DEBUG = "0";
-    expect(isLLMDebug()).toBe(false);
-    delete process.env.AI_EDITOR_DEBUG;
-    expect(isLLMDebug()).toBe(false);
   });
 
   it("summarizeStreamData：保留序号/delta 摘要/finish，usage 完整打印，[DONE] 原样", () => {
@@ -657,18 +645,20 @@ describe("[llm] stream 调试日志（AI_EDITOR_DEBUG=1）", () => {
     expect(line).toContain("…("); // 截断标注（含原长）
   });
 
-  it("开启时 chatStream 逐 data 行打 [llm] stream（含 [DONE]）；关闭时 console.debug 零调用", async () => {
+  it("debugStream=true：逐 data 行打 [llm] stream（含 [DONE]），server 按 stream 类别显式传入", async () => {
     const delta = '{"choices":[{"index":0,"delta":{"content":"好"},"finish_reason":null}]}';
     const finish = '{"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}';
     const usage = '{"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}';
-    process.env.AI_EDITOR_DEBUG = "1";
     const spy = vi.spyOn(console, "debug").mockImplementation(() => {});
-    await runStream([
-      "data: " + delta + "\n\n",
-      "data: " + finish + "\n\n",
-      "data: " + usage + "\n\n",
-      "data: " + SSE_DONE + "\n\n",
-    ]);
+    await runStream(
+      [
+        "data: " + delta + "\n\n",
+        "data: " + finish + "\n\n",
+        "data: " + usage + "\n\n",
+        "data: " + SSE_DONE + "\n\n",
+      ],
+      { debugStream: true },
+    );
     const lines = spy.mock.calls.map((c) => c.map(String).join(" "));
     expect(lines).toContain('[llm] stream #1 delta={content="好"} finish=null');
     expect(lines).toContain("[llm] stream #2 delta={} finish=stop");
@@ -677,38 +667,22 @@ describe("[llm] stream 调试日志（AI_EDITOR_DEBUG=1）", () => {
       '[llm] stream #3 delta={} finish=null usage={"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}',
     );
     expect(lines).toContain("[llm] stream [DONE]");
+  });
 
-    // 关闭（未设置）：零调用（零开销早退）
-    spy.mockClear();
-    delete process.env.AI_EDITOR_DEBUG;
+  it("缺省（无 debugStream 选项）→ console.debug 零调用（默认关，无 env 回退）", async () => {
+    const spy = vi.spyOn(console, "debug").mockImplementation(() => {});
     await runStream(["data: " + SSE_DONE + "\n\n"]);
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("debugStream 选项开但 env 关 → 打（选项优先，server 按 stream 类别显式传入）", async () => {
-    delete process.env.AI_EDITOR_DEBUG; // env 关
-    const spy = vi.spyOn(console, "debug").mockImplementation(() => {});
-    const delta = '{"choices":[{"index":0,"delta":{"content":"好"},"finish_reason":null}]}';
-    await chatStream({
-      apiKey: "k",
-      model: "m",
-      messages: [{ role: "user", content: "hi" }],
-      fetchImpl: async () => sseResponse(["data: " + delta + "\n\n", "data: " + SSE_DONE + "\n\n"]),
-      debugStream: true, // 选项开
-    });
-    const lines = spy.mock.calls.map((c) => c.map(String).join(" "));
-    expect(lines).toContain('[llm] stream #1 delta={content="好"} finish=null');
-  });
-
-  it("debugStream 选项关但 env 开 → 不打（显式 false 压过 env，保证类别隔离语义）", async () => {
-    process.env.AI_EDITOR_DEBUG = "1"; // env 开
+  it("debugStream=false → 不打（显式关）", async () => {
     const spy = vi.spyOn(console, "debug").mockImplementation(() => {});
     await chatStream({
       apiKey: "k",
       model: "m",
       messages: [{ role: "user", content: "hi" }],
       fetchImpl: async () => sseResponse(["data: " + SSE_DONE + "\n\n"]),
-      debugStream: false, // 选项关
+      debugStream: false,
     });
     expect(spy).not.toHaveBeenCalled();
   });

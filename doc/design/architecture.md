@@ -367,14 +367,14 @@ export interface Entity { id: string; type: EntityType; name: string; }
       GET /api/v1/project/list 扫描 books/ 列书（不依赖当前项目，待命态可用）；
       create/open 契约不变，前端拼 创作根/books/<书名>/ 路径调用
     → 启动 Hono (port 3456，占用时生产态自动 +1；AI_EDITOR_PORT 可覆盖)
-    → 调试日志（配置文件优先，server/src/debug.ts——`initDebugConfig` 启动读一次）：
+    → 调试日志（纯配置文件，server/src/debug.ts——`initDebugConfig` 启动读一次）：
       创作根 .ai-editor/config.json：{ "debug": { "enabled": true, "categories": [...] } }
       五类别 chat（agent 事件：turn_start/tool_call/proposal/done 等截断摘要）/
       request（LLM 完整 prompt）/ stream（原始 SSE chunk，经 chatStream debugStream 选项
-      传入 llm 包——选项优先 env 回退）/ usage（tokens 统计）/ http（hono/logger 请求日志，
-      仅该类别挂载）；categories 缺失 = 全部、enabled 缺失/false = 全关；
-      文件不存在/非法 JSON/结构不符 → 回退 AI_EDITOR_DEBUG env（= 全类别开启，兼容旧行为）；
-      默认关闭防刷屏）
+      显式传入 llm 包——显式 true 才开，无 env 回退）/ usage（tokens 统计）/
+      http（hono/logger 请求日志，仅该类别挂载）；categories 缺失 = 全部、
+      enabled 缺失/false = 全关；无配置文件/非法 JSON/结构不符 = 全关
+      （环境变量开关已移除；默认关闭防刷屏）
     → 加载 SPA（defaultClientDist 双路径：monorepo 开发态 ../../client/dist /
       打包安装态 ../client-dist——随 tarball 携带）为 SPA fallback
     → 打开浏览器（127.0.0.1，决策 8）

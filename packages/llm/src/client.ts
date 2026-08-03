@@ -8,8 +8,9 @@
 //     决策 16（取消信号逐 chunk 检查，命中即终止并标记 aborted，消息 "Request was aborted"）
 // 本包只管「怎么调模型」：key 由调用方注入（决策 17 读取优先级在 server 层实现），
 // 对话组织 / 重试退避 / token 估算分别在 agent 包与 S6.2，不在本文件。
-// 调试日志：AI_EDITOR_DEBUG=1 时打 [llm] stream——原始 SSE data 行摘要（需求 2 事件流形态）；
-// 开关本包独立判定（isLLMDebug），不依赖 server 的 debug.ts（architecture.md 依赖方向 server → llm）。
+// 调试日志：chatStream 的 debugStream 选项（显式 true 才开）打 [llm] stream——原始 SSE data
+// 行摘要（需求 2 事件流形态）；开关由调用方（server 按 stream 类别）显式传入，本包不读 env、
+// 不依赖 server 的 debug.ts（architecture.md 依赖方向 server → llm）。
 import type {
   AbortSignalLike,
   ChatStreamResult,
@@ -85,8 +86,8 @@ export interface ChatStreamParams {
   onEvent?: (event: LLMStreamEvent) => void;
   /**
    * [llm] stream 调试日志开关（需求 2 原始 SSE 流；server 按 isCategoryEnabled("stream") 显式
-   * 传入——**选项优先**：显式 false 可压过 env，保证 server 配置文件的类别隔离语义；
-   * 缺省 undefined 回退本包 env 判定 isLLMDebug()，独立使用场景行为不变）
+   * 传入——**显式 true 才开**：无选项默认关、无 env 回退，本包不读任何环境变量；
+   * server 配置文件的 stream 类别隔离语义由此落到本包）
    */
   debugStream?: boolean;
   /** 测试注入：默认取全局 fetch（Node 18+ / 浏览器） */
@@ -282,30 +283,17 @@ function parseChunk(data: string): LLMStreamChunk | null {
   }
 }
 
-// ============ [llm] stream 调试日志（AI_EDITOR_DEBUG=1 / debugStream 选项，原始 SSE 流） ============
-// 与 server 的 debug.ts 同开关语义（AI_EDITOR_DEBUG === "1"），但**本包独立判定**——
-// llm 不依赖 server（architecture.md 依赖方向 server → llm），client.ts 内部直接读环境变量。
-// 2026-08 升级：chatStream 新增 debugStream 选项（server 按 stream 类别显式传入，
-// 选项优先、env 回退——server 配置文件的类别隔离语义由此落到本包）。
+// ============ [llm] stream 调试日志（debugStream 选项，原始 SSE 流） ============
+// 开关语义：chatStream 的 debugStream 选项——**显式 true 才开**（无选项默认关，
+// 无 env 回退，本包不读任何环境变量；server 按 stream 类别显式传入）。
 // 输出走 console.debug（stderr 通道，与 server [chat]/[llm] 日志同通道，shell 统一过滤）。
 // 需求 2：debug 态查看 DeepSeek 返回的原始 chunk 序列（data 行摘要 + [DONE]）。
-
-/** 调试开关环境变量名（与 server DEBUG_ENV_NAME 同值；本包自持常量，避免跨包 import） */
-const LLM_DEBUG_ENV_NAME = "AI_EDITOR_DEBUG";
 
 /** [llm] stream 摘要：delta 片段（content / tool_call 参数）截断上限（防刷屏） */
 const LLM_STREAM_DELTA_MAX = 120;
 
-/**
- * 调试开关判定：globalThis.process 探测——本包零依赖硬约束（tsconfig lib 仅 ES2022、
- * types 为空，无 @types/node / DOM lib），Node ≥ 18 与浏览器下均可安全访问，缺 process 返回关闭。
- */
-export function isLLMDebug(): boolean {
-  const proc = (globalThis as unknown as { process?: { env?: Record<string, string | undefined> } }).process;
-  return proc?.env?.[LLM_DEBUG_ENV_NAME] === "1";
-}
-
-/** 调试输出（console.debug 探测调用——同上的零依赖约束；调用时取值，测试 vi.spyOn 可拦截） */
+/** 调试输出（console.debug 探测调用——本包零依赖约束：tsconfig lib 仅 ES2022、types 为空，
+ * 无 @types/node / DOM lib；调用时取值，测试 vi.spyOn 可拦截） */
 function debugConsole(...args: unknown[]): void {
   (globalThis as unknown as { console?: { debug?: (...a: unknown[]) => void } }).console?.debug?.(...args);
 }
@@ -505,9 +493,8 @@ export async function chatStream(params: ChatStreamParams): Promise<ChatStreamRe
 
   // [llm] 原始 SSE data 行逐帧日志（调试开启时打；关闭时零开销早退——高频路径无条件
   // 调用，成本控制在本层内部，与 server debug.ts 同模式）。
-  // 开关解析：**选项优先**（server 按 stream 类别显式传 true/false——显式 false 压过 env，
-  // 保证配置文件类别隔离语义），缺省回退本包 env 判定（独立使用场景行为不变）
-  const streamLogEnabled = debugStream ?? isLLMDebug();
+  // 开关解析：**显式 true 才开**（server 按 stream 类别传 true/false；无选项默认关，无 env 回退）
+  const streamLogEnabled = debugStream === true;
   let streamSeq = 0;
   const logStreamData = (data: string): void => {
     if (!streamLogEnabled) return;
@@ -528,7 +515,7 @@ export async function chatStream(params: ChatStreamParams): Promise<ChatStreamRe
       for (const frame of frames) {
         const data = parseSSEFrame(frame);
         if (data === null) continue; // 注释帧 / 无 data 帧
-        logStreamData(data); // [llm] stream 原始 data 行（AI_EDITOR_DEBUG=1；关闭零开销）
+        logStreamData(data); // [llm] stream 原始 data 行（debugStream=true；关闭零开销）
         if (data === SSE_DONE) return finalize(state); // 哨兵：正常结束
         const chunk = parseChunk(data);
         if (chunk) {

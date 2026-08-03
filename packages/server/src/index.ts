@@ -143,9 +143,9 @@ export async function startServer(projectRoot: string, options: StartServerOptio
   // 及其下游消费方全部使用归一化值；create/open 请求体 path 仍要求绝对（安全校验不变）。
   const root = resolve(projectRoot);
 
-  // 调试配置初始化（**启动读一次**：<创作根>/.ai-editor/config.json——配置文件优先，细粒度
-  // 五类别 chat/request/stream/usage/http；文件不存在/非法 JSON/结构不符 → 回退 AI_EDITOR_DEBUG
-  // env（= 全类别开启）；不阻断启动。运行中改配置文件不生效——热加载 YAGNI）
+  // 调试配置初始化（**启动读一次**：<创作根>/.ai-editor/config.json——唯一来源，细粒度
+  // 五类别 chat/request/stream/usage/http；文件不存在/非法 JSON/结构不符 → 全关；
+  // 不阻断启动。运行中改配置文件不生效——热加载 YAGNI）
   initDebugConfig(root);
 
   // 检测语义（设计缺陷修复）：不再无条件初始化——待命态下 GET /project/config → 409

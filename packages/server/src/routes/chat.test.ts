@@ -179,7 +179,6 @@ async function waitFor(cond: () => boolean, timeoutMs = 3000): Promise<void> {
 
 let originalHome: string | undefined;
 let originalKey: string | undefined;
-let originalDebug: string | undefined;
 
 beforeEach(() => {
   tmpRoot = mkdtempSync(join(tmpdir(), "ai-editor-chat-"));
@@ -189,10 +188,9 @@ beforeEach(() => {
   // 保证 effectiveApiKey() 在测试内确定（无 key），S7.6 缺 key 用例可稳定复现
   originalHome = process.env.HOME;
   originalKey = process.env.DEEPSEEK_API_KEY;
-  originalDebug = process.env.AI_EDITOR_DEBUG;
   process.env.HOME = tmpRoot;
   delete process.env.DEEPSEEK_API_KEY;
-  delete process.env.AI_EDITOR_DEBUG; // 调试开关默认关——「关闭零开销」用例确定性依赖此删除
+  initDebugConfig(undefined); // 调试默认全关（无配置文件）——「关闭零开销」用例确定性依赖此重置
 });
 
 afterEach(() => {
@@ -203,12 +201,11 @@ afterEach(() => {
   }
   defaultProposalStore.clear();
   vi.restoreAllMocks(); // 还原 console.debug spy 等（调试日志用例）
+  initDebugConfig(undefined); // 回全关态（防配置态泄漏到后续用例）
   if (originalHome !== undefined) process.env.HOME = originalHome;
   else delete process.env.HOME;
   if (originalKey !== undefined) process.env.DEEPSEEK_API_KEY = originalKey;
   else delete process.env.DEEPSEEK_API_KEY;
-  if (originalDebug !== undefined) process.env.AI_EDITOR_DEBUG = originalDebug;
-  else delete process.env.AI_EDITOR_DEBUG;
   for (const dir of tmpDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -627,13 +624,13 @@ describe("zod → JSON Schema 转换（S7.6 决策点：zod 4 内置 toJSONSchem
   });
 });
 
-// ============ [chat] 调试日志（AI_EDITOR_DEBUG=1，服务端对话链路） ============
-// 覆盖：开关开启时 onEvent 转发逐事件打 [chat] 日志（工具名/参数摘要/proposal_id/文本长度）、
-//   关闭（未设置）时 console.debug 零调用（零开销早退）、长参数/长结果截断（200 字符 + 原长标注）
+// ============ [chat] 调试日志（配置文件 chat 类别，服务端对话链路） ============
+// 覆盖：类别开启时 onEvent 转发逐事件打 [chat] 日志（工具名/参数摘要/proposal_id/文本长度）、
+//   关闭（无配置文件）时 console.debug 零调用（零开销早退）、长参数/长结果截断（200 字符 + 原长标注）
 
-describe("[chat] 调试日志（AI_EDITOR_DEBUG=1）", () => {
+describe("[chat] 调试日志（配置文件 chat 类别）", () => {
   it("开启时 onEvent 转发产生 [chat] 日志（turn_start/text 长度/tool_call 参数/tool_result/proposal/done）", async () => {
-    process.env.AI_EDITOR_DEBUG = "1"; // beforeEach 已删除该变量，此处显式开启
+    enableDebug(); // 临时创作根写 .ai-editor/config.json（enabled=true，全部类别）+ initDebugConfig
     const spy = vi.spyOn(console, "debug").mockImplementation(() => {});
     openProject();
     const produce = vi.fn<RunAgentDeps["produce"]>(async (_messages, _signal, onEvent) => {
@@ -678,7 +675,7 @@ describe("[chat] 调试日志（AI_EDITOR_DEBUG=1）", () => {
     expect(lines.some((l) => l.includes("[chat] done session=") && l.includes("round=2"))).toBe(true); // done 附带轮次
   });
 
-  it("关闭（未设置）时 onEvent 不调用 console.debug（零开销早退）", async () => {
+  it("关闭（无配置文件）时 onEvent 不调用 console.debug（零开销早退）", async () => {
     const spy = vi.spyOn(console, "debug").mockImplementation(() => {});
     openProject();
     const produce = vi.fn<RunAgentDeps["produce"]>(async () => ({ ok: true, stopReason: "stop", usage: null }));
@@ -688,7 +685,7 @@ describe("[chat] 调试日志（AI_EDITOR_DEBUG=1）", () => {
   });
 
   it("长参数/长结果截断（200 字符上限 + 原长标注）", async () => {
-    process.env.AI_EDITOR_DEBUG = "1";
+    enableDebug();
     const spy = vi.spyOn(console, "debug").mockImplementation(() => {});
     openProject();
     const produce = vi.fn<RunAgentDeps["produce"]>(async (_messages, _signal, onEvent) => {
@@ -724,15 +721,15 @@ describe("[chat] 调试日志（AI_EDITOR_DEBUG=1）", () => {
   });
 });
 
-// ============ [llm] 请求/usage 调试日志（AI_EDITOR_DEBUG=1，produce 装饰器） ============
+// ============ [llm] 请求/usage 调试日志（配置文件 request/usage 类别，produce 装饰器） ============
 // 覆盖：request 日志（模型名 + 完整 messages JSON 不截断 + 工具名列表）、usage 日志（真实
 //   token 数 + stop 原因）、敏感红线（日志中绝不出现密钥值/Bearer/apiKey 字样）、
 //   关闭时零开销直通（无日志、onEvent 同引用不包装）
 // 注：装饰器独立于路由（createLLMRequestLogger 包 mock produce 直测），不经真实 DeepSeek 调用
 
-describe("[llm] 请求/usage 调试日志（AI_EDITOR_DEBUG=1）", () => {
+describe("[llm] 请求/usage 调试日志（配置文件 request/usage 类别）", () => {
   it("开启时 request 日志含模型名/完整 messages JSON/工具名列表，且无密钥字样", async () => {
-    process.env.AI_EDITOR_DEBUG = "1"; // beforeEach 已删除该变量，此处显式开启
+    enableDebug({ debug: { enabled: true, categories: ["request", "usage"] } });
     process.env.DEEPSEEK_API_KEY = "sk-test-secret-123456"; // 红线验证：密钥绝不出现在日志
     const spy = vi.spyOn(console, "debug").mockImplementation(() => {});
     const inner = vi.fn<RunAgentDeps["produce"]>(async () => ({ ok: true, stopReason: "stop", usage: null }));
@@ -768,7 +765,7 @@ describe("[llm] 请求/usage 调试日志（AI_EDITOR_DEBUG=1）", () => {
   });
 
   it("开启时 finish 事件打 [llm] usage（真实 token 数 + stop 原因）", async () => {
-    process.env.AI_EDITOR_DEBUG = "1";
+    enableDebug({ debug: { enabled: true, categories: ["usage"] } });
     const spy = vi.spyOn(console, "debug").mockImplementation(() => {});
     const inner = vi.fn<RunAgentDeps["produce"]>(async (_messages, _signal, onEvent) => {
       onEvent?.({
@@ -787,7 +784,7 @@ describe("[llm] 请求/usage 调试日志（AI_EDITOR_DEBUG=1）", () => {
     expect(inner).toHaveBeenCalledTimes(1);
   });
 
-  it("关闭（未设置）时零开销直通：无日志、onEvent 同引用不包装", async () => {
+  it("关闭（无配置文件）时零开销直通：无日志、onEvent 同引用不包装", async () => {
     const spy = vi.spyOn(console, "debug").mockImplementation(() => {});
     const onEvent = (): void => {};
     const inner = vi.fn<RunAgentDeps["produce"]>(async (_messages, _signal, e) => {
@@ -803,10 +800,10 @@ describe("[llm] 请求/usage 调试日志（AI_EDITOR_DEBUG=1）", () => {
 // ============ 调试类别隔离（配置文件模式，细粒度开关） ============
 // 覆盖：只开 request 时路由 [chat] 事件日志不打（createChatEventLogger 类别门控）、
 //   request/usage 分开判定（只开 usage → request 不打；只开 request → usage 不打）、
-//   stream 类别经 isCategoryEnabled 判定（env=1 时未列 stream 也不开——配置文件优先）
-// 注：llm client 的 debugStream 选项透传行为（选项开 env 关 → 打等）在 llm 包测试覆盖
-// 状态：本 describe 用临时创作根写 .ai-editor/config.json + initDebugConfig 进入配置模式；
-//   每个用例后 initDebugConfig(undefined) 回 env 模式（防模块状态泄漏到后续用例）
+//   stream 类别经 isCategoryEnabled 判定（未列 stream 不开启）
+// 注：llm client 的 debugStream 选项透传行为（true 开/缺省关）在 llm 包测试覆盖
+// 状态：本 describe 用临时创作根写 .ai-editor/config.json + initDebugConfig 进入配置态；
+//   文件级 beforeEach/afterEach 已 initDebugConfig(undefined) 重置
 
 /** 写入调试配置文件（<root>/.ai-editor/config.json；创作根 = tmpRoot） */
 function writeDebugConfig(projectRoot: string, content: unknown): void {
@@ -815,14 +812,16 @@ function writeDebugConfig(projectRoot: string, content: unknown): void {
   writeFileSync(join(dir, "config.json"), JSON.stringify(content));
 }
 
+/** 启用调试（纯配置文件方式）：向临时创作根写配置并 initDebugConfig（缺省 enabled=true 全部类别） */
+function enableDebug(config: unknown = { debug: { enabled: true } }): void {
+  writeDebugConfig(tmpRoot, config);
+  initDebugConfig(tmpRoot);
+}
+
 describe("调试类别隔离（配置文件模式）", () => {
-  afterEach(() => {
-    initDebugConfig(undefined); // 回 env 模式（模块状态重置）
-  });
 
   it("只开 request：路由 [chat] 事件日志不打（类别门控）", async () => {
-    writeDebugConfig(tmpRoot, { debug: { enabled: true, categories: ["request"] } });
-    initDebugConfig(tmpRoot);
+    enableDebug({ debug: { enabled: true, categories: ["request"] } });
     const spy = vi.spyOn(console, "debug").mockImplementation(() => {});
     openProject();
     const produce = vi.fn<RunAgentDeps["produce"]>(async (_messages, _signal, onEvent) => {
@@ -835,8 +834,7 @@ describe("调试类别隔离（配置文件模式）", () => {
   });
 
   it("只开 usage：request 不打、usage 打（分开判定）", async () => {
-    writeDebugConfig(tmpRoot, { debug: { enabled: true, categories: ["usage"] } });
-    initDebugConfig(tmpRoot);
+    enableDebug({ debug: { enabled: true, categories: ["usage"] } });
     const spy = vi.spyOn(console, "debug").mockImplementation(() => {});
     const inner = vi.fn<RunAgentDeps["produce"]>(async (_messages, _signal, onEvent) => {
       onEvent?.({
@@ -856,8 +854,7 @@ describe("调试类别隔离（配置文件模式）", () => {
   });
 
   it("只开 request：usage 不打（分开判定）", async () => {
-    writeDebugConfig(tmpRoot, { debug: { enabled: true, categories: ["request"] } });
-    initDebugConfig(tmpRoot);
+    enableDebug({ debug: { enabled: true, categories: ["request"] } });
     const spy = vi.spyOn(console, "debug").mockImplementation(() => {});
     const inner = vi.fn<RunAgentDeps["produce"]>(async (_messages, _signal, onEvent) => {
       onEvent?.({
@@ -874,10 +871,8 @@ describe("调试类别隔离（配置文件模式）", () => {
     expect(lines.some((l) => l.includes("[llm] usage prompt_tokens="))).toBe(false); // usage 类别未开
   });
 
-  it("stream 类别：env=1 时未列 stream 也不开（配置文件优先）", () => {
-    writeDebugConfig(tmpRoot, { debug: { enabled: true, categories: ["chat"] } });
-    process.env.AI_EDITOR_DEBUG = "1"; // env 开也不影响——配置模式 env 被忽略
-    initDebugConfig(tmpRoot);
+  it("stream 类别：未列 stream 不开启（细粒度隔离）", () => {
+    enableDebug({ debug: { enabled: true, categories: ["chat"] } });
     expect(isCategoryEnabled("chat")).toBe(true);
     expect(isCategoryEnabled("stream")).toBe(false);
   });
