@@ -57,6 +57,9 @@ pnpm start:test-project
 
 # 验证
 pnpm typecheck && pnpm lint && pnpm -r test
+
+# 调试（服务端对话链路 [chat] 事件日志 + hono 请求日志，默认关闭，显式开关防刷屏）
+AI_EDITOR_DEBUG=1 pnpm dev
 ```
 
 ## 打包安装（借鉴 inkos 发布机制）

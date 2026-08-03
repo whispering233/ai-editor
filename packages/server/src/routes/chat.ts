@@ -63,6 +63,7 @@ import { TOOL_PERMISSION, generateRuntimeId } from "@ai-editor/shared";
 import { chatMessagesResSchema, chatSendReqSchema, chatSessionsResSchema } from "@ai-editor/shared/schemas";
 import { HttpError, ok } from "../middleware/error.js";
 import { requireCurrentProject, type ProjectContext } from "../middleware/project.js";
+import { debugLog, isDebugEnabled } from "../debug.js";
 import { DEFAULT_MODEL, effectiveApiKey, getUserConfig } from "./settings.js";
 
 // ============ 常量 ============
@@ -193,6 +194,65 @@ function sleepAbortable(ms: number, signals: readonly AbortSignal[]): Promise<vo
   });
 }
 
+// ============ [chat] 事件调试日志（AI_EDITOR_DEBUG=1） ============
+
+/** 调试日志字段摘要长度上限（tool_call args / tool_result 长文本截断，防刷屏） */
+const DEBUG_FIELD_MAX = 200;
+
+/**
+ * 调试日志字段摘要：字符串原样、对象 JSON 序列化，超长截断并标注原长。
+ * 仅在调试开启时被调用（createChatEventLogger 内部早退），关闭时零开销。
+ */
+function debugSummary(value: unknown, max = DEBUG_FIELD_MAX): string {
+  let text: string;
+  try {
+    text = typeof value === "string" ? value : JSON.stringify(value) ?? "undefined";
+  } catch {
+    text = String(value);
+  }
+  return text.length > max ? `${text.slice(0, max)}…(${text.length} 字符)` : text;
+}
+
+/**
+ * 创建 [chat] 事件调试日志器（对话链路调试，打到服务端终端 stdout/stderr）：
+ * - 关闭（AI_EDITOR_DEBUG ≠ "1"）时零开销早退——不做任何字符串拼接（onEvent 高频路径无条件调用）
+ * - turn_start → 轮次；tool_call → 工具名 + 参数 JSON 摘要（截断）；tool_result → 工具名 + 结果
+ *   摘要（截断）；proposal → proposal_id + type；text → **只打 delta 长度**（流式高频防刷屏）；
+ *   done → sessionId + 轮次；error → code + message
+ * - 注：AgentEvent.tool_result 契约（run.ts）不含 ok/isError 字段——工具成败已编码进 result
+ *   文本（失败为错误说明），日志只摘要该文本
+ */
+export function createChatEventLogger(): (event: AgentEvent) => void {
+  let round = 0; // 轮次计数器（turn_start 刷新；done 事件附带——AgentEvent.done 无轮次字段）
+  return (event: AgentEvent): void => {
+    if (!isDebugEnabled()) return; // 短路由早退：关闭时不产生任何字符串拼接
+    switch (event.type) {
+      case "turn_start":
+        round = event.round;
+        debugLog("chat", `turn_start round=${event.round}`);
+        return;
+      case "text":
+        debugLog("chat", `text delta=+${event.delta.length} 字符`); // 只打长度不打内容
+        return;
+      case "tool_call":
+        debugLog("chat", `tool_call tool=${event.tool} id=${event.id} args=${debugSummary(event.args)}`);
+        return;
+      case "tool_result":
+        debugLog("chat", `tool_result tool=${event.tool} id=${event.id} result=${debugSummary(event.result)}`);
+        return;
+      case "proposal":
+        debugLog("chat", `proposal id=${event.proposal.proposal_id} type=${event.proposal.type}`);
+        return;
+      case "done":
+        debugLog("chat", `done session=${event.sessionId} round=${round}`);
+        return;
+      case "error":
+        debugLog("chat", `error code=${event.code} message=${event.message} aborted=${event.aborted}`);
+        return;
+    }
+  };
+}
+
 // ============ POST /api/v1/chat（S7.6：POST + SSE 对话端点） ============
 
 /**
@@ -304,7 +364,9 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
         // ---- 7. onEvent → SSE 帧（AgentEvent 六类 + turn_start；proposal 顺序由 runAgent 保证） ----
         // 帧写入经 void 异步排入 writer（WritableStream FIFO 保证顺序，await 仅背压）——
         // 事件回调恒同步返回，不阻塞 runAgent 循环
+        const logChatEvent = createChatEventLogger(); // [chat] 调试日志（AI_EDITOR_DEBUG=1；关闭时零开销）
         const onEvent = (event: AgentEvent): void => {
+          logChatEvent(event); // 对话链路调试：工具调用/提案/文本增量长度等打到服务端终端
           switch (event.type) {
             case "turn_start":
               return; // 循环内部事件：不映射 SSE 帧（日志/调试用）

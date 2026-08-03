@@ -17,9 +17,11 @@ import { existsSync, realpathSync } from "node:fs";
 import { dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
+import { logger } from "hono/logger";
 import { createAdaptorServer, type ServerType } from "@hono/node-server";
 import type { AddressInfo } from "node:net";
 import { errorHandler, fail, ok } from "./middleware/error.js";
+import { isDebugEnabled } from "./debug.js";
 import { chatRoutes } from "./routes/chat.js";
 import { deltaRoutes } from "./routes/delta.js";
 import { entityRoutes } from "./routes/entity.js";
@@ -158,8 +160,14 @@ export async function startServer(projectRoot: string, options: StartServerOptio
 
   const app = new Hono<{ Variables: ProjectVariables }>();
 
-  // 中间件装配顺序：错误兜底 → 来源校验 → 项目上下文注入（从 currentProject 单例读取）
+  // 中间件装配顺序：错误兜底 →（调试）请求日志 → 来源校验 → 项目上下文注入
   app.onError(errorHandler());
+  // 请求日志（hono 内置中间件，零新依赖）：**仅 AI_EDITOR_DEBUG=1 时挂载**——测试与日常
+  // 启动默认输出干净（hono logger 逐请求打印会刷屏）；debug 模式下每个请求打一行
+  // （方法 路径 状态码 耗时，hono logger 内置格式，console.log stdout）
+  if (isDebugEnabled()) {
+    app.use("*", logger());
+  }
   app.use("*", originCheckMiddleware());
   app.use("*", projectMiddleware());
 

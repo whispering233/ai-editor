@@ -178,6 +178,7 @@ async function waitFor(cond: () => boolean, timeoutMs = 3000): Promise<void> {
 
 let originalHome: string | undefined;
 let originalKey: string | undefined;
+let originalDebug: string | undefined;
 
 beforeEach(() => {
   tmpRoot = mkdtempSync(join(tmpdir(), "ai-editor-chat-"));
@@ -187,8 +188,10 @@ beforeEach(() => {
   // 保证 effectiveApiKey() 在测试内确定（无 key），S7.6 缺 key 用例可稳定复现
   originalHome = process.env.HOME;
   originalKey = process.env.DEEPSEEK_API_KEY;
+  originalDebug = process.env.AI_EDITOR_DEBUG;
   process.env.HOME = tmpRoot;
   delete process.env.DEEPSEEK_API_KEY;
+  delete process.env.AI_EDITOR_DEBUG; // 调试开关默认关——「关闭零开销」用例确定性依赖此删除
 });
 
 afterEach(() => {
@@ -198,10 +201,13 @@ afterEach(() => {
     setCurrentProject(null);
   }
   defaultProposalStore.clear();
+  vi.restoreAllMocks(); // 还原 console.debug spy 等（调试日志用例）
   if (originalHome !== undefined) process.env.HOME = originalHome;
   else delete process.env.HOME;
   if (originalKey !== undefined) process.env.DEEPSEEK_API_KEY = originalKey;
   else delete process.env.DEEPSEEK_API_KEY;
+  if (originalDebug !== undefined) process.env.AI_EDITOR_DEBUG = originalDebug;
+  else delete process.env.AI_EDITOR_DEBUG;
   for (const dir of tmpDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -503,7 +509,9 @@ describe("POST /chat 心跳与断开取消（决策 16/20）", () => {
     expect(defaultProposalStore.size()).toBe(1);
 
     // mock produce：等待 abort 后返回 aborted 结果（模拟 DeepSeek fetch 被取消的 resolve 形态）
-    let attemptSignal: AbortSignalLike | null = null;
+    // 注：`null as AbortSignalLike | null`——TS 5.9 对 let 初始化收紧为 null 字面量，
+    // 直接 `= null` 会让后续 `attemptSignal?.aborted` 在 never 上报错（闭包赋值不参与窄化）
+    let attemptSignal: AbortSignalLike | null = null as AbortSignalLike | null;
     const produce = vi.fn<RunAgentDeps["produce"]>(async (_messages, signal) => {
       attemptSignal = signal ?? null;
       await new Promise<void>((resolve) => {
@@ -539,7 +547,8 @@ describe("POST /chat 会话重建（决策 18 续聊）", () => {
     seedMessage(project, "sess-old", { role: "user", content: "旧消息一", createdAt: "2026-08-01T10:00:00Z" });
     seedMessage(project, "sess-old", { role: "assistant", content: "旧回复", createdAt: "2026-08-01T10:01:00Z" });
 
-    let captured: LLMMessage[] | null = null;
+    // `null as LLMMessage[] | null`：同 attemptSignal 的 TS 5.9 收紧问题（闭包赋值不参与窄化）
+    let captured: LLMMessage[] | null = null as LLMMessage[] | null;
     const produce = vi.fn<RunAgentDeps["produce"]>(async (messages) => {
       captured = messages;
       return { ok: true, stopReason: "stop", usage: null };
@@ -567,7 +576,7 @@ describe("POST /chat 会话重建（决策 18 续聊）", () => {
     seedMessage(projectA, "sess-a", { role: "user", content: "仅属于 A", createdAt: "2026-08-01T10:00:00Z" });
     openProject(); // 切到项目 B
 
-    let captured: LLMMessage[] | null = null;
+    let captured: LLMMessage[] | null = null as LLMMessage[] | null;
     const produce = vi.fn<RunAgentDeps["produce"]>(async (messages) => {
       captured = messages;
       return { ok: true, stopReason: "stop", usage: null };
@@ -614,5 +623,102 @@ describe("zod → JSON Schema 转换（S7.6 决策点：zod 4 内置 toJSONSchem
       expect(typeof d.description).toBe("string");
       expect(d.parameters).toEqual(expect.any(Object));
     }
+  });
+});
+
+// ============ [chat] 调试日志（AI_EDITOR_DEBUG=1，服务端对话链路） ============
+// 覆盖：开关开启时 onEvent 转发逐事件打 [chat] 日志（工具名/参数摘要/proposal_id/文本长度）、
+//   关闭（未设置）时 console.debug 零调用（零开销早退）、长参数/长结果截断（200 字符 + 原长标注）
+
+describe("[chat] 调试日志（AI_EDITOR_DEBUG=1）", () => {
+  it("开启时 onEvent 转发产生 [chat] 日志（turn_start/text 长度/tool_call 参数/tool_result/proposal/done）", async () => {
+    process.env.AI_EDITOR_DEBUG = "1"; // beforeEach 已删除该变量，此处显式开启
+    const spy = vi.spyOn(console, "debug").mockImplementation(() => {});
+    openProject();
+    const produce = vi.fn<RunAgentDeps["produce"]>(async (_messages, _signal, onEvent) => {
+      if (produce.mock.calls.length === 1) {
+        // 仅第 1 轮流式输出文本 + 工具调用；第 2 轮无事件 → done（防无限工具循环）
+        onEvent?.({ type: "text", delta: "你好" });
+        onEvent?.({
+          type: "tool_call",
+          toolCall: {
+            id: "call_1",
+            name: "propose_create_entity",
+            rawArguments: "{}",
+            arguments: { type: "character", name: "张三" },
+          },
+        });
+      }
+      return { ok: true, stopReason: "tool_calls", usage: null };
+    });
+    const dispatcher = vi.fn<ToolDispatcher>(async (calls) =>
+      calls.map((call) => ({
+        id: call.id,
+        tool: call.tool,
+        ok: true,
+        isError: false,
+        content: JSON.stringify({ proposal_id: "prop_1", summary: "创建角色张三" }),
+        proposal: { proposal_id: "prop_1", type: "propose_create_entity", preview: {} },
+      })),
+    );
+    const res = await buildApp(createChatRoutes({ produce, dispatcher })).request(
+      "/api/v1/chat",
+      postChat({ message: "你好" }),
+    );
+    await readSseFrames(res);
+
+    const lines = spy.mock.calls.map((c) => c.map(String).join(" "));
+    expect(lines.some((l) => l.includes("[chat] turn_start round=1"))).toBe(true);
+    expect(lines.some((l) => l.includes("[chat] text delta=+2"))).toBe(true); // 只打长度不打内容
+    expect(lines.some((l) => l.includes("[chat] tool_call tool=propose_create_entity id=call_1 args="))).toBe(true);
+    expect(lines.some((l) => l.includes('"name":"张三"'))).toBe(true); // 参数摘要含实际内容
+    expect(lines.some((l) => l.includes("[chat] tool_result tool=propose_create_entity id=call_1 result="))).toBe(true);
+    expect(lines.some((l) => l.includes("[chat] proposal id=prop_1 type=propose_create_entity"))).toBe(true);
+    expect(lines.some((l) => l.includes("[chat] done session=") && l.includes("round=2"))).toBe(true); // done 附带轮次
+  });
+
+  it("关闭（未设置）时 onEvent 不调用 console.debug（零开销早退）", async () => {
+    const spy = vi.spyOn(console, "debug").mockImplementation(() => {});
+    openProject();
+    const produce = vi.fn<RunAgentDeps["produce"]>(async () => ({ ok: true, stopReason: "stop", usage: null }));
+    const res = await buildApp(createChatRoutes({ produce })).request("/api/v1/chat", postChat({ message: "你好" }));
+    await readSseFrames(res);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("长参数/长结果截断（200 字符上限 + 原长标注）", async () => {
+    process.env.AI_EDITOR_DEBUG = "1";
+    const spy = vi.spyOn(console, "debug").mockImplementation(() => {});
+    openProject();
+    const produce = vi.fn<RunAgentDeps["produce"]>(async (_messages, _signal, onEvent) => {
+      if (produce.mock.calls.length === 1) {
+        // 仅第 1 轮流式输出工具调用（防无限工具循环）
+        onEvent?.({
+          type: "tool_call",
+          toolCall: {
+            id: "call_1",
+            name: "propose_update_entity",
+            rawArguments: "{}",
+            arguments: { content: "甲".repeat(500) },
+          },
+        });
+      }
+      return { ok: true, stopReason: "tool_calls", usage: null };
+    });
+    const dispatcher = vi.fn<ToolDispatcher>(async (calls) =>
+      calls.map((call) => ({ id: call.id, tool: call.tool, ok: true, isError: false, content: "x".repeat(500) })),
+    );
+    const res = await buildApp(createChatRoutes({ produce, dispatcher })).request(
+      "/api/v1/chat",
+      postChat({ message: "你好" }),
+    );
+    await readSseFrames(res);
+
+    const lines = spy.mock.calls.map((c) => c.map(String).join(" "));
+    const callLine = lines.find((l) => l.includes("tool_call"))!;
+    expect(callLine.length).toBeLessThan(400); // 截断后远小于原始 500+ 字符参数
+    expect(callLine).toContain("…("); // 截断标注（含原长）
+    const resultLine = lines.find((l) => l.includes("tool_result"))!;
+    expect(resultLine).toContain("…(");
   });
 });
