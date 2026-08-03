@@ -663,3 +663,33 @@ export interface SendChatMessageBody {
     focus_node_id?: string;
   };
 }
+
+// ============ 提案确认/拒绝（S8.2；契约：endpoints.md「提案确认」L848-888 + shared proposalConfirmResSchema/proposalRejectResSchema） ============
+
+/** POST /api/v1/proposal/:proposalId/confirm 响应（字段契约同 shared proposalConfirmResSchema） */
+export interface ConfirmProposalRes {
+  confirmed: true;
+  /** 执行结果（如新创建的 entity id） */
+  result: unknown;
+}
+
+/**
+ * 确认提案（一次性消费，决策 14：确认动作即终态，服务端处理完立即移除）。
+ * 错误码语义（endpoints.md L864-874，ApiError.code 透传）：
+ * - 409 PROPOSAL_STALE——确认时快照重校验失败（引用实体/节点已变化或删除）→ 前端提示重新生成提案
+ * - 404 PROPOSAL_NOT_FOUND——proposal_id 不存在（已过期清除 / SSE 断开作废）
+ * - 409 PROPOSAL_PROJECT_MISMATCH——提案所属项目 ≠ 当前项目（防御性，切换项目时提案已清空）
+ */
+export function confirmProposal(proposalId: string): Promise<ConfirmProposalRes> {
+  return apiFetch<ConfirmProposalRes>(`/proposal/${proposalId}/confirm`, { method: "POST" });
+}
+
+/** POST /api/v1/proposal/:proposalId/reject 响应（字段契约同 shared proposalRejectResSchema） */
+export interface RejectProposalRes {
+  rejected: true;
+}
+
+/** 拒绝提案（错误码语义同 confirm；拒绝同样是不可逆消费动作，跨项目拒绝不消费他项目提案） */
+export function rejectProposal(proposalId: string): Promise<RejectProposalRes> {
+  return apiFetch<RejectProposalRes>(`/proposal/${proposalId}/reject`, { method: "POST" });
+}

@@ -6,6 +6,7 @@ import {
   CLIENT_NETWORK_ERROR,
   closeProject,
   computeDeltaState,
+  confirmProposal,
   createDelta,
   createRelation,
   deleteRelation,
@@ -25,6 +26,7 @@ import {
   moveOutlineNode,
   openProject,
   purgeOutlineNode,
+  rejectProposal,
   restoreOutlineNode,
   updateEntity,
   updateOutlineNode,
@@ -538,5 +540,42 @@ describe("delta 端点（S5.4；契约 endpoints.md「Delta 变更追踪」）",
     await expect(
       createDelta({ node_id: "sc-999", target_type: "character", target_id: "char-3", changes: [{ field: "status", op: "set", to: "x" }], description: "d" }),
     ).rejects.toMatchObject({ code: "OUTLINE_NODE_NOT_FOUND" });
+  });
+});
+
+describe("提案确认/拒绝（S8.2，契约 endpoints.md「提案确认」L848-888 + shared proposal*ResSchema）", () => {
+  it("confirmProposal：POST /proposal/:id/confirm，无 body；响应透传 confirmed + result", async () => {
+    const calls = mockFetchOnce({ body: { success: true, data: { confirmed: true, result: "char-9" } } });
+    const res = await confirmProposal("prop-1");
+    expect(res).toEqual({ confirmed: true, result: "char-9" });
+    expect(calls[0].url).toBe("/api/v1/proposal/prop-1/confirm");
+    expect(calls[0].init?.method).toBe("POST");
+    expect(calls[0].init?.body).toBeUndefined();
+  });
+
+  it("confirmProposal：409 PROPOSAL_STALE → ApiError 透传（前端标 stale 引导重新生成）", async () => {
+    mockFetchOnce({
+      status: 409,
+      body: { success: false, error: { code: "PROPOSAL_STALE", message: "提案引用对象已变化: entity char-9" } },
+    });
+    await expect(confirmProposal("prop-1")).rejects.toMatchObject({ code: "PROPOSAL_STALE" });
+  });
+
+  it("confirmProposal：404 PROPOSAL_NOT_FOUND / 409 PROPOSAL_PROJECT_MISMATCH → ApiError 透传", async () => {
+    mockFetchOnce({ status: 404, body: { success: false, error: { code: "PROPOSAL_NOT_FOUND", message: "不存在" } } });
+    await expect(confirmProposal("prop-1")).rejects.toMatchObject({ code: "PROPOSAL_NOT_FOUND" });
+    mockFetchOnce({
+      status: 409,
+      body: { success: false, error: { code: "PROPOSAL_PROJECT_MISMATCH", message: "项目不一致" } },
+    });
+    await expect(confirmProposal("prop-1")).rejects.toMatchObject({ code: "PROPOSAL_PROJECT_MISMATCH" });
+  });
+
+  it("rejectProposal：POST /proposal/:id/reject，无 body；响应 { rejected: true }", async () => {
+    const calls = mockFetchOnce({ body: { success: true, data: { rejected: true } } });
+    await expect(rejectProposal("prop-1")).resolves.toEqual({ rejected: true });
+    expect(calls[0].url).toBe("/api/v1/proposal/prop-1/reject");
+    expect(calls[0].init?.method).toBe("POST");
+    expect(calls[0].init?.body).toBeUndefined();
   });
 });

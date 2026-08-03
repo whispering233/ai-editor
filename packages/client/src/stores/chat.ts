@@ -10,9 +10,17 @@
 //   打开时自动重载新项目会话列表，避免跨项目残留
 import { create } from "zustand";
 import type { ChatMessage, ChatSessionSummary } from "@ai-editor/shared";
-import { ApiError, getSessionMessages, listSessions, type SendChatMessageBody } from "../lib/api";
+import {
+  ApiError,
+  confirmProposal as confirmProposalApi,
+  getSessionMessages,
+  listSessions,
+  rejectProposal as rejectProposalApi,
+  type SendChatMessageBody,
+} from "../lib/api";
 import { fetchSSE } from "../hooks/use-sse";
 import { useProjectStore } from "./project";
+import { useUiStore } from "./ui";
 
 /** focus context（layout.md §4.2：跨页注入「问 AI」；POST /chat 请求体 context 字段） */
 export interface FocusContext {
@@ -36,8 +44,13 @@ export interface ProposalCard {
   proposalId: string; // prop_ 前缀
   type: string; // 提案工具名（propose_create_entity 等）
   preview?: unknown;
-  /** 处理态：pending 未处理 / confirmed / rejected / stale（409 PROPOSAL_STALE）/ notFound（404） */
+  /**
+   * 处理态：pending 未处理 / confirmed / rejected / stale（409 PROPOSAL_STALE 快照失效）/
+   * notFound（404——S8.2 起由 store 直接移除卡片、不再落此态，保留仅为类型防御）
+   */
   status: "pending" | "confirmed" | "rejected" | "stale" | "notFound";
+  /** 处理中（S8.2：confirm/reject 请求在途，防重复点击；UI 层 pending + 非处理中才可点） */
+  processing?: boolean;
 }
 
 interface ChatState {
@@ -89,6 +102,16 @@ interface ChatState {
   sendMessage: (text: string) => void;
   /** 断连横幅 [重新发送]：移除断连残留的重复消息后重发上一条用户消息 */
   resendLast: () => void;
+
+  // ---- S8.2：提案确认/拒绝（S7.5 confirm/reject 真实调用） ----
+  /**
+   * 确认提案：成功 → status=confirmed（按钮禁用由 status 驱动）；
+   * 409 PROPOSAL_STALE → stale（卡标「数据已变化」）；404 NOT_FOUND / 409 MISMATCH → 移除卡片；
+   * 其他错误（500 执行失败/网络失败）→ 保持 pending 可重试 + toast 提示
+   */
+  confirmProposal: (proposalId: string) => Promise<void>;
+  /** 拒绝提案：语义同 confirm，成功 → status=rejected */
+  rejectProposal: (proposalId: string) => Promise<void>;
 }
 
 /**
@@ -106,6 +129,25 @@ export function describeStreamError(code: string, message: string): string {
   return message;
 }
 
+/**
+ * 提案动作非契约错误的 toast 文案映射（S8.2；S7.5 契约三错误码 STALE/NOT_FOUND/MISMATCH
+ * 由 store 分支处理、不经此函数）：
+ * - INTERNAL_ERROR（500 执行失败，proposal.ts「执行失败按 500 呈现」）→ 引导重新生成提案
+ *   （重试仍会失败，不保留重试价值）
+ * - CLIENT_NETWORK_ERROR（网络层）→ 重试引导（不透传原始 fetch 错误文本）
+ * - 其他（未知码防御兜底）→ 透传服务端 message
+ */
+export function describeProposalActionError(code: string, message: string): string {
+  switch (code) {
+    case "INTERNAL_ERROR":
+      return "提案执行失败，请让 AI 重新生成提案";
+    case "CLIENT_NETWORK_ERROR":
+      return "网络请求失败，请重试";
+    default:
+      return message;
+  }
+}
+
 /** 会话列表请求序号：项目切换时递增使在途列表请求作废（旧响应不得覆盖新项目状态） */
 let loadSeq = 0;
 /** 消息历史请求序号：切会话/切项目时递增作废在途请求（同 loadSeq 竞态保护） */
@@ -120,7 +162,68 @@ let currentStreamMsgId: string | null = null;
 /** 上一条发送的用户文本（断连横幅 [重新发送] 用；切会话/项目时清空） */
 let lastSentText: string | null = null;
 
-export const useChatStore = create<ChatState>((set, get) => ({
+export const useChatStore = create<ChatState>((set, get) => {
+  /**
+   * 提案动作统一处理（confirm/reject 共用，S8.2）：
+   * 1. 防重复：卡片不存在（已移除）/ 非 pending（已确认/拒绝/失效）/ 处理中（processing）→ 忽略
+   *    （按钮层同时禁用，此处为状态层防御）
+   * 2. 在途：置 processing=true（按钮禁用防连点）→ 调 S7.5 API
+   * 3. 成功 → status 终态（confirmed/rejected）；错误分支见 switch——
+   *    - 409 PROPOSAL_STALE：快照重校验失败（引用已变化/删除）→ stale（卡标「数据已变化，此提案已失效」+ 按钮禁用）
+   *    - 404 PROPOSAL_NOT_FOUND：proposal_id 不存在（已过期清除/SSE 断开作废）→ 移除卡片
+   *    - 409 PROPOSAL_PROJECT_MISMATCH：提案属他项目（防御——切换项目已清空提案，理论不可达）→ 移除卡片
+   *    - 其他（500 INTERNAL_ERROR 执行失败 / 网络失败）：保持 pending 可重试 + 全局 toast 提示
+   * 注意：请求在途时切会话/切项目会清空 proposals——响应后按 proposalId 在**当前**列表内
+   *   map/filter 是空操作，天然无跨会话污染
+   */
+  const runProposalAction = async (
+    proposalId: string,
+    apiCall: (id: string) => Promise<unknown>,
+    successStatus: "confirmed" | "rejected",
+  ): Promise<void> => {
+    const proposal = get().proposals.find((p) => p.proposalId === proposalId);
+    if (!proposal || proposal.status !== "pending" || proposal.processing === true) return;
+    set((s) => ({
+      proposals: s.proposals.map((p) => (p.proposalId === proposalId ? { ...p, processing: true } : p)),
+    }));
+    try {
+      await apiCall(proposalId);
+      // 成功（200 { confirmed:true } / { rejected:true }，shared proposal*ResSchema）：终态，按钮随之禁用
+      set((s) => ({
+        proposals: s.proposals.map((p) =>
+          p.proposalId === proposalId ? { ...p, status: successStatus, processing: false } : p,
+        ),
+      }));
+    } catch (err) {
+      // apiFetch 只抛 ApiError（code 透传服务端 ErrorCode）；非 ApiError 属理论不可达，按网络错误兜底
+      const code = err instanceof ApiError ? err.code : "CLIENT_NETWORK_ERROR";
+      const message = err instanceof Error ? err.message : "网络请求失败";
+      switch (code) {
+        case "PROPOSAL_STALE":
+          set((s) => ({
+            proposals: s.proposals.map((p) =>
+              p.proposalId === proposalId ? { ...p, status: "stale", processing: false } : p,
+            ),
+          }));
+          return;
+        case "PROPOSAL_NOT_FOUND":
+        case "PROPOSAL_PROJECT_MISMATCH":
+          set((s) => ({ proposals: s.proposals.filter((p) => p.proposalId !== proposalId) }));
+          return;
+        default:
+          // 保持 pending（可重试）+ 全局反馈 toast（U6，FeedbackHost 桥接 sonner）
+          useUiStore.getState().showToast(describeProposalActionError(code, message), "error");
+          set((s) => ({
+            proposals: s.proposals.map((p) =>
+              p.proposalId === proposalId ? { ...p, processing: false } : p,
+            ),
+          }));
+          return;
+      }
+    }
+  };
+
+  return {
   sessions: null,
   sessionsLoading: false,
   sessionsError: null,
@@ -290,7 +393,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
             // 契约确认（S8.1）：AgentEvent tool_result 仅 { tool, result, id }，无 ok/isError 字段——
             // 工具失败编码进 result 字符串内容（如「错误：实体 char-9 不存在」，决策 15 结构化喂回自纠），
             // SSE 帧与 AgentEvent 同构（chat.ts onEvent 直通 writeEvent）。故无条件置 ok，
-            // status: "error" 为历史预留（UI 渲染已支持），当前契约下不可达；result 按字符串原文挂载
+            // status: "error" 为历史预留（UI 渲染已支持），当前契约下不可达；result 按字符串原文挂载。
+            // S8.2 评估（ora S8.1 建议 isError 透传）：不做——失败已编码进 result 字符串（决策 15 消费方
+            // 是 LLM 自纠而非展示层），isError 透传需改 agent run.ts + server 帧 + shared schema + client
+            // 四层契约，YAGNI；未来需要时改动点已明确（run.ts emit 透传 DispatchResult.isError）
             const { id } = data as { id?: string };
             if (!id) break;
             set((s) => ({
@@ -360,7 +466,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ messages: next });
     get().sendMessage(lastSentText);
   },
-}));
+
+  confirmProposal: (proposalId) => runProposalAction(proposalId, confirmProposalApi, "confirmed"),
+  rejectProposal: (proposalId) => runProposalAction(proposalId, rejectProposalApi, "rejected"),
+  };
+});
 
 // 项目切换联动：仅在 config.id 真正变化时动作——null → id（打开）清空并加载新列表；
 // id → null（关闭）/ id → id'（直接切项目）清空（关闭不请求）。

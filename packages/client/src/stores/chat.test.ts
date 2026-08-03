@@ -2,7 +2,7 @@
 // 订阅在 chat.ts 模块加载时激活：测试通过操作 useProjectStore.setState({config}) 驱动联动
 // mock lib/api 模块（保留 ApiError 类真实实现）与 use-sse（fetchSSE 捕获 options 后手动驱动事件回调）
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ChatMessage, ChatSessionSummary, ProjectConfig } from "@ai-editor/shared";
+import type { ChatMessage, ChatSessionSummary, ErrorCode, ProjectConfig } from "@ai-editor/shared";
 import { ApiError } from "../lib/api";
 
 vi.mock("../lib/api", async (importOriginal) => {
@@ -11,6 +11,8 @@ vi.mock("../lib/api", async (importOriginal) => {
     ...actual,
     listSessions: vi.fn(),
     getSessionMessages: vi.fn(),
+    confirmProposal: vi.fn(),
+    rejectProposal: vi.fn(),
   };
 });
 
@@ -18,14 +20,22 @@ vi.mock("../hooks/use-sse", () => ({
   fetchSSE: vi.fn(() => () => {}),
 }));
 
-import { getSessionMessages as apiGetSessionMessages, listSessions as apiListSessions } from "../lib/api";
+import {
+  confirmProposal as apiConfirmProposal,
+  getSessionMessages as apiGetSessionMessages,
+  listSessions as apiListSessions,
+  rejectProposal as apiRejectProposal,
+} from "../lib/api";
 import { fetchSSE } from "../hooks/use-sse";
-import { describeStreamError, useChatStore } from "./chat";
+import { describeProposalActionError, describeStreamError, useChatStore, type ProposalCard } from "./chat";
 import { useProjectStore } from "./project";
+import { useUiStore } from "./ui";
 
 const mocked = {
   listSessions: vi.mocked(apiListSessions),
   getSessionMessages: vi.mocked(apiGetSessionMessages),
+  confirmProposal: vi.mocked(apiConfirmProposal),
+  rejectProposal: vi.mocked(apiRejectProposal),
   fetchSSE: vi.mocked(fetchSSE),
 };
 
@@ -63,6 +73,13 @@ const makeMsg = (over: Partial<ChatMessage> & { id: string }): ChatMessage => ({
   ...over,
 });
 
+/** 提案卡 fixture（S8.2：confirm/reject 用例用；默认 pending） */
+const makeProposal = (over: Partial<ProposalCard> & { proposalId: string }): ProposalCard => ({
+  type: "propose_create_entity",
+  status: "pending",
+  ...over,
+});
+
 beforeEach(() => {
   // 默认 mock：历史为空、fetchSSE 返回空 abort 函数（用例内按需覆盖）
   mocked.getSessionMessages.mockResolvedValue({ sessionId: "sess-x", messages: [] });
@@ -96,6 +113,8 @@ afterEach(() => {
     proposals: [],
     streamTools: [],
   });
+  // 全局反馈状态复位（提案动作 toast 断言用；ui store 的 toast 定时器按 id 守卫，旧定时器不污染新 toast）
+  useUiStore.setState({ error: null, toast: null, confirmState: null });
 });
 
 describe("loadSessions", () => {
@@ -281,6 +300,20 @@ describe("describeStreamError（U5：错误文案映射）", () => {
 
   it("服务端 error 事件 → 透传 message", () => {
     expect(describeStreamError("AGENT_TIMEOUT", "单轮超时")).toBe("单轮超时");
+  });
+});
+
+describe("describeProposalActionError（S8.2：提案动作非契约错误文案）", () => {
+  it("INTERNAL_ERROR（500 执行失败）→ 引导重新生成提案", () => {
+    expect(describeProposalActionError("INTERNAL_ERROR", "提案执行失败")).toBe("提案执行失败，请让 AI 重新生成提案");
+  });
+
+  it("CLIENT_NETWORK_ERROR → 网络重试文案（不透传原始 fetch 错误）", () => {
+    expect(describeProposalActionError("CLIENT_NETWORK_ERROR", "fetch failed")).toBe("网络请求失败，请重试");
+  });
+
+  it("未知码 → 透传服务端 message（防御兜底）", () => {
+    expect(describeProposalActionError("SOMETHING_ELSE", "服务端消息")).toBe("服务端消息");
   });
 });
 
@@ -523,6 +556,92 @@ describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
     // 新流自身 onEnd 仍正常收尾
     sseOptions().onEnd();
     expect(useChatStore.getState().streaming).toBe(false);
+  });
+});
+
+describe("confirmProposal / rejectProposal（S8.2：提案卡接入 S7.5 confirm/reject 真实调用）", () => {
+  it("confirm 成功 → status=confirmed + processing 复位（终态，按钮禁用由 status 驱动）", async () => {
+    mocked.confirmProposal.mockResolvedValue({ confirmed: true, result: "char-9" });
+    useChatStore.setState({ proposals: [makeProposal({ proposalId: "prop-1" })] });
+    await useChatStore.getState().confirmProposal("prop-1");
+    expect(mocked.confirmProposal).toHaveBeenCalledWith("prop-1");
+    expect(useChatStore.getState().proposals).toEqual([
+      { proposalId: "prop-1", type: "propose_create_entity", status: "confirmed", processing: false },
+    ]);
+  });
+
+  it("reject 成功 → status=rejected", async () => {
+    mocked.rejectProposal.mockResolvedValue({ rejected: true });
+    useChatStore.setState({ proposals: [makeProposal({ proposalId: "prop-1" })] });
+    await useChatStore.getState().rejectProposal("prop-1");
+    expect(mocked.rejectProposal).toHaveBeenCalledWith("prop-1");
+    expect(useChatStore.getState().proposals[0]).toMatchObject({ status: "rejected", processing: false });
+  });
+
+  it("409 PROPOSAL_STALE → status=stale（卡标「⚠ 数据已变化，此提案已失效」+ 按钮禁用）", async () => {
+    mocked.confirmProposal.mockRejectedValue(new ApiError("PROPOSAL_STALE", "提案引用对象已变化: entity char-9"));
+    useChatStore.setState({ proposals: [makeProposal({ proposalId: "prop-1" })] });
+    await useChatStore.getState().confirmProposal("prop-1");
+    expect(useChatStore.getState().proposals[0]).toMatchObject({ status: "stale", processing: false });
+  });
+
+  it("404 PROPOSAL_NOT_FOUND → 移除卡片（提案已过期清除/SSE 断开作废）", async () => {
+    mocked.confirmProposal.mockRejectedValue(new ApiError("PROPOSAL_NOT_FOUND", "提案不存在或已过期"));
+    useChatStore.setState({ proposals: [makeProposal({ proposalId: "prop-1" })] });
+    await useChatStore.getState().confirmProposal("prop-1");
+    expect(useChatStore.getState().proposals).toEqual([]);
+  });
+
+  it("409 PROPOSAL_PROJECT_MISMATCH → 移除卡片（防御：切项目已清空提案，理论不可达）", async () => {
+    mocked.rejectProposal.mockRejectedValue(new ApiError("PROPOSAL_PROJECT_MISMATCH", "提案所属项目与当前项目不一致"));
+    useChatStore.setState({ proposals: [makeProposal({ proposalId: "prop-1" })] });
+    await useChatStore.getState().rejectProposal("prop-1");
+    expect(useChatStore.getState().proposals).toEqual([]);
+  });
+
+  it("其他错误（500 INTERNAL_ERROR 执行失败）→ 保持 pending 可重试 + toast 错误提示（U6 全局反馈）", async () => {
+    // INTERNAL_ERROR 不在 shared ErrorCode 枚举（proposal.ts 注释：契约未定义该错误码，前端按通用错误呈现）——
+    // 运行时错误码是普通字符串，store default 分支按字符串匹配，测试构造仅需类型断言
+    mocked.confirmProposal.mockRejectedValue(new ApiError("INTERNAL_ERROR" as ErrorCode, "提案执行失败"));
+    useChatStore.setState({ proposals: [makeProposal({ proposalId: "prop-1" })] });
+    await useChatStore.getState().confirmProposal("prop-1");
+    expect(useChatStore.getState().proposals[0]).toMatchObject({ status: "pending", processing: false });
+    expect(useUiStore.getState().toast).toMatchObject({
+      kind: "error",
+      text: "提案执行失败，请让 AI 重新生成提案",
+    });
+  });
+
+  it("网络失败（CLIENT_NETWORK_ERROR）→ 保持 pending + toast 网络重试文案", async () => {
+    mocked.confirmProposal.mockRejectedValue(new ApiError("CLIENT_NETWORK_ERROR", "fetch failed"));
+    useChatStore.setState({ proposals: [makeProposal({ proposalId: "prop-1" })] });
+    await useChatStore.getState().confirmProposal("prop-1");
+    expect(useChatStore.getState().proposals[0]).toMatchObject({ status: "pending", processing: false });
+    expect(useUiStore.getState().toast?.text).toBe("网络请求失败，请重试");
+  });
+
+  it("防重复：处理中（processing）再次调用忽略，API 只调一次", async () => {
+    let resolveFirst: (v: { confirmed: true; result: unknown }) => void = () => {};
+    mocked.confirmProposal.mockImplementationOnce(() => new Promise((r) => (resolveFirst = r)));
+    useChatStore.setState({ proposals: [makeProposal({ proposalId: "prop-1" })] });
+    const p1 = useChatStore.getState().confirmProposal("prop-1");
+    // 在途（processing=true）：重复点击被状态层忽略
+    await useChatStore.getState().confirmProposal("prop-1");
+    expect(mocked.confirmProposal).toHaveBeenCalledTimes(1);
+    resolveFirst({ confirmed: true, result: undefined });
+    await p1;
+    expect(useChatStore.getState().proposals[0]).toMatchObject({ status: "confirmed" });
+  });
+
+  it("防重复：非 pending（已确认）再次调用忽略", async () => {
+    useChatStore.setState({ proposals: [makeProposal({ proposalId: "prop-1", status: "confirmed" })] });
+    await useChatStore.getState().confirmProposal("prop-1");
+    expect(mocked.confirmProposal).not.toHaveBeenCalled();
+  });
+
+  it("卡片不存在（已移除/幽灵 id）→ 忽略，不调 API", async () => {
+    await useChatStore.getState().confirmProposal("prop-ghost");
+    expect(mocked.confirmProposal).not.toHaveBeenCalled();
   });
 });
 

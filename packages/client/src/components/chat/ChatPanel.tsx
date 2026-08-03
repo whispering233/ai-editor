@@ -5,7 +5,8 @@
 //   focus 小条 → 输入区（Enter 发送 / Shift+Enter 换行）
 // 无项目打开时整体禁用（灰显 + 「打开项目后可用」，不请求会话数据，chat.md「位置与形态」）
 // S7 数据源已接入（S8.1 联调完成）：proposals（提案卡）/ streamTools（运行时工具行）
-//   由 SSE 事件经 store 瞬态字段自动填充渲染；提案确认/拒绝按钮仍为锁定态（S8.2 解锁）
+//   由 SSE 事件经 store 瞬态字段自动填充渲染；提案确认/拒绝已接 S7.5 真实 API（S8.2 解锁，
+//   store 驱动状态迁移：confirmed/rejected/stale 终态 + 404 移除卡片）
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronDown,
@@ -276,12 +277,16 @@ function MessageItem({ message, toolResults }: { message: ChatMessage; toolResul
   );
 }
 
-// ============ 提案卡（chat.md「提案卡片」；S7 接入确认/拒绝 API 后启用按钮） ============
+// ============ 提案卡（chat.md「提案卡片」；S8.2 已接 S7.5 confirm/reject 真实调用） ============
 
 function ProposalCardView({ proposal }: { proposal: ProposalCard }) {
-  // S7 接入点：确认 → POST /proposal/:id/confirm（409 PROPOSAL_STALE → 卡标「数据已变化」+ 按钮禁用；
-  //   404 → 移除卡片）；拒绝 → POST /proposal/:id/reject。当前 S7 未实现，按钮为锁定态
+  const confirmProposal = useChatStore((s) => s.confirmProposal);
+  const rejectProposal = useChatStore((s) => s.rejectProposal);
   const label = PROPOSAL_TYPE_LABELS[proposal.type] ?? proposal.type;
+  // 终态（confirmed/rejected/stale）与处理中（processing 在途）：按钮禁用——
+  // 409 PROPOSAL_STALE 由 store 标 stale（卡标文案见上）+ 按钮随之禁用；
+  // 404 NOT_FOUND / 409 MISMATCH 由 store 移除卡片（组件无需处理）；notFound 不渲染
+  const busy = proposal.status !== "pending" || proposal.processing === true;
   return (
     <div className="rounded-lg border border-primary/25 bg-primary/5 p-2.5">
       <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
@@ -298,12 +303,10 @@ function ProposalCardView({ proposal }: { proposal: ProposalCard }) {
         </pre>
       )}
       <div className="mt-2 flex gap-1.5">
-        {/* S7 接 onClick 前统一硬锁：pending 可点但无 onClick（死按钮误导），全态 disabled；
-             disabled 按钮不触发 title（pointer-events-none），S7 接入时删除 disabled 并挂确认/拒绝 API */}
-        <Button size="xs" disabled>
+        <Button size="xs" disabled={busy} onClick={() => void confirmProposal(proposal.proposalId)}>
           确认
         </Button>
-        <Button size="xs" variant="outline" disabled>
+        <Button size="xs" variant="outline" disabled={busy} onClick={() => void rejectProposal(proposal.proposalId)}>
           拒绝
         </Button>
       </div>
