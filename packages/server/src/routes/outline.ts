@@ -6,8 +6,9 @@
 //   PARENT_NOT_FOUND           → 400 OUTLINE_NODE_NOT_FOUND（父不存在是参数问题，非资源访问）
 //   INVALID_HIERARCHY          → 400 VALIDATION_ERROR（严格三层违反）
 //   OUTLINE_ANCESTOR_DELETED   → 409 OUTLINE_ANCESTOR_DELETED（决策 12 修订）
-// 说明：relations/deltas 的级联软删/还原/物理清除在路由层用最简 SQL 完成（S3 前 db 无
-//   relation/delta 查询模块；S3 建模块后此处理论上可下沉，接口不变——注释留痕）。
+// 说明：级联还原/物理清除（cascadeRestore/cascadePurge）已下沉 db 包 queries/trash.ts（S4.1）；
+//   级联软删（cascadeSoftDelete）保留在路由层——与软删端点同文件内联，S4.1 任务边界只下沉
+//   还原/清除两个 helper（trash.ts 路由直接 import @ai-editor/db）。
 import { Hono } from "hono";
 import type { Db } from "@ai-editor/db";
 import { readOutlineFile } from "@ai-editor/db";
@@ -86,28 +87,6 @@ function cascadeSoftDelete(db: Db, subtreeIds: string[], deletedAt: string): { r
     .prepare(`UPDATE delta_records SET deleted_at = ? WHERE deleted_at IS NULL AND node_id IN ${inPlaceholders(subtreeIds)}`)
     .run(deletedAt, ...subtreeIds);
   return { relations: rel.changes, deltas: delta.changes };
-}
-
-/** 级联还原 relation/delta（决策 12 修订：全部还原，不因另一端仍软删而跳过；trash 路由复用） */
-export function cascadeRestore(db: Db, subtreeIds: string[]): { relations: number; deltas: number } {
-  const rel = db
-    .prepare(
-      `UPDATE relation_records SET deleted_at = NULL WHERE deleted_at IS NOT NULL AND
-       (source_id IN ${inPlaceholders(subtreeIds)} OR target_id IN ${inPlaceholders(subtreeIds)})`,
-    )
-    .run(...subtreeIds, ...subtreeIds);
-  const delta = db
-    .prepare(`UPDATE delta_records SET deleted_at = NULL WHERE deleted_at IS NOT NULL AND node_id IN ${inPlaceholders(subtreeIds)}`)
-    .run(...subtreeIds);
-  return { relations: rel.changes, deltas: delta.changes };
-}
-
-/** 物理清除 relation/delta（purge，决策 12：物理清除且不可恢复；trash 路由复用） */
-export function cascadePurge(db: Db, subtreeIds: string[]): void {
-  db.prepare(
-    `DELETE FROM relation_records WHERE source_id IN ${inPlaceholders(subtreeIds)} OR target_id IN ${inPlaceholders(subtreeIds)}`,
-  ).run(...subtreeIds, ...subtreeIds);
-  db.prepare(`DELETE FROM delta_records WHERE node_id IN ${inPlaceholders(subtreeIds)}`).run(...subtreeIds);
 }
 
 // GET /api/v1/outline —— 完整大纲树（软删过滤；with_metadata=true 联查统计）

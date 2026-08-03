@@ -2,16 +2,16 @@
 //
 // 契约来源：doc/api/endpoints.md 第 660-736 行、决策 12（软删/级联还原/物理清除）。
 // 组织说明：本卡实现**大纲节点侧**（entities 侧 S4 扩展——列表的 entities 字段先返回空数组）；
-// relation/delta 的级联还原与物理清除复用 outline.ts 的级联 helper（S3 建模块后可下沉 db 层）。
+// relation/delta 的级联还原与物理清除 helper 已下沉 db 包 queries/trash.ts（S4.1），此处直接 import。
 // restore 祖先链校验：存在软删祖先 → 409 OUTLINE_ANCESTOR_DELETED（决策 12 修订）。
 import { Hono } from "hono";
-import { getOutlinePathIds, readOutlineFile } from "@ai-editor/db";
+import { cascadePurge, cascadeRestore, getOutlinePathIds, readOutlineFile } from "@ai-editor/db";
 import { listDeletedNodes, purgeOutlineNode, restoreOutlineNode } from "@ai-editor/db";
 import type { OutlineFileNode, OutlineFileTree } from "@ai-editor/shared";
 import { nowIso } from "@ai-editor/db";
 import { HttpError, ok } from "../middleware/error.js";
 import { requireCurrentProject } from "../middleware/project.js";
-import { cascadePurge, cascadeRestore, collectSubtreeIds, mapOutlineError } from "./outline.js";
+import { collectSubtreeIds, mapOutlineError } from "./outline.js";
 
 /** 回收站路由（挂载于 /api/v1/trash，index.ts） */
 export const trashRoutes = new Hono();
