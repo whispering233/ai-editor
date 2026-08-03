@@ -369,7 +369,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - 回滚：单 commit
 
 **S7.3 主循环**
-- 范围：`run.ts` runAgent()——8 轮/120s/token 三重保险（决策 15）、工具失败结构化喂回自纠、模型失败重试、SSE 事件序列（tool_call/tool_result/proposal/text/done/error，proposal 在 tool_result 后、循环继续前）；**length 截断不执行任何 tool_call 全部标错重发**、**重试与轮次分开计量、120s 含重试退避**（2026-08 补充，借鉴 pi）
+- 范围：`run.ts` runAgent()——8 轮/120s/token 三重保险（决策 15）、工具失败结构化喂回自纠、模型失败重试、SSE 事件序列（tool_call/tool_result/proposal/text/done/error，proposal 在 tool_result 后、循环继续前）；**length 截断不执行任何 tool_call 全部标错重发**、**重试与轮次分开计量、120s 含重试退避**（2026-08 补充，借鉴 pi）；**超时信号与用户取消分离**（决策 15 超时可重试 vs 决策 16 取消不重试——单次 attempt 超时须独立 signal 并映射为可重试错误，勿将 AbortSignal.timeout 直挂用户取消链路）；**abort 双形态归一化**（chatStream 流中返回 `{ok:false, aborted}` vs withRetry 抛 `ABORT_ERROR`，主循环包 helper 归一双通道）（ora S6.2 审核 2026-08）
 - 依赖：S6.7、S7.2
 - 验证：vitest mock LLM 固定响应断言终止条件与事件顺序、**finish_reason=length 用例**、**半条 assistant 不重发用例**
 - 回滚：单 commit
