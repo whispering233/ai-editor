@@ -1,30 +1,26 @@
-// 实体详情/编辑页（S3.6；替换 T7.1 占位壳）
+// 实体详情/编辑页（S3.6；替换 T7.1 占位壳；U8 起「新增关联」用共用 CreateRelationDialog）
 // 路由：#/entities/:type/:id；数据：GET /api/v1/entity/:type/:id（含双向 relations + deltaCount）
 // 契约：doc/ui/pages/entity-detail.md——data 表单按类型差异化（lib/entity-detail.ts detailFieldsForType）、
-//   PUT partial 浅合并（diffData 只提交变更字段）、关系 1 跳双向展示 + 创建对话框（409 RELATION_EXISTS 提示）、
+//   PUT partial 浅合并（diffData 只提交变更字段）、关系 1 跳双向展示 + 创建对话框（409 RELATION_EXISTS 提示，
+//   组件抽至 components/entity/create-relation-dialog.tsx，详情模式 source 固定本实体）、
 //   删关系物理删确认（决策 12 修订：轻量可重建）、软删确认 + 级联计数、404 引导
 // 边界：custom_fields 仅在响应 data 已有该键时显示（MVP 无法新增键）；「问 AI」入口待 chat store
 //   就绪后补（layout.md §3.3 带上下文进聊天）；Delta 明细无 REST 端点（原型注释），deltaCount 仅数字
 import { useEffect, useState } from "react";
-import type { FormEvent } from "react";
-import { RELATION_TYPES } from "@ai-editor/shared";
 import { formatTimestamp } from "@ai-editor/shared";
-import type { EntitySummary, EntityType } from "@ai-editor/shared";
+import type { EntityType } from "@ai-editor/shared";
 import { ConfirmDialog } from "../components/outline/dialogs";
+import { CreateRelationDialog } from "../components/entity/create-relation-dialog";
 import { Breadcrumb } from "../components/page-nav/Breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   ApiError,
   CLIENT_NETWORK_ERROR,
-  createRelation,
   deleteEntity,
   deleteRelation,
   getEntityDetail,
-  listEntities,
   updateEntity,
-  type CreateRelationBody,
   type EntityDetailRes,
   type RelationSummaryItem,
 } from "../lib/api";
@@ -155,155 +151,6 @@ function CustomFieldsEditor({
         + 添加字段
       </Button>
     </div>
-  );
-}
-
-/** 新增关联对话框：另一端类型（实体四类或大纲节点）+ id 选择 + 关系类型下拉 */
-function CreateRelationDialog({
-  entityType,
-  entityId,
-  onCreated,
-  onClose,
-}: {
-  entityType: EntityType;
-  entityId: string;
-  onCreated: () => void | Promise<void>;
-  onClose: () => void;
-}) {
-  const outline = useProjectStore((s) => s.outline);
-  /** 另一端类型（"outline_node" = 大纲节点，schema.md relation_records 端点类型） */
-  const [otherType, setOtherType] = useState<EntityType | "outline_node">("character");
-  const [otherEntities, setOtherEntities] = useState<EntitySummary[] | null>(null);
-  const [otherId, setOtherId] = useState("");
-  const [relationType, setRelationType] = useState<string>(RELATION_TYPES[0]);
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-
-  // 另一端类型变化 → 拉实体列表（大纲节点用 outline store 的树，无需请求）
-  useEffect(() => {
-    setOtherId("");
-    if (otherType === "outline_node") {
-      setOtherEntities(null);
-      return;
-    }
-    setOtherEntities(null);
-    listEntities(otherType, { limit: 100 })
-      .then((res) => setOtherEntities(res.items))
-      .catch(() => setOtherEntities([]));
-  }, [otherType]);
-
-  const outlineOptions = flattenTree(outline?.children ?? []);
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    if (!otherId) {
-      setError("请选择关联对象");
-      return;
-    }
-    setSubmitting(true);
-    setError(null);
-    try {
-      const body: CreateRelationBody = {
-        source_type: entityType,
-        source_id: entityId,
-        target_type: otherType,
-        target_id: otherId,
-        relation_type: relationType,
-      };
-      await createRelation(body);
-      useUiStore.getState().showToast("已建立关系");
-      await onCreated();
-      onClose();
-    } catch (err) {
-      if (err instanceof ApiError && err.code === "RELATION_EXISTS") {
-        setError("这条关系已经存在");
-      } else {
-        setError(err instanceof ApiError ? err.message : "创建失败，请重试");
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>新增关联</DialogTitle>
-        </DialogHeader>
-        <form id="create-relation-form" onSubmit={handleSubmit} className="flex flex-col gap-3">
-        <div>
-          <p className="mb-1 text-sm font-medium text-zinc-700">关联对象类型</p>
-          <select
-            value={otherType}
-            onChange={(e) => setOtherType(e.target.value as EntityType | "outline_node")}
-            className="w-full rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
-          >
-            <option value="character">人物</option>
-            <option value="setting">设定</option>
-            <option value="location">地点</option>
-            <option value="hook">伏笔</option>
-            <option value="outline_node">大纲节点</option>
-          </select>
-        </div>
-        <div>
-          <p className="mb-1 text-sm font-medium text-zinc-700">关联对象</p>
-          {otherType === "outline_node" ? (
-            <select
-              value={otherId}
-              onChange={(e) => setOtherId(e.target.value)}
-              className="w-full rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
-            >
-              <option value="">选择大纲节点…</option>
-              {outlineOptions.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {"　".repeat(o.depth)}
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <select
-              value={otherId}
-              onChange={(e) => setOtherId(e.target.value)}
-              className="w-full rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
-            >
-              <option value="">选择{TYPE_LABEL[otherType]}…</option>
-              {(otherEntities ?? []).map((it) => (
-                <option key={it.id} value={it.id}>
-                  {it.name}
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
-        <div>
-          <p className="mb-1 text-sm font-medium text-zinc-700">关系类型</p>
-          <select
-            value={relationType}
-            onChange={(e) => setRelationType(e.target.value)}
-            className="w-full rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
-          >
-            {RELATION_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {relationTypeLabel(t)}
-              </option>
-            ))}
-          </select>
-        </div>
-        <p className="text-xs text-zinc-400">方向：本实体 → 关联对象</p>
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        </form>
-        <DialogFooter>
-          <Button variant="outline" type="button" onClick={onClose} disabled={submitting}>
-            取消
-          </Button>
-          <Button type="submit" form="create-relation-form" disabled={submitting}>
-            建立
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -580,11 +427,10 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
         </div>
       )}
 
-      {/* 新增关联对话框 */}
+      {/* 新增关联对话框（共用组件，详情模式：源固定为本实体，U8） */}
       {relationDialogOpen && (
         <CreateRelationDialog
-          entityType={entityType}
-          entityId={id}
+          source={{ type: entityType, id, name: detail?.name ?? "" }}
           onCreated={loadDetail}
           onClose={() => setRelationDialogOpen(false)}
         />

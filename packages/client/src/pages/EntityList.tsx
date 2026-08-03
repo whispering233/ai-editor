@@ -1,9 +1,12 @@
-// 实体列表页（S3.5；替换 T7.1 占位壳）
-// 路由：#/entities/:type?（type ∈ character|setting|location|hook，缺省 character——main.tsx 归一化）；
+// 实体列表页（S3.5；替换 T7.1 占位壳；U8 增补第 5 个「关联」tab）
+// 路由：#/entities/:type?（type ∈ character|setting|location|hook，缺省 character——main.tsx 归一化；
+//   "relations" 由 main.tsx 先拦截传入本页，不参与归一化）；
 //   四类 tab 切换即改 hash（useHashRoute 驱动），hash 变化 → main.tsx 传新 type → 本页重置查询状态
 // 数据：GET /api/v1/entity/:type?q=&offset=&limit=&sort=&order=（EntitySummary 摘要列表）
 // 契约：doc/ui/pages/entity-list.md——tab/搜索防抖 300ms/排序下拉/分页（limit 20、total 驱动）/
-//   摘要列按类型（lib/entity-list.ts SUMMARY_COLUMNS）/空态两种文案区分/行点击跳详情（S3.6）
+//   摘要列按类型（lib/entity-list.ts SUMMARY_COLUMNS）/空态两种文案区分/行点击跳详情（S3.6）；
+//   「关联 Tab（U8 增补）」——type==="relations" 渲染 RelationsView（前端过滤全量关系），
+//   「+ 新建」变「+ 建立关联」打开共用 CreateRelationDialog（列表模式，源可选）
 // 软删：服务端默认过滤（决策 12 修订）；回收站入口 #/trash 由 S4 卡实现，本卡不提供入口
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
@@ -24,6 +27,8 @@ import { cn } from "../lib/utils";
 import { navigate } from "../hooks/use-route";
 import { useUiStore } from "../stores/ui";
 import { formatTimestamp } from "@ai-editor/shared";
+import { CreateRelationDialog } from "../components/entity/create-relation-dialog";
+import { RelationsView } from "../components/entity/relations-view";
 
 const TYPE_LABEL: Record<EntityType, string> = {
   character: "人物",
@@ -48,6 +53,8 @@ const SORT_OPTIONS: Array<{
 ];
 
 export default function EntityList({ type }: { type: string }) {
+  /** 关联 tab（U8）：type==="relations" 时渲染关联总览视图，不参与四类实体逻辑 */
+  const isRelations = type === "relations";
   // main.tsx 已把未知 type 归一化为 character；此处双保险
   const entityType = (ENTITY_TYPES as readonly string[]).includes(type) ? (type as EntityType) : "character";
 
@@ -76,7 +83,7 @@ export default function EntityList({ type }: { type: string }) {
   const pages = pageCount(total, PAGE_LIMIT);
   const page = Math.floor(offset / PAGE_LIMIT) + 1;
 
-  // tab 切换（type 变化）：重置搜索/分页/排序（原型「MVP 切换时重置搜索与分页」）
+  // tab 切换（type 变化，含进出关联 tab）：重置搜索/分页/排序（原型「MVP 切换时重置搜索与分页」）
   useEffect(() => {
     setQInput("");
     setQ("");
@@ -85,7 +92,7 @@ export default function EntityList({ type }: { type: string }) {
     setOrder("desc");
     setItems(null);
     setError(null);
-  }, [entityType]);
+  }, [type]);
 
   // 搜索防抖 300ms；关键词变化时页码重置 0（同批 setState，只发一次请求）
   useEffect(() => {
@@ -97,7 +104,9 @@ export default function EntityList({ type }: { type: string }) {
   }, [qInput]);
 
   // 列表加载：type/q/offset/sort/order 变化驱动；卸载或参数变化时丢弃过期响应
+  // 关联 tab：列表请求不发起（RelationsView 自己拉全量关系），进出 tab 由 isRelations 触发兜底
   useEffect(() => {
+    if (isRelations) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -126,7 +135,7 @@ export default function EntityList({ type }: { type: string }) {
     return () => {
       cancelled = true;
     };
-  }, [entityType, q, offset, sort, order, reloadTick]);
+  }, [entityType, q, offset, sort, order, reloadTick, isRelations]);
 
   /** 排序切换：重置页码（原型交互） */
   function handleSortChange(value: string) {
@@ -174,7 +183,7 @@ export default function EntityList({ type }: { type: string }) {
     <section>
       <h1 className="mb-4 text-xl font-semibold">实体</h1>
 
-      {/* 顶部：四类 tab + 搜索 + 新建 */}
+      {/* 顶部：五类 tab（四类实体 + 关联，U8）+ 搜索 + 新建/建立关联 */}
       <div className="flex flex-wrap items-center gap-3 border-b border-zinc-200 pb-3">
         <div className="flex gap-1">
           {ENTITY_TYPES.map((t) => (
@@ -184,7 +193,7 @@ export default function EntityList({ type }: { type: string }) {
               onClick={() => navigate(`/entities/${t}`)}
               className={cn(
                 "rounded-md px-3 py-1.5 text-sm",
-                entityType === t
+                !isRelations && entityType === t
                   ? "bg-zinc-900 text-white"
                   : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800",
               )}
@@ -192,20 +201,40 @@ export default function EntityList({ type }: { type: string }) {
               {TYPE_LABEL[t]}
             </button>
           ))}
+          {/* 关联 tab（第 5 个，token 样式；激活态反相对比 bg-foreground/text-background，同 Breadcrumb） */}
+          <button
+            type="button"
+            onClick={() => navigate("/entities/relations")}
+            className={cn(
+              "rounded-md px-3 py-1.5 text-sm",
+              isRelations
+                ? "bg-foreground font-medium text-background"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+            )}
+          >
+            关联
+          </button>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          <Input
-            value={qInput}
-            onChange={(e) => setQInput(e.target.value)}
-            placeholder={`搜索${TYPE_LABEL[entityType]}名称…`}
-            className="w-52"
-          />
+          {!isRelations && (
+            <Input
+              value={qInput}
+              onChange={(e) => setQInput(e.target.value)}
+              placeholder={`搜索${TYPE_LABEL[entityType]}名称…`}
+              className="w-52"
+            />
+          )}
           <Button type="button" onClick={() => setCreateOpen(true)}>
-            + 新建
+            {isRelations ? "+ 建立关联" : "+ 新建"}
           </Button>
         </div>
       </div>
 
+      {/* 关联 tab：关系总览视图（前端过滤全量）；四类实体 tab：原列表视图（行为不变） */}
+      {isRelations ? (
+        <RelationsView reloadKey={reloadTick} onOpenCreate={() => setCreateOpen(true)} />
+      ) : (
+        <>
       {/* 排序行 + 总数 */}
       <div className="mb-2 mt-3 flex items-center gap-3">
         <label className="flex items-center gap-2 text-sm text-zinc-500">
@@ -381,6 +410,17 @@ export default function EntityList({ type }: { type: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+        </>
+      )}
+
+      {/* 关联 tab 建立关联对话框（列表模式：源实体可选，U8） */}
+      {isRelations && createOpen && (
+        <CreateRelationDialog
+          source={null}
+          onCreated={() => setReloadTick((t) => t + 1)}
+          onClose={() => setCreateOpen(false)}
+        />
+      )}
     </section>
   );
 }

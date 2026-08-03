@@ -26,6 +26,10 @@ function renderPage(route: Route): ReactNode {
     case "canvas":
       return <Canvas />;
     case "entities": {
+      // 关联 tab（U8，entity-list.md「关联 Tab」）：第 5 个 tab，先于类型归一化拦截——relations 不是实体类型
+      if (second === "relations") {
+        return <EntityList type="relations" />;
+      }
       // 按段数区分：2 段（#/entities/:type）→ 列表；3 段（#/entities/:type/:id）→ 详情（layout.md §1）
       // type 缺省 character（entity-list.md：type ∈ character|setting|location|hook）
       const type =
