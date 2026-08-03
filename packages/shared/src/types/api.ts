@@ -391,8 +391,8 @@ export const deltaChangeSchema = z.object({
   field: z.string(),
   op: deltaOpSchema,
   from: z.union([z.string(), z.number()]).nullable().optional(), // op=update 时服务端要求必填
-  to: z.union([z.string(), z.number()]).nullable().optional(), // op=set/update/add 时服务端要求必填
-  value: z.union([z.string(), z.number()]).optional(), // op=add 时使用
+  to: z.union([z.string(), z.number()]).nullable().optional(), // op=set/update 时服务端要求必填；add/remove 用 value
+  value: z.union([z.string(), z.number()]).optional(), // op=add/remove 时使用
 });
 
 /** DeltaRecord（响应；与 types/entity.ts 对齐） */

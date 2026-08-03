@@ -408,8 +408,8 @@ id: string;
     field: string;                // 字段名
     op: "set" | "update" | "add" | "remove";
     from?: string | number | null;  // 旧值（op=update 时必填）
-    to?: string | number | null;    // 新值（op=set/update/add 时必填）
-    value?: string | number;         // 值（op=add 时使用）
+    to?: string | number | null;    // 新值（op=set/update 时必填；add/remove 用 value）
+    value?: string | number;         // 值（op=add/remove 时使用）
   }[];
   description: string;            // 人类可读描述
   // 注意：无 order 入参——order 由服务端生成，全局单调递增（与 schema.md 一致）

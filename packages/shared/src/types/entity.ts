@@ -125,9 +125,9 @@ export interface DeltaChange {
   op: DeltaOp;
   /** 旧值（op=update 时必填） */
   from?: string | number | null;
-  /** 新值（op=set/update/add 时必填） */
+  /** 新值（op=set/update 时必填；add/remove 用 value） */
   to?: string | number | null;
-  /** 值（op=add 时使用） */
+  /** 值（op=add/remove 时使用） */
   value?: string | number;
 }
 
