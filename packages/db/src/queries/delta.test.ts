@@ -9,7 +9,7 @@ import { join } from "node:path";
 import type { DeltaChange, OutlineFileTree } from "@ai-editor/shared";
 import { closeDatabase, openDatabase, type Db } from "../connection.js";
 import { createEntity } from "./entity.js";
-import { insertDelta, listDeltasByNode } from "./delta.js";
+import { insertDelta, listDeltasByNode, listDeltasByTarget } from "./delta.js";
 import { findOutlineNode, readOutlineFile, writeOutlineFile } from "../storage/outline.js";
 
 let dir: string;
@@ -262,5 +262,81 @@ describe("listDeltasByNode 可见性三态（决策 12 修订：任一命中即�
 
     expect(listDeltasByNode(db, "sc-1", dir)).toEqual([]); // 触发节点缺失视同不可见（决策 12 修订兜底）
     expect(listDeltasByNode(db, "sc-2", dir).map((r) => r.id)).toEqual([other.id]); // 其他节点不受影响
+  });
+});
+
+describe("listDeltasByTarget（S6.3 工具 get_delta_history 下沉）", () => {
+  it("按目标实体返回全部记录：跨节点聚合 + 全局 order ASC（时间序）+ targetName 联表", () => {
+    const { charA } = seedBase();
+    insertDelta(db, { nodeId: "vol-1", targetType: "character", targetId: charA, changes: change("a", "1", "2"), description: "卷级" });
+    insertDelta(db, { nodeId: "sc-1", targetType: "character", targetId: charA, changes: change("b", "1", "2"), description: "场景级" });
+    insertDelta(db, { nodeId: "ch-1", targetType: "character", targetId: charA, changes: change("c", "1", "2"), description: "章级" });
+
+    const records = listDeltasByTarget(db, charA, dir);
+    expect(records.map((r) => r.description)).toEqual(["卷级", "场景级", "章级"]); // order 单调 → 插入序
+    for (const r of records) {
+      expect(r.targetId).toBe(charA);
+      expect(r.targetName).toBe("阿强"); // 实体联表名
+    }
+  });
+
+  it("只返回目标匹配的记录：同节点指向其他实体的 delta 不混入", () => {
+    const { charA } = seedBase();
+    const charB = createEntity(db, { type: "character", name: "阿珍" }).id;
+    insertDelta(db, { nodeId: "sc-1", targetType: "character", targetId: charA, changes: change("a", "1", "2"), description: "指向阿强" });
+    insertDelta(db, { nodeId: "sc-1", targetType: "character", targetId: charB, changes: change("b", "1", "2"), description: "指向阿珍" });
+
+    const records = listDeltasByTarget(db, charA, dir);
+    expect(records).toHaveLength(1);
+    expect(records[0].description).toBe("指向阿强");
+  });
+
+  it("可见性三态（决策 12 修订）：delta 自身软删 / 触发节点软删均过滤（与 listDeltasByNode 同语义）", () => {
+    const { charA } = seedBase();
+    insertDelta(db, { nodeId: "vol-1", targetType: "character", targetId: charA, changes: change("a", "1", "2"), description: "卷级" });
+    const scDelta = insertDelta(db, { nodeId: "sc-1", targetType: "character", targetId: charA, changes: change("b", "1", "2"), description: "场景级" });
+
+    // a. delta 自身软删 → 过滤
+    db.prepare("UPDATE delta_records SET deleted_at = ? WHERE id = ?").run(T0, scDelta.id);
+    let records = listDeltasByTarget(db, charA, dir);
+    expect(records.map((r) => r.description)).toEqual(["卷级"]);
+
+    // b. 触发节点软删 → 该节点全部 delta 不可见
+    db.prepare("UPDATE delta_records SET deleted_at = NULL WHERE id = ?").run(scDelta.id);
+    softDeleteScene("sc-1");
+    records = listDeltasByTarget(db, charA, dir);
+    expect(records.map((r) => r.description)).toEqual(["卷级"]);
+  });
+
+  it("目标端点软删（实体 / 大纲节点）→ 过滤；大纲 target 联表名（outline.json title）", () => {
+    const { charA } = seedBase();
+    insertDelta(db, { nodeId: "sc-1", targetType: "character", targetId: charA, changes: change("a", "1", "2"), description: "指向阿强" });
+    // 目标实体软删 → 全部不可见
+    db.prepare("UPDATE entities SET deleted_at = ? WHERE id = ?").run(T0, charA);
+    expect(listDeltasByTarget(db, charA, dir)).toEqual([]);
+    db.prepare("UPDATE entities SET deleted_at = NULL WHERE id = ?").run(charA);
+
+    // 大纲节点目标（targetType=outline_node）→ 联表名 + 软删过滤
+    insertDelta(db, { nodeId: "sc-1", targetType: "outline_node", targetId: "sc-2", changes: change("c", "1", "2"), description: "指向场景二" });
+    const nodeRecords = listDeltasByTarget(db, "sc-2", dir);
+    expect(nodeRecords).toHaveLength(1);
+    expect(nodeRecords[0].targetName).toBe("场景二");
+    softDeleteScene("sc-2");
+    expect(listDeltasByTarget(db, "sc-2", dir)).toEqual([]);
+  });
+
+  it("触发节点缺失（脏引用）→ 该条不可见；无记录 → 空数组", () => {
+    const { charA } = seedBase();
+    expect(listDeltasByTarget(db, charA, dir)).toEqual([]); // 无记录
+    expect(listDeltasByTarget(db, "char-999", dir)).toEqual([]); // 目标不存在
+
+    insertDelta(db, { nodeId: "sc-1", targetType: "character", targetId: charA, changes: change("a", "1", "2"), description: "一" });
+    // 物理删除 sc-1（构造不含该节点的树——purge 后 delta 残留的脏引用）
+    const tree = readOutlineFile(dir);
+    const chapter = findOutlineNode(tree, "ch-1");
+    if (chapter?.type !== "chapter") throw new Error("fixture 缺失 ch-1");
+    chapter.children = chapter.children!.filter((c) => c.id !== "sc-1");
+    writeOutlineFile(dir, tree);
+    expect(listDeltasByTarget(db, charA, dir)).toEqual([]);
   });
 });

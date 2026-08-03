@@ -26,6 +26,7 @@
     "@ai-editor/shared": "workspace:*"
   },
   "devDependencies": {
-    "typescript": "^5.8.0"
+    "typescript": "^5.8.0",
+    "zod": "^4.0.0"
   }
 }

@@ -21,6 +21,12 @@ export interface EntityListQuery {
   type?: EntityType;
   /** 搜索关键词（模糊匹配 name；LIKE 通配符 %/_ 原样透传——模糊搜索语义，注释明示） */
   q?: string;
+  /**
+   * data 字段过滤（S6.3 工具 search_entities 下沉，tools.md「实体查询」filters）：
+   * status 精确匹配 data.status；tags 要求 data.tags 数组包含全部指定 tags（AND）。
+   * 列表摘要不含 data（toSummary 只提取关键字段），故本过滤走「全行查询 + JS 层判定」。
+   */
+  filters?: { tags?: string[]; status?: string };
   /** 分页偏移，默认 0 */
   offset?: number;
   /** 每页条数，默认 50，最大 200（超限 clamp，防恶意大页） */
@@ -95,10 +101,30 @@ function parseDataColumn(value: unknown): Record<string, unknown> {
 }
 
 /**
+ * data 字段过滤（S6.3 工具 search_entities 下沉，filters 语义见 EntityListQuery）：
+ * status 字符串相等匹配；tags 要求 data.tags 为数组且包含全部指定 tags（AND）。
+ * 匹配失败的字段（如非数组 tags）一律视为不匹配——防御，不做宽松猜测。
+ */
+function matchDataFilters(data: Record<string, unknown>, filters: { tags?: string[]; status?: string }): boolean {
+  if (filters.status !== undefined && data.status !== filters.status) return false;
+  if (filters.tags !== undefined && filters.tags.length > 0) {
+    const tags = data.tags;
+    if (!Array.isArray(tags)) return false;
+    for (const tag of filters.tags) {
+      if (!tags.includes(tag)) return false;
+    }
+  }
+  return true;
+}
+
+/**
  * 实体列表（GET /api/v1/entity/:type，endpoints.md 第 154-193 行）：
  * type 过滤 + q 模糊搜索（name LIKE）+ 排序（name/created_at/updated_at × asc/desc，
  * 白名单防注入）+ 分页（limit clamp 1-200）+ **默认过滤软删**（决策 12）。
  * total 为过滤后总数（不含分页）。
+ * filters 语义（S6.3 下沉）：data 字段 JS 过滤（列表摘要不含 data），此时 SQL 只做
+ * type/q/软删过滤，filters + 分页在 JS 层（MVP 数据量小，全行查询可接受）；
+ * 无 filters 时保持 COUNT + LIMIT SQL 原路径（行为不变）。
  */
 export function listEntities(db: Db, query: EntityListQuery): EntityListResult {
   const where = ["deleted_at IS NULL"];
@@ -116,6 +142,18 @@ export function listEntities(db: Db, query: EntityListQuery): EntityListResult {
   const orderDir = query.order === "asc" ? "ASC" : "DESC";
   const offset = Math.max(0, Math.trunc(query.offset ?? 0));
   const limit = Math.min(200, Math.max(1, Math.trunc(query.limit ?? 50)));
+
+  // filters 分支：SQL 取全量候选行（type/q/软删），filters + 分页在 JS 层
+  if (query.filters !== undefined) {
+    const all = db
+      .prepare(`SELECT * FROM entities WHERE ${where.join(" AND ")} ORDER BY ${sortCol} ${orderDir}, id ASC`)
+      .all(...params) as Array<Record<string, unknown>>;
+    const filtered = all.filter((r) => matchDataFilters(rowToEntityRow(r).data, query.filters!));
+    return {
+      items: filtered.slice(offset, offset + limit).map((r) => toSummary(rowToEntityRow(r))),
+      total: filtered.length,
+    };
+  }
 
   const total = (
     db.prepare(`SELECT COUNT(*) AS c FROM entities WHERE ${where.join(" AND ")}`).get(...params) as { c: number }
@@ -235,11 +273,94 @@ export function softDeleteEntity(db: Db, id: string, deletedAt: string): { relat
     const delta = db
       .prepare(`UPDATE delta_records SET deleted_at = ? WHERE deleted_at IS NULL AND target_id = ?`)
       .run(deletedAt, id);
-    db.prepare("UPDATE entities SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL").run(
-      deletedAt,
-      deletedAt,
-      id,
-    );
-    return { relations: rel.changes, deltas: delta.changes };
+  db.prepare("UPDATE entities SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL").run(
+    deletedAt,
+    deletedAt,
+    id,
+  );
+  return { relations: rel.changes, deltas: delta.changes };
   });
+}
+
+// ============ 聚合统计（S6.3 工具 get_entity_summary 下沉，tools.md「聚合分析」） ============
+
+/** 实体聚合统计结果：总数 + 类型专属分布（稀疏字段，仅出现对应类型的分布） */
+export interface EntitySummaryStats {
+  type: EntityType;
+  /** 非软删实体总数（决策 12 修订：回收站对象不计入） */
+  total: number;
+  /** character：data.role 分布 */
+  byRole?: Record<string, number>;
+  /** character / hook：data.status 分布 */
+  byStatus?: Record<string, number>;
+  /** setting：data.category 分布 */
+  byCategory?: Record<string, number>;
+  /** location：data.type 分布 */
+  byType?: Record<string, number>;
+  /** hook：data.payoff_timing 分布 */
+  byPayoffTiming?: Record<string, number>;
+  /** character：data.abilities 频率（取前 10，防 token 爆炸，决策 15） */
+  topAbilities?: { ability: string; count: number }[];
+}
+
+/** 字符串值直方图（非字符串/空串不计入——data 字段稀疏，防御） */
+function countBy(values: unknown[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const v of values) {
+    if (typeof v === "string" && v !== "") {
+      out[v] = (out[v] ?? 0) + 1;
+    }
+  }
+  return out;
+}
+
+/** abilities 频率统计（数组元素展平计数，取前 limit 名；按频率降序、同频名称序） */
+function topAbilityCounts(rows: Array<Record<string, unknown>>, limit: number): { ability: string; count: number }[] {
+  const freq = new Map<string, number>();
+  for (const row of rows) {
+    const abilities = parseDataColumn(row.data).abilities;
+    if (!Array.isArray(abilities)) continue;
+    for (const ability of abilities) {
+      if (typeof ability === "string" && ability !== "") {
+        freq.set(ability, (freq.get(ability) ?? 0) + 1);
+      }
+    }
+  }
+  return [...freq.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, limit)
+    .map(([ability, count]) => ({ ability, count }));
+}
+
+/**
+ * 实体聚合统计（S6.3 工具 get_entity_summary 下沉，tools.md「聚合分析」）：
+ * 指定类型实体的总数 + 类型专属分布。仅统计非软删实体（决策 12 修订）；
+ * 分布字段按类型稀疏出现：character→byRole/byStatus/topAbilities、setting→byCategory、
+ * location→byType、hook→byStatus/byPayoffTiming；缺字段（data 未填）不报错、不计入。
+ */
+export function getEntitySummaryStats(db: Db, type: EntityType): EntitySummaryStats {
+  const rows = db
+    .prepare("SELECT data FROM entities WHERE type = ? AND deleted_at IS NULL")
+    .all(type) as Array<Record<string, unknown>>;
+
+  const result: EntitySummaryStats = { type, total: rows.length };
+  const dataOf = (r: Record<string, unknown>): Record<string, unknown> => parseDataColumn(r.data);
+  switch (type) {
+    case "character":
+      result.byRole = countBy(rows.map((r) => dataOf(r).role));
+      result.byStatus = countBy(rows.map((r) => dataOf(r).status));
+      result.topAbilities = topAbilityCounts(rows, 10);
+      break;
+    case "setting":
+      result.byCategory = countBy(rows.map((r) => dataOf(r).category));
+      break;
+    case "location":
+      result.byType = countBy(rows.map((r) => dataOf(r).type));
+      break;
+    case "hook":
+      result.byStatus = countBy(rows.map((r) => dataOf(r).status));
+      result.byPayoffTiming = countBy(rows.map((r) => dataOf(r).payoff_timing));
+      break;
+  }
+  return result;
 }

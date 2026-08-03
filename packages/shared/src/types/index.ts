@@ -8,3 +8,4 @@ export type * from "./outline.js";
 export type * from "./project.js";
 export type * from "./chat.js";
 export type * from "./api.js";
+export type * from "./tool.js";

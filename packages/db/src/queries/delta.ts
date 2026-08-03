@@ -21,7 +21,7 @@
 //   大纲节点 target 走 outline.json
 // - name 联表同路径：实体 → entities.name、大纲节点 → outline.json title
 
-import type { DeltaChange, DeltaRecord, DeltaRow } from "@ai-editor/shared";
+import type { DeltaChange, DeltaRecord, DeltaRow, OutlineFileTree } from "@ai-editor/shared";
 import { generateId, mapRowToDelta } from "@ai-editor/shared";
 import { nowIso } from "../storage/atomic.js";
 import { withTransaction, type Db } from "../connection.js";
@@ -119,29 +119,20 @@ export function insertDelta(db: Db, input: InsertDeltaInput): DeltaRow {
 }
 
 /**
- * 按触发节点查询 Delta（GET /api/v1/delta/node/:nodeId，endpoints.md 第 436-462 行）：
- * - SQL：node_id = ? AND deleted_at IS NULL，按 "order" 递增（computeState 同节点内应用序）
- * - **可见性三态过滤（决策 12 修订，AND）**：
- *   1. delta 自身未软删（SQL 层 WHERE deleted_at IS NULL）
- *   2. 触发节点未软删（outline.json：节点 deleted !== true；节点不存在视同不可见——
- *      purge 已物理清除其 Delta，脏引用兜底为空）
- *   3. 目标端点未软删：实体 target 查 entities 软删集合；大纲 target 查树软删标记
- *      （target 不存在 → 不过滤但省略 name——与 relation.ts 端点缺失语义一致）
+ * 行数组 → 可见性三态过滤 + targetName 联表（决策 12 修订，AND）：
+ * 1. delta 自身未软删（SQL 层 WHERE deleted_at IS NULL 保证，调用方负责）
+ * 2. 触发节点未软删（outline.json：节点 deleted !== true；节点不存在视同不可见——
+ *    purge 已物理清除其 Delta，脏引用兜底为空）——**逐行判定**（listDeltasByTarget
+ *    的行可来自不同触发节点，listDeltasByNode 复用同一逻辑，语义幂等）
+ * 3. 目标端点未软删：实体 target 查 entities 软删集合（一次 IN 查询）；大纲 target 查树
+ *    （target 不存在 → 不过滤但省略 name——与 relation.ts 端点缺失语义一致）
  * - targetName 联表（参照 relation.ts buildEndpointContext）：实体 → entities.name
  *   （一次 IN 查询）；大纲节点 → outline.json title；解析失败/缺失 → 省略字段
- * @param outlineDir 项目根（触发节点与大纲 target 的软删/标题校验读 outline.json）
+ *
+ * 供 listDeltasByNode / listDeltasByTarget 共用（S6.3 工具下沉：按目标查询复用同一语义）。
+ * @param tree 已读取的 outline.json 树（调用方读取一次，避免重复 I/O）
  */
-export function listDeltasByNode(db: Db, nodeId: string, outlineDir: string): DeltaRecord[] {
-  const rows = db
-    .prepare('SELECT * FROM delta_records WHERE node_id = ? AND deleted_at IS NULL ORDER BY "order" ASC')
-    .all(nodeId) as Array<Record<string, unknown>>;
-  if (rows.length === 0) return [];
-
-  const tree = readOutlineFile(outlineDir);
-  // 触发节点软删检查（决策 12 修订：触发节点软删 → 其全部 Delta 不可见）
-  const trigger = findOutlineNode(tree, nodeId);
-  if (trigger === undefined || trigger.deleted === true) return [];
-
+function filterVisibleDeltas(db: Db, rows: Array<Record<string, unknown>>, tree: OutlineFileTree): DeltaRecord[] {
   // 目标实体端点：一次 IN 查询收集软删集合与名称映射（含软删实体——名称填充不受
   // 可见性影响，过滤在另一层；relation.ts 同款取舍）。重复 target_id 用 Set 去重
   // （同一节点多条 Delta 指向同一实体时常见），避免 IN 参数重复
@@ -169,11 +160,13 @@ export function listDeltasByNode(db: Db, nodeId: string, outlineDir: string): De
   const records: DeltaRecord[] = [];
   for (const raw of rows) {
     const row = rowToDeltaRow(raw);
-    const isEntityTarget = (ENTITY_TARGET_TYPES as readonly string[]).includes(row.target_type);
+    // 触发节点软删检查（决策 12 修订：触发节点软删 → 该 Delta 不可见）
+    const trigger = findOutlineNode(tree, row.node_id);
+    if (trigger === undefined || trigger.deleted === true) continue;
     // 目标端点软删检查（决策 12 修订）
     let targetSoftDeleted: boolean;
     let targetName: string | undefined;
-    if (isEntityTarget) {
+    if ((ENTITY_TARGET_TYPES as readonly string[]).includes(row.target_type)) {
       targetSoftDeleted = entitySoftDeleted.has(row.target_id);
       targetName = entityNames.get(row.target_id);
     } else {
@@ -187,4 +180,44 @@ export function listDeltasByNode(db: Db, nodeId: string, outlineDir: string): De
     records.push(record);
   }
   return records;
+}
+
+/**
+ * 按触发节点查询 Delta（GET /api/v1/delta/node/:nodeId，endpoints.md 第 436-462 行）：
+ * - SQL：node_id = ? AND deleted_at IS NULL，按 "order" 递增（computeState 同节点内应用序）
+ * - **可见性三态过滤（决策 12 修订，AND）**：见 filterVisibleDeltas（本函数行同属一个
+ *   触发节点，仍逐行判定——与 listDeltasByTarget 共用同一实现，语义幂等）
+ * @param outlineDir 项目根（触发节点与大纲 target 的软删/标题校验读 outline.json）
+ */
+export function listDeltasByNode(db: Db, nodeId: string, outlineDir: string): DeltaRecord[] {
+  const rows = db
+    .prepare('SELECT * FROM delta_records WHERE node_id = ? AND deleted_at IS NULL ORDER BY "order" ASC')
+    .all(nodeId) as Array<Record<string, unknown>>;
+  if (rows.length === 0) return [];
+
+  const tree = readOutlineFile(outlineDir);
+  // 触发节点软删检查（决策 12 修订：触发节点软删 → 其全部 Delta 不可见；
+  // 提前短路避免无谓的实体软删集合 IN 查询）
+  const trigger = findOutlineNode(tree, nodeId);
+  if (trigger === undefined || trigger.deleted === true) return [];
+
+  return filterVisibleDeltas(db, rows, tree);
+}
+
+/**
+ * 按目标端点查询 Delta（S6.3 工具 get_delta_history 下沉，tools.md「状态查询」）：
+ * - SQL：target_id = ? AND deleted_at IS NULL，按 "order" 递增（order 全局单调 =
+ *   创建顺序，即「按时间/节点排序」）
+ * - 可见性过滤与 listDeltasByNode **完全一致**（filterVisibleDeltas 共享：delta 自身 /
+ *   触发节点 / 目标端点三态软删判定 + targetName 联表，决策 12 修订）
+ * @param outlineDir 项目根（触发节点与大纲 target 的软删/标题校验读 outline.json）
+ */
+export function listDeltasByTarget(db: Db, targetId: string, outlineDir: string): DeltaRecord[] {
+  const rows = db
+    .prepare('SELECT * FROM delta_records WHERE target_id = ? AND deleted_at IS NULL ORDER BY "order" ASC')
+    .all(targetId) as Array<Record<string, unknown>>;
+  if (rows.length === 0) return [];
+
+  const tree = readOutlineFile(outlineDir);
+  return filterVisibleDeltas(db, rows, tree);
 }

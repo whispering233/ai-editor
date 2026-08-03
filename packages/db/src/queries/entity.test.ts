@@ -11,6 +11,7 @@ import {
   countDeltasForEntity,
   createEntity,
   getEntity,
+  getEntitySummaryStats,
   listEntities,
   softDeleteEntity,
   updateEntity,
@@ -142,6 +143,48 @@ describe("listEntities", () => {
     expect(res.items.find((i) => i.id === target.id)).toBeUndefined();
   });
 
+  it("filters.status：data.status 精确匹配（S6.3 工具 search_entities 下沉）", () => {
+    const alive = listEntities(db, { type: "character", filters: { status: "活跃" } });
+    expect(alive.items.map((i) => i.name)).toEqual(["阿强"]);
+    expect(alive.total).toBe(1);
+    const missing = listEntities(db, { type: "character", filters: { status: "不存在" } });
+    expect(missing.items).toEqual([]);
+    // 与 q 组合过滤
+    const qAnd = listEntities(db, { type: "character", q: "阿", filters: { status: "失踪" } });
+    expect(qAnd.items).toEqual([]); // 阿强/阿珍均非失踪
+  });
+
+  it("filters.tags：data.tags 数组须包含全部指定标签（AND）；非数组/缺标签不匹配", () => {
+    createEntity(db, { type: "character", name: "赵六", data: { tags: ["门派甲", "主世界"] } });
+    createEntity(db, { type: "character", name: "钱七", data: { tags: ["门派甲"] } });
+    createEntity(db, { type: "character", name: "孙八", data: { tags: "非数组" } });
+    const r1 = listEntities(db, { type: "character", filters: { tags: ["门派甲"] } });
+    expect(r1.items.map((i) => i.name).sort()).toEqual(["赵六", "钱七"]);
+    const r2 = listEntities(db, { type: "character", filters: { tags: ["门派甲", "主世界"] } });
+    expect(r2.items.map((i) => i.name)).toEqual(["赵六"]); // AND 语义
+    const r3 = listEntities(db, { type: "character", filters: { tags: ["不存在"] } });
+    expect(r3.items).toEqual([]);
+    expect(r3.total).toBe(0);
+    // 非数组 tags 一律不匹配（防御）
+    expect(listEntities(db, { type: "character", filters: { tags: ["非数组"] } }).items).toEqual([]);
+  });
+
+  it("filters 分支：total 为 filters 过滤后总数（不含分页）；分页作用于过滤后", () => {
+    createEntity(db, { type: "character", name: "赵六", data: { status: "活跃" } });
+    createEntity(db, { type: "character", name: "钱七", data: { status: "活跃" } });
+    const res = listEntities(db, { type: "character", filters: { status: "活跃" }, offset: 1, limit: 1 });
+    expect(res.total).toBe(3); // 阿强 + 赵六 + 钱七（过滤后总数，不受分页影响）
+    expect(res.items).toHaveLength(1); // 分页第二页
+  });
+
+  it("filters 分支：软删实体不参与（决策 12）", () => {
+    const target = listEntities(db, { type: "character", q: "阿强" }).items[0];
+    softDeleteEntity(db, target.id, "2026-08-02T00:00:00Z");
+    const res = listEntities(db, { type: "character", filters: { status: "活跃" } });
+    expect(res.items).toEqual([]);
+    expect(res.total).toBe(0);
+  });
+
   it("limit 上限 clamp 200；非法值防御", () => {
     const res = listEntities(db, { type: "character", limit: 9999 });
     expect(res.items.length).toBeLessThanOrEqual(200);
@@ -249,5 +292,91 @@ describe("softDeleteEntity（决策 12 级联）", () => {
     softDeleteEntity(db, row.id, "2026-08-02T00:00:00Z");
     expect(getEntity(db, row.id)).toBeNull();
     expect(listEntities(db, { type: "character" }).total).toBe(0);
+  });
+});
+
+describe("getEntitySummaryStats（S6.3 工具 get_entity_summary 下沉）", () => {
+  it("character：total/byRole/byStatus/topAbilities（软删不计入，决策 12）", () => {
+    createEntity(db, {
+      type: "character",
+      name: "阿强",
+      data: { role: "主角", status: "alive", abilities: ["剑术", "轻功"] },
+    });
+    createEntity(db, {
+      type: "character",
+      name: "阿珍",
+      data: { role: "配角", status: "alive", abilities: ["剑术"] },
+    });
+    const dead = createEntity(db, {
+      type: "character",
+      name: "阿灭",
+      data: { role: "反派", status: "dead", abilities: ["毒术"] },
+    });
+    softDeleteEntity(db, dead.id, "2026-08-02T00:00:00Z");
+
+    const result = getEntitySummaryStats(db, "character");
+    expect(result.total).toBe(2);
+    expect(result.byRole).toEqual({ 主角: 1, 配角: 1 });
+    expect(result.byStatus).toEqual({ alive: 2 });
+    // 能力分布按频率降序、同频名称序
+    expect(result.topAbilities).toEqual([
+      { ability: "剑术", count: 2 },
+      { ability: "轻功", count: 1 },
+    ]);
+  });
+
+  it("hook：byStatus/byPayoffTiming；setting：byCategory；location：byType（稀疏分布）", () => {
+    createEntity(db, { type: "hook", name: "密信", data: { status: "planted", payoff_timing: "chapter" } });
+    createEntity(db, { type: "hook", name: "遗物", data: { status: "planted", payoff_timing: "book" } });
+    const hook = getEntitySummaryStats(db, "hook");
+    expect(hook).toEqual({
+      type: "hook",
+      total: 2,
+      byStatus: { planted: 2 },
+      byPayoffTiming: { chapter: 1, book: 1 },
+    });
+    expect(hook.byRole).toBeUndefined(); // 非 character 不出现角色分布
+
+    createEntity(db, { type: "setting", name: "修真界", data: { category: "世界观" } });
+    createEntity(db, { type: "setting", name: "江湖", data: { category: "世界观" } });
+    createEntity(db, { type: "setting", name: "门派", data: { category: "组织" } });
+    expect(getEntitySummaryStats(db, "setting")).toEqual({
+      type: "setting",
+      total: 3,
+      byCategory: { 世界观: 2, 组织: 1 },
+    });
+
+    createEntity(db, { type: "location", name: "青城山", data: { type: "山门" } });
+    createEntity(db, { type: "location", name: "藏经阁", data: { type: "建筑" } });
+    expect(getEntitySummaryStats(db, "location")).toEqual({
+      type: "location",
+      total: 2,
+      byType: { 山门: 1, 建筑: 1 },
+    });
+  });
+
+  it("缺字段/坏行不报错：无 data 字段不计入分布；data 非法 JSON 按空 data 防御", () => {
+    createEntity(db, { type: "character", name: "无字段者" }); // data 空
+    createEntity(db, { type: "character", name: "空字符串分布" }); // 同上
+    // 预插一条 data 为非法 JSON 的行（手改库/异常写入；parseDataColumn 防御 → {}）
+    db.prepare(
+      "INSERT INTO entities (id, type, name, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+    ).run("char-bad", "character", "坏行", "{ 这不是 JSON", "2026-08-01T00:00:00Z", "2026-08-01T00:00:00Z");
+
+    const result = getEntitySummaryStats(db, "character");
+    expect(result.total).toBe(3); // 2 正常 + 1 坏行（坏行不丢，data 视为 {}）
+    expect(result.byRole).toEqual({});
+    expect(result.byStatus).toEqual({});
+    expect(result.topAbilities).toEqual([]);
+  });
+
+  it("空类型：total 0，分布字段为空对象", () => {
+    expect(getEntitySummaryStats(db, "character")).toEqual({
+      type: "character",
+      total: 0,
+      byRole: {},
+      byStatus: {},
+      topAbilities: [],
+    });
   });
 });
