@@ -452,6 +452,28 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - 验证：typecheck + lint + client test（227 全绿）+ 手工走查创建流程
 - 回滚：单 commit
 
+### 切片 13：大纲交互重构（2026-08 用户反馈）
+
+> 用户反馈（2026-08）：大纲页操作区冗杂（⋯ 菜单/重复新建入口/意义不明的「设为当前位置」）、同级拖拽排序不可用、摘要显示不充分、大纲页底部回收站折叠区冗余；节点结构化信息不应出现在变更记录目标类型中（节点代表的故事导致实体变更）。决策经逐项确认：⋯ 取消操作平铺图标化；「设为当前位置」迁入节点详情页；拖拽上下半判定 + 指示线；摘要标题下方独立行；回收站折叠区删除；变更记录目标类型前后端均禁止 outline_node。
+
+**S13.1 大纲页交互重构** ✅（b61d4b6，经 oracle 审核放行；oracle M1 同父重排 off-by-one 修补轮）
+- 范围：Outline.tsx——取消 ⋯ 操作条（行尾平铺：＋ 就地新建 + 详情图标 + 移入回收站图标，带确认）；删除「新建子节点」「移动到…」「设为当前位置」入口；**拖拽上下半判定 + 插入指示线**（上半=插前、下半=插后，同级排序可用，跨父移动按 canMoveTo 过滤）；摘要移到**标题下方独立行**（默认显示、空不显示、点击就地编辑保留）；删除大纲页底部回收站折叠区（Trash tab 已覆盖）；当前位置徽标 amber 硬编码 → token 类；doc/ui/pages/outline.md + layout.md 同步
+- 依赖：S2.3、S12.2（详情页已存在，图标跳转目标）
+- 验证：typecheck + lint + client test + 手工走查（拖拽排序/图标操作/摘要两行/回收站区移除）
+- 回滚：单 commit
+
+**S13.2 设为当前位置迁入详情页** ✅（1d5eba9，经 oracle 审核放行）
+- 范围：OutlineDetail.tsx 加「设为当前位置」按钮（PUT /project/config；已是当前位置则禁用/标记）；大纲页入口由 S13.1 移除；InfoBar/行尾徽标/compute 预览默认节点/S9 依赖全部保留；doc/ui 同步
+- 依赖：S13.1
+- 验证：typecheck + lint + client test + 手工走查（详情页标记 → InfoBar/徽标联动）
+- 回滚：单 commit
+
+**S13.3 变更记录目标类型收紧** ✅（6df1eaa，经 oracle 审核放行）
+- 范围：前端——`DELTA_TARGET_TYPE_OPTIONS` 去掉「大纲节点」、默认目标改为空（需选择实体）、删除 `nodeDeltaFieldOptions` 节点字段选项逻辑；后端——POST /delta 路由校验 `target_type` 不含 outline_node → 400 VALIDATION_ERROR（server delta.ts + 测试）；契约——endpoints.md 注明 POST /delta target_type 仅实体类型；**历史 outline_node 目标 Delta 保留展示**（listDeltasByNode/computeState 既有行为不变）
+- 依赖：S12.3、S5.3
+- 验证：typecheck + lint + client/server test + 手工走查（表单无大纲节点选项、POST 非法 target_type 400）
+- 回滚：单 commit
+
 ---
 
 ## 阶段 U：UI 工作台重构（三栏布局，2026-08，决策 22）
