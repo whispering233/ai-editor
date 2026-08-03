@@ -480,7 +480,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - 验证：typecheck + lint + vitest 全绿；手工走查详情页面包屑逐级返回
 - 回滚：单 commit
 
-**U8 关联 tab（实体关系总览）** ✅（0366fd3 + 7346c2e，经 oracle 审核放行；优化：建立关联对话框左右布局「源 —关系→ 目标」c61d354）
+**U8 关联 tab（实体关系总览）** ✅（0366fd3 + 7346c2e，经 oracle 审核放行；优化：建立关联对话框左右布局「源 —关系→ 目标」c61d354；根因修复：DialogContent 基座 `max-w-lg`（原 `sm:max-w-sm` 压掉全仓覆盖致对话框静默 384px）f653058）
 - 背景：建立关联必须进入详情页点击条目，列表层无关系总览与快捷建立入口（用户反馈）。
 - 范围：`#/entities/relations` 第 5 个 tab（main.tsx 实体分支拦截 `relations` 段）——关联列表（`GET /relation?depth=1`，端点类型/关系类型下拉过滤 + 名称前端过滤）、行内 [删除]（ConfirmDialog 物理删确认）、端点名点击跳详情；「+ 新建」在关联 tab 下变「+ 建立关联」——抽 `CreateRelationDialog` 为共用组件（`components/entity/create-relation-dialog.tsx`），列表模式暴露源实体选择（类型+实体），详情页模式源固定当前实体（原行为不变）；entity-list.md 同步（已更新）
 - 依赖：U6（toast 反馈）
