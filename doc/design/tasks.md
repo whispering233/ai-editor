@@ -397,7 +397,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 > 2026-08 修订：**聊天 UI 已由 U5 完成**（右栏 ChatPanel：消息流/输入区/focus 小条/断连横幅/提案卡 UI，UI 先行决策）——本切片不再实现 UI，改为 S7 后端就绪后的联调与真实数据接入；接入点清单见 U5 卡报告。
 
 **S8.1 聊天联调（文本流）**
-- 范围：接 S7.6 真实 SSE 流联调——消息流/输入区/断连重发（U5 已实现），验证事件映射（text/tool_call/tool_result/done/error）、流式文本追加、断连横幅与 resendLast
+- 范围：接 S7.6 真实 SSE 流联调——消息流/输入区/断连重发（U5 已实现），验证事件映射（text/tool_call/tool_result/done/error）、流式文本追加、断连横幅与 resendLast；**服务端调试日志已就绪（AI_EDITOR_DEBUG=1，2026-08 独立交付 f9ad793）——联调时开启可观察 [chat] 事件序列**
 - 依赖：U5、S7.6
 - 验证：stub SSE 事件序列走查；有 key 则真实对话冒烟
 - 回滚：单 commit

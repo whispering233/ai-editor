@@ -367,6 +367,9 @@ export interface Entity { id: string; type: EntityType; name: string; }
       GET /api/v1/project/list 扫描 books/ 列书（不依赖当前项目，待命态可用）；
       create/open 契约不变，前端拼 创作根/books/<书名>/ 路径调用
     → 启动 Hono (port 3456，占用时生产态自动 +1；AI_EDITOR_PORT 可覆盖)
+    → 调试对话链路：AI_EDITOR_DEBUG=1 开启服务端日志（server/src/debug.ts——
+      [chat] 事件日志：turn_start/tool_call/proposal/done 等截断摘要 + hono/logger
+      请求日志仅调试态挂载；默认关闭防刷屏）
     → 加载 SPA（defaultClientDist 双路径：monorepo 开发态 ../../client/dist /
       打包安装态 ../client-dist——随 tarball 携带）为 SPA fallback
     → 打开浏览器（127.0.0.1，决策 8）

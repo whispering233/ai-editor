@@ -60,7 +60,17 @@ pnpm typecheck && pnpm lint && pnpm -r test
 
 # 调试（服务端对话链路 [chat] 事件日志 + hono 请求日志，默认关闭，显式开关防刷屏）
 AI_EDITOR_DEBUG=1 pnpm dev
+AI_EDITOR_DEBUG=1 pnpm start:test-project   # 生产态同样可用
 ```
+
+## 当前能力（2026-08）
+
+- **项目管理**：书架模式（`books/` 子目录）、创建/打开/关闭/配置、LLM 设置（模型/key）
+- **大纲**：严格三层（卷→章→场景）增删改移、节点详情（麦基《故事》结构化字段）
+- **实体与关系**：四类实体（人物/设定/地点/伏笔）CRUD、k 跳关系遍历、Delta 变更追踪与状态计算（computeState）
+- **回收站**：软删还原 / 彻底清除 + 启动一致性校验兜底
+- **AI 对话链路（S6-S7 已就绪）**：DeepSeek SSE 流式客户端、44 个工具（查询 8 / 分析 5 / 伏笔 5 / 提案 14 / 执行 12）、agent 主循环（8 轮 / 120s / token 三重保险）、提案确认流程、chat SSE 路由（心跳 15-30s / 断连检测 / 全链路取消）——配置 key 后右栏 ChatPanel 可直接对话
+- **调试**：`AI_EDITOR_DEBUG=1` 开启 `[chat]` 事件日志（tool_call/proposal/done 等截断摘要）+ 请求日志
 
 ## 打包安装（借鉴 inkos 发布机制）
 
