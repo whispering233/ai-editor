@@ -11,6 +11,7 @@ import { RELATION_TYPES } from "@ai-editor/shared";
 import { formatTimestamp } from "@ai-editor/shared";
 import type { EntitySummary, EntityType } from "@ai-editor/shared";
 import { ConfirmDialog } from "../components/outline/dialogs";
+import { Breadcrumb } from "../components/page-nav/Breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -443,9 +444,15 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
 
   return (
     <section>
-      {/* header：类型徽标 + 名称 + 操作 */}
+      {/* header：面包屑（实体 › 类型 › 名称，返回列表入口）+ 操作 */}
       <div className="mb-1 flex items-center gap-3">
-        <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-500">{TYPE_LABEL[entityType]}</span>
+        <Breadcrumb
+          items={[
+            { label: "实体", href: "/entities/character" },
+            { label: TYPE_LABEL[entityType], href: `/entities/${entityType}` },
+            { label: detail?.name ?? "…" },
+          ]}
+        />
         <h1 className="min-w-0 truncate text-xl font-semibold">{detail?.name ?? "…"}</h1>
         <div className="ml-auto flex items-center gap-2">
           <Button variant="outline" type="button" onClick={() => void handleSave()} disabled={!detail || saving}>
