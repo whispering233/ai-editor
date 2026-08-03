@@ -46,7 +46,7 @@ import {
   type ToolDispatcher,
 } from "@ai-editor/agent";
 import { chatStream } from "@ai-editor/llm";
-import type { AbortSignalLike, LLMMessage, LLMToolDefinition } from "@ai-editor/llm";
+import type { AbortSignalLike, LLMMessage, LLMStreamEvent, LLMToolDefinition } from "@ai-editor/llm";
 import { listTools, type ToolDefinition } from "@ai-editor/tools";
 import {
   findOutlineNode,
@@ -117,6 +117,46 @@ export function toLLMToolDefinitions(defs: readonly ToolDefinition[]): LLMToolDe
 function createRealProduce(apiKey: string, model: string, tools: LLMToolDefinition[]): RunAgentDeps["produce"] {
   return (messages: LLMMessage[], signal?: AbortSignalLike, onEvent?: Parameters<RunAgentDeps["produce"]>[2]) =>
     chatStream({ apiKey, model, messages, tools, signal, onEvent });
+}
+
+// ============ [llm] 请求 / usage 调试日志装饰器（AI_EDITOR_DEBUG=1） ============
+
+/**
+ * [llm] 请求调试日志装饰器：给 produce 包一层（真实路径经
+ * `createLLMRequestLogger(createRealProduce(...), { model, tools })` 组装），debug 开启时：
+ * - **request 日志**：模型名 + 请求参数 + **完整 messages JSON（不截断——用户核心诉求
+ *   「最终组装的 prompt」）** + 工具名列表；每轮每次 attempt 各打一次（含重试）
+ * - **usage 日志**：onEvent 转发处捕获 finish 事件，打真实 token 数（需求 3，流内真实 usage）
+ * - **敏感红线**：只打印请求体（messages 本身无 key——key 走 fetch header），
+ *   绝不打印 apiKey / headers
+ * - 关闭（AI_EDITOR_DEBUG ≠ "1"）时**零开销直通**：不包装 onEvent、不拼接字符串
+ * 独立成装饰器而非塞进 createRealProduce：测试可用 mock produce 直测日志层，
+ * 不经真实 DeepSeek 网络调用（与 createChatEventLogger 的「工厂 + 组合」同款模式）。
+ * 注：produce 契约（run.ts）不含 maxTokens/temperature（当前无对应配置），如实标注 <未设置>。
+ */
+export function createLLMRequestLogger(
+  produce: RunAgentDeps["produce"],
+  ctx: { model: string; tools: LLMToolDefinition[] },
+): RunAgentDeps["produce"] {
+  const toolNames = ctx.tools.map((t) => t.name).join(", ");
+  return (messages, signal, onEvent) => {
+    if (!isDebugEnabled()) return produce(messages, signal, onEvent); // 关闭：零开销直通
+    debugLog("llm", `request model=${ctx.model} max_tokens=<未设置> temperature=<未设置> tools=[${toolNames}]`);
+    debugLog("llm", `request messages=${JSON.stringify(messages, null, 2)}`); // 完整打印不截断
+    const loggedOnEvent: ((event: LLMStreamEvent) => void) | undefined = onEvent
+      ? (event) => {
+          if (event.type === "finish") {
+            const u = event.usage;
+            debugLog(
+              "llm",
+              `usage prompt_tokens=${u?.prompt_tokens ?? "?"} completion_tokens=${u?.completion_tokens ?? "?"} total=${u?.total_tokens ?? "?"} stop=${event.stopReason}`,
+            );
+          }
+          onEvent(event); // 原样转发（日志先于事件）
+        }
+      : undefined;
+    return produce(messages, signal, loggedOnEvent);
+  };
 }
 
 // ============ 路由依赖注入（测试覆盖用） ============
@@ -416,7 +456,10 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
         };
 
         // ---- 9. runAgent 接线（S7.3：produce/dispatcher 由本路由组装注入） ----
-        const produce = deps.produce ?? createRealProduce(apiKey, model, tools);
+        // 真实 produce 外包 [llm] 请求/usage 调试日志装饰器（AI_EDITOR_DEBUG=1；关闭零开销直通）
+        const produce =
+          deps.produce ??
+          createLLMRequestLogger(createRealProduce(apiKey, model, tools), { model, tools });
         // S7.4 真实现：ToolContext { db, outlineDir, projectId } + 同仓提案（S7.5 消费）
         const dispatcher =
           deps.dispatcher ?? createToolDispatcher({ db: project.db, outlineDir: project.root, projectId: project.config.id }, { store });

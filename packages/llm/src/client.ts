@@ -8,6 +8,8 @@
 //     决策 16（取消信号逐 chunk 检查，命中即终止并标记 aborted，消息 "Request was aborted"）
 // 本包只管「怎么调模型」：key 由调用方注入（决策 17 读取优先级在 server 层实现），
 // 对话组织 / 重试退避 / token 估算分别在 agent 包与 S6.2，不在本文件。
+// 调试日志：AI_EDITOR_DEBUG=1 时打 [llm] stream——原始 SSE data 行摘要（需求 2 事件流形态）；
+// 开关本包独立判定（isLLMDebug），不依赖 server 的 debug.ts（architecture.md 依赖方向 server → llm）。
 import type {
   AbortSignalLike,
   ChatStreamResult,
@@ -274,6 +276,79 @@ function parseChunk(data: string): LLMStreamChunk | null {
   }
 }
 
+// ============ [llm] stream 调试日志（AI_EDITOR_DEBUG=1，原始 SSE 流） ============
+// 与 server 的 debug.ts 同开关语义（AI_EDITOR_DEBUG === "1"），但**本包独立判定**——
+// llm 不依赖 server（architecture.md 依赖方向 server → llm），client.ts 内部直接读环境变量。
+// 输出走 console.debug（stderr 通道，与 server [chat]/[llm] 日志同通道，shell 统一过滤）。
+// 需求 2：debug 态查看 DeepSeek 返回的原始 chunk 序列（data 行摘要 + [DONE]）。
+
+/** 调试开关环境变量名（与 server DEBUG_ENV_NAME 同值；本包自持常量，避免跨包 import） */
+const LLM_DEBUG_ENV_NAME = "AI_EDITOR_DEBUG";
+
+/** [llm] stream 摘要：delta 片段（content / tool_call 参数）截断上限（防刷屏） */
+const LLM_STREAM_DELTA_MAX = 120;
+
+/**
+ * 调试开关判定：globalThis.process 探测——本包零依赖硬约束（tsconfig lib 仅 ES2022、
+ * types 为空，无 @types/node / DOM lib），Node ≥ 18 与浏览器下均可安全访问，缺 process 返回关闭。
+ */
+export function isLLMDebug(): boolean {
+  const proc = (globalThis as unknown as { process?: { env?: Record<string, string | undefined> } }).process;
+  return proc?.env?.[LLM_DEBUG_ENV_NAME] === "1";
+}
+
+/** 调试输出（console.debug 探测调用——同上的零依赖约束；调用时取值，测试 vi.spyOn 可拦截） */
+function debugConsole(...args: unknown[]): void {
+  (globalThis as unknown as { console?: { debug?: (...a: unknown[]) => void } }).console?.debug?.(...args);
+}
+
+/** 摘要截断：超长截断并标注原长（如 "你好…(500 字符)"），可读性优先；非字符串兜底 JSON 序列化（防御畸形 chunk） */
+function truncateDebugField(value: unknown, max: number): string {
+  const text = typeof value === "string" ? value : JSON.stringify(value) ?? String(value);
+  return text.length > max ? `${text.slice(0, max)}…(${text.length} 字符)` : text;
+}
+
+/**
+ * 原始 SSE data 行 → [llm] stream 摘要（每帧一行，展示事件流形态）：
+ * - [DONE] 哨兵：原样 "[DONE]"
+ * - 普通 chunk：`#序号 delta={role=… content="…" tool_call#i id=… name=… args=…} finish=<reason|null>`
+ *   关键字段**完整保留**：chunk 序号 / role / tool_call index / finish_reason；
+ *   content 与 tool_call 参数为增量片段，截断（120 字符 + 原长标注，防刷屏）——
+ *   delta 摘要本身就是流式片段，截断只丢片段尾部、不丢结构
+ * - usage 出现即完整打印（字段短、信息密度高，需求 3 的流内真实用量）
+ * - data 非 JSON（防御路径）：原文截断摘要
+ */
+export function summarizeStreamData(data: string, seq: number): string {
+  if (data === SSE_DONE) return "[DONE]";
+  const chunk = parseChunk(data);
+  if (chunk === null) return `#${seq} <解析失败> ${truncateDebugField(data, LLM_STREAM_DELTA_MAX)}`;
+  const parts: string[] = [];
+  const choice = chunk.choices[0];
+  const delta = choice?.delta;
+  if (delta !== undefined) {
+    if (delta.role !== undefined) parts.push(`role=${delta.role}`);
+    if (typeof delta.content === "string" && delta.content !== "") {
+      parts.push(`content=${JSON.stringify(truncateDebugField(delta.content, LLM_STREAM_DELTA_MAX))}`);
+    }
+    if (delta.tool_calls !== undefined) {
+      for (const tc of delta.tool_calls) {
+        const fn = tc.function;
+        const frag = [
+          `tool_call#${tc.index}`,
+          ...(tc.id ? [`id=${tc.id}`] : []),
+          ...(fn?.name ? [`name=${fn.name}`] : []),
+          // arguments 本身是 JSON 字符串，截断后原样输出（不再包引号，保持可读）
+          ...(fn?.arguments ? [`args=${truncateDebugField(fn.arguments, LLM_STREAM_DELTA_MAX)}`] : []),
+        ];
+        parts.push(frag.join(" "));
+      }
+    }
+  }
+  let line = `#${seq} delta={${parts.join(" ")}} finish=${choice?.finish_reason ?? "null"}`;
+  if (chunk.usage) line += ` usage=${JSON.stringify(chunk.usage)}`; // usage 完整打印（字段短、信息密度高）
+  return line;
+}
+
 /** 惰性获取全局 TextDecoder（Node 18+ / 浏览器自带）；缺失返回 null（几乎不可能） */
 function loadTextDecoder(): TextDecoderLike | null {
   const ctor = (globalThis as unknown as { TextDecoder?: new () => TextDecoderLike }).TextDecoder;
@@ -419,6 +494,15 @@ export async function chatStream(params: ChatStreamParams): Promise<ChatStreamRe
   const state: StreamState = { toolCalls: [], usage: null, finishReason: null };
   let buffer = "";
 
+  // [llm] 原始 SSE data 行逐帧日志（AI_EDITOR_DEBUG=1；关闭时零开销早退——高频路径无条件
+  // 调用，成本控制在本层内部，与 server debug.ts 同模式）
+  let streamSeq = 0;
+  const logStreamData = (data: string): void => {
+    if (!isLLMDebug()) return;
+    streamSeq += 1;
+    debugConsole(`[llm] stream ${summarizeStreamData(data, streamSeq)}`);
+  };
+
   try {
     while (true) {
       if (signal?.aborted) return abortNow();
@@ -432,6 +516,7 @@ export async function chatStream(params: ChatStreamParams): Promise<ChatStreamRe
       for (const frame of frames) {
         const data = parseSSEFrame(frame);
         if (data === null) continue; // 注释帧 / 无 data 帧
+        logStreamData(data); // [llm] stream 原始 data 行（AI_EDITOR_DEBUG=1；关闭零开销）
         if (data === SSE_DONE) return finalize(state); // 哨兵：正常结束
         const chunk = parseChunk(data);
         if (chunk) {
@@ -456,6 +541,7 @@ export async function chatStream(params: ChatStreamParams): Promise<ChatStreamRe
   // EOF 未收到 [DONE]：先 flush 残余帧（服务端可能省略结尾空行），再判定截断
   if (buffer.trim() !== "") {
     const data = parseSSEFrame(buffer.trim());
+    if (data !== null) logStreamData(data); // [llm] stream（EOF 残余帧同样逐帧）
     if (data === SSE_DONE) return finalize(state);
     if (data !== null) {
       const chunk = parseChunk(data);

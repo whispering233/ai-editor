@@ -30,7 +30,7 @@ import {
   setCurrentProject,
   type ProjectContext,
 } from "../middleware/project.js";
-import { chatRoutes, createChatRoutes, toLLMToolDefinitions, zodArgsToJsonSchema } from "./chat.js";
+import { chatRoutes, createChatRoutes, createLLMRequestLogger, toLLMToolDefinitions, zodArgsToJsonSchema } from "./chat.js";
 
 const HOST_HEADERS = { host: "127.0.0.1:3456" };
 
@@ -720,5 +720,81 @@ describe("[chat] 调试日志（AI_EDITOR_DEBUG=1）", () => {
     expect(callLine).toContain("…("); // 截断标注（含原长）
     const resultLine = lines.find((l) => l.includes("tool_result"))!;
     expect(resultLine).toContain("…(");
+  });
+});
+
+// ============ [llm] 请求/usage 调试日志（AI_EDITOR_DEBUG=1，produce 装饰器） ============
+// 覆盖：request 日志（模型名 + 完整 messages JSON 不截断 + 工具名列表）、usage 日志（真实
+//   token 数 + stop 原因）、敏感红线（日志中绝不出现密钥值/Bearer/apiKey 字样）、
+//   关闭时零开销直通（无日志、onEvent 同引用不包装）
+// 注：装饰器独立于路由（createLLMRequestLogger 包 mock produce 直测），不经真实 DeepSeek 调用
+
+describe("[llm] 请求/usage 调试日志（AI_EDITOR_DEBUG=1）", () => {
+  it("开启时 request 日志含模型名/完整 messages JSON/工具名列表，且无密钥字样", async () => {
+    process.env.AI_EDITOR_DEBUG = "1"; // beforeEach 已删除该变量，此处显式开启
+    process.env.DEEPSEEK_API_KEY = "sk-test-secret-123456"; // 红线验证：密钥绝不出现在日志
+    const spy = vi.spyOn(console, "debug").mockImplementation(() => {});
+    const inner = vi.fn<RunAgentDeps["produce"]>(async () => ({ ok: true, stopReason: "stop", usage: null }));
+    const produce = createLLMRequestLogger(inner, {
+      model: "deepseek-v4-flash",
+      tools: [
+        { name: "get_entity", description: "查询实体", parameters: { type: "object" } },
+        { name: "propose_create_entity", description: "创建实体", parameters: { type: "object" } },
+      ],
+    });
+    await produce(
+      [
+        { role: "system", content: "你是创作顾问" },
+        { role: "user", content: "帮我查一下张三" },
+      ],
+      new AbortController().signal,
+    );
+
+    const lines = spy.mock.calls.map((c) => c.map(String).join(" "));
+    const reqLine = lines.find((l) => l.includes("[llm] request model="))!;
+    expect(reqLine).toContain("model=deepseek-v4-flash");
+    expect(reqLine).toContain("tools=[get_entity, propose_create_entity]"); // 工具名列表
+    const msgLine = lines.find((l) => l.includes("[llm] request messages="))!;
+    expect(msgLine).toContain('"role": "system"'); // 完整 JSON（pretty 打印，不截断）
+    expect(msgLine).toContain("帮我查一下张三");
+    // 敏感红线：密钥值 / Bearer 头 / apiKey 字样绝不入日志
+    for (const l of lines) {
+      expect(l).not.toContain("sk-test-secret-123456");
+      expect(l).not.toContain("Bearer");
+      expect(l).not.toContain("apiKey");
+    }
+    expect(inner).toHaveBeenCalledTimes(1); // 装饰器只包装不改调用
+  });
+
+  it("开启时 finish 事件打 [llm] usage（真实 token 数 + stop 原因）", async () => {
+    process.env.AI_EDITOR_DEBUG = "1";
+    const spy = vi.spyOn(console, "debug").mockImplementation(() => {});
+    const inner = vi.fn<RunAgentDeps["produce"]>(async (_messages, _signal, onEvent) => {
+      onEvent?.({
+        type: "finish",
+        stopReason: "tool_calls",
+        usage: { prompt_tokens: 120, completion_tokens: 45, total_tokens: 165 },
+      });
+      return { ok: true, stopReason: "tool_calls", usage: { prompt_tokens: 120, completion_tokens: 45, total_tokens: 165 } };
+    });
+    const produce = createLLMRequestLogger(inner, { model: "m", tools: [] });
+    await produce([{ role: "user", content: "hi" }], new AbortController().signal, () => {}); // 需传 onEvent 触发包装
+    const lines = spy.mock.calls.map((c) => c.map(String).join(" "));
+    expect(
+      lines.some((l) => l.includes("[llm] usage prompt_tokens=120 completion_tokens=45 total=165 stop=tool_calls")),
+    ).toBe(true);
+    expect(inner).toHaveBeenCalledTimes(1);
+  });
+
+  it("关闭（未设置）时零开销直通：无日志、onEvent 同引用不包装", async () => {
+    const spy = vi.spyOn(console, "debug").mockImplementation(() => {});
+    const onEvent = (): void => {};
+    const inner = vi.fn<RunAgentDeps["produce"]>(async (_messages, _signal, e) => {
+      expect(e).toBe(onEvent); // 未包装：同一引用转发
+      return { ok: true, stopReason: "stop", usage: null };
+    });
+    const produce = createLLMRequestLogger(inner, { model: "m", tools: [] });
+    await produce([{ role: "user", content: "hi" }], new AbortController().signal, onEvent);
+    expect(spy).not.toHaveBeenCalled();
   });
 });

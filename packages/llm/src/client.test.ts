@@ -3,15 +3,17 @@
 //   流式分片跨 chunk 拼接、注释行跳过、[DONE] 正常结束（stop_reason 正确）、
 //   流中途终止无 [DONE] → error、非 2xx 结构化错误、abort 中断、
 //   tool_call 参数增量累积 → 完整参数对象（含解析失败 / length 截断标记）
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, afterEach } from "vitest";
 import {
   buildChatRequestBody,
   chatStream,
   DEEPSEEK_BASE_URL,
+  isLLMDebug,
   LLM_TRANSPORT_ERROR_CODES,
   parseSSEFrame,
   splitSSEFrames,
   SSE_DONE,
+  summarizeStreamData,
 } from "./client";
 import type {
   ChatStreamResult,
@@ -607,5 +609,79 @@ describe("chatStream 消费者异常隔离（onEvent 抛错）", () => {
     if (!result.ok) {
       expect(result.error.code).toBe(LLM_TRANSPORT_ERROR_CODES.CONSUMER_ERROR);
     }
+  });
+});
+
+// ============ [llm] stream 调试日志（AI_EDITOR_DEBUG=1，原始 SSE 事件流） ============
+// 覆盖：开关判定（isLLMDebug）、摘要格式（序号/delta 摘要/finish 完整保留、usage 完整打印、
+//   content/tool_call 参数片段截断 120 字符 + 原长标注、[DONE] 原样）、
+//   chatStream 集成（开启逐 data 行打 [llm] stream、关闭 console.debug 零调用）
+
+describe("[llm] stream 调试日志（AI_EDITOR_DEBUG=1）", () => {
+  const originalDebug = process.env.AI_EDITOR_DEBUG;
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    if (originalDebug !== undefined) process.env.AI_EDITOR_DEBUG = originalDebug;
+    else delete process.env.AI_EDITOR_DEBUG;
+  });
+
+  it("isLLMDebug：AI_EDITOR_DEBUG=1 开启，未设置/其他值关闭", () => {
+    process.env.AI_EDITOR_DEBUG = "1";
+    expect(isLLMDebug()).toBe(true);
+    process.env.AI_EDITOR_DEBUG = "0";
+    expect(isLLMDebug()).toBe(false);
+    delete process.env.AI_EDITOR_DEBUG;
+    expect(isLLMDebug()).toBe(false);
+  });
+
+  it("summarizeStreamData：保留序号/delta 摘要/finish，usage 完整打印，[DONE] 原样", () => {
+    const contentChunk = '{"choices":[{"index":0,"delta":{"role":"assistant","content":"你好"},"finish_reason":null}]}';
+    expect(summarizeStreamData(contentChunk, 1)).toBe('#1 delta={role=assistant content="你好"} finish=null');
+    const finishChunk = '{"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}';
+    expect(summarizeStreamData(finishChunk, 2)).toBe("#2 delta={} finish=stop");
+    const usageChunk = '{"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}';
+    expect(summarizeStreamData(usageChunk, 3)).toBe(
+      '#3 delta={} finish=null usage={"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}',
+    );
+    expect(summarizeStreamData(SSE_DONE, 4)).toBe("[DONE]");
+  });
+
+  it("summarizeStreamData：tool_call 保留 index/id/name，参数片段截断（120 字符 + 原长标注）", () => {
+    const longArgs = JSON.stringify({ name: "张".repeat(150) });
+    const chunk = `{"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"create_entity","arguments":${JSON.stringify(longArgs)}}}]},"finish_reason":null}]}`;
+    const line = summarizeStreamData(chunk, 1);
+    expect(line).toContain("tool_call#0");
+    expect(line).toContain("id=call_1");
+    expect(line).toContain("name=create_entity");
+    expect(line).toContain("…("); // 截断标注（含原长）
+  });
+
+  it("开启时 chatStream 逐 data 行打 [llm] stream（含 [DONE]）；关闭时 console.debug 零调用", async () => {
+    const delta = '{"choices":[{"index":0,"delta":{"content":"好"},"finish_reason":null}]}';
+    const finish = '{"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}';
+    const usage = '{"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}';
+    process.env.AI_EDITOR_DEBUG = "1";
+    const spy = vi.spyOn(console, "debug").mockImplementation(() => {});
+    await runStream([
+      "data: " + delta + "\n\n",
+      "data: " + finish + "\n\n",
+      "data: " + usage + "\n\n",
+      "data: " + SSE_DONE + "\n\n",
+    ]);
+    const lines = spy.mock.calls.map((c) => c.map(String).join(" "));
+    expect(lines).toContain('[llm] stream #1 delta={content="好"} finish=null');
+    expect(lines).toContain("[llm] stream #2 delta={} finish=stop");
+    // toContain 对数组是元素全等匹配——usage 断言须带完整行（含 [llm] stream 前缀）
+    expect(lines).toContain(
+      '[llm] stream #3 delta={} finish=null usage={"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}',
+    );
+    expect(lines).toContain("[llm] stream [DONE]");
+
+    // 关闭（未设置）：零调用（零开销早退）
+    spy.mockClear();
+    delete process.env.AI_EDITOR_DEBUG;
+    await runStream(["data: " + SSE_DONE + "\n\n"]);
+    expect(spy).not.toHaveBeenCalled();
   });
 });
