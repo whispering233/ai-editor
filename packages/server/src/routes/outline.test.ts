@@ -413,6 +413,163 @@ describe("软删与回收站（决策 12）", () => {
   });
 });
 
+// ============ 节点 data（决策 23，麦基字段集） ============
+
+describe("节点 data（决策 23）", () => {
+  /** 建 卷[章[场景]] 结构并给 scene 挂全字段 data，返回各节点 id */
+  async function seedWithSceneData(
+    app: Hono,
+  ): Promise<{ vol: string; ch: string; sc: string }> {
+    await openProject();
+    const vol = (await (await app.request("/api/v1/outline", {
+      method: "POST", headers: HOST_HEADERS,
+      body: JSON.stringify({ type: "volume", title: "第一卷", parent_id: "root", data: { climax_scene: "sc-12", inciting_scene: "sc-3" } }),
+    })).json()).data;
+    const ch = (await (await app.request("/api/v1/outline", {
+      method: "POST", headers: HOST_HEADERS,
+      body: JSON.stringify({ type: "chapter", title: "第一章", parent_id: vol.id, data: { reversal: "张三决定叛出师门", climax_scene: "sc-5" } }),
+    })).json()).data;
+    const sc = (await (await app.request("/api/v1/outline", {
+      method: "POST", headers: HOST_HEADERS,
+      body: JSON.stringify({
+        type: "scene", title: "灵根测试失败", parent_id: ch.id,
+        data: { goal: "确认灵根品质", conflict_levels: ["inner", "personal"], value_from: "希望", value_to: "绝望" },
+      }),
+    })).json()).data;
+    return { vol: vol.id, ch: ch.id, sc: sc.id };
+  }
+
+  it("POST 带 data 成功 201；GET 整树原样返回 data（决策 23 透传）", async () => {
+    const app = buildApp();
+    const { vol, ch, sc } = await seedWithSceneData(app);
+    expect(vol).toMatch(/^vol-/);
+    expect(ch).toMatch(/^ch-/);
+    expect(sc).toMatch(/^sc-/);
+
+    const res = await app.request("/api/v1/outline", { headers: HOST_HEADERS });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const tree = body.data;
+    expect(tree.children[0].data).toEqual({ climax_scene: "sc-12", inciting_scene: "sc-3" });
+    expect(tree.children[0].children[0].data).toEqual({ reversal: "张三决定叛出师门", climax_scene: "sc-5" });
+    expect(tree.children[0].children[0].children[0].data).toEqual({
+      goal: "确认灵根品质",
+      conflict_levels: ["inner", "personal"],
+      value_from: "希望",
+      value_to: "绝望",
+    });
+  });
+
+  it("POST data 非法 → 400 VALIDATION_ERROR（scene conflict_levels 非法枚举；volume 引用字段非字符串）", async () => {
+    const app = buildApp();
+    await openProject();
+    const vol = (await (await app.request("/api/v1/outline", {
+      method: "POST", headers: HOST_HEADERS, body: JSON.stringify({ type: "volume", title: "卷", parent_id: "root" }),
+    })).json()).data;
+
+    const badScene = await app.request("/api/v1/outline", {
+      method: "POST", headers: HOST_HEADERS,
+      body: JSON.stringify({ type: "scene", title: "x", parent_id: vol.id, data: { conflict_levels: ["social"] } }),
+    });
+    expect(badScene.status).toBe(400);
+    expect((await badScene.json()).error.code).toBe("VALIDATION_ERROR");
+
+    const badVol = await app.request("/api/v1/outline", {
+      method: "POST", headers: HOST_HEADERS,
+      body: JSON.stringify({ type: "volume", title: "卷2", parent_id: "root", data: { inciting_scene: 42 } }),
+    });
+    expect(badVol.status).toBe(400);
+    expect((await badVol.json()).error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("PUT data 部分合并成功：GET 验证未传字段保留；data 变更刷新 updatedAt", async () => {
+    const app = buildApp();
+    const { vol } = await seedWithSceneData(app);
+
+    const res = await app.request(`/api/v1/outline/${vol}`, {
+      method: "PUT", headers: HOST_HEADERS,
+      body: JSON.stringify({ data: { climax_scene: "sc-99" } }),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toEqual({ updated: true });
+
+    const tree = (await (await app.request("/api/v1/outline", { headers: HOST_HEADERS })).json()).data;
+    // 浅合并：climax_scene 替换、inciting_scene 保留（未传字段）
+    expect(tree.children[0].data).toEqual({ climax_scene: "sc-99", inciting_scene: "sc-3" });
+    // 未传 data 的更新不改动既有 data
+    await app.request(`/api/v1/outline/${vol}`, {
+      method: "PUT", headers: HOST_HEADERS, body: JSON.stringify({ title: "新名" }),
+    });
+    const after = (await (await app.request("/api/v1/outline", { headers: HOST_HEADERS })).json()).data;
+    expect(after.children[0].data).toEqual({ climax_scene: "sc-99", inciting_scene: "sc-3" });
+    expect(after.children[0].title).toBe("新名");
+  });
+
+  it("PUT { data: {} } 空对象 → 200：有 data 节点原字段保留（no-op）；原无 data 节点 GET 返回 data: {}（与 updateEntity 浅合并语义一致，有意为之）", async () => {
+    const app = buildApp();
+    const { vol } = await seedWithSceneData(app);
+
+    // 有 data 节点：空对象浅合并 no-op（字段全保留）
+    const res = await app.request(`/api/v1/outline/${vol}`, {
+      method: "PUT", headers: HOST_HEADERS, body: JSON.stringify({ data: {} }),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toEqual({ updated: true });
+
+    // 原无 data 节点：浅合并展开落盘 data: {}，GET 显式返回空对象（决策 23 透传）
+    const ch = (await (await app.request("/api/v1/outline", {
+      method: "POST", headers: HOST_HEADERS,
+      body: JSON.stringify({ type: "chapter", title: "新章", parent_id: vol }),
+    })).json()).data;
+    const res2 = await app.request(`/api/v1/outline/${ch.id}`, {
+      method: "PUT", headers: HOST_HEADERS, body: JSON.stringify({ data: {} }),
+    });
+    expect(res2.status).toBe(200);
+
+    const tree = (await (await app.request("/api/v1/outline", { headers: HOST_HEADERS })).json()).data;
+    expect(tree.children[0].data).toEqual({ climax_scene: "sc-12", inciting_scene: "sc-3" }); // 有 data 节点 no-op
+    expect(tree.children[0].children[1].data).toEqual({}); // 原无 data 节点 → 空对象落盘并透传
+  });
+
+  it("GET 无 data 节点响应不含 data 键（省略而非输出 null/undefined）", async () => {
+    const app = buildApp();
+    await openProject();
+    const vol = (await (await app.request("/api/v1/outline", {
+      method: "POST", headers: HOST_HEADERS, body: JSON.stringify({ type: "volume", title: "卷", parent_id: "root" }),
+    })).json()).data;
+
+    const res = await app.request("/api/v1/outline", { headers: HOST_HEADERS });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    // 显式断言：无 data 节点不输出 data 键（不依赖 JSON.stringify 省略 undefined 的隐式行为）
+    expect("data" in body.data.children[0]).toBe(false);
+  });
+
+  it("PUT data 非法 → 400 VALIDATION_ERROR（按节点实际层级校验）；节点不存在 + data → 404", async () => {
+    const app = buildApp();
+    await openProject();
+    const vol = (await (await app.request("/api/v1/outline", {
+      method: "POST", headers: HOST_HEADERS, body: JSON.stringify({ type: "volume", title: "卷", parent_id: "root" }),
+    })).json()).data;
+
+    // volume 节点传非法 data（inciting_scene 非字符串）→ 400（按节点实际层级 schema 校验）
+    const bad2 = await app.request(`/api/v1/outline/${vol.id}`, {
+      method: "PUT", headers: HOST_HEADERS,
+      body: JSON.stringify({ data: { inciting_scene: 42 } }),
+    });
+    expect(bad2.status).toBe(400);
+    expect((await bad2.json()).error.code).toBe("VALIDATION_ERROR");
+
+    // 节点不存在 + data → 404（data 精校验前先定位节点）
+    const nf = await app.request("/api/v1/outline/sc-999", {
+      method: "PUT", headers: HOST_HEADERS,
+      body: JSON.stringify({ data: { goal: "x" } }),
+    });
+    expect(nf.status).toBe(404);
+    expect((await nf.json()).error.code).toBe("OUTLINE_NODE_NOT_FOUND");
+  });
+});
+
 // ============ 跨存储写序（决策 16：先 DB 后 JSON） ============
 //
 // 锁定方式：预建 .outline.json.tmp 为**目录**——writeJsonAtomic 写前清理残留临时文件时

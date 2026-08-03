@@ -165,8 +165,8 @@ CREATE INDEX idx_chat_session ON chat_messages(session_id, created_at);
 
 | 层级 | data 字段 | 说明 |
 |------|-----------|------|
-| `scene` | `goal`（文本）、`conflict_levels`（`inner`/`personal`/`extra_personal` 多选）、`value_from`/`value_to`（开场/收场价值双文本） | 场景目标/欲望、冲突三层次、价值转向（麦基场景定义） |
-| `chapter` | `reversal`（单文本，可选）、`climax_scene`（场景节点 id 引用，可选） | 章末反转、章高潮场景 |
+| `scene` | `goal`（文本，max 1000）、`conflict_levels`（`inner`/`personal`/`extra_personal` 多选）、`value_from`/`value_to`（开场/收场价值双文本，各 max 200） | 场景目标/欲望、冲突三层次、价值转向（麦基场景定义） |
+| `chapter` | `reversal`（单文本，可选，max 1000）、`climax_scene`（场景节点 id 引用，可选） | 章末反转、章高潮场景 |
 | `volume` | `climax_scene`（场景节点 id 引用，可选）、`inciting_scene`（激励事件落位，可选） | 幕高潮、激励事件 |
 
 - 引用字段宽松校验：`climax_scene`/`inciting_scene` 引用任意场景节点 id，MVP 不校验引用范围（UI 提示建议本层内），详情页可跳转。

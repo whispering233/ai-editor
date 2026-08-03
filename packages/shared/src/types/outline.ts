@@ -22,6 +22,12 @@ export interface OutlineNodeBase {
   title: string;
   /** 可选描述 */
   summary?: string;
+  /**
+   * 节点结构化信息（决策 23，麦基《故事》字段集）：按层级 schema 校验
+   * （scene：goal/conflict_levels/value_from/value_to；chapter：reversal/climax_scene；
+   * volume：climax_scene/inciting_scene）；嵌套字段原样透传（snake_case），无 data 时省略
+   */
+  data?: Record<string, unknown>;
   /** 节点版本戳（决策 19，提案快照比对） */
   updatedAt: string;
   /** 软删标记（决策 12）：常规查询默认过滤软删节点；字段供回收站等管理视图与映射完整性（endpoints.md 契约未列） */
@@ -68,6 +74,11 @@ export interface OutlineFileNodeBase {
   id: string;
   title: string;
   summary?: string;
+  /**
+   * 节点结构化信息（决策 23）：与实体 data 同构（Record<string, unknown>，默认省略），
+   * 按层级 schema（OUTLINE_NODE_DATA_SCHEMAS）校验；编辑 data 不自动生成 Delta（决策 9 修订语义）
+   */
+  data?: Record<string, unknown>;
   /** 节点版本戳（决策 19），任何字段变更由服务端原子写时统一更新 */
   updated_at: string;
   /** 软删标记（决策 12）：默认 false，省略即未删 */

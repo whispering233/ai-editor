@@ -10,6 +10,7 @@
 import { z } from "zod";
 import { ENTITY_TYPES, RELATION_TYPES } from "../constants/entity.js";
 import { HOOK_STATUSES, PAYOFF_TIMING } from "../constants/hook.js";
+import { CONFLICT_LEVELS } from "../constants/outline.js";
 import type { ComputeStateResult, DeltaRecord, EntitySummary, ProjectConfig, RelationRecord } from "./index.js";
 
 // ============ 基础 schema ============
@@ -474,7 +475,48 @@ export const deltaComputeResSchema: z.ZodType<ComputeStateResult> = z.object({
 // ============ outline 端点（endpoints.md「大纲操作」，严格三层决策 19） ============
 
 /**
- * 大纲节点（递归 schema；type 三选一 + children 可选，比 T1.1 的判别联合宽松——
+ * 大纲节点 data 字段 schema（决策 23，麦基《故事》字段集，schema.md outline.json「节点结构化信息」节）：
+ * scene——goal/conflict_levels/value_from/value_to；chapter——reversal/climax_scene；
+ * volume——climax_scene/inciting_scene。
+ * 宽松语义与 ENTITY_DATA_SCHEMAS 一致：
+ * - `.passthrough()` 允许未知字段（创作工具，用户自定义字段自由，未知字段原样保留透传）
+ * - 引用字段（climax_scene/inciting_scene）仅类型校验（字符串），不校验存在性/范围（决策 23：MVP 宽松）
+ * 请求体 data 本体使用宽松 record（outlineCreateReqSchema），精确校验在服务端 route 层按层级选用
+ */
+export const sceneDataSchema = z
+  .object({
+    goal: z.string().max(1000).optional(), // 场景目标/欲望（麦基 Scene）
+    conflict_levels: z.array(z.enum(CONFLICT_LEVELS)).optional(), // 冲突三层次多选
+    value_from: z.string().max(200).optional(), // 开场价值
+    value_to: z.string().max(200).optional(), // 收场价值（「No scene that doesn't turn」）
+  })
+  .passthrough();
+
+export const chapterDataSchema = z
+  .object({
+    reversal: z.string().max(1000).optional(), // 章末反转（单文本）
+    climax_scene: z.string().optional(), // 章高潮场景引用（宽松：仅字符串，MVP 不校验引用范围）
+  })
+  .passthrough();
+
+export const volumeDataSchema = z
+  .object({
+    climax_scene: z.string().optional(), // 幕高潮场景引用（宽松）
+    inciting_scene: z.string().optional(), // 激励事件落位（宽松）
+  })
+  .passthrough();
+
+/**
+ * 各层级 data schema 注册表（服务端按节点 type 选用精确 schema 校验，
+ * 与 ENTITY_DATA_SCHEMAS 同构；type 三选一 scene/chapter/volume，root 无 data）
+ */
+export const OUTLINE_NODE_DATA_SCHEMAS = {
+  scene: sceneDataSchema,
+  chapter: chapterDataSchema,
+  volume: volumeDataSchema,
+} as const;
+
+/** 大纲节点（递归 schema；type 三选一 + children 可选，比 T1.1 的判别联合宽松——
  * 严格三层（卷→章→场景、scene 无 children）的类型约束由 types/outline.ts 承担，服务端负责层级校验，
  * 故此处不做 z.ZodType<OutlineNode> 标注（宽松 infer 无法赋给判别联合））
  */
@@ -484,6 +526,7 @@ export const outlineNodeSchema: z.ZodTypeAny = z.lazy(() =>
     type: z.enum(["volume", "chapter", "scene"]),
     title: z.string(),
     summary: z.string().optional(),
+    data: z.record(z.string(), z.unknown()).optional(), // 节点结构化信息（决策 23；内部字段原样透传）
     updatedAt: z.string(), // 节点版本戳（决策 19）
     deleted: z.boolean().optional(), // 软删标记（决策 12，管理视图）
     deletedAt: z.string().optional(),
@@ -523,6 +566,7 @@ export const outlineCreateReqSchema = z
     title: z.string().min(1).max(200),
     parent_id: z.string(), // volume→root；chapter→volume 或 root；scene→必须 chapter
     summary: z.string().optional(),
+    data: z.record(z.string(), z.unknown()).optional(), // 节点结构化信息（决策 23，宽松 record，按层级 schema 精校验）
   })
   .strict();
 
@@ -539,6 +583,7 @@ export const outlineUpdateReqSchema = z
   .object({
     title: z.string().min(1).max(200).optional(),
     summary: z.string().optional(),
+    data: z.record(z.string(), z.unknown()).optional(), // 部分合并（决策 23；按层级 schema 精校验）
   })
   .strict();
 

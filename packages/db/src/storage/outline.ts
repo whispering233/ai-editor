@@ -118,8 +118,15 @@ export function touchOutlineNode(tree: OutlineFileTree, nodeId: string, updatedA
   node.updated_at = updatedAt;
 }
 
-/** updateOutlineNode 可更新的节点字段（决策 19：title/summary；决策 12：软删字段） */
-export type OutlineNodePatch = Partial<Pick<OutlineFileNodeBase, "title" | "summary" | "deleted" | "deleted_at">>;
+/**
+ * updateOutlineNode 可更新的节点字段
+ * （决策 19：title/summary；决策 23：data——与 title/summary 同等对待，patch 含 data 时整体替换，
+ * 未传字段保留；data 的浅合并语义在 outline-ops.updateOutlineNodeInfo（与实体 updateEntity 同构）；
+ * 决策 12：软删字段）
+ */
+export type OutlineNodePatch = Partial<
+  Pick<OutlineFileNodeBase, "title" | "summary" | "data" | "deleted" | "deleted_at">
+>;
 
 /**
  * 更新节点字段并统一更新 updated_at 版本戳（决策 19）。

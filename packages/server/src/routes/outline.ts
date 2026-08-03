@@ -11,7 +11,7 @@
 //   还原/清除两个 helper（trash.ts 路由直接 import @ai-editor/db）。
 import { Hono } from "hono";
 import type { Db } from "@ai-editor/db";
-import { readOutlineFile } from "@ai-editor/db";
+import { findOutlineNode, readOutlineFile } from "@ai-editor/db";
 import { getOutlinePathIds } from "@ai-editor/db";
 import {
   createOutlineNode,
@@ -20,7 +20,7 @@ import {
   OutlineError,
   updateOutlineNodeInfo,
 } from "@ai-editor/db";
-import type { OutlineFileNode, OutlineFileTree, OutlineNode, OutlineTree } from "@ai-editor/shared";
+import type { OutlineFileNode, OutlineFileTree, OutlineNode, OutlineNodeType, OutlineTree } from "@ai-editor/shared";
 import { HOOK_RELATION_TYPES, mapOutlineFileToTree } from "@ai-editor/shared";
 import { nowIso } from "@ai-editor/db";
 import {
@@ -28,12 +28,25 @@ import {
   outlineGetQuerySchema,
   outlineMoveReqSchema,
   outlineUpdateReqSchema,
+  OUTLINE_NODE_DATA_SCHEMAS,
 } from "@ai-editor/shared/schemas";
 import { HttpError, ok } from "../middleware/error.js";
 import { requireCurrentProject } from "../middleware/project.js";
 
 /** 大纲路由（挂载于 /api/v1/outline，index.ts） */
 export const outlineRoutes = new Hono();
+
+/**
+ * 按节点层级精确校验 data（决策 23：麦基字段集，OUTLINE_NODE_DATA_SCHEMAS；
+ * 宽松 record 之外的精校验，与 entity.ts validateDataByType 同构；
+ * 失败 → errorHandler → 400 VALIDATION_ERROR（含 fields））
+ */
+function validateNodeData(type: Exclude<OutlineNodeType, "root">, data: Record<string, unknown>): void {
+  const check = OUTLINE_NODE_DATA_SCHEMAS[type].safeParse(data);
+  if (!check.success) {
+    throw check.error;
+  }
+}
 
 /** 递归过滤软删节点（决策 12：常规查询默认过滤；deleted 节点整棵子树丢弃） */
 function filterDeletedTree(tree: OutlineFileTree): OutlineFileTree {
@@ -139,7 +152,7 @@ function attachMetadata(tree: OutlineTree, db: Db): void {
   for (const vol of tree.children) visit(vol);
 }
 
-// POST /api/v1/outline —— 创建节点（严格三层，parent_id 必填，决策 19）
+// POST /api/v1/outline —— 创建节点（严格三层，parent_id 必填，决策 19；data 按层级精校验，决策 23）
 outlineRoutes.post("/", async (c) => {
   const project = requireCurrentProject();
   const raw = await c.req.json().catch(() => null);
@@ -147,10 +160,13 @@ outlineRoutes.post("/", async (c) => {
   if (!parsed.success) {
     throw parsed.error; // → 400 VALIDATION_ERROR（含 fields）
   }
-  const { type, title, parent_id, summary } = parsed.data;
+  const { type, title, parent_id, summary, data } = parsed.data;
+  if (data !== undefined) {
+    validateNodeData(type, data);
+  }
   let node: OutlineFileNode;
   try {
-    node = createOutlineNode(project.root, { type, title, parentId: parent_id, summary, updatedAt: nowIso() });
+    node = createOutlineNode(project.root, { type, title, parentId: parent_id, summary, data, updatedAt: nowIso() });
   } catch (err) {
     throw mapOutlineError(err);
   }
@@ -166,7 +182,7 @@ outlineRoutes.post("/", async (c) => {
   );
 });
 
-// PUT /api/v1/outline/:nodeId —— 更新标题/描述
+// PUT /api/v1/outline/:nodeId —— 更新标题/描述/结构化 data（data 部分合并，决策 23）
 outlineRoutes.put("/:nodeId", async (c) => {
   const project = requireCurrentProject();
   const raw = await c.req.json().catch(() => null);
@@ -174,8 +190,17 @@ outlineRoutes.put("/:nodeId", async (c) => {
   if (!parsed.success) {
     throw parsed.error;
   }
+  const nodeId = c.req.param("nodeId");
+  // data 精校验需要节点实际层级（请求体不含 type）：先定位节点（404 语义），再按层级校验
+  if (parsed.data.data !== undefined) {
+    const node = findOutlineNode(readOutlineFile(project.root), nodeId);
+    if (node === undefined) {
+      throw new HttpError(404, "OUTLINE_NODE_NOT_FOUND", `大纲节点不存在: ${nodeId}`);
+    }
+    validateNodeData(node.type, parsed.data.data);
+  }
   try {
-    updateOutlineNodeInfo(project.root, c.req.param("nodeId"), parsed.data, nowIso());
+    updateOutlineNodeInfo(project.root, nodeId, parsed.data, nowIso());
   } catch (err) {
     throw mapOutlineError(err);
   }

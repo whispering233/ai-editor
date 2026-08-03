@@ -74,7 +74,8 @@ export function assertCanHold(parentType: "root" | OutlineNodeType, childType: O
  * → 插入父 children 尾部 → **父节点 updated_at 统一更新**（决策 19）→ 原子写回。
  *
  * @param updatedAt ISO 8601 由调用方（应用层）传入，模块不生成时间
- * @returns 新建节点（含 id/type/title/updated_at）
+ * @param data 节点结构化信息（决策 23，可选；校验由路由层按层级 schema 执行，本模块仅透传存储）
+ * @returns 新建节点（含 id/type/title/updated_at/data）
  * @throws OutlineError PARENT_NOT_FOUND（父不存在）/ INVALID_HIERARCHY（三层违反）
  */
 export function createOutlineNode(
@@ -84,6 +85,7 @@ export function createOutlineNode(
     title: string;
     parentId: string;
     summary?: string;
+    data?: Record<string, unknown>;
     updatedAt: string;
   },
 ): OutlineFileNode {
@@ -100,6 +102,7 @@ export function createOutlineNode(
     title: input.title,
     updated_at: input.updatedAt,
     ...(input.summary !== undefined ? { summary: input.summary } : {}),
+    ...(input.data !== undefined ? { data: input.data } : {}),
     // 非 scene 节点必须初始化 children 数组（volume→chapter[]、chapter→scene[]），
     // 否则 childrenOf 视为叶子、后续挂载失败
     ...(input.type !== "scene" ? { children: [] } : {}),
@@ -121,13 +124,14 @@ export function createOutlineNode(
 
 /**
  * 更新大纲节点信息（PUT /api/v1/outline/:nodeId，endpoints.md 第 579-597 行）：
- * title/summary 更新 + 节点 updated_at 统一更新（决策 19），原子写回。
+ * title/summary 更新 + 节点 updated_at 统一更新（决策 19），原子写回；
+ * data **浅合并**（决策 23：未传字段保留，与实体 updateEntity 的 data 浅合并同语义）。
  * @throws OutlineError NODE_NOT_FOUND
  */
 export function updateOutlineNodeInfo(
   dir: string,
   nodeId: string,
-  patch: { title?: string; summary?: string },
+  patch: { title?: string; summary?: string; data?: Record<string, unknown> },
   updatedAt: string,
 ): void {
   const tree = readOutlineFile(dir);
@@ -137,6 +141,10 @@ export function updateOutlineNodeInfo(
   }
   if (patch.title !== undefined) node.title = patch.title;
   if (patch.summary !== undefined) node.summary = patch.summary;
+  // data 浅合并：仅合并传入字段，现有字段保留（决策 23；与 updateEntity 同语义）
+  if (patch.data !== undefined) {
+    node.data = { ...(node.data ?? {}), ...patch.data };
+  }
   node.updated_at = updatedAt;
   writeOutlineFile(dir, tree);
 }

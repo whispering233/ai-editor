@@ -5,6 +5,7 @@ import type { EntityType } from "../types/entity.js";
 import {
   ANALYSIS_TOOLS,
   AUTO_TOOLS,
+  CONFLICT_LEVELS,
   DEFAULT_HALF_LIFE,
   ENTITY_TYPES,
   EXECUTOR_TOOLS,
@@ -52,6 +53,13 @@ describe("实体 / 关系常量（schema.md）", () => {
   it("分类常量：plot_edge 与伏笔三关系", () => {
     expect(PLOT_EDGE_TYPE).toBe("plot_edge");
     expect(HOOK_RELATION_TYPES).toEqual(["plants", "advances", "resolves"]);
+  });
+});
+
+describe("大纲节点常量（决策 23 麦基字段集）", () => {
+  it("CONFLICT_LEVELS 为麦基冲突三层次（inner/personal/extra_personal）", () => {
+    expect(CONFLICT_LEVELS).toEqual(["inner", "personal", "extra_personal"]);
+    expect(CONFLICT_LEVELS).toHaveLength(3);
   });
 });
 

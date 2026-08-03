@@ -142,6 +142,96 @@ describe("updateOutlineNodeInfo（PUT /outline/:nodeId）", () => {
   });
 });
 
+describe("节点 data（决策 23，麦基字段集）", () => {
+  it("创建带 data：scene 全字段 + volume/chapter 引用字段，落盘可读（读写透传）", () => {
+    const vol = createOutlineNode(dir, {
+      type: "volume",
+      title: "第一卷",
+      parentId: "root",
+      data: { climax_scene: "sc-12", inciting_scene: "sc-3" },
+      updatedAt: T0,
+    });
+    const ch = createOutlineNode(dir, {
+      type: "chapter",
+      title: "第一章",
+      parentId: vol.id,
+      data: { reversal: "张三决定叛出师门", climax_scene: "sc-5" },
+      updatedAt: T0,
+    });
+    const sc = createOutlineNode(dir, {
+      type: "scene",
+      title: "灵根测试失败",
+      parentId: ch.id,
+      data: { goal: "确认灵根品质", conflict_levels: ["inner", "personal"], value_from: "希望", value_to: "绝望" },
+      updatedAt: T0,
+    });
+
+    // 整树读回：三层 data 均原样透传（findOutlineNode 与 readOutlineFile 同一数据源）
+    const tree = readOutlineFile(dir);
+    expect(findOutlineNode(tree, vol.id)?.data).toEqual({ climax_scene: "sc-12", inciting_scene: "sc-3" });
+    expect(findOutlineNode(tree, ch.id)?.data).toEqual({ reversal: "张三决定叛出师门", climax_scene: "sc-5" });
+    expect(findOutlineNode(tree, sc.id)?.data).toEqual({
+      goal: "确认灵根品质",
+      conflict_levels: ["inner", "personal"],
+      value_from: "希望",
+      value_to: "绝望",
+    });
+  });
+
+  it("不传 data 创建：节点无 data 字段（默认省略，schema.md 契约）", () => {
+    const vol = createOutlineNode(dir, { type: "volume", title: "卷", parentId: "root", updatedAt: T0 });
+    expect(findOutlineNode(readOutlineFile(dir), vol.id)?.data).toBeUndefined();
+  });
+
+  it("更新 data 部分合并：未传字段保留（与实体 updateEntity 浅合并同语义）", () => {
+    const vol = createOutlineNode(dir, {
+      type: "volume",
+      title: "第一卷",
+      parentId: "root",
+      data: { climax_scene: "sc-12", inciting_scene: "sc-3" },
+      updatedAt: T0,
+    });
+    // 浅合并：仅合并传入字段（climax_scene 替换），未传字段（inciting_scene）保留
+    updateOutlineNodeInfo(dir, vol.id, { data: { climax_scene: "sc-99" } }, T1);
+    expect(readOutlineFile(dir).children[0].data).toEqual({ climax_scene: "sc-99", inciting_scene: "sc-3" });
+    // 节点原先无 data 时：仅写入传入字段
+    const ch = createOutlineNode(dir, { type: "chapter", title: "章", parentId: vol.id, updatedAt: T0 });
+    updateOutlineNodeInfo(dir, ch.id, { data: { reversal: "反转" } }, T1);
+    expect(findOutlineNode(readOutlineFile(dir), ch.id)?.data).toEqual({ reversal: "反转" });
+  });
+
+  it("PUT { data: {} } 空对象：原有 data 保留（no-op）；原无 data 节点落盘 data: {}（与 updateEntity 浅合并语义一致，有意为之）", () => {
+    const vol = createOutlineNode(dir, {
+      type: "volume",
+      title: "第一卷",
+      parentId: "root",
+      data: { climax_scene: "sc-12", inciting_scene: "sc-3" },
+      updatedAt: T0,
+    });
+    // 有 data 节点：空对象浅合并（{ ...existing, ...{} }）no-op，字段全保留
+    updateOutlineNodeInfo(dir, vol.id, { data: {} }, T1);
+    expect(readOutlineFile(dir).children[0].data).toEqual({ climax_scene: "sc-12", inciting_scene: "sc-3" });
+    // 原无 data 节点：浅合并展开（{ ...(data ?? {}), ...{} } = {}）并落盘——
+    // data 键从省略变为空对象，与 updateEntity 的 data 浅合并语义一致，有意为之
+    // （详情页保存表单传空 data 时行为可预期，不依赖 JSON.stringify 省略 undefined）
+    const ch = createOutlineNode(dir, { type: "chapter", title: "章", parentId: vol.id, updatedAt: T0 });
+    expect(findOutlineNode(readOutlineFile(dir), ch.id)?.data).toBeUndefined(); // 前置：创建时无 data 键
+    updateOutlineNodeInfo(dir, ch.id, { data: {} }, T1);
+    expect(findOutlineNode(readOutlineFile(dir), ch.id)?.data).toEqual({});
+  });
+
+  it("data 变更 touch updated_at（决策 19 版本戳）", () => {
+    const vol = createOutlineNode(dir, { type: "volume", title: "卷", parentId: "root", updatedAt: T0 });
+    updateOutlineNodeInfo(dir, vol.id, { data: { climax_scene: "sc-1" } }, T1);
+    const node = readOutlineFile(dir).children[0];
+    expect(node.data).toEqual({ climax_scene: "sc-1" });
+    expect(node.updated_at).toBe(T1);
+    // 未传 data 的更新不改动既有 data
+    updateOutlineNodeInfo(dir, vol.id, { title: "新名" }, T1);
+    expect(readOutlineFile(dir).children[0].data).toEqual({ climax_scene: "sc-1" });
+  });
+});
+
 describe("moveOutlineNode（PUT /outline/:nodeId/move）", () => {
   it("同父重排：order 生效，返回 previousParentId === newParentId", () => {
     seedTree();

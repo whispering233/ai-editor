@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ERROR_CODES,
+  OUTLINE_NODE_DATA_SCHEMAS,
   apiErrorSchema,
   chatSendReqSchema,
   deltaChangeSchema,
@@ -17,7 +18,9 @@ import {
   errorCodeSchema,
   outlineCreateReqSchema,
   outlineGetQuerySchema,
+  outlineNodeSchema,
   outlineTreeSchema,
+  outlineUpdateReqSchema,
   projectConfigSchema,
   projectListResSchema,
   relationCreateReqSchema,
@@ -272,6 +275,39 @@ describe("outline 端点", () => {
     expect(outlineGetQuerySchema.safeParse({ with_metadata: "yes" }).success).toBe(false);
   });
 
+  it("创建/更新：data 为宽松 record 可选字段（决策 23，精校验在服务端路由层）", () => {
+    const req = outlineCreateReqSchema.parse({
+      type: "scene",
+      title: "灵根测试",
+      parent_id: "ch-1",
+      data: { goal: "确认灵根品质", conflict_levels: ["inner", "personal"] },
+    });
+    expect(req.data).toEqual({ goal: "确认灵根品质", conflict_levels: ["inner", "personal"] });
+    // 更新：data 可选（部分合并语义由服务端保证）
+    expect(
+      outlineUpdateReqSchema.parse({ data: { goal: "新目标" } }).data,
+    ).toEqual({ goal: "新目标" });
+    // 不传 data 合法
+    expect(outlineUpdateReqSchema.safeParse({ title: "x" }).success).toBe(true);
+  });
+
+  it("响应节点 schema：data 可选且原样透传（schema.md 示例）", () => {
+    // outlineNodeSchema 为 lazy 递归 schema（ZodTypeAny），parse 结果用 safeParse + 断言收窄
+    const parsed = outlineNodeSchema.safeParse({
+      id: "sc-1",
+      type: "scene",
+      title: "灵根测试失败",
+      updatedAt: "2026-08-01T10:00:00Z",
+      data: { goal: "确认灵根品质", value_from: "希望", value_to: "绝望" },
+    });
+    expect(parsed.success).toBe(true);
+    expect((parsed.data as { data?: Record<string, unknown> }).data).toEqual({
+      goal: "确认灵根品质",
+      value_from: "希望",
+      value_to: "绝望",
+    });
+  });
+
   it("整树响应：schema.md 三层示例 parse 通过（递归 children）", () => {
     const tree = outlineTreeSchema.parse({
       id: "root",
@@ -303,6 +339,57 @@ describe("outline 端点", () => {
       schemaVersion: 1,
       children: [{ id: "vol-1", type: "volume", children: [{ id: "ch-1", type: "chapter", children: [{ id: "sc-1", type: "scene", title: "灵根测试失败" }] }] }],
     });
+  });
+});
+
+describe("OUTLINE_NODE_DATA_SCHEMAS（决策 23，麦基字段集，schema.md outline.json 节）", () => {
+  it("scene：麦基字段集全字段通过（goal/conflict_levels/value_from/value_to）", () => {
+    const parsed = OUTLINE_NODE_DATA_SCHEMAS.scene.parse({
+      goal: "确认灵根品质",
+      conflict_levels: ["inner", "personal", "extra_personal"],
+      value_from: "希望",
+      value_to: "绝望",
+    });
+    expect(parsed).toEqual({
+      goal: "确认灵根品质",
+      conflict_levels: ["inner", "personal", "extra_personal"],
+      value_from: "希望",
+      value_to: "绝望",
+    });
+  });
+
+  it("scene：conflict_levels 非法枚举 / goal 超 1000 字符拒绝", () => {
+    expect(OUTLINE_NODE_DATA_SCHEMAS.scene.safeParse({ conflict_levels: ["social"] }).success).toBe(false);
+    expect(OUTLINE_NODE_DATA_SCHEMAS.scene.safeParse({ goal: "a".repeat(1001) }).success).toBe(false);
+    expect(OUTLINE_NODE_DATA_SCHEMAS.scene.safeParse({ value_from: "a".repeat(201) }).success).toBe(false);
+  });
+
+  it("scene：value_to 超 200 字符拒绝（与 value_from 同限，麦基「收场价值」）", () => {
+    expect(OUTLINE_NODE_DATA_SCHEMAS.scene.safeParse({ value_to: "a".repeat(201) }).success).toBe(false);
+    // 边界 200 合法
+    expect(OUTLINE_NODE_DATA_SCHEMAS.scene.parse({ value_to: "a".repeat(200) }).value_to).toHaveLength(200);
+  });
+
+  it("chapter：reversal/climax_scene 通过；reversal 超 1000 拒绝；引用字段仅类型校验（宽松，决策 23）", () => {
+    expect(
+      OUTLINE_NODE_DATA_SCHEMAS.chapter.parse({ reversal: "张三决定叛出师门", climax_scene: "sc-5" }),
+    ).toEqual({ reversal: "张三决定叛出师门", climax_scene: "sc-5" });
+    expect(OUTLINE_NODE_DATA_SCHEMAS.chapter.safeParse({ reversal: "a".repeat(1001) }).success).toBe(false);
+    // 引用字段指向任意场景 id 均通过（MVP 不校验引用范围）；非字符串拒绝
+    expect(OUTLINE_NODE_DATA_SCHEMAS.chapter.safeParse({ climax_scene: "sc-999" }).success).toBe(true);
+    expect(OUTLINE_NODE_DATA_SCHEMAS.chapter.safeParse({ climax_scene: 42 }).success).toBe(false);
+  });
+
+  it("volume：climax_scene/inciting_scene 通过；非字符串引用拒绝", () => {
+    expect(
+      OUTLINE_NODE_DATA_SCHEMAS.volume.parse({ climax_scene: "sc-12", inciting_scene: "sc-3" }),
+    ).toEqual({ climax_scene: "sc-12", inciting_scene: "sc-3" });
+    expect(OUTLINE_NODE_DATA_SCHEMAS.volume.safeParse({ inciting_scene: 7 }).success).toBe(false);
+  });
+
+  it("宽松语义与 ENTITY_DATA_SCHEMAS 一致：未知字段保留透传（.passthrough()）", () => {
+    const parsed = OUTLINE_NODE_DATA_SCHEMAS.scene.parse({ goal: "x", custom_field: { a: 1 } });
+    expect(parsed).toEqual({ goal: "x", custom_field: { a: 1 } });
   });
 });
 

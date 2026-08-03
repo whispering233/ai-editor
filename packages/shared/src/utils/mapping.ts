@@ -103,6 +103,7 @@ function mapFileVolumeToVolume(file: OutlineFileVolume): OutlineVolume {
     type: "volume",
     title: file.title,
     summary: file.summary,
+    data: file.data, // 嵌套 data 原样透传（决策 23，不做递归 camelCase）
     updatedAt: file.updated_at,
     deleted: file.deleted,
     deletedAt: file.deleted_at,
@@ -117,6 +118,7 @@ function mapFileChapterToChapter(file: OutlineFileChapter): OutlineChapter {
     type: "chapter",
     title: file.title,
     summary: file.summary,
+    data: file.data, // 嵌套 data 原样透传（决策 23）
     updatedAt: file.updated_at,
     deleted: file.deleted,
     deletedAt: file.deleted_at,
@@ -131,6 +133,7 @@ function mapFileSceneToScene(file: OutlineFileScene): OutlineScene {
     type: "scene",
     title: file.title,
     summary: file.summary,
+    data: file.data, // 嵌套 data 原样透传（决策 23）
     updatedAt: file.updated_at,
     deleted: file.deleted,
     deletedAt: file.deleted_at,
@@ -167,6 +170,7 @@ function mapVolumeToFileVolume(node: OutlineVolume): OutlineFileVolume {
     type: "volume",
     title: node.title,
     summary: node.summary,
+    data: node.data, // 嵌套 data 原样透传（决策 23）
     updated_at: node.updatedAt,
     deleted: node.deleted,
     deleted_at: node.deletedAt,
@@ -181,6 +185,7 @@ function mapChapterToFileChapter(node: OutlineChapter): OutlineFileChapter {
     type: "chapter",
     title: node.title,
     summary: node.summary,
+    data: node.data, // 嵌套 data 原样透传（决策 23）
     updated_at: node.updatedAt,
     deleted: node.deleted,
     deleted_at: node.deletedAt,
@@ -195,6 +200,7 @@ function mapSceneToFileScene(node: OutlineScene): OutlineFileScene {
     type: "scene",
     title: node.title,
     summary: node.summary,
+    data: node.data, // 嵌套 data 原样透传（决策 23）
     updated_at: node.updatedAt,
     deleted: node.deleted,
     deleted_at: node.deletedAt,
