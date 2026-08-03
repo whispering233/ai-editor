@@ -4,6 +4,7 @@
 import { useState, type ReactNode } from "react";
 import type { Route } from "../hooks/use-route";
 import { ChatPanel } from "./chat/ChatPanel";
+import { FeedbackHost } from "./feedback/FeedbackHost";
 import { MainPanel } from "./main-panel/MainPanel";
 import { Sidebar } from "./sidebar/Sidebar";
 
@@ -18,6 +19,7 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
         {children}
       </MainPanel>
       <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />
+      <FeedbackHost />
     </div>
   );
 }
