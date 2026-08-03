@@ -380,3 +380,19 @@ UI 布局从「顶栏 + 侧栏 + 内容区」重构为**三栏工作台**（借�
 - **主题系统**：shadcn 官方 oklch tokens（`@theme inline` + `@custom-variant dark`），双主题（浅：暖羊皮纸+牛血红+金箔 / 深：蓝黑曜石+琥珀烛光），手动切换 + localStorage 持久化；字体用系统字体栈（不下载 web 字体，本地优先离线可用）。
 
 **为什么**：创作工具的核心工作流是「边写边问 AI」——聊天常驻右栏消除页间跳转摩擦（原 layout.md 的「带上下文进聊天」需跳 `#/chat`）；会话归属项目符合「一项目一创作语境」的心智模型（inkos 书→会话树已验证）；主题 tokens 标准化是 shadcn/ui 组件的先决条件（原自研 zinc 硬编码无法支撑后续组件库）。
+
+## 决策 23：大纲节点结构化信息（麦基《故事》字段集，2026-08 新增）
+
+大纲节点长期只有 title/summary 自由文本（S2），作者无法挂载结构化信息、AI 无法感知节点叙事功能（用户反馈 2026-08：节点"只有标题可编辑，缺失详情"）。经设计讨论，基于罗伯特·麦基《故事》的结构理论定义三层节点的结构化字段（载体、字段集、联动语义统一如下）：
+
+- **载体**：outline.json 节点新增 `data` 字段（`Record<string, unknown>`），与实体 data 同构；按层级 schema（`OUTLINE_NODE_DATA_SCHEMAS`：volume/chapter/scene）校验。关联（人物/地点/伏笔）仍走 `relation_records`，不在 data 中重复建模。
+- **字段集（麦基依据，三层各异）**：
+  - 场景（= 麦基 Scene）：`goal` 场景目标/欲望（文本）；`conflict_levels` 冲突层次多选（`inner`/`personal`/`extra_personal`，麦基冲突三层次）；`value_from`/`value_to` 开场/收场价值（双文本——麦基场景定义核心「No scene that doesn't turn」）
+  - 章（≈ 麦基 Sequence，推断映射）：`reversal` 章末反转（单文本，可选）；`climax_scene` 章高潮场景引用（可选）
+  - 卷（≈ 麦基 Act，推断映射）：`climax_scene` 幕高潮场景引用（可选）；`inciting_scene` 激励事件落位（可选）
+  - 麦基体系中无「章/卷」概念，章=Sequence、卷=Act 为推断映射（librarian 查证原书原文，2026-08）
+- **引用字段宽松校验**：`climax_scene`/`inciting_scene` 引用任意场景节点 id，MVP 不校验引用范围（UI 提示建议本层内），详情页可跳转。
+- **编辑不联动 Delta**：详情页编辑节点 data 直接保存，不自动生成 Delta（保持决策 9 修订「手动编辑 data 不产生 Delta 属正常行为」）；变更记录由「+ 新建变更」显式创建（S5.6 入口）。
+- **主控思想 MVP 不做**：Controlling Idea（价值+原因）不进 project.json，后续迭代评估（用户裁决 2026-08）。
+
+**为什么**：作者需要记录「这个场景要达成什么、冲突在哪、价值如何转向」——这是 AI 顾问（S6 分析工具）做小说理论层面分析的输入基础；自由文本 summary 信息密度低且无结构，AI 无法程序化感知节点叙事功能；字段集宁少勿多（每层 1-3 字段），避免过度设计。

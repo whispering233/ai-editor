@@ -139,12 +139,16 @@ CREATE INDEX idx_chat_session ON chat_messages(session_id, created_at);
     {
       "id": "vol-1", "type": "volume", "title": "第一卷",
       "updated_at": "2026-08-01T10:00:00Z",
+      "data": { "climax_scene": "sc-12", "inciting_scene": "sc-3" },
       "children": [
         { "id": "ch-1", "type": "chapter", "title": "第一章",
           "updated_at": "2026-08-01T10:00:00Z",
+          "data": { "reversal": "张三决定叛出师门", "climax_scene": "sc-5" },
           "children": [
             { "id": "sc-1", "type": "scene", "title": "灵根测试失败",
-              "updated_at": "2026-08-01T10:00:00Z" }
+              "updated_at": "2026-08-01T10:00:00Z",
+              "data": { "goal": "确认灵根品质", "conflict_levels": ["inner", "personal"],
+                        "value_from": "希望", "value_to": "绝望" } }
           ]
         }
       ]
@@ -155,7 +159,19 @@ CREATE INDEX idx_chat_session ON chat_messages(session_id, created_at);
 
 **理由**：大纲的树形结构与实体关系表对存储格式的要求天然不同——大纲需要整树读写、拖拽重排，JSON 文件更合适。
 
-**节点版本戳（决策 19）**：每个节点携带 `updated_at`（ISO 8601），节点任何字段变更（title/summary/children 重排）时由服务端在原子写流程中统一更新，支撑决策 14 的提案快照比对。
+**节点版本戳（决策 19）**：每个节点携带 `updated_at`（ISO 8601），节点任何字段变更（title/summary/data/children 重排）时由服务端在原子写流程中统一更新，支撑决策 14 的提案快照比对。
+
+**节点结构化信息 `data`（决策 23，2026-08 新增）**：可选 `data` 字段（`Record<string, unknown>`，默认省略），按层级 schema（`OUTLINE_NODE_DATA_SCHEMAS`）校验，字段集基于麦基《故事》理论：
+
+| 层级 | data 字段 | 说明 |
+|------|-----------|------|
+| `scene` | `goal`（文本）、`conflict_levels`（`inner`/`personal`/`extra_personal` 多选）、`value_from`/`value_to`（开场/收场价值双文本） | 场景目标/欲望、冲突三层次、价值转向（麦基场景定义） |
+| `chapter` | `reversal`（单文本，可选）、`climax_scene`（场景节点 id 引用，可选） | 章末反转、章高潮场景 |
+| `volume` | `climax_scene`（场景节点 id 引用，可选）、`inciting_scene`（激励事件落位，可选） | 幕高潮、激励事件 |
+
+- 引用字段宽松校验：`climax_scene`/`inciting_scene` 引用任意场景节点 id，MVP 不校验引用范围（UI 提示建议本层内），详情页可跳转。
+- 编辑节点 data **不自动生成 Delta**（决策 9 修订语义不变）；变更记录由「+ 新建变更」显式创建（S5.6）。
+- 关联（人物/地点/伏笔）一律走 `relation_records`，不在 data 中重复建模。
 
 **顶层 `schema_version`（决策 13 修订）**：与 project.json 同步写入，用于 outline.json 文件格式演进判定；删库重建时同步重置。
 

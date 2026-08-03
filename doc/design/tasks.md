@@ -430,6 +430,28 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - 验证：手工走查（刷新后布局保持）
 - 回滚：单 commit
 
+### 切片 12：大纲节点详情与结构化信息（2026-08 用户反馈，决策 23）
+
+> 依据：`decisions.md` 决策 23（麦基《故事》字段集——场景 goal/conflict_levels/value_from/value_to、章 reversal/climax_scene、卷 climax_scene/inciting_scene；载体 = outline.json 节点 data，与实体 data 同构）；`schema.md` outline.json 契约；`endpoints.md` 大纲端点（GET 返回 data、POST/PUT 支持 data）；`doc/ui/pages/outline.md` 详情页文档。验收：大纲节点详情页可编辑标题/摘要/结构化 data、查看变更记录与相关实体；变更记录可在详情页创建。
+
+**S12.1 节点 data 后端** 
+- 范围：shared——`OUTLINE_NODE_DATA_SCHEMAS`（volume/chapter/scene 三层 zod schema，决策 23 字段集；scene：goal/conflict_levels/value_from/value_to；chapter：reversal/climax_scene；volume：climax_scene/inciting_scene）+ `OutlineFileNode`/`OutlineNode` 类型加 `data?` + 大纲端点 schema 更新（POST/PUT 支持 data、GET 返回 data）；db——outline 读写层 data 透传 + outline-ops create/update 支持 data（部分合并 + touch updated_at）；server——outline 路由（POST/PUT data 按层级 schema 校验 → 400 VALIDATION_ERROR）
+- 依赖：S2.1、决策 23
+- 验证：vitest 断言 data 透传/校验/部分合并（shared/db/server 各补测试）
+- 回滚：单 commit
+
+**S12.2 节点详情页**
+- 范围：`#/outline/:nodeId` 中栏二级路由（仿实体详情）；面包屑 + 类型徽标 + 元信息；基本信息（title/summary 表单编辑）；data 字段表单（按层级渲染，引用字段用场景节点选择器）；变更记录列表（自 S5.4 行内面板迁入）；相关实体（relations-view 复用，可建立关系）；伏笔标记占位（S9 后）；大纲页 ⋯ 菜单「变更记录」→「详情」+ 行内面板移除；layout.md 路由表 + pages/outline.md 更新
+- 依赖：S12.1、S5.3（delta 端点）、U8（relations-view）
+- 验证：typecheck + lint + client test + 手工走查（data 编辑/引用跳转/变更记录展示）
+- 回滚：单 commit
+
+**S12.3 变更记录创建入口**
+- 范围：详情页「+ 新建变更」表单——目标实体（类型下拉 + 搜索选择，含大纲节点）、字段选择（按目标类型 schema 下拉 + 自定义兜底）、op（set/update/add/remove，数组字段推断 add/remove）、值输入（**update 的 from 自动取实体当前 data 值**——决策 9 修订 conflicts 机制兜底断裂）、描述必填 → POST /delta → toast + 列表刷新
+- 依赖：S12.2、S5.3
+- 验证：typecheck + lint + client test + 手工走查创建流程
+- 回滚：单 commit
+
 ---
 
 ## 阶段 U：UI 工作台重构（三栏布局，2026-08，决策 22）

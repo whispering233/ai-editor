@@ -537,6 +537,7 @@ nodeId: string;
   type: "volume" | "chapter" | "scene";
   title: string;
   summary?: string;              // 可选描述
+  data?: Record<string, unknown>; // 节点结构化信息（决策 23，麦基字段集；无 data 时省略）
   children?: OutlineNode[];      // 卷下有章，章下有场景
   updatedAt: string;             // 节点版本戳（决策 19，提案快照比对）
   metadata?: {                   // 仅 with_metadata=true 时返回
@@ -546,6 +547,8 @@ nodeId: string;
   };
 }
 ```
+
+> **节点 `data`（决策 23，2026-08 新增）**：按层级 schema（`OUTLINE_NODE_DATA_SCHEMAS`，shared 单一来源）校验——scene：`goal`/`conflict_levels`/`value_from`/`value_to`；chapter：`reversal`/`climax_scene`；volume：`climax_scene`/`inciting_scene`。引用字段（`climax_scene`/`inciting_scene`）宽松校验（任意场景节点 id），MVP 不校验引用范围。编辑 data 不自动生成 Delta（决策 9 修订语义）。
 
 ### POST /api/v1/outline
 
@@ -561,6 +564,7 @@ nodeId: string;
                                  // chapter → 挂 volume 或 root
                                  // scene → 必须挂 chapter
   summary?: string;
+  data?: Record<string, unknown>; // 可选，节点结构化信息（决策 23，按层级 schema 校验）
 }
 
 // Res: 201
@@ -588,6 +592,7 @@ nodeId: string;
 {
   title?: string;
   summary?: string;
+  data?: Record<string, unknown>; // 部分合并（决策 23；按层级 schema 校验，失败 400 VALIDATION_ERROR）
 }
 
 // Res: 200
