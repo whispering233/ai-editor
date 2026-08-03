@@ -10,8 +10,8 @@
 - 大纲（选节点）：`GET /api/v1/outline`；当前位置：`GET /project/config`
 - 操作：
   - 新建：`POST /entity/hook` + `POST /relation`（plants）
-  - 推进/回收：`POST /delta`（status 变化）+ `POST /relation`（advances/resolves），一次提交（等价 executor 复合写，tools.md）
-  - 废弃：`POST /delta`（status=abandoned）
+  - 推进/回收：`POST /delta`（status 变化）+ `POST /relation`（advances/resolves）+ **`PUT /entity`（同步 data.status——executor 复合写 S6.7「状态同步」语义的 REST 逼近；REST 无事务，失败重试经幂等收敛：relation 409 放行 + status 同步幂等 + delta from 与陈旧值匹配）**
+  - 废弃：`POST /delta`（status=abandoned）+ `PUT /entity`（同步 data.status；无关系写入）
   - 软删：`DELETE /entity/hook/:id`
 
 ## 布局线框
@@ -57,8 +57,8 @@
 
 所有状态变更操作走「提案式确认」交互——与 AI 提案体验一致：先展示将写入的内容，确认后才执行。
 
-- **推进**：选择大纲节点（默认当前位置节点）+ 描述 → 面板展示「将写入：status → progressing + advances 关系」→ 确认 → `POST /delta` + `POST /relation` 一次提交。成功 toast「已推进」。
-- **回收**：选择节点 + 描述 → 面板展示「status → resolved + resolves 关系」；若该伏笔存在 `depends_on` 依赖者（别人依赖它），面板额外提示「有 N 个伏笔依赖此伏笔」。
+- **推进**：选择大纲节点（默认当前位置节点）+ 描述 → 面板展示「将写入：status → progressing + advances 关系 + 同步 status」→ 确认 → `POST /delta` + `POST /relation` + `PUT /entity`（status 同步）顺序提交（REST 无事务；任一步失败 → 面板内联错误，重试经幂等收敛）。成功 toast「已推进」。
+- **回收**：选择节点 + 描述 → 面板展示「status → resolved + resolves 关系 + 同步 status」；若该伏笔存在 `depends_on` 依赖者（别人依赖它），面板额外提示「有 N 个伏笔依赖此伏笔」。
 - **废弃**：仅描述 → 面板展示「status → abandoned」。
 
 ### 行操作
