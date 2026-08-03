@@ -58,9 +58,14 @@ pnpm start:test-project
 # 验证
 pnpm typecheck && pnpm lint && pnpm -r test
 
-# 调试（服务端对话链路 [chat] 事件日志 + hono 请求日志，默认关闭，显式开关防刷屏）
-AI_EDITOR_DEBUG=1 pnpm dev
-AI_EDITOR_DEBUG=1 pnpm start:test-project   # 生产态同样可用
+# 调试（服务端日志，默认关闭，显式开关防刷屏）
+# 方式一：项目配置文件（推荐，细粒度类别）——创作根/.ai-editor/config.json：
+#   { "debug": { "enabled": true, "categories": ["request", "usage"] } }   # 只显示请求和 tokens 统计
+#   五类别：chat（agent 事件）/ request（LLM 完整 prompt）/ stream（原始 SSE chunk）/
+#          usage（tokens 统计）/ http（hono 请求日志）；categories 缺失 = 全部类别；
+#          enabled=false 或缺失 = 全关；文件不存在/非法 = 回退方式二
+AI_EDITOR_DEBUG=1 pnpm dev                              # 方式二：env 布尔（兼容，= 全类别开启）
+AI_EDITOR_DEBUG=1 pnpm start:test-project               # 生产态同样可用；创作根 = test-project/
 ```
 
 ## 当前能力（2026-08）
@@ -70,7 +75,7 @@ AI_EDITOR_DEBUG=1 pnpm start:test-project   # 生产态同样可用
 - **实体与关系**：四类实体（人物/设定/地点/伏笔）CRUD、k 跳关系遍历、Delta 变更追踪与状态计算（computeState）
 - **回收站**：软删还原 / 彻底清除 + 启动一致性校验兜底
 - **AI 对话链路（S6-S7 已就绪）**：DeepSeek SSE 流式客户端、44 个工具（查询 8 / 分析 5 / 伏笔 5 / 提案 14 / 执行 12）、agent 主循环（8 轮 / 120s / token 三重保险）、提案确认流程、chat SSE 路由（心跳 15-30s / 断连检测 / 全链路取消）——配置 key 后右栏 ChatPanel 可直接对话
-- **调试**：`AI_EDITOR_DEBUG=1` 开启 `[chat]` 事件日志（tool_call/proposal/done 等截断摘要）+ 请求日志
+- **调试**：创作根 `.ai-editor/config.json` 细粒度五类别（chat/request/stream/usage/http，见上文示例），`AI_EDITOR_DEBUG=1` env 兼容回退（= 全类别开启）
 
 ## 打包安装（借鉴 inkos 发布机制）
 

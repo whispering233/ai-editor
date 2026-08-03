@@ -684,4 +684,32 @@ describe("[llm] stream 调试日志（AI_EDITOR_DEBUG=1）", () => {
     await runStream(["data: " + SSE_DONE + "\n\n"]);
     expect(spy).not.toHaveBeenCalled();
   });
+
+  it("debugStream 选项开但 env 关 → 打（选项优先，server 按 stream 类别显式传入）", async () => {
+    delete process.env.AI_EDITOR_DEBUG; // env 关
+    const spy = vi.spyOn(console, "debug").mockImplementation(() => {});
+    const delta = '{"choices":[{"index":0,"delta":{"content":"好"},"finish_reason":null}]}';
+    await chatStream({
+      apiKey: "k",
+      model: "m",
+      messages: [{ role: "user", content: "hi" }],
+      fetchImpl: async () => sseResponse(["data: " + delta + "\n\n", "data: " + SSE_DONE + "\n\n"]),
+      debugStream: true, // 选项开
+    });
+    const lines = spy.mock.calls.map((c) => c.map(String).join(" "));
+    expect(lines).toContain('[llm] stream #1 delta={content="好"} finish=null');
+  });
+
+  it("debugStream 选项关但 env 开 → 不打（显式 false 压过 env，保证类别隔离语义）", async () => {
+    process.env.AI_EDITOR_DEBUG = "1"; // env 开
+    const spy = vi.spyOn(console, "debug").mockImplementation(() => {});
+    await chatStream({
+      apiKey: "k",
+      model: "m",
+      messages: [{ role: "user", content: "hi" }],
+      fetchImpl: async () => sseResponse(["data: " + SSE_DONE + "\n\n"]),
+      debugStream: false, // 选项关
+    });
+    expect(spy).not.toHaveBeenCalled();
+  });
 });

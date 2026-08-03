@@ -21,7 +21,7 @@ import { logger } from "hono/logger";
 import { createAdaptorServer, type ServerType } from "@hono/node-server";
 import type { AddressInfo } from "node:net";
 import { errorHandler, fail, ok } from "./middleware/error.js";
-import { isDebugEnabled } from "./debug.js";
+import { initDebugConfig, isCategoryEnabled } from "./debug.js";
 import { chatRoutes } from "./routes/chat.js";
 import { deltaRoutes } from "./routes/delta.js";
 import { entityRoutes } from "./routes/entity.js";
@@ -143,6 +143,11 @@ export async function startServer(projectRoot: string, options: StartServerOptio
   // 及其下游消费方全部使用归一化值；create/open 请求体 path 仍要求绝对（安全校验不变）。
   const root = resolve(projectRoot);
 
+  // 调试配置初始化（**启动读一次**：<创作根>/.ai-editor/config.json——配置文件优先，细粒度
+  // 五类别 chat/request/stream/usage/http；文件不存在/非法 JSON/结构不符 → 回退 AI_EDITOR_DEBUG
+  // env（= 全类别开启）；不阻断启动。运行中改配置文件不生效——热加载 YAGNI）
+  initDebugConfig(root);
+
   // 检测语义（设计缺陷修复）：不再无条件初始化——待命态下 GET /project/config → 409
   // NO_PROJECT_OPEN，前端引导「新建/打开项目」（client store loadConfig 已处理该错误码）
   const project = detectProject(root);
@@ -162,10 +167,11 @@ export async function startServer(projectRoot: string, options: StartServerOptio
 
   // 中间件装配顺序：错误兜底 →（调试）请求日志 → 来源校验 → 项目上下文注入
   app.onError(errorHandler());
-  // 请求日志（hono 内置中间件，零新依赖）：**仅 AI_EDITOR_DEBUG=1 时挂载**——测试与日常
-  // 启动默认输出干净（hono logger 逐请求打印会刷屏）；debug 模式下每个请求打一行
-  // （方法 路径 状态码 耗时，hono logger 内置格式，console.log stdout）
-  if (isDebugEnabled()) {
+  // 请求日志（hono 内置中间件，零新依赖）：**仅 http 类别开启时挂载**——测试与日常
+  // 启动默认输出干净（hono logger 逐请求打印会刷屏）；调试配置 categories 含 "http"（或
+  // env 回退全开）时每个请求打一行（方法 路径 状态码 耗时，hono logger 内置格式，
+  // console.log stdout）
+  if (isCategoryEnabled("http")) {
     app.use("*", logger());
   }
   app.use("*", originCheckMiddleware());

@@ -63,7 +63,7 @@ import { TOOL_PERMISSION, generateRuntimeId } from "@ai-editor/shared";
 import { chatMessagesResSchema, chatSendReqSchema, chatSessionsResSchema } from "@ai-editor/shared/schemas";
 import { HttpError, ok } from "../middleware/error.js";
 import { requireCurrentProject, type ProjectContext } from "../middleware/project.js";
-import { debugLog, isDebugEnabled } from "../debug.js";
+import { debugLog, isCategoryEnabled } from "../debug.js";
 import { DEFAULT_MODEL, effectiveApiKey, getUserConfig } from "./settings.js";
 
 // ============ 常量 ============
@@ -114,22 +114,30 @@ export function toLLMToolDefinitions(defs: readonly ToolDefinition[]): LLMToolDe
  * 累积文本与收集工具调用；失败按 chatStream 契约 resolve 出 { ok:false, ... } 不 throw；
  * signal 由 runAgent 注入 attempt 级独立控制器——超时 abort 与用户取消分离，决策 15）。
  */
-function createRealProduce(apiKey: string, model: string, tools: LLMToolDefinition[]): RunAgentDeps["produce"] {
+function createRealProduce(
+  apiKey: string,
+  model: string,
+  tools: LLMToolDefinition[],
+  debugStream: boolean,
+): RunAgentDeps["produce"] {
   return (messages: LLMMessage[], signal?: AbortSignalLike, onEvent?: Parameters<RunAgentDeps["produce"]>[2]) =>
-    chatStream({ apiKey, model, messages, tools, signal, onEvent });
+    // debugStream 显式传布尔（含 false）——stream 类别关时压过 env，保证配置文件类别隔离语义
+    chatStream({ apiKey, model, messages, tools, signal, onEvent, debugStream });
 }
 
-// ============ [llm] 请求 / usage 调试日志装饰器（AI_EDITOR_DEBUG=1） ============
+// ============ [llm] 请求 / usage 调试日志装饰器（细粒度类别 request / usage） ============
 
 /**
  * [llm] 请求调试日志装饰器：给 produce 包一层（真实路径经
- * `createLLMRequestLogger(createRealProduce(...), { model, tools })` 组装），debug 开启时：
- * - **request 日志**：模型名 + 请求参数 + **完整 messages JSON（不截断——用户核心诉求
- *   「最终组装的 prompt」）** + 工具名列表；每轮每次 attempt 各打一次（含重试）
- * - **usage 日志**：onEvent 转发处捕获 finish 事件，打真实 token 数（需求 3，流内真实 usage）
+ * `createLLMRequestLogger(createRealProduce(...), { model, tools })` 组装），对应类别开启时：
+ * - **request 日志**（类别 request）：模型名 + 请求参数 + **完整 messages JSON（不截断——
+ *   用户核心诉求「最终组装的 prompt」）** + 工具名列表；每轮每次 attempt 各打一次（含重试）
+ * - **usage 日志**（类别 usage）：onEvent 转发处捕获 finish 事件，打真实 token 数
+ *   （需求 3，流内真实 usage）——与 request **分开判定**（categories: ["request","usage"]
+ *   时只显示请求与 tokens 统计）
  * - **敏感红线**：只打印请求体（messages 本身无 key——key 走 fetch header），
  *   绝不打印 apiKey / headers
- * - 关闭（AI_EDITOR_DEBUG ≠ "1"）时**零开销直通**：不包装 onEvent、不拼接字符串
+ * - 两类别全关（request + usage 均未开启）时**零开销直通**：不包装 onEvent、不拼接字符串
  * 独立成装饰器而非塞进 createRealProduce：测试可用 mock produce 直测日志层，
  * 不经真实 DeepSeek 网络调用（与 createChatEventLogger 的「工厂 + 组合」同款模式）。
  * 注：produce 契约（run.ts）不含 maxTokens/temperature（当前无对应配置），如实标注 <未设置>。
@@ -140,21 +148,29 @@ export function createLLMRequestLogger(
 ): RunAgentDeps["produce"] {
   const toolNames = ctx.tools.map((t) => t.name).join(", ");
   return (messages, signal, onEvent) => {
-    if (!isDebugEnabled()) return produce(messages, signal, onEvent); // 关闭：零开销直通
-    debugLog("llm", `request model=${ctx.model} max_tokens=<未设置> temperature=<未设置> tools=[${toolNames}]`);
-    debugLog("llm", `request messages=${JSON.stringify(messages, null, 2)}`); // 完整打印不截断
-    const loggedOnEvent: ((event: LLMStreamEvent) => void) | undefined = onEvent
-      ? (event) => {
-          if (event.type === "finish") {
-            const u = event.usage;
-            debugLog(
-              "llm",
-              `usage prompt_tokens=${u?.prompt_tokens ?? "?"} completion_tokens=${u?.completion_tokens ?? "?"} total=${u?.total_tokens ?? "?"} stop=${event.stopReason}`,
-            );
+    // 两类别全关：零开销直通（不包装 onEvent、不拼接字符串）
+    if (!isCategoryEnabled("request") && !isCategoryEnabled("usage")) {
+      return produce(messages, signal, onEvent);
+    }
+    if (isCategoryEnabled("request")) {
+      debugLog("request", "llm", `request model=${ctx.model} max_tokens=<未设置> temperature=<未设置> tools=[${toolNames}]`);
+      debugLog("request", "llm", `request messages=${JSON.stringify(messages, null, 2)}`); // 完整打印不截断
+    }
+    // usage 类别开启时才需要包装 onEvent（捕获 finish 事件）
+    const loggedOnEvent: ((event: LLMStreamEvent) => void) | undefined =
+      isCategoryEnabled("usage") && onEvent
+        ? (event) => {
+            if (event.type === "finish") {
+              const u = event.usage;
+              debugLog(
+                "usage",
+                "llm",
+                `usage prompt_tokens=${u?.prompt_tokens ?? "?"} completion_tokens=${u?.completion_tokens ?? "?"} total=${u?.total_tokens ?? "?"} stop=${event.stopReason}`,
+              );
+            }
+            onEvent(event); // 原样转发（日志先于事件）
           }
-          onEvent(event); // 原样转发（日志先于事件）
-        }
-      : undefined;
+        : onEvent;
     return produce(messages, signal, loggedOnEvent);
   };
 }
@@ -254,8 +270,9 @@ function debugSummary(value: unknown, max = DEBUG_FIELD_MAX): string {
 }
 
 /**
- * 创建 [chat] 事件调试日志器（对话链路调试，打到服务端终端 stdout/stderr）：
- * - 关闭（AI_EDITOR_DEBUG ≠ "1"）时零开销早退——不做任何字符串拼接（onEvent 高频路径无条件调用）
+ * 创建 [chat] 事件调试日志器（对话链路调试，打到服务端终端 stdout/stderr；类别 chat）：
+ * - 类别未开启（配置文件未列 chat 且 env 关）时零开销早退——不做任何字符串拼接
+ *   （onEvent 高频路径无条件调用）
  * - turn_start → 轮次；tool_call → 工具名 + 参数 JSON 摘要（截断）；tool_result → 工具名 + 结果
  *   摘要（截断）；proposal → proposal_id + type；text → **只打 delta 长度**（流式高频防刷屏）；
  *   done → sessionId + 轮次；error → code + message
@@ -265,29 +282,29 @@ function debugSummary(value: unknown, max = DEBUG_FIELD_MAX): string {
 export function createChatEventLogger(): (event: AgentEvent) => void {
   let round = 0; // 轮次计数器（turn_start 刷新；done 事件附带——AgentEvent.done 无轮次字段）
   return (event: AgentEvent): void => {
-    if (!isDebugEnabled()) return; // 短路由早退：关闭时不产生任何字符串拼接
+    if (!isCategoryEnabled("chat")) return; // 短路由早退：类别未开时不产生任何字符串拼接
     switch (event.type) {
       case "turn_start":
         round = event.round;
-        debugLog("chat", `turn_start round=${event.round}`);
+        debugLog("chat", "chat", `turn_start round=${event.round}`);
         return;
       case "text":
-        debugLog("chat", `text delta=+${event.delta.length} 字符`); // 只打长度不打内容
+        debugLog("chat", "chat", `text delta=+${event.delta.length} 字符`); // 只打长度不打内容
         return;
       case "tool_call":
-        debugLog("chat", `tool_call tool=${event.tool} id=${event.id} args=${debugSummary(event.args)}`);
+        debugLog("chat", "chat", `tool_call tool=${event.tool} id=${event.id} args=${debugSummary(event.args)}`);
         return;
       case "tool_result":
-        debugLog("chat", `tool_result tool=${event.tool} id=${event.id} result=${debugSummary(event.result)}`);
+        debugLog("chat", "chat", `tool_result tool=${event.tool} id=${event.id} result=${debugSummary(event.result)}`);
         return;
       case "proposal":
-        debugLog("chat", `proposal id=${event.proposal.proposal_id} type=${event.proposal.type}`);
+        debugLog("chat", "chat", `proposal id=${event.proposal.proposal_id} type=${event.proposal.type}`);
         return;
       case "done":
-        debugLog("chat", `done session=${event.sessionId} round=${round}`);
+        debugLog("chat", "chat", `done session=${event.sessionId} round=${round}`);
         return;
       case "error":
-        debugLog("chat", `error code=${event.code} message=${event.message} aborted=${event.aborted}`);
+        debugLog("chat", "chat", `error code=${event.code} message=${event.message} aborted=${event.aborted}`);
         return;
     }
   };
@@ -456,10 +473,14 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
         };
 
         // ---- 9. runAgent 接线（S7.3：produce/dispatcher 由本路由组装注入） ----
-        // 真实 produce 外包 [llm] 请求/usage 调试日志装饰器（AI_EDITOR_DEBUG=1；关闭零开销直通）
+        // 真实 produce 外包 [llm] 请求/usage 调试日志装饰器（细粒度类别 request/usage，关闭零开销直通）；
+        // debugStream 按 stream 类别显式传入（false 也传——压过 env，保证类别隔离语义）
         const produce =
           deps.produce ??
-          createLLMRequestLogger(createRealProduce(apiKey, model, tools), { model, tools });
+          createLLMRequestLogger(createRealProduce(apiKey, model, tools, isCategoryEnabled("stream")), {
+            model,
+            tools,
+          });
         // S7.4 真实现：ToolContext { db, outlineDir, projectId } + 同仓提案（S7.5 消费）
         const dispatcher =
           deps.dispatcher ?? createToolDispatcher({ db: project.db, outlineDir: project.root, projectId: project.config.id }, { store });

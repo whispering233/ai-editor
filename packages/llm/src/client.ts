@@ -83,6 +83,12 @@ export interface ChatStreamParams {
   temperature?: number;
   /** 流事件回调：text 增量 / 完整 tool_call / finish（stop_reason+usage）/ error / done */
   onEvent?: (event: LLMStreamEvent) => void;
+  /**
+   * [llm] stream 调试日志开关（需求 2 原始 SSE 流；server 按 isCategoryEnabled("stream") 显式
+   * 传入——**选项优先**：显式 false 可压过 env，保证 server 配置文件的类别隔离语义；
+   * 缺省 undefined 回退本包 env 判定 isLLMDebug()，独立使用场景行为不变）
+   */
+  debugStream?: boolean;
   /** 测试注入：默认取全局 fetch（Node 18+ / 浏览器） */
   fetchImpl?: FetchLike;
 }
@@ -276,9 +282,11 @@ function parseChunk(data: string): LLMStreamChunk | null {
   }
 }
 
-// ============ [llm] stream 调试日志（AI_EDITOR_DEBUG=1，原始 SSE 流） ============
+// ============ [llm] stream 调试日志（AI_EDITOR_DEBUG=1 / debugStream 选项，原始 SSE 流） ============
 // 与 server 的 debug.ts 同开关语义（AI_EDITOR_DEBUG === "1"），但**本包独立判定**——
 // llm 不依赖 server（architecture.md 依赖方向 server → llm），client.ts 内部直接读环境变量。
+// 2026-08 升级：chatStream 新增 debugStream 选项（server 按 stream 类别显式传入，
+// 选项优先、env 回退——server 配置文件的类别隔离语义由此落到本包）。
 // 输出走 console.debug（stderr 通道，与 server [chat]/[llm] 日志同通道，shell 统一过滤）。
 // 需求 2：debug 态查看 DeepSeek 返回的原始 chunk 序列（data 行摘要 + [DONE]）。
 
@@ -373,6 +381,7 @@ export async function chatStream(params: ChatStreamParams): Promise<ChatStreamRe
     maxTokens,
     temperature,
     onEvent,
+    debugStream,
   } = params;
 
   // —— 消费者异常状态（安全 emit 用）：onEvent 抛错 → 转 CONSUMER_ERROR 并终止流 ——
@@ -494,11 +503,14 @@ export async function chatStream(params: ChatStreamParams): Promise<ChatStreamRe
   const state: StreamState = { toolCalls: [], usage: null, finishReason: null };
   let buffer = "";
 
-  // [llm] 原始 SSE data 行逐帧日志（AI_EDITOR_DEBUG=1；关闭时零开销早退——高频路径无条件
-  // 调用，成本控制在本层内部，与 server debug.ts 同模式）
+  // [llm] 原始 SSE data 行逐帧日志（调试开启时打；关闭时零开销早退——高频路径无条件
+  // 调用，成本控制在本层内部，与 server debug.ts 同模式）。
+  // 开关解析：**选项优先**（server 按 stream 类别显式传 true/false——显式 false 压过 env，
+  // 保证配置文件类别隔离语义），缺省回退本包 env 判定（独立使用场景行为不变）
+  const streamLogEnabled = debugStream ?? isLLMDebug();
   let streamSeq = 0;
   const logStreamData = (data: string): void => {
-    if (!isLLMDebug()) return;
+    if (!streamLogEnabled) return;
     streamSeq += 1;
     debugConsole(`[llm] stream ${summarizeStreamData(data, streamSeq)}`);
   };

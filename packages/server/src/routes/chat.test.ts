@@ -8,7 +8,7 @@
 //   断开全链路取消（produce signal abort + 未确认提案作废，决策 16 B2 取舍 b）、
 //   会话重建（session_id 续聊：历史喂回 + 新消息落库 + done 回显）、新建会话 sess_ 前缀、
 //   模型最终失败 error 事件、zod→JSON Schema 转换（32 工具全量 + $schema 剥离）
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -31,6 +31,7 @@ import {
   type ProjectContext,
 } from "../middleware/project.js";
 import { chatRoutes, createChatRoutes, createLLMRequestLogger, toLLMToolDefinitions, zodArgsToJsonSchema } from "./chat.js";
+import { initDebugConfig, isCategoryEnabled } from "../debug.js";
 
 const HOST_HEADERS = { host: "127.0.0.1:3456" };
 
@@ -796,5 +797,88 @@ describe("[llm] 请求/usage 调试日志（AI_EDITOR_DEBUG=1）", () => {
     const produce = createLLMRequestLogger(inner, { model: "m", tools: [] });
     await produce([{ role: "user", content: "hi" }], new AbortController().signal, onEvent);
     expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+// ============ 调试类别隔离（配置文件模式，细粒度开关） ============
+// 覆盖：只开 request 时路由 [chat] 事件日志不打（createChatEventLogger 类别门控）、
+//   request/usage 分开判定（只开 usage → request 不打；只开 request → usage 不打）、
+//   stream 类别经 isCategoryEnabled 判定（env=1 时未列 stream 也不开——配置文件优先）
+// 注：llm client 的 debugStream 选项透传行为（选项开 env 关 → 打等）在 llm 包测试覆盖
+// 状态：本 describe 用临时创作根写 .ai-editor/config.json + initDebugConfig 进入配置模式；
+//   每个用例后 initDebugConfig(undefined) 回 env 模式（防模块状态泄漏到后续用例）
+
+/** 写入调试配置文件（<root>/.ai-editor/config.json；创作根 = tmpRoot） */
+function writeDebugConfig(projectRoot: string, content: unknown): void {
+  const dir = join(projectRoot, ".ai-editor");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "config.json"), JSON.stringify(content));
+}
+
+describe("调试类别隔离（配置文件模式）", () => {
+  afterEach(() => {
+    initDebugConfig(undefined); // 回 env 模式（模块状态重置）
+  });
+
+  it("只开 request：路由 [chat] 事件日志不打（类别门控）", async () => {
+    writeDebugConfig(tmpRoot, { debug: { enabled: true, categories: ["request"] } });
+    initDebugConfig(tmpRoot);
+    const spy = vi.spyOn(console, "debug").mockImplementation(() => {});
+    openProject();
+    const produce = vi.fn<RunAgentDeps["produce"]>(async (_messages, _signal, onEvent) => {
+      onEvent?.({ type: "text", delta: "你好" }); // 触发 createChatEventLogger
+      return { ok: true, stopReason: "stop", usage: null };
+    });
+    const res = await buildApp(createChatRoutes({ produce })).request("/api/v1/chat", postChat({ message: "你好" }));
+    await readSseFrames(res);
+    expect(spy).not.toHaveBeenCalled(); // chat 类别未开 → 无 [chat] 日志
+  });
+
+  it("只开 usage：request 不打、usage 打（分开判定）", async () => {
+    writeDebugConfig(tmpRoot, { debug: { enabled: true, categories: ["usage"] } });
+    initDebugConfig(tmpRoot);
+    const spy = vi.spyOn(console, "debug").mockImplementation(() => {});
+    const inner = vi.fn<RunAgentDeps["produce"]>(async (_messages, _signal, onEvent) => {
+      onEvent?.({
+        type: "finish",
+        stopReason: "stop",
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      });
+      return { ok: true, stopReason: "stop", usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } };
+    });
+    const produce = createLLMRequestLogger(inner, { model: "m", tools: [] });
+    await produce([{ role: "user", content: "hi" }], new AbortController().signal, () => {});
+    const lines = spy.mock.calls.map((c) => c.map(String).join(" "));
+    expect(
+      lines.some((l) => l.includes("[llm] usage prompt_tokens=10 completion_tokens=5 total=15 stop=stop")),
+    ).toBe(true);
+    expect(lines.some((l) => l.includes("[llm] request model="))).toBe(false); // request 类别未开
+  });
+
+  it("只开 request：usage 不打（分开判定）", async () => {
+    writeDebugConfig(tmpRoot, { debug: { enabled: true, categories: ["request"] } });
+    initDebugConfig(tmpRoot);
+    const spy = vi.spyOn(console, "debug").mockImplementation(() => {});
+    const inner = vi.fn<RunAgentDeps["produce"]>(async (_messages, _signal, onEvent) => {
+      onEvent?.({
+        type: "finish",
+        stopReason: "stop",
+        usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      });
+      return { ok: true, stopReason: "stop", usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 } };
+    });
+    const produce = createLLMRequestLogger(inner, { model: "m", tools: [] });
+    await produce([{ role: "user", content: "hi" }], new AbortController().signal, () => {});
+    const lines = spy.mock.calls.map((c) => c.map(String).join(" "));
+    expect(lines.some((l) => l.includes("[llm] request model=m"))).toBe(true);
+    expect(lines.some((l) => l.includes("[llm] usage prompt_tokens="))).toBe(false); // usage 类别未开
+  });
+
+  it("stream 类别：env=1 时未列 stream 也不开（配置文件优先）", () => {
+    writeDebugConfig(tmpRoot, { debug: { enabled: true, categories: ["chat"] } });
+    process.env.AI_EDITOR_DEBUG = "1"; // env 开也不影响——配置模式 env 被忽略
+    initDebugConfig(tmpRoot);
+    expect(isCategoryEnabled("chat")).toBe(true);
+    expect(isCategoryEnabled("stream")).toBe(false);
   });
 });
