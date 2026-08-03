@@ -35,6 +35,7 @@ import {
 } from "./middleware/project.js";
 import { projectRoutes, setProjectRoot } from "./routes/project.js";
 import { outlineRoutes } from "./routes/outline.js";
+import { proposalRoutes } from "./routes/proposal.js";
 import { trashRoutes } from "./routes/trash.js";
 import { relationRoutes } from "./routes/relation.js";
 import { logSoftDeleteReconcile, reconcileSoftDelete } from "./consistency.js";
@@ -188,6 +189,9 @@ export async function startServer(projectRoot: string, options: StartServerOptio
 
   // 对话路由（U3）：会话列表 / 消息历史（决策 18 按项目隔离；POST SSE 端点属后续切片）
   app.route("/api/v1/chat", chatRoutes);
+
+  // 提案路由（S7.5）：confirm/reject（决策 14：仅内存提案 + 快照重校验 + 项目绑定）
+  app.route("/api/v1/proposal", proposalRoutes);
 
   // 兜底：/api/* → JSON 404；其他 GET/HEAD → 静态文件 → SPA fallback index.html（决策 8）
   app.notFound(async (c) => {

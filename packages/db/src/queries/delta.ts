@@ -183,6 +183,23 @@ function filterVisibleDeltas(db: Db, rows: Array<Record<string, unknown>>, tree:
 }
 
 /**
+ * 按 id 取单条 Delta（S7.5 提案快照重校验，决策 14）：
+ * 记录级查询——自身软删（deleted_at 非空）视为不存在返回 null；
+ * 触发节点/目标端点的可见性联动（决策 12 修订）不在此判定：
+ * 提案引用的对象是 delta_records 记录本身，「存在性 + 自身 updated_at」即决策 14 语义
+ * （与 getRelation 的端点联动过滤不同——关系引用同样只比对关系自身，见 proposal/relation.ts
+ * buildProposeRemoveRelation 只采集 refRelation）。
+ * @returns 完整行（DeltaRow，changes 已解析）；不存在或已软删返回 null
+ */
+export function getDeltaRow(db: Db, id: string): DeltaRow | null {
+  const row = db.prepare("SELECT * FROM delta_records WHERE id = ? AND deleted_at IS NULL").get(id) as
+    | Record<string, unknown>
+    | undefined;
+  if (row === undefined) return null;
+  return rowToDeltaRow(row);
+}
+
+/**
  * 按触发节点查询 Delta（GET /api/v1/delta/node/:nodeId，endpoints.md 第 436-462 行）：
  * - SQL：node_id = ? AND deleted_at IS NULL，按 "order" 递增（computeState 同节点内应用序）
  * - **可见性三态过滤（决策 12 修订，AND）**：见 filterVisibleDeltas（本函数行同属一个

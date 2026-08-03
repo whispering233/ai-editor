@@ -85,6 +85,12 @@ export interface ProposalStore {
    * 过期条目同样视为不存在（惰性清理）。
    */
   peek(proposalId: string): Proposal | null;
+  /**
+   * 按 id 移除单条（S7.5 一次性消费：confirm/reject 终态后移除——决策 14 瞬态交互对象，
+   * 确认/拒绝动作即消费，残留只会让重复 confirm 产生重复执行或反复 409）。
+   * 与 clear() 的区别：clear 清空全部（S7.6 切换项目用），remove 只移除指定提案。
+   */
+  remove(proposalId: string): void;
   /** 清空全部项目提案（决策 14 修订：create/open/close 切换项目时由 S7.6 调用） */
   clear(): void;
   /** 当前仓内提案数（测试/诊断） */
@@ -157,6 +163,9 @@ export function createProposalStore(options: ProposalStoreOptions = {}): Proposa
         return null;
       }
       return entry.proposal;
+    },
+    remove(proposalId) {
+      entries.delete(proposalId);
     },
     clear() {
       entries.clear();

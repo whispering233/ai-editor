@@ -9,7 +9,7 @@ import { join } from "node:path";
 import type { DeltaChange, OutlineFileTree } from "@ai-editor/shared";
 import { closeDatabase, openDatabase, type Db } from "../connection.js";
 import { createEntity } from "./entity.js";
-import { insertDelta, listDanglingDeltas, listDeltasByNode, listDeltasByTarget } from "./delta.js";
+import { insertDelta, getDeltaRow, listDanglingDeltas, listDeltasByNode, listDeltasByTarget } from "./delta.js";
 import { findOutlineNode, readOutlineFile, writeOutlineFile } from "../storage/outline.js";
 
 let dir: string;
@@ -338,6 +338,22 @@ describe("listDeltasByTarget（S6.3 工具 get_delta_history 下沉）", () => {
     chapter.children = chapter.children!.filter((c) => c.id !== "sc-1");
     writeOutlineFile(dir, tree);
     expect(listDeltasByTarget(db, charA, dir)).toEqual([]);
+  });
+});
+
+describe("getDeltaRow（S7.5 提案快照重校验，决策 14）", () => {
+  it("正常行取回：与 insertDelta 返回行一致（changes 已解析、updated_at 原样）", () => {
+    const { charA } = seedBase();
+    const row = insertDelta(db, { nodeId: "sc-1", targetType: "character", targetId: charA, changes: change("a", "1", "2"), description: "快照引用" });
+    expect(getDeltaRow(db, row.id)).toEqual(row);
+  });
+
+  it("不存在 / 自身软删（deleted_at 非空）→ null", () => {
+    const { charA } = seedBase();
+    expect(getDeltaRow(db, "delta-missing")).toBeNull();
+    const row = insertDelta(db, { nodeId: "sc-1", targetType: "character", targetId: charA, changes: change("a", "1", "2"), description: "已软删" });
+    db.prepare("UPDATE delta_records SET deleted_at = ? WHERE id = ?").run(T0, row.id);
+    expect(getDeltaRow(db, row.id)).toBeNull();
   });
 });
 

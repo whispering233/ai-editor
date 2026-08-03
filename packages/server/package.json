@@ -30,6 +30,7 @@
     "@ai-editor/agent": "workspace:*",
     "@ai-editor/db": "workspace:*",
     "@ai-editor/shared": "workspace:*",
+    "@ai-editor/tools": "workspace:*",
     "@hono/node-server": "^2.0.12",
     "hono": "^4.7.0",
     "zod": "^4.4.3"

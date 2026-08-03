@@ -141,6 +141,9 @@ importers:
       '@ai-editor/shared':
         specifier: workspace:*
         version: link:../shared
+      '@ai-editor/tools':
+        specifier: workspace:*
+        version: link:../tools
       '@hono/node-server':
         specifier: ^2.0.12
         version: 2.0.12(hono@4.12.32)
