@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import { ENTITY_TYPES } from "@ai-editor/shared";
 import { useHashRoute, type Route } from "./hooks/use-route";
 import { AppShell } from "./components/AppShell";
+import { ErrorBoundary } from "./components/feedback/ErrorBoundary";
 import Dashboard from "./pages/Dashboard";
 import Outline from "./pages/Outline";
 import OutlineDetail from "./pages/OutlineDetail";
@@ -69,6 +70,9 @@ if (!rootEl) throw new Error("#root 元素缺失（index.html）");
 
 createRoot(rootEl).render(
   <StrictMode>
-    <App />
+    {/* 应用级错误边界（问题 3）：渲染异常不白屏，展示可恢复错误卡（components/feedback/ErrorBoundary.tsx） */}
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 );

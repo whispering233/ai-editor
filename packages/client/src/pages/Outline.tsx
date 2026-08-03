@@ -47,6 +47,7 @@ import {
 } from "../lib/outline-tree";
 import { cn } from "../lib/utils";
 import { navigate } from "../hooks/use-route";
+import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
 
@@ -182,6 +183,10 @@ export default function Outline() {
   // 设置后跳转本页；本页消费（展开祖先+滚动+高亮）后清除，不侵入 hash 路由
   const focusOutlineNodeId = useUiStore((s) => s.focusOutlineNodeId);
   const clearFocusOutlineNode = useUiStore((s) => s.clearFocusOutlineNode);
+
+  // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉整树；
+  // 伏笔标记 effect 依赖 outline 对象，树重拉后自动联动刷新（见该 effect 注释）
+  useDataRefresh(() => void loadOutline());
 
   // 首次加载标记：loadOutline 在 store 内静默吞错，用 loadAttempted 呈现「加载失败 + 重试」
   const [loadAttempted, setLoadAttempted] = useState(false);

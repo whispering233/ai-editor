@@ -197,8 +197,8 @@ function ErrorBar() {
 
 // ============ 工具调用折叠记录行（历史 assistant.toolCalls 与运行时 streamTools 共用） ============
 
-/** 工具调用行：折叠态「调用了 {tool}」，展开显示 args 摘要与结果状态（chat.md「工具调用折叠记录」） */
-function ToolCallRow({
+/** 工具调用行：折叠态「调用了 {tool}」，展开显示 args 摘要与结果状态（chat.md「工具调用折叠记录」；导出供渲染走查测试） */
+export function ToolCallRow({
   toolName,
   args,
   result,
@@ -236,8 +236,8 @@ function ToolCallRow({
 
 // ============ 消息条目：user 气泡 / assistant 无气泡宋体排版 + 历史工具折叠记录 ============
 
-/** 历史 tool 消息按 toolCallId 挂到 assistant.toolCalls 行（决策 18 成对；孤儿半对不渲染） */
-function MessageItem({ message, toolResults }: { message: ChatMessage; toolResults: Map<string, ChatMessage> }) {
+/** 历史 tool 消息按 toolCallId 挂到 assistant.toolCalls 行（决策 18 成对；孤儿半对不渲染；导出供渲染走查测试） */
+export function MessageItem({ message, toolResults }: { message: ChatMessage; toolResults: Map<string, ChatMessage> }) {
   if (message.role === "user") {
     // user 气泡：右对齐 bg-secondary 圆角气泡（chat.md 结构图）
     return (
@@ -279,8 +279,8 @@ function MessageItem({ message, toolResults }: { message: ChatMessage; toolResul
 
 // ============ 提案卡（chat.md「提案卡片」；S8.2 已接 S7.5 confirm/reject 真实调用） ============
 
-function ProposalCardView({ proposal }: { proposal: ProposalCard }) {
-  const confirmProposal = useChatStore((s) => s.confirmProposal);
+/** 提案卡（chat.md「提案卡片」；S8.2 已接 S7.5 confirm/reject 真实调用；导出供渲染走查测试） */
+export function ProposalCardView({ proposal }: { proposal: ProposalCard }) {  const confirmProposal = useChatStore((s) => s.confirmProposal);
   const rejectProposal = useChatStore((s) => s.rejectProposal);
   const label = PROPOSAL_TYPE_LABELS[proposal.type] ?? proposal.type;
   // 终态（confirmed/rejected/stale）与处理中（processing 在途）：按钮禁用——

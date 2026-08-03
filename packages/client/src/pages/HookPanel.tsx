@@ -63,6 +63,7 @@ import { LIFECYCLE_STATUS } from "../lib/hook-panel";
 import { flattenTree } from "../lib/outline-tree";
 import { cn } from "../lib/utils";
 import { ConfirmDialog } from "../components/outline/dialogs";
+import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
 
@@ -95,6 +96,9 @@ export default function HookPanel() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
+  // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉列表 + 依赖边
+  // （AI 可能新建/推进/回收伏笔；ref 守卫防首帧重复拉）
+  useDataRefresh(() => setReloadTick((t) => t + 1));
   /** 全量 depends_on 边（GET /relation 一次拉全；行内「依赖:」与依赖者计数用；失败不阻塞列表） */
   const [depEdges, setDepEdges] = useState<RelationSummaryItem[]>([]);
   const [depEdgesFailed, setDepEdgesFailed] = useState(false);

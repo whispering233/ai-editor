@@ -4,7 +4,11 @@
 // 定位实现（U4 方案 A）：点击当前位置 → ui store 设置 focusOutlineNodeId（transient）→ 跳 #/outline，
 //   Outline 页消费（展开祖先+滚动+高亮）后清除；不侵入 hash 路由
 // <1024px 时右栏为抽屉：信息条右侧显示聊天开关（layout.md §0）
-import { MessageSquare } from "lucide-react";
+// 刷新按钮（交互批次，问题 1）：InfoBar 是中栏统一头部（全 tab 常驻），在此放刷新 = 一个入口
+// 刷所有数据页——点击调 ui store notifyDataChanged（+1），各数据页订阅后重拉。
+// 实体列表错误横幅内的「重试」按钮保留：那是错误态行内重试（错误时用户不一定会想到顶部刷新），
+// 与全局刷新不构成重复（不同状态上下文、不同语义）
+import { MessageSquare, RefreshCw } from "lucide-react";
 import { useMediaQuery } from "../../hooks/use-media-query";
 import { findOutlineNodeTitle, useProjectStore } from "../../stores/project";
 import { useUiStore } from "../../stores/ui";
@@ -15,6 +19,7 @@ export function InfoBar({ chatOpen, onToggleChat }: { chatOpen: boolean; onToggl
   const configLoading = useProjectStore((s) => s.configLoading);
   const outline = useProjectStore((s) => s.outline);
   const setFocusOutlineNode = useUiStore((s) => s.setFocusOutlineNode);
+  const notifyDataChanged = useUiStore((s) => s.notifyDataChanged);
   const isDesktop = useMediaQuery("(min-width: 1024px)");
 
   // 当前位置：null → 「未设置」；有 id 时优先 outline 树映射标题，未加载 outline 则显示 id 占位
@@ -51,8 +56,18 @@ export function InfoBar({ chatOpen, onToggleChat }: { chatOpen: boolean; onToggl
         <span className="truncate text-foreground">{positionTitle ?? "未设置"}</span>
       </a>
 
-      {/* 右侧：语言 + 小屏聊天开关 */}
-      <span className="ml-auto shrink-0 text-sm text-muted-foreground">语言: {config?.language ?? "—"}</span>
+      {/* 右侧：刷新按钮（全中栏统一数据刷新入口，问题 1）+ 语言 + 小屏聊天开关 */}
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        className="ml-auto shrink-0 text-muted-foreground"
+        onClick={notifyDataChanged}
+        aria-label="刷新数据"
+        title="刷新数据"
+      >
+        <RefreshCw className="size-4" />
+      </Button>
+      <span className="shrink-0 text-sm text-muted-foreground">语言: {config?.language ?? "—"}</span>
       {!isDesktop && (
         <Button
           variant="ghost"

@@ -39,6 +39,7 @@ import {
 import { findNode, findNodePath, shouldCommitSummary, shouldCommitTitle } from "../lib/outline-tree";
 import { cn } from "../lib/utils";
 import { navigate } from "../hooks/use-route";
+import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
 
@@ -101,6 +102,14 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
       void loadOutline();
     }
   }, [outline, outlineLoading, loadAttempted, loadOutline]);
+
+  // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉整树（node 变化驱动
+  // 表单重置）+ 相关实体与变更记录区块重载（AI 可能为本节点新增关系/变更记录）
+  useDataRefresh(() => {
+    void loadOutline();
+    setRelKey((k) => k + 1);
+    setDeltaReloadKey((k) => k + 1);
+  });
 
   const node = outline === null ? null : findNode(outline.children, nodeId);
   const notFound = outline !== null && node === null;

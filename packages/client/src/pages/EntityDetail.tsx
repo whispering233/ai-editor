@@ -30,6 +30,7 @@ import { detailFieldsForType, diffData, relationTypeLabel, type DetailFieldConfi
 import { flattenTree } from "../lib/outline-tree";
 import { cn } from "../lib/utils";
 import { navigate } from "../hooks/use-route";
+import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
 
@@ -201,6 +202,10 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
     void loadDetail();
     // 依赖仅 [entityType, id]：loadDetail 每次渲染重建，但页面切换才需重载（项目未启用 exhaustive-deps 检查）
   }, [entityType, id]);
+
+  // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉详情——
+  // 表单以服务端权威为准整体重置（AI 改动的字段随之同步，本地未保存编辑被覆盖属预期语义）
+  useDataRefresh(() => void loadDetail());
 
   /** 保存：diffData 只提交变更字段（partial 浅合并）；成功后重拉（服务端权威） */
   async function handleSave() {

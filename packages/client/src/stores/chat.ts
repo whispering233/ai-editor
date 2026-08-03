@@ -194,6 +194,9 @@ export const useChatStore = create<ChatState>((set, get) => {
           p.proposalId === proposalId ? { ...p, status: successStatus, processing: false } : p,
         ),
       }));
+      // 数据变更信号（交互批次，问题 1）：确认 = executeProposal 写库成功，通知中栏页面重拉；
+      // 拒绝不改数据不触发；hook-panel 复合写是页面本地操作（S9.1 自带 reloadTick），不走全局信号
+      if (successStatus === "confirmed") useUiStore.getState().notifyDataChanged();
     } catch (err) {
       // apiFetch 只抛 ApiError（code 透传服务端 ErrorCode）；非 ApiError 属理论不可达，按网络错误兜底
       const code = err instanceof ApiError ? err.code : "CLIENT_NETWORK_ERROR";
@@ -240,6 +243,15 @@ export const useChatStore = create<ChatState>((set, get) => {
       const sessions = await listSessions();
       if (seq !== loadSeq) return; // 请求期间项目已切换，旧列表作废
       set({ sessions, sessionsError: null });
+      // 自动激活最近会话（交互批次，问题 2）：刷新页面/切项目后 currentSessionId 为 null，
+      // 若列表非空则激活 sessions[0]——服务端按最后活动倒序返回，[0] 即最近会话，
+      // 符合「一项目一会话」心智（决策 22：刷新后右栏应恢复最近对话而非空会话）。
+      // 守卫：空列表不激活（保持新会话空态）；已有 currentSessionId 不覆盖
+      // （done 事件刷新列表、用户已手动选会话等场景）。不用 localStorage 记忆上次会话：
+      // 服务端列表已倒序，最近会话即用户预期，持久化映射是 YAGNI
+      if (get().currentSessionId === null && sessions.length > 0) {
+        get().setCurrentSession(sessions[0].id);
+      }
     } catch (err) {
       if (seq !== loadSeq) return;
       const code = err instanceof ApiError ? err.code : "CLIENT_NETWORK_ERROR";
@@ -272,7 +284,12 @@ export const useChatStore = create<ChatState>((set, get) => {
     if (id !== null) void get().loadMessages(id); // 恢复历史（fire-and-forget，失败静默 → 空态）
   },
 
-  newSession: () => get().setCurrentSession(null),
+  newSession: () => {
+    // 作废在途会话列表请求（ora S1）：点「新会话」时若 loadSessions 在途，其响应不得
+    // 触发自动激活最近会话把用户的开新会话意图拉回（与 clearSessions 的 loadSeq++ 同款）
+    loadSeq++;
+    get().setCurrentSession(null);
+  },
 
   clearSessions: () => {
     loadSeq++; // 作废在途列表请求

@@ -114,7 +114,7 @@ afterEach(() => {
     streamTools: [],
   });
   // 全局反馈状态复位（提案动作 toast 断言用；ui store 的 toast 定时器按 id 守卫，旧定时器不污染新 toast）
-  useUiStore.setState({ error: null, toast: null, confirmState: null });
+  useUiStore.setState({ error: null, toast: null, confirmState: null, dataVersion: 0 });
 });
 
 describe("loadSessions", () => {
@@ -144,6 +144,47 @@ describe("loadSessions", () => {
     resolveFirst([sampleSession]);
     await p1;
     expect(mocked.listSessions).toHaveBeenCalledTimes(1);
+  });
+
+  it("非空列表且无当前会话 → 自动激活最近会话（问题 2：刷新页面/切项目后恢复最近对话）", async () => {
+    // sessions[0] = 服务端按最后活动倒序的最近会话（决策 22「一项目一会话」心智）
+    const older = { ...sampleSession, id: "sess-older", updatedAt: "2026-08-01T09:00:00Z" };
+    mocked.listSessions.mockResolvedValue([sampleSession, older]);
+    await useChatStore.getState().loadSessions();
+    const s = useChatStore.getState();
+    expect(s.sessions).toEqual([sampleSession, older]);
+    expect(s.currentSessionId).toBe("sess-1"); // 最近会话（列表 [0]）
+    // 激活即恢复历史（setCurrentSession → loadMessages）
+    await vi.waitFor(() => expect(mocked.getSessionMessages).toHaveBeenCalledWith("sess-1"));
+  });
+
+  it("空列表 → 不激活（保持新会话空态）", async () => {
+    mocked.listSessions.mockResolvedValue([]);
+    await useChatStore.getState().loadSessions();
+    expect(useChatStore.getState().currentSessionId).toBeNull();
+  });
+
+  it("已有当前会话 → 不覆盖（done 事件刷新列表 / 用户已手动选择场景）", async () => {
+    useChatStore.setState({ currentSessionId: "sess-keep" });
+    mocked.listSessions.mockResolvedValue([sampleSession]);
+    await useChatStore.getState().loadSessions();
+    expect(useChatStore.getState().currentSessionId).toBe("sess-keep");
+    expect(mocked.getSessionMessages).not.toHaveBeenCalled(); // 未触发 setCurrentSession
+  });
+
+  it("newSession 作废在途列表请求 → 响应不自动激活（ora S1：不拉回开新会话意图）", async () => {
+    let resolveList!: (v: ChatSessionSummary[]) => void;
+    mocked.listSessions.mockReturnValue(
+      new Promise<ChatSessionSummary[]>((r) => {
+        resolveList = r;
+      }),
+    );
+    const p = useChatStore.getState().loadSessions(); // 在途（不 await）
+    useChatStore.getState().newSession(); // 在途期间点「新会话」（loadSeq++ 作废在途请求）
+    resolveList([sampleSession]);
+    await p;
+    expect(useChatStore.getState().currentSessionId).toBeNull(); // 作废响应不自动激活
+    expect(useChatStore.getState().sessions).toBeNull(); // 作废响应不落列表
   });
 });
 
@@ -570,6 +611,22 @@ describe("confirmProposal / rejectProposal（S8.2：提案卡接入 S7.5 confirm
     ]);
   });
 
+  it("confirm 成功 → 触发数据变更信号（问题 1：notifyDataChanged，中栏页面重拉）", async () => {
+    mocked.confirmProposal.mockResolvedValue({ confirmed: true, result: "char-9" });
+    useChatStore.setState({ proposals: [makeProposal({ proposalId: "prop-1" })] });
+    const before = useUiStore.getState().dataVersion;
+    await useChatStore.getState().confirmProposal("prop-1");
+    expect(useUiStore.getState().dataVersion).toBe(before + 1);
+  });
+
+  it("reject 成功 → 不触发数据变更信号（不改数据）", async () => {
+    mocked.rejectProposal.mockResolvedValue({ rejected: true });
+    useChatStore.setState({ proposals: [makeProposal({ proposalId: "prop-1" })] });
+    const before = useUiStore.getState().dataVersion;
+    await useChatStore.getState().rejectProposal("prop-1");
+    expect(useUiStore.getState().dataVersion).toBe(before);
+  });
+
   it("reject 成功 → status=rejected", async () => {
     mocked.rejectProposal.mockResolvedValue({ rejected: true });
     useChatStore.setState({ proposals: [makeProposal({ proposalId: "prop-1" })] });
@@ -646,14 +703,14 @@ describe("confirmProposal / rejectProposal（S8.2：提案卡接入 S7.5 confirm
 });
 
 describe("项目切换联动（U5：清空消息/运行态 + 中止在途流）", () => {
-  it("打开项目（config null → id）→ 清空并自动加载会话列表", async () => {
+  it("打开项目（config null → id）→ 清空并自动加载会话列表并激活最近会话", async () => {
     mocked.listSessions.mockResolvedValue([sampleSession]);
     useChatStore.setState({ currentSessionId: "sess-old", sessions: [sampleSession] });
     useProjectStore.setState({ config: makeConfig("proj-a") });
     await vi.waitFor(() => expect(useChatStore.getState().sessions).toEqual([sampleSession]));
     expect(mocked.listSessions).toHaveBeenCalledTimes(1);
-    // 切项目时当前会话重置为新会话（旧项目会话不残留）
-    expect(useChatStore.getState().currentSessionId).toBeNull();
+    // 切项目时旧项目会话不残留；新项目列表加载后自动激活最近会话（问题 2 行为）
+    await vi.waitFor(() => expect(useChatStore.getState().currentSessionId).toBe("sess-1"));
   });
 
   it("关闭项目（config → null）→ 清空会话且不请求", async () => {

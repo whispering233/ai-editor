@@ -21,6 +21,7 @@ import { describeOpenError } from "../lib/error-messages";
 import { cn } from "../lib/utils";
 import { buildBookPath, findOutlineNodeTitle, useProjectStore } from "../stores/project";
 import { useChatStore } from "../stores/chat";
+import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useUiStore } from "../stores/ui";
 
 /** 创作要素卡类型中文名（与 EntityList 本地映射一致；四卡顺序 = 统计请求顺序） */
@@ -127,6 +128,14 @@ export default function Dashboard() {
   useEffect(() => {
     setOutlineAttempted(false);
   }, [config?.id]);
+
+  // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉各区块
+  // （要素计数 + 大纲概览 + 最近会话；书架与 AI 无关不刷新；ref 守卫防首帧重复拉）
+  useDataRefresh(() => {
+    setEntitiesTick((t) => t + 1);
+    void loadOutline();
+    void loadSessions();
+  });
 
   // 项目切换同样清除书籍打开错误（防下次进入引导形态时残留上次失败文案）
   useEffect(() => {

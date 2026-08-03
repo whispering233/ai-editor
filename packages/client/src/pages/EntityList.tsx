@@ -25,6 +25,7 @@ import {
 import { CREATE_FIRST_FIELD, PAGE_LIMIT, pageCount, SUMMARY_COLUMNS, summaryCellText } from "../lib/entity-list";
 import { cn } from "../lib/utils";
 import { navigate } from "../hooks/use-route";
+import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useUiStore } from "../stores/ui";
 import { formatTimestamp } from "@ai-editor/shared";
 import { CreateRelationDialog } from "../components/entity/create-relation-dialog";
@@ -71,6 +72,9 @@ export default function EntityList({ type }: { type: string }) {
   const [order, setOrder] = useState<"asc" | "desc">("desc");
   /** 重试计数（错误后手动重新加载） */
   const [reloadTick, setReloadTick] = useState(0);
+  // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉列表
+  // （关联 tab 的 RelationsView 以 reloadKey={reloadTick} 联动刷新；ref 守卫防首帧重复拉）
+  useDataRefresh(() => setReloadTick((t) => t + 1));
   const [createOpen, setCreateOpen] = useState(false);
   // 新建对话框表单状态
   const [createName, setCreateName] = useState("");
