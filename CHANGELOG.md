@@ -9,6 +9,22 @@
 
 （开发中条目累积于此，发布时搬运为新版本段）
 
+## [v0.0.3] - 2026-08-04
+
+### Fixed
+
+- npm 发布管道最终修复：npm 12 的 publish 在 postpack 恢复**之后**生成 registry manifest，prepack 替换只影响 tarball——改为发布前主动执行替换与 SPA 拷贝 + `npm publish --ignore-scripts`，manifest 与 tarball 一致；**0.0.3 是首个可正常安装的版本（0.0.1/0.0.2 manifest 残留 workspace:*，勿安装）**
+
+## [v0.0.2] - 2026-08-04
+
+### Fixed
+
+- npm 发布管道修复：npm 12 的 `npm publish` 用 postpack 恢复后的 package.json 生成 registry manifest，导致 0.0.1 的 manifest 残留 `workspace:*`（`npm install` 报 EUNSUPPORTEDPROTOCOL）——改为发布前主动替换 workspace:* 后恢复；**0.0.1 已标注废弃，请使用 0.0.2**
+
+### Changed
+
+- 发布包名由 `@ai-editor/*` 改为 `@whispering233/ai-editor-*`（`@ai-editor` scope 在 npm 已被其他用户占用，无法发布）
+
 ## [v0.0.1] - 2026-08-04
 
 首个正式发布（MVP 完整交付）。

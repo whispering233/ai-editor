@@ -111,9 +111,23 @@ for (const name of PUBLISH_ORDER) {
   // 3. tarball workspace: 防线（真实 pack，触发 prepack 替换钩子）
   const { tmpDir } = packAndCheckWorkspace(pkgDir, pkgName);
   try {
-    // 4. 发布（cwd=包目录；prepack 钩子自动执行 workspace: 替换，发布后 postpack 恢复）
+    // 4. 发布（cwd=包目录）
+    //    ⚠ npm 12 的 publish 时序：manifest 在 postpack 恢复**之后**从磁盘读取——
+    //    任何经 prepack/postpack 钩子的替换都会在 manifest 生成前被恢复，导致
+    //    registry manifest 残留 workspace:*（npm install 报 EUNSUPPORTEDPROTOCOL）。
+    //    修复：发布前主动执行「copy-client-dist（server 的 SPA 随包）+ workspace:*
+    //    替换」，npm publish 加 --ignore-scripts 跳过全部钩子——manifest 与 tarball
+    //    都基于替换后的 package.json（一致）；发布后 finally 主动恢复（幂等）。
     if (!dryRun) {
-      run("npm", ["publish", "--access", "public"], { cwd: pkgDir });
+      if (name === "server") {
+        run("node", ["../../scripts/copy-client-dist.mjs"], { cwd: pkgDir });
+      }
+      run("node", ["../../scripts/prepare-package-for-publish.mjs"], { cwd: pkgDir });
+      try {
+        run("npm", ["publish", "--access", "public", "--ignore-scripts"], { cwd: pkgDir });
+      } finally {
+        run("node", ["../../scripts/restore-package-json.mjs"], { cwd: pkgDir });
+      }
       console.log(`[publish] ${pkgName}@${pkg.version} 发布成功`);
     } else {
       console.log(`[publish] [dry-run] ${pkgName}@${pkg.version}（tarball 防线已通过，未发布）`);

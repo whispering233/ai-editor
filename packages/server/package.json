@@ -1,6 +1,6 @@
 {
   "name": "@whispering233/ai-editor-server",
-  "version": "0.0.1",
+  "version": "0.0.3",
   "description": "Hono API 服务端（单进程：API + SPA 静态托管，决策 8）",
   "type": "module",
   "main": "./dist/index.js",
