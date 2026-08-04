@@ -33,6 +33,9 @@ jobs:
           node-version: 22
           cache: pnpm
           registry-url: https://registry.npmjs.org
+      # OIDC 发布认证（Trusted Publishing）需 npm 11+——node 22 自带 npm 10.x 不支持
+      #（发布时无 OIDC 换证 → npmjs 404 保护性拒绝）；升级到 latest（npm 12）
+      - run: npm install -g npm@latest
       - run: pnpm install --frozen-lockfile
       # 全量验证：build 先行——fresh checkout 无 dist（gitignore 不入库），而 @whispering233/ai-editor-*
       # 的 types/exports 指向 ./dist/index.d.ts，必须先拓扑序 build 生成 dist 才能 typecheck

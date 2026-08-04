@@ -134,7 +134,7 @@ for (const name of PUBLISH_ORDER) {
         console.log(`[publish] 诊断: OIDC 环境=${hasOidcEnv ? "有" : "无"} npm=${run("npm", ["--version"]).trim()} registry=${run("npm", ["config", "get", "registry"]).trim()}`);
       }
       try {
-        run("npm", ["publish", "--access", "public", "--ignore-scripts", "--loglevel", "verbose"], { cwd: pkgDir });
+        run("npm", ["publish", "--access", "public", "--ignore-scripts"], { cwd: pkgDir });
       } finally {
         run("node", ["../../scripts/restore-package-json.mjs"], { cwd: pkgDir });
       }
