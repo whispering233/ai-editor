@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
+import { unzipSync } from "fflate";
 import type { OutlineFileTree, ProjectFileConfig } from "@ai-editor/shared";
 import { closeDatabase, getUserVersion, openDatabase, SCHEMA_VERSION, setUserVersion } from "@ai-editor/db";
 import { readOutlineFile, readProjectFile, writeOutlineFile, writeProjectFile } from "@ai-editor/db";
@@ -692,5 +693,110 @@ describe("GET /project/list（书架：创作根 books/ 扫描）", () => {
     });
     const listRes2 = await app.request("/api/v1/project/list", { headers: HOST_HEADERS });
     expect((await listRes2.json()).data.books).toHaveLength(2);
+  });
+});
+
+// ============ GET /api/v1/project/export（E1：导出 zip 三文件） ============
+
+describe("GET /project/export（E1：zip 导出三文件）", () => {
+  /** open 一个含实体数据的正常项目（验证 data.db 完整快照）并返回测试 app */
+  async function openSeededProject(dir: string): Promise<Hono> {
+    initProjectDir(dir, makeConfig("proj-exp", "导出项目"));
+    // 写入真实数据：导出后解包出的 data.db 应能直接打开且含该实体（WAL 已合并验证）
+    const db = openDatabase(join(dir, "data.db"));
+    try {
+      db.prepare("INSERT INTO entities (id, type, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)").run(
+        "char-exp", "character", "导出角色", T0, T0,
+      );
+    } finally {
+      closeDatabase(db);
+    }
+    const app = buildApp();
+    const res = await app.request("/api/v1/project/open", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: dir }),
+    });
+    expect(res.status).toBe(200);
+    return app;
+  }
+
+  it("导出成功：application/zip + attachment；解包三文件齐全且与源文件一致", async () => {
+    const dir = makeTmpDir();
+    const app = await openSeededProject(dir);
+
+    const res = await app.request("/api/v1/project/export", { headers: HOST_HEADERS });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("application/zip");
+    const disposition = res.headers.get("content-disposition") ?? "";
+    expect(disposition).toContain("attachment");
+    // RFC 5987 filename*：UTF-8 percent-encoded 中文书名（解码后校验）
+    expect(disposition).toContain("filename*=UTF-8''");
+    expect(decodeURIComponent(disposition)).toContain("导出项目.zip");
+
+    const unzipped = unzipSync(new Uint8Array(await res.arrayBuffer()));
+    // 三文件齐全（key = zip 条目名，与数据文件原名一致）
+    expect(Object.keys(unzipped).sort()).toEqual(["data.db", "outline.json", "project.json"]);
+    // project.json / outline.json 与源文件字节一致
+    expect(Buffer.from(unzipped["project.json"]).equals(readFileSync(join(dir, "project.json")))).toBe(true);
+    expect(Buffer.from(unzipped["outline.json"]).equals(readFileSync(join(dir, "outline.json")))).toBe(true);
+    // data.db：与盘上主文件字节一致（export 前已 wal_checkpoint(TRUNCATE)）
+    expect(Buffer.from(unzipped["data.db"]).equals(readFileSync(join(dir, "data.db")))).toBe(true);
+  });
+
+  it("zip 内 data.db 为完整快照：可直接打开且含写入的实体（WAL 已合并）", async () => {
+    const dir = makeTmpDir();
+    const app = await openSeededProject(dir);
+    const res = await app.request("/api/v1/project/export", { headers: HOST_HEADERS });
+    const unzipped = unzipSync(new Uint8Array(await res.arrayBuffer()));
+
+    const snapshotPath = join(makeTmpDir(), "snapshot.db");
+    writeFileSync(snapshotPath, Buffer.from(unzipped["data.db"]));
+    const db = openDatabase(snapshotPath);
+    try {
+      const row = db.prepare("SELECT name FROM entities WHERE id = ?").get("char-exp") as { name: string } | undefined;
+      expect(row?.name).toBe("导出角色");
+    } finally {
+      closeDatabase(db);
+    }
+  });
+
+  it("zip 不含任何 key 内容（决策 17：key 存用户级配置，天然不入包）", async () => {
+    const dir = makeTmpDir();
+    const app = await openSeededProject(dir);
+    const res = await app.request("/api/v1/project/export", { headers: HOST_HEADERS });
+    const unzipped = unzipSync(new Uint8Array(await res.arrayBuffer()));
+    // key 只可能出现在两个明文 JSON 中（data.db 二进制不做子串断言，避免误报）
+    const text = [unzipped["project.json"], unzipped["outline.json"]]
+      .map((b) => Buffer.from(b).toString("utf8"))
+      .join("\n");
+    expect(text).not.toContain("api_key");
+    expect(text).not.toContain("sk-");
+  });
+
+  it("无当前项目 → 409 NO_PROJECT_OPEN（与 /config 一致）", async () => {
+    const res = await buildApp().request("/api/v1/project/export", { headers: HOST_HEADERS });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      success: false,
+      error: { code: "NO_PROJECT_OPEN", message: expect.stringContaining("open") },
+    });
+  });
+
+  it("data.db 缺失（损坏）→ 500 INTERNAL_ERROR，不导出半成品包", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-exp2", "损坏项目"));
+    const app = buildApp();
+    await app.request("/api/v1/project/open", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: dir }),
+    });
+    // open 成功后外部删除 data.db（模拟损坏：打开的项目三文件不齐全）
+    rmSync(join(dir, "data.db"), { force: true });
+
+    const res = await app.request("/api/v1/project/export", { headers: HOST_HEADERS });
+    expect(res.status).toBe(500);
+    expect((await res.json()).error.code).toBe("INTERNAL_ERROR");
   });
 });

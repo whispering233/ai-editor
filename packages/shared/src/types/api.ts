@@ -41,6 +41,7 @@ export const ERROR_CODES = [
   "PROPOSAL_STALE", // 409 确认时引用快照不一致（决策 14）
   "PROPOSAL_NOT_FOUND", // 404 proposal_id 不存在（决策 14）
   "PROPOSAL_PROJECT_MISMATCH", // 409 提案所属项目 ≠ 当前项目（决策 14 修订）
+  "SCHEMA_VERSION_MISMATCH", // 409 导入 zip 的 data.db user_version 与当前程序版本不匹配（E2；拒绝导入，不静默重建，release-review §二）
   // ---- 废弃（保留兼容）----
   "DELTA_CONFLICT", // 已废弃（2026-08 修订：computeState 以 conflicts 字段替代 409）
   // ---- tools.md 决策 15/16 补充命名（SSE error 事件用）----
@@ -233,6 +234,41 @@ export const projectConfigUpdateReqSchema = z
 
 export const projectConfigUpdateResSchema = z.object({
   updated: z.literal(true),
+});
+
+// ============ 导出/导入端点（E1/E2：release-review §二，产品承诺「数据主权归用户」） ============
+
+/**
+ * 导出 zip 内固定三文件名（E1：GET /api/v1/project/export 的 zip 条目名与数据文件
+ * 原名一致——import 侧按此固定名校验，缺失即坏包）
+ */
+export const PROJECT_EXPORT_FILE_NAMES = ["project.json", "outline.json", "data.db"] as const;
+
+/**
+ * GET /api/v1/project/export（E1 实现，E2 依赖）：
+ * - **响应为二进制 zip（application/zip），非 JSON 包裹**——endpoints.md「成功响应
+ *   {success,data}」通用约定的显式例外；Content-Disposition: attachment;
+ *   filename*=UTF-8''<书名>.zip（RFC 5987）
+ * - zip 内三文件：project.json + outline.json + data.db（导出前 wal_checkpoint(TRUNCATE)
+ *   保证 data.db 主文件完整快照；决策 17 key 存用户级配置，天然不入包）
+ * - 错误：无当前项目 → 409 NO_PROJECT_OPEN（服务端补充码，与 /config 一致）；
+ *   三文件缺失任一 → 500 INTERNAL_ERROR（打开的项目三文件必然齐全，缺失即损坏）
+ * - 二进制响应不走 Zod parse——契约以本注释 + PROJECT_EXPORT_FILE_NAMES 常量表达
+ */
+
+// POST /api/v1/project/import（E2 实现；E1 仅落契约）
+// - 请求：multipart/form-data 文件上传，field 名 "file"，内容为 E1 导出的 zip
+// - 服务端流程（E2）：解压到临时目录 → 校验（三文件齐全 + project.json/outline.json
+//   顶层契约 + data.db user_version 匹配）→ 原子搬入 创作根/books/<书名>/（新建，
+//   不覆盖现有项目）→ 返回 200
+// - 错误码：坏包/缺文件 → 400 VALIDATION_ERROR；data.db user_version 与当前程序版本
+//   不匹配 → 409 SCHEMA_VERSION_MISMATCH（拒绝导入，不静默重建）；目标书名已存在
+//   → 409 PROJECT_ALREADY_EXISTS（服务端补充码，与 create 同语义）
+export const projectImportResSchema = z.object({
+  imported: z.literal(true),
+  id: z.string(), // 导入项目的 project_id（沿用 zip 内 project.json 的 id）
+  path: z.string(), // 新书目录绝对路径（创作根/books/<书名>/）
+  name: z.string(), // 书名（project.json name，即目录名）
 });
 
 // ============ entity 端点（endpoints.md「实体 CRUD」） ============

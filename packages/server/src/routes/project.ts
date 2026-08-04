@@ -1,15 +1,19 @@
-// 项目路由（S1.2）：POST /create、POST /open、POST /close、GET/PUT /config
+// 项目路由（S1.2）：POST /create、POST /open、POST /close、GET/PUT /config、GET /export（E1）
 //
 // 契约来源：doc/api/endpoints.md 第 18-122 行（项目管理全部端点）、doc/design/decisions.md
 //   决策 8（单进程 currentProject）、决策 13 修订（open 时 user_version 判定删库重建）、决策 17（路径校验防越权）。
 // 校验失败统一 400 INVALID_PROJECT_PATH（shared ErrorCode，endpoints.md 第 66 行）。
 import { isAbsolute, join, resolve } from "node:path";
-import { mkdirSync, readdirSync, realpathSync, type Dirent } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, type Dirent } from "node:fs";
 import { Hono, type Context } from "hono";
+import { zipSync } from "fflate";
 import type { ProjectFileConfig } from "@ai-editor/shared";
 import { mapProjectFileToConfig } from "@ai-editor/shared";
 import { openDatabase } from "@ai-editor/db";
 import { ensureSchemaCompatible, DATA_DB_FILE_NAME } from "@ai-editor/db";
+import { OUTLINE_FILE_NAME } from "@ai-editor/db";
+import { PROJECT_FILE_NAME } from "@ai-editor/db";
+import { checkpointWal } from "@ai-editor/db";
 import { findOutlineNode, readOutlineFile, readProjectFile, writeProjectFile } from "@ai-editor/db";
 import { nowIso } from "@ai-editor/db";
 import {
@@ -254,6 +258,51 @@ projectRoutes.post("/close", (c) => {
   }
   // 无当前项目时幂等返回 saved:true（close 语义是「确保已关闭」，非报错）
   return c.json(ok({ saved: true as const }));
+});
+
+// GET /api/v1/project/export —— 导出当前项目三文件为 zip（E1，release-review §二）
+//
+// 响应：application/zip **二进制**（endpoints.md 通用约定显式例外，契约见 shared
+// types/api.ts PROJECT_EXPORT_FILE_NAMES 注释）；Content-Disposition attachment，
+// 文件名 <书名>.zip（RFC 5987 filename* UTF-8 编码，中文书名安全）。
+// 流程：requireCurrentProject（无项目 → 409，与 /config 一致）→ 三文件存在性防御
+// （缺失任一 → 500：打开的项目三文件必然齐全，缺失即损坏，不导出半成品包）→
+// wal_checkpoint(TRUNCATE) 把 WAL 合并回主文件（完整快照）→ zipSync 打包（条目名
+// 保持数据文件原名，import 侧按固定名校验）。决策 17：key 存用户级配置，天然不入包。
+projectRoutes.get("/export", (c) => {
+  const project = requireCurrentProject();
+  const dir = project.root;
+
+  // 三文件缺失任一 → 500（数据完整性推断：打开的项目三文件必然齐全，缺失即损坏）
+  const fileEntries = [
+    { name: PROJECT_FILE_NAME, path: join(dir, PROJECT_FILE_NAME) },
+    { name: OUTLINE_FILE_NAME, path: join(dir, OUTLINE_FILE_NAME) },
+    { name: DATA_DB_FILE_NAME, path: join(dir, DATA_DB_FILE_NAME) },
+  ];
+  for (const f of fileEntries) {
+    if (!existsSync(f.path)) {
+      throw new HttpError(500, "INTERNAL_ERROR", `项目数据文件缺失，无法导出: ${f.name}`);
+    }
+  }
+
+  // WAL checkpoint：合并 WAL 到主文件并截断——zip 内 data.db 为完整快照，无需附带 -wal/-shm
+  checkpointWal(project.db);
+
+  // fflate zipSync：对象形式（key = 条目文件名），key 插入序稳定（project.json → outline.json → data.db）
+  const zipData = zipSync(
+    {
+      [PROJECT_FILE_NAME]: readFileSync(join(dir, PROJECT_FILE_NAME)),
+      [OUTLINE_FILE_NAME]: readFileSync(join(dir, OUTLINE_FILE_NAME)),
+      [DATA_DB_FILE_NAME]: readFileSync(join(dir, DATA_DB_FILE_NAME)),
+    },
+    { level: 6 },
+  );
+
+  // Content-Disposition：ASCII fallback + RFC 5987 filename*（中文/空格书名编码安全）
+  const fileName = `${project.config.name}.zip`;
+  c.header("Content-Type", "application/zip");
+  c.header("Content-Disposition", `attachment; filename="book.zip"; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+  return c.body(zipData);
 });
 
 // GET /api/v1/project/config —— 获取当前项目配置

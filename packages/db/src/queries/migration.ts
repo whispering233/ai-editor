@@ -63,6 +63,15 @@ export function ensureSchemaCompatible(db: Db, dir: string, dbPath: string): Reb
 }
 
 /**
+ * WAL checkpoint（TRUNCATE）：把 WAL 内容合并回主文件并截断（busy>0 说明有其他连接
+ * 在写——MVP 单进程单连接，不检查）。供**导出前**调用（E1：release-review §二）——
+ * 保证 data.db 主文件为完整快照，导出 zip 内的 data.db 无需附带 -wal/-shm。
+ */
+export function checkpointWal(db: Db): void {
+  db.pragma("wal_checkpoint(TRUNCATE)");
+}
+
+/**
  * 删库重建全流程（决策 13）：
  *
  * 1. **checkpoint + 关闭连接**：`wal_checkpoint(TRUNCATE)` 把 WAL 内容合并回主文件并截断，
@@ -91,7 +100,7 @@ export function ensureSchemaCompatible(db: Db, dir: string, dbPath: string): Reb
  */
 export function rebuildProjectStorage(db: Db, dir: string, dbPath: string, oldVersion: number): RebuildOutput {
   // 1. WAL 合并回主文件后关闭连接（busy>0 说明有其他连接在写——MVP 单进程单连接，不检查）
-  db.pragma("wal_checkpoint(TRUNCATE)");
+  checkpointWal(db);
   closeDatabase(db);
 
   // 2/3. 备份（复制而非 rename：原文件在重建流程中继续使用/删除）

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   ERROR_CODES,
   OUTLINE_NODE_DATA_SCHEMAS,
+  PROJECT_EXPORT_FILE_NAMES,
   apiErrorSchema,
   chatSendReqSchema,
   deltaChangeSchema,
@@ -22,6 +23,7 @@ import {
   outlineTreeSchema,
   outlineUpdateReqSchema,
   projectConfigSchema,
+  projectImportResSchema,
   projectListResSchema,
   relationCreateReqSchema,
   relationQuerySchema,
@@ -414,6 +416,26 @@ describe("SSE 事件（endpoints.md 第 738-765 行）", () => {
       sseProposalEventSchema.parse({ proposal_id: "prop_1", type: "propose_create_entity", preview: { name: "李四" } }).proposal_id,
     ).toBe("prop_1");
     expect(sseDoneEventSchema.parse({ session_id: "sess_1" }).session_id).toBe("sess_1");
+  });
+});
+
+describe("导出/导入契约（E1，release-review §二）", () => {
+  it("导出 zip 三文件名常量与数据文件原名一致（import 侧按此固定名校验）", () => {
+    expect(PROJECT_EXPORT_FILE_NAMES).toEqual(["project.json", "outline.json", "data.db"]);
+  });
+
+  it("ErrorCode 含 SCHEMA_VERSION_MISMATCH（409：import 版本不匹配拒绝导入，不静默重建）", () => {
+    expect(ERROR_CODES).toContain("SCHEMA_VERSION_MISMATCH");
+    expect(errorCodeSchema.safeParse("SCHEMA_VERSION_MISMATCH").success).toBe(true);
+  });
+
+  it("import 响应 { imported: true, id, path, name } parse（E2 端点响应契约）", () => {
+    expect(
+      projectImportResSchema.parse({ imported: true, id: "proj-1", path: "/books/我的小说", name: "我的小说" }),
+    ).toEqual({ imported: true, id: "proj-1", path: "/books/我的小说", name: "我的小说" });
+    // 契约收紧：imported 字面量 true、字段必填
+    expect(projectImportResSchema.safeParse({ imported: false, id: "proj-1", path: "/x", name: "x" }).success).toBe(false);
+    expect(projectImportResSchema.safeParse({ imported: true, id: "proj-1" }).success).toBe(false);
   });
 });
 
