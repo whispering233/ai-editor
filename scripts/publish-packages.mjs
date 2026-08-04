@@ -118,11 +118,16 @@ for (const name of PUBLISH_ORDER) {
     //    修复：发布前主动执行「copy-client-dist（server 的 SPA 随包）+ workspace:*
     //    替换」，npm publish 加 --ignore-scripts 跳过全部钩子——manifest 与 tarball
     //    都基于替换后的 package.json（一致）；发布后 finally 主动恢复（幂等）。
+    //    ⚠ OIDC 认证：CI 中 setup-node 会注入占位 NODE_AUTH_TOKEN（XXXXX-…），npm
+    //    检测到它时优先使用（而非 Trusted Publishing 的 OIDC）→ 无效凭据被 npmjs
+    //    以 404 保护性拒绝。发布前必须删除，让 npm 自动检测 GitHub Actions 的
+    //    OIDC 环境变量（ACTIONS_ID_TOKEN_REQUEST_URL）走 Trusted Publisher。
     if (!dryRun) {
       if (name === "server") {
         run("node", ["../../scripts/copy-client-dist.mjs"], { cwd: pkgDir });
       }
       run("node", ["../../scripts/prepare-package-for-publish.mjs"], { cwd: pkgDir });
+      delete process.env.NODE_AUTH_TOKEN; // 占位 token 优先于 OIDC，必须清除（见上）
       try {
         run("npm", ["publish", "--access", "public", "--ignore-scripts"], { cwd: pkgDir });
       } finally {
