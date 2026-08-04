@@ -51,15 +51,27 @@ const projectDir = mkdtempSync(join(tmpdir(), "ai-editor-verify-proj-"));
 
 try {
   // 2. 真实安装（registry 拉包；--no-fund/--no-audit 减噪；失败时打印输出）
+  //    重试：新发布版本在 registry 有文档缓存传播延迟（dist-tags 即时、manifest 数分钟），
+  //    紧接发布后的 npm install 可能 ETARGET/E404——重试等待（最多 5 次 × 15s）。
   console.log(`[verify] npm install --prefix ${installDir} @whispering233/ai-editor-server@${version}`);
-  try {
-    execFileSync(
-      "npm",
-      ["install", "--prefix", installDir, "--no-fund", "--no-audit", "--loglevel", "error", `@whispering233/ai-editor-server@${version}`],
-      { stdio: "inherit", timeout: 300_000 },
-    );
-  } catch (err) {
-    console.error(`[verify] FAIL: npm install 失败（exit ${err.status}）`);
+  let installOk = false;
+  for (let attempt = 1; attempt <= 5 && !installOk; attempt++) {
+    try {
+      execFileSync(
+        "npm",
+        ["install", "--prefix", installDir, "--no-fund", "--no-audit", "--loglevel", "error", `@whispering233/ai-editor-server@${version}`],
+        { stdio: "inherit", timeout: 300_000 },
+      );
+      installOk = true;
+    } catch (err) {
+      if (attempt < 5) {
+        console.warn(`[verify] npm install 失败（第 ${attempt} 次，等待 registry 缓存传播后重试）`);
+        await new Promise((r) => setTimeout(r, 15_000));
+      }
+    }
+  }
+  if (!installOk) {
+    console.error(`[verify] FAIL: npm install 失败（5 次重试后仍失败——疑似版本不存在或网络问题）`);
     process.exit(1);
   }
 
