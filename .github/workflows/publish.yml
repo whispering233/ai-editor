@@ -1,0 +1,41 @@
+# npm 发布工作流（E6）：push 版本 tag（v*）时按依赖序发布 6 包到 npm registry。
+#
+# 认证：Trusted Publishing（OIDC）——permissions.id-token: write 换取 npmjs 短期凭证，
+# **无 NODE_AUTH_TOKEN**（前置：npmjs 为 6 包各配置 Trusted Publisher，
+# Publisher = GitHub Actions，工作流名 = publish.yml，见 README「发布与安装」）。
+#
+# 三重防线（inkos 模式）：
+#   1. publish-packages.mjs 判重幂等（已存在版本跳过，中途失败重跑安全）
+#   2. publish-packages.mjs tarball workspace: 断言（pack 后解包检查，残留即中止）
+#   3. verify-installed.mjs 临时目录真实安装 + 启动冒烟（发布后最后一道闸）
+name: Publish
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  id-token: write # OIDC Trusted Publishing（用户已在 npmjs 配置 Trusted Publisher）
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20 # CI 挂起保险（verify-installed 冒烟等步骤兜底，常态 3-5 分钟）
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.8.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck && pnpm lint && pnpm -r test && pnpm -r build
+      # 发布 6 包（GITHUB_REF=refs/tags/vX.Y.Z 时自动校验 tag 与包版本一致）
+      - run: node scripts/publish-packages.mjs
+      # 安装态验证：临时目录真实安装 @ai-editor/server@<版本> 并启动冒烟
+      - run: node scripts/verify-installed.mjs

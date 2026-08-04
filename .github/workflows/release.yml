@@ -1,0 +1,21 @@
+# GitHub Release 工作流（E6，adarkroom 模式照搬）：
+# push 版本 tag（v*）时，从根 CHANGELOG.md 按 tag 版本段创建 GitHub Release。
+# 依赖根级 CHANGELOG.md 存在（调度方维护，勿在此创建）。
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      # 读取 CHANGELOG.md 中匹配 tag（vX.Y.Z）的版本段，创建 GitHub Release
+      #（action 自带 contents: write 权限，与 jobs.permissions 叠加声明保持一致）
+      - uses: hermannm/release-from-changelog@v0.2.6
