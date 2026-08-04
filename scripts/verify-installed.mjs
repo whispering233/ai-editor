@@ -63,7 +63,7 @@ try {
         { stdio: "inherit", timeout: 300_000 },
       );
       installOk = true;
-    } catch (err) {
+    } catch {
       if (attempt < 5) {
         console.warn(`[verify] npm install 失败（第 ${attempt} 次，等待 registry 缓存传播后重试）`);
         await new Promise((r) => setTimeout(r, 15_000));
