@@ -17,8 +17,9 @@ import { useEffect, useState } from "react";
 import type { DragEvent, KeyboardEvent, ReactNode } from "react";
 import { formatTimestamp } from "@ai-editor/shared";
 import type { OutlineNode } from "@ai-editor/shared";
-import { BookOpen, CheckCircle2, FastForward, Pin, Trash2 } from "lucide-react";
+import { BookOpen, Trash2 } from "lucide-react";
 import { CHILD_TYPE, ConfirmDialog, TYPE_LABEL } from "../components/outline/dialogs";
+import { NodeHookMarkBadge } from "../components/outline/node-hook-badge";
 import { Button } from "@/components/ui/button";
 import {
   ApiError,
@@ -140,38 +141,8 @@ function RootCreateRow({
 }
 
 // ============ 伏笔标记徽标（S9.2） ============
-
-/** 标记类型 → 文案（title tooltip 前缀；hooks.md 生命周期动作：埋下 → 推进 → 回收） */
-const HOOK_MARK_LABEL: Record<NodeHookMark["relationType"], string> = {
-  plants: "埋设",
-  advances: "推进",
-  resolves: "回收",
-};
-
-/** 标记类型 → lucide 图标（📌 / ⏩ / ✅ 对应物；样式一律 token 类，禁硬编码色——oracle 红线） */
-const HOOK_MARK_ICON: Record<NodeHookMark["relationType"], typeof Pin> = {
-  plants: Pin,
-  advances: FastForward,
-  resolves: CheckCircle2,
-};
-
-/**
- * 单个伏笔标记小徽标（title 行尾紧凑排列）：图标 + 原生 title tooltip 显示伏笔名。
- * 用原生 title 而非 Tooltip 组件：与全页既有 hover 提示模式一致（各操作图标同为 title 属性），
- * 且行容器已有拖拽提示 title——徽标自带 title 可遮蔽父级提示，避免双 tooltip 叠加
- */
-function NodeHookMarkBadge({ mark }: { mark: NodeHookMark }) {
-  const Icon = HOOK_MARK_ICON[mark.relationType];
-  return (
-    <span
-      className="shrink-0 rounded px-0.5 text-muted-foreground hover:text-foreground"
-      title={`${HOOK_MARK_LABEL[mark.relationType]}伏笔：${mark.hookName}`}
-      aria-label={`${HOOK_MARK_LABEL[mark.relationType]}伏笔：${mark.hookName}`}
-    >
-      <Icon className="size-3" />
-    </span>
-  );
-}
+// 徽标组件已上提为共享组件 components/outline/node-hook-badge.tsx（S10.1 画布节点卡复用，
+// layout.md §5 上提约定）；本页仅消费 buildNodeHookMarks 聚合结果渲染
 
 export default function Outline() {
   const outline = useProjectStore((s) => s.outline);
