@@ -128,8 +128,13 @@ for (const name of PUBLISH_ORDER) {
       }
       run("node", ["../../scripts/prepare-package-for-publish.mjs"], { cwd: pkgDir });
       delete process.env.NODE_AUTH_TOKEN; // 占位 token 优先于 OIDC，必须清除（见上）
+      // 诊断（OIDC 换证调试用）：环境变量存在性 + npm 版本 + 请求的 OIDC token claims
+      if (process.env.CI) {
+        const hasOidcEnv = Boolean(process.env.ACTIONS_ID_TOKEN_REQUEST_URL && process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN);
+        console.log(`[publish] 诊断: OIDC 环境=${hasOidcEnv ? "有" : "无"} npm=${run("npm", ["--version"]).trim()} registry=${run("npm", ["config", "get", "registry"]).trim()}`);
+      }
       try {
-        run("npm", ["publish", "--access", "public", "--ignore-scripts"], { cwd: pkgDir });
+        run("npm", ["publish", "--access", "public", "--ignore-scripts", "--loglevel", "verbose"], { cwd: pkgDir });
       } finally {
         run("node", ["../../scripts/restore-package-json.mjs"], { cwd: pkgDir });
       }
