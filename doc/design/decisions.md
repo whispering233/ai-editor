@@ -287,6 +287,7 @@ AI Editor 的目标用户是**写小说的人**，不是开发者。纯 GUI 交�
 - outline.json 顶层携带 `schema_version` 字段（与 project.json 同步写入，用于文件格式演进判定）。
 - 不写迁移脚本（YAGNI）。
 - **约束**：此策略仅在正式发布前可接受；首次发布前必须重新评估（发布后用户持有真实创作数据，删库不可接受）。
+- **删库重建策略于 v0.1.0 发布终止（E5 增补）**：增量迁移机制替代——旧版本库（user_version < SCHEMA_VERSION）**有迁移路径**（`MIGRATIONS` 存在连续迁移链）→ 前向迁移（每迁移一个事务、`setUserVersion` 原子提交、迁移前时间戳快照 `data.db.v{n}.{时间戳}.bak`）；**无迁移路径**的历史版本保留重建兜底；未来版本（> 当前）仍按 E4 拒绝打开。首个真实迁移条目在 SCHEMA_VERSION 提升时加入 `packages/db/src/migrations/`。
 
 **为什么**：MVP 阶段 schema 必然频繁变动，迁移脚本成本高收益低；删库重建换取开发速度，代价由「未发布无真实数据」这一前提兜底。存储双轨下只重建 data.db 会留下大纲与实体割裂的半状态，必须同步重置 outline.json 并留备份。
 

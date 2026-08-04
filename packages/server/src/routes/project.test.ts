@@ -1037,7 +1037,7 @@ describe("POST /project/import（E2：zip 导入新书）", () => {
     expect(existsSync(join(root, "books", "未来版书"))).toBe(false);
   });
 
-  it("旧版本备份（user_version < SCHEMA_VERSION）→ 409 文案提示「旧版本程序」（当前一律拒绝，E5 后放开）", async () => {
+  it("旧版本备份（user_version < SCHEMA_VERSION）→ 409 文案提示「旧版本程序且无可用迁移路径」（E5：当前 MIGRATIONS 为空无路径，仍拒绝）", async () => {
     const root = makeTmpDir();
     setProjectRoot(root);
     // 构造旧版本备份：合法 project.json/outline.json + data.db user_version=0（新库默认）
@@ -1058,7 +1058,9 @@ describe("POST /project/import（E2：zip 导入新书）", () => {
       body: importForm(oldZip, "旧版书"),
     });
     expect(res.status).toBe(409);
-    expect((await res.json()).error.message).toContain("旧版本程序");
+    const msg = (await res.json()).error.message as string;
+    expect(msg).toContain("旧版本程序");
+    expect(msg).toContain("无可用迁移路径");
     expect(existsSync(join(root, "books", "旧版书"))).toBe(false);
   });
 

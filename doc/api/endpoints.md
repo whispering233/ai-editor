@@ -57,6 +57,10 @@
   language: "zh" | "en";
   config: ProjectConfig;  // 完整项目配置
   // ProjectConfig 含 schema_version: number（对应 project.json 的 schema_version，决策 13）
+  // 附加字段（shared projectOpenResSchema 未含，服务端附加构造）：
+  //   rebuilt?: true    —— 删库重建发生（决策 13 修订，提示客户端「已重建」）
+  //   migrated?: true   —— 前向迁移发生（E5：旧版本经 runMigrations 自动升级；与 rebuilt 互斥）
+  //   fromVersion?: number —— 重建/迁移前的旧版本号（备份/快照命名 v{n}）
 }
 ```
 
@@ -65,9 +69,13 @@
 - open 必须校验目标目录包含 `project.json`，否则拒绝。
 - 校验失败返回 `{ code: "INVALID_PROJECT_PATH" }`（400）。
 
-**schema 版本检测（open 时，决策 13 修订 + E4）**：
-- 以 data.db 的 `user_version` 为准判定；**旧版本**（`user_version` < 当前）时执行**删库重建**，并同步重置 outline.json（先备份为 `outline.json.v{n}.bak`，n=旧版本号）、清空回收站；完成后向客户端提示已重建。
-- **未来版本**（`user_version` > 当前，E4——堵「装新版后回退旧版 → 降级重建清零」的降级数据丢失路径）：**拒绝打开**，返回 409 `PROJECT_VERSION_NEWER`（message 提示「项目 data.db 版本高于当前程序版本，请升级程序后打开」）；**不触发任何重建/备份/写操作**，数据文件原封不动。
+**schema 版本检测（open 时，决策 13 修订 + E4 + E5）**：
+- 以 data.db 的 `user_version` 为准判定，三分支：
+  - **同版本**（`user_version` === 当前）→ 正常打开。
+  - **旧版本**（`user_version` < 当前）：
+    - **有迁移路径**（`MIGRATIONS` 存在从当前版本到目标版本的连续迁移链，见 `doc/database/schema.md` 迁移机制）→ **前向迁移**（`runMigrations`：整批迁移前自动快照 `data.db.v{n}.{时间戳}.bak` + 每迁移一个事务原子提交）；响应附加 `migrated: true` + `fromVersion`；数据保全完整。
+    - **无迁移路径** → **删库重建兜底**（决策 13：备份 `data.db.v{n}.bak` + `outline.json.v{n}.bak`、重置 outline 空树、清空回收站）；响应附加 `rebuilt: true` + `fromVersion`。
+  - **未来版本**（`user_version` > 当前，E4——堵「装新版后回退旧版 → 降级重建清零」的降级数据丢失路径）：**拒绝打开**，返回 409 `PROJECT_VERSION_NEWER`（message 提示「项目 data.db 版本高于当前程序版本，请升级程序后打开」）；**不触发任何重建/备份/写操作**，数据文件原封不动。
 - `project.json` 的 `schema_version` 仅用于 JSON 结构判断。
 
 ### POST /api/v1/project/close

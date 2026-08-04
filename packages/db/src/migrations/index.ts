@@ -1,0 +1,43 @@
+// 增量迁移脚本目录（E5：release-review §一 建议动作 2）
+//
+// **形态**：每个迁移一个 TS 文件（001_xxx.ts → version 1、002_xxx.ts → version 2...），
+// 文件内 `export default { version, up }` 形态的 Migration 对象；本目录 index.ts 按
+// version 升序聚合导出 MIGRATIONS（tsc 编译进 dist 随包分发，无运行时目录读取——
+// 迁移集在构建期冻结，避免「读目录顺序不稳定/漏文件」的运行时不确定性）。
+//
+// **version 语义**：迁移完成后 data.db 的 user_version（`setUserVersion(m.version)`）。
+// 从 v=N 库升级到 v=N+1 的迁移条目 version = N+1（SCHEMA_VERSION 即目标版本）。
+//
+// **写法示例**（首个真实迁移（SCHEMA_VERSION 提升到 2 时）加入）：
+// ```ts
+// import type { Db } from "../connection.js";
+// import type { Migration } from "./index.js";
+// export default {
+//   version: 2,
+//   up: (db: Db) => {
+//     // DDL/数据变更（better-sqlite3 同步 API；抛错 → 该迁移整体回滚）
+//     db.exec("ALTER TABLE entities ADD COLUMN note TEXT");
+//   },
+// } satisfies Migration;
+// ```
+//
+// **执行语义**（runMigrations，见 queries/migration.ts）：
+// - 按 version 升序逐个执行，每个迁移一个事务（up + setUserVersion 原子提交）
+// - 整批迁移前自动快照 data.db（`data.db.v{n}.{时间戳}.bak`，不覆盖旧备份）
+// - 失败 → 该迁移回滚 + 版本停在前一迁移后，下次 open 重试
+// - 无迁移路径的旧版本（如 v0 且无 0→1 条目）保持删库重建兜底（决策 13）
+//
+// **当前状态**：SCHEMA_VERSION = 1 且无历史版本 → 数组为空（机制已就绪，
+// 首个真实条目在未来的 schema 变更时加入）。
+
+import type { Db } from "../connection.js";
+
+/** 单条增量迁移（version = 迁移完成后 data.db 的 user_version） */
+export interface Migration {
+  version: number;
+  /** 迁移逻辑（DDL/数据变更）；抛错 → 该迁移事务整体回滚，版本号不变 */
+  up: (db: Db) => void;
+}
+
+/** 全量迁移集（按 version 升序；SCHEMA_VERSION = 1 当前为空） */
+export const MIGRATIONS: readonly Migration[] = [];

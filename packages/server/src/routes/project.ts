@@ -24,7 +24,7 @@ import type { ProjectFileConfig } from "@ai-editor/shared";
 import { mapProjectFileToConfig } from "@ai-editor/shared";
 import { PROJECT_EXPORT_FILE_NAMES } from "@ai-editor/shared/schemas";
 import { openDatabase, closeDatabase, getUserVersion, SCHEMA_VERSION } from "@ai-editor/db";
-import { ensureSchemaCompatible, DATA_DB_FILE_NAME } from "@ai-editor/db";
+import { ensureSchemaCompatible, DATA_DB_FILE_NAME, hasMigrationPath } from "@ai-editor/db";
 import { SchemaVersionError, type MigrationResult, type Db } from "@ai-editor/db";
 import { OUTLINE_FILE_NAME } from "@ai-editor/db";
 import { PROJECT_FILE_NAME } from "@ai-editor/db";
@@ -208,6 +208,7 @@ projectRoutes.post("/open", async (c) => {
     // 响应：openResSchema 核心字段 + rebuilt 提示（端到端文档「向客户端提示已重建」，endpoints.md 第 69 行；
     // rebuilt/fromVersion 为附加字段——shared 的 projectOpenResSchema 未含（shared 冻结约束），
     // 此处不经 schema parse 直接构造，避免 zod 默认 strip 掉附加字段；建议 2 记录在案，契约修订时收敛）
+    // E5：有迁移路径的旧版本经前向迁移打开时附加 migrated:true（提示客户端已自动升级数据）
     return c.json(
       ok({
         id: config.id,
@@ -215,6 +216,7 @@ projectRoutes.post("/open", async (c) => {
         language: config.language,
         config: mapProjectFileToConfig(config),
         ...(result.rebuilt ? { rebuilt: true, fromVersion: result.fromVersion } : {}),
+        ...(result.migrated ? { migrated: true, fromVersion: result.fromVersion } : {}),
       }),
     );
   } catch (err) {
@@ -524,9 +526,12 @@ projectRoutes.post("/import", async (c) => {
     // data.db 校验顺序（ora-4）：**文件大小 > 0 → 打开成功 → user_version**——
     // 0 字节文件 SQLite 会当新库打开（user_version=0），必须先按坏包拒绝（400 而非 409）；
     // 非 SQLite 内容打开失败 → 400 坏包。
-    // user_version === SCHEMA_VERSION（决策 13：以 user_version 为准判定）；不匹配 → 409
-    // 拒绝导入（不静默重建——导入是用户主动恢复备份，版本不兼容须明示），文案按相对
-    // 版本分流（更高版本程序 / 旧版本程序；当前一律拒绝，E5 迁移机制落地后旧版本放开）。
+    // user_version 判定（E5 决议，tasks.md E5 卡规格追加句）：
+    //   v === SCHEMA_VERSION → 接受（现状）
+    //   v < SCHEMA_VERSION → **有迁移路径**（MIGRATIONS 存在连续链，open 时自动前向
+    //     迁移，数据保全完整）→ 接受；**无迁移路径** → 409（文案标注版本过旧无路径）
+    //   v > SCHEMA_VERSION → 409（E4 语义：备份来自更高版本程序）
+    // 拒绝均不静默重建——导入是用户主动恢复备份，版本不兼容须明示。
     const dbPath = join(tmpDir, DATA_DB_FILE_NAME);
     if (statSync(dbPath).size === 0) {
       throw new HttpError(400, "VALIDATION_ERROR", "备份包内 data.db 为空文件（损坏包）");
@@ -535,8 +540,9 @@ projectRoutes.post("/import", async (c) => {
     try {
       db = openDatabase(dbPath);
       const v = getUserVersion(db);
-      if (v !== SCHEMA_VERSION) {
-        const hint = v > SCHEMA_VERSION ? "备份来自更高版本程序" : "备份来自旧版本程序";
+      const acceptable = v === SCHEMA_VERSION || (v < SCHEMA_VERSION && hasMigrationPath(v, SCHEMA_VERSION));
+      if (!acceptable) {
+        const hint = v > SCHEMA_VERSION ? "备份来自更高版本程序" : "备份来自旧版本程序且无可用迁移路径";
         throw new HttpError(
           409,
           "SCHEMA_VERSION_MISMATCH",

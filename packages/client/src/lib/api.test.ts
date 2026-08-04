@@ -115,6 +115,29 @@ describe("openProject（POST /api/v1/project/open）", () => {
     expect(JSON.parse(String(calls[0].init?.body))).toEqual({ path: "/tmp/p" });
   });
 
+  it("响应透传 migrated 附加字段（E5：前向迁移自动升级提示，与 rebuilt 互斥）", async () => {
+    const config = {
+      id: "proj-1",
+      name: "我的小说",
+      language: "zh",
+      prompt: "",
+      schemaVersion: 1,
+      currentPosition: null,
+      createdAt: "2026-08-01T10:00:00Z",
+      updatedAt: "2026-08-01T10:00:00Z",
+    };
+    mockFetchOnce({
+      body: {
+        success: true,
+        data: { id: "proj-1", name: "我的小说", language: "zh", config, migrated: true, fromVersion: 0 },
+      },
+    });
+    const res = await openProject("/tmp/p");
+    expect(res.migrated).toBe(true);
+    expect(res.rebuilt).toBeUndefined();
+    expect(res.fromVersion).toBe(0);
+  });
+
   it("400 INVALID_PROJECT_PATH → 抛 ApiError", async () => {
     mockFetchOnce({
       status: 400,

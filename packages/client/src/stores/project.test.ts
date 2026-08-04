@@ -114,6 +114,21 @@ describe("openProjectAt（打开项目 + rebuilt 提示）", () => {
     expect(useUiStore.getState().toast?.text).toContain("v0");
   });
 
+  it("migrated=true → toast 提示（E5：前向迁移自动升级，含 fromVersion；与 rebuilt 互斥）", async () => {
+    mocked.openProject.mockResolvedValue({
+      id: "proj-1",
+      name: "我的小说",
+      language: "zh",
+      config: sampleConfig,
+      migrated: true,
+      fromVersion: 0,
+    });
+    await useProjectStore.getState().openProjectAt("/tmp/p");
+    expect(useUiStore.getState().toast?.text).toContain("已自动升级");
+    expect(useUiStore.getState().toast?.text).toContain("v0");
+    expect(useUiStore.getState().toast?.text).not.toContain("重建");
+  });
+
   it("rebuilt 未返回 → 无 toast", async () => {
     mocked.openProject.mockResolvedValue({ id: "proj-1", name: "我的小说", language: "zh", config: sampleConfig });
     await useProjectStore.getState().openProjectAt("/tmp/p");

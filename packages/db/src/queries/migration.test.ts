@@ -1,7 +1,7 @@
 // S1.1 schema 演进删库重建测试（决策 13）
 // 覆盖：版本匹配不重建 / 版本不匹配重建（备份+重置）/ 备份内容可读 / 旧版本号命名 / outline 缺失兜底
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -175,5 +175,77 @@ describe("ensureSchemaCompatible 版本不匹配 → 删库重建（决策 13）
       children: [],
     });
     closeDatabase(active);
+  });
+});
+
+// ============ ensureSchemaCompatible 旧版本迁移路径（E5 注入） ============
+
+describe("ensureSchemaCompatible 旧版本有迁移路径（E5）", () => {
+  it("user_version=0 + 注入迁移链 → 前向迁移：数据保留、无重建备份、时间戳快照生成", () => {
+    const migrations = [
+      { version: 1, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN note TEXT") },
+    ];
+    insertOldEntity(db, "char-1");
+    writeOutlineFile(dir, oldTree());
+    const outlineRawBefore = readFileSync(join(dir, OUTLINE_FILE_NAME), "utf8");
+
+    const { db: active, result } = ensureSchemaCompatible(db, dir, dbPath, { migrations });
+
+    // 走迁移而非重建
+    expect(result.rebuilt).toBe(false);
+    expect(result.migrated).toBe(true);
+    expect(result.fromVersion).toBe(0);
+    expect(getUserVersion(active)).toBe(SCHEMA_VERSION);
+    // 数据保全：实体行仍在、outline 字节原样（重建会清空/重置）
+    expect(countEntities(active)).toBe(1);
+    expect(readFileSync(join(dir, OUTLINE_FILE_NAME), "utf8")).toBe(outlineRawBefore);
+    // 迁移副作用可见（note 列已加）
+    const cols = active.prepare("PRAGMA table_info(entities)").all() as Array<{ name: string }>;
+    expect(cols.some((c) => c.name === "note")).toBe(true);
+    // 无删库重建备份（data.db.v0.bak 不带时间戳的不生成）、有迁移时间戳快照
+    expect(existsSync(join(dir, "data.db.v0.bak"))).toBe(false);
+    expect(result.backups[0]).toMatch(/data\.db\.v0\.\d{8}T\d{6}\.\d{3}Z\.bak$/);
+    closeDatabase(active);
+  });
+
+  it("user_version=0 + 默认迁移集（当前为空）→ 无迁移路径 → 重建兜底（E5 前行为不变）", () => {
+    insertOldEntity(db, "char-1");
+    writeOutlineFile(dir, oldTree());
+
+    const { db: active, result } = ensureSchemaCompatible(db, dir, dbPath);
+
+    expect(result.rebuilt).toBe(true);
+    expect(result.migrated).toBeUndefined();
+    expect(getUserVersion(active)).toBe(SCHEMA_VERSION);
+    closeDatabase(active);
+  });
+
+  it("迁移中途失败（ora-3 S2）→ 连接已关闭（open 未生效，不留句柄）+ 版本停步 + 快照保留", () => {
+    // 注入的第一个迁移（v1）即抛错——ensureSchemaCompatible 的 targetVersion=SCHEMA_VERSION=1，
+    // 迁移链首个条目失败即可覆盖「runMigrations 中途抛错」路径（v2 抛错无法构造：v2 超出目标版本不执行）
+    const migrations = [
+      {
+        version: 1,
+        up: () => {
+          throw new Error("migration boom");
+        },
+      },
+    ];
+    insertOldEntity(db, "char-1");
+
+    expect(() => ensureSchemaCompatible(db, dir, dbPath, { migrations })).toThrow("migration boom");
+    // 迁移失败 = open 未生效：本次打开的连接已关闭（与 E4 拒绝分支同语义）
+    expect(db.open).toBe(false);
+    // 版本停步（v1 未提交，仍为 0）、数据未动
+    const reopened = openDatabase(dbPath);
+    try {
+      expect(getUserVersion(reopened)).toBe(0);
+      expect(countEntities(reopened)).toBe(1);
+    } finally {
+      closeDatabase(reopened);
+    }
+    // 迁移前快照保留（重试现场）
+    const snapFiles = readdirSync(dir).filter((f) => /^data\.db\.v0\.\d{8}T\d{6}\.\d{3}Z\.bak$/.test(f));
+    expect(snapFiles.length).toBeGreaterThan(0);
   });
 });

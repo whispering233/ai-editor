@@ -115,6 +115,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       useUiStore
         .getState()
         .showToast(`项目已按新版本重建${res.fromVersion !== undefined ? `（v${res.fromVersion}）` : ""}，备份已保留`);
+    } else if (res.migrated) {
+      // 前向迁移提示（E5：旧版本经增量迁移自动升级，数据保全；与 rebuilt 互斥）
+      useUiStore
+        .getState()
+        .showToast(`项目数据已自动升级${res.fromVersion !== undefined ? `（v${res.fromVersion} → 当前版本）` : ""}，快照已保留`);
     }
     await get().loadOutline();
   },

@@ -22,6 +22,17 @@
 
 **时间约定**：所有时间列/字段统一 ISO 8601 字符串（如 `2026-08-01T10:00:00Z`），由应用层写入，不使用 SQLite 内置 `datetime('now')`——回收站按 `deleted_at` 排序需跨 SQLite 与 outline.json 统一格式。
 
+**schema 版本与迁移（E5，决策 13 增补）**：
+
+- **版本判定**：以 data.db 的 `PRAGMA user_version` 为准（`packages/db/src/schema.ts` 的 `SCHEMA_VERSION` 常量）；`project.json`/`outline.json` 顶层的 `schema_version` 仅用于 JSON 结构判断（决策 13）。
+- **三态分流（open 时，`ensureSchemaCompatible`）**：
+  - `user_version === SCHEMA_VERSION` → 正常打开；
+  - `user_version > SCHEMA_VERSION`（未来版本，E4）→ **拒绝打开** 409 `PROJECT_VERSION_NEWER`（数据原封不动，提示升级程序）；
+  - `user_version < SCHEMA_VERSION`（旧版本）→ **有迁移路径**（`packages/db/src/migrations/` 存在从当前版本到目标版本的连续迁移链）→ `runMigrations` 前向迁移；**无迁移路径** → 删库重建兜底（决策 13，备份 `data.db.v{n}.bak` + `outline.json.v{n}.bak`）。
+- **迁移机制（E5）**：`migrations/` 目录每个文件导出一个 `Migration = { version, up }`（`001_xxx.ts` → version 1），`index.ts` 按 version 升序聚合导出 `MIGRATIONS`（tsc 编译进 dist 随包分发，无运行时目录读取）。`runMigrations` 对缺失版本逐个执行：**每个迁移一个事务（`up(db)` + `setUserVersion(version)` 原子提交——成功 ⇒ 版本已写入；失败 ⇒ 版本未变）**；**整批迁移前自动快照** data.db → `data.db.v{n}.{YYYYMMDDHHmmssSSSZ}.bak`（checkpoint 后复制主文件，时间戳命名不覆盖旧备份，失败重试现场保留）。迁移失败 → 该迁移回滚 + 版本停在前一迁移后，下次 open 重试。
+- 当前 `SCHEMA_VERSION = 1` 且无历史版本 → `MIGRATIONS` 为空；首个真实迁移条目在 SCHEMA_VERSION 提升时加入。
+- **import 侧联动（E5 决议）**：导入备份时 `user_version < SCHEMA_VERSION` 且**有迁移路径** → 接受（搬入后 open 自动迁移）；无路径 → 409 `SCHEMA_VERSION_MISMATCH`；`>` 当前 → 409（E4 语义）。
+
 ## entities — 实体表
 
 ```sql

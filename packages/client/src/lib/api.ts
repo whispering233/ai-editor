@@ -563,7 +563,9 @@ export interface OpenProjectRes {
   config: ProjectConfig;
   /** schema 版本不匹配时删库重建提示（决策 13 修订，endpoints.md「向客户端提示已重建」） */
   rebuilt?: boolean;
-  /** 重建前的 schema 版本号（决策 13：备份文件命名 v{n}） */
+  /** 前向迁移提示（E5：旧版本经 runMigrations 自动升级时 true，与 rebuilt 互斥） */
+  migrated?: boolean;
+  /** 重建/迁移前的 schema 版本号（决策 13：备份文件命名 v{n}） */
   fromVersion?: number;
 }
 
