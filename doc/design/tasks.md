@@ -35,6 +35,12 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - [x] S11.1 生产构建全链路
 - [x] S11.2 端到端冒烟
 - [x] S11.3 发布前复审（评审纪要：`doc/design/release-review.md`）
+- [ ] E1 导出/导入契约 + export 路由
+- [ ] E2 import 路由（校验 + 原子搬入）
+- [ ] E3 导出/导入 client UI
+- [ ] E4 未来版本拒绝重建（堵降级数据丢失）
+- [ ] E5 增量迁移脚本机制
+- [ ] E6 publishConfig + 版本管理 + publish 演练
 
 ---
 
@@ -73,3 +79,45 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 **切片 11 发布（S11.1-S11.3，2026-08）**——生产构建全链路（`pnpm -r build` → dist 启动，真实目录 14 项走查：SPA fallback / 待命语义 / 端口 +1 / 127.0.0.1 开浏览器）；端到端冒烟（`smoke.test.ts` 9 步链路 123+ 断言：建项目→大纲→实体→关系→Delta→回收站→伏笔→对话→提案确认，真实 HTTP + tmp 项目 + mock LLM）；发布前复审（`doc/design/release-review.md`：阻断项 = #2 导出/导入 + #8 publishConfig 与 publish 演练 + #12 未来版本拒绝重建）。
 
 **调试基础设施（2026-08 独立交付）**——创作根 `.ai-editor/config.json` 纯配置文件调试日志（五类别 chat/request/stream/usage/http 细粒度门控，无 env 开关）；`[llm] request` 完整 prompt / `[llm] stream` 原始 SSE chunk / `[llm] usage` 真实 token 观察。
+
+---
+
+## 发布前阻断项（E1-E6，依据 `doc/design/release-review.md`）
+
+> 发布就绪度评审（S11.3）产出：阻断项 4 项（#2 导出/导入、#8 publishConfig、#8 publish 演练、#12 未来版本拒绝重建），迁移机制按用户裁决在发布窗口内做。zip 库选型 **fflate**（用户裁决）。按卡执行、一卡一 commit、每卡「实现 fixer/designer + 验证 oracle」双代理。
+
+**E1 导出/导入契约 + export 路由**
+- 范围：shared 契约（export/import 请求/响应 schema）+ 引入 fflate + `GET /api/v1/project/export`（zip 打包 project.json + outline.json + data.db；导出前 wal_checkpoint(TRUNCATE) 保证完整快照；决策 17 key 不入包）
+- 依赖：S11.2（冒烟测试 tmp 项目模式可复用）
+- 验证：导出 zip 解包三文件齐全 + 与源文件一致；单测 roundtrip
+- 回滚：单 commit
+
+**E2 import 路由（校验 + 原子搬入）**
+- 范围：`POST /api/v1/project/import`——解压到临时目录校验（三文件齐全 + project.json/outline.json 顶层契约 + data.db user_version 匹配），全绿原子搬入**新书目录**（books/ 新建，不覆盖现有项目，`PROJECT_ALREADY_EXISTS` 同语义）；user_version 不匹配拒绝导入提示版本不兼容（不静默重建）
+- 依赖：E1
+- 验证：roundtrip（E1 导出 → E2 导入新书 → 数据完整）；坏包/缺文件/版本不匹配/路径冲突分支
+- 回滚：单 commit
+
+**E3 导出/导入 client UI**
+- 范围：书架/设置页「导出（下载 zip）/ 导入（选文件）」入口 + 进度/结果 toast；错误码文案映射
+- 依赖：E2
+- 验证：手工走查 + 组件测试
+- 回滚：单 commit
+
+**E4 未来版本拒绝重建（堵降级数据丢失）**
+- 范围：migration.ts 的 `user_version > SCHEMA_VERSION` 分支由「重建」改为「拒绝打开 + 明确错误提示升级程序版本」（新错误码/响应字段，前端提示）
+- 依赖：无
+- 验证：单测覆盖未来版本拒绝 + 旧版本仍重建 + 同版本正常
+- 回滚：单 commit
+
+**E5 增量迁移脚本机制**
+- 范围：`migrations/` 目录按序执行（001_xxx.sql/ts）+ 每步 `setUserVersion(v+1)` + 启动按 user_version < SCHEMA_VERSION 前向执行 + 迁移前自动快照（复用备份函数，命名加时间戳）；决策 13 增补「删库重建策略于 v0.1.0 发布终止」
+- 依赖：E4
+- 验证：空迁移/多步顺序/失败回滚/快照生成；文档更新（schema.md/decisions.md）
+- 回滚：单 commit
+
+**E6 publishConfig + 版本管理 + publish 演练**
+- 范围：6 包 `publishConfig: { access: "public" }` + 版本同步规则（`scripts/publish.mjs`：build → pack 校验 → 依赖序 publish → 版本 bump）+ `npm publish --dry-run` 验证包内容 + 真实 npm publish 演练（依赖序 shared → llm/db/tools → agent → server → registry 安装 `npm i -g ai-editor` 启动验证）
+- 依赖：E1-E5（发布内容完整）
+- 验证：dry-run 包内容清单 + 演练记录
+- 回滚：单 commit
