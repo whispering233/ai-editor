@@ -103,7 +103,7 @@
 
 ### 发布阻断项（必须清零）
 
-> **实施进展（2026-08）**：E1-E6 已全部实施完成（导出/导入三卡 `8706f63`/`0c1ecf7`/`9e7c60e`、未来版本拒绝重建 `e53d261`、增量迁移机制 `023c2b5`、发布链路 `E6 commit`）——**发布阻断项全部清零**；剩余为 npmjs 手动前置（6 包 Trusted Publisher 配置）与首次真实发布执行（流程见 AGENTS.md「版本发布流程（E6）」）。
+> **实施进展（2026-08-04）**：E1-E5 完成（导出/导入三卡 `8706f63`/`0c1ecf7`/`9e7c60e`、未来版本拒绝重建 `e53d261`、增量迁移机制 `023c2b5`）；E6 基础落地（publishConfig/脚本/workflow/包名改 `@whispering233/ai-editor-*`——`@ai-editor` scope 被占）/ 6 包已发布 npm（v0.0.3 为首个可安装版本，发布管道经两轮修复：npm 12 manifest 时序 → 发布前主动替换 + `--ignore-scripts`）。**剩余：npmjs Trusted Publisher ×6 配置（需先开 2FA）、坏版本 v0.0.1/v0.0.2 deprecate、CI 全链路重测**——细分与坑记录见 `doc/design/tasks.md` E6 卡「当前状态」段。
 
 | # | 项 | 性质 | 工作量 |
 |---|----|------|--------|

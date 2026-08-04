@@ -102,7 +102,9 @@ npm install -g @whispering233/ai-editor-server
 ai-editor <项目目录>   # 启动服务 + 自动打开浏览器 http://127.0.0.1:3456
 ```
 
-**发布前置（一次性，npmjs 手动）**：Trusted Publishing（OIDC）——为 `@whispering233/ai-editor-shared`、`@whispering233/ai-editor-llm`、`@whispering233/ai-editor-db`、`@whispering233/ai-editor-tools`、`@whispering233/ai-editor-agent`、`@whispering233/ai-editor-server` 六包各配置 Trusted Publisher：Publisher = GitHub Actions、工作流名 = `publish.yml`；配置后 CI 无需 token。
+> 版本说明：**v0.0.3 是首个可正常安装的版本**——v0.0.1/v0.0.2 因发布管道缺陷（npm 12 manifest 残留 `workspace:*` 协议）不可安装，已标注废弃处理中；安装时请使用 `@whispering233/ai-editor-server@latest`（当前 = v0.0.3）。
+
+**发布前置（一次性，npmjs 手动）**：① 开启 npm 账号 **2FA**（npmjs 要求开启两步验证才能配置包管理；开启会撤销现有 token，需重新生成 Automation token）；② 为 `@whispering233/ai-editor-shared`、`@whispering233/ai-editor-llm`、`@whispering233/ai-editor-db`、`@whispering233/ai-editor-tools`、`@whispering233/ai-editor-agent`、`@whispering233/ai-editor-server` 六包各配置 Trusted Publisher：Publisher = GitHub Actions、工作流名 = `publish.yml`；配置后 CI 无需 token（OIDC 自动换证）。
 
 **发布流程**（详见 AGENTS.md「版本发布流程（E6）」）：更新根 `CHANGELOG.md`（Unreleased 搬运为新版本段）→ `pnpm release:version X.Y.Z` 同步 6 包 + client + 根版本 → commit + 手动 annotated tag `vX.Y.Z` → push tag 后 workflow 自动执行（release.yml 建 GitHub Release，publish.yml 发布 6 包 npm + 安装态冒烟验证）。
 
