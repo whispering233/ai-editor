@@ -80,42 +80,13 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 
 **调试基础设施（2026-08 独立交付）**——创作根 `.ai-editor/config.json` 纯配置文件调试日志（五类别 chat/request/stream/usage/http 细粒度门控，无 env 开关）；`[llm] request` 完整 prompt / `[llm] stream` 原始 SSE chunk / `[llm] usage` 真实 token 观察。
 
+**发布阻断项 E1-E6（2026-08，全部完成）**——导出/导入（E1-E3：fflate zip 导出三文件 + wal_checkpoint 完整快照 / import 校验（zip 白名单防穿越/顶层契约/user_version）+ 原子搬入 books/ 新书 / 书架导入导出 UI）；schema 安全（E4：未来版本拒绝重建 `PROJECT_VERSION_NEWER` 零触碰 / E5：增量迁移机制 `migrations/` 目录按序执行 + 迁移前时间戳快照 + hasMigrationPath + import 侧联动）；发布链路（E6：publishConfig ×6 + 包名改 `@whispering233/ai-editor-*`（`@ai-editor` scope 被占）+ sync-version/publish-packages/verify-installed + release.yml/publish.yml（OIDC Trusted Publishing）+ CHANGELOG.md + **CI 发布全链路全绿（v0.0.4 由 CI 自动发布）**——发布管道坑记录见文末 E6 卡）。
+
 ---
 
 ## 发布前阻断项（E1-E6，依据 `doc/design/release-review.md`）
 
-> 发布就绪度评审（S11.3）产出：阻断项 4 项（#2 导出/导入、#8 publishConfig、#8 publish 演练、#12 未来版本拒绝重建），迁移机制按用户裁决在发布窗口内做。zip 库选型 **fflate**（用户裁决）。按卡执行、一卡一 commit、每卡「实现 fixer/designer + 验证 oracle」双代理。
-
-**E1 导出/导入契约 + export 路由**
-- 范围：shared 契约（export/import 请求/响应 schema）+ 引入 fflate + `GET /api/v1/project/export`（zip 打包 project.json + outline.json + data.db；导出前 wal_checkpoint(TRUNCATE) 保证完整快照；决策 17 key 不入包）
-- 依赖：S11.2（冒烟测试 tmp 项目模式可复用）
-- 验证：导出 zip 解包三文件齐全 + 与源文件一致；单测 roundtrip
-- 回滚：单 commit
-
-**E2 import 路由（校验 + 原子搬入）**
-- 范围：`POST /api/v1/project/import`——解压到临时目录校验（三文件齐全 + project.json/outline.json 顶层契约 + data.db user_version 匹配），全绿原子搬入**新书目录**（books/ 新建，不覆盖现有项目，`PROJECT_ALREADY_EXISTS` 同语义）；user_version 不匹配拒绝导入提示版本不兼容（不静默重建）
-- 依赖：E1
-- 验证：roundtrip（E1 导出 → E2 导入新书 → 数据完整）；坏包/缺文件/版本不匹配/路径冲突分支
-- 回滚：单 commit
-
-**E3 导出/导入 client UI**
-- 范围：书架/设置页「导出（下载 zip）/ 导入（选文件）」入口 + 进度/结果 toast；错误码文案映射
-- 依赖：E2
-- 验证：手工走查 + 组件测试
-- 回滚：单 commit
-
-**E4 未来版本拒绝重建（堵降级数据丢失）**
-- 范围：migration.ts 的 `user_version > SCHEMA_VERSION` 分支由「重建」改为「拒绝打开 + 明确错误提示升级程序版本」（新错误码/响应字段，前端提示）
-- 依赖：无
-- 验证：单测覆盖未来版本拒绝 + 旧版本仍重建 + 同版本正常
-- 回滚：单 commit
-
-**E5 增量迁移脚本机制**
-- 范围：`migrations/` 目录按序执行（001_xxx.sql/ts）+ 每步 `setUserVersion(v+1)` + 启动按 user_version < SCHEMA_VERSION 前向执行 + 迁移前自动快照（复用备份函数，命名加时间戳）；决策 13 增补「删库重建策略于 v0.1.0 发布终止」
-- **import 侧版本兼容（ora-4 决议）**：E5 迁移机制放开 open 侧旧版本后，import 需同步决定是否接受旧版本备份（当前一律 409 SCHEMA_VERSION_MISMATCH，文案已按相对版本分流「备份来自旧版本程序」——放开时改为导入前执行迁移，或维持拒绝）
-- 依赖：E4
-- 验证：空迁移/多步顺序/失败回滚/快照生成；文档更新（schema.md/decisions.md）
-- 回滚：单 commit
+> ✅ **E1-E6 已全部完成（2026-08-04）**：导出/导入（E1-E3）、未来版本拒绝重建（E4）、增量迁移机制（E5）、发布链路（E6，CI OIDC 全绿）——详细规格已归档（git history 可回溯），完成摘要见「项目演进路线」；发布管道坑记录保留于 E6 卡下方。
 
 **E6 publishConfig + 版本管理 + publish 演练**
 - 范围：6 包 `publishConfig: { access: "public" }` + 版本同步规则（`scripts/sync-version.mjs` 批量同步 6 发布包 + client + 根）+ `scripts/publish-packages.mjs`（依赖序发布：判重幂等/tarball workspace: 防线/tag 一致性校验）+ `scripts/verify-installed.mjs`（安装态冒烟）+ `CHANGELOG.md`（Keep a Changelog 手动维护）+ `release.yml`（release-from-changelog 出 GitHub Release）+ `publish.yml`（tag 触发 OIDC 发布 6 包）+ AGENTS.md 发布流程段 + 真实 npm publish 演练（依赖序 shared → llm/db/tools → agent → server → registry 安装 `npm i -g @whispering233/ai-editor-server` 启动验证）
