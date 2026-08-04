@@ -1,6 +1,6 @@
 {
   "name": "@ai-editor/llm",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "模型接入层：封装 fetch → DeepSeek API",
   "type": "module",
   "main": "./dist/index.js",

@@ -1,6 +1,6 @@
 {
   "name": "@ai-editor/db",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "数据库层：better-sqlite3 连接 / 建表 / 查询",
   "type": "module",
   "main": "./dist/index.js",

@@ -1,6 +1,6 @@
 {
   "name": "@ai-editor/agent",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "AI 对话循环：会话管理 / 上下文组装 / 工具调度",
   "type": "module",
   "main": "./dist/index.js",

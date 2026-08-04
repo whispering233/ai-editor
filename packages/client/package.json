@@ -1,6 +1,6 @@
 {
   "name": "@ai-editor/client",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "React SPA 前端（仅依赖 @ai-editor/shared）",
   "type": "module",
   "private": true,

@@ -1,6 +1,6 @@
 {
   "name": "@ai-editor/tools",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "AI 工具目录：工具定义 + 执行器",
   "type": "module",
   "main": "./dist/index.js",

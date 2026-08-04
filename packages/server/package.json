@@ -1,6 +1,6 @@
 {
   "name": "@ai-editor/server",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "Hono API 服务端（单进程：API + SPA 静态托管，决策 8）",
   "type": "module",
   "main": "./dist/index.js",

@@ -1,6 +1,6 @@
 {
   "name": "@ai-editor/shared",
-  "version": "0.1.0",
+  "version": "0.0.1",
   "description": "前后端共享层：纯类型 + 常量 + 纯函数（零 Node 依赖）",
   "type": "module",
   "main": "./dist/index.js",
