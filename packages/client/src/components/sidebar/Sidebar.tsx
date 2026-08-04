@@ -3,13 +3,16 @@
 //   点击项目行 openProjectAt（当前项目 name 匹配高亮）；chevron 单展开会话列表（归属项目，决策 22，
 //   展开时 chat store 自动 loadSessions）；底部 [+ 新建项目] Dialog（bookshelf.rootPath + buildBookPath）；
 //   主题切换用 use-theme hook（layout.md §3.4 Sun/Moon，localStorage 持久化）
+// E3 导出/导入（release-review §二「数据主权归用户」载体）：
+//   - 书架头部行 [+ 导入备份]（Upload，zip 恢复为新书，导入不自动打开 → 刷新书架）；
+//   - 当前项目行尾部 [导出备份]（Download，点击即下载 zip；无项目打开时不渲染——「导出当前项目」语义）
 import { useEffect, useRef, useState } from "react";
-import type { FormEvent } from "react";
-import { BookOpen, ChevronRight, MessageSquare, Moon, Plus, Settings, Sun } from "lucide-react";
+import type { ChangeEvent, FormEvent } from "react";
+import { BookOpen, ChevronRight, Download, Loader2, MessageSquare, Moon, Plus, Settings, Sun, Upload } from "lucide-react";
 import { formatRelativeTime, formatTimestamp } from "@ai-editor/shared";
 import { useTheme } from "../../hooks/use-theme";
-import { ApiError, CLIENT_NETWORK_ERROR } from "../../lib/api";
-import { describeOpenError } from "../../lib/error-messages";
+import { ApiError, CLIENT_NETWORK_ERROR, exportProjectZip, importProjectZip } from "../../lib/api";
+import { describeExportError, describeImportError, describeOpenError } from "../../lib/error-messages";
 import { cn } from "../../lib/utils";
 import { buildBookPath, useProjectStore } from "../../stores/project";
 import { useChatStore } from "../../stores/chat";
@@ -115,6 +118,14 @@ export function Sidebar() {
   const [bookName, setBookName] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  // 导入备份 Dialog（E3）
+  const [importOpen, setImportOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importName, setImportName] = useState("");
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  // 导出备份进行态（当前项目行下载按钮；exporting 防连点）
+  const [exporting, setExporting] = useState(false);
 
   // 挂载时加载书架（Sidebar 常驻；Dashboard 书架形态已加载则不重复）
   useEffect(() => {
@@ -181,6 +192,93 @@ export function Sidebar() {
     }
   }
 
+  /**
+   * 导出当前项目备份（E3：GET /project/export 二进制 zip → 临时 <a> 触发浏览器下载）。
+   * 按钮仅渲染在当前项目行（无项目打开时无入口，与「导出当前项目」语义一致）；
+   * 导出中按钮 loading 防连点；失败 toast（网络/服务端 message 映射）
+   */
+  async function handleExportBook(name: string) {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const { blob, filename } = await exportProjectZip();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // 延迟到下一帧 revoke（ora-1：旧版 Safari 下载开始前即 revoke 会中断下载的竞态防御）
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      useUiStore.getState().showToast(`已导出《${name}》备份`);
+    } catch (err) {
+      useUiStore.getState().showToast(
+        describeExportError(
+          err instanceof ApiError ? err.code : null,
+          err instanceof ApiError ? err.message : "导出失败，请重试",
+        ),
+        "error",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  /** 文件选择：书名预填为文件名去 .zip 扩展名（zip 未解析前拿不到 project.json 内部 name） */
+  function handleImportFileChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] ?? null;
+    setImportFile(file);
+    setImportError(null);
+    if (file) {
+      setImportName((cur) => (cur.trim() === "" ? file.name.replace(/\.zip$/i, "") : cur));
+    }
+  }
+
+  /**
+   * 导入备份为新书（E3：multipart 上传 zip + 书名 → 服务端校验（三文件齐全 + 契约 +
+   * data.db user_version）原子搬入 books/<name>/ → 刷新书架）。导入不自动打开（与 create 一致）；
+   * 失败内联显示（对话框保持打开可换文件/改名重试）；成功 toast + 关闭
+   */
+  async function handleImportSubmit(e: FormEvent) {
+    e.preventDefault();
+    const name = importName.trim();
+    // 客户端预检（与服务端同规则，快速反馈；最终以服务端校验为准）
+    if (!importFile) {
+      setImportError("请选择备份文件");
+      return;
+    }
+    if (!name) {
+      setImportError("请输入书名");
+      return;
+    }
+    if (/[\\/]|^\.+$|[\u0000-\u001f]/.test(name)) {
+      setImportError("书名不能包含 /、\\ 或为 . / ..");
+      return;
+    }
+    setImporting(true);
+    setImportError(null);
+    try {
+      await importProjectZip(importFile, name);
+      useUiStore.getState().showToast(`已导入《${name}》`);
+      await loadBookshelf(); // 刷新书架让新书出现（失败由 bookshelfError 呈现）
+      setImportOpen(false);
+      setImportFile(null);
+      setImportName("");
+    } catch (err) {
+      const text = describeImportError(
+        err instanceof ApiError ? err.code : null,
+        err instanceof ApiError ? err.message : "导入失败，请重试",
+      );
+      setImportError(text);
+      // 兜底反馈（ora-1）：onOpenChange 未守卫 importing——导入中途关闭对话框后内联错误不可见，
+      // toast 保证失败一定有反馈（框开闭均提示；空文案如 NO_PROJECT_OPEN 不打扰）
+      if (text !== "") useUiStore.getState().showToast(text, "error");
+    } finally {
+      setImporting(false);
+    }
+  }
+
   return (
     <aside className="flex min-w-0 flex-[1_1_10%] flex-col border-r border-border bg-sidebar">
       {/* 产品标识：衬线斜体（layout.md §3.3），点击回 #/ */}
@@ -194,18 +292,29 @@ export function Sidebar() {
 
       {/* 书架区：项目→会话二级树 + 新建项目入口（U3） */}
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
-        {/* 头部：书架标签 + 新建项目 */}
+        {/* 头部：书架标签 + 导入备份 + 新建项目（E3 导入入口与新建并列——书架是书籍管理的自然宿主） */}
         <div className="mb-1 flex items-center justify-between px-1">
           <span className="text-xs font-medium text-muted-foreground">书架</span>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            onClick={() => setCreateOpen(true)}
-            aria-label="新建项目"
-            title="新建项目"
-          >
-            <Plus />
-          </Button>
+          <div className="flex items-center gap-0.5">
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={() => setImportOpen(true)}
+              aria-label="导入备份"
+              title="导入备份（zip）"
+            >
+              <Upload />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={() => setCreateOpen(true)}
+              aria-label="新建项目"
+              title="新建项目"
+            >
+              <Plus />
+            </Button>
+          </div>
         </div>
 
         {/* 书架加载失败：错误 + 重试（layout.md §3.2 错误呈现） */}
@@ -262,6 +371,19 @@ export function Sidebar() {
                         {formatShortTimestamp(book.updatedAt)}
                       </span>
                     </button>
+                    {/* 导出备份（E3）：仅当前项目行渲染——「导出当前项目」语义；无项目打开时无入口 */}
+                    {isCurrent && (
+                      <button
+                        type="button"
+                        onClick={() => void handleExportBook(book.name)}
+                        disabled={exporting}
+                        aria-label={`导出《${book.name}》备份`}
+                        title="导出备份（zip）"
+                        className="flex h-8 w-6 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+                      >
+                        {exporting ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => setExpandedPath((cur) => (cur === book.path ? null : book.path))}
@@ -330,6 +452,53 @@ export function Sidebar() {
             </Button>
             <Button type="submit" form="create-book-form" disabled={creating}>
               {creating ? "创建中…" : "创建并打开"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 导入备份 Dialog（E3：选 zip + 书名 → 导入为新书，不自动打开；失败内联显示保持打开可重试） */}
+      <Dialog
+        open={importOpen}
+        onOpenChange={(v) => {
+          setImportOpen(v);
+          if (!v) {
+            setImportError(null);
+            setImportFile(null);
+            setImportName("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>导入书籍</DialogTitle>
+            <DialogDescription>从备份 zip 导入为新书，数据原样恢复；导入后从书架打开</DialogDescription>
+          </DialogHeader>
+          <form id="import-book-form" onSubmit={handleImportSubmit} className="flex flex-col gap-3">
+            {/* 文件选择（accept zip；token 类样式，layout.md §3；file: 变体美化原生按钮） */}
+            <input
+              type="file"
+              accept=".zip,application/zip"
+              onChange={handleImportFileChange}
+              disabled={importing}
+              aria-label="选择备份文件"
+              className="block w-full cursor-pointer rounded-md border border-border bg-card px-3 py-1.5 text-sm text-foreground file:mr-2 file:cursor-pointer file:rounded file:border-0 file:bg-muted file:px-2 file:py-1 file:text-xs file:text-muted-foreground disabled:opacity-50"
+            />
+            <Input
+              value={importName}
+              onChange={(e) => setImportName(e.target.value)}
+              placeholder="书名（默认取文件名）"
+              maxLength={60}
+              disabled={importing}
+            />
+            {importError && <p className="text-sm text-destructive">{importError}</p>}
+          </form>
+          <DialogFooter>
+            <Button variant="outline" type="button" onClick={() => setImportOpen(false)} disabled={importing}>
+              取消
+            </Button>
+            <Button type="submit" form="import-book-form" disabled={importing || importFile === null}>
+              {importing ? "导入中…" : "导入"}
             </Button>
           </DialogFooter>
         </DialogContent>

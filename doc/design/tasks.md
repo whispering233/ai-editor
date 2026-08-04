@@ -35,9 +35,9 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - [x] S11.1 生产构建全链路
 - [x] S11.2 端到端冒烟
 - [x] S11.3 发布前复审（评审纪要：`doc/design/release-review.md`）
-- [ ] E1 导出/导入契约 + export 路由
-- [ ] E2 import 路由（校验 + 原子搬入）
-- [ ] E3 导出/导入 client UI
+- [x] E1 导出/导入契约 + export 路由
+- [x] E2 import 路由（校验 + 原子搬入）
+- [x] E3 导出/导入 client UI
 - [ ] E4 未来版本拒绝重建（堵降级数据丢失）
 - [ ] E5 增量迁移脚本机制
 - [ ] E6 publishConfig + 版本管理 + publish 演练

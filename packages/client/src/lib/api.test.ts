@@ -16,15 +16,18 @@ import {
   createProject,
   deleteEntity,
   deleteOutlineNode,
+  exportProjectZip,
   getDeltasByNode,
   getEntityDetail,
   getOutlinePath,
   getSettingsLlm,
   getTrashList,
+  importProjectZip,
   listEntities,
   listProjects,
   moveOutlineNode,
   openProject,
+  parseContentDispositionFilename,
   purgeOutlineNode,
   rejectProposal,
   restoreOutlineNode,
@@ -577,5 +580,154 @@ describe("提案确认/拒绝（S8.2，契约 endpoints.md「提案确认」L848
     expect(calls[0].url).toBe("/api/v1/proposal/prop-1/reject");
     expect(calls[0].init?.method).toBe("POST");
     expect(calls[0].init?.body).toBeUndefined();
+  });
+});
+// ============ E3：导出/导入（二进制 zip 分流 + FormData 上传） ============
+
+/** mock fetch 返回二进制/任意响应（export 走 apiFetch 之外的裸 fetch） */
+function mockRawResponse(body: BodyInit | null, status: number, headers: Record<string, string>) {
+  globalThis.fetch = vi.fn(async () => new Response(body, { status, headers })) as unknown as typeof fetch;
+}
+
+describe("exportProjectZip（GET /project/export：二进制 zip 与 JSON 错误分流）", () => {
+  it("application/zip 响应 → blob + Content-Disposition RFC 5987 文件名（中文解码）", async () => {
+    const zipBytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00]);
+    mockRawResponse(new Blob([zipBytes]), 200, {
+      "Content-Type": "application/zip",
+      "Content-Disposition": `attachment; filename="book.zip"; filename*=UTF-8''${encodeURIComponent("我的书.zip")}`,
+    });
+    const res = await exportProjectZip();
+    expect(res.filename).toBe("我的书.zip");
+    expect(new Uint8Array(await res.blob.arrayBuffer())).toEqual(zipBytes);
+    // 请求：GET /api/v1/project/export（裸 fetch，无 options——GET 无 body/header）
+    expect(globalThis.fetch).toHaveBeenCalledWith("/api/v1/project/export");
+  });
+
+  it("无 filename* → 回退 ASCII filename", async () => {
+    mockRawResponse(new Blob(["zip"]), 200, {
+      "Content-Type": "application/zip",
+      "Content-Disposition": 'attachment; filename="book.zip"',
+    });
+    await expect(exportProjectZip().then((r) => r.filename)).resolves.toBe("book.zip");
+  });
+
+  it("无 Content-Disposition → 回退 project.zip（endpoints.md 兜底）", async () => {
+    mockRawResponse(new Blob(["zip"]), 200, { "Content-Type": "application/zip" });
+    await expect(exportProjectZip().then((r) => r.filename)).resolves.toBe("project.zip");
+  });
+
+  it("2xx 非 zip（200 text/html，中间层兜底页）→ 抛 CLIENT_NETWORK_ERROR，不把 HTML 当 zip 下载", async () => {
+    mockRawResponse("<html>not found</html>", 200, { "Content-Type": "text/html" });
+    await expect(exportProjectZip()).rejects.toMatchObject({ code: CLIENT_NETWORK_ERROR });
+  });
+
+  it("2xx application/octet-stream → 正常返回 blob（中间层改写 Content-Type 的兼容分支）", async () => {
+    const zipBytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04]);
+    mockRawResponse(new Blob([zipBytes]), 200, {
+      "Content-Type": "application/octet-stream",
+      "Content-Disposition": 'attachment; filename="book.zip"',
+    });
+    const res = await exportProjectZip();
+    expect(res.filename).toBe("book.zip");
+    expect(new Uint8Array(await res.blob.arrayBuffer())).toEqual(zipBytes);
+  });
+
+  it("409 NO_PROJECT_OPEN（JSON 错误包裹）→ 抛 ApiError code 透传", async () => {
+    mockRawResponse(
+      JSON.stringify({ success: false, error: { code: "NO_PROJECT_OPEN", message: "未打开项目" } }),
+      409,
+      { "Content-Type": "application/json" },
+    );
+    await expect(exportProjectZip()).rejects.toMatchObject({ code: "NO_PROJECT_OPEN", message: "未打开项目" });
+  });
+
+  it("500 INTERNAL_ERROR（JSON 错误包裹）→ 抛 ApiError code 透传", async () => {
+    mockRawResponse(
+      JSON.stringify({ success: false, error: { code: "INTERNAL_ERROR", message: "项目数据文件缺失" } }),
+      500,
+      { "Content-Type": "application/json" },
+    );
+    await expect(exportProjectZip()).rejects.toMatchObject({ code: "INTERNAL_ERROR" });
+  });
+
+  it("网络失败 → CLIENT_NETWORK_ERROR", async () => {
+    globalThis.fetch = vi.fn(async () => {
+      throw new TypeError("Failed to fetch");
+    }) as unknown as typeof fetch;
+    await expect(exportProjectZip()).rejects.toMatchObject({ code: CLIENT_NETWORK_ERROR });
+  });
+});
+
+describe("parseContentDispositionFilename（RFC 5987 文件名解析）", () => {
+  it("filename* UTF-8 中文解码优先于 ASCII filename", () => {
+    const header = `attachment; filename="book.zip"; filename*=UTF-8''${encodeURIComponent("血与火.zip")}`;
+    expect(parseContentDispositionFilename(header)).toBe("血与火.zip");
+  });
+
+  it("仅 ASCII filename（带引号）→ 取引号内值", () => {
+    expect(parseContentDispositionFilename('attachment; filename="book.zip"')).toBe("book.zip");
+  });
+
+  it("filename* 为非法 percent 序列 → 回退 ASCII filename", () => {
+    expect(parseContentDispositionFilename('attachment; filename="book.zip"; filename*=UTF-8\'\'%zz%zz')).toBe(
+      "book.zip",
+    );
+  });
+
+  it("无 header → project.zip（兜底）", () => {
+    expect(parseContentDispositionFilename(null)).toBe("project.zip");
+  });
+});
+
+describe("importProjectZip（POST /project/import：FormData multipart 上传）", () => {
+  it("请求：FormData body 含 file + name 字段，不手动设 Content-Type（浏览器自动带 boundary）", async () => {
+    const calls = mockFetchOnce({
+      body: { success: true, data: { imported: true, id: "proj-9", path: "/books/新书", name: "新书" } },
+    });
+    const file = new File([new Uint8Array([0x50, 0x4b, 0x03, 0x04])], "backup.zip", { type: "application/zip" });
+    const res = await importProjectZip(file, "新书");
+    expect(res).toEqual({ imported: true, id: "proj-9", path: "/books/新书", name: "新书" });
+    expect(calls[0].url).toBe("/api/v1/project/import");
+    expect(calls[0].init?.method).toBe("POST");
+    // FormData 原样透传（E3 apiFetch 扩展：不 JSON.stringify、不设 Content-Type）
+    expect(calls[0].init?.body).toBeInstanceOf(FormData);
+    const form = calls[0].init?.body as FormData;
+    expect(form.get("name")).toBe("新书");
+    expect(form.get("file")).toBeInstanceOf(File);
+    expect(calls[0].init?.headers).toBeUndefined();
+  });
+
+  it("409 PROJECT_ALREADY_EXISTS → ApiError code 透传", async () => {
+    mockFetchOnce({
+      status: 409,
+      body: { success: false, error: { code: "PROJECT_ALREADY_EXISTS", message: "书架已存在同名书: 新书" } },
+    });
+    await expect(importProjectZip(new File(["x"], "b.zip"), "新书")).rejects.toMatchObject({
+      code: "PROJECT_ALREADY_EXISTS",
+    });
+  });
+
+  it("409 SCHEMA_VERSION_MISMATCH → ApiError code 透传（版本分流文案在 message）", async () => {
+    mockFetchOnce({
+      status: 409,
+      body: {
+        success: false,
+        error: { code: "SCHEMA_VERSION_MISMATCH", message: "备份包 data.db 版本 (2) 备份来自更高版本程序" },
+      },
+    });
+    await expect(importProjectZip(new File(["x"], "b.zip"), "新书")).rejects.toMatchObject({
+      code: "SCHEMA_VERSION_MISMATCH",
+      message: expect.stringContaining("更高版本程序"),
+    });
+  });
+
+  it("400 VALIDATION_ERROR（坏包）→ ApiError code 透传", async () => {
+    mockFetchOnce({
+      status: 400,
+      body: { success: false, error: { code: "VALIDATION_ERROR", message: "不是有效的项目备份包" } },
+    });
+    await expect(importProjectZip(new File(["x"], "b.zip"), "新书")).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+    });
   });
 });

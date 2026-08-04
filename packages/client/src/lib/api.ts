@@ -82,6 +82,8 @@ function isErrorEnvelope(
 /**
  * 通用 fetch 封装：拼 /api/v1 前缀、JSON 序列化、解析统一响应包裹（endpoints.md）
  * 成功返回 data；失败抛 ApiError（code 为服务端 ErrorCode；网络层/解析失败为 CLIENT_NETWORK_ERROR）
+ * E3 扩展：body 为 FormData（导入 multipart 上传）时不 JSON 序列化、不手动设 Content-Type——
+ *   浏览器自动带 multipart boundary；其余 body（JSON）语义不变
  */
 export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
   const { method = "GET", body, query, headers, signal } = options;
@@ -90,8 +92,11 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
   try {
     res = await fetch(buildUrl(path, query), {
       method,
-      headers: body === undefined ? headers : { "Content-Type": "application/json", ...headers },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      headers:
+        body === undefined || body instanceof FormData
+          ? headers
+          : { "Content-Type": "application/json", ...headers },
+      body: body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body),
       signal,
     });
   } catch (err) {
@@ -575,6 +580,93 @@ export interface CloseProjectRes {
 /** 关闭当前项目（释放数据库连接，data-flow.md 第 46 行） */
 export function closeProject(): Promise<CloseProjectRes> {
   return apiFetch<CloseProjectRes>("/project/close", { method: "POST" });
+}
+
+// ============ 导出/导入（E3；契约：endpoints.md「项目管理」段末尾 + shared types/api.ts
+//   PROJECT_EXPORT_FILE_NAMES 注释——zip 内三文件 project.json/outline.json/data.db） ============
+
+/**
+ * 解析 Content-Disposition 的文件名（RFC 5987，服务端格式
+ * `attachment; filename="book.zip"; filename*=UTF-8''<书名>.zip`）：
+ * - `filename*`（percent 编码，中文书名）优先，decodeURIComponent 解码
+ * - 回退 ASCII `filename="..."`；解码失败（非法 percent 序列）/无 header → "project.zip"
+ * 纯函数（可单测）；endpoints.md：文件名缺失回退 "project.zip"
+ */
+export function parseContentDispositionFilename(header: string | null): string {
+  if (header !== null) {
+    const star = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(header);
+    if (star) {
+      try {
+        return decodeURIComponent(star[1]);
+      } catch {
+        // 非法 percent 序列 → 继续回退 ASCII filename
+      }
+    }
+    const plain = /filename\s*=\s*"?([^";]+)"?/i.exec(header);
+    if (plain) return plain[1];
+  }
+  return "project.zip";
+}
+
+/** GET /api/v1/project/export 响应（二进制 zip 例外：不走 apiFetch 的 JSON 解析） */
+export interface ExportProjectZipRes {
+  blob: Blob;
+  /** 下载文件名（Content-Disposition 解析；缺失回退 "project.zip"） */
+  filename: string;
+}
+
+/**
+ * 导出当前项目为 zip 备份包（E1 服务端 / E3 前端；endpoints.md「GET /project/export」）。
+ * **不走 apiFetch**——成功响应是 application/zip **二进制**（通用约定「成功 {success,data}
+ * JSON 包裹」的显式例外），错误响应仍是 JSON 包裹（409 NO_PROJECT_OPEN / 500 INTERNAL_ERROR）。
+ * 响应分流（ora-1 守卫收紧）：
+ * - **白名单式判定二进制**：仅 2xx 且 Content-Type 含 zip/octet-stream 才当 zip 返回
+ *   （服务端恒发 application/zip，octet-stream 为中间层改写兼容；守卫零误伤）——
+ *   其余 2xx（如中间层 200 text/html）抛 CLIENT_NETWORK_ERROR，不把 HTML 当 zip 下载
+ * - JSON（或非 2xx）：复用统一错误包裹解析抛 ApiError（错误码透传）
+ */
+export async function exportProjectZip(): Promise<ExportProjectZipRes> {
+  let res: Response;
+  try {
+    res = await fetch(buildUrl("/project/export"));
+  } catch (err) {
+    throw new ApiError(CLIENT_NETWORK_ERROR, err instanceof Error ? err.message : "网络请求失败");
+  }
+  const contentType = res.headers.get("content-type") ?? "";
+  if (res.ok && (contentType.includes("zip") || contentType.includes("octet-stream"))) {
+    const blob = await res.blob();
+    return { blob, filename: parseContentDispositionFilename(res.headers.get("content-disposition")) };
+  }
+  if (contentType.includes("application/json")) {
+    const json: unknown = await res.json().catch(() => null);
+    if (isErrorEnvelope(json)) throw new ApiError(json.error.code, json.error.message);
+  }
+  // 非预期响应（2xx 非 zip / 非 JSON 错误响应）：不当作 zip 下载
+  throw new ApiError(CLIENT_NETWORK_ERROR, `非预期响应（HTTP ${res.status}）`);
+}
+
+/** POST /api/v1/project/import 响应（契约同 shared projectImportResSchema；id 沿用 zip 内 project.json 的 id） */
+export interface ImportProjectRes {
+  imported: true;
+  id: string;
+  path: string;
+  name: string;
+}
+
+/**
+ * 导入备份 zip 为新书（E2 服务端 / E3 前端；endpoints.md「POST /project/import」）。
+ * multipart/form-data：`file` = zip 二进制 + `name` = 新书目录名（禁路径分隔符，服务端校验；
+ *   目标目录由服务端决定 创作根/books/<name>/，客户端不可指定路径防越权）。
+ * 走 apiFetch（E3 扩展：body 为 FormData 时保持原样 + 浏览器自动带 boundary）；
+ * 错误码：400 VALIDATION_ERROR（坏包/缺文件/书名非法/超限）、409 SCHEMA_VERSION_MISMATCH
+ * （版本不兼容，文案区分更高/旧版本程序）、409 PROJECT_ALREADY_EXISTS（同名书已存在）——
+ * ApiError.code 透传；成功不自动打开（与 create 一致），前端刷新书架
+ */
+export async function importProjectZip(file: File, name: string): Promise<ImportProjectRes> {
+  const form = new FormData();
+  form.append("file", file, "backup.zip");
+  form.append("name", name);
+  return apiFetch<ImportProjectRes>("/project/import", { method: "POST", body: form });
 }
 
 // ============ 设置（S1.4；契约：endpoints.md「系统设置」+ S1.3 server 路由） ============
