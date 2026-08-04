@@ -1,0 +1,6 @@
+{
+  "debug": {
+    "enabled": true,
+    "categories": ["request", "usage", "http"]
+  }
+}

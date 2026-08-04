@@ -36,4 +36,8 @@ project.json
 *.tgz
 .package.json.publish-backup
 
-test-project/
+# 测试项目目录：运行时数据不入库（AGENTS.md 约定）；例外放行调试配置示例
+# test-project/.ai-editor/config.json（AGENTS.md 契约的默认示例，随仓库分发）
+test-project/*
+!test-project/.ai-editor/
+!test-project/.ai-editor/config.json

@@ -92,20 +92,24 @@ export interface ServerHandle {
 }
 
 /**
- * client/dist 默认位置（双路径解析）：
+ * 探测 client/dist 位置（双路径解析，纯函数——baseDir 为当前模块所在目录）：
  * 1. **monorepo 开发态**：packages/server/{dist,src} → ../../client/dist（Vite 构建产物原位）
  * 2. **打包安装态**（fallback）：node_modules/@ai-editor/server/dist → ../client-dist
  *    （prepack 时由 scripts/copy-client-dist.mjs 复制到包根，随 tarball 携带）
- * 探测优先：源存在即用（开发态 client/dist 已构建时走 1）；都不存在返回 2 的路径，
+ * 探测优先：monorepo 路径存在即用（开发态 client/dist 已构建时走 1）；都不存在返回 2 的路径，
  * SPA fallback 优雅降级（404 JSON 提示「client/dist 未构建」，不崩溃）。
+ * 导出供单测以 fixture 目录覆盖三种探测情形（defaultClientDist 保持私有调用）。
  */
-function defaultClientDist(): string {
-  const dir = dirname(fileURLToPath(import.meta.url));
-  const monoDist = resolve(dir, "../../client/dist");
+export function resolveClientDist(baseDir: string): string {
+  const monoDist = resolve(baseDir, "../../client/dist");
   if (existsSync(monoDist)) {
     return monoDist;
   }
-  return resolve(dir, "../client-dist");
+  return resolve(baseDir, "../client-dist");
+}
+
+function defaultClientDist(): string {
+  return resolveClientDist(dirname(fileURLToPath(import.meta.url)));
 }
 
 function contentTypeFor(file: string): string {
@@ -305,6 +309,21 @@ export async function openBrowserUrl(url: string): Promise<void> {
 }
 
 // ============ 直接执行入口（bin/生产态：ai-editor [projectRoot]） ============
+
+/**
+ * 解析 AI_EDITOR_PORT 环境变量（bin 入口用，防御非法输入）：
+ * 合法范围 = 1-65535 的整数端口；未设置/空串/NaN/越界/非整数 → undefined，
+ * 调用方回退默认端口 DEFAULT_PORT（3456）。此前 `Number("abc")` → NaN 会传入
+ * 端口逻辑导致监听行为未定义；回退默认是文档声明端口，启动日志会打印实际端口，
+ * 无歧义且不中断启动（与生产态端口容错精神一致，不升级为启动失败）。
+ */
+export function parsePortEnv(value: string | undefined): number | undefined {
+  if (value === undefined || value === "") return undefined;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1 || n > 65535) return undefined;
+  return n;
+}
+
 //
 // isDirectRun 判定（打包安装实测修复）：npm 安装 bin 后 node_modules/.bin/ai-editor 是指向
 // dist/index.js 的**符号链接**——经 bin 执行时 process.argv[1] 是 symlink 路径而非真实文件路径，
@@ -318,8 +337,8 @@ if (isDirectRun) {
   const projectRoot = process.argv[2] ?? process.cwd();
   const dev = process.env.NODE_ENV === "development";
   // AI_EDITOR_PORT 环境变量可覆盖默认端口（决策 8 端口策略；测试/多实例场景用，
-  // 如打包安装冒烟与 dev server 并存时指定独立端口）
-  const port = process.env.AI_EDITOR_PORT ? Number(process.env.AI_EDITOR_PORT) : undefined;
+  // 如打包安装冒烟与 dev server 并存时指定独立端口）；非法值（NaN/越界）回退默认 3456
+  const port = parsePortEnv(process.env.AI_EDITOR_PORT);
   const handle = await startServer(projectRoot, { dev, ...(port !== undefined ? { port } : {}) });
   console.log(
     handle.project === null

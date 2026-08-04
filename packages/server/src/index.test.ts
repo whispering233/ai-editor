@@ -6,7 +6,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { startServer } from "./index.js";
+import { parsePortEnv, resolveClientDist, startServer } from "./index.js";
 
 const tmpDirs: string[] = [];
 const occupiedServers: Server[] = [];
@@ -152,6 +152,51 @@ describe("SPA 静态服务（决策 8 单进程架构）", () => {
     } finally {
       await handle.close();
     }
+  });
+});
+
+describe("defaultClientDist 双路径探测（resolveClientDist 纯函数）", () => {
+  // fixture 结构（模拟模块目录）：
+  //   <tmp>/packages/server/dist           → baseDir（对应 dist 或 src）
+  //   <tmp>/packages/client/dist           → monorepo 路径（resolve ../../client/dist）
+  //   <tmp>/packages/server/client-dist    → 安装态路径（resolve ../client-dist）
+  it("monorepo 路径存在时优先", () => {
+    const dir = makeTmpDir();
+    const baseDir = join(dir, "packages", "server", "dist");
+    mkdirSync(join(dir, "packages", "client", "dist"), { recursive: true }); // 仅 monorepo 路径
+    expect(resolveClientDist(baseDir)).toBe(resolve(baseDir, "../../client/dist"));
+  });
+
+  it("monorepo 缺失时回退安装态路径", () => {
+    const dir = makeTmpDir();
+    const baseDir = join(dir, "packages", "server", "dist");
+    mkdirSync(join(baseDir, "..", "client-dist"), { recursive: true }); // 仅安装态路径
+    expect(resolveClientDist(baseDir)).toBe(resolve(baseDir, "../client-dist"));
+  });
+
+  it("两路径都存在时取 monorepo", () => {
+    const dir = makeTmpDir();
+    const baseDir = join(dir, "packages", "server", "dist");
+    mkdirSync(join(dir, "packages", "client", "dist"), { recursive: true });
+    mkdirSync(join(baseDir, "..", "client-dist"), { recursive: true });
+    expect(resolveClientDist(baseDir)).toBe(resolve(baseDir, "../../client/dist"));
+  });
+});
+
+describe("AI_EDITOR_PORT 解析（parsePortEnv）", () => {
+  it("非法值（NaN/越界/非整数/空串/未设置）→ undefined（bin 入口回退默认 3456）", () => {
+    expect(parsePortEnv("abc")).toBeUndefined();
+    expect(parsePortEnv("0")).toBeUndefined();
+    expect(parsePortEnv("65536")).toBeUndefined();
+    expect(parsePortEnv("12.5")).toBeUndefined();
+    expect(parsePortEnv("")).toBeUndefined();
+    expect(parsePortEnv(undefined)).toBeUndefined();
+  });
+
+  it("合法值（1-65535 整数）原样返回", () => {
+    expect(parsePortEnv("3456")).toBe(3456);
+    expect(parsePortEnv("1")).toBe(1);
+    expect(parsePortEnv("65535")).toBe(65535);
   });
 });
 
