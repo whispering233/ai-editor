@@ -15,6 +15,9 @@ export function describeOpenError(code: string | null): string {
     case "PROJECT_ALREADY_EXISTS":
       // S1.5 修订：书架形态下对应动作是列表行「打开」或折叠区「打开其他路径」
       return "该目录已是项目，请直接打开（书架列表或「打开其他路径」）";
+    case "PROJECT_VERSION_NEWER":
+      // E4：项目由更高版本程序创建（open 409，堵降级数据丢失——release-review §一）
+      return "该项目由更高版本的 ai-editor 创建，请升级程序后再打开（避免降级导致数据丢失）";
     case "NO_PROJECT_OPEN":
       return "";
     case "CLIENT_NETWORK_ERROR":

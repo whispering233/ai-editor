@@ -364,6 +364,39 @@ describe("POST /project/open", () => {
     expect(second?.root).toBe(dirB);
   });
 
+  it("未来版本（user_version > SCHEMA_VERSION）→ 409 PROJECT_VERSION_NEWER：拒绝打开、数据未动、无备份生成（E4 堵降级数据丢失）", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-future", "未来项目"));
+    // 模拟更高版本程序创建的库：user_version = SCHEMA_VERSION + 1
+    const db = openDatabase(join(dir, "data.db"));
+    setUserVersion(db, SCHEMA_VERSION + 1);
+    closeDatabase(db);
+    const outlineBefore = readFileSync(join(dir, "outline.json"), "utf8");
+
+    const res = await buildApp().request("/api/v1/project/open", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: dir }),
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      success: false,
+      error: { code: "PROJECT_VERSION_NEWER", message: expect.stringContaining("高于当前程序版本") },
+    });
+    // open 失败 = 操作未生效：单例保持 null（无项目被打开）
+    expect(getCurrentProject()).toBeNull();
+    // 数据原封不动：outline.json 字节原样、无 .bak 备份、user_version 未被改动（未触发重建）
+    expect(readFileSync(join(dir, "outline.json"), "utf8")).toBe(outlineBefore);
+    expect(existsSync(join(dir, "data.db.v0.bak"))).toBe(false);
+    expect(existsSync(join(dir, "outline.json.v0.bak"))).toBe(false);
+    const reopened = openDatabase(join(dir, "data.db"));
+    try {
+      expect(getUserVersion(reopened)).toBe(SCHEMA_VERSION + 1);
+    } finally {
+      closeDatabase(reopened);
+    }
+  });
+
   it("open 失败（重建中途备份失败）不影响当前项目：单例保持旧项目且连接有效（oracle 建议 1）", async () => {
     // 正常项目 A 先打开
     const dirA = makeTmpDir();

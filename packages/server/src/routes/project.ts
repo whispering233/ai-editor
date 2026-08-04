@@ -25,6 +25,7 @@ import { mapProjectFileToConfig } from "@ai-editor/shared";
 import { PROJECT_EXPORT_FILE_NAMES } from "@ai-editor/shared/schemas";
 import { openDatabase, closeDatabase, getUserVersion, SCHEMA_VERSION } from "@ai-editor/db";
 import { ensureSchemaCompatible, DATA_DB_FILE_NAME } from "@ai-editor/db";
+import { SchemaVersionError, type MigrationResult, type Db } from "@ai-editor/db";
 import { OUTLINE_FILE_NAME } from "@ai-editor/db";
 import { PROJECT_FILE_NAME } from "@ai-editor/db";
 import { checkpointWal } from "@ai-editor/db";
@@ -168,12 +169,29 @@ projectRoutes.post("/open", async (c) => {
   // 若先 closeProject(prev) 再开新项目，openDatabase/ensureSchemaCompatible 抛错时
   // currentProject 会悬挂指向连接已关闭的旧项目（后续请求 "connection not open" → 500）。
   // 失败语义：open 失败 = 操作未生效——当前项目保持原样（连接仍有效、单例不变）。
-  // schema 版本检测（决策 13 修订 + endpoints.md 第 68-70 行）：data.db user_version 与当前版本
-  // 不匹配 → 删库重建（备份 data.db.v{n}.bak + outline.json.v{n}.bak、重置 outline 空树、清空回收站）
+  // schema 版本检测（决策 13 修订 + endpoints.md 第 68-70 行）：data.db user_version——
+  // 旧版本（< 当前）→ 删库重建（备份 data.db.v{n}.bak + outline.json.v{n}.bak、重置
+  //   outline 空树、清空回收站）；**未来版本（> 当前，E4）→ 拒绝打开 409
+  //   PROJECT_VERSION_NEWER**（提示升级程序；不触发任何重建/备份，数据原封不动——
+  //   堵降级路径数据丢失，release-review §一 风险 2）。SchemaVersionError 由 db 包
+  //   抛出前已关闭本次打开的连接（无句柄泄漏）。
   try {
     const dbPath = join(dir, DATA_DB_FILE_NAME);
     const db = openDatabase(dbPath);
-    const { db: activeDb, result } = ensureSchemaCompatible(db, dir, dbPath);
+    let activeDb: Db;
+    let result: MigrationResult;
+    try {
+      const out = ensureSchemaCompatible(db, dir, dbPath);
+      activeDb = out.db;
+      result = out.result;
+    } catch (err) {
+      // E4：未来版本拒绝（SchemaVersionError → 409 PROJECT_VERSION_NEWER，message 透传
+      // 「请升级程序后打开」；连接已由 db 包关闭，此处仅做错误码映射）
+      if (err instanceof SchemaVersionError) {
+        throw new HttpError(409, "PROJECT_VERSION_NEWER", err.message);
+      }
+      throw err;
+    }
 
     // 新项目就绪，切换单例：释放旧项目连接（重建分支已关闭旧连接，closeProject 幂等；
     // 匹配分支旧连接仍开，此处统一释放）

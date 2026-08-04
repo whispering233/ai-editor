@@ -65,8 +65,9 @@
 - open 必须校验目标目录包含 `project.json`，否则拒绝。
 - 校验失败返回 `{ code: "INVALID_PROJECT_PATH" }`（400）。
 
-**schema 版本检测（open 时，决策 13 修订）**：
-- 以 data.db 的 `user_version` 为准判定是否重建；与当前版本不匹配时执行**删库重建**，并同步重置 outline.json（先备份为 `outline.json.v{n}.bak`，n=旧版本号）、清空回收站；完成后向客户端提示已重建。
+**schema 版本检测（open 时，决策 13 修订 + E4）**：
+- 以 data.db 的 `user_version` 为准判定；**旧版本**（`user_version` < 当前）时执行**删库重建**，并同步重置 outline.json（先备份为 `outline.json.v{n}.bak`，n=旧版本号）、清空回收站；完成后向客户端提示已重建。
+- **未来版本**（`user_version` > 当前，E4——堵「装新版后回退旧版 → 降级重建清零」的降级数据丢失路径）：**拒绝打开**，返回 409 `PROJECT_VERSION_NEWER`（message 提示「项目 data.db 版本高于当前程序版本，请升级程序后打开」）；**不触发任何重建/备份/写操作**，数据文件原封不动。
 - `project.json` 的 `schema_version` 仅用于 JSON 结构判断。
 
 ### POST /api/v1/project/close

@@ -429,6 +429,11 @@ describe("导出/导入契约（E1，release-review §二）", () => {
     expect(errorCodeSchema.safeParse("SCHEMA_VERSION_MISMATCH").success).toBe(true);
   });
 
+  it("ErrorCode 含 PROJECT_VERSION_NEWER（409：open 时项目版本高于程序版本，E4 拒绝打开堵降级数据丢失）", () => {
+    expect(ERROR_CODES).toContain("PROJECT_VERSION_NEWER");
+    expect(errorCodeSchema.safeParse("PROJECT_VERSION_NEWER").success).toBe(true);
+  });
+
   it("import 响应 { imported: true, id, path, name } parse（E2 端点响应契约）", () => {
     expect(
       projectImportResSchema.parse({ imported: true, id: "proj-1", path: "/books/我的小说", name: "我的小说" }),

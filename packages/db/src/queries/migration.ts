@@ -1,7 +1,11 @@
-// @ai-editor/db schema 演进：删库重建（S1.1）
+// @ai-editor/db schema 演进：删库重建（S1.1）+ 未来版本拒绝（E4）
 //
 // 单一事实来源：doc/design/decisions.md 决策 13（MVP 删库重建）与修订（2026-08）——
 // - 以 data.db 的 PRAGMA user_version 为准判定是否重建；与当前版本不匹配即删库重建，无迁移脚本（YAGNI）
+// - **E4（release-review §一 风险 2「降级路径最险」）**：user_version > SCHEMA_VERSION（未来版本）
+//   → **拒绝打开**（提示升级程序，不触发任何重建/备份/写操作，数据原封不动）——堵「用户装新版
+//   后回退旧版 → 旧版程序把高版本库当不匹配重建清零」的降级数据丢失路径
+// - 旧版本（user_version < SCHEMA_VERSION）保持重建兜底（E5 增量迁移机制替代前，可接受）
 // - 重建时同步重置 outline.json（先备份为 outline.json.v{n}.bak，n=旧版本号）、清空回收站
 // - 旧 data.db 一并备份为 data.db.v{n}.bak；备份带版本号、不覆盖旧备份（多次重建各自留档）
 // - project.json 的 schema_version 仅用于 JSON 结构判断（与 user_version 不同维度），重建不修改 project.json
@@ -38,11 +42,37 @@ export interface RebuildOutput {
 }
 
 /**
+ * data.db user_version 高于当前程序版本（E4 拒绝打开专用错误）。
+ *
+ * 语义（release-review §一 风险 2）：用户安装新版程序后回退旧版 → 旧版程序打开高版本库，
+ * 若按「不匹配即重建」处理会把用户全部数据重建清零（且备份仅配合旧版本回滚，普通用户
+ * 不可自救）。E4 起该分支改为拒绝打开并抛出本错误——**不触发任何重建/备份/写操作**，
+ * 数据文件原封不动；上层（server open 路由）捕获后转 409 + 明确提示升级程序。
+ *
+ * 独立于 import 侧的 SCHEMA_VERSION_MISMATCH（备份导入校验）：本错误是**打开已存在项目**
+ * 时发现项目版本高于程序版本；SCHEMA_VERSION_MISMATCH 是导入 zip 备份时版本不匹配。
+ */
+export class SchemaVersionError extends Error {
+  /** 项目 data.db 的实际 user_version（未来版本） */
+  readonly version: number;
+  /** 当前程序支持的版本 */
+  readonly current: number;
+  constructor(version: number, current: number) {
+    super(`项目 data.db 版本 (${version}) 高于当前程序版本 (${current})，请升级程序后打开`);
+    this.name = "SchemaVersionError";
+    this.version = version;
+    this.current = current;
+  }
+}
+
+/**
  * schema 版本检测 + 删库重建的高层入口（open 流程调用，endpoints.md 第 68-70 行）。
  *
  * - user_version 与 SCHEMA_VERSION **匹配**：直接返回，db 为原连接，rebuilt=false。
- * - **不匹配**（含旧版本与未来版本——决策 13「与当前版本不匹配则重建」，降级同样重建）：
- *   执行 rebuildProjectStorage 并返回新连接与重建信息，供上层提示「已重建」。
+ * - user_version **> SCHEMA_VERSION（未来版本，E4）**：**拒绝打开**——关闭连接并抛
+ *   `SchemaVersionError`（提示升级程序），不触发任何重建/备份/写操作，数据原封不动。
+ * - user_version **< SCHEMA_VERSION（旧版本）**：执行 rebuildProjectStorage（决策 13
+ *   重建兜底，E5 增量迁移机制落地前保留），返回新连接与重建信息。
  *
  * 注意（brand-new 库场景）：新 openDatabase 的库 user_version=0，若不匹配当前版本会触发
  * 一次**无意义重建**并留下空库备份 data.db.v0.bak——建议调用方（S1.2 create 流程）在
@@ -52,12 +82,18 @@ export interface RebuildOutput {
  * @param db 已打开 data.db 的连接（openDatabase 后立即调用）
  * @param dir 项目根目录（outline.json 所在）
  * @param dbPath data.db 绝对路径
+ * @throws SchemaVersionError 未来版本拒绝打开（连接已由本函数关闭，无句柄泄漏）
  * @throws 备份/重建过程中的 I/O 错误；重建失败时旧连接已关闭，调用方需自行恢复
  */
 export function ensureSchemaCompatible(db: Db, dir: string, dbPath: string): RebuildOutput {
   const current = getUserVersion(db);
   if (current === SCHEMA_VERSION) {
     return { db, result: { rebuilt: false, toVersion: SCHEMA_VERSION, backups: [] } };
+  }
+  // E4：未来版本拒绝打开（先关连接防句柄泄漏，再抛错；数据文件零触碰）
+  if (current > SCHEMA_VERSION) {
+    closeDatabase(db);
+    throw new SchemaVersionError(current, SCHEMA_VERSION);
   }
   return rebuildProjectStorage(db, dir, dbPath, current);
 }

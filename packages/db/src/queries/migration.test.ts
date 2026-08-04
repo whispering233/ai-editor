@@ -9,7 +9,7 @@ import type { OutlineFileTree } from "@ai-editor/shared";
 import { closeDatabase, openDatabase, type Db } from "../connection";
 import { getUserVersion, SCHEMA_VERSION, setUserVersion } from "../schema";
 import { OUTLINE_FILE_NAME, readOutlineFile, writeOutlineFile } from "../storage/outline";
-import { DATA_DB_FILE_NAME, ensureSchemaCompatible, rebuildProjectStorage } from "./migration";
+import { DATA_DB_FILE_NAME, ensureSchemaCompatible, SchemaVersionError } from "./migration";
 
 let dir: string;
 let dbPath: string;
@@ -125,20 +125,36 @@ describe("ensureSchemaCompatible 版本不匹配 → 删库重建（决策 13）
     expect(readFileSync(join(dir, "outline.json.v0.bak"), "utf8")).toBe(outlineRawBefore);
   });
 
-  it("备份文件名带旧版本号：user_version=2 的库重建为 data.db.v2.bak（决策 13 修订命名）", () => {
-    // 未来/降级场景：user_version=2 ≠ SCHEMA_VERSION，同样触发重建
+  it("未来版本（user_version=2 > SCHEMA_VERSION）→ 拒绝打开：抛 SchemaVersionError、数据文件未动、无 .bak 备份（E4 堵降级数据丢失）", () => {
+    // 模拟「用户安装新版后回退旧版程序」：高版本库 + 数据 + 大纲
     setUserVersion(db, 2);
     insertOldEntity(db, "char-1");
     writeOutlineFile(dir, oldTree());
+    const outlineRawBefore = readFileSync(join(dir, OUTLINE_FILE_NAME), "utf8");
 
-    const { db: active, result } = rebuildProjectStorage(db, dir, dbPath, 2);
-
-    expect(result.fromVersion).toBe(2);
-    expect(result.backups[0]).toBe(join(dir, "data.db.v2.bak"));
-    expect(existsSync(join(dir, "data.db.v2.bak"))).toBe(true);
-    expect(existsSync(join(dir, "outline.json.v2.bak"))).toBe(true);
-    expect(getUserVersion(active)).toBe(SCHEMA_VERSION);
-    closeDatabase(active);
+    try {
+      ensureSchemaCompatible(db, dir, dbPath);
+      expect.unreachable("未来版本应拒绝打开");
+    } catch (err) {
+      expect(err).toBeInstanceOf(SchemaVersionError);
+      expect((err as SchemaVersionError).version).toBe(2);
+      expect((err as SchemaVersionError).current).toBe(SCHEMA_VERSION);
+      expect((err as Error).message).toContain("高于当前程序版本");
+    }
+    // 拒绝分支：本次打开的连接已关闭（无句柄泄漏，afterEach 幂等）
+    expect(db.open).toBe(false);
+    // 数据原封不动：无 .bak 备份生成、data.db 主文件仍在且 user_version 仍为 2、
+    // outline.json 字节原样、实体数据仍在（未触发任何重建/写操作）
+    expect(existsSync(join(dir, "data.db.v2.bak"))).toBe(false);
+    expect(existsSync(join(dir, "outline.json.v2.bak"))).toBe(false);
+    expect(readFileSync(join(dir, OUTLINE_FILE_NAME), "utf8")).toBe(outlineRawBefore);
+    const reopened = openDatabase(dbPath);
+    try {
+      expect(getUserVersion(reopened)).toBe(2);
+      expect(countEntities(reopened)).toBe(1);
+    } finally {
+      closeDatabase(reopened);
+    }
   });
 
   it("outline.json 缺失（异常状态）时重建仍成功：跳过备份但重置为空树", () => {

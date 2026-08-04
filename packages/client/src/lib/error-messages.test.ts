@@ -13,6 +13,10 @@ describe("describeOpenError（项目开/建错误码映射）", () => {
     expect(describeOpenError("PROJECT_ALREADY_EXISTS")).toContain("打开");
   });
 
+  it("PROJECT_VERSION_NEWER → 升级程序引导（E4：项目由更高版本创建，open 409）", () => {
+    expect(describeOpenError("PROJECT_VERSION_NEWER")).toContain("升级");
+  });
+
   it("NO_PROJECT_OPEN → 空串（页面分支处理，不产生表单错误）", () => {
     expect(describeOpenError("NO_PROJECT_OPEN")).toBe("");
   });

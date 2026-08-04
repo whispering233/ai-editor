@@ -42,6 +42,7 @@ export const ERROR_CODES = [
   "PROPOSAL_NOT_FOUND", // 404 proposal_id 不存在（决策 14）
   "PROPOSAL_PROJECT_MISMATCH", // 409 提案所属项目 ≠ 当前项目（决策 14 修订）
   "SCHEMA_VERSION_MISMATCH", // 409 导入 zip 的 data.db user_version 与当前程序版本不匹配（E2；拒绝导入，不静默重建，release-review §二）
+  "PROJECT_VERSION_NEWER", // 409 open 时项目 data.db user_version 高于当前程序版本（E4；拒绝打开并提示升级程序，堵降级数据丢失，release-review §一）
   // ---- 废弃（保留兼容）----
   "DELTA_CONFLICT", // 已废弃（2026-08 修订：computeState 以 conflicts 字段替代 409）
   // ---- tools.md 决策 15/16 补充命名（SSE error 事件用）----
