@@ -34,7 +34,9 @@ jobs:
           cache: pnpm
           registry-url: https://registry.npmjs.org
       - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck && pnpm lint && pnpm -r test && pnpm -r build
+      # 全量验证：build 先行——fresh checkout 无 dist（gitignore 不入库），而 @ai-editor/*
+      # 的 types/exports 指向 ./dist/index.d.ts，必须先拓扑序 build 生成 dist 才能 typecheck
+      - run: pnpm -r build && pnpm typecheck && pnpm lint && pnpm -r test
       # 发布 6 包（GITHUB_REF=refs/tags/vX.Y.Z 时自动校验 tag 与包版本一致）
       - run: node scripts/publish-packages.mjs
       # 安装态验证：临时目录真实安装 @ai-editor/server@<版本> 并启动冒烟
