@@ -15,9 +15,9 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 
 ## 项目状态（2026-08）
 
-- **完成**：阶段 A 地基 + 切片 1-9、12、13 + 阶段 U（U1-U8）+ 交互修复批次——详见「项目演进路线」。
-- **待做**：切片 10 画布（S10.1）、切片 11 发布（S11.1-S11.3）——卡片规格见文末，直接按卡执行。
-- **测试**：全仓 1176 个（shared 84 / db 187 / server 214 / client 316 / tools 225 / llm 59 / agent 94）。
+- **完成**：阶段 A 地基 + 切片 1-9、12、13 + 阶段 U（U1-U8）+ 交互修复批次 + 切片 10 画布（S10.1）+ 切片 11 发布（S11.1-S11.3）——详见「项目演进路线」。
+- **待做**：无（MVP 切片全部完成；发布前阻断项见 `doc/design/release-review.md`，backlog 事项一律不做）。
+- **测试**：全仓 1225 个（shared 84 / db 187 / server 220 / client 356 / tools 225 / llm 59 / agent 94）。
 - 已完成卡片的详细规格已归档（git history 可回溯）；「项目演进路线」提供脉络摘要，配合 `decisions.md`（决策 1-23 为设计主轴）理解现状。
 
 ## 执行进度（Todo）
@@ -31,10 +31,10 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - [x] 切片 12 大纲节点详情（决策 23）· 切片 13 大纲交互重构
 - [x] 阶段 U UI 工作台重构（U1-U8）
 - [x] 交互修复批次（2026-08：数据刷新信号 / 会话恢复 / ErrorBoundary / Base UI #31）
-- [ ] S10.1 画布页
-- [ ] S11.1 生产构建全链路
-- [ ] S11.2 端到端冒烟
-- [ ] S11.3 发布前复审
+- [x] S10.1 画布页
+- [x] S11.1 生产构建全链路
+- [x] S11.2 端到端冒烟
+- [x] S11.3 发布前复审（评审纪要：`doc/design/release-review.md`）
 
 ---
 
@@ -68,34 +68,8 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 
 **交互修复批次（2026-08 用户实测反馈）**——数据变更刷新信号（ui store `dataVersion`：AI 提案确认后中栏 7 页面自动重拉 + InfoBar 全局刷新按钮）；刷新页面自动激活最近会话（loadSessions 非空自动激活）；应用级 ErrorBoundary 防白屏（可恢复错误卡）；Base UI error #31 根因修复（DropdownMenuLabel 必须 DropdownMenuGroup 包裹——GroupLabel 裸放 Popup 内取不到 MenuGroupContext）。
 
+**切片 10 画布（S10.1，2026-08）**——大纲节点画布投影：自动布局（确定性树序排布）/ 节点拖拽（坐标防抖写 localStorage，key `ai-editor:canvas:{project_id}` 按项目隔离，决策 10）/ 缩放（0.5-2 滚轮 + 按钮）/ 仅场景显示模式；plot_edge 连线创建（拖出→目标→标签表单，RELATION_EXISTS→toast「这条连线已经存在」）/ 删除（点击高亮 + confirm 物理删提示）；伏笔标记复用 S9.2 buildNodeHookMarks 语义；ConfirmDialog 全局桥接上提（FeedbackHost）；`lib/canvas.ts` 15 个纯函数（40+ 测试）。
+
+**切片 11 发布（S11.1-S11.3，2026-08）**——生产构建全链路（`pnpm -r build` → dist 启动，真实目录 14 项走查：SPA fallback / 待命语义 / 端口 +1 / 127.0.0.1 开浏览器）；端到端冒烟（`smoke.test.ts` 9 步链路 123+ 断言：建项目→大纲→实体→关系→Delta→回收站→伏笔→对话→提案确认，真实 HTTP + tmp 项目 + mock LLM）；发布前复审（`doc/design/release-review.md`：阻断项 = #2 导出/导入 + #8 publishConfig 与 publish 演练 + #12 未来版本拒绝重建）。
+
 **调试基础设施（2026-08 独立交付）**——创作根 `.ai-editor/config.json` 纯配置文件调试日志（五类别 chat/request/stream/usage/http 细粒度门控，无 env 开关）；`[llm] request` 完整 prompt / `[llm] stream` 原始 SSE chunk / `[llm] usage` 真实 token 观察。
-
----
-
-## 切片 10：画布（待做）
-
-**S10.1 画布页**
-- 范围：大纲节点画布投影、拖拽定位（坐标/缩放存 localStorage，按 project_id 隔离）、plot_edge 连线创建/删除（连线标签）；**接入三栏布局**——中栏 tab「画布」（`#/canvas`，layout.md §1，2026-08 修订）；伏笔标记集成（S9.2 语义，画布节点标记）
-- 依赖：S2.3、S3.4
-- 验证：手工走查（刷新后布局保持）
-- 回滚：单 commit
-
-## 切片 11：发布（待做）
-
-**S11.1 生产构建全链路**
-- 范围：`pnpm -r build` → `node packages/server/dist/index.js` 启动（项目初始化、SPA fallback、端口 +1、127.0.0.1 打开浏览器）
-- 依赖：全部切片
-- 验证：真实目录起服务走查核心流程
-- 回滚：单 commit
-
-**S11.2 端到端冒烟**
-- 范围：脚本化走查核心链路（建项目 → 建大纲 → 建实体 → 建关系 → Delta → 回收站 → 伏笔 → 对话）
-- 依赖：S11.1
-- 验证：脚本全绿
-- 回滚：单 commit
-
-**S11.3 发布前复审**
-- 范围：backlog #12 schema 演进复审、#2 导出/导入、#8 全局安装演练、#4 token 统计评估
-- 依赖：S11.2
-- 验证：评审纪要产出
-- 回滚：单 commit
