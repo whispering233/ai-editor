@@ -145,6 +145,65 @@
 }
 ```
 
+### GET /api/v1/project/export
+
+导出当前项目完整数据为 zip 备份包（E1，release-review §二——产品承诺「数据主权归用户」的载体）。
+
+> **响应为二进制 zip（`application/zip`），不走 `{success, data}` 包裹**——「通用约定」成功响应的显式例外（契约见 `@ai-editor/shared` 的 `PROJECT_EXPORT_FILE_NAMES` 常量注释）。
+
+```typescript
+// Query: (none)
+
+// Res: 200 —— application/zip 二进制
+//  Headers:
+//   Content-Type: application/zip
+//   Content-Disposition: attachment; filename="book.zip"; filename*=UTF-8''<书名>.zip  // RFC 5987（中文书名 percent-encoded）
+//  Body: zip 内三文件（条目名 = 数据文件原名，import 侧按此固定名校验）
+//   project.json
+//   outline.json
+//   data.db        // 导出前服务端 wal_checkpoint(TRUNCATE)——主文件为完整快照，无需附带 -wal/-shm
+```
+
+**语义**：
+- 导出**当前打开项目**（无项目 → 409 `NO_PROJECT_OPEN`，与 `/config` 一致）。
+- zip 天然不含 DeepSeek key（决策 17：key 存用户级配置 `~/.ai-editor/config.json`，不入项目文件）。
+- 三文件缺失任一 → 500 `INTERNAL_ERROR`（打开的项目三文件必然齐全，缺失即损坏，不导出半成品包）。
+
+### POST /api/v1/project/import
+
+导入备份 zip 为新书（E2：校验 + 原子搬入，全部校验通过才触碰 `books/`）。
+
+```typescript
+// Req: multipart/form-data
+//   file: zip 备份包（必填；大小上限 50MB，超限 400 VALIDATION_ERROR）
+//   name: 书名（必填；禁路径分隔符 / \、纯点 . / ..、控制字符——同 client 新建项目规则）
+//        目标目录为服务端决定的 创作根/books/<name>/（客户端不可指定路径，防越权）
+
+// Res: 200
+{
+  imported: true;
+  id: string;     // 导入项目的 project_id（沿用 zip 内 project.json 的 id，数据原样恢复）
+  path: string;   // 新书目录绝对路径（创作根/books/<name>/）
+  name: string;   // 书名（即新书目录名；project.json 内部 name 保持原样）
+}
+```
+
+**校验顺序**（任一步失败即拒绝，不触发删库重建逻辑）：
+1. `content-length` 预检（> 50MB 快速拒绝，防超大请求先缓冲）+ `file.size` 复核
+2. 书名校验（防路径逃逸）
+3. zip 解压（fflate Unzip 流式 + **解压总字节预算 200MB**——zip 炸弹防御；解析失败/零条目 → 400 `VALIDATION_ERROR`「不是有效的项目备份包」）
+4. **条目白名单**：只接受 `PROJECT_EXPORT_FILE_NAMES` 三文件名（未知条目严格拒绝——逐名比对天然防 zip 路径穿越）
+5. 三文件齐全（缺任一 → 400）
+6. `project.json`/`outline.json` 顶层契约（JSON 可解析 + id/name/schema_version；`{id:"root",type:"root",schema_version,children[]}`）
+7. `data.db`：**文件大小 > 0 → 打开成功（非 SQLite/空文件 → 400 坏包）→ `user_version` === 当前版本**
+
+**错误码**：
+- 400 `VALIDATION_ERROR`：坏包/缺文件/未知条目/契约不符/书名非法/超大小上限
+- 409 `SCHEMA_VERSION_MISMATCH`：data.db `user_version` 与当前程序版本不匹配（文案按相对版本分流：`v > 当前` → 「备份来自更高版本程序」；`v < 当前` → 「备份来自旧版本程序」；**当前一律拒绝，不静默重建**——E5 迁移机制落地后旧版本放开）
+- 409 `PROJECT_ALREADY_EXISTS`：目标 `books/<name>/` 已存在（与 create 同语义）
+
+**原子搬入**：校验在 `mkdtemp` 临时目录完成（无论成败清理）；通过后 `mkdir` + 复制三文件到 `books/<name>/`，任一失败清理半成品目录（不留下残缺书）。导入**不自动打开**（与 create 一致，前端刷新书架）。
+
 ---
 
 ## 实体 CRUD

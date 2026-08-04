@@ -17,3 +17,4 @@ MVP 明确不做、延后迭代的事项。每项记录：现状、优化方案�
 | 11 | ~~孤儿节点层级限制~~ | **已取消（2026-08）**：游离节点设计整体删除（决策 19），move 不再支持 `__orphan__`，创建必须显式指定父节点（volume→root、chapter→volume/root、scene→chapter） | — | — |
 | 12 | schema 演进策略复审 | 删库重建仅限 MVP | 首次发布前重新评估（用户已有真实数据） | 首次发布前 |
 | 13 | 伏笔面板健康指标展示 | **MVP 简化（2026-08 决策）**：`_health` REST 附加字段契约未定义，伏笔面板只列基础字段与生命周期操作（`doc/ui/pages/hook-panel.md`），章节序展示（「第5章 → 预计第45章」）不做 | 补充 hook 查询响应 `_health` 附加字段契约（决策 21 口径：age/dormancy/stale/overdue/ready_to_resolve/blocked）与 plants/advances/resolves 章节序现推 → 面板徽标与位置展示 | 伏笔面板 MVP 上线后 |
+| 14 | 同 zip 重复导入产生同 id 项目 | E2 导入沿用 zip 内 project.json 的 id（「数据原样恢复」契约下不重新生成）——同一 zip 导入两次（不同书名）产生两个同 id 项目，`chat_messages.project_id` 同键 → 两书共享会话历史 | 导入时检测 id 已存在于现有书 → 重新生成新 id（或 409 提示）；需先评估「数据原样恢复」契约的取舍 | 用户实际重复导入（发布后观察） |

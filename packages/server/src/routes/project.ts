@@ -1,15 +1,29 @@
-// 项目路由（S1.2）：POST /create、POST /open、POST /close、GET/PUT /config、GET /export（E1）
+// 项目路由（S1.2）：POST /create、POST /open、POST /close、GET/PUT /config、GET /export（E1）、POST /import（E2）
 //
 // 契约来源：doc/api/endpoints.md 第 18-122 行（项目管理全部端点）、doc/design/decisions.md
 //   决策 8（单进程 currentProject）、决策 13 修订（open 时 user_version 判定删库重建）、决策 17（路径校验防越权）。
 // 校验失败统一 400 INVALID_PROJECT_PATH（shared ErrorCode，endpoints.md 第 66 行）。
 import { isAbsolute, join, resolve } from "node:path";
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, type Dirent } from "node:fs";
+import { tmpdir } from "node:os";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+  type Dirent,
+} from "node:fs";
 import { Hono, type Context } from "hono";
-import { zipSync } from "fflate";
+import { Unzip, UnzipInflate, zipSync } from "fflate";
 import type { ProjectFileConfig } from "@ai-editor/shared";
 import { mapProjectFileToConfig } from "@ai-editor/shared";
-import { openDatabase } from "@ai-editor/db";
+import { PROJECT_EXPORT_FILE_NAMES } from "@ai-editor/shared/schemas";
+import { openDatabase, closeDatabase, getUserVersion, SCHEMA_VERSION } from "@ai-editor/db";
 import { ensureSchemaCompatible, DATA_DB_FILE_NAME } from "@ai-editor/db";
 import { OUTLINE_FILE_NAME } from "@ai-editor/db";
 import { PROJECT_FILE_NAME } from "@ai-editor/db";
@@ -303,6 +317,242 @@ projectRoutes.get("/export", (c) => {
   c.header("Content-Type", "application/zip");
   c.header("Content-Disposition", `attachment; filename="book.zip"; filename*=UTF-8''${encodeURIComponent(fileName)}`);
   return c.body(zipData);
+});
+
+// ============ 导入（E2） ============
+
+/** 上传大小上限（50MB；ora-4 复核保留——zip 含 data.db，正常项目远小于此） */
+const MAX_IMPORT_SIZE = 50 * 1024 * 1024;
+
+/** 解压总字节预算（200MB，zip 炸弹防御：压缩比极高/超多条目的恶意包在解压阶段即中止） */
+const MAX_UNZIP_BUDGET = 200 * 1024 * 1024;
+
+/** 拼接 Uint8Array 分块（Unzip ondata 流累计） */
+function concatChunks(chunks: Uint8Array[], totalSize: number): Uint8Array {
+  const out = new Uint8Array(totalSize);
+  let offset = 0;
+  for (const c of chunks) {
+    out.set(c, offset);
+    offset += c.length;
+  }
+  return out;
+}
+
+/**
+ * 带预算的 zip 解压（ora-4 zip 炸弹防御）：
+ * fflate Unzip 流式解压（同步 push）——onfile 回调中**只解压白名单条目**（未知条目
+ * 仅记名不 start，省预算；白名单检查由调用方用 names 列表执行，语义与全量解压等价），
+ * ondata 累计解压总字节，超过预算抛 HttpError 中止（push 同步传播）。
+ * 返回 { entries（白名单条目解压结果）, names（全部条目名）}。
+ */
+function unzipWithBudget(
+  zipData: Uint8Array,
+  budget: number,
+): { entries: Record<string, Uint8Array>; names: string[] } {
+  const entries: Record<string, Uint8Array> = {};
+  const names: string[] = [];
+  let total = 0;
+  const unzipper = new Unzip((file) => {
+    names.push(file.name);
+    if (!(PROJECT_EXPORT_FILE_NAMES as readonly string[]).includes(file.name)) return; // 未知条目不解压
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    file.ondata = (err, chunk, final) => {
+      if (err) throw err;
+      size += chunk.length;
+      total += chunk.length;
+      if (total > budget) {
+        throw new HttpError(400, "VALIDATION_ERROR", `备份包解压超出预算（${budget} 字节上限，zip 炸弹防御）`);
+      }
+      chunks.push(chunk);
+      if (final) entries[file.name] = concatChunks(chunks, size);
+    };
+    file.start();
+  });
+  // 关键（fflate API 契约）：Unzip 默认仅注册 stored(0) 解码器——deflate(8) 压缩的
+  // zip（zipSync 默认）必须显式 register(UnzipInflate)，否则 start() 报 unknown
+  // compression type（fflate README 明确要求）
+  unzipper.register(UnzipInflate);
+  unzipper.push(zipData, true);
+  // 防御：无 EOCD/零条目的输入 Unzip 流式**静默返回空**（unzipSync 会抛）——
+  // 显式判定坏包（非 zip 内容 → 「不是有效的项目备份包」而非「缺少文件」）
+  if (names.length === 0) {
+    throw new HttpError(400, "VALIDATION_ERROR", "不是有效的项目备份包（zip 解析失败）");
+  }
+  return { entries, names };
+}
+
+/** 书名校验（与 client Sidebar 新建项目同规则）：禁路径分隔符/纯点/控制字符 */
+function validateBookName(name: string): void {
+  if (!name) {
+    throw new HttpError(400, "VALIDATION_ERROR", "缺少书名字段 name");
+  }
+  // 与 client 同规则（Sidebar.tsx L3）："/"、"\"、纯点（. / ..）、控制字符一律拒绝——
+  // name 直接拼 books/<name>/ 目录名，否则可逃出 books/（决策 17 防越权精神）
+  if (/[\\/]|^\.+$|[\u0000-\u001f]/.test(name)) {
+    throw new HttpError(400, "VALIDATION_ERROR", "书名不能包含 /、\\ 或为 . / ..");
+  }
+}
+
+/** project.json 顶层契约最小校验（E2 本项目内——shared 无文件形态 schema，不扩契约范围） */
+function isValidProjectFile(parsed: unknown): parsed is { id: string; name: string; schema_version: number } {
+  if (typeof parsed !== "object" || parsed === null) return false;
+  const p = parsed as Record<string, unknown>;
+  return typeof p.id === "string" && p.id.length > 0 && typeof p.name === "string" && typeof p.schema_version === "number";
+}
+
+/** outline.json 顶层契约校验（与 db 包 validateOutlineFile 同构：root 根 + schema_version 数字 + children 数组） */
+function isValidOutlineFile(parsed: unknown): boolean {
+  if (typeof parsed !== "object" || parsed === null) return false;
+  const p = parsed as Record<string, unknown>;
+  return p.id === "root" && p.type === "root" && typeof p.schema_version === "number" && Array.isArray(p.children);
+}
+
+// POST /api/v1/project/import —— 导入备份 zip 为新书（E2，release-review §二）
+//
+// 流程（全部校验通过才搬入，校验失败不触碰 books/）：
+//   content-length 预检（>50MB 快速拒绝，防超大请求先缓冲）→ multipart 解析
+//   （file=zip + name=书名）→ 书名校验（防路径逃逸）→ file.size 上限复核 →
+//   fflate Unzip 流式解压（**解压总字节预算 200MB**——zip 炸弹防御；未知条目仅记名
+//   不解压；失败 400「不是有效的项目备份包」）→ **条目白名单**（只接受
+//   PROJECT_EXPORT_FILE_NAMES 三文件名，非白名单条目即损坏/恶意包，严格拒绝——
+//   逐名比对天然防 zip 路径穿越）→ 三文件齐全 → project.json/outline.json 顶层契约
+//   → data.db 校验（**大小 > 0 → 打开成功 → user_version === SCHEMA_VERSION**；
+//   0 字节/非 SQLite → 400 坏包；版本不匹配 409 SCHEMA_VERSION_MISMATCH 按相对版本
+//   分流文案，拒绝导入不静默重建——与 open 的删库重建语义刻意区分）→ 目标
+//   books/<name>/ 冲突（409 PROJECT_ALREADY_EXISTS，与 create 同语义）→ mkdir + copy
+//   原子搬入（任一失败清理半成品目录）→ 不打开（与 create 一致，前端刷新书架）。
+// 校验在 mkdtemp 临时目录完成（finally 清理）；目标目录由服务端拼 books/<name>/，
+// 客户端不可指定路径（防越权）。
+projectRoutes.post("/import", async (c) => {
+  if (projectRoot === null) {
+    throw new HttpError(500, "INTERNAL_ERROR", "创作根未初始化（startServer 未调用 setProjectRoot）");
+  }
+
+  // 0. 上传大小预检（ora-4：parseBody 缓冲前先查 content-length，快速拒绝超大请求，
+  //    避免先把几十上百 MB 读进内存；与 file.size 检查双保险——content-length 可缺失/不可信）
+  const contentLength = Number(c.req.header("content-length") ?? "0");
+  if (contentLength > MAX_IMPORT_SIZE) {
+    throw new HttpError(400, "VALIDATION_ERROR", `备份包超过大小上限（${MAX_IMPORT_SIZE / 1024 / 1024}MB）`);
+  }
+
+  // 1. multipart 解析（Hono 4 c.req.parseBody；非 multipart body → 解析失败 → 400）
+  const body = await c.req.parseBody().catch(() => null);
+  const name = typeof body?.name === "string" ? body.name.trim() : "";
+  validateBookName(name);
+  const file = body?.file;
+  if (!(file instanceof File)) {
+    throw new HttpError(400, "VALIDATION_ERROR", "缺少文件字段 file（zip 备份包）");
+  }
+  if (file.size > MAX_IMPORT_SIZE) {
+    throw new HttpError(400, "VALIDATION_ERROR", `备份包超过大小上限（${MAX_IMPORT_SIZE / 1024 / 1024}MB）`);
+  }
+
+  // 2. zip 解压（fflate Unzip 流式 + 解压总字节预算 200MB——ora-4 zip 炸弹防御；
+  //    未知条目不解压仅记名，白名单检查见步骤 3；解析失败/超预算 → 400）
+  let entries: Record<string, Uint8Array>;
+  let entryNames: string[];
+  try {
+    const result = unzipWithBudget(new Uint8Array(await file.arrayBuffer()), MAX_UNZIP_BUDGET);
+    entries = result.entries;
+    entryNames = result.names;
+  } catch (err) {
+    if (err instanceof HttpError) throw err;
+    throw new HttpError(400, "VALIDATION_ERROR", "不是有效的项目备份包（zip 解析失败）");
+  }
+
+  // 3. 条目白名单（严格拒绝）：只接受三数据文件名——非白名单条目即损坏/恶意包，
+  //    逐名比对（条目名不含路径分隔符概念，白名单比对即防 zip 路径穿越）
+  const unknown = entryNames.filter((k) => !(PROJECT_EXPORT_FILE_NAMES as readonly string[]).includes(k));
+  if (unknown.length > 0) {
+    throw new HttpError(400, "VALIDATION_ERROR", `备份包含未知条目: ${unknown.join(", ")}（只接受 ${PROJECT_EXPORT_FILE_NAMES.join("/")}）`);
+  }
+  const missing = PROJECT_EXPORT_FILE_NAMES.filter((f) => !(f in entries));
+  if (missing.length > 0) {
+    throw new HttpError(400, "VALIDATION_ERROR", `备份包缺少文件: ${missing.join(", ")}（非完整项目备份）`);
+  }
+
+  // 4. 临时目录校验（全部通过才搬入；finally 清理）
+  const tmpDir = mkdtempSync(join(tmpdir(), "ai-editor-import-"));
+  let projectId = "";
+  try {
+    for (const f of PROJECT_EXPORT_FILE_NAMES) {
+      writeFileSync(join(tmpDir, f), Buffer.from(entries[f]));
+    }
+
+    // project.json 顶层契约（JSON 可解析 + id/name/schema_version）
+    let projectConfig: unknown;
+    try {
+      projectConfig = JSON.parse(readFileSync(join(tmpDir, PROJECT_FILE_NAME), "utf8"));
+    } catch {
+      throw new HttpError(400, "VALIDATION_ERROR", "备份包内 project.json 不是合法 JSON");
+    }
+    if (!isValidProjectFile(projectConfig)) {
+      throw new HttpError(400, "VALIDATION_ERROR", "备份包内 project.json 顶层契约不符（需 id/name/schema_version）");
+    }
+    projectId = projectConfig.id;
+
+    // outline.json 顶层契约（{id:"root",type:"root",schema_version,children[]}）
+    try {
+      const outline = JSON.parse(readFileSync(join(tmpDir, OUTLINE_FILE_NAME), "utf8"));
+      if (!isValidOutlineFile(outline)) {
+        throw new HttpError(400, "VALIDATION_ERROR", "备份包内 outline.json 顶层契约不符（需 {id:root,type:root,schema_version,children[]}）");
+      }
+    } catch (err) {
+      if (err instanceof HttpError) throw err;
+      throw new HttpError(400, "VALIDATION_ERROR", "备份包内 outline.json 不是合法 JSON");
+    }
+
+    // data.db 校验顺序（ora-4）：**文件大小 > 0 → 打开成功 → user_version**——
+    // 0 字节文件 SQLite 会当新库打开（user_version=0），必须先按坏包拒绝（400 而非 409）；
+    // 非 SQLite 内容打开失败 → 400 坏包。
+    // user_version === SCHEMA_VERSION（决策 13：以 user_version 为准判定）；不匹配 → 409
+    // 拒绝导入（不静默重建——导入是用户主动恢复备份，版本不兼容须明示），文案按相对
+    // 版本分流（更高版本程序 / 旧版本程序；当前一律拒绝，E5 迁移机制落地后旧版本放开）。
+    const dbPath = join(tmpDir, DATA_DB_FILE_NAME);
+    if (statSync(dbPath).size === 0) {
+      throw new HttpError(400, "VALIDATION_ERROR", "备份包内 data.db 为空文件（损坏包）");
+    }
+    let db: ReturnType<typeof openDatabase> | null = null;
+    try {
+      db = openDatabase(dbPath);
+      const v = getUserVersion(db);
+      if (v !== SCHEMA_VERSION) {
+        const hint = v > SCHEMA_VERSION ? "备份来自更高版本程序" : "备份来自旧版本程序";
+        throw new HttpError(
+          409,
+          "SCHEMA_VERSION_MISMATCH",
+          `备份包 data.db 版本 (${v}) ${hint}（当前程序 ${SCHEMA_VERSION}），暂不支持导入`,
+        );
+      }
+    } catch (err) {
+      if (err instanceof HttpError) throw err;
+      throw new HttpError(400, "VALIDATION_ERROR", "备份包内 data.db 不是有效的 SQLite 数据库");
+    } finally {
+      if (db !== null) closeDatabase(db);
+    }
+
+    // 5. 目标目录冲突（books/<name>/ 已存在 → 409，与 create 的 PROJECT_ALREADY_EXISTS 同语义）
+    const bookDir = join(projectRoot, BOOKS_DIR_NAME, name);
+    if (existsSync(bookDir)) {
+      throw new HttpError(409, "PROJECT_ALREADY_EXISTS", `书架已存在同名书: ${name}`);
+    }
+
+    // 6. 原子搬入：mkdir（recursive 建 books/）+ 复制三文件；任一失败清理半成品目录
+    try {
+      mkdirSync(bookDir, { recursive: true });
+      for (const f of PROJECT_EXPORT_FILE_NAMES) {
+        copyFileSync(join(tmpDir, f), join(bookDir, f));
+      }
+    } catch (err) {
+      rmSync(bookDir, { recursive: true, force: true }); // 不留下残缺书
+      throw err; // → errorHandler 500 INTERNAL_ERROR
+    }
+
+    return c.json(ok({ imported: true as const, id: projectId, path: bookDir, name }));
+  } finally {
+    rmSync(tmpDir, { recursive: true, force: true });
+  }
 });
 
 // GET /api/v1/project/config —— 获取当前项目配置

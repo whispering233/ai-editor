@@ -112,6 +112,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 
 **E5 增量迁移脚本机制**
 - 范围：`migrations/` 目录按序执行（001_xxx.sql/ts）+ 每步 `setUserVersion(v+1)` + 启动按 user_version < SCHEMA_VERSION 前向执行 + 迁移前自动快照（复用备份函数，命名加时间戳）；决策 13 增补「删库重建策略于 v0.1.0 发布终止」
+- **import 侧版本兼容（ora-4 决议）**：E5 迁移机制放开 open 侧旧版本后，import 需同步决定是否接受旧版本备份（当前一律 409 SCHEMA_VERSION_MISMATCH，文案已按相对版本分流「备份来自旧版本程序」——放开时改为导入前执行迁移，或维持拒绝）
 - 依赖：E4
 - 验证：空迁移/多步顺序/失败回滚/快照生成；文档更新（schema.md/decisions.md）
 - 回滚：单 commit

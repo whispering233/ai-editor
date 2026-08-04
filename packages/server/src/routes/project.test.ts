@@ -1,14 +1,24 @@
 // 项目路由测试（S1.2）：create / open（含 schema 删库重建）/ close / config GET/PUT
 // 覆盖：三文件初始化与版本号写入、路径校验（相对路径/符号链接）、版本不匹配重建 + 备份、
 //       currentProject 单例切换与清空、current_position 非软删节点校验
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
-import { unzipSync } from "fflate";
+import { unzipSync, zipSync } from "fflate";
 import type { OutlineFileTree, ProjectFileConfig } from "@ai-editor/shared";
-import { closeDatabase, getUserVersion, openDatabase, SCHEMA_VERSION, setUserVersion } from "@ai-editor/db";
+import {
+  closeDatabase,
+  DATA_DB_FILE_NAME,
+  getUserVersion,
+  openDatabase,
+  OUTLINE_FILE_NAME,
+  PROJECT_FILE_NAME,
+  SCHEMA_VERSION,
+  setUserVersion,
+} from "@ai-editor/db";
+import { PROJECT_EXPORT_FILE_NAMES } from "@ai-editor/shared/schemas";
 import { readOutlineFile, readProjectFile, writeOutlineFile, writeProjectFile } from "@ai-editor/db";
 import { errorHandler } from "../middleware/error.js";
 import {
@@ -698,29 +708,38 @@ describe("GET /project/list（书架：创作根 books/ 扫描）", () => {
 
 // ============ GET /api/v1/project/export（E1：导出 zip 三文件） ============
 
-describe("GET /project/export（E1：zip 导出三文件）", () => {
-  /** open 一个含实体数据的正常项目（验证 data.db 完整快照）并返回测试 app */
-  async function openSeededProject(dir: string): Promise<Hono> {
-    initProjectDir(dir, makeConfig("proj-exp", "导出项目"));
-    // 写入真实数据：导出后解包出的 data.db 应能直接打开且含该实体（WAL 已合并验证）
-    const db = openDatabase(join(dir, "data.db"));
-    try {
-      db.prepare("INSERT INTO entities (id, type, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)").run(
-        "char-exp", "character", "导出角色", T0, T0,
-      );
-    } finally {
-      closeDatabase(db);
-    }
-    const app = buildApp();
-    const res = await app.request("/api/v1/project/open", {
-      method: "POST",
-      headers: HOST_HEADERS,
-      body: JSON.stringify({ path: dir }),
-    });
-    expect(res.status).toBe(200);
-    return app;
+/**
+ * 构造含实体数据的项目并 open（E1 export / E2 import roundtrip 共用）：
+ * initProjectDir + 插入实体 + open 路由切换 currentProject
+ */
+async function openSeededProject(
+  dir: string,
+  id = "proj-exp",
+  name = "导出项目",
+  charId = "char-exp",
+  charName = "导出角色",
+): Promise<Hono> {
+  initProjectDir(dir, makeConfig(id, name));
+  // 写入真实数据：导出后解包出的 data.db 应能直接打开且含该实体（WAL 已合并验证）
+  const db = openDatabase(join(dir, "data.db"));
+  try {
+    db.prepare("INSERT INTO entities (id, type, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)").run(
+      charId, "character", charName, T0, T0,
+    );
+  } finally {
+    closeDatabase(db);
   }
+  const app = buildApp();
+  const res = await app.request("/api/v1/project/open", {
+    method: "POST",
+    headers: HOST_HEADERS,
+    body: JSON.stringify({ path: dir }),
+  });
+  expect(res.status).toBe(200);
+  return app;
+}
 
+describe("GET /project/export（E1：zip 导出三文件）", () => {
   it("导出成功：application/zip + attachment；解包三文件齐全且与源文件一致", async () => {
     const dir = makeTmpDir();
     const app = await openSeededProject(dir);
@@ -744,18 +763,35 @@ describe("GET /project/export（E1：zip 导出三文件）", () => {
     expect(Buffer.from(unzipped["data.db"]).equals(readFileSync(join(dir, "data.db")))).toBe(true);
   });
 
-  it("zip 内 data.db 为完整快照：可直接打开且含写入的实体（WAL 已合并）", async () => {
+  it("zip 内 data.db 为完整快照：已打开连接上的写入（仅存于 WAL）经 checkpoint 合并入包（ora-4 真实验证）", async () => {
     const dir = makeTmpDir();
-    const app = await openSeededProject(dir);
-    const res = await app.request("/api/v1/project/export", { headers: HOST_HEADERS });
-    const unzipped = unzipSync(new Uint8Array(await res.arrayBuffer()));
+    initProjectDir(dir, makeConfig("proj-wal", "WAL 项目"));
+    const app = buildApp();
+    await app.request("/api/v1/project/open", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: dir }),
+    });
+    // 关键（ora-4 修复）：在**已打开的项目连接**上插入——better-sqlite3 WAL 模式下
+    // 数据此刻仅存于 -wal 文件。反证：盘上主文件不含该实体；若 export 解包出的
+    // data.db 能查到 → 证明 wal_checkpoint(TRUNCATE) 真实合并（E1 核心卖点）。
+    // 旧版用例经独立连接写入后 close（WAL 恒空），checkpoint 从未被真正验证。
+    const active = getCurrentProject()!;
+    active.db.prepare("INSERT INTO entities (id, type, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)").run(
+      "char-wal", "character", "WAL角色", T0, T0,
+    );
+    expect(readFileSync(join(dir, "data.db")).includes(Buffer.from("WAL角色"))).toBe(false); // 主文件不含（未合并）
 
+    const res = await app.request("/api/v1/project/export", { headers: HOST_HEADERS });
+    expect(res.status).toBe(200);
+    const unzipped = unzipSync(new Uint8Array(await res.arrayBuffer()));
+    // 解包出的 data.db（导出时已 checkpoint）应能直接查到 WAL 中的实体
     const snapshotPath = join(makeTmpDir(), "snapshot.db");
     writeFileSync(snapshotPath, Buffer.from(unzipped["data.db"]));
     const db = openDatabase(snapshotPath);
     try {
-      const row = db.prepare("SELECT name FROM entities WHERE id = ?").get("char-exp") as { name: string } | undefined;
-      expect(row?.name).toBe("导出角色");
+      const row = db.prepare("SELECT name FROM entities WHERE id = ?").get("char-wal") as { name: string } | undefined;
+      expect(row?.name).toBe("WAL角色");
     } finally {
       closeDatabase(db);
     }
@@ -798,5 +834,316 @@ describe("GET /project/export（E1：zip 导出三文件）", () => {
     const res = await app.request("/api/v1/project/export", { headers: HOST_HEADERS });
     expect(res.status).toBe(500);
     expect((await res.json()).error.code).toBe("INTERNAL_ERROR");
+  });
+});
+
+// ============ POST /api/v1/project/import（E2：校验 + 原子搬入） ============
+
+describe("POST /project/import（E2：zip 导入新书）", () => {
+  /** 造 multipart 请求体（file = zip 字节 + name = 书名） */
+  function importForm(zipBytes: Uint8Array, name: string): FormData {
+    const form = new FormData();
+    // new Uint8Array(zipBytes)：fflate 返回 ArrayBufferLike 泛型，复制为 ArrayBuffer 视图
+    // 以满足 BlobPart 类型约束（TS 5.7 泛型 Uint8Array）
+    form.append("file", new File([new Uint8Array(zipBytes)], "backup.zip", { type: "application/zip" }));
+    form.append("name", name);
+    return form;
+  }
+
+  /** 从真实项目导出 zip（E1 路由），供 roundtrip / 冲突等用例复用 */
+  async function exportZip(app: Hono): Promise<Uint8Array> {
+    const res = await app.request("/api/v1/project/export", { headers: HOST_HEADERS });
+    expect(res.status).toBe(200);
+    return new Uint8Array(await res.arrayBuffer());
+  }
+
+  it("roundtrip：E1 导出 → import 新书名 → 200 + 三文件生成 + 打开新书数据完整（与源一致）", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    // 源项目：含实体数据 + open（export 需要 currentProject）
+    const srcDir = makeTmpDir();
+    const app = await openSeededProject(srcDir, "proj-src", "源书", "char-src", "源角色");
+    const srcCfg = await app.request("/api/v1/project/config", { headers: HOST_HEADERS });
+    expect((await srcCfg.json()).data.id).toBe("proj-src");
+    const srcOutline = readOutlineFile(srcDir);
+    // 源实体基线（DB 直查——测试 app 未挂 entity 路由，数据完整性本质对比同一张表）
+    const srcDb = openDatabase(join(srcDir, "data.db"));
+    const srcEntities = srcDb.prepare("SELECT id, type, name FROM entities ORDER BY id").all();
+    closeDatabase(srcDb);
+
+    // E1 导出 → E2 导入（新书名）
+    const impRes = await app.request("/api/v1/project/import", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: importForm(await exportZip(app), "导入的新书"),
+    });
+    expect(impRes.status).toBe(200);
+    const data = (await impRes.json()).data;
+    expect(data).toEqual({
+      imported: true,
+      id: "proj-src",
+      path: join(root, "books", "导入的新书"),
+      name: "导入的新书",
+    });
+    // 新书目录三文件生成（project.json id 沿用源 id——数据原样恢复）
+    const bookDir = join(root, "books", "导入的新书");
+    expect(readProjectFile(bookDir)?.id).toBe("proj-src");
+    expect(readProjectFile(bookDir)?.name).toBe("源书"); // project.json 内部 name 不被篡改
+    expect(readOutlineFile(bookDir)).toEqual(srcOutline);
+    // import 不打开（与 create 一致）
+    expect(getCurrentProject()?.root).toBe(srcDir);
+
+    // 数据完整：打开新书 → config 与源一致 + 实体表与源一致
+    const openRes = await app.request("/api/v1/project/open", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: bookDir }),
+    });
+    expect(openRes.status).toBe(200);
+    const cfgRes = await app.request("/api/v1/project/config", { headers: HOST_HEADERS });
+    expect((await cfgRes.json()).data.id).toBe("proj-src");
+    const active = getCurrentProject();
+    expect(active?.db.prepare("SELECT id, type, name FROM entities ORDER BY id").all()).toEqual(srcEntities);
+  });
+
+  it("缺文件 zip（只含 project.json）→ 400 VALIDATION_ERROR（非完整备份）", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    const badZip = zipSync({ "project.json": new TextEncoder().encode("{}") });
+    const res = await buildApp().request("/api/v1/project/import", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: importForm(badZip, "缺文件书"),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      success: false,
+      error: { code: "VALIDATION_ERROR", message: expect.stringContaining("缺少文件") },
+    });
+  });
+
+  it("非 zip 内容 → 400 VALIDATION_ERROR（不是有效的项目备份包）", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    const res = await buildApp().request("/api/v1/project/import", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: importForm(new TextEncoder().encode("这不是一个 zip 文件"), "坏包书"),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      success: false,
+      error: { code: "VALIDATION_ERROR", message: expect.stringContaining("不是有效的项目备份包") },
+    });
+  });
+
+  it("zip 含未知条目 → 400 VALIDATION_ERROR（白名单严格拒绝，防路径穿越）", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    // 合法三文件 + 恶意条目（如 ../../evil.txt 形状名）
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-x", "x"));
+    const evilZip = zipSync({
+      "project.json": readFileSync(join(dir, "project.json")),
+      "outline.json": readFileSync(join(dir, "outline.json")),
+      "data.db": readFileSync(join(dir, "data.db")),
+      "../../evil.txt": new TextEncoder().encode("pwned"),
+    });
+    const res = await buildApp().request("/api/v1/project/import", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: importForm(evilZip, "白名单书"),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.message).toContain("未知条目");
+  });
+
+  it("project.json 非合法 JSON → 400 VALIDATION_ERROR", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    const badZip = zipSync({
+      "project.json": new TextEncoder().encode("{ 这不是 JSON"),
+      "outline.json": new TextEncoder().encode(JSON.stringify({ id: "root", type: "root", schema_version: 1, children: [] })),
+      "data.db": new Uint8Array(),
+    });
+    const res = await buildApp().request("/api/v1/project/import", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: importForm(badZip, "坏JSON书"),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.message).toContain("project.json");
+  });
+
+  it("user_version 不匹配（SCHEMA_VERSION+1）→ 409 SCHEMA_VERSION_MISMATCH（拒绝导入不静默重建）", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    // 构造未来版本备份：合法三文件 + data.db user_version = SCHEMA_VERSION + 1
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-v", "未来版"));
+    const db = openDatabase(join(dir, "data.db"));
+    setUserVersion(db, SCHEMA_VERSION + 1);
+    closeDatabase(db);
+    const futureZip = zipSync({
+      "project.json": readFileSync(join(dir, "project.json")),
+      "outline.json": readFileSync(join(dir, "outline.json")),
+      "data.db": readFileSync(join(dir, "data.db")),
+    });
+
+    const res = await buildApp().request("/api/v1/project/import", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: importForm(futureZip, "未来版书"),
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      success: false,
+      error: { code: "SCHEMA_VERSION_MISMATCH", message: expect.stringContaining("更高版本程序") },
+    });
+    // 拒绝导入：books/ 无残留
+    expect(existsSync(join(root, "books", "未来版书"))).toBe(false);
+  });
+
+  it("旧版本备份（user_version < SCHEMA_VERSION）→ 409 文案提示「旧版本程序」（当前一律拒绝，E5 后放开）", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    // 构造旧版本备份：合法 project.json/outline.json + data.db user_version=0（新库默认）
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-old", "旧版"));
+    const oldDb = openDatabase(join(dir, "data.db"));
+    setUserVersion(oldDb, 0); // 旧版本（< SCHEMA_VERSION）
+    closeDatabase(oldDb);
+    const oldZip = zipSync({
+      "project.json": readFileSync(join(dir, "project.json")),
+      "outline.json": readFileSync(join(dir, "outline.json")),
+      "data.db": readFileSync(join(dir, "data.db")),
+    });
+
+    const res = await buildApp().request("/api/v1/project/import", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: importForm(oldZip, "旧版书"),
+    });
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.message).toContain("旧版本程序");
+    expect(existsSync(join(root, "books", "旧版书"))).toBe(false);
+  });
+
+  it("data.db 为空文件（0 字节）→ 400 VALIDATION_ERROR（坏包，而非 409 版本不匹配——ora-4 顺序修复）", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-empty", "空库"));
+    const badZip = zipSync({
+      "project.json": readFileSync(join(dir, "project.json")),
+      "outline.json": readFileSync(join(dir, "outline.json")),
+      "data.db": new Uint8Array(), // 0 字节：SQLite 会当新库（user_version=0），必须先按坏包拒
+    });
+    const res = await buildApp().request("/api/v1/project/import", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: importForm(badZip, "空库书"),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.message).toContain("空文件");
+  });
+
+  it("书名冲突（目标 books/<name>/ 已存在）→ 409 PROJECT_ALREADY_EXISTS（与 create 同语义）", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    // 先导入一本书成功
+    const srcDir = makeTmpDir();
+    const app = await openSeededProject(srcDir);
+    const okRes = await app.request("/api/v1/project/import", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: importForm(await exportZip(app), "同名书"),
+    });
+    expect(okRes.status).toBe(200);
+    // 再次导入同名 → 409
+    const dupRes = await app.request("/api/v1/project/import", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: importForm(await exportZip(app), "同名书"),
+    });
+    expect(dupRes.status).toBe(409);
+    expect(await dupRes.json()).toEqual({
+      success: false,
+      error: { code: "PROJECT_ALREADY_EXISTS", message: expect.stringContaining("同名") },
+    });
+  });
+
+  it("书名含路径分隔符（../escape）→ 400 VALIDATION_ERROR（防 books/ 逃逸，决策 17）", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-esc", "esc"));
+    const zip = zipSync({
+      "project.json": readFileSync(join(dir, "project.json")),
+      "outline.json": readFileSync(join(dir, "outline.json")),
+      "data.db": readFileSync(join(dir, "data.db")),
+    });
+    const res = await buildApp().request("/api/v1/project/import", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: importForm(zip, "../escape"),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.message).toContain("书名");
+    // books/ 外无残留（逃逸目录未被创建）
+    expect(existsSync(join(root, "books", "..", "escape"))).toBe(false);
+  });
+
+  it("缺少 multipart 字段（无 file / 无 name）→ 400 VALIDATION_ERROR", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    // 无 file
+    const noFile = new FormData();
+    noFile.append("name", "无文件书");
+    const res1 = await buildApp().request("/api/v1/project/import", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: noFile,
+    });
+    expect(res1.status).toBe(400);
+    expect((await res1.json()).error.message).toContain("file");
+    // 无 name
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-n", "n"));
+    const zip = zipSync({
+      "project.json": readFileSync(join(dir, "project.json")),
+      "outline.json": readFileSync(join(dir, "outline.json")),
+      "data.db": readFileSync(join(dir, "data.db")),
+    });
+    const noName = new FormData();
+    noName.append("file", new File([zip], "backup.zip"));
+    const res2 = await buildApp().request("/api/v1/project/import", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: noName,
+    });
+    expect(res2.status).toBe(400);
+    expect((await res2.json()).error.message).toContain("name");
+  });
+
+  it("创作根未注入（setProjectRoot 未调用）→ 500 INTERNAL_ERROR（防御，同 list）", async () => {
+    // beforeEach 已 setProjectRoot(null)
+    const res = await buildApp().request("/api/v1/project/import", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: importForm(new Uint8Array(), "任意书"),
+    });
+    expect(res.status).toBe(500);
+    expect((await res.json()).error.code).toBe("INTERNAL_ERROR");
+  });
+});
+
+// ============ 导出/导入 zip 条目契约（ora-4 钉死） ============
+
+describe("导出/导入 zip 条目契约（ora-4）", () => {
+  it("shared PROJECT_EXPORT_FILE_NAMES 与 db 包三常量相等（export 组装与 import 校验不漂移）", () => {
+    expect([...PROJECT_EXPORT_FILE_NAMES].sort()).toEqual(
+      [PROJECT_FILE_NAME, OUTLINE_FILE_NAME, DATA_DB_FILE_NAME].sort(),
+    );
   });
 });

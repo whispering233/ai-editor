@@ -256,19 +256,21 @@ export const PROJECT_EXPORT_FILE_NAMES = ["project.json", "outline.json", "data.
  * - 二进制响应不走 Zod parse——契约以本注释 + PROJECT_EXPORT_FILE_NAMES 常量表达
  */
 
-// POST /api/v1/project/import（E2 实现；E1 仅落契约）
-// - 请求：multipart/form-data 文件上传，field 名 "file"，内容为 E1 导出的 zip
-// - 服务端流程（E2）：解压到临时目录 → 校验（三文件齐全 + project.json/outline.json
-//   顶层契约 + data.db user_version 匹配）→ 原子搬入 创作根/books/<书名>/（新建，
-//   不覆盖现有项目）→ 返回 200
-// - 错误码：坏包/缺文件 → 400 VALIDATION_ERROR；data.db user_version 与当前程序版本
-//   不匹配 → 409 SCHEMA_VERSION_MISMATCH（拒绝导入，不静默重建）；目标书名已存在
-//   → 409 PROJECT_ALREADY_EXISTS（服务端补充码，与 create 同语义）
+// POST /api/v1/project/import（E2 实现；E1 已落契约）
+// - 请求：multipart/form-data 文件上传——field "file"（zip 备份包）+ field "name"（书名，
+//   必填；禁路径分隔符/纯点/控制字符，与 client 新建项目同规则）——目标目录为
+//   服务端决定的 创作根/books/<name>/（客户端不可指定路径，防越权）
+// - 服务端流程（E2）：解压到临时目录 → 校验（条目白名单 = PROJECT_EXPORT_FILE_NAMES
+//   三文件名 + project.json/outline.json 顶层契约 + data.db user_version 匹配）→
+//   原子搬入新书目录（新建，不覆盖现有项目）→ 返回 200
+// - 错误码：坏包/缺文件/未知条目/契约不符 → 400 VALIDATION_ERROR；data.db user_version
+//   与当前程序版本不匹配 → 409 SCHEMA_VERSION_MISMATCH（拒绝导入，不静默重建）；
+//   目标书名已存在 → 409 PROJECT_ALREADY_EXISTS（服务端补充码，与 create 同语义）
 export const projectImportResSchema = z.object({
   imported: z.literal(true),
-  id: z.string(), // 导入项目的 project_id（沿用 zip 内 project.json 的 id）
-  path: z.string(), // 新书目录绝对路径（创作根/books/<书名>/）
-  name: z.string(), // 书名（project.json name，即目录名）
+  id: z.string(), // 导入项目的 project_id（沿用 zip 内 project.json 的 id，数据原样恢复）
+  path: z.string(), // 新书目录绝对路径（创作根/books/<name>/）
+  name: z.string(), // 书名（即新书目录名 books/<name>/；project.json 内部 name 保持原样）
 });
 
 // ============ entity 端点（endpoints.md「实体 CRUD」） ============
