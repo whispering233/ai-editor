@@ -6,10 +6,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { OutlineFileTree } from "@ai-editor/shared";
+import type { OutlineFileTree } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
-import { closeDatabase, createEntity, listDeltasByTarget, openDatabase, type Db } from "@ai-editor/db";
-import { writeOutlineFile } from "@ai-editor/db";
+import { closeDatabase, createEntity, listDeltasByTarget, openDatabase, type Db } from "@whispering233/ai-editor-db";
+import { writeOutlineFile } from "@whispering233/ai-editor-db";
 import { buildProposal } from "../proposal/types.js";
 import { executeAddDelta } from "./delta.js";
 

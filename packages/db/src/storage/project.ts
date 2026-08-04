@@ -1,11 +1,11 @@
-// @ai-editor/db project.json 存储模块（T2.2）
+// @whispering233/ai-editor-db project.json 存储模块（T2.2）
 //
 // 单一事实来源：doc/database/schema.md 第 157-186 行（project.json 契约）——
 // id/name/language/prompt/schema_version/current_position/created_at/updated_at，
 // 文件写入走决策 11 原子写同款流程（第 186 行），DeepSeek key 绝不写入本文件（决策 17）。
 
 import { join } from "node:path";
-import type { ProjectFileConfig } from "@ai-editor/shared";
+import type { ProjectFileConfig } from "@whispering233/ai-editor-shared";
 import { readTextFileOrNull, writeJsonAtomic } from "./atomic.js";
 
 /** project.json 文件名（决策 8：项目根目录） */

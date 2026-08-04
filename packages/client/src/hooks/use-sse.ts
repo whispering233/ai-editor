@@ -4,7 +4,7 @@
 //   - error 事件后流立即关闭（客户端收到即终止解析）
 //   - 60s 无任何事件 → 判定连接断开（决策 20 半开连接兜底），回调 onTimeout 并中止 fetch
 // 帧解析抽为纯函数（parseSSEFrames / parseSSEFrame）便于单测
-import type { ErrorCode } from "@ai-editor/shared";
+import type { ErrorCode } from "@whispering233/ai-editor-shared";
 import { CLIENT_NETWORK_ERROR } from "../lib/api";
 
 /** 已解析的 SSE 消息 */

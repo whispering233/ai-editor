@@ -1,4 +1,4 @@
-// @ai-editor/llm 重试与错误分类（S6.2）
+// @whispering233/ai-editor-llm 重试与错误分类（S6.2）
 // 契约来源：doc/design/decisions.md 决策 15（重试分类与退避，2026-08 补充借鉴 pi）：
 //   - 配额/计费类（402 / code 含 insufficient_quota / billing / quota）不可重试快失败
 //   - 传输与瞬时类（429 / 5xx / 超时 / 网络断开 / 流截断）指数退避 baseDelay * 2^(n-1)

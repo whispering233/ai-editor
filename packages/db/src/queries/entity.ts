@@ -1,4 +1,4 @@
-// @ai-editor/db 实体 CRUD 查询（S3.1）
+// @whispering233/ai-editor-db 实体 CRUD 查询（S3.1）
 //
 // 单一事实来源：doc/database/schema.md 第 18-39 行（entities 表）、doc/api/endpoints.md 第 150-278 行
 // （实体端点：列表 q/分页/排序 + 摘要字段、详情 + deltaCount、创建/部分更新/软删级联）、
@@ -11,8 +11,8 @@
 //   与 better-sqlite3 字符串列一致（chat.ts 同款风格），数据量大后再优化。
 // 级联软删边界：relations/deltas 的**查询**模块 S3.2 才建——本卡只做级联软删所需 UPDATE。
 
-import type { EntityRow, EntitySummary, EntityType } from "@ai-editor/shared";
-import { ENTITY_TYPES, generateEntityId } from "@ai-editor/shared";
+import type { EntityRow, EntitySummary, EntityType } from "@whispering233/ai-editor-shared";
+import { ENTITY_TYPES, generateEntityId } from "@whispering233/ai-editor-shared";
 import { nowIso } from "../storage/atomic.js";
 import { withTransaction, type Db } from "../connection.js";
 

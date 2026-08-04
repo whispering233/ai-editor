@@ -8,10 +8,10 @@
 // - outlineDir：项目根目录（outline.json 所在目录，决策 8）
 // - projectId：当前打开项目的 id（决策 22 会话归属项目；提案绑定 project_id）
 
-import type { Db } from "@ai-editor/db";
+import type { Db } from "@whispering233/ai-editor-db";
 
 export interface ToolContext {
-  /** 当前项目的 data.db 连接（@ai-editor/db openDatabase 返回值） */
+  /** 当前项目的 data.db 连接（@whispering233/ai-editor-db openDatabase 返回值） */
   db: Db;
   /** 项目根目录（outline.json 所在目录，决策 8；关系/Delta 端点软删校验读树用） */
   outlineDir: string;

@@ -1,4 +1,4 @@
-// @ai-editor/llm 客户端测试（S6.1）
+// @whispering233/ai-editor-llm 客户端测试（S6.1）
 // mock fetch 注入（fetchImpl），不依赖真实网络；覆盖任务卡验收点：
 //   流式分片跨 chunk 拼接、注释行跳过、[DONE] 正常结束（stop_reason 正确）、
 //   流中途终止无 [DONE] → error、非 2xx 结构化错误、abort 中断、

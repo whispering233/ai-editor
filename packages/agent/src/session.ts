@@ -1,4 +1,4 @@
-// @ai-editor/agent 会话管理（S7.1）
+// @whispering233/ai-editor-agent 会话管理（S7.1）
 //
 // 契约来源：doc/design/tasks.md S7.1、doc/design/decisions.md 决策 18（历史重建 / 成对裁剪 /
 // 孤儿半对整对丢弃 / 末条约束）、packages/llm/src/types.ts（LLMMessage 四角色 wire 形态）、
@@ -10,8 +10,8 @@
 // trimSession（滑动窗口成对裁剪）→ buildPayload（喂回格式 + 末条约束）→
 // 失败重试时 retryPayload（复用原 payload，不追加失败轮半条 assistant）。
 
-import type { ChatMessageRow } from "@ai-editor/shared";
-import type { LLMMessage, LLMToolCallRequest } from "@ai-editor/llm";
+import type { ChatMessageRow } from "@whispering233/ai-editor-shared";
+import type { LLMMessage, LLMToolCallRequest } from "@whispering233/ai-editor-llm";
 
 // ============ 运行时消息形态 ============
 

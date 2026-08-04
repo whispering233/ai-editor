@@ -1,4 +1,4 @@
-// @ai-editor/agent 工具调度器 + 提案内存仓（S7.4）
+// @whispering233/ai-editor-agent 工具调度器 + 提案内存仓（S7.4）
 // 契约来源：
 //   - doc/design/tasks.md S7.4（调度 query/analysis/proposal；提案仓 TTL 10 分钟 + 条数上限 +
 //     project_id 绑定、切换项目清空；批量 tool_call 先全部校验再执行、错误统一结构化回填、
@@ -16,7 +16,7 @@
 // 架构边界：本包**不依赖 db**——ToolContext（db/outlineDir/projectId）由 S7.6 server 层注入
 // （createToolDispatcher 闭包捕获），这里只透传给工具 run/build；agent 侧不触碰 db 类型。
 
-import type { AbortSignalLike } from "@ai-editor/llm";
+import type { AbortSignalLike } from "@whispering233/ai-editor-llm";
 import type {
   ProposeAbandonHookArgs,
   ProposeAddDeltaArgs,
@@ -32,7 +32,7 @@ import type {
   ProposeResolveHookArgs,
   ProposeUpdateEntityArgs,
   ProposeUpdateHookArgs,
-} from "@ai-editor/shared";
+} from "@whispering233/ai-editor-shared";
 import {
   AbortedError,
   buildProposeAbandonHook,
@@ -54,7 +54,7 @@ import {
   type Proposal,
   type ToolContext,
   type ToolDefinition,
-} from "@ai-editor/tools";
+} from "@whispering233/ai-editor-tools";
 import type { DispatchResult, DispatchToolCall, ToolDispatcher } from "./run.js";
 
 // ============ 提案内存仓（决策 14：仅内存、不落盘） ============

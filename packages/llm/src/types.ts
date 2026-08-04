@@ -1,4 +1,4 @@
-// @ai-editor/llm 类型定义（S6.1）
+// @whispering233/ai-editor-llm 类型定义（S6.1）
 // 契约来源：doc/api/endpoints.md POST /api/v1/chat、doc/design/decisions.md 决策 15/16/17/18
 // DeepSeek 为 OpenAI 兼容 chat completions 格式（请求 /chat/completions，SSE 流式返回）。
 // 本包只管「怎么调模型」（architecture.md 分包）：key 注入、消息序列、工具定义均由调用方提供，

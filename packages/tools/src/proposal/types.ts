@@ -20,11 +20,11 @@
 // { proposal_id, summary }，**不含预览细节**——避免 LLM 误以为提案已生效而重复提案；
 // 完整预览经 SSE proposal 事件推送 GUI（S7 实现）。
 
-import { getEntity } from "@ai-editor/db";
-import { nowIso } from "@ai-editor/db";
-import { generateRuntimeId } from "@ai-editor/shared";
-import type { EntityRow, OutlineFileNode, RelationRow } from "@ai-editor/shared";
-import { findOutlineNode, readOutlineFile } from "@ai-editor/db";
+import { getEntity } from "@whispering233/ai-editor-db";
+import { nowIso } from "@whispering233/ai-editor-db";
+import { generateRuntimeId } from "@whispering233/ai-editor-shared";
+import type { EntityRow, OutlineFileNode, RelationRow } from "@whispering233/ai-editor-shared";
+import { findOutlineNode, readOutlineFile } from "@whispering233/ai-editor-db";
 import type { ToolContext } from "../context.js";
 import { throwIfAborted } from "../analysis/utils.js";
 

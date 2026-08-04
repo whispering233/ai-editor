@@ -1,4 +1,4 @@
-// @ai-editor/db Delta 增查（S5.1）：增量插入 + 按节点查询（联表 target_name + 可见性联动）
+// @whispering233/ai-editor-db Delta 增查（S5.1）：增量插入 + 按节点查询（联表 target_name + 可见性联动）
 //
 // 单一事实来源：
 // - doc/api/endpoints.md 第 395-462 行（POST /delta 追加 + GET /delta/node/:nodeId；
@@ -21,8 +21,8 @@
 //   大纲节点 target 走 outline.json
 // - name 联表同路径：实体 → entities.name、大纲节点 → outline.json title
 
-import type { DeltaChange, DeltaRecord, DeltaRow, OutlineFileTree } from "@ai-editor/shared";
-import { generateId, mapRowToDelta } from "@ai-editor/shared";
+import type { DeltaChange, DeltaRecord, DeltaRow, OutlineFileTree } from "@whispering233/ai-editor-shared";
+import { generateId, mapRowToDelta } from "@whispering233/ai-editor-shared";
 import { nowIso } from "../storage/atomic.js";
 import { withTransaction, type Db } from "../connection.js";
 import { findOutlineNode, readOutlineFile } from "../storage/outline.js";

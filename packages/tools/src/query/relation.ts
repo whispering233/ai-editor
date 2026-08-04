@@ -11,10 +11,10 @@
 // 4. depth>=2 的 k 跳 BFS 路径（防环、多起点）
 // 工具层仅做参数映射透传，无额外过滤逻辑。
 
-import { listRelations } from "@ai-editor/db";
-import type { RelationQueryResult } from "@ai-editor/shared";
+import { listRelations } from "@whispering233/ai-editor-db";
+import type { RelationQueryResult } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
-import type { QueryRelationshipsArgs } from "@ai-editor/shared";
+import type { QueryRelationshipsArgs } from "@whispering233/ai-editor-shared";
 
 /**
  * 关系图子图（tools.md query_relationships → [{source,target,type,metadata}] 简写；

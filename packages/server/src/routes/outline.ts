@@ -8,28 +8,28 @@
 //   OUTLINE_ANCESTOR_DELETED   → 409 OUTLINE_ANCESTOR_DELETED（决策 12 修订）
 // 说明：级联还原/物理清除（cascadeRestore/cascadePurge）已下沉 db 包 queries/trash.ts（S4.1）；
 //   级联软删（cascadeSoftDelete）保留在路由层——与软删端点同文件内联，S4.1 任务边界只下沉
-//   还原/清除两个 helper（trash.ts 路由直接 import @ai-editor/db）。
+//   还原/清除两个 helper（trash.ts 路由直接 import @whispering233/ai-editor-db）。
 import { Hono } from "hono";
-import type { Db } from "@ai-editor/db";
-import { findOutlineNode, readOutlineFile } from "@ai-editor/db";
-import { getOutlinePathIds } from "@ai-editor/db";
+import type { Db } from "@whispering233/ai-editor-db";
+import { findOutlineNode, readOutlineFile } from "@whispering233/ai-editor-db";
+import { getOutlinePathIds } from "@whispering233/ai-editor-db";
 import {
   createOutlineNode,
   deleteOutlineNode,
   moveOutlineNode,
   OutlineError,
   updateOutlineNodeInfo,
-} from "@ai-editor/db";
-import type { OutlineFileNode, OutlineFileTree, OutlineNode, OutlineNodeType, OutlineTree } from "@ai-editor/shared";
-import { HOOK_RELATION_TYPES, mapOutlineFileToTree } from "@ai-editor/shared";
-import { nowIso } from "@ai-editor/db";
+} from "@whispering233/ai-editor-db";
+import type { OutlineFileNode, OutlineFileTree, OutlineNode, OutlineNodeType, OutlineTree } from "@whispering233/ai-editor-shared";
+import { HOOK_RELATION_TYPES, mapOutlineFileToTree } from "@whispering233/ai-editor-shared";
+import { nowIso } from "@whispering233/ai-editor-db";
 import {
   outlineCreateReqSchema,
   outlineGetQuerySchema,
   outlineMoveReqSchema,
   outlineUpdateReqSchema,
   OUTLINE_NODE_DATA_SCHEMAS,
-} from "@ai-editor/shared/schemas";
+} from "@whispering233/ai-editor-shared/schemas";
 import { HttpError, ok } from "../middleware/error.js";
 import { requireCurrentProject } from "../middleware/project.js";
 

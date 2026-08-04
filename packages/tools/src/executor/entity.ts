@@ -13,8 +13,8 @@
 // 参数形态：与 S6.6 proposal.args 对齐（propose_create_entity → { type, name, data? } 等），
 // 由 executeProposal 按 proposal.type 映射后直接消费。
 
-import { createEntity, nowIso, softDeleteEntity, updateEntity } from "@ai-editor/db";
-import type { EntityType } from "@ai-editor/shared";
+import { createEntity, nowIso, softDeleteEntity, updateEntity } from "@whispering233/ai-editor-db";
+import type { EntityType } from "@whispering233/ai-editor-shared";
 import { optionalRecord, requireRecord, requireString, type ExecutorFn } from "./types.js";
 
 /** create_entity（tools.md：create_entity(type, name, data) → id） */

@@ -1,4 +1,4 @@
-// @ai-editor/db 回收站数据层（S4.1）：实体列表/级联还原/物理清除 + 级联 helper（自 server 下沉）
+// @whispering233/ai-editor-db 回收站数据层（S4.1）：实体列表/级联还原/物理清除 + 级联 helper（自 server 下沉）
 //
 // 单一事实来源：
 // - doc/api/endpoints.md 第 660-736 行（回收站端点契约：GET /trash、POST restore、DELETE purge）
@@ -17,7 +17,7 @@
 // 级联 helper（cascadeRestore/cascadePurge）自 server/routes/outline.ts 下沉（trash.ts 注释
 // 留痕的「S3 建模块后可下沉」项，S4.1 兑现）：参数与 SQL 语义不变，仅补充单库事务包裹。
 
-import type { EntityType } from "@ai-editor/shared";
+import type { EntityType } from "@whispering233/ai-editor-shared";
 import { nowIso } from "../storage/atomic.js";
 import { withTransaction, type Db } from "../connection.js";
 

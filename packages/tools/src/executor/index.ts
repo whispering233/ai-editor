@@ -15,8 +15,8 @@
 // signal：执行类是短同步事务，不做中止检查（决策 16 ③ 只要求长工具执行中检查；
 // S7.5 确认路由在调用前做取消判定）。
 
-import { createEntity, createRelation, withTransaction } from "@ai-editor/db";
-import { EXECUTOR_TOOLS, PROPOSAL_TOOLS } from "@ai-editor/shared";
+import { createEntity, createRelation, withTransaction } from "@whispering233/ai-editor-db";
+import { EXECUTOR_TOOLS, PROPOSAL_TOOLS } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
 import { requireHook, requireOutlineNode } from "../proposal/types.js";
 import type { Proposal } from "../proposal/types.js";

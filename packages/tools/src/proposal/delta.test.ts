@@ -7,10 +7,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { DeltaChange, OutlineFileTree } from "@ai-editor/shared";
+import type { DeltaChange, OutlineFileTree } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
-import { closeDatabase, createEntity, listDeltasByNode, openDatabase, type Db } from "@ai-editor/db";
-import { findOutlineNode, readOutlineFile, writeOutlineFile } from "@ai-editor/db";
+import { closeDatabase, createEntity, listDeltasByNode, openDatabase, type Db } from "@whispering233/ai-editor-db";
+import { findOutlineNode, readOutlineFile, writeOutlineFile } from "@whispering233/ai-editor-db";
 import { AbortedError } from "../analysis/utils.js";
 import { buildProposeAddDelta, runProposeAddDelta } from "./delta.js";
 

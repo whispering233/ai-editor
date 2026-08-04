@@ -15,8 +15,8 @@
 //   project store（跨页共用：顶栏当前位置标题映射、画布投影），本页只持有 UI 态
 import { useEffect, useState } from "react";
 import type { DragEvent, KeyboardEvent, ReactNode } from "react";
-import { formatTimestamp } from "@ai-editor/shared";
-import type { OutlineNode } from "@ai-editor/shared";
+import { formatTimestamp } from "@whispering233/ai-editor-shared";
+import type { OutlineNode } from "@whispering233/ai-editor-shared";
 import { BookOpen, Trash2 } from "lucide-react";
 import { CHILD_TYPE, ConfirmDialog, TYPE_LABEL } from "../components/outline/dialogs";
 import { NodeHookMarkBadge } from "../components/outline/node-hook-badge";

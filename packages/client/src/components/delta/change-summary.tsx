@@ -2,7 +2,7 @@
 // 大纲节点变更记录面板与实体详情状态预览共用；skipped（compute 中被跳过的 change，
 // 决策 9 修订）用 destructive 弱化样式标注
 // 样式 token 类（layout.md §3，禁止硬编码色类）
-import type { DeltaChange } from "@ai-editor/shared";
+import type { DeltaChange } from "@whispering233/ai-editor-shared";
 import { DELTA_OP_LABEL, describeChange } from "../../lib/delta";
 import { cn } from "../../lib/utils";
 

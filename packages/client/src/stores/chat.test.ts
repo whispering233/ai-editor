@@ -2,7 +2,7 @@
 // 订阅在 chat.ts 模块加载时激活：测试通过操作 useProjectStore.setState({config}) 驱动联动
 // mock lib/api 模块（保留 ApiError 类真实实现）与 use-sse（fetchSSE 捕获 options 后手动驱动事件回调）
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ChatMessage, ChatSessionSummary, ErrorCode, ProjectConfig } from "@ai-editor/shared";
+import type { ChatMessage, ChatSessionSummary, ErrorCode, ProjectConfig } from "@whispering233/ai-editor-shared";
 import { ApiError } from "../lib/api";
 
 vi.mock("../lib/api", async (importOriginal) => {

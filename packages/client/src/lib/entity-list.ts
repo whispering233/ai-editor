@@ -1,7 +1,7 @@
 // 实体列表页辅助纯函数与配置（S3.5）
 // 契约来源：doc/ui/pages/entity-list.md「信息层级」——各类型摘要列（character→role/status、
 //   setting→category、location→type、hook→status/payoff_timing）+ 分页（limit 固定 20、total 驱动）
-import type { EntityType } from "@ai-editor/shared";
+import type { EntityType } from "@whispering233/ai-editor-shared";
 
 /** MVP 每页条数（原型：limit 固定 20；服务端默认 50 最大 200） */
 export const PAGE_LIMIT = 20;

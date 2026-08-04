@@ -1,4 +1,4 @@
-// @ai-editor/agent 提示词（S7.2）
+// @whispering233/ai-editor-agent 提示词（S7.2）
 // 契约来源：doc/design/decisions.md 决策 7（提示词三层注入——本文件是**内核层**：
 // 开发者编辑、代码固定、不持久化）、doc/api/tools.md「核心设计原则」（AI 角色是分析顾问
 // 不是操作员、写操作走提案、截断显式告知）。

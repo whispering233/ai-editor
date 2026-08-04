@@ -7,7 +7,7 @@
 // - remove_relation：手动删关系 = **物理删**（决策 12 修订：不置 deleted_at、不进回收站）；
 //   0 行影响（关系不存在）→ 抛错（fail-fast，S7.5 转错误响应）
 
-import { createRelation, deleteRelation } from "@ai-editor/db";
+import { createRelation, deleteRelation } from "@whispering233/ai-editor-db";
 import { optionalRecord, requireString, type ExecutorFn } from "./types.js";
 
 /** add_relation（tools.md：add_relation(source, target, type) → id） */

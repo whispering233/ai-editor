@@ -1,4 +1,4 @@
-// @ai-editor/agent 主循环（S7.3）
+// @whispering233/ai-editor-agent 主循环（S7.3）
 //
 // 契约来源：
 //   - doc/design/tasks.md S7.3（三重保险：8 轮 / 120s 单轮 / token 预算；length 截断不执行
@@ -21,8 +21,8 @@
 // 新消息序列，本文件只定义接口不落库）；工具执行 / 批量校验 / 提案仓在 S7.4（本文件只定义
 // ToolDispatcher 接口与消费契约，测试用 mock，S7.4 提供真实现）。
 
-import { ERROR_CODES } from "@ai-editor/shared/schemas";
-import type { ErrorCode } from "@ai-editor/shared";
+import { ERROR_CODES } from "@whispering233/ai-editor-shared/schemas";
+import type { ErrorCode } from "@whispering233/ai-editor-shared";
 import {
   ABORT_ERROR,
   classifyLLMError,
@@ -39,8 +39,8 @@ import {
   type LLMToolCallResult,
   type LLMUsage,
   type RetryOutcome,
-} from "@ai-editor/llm";
-import { AbortedError } from "@ai-editor/tools";
+} from "@whispering233/ai-editor-llm";
+import { AbortedError } from "@whispering233/ai-editor-tools";
 import {
   buildContext,
   type AssembledContext,

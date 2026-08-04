@@ -1,7 +1,7 @@
 // Delta 展示辅助纯函数（S5.4；契约：shared types/entity.ts DeltaChange/DeltaRecord/ComputeStateResult +
 //   endpoints.md「Delta 变更追踪」——op 语义 set/update/add/remove，2026-08 修订）
 // 用途：大纲节点变更记录面板与实体详情状态预览共用；保持薄封装，UI 组件只做编排
-import type { DeltaChange, DeltaOp } from "@ai-editor/shared";
+import type { DeltaChange, DeltaOp } from "@whispering233/ai-editor-shared";
 
 /** op → 中文标签（changes 摘要 chip 前缀） */
 export const DELTA_OP_LABEL: Record<DeltaOp, string> = {

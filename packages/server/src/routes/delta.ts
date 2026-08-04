@@ -14,10 +14,10 @@
 //     因可见性规则永久不可见），路由层拦截防死记录——oracle 建议）
 //   目标实体不存在或已软删 → 404 ENTITY_NOT_FOUND（POST /delta/compute）
 import { Hono } from "hono";
-import { computeState, findOutlineNode, getEntity, insertDelta, listDeltasByNode, readOutlineFile } from "@ai-editor/db";
-import type { DeltaChange } from "@ai-editor/shared";
-import { ENTITY_TYPES, mapRowToDelta } from "@ai-editor/shared";
-import { deltaComputeReqSchema, deltaCreateReqSchema } from "@ai-editor/shared/schemas";
+import { computeState, findOutlineNode, getEntity, insertDelta, listDeltasByNode, readOutlineFile } from "@whispering233/ai-editor-db";
+import type { DeltaChange } from "@whispering233/ai-editor-shared";
+import { ENTITY_TYPES, mapRowToDelta } from "@whispering233/ai-editor-shared";
+import { deltaComputeReqSchema, deltaCreateReqSchema } from "@whispering233/ai-editor-shared/schemas";
 import { HttpError, ok } from "../middleware/error.js";
 import { requireCurrentProject, type ProjectContext } from "../middleware/project.js";
 

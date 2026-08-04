@@ -1,5 +1,5 @@
 {
-  "name": "@ai-editor/db",
+  "name": "@whispering233/ai-editor-db",
   "version": "0.0.1",
   "description": "数据库层：better-sqlite3 连接 / 建表 / 查询",
   "type": "module",
@@ -25,7 +25,7 @@
     "postpack": "node ../../scripts/restore-package-json.mjs"
   },
   "dependencies": {
-    "@ai-editor/shared": "workspace:*",
+    "@whispering233/ai-editor-shared": "workspace:*",
     "better-sqlite3": "^13.0.0",
     "nanoid": "^5.1.0"
   },

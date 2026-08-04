@@ -7,11 +7,11 @@
 // 数据访问：db 查询层（listEntities 全量非软删实体 + listRelations 全量可见关系）+ 纯函数图分析，无原生 SQL。
 // signal：全量关系遍历为长任务候选，循环中检查（决策 16 ③）。
 
-import { listEntities, listRelations } from "@ai-editor/db";
-import type { EntitySummary } from "@ai-editor/shared";
+import { listEntities, listRelations } from "@whispering233/ai-editor-db";
+import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
 import { isEntityType, throwIfAborted } from "./utils.js";
-import type { DetectConflictsArgs } from "@ai-editor/shared";
+import type { DetectConflictsArgs } from "@whispering233/ai-editor-shared";
 
 /** 单条跨实体矛盾（tools.md detect_conflicts 返回项；entity_a/entity_b 为实体 id） */
 export interface ConflictIssue {

@@ -21,7 +21,7 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-/** 依赖发布顺序（内部依赖先发；映射 @ai-editor/<name>，与 pnpm-workspace 一致） */
+/** 依赖发布顺序（内部依赖先发；映射 @whispering233/ai-editor-<name>，与 pnpm-workspace 一致） */
 const PUBLISH_ORDER = ["shared", "llm", "db", "tools", "agent", "server"];
 
 const args = process.argv.slice(2);
@@ -76,7 +76,7 @@ const version = tagVersion();
 if (version) console.log(`[publish] tag 版本: v${version}（GITHUB_REF 或 --tag）`);
 
 for (const name of PUBLISH_ORDER) {
-  const pkgName = `@ai-editor/${name}`;
+  const pkgName = `@whispering233/ai-editor-${name}`;
   const pkgDir = join(process.cwd(), "packages", name);
   const pkg = readPkg(pkgDir);
 

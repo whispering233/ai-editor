@@ -1,5 +1,5 @@
 {
-  "name": "@ai-editor/agent",
+  "name": "@whispering233/ai-editor-agent",
   "version": "0.0.1",
   "description": "AI 对话循环：会话管理 / 上下文组装 / 工具调度",
   "type": "module",
@@ -25,9 +25,9 @@
     "postpack": "node ../../scripts/restore-package-json.mjs"
   },
   "dependencies": {
-    "@ai-editor/llm": "workspace:*",
-    "@ai-editor/shared": "workspace:*",
-    "@ai-editor/tools": "workspace:*"
+    "@whispering233/ai-editor-llm": "workspace:*",
+    "@whispering233/ai-editor-shared": "workspace:*",
+    "@whispering233/ai-editor-tools": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.8.0"

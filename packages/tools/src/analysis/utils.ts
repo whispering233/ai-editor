@@ -1,8 +1,8 @@
 // 分析类工具共享辅助（S6.4/S6.5）：中止检查 + 实体关系图 + 章节序索引
 // 纯函数模块，单一职责：被 analysis/ 各工具与测试复用，不持有状态。
 
-import { deriveChapterOrder, findOutlineNode, readOutlineFile, readProjectFile } from "@ai-editor/db";
-import type { OutlineFileNode, OutlineFileTree, RelationRecord } from "@ai-editor/shared";
+import { deriveChapterOrder, findOutlineNode, readOutlineFile, readProjectFile } from "@whispering233/ai-editor-db";
+import type { OutlineFileNode, OutlineFileTree, RelationRecord } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
 
 /**

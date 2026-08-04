@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { OutlineFileTree } from "@ai-editor/shared";
+import type { OutlineFileTree } from "@whispering233/ai-editor-shared";
 import { closeDatabase, openDatabase, type Db } from "../connection.js";
 import { createEntity, softDeleteEntity } from "./entity.js";
 import {

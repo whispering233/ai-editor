@@ -1,4 +1,4 @@
-// @ai-editor/db JSON 原子写核心（T2.2）
+// @whispering233/ai-editor-db JSON 原子写核心（T2.2）
 //
 // 单一事实来源：doc/design/decisions.md 决策 11（outline.json 原子写）——
 // 「写临时文件 → fsync → rename 覆盖」，禁止直接 writeFileSync 覆盖原文件；

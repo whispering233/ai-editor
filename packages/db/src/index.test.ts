@@ -1,8 +1,8 @@
-// 冒烟测试：验证 @ai-editor/db 入口导出（T2.1：schema + connection 真实 API；T2.2：JSON 存储）
+// 冒烟测试：验证 @whispering233/ai-editor-db 入口导出（T2.1：schema + connection 真实 API；T2.2：JSON 存储）
 import { describe, expect, it } from "vitest";
 import * as m from "./index.js";
 
-describe("@ai-editor/db 入口冒烟", () => {
+describe("@whispering233/ai-editor-db 入口冒烟", () => {
   it("导出 schema 与 connection 的真实 API", () => {
     expect(m).toBeDefined();
     // connection.ts

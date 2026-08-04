@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { ToolContext } from "../context.js";
-import { closeDatabase, createEntity, getEntity, listEntities, openDatabase, softDeleteEntity, type Db } from "@ai-editor/db";
+import { closeDatabase, createEntity, getEntity, listEntities, openDatabase, softDeleteEntity, type Db } from "@whispering233/ai-editor-db";
 import { AbortedError } from "../analysis/utils.js";
 import {
   buildProposeDeleteEntity,

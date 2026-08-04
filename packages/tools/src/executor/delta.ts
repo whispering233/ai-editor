@@ -6,8 +6,8 @@
 //   （S6.6 delta.ts 注释：由执行器取 summary——args 不带 description，提案摘要即变更描述）
 // - order 由 db 层全局单调生成（insertDelta 事务内 MAX+1），此处无 order 入参
 
-import { insertDelta } from "@ai-editor/db";
-import type { DeltaChange } from "@ai-editor/shared";
+import { insertDelta } from "@whispering233/ai-editor-db";
+import type { DeltaChange } from "@whispering233/ai-editor-shared";
 import { requireArray, requireString, type ExecutorFn } from "./types.js";
 
 /** add_delta（tools.md：add_delta(node_id, target, changes) → id） */

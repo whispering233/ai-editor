@@ -24,11 +24,11 @@ import {
   updateEntity,
   updateOutlineNodeInfo,
   writeOutlineFile,
-} from "@ai-editor/db";
-import type { OutlineFileTree } from "@ai-editor/shared";
-import { defaultProposalStore } from "@ai-editor/agent";
-import { buildProposal, refEntity, refOutlineNode, refRelation } from "@ai-editor/tools";
-import type { Proposal } from "@ai-editor/tools";
+} from "@whispering233/ai-editor-db";
+import type { OutlineFileTree } from "@whispering233/ai-editor-shared";
+import { defaultProposalStore } from "@whispering233/ai-editor-agent";
+import { buildProposal, refEntity, refOutlineNode, refRelation } from "@whispering233/ai-editor-tools";
+import type { Proposal } from "@whispering233/ai-editor-tools";
 import { errorHandler } from "../middleware/error.js";
 import {
   closeProject,

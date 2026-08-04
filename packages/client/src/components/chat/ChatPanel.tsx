@@ -24,8 +24,8 @@ import {
 import { useMediaQuery } from "../../hooks/use-media-query";
 import { useProjectStore } from "../../stores/project";
 import { useChatStore, type FocusContext, type ProposalCard } from "../../stores/chat";
-import type { ChatMessage } from "@ai-editor/shared";
-import { formatRelativeTime } from "@ai-editor/shared";
+import type { ChatMessage } from "@whispering233/ai-editor-shared";
+import { formatRelativeTime } from "@whispering233/ai-editor-shared";
 import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
 import {

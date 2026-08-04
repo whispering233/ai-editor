@@ -1,5 +1,5 @@
 {
-  "name": "@ai-editor/llm",
+  "name": "@whispering233/ai-editor-llm",
   "version": "0.0.1",
   "description": "模型接入层：封装 fetch → DeepSeek API",
   "type": "module",
@@ -25,7 +25,7 @@
     "postpack": "node ../../scripts/restore-package-json.mjs"
   },
   "dependencies": {
-    "@ai-editor/shared": "workspace:*"
+    "@whispering233/ai-editor-shared": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.8.0"

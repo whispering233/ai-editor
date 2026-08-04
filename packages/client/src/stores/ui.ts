@@ -2,7 +2,7 @@
 // 错误横幅：code + message，按错误码的引导文案由各页映射；toast：轻提示自动消失；
 // 确认对话框：危险操作（软删、purge、删关系）必须二次确认并说明影响范围——渲染组件（ConfirmDialog）由后续切片卡实现
 import { create } from "zustand";
-import type { ErrorCode } from "@ai-editor/shared";
+import type { ErrorCode } from "@whispering233/ai-editor-shared";
 import type { ClientErrorCode } from "../lib/api";
 
 export type ToastKind = "success" | "error";

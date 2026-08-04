@@ -7,12 +7,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { OutlineFileTree } from "@ai-editor/shared";
+import type { OutlineFileTree } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
-import { closeDatabase, openDatabase, type Db } from "@ai-editor/db";
-import { createEntity, softDeleteEntity } from "@ai-editor/db";
-import { createRelation } from "@ai-editor/db";
-import { writeOutlineFile } from "@ai-editor/db";
+import { closeDatabase, openDatabase, type Db } from "@whispering233/ai-editor-db";
+import { createEntity, softDeleteEntity } from "@whispering233/ai-editor-db";
+import { createRelation } from "@whispering233/ai-editor-db";
+import { writeOutlineFile } from "@whispering233/ai-editor-db";
 import { runDetectConflicts } from "./conflict.js";
 
 let dir: string;

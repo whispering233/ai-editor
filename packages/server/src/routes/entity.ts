@@ -5,9 +5,9 @@
 //   type 参数非法 / 参数校验失败 → 400 VALIDATION_ERROR（zod 抛错由 errorHandler 统一映射，含 fields）
 //   实体不存在或已软删 → 404 ENTITY_NOT_FOUND
 import { Hono } from "hono";
-import { countDeltasForEntity, createEntity, getEntity, listEntities, listRelations, nowIso, softDeleteEntity, updateEntity } from "@ai-editor/db";
-import type { EntityType } from "@ai-editor/shared";
-import { ENTITY_DATA_SCHEMAS, entityCreateReqSchema, entityListQuerySchema, entityTypeSchema, entityUpdateReqSchema } from "@ai-editor/shared/schemas";
+import { countDeltasForEntity, createEntity, getEntity, listEntities, listRelations, nowIso, softDeleteEntity, updateEntity } from "@whispering233/ai-editor-db";
+import type { EntityType } from "@whispering233/ai-editor-shared";
+import { ENTITY_DATA_SCHEMAS, entityCreateReqSchema, entityListQuerySchema, entityTypeSchema, entityUpdateReqSchema } from "@whispering233/ai-editor-shared/schemas";
 import { HttpError, ok } from "../middleware/error.js";
 import { requireCurrentProject } from "../middleware/project.js";
 

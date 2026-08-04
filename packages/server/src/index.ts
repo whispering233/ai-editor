@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @ai-editor/server 入口（T6.1 服务骨架）
+// @whispering233/ai-editor-server 入口（T6.1 服务骨架）
 //
 // 职责（doc/design/architecture.md 第 307-336 行「构建与部署」）：
 //   - startServer(projectRoot, opts?)：检测/初始化项目（决策 8）→ 装配 Hono（错误中间件 +
@@ -94,7 +94,7 @@ export interface ServerHandle {
 /**
  * 探测 client/dist 位置（双路径解析，纯函数——baseDir 为当前模块所在目录）：
  * 1. **monorepo 开发态**：packages/server/{dist,src} → ../../client/dist（Vite 构建产物原位）
- * 2. **打包安装态**（fallback）：node_modules/@ai-editor/server/dist → ../client-dist
+ * 2. **打包安装态**（fallback）：node_modules/@whispering233/ai-editor-server/dist → ../client-dist
  *    （prepack 时由 scripts/copy-client-dist.mjs 复制到包根，随 tarball 携带）
  * 探测优先：monorepo 路径存在即用（开发态 client/dist 已构建时走 1）；都不存在返回 2 的路径，
  * SPA fallback 优雅降级（404 JSON 提示「client/dist 未构建」，不崩溃）。
@@ -233,7 +233,7 @@ export async function startServer(projectRoot: string, options: StartServerOptio
     const html = await readFileSafe(join(clientRoot, "index.html"));
     if (!html) {
       return c.json(
-        fail("NOT_FOUND", "client/dist 未构建（请先运行 pnpm --filter @ai-editor/client build）"),
+        fail("NOT_FOUND", "client/dist 未构建（请先运行 pnpm --filter @whispering233/ai-editor-client build）"),
         404,
       );
     }

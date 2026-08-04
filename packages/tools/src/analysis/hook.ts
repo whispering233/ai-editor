@@ -18,9 +18,9 @@
 // 软删过滤：listEntities/listRelations/getEntity 默认过滤（决策 12）。
 // signal：全量 hook 遍历为长任务候选，循环中检查（AbortedError，决策 16 ③）。
 
-import { findOutlineNode, getEntity, listEntities, listRelations, readOutlineFile } from "@ai-editor/db";
-import { DEFAULT_HALF_LIFE, PAYOFF_TIMING } from "@ai-editor/shared";
-import type { EntityRow, OutlineFileNode, RelationRecord } from "@ai-editor/shared";
+import { findOutlineNode, getEntity, listEntities, listRelations, readOutlineFile } from "@whispering233/ai-editor-db";
+import { DEFAULT_HALF_LIFE, PAYOFF_TIMING } from "@whispering233/ai-editor-shared";
+import type { EntityRow, OutlineFileNode, RelationRecord } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
 import {
   buildChapterIndex,
@@ -34,7 +34,7 @@ import type {
   FindHookOpportunitiesArgs,
   SuggestHookPayoffArgs,
   TraceHookLifecycleArgs,
-} from "@ai-editor/shared";
+} from "@whispering233/ai-editor-shared";
 
 // ============ 数据收集（一次查询层调用支撑全量分析） ============
 

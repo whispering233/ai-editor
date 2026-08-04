@@ -10,8 +10,8 @@
 // 软删：服务端默认过滤（决策 12 修订）；回收站入口 #/trash 由 S4 卡实现，本卡不提供入口
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { ENTITY_TYPES } from "@ai-editor/shared";
-import type { EntitySummary, EntityType } from "@ai-editor/shared";
+import { ENTITY_TYPES } from "@whispering233/ai-editor-shared";
+import type { EntitySummary, EntityType } from "@whispering233/ai-editor-shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -27,7 +27,7 @@ import { cn } from "../lib/utils";
 import { navigate } from "../hooks/use-route";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useUiStore } from "../stores/ui";
-import { formatTimestamp } from "@ai-editor/shared";
+import { formatTimestamp } from "@whispering233/ai-editor-shared";
 import { CreateRelationDialog } from "../components/entity/create-relation-dialog";
 import { RelationsView } from "../components/entity/relations-view";
 

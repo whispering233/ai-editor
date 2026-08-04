@@ -31,8 +31,8 @@
 // 执行类是短同步事务，不做 signal 检查（决策 16 ③：长工具才要求执行中检查；入口检查由
 // S7.5 确认路由承担）。
 
-import { createRelation, findOutlineNode, insertDelta, readOutlineFile, readProjectFile, updateEntity, withTransaction, type Db } from "@ai-editor/db";
-import type { DeltaChange } from "@ai-editor/shared";
+import { createRelation, findOutlineNode, insertDelta, readOutlineFile, readProjectFile, updateEntity, withTransaction, type Db } from "@whispering233/ai-editor-db";
+import type { DeltaChange } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
 import { requireHook, requireOutlineNode } from "../proposal/types.js";
 import { requireString, type ExecutorFn, type ExecutorResult } from "./types.js";

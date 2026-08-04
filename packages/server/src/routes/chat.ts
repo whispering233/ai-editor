@@ -44,10 +44,10 @@ import {
   type SessionMessage,
   type SessionState,
   type ToolDispatcher,
-} from "@ai-editor/agent";
-import { chatStream } from "@ai-editor/llm";
-import type { AbortSignalLike, LLMMessage, LLMStreamEvent, LLMToolDefinition } from "@ai-editor/llm";
-import { listTools, type ToolDefinition } from "@ai-editor/tools";
+} from "@whispering233/ai-editor-agent";
+import { chatStream } from "@whispering233/ai-editor-llm";
+import type { AbortSignalLike, LLMMessage, LLMStreamEvent, LLMToolDefinition } from "@whispering233/ai-editor-llm";
+import { listTools, type ToolDefinition } from "@whispering233/ai-editor-tools";
 import {
   findOutlineNode,
   getEntity,
@@ -57,10 +57,10 @@ import {
   listSessions,
   nowIso,
   readOutlineFile,
-} from "@ai-editor/db";
-import type { ChatMessage, ChatSessionSummary } from "@ai-editor/shared";
-import { TOOL_PERMISSION, generateRuntimeId } from "@ai-editor/shared";
-import { chatMessagesResSchema, chatSendReqSchema, chatSessionsResSchema } from "@ai-editor/shared/schemas";
+} from "@whispering233/ai-editor-db";
+import type { ChatMessage, ChatSessionSummary } from "@whispering233/ai-editor-shared";
+import { TOOL_PERMISSION, generateRuntimeId } from "@whispering233/ai-editor-shared";
+import { chatMessagesResSchema, chatSendReqSchema, chatSessionsResSchema } from "@whispering233/ai-editor-shared/schemas";
 import { HttpError, ok } from "../middleware/error.js";
 import { requireCurrentProject, type ProjectContext } from "../middleware/project.js";
 import { debugLog, isCategoryEnabled } from "../debug.js";

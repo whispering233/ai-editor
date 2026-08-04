@@ -1,8 +1,8 @@
 // 大纲节点详情页辅助纯函数与配置（S12.2；契约：决策 23 + schema.md outline.json「节点结构化信息 data」节
 //   + shared OUTLINE_NODE_DATA_SCHEMAS——client 只消费常量与类型，不打包 zod 校验函数）
 // 用途：详情页 data 表单按层级渲染（仿 lib/entity-detail.ts 的字段配置模式）——纯函数可单测，UI 只做编排
-import type { OutlineNode } from "@ai-editor/shared";
-import { CONFLICT_LEVELS } from "@ai-editor/shared";
+import type { OutlineNode } from "@whispering233/ai-editor-shared";
+import { CONFLICT_LEVELS } from "@whispering233/ai-editor-shared";
 import type { OutlineNodeType } from "./api";
 
 /** 场景冲突层次 → 中文（麦基冲突三层次，决策 23；checkbox 组标签） */

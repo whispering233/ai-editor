@@ -7,7 +7,7 @@
 // 空态：deltaCount === 0 → 轻量文案（当前状态即初始状态），不展示计算控件
 import { useEffect, useState } from "react";
 import { TriangleAlert } from "lucide-react";
-import type { ComputeStateResult, DeltaChange } from "@ai-editor/shared";
+import type { ComputeStateResult, DeltaChange } from "@whispering233/ai-editor-shared";
 import { ApiError, computeDeltaState } from "../../lib/api";
 import { diffStateFields, formatDeltaValue } from "../../lib/delta";
 import { flattenTree } from "../../lib/outline-tree";

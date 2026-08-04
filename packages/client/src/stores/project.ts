@@ -1,7 +1,7 @@
 // 项目状态（doc/ui/layout.md §3.1：config + outline 树——顶栏标题映射、多页共用，避免重复请求）
 // S1.4 扩展：loadError（区分「未打开项目」与网络失败）、openProjectAt/createProjectAt/closeProject
 import { create } from "zustand";
-import type { OutlineNode, OutlineTree, ProjectConfig, ProjectLanguage } from "@ai-editor/shared";
+import type { OutlineNode, OutlineTree, ProjectConfig, ProjectLanguage } from "@whispering233/ai-editor-shared";
 import {
   ApiError,
   closeProject as apiCloseProject,

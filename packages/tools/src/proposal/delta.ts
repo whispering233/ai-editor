@@ -14,7 +14,7 @@
 // args 规范化为执行形态 { node_id, target_type, target_id, changes }（S6.7 add_delta 直接消费）；
 // delta_records.description（NOT NULL）在确认后由 S6.7 执行器取 proposal.summary 作为人类可读描述。
 
-import type { ProposeAddDeltaArgs } from "@ai-editor/shared";
+import type { ProposeAddDeltaArgs } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
 import { buildProposal, checkProposalAborted, refOutlineNode, requireOutlineNode, resolveEndpoint, type Proposal, type ToolProposalResult } from "./types.js";
 

@@ -14,12 +14,12 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { z } from "zod";
-import { insertChatMessage, listMessages } from "@ai-editor/db";
-import { defaultProposalStore, type RunAgentDeps, type ToolDispatcher } from "@ai-editor/agent";
-import { ABORT_ERROR } from "@ai-editor/llm";
-import type { AbortSignalLike, LLMMessage } from "@ai-editor/llm";
-import { listTools } from "@ai-editor/tools";
-import type { Proposal } from "@ai-editor/tools";
+import { insertChatMessage, listMessages } from "@whispering233/ai-editor-db";
+import { defaultProposalStore, type RunAgentDeps, type ToolDispatcher } from "@whispering233/ai-editor-agent";
+import { ABORT_ERROR } from "@whispering233/ai-editor-llm";
+import type { AbortSignalLike, LLMMessage } from "@whispering233/ai-editor-llm";
+import { listTools } from "@whispering233/ai-editor-tools";
+import type { Proposal } from "@whispering233/ai-editor-tools";
 import { errorHandler } from "../middleware/error.js";
 import {
   closeProject,

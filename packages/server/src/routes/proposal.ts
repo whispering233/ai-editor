@@ -11,8 +11,8 @@
 //   执行失败 → 500 INTERNAL_ERROR（契约未定义该错误码——执行失败属服务端状态异常/数据竞争，
 //     前端按通用错误呈现）
 //
-// 消费方：defaultProposalStore（@ai-editor/agent S7.4 提案仓，与调度同仓消费）+ executeProposal
-//   （@ai-editor/tools S6.7 执行门面，按 proposal.type 映射执行函数，args 直接消费执行形态）。
+// 消费方：defaultProposalStore（@whispering233/ai-editor-agent S7.4 提案仓，与调度同仓消费）+ executeProposal
+//   （@whispering233/ai-editor-tools S6.7 执行门面，按 proposal.type 映射执行函数，args 直接消费执行形态）。
 //
 // 提案移除语义（一次性消费，决策 14「提案是毫秒级交互对象、无跨会话恢复」落地）：
 //   confirm/reject 任一动作到达即消费——确认成功、快照过期、执行失败、拒绝均为终态，
@@ -20,11 +20,11 @@
 //   （如 propose_create_entity）会**重复执行**产生重复数据；② 已过期提案反复返回 409 无意义
 //   （前端按 PROPOSAL_STALE 引导重新生成，保留不提供任何重试价值）。故失败同样移除。
 import { Hono } from "hono";
-import { defaultProposalStore } from "@ai-editor/agent";
-import { executeProposal } from "@ai-editor/tools";
-import type { Proposal, ProposalReference } from "@ai-editor/tools";
-import type { OutlineFileTree } from "@ai-editor/shared";
-import { findOutlineNode, getDeltaRow, getEntity, getRelation, readOutlineFile } from "@ai-editor/db";
+import { defaultProposalStore } from "@whispering233/ai-editor-agent";
+import { executeProposal } from "@whispering233/ai-editor-tools";
+import type { Proposal, ProposalReference } from "@whispering233/ai-editor-tools";
+import type { OutlineFileTree } from "@whispering233/ai-editor-shared";
+import { findOutlineNode, getDeltaRow, getEntity, getRelation, readOutlineFile } from "@whispering233/ai-editor-db";
 import { HttpError, ok } from "../middleware/error.js";
 import { requireCurrentProject, type ProjectContext } from "../middleware/project.js";
 

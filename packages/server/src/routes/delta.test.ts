@@ -11,8 +11,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
-import { createEntity, SCHEMA_VERSION, updateEntity, writeOutlineFile } from "@ai-editor/db";
-import type { OutlineFileTree } from "@ai-editor/shared";
+import { createEntity, SCHEMA_VERSION, updateEntity, writeOutlineFile } from "@whispering233/ai-editor-db";
+import type { OutlineFileTree } from "@whispering233/ai-editor-shared";
 import { errorHandler } from "../middleware/error.js";
 import {
   closeProject,

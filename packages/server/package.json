@@ -1,5 +1,5 @@
 {
-  "name": "@ai-editor/server",
+  "name": "@whispering233/ai-editor-server",
   "version": "0.0.1",
   "description": "Hono API 服务端（单进程：API + SPA 静态托管，决策 8）",
   "type": "module",
@@ -30,11 +30,11 @@
     "postpack": "node ../../scripts/restore-package-json.mjs"
   },
   "dependencies": {
-    "@ai-editor/agent": "workspace:*",
-    "@ai-editor/db": "workspace:*",
-    "@ai-editor/llm": "workspace:*",
-    "@ai-editor/shared": "workspace:*",
-    "@ai-editor/tools": "workspace:*",
+    "@whispering233/ai-editor-agent": "workspace:*",
+    "@whispering233/ai-editor-db": "workspace:*",
+    "@whispering233/ai-editor-llm": "workspace:*",
+    "@whispering233/ai-editor-shared": "workspace:*",
+    "@whispering233/ai-editor-tools": "workspace:*",
     "@hono/node-server": "^2.0.12",
     "fflate": "^0.8.3",
     "hono": "^4.7.0",

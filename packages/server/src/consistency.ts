@@ -19,7 +19,7 @@
 // 幂等：UPDATE 均带 deleted_at IS NULL 过滤——一致状态返回零补标、无副作用，
 // 可安全重复执行（二次打开项目零补标）。
 import type { ProjectContext } from "./middleware/project.js";
-import { listDeletedNodes, nowIso } from "@ai-editor/db";
+import { listDeletedNodes, nowIso } from "@whispering233/ai-editor-db";
 
 /** 启动一致性校验结果（供调用方写日志，任务卡 S4.2） */
 export interface SoftDeleteReconcileResult {

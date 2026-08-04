@@ -35,10 +35,10 @@
 shared → llm / db / tools → agent → server    （依赖方向，client 只依赖 shared）
 ```
 
-- `@ai-editor/shared`：前后端共享类型 / 常量 / 工具 / API 契约（零 Node 依赖，浏览器安全）
-- `@ai-editor/db`：SQLite 建表 / 查询 / outline.json 原子写 / schema 演进删库重建
-- `@ai-editor/server`：Hono API + SPA 静态托管（单进程部署）
-- `@ai-editor/client`：React SPA
+- `@whispering233/ai-editor-shared`：前后端共享类型 / 常量 / 工具 / API 契约（零 Node 依赖，浏览器安全）
+- `@whispering233/ai-editor-db`：SQLite 建表 / 查询 / outline.json 原子写 / schema 演进删库重建
+- `@whispering233/ai-editor-server`：Hono API + SPA 静态托管（单进程部署）
+- `@whispering233/ai-editor-client`：React SPA
 
 ## 快速开始
 
@@ -85,7 +85,7 @@ pnpm typecheck && pnpm lint && pnpm -r test
 ```bash
 # 6 包 pack（prepack 钩子自动：SPA 进包 + workspace:* 替换真实版本）
 for p in shared llm db tools agent server; do
-  pnpm --filter @ai-editor/$p pack --pack-destination /tmp/ai-editor-packs
+  pnpm --filter @whispering233/ai-editor-$p pack --pack-destination /tmp/ai-editor-packs
 done
 # 测试目录安装（未发布 registry 也能装——npm 对同批 tarball 复用依赖）
 npm install /tmp/ai-editor-packs/*.tgz
@@ -98,11 +98,11 @@ npx ai-editor <项目目录>
 **用户安装**（发布形态：6 包全部发布 npm，用户只装 server 一个包，其余 5 个依赖自动拉取）：
 
 ```bash
-npm install -g @ai-editor/server
+npm install -g @whispering233/ai-editor-server
 ai-editor <项目目录>   # 启动服务 + 自动打开浏览器 http://127.0.0.1:3456
 ```
 
-**发布前置（一次性，npmjs 手动）**：Trusted Publishing（OIDC）——为 `@ai-editor/shared`、`@ai-editor/llm`、`@ai-editor/db`、`@ai-editor/tools`、`@ai-editor/agent`、`@ai-editor/server` 六包各配置 Trusted Publisher：Publisher = GitHub Actions、工作流名 = `publish.yml`；配置后 CI 无需 token。
+**发布前置（一次性，npmjs 手动）**：Trusted Publishing（OIDC）——为 `@whispering233/ai-editor-shared`、`@whispering233/ai-editor-llm`、`@whispering233/ai-editor-db`、`@whispering233/ai-editor-tools`、`@whispering233/ai-editor-agent`、`@whispering233/ai-editor-server` 六包各配置 Trusted Publisher：Publisher = GitHub Actions、工作流名 = `publish.yml`；配置后 CI 无需 token。
 
 **发布流程**（详见 AGENTS.md「版本发布流程（E6）」）：更新根 `CHANGELOG.md`（Unreleased 搬运为新版本段）→ `pnpm release:version X.Y.Z` 同步 6 包 + client + 根版本 → commit + 手动 annotated tag `vX.Y.Z` → push tag 后 workflow 自动执行（release.yml 建 GitHub Release，publish.yml 发布 6 包 npm + 安装态冒烟验证）。
 

@@ -2,8 +2,8 @@
 // 契约来源：doc/design/decisions.md 决策 18、doc/design/tasks.md S7.1
 // 纯内存断言，无 I/O——直接构造 mock 消息序列调用 session 状态机函数链。
 import { describe, expect, it } from "vitest";
-import type { ChatMessageRow } from "@ai-editor/shared";
-import type { LLMMessage } from "@ai-editor/llm";
+import type { ChatMessageRow } from "@whispering233/ai-editor-shared";
+import type { LLMMessage } from "@whispering233/ai-editor-llm";
 import {
   appendMessage,
   buildPayload,

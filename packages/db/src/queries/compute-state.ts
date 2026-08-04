@@ -1,4 +1,4 @@
-// @ai-editor/db 状态计算（S5.2 computeState）：沿大纲树父链累积 Delta 得到实体到达状态
+// @whispering233/ai-editor-db 状态计算（S5.2 computeState）：沿大纲树父链累积 Delta 得到实体到达状态
 //
 // 单一事实来源：
 // - doc/api/endpoints.md 第 464-510 行（POST /delta/compute：Req/Res、累积规则四段——
@@ -24,7 +24,7 @@ import type {
   ComputeStateResult,
   DeltaChange,
   DeltaConflict,
-} from "@ai-editor/shared";
+} from "@whispering233/ai-editor-shared";
 import type { Db } from "../connection.js";
 import { listDeltasByNode } from "./delta.js";
 import { getEntity } from "./entity.js";

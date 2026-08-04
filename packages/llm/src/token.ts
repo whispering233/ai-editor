@@ -1,4 +1,4 @@
-// @ai-editor/llm token 估算与工具结果截断（S6.2）
+// @whispering233/ai-editor-llm token 估算与工具结果截断（S6.2）
 // 契约来源：
 //   - doc/design/decisions.md 决策 6：chars/4 启发式 + 预算优先采用「最近一次成功响应的
 //     真实 usage」，其后消息按 chars/4 估算；裁剪/重排历史后必须重置 usage 基线（旧 usage

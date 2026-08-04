@@ -11,8 +11,8 @@
 //   采集两节点 updated_at 快照
 // - propose_delete_node：节点存在且未软删（软删 + 递归子树，可回收站还原，决策 12）
 
-import { assertCanHold } from "@ai-editor/db";
-import type { ProposeDeleteNodeArgs, ProposeMoveNodeArgs, ProposeOutlineNodeArgs } from "@ai-editor/shared";
+import { assertCanHold } from "@whispering233/ai-editor-db";
+import type { ProposeDeleteNodeArgs, ProposeMoveNodeArgs, ProposeOutlineNodeArgs } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
 import { buildProposal, checkProposalAborted, refOutlineNode, requireOutlineNode, type Proposal, type ProposalReference, type ToolProposalResult } from "./types.js";
 

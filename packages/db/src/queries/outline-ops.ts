@@ -1,4 +1,4 @@
-// @ai-editor/db 大纲树操作（S2.1）：创建/更新/移动/软删/还原/物理删除/回收站列表/章节序
+// @whispering233/ai-editor-db 大纲树操作（S2.1）：创建/更新/移动/软删/还原/物理删除/回收站列表/章节序
 //
 // 单一事实来源：
 // - doc/design/decisions.md 决策 19（严格三层：volume 挂 root、chapter 挂 volume 或 root、
@@ -20,8 +20,8 @@
 //   INVALID_HIERARCHY          → 400 VALIDATION_ERROR（严格三层违反，决策 19）
 //   OUTLINE_ANCESTOR_DELETED   → 409 OUTLINE_ANCESTOR_DELETED（决策 12 修订）
 
-import type { OutlineFileNode, OutlineFileTree, OutlineNodeType } from "@ai-editor/shared";
-import { generateOutlineNodeId } from "@ai-editor/shared";
+import type { OutlineFileNode, OutlineFileTree, OutlineNodeType } from "@whispering233/ai-editor-shared";
+import { generateOutlineNodeId } from "@whispering233/ai-editor-shared";
 import {
   findOutlineNode,
   getOutlinePathIds,

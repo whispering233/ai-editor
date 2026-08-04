@@ -6,11 +6,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { OutlineFileTree } from "@ai-editor/shared";
+import type { OutlineFileTree } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
-import { closeDatabase, openDatabase, type Db } from "@ai-editor/db";
-import { createRelation } from "@ai-editor/db";
-import { findOutlineNode, readOutlineFile, writeOutlineFile } from "@ai-editor/db";
+import { closeDatabase, openDatabase, type Db } from "@whispering233/ai-editor-db";
+import { createRelation } from "@whispering233/ai-editor-db";
+import { findOutlineNode, readOutlineFile, writeOutlineFile } from "@whispering233/ai-editor-db";
 import { runTracePlotPaths } from "./path.js";
 
 let dir: string;

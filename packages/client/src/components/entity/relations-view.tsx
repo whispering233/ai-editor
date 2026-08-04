@@ -11,7 +11,7 @@
 //   （source_type+source_id，depth=1），隐藏前端过滤区（列表短，无过滤必要）。
 // 样式 token 类（layout.md §3，禁止硬编码色类）。
 import { useEffect, useState } from "react";
-import { ENTITY_TYPES, RELATION_TYPES } from "@ai-editor/shared";
+import { ENTITY_TYPES, RELATION_TYPES } from "@whispering233/ai-editor-shared";
 import { ApiError, CLIENT_NETWORK_ERROR, deleteRelation, listRelations } from "../../lib/api";
 import type { RelationSummaryItem } from "../../lib/api";
 import { relationTypeLabel } from "../../lib/entity-detail";

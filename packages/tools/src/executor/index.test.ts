@@ -9,7 +9,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { EXECUTOR_TOOLS, type OutlineFileTree } from "@ai-editor/shared";
+import { EXECUTOR_TOOLS, type OutlineFileTree } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
 import {
   closeDatabase,
@@ -21,8 +21,8 @@ import {
   listRelations,
   openDatabase,
   type Db,
-} from "@ai-editor/db";
-import { findOutlineNode, readOutlineFile, writeOutlineFile } from "@ai-editor/db";
+} from "@whispering233/ai-editor-db";
+import { findOutlineNode, readOutlineFile, writeOutlineFile } from "@whispering233/ai-editor-db";
 import { buildProposal } from "../proposal/types.js";
 import { executeProposal } from "./index.js";
 import { listTools } from "../registry.js";

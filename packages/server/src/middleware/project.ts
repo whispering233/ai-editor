@@ -12,13 +12,13 @@
 import { basename, join } from "node:path";
 import { mkdirSync } from "node:fs";
 import type { Context, MiddlewareHandler } from "hono";
-import type { ProjectFileConfig } from "@ai-editor/shared";
-import { generateProjectId } from "@ai-editor/shared";
-import { closeDatabase, openDatabase, setUserVersion, type Db } from "@ai-editor/db";
-import { readProjectFile, writeProjectFile } from "@ai-editor/db";
-import { writeOutlineFile } from "@ai-editor/db";
-import { SCHEMA_VERSION } from "@ai-editor/db";
-import { nowIso } from "@ai-editor/db";
+import type { ProjectFileConfig } from "@whispering233/ai-editor-shared";
+import { generateProjectId } from "@whispering233/ai-editor-shared";
+import { closeDatabase, openDatabase, setUserVersion, type Db } from "@whispering233/ai-editor-db";
+import { readProjectFile, writeProjectFile } from "@whispering233/ai-editor-db";
+import { writeOutlineFile } from "@whispering233/ai-editor-db";
+import { SCHEMA_VERSION } from "@whispering233/ai-editor-db";
+import { nowIso } from "@whispering233/ai-editor-db";
 import { HttpError, fail, type ApiErrorCode } from "./error.js";
 
 /** data.db 文件名（决策 8：项目根目录） */

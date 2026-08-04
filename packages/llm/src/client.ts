@@ -1,4 +1,4 @@
-// @ai-editor/llm 核心客户端（S6.1）
+// @whispering233/ai-editor-llm 核心客户端（S6.1）
 // 职责：fetch → DeepSeek（OpenAI 兼容 chat completions）流式调用——
 //   手写 SSE 解码（跨 chunk data: 行拼接 / 注释行跳过 / [DONE] 哨兵 / CRLF 兼容）、
 //   流式 tool_call 按 index 累积参数增量、错误归一化（{ status, code, message }）

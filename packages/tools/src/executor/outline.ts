@@ -7,8 +7,8 @@
 // volume 挂根；parent_id 缺省挂 root（volume/chapter 可挂根，scene 缺省即拒绝——与提案层同语义）。
 // 软删语义（决策 12）：delete_node 软删 + 递归子树（本体保留可回收站还原）。
 
-import { createOutlineNode, deleteOutlineNode, moveOutlineNode, nowIso } from "@ai-editor/db";
-import type { OutlineNodeType } from "@ai-editor/shared";
+import { createOutlineNode, deleteOutlineNode, moveOutlineNode, nowIso } from "@whispering233/ai-editor-db";
+import type { OutlineNodeType } from "@whispering233/ai-editor-shared";
 import { requireNumber, requireString, type ExecutorFn } from "./types.js";
 
 /** create_outline_node（tools.md：create_outline_node(type, title, parent) → id） */

@@ -11,11 +11,11 @@
 // - get_outline_path：db getOutlinePathIds 返回根 → 目标节点路径（含 root）；
 //   节点不存在抛错——工具层转 null（查询无结果）；路径上任一节点软删 → null（不可见）
 
-import { findOutlineNode, getOutlinePathIds, readOutlineFile } from "@ai-editor/db";
-import { mapOutlineFileToTree } from "@ai-editor/shared";
-import type { OutlineFileNode, OutlineTree } from "@ai-editor/shared";
+import { findOutlineNode, getOutlinePathIds, readOutlineFile } from "@whispering233/ai-editor-db";
+import { mapOutlineFileToTree } from "@whispering233/ai-editor-shared";
+import type { OutlineFileNode, OutlineTree } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
-import type { GetOutlinePathArgs } from "@ai-editor/shared";
+import type { GetOutlinePathArgs } from "@whispering233/ai-editor-shared";
 
 /**
  * 递归剔除软删节点（决策 12 修订）：deleted === true 的节点整棵不可见——

@@ -1,4 +1,4 @@
-// 冒烟测试：验证 @ai-editor/shared 入口可正常导入（T0.3）+ 契约类型断言（T1.1）
+// 冒烟测试：验证 @whispering233/ai-editor-shared 入口可正常导入（T0.3）+ 契约类型断言（T1.1）
 import { describe, expect, expectTypeOf, it } from "vitest";
 import * as m from "./index.js";
 import type {
@@ -11,10 +11,10 @@ import type {
   RelationRecord,
 } from "./index.js";
 
-describe("@ai-editor/shared 入口冒烟", () => {
+describe("@whispering233/ai-editor-shared 入口冒烟", () => {
   it("可正常导入且导出包名常量", () => {
     expect(m).toBeDefined();
-    expect(m.SHARED_PKG_NAME).toBe("@ai-editor/shared");
+    expect(m.SHARED_PKG_NAME).toBe("@whispering233/ai-editor-shared");
     expect(m.SHARED_PKG_VERSION).toBe("0.1.0");
   });
 
@@ -34,7 +34,7 @@ describe("@ai-editor/shared 入口冒烟", () => {
 });
 
 // T1.1 契约类型断言：字段形态与文档（endpoints.md / schema.md）一致
-describe("@ai-editor/shared 契约类型（T1.1）", () => {
+describe("@whispering233/ai-editor-shared 契约类型（T1.1）", () => {
   it("Entity / EntitySummary 字段为 API 形态（camelCase）", () => {
     expectTypeOf<Entity>().toMatchTypeOf<{
       id: string;

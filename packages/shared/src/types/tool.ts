@@ -1,9 +1,9 @@
-// AI 工具参数 Zod schema（@ai-editor/shared/types/tool.ts，S6.3）
+// AI 工具参数 Zod schema（@whispering233/ai-editor-shared/types/tool.ts，S6.3）
 // 契约来源：doc/api/tools.md「查询类（自动）」——8 个查询工具的入参/返回语义；
 //   字段名沿用 tools.md 的 snake_case 参数约定（工具参数由 LLM 直接生成，snake_case 与
 //   REST 请求体一致）；取值范围引用 constants/entity.ts 既有枚举（EntityType/RelationType），
 //   不另造类型。
-// **导出边界**：运行时 schema 仅经 @ai-editor/shared/schemas/tools 子路径导出（供服务端
+// **导出边界**：运行时 schema 仅经 @whispering233/ai-editor-shared/schemas/tools 子路径导出（供服务端
 //   tools 包/executor 使用）；types/index.ts 的 type-only barrel 只导出推断类型——
 //   client 浏览器包不打包 zod 校验函数（与 types/api.ts 同款约束，见 index.ts 头注释）。
 

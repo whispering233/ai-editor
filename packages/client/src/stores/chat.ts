@@ -9,7 +9,7 @@
 //   从任何入口打开/关闭/切换项目都清空会话 + 消息 + SSE 运行态（并中止在途流），
 //   打开时自动重载新项目会话列表，避免跨项目残留
 import { create } from "zustand";
-import type { ChatMessage, ChatSessionSummary } from "@ai-editor/shared";
+import type { ChatMessage, ChatSessionSummary } from "@whispering233/ai-editor-shared";
 import {
   ApiError,
   confirmProposal as confirmProposalApi,

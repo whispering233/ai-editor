@@ -4,13 +4,13 @@
 // 规则表驱动（单一职责、可扩展）：每条规则纯函数判定，按实体类型分发。
 // 数据访问：db 查询层（getEntity 过滤软删）+ outline.json 读取（引用字段校验），无原生 SQL。
 
-import { getEntity, findOutlineNode, readOutlineFile } from "@ai-editor/db";
-import type { EntityRow } from "@ai-editor/shared";
-import type { Db } from "@ai-editor/db";
-import type { OutlineFileTree } from "@ai-editor/shared";
+import { getEntity, findOutlineNode, readOutlineFile } from "@whispering233/ai-editor-db";
+import type { EntityRow } from "@whispering233/ai-editor-shared";
+import type { Db } from "@whispering233/ai-editor-db";
+import type { OutlineFileTree } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
 import { throwIfAborted } from "./utils.js";
-import type { AnalyzeConsistencyArgs } from "@ai-editor/shared";
+import type { AnalyzeConsistencyArgs } from "@whispering233/ai-editor-shared";
 
 /** 一致性问题的严重级别（error = 确定矛盾；warning = 可疑/待确认） */
 export type IssueSeverity = "error" | "warning";

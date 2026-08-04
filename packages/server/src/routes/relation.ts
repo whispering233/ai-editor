@@ -8,11 +8,11 @@
 //   INVALID_RELATION_TYPE   → 400 VALIDATION_ERROR（白名单外——schema 层 enum 已拦截，防御分支）
 //   DELETE 0 影响行         → 404 RELATION_NOT_FOUND
 import { Hono } from "hono";
-import { createRelation, deleteRelation, listRelations, RelationError } from "@ai-editor/db";
+import { createRelation, deleteRelation, listRelations, RelationError } from "@whispering233/ai-editor-db";
 import {
   relationCreateReqSchema,
   relationQuerySchema,
-} from "@ai-editor/shared/schemas";
+} from "@whispering233/ai-editor-shared/schemas";
 import { HttpError, ok } from "../middleware/error.js";
 import { requireCurrentProject } from "../middleware/project.js";
 

@@ -1,8 +1,8 @@
-// @ai-editor/client 入口（architecture.md：main.tsx 挂载 + App 路由分发）
+// @whispering233/ai-editor-client 入口（architecture.md：main.tsx 挂载 + App 路由分发）
 // 路由表见 doc/ui/layout.md §1（8 路由，#/chat 已移除——聊天常驻右栏 ChatPanel，U2 起不再作为独立页渲染）
 import { StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import { ENTITY_TYPES } from "@ai-editor/shared";
+import { ENTITY_TYPES } from "@whispering233/ai-editor-shared";
 import { useHashRoute, type Route } from "./hooks/use-route";
 import { AppShell } from "./components/AppShell";
 import { ErrorBoundary } from "./components/feedback/ErrorBoundary";

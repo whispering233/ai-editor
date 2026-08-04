@@ -39,7 +39,7 @@ run("pnpm -r build", { cwd: workspaceRoot });
 rmSync(packsDir, { recursive: true, force: true });
 mkdirSync(packsDir, { recursive: true });
 for (const p of PACKAGES) {
-  run(`pnpm --filter @ai-editor/${p} pack --pack-destination "${packsDir}"`, { cwd: workspaceRoot });
+  run(`pnpm --filter @whispering233/ai-editor-${p} pack --pack-destination "${packsDir}"`, { cwd: workspaceRoot });
 }
 
 // 4/5. 清空安装目录并安装全部 tarball

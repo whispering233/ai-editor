@@ -15,7 +15,7 @@
 // 展示可恢复错误卡（错误信息 + 重新加载/回到首页）而非无提示白屏（下方有兜底行为验证用例）。
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToString } from "react-dom/server";
-import type { ChatMessage, ChatSessionSummary, ProjectConfig } from "@ai-editor/shared";
+import type { ChatMessage, ChatSessionSummary, ProjectConfig } from "@whispering233/ai-editor-shared";
 import { ErrorBoundary } from "../feedback/ErrorBoundary";
 
 vi.mock("../../lib/api", async (importOriginal) => {

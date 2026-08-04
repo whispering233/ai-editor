@@ -11,8 +11,8 @@
 // 错误/加载/空态按 layout.md §4.3：区块级骨架、区块内「加载失败 [重试]」、空态一句说明 + 主操作
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { formatRelativeTime } from "@ai-editor/shared";
-import type { EntityType, OutlineNode } from "@ai-editor/shared";
+import { formatRelativeTime } from "@whispering233/ai-editor-shared";
+import type { EntityType, OutlineNode } from "@whispering233/ai-editor-shared";
 import { BookOpen } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

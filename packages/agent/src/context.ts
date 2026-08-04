@@ -1,4 +1,4 @@
-// @ai-editor/agent 上下文组装（S7.2）
+// @whispering233/ai-editor-agent 上下文组装（S7.2）
 //
 // 契约来源：doc/design/decisions.md 决策 6（分层上下文策略：系统 ~500 / 聚焦 ~3000 /
 // 历史 ~6000；usage 基线——优先最近真实 usage，裁剪历史后重置基线防预算漂移）、决策 7
@@ -13,9 +13,9 @@
 // 消费链（S7.3 主循环）：SessionState → buildContext()（本层成对裁剪 + 基线重置）→
 // 输出 LLMMessage[]（system + 可选聚焦 system + 历史）直接喂给模型。
 
-import type { LLMMessage, LLMUsage } from "@ai-editor/llm";
-import { estimateMessagesTokens, estimateTokens } from "@ai-editor/llm";
-import { listTools, type ToolDefinition } from "@ai-editor/tools";
+import type { LLMMessage, LLMUsage } from "@whispering233/ai-editor-llm";
+import { estimateMessagesTokens, estimateTokens } from "@whispering233/ai-editor-llm";
+import { listTools, type ToolDefinition } from "@whispering233/ai-editor-tools";
 import {
   FOCUS_TITLE,
   FOCUS_TRUNCATION_NOTICE,

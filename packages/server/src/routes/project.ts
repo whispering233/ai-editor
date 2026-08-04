@@ -20,23 +20,23 @@ import {
 } from "node:fs";
 import { Hono, type Context } from "hono";
 import { Unzip, UnzipInflate, zipSync } from "fflate";
-import type { ProjectFileConfig } from "@ai-editor/shared";
-import { mapProjectFileToConfig } from "@ai-editor/shared";
-import { PROJECT_EXPORT_FILE_NAMES } from "@ai-editor/shared/schemas";
-import { openDatabase, closeDatabase, getUserVersion, SCHEMA_VERSION } from "@ai-editor/db";
-import { ensureSchemaCompatible, DATA_DB_FILE_NAME, hasMigrationPath } from "@ai-editor/db";
-import { SchemaVersionError, type MigrationResult, type Db } from "@ai-editor/db";
-import { OUTLINE_FILE_NAME } from "@ai-editor/db";
-import { PROJECT_FILE_NAME } from "@ai-editor/db";
-import { checkpointWal } from "@ai-editor/db";
-import { findOutlineNode, readOutlineFile, readProjectFile, writeProjectFile } from "@ai-editor/db";
-import { nowIso } from "@ai-editor/db";
+import type { ProjectFileConfig } from "@whispering233/ai-editor-shared";
+import { mapProjectFileToConfig } from "@whispering233/ai-editor-shared";
+import { PROJECT_EXPORT_FILE_NAMES } from "@whispering233/ai-editor-shared/schemas";
+import { openDatabase, closeDatabase, getUserVersion, SCHEMA_VERSION } from "@whispering233/ai-editor-db";
+import { ensureSchemaCompatible, DATA_DB_FILE_NAME, hasMigrationPath } from "@whispering233/ai-editor-db";
+import { SchemaVersionError, type MigrationResult, type Db } from "@whispering233/ai-editor-db";
+import { OUTLINE_FILE_NAME } from "@whispering233/ai-editor-db";
+import { PROJECT_FILE_NAME } from "@whispering233/ai-editor-db";
+import { checkpointWal } from "@whispering233/ai-editor-db";
+import { findOutlineNode, readOutlineFile, readProjectFile, writeProjectFile } from "@whispering233/ai-editor-db";
+import { nowIso } from "@whispering233/ai-editor-db";
 import {
   projectConfigUpdateReqSchema,
   projectCreateReqSchema,
   projectListResSchema,
   projectOpenReqSchema,
-} from "@ai-editor/shared/schemas";
+} from "@whispering233/ai-editor-shared/schemas";
 import { HttpError, ok } from "../middleware/error.js";
 import {
   closeProject,

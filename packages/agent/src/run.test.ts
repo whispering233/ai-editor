@@ -4,9 +4,9 @@
 // doc/api/endpoints.md POST /api/v1/chat 事件契约（tool_call/tool_result/proposal/text/done/error）。
 // 策略：mock produce 固定响应序列（逐次 shift 脚本）+ mock dispatcher，纯内存断言，无 I/O。
 import { describe, expect, it, vi } from "vitest";
-import type { AbortSignalLike, ChatStreamResult, LLMMessage, LLMStreamEvent, LLMUsage } from "@ai-editor/llm";
-import { ABORT_ERROR } from "@ai-editor/llm";
-import { AbortedError } from "@ai-editor/tools";
+import type { AbortSignalLike, ChatStreamResult, LLMMessage, LLMStreamEvent, LLMUsage } from "@whispering233/ai-editor-llm";
+import { ABORT_ERROR } from "@whispering233/ai-editor-llm";
+import { AbortedError } from "@whispering233/ai-editor-tools";
 import {
   DEFAULT_MAX_ROUNDS,
   runAgent,

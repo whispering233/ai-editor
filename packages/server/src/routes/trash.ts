@@ -7,10 +7,10 @@
 // restore 祖先链校验（大纲侧）：存在软删祖先 → 409 OUTLINE_ANCESTOR_DELETED（决策 12 修订）。
 // purge 语义拦截（两侧同构）：未软删对象拒绝 purge——仅用于回收站清理。
 import { Hono } from "hono";
-import { cascadePurge, cascadeRestore, getOutlinePathIds, readOutlineFile } from "@ai-editor/db";
-import { listDeletedEntities, listDeletedNodes, purgeEntity, purgeOutlineNode, restoreEntity, restoreOutlineNode } from "@ai-editor/db";
-import type { OutlineFileNode, OutlineFileTree } from "@ai-editor/shared";
-import { nowIso } from "@ai-editor/db";
+import { cascadePurge, cascadeRestore, getOutlinePathIds, readOutlineFile } from "@whispering233/ai-editor-db";
+import { listDeletedEntities, listDeletedNodes, purgeEntity, purgeOutlineNode, restoreEntity, restoreOutlineNode } from "@whispering233/ai-editor-db";
+import type { OutlineFileNode, OutlineFileTree } from "@whispering233/ai-editor-shared";
+import { nowIso } from "@whispering233/ai-editor-db";
 import { HttpError, ok } from "../middleware/error.js";
 import { requireCurrentProject } from "../middleware/project.js";
 import { collectSubtreeIds, mapOutlineError } from "./outline.js";

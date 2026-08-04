@@ -2,8 +2,8 @@
 // 契约来源：doc/design/decisions.md 决策 6（分层预算 + usage 基线）、决策 7（三层注入）、
 // 决策 18（成对裁剪语义复用 session）；纯内存断言，无 I/O。
 import { describe, expect, it } from "vitest";
-import type { LLMUsage } from "@ai-editor/llm";
-import { listTools } from "@ai-editor/tools";
+import type { LLMUsage } from "@whispering233/ai-editor-llm";
+import { listTools } from "@whispering233/ai-editor-tools";
 import {
   buildContext,
   DEFAULT_CONTEXT_BUDGETS,

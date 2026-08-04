@@ -1,13 +1,13 @@
-// 冒烟测试：验证 @ai-editor/tools 入口可正常导入（T0.3 语义）
+// 冒烟测试：验证 @whispering233/ai-editor-tools 入口可正常导入（T0.3 语义）
 // 入口重写（S6.3）后原空壳常量（TOOLS_PKG_NAME/DB_DEP）已移除——
 // 冒烟断言更新为新入口形态：注册表 API + 工具副作用注册（S6.3 查询 8 + S6.4 分析 5 +
 // S6.5 伏笔 5 + S6.6 提案 14 = 32 个；S6.7 执行 12 个不暴露）；
-// workspace 依赖 @ai-editor/db / @ai-editor/shared 解析由 import 在编译/运行期验证
+// workspace 依赖 @whispering233/ai-editor-db / @whispering233/ai-editor-shared 解析由 import 在编译/运行期验证
 import { describe, expect, it } from "vitest";
-import { PROPOSAL_TOOLS } from "@ai-editor/shared";
+import { PROPOSAL_TOOLS } from "@whispering233/ai-editor-shared";
 import * as m from "./index";
 
-describe("@ai-editor/tools 入口冒烟", () => {
+describe("@whispering233/ai-editor-tools 入口冒烟", () => {
   it("可正常导入：注册表/上下文/工具 API 导出，且查询/分析/伏笔/提案工具已注册", () => {
     expect(m).toBeDefined();
     // registry API

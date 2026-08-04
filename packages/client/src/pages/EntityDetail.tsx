@@ -8,8 +8,8 @@
 // 边界：custom_fields 仅在响应 data 已有该键时显示（MVP 无法新增键）；「问 AI」入口待 chat store
 //   就绪后补（layout.md §3.3 带上下文进聊天）
 import { useEffect, useState } from "react";
-import { formatTimestamp } from "@ai-editor/shared";
-import type { EntityType } from "@ai-editor/shared";
+import { formatTimestamp } from "@whispering233/ai-editor-shared";
+import type { EntityType } from "@whispering233/ai-editor-shared";
 import { ConfirmDialog } from "../components/outline/dialogs";
 import { CreateRelationDialog } from "../components/entity/create-relation-dialog";
 import { ComputePreview } from "../components/delta/compute-preview";

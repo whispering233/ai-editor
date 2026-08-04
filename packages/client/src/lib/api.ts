@@ -1,7 +1,7 @@
 // API 客户端基础封装（T7.2）
 // 契约来源：doc/api/endpoints.md「通用约定」——前缀 /api/v1、请求体 snake_case、响应体 camelCase、
 //   成功 {success:true,data:T} / 失败 {success:false,error:{code,message}} 包裹、ErrorCode 枚举统一
-// 响应类型沿用 @ai-editor/shared 的导出类型（z.infer 的结果，仅类型、编译期消失）；
+// 响应类型沿用 @whispering233/ai-editor-shared 的导出类型（z.infer 的结果，仅类型、编译期消失）；
 // 本文件不 import zod 运行时（校验执行边界：zod 校验仅在服务端执行，避免 50KB 级依赖进浏览器包）
 import type {
   ChatRole,
@@ -15,8 +15,8 @@ import type {
   ProjectConfig,
   ProjectLanguage,
   ProjectListBook,
-} from "@ai-editor/shared";
-import type { EntityType } from "@ai-editor/shared";
+} from "@whispering233/ai-editor-shared";
+import type { EntityType } from "@whispering233/ai-editor-shared";
 
 const API_BASE = "/api/v1";
 

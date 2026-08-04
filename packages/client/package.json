@@ -1,7 +1,7 @@
 {
-  "name": "@ai-editor/client",
+  "name": "@whispering233/ai-editor-client",
   "version": "0.0.1",
-  "description": "React SPA 前端（仅依赖 @ai-editor/shared）",
+  "description": "React SPA 前端（仅依赖 @whispering233/ai-editor-shared）",
   "type": "module",
   "private": true,
   "scripts": {
@@ -11,7 +11,7 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@ai-editor/shared": "workspace:*",
+    "@whispering233/ai-editor-shared": "workspace:*",
     "@base-ui/react": "^1.6.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

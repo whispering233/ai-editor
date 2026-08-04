@@ -1,4 +1,4 @@
-// @ai-editor/db 对话历史数据层查询（T2.3）
+// @whispering233/ai-editor-db 对话历史数据层查询（T2.3）
 //
 // 单一事实来源：doc/database/schema.md（chat_messages 表结构，决策 18）、
 // doc/api/endpoints.md（chat/sessions 会话列表、chat/sessions/:id/messages 消息历史）。
@@ -7,7 +7,7 @@
 // messageCount/lastMessage）全部由消息行实时聚合得出，无独立会话表。
 
 import { nanoid } from "nanoid";
-import { truncate, type ChatMessage, type ChatMessageRow, type ChatRole, type ChatSessionSummary } from "@ai-editor/shared";
+import { truncate, type ChatMessage, type ChatMessageRow, type ChatRole, type ChatSessionSummary } from "@whispering233/ai-editor-shared";
 import type { Db } from "../connection.js";
 
 /** 会话列表 lastMessage 截断长度（endpoints.md 仅要求「截断」，长度为本实现约定，未入文档契约） */

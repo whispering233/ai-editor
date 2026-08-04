@@ -1,4 +1,4 @@
-// @ai-editor/llm token 估算与截断测试（S6.2）
+// @whispering233/ai-editor-llm token 估算与截断测试（S6.2）
 // 覆盖：chars/4 估算边界、lastUsage 真实 usage 基线优先、工具定义 JSON 估算、
 // 截断标记与「缩小范围」提示、未超限不截断、极小预算不崩溃
 import { describe, expect, it } from "vitest";

@@ -9,7 +9,7 @@
 //   成功 → onCreated（父刷新列表 + 收起）；VALIDATION_ERROR → 行内提示；OUTLINE_NODE_NOT_FOUND → toast + 收起
 // 样式 token 类（layout.md §3，oracle 红线：禁止硬编码色类）
 import { useEffect, useState } from "react";
-import type { DeltaOp, EntitySummary, EntityType } from "@ai-editor/shared";
+import type { DeltaOp, EntitySummary, EntityType } from "@whispering233/ai-editor-shared";
 import { ApiError, CLIENT_NETWORK_ERROR, createDelta, getEntityDetail, listEntities } from "../../lib/api";
 import {
   DELTA_TARGET_TYPE_OPTIONS,

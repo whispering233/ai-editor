@@ -6,9 +6,9 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { Hono } from "hono";
-import { maskApiKey } from "@ai-editor/shared";
-import { writeJsonAtomic } from "@ai-editor/db";
-import { settingsLlmGetResSchema, settingsLlmPutReqSchema } from "@ai-editor/shared/schemas";
+import { maskApiKey } from "@whispering233/ai-editor-shared";
+import { writeJsonAtomic } from "@whispering233/ai-editor-db";
+import { settingsLlmGetResSchema, settingsLlmPutReqSchema } from "@whispering233/ai-editor-shared/schemas";
 import { ok } from "../middleware/error.js";
 
 /** 默认模型名（endpoints.md settings 端点） */
@@ -46,7 +46,7 @@ export function getUserConfig(): UserConfigFile {
 /**
  * 写入用户级配置（合并 partial；显式 undefined 字段不覆盖已有值）；
  * api_key 为空字符串 = 清除 key 字段
- * 原子写：复用 @ai-editor/db 的 writeJsonAtomic（决策 11 精神完整版：临时文件 wx 独占 +
+ * 原子写：复用 @whispering233/ai-editor-db 的 writeJsonAtomic（决策 11 精神完整版：临时文件 wx 独占 +
  *   文件 fsync + rename + 目录 fsync）。目标在 $HOME/.ai-editor/ 下，目录 fsync 在部分
  *   平台/文件系统受限时由 db 实现静默忽略（主链路已保证文件内容完整）
  */

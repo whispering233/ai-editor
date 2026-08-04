@@ -3,7 +3,7 @@
 //   doc/design/decisions.md 决策 21（data.status 缺失视为 planted；current_position 锚点口径）、
 //   packages/tools/src/executor/hook.ts（复合写与 status 同步语义参照——REST 链路上的等价逼近）
 // MVP 简化（backlog #13）：本模块不消费 _health 字段、不计算章节序——只处理基础字段与生命周期
-import type { DeltaChange, EntitySummary, OutlineNode, OutlineTree, ProjectConfig } from "@ai-editor/shared";
+import type { DeltaChange, EntitySummary, OutlineNode, OutlineTree, ProjectConfig } from "@whispering233/ai-editor-shared";
 import {
   ApiError,
   createDelta,

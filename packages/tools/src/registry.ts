@@ -12,7 +12,7 @@
 // 注册语义：重复注册同名工具抛错（防 S6.4-6.7 与查询类撞名；注册表是唯一事实来源）。
 
 import type { z } from "zod";
-import type { ToolPermission } from "@ai-editor/shared";
+import type { ToolPermission } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "./context.js";
 
 /**

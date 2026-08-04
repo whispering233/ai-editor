@@ -1,5 +1,5 @@
 {
-  "name": "@ai-editor/tools",
+  "name": "@whispering233/ai-editor-tools",
   "version": "0.0.1",
   "description": "AI 工具目录：工具定义 + 执行器",
   "type": "module",
@@ -25,8 +25,8 @@
     "postpack": "node ../../scripts/restore-package-json.mjs"
   },
   "dependencies": {
-    "@ai-editor/db": "workspace:*",
-    "@ai-editor/shared": "workspace:*"
+    "@whispering233/ai-editor-db": "workspace:*",
+    "@whispering233/ai-editor-shared": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.8.0",

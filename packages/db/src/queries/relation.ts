@@ -1,4 +1,4 @@
-// @ai-editor/db 关系管理（S3.2）：查询（k 跳遍历）/ 创建（判重）/ 物理删除
+// @whispering233/ai-editor-db 关系管理（S3.2）：查询（k 跳遍历）/ 创建（判重）/ 物理删除
 //
 // 单一事实来源：doc/database/schema.md 第 41-80 行（relation_records 表 + 16 个预定义关系类型）、
 // doc/api/endpoints.md 第 304-391 行（关系端点）、决策 2（通用关系表）、
@@ -17,8 +17,8 @@
 import { findOutlineNode, readOutlineFile } from "../storage/outline.js";
 import { getEntity } from "./entity.js";
 import type { Db } from "../connection.js";
-import type { OutlineFileNode, OutlineFileTree, RelationQueryResult, RelationRecord, RelationRow } from "@ai-editor/shared";
-import { RELATION_TYPES, generateId } from "@ai-editor/shared";
+import type { OutlineFileNode, OutlineFileTree, RelationQueryResult, RelationRecord, RelationRow } from "@whispering233/ai-editor-shared";
+import { RELATION_TYPES, generateId } from "@whispering233/ai-editor-shared";
 import { nowIso } from "../storage/atomic.js";
 
 /** 关系操作错误码（server 层映射 HttpError：RELATION_EXISTS → 409、其余 → 400） */

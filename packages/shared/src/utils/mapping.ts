@@ -1,4 +1,4 @@
-// 文件字段 ↔ API 字段映射（endpoints.md 通用约定指定位置：@ai-editor/shared/utils）
+// 文件字段 ↔ API 字段映射（endpoints.md 通用约定指定位置：@whispering233/ai-editor-shared/utils）
 // 约定（endpoints.md 第 10 行）：请求体/查询参数 snake_case，响应体 camelCase，
 //   outline.json / project.json / data.db 行内部 snake_case；
 //   **嵌套 data 对象内部字段原样透传**（如 expected_payoff 保持 snake_case，2026-08 修订），

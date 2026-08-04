@@ -4,7 +4,7 @@
 // 形态（任务卡既定决策）：
 //   - 走 HTTP 层：Hono app.request + 真实中间件（errorHandler/originCheck/projectMiddleware）
 //     + 真实 tmp 项目目录（project.json/outline.json/data.db 三文件落盘），非独立 node 脚本——
-//     沿用仓库测试基建，`pnpm --filter @ai-editor/server test` 全绿即「脚本全绿」。
+//     沿用仓库测试基建，`pnpm --filter @whispering233/ai-editor-server test` 全绿即「脚本全绿」。
 //   - 对话链路用 mock produce 注入（createChatRoutes({ produce })，不经真实 DeepSeek）：
 //     mock 模仿真实 LLM——第 1 轮输出文本 + get_outline 工具调用（**不注入 dispatcher**，
 //     走真实 createToolDispatcher 在真实项目上执行真实工具），第 2 轮纯文本收尾；
@@ -19,7 +19,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
-import { defaultProposalStore, type RunAgentDeps } from "@ai-editor/agent";
+import { defaultProposalStore, type RunAgentDeps } from "@whispering233/ai-editor-agent";
 import { errorHandler, ok } from "../middleware/error.js";
 import {
   closeProject,

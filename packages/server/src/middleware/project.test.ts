@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
-import { getUserVersion, SCHEMA_VERSION } from "@ai-editor/db";
+import { getUserVersion, SCHEMA_VERSION } from "@whispering233/ai-editor-db";
 import { errorHandler } from "./error.js";
 import {
   closeProject,

@@ -11,8 +11,8 @@
 // - propose_remove_relation：关系存在且可见（getRelation 已含端点软删联动过滤，决策 12 修订），
 //   采集关系自身 updated_at 快照（决策 14）
 
-import { getRelation } from "@ai-editor/db";
-import type { ProposeAddRelationArgs, ProposeRemoveRelationArgs } from "@ai-editor/shared";
+import { getRelation } from "@whispering233/ai-editor-db";
+import type { ProposeAddRelationArgs, ProposeRemoveRelationArgs } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
 import { buildProposal, checkProposalAborted, refRelation, resolveEndpoint, type Proposal, type ToolProposalResult } from "./types.js";
 

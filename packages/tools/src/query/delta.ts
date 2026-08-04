@@ -12,10 +12,10 @@
 //   可见性三态过滤（delta 自身/触发节点/目标端点软删，决策 12 修订，与 listDeltasByNode
 //   共享 filterVisibleDeltas 实现）——工具层一行透传
 
-import { computeState as dbComputeState, listDeltasByTarget } from "@ai-editor/db";
-import type { ComputeStateResult, DeltaRecord } from "@ai-editor/shared";
+import { computeState as dbComputeState, listDeltasByTarget } from "@whispering233/ai-editor-db";
+import type { ComputeStateResult, DeltaRecord } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
-import type { ComputeStateArgs, GetDeltaHistoryArgs } from "@ai-editor/shared";
+import type { ComputeStateArgs, GetDeltaHistoryArgs } from "@whispering233/ai-editor-shared";
 
 // ============ compute_state ============
 

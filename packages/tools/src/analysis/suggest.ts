@@ -8,10 +8,10 @@
 // 数据访问：db 查询层（getEntity/listEntities/listRelations）+ 纯函数图分析，无原生 SQL。
 // signal：全量候选 × 信号计算为长任务候选，循环中检查（决策 16 ③）。
 
-import { getEntity, listEntities, listRelations } from "@ai-editor/db";
+import { getEntity, listEntities, listRelations } from "@whispering233/ai-editor-db";
 import type { ToolContext } from "../context.js";
 import { buildEntityGraph, intersectSets, isEntityType, throwIfAborted } from "./utils.js";
-import type { SuggestConnectionsArgs } from "@ai-editor/shared";
+import type { SuggestConnectionsArgs } from "@whispering233/ai-editor-shared";
 
 /** 潜在关联建议（tools.md suggest_connections 返回项） */
 export interface ConnectionSuggestion {

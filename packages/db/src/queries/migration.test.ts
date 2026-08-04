@@ -5,7 +5,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { OutlineFileTree } from "@ai-editor/shared";
+import type { OutlineFileTree } from "@whispering233/ai-editor-shared";
 import { closeDatabase, openDatabase, type Db } from "../connection";
 import { getUserVersion, SCHEMA_VERSION, setUserVersion } from "../schema";
 import { OUTLINE_FILE_NAME, readOutlineFile, writeOutlineFile } from "../storage/outline";

@@ -1,6 +1,6 @@
 // canvas 纯函数测试（S10.1）：扁平化/自动布局确定性/localStorage 容错/连线解析过滤/仅场景过滤/几何/文案
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { OutlineTree } from "@ai-editor/shared";
+import type { OutlineTree } from "@whispering233/ai-editor-shared";
 import type { RelationSummaryItem } from "./api";
 import {
   autoLayout,

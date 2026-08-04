@@ -7,11 +7,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { EntityRow, OutlineFileTree } from "@ai-editor/shared";
+import type { EntityRow, OutlineFileTree } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
-import { closeDatabase, openDatabase, type Db } from "@ai-editor/db";
-import { createEntity, createRelation, getEntity, softDeleteEntity } from "@ai-editor/db";
-import { findOutlineNode, readOutlineFile, writeOutlineFile, writeProjectFile } from "@ai-editor/db";
+import { closeDatabase, openDatabase, type Db } from "@whispering233/ai-editor-db";
+import { createEntity, createRelation, getEntity, softDeleteEntity } from "@whispering233/ai-editor-db";
+import { findOutlineNode, readOutlineFile, writeOutlineFile, writeProjectFile } from "@whispering233/ai-editor-db";
 import { computeHookHealth, runAnalyzeHookHealth, runDetectHookConflicts, runFindHookOpportunities, runSuggestHookPayoff, runTraceHookLifecycle } from "./hook.js";
 import { AbortedError, buildChapterIndex } from "./utils.js";
 import type { HookRecord } from "./hook.js";

@@ -1,4 +1,4 @@
-// @ai-editor/db schema 演进：删库重建（S1.1）+ 未来版本拒绝（E4）+ 增量迁移（E5）
+// @whispering233/ai-editor-db schema 演进：删库重建（S1.1）+ 未来版本拒绝（E4）+ 增量迁移（E5）
 //
 // 单一事实来源：doc/design/decisions.md 决策 13（MVP 删库重建 + E5 增补「v0.1.0 发布终止
 // 删库重建」）与修订（2026-08）——
@@ -17,7 +17,7 @@
 
 import { copyFileSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import type { OutlineFileTree } from "@ai-editor/shared";
+import type { OutlineFileTree } from "@whispering233/ai-editor-shared";
 import { closeDatabase, openDatabase, type Db } from "../connection.js";
 import { getUserVersion, SCHEMA_VERSION, setUserVersion } from "../schema.js";
 import { OUTLINE_FILE_NAME, writeOutlineFile } from "../storage/outline.js";

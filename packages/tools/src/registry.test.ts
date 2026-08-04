@@ -4,7 +4,7 @@
 //   argsSchema 严格校验（strict：未知参数拒绝；depth 必填 1|2|3）
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { TOOL_PERMISSION } from "@ai-editor/shared";
+import { TOOL_PERMISSION } from "@whispering233/ai-editor-shared";
 import { registerTool, getTool, listTools, toolCount, type ToolDefinition } from "./registry.js";
 import type { ToolContext } from "./context.js";
 import { z } from "zod";

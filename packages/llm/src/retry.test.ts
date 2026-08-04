@@ -1,4 +1,4 @@
-// @ai-editor/llm 重试测试（S6.2）
+// @whispering233/ai-editor-llm 重试测试（S6.2）
 // mock produce + vitest fake timers：重试次数 / 退避间隔 / 配额不重试 /
 // abort 中断（含退避 sleep 期间）/ 非重试错误直返 / withRetry 包 chatStream 集成
 import { describe, expect, it, vi } from "vitest";

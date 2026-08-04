@@ -63,7 +63,7 @@
 ### 现状核对
 
 - 已自动化闭环：`pack:test`（build → 6 包 tarball → npm install）→ `start:test`（bin 启动）→ `test:packed`；prepack/postpack 钩子（copy-client-dist + workspace:* 替换）已实测；better-sqlite3 ^13 预编译无 ABI 问题。
-- **剩余缺口**：① 6 包均无 `publishConfig`（`@ai-editor/*` 是 scoped 包，npm 默认私有——直接 publish 会失败或进私有包，代码级硬阻断）；② 版本管理未落地（全仓 0.1.0，无统一 bump 脚本）；③ npm 账号/2FA/publish 顺序从未演练。
+- **剩余缺口**：① 6 包均无 `publishConfig`（`@whispering233/ai-editor-*` 是 scoped 包，npm 默认私有——直接 publish 会失败或进私有包，代码级硬阻断）；② 版本管理未落地（全仓 0.1.0，无统一 bump 脚本）；③ npm 账号/2FA/publish 顺序从未演练。
 
 ### 建议动作
 

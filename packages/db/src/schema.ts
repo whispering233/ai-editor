@@ -1,4 +1,4 @@
-// @ai-editor/db 建表 SQL 与 schema 版本管理（T2.1）
+// @whispering233/ai-editor-db 建表 SQL 与 schema 版本管理（T2.1）
 //
 // 单一事实来源：doc/database/schema.md——列名/类型/CHECK/索引逐字对照，勿在此处自行改动结构。
 // 时间约定（schema.md 第 16 行）：所有时间列统一 ISO 8601 字符串、由应用层写入，

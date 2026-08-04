@@ -28,7 +28,7 @@ ai-editor/
 ├── tsconfig.base.json             # 公共 TS 配置（ESM: module/moduleResolution 统一）
 │
 ├── packages/
-│   ├── shared/                    # @ai-editor/shared（前后端共享层，零 Node 依赖）
+│   ├── shared/                    # @whispering233/ai-editor-shared（前后端共享层，零 Node 依赖）
 │   │   ├── src/
 │   │   │   ├── types/             # 数据类型（纯 TS 类型 + Zod schema）
 │   │   │   │   ├── entity.ts      # Entity / Relation / Delta
@@ -48,16 +48,16 @@ ai-editor/
 │   │   ├── package.json           # deps: zod, nanoid（无 Node 内置模块）
 │   │   └── tsconfig.json
 │   │
-│   ├── llm/                       # @ai-editor/llm（模型接入层）
+│   ├── llm/                       # @whispering233/ai-editor-llm（模型接入层）
 │   │   ├── src/
 │   │   │   ├── client.ts          # LLMClient 类（fetch → DeepSeek API）
 │   │   │   ├── retry.ts           # 重试/退避逻辑
 │   │   │   ├── token.ts           # Token 估算
 │   │   │   └── types.ts           # LLM 请求/响应类型
-│   │   ├── package.json           # deps: @ai-editor/shared
+│   │   ├── package.json           # deps: @whispering233/ai-editor-shared
 │   │   └── tsconfig.json
 │   │
-│   ├── db/                        # @ai-editor/db（数据库层）
+│   ├── db/                        # @whispering233/ai-editor-db（数据库层）
 │   │   ├── src/
 │   │   │   ├── schema.ts          # 建表 SQL + migration
 │   │   │   ├── connection.ts      # Database 类（连接/事务/WAL）
@@ -67,10 +67,10 @@ ai-editor/
 │   │   │       ├── delta.ts       # Delta 增删查
 │   │   │       ├── outline.ts     # 大纲操作
 │   │   │       └── project.ts     # 项目配置
-│   │   ├── package.json           # deps: @ai-editor/shared, better-sqlite3
+│   │   ├── package.json           # deps: @whispering233/ai-editor-shared, better-sqlite3
 │   │   └── tsconfig.json
 │   │
-│   ├── tools/                     # @ai-editor/tools（工具定义 + 执行器）
+│   ├── tools/                     # @whispering233/ai-editor-tools（工具定义 + 执行器）
 │   │   ├── src/
 │   │   │   ├── registry.ts        # 工具注册表（所有工具列表）
 │   │   │   ├── query/             # 查询类工具（自动权限）
@@ -96,19 +96,19 @@ ai-editor/
 │   │   │       ├── delta.ts       # add_delta
 │   │   │       ├── outline.ts     # create/move/delete_outline_node
 │   │   │       └── hook.ts        # advance/resolve_hook
-│   │   ├── package.json           # deps: @ai-editor/shared, @ai-editor/db
+│   │   ├── package.json           # deps: @whispering233/ai-editor-shared, @whispering233/ai-editor-db
 │   │   └── tsconfig.json
 │   │
-│   ├── agent/                     # @ai-editor/agent（AI 对话循环）
+│   ├── agent/                     # @whispering233/ai-editor-agent（AI 对话循环）
 │   │   ├── src/
 │   │   │   ├── session.ts         # 对话会话管理（历史/缓存/转录）
 │   │   │   ├── context.ts         # 上下文组装（聚焦上下文 + 工具注入）
 │   │   │   ├── run.ts             # runAgent() 主循环
 │   │   │   └── executor.ts        # 工具调度器（收到 LLM tool_call → 执行）
-│   │   ├── package.json           # deps: @ai-editor/shared, @ai-editor/llm, @ai-editor/tools
+│   │   ├── package.json           # deps: @whispering233/ai-editor-shared, @whispering233/ai-editor-llm, @whispering233/ai-editor-tools
 │   │   └── tsconfig.json
 │   │
-│   ├── server/                    # @ai-editor/server（Hono API）
+│   ├── server/                    # @whispering233/ai-editor-server（Hono API）
 │   │   ├── src/
 │   │   │   ├── index.ts           # startServer(projectRoot, port)
 │   │   │   ├── routes/
@@ -123,10 +123,10 @@ ai-editor/
 │   │   │   └── middleware/
 │   │   │       ├── project.ts     # 项目路径注入
 │   │   │       └── error.ts       # 统一错误处理
-│   │   ├── package.json           # deps: @ai-editor/shared, @ai-editor/db, @ai-editor/agent, hono
+│   │   ├── package.json           # deps: @whispering233/ai-editor-shared, @whispering233/ai-editor-db, @whispering233/ai-editor-agent, hono
 │   │   └── tsconfig.json
 │   │
-│   └── client/                    # @ai-editor/client（React SPA）
+│   └── client/                    # @whispering233/ai-editor-client（React SPA）
 │       ├── src/
 │       │   ├── main.tsx
 │       │   ├── pages/
@@ -210,7 +210,7 @@ shared（纯类型 + 常量 + 工具函数，零 Node 依赖）
   │     └── 挂载 client/dist/ 为静态文件
   │
   └── client（React SPA）
-        └── 依赖 @ai-editor/shared（仅类型 + 常量，编译期消失）
+        └── 依赖 @whispering233/ai-editor-shared（仅类型 + 常量，编译期消失）
             不依赖任何 Node.js 包
 ```
 
@@ -231,53 +231,53 @@ shared ← client（仅类型/常量，零运行时）
 ```json
 // packages/shared/package.json
 {
-  "name": "@ai-editor/shared",
+  "name": "@whispering233/ai-editor-shared",
   "dependencies": { "zod": "^4.0.0", "nanoid": "^5.1.0" }
 }
 
 // packages/llm/package.json
 {
-  "name": "@ai-editor/llm",
-  "dependencies": { "@ai-editor/shared": "workspace:*" }
+  "name": "@whispering233/ai-editor-llm",
+  "dependencies": { "@whispering233/ai-editor-shared": "workspace:*" }
 }
 
 // packages/db/package.json
 {
-  "name": "@ai-editor/db",
+  "name": "@whispering233/ai-editor-db",
   "dependencies": {
-    "@ai-editor/shared": "workspace:*",
+    "@whispering233/ai-editor-shared": "workspace:*",
     "better-sqlite3": "^13.0.0"
   }
 }
 
 // packages/tools/package.json
 {
-  "name": "@ai-editor/tools",
+  "name": "@whispering233/ai-editor-tools",
   "dependencies": {
-    "@ai-editor/shared": "workspace:*",
-    "@ai-editor/db": "workspace:*"
+    "@whispering233/ai-editor-shared": "workspace:*",
+    "@whispering233/ai-editor-db": "workspace:*"
   }
 }
 
 // packages/agent/package.json
 {
-  "name": "@ai-editor/agent",
+  "name": "@whispering233/ai-editor-agent",
   "dependencies": {
-    "@ai-editor/shared": "workspace:*",
-    "@ai-editor/llm": "workspace:*",
-    "@ai-editor/tools": "workspace:*"
+    "@whispering233/ai-editor-shared": "workspace:*",
+    "@whispering233/ai-editor-llm": "workspace:*",
+    "@whispering233/ai-editor-tools": "workspace:*"
   }
 }
 
 // packages/server/package.json
 {
-  "name": "@ai-editor/server",
+  "name": "@whispering233/ai-editor-server",
   "dependencies": {
-    "@ai-editor/shared": "workspace:*",
-    "@ai-editor/db": "workspace:*",
-    "@ai-editor/agent": "workspace:*",
-    "@ai-editor/tools": "workspace:*",  // S7.5 提案路由 executeProposal 消费入口
-    "@ai-editor/llm": "workspace:*",    // S7.6 chat 流 produce 闭包直连 chatStream
+    "@whispering233/ai-editor-shared": "workspace:*",
+    "@whispering233/ai-editor-db": "workspace:*",
+    "@whispering233/ai-editor-agent": "workspace:*",
+    "@whispering233/ai-editor-tools": "workspace:*",  // S7.5 提案路由 executeProposal 消费入口
+    "@whispering233/ai-editor-llm": "workspace:*",    // S7.6 chat 流 produce 闭包直连 chatStream
     "hono": "^4.7.0"
   }
   // server 是顶层装配包：依赖任一下层（shared/db/llm/tools/agent）方向均合规、无环
@@ -285,9 +285,9 @@ shared ← client（仅类型/常量，零运行时）
 
 // packages/client/package.json
 {
-  "name": "@ai-editor/client",
+  "name": "@whispering233/ai-editor-client",
   "dependencies": {
-    "@ai-editor/shared": "workspace:*",
+    "@whispering233/ai-editor-shared": "workspace:*",
     "react": "^19.0.0",
     "zustand": "^5.0.0"
   }
@@ -349,7 +349,7 @@ export interface Entity { id: string; type: EntityType; name: string; }
 
 打包发布（2026-08 实测，backlog #8 演练）:
   借鉴 @actalk/inkos 的发布机制（scripts/prepare-package-for-publish.mjs + restore-package-json.mjs）:
-    pnpm --filter @ai-editor/<pkg> pack --pack-destination <目录>
+    pnpm --filter @whispering233/ai-editor-<pkg> pack --pack-destination <目录>
       → prepack 钩子：copy-client-dist（SPA 进包）→ workspace:* 替换为真实版本号
       → postpack 钩子：恢复原 package.json
     6 个可发布包（shared/llm/db/tools/agent/server）统一挂 prepack/postpack；

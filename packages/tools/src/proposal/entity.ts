@@ -10,8 +10,8 @@
 //
 // 参数契约：packages/shared/src/types/tool.ts propose*ArgsSchema（snake_case 与 tools.md 对齐）
 
-import { getEntity } from "@ai-editor/db";
-import type { ProposeCreateEntityArgs, ProposeDeleteEntityArgs, ProposeUpdateEntityArgs } from "@ai-editor/shared";
+import { getEntity } from "@whispering233/ai-editor-db";
+import type { ProposeCreateEntityArgs, ProposeDeleteEntityArgs, ProposeUpdateEntityArgs } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
 import { buildProposal, checkProposalAborted, refEntity, type Proposal, type ToolProposalResult } from "./types.js";
 

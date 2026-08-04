@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { OutlineFileNode, OutlineFileTree } from "@ai-editor/shared";
+import type { OutlineFileNode, OutlineFileTree } from "@whispering233/ai-editor-shared";
 import { SCHEMA_VERSION } from "../schema.js";
 import {
   findOutlineNode,

@@ -23,13 +23,13 @@ importers:
 
   packages/agent:
     dependencies:
-      '@ai-editor/llm':
+      '@whispering233/ai-editor-llm':
         specifier: workspace:*
         version: link:../llm
-      '@ai-editor/shared':
+      '@whispering233/ai-editor-shared':
         specifier: workspace:*
         version: link:../shared
-      '@ai-editor/tools':
+      '@whispering233/ai-editor-tools':
         specifier: workspace:*
         version: link:../tools
     devDependencies:
@@ -39,12 +39,12 @@ importers:
 
   packages/client:
     dependencies:
-      '@ai-editor/shared':
-        specifier: workspace:*
-        version: link:../shared
       '@base-ui/react':
         specifier: ^1.6.0
         version: 1.6.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@whispering233/ai-editor-shared':
+        specifier: workspace:*
+        version: link:../shared
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -103,7 +103,7 @@ importers:
 
   packages/db:
     dependencies:
-      '@ai-editor/shared':
+      '@whispering233/ai-editor-shared':
         specifier: workspace:*
         version: link:../shared
       better-sqlite3:
@@ -122,7 +122,7 @@ importers:
 
   packages/llm:
     dependencies:
-      '@ai-editor/shared':
+      '@whispering233/ai-editor-shared':
         specifier: workspace:*
         version: link:../shared
     devDependencies:
@@ -132,24 +132,24 @@ importers:
 
   packages/server:
     dependencies:
-      '@ai-editor/agent':
-        specifier: workspace:*
-        version: link:../agent
-      '@ai-editor/db':
-        specifier: workspace:*
-        version: link:../db
-      '@ai-editor/llm':
-        specifier: workspace:*
-        version: link:../llm
-      '@ai-editor/shared':
-        specifier: workspace:*
-        version: link:../shared
-      '@ai-editor/tools':
-        specifier: workspace:*
-        version: link:../tools
       '@hono/node-server':
         specifier: ^2.0.12
         version: 2.0.12(hono@4.12.32)
+      '@whispering233/ai-editor-agent':
+        specifier: workspace:*
+        version: link:../agent
+      '@whispering233/ai-editor-db':
+        specifier: workspace:*
+        version: link:../db
+      '@whispering233/ai-editor-llm':
+        specifier: workspace:*
+        version: link:../llm
+      '@whispering233/ai-editor-shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@whispering233/ai-editor-tools':
+        specifier: workspace:*
+        version: link:../tools
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
@@ -185,10 +185,10 @@ importers:
 
   packages/tools:
     dependencies:
-      '@ai-editor/db':
+      '@whispering233/ai-editor-db':
         specifier: workspace:*
         version: link:../db
-      '@ai-editor/shared':
+      '@whispering233/ai-editor-shared':
         specifier: workspace:*
         version: link:../shared
     devDependencies:

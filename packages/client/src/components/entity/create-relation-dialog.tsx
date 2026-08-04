@@ -9,8 +9,8 @@
 //   中列关系类型下拉 + 「→」箭头（mt-auto 沉底对齐两端实体下拉），三列各有小标题（源实体/关系类型/目标实体）。
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { ENTITY_TYPES, RELATION_TYPES } from "@ai-editor/shared";
-import type { EntitySummary, EntityType } from "@ai-editor/shared";
+import { ENTITY_TYPES, RELATION_TYPES } from "@whispering233/ai-editor-shared";
+import type { EntitySummary, EntityType } from "@whispering233/ai-editor-shared";
 import { ApiError, createRelation, listEntities, type CreateRelationBody } from "../../lib/api";
 import { relationTypeLabel } from "../../lib/entity-detail";
 import { flattenTree } from "../../lib/outline-tree";

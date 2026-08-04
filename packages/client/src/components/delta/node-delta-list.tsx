@@ -6,8 +6,8 @@
 // 防御分支：OUTLINE_NODE_NOT_FOUND 分支当前**不可达**——契约（endpoints.md L436-462）未定义该端点
 //   404，节点缺失/软删 → 200 空数组（server delta.ts 三态过滤），缺失即空态；分支保留以防契约未来变化
 import { useEffect, useState } from "react";
-import { formatTimestamp } from "@ai-editor/shared";
-import type { DeltaRecord } from "@ai-editor/shared";
+import { formatTimestamp } from "@whispering233/ai-editor-shared";
+import type { DeltaRecord } from "@whispering233/ai-editor-shared";
 import { ApiError, CLIENT_NETWORK_ERROR, getDeltasByNode } from "../../lib/api";
 import { targetTypeLabel } from "../../lib/delta";
 import { Button } from "@/components/ui/button";

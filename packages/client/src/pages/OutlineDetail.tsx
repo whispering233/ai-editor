@@ -14,7 +14,7 @@
 //   描述，update 自动取旧值）→ 成功后 toast + 重拉变更记录列表
 // 样式 token 类（layout.md §3，oracle 红线：禁止硬编码色类）
 import { useEffect, useState } from "react";
-import { formatTimestamp } from "@ai-editor/shared";
+import { formatTimestamp } from "@whispering233/ai-editor-shared";
 import { CreateRelationDialog } from "../components/entity/create-relation-dialog";
 import { RelationsView } from "../components/entity/relations-view";
 import { NodeDeltaList } from "../components/delta/node-delta-list";

@@ -16,13 +16,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// mock @ai-editor/db：包裹 createRelation 为 vi.fn（默认走真实实现）——原子性测试注入失败
-vi.mock("@ai-editor/db", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@ai-editor/db")>();
+// mock @whispering233/ai-editor-db：包裹 createRelation 为 vi.fn（默认走真实实现）——原子性测试注入失败
+vi.mock("@whispering233/ai-editor-db", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@whispering233/ai-editor-db")>();
   return { ...actual, createRelation: vi.fn(actual.createRelation) };
 });
 
-import type { OutlineFileTree, RelationRecord } from "@ai-editor/shared";
+import type { OutlineFileTree, RelationRecord } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
 import {
   closeDatabase,
@@ -36,8 +36,8 @@ import {
   openDatabase,
   writeProjectFile,
   type Db,
-} from "@ai-editor/db";
-import { writeOutlineFile } from "@ai-editor/db";
+} from "@whispering233/ai-editor-db";
+import { writeOutlineFile } from "@whispering233/ai-editor-db";
 import { buildProposal } from "../proposal/types.js";
 import { executeAbandonHook, executeAdvanceHook, executeResolveHook } from "./hook.js";
 

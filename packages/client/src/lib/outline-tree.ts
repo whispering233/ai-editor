@@ -1,7 +1,7 @@
 // 大纲树辅助纯函数（S2.3）：父节点按类型过滤（决策 19 严格三层）+ 子节点查找（move order 计算）
 // 契约来源：doc/ui/pages/outline.md「父节点按类型过滤：volume → 固定 root；chapter → root 或 volume；
 //   scene → 仅 chapter」+ endpoints.md「POST /outline parent_id 必填（volume→root、chapter→volume/root、scene→chapter）」
-import type { OutlineNode } from "@ai-editor/shared";
+import type { OutlineNode } from "@whispering233/ai-editor-shared";
 import type { OutlineNodeType } from "./api";
 
 /** 大纲根（虚拟）id——volume/chapter 挂 root 时使用的 parent_id（决策 19） */

@@ -1,4 +1,4 @@
-// @ai-editor/tools 入口：导出工具上下文 / 注册表 / 查询类与分析类工具实现
+// @whispering233/ai-editor-tools 入口：导出工具上下文 / 注册表 / 查询类与分析类工具实现
 // S6.3 查询类工具（自动权限，8 个）+ S6.4 分析类工具（自动权限，5 个）在此注册；
 // S6.5 伏笔 / S6.6 提案通过 registry.registerTool(s) 继续挂载（注册表是唯一事实来源）。
 // S6.7 执行类 12 个**不注册 registry**（LLM 不可见，tools.md「核心设计原则」）——
@@ -9,7 +9,7 @@
 // 本入口统一注册并导出全部 API。
 
 // 包标识常量（与 shared/llm 包风格一致：SHARED_PKG_NAME/LLM_PKG_NAME；agent 冒烟依赖）
-export const TOOLS_PKG_NAME = "@ai-editor/tools";
+export const TOOLS_PKG_NAME = "@whispering233/ai-editor-tools";
 export const TOOLS_PKG_VERSION = "0.1.0";
 
 export * from "./context.js";
@@ -34,7 +34,7 @@ export * from "./proposal/hook.js";
 // S6.7 执行层：导出 executor 门面与 12 个执行函数（不注册工具——见文件头注释）
 export * from "./executor/index.js";
 
-import { TOOL_PERMISSION } from "@ai-editor/shared";
+import { TOOL_PERMISSION } from "@whispering233/ai-editor-shared";
 import {
   computeStateArgsSchema,
   getDeltaHistoryArgsSchema,
@@ -44,7 +44,7 @@ import {
   getOutlinePathArgsSchema,
   queryRelationshipsArgsSchema,
   searchEntitiesArgsSchema,
-} from "@ai-editor/shared/schemas/tools";
+} from "@whispering233/ai-editor-shared/schemas/tools";
 import { registerTools, type ToolDefinition } from "./registry.js";
 import { runGetEntity, runGetEntitySummary, runSearchEntities } from "./query/entity.js";
 import { runQueryRelationships } from "./query/relation.js";
@@ -139,7 +139,7 @@ import {
   findOrphanElementsArgsSchema,
   suggestConnectionsArgsSchema,
   tracePlotPathsArgsSchema,
-} from "@ai-editor/shared/schemas/tools";
+} from "@whispering233/ai-editor-shared/schemas/tools";
 import { runAnalyzeConsistency } from "./analysis/consistency.js";
 import { runDetectConflicts } from "./analysis/conflict.js";
 import { runTracePlotPaths } from "./analysis/path.js";
@@ -210,7 +210,7 @@ import {
   findHookOpportunitiesArgsSchema,
   suggestHookPayoffArgsSchema,
   traceHookLifecycleArgsSchema,
-} from "@ai-editor/shared/schemas/tools";
+} from "@whispering233/ai-editor-shared/schemas/tools";
 import { runAnalyzeHookHealth, runDetectHookConflicts, runFindHookOpportunities, runSuggestHookPayoff, runTraceHookLifecycle } from "./analysis/hook.js";
 
 /** 伏笔分析工具定义（S6.5，hooks.md「工具扩展」+ 决策 21；权限全为 AUTO） */
@@ -284,7 +284,7 @@ import {
   proposeResolveHookArgsSchema,
   proposeUpdateEntityArgsSchema,
   proposeUpdateHookArgsSchema,
-} from "@ai-editor/shared/schemas/tools";
+} from "@whispering233/ai-editor-shared/schemas/tools";
 import {
   runProposeAbandonHook,
   runProposeAdvanceHook,

@@ -1,7 +1,7 @@
 // hook-panel 纯函数与复合写编排测试（S9.1）：
 // 分组逻辑、依赖链解析（含环守卫/深度限制）、废弃锚点、复合写请求序列（delta → relation → status 同步）
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { EntitySummary, OutlineTree, ProjectConfig } from "@ai-editor/shared";
+import type { EntitySummary, OutlineTree, ProjectConfig } from "@whispering233/ai-editor-shared";
 import { ApiError, type RelationSummaryItem } from "./api";
 
 // 部分 mock api：保留 ApiError 真实实现，替换写函数为 spy（断言调用序列与请求体形状）

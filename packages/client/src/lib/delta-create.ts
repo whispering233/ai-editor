@@ -5,10 +5,10 @@
 //   决策 9 修订（update 的 from 由客户端自动取目标当前 data 值——作者无需手填；data 后续被改 →
 //   compute 时跳过 + conflicts 标注，机制兜底）、
 //   shared ENTITY_DATA_SCHEMAS（字段名编译期断言：client 只消费类型不打包 zod，schema 变更即编译报错防漂移）
-import type { DeltaChange, DeltaOp, EntityType } from "@ai-editor/shared";
-import { ENTITY_TYPES } from "@ai-editor/shared";
+import type { DeltaChange, DeltaOp, EntityType } from "@whispering233/ai-editor-shared";
+import { ENTITY_TYPES } from "@whispering233/ai-editor-shared";
 // 类型-only 导入 schema 常量（编译期擦除，不打包 zod；用于断言本地字段清单 = shared schema keys）
-import type { ENTITY_DATA_SCHEMAS } from "@ai-editor/shared/schemas";
+import type { ENTITY_DATA_SCHEMAS } from "@whispering233/ai-editor-shared/schemas";
 import { detailFieldsForType } from "./entity-detail";
 import { targetTypeLabel } from "./delta";
 

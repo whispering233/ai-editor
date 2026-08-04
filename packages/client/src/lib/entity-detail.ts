@@ -3,7 +3,7 @@
 //   character→role/gender/age/personality/motivation/abilities/status/custom_fields、
 //   setting→category/parent_id/description/rules、location→type/parent_id/description、
 //   hook→status/category/expected_payoff/payoff_timing/half_life/is_core/notes/expected_resolve_node_id）
-import type { EntityType } from "@ai-editor/shared";
+import type { EntityType } from "@whispering233/ai-editor-shared";
 import { HOOK_STATUS_LABEL, HOOK_TIMING_LABEL } from "./entity-list";
 
 /** 字段控件类型：text 单行 / textarea 多行 / number 数字 / tags 标签列表 / select 枚举下拉 /

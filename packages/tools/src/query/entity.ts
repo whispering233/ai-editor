@@ -11,12 +11,12 @@
 // - get_entity_summary：db getEntitySummaryStats（S6.3 下沉：总数 + 类型专属分布，
 //   稀疏字段知识归拢 db 单一位置）——工具层透传
 
-import { getEntity as dbGetEntity, getEntitySummaryStats, listEntities } from "@ai-editor/db";
-import { mapRowToEntity } from "@ai-editor/shared";
-import type { Entity } from "@ai-editor/shared";
-import type { EntityListResult, EntitySummaryStats } from "@ai-editor/db";
+import { getEntity as dbGetEntity, getEntitySummaryStats, listEntities } from "@whispering233/ai-editor-db";
+import { mapRowToEntity } from "@whispering233/ai-editor-shared";
+import type { Entity } from "@whispering233/ai-editor-shared";
+import type { EntityListResult, EntitySummaryStats } from "@whispering233/ai-editor-db";
 import type { ToolContext } from "../context.js";
-import type { GetEntityArgs, GetEntitySummaryArgs, SearchEntitiesArgs } from "@ai-editor/shared";
+import type { GetEntityArgs, GetEntitySummaryArgs, SearchEntitiesArgs } from "@whispering233/ai-editor-shared";
 
 // ============ get_entity ============
 

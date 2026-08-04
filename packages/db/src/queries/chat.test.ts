@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { ChatMessageRow, ChatRole } from "@ai-editor/shared";
+import type { ChatMessageRow, ChatRole } from "@whispering233/ai-editor-shared";
 import { closeDatabase, openDatabase, type Db } from "../connection.js";
 import { insertChatMessage, listMessages, listSessions, reassembleMessages } from "./chat.js";
 

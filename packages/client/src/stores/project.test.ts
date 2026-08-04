@@ -2,7 +2,7 @@
 // + S1.5：书架 loadBookshelf 成功/失败、buildBookPath 路径拼接
 // mock lib/api 模块（保留 ApiError 类真实实现）
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ProjectConfig } from "@ai-editor/shared";
+import type { ProjectConfig } from "@whispering233/ai-editor-shared";
 import { ApiError } from "../lib/api";
 
 // 部分 mock：端点函数全部替换，ApiError 类保持真实

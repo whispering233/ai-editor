@@ -12,8 +12,8 @@
 // - purge：ConfirmDialog danger + 「确认彻底删除」文案（trash.md 44-49 行 MVP 语义：单次确认 + 明确文案）
 //   → 行移除 + toast「已彻底删除」；404 残留同还原（刷新 + toast）；其他错误冒泡 ConfirmDialog 内联显示
 import { useEffect, useState } from "react";
-import type { EntityType } from "@ai-editor/shared";
-import { formatRelativeTime } from "@ai-editor/shared";
+import type { EntityType } from "@whispering233/ai-editor-shared";
+import { formatRelativeTime } from "@whispering233/ai-editor-shared";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "../components/outline/dialogs";
 import {

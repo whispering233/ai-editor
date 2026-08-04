@@ -8,9 +8,9 @@
 //   最小参数走纯函数路径，无 db/文件 I/O）；提案仓用独立实例 + 假时钟。agent 不依赖 db——
 //   ToolContext.db 用 never 占位（registry.test.ts 同款模式），executor 只透传不触达。
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PROPOSAL_TOOLS, TOOL_PERMISSION } from "@ai-editor/shared";
-import { getEntityArgsSchema } from "@ai-editor/shared/schemas/tools";
-import { AbortedError, registerTool, type Proposal, type ToolContext } from "@ai-editor/tools";
+import { PROPOSAL_TOOLS, TOOL_PERMISSION } from "@whispering233/ai-editor-shared";
+import { getEntityArgsSchema } from "@whispering233/ai-editor-shared/schemas/tools";
+import { AbortedError, registerTool, type Proposal, type ToolContext } from "@whispering233/ai-editor-tools";
 import {
   PROPOSAL_BUILDERS,
   PROPOSAL_MAX_COUNT,

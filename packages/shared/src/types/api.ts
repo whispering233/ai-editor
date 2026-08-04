@@ -1,4 +1,4 @@
-// API 契约 Zod schema（@ai-editor/shared/types/api.ts，单一事实来源）
+// API 契约 Zod schema（@whispering233/ai-editor-shared/types/api.ts，单一事实来源）
 // 契约来源：doc/api/endpoints.md（全部端点 Req/Res 与错误码）、doc/api/tools.md（决策 15 agent 终止语义）、
 //   doc/database/schema.md（entity data 字段）、doc/database/hooks.md（hook data 字段）
 // 命名约定（endpoints.md）：请求体/查询参数 snake_case，响应体 camelCase；

@@ -1,7 +1,7 @@
 // outline-detail 纯函数测试（S12.2 节点详情页）：data 字段配置（决策 23 麦基字段集，按层级）、
 //   冲突层次多选切换、场景节点选择器选项（仅 scene 叶子）、引用字段「未设置」值归一
 import { describe, expect, it } from "vitest";
-import type { OutlineNode } from "@ai-editor/shared";
+import type { OutlineNode } from "@whispering233/ai-editor-shared";
 import {
   CONFLICT_LEVEL_LABEL,
   detailFieldsForNodeType,

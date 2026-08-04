@@ -7,8 +7,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { ToolContext } from "../context.js";
-import { closeDatabase, openDatabase, type Db } from "@ai-editor/db";
-import { createEntity, softDeleteEntity } from "@ai-editor/db";
+import { closeDatabase, openDatabase, type Db } from "@whispering233/ai-editor-db";
+import { createEntity, softDeleteEntity } from "@whispering233/ai-editor-db";
 import { runGetEntity, runGetEntitySummary, runSearchEntities } from "./entity.js";
 
 let dir: string;

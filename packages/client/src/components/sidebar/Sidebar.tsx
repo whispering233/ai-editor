@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { BookOpen, ChevronRight, Download, Loader2, MessageSquare, Moon, Plus, Settings, Sun, Upload } from "lucide-react";
-import { formatRelativeTime, formatTimestamp } from "@ai-editor/shared";
+import { formatRelativeTime, formatTimestamp } from "@whispering233/ai-editor-shared";
 import { useTheme } from "../../hooks/use-theme";
 import { ApiError, CLIENT_NETWORK_ERROR, exportProjectZip, importProjectZip } from "../../lib/api";
 import { describeExportError, describeImportError, describeOpenError } from "../../lib/error-messages";

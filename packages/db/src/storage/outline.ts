@@ -1,13 +1,13 @@
-// @ai-editor/db outline.json 存储模块（T2.2）
+// @whispering233/ai-editor-db outline.json 存储模块（T2.2）
 //
 // 单一事实来源：doc/database/schema.md 第 123-155 行（outline.json 契约）——
 // 严格三层（卷→章→场景，决策 19）、节点携带 updated_at 版本戳、顶层 schema_version、
 // 软删字段 deleted/deleted_at（决策 12）。
 // 读接口返回 shared 存储形态 OutlineFileTree（snake_case），映射到 API 形态由
-// @ai-editor/shared/utils 的 mapOutlineFileToTree 负责（本模块不映射）。
+// @whispering233/ai-editor-shared/utils 的 mapOutlineFileToTree 负责（本模块不映射）。
 
 import { join } from "node:path";
-import type { OutlineFileNode, OutlineFileNodeBase, OutlineFileTree } from "@ai-editor/shared";
+import type { OutlineFileNode, OutlineFileNodeBase, OutlineFileTree } from "@whispering233/ai-editor-shared";
 import { SCHEMA_VERSION } from "../schema.js";
 import { readTextFileOrNull, writeJsonAtomic } from "./atomic.js";
 

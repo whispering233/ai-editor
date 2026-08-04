@@ -9,7 +9,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createOutlineNode, deleteOutlineNode, nowIso, type Db } from "@ai-editor/db";
+import { createOutlineNode, deleteOutlineNode, nowIso, type Db } from "@whispering233/ai-editor-db";
 import { closeProject, initProject, type ProjectContext } from "./middleware/project.js";
 import { reconcileSoftDelete } from "./consistency.js";
 

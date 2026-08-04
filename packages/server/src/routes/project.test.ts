@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { unzipSync, zipSync } from "fflate";
-import type { OutlineFileTree, ProjectFileConfig } from "@ai-editor/shared";
+import type { OutlineFileTree, ProjectFileConfig } from "@whispering233/ai-editor-shared";
 import {
   closeDatabase,
   DATA_DB_FILE_NAME,
@@ -17,9 +17,9 @@ import {
   PROJECT_FILE_NAME,
   SCHEMA_VERSION,
   setUserVersion,
-} from "@ai-editor/db";
-import { PROJECT_EXPORT_FILE_NAMES } from "@ai-editor/shared/schemas";
-import { readOutlineFile, readProjectFile, writeOutlineFile, writeProjectFile } from "@ai-editor/db";
+} from "@whispering233/ai-editor-db";
+import { PROJECT_EXPORT_FILE_NAMES } from "@whispering233/ai-editor-shared/schemas";
+import { readOutlineFile, readProjectFile, writeOutlineFile, writeProjectFile } from "@whispering233/ai-editor-db";
 import { errorHandler } from "../middleware/error.js";
 import {
   closeProject,

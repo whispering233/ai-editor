@@ -1,4 +1,4 @@
-// @ai-editor/db 入口：导出建表（schema）、连接（connection）、对话历史查询（queries/chat）与
+// @whispering233/ai-editor-db 入口：导出建表（schema）、连接（connection）、对话历史查询（queries/chat）与
 // JSON 存储（storage/：outline.json / project.json 原子读写，T2.2）、增量迁移（migrations/，E5）
 export * from "./schema.js";
 export * from "./connection.js";

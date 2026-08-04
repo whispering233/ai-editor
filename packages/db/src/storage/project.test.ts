@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { ProjectFileConfig } from "@ai-editor/shared";
+import type { ProjectFileConfig } from "@whispering233/ai-editor-shared";
 import { PROJECT_FILE_NAME, readProjectFile, writeProjectFile } from "./project.js";
 
 let dir: string;

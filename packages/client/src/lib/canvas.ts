@@ -8,8 +8,8 @@
 // 数据流：Canvas.tsx 取数（outline store + listRelations）→ 本模块纯函数整理 → 渲染；
 //   本模块不 import react / localStorage 之外的浏览器 API（localStorage 读写集中在
 //   read/writeCanvasLayout 两个函数内 try/catch 容错，其余函数纯计算可单测）
-import { PLOT_EDGE_TYPE } from "@ai-editor/shared";
-import type { OutlineNode, OutlineTree } from "@ai-editor/shared";
+import { PLOT_EDGE_TYPE } from "@whispering233/ai-editor-shared";
+import type { OutlineNode, OutlineTree } from "@whispering233/ai-editor-shared";
 import type { RelationSummaryItem } from "./api";
 
 /** 画布节点类型（决策 19 严格三层；画布投影不含 root 虚拟节点） */

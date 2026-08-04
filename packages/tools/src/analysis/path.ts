@@ -7,11 +7,11 @@
 //   途经 chapter 缺 reversal、路径经过软删节点（手改树的不一致形态）。
 // 数据访问：db 查询层（listRelations plot_edge）+ outline.json 读取（树路径），无原生 SQL。
 
-import { findOutlineNode, getOutlinePathIds, listRelations, readOutlineFile } from "@ai-editor/db";
-import type { OutlineFileNode, OutlineFileTree } from "@ai-editor/shared";
+import { findOutlineNode, getOutlinePathIds, listRelations, readOutlineFile } from "@whispering233/ai-editor-db";
+import type { OutlineFileNode, OutlineFileTree } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
 import { throwIfAborted } from "./utils.js";
-import type { TracePlotPathsArgs } from "@ai-editor/shared";
+import type { TracePlotPathsArgs } from "@whispering233/ai-editor-shared";
 
 /** 路径节点（tools.md trace_plot_paths paths[].nodes 项；type/id/name 与 relation 路径同构） */
 export interface PlotPathNode {

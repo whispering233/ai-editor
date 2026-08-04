@@ -14,8 +14,8 @@
 //  - 依赖链：行内「依赖: …」可点击展开递归链（expandDependencyChain：深度 3 + 环守卫）
 import { useEffect, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
-import { formatTimestamp, HOOK_CATEGORIES } from "@ai-editor/shared";
-import type { EntitySummary } from "@ai-editor/shared";
+import { formatTimestamp, HOOK_CATEGORIES } from "@whispering233/ai-editor-shared";
+import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { CheckCircle2, Circle, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

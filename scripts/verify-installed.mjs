@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 安装态验证脚本（E6）：CI 发布后冒烟 —— 临时目录真实 `npm install @ai-editor/server@<version>`，
+// 安装态验证脚本（E6）：CI 发布后冒烟 —— 临时目录真实 `npm install @whispering233/ai-editor-server@<version>`，
 // 断言 bin 链接与版本正确，再短时启动服务验证「服务已启动」输出（发布链路的最后一道闸）。
 //
 // 用法：
@@ -8,8 +8,8 @@
 //
 // 流程：
 //   1. mkdtemp 临时安装目录 + 临时空项目目录
-//   2. `npm install --prefix <安装目录> @ai-editor/server@<version>`（真实 registry 拉包与依赖）
-//   3. 断言 node_modules/@ai-editor/server/package.json 存在且 version 匹配
+//   2. `npm install --prefix <安装目录> @whispering233/ai-editor-server@<version>`（真实 registry 拉包与依赖）
+//   3. 断言 node_modules/@whispering233/ai-editor-server/package.json 存在且 version 匹配
 //   4. 断言 node_modules/.bin/ai-editor 存在（npm 生成的 bin 链接；win32 为 .cmd shim）
 //   5. 冒烟：`node <server>/dist/index.js <临时空目录>`（AI_EDITOR_PORT 随机端口避免冲突），
 //      收集 stdout，出现「服务已启动」即 kill；超时未见 → 失败并打印输出
@@ -44,18 +44,18 @@ function assert(cond, message) {
 }
 
 const version = versionArg ?? readServerVersion();
-console.log(`[verify] 安装态验证 @ai-editor/server@${version}`);
+console.log(`[verify] 安装态验证 @whispering233/ai-editor-server@${version}`);
 
 const installDir = mkdtempSync(join(tmpdir(), "ai-editor-verify-install-"));
 const projectDir = mkdtempSync(join(tmpdir(), "ai-editor-verify-proj-"));
 
 try {
   // 2. 真实安装（registry 拉包；--no-fund/--no-audit 减噪；失败时打印输出）
-  console.log(`[verify] npm install --prefix ${installDir} @ai-editor/server@${version}`);
+  console.log(`[verify] npm install --prefix ${installDir} @whispering233/ai-editor-server@${version}`);
   try {
     execFileSync(
       "npm",
-      ["install", "--prefix", installDir, "--no-fund", "--no-audit", "--loglevel", "error", `@ai-editor/server@${version}`],
+      ["install", "--prefix", installDir, "--no-fund", "--no-audit", "--loglevel", "error", `@whispering233/ai-editor-server@${version}`],
       { stdio: "inherit", timeout: 300_000 },
     );
   } catch (err) {
@@ -64,7 +64,7 @@ try {
   }
 
   // 3. 断言已安装包版本
-  const serverPkgPath = join(installDir, "node_modules", "@ai-editor", "server", "package.json");
+  const serverPkgPath = join(installDir, "node_modules", "@whispering233", "ai-editor-server", "package.json");
   assert(existsSync(serverPkgPath), `已安装包 package.json 不存在: ${serverPkgPath}`);
   const installedPkg = JSON.parse(readFileSync(serverPkgPath, "utf-8"));
   assert(
@@ -82,7 +82,7 @@ try {
   console.log(`[verify] OK: bin 链接存在（${binPaths.find((p) => existsSync(p))}）`);
 
   // 5. 冒烟启动：等「服务已启动」出现即成功 kill；超时/退出过早 → 失败
-  const serverIndex = join(installDir, "node_modules", "@ai-editor", "server", "dist", "index.js");
+  const serverIndex = join(installDir, "node_modules", "@whispering233", "ai-editor-server", "dist", "index.js");
   assert(existsSync(serverIndex), `server dist 入口不存在: ${serverIndex}`);
   const port = 20_000 + Math.floor(Math.random() * 20_000); // 随机端口，避免与本地服务冲突
   const child = spawn(process.execPath, [serverIndex, projectDir], {
@@ -112,7 +112,7 @@ try {
   await new Promise((r) => child.once("exit", r));
   assert(ready, `服务未在 ${SMOKE_TIMEOUT_MS}ms 内输出「${READY_MARKER}」。进程输出:\n${output}`);
   console.log(`[verify] OK: 冒烟启动成功（输出含「${READY_MARKER}」）`);
-  console.log(`[verify] 全部通过：@ai-editor/server@${version} 安装态可用`);
+  console.log(`[verify] 全部通过：@whispering233/ai-editor-server@${version} 安装态可用`);
 } finally {
   rmSync(installDir, { recursive: true, force: true });
   rmSync(projectDir, { recursive: true, force: true });

@@ -1,7 +1,7 @@
 // outline-tree 纯函数测试（S2.3 + 就地编辑 S2.4）：父节点过滤（决策 19）、子节点查找、
 //   拖拽移动合法性（canMoveTo/isDescendant）、行内编辑提交判定
 import { describe, expect, it } from "vitest";
-import type { OutlineNode } from "@ai-editor/shared";
+import type { OutlineNode } from "@whispering233/ai-editor-shared";
 import {
   canMoveTo,
   dropInsertOrder,
