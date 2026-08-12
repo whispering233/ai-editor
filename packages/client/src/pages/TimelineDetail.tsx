@@ -10,6 +10,8 @@
 //  - 已关联节点标题取关系 targetName（服务端联表填充大纲节点标题，endpoints.md L430），点击跳
 //    #/outline/:nodeId 定位；节点选择器允许重复选择——服务端 409 RELATION_EXISTS 判重（选实现最简，
 //    提示沿用 entity-detail.md「这条关系已经存在」）
+//  - 关联节点选择器（UX3）：全屏模态 Dialog → Base UI Popover 轻量非模态弹层（components/ui/popover.tsx）——
+//    不打断详情页编辑；409 内联提示保留在 Popover 内，选择后提交成功关闭 + 重拉详情
 //  - 元信息行不展示「变更记录 N 条」入口：事件不产生 Delta（决策 26），timeline.md 信息层级仅
 //    createdAt/updatedAt
 //  - 未保存离开守卫：EntityDetail 无此模式，不做（避免过度设计）
@@ -17,7 +19,7 @@ import { useEffect, useState } from "react";
 import { formatTimestamp } from "@whispering233/ai-editor-shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   ApiError,
   CLIENT_NETWORK_ERROR,
@@ -53,8 +55,8 @@ export default function TimelineDetail({ id }: { id: string }) {
   const [form, setForm] = useState<EventDetailForm | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  // 关联节点选择器对话框
-  const [relationDialogOpen, setRelationDialogOpen] = useState(false);
+  // 关联节点选择器 Popover（UX3 轻量弹层：非模态，不打断详情页）
+  const [relationOpen, setRelationOpen] = useState(false);
   const [relNodeId, setRelNodeId] = useState("");
   const [relError, setRelError] = useState<string | null>(null);
   const [relSubmitting, setRelSubmitting] = useState(false);
@@ -128,14 +130,7 @@ export default function TimelineDetail({ id }: { id: string }) {
     }
   }
 
-  /** 打开关联对话框：重置选择态（防上次残留） */
-  function openRelationDialog() {
-    setRelNodeId("");
-    setRelError(null);
-    setRelationDialogOpen(true);
-  }
-
-  /** 添加关联：POST /relation（event → outline_node，occurs_in）；409 判重内联提示，不关对话框 */
+  /** 添加关联：POST /relation（event → outline_node，occurs_in）；409 判重内联提示，不关闭 Popover */
   async function handleAddRelation() {
     if (relNodeId === "" || relSubmitting) return;
     setRelSubmitting(true);
@@ -143,7 +138,7 @@ export default function TimelineDetail({ id }: { id: string }) {
     try {
       await createRelation(buildOccursRelationBody(id, relNodeId));
       useUiStore.getState().showToast("已关联大纲节点");
-      setRelationDialogOpen(false);
+      setRelationOpen(false);
       await loadDetail();
     } catch (err) {
       if (err instanceof ApiError && err.code === "RELATION_EXISTS") {
@@ -315,18 +310,63 @@ export default function TimelineDetail({ id }: { id: string }) {
             </div>
           </div>
 
-          {/* 右栏：occurs_in 关联节点管理（timeline.md 详情页核心交互） */}
+          {/* 右栏：occurs_in 关联节点管理（timeline.md 详情页核心交互；UX3：选择器为 Popover 轻量弹层） */}
           <div className="rounded-md border border-border p-4">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-foreground">关联节点（occurs_in）</h2>
-              <Button
-                variant="outline"
-                type="button"
-                className="h-8 px-2 text-xs"
-                onClick={openRelationDialog}
+              <Popover
+                open={relationOpen}
+                onOpenChange={(v) => {
+                  if (v) {
+                    // 打开时重置选择态（防上次残留）
+                    setRelNodeId("");
+                    setRelError(null);
+                    setRelationOpen(true);
+                  } else if (!relSubmitting) {
+                    // 提交中禁止关闭（409 内联提示需要停留；Esc/点击外部同理被守卫）
+                    setRelationOpen(false);
+                  }
+                }}
               >
-                + 关联场景/章节
-              </Button>
+                <PopoverTrigger
+                  render={
+                    <Button variant="outline" type="button" className="h-8 px-2 text-xs">
+                      + 关联场景/章节
+                    </Button>
+                  }
+                />
+                <PopoverContent className="flex flex-col gap-3">
+                  <div>
+                    <p className="mb-1 text-sm font-medium text-foreground">大纲节点</p>
+                    <OutlineNodeSelect
+                      value={relNodeId}
+                      onChange={setRelNodeId}
+                      nodeOptions={nodeOptions}
+                      placeholder="请选择节点"
+                    />
+                  </div>
+                  {relError && <p className="text-sm text-destructive">{relError}</p>}
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      type="button"
+                      size="sm"
+                      onClick={() => setRelationOpen(false)}
+                      disabled={relSubmitting}
+                    >
+                      取消
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => void handleAddRelation()}
+                      disabled={relSubmitting || relNodeId === ""}
+                    >
+                      {relSubmitting ? "关联中…" : "关联"}
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
             {occurring.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">暂无关联节点，新增一个</p>
@@ -357,40 +397,6 @@ export default function TimelineDetail({ id }: { id: string }) {
           </div>
         </div>
       )}
-
-      {/* 关联节点选择器对话框（大纲树形选项，同 HookPanel 新建伏笔埋点选择器模式） */}
-      <Dialog open={relationDialogOpen} onOpenChange={(v) => !v && !relSubmitting && setRelationDialogOpen(false)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>关联场景/章节</DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col gap-3">
-            <div>
-              <p className="mb-1 text-sm font-medium text-foreground">大纲节点</p>
-              <OutlineNodeSelect
-                value={relNodeId}
-                onChange={setRelNodeId}
-                nodeOptions={nodeOptions}
-                placeholder="请选择节点"
-              />
-            </div>
-            {relError && <p className="text-sm text-destructive">{relError}</p>}
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              type="button"
-              onClick={() => setRelationDialogOpen(false)}
-              disabled={relSubmitting}
-            >
-              取消
-            </Button>
-            <Button type="button" onClick={() => void handleAddRelation()} disabled={relSubmitting || relNodeId === ""}>
-              {relSubmitting ? "关联中…" : "关联"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* 取消关联确认（物理删不可恢复，可重新建立——同实体详情页关系删除语义） */}
       {deleteRelationTarget && (
