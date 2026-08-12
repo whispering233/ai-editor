@@ -14,6 +14,7 @@ import EntityList from "./pages/EntityList";
 import EntityDetail from "./pages/EntityDetail";
 import HookPanel from "./pages/HookPanel";
 import Timeline from "./pages/Timeline";
+import TimelineDetail from "./pages/TimelineDetail";
 import Trash from "./pages/Trash";
 import Settings from "./pages/Settings";
 import "./index.css";
@@ -53,8 +54,9 @@ function renderPage(route: Route): ReactNode {
     case "hooks":
       return <HookPanel />;
     case "timeline":
-      // 1 段（#/timeline）→ 时间轴列表页；详情页路由（#/timeline/:id）由 C4 注册
-      return <Timeline />;
+      // 按段数区分——1 段（#/timeline）→ 列表页；2 段（#/timeline/:id）→ 事件详情页
+      // （timeline.md 路由；key = id 变化强制卸载重挂——详情页表单按事件重置）
+      return second !== undefined ? <TimelineDetail key={second} id={second} /> : <Timeline />;
     case "trash":
       return <Trash />;
     case "settings":
