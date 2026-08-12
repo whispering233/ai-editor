@@ -209,23 +209,23 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
   - **线上编辑标签**：点击选中连线 → 线中点标签处内联输入框（无标签显示占位「+ 标签」）→ Enter/失焦 → `PUT /relation/:id`（`metadata: { label }` 整体替换）→ 重拉；空标签提交 = 清除（`metadata: {}`）
   - **后端**：新增 `PUT /api/v1/relation/:id`（shared `relationUpdateMetaReqSchema` + db updateRelationMetadata + server 路由 + 测试；metadata 整体替换、label trim、软删关系 404）
 - 依赖：无（S10.2 已提供标签渲染/选中态基础）
-- 验证：server 测试（PUT metadata/404/trim/整体替换）+ client 测试（拖出即连不弹框、线上编辑提交）+ 手工验收
+- 验证：server 测试（PUT metadata/404/trim/整体替换）+ client lib/api 测试（updateRelationMeta 封装）+ 手工走查（拖出即连/线上编辑/双提交防护）
 - 回滚：单 commit
 
 **UX2 侧栏新建项目行内化**
 - 范围：Sidebar「＋」新建项目 Dialog → 书架头部**行内展开输入框**（书名单字段，回车/失焦提交 `createProjectAt`；Esc/失焦取消——失焦取消需确认不误触，或失焦提交+成功关闭）；与 Dashboard 引导页表单共用 createProjectAt 逻辑
 - 依赖：无
-- 验证：client 测试 + 手工验收（行内输入/提交/取消/路径安全校验提示保留）
+- 验证：client 测试（book-name 校验纯函数，已落实）+ 手工验收（行内输入/提交/取消/路径安全校验提示保留）
 - 回滚：单 commit
 
 **UX3 时间轴详情关联节点轻量弹层**
 - 范围：TimelineDetail「+ 关联场景/章节」全屏模态 Dialog → **轻量 Popover 弹层**（Base UI Popover 内嵌大纲树形下拉，单字段选择器非模态）；409 RELATION_EXISTS 内联提示保留
 - 依赖：无
-- 验证：client 测试 + 手工验收
+- 验证：client 纯函数测试（如有）+ 手工验收（Popover 内嵌大纲树形选择、409 RELATION_EXISTS 内联提示）
 - 回滚：单 commit
 
 **UX4 实体新建行内化**
 - 范围：EntityList「+ 新建」Dialog → **列表首行内联编辑行**（name + 该类型首字段；hook 类型 status 下拉保留；提交成功跳详情页语义保留——行内提交后 `navigate("/entities/:type/:id")`）
 - 依赖：无
-- 验证：client 测试 + 手工验收
+- 验证：client 纯函数测试（如有）+ 手工验收（行内编辑/提交/取消/跳详情语义）
 - 回滚：单 commit
