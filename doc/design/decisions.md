@@ -280,12 +280,12 @@ AI Editor 的目标用户是**写小说的人**，不是开发者。纯 GUI 交�
 
 ## 决策 13：schema 演进 —— MVP 删库重建
 
-- MVP 不做数据迁移：`data.db` 通过 `PRAGMA user_version` 记录 schema 版本，启动时检测不匹配则**删除重建**并提示用户；`project.json` 增加 `schema_version` 字段。
+- ~~MVP 不做数据迁移~~（**已由文末 E5 增补替代（2026-08 修订）**）：原 MVP 口径为 `data.db` 通过 `PRAGMA user_version` 记录 schema 版本，启动时检测不匹配则**删除重建**并提示用户；`project.json` 增加 `schema_version` 字段。
 - **版本判定规则**：以 data.db 的 `user_version` 为准判定是否重建；`project.json` 的 `schema_version` 仅用于 JSON 结构判断；首次初始化时两个版本号都写入（见决策 8 初始化流程）。
 - **重建时同步重置 outline.json**（先备份为 `outline.json.v{n}.bak`，n=旧 schema 版本号）并清空回收站，避免「大纲完整、实体全空」的半状态；**旧 data.db 一并备份为 `data.db.v{n}.bak`**——对话历史属创作数据（决策 18），重建不可静默丢弃。
 - **备份带版本号、不覆盖旧备份（2026-08 修订）**：多次重建各自留档；手动恢复 .bak 仅用于配合**旧版本程序**回滚——当前版本下 user_version 仍不匹配、再次重建属预期行为。
 - outline.json 顶层携带 `schema_version` 字段（与 project.json 同步写入，用于文件格式演进判定）。
-- 不写迁移脚本（YAGNI）。
+- ~~不写迁移脚本（YAGNI）~~（**已由文末 E5 增补替代（2026-08 修订）**）。
 - **约束**：此策略仅在正式发布前可接受；首次发布前必须重新评估（发布后用户持有真实创作数据，删库不可接受）。
 - **删库重建策略于 v0.1.0 发布终止（E5 增补）**：增量迁移机制替代——旧版本库（user_version < SCHEMA_VERSION）**有迁移路径**（`MIGRATIONS` 存在连续迁移链）→ 前向迁移（每迁移一个事务、`setUserVersion` 原子提交、迁移前时间戳快照 `data.db.v{n}.{时间戳}.bak`）；**无迁移路径**的历史版本保留重建兜底；未来版本（> 当前）仍按 E4 拒绝打开。首个真实迁移条目在 SCHEMA_VERSION 提升时加入 `packages/db/src/migrations/`。
 

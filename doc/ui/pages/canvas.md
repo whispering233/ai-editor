@@ -35,7 +35,7 @@
 | 连线 | 曲线 + 中点标签 | `relationType=plot_edge`，标签取 `metadata.label`；`relation.id` 用于删除 |
 | 布局 | 坐标/缩放 | localStorage（不进出任何 API 字段，决策 10） |
 
-可选增强（MVP 可不做）：节点卡右上角伏笔数徽标（需额外查询大纲节点的 `plants`/`advances` 关联，成本高，后置）。
+节点卡右上角伏笔标记**已随 S10.1 集成**：复用 S9.2 `buildNodeHookMarks`（plants/advances/resolves 徽标，并行三请求降级），见 `doc/ui/pages/outline.md`。
 
 ## 关键交互
 

@@ -204,11 +204,11 @@
 4. **条目白名单**：只接受 `PROJECT_EXPORT_FILE_NAMES` 三文件名（未知条目严格拒绝——逐名比对天然防 zip 路径穿越）
 5. 三文件齐全（缺任一 → 400）
 6. `project.json`/`outline.json` 顶层契约（JSON 可解析 + id/name/schema_version；`{id:"root",type:"root",schema_version,children[]}`）
-7. `data.db`：**文件大小 > 0 → 打开成功（非 SQLite/空文件 → 400 坏包）→ `user_version` === 当前版本**
+7. `data.db`：**文件大小 > 0 → 打开成功（非 SQLite/空文件 → 400 坏包）→ `user_version` === 当前版本，或 < 当前版本且有迁移路径**（搬入后首次 open 由 E5 自动前向迁移）
 
 **错误码**：
 - 400 `VALIDATION_ERROR`：坏包/缺文件/未知条目/契约不符/书名非法/超大小上限
-- 409 `SCHEMA_VERSION_MISMATCH`：data.db `user_version` 与当前程序版本不匹配（文案按相对版本分流：`v > 当前` → 「备份来自更高版本程序」；`v < 当前` → 「备份来自旧版本程序」；**当前一律拒绝，不静默重建**——E5 迁移机制落地后旧版本放开）
+- 409 `SCHEMA_VERSION_MISMATCH`：data.db `user_version` 与当前程序版本不匹配且**无迁移路径**（`v > 当前` → 「备份来自更高版本程序」（E4 语义，零触碰）；`v < 当前` 但有迁移路径 → 放行，搬入后 open 自动前向迁移（E5））；**一律不静默重建**
 - 409 `PROJECT_ALREADY_EXISTS`：目标 `books/<name>/` 已存在（与 create 同语义）
 
 **原子搬入**：校验在 `mkdtemp` 临时目录完成（无论成败清理）；通过后 `mkdir` + 复制三文件到 `books/<name>/`，任一失败清理半成品目录（不留下残缺书）。导入**不自动打开**（与 create 一致，前端刷新书架）。

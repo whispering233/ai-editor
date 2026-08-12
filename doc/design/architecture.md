@@ -358,6 +358,15 @@ export interface Entity { id: string; type: EntityType; name: string; }
     npm install <server.tgz + 依赖 tgz>
   运行: npx ai-editor <项目目录> → 服务 + 自动打开浏览器界面（SPA 随包）
 
+发布链路（E6，2026-08 已自动化）:
+  根脚本清单：pack:test（构建 + 6 包 pack + npm 安装到 /tmp 测试目录）/ start:test（启动安装态服务）/
+    test:packed（一键串联）/ release:version X.Y.Z（同步 6 发布包 + client + 根版本，--dry-run 预览）/
+    start:test-project（构建后生产态启动 test-project）
+  正式发布：commit + 手动 annotated tag vX.Y.Z → push tag 后 CI 自动执行——release.yml 建 GitHub
+    Release（release-from-changelog）+ publish.yml 发布 6 包 npm（OIDC Trusted Publisher，无需 token）
+    + verify-installed 安装态冒烟；发布脚本 scripts/sync-version.mjs / publish-packages.mjs /
+    verify-installed.mjs；完整流程见 AGENTS.md「版本发布流程（E6）」与 tasks.md E6 卡
+
 启动流程（Node ≥ 22.12，产物为全仓 ESM）:
   node packages/server/dist/index.js [projectRoot]
     → 参数: projectRoot = 创作根（缺省 process.cwd()）

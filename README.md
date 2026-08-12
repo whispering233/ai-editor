@@ -36,7 +36,7 @@ shared → llm / db / tools → agent → server    （依赖方向，client 只
 ```
 
 - `@whispering233/ai-editor-shared`：前后端共享类型 / 常量 / 工具 / API 契约（零 Node 依赖，浏览器安全）
-- `@whispering233/ai-editor-db`：SQLite 建表 / 查询 / outline.json 原子写 / schema 演进删库重建
+- `@whispering233/ai-editor-db`：SQLite 建表 / 查询 / outline.json 原子写 / schema 演进（增量迁移 E5 + 未来版本拒绝打开 E4，无迁移路径时删库重建兜底）
 - `@whispering233/ai-editor-server`：Hono API + SPA 静态托管（单进程部署）
 - `@whispering233/ai-editor-client`：React SPA
 

@@ -123,6 +123,8 @@ VALUES ('sc-45', 'hook', 'hook-1',
 
 ## 健康指标（运行时计算，不持久化）
 
+> **MVP 简化（2026-08 决策，backlog #13）**：以下 `_health` 附加字段**契约未定义、不对外承诺**——REST 响应不含该字段，伏笔面板不展示健康指标与章节序（见 `doc/ui/pages/hook-panel.md`）；本节为后续迭代的设计草案。
+
 每次查询伏笔时实时计算 `_health`，**仅作为响应附加字段返回，不写回 data**。**「当前章节」来源于 project.json 的 `current_position`**（已纳入 project.json 契约，见 `schema.md`；`current_position` 指向某大纲节点，**章节序推导规则见决策 21**：全局章序号、scene 归入所属章）；未设置时为 null，相关指标返回未计算。
 
 | 指标 | 计算方式 |
