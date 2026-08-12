@@ -3,10 +3,13 @@
 // 交互：模型名输入 + 保存；API key 状态行（掩码）+ 新 key 输入 + 保存/清除；
 //   常驻说明：key 只存本机用户配置（~/.ai-editor/config.json），不入项目文件（决策 17）；
 //   环境变量 DEEPSEEK_API_KEY 优先于此处配置（页面仍可保存，实际生效以环境变量为准）
+//   B1（决策 25）：项目提示词区——GET/PUT /project/config → prompt；载入优先读 project store
+//   已缓存 config；保存后 toast + dataVersion +1（中栏数据页刷新）；无项目打开灰显禁用
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiError, CLIENT_NETWORK_ERROR, getSettingsLlm, updateSettingsLlm } from "../lib/api";
+import { useProjectStore } from "../stores/project";
 import { useUiStore, type ErrorBanner } from "../stores/ui";
 
 /** 从任意错误提取错误码（ApiError → 服务端/客户端码；未知 → 网络错误） */
@@ -17,6 +20,10 @@ function errorCodeOf(err: unknown): ErrorBanner["code"] {
 export default function Settings() {
   const showToast = useUiStore((s) => s.showToast);
   const showError = useUiStore((s) => s.showError);
+  const notifyDataChanged = useUiStore((s) => s.notifyDataChanged);
+  const config = useProjectStore((s) => s.config);
+  const configLoading = useProjectStore((s) => s.configLoading);
+  const updateConfig = useProjectStore((s) => s.updateConfig);
 
   const [loading, setLoading] = useState(true);
   const [model, setModel] = useState("");
@@ -27,6 +34,14 @@ export default function Settings() {
   const [modelError, setModelError] = useState<string | null>(null);
   /** key 区表单内联错误（原型 settings.md「错误态：VALIDATION_ERROR → 表单内联错误」） */
   const [keyError, setKeyError] = useState<string | null>(null);
+  // —— B1 项目提示词（决策 25）——
+  const [prompt, setPrompt] = useState("");
+  /** 已填充提示词的项目 id（null = 尚未/无项目）：id 变化（切换项目）→ 重新填充；
+   *  同项目内 store 重拉（updateConfig 内部 loadConfig）→ 不覆盖用户草稿 */
+  const [promptLoadedFor, setPromptLoadedFor] = useState<string | null>(null);
+  const [promptSaving, setPromptSaving] = useState(false);
+  /** 提示词区表单内联错误（原型「错误态：VALIDATION_ERROR → 表单内联错误」） */
+  const [promptError, setPromptError] = useState<string | null>(null);
 
   /** 拉取当前配置（保存/清除后刷新掩码状态） */
   async function refresh() {
@@ -45,6 +60,51 @@ export default function Settings() {
   useEffect(() => {
     void refresh();
   }, []);
+
+  // B1 载入：进入设置页优先用 project store 已缓存 config（AppShell 挂载时已拉取）；
+  //   无缓存（store 尚未拉取）补拉一次——仅本挂载触发一次（store 内部有并发防抖），
+  //   避免「无项目/失败后 config 恒为 null」时本 effect 反复重拉
+  useEffect(() => {
+    const state = useProjectStore.getState();
+    if (state.config === null && !state.configLoading) {
+      void state.loadConfig();
+    }
+  }, []);
+
+  // config 就绪后按项目身份填充提示词：关闭项目（null）→ 重置；切换项目（id 变化）→
+  // 重新填充（丢弃旧项目草稿是正确行为）；同项目内 store 重拉 → 不覆盖用户正在编辑的草稿
+  useEffect(() => {
+    if (config === null) {
+      setPromptLoadedFor(null);
+      return;
+    }
+    if (config.id !== promptLoadedFor) {
+      setPrompt(config.prompt);
+      setPromptLoadedFor(config.id);
+    }
+  }, [config, promptLoadedFor]);
+
+  /** B1 保存提示词：空值/纯空白 = 清除（服务端「## 项目设定」整段跳过，决策 25）；
+   *  store updateConfig 内部 PUT 成功后自动重拉 config；toast + dataVersion +1 触发中栏数据页刷新 */
+  async function handleSavePrompt() {
+    setPromptError(null);
+    setPromptSaving(true);
+    try {
+      const value = prompt.trim();
+      await updateConfig({ prompt: value });
+      setPrompt(value);
+      showToast("提示词已保存，仅影响新请求");
+      notifyDataChanged();
+    } catch (err) {
+      if (errorCodeOf(err) === CLIENT_NETWORK_ERROR) {
+        showError("CLIENT_NETWORK_ERROR", "无法连接服务，提示词未保存");
+      } else {
+        setPromptError("保存失败，请重试");
+      }
+    } finally {
+      setPromptSaving(false);
+    }
+  }
 
   /** 保存模型名（非空校验，原型：保存时非空校验）；表单错误内联，网络错误走全局横幅 */
   async function handleSaveModel() {
@@ -159,6 +219,37 @@ export default function Settings() {
           <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3 text-xs leading-relaxed text-zinc-600">
             <p>· key 保存在用户目录配置文件（~/.ai-editor/config.json），不写入项目文件（决策 17）</p>
             <p>· 环境变量 DEEPSEEK_API_KEY 优先于此处配置；保存的 key 仅影响新请求</p>
+          </div>
+
+          {/* 项目提示词（B1，决策 25）：注入 AI 上下文「## 项目设定」段（每轮有效）；
+              空值保存 = 清除（服务端整段跳过）；无项目打开灰显禁用 + 提示 */}
+          <div>
+            <h2 className="mb-1 text-sm font-semibold text-foreground">项目提示词</h2>
+            <p className="mb-2 text-xs text-muted-foreground">
+              注入 AI 上下文「## 项目设定」段（每轮有效）；承载项目级规则/行业要求；空 = 整段跳过
+            </p>
+            <textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              rows={6}
+              // 首填完成前不可输入（含 config 拉取中/切换项目后未填充），消除草稿被首填覆盖窗口
+              disabled={config === null || config.id !== promptLoadedFor}
+              placeholder="输入项目级规则/行业要求…"
+              className="w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+            />
+            <div className="mt-2 flex items-center gap-3">
+              <Button
+                onClick={() => void handleSavePrompt()}
+                disabled={promptSaving || config === null || config.id !== promptLoadedFor}
+                type="button"
+              >
+                保存提示词
+              </Button>
+              {config === null && !configLoading && (
+                <p className="text-xs text-muted-foreground/70">打开项目后可用</p>
+              )}
+            </div>
+            {promptError && <p className="mt-1 text-sm text-destructive">{promptError}</p>}
           </div>
         </div>
       )}
