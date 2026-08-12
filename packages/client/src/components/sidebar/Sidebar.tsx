@@ -1,19 +1,20 @@
 // 左栏 Sidebar（doc/ui/layout.md §2.3）：产品标识 + 书架（项目→会话二级树）+ 底部设置/主题切换
 // U3 实现：书架树——bookshelf 列表（挂载即拉取，与 config 无关，无项目时照常展示）；
 //   点击项目行 openProjectAt（当前项目 name 匹配高亮）；chevron 单展开会话列表（归属项目，决策 22，
-//   展开时 chat store 自动 loadSessions）；底部 [+ 新建项目] Dialog（bookshelf.rootPath + buildBookPath）；
-//   主题切换用 use-theme hook（layout.md §3.4 Sun/Moon，localStorage 持久化）
+//   展开时 chat store 自动 loadSessions）；书架头部 [+ 新建项目] 行内输入（UX2：bookshelf.rootPath +
+//   buildBookPath）；主题切换用 use-theme hook（layout.md §3.4 Sun/Moon，localStorage 持久化）
 // E3 导出/导入（release-review §二「数据主权归用户」载体）：
 //   - 书架头部行 [+ 导入备份]（Upload，zip 恢复为新书，导入不自动打开 → 刷新书架）；
 //   - 当前项目行尾部 [导出备份]（Download，点击即下载 zip；无项目打开时不渲染——「导出当前项目」语义）
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
-import { BookOpen, ChevronRight, Download, Loader2, MessageSquare, Moon, Plus, Settings, Sun, Upload } from "lucide-react";
+import { BookOpen, ChevronRight, Download, Loader2, MessageSquare, Moon, Plus, Settings, Sun, Upload, X } from "lucide-react";
 import { formatRelativeTime, formatTimestamp } from "@whispering233/ai-editor-shared";
 import { useTheme } from "../../hooks/use-theme";
 import { ApiError, CLIENT_NETWORK_ERROR, exportProjectZip, importProjectZip } from "../../lib/api";
 import { describeExportError, describeImportError, describeOpenError } from "../../lib/error-messages";
 import { cn } from "../../lib/utils";
+import { validateBookName } from "../../lib/book-name";
 import { buildBookPath, useProjectStore } from "../../stores/project";
 import { useChatStore } from "../../stores/chat";
 import { useUiStore } from "../../stores/ui";
@@ -113,7 +114,7 @@ export function Sidebar() {
 
   // 展开的项目行（单展开：同一时刻只展开一本，布局 §2.3 推荐）；展开会话由 SessionList 按需加载
   const [expandedPath, setExpandedPath] = useState<string | null>(null);
-  // 新建项目 Dialog
+  // 新建项目行内输入（UX2：书架头部「＋」展开单字段输入；状态仅行内使用）
   const [createOpen, setCreateOpen] = useState(false);
   const [bookName, setBookName] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
@@ -156,18 +157,21 @@ export function Sidebar() {
     }
   }, [projectId]);
 
-  /** 新建项目：书名 → 创作根/books/<书名>/，create（不打开）→ open 进入新书 → toast + 刷新书架 + 展开新书行 */
+  /** 取消行内新建（× 按钮 / Esc / 失焦共用）：清空输入与错误，防下次展开残留 */
+  function cancelCreate() {
+    setBookName("");
+    setCreateError(null);
+    setCreateOpen(false);
+  }
+
+  /** 新建项目（行内输入提交）：书名 → 创作根/books/<书名>/，create（不打开）→ open 进入新书 → toast + 刷新书架 + 展开新书行 */
   async function handleCreateBook(e: FormEvent) {
     e.preventDefault();
     const name = bookName.trim();
-    // L3（oracle U3 审核）：书名禁路径分隔符/相对路径段/控制字符——buildBookPath 直接拼目录名，
-    // 否则 ".." 或含 "/" 的书名可逃出 books/ 目录
-    if (!name) {
-      setCreateError("请输入书名");
-      return;
-    }
-    if (/[\\/]|^\.+$|[\u0000-\u001f]/.test(name)) {
-      setCreateError("书名不能包含 /、\\ 或为 . / ..");
+    // 书名校验（UX2 抽取：lib/book-name.validateBookName——L3 防路径逃逸规则，创建/导入共用）
+    const err = validateBookName(name);
+    if (err !== null) {
+      setCreateError(err);
       return;
     }
     if (!bookshelf) {
@@ -248,12 +252,10 @@ export function Sidebar() {
       setImportError("请选择备份文件");
       return;
     }
-    if (!name) {
-      setImportError("请输入书名");
-      return;
-    }
-    if (/[\\/]|^\.+$|[\u0000-\u001f]/.test(name)) {
-      setImportError("书名不能包含 /、\\ 或为 . / ..");
+    // 书名校验与新建项目共用（UX2 抽取）
+    const err = validateBookName(name);
+    if (err !== null) {
+      setImportError(err);
       return;
     }
     setImporting(true);
@@ -292,7 +294,7 @@ export function Sidebar() {
 
       {/* 书架区：项目→会话二级树 + 新建项目入口（U3） */}
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
-        {/* 头部：书架标签 + 导入备份 + 新建项目（E3 导入入口与新建并列——书架是书籍管理的自然宿主） */}
+        {/* 头部：书架标签 + 导入备份 + 新建项目（UX2：＋ 展开行内输入；展开态变 × 取消） */}
         <div className="mb-1 flex items-center justify-between px-1">
           <span className="text-xs font-medium text-muted-foreground">书架</span>
           <div className="flex items-center gap-0.5">
@@ -305,17 +307,54 @@ export function Sidebar() {
             >
               <Upload />
             </Button>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={() => setCreateOpen(true)}
-              aria-label="新建项目"
-              title="新建项目"
-            >
-              <Plus />
-            </Button>
+            {createOpen ? (
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={cancelCreate}
+                aria-label="取消新建项目"
+                title="取消新建"
+              >
+                <X />
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => setCreateOpen(true)}
+                aria-label="新建项目"
+                title="新建项目"
+              >
+                <Plus />
+              </Button>
+            )}
           </div>
         </div>
+
+        {/* 行内新建输入（UX2）：书架头部下方展开单字段书名输入——回车提交（复用 handleCreateBook 校验/路径安全/toast/刷新书架），
+            Esc / × / 失焦取消。
+            失焦策略选「失焦取消」：失焦提交会把误触（点书架其他行/导入按钮等）变成落盘建书的重操作，代价不可逆；
+            失焦取消最坏只是丢掉已输入文本（可重输）——提交唯一入口为显式回车（含路径安全校验提示），不误触、
+            且与 Esc 语义统一（都是「不创建」）。× 按钮存在时点它会先触发 input 失焦再触发 click——两条路径都走
+            cancelCreate（幂等），不会误开/误建 */}
+        {createOpen && (
+          <form onSubmit={handleCreateBook} className="mb-1 flex flex-col gap-1 px-1" aria-label="新建项目">
+            <Input
+              value={bookName}
+              onChange={(e) => setBookName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") cancelCreate();
+              }}
+              onBlur={cancelCreate}
+              placeholder="书名，回车创建"
+              maxLength={60}
+              disabled={creating}
+              autoFocus
+              aria-label="书名"
+            />
+            {createError && <p className="text-xs text-destructive">{createError}</p>}
+          </form>
+        )}
 
         {/* 书架加载失败：错误 + 重试（layout.md §3.2 错误呈现） */}
         {bookshelfError !== null && (
@@ -422,40 +461,6 @@ export function Sidebar() {
           <span className="truncate">{theme === "dark" ? "浅色模式" : "深色模式"}</span>
         </Button>
       </div>
-
-      {/* 新建项目 Dialog（与引导页表单等效：书名 → createProjectAt） */}
-      <Dialog
-        open={createOpen}
-        onOpenChange={(v) => {
-          setCreateOpen(v);
-          if (!v) setCreateError(null);
-        }}
-      >
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>新建项目</DialogTitle>
-            <DialogDescription>创建于 创作根/books/书名/ 目录，创建后自动打开</DialogDescription>
-          </DialogHeader>
-          <form id="create-book-form" onSubmit={handleCreateBook} className="flex flex-col gap-3">
-            <Input
-              value={bookName}
-              onChange={(e) => setBookName(e.target.value)}
-              placeholder="书名"
-              maxLength={60}
-              disabled={creating}
-            />
-            {createError && <p className="text-sm text-destructive">{createError}</p>}
-          </form>
-          <DialogFooter>
-            <Button variant="outline" type="button" onClick={() => setCreateOpen(false)} disabled={creating}>
-              取消
-            </Button>
-            <Button type="submit" form="create-book-form" disabled={creating}>
-              {creating ? "创建中…" : "创建并打开"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* 导入备份 Dialog（E3：选 zip + 书名 → 导入为新书，不自动打开；失败内联显示保持打开可重试） */}
       <Dialog

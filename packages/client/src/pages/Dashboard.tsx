@@ -17,6 +17,7 @@ import { BookOpen } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiError, CLIENT_NETWORK_ERROR, listEntities } from "../lib/api";
+import { validateBookName } from "../lib/book-name";
 import { describeOpenError } from "../lib/error-messages";
 import { cn } from "../lib/utils";
 import { buildBookPath, findOutlineNodeTitle, useProjectStore } from "../stores/project";
@@ -192,13 +193,10 @@ export default function Dashboard() {
   async function handleCreateBook(e: FormEvent) {
     e.preventDefault();
     const name = bookName.trim();
-    if (!name) {
-      setBookError("请输入书名");
-      return;
-    }
-    // 与 Sidebar 新建同款校验：禁路径分隔符/相对路径段（否则可逃出 books/ 目录）
-    if (/[\\/]|^\.+$|[\u0000-\u001f]/.test(name)) {
-      setBookError("书名不能包含 /、\\ 或为 . / ..");
+    // 书名校验复用 lib/book-name（与 Sidebar 新建/导入同款规则——L3 防路径逃逸，错误文案直接用于内联提示）
+    const nameError = validateBookName(name);
+    if (nameError !== null) {
+      setBookError(nameError);
       return;
     }
     if (!bookshelf) {
