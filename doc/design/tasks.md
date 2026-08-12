@@ -1,6 +1,6 @@
 # 开发任务清单（Task Cards）
 
-MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）后，每个切片 = 一个端到端功能（后端 → API 路由 → 前端页面），切片完成即可独立演示验证。依据：`architecture.md`（分包/命令）、`endpoints.md`（API 契约）、`schema.md`（数据结构）、`tools.md`（工具目录）、`hooks.md`（伏笔）、`decisions.md`（决策 1-23）。
+MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）后，每个切片 = 一个端到端功能（后端 → API 路由 → 前端页面），切片完成即可独立演示验证。依据：`architecture.md`（分包/命令）、`endpoints.md`（API 契约）、`schema.md`（数据结构）、`tools.md`（工具目录）、`hooks.md`（伏笔）、`decisions.md`（决策 1-26）。
 
 **执行纪律**：
 - 一次只做一张任务卡，验证通过（含测试）才算完成，然后独立 commit（一张卡一个 commit，回滚 = revert 该 commit）。
@@ -16,9 +16,9 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 ## 项目状态（2026-08）
 
 - **完成**：阶段 A 地基 + 切片 1-9、12、13 + 阶段 U（U1-U8）+ 交互修复批次 + 切片 10 画布（S10.1）+ 切片 11 发布（S11.1-S11.3）+ 发布阻断项 E1-E6（导出/导入、未来版本拒绝重建、增量迁移、发布链路 OIDC 全绿）+ 阶段 B 项目提示词编辑（B1，决策 24/25）——详见「项目演进路线」。
-- **待做**：无（MVP 与阶段 B 全部完成；可选收尾 = npm 坏版本 v0.0.1/v0.0.2 deprecate 标注——需 2FA 凭据，见 E6 卡）；backlog 事项一律不做。
+- **待做**：阶段 C 时间轴（决策 26，C1-C4 任务卡已落档待实现，见文末「阶段 C」区块）；MVP 与阶段 B 已全部完成（可选收尾 = npm 坏版本 v0.0.1/v0.0.2 deprecate 标注——需 2FA 凭据，见 E6 卡）；backlog 事项一律不做。
 - **测试**：全仓 1286 个（shared 88 / db 198 / server 239 / client 383 / tools 225 / llm 59 / agent 94）。
-- 已完成卡片的详细规格已归档（git history 可回溯）；「项目演进路线」提供脉络摘要，配合 `decisions.md`（决策 1-23 为设计主轴）理解现状。
+- 已完成卡片的详细规格已归档（git history 可回溯）；「项目演进路线」提供脉络摘要，配合 `decisions.md`（决策 1-26 为设计主轴）理解现状。
 
 ## 执行进度（Todo）
 
@@ -42,6 +42,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - [x] E5 增量迁移脚本机制
 - [x] E6 publishConfig + 版本管理 + publish 演练（OIDC 发布链路全绿——见文末 E6 卡）
 - [x] B1 项目提示词编辑器（设置页编辑保存 → 注入「## 项目设定」段）
+- [ ] 阶段 C 时间轴（C1 契约与数据层 / C2 服务端 / C3 列表页 / C4 详情页）
 
 ---
 
@@ -85,6 +86,8 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 
 **阶段 B：项目提示词编辑（B1，2026-08）**——创作伴侣定位（决策 24：不编辑/存储/读取正文，AI 基于结构化数据建议）；用户自定义上下文裁决（决策 25）：项目 `prompt` 字段（跟随书籍）是唯一持久化通道，设置页补编辑 UI（B1：按项目身份载入/防写错、PUT patch 保存、空值清除、无项目禁用态）；规则文件机制（rules.md）与提示词重复 → 否决；临时指令层（聊天框即临时指令）→ 否决。
 
+**阶段 C：时间轴（C1-C4，2026-08）**——第 5 种实体类型 `event`（id 前缀 `ev-`，决策 26）：中栏新增「时间轴」tab（伏笔与回收站之间）；entities 表新增 `sort_order` 列（全局事件线性序，拖拽为权威、时间标签仅展示）；SCHEMA_VERSION 1→2，E5 迁移机制首个真实用例（`002_event_timeline.ts` 建新表拷贝改 CHECK）；`occurs_in` 关系类型锚定大纲节点（多对多，倒叙/多时间线/无场景事件均可表达）；列表页 `#/timeline`（拖拽排序 + tags 徽标 + 标签筛选器 + 新建）+ 详情页 `#/timeline/:id`（字段编辑 + occurs_in 关联管理）；**MVP 无 AI 工具**（时间线一致性分析、事件草案生成 → backlog #15）。
+
 ---
 
 ## 发布前阻断项（E1-E6，依据 `doc/design/release-review.md`）
@@ -127,3 +130,35 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - 依赖：无（PUT config API 已就绪）
 - 验证：手工（编辑保存 → 新对话「## 项目设定」含新内容；清空 → 段消失）——✅ 已完成
 - 回滚：单 commit（`66785bc`）
+
+---
+
+## 阶段 C：时间轴（决策 26，2026-08）
+
+> **背景**：大纲树表达结构序（卷→章→场景）、关系图表达关联，但都无法表达「事件发生顺序」（倒叙、多时间线）。经外部调研（Aeon Timeline 灵活排序 / Plottr 标签筛选 / oh-story 事件锚点模式）与用户裁决（决策 26）：新增第 5 种实体类型 `event`，中栏新增「时间轴」tab。
+> **状态（2026-08）**：决策 26 已落档（事件实体 + `sort_order` 拖拽排序 + `occurs_in` 锚定 + **MVP 无 AI 工具**），任务卡 C1-C4 已切分；**C1-C4 尚未开始实现**（每卡完成后再勾选「执行进度」）。
+> **范围裁决（2026-08 用户）**：拖拽排序为权威（时间标签仅展示不解析）；锚定 = `occurs_in` 关系（无独立 chapter_anchor 字段）；事件不承载正文（决策 24 边界）、不产生 Delta；AI 工具（时间线一致性分析、事件草案生成）→ backlog #15。
+
+**C1 shared 契约 + db 数据层**
+- 范围：`ENTITY_TYPES` 新增 `event`、`RELATION_TYPES` 新增 `occurs_in`、`ENTITY_ID_PREFIX` 新增 `ev-`；event data schema（`description` / `time_label` / `tags`，决策 23 风格）；api.ts 契约（`entityMoveReqSchema` 等）；db `schema.ts` v2（CHECK 更新 + entities 表新增 `sort_order` 列）；`migrations/002_event_timeline.ts`（SQLite 改 CHECK 需建新表拷贝迁移）；查询层（事件列表按 `sort_order`、move 更新顺序、occurs_in 端点软删可见性联动）
+- 依赖：无（E5 迁移机制已就绪，本卡为首个真实用例）
+- 验证：db 测试（迁移 v1→v2 数据保全、move 顺序、级联软删）
+- 回滚：单 commit
+
+**C2 server 端点**
+- 范围：泛型实体路由自动获得 event 支持（`parseTypeParam` 校验 event data）；新增 `PUT /api/v1/entity/event/:id/move`（body `{order}`）移动端点；迁移接线验证（旧库打开自动迁移，决策 13 E5 口径）
+- 依赖：C1
+- 验证：server 测试（CRUD / move / 回收站 / 级联软删）
+- 回滚：单 commit
+
+**C3 client 列表页**
+- 范围：中栏 tab 注册（TabBar / `KNOWN_ROUTE_SEGMENTS` / renderPage，位置 = 伏笔与回收站之间）；`#/timeline` 列表页（行 / tags 徽标 / time_label / occurs_in 关联数）；拖拽排序（复用 S13 大纲拖拽模式，调 move 端点）；标签筛选器；新建对话框；软删入口
+- 依赖：C2
+- 验证：tsc / lint / client 测试 + 手工演示
+- 回滚：单 commit
+
+**C4 client 详情页**
+- 范围：`#/timeline/:id` 字段编辑（name / description / time_label / tags）；occurs_in 关联节点管理（大纲节点选择器 / 关联列表跳转）
+- 依赖：C3
+- 验证：tsc / lint + 手工演示
+- 回滚：单 commit

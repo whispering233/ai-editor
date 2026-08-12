@@ -11,7 +11,7 @@
 │       ├── project.json       # 项目配置（id/schema_version/current_position 等，见下文契约）
 │       ├── outline.json       # 大纲树（卷 → 章 → 场景，严格三层，无游离节点）
 │       └── data.db            # SQLite
-│           ├── entities       # 人物 / 设定 / 地点 / 伏笔
+│           ├── entities       # 人物 / 设定 / 地点 / 伏笔 / 事件
 │           ├── relation_records  # 通用关系表
 │           ├── delta_records    # 属性变更记录
 │           └── chat_messages    # 对话历史（决策 18）
@@ -30,17 +30,18 @@
   - `user_version > SCHEMA_VERSION`（未来版本，E4）→ **拒绝打开** 409 `PROJECT_VERSION_NEWER`（数据原封不动，提示升级程序）；
   - `user_version < SCHEMA_VERSION`（旧版本）→ **有迁移路径**（`packages/db/src/migrations/` 存在从当前版本到目标版本的连续迁移链）→ `runMigrations` 前向迁移；**无迁移路径** → 删库重建兜底（决策 13，备份 `data.db.v{n}.bak` + `outline.json.v{n}.bak`）。
 - **迁移机制（E5）**：`migrations/` 目录每个文件导出一个 `Migration = { version, up }`（`001_xxx.ts` → version 1），`index.ts` 按 version 升序聚合导出 `MIGRATIONS`（tsc 编译进 dist 随包分发，无运行时目录读取）。`runMigrations` 对缺失版本逐个执行：**每个迁移一个事务（`up(db)` + `setUserVersion(version)` 原子提交——成功 ⇒ 版本已写入；失败 ⇒ 版本未变）**；**整批迁移前自动快照** data.db → `data.db.v{n}.{YYYYMMDDHHmmssSSSZ}.bak`（checkpoint 后复制主文件，时间戳命名不覆盖旧备份，失败重试现场保留）。迁移失败 → 该迁移回滚 + 版本停在前一迁移后，下次 open 重试。
-- 当前 `SCHEMA_VERSION = 1` 且无历史版本 → `MIGRATIONS` 为空；首个真实迁移条目在 SCHEMA_VERSION 提升时加入。
-- **import 侧联动（E5 决议）**：导入备份时 `user_version < SCHEMA_VERSION` 且**有迁移路径** → 接受（搬入后 open 自动迁移）；无路径 → 409 `SCHEMA_VERSION_MISMATCH`；`>` 当前 → 409（E4 语义）。
+- 当前 `SCHEMA_VERSION = 2`；迁移链含 `002_event_timeline.ts`（version 2，决策 26：entities 表 CHECK 扩入 `'event'` + 新增 `sort_order` 列）。**SQLite 无法直接修改 CHECK 约束**，该迁移走「建新表（新 CHECK + sort_order 列）→ 拷贝数据 → drop 旧表 → rename」四步（`relation_records`/`delta_records` 无外键指向 entities，迁移只动 entities 表）；v1 → v2 迁移存在 ⇒ 旧库 open 时自动前向迁移，不再走删库重建兜底。
+- **import 侧联动（E5 决议）**：导入备份时 `user_version < SCHEMA_VERSION` 且**有迁移路径** → 接受（搬入后 open 自动迁移，v1 备份经 E5 迁移升到 v2）；无路径 → 409 `SCHEMA_VERSION_MISMATCH`；`>` 当前 → 409（E4 语义）。
 
 ## entities — 实体表
 
 ```sql
 CREATE TABLE entities (
   id          TEXT PRIMARY KEY,
-  type        TEXT NOT NULL CHECK(type IN ('character', 'setting', 'location', 'hook')),
+  type        TEXT NOT NULL CHECK(type IN ('character', 'setting', 'location', 'hook', 'event')),
   name        TEXT NOT NULL,
   data        TEXT NOT NULL DEFAULT '{}',  -- JSON: 各类型的专属字段
+  sort_order  INTEGER,                     -- 时间轴事件全局线性序（决策 26）：仅 event 使用，NULL = 未参与排序；其余类型恒为 NULL
   created_at  TEXT NOT NULL,               -- ISO 8601，应用层写入
   updated_at  TEXT NOT NULL,               -- ISO 8601，应用层写入（提案快照比对，决策 14）
   deleted_at  TEXT             -- 软删标记（决策 12），NULL 表示未删除；非 NULL 时该实体进入回收站，本体保留可还原
@@ -55,13 +56,22 @@ CREATE TABLE entities (
 | `setting` | `category`, `parent_id`, `description`, `rules[]`, `custom_fields` |
 | `location` | `type`, `parent_id`, `description`, `custom_fields` |
 | `hook` | 详见 [hooks.md](./hooks.md) |
+| `event` | `description`（文本）, `time_label`（自由文本时间标签，如「第二天黄昏」「第三纪元」，**不参与排序、不解析**）, `tags[]`（字符串数组，分类筛选用） |
+
+### 时间轴事件（决策 26）
+
+- **第 5 种实体类型 `event`（事件）**：id 前缀 `ev-`（与 `char-`/`set-`/`loc-`/`hook-` 并列）；`data` 字段按决策 23 风格精校验 + passthrough（仅校验上述三字段，额外字段透传不拒绝）。
+- **排序**：时间轴顺序是**全局事件线性序**（`sort_order` 列，拖拽为权威，midpoint 或数组索引语义），`time_label` 仅作展示、不参与排序；非 event 实体 `sort_order` 恒为 NULL。
+- **软删/回收站**：event 自动获得（泛型路由 parseTypeParam）；软删级联 occurs_in 关系（现有级联逻辑复用），restore 级联还原。
+- **Delta**：手动编辑事件不产生 Delta（与现有实体语义一致，决策 9）。
+- **导出/导入**：自动覆盖（data.db 整库 zip）；导入端 open 时经 E5 迁移升到 v2。
 
 ## relation_records — 通用关系表
 
 ```sql
 CREATE TABLE relation_records (
   id            TEXT PRIMARY KEY,
-  source_type   TEXT NOT NULL,             -- 端点类型：实体 'character'|'setting'|'location'|'hook'，大纲节点 'outline_node'
+  source_type   TEXT NOT NULL,             -- 端点类型：实体 'character'|'setting'|'location'|'hook'|'event'，大纲节点 'outline_node'
   source_id     TEXT NOT NULL,
   target_type   TEXT NOT NULL,
   target_id     TEXT NOT NULL,
@@ -91,6 +101,7 @@ CREATE INDEX idx_relation_type   ON relation_records(relation_type) WHERE delete
 | `ally` / `rival` / `mentor` / `family` | 人物间关系 | 人物→人物 |
 | `kills` | 击杀 | 人物→人物 |
 | `appears_in` | 出现于大纲节点 | 实体→大纲节点 |
+| `occurs_in` | 发生于大纲节点（事件锚定，决策 26） | event→大纲节点（多对多：一个事件可关联多个场景/章节，一个场景可被多个事件引用；**锚定 = 关系，无独立 chapter_anchor 字段**） |
 | `occurs_at` | 发生在地点 | 大纲节点→地点 |
 | `plot_edge` | 剧情连线（画布推演） | 大纲节点→大纲节点，`metadata` 存连线标签 |
 | `plants` / `advances` / `resolves` | 伏笔管理 | 大纲节点→hook |

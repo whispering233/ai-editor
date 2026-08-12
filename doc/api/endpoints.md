@@ -8,7 +8,7 @@
 - 错误响应：`{ success: false, error: { code: string, message: string } }`
 - 统一 HTTP 状态码：200 成功、400 参数错误、404 不存在、409 冲突、500 服务端错误
 - **命名约定**：请求体/查询参数用 snake_case，响应体用 camelCase，outline.json 内部字段用 snake_case；文件字段与 API 字段的显式映射函数定义于 `@whispering233/ai-editor-shared/utils`（backlog #7）。**嵌套 `data` 对象内部字段原样透传**（保持 snake_case，如 `expected_payoff`）——camelCase 映射仅应用于 API 顶层契约字段（2026-08 修订）。
-- **id 约定**：`{前缀}-{nanoid}`（如 `char-9f3k2m`）。前缀表：`char-`/`set-`/`loc-`/`hook-`（实体）、`sc-`/`ch-`/`vol-`（大纲）、`rel-`（关系，S3.2 补充）、`proj-`（项目）、`prop_`/`sess_`/`call_`（运行时对象）。本文示例中的 `char-9` 等为形状示意，**非自增序号**。
+- **id 约定**：`{前缀}-{nanoid}`（如 `char-9f3k2m`）。前缀表：`char-`/`set-`/`loc-`/`hook-`/`ev-`（实体，`ev-` 为事件，决策 26）、`sc-`/`ch-`/`vol-`（大纲）、`rel-`（关系，S3.2 补充）、`proj-`（项目）、`prop_`/`sess_`/`call_`（运行时对象）。本文示例中的 `char-9` 等为形状示意，**非自增序号**。
 - **错误码**：所有错误码统一枚举 `ErrorCode`（单一来源：`@whispering233/ai-editor-shared/types/api.ts`），REST 响应、SSE error 事件、工具结果截断提示共用。
 
 **类型定义**：以下 `Req` / `Res` 类型对应 `@whispering233/ai-editor-shared` 包中 `types/api.ts` 的 Zod schema。
@@ -219,13 +219,25 @@
 
 > **软删过滤（决策 12 修订）**：常规查询端点（GET 列表/详情、关系查询、Delta 查询等）**默认过滤软删对象**；回收站 API（`/api/v1/trash/*`）是访问软删对象的唯一入口。
 
+> **实体类型（决策 26 扩展，2026-08）**：`type` 现支持 **5 种**——`character` / `setting` / `location` / `hook` / **`event`（事件，时间轴）**。event 完全复用本章节泛型端点（列表/详情/创建/更新/软删），id 前缀 `ev-`；软删/回收站走 `/api/v1/trash/entity/:type/:id/*` 泛型路径（无需独立端点）。
+
+**event 的 data 字段（决策 26，精校验 + passthrough；shared `eventDataSchema`）**：
+
+| 字段 | 是否必选 | 数据类型 | 取值范围 | 备注 |
+| :--- | :------- | :------- | :------- | :--- |
+| `description` | 否 | string | — | 事件描述文本 |
+| `time_label` | 否 | string | — | 自由文本时间标签（如「第二天黄昏」），**不解析、不参与排序**，仅展示 |
+| `tags` | 否 | string[] | — | 标签数组，分类筛选用 |
+
+- **排序**：事件列表（`GET /api/v1/entity/event`）按 `sort_order` **升序**返回——时间轴全局事件线性序（拖拽为权威，决策 26；`time_label` 不参与排序）；`sort_order` 持久化于 data.db `entities.sort_order` 列（见 `doc/database/schema.md`），其余实体类型无该语义。
+
 ### GET /api/v1/entity/:type
 
 列出指定类型的所有实体。
 
 ```typescript
 // Path
-type: "character" | "setting" | "location" | "hook";
+type: "character" | "setting" | "location" | "hook" | "event";
 
 // Query
 {
@@ -247,17 +259,21 @@ type: "character" | "setting" | "location" | "hook";
 // EntitySummary（列表用摘要，不含完整 data）
 {
   id: string;
-  type: "character" | "setting" | "location" | "hook";
+  type: "character" | "setting" | "location" | "hook" | "event";
   name: string;
   // 各类型的关键摘要字段：
   //   character → role, status
   //   setting   → category
   //   location  → type
   //   hook      → status, payoff_timing (从 data JSON 提取)
+  //   event     → description, time_label, tags (从 data JSON 提取)
   summary: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
 }
+
+// 注意：type="event" 时列表恒按 sort_order 升序返回（时间轴全局线性序，决策 26），
+// sort/order 查询参数不参与事件排序
 ```
 
 ### GET /api/v1/entity/:type/:id
@@ -266,7 +282,7 @@ type: "character" | "setting" | "location" | "hook";
 
 ```typescript
 // Path
-type: "character" | "setting" | "location" | "hook";
+type: "character" | "setting" | "location" | "hook" | "event";
 id: string;
 
 // Res: 200
@@ -292,7 +308,7 @@ id: string;
 
 ```typescript
 // Path
-type: "character" | "setting" | "location" | "hook";
+type: "character" | "setting" | "location" | "hook" | "event";
 
 // Req
 {
@@ -306,10 +322,11 @@ type: "character" | "setting" | "location" | "hook";
 // location:  { type?, parent_id?, description?, custom_fields? }
 // hook:      { status?, category?, expected_payoff?, payoff_timing?, half_life?, is_core?, notes? }
 //             (详见 database/hooks.md)
+// event:     { description?, time_label?, tags?: string[] }（决策 26，精校验 + passthrough，详见本章节开头字段表）
 
 // Res: 201
 {
-  id: string;                // 自动生成，如 "char-9", "hook-3"
+  id: string;                // 自动生成，如 "char-9", "hook-3", "ev-1"（ev- 为事件形状示意）
   type: string;
   name: string;
   data: Record<string, unknown>;
@@ -367,9 +384,38 @@ id: string;
 { error: { code: "ENTITY_NOT_FOUND" } }
 ```
 
+### PUT /api/v1/entity/event/:id/move
+
+调整事件在时间轴上的位置（拖拽重排，决策 26）。**仅 `event` 类型支持**——时间轴顺序是全局事件线性序，持久化到 data.db `entities.sort_order` 列。
+
+```typescript
+// Path
+type: "event";                // 仅事件可排序（其余实体类型无 sort_order 语义）
+id: string;
+
+// Req（shared: entityMoveReqSchema，命名风格同 outlineMoveReqSchema）
+{
+  order: number;             // 目标位置（0-based 全局事件线性序，范围 [0, 事件总数]）
+}
+
+// Res: 200（shared: entityMoveResSchema）
+{
+  moved: true;
+}
+
+// Res: 404
+{ error: { code: "ENTITY_NOT_FOUND" } }
+```
+
+**语义**（与 `PUT /outline/:nodeId/move` 口径一致，决策 26）：
+- `order` 越界 **clamp**（拖拽场景边界宽松处理，db 层语义）：负数 → 0，超过当前事件总数 → 末尾；不返回 4xx。
+- 排序为拖拽权威：移动后事件列表（`GET /api/v1/entity/event`）按新 `sort_order` 升序返回；`time_label` 不参与排序（仅展示）。
+
 ---
 
 ## 关系管理
+
+> **端点类型（决策 26 扩展）**：关系端点 source_type / target_type 支持全部实体类型（含 **`event`**）与 `outline_node`；预定义关系类型新增 **`occurs_in`**（event→outline_node，事件锚定大纲节点，多对多，决策 26）——**锚定 = 关系本身，无独立 chapter_anchor 字段**；一个事件可关联多个场景/章节，一个场景可被多个事件引用。
 
 ### GET /api/v1/relation
 
@@ -421,7 +467,7 @@ id: string;
   source_id: string;
   target_type: string;
   target_id: string;
-  relation_type: string;     // 参见 database/schema.md 预定义关系类型
+  relation_type: string;     // 参见 database/schema.md 预定义关系类型（含 occurs_in 事件锚定，决策 26）
   metadata?: Record<string, unknown>;
 }
 
@@ -470,7 +516,8 @@ id: string;
 // Req
 {
   node_id: string;                // 触发变更的大纲节点 ID
-  target_type: string;            // 变更目标类型——**仅实体类型**：character/setting/location/hook
+  target_type: string;            // 变更目标类型——**仅实体类型**（白名单由 ENTITY_TYPES 派生：
+                                  //   character/setting/location/hook/event，event 随决策 26 自动扩入）
                                   //   （2026-08 收紧：大纲节点不可作为变更目标——节点代表的故事导致实体
                                   //   发生变更，节点结构化信息不出现在变更记录中；历史 outline_node 目标
                                   //   数据保留展示，仅创建路径拒绝；校验在路由层，shared schema 不动）
@@ -498,7 +545,7 @@ id: string;
 // Res: 400
 // { error: { code: "VALIDATION_ERROR" } }
 // 触发条件：schema 校验失败（含 fields）；per-op 必填缺失（set→to、update→from+to、add/remove→value）；
-//   target_type 非实体类型（2026-08 收紧：仅 character/setting/location/hook，路由层白名单校验）
+//   target_type 非实体类型（2026-08 收紧：仅实体类型，白名单由 ENTITY_TYPES 派生——含 event，决策 26；路由层白名单校验）
 
 // 示例
 // Req: { node_id: "sc-37", target_type: "character", target_id: "char-3",

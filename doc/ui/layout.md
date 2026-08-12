@@ -14,7 +14,7 @@
 │               │ ┌────────────────────────────────────────────┐ │                      │
 │ ◈ 我的小说      │ │ 信息条：项目名 | 当前位置 | 语言 | (聊天开关) │ │ 会话标题（下拉切换）    │
 │ (衬线斜体标识)  │ ├────────────────────────────────────────────┤ │  [+ 新会话]          │
-│               │ │ TabBar：概览|大纲|画布|实体关系|伏笔|回收站     │ │ ───────────────────  │
+│               │ │ TabBar：概览|大纲|画布|实体关系|伏笔|时间轴|回收站 │ │ ───────────────────  │
 │ 书架           │ ├────────────────────────────────────────────┤ │ [⚠ 上次会话已取消]     │
 │  ▸ 项目行       │ │                                            │ │ 消息流               │
 │    ▸ 会话行     │ │             页面内容区（按路由渲染）          │ │  （user 气泡 /        │
@@ -55,7 +55,7 @@
 
 ## 1. 路由结构（hash 路由）
 
-前端用自制 `useHashRoute`（`hooks/use-route.ts`，不引入 React Router）。路由表（**8 路由**）：
+前端用自制 `useHashRoute`（`hooks/use-route.ts`，不引入 React Router）。路由表（**11 路由**）：
 
 | hash | 页面 | 归属 |
 |------|------|------|
@@ -66,12 +66,14 @@
 | `#/entities/:type?` | EntityList 实体列表 | 中栏 tab「实体关系」 |
 | `#/entities/:type/:id` | EntityDetail 实体详情 | 中栏 tab「实体关系」 |
 | `#/hooks` | HookPanel 伏笔面板 | 中栏 tab「伏笔」 |
+| `#/timeline` | Timeline 事件列表 | 中栏 tab「时间轴」 |
+| `#/timeline/:id` | EventDetail 事件详情 | 中栏 tab「时间轴」 |
 | `#/trash` | Trash 回收站 | 中栏 tab「回收站」 |
 | `#/settings` | Settings 设置 | 左栏底部 |
 
 说明：
 
-- **tab 与路由一一对应**：`KNOWN_ROUTE_SEGMENTS = [outline, entities, canvas, hooks, trash, settings]`；TabBar 高亮由路由首段驱动（根路由 `#/` 用 `null` 表达），「实体关系」tab 在实体列表/详情路由下均保持高亮。
+- **tab 与路由一一对应**：`KNOWN_ROUTE_SEGMENTS = [outline, entities, canvas, hooks, timeline, trash, settings]`；TabBar 高亮由路由首段驱动（根路由 `#/` 用 `null` 表达），「实体关系」tab 在实体列表/详情路由下均保持高亮。
 - 路由解析按段数区分：`#/entities/character`（2 段）→ 列表页；`#/entities/character/char-abc`（3 段）→ 详情页；type 缺省回退 `character`。大纲同款二级路由（S12.2）：`#/outline`（1 段）→ 大纲树；`#/outline/:nodeId`（2 段）→ 节点详情页（main.tsx outline 分支拦截第二段，仿实体详情分支）。
 - 未知首段 hash 回退 `#/`（`window.location.replace` 拉回 URL，不污染历史）。
 - **`#/chat` 已移除**：聊天常驻右栏，无独立页；原「带上下文进聊天」改为注入右栏当前会话 focus 小条（见 §4.2）。
@@ -97,7 +99,7 @@
 ### 2.2 中栏 TabBar（药丸分段控件）
 
 - 外壳：`flex items-center gap-1 rounded-lg bg-secondary/30 p-1`（外包一层 `shrink-0 px-3 py-2`）。
-- 六个 tab：概览（LayoutGrid）/ 大纲（ListTree）/ 画布（Shapes）/ 实体关系（Network）/ 伏笔（Puzzle）/ 回收站（Trash2），lucide 图标 `size-4` + 中文标签。
+- 七个 tab：概览（LayoutGrid）/ 大纲（ListTree）/ 画布（Shapes）/ 实体关系（Network）/ 伏笔（Puzzle）/ 时间轴（CalendarClock）/ 回收站（Trash2），lucide 图标 `size-4` + 中文标签。
 - 每项：`flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground`；激活项 `bg-card text-foreground shadow-sm`（+ `aria-current="page"`）。
 - 当前 tab 由路由首段驱动；点击即跳对应 hash。
 
@@ -274,6 +276,7 @@ client/src/
 | EntityDetail | `#/entities/:type/:id` | entity/:type/:id、relation、delta/compute | pages/entity-detail.md |
 | ChatPanel（右栏常驻） | —（无独立路由） | chat（SSE）、chat/sessions、proposal | pages/chat.md |
 | HookPanel | `#/hooks` | entity/hook、outline、relation、delta | pages/hook-panel.md |
+| Timeline | `#/timeline`、`#/timeline/:id`（事件详情） | entity/event、relation（occurs_in）、outline | pages/timeline.md |
 | Trash | `#/trash` | trash/* | pages/trash.md |
 | Settings | `#/settings` | settings/llm | pages/settings.md |
 
