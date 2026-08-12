@@ -228,6 +228,9 @@ export default function Settings() {
             <p className="mb-2 text-xs text-muted-foreground">
               注入 AI 上下文「## 项目设定」段（每轮有效）；承载项目级规则/行业要求；空 = 整段跳过
             </p>
+            <p className="mb-2 text-xs text-muted-foreground/70">
+              建议用 ### 及以下层级的小标题组织内容（如「### 写作规则」）；避免使用 ## 顶层标题（与系统分段标题冲突）
+            </p>
             <textarea
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
