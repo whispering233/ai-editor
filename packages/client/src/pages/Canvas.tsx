@@ -7,10 +7,17 @@
 // 布局：坐标/缩放存 localStorage（决策 10：key ai-editor:canvas:{project_id}，按项目隔离，
 //   丢失自动布局不视为异常）；拖拽坐标防抖 300ms 写、缩放即时写
 // 交互（canvas.md 关键交互）：
-//   - 拖拽节点卡移动；[自动布局] 随时重排；[-] 百分比 [+] + 滚轮缩放；「全部节点|仅场景」切换
+//   - 拖拽节点卡移动；[重新布局] 一键重排（S10.4：保留已拖拽坐标，仅新节点补位）；[-] 百分比 [+] + 滚轮缩放；
+//     「全部节点|仅场景」切换
 //   - 节点卡右侧把手拖出连线 → 松到目标节点 → 小表单（标签可选写 metadata.label）→ POST
 //   - 点击连线高亮 → 中点下方 [删除连线] → ui store confirm 二次确认（物理删不可恢复，可随时重建）
 //   - 画布说明角标常驻（「连线与坐标仅用于推演展示，不参与状态计算」，可收起）
+// 画布增强（S10.2-S10.5，inkos 参考，自研不引库）：
+//   - 连线绘制质量：语义色（目标层级：场景琥珀/章蓝/卷青，hover 路径/选中高亮紫）+ 粗细 1.5→2.5 +
+//     流动虚线动画 + 箭头 marker（端点收窄到卡边框，edgeBorderPoint）；色值常量在 lib/canvas.ts
+//   - 小地图：右下角只读缩略图（节点类型色矩形 + 视口框，纯函数 minimapRectangles；滚动/缩放/尺寸变化同步）
+//   - hover 路径高亮：hover 节点 → dfsForwardPath 出边向前 DFS（visited 防环）→ 路径紫圈/紫线，
+//     非路径节点与边 opacity 0.2；本地 UI 态不写回数据层（决策 10 投影语义）
 // 状态：空态（大纲无节点 → 引导去 #/outline）、节点区骨架、关系错误重试横幅、连线操作 toast
 // 刷新：useDataRefresh 订阅 dataVersion（AI 提案确认/InfoBar 刷新 → 重拉树 + 连线 + 伏笔标记）
 // 样式：一律 token 类（layout.md §3，禁硬编码 zinc/white/black——oracle 红线）；动画克制（§4.3）
@@ -36,13 +43,23 @@ import {
   CANVAS_CARD_W,
   clampZoom,
   describeCanvasEdgeError,
+  dfsForwardPath,
+  EDGE_ARROW_MARKER_ID,
+  EDGE_COLORS,
+  edgeArrowMarkerEnd,
+  edgeBorderPoint,
   edgeMidpoint,
+  edgeOpacity,
   edgePath,
+  edgeStrokeColor,
+  edgeStrokeWidth,
   filterSceneNodes,
   filterVisibleEdges,
   flattenCanvasNodes,
   MAX_ZOOM,
   mergeLayout,
+  MINIMAP_SIZE,
+  minimapRectangles,
   MIN_ZOOM,
   nodeCenter,
   parsePlotEdges,
@@ -50,8 +67,10 @@ import {
   writeCanvasLayout,
   type CanvasEdge,
   type CanvasNodePositions,
+  type CanvasNodeType,
   type CanvasPoint,
   type FlatCanvasNode,
+  type MinimapViewport,
 } from "../lib/canvas";
 import { buildNodeHookMarks, HOOK_MARK_TYPES, type NodeHookMark } from "../lib/outline-hooks";
 import { cn } from "../lib/utils";
@@ -74,6 +93,17 @@ interface RenderedEdge {
   edge: CanvasEdge;
   d: string;
   mid: CanvasPoint;
+  /** 目标节点类型（语义色映射输入；节点消失 → null → 默认灰） */
+  targetType: CanvasNodeType | null;
+}
+
+/** 派生样式连线（S10.2/S10.5：语义色/粗细/透明度/流动虚线——展开新对象注入，不修改本体） */
+interface DisplayEdge extends RenderedEdge {
+  stroke: string;
+  strokeWidth: number;
+  opacity: number;
+  /** 流动虚线动画（选中/hover 路径边） */
+  dash: boolean;
 }
 
 /** 连线创建对话框提交进行态 */
@@ -98,6 +128,10 @@ export default function Canvas() {
   const [edgeError, setEdgeError] = useState<string | null>(null);
   const [hookMarks, setHookMarks] = useState<Map<string, NodeHookMark[]> | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+
+  // ---- 画布增强交互态（S10.3/S10.5：本地 UI 态，不写回数据层——决策 10 投影语义） ----
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [viewportPx, setViewportPx] = useState<MinimapViewport | null>(null);
 
   // ---- 拖拽/连线创建交互态 ----
   const [dragState, setDragState] = useState<DragState | null>(null);
@@ -254,10 +288,35 @@ export default function Canvas() {
   // React onWheel 被动监听无法 preventDefault，用原生监听 + passive:false；
   // 视口 div 可能晚于首帧渲染（大纲加载后），用 ref 回调在挂载时挂接、卸载时移除
   const wheelCleanup = useRef<(() => void) | null>(null);
+  /** 小地图视口框 ResizeObserver 清理（挂接/卸载与滚轮监听同生命周期） */
+  const viewportRoCleanup = useRef<(() => void) | null>(null);
+
+  /** 小地图视口框同步（S10.3）：渲染像素坐标（相对内容区左上角，含缩放），整数化 + 相等跳过防滚动每帧重渲染 */
+  const syncViewport = useCallback(() => {
+    const vp = viewportRef.current;
+    const content = contentRef.current;
+    if (vp === null || content === null) return;
+    const vpRect = vp.getBoundingClientRect();
+    const contentRect = content.getBoundingClientRect();
+    const next: MinimapViewport = {
+      x: Math.round(vpRect.left - contentRect.left),
+      y: Math.round(vpRect.top - contentRect.top),
+      width: Math.round(vpRect.width),
+      height: Math.round(vpRect.height),
+    };
+    setViewportPx((prev) =>
+      prev !== null && prev.x === next.x && prev.y === next.y && prev.width === next.width && prev.height === next.height
+        ? prev
+        : next,
+    );
+  }, []);
+
   const setViewportRef = useCallback((el: HTMLDivElement | null) => {
     viewportRef.current = el;
     wheelCleanup.current?.();
     wheelCleanup.current = null;
+    viewportRoCleanup.current?.();
+    viewportRoCleanup.current = null;
     if (el === null) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
@@ -265,11 +324,18 @@ export default function Canvas() {
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     wheelCleanup.current = () => el.removeEventListener("wheel", onWheel);
-  }, []);
-  // 页面卸载清理（wheelCleanup 挂接于视口 div，页面切走/卸载时移除）
+    // 小地图视口框：挂载初始同步 + 容器尺寸变化（滚动由 viewport div onScroll 承担）
+    syncViewport();
+    const ro = new ResizeObserver(() => syncViewport());
+    ro.observe(el);
+    viewportRoCleanup.current = () => ro.disconnect();
+  }, [syncViewport]);
+  // 页面卸载清理（wheelCleanup/RO 挂接于视口 div，页面切走/卸载时移除）
   useEffect(() => () => {
     wheelCleanup.current?.();
     wheelCleanup.current = null;
+    viewportRoCleanup.current?.();
+    viewportRoCleanup.current = null;
   }, []);
 
   // 连线创建中按 Esc 取消
@@ -288,7 +354,14 @@ export default function Canvas() {
   const visibleIds = useMemo(() => new Set(visibleNodes.map((n) => n.id)), [visibleNodes]);
   const visibleEdges = useMemo(() => filterVisibleEdges(edges ?? [], visibleIds), [edges, visibleIds]);
 
-  /** 已就绪连线（几何一次计算；端点缺失/节点消失 → 跳过——决策 1 投影的防御） */
+  // hover 陈旧态清理（oracle 审查）：hover 卷/章时切换「仅场景」或节点被外部刷新删除 →
+  // 卡片从光标下卸载不触发 mouseleave → hoverPath 残留、全部可见节点/边停留 0.2 降透明。
+  // hoveredNodeId 不在当前可见节点集即置 null；正常 hover 期间 setState 不触发（零渲染开销）
+  useEffect(() => {
+    if (hoveredNodeId !== null && !visibleIds.has(hoveredNodeId)) setHoveredNodeId(null);
+  }, [hoveredNodeId, visibleIds]);
+
+  /** 已就绪连线（几何一次计算；端点收窄到卡边框——箭头可见，S10.2；端点缺失/节点消失 → 跳过——决策 1 投影的防御） */
   const renderedEdges = useMemo<RenderedEdge[]>(() => {
     const out: RenderedEdge[] = [];
     for (const edge of visibleEdges) {
@@ -297,12 +370,41 @@ export default function Canvas() {
       const sNode = nodesById.get(edge.sourceId);
       const tNode = nodesById.get(edge.targetId);
       if (!sPos || !tPos || !sNode || !tNode) continue;
-      const from = nodeCenter(sPos, sNode.type);
-      const to = nodeCenter(tPos, tNode.type);
-      out.push({ edge, d: edgePath(from, to), mid: edgeMidpoint(from, to) });
+      const sCenter = nodeCenter(sPos, sNode.type);
+      const tCenter = nodeCenter(tPos, tNode.type);
+      const from = edgeBorderPoint(sCenter, tCenter, CANVAS_CARD_W[sNode.type], CANVAS_CARD_H[sNode.type]);
+      const to = edgeBorderPoint(tCenter, sCenter, CANVAS_CARD_W[tNode.type], CANVAS_CARD_H[tNode.type]);
+      out.push({ edge, d: edgePath(from, to), mid: edgeMidpoint(from, to), targetType: tNode.type });
     }
     return out;
   }, [visibleEdges, positions, nodesById]);
+
+  /** hover 路径（S10.5：沿 plot_edge 出边向前 DFS 得 {nodeIds, edgeIds} 双集合；null = 未 hover） */
+  const hoverPath = useMemo(
+    () => (hoveredNodeId !== null ? dfsForwardPath(hoveredNodeId, visibleEdges) : null),
+    [hoveredNodeId, visibleEdges],
+  );
+
+  /** 派生连线（S10.2/S10.5：语义色三级优先级/粗细/透明度/流动虚线——展开新对象注入，不修改本体） */
+  const displayEdges = useMemo<DisplayEdge[]>(() => {
+    return renderedEdges.map((r) => {
+      const selected = r.edge.id === selectedEdgeId;
+      const onPath = hoverPath?.edgeIds.has(r.edge.id) ?? false;
+      return {
+        ...r,
+        stroke: edgeStrokeColor(r.targetType, { onPath, selected }),
+        strokeWidth: edgeStrokeWidth({ onPath, selected }),
+        opacity: edgeOpacity({ offPath: hoverPath !== null && !onPath }),
+        dash: onPath || selected,
+      };
+    });
+  }, [renderedEdges, hoverPath, selectedEdgeId]);
+
+  /** 小地图（S10.3：可见节点归一化矩形 + 视口框，右下角缩略图数据源） */
+  const minimap = useMemo(
+    () => minimapRectangles(visibleNodes, positions, zoom, viewportPx),
+    [visibleNodes, positions, zoom, viewportPx],
+  );
 
   /** 内容区尺寸（节点位置 + 卡片尺寸上界 + 边距；缩放容器宽高，滚动范围） */
   const contentSize = useMemo(() => {
@@ -472,8 +574,9 @@ export default function Canvas() {
     }
   }
 
-  function handleAutoLayout() {
-    setPositions(autoLayout(nodes));
+  /** 一键重排（S10.4，inkos position ?? 自动计算 幂等语义）：保留已拖拽坐标，仅新节点补位 + 孤儿兜底 */
+  function handleRelayout() {
+    setPositions((prev) => mergeLayout(prev, autoLayout(nodes), nodes));
   }
 
   function changeZoom(delta: number) {
@@ -487,8 +590,8 @@ export default function Canvas() {
       {/* 工具栏（canvas.md 线框：自动布局 | 缩放 | 显示切换 | 画布说明） */}
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="mr-auto font-serif text-xl font-medium">画布</h1>
-        <Button variant="outline" type="button" onClick={handleAutoLayout} disabled={nodes.length === 0}>
-          自动布局
+        <Button variant="outline" type="button" onClick={handleRelayout} disabled={nodes.length === 0}>
+          重新布局
         </Button>
         <div className="flex items-center gap-1.5">
           <Button
@@ -607,7 +710,8 @@ export default function Canvas() {
         /* 画布：滚动视口 + 缩放容器（transform scale，transform-origin 左上——canvas 坐标换算与 zoom 一致） */
         <div
           ref={setViewportRef}
-          className="min-h-0 flex-1 overflow-auto rounded-md border border-border bg-muted/20"
+          className="relative min-h-0 flex-1 overflow-auto rounded-md border border-border bg-muted/20"
+          onScroll={syncViewport}
           onClick={(e) => {
             if (e.target === e.currentTarget) setSelectedEdgeId(null);
           }}
@@ -632,17 +736,35 @@ export default function Canvas() {
               height={contentSize.h}
               style={{ overflow: "visible" }}
             >
-              {renderedEdges.map(({ edge, d }) => {
+              <defs>
+                {/* 连线箭头（S10.2 marker-end；fill=context-stroke 取引用路径的描边色——单 marker 多色） */}
+                <marker
+                  id={EDGE_ARROW_MARKER_ID}
+                  viewBox="0 0 10 10"
+                  refX={10}
+                  refY={5}
+                  markerWidth={10}
+                  markerHeight={10}
+                  markerUnits="userSpaceOnUse"
+                  orient="auto"
+                >
+                  <path d="M 0 0 L 10 5 L 0 10 Z" fill="context-stroke" />
+                </marker>
+              </defs>
+              {displayEdges.map(({ edge, d, stroke, strokeWidth, opacity, dash }) => {
                 const selected = edge.id === selectedEdgeId;
                 return (
-                  <g key={edge.id}>
-                    {/* 可见描边（非缩放描边：任意 zoom 下粗细恒定，视觉稳定） */}
+                  <g key={edge.id} opacity={opacity}>
+                    {/* 可见描边（非缩放描边：任意 zoom 下粗细恒定；语义色三级优先级 + 选中/路径加粗 + 流动虚线 + 箭头） */}
                     <path
                       d={d}
                       fill="none"
-                      stroke={selected ? "var(--primary)" : "var(--border)"}
-                      strokeWidth={selected ? 2.5 : 2}
+                      stroke={stroke}
+                      strokeWidth={strokeWidth}
+                      strokeDasharray={dash ? "6 4" : undefined}
                       vectorEffect="non-scaling-stroke"
+                      markerEnd={edgeArrowMarkerEnd()}
+                      className={dash ? "canvas-edge-flow" : undefined}
                     />
                     {/* 点击热区（透明粗描边承接点击；选中再点取消选中） */}
                     <path
@@ -670,19 +792,28 @@ export default function Canvas() {
               )}
             </svg>
 
-            {/* 连线中点标签（HTML 定位在缩放容器内，随缩放；pointer-events-none 不挡节点点击） */}
-            {renderedEdges.map(({ edge, mid }) => (
-              <span
-                key={`label-${edge.id}`}
-                className={cn(
-                  "pointer-events-none absolute max-w-44 -translate-x-1/2 -translate-y-1/2 truncate whitespace-nowrap rounded border bg-card px-1.5 py-0.5 text-[10px]",
-                  edge.id === selectedEdgeId ? "border-primary/40 text-primary" : "border-border text-muted-foreground",
-                )}
-                style={{ left: mid.x, top: mid.y }}
-              >
-                {edge.label ?? "未命名连线"}
-              </span>
-            ))}
+            {/* 连线中点标签（HTML 定位在缩放容器内，随缩放；pointer-events-none 不挡节点点击；透明度随边派生） */}
+            {displayEdges.map(({ edge, mid, opacity }) => {
+              const selected = edge.id === selectedEdgeId;
+              return (
+                <span
+                  key={`label-${edge.id}`}
+                  className={cn(
+                    "pointer-events-none absolute max-w-44 -translate-x-1/2 -translate-y-1/2 truncate whitespace-nowrap rounded border bg-card px-1.5 py-0.5 text-[10px] text-muted-foreground",
+                    selected && "border-transparent",
+                  )}
+                  style={{
+                    left: mid.x,
+                    top: mid.y,
+                    opacity,
+                    // 选中态与连线高亮紫一致（单一来源 EDGE_COLORS.highlight，S10.2）
+                    ...(selected ? { borderColor: EDGE_COLORS.highlight, color: EDGE_COLORS.highlight } : {}),
+                  }}
+                >
+                  {edge.label ?? "未命名连线"}
+                </span>
+              );
+            })}
 
             {/* 选中连线操作浮条（中点下方：显示标签 + [删除连线] + 关闭） */}
             {selectedEdge !== null && (
@@ -713,13 +844,14 @@ export default function Canvas() {
               </div>
             )}
 
-            {/* 节点卡（绝对定位；拖拽 pointer 事件 + 连线拖出把手） */}
+            {/* 节点卡（绝对定位；拖拽 pointer 事件 + 连线拖出把手；hover 路径高亮派生样式） */}
             {visibleNodes.map((node) => {
               const pos = positions[node.id];
               if (!pos) return null;
               const marks = hookMarks?.get(node.id) ?? [];
               const isCreatingSource = createFrom === node.id;
               const isDragging = dragState?.nodeId === node.id;
+              const isOnPath = hoverPath?.nodeIds.has(node.id) ?? false;
               return (
                 <div
                   key={node.id}
@@ -729,11 +861,25 @@ export default function Canvas() {
                     isCreatingSource ? "border-primary ring-2 ring-ring/40" : "border-border",
                     isDragging && "opacity-80",
                   )}
-                  style={{ left: pos.x, top: pos.y, width: CANVAS_CARD_W[node.type], height: CANVAS_CARD_H[node.type] }}
+                  style={{
+                    left: pos.x,
+                    top: pos.y,
+                    width: CANVAS_CARD_W[node.type],
+                    height: CANVAS_CARD_H[node.type],
+                    // hover 路径高亮（S10.5）：路径节点紫圈、非路径降透明 0.2（本地 UI 态，不写回数据层）
+                    ...(hoverPath !== null
+                      ? {
+                          opacity: isOnPath ? 1 : 0.2,
+                          boxShadow: isOnPath ? `0 0 0 2px ${EDGE_COLORS.highlight}` : undefined,
+                        }
+                      : {}),
+                  }}
                   title="拖动调整位置"
                   onPointerDown={(e) => handleNodePointerDown(e, node)}
                   onPointerMove={(e) => handleNodePointerMove(e, node.id)}
                   onPointerUp={handleNodePointerUp}
+                  onMouseEnter={() => setHoveredNodeId(node.id)}
+                  onMouseLeave={() => setHoveredNodeId((cur) => (cur === node.id ? null : cur))}
                 >
                   {/* 头部：类型徽标 + 标题 + 伏笔标记（S9.2 语义，画布节点卡复用 buildNodeHookMarks） */}
                   <div className="flex items-center gap-1.5">
@@ -771,6 +917,27 @@ export default function Canvas() {
                 </div>
               );
             })}
+          </div>
+
+          {/* 小地图（S10.3：右下角缩略图，纯只读展示——MVP 不做点击跳转；
+              pointer-events-none 不挡画布操作；节点类型色填充 + 视口框描边） */}
+          <div className="pointer-events-none absolute right-2 bottom-2 z-10 overflow-hidden rounded-md border border-border bg-card/90 shadow-sm">
+            <svg width={MINIMAP_SIZE.w} height={MINIMAP_SIZE.h}>
+              {minimap.nodeRects.map((r) => (
+                <rect key={r.id} x={r.x} y={r.y} width={r.w} height={r.h} rx={2} fill={EDGE_COLORS[r.type]} opacity={0.85} />
+              ))}
+              {minimap.viewportRect !== null && (
+                <rect
+                  x={minimap.viewportRect.x}
+                  y={minimap.viewportRect.y}
+                  width={minimap.viewportRect.w}
+                  height={minimap.viewportRect.h}
+                  fill="none"
+                  stroke={EDGE_COLORS.highlight}
+                  strokeWidth={1}
+                />
+              )}
+            </svg>
           </div>
         </div>
       )}
