@@ -46,12 +46,12 @@
 - [重新布局] 按钮（保留已拖拽坐标，仅新节点补位）随时可用；缩放按钮 + 滚轮，`zoom` 写 localStorage。
 - 「显示: 仅场景」开关：隐藏卷/章容器节点，只留 scene（推荐模式，连线以 scene 为主）。
 
-### 创建连线（plot_edge）
+### 创建连线（plot_edge，UX1 改造：拖出即连，不再弹 Dialog）
 
-1. 从节点拖出连线，松开到目标节点。
-2. 弹出小表单：连线标签（可选，写入 `metadata.label`，如「路径A」）。
-3. 提交 `POST /relation`；成功即绘制。
-4. 失败：`RELATION_EXISTS` → toast「这条连线已经存在」；`VALIDATION_ERROR` → toast 参数问题。
+1. 从节点卡右侧把手拖出连线，松开到目标节点 → **立即创建**（`POST /relation`，无标签）——拖放流不打断。
+2. 成功即绘制（无标签显示为空线）；`RELATION_EXISTS` → toast「这条连线已经存在」并重拉；`VALIDATION_ERROR` → toast 参数问题。
+3. **连线标签线上编辑**：点击选中连线 → 线中点标签处出现内联输入框（若当前无标签则显示占位「+ 标签」）→ 输入后 Enter/失焦 → `PUT /relation/:id`（`metadata: { label }` 整体替换）→ 重拉；空标签提交 = 清除标签（`metadata: {}`）。
+4. **hover 高亮冲突规避（UX1）**：连线创建中（拖线期间）禁用节点 hover 路径高亮——避免拖线时非路径节点全部降透明、看不清连线目标（S10.5 与连线创建的交互冲突修复）。
 
 ### 删除连线
 

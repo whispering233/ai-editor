@@ -487,6 +487,30 @@ id: string;
 { error: { code: "RELATION_EXISTS" } }
 ```
 
+### PUT /api/v1/relation/:id
+
+更新关系元数据（2026-08 交互优化 I1：画布连线标签线上编辑）。**仅支持 `metadata` 字段 patch**（当前唯一用途 = `plot_edge` 连线标签）；关系三元组（source/target/relation_type）不可变——要改连接请删后重建。
+
+```typescript
+// Path
+id: string;
+
+// Req（shared: relationUpdateMetaReqSchema）
+{
+  metadata: Record<string, unknown>;   // 整体替换 metadata（含清空：传 {} 或 null）
+}
+
+// Res: 200
+{
+  updated: true;
+}
+
+// Res: 404
+{ error: { code: "RELATION_NOT_FOUND" } }   // 不存在（含已软删——软删关系不可编辑，决策 12）
+```
+
+**语义**：metadata 整体替换（非浅合并）——画布连线标签编辑时传 `{ label: "新标签" }`，清空标签传 `{}`；与 POST 创建侧的 trim 对称，服务端对 label 做首尾空格去除。
+
 ### DELETE /api/v1/relation/:id
 
 删除关系。**物理删除，不进入回收站**（决策 12 修订：关系是轻量可重建对象；`deleted_at` 软删仅服务于实体/节点级联删除场景）。

@@ -194,3 +194,38 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - 依赖：S10.2（语义色/路径样式派生复用）
 - 验证：canvas 纯函数测试（DFS 方向/防环/双集合）+ 手工验收
 - 回滚：单 commit
+
+---
+
+## 交互优化批次（UX1-UX4，2026-08 用户实测反馈）
+
+> **背景**：画布增强批次上线后用户实测反馈：① 连线创建时（拖线期间）其他节点全部降透明——S10.5 hover 高亮与连线创建交互冲突，看不清连线目标；② 连线创建弹 Dialog 打断拖放流——连线是直接逻辑，应「拖出即连、线上就地编辑标签」；③ 全仓 Dialog 表单提交梳理（15 文件逐核，exp-3）——单字段/短文本的对话框可改行内编辑，多字段/复杂选择器/复合写确认保留。用户裁决 2026-08：画布交互修复+连线改造（I1）、侧栏新建项目行内化（I2）、时间轴关联节点轻量弹层（I3）、实体新建行内化（I4）全部选定。详细规格见 `doc/ui/pages/canvas.md`（连线交互改造）与 `doc/api/endpoints.md`（PUT /relation/:id）。
+> **状态（2026-08）**：任务卡已切分，**尚未开始实现**（每卡完成后再勾选「执行进度」）。
+
+**UX1 画布连线交互改造（拖出即连 + 线上编辑标签 + hover 冲突修复）**
+- 范围：
+  - **hover 冲突修复**：连线创建中（`createFrom !== null`）禁用 hover 路径高亮（拖线时清 hover 态 / hoverPath 派生条件加 createFrom 判断）——拖线时其他节点不再降透明
+  - **拖出即连**：松手命中目标即 `POST /relation`（无标签直接创建），移除新建连线 Dialog（Canvas.tsx createDialog 状态/表单删除）；RELATION_EXISTS/VALIDATION_ERROR 终态 toast 保留
+  - **线上编辑标签**：点击选中连线 → 线中点标签处内联输入框（无标签显示占位「+ 标签」）→ Enter/失焦 → `PUT /relation/:id`（`metadata: { label }` 整体替换）→ 重拉；空标签提交 = 清除（`metadata: {}`）
+  - **后端**：新增 `PUT /api/v1/relation/:id`（shared `relationUpdateMetaReqSchema` + db updateRelationMetadata + server 路由 + 测试；metadata 整体替换、label trim、软删关系 404）
+- 依赖：无（S10.2 已提供标签渲染/选中态基础）
+- 验证：server 测试（PUT metadata/404/trim/整体替换）+ client 测试（拖出即连不弹框、线上编辑提交）+ 手工验收
+- 回滚：单 commit
+
+**UX2 侧栏新建项目行内化**
+- 范围：Sidebar「＋」新建项目 Dialog → 书架头部**行内展开输入框**（书名单字段，回车/失焦提交 `createProjectAt`；Esc/失焦取消——失焦取消需确认不误触，或失焦提交+成功关闭）；与 Dashboard 引导页表单共用 createProjectAt 逻辑
+- 依赖：无
+- 验证：client 测试 + 手工验收（行内输入/提交/取消/路径安全校验提示保留）
+- 回滚：单 commit
+
+**UX3 时间轴详情关联节点轻量弹层**
+- 范围：TimelineDetail「+ 关联场景/章节」全屏模态 Dialog → **轻量 Popover 弹层**（Base UI Popover 内嵌大纲树形下拉，单字段选择器非模态）；409 RELATION_EXISTS 内联提示保留
+- 依赖：无
+- 验证：client 测试 + 手工验收
+- 回滚：单 commit
+
+**UX4 实体新建行内化**
+- 范围：EntityList「+ 新建」Dialog → **列表首行内联编辑行**（name + 该类型首字段；hook 类型 status 下拉保留；提交成功跳详情页语义保留——行内提交后 `navigate("/entities/:type/:id")`）
+- 依赖：无
+- 验证：client 测试 + 手工验收
+- 回滚：单 commit
