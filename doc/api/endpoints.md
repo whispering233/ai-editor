@@ -408,7 +408,7 @@ id: string;
 ```
 
 **语义**（与 `PUT /outline/:nodeId/move` 口径一致，决策 26）：
-- `order` 越界 **clamp**（拖拽场景边界宽松处理，db 层语义）：负数 → 0，超过当前事件总数 → 末尾；不返回 4xx。
+- `order` 超过当前事件总数 → clamp 到末尾（不返回 4xx）；**负数在 HTTP 层被 schema 拒绝（400 VALIDATION_ERROR，`z.number().int().min(0)`）**——db 层 moveEvent 对负数 clamp 至 0 仅为内部防御语义（HTTP 路径不可达）。
 - 排序为拖拽权威：移动后事件列表（`GET /api/v1/entity/event`）按新 `sort_order` 升序返回；`time_label` 不参与排序（仅展示）。
 
 ---

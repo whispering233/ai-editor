@@ -298,6 +298,20 @@ describe("POST /api/v1/delta 追加", () => {
     expect(body.error?.message).toContain("character/setting/location/hook");
   });
 
+  it("target_type=event → 400 VALIDATION_ERROR（决策 26：event 不产生 Delta，C2 收紧）", async () => {
+    const { app, charId } = await seed();
+    const { status, body } = await postDelta(app, {
+      node_id: "sc-1",
+      target_type: "event",
+      target_id: charId,
+      changes: [{ field: "a", op: "set", to: 1 }],
+      description: "x",
+    });
+    expect(status).toBe(400);
+    expect(body.error?.code).toBe("VALIDATION_ERROR");
+    expect(body.error?.message).toContain("event");
+  });
+
   it("target_type 白名单先于节点存在性校验（outline_node + 不存在节点 → 400 而非 404）", async () => {
     const { app, charId } = await seed();
     const { status, body } = await postDelta(app, {

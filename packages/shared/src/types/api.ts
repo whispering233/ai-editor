@@ -659,7 +659,10 @@ export const outlineMoveResSchema = z.object({
 // PUT /api/v1/entity/event/:id/move（时间轴事件重排，决策 26；命名风格同 outlineMoveReqSchema）
 export const entityMoveReqSchema = z
   .object({
-    order: z.number().int().min(0), // 0-based 全局事件线性序（endpoints.md：越界 clamp，负数→0、超总数→末尾）
+    // 0-based 全局事件线性序（endpoints.md）：超过当前事件总数 → clamp 到末尾（不返回 4xx）；
+    // 负数由本 schema 拒绝（400 VALIDATION_ERROR）——db 层 moveEvent 对负数 clamp 至 0
+    // 仅为内部防御语义（HTTP 路径不可达）
+    order: z.number().int().min(0),
   })
   .strict();
 

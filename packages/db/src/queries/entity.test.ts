@@ -510,6 +510,18 @@ describe("moveEvent（PUT /api/v1/entity/event/:id/move，决策 26）", () => {
     expect(orders.map((o) => o.sort_order)).toEqual([0, 1, 2, 3]);
   });
 
+  it("updated_at：仅被移动行刷新（传入新时间戳），其余行保持不变（决策 14 版本戳语义）", () => {
+    const ids = seedEvents(3); // 种子 updated_at = 2026-08-01T00:00:00Z
+    expect(moveEvent(db, ids[2], 0, "2026-08-02T00:00:00Z")).toEqual({ moved: true });
+    const rows = db
+      .prepare("SELECT id, updated_at FROM entities WHERE type = 'event'")
+      .all() as Array<{ id: string; updated_at: string }>;
+    const byId = new Map(rows.map((r) => [r.id, r.updated_at]));
+    expect(byId.get(ids[2])).toBe("2026-08-02T00:00:00Z"); // 被移行：刷新为传入时间戳
+    expect(byId.get(ids[0])).toBe("2026-08-01T00:00:00Z"); // 未移行：保持不变
+    expect(byId.get(ids[1])).toBe("2026-08-01T00:00:00Z");
+  });
+
   it("clamp 边界：负数 → 0；超总数 → 末尾（endpoints.md 契约）", () => {
     const ids = seedEvents(3); // [0,1,2]
     expect(moveEvent(db, ids[2], -5, "2026-08-02T00:00:00Z")).toEqual({ moved: true });

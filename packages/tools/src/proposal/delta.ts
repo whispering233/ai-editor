@@ -10,6 +10,9 @@
 //   **target 可为大纲节点**：S13.3 收紧的是 UI 创建入口（仅实体）；AI 提案通道保持大纲
 //   target 是 tools.md「提案类」/get_delta_history（target_type 含 outline_node）的既有契约
 //   能力，本卡维持，非回归
+// - **target 不可为 event（决策 26：event 不产生 Delta，oracle 审查口径）**：与 REST 创建
+//   路径（server delta.ts assertDeltaTargetType）一致拒绝；outline_node 有 S13.3 显式豁免
+//   （UI 收紧、AI 通道保持），event 无豁免——resolveEndpoint 解析出 event 即抛错
 // - changes 由 schema 校验（复用 deltaChangeSchema，至少一项）
 // args 规范化为执行形态 { node_id, target_type, target_id, changes }（S6.7 add_delta 直接消费）；
 // delta_records.description（NOT NULL）在确认后由 S6.7 执行器取 proposal.summary 作为人类可读描述。
@@ -22,6 +25,11 @@ import { buildProposal, checkProposalAborted, refOutlineNode, requireOutlineNode
 export function buildProposeAddDelta(ctx: ToolContext, args: ProposeAddDeltaArgs): Proposal {
   const node = requireOutlineNode(ctx, args.node_id);
   const target = resolveEndpoint(ctx, args.target);
+  // 决策 26：event（时间轴事件）不产生 Delta——AI 提案通道与 REST 创建路径一致拒绝
+  //（outline_node 有 S13.3 显式豁免，event 无豁免）
+  if (target.type === "event") {
+    throw new Error(`event（时间轴事件）不产生 Delta（决策 26），变更目标无效: ${args.target}`);
+  }
   return buildProposal(
     ctx,
     "propose_add_delta",

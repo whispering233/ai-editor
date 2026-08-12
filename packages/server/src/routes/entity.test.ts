@@ -1,6 +1,7 @@
-// 实体路由测试（S3.3）：列表/创建/详情/更新/软删 + 契约校验
+// 实体路由测试（S3.3）：列表/创建/详情/更新/软删 + 契约校验 + event 时间轴（C2，决策 26）
 // 覆盖：type 过滤与摘要（camelCase）、分页/排序、软删过滤（决策 12）、创建 201 与按类型 data 校验、
-//       部分更新（浅合并）、404 映射、级联计数、详情 relations 紧邻（S3.2 接入）
+//       部分更新（浅合并）、404 映射、级联计数、详情 relations 紧邻（S3.2 接入）、
+//       event 泛型 CRUD（C2）+ move 端点 + occurs_in 关系链路（决策 26）
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,6 +17,9 @@ import {
   setCurrentProject,
 } from "../middleware/project.js";
 import { entityRoutes } from "./entity.js";
+import { outlineRoutes } from "./outline.js";
+import { relationRoutes } from "./relation.js";
+import { trashRoutes } from "./trash.js";
 
 const HOST_HEADERS = { host: "127.0.0.1:3456" };
 
@@ -28,13 +32,16 @@ function makeTmpDir(): string {
   return dir;
 }
 
-/** 组装带中间件的测试 app（entity 路由） */
+/** 组装带中间件的测试 app（entity + outline + relation + trash 路由，C2 关系链路与回收站还原用） */
 function buildApp(): Hono {
   const app = new Hono();
   app.onError(errorHandler());
   app.use("*", originCheckMiddleware());
   app.use("*", projectMiddleware());
   app.route("/api/v1/entity", entityRoutes);
+  app.route("/api/v1/outline", outlineRoutes);
+  app.route("/api/v1/relation", relationRoutes);
+  app.route("/api/v1/trash", trashRoutes);
   return app;
 }
 
@@ -328,5 +335,176 @@ describe("DELETE /api/v1/entity/:type/:id 软删", () => {
     await app.request(`/api/v1/entity/character/${id}`, { method: "DELETE", headers: HOST_HEADERS });
     const again = await app.request(`/api/v1/entity/character/${id}`, { method: "DELETE", headers: HOST_HEADERS });
     expect(again.status).toBe(404);
+  });
+});
+
+// ============ 时间轴事件（C2，决策 26）：泛型 CRUD + move 端点 + occurs_in 关系链路 ============
+
+describe("event 时间轴（C2，决策 26）", () => {
+  /** 创建事件辅助（201 断言，ev- 前缀由 db 层生成） */
+  async function createEvent(app: Hono, name: string, data?: Record<string, unknown>): Promise<{ id: string }> {
+    const res = await app.request(`/api/v1/entity/event`, jsonRequest("POST", "", { name, ...(data ? { data } : {}) }));
+    expect(res.status).toBe(201);
+    return (await res.json()).data as { id: string };
+  }
+
+  /** 事件列表 id 序（恒按 sort_order 升序——服务端契约） */
+  async function eventIds(app: Hono): Promise<string[]> {
+    const res = await app.request("/api/v1/entity/event", { headers: HOST_HEADERS });
+    const body = (await res.json()) as { data: { items: Array<{ id: string }> } };
+    return body.data.items.map((i) => i.id);
+  }
+
+  it("泛型 CRUD：创建（data 精校验）→ 列表（summary 三字段）→ 详情 → 更新 → 软删 → 回收站还原", async () => {
+    openProject();
+    const app = buildApp();
+    // 创建：合法 data 通过（eventDataSchema：description/time_label/tags + passthrough）
+    const { id } = await createEvent(app, "藏经阁发现玉佩", {
+      description: "张三在藏经阁发现玉佩",
+      time_label: "第一卷·第 3 章",
+      tags: ["主线", "伏笔"],
+    });
+    expect(id).toMatch(/^ev-/);
+    // 非法 data → 400（tags 非数组，eventDataSchema 拒绝）
+    const bad = await app.request(
+      "/api/v1/entity/event",
+      jsonRequest("POST", "", { name: "坏事件", data: { tags: "主线" } }),
+    );
+    expect(bad.status).toBe(400);
+    // 列表：summary 含三字段（C1 契约，endpoints.md L269）
+    const listRes = await app.request("/api/v1/entity/event", { headers: HOST_HEADERS });
+    const listBody = (await listRes.json()) as { data: { items: Array<Record<string, unknown>>; total: number } };
+    expect(listBody.data.total).toBe(1);
+    expect(listBody.data.items[0].summary).toEqual({
+      description: "张三在藏经阁发现玉佩",
+      time_label: "第一卷·第 3 章",
+      tags: ["主线", "伏笔"],
+    });
+    // 详情：data 完整 + deltaCount 0 + relations 空
+    const detailRes = await app.request(`/api/v1/entity/event/${id}`, { headers: HOST_HEADERS });
+    const detailBody = (await detailRes.json()) as { data: Record<string, unknown> };
+    expect(detailBody.data).toMatchObject({ id, type: "event", name: "藏经阁发现玉佩", deltaCount: 0 });
+    expect((detailBody.data.data as Record<string, unknown>).description).toBe("张三在藏经阁发现玉佩");
+    expect(detailBody.data.relations).toEqual([]);
+    // 更新：data 浅合并（未传字段保留）
+    const upd = await app.request(
+      `/api/v1/entity/event/${id}`,
+      jsonRequest("PUT", "", { data: { description: "玉佩被夺" } }),
+    );
+    expect(upd.status).toBe(200);
+    const detail2 = await app.request(`/api/v1/entity/event/${id}`, { headers: HOST_HEADERS });
+    const body2 = (await detail2.json()) as { data: { data: Record<string, unknown> } };
+    expect(body2.data.data).toEqual({ description: "玉佩被夺", time_label: "第一卷·第 3 章", tags: ["主线", "伏笔"] });
+    // 软删 → 列表不可见（决策 12）
+    const del = await app.request(`/api/v1/entity/event/${id}`, { method: "DELETE", headers: HOST_HEADERS });
+    expect(del.status).toBe(200);
+    expect(await eventIds(app)).toEqual([]);
+    // 回收站列表含 event → 还原 → 列表恢复
+    const trash = await app.request("/api/v1/trash", { headers: HOST_HEADERS });
+    const trashBody = (await trash.json()) as { data: { entities: Array<{ id: string; type: string }> } };
+    expect(trashBody.data.entities.some((e) => e.id === id && e.type === "event")).toBe(true);
+    const restore = await app.request(`/api/v1/trash/entity/event/${id}/restore`, { method: "POST", headers: HOST_HEADERS });
+    expect(restore.status).toBe(200);
+    expect(await eventIds(app)).toEqual([id]);
+  });
+
+  it("move：正常重排（全局线性序）——移动后列表按新序，sort/order 参数不参与事件排序", async () => {
+    openProject();
+    const app = buildApp();
+    const e0 = (await createEvent(app, "事件0")).id;
+    const e2 = (await createEvent(app, "事件2")).id;
+    // 初始：全部 sort_order NULL → 沉底按 id 序（创建序不可控，先取当前序）
+    const initial = await eventIds(app);
+    expect(initial).toHaveLength(2);
+    // 把 e2 移到 0 → 列表首位 e2，其余相对序保持（db 层 splice 语义）
+    const mv = await app.request(`/api/v1/entity/event/${e2}/move`, jsonRequest("PUT", "", { order: 0 }));
+    expect(mv.status).toBe(200);
+    expect((await mv.json()) as { data: { moved: boolean } }).toMatchObject({ data: { moved: true } });
+    expect(await eventIds(app)).toEqual([e2, ...initial.filter((i) => i !== e2)]);
+    // 显式传 sort=created_at&order=desc → 仍按 sort_order 升序（endpoints.md 契约）
+    const desc = await app.request("/api/v1/entity/event?sort=created_at&order=desc", { headers: HOST_HEADERS });
+    const descBody = (await desc.json()) as { data: { items: Array<{ id: string }> } };
+    expect(descBody.data.items.map((i) => i.id)).toEqual([e2, ...initial.filter((i) => i !== e2)]);
+    // 再把 e0 移到末尾（order 2）→ 末尾 e0
+    await app.request(`/api/v1/entity/event/${e0}/move`, jsonRequest("PUT", "", { order: 2 }));
+    const after = await eventIds(app);
+    expect(after[after.length - 1]).toBe(e0);
+  });
+
+  it("move：clamp 超大→末尾；负数被 schema 拒绝（z.min(0)，db 层 clamp 负数由 C1 测试覆盖）", async () => {
+    openProject();
+    const app = buildApp();
+    const e0 = (await createEvent(app, "事件0")).id;
+    const e2 = (await createEvent(app, "事件2")).id;
+    // 超大 → clamp 末尾（endpoints.md 契约）
+    await app.request(`/api/v1/entity/event/${e2}/move`, jsonRequest("PUT", "", { order: 999 }));
+    const ids = await eventIds(app);
+    expect(ids[ids.length - 1]).toBe(e2);
+    // 负数 → 400（entityMoveReqSchema z.number().int().min(0)；「负数→0」为 db 层 moveEvent 防御语义）
+    const neg = await app.request(`/api/v1/entity/event/${e0}/move`, jsonRequest("PUT", "", { order: -1 }));
+    expect(neg.status).toBe(400);
+    expect(((await neg.json()) as { error: { code: string } }).error.code).toBe("VALIDATION_ERROR");
+    // body 校验：缺 order → 400；未知键 → 400（.strict()）
+    expect((await app.request(`/api/v1/entity/event/${e0}/move`, jsonRequest("PUT", "", {}))).status).toBe(400);
+    expect((await app.request(`/api/v1/entity/event/${e0}/move`, jsonRequest("PUT", "", { order: 0, extra: 1 }))).status).toBe(400);
+  });
+
+  it("move：404（不存在 id / 已软删 id）；端点仅 event——非 event 类型路径 404", async () => {
+    openProject();
+    const app = buildApp();
+    expect(
+      (await app.request("/api/v1/entity/event/ev-nope/move", jsonRequest("PUT", "", { order: 0 }))).status,
+    ).toBe(404);
+    // 已软删事件不可 move（moveEvent 过滤软删 → null → 404）
+    const { id } = await createEvent(app, "将删事件");
+    await app.request(`/api/v1/entity/event/${id}`, { method: "DELETE", headers: HOST_HEADERS });
+    expect(
+      (await app.request(`/api/v1/entity/event/${id}/move`, jsonRequest("PUT", "", { order: 0 }))).status,
+    ).toBe(404);
+    // 专端点仅 event：character 无 move 路径（其余实体类型无 sort_order 语义，endpoints.md L393）
+    const { id: charId } = await createCharacter(app, "张三");
+    expect(
+      (await app.request(`/api/v1/entity/character/${charId}/move`, jsonRequest("PUT", "", { order: 0 }))).status,
+    ).toBe(404);
+  });
+
+  it("occurs_in 关系链路：event → outline_node 建立 → 软删 event 后不可见 → 还原恢复（决策 12 修订）", async () => {
+    openProject();
+    const app = buildApp();
+    const { id: evId } = await createEvent(app, "玉佩事件");
+    // 建大纲节点（chapter 直挂 root，决策 19）
+    const nodeRes = await app.request(
+      "/api/v1/outline",
+      jsonRequest("POST", "", { type: "chapter", title: "第一章", parent_id: "root" }),
+    );
+    expect(nodeRes.status).toBe(201);
+    const nodeId = ((await nodeRes.json()) as { data: { id: string } }).data.id;
+    // 建立 occurs_in（event → 大纲节点，决策 26；relation 白名单 C1 已含 event）
+    const relRes = await app.request("/api/v1/relation", jsonRequest("POST", "", {
+      source_type: "event",
+      source_id: evId,
+      target_type: "outline_node",
+      target_id: nodeId,
+      relation_type: "occurs_in",
+    }));
+    expect(relRes.status).toBe(201);
+    // 关系可见（source 方向查询，name 联表）
+    const q1 = await app.request(`/api/v1/relation?source_id=${evId}&depth=1`, { headers: HOST_HEADERS });
+    const q1Body = (await q1.json()) as { data: { relations: Array<Record<string, unknown>> } };
+    expect(q1Body.data.relations).toHaveLength(1);
+    expect(q1Body.data.relations[0]).toMatchObject({
+      sourceId: evId,
+      targetId: nodeId,
+      relationType: "occurs_in",
+      sourceName: "玉佩事件",
+    });
+    // 软删 event → 关系不可见（任一端点软删即不可见）
+    await app.request(`/api/v1/entity/event/${evId}`, { method: "DELETE", headers: HOST_HEADERS });
+    const q2 = await app.request(`/api/v1/relation?source_id=${evId}&depth=1`, { headers: HOST_HEADERS });
+    expect(((await q2.json()) as { data: { relations: unknown[] } }).data.relations).toEqual([]);
+    // 还原 event → 关系恢复可见（级联还原）
+    await app.request(`/api/v1/trash/entity/event/${evId}/restore`, { method: "POST", headers: HOST_HEADERS });
+    const q3 = await app.request(`/api/v1/relation?source_id=${evId}&depth=1`, { headers: HOST_HEADERS });
+    expect(((await q3.json()) as { data: { relations: unknown[] } }).data.relations).toHaveLength(1);
   });
 });

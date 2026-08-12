@@ -317,6 +317,55 @@ describe("POST /project/open", () => {
     expect(readOutlineFile(dir)).toEqual({ id: "root", type: "root", schema_version: SCHEMA_VERSION, children: [] });
   });
 
+  it("v1 旧库（有迁移路径 002）→ open 前向迁移：migrated 提示 + 数据保全 + v2 结构生效（event 可用，C2 决策 26）", async () => {
+    const dir = makeTmpDir();
+    mkdirSync(dir, { recursive: true });
+    writeProjectFile(dir, makeConfig("proj-v1", "v1项目"));
+    writeOutlineFile(dir, { id: "root", type: "root", schema_version: 1, children: [] });
+    // 手工建 v1 结构库（旧 entities DDL：无 sort_order、CHECK 4 种）+ 数据 + user_version=1
+    const db = openDatabase(join(dir, "data.db"));
+    db.exec("DROP TABLE entities"); // 换成 v1 结构（其余表 v2 结构在迁移中不动，无碍）
+    db.exec(`CREATE TABLE entities (
+      id          TEXT PRIMARY KEY,
+      type        TEXT NOT NULL CHECK(type IN ('character', 'setting', 'location', 'hook')),
+      name        TEXT NOT NULL,
+      data        TEXT NOT NULL DEFAULT '{}',
+      created_at  TEXT NOT NULL,
+      updated_at  TEXT NOT NULL,
+      deleted_at  TEXT
+    )`);
+    db.prepare("INSERT INTO entities (id, type, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)").run(
+      "char-1", "character", "旧角色", T0, T0,
+    );
+    setUserVersion(db, 1); // v1 版本号
+    closeDatabase(db);
+
+    const res = await buildApp().request("/api/v1/project/open", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: dir }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    // E5：有迁移路径（MIGRATIONS 002）的旧版本经前向迁移打开——migrated 附加提示，非删库重建
+    expect(body.data.migrated).toBe(true);
+    expect(body.data.fromVersion).toBe(1);
+    expect(body.data.rebuilt).toBeUndefined();
+    // 数据保全：旧角色仍在（迁移不丢数据）
+    const active = getCurrentProject()!;
+    expect(getUserVersion(active.db)).toBe(SCHEMA_VERSION);
+    const count = active.db.prepare("SELECT COUNT(*) AS c FROM entities").get() as { c: number };
+    expect(count.c).toBe(1);
+    // v2 结构生效：sort_order 列存在 + event CHECK 放行（时间轴数据层可用）
+    const cols = active.db.prepare("PRAGMA table_info(entities)").all() as Array<{ name: string }>;
+    expect(cols.some((c) => c.name === "sort_order")).toBe(true);
+    expect(() =>
+      active.db
+        .prepare("INSERT INTO entities (id, type, name, created_at, updated_at) VALUES (?, 'event', ?, ?, ?)")
+        .run("ev-1", "玉佩事件", T0, T0),
+    ).not.toThrow();
+  });
+
   it("目录不含 project.json → 400 INVALID_PROJECT_PATH（open 必须含 project.json，endpoints.md 第 65 行）", async () => {
     const dir = makeTmpDir(); // 空目录
     const res = await buildApp().request("/api/v1/project/open", {

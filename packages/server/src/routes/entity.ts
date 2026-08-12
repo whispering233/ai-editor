@@ -1,13 +1,14 @@
-// 实体路由（S3.3）：GET 列表 / POST 创建 / GET 详情 / PUT 部分更新 / DELETE 软删
+// 实体路由（S3.3）：GET 列表 / POST 创建 / GET 详情 / PUT 部分更新 / DELETE 软删 / PUT event move（C2，决策 26）
 //
-// 契约来源：doc/api/endpoints.md 第 124-276 行（实体 CRUD）、决策 12（软删级联）。
+// 契约来源：doc/api/endpoints.md 第 124-276 行（实体 CRUD）+ 第 386-393 行（PUT /entity/event/:id/move）、
+// 决策 12（软删级联）、决策 26（时间轴事件：全局线性序 sort_order，仅 event 使用）。
 // 错误映射（对照 endpoints.md 错误码）：
 //   type 参数非法 / 参数校验失败 → 400 VALIDATION_ERROR（zod 抛错由 errorHandler 统一映射，含 fields）
 //   实体不存在或已软删 → 404 ENTITY_NOT_FOUND
 import { Hono } from "hono";
-import { countDeltasForEntity, createEntity, getEntity, listEntities, listRelations, nowIso, softDeleteEntity, updateEntity } from "@whispering233/ai-editor-db";
+import { countDeltasForEntity, createEntity, getEntity, listEntities, listRelations, moveEvent, nowIso, softDeleteEntity, updateEntity } from "@whispering233/ai-editor-db";
 import type { EntityType } from "@whispering233/ai-editor-shared";
-import { ENTITY_DATA_SCHEMAS, entityCreateReqSchema, entityListQuerySchema, entityTypeSchema, entityUpdateReqSchema } from "@whispering233/ai-editor-shared/schemas";
+import { ENTITY_DATA_SCHEMAS, entityCreateReqSchema, entityListQuerySchema, entityMoveReqSchema, entityTypeSchema, entityUpdateReqSchema } from "@whispering233/ai-editor-shared/schemas";
 import { HttpError, ok } from "../middleware/error.js";
 import { requireCurrentProject } from "../middleware/project.js";
 
@@ -119,6 +120,23 @@ entityRoutes.put("/:type/:id", async (c) => {
     throw new HttpError(404, "ENTITY_NOT_FOUND", `实体不存在: ${id}`);
   }
   return c.json(ok({ id: row.id, updated: true }));
+});
+
+// PUT /api/v1/entity/event/:id/move —— 时间轴事件重排（决策 26，endpoints.md 第 386-393 行）
+// 请求 { order }（0-based 全局事件线性序；越界 clamp：负数→0、超总数→末尾——db 层 moveEvent 语义）；
+// 响应 200 { moved: true }；事件不存在或已软删 → 404 ENTITY_NOT_FOUND。
+// 仅 event 支持（专端点路径）：其余实体类型无 sort_order 语义（endpoints.md 第 393 行）。
+entityRoutes.put("/event/:id/move", async (c) => {
+  const project = requireCurrentProject();
+  const id = c.req.param("id");
+  const raw = await c.req.json().catch(() => null);
+  const parsed = entityMoveReqSchema.safeParse(raw); // .strict()：未知键 → 400
+  if (!parsed.success) throw parsed.error;
+  const result = moveEvent(project.db, id, parsed.data.order, nowIso());
+  if (result === null) {
+    throw new HttpError(404, "ENTITY_NOT_FOUND", `事件不存在: ${id}`);
+  }
+  return c.json(ok({ moved: true }));
 });
 
 // DELETE /api/v1/entity/:type/:id —— 软删（决策 12：级联软删关系与 Delta，本体保留可还原）

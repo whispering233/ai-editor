@@ -72,17 +72,24 @@ function validateChangesByOp(changes: DeltaChange[]): void {
 }
 
 /**
- * 变更目标类型白名单校验（S13.3 收紧：仅实体类型 character/setting/location/hook——大纲节点代表的
+ * 变更目标类型白名单校验（S13.3 收紧：仅实体类型——大纲节点代表的
  * 故事导致实体发生变更，节点结构化信息不应出现在变更记录中；历史 outline_node 目标数据保留展示，
- * 仅创建路径拒绝）。schema 层 target_type 为宽松 z.string()（shared 不动），收紧在路由层
+ * 仅创建路径拒绝）。
+ * **排除 event（C2 oracle 审查口径，决策 26）**：event（时间轴事件）不产生 Delta——
+ * **本收紧覆盖 REST 创建路径**（API 直连）：client 目标下拉已过滤（delta-create.ts），
+ * REST 层同步拒绝（不产生「死 Delta」：无字段清单可编辑、client 无管理入口）；
+ * AI 提案通道（propose_add_delta）在 tools 层独立拒绝（proposal/delta.ts，同决策 26）。
+ * 已存在的 event 目标历史数据仍按实体端点展示（db 层 ENTITY_TARGET_TYPES 已含 event，决策 26）。
+ * schema 层 target_type 为宽松 z.string()（shared 不动），收紧在路由层
  * （与 S12.1 节点 data 按层级校验同模式）。不通过 → 400 VALIDATION_ERROR（参照 entity.ts parseTypeParam 错误风格）。
  */
 function assertDeltaTargetType(targetType: string): void {
-  if (!(ENTITY_TYPES as readonly string[]).includes(targetType)) {
+  const allowed = ENTITY_TYPES.filter((t) => t !== "event");
+  if (!(allowed as readonly string[]).includes(targetType)) {
     throw new HttpError(
       400,
       "VALIDATION_ERROR",
-      `非法变更目标类型: ${targetType}（变更目标仅限实体类型: ${ENTITY_TYPES.join("/")}）`,
+      `非法变更目标类型: ${targetType}（变更目标仅限实体类型: ${allowed.join("/")}；event 不产生 Delta，决策 26）`,
     );
   }
 }
