@@ -162,3 +162,34 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - 依赖：C3
 - 验证：tsc / lint + 手工演示
 - 回滚：单 commit
+
+---
+
+## 画布增强批次（S10.2-S10.5，inkos 参考，2026-08）
+
+> **背景**：画布 S10.1（确定性树布局 + localStorage 坐标 + plot_edge 连线）已上线；经外部调研（`doc/design/backlog.md` 参考源：github.com/Narcooo/inkos 的 `FlowView.tsx`/`story-flow-layout.ts`——技术栈与本项目同源：React 19 + Zustand + Tailwind + Base UI），补 4 项画布能力（用户裁决 2026-08 全部选定）：连线绘制质量、小地图、重新布局能力、hover 路径高亮。**保持自研不引库**（@xyflow/react 留作节点 >500/框选编辑时的升级路径）。详细规格见 `doc/ui/pages/canvas.md`。
+> **状态（2026-08）**：任务卡已切分，**尚未开始实现**（每卡完成后再勾选「执行进度」）。
+
+**S10.2 连线绘制质量**
+- 范围：贝塞尔曲线 + 箭头（marker-end）；语义色（目标节点层级色：场景琥珀/章蓝/卷青，三级优先级 hover 路径 > 目标层级 > 默认灰）；选中/路径边 strokeWidth 1.5→2.5 + 流动虚线动画；非路径边 opacity 0.2；色值集中 `lib/canvas.ts` 常量
+- 依赖：无（画布 S10.1 已有 `edgePath`/`edgeMidpoint` 纯函数）
+- 验证：canvas 纯函数测试（语义色映射/路径样式派生）+ 手工视觉验收
+- 回滚：单 commit
+
+**S10.3 小地图**
+- 范围：画布右下角缩略图——节点外框矩形（类型色填充）+ 视口框；`lib/canvas.ts` 纯函数计算归一化矩形（输入 nodes/positions/zoom/视口 → 输出矩形列表），组件只渲染；点击跳转视口（MVP 先只读展示）
+- 依赖：S10.1（坐标/缩放已有）
+- 验证：canvas 纯函数测试（归一化/边界）+ 手工验收
+- 回滚：单 commit
+
+**S10.4 重新布局能力（inkos `position ?? 自动计算` 模式）**
+- 范围：`mergeLayout` 语义升级——已有坐标保留（含拖拽结果），仅新节点用自动布局初值；[自动布局] 按钮改「一键重排」：保留已拖拽坐标，仅新节点补位 + 孤儿节点兜底；结构变化（增删节点）自动走同一路径
+- 依赖：S10.1（mergeLayout 已有）
+- 验证：canvas 纯函数测试（已存坐标不动的幂等重排/新节点补位/孤儿兜底）
+- 回滚：单 commit
+
+**S10.5 hover 路径高亮（inkos `dfsForwardPath` 模式）**
+- 范围：hover 节点 → 沿 plot_edge 出边向前 DFS（visited 防环）得 {nodeIds, edgeIds}；路径节点/边高亮（紫圈/紫线 + 动画），非路径节点与边 opacity 0.2；mouseLeave 恢复；纯函数可测；hover 为本地 UI 态不写回数据层（决策 10 投影语义）
+- 依赖：S10.2（语义色/路径样式派生复用）
+- 验证：canvas 纯函数测试（DFS 方向/防环/双集合）+ 手工验收
+- 回滚：单 commit
