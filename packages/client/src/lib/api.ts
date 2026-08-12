@@ -477,6 +477,21 @@ export function deleteRelation(id: string): Promise<{ deleted: true }> {
   return apiFetch<{ deleted: true }>(`/relation/${id}`, { method: "DELETE" });
 }
 
+/** PUT /api/v1/relation/:id 请求体（metadata **整体替换**；清空传 {}；label 服务端 trim） */
+export interface UpdateRelationMetaBody {
+  metadata: Record<string, unknown>;
+}
+
+/** PUT /api/v1/relation/:id 响应（200；404 RELATION_NOT_FOUND——不存在/已软删） */
+export interface UpdateRelationMetaRes {
+  updated: true;
+}
+
+/** 更新关系元数据（整体替换；画布连线标签线上编辑用——endpoints.md「PUT /relation/:id」） */
+export function updateRelationMeta(id: string, metadata: Record<string, unknown>): Promise<UpdateRelationMetaRes> {
+  return apiFetch<UpdateRelationMetaRes>(`/relation/${id}`, { method: "PUT", body: { metadata } });
+}
+
 // ============ Delta（S5.4；契约：endpoints.md「Delta 变更追踪」L395-510 + shared delta*Schema） ============
 
 /** GET /api/v1/delta/node/:nodeId 响应（按节点查该节点触发的全部 Delta，endpoints.md L436-462） */

@@ -33,6 +33,7 @@ import {
   restoreOutlineNode,
   updateEntity,
   updateOutlineNode,
+  updateRelationMeta,
   updateSettingsLlm,
 } from "./api";
 
@@ -469,6 +470,20 @@ describe("关系端点（S3.6，契约 endpoints.md「关系」）", () => {
     expect(calls[0].init?.method).toBe("DELETE");
     mockFetchOnce({ status: 404, body: { success: false, error: { code: "RELATION_NOT_FOUND", message: "不存在" } } });
     await expect(deleteRelation("rel-999")).rejects.toMatchObject({ code: "RELATION_NOT_FOUND" });
+  });
+
+  it("updateRelationMeta：PUT /relation/:id body { metadata } 整体替换；200 透传；404 → ApiError", async () => {
+    const calls = mockFetchOnce({ body: { success: true, data: { updated: true } } });
+    await expect(updateRelationMeta("rel-1", { label: "新标签" })).resolves.toEqual({ updated: true });
+    expect(calls[0].url).toBe("/api/v1/relation/rel-1");
+    expect(calls[0].init?.method).toBe("PUT");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ metadata: { label: "新标签" } });
+    // 清空标签 → 传 {}
+    const empty = mockFetchOnce({ body: { success: true, data: { updated: true } } });
+    await updateRelationMeta("rel-1", {});
+    expect(JSON.parse(String(empty[0].init?.body))).toEqual({ metadata: {} });
+    mockFetchOnce({ status: 404, body: { success: false, error: { code: "RELATION_NOT_FOUND", message: "不存在" } } });
+    await expect(updateRelationMeta("rel-999", {})).rejects.toMatchObject({ code: "RELATION_NOT_FOUND" });
   });
 });
 

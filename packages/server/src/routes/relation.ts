@@ -8,10 +8,18 @@
 //   INVALID_RELATION_TYPE   → 400 VALIDATION_ERROR（白名单外——schema 层 enum 已拦截，防御分支）
 //   DELETE 0 影响行         → 404 RELATION_NOT_FOUND
 import { Hono } from "hono";
-import { createRelation, deleteRelation, listRelations, RelationError } from "@whispering233/ai-editor-db";
+import {
+  createRelation,
+  deleteRelation,
+  listRelations,
+  nowIso,
+  RelationError,
+  updateRelationMetadata,
+} from "@whispering233/ai-editor-db";
 import {
   relationCreateReqSchema,
   relationQuerySchema,
+  relationUpdateMetaReqSchema,
 } from "@whispering233/ai-editor-shared/schemas";
 import { HttpError, ok } from "../middleware/error.js";
 import { requireCurrentProject } from "../middleware/project.js";
@@ -88,6 +96,36 @@ relationRoutes.delete("/:id", (c) => {
     throw new HttpError(404, "RELATION_NOT_FOUND", `关系不存在: ${id}`);
   }
   return c.json(ok({ deleted: true as const }));
+});
+
+// PUT /api/v1/relation/:id —— 更新关系元数据（endpoints.md「PUT /relation/:id」：
+// metadata 整体替换（非浅合并），清空传 {}；三元组不可变——要改连接请删后重建。
+// 404 语义：不存在或已软删（软删关系不可编辑，决策 12）；db 层 null → 404。
+// label 首尾 trim（契约：与 POST 创建侧对称；trim 后为空串 → 删除该键，等价清空）
+relationRoutes.put("/:id", async (c) => {
+  const project = requireCurrentProject();
+  const id = c.req.param("id");
+  const raw = await c.req.json().catch(() => null);
+  const parsed = relationUpdateMetaReqSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw parsed.error; // → 400 VALIDATION_ERROR（metadata 必填、strict 拒绝未知键）
+  }
+  let metadata = parsed.data.metadata;
+  const rawLabel = metadata.label;
+  if (typeof rawLabel === "string") {
+    const trimmed = rawLabel.trim();
+    if (trimmed === "") {
+      // 空串标签 → 移除 label 键（等价清空；请求内其余键保留——metadata 整体替换语义）
+      metadata = Object.fromEntries(Object.entries(metadata).filter(([key]) => key !== "label"));
+    } else {
+      metadata = { ...metadata, label: trimmed };
+    }
+  }
+  const row = updateRelationMetadata(project.db, id, metadata, nowIso());
+  if (row === null) {
+    throw new HttpError(404, "RELATION_NOT_FOUND", `关系不存在: ${id}`);
+  }
+  return c.json(ok({ updated: true as const }));
 });
 
 /** RelationError → HttpError 映射（文件头注释表） */

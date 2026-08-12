@@ -16,6 +16,7 @@ import {
   listDanglingRelations,
   listRelations,
   RelationError,
+  updateRelationMetadata,
 } from "./relation.js";
 import { findOutlineNode, readOutlineFile, writeOutlineFile } from "../storage/outline.js";
 
@@ -350,6 +351,63 @@ describe("deleteRelation（物理删，决策 12 修订）", () => {
     expect(
       (db.prepare("SELECT COUNT(*) AS c FROM relation_records").get() as { c: number }).c,
     ).toBe(0);
+  });
+});
+
+describe("updateRelationMetadata（整体替换 + 404 语义，endpoints.md「PUT /relation/:id」）", () => {
+  it("更新：metadata 整体替换（旧键不残留）+ updated_at 刷新", () => {
+    const { charA, charB } = seedBase();
+    const rel = createRelation(
+      db,
+      { sourceType: "character", sourceId: charA, targetType: "character", targetId: charB, relationType: "ally", metadata: { label: "旧标签", note: "保留" } },
+      dir,
+    );
+    const before = db.prepare("SELECT updated_at FROM relation_records WHERE id = ?").get(rel.id) as { updated_at: string };
+    const res = updateRelationMetadata(db, rel.id, { label: "新标签", extra: 1 }, "2026-08-12T10:00:00Z");
+    expect(res).toEqual({ id: rel.id });
+    const row = getRelation(db, rel.id, dir)!;
+    // 整体替换：旧 label/note 不残留，新键完整
+    expect(row.metadata).toEqual({ label: "新标签", extra: 1 });
+    expect(row.updated_at).toBe("2026-08-12T10:00:00Z");
+    expect(row.updated_at).not.toBe(before.updated_at);
+  });
+
+  it("清空：{} → metadata 置空对象（label 消失；读侧仍返回 metadata:{}，客户端 label 取不到）", () => {
+    const { charA, charB } = seedBase();
+    const rel = createRelation(
+      db,
+      { sourceType: "character", sourceId: charA, targetType: "character", targetId: charB, relationType: "ally", metadata: { label: "x" } },
+      dir,
+    );
+    expect(updateRelationMetadata(db, rel.id, {}, "2026-08-12T10:00:00Z")).toEqual({ id: rel.id });
+    const row = getRelation(db, rel.id, dir)!;
+    // 整体替换语义：空对象字面存储（parseMetadata("{}") → {}），label 键不残留
+    expect(row.metadata).toEqual({});
+    expect(row.metadata?.label).toBeUndefined();
+    expect(listRelations(db, {}, 1, dir).relations[0].metadata).toEqual({});
+  });
+
+  it("不存在 → null（404 语义）", () => {
+    expect(updateRelationMetadata(db, "rel-999", { label: "x" }, "2026-08-12T10:00:00Z")).toBeNull();
+  });
+
+  it("已软删 → null，且行未被触碰（软删关系不可编辑，决策 12）", () => {
+    const { charA, charB } = seedBase();
+    const rel = createRelation(
+      db,
+      { sourceType: "character", sourceId: charA, targetType: "character", targetId: charB, relationType: "ally", metadata: { label: "旧" } },
+      dir,
+    );
+    db.prepare("UPDATE relation_records SET deleted_at = ? WHERE id = ?").run(T0, rel.id);
+    expect(updateRelationMetadata(db, rel.id, { label: "新" }, "2026-08-12T10:00:00Z")).toBeNull();
+    const raw = db.prepare("SELECT metadata, updated_at, deleted_at FROM relation_records WHERE id = ?").get(rel.id) as {
+      metadata: string;
+      updated_at: string;
+      deleted_at: string;
+    };
+    expect(raw.metadata).toBe(JSON.stringify({ label: "旧" }));
+    expect(raw.updated_at).toBe(rel.updated_at);
+    expect(raw.deleted_at).toBe(T0);
   });
 });
 

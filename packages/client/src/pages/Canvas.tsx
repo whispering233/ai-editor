@@ -2,15 +2,17 @@
 // 路由：#/canvas（layout.md §1）；中栏内容区页面（画布区域占满可用高度，内部滚动）
 // 数据：大纲 = project store 全局树（决策 1：画布是同一数据的投影，节点即大纲，无游离节点）；
 //   连线 = GET /api/v1/relation?source_type=outline_node&relation_type=plot_edge&depth=1
-//   （lib/canvas parsePlotEdges 解析；创建 POST /relation、删除 DELETE /relation/:id 物理删）；
+//   （lib/canvas parsePlotEdges 解析；创建 POST /relation、标签编辑 PUT /relation/:id、删除 DELETE /relation/:id 物理删）；
 //   伏笔标记 = S9.2 并行三请求模式（plants/advances/resolves，Promise.all 降级）
 // 布局：坐标/缩放存 localStorage（决策 10：key ai-editor:canvas:{project_id}，按项目隔离，
 //   丢失自动布局不视为异常）；拖拽坐标防抖 300ms 写、缩放即时写
 // 交互（canvas.md 关键交互）：
 //   - 拖拽节点卡移动；[重新布局] 一键重排（S10.4：保留已拖拽坐标，仅新节点补位）；[-] 百分比 [+] + 滚轮缩放；
 //     「全部节点|仅场景」切换
-//   - 节点卡右侧把手拖出连线 → 松到目标节点 → 小表单（标签可选写 metadata.label）→ POST
+//   - 节点卡右侧把手拖出连线 → 松到目标节点 → 直接 POST 创建（UX1 拖出即连，无标签不打断拖放流）；
+//     选中连线 → 线中点标签内联编辑（PUT /relation/:id，metadata 整体替换；空标签提交 {} 清除）
 //   - 点击连线高亮 → 中点下方 [删除连线] → ui store confirm 二次确认（物理删不可恢复，可随时重建）
+//   - 连线创建中（拖线期间）禁用 hover 路径高亮（UX1 hover 冲突规避：不降透明，连线目标清晰可辨）
 //   - 画布说明角标常驻（「连线与坐标仅用于推演展示，不参与状态计算」，可收起）
 // 画布增强（S10.2-S10.5，inkos 参考，自研不引库）：
 //   - 连线绘制质量：语义色（目标层级：场景琥珀/章蓝/卷青，hover 路径/选中高亮紫）+ 粗细 1.5→2.5 +
@@ -22,18 +24,17 @@
 // 刷新：useDataRefresh 订阅 dataVersion（AI 提案确认/InfoBar 刷新 → 重拉树 + 连线 + 伏笔标记）
 // 样式：一律 token 类（layout.md §3，禁硬编码 zinc/white/black——oracle 红线）；动画克制（§4.3）
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { FormEvent, PointerEvent as ReactPointerEvent } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 import { Info, Minus, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   ApiError,
   CLIENT_NETWORK_ERROR,
   createRelation,
   deleteRelation,
   listRelations,
-  type CreateRelationBody,
+  updateRelationMeta,
 } from "../lib/api";
 import { TYPE_LABEL } from "../components/outline/dialogs";
 import { NodeHookMarkBadge } from "../components/outline/node-hook-badge";
@@ -106,8 +107,11 @@ interface DisplayEdge extends RenderedEdge {
   dash: boolean;
 }
 
-/** 连线创建对话框提交进行态 */
-type CreateDialog = { sourceId: string; targetId: string } | null;
+/** 连线标签内联编辑进行态（UX1：选中连线 → 线中点输入框，draft 本地草稿） */
+interface EditingLabelState {
+  edgeId: string;
+  draft: string;
+}
 
 export default function Canvas() {
   const outline = useProjectStore((s) => s.outline);
@@ -137,10 +141,9 @@ export default function Canvas() {
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [createFrom, setCreateFrom] = useState<string | null>(null);
   const [createCursor, setCreateCursor] = useState<CanvasPoint | null>(null);
-  const [createDialog, setCreateDialog] = useState<CreateDialog>(null);
-  const [createLabel, setCreateLabel] = useState("");
-  const [createError, setCreateError] = useState<string | null>(null);
-  const [createSubmitting, setCreateSubmitting] = useState(false);
+  // ---- 连线标签线上编辑态（UX1） ----
+  const [editingLabel, setEditingLabel] = useState<EditingLabelState | null>(null);
+  const [labelSubmitting, setLabelSubmitting] = useState(false);
 
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -379,10 +382,14 @@ export default function Canvas() {
     return out;
   }, [visibleEdges, positions, nodesById]);
 
-  /** hover 路径（S10.5：沿 plot_edge 出边向前 DFS 得 {nodeIds, edgeIds} 双集合；null = 未 hover） */
+  /**
+   * hover 路径（S10.5：沿 plot_edge 出边向前 DFS 得 {nodeIds, edgeIds} 双集合；null = 未 hover）
+   * UX1 hover 冲突规避：连线创建中（createFrom !== null）强制 null——拖线时禁用高亮，
+   * 避免非路径节点/边全部降透明、看不清连线目标（canvas.md「创建连线」第 4 条）。
+   */
   const hoverPath = useMemo(
-    () => (hoveredNodeId !== null ? dfsForwardPath(hoveredNodeId, visibleEdges) : null),
-    [hoveredNodeId, visibleEdges],
+    () => (hoveredNodeId !== null && createFrom === null ? dfsForwardPath(hoveredNodeId, visibleEdges) : null),
+    [hoveredNodeId, createFrom, visibleEdges],
   );
 
   /** 派生连线（S10.2/S10.5：语义色三级优先级/粗细/透明度/流动虚线——展开新对象注入，不修改本体） */
@@ -475,7 +482,7 @@ export default function Canvas() {
     setDragState(null);
   }
 
-  /** 连线创建：节点卡右侧把手按下 → 捕获指针 → 拖出临时线 → 松开命中目标卡 → 弹小表单 */
+  /** 连线创建：节点卡右侧把手按下 → 捕获指针 → 拖出临时线 → 松开命中目标卡 → 直接创建（UX1 拖出即连） */
   function handleEdgeHandleDown(e: ReactPointerEvent, node: FlatCanvasNode) {
     e.stopPropagation();
     e.preventDefault();
@@ -491,7 +498,13 @@ export default function Canvas() {
     setCreateCursor(clientToCanvas(e.clientX, e.clientY));
   }
 
-  function handleEdgeHandleUp(e: ReactPointerEvent) {
+  /**
+   * 连线创建松手（UX1 拖出即连）：命中目标卡 → **直接 POST 创建**（无标签 body 不带 metadata），
+   * 不再弹 Dialog——拖放流不打断。自连（松回源卡）静默取消。
+   * 终态错误沿用旧语义：RELATION_EXISTS/VALIDATION_ERROR → toast + 重拉（既有连线立即可见）；
+   * 其余错误 toast 兜底（不内联展示——无对话框可挂）。
+   */
+  async function handleEdgeHandleUp(e: ReactPointerEvent) {
     if (createFrom === null) return;
     const sourceId = createFrom;
     // 松开点命中判定：elementFromPoint 找最近的节点卡（把手捕获不阻断命中测试）
@@ -500,48 +513,74 @@ export default function Canvas() {
     const targetId = card?.getAttribute("data-canvas-node-id") ?? null;
     setCreateFrom(null);
     setCreateCursor(null);
-    // 自连（松回源卡）静默取消
-    if (targetId !== null && targetId !== sourceId) {
-      setCreateLabel("");
-      setCreateError(null);
-      setCreateDialog({ sourceId, targetId });
-    }
-  }
-
-  /** 连线创建提交：POST /relation；成功 toast + 重拉；RELATION_EXISTS/VALIDATION_ERROR → toast 关闭（canvas.md）；其余错误内联显示 */
-  async function handleCreateEdgeSubmit(e: FormEvent) {
-    e.preventDefault();
-    if (createDialog === null || createSubmitting) return;
-    const pending = createDialog;
-    setCreateSubmitting(true);
-    setCreateError(null);
+    // 未命中 / 自连（松回源卡）静默取消
+    if (targetId === null || targetId === sourceId) return;
     try {
-      const body: CreateRelationBody = {
+      await createRelation({
         source_type: "outline_node",
-        source_id: pending.sourceId,
+        source_id: sourceId,
         target_type: "outline_node",
-        target_id: pending.targetId,
+        target_id: targetId,
         relation_type: "plot_edge",
-        ...(createLabel.trim() !== "" ? { metadata: { label: createLabel.trim() } } : {}),
-      };
-      await createRelation(body);
+      });
       useUiStore.getState().showToast("已建立连线");
-      setCreateDialog(null);
       await reloadEdges();
     } catch (err) {
       const code = err instanceof ApiError ? err.code : null;
       const text = describeCanvasEdgeError(code);
       if (text !== null) {
-        // 终态错误：toast 提示 + 关闭 + 重拉（RELATION_EXISTS 让既有连线立即可见）
+        // 终态错误：toast 提示 + 重拉（RELATION_EXISTS 让既有连线立即可见）
         useUiStore.getState().showToast(text, "error");
-        setCreateDialog(null);
         await reloadEdges();
         return;
       }
-      setCreateError(err instanceof ApiError ? err.message : "创建失败，请重试");
-    } finally {
-      setCreateSubmitting(false);
+      useUiStore.getState().showToast(err instanceof ApiError ? err.message : "创建失败，请重试", "error");
     }
+  }
+
+  // ---- 连线标签线上编辑（UX1：选中连线 → 线中点内联输入框；Enter/失焦提交 PUT，Esc 取消） ----
+  // labelSubmitRef 防重复提交：Enter/Esc 先置位，卸载/失焦触发的 blur 不再走提交路径
+  const labelSubmitRef = useRef(false);
+
+  /** 开始编辑（draft 取当前标签；无标签 → 空 draft 显示占位） */
+  function startEditLabel(edge: CanvasEdge) {
+    labelSubmitRef.current = false;
+    setEditingLabel({ edgeId: edge.id, draft: edge.label ?? "" });
+  }
+
+  /** 提交：trim 后为空 → 提交 {} 清除标签（与 POST 创建侧 trim 对称）；成功 toast + 重拉 */
+  async function commitLabel(edgeId: string, draft: string) {
+    if (labelSubmitting) return;
+    setLabelSubmitting(true);
+    setEditingLabel(null);
+    try {
+      const trimmed = draft.trim();
+      await updateRelationMeta(edgeId, trimmed === "" ? {} : { label: trimmed });
+      useUiStore.getState().showToast("已保存标签");
+      await reloadEdges();
+    } catch (err) {
+      useUiStore.getState().showToast(err instanceof ApiError ? err.message : "保存失败，请重试", "error");
+    } finally {
+      setLabelSubmitting(false);
+    }
+  }
+
+  function handleLabelKeyDown(e: ReactKeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      labelSubmitRef.current = true;
+      if (editingLabel !== null) void commitLabel(editingLabel.edgeId, editingLabel.draft);
+    } else if (e.key === "Escape") {
+      // 取消不提交（失焦守卫：置位后 blur 跳过）
+      e.preventDefault();
+      labelSubmitRef.current = true;
+      setEditingLabel(null);
+    }
+  }
+
+  function handleLabelBlur() {
+    if (labelSubmitRef.current) return; // Enter/Esc 已处理
+    if (editingLabel !== null) void commitLabel(editingLabel.edgeId, editingLabel.draft);
   }
 
   /** 删除选中连线：ui store confirm 二次确认（物理删不可恢复，可随时重建）→ DELETE → toast + 重拉 */
@@ -555,6 +594,9 @@ export default function Canvas() {
     });
     if (!ok) return;
     try {
+      // 清除标签编辑态：输入框随连线卸载会触发 blur——置位守卫防 blur 对已删连线补发 PUT（404）
+      labelSubmitRef.current = true;
+      setEditingLabel(null);
       await deleteRelation(edge.id);
       useUiStore.getState().showToast("已删除连线");
       setSelectedEdgeId(null);
@@ -792,25 +834,56 @@ export default function Canvas() {
               )}
             </svg>
 
-            {/* 连线中点标签（HTML 定位在缩放容器内，随缩放；pointer-events-none 不挡节点点击；透明度随边派生） */}
+            {/* 连线中点标签（HTML 定位在缩放容器内，随缩放；未选中时 pointer-events-none 不挡节点点击；
+                选中时变为可点标签（+ 标签占位）/ 内联输入框——UX1 线上编辑） */}
             {displayEdges.map(({ edge, mid, opacity }) => {
               const selected = edge.id === selectedEdgeId;
+              const editing = selected && editingLabel !== null && editingLabel.edgeId === edge.id;
+              if (editing) {
+                // 线上编辑输入框（Enter/失焦提交、Esc 取消；z-20 盖过连线热区）
+                return (
+                  <div
+                    key={`label-${edge.id}`}
+                    className="absolute z-20 -translate-x-1/2 -translate-y-1/2"
+                    style={{ left: mid.x, top: mid.y }}
+                  >
+                    <Input
+                      value={editingLabel.draft}
+                      onChange={(e) => setEditingLabel({ edgeId: edge.id, draft: e.target.value })}
+                      onKeyDown={handleLabelKeyDown}
+                      onBlur={handleLabelBlur}
+                      onFocus={(e) => e.currentTarget.select()}
+                      maxLength={50}
+                      placeholder="+ 标签"
+                      autoFocus
+                      aria-label="编辑连线标签"
+                      className="h-7 w-44 rounded-md px-1.5 py-0.5 text-xs"
+                    />
+                  </div>
+                );
+              }
               return (
                 <span
                   key={`label-${edge.id}`}
                   className={cn(
                     "pointer-events-none absolute max-w-44 -translate-x-1/2 -translate-y-1/2 truncate whitespace-nowrap rounded border bg-card px-1.5 py-0.5 text-[10px] text-muted-foreground",
-                    selected && "border-transparent",
+                    selected && "pointer-events-auto cursor-text",
                   )}
                   style={{
                     left: mid.x,
                     top: mid.y,
                     opacity,
-                    // 选中态与连线高亮紫一致（单一来源 EDGE_COLORS.highlight，S10.2）
+                    // 选中态与连线高亮紫一致（单一来源 EDGE_COLORS.highlight，S10.2）；
+                    // 无标签显示占位「+ 标签」，点击进入编辑（UX1）
                     ...(selected ? { borderColor: EDGE_COLORS.highlight, color: EDGE_COLORS.highlight } : {}),
                   }}
+                  title={selected ? (edge.label === undefined ? "添加标签" : "编辑标签") : undefined}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    startEditLabel(edge);
+                  }}
                 >
-                  {edge.label ?? "未命名连线"}
+                  {edge.label ?? (selected ? "+ 标签" : "未命名连线")}
                 </span>
               );
             })}
@@ -941,40 +1014,6 @@ export default function Canvas() {
           </div>
         </div>
       )}
-
-      {/* 连线创建小表单（canvas.md：标签可选，写 metadata.label） */}
-      <Dialog open={createDialog !== null} onOpenChange={(v) => !v && !createSubmitting && setCreateDialog(null)}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>新建连线</DialogTitle>
-          </DialogHeader>
-          {createDialog !== null && (
-            <form id="create-edge-form" onSubmit={handleCreateEdgeSubmit} className="flex flex-col gap-3">
-              <p className="text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">{nodesById.get(createDialog.sourceId)?.title ?? createDialog.sourceId}</span>
-                {" → "}
-                <span className="font-medium text-foreground">{nodesById.get(createDialog.targetId)?.title ?? createDialog.targetId}</span>
-              </p>
-              <Input
-                value={createLabel}
-                onChange={(e) => setCreateLabel(e.target.value)}
-                maxLength={50}
-                placeholder="连线标签（可选，如「路径A」）"
-                autoFocus
-              />
-              {createError !== null && <p className="text-sm text-destructive">{createError}</p>}
-            </form>
-          )}
-          <DialogFooter>
-            <Button variant="outline" type="button" disabled={createSubmitting} onClick={() => setCreateDialog(null)}>
-              取消
-            </Button>
-            <Button type="submit" form="create-edge-form" disabled={createSubmitting || createDialog === null}>
-              创建连线
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </section>
   );
 }

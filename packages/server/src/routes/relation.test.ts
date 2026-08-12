@@ -307,3 +307,99 @@ describe("DELETE /relation/:id 物理删", () => {
     expect((await res.json()).data.relations).toHaveLength(0);
   });
 });
+
+// ============ PUT /api/v1/relation/:id ============
+
+describe("PUT /relation/:id 更新元数据", () => {
+  /** PUT 请求 helper（返回 status + body） */
+  async function putRel(
+    app: Hono,
+    id: string,
+    body: Record<string, unknown>,
+  ): Promise<{ status: number; body: { success: boolean; data?: { updated: boolean }; error?: { code: string; message: string } } }> {
+    const res = await app.request(`/api/v1/relation/${id}`, {
+      method: "PUT",
+      headers: { ...HOST_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    return { status: res.status, body: await res.json() };
+  }
+
+  it("正常更新 → 200 { updated: true }；metadata 整体替换（GET 验证旧键不残留）", async () => {
+    const { app, charA, charB } = await seed();
+    const created = await createRel(app, {
+      source_type: "character", source_id: charA, target_type: "character", target_id: charB, relation_type: "ally",
+      metadata: { label: "旧标签", note: "保留" },
+    });
+    const id = created.body.data.id!;
+    const res = await putRel(app, id, { metadata: { label: "新标签" } });
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({ updated: true });
+    const list = await app.request("/api/v1/relation?depth=1", { headers: HOST_HEADERS });
+    expect((await list.json()).data.relations[0].metadata).toEqual({ label: "新标签" });
+  });
+
+  it("清空：metadata {} → 200；GET 返回 metadata {}（label 键消失，客户端取不到 label）", async () => {
+    const { app, charA, charB } = await seed();
+    const created = await createRel(app, {
+      source_type: "character", source_id: charA, target_type: "character", target_id: charB, relation_type: "ally",
+      metadata: { label: "x" },
+    });
+    const res = await putRel(app, created.body.data.id!, { metadata: {} });
+    expect(res.status).toBe(200);
+    const list = await app.request("/api/v1/relation?depth=1", { headers: HOST_HEADERS });
+    const meta = (await list.json()).data.relations[0].metadata as Record<string, unknown> | undefined;
+    expect(meta).toEqual({});
+    expect(meta?.label).toBeUndefined();
+  });
+
+  it("label 首尾 trim（与 POST 创建侧对称）", async () => {
+    const { app, charA, charB } = await seed();
+    const created = await createRel(app, {
+      source_type: "character", source_id: charA, target_type: "character", target_id: charB, relation_type: "ally",
+    });
+    const res = await putRel(app, created.body.data.id!, { metadata: { label: "  新标签  " } });
+    expect(res.status).toBe(200);
+    const list = await app.request("/api/v1/relation?depth=1", { headers: HOST_HEADERS });
+    expect((await list.json()).data.relations[0].metadata).toEqual({ label: "新标签" });
+  });
+
+  it("label trim 后为空串 → 仅移除 label 键（请求内其余键保留）", async () => {
+    const { app, charA, charB } = await seed();
+    const created = await createRel(app, {
+      source_type: "character", source_id: charA, target_type: "character", target_id: charB, relation_type: "ally",
+      metadata: { label: "x", note: "保留" },
+    });
+    const res = await putRel(app, created.body.data.id!, { metadata: { label: "   ", note: "保留" } });
+    expect(res.status).toBe(200);
+    const list = await app.request("/api/v1/relation?depth=1", { headers: HOST_HEADERS });
+    expect((await list.json()).data.relations[0].metadata).toEqual({ note: "保留" }); // 仅 label 键移除
+  });
+
+  it("不存在 → 404 RELATION_NOT_FOUND", async () => {
+    const { app } = await seed();
+    const res = await putRel(app, "rel-999", { metadata: { label: "x" } });
+    expect(res.status).toBe(404);
+    expect(res.body.error!.code).toBe("RELATION_NOT_FOUND");
+  });
+
+  it("缺 metadata → 400 VALIDATION_ERROR", async () => {
+    const { app, charA, charB } = await seed();
+    const created = await createRel(app, {
+      source_type: "character", source_id: charA, target_type: "character", target_id: charB, relation_type: "ally",
+    });
+    const res = await putRel(app, created.body.data.id!, {});
+    expect(res.status).toBe(400);
+    expect(res.body.error!.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("未知键 → 400 VALIDATION_ERROR（strict）", async () => {
+    const { app, charA, charB } = await seed();
+    const created = await createRel(app, {
+      source_type: "character", source_id: charA, target_type: "character", target_id: charB, relation_type: "ally",
+    });
+    const res = await putRel(app, created.body.data.id!, { metadata: { label: "x" }, source_id: "sc-1" });
+    expect(res.status).toBe(400);
+    expect(res.body.error!.code).toBe("VALIDATION_ERROR");
+  });
+});

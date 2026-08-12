@@ -31,6 +31,7 @@ import {
   projectListResSchema,
   relationCreateReqSchema,
   relationQuerySchema,
+  relationUpdateMetaReqSchema,
   sseDoneEventSchema,
   sseProposalEventSchema,
   sseToolCallEventSchema,
@@ -274,6 +275,13 @@ describe("relation 端点", () => {
     };
     expect(relationCreateReqSchema.parse(valid).relation_type).toBe("appears_in");
     expect(relationCreateReqSchema.safeParse({ ...valid, relation_type: "teleports_to" }).success).toBe(false);
+  });
+
+  it("更新元数据：metadata 必填整体替换；{} 清空通过；未知键拒绝（strict）", () => {
+    expect(relationUpdateMetaReqSchema.parse({ metadata: { label: "新标签" } }).metadata).toEqual({ label: "新标签" });
+    expect(relationUpdateMetaReqSchema.parse({ metadata: {} }).metadata).toEqual({});
+    expect(relationUpdateMetaReqSchema.safeParse({}).success).toBe(false); // metadata 必填
+    expect(relationUpdateMetaReqSchema.safeParse({ metadata: { label: "x" }, source_id: "sc-1" }).success).toBe(false); // strict 拒绝未知键
   });
 });
 

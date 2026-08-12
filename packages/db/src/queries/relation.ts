@@ -399,6 +399,26 @@ export function deleteRelation(db: Db, id: string): number {
   return db.prepare("DELETE FROM relation_records WHERE id = ?").run(id).changes;
 }
 
+/**
+ * 更新关系元数据（PUT /api/v1/relation/:id，endpoints.md「PUT /relation/:id」）：
+ * metadata **整体替换**（非浅合并）——画布连线标签编辑传 `{ label }`，清空传 `{}`；
+ * 同时刷新 updated_at（应用层 ISO，与全仓时间约定一致）。
+ * 不存在或已软删（deleted_at IS NOT NULL）→ null（404 语义，软删关系不可编辑，决策 12）。
+ * 端点可见性不在此校验——编辑不改变三元组，与可见性无关。
+ * @returns 更新后的 { id }；不存在/已软删 → null
+ */
+export function updateRelationMetadata(
+  db: Db,
+  id: string,
+  metadata: Record<string, unknown>,
+  updatedAt: string,
+): { id: string } | null {
+  const result = db
+    .prepare("UPDATE relation_records SET metadata = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL")
+    .run(JSON.stringify(metadata), updatedAt, id);
+  return result.changes === 0 ? null : { id };
+}
+
 // ============ 悬空关系诊断（S6.4 工具 find_orphan_elements 下沉） ============
 
 /** 悬空关系的端点异常原因（端点物理缺失 / 端点软删未级联） */

@@ -428,6 +428,13 @@ export const relationCreateResSchema = z.object({
   }),
 });
 
+// PUT /api/v1/relation/:id（endpoints.md「PUT /relation/:id」：metadata **整体替换**，含清空传 {}）
+export const relationUpdateMetaReqSchema = z
+  .object({
+    metadata: z.record(z.string(), z.unknown()),
+  })
+  .strict();
+
 // DELETE /api/v1/relation/:id（物理删除，不进回收站，决策 12 修订）
 export const relationDeleteResSchema = z.object({
   deleted: z.literal(true),
