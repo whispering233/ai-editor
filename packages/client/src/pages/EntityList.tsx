@@ -7,6 +7,9 @@
 //   摘要列按类型（lib/entity-list.ts SUMMARY_COLUMNS）/空态两种文案区分/行点击跳详情（S3.6）；
 //   「关联 Tab（U8 增补）」——type==="relations" 渲染 RelationsView（前端过滤全量关系），
 //   「+ 新建」变「+ 建立关联」打开共用 CreateRelationDialog（列表模式，源可选）
+// 「+ 新建」按钮（列表头/空态两个入口）→ 列表首行内联编辑行（UX4：name + 该类型首字段——
+//   hook 的 status 下拉、其余文本；字段配置复用 lib/entity-list.ts CREATE_FIRST_FIELD；
+//   提交成功跳详情页语义保留，失败内联错误不关行）
 // 软删：服务端默认过滤（决策 12 修订）；回收站入口 #/trash 由 S4 卡实现，本卡不提供入口
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
@@ -14,7 +17,6 @@ import { ENTITY_TYPES } from "@whispering233/ai-editor-shared";
 import type { EntitySummary, EntityType } from "@whispering233/ai-editor-shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   ApiError,
   CLIENT_NETWORK_ERROR,
@@ -77,8 +79,8 @@ export default function EntityList({ type }: { type: string }) {
   // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉列表
   // （关联 tab 的 RelationsView 以 reloadKey={reloadTick} 联动刷新；ref 守卫防首帧重复拉）
   useDataRefresh(() => setReloadTick((t) => t + 1));
+  // 行内新建（UX4）打开态与表单状态
   const [createOpen, setCreateOpen] = useState(false);
-  // 新建对话框表单状态
   const [createName, setCreateName] = useState("");
   const [firstValue, setFirstValue] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
@@ -153,7 +155,21 @@ export default function EntityList({ type }: { type: string }) {
     setOffset(0);
   }
 
-  /** 新建对话框提交：POST → toast → 跳详情页（原型「成功跳详情页」） */
+  /** 打开行内新建（UX4）：重置表单防上次残留；实体 tab 用（关联 tab 走 CreateRelationDialog） */
+  function openCreateRow() {
+    setCreateName("");
+    setFirstValue("");
+    setCreateError(null);
+    setCreateOpen(true);
+  }
+
+  /** 取消行内新建（Esc / 取消按钮共用） */
+  function cancelCreateRow() {
+    setCreateOpen(false);
+    setCreateError(null);
+  }
+
+  /** 行内新建提交：POST → toast → 跳详情页（原型「成功跳详情页」；失败内联错误不关行） */
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
     // name 必填（服务端 1-100 校验；前端先拦空值）
@@ -231,7 +247,7 @@ export default function EntityList({ type }: { type: string }) {
               className="w-52"
             />
           )}
-          <Button type="button" onClick={() => setCreateOpen(true)}>
+          <Button type="button" onClick={isRelations ? () => setCreateOpen(true) : openCreateRow}>
             {isRelations ? "+ 建立关联" : "+ 新建"}
           </Button>
         </div>
@@ -260,6 +276,61 @@ export default function EntityList({ type }: { type: string }) {
         </label>
         <span className="ml-auto text-sm text-zinc-400">共 {total} 个</span>
       </div>
+
+      {/* 行内新建（UX4）：列表首行内联编辑——name + 该类型首字段（hook 的 status 下拉，其余文本；
+          字段配置复用 lib/entity-list.ts CREATE_FIRST_FIELD）；回车/「创建」提交（成功跳详情页），
+          Esc/「取消」关闭，失败内联错误不关行（可修正重试） */}
+      {createOpen && (
+        <form id="create-entity-row" onSubmit={handleCreate} className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-border bg-card px-3 py-2">
+          <Input
+            value={createName}
+            onChange={(e) => setCreateName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") cancelCreateRow();
+            }}
+            placeholder={`名称（如：${entityType === "character" ? "张三" : "示例名称"}）`}
+            maxLength={100}
+            disabled={createSubmitting}
+            autoFocus
+            aria-label="名称"
+            className="w-48"
+          />
+          {firstField.input === "select" ? (
+            <select
+              value={firstValue}
+              onChange={(e) => setFirstValue(e.target.value)}
+              disabled={createSubmitting}
+              aria-label={firstField.label}
+              className="rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            >
+              <option value="">{firstField.label}（选填）</option>
+              {firstField.options?.map((opt) => (
+                <option key={opt} value={opt}>
+                  {summaryCellText(entityType, firstField.key, opt)}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <Input
+              value={firstValue}
+              onChange={(e) => setFirstValue(e.target.value)}
+              placeholder={`${firstField.label}（选填）`}
+              disabled={createSubmitting}
+              aria-label={firstField.label}
+              className="w-40"
+            />
+          )}
+          <div className="ml-auto flex items-center gap-2">
+            <Button variant="outline" type="button" size="sm" onClick={cancelCreateRow} disabled={createSubmitting}>
+              取消
+            </Button>
+            <Button type="submit" size="sm" disabled={createSubmitting}>
+              {createSubmitting ? "创建中…" : "创建"}
+            </Button>
+          </div>
+          {createError && <p className="w-full text-sm text-destructive">{createError}</p>}
+        </form>
+      )}
 
       {/* 错误横幅（列表请求失败） */}
       {error !== null && (
@@ -300,7 +371,7 @@ export default function EntityList({ type }: { type: string }) {
           ) : (
             <>
               <p className="text-sm text-zinc-600">还没有{TYPE_LABEL[entityType]}，新建一个</p>
-              <Button className="mt-4" type="button" onClick={() => setCreateOpen(true)}>
+              <Button className="mt-4" type="button" onClick={openCreateRow}>
                 + 新建{TYPE_LABEL[entityType]}
               </Button>
             </>
@@ -372,51 +443,6 @@ export default function EntityList({ type }: { type: string }) {
         </div>
       )}
 
-      {/* 新建对话框：name 必填 + 该类型首字段（原型交互） */}
-      <Dialog open={createOpen} onOpenChange={(v) => !v && setCreateOpen(false)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>新建{TYPE_LABEL[entityType]}</DialogTitle>
-          </DialogHeader>
-          <form id="create-entity-form" onSubmit={handleCreate} className="flex flex-col gap-3">
-            <div>
-              <p className="mb-1 text-sm font-medium text-zinc-700">名称（必填）</p>
-              <Input value={createName} onChange={(e) => setCreateName(e.target.value)} placeholder={`如：${entityType === "character" ? "张三" : "示例名称"}`} maxLength={100} />
-            </div>
-            <div>
-              <p className="mb-1 text-sm font-medium text-zinc-700">{firstField.label}</p>
-              {firstField.input === "select" ? (
-                <select
-                  value={firstValue}
-                  onChange={(e) => setFirstValue(e.target.value)}
-                  className="w-full rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
-                >
-                  {firstField.options?.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {summaryCellText(entityType, firstField.key, opt)}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <Input
-                  value={firstValue}
-                  onChange={(e) => setFirstValue(e.target.value)}
-                  placeholder={entityType === "character" ? "如：主角 / 配角" : "选填"}
-                />
-              )}
-            </div>
-            {createError && <p className="text-sm text-red-600">{createError}</p>}
-          </form>
-          <DialogFooter>
-            <Button variant="outline" type="button" onClick={() => setCreateOpen(false)} disabled={createSubmitting}>
-              取消
-            </Button>
-            <Button type="submit" form="create-entity-form" disabled={createSubmitting}>
-              创建
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
         </>
       )}
 
