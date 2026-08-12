@@ -2,8 +2,11 @@
 // 形态参考 inkos：容器 bg-secondary/30 rounded-lg p-1 + 激活项 bg-card shadow-sm；lucide 图标 + 中文标签
 // 当前 tab 由路由首段驱动；「实体关系」在实体列表/详情路由下均保持高亮（segment=entities，layout.md §1）
 import { CalendarClock, LayoutGrid, ListTree, Network, Puzzle, Shapes, Trash2, type LucideIcon } from "lucide-react";
+import type { MouseEvent } from "react";
 import type { Route } from "../../hooks/use-route";
 import { cn } from "../../lib/utils";
+import { useProjectStore } from "../../stores/project";
+import { useUiStore } from "../../stores/ui";
 
 interface TabItem {
   label: string;
@@ -26,6 +29,17 @@ const TABS: TabItem[] = [
 
 export function TabBar({ route }: { route: Route }) {
   const active = route.segments[0] ?? null;
+  // 无项目引导（S1.4）：服务端 NO_PROJECT_OPEN 时业务 tab 无数据可看，
+  // 点击引导回概览页开/建项目，避免 409 错误横幅（决策 26 体验修复，2026-08）
+  const noProject = useProjectStore((s) => s.loadError === "NO_PROJECT_OPEN");
+  const showToast = useUiStore((s) => s.showToast);
+
+  const handleClick = (e: MouseEvent, tab: TabItem) => {
+    if (!noProject || tab.segment === null) return; // 概览 tab 始终可用
+    e.preventDefault();
+    window.location.hash = "#/";
+    showToast("请先创建或打开项目");
+  };
 
   return (
     <nav aria-label="页面导航" className="flex items-center gap-1 rounded-lg bg-secondary/30 p-1">
@@ -37,6 +51,7 @@ export function TabBar({ route }: { route: Route }) {
             key={tab.label}
             href={tab.href}
             aria-current={isActive ? "page" : undefined}
+            onClick={(e) => handleClick(e, tab)}
             className={cn(
               "flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground",
               isActive && "bg-card text-foreground shadow-sm",
