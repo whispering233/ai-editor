@@ -13,6 +13,7 @@ import {
   getEntity,
   getEntitySummaryStats,
   listEntities,
+  moveEvent,
   softDeleteEntity,
   updateEntity,
 } from "./entity.js";
@@ -45,16 +46,18 @@ function seedRelation(targetId: string): void {
 }
 
 describe("createEntity", () => {
-  it("id 前缀按类型（char-/set-/loc-/hook-），时间戳为应用层 ISO", () => {
+  it("id 前缀按类型（char-/set-/loc-/hook-/ev-），时间戳为应用层 ISO", () => {
     const char = createEntity(db, { type: "character", name: "张三" });
     const setting = createEntity(db, { type: "setting", name: "修仙界" });
     const loc = createEntity(db, { type: "location", name: "宗门" });
     const hook = createEntity(db, { type: "hook", name: "身世之谜" });
+    const event = createEntity(db, { type: "event", name: "藏经阁发现玉佩" });
     expect(char.id).toMatch(/^char-/);
     expect(setting.id).toMatch(/^set-/);
     expect(loc.id).toMatch(/^loc-/);
     expect(hook.id).toMatch(/^hook-/);
-    for (const row of [char, setting, loc, hook]) {
+    expect(event.id).toMatch(/^ev-/);
+    for (const row of [char, setting, loc, hook, event]) {
       expect(Number.isNaN(Date.parse(row.created_at))).toBe(false);
       expect(row.created_at).toBe(row.updated_at); // 创建时相同
       expect(row.deleted_at).toBeNull();
@@ -378,5 +381,188 @@ describe("getEntitySummaryStats（S6.3 工具 get_entity_summary 下沉）", () 
       byStatus: {},
       topAbilities: [],
     });
+  });
+});
+
+// ============ 时间轴事件（决策 26）：listEntities 固定排序 + moveEvent ============
+
+describe("listEntities event（时间轴事件固定排序，决策 26）", () => {
+  /** 造 n 个 event，sort_order 按给定序列赋值（NULL 表示未设） */
+  function seedEvents(names: string[], sortOrders: Array<number | null>): string[] {
+    const ids: string[] = [];
+    for (let i = 0; i < names.length; i++) {
+      const id = `ev-seed-${i}`;
+      ids.push(id);
+      const sort = sortOrders[i];
+      db.prepare(
+        `INSERT INTO entities (id, type, name, sort_order, created_at, updated_at)
+         VALUES (?, 'event', ?, ?, ?, ?)`,
+      ).run(id, names[i], sort, `2026-08-0${i + 1}T00:00:00Z`, `2026-08-0${i + 1}T00:00:00Z`);
+    }
+    return ids;
+  }
+
+  it("恒按 sort_order 升序（NULL 沉底、id 稳定次序）；忽略 sort/order 参数（endpoints.md 契约）", () => {
+    seedEvents(["事件C", "事件A", "事件D", "事件B"], [2, 0, null, 1]);
+    const res = listEntities(db, { type: "event" });
+    expect(res.items.map((i) => i.name)).toEqual(["事件A", "事件B", "事件C", "事件D"]); // NULL 沉底
+    // sort/order 参数不参与事件排序——显式传 desc 仍按 sort_order 升序
+    const desc = listEntities(db, { type: "event", sort: "created_at", order: "desc" });
+    expect(desc.items.map((i) => i.name)).toEqual(["事件A", "事件B", "事件C", "事件D"]);
+    // q 过滤 + 分页照常生效
+    const page = listEntities(db, { type: "event", offset: 1, limit: 2 });
+    expect(page.items.map((i) => i.name)).toEqual(["事件B", "事件C"]);
+    expect(page.total).toBe(4);
+  });
+
+  it("事件与其他类型互不干扰：非 event 类型仍按 sort/order 参数排序", () => {
+    createEntity(db, { type: "character", name: "甲" });
+    createEntity(db, { type: "character", name: "乙" });
+    // 覆写时间戳为递增序列（nowIso 同毫秒精度，排序断言需可控时间——既有测试同款做法）
+    db.prepare("UPDATE entities SET created_at = ?, updated_at = ? WHERE name = ?").run(
+      "2026-08-01T00:00:00Z", "2026-08-01T00:00:00Z", "甲",
+    );
+    db.prepare("UPDATE entities SET created_at = ?, updated_at = ? WHERE name = ?").run(
+      "2026-08-02T00:00:00Z", "2026-08-02T00:00:00Z", "乙",
+    );
+    const res = listEntities(db, { type: "character", sort: "created_at", order: "desc" });
+    expect(res.items.map((i) => i.name)).toEqual(["乙", "甲"]);
+  });
+
+  it("filters 分支同样固定 sort_order 排序（data.tags 过滤后仍为时间轴序）", () => {
+    seedEvents(["事件A", "事件B", "事件C"], [2, 0, 1]);
+    // 给事件 A/B 打 tags（filters 走 JS 层过滤路径）
+    db.prepare("UPDATE entities SET data = ? WHERE name = ?").run(
+      JSON.stringify({ tags: ["主线"] }),
+      "事件B",
+    );
+    db.prepare("UPDATE entities SET data = ? WHERE name = ?").run(
+      JSON.stringify({ tags: ["主线"] }),
+      "事件C",
+    );
+    const res = listEntities(db, { type: "event", filters: { tags: ["主线"] } });
+    expect(res.items.map((i) => i.name)).toEqual(["事件B", "事件C"]); // 仍按 sort_order 0,1
+  });
+
+  it("event 摘要字段提取：description/time_label/tags（endpoints.md L269 契约；字段缺失不出现）", () => {
+    seedEvents(["事件A", "事件B"], [0, 1]);
+    db.prepare("UPDATE entities SET data = ? WHERE name = '事件A'").run(
+      JSON.stringify({ description: "藏经阁发现玉佩", time_label: "第一卷·第 3 章", tags: ["主线", "伏笔"] }),
+    );
+    const res = listEntities(db, { type: "event" });
+    const a = res.items.find((i) => i.name === "事件A")!;
+    expect(a.summary).toEqual({
+      description: "藏经阁发现玉佩",
+      time_label: "第一卷·第 3 章",
+      tags: ["主线", "伏笔"],
+    });
+    // 字段缺失不出现（稀疏语义）——事件B 无 data
+    const b = res.items.find((i) => i.name === "事件B")!;
+    expect(b.summary).toEqual({});
+  });
+
+  it("软删事件不参与列表（决策 12 过滤）", () => {
+    const [a, b, c] = seedEvents(["事件A", "事件B", "事件C"], [0, 1, 2]);
+    softDeleteEntity(db, b, "2026-08-02T00:00:00Z");
+    const res = listEntities(db, { type: "event" });
+    expect(res.items.map((i) => i.id)).toEqual([a, c]); // B 软删不可见
+  });
+});
+
+describe("moveEvent（PUT /api/v1/entity/event/:id/move，决策 26）", () => {
+  /** 造 n 个 event，sort_order 0..n-1；返回 id 数组（按序） */
+  function seedEvents(n: number): string[] {
+    const ids: string[] = [];
+    for (let i = 0; i < n; i++) {
+      const id = `ev-move-${i}`;
+      ids.push(id);
+      db.prepare(
+        `INSERT INTO entities (id, type, name, sort_order, created_at, updated_at)
+         VALUES (?, 'event', ?, ?, ?, ?)`,
+      ).run(id, `事件${i}`, i, "2026-08-01T00:00:00Z", "2026-08-01T00:00:00Z");
+    }
+    return ids;
+  }
+
+  /** 读全部未软删 event 的 id（按 sort_order 升序、NULL 沉底） */
+  function eventIdsInOrder(): string[] {
+    const rows = db
+      .prepare(
+        `SELECT id FROM entities WHERE type = 'event' AND deleted_at IS NULL
+         ORDER BY sort_order IS NULL, sort_order ASC, id ASC`,
+      )
+      .all() as Array<{ id: string }>;
+    return rows.map((r) => r.id);
+  }
+
+  it("顺序重排：移后重写全局线性序 0..n-1，其余事件序保持相对位置", () => {
+    const ids = seedEvents(4); // [0,1,2,3]
+    // 把 id[2] 移到位置 0 → [2,0,1,3]
+    expect(moveEvent(db, ids[2], 0, "2026-08-02T00:00:00Z")).toEqual({ moved: true });
+    expect(eventIdsInOrder()).toEqual([ids[2], ids[0], ids[1], ids[3]]);
+    // 再移 id[0] 到末尾（order 3）→ [2,1,3,0]
+    expect(moveEvent(db, ids[0], 3, "2026-08-02T00:00:00Z")).toEqual({ moved: true });
+    expect(eventIdsInOrder()).toEqual([ids[2], ids[1], ids[3], ids[0]]);
+    // sort_order 列已重写为连续 0..n-1（可验证）
+    const orders = db
+      .prepare("SELECT sort_order FROM entities WHERE type = 'event' ORDER BY sort_order")
+      .all() as Array<{ sort_order: number }>;
+    expect(orders.map((o) => o.sort_order)).toEqual([0, 1, 2, 3]);
+  });
+
+  it("clamp 边界：负数 → 0；超总数 → 末尾（endpoints.md 契约）", () => {
+    const ids = seedEvents(3); // [0,1,2]
+    expect(moveEvent(db, ids[2], -5, "2026-08-02T00:00:00Z")).toEqual({ moved: true });
+    expect(eventIdsInOrder()).toEqual([ids[2], ids[0], ids[1]]); // 负数 clamp 到 0
+    expect(moveEvent(db, ids[1], 999, "2026-08-02T00:00:00Z")).toEqual({ moved: true });
+    expect(eventIdsInOrder()).toEqual([ids[2], ids[0], ids[1]]); // 999 → 末尾（已在末尾，序不变）
+  });
+
+  it("原地移动：order = 当前位置 → 序不变，updated_at 仍刷新", () => {
+    const ids = seedEvents(3);
+    expect(moveEvent(db, ids[1], 1, "2026-08-02T00:00:00Z")).toEqual({ moved: true });
+    expect(eventIdsInOrder()).toEqual(ids);
+    const raw = db.prepare("SELECT updated_at FROM entities WHERE id = ?").get(ids[1]) as { updated_at: string };
+    expect(raw.updated_at).toBe("2026-08-02T00:00:00Z");
+  });
+
+  it("NULL sort_order 沉底参与排序：旧数据（迁移来的 NULL 序）可正常重排", () => {
+    const ids: string[] = [];
+    const inserts: Array<[string, string, number | null]> = [
+      ["ev-null-0", "空序A", null],
+      ["ev-null-1", "空序B", null],
+      ["ev-1", "有序1", 1],
+    ];
+    for (const [id, name, sort] of inserts) {
+      ids.push(id);
+      db.prepare(
+        `INSERT INTO entities (id, type, name, sort_order, created_at, updated_at) VALUES (?, 'event', ?, ?, ?, ?)`,
+      ).run(id, name, sort, "2026-08-01T00:00:00Z", "2026-08-01T00:00:00Z");
+    }
+    // 初始：有序1（sort=1）在前，两个 NULL 沉底（id 序）
+    expect(eventIdsInOrder()).toEqual(["ev-1", "ev-null-0", "ev-null-1"]);
+    // 把 ev-null-0 移到 0 → NULL 行获得全局线性序 0
+    expect(moveEvent(db, "ev-null-0", 0, "2026-08-02T00:00:00Z")).toEqual({ moved: true });
+    expect(eventIdsInOrder()).toEqual(["ev-null-0", "ev-1", "ev-null-1"]);
+    // 全部行重写为连续序（NULL 清零）
+    const orders = db
+      .prepare("SELECT sort_order FROM entities WHERE type = 'event' ORDER BY sort_order")
+      .all() as Array<{ sort_order: number }>;
+    expect(orders.map((o) => o.sort_order)).toEqual([0, 1, 2]);
+  });
+
+  it("软删事件不可 move（返回 null）；不存在返回 null", () => {
+    const ids = seedEvents(2);
+    softDeleteEntity(db, ids[0], "2026-08-02T00:00:00Z");
+    expect(moveEvent(db, ids[0], 1, "2026-08-02T00:00:00Z")).toBeNull();
+    expect(moveEvent(db, "ev-999", 0, "2026-08-02T00:00:00Z")).toBeNull();
+    // 软删事件不参与剩余事件的排序空间（列表已过滤）
+    expect(eventIdsInOrder()).toEqual([ids[1]]);
+  });
+
+  it("非 event 类型实体不受影响（moveEvent 只处理 event 行）", () => {
+    const char = createEntity(db, { type: "character", name: "张三" });
+    expect(moveEvent(db, char.id, 0, "2026-08-02T00:00:00Z")).toBeNull();
+    expect(getEntity(db, char.id)).not.toBeNull(); // character 行未被触碰
   });
 });

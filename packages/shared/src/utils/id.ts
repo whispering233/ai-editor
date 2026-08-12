@@ -1,5 +1,5 @@
 // ID 生成工具
-// 契约来源：doc/api/endpoints.md「id 约定」：{前缀}-{nanoid}；前缀表 char-/set-/loc-/hook-、
+// 契约来源：doc/api/endpoints.md「id 约定」：{前缀}-{nanoid}；前缀表 char-/set-/loc-/hook-/ev-、
 //   sc-/ch-/vol-、proj-（连字符分隔）；prop_/sess_/call_（下划线分隔的运行时对象）
 // nanoid 为环境无关包（浏览器可用），仅在本模块引入，无副作用
 
@@ -7,12 +7,13 @@ import { nanoid } from "nanoid";
 import type { EntityType } from "../types/entity.js";
 import type { OutlineNodeType } from "../types/outline.js";
 
-/** 实体类型 → id 前缀（endpoints.md id 约定） */
+/** 实体类型 → id 前缀（endpoints.md id 约定；event 时间轴事件 ev-，决策 26） */
 export const ENTITY_ID_PREFIX: Record<EntityType, string> = {
   character: "char-",
   setting: "set-",
   location: "loc-",
   hook: "hook-",
+  event: "ev-",
 };
 
 /** 大纲节点类型 → id 前缀（endpoints.md id 约定；root 不生成 id） */
@@ -40,7 +41,7 @@ export function generateId(prefix: string): string {
   return `${prefix}${nanoid()}`;
 }
 
-/** 生成实体 id（按类型映射前缀：character→char-、setting→set-、location→loc-、hook→hook-） */
+/** 生成实体 id（按类型映射前缀：character→char-、setting→set-、location→loc-、hook→hook-、event→ev-） */
 export function generateEntityId(type: EntityType): string {
   return generateId(ENTITY_ID_PREFIX[type]);
 }

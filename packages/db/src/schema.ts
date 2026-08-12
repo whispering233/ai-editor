@@ -7,26 +7,30 @@
 import type Database from "better-sqlite3";
 
 /**
- * data.db 当前 schema 版本（决策 13）。
- * MVP 采用删库重建：以 PRAGMA user_version 为准判定版本，不匹配即备份并重建，无迁移脚本（YAGNI）。
+ * data.db 当前 schema 版本（决策 13；SCHEMA_VERSION = 2 起由增量迁移驱动，E5）。
+ * v1 → v2（决策 26 时间轴）：entities 表 type CHECK 扩为 5 种（含 event）+ 新增
+ * sort_order 列——旧 v1 库经 migrations/002_event_timeline.ts 迁移，新库直接建 v2 结构。
  */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 /**
  * 四张业务表 + 索引的建表 SQL（幂等：CREATE TABLE/INDEX IF NOT EXISTS）。
  *
- * - entities          实体（character/setting/location/hook），type 受 CHECK 约束，data 存 JSON，软删列 deleted_at（决策 12）
- * - relation_records  通用关系表（含 plot_edge 剧情连线），3 个部分索引 WHERE deleted_at IS NULL（决策 12 修订）
+ * - entities          实体（character/setting/location/hook/event），type 受 CHECK 约束，data 存 JSON，
+ *                     sort_order 为时间轴事件全局线性序（仅 event 使用，其余类型 NULL，决策 26），软删列 deleted_at（决策 12）
+ * - relation_records  通用关系表（含 plot_edge 剧情连线、occurs_in 事件锚定，决策 26），
+ *                     3 个部分索引 WHERE deleted_at IS NULL（决策 12 修订）
  * - delta_records     属性变更记录（"order" 列引号保留——ORDER 是 SQLite 关键字）
  * - chat_messages     对话历史（决策 18），含 project_id/tool_call_id，会话索引 (session_id, created_at)
  */
 export const CREATE_TABLES_SQL = `
--- entities：实体表（人物/设定/地点/伏笔）
+-- entities：实体表（人物/设定/地点/伏笔/时间轴事件）
 CREATE TABLE IF NOT EXISTS entities (
   id          TEXT PRIMARY KEY,
-  type        TEXT NOT NULL CHECK(type IN ('character', 'setting', 'location', 'hook')),
+  type        TEXT NOT NULL CHECK(type IN ('character', 'setting', 'location', 'hook', 'event')),
   name        TEXT NOT NULL,
   data        TEXT NOT NULL DEFAULT '{}',  -- JSON: 各类型的专属字段
+  sort_order  INTEGER,         -- 时间轴事件全局线性序（决策 26）：仅 event 使用，其余类型 NULL
   created_at  TEXT NOT NULL,               -- ISO 8601，应用层写入
   updated_at  TEXT NOT NULL,               -- ISO 8601，应用层写入（提案快照比对，决策 14）
   deleted_at  TEXT             -- 软删标记（决策 12），NULL 表示未删除；非 NULL 时该实体进入回收站，本体保留可还原
@@ -35,7 +39,7 @@ CREATE TABLE IF NOT EXISTS entities (
 -- relation_records：通用关系表
 CREATE TABLE IF NOT EXISTS relation_records (
   id            TEXT PRIMARY KEY,
-  source_type   TEXT NOT NULL,             -- 端点类型：实体 'character'|'setting'|'location'|'hook'，大纲节点 'outline_node'
+  source_type   TEXT NOT NULL,             -- 端点类型：实体 'character'|'setting'|'location'|'hook'|'event'，大纲节点 'outline_node'
   source_id     TEXT NOT NULL,
   target_type   TEXT NOT NULL,
   target_id     TEXT NOT NULL,

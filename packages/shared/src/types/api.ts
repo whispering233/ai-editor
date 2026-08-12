@@ -137,6 +137,15 @@ export const hookDataSchema = z
   })
   .passthrough();
 
+/** event 专属字段（决策 26 时间轴事件：description/time_label/tags[]；字段名 snake_case） */
+export const eventDataSchema = z
+  .object({
+    description: z.string().optional(),
+    time_label: z.string().optional(),
+    tags: z.array(z.string()).optional(),
+  })
+  .passthrough(); // 允许未知字段（创作工具，用户自定义字段自由）
+
 /**
  * 各类型 data schema 注册表（服务端按实体 type 选用精确 schema 校验）
  * 创建/更新请求中的 data 本体使用宽松 record（entityCreateReqSchema），
@@ -147,6 +156,7 @@ export const ENTITY_DATA_SCHEMAS = {
   setting: settingDataSchema,
   location: locationDataSchema,
   hook: hookDataSchema,
+  event: eventDataSchema,
 } as const;
 
 // ============ project 端点（endpoints.md「项目管理」） ============
@@ -644,6 +654,17 @@ export const outlineMoveResSchema = z.object({
   moved: z.literal(true),
   previousParentId: z.string(),
   newParentId: z.string(),
+});
+
+// PUT /api/v1/entity/event/:id/move（时间轴事件重排，决策 26；命名风格同 outlineMoveReqSchema）
+export const entityMoveReqSchema = z
+  .object({
+    order: z.number().int().min(0), // 0-based 全局事件线性序（endpoints.md：越界 clamp，负数→0、超总数→末尾）
+  })
+  .strict();
+
+export const entityMoveResSchema = z.object({
+  moved: z.literal(true),
 });
 
 // DELETE /api/v1/outline/:nodeId（软删 + 递归级联，决策 12）

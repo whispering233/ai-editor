@@ -6,7 +6,8 @@
 // 时间约定（schema.md 第 16 行）：ISO 8601 应用层写入（nowIso），模块内不生成时间。
 //
 // 摘要字段提取（endpoints.md 第 184-188 行）：**行内解析**（SELECT 整行 → JSON.parse → JS 提取）——
-//   character → role/status、setting → category、location → type、hook → status/payoff_timing；
+//   character → role/status、setting → category、location → type、hook → status/payoff_timing、
+//   event → description/time_label/tags（决策 26）；
 //   取舍：json_extract 免全量 parse 但需按类型动态列，SQL 复杂化；MVP 数据量小，行内解析
 //   与 better-sqlite3 字符串列一致（chat.ts 同款风格），数据量大后再优化。
 // 级联软删边界：relations/deltas 的**查询**模块 S3.2 才建——本卡只做级联软删所需 UPDATE。
@@ -59,6 +60,13 @@ function toSummary(row: EntityRow): EntitySummary {
     case "hook":
       if (data.status !== undefined) summary.status = data.status;
       if (data.payoff_timing !== undefined) summary.payoff_timing = data.payoff_timing;
+      break;
+    // event（决策 26）：description/time_label/tags 三字段摘要（endpoints.md L269 契约；
+    // tags 为数组原样返回——Record 稀疏语义，字段缺失即不出现）
+    case "event":
+      if (data.description !== undefined) summary.description = data.description;
+      if (data.time_label !== undefined) summary.time_label = data.time_label;
+      if (data.tags !== undefined) summary.tags = data.tags;
       break;
   }
   return {
@@ -140,13 +148,18 @@ export function listEntities(db: Db, query: EntityListQuery): EntityListResult {
   // 排序白名单（列名不可参数化，只允许枚举值；id 作次级排序保证稳定分页）
   const sortCol = query.sort === "name" ? "name" : query.sort === "created_at" ? "created_at" : "updated_at";
   const orderDir = query.order === "asc" ? "ASC" : "DESC";
+  // event（时间轴事件，决策 26）固定按 sort_order 升序、NULL 沉底（endpoints.md 契约：
+  // 列表恒按 sort_order 升序，sort/order 参数不参与事件排序）——SQLite 中
+  // `sort_order IS NULL` 为 1 的排最后，实现 NULL 沉底；id 作稳定次序
+  const eventOrderSql = "sort_order IS NULL, sort_order ASC, id ASC";
+  const orderSql = query.type === "event" ? eventOrderSql : `${sortCol} ${orderDir}, id ASC`;
   const offset = Math.max(0, Math.trunc(query.offset ?? 0));
   const limit = Math.min(200, Math.max(1, Math.trunc(query.limit ?? 50)));
 
   // filters 分支：SQL 取全量候选行（type/q/软删），filters + 分页在 JS 层
   if (query.filters !== undefined) {
     const all = db
-      .prepare(`SELECT * FROM entities WHERE ${where.join(" AND ")} ORDER BY ${sortCol} ${orderDir}, id ASC`)
+      .prepare(`SELECT * FROM entities WHERE ${where.join(" AND ")} ORDER BY ${orderSql}`)
       .all(...params) as Array<Record<string, unknown>>;
     const filtered = all.filter((r) => matchDataFilters(rowToEntityRow(r).data, query.filters!));
     return {
@@ -161,7 +174,7 @@ export function listEntities(db: Db, query: EntityListQuery): EntityListResult {
   const rows = db
     .prepare(
       `SELECT * FROM entities WHERE ${where.join(" AND ")}
-       ORDER BY ${sortCol} ${orderDir}, id ASC LIMIT ? OFFSET ?`,
+       ORDER BY ${orderSql} LIMIT ? OFFSET ?`,
     )
     .all(...params, limit, offset) as Array<Record<string, unknown>>;
 
@@ -248,6 +261,44 @@ export function updateEntity(
       id,
     );
     return next;
+  });
+}
+
+/**
+ * 移动时间轴事件（PUT /api/v1/entity/event/:id/move，决策 26，endpoints.md）：
+ * 事件排序为**全局线性序**（跨所有事件，0-based）——
+ * 1. 读出全部未软删 event 行按 sort_order 升序（NULL 沉底，id 作稳定次序）排成数组
+ * 2. 目标 id 不存在或已软删 → 返回 null（路由层映射 404 ENTITY_NOT_FOUND）
+ * 3. 剔除自身后，order clamp 到 [0, 剩余数]（负数→0、超总数→末尾），splice 插入——
+ *    与大纲 moveOutlineNode 的数组 splice 语义一致、可验证
+ * 4. 重写整个数组的 sort_order 为 0..n-1（事务内逐行 UPDATE），并刷新该行 updated_at
+ *
+ * 事务：withTransaction 包住读改写（better-sqlite3 同步单连接下无竞态，包事务统一风格，
+ * 与 updateEntity/softDeleteEntity 一致）。
+ * @returns { moved: true }；事件不存在或已软删返回 null
+ */
+export function moveEvent(db: Db, id: string, order: number, updatedAt: string): { moved: true } | null {
+  return withTransaction(db, () => {
+    // 全部未软删 event，按 sort_order 升序（NULL 沉底）排成数组（id 作稳定次序）
+    const rows = db
+      .prepare(
+        `SELECT * FROM entities WHERE type = 'event' AND deleted_at IS NULL
+         ORDER BY sort_order IS NULL, sort_order ASC, id ASC`,
+      )
+      .all() as Array<Record<string, unknown>>;
+    const idx = rows.findIndex((r) => r.id === id);
+    if (idx < 0) return null; // 不存在或已软删（决策 12 过滤）
+    const [moved] = rows.splice(idx, 1);
+    // clamp 到 [0, 剩余数]：负数→0、超总数→末尾（endpoints.md 契约）
+    const pos = Math.max(0, Math.min(Math.trunc(order), rows.length));
+    rows.splice(pos, 0, moved);
+    // 重写全局线性序 0..n-1；被移动行刷新 updated_at（决策 14 版本戳语义），其余行不动
+    const update = db.prepare("UPDATE entities SET sort_order = ?, updated_at = ? WHERE id = ?");
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i] as { id: string; updated_at: string };
+      update.run(i, row.id === id ? updatedAt : row.updated_at, row.id);
+    }
+    return { moved: true };
   });
 }
 

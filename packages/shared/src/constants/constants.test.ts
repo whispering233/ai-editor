@@ -23,12 +23,12 @@ import {
 } from "./index.js";
 
 describe("实体 / 关系常量（schema.md）", () => {
-  it("ENTITY_TYPES 为 4 种实体类型，且与 types 的 EntityType 一致", () => {
-    expect(ENTITY_TYPES).toEqual(["character", "setting", "location", "hook"]);
+  it("ENTITY_TYPES 为 5 种实体类型（含 event 时间轴事件，决策 26），且与 types 的 EntityType 一致", () => {
+    expect(ENTITY_TYPES).toEqual(["character", "setting", "location", "hook", "event"]);
     expectTypeOf<(typeof ENTITY_TYPES)[number]>().toEqualTypeOf<EntityType>();
   });
 
-  it("RELATION_TYPES 含全部 16 个预定义关系类型（schema.md 第 66-80 行）", () => {
+  it("RELATION_TYPES 含全部 17 个预定义关系类型（schema.md 第 66-80 行 + occurs_in 决策 26）", () => {
     expect(RELATION_TYPES).toEqual([
       "belongs_to",
       "owns",
@@ -46,8 +46,9 @@ describe("实体 / 关系常量（schema.md）", () => {
       "resolves",
       "depends_on",
       "involves",
+      "occurs_in",
     ]);
-    expect(RELATION_TYPES).toHaveLength(16);
+    expect(RELATION_TYPES).toHaveLength(17);
   });
 
   it("分类常量：plot_edge 与伏笔三关系", () => {

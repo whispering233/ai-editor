@@ -5,8 +5,8 @@
 
 // ============ 实体 ============
 
-/** 实体类型（entities 表 type 列，schema.md） */
-export type EntityType = "character" | "setting" | "location" | "hook";
+/** 实体类型（entities 表 type 列，schema.md；event 为时间轴事件，决策 26） */
+export type EntityType = "character" | "setting" | "location" | "hook" | "event";
 
 /**
  * 实体（API 响应形态，camelCase；对应 GET /api/v1/entity/:type/:id 详情）

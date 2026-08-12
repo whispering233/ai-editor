@@ -39,6 +39,8 @@ const ENTITY_TYPE_LABEL: Record<EntityType, string> = {
   setting: "设定",
   location: "地点",
   hook: "伏笔",
+  // C1 类型补全（决策 26 event 时间轴事件；时间轴专属 UI 由 C2 实现）
+  event: "事件",
 };
 
 const NODE_TYPE_LABEL: Record<OutlineNodeType, string> = {

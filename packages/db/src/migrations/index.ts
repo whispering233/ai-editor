@@ -8,18 +8,7 @@
 // **version 语义**：迁移完成后 data.db 的 user_version（`setUserVersion(m.version)`）。
 // 从 v=N 库升级到 v=N+1 的迁移条目 version = N+1（SCHEMA_VERSION 即目标版本）。
 //
-// **写法示例**（首个真实迁移（SCHEMA_VERSION 提升到 2 时）加入）：
-// ```ts
-// import type { Db } from "../connection.js";
-// import type { Migration } from "./index.js";
-// export default {
-//   version: 2,
-//   up: (db: Db) => {
-//     // DDL/数据变更（better-sqlite3 同步 API；抛错 → 该迁移整体回滚）
-//     db.exec("ALTER TABLE entities ADD COLUMN note TEXT");
-//   },
-// } satisfies Migration;
-// ```
+// **写法示例**：见 002_event_timeline.ts（首个真实迁移：建新表拷贝改 CHECK，四步换表）。
 //
 // **执行语义**（runMigrations，见 queries/migration.ts）：
 // - 按 version 升序逐个执行，每个迁移一个事务（up + setUserVersion 原子提交）
@@ -27,10 +16,12 @@
 // - 失败 → 该迁移回滚 + 版本停在前一迁移后，下次 open 重试
 // - 无迁移路径的旧版本（如 v0 且无 0→1 条目）保持删库重建兜底（决策 13）
 //
-// **当前状态**：SCHEMA_VERSION = 1 且无历史版本 → 数组为空（机制已就绪，
-// 首个真实条目在未来的 schema 变更时加入）。
+// **当前状态**：SCHEMA_VERSION = 2；已有首个真实迁移 002（v1→v2：entities 表
+// CHECK 扩为 5 种 + sort_order 列，决策 26 时间轴）。v0 库无 0→1 迁移条目，
+// 仍走删库重建兜底（决策 13）。
 
 import type { Db } from "../connection.js";
+import migration002 from "./002_event_timeline.js";
 
 /** 单条增量迁移（version = 迁移完成后 data.db 的 user_version） */
 export interface Migration {
@@ -39,5 +30,5 @@ export interface Migration {
   up: (db: Db) => void;
 }
 
-/** 全量迁移集（按 version 升序；SCHEMA_VERSION = 1 当前为空） */
-export const MIGRATIONS: readonly Migration[] = [];
+/** 全量迁移集（按 version 升序；当前含 002：v1→v2 时间轴事件，决策 26） */
+export const MIGRATIONS: readonly Migration[] = [migration002];

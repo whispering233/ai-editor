@@ -24,6 +24,8 @@ export const SUMMARY_COLUMNS: Record<EntityType, SummaryColumnConfig> = {
   setting: { key1: "category", label1: "类别" },
   location: { key1: "type", label1: "类型" },
   hook: { key1: "status", label1: "状态", key2: "payoff_timing", label2: "回收时机" },
+  // C1 类型补全（决策 26 event 时间轴事件；服务端 event 摘要为空对象，时间轴专属 UI 由 C2 实现）
+  event: { key1: "description", label1: "描述" },
 };
 
 /** hook 枚举值 → 中文（展示映射；未收录的原样显示）；详情页表单下拉复用（S3.6） */
@@ -73,4 +75,6 @@ export const CREATE_FIRST_FIELD: Record<EntityType, CreateFirstFieldConfig> = {
     input: "select",
     options: ["planted", "progressing", "resolved", "abandoned"],
   },
+  // C1 类型补全（决策 26 event 时间轴事件；时间轴专属创建 UI 由 C2 实现）
+  event: { key: "description", label: "描述", input: "text" },
 };

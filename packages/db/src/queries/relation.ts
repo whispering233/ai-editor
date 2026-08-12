@@ -46,8 +46,8 @@ export interface RelationQuery {
 /** 大纲端点 id（relation_records 端点类型约定，schema.md） */
 export const OUTLINE_ENDPOINT_TYPE = "outline_node";
 
-/** 实体端点类型集合（entities 表 type 列） */
-const ENTITY_ENDPOINT_TYPES = ["character", "setting", "location", "hook"] as const;
+/** 实体端点类型集合（entities 表 type 列；含 event 时间轴事件——occurs_in 端点校验，决策 26） */
+const ENTITY_ENDPOINT_TYPES = ["character", "setting", "location", "hook", "event"] as const;
 
 /**
  * 构建可见性上下文：一次性收集两端点的软删集合与名称映射——

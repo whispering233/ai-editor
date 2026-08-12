@@ -27,8 +27,14 @@ import { nowIso } from "../storage/atomic.js";
 import { withTransaction, type Db } from "../connection.js";
 import { findOutlineNode, readOutlineFile } from "../storage/outline.js";
 
-/** 实体端点类型集合（entities 表 type 列；其余 target_type 按大纲节点处理，relation.ts 同款约定） */
-const ENTITY_TARGET_TYPES = ["character", "setting", "location", "hook"] as const;
+/**
+ * 实体端点类型集合（entities 表 type 列；其余 target_type 按大纲节点处理，relation.ts 同款约定）。
+ * 含 event（oracle 审查，决策 26）：event 虽不产生 Delta（client 下拉已过滤），但本集合是
+ * 「实体 vs 大纲节点」端点分类——可见性软删过滤、targetName 联表（entities.name）与
+ * 悬空诊断（listDanglingDeltas）需按实体处理，否则 event 目标会落入大纲节点分支：
+ * targetName 缺失、实体 purge 后误报 target_missing。
+ */
+const ENTITY_TARGET_TYPES = ["character", "setting", "location", "hook", "event"] as const;
 
 /** 行 → DeltaRow（changes JSON 解析；坏行防御同 entity.ts parseDataColumn 风格） */
 function rowToDeltaRow(row: Record<string, unknown>): DeltaRow {

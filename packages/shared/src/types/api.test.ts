@@ -1,6 +1,7 @@
 // API 契约 schema 测试（T1.4）：按 endpoints.md 示例做 parse 通过与拒绝用例
 import { describe, expect, it } from "vitest";
 import {
+  ENTITY_DATA_SCHEMAS,
   ERROR_CODES,
   OUTLINE_NODE_DATA_SCHEMAS,
   PROJECT_EXPORT_FILE_NAMES,
@@ -14,9 +15,12 @@ import {
   entityDetailResSchema,
   entityListQuerySchema,
   entityListResSchema,
+  entityMoveReqSchema,
+  entityMoveResSchema,
   entitySummarySchema,
   entityUpdateResSchema,
   errorCodeSchema,
+  eventDataSchema,
   outlineCreateReqSchema,
   outlineGetQuerySchema,
   outlineNodeSchema,
@@ -210,6 +214,46 @@ describe("entity 端点", () => {
 
   it("更新响应 parse：entityUpdateResSchema", () => {
     expect(entityUpdateResSchema.parse({ id: "char-1", updated: true }).updated).toBe(true);
+  });
+});
+
+describe("event 时间轴契约（决策 26）", () => {
+  it("eventDataSchema：description/time_label/tags 全字段通过（字段名 snake_case）", () => {
+    const parsed = eventDataSchema.parse({
+      description: "张三在藏经阁发现玉佩",
+      time_label: "第一卷·第 3 章",
+      tags: ["主线", "伏笔"],
+    });
+    expect(parsed).toEqual({
+      description: "张三在藏经阁发现玉佩",
+      time_label: "第一卷·第 3 章",
+      tags: ["主线", "伏笔"],
+    });
+  });
+
+  it("eventDataSchema：空对象合法；tags 非字符串数组拒绝；未知字段保留透传（.passthrough）", () => {
+    expect(eventDataSchema.parse({})).toEqual({});
+    expect(eventDataSchema.safeParse({ tags: "主线" }).success).toBe(false);
+    expect(eventDataSchema.safeParse({ tags: [1] }).success).toBe(false);
+    const parsed = eventDataSchema.parse({ description: "x", custom_field: { a: 1 } });
+    expect(parsed).toEqual({ description: "x", custom_field: { a: 1 } });
+  });
+
+  it("ENTITY_DATA_SCHEMAS 注册 event → eventDataSchema（服务端按 type 选用精校验）", () => {
+    expect(ENTITY_DATA_SCHEMAS.event).toBe(eventDataSchema);
+  });
+
+  it("entityMoveReqSchema：order 必填非负整数；负数/小数/缺字段拒绝；strict 拒绝未知键", () => {
+    expect(entityMoveReqSchema.parse({ order: 3 }).order).toBe(3);
+    expect(entityMoveReqSchema.safeParse({ order: -1 }).success).toBe(false);
+    expect(entityMoveReqSchema.safeParse({ order: 1.5 }).success).toBe(false);
+    expect(entityMoveReqSchema.safeParse({}).success).toBe(false);
+    expect(entityMoveReqSchema.safeParse({ order: 3, parent_id: "root" }).success).toBe(false);
+  });
+
+  it("entityMoveResSchema：{ moved: true } 字面量（响应 200）", () => {
+    expect(entityMoveResSchema.parse({ moved: true })).toEqual({ moved: true });
+    expect(entityMoveResSchema.safeParse({ moved: false }).success).toBe(false);
   });
 });
 

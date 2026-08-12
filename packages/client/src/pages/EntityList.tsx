@@ -36,6 +36,8 @@ const TYPE_LABEL: Record<EntityType, string> = {
   setting: "设定",
   location: "地点",
   hook: "伏笔",
+  // C1 类型补全（决策 26 event 时间轴事件；时间轴专属 UI 由 C2 实现）
+  event: "事件",
 };
 
 /** 排序下拉选项（sort × order 组合；默认更新时间倒序） */

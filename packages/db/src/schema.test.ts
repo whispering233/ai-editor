@@ -76,7 +76,7 @@ describe("schema.ts 建表", () => {
     expect(listTables(db)).toHaveLength(4);
   });
 
-  it("entities.type CHECK 约束生效：非法 type 插入报错，合法 type 可插入", () => {
+  it("entities.type CHECK 约束生效：非法 type 插入报错，合法 type 可插入（含 event 时间轴事件，决策 26）", () => {
     const insert = db.prepare(
       "INSERT INTO entities (id, type, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
     );
@@ -85,8 +85,8 @@ describe("schema.ts 建表", () => {
       () => insert.run("char-1", "invalid", "测试", "2026-08-01T10:00:00Z", "2026-08-01T10:00:00Z"),
       "SQLITE_CONSTRAINT_CHECK",
     );
-    // 合法 type：四类均可插入
-    for (const type of ["character", "setting", "location", "hook"]) {
+    // 合法 type：五类均可插入
+    for (const type of ["character", "setting", "location", "hook", "event"]) {
       expect(() => insert.run(`e-${type}`, type, "测试", "2026-08-01T10:00:00Z", "2026-08-01T10:00:00Z")).not.toThrow();
     }
   });
@@ -104,12 +104,23 @@ describe("schema.ts 建表", () => {
     }
   });
 
-  it("user_version 读写往返（决策 13：MVP 版本号取 1）", () => {
+  it("user_version 读写往返（决策 13/E5：SCHEMA_VERSION = 2，v1→v2 走增量迁移 002）", () => {
     // 新库默认 0
     expect(getUserVersion(db)).toBe(0);
     setUserVersion(db, SCHEMA_VERSION);
     expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
-    expect(SCHEMA_VERSION).toBe(1);
+    expect(SCHEMA_VERSION).toBe(2);
+  });
+
+  it("entities 有 sort_order 列（时间轴事件全局线性序，仅 event 使用，其余类型 NULL，决策 26）", () => {
+    const cols = db.prepare("PRAGMA table_info(entities)").all() as Array<{ name: string; dflt_value: string | null }>;
+    expect(cols.some((c) => c.name === "sort_order")).toBe(true);
+    // 非 event 类型插入后 sort_order 为 NULL（未显式指定走默认）
+    db.prepare(
+      "INSERT INTO entities (id, type, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+    ).run("char-1", "character", "张三", "2026-08-01T10:00:00Z", "2026-08-01T10:00:00Z");
+    const raw = db.prepare("SELECT sort_order FROM entities WHERE id = ?").get("char-1") as { sort_order: number | null };
+    expect(raw.sort_order).toBeNull();
   });
 
   it("setUserVersion 拒绝非整数版本号（防模板拼接注入面）", () => {

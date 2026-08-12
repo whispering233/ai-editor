@@ -116,6 +116,9 @@ export function analyzeEntityConsistency(row: EntityRow, tree: OutlineFileTree, 
     case "setting":
     case "location":
       return checkParentReference(data, db);
+    // C1 类型补全（决策 26 event 时间轴事件：暂无一致性规则，返回空集；后续卡按需增补）
+    case "event":
+      return [];
   }
 }
 

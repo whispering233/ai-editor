@@ -14,8 +14,16 @@ import { targetTypeLabel } from "./delta";
 
 // ============ 目标类型选项（复用 lib/delta targetTypeLabel，不自行定义标签） ============
 
-/** 变更目标类型下拉（S13.3 收紧：仅四类实体——大纲节点不可作为变更目标；历史 outline_node 目标数据保留展示） */
-export const DELTA_TARGET_TYPE_OPTIONS: ReadonlyArray<{ value: string; label: string }> = ENTITY_TYPES.map((t) => ({
+/**
+ * 变更目标类型下拉（S13.3 收紧：仅四类实体——大纲节点不可作为变更目标；历史 outline_node
+ * 目标数据保留展示）。
+ * **过滤 event（oracle 审查，决策 26）**：ENTITY_TYPES 扩为 5 种后，event（时间轴事件）
+ * 不产生 Delta（决策 26：时间轴为结构化数据，变更追踪语义未定义；服务端 delta 端点亦
+ * 不校验 event 目标）——下拉泄漏会出现「事件」死选项（label 回退原文、字段列表空）。
+ */
+export const DELTA_TARGET_TYPE_OPTIONS: ReadonlyArray<{ value: string; label: string }> = ENTITY_TYPES.filter(
+  (t) => t !== "event",
+).map((t) => ({
   value: t,
   label: targetTypeLabel(t),
 }));

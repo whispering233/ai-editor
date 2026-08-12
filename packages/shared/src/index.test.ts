@@ -38,7 +38,7 @@ describe("@whispering233/ai-editor-shared 契约类型（T1.1）", () => {
   it("Entity / EntitySummary 字段为 API 形态（camelCase）", () => {
     expectTypeOf<Entity>().toMatchTypeOf<{
       id: string;
-      type: "character" | "setting" | "location" | "hook";
+      type: "character" | "setting" | "location" | "hook" | "event";
       name: string;
       data: Record<string, unknown>;
       createdAt: string;
