@@ -27,7 +27,7 @@ export interface CanvasPoint {
 export type CanvasNodePositions = Record<string, CanvasPoint>;
 
 /** 布局持久化结构（决策 10：localStorage key ai-editor:canvas:{project_id}） */
-export interface CanvasLayout {
+interface CanvasLayout {
   nodes: CanvasNodePositions;
   zoom: number;
 }
@@ -60,7 +60,7 @@ export const CANVAS_CARD_W: Record<CanvasNodeType, number> = { volume: 248, chap
 export const CANVAS_CARD_H: Record<CanvasNodeType, number> = { volume: 96, chapter: 88, scene: 76 };
 
 /** 自动布局间距（canvas.md 线框：卷为容器横向成列、章缩进、场景为叶子） */
-export const CANVAS_LAYOUT = {
+const CANVAS_LAYOUT = {
   /** 内容区左边距 */
   padX: 48,
   /** 内容区上边距 */
@@ -80,7 +80,7 @@ export const MIN_ZOOM = 0.5;
 export const MAX_ZOOM = 2;
 
 /** localStorage 键前缀（决策 10：key = ai-editor:canvas:{project_id}，按项目隔离） */
-export const CANVAS_STORAGE_PREFIX = "ai-editor:canvas:";
+const CANVAS_STORAGE_PREFIX = "ai-editor:canvas:";
 
 /** 缩放值夹取到 [MIN_ZOOM, MAX_ZOOM] */
 export function clampZoom(zoom: number): number {
@@ -354,13 +354,13 @@ export const MINIMAP_SIZE = { w: 180, h: 120 } as const;
 export const MINIMAP_PAD = 4;
 
 /** 归一化比例 clamp 上限（单节点/极小内容不放大占满小地图） */
-export const MINIMAP_MAX_SCALE = 1;
+const MINIMAP_MAX_SCALE = 1;
 
 /** 归一化比例 clamp 下限（极大内容也不归零） */
-export const MINIMAP_MIN_SCALE = 0.02;
+const MINIMAP_MIN_SCALE = 0.02;
 
 /** 小地图节点矩形（归一化坐标；type 供类型色填充） */
-export interface MinimapNodeRect {
+interface MinimapNodeRect {
   id: string;
   x: number;
   y: number;
@@ -381,7 +381,7 @@ export interface MinimapViewport {
 }
 
 /** 小地图视口框（归一化坐标） */
-export interface MinimapViewportRect {
+interface MinimapViewportRect {
   x: number;
   y: number;
   w: number;
@@ -389,7 +389,7 @@ export interface MinimapViewportRect {
 }
 
 /** 小地图布局结果（组件只渲染） */
-export interface MinimapLayout {
+interface MinimapLayout {
   nodeRects: MinimapNodeRect[];
   viewportRect: MinimapViewportRect | null;
 }
@@ -469,7 +469,7 @@ export function minimapRectangles(
 // ============ hover 路径高亮（S10.5，inkos dfsForwardPath 模式；本地 UI 态不写回数据层——决策 10 投影语义） ============
 
 /** hover 路径高亮结果：双集合（节点 id 集 + 边 id 集，边按 CanvasEdge.id 匹配） */
-export interface PathHighlight {
+interface PathHighlight {
   nodeIds: Set<string>;
   edgeIds: Set<string>;
 }

@@ -103,7 +103,7 @@
 
 ### 发布阻断项（必须清零）
 
-> **实施进展（2026-08-04）**：✅ **E1-E6 已全部完成**——导出/导入（E1-E3 `8706f63`/`0c1ecf7`/`9e7c60e`）、未来版本拒绝重建（E4 `e53d261`）、增量迁移机制（E5 `023c2b5`）、发布链路（E6：包名改 `@whispering233/ai-editor-*`——`@ai-editor` scope 被占；publishConfig/脚本/双 workflow；npmjs Trusted Publisher ×6 已配 + 2FA 已开；**v0.0.4 由 CI OIDC 自动发布、Release + Publish 全链路全绿**）。剩余可选收尾：坏版本 v0.0.1/v0.0.2 deprecate 标注（需 2FA 凭据）；发布管道坑记录见 `doc/design/tasks.md` E6 卡。
+> **实施进展（2026-08）**：✅ **E1-E6 已全部完成**——导出/导入（E1-E3 `8706f63`/`0c1ecf7`/`9e7c60e`）、未来版本拒绝重建（E4 `e53d261`）、增量迁移机制（E5 `023c2b5`）、发布链路（E6：包名改 `@whispering233/ai-editor-*`——`@ai-editor` scope 被占；publishConfig/脚本/双 workflow；npmjs Trusted Publisher ×6 已配 + 2FA 已开；**v0.0.4 由 CI OIDC 自动发布、Release + Publish 全链路全绿**）。后续版本发布：**v0.0.5（2026-08-12，阶段 B/C + 画布增强 + 交互优化，全仓 1387 测试全绿）**。剩余可选收尾：坏版本 v0.0.1/v0.0.2 deprecate 标注（需 2FA 凭据）；发布管道坑记录见 `doc/design/tasks.md` E6 卡。
 
 | # | 项 | 性质 | 工作量 |
 |---|----|------|--------|

@@ -4,7 +4,7 @@
 
 | 目录 | 内容 | 阅读对象 |
 |------|------|---------|
-| [`design/`](./design/) | 系统架构设计：产品定位（`product.md`）、技术架构与分包（`architecture.md`）、关键决策 1-23（`decisions.md`）、迭代优化清单（`backlog.md`，MVP 不做） | 全体开发者 |
+| [`design/`](./design/) | 系统架构设计：产品定位（`product.md`）、技术架构与分包（`architecture.md`）、关键决策 1-26（`decisions.md`）、迭代优化清单（`backlog.md`，MVP 不做） | 全体开发者 |
 | [`api/`](./api/) | 核心 API 设计（端点契约 `endpoints.md`、AI 工具目录 `tools.md`、数据流 `data-flow.md`） | 前后端开发者 |
 | [`database/`](./database/) | 数据结构 schema（表结构 `schema.md`、伏笔系统 `hooks.md`） | 后端开发者 |
 | [`ui/`](./ui/) | 当前 UI 布局样式设计（`layout.md` 三栏工作台 + `pages/` 各页面细案，2026-08 已从原型更新为实现样式） | 前端开发者 |

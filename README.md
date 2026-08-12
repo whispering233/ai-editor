@@ -102,7 +102,7 @@ npm install -g @whispering233/ai-editor-server
 ai-editor <项目目录>   # 启动服务 + 自动打开浏览器 http://127.0.0.1:3456
 ```
 
-> 版本说明：**当前最新版 v0.0.4**（由 CI OIDC 自动发布，发布全链路自动化已验证）；v0.0.1/v0.0.2 因发布管道缺陷（manifest 残留 `workspace:*` 协议）不可安装，已计划 deprecate 标注；安装时使用 `@whispering233/ai-editor-server@latest` 即可。
+> 版本说明：**当前最新版 v0.0.5**（由 CI OIDC 自动发布，发布全链路自动化已验证）；v0.0.1/v0.0.2 因发布管道缺陷（manifest 残留 `workspace:*` 协议）不可安装，已计划 deprecate 标注；安装时使用 `@whispering233/ai-editor-server@latest` 即可。
 
 **发布前置（一次性，npmjs 手动）**：① 开启 npm 账号 **2FA**（npmjs 要求开启两步验证才能配置包管理；开启会撤销现有 token，需重新生成 Automation token）；② 为 `@whispering233/ai-editor-shared`、`@whispering233/ai-editor-llm`、`@whispering233/ai-editor-db`、`@whispering233/ai-editor-tools`、`@whispering233/ai-editor-agent`、`@whispering233/ai-editor-server` 六包各配置 Trusted Publisher：Publisher = GitHub Actions、工作流名 = `publish.yml`；配置后 CI 无需 token（OIDC 自动换证）。
 
@@ -112,7 +112,7 @@ ai-editor <项目目录>   # 启动服务 + 自动打开浏览器 http://127.0.0
 
 | 目录 | 内容 |
 |------|------|
-| `doc/design/` | 产品定位、架构与分包、关键决策 1-23、backlog、任务清单与进度 |
+| `doc/design/` | 产品定位、架构与分包、关键决策 1-26、backlog、任务清单与进度 |
 | `doc/api/` | 端点契约、AI 工具目录、数据流 |
 | `doc/database/` | 表结构 / outline.json / project.json 契约、伏笔系统 |
 | `doc/ui/` | 当前 UI 布局样式设计（三栏工作台 `layout.md` + 各页面细案） |
