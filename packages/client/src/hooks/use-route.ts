@@ -1,7 +1,8 @@
 // 自制 hash 路由（architecture.md 决策：轻量 hash-based useHashRoute，不引入 React Router）
 // 解析 location.hash（形如 "#/outline"、"#/entities/character/char-abc"）为结构化路由。
-// 路由表见 doc/ui/layout.md §1（8 路由）：#/、#/outline、#/entities/:type?、#/entities/:type/:id、
-// #/canvas、#/hooks、#/trash、#/settings（#/chat 已移除——聊天常驻右栏，不再有独立页）
+// 路由表见 doc/ui/layout.md §1（11 路由）：#/、#/outline、#/outline/:nodeId、#/canvas、
+// #/entities/:type?、#/entities/:type/:id、#/hooks、#/timeline、#/timeline/:id、#/trash、#/settings
+// （#/chat 已移除——聊天常驻右栏，不再有独立页）
 import { useEffect, useState } from "react";
 
 /** 路由结构：path 为归一化路径（如 "/entities/character"），segments 为分段数组 */
@@ -18,6 +19,7 @@ export const KNOWN_ROUTE_SEGMENTS = [
   "entities",
   "canvas",
   "hooks",
+  "timeline",
   "trash",
   "settings",
 ] as const;

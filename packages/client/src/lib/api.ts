@@ -383,6 +383,21 @@ export function deleteEntity(type: EntityType, id: string): Promise<DeleteEntity
   return apiFetch<DeleteEntityRes>(`/entity/${type}/${id}`, { method: "DELETE" });
 }
 
+/** PUT /api/v1/entity/event/:id/move 请求体（order：0-based 全局事件线性序，决策 26；负数由 schema 拒绝） */
+export interface MoveEventBody {
+  order: number;
+}
+
+/** PUT /api/v1/entity/event/:id/move 响应（endpoints.md L386-393；仅 event 支持，其余实体无 sort_order 语义） */
+export interface MoveEventRes {
+  moved: true;
+}
+
+/** 移动时间轴事件（拖拽排序，决策 26；error：404 ENTITY_NOT_FOUND / 400 VALIDATION_ERROR） */
+export function moveEntityEvent(id: string, body: MoveEventBody): Promise<MoveEventRes> {
+  return apiFetch<MoveEventRes>(`/entity/event/${id}/move`, { method: "PUT", body });
+}
+
 // ============ 关系（S3.6；契约：endpoints.md「关系」L300-391，物理删决策 12 修订） ============
 
 /** GET /api/v1/relation 列表项（联表填充的端点名称；depth=1 紧邻展示用） */

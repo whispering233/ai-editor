@@ -13,6 +13,7 @@ import Canvas from "./pages/Canvas";
 import EntityList from "./pages/EntityList";
 import EntityDetail from "./pages/EntityDetail";
 import HookPanel from "./pages/HookPanel";
+import Timeline from "./pages/Timeline";
 import Trash from "./pages/Trash";
 import Settings from "./pages/Settings";
 import "./index.css";
@@ -51,6 +52,9 @@ function renderPage(route: Route): ReactNode {
     }
     case "hooks":
       return <HookPanel />;
+    case "timeline":
+      // 1 段（#/timeline）→ 时间轴列表页；详情页路由（#/timeline/:id）由 C4 注册
+      return <Timeline />;
     case "trash":
       return <Trash />;
     case "settings":
