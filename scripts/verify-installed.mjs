@@ -51,11 +51,12 @@ const projectDir = mkdtempSync(join(tmpdir(), "ai-editor-verify-proj-"));
 
 try {
   // 2. 真实安装（registry 拉包；--no-fund/--no-audit 减噪；失败时打印输出）
-  //    重试：新发布版本在 registry 有文档缓存传播延迟（dist-tags 即时、manifest 数分钟），
-  //    紧接发布后的 npm install 可能 ETARGET/E404——重试等待（最多 5 次 × 15s）。
+  //    重试：新发布版本在 registry 有文档缓存传播延迟（dist-tags 即时、manifest 数分钟，
+  //    实测最慢可达 3-5 分钟——2026-08 v0.0.5 曾 5×15s=75s 窗口不足导致 CI 冒烟 ETARGET 失败，
+  //    发布实际成功仅验证超窗），重试等待（最多 10 次 × 30s = 5 分钟窗口）。
   console.log(`[verify] npm install --prefix ${installDir} @whispering233/ai-editor-server@${version}`);
   let installOk = false;
-  for (let attempt = 1; attempt <= 5 && !installOk; attempt++) {
+  for (let attempt = 1; attempt <= 10 && !installOk; attempt++) {
     try {
       execFileSync(
         "npm",
@@ -64,14 +65,14 @@ try {
       );
       installOk = true;
     } catch {
-      if (attempt < 5) {
+      if (attempt < 10) {
         console.warn(`[verify] npm install 失败（第 ${attempt} 次，等待 registry 缓存传播后重试）`);
-        await new Promise((r) => setTimeout(r, 15_000));
+        await new Promise((r) => setTimeout(r, 30_000));
       }
     }
   }
   if (!installOk) {
-    console.error(`[verify] FAIL: npm install 失败（5 次重试后仍失败——疑似版本不存在或网络问题）`);
+    console.error(`[verify] FAIL: npm install 失败（10 次重试后仍失败——疑似版本不存在或网络问题）`);
     process.exit(1);
   }
 

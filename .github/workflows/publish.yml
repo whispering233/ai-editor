@@ -25,7 +25,8 @@ jobs:
     timeout-minutes: 20 # CI 挂起保险（verify-installed 冒烟等步骤兜底，常态 3-5 分钟）
     steps:
       - uses: actions/checkout@v6
-      - uses: pnpm/action-setup@v4
+      # pnpm/action-setup v4.4.0+（v4.2.0 起修复 Node 20 弃用警告——runner 强制 Node 24 运行旧 action 报 deprecation）
+      - uses: pnpm/action-setup@v4.4.0
         with:
           version: 11.8.0
       - uses: actions/setup-node@v6
