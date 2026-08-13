@@ -288,8 +288,9 @@
 1. fileName 白名单校验（仅允许 `.backups/` 下 `<YYYYMMDD-HHmmss>.zip` 格式，拒绝路径分隔符/`..`）
 2. **覆盖前自动快照**：将当前三文件打包为快照存入 `.backups/`（复用备份管道）
 3. 备份包校验（同 import 校验顺序 3-7：zip 解析/白名单/三文件齐全/顶层契约/data.db user_version 三态分流——E4/E5 语义，绝不静默重建）
-4. **原子替换**：临时目录解压校验通过后，三文件覆盖写入项目目录（原子写）
-5. 服务端当前项目引用不变（id 保留，决策 27）；前端刷新 config/outline/会话数据
+4. **原子替换**：临时目录解压校验通过后，三文件覆盖写入项目目录（原子写）；**project.json 内 `name` 归一为当前目录名**（与 import 覆盖一致，维持「目录名 = 书名」不变式；`id` 保留当前项目 id）
+5. **data.db 会话归属迁移（B2.2 审核 P1-1）**：备份包内 `project_id` ≠ 当前项目 id 时（跨项目恢复），替换后执行 `UPDATE chat_messages SET project_id = ? WHERE project_id = ?`（旧 id → 当前 id）——「保留 id 保会话」的理由在跨项目场景同样成立，聊天历史不静默消失
+6. 服务端当前项目引用不变（id 保留，决策 27）；前端刷新 config/outline/会话数据
 
 **错误码**：400 `VALIDATION_ERROR`（坏包/文件名非法）、404（备份不存在）、409 `SCHEMA_VERSION_MISMATCH`（同上）。
 
@@ -313,7 +314,8 @@
 
 **语义**：
 - 校验新名 → 目标目录 `books/<新名>/` 已存在（且不是当前书自身目录）→ 409 `PROJECT_ALREADY_EXISTS`；
-- **原子移动**：`books/<旧名>/` → `books/<新名>/` + 更新 project.json 内 name（任一失败回滚，不留下半成品）；
+- **仅支持重命名书架 `books/` 下的书**：创作根自身是项目（旧单项目部署兼容语义）时 → 400 `VALIDATION_ERROR`（移动创作根会破坏书架结构）；
+- **原子移动**：`books/<旧名>/` → `books/<新名>/` + 更新 project.json 内 name（任一失败回滚，不留下半成品）；`.backups/` 随目录移动自然携带；
 - 当前打开的书改名：服务端**同步更新内部项目路径引用**（会话/历史按 id 不受影响）；前端刷新书架与 config（`GET /project/config` 的 name 变化）。
 - 未打开项目时 → 409 `NO_PROJECT_OPEN`。
 
