@@ -1,7 +1,7 @@
 // 项目路由测试（S1.2）：create / open（含 schema 删库重建）/ close / config GET/PUT
 // 覆盖：三文件初始化与版本号写入、路径校验（相对路径/符号链接）、版本不匹配重建 + 备份、
 //       currentProject 单例切换与清空、current_position 非软删节点校验
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -1024,6 +1024,15 @@ describe("POST /project/import（E2：zip 导入新书）", () => {
     return new Uint8Array(await res.arrayBuffer());
   }
 
+  /** 手工打包一本书目录三文件为 zip（未打开的书无法走 export 端点；initProjectDir 关闭连接时 WAL 已合并） */
+  function bookZip(dir: string): Uint8Array {
+    return zipSync({
+      "project.json": readFileSync(join(dir, "project.json")),
+      "outline.json": readFileSync(join(dir, "outline.json")),
+      "data.db": readFileSync(join(dir, "data.db")),
+    });
+  }
+
   it("roundtrip：E1 导出 → import 新书名 → 200 + 三文件生成 + 打开新书数据完整（与源一致）", async () => {
     const root = makeTmpDir();
     setProjectRoot(root);
@@ -1051,11 +1060,13 @@ describe("POST /project/import（E2：zip 导入新书）", () => {
       id: "proj-src",
       path: join(root, "books", "导入的新书"),
       name: "导入的新书",
+      mode: "new", // 决策 27 分流：id 不匹配书架 → 导入为新书
     });
     // 新书目录三文件生成（project.json id 沿用源 id——数据原样恢复）
     const bookDir = join(root, "books", "导入的新书");
     expect(readProjectFile(bookDir)?.id).toBe("proj-src");
-    expect(readProjectFile(bookDir)?.name).toBe("源书"); // project.json 内部 name 不被篡改
+    // name 归一为目录名（决策 27：id 是身份、name 是展示名——「目录名 = 书名」不变式）
+    expect(readProjectFile(bookDir)?.name).toBe("导入的新书");
     expect(readOutlineFile(bookDir)).toEqual(srcOutline);
     // import 不打开（与 create 一致）
     expect(getCurrentProject()?.root).toBe(srcDir);
@@ -1217,29 +1228,56 @@ describe("POST /project/import（E2：zip 导入新书）", () => {
     expect((await res.json()).error.message).toContain("空文件");
   });
 
-  it("书名冲突（目标 books/<name>/ 已存在）→ 409 PROJECT_ALREADY_EXISTS（与 create 同语义）", async () => {
+  it("同名不再 409（决策 27）：id 不匹配 → 新书目录自动去重 books/<name> (2)/，project.json name 同步", async () => {
     const root = makeTmpDir();
     setProjectRoot(root);
-    // 先导入一本书成功
-    const srcDir = makeTmpDir();
-    const app = await openSeededProject(srcDir);
+    // 三本不同 id 的源书（同名去重只发生在「id 不匹配」的新书导入分支；bookZip 直接打包，
+    // 不依赖 currentProject 单例——避免 openSeededProject 互相切换）
+    const srcDirA = makeTmpDir();
+    initProjectDir(srcDirA, makeConfig("proj-dup-a", "源书A"));
+    const srcDirB = makeTmpDir();
+    initProjectDir(srcDirB, makeConfig("proj-dup-b", "源书B"));
+    const srcDirC = makeTmpDir();
+    initProjectDir(srcDirC, makeConfig("proj-dup-c", "源书C"));
+    const app = buildApp();
+
+    // 先导入书 A（同名书）
     const okRes = await app.request("/api/v1/project/import", {
       method: "POST",
       headers: HOST_HEADERS,
-      body: importForm(await exportZip(app), "同名书"),
+      body: importForm(bookZip(srcDirA), "同名书"),
     });
     expect(okRes.status).toBe(200);
-    // 再次导入同名 → 409
+    expect((await okRes.json()).data).toMatchObject({ mode: "new", path: join(root, "books", "同名书") });
+
+    // 再导入书 B（不同 id）同名 → 不再 409：目录去重为 同名书 (2)/，project.json name 同步
     const dupRes = await app.request("/api/v1/project/import", {
       method: "POST",
       headers: HOST_HEADERS,
-      body: importForm(await exportZip(app), "同名书"),
+      body: importForm(bookZip(srcDirB), "同名书"),
     });
-    expect(dupRes.status).toBe(409);
-    expect(await dupRes.json()).toEqual({
-      success: false,
-      error: { code: "PROJECT_ALREADY_EXISTS", message: expect.stringContaining("同名") },
+    expect(dupRes.status).toBe(200);
+    const dupData = (await dupRes.json()).data;
+    expect(dupData).toEqual({
+      imported: true,
+      id: "proj-dup-b",
+      path: join(root, "books", "同名书 (2)"),
+      name: "同名书 (2)",
+      mode: "new",
     });
+    // 两本并存：首本 name 不变，(2) 的 project.json name 同步为去重名（「目录名 = 书名」不变式）
+    expect(readProjectFile(join(root, "books", "同名书"))?.name).toBe("同名书");
+    expect(readProjectFile(join(root, "books", "同名书 (2)"))?.name).toBe("同名书 (2)");
+
+    // 连续去重递增：再导入书 C 同名 → (3)
+    const thirdRes = await app.request("/api/v1/project/import", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: importForm(bookZip(srcDirC), "同名书"),
+    });
+    expect(thirdRes.status).toBe(200);
+    expect((await thirdRes.json()).data.path).toBe(join(root, "books", "同名书 (3)"));
+    expect(readProjectFile(join(root, "books", "同名书 (3)"))?.name).toBe("同名书 (3)");
   });
 
   it("书名含路径分隔符（../escape）→ 400 VALIDATION_ERROR（防 books/ 逃逸，决策 17）", async () => {
@@ -1304,6 +1342,214 @@ describe("POST /project/import（E2：zip 导入新书）", () => {
     });
     expect(res.status).toBe(500);
     expect((await res.json()).error.code).toBe("INTERNAL_ERROR");
+  });
+
+  // ============ B2.3 分流：id 匹配 → 覆盖恢复（决策 27） ============
+
+  it("id 匹配当前打开的书 → 覆盖恢复（mode: restored）：name 归一为目录名 + 覆盖前快照 + db 重连 + 数据回滚", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    const bookDir = join(root, "books", "书A");
+    initProjectDir(bookDir, { ...makeConfig("proj-imp-cur", "书A"), prompt: "旧提示词" });
+    const app = buildApp();
+    const openRes = await app.request("/api/v1/project/open", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: bookDir }),
+    });
+    expect(openRes.status).toBe(200);
+    // 导出当前状态（zip 内数据 = 旧提示词）
+    const zip = await exportZip(app);
+    // 修改数据（prompt + 大纲清空）
+    writeProjectFile(bookDir, { ...makeConfig("proj-imp-cur", "书A"), prompt: "新提示词" });
+    writeOutlineFile(bookDir, { id: "root", type: "root", schema_version: SCHEMA_VERSION, children: [] });
+
+    // 导入同一 id 的 zip（请求 name 任意——覆盖场景 name 不生效，归一为目录名）
+    const res = await app.request("/api/v1/project/import", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: importForm(zip, "随便什么名"),
+    });
+    expect(res.status).toBe(200);
+    const data = (await res.json()).data;
+    expect(data).toEqual({
+      imported: true,
+      id: "proj-imp-cur",
+      path: bookDir,
+      name: "书A", // name 归一为当前目录名（不是请求名，不是 zip 内 name）
+      mode: "restored",
+    });
+    // 数据回滚（覆盖恢复 = 恢复备份时点数据）
+    expect(readProjectFile(bookDir)?.prompt).toBe("旧提示词");
+    expect(readFileSync(join(bookDir, "outline.json"), "utf8")).toContain("第一卷");
+    // 覆盖前快照（后悔药）：.backups/ 有备份文件
+    expect(readdirSync(join(bookDir, ".backups")).length).toBeGreaterThan(0);
+    // db 重连：config 端点可用、当前项目引用未变
+    const cfg = await app.request("/api/v1/project/config", { headers: HOST_HEADERS });
+    expect(cfg.status).toBe(200);
+    expect(getCurrentProject()?.root).toBe(bookDir);
+    expect(getCurrentProject()?.db.open).toBe(true);
+  });
+
+  it("id 匹配书架其他书（未打开）→ 覆盖恢复：目标按 id 定位、数据回滚、当前打开的书不受影响", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    // 书A（打开）+ 书B（未打开，初始数据 B1）
+    const dirA = join(root, "books", "书A");
+    initProjectDir(dirA, { ...makeConfig("proj-imp-oa", "书A"), prompt: "A 当前" });
+    const dirB = join(root, "books", "书B");
+    initProjectDir(dirB, { ...makeConfig("proj-imp-ob", "书B"), prompt: "B 旧数据" });
+    const app = buildApp();
+    const openRes = await app.request("/api/v1/project/open", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: dirA }),
+    });
+    expect(openRes.status).toBe(200);
+    // 书B 备份（旧数据 B1）→ 改书B 数据为 B2 → 导入书B 的 zip（id 匹配书架书B）
+    const zipB = bookZip(dirB);
+    writeProjectFile(dirB, { ...makeConfig("proj-imp-ob", "书B"), prompt: "B 新数据" });
+    const res = await app.request("/api/v1/project/import", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: importForm(zipB, "随便"),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toEqual({
+      imported: true,
+      id: "proj-imp-ob",
+      path: dirB,
+      name: "书B", // 归一为书B 目录名（不是 zip 内 name——zip 内 name 也是书B，一致）
+      mode: "restored",
+    });
+    // 书B 数据回滚到 B1（覆盖恢复生效）；未打开 → 无连接可重连，文件层替换
+    expect(readProjectFile(dirB)?.prompt).toBe("B 旧数据");
+    // 覆盖前快照生成（临时连接管道）
+    expect(readdirSync(join(dirB, ".backups")).length).toBeGreaterThan(0);
+    // 当前打开的书A 不受影响（连接与数据完好）
+    const cfg = await app.request("/api/v1/project/config", { headers: HOST_HEADERS });
+    expect((await cfg.json()).data.prompt).toBe("A 当前");
+    expect(getCurrentProject()?.root).toBe(dirA);
+  });
+});
+
+// ============ POST /api/v1/project/rename（决策 27：重命名当前书籍） ============
+
+describe("POST /project/rename（重命名当前书籍，决策 27）", () => {
+  /** 在创作根 books/ 下造书并 open（rename 只对 books/ 下的书开放） */
+  async function openBookInRoot(root: string, name: string, id = "proj-rn"): Promise<Hono> {
+    const dir = join(root, "books", name);
+    initProjectDir(dir, { ...makeConfig(id, name), prompt: "提示词" });
+    const app = buildApp();
+    const res = await app.request("/api/v1/project/open", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: dir }),
+    });
+    expect(res.status).toBe(200);
+    return app;
+  }
+
+  it("成功：目录原子移动 + project.json name 更新 + 当前项目引用同步 + .backups/ 随目录携带", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    const app = await openBookInRoot(root, "旧名字");
+    const oldDir = join(root, "books", "旧名字");
+    // 先留一个备份（验证 .backups/ 随目录移动）
+    const bk = await app.request("/api/v1/project/backup", { method: "POST", headers: HOST_HEADERS });
+    expect(bk.status).toBe(200);
+    const backupName = (await bk.json()).data.backup.fileName;
+
+    const res = await app.request("/api/v1/project/rename", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ name: "新名字" }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      success: true,
+      data: { renamed: true, path: join(root, "books", "新名字"), name: "新名字" },
+    });
+    // 目录移动：旧目录消失、新目录存在
+    expect(existsSync(oldDir)).toBe(false);
+    const newDir = join(root, "books", "新名字");
+    expect(existsSync(newDir)).toBe(true);
+    // project.json name 更新（目录名 = 书名不变式）
+    expect(readProjectFile(newDir)?.name).toBe("新名字");
+    // .backups/ 随目录移动自然携带
+    expect(existsSync(join(newDir, ".backups", backupName))).toBe(true);
+    // 当前项目引用同步（config 端点 name + project.root 指向新目录）
+    const cfg = await app.request("/api/v1/project/config", { headers: HOST_HEADERS });
+    expect((await cfg.json()).data.name).toBe("新名字");
+    expect(getCurrentProject()?.root).toBe(newDir);
+    // rename 后备份写入新目录（定时器/管道路径跟随同一 project 引用）
+    const bk2 = await app.request("/api/v1/project/backup", { method: "POST", headers: HOST_HEADERS });
+    expect(bk2.status).toBe(200);
+    const bk2Name = (await bk2.json()).data.backup.fileName;
+    expect(existsSync(join(newDir, ".backups", bk2Name))).toBe(true);
+    // 书架列表反映新名
+    const list = await app.request("/api/v1/project/list", { headers: HOST_HEADERS });
+    expect((await list.json()).data.books.map((b: { name: string }) => b.name)).toContain("新名字");
+  });
+
+  it("目标目录已被其他书占用 → 409 PROJECT_ALREADY_EXISTS，当前书不动", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    const app = await openBookInRoot(root, "旧名字");
+    // 另一本「新名字」已存在（未打开）
+    initProjectDir(join(root, "books", "新名字"), makeConfig("proj-other", "新名字"));
+    const res = await app.request("/api/v1/project/rename", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ name: "新名字" }),
+    });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({
+      success: false,
+      error: { code: "PROJECT_ALREADY_EXISTS", message: expect.stringContaining("同名") },
+    });
+    // 当前书未被移动（目录与 name 原样）
+    expect(existsSync(join(root, "books", "旧名字"))).toBe(true);
+    expect(readProjectFile(join(root, "books", "旧名字"))?.name).toBe("旧名字");
+  });
+
+  it("校验：非法书名（路径分隔符/纯点/空）→ 400 VALIDATION_ERROR", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    const app = await openBookInRoot(root, "旧名字");
+    for (const bad of ["a/b", "a\\b", "..", ".", "", "  "]) {
+      const res = await app.request("/api/v1/project/rename", {
+        method: "POST",
+        headers: HOST_HEADERS,
+        body: JSON.stringify({ name: bad }),
+      });
+      expect(res.status).toBe(400);
+      expect((await res.json()).error.code).toBe("VALIDATION_ERROR");
+    }
+  });
+
+  it("无当前项目 → 409 NO_PROJECT_OPEN", async () => {
+    const res = await buildApp().request("/api/v1/project/rename", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ name: "任意名" }),
+    });
+    expect(res.status).toBe(409);
+  });
+
+  it("目录名未变（自身）→ 幂等成功，无副作用", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    const app = await openBookInRoot(root, "旧名字");
+    const res = await app.request("/api/v1/project/rename", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ name: "旧名字" }),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toEqual({ renamed: true, path: join(root, "books", "旧名字"), name: "旧名字" });
+    expect(existsSync(join(root, "books", "旧名字"))).toBe(true);
+    expect(readProjectFile(join(root, "books", "旧名字"))?.name).toBe("旧名字");
   });
 });
 

@@ -7,20 +7,19 @@
 // 校验失败统一 400 INVALID_PROJECT_PATH（shared ErrorCode，endpoints.md 第 66 行）。
 // 备份管道/校验/恢复逻辑在 backup.ts（B2.2 提取：createBackupZip/validateBackupPackage/
 // writeBackup/listBackups/restoreBackup——与自动定时器同模块）。
-import { isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import {
   existsSync,
   mkdirSync,
   readdirSync,
   realpathSync,
+  renameSync,
   rmSync,
-  writeFileSync,
   type Dirent,
 } from "node:fs";
 import { Hono, type Context } from "hono";
 import type { ProjectFileConfig } from "@whispering233/ai-editor-shared";
 import { mapProjectFileToConfig } from "@whispering233/ai-editor-shared";
-import { PROJECT_EXPORT_FILE_NAMES } from "@whispering233/ai-editor-shared/schemas";
 import { openDatabase } from "@whispering233/ai-editor-db";
 import { ensureSchemaCompatible, DATA_DB_FILE_NAME } from "@whispering233/ai-editor-db";
 import { SchemaVersionError, type MigrationResult, type Db } from "@whispering233/ai-editor-db";
@@ -34,7 +33,7 @@ import {
   projectListResSchema,
   projectOpenReqSchema,
 } from "@whispering233/ai-editor-shared/schemas";
-import { createBackupZip, listBackups, restoreBackup, validateBackupPackage, writeBackup } from "../backup.js";
+import { createBackupZip, listBackups, overwriteProjectFiles, restoreBackup, snapshotBookDir, validateBackupPackage, writeBackup, writeProjectFilesFromBackup } from "../backup.js";
 import { HttpError, ok } from "../middleware/error.js";
 import {
   closeProject,
@@ -342,7 +341,44 @@ function validateBookName(name: string): void {
 
 // 注：zip 解压（unzipWithBudget，含 zip 炸弹预算）、条目白名单、三文件顶层契约与
 // data.db user_version 三态校验已在 backup.ts 提取为 validateBackupPackage（restore 与
-// import 共用，import 校验顺序 3-7 语义）；本文件只保留 import 专属的搬入逻辑。
+// import 共用，import 校验顺序 3-7 语义）；本文件只保留 import 专属的分流与搬入逻辑。
+
+/**
+ * 按 project_id 在书架 books/ 下定位书目录（决策 27：唯一 key = project_id）：
+ * 遍历 books/ 下各书目录的 project.json 读 id 比对；无匹配返回 null。
+ * 损坏的 project.json 抛错向上传播（与 list/open 语义一致：坏数据不静默吞）。
+ */
+function findBookDirById(root: string, id: string): string | null {
+  const booksDir = join(root, BOOKS_DIR_NAME);
+  let entries: Dirent[];
+  try {
+    entries = readdirSync(booksDir, { withFileTypes: true });
+  } catch {
+    return null; // books/ 不存在 → 无匹配
+  }
+  for (const e of entries) {
+    if (!e.isDirectory()) continue;
+    const dir = join(booksDir, e.name);
+    const config = readProjectFile(dir);
+    if (config !== null && config.id === id) return dir;
+  }
+  return null;
+}
+
+/**
+ * 新书目标目录去重（决策 27，endpoints.md import 节）：`books/<name>/` 已存在 →
+ * `books/<name> (N)/`（N 为最小正整数，从 2 起，避免与去重命名惯例冲突）；
+ * 返回去重后的目录绝对路径。project.json 内部 name 由调用方同步为去重名
+ * （「目录名 = 书名」不变式）。
+ */
+function uniqueBookDir(root: string, name: string): string {
+  const booksDir = join(root, BOOKS_DIR_NAME);
+  let candidate = join(booksDir, name);
+  for (let n = 2; existsSync(candidate); n++) {
+    candidate = join(booksDir, `${name} (${n})`);
+  }
+  return candidate;
+}
 
 // POST /api/v1/project/import —— 导入备份 zip 为新书（E2，release-review §二）
 //
@@ -400,24 +436,41 @@ projectRoutes.post("/import", async (c) => {
     throw new HttpError(400, "VALIDATION_ERROR", "不是有效的项目备份包（zip 解析失败）");
   }
 
-  // 5. 目标目录冲突（books/<name>/ 已存在 → 409，与 create 的 PROJECT_ALREADY_EXISTS 同语义）
-  const bookDir = join(projectRoot, BOOKS_DIR_NAME, name);
-  if (existsSync(bookDir)) {
-    throw new HttpError(409, "PROJECT_ALREADY_EXISTS", `书架已存在同名书: ${name}`);
+  // 5. 分流（决策 27，endpoints.md import 节）：id 匹配书架已有项目 → 覆盖恢复；
+  //    不匹配 → 导入为新书（同名不再 409，目录自动去重）
+  const matchedDir = findBookDirById(projectRoot, projectId);
+  if (matchedDir !== null) {
+    // —— 覆盖恢复（restore 同款管道）——
+    // 覆盖目标按 id 定位目录（不是按 name，请求体 name 在覆盖场景不生效）；
+    // 覆盖时 project.json 内 name 归一为当前目录名（「目录名 = 书名」不变式，
+    // id 是身份、name 是展示名——契约修正 f4424b7）；数据随备份替换。
+    const cur = getCurrentProject();
+    if (cur !== null && cur.root === matchedDir) {
+      // 目标是当前打开的书：复用现有连接快照 + 覆盖管道（重连 data.db + 定时器重启）
+      writeBackup(cur); // 覆盖前自动快照（后悔药，决策 27）
+      overwriteProjectFiles(cur, entries, { name: basename(matchedDir) });
+    } else {
+      // 目标是书架其他书（未打开）：无连接，临时连接快照 + 文件层替换
+      snapshotBookDir(matchedDir); // 覆盖前自动快照
+      writeProjectFilesFromBackup(matchedDir, entries, { keepId: projectId, name: basename(matchedDir) });
+    }
+    return c.json(ok({ imported: true as const, id: projectId, path: matchedDir, name: basename(matchedDir), mode: "restored" as const }));
   }
 
-  // 6. 原子搬入：mkdir（recursive 建 books/）+ 写三文件（校验通过的 entries）；任一失败清理半成品目录
+  // —— 导入为新书（原 E2 语义；同名不再 409）——
+  // 目标目录 books/<name>/ 冲突 → 自动去重 books/<书名> (N)/（N 最小正整数，从 2 起）；
+  // project.json 内部 name 同步为去重名（维持「目录名 = 书名」不变式）
+  const bookDir = uniqueBookDir(projectRoot, name);
   try {
     mkdirSync(bookDir, { recursive: true });
-    for (const f of PROJECT_EXPORT_FILE_NAMES) {
-      writeFileSync(join(bookDir, f), entries[f]);
-    }
+    // zip id 沿用（keepId 不传）；name 归一为最终目录名
+    writeProjectFilesFromBackup(bookDir, entries, { name: basename(bookDir) });
   } catch (err) {
     rmSync(bookDir, { recursive: true, force: true }); // 不留下残缺书
     throw err; // → errorHandler 500 INTERNAL_ERROR
   }
 
-  return c.json(ok({ imported: true as const, id: projectId, path: bookDir, name }));
+  return c.json(ok({ imported: true as const, id: projectId, path: bookDir, name: basename(bookDir), mode: "new" as const }));
 });
 
 // GET /api/v1/project/config —— 获取当前项目配置
@@ -505,4 +558,59 @@ projectRoutes.post("/backup/restore", async (c) => {
     throw new HttpError(400, "VALIDATION_ERROR", "缺少文件名字段 fileName（备份文件名）");
   }
   return c.json(ok({ restored: true as const, ...restoreBackup(project, fileName) }));
+});
+
+// POST /api/v1/project/rename —— 重命名当前书籍（决策 27：同名并存场景的区分配套；
+// 契约修正 f4424b7：仅当前打开项目，与导出按钮一致）
+//
+// 流程（endpoints.md）：
+// 1. 校验新名（同创建规则：禁路径分隔符/纯点/控制字符 → 400 VALIDATION_ERROR）
+// 2. 目标 books/<新名>/ 已存在且非当前书自身目录 → 409 PROJECT_ALREADY_EXISTS
+// 3. 原子移动：先更新 project.json 内 name（原目录原子写）→ renameSync 移动目录；
+//    移动失败 → 还原 name（回滚，不留下半成品）；.backups/ 随目录移动自然携带
+// 4. 引用同步：project.root 指向新目录（定时器持有同一 project 引用，tick 内按
+//    project.root 计算路径，自动跟随）；会话/历史按 id 不受影响（决策 18/27）
+projectRoutes.post("/rename", async (c) => {
+  const project = requireCurrentProject(); // 无当前项目 → 409 NO_PROJECT_OPEN
+  if (projectRoot === null) {
+    throw new HttpError(500, "INTERNAL_ERROR", "创作根未初始化（startServer 未调用 setProjectRoot）");
+  }
+  const raw = await c.req.json().catch(() => null);
+  const name =
+    typeof raw === "object" && raw !== null && typeof (raw as Record<string, unknown>).name === "string"
+      ? ((raw as Record<string, unknown>).name as string).trim()
+      : "";
+  validateBookName(name); // 400（缺字段/非法字符）
+
+  // 仅支持移动 books/ 下的书（创作根自身是项目时不可改名——移动创作根会破坏书架语义）
+  const booksDir = join(projectRoot, BOOKS_DIR_NAME);
+  if (dirname(project.root) !== booksDir) {
+    throw new HttpError(400, "VALIDATION_ERROR", "仅支持重命名书架 books/ 下的书");
+  }
+  const oldDir = project.root;
+  const targetDir = join(booksDir, name);
+  if (targetDir === oldDir) {
+    // 目录名未变（自身）→ 幂等成功（name 已是目录名，无需写盘）
+    return c.json(ok({ renamed: true as const, path: oldDir, name }));
+  }
+  if (existsSync(targetDir)) {
+    throw new HttpError(409, "PROJECT_ALREADY_EXISTS", `书架已存在同名书: ${name}`);
+  }
+
+  // 原子移动（决策 27）：先写新 name 到原目录 → rename 移动目录；移动失败还原 name
+  const oldName = project.config.name;
+  const written = { ...project.config, name, updated_at: nowIso() };
+  writeProjectFile(oldDir, written);
+  try {
+    renameSync(oldDir, targetDir);
+  } catch (err) {
+    // 回滚：目录未移动，还原 project.json 内 name（不留下半成品）
+    writeProjectFile(oldDir, { ...written, name: oldName, updated_at: nowIso() });
+    throw err; // → errorHandler 500 INTERNAL_ERROR
+  }
+
+  // 引用同步：当前项目路径指向新目录（config 内存同步为写盘值；会话按 id 不受影响）
+  project.root = targetDir;
+  project.config = written;
+  return c.json(ok({ renamed: true as const, path: targetDir, name }));
 });

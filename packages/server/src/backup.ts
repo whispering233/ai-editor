@@ -453,9 +453,115 @@ export function getScheduledProject(): ProjectContext | null {
 
 // ============ 恢复（restore：白名单 → 快照 → 校验 → 原子替换） ============
 
+// ============ 覆盖恢复共享管道（restore / import 覆盖 / 新书导入共用，B2.3 提取） ============
+
+/**
+ * 用备份包内容替换目录三文件（restore 与 import 分流共用，B2.3 提取）：
+ *
+ * - project.json：JSON 解析后按 opts 覆盖——`keepId`（决策 27：覆盖恢复以 project_id 为
+ *   唯一 key，换 id 即断连 chat_messages 会话历史——决策 18；备份包可能来自异项目，
+ *   防御性强制保留）与 `name`（「目录名 = 书名」不变式：import 覆盖归一为目录名、
+ *   新书导入同步为去重名）；其余字段随备份替换。序列化走 2 空格缩进 + 尾换行
+ *   （与 db 包 writeJsonAtomic 同款格式惯例）
+ * - outline.json / data.db：原样字节原子写
+ *
+ * 注意：本函数只管文件层，不含 data.db 连接管理（重连见 overwriteProjectFiles）。
+ */
+export function writeProjectFilesFromBackup(
+  dir: string,
+  entries: Record<string, Uint8Array>,
+  opts: { keepId?: string; name?: string } = {},
+): void {
+  const parsedProject = JSON.parse(new TextDecoder().decode(entries[PROJECT_FILE_NAME])) as Record<string, unknown>;
+  const nextProject = {
+    ...parsedProject,
+    ...(opts.keepId !== undefined ? { id: opts.keepId } : {}),
+    ...(opts.name !== undefined ? { name: opts.name } : {}),
+  };
+  // 顺序：JSON 两文件在前，data.db 最后——db 替换失败时其余已替换（校验已通过，
+  // 文件内容本身有效，部分替换可经重新恢复修复）
+  writeFileAtomic(join(dir, PROJECT_FILE_NAME), new TextEncoder().encode(`${JSON.stringify(nextProject, null, 2)}\n`));
+  writeFileAtomic(join(dir, OUTLINE_FILE_NAME), entries[OUTLINE_FILE_NAME]);
+  writeFileAtomic(join(dir, DATA_DB_FILE_NAME), entries[DATA_DB_FILE_NAME]);
+}
+
+/**
+ * 覆盖管道（restore 与 import 覆盖当前打开的书共用，B2.3 从 restoreBackup 提取）：
+ *
+ * 1. 释放当前 data.db 连接（替换 data.db 前必须；顺带清理陈旧 WAL/SHM 残留——
+ *    替换后新库不得复用旧 WAL）
+ * 2. writeProjectFilesFromBackup 原子替换三文件（保留当前项目 id；opts.name 归一）
+ * 3. 重连 + 版本对齐（v < 当前且有迁移路径 → 前向迁移，E5；v === 当前 → 原样。
+ *    校验阶段已拒绝 v > 当前与无路径旧版，此处不会触发重建/拒绝）
+ * 4. 同步内存 config（刚原子写入，readProjectFile 必非 null；损坏抛错由 catch 恢复连接）
+ * 5. 重启定时器（备份包内频率可能不同：5 → 60 等）
+ *
+ * 调用方职责：覆盖前自动快照 + 备份包校验（validateBackupPackage）。
+ * 失败时尝试恢复连接（原库可能未被替换或已替换为校验过的有效库），保证后续请求
+ * 不因悬挂连接报 500「connection not open」；恢复失败由路由清空 currentProject 单例。
+ */
+export function overwriteProjectFiles(
+  project: ProjectContext,
+  entries: Record<string, Uint8Array>,
+  opts: { name?: string } = {},
+): void {
+  const dbPath = join(project.root, DATA_DB_FILE_NAME);
+  closeDatabase(project.db); // 释放当前连接（替换 data.db 前必须；替换失败恢复见 catch）
+  try {
+    // 清理陈旧 WAL/SHM 残留（正常关闭通常已清理；防御：替换后新库不得复用旧 WAL）
+    for (const suffix of ["-wal", "-shm"]) {
+      try {
+        unlinkSync(`${dbPath}${suffix}`);
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+      }
+    }
+    writeProjectFilesFromBackup(project.root, entries, { keepId: project.config.id, ...(opts.name !== undefined ? { name: opts.name } : {}) });
+    // 重连 + 版本对齐
+    let active = openDatabase(dbPath);
+    const out = ensureSchemaCompatible(active, project.root, dbPath);
+    active = out.db;
+    project.db = active;
+    // 同步内存 config（覆盖后的 project.json——含 name/prompt/backup_frequency_minutes 等）
+    const restoredConfig = readProjectFile(project.root);
+    if (restoredConfig === null) {
+      throw new HttpError(500, "INTERNAL_ERROR", "覆盖后 project.json 读取失败");
+    }
+    project.config = restoredConfig;
+  } catch (err) {
+    // 替换/重连失败：尝试恢复连接（原库可能未被替换或已替换为校验过的有效库），
+    // 保证后续请求不因悬挂连接报 500「connection not open」；恢复失败则清空单例
+    try {
+      project.db = openDatabase(dbPath);
+    } catch {
+      // 恢复失败：由调用方（路由）清空 currentProject 单例，后续请求 409 NO_PROJECT_OPEN
+    }
+    throw err;
+  }
+  startAutoBackup(project); // 重启定时器（覆盖包内频率可能不同）
+}
+
+/**
+ * 为**未打开的书**生成覆盖前快照（import 覆盖书架其他书场景，决策 27「覆盖前自动快照」）：
+ * 临时打开 data.db 连接走备份管道（wal_checkpoint 保证快照完整性），完成后关闭连接。
+ * 已打开的书走 writeBackup(project)（复用现有连接，见 import 路由分流）。
+ */
+export function snapshotBookDir(dir: string): BackupFileInfo {
+  const config = readProjectFile(dir);
+  if (config === null) {
+    throw new HttpError(500, "INTERNAL_ERROR", `目录不是项目（缺 project.json）: ${dir}`);
+  }
+  const db = openDatabase(join(dir, DATA_DB_FILE_NAME));
+  try {
+    return writeBackup({ root: dir, config, db });
+  } finally {
+    closeDatabase(db);
+  }
+}
+
 /**
  * 原子写任意字节（决策 11 同款流程：写同目录临时文件 → fsync → rename 覆盖；
- * 供 restore 替换三文件用——JSON 版见 db 包 writeJsonAtomic，此处为通用 bytes 版）。
+ * 供 restore/import 替换三文件用——JSON 版见 db 包 writeJsonAtomic，此处为通用 bytes 版）。
  * 失败保留临时文件供排查，原文件未被触碰。
  */
 function writeFileAtomic(filePath: string, data: Uint8Array): void {
@@ -502,8 +608,8 @@ function writeFileAtomic(filePath: string, data: Uint8Array): void {
  *    v < 有路径时此处前向迁移，E5）→ project.config 同步新 project.json
  * 5. 项目 id 保留（当前项目引用不变，决策 27）；重启定时器（频率可能随备份变化）
  *
- * @throws HttpError 400（文件名非法/坏包）、404（备份不存在）、409 SCHEMA_VERSION_MISMATCH
- */
+  * @throws HttpError 400（文件名非法/坏包）、404（备份不存在）、409 SCHEMA_VERSION_MISMATCH
+  */
 export function restoreBackup(project: ProjectContext, fileName: string): { snapshot: Pick<BackupFileInfo, "fileName" | "createdAt"> } {
   // 1. 白名单校验（parseBackupFileName 全格式校验，防路径穿越）
   if (parseBackupFileName(fileName) === null) {
@@ -521,59 +627,9 @@ export function restoreBackup(project: ProjectContext, fileName: string): { snap
   const zip = readFileSync(backupPath);
   const { entries } = validateBackupPackage(zip);
 
-  // 4. 原子替换：释放连接 → 逐文件原子写 → 重连 + 版本对齐 → 同步内存 config
-  const dbPath = join(project.root, DATA_DB_FILE_NAME);
-  closeDatabase(project.db); // 释放当前连接（替换 data.db 前必须；替换失败恢复见 catch）
-  try {
-    // 清理陈旧 WAL/SHM 残留（正常关闭通常已清理；防御：替换后新库不得复用旧 WAL）
-    for (const suffix of ["-wal", "-shm"]) {
-      try {
-        unlinkSync(`${dbPath}${suffix}`);
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
-      }
-    }
-    // project.json 替换时**保留当前项目 id**（决策 27：覆盖恢复以 project_id 为唯一 key，
-    // 换 id 即断连 chat_messages 会话历史——决策 18；name/prompt/其余字段随备份替换）。
-    // 备份包可能来自异项目（.backups/ 手工放入等），防御性强制 id = 当前项目 id
-    const parsedProject = JSON.parse(new TextDecoder().decode(entries[PROJECT_FILE_NAME])) as Record<string, unknown>;
-    const restoredProject = { ...parsedProject, id: project.config.id };
-    // 三文件原子覆盖（顺序：JSON 两文件在前，data.db 最后——db 替换失败时其余已替换，
-    // 记日志暴露部分替换；校验已通过，文件内容本身有效）。project.json 走 JSON 序列化
-    //（2 空格缩进 + 尾换行，与 writeJsonAtomic 同款格式惯例）
-    writeFileAtomic(
-      join(project.root, PROJECT_FILE_NAME),
-      new TextEncoder().encode(`${JSON.stringify(restoredProject, null, 2)}\n`),
-    );
-    for (const f of [OUTLINE_FILE_NAME, DATA_DB_FILE_NAME]) {
-      writeFileAtomic(join(project.root, f), entries[f]);
-    }
-    // 重连 + 版本对齐（v < 当前且有迁移路径 → 前向迁移；v === 当前 → 原样。
-    // 校验阶段已拒绝 v > 当前与无路径旧版，此处不会触发重建/拒绝）
-    let active = openDatabase(dbPath);
-    const out = ensureSchemaCompatible(active, project.root, dbPath);
-    active = out.db;
-    project.db = active;
-    // 同步内存 config（备份包内的 project.json——含 name/prompt/backup_frequency_minutes 等；
-    // 刚原子写入，readProjectFile 不会返回 null；若损坏抛错由 catch 恢复连接）
-    const restoredConfig = readProjectFile(project.root);
-    if (restoredConfig === null) {
-      throw new HttpError(500, "INTERNAL_ERROR", "恢复后 project.json 读取失败");
-    }
-    project.config = restoredConfig;
-  } catch (err) {
-    // 替换/重连失败：尝试恢复连接（原库可能未被替换或已替换为校验过的有效库），
-    // 保证后续请求不因悬挂连接报 500「connection not open」；恢复失败则清空单例
-    try {
-      project.db = openDatabase(dbPath);
-    } catch {
-      // 恢复失败：由调用方（路由）清空 currentProject 单例，后续请求 409 NO_PROJECT_OPEN
-    }
-    throw err;
-  }
-
-  // 5. 重启定时器（备份包内频率可能不同：5 → 60 等）
-  startAutoBackup(project);
+  // 4. 覆盖管道（B2.3 提取，import 覆盖复用）：原子替换三文件（保留当前 id）+
+  //    重连 data.db + 同步 config + 重启定时器
+  overwriteProjectFiles(project, entries);
 
   // 契约（endpoints.md）：snapshot 仅含 fileName/createdAt（size 属内部信息不暴露）
   return { snapshot: { fileName: snapshot.fileName, createdAt: snapshot.createdAt } };
