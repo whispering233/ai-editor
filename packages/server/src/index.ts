@@ -21,6 +21,7 @@ import { logger } from "hono/logger";
 import { createAdaptorServer, type ServerType } from "@hono/node-server";
 import type { AddressInfo } from "node:net";
 import { errorHandler, fail, ok } from "./middleware/error.js";
+import { stopAutoBackup } from "./backup.js";
 import { initDebugConfig, isCategoryEnabled } from "./debug.js";
 import { chatRoutes } from "./routes/chat.js";
 import { deltaRoutes } from "./routes/delta.js";
@@ -274,6 +275,7 @@ export async function startServer(projectRoot: string, options: StartServerOptio
     port: actualPort,
     project,
     close: async () => {
+      stopAutoBackup(); // B2.2（决策 27）：服务关闭停止自动备份调度（无残留句柄）
       await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
       if (project !== null) {
         closeProject(project); // 待命态（project=null）无连接可释放

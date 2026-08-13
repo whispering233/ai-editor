@@ -15,6 +15,7 @@ import {
   HOOK_CATEGORIES,
   HOOK_RELATION_TYPES,
   HOOK_STATUSES,
+  MAX_BACKUPS_PER_PROJECT,
   PAYOFF_TIMING,
   PLOT_EDGE_TYPE,
   PROPOSAL_TOOLS,
@@ -197,5 +198,9 @@ describe("自动备份常量（决策 27，B2.1）", () => {
 
   it("缺省频率 = 10（决策 27：新项目默认开启）", () => {
     expect(DEFAULT_BACKUP_FREQUENCY_MINUTES).toBe(10);
+  });
+
+  it("每项目保留最近 20 份（决策 27：超出删除最旧，含覆盖前自动快照）", () => {
+    expect(MAX_BACKUPS_PER_PROJECT).toBe(20);
   });
 });

@@ -1,34 +1,31 @@
-// 项目路由（S1.2）：POST /create、POST /open、POST /close、GET/PUT /config、GET /export（E1）、POST /import（E2）
+// 项目路由（S1.2）：POST /create、POST /open、POST /close、GET/PUT /config、GET /export（E1）、
+// POST /import（E2）、GET /backups + POST /backup + POST /backup/restore（B2.2，决策 27）
 //
-// 契约来源：doc/api/endpoints.md 第 18-122 行（项目管理全部端点）、doc/design/decisions.md
-//   决策 8（单进程 currentProject）、决策 13 修订（open 时 user_version 判定删库重建）、决策 17（路径校验防越权）。
+// 契约来源：doc/api/endpoints.md 第 18-122 行（项目管理全部端点）+「备份管理」节（决策 27）、
+//   doc/design/decisions.md 决策 8（单进程 currentProject）、决策 13 修订（open 时 user_version
+//   判定删库重建）、决策 17（路径校验防越权）、决策 27（自动备份与恢复）。
 // 校验失败统一 400 INVALID_PROJECT_PATH（shared ErrorCode，endpoints.md 第 66 行）。
+// 备份管道/校验/恢复逻辑在 backup.ts（B2.2 提取：createBackupZip/validateBackupPackage/
+// writeBackup/listBackups/restoreBackup——与自动定时器同模块）。
 import { isAbsolute, join, resolve } from "node:path";
-import { tmpdir } from "node:os";
 import {
-  copyFileSync,
   existsSync,
   mkdirSync,
-  mkdtempSync,
   readdirSync,
-  readFileSync,
   realpathSync,
   rmSync,
-  statSync,
   writeFileSync,
   type Dirent,
 } from "node:fs";
 import { Hono, type Context } from "hono";
-import { Unzip, UnzipInflate, zipSync } from "fflate";
 import type { ProjectFileConfig } from "@whispering233/ai-editor-shared";
 import { mapProjectFileToConfig } from "@whispering233/ai-editor-shared";
 import { PROJECT_EXPORT_FILE_NAMES } from "@whispering233/ai-editor-shared/schemas";
-import { openDatabase, closeDatabase, getUserVersion, SCHEMA_VERSION } from "@whispering233/ai-editor-db";
-import { ensureSchemaCompatible, DATA_DB_FILE_NAME, hasMigrationPath } from "@whispering233/ai-editor-db";
+import { openDatabase } from "@whispering233/ai-editor-db";
+import { ensureSchemaCompatible, DATA_DB_FILE_NAME } from "@whispering233/ai-editor-db";
 import { SchemaVersionError, type MigrationResult, type Db } from "@whispering233/ai-editor-db";
 import { OUTLINE_FILE_NAME } from "@whispering233/ai-editor-db";
 import { PROJECT_FILE_NAME } from "@whispering233/ai-editor-db";
-import { checkpointWal } from "@whispering233/ai-editor-db";
 import { findOutlineNode, readOutlineFile, readProjectFile, writeProjectFile } from "@whispering233/ai-editor-db";
 import { nowIso } from "@whispering233/ai-editor-db";
 import {
@@ -37,6 +34,7 @@ import {
   projectListResSchema,
   projectOpenReqSchema,
 } from "@whispering233/ai-editor-shared/schemas";
+import { createBackupZip, listBackups, restoreBackup, validateBackupPackage, writeBackup } from "../backup.js";
 import { HttpError, ok } from "../middleware/error.js";
 import {
   closeProject,
@@ -301,36 +299,22 @@ projectRoutes.post("/close", (c) => {
 // 文件名 <书名>.zip（RFC 5987 filename* UTF-8 编码，中文书名安全）。
 // 流程：requireCurrentProject（无项目 → 409，与 /config 一致）→ 三文件存在性防御
 // （缺失任一 → 500：打开的项目三文件必然齐全，缺失即损坏，不导出半成品包）→
-// wal_checkpoint(TRUNCATE) 把 WAL 合并回主文件（完整快照）→ zipSync 打包（条目名
-// 保持数据文件原名，import 侧按固定名校验）。决策 17：key 存用户级配置，天然不入包。
+// createBackupZip（B2.2 提取：wal_checkpoint 合并 WAL + zipSync 打包——与自动备份
+// 同款管道，条目名保持数据文件原名，import/restore 侧按固定名校验）。
+// 决策 17：key 存用户级配置，天然不入包。
 projectRoutes.get("/export", (c) => {
   const project = requireCurrentProject();
   const dir = project.root;
 
   // 三文件缺失任一 → 500（数据完整性推断：打开的项目三文件必然齐全，缺失即损坏）
-  const fileEntries = [
-    { name: PROJECT_FILE_NAME, path: join(dir, PROJECT_FILE_NAME) },
-    { name: OUTLINE_FILE_NAME, path: join(dir, OUTLINE_FILE_NAME) },
-    { name: DATA_DB_FILE_NAME, path: join(dir, DATA_DB_FILE_NAME) },
-  ];
-  for (const f of fileEntries) {
-    if (!existsSync(f.path)) {
-      throw new HttpError(500, "INTERNAL_ERROR", `项目数据文件缺失，无法导出: ${f.name}`);
+  for (const f of [PROJECT_FILE_NAME, OUTLINE_FILE_NAME, DATA_DB_FILE_NAME]) {
+    if (!existsSync(join(dir, f))) {
+      throw new HttpError(500, "INTERNAL_ERROR", `项目数据文件缺失，无法导出: ${f}`);
     }
   }
 
-  // WAL checkpoint：合并 WAL 到主文件并截断——zip 内 data.db 为完整快照，无需附带 -wal/-shm
-  checkpointWal(project.db);
-
-  // fflate zipSync：对象形式（key = 条目文件名），key 插入序稳定（project.json → outline.json → data.db）
-  const zipData = zipSync(
-    {
-      [PROJECT_FILE_NAME]: readFileSync(join(dir, PROJECT_FILE_NAME)),
-      [OUTLINE_FILE_NAME]: readFileSync(join(dir, OUTLINE_FILE_NAME)),
-      [DATA_DB_FILE_NAME]: readFileSync(join(dir, DATA_DB_FILE_NAME)),
-    },
-    { level: 6 },
-  );
+  // 备份管道复用（B2.2 提取）：WAL checkpoint + fflate zipSync（键序稳定）
+  const zipData = createBackupZip(project);
 
   // Content-Disposition：ASCII fallback + RFC 5987 filename*（中文/空格书名编码安全）
   const fileName = `${project.config.name}.zip`;
@@ -339,68 +323,10 @@ projectRoutes.get("/export", (c) => {
   return c.body(zipData);
 });
 
-// ============ 导入（E2） ============
+// ============ 导入（E2）与备份管理（决策 27，B2.2） ============
 
 /** 上传大小上限（50MB；ora-4 复核保留——zip 含 data.db，正常项目远小于此） */
 const MAX_IMPORT_SIZE = 50 * 1024 * 1024;
-
-/** 解压总字节预算（200MB，zip 炸弹防御：压缩比极高/超多条目的恶意包在解压阶段即中止） */
-const MAX_UNZIP_BUDGET = 200 * 1024 * 1024;
-
-/** 拼接 Uint8Array 分块（Unzip ondata 流累计） */
-function concatChunks(chunks: Uint8Array[], totalSize: number): Uint8Array {
-  const out = new Uint8Array(totalSize);
-  let offset = 0;
-  for (const c of chunks) {
-    out.set(c, offset);
-    offset += c.length;
-  }
-  return out;
-}
-
-/**
- * 带预算的 zip 解压（ora-4 zip 炸弹防御）：
- * fflate Unzip 流式解压（同步 push）——onfile 回调中**只解压白名单条目**（未知条目
- * 仅记名不 start，省预算；白名单检查由调用方用 names 列表执行，语义与全量解压等价），
- * ondata 累计解压总字节，超过预算抛 HttpError 中止（push 同步传播）。
- * 返回 { entries（白名单条目解压结果）, names（全部条目名）}。
- */
-function unzipWithBudget(
-  zipData: Uint8Array,
-  budget: number,
-): { entries: Record<string, Uint8Array>; names: string[] } {
-  const entries: Record<string, Uint8Array> = {};
-  const names: string[] = [];
-  let total = 0;
-  const unzipper = new Unzip((file) => {
-    names.push(file.name);
-    if (!(PROJECT_EXPORT_FILE_NAMES as readonly string[]).includes(file.name)) return; // 未知条目不解压
-    const chunks: Uint8Array[] = [];
-    let size = 0;
-    file.ondata = (err, chunk, final) => {
-      if (err) throw err;
-      size += chunk.length;
-      total += chunk.length;
-      if (total > budget) {
-        throw new HttpError(400, "VALIDATION_ERROR", `备份包解压超出预算（${budget} 字节上限，zip 炸弹防御）`);
-      }
-      chunks.push(chunk);
-      if (final) entries[file.name] = concatChunks(chunks, size);
-    };
-    file.start();
-  });
-  // 关键（fflate API 契约）：Unzip 默认仅注册 stored(0) 解码器——deflate(8) 压缩的
-  // zip（zipSync 默认）必须显式 register(UnzipInflate)，否则 start() 报 unknown
-  // compression type（fflate README 明确要求）
-  unzipper.register(UnzipInflate);
-  unzipper.push(zipData, true);
-  // 防御：无 EOCD/零条目的输入 Unzip 流式**静默返回空**（unzipSync 会抛）——
-  // 显式判定坏包（非 zip 内容 → 「不是有效的项目备份包」而非「缺少文件」）
-  if (names.length === 0) {
-    throw new HttpError(400, "VALIDATION_ERROR", "不是有效的项目备份包（zip 解析失败）");
-  }
-  return { entries, names };
-}
 
 /** 书名校验（与 client Sidebar 新建项目同规则）：禁路径分隔符/纯点/控制字符 */
 function validateBookName(name: string): void {
@@ -414,19 +340,9 @@ function validateBookName(name: string): void {
   }
 }
 
-/** project.json 顶层契约最小校验（E2 本项目内——shared 无文件形态 schema，不扩契约范围） */
-function isValidProjectFile(parsed: unknown): parsed is { id: string; name: string; schema_version: number } {
-  if (typeof parsed !== "object" || parsed === null) return false;
-  const p = parsed as Record<string, unknown>;
-  return typeof p.id === "string" && p.id.length > 0 && typeof p.name === "string" && typeof p.schema_version === "number";
-}
-
-/** outline.json 顶层契约校验（与 db 包 validateOutlineFile 同构：root 根 + schema_version 数字 + children 数组） */
-function isValidOutlineFile(parsed: unknown): boolean {
-  if (typeof parsed !== "object" || parsed === null) return false;
-  const p = parsed as Record<string, unknown>;
-  return p.id === "root" && p.type === "root" && typeof p.schema_version === "number" && Array.isArray(p.children);
-}
+// 注：zip 解压（unzipWithBudget，含 zip 炸弹预算）、条目白名单、三文件顶层契约与
+// data.db user_version 三态校验已在 backup.ts 提取为 validateBackupPackage（restore 与
+// import 共用，import 校验顺序 3-7 语义）；本文件只保留 import 专属的搬入逻辑。
 
 // POST /api/v1/project/import —— 导入备份 zip 为新书（E2，release-review §二）
 //
@@ -468,115 +384,40 @@ projectRoutes.post("/import", async (c) => {
     throw new HttpError(400, "VALIDATION_ERROR", `备份包超过大小上限（${MAX_IMPORT_SIZE / 1024 / 1024}MB）`);
   }
 
-  // 2. zip 解压（fflate Unzip 流式 + 解压总字节预算 200MB——ora-4 zip 炸弹防御；
-  //    未知条目不解压仅记名，白名单检查见步骤 3；解析失败/超预算 → 400）
+  // 2-4. 备份包校验（validateBackupPackage，backup.ts 提取——restore 与 import 共用）：
+  //      zip 解析（流式 + 200MB 预算，zip 炸弹防御）→ 条目白名单（防 zip 路径穿越）→
+  //      三文件齐全 → 临时目录顶层契约（project.json/outline.json）→ data.db user_version
+  //      三态分流（E4/E5，拒绝不静默重建）。通过返回内存 entries 与 project_id；
+  //      失败抛 HttpError（400 坏包 / 409 SCHEMA_VERSION_MISMATCH），未触碰任何目标数据。
   let entries: Record<string, Uint8Array>;
-  let entryNames: string[];
+  let projectId: string;
   try {
-    const result = unzipWithBudget(new Uint8Array(await file.arrayBuffer()), MAX_UNZIP_BUDGET);
-    entries = result.entries;
-    entryNames = result.names;
+    const validated = validateBackupPackage(new Uint8Array(await file.arrayBuffer()));
+    entries = validated.entries;
+    projectId = validated.projectId;
   } catch (err) {
     if (err instanceof HttpError) throw err;
     throw new HttpError(400, "VALIDATION_ERROR", "不是有效的项目备份包（zip 解析失败）");
   }
 
-  // 3. 条目白名单（严格拒绝）：只接受三数据文件名——非白名单条目即损坏/恶意包，
-  //    逐名比对（条目名不含路径分隔符概念，白名单比对即防 zip 路径穿越）
-  const unknown = entryNames.filter((k) => !(PROJECT_EXPORT_FILE_NAMES as readonly string[]).includes(k));
-  if (unknown.length > 0) {
-    throw new HttpError(400, "VALIDATION_ERROR", `备份包含未知条目: ${unknown.join(", ")}（只接受 ${PROJECT_EXPORT_FILE_NAMES.join("/")}）`);
-  }
-  const missing = PROJECT_EXPORT_FILE_NAMES.filter((f) => !(f in entries));
-  if (missing.length > 0) {
-    throw new HttpError(400, "VALIDATION_ERROR", `备份包缺少文件: ${missing.join(", ")}（非完整项目备份）`);
+  // 5. 目标目录冲突（books/<name>/ 已存在 → 409，与 create 的 PROJECT_ALREADY_EXISTS 同语义）
+  const bookDir = join(projectRoot, BOOKS_DIR_NAME, name);
+  if (existsSync(bookDir)) {
+    throw new HttpError(409, "PROJECT_ALREADY_EXISTS", `书架已存在同名书: ${name}`);
   }
 
-  // 4. 临时目录校验（全部通过才搬入；finally 清理）
-  const tmpDir = mkdtempSync(join(tmpdir(), "ai-editor-import-"));
-  let projectId = "";
+  // 6. 原子搬入：mkdir（recursive 建 books/）+ 写三文件（校验通过的 entries）；任一失败清理半成品目录
   try {
+    mkdirSync(bookDir, { recursive: true });
     for (const f of PROJECT_EXPORT_FILE_NAMES) {
-      writeFileSync(join(tmpDir, f), Buffer.from(entries[f]));
+      writeFileSync(join(bookDir, f), entries[f]);
     }
-
-    // project.json 顶层契约（JSON 可解析 + id/name/schema_version）
-    let projectConfig: unknown;
-    try {
-      projectConfig = JSON.parse(readFileSync(join(tmpDir, PROJECT_FILE_NAME), "utf8"));
-    } catch {
-      throw new HttpError(400, "VALIDATION_ERROR", "备份包内 project.json 不是合法 JSON");
-    }
-    if (!isValidProjectFile(projectConfig)) {
-      throw new HttpError(400, "VALIDATION_ERROR", "备份包内 project.json 顶层契约不符（需 id/name/schema_version）");
-    }
-    projectId = projectConfig.id;
-
-    // outline.json 顶层契约（{id:"root",type:"root",schema_version,children[]}）
-    try {
-      const outline = JSON.parse(readFileSync(join(tmpDir, OUTLINE_FILE_NAME), "utf8"));
-      if (!isValidOutlineFile(outline)) {
-        throw new HttpError(400, "VALIDATION_ERROR", "备份包内 outline.json 顶层契约不符（需 {id:root,type:root,schema_version,children[]}）");
-      }
-    } catch (err) {
-      if (err instanceof HttpError) throw err;
-      throw new HttpError(400, "VALIDATION_ERROR", "备份包内 outline.json 不是合法 JSON");
-    }
-
-    // data.db 校验顺序（ora-4）：**文件大小 > 0 → 打开成功 → user_version**——
-    // 0 字节文件 SQLite 会当新库打开（user_version=0），必须先按坏包拒绝（400 而非 409）；
-    // 非 SQLite 内容打开失败 → 400 坏包。
-    // user_version 判定（E5 决议，tasks.md E5 卡规格追加句）：
-    //   v === SCHEMA_VERSION → 接受（现状）
-    //   v < SCHEMA_VERSION → **有迁移路径**（MIGRATIONS 存在连续链，open 时自动前向
-    //     迁移，数据保全完整）→ 接受；**无迁移路径** → 409（文案标注版本过旧无路径）
-    //   v > SCHEMA_VERSION → 409（E4 语义：备份来自更高版本程序）
-    // 拒绝均不静默重建——导入是用户主动恢复备份，版本不兼容须明示。
-    const dbPath = join(tmpDir, DATA_DB_FILE_NAME);
-    if (statSync(dbPath).size === 0) {
-      throw new HttpError(400, "VALIDATION_ERROR", "备份包内 data.db 为空文件（损坏包）");
-    }
-    let db: ReturnType<typeof openDatabase> | null = null;
-    try {
-      db = openDatabase(dbPath);
-      const v = getUserVersion(db);
-      const acceptable = v === SCHEMA_VERSION || (v < SCHEMA_VERSION && hasMigrationPath(v, SCHEMA_VERSION));
-      if (!acceptable) {
-        const hint = v > SCHEMA_VERSION ? "备份来自更高版本程序" : "备份来自旧版本程序且无可用迁移路径";
-        throw new HttpError(
-          409,
-          "SCHEMA_VERSION_MISMATCH",
-          `备份包 data.db 版本 (${v}) ${hint}（当前程序 ${SCHEMA_VERSION}），暂不支持导入`,
-        );
-      }
-    } catch (err) {
-      if (err instanceof HttpError) throw err;
-      throw new HttpError(400, "VALIDATION_ERROR", "备份包内 data.db 不是有效的 SQLite 数据库");
-    } finally {
-      if (db !== null) closeDatabase(db);
-    }
-
-    // 5. 目标目录冲突（books/<name>/ 已存在 → 409，与 create 的 PROJECT_ALREADY_EXISTS 同语义）
-    const bookDir = join(projectRoot, BOOKS_DIR_NAME, name);
-    if (existsSync(bookDir)) {
-      throw new HttpError(409, "PROJECT_ALREADY_EXISTS", `书架已存在同名书: ${name}`);
-    }
-
-    // 6. 原子搬入：mkdir（recursive 建 books/）+ 复制三文件；任一失败清理半成品目录
-    try {
-      mkdirSync(bookDir, { recursive: true });
-      for (const f of PROJECT_EXPORT_FILE_NAMES) {
-        copyFileSync(join(tmpDir, f), join(bookDir, f));
-      }
-    } catch (err) {
-      rmSync(bookDir, { recursive: true, force: true }); // 不留下残缺书
-      throw err; // → errorHandler 500 INTERNAL_ERROR
-    }
-
-    return c.json(ok({ imported: true as const, id: projectId, path: bookDir, name }));
-  } finally {
-    rmSync(tmpDir, { recursive: true, force: true });
+  } catch (err) {
+    rmSync(bookDir, { recursive: true, force: true }); // 不留下残缺书
+    throw err; // → errorHandler 500 INTERNAL_ERROR
   }
+
+  return c.json(ok({ imported: true as const, id: projectId, path: bookDir, name }));
 });
 
 // GET /api/v1/project/config —— 获取当前项目配置
@@ -627,4 +468,41 @@ projectRoutes.put("/config", async (c) => {
   project.config = next;
 
   return c.json(ok({ updated: true as const }));
+});
+
+// ============ 备份管理（B2.2，决策 27：endpoints.md「备份管理」节） ============
+//
+// 备份管道/保留策略/校验/恢复逻辑集中 backup.ts（与自动定时器同模块）；
+// 本文件只挂端点：requireCurrentProject（无项目 → 409 NO_PROJECT_OPEN，与 /config 一致）。
+
+// GET /api/v1/project/backups —— 备份列表（时间倒序；.backups/ 不存在 → 空数组不报错）
+projectRoutes.get("/backups", (c) => {
+  const project = requireCurrentProject();
+  return c.json(ok({ backups: listBackups(project) }));
+});
+
+// POST /api/v1/project/backup —— 立即备份（手动触发；同款管道 + 保留策略清理）
+projectRoutes.post("/backup", (c) => {
+  const project = requireCurrentProject();
+  return c.json(ok({ backup: writeBackup(project) }));
+});
+
+// POST /api/v1/project/backup/restore —— 从备份恢复当前项目（覆盖恢复，决策 27）
+//
+// 流程（endpoints.md）：
+// 1. fileName 白名单校验（仅 .backups/ 下 <YYYYMMDD-HHmmss>.zip，防路径穿越）→ 非法 400
+// 2. 覆盖前自动快照（复用备份管道，参与保留策略——后悔药）→ 备份不存在 404
+// 3. 备份包校验（zip/白名单/契约/user_version 三态，E4/E5）→ 400/409 零触碰
+// 4. 原子替换三文件 + 重连 data.db + 同步内存 config + 重启定时器（restoreBackup）
+projectRoutes.post("/backup/restore", async (c) => {
+  const project = requireCurrentProject();
+  const raw = await c.req.json().catch(() => null);
+  const fileName =
+    typeof raw === "object" && raw !== null && typeof (raw as Record<string, unknown>).fileName === "string"
+      ? ((raw as Record<string, unknown>).fileName as string)
+      : null;
+  if (fileName === null) {
+    throw new HttpError(400, "VALIDATION_ERROR", "缺少文件名字段 fileName（备份文件名）");
+  }
+  return c.json(ok({ restored: true as const, ...restoreBackup(project, fileName) }));
 });

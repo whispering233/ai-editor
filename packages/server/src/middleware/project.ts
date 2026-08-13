@@ -20,6 +20,7 @@ import { writeOutlineFile } from "@whispering233/ai-editor-db";
 import { SCHEMA_VERSION } from "@whispering233/ai-editor-db";
 import { nowIso } from "@whispering233/ai-editor-db";
 import { HttpError, fail, type ApiErrorCode } from "./error.js";
+import { startAutoBackup, stopAutoBackup } from "../backup.js";
 
 /** data.db 文件名（决策 8：项目根目录） */
 export const DATA_DB_FILE_NAME = "data.db";
@@ -53,9 +54,19 @@ export function getProject(c: Context<{ Variables: ProjectVariables }>): Project
 /** 当前打开的项目（null = 无） */
 let currentProject: ProjectContext | null = null;
 
-/** 设置当前项目（create/open 成功后调用；传 null 清空——close 时） */
+/**
+ * 设置当前项目（create/open 成功后调用；传 null 清空——close 时）。
+ * B2.2（决策 27）：自动备份定时器跟随当前项目生命周期——设置非空 → 启动调度
+ * （open/切换/启动即打开），清空 → 停止（close）。频率变化（restore 等）由
+ * 调度器 tick 内重读 config 自行跟随。
+ */
 export function setCurrentProject(project: ProjectContext | null): void {
   currentProject = project;
+  if (project !== null) {
+    startAutoBackup(project);
+  } else {
+    stopAutoBackup();
+  }
 }
 
 /** 读取当前项目（可能为 null） */

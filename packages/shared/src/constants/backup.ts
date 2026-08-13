@@ -11,3 +11,6 @@ export type BackupFrequency = (typeof BACKUP_FREQUENCIES)[number];
 
 /** 缺省自动备份频率（分钟，决策 27：新项目默认开启；project.json 字段缺失时读侧兜底） */
 export const DEFAULT_BACKUP_FREQUENCY_MINUTES = 10;
+
+/** 每项目保留最近备份份数（决策 27：超出删除最旧，含覆盖前自动快照；B2.2 保留策略） */
+export const MAX_BACKUPS_PER_PROJECT = 20;
