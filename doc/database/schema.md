@@ -211,6 +211,7 @@ CREATE INDEX idx_chat_session ON chat_messages(session_id, created_at);
   "prompt": "力量体系：练气→筑基→金丹",
   "schema_version": 1,
   "current_position": "sc-42",
+  "backup_frequency_minutes": 10,
   "created_at": "2026-08-01T10:00:00Z",
   "updated_at": "2026-08-01T10:00:00Z"
 }
@@ -218,16 +219,18 @@ CREATE INDEX idx_chat_session ON chat_messages(session_id, created_at);
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `id` | string | 项目唯一 id，首次初始化时生成（前缀 `proj-` + nanoid），**跨启动稳定**；画布布局 localStorage 的隔离 key（决策 10） |
-| `name` | string | 项目名称，默认取目录名 |
+| `id` | string | 项目唯一 id，首次初始化时生成（前缀 `proj-` + nanoid），**跨启动稳定**；画布布局 localStorage 的隔离 key（决策 10）；**备份/恢复的唯一 key（决策 27）**——导入/加载备份时以 zip 内 id 与书架比对，匹配 → 覆盖恢复，不匹配 → 导入为新书 |
+| `name` | string | 项目名称，默认取目录名；**与目录名绑定**（「目录名 = 书名」不变式，决策 27：同名并存时目录与 name 同步去重为 `<书名> (N)`） |
 | `language` | `"zh"` \| `"en"` | 语言 |
 | `prompt` | string | 项目级提示词（决策 7 三层注入的项目层） |
 | `schema_version` | number | JSON 结构版本（决策 13；与 outline.json 顶层同步写入） |
 | `current_position` | string \| null | 大纲「当前位置」节点 id（伏笔健康指标依赖，见 `hooks.md`；null = 未设置；须指向存在的非软删节点） |
+| `backup_frequency_minutes` | number \| null | **自动备份频率（决策 27，可选字段）**：分钟数，仅接受枚举 5/10/15/30/60；`null` / `0` = 关闭；**缺省 = 10**（新项目默认开启）；随书籍（每项目独立）；不参与 schema_version 判定（宽松读取，缺省兜底） |
 | `created_at` / `updated_at` | string | ISO 8601，应用层写入；首次初始化写 `created_at`，配置变更更新 `updated_at` |
 
 **约束**：
 - DeepSeek API key **绝不写入本文件**（决策 17）——只走环境变量 `DEEPSEEK_API_KEY` 或用户级配置 `~/.ai-editor/config.json`。
 - 文件写入遵循决策 11 的原子写流程（outline.json 同款：临时文件 + fsync + rename）。
+- **自动备份目录（决策 27）**：项目目录内 `.backups/` 子目录存放自动备份 zip（时间戳命名 `<YYYYMMDD-HHmmss>.zip`，格式 = E1 导出包：project.json + outline.json + data.db）；**每项目保留最近 20 份**（超出删除最旧，含覆盖前自动快照）；备份文件不入 git、不算数据文件（可随时删除）。
 
 **画布视图**：大纲中的节点通过 `relation_records` 中的关系形成有向图，支持多线推演和路径分析（参见 [`../api/tools.md`](../api/tools.md) 中的分析类工具）。画布连线通过 `relation_records` 的 `plot_edge` 类型存储（决策 10），不进入 outline.json；节点坐标与画布缩放存浏览器 localStorage（决策 10），不进任何数据文件。

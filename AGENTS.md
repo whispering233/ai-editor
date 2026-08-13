@@ -2,9 +2,10 @@
 
 ## 项目状态
 
-- **状态：MVP、阶段 B/C、画布增强与交互优化全部完成（2026-08 实测）**——阶段 A 地基 + 切片 1-13（含 S6 模型工具层 / S7 对话服务 / S8 聊天联调 / S9 伏笔面板 / S12 节点详情 / S13 大纲交互重构）+ 阶段 U（U1-U8 三栏工作台重构）+ 画布 S10.1 + 发布 S11 + 阻断项 E1-E6（导出/导入、未来版本拒绝重建、增量迁移、OIDC 发布链路 **v0.0.4/v0.0.5 全绿**）+ 阶段 B B1 项目提示词编辑（决策 24/25）+ 阶段 C 时间轴（决策 26，C1-C4）+ 画布增强批次（S10.2-S10.5，inkos 参考）+ 交互优化批次（UX1-UX4，用户实测反馈）。**无待做项**；可选收尾：npm 坏版本 v0.0.1/v0.0.2 deprecate（需 2FA 凭据）。各阶段/任务卡详情、坑记录与演进路线见 `doc/design/tasks.md`，发布评审见 `doc/design/release-review.md`，backlog.md 事项一律不做。
+- **状态：MVP、阶段 B/C、画布增强与交互优化全部完成（2026-08 实测）**——阶段 A 地基 + 切片 1-13（含 S6 模型工具层 / S7 对话服务 / S8 聊天联调 / S9 伏笔面板 / S12 节点详情 / S13 大纲交互重构）+ 阶段 U（U1-U8 三栏工作台重构）+ 画布 S10.1 + 发布 S11 + 阻断项 E1-E6（导出/导入、未来版本拒绝重建、增量迁移、OIDC 发布链路 **v0.0.4/v0.0.5 全绿**）+ 阶段 B B1 项目提示词编辑（决策 24/25）+ 阶段 C 时间轴（决策 26，C1-C4）+ 画布增强批次（S10.2-S10.5，inkos 参考）+ 交互优化批次（UX1-UX4，用户实测反馈）。**进行中（2026-08）：阶段 B2 自动备份与恢复（B2.1-B2.4，决策 27）**；可选收尾：npm 坏版本 v0.0.1/v0.0.2 deprecate（需 2FA 凭据）。各阶段/任务卡详情、坑记录与演进路线见 `doc/design/tasks.md`，发布评审见 `doc/design/release-review.md`，backlog.md 事项一律不做。
 - 任务执行以 `doc/design/tasks.md` 为清单（checkbox 进度），按卡开发、一卡一 commit、每卡「实现 fixer/designer + 验证 oracle」双代理、完成后向用户汇报；**backlog.md 事项一律不做**（#8 已演练完成）。
 - 一切实现工作必须按 `doc/design/architecture.md` 的分包方案搭建，不得擅自改变包划分或依赖方向。
+- 路径约定：`client/src/...`、`server/src/...`、`db/src/...` 等包内路径均相对 `packages/` 目录；`doc/`、`scripts/`、`test-project/` 在仓库根。
 
 ## 文档即契约
 
@@ -25,6 +26,7 @@
 - pnpm monorepo，7 个包：`shared → llm/db/tools → agent → server`，`client` 只依赖 `shared`。
 - **`shared` 硬约束**：禁止任何 Node.js 内置模块或服务端包（只允许 zod / nanoid / 纯 TS）。client 会在浏览器打包它，违反即 Vite 构建失败。**Zod 校验仅在服务端执行**——client 只消费 shared 的类型与常量，不打包校验函数（避免 50KB 级依赖进浏览器包）。
 - 存储**三个数据文件**，不要试图统一：`outline.json`（大纲树 JSON）、`data.db`（实体/关系/Delta/对话历史 `chat_messages` 表，决策 18 含 `tool_call_id`/`project_id` 列）、`project.json`（项目配置：id/name/language/prompt/`schema_version`/`current_position`，决策 8/21；写入与 outline.json 同款原子写，**DeepSeek key 绝不写入**）。
+- **自动备份（决策 27，B2 阶段）**：备份/频率/列表均**项目级（跟随书籍）**——频率 = project.json `backup_frequency_minutes`（缺省 10，null/0 = 关闭，仅枚举 5/10/15/30/60），备份 zip 存项目目录 `.backups/`（时间戳命名，每项目保留 20 份）；**加载备份/导入覆盖以 project_id 为唯一 key**：zip 内 id 匹配书架 → 覆盖恢复（**必须保留当前项目 id**——换 id 即断连 chat_messages 会话历史；覆盖前自动快照当前状态）；不匹配 → 导入新书（同名不同 id **不再 409**，目录自动去重 `书名 (N)`）；`POST /project/rename` 改书名（原子移动目录 + 更新 name，当前打开项目同步内部路径引用）。
 - 大纲**严格三层**（卷→章→场景），**无游离节点**：创建必须显式指定 parent_id，scene 只能挂 chapter（决策 19）；outline.json 无 `orphan_nodes` 字段，节点带 `updated_at` 版本戳、顶层带 `schema_version`。**节点可选 `data` 字段（决策 23，S12 已实现）**——麦基《故事》字段集，按层级 schema 校验（scene：goal/conflict_levels/value_from/value_to；chapter：reversal/climax_scene；volume：climax_scene/inciting_scene），**编辑 data 不自动生成 Delta**（决策 9 修订语义），详情页 `#/outline/:nodeId` 承载展示与编辑。
 - 关系用**一张通用表** `relation_records`（含 `plot_edge` 剧情连线），不要按实体类型分表。**Delta 不在此表**——独立存 `delta_records`，`attribute_change` 类型已废弃（决策 3，2026-08 修订）。
 - 状态计算 `computeState` **只沿大纲树父链累积已确认 Delta**：节点间按树路径序、节点内按 `order` 双层排序；`plot_edge` 连线不参与；`op=update` 校验 from 失败**跳过该 change 并在 `conflicts` 中标注**（不返回 409——手动编辑 data 不产生 Delta 属正常行为，决策 9 修订）。
@@ -32,7 +34,7 @@
 - 伏笔系统（决策 21）：**健康指标 `_health` 仅运行时计算，作为响应附加字段返回，绝不写回 data**；`plants`/`advances`/`resolves` 关系**不存 chapter 元数据**——章节序由服务端基于 source_id 从大纲树查询时现推（节点 move 后不陈旧）；「当前章节」= project.json 的 `current_position`；`ready_to_resolve` 依据 hook 的 `expected_resolve_node_id`（未设置返回未计算，不猜测）。**MVP 简化（2026-08 决策）**：`_health` REST 附加字段契约未定义，伏笔面板不展示健康指标与章节序（backlog #13）。
 - 画布节点坐标/缩放存**浏览器 localStorage**（纯展示层，不进数据文件，决策 10）。
 - 前端技术栈已定（architecture.md + 决策 22）：React 19 + Zustand 5 + Tailwind 4 + shadcn/ui（**base-nova/Base UI 风格，已 CLI 集成**：components.json + `@` 别名 + `pnpm dlx shadcn add <组件>` 增补组件，CLI 在 devDependencies）；路由用自制 hash 路由（`useHashRoute`），**不要引入 React Router**。
-- **UI 三栏工作台布局（决策 22，layout.md §0/§2）**：左 10%（Sidebar：产品标识 + 书架树 + 设置/主题切换）/ 中 50%（InfoBar + 6 tab：概览|大纲|画布|实体关系|伏笔|回收站 + 内容区）/ 右 40%（ChatPanel 常驻，`<1024px` 折叠抽屉），`flex-basis` 百分比固定不可拖拽；**`#/chat` 独立页已移除**——聊天常驻右栏，跨页「问 AI」注入当前会话 focus context（`ui store focusOutlineNodeId` 或 `chat store focusContext`）；**会话归属项目**（chat store 订阅 project store 切换联动，决策 22）。
+- **UI 三栏工作台布局（决策 22，layout.md §0/§2）**：左 10%（Sidebar：产品标识 + 书架树 + 设置/主题切换）/ 中 50%（InfoBar + 7 tab：概览|大纲|画布|实体关系|伏笔|时间轴|回收站 + 内容区，阶段 C 加入时间轴）/ 右 40%（ChatPanel 常驻，`<1024px` 折叠抽屉），`flex-basis` 百分比固定不可拖拽；**`#/chat` 独立页已移除**——聊天常驻右栏，跨页「问 AI」注入当前会话 focus context（`ui store focusOutlineNodeId` 或 `chat store focusContext`）；**会话归属项目**（chat store 订阅 project store 切换联动，决策 22）。
 - **Base UI 菜单契约（2026-08 踩坑）**：`DropdownMenuLabel`（= `Menu.GroupLabel`）**必须**用 `DropdownMenuGroup` 包裹——裸放 `DropdownMenuContent` 内，菜单打开时抛 Base UI error #31（`MenuGroupContext is missing`），曾致点击会话标题下拉整页白屏（`3e877a1` 根因修复）；新增菜单遵守，layout.md §4.3 红线。
 - **主题系统（layout.md §3，U1）**：oklch 文学氛围双主题 tokens 集中在 `client/src/index.css`（`@custom-variant dark` + `@theme inline` + `:root`/`.dark`，浅色暖羊皮纸+牛血红 ↔ 深色蓝黑曜石+琥珀烛光）+ 系统字体栈（标题/聊天衬线 `font-serif`）+ `--radius: 0.6rem` + `color-scheme`；**组件一律用 token 类（bg-background/bg-card/border-border/text-muted-foreground 等），禁止硬编码 zinc/white/black 色类**（oracle 审核红线）；**已知残留（2026-08 实测）**：EntityList.tsx/EntityDetail.tsx 等仍有约 20 处硬编码色类（bg-zinc-900/bg-white 等）——新代码不得新增、勿复制其写法，顺手改旧代码时换 token 类；主题切换 `hooks/use-theme.ts`（localStorage `ai-editor:theme`）+ index.html FOUC 内联脚本（深色首帧防闪白）。
 - **聊天发送状态（U5）**：POST /api/v1/chat 是 **POST + SSE**——浏览器原生 `EventSource` 只支持 GET，客户端必须用 `fetch` + `ReadableStream` 自写 SSE 解析（`client/src/hooks/use-sse.ts`，`fetchSSE` 是 POST /chat 的事实契约来源——**勿另起炉灶**），处理跨 chunk 的 `data:` 行拼接与注释行；**端点已实现**（S7.6 挂载于 `server/src/routes/chat.ts`，S8.1 联调契约 0 gap——服务端网络失败会补发 error 事件消除静默失败）；chat store 有 loadSeq/msgSeq 竞态 + 中止在途 SSE 的约定，改动时保持。

@@ -374,7 +374,9 @@ export interface Entity { id: string; type: EntityType; name: string; }
       （2026-08 修订——原「不存在则初始化」改为待命，避免空目录被替用户决定初始化/污染代码包）
     → 书架模式（2026-08，参考 inkos）：创建书 = 创作根/books/<书名>/ 子目录（三文件），
       GET /api/v1/project/list 扫描 books/ 列书（不依赖当前项目，待命态可用）；
-      create/open 契约不变，前端拼 创作根/books/<书名>/ 路径调用
+      create/open 契约不变，前端拼 创作根/books/<书名>/ 路径调用；
+      自动备份（决策 27）：书目录内 .backups/ 存备份 zip（时间戳命名，保留 20 份，
+      覆盖恢复前自动快照；频率 = project.json backup_frequency_minutes，缺省 10 分钟）
     → 启动 Hono (port 3456，占用时生产态自动 +1；AI_EDITOR_PORT 可覆盖)
     → 调试日志（纯配置文件，server/src/debug.ts——`initDebugConfig` 启动读一次）：
       创作根 .ai-editor/config.json：{ "debug": { "enabled": true, "categories": [...] } }

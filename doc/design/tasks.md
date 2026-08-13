@@ -16,7 +16,8 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 ## 项目状态（2026-08）
 
 - **完成**：阶段 A 地基 + 切片 1-9、12、13 + 阶段 U（U1-U8）+ 交互修复批次 + 切片 10 画布（S10.1）+ 切片 11 发布（S11.1-S11.3）+ 发布阻断项 E1-E6（导出/导入、未来版本拒绝重建、增量迁移、发布链路 OIDC 全绿）+ 阶段 B 项目提示词编辑（B1，决策 24/25）+ **阶段 C 时间轴（C1-C4，决策 26）** + 画布增强批次（S10.2-S10.5，inkos 参考）+ 交互优化批次（UX1-UX4，用户实测反馈）——详见「项目演进路线」。
-- **待做**：无（MVP 与阶段 A/B/C 全部完成；可选收尾 = npm 坏版本 v0.0.1/v0.0.2 deprecate 标注——需 2FA 凭据，见 E6 卡）；backlog 事项一律不做。
+- **进行中（2026-08）**：阶段 B2 自动备份与恢复（B2.1-B2.4，决策 27）——见文末批次卡。
+- **待做**：B2.1-B2.4（进行中）；可选收尾 = npm 坏版本 v0.0.1/v0.0.2 deprecate 标注——需 2FA 凭据，见 E6 卡；backlog 事项一律不做。
 - **测试**：全仓 1387 个（shared 94 / llm 59 / db 218 / server 253 / client 444 / tools 225 / agent 94）。
 - 已完成卡片的详细规格已归档（git history 可回溯）；「项目演进路线」提供脉络摘要，配合 `decisions.md`（决策 1-26 为设计主轴）理解现状。
 
@@ -235,4 +236,35 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - 范围：EntityList「+ 新建」Dialog → **列表首行内联编辑行**（name + 该类型首字段；hook 类型 status 下拉保留；提交成功跳详情页语义保留——行内提交后 `navigate("/entities/:type/:id")`）
 - 依赖：无
 - 验证：client 纯函数测试（如有）+ 手工验收（行内编辑/提交/取消/跳详情语义）
+- 回滚：单 commit
+
+---
+
+## 阶段 B2：自动备份与恢复（B2.1-B2.4，2026-08 用户裁决，决策 27）
+
+> **背景**：E1 手动导出/导入已具备，但备份依赖手动操作、无历史版本管理。用户需求：自动备份 + 加载备份（文件导入 / 历史自动备份列表二选一）+ 设置备份频率。设计裁决（决策 27）：唯一 key = project_id（匹配 → 覆盖恢复 / 不匹配 → 导入新书）；同名不同 id 不再 409（重命名导入 / 同名并存目录去重二选一）+ 新增重命名书名能力；频率跟随书籍（project.json `backup_frequency_minutes`，缺省 10，选项 关闭/5/10/15/30/60）；定时检查 + 有变更才备份；`.backups/` 时间戳命名、保留 20 份；覆盖前自动快照。契约见 `doc/api/endpoints.md`（备份管理节 + import 改造）、`doc/database/schema.md`（project.json 契约）、`doc/ui/pages/settings.md`（备份区细案）、`doc/ui/layout.md` §2.3（书架重命名/导入冲突）。
+> **状态（2026-08）**：进行中。
+
+**B2.1 shared + server 配置：project.json 备份频率字段**
+- 范围：shared 新增 `backup_frequency_minutes` 契约字段（config 读/写 schema）+ 频率枚举常量 `BACKUP_FREQUENCIES`（[5, 10, 15, 30, 60]，null/0 = 关闭、缺省 10）+ 备份文件名纯函数（时间戳解析/校验 `<YYYYMMDD-HHmmss>.zip`）；server project 模块读写该字段（缺省兜底 10）
+- 依赖：无（决策 27 契约先行）
+- 验证：shared 纯函数测试（文件名格式/频率枚举）+ server config 读写测试（缺省/显式/null）
+- 回滚：单 commit
+
+**B2.2 server 自动备份 + 备份管理端点**
+- 范围：备份管道（三文件 + wal_checkpoint → `.backups/<时间戳>.zip`，复用 E1 打包）；自动定时器（服务运行期间按频率检查，**三文件 mtime 均早于上次备份时刻（=.backups/ 最新备份时间）则跳过**）；保留策略（每项目最近 20 份，超出删最旧）；`GET /project/backups` + `POST /project/backup`（立即备份）+ `POST /project/backup/restore`（fileName 白名单防穿越 → **覆盖前自动快照** → 备份包校验（同 import 校验 3-7，E4/E5 三态分流）→ 原子替换三文件 → 返回 snapshot 信息）
+- 依赖：B2.1
+- 验证：server 测试（定时器有变更才备份/无变更跳过、保留策略 20 份清理、restore 快照+替换+文件名穿越拒绝+坏包/user_version 拒绝）；手工走查（立即备份 → 列表 → 恢复）
+- 回滚：单 commit
+
+**B2.3 server import 分流改造 + rename 端点**
+- 范围：import 解压校验后读 zip 内 `project.json` id → 遍历 `books/*/project.json` 比对：**id 匹配 → 覆盖恢复**（复用 restore 管道，返回 `mode: "restored"`）；不匹配 → 新书导入，目标目录冲突**不再 409** → 自动去重 `books/<书名> (N)/`（project.json name 同步为去重名）；新增 `POST /project/rename { name }`（校验 → 目标目录可用性 409 → 原子移动目录 + 更新 name → 当前打开项目同步内部路径引用）
+- 依赖：B2.1、B2.2（覆盖管道）
+- 验证：server 测试（import id 匹配覆盖/不匹配新书/同名去重、rename 成功/冲突 409/当前项目引用同步）；手工走查（导出 A 书 → 改名后导入 → 覆盖恢复）
+- 回滚：单 commit
+
+**B2.4 client 设置页备份区 + 书架改造**
+- 范围：设置页「自动备份」区（频率下拉：关闭/每 5/10/15/30/60 分钟，选择即保存 PUT /project/config；「立即备份」按钮；备份列表（时间/大小 + [加载] → 强确认 Dialog 展示时间/大小 + 「覆盖前自动备份当前状态」说明 → restore → 刷新项目数据）；书架导入 Dialog 同名冲突二选一（重命名导入预填 `<书名> (2)` / 保持原样）+ restored 模式 toast；项目行 ⋯ 菜单 [重命名]（行内输入框 → POST /project/rename → 刷新书架与 config）
+- 依赖：B2.1-B2.3
+- 验证：client 纯函数测试（备份文件名解析/列表展示辅助）+ 手工走查（设置频率 → 立即备份 → 列表加载恢复 → 导入同名 → 书架重命名）；oracle 审核 UI 与交互
 - 回滚：单 commit

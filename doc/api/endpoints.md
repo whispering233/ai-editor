@@ -130,6 +130,7 @@
   prompt: string;            // 项目提示词
   schemaVersion: number;     // schema 版本（对应 project.json 的 schema_version，决策 13）
   currentPosition: string | null;  // 大纲「当前位置」节点 id（project.json，伏笔健康指标依赖）
+  backupFrequencyMinutes: number | null;  // 自动备份频率（分钟，决策 27；null = 关闭；缺省 10）
   createdAt: string;         // ISO datetime
   updatedAt: string;
 }
@@ -146,6 +147,7 @@
   language?: "zh" | "en";
   prompt?: string;
   current_position?: string | null;  // 更新「当前位置」（须指向存在的非软删大纲节点）
+  backup_frequency_minutes?: number | null;  // 自动备份频率（决策 27；null/0 = 关闭；仅接受枚举值 5/10/15/30/60，其他 → 400 VALIDATION_ERROR）
 }
 
 // Res: 200
@@ -180,7 +182,7 @@
 
 ### POST /api/v1/project/import
 
-导入备份 zip 为新书（E2：校验 + 原子搬入，全部校验通过才触碰 `books/`）。
+导入备份 zip（E2 校验 + 原子搬入；决策 27 分流：**id 匹配书架已有项目 → 覆盖恢复，不匹配 → 导入为新书**）。
 
 ```typescript
 // Req: multipart/form-data
@@ -191,11 +193,17 @@
 // Res: 200
 {
   imported: true;
-  id: string;     // 导入项目的 project_id（沿用 zip 内 project.json 的 id，数据原样恢复）
-  path: string;   // 新书目录绝对路径（创作根/books/<name>/）
-  name: string;   // 书名（即新书目录名；project.json 内部 name 保持原样）
+  id: string;     // 项目 project_id（覆盖恢复 = 书架目标项目原 id；导入新书 = 沿用 zip 内 project.json 的 id）
+  path: string;   // 书目录绝对路径（创作根/books/<name>/ 或去重名）
+  name: string;   // 书名（新书目录名；project.json 内部 name 同此）
+  mode: "restored" | "new";  // 决策 27：restored = id 匹配覆盖恢复；new = 导入为新书（前端按此提示 toast）
 }
 ```
+
+**分流逻辑（决策 27，在 E2 校验通过后）**：
+1. 解压校验完成后读取 zip 内 `project.json` 的 `id`；
+2. **id 与书架已有项目匹配**（遍历 `books/*/project.json` 比对）→ **覆盖恢复**：走 restore 同款管道（覆盖前自动快照当前状态 → 原子替换三文件 → 返回 `mode: "restored"`）；覆盖目标按 id 定位目录（不是按 name）；
+3. **id 不匹配** → 导入为新书（原 E2 语义）：目标 `books/<name>/` 冲突时**不再 409**——若前端已选择重命名（name 为新名）则无冲突；若保持原样（name 与书架冲突）则**目录自动去重为 `books/<书名> (N)/`**（N 为最小正整数，project.json 内部 name 同步为去重名，维持「目录名 = 书名」不变式）。
 
 **校验顺序**（任一步失败即拒绝，不触发删库重建逻辑）：
 1. `content-length` 预检（> 50MB 快速拒绝，防超大请求先缓冲）+ `file.size` 复核
@@ -209,9 +217,105 @@
 **错误码**：
 - 400 `VALIDATION_ERROR`：坏包/缺文件/未知条目/契约不符/书名非法/超大小上限
 - 409 `SCHEMA_VERSION_MISMATCH`：data.db `user_version` 与当前程序版本不匹配且**无迁移路径**（`v > 当前` → 「备份来自更高版本程序」（E4 语义，零触碰）；`v < 当前` 但有迁移路径 → 放行，搬入后 open 自动前向迁移（E5））；**一律不静默重建**
-- 409 `PROJECT_ALREADY_EXISTS`：目标 `books/<name>/` 已存在（与 create 同语义）
 
-**原子搬入**：校验在 `mkdtemp` 临时目录完成（无论成败清理）；通过后 `mkdir` + 复制三文件到 `books/<name>/`，任一失败清理半成品目录（不留下残缺书）。导入**不自动打开**（与 create 一致，前端刷新书架）。
+**原子搬入/覆盖**：校验在 `mkdtemp` 临时目录完成（无论成败清理）；通过后 `mkdir` + 复制三文件到 `books/<name>/`（或覆盖目标目录，覆盖前先快照），任一失败清理半成品（不留下残缺书）。导入**不自动打开**（与 create 一致，前端刷新书架）。
+
+---
+
+## 备份管理（决策 27）
+
+> 自动备份由服务端定时器驱动（服务运行期间生效，频率 = project.json `backup_frequency_minutes`，缺省 10 分钟）。备份文件存项目目录内 `.backups/`，时间戳命名（`<YYYYMMDD-HHmmss>.zip`），格式与 E1 导出 zip 完全一致（三文件 + wal_checkpoint），**每项目保留最近 20 份**（超出删除最旧，含覆盖前自动快照）。全部端点要求当前项目已打开（无项目 → 409 `NO_PROJECT_OPEN`，与 `/config` 一致）。
+
+### GET /api/v1/project/backups
+
+当前项目的自动备份列表。
+
+```typescript
+// Query: (none)
+
+// Res: 200
+{
+  backups: Array<{
+    fileName: string;   // 备份文件名（时间戳命名；restore 用此引用）
+    size: number;       // 字节数
+    createdAt: string;  // 备份时间（ISO 8601，由文件名时间戳解析）
+  }>;
+}
+```
+
+**语义**：按时间倒序（最新在前）；`.backups/` 不存在返回空数组（不报错）。
+
+### POST /api/v1/project/backup
+
+立即备份当前项目（手动触发；设置页「立即备份」按钮）。
+
+```typescript
+// Req: (none)
+
+// Res: 200
+{
+  backup: {
+    fileName: string;
+    size: number;
+    createdAt: string;
+  };
+}
+```
+
+**语义**：与自动备份同款管道（三文件 + wal_checkpoint → `.backups/<时间戳>.zip` → 触发保留策略清理）。文件写入失败 → 500 `INTERNAL_ERROR`。
+
+### POST /api/v1/project/backup/restore
+
+从备份列表恢复当前项目（覆盖恢复，决策 27）。
+
+```typescript
+// Req
+{
+  fileName: string;  // 备份文件名（须匹配 .backups/ 内时间戳格式，防路径穿越；不存在 → 404 VALIDATION_ERROR「备份不存在」）
+}
+
+// Res: 200
+{
+  restored: true;
+  snapshot: {
+    fileName: string;  // 覆盖前自动生成的当前状态快照文件名（后悔药，已计入保留策略）
+    createdAt: string;
+  };
+}
+```
+
+**恢复流程**：
+1. fileName 白名单校验（仅允许 `.backups/` 下 `<YYYYMMDD-HHmmss>.zip` 格式，拒绝路径分隔符/`..`）
+2. **覆盖前自动快照**：将当前三文件打包为快照存入 `.backups/`（复用备份管道）
+3. 备份包校验（同 import 校验顺序 3-7：zip 解析/白名单/三文件齐全/顶层契约/data.db user_version 三态分流——E4/E5 语义，绝不静默重建）
+4. **原子替换**：临时目录解压校验通过后，三文件覆盖写入项目目录（原子写）
+5. 服务端当前项目引用不变（id 保留，决策 27）；前端刷新 config/outline/会话数据
+
+**错误码**：400 `VALIDATION_ERROR`（坏包/文件名非法）、404（备份不存在）、409 `SCHEMA_VERSION_MISMATCH`（同上）。
+
+### POST /api/v1/project/rename
+
+重命名当前书籍（决策 27：同名并存场景的区分配套）。
+
+```typescript
+// Req
+{
+  name: string;  // 新书名（校验同创建规则：禁路径分隔符/纯点/控制字符）
+}
+
+// Res: 200
+{
+  renamed: true;
+  path: string;  // 新书目录绝对路径（创作根/books/<新名>/）
+  name: string;  // 新书名
+}
+```
+
+**语义**：
+- 校验新名 → 目标目录 `books/<新名>/` 已存在（且不是当前书自身目录）→ 409 `PROJECT_ALREADY_EXISTS`；
+- **原子移动**：`books/<旧名>/` → `books/<新名>/` + 更新 project.json 内 name（任一失败回滚，不留下半成品）；
+- 当前打开的书改名：服务端**同步更新内部项目路径引用**（会话/历史按 id 不受影响）；前端刷新书架与 config（`GET /project/config` 的 name 变化）。
+- 未打开项目时 → 409 `NO_PROJECT_OPEN`。
 
 ---
 
