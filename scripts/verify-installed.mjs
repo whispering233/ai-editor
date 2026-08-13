@@ -8,12 +8,15 @@
 //
 // 流程：
 //   1. mkdtemp 临时安装目录 + 临时空项目目录
-//   2. `npm install --prefix <安装目录> @whispering233/ai-editor-server@<version>`（真实 registry 拉包与依赖）
-//   3. 断言 node_modules/@whispering233/ai-editor-server/package.json 存在且 version 匹配
-//   4. 断言 node_modules/.bin/ai-editor 存在（npm 生成的 bin 链接；win32 为 .cmd shim）
-//   5. 冒烟：`node <server>/dist/index.js <临时空目录>`（AI_EDITOR_PORT 随机端口避免冲突），
+//   2. 【发布可见性轮询】`npm view <6 包>@<version>` 循环确认全部可见（registry manifest CDN
+//      传播延迟，实测最慢可超 5 分钟——2026-08 v0.0.6 曾 10×30s=5 分钟窗口仍 ETARGET 超窗；
+//      窗口 20×30s = 10 分钟；npm view 与 install 同源，可见后再装基本一次成功）
+//   3. `npm install --prefix <安装目录> @whispering233/ai-editor-server@<version>`（真实 registry 拉包与依赖）
+//   4. 断言 node_modules/@whispering233/ai-editor-server/package.json 存在且 version 匹配
+//   5. 断言 node_modules/.bin/ai-editor 存在（npm 生成的 bin 链接；win32 为 .cmd shim）
+//   6. 冒烟：`node <server>/dist/index.js <临时空目录>`（AI_EDITOR_PORT 随机端口避免冲突），
 //      收集 stdout，出现「服务已启动」即 kill；超时未见 → 失败并打印输出
-//   6. 清理临时目录（finally 兜底）
+//   7. 清理临时目录（finally 兜底）
 //
 // 说明：ESM 下读 package.json 用 readFile + JSON.parse（不引入 import assertions / 新依赖）。
 import { execFileSync, spawn } from "node:child_process";
@@ -30,6 +33,12 @@ const READY_MARKER = "服务已启动";
 /** 冒烟等待超时（毫秒）；启动含 better-sqlite3 原生加载，给足余量 */
 const SMOKE_TIMEOUT_MS = 20_000;
 
+/** 发布包名后缀（server 依赖其余 5 包，install 需全部可见；与 publish-packages.mjs 同序） */
+const PUBLISHED_PACKAGES = ["shared", "llm", "db", "tools", "agent", "server"];
+/** 可见性轮询：最多 20 次 × 30s = 10 分钟窗口（v0.0.6 实录：传播最慢超 5 分钟） */
+const VISIBILITY_POLLS = 20;
+const VISIBILITY_POLL_INTERVAL_MS = 30_000;
+
 /** 读取 server 包版本（spec：ESM 下 readFile + JSON.parse） */
 function readServerVersion() {
   const raw = readFileSync(join(workspaceRoot, "packages", "server", "package.json"), "utf-8");
@@ -43,6 +52,22 @@ function assert(cond, message) {
   }
 }
 
+/** 6 个发布包是否全部在 registry 可见（npm view 成功且版本匹配；与 npm install 同源判定） */
+function allPackagesVisible() {
+  return PUBLISHED_PACKAGES.every((p) => {
+    try {
+      const out = execFileSync(
+        "npm",
+        ["view", `@whispering233/ai-editor-${p}@${version}`, "version"],
+        { encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"], timeout: 60_000 },
+      );
+      return out.trim() === version;
+    } catch {
+      return false; // E404（未传播）或网络错误 → 不可见
+    }
+  });
+}
+
 const version = versionArg ?? readServerVersion();
 console.log(`[verify] 安装态验证 @whispering233/ai-editor-server@${version}`);
 
@@ -50,10 +75,29 @@ const installDir = mkdtempSync(join(tmpdir(), "ai-editor-verify-install-"));
 const projectDir = mkdtempSync(join(tmpdir(), "ai-editor-verify-proj-"));
 
 try {
-  // 2. 真实安装（registry 拉包；--no-fund/--no-audit 减噪；失败时打印输出）
-  //    重试：新发布版本在 registry 有文档缓存传播延迟（dist-tags 即时、manifest 数分钟，
-  //    实测最慢可达 3-5 分钟——2026-08 v0.0.5 曾 5×15s=75s 窗口不足导致 CI 冒烟 ETARGET 失败，
-  //    发布实际成功仅验证超窗），重试等待（最多 10 次 × 30s = 5 分钟窗口）。
+  // 2. 发布可见性轮询（先于 install——传播期内轻量轮询，传播一完成立即安装）
+  let visible = false;
+  for (let attempt = 1; attempt <= VISIBILITY_POLLS && !visible; attempt++) {
+    visible = allPackagesVisible();
+    if (!visible) {
+      if (attempt < VISIBILITY_POLLS) {
+        console.warn(
+          `[verify] registry 可见性轮询（第 ${attempt}/${VISIBILITY_POLLS} 次：6 包未全部可见 @${version}，${VISIBILITY_POLL_INTERVAL_MS / 1000}s 后重试）`,
+        );
+        await new Promise((r) => setTimeout(r, VISIBILITY_POLL_INTERVAL_MS));
+      }
+    }
+  }
+  if (!visible) {
+    console.error(
+      `[verify] FAIL: ${PUBLISHED_PACKAGES.length} 包在 ${(VISIBILITY_POLLS * VISIBILITY_POLL_INTERVAL_MS) / 60_000} 分钟内未全部可见 @${version}——版本未发布或网络问题`,
+    );
+    process.exit(1);
+  }
+  console.log(`[verify] OK: 6 包 @${version} 已在 registry 可见`);
+
+  // 3. 真实安装（registry 拉包；--no-fund/--no-audit 减噪；失败时打印输出）
+  //    兜底重试：轮询已确认可见，install 失败只可能是网络抖动（最多 10 次 × 30s）。
   console.log(`[verify] npm install --prefix ${installDir} @whispering233/ai-editor-server@${version}`);
   let installOk = false;
   for (let attempt = 1; attempt <= 10 && !installOk; attempt++) {
@@ -66,7 +110,7 @@ try {
       installOk = true;
     } catch {
       if (attempt < 10) {
-        console.warn(`[verify] npm install 失败（第 ${attempt} 次，等待 registry 缓存传播后重试）`);
+        console.warn(`[verify] npm install 失败（第 ${attempt} 次，30s 后重试）`);
         await new Promise((r) => setTimeout(r, 30_000));
       }
     }

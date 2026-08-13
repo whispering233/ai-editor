@@ -1,6 +1,7 @@
 {
   "name": "@whispering233/ai-editor-shared",
-  "version": "0.0.6",
+  "version": "0.0.7",
+  "license": "MIT",
   "description": "前后端共享层：纯类型 + 常量 + 纯函数（零 Node 依赖）",
   "type": "module",
   "main": "./dist/index.js",

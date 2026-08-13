@@ -69,7 +69,7 @@
 发布脚本要点：
 
 - `scripts/publish-packages.mjs`：依赖序硬编码 shared → llm → db → tools → agent → server；每包 `npm view <name>@<version>` 判重（**E404 才视为未发布**，网络错误直接中止），已存在跳过 → 幂等重跑安全；`npm pack` 到临时目录后 `tar -xOf` 读包内 package.json 断言无 `workspace:` 残留（防线）；**发布方式（npm 12 manifest 时序坑）**：发布前主动执行 copy-client-dist（server 的 SPA 随包）+ prepare 替换 workspace:*，然后 `npm publish --access public --ignore-scripts`（跳过 prepack/postpack 钩子——npm 12 的 manifest 在 postpack 恢复后从磁盘生成，钩子替换只影响 tarball 导致 manifest 残留 workspace:*、`npm install` 报 EUNSUPPORTEDPROTOCOL），发布后 finally 主动 restore 恢复；`GITHUB_REF=refs/tags/vX.Y.Z` 存在时校验 tag 与包版本一致（不一致中止，防漂移误发）
-- `scripts/verify-installed.mjs`：CI 发布后冒烟——mkdtemp 临时目录 `npm install --prefix <dir> @whispering233/ai-editor-server@<version>` → 断言已装包 version 匹配 + `.bin/ai-editor` 存在 → 短时启动 `node <pkg>/dist/index.js <空目录>`（20s 超时 kill——better-sqlite3 原生加载 + npm 冷启动给足余量），输出含「服务已启动」即通过（未见即失败）
+- `scripts/verify-installed.mjs`：CI 发布后冒烟——**先轮询 6 包 registry 可见性**（`npm view` 20×30s = 10 分钟窗口；npm 包 manifest CDN 传播延迟实录最慢超 5 分钟，v0.0.6 曾 5 分钟窗口超窗失败，v0.0.7 起改为轮询可见后再装）→ mkdtemp 临时目录 `npm install --prefix <dir> @whispering233/ai-editor-server@<version>` → 断言已装包 version 匹配 + `.bin/ai-editor` 存在 → 短时启动 `node <pkg>/dist/index.js <空目录>`（20s 超时 kill——better-sqlite3 原生加载 + npm 冷启动给足余量），输出含「服务已启动」即通过（未见即失败）
 - **automation token 限制**：绕过 2FA 的 granular token（Automation 类型）**不能执行 unpublish/deprecate**（npm 安全策略 403）——坏版本处理需 2FA 凭据（`npm login` 会话 + OTP）或 npmjs 网页操作
 - 本地验证链路（pack:test/start:test，backlog #8）保留不动；`sync-version` 只改 version 字段，不碰依赖/scripts
 

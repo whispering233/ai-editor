@@ -117,7 +117,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - ✅ 全仓包名改 `@whispering233/ai-editor-*`（`@ai-editor` scope 被占）；6 包已发布 npm（v0.0.1/v0.0.2/v0.0.3/v0.0.4——**v0.0.4 由 CI OIDC 自动发布，全链路验证通过**）
 - ✅ npmjs Trusted Publisher ×6 配置完成（需 npm 账号 2FA 前置）
 - ✅ CI 全链路全绿（Release + Publish：全量验证 → OIDC 发布 → 安装态冒烟）
-- ✅ 发布管道三轮修复：npm 12 manifest 时序（主动替换 + `--ignore-scripts`）、CI npm 10.9.8 不支持 OIDC（升级 `npm@latest`）、provenance 校验（补 `repository` 字段）+ verify-installed 缓存传播重试
+- ✅ 发布管道四轮修复：npm 12 manifest 时序（主动替换 + `--ignore-scripts`）、CI npm 10.9.8 不支持 OIDC（升级 `npm@latest`）、provenance 校验（补 `repository` 字段）+ verify-installed 缓存传播重试（**v0.0.7 再修：先 `npm view` 轮询 6 包可见 20×30s 再 install**——v0.0.6 实录传播超 5 分钟仍超窗）
 - ⏳ 可选收尾：坏版本 v0.0.1/v0.0.2 deprecate 标注（automation token 不能执行，需 2FA 凭据或 npmjs 网页——见 AGENTS.md 发布流程段）
 
 已踩坑记录（完整）：
@@ -125,7 +125,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - CI node 22 自带 npm 10.9.8 **不支持 OIDC 发布认证**（Trusted Publishing）→ 发布无换证，npmjs 404 保护性拒绝 → CI `npm install -g npm@latest`
 - npm 12 发布自动生成 sigstore provenance，npmjs 校验 manifest `repository.url` 与 provenance 一致（E422）→ 各包补 `repository` 字段
 - setup-node 注入占位 `NODE_AUTH_TOKEN`，npm 检测到它优先于 OIDC → 发布前 `delete process.env.NODE_AUTH_TOKEN`
-- 新发布版本 registry 文档缓存有数分钟传播延迟（dist-tags 即时、`npm view`/install 短暂 404/ETARGET）→ verify-installed npm install 重试（5 × 15s）
+- 新发布版本 registry 文档缓存有数分钟传播延迟（dist-tags 即时、`npm view`/install 短暂 404/ETARGET）→ 演进：verify-installed install 重试（5×15s）→ 窗口扩至 10×30s（v0.0.5）→ **v0.0.6 实录传播超 5 分钟仍超窗（发布成功仅验证超窗，重跑通过）→ v0.0.7 改为先 `npm view` 轮询 6 包全部可见（20×30s = 10 分钟窗口）再 install**——传播期内轻量轮询、传播完成即装，超时未可见直接判失败（版本未发布/网络），不再盲重试完整 install
 - automation token（绕过 2FA）不能执行 unpublish/deprecate（npm 安全策略 403）→ 需 2FA 凭据或网页操作
 
 ---

@@ -9,6 +9,16 @@
 
 （开发中条目累积于此，发布时搬运为新版本段）
 
+## [v0.0.7] - 2026-08-13
+
+### Added
+
+- **MIT License**：仓库根 LICENSE（Copyright (c) 2026 whispering233）+ 8 个 package.json（6 发布包 + client + 根）补 `license: "MIT"` 字段
+
+### Fixed
+
+- **发布冒烟 ETARGET 超窗（v0.0.6 实录）**：`verify-installed.mjs` 改为**先轮询 registry 可见性再 install**——`npm view` 循环确认 6 个发布包 `@<version>` 全部可见（20×30s = 10 分钟窗口；npm view 与 install 同源，判断精准）后再执行 `npm install`；传播期内轻量轮询、传播完成即装（基本一次成功），超时仍未可见直接判失败（版本未发布/网络问题），不再盲重试完整 install
+
 ## [v0.0.6] - 2026-08-13
 
 ### Added
