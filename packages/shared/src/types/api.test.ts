@@ -27,6 +27,7 @@ import {
   outlineTreeSchema,
   outlineUpdateReqSchema,
   projectConfigSchema,
+  projectConfigUpdateReqSchema,
   projectImportResSchema,
   projectListResSchema,
   relationCreateReqSchema,
@@ -85,15 +86,33 @@ describe("project 端点", () => {
       prompt: "力量体系：练气→筑基→金丹",
       schemaVersion: 1,
       currentPosition: "sc-42",
+      backupFrequencyMinutes: 10,
       createdAt: "2026-08-01T10:00:00Z",
       updatedAt: "2026-08-01T10:00:00Z",
     });
     expect(config.currentPosition).toBe("sc-42");
   });
 
-  it("language 非法拒绝；currentPosition null 允许", () => {
+  it("language 非法拒绝；currentPosition null 允许；backupFrequencyMinutes null（关闭）允许", () => {
     expect(projectConfigSchema.safeParse({ ...validConfig(), language: "fr" }).success).toBe(false);
     expect(projectConfigSchema.parse({ ...validConfig(), currentPosition: null }).currentPosition).toBeNull();
+    expect(projectConfigSchema.parse({ ...validConfig(), backupFrequencyMinutes: null }).backupFrequencyMinutes).toBeNull();
+  });
+
+  it("projectConfigUpdateReqSchema：backup_frequency_minutes 接受枚举值/null/省略，拒绝其他（决策 27）", () => {
+    // 枚举值全接受
+    for (const v of [5, 10, 15, 30, 60]) {
+      expect(projectConfigUpdateReqSchema.safeParse({ backup_frequency_minutes: v }).success).toBe(true);
+    }
+    // null = 关闭；省略 = 不更新该字段
+    expect(projectConfigUpdateReqSchema.parse({ backup_frequency_minutes: null }).backup_frequency_minutes).toBeNull();
+    expect(projectConfigUpdateReqSchema.parse({ name: "x" }).backup_frequency_minutes).toBeUndefined();
+    // 非枚举拒绝：0（关闭语义写侧一律用 null）、7、小数、字符串、布尔
+    expect(projectConfigUpdateReqSchema.safeParse({ backup_frequency_minutes: 0 }).success).toBe(false);
+    expect(projectConfigUpdateReqSchema.safeParse({ backup_frequency_minutes: 7 }).success).toBe(false);
+    expect(projectConfigUpdateReqSchema.safeParse({ backup_frequency_minutes: 5.5 }).success).toBe(false);
+    expect(projectConfigUpdateReqSchema.safeParse({ backup_frequency_minutes: "10" }).success).toBe(false);
+    expect(projectConfigUpdateReqSchema.safeParse({ backup_frequency_minutes: true }).success).toBe(false);
   });
 
   it("projectListResSchema：合法响应 parse 通过（books 数组、倒序语义由服务端保证）", () => {
@@ -505,6 +524,7 @@ function validConfig() {
     prompt: "力量体系",
     schemaVersion: 1,
     currentPosition: "sc-42",
+    backupFrequencyMinutes: 10,
     createdAt: "2026-08-01T10:00:00Z",
     updatedAt: "2026-08-01T10:00:00Z",
   };

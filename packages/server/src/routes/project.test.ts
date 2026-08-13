@@ -165,6 +165,8 @@ describe("POST /project/create", () => {
     const config = JSON.parse(readFileSync(join(dir, "project.json"), "utf8"));
     expect(config.id).toMatch(/^proj-/);
     expect(config.schema_version).toBe(SCHEMA_VERSION);
+    // 决策 27：新项目默认开启自动备份（显式写入缺省 10）
+    expect(config.backup_frequency_minutes).toBe(10);
     // outline.json：空树 + 同步 schema_version
     expect(readOutlineFile(dir)).toEqual({ id: "root", type: "root", schema_version: SCHEMA_VERSION, children: [] });
     // data.db：user_version 已写（S1.1 审核建议：避免 open 时无意义重建）
@@ -283,6 +285,7 @@ describe("POST /project/open", () => {
       prompt: "提示词",
       schemaVersion: SCHEMA_VERSION,
       currentPosition: "sc-1",
+      backupFrequencyMinutes: 10, // 旧文件缺字段 → 读侧缺省兜底 10（决策 27）
       createdAt: T0,
       updatedAt: T0,
     });
@@ -555,7 +558,7 @@ describe("GET/PUT /project/config", () => {
     });
   });
 
-  it("GET 读回全量配置（camelCase 映射：schemaVersion/currentPosition/createdAt/updatedAt）", async () => {
+  it("GET 读回全量配置（camelCase 映射：schemaVersion/currentPosition/backupFrequencyMinutes/createdAt/updatedAt）", async () => {
     const dir = makeTmpDir();
     const app = await openProject(dir);
     const res = await app.request("/api/v1/project/config", { headers: HOST_HEADERS });
@@ -569,6 +572,7 @@ describe("GET/PUT /project/config", () => {
         prompt: "",
         schemaVersion: SCHEMA_VERSION,
         currentPosition: null,
+        backupFrequencyMinutes: 10, // makeConfig 缺字段 → 读侧缺省兜底 10（决策 27）
         createdAt: T0,
         updatedAt: T0,
       },
@@ -657,6 +661,87 @@ describe("GET/PUT /project/config", () => {
     expect(res.status).toBe(200);
     const getRes = await app.request("/api/v1/project/config", { headers: HOST_HEADERS });
     expect((await getRes.json()).data.currentPosition).toBeNull();
+  });
+
+  // ============ backup_frequency_minutes（决策 27，B2.1） ============
+
+  it("PUT backup_frequency_minutes 枚举值 30 → updated:true，GET 读回 30，project.json 写入 30", async () => {
+    const dir = makeTmpDir();
+    const app = await openProject(dir);
+    const res = await app.request("/api/v1/project/config", {
+      method: "PUT",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ backup_frequency_minutes: 30 }),
+    });
+    expect(res.status).toBe(200);
+    const getRes = await app.request("/api/v1/project/config", { headers: HOST_HEADERS });
+    expect((await getRes.json()).data.backupFrequencyMinutes).toBe(30);
+    expect(readProjectFile(dir)?.backup_frequency_minutes).toBe(30);
+  });
+
+  it("PUT backup_frequency_minutes: null → 关闭（写盘 null，GET 返回 null）", async () => {
+    const dir = makeTmpDir();
+    const app = await openProject(dir);
+    const res = await app.request("/api/v1/project/config", {
+      method: "PUT",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ backup_frequency_minutes: null }),
+    });
+    expect(res.status).toBe(200);
+    const getRes = await app.request("/api/v1/project/config", { headers: HOST_HEADERS });
+    expect((await getRes.json()).data.backupFrequencyMinutes).toBeNull();
+    expect(readProjectFile(dir)?.backup_frequency_minutes).toBeNull();
+  });
+
+  it("PUT backup_frequency_minutes 非枚举（0/7）→ 400 VALIDATION_ERROR（0 仅读侧兼容旧数据，写侧用 null 关闭）", async () => {
+    const dir = makeTmpDir();
+    const app = await openProject(dir);
+    for (const bad of [0, 7]) {
+      const res = await app.request("/api/v1/project/config", {
+        method: "PUT",
+        headers: HOST_HEADERS,
+        body: JSON.stringify({ backup_frequency_minutes: bad }),
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        success: false,
+        error: { code: "VALIDATION_ERROR", message: expect.any(String), fields: ["backup_frequency_minutes"] },
+      });
+    }
+  });
+
+  it("project.json 显式 null/0（旧数据）→ GET 返回 null（关闭）；读侧不兜底为缺省", async () => {
+    for (const raw of [null, 0]) {
+      const dir = makeTmpDir();
+      initProjectDir(dir, { ...makeConfig("proj-null", "关闭备份"), backup_frequency_minutes: raw });
+      const app = buildApp();
+      const openRes = await app.request("/api/v1/project/open", {
+        method: "POST",
+        headers: HOST_HEADERS,
+        body: JSON.stringify({ path: dir }),
+      });
+      expect(openRes.status).toBe(200);
+      const res = await app.request("/api/v1/project/config", { headers: HOST_HEADERS });
+      expect((await res.json()).data.backupFrequencyMinutes).toBeNull();
+    }
+  });
+
+  it("旧项目文件缺字段：GET 兜底 10；PUT 无关字段不把 10 写盘（写只写显式，决策 27）", async () => {
+    const dir = makeTmpDir();
+    const app = await openProject(dir); // makeConfig 缺 backup_frequency_minutes
+    // 读侧兜底 10
+    const getRes = await app.request("/api/v1/project/config", { headers: HOST_HEADERS });
+    expect((await getRes.json()).data.backupFrequencyMinutes).toBe(10);
+    // PUT 无关字段（name）→ 不写 backup_frequency_minutes（字段保持缺失）
+    const res = await app.request("/api/v1/project/config", {
+      method: "PUT",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ name: "改名不改备份" }),
+    });
+    expect(res.status).toBe(200);
+    const file = readProjectFile(dir);
+    expect(file?.name).toBe("改名不改备份");
+    expect(file).not.toHaveProperty("backup_frequency_minutes");
   });
 
   it("无当前项目时 PUT /config → 409 NO_PROJECT_OPEN", async () => {

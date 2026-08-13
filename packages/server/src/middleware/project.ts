@@ -13,7 +13,7 @@ import { basename, join } from "node:path";
 import { mkdirSync } from "node:fs";
 import type { Context, MiddlewareHandler } from "hono";
 import type { ProjectFileConfig } from "@whispering233/ai-editor-shared";
-import { generateProjectId } from "@whispering233/ai-editor-shared";
+import { generateProjectId, DEFAULT_BACKUP_FREQUENCY_MINUTES } from "@whispering233/ai-editor-shared";
 import { closeDatabase, openDatabase, setUserVersion, type Db } from "@whispering233/ai-editor-db";
 import { readProjectFile, writeProjectFile } from "@whispering233/ai-editor-db";
 import { writeOutlineFile } from "@whispering233/ai-editor-db";
@@ -117,6 +117,8 @@ export function initProject(
     prompt: "",
     schema_version: SCHEMA_VERSION,
     current_position: null,
+    // 决策 27：新项目默认开启自动备份（显式写入缺省 10，跟随书籍）
+    backup_frequency_minutes: DEFAULT_BACKUP_FREQUENCY_MINUTES,
     created_at: now,
     updated_at: now,
     ...configOverride, // 覆盖参数（若有）；updated_at 已含当前时间

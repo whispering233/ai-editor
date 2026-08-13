@@ -193,16 +193,29 @@ describe("项目映射", () => {
     updated_at: "2026-08-01T10:00:00Z",
   };
 
-  it("mapProjectFileToConfig：schema_version/current_position → camelCase", () => {
+  it("mapProjectFileToConfig：schema_version/current_position → camelCase；backup 频率读侧兜底（决策 27）", () => {
     const config = mapProjectFileToConfig(file);
     expect(config.schemaVersion).toBe(1);
     expect(config.currentPosition).toBe("sc-42");
     expect(config.language).toBe("zh");
+    // 字段缺失 → 缺省 10（新项目默认开启）
+    expect(config.backupFrequencyMinutes).toBe(10);
   });
 
-  it("往返一致（含 current_position 为 null 的情形）", () => {
-    expect(mapConfigToProjectFile(mapProjectFileToConfig(file))).toEqual(file);
-    const noPosition = { ...file, current_position: null };
-    expect(mapConfigToProjectFile(mapProjectFileToConfig(noPosition))).toEqual(noPosition);
+  it("backup 频率读侧语义：显式 null/0 → null（关闭）；缺失 → 10（读映射宽松、写只写显式）", () => {
+    expect(mapProjectFileToConfig({ ...file, backup_frequency_minutes: null }).backupFrequencyMinutes).toBeNull();
+    expect(mapProjectFileToConfig({ ...file, backup_frequency_minutes: 0 }).backupFrequencyMinutes).toBeNull();
+    expect(mapProjectFileToConfig({ ...file, backup_frequency_minutes: 30 }).backupFrequencyMinutes).toBe(30);
+  });
+
+  it("往返一致：显式字段的文件往返不丢（含 null 关闭与枚举值）", () => {
+    const withFreq = { ...file, backup_frequency_minutes: null };
+    expect(mapConfigToProjectFile(mapProjectFileToConfig(withFreq))).toEqual(withFreq);
+    const withEnum = { ...file, backup_frequency_minutes: 30 };
+    expect(mapConfigToProjectFile(mapProjectFileToConfig(withEnum))).toEqual(withEnum);
+  });
+
+  it("旧文件（缺字段）往返：mapConfigToProjectFile 全量映射写出缺省 10（写侧规范化，非 patch 路径）", () => {
+    expect(mapConfigToProjectFile(mapProjectFileToConfig(file))).toEqual({ ...file, backup_frequency_minutes: 10 });
   });
 });

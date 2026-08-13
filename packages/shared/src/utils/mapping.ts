@@ -19,6 +19,7 @@ import type {
   OutlineVolume,
 } from "../types/outline.js";
 import type { ProjectConfig, ProjectFileConfig } from "../types/project.js";
+import { DEFAULT_BACKUP_FREQUENCY_MINUTES } from "../constants/backup.js";
 
 /** 单层键映射：snake_case → camelCase（仅用于顶层契约字段，不递归 data） */
 export function snakeToCamelKey(key: string): string {
@@ -231,7 +232,18 @@ export function mapTreeToOutlineFile(tree: OutlineTree): OutlineFileTree {
 
 // ============ 项目（project.json ↔ API） ============
 
-/** ProjectFileConfig → ProjectConfig（schema_version → schemaVersion、current_position → currentPosition） */
+/**
+ * 备份频率读侧语义（决策 27 / schema.md project.json 契约，宽松读取）：
+ * 字段缺失 → 缺省 10（新项目默认开启）；显式 null / 0 → null（关闭）；
+ * 其余数值原样透传（枚举校验只在写侧执行，旧数据脏值不在此拦截）
+ */
+function resolveBackupFrequencyMinutes(value: number | null | undefined): number | null {
+  if (value === undefined) return DEFAULT_BACKUP_FREQUENCY_MINUTES;
+  if (value === null || value === 0) return null;
+  return value;
+}
+
+/** ProjectFileConfig → ProjectConfig（schema_version → schemaVersion、current_position → currentPosition、backup 频率读侧兜底） */
 export function mapProjectFileToConfig(file: ProjectFileConfig): ProjectConfig {
   return {
     id: file.id,
@@ -240,12 +252,13 @@ export function mapProjectFileToConfig(file: ProjectFileConfig): ProjectConfig {
     prompt: file.prompt,
     schemaVersion: file.schema_version,
     currentPosition: file.current_position,
+    backupFrequencyMinutes: resolveBackupFrequencyMinutes(file.backup_frequency_minutes),
     createdAt: file.created_at,
     updatedAt: file.updated_at,
   };
 }
 
-/** ProjectConfig → ProjectFileConfig */
+/** ProjectConfig → ProjectFileConfig（全量映射：backup_frequency_minutes 恒写入——本函数非 patch 路径，写全对象即显式） */
 export function mapConfigToProjectFile(config: ProjectConfig): ProjectFileConfig {
   return {
     id: config.id,
@@ -254,6 +267,7 @@ export function mapConfigToProjectFile(config: ProjectConfig): ProjectFileConfig
     prompt: config.prompt,
     schema_version: config.schemaVersion,
     current_position: config.currentPosition,
+    backup_frequency_minutes: config.backupFrequencyMinutes,
     created_at: config.createdAt,
     updated_at: config.updatedAt,
   };

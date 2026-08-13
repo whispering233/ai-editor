@@ -1,0 +1,13 @@
+// 自动备份常量（决策 27：阶段 B2，2026-08 新增）
+// 契约来源：doc/design/decisions.md 决策 27、doc/database/schema.md project.json 契约
+//   （backup_frequency_minutes 可选字段：仅枚举 5/10/15/30/60；null/0 = 关闭；缺省 = 10）
+// 常量命名 UPPER_SNAKE_CASE，as const 保持字面量类型；前后端共用（client 直接消费）
+
+/** 自动备份频率枚举（分钟，决策 27）：null / 0 = 关闭；缺省见 DEFAULT_BACKUP_FREQUENCY_MINUTES */
+export const BACKUP_FREQUENCIES = [5, 10, 15, 30, 60] as const;
+
+/** 备份频率类型（从 BACKUP_FREQUENCIES 派生） */
+export type BackupFrequency = (typeof BACKUP_FREQUENCIES)[number];
+
+/** 缺省自动备份频率（分钟，决策 27：新项目默认开启；project.json 字段缺失时读侧兜底） */
+export const DEFAULT_BACKUP_FREQUENCY_MINUTES = 10;

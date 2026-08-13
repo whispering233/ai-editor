@@ -61,6 +61,7 @@ const makeConfig = (id: string): ProjectConfig => ({
   prompt: "",
   schemaVersion: 1,
   currentPosition: null,
+  backupFrequencyMinutes: 10, // 决策 27（B2.1 新增字段）
   createdAt: "2026-08-01T10:00:00Z",
   updatedAt: "2026-08-01T10:00:00Z",
 });

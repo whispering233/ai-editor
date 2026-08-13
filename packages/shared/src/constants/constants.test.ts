@@ -5,7 +5,9 @@ import type { EntityType } from "../types/entity.js";
 import {
   ANALYSIS_TOOLS,
   AUTO_TOOLS,
+  BACKUP_FREQUENCIES,
   CONFLICT_LEVELS,
+  DEFAULT_BACKUP_FREQUENCY_MINUTES,
   DEFAULT_HALF_LIFE,
   ENTITY_TYPES,
   EXECUTOR_TOOLS,
@@ -183,5 +185,17 @@ describe("工具常量（tools.md 工具目录）", () => {
     expect(new Set(all).size).toBe(all.length);
     // 全量集合 = 各分组之和
     expect(new Set(TOOL_NAMES)).toEqual(new Set(all));
+  });
+});
+
+describe("自动备份常量（决策 27，B2.1）", () => {
+  it("BACKUP_FREQUENCIES 为 [5, 10, 15, 30, 60]（schema.md 枚举，含缺省 10）", () => {
+    expect(BACKUP_FREQUENCIES).toEqual([5, 10, 15, 30, 60]);
+    expect(BACKUP_FREQUENCIES).toHaveLength(5);
+    expect(BACKUP_FREQUENCIES).toContain(DEFAULT_BACKUP_FREQUENCY_MINUTES);
+  });
+
+  it("缺省频率 = 10（决策 27：新项目默认开启）", () => {
+    expect(DEFAULT_BACKUP_FREQUENCY_MINUTES).toBe(10);
   });
 });

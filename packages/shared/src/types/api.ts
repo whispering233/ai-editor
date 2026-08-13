@@ -11,6 +11,7 @@ import { z } from "zod";
 import { ENTITY_TYPES, RELATION_TYPES } from "../constants/entity.js";
 import { HOOK_STATUSES, PAYOFF_TIMING } from "../constants/hook.js";
 import { CONFLICT_LEVELS } from "../constants/outline.js";
+import { BACKUP_FREQUENCIES } from "../constants/backup.js";
 import type { ComputeStateResult, DeltaRecord, EntitySummary, ProjectConfig, RelationRecord } from "./index.js";
 
 // ============ 基础 schema ============
@@ -169,6 +170,7 @@ export const projectConfigSchema: z.ZodType<ProjectConfig> = z.object({
   prompt: z.string(), // 项目级提示词（决策 7）
   schemaVersion: z.number().int(), // 决策 13
   currentPosition: z.string().nullable(), // 「当前位置」节点 id；null = 未设置（决策 21）
+  backupFrequencyMinutes: z.number().int().nullable(), // 自动备份频率（决策 27）；null = 关闭；缺省 10 由读侧兜底
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -240,6 +242,11 @@ export const projectConfigUpdateReqSchema = z
     language: projectLanguageSchema.optional(),
     prompt: z.string().optional(),
     current_position: z.string().nullable().optional(), // 须指向存在的非软删大纲节点（服务端校验）
+    /**
+     * 自动备份频率（决策 27）：仅接受枚举 5/10/15/30/60（BACKUP_FREQUENCIES），其他（含 0）→ 400
+     * VALIDATION_ERROR；null = 关闭（写入 null）——0 仅读侧兼容旧数据语义，写侧一律用 null 表示关闭
+     */
+    backup_frequency_minutes: z.union(BACKUP_FREQUENCIES.map((v) => z.literal(v))).nullable().optional(),
   })
   .strict();
 

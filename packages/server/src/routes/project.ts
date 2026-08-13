@@ -594,7 +594,7 @@ projectRoutes.put("/config", async (c) => {
   if (!parsed.success) {
     throw parsed.error;
   }
-  const { name, language, prompt, current_position } = parsed.data;
+  const { name, language, prompt, current_position, backup_frequency_minutes } = parsed.data;
 
   // current_position 校验：须指向存在的**非软删**大纲节点（endpoints.md 第 115 行）；
   // 400 + OUTLINE_NODE_NOT_FOUND（参数语义错误用 400，非资源访问 404）
@@ -611,12 +611,16 @@ projectRoutes.put("/config", async (c) => {
   }
 
   // 合并更新 + 刷新 updated_at（时间 ISO 8601 应用层写入，schema.md 第 16 行），写盘并同步内存
+  // backup_frequency_minutes 写侧「只写显式」（决策 27）：未在 patch 中出现不写盘——
+  // 旧项目文件缺字段时不因无关更新被补写成缺省值（读侧兜底 10 不落盘，避免污染旧数据）；
+  // 显式 null = 关闭（写入 null）；枚举值原样写入
   const next: ProjectFileConfig = {
     ...project.config,
     ...(name !== undefined ? { name } : {}),
     ...(language !== undefined ? { language } : {}),
     ...(prompt !== undefined ? { prompt } : {}),
     ...(current_position !== undefined ? { current_position } : {}),
+    ...(backup_frequency_minutes !== undefined ? { backup_frequency_minutes } : {}),
     updated_at: nowIso(),
   };
   writeProjectFile(project.root, next);
