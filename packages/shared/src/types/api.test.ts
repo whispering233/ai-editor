@@ -505,12 +505,16 @@ describe("导出/导入契约（E1，release-review §二）", () => {
     expect(errorCodeSchema.safeParse("PROJECT_VERSION_NEWER").success).toBe(true);
   });
 
-  it("import 响应 { imported: true, id, path, name } parse（E2 端点响应契约）", () => {
+  it("import 响应 { imported: true, id, path, name, mode } parse（B2.3 契约同步：mode 分流字段必填）", () => {
     expect(
-      projectImportResSchema.parse({ imported: true, id: "proj-1", path: "/books/我的小说", name: "我的小说" }),
-    ).toEqual({ imported: true, id: "proj-1", path: "/books/我的小说", name: "我的小说" });
-    // 契约收紧：imported 字面量 true、字段必填
-    expect(projectImportResSchema.safeParse({ imported: false, id: "proj-1", path: "/x", name: "x" }).success).toBe(false);
+      projectImportResSchema.parse({ imported: true, id: "proj-1", path: "/books/我的小说", name: "我的小说", mode: "new" }),
+    ).toEqual({ imported: true, id: "proj-1", path: "/books/我的小说", name: "我的小说", mode: "new" });
+    // mode 枚举：restored/new 通过（决策 27 分流），其他值拒绝
+    expect(projectImportResSchema.parse({ imported: true, id: "proj-1", path: "/books/我的小说", name: "我的小说", mode: "restored" }).mode).toBe("restored");
+    expect(projectImportResSchema.safeParse({ imported: true, id: "proj-1", path: "/x", name: "x", mode: "overwrite" }).success).toBe(false);
+    // 契约收紧：imported 字面量 true、mode 必填、其余字段必填
+    expect(projectImportResSchema.safeParse({ imported: false, id: "proj-1", path: "/x", name: "x", mode: "new" }).success).toBe(false);
+    expect(projectImportResSchema.safeParse({ imported: true, id: "proj-1", path: "/x", name: "x" }).success).toBe(false); // 缺 mode
     expect(projectImportResSchema.safeParse({ imported: true, id: "proj-1" }).success).toBe(false);
   });
 });

@@ -13,6 +13,7 @@ import type {
   ErrorCode,
   OutlineTree,
   ProjectConfig,
+  ProjectImportRes,
   ProjectLanguage,
   ProjectListBook,
 } from "@whispering233/ai-editor-shared";
@@ -679,16 +680,9 @@ export async function exportProjectZip(): Promise<ExportProjectZipRes> {
   throw new ApiError(CLIENT_NETWORK_ERROR, `非预期响应（HTTP ${res.status}）`);
 }
 
-/** POST /api/v1/project/import 响应（契约同 shared projectImportResSchema + mode 附加字段，
- * 服务端 B2.2 已实现分流；shared schema 未同步 mode 时本地组合，参照 ProjectList 先例） */
-export interface ImportProjectRes {
-  imported: true;
-  id: string;
-  path: string;
-  name: string;
-  /** 决策 27：restored = zip 内 id 匹配书架 → 覆盖恢复；new = 导入为新书（前端按此提示 toast） */
-  mode: "restored" | "new";
-}
+/** POST /api/v1/project/import 响应（类型同 shared projectImportResSchema 推导——
+ * 含 mode 分流字段，B2.3 契约同步后删除本地组合，client 只消费类型不打包校验函数） */
+export type ImportProjectRes = ProjectImportRes;
 
 /**
  * 导入备份 zip 为新书（E2 服务端 / E3 前端；endpoints.md「POST /project/import」）。

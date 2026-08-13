@@ -286,10 +286,13 @@ export const PROJECT_EXPORT_FILE_NAMES = ["project.json", "outline.json", "data.
 //   目标书名已存在 → 409 PROJECT_ALREADY_EXISTS（服务端补充码，与 create 同语义）
 export const projectImportResSchema = z.object({
   imported: z.literal(true),
-  id: z.string(), // 导入项目的 project_id（沿用 zip 内 project.json 的 id，数据原样恢复）
-  path: z.string(), // 新书目录绝对路径（创作根/books/<name>/）
-  name: z.string(), // 书名（即新书目录名 books/<name>/；project.json 内部 name 保持原样）
+  id: z.string(), // 项目 project_id（覆盖恢复 = 书架目标项目原 id；导入新书 = 沿用 zip 内 project.json 的 id）
+  path: z.string(), // 书目录绝对路径（创作根/books/<name>/ 或去重名 books/<name> (N)/）
+  name: z.string(), // 书名（新书目录名；project.json 内部 name 同此——「目录名 = 书名」不变式，决策 27）
+  /** 决策 27 分流：restored = zip 内 id 匹配书架 → 覆盖恢复；new = 导入为新书（前端按此提示 toast） */
+  mode: z.enum(["restored", "new"]),
 });
+export type ProjectImportRes = z.infer<typeof projectImportResSchema>;
 
 // ============ entity 端点（endpoints.md「实体 CRUD」） ============
 
