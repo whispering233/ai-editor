@@ -123,6 +123,8 @@ export interface UpdateProjectConfigBody {
   language?: ProjectLanguage;
   prompt?: string;
   current_position?: string | null; // 须指向存在的非软删大纲节点（服务端校验）
+  /** 自动备份频率（决策 27）：null = 关闭；仅枚举 5/10/15/30/60（BACKUP_FREQUENCIES），其他 → 400 */
+  backup_frequency_minutes?: number | null;
 }
 
 export interface UpdateProjectConfigRes {
@@ -677,12 +679,15 @@ export async function exportProjectZip(): Promise<ExportProjectZipRes> {
   throw new ApiError(CLIENT_NETWORK_ERROR, `非预期响应（HTTP ${res.status}）`);
 }
 
-/** POST /api/v1/project/import 响应（契约同 shared projectImportResSchema；id 沿用 zip 内 project.json 的 id） */
+/** POST /api/v1/project/import 响应（契约同 shared projectImportResSchema + mode 附加字段，
+ * 服务端 B2.2 已实现分流；shared schema 未同步 mode 时本地组合，参照 ProjectList 先例） */
 export interface ImportProjectRes {
   imported: true;
   id: string;
   path: string;
   name: string;
+  /** 决策 27：restored = zip 内 id 匹配书架 → 覆盖恢复；new = 导入为新书（前端按此提示 toast） */
+  mode: "restored" | "new";
 }
 
 /**
@@ -699,6 +704,71 @@ export async function importProjectZip(file: File, name: string): Promise<Import
   form.append("file", file, "backup.zip");
   form.append("name", name);
   return apiFetch<ImportProjectRes>("/project/import", { method: "POST", body: form });
+}
+
+// ============ 备份管理（B2.4；契约：endpoints.md「备份管理」L225-295，决策 27） ============
+
+/** 备份条目（GET /project/backups 列表元素 / POST /project/backup 响应 backup） */
+export interface BackupEntry {
+  fileName: string; // 时间戳命名（<YYYYMMDD-HHmmss>.zip；restore 用此引用）
+  size: number; // 字节数
+  createdAt: string; // 备份时间（ISO 8601，由文件名时间戳解析）
+}
+
+/** GET /api/v1/project/backups 响应（按时间倒序；.backups/ 不存在返回空数组不报错） */
+export interface BackupsListRes {
+  backups: BackupEntry[];
+}
+
+/** 列出当前项目自动备份（无项目打开 → 409 NO_PROJECT_OPEN） */
+export function getProjectBackups(): Promise<BackupsListRes> {
+  return apiFetch<BackupsListRes>("/project/backups");
+}
+
+/** POST /api/v1/project/backup 响应（立即备份；文件写入失败 → 500 INTERNAL_ERROR） */
+export interface CreateBackupRes {
+  backup: BackupEntry;
+}
+
+/** 立即备份当前项目（手动触发，设置页「立即备份」按钮） */
+export function createProjectBackup(): Promise<CreateBackupRes> {
+  return apiFetch<CreateBackupRes>("/project/backup", { method: "POST" });
+}
+
+/** POST /api/v1/project/backup/restore 响应（覆盖恢复，决策 27） */
+export interface RestoreBackupRes {
+  restored: true;
+  /** 覆盖前自动生成的当前状态快照（后悔药，已计入保留策略） */
+  snapshot: {
+    fileName: string;
+    createdAt: string;
+  };
+}
+
+/**
+ * 从备份列表恢复当前项目（覆盖恢复）：
+ * - 覆盖前服务端自动快照当前状态 → 原子替换三文件 → 会话归属迁移（跨项目恢复，决策 18 保护）
+ * - 错误：404 VALIDATION_ERROR（备份不存在）、409 SCHEMA_VERSION_MISMATCH（备份来自更高版本，
+ *   前端阻断提示——message 已按相对版本分流，透传展示）
+ */
+export function restoreProjectBackup(fileName: string): Promise<RestoreBackupRes> {
+  return apiFetch<RestoreBackupRes>("/project/backup/restore", { method: "POST", body: { fileName } });
+}
+
+/** POST /api/v1/project/rename 响应（重命名当前书籍，决策 27） */
+export interface RenameProjectRes {
+  renamed: true;
+  path: string; // 新书目录绝对路径（创作根/books/<新名>/）
+  name: string; // 新书名
+}
+
+/**
+ * 重命名当前书籍（原子移动目录 + 更新 project.json name；.backups/ 随目录携带）。
+ * 错误：409 PROJECT_ALREADY_EXISTS（目标目录已存在且非自身）、400 VALIDATION_ERROR（创作根自身）、
+ * 409 NO_PROJECT_OPEN（未打开项目）
+ */
+export function renameProject(name: string): Promise<RenameProjectRes> {
+  return apiFetch<RenameProjectRes>("/project/rename", { method: "POST", body: { name } });
 }
 
 // ============ 设置（S1.4；契约：endpoints.md「系统设置」+ S1.3 server 路由） ============

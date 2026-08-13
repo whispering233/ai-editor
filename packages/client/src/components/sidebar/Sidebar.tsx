@@ -6,12 +6,37 @@
 // E3 导出/导入（release-review §二「数据主权归用户」载体）：
 //   - 书架头部行 [+ 导入备份]（Upload，zip 恢复为新书，导入不自动打开 → 刷新书架）；
 //   - 当前项目行尾部 [导出备份]（Download，点击即下载 zip；无项目打开时不渲染——「导出当前项目」语义）
+// B2（决策 27）：
+//   - 导入同名二选一：书名与书架已有书同名 → Dialog 内联冲突提示 + [重命名导入]（Input 可编辑，
+//     预填 `<名> (2)`）/ [保持原样导入]（服务端目录自动去重）；响应 mode 分流 toast（restored/new）
+//   - 项目行 ⋯ 菜单 [重命名]：仅当前项目行渲染（⋯ 最右、导出按钮在 ⋯ 左侧）；菜单项 → 行内输入框
+//     （预填当前名，Enter/失焦提交 POST /project/rename，Esc 取消）；成功刷新书架 + config；
+//     409 PROJECT_ALREADY_EXISTS → 行内内联错误（不关闭输入态）
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
-import { BookOpen, ChevronRight, Download, Loader2, MessageSquare, Moon, Plus, Settings, Sun, Upload, X } from "lucide-react";
+import {
+  BookOpen,
+  ChevronRight,
+  Download,
+  Loader2,
+  MessageSquare,
+  Moon,
+  MoreHorizontal,
+  Plus,
+  Settings,
+  Sun,
+  Upload,
+  X,
+} from "lucide-react";
 import { formatRelativeTime, formatTimestamp } from "@whispering233/ai-editor-shared";
 import { useTheme } from "../../hooks/use-theme";
-import { ApiError, CLIENT_NETWORK_ERROR, exportProjectZip, importProjectZip } from "../../lib/api";
+import {
+  ApiError,
+  CLIENT_NETWORK_ERROR,
+  exportProjectZip,
+  importProjectZip,
+  renameProject,
+} from "../../lib/api";
 import { describeExportError, describeImportError, describeOpenError } from "../../lib/error-messages";
 import { cn } from "../../lib/utils";
 import { validateBookName } from "../../lib/book-name";
@@ -20,6 +45,7 @@ import { useChatStore } from "../../stores/chat";
 import { useUiStore } from "../../stores/ui";
 import { Button } from "../ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
 import { Input } from "../ui/input";
 
 /** 紧凑日期（左栏 10% 很窄）：当年显示 MM-DD，跨年显示 YY-MM-DD；非法输入原样返回 */
@@ -125,8 +151,18 @@ export function Sidebar() {
   const [importName, setImportName] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  // 导入同名冲突（B2，决策 27）：书名与书架已有书同名时进入冲突态——
+  // importConflictBase = 冲突基础名（「保持原样导入」提交它；服务端目录自动去重）
+  const [importConflict, setImportConflict] = useState(false);
+  const [importConflictBase, setImportConflictBase] = useState("");
   // 导出备份进行态（当前项目行下载按钮；exporting 防连点）
   const [exporting, setExporting] = useState(false);
+  // 书架行 ⋯ 菜单 [重命名]（B2）：行内输入框状态（仅当前项目行触发，按书 path 标记）
+  const [renamingPath, setRenamingPath] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const [renamingSubmitting, setRenamingSubmitting] = useState(false);
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   // 挂载时加载书架（Sidebar 常驻；Dashboard 书架形态已加载则不重复）
   useEffect(() => {
@@ -154,6 +190,7 @@ export function Sidebar() {
     if (prevProjectId.current !== projectId) {
       prevProjectId.current = projectId;
       setExpandedPath(null);
+      setRenamingPath(null); // 行内重命名同样只对「当前项目行」有效，切换即收敛
     }
   }, [projectId]);
 
@@ -229,31 +266,75 @@ export function Sidebar() {
     }
   }
 
-  /** 文件选择：书名预填为文件名去 .zip 扩展名（zip 未解析前拿不到 project.json 内部 name） */
+  /** 文件选择：书名预填为文件名去 .zip 扩展名（zip 未解析前拿不到 project.json 内部 name）；
+   *  预填名与书架已有书同名 → 同步进入冲突态（B2，决策 27） */
   function handleImportFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] ?? null;
     setImportFile(file);
     setImportError(null);
     if (file) {
-      setImportName((cur) => (cur.trim() === "" ? file.name.replace(/\.zip$/i, "") : cur));
+      const suggested = file.name.replace(/\.zip$/i, "");
+      const next = importName.trim() === "" ? suggested : importName;
+      setImportName(next);
+      evaluateImportConflict(next);
     }
   }
 
   /**
-   * 导入备份为新书（E3：multipart 上传 zip + 书名 → 服务端校验（三文件齐全 + 契约 +
-   * data.db user_version）原子搬入 books/<name>/ → 刷新书架）。导入不自动打开（与 create 一致）；
-   * 失败内联显示（对话框保持打开可换文件/改名重试）；成功 toast + 关闭
+   * 导入同名冲突评估（B2，决策 27：同名 id 不同不再 409，改由前端二选一）：
+   * - 非冲突态：输入名与书架已有书同名 → 进入冲突态（记录基础名 + 预填 `<名> (2)`，可编辑）
+   * - 冲突态内（粘性，直到用户明确选择/改名）：
+   *   · 值 = 预填名（重命名导入流程）或回改回基础名 → 保持冲突态
+   *   · 编辑为另一冲突名 → 更新基础名并重新预填
+   *   · 编辑为非冲突名 → 退出冲突态（回到普通导入）
+   * 预填导致的 onChange（值 = 预填名）不会退出冲突态——「保持原样」入口不被预填破坏
    */
-  async function handleImportSubmit(e: FormEvent) {
-    e.preventDefault();
-    const name = importName.trim();
+  function evaluateImportConflict(next: string) {
+    const trimmed = next.trim();
+    const isBookName = (name: string) => bookshelf?.books.some((b) => b.name === name) ?? false;
+    if (importConflict) {
+      if (trimmed === `${importConflictBase} (2)` || (trimmed === importConflictBase && isBookName(trimmed))) {
+        return; // 预填名 / 回改基础名：保持冲突态
+      }
+      if (isBookName(trimmed)) {
+        setImportConflictBase(trimmed);
+        setImportName(`${trimmed} (2)`);
+        return;
+      }
+      setImportConflict(false);
+      setImportConflictBase("");
+      return;
+    }
+    if (trimmed !== "" && isBookName(trimmed)) {
+      setImportConflictBase(trimmed);
+      setImportConflict(true);
+      setImportName(`${trimmed} (2)`);
+    }
+  }
+
+  /** 书名输入（编辑即重新评估冲突；空名不进入冲突态） */
+  function handleImportNameChange(e: ChangeEvent<HTMLInputElement>) {
+    const next = e.target.value;
+    setImportName(next);
+    evaluateImportConflict(next);
+  }
+
+  /**
+   * 导入备份（E3 + B2 决策 27）：multipart 上传 zip + 书名 → 服务端校验后原子搬入/覆盖 →
+   * 刷新书架。书名由调用方传入（普通导入 = 当前输入名；冲突态二选一 = 基础名「保持原样」/ 编辑后新名
+   * 「重命名导入」）；响应 mode 分流 toast——restored（id 匹配覆盖恢复）/ new（导入为新书，name 为
+   * 服务端实际目录名，含自动去重）。导入不自动打开（与 create 一致）；失败内联显示保持打开可重试
+   */
+  async function handleImportSubmit(name: string, e?: FormEvent) {
+    e?.preventDefault();
+    const trimmed = name.trim();
     // 客户端预检（与服务端同规则，快速反馈；最终以服务端校验为准）
     if (!importFile) {
       setImportError("请选择备份文件");
       return;
     }
     // 书名校验与新建项目共用（UX2 抽取）
-    const err = validateBookName(name);
+    const err = validateBookName(trimmed);
     if (err !== null) {
       setImportError(err);
       return;
@@ -261,12 +342,17 @@ export function Sidebar() {
     setImporting(true);
     setImportError(null);
     try {
-      await importProjectZip(importFile, name);
-      useUiStore.getState().showToast(`已导入《${name}》`);
+      const res = await importProjectZip(importFile, trimmed);
+      // 决策 27 分流提示（settings.md/layout.md §2.3：restored → 已恢复备份；new → 已导入为新书）
+      useUiStore
+        .getState()
+        .showToast(res.mode === "restored" ? `已恢复备份《${res.name}》` : `已导入为新书《${res.name}》`);
       await loadBookshelf(); // 刷新书架让新书出现（失败由 bookshelfError 呈现）
       setImportOpen(false);
       setImportFile(null);
       setImportName("");
+      setImportConflict(false);
+      setImportConflictBase("");
     } catch (err) {
       const text = describeImportError(
         err instanceof ApiError ? err.code : null,
@@ -278,6 +364,62 @@ export function Sidebar() {
       if (text !== "") useUiStore.getState().showToast(text, "error");
     } finally {
       setImporting(false);
+    }
+  }
+
+  /** 打开行内重命名输入（菜单项点击）：预填当前书名；菜单关闭动画期间 Base UI 会把焦点还给 trigger，
+   *  延迟到动画后聚焦输入框，避免刚挂载的输入被抢焦触发「失焦提交」误退出 */
+  function startRename(book: { name: string; path: string }) {
+    setRenamingPath(book.path);
+    setRenameValue(book.name);
+    setRenameError(null);
+    window.setTimeout(() => renameInputRef.current?.focus(), 150);
+  }
+
+  /** 取消行内重命名（Esc / 成功 / 未变化）：清空输入与错误，防下次展开残留 */
+  function cancelRename() {
+    setRenamingPath(null);
+    setRenameValue("");
+    setRenameError(null);
+  }
+
+  /**
+   * 行内重命名提交（Enter / 失焦）：POST /project/rename → 成功刷新书架 + config（name 变化驱动
+   * 当前行高亮与 InfoBar 项目名）；409 PROJECT_ALREADY_EXISTS → 行内内联错误（不关闭输入态，可改名重试）；
+   * 值未变化（含菜单关闭抢焦的误失焦）→ 直接退出不请求
+   */
+  async function handleRenameSubmit() {
+    if (renamingPath === null || renamingSubmitting) return;
+    const name = renameValue.trim();
+    if (name === useProjectStore.getState().config?.name) {
+      cancelRename();
+      return;
+    }
+    // 书名校验与新建项目共用（UX2 抽取：禁路径分隔符/纯点/控制字符）
+    const err = validateBookName(name);
+    if (err !== null) {
+      setRenameError(err);
+      return;
+    }
+    setRenamingSubmitting(true);
+    setRenameError(null);
+    try {
+      await renameProject(name);
+      useUiStore.getState().showToast(`已重命名为《${name}》`);
+      await Promise.all([loadBookshelf(), useProjectStore.getState().loadConfig()]);
+      cancelRename();
+    } catch (err) {
+      // 服务端补充码 PROJECT_ALREADY_EXISTS 不在 shared ErrorCode 枚举，统一按 string 比较
+      const code: string | null = err instanceof ApiError ? err.code : null;
+      if (code === "PROJECT_ALREADY_EXISTS") {
+        setRenameError("书架已有同名书籍，请换一个名字"); // 不关闭输入态
+      } else if (err instanceof ApiError && err.code !== CLIENT_NETWORK_ERROR) {
+        setRenameError(err.message); // VALIDATION_ERROR 等透传服务端 message
+      } else {
+        setRenameError("无法连接服务，请确认 ai-editor 服务已启动");
+      }
+    } finally {
+      setRenamingSubmitting(false);
     }
   }
 
@@ -388,28 +530,55 @@ export function Sidebar() {
             {bookshelf.books.map((book) => {
               const expanded = expandedPath === book.path;
               // 当前项目高亮：config.id 与书无直接映射（open 响应无 path 字段），
-              // MVP 用书名匹配（创建时书名 = 目录名 = config.name；改名后高亮失效，可接受）
+              // MVP 用书名匹配（创建时书名 = 目录名 = config.name；改名后 loadConfig 刷新）
               const isCurrent = config !== null && book.name === config.name;
+              const isRenaming = renamingPath === book.path;
               return (
                 <li key={book.path}>
                   <div className="flex items-center">
-                    <button
-                      type="button"
-                      title={`打开《${book.name}》`}
-                      onClick={() => void handleOpenBook(book.path)}
-                      className={cn(
-                        "flex h-8 min-w-0 flex-1 items-center gap-1.5 rounded-lg px-2 text-left text-sm transition-colors",
-                        isCurrent
-                          ? "bg-muted font-medium text-foreground"
-                          : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                      )}
-                    >
-                      <BookOpen className={cn("size-3.5 shrink-0", isCurrent ? "text-primary" : "text-muted-foreground/60")} />
-                      <span className="min-w-0 flex-1 truncate">{book.name}</span>
-                      <span className="shrink-0 text-[10px] text-muted-foreground/60" title={formatTimestamp(book.updatedAt)}>
-                        {formatShortTimestamp(book.updatedAt)}
-                      </span>
-                    </button>
+                    {isRenaming ? (
+                      /* 行内重命名输入（B2）：替换书名按钮区（div 而非 button——输入框不可嵌套交互元素）；
+                          Enter/失焦提交 POST /project/rename，Esc 取消；输入框 flex-1 与书名同宽 */
+                      <div className="flex h-8 min-w-0 flex-1 items-center gap-1.5 rounded-lg bg-muted px-2">
+                        <BookOpen className="size-3.5 shrink-0 text-primary" />
+                        <Input
+                          ref={renameInputRef}
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              void handleRenameSubmit();
+                            } else if (e.key === "Escape") {
+                              cancelRename();
+                            }
+                          }}
+                          onBlur={() => void handleRenameSubmit()}
+                          maxLength={60}
+                          disabled={renamingSubmitting}
+                          aria-label="重命名书名"
+                          className="h-6 min-w-0 flex-1 rounded-md bg-transparent px-1.5 text-sm focus-visible:ring-2"
+                        />
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        title={`打开《${book.name}》`}
+                        onClick={() => void handleOpenBook(book.path)}
+                        className={cn(
+                          "flex h-8 min-w-0 flex-1 items-center gap-1.5 rounded-lg px-2 text-left text-sm transition-colors",
+                          isCurrent
+                            ? "bg-muted font-medium text-foreground"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                        )}
+                      >
+                        <BookOpen className={cn("size-3.5 shrink-0", isCurrent ? "text-primary" : "text-muted-foreground/60")} />
+                        <span className="min-w-0 flex-1 truncate">{book.name}</span>
+                        <span className="shrink-0 text-[10px] text-muted-foreground/60" title={formatTimestamp(book.updatedAt)}>
+                          {formatShortTimestamp(book.updatedAt)}
+                        </span>
+                      </button>
+                    )}
                     {/* 导出备份（E3）：仅当前项目行渲染——「导出当前项目」语义；无项目打开时无入口 */}
                     {isCurrent && (
                       <button
@@ -432,7 +601,32 @@ export function Sidebar() {
                     >
                       <ChevronRight className={cn("size-4 transition-transform duration-200", expanded && "rotate-90")} />
                     </button>
+                    {/* ⋯ 菜单（B2）：仅当前项目行渲染（rename 作用于当前打开项目）——
+                        ⋯ 最右、导出按钮在 ⋯ 左侧（layout.md §2.3） */}
+                    {isCurrent && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          render={
+                            <button
+                              type="button"
+                              aria-label={`《${book.name}》更多操作`}
+                              title="更多操作"
+                              className="flex h-8 w-6 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                            >
+                              <MoreHorizontal className="size-3.5" />
+                            </button>
+                          }
+                        />
+                        <DropdownMenuContent>
+                          <DropdownMenuItem onClick={() => startRename(book)}>重命名</DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                   </div>
+                  {/* 重命名行内错误（409 同名等：不关闭输入态，可改名重试） */}
+                  {isRenaming && renameError && (
+                    <p className="px-2 pb-1 text-xs text-destructive">{renameError}</p>
+                  )}
                   {expanded && <SessionList />}
                 </li>
               );
@@ -471,15 +665,26 @@ export function Sidebar() {
             setImportError(null);
             setImportFile(null);
             setImportName("");
+            setImportConflict(false);
+            setImportConflictBase("");
           }
         }}
       >
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>导入书籍</DialogTitle>
-            <DialogDescription>从备份 zip 导入为新书，数据原样恢复；导入后从书架打开</DialogDescription>
+            <DialogDescription>
+              从备份 zip 导入；与书架已有书 id 匹配时覆盖恢复，否则导入为新书（同名可重命名或保持原样并存）
+            </DialogDescription>
           </DialogHeader>
-          <form id="import-book-form" onSubmit={handleImportSubmit} className="flex flex-col gap-3">
+          <form
+            id="import-book-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void handleImportSubmit(importName);
+            }}
+            className="flex flex-col gap-3"
+          >
             {/* 文件选择（accept zip；token 类样式，layout.md §3；file: 变体美化原生按钮） */}
             <input
               type="file"
@@ -491,20 +696,48 @@ export function Sidebar() {
             />
             <Input
               value={importName}
-              onChange={(e) => setImportName(e.target.value)}
+              onChange={handleImportNameChange}
               placeholder="书名（默认取文件名）"
               maxLength={60}
               disabled={importing}
             />
+            {/* 同名冲突提示（B2，决策 27）：预填 `<名> (2)` 后可编辑；保持原样由服务端目录自动去重 */}
+            {importConflict && (
+              <p className="text-sm text-primary">
+                书架已有同名书籍《{importConflictBase}》——可重命名导入，或保持原样（服务端自动去重）
+              </p>
+            )}
             {importError && <p className="text-sm text-destructive">{importError}</p>}
           </form>
           <DialogFooter>
             <Button variant="outline" type="button" onClick={() => setImportOpen(false)} disabled={importing}>
               取消
             </Button>
-            <Button type="submit" form="import-book-form" disabled={importing || importFile === null}>
-              {importing ? "导入中…" : "导入"}
-            </Button>
+            {importConflict ? (
+              <>
+                {/* 保持原样导入：不改名，服务端目录自动去重为 books/<书名> (N)/ */}
+                <Button
+                  variant="outline"
+                  type="button"
+                  onClick={() => void handleImportSubmit(importConflictBase)}
+                  disabled={importing || importFile === null}
+                >
+                  {importing ? "导入中…" : "保持原样导入"}
+                </Button>
+                {/* 重命名导入：提交当前 Input 值（已预填 `<名> (2)`，可编辑） */}
+                <Button
+                  type="button"
+                  onClick={() => void handleImportSubmit(importName)}
+                  disabled={importing || importFile === null}
+                >
+                  {importing ? "导入中…" : "重命名导入"}
+                </Button>
+              </>
+            ) : (
+              <Button type="submit" form="import-book-form" disabled={importing || importFile === null}>
+                {importing ? "导入中…" : "导入"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

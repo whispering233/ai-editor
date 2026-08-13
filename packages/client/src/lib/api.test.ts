@@ -8,6 +8,7 @@ import {
   computeDeltaState,
   confirmProposal,
   createDelta,
+  createProjectBackup,
   createRelation,
   deleteRelation,
   listRelations,
@@ -20,6 +21,7 @@ import {
   getDeltasByNode,
   getEntityDetail,
   getOutlinePath,
+  getProjectBackups,
   getSettingsLlm,
   getTrashList,
   importProjectZip,
@@ -30,7 +32,9 @@ import {
   parseContentDispositionFilename,
   purgeOutlineNode,
   rejectProposal,
+  renameProject,
   restoreOutlineNode,
+  restoreProjectBackup,
   updateEntity,
   updateOutlineNode,
   updateRelationMeta,
@@ -720,11 +724,14 @@ describe("parseContentDispositionFilename（RFC 5987 文件名解析）", () => 
 describe("importProjectZip（POST /project/import：FormData multipart 上传）", () => {
   it("请求：FormData body 含 file + name 字段，不手动设 Content-Type（浏览器自动带 boundary）", async () => {
     const calls = mockFetchOnce({
-      body: { success: true, data: { imported: true, id: "proj-9", path: "/books/新书", name: "新书" } },
+      body: {
+        success: true,
+        data: { imported: true, id: "proj-9", path: "/books/新书", name: "新书", mode: "new" },
+      },
     });
     const file = new File([new Uint8Array([0x50, 0x4b, 0x03, 0x04])], "backup.zip", { type: "application/zip" });
     const res = await importProjectZip(file, "新书");
-    expect(res).toEqual({ imported: true, id: "proj-9", path: "/books/新书", name: "新书" });
+    expect(res).toEqual({ imported: true, id: "proj-9", path: "/books/新书", name: "新书", mode: "new" });
     expect(calls[0].url).toBe("/api/v1/project/import");
     expect(calls[0].init?.method).toBe("POST");
     // FormData 原样透传（E3 apiFetch 扩展：不 JSON.stringify、不设 Content-Type）
@@ -733,6 +740,23 @@ describe("importProjectZip（POST /project/import：FormData multipart 上传）
     expect(form.get("name")).toBe("新书");
     expect(form.get("file")).toBeInstanceOf(File);
     expect(calls[0].init?.headers).toBeUndefined();
+  });
+
+  it("mode: \"restored\"（id 匹配覆盖恢复，决策 27）→ 字段透传", async () => {
+    mockFetchOnce({
+      body: {
+        success: true,
+        data: {
+          imported: true,
+          id: "proj-9",
+          path: "/books/我的小说",
+          name: "我的小说",
+          mode: "restored",
+        },
+      },
+    });
+    const res = await importProjectZip(new File(["x"], "b.zip"), "我的小说");
+    expect(res).toMatchObject({ name: "我的小说", mode: "restored" });
   });
 
   it("409 PROJECT_ALREADY_EXISTS → ApiError code 透传", async () => {
@@ -767,5 +791,91 @@ describe("importProjectZip（POST /project/import：FormData multipart 上传）
     await expect(importProjectZip(new File(["x"], "b.zip"), "新书")).rejects.toMatchObject({
       code: "VALIDATION_ERROR",
     });
+  });
+});
+
+describe("备份管理（B2.4；endpoints.md「备份管理」，决策 27）", () => {
+  it("getProjectBackups：GET /project/backups，响应 backups[] 透传", async () => {
+    mockFetchOnce({
+      body: {
+        success: true,
+        data: {
+          backups: [
+            { fileName: "20260813-101500.zip", size: 1258291, createdAt: "2026-08-13T10:15:00" },
+            { fileName: "20260813-094500.zip", size: 1009664, createdAt: "2026-08-13T09:45:00" },
+          ],
+        },
+      },
+    });
+    const res = await getProjectBackups();
+    expect(res.backups).toHaveLength(2);
+    expect(res.backups[0]).toEqual({
+      fileName: "20260813-101500.zip",
+      size: 1258291,
+      createdAt: "2026-08-13T10:15:00",
+    });
+  });
+
+  it("createProjectBackup：POST /project/backup（无 body），响应 backup 透传", async () => {
+    const calls = mockFetchOnce({
+      body: {
+        success: true,
+        data: { backup: { fileName: "20260813-110000.zip", size: 1024, createdAt: "2026-08-13T11:00:00" } },
+      },
+    });
+    const res = await createProjectBackup();
+    expect(calls[0].url).toBe("/api/v1/project/backup");
+    expect(calls[0].init?.method).toBe("POST");
+    expect(res.backup.fileName).toBe("20260813-110000.zip");
+  });
+
+  it("restoreProjectBackup：POST /project/backup/restore，body 含 fileName，响应 snapshot 透传", async () => {
+    const calls = mockFetchOnce({
+      body: {
+        success: true,
+        data: {
+          restored: true,
+          snapshot: { fileName: "20260813-105000.zip", createdAt: "2026-08-13T10:50:00" },
+        },
+      },
+    });
+    const res = await restoreProjectBackup("20260813-101500.zip");
+    expect(calls[0].url).toBe("/api/v1/project/backup/restore");
+    expect(calls[0].init?.body).toEqual(JSON.stringify({ fileName: "20260813-101500.zip" }));
+    expect(res).toEqual({
+      restored: true,
+      snapshot: { fileName: "20260813-105000.zip", createdAt: "2026-08-13T10:50:00" },
+    });
+  });
+
+  it("restoreProjectBackup：409 SCHEMA_VERSION_MISMATCH → ApiError code 透传（前端阻断提示）", async () => {
+    mockFetchOnce({
+      status: 409,
+      body: {
+        success: false,
+        error: { code: "SCHEMA_VERSION_MISMATCH", message: "备份来自更高版本程序，请升级后打开" },
+      },
+    });
+    await expect(restoreProjectBackup("20260813-101500.zip")).rejects.toMatchObject({
+      code: "SCHEMA_VERSION_MISMATCH",
+    });
+  });
+
+  it("renameProject：POST /project/rename，body 含 name，响应透传", async () => {
+    const calls = mockFetchOnce({
+      body: { success: true, data: { renamed: true, path: "/books/新名", name: "新名" } },
+    });
+    const res = await renameProject("新名");
+    expect(calls[0].url).toBe("/api/v1/project/rename");
+    expect(calls[0].init?.body).toEqual(JSON.stringify({ name: "新名" }));
+    expect(res).toEqual({ renamed: true, path: "/books/新名", name: "新名" });
+  });
+
+  it("renameProject：409 PROJECT_ALREADY_EXISTS → ApiError code 透传（行内错误不关闭输入态）", async () => {
+    mockFetchOnce({
+      status: 409,
+      body: { success: false, error: { code: "PROJECT_ALREADY_EXISTS", message: "书架已存在同名书: 新名" } },
+    });
+    await expect(renameProject("新名")).rejects.toMatchObject({ code: "PROJECT_ALREADY_EXISTS" });
   });
 });

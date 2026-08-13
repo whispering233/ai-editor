@@ -1,0 +1,237 @@
+// 设置页「自动备份」区（B2，决策 27；doc/ui/pages/settings.md「自动备份」区）
+// 交互（settings.md「关键交互」+ 任务卡 B2.4）：
+//  - 频率下拉：选择即保存 PUT /project/config { backup_frequency_minutes }（null = 关闭，
+//    仅枚举 5/10/15/30/60）；载入用 config.backupFrequencyMinutes（缺省 10 / null → 关闭选中）
+//  - [立即备份]：POST /project/backup → 刷新列表 + toast「已备份」；失败 toast（磁盘错误透传 message）
+//  - 历史备份列表：GET /project/backups → 行 = 时间（当年 MM-DD HH:mm / 跨年 YY-MM-DD HH:mm）
+//    + 大小（KB/MB 人类可读）+ 行内 [加载]
+//  - [加载] → 强确认 Dialog（ConfirmDialog，danger）→ POST /project/backup/restore → 成功 toast
+//    （含覆盖前自动快照文件名）→ 刷新 config/outline（dataVersion 信号驱动中栏数据页）+ 会话重载
+//    （chat store 订阅仅响应 config.id 变化，restore 保留 id → 手动 clearSessions + loadSessions）；
+//    409 SCHEMA_VERSION_MISMATCH（备份来自更高版本）→ ConfirmDialog 内阻断提示（透传服务端 message）
+//  - 空态：「暂无备份，自动备份将在数据变更后按频率生成」；无项目打开 → 整区禁用 + 引导文案
+// 风格约束：token 类（bg-muted/border-border/text-muted-foreground 等），禁硬编码色类（layout.md §3）
+import { useEffect, useRef, useState } from "react";
+import { Loader2 } from "lucide-react";
+import { ApiError, CLIENT_NETWORK_ERROR, createProjectBackup, getProjectBackups, restoreProjectBackup, type BackupEntry } from "../../lib/api";
+import { BACKUP_FREQUENCY_OPTIONS, formatBackupTime, formatBytes } from "../../lib/backup";
+import { useProjectStore } from "../../stores/project";
+import { useUiStore } from "../../stores/ui";
+import { useChatStore } from "../../stores/chat";
+import { Button } from "../ui/button";
+import { ConfirmDialog } from "../outline/dialogs";
+
+export function BackupSection() {
+  const showToast = useUiStore((s) => s.showToast);
+  const showError = useUiStore((s) => s.showError);
+  const notifyDataChanged = useUiStore((s) => s.notifyDataChanged);
+  const config = useProjectStore((s) => s.config);
+  const configLoading = useProjectStore((s) => s.configLoading);
+  const updateConfig = useProjectStore((s) => s.updateConfig);
+  const loadConfig = useProjectStore((s) => s.loadConfig);
+  const loadOutline = useProjectStore((s) => s.loadOutline);
+
+  /** 频率保存中（选择即保存；保存中禁用下拉防连点） */
+  const [frequencySaving, setFrequencySaving] = useState(false);
+  /** 备份列表；null = 未加载/加载失败 */
+  const [backups, setBackups] = useState<BackupEntry[] | null>(null);
+  const [backupsLoading, setBackupsLoading] = useState(false);
+  /** 列表加载失败的错误码（CLIENT_NETWORK_ERROR 等；null = 无错误/未加载） */
+  const [backupsError, setBackupsError] = useState<string | null>(null);
+  const [backupNowRunning, setBackupNowRunning] = useState(false);
+  /** 待加载的备份（非 null 时渲染强确认 Dialog） */
+  const [restoreTarget, setRestoreTarget] = useState<BackupEntry | null>(null);
+
+  /** 拉取备份列表（仅项目打开时有效；无项目 → 直接返回防 409 NO_PROJECT_OPEN 误报） */
+  async function loadBackups() {
+    if (useProjectStore.getState().config === null) return;
+    setBackupsLoading(true);
+    setBackupsError(null);
+    try {
+      const res = await getProjectBackups();
+      setBackups(res.backups);
+    } catch (err) {
+      const code = err instanceof ApiError ? err.code : CLIENT_NETWORK_ERROR;
+      setBackupsError(code);
+    } finally {
+      setBackupsLoading(false);
+    }
+  }
+
+  // 项目身份驱动：切项目（id 变化）→ 重拉列表；关闭项目（null）→ 清空 + 关闭残留确认框。
+  // prevProjectId 初始 null：挂载时项目已打开（store 缓存）也能触发首载
+  const projectId = config?.id ?? null;
+  const prevProjectId = useRef<string | null>(null);
+  useEffect(() => {
+    if (projectId === null) {
+      setBackups(null);
+      setBackupsError(null);
+      setRestoreTarget(null);
+      prevProjectId.current = null;
+      return;
+    }
+    if (prevProjectId.current !== projectId) {
+      prevProjectId.current = projectId;
+      void loadBackups();
+    }
+  }, [projectId]);
+
+  /** 频率选择即保存（决策 27：null = 关闭；select 受控值回弹由 store config 重拉保证） */
+  async function handleFrequencyChange(raw: string) {
+    if (config === null) return;
+    const value = raw === "null" ? null : Number(raw);
+    if (value === config.backupFrequencyMinutes) return; // 防重复提交
+    setFrequencySaving(true);
+    try {
+      await updateConfig({ backup_frequency_minutes: value });
+      showToast(value === null ? "已关闭自动备份" : `自动备份频率已设为每 ${value} 分钟`);
+    } catch (err) {
+      if (err instanceof ApiError && err.code === CLIENT_NETWORK_ERROR) {
+        showError("CLIENT_NETWORK_ERROR", "无法连接服务，频率未保存");
+      } else {
+        showToast("频率保存失败，请重试", "error");
+      }
+    } finally {
+      setFrequencySaving(false);
+    }
+  }
+
+  /** 立即备份：成功刷新列表（新条目在顶部）+ toast；失败 toast（磁盘错误透传服务端 message） */
+  async function handleBackupNow() {
+    if (config === null || backupNowRunning) return;
+    setBackupNowRunning(true);
+    try {
+      await createProjectBackup();
+      showToast("已备份");
+      await loadBackups();
+    } catch (err) {
+      showToast(
+        err instanceof ApiError && err.code !== CLIENT_NETWORK_ERROR
+          ? err.message
+          : "无法连接服务，备份失败",
+        "error",
+      );
+    } finally {
+      setBackupNowRunning(false);
+    }
+  }
+
+  /**
+   * 加载备份（强确认通过后）：restore → toast（含覆盖前快照文件名）→ 刷新项目数据：
+   * config/outline 重拉（中栏数据页经 dataVersion 信号重拉）+ 会话重载（chat store 订阅
+   * 仅响应 config.id 变化，restore 保留 id → 手动 clearSessions + loadSessions）；
+   * 失败（409 SCHEMA_VERSION_MISMATCH 等）抛给 ConfirmDialog 显示并保持打开
+   */
+  async function handleRestore() {
+    if (restoreTarget === null) return;
+    const res = await restoreProjectBackup(restoreTarget.fileName);
+    showToast(`已恢复备份，覆盖前状态已自动快照（${res.snapshot.fileName}）`);
+    await Promise.all([loadConfig(), loadOutline()]);
+    notifyDataChanged();
+    useChatStore.getState().clearSessions();
+    void useChatStore.getState().loadSessions();
+    void loadBackups(); // 顶部出现覆盖前自动快照
+  }
+
+  /** 频率下拉选中值：缺省 10 → 「每 10 分钟」；null → 关闭；非枚举脏值（旧数据手工写入，读侧
+   *  原样透传）→ 归为关闭——与服务端定时器 resolveBackupFrequency（非枚举 = 关闭）语义一致 */
+  const frequencyValue =
+    config === null
+      ? ""
+      : BACKUP_FREQUENCY_OPTIONS.some((o) => String(o.value) === String(config.backupFrequencyMinutes))
+        ? String(config.backupFrequencyMinutes)
+        : "null";
+
+  return (
+    <div>
+      <h2 className="mb-1 text-sm font-semibold text-foreground">自动备份</h2>
+      <p className="mb-2 text-xs text-muted-foreground">
+        跟随书籍：备份与频率均为本项目独立；服务运行期间按频率自动备份，有变更才生成新备份；每项目保留最近 20 份
+      </p>
+      <div className="flex items-center gap-2">
+        <select
+          value={frequencyValue}
+          onChange={(e) => void handleFrequencyChange(e.target.value)}
+          disabled={config === null || frequencySaving}
+          aria-label="自动备份频率"
+          className="rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {BACKUP_FREQUENCY_OPTIONS.map((opt) => (
+            <option key={String(opt.value)} value={String(opt.value)}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+        <Button
+          onClick={() => void handleBackupNow()}
+          disabled={config === null || backupNowRunning}
+          type="button"
+        >
+          {backupNowRunning ? <Loader2 className="size-4 animate-spin" /> : null}
+          立即备份
+        </Button>
+      </div>
+      {config === null && !configLoading && (
+        <p className="mt-1 text-xs text-muted-foreground/70">打开项目后可用</p>
+      )}
+
+      {/* 历史备份列表（仅项目打开时渲染；无项目 → 引导文案已在上方） */}
+      {config !== null && (
+        <div className="mt-3">
+          <p className="mb-1 text-xs font-medium text-muted-foreground">历史备份</p>
+          <div className="overflow-hidden rounded-lg border border-border">
+            {backupsLoading && backups === null ? (
+              /* 首载骨架（重载不闪骨架：条件含 backups === null，layout.md §4.3） */
+              <div className="space-y-1 p-2">
+                <div className="h-7 animate-pulse rounded-md bg-muted" />
+                <div className="h-7 animate-pulse rounded-md bg-muted" />
+              </div>
+            ) : backupsError !== null ? (
+              <div className="flex items-center justify-between px-2 py-2">
+                <p className="text-xs text-muted-foreground">
+                  {backupsError === CLIENT_NETWORK_ERROR ? "无法连接服务" : "备份列表加载失败"}
+                </p>
+                <Button variant="ghost" size="xs" onClick={() => void loadBackups()}>
+                  重试
+                </Button>
+              </div>
+            ) : backups !== null && backups.length === 0 ? (
+              <p className="px-2 py-3 text-xs text-muted-foreground/70">
+                暂无备份，自动备份将在数据变更后按频率生成
+              </p>
+            ) : backups !== null ? (
+              <ul className="divide-y divide-border">
+                {backups.map((b) => (
+                  <li key={b.fileName} className="flex items-center gap-2 px-2 py-1.5">
+                    <span className="min-w-0 flex-1 text-sm" title={b.fileName}>
+                      {formatBackupTime(b.createdAt)}
+                    </span>
+                    <span className="shrink-0 text-xs text-muted-foreground">{formatBytes(b.size)}</span>
+                    <Button variant="outline" size="xs" onClick={() => setRestoreTarget(b)}>
+                      加载
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        </div>
+      )}
+
+      {/* 加载强确认（settings.md「关键交互」：展示备份时间与大小 + 覆盖说明 + 后悔药提示）；
+          409 SCHEMA_VERSION_MISMATCH 时 ConfirmDialog 显示服务端 message 保持打开（阻断） */}
+      {restoreTarget !== null && (
+        <ConfirmDialog
+          title="加载备份"
+          description={`${formatBackupTime(restoreTarget.createdAt)} · ${formatBytes(
+            restoreTarget.size,
+          )}。将覆盖当前项目数据；覆盖前会自动备份当前状态（可回退）`}
+          confirmLabel="确认加载"
+          danger
+          onConfirm={handleRestore}
+          onClose={() => setRestoreTarget(null)}
+        />
+      )}
+    </div>
+  );
+}

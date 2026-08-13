@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { ApiError, CLIENT_NETWORK_ERROR, getSettingsLlm, updateSettingsLlm } from "../lib/api";
 import { useProjectStore } from "../stores/project";
 import { useUiStore, type ErrorBanner } from "../stores/ui";
+import { BackupSection } from "../components/settings/backup-section";
 
 /** 从任意错误提取错误码（ApiError → 服务端/客户端码；未知 → 网络错误） */
 function errorCodeOf(err: unknown): ErrorBanner["code"] {
@@ -254,6 +255,9 @@ export default function Settings() {
             </div>
             {promptError && <p className="mt-1 text-sm text-destructive">{promptError}</p>}
           </div>
+
+          {/* 自动备份（B2，决策 27）：频率下拉（选择即保存）/ 立即备份 / 历史备份列表 + 加载强确认 */}
+          <BackupSection />
         </div>
       )}
     </section>
