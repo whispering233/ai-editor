@@ -21,6 +21,13 @@ import { useChatStore } from "../../stores/chat";
 import { Button } from "../ui/button";
 import { ConfirmDialog } from "../outline/dialogs";
 
+/**
+ * 备份列表请求序号（模块级，仿 chat store loadSeq 模式——P2-1 代际守卫）：
+ * 每次发请求递增；响应落地时校验序号未变才写入列表，项目已切换/关闭的在途响应直接丢弃，
+ * 避免「关项目后旧响应落地覆盖新列表 / 切项目后闪现旧项目数据」的竞态
+ */
+let backupListSeq = 0;
+
 export function BackupSection() {
   const showToast = useUiStore((s) => s.showToast);
   const showError = useUiStore((s) => s.showError);
@@ -42,28 +49,33 @@ export function BackupSection() {
   /** 待加载的备份（非 null 时渲染强确认 Dialog） */
   const [restoreTarget, setRestoreTarget] = useState<BackupEntry | null>(null);
 
-  /** 拉取备份列表（仅项目打开时有效；无项目 → 直接返回防 409 NO_PROJECT_OPEN 误报） */
+  /** 拉取备份列表（仅项目打开时有效；无项目 → 直接返回防 409 NO_PROJECT_OPEN 误报）；
+   *  代际守卫：响应落地时校验请求序号未变（关项目/切项目时在途响应丢弃，P2-1） */
   async function loadBackups() {
     if (useProjectStore.getState().config === null) return;
+    const seq = ++backupListSeq;
     setBackupsLoading(true);
     setBackupsError(null);
     try {
       const res = await getProjectBackups();
+      if (seq !== backupListSeq) return; // 请求期间项目已切换/关闭，旧列表作废
       setBackups(res.backups);
     } catch (err) {
+      if (seq !== backupListSeq) return;
       const code = err instanceof ApiError ? err.code : CLIENT_NETWORK_ERROR;
       setBackupsError(code);
     } finally {
-      setBackupsLoading(false);
+      if (seq === backupListSeq) setBackupsLoading(false);
     }
   }
 
-  // 项目身份驱动：切项目（id 变化）→ 重拉列表；关闭项目（null）→ 清空 + 关闭残留确认框。
+  // 项目身份驱动：切项目（id 变化）→ 重拉列表；关闭项目（null）→ 清空 + 作废在途请求 + 关闭残留确认框。
   // prevProjectId 初始 null：挂载时项目已打开（store 缓存）也能触发首载
   const projectId = config?.id ?? null;
   const prevProjectId = useRef<string | null>(null);
   useEffect(() => {
     if (projectId === null) {
+      backupListSeq++; // 作废在途列表请求（关项目时丢弃旧响应，防闪旧数据）
       setBackups(null);
       setBackupsError(null);
       setRestoreTarget(null);

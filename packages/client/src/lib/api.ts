@@ -680,8 +680,7 @@ export async function exportProjectZip(): Promise<ExportProjectZipRes> {
   throw new ApiError(CLIENT_NETWORK_ERROR, `非预期响应（HTTP ${res.status}）`);
 }
 
-/** POST /api/v1/project/import 响应（类型同 shared projectImportResSchema 推导——
- * 含 mode 分流字段，B2.3 契约同步后删除本地组合，client 只消费类型不打包校验函数） */
+/** POST /api/v1/project/import 响应（类型同 shared projectImportResSchema，含 mode 分流字段） */
 export type ImportProjectRes = ProjectImportRes;
 
 /**
