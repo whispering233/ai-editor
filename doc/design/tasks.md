@@ -45,6 +45,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - [x] E6 publishConfig + 版本管理 + publish 演练（OIDC 发布链路全绿——见文末 E6 卡）
 - [x] B1 项目提示词编辑器（设置页编辑保存 → 注入「## 项目设定」段）
 - [x] 阶段 C 时间轴（C1 契约与数据层 / C2 服务端 / C3 列表页 / C4 详情页）
+- [x] 阶段 B2 自动备份与恢复（B2.1 契约与配置 / B2.2 备份管道+定时器+端点 / B2.3 import 分流+rename / B2.4 client 备份区+书架）
 
 ---
 
@@ -95,6 +96,8 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 **交互优化批次（UX1-UX4，2026-08 用户实测反馈）**——① UX1 画布连线改造：拖出即连（移除标签 Dialog）+ 连线标签线上就地编辑（新增 `PUT /relation/:id` metadata 整体替换契约）+ 拖线期间禁用 hover 高亮（修复连线时其他节点全暗的交互冲突）；② UX2 侧栏新建项目行内化（书架头部行内输入框，失焦取消防误触；`validateBookName` 三处复用）；③ UX3 时间轴关联节点全屏 Dialog → 轻量 Popover 弹层；④ UX4 实体新建 Dialog → 列表首行内联编辑行（提交成功仍跳详情页）；全仓 Dialog 梳理结论：A 组 4 项去对话框化、B 组 7 项保留（多字段/复杂选择器/复合写确认）、C 组 10 个确认框保留。
 
 **阶段 C：时间轴（C1-C4，2026-08）**——第 5 种实体类型 `event`（id 前缀 `ev-`，决策 26）：中栏新增「时间轴」tab（伏笔与回收站之间）；entities 表新增 `sort_order` 列（全局事件线性序，拖拽为权威、时间标签仅展示）；SCHEMA_VERSION 1→2，E5 迁移机制首个真实用例（`002_event_timeline.ts` 建新表拷贝改 CHECK）；`occurs_in` 关系类型锚定大纲节点（多对多，倒叙/多时间线/无场景事件均可表达）；列表页 `#/timeline`（拖拽排序 + tags 徽标 + 标签筛选器 + 新建）+ 详情页 `#/timeline/:id`（字段编辑 + occurs_in 关联管理）；**MVP 无 AI 工具**（时间线一致性分析、事件草案生成 → backlog #15）。
+
+**阶段 B2：自动备份与恢复（B2.1-B2.4，2026-08 用户裁决，决策 27）**——备份/频率/列表均项目级（跟随书籍）：自动备份定时器（有变更才备份：三文件 mtime 判定 + 1s 容差防 checkpoint 自激，`.backups/` 时间戳命名保留 20 份）；频率 = project.json `backup_frequency_minutes`（缺省 10，枚举 5/10/15/30/60，读侧宽松/写侧显式）；**唯一 key = project_id**——导入/加载 zip 内 id 匹配书架 → 覆盖恢复（保留当前 id 防会话断连 + 覆盖前自动快照后悔药 + 跨项目恢复迁移 chat_messages 归属）/ 不匹配 → 导入新书（同名不再 409：重命名导入或目录去重 `书名 (N)`，维持「目录名=书名」不变式）；书架重命名书名（原子移动目录 + 引用同步）；打包/校验/恢复管道统一提取（`server/src/backup.ts`，E1 export/import 重构复用）；restore 与 import 走同款 E4/E5 三态校验（坏包/高版本零触碰）。
 
 ---
 
@@ -244,26 +247,4 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 > **背景**：E1 手动导出/导入已具备，但备份依赖手动操作、无历史版本管理。用户需求：自动备份 + 加载备份（文件导入 / 历史自动备份列表二选一）+ 设置备份频率。设计裁决（决策 27）：唯一 key = project_id（匹配 → 覆盖恢复 / 不匹配 → 导入新书）；同名不同 id 不再 409（重命名导入 / 同名并存目录去重二选一）+ 新增重命名书名能力；频率跟随书籍（project.json `backup_frequency_minutes`，缺省 10，选项 关闭/5/10/15/30/60）；定时检查 + 有变更才备份；`.backups/` 时间戳命名、保留 20 份；覆盖前自动快照。契约见 `doc/api/endpoints.md`（备份管理节 + import 改造）、`doc/database/schema.md`（project.json 契约）、`doc/ui/pages/settings.md`（备份区细案）、`doc/ui/layout.md` §2.3（书架重命名/导入冲突）。
 > **状态（2026-08）**：✅ B2.1-B2.4 已完成（决策 27 落地；oracle 审核通过）。提交：B2.1 契约 `0f1cc92` / B2.2 备份管道 `cf51cfe`（审核 P1 修复 `6823c4b`）/ B2.3 分流改造 `16a312d`（契约同步 `a5e9836`）/ B2.4 client `0ce5f4d`（审核 P2 修复 `49d44d5`）；全仓测试 green（shared 107 / llm 59 / db 219 / server 286 / client 462 / tools 225 / agent 94）。
 
-**B2.1 shared + server 配置：project.json 备份频率字段**
-- 范围：shared 新增 `backup_frequency_minutes` 契约字段（config 读/写 schema）+ 频率枚举常量 `BACKUP_FREQUENCIES`（[5, 10, 15, 30, 60]，null/0 = 关闭、缺省 10）+ 备份文件名纯函数（时间戳解析/校验 `<YYYYMMDD-HHmmss>.zip`）；server project 模块读写该字段（缺省兜底 10）
-- 依赖：无（决策 27 契约先行）
-- 验证：shared 纯函数测试（文件名格式/频率枚举）+ server config 读写测试（缺省/显式/null）
-- 回滚：单 commit
-
-**B2.2 server 自动备份 + 备份管理端点**
-- 范围：备份管道（三文件 + wal_checkpoint → `.backups/<时间戳>.zip`，复用 E1 打包）；自动定时器（服务运行期间按频率检查，**三文件 mtime 均早于上次备份时刻（=.backups/ 最新备份时间）则跳过**）；保留策略（每项目最近 20 份，超出删最旧）；`GET /project/backups` + `POST /project/backup`（立即备份）+ `POST /project/backup/restore`（fileName 白名单防穿越 → **覆盖前自动快照** → 备份包校验（同 import 校验 3-7，E4/E5 三态分流）→ 原子替换三文件 → 返回 snapshot 信息）
-- 依赖：B2.1
-- 验证：server 测试（定时器有变更才备份/无变更跳过、保留策略 20 份清理、restore 快照+替换+文件名穿越拒绝+坏包/user_version 拒绝）；手工走查（立即备份 → 列表 → 恢复）
-- 回滚：单 commit
-
-**B2.3 server import 分流改造 + rename 端点**
-- 范围：import 解压校验后读 zip 内 `project.json` id → 遍历 `books/*/project.json` 比对：**id 匹配 → 覆盖恢复**（复用 restore 管道，返回 `mode: "restored"`）；不匹配 → 新书导入，目标目录冲突**不再 409** → 自动去重 `books/<书名> (N)/`（project.json name 同步为去重名）；新增 `POST /project/rename { name }`（校验 → 目标目录可用性 409 → 原子移动目录 + 更新 name → 当前打开项目同步内部路径引用）
-- 依赖：B2.1、B2.2（覆盖管道）
-- 验证：server 测试（import id 匹配覆盖/不匹配新书/同名去重、rename 成功/冲突 409/当前项目引用同步）；手工走查（导出 A 书 → 改名后导入 → 覆盖恢复）
-- 回滚：单 commit
-
-**B2.4 client 设置页备份区 + 书架改造**
-- 范围：设置页「自动备份」区（频率下拉：关闭/每 5/10/15/30/60 分钟，选择即保存 PUT /project/config；「立即备份」按钮；备份列表（时间/大小 + [加载] → 强确认 Dialog 展示时间/大小 + 「覆盖前自动备份当前状态」说明 → restore → 刷新项目数据）；书架导入 Dialog 同名冲突二选一（重命名导入预填 `<书名> (2)` / 保持原样）+ restored 模式 toast；项目行 ⋯ 菜单 [重命名]（行内输入框 → POST /project/rename → 刷新书架与 config）
-- 依赖：B2.1-B2.3
-- 验证：client 纯函数测试（备份文件名解析/列表展示辅助）+ 手工走查（设置频率 → 立即备份 → 列表加载恢复 → 导入同名 → 书架重命名）；oracle 审核 UI 与交互
-- 回滚：单 commit
+> **各卡详细规格已归档（git history 可回溯）**——B2.1 shared 契约与配置 / B2.2 自动备份管道 + 定时器 + 备份管理端点 / B2.3 import 分流改造 + rename / B2.4 client 设置页备份区 + 书架改造；实现摘要见上方「项目演进路线」B2 段。
