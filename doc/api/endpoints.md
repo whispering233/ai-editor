@@ -147,7 +147,7 @@
   language?: "zh" | "en";
   prompt?: string;
   current_position?: string | null;  // 更新「当前位置」（须指向存在的非软删大纲节点）
-  backup_frequency_minutes?: number | null;  // 自动备份频率（决策 27；null/0 = 关闭；仅接受枚举值 5/10/15/30/60，其他 → 400 VALIDATION_ERROR）
+  backup_frequency_minutes?: number | null;  // 自动备份频率（决策 27；null = 关闭；仅接受枚举值 5/10/15/30/60，其他（含 0）→ 400 VALIDATION_ERROR——0 仅读侧兼容旧数据，写侧不接受）
 }
 
 // Res: 200
