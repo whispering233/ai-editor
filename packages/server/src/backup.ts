@@ -28,6 +28,7 @@ import {
   ensureSchemaCompatible,
   getUserVersion,
   hasMigrationPath,
+  migrateChatMessagesProject,
   openDatabase,
   OUTLINE_FILE_NAME,
   PROJECT_FILE_NAME,
@@ -470,19 +471,36 @@ export function getScheduledProject(): ProjectContext | null {
 export function writeProjectFilesFromBackup(
   dir: string,
   entries: Record<string, Uint8Array>,
-  opts: { keepId?: string; name?: string } = {},
+  opts: { keepId?: string; name?: string; snapshotFileName?: string } = {},
 ): void {
-  const parsedProject = JSON.parse(new TextDecoder().decode(entries[PROJECT_FILE_NAME])) as Record<string, unknown>;
-  const nextProject = {
-    ...parsedProject,
-    ...(opts.keepId !== undefined ? { id: opts.keepId } : {}),
-    ...(opts.name !== undefined ? { name: opts.name } : {}),
-  };
-  // 顺序：JSON 两文件在前，data.db 最后——db 替换失败时其余已替换（校验已通过，
-  // 文件内容本身有效，部分替换可经重新恢复修复）
-  writeFileAtomic(join(dir, PROJECT_FILE_NAME), new TextEncoder().encode(`${JSON.stringify(nextProject, null, 2)}\n`));
-  writeFileAtomic(join(dir, OUTLINE_FILE_NAME), entries[OUTLINE_FILE_NAME]);
-  writeFileAtomic(join(dir, DATA_DB_FILE_NAME), entries[DATA_DB_FILE_NAME]);
+  // 替换顺序：JSON 两文件在前，data.db 最后——db 替换失败时其余已替换（校验已通过，
+  // 文件内容本身有效，部分替换可经重新恢复修复）；replaced 清单供失败日志使用（P1-2）
+  const targetNames = [PROJECT_FILE_NAME, OUTLINE_FILE_NAME, DATA_DB_FILE_NAME];
+  const replaced: string[] = [];
+  try {
+    const parsedProject = JSON.parse(new TextDecoder().decode(entries[PROJECT_FILE_NAME])) as Record<string, unknown>;
+    const nextProject = {
+      ...parsedProject,
+      ...(opts.keepId !== undefined ? { id: opts.keepId } : {}),
+      ...(opts.name !== undefined ? { name: opts.name } : {}),
+    };
+    writeFileAtomic(join(dir, PROJECT_FILE_NAME), new TextEncoder().encode(`${JSON.stringify(nextProject, null, 2)}\n`));
+    replaced.push(PROJECT_FILE_NAME);
+    writeFileAtomic(join(dir, OUTLINE_FILE_NAME), entries[OUTLINE_FILE_NAME]);
+    replaced.push(OUTLINE_FILE_NAME);
+    writeFileAtomic(join(dir, DATA_DB_FILE_NAME), entries[DATA_DB_FILE_NAME]);
+    replaced.push(DATA_DB_FILE_NAME);
+  } catch (err) {
+    // P1-2：失败路径日志（对齐「记日志暴露部分替换」承诺）——已替换/未替换文件清单 + 覆盖前快照名
+    const notReplaced = targetNames.filter((n) => !replaced.includes(n));
+    console.error(
+      `[backup] 覆盖文件替换失败（已替换: ${replaced.join(", ") || "无"}；未替换: ${notReplaced.join(", ") || "无"}${
+        opts.snapshotFileName !== undefined ? `；覆盖前快照: ${opts.snapshotFileName}` : ""
+      }）`,
+      err,
+    );
+    throw err;
+  }
 }
 
 /**
@@ -496,14 +514,16 @@ export function writeProjectFilesFromBackup(
  * 4. 同步内存 config（刚原子写入，readProjectFile 必非 null；损坏抛错由 catch 恢复连接）
  * 5. 重启定时器（备份包内频率可能不同：5 → 60 等）
  *
- * 调用方职责：覆盖前自动快照 + 备份包校验（validateBackupPackage）。
- * 失败时尝试恢复连接（原库可能未被替换或已替换为校验过的有效库），保证后续请求
- * 不因悬挂连接报 500「connection not open」；恢复失败由路由清空 currentProject 单例。
- */
+  * 调用方职责：覆盖前自动快照 + 备份包校验（validateBackupPackage）。
+  * 失败时尝试恢复连接（原库可能未被替换或已替换为校验过的有效库），保证后续请求
+  * 不因悬挂连接报 500「connection not open」；**重连失败时连接悬挂**——由路由层
+  * （restore/import）在 catch 后检查 project.db.open 清空 currentProject 单例
+  * （backup 模块不依赖 middleware，避免运行时循环依赖）。
+  */
 export function overwriteProjectFiles(
   project: ProjectContext,
   entries: Record<string, Uint8Array>,
-  opts: { name?: string } = {},
+  opts: { name?: string; snapshotFileName?: string } = {},
 ): void {
   const dbPath = join(project.root, DATA_DB_FILE_NAME);
   closeDatabase(project.db); // 释放当前连接（替换 data.db 前必须；替换失败恢复见 catch）
@@ -516,7 +536,11 @@ export function overwriteProjectFiles(
         if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
       }
     }
-    writeProjectFilesFromBackup(project.root, entries, { keepId: project.config.id, ...(opts.name !== undefined ? { name: opts.name } : {}) });
+    writeProjectFilesFromBackup(project.root, entries, {
+      keepId: project.config.id,
+      ...(opts.name !== undefined ? { name: opts.name } : {}),
+      ...(opts.snapshotFileName !== undefined ? { snapshotFileName: opts.snapshotFileName } : {}),
+    });
     // 重连 + 版本对齐
     let active = openDatabase(dbPath);
     const out = ensureSchemaCompatible(active, project.root, dbPath);
@@ -529,13 +553,21 @@ export function overwriteProjectFiles(
     }
     project.config = restoredConfig;
   } catch (err) {
-    // 替换/重连失败：尝试恢复连接（原库可能未被替换或已替换为校验过的有效库），
-    // 保证后续请求不因悬挂连接报 500「connection not open」；恢复失败则清空单例
+    // P1-2：替换/重连失败——writeProjectFilesFromBackup 已记录文件替换清单（含快照名），
+    // 此处尝试恢复连接（原库可能未被替换或已替换为校验过的有效库）；重连失败时连接悬挂，
+    // 记日志供排查，由路由层（restore/import）catch 后检查 db.open 清空单例
+    let reopened = true;
     try {
       project.db = openDatabase(dbPath);
     } catch {
-      // 恢复失败：由调用方（路由）清空 currentProject 单例，后续请求 409 NO_PROJECT_OPEN
+      reopened = false;
     }
+    console.error(
+      `[backup] 覆盖失败${opts.snapshotFileName !== undefined ? `，覆盖前快照: ${opts.snapshotFileName}` : ""}${
+        reopened ? "，data.db 已恢复连接" : "，data.db 重连失败（连接悬挂，路由层将清空单例）"
+      }`,
+      err,
+    );
     throw err;
   }
   startAutoBackup(project); // 重启定时器（覆盖包内频率可能不同）
@@ -623,13 +655,24 @@ export function restoreBackup(project: ProjectContext, fileName: string): { snap
   // 2. 覆盖前自动快照（复用备份管道；误操作/选错备份永远有后悔药）
   const snapshot = writeBackup(project);
 
-  // 3. 备份包校验（零触碰：通过前不写任何数据文件）
+  // 3. 备份包校验（零触碰：通过前不写任何数据文件）；projectId = zip 内 project.json 的 id
   const zip = readFileSync(backupPath);
-  const { entries } = validateBackupPackage(zip);
+  const { entries, projectId: zipProjectId } = validateBackupPackage(zip);
 
   // 4. 覆盖管道（B2.3 提取，import 覆盖复用）：原子替换三文件（保留当前 id）+
-  //    重连 data.db + 同步 config + 重启定时器
-  overwriteProjectFiles(project, entries);
+  //    重连 data.db + 同步 config + 重启定时器。
+  //    name 归一为当前目录名（审核裁决：与 import 覆盖一致，维持「目录名 = 书名」
+  //    不变式——id 是身份、name 是展示名；改名需求走 /project/rename）
+  overwriteProjectFiles(project, entries, { name: basename(project.root), snapshotFileName: snapshot.fileName });
+
+  // 5. 会话归属迁移（B2.2 审核 P1-1，决策 18/27）：备份包内 project_id ≠ 当前项目 id
+  //    （跨项目恢复，如手工放入 .backups/ 的异项目备份）→ chat_messages 旧 id 行迁移为
+  //    当前 id——「保留 id 保会话」的理由在跨项目场景同样成立：不迁移则恢复后聊天面板
+  //    静默为空、旧会话行成孤儿数据。同项目恢复（id 相等）跳过，不执行多余迁移。
+  //    （import 覆盖无需迁移：id 匹配才走覆盖分支，zip id = 书架 id）
+  if (zipProjectId !== project.config.id) {
+    migrateChatMessagesProject(project.db, zipProjectId, project.config.id);
+  }
 
   // 契约（endpoints.md）：snapshot 仅含 fileName/createdAt（size 属内部信息不暴露）
   return { snapshot: { fileName: snapshot.fileName, createdAt: snapshot.createdAt } };

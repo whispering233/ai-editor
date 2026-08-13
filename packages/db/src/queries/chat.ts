@@ -45,6 +45,21 @@ export function insertChatMessage(
 }
 
 /**
+ * 会话归属迁移（B2.2 审核 P1-1，决策 18/27）：
+ * 跨项目恢复（备份包内 project_id ≠ 当前项目 id）后，chat_messages 的 project_id
+ * 从旧 id 批量迁移为当前项目 id——「保留 id 保会话」的理由在跨项目场景同样成立：
+ * 不迁移则恢复后聊天面板静默为空、旧会话行成孤儿数据（决策 18：会话按 project_id 隔离）。
+ *
+ * @param fromProjectId 备份包内 project.json 的 id（旧归属）
+ * @param toProjectId 当前项目 id（迁移目标；调用方保证两者不等）
+ * @returns 受影响行数（0 = 无该旧 id 的消息；重复执行幂等——第二次起返回 0）
+ */
+export function migrateChatMessagesProject(db: Db, fromProjectId: string, toProjectId: string): number {
+  const info = db.prepare("UPDATE chat_messages SET project_id = ? WHERE project_id = ?").run(toProjectId, fromProjectId);
+  return info.changes;
+}
+
+/**
  * 会话列表（GET /api/v1/chat/sessions）：
  * - 按 project_id 隔离（决策 18 修订：会话按项目隔离）
  * - 仅返回含消息的会话；updatedAt = 该会话最后一条消息的 created_at

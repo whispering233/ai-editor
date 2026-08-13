@@ -447,12 +447,25 @@ projectRoutes.post("/import", async (c) => {
     const cur = getCurrentProject();
     if (cur !== null && cur.root === matchedDir) {
       // 目标是当前打开的书：复用现有连接快照 + 覆盖管道（重连 data.db + 定时器重启）
-      writeBackup(cur); // 覆盖前自动快照（后悔药，决策 27）
-      overwriteProjectFiles(cur, entries, { name: basename(matchedDir) });
+      try {
+        const snapshot = writeBackup(cur); // 覆盖前自动快照（后悔药，决策 27）
+        overwriteProjectFiles(cur, entries, { name: basename(matchedDir), snapshotFileName: snapshot.fileName });
+      } catch (err) {
+        // P1-2：覆盖失败——overwriteProjectFiles 已尝试恢复连接；重连失败时连接悬挂，
+        // 此处清空单例（与 open 路由同款防御），后续请求 409 NO_PROJECT_OPEN 而非 500
+        if (getCurrentProject() !== null && !getCurrentProject()!.db.open) {
+          setCurrentProject(null);
+        }
+        throw err;
+      }
     } else {
       // 目标是书架其他书（未打开）：无连接，临时连接快照 + 文件层替换
-      snapshotBookDir(matchedDir); // 覆盖前自动快照
-      writeProjectFilesFromBackup(matchedDir, entries, { keepId: projectId, name: basename(matchedDir) });
+      const snapshot = snapshotBookDir(matchedDir); // 覆盖前自动快照
+      writeProjectFilesFromBackup(matchedDir, entries, {
+        keepId: projectId,
+        name: basename(matchedDir),
+        snapshotFileName: snapshot.fileName,
+      });
     }
     return c.json(ok({ imported: true as const, id: projectId, path: matchedDir, name: basename(matchedDir), mode: "restored" as const }));
   }
@@ -557,7 +570,16 @@ projectRoutes.post("/backup/restore", async (c) => {
   if (fileName === null) {
     throw new HttpError(400, "VALIDATION_ERROR", "缺少文件名字段 fileName（备份文件名）");
   }
-  return c.json(ok({ restored: true as const, ...restoreBackup(project, fileName) }));
+  try {
+    return c.json(ok({ restored: true as const, ...restoreBackup(project, fileName) }));
+  } catch (err) {
+    // P1-2：restore 失败——overwriteProjectFiles 已尝试恢复连接；重连失败时连接悬挂，
+    // 此处清空单例（与 open 路由同款防御），后续请求 409 NO_PROJECT_OPEN 而非 500
+    if (getCurrentProject() !== null && !getCurrentProject()!.db.open) {
+      setCurrentProject(null);
+    }
+    throw err;
+  }
 });
 
 // POST /api/v1/project/rename —— 重命名当前书籍（决策 27：同名并存场景的区分配套；

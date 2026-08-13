@@ -4,7 +4,7 @@
 // 契约来源：doc/api/endpoints.md「备份管理」节、doc/design/decisions.md 决策 27
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { zipSync } from "fflate";
@@ -13,6 +13,7 @@ import { parseBackupFileName } from "@whispering233/ai-editor-shared";
 import {
   closeDatabase,
   DATA_DB_FILE_NAME,
+  listSessions,
   openDatabase,
   OUTLINE_FILE_NAME,
   PROJECT_FILE_NAME,
@@ -31,7 +32,7 @@ import {
   setCurrentProject,
 } from "./middleware/project.js";
 import { projectRoutes, setProjectRoot } from "./routes/project.js";
-import { BACKUPS_DIR_NAME, maybeAutoBackup, pruneBackups, writeBackup } from "./backup.js";
+import { BACKUPS_DIR_NAME, maybeAutoBackup, pruneBackups, writeBackup, writeProjectFilesFromBackup } from "./backup.js";
 
 const HOST_HEADERS = { host: "127.0.0.1:3456" }; // 来源校验 host 白名单（决策 17 修订）
 const T0 = "2026-08-01T10:00:00Z";
@@ -363,7 +364,7 @@ describe("POST /project/backup/restore", () => {
     expect(again.status).toBe(200);
   });
 
-  it("覆盖时保留当前项目 id（决策 27：换 id 即断连 chat_messages 会话历史）；name/prompt 随备份替换", async () => {
+  it("覆盖时保留当前项目 id（决策 27：换 id 即断连 chat_messages 会话历史）；name 归一为目录名、prompt 随备份替换", async () => {
     const dirA = makeTmpDir();
     initProjectDir(dirA, makeConfig("proj-A", "书A"));
     await openProject(dirA);
@@ -388,10 +389,111 @@ describe("POST /project/backup/restore", () => {
       body: JSON.stringify({ fileName: bkpB.fileName }),
     });
     expect(res.status).toBe(200);
-    // id 保留当前项目（proj-A）；name/prompt 随备份包（书B / B 的提示词）
+    // id 保留当前项目（proj-A）；name 归一为当前目录名（审核裁决：与 import 覆盖一致，
+    // 维持「目录名 = 书名」不变式——id 是身份、name 是展示名，不再随备份包）；prompt 随备份包替换
     expect(readProjectFile(dirA)?.id).toBe("proj-A");
-    expect(readProjectFile(dirA)?.name).toBe("书B");
+    expect(readProjectFile(dirA)?.name).toBe(basename(dirA)); // 归一为目录名（makeTmpDir 随机目录）
+    expect(readProjectFile(dirA)?.name).not.toBe("书B"); // 不再使用备份包内 name
     expect(readProjectFile(dirA)?.prompt).toBe("B 的提示词");
+  });
+
+  it("跨项目恢复（P1-1）：chat_messages 会话归属迁移为当前项目 id，会话列表按当前 id 可查", async () => {
+    const dirA = makeTmpDir();
+    initProjectDir(dirA, makeConfig("proj-mig-a", "迁移书A"));
+    await openProject(dirA);
+
+    // 异项目备份 B：data.db 内含 B 的会话行（project_id = proj-mig-b）
+    const dirB = makeTmpDir();
+    initProjectDir(dirB, makeConfig("proj-mig-b", "迁移书B"));
+    const dbB = openDatabase(join(dirB, DATA_DB_FILE_NAME));
+    dbB.prepare("INSERT INTO chat_messages (id, session_id, project_id, role, content, created_at) VALUES (?, ?, ?, ?, ?, ?)").run(
+      "m-b1", "sess-b", "proj-mig-b", "user", "B 的消息 1", T0,
+    );
+    dbB.prepare("INSERT INTO chat_messages (id, session_id, project_id, role, content, created_at) VALUES (?, ?, ?, ?, ?, ?)").run(
+      "m-b2", "sess-b", "proj-mig-b", "assistant", "B 的消息 2", T0,
+    );
+    closeDatabase(dbB);
+    const ctxB = {
+      root: dirB,
+      config: readProjectFile(dirB) as ProjectFileConfig,
+      db: openDatabase(join(dirB, DATA_DB_FILE_NAME)),
+    };
+    const bkpB = writeBackup(ctxB);
+    closeDatabase(ctxB.db);
+    const backupsDirA = join(dirA, BACKUPS_DIR_NAME);
+    mkdirSync(backupsDirA, { recursive: true });
+    copyFileSync(join(dirB, BACKUPS_DIR_NAME, bkpB.fileName), join(backupsDirA, bkpB.fileName));
+
+    // restore 异项目备份 → 会话归属迁移（旧 id → 当前 id；覆盖恢复语义：A 原数据被备份覆盖）
+    const res = await buildApp().request("/api/v1/project/backup/restore", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ fileName: bkpB.fileName }),
+    });
+    expect(res.status).toBe(200);
+
+    // chat_messages 全部 project_id = 当前项目 id（B 的 2 行迁移；A 原数据已被覆盖）
+    const dbA = openDatabase(join(dirA, DATA_DB_FILE_NAME));
+    try {
+      const rows = dbA.prepare("SELECT project_id FROM chat_messages ORDER BY id").all() as Array<{ project_id: string }>;
+      expect(rows).toEqual([{ project_id: "proj-mig-a" }, { project_id: "proj-mig-a" }]);
+      // 会话列表按当前 id 可查（决策 18：按 project_id 隔离——不迁移则 B 的会话静默消失）
+      const sessions = listSessions(dbA, "proj-mig-a");
+      expect(sessions.map((s) => s.id)).toEqual(["sess-b"]);
+      expect(sessions[0]?.messageCount).toBe(2);
+    } finally {
+      closeDatabase(dbA);
+    }
+  });
+
+  it("同项目恢复：不执行多余迁移（chat_messages 行保持原 project_id，行为不变）", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-same", "同项目"));
+    const app = await openProject(dir);
+    // 插入当前项目会话行后备份（zip id = 当前 id）
+    const db = openDatabase(join(dir, DATA_DB_FILE_NAME));
+    db.prepare("INSERT INTO chat_messages (id, session_id, project_id, role, content, created_at) VALUES (?, ?, ?, ?, ?, ?)").run(
+      "m-1", "sess-1", "proj-same", "user", "消息", T0,
+    );
+    closeDatabase(db);
+    const project = getCurrentProject() as NonNullable<ReturnType<typeof getCurrentProject>>;
+    const bkp = writeBackup(project);
+
+    const res = await app.request("/api/v1/project/backup/restore", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ fileName: bkp.fileName }),
+    });
+    expect(res.status).toBe(200);
+    // 行仍在且 project_id 不变（同 id 恢复跳过迁移）
+    const dbAfter = openDatabase(join(dir, DATA_DB_FILE_NAME));
+    try {
+      const rows = dbAfter.prepare("SELECT project_id FROM chat_messages").all() as Array<{ project_id: string }>;
+      expect(rows).toEqual([{ project_id: "proj-same" }]);
+    } finally {
+      closeDatabase(dbAfter);
+    }
+  });
+
+  it("P1-2：文件替换失败日志输出已替换/未替换清单与覆盖前快照名", () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-log", "日志"));
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      // 构造缺 outline.json 的 entries（绕过校验直接调用——模拟替换中途失败：
+      // project.json 已替换成功、outline.json 抛错）
+      const entries = {
+        "project.json": new TextEncoder().encode(JSON.stringify(makeConfig("proj-log", "日志"))),
+        "data.db": new Uint8Array([1, 2, 3]),
+      } as unknown as Record<string, Uint8Array>;
+      expect(() => writeProjectFilesFromBackup(dir, entries, { name: "日志", snapshotFileName: "20260813-000000.zip" })).toThrow();
+      const log = errorSpy.mock.calls.map((c) => String(c[0])).join("\n");
+      expect(log).toContain("project.json"); // 已替换清单
+      expect(log).toContain("outline.json"); // 未替换清单
+      expect(log).toContain("20260813-000000.zip"); // 覆盖前快照名
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 
   it("文件名白名单：路径分隔符/.. 拒绝 400（防路径穿越）", async () => {

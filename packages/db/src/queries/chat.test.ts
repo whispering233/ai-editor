@@ -8,7 +8,7 @@ import { join } from "node:path";
 
 import type { ChatMessageRow, ChatRole } from "@whispering233/ai-editor-shared";
 import { closeDatabase, openDatabase, type Db } from "../connection.js";
-import { insertChatMessage, listMessages, listSessions, reassembleMessages } from "./chat.js";
+import { insertChatMessage, listMessages, listSessions, migrateChatMessagesProject, reassembleMessages } from "./chat.js";
 
 let dir: string;
 let dbPath: string;
@@ -97,6 +97,28 @@ describe("chat.ts 项目隔离（决策 18 修订）", () => {
     expect(listMessages(db, "sess-2", "proj-a")).toEqual([]);
     // 本项目内正常返回
     expect(listMessages(db, "sess-1", "proj-a")).toHaveLength(1);
+  });
+});
+
+describe("chat.ts migrateChatMessagesProject（B2.2 审核 P1-1：跨项目恢复会话归属迁移）", () => {
+  it("旧 id 行全部迁移为新 id，其他 id 行不动；迁移后按新 id 可查（决策 18 隔离语义）", () => {
+    insertChatMessage(db, msg({ session_id: "sess-old", project_id: "proj-old", role: "user", content: "旧项目消息 1", created_at: "2026-08-01T10:00:00Z" }));
+    insertChatMessage(db, msg({ session_id: "sess-old", project_id: "proj-old", role: "assistant", content: "旧项目消息 2", created_at: "2026-08-01T10:00:01Z" }));
+    insertChatMessage(db, msg({ session_id: "sess-other", project_id: "proj-other", role: "user", content: "无关项目消息", created_at: "2026-08-01T11:00:00Z" }));
+
+    // 迁移前：新 id 查不到旧会话
+    expect(listSessions(db, "proj-new")).toEqual([]);
+    const changed = migrateChatMessagesProject(db, "proj-old", "proj-new");
+    expect(changed).toBe(2); // 仅旧 id 的两行受影响
+
+    // 迁移后：旧 id 会话在新 id 下可查；无关项目数据不动
+    expect(listSessions(db, "proj-new").map((s) => s.id)).toEqual(["sess-old"]);
+    expect(listMessages(db, "sess-old", "proj-new")).toHaveLength(2);
+    expect(listSessions(db, "proj-old")).toEqual([]);
+    expect(listSessions(db, "proj-other")).toEqual([{ id: "sess-other", messageCount: 1, createdAt: "2026-08-01T11:00:00Z", updatedAt: "2026-08-01T11:00:00Z", lastMessage: "无关项目消息" }]);
+
+    // 幂等：无该旧 id 行后再执行返回 0
+    expect(migrateChatMessagesProject(db, "proj-old", "proj-new")).toBe(0);
   });
 });
 
