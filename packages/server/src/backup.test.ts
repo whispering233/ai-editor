@@ -24,6 +24,7 @@ import {
   writeProjectFile,
 } from "@whispering233/ai-editor-db";
 import { errorHandler } from "./middleware/error.js";
+import { HttpError } from "./middleware/error.js";
 import {
   closeProject,
   getCurrentProject,
@@ -32,7 +33,7 @@ import {
   setCurrentProject,
 } from "./middleware/project.js";
 import { projectRoutes, setProjectRoot } from "./routes/project.js";
-import { BACKUPS_DIR_NAME, maybeAutoBackup, pruneBackups, writeBackup, writeProjectFilesFromBackup } from "./backup.js";
+import { BACKUPS_DIR_NAME, maybeAutoBackup, pruneBackups, renameBackup, writeBackup, writeProjectFilesFromBackup } from "./backup.js";
 
 const HOST_HEADERS = { host: "127.0.0.1:3456" }; // 来源校验 host 白名单（决策 17 修订）
 const T0 = "2026-08-01T10:00:00Z";
@@ -230,7 +231,7 @@ describe("writeBackup 与保留策略", () => {
     }
   });
 
-  it("自定义名称备份：文件名 <时间戳>-<名称>.zip，名称原样进响应（trim/剥 .zip 规范化）", () => {
+  it("自定义名称备份（kind 缺省 auto → 文件名 <时间戳>-a-<名称>.zip，名称原样进响应；trim/剥 .zip 规范化）", () => {
     const dir = makeTmpDir();
     initProjectDir(dir, makeConfig("proj-named", "自定义名"));
     const project = {
@@ -240,13 +241,37 @@ describe("writeBackup 与保留策略", () => {
     };
     try {
       const a = writeBackup(project, { name: "  定稿.zip  " });
-      expect(a.fileName).toMatch(/^\d{8}-\d{9}-定稿\.zip$/);
+      expect(a.fileName).toMatch(/^\d{8}-\d{9}-a-定稿\.zip$/);
+      expect(a.kind).toBe("auto"); // kind 缺省 auto
       expect(a.name).toBe("定稿");
       expect(existsSync(join(dir, BACKUPS_DIR_NAME, a.fileName))).toBe(true);
       // 同毫秒同名称再备份 → +1ms 去重且名称保留
       const b = writeBackup(project, { name: "定稿" });
-      expect(b.fileName).toMatch(/^\d{8}-\d{9}-定稿\.zip$/);
+      expect(b.fileName).toMatch(/^\d{8}-\d{9}-a-定稿\.zip$/);
       expect(b.fileName).not.toBe(a.fileName);
+      expect(b.kind).toBe("auto");
+      expect(b.name).toBe("定稿");
+    } finally {
+      closeDatabase(project.db);
+    }
+  });
+
+  it("manual kind：无名称 → <时间戳>-m.zip；带名称 → <时间戳>-m-<名称>.zip（决策 29）", () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-kind", "kind 段"));
+    const project = {
+      root: dir,
+      config: readProjectFile(dir) as ProjectFileConfig,
+      db: openDatabase(join(dir, DATA_DB_FILE_NAME)),
+    };
+    try {
+      const a = writeBackup(project, { kind: "manual" });
+      expect(a.fileName).toMatch(/^\d{8}-\d{9}-m\.zip$/);
+      expect(a.kind).toBe("manual");
+      expect(a).not.toHaveProperty("name");
+      const b = writeBackup(project, { kind: "manual", name: "定稿" });
+      expect(b.fileName).toMatch(/^\d{8}-\d{9}-m-定稿\.zip$/);
+      expect(b.kind).toBe("manual");
       expect(b.name).toBe("定稿");
     } finally {
       closeDatabase(project.db);
@@ -325,12 +350,12 @@ describe("GET /project/backups 与 POST /project/backup", () => {
     expect(res.status).toBe(200);
     const backups = (await res.json()).data.backups;
     expect(backups).toHaveLength(3);
-    expect(backups[0]).toEqual({ fileName: "20260813-140000.zip", size: 1, createdAt: new Date(2026, 7, 13, 14, 0, 0).toISOString() });
+    expect(backups[0]).toEqual({ fileName: "20260813-140000.zip", size: 1, createdAt: new Date(2026, 7, 13, 14, 0, 0).toISOString(), kind: "auto" });
     expect(backups[1].fileName).toBe("20260813-130000.zip");
     expect(backups[2].fileName).toBe("20260813-120000.zip");
   });
 
-  it("POST /backup：立即备份返回 { backup: { fileName, size, createdAt } }，文件落盘且 createdAt 与文件名解析一致", async () => {
+  it("POST /backup：立即备份返回 { backup: { fileName, size, createdAt, kind } }，文件落盘且 createdAt 与文件名解析一致（决策 29：手动备份落 -m 段）", async () => {
     const dir = makeTmpDir();
     initProjectDir(dir, makeConfig("proj-now", "立即备份"));
     const app = await openProject(dir);
@@ -338,7 +363,8 @@ describe("GET /project/backups 与 POST /project/backup", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     const backup = body.data.backup;
-    expect(backup.fileName).toMatch(/^\d{8}-\d{9}\.zip$/); // 决策 28 毫秒精度
+    expect(backup.fileName).toMatch(/^\d{8}-\d{9}-m\.zip$/); // 决策 28 毫秒精度 + 决策 29 manual kind 段
+    expect(backup.kind).toBe("manual");
     expect(typeof backup.size).toBe("number");
     expect(backup.size).toBeGreaterThan(0);
     // createdAt 由文件名时间戳解析（决策 27 无状态语义）
@@ -346,7 +372,7 @@ describe("GET /project/backups 与 POST /project/backup", () => {
     expect(existsSync(join(dir, BACKUPS_DIR_NAME, backup.fileName))).toBe(true);
   });
 
-  it("POST /backup 带自定义名称：文件名 <时间戳>-<名称>.zip + 响应 name 字段（决策 28）", async () => {
+  it("POST /backup 带自定义名称：文件名 <时间戳>-m-<名称>.zip + 响应 name 字段（决策 28/29）", async () => {
     const dir = makeTmpDir();
     initProjectDir(dir, makeConfig("proj-named-ep", "端点自定义名"));
     const app = await openProject(dir);
@@ -357,15 +383,16 @@ describe("GET /project/backups 与 POST /project/backup", () => {
     });
     expect(res.status).toBe(200);
     const backup = (await res.json()).data.backup;
-    expect(backup.fileName).toMatch(/^\d{8}-\d{9}-交编辑前\.zip$/);
+    expect(backup.fileName).toMatch(/^\d{8}-\d{9}-m-交编辑前\.zip$/);
+    expect(backup.kind).toBe("manual");
     expect(backup.name).toBe("交编辑前");
     expect(existsSync(join(dir, BACKUPS_DIR_NAME, backup.fileName))).toBe(true);
 
-    // GET /backups 列表项带 name
+    // GET /backups 列表项带 name 与 kind
     const listRes = await app.request("/api/v1/project/backups", { headers: HOST_HEADERS });
     const backups = (await listRes.json()).data.backups;
     expect(backups).toHaveLength(1);
-    expect(backups[0]).toMatchObject({ fileName: backup.fileName, name: "交编辑前" });
+    expect(backups[0]).toMatchObject({ fileName: backup.fileName, kind: "manual", name: "交编辑前" });
   });
 
   it("POST /backup 名称非法 → 400 VALIDATION_ERROR（路由层 zod 校验 + writeBackup sanitize）", async () => {
@@ -386,22 +413,24 @@ describe("GET /project/backups 与 POST /project/backup", () => {
     expect((await listRes.json()).data.backups).toEqual([]);
   });
 
-  it("GET /backups：旧秒级格式文件无 name 字段；带名称文件含 name；时间倒序（决策 28 兼容）", async () => {
+  it("GET /backups：旧秒级格式 kind auto 无 name；旧带名称（无 kind 段）kind manual 含 name；时间倒序（决策 28/29 兼容）", async () => {
     const dir = makeTmpDir();
     initProjectDir(dir, makeConfig("proj-legacy", "旧格式"));
     const app = await openProject(dir);
     const backupsDir = join(dir, BACKUPS_DIR_NAME);
     mkdirSync(backupsDir, { recursive: true });
-    writeFileSync(join(backupsDir, "20260813-120000.zip"), "legacy"); // 旧秒级格式（手工遗留）
-    writeFileSync(join(backupsDir, "20260813-130000999-初稿.zip"), "named"); // 新格式带名称
+    writeFileSync(join(backupsDir, "20260813-120000.zip"), "legacy"); // 旧秒级格式（手工遗留）→ kind auto
+    writeFileSync(join(backupsDir, "20260813-130000999-初稿.zip"), "named"); // 旧带名称（无 kind 段）→ kind manual
 
     const res = await app.request("/api/v1/project/backups", { headers: HOST_HEADERS });
     expect(res.status).toBe(200);
     const backups = (await res.json()).data.backups;
     expect(backups).toHaveLength(2);
     expect(backups[0].fileName).toBe("20260813-130000999-初稿.zip"); // 最新在前
+    expect(backups[0].kind).toBe("manual"); // 旧带名称兼容为 manual（决策 29）
     expect(backups[0].name).toBe("初稿");
     expect(backups[1].fileName).toBe("20260813-120000.zip"); // 旧格式兼容列出
+    expect(backups[1].kind).toBe("auto"); // 旧秒级 → auto
     expect(backups[1]).not.toHaveProperty("name");
   });
 
@@ -412,12 +441,194 @@ describe("GET /project/backups 与 POST /project/backup", () => {
     expect(getRes.status).toBe(409);
     const postBackupRes = await app.request("/api/v1/project/backup", { method: "POST", headers: HOST_HEADERS });
     expect(postBackupRes.status).toBe(409);
+    const renameRes = await app.request("/api/v1/project/backup/rename", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ fileName: "20260813-101500123.zip", name: "新名" }),
+    });
+    expect(renameRes.status).toBe(409);
     const restoreRes = await app.request("/api/v1/project/backup/restore", {
       method: "POST",
       headers: HOST_HEADERS,
       body: JSON.stringify({ fileName: "x.zip" }),
     });
     expect(restoreRes.status).toBe(409);
+  });
+});
+
+// ============ renameBackup（决策 29：只改名称段，时间戳与 kind 保持） ============
+
+describe("renameBackup", () => {
+  /** 打开一个项目并返回其 ProjectContext（供 renameBackup 直接调用） */
+  async function openProjectCtx(dir: string) {
+    await openProject(dir);
+    return getCurrentProject() as NonNullable<ReturnType<typeof getCurrentProject>>;
+  }
+
+  it("成功改名：kind/时间戳保持、名称更新、文件确实改名（manual -m-旧名 → -m-新名）", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-rn1", "改名"));
+    const project = await openProjectCtx(dir);
+    const a = writeBackup(project, { kind: "manual", name: "旧名" });
+    const res = renameBackup(project, a.fileName, "新名");
+    expect(res.fileName).toBe(a.fileName.replace("-m-旧名.zip", "-m-新名.zip")); // 时间戳与 kind 段保持
+    expect(res.kind).toBe("manual");
+    expect(res.name).toBe("新名");
+    expect(res.createdAt).toBe(a.createdAt);
+    expect(res.size).toBe(a.size);
+    // 文件确实改名：旧名消失、新名存在
+    expect(existsSync(join(dir, BACKUPS_DIR_NAME, a.fileName))).toBe(false);
+    expect(existsSync(join(dir, BACKUPS_DIR_NAME, res.fileName))).toBe(true);
+  });
+
+  it("幂等：重命名为相同名称 → 不报错、文件不动、返回当前条目（重新 stat 的 size）", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-rn2", "幂等"));
+    const project = await openProjectCtx(dir);
+    const a = writeBackup(project, { kind: "manual", name: "旧名" });
+    const res = renameBackup(project, a.fileName, "旧名");
+    expect(res.fileName).toBe(a.fileName);
+    expect(res.kind).toBe("manual");
+    expect(res.name).toBe("旧名");
+    expect(res.size).toBe(a.size);
+    expect(existsSync(join(dir, BACKUPS_DIR_NAME, a.fileName))).toBe(true); // 文件原样保留
+  });
+
+  it("清除名称：manual -m-名.zip → -m.zip（name 缺省）；auto -a-名.zip → 纯时间戳（name 空串）", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-rn3", "清名"));
+    const project = await openProjectCtx(dir);
+    // manual：请求未传 name → 清除名称段（落 -m.zip）
+    const m = writeBackup(project, { kind: "manual", name: "名" });
+    const mRes = renameBackup(project, m.fileName);
+    expect(mRes.fileName).toBe(m.fileName.replace("-m-名.zip", "-m.zip"));
+    expect(mRes.kind).toBe("manual");
+    expect(mRes).not.toHaveProperty("name");
+    expect(existsSync(join(dir, BACKUPS_DIR_NAME, m.fileName))).toBe(false);
+    expect(existsSync(join(dir, BACKUPS_DIR_NAME, mRes.fileName))).toBe(true);
+    // auto：name 传空串 → 清除名称段（落纯时间戳）
+    const a = writeBackup(project, { kind: "auto", name: "名" });
+    const aRes = renameBackup(project, a.fileName, "");
+    expect(aRes.fileName).toBe(a.fileName.replace("-a-名.zip", ".zip"));
+    expect(aRes.kind).toBe("auto");
+    expect(aRes).not.toHaveProperty("name");
+    expect(existsSync(join(dir, BACKUPS_DIR_NAME, aRes.fileName))).toBe(true);
+  });
+
+  it("纯空白名称 → 清除名称段（与空串/缺省同语义，oracle P2-5）", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-rn3b", "空白清名"));
+    const project = await openProjectCtx(dir);
+    const m = writeBackup(project, { kind: "manual", name: "名" });
+    const res = renameBackup(project, m.fileName, "   ");
+    expect(res.fileName).toBe(m.fileName.replace("-m-名.zip", "-m.zip"));
+    expect(res.kind).toBe("manual");
+    expect(res).not.toHaveProperty("name");
+    expect(existsSync(join(dir, BACKUPS_DIR_NAME, m.fileName))).toBe(false);
+    expect(existsSync(join(dir, BACKUPS_DIR_NAME, res.fileName))).toBe(true);
+  });
+
+  it("目标文件名已存在 → 409 BACKUP_TARGET_EXISTS（oracle P1-1：rename 不静默覆盖）", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-rn409", "目标冲突"));
+    const project = await openProjectCtx(dir);
+    const backupsDir = join(dir, BACKUPS_DIR_NAME);
+    mkdirSync(backupsDir, { recursive: true });
+    // 同毫秒双 manual：T-m-来源.zip（源）与 T-m-目标.zip（已存在目标）——改名撞名场景
+    writeFileSync(join(backupsDir, "20260813-101500000-m-来源.zip"), "src");
+    writeFileSync(join(backupsDir, "20260813-101500000-m-目标.zip"), "target");
+    let err: unknown;
+    try {
+      renameBackup(project, "20260813-101500000-m-来源.zip", "目标");
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(HttpError);
+    const he = err as HttpError;
+    expect(he.status).toBe(409);
+    expect(he.code).toBe("BACKUP_TARGET_EXISTS");
+    expect(he.message).toContain("目标备份文件名已存在");
+    // 数据零损失：源文件未被移动、目标文件原内容未被覆盖
+    expect(existsSync(join(backupsDir, "20260813-101500000-m-来源.zip"))).toBe(true);
+    expect(readFileSync(join(backupsDir, "20260813-101500000-m-目标.zip"), "utf8")).toBe("target");
+  });
+
+  it("旧格式兼容改名：旧秒级（kind auto）改名后落 -a- 段；旧带名称（kind manual）改名保持 -m- 段", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-rn4", "旧格式改名"));
+    const project = await openProjectCtx(dir);
+    const backupsDir = join(dir, BACKUPS_DIR_NAME);
+    mkdirSync(backupsDir, { recursive: true });
+    // 旧秒级（决策 27 遗留）→ 解析 kind auto（毫秒 = 0）→ 改名后 -a- 段（format 统一毫秒精度）
+    writeFileSync(join(backupsDir, "20260813-101500.zip"), "legacy");
+    const legacyRes = renameBackup(project, "20260813-101500.zip", "升级整理");
+    expect(legacyRes.fileName).toBe("20260813-101500000-a-升级整理.zip");
+    expect(legacyRes.kind).toBe("auto");
+    expect(existsSync(join(backupsDir, "20260813-101500.zip"))).toBe(false);
+    expect(existsSync(join(backupsDir, legacyRes.fileName))).toBe(true);
+    // 旧带名称（决策 28 遗留）→ 解析 kind manual → 改名保持 -m- 段
+    writeFileSync(join(backupsDir, "20260813-101500999-初稿.zip"), "named");
+    const namedRes = renameBackup(project, "20260813-101500999-初稿.zip", "定稿");
+    expect(namedRes.fileName).toBe("20260813-101500999-m-定稿.zip");
+    expect(namedRes.kind).toBe("manual");
+  });
+
+  it("格式合法但备份不存在 → 404 VALIDATION_ERROR", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-rn404", "缺失"));
+    const project = await openProjectCtx(dir);
+    let err: unknown;
+    try {
+      renameBackup(project, "20260813-101500.zip", "新名");
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(HttpError);
+    const he = err as HttpError;
+    expect(he.status).toBe(404);
+    expect(he.code).toBe("VALIDATION_ERROR");
+    expect(he.message).toContain("备份不存在");
+  });
+
+  it("文件名格式非法 → 400 VALIDATION_ERROR（防路径穿越白名单）", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-rn400", "非法名"));
+    const project = await openProjectCtx(dir);
+    for (const bad of ["../20260813-101500.zip", "a/20260813-101500.zip", "20260813-101500.zip/..", "20260813-10150.zip", "notes.txt", ""]) {
+      let err: unknown;
+      try {
+        renameBackup(project, bad, "新名");
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(HttpError);
+      const he = err as HttpError;
+      expect(he.status).toBe(400);
+      expect(he.code).toBe("VALIDATION_ERROR");
+      expect(he.message).toContain("文件名格式非法");
+    }
+  });
+
+  it("新名称非法 → 400 VALIDATION_ERROR（路径分隔符/超长/纯点；文案同 writeBackup）", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-rn400b", "非法名"));
+    const project = await openProjectCtx(dir);
+    const a = writeBackup(project, { kind: "manual", name: "旧名" });
+    for (const bad of ["a/b", "a\\b", "a:b", "..", "a".repeat(31), "a\nb"]) {
+      let err: unknown;
+      try {
+        renameBackup(project, a.fileName, bad);
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(HttpError);
+      const he = err as HttpError;
+      expect(he.status).toBe(400);
+      expect(he.code).toBe("VALIDATION_ERROR");
+      expect(he.message).toContain("备份名称非法");
+    }
+    // 非法名称不产生改名副作用（原文件仍在）
+    expect(existsSync(join(dir, BACKUPS_DIR_NAME, a.fileName))).toBe(true);
   });
 });
 
@@ -694,9 +905,9 @@ describe("POST /project/backup/restore", () => {
     const app = await openProject(dir);
     const project = getCurrentProject() as NonNullable<ReturnType<typeof getCurrentProject>>;
 
-    // 带名称备份当前状态
+    // 带名称备份当前状态（kind 缺省 auto → -a- 段）
     const bkp = writeBackup(project, { name: "定稿前" });
-    expect(bkp.fileName).toMatch(/^\d{8}-\d{9}-定稿前\.zip$/);
+    expect(bkp.fileName).toMatch(/^\d{8}-\d{9}-a-定稿前\.zip$/);
 
     // 修改内容后按自定义名称恢复
     writeProjectFile(dir, { ...readProjectFile(dir)!, prompt: "新提示词" });

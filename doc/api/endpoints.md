@@ -222,9 +222,9 @@
 
 ---
 
-## 备份管理（决策 27 + 决策 28）
+## 备份管理（决策 27 + 决策 28 + 决策 29）
 
-> 自动备份由服务端定时器驱动（服务运行期间生效，频率 = project.json `backup_frequency_minutes`，缺省 10 分钟）。备份文件存项目目录内 `.backups/`，时间戳命名（决策 28 毫秒精度 `<YYYYMMDD-HHmmssSSS>.zip`；手动备份可带自定义名称 `<YYYYMMDD-HHmmssSSS>-<名称>.zip`；**旧秒级格式 `<YYYYMMDD-HHmmss>.zip` 兼容解析**——历史备份仍可列出/恢复/参与保留策略），格式与 E1 导出 zip 完全一致（三文件 + wal_checkpoint），**每项目保留最近 20 份**（超出删除最旧，含覆盖前自动快照）。全部端点要求当前项目已打开（无项目 → 409 `NO_PROJECT_OPEN`，与 `/config` 一致）。
+> 自动备份由服务端定时器驱动（服务运行期间生效，频率 = project.json `backup_frequency_minutes`，缺省 10 分钟）。备份文件存项目目录内 `.backups/`，时间戳命名（决策 28 毫秒精度 + **决策 29 类型标记段**：`<YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip`——kind 为 `m`（手动）/ `a`（自动带名称），自动备份/快照为纯时间戳；手动备份无名称也带 `-m` 段，与自动备份可靠区分；**旧格式兼容解析不迁移**：旧秒级 `<YYYYMMDD-HHmmss>.zip` → auto、旧带名称无 kind 段 `<YYYYMMDD-HHmmssSSS>-<名称>.zip` → manual、纯时间戳 → auto——历史备份仍可列出/恢复/参与保留策略），格式与 E1 导出 zip 完全一致（三文件 + wal_checkpoint），**每项目保留最近 20 份**（超出删除最旧，含覆盖前自动快照）。全部端点要求当前项目已打开（无项目 → 409 `NO_PROJECT_OPEN`，与 `/config` 一致）。
 
 ### GET /api/v1/project/backups
 
@@ -239,7 +239,10 @@
     fileName: string;   // 备份文件名（毫秒级时间戳命名；restore 用此引用）
     size: number;       // 字节数
     createdAt: string;  // 备份时间（ISO 8601，由文件名时间戳解析）
-    name?: string;      // 手动备份自定义名称（决策 28；由文件名解析——自动备份/快照/旧备份无此字段）
+    kind: "auto" | "manual";  // 备份类型标签（决策 29，必填；由文件名解析——
+                              //   -m/-a 标记段、旧带名称（无标记）→ manual、纯时间戳/旧秒级 → auto）
+    name?: string;      // 自定义名称（决策 28/29；由文件名解析——自动备份/快照/旧备份无此字段；
+                        //   自动备份重命名后带 -a 段 + 名称，kind 仍为 auto）
   }>;
 }
 ```
@@ -248,7 +251,7 @@
 
 ### POST /api/v1/project/backup
 
-立即备份当前项目（手动触发；设置页「立即备份」按钮）。
+立即备份当前项目（手动触发；设置页「立即备份」按钮）。**kind 恒为 manual**（文件名落 `-m` 段，决策 29）。
 
 ```typescript
 // Req（请求体可选；缺省 = 纯时间戳文件名）
@@ -261,15 +264,46 @@
 // Res: 200
 {
   backup: {
-    fileName: string;   // <YYYYMMDD-HHmmssSSS>.zip 或 <YYYYMMDD-HHmmssSSS>-<名称>.zip
+    fileName: string;   // <YYYYMMDD-HHmmssSSS>-m.zip（无名称）或 <YYYYMMDD-HHmmssSSS>-m-<名称>.zip
     size: number;
     createdAt: string;
+    kind: "manual";     // 决策 29
     name?: string;      // 带名称时返回规范化后的名称
   };
 }
 ```
 
-**语义**：与自动备份同款管道（三文件 + wal_checkpoint → `.backups/<时间戳>.zip` → 触发保留策略清理）。文件写入失败 → 500 `INTERNAL_ERROR`。
+**语义**：与自动备份同款管道（三文件 + wal_checkpoint → `.backups/<时间戳>-m...>.zip` → 触发保留策略清理）。文件写入失败 → 500 `INTERNAL_ERROR`。
+
+### POST /api/v1/project/backup/rename
+
+重命名备份（决策 29；设置页备份列表行内编辑）。**只改名称段，时间戳与 kind 保持**——重命名不改变备份来源标签。
+
+```typescript
+// Req
+{
+  fileName: string;  // 备份文件名（须匹配 .backups/ 内时间戳格式，防路径穿越；不存在 → 404 VALIDATION_ERROR「备份不存在」）
+  name?: string;     // 新名称（规则同决策 28：trim 后 1-30 字符/禁路径分隔符与保留字符/禁纯点/自动剥 .zip；
+                     //   非法 → 400 VALIDATION_ERROR）。空串或缺省 = 清除名称段——
+                     //   manual 保留 -m 标记（<时间戳>-m.zip），auto 回到纯时间戳
+}
+
+// Res: 200
+{
+  backup: {
+    fileName: string;   // 新文件名 <YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip（时间戳与 kind 不变；
+                        //   旧格式文件改名时顺带规范化：旧秒级补毫秒 000、旧带名称无 kind 段补 kind 段）
+    size: number;
+    createdAt: string;
+    kind: "auto" | "manual";
+    name?: string;      // 新名称（清除后无此字段）
+  };
+}
+```
+
+**语义**：同目录 renameSync 原子改名；新名称与原名称相同（幂等）→ 直接返回当前条目不报错；**改名前检查目标文件名是否已存在**——已存在 → 409 `BACKUP_TARGET_EXISTS`（防 rename 静默覆盖丢失备份）；改名不触碰 zip 内容（名称只进文件名，决策 28 语义）。
+
+**错误码**：400 `VALIDATION_ERROR`（文件名格式非法/新名称非法）、404 `VALIDATION_ERROR`（备份不存在）、409 `BACKUP_TARGET_EXISTS`（目标文件名已存在）。
 
 ### POST /api/v1/project/backup/restore
 

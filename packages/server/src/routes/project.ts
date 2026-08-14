@@ -1,12 +1,14 @@
 // 项目路由（S1.2）：POST /create、POST /open、POST /close、GET/PUT /config、GET /export（E1）、
-// POST /import（E2）、GET /backups + POST /backup + POST /backup/restore（B2.2，决策 27）
+// POST /import（E2）、GET /backups + POST /backup + POST /backup/rename + POST /backup/restore
+// （B2.2 决策 27 + B2.6 决策 29）
 //
 // 契约来源：doc/api/endpoints.md 第 18-122 行（项目管理全部端点）+「备份管理」节（决策 27）、
 //   doc/design/decisions.md 决策 8（单进程 currentProject）、决策 13 修订（open 时 user_version
-//   判定删库重建）、决策 17（路径校验防越权）、决策 27（自动备份与恢复）。
+//   判定删库重建）、决策 17（路径校验防越权）、决策 27（自动备份与恢复）、决策 29（备份类型标签
+//   与重命名）。
 // 校验失败统一 400 INVALID_PROJECT_PATH（shared ErrorCode，endpoints.md 第 66 行）。
-// 备份管道/校验/恢复逻辑在 backup.ts（B2.2 提取：createBackupZip/validateBackupPackage/
-// writeBackup/listBackups/restoreBackup——与自动定时器同模块）。
+// 备份管道/校验/恢复/重命名逻辑在 backup.ts（B2.2 提取：createBackupZip/validateBackupPackage/
+// writeBackup/listBackups/restoreBackup/renameBackup——与自动定时器同模块）。
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import {
   existsSync,
@@ -18,7 +20,7 @@ import {
   type Dirent,
 } from "node:fs";
 import { Hono, type Context } from "hono";
-import type { ProjectFileConfig } from "@whispering233/ai-editor-shared";
+import type { ProjectBackupRenameReq, ProjectFileConfig } from "@whispering233/ai-editor-shared";
 import { mapProjectFileToConfig } from "@whispering233/ai-editor-shared";
 import { openDatabase } from "@whispering233/ai-editor-db";
 import { ensureSchemaCompatible, DATA_DB_FILE_NAME } from "@whispering233/ai-editor-db";
@@ -28,13 +30,14 @@ import { PROJECT_FILE_NAME } from "@whispering233/ai-editor-db";
 import { findOutlineNode, readOutlineFile, readProjectFile, writeProjectFile } from "@whispering233/ai-editor-db";
 import { nowIso } from "@whispering233/ai-editor-db";
 import {
+  projectBackupRenameReqSchema,
   projectBackupReqSchema,
   projectConfigUpdateReqSchema,
   projectCreateReqSchema,
   projectListResSchema,
   projectOpenReqSchema,
 } from "@whispering233/ai-editor-shared/schemas";
-import { createBackupZip, listBackups, overwriteProjectFiles, restoreBackup, snapshotBookDir, validateBackupPackage, writeBackup, writeProjectFilesFromBackup } from "../backup.js";
+import { createBackupZip, listBackups, overwriteProjectFiles, renameBackup, restoreBackup, snapshotBookDir, validateBackupPackage, writeBackup, writeProjectFilesFromBackup } from "../backup.js";
 import { HttpError, ok } from "../middleware/error.js";
 import {
   closeProject,
@@ -550,7 +553,8 @@ projectRoutes.get("/backups", (c) => {
 
 // POST /api/v1/project/backup —— 立即备份（手动触发；同款管道 + 保留策略清理）
 // 决策 28：请求体可选 name（手动备份自定义名称，trim 后 1-30 字符；形状校验 zod schema，
-// 名称规范化/权威校验收敛 sanitizeBackupName → writeBackup 唯一执行点）
+// 名称规范化/权威校验收敛 sanitizeBackupName → writeBackup 唯一执行点）。
+// 决策 29：手动备份文件名落 kind 段 -m（无名称 <时间戳>-m.zip / 带名称 <时间戳>-m-<名称>.zip）
 projectRoutes.post("/backup", async (c) => {
   const project = requireCurrentProject();
   const raw = await c.req.json().catch(() => null);
@@ -558,8 +562,28 @@ projectRoutes.post("/backup", async (c) => {
   if (!parsed.success) {
     throw new HttpError(400, "VALIDATION_ERROR", `备份请求体非法: ${parsed.error.issues[0]?.message ?? "参数校验失败"}`);
   }
-  const opts = parsed.data.name !== undefined ? { name: parsed.data.name } : undefined;
-  return c.json(ok({ backup: writeBackup(project, opts) }));
+  // kind 显式传 "manual"：name undefined 时 writeBackup 内部不 sanitize、无名称段（落 -m 段）
+  return c.json(ok({ backup: writeBackup(project, { name: parsed.data.name, kind: "manual" }) }));
+});
+
+// POST /api/v1/project/backup/rename —— 重命名备份（决策 29：只改名称段，时间戳与 kind 保持）
+//
+// 请求体（projectBackupRenameReqSchema，决策 29）：
+// - fileName 必填：.backups/ 下时间戳格式（parseBackupFileName 白名单校验 → 非法 400）
+// - name 可选：非空 → sanitizeBackupName 规范化（非法 400）；空串/缺省 → 清除名称段
+// 语义：auto 备份重命名后仍落 -a-<名称> 段、manual 仍落 -m[-<名称>] 段（kind 不随重命名改变）；
+// 幂等——新文件名与原文件名相同 → 返回当前条目（不报错）。备份不存在 → 404。
+projectRoutes.post("/backup/rename", async (c) => {
+  const project = requireCurrentProject(); // 无当前项目 → 409 NO_PROJECT_OPEN（与 /backup 一致）
+  const raw = await c.req.json().catch(() => null);
+  let parsed: ProjectBackupRenameReq;
+  try {
+    parsed = await projectBackupRenameReqSchema.parseAsync(raw);
+  } catch (err) {
+    // ZodError → errorHandler → 400 VALIDATION_ERROR（含 fields，与 /config PUT 同款语义）
+    throw err;
+  }
+  return c.json(ok({ backup: renameBackup(project, parsed.fileName, parsed.name) }));
 });
 
 // POST /api/v1/project/backup/restore —— 从备份恢复当前项目（覆盖恢复，决策 27）

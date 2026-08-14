@@ -46,6 +46,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - [x] B1 项目提示词编辑器（设置页编辑保存 → 注入「## 项目设定」段）
 - [x] 阶段 C 时间轴（C1 契约与数据层 / C2 服务端 / C3 列表页 / C4 详情页）
 - [x] 阶段 B2 自动备份与恢复（B2.1 契约与配置 / B2.2 备份管道+定时器+端点 / B2.3 import 分流+rename / B2.4 client 备份区+书架 / B2.5 备份命名增强：毫秒精度 + 自定义名称）
+- [x] B2.6 备份类型标签 + 备份重命名（决策 29：kind 文件名标记段 + `POST /backup/rename` + 列表标签/行内重命名 UI）
 
 ---
 
@@ -100,6 +101,8 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 **阶段 B2：自动备份与恢复（B2.1-B2.4，2026-08 用户裁决，决策 27）**——备份/频率/列表均项目级（跟随书籍）：自动备份定时器（有变更才备份：三文件 mtime 判定 + 1s 容差防 checkpoint 自激，`.backups/` 时间戳命名保留 20 份）；频率 = project.json `backup_frequency_minutes`（缺省 10，枚举 5/10/15/30/60，读侧宽松/写侧显式）；**唯一 key = project_id**——导入/加载 zip 内 id 匹配书架 → 覆盖恢复（保留当前 id 防会话断连 + 覆盖前自动快照后悔药 + 跨项目恢复迁移 chat_messages 归属）/ 不匹配 → 导入新书（同名不再 409：重命名导入或目录去重 `书名 (N)`，维持「目录名=书名」不变式）；书架重命名书名（原子移动目录 + 引用同步）；打包/校验/恢复管道统一提取（`server/src/backup.ts`，E1 export/import 重构复用）；restore 与 import 走同款 E4/E5 三态校验（坏包/高版本零触碰）。
 
 **B2.5 备份命名增强（2026-08 用户反馈，决策 28）**——手动备份支持自定义名称（`POST /project/backup` 可选 `name`：trim 后 1-30 字符、禁路径分隔符/保留字符/控制字符/纯点、自动剥 `.zip`；校验收敛 shared `sanitizeBackupName`，`writeBackup` 为唯一执行点）+ **文件名毫秒精度**（`<YYYYMMDD-HHmmssSSS>.zip`，旧秒级格式兼容解析不迁移）；`GET /backups` 响应项新增可选 `name`（文件名解析，旧备份无）；设置页「立即备份」旁名称输入框 + 列表名称展示 + 时间显示补秒（`MM-DD HH:mm:ss`）；保留策略/变更判定/restore 白名单按新 parse 兼容三类文件名。
+
+**B2.6 备份类型标签 + 备份重命名（2026-08 用户反馈，决策 29）**——界面简单标签区分手动/自动备份 + 备份列表支持重命名（行格式「时间 + 简单标签 + 用户自定义命名」）：**类型标签持久化 = 文件名编码**（无状态，决策 27 哲学）——格式扩展 `<YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip`，kind 段 `m`（手动，**无名称也带 `-m` 段**）/ `a`（自动备份重命名后带名称）；自动/快照保持纯时间戳；旧格式兼容解析（旧秒级 → auto、旧带名称无 kind 段 → manual）；**kind 不随重命名改变**；`GET /backups` 响应项新增必填 `kind`；新增 `POST /project/backup/rename` `{ fileName, name? }`（sanitize 同决策 28，name 空 = 清除名称段，幂等，同目录 rename 原子）；设置页列表行标签 + 行内重命名编辑 + 恢复 Dialog 展示标签。
 
 ---
 
@@ -267,3 +270,20 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 **验证**：`pnpm typecheck && pnpm lint` + 全仓测试 green（shared 122 / server 293 / client 465，全仓 1477）；oracle 审核通过（无 P0/P1，4 项 P2 已修复）。
 
 **状态（2026-08）**：✅ 已完成（决策 28 落地；oracle 审核通过，P2-1 schema 形状校验收敛 / P2-2 .zip 循环剥尽 / P2-3 三处测试缺口补齐 / P2-4 文案修正）。提交：`2d8e5eb`。
+
+---
+
+## B2.6 备份类型标签 + 备份重命名（2026-08 用户反馈，决策 29）
+
+> **背景**：B2.5 后用户反馈两点体验痛点——① 手动备份不填名称时文件名与自动备份同为纯时间戳，列表无法区分类型；② 备份创建后不能改名（忘填名称/意图变化只能删除重建）。需求：界面简单标签区分手动/自动备份；备份列表支持重命名，行显示格式「时间 + 简单标签 + 用户自定义命名」。设计裁决（决策 29）：**类型标签 = 文件名编码**（无状态，否决旁路元数据文件——引入状态文件与脱钩风险）——格式扩展 `<YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip`，kind 段 `m`（手动）/ `a`（自动带名称）；自动/快照纯时间戳不变；旧格式兼容解析不迁移；**kind 不随重命名改变**；`GET /backups` 响应项新增必填 `kind: "auto" | "manual"`；新增 `POST /project/backup/rename`（sanitize 同决策 28、name 空 = 清除名称段、幂等、同目录 rename 原子）。契约见 `doc/api/endpoints.md`（备份管理节）、`doc/database/schema.md`（自动备份目录）、`doc/ui/pages/settings.md`（备份区）。
+
+**范围**：
+- shared：`utils/backup.ts` 新增 `BackupKind` 类型（constants/backup.ts）+ parse 返回 `{ time, kind, name? }`（新正则识别 `-m`/`-a` 段 + 旧带名称/旧秒级兼容）+ format 支持 `{ kind?, name? }`（auto 无名称不输出标记段）；`types/api.ts` 新增 `projectBackupRenameReqSchema`（fileName + 可选 name，形状校验）
+- server：`backup.ts` BackupFileInfo + kind、writeBackup 支持 `{ kind? }`（缺省 auto；POST /backup 传 manual）+ 新增 `renameBackup(project, fileName, name?)`（parse 白名单 + 存在性 404 + sanitize 400 + 同目录 renameSync 原子 + 幂等返回）；`routes/project.ts` POST /backup 传 kind:manual + 新增 POST /backup/rename
+- client：`lib/api.ts` BackupEntry.kind + renameProjectBackup(fileName, name?)；`backup-section.tsx` 列表行标签（自动/手动）+ 行内重命名编辑（预填/Enter 提交/Esc 取消/空输入清除名称）+ 恢复 Dialog 展示标签
+- 测试：shared parse/format kind 用例（四类新格式 + 三类旧格式兼容 + 歧义注释）；server rename 端点用例（成功/幂等/清名称/404/400）+ listBackups kind + POST /backup 落 `-m` 段；client api rename 请求 + 组件行为（如有）
+- 文档：decisions.md 决策 29 / endpoints.md / schema.md / settings.md / architecture.md / README.md（阅读顺序）
+
+**验证**：`pnpm typecheck && pnpm lint` + 全仓测试 green（shared 126 / server 311 / client 468，全仓 1502）；oracle 审核通过（无 P0；P1 三项已修复：renameSync 目标冲突 409 防护 / client 提交失败 blur 竞态兜底 / 文档失焦语义对齐实现；P2 六项全部处理）。
+
+**状态（2026-08）**：✅ 已完成（决策 29 落地；oracle 审核通过——P1-1 `BACKUP_TARGET_EXISTS` 409（rename 前 existsSync 防静默覆盖）/ P1-2 onBlur saving 守卫 + catch 兜底 toast / P1-3 文档统一「Enter/确认提交、Esc/失焦取消」；P2-1 歧义措辞扩为「单字母 a/m 或以 a-/m- 开头」/ P2-2 restore 400 文案统一含 kind / P2-3 BackupKind 收敛 shared 导入 / P2-4 测试错误码换真实码 / P2-5 测试补充（连字符名称、`-m-` 空名回退、纯空白清除、目标冲突）×4 / P2-6 收尾同步）。

@@ -33,6 +33,7 @@ import {
   purgeOutlineNode,
   rejectProposal,
   renameProject,
+  renameProjectBackup,
   restoreOutlineNode,
   restoreProjectBackup,
   updateEntity,
@@ -794,15 +795,15 @@ describe("importProjectZip（POST /project/import：FormData multipart 上传）
   });
 });
 
-describe("备份管理（B2.4；endpoints.md「备份管理」，决策 27）", () => {
-  it("getProjectBackups：GET /project/backups，响应 backups[] 透传", async () => {
+describe("备份管理（B2.4 + B2.6 决策 29；endpoints.md「备份管理」，决策 27）", () => {
+  it("getProjectBackups：GET /project/backups，响应 backups[] 透传（含决策 29 kind 字段）", async () => {
     mockFetchOnce({
       body: {
         success: true,
         data: {
           backups: [
-            { fileName: "20260813-101500.zip", size: 1258291, createdAt: "2026-08-13T10:15:00" },
-            { fileName: "20260813-094500.zip", size: 1009664, createdAt: "2026-08-13T09:45:00" },
+            { fileName: "20260813-101500000.zip", size: 1258291, createdAt: "2026-08-13T10:15:00", kind: "auto" },
+            { fileName: "20260813-094500123-定稿.zip", size: 1009664, createdAt: "2026-08-13T09:45:00.123", kind: "manual", name: "定稿" },
           ],
         },
       },
@@ -810,30 +811,33 @@ describe("备份管理（B2.4；endpoints.md「备份管理」，决策 27）", 
     const res = await getProjectBackups();
     expect(res.backups).toHaveLength(2);
     expect(res.backups[0]).toEqual({
-      fileName: "20260813-101500.zip",
+      fileName: "20260813-101500000.zip",
       size: 1258291,
       createdAt: "2026-08-13T10:15:00",
+      kind: "auto",
     });
+    expect(res.backups[1]).toMatchObject({ kind: "manual", name: "定稿" });
   });
 
-  it("createProjectBackup：POST /project/backup（无 body），响应 backup 透传", async () => {
+  it("createProjectBackup：POST /project/backup（无 body），响应 backup 透传（立即备份 → kind manual）", async () => {
     const calls = mockFetchOnce({
       body: {
         success: true,
-        data: { backup: { fileName: "20260813-110000.zip", size: 1024, createdAt: "2026-08-13T11:00:00" } },
+        data: { backup: { fileName: "20260813-110000000-m.zip", size: 1024, createdAt: "2026-08-13T11:00:00", kind: "manual" } },
       },
     });
     const res = await createProjectBackup();
     expect(calls[0].url).toBe("/api/v1/project/backup");
     expect(calls[0].init?.method).toBe("POST");
-    expect(res.backup.fileName).toBe("20260813-110000.zip");
+    expect(res.backup.fileName).toBe("20260813-110000000-m.zip");
+    expect(res.backup.kind).toBe("manual");
   });
 
-  it("createProjectBackup(name)：带自定义名称 → 请求体含 { name }（决策 28）", async () => {
+  it("createProjectBackup(name)：带自定义名称 → 请求体含 { name }（决策 28）；响应 kind manual", async () => {
     const calls = mockFetchOnce({
       body: {
         success: true,
-        data: { backup: { fileName: "20260813-110000123-定稿.zip", size: 1024, createdAt: "2026-08-13T11:00:00.123", name: "定稿" } },
+        data: { backup: { fileName: "20260813-110000123-定稿.zip", size: 1024, createdAt: "2026-08-13T11:00:00.123", kind: "manual", name: "定稿" } },
       },
     });
     const res = await createProjectBackup("定稿");
@@ -841,14 +845,64 @@ describe("备份管理（B2.4；endpoints.md「备份管理」，决策 27）", 
     expect(calls[0].init?.method).toBe("POST");
     expect(JSON.parse(String(calls[0].init?.body))).toEqual({ name: "定稿" });
     expect(res.backup.name).toBe("定稿");
+    expect(res.backup.kind).toBe("manual");
   });
 
   it("createProjectBackup()：不传名称 → 无请求体（undefined body，决策 28 缺省纯时间戳）", async () => {
     const calls = mockFetchOnce({
-      body: { success: true, data: { backup: { fileName: "20260813-110000000.zip", size: 1024, createdAt: "2026-08-13T11:00:00" } } },
+      body: { success: true, data: { backup: { fileName: "20260813-110000000.zip", size: 1024, createdAt: "2026-08-13T11:00:00", kind: "auto" } } },
     });
     await createProjectBackup();
     expect(calls[0].init?.body).toBeUndefined();
+  });
+
+  it("renameProjectBackup：POST /project/backup/rename，带名称（trim 后）→ body { fileName, name }；响应 backup 透传", async () => {
+    const calls = mockFetchOnce({
+      body: {
+        success: true,
+        data: { backup: { fileName: "20260813-110000123-终稿.zip", size: 1024, createdAt: "2026-08-13T11:00:00.123", kind: "manual", name: "终稿" } },
+      },
+    });
+    const res = await renameProjectBackup("20260813-110000123.zip", "  终稿  ");
+    expect(calls[0].url).toBe("/api/v1/project/backup/rename");
+    expect(calls[0].init?.method).toBe("POST");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ fileName: "20260813-110000123.zip", name: "终稿" });
+    expect(res.backup).toEqual({
+      fileName: "20260813-110000123-终稿.zip",
+      size: 1024,
+      createdAt: "2026-08-13T11:00:00.123",
+      kind: "manual",
+      name: "终稿",
+    });
+  });
+
+  it("renameProjectBackup：空名称（纯空格 / undefined）→ body 均含 name: \"\"（明确清除意图，防 JSON.stringify 丢字段）", async () => {
+    const calls = mockFetchOnce({
+      body: { success: true, data: { backup: { fileName: "20260813-110000000.zip", size: 1024, createdAt: "2026-08-13T11:00:00", kind: "auto" } } },
+    });
+    await renameProjectBackup("20260813-110000000.zip", "   ");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ fileName: "20260813-110000000.zip", name: "" });
+    await renameProjectBackup("20260813-110000000.zip");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ fileName: "20260813-110000000.zip", name: "" });
+  });
+
+  it("renameProjectBackup：404（备份不存在）/ 400（名称非法）→ ApiError code + message 透传（与 restore 一致，404 也返回 VALIDATION_ERROR）", async () => {
+    mockFetchOnce({
+      status: 404,
+      body: { success: false, error: { code: "VALIDATION_ERROR", message: "备份不存在" } },
+    });
+    await expect(renameProjectBackup("nope.zip", "x")).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      message: "备份不存在",
+    });
+    mockFetchOnce({
+      status: 400,
+      body: { success: false, error: { code: "VALIDATION_ERROR", message: "备份名称含非法字符" } },
+    });
+    await expect(renameProjectBackup("20260813-110000000.zip", "a/b")).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      message: "备份名称含非法字符",
+    });
   });
 
   it("restoreProjectBackup：POST /project/backup/restore，body 含 fileName，响应 snapshot 透传", async () => {

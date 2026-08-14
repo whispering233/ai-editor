@@ -1,9 +1,10 @@
-// 自动备份与恢复（B2.2 决策 27 + B2.5 决策 28）
+// 自动备份与恢复（B2.2 决策 27 + B2.5 决策 28 + B2.6 决策 29）
 //
-// 单一事实来源：doc/design/decisions.md 决策 27/28、doc/api/endpoints.md「备份管理」节。
+// 单一事实来源：doc/design/decisions.md 决策 27/28/29、doc/api/endpoints.md「备份管理」节。
 // 职责：
-//   - 备份管道：三文件 + wal_checkpoint → .backups/<YYYYMMDD-HHmmssSSS>.zip（复用 E1 打包；
-//     决策 28 毫秒精度；手动备份可带自定义名称 <YYYYMMDD-HHmmssSSS>-<名称>.zip）
+//   - 备份管道：三文件 + wal_checkpoint → .backups/<YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip
+//     （复用 E1 打包；决策 28 毫秒精度；决策 29 kind 段：手动备份落 -m[-<名称>]、
+//     自动备份/覆盖前快照纯时间戳、重命名后自动备份落 -a-<名称>）
 //   - 保留策略：每项目保留最近 MAX_BACKUPS_PER_PROJECT 份，超出删除最旧（含覆盖前快照；
 //     新旧格式文件名均参与——parseBackupFileName 兼容解析）
 //   - 自动定时器：跟随当前项目生命周期（middleware/project.ts setCurrentProject 挂载启停），
@@ -11,6 +12,7 @@
 //   - 备份包校验（restore 与 import 共用）：zip 解析/白名单/三文件齐全/顶层契约/
 //     data.db user_version 三态分流（E4/E5，绝不静默重建）
 //   - restore：fileName 白名单 → 覆盖前自动快照 → 校验 → 原子替换三文件
+//   - rename：只改名称段（时间戳与 kind 保持，决策 29）
 //
 // 依赖方向：本模块不依赖 middleware（避免循环依赖——定时器持有所调度项目引用，
 // 由 setCurrentProject 显式启停）；仅 import type ProjectContext（类型擦除）。
@@ -21,7 +23,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { Unzip, UnzipInflate, zipSync } from "fflate";
-import { BACKUP_FREQUENCIES, DEFAULT_BACKUP_FREQUENCY_MINUTES, formatBackupFileName, MAX_BACKUPS_PER_PROJECT, MAX_BACKUP_NAME_LENGTH, parseBackupFileName, sanitizeBackupName } from "@whispering233/ai-editor-shared";
+import { BACKUP_FREQUENCIES, DEFAULT_BACKUP_FREQUENCY_MINUTES, formatBackupFileName, MAX_BACKUPS_PER_PROJECT, MAX_BACKUP_NAME_LENGTH, parseBackupFileName, sanitizeBackupName, type BackupKind } from "@whispering233/ai-editor-shared";
 import { PROJECT_EXPORT_FILE_NAMES } from "@whispering233/ai-editor-shared/schemas";
 import {
   closeDatabase,
@@ -60,6 +62,8 @@ export interface BackupFileInfo {
   fileName: string;
   size: number;
   createdAt: string; // ISO 8601，由文件名时间戳解析（决策 27 无状态语义）
+  /** 备份类型（决策 29，由文件名 kind 段解析：auto = 自动/manual = 手动） */
+  kind: BackupKind;
   /** 手动备份自定义名称（决策 28；由文件名解析，自动备份/快照/旧备份无此字段） */
   name?: string;
 }
@@ -86,33 +90,40 @@ export function createBackupZip(project: ProjectContext): Uint8Array<ArrayBuffer
 }
 
 /**
- * 生成不冲突的备份文件名：`<YYYYMMDD-HHmmssSSS>.zip`（决策 28 毫秒精度；
- * shared formatBackupFileName；带自定义名称 → `<YYYYMMDD-HHmmssSSS>-<名称>.zip`）。
+ * 生成不冲突的备份文件名：`<YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip`（决策 28 毫秒精度 +
+ * 决策 29 kind 段；shared formatBackupFileName；kind 缺省 auto——纯时间戳；带自定义名称 →
+ * `-a-<名称>`（auto）/ `-m-<名称>`（manual））。
  *
  * 同毫秒冲突（如「立即备份 + restore 覆盖前快照」连续触发，理论罕见）处理：
- * 时间戳 +1 毫秒循环去重，**保持 <YYYYMMDD-HHmmssSSS>[-<名称>].zip 格式契约**——
+ * 时间戳 +1 毫秒循环去重，**保持 <YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip 格式契约**——
  * parseBackupFileName 解析与 restore 白名单校验不受影响。
  */
-function uniqueBackupFileName(backupsDir: string, date: Date, name?: string): string {
-  const opts = name !== undefined ? { name } : undefined;
-  let fileName = formatBackupFileName(date, opts);
+function uniqueBackupFileName(backupsDir: string, date: Date, opts?: { kind?: BackupKind; name?: string }): string {
+  const kind = opts?.kind ?? "auto";
+  const name = opts?.name;
+  let fileName = formatBackupFileName(date, { kind, name });
   while (existsSync(join(backupsDir, fileName))) {
     date = new Date(date.getTime() + 1);
-    fileName = formatBackupFileName(date, opts);
+    fileName = formatBackupFileName(date, { kind, name });
   }
   return fileName;
 }
 
 /**
  * 立即备份当前项目（手动触发 / 自动定时器 / restore 覆盖前快照共用）：
- * 打包 → 写入 .backups/<时间戳>.zip（毫秒精度；同毫秒 +1ms 去重）→ 触发保留策略清理（失败不阻塞）。
+ * 打包 → 写入 .backups/<时间戳>[-<kind>][-<名称>].zip（毫秒精度；同毫秒 +1ms 去重）→
+ * 触发保留策略清理（失败不阻塞）。
  * 写盘失败向上抛（errorHandler → 500 INTERNAL_ERROR，endpoints.md POST /backup 语义）。
  *
- * @param opts.name 手动备份自定义名称（决策 28，仅 POST /backup 手动触发传入）：
+ * @param opts.kind 备份类型（决策 29，缺省 "auto"）：手动触发传 "manual"（文件名落 -m 段）；
+ *   自动备份/覆盖前快照不传（auto，纯时间戳）
+ * @param opts.name 手动备份自定义名称（决策 28，仅带名称的手动/重命名场景传入）：
  *   sanitizeBackupName 是名称校验/规范化**唯一执行点**——非法（含路径分隔符/超长/纯点）→
  *   400 VALIDATION_ERROR；自动备份/覆盖前快照不传 name，文件名保持纯时间戳。
+ *   注意：name 仅在 opts.name !== undefined 且 sanitize 通过后传入 formatBackupFileName。
  */
-export function writeBackup(project: ProjectContext, opts?: { name?: string }): BackupFileInfo {
+export function writeBackup(project: ProjectContext, opts?: { name?: string; kind?: BackupKind }): BackupFileInfo {
+  const kind = opts?.kind ?? "auto";
   let name: string | undefined;
   if (opts?.name !== undefined) {
     const sanitized = sanitizeBackupName(opts.name);
@@ -128,11 +139,113 @@ export function writeBackup(project: ProjectContext, opts?: { name?: string }): 
   const zip = createBackupZip(project);
   const backupsDir = join(project.root, BACKUPS_DIR_NAME);
   mkdirSync(backupsDir, { recursive: true });
-  const fileName = uniqueBackupFileName(backupsDir, new Date(), name);
+  const fileName = uniqueBackupFileName(backupsDir, new Date(), { kind, name });
   writeFileSync(join(backupsDir, fileName), zip); // 失败抛错 → 500（不产出半截备份）
   pruneBackups(backupsDir); // 清理失败仅记日志，不阻塞备份主流程
   const parsed = parseBackupFileName(fileName) as NonNullable<ReturnType<typeof parseBackupFileName>>;
-  return { fileName, size: zip.length, createdAt: toIso(parsed.time), ...(name !== undefined ? { name } : {}) };
+  return {
+    fileName,
+    size: zip.length,
+    createdAt: toIso(parsed.time),
+    kind,
+    ...(name !== undefined ? { name } : {}),
+  };
+}
+
+/**
+ * 重命名备份（POST /project/backup/rename，决策 29）：**只改名称段**，时间戳与 kind 保持。
+ *
+ * 契约：
+ * 1. fileName 白名单校验：仅接受 parseBackupFileName 可解析的时间戳格式
+ *    `<YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip`（含旧格式兼容，^$ 锚定 + 名称部分拒绝 /\\，
+ *    天然防路径分隔符与 `..` 穿越）→ 非法 400 VALIDATION_ERROR
+ * 2. 文件不存在 → 404 VALIDATION_ERROR
+ * 3. 新名称解析（决策 29）：请求未传 name → 清除名称段；传空串/纯空白 → 清除名称段；
+ *    非空 → sanitizeBackupName 规范化（非法 → 400 VALIDATION_ERROR，文案同 writeBackup）
+ * 4. 新文件名 = formatBackupFileName(parsed.time, { kind: parsed.kind, name: 新名称 })——
+ *    kind 不随重命名改变（auto 重命名后仍落 -a- 段、manual 仍落 -m- 段）
+ * 5. 幂等：新文件名 === 原文件名（如重命名为相同名称）→ 不移动文件，直接返回当前条目
+ *    （重新 stat 取 size；stat 失败 → 404「备份不存在」）
+ * 6. **目标冲突防御（oracle P1-1，决策 29）**：新文件名已存在（≠ 原文件）→ 409
+ *    BACKUP_TARGET_EXISTS——POSIX rename 目标存在时静默替换，可达路径：旧秒级改名后毫秒补
+ *    000 撞上毫秒为 0 的自动备份、同毫秒双 manual（T-m.zip + T-m-X.zip）清名覆盖；显式拒绝
+ * 7. renameSync 同目录原子改名（失败向上抛 → 500）；改名后统一 stat 取 size
+ *    （改名瞬间被删等竞态 → 404「备份不存在」）
+ *
+ * @throws HttpError 400（文件名非法/名称非法）、404（备份不存在）、409 BACKUP_TARGET_EXISTS
+ */
+export function renameBackup(project: ProjectContext, fileName: string, name?: string): BackupFileInfo {
+  // 1. 白名单校验（parseBackupFileName 全格式校验，防路径穿越）
+  const parsed = parseBackupFileName(fileName);
+  if (parsed === null) {
+    throw new HttpError(
+      400,
+      "VALIDATION_ERROR",
+      `备份文件名格式非法（仅接受 <YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip 时间戳格式）: ${fileName}`,
+    );
+  }
+  const backupsDir = join(project.root, BACKUPS_DIR_NAME);
+  if (!existsSync(join(backupsDir, fileName))) {
+    throw new HttpError(404, "VALIDATION_ERROR", `备份不存在: ${fileName}`);
+  }
+
+  // 2. 新名称解析：请求未传 name → 清除名称；传空串/纯空白 → 清除名称（sanitize null 且 trim 空）；
+  //    非空 → sanitize 规范化（null 且 trim 非空 → 400，文案同 writeBackup）
+  let nextName: string | undefined;
+  if (name !== undefined) {
+    const sanitized = sanitizeBackupName(name);
+    if (sanitized === null && name.trim() !== "") {
+      throw new HttpError(
+        400,
+        "VALIDATION_ERROR",
+        `备份名称非法（trim 后 1-${MAX_BACKUP_NAME_LENGTH} 字符，禁路径分隔符/保留字符/控制字符/纯点）`,
+      );
+    }
+    if (sanitized !== null) nextName = sanitized;
+  }
+
+  // 3. 新文件名（时间戳与 kind 保持原备份——kind 不随重命名改变，决策 29）
+  const newFileName = formatBackupFileName(parsed.time, { kind: parsed.kind, name: nextName });
+
+  // 4. 幂等：名称未变 → 不移动文件，返回当前条目（重新 stat 取 size；读不到 → 404）
+  if (newFileName === fileName) {
+    try {
+      return {
+        fileName,
+        size: statSync(join(backupsDir, fileName)).size,
+        createdAt: toIso(parsed.time),
+        kind: parsed.kind,
+        ...(nextName !== undefined ? { name: nextName } : {}),
+      };
+    } catch {
+      throw new HttpError(404, "VALIDATION_ERROR", `备份不存在: ${fileName}`);
+    }
+  }
+
+  // 5. 目标冲突防御（oracle P1-1，决策 29）：POSIX rename 目标存在时静默替换（数据丢失风险）——
+  //    可达路径：旧秒级改名后毫秒补 000 撞上毫秒为 0 的自动备份、同毫秒双 manual 清名覆盖等；
+  //    显式 409 拒绝。幂等分支（target === fileName）已在第 4 步提前返回，不在此检查。
+  if (newFileName !== fileName && existsSync(join(backupsDir, newFileName))) {
+    throw new HttpError(409, "BACKUP_TARGET_EXISTS", `目标备份文件名已存在: ${newFileName}`);
+  }
+
+  // 6. 同目录原子改名（失败向上抛 → 500 INTERNAL_ERROR）
+  renameSync(join(backupsDir, fileName), join(backupsDir, newFileName));
+
+  // 7. 改名后统一 stat 取 size（改名瞬间文件被删等竞态 → 404「备份不存在」）
+  let size: number;
+  try {
+    size = statSync(join(backupsDir, newFileName)).size;
+  } catch {
+    throw new HttpError(404, "VALIDATION_ERROR", `备份不存在: ${fileName}`);
+  }
+  return {
+    fileName: newFileName,
+    size,
+    createdAt: toIso(parsed.time),
+    kind: parsed.kind,
+    ...(nextName !== undefined ? { name: nextName } : {}),
+  };
 }
 
 /**
@@ -181,6 +294,7 @@ export function listBackups(project: ProjectContext): BackupFileInfo[] {
           fileName: f,
           size: statSync(join(backupsDir, f)).size,
           createdAt: toIso(parsed.time),
+          kind: parsed.kind,
           ...(parsed.name !== undefined ? { name: parsed.name } : {}),
         };
       } catch {
@@ -657,9 +771,9 @@ function writeFileAtomic(filePath: string, data: Uint8Array): void {
 /**
  * 从备份恢复当前项目（POST /project/backup/restore，决策 27）：
  *
- * 1. fileName 白名单校验：仅允许 `.backups/` 下时间戳格式（决策 28 兼容三类：
- *    `<YYYYMMDD-HHmmssSSS>.zip` 毫秒级 / `<YYYYMMDD-HHmmssSSS>-<名称>.zip` 带自定义名称 /
- *    旧秒级 `<YYYYMMDD-HHmmss>.zip`——shared parseBackupFileName，^$ 锚定 + 名称部分
+ * 1. fileName 白名单校验：仅允许 `.backups/` 下时间戳格式（决策 28/29 兼容四类：
+ *    `<YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip` 毫秒级（含 kind 段）/ `<YYYYMMDD-HHmmssSSS>-<名称>.zip`
+ *    旧带名称 / 旧秒级 `<YYYYMMDD-HHmmss>.zip`——shared parseBackupFileName，^$ 锚定 + 名称部分
  *    拒绝 /\\，天然防路径分隔符与 `..` 穿越）；格式合法但文件不存在 → 404
  * 2. **覆盖前自动快照**：当前三文件打包为快照存入 .backups/（复用备份管道，
  *    就是普通备份文件，自然参与保留策略——后悔药，决策 27）
@@ -677,7 +791,7 @@ export function restoreBackup(project: ProjectContext, fileName: string): { snap
   // 1. 白名单校验（parseBackupFileName 全格式校验，防路径穿越；决策 28 兼容
   //    毫秒级/带自定义名称/旧秒级三类文件名）
   if (parseBackupFileName(fileName) === null) {
-    throw new HttpError(400, "VALIDATION_ERROR", `备份文件名格式非法（仅接受 <YYYYMMDD-HHmmssSSS>.zip 时间戳格式）: ${fileName}`);
+    throw new HttpError(400, "VALIDATION_ERROR", `备份文件名格式非法（仅接受 <YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip 时间戳格式）: ${fileName}`);
   }
   const backupPath = join(project.root, BACKUPS_DIR_NAME, fileName);
   if (!existsSync(backupPath)) {

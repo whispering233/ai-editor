@@ -44,6 +44,7 @@ export const ERROR_CODES = [
   "PROPOSAL_PROJECT_MISMATCH", // 409 提案所属项目 ≠ 当前项目（决策 14 修订）
   "SCHEMA_VERSION_MISMATCH", // 409 导入 zip 的 data.db user_version 与当前程序版本不匹配（E2；拒绝导入，不静默重建，release-review §二）
   "PROJECT_VERSION_NEWER", // 409 open 时项目 data.db user_version 高于当前程序版本（E4；拒绝打开并提示升级程序，堵降级数据丢失，release-review §一）
+  "BACKUP_TARGET_EXISTS", // 409 重命名备份目标文件名已存在（决策 29，B2.6：renameSync 目标存在会静默覆盖——显式拒绝防数据丢失）
   // ---- 废弃（保留兼容）----
   "DELTA_CONFLICT", // 已废弃（2026-08 修订：computeState 以 conflicts 字段替代 409）
   // ---- tools.md 决策 15/16 补充命名（SSE error 事件用）----
@@ -266,6 +267,16 @@ export const projectBackupReqSchema = z
   })
   .strict();
 export type ProjectBackupReq = z.infer<typeof projectBackupReqSchema>;
+
+// POST /api/v1/project/backup/rename（决策 29）：重命名备份（只改名称段，时间戳与 kind 保持）
+// - 请求体 fileName 必填；name 可选——非空 → sanitize（非法 400）；空串/缺省 → 清除名称段
+export const projectBackupRenameReqSchema = z
+  .object({
+    fileName: z.string(),
+    name: z.string().optional(),
+  })
+  .strict();
+export type ProjectBackupRenameReq = z.infer<typeof projectBackupRenameReqSchema>;
 
 // ============ 导出/导入端点（E1/E2：release-review §二，产品承诺「数据主权归用户」） ============
 

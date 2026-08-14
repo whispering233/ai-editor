@@ -1553,6 +1553,218 @@ describe("POST /project/rename（重命名当前书籍，决策 27）", () => {
   });
 });
 
+// ============ POST /api/v1/project/backup/rename（决策 29，B2.6） ============
+
+describe("POST /project/backup/rename", () => {
+  /** open 一个正常项目并返回测试 app（本 describe 局部 helper，config describe 的同名函数不在此作用域） */
+  async function openProject(dir: string): Promise<Hono> {
+    const app = buildApp();
+    const res = await app.request("/api/v1/project/open", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: dir }),
+    });
+    expect(res.status).toBe(200);
+    return app;
+  }
+
+  it("成功改名：manual 备份只改名称段（时间戳与 kind 保持）、文件确实改名、GET /backups 反映新名与 kind", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-ren-ep", "端点改名"));
+    const app = await openProject(dir);
+    // 造一个带名称的手动备份（决策 29：POST /backup 落 -m- 段）
+    const bk = await app.request("/api/v1/project/backup", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ name: "旧名" }),
+    });
+    expect(bk.status).toBe(200);
+    const oldName = (await bk.json()).data.backup.fileName;
+    expect(oldName).toMatch(/-m-旧名\.zip$/);
+
+    const res = await app.request("/api/v1/project/backup/rename", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ fileName: oldName, name: "新名" }),
+    });
+    expect(res.status).toBe(200);
+    const backup = (await res.json()).data.backup;
+    expect(backup.fileName).toBe(oldName.replace("-m-旧名.zip", "-m-新名.zip")); // 时间戳与 kind 段保持
+    expect(backup.kind).toBe("manual");
+    expect(backup.name).toBe("新名");
+    expect(existsSync(join(dir, ".backups", oldName))).toBe(false); // 旧文件已改名
+    expect(existsSync(join(dir, ".backups", backup.fileName))).toBe(true);
+
+    // GET /backups 反映新名 + kind（决策 29 列表项带 kind）
+    const listRes = await app.request("/api/v1/project/backups", { headers: HOST_HEADERS });
+    const backups = (await listRes.json()).data.backups;
+    expect(backups).toHaveLength(1);
+    expect(backups[0]).toMatchObject({ fileName: backup.fileName, kind: "manual", name: "新名" });
+  });
+
+  it("auto 备份改名：-a- 段保持（kind 不随重命名改变）；name 空串清除名称段 → 纯时间戳", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-ren-auto", "自动备份改名"));
+    const app = await openProject(dir);
+    // 手工造 auto 带名称备份文件（模拟自动备份重命名场景）
+    const backupsDir = join(dir, ".backups");
+    mkdirSync(backupsDir, { recursive: true });
+    writeFileSync(join(backupsDir, "20260813-101500123-a-旧名.zip"), "auto");
+
+    // 改名 → -a- 段保持
+    const res = await app.request("/api/v1/project/backup/rename", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ fileName: "20260813-101500123-a-旧名.zip", name: "新名" }),
+    });
+    expect(res.status).toBe(200);
+    const backup = (await res.json()).data.backup;
+    expect(backup.fileName).toBe("20260813-101500123-a-新名.zip");
+    expect(backup.kind).toBe("auto");
+    expect(backup.name).toBe("新名");
+    expect(existsSync(join(backupsDir, "20260813-101500123-a-旧名.zip"))).toBe(false);
+    expect(existsSync(join(backupsDir, backup.fileName))).toBe(true);
+
+    // 再清名称（name 空串）→ 纯时间戳（auto 无名称不落段）
+    const clearRes = await app.request("/api/v1/project/backup/rename", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ fileName: backup.fileName, name: "" }),
+    });
+    expect(clearRes.status).toBe(200);
+    const cleared = (await clearRes.json()).data.backup;
+    expect(cleared.fileName).toBe("20260813-101500123.zip");
+    expect(cleared.kind).toBe("auto");
+    expect(cleared).not.toHaveProperty("name");
+  });
+
+  it("幂等：重命名为相同名称 → 200 返回当前条目（不报错、文件不动）", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-ren-idem", "幂等改名"));
+    const app = await openProject(dir);
+    const bk = await app.request("/api/v1/project/backup", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ name: "同名" }),
+    });
+    const oldName = (await bk.json()).data.backup.fileName;
+    const res = await app.request("/api/v1/project/backup/rename", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ fileName: oldName, name: "同名" }),
+    });
+    expect(res.status).toBe(200);
+    const backup = (await res.json()).data.backup;
+    expect(backup.fileName).toBe(oldName);
+    expect(backup.kind).toBe("manual");
+    expect(existsSync(join(dir, ".backups", oldName))).toBe(true); // 文件原样保留
+  });
+
+  it("新名称非法（路径分隔符/超长/纯点）→ 400 VALIDATION_ERROR，原文件不动", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-ren-badname", "非法名"));
+    const app = await openProject(dir);
+    const bk = await app.request("/api/v1/project/backup", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ name: "旧名" }),
+    });
+    const oldName = (await bk.json()).data.backup.fileName;
+    for (const bad of ["a/b", "a\\b", "..", "a".repeat(31)]) {
+      const res = await app.request("/api/v1/project/backup/rename", {
+        method: "POST",
+        headers: HOST_HEADERS,
+        body: JSON.stringify({ fileName: oldName, name: bad }),
+      });
+      expect(res.status).toBe(400);
+      expect((await res.json()).error.code).toBe("VALIDATION_ERROR");
+    }
+    expect(existsSync(join(dir, ".backups", oldName))).toBe(true); // 无副作用
+  });
+
+  it("文件名格式非法（路径分隔符/非时间戳）→ 400 VALIDATION_ERROR；合法格式但不存在 → 404", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-ren-badfn", "非法文件"));
+    const app = await openProject(dir);
+    for (const bad of ["../20260813-101500.zip", "a/20260813-101500.zip", "20260813-101500.zip/..", "notes.txt", ""]) {
+      const res = await app.request("/api/v1/project/backup/rename", {
+        method: "POST",
+        headers: HOST_HEADERS,
+        body: JSON.stringify({ fileName: bad, name: "新名" }),
+      });
+      expect(res.status).toBe(400);
+      expect((await res.json()).error.code).toBe("VALIDATION_ERROR");
+    }
+    // 合法格式但 .backups/ 内不存在 → 404
+    const notFound = await app.request("/api/v1/project/backup/rename", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ fileName: "20260813-101500123.zip", name: "新名" }),
+    });
+    expect(notFound.status).toBe(404);
+    const notFoundBody = await notFound.json();
+    expect(notFoundBody.error.code).toBe("VALIDATION_ERROR");
+    expect(notFoundBody.error.message).toContain("备份不存在");
+  });
+
+  it("目标文件名已存在 → 409 BACKUP_TARGET_EXISTS（oracle P1-1：旧秒级改名毫秒补 000 撞上毫秒为 0 的自动备份）", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-ren-conflict", "目标冲突"));
+    const app = await openProject(dir);
+    // 造可达冲突：旧秒级源文件 + 已存在的毫秒为 0 自动备份（改名目标）
+    const backupsDir = join(dir, ".backups");
+    mkdirSync(backupsDir, { recursive: true });
+    writeFileSync(join(backupsDir, "20260813-101500.zip"), "legacy"); // 旧秒级（决策 27 遗留）
+    writeFileSync(join(backupsDir, "20260813-101500000-a-自动.zip"), "auto"); // 已存在目标
+
+    const res = await app.request("/api/v1/project/backup/rename", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ fileName: "20260813-101500.zip", name: "自动" }),
+    });
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error.code).toBe("BACKUP_TARGET_EXISTS");
+    expect(body.error.message).toContain("目标备份文件名已存在");
+    // 数据零损失：源未被移动、目标未被覆盖
+    expect(existsSync(join(backupsDir, "20260813-101500.zip"))).toBe(true);
+    expect(readFileSync(join(backupsDir, "20260813-101500000-a-自动.zip"), "utf8")).toBe("auto");
+  });
+
+  it("请求体校验：缺 fileName / 多余字段 → 400 VALIDATION_ERROR（含 fields）", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-ren-schema", "schema"));
+    const app = await openProject(dir);
+    // 缺 fileName
+    const noFile = await app.request("/api/v1/project/backup/rename", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ name: "新名" }),
+    });
+    expect(noFile.status).toBe(400);
+    const noFileBody = await noFile.json();
+    expect(noFileBody.error.code).toBe("VALIDATION_ERROR");
+    expect(noFileBody.error.fields).toContain("fileName");
+    // 多余字段（.strict()）
+    const extra = await app.request("/api/v1/project/backup/rename", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ fileName: "x.zip", name: "新名", extra: 1 }),
+    });
+    expect(extra.status).toBe(400);
+    expect((await extra.json()).error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("无当前项目 → 409 NO_PROJECT_OPEN", async () => {
+    const res = await buildApp().request("/api/v1/project/backup/rename", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ fileName: "20260813-101500123.zip", name: "新名" }),
+    });
+    expect(res.status).toBe(409);
+  });
+});
+
 // ============ 导出/导入 zip 条目契约（ora-4 钉死） ============
 
 describe("导出/导入 zip 条目契约（ora-4）", () => {

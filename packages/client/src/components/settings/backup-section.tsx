@@ -1,11 +1,16 @@
-// 设置页「自动备份」区（B2 决策 27 + B2.5 决策 28；doc/ui/pages/settings.md「自动备份」区）
-// 交互（settings.md「关键交互」+ 任务卡 B2.4/B2.5）：
+// 设置页「自动备份」区（B2 决策 27 + B2.5 决策 28 + B2.6 决策 29；doc/ui/pages/settings.md「自动备份」区）
+// 交互（settings.md「关键交互」+ 任务卡 B2.4/B2.5/B2.6）：
 //  - 频率下拉：选择即保存 PUT /project/config { backup_frequency_minutes }（null = 关闭，
 //    仅枚举 5/10/15/30/60）；载入用 config.backupFrequencyMinutes（缺省 10 / null → 关闭选中）
 //  - [备份名称（可选）输入框] + [立即备份]：POST /project/backup（带 name，决策 28）→
 //    清空输入 + 刷新列表 + toast「已备份」；失败 toast（磁盘错误透传 message）
 //  - 历史备份列表：GET /project/backups → 行 = 时间（当年 MM-DD HH:mm:ss / 跨年 YY-MM-DD
-//    HH:mm:ss，决策 28 补秒）+ 自定义名称（如有）+ 大小（KB/MB 人类可读）+ 行内 [加载]
+//    HH:mm:ss，决策 28 补秒）+ 类型标签（决策 29：自动=中性徽标 / 手动=强调徽标）+ 自定义
+//    名称（如有）+ 大小（KB/MB 人类可读）+ [重命名] [加载]
+//  - [重命名]（决策 29 行内编辑，无 Dialog）：铅笔按钮 → 该行切编辑态（行内 input 预填当前
+//    名称 + 确认/取消按钮）；Enter/确认提交 POST /project/backup/rename（空输入 = 清除名称段）、
+//    Esc/失焦取消、输入未变更不发请求（幂等保护）；400/404 行内错误提示并保持编辑态，成功
+//    toast「已重命名」+ 刷新列表
 //  - [加载] → 强确认 Dialog（ConfirmDialog，danger）→ POST /project/backup/restore → 成功 toast
 //    （含覆盖前自动快照文件名）→ 刷新 config/outline（dataVersion 信号驱动中栏数据页）+ 会话重载
 //    （chat store 订阅仅响应 config.id 变化，restore 保留 id → 手动 clearSessions + loadSessions）；
@@ -13,9 +18,9 @@
 //  - 空态：「暂无备份，自动备份将在数据变更后按频率生成」；无项目打开 → 整区禁用 + 引导文案
 // 风格约束：token 类（bg-muted/border-border/text-muted-foreground 等），禁硬编码色类（layout.md §3）
 import { useEffect, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
-import { ApiError, CLIENT_NETWORK_ERROR, createProjectBackup, getProjectBackups, restoreProjectBackup, type BackupEntry } from "../../lib/api";
-import { BACKUP_FREQUENCY_OPTIONS, formatBackupTime, formatBytes } from "../../lib/backup";
+import { Check, Loader2, Pencil, X } from "lucide-react";
+import { ApiError, CLIENT_NETWORK_ERROR, createProjectBackup, getProjectBackups, renameProjectBackup, restoreProjectBackup, type BackupEntry } from "../../lib/api";
+import { BACKUP_FREQUENCY_OPTIONS, BACKUP_KIND_LABELS, formatBackupTime, formatBytes } from "../../lib/backup";
 import { MAX_BACKUP_NAME_LENGTH } from "@whispering233/ai-editor-shared";
 import { useProjectStore } from "../../stores/project";
 import { useUiStore } from "../../stores/ui";
@@ -52,6 +57,19 @@ export function BackupSection() {
   const [restoreTarget, setRestoreTarget] = useState<BackupEntry | null>(null);
   /** 立即备份的自定义名称（决策 28；trim 后非空才随请求提交，成功后清空） */
   const [backupName, setBackupName] = useState("");
+  /**
+   * 行内重命名编辑态（决策 29，单行同时编辑；null = 无编辑中）：
+   * fileName = 目标备份；value = 输入框当前值（预填 b.name ?? ""）；
+   * saving = 提交中（禁用输入/按钮防连点）；error = 行内错误提示（400/404 透传 message，网络失败固定文案）
+   */
+  const [renaming, setRenaming] = useState<{ fileName: string; value: string; saving: boolean; error: string | null } | null>(null);
+  /**
+   * renaming 最新值镜像（渲染时同步，oracle P1-2）：
+   * onBlur 守卫与 catch 兜底需要读「当前」而非事件绑定时闭包快照——saving 置位后 input 被
+   * disabled，浏览器对持有焦点的禁用元素自动触发 blur，此时必须能读到 saving 已为 true
+   */
+  const renamingRef = useRef(renaming);
+  renamingRef.current = renaming;
 
   /** 拉取备份列表（仅项目打开时有效；无项目 → 直接返回防 409 NO_PROJECT_OPEN 误报）；
    *  代际守卫：响应落地时校验请求序号未变（关项目/切项目时在途响应丢弃，P2-1） */
@@ -83,6 +101,7 @@ export function BackupSection() {
       setBackups(null);
       setBackupsError(null);
       setRestoreTarget(null);
+      setRenaming(null); // 关项目同时退出行内重命名编辑态
       prevProjectId.current = null;
       return;
     }
@@ -149,6 +168,44 @@ export function BackupSection() {
     useChatStore.getState().clearSessions();
     void useChatStore.getState().loadSessions();
     void loadBackups(); // 顶部出现覆盖前自动快照
+  }
+
+  /**
+   * 行内重命名提交（决策 29）：
+   * - 幂等保护：输入 trim 后与原名称一致 → 不发请求直接退出编辑态
+   * - 空输入 = 清除名称段（renameProjectBackup 收到空串/undefined → body 传 { name: "" }）
+   * - 成功：退出编辑态 + toast + 刷新列表（backupListSeq 代际守卫在 loadBackups 内）；
+   *   400/404：行内错误提示（透传服务端 message），保持编辑态；网络失败：行内固定文案
+   * - 失败兜底（oracle P1-2）：saving 期间 input 被 disabled 触发的 blur 已被 onBlur 守卫挡住，
+   *   正常流程行内错误必有挂点；但若编辑态被其他路径清掉（如提交中关项目），catch 读 ref 兜底
+   *   toast，保证失败必有反馈（toast 放 updater 外，避免 StrictMode 下 updater 双执行的副作用）
+   */
+  async function handleRenameSubmit() {
+    if (renaming === null || renaming.saving) return;
+    const originalName = backups?.find((b) => b.fileName === renaming.fileName)?.name ?? "";
+    const trimmed = renaming.value.trim();
+    if (trimmed === originalName) {
+      setRenaming(null); // 未变更：视为取消，不发请求
+      return;
+    }
+    setRenaming({ ...renaming, saving: true, error: null });
+    try {
+      await renameProjectBackup(renaming.fileName, renaming.value);
+      setRenaming(null);
+      showToast(trimmed.length > 0 ? `已重命名「${trimmed}」` : "已清除备份名称");
+      await loadBackups();
+    } catch (err) {
+      const message =
+        err instanceof ApiError && err.code !== CLIENT_NETWORK_ERROR
+          ? err.message
+          : "无法连接服务，重命名失败";
+      if (renamingRef.current === null) {
+        // 编辑态已被清掉（行内错误无处可挂）→ 兜底 toast，避免静默失败
+        showToast(message, "error");
+        return;
+      }
+      setRenaming((r) => (r === null ? r : { ...r, saving: false, error: message }));
+    }
   }
 
   /** 频率下拉选中值：缺省 10 → 「每 10 分钟」；null → 关闭；非枚举脏值（旧数据手工写入，读侧
@@ -228,32 +285,128 @@ export function BackupSection() {
               </p>
             ) : backups !== null ? (
               <ul className="divide-y divide-border">
-                {backups.map((b) => (
-                  <li key={b.fileName} className="flex items-center gap-2 px-2 py-1.5">
-                    <span className="min-w-0 flex-1 text-sm" title={b.fileName}>
-                      <span className="text-muted-foreground">{formatBackupTime(b.createdAt)}</span>
-                      {b.name !== undefined ? (
-                        <span className="ml-1.5 font-medium text-foreground">{b.name}</span>
+                {backups.map((b) => {
+                  const editing = renaming !== null && renaming.fileName === b.fileName;
+                  return (
+                    <li key={b.fileName} className="px-2 py-1.5">
+                      <div className="flex items-center gap-2">
+                        {/* 行身份区：时间 + 类型标签 + 自定义名称（完整文件名 title tooltip 保持） */}
+                        <span className="min-w-0 flex-1 text-sm" title={b.fileName}>
+                          <span className="text-muted-foreground">{formatBackupTime(b.createdAt)}</span>
+                          {/* 类型标签（决策 29）：自动 = 中性低调徽标，手动 = primary 强调徽标 */}
+                          <span
+                            className={
+                              b.kind === "manual"
+                                ? "ml-1.5 rounded border border-primary/40 px-1 text-[10px] leading-4 text-primary"
+                                : "ml-1.5 rounded border border-border px-1 text-[10px] leading-4 text-muted-foreground"
+                            }
+                          >
+                            {BACKUP_KIND_LABELS[b.kind]}
+                          </span>
+                          {!editing && b.name !== undefined ? (
+                            <span className="ml-1.5 font-medium text-foreground">{b.name}</span>
+                          ) : null}
+                        </span>
+                        {!editing ? (
+                          <span className="shrink-0 text-xs text-muted-foreground">{formatBytes(b.size)}</span>
+                        ) : null}
+                        {editing ? (
+                          /* 行内编辑态：input（预填当前名称）+ 确认/取消；Enter 提交 / Esc 或失焦取消 */
+                          <>
+                            <input
+                              value={renaming.value}
+                              onChange={(e) =>
+                                setRenaming((r) =>
+                                  r === null ? r : { ...r, value: e.target.value, error: null },
+                                )
+                              }
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") void handleRenameSubmit();
+                                else if (e.key === "Escape") setRenaming(null);
+                              }}
+                              onBlur={() => {
+                                // oracle P1-2 竞态守卫：saving 置位后 input 被 disabled，浏览器对
+                                // 聚焦中的禁用元素自动触发 blur——此时不清编辑态，否则异步失败返回时
+                                // 行内错误无处可挂（静默失败）。saving 期间 Esc/取消按钮均被禁用，
+                                // 编辑态只能由成功路径/兜底 toast 路径收尾
+                                if (!renamingRef.current?.saving) setRenaming(null);
+                              }}
+                              maxLength={MAX_BACKUP_NAME_LENGTH}
+                              disabled={renaming.saving}
+                              autoFocus
+                              aria-label="备份新名称"
+                              className="w-36 shrink-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none placeholder:text-muted-foreground/60 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                            />
+                            <Button
+                              size="icon-xs"
+                              variant="ghost"
+                              onClick={() => void handleRenameSubmit()}
+                              disabled={renaming.saving}
+                              onMouseDown={(e) => e.preventDefault()} // 防抢焦点触发 input 失焦取消
+                              aria-label="确认重命名"
+                              title="确认（Enter）"
+                            >
+                              {renaming.saving ? (
+                                <Loader2 className="size-3 animate-spin" />
+                              ) : (
+                                <Check className="size-3" />
+                              )}
+                            </Button>
+                            <Button
+                              size="icon-xs"
+                              variant="ghost"
+                              onClick={() => setRenaming(null)}
+                              disabled={renaming.saving}
+                              onMouseDown={(e) => e.preventDefault()}
+                              aria-label="取消重命名"
+                              title="取消（Esc）"
+                            >
+                              <X className="size-3" />
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button
+                              size="icon-xs"
+                              variant="ghost"
+                              onClick={() =>
+                                setRenaming({
+                                  fileName: b.fileName,
+                                  value: b.name ?? "",
+                                  saving: false,
+                                  error: null,
+                                })
+                              }
+                              aria-label={`重命名备份 ${formatBackupTime(b.createdAt)}`}
+                              title="重命名"
+                            >
+                              <Pencil className="size-3" />
+                            </Button>
+                            <Button variant="outline" size="xs" onClick={() => setRestoreTarget(b)}>
+                              加载
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                      {/* 行内错误提示（400/404 透传服务端 message / 网络失败固定文案），保持编辑态 */}
+                      {editing && renaming.error !== null ? (
+                        <p className="mt-1 text-xs text-destructive">{renaming.error}</p>
                       ) : null}
-                    </span>
-                    <span className="shrink-0 text-xs text-muted-foreground">{formatBytes(b.size)}</span>
-                    <Button variant="outline" size="xs" onClick={() => setRestoreTarget(b)}>
-                      加载
-                    </Button>
-                  </li>
-                ))}
+                    </li>
+                  );
+                })}
               </ul>
             ) : null}
           </div>
         </div>
       )}
 
-      {/* 加载强确认（settings.md「关键交互」：展示备份时间与大小 + 覆盖说明 + 后悔药提示）；
-          409 SCHEMA_VERSION_MISMATCH 时 ConfirmDialog 显示服务端 message 保持打开（阻断） */}
+      {/* 加载强确认（settings.md「关键交互」：展示备份时间 + 类型标签 + 名称 + 大小 + 覆盖说明 +
+          后悔药提示）；409 SCHEMA_VERSION_MISMATCH 时 ConfirmDialog 显示服务端 message 保持打开（阻断） */}
       {restoreTarget !== null && (
         <ConfirmDialog
           title="加载备份"
-          description={`${formatBackupTime(restoreTarget.createdAt)}${
+          description={`${formatBackupTime(restoreTarget.createdAt)} · ${BACKUP_KIND_LABELS[restoreTarget.kind]}${
             restoreTarget.name !== undefined ? ` · ${restoreTarget.name}` : ""
           } · ${formatBytes(restoreTarget.size)}。将覆盖当前项目数据；覆盖前会自动备份当前状态（可回退）`}
           confirmLabel="确认加载"

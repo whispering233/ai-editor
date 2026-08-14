@@ -4,6 +4,7 @@
 // 响应类型沿用 @whispering233/ai-editor-shared 的导出类型（z.infer 的结果，仅类型、编译期消失）；
 // 本文件不 import zod 运行时（校验执行边界：zod 校验仅在服务端执行，避免 50KB 级依赖进浏览器包）
 import type {
+  BackupKind,
   ChatRole,
   ChatSessionSummary,
   ComputeStateResult,
@@ -699,14 +700,16 @@ export async function importProjectZip(file: File, name: string): Promise<Import
   return apiFetch<ImportProjectRes>("/project/import", { method: "POST", body: form });
 }
 
-// ============ 备份管理（B2.4；契约：endpoints.md「备份管理」L225-295，决策 27） ============
+// ============ 备份管理（B2.4 + B2.6 决策 29；契约：endpoints.md「备份管理」L225-295，决策 27） ============
 
 /** 备份条目（GET /project/backups 列表元素 / POST /project/backup 响应 backup） */
 export interface BackupEntry {
   fileName: string; // 时间戳命名（决策 28 毫秒精度 <YYYYMMDD-HHmmssSSS>.zip；restore 用此引用）
   size: number; // 字节数
   createdAt: string; // 备份时间（ISO 8601，由文件名时间戳解析）
-  /** 手动备份自定义名称（决策 28；由文件名解析——自动备份/覆盖前快照/旧备份无此字段） */
+  /** 备份类型（决策 29 必填，文件名解析：自动/快照/旧秒级 = auto；手动/旧带名称 = manual） */
+  kind: BackupKind;
+  /** 手动备份自定义名称（决策 28/29；由文件名解析——自动备份/覆盖前快照/旧备份无此字段） */
   name?: string;
 }
 
@@ -755,6 +758,22 @@ export interface RestoreBackupRes {
  */
 export function restoreProjectBackup(fileName: string): Promise<RestoreBackupRes> {
   return apiFetch<RestoreBackupRes>("/project/backup/restore", { method: "POST", body: { fileName } });
+}
+
+/** POST /api/v1/project/backup/rename 响应（重命名备份，决策 29：只改名称段，时间戳与 kind 保持） */
+export interface RenameBackupRes {
+  backup: BackupEntry;
+}
+
+/**
+ * 重命名备份（设置页列表行内编辑）：name 非空（trim 后）→ 提交 { name }；
+ * 空 → 提交 { name: "" }（清除名称段）；错误：404（备份不存在）、400（名称非法，message 透传）
+ */
+export function renameProjectBackup(fileName: string, name?: string): Promise<RenameBackupRes> {
+  return apiFetch<RenameBackupRes>("/project/backup/rename", {
+    method: "POST",
+    body: name !== undefined && name.trim().length > 0 ? { fileName, name: name.trim() } : { fileName, name: "" },
+  });
 }
 
 /** POST /api/v1/project/rename 响应（重命名当前书籍，决策 27） */

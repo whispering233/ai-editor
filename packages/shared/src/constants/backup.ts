@@ -17,3 +17,7 @@ export const MAX_BACKUPS_PER_PROJECT = 20;
 
 /** 手动备份自定义名称最大长度（决策 28：trim 后 1-30 字符；超出 → 400 VALIDATION_ERROR） */
 export const MAX_BACKUP_NAME_LENGTH = 30;
+
+/** 备份类型（决策 29）：auto = 自动（定时器/覆盖前快照）/ manual = 手动（立即备份触发）；文件名 kind 标记段来源 */
+export const BACKUP_KINDS = ["auto", "manual"] as const;
+export type BackupKind = (typeof BACKUP_KINDS)[number];
