@@ -231,6 +231,6 @@ CREATE INDEX idx_chat_session ON chat_messages(session_id, created_at);
 **约束**：
 - DeepSeek API key **绝不写入本文件**（决策 17）——只走环境变量 `DEEPSEEK_API_KEY` 或用户级配置 `~/.ai-editor/config.json`。
 - 文件写入遵循决策 11 的原子写流程（outline.json 同款：临时文件 + fsync + rename）。
-- **自动备份目录（决策 27）**：项目目录内 `.backups/` 子目录存放自动备份 zip（时间戳命名 `<YYYYMMDD-HHmmss>.zip`，格式 = E1 导出包：project.json + outline.json + data.db）；**每项目保留最近 20 份**（超出删除最旧，含覆盖前自动快照；清理失败不阻塞备份主流程）；备份文件不入 git、不算数据文件（可随时删除）。**实现细节（2026-08 实测）**：同秒冲突用「时间戳 +1 秒循环去重」（保持文件名格式契约可解析）；「有变更才备份」的 mtime 判定加 1s 容差（备份管道内 wal_checkpoint 会把 data.db mtime 刷新到备份时刻，严格 `mtime > 上次备份时刻` 会自激误判，`BACKUP_CHANGE_TOLERANCE_MS`）。
+- **自动备份目录（决策 27 + 决策 28）**：项目目录内 `.backups/` 子目录存放自动备份 zip（时间戳命名 `<YYYYMMDD-HHmmssSSS>.zip` 毫秒精度，手动备份可带自定义名称 `<YYYYMMDD-HHmmssSSS>-<名称>.zip`；**旧秒级格式 `<YYYYMMDD-HHmmss>.zip` 兼容解析不迁移**；格式 = E1 导出包：project.json + outline.json + data.db）；**每项目保留最近 20 份**（超出删除最旧，含覆盖前自动快照；清理失败不阻塞备份主流程）；备份文件不入 git、不算数据文件（可随时删除）。**实现细节（2026-08 实测）**：同毫秒冲突用「时间戳 +1 毫秒循环去重」（保持文件名格式契约可解析）；「有变更才备份」的 mtime 判定加 1s 容差（备份管道内 wal_checkpoint 会把 data.db mtime 刷新到备份时刻，严格 `mtime > 上次备份时刻` 会自激误判——决策 28 毫秒精度下文件名截断误差已消除，但粗粒度 mtime 文件系统（如 FAT/exFAT 2s 粒度）下容差仍是必要防御，`BACKUP_CHANGE_TOLERANCE_MS` 保留 1s）。
 
 **画布视图**：大纲中的节点通过 `relation_records` 中的关系形成有向图，支持多线推演和路径分析（参见 [`../api/tools.md`](../api/tools.md) 中的分析类工具）。画布连线通过 `relation_records` 的 `plot_edge` 类型存储（决策 10），不进入 outline.json；节点坐标与画布缩放存浏览器 localStorage（决策 10），不进任何数据文件。

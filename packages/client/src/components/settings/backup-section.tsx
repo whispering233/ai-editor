@@ -1,10 +1,11 @@
-// 设置页「自动备份」区（B2，决策 27；doc/ui/pages/settings.md「自动备份」区）
-// 交互（settings.md「关键交互」+ 任务卡 B2.4）：
+// 设置页「自动备份」区（B2 决策 27 + B2.5 决策 28；doc/ui/pages/settings.md「自动备份」区）
+// 交互（settings.md「关键交互」+ 任务卡 B2.4/B2.5）：
 //  - 频率下拉：选择即保存 PUT /project/config { backup_frequency_minutes }（null = 关闭，
 //    仅枚举 5/10/15/30/60）；载入用 config.backupFrequencyMinutes（缺省 10 / null → 关闭选中）
-//  - [立即备份]：POST /project/backup → 刷新列表 + toast「已备份」；失败 toast（磁盘错误透传 message）
-//  - 历史备份列表：GET /project/backups → 行 = 时间（当年 MM-DD HH:mm / 跨年 YY-MM-DD HH:mm）
-//    + 大小（KB/MB 人类可读）+ 行内 [加载]
+//  - [备份名称（可选）输入框] + [立即备份]：POST /project/backup（带 name，决策 28）→
+//    清空输入 + 刷新列表 + toast「已备份」；失败 toast（磁盘错误透传 message）
+//  - 历史备份列表：GET /project/backups → 行 = 时间（当年 MM-DD HH:mm:ss / 跨年 YY-MM-DD
+//    HH:mm:ss，决策 28 补秒）+ 自定义名称（如有）+ 大小（KB/MB 人类可读）+ 行内 [加载]
 //  - [加载] → 强确认 Dialog（ConfirmDialog，danger）→ POST /project/backup/restore → 成功 toast
 //    （含覆盖前自动快照文件名）→ 刷新 config/outline（dataVersion 信号驱动中栏数据页）+ 会话重载
 //    （chat store 订阅仅响应 config.id 变化，restore 保留 id → 手动 clearSessions + loadSessions）；
@@ -15,6 +16,7 @@ import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { ApiError, CLIENT_NETWORK_ERROR, createProjectBackup, getProjectBackups, restoreProjectBackup, type BackupEntry } from "../../lib/api";
 import { BACKUP_FREQUENCY_OPTIONS, formatBackupTime, formatBytes } from "../../lib/backup";
+import { MAX_BACKUP_NAME_LENGTH } from "@whispering233/ai-editor-shared";
 import { useProjectStore } from "../../stores/project";
 import { useUiStore } from "../../stores/ui";
 import { useChatStore } from "../../stores/chat";
@@ -48,6 +50,8 @@ export function BackupSection() {
   const [backupNowRunning, setBackupNowRunning] = useState(false);
   /** 待加载的备份（非 null 时渲染强确认 Dialog） */
   const [restoreTarget, setRestoreTarget] = useState<BackupEntry | null>(null);
+  /** 立即备份的自定义名称（决策 28；trim 后非空才随请求提交，成功后清空） */
+  const [backupName, setBackupName] = useState("");
 
   /** 拉取备份列表（仅项目打开时有效；无项目 → 直接返回防 409 NO_PROJECT_OPEN 误报）；
    *  代际守卫：响应落地时校验请求序号未变（关项目/切项目时在途响应丢弃，P2-1） */
@@ -113,8 +117,10 @@ export function BackupSection() {
     if (config === null || backupNowRunning) return;
     setBackupNowRunning(true);
     try {
-      await createProjectBackup();
-      showToast("已备份");
+      const name = backupName.trim();
+      await createProjectBackup(name.length > 0 ? name : undefined); // 决策 28：空输入不传 name
+      setBackupName(""); // 成功后清空（同频率下拉「选择即保存」惯例）
+      showToast(name.length > 0 ? `已备份「${name}」` : "已备份");
       await loadBackups();
     } catch (err) {
       showToast(
@@ -160,7 +166,7 @@ export function BackupSection() {
       <p className="mb-2 text-xs text-muted-foreground">
         跟随书籍：备份与频率均为本项目独立；服务运行期间按频率自动备份，有变更才生成新备份；每项目保留最近 20 份
       </p>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <select
           value={frequencyValue}
           onChange={(e) => void handleFrequencyChange(e.target.value)}
@@ -174,6 +180,15 @@ export function BackupSection() {
             </option>
           ))}
         </select>
+        <input
+          value={backupName}
+          onChange={(e) => setBackupName(e.target.value)}
+          maxLength={MAX_BACKUP_NAME_LENGTH}
+          placeholder="备份名称（可选）"
+          aria-label="备份名称（可选）"
+          disabled={config === null}
+          className="w-36 rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm outline-none placeholder:text-muted-foreground/60 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+        />
         <Button
           onClick={() => void handleBackupNow()}
           disabled={config === null || backupNowRunning}
@@ -216,7 +231,10 @@ export function BackupSection() {
                 {backups.map((b) => (
                   <li key={b.fileName} className="flex items-center gap-2 px-2 py-1.5">
                     <span className="min-w-0 flex-1 text-sm" title={b.fileName}>
-                      {formatBackupTime(b.createdAt)}
+                      <span className="text-muted-foreground">{formatBackupTime(b.createdAt)}</span>
+                      {b.name !== undefined ? (
+                        <span className="ml-1.5 font-medium text-foreground">{b.name}</span>
+                      ) : null}
                     </span>
                     <span className="shrink-0 text-xs text-muted-foreground">{formatBytes(b.size)}</span>
                     <Button variant="outline" size="xs" onClick={() => setRestoreTarget(b)}>
@@ -235,9 +253,9 @@ export function BackupSection() {
       {restoreTarget !== null && (
         <ConfirmDialog
           title="加载备份"
-          description={`${formatBackupTime(restoreTarget.createdAt)} · ${formatBytes(
-            restoreTarget.size,
-          )}。将覆盖当前项目数据；覆盖前会自动备份当前状态（可回退）`}
+          description={`${formatBackupTime(restoreTarget.createdAt)}${
+            restoreTarget.name !== undefined ? ` · ${restoreTarget.name}` : ""
+          } · ${formatBytes(restoreTarget.size)}。将覆盖当前项目数据；覆盖前会自动备份当前状态（可回退）`}
           confirmLabel="确认加载"
           danger
           onConfirm={handleRestore}

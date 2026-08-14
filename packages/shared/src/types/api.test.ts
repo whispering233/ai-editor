@@ -26,6 +26,7 @@ import {
   outlineNodeSchema,
   outlineTreeSchema,
   outlineUpdateReqSchema,
+  projectBackupReqSchema,
   projectConfigSchema,
   projectConfigUpdateReqSchema,
   projectImportResSchema,
@@ -113,6 +114,23 @@ describe("project 端点", () => {
     expect(projectConfigUpdateReqSchema.safeParse({ backup_frequency_minutes: 5.5 }).success).toBe(false);
     expect(projectConfigUpdateReqSchema.safeParse({ backup_frequency_minutes: "10" }).success).toBe(false);
     expect(projectConfigUpdateReqSchema.safeParse({ backup_frequency_minutes: true }).success).toBe(false);
+  });
+
+  it("projectBackupReqSchema：仅形状校验（决策 28 + oracle P2-1——名称规则权威判定在 sanitizeBackupName，schema 不重复判长）", () => {
+    // 缺省/空对象 → 通过（无自定义名称）
+    expect(projectBackupReqSchema.safeParse({}).success).toBe(true);
+    expect(projectBackupReqSchema.parse({}).name).toBeUndefined();
+    // 任意 string（含超长/.zip 后缀/空格等——是否合法由 sanitizeBackupName 判定，schema 不拦截）
+    expect(projectBackupReqSchema.safeParse({ name: "定稿" }).success).toBe(true);
+    expect(projectBackupReqSchema.safeParse({ name: "a".repeat(100) }).success).toBe(true); // 超长放行（writeBackup → 400）
+    expect(projectBackupReqSchema.safeParse({ name: "a".repeat(30) + ".zip" }).success).toBe(true); // 剥 .zip 后 30 字符（P2-1 回归：不得误拒）
+    expect(projectBackupReqSchema.safeParse({ name: "  " }).success).toBe(true); // 空白放行（writeBackup → 400）
+    // 类型不符拒绝：非 string / null / 数字
+    expect(projectBackupReqSchema.safeParse({ name: 123 }).success).toBe(false);
+    expect(projectBackupReqSchema.safeParse({ name: null }).success).toBe(false);
+    expect(projectBackupReqSchema.safeParse({ name: true }).success).toBe(false);
+    // strict：未知字段拒绝
+    expect(projectBackupReqSchema.safeParse({ name: "x", extra: 1 }).success).toBe(false);
   });
 
   it("projectListResSchema：合法响应 parse 通过（books 数组、倒序语义由服务端保证）", () => {

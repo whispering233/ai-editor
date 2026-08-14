@@ -13,20 +13,20 @@
 
 | 目录 | 内容 | 何时读 |
 |------|------|--------|
-| `doc/design/` | `product.md` 产品定位、`architecture.md` 架构与分包、`decisions.md` 关键决策 1-26、`backlog.md` 迭代优化清单（MVP 不做）、`tasks.md` 开发任务清单与进度 | 任何改动前 |
+| `doc/design/` | `product.md` 产品定位、`architecture.md` 架构与分包、`decisions.md` 关键决策 1-28、`backlog.md` 迭代优化清单（MVP 不做）、`tasks.md` 开发任务清单与进度 | 任何改动前 |
 | `doc/api/` | `endpoints.md` 端点契约、`tools.md` AI 工具目录、`data-flow.md` 数据流 | 前后端改动 |
 | `doc/database/` | `schema.md` 表结构与 outline.json/project.json 契约、`hooks.md` 伏笔系统与健康指标 | 数据/后端改动 |
 | `doc/ui/` | **当前 UI 布局样式设计**：`layout.md` 三栏工作台外壳与样式规范（2026-08 已从原型更新为实现样式）、`pages/*.md` 各页面（字段标注 API 响应字段） | 前端改动 |
 | `test-project/` | 测试项目目录（借鉴 inkos test-project 模式，运行时数据不入库），日常开发测试用 | 测试/联调前 |
 
-阅读顺序（见 `doc/README.md`）：`design/product.md` → `design/architecture.md` → `design/decisions.md`（决策 9-19 是数据模型与安全基线，20/21 为 SSE 断开检测与伏笔健康指标，22 为三栏工作台布局与会话归属模型，23 为大纲节点结构化信息麦基字段集，24 为正文边界创作伴侣定位，25 为项目提示词编辑 UI，26 为时间轴事件实体）→ 按职责读 `api/` 与 `database/`；前端实现前必读 `doc/ui/layout.md`（当前实现样式，含组件结构与样式细节规范）。
+阅读顺序（见 `doc/README.md`）：`design/product.md` → `design/architecture.md` → `design/decisions.md`（决策 9-19 是数据模型与安全基线，20/21 为 SSE 断开检测与伏笔健康指标，22 为三栏工作台布局与会话归属模型，23 为大纲节点结构化信息麦基字段集，24 为正文边界创作伴侣定位，25 为项目提示词编辑 UI，26 为时间轴事件实体，27 为自动备份与恢复，28 为备份命名增强）→ 按职责读 `api/` 与 `database/`；前端实现前必读 `doc/ui/layout.md`（当前实现样式，含组件结构与样式细节规范）。
 
 ## 易踩坑的架构约束
 
 - pnpm monorepo，7 个包：`shared → llm/db/tools → agent → server`，`client` 只依赖 `shared`。
 - **`shared` 硬约束**：禁止任何 Node.js 内置模块或服务端包（只允许 zod / nanoid / 纯 TS）。client 会在浏览器打包它，违反即 Vite 构建失败。**Zod 校验仅在服务端执行**——client 只消费 shared 的类型与常量，不打包校验函数（避免 50KB 级依赖进浏览器包）。
 - 存储**三个数据文件**，不要试图统一：`outline.json`（大纲树 JSON）、`data.db`（实体/关系/Delta/对话历史 `chat_messages` 表，决策 18 含 `tool_call_id`/`project_id` 列）、`project.json`（项目配置：id/name/language/prompt/`schema_version`/`current_position`，决策 8/21；写入与 outline.json 同款原子写，**DeepSeek key 绝不写入**）。
-- **自动备份（决策 27，B2 阶段）**：备份/频率/列表均**项目级（跟随书籍）**——频率 = project.json `backup_frequency_minutes`（缺省 10，null/0 = 关闭，仅枚举 5/10/15/30/60），备份 zip 存项目目录 `.backups/`（时间戳命名，每项目保留 20 份）；**加载备份/导入覆盖以 project_id 为唯一 key**：zip 内 id 匹配书架 → 覆盖恢复（**必须保留当前项目 id**——换 id 即断连 chat_messages 会话历史；覆盖前自动快照当前状态）；不匹配 → 导入新书（同名不同 id **不再 409**，目录自动去重 `书名 (N)`）；`POST /project/rename` 改书名（原子移动目录 + 更新 name，当前打开项目同步内部路径引用）。
+- **自动备份（决策 27/28，B2 阶段）**：备份/频率/列表均**项目级（跟随书籍）**——频率 = project.json `backup_frequency_minutes`（缺省 10，null/0 = 关闭，仅枚举 5/10/15/30/60），备份 zip 存项目目录 `.backups/`（毫秒级时间戳命名 `<YYYYMMDD-HHmmssSSS>.zip`，手动备份可带自定义名称 `<时间戳>-<名称>.zip`——名称 trim 后 1-30 字符、禁路径分隔符/保留字符/控制字符/纯点，sanitize 收敛 shared `sanitizeBackupName`；**旧秒级格式兼容解析不迁移**；每项目保留 20 份）；**加载备份/导入覆盖以 project_id 为唯一 key**：zip 内 id 匹配书架 → 覆盖恢复（**必须保留当前项目 id**——换 id 即断连 chat_messages 会话历史；覆盖前自动快照当前状态）；不匹配 → 导入新书（同名不同 id **不再 409**，目录自动去重 `书名 (N)`）；`POST /project/rename` 改书名（原子移动目录 + 更新 name，当前打开项目同步内部路径引用）。
 - 大纲**严格三层**（卷→章→场景），**无游离节点**：创建必须显式指定 parent_id，scene 只能挂 chapter（决策 19）；outline.json 无 `orphan_nodes` 字段，节点带 `updated_at` 版本戳、顶层带 `schema_version`。**节点可选 `data` 字段（决策 23，S12 已实现）**——麦基《故事》字段集，按层级 schema 校验（scene：goal/conflict_levels/value_from/value_to；chapter：reversal/climax_scene；volume：climax_scene/inciting_scene），**编辑 data 不自动生成 Delta**（决策 9 修订语义），详情页 `#/outline/:nodeId` 承载展示与编辑。
 - 关系用**一张通用表** `relation_records`（含 `plot_edge` 剧情连线），不要按实体类型分表。**Delta 不在此表**——独立存 `delta_records`，`attribute_change` 类型已废弃（决策 3，2026-08 修订）。
 - 状态计算 `computeState` **只沿大纲树父链累积已确认 Delta**：节点间按树路径序、节点内按 `order` 双层排序；`plot_edge` 连线不参与；`op=update` 校验 from 失败**跳过该 change 并在 `conflicts` 中标注**（不返回 409——手动编辑 data 不产生 Delta 属正常行为，决策 9 修订）。

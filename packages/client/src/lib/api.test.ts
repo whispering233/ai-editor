@@ -829,6 +829,28 @@ describe("备份管理（B2.4；endpoints.md「备份管理」，决策 27）", 
     expect(res.backup.fileName).toBe("20260813-110000.zip");
   });
 
+  it("createProjectBackup(name)：带自定义名称 → 请求体含 { name }（决策 28）", async () => {
+    const calls = mockFetchOnce({
+      body: {
+        success: true,
+        data: { backup: { fileName: "20260813-110000123-定稿.zip", size: 1024, createdAt: "2026-08-13T11:00:00.123", name: "定稿" } },
+      },
+    });
+    const res = await createProjectBackup("定稿");
+    expect(calls[0].url).toBe("/api/v1/project/backup");
+    expect(calls[0].init?.method).toBe("POST");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ name: "定稿" });
+    expect(res.backup.name).toBe("定稿");
+  });
+
+  it("createProjectBackup()：不传名称 → 无请求体（undefined body，决策 28 缺省纯时间戳）", async () => {
+    const calls = mockFetchOnce({
+      body: { success: true, data: { backup: { fileName: "20260813-110000000.zip", size: 1024, createdAt: "2026-08-13T11:00:00" } } },
+    });
+    await createProjectBackup();
+    expect(calls[0].init?.body).toBeUndefined();
+  });
+
   it("restoreProjectBackup：POST /project/backup/restore，body 含 fileName，响应 snapshot 透传", async () => {
     const calls = mockFetchOnce({
       body: {

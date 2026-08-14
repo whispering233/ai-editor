@@ -1,8 +1,8 @@
-// 自动备份与恢复测试（B2.2，决策 27）：
-// 备份管道（有变更才备份/同秒去重/保留策略）、备份管理端点（列表/立即备份/restore）、
-// 定时器生命周期（open 启/close 停/无变更跳过）
-// 契约来源：doc/api/endpoints.md「备份管理」节、doc/design/decisions.md 决策 27
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+// 自动备份与恢复测试（B2.2 决策 27 + B2.5 决策 28）：
+// 备份管道（有变更才备份/同毫秒去重/保留策略）、备份管理端点（列表/立即备份/restore）、
+// 定时器生命周期（open 启/close 停/无变更跳过）；决策 28：自定义名称/旧格式兼容
+// 契约来源：doc/api/endpoints.md「备份管理」节、doc/design/decisions.md 决策 27/28
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -133,7 +133,7 @@ function backupFileNames(dir: string): string[] {
 function latestBackupTime(dir: string): Date {
   const names = backupFileNames(dir);
   expect(names.length).toBeGreaterThan(0);
-  return parseBackupFileName(names[names.length - 1]) as Date; // 升序取最后一个
+  return (parseBackupFileName(names[names.length - 1]) as NonNullable<ReturnType<typeof parseBackupFileName>>).time; // 升序取最后一个
 }
 
 beforeEach(() => {
@@ -206,12 +206,12 @@ describe("maybeAutoBackup（有变更才备份）", () => {
 // ============ writeBackup / 保留策略 ============
 
 describe("writeBackup 与保留策略", () => {
-  it("同秒连续备份不覆盖：文件名时间戳 +1 秒去重（保持 <YYYYMMDD-HHmmss>.zip 格式契约）", () => {
+  it("同毫秒连续备份不覆盖：文件名时间戳 +1 毫秒去重（保持 <YYYYMMDD-HHmmssSSS>.zip 格式契约）", () => {
     const dir = makeTmpDir();
     initProjectDir(dir, makeConfig("proj-dedup", "去重"));
-    // 固定系统时间：两次 writeBackup 落在同一秒 → 第二个文件名 +1s
+    // 固定系统时间：两次 writeBackup 落在同一毫秒 → 第二个文件名 +1ms
     vi.useFakeTimers();
-    vi.setSystemTime(new Date(2026, 7, 13, 10, 15, 30));
+    vi.setSystemTime(new Date(2026, 7, 13, 10, 15, 30, 0));
     const project = {
       root: dir,
       config: readProjectFile(dir) as ProjectFileConfig,
@@ -220,11 +220,53 @@ describe("writeBackup 与保留策略", () => {
     try {
       const a = writeBackup(project);
       const b = writeBackup(project);
-      expect(a.fileName).toBe("20260813-101530.zip");
-      expect(b.fileName).toBe("20260813-101531.zip"); // +1s 去重，格式仍可解析
+      expect(a.fileName).toBe("20260813-101530000.zip");
+      expect(b.fileName).toBe("20260813-101530001.zip"); // +1ms 去重，格式仍可解析
       expect(parseBackupFileName(b.fileName)).not.toBeNull();
       expect(existsSync(join(dir, BACKUPS_DIR_NAME, a.fileName))).toBe(true);
       expect(existsSync(join(dir, BACKUPS_DIR_NAME, b.fileName))).toBe(true);
+    } finally {
+      closeDatabase(project.db);
+    }
+  });
+
+  it("自定义名称备份：文件名 <时间戳>-<名称>.zip，名称原样进响应（trim/剥 .zip 规范化）", () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-named", "自定义名"));
+    const project = {
+      root: dir,
+      config: readProjectFile(dir) as ProjectFileConfig,
+      db: openDatabase(join(dir, DATA_DB_FILE_NAME)),
+    };
+    try {
+      const a = writeBackup(project, { name: "  定稿.zip  " });
+      expect(a.fileName).toMatch(/^\d{8}-\d{9}-定稿\.zip$/);
+      expect(a.name).toBe("定稿");
+      expect(existsSync(join(dir, BACKUPS_DIR_NAME, a.fileName))).toBe(true);
+      // 同毫秒同名称再备份 → +1ms 去重且名称保留
+      const b = writeBackup(project, { name: "定稿" });
+      expect(b.fileName).toMatch(/^\d{8}-\d{9}-定稿\.zip$/);
+      expect(b.fileName).not.toBe(a.fileName);
+      expect(b.name).toBe("定稿");
+    } finally {
+      closeDatabase(project.db);
+    }
+  });
+
+  it("自定义名称非法 → 400 VALIDATION_ERROR（路径分隔符/超长/纯点）", () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-badname", "非法名"));
+    const project = {
+      root: dir,
+      config: readProjectFile(dir) as ProjectFileConfig,
+      db: openDatabase(join(dir, DATA_DB_FILE_NAME)),
+    };
+    try {
+      for (const bad of ["a/b", "a\\b", "a:b", "..", "a".repeat(31), "a\nb"]) {
+        expect(() => writeBackup(project, { name: bad })).toThrow(/备份名称非法/);
+      }
+      // 非法名称不产出备份文件
+      expect(backupFileNames(dir)).toHaveLength(0);
     } finally {
       closeDatabase(project.db);
     }
@@ -296,12 +338,71 @@ describe("GET /project/backups 与 POST /project/backup", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     const backup = body.data.backup;
-    expect(backup.fileName).toMatch(/^\d{8}-\d{6}\.zip$/);
+    expect(backup.fileName).toMatch(/^\d{8}-\d{9}\.zip$/); // 决策 28 毫秒精度
     expect(typeof backup.size).toBe("number");
     expect(backup.size).toBeGreaterThan(0);
     // createdAt 由文件名时间戳解析（决策 27 无状态语义）
-    expect(backup.createdAt).toBe(parseBackupFileName(backup.fileName)?.toISOString());
+    expect(backup.createdAt).toBe(parseBackupFileName(backup.fileName)?.time.toISOString());
     expect(existsSync(join(dir, BACKUPS_DIR_NAME, backup.fileName))).toBe(true);
+  });
+
+  it("POST /backup 带自定义名称：文件名 <时间戳>-<名称>.zip + 响应 name 字段（决策 28）", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-named-ep", "端点自定义名"));
+    const app = await openProject(dir);
+    const res = await app.request("/api/v1/project/backup", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ name: "交编辑前" }),
+    });
+    expect(res.status).toBe(200);
+    const backup = (await res.json()).data.backup;
+    expect(backup.fileName).toMatch(/^\d{8}-\d{9}-交编辑前\.zip$/);
+    expect(backup.name).toBe("交编辑前");
+    expect(existsSync(join(dir, BACKUPS_DIR_NAME, backup.fileName))).toBe(true);
+
+    // GET /backups 列表项带 name
+    const listRes = await app.request("/api/v1/project/backups", { headers: HOST_HEADERS });
+    const backups = (await listRes.json()).data.backups;
+    expect(backups).toHaveLength(1);
+    expect(backups[0]).toMatchObject({ fileName: backup.fileName, name: "交编辑前" });
+  });
+
+  it("POST /backup 名称非法 → 400 VALIDATION_ERROR（路由层 zod 校验 + writeBackup sanitize）", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-badname-ep", "端点非法名"));
+    const app = await openProject(dir);
+    for (const bad of ["a/b", "a: b", "..", "a".repeat(31)]) {
+      const res = await app.request("/api/v1/project/backup", {
+        method: "POST",
+        headers: HOST_HEADERS,
+        body: JSON.stringify({ name: bad }),
+      });
+      expect(res.status).toBe(400);
+      expect((await res.json()).error.code).toBe("VALIDATION_ERROR");
+    }
+    // 无任何备份产出
+    const listRes = await app.request("/api/v1/project/backups", { headers: HOST_HEADERS });
+    expect((await listRes.json()).data.backups).toEqual([]);
+  });
+
+  it("GET /backups：旧秒级格式文件无 name 字段；带名称文件含 name；时间倒序（决策 28 兼容）", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-legacy", "旧格式"));
+    const app = await openProject(dir);
+    const backupsDir = join(dir, BACKUPS_DIR_NAME);
+    mkdirSync(backupsDir, { recursive: true });
+    writeFileSync(join(backupsDir, "20260813-120000.zip"), "legacy"); // 旧秒级格式（手工遗留）
+    writeFileSync(join(backupsDir, "20260813-130000999-初稿.zip"), "named"); // 新格式带名称
+
+    const res = await app.request("/api/v1/project/backups", { headers: HOST_HEADERS });
+    expect(res.status).toBe(200);
+    const backups = (await res.json()).data.backups;
+    expect(backups).toHaveLength(2);
+    expect(backups[0].fileName).toBe("20260813-130000999-初稿.zip"); // 最新在前
+    expect(backups[0].name).toBe("初稿");
+    expect(backups[1].fileName).toBe("20260813-120000.zip"); // 旧格式兼容列出
+    expect(backups[1]).not.toHaveProperty("name");
   });
 
   it("无当前项目时备份端点 → 409 NO_PROJECT_OPEN（与 /config 一致）", async () => {
@@ -585,6 +686,49 @@ describe("POST /project/backup/restore", () => {
     // 校验失败后连接仍有效（未悬挂）
     const cfg = await app.request("/api/v1/project/config", { headers: HOST_HEADERS });
     expect(cfg.status).toBe(200);
+  });
+
+  it("自定义名称备份可恢复（决策 28：restore 白名单兼容 <时间戳>-<名称>.zip）", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, { ...makeConfig("proj-named-restore", "命名恢复"), prompt: "旧提示词" });
+    const app = await openProject(dir);
+    const project = getCurrentProject() as NonNullable<ReturnType<typeof getCurrentProject>>;
+
+    // 带名称备份当前状态
+    const bkp = writeBackup(project, { name: "定稿前" });
+    expect(bkp.fileName).toMatch(/^\d{8}-\d{9}-定稿前\.zip$/);
+
+    // 修改内容后按自定义名称恢复
+    writeProjectFile(dir, { ...readProjectFile(dir)!, prompt: "新提示词" });
+    const res = await app.request("/api/v1/project/backup/restore", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ fileName: bkp.fileName }),
+    });
+    expect(res.status).toBe(200);
+    expect(readProjectFile(dir)?.prompt).toBe("旧提示词"); // 数据回滚
+  });
+
+  it("旧秒级格式备份可恢复（决策 28：restore 白名单兼容 <YYYYMMDD-HHmmss>.zip，升级前遗留）", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, { ...makeConfig("proj-legacy-restore", "旧格式恢复"), prompt: "旧提示词" });
+    const app = await openProject(dir);
+    const project = getCurrentProject() as NonNullable<ReturnType<typeof getCurrentProject>>;
+
+    // 生成合法备份后改名为旧秒级格式文件名（模拟升级前遗留的历史备份，zip 内容合法）
+    const bkp = writeBackup(project);
+    const legacyName = "20260813-101500.zip";
+    renameSync(join(dir, BACKUPS_DIR_NAME, bkp.fileName), join(dir, BACKUPS_DIR_NAME, legacyName));
+
+    // 修改内容后按旧格式名恢复 → 200 + 数据回滚
+    writeProjectFile(dir, { ...readProjectFile(dir)!, prompt: "新提示词" });
+    const res = await app.request("/api/v1/project/backup/restore", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ fileName: legacyName }),
+    });
+    expect(res.status).toBe(200);
+    expect(readProjectFile(dir)?.prompt).toBe("旧提示词");
   });
 });
 

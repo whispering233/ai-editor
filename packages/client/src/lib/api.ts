@@ -703,9 +703,11 @@ export async function importProjectZip(file: File, name: string): Promise<Import
 
 /** 备份条目（GET /project/backups 列表元素 / POST /project/backup 响应 backup） */
 export interface BackupEntry {
-  fileName: string; // 时间戳命名（<YYYYMMDD-HHmmss>.zip；restore 用此引用）
+  fileName: string; // 时间戳命名（决策 28 毫秒精度 <YYYYMMDD-HHmmssSSS>.zip；restore 用此引用）
   size: number; // 字节数
   createdAt: string; // 备份时间（ISO 8601，由文件名时间戳解析）
+  /** 手动备份自定义名称（决策 28；由文件名解析——自动备份/覆盖前快照/旧备份无此字段） */
+  name?: string;
 }
 
 /** GET /api/v1/project/backups 响应（按时间倒序；.backups/ 不存在返回空数组不报错） */
@@ -723,9 +725,16 @@ export interface CreateBackupRes {
   backup: BackupEntry;
 }
 
-/** 立即备份当前项目（手动触发，设置页「立即备份」按钮） */
-export function createProjectBackup(): Promise<CreateBackupRes> {
-  return apiFetch<CreateBackupRes>("/project/backup", { method: "POST" });
+/**
+ * 立即备份当前项目（手动触发，设置页「立即备份」按钮）。
+ * @param name 自定义备份名称（决策 28，可选）：trim 后 1-30 字符，服务端校验；
+ *   缺省 → 纯时间戳文件名
+ */
+export function createProjectBackup(name?: string): Promise<CreateBackupRes> {
+  return apiFetch<CreateBackupRes>("/project/backup", {
+    method: "POST",
+    ...(name !== undefined ? { body: { name } } : {}),
+  });
 }
 
 /** POST /api/v1/project/backup/restore 响应（覆盖恢复，决策 27） */

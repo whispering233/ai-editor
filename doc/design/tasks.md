@@ -15,10 +15,10 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 
 ## 项目状态（2026-08）
 
-- **完成**：阶段 A 地基 + 切片 1-9、12、13 + 阶段 U（U1-U8）+ 交互修复批次 + 切片 10 画布（S10.1）+ 切片 11 发布（S11.1-S11.3）+ 发布阻断项 E1-E6（导出/导入、未来版本拒绝重建、增量迁移、发布链路 OIDC 全绿）+ 阶段 B 项目提示词编辑（B1，决策 24/25）+ **阶段 C 时间轴（C1-C4，决策 26）** + 画布增强批次（S10.2-S10.5，inkos 参考）+ 交互优化批次（UX1-UX4，用户实测反馈）+ **阶段 B2 自动备份与恢复（B2.1-B2.4，决策 27）**——详见「项目演进路线」。
+- **完成**：阶段 A 地基 + 切片 1-9、12、13 + 阶段 U（U1-U8）+ 交互修复批次 + 切片 10 画布（S10.1）+ 切片 11 发布（S11.1-S11.3）+ 发布阻断项 E1-E6（导出/导入、未来版本拒绝重建、增量迁移、发布链路 OIDC 全绿）+ 阶段 B 项目提示词编辑（B1，决策 24/25）+ **阶段 C 时间轴（C1-C4，决策 26）** + 画布增强批次（S10.2-S10.5，inkos 参考）+ 交互优化批次（UX1-UX4，用户实测反馈）+ **阶段 B2 自动备份与恢复（B2.1-B2.4，决策 27）** + **B2.5 备份命名增强（毫秒精度 + 自定义名称，决策 28）**——详见「项目演进路线」。
 - **待做**：无（MVP 与阶段 A/B/C/B2 全部完成；可选收尾 = npm 坏版本 v0.0.1/v0.0.2 deprecate 标注——需 2FA 凭据，见 E6 卡）；backlog 事项一律不做。
-- **测试**：全仓 1387 个（shared 94 / llm 59 / db 218 / server 253 / client 444 / tools 225 / agent 94）。
-- 已完成卡片的详细规格已归档（git history 可回溯）；「项目演进路线」提供脉络摘要，配合 `decisions.md`（决策 1-26 为设计主轴）理解现状。
+- **测试**：全仓 1472 个（shared 120 / llm 59 / db 219 / server 292 / client 463 / tools 225 / agent 94）。
+- 已完成卡片的详细规格已归档（git history 可回溯）；「项目演进路线」提供脉络摘要，配合 `decisions.md`（决策 1-28 为设计主轴）理解现状。
 
 ## 执行进度（Todo）
 
@@ -45,7 +45,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - [x] E6 publishConfig + 版本管理 + publish 演练（OIDC 发布链路全绿——见文末 E6 卡）
 - [x] B1 项目提示词编辑器（设置页编辑保存 → 注入「## 项目设定」段）
 - [x] 阶段 C 时间轴（C1 契约与数据层 / C2 服务端 / C3 列表页 / C4 详情页）
-- [x] 阶段 B2 自动备份与恢复（B2.1 契约与配置 / B2.2 备份管道+定时器+端点 / B2.3 import 分流+rename / B2.4 client 备份区+书架）
+- [x] 阶段 B2 自动备份与恢复（B2.1 契约与配置 / B2.2 备份管道+定时器+端点 / B2.3 import 分流+rename / B2.4 client 备份区+书架 / B2.5 备份命名增强：毫秒精度 + 自定义名称）
 
 ---
 
@@ -98,6 +98,8 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 **阶段 C：时间轴（C1-C4，2026-08）**——第 5 种实体类型 `event`（id 前缀 `ev-`，决策 26）：中栏新增「时间轴」tab（伏笔与回收站之间）；entities 表新增 `sort_order` 列（全局事件线性序，拖拽为权威、时间标签仅展示）；SCHEMA_VERSION 1→2，E5 迁移机制首个真实用例（`002_event_timeline.ts` 建新表拷贝改 CHECK）；`occurs_in` 关系类型锚定大纲节点（多对多，倒叙/多时间线/无场景事件均可表达）；列表页 `#/timeline`（拖拽排序 + tags 徽标 + 标签筛选器 + 新建）+ 详情页 `#/timeline/:id`（字段编辑 + occurs_in 关联管理）；**MVP 无 AI 工具**（时间线一致性分析、事件草案生成 → backlog #15）。
 
 **阶段 B2：自动备份与恢复（B2.1-B2.4，2026-08 用户裁决，决策 27）**——备份/频率/列表均项目级（跟随书籍）：自动备份定时器（有变更才备份：三文件 mtime 判定 + 1s 容差防 checkpoint 自激，`.backups/` 时间戳命名保留 20 份）；频率 = project.json `backup_frequency_minutes`（缺省 10，枚举 5/10/15/30/60，读侧宽松/写侧显式）；**唯一 key = project_id**——导入/加载 zip 内 id 匹配书架 → 覆盖恢复（保留当前 id 防会话断连 + 覆盖前自动快照后悔药 + 跨项目恢复迁移 chat_messages 归属）/ 不匹配 → 导入新书（同名不再 409：重命名导入或目录去重 `书名 (N)`，维持「目录名=书名」不变式）；书架重命名书名（原子移动目录 + 引用同步）；打包/校验/恢复管道统一提取（`server/src/backup.ts`，E1 export/import 重构复用）；restore 与 import 走同款 E4/E5 三态校验（坏包/高版本零触碰）。
+
+**B2.5 备份命名增强（2026-08 用户反馈，决策 28）**——手动备份支持自定义名称（`POST /project/backup` 可选 `name`：trim 后 1-30 字符、禁路径分隔符/保留字符/控制字符/纯点、自动剥 `.zip`；校验收敛 shared `sanitizeBackupName`，`writeBackup` 为唯一执行点）+ **文件名毫秒精度**（`<YYYYMMDD-HHmmssSSS>.zip`，旧秒级格式兼容解析不迁移）；`GET /backups` 响应项新增可选 `name`（文件名解析，旧备份无）；设置页「立即备份」旁名称输入框 + 列表名称展示 + 时间显示补秒（`MM-DD HH:mm:ss`）；保留策略/变更判定/restore 白名单按新 parse 兼容三类文件名。
 
 ---
 
@@ -245,6 +247,23 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 ## 阶段 B2：自动备份与恢复（B2.1-B2.4，2026-08 用户裁决，决策 27）
 
 > **背景**：E1 手动导出/导入已具备，但备份依赖手动操作、无历史版本管理。用户需求：自动备份 + 加载备份（文件导入 / 历史自动备份列表二选一）+ 设置备份频率。设计裁决（决策 27）：唯一 key = project_id（匹配 → 覆盖恢复 / 不匹配 → 导入新书）；同名不同 id 不再 409（重命名导入 / 同名并存目录去重二选一）+ 新增重命名书名能力；频率跟随书籍（project.json `backup_frequency_minutes`，缺省 10，选项 关闭/5/10/15/30/60）；定时检查 + 有变更才备份；`.backups/` 时间戳命名、保留 20 份；覆盖前自动快照。契约见 `doc/api/endpoints.md`（备份管理节 + import 改造）、`doc/database/schema.md`（project.json 契约）、`doc/ui/pages/settings.md`（备份区细案）、`doc/ui/layout.md` §2.3（书架重命名/导入冲突）。
-> **状态（2026-08）**：✅ B2.1-B2.4 已完成（决策 27 落地；oracle 审核通过）。提交：B2.1 契约 `0f1cc92` / B2.2 备份管道 `cf51cfe`（审核 P1 修复 `6823c4b`）/ B2.3 分流改造 `16a312d`（契约同步 `a5e9836`）/ B2.4 client `0ce5f4d`（审核 P2 修复 `49d44d5`）；全仓测试 green（shared 107 / llm 59 / db 219 / server 286 / client 462 / tools 225 / agent 94）。
+> **状态（2026-08）**：✅ B2.1-B2.4 已完成（决策 27 落地；oracle 审核通过）。提交：B2.1 契约 `0f1cc92` / B2.2 备份管道 `cf51cfe`（审核 P1 修复 `6823c4b`）/ B2.3 分流改造 `16a312d`（契约同步 `a5e9836`）/ B2.4 client `0ce5f4d`（审核 P2 修复 `49d44d5`）；**B2.5 备份命名增强（决策 28）已并入本阶段**；全仓测试 green（shared 120 / llm 59 / db 219 / server 292 / client 463 / tools 225 / agent 94）。
 
 > **各卡详细规格已归档（git history 可回溯）**——B2.1 shared 契约与配置 / B2.2 自动备份管道 + 定时器 + 备份管理端点 / B2.3 import 分流改造 + rename / B2.4 client 设置页备份区 + 书架改造；实现摘要见上方「项目演进路线」B2 段。
+
+---
+
+## B2.5 备份命名增强：毫秒精度 + 手动备份自定义名称（2026-08 用户反馈，决策 28）
+
+> **背景**：B2 上线后用户反馈两点命名痛点——① 文件名时间精度不足（快速连续备份在列表里几乎无法区分，UI 时间显示只到分钟）；② 手动备份不支持自定义名称（无法表达备份意图）。设计裁决（决策 28）：文件名毫秒精度 `<YYYYMMDD-HHmmssSSS>.zip`（旧秒级格式兼容解析、不迁移）；`POST /project/backup` 可选 `name`（trim 后 1-30 字符，禁路径分隔符/保留字符/控制字符/纯点，自动剥 `.zip`，非法 400）；`GET /backups` 响应项新增可选 `name`（文件名解析）；设置页名称输入框 + 列表名称展示 + 时间显示补秒。契约见 `doc/api/endpoints.md`（备份管理节）、`doc/database/schema.md`（自动备份目录）、`doc/ui/pages/settings.md`（备份区）。
+
+**范围**：
+- shared：`utils/backup.ts` 新格式 format/parse（返回 `{ time, name? }`）+ 旧格式兼容 + `sanitizeBackupName` 纯函数；`constants/backup.ts` 新增 `MAX_BACKUP_NAME_LENGTH = 30`；`types/api.ts` 新增 `projectBackupReqSchema`（可选 name，形状校验）
+- server：`backup.ts` writeBackup 支持 `{ name? }`（sanitize 唯一执行点，非法 400）+ uniqueBackupFileName 毫秒精度（+1ms 去重）+ listBackups 返回 name + 注释更新；`routes/project.ts` POST /backup 读 body + zod 校验
+- client：`lib/api.ts` BackupEntry.name + createProjectBackup(name?)；`lib/backup.ts` formatBackupTime 补秒；`backup-section.tsx` 名称输入框（maxLength 30，成功后清空）+ 列表名称展示 + 恢复 Dialog 名称展示
+- 测试：shared utils 全量重写（新格式/名称/兼容/非法）；server 新增自定义名称/非法名称/旧格式兼容/毫秒去重用例；client formatBackupTime 补秒预期更新
+- 文档：decisions.md 决策 28 / endpoints.md / schema.md / settings.md / architecture.md / CHANGELOG
+
+**验证**：`pnpm typecheck && pnpm lint` + 全仓测试 green（shared 122 / server 293 / client 465，全仓 1477）；oracle 审核通过（无 P0/P1，4 项 P2 已修复）。
+
+**状态（2026-08）**：✅ 已完成（决策 28 落地；oracle 审核通过，P2-1 schema 形状校验收敛 / P2-2 .zip 循环剥尽 / P2-3 三处测试缺口补齐 / P2-4 文案修正）。提交：`1cba17a`。

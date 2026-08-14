@@ -222,9 +222,9 @@
 
 ---
 
-## 备份管理（决策 27）
+## 备份管理（决策 27 + 决策 28）
 
-> 自动备份由服务端定时器驱动（服务运行期间生效，频率 = project.json `backup_frequency_minutes`，缺省 10 分钟）。备份文件存项目目录内 `.backups/`，时间戳命名（`<YYYYMMDD-HHmmss>.zip`），格式与 E1 导出 zip 完全一致（三文件 + wal_checkpoint），**每项目保留最近 20 份**（超出删除最旧，含覆盖前自动快照）。全部端点要求当前项目已打开（无项目 → 409 `NO_PROJECT_OPEN`，与 `/config` 一致）。
+> 自动备份由服务端定时器驱动（服务运行期间生效，频率 = project.json `backup_frequency_minutes`，缺省 10 分钟）。备份文件存项目目录内 `.backups/`，时间戳命名（决策 28 毫秒精度 `<YYYYMMDD-HHmmssSSS>.zip`；手动备份可带自定义名称 `<YYYYMMDD-HHmmssSSS>-<名称>.zip`；**旧秒级格式 `<YYYYMMDD-HHmmss>.zip` 兼容解析**——历史备份仍可列出/恢复/参与保留策略），格式与 E1 导出 zip 完全一致（三文件 + wal_checkpoint），**每项目保留最近 20 份**（超出删除最旧，含覆盖前自动快照）。全部端点要求当前项目已打开（无项目 → 409 `NO_PROJECT_OPEN`，与 `/config` 一致）。
 
 ### GET /api/v1/project/backups
 
@@ -236,9 +236,10 @@
 // Res: 200
 {
   backups: Array<{
-    fileName: string;   // 备份文件名（时间戳命名；restore 用此引用）
+    fileName: string;   // 备份文件名（毫秒级时间戳命名；restore 用此引用）
     size: number;       // 字节数
     createdAt: string;  // 备份时间（ISO 8601，由文件名时间戳解析）
+    name?: string;      // 手动备份自定义名称（决策 28；由文件名解析——自动备份/快照/旧备份无此字段）
   }>;
 }
 ```
@@ -250,14 +251,20 @@
 立即备份当前项目（手动触发；设置页「立即备份」按钮）。
 
 ```typescript
-// Req: (none)
+// Req（请求体可选；缺省 = 纯时间戳文件名）
+{
+  name?: string;  // 手动备份自定义名称（决策 28）：trim 后 1-30 字符（MAX_BACKUP_NAME_LENGTH）；
+                  // 禁路径分隔符/保留字符（: * ? " < > |）/控制字符/纯点（. ..）；
+                  // 自动剥离尾部 .zip；非法 → 400 VALIDATION_ERROR
+}
 
 // Res: 200
 {
   backup: {
-    fileName: string;
+    fileName: string;   // <YYYYMMDD-HHmmssSSS>.zip 或 <YYYYMMDD-HHmmssSSS>-<名称>.zip
     size: number;
     createdAt: string;
+    name?: string;      // 带名称时返回规范化后的名称
   };
 }
 ```
@@ -285,7 +292,7 @@
 ```
 
 **恢复流程**：
-1. fileName 白名单校验（仅允许 `.backups/` 下 `<YYYYMMDD-HHmmss>.zip` 格式，拒绝路径分隔符/`..`）
+1. fileName 白名单校验（仅允许 `.backups/` 下时间戳格式——决策 28 兼容 `<YYYYMMDD-HHmmssSSS>.zip` 毫秒级 / `<YYYYMMDD-HHmmssSSS>-<名称>.zip` 带自定义名称 / 旧秒级 `<YYYYMMDD-HHmmss>.zip`；时间戳部分 ^$ 锚定纯数字 + 名称部分拒绝路径分隔符，防 `..` 穿越）
 2. **覆盖前自动快照**：将当前三文件打包为快照存入 `.backups/`（复用备份管道）
 3. 备份包校验（同 import 校验顺序 3-7：zip 解析/白名单/三文件齐全/顶层契约/data.db user_version 三态分流——E4/E5 语义，绝不静默重建）
 4. **原子替换**：临时目录解压校验通过后，三文件覆盖写入项目目录（原子写）；**project.json 内 `name` 归一为当前目录名**（与 import 覆盖一致，维持「目录名 = 书名」不变式；`id` 保留当前项目 id）

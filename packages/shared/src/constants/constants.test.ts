@@ -15,6 +15,7 @@ import {
   HOOK_CATEGORIES,
   HOOK_RELATION_TYPES,
   HOOK_STATUSES,
+  MAX_BACKUP_NAME_LENGTH,
   MAX_BACKUPS_PER_PROJECT,
   PAYOFF_TIMING,
   PLOT_EDGE_TYPE,
@@ -202,5 +203,9 @@ describe("自动备份常量（决策 27，B2.1）", () => {
 
   it("每项目保留最近 20 份（决策 27：超出删除最旧，含覆盖前自动快照）", () => {
     expect(MAX_BACKUPS_PER_PROJECT).toBe(20);
+  });
+
+  it("手动备份自定义名称最大长度 = 30（决策 28）", () => {
+    expect(MAX_BACKUP_NAME_LENGTH).toBe(30);
   });
 });

@@ -254,6 +254,19 @@ export const projectConfigUpdateResSchema = z.object({
   updated: z.literal(true),
 });
 
+// POST /api/v1/project/backup（决策 28 新增：手动备份可携带自定义名称）
+// - 请求体可选 `name`（string）；空串/缺省 → 无自定义名称（纯时间戳文件名）。
+// - **形状校验仅限类型**（oracle 审核 P2-1：zod 与 sanitize 的「.zip 剥离 + 长度」判定
+//   顺序曾在 schema 内重复实现导致误拒——如 29 字符 + ".zip" schema 判超长而 sanitize 判合法）；
+//   **名称规则（trim/.zip 剥离/长度/字符集）权威判定全部收敛在 shared sanitizeBackupName**——
+//   writeBackup 为唯一执行点，非法 → 400 VALIDATION_ERROR（决策 28）。
+export const projectBackupReqSchema = z
+  .object({
+    name: z.string().optional(),
+  })
+  .strict();
+export type ProjectBackupReq = z.infer<typeof projectBackupReqSchema>;
+
 // ============ 导出/导入端点（E1/E2：release-review §二，产品承诺「数据主权归用户」） ============
 
 /**

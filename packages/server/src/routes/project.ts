@@ -28,6 +28,7 @@ import { PROJECT_FILE_NAME } from "@whispering233/ai-editor-db";
 import { findOutlineNode, readOutlineFile, readProjectFile, writeProjectFile } from "@whispering233/ai-editor-db";
 import { nowIso } from "@whispering233/ai-editor-db";
 import {
+  projectBackupReqSchema,
   projectConfigUpdateReqSchema,
   projectCreateReqSchema,
   projectListResSchema,
@@ -548,15 +549,24 @@ projectRoutes.get("/backups", (c) => {
 });
 
 // POST /api/v1/project/backup —— 立即备份（手动触发；同款管道 + 保留策略清理）
-projectRoutes.post("/backup", (c) => {
+// 决策 28：请求体可选 name（手动备份自定义名称，trim 后 1-30 字符；形状校验 zod schema，
+// 名称规范化/权威校验收敛 sanitizeBackupName → writeBackup 唯一执行点）
+projectRoutes.post("/backup", async (c) => {
   const project = requireCurrentProject();
-  return c.json(ok({ backup: writeBackup(project) }));
+  const raw = await c.req.json().catch(() => null);
+  const parsed = projectBackupReqSchema.safeParse(raw ?? {});
+  if (!parsed.success) {
+    throw new HttpError(400, "VALIDATION_ERROR", `备份请求体非法: ${parsed.error.issues[0]?.message ?? "参数校验失败"}`);
+  }
+  const opts = parsed.data.name !== undefined ? { name: parsed.data.name } : undefined;
+  return c.json(ok({ backup: writeBackup(project, opts) }));
 });
 
 // POST /api/v1/project/backup/restore —— 从备份恢复当前项目（覆盖恢复，决策 27）
 //
 // 流程（endpoints.md）：
-// 1. fileName 白名单校验（仅 .backups/ 下 <YYYYMMDD-HHmmss>.zip，防路径穿越）→ 非法 400
+// 1. fileName 白名单校验（仅 .backups/ 下时间戳格式——决策 28 兼容毫秒级/带自定义名称/旧秒级，
+//    防路径穿越）→ 非法 400
 // 2. 覆盖前自动快照（复用备份管道，参与保留策略——后悔药）→ 备份不存在 404
 // 3. 备份包校验（zip/白名单/契约/user_version 三态，E4/E5）→ 400/409 零触碰
 // 4. 原子替换三文件 + 重连 data.db + 同步内存 config + 重启定时器（restoreBackup）

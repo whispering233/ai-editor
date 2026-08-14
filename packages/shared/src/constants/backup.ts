@@ -14,3 +14,6 @@ export const DEFAULT_BACKUP_FREQUENCY_MINUTES = 10;
 
 /** 每项目保留最近备份份数（决策 27：超出删除最旧，含覆盖前自动快照；B2.2 保留策略） */
 export const MAX_BACKUPS_PER_PROJECT = 20;
+
+/** 手动备份自定义名称最大长度（决策 28：trim 后 1-30 字符；超出 → 400 VALIDATION_ERROR） */
+export const MAX_BACKUP_NAME_LENGTH = 30;

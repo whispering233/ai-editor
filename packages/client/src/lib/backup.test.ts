@@ -3,20 +3,25 @@ import { describe, expect, it } from "vitest";
 import { BACKUP_FREQUENCIES } from "@whispering233/ai-editor-shared";
 import { BACKUP_FREQUENCY_OPTIONS, formatBackupTime, formatBytes } from "./backup";
 
-describe("formatBackupTime（当年 MM-DD HH:mm / 跨年 YY-MM-DD HH:mm，settings.md 线框）", () => {
+describe("formatBackupTime（当年 MM-DD HH:mm:ss / 跨年 YY-MM-DD HH:mm:ss，settings.md 线框，决策 28 补秒）", () => {
   // 固定基准时间：2026-08-13 12:00（本地时区构造，与实现同用本地时间）
   const now = new Date(2026, 7, 13, 12, 0, 0);
 
-  it("当年：MM-DD HH:mm（08-13 10:15）", () => {
-    expect(formatBackupTime("2026-08-13T10:15:00", now)).toBe("08-13 10:15");
+  it("当年：MM-DD HH:mm:ss（08-13 10:15:00）", () => {
+    expect(formatBackupTime("2026-08-13T10:15:00", now)).toBe("08-13 10:15:00");
   });
 
-  it("跨年：YY-MM-DD HH:mm（25-12-31 22:30）", () => {
-    expect(formatBackupTime("2025-12-31T22:30:00", now)).toBe("25-12-31 22:30");
+  it("跨年：YY-MM-DD HH:mm:ss（25-12-31 22:30:00）", () => {
+    expect(formatBackupTime("2025-12-31T22:30:00", now)).toBe("25-12-31 22:30:00");
   });
 
-  it("当年 1 月 1 日凌晨补零（01-01 00:05）", () => {
-    expect(formatBackupTime("2026-01-01T00:05:00", now)).toBe("01-01 00:05");
+  it("当年 1 月 1 日凌晨补零（01-01 00:05:00）", () => {
+    expect(formatBackupTime("2026-01-01T00:05:00", now)).toBe("01-01 00:05:00");
+  });
+
+  it("同分钟内不同秒可区分（决策 28：与毫秒级文件名配套，快速连备可见差异）", () => {
+    expect(formatBackupTime("2026-08-13T10:15:09", now)).toBe("08-13 10:15:09");
+    expect(formatBackupTime("2026-08-13T10:15:31", now)).toBe("08-13 10:15:31");
   });
 
   it("非法输入原样返回（防御：服务端 createdAt 恒有效，仅兜底）", () => {

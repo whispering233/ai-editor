@@ -1,9 +1,11 @@
-// 自动备份与恢复（B2.2，决策 27）
+// 自动备份与恢复（B2.2 决策 27 + B2.5 决策 28）
 //
-// 单一事实来源：doc/design/decisions.md 决策 27、doc/api/endpoints.md「备份管理」节。
+// 单一事实来源：doc/design/decisions.md 决策 27/28、doc/api/endpoints.md「备份管理」节。
 // 职责：
-//   - 备份管道：三文件 + wal_checkpoint → .backups/<YYYYMMDD-HHmmss>.zip（复用 E1 打包）
-//   - 保留策略：每项目保留最近 MAX_BACKUPS_PER_PROJECT 份，超出删除最旧（含覆盖前快照）
+//   - 备份管道：三文件 + wal_checkpoint → .backups/<YYYYMMDD-HHmmssSSS>.zip（复用 E1 打包；
+//     决策 28 毫秒精度；手动备份可带自定义名称 <YYYYMMDD-HHmmssSSS>-<名称>.zip）
+//   - 保留策略：每项目保留最近 MAX_BACKUPS_PER_PROJECT 份，超出删除最旧（含覆盖前快照；
+//     新旧格式文件名均参与——parseBackupFileName 兼容解析）
 //   - 自动定时器：跟随当前项目生命周期（middleware/project.ts setCurrentProject 挂载启停），
 //     有变更才备份（三文件 mtime 与 .backups/ 最新备份时间比较，无状态、服务重启不丢）
 //   - 备份包校验（restore 与 import 共用）：zip 解析/白名单/三文件齐全/顶层契约/
@@ -19,7 +21,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { Unzip, UnzipInflate, zipSync } from "fflate";
-import { BACKUP_FREQUENCIES, DEFAULT_BACKUP_FREQUENCY_MINUTES, formatBackupFileName, MAX_BACKUPS_PER_PROJECT, parseBackupFileName } from "@whispering233/ai-editor-shared";
+import { BACKUP_FREQUENCIES, DEFAULT_BACKUP_FREQUENCY_MINUTES, formatBackupFileName, MAX_BACKUPS_PER_PROJECT, MAX_BACKUP_NAME_LENGTH, parseBackupFileName, sanitizeBackupName } from "@whispering233/ai-editor-shared";
 import { PROJECT_EXPORT_FILE_NAMES } from "@whispering233/ai-editor-shared/schemas";
 import {
   closeDatabase,
@@ -46,10 +48,9 @@ const MAX_UNZIP_BUDGET = 200 * 1024 * 1024;
 
 /**
  * mtime 变更判定容差（毫秒）：备份管道内 wal_checkpoint 会把 WAL 合并回 data.db 主文件，
- * 其 mtime 刷新到「备份时刻」（毫秒精度），而上次备份时刻来自备份文件名（秒精度截断）——
- * 若用严格 `mtime > lastBackupAt` 判定，checkpoint 后的 data.db mtime 恒晚于文件名秒时间，
- * 每轮 tick 都会误判「有变更」产生自激垃圾备份。加 1s 容差：备份后三文件 mtime 落在
- * [备份时刻秒, 备份时刻秒+1s) 内一律视为「已包含在本次备份中」；最小 tick 5 分钟，
+ * 其 mtime 刷新到「备份时刻」（毫秒精度）。决策 28 起文件名时间戳为毫秒精度，
+ * 文件名截断误差已消除——但容差**保留 1s**：粗粒度 mtime 文件系统（如 FAT/exFAT 2s 粒度）
+ * 下，严格 `mtime > lastBackupAt` 仍可能误判，1s 容差是必要防御；最小 tick 5 分钟，
  * 用户变更必然超出容差窗口。
  */
 const BACKUP_CHANGE_TOLERANCE_MS = 1000;
@@ -59,6 +60,8 @@ export interface BackupFileInfo {
   fileName: string;
   size: number;
   createdAt: string; // ISO 8601，由文件名时间戳解析（决策 27 无状态语义）
+  /** 手动备份自定义名称（决策 28；由文件名解析，自动备份/快照/旧备份无此字段） */
+  name?: string;
 }
 
 // ============ 备份管道（复用 E1 打包，避免复制） ============
@@ -83,34 +86,53 @@ export function createBackupZip(project: ProjectContext): Uint8Array<ArrayBuffer
 }
 
 /**
- * 生成不冲突的备份文件名：`<YYYYMMDD-HHmmss>.zip`（shared formatBackupFileName）。
+ * 生成不冲突的备份文件名：`<YYYYMMDD-HHmmssSSS>.zip`（决策 28 毫秒精度；
+ * shared formatBackupFileName；带自定义名称 → `<YYYYMMDD-HHmmssSSS>-<名称>.zip`）。
  *
- * 同秒冲突（如「立即备份 + restore 覆盖前快照」连续触发）处理：时间戳 +1 秒循环去重，
- * **保持 <YYYYMMDD-HHmmss>.zip 格式契约**——不追加毫秒/后缀（那会破坏
- * parseBackupFileName 解析与 restore 白名单校验），加 1 秒后文件名仍合法且排序位置正确。
+ * 同毫秒冲突（如「立即备份 + restore 覆盖前快照」连续触发，理论罕见）处理：
+ * 时间戳 +1 毫秒循环去重，**保持 <YYYYMMDD-HHmmssSSS>[-<名称>].zip 格式契约**——
+ * parseBackupFileName 解析与 restore 白名单校验不受影响。
  */
-function uniqueBackupFileName(backupsDir: string, date: Date): string {
-  let name = formatBackupFileName(date);
-  while (existsSync(join(backupsDir, name))) {
-    date = new Date(date.getTime() + 1000);
-    name = formatBackupFileName(date);
+function uniqueBackupFileName(backupsDir: string, date: Date, name?: string): string {
+  const opts = name !== undefined ? { name } : undefined;
+  let fileName = formatBackupFileName(date, opts);
+  while (existsSync(join(backupsDir, fileName))) {
+    date = new Date(date.getTime() + 1);
+    fileName = formatBackupFileName(date, opts);
   }
-  return name;
+  return fileName;
 }
 
 /**
  * 立即备份当前项目（手动触发 / 自动定时器 / restore 覆盖前快照共用）：
- * 打包 → 写入 .backups/<时间戳>.zip（同秒去重）→ 触发保留策略清理（失败不阻塞）。
+ * 打包 → 写入 .backups/<时间戳>.zip（毫秒精度；同毫秒 +1ms 去重）→ 触发保留策略清理（失败不阻塞）。
  * 写盘失败向上抛（errorHandler → 500 INTERNAL_ERROR，endpoints.md POST /backup 语义）。
+ *
+ * @param opts.name 手动备份自定义名称（决策 28，仅 POST /backup 手动触发传入）：
+ *   sanitizeBackupName 是名称校验/规范化**唯一执行点**——非法（含路径分隔符/超长/纯点）→
+ *   400 VALIDATION_ERROR；自动备份/覆盖前快照不传 name，文件名保持纯时间戳。
  */
-export function writeBackup(project: ProjectContext): BackupFileInfo {
+export function writeBackup(project: ProjectContext, opts?: { name?: string }): BackupFileInfo {
+  let name: string | undefined;
+  if (opts?.name !== undefined) {
+    const sanitized = sanitizeBackupName(opts.name);
+    if (sanitized === null) {
+      throw new HttpError(
+        400,
+        "VALIDATION_ERROR",
+        `备份名称非法（trim 后 1-${MAX_BACKUP_NAME_LENGTH} 字符，禁路径分隔符/保留字符/控制字符/纯点）`,
+      );
+    }
+    name = sanitized;
+  }
   const zip = createBackupZip(project);
   const backupsDir = join(project.root, BACKUPS_DIR_NAME);
   mkdirSync(backupsDir, { recursive: true });
-  const fileName = uniqueBackupFileName(backupsDir, new Date());
+  const fileName = uniqueBackupFileName(backupsDir, new Date(), name);
   writeFileSync(join(backupsDir, fileName), zip); // 失败抛错 → 500（不产出半截备份）
   pruneBackups(backupsDir); // 清理失败仅记日志，不阻塞备份主流程
-  return { fileName, size: zip.length, createdAt: toIso(parseBackupFileName(fileName) as Date) };
+  const parsed = parseBackupFileName(fileName) as NonNullable<ReturnType<typeof parseBackupFileName>>;
+  return { fileName, size: zip.length, createdAt: toIso(parsed.time), ...(name !== undefined ? { name } : {}) };
 }
 
 /**
@@ -126,8 +148,11 @@ export function pruneBackups(backupsDir: string): void {
     return; // 目录不存在 → 无事可做
   }
   const parsed = files
-    .map((f) => ({ fileName: f, time: parseBackupFileName(f) }))
-    .filter((x): x is { fileName: string; time: Date } => x.time !== null)
+    .map((f) => {
+      const p = parseBackupFileName(f);
+      return p === null ? null : { fileName: f, time: p.time };
+    })
+    .filter((x): x is { fileName: string; time: Date } => x !== null)
     .sort((a, b) => b.time.getTime() - a.time.getTime()); // 最新在前
   for (const extra of parsed.slice(MAX_BACKUPS_PER_PROJECT)) {
     try {
@@ -149,10 +174,15 @@ export function listBackups(project: ProjectContext): BackupFileInfo[] {
   }
   return files
     .map((f) => {
-      const time = parseBackupFileName(f);
-      if (time === null) return null; // 非法文件名（手工放入等）不展示
+      const parsed = parseBackupFileName(f);
+      if (parsed === null) return null; // 非法文件名（手工放入等）不展示
       try {
-        return { fileName: f, size: statSync(join(backupsDir, f)).size, createdAt: toIso(time) };
+        return {
+          fileName: f,
+          size: statSync(join(backupsDir, f)).size,
+          createdAt: toIso(parsed.time),
+          ...(parsed.name !== undefined ? { name: parsed.name } : {}),
+        };
       } catch {
         return null; // 列表读取瞬间被删（竞态）→ 跳过
       }
@@ -359,8 +389,8 @@ function latestBackupTime(backupsDir: string): Date | null {
   }
   let latest: Date | null = null;
   for (const f of files) {
-    const t = parseBackupFileName(f);
-    if (t !== null && (latest === null || t.getTime() > latest.getTime())) latest = t;
+    const p = parseBackupFileName(f);
+    if (p !== null && (latest === null || p.time.getTime() > latest.getTime())) latest = p.time;
   }
   return latest;
 }
@@ -627,9 +657,10 @@ function writeFileAtomic(filePath: string, data: Uint8Array): void {
 /**
  * 从备份恢复当前项目（POST /project/backup/restore，决策 27）：
  *
- * 1. fileName 白名单校验：仅允许 `.backups/` 下 `<YYYYMMDD-HHmmss>.zip` 格式
- *    （shared parseBackupFileName，^$ 锚定天然拒绝路径分隔符/`..`，防路径穿越）；
- *    格式合法但文件不存在 → 404
+ * 1. fileName 白名单校验：仅允许 `.backups/` 下时间戳格式（决策 28 兼容三类：
+ *    `<YYYYMMDD-HHmmssSSS>.zip` 毫秒级 / `<YYYYMMDD-HHmmssSSS>-<名称>.zip` 带自定义名称 /
+ *    旧秒级 `<YYYYMMDD-HHmmss>.zip`——shared parseBackupFileName，^$ 锚定 + 名称部分
+ *    拒绝 /\\，天然防路径分隔符与 `..` 穿越）；格式合法但文件不存在 → 404
  * 2. **覆盖前自动快照**：当前三文件打包为快照存入 .backups/（复用备份管道，
  *    就是普通备份文件，自然参与保留策略——后悔药，决策 27）
  * 3. 备份包校验（validateBackupPackage：zip/白名单/契约/user_version 三态，
@@ -643,9 +674,10 @@ function writeFileAtomic(filePath: string, data: Uint8Array): void {
   * @throws HttpError 400（文件名非法/坏包）、404（备份不存在）、409 SCHEMA_VERSION_MISMATCH
   */
 export function restoreBackup(project: ProjectContext, fileName: string): { snapshot: Pick<BackupFileInfo, "fileName" | "createdAt"> } {
-  // 1. 白名单校验（parseBackupFileName 全格式校验，防路径穿越）
+  // 1. 白名单校验（parseBackupFileName 全格式校验，防路径穿越；决策 28 兼容
+  //    毫秒级/带自定义名称/旧秒级三类文件名）
   if (parseBackupFileName(fileName) === null) {
-    throw new HttpError(400, "VALIDATION_ERROR", `备份文件名格式非法（仅接受 <YYYYMMDD-HHmmss>.zip）: ${fileName}`);
+    throw new HttpError(400, "VALIDATION_ERROR", `备份文件名格式非法（仅接受 <YYYYMMDD-HHmmssSSS>.zip 时间戳格式）: ${fileName}`);
   }
   const backupPath = join(project.root, BACKUPS_DIR_NAME, fileName);
   if (!existsSync(backupPath)) {

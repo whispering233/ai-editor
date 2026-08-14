@@ -33,16 +33,17 @@
 │  [多行文本域…                            ]        │
 │  [保存提示词]                                     │
 │                                                  │
-│ 自动备份（B2，决策 27）                            │
+│ 自动备份（B2 决策 27 + 决策 28）                   │
 │  · 跟随书籍：备份/频率均为本项目独立                  │
 │  · 服务运行期间按频率自动备份；有变更才生成新备份      │
 │  · 每项目保留最近 20 份，超出自动清理最旧             │
-│  频率: [每 10 分钟 ▼]  [立即备份]                  │
+│  频率: [每 10 分钟 ▼]                             │
+│  [备份名称（可选）…] [立即备份]                    │
 │  历史备份:                                         │
 │  ┌──────────────────────────────────────┐        │
-│  │ 08-13 10:15   1.2 MB    [加载]       │        │
-│  │ 08-13 09:45   1.2 MB    [加载]       │        │
-│  │ 08-12 22:30   986 KB    [加载]       │        │
+│  │ 08-13 10:15:30 定稿   1.2 MB [加载]  │        │
+│  │ 08-13 09:45:12        1.2 MB [加载]  │        │
+│  │ 08-12 22:30:05        986 KB [加载]  │        │
 │  └──────────────────────────────────────┘        │
 │                                                  │
 │ [保存设置]                                        │
@@ -58,8 +59,8 @@
 | key 编辑 | PUT → `api_key`（新 key；空字符串 = 清除） |
 | 项目提示词（B1） | GET/PUT `/api/v1/project/config` → `prompt` |
 | 备份频率（B2） | GET/PUT `/api/v1/project/config` → `backupFrequencyMinutes` / `backup_frequency_minutes` |
-| 备份列表（B2） | `GET /api/v1/project/backups` → `backups[]`（fileName/size/createdAt） |
-| 立即备份（B2） | `POST /api/v1/project/backup` → `backup` |
+| 备份列表（B2） | `GET /api/v1/project/backups` → `backups[]`（fileName/size/createdAt/name?） |
+| 立即备份（B2.5） | `POST /api/v1/project/backup` 可选 `{ name }` → `backup`（fileName/size/createdAt/name?） |
 | 加载备份（B2） | `POST /api/v1/project/backup/restore` `{ fileName }` → `{ restored, snapshot }` |
 
 ## 关键交互
@@ -71,7 +72,8 @@
 - **保存**：`PUT /settings/llm` → toast「已保存，仅影响新请求」（决策 17：运行中的 agent 循环不受扰动）。
 - **项目提示词（B1）**：`GET /project/config` 载入当前 `prompt` → 多行文本域编辑 → [保存提示词] `PUT /project/config { prompt }` → toast + `dataVersion` +1（中栏数据页刷新）；清空保存 = 移除项目提示词（后续请求「## 项目设定」整段跳过）。
 - **备份频率（B2）**：下拉选择（关闭 / 每 5 / 10 / 15 / 30 / 60 分钟）→ 选择即保存 `PUT /project/config { backup_frequency_minutes }`（null = 关闭）→ toast + 列表/定时器按新频率生效；无项目打开时整区禁用（404/409 时显示引导提示）。
-- **立即备份（B2）**：点击 → `POST /project/backup` → 成功后列表顶部出现新条目 + toast「已备份」；失败（如磁盘错误）→ toast。
+- **立即备份（B2 + B2.5）**：旁侧「备份名称（可选）」输入框（maxLength 30，决策 28）——trim 后非空 → 随请求提交 `POST /project/backup { name }`，文件名 `<时间戳>-<名称>.zip`，成功后清空输入 + toast「已备份「名称」」；空输入 → 不传 name（纯时间戳文件名）。失败（如磁盘错误）→ toast。
+- **备份列表（B2.5）**：时间显示补秒（当年 `MM-DD HH:mm:ss` / 跨年 `YY-MM-DD HH:mm:ss`——同分钟内多次备份可区分）；自定义名称行内展示（时间置灰 + 名称强调，旧备份/自动备份无名称）；完整文件名在行 tooltip。
 - **加载备份（B2）**：行内 [加载] → **强确认 Dialog**：展示备份时间与大小 + 说明「将覆盖当前项目数据；覆盖前会自动备份当前状态（后悔药）」→ 确认 → `POST /project/backup/restore { fileName }` → 成功后提示快照文件名 + **刷新项目数据**（config/outline/会话，与 B1 保存同款 dataVersion 联动）；409 `SCHEMA_VERSION_MISMATCH`（备份来自更高版本）→ 阻断提示。
 - **错误态**：`VALIDATION_ERROR` → 表单内联错误。
 - 说明区常驻：key 只进用户级配置、不进项目文件（决策 17）；环境变量优先级提示（当 key 来自环境变量时，页面仍可保存配置但实际生效以环境变量为准——MVP 仅文案说明，不区分来源展示）。
