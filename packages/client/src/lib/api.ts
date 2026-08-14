@@ -770,9 +770,10 @@ export interface RenameBackupRes {
  * 空 → 提交 { name: "" }（清除名称段）；错误：404（备份不存在）、400（名称非法，message 透传）
  */
 export function renameProjectBackup(fileName: string, name?: string): Promise<RenameBackupRes> {
+  const trimmed = name?.trim() ?? ""; // undefined/空白 → 空串（清除名称段）
   return apiFetch<RenameBackupRes>("/project/backup/rename", {
     method: "POST",
-    body: name !== undefined && name.trim().length > 0 ? { fileName, name: name.trim() } : { fileName, name: "" },
+    body: { fileName, name: trimmed },
   });
 }
 

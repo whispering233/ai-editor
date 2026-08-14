@@ -20,7 +20,7 @@ import {
   type Dirent,
 } from "node:fs";
 import { Hono, type Context } from "hono";
-import type { ProjectBackupRenameReq, ProjectFileConfig } from "@whispering233/ai-editor-shared";
+import type { ProjectFileConfig } from "@whispering233/ai-editor-shared";
 import { mapProjectFileToConfig } from "@whispering233/ai-editor-shared";
 import { openDatabase } from "@whispering233/ai-editor-db";
 import { ensureSchemaCompatible, DATA_DB_FILE_NAME } from "@whispering233/ai-editor-db";
@@ -576,20 +576,15 @@ projectRoutes.post("/backup", async (c) => {
 projectRoutes.post("/backup/rename", async (c) => {
   const project = requireCurrentProject(); // 无当前项目 → 409 NO_PROJECT_OPEN（与 /backup 一致）
   const raw = await c.req.json().catch(() => null);
-  let parsed: ProjectBackupRenameReq;
-  try {
-    parsed = await projectBackupRenameReqSchema.parseAsync(raw);
-  } catch (err) {
-    // ZodError → errorHandler → 400 VALIDATION_ERROR（含 fields，与 /config PUT 同款语义）
-    throw err;
-  }
+  // parseAsync 失败抛 ZodError → errorHandler → 400 VALIDATION_ERROR（含 fields，与 /config PUT 同款语义）
+  const parsed = await projectBackupRenameReqSchema.parseAsync(raw);
   return c.json(ok({ backup: renameBackup(project, parsed.fileName, parsed.name) }));
 });
 
 // POST /api/v1/project/backup/restore —— 从备份恢复当前项目（覆盖恢复，决策 27）
 //
 // 流程（endpoints.md）：
-// 1. fileName 白名单校验（仅 .backups/ 下时间戳格式——决策 28 兼容毫秒级/带自定义名称/旧秒级，
+// 1. fileName 白名单校验（仅 .backups/ 下时间戳格式——决策 28/29 兼容毫秒级/带 kind 段/旧带名称/旧秒级，
 //    防路径穿越）→ 非法 400
 // 2. 覆盖前自动快照（复用备份管道，参与保留策略——后悔药）→ 备份不存在 404
 // 3. 备份包校验（zip/白名单/契约/user_version 三态，E4/E5）→ 400/409 零触碰

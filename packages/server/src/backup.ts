@@ -17,9 +17,7 @@
 // 依赖方向：本模块不依赖 middleware（避免循环依赖——定时器持有所调度项目引用，
 // 由 setCurrentProject 显式启停）；仅 import type ProjectContext（类型擦除）。
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { closeSync, fsyncSync, openSync } from "node:fs";
-import { mkdtempSync, rmSync } from "node:fs";
+import { closeSync, existsSync, fsyncSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { Unzip, UnzipInflate, zipSync } from "fflate";
@@ -68,6 +66,26 @@ export interface BackupFileInfo {
   name?: string;
 }
 
+/**
+ * 备份文件名白名单校验（renameBackup / restoreBackup 共用，防路径穿越）：
+ * parseBackupFileName 全格式校验（时间戳部分 ^$ 锚定纯数字 + 名称部分拒绝 /\\，
+ * 天然防路径分隔符与 `..` 穿越；含旧格式兼容解析）；非法 → 400 VALIDATION_ERROR（文案统一）。
+ *
+ * @returns 解析结果（校验通过即返回非 null——调用方直接取 time/kind/name，免二次解析）
+ * @throws HttpError 400 VALIDATION_ERROR（文件名格式非法）
+ */
+function assertBackupFileNameFormat(fileName: string): NonNullable<ReturnType<typeof parseBackupFileName>> {
+  const parsed = parseBackupFileName(fileName);
+  if (parsed === null) {
+    throw new HttpError(
+      400,
+      "VALIDATION_ERROR",
+      `备份文件名格式非法（仅接受 <YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip 时间戳格式）: ${fileName}`,
+    );
+  }
+  return parsed;
+}
+
 // ============ 备份管道（复用 E1 打包，避免复制） ============
 
 /**
@@ -97,8 +115,15 @@ export function createBackupZip(project: ProjectContext): Uint8Array<ArrayBuffer
  * 同毫秒冲突（如「立即备份 + restore 覆盖前快照」连续触发，理论罕见）处理：
  * 时间戳 +1 毫秒循环去重，**保持 <YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip 格式契约**——
  * parseBackupFileName 解析与 restore 白名单校验不受影响。
+ *
+ * @returns { fileName, date }——date 为最终去重后的时间戳（与 fileName 时间戳段一致，
+ *   调用方直接用于构造 createdAt，免 parse 回读）
  */
-function uniqueBackupFileName(backupsDir: string, date: Date, opts?: { kind?: BackupKind; name?: string }): string {
+function uniqueBackupFileName(
+  backupsDir: string,
+  date: Date,
+  opts?: { kind?: BackupKind; name?: string },
+): { fileName: string; date: Date } {
   const kind = opts?.kind ?? "auto";
   const name = opts?.name;
   let fileName = formatBackupFileName(date, { kind, name });
@@ -106,7 +131,7 @@ function uniqueBackupFileName(backupsDir: string, date: Date, opts?: { kind?: Ba
     date = new Date(date.getTime() + 1);
     fileName = formatBackupFileName(date, { kind, name });
   }
-  return fileName;
+  return { fileName, date };
 }
 
 /**
@@ -139,14 +164,13 @@ export function writeBackup(project: ProjectContext, opts?: { name?: string; kin
   const zip = createBackupZip(project);
   const backupsDir = join(project.root, BACKUPS_DIR_NAME);
   mkdirSync(backupsDir, { recursive: true });
-  const fileName = uniqueBackupFileName(backupsDir, new Date(), { kind, name });
+  const { fileName, date } = uniqueBackupFileName(backupsDir, new Date(), { kind, name });
   writeFileSync(join(backupsDir, fileName), zip); // 失败抛错 → 500（不产出半截备份）
   pruneBackups(backupsDir); // 清理失败仅记日志，不阻塞备份主流程
-  const parsed = parseBackupFileName(fileName) as NonNullable<ReturnType<typeof parseBackupFileName>>;
   return {
     fileName,
     size: zip.length,
-    createdAt: toIso(parsed.time),
+    createdAt: toIso(date), // date = 最终去重后的时间戳，与 fileName 时间戳段一致（决策 27 无状态语义）
     kind,
     ...(name !== undefined ? { name } : {}),
   };
@@ -175,15 +199,9 @@ export function writeBackup(project: ProjectContext, opts?: { name?: string; kin
  * @throws HttpError 400（文件名非法/名称非法）、404（备份不存在）、409 BACKUP_TARGET_EXISTS
  */
 export function renameBackup(project: ProjectContext, fileName: string, name?: string): BackupFileInfo {
-  // 1. 白名单校验（parseBackupFileName 全格式校验，防路径穿越）
-  const parsed = parseBackupFileName(fileName);
-  if (parsed === null) {
-    throw new HttpError(
-      400,
-      "VALIDATION_ERROR",
-      `备份文件名格式非法（仅接受 <YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip 时间戳格式）: ${fileName}`,
-    );
-  }
+  // 1. 白名单校验（assertBackupFileNameFormat：parseBackupFileName 全格式校验，防路径穿越；
+  //    非法 → 400；返回解析结果直接取 time/kind）
+  const parsed = assertBackupFileNameFormat(fileName);
   const backupsDir = join(project.root, BACKUPS_DIR_NAME);
   if (!existsSync(join(backupsDir, fileName))) {
     throw new HttpError(404, "VALIDATION_ERROR", `备份不存在: ${fileName}`);
@@ -224,8 +242,8 @@ export function renameBackup(project: ProjectContext, fileName: string, name?: s
 
   // 5. 目标冲突防御（oracle P1-1，决策 29）：POSIX rename 目标存在时静默替换（数据丢失风险）——
   //    可达路径：旧秒级改名后毫秒补 000 撞上毫秒为 0 的自动备份、同毫秒双 manual 清名覆盖等；
-  //    显式 409 拒绝。幂等分支（target === fileName）已在第 4 步提前返回，不在此检查。
-  if (newFileName !== fileName && existsSync(join(backupsDir, newFileName))) {
+  //    显式 409 拒绝。幂等分支（target === fileName）已在第 4 步提前返回，此处必然 target ≠ fileName。
+  if (existsSync(join(backupsDir, newFileName))) {
     throw new HttpError(409, "BACKUP_TARGET_EXISTS", `目标备份文件名已存在: ${newFileName}`);
   }
 
@@ -550,8 +568,6 @@ export function maybeAutoBackup(project: ProjectContext): boolean {
 
 /** 当前排程的定时器句柄（null = 未排程/已停止） */
 let backupTimer: ReturnType<typeof setTimeout> | null = null;
-/** 定时器当前服务的项目（stop 时清空；restore 替换 config/db 后同一引用仍有效） */
-let scheduledProject: ProjectContext | null = null;
 
 /**
  * 启动/重启自动备份调度（open/切换项目时调用；restore 后频率可能变化也调用）：
@@ -561,7 +577,6 @@ let scheduledProject: ProjectContext | null = null;
  */
 export function startAutoBackup(project: ProjectContext): void {
   stopAutoBackup();
-  scheduledProject = project;
   scheduleNext(project);
 }
 
@@ -571,7 +586,6 @@ export function stopAutoBackup(): void {
     clearTimeout(backupTimer);
     backupTimer = null;
   }
-  scheduledProject = null;
 }
 
 /** 按项目当前频率排程下一次检查；频率关闭 → 不排程 */
@@ -589,11 +603,6 @@ function scheduleNext(project: ProjectContext): void {
   }, freq * 60_000);
   // unref：定时器不阻止进程退出（测试/服务关闭后无残留句柄）
   (backupTimer as { unref?: () => void }).unref?.();
-}
-
-/** 当前被定时器服务的项目（测试用；null = 未排程） */
-export function getScheduledProject(): ProjectContext | null {
-  return scheduledProject;
 }
 
 // ============ 恢复（restore：白名单 → 快照 → 校验 → 原子替换） ============
@@ -788,11 +797,9 @@ function writeFileAtomic(filePath: string, data: Uint8Array): void {
   * @throws HttpError 400（文件名非法/坏包）、404（备份不存在）、409 SCHEMA_VERSION_MISMATCH
   */
 export function restoreBackup(project: ProjectContext, fileName: string): { snapshot: Pick<BackupFileInfo, "fileName" | "createdAt"> } {
-  // 1. 白名单校验（parseBackupFileName 全格式校验，防路径穿越；决策 28 兼容
-  //    毫秒级/带自定义名称/旧秒级三类文件名）
-  if (parseBackupFileName(fileName) === null) {
-    throw new HttpError(400, "VALIDATION_ERROR", `备份文件名格式非法（仅接受 <YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip 时间戳格式）: ${fileName}`);
-  }
+  // 1. 白名单校验（assertBackupFileNameFormat：parseBackupFileName 全格式校验，防路径穿越；
+  //    决策 28/29 兼容毫秒级/带 kind 段/旧带名称/旧秒级文件名）
+  assertBackupFileNameFormat(fileName);
   const backupPath = join(project.root, BACKUPS_DIR_NAME, fileName);
   if (!existsSync(backupPath)) {
     throw new HttpError(404, "VALIDATION_ERROR", `备份不存在: ${fileName}`);

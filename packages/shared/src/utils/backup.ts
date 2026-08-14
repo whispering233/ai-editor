@@ -2,7 +2,7 @@
 // 纯函数，零 Node 依赖（client 浏览器打包安全）
 // 契约来源：doc/database/schema.md「自动备份目录」（时间戳命名）、doc/api/endpoints.md
 //   POST /project/backup/restore（fileName 白名单校验：仅允许 .backups/ 下时间戳格式，
-//   拒绝路径分隔符 / ..，防路径穿越——正则 ^...$ 只匹配纯数字时间戳，天然拒绝路径字符）
+//   拒绝路径分隔符 / ..，防路径穿越——时间戳部分 ^$ 锚定纯数字 + 名称部分拒绝 /\\）
 // 时区约定：文件名时间戳为本地时区（无时区后缀），format/parse 对称使用本地时间
 //
 // 格式（决策 29）——<YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip，kind 段单字母 m/a：
@@ -82,10 +82,11 @@ export function parseBackupFileName(fileName: string): ParsedBackupFileName | nu
   // 解析为 kind 标记（无名称），接受——见 BACKUP_FILE_NAME_PATTERN_MS 注释。
   if (m[8] === "a" || m[8] === "m") {
     result.kind = m[8] === "a" ? "auto" : "manual";
-    if (m[9] !== undefined && m[9].length > 0) {
+    // 名称组 [^/\\]+ 的 + 已保证非空（组匹配即非空），仅需判 undefined
+    if (m[9] !== undefined) {
       result.name = m[9];
     }
-  } else if (m[8] !== undefined && m[8].length > 0) {
+  } else if (m[8] !== undefined) {
     result.kind = "manual"; // 旧带名称（决策 28 格式）→ 兼容为 manual
     result.name = m[8];
   }

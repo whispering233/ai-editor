@@ -6,9 +6,6 @@
 /** 自动备份频率枚举（分钟，决策 27）：null / 0 = 关闭；缺省见 DEFAULT_BACKUP_FREQUENCY_MINUTES */
 export const BACKUP_FREQUENCIES = [5, 10, 15, 30, 60] as const;
 
-/** 备份频率类型（从 BACKUP_FREQUENCIES 派生） */
-export type BackupFrequency = (typeof BACKUP_FREQUENCIES)[number];
-
 /** 缺省自动备份频率（分钟，决策 27：新项目默认开启；project.json 字段缺失时读侧兜底） */
 export const DEFAULT_BACKUP_FREQUENCY_MINUTES = 10;
 
@@ -19,5 +16,4 @@ export const MAX_BACKUPS_PER_PROJECT = 20;
 export const MAX_BACKUP_NAME_LENGTH = 30;
 
 /** 备份类型（决策 29）：auto = 自动（定时器/覆盖前快照）/ manual = 手动（立即备份触发）；文件名 kind 标记段来源 */
-export const BACKUP_KINDS = ["auto", "manual"] as const;
-export type BackupKind = (typeof BACKUP_KINDS)[number];
+export type BackupKind = "auto" | "manual";
