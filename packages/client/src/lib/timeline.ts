@@ -123,6 +123,12 @@ export function eventTimeLabel(item: EntitySummary): string {
   return typeof label === "string" ? label : "";
 }
 
+/** 事件的 description 摘要字段（非字符串防御 → 空串 = 行内不渲染描述区，timeline.md 信息层级）；F6 行内描述展示 */
+export function eventDescription(item: EntitySummary): string {
+  const desc = (item.summary as Record<string, unknown>).description;
+  return typeof desc === "string" ? desc : "";
+}
+
 /** 收集全部事件的标签去重（稳定序：按列表序首次出现；空串忽略——筛选器选项） */
 export function collectEventTags(items: EntitySummary[]): string[] {
   const seen = new Set<string>();

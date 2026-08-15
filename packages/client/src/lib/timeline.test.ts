@@ -7,6 +7,7 @@ import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import {
   buildEventDetailPatch,
   collectEventTags,
+  eventDescription,
   eventDropOrder,
   eventFormFromDetail,
   eventTagsOf,
@@ -65,6 +66,12 @@ describe("eventTagsOf / eventTimeLabel（事件行摘要防御提取，F3 垂直
     expect(eventTimeLabel(eventOf("a"))).toBe("");
     expect(eventTimeLabel({ ...eventOf("b"), summary: { time_label: 42 } })).toBe("");
     expect(eventTimeLabel({ ...eventOf("c"), summary: { time_label: "第二天黄昏" } })).toBe("第二天黄昏");
+  });
+
+  it("eventDescription：description 缺失/非字符串 → 空串（行内不渲染描述区）；正常值原样返回", () => {
+    expect(eventDescription(eventOf("a"))).toBe("");
+    expect(eventDescription({ ...eventOf("b"), summary: { description: 42 } })).toBe("");
+    expect(eventDescription({ ...eventOf("c"), summary: { description: "拜入山门" } })).toBe("拜入山门");
   });
 });
 

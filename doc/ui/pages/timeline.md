@@ -38,7 +38,7 @@
 
 - **垂直轴线**：容器内绝对定位竖线 `absolute left-[11px] top-0 bottom-0 w-0.5 bg-border pointer-events-none`（left = 节点列中心；**pointer-events-none 是拖拽共存前提**，组间空隙处线连续贯穿）。
 - **节点圆点**：`relative z-10 rounded-full border-2 border-primary bg-background`（不透明背景盖住穿过轴线，尺寸 `size-4`；组内事件行用小圆点 `size-2 rounded-full bg-primary/60`）。
-- **事件行**：内容卡 `rounded-md bg-card border-border px-3 py-2`，从左到右：拖拽柄 `GripVertical` → 事件名（`truncate` + title 全文）→ 时间标签（**F5 醒目**：有值 `text-sm font-medium text-primary` 主题色点缀；空值占位「未标注时间」弱化样式 `text-xs italic text-muted-foreground`——已标注/未标注一眼可辨）→ tags 胶囊 → 「N 节点」计数 → ⋯ 菜单（详情/编辑/移入回收站）。
+- **事件行**：内容卡 `rounded-md bg-card border-border px-3 py-2`，从左到右：拖拽柄 `GripVertical` → 事件名（`truncate` + title 全文）→ 时间标签（**F5 醒目**：有值 `text-sm font-medium text-primary` 主题色点缀；空值占位「未标注时间」弱化样式 `text-xs italic text-muted-foreground`——已标注/未标注一眼可辨）→ tags 胶囊 → 「N 节点」计数 → ⋯ 菜单（详情/编辑/移入回收站）。**事件名行下方为全宽描述区（F6）**：`text-sm text-muted-foreground` 次要层级（低于事件名/时间标签），两行截断 `line-clamp-2`；**超过两行才显示「展开」按钮**（clamp 态 `scrollHeight > clientHeight` 运行时测量，窗口 resize 重测；展开态跳过重测保留上次 clamped 测量值），展开后 `line-clamp-none` 显示「收起」；描述 trim 后为空不渲染（上方线框为展示简洁省略描述行，F4 线框组内事件行同理）。
 - **拖拽**：draggable 设在事件行根（组内行不 draggable 防误拖，F4 后为组块根）；容器 onDragOver `e.preventDefault()`，用 `e.clientY` 与各行/组块中点比较算插入位（复用 S13 上下半判定模式），插入指示 `border-t-2 border-primary`；dragstart 时被拖行 `opacity-50`；拖拽结束 → `PUT /entity/event/:id/move` → 失败回滚 + toast。
 - 视觉全走 tokens（`border-border`/`bg-card`/`bg-background`/`text-foreground`/`text-muted-foreground`/`rounded-md`），**禁硬编码色类**；节点/轴线主题色点缀适配浅深双主题。
 
@@ -72,7 +72,7 @@
 | 时间标签 | `time_label`（自由文本，行内/右侧展示；**不参与排序、不解析**；F5 样式提升：行内有值 → `text-sm font-medium text-primary` 主题色点缀、空 → 「未标注时间」弱化占位斜体） |
 | 标签徽标 | `tags`（字符串数组，多枚徽标并排） |
 | 关联节点数 | `relations` 中 `occurs_in` 关系计数（显示「N 节点」） |
-| 描述 | `description`（详情页展示） |
+| 描述 | `description`（详情页展示；**F6：列表行内展示**——事件名行下方全宽，两行截断 + 超两行显示「展开/收起」，空描述不渲染） |
 | 排序 | `sort_order`（全局事件线性序，拖拽为权威；非 event 实体恒为 NULL） |
 | 时间 | `createdAt` / `updatedAt` |
 
