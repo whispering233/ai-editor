@@ -214,11 +214,14 @@ export function Timeline({
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
     if (cur.kind === "timepoint") {
-      // 时间点拖拽落点在事件行：视为该组的组级插入位（side 按行中点）
+      // 时间点拖拽落点在事件行：视为该组的组级插入位（side 按行中点）。
+      // ⚠ side 必须在 updater 外计算——合成事件 currentTarget 在事件处理结束后被
+      // React 清空，updater 延迟执行时访问 e.currentTarget 会得到 null（拖拽崩溃根因）
+      const side = insertSideFromEvent(e);
       setDropTarget((prev) =>
-        prev !== null && prev.kind === "timepoint" && prev.side === insertSideFromEvent(e) && prev.groupId === g.groupId
+        prev !== null && prev.kind === "timepoint" && prev.side === side && prev.groupId === g.groupId
           ? prev
-          : { kind: "timepoint", side: insertSideFromEvent(e), groupId: g.groupId },
+          : { kind: "timepoint", side, groupId: g.groupId },
       );
       return;
     }
