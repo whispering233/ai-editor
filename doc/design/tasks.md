@@ -306,10 +306,11 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 ### F2 自动备份检测不到 data.db 变更（Bug，2026-08 用户反馈）
 
 - 范围：`server/src/backup.ts` `hasFileChangesSince`（535-545 行）补查 `data.db-wal` mtime——根因：WAL 模式普通写事务只刷新 `-wal` 伴生文件、主文件 mtime 不变，自动备份永远判定「无变更」；影响所有 data.db 写（实体/关系/Delta/聊天/时间轴）。补查 wal 文件即可（备份时 `checkpointWal` 已保证打包完整）；同步补 `backup.test.ts` WAL 场景用例。
-- 文档：决策 27 无变更（修复既有实现缺陷，不改契约）；tasks.md 本卡
+- 文档：decisions.md 决策 27 修订注记（WAL 伴生文件纳入判定，wal 缺失 ≠ 变更）；tasks.md 本卡
 - 依赖：无
 - 验证：`pnpm --filter server test` + 手工（改时间轴事件 → 等 tick → 检查 `.backups/` 新备份生成）
 - 回滚：单 commit
+- **状态（2026-08）**：✅ 已完成（commit `2fb0735`；oracle 审核通过——语义/误报/漏检/既有用例兼容逐项核验，P2 两处注释措辞同步已修；server 313 用例全绿 + typecheck/lint 通过）。手工验证指引：`pnpm start:test-project` 后改时间轴事件，等待 ≥ 1 个频率周期（默认 10 分钟，可把 project.json `backup_frequency_minutes` 临时设为 5）检查 `.backups/`。
 
 ### F3 垂直时间轴 UI（交互优化，2026-08 用户裁决：垂直轴线 + 时间点分组）
 
