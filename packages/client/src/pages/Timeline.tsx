@@ -1,19 +1,23 @@
-// 时间轴列表页（C3，决策 26；替换中栏占位）
+// 时间轴列表页（C3，决策 26；G2.3 双实体重构）
 // 路由：#/timeline（1 段 → 列表页）；#/timeline/:id 详情页见 TimelineDetail.tsx（C4，main.tsx 2 段分支）
-// 数据：GET /api/v1/entity/event（EntitySummary，服务端恒按 sort_order 升序，决策 26）+
-//   GET /api/v1/relation?source_type=event&relation_type=occurs_in&depth=1（全量锚定边，
-//   行内「N 节点」计数——列表响应无关系计数，一次批量拉取避免 N+1；同 HookPanel depEdges 模式）
-// 契约：doc/ui/pages/timeline.md（布局线框/信息层级/关键交互/状态）
-// 关键交互：
-//  - 新建：POST /entity/event（name/description/time_label/tags）+ 有锚点节点再 POST /relation
-//    （event → outline_node，occurs_in）→ toast + 刷新（追加至列表尾部——服务端 NULL 沉底）
-//  - 拖拽排序：组块级 HTML5 DnD（F4：同 time_label 归组后拖拽组块；组内事件不 draggable 防误拖，
-//    drop 后对组内事件按序逐个 PUT /entity/event/:id/move——见 components/timeline/Timeline.tsx）
-//  - 行 ⋯ 菜单：详情（跳 #/timeline/:id）/编辑（同新建表单预填，PUT）/移入回收站（ConfirmDialog 软删）
-//  - 标签筛选：顶部 [全部] [tag…] 客户端过滤（筛选后再分组；tag 从当前列表聚合，timeline.md）
-//  - AI 排序（F9）：头部「AI 排序」按钮 → 聊天注入预设指令（工具名 propose_reorder_events 保证出现，
-//    LLM 依赖工具名发现）→ agent 循环调工具 → 提案卡确认后 Executor 重排 sort_order →
-//    notifyDataChanged → 本页 useDataRefresh 自动重拉（无需本页处理刷新）
+// 数据（G2 双实体，timeline.md「路由与数据」）：
+//   GET /api/v1/entity/timepoint（时间点实体，恒按 sort_order 升序——组间顺序，拖拽为权威）
+//   + GET /api/v1/entity/event（事件实体，恒按 sort_order 升序——组内排序键，拖拽为权威）
+//   + GET /api/v1/relation?source_type=timepoint&relation_type=occurs_at&depth=1（挂载边，
+//     timepoint → event 1:n——构建 eventId → timepointId 挂载映射）
+//   + GET /api/v1/relation?source_type=event&relation_type=occurs_in&depth=1（全量锚定边，
+//     行内「N 节点」计数——同 HookPanel depEdges 模式）
+// 契约：doc/ui/pages/timeline.md（G2 布局线框/双实体模型/双入口/双轨拖拽/信息层级/状态）
+// 关键交互（G2）：
+//  - 新建时间点：POST /entity/timepoint（name = 时间标签文本）→ 时间轴末尾追加
+//  - 新建事件（双入口）：顶部「+ 新建事件」= 不挂载（入未挂载区）；组尾「+ 在此时间点新建事件」=
+//    POST /entity/event + POST /relation（timepoint → event，occurs_at 挂载该时间点）
+//  - 拖拽（双轨）：时间点整组 = PUT /entity/timepoint/:id/move（只重排组间序，内部事件不动）；
+//    事件单条 = 同组 PUT /entity/event/:id/move；跨组 POST /entity/event/:id/move_to（改挂载+重排）
+//  - 时间点重命名：组标题 [重命名] 行内编辑 → PUT /entity/timepoint/:id { name }
+//  - AI 排序（F9）：注入聊天预设指令（工具名 propose_reorder_timepoints 保证出现——LLM 依赖
+//    工具名发现）→ 提案卡确认后 Executor 重排 timepoint.sort_order → notifyDataChanged → 本页
+//    useDataRefresh 自动重拉（无需本页处理刷新）
 //  - 数据刷新：useDataRefresh 订阅 dataVersion（AI 提案确认写库 / InfoBar 刷新按钮）
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
@@ -31,6 +35,8 @@ import {
   listEntities,
   listRelations,
   moveEntityEvent,
+  moveEntityEventTo,
+  moveEntityTimepoint,
   updateEntity,
   type RelationSummaryItem,
 } from "../lib/api";
@@ -43,6 +49,7 @@ import {
   suggestTags,
   tagsToInput,
 } from "../lib/timeline";
+import { buildOccursAtRelationBody } from "../lib/timeline-detail";
 import { flattenTree } from "../lib/outline-tree";
 import { cn } from "../lib/utils";
 import { ConfirmDialog } from "../components/outline/dialogs";
@@ -54,24 +61,29 @@ import { useProjectStore } from "../stores/project";
 import { useChatStore } from "../stores/chat";
 import { useUiStore } from "../stores/ui";
 
-/** 事件表单（新建/编辑共用；tags 为输入框字符串，提交前 parseTagsInput） */
+/** 事件表单（新建/编辑共用；G2：time_label 已移除——时间标签 = 时间点挂载；tags 为输入框字符串） */
 interface EventForm {
   name: string;
   description: string;
-  timeLabel: string;
   tagsInput: string;
 }
 
-const EMPTY_FORM: EventForm = { name: "", description: "", timeLabel: "", tagsInput: "" };
+const EMPTY_FORM: EventForm = { name: "", description: "", tagsInput: "" };
 
 export default function Timeline() {
+  // 时间点 / 事件列表（双实体，均按 sort_order 升序）
+  const [timepoints, setTimepoints] = useState<EntitySummary[] | null>(null);
   const [items, setItems] = useState<EntitySummary[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
-  // 数据变更信号（同 HookPanel）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉列表 + 锚定边
+  // 数据变更信号（同 HookPanel）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉全部
   useDataRefresh(() => setReloadTick((t) => t + 1));
-  /** 全量 occurs_in 边（GET /relation 一次拉全；行内「N 节点」计数；失败降级隐藏——不阻塞列表） */
+  /** 全量 occurs_at 挂载边（GET /relation 一次拉全；构建挂载映射；失败降级空数组——
+   *  事件全部视为未挂载——不阻塞列表） */
+  const [occursAtEdges, setOccursAtEdges] = useState<RelationSummaryItem[]>([]);
+  const [occursAtFailed, setOccursAtFailed] = useState(false);
+  /** 全量 occurs_in 边（行内「N 节点」计数；失败降级隐藏——不阻塞列表） */
   const [occursEdges, setOccursEdges] = useState<RelationSummaryItem[]>([]);
   const [occursEdgesFailed, setOccursEdgesFailed] = useState(false);
 
@@ -82,12 +94,19 @@ export default function Timeline() {
   // 达到默认 limit 50 说明可能截断 → 补拉全量 200；补拉失败静默降级用已拉列表聚合）
   const [tagPool, setTagPool] = useState<string[]>([]);
 
-  // 新建对话框
+  // 新建对话框（G2 双入口：createTimepointId 非空 = 组尾「+ 在此时间点新建事件」预挂载）
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState<EventForm>(EMPTY_FORM);
+  const [createTimepointId, setCreateTimepointId] = useState<string | null>(null);
   const [createNodeId, setCreateNodeId] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
   const [createSubmitting, setCreateSubmitting] = useState(false);
+
+  // 新建时间点对话框
+  const [tpCreateOpen, setTpCreateOpen] = useState(false);
+  const [tpName, setTpName] = useState("");
+  const [tpError, setTpError] = useState<string | null>(null);
+  const [tpSubmitting, setTpSubmitting] = useState(false);
 
   // 编辑对话框（预填 name + data；saveName 记录打开时的原名——name 变更才提交）
   const [editTarget, setEditTarget] = useState<EntitySummary | null>(null);
@@ -103,15 +122,26 @@ export default function Timeline() {
   const nodeOptions = flattenTree(outline?.children ?? []);
   const sendMessage = useChatStore((s) => s.sendMessage);
 
-  // 列表 + 锚定边并行（互不依赖；锚定边失败仅降级隐藏「N 节点」列）。
-  // Promise.allSettled 统一收口 loading：两个请求都完成才结束骨架，避免列表慢于关系请求时
-  // 「骨架消失 + 空白」窗口（oracle 修复）；各请求错误仍按原语义分别处理
+  // 四路并行：时间点 / 事件 / occurs_at 挂载边 / occurs_in 锚定边。
+  // Promise.allSettled 统一收口 loading：全部完成才结束骨架（G1 同式）；各请求错误按语义分别处理：
+  // 时间点或事件失败 → error 横幅（重试全部）；occurs_at/occurs_in 失败 → 降级不阻塞。
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setOccursAtFailed(false);
     setOccursEdgesFailed(false);
     void Promise.allSettled([
+      listEntities("timepoint", {})
+        .then((res) => {
+          if (!cancelled) setTimepoints(res.items);
+        })
+        .catch((err) => {
+          if (!cancelled) {
+            setTimepoints(null);
+            setError(err instanceof ApiError ? err.code : CLIENT_NETWORK_ERROR);
+          }
+        }),
       listEntities("event", {})
         .then((res) => {
           if (!cancelled) {
@@ -136,6 +166,13 @@ export default function Timeline() {
             setError(err instanceof ApiError ? err.code : CLIENT_NETWORK_ERROR);
           }
         }),
+      listRelations({ source_type: "timepoint", relation_type: "occurs_at", depth: 1 })
+        .then((res) => {
+          if (!cancelled) setOccursAtEdges(res.relations);
+        })
+        .catch(() => {
+          if (!cancelled) setOccursAtFailed(true);
+        }),
       listRelations({ source_type: "event", relation_type: "occurs_in", depth: 1 })
         .then((res) => {
           if (!cancelled) setOccursEdges(res.relations);
@@ -158,9 +195,38 @@ export default function Timeline() {
     }
   }, []);
 
-  // ============ 新建 ============
+  // ============ 新建时间点（G2 双入口之一） ============
 
-  /** 新建提交：POST /entity/event → 有锚点节点再 POST /relation（occurs_in）→ toast + 刷新 */
+  /** 新建时间点提交：POST /entity/timepoint（name = 时间标签文本）→ toast + 刷新（时间轴末尾追加） */
+  async function handleCreateTimepoint(e: FormEvent) {
+    e.preventDefault();
+    const name = tpName.trim();
+    if (!name) {
+      setTpError("请输入名称");
+      return;
+    }
+    setTpSubmitting(true);
+    setTpError(null);
+    try {
+      await createEntity("timepoint", { name });
+      useUiStore.getState().showToast(`已创建时间点《${name}》`);
+      setTpCreateOpen(false);
+      setTpName("");
+      setReloadTick((t) => t + 1);
+    } catch (err) {
+      setTpError(err instanceof ApiError ? err.message : "创建失败，请重试");
+    } finally {
+      setTpSubmitting(false);
+    }
+  }
+
+  // ============ 新建事件（G2 双入口：顶部不挂载 / 组尾预挂载） ============
+
+  /**
+   * 新建提交：POST /entity/event → 预挂载时间点（createTimepointId 非空）→ 有锚点节点再
+   * POST /relation（occurs_in）→ toast + 刷新。
+   * 挂载/锚定失败不阻塞创建——提示后刷新，可后续拖拽/详情补（同 HookPanel 埋点失败语义）。
+   */
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
     const name = createForm.name.trim();
@@ -173,12 +239,27 @@ export default function Timeline() {
     try {
       const data: Record<string, unknown> = {};
       if (createForm.description.trim() !== "") data.description = createForm.description.trim();
-      if (createForm.timeLabel.trim() !== "") data.time_label = createForm.timeLabel.trim();
       const tags = parseTagsInput(createForm.tagsInput);
       if (tags.length > 0) data.tags = tags;
       const res = await createEntity("event", { name, data });
-      // 有锚点节点才建 occurs_in 关系（timeline.md 新建交互）；失败不阻塞创建——提示后刷新，
-      // 可后续在详情补关联（同 HookPanel 埋点失败语义）
+      // 组尾新建：occurs_at 挂载到该时间点（timepoint → event，G2）；失败 → 事件入未挂载区可拖拽补
+      if (createTimepointId !== null) {
+        try {
+          await createRelation(buildOccursAtRelationBody(createTimepointId, res.id));
+        } catch (relErr) {
+          useUiStore.getState().showToast(
+            `已创建事件《${name}》，但挂载到时间点失败：${relErr instanceof ApiError ? relErr.message : "未知错误"}`,
+            "error",
+          );
+          setCreateOpen(false);
+          setCreateForm(EMPTY_FORM);
+          setCreateTimepointId(null);
+          setCreateNodeId("");
+          setReloadTick((t) => t + 1);
+          return;
+        }
+      }
+      // 有锚点节点才建 occurs_in 关系（timeline.md 新建交互）
       if (createNodeId !== "") {
         try {
           await createRelation({
@@ -194,6 +275,9 @@ export default function Timeline() {
             "error",
           );
           setCreateOpen(false);
+          setCreateForm(EMPTY_FORM);
+          setCreateTimepointId(null);
+          setCreateNodeId("");
           setReloadTick((t) => t + 1);
           return;
         }
@@ -201,6 +285,7 @@ export default function Timeline() {
       useUiStore.getState().showToast(`已创建事件《${name}》`);
       setCreateOpen(false);
       setCreateForm(EMPTY_FORM);
+      setCreateTimepointId(null);
       setCreateNodeId("");
       setReloadTick((t) => t + 1);
     } catch (err) {
@@ -212,7 +297,7 @@ export default function Timeline() {
 
   // ============ 编辑 ============
 
-  /** 打开编辑：预填表单（name + data 三字段；tags 数组 → 逗号输入串） */
+  /** 打开编辑：预填表单（name + data 两字段；tags 数组 → 逗号输入串；G2 无 time_label） */
   function openEdit(ev: EntitySummary) {
     const data = ev.summary as Record<string, unknown>;
     setEditTarget(ev);
@@ -220,7 +305,6 @@ export default function Timeline() {
     setEditForm({
       name: ev.name,
       description: typeof data.description === "string" ? data.description : "",
-      timeLabel: typeof data.time_label === "string" ? data.time_label : "",
       tagsInput: tagsToInput(data.tags),
     });
   }
@@ -274,17 +358,27 @@ export default function Timeline() {
     }
   }
 
-  // ============ 组块移动（F4：拖拽回调实现——页面负责 move 调用） ============
+  // ============ 双轨拖拽（G2：页面负责 move 调用——成功/失败 toast + 刷新回滚） ============
 
-  /**
-   * 组块拖拽结果执行：按组内序逐次 PUT /entity/event/:id/move（moves 由组件 groupDropOrders 算好，
-   * 单事件组 = F3 单次调用）；成功 → toast；失败 → toast + 重拉（回滚为服务端实际顺序）。
-   */
-  async function handleGroupMove(moves: Array<{ id: string; order: number }>) {
+  /** 时间点整组移动：PUT /entity/timepoint/:id/move（只重排组间序）；失败 → toast + 重拉回滚 */
+  async function handleMoveTimepoint(id: string, order: number) {
     try {
-      for (const m of moves) {
-        await moveEntityEvent(m.id, { order: m.order });
-      }
+      await moveEntityTimepoint(id, { order });
+      useUiStore.getState().showToast("已调整时间点顺序");
+    } catch (err) {
+      useUiStore.getState().showToast(
+        err instanceof ApiError ? `排序失败：${err.message}` : "排序失败，请重试",
+        "error",
+      );
+    } finally {
+      setReloadTick((t) => t + 1);
+    }
+  }
+
+  /** 事件同组重排：PUT /entity/event/:id/move */
+  async function handleMoveEvent(id: string, order: number) {
+    try {
+      await moveEntityEvent(id, { order });
       useUiStore.getState().showToast("已调整事件顺序");
     } catch (err) {
       useUiStore.getState().showToast(
@@ -292,9 +386,55 @@ export default function Timeline() {
         "error",
       );
     } finally {
-      // 成功保持新序、失败回滚——均以服务端实际顺序为准，重拉列表
       setReloadTick((t) => t + 1);
     }
+  }
+
+  /** 事件跨组改挂载：POST /entity/event/:id/move_to（timepointId null = 移出到未挂载区） */
+  async function handleMoveEventTo(id: string, timepointId: string | null, order: number) {
+    try {
+      await moveEntityEventTo(id, { timepoint_id: timepointId, order });
+      useUiStore.getState().showToast(timepointId === null ? "已移至未挂载区" : "已调整事件挂载与顺序");
+    } catch (err) {
+      useUiStore.getState().showToast(
+        err instanceof ApiError ? `操作失败：${err.message}` : "操作失败，请重试",
+        "error",
+      );
+    } finally {
+      setReloadTick((t) => t + 1);
+    }
+  }
+
+  /** 时间点重命名：PUT /entity/timepoint/:id { name }；失败 toast（组件已退出编辑态，无需 rethrow——调用方不消费） */
+  async function handleRenameTimepoint(id: string, name: string) {
+    try {
+      await updateEntity("timepoint", id, { name });
+      useUiStore.getState().showToast("已重命名");
+      setReloadTick((t) => t + 1);
+    } catch (err) {
+      useUiStore.getState().showToast(
+        err instanceof ApiError ? `重命名失败：${err.message}` : "重命名失败，请重试",
+        "error",
+      );
+    }
+  }
+
+  /** 组尾「+ 在此时间点新建事件」：打开新建对话框并预挂载该时间点（G2 双入口） */
+  function openCreateInTimepoint(timepointId: string) {
+    setCreateForm(EMPTY_FORM);
+    setCreateNodeId("");
+    setCreateError(null);
+    setCreateTimepointId(timepointId);
+    setCreateOpen(true);
+  }
+
+  /** 顶部「+ 新建事件」：不挂载（事件入未挂载区，可后续拖拽挂载） */
+  function openCreateEvent() {
+    setCreateForm(EMPTY_FORM);
+    setCreateNodeId("");
+    setCreateError(null);
+    setCreateTimepointId(null);
+    setCreateOpen(true);
   }
 
   // ============ AI 排序（F9，timeline.md「AI 排序入口」） ============
@@ -337,7 +477,7 @@ export default function Timeline() {
   // 与 Canvas.tsx §631 同式高度链）；错误横幅/骨架/空态/列表归滚动区（替代列表位置语义）
   return (
     <section className="flex h-full min-h-0 flex-col">
-      {/* 固定区：header——标题 + 操作（timeline.md 线框；F9「AI 排序入口」新增 AI 排序按钮） */}
+      {/* 固定区：header——标题 + 操作（timeline.md G2 线框：AI 排序 + 新建事件 + 新建时间点） */}
       <div className="mb-4 flex items-center gap-3">
         <h1 className="text-xl font-semibold">时间轴</h1>
         {/* AI 排序：注入聊天预设指令（F9）；无项目禁用——外层 span 承载 title 提示
@@ -355,8 +495,11 @@ export default function Timeline() {
             AI 排序
           </Button>
         </span>
-        <Button type="button" onClick={() => setCreateOpen(true)}>
+        <Button type="button" variant="outline" onClick={openCreateEvent}>
           + 新建事件
+        </Button>
+        <Button type="button" onClick={() => setTpCreateOpen(true)}>
+          + 新建时间点
         </Button>
       </div>
 
@@ -395,9 +538,9 @@ export default function Timeline() {
       )}
 
       {/* 滚动区：状态/列表（G1：flex-1 min-h-0 overflow-y-auto 独立滚动——错误横幅/骨架/空态/
-          列表/无匹配均替代列表位置，归滚动区；header 与筛选器在滚动区外保持固定） */}
+           列表/无匹配均替代列表位置，归滚动区；header 与筛选器在滚动区外保持固定） */}
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {/* 错误横幅（列表请求失败 → 重试） */}
+        {/* 错误横幅（时间点/事件列表请求失败 → 重试全部） */}
         {error !== null && (
           <div className="mb-3 flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {error === CLIENT_NETWORK_ERROR ? "无法连接服务，请确认 ai-editor 服务已启动。" : "时间轴加载失败，请重试。"}
@@ -408,7 +551,7 @@ export default function Timeline() {
         )}
 
         {/* 加载骨架（行级 animate-pulse bg-muted，timeline.md 状态） */}
-        {loading && items === null && error === null && (
+        {loading && (timepoints === null || items === null) && error === null && (
           <div className="space-y-2">
             {Array.from({ length: 4 }, (_, i) => (
               <div key={i} className="flex items-center gap-3 rounded-md border border-border px-3 py-2.5">
@@ -421,31 +564,47 @@ export default function Timeline() {
           </div>
         )}
 
-        {/* 空态（timeline.md 原文） */}
-        {!loading && items !== null && items.length === 0 && (
-          <div className="rounded-lg border border-dashed border-border px-6 py-12 text-center">
-            <p className="text-sm text-muted-foreground">
-              还没有事件。先定义一个关键事件，再把它们排成故事的时间骨架。
-            </p>
-            <Button className="mt-4" type="button" onClick={() => setCreateOpen(true)}>
-              + 新建事件
-            </Button>
-          </div>
-        )}
+        {/* 空态（G2 文案：先定义时间标签点，再挂载事件；timeline.md 状态） */}
+        {!loading &&
+          timepoints !== null &&
+          items !== null &&
+          timepoints.length === 0 &&
+          items.length === 0 && (
+            <div className="rounded-lg border border-dashed border-border px-6 py-12 text-center">
+              <p className="text-sm text-muted-foreground">
+                还没有时间点。先定义一个时间标签点（如「第二天黄昏」），再在其中挂载事件。
+              </p>
+              <Button className="mt-4" type="button" onClick={() => setTpCreateOpen(true)}>
+                + 新建时间点
+              </Button>
+            </div>
+          )}
 
-        {/* 事件时间轴（F4 时间点分组：垂直轴线 + 组块（标题 + 组内事件堆叠）+ 组块级拖拽；
-            数据编排在本页、渲染与拖拽协调在 components/timeline/） */}
-        {!loading && visible !== null && visible.length > 0 && (
-          <TimelineView
-            events={visible}
-            occursCount={occursCount}
-            hasOccursData={hasOccursData}
-            onMove={handleGroupMove}
-            onDetail={(ev) => navigate(`/timeline/${ev.id}`)}
-            onEdit={openEdit}
-            onDelete={setDeleteTarget}
-          />
-        )}
+        {/* 时间轴（G2 双实体：时间点组块 + 事件挂载 + 未挂载兜底区 + 双轨拖拽；
+            数据编排在本页、渲染与拖拽协调在 components/timeline/；
+            标签筛选无匹配 → 仅显示提示（不渲染空组列表）） */}
+        {!loading &&
+          timepoints !== null &&
+          items !== null &&
+          visible !== null &&
+          !(activeTag !== null && visible.length === 0) && (
+            <TimelineView
+              timepoints={timepoints}
+              events={visible}
+              allEvents={items}
+              occursAtEdges={occursAtFailed ? [] : occursAtEdges}
+              occursCount={occursCount}
+              hasOccursData={hasOccursData}
+              onMoveTimepoint={handleMoveTimepoint}
+              onMoveEvent={handleMoveEvent}
+              onMoveEventTo={handleMoveEventTo}
+              onRenameTimepoint={handleRenameTimepoint}
+              onAddEventAt={openCreateInTimepoint}
+              onDetail={(ev) => navigate(`/timeline/${ev.id}`)}
+              onEdit={openEdit}
+              onDelete={setDeleteTarget}
+            />
+          )}
 
         {/* 标签筛选无匹配（timeline.md 状态：「没有匹配「{tag}」的事件」） */}
         {!loading && items !== null && items.length > 0 && visible !== null && visible.length === 0 && (
@@ -455,11 +614,44 @@ export default function Timeline() {
         )}
       </div>
 
-      {/* 新建事件对话框（timeline.md：name 必填 + description + time_label + tags + 可选锚点节点） */}
+      {/* 新建时间点对话框（G2：name = 时间标签文本 → POST /entity/timepoint） */}
+      <Dialog open={tpCreateOpen} onOpenChange={(v) => !v && setTpCreateOpen(false)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>新建时间点</DialogTitle>
+          </DialogHeader>
+          <form id="create-timepoint-form" onSubmit={handleCreateTimepoint} className="flex flex-col gap-3">
+            <div>
+              <p className="mb-1 text-sm font-medium text-foreground">名称（必填，时间标签文本）</p>
+              <Input
+                value={tpName}
+                onChange={(e) => setTpName(e.target.value)}
+                placeholder="如：第二天黄昏"
+                maxLength={100}
+                autoFocus
+              />
+            </div>
+            {tpError && <p className="text-sm text-destructive">{tpError}</p>}
+          </form>
+          <DialogFooter>
+            <Button variant="outline" type="button" onClick={() => setTpCreateOpen(false)} disabled={tpSubmitting}>
+              取消
+            </Button>
+            <Button type="submit" form="create-timepoint-form" disabled={tpSubmitting}>
+              创建
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 新建事件对话框（G2：移除 time_label 字段——时间标签由挂载表达；
+          标题区分双入口：组尾挂载 vs 顶部不挂载） */}
       <Dialog open={createOpen} onOpenChange={(v) => !v && setCreateOpen(false)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>新建事件</DialogTitle>
+            <DialogTitle>
+              {createTimepointId !== null ? "在此时间点新建事件（自动挂载）" : "新建事件（不挂载，入未挂载区）"}
+            </DialogTitle>
           </DialogHeader>
           <form id="create-event-form" onSubmit={handleCreate} className="flex flex-col gap-3">
             <div>
@@ -479,14 +671,6 @@ export default function Timeline() {
                 rows={2}
                 placeholder="事件发生了什么"
                 className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-              />
-            </div>
-            <div>
-              <p className="mb-1 text-sm font-medium text-foreground">时间标签</p>
-              <Input
-                value={createForm.timeLabel}
-                onChange={(e) => setCreateForm((f) => ({ ...f, timeLabel: e.target.value }))}
-                placeholder="如：第二天黄昏（自由文本，不参与排序）"
               />
             </div>
             <div>
@@ -520,7 +704,7 @@ export default function Timeline() {
         </DialogContent>
       </Dialog>
 
-      {/* 编辑事件对话框（同新建表单预填；timeline.md 行操作） */}
+      {/* 编辑事件对话框（同新建表单预填；G2 无 time_label；timeline.md 行操作） */}
       {editTarget && editForm && (
         <Dialog open onOpenChange={(v) => !v && !editSaving && setEditTarget(null)}>
           <DialogContent className="sm:max-w-md">
@@ -543,14 +727,6 @@ export default function Timeline() {
                   onChange={(e) => setEditForm((f) => (f ? { ...f, description: e.target.value } : f))}
                   rows={2}
                   className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                />
-              </div>
-              <div>
-                <p className="mb-1 text-sm font-medium text-foreground">时间标签</p>
-                <Input
-                  value={editForm.timeLabel}
-                  onChange={(e) => setEditForm((f) => (f ? { ...f, timeLabel: e.target.value } : f))}
-                  placeholder="如：第二天黄昏（自由文本，不参与排序）"
                 />
               </div>
               <div>

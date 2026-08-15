@@ -32,6 +32,11 @@ describe("SUMMARY_COLUMNS（摘要列配置——原型信息层级表）", () =
     expect(SUMMARY_COLUMNS.setting.key2).toBeUndefined();
     expect(SUMMARY_COLUMNS.location.key2).toBeUndefined();
   });
+
+  it("timepoint（G2 时间标签点）：无专属摘要字段——空 key（摘要列渲染「—」占位）", () => {
+    expect(SUMMARY_COLUMNS.timepoint.key1).toBe("");
+    expect(SUMMARY_COLUMNS.timepoint.key2).toBeUndefined();
+  });
 });
 
 describe("summaryCellText（摘要单元格文案）", () => {
@@ -69,5 +74,9 @@ describe("CREATE_FIRST_FIELD（创建对话框首字段配置——原型「name
     expect(CREATE_FIRST_FIELD.hook.input).toBe("select");
     expect(CREATE_FIRST_FIELD.hook.options).toEqual(["planted", "progressing", "resolved", "abandoned"]);
     expect(CREATE_FIRST_FIELD.character.input).toBe("text");
+  });
+
+  it("timepoint（G2 时间标签点）：空 key = 无 data 首字段（名称即时间标签文本）", () => {
+    expect(CREATE_FIRST_FIELD.timepoint.key).toBe("");
   });
 });

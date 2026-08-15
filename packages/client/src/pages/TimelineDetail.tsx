@@ -1,8 +1,9 @@
-// 时间轴事件详情页（C4，决策 26；启用 main.tsx C3 留的 #/timeline/:id 占位与列表页「详情」菜单）
+// 时间轴事件详情页（C4，决策 26；G2.3 修订：time_label 移除 + 挂载时间点选择器）
 // 路由：#/timeline/:id（2 段）；数据：GET /api/v1/entity/event/:id（EntityDetailRes：完整 data + relations）
-// 契约：doc/ui/pages/timeline.md「详情页（#/timeline/:id）」——字段编辑（name/description/time_label/tags）、
-//   occurs_in 关联管理（添加：大纲节点选择器 → POST /relation event → outline_node；取消：确认后
-//   DELETE /relation/:id 物理删）、软删（级联计数 toast → 跳回列表）、三态（加载骨架 / 404 / 保存失败内联）
+// 契约：doc/ui/pages/timeline.md「详情页（#/timeline/:id）」——字段编辑（name/description/tags，G2 无
+//   time_label）、**挂载时间点选择器（G2）**、occurs_in 关联管理（添加：大纲节点选择器 → POST /relation
+//   event → outline_node；取消：确认后 DELETE /relation/:id 物理删）、软删（级联计数 toast → 跳回列表）、
+//   三态（加载骨架 / 404 / 保存失败内联）
 // 参照：EntityDetail.tsx（面包屑/保存交互/404 引导/软删确认）、HookPanel/Timeline OutlineNodeSelect（节点选择）
 // 关键决策：
 //  - 404 错误码为 ENTITY_NOT_FOUND（事件走泛型实体路由，server/src/routes/entity.ts；timeline.md 的
@@ -12,11 +13,16 @@
 //    提示沿用 entity-detail.md「这条关系已经存在」）
 //  - 关联节点选择器（UX3）：全屏模态 Dialog → Base UI Popover 轻量非模态弹层（components/ui/popover.tsx）——
 //    不打断详情页编辑；409 内联提示保留在 Popover 内，选择后提交成功关闭 + 重拉详情
+//  - **挂载选择器（G2）**：当前挂载 = detail.relations 中 occurs_at（timepoint → event，事件为 target 端）
+//    的 sourceId；变更即保存——POST /entity/event/:id/move_to { timepoint_id, order }（以 move_to 语义
+//    统一，事务原子），order = 事件在当前全局序中的位置（列表 index，保位不跳位）；空 = 移出未挂载。
+//    时间点/事件列表预拉（选择器选项 + 当前位置）；拉取失败 → 选择器重试（不阻塞详情主体）
 //  - 元信息行不展示「变更记录 N 条」入口：事件不产生 Delta（决策 26），timeline.md 信息层级仅
 //    createdAt/updatedAt
 //  - 未保存离开守卫：EntityDetail 无此模式，不做（避免过度设计）
 import { useEffect, useState } from "react";
 import { formatTimestamp } from "@whispering233/ai-editor-shared";
+import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -28,6 +34,7 @@ import {
   deleteRelation,
   getEntityDetail,
   listEntities,
+  moveEntityEventTo,
   updateEntity,
   type EntityDetailRes,
   type RelationSummaryItem,
@@ -40,7 +47,7 @@ import {
   suggestTags,
   type EventDetailForm,
 } from "../lib/timeline";
-import { buildOccursRelationBody, occursInRelations } from "../lib/timeline-detail";
+import { buildOccursRelationBody, occursInRelations, mountedTimepointId } from "../lib/timeline-detail";
 import { flattenTree } from "../lib/outline-tree";
 import { cn } from "../lib/utils";
 import { Breadcrumb } from "../components/page-nav/Breadcrumb";
@@ -71,6 +78,12 @@ export default function TimelineDetail({ id }: { id: string }) {
   const [deleteTarget, setDeleteTarget] = useState(false);
   // 标签建议池（F8：独立补拉全量 200 聚合已存在标签；失败静默——无建议区，不影响表单）
   const [tagPool, setTagPool] = useState<string[]>([]);
+  // 挂载选择器数据（G2）：时间点列表（选项）+ 事件列表（当前位置保位）；失败 → 选择器重试
+  const [timepoints, setTimepoints] = useState<EntitySummary[] | null>(null);
+  const [events, setEvents] = useState<EntitySummary[] | null>(null);
+  const [mountDataFailed, setMountDataFailed] = useState(false);
+  const [mountSaving, setMountSaving] = useState(false);
+  const [mountError, setMountError] = useState<string | null>(null);
 
   /** 补拉全量事件聚合标签池（F8；保存新标签后随 useDataRefresh 刷新，避免建议池陈旧——oracle P2） */
   async function loadTagPool(): Promise<void> {
@@ -82,8 +95,30 @@ export default function TimelineDetail({ id }: { id: string }) {
     }
   }
 
+  /**
+   * 挂载选择器数据（G2）：时间点列表（选项）+ 事件列表（当前位置——move_to 保位用；
+   * limit 200 拉全量——全局事件线性序，避免 >50 时 findIndex 落空）。
+   * 失败 → mountDataFailed（选择器显示重试，不阻塞详情主体/表单）。
+   */
+  async function loadMountData(): Promise<void> {
+    setMountDataFailed(false);
+    try {
+      const [tpRes, evRes] = await Promise.all([
+        listEntities("timepoint", {}),
+        listEntities("event", { limit: 200 }),
+      ]);
+      setTimepoints(tpRes.items);
+      setEvents(evRes.items);
+    } catch {
+      setTimepoints(null);
+      setEvents(null);
+      setMountDataFailed(true);
+    }
+  }
+
   useEffect(() => {
     void loadTagPool();
+    void loadMountData();
     // 依赖仅 []：挂载拉取一次；数据变更由 useDataRefresh 兜底刷新（main.tsx key=id 保证切页 remount）
   }, []);
 
@@ -117,10 +152,11 @@ export default function TimelineDetail({ id }: { id: string }) {
     // 依赖仅 [id]：loadDetail 每次渲染重建，但页面切换才需重载（同 EntityDetail）
   }, [id]);
 
-  // 数据变更信号：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉详情（表单以服务端权威为准重置）+ 标签池
+  // 数据变更信号：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉详情（表单以服务端权威为准重置）+ 标签池 + 挂载数据
   useDataRefresh(() => {
     void loadDetail();
     void loadTagPool();
+    void loadMountData();
   });
 
   // 大纲未加载时兜底拉取（节点选择器依赖；项目打开时已加载，防御直达路由场景——同 HookPanel/Timeline）
@@ -152,6 +188,40 @@ export default function TimelineDetail({ id }: { id: string }) {
       setSaveError(err instanceof ApiError ? err.message : "保存失败，请重试");
     } finally {
       setSaving(false);
+    }
+  }
+
+  /**
+   * 挂载变更即保存（G2，以 move_to 语义统一）：
+   * POST /entity/event/:id/move_to { timepoint_id（空 = 移出未挂载）, order }——
+   * order = 事件在当前全局事件序中的 index（保位不跳位：改挂载不动位置）；
+   * 列表未拉到/未找到（防御）→ 全局序末尾（length——不改动其他事件相对序）。
+   * 成功 → toast + 重拉详情（relations 更新）；失败 → 内联错误 + 选择器回退原值
+   * （受控 value = mountedId，未变更 state 即回退）。
+   */
+  async function handleMountChange(nextTimepointId: string) {
+    if (!detail || mountSaving || !timepoints || !events) return;
+    const current = mountedTimepointId(detail.relations, id);
+    if (nextTimepointId === (current ?? "")) return; // 未变更（含「未挂载」选未挂载）
+    const idx = events.findIndex((ev) => ev.id === id);
+    const order = idx === -1 ? events.length : idx; // 未找到 → 末尾（防御，保其余事件相对序）
+    setMountSaving(true);
+    setMountError(null);
+    try {
+      await moveEntityEventTo(id, {
+        timepoint_id: nextTimepointId === "" ? null : nextTimepointId,
+        order,
+      });
+      useUiStore.getState().showToast(nextTimepointId === "" ? "已移出挂载" : "已更新挂载时间点");
+      await loadDetail();
+    } catch (err) {
+      if (err instanceof ApiError && err.code === "ENTITY_NOT_FOUND") {
+        setNotFound(true);
+        return;
+      }
+      setMountError(err instanceof ApiError ? err.message : "挂载保存失败，请重试");
+    } finally {
+      setMountSaving(false);
     }
   }
 
@@ -300,7 +370,8 @@ export default function TimelineDetail({ id }: { id: string }) {
 
       {detail && form && (
         <div className="grid gap-4 md:grid-cols-2">
-          {/* 左栏：基础信息表单（name + data 三字段，timeline.md 详情页字段编辑） */}
+          {/* 左栏：基础信息表单（name + data 两字段，G2 无 time_label——时间标签 = 挂载，
+              timeline.md 详情页字段编辑 + 挂载时间点选择器） */}
           <div className="rounded-md border border-border p-4">
             <h2 className="mb-3 text-sm font-semibold text-foreground">基础信息</h2>
             <div className="flex flex-col gap-3">
@@ -322,13 +393,47 @@ export default function TimelineDetail({ id }: { id: string }) {
                   className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                 />
               </div>
+              {/* 挂载时间点选择器（G2）：显示当前挂载 + 选择器（可清空 = 移出未挂载）；
+                  变更即保存 move_to（保位）。数据预拉失败 → 行内重试（不阻塞详情主体） */}
               <div>
-                <p className="mb-1 text-sm font-medium text-foreground">时间标签</p>
-                <Input
-                  value={form.timeLabel}
-                  onChange={(e) => setForm((f) => (f ? { ...f, timeLabel: e.target.value } : f))}
-                  placeholder="如：第二天黄昏（自由文本，不参与排序）"
-                />
+                <p className="mb-1 text-sm font-medium text-foreground">挂载时间点</p>
+                {timepoints === null ? (
+                  mountDataFailed ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      挂载数据加载失败
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        type="button"
+                        className="h-6 px-2 text-xs"
+                        onClick={() => void loadMountData()}
+                      >
+                        重试
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="h-9 animate-pulse rounded bg-muted" />
+                  )
+                ) : (
+                  <select
+                    value={mountedTimepointId(detail.relations, id) ?? ""}
+                    onChange={(e) => void handleMountChange(e.target.value)}
+                    disabled={mountSaving}
+                    className={cn(
+                      "w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                      mountedTimepointId(detail.relations, id) === null && "text-muted-foreground",
+                    )}
+                  >
+                    <option value="">未挂载</option>
+                    {timepoints.map((tp) => (
+                      <option key={tp.id} value={tp.id}>
+                        {tp.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {mountSaving && <p className="mt-1 text-xs text-muted-foreground">保存中…</p>}
+                {mountError && <p className="mt-1 text-sm text-destructive">{mountError}</p>}
               </div>
               <div>
                 <p className="mb-1 text-sm font-medium text-foreground">标签</p>

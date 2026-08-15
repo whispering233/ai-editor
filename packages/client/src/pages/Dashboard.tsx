@@ -33,6 +33,8 @@ const TYPE_LABEL: Record<EntityType, string> = {
   hook: "伏笔",
   // C1 类型补全（决策 26 event 时间轴事件；概览卡仍为四卡，时间轴专属 UI 由 C2 实现）
   event: "事件",
+  // G2.3 类型补全（G2 时间标签点；概览卡仍为四卡——时间点无独立统计卡）
+  timepoint: "时间点",
 };
 const ENTITY_ORDER: EntityType[] = ["character", "setting", "location", "hook"];
 

@@ -77,14 +77,17 @@ export function detailFieldsForType(type: EntityType): DetailFieldConfig[] {
         { key: "notes", label: "备注", control: "textarea" },
         { key: "expected_resolve_node_id", label: "预计回收节点", control: "outline-node" },
       ];
-    // C1 类型补全（决策 26 event 时间轴事件：data 契约字段 description/time_label/tags[]；
-    // 时间轴专属 UI 由 C2 实现，本分支为数据驱动表单的字段配置）
+    // C1 类型补全（决策 26 event 时间轴事件：data 契约字段 description/tags[]——time_label
+    //   已随 G2 移除（时间标签 = 时间点挂载）；时间轴专属 UI 由 C2 实现，本分支为数据驱动表单的字段配置）
     case "event":
       return [
         { key: "description", label: "描述", control: "textarea" },
-        { key: "time_label", label: "时间标注", control: "text" },
         { key: "tags", label: "标签", control: "tags" },
       ];
+    // G2.3 类型补全（G2 时间标签点：data 空——时间标签文本 = name，仅名称可编辑，
+    // 无 data 字段区；详情页表单按「未出现的字段不渲染」自然退化为纯名称表单）
+    case "timepoint":
+      return [];
   }
 }
 

@@ -34,6 +34,14 @@ describe("detailFieldsForType（data 表单按类型配置——schema.md 字段
     expect(fields.find((f) => f.key === "is_core")?.control).toBe("toggle");
     expect(fields.find((f) => f.key === "half_life")?.control).toBe("number");
   });
+
+  it("event（决策 26）：description/tags——G2 移除 time_label（时间标签 = 时间点挂载）", () => {
+    expect(detailFieldsForType("event").map((f) => f.key)).toEqual(["description", "tags"]);
+  });
+
+  it("timepoint（G2 时间标签点）：data 空——无字段配置（名称 = 时间标签文本，仅名称可编辑）", () => {
+    expect(detailFieldsForType("timepoint")).toEqual([]);
+  });
 });
 
 describe("relationTypeLabel（16 种预定义关系类型中文映射）", () => {

@@ -1,31 +1,32 @@
-// lib/timeline 纯函数测试（C3，决策 26）
-// 覆盖：拖拽插入位计算（eventDropOrder，同 dropInsertOrder 语义）、标签收集/筛选/解析、
-//       事件表单共享函数（eventFormFromDetail / buildEventDetailPatch——C3 编辑对话框与 C4 详情页共用，
-//       原测试位于 timeline-detail.test.ts，随函数迁入本文件）
+// lib/timeline 纯函数测试（C3，决策 26；G2.3 修订）
+// 覆盖：拖拽插入位计算（eventDropOrder，双轨共用）、G2 双实体模型（buildTimelineModel——
+//   时间点组块 + 事件挂载 + 未挂载兜底区）、事件拖入组块 order（eventOrderIntoGroup）、
+//   标签收集/筛选/解析、事件表单共享函数（eventFormFromDetail / buildEventDetailPatch——
+//   C3 编辑对话框与 C4 详情页共用，原测试位于 timeline-detail.test.ts，随函数迁入本文件）
 import { describe, expect, it } from "vitest";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
+import type { RelationSummaryItem } from "./api";
 import {
   applyTagSuggestion,
   buildEventDetailPatch,
+  buildTimelineModel,
   collectEventTags,
   eventDescription,
   eventDropOrder,
   eventFormFromDetail,
+  eventOrderIntoGroup,
   eventTagsOf,
-  eventTimeLabel,
   filterEventsByTag,
-  groupDropOrders,
-  groupEventsByTimeLabel,
   parseTagsInput,
   suggestTags,
   tagsToInput,
 } from "./timeline";
 
-/** 构造事件摘要（summary 关心 tags 与 time_label——F4 分组测试） */
-function eventOf(id: string, tags?: string[], timeLabel?: string): EntitySummary {
+/** 构造事件摘要（summary 关心 tags 与 description——G2 无 time_label） */
+function eventOf(id: string, tags?: string[], description?: string): EntitySummary {
   const summary: Record<string, unknown> = {};
   if (tags !== undefined) summary.tags = tags;
-  if (timeLabel !== undefined) summary.time_label = timeLabel;
+  if (description !== undefined) summary.description = description;
   return {
     id,
     type: "event",
@@ -36,7 +37,32 @@ function eventOf(id: string, tags?: string[], timeLabel?: string): EntitySummary
   };
 }
 
-describe("eventDropOrder（拖拽插入位 → order，C3）", () => {
+/** 构造时间点摘要（name = 时间标签文本） */
+function timepointOf(id: string, name: string): EntitySummary {
+  return {
+    id,
+    type: "timepoint",
+    name,
+    summary: {},
+    createdAt: "2026-08-01T00:00:00Z",
+    updatedAt: "2026-08-01T00:00:00Z",
+  };
+}
+
+/** 构造 occurs_at 挂载边（timepoint → event，G2 方向约定） */
+function mountOf(timepointId: string, eventId: string): RelationSummaryItem {
+  return {
+    id: `rel-${timepointId}-${eventId}`,
+    sourceType: "timepoint",
+    sourceId: timepointId,
+    targetType: "event",
+    targetId: eventId,
+    relationType: "occurs_at",
+    createdAt: "2026-08-01T00:00:00Z",
+  };
+}
+
+describe("eventDropOrder（拖拽插入位 → order，C3；G2 双轨共用——事件/时间点各自调用）", () => {
   const ids = ["ev-a", "ev-b", "ev-c"];
 
   it("before → 锚点 index；after → index+1；end → 长度（同 dropInsertOrder 语义）", () => {
@@ -56,24 +82,114 @@ describe("eventDropOrder（拖拽插入位 → order，C3）", () => {
     expect(eventDropOrder(ids, { kind: "after", id: "ev-ghost" }, "ev-a")).toBe(2);
     expect(eventDropOrder(ids, { kind: "before", id: "ev-ghost" })).toBe(3);
   });
+
+  it("时间点列表同款调用（全局时间点线性序，G2 双独立线性序）", () => {
+    const tpIds = ["tp-a", "tp-b", "tp-c"];
+    expect(eventDropOrder(tpIds, { kind: "after", id: "tp-b" }, "tp-a")).toBe(1);
+  });
 });
 
-describe("eventTagsOf / eventTimeLabel（事件行摘要防御提取，F3 垂直时间轴行渲染）", () => {
+describe("eventTagsOf / eventDescription（事件行摘要防御提取，F3 垂直时间轴行渲染）", () => {
   it("eventTagsOf：tags 缺失/非数组 → 空数组；过滤非字符串成员", () => {
     expect(eventTagsOf(eventOf("a"))).toEqual([]);
     expect(eventTagsOf(eventOf("b", ["主线", 42 as unknown as string]))).toEqual(["主线"]);
-  });
-
-  it("eventTimeLabel：time_label 缺失/非字符串 → 空串（行内「未标注时间」）；正常值原样返回", () => {
-    expect(eventTimeLabel(eventOf("a"))).toBe("");
-    expect(eventTimeLabel({ ...eventOf("b"), summary: { time_label: 42 } })).toBe("");
-    expect(eventTimeLabel({ ...eventOf("c"), summary: { time_label: "第二天黄昏" } })).toBe("第二天黄昏");
   });
 
   it("eventDescription：description 缺失/非字符串 → 空串（行内不渲染描述区）；正常值原样返回", () => {
     expect(eventDescription(eventOf("a"))).toBe("");
     expect(eventDescription({ ...eventOf("b"), summary: { description: 42 } })).toBe("");
     expect(eventDescription({ ...eventOf("c"), summary: { description: "拜入山门" } })).toBe("拜入山门");
+  });
+});
+
+describe("buildTimelineModel（G2 双实体模型：时间点组块 + 事件挂载 + 未挂载兜底区）", () => {
+  const tps = [timepointOf("tp-a", "第二天黄昏"), timepointOf("tp-b", "少年时")];
+
+  it("组序 = timepoints 传入序（timepoint.sort_order 投影）；组内事件 = 事件传入序投影；未挂载独立", () => {
+    const model = buildTimelineModel(tps, [eventOf("e1"), eventOf("e2"), eventOf("e3")], [
+      mountOf("tp-a", "e2"),
+      mountOf("tp-b", "e3"),
+    ]);
+    expect(model.groups.map((g) => g.timepoint.id)).toEqual(["tp-a", "tp-b"]);
+    expect(model.groups[0].events.map((e) => e.id)).toEqual(["e2"]);
+    expect(model.groups[1].events.map((e) => e.id)).toEqual(["e3"]);
+    expect(model.ungrouped.map((e) => e.id)).toEqual(["e1"]);
+  });
+
+  it("空时间点组保留（时间点是真实实体——空组仍渲染，可后续拖入事件）", () => {
+    const model = buildTimelineModel([timepointOf("tp-empty", "空组")], [], []);
+    expect(model.groups).toHaveLength(1);
+    expect(model.groups[0].events).toEqual([]);
+    expect(model.ungrouped).toEqual([]);
+  });
+
+  it("非 occurs_at / 非 timepoint 源的边不参与挂载（防御：occurs_at 双语义——appears_in 等不入映射）", () => {
+    const model = buildTimelineModel(tps, [eventOf("e1")], [
+      mountOf("tp-a", "e1"),
+      { ...mountOf("tp-b", "e1"), relationType: "occurs_in" },
+      { ...mountOf("tp-b", "e1"), sourceType: "outline_node" },
+    ]);
+    expect(model.groups[0].events.map((e) => e.id)).toEqual(["e1"]);
+    expect(model.groups[1].events).toEqual([]);
+    expect(model.ungrouped).toEqual([]);
+  });
+
+  it("挂载点不在时间点列表 → 事件归未挂载（防御：服务端级联软删保证 occurs_at 端点存活）", () => {
+    const model = buildTimelineModel(tps, [eventOf("e1")], [mountOf("tp-ghost", "e1")]);
+    expect(model.ungrouped.map((e) => e.id)).toEqual(["e1"]);
+  });
+
+  it("单事件多条挂载边 → 首次出现者胜（防御：服务端 1:n 校验，理论不可达）", () => {
+    const model = buildTimelineModel(tps, [eventOf("e1")], [mountOf("tp-a", "e1"), mountOf("tp-b", "e1")]);
+    expect(model.groups[0].events.map((e) => e.id)).toEqual(["e1"]);
+    expect(model.groups[1].events).toEqual([]);
+  });
+
+  it("空输入 → 空模型（无时间点、无事件、无边）", () => {
+    const model = buildTimelineModel([], [], []);
+    expect(model.groups).toEqual([]);
+    expect(model.ungrouped).toEqual([]);
+  });
+});
+
+describe("eventOrderIntoGroup（事件拖入组块的插入位 order，G2 双轨拖拽）", () => {
+  // 模型：tp-a 组 [e1, e2]、tp-b 组 [e3]、tp-c 空组；未挂载 [u1, u2]
+  const tps = [timepointOf("tp-a", "A"), timepointOf("tp-b", "B"), timepointOf("tp-c", "C")];
+  const events = [eventOf("e1"), eventOf("e2"), eventOf("e3"), eventOf("u1"), eventOf("u2")];
+  const edges = [mountOf("tp-a", "e1"), mountOf("tp-a", "e2"), mountOf("tp-b", "e3")];
+  const model = buildTimelineModel(tps, events, edges);
+  // 投影序：e1, e2, e3, u1, u2（组块序 + 未挂载区序）
+
+  it("组内 before/after：锚定组首/末事件（剔除拖拽项后 index）", () => {
+    // 拖 e3 到 tp-a 组前（before）→ 剔除 e3 后 [e1, e2, u1, u2]，before e1 → 0
+    expect(eventOrderIntoGroup(model.groups, model.ungrouped, 0, "before", "e3")).toBe(0);
+    // 拖 u1 到 tp-b 组后（after）→ 剔除 u1 后 [e1, e2, e3, u2]，after e3 → 3
+    expect(eventOrderIntoGroup(model.groups, model.ungrouped, 1, "after", "u1")).toBe(3);
+  });
+
+  it("未挂载区 before/after：锚定未挂载首/末事件", () => {
+    // 拖 e1 到未挂载区前（before）→ 剔除 e1 后 [e2, e3, u1, u2]，before u1 → 2
+    expect(eventOrderIntoGroup(model.groups, model.ungrouped, -1, "before", "e1")).toBe(2);
+    // 拖 e1 到未挂载区后（after）→ 剔除 e1 后 [e2, e3, u1, u2]，after u2 → 4
+    expect(eventOrderIntoGroup(model.groups, model.ungrouped, -1, "after", "e1")).toBe(4);
+  });
+
+  it("空组：before → 其后最近非空组首事件前；after → 其前最近非空组末事件后（空组无锚点事件）", () => {
+    // tp-c 空组：before → 其后无非空组 → 兜底首事件前 = 0；after → 其前最近非空组 = tp-b 末事件 e3 后
+    expect(eventOrderIntoGroup(model.groups, model.ungrouped, 2, "before", "u1")).toBe(0);
+    // 剔除 u1 后 [e1, e2, e3, u2]，after e3 → 3
+    expect(eventOrderIntoGroup(model.groups, model.ungrouped, 2, "after", "u1")).toBe(3);
+  });
+
+  it("空未挂载区（无任何事件）：兜底 → 首位 0（防御分支）", () => {
+    const empty = buildTimelineModel(tps, [], []);
+    expect(eventOrderIntoGroup(empty.groups, empty.ungrouped, -1, "before", "e-new")).toBe(0);
+    expect(eventOrderIntoGroup(empty.groups, empty.ungrouped, -1, "after", "e-new")).toBe(0);
+  });
+
+  it("拖拽事件在目标组内（剔除自身后锚点 index 修正——S13 同款防 1 位错位）", () => {
+    // 拖 e1（tp-a 组内）到同组 e2 之后：剔除 e1 后 [e2, e3, u1, u2]，after e2 → 1
+    expect(eventOrderIntoGroup(model.groups, model.ungrouped, 0, "after", "e1")).toBe(1);
   });
 });
 
@@ -160,16 +276,15 @@ describe("parseTagsInput / tagsToInput（标签输入解析，新建/编辑表�
   });
 });
 
-describe("eventFormFromDetail（详情响应 → 表单初始值；C3 编辑预填/C4 详情页共用）", () => {
-  it("name + data 三字段完整提取（tags 数组 → 逗号输入串）", () => {
+describe("eventFormFromDetail（详情响应 → 表单初始值；C3 编辑预填/C4 详情页共用；G2 无 time_label）", () => {
+  it("name + data 两字段完整提取（tags 数组 → 逗号输入串）", () => {
     const form = eventFormFromDetail({
       name: "主角踏入宗门",
-      data: { description: "拜入山门", time_label: "第二天黄昏", tags: ["主线", "战争"] },
+      data: { description: "拜入山门", tags: ["主线", "战争"] },
     });
     expect(form).toEqual({
       name: "主角踏入宗门",
       description: "拜入山门",
-      timeLabel: "第二天黄昏",
       tagsInput: "主线，战争",
     });
   });
@@ -177,96 +292,45 @@ describe("eventFormFromDetail（详情响应 → 表单初始值；C3 编辑预�
   it("缺失/非字符串字段防御 → 空串；tags 非数组 → 空串", () => {
     const form = eventFormFromDetail({
       name: "无描述事件",
-      data: { time_label: 42, tags: "主线" },
+      data: { tags: "主线" },
     });
-    expect(form).toEqual({ name: "无描述事件", description: "", timeLabel: "", tagsInput: "" });
+    expect(form).toEqual({ name: "无描述事件", description: "", tagsInput: "" });
   });
 });
 
-describe("buildEventDetailPatch（保存 patch，C3 编辑对话框与 C4 详情页共用同一稀疏提交语义；清空语义：表单空且原值非空 → 提交空值显式清除）", () => {
+describe("buildEventDetailPatch（保存 patch，稀疏提交 + 清空语义；G2：仅 description/tags）", () => {
   const original = {
     name: "主角踏入宗门",
-    data: { description: "拜入山门", time_label: "第二天黄昏", tags: ["主线"] },
+    data: { description: "拜入山门", tags: ["主线"] },
   };
+  const baseForm = { name: "主角踏入宗门", description: "拜入山门", tagsInput: "主线" };
 
   it("无变更 → null（「没有变更」）", () => {
-    expect(
-      buildEventDetailPatch(original, {
-        name: "主角踏入宗门",
-        description: "拜入山门",
-        timeLabel: "第二天黄昏",
-        tagsInput: "主线",
-      }),
-    ).toBeNull();
+    expect(buildEventDetailPatch(original, baseForm)).toBeNull();
   });
 
   it("name 变化（trim 后比对）→ 仅提交 name", () => {
-    const patch = buildEventDetailPatch(original, {
-      name: "  主角踏入山门  ",
-      description: "拜入山门",
-      timeLabel: "第二天黄昏",
-      tagsInput: "主线",
-    });
+    const patch = buildEventDetailPatch(original, { ...baseForm, name: "  主角踏入山门  " });
     expect(patch).toEqual({ name: "主角踏入山门" });
   });
 
   it("description 变化 → 仅提交 data.description（其余未改字段不提交）", () => {
-    const patch = buildEventDetailPatch(original, {
-      name: "主角踏入宗门",
-      description: "拜入山门，遇见师兄",
-      timeLabel: "第二天黄昏",
-      tagsInput: "主线",
-    });
+    const patch = buildEventDetailPatch(original, { ...baseForm, description: "拜入山门，遇见师兄" });
     expect(patch).toEqual({ data: { description: "拜入山门，遇见师兄" } });
   });
 
   it("tags 输入解析收敛后比对（多分隔符；与 parseTagsInput 同源）", () => {
-    const patch = buildEventDetailPatch(original, {
-      name: "主角踏入宗门",
-      description: "拜入山门",
-      timeLabel: "第二天黄昏",
-      tagsInput: "主线， 战争 \n主线",
-    });
+    const patch = buildEventDetailPatch(original, { ...baseForm, tagsInput: "主线， 战争 \n主线" });
     expect(patch).toEqual({ data: { tags: ["主线", "战争"] } });
   });
 
-  it("time_label 变化 → 提交 data.time_label", () => {
-    const patch = buildEventDetailPatch(original, {
-      name: "主角踏入宗门",
-      description: "拜入山门",
-      timeLabel: "少年时",
-      tagsInput: "主线",
-    });
-    expect(patch).toEqual({ data: { time_label: "少年时" } });
-  });
-
   it("清空 description（原值「拜入山门」非空）→ 提交空串显式清除", () => {
-    const patch = buildEventDetailPatch(original, {
-      name: "主角踏入宗门",
-      description: "",
-      timeLabel: "第二天黄昏",
-      tagsInput: "主线",
-    });
+    const patch = buildEventDetailPatch(original, { ...baseForm, description: "" });
     expect(patch).toEqual({ data: { description: "" } });
   });
 
-  it("清空 time_label（原值「第二天黄昏」非空）→ 提交空串显式清除", () => {
-    const patch = buildEventDetailPatch(original, {
-      name: "主角踏入宗门",
-      description: "拜入山门",
-      timeLabel: "",
-      tagsInput: "主线",
-    });
-    expect(patch).toEqual({ data: { time_label: "" } });
-  });
-
   it("清空 tags（原值「主线」，tagsInput 空串）→ 提交空数组显式清除", () => {
-    const patch = buildEventDetailPatch(original, {
-      name: "主角踏入宗门",
-      description: "拜入山门",
-      timeLabel: "第二天黄昏",
-      tagsInput: "",
-    });
+    const patch = buildEventDetailPatch(original, { ...baseForm, tagsInput: "" });
     expect(patch).toEqual({ data: { tags: [] } });
   });
 
@@ -274,26 +338,21 @@ describe("buildEventDetailPatch（保存 patch，C3 编辑对话框与 C4 详情
     expect(
       buildEventDetailPatch(
         { name: "空事件", data: {} },
-        { name: "空事件", description: "", timeLabel: "", tagsInput: "" },
+        { name: "空事件", description: "", tagsInput: "" },
       ),
     ).toBeNull();
   });
 
   it("原值缺失（data 无 description 键）+ 表单有值 → 提交新值", () => {
     const patch = buildEventDetailPatch(
-      { name: "X", data: { time_label: "第二天黄昏" } },
-      { name: "X", description: "新描述", timeLabel: "第二天黄昏", tagsInput: "" },
+      { name: "X", data: {} },
+      { name: "X", description: "新描述", tagsInput: "" },
     );
     expect(patch).toEqual({ data: { description: "新描述" } });
   });
 
   it("全空格输入（trim 后为空）→ 等价清空：提交空串显式清除", () => {
-    const patch = buildEventDetailPatch(original, {
-      name: "主角踏入宗门",
-      description: "   ",
-      timeLabel: "第二天黄昏",
-      tagsInput: "主线",
-    });
+    const patch = buildEventDetailPatch(original, { ...baseForm, description: "   " });
     expect(patch).toEqual({ data: { description: "" } });
   });
 
@@ -301,117 +360,16 @@ describe("buildEventDetailPatch（保存 patch，C3 编辑对话框与 C4 详情
     // 仅 description 已清空（其余字段未变）→ 无变更
     expect(
       buildEventDetailPatch(
-        { name: "X", data: { description: "", time_label: "第二天黄昏", tags: ["主线"] } },
-        { name: "X", description: "", timeLabel: "第二天黄昏", tagsInput: "主线" },
+        { name: "X", data: { description: "", tags: ["主线"] } },
+        { name: "X", description: "", tagsInput: "主线" },
       ),
     ).toBeNull();
-    // 三字段全空原值 + 全空表单 → 无变更（重点：清空后再次保存不产生多余 patch）
+    // 两字段全空原值 + 全空表单 → 无变更（重点：清空后再次保存不产生多余 patch）
     expect(
       buildEventDetailPatch(
-        { name: "X", data: { description: "", time_label: "", tags: [] } },
-        { name: "X", description: "", timeLabel: "", tagsInput: "" },
+        { name: "X", data: { description: "", tags: [] } },
+        { name: "X", description: "", tagsInput: "" },
       ),
     ).toBeNull();
-  });
-});
-
-describe("groupEventsByTimeLabel（时间点分组，F4 timeline.md 时间点分组线框）", () => {
-  it("同 time_label 聚为一组；组序 = 组内最早事件的列表 index 序（sort_order 投影）", () => {
-    // [a(黄昏), b(少年), c(黄昏)] → 黄昏组（a 先于 c）、少年组
-    const groups = groupEventsByTimeLabel([
-      eventOf("a", undefined, "第二天黄昏"),
-      eventOf("b", undefined, "少年时"),
-      eventOf("c", undefined, "第二天黄昏"),
-    ]);
-    expect(groups.map((g) => g.label)).toEqual(["第二天黄昏", "少年时"]);
-    expect(groups[0].events.map((e) => e.id)).toEqual(["a", "c"]);
-    expect(groups[1].events.map((e) => e.id)).toEqual(["b"]);
-  });
-
-  it("time_label trim 归一（' 第二天黄昏 ' 与 '第二天黄昏' 同组；label 为 trim 后值）", () => {
-    const groups = groupEventsByTimeLabel([
-      eventOf("a", undefined, "  第二天黄昏  "),
-      eventOf("b", undefined, "第二天黄昏"),
-    ]);
-    expect(groups).toHaveLength(1);
-    expect(groups[0].key).toBe("第二天黄昏");
-    expect(groups[0].label).toBe("第二天黄昏");
-  });
-
-  it("空标签（缺失/空串/非字符串）归兜底组（key ''），恒置末尾；组内按列表序平铺", () => {
-    const groups = groupEventsByTimeLabel([
-      eventOf("a", undefined, "第二天黄昏"),
-      eventOf("b"), // 缺失 time_label
-      eventOf("c", undefined, ""), // 空串
-      eventOf("d", undefined, 42 as unknown as string), // 非字符串
-      eventOf("e", undefined, "少年时"),
-    ]);
-    expect(groups.map((g) => g.key)).toEqual(["第二天黄昏", "少年时", ""]);
-    expect(groups[2].events.map((e) => e.id)).toEqual(["b", "c", "d"]);
-  });
-
-  it("全部事件均有标签 → 无兜底组；空列表 → []", () => {
-    expect(groupEventsByTimeLabel([eventOf("a", undefined, "黄昏"), eventOf("b", undefined, "少年")]).map((g) => g.key)).toEqual([
-      "黄昏",
-      "少年",
-    ]);
-    expect(groupEventsByTimeLabel([])).toEqual([]);
-  });
-
-  it("拖拽改序后分组随事件自然迁移（列表序即组序投影）", () => {
-    // 把少年时事件移到最前 → 少年组成为第一组
-    const groups = groupEventsByTimeLabel([
-      eventOf("b", undefined, "少年时"),
-      eventOf("a", undefined, "第二天黄昏"),
-      eventOf("c", undefined, "第二天黄昏"),
-    ]);
-    expect(groups.map((g) => g.label)).toEqual(["少年时", "第二天黄昏"]);
-  });
-});
-
-describe("groupDropOrders（组块拖拽插入位 → 组内各事件 move order，F4）", () => {
-  const ids = ["ev-a", "ev-b", "ev-c", "ev-d", "ev-e"];
-
-  it("多事件组移动到目标组之前：首个锚定插入位、后续跟随上一已移动事件", () => {
-    // 拖组 [ev-c, ev-e] 到 ev-b 之前：c → before b = 1；e 跟随 c 后 → 2
-    expect(groupDropOrders(ids, { kind: "before", id: "ev-b" }, ["ev-c", "ev-e"])).toEqual([1, 2]);
-  });
-
-  it("多事件组移动到目标组之后（首个 order = 锚点 index + 1；后续跟随）", () => {
-    // 拖组 [ev-a, ev-b] 到 ev-d 之后：a → after d = 3；b 跟随 a → 3
-    expect(groupDropOrders(ids, { kind: "after", id: "ev-d" }, ["ev-a", "ev-b"])).toEqual([3, 3]);
-  });
-
-  it("目标组在被拖组之后（剔除后锚点 index 修正——S13 同款防 1 位错位）", () => {
-    // 拖组 [ev-a, ev-b] 到 ev-e 之后：a → after e = 4；b 跟随 a → 4
-    expect(groupDropOrders(ids, { kind: "after", id: "ev-e" }, ["ev-a", "ev-b"])).toEqual([4, 4]);
-  });
-
-  it("end → 末尾（首个 = rest 长度；后续跟随）", () => {
-    expect(groupDropOrders(ids, { kind: "end" }, ["ev-a", "ev-b"])).toEqual([4, 4]);
-  });
-
-  it("分散组（同标签事件在列表中不相邻）：逐个 move 后仍连续落在目标位", () => {
-    // ids = [a, d, b, c, e]（a、b 分散），拖组 [a, b] 到 e 之后：
-    // a → after e = 4；b 跟随 a → 4 → 最终 [d, c, e, a, b]（连续且保持组内序）
-    expect(groupDropOrders(["ev-a", "ev-d", "ev-b", "ev-c", "ev-e"], { kind: "after", id: "ev-e" }, ["ev-a", "ev-b"])).toEqual([4, 4]);
-  });
-
-  it("单事件组与 eventDropOrder 等价（F3 行为完全一致）", () => {
-    for (const insert of [
-      { kind: "before", id: "ev-c" },
-      { kind: "after", id: "ev-c" },
-      { kind: "end" },
-    ] as const) {
-      expect(groupDropOrders(ids, insert, ["ev-a"])).toEqual([eventDropOrder(ids, insert, "ev-a")]);
-    }
-  });
-
-  it("锚点不存在 → 末尾（防御；列表与拖拽态同源，理论不可达）", () => {
-    expect(groupDropOrders(ids, { kind: "before", id: "ev-ghost" }, ["ev-a", "ev-b"])).toEqual([4, 4]);
-  });
-
-  it("空组 → 空序列（防御）", () => {
-    expect(groupDropOrders(ids, { kind: "end" }, [])).toEqual([]);
   });
 });

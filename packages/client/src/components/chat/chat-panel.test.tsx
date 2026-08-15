@@ -194,19 +194,19 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3：任务�
     expect(stale).toContain("此提案已失效");
   });
 
-  it("ProposalCardView：propose_reorder_events（F9）标题映射「重排时间轴事件」+ preview 通用 JSON 展示", () => {
+  it("ProposalCardView：propose_reorder_timepoints（F9 + G2 修订）标题映射「重排时间轴时间点」+ preview 通用 JSON 展示", () => {
     const html = renderToString(
       <ProposalCardView
         proposal={{
           proposalId: "prop-9",
-          type: "propose_reorder_events",
+          type: "propose_reorder_timepoints",
           status: "pending",
-          preview: { changes: [{ id: "evt-1", order: 2 }] },
+          preview: { changes: [{ id: "tp-1", order: 2 }] },
         }}
       />,
     );
     expect(html).toContain("提案");
-    expect(html).toContain("重排时间轴事件"); // PROPOSAL_TYPE_LABELS 映射（F9 新增）
+    expect(html).toContain("重排时间轴时间点"); // PROPOSAL_TYPE_LABELS 映射（G2 修订：propose_reorder_timepoints）
     // preview 走通用 JSON 渲染（F9 不做特化，YAGNI）：结构字段原文可见
     expect(html).toContain("changes");
   });

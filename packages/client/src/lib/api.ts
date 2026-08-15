@@ -402,6 +402,25 @@ export function moveEntityEvent(id: string, body: MoveEventBody): Promise<MoveEv
   return apiFetch<MoveEventRes>(`/entity/event/${id}/move`, { method: "PUT", body });
 }
 
+/** PUT /api/v1/entity/timepoint/:id/move（G2：时间点拖拽重排，双独立线性序——只动组间序，组内事件不动） */
+export function moveEntityTimepoint(id: string, body: MoveEventBody): Promise<MoveEventRes> {
+  return apiFetch<MoveEventRes>(`/entity/timepoint/${id}/move`, { method: "PUT", body });
+}
+
+/** POST /api/v1/entity/event/:id/move_to 请求体（复合端点：改挂载 + 重排一次事务提交，G2） */
+export interface MoveEventToBody {
+  /** 目标时间点 id（null = 移出到「未挂载」兜底区，仅重排不建挂载） */
+  timepoint_id: string | null;
+  /** 目标位置（0-based 全局事件线性序，语义同 event move：越界 clamp、负数 400） */
+  order: number;
+}
+
+/** 事件跨组拖拽/挂载变更（G2：替代「删旧 occurs_at + 建新 + move」两步分调，事务原子；
+ * error：404 ENTITY_NOT_FOUND / 400 VALIDATION_ERROR（timepoint 不存在或已软删）） */
+export function moveEntityEventTo(id: string, body: MoveEventToBody): Promise<MoveEventRes> {
+  return apiFetch<MoveEventRes>(`/entity/event/${id}/move_to`, { method: "POST", body });
+}
+
 // ============ 关系（S3.6；契约：endpoints.md「关系」L300-391，物理删决策 12 修订） ============
 
 /** GET /api/v1/relation 列表项（联表填充的端点名称；depth=1 紧邻展示用） */

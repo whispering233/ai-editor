@@ -26,6 +26,9 @@ export const SUMMARY_COLUMNS: Record<EntityType, SummaryColumnConfig> = {
   hook: { key1: "status", label1: "状态", key2: "payoff_timing", label2: "回收时机" },
   // C1 类型补全（决策 26 event 时间轴事件；服务端 event 摘要为空对象，时间轴专属 UI 由 C2 实现）
   event: { key1: "description", label1: "描述" },
+  // G2.3 类型补全（G2 时间标签点：data 空、无专属摘要字段——endpoints.md「timepoint → 无专属摘要字段」，
+  // 空 key = 摘要列渲染「—」占位，与 event 摘要缺失同款防御）
+  timepoint: { key1: "", label1: "" },
 };
 
 /** hook 枚举值 → 中文（展示映射；未收录的原样显示）；详情页表单下拉复用（S3.6） */
@@ -77,4 +80,7 @@ export const CREATE_FIRST_FIELD: Record<EntityType, CreateFirstFieldConfig> = {
   },
   // C1 类型补全（决策 26 event 时间轴事件；时间轴专属创建 UI 由 C2 实现）
   event: { key: "description", label: "描述", input: "text" },
+  // G2.3 类型补全（G2 时间标签点：data 空——name = 时间标签文本即全部字段；
+  // 空 key = 行内新建仅 name 输入，EntityList 对空 key 跳过 data 字段与首字段输入）
+  timepoint: { key: "", label: "", input: "text" },
 };

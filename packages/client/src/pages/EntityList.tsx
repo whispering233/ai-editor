@@ -40,6 +40,8 @@ const TYPE_LABEL: Record<EntityType, string> = {
   hook: "伏笔",
   // C1 类型补全（决策 26 event 时间轴事件；时间轴专属 UI 由 C2 实现）
   event: "事件",
+  // G2.3 类型补全（G2 时间标签点；tab 随 ENTITY_TYPES 自动出现，列表 = 泛型视图）
+  timepoint: "时间点",
 };
 
 /** 排序下拉选项（sort × order 组合；默认更新时间倒序） */
@@ -183,7 +185,8 @@ export default function EntityList({ type }: { type: string }) {
     try {
       const first = CREATE_FIRST_FIELD[entityType];
       const data: Record<string, unknown> = {};
-      if (firstValue.trim()) data[first.key] = firstValue.trim();
+      // 空 key = 该类型无 data 首字段（timepoint：时间标签文本即 name，G2）——跳过不写 data
+      if (first.key !== "" && firstValue.trim()) data[first.key] = firstValue.trim();
       const res = await createEntity(entityType, { name, data });
       useUiStore.getState().showToast(`已创建${TYPE_LABEL[entityType]}《${name}》`);
       setCreateOpen(false);
@@ -295,7 +298,9 @@ export default function EntityList({ type }: { type: string }) {
             aria-label="名称"
             className="w-48"
           />
-          {firstField.input === "select" ? (
+          {/* 首字段（空 key = 无 data 首字段——timepoint 仅 name，G2.3；行内新建退化为纯名称输入） */}
+          {firstField.key !== "" &&
+            (firstField.input === "select" ? (
             <select
               value={firstValue}
               onChange={(e) => setFirstValue(e.target.value)}
@@ -319,7 +324,7 @@ export default function EntityList({ type }: { type: string }) {
               aria-label={firstField.label}
               className="w-40"
             />
-          )}
+          ))}
           <div className="ml-auto flex items-center gap-2">
             <Button variant="outline" type="button" size="sm" onClick={cancelCreateRow} disabled={createSubmitting}>
               取消

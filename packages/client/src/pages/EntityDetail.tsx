@@ -41,6 +41,8 @@ const TYPE_LABEL: Record<EntityType, string> = {
   hook: "伏笔",
   // C1 类型补全（决策 26 event 时间轴事件；时间轴专属 UI 由 C2 实现）
   event: "事件",
+  // G2.3 类型补全（G2 时间标签点；泛型详情页可用——仅名称可编辑，data 空）
+  timepoint: "时间点",
 };
 
 /** 字段值 → 表单字符串（undefined/null → 空串） */

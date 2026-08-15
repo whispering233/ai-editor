@@ -26,7 +26,17 @@ const TYPE_LABEL: Record<EntityType, string> = {
   hook: "伏笔",
   // C1 类型补全（决策 26 event 时间轴事件；时间轴专属 UI 由 C2 实现）
   event: "事件",
+  // G2.3 类型补全（G2 时间标签点；源端下拉随 ENTITY_TYPES 出现——挂载关系不在此对话框创建）
+  timepoint: "时间点",
 };
+
+/**
+ * 对话框关系类型下拉选项（oracle P2-2：occurs_at 方向白名单）：
+ * **排除 occurs_at**——挂载（timepoint → event 1:n，G2）由时间轴 UI 专管（组尾新建
+ * POST /relation 固定方向、跨组拖拽 move_to 复合端点），对话框不暴露自定义 occurs_at 创建，
+ * UI 层天然限制「仅 timepoint → event」方向（目标端下拉亦无 event 可选，双保险）。
+ */
+const DIALOG_RELATION_TYPES = RELATION_TYPES.filter((t) => t !== "occurs_at");
 
 /** 下拉选择框样式（token 类，layout.md §3） */
 const SELECT_CLASS =
@@ -169,7 +179,7 @@ export function CreateRelationDialog({
             <div className="flex flex-col gap-2 sm:w-44">
               <p className="text-sm font-medium text-foreground">关系类型</p>
               <select value={relationType} onChange={(e) => setRelationType(e.target.value)} className={SELECT_CLASS}>
-                {RELATION_TYPES.map((t) => (
+                {DIALOG_RELATION_TYPES.map((t) => (
                   <option key={t} value={t}>
                     {relationTypeLabel(t)}
                   </option>

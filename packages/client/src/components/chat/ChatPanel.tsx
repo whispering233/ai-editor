@@ -49,8 +49,9 @@ const PROPOSAL_TYPE_LABELS: Record<string, string> = {
   propose_update_entity: "更新实体",
   propose_add_relation: "新增关系",
   propose_outline_node: "新建大纲节点",
-  // F9：时间轴 AI 排序提案（propose_reorder_events，见 doc/ui/pages/timeline.md「AI 排序入口」）
-  propose_reorder_events: "重排时间轴事件",
+  // F9 + G2 修订：时间轴 AI 排序提案（propose_reorder_timepoints 取代 propose_reorder_events——
+  //   事件不再带 time_label，语义序载体为时间点实体，见 doc/ui/pages/timeline.md「AI 排序入口」）
+  propose_reorder_timepoints: "重排时间轴时间点",
 };
 
 /** focus 实体类型 → 中文（focus 小条展示；未知类型显示原文） */

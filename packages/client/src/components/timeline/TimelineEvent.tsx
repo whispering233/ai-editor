@@ -1,16 +1,17 @@
-// 时间轴事件行（F4，timeline.md 时间点分组线框：组内事件堆叠；F5 时间标签样式提升；F6 行内描述展示）
-// 职责：纯展示——组内事件行 = 小圆点 + 内容卡（事件名 → 时间标签 → tags → 「N 节点」→ ⋯ 菜单 + 描述区）。
-// 拖拽归组块级（TimelineGroup 根 draggable），本行**不 draggable 防误拖**（F4 线框），故无拖拽柄。
-// 行内时间标签（F5）：有值 → 主题色点缀 `text-sm font-medium text-primary`（第二信息层级，仅次于
-//   事件名；与 tags 胶囊 bg-muted 灰、组标题 text-foreground 实色均区分）；空 → 「未标注时间」占位
-//   弱化样式（text-xs italic text-muted-foreground）——已标注/未标注一眼可辨。
-// 描述区（F6）：事件名行下方全宽换行，`text-sm text-muted-foreground` 次要层级（低于事件名/时间标签）；
+// 时间轴事件行（G2.3，timeline.md G2 布局线框：组内事件堆叠；F5 时间标签样式已随 G2 移除——
+//   时间标签 = 组标题（时间点实体），行内不再展示；F6 行内描述展示保留）
+// 职责：纯展示 + 单条拖拽（G2 双轨：事件行 draggable，恢复 F3 能力）——
+//   行 = 小圆点 + 内容卡（拖拽柄 GripVertical → 事件名 → tags → 「N 节点」→ ⋯ 菜单 + 描述区）。
+// 拖拽协调在容器（components/timeline/Timeline.tsx）——本行只负责 draggable 挂载与回调转发：
+//   行内按钮 draggable={false} 防拖（菜单/展开按钮）；opacity-50 拖拽态；插入指示线（S13 模式）。
+// 描述区（F6）：事件名行下方全宽换行，`text-sm text-muted-foreground` 次要层级（低于事件名）；
 //   两行截断（line-clamp-2）——**超过两行才显示「展开」按钮**（clamp 态 scrollHeight > clientHeight
 //   运行时测量，窗口 resize 重测；**展开态跳过重测**——line-clamp 解除后无法测 clamp 溢出，
 //   保留上次 clamped 测量值）；展开后 line-clamp-none 显示「收起」；空描述不渲染。
 import { useLayoutEffect, useRef, useState } from "react";
+import type { DragEvent } from "react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
-import { MoreHorizontal } from "lucide-react";
+import { GripVertical, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -19,22 +20,49 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { eventDescription, eventTagsOf, eventTimeLabel } from "../../lib/timeline";
+import { eventDescription, eventTagsOf } from "../../lib/timeline";
 import { cn } from "../../lib/utils";
+
+/** 事件行拖拽回调（容器统一装配：dragstart/dragover/drop 需结合拖拽来源与落点行判定） */
+export interface EventDragHandlers {
+  onDragStart: (e: DragEvent<HTMLDivElement>, ev: EntitySummary) => void;
+  onDragEnd: () => void;
+  onDragOver: (e: DragEvent<HTMLDivElement>, ev: EntitySummary) => void;
+  onDrop: (e: DragEvent<HTMLDivElement>, ev: EntitySummary) => void;
+}
 
 interface TimelineEventProps {
   ev: EntitySummary;
   /** 行内「N 节点」计数（occurs_in 关联数；锚定边拉取失败时页面传 0 + hasOccursData=false 降级隐藏） */
   occursCount: (id: string) => number;
   hasOccursData: boolean;
+  /** 本行被拖拽中（opacity-50） */
+  dragging: boolean;
+  /** 拖拽在途（防并发；draggable 禁用） */
+  busy: boolean;
+  /** 插入指示线（S13 模式：行上下边缘——事件拖拽落点判定以行中点为准） */
+  showInsertBefore: boolean;
+  showInsertAfter: boolean;
+  eventDrag: EventDragHandlers;
   /** 行 ⋯ 菜单回调（页面级动作：详情跳转 / 编辑对话框 / 软删确认） */
   onDetail: (ev: EntitySummary) => void;
   onEdit: (ev: EntitySummary) => void;
   onDelete: (ev: EntitySummary) => void;
 }
 
-export function TimelineEvent({ ev, occursCount, hasOccursData, onDetail, onEdit, onDelete }: TimelineEventProps) {
-  const timeLabel = eventTimeLabel(ev);
+export function TimelineEvent({
+  ev,
+  occursCount,
+  hasOccursData,
+  dragging,
+  busy,
+  showInsertBefore,
+  showInsertAfter,
+  eventDrag,
+  onDetail,
+  onEdit,
+  onDelete,
+}: TimelineEventProps) {
   const tags = eventTagsOf(ev);
   const description = eventDescription(ev);
   const count = occursCount(ev.id);
@@ -61,27 +89,37 @@ export function TimelineEvent({ ev, occursCount, hasOccursData, onDetail, onEdit
   }, [description, expanded]);
 
   return (
-    <div className="flex items-start">
-      {/* 组内小圆点（F4：组内事件堆叠，小圆点 size-2 bg-primary/60 居中于轴线列——
+    <div
+      draggable={!busy}
+      onDragStart={(e) => eventDrag.onDragStart(e, ev)}
+      onDragEnd={eventDrag.onDragEnd}
+      onDragOver={(e) => eventDrag.onDragOver(e, ev)}
+      onDrop={(e) => eventDrag.onDrop(e, ev)}
+      className={cn("relative flex items-start", dragging && "opacity-50")}
+    >
+      {/* 插入指示线（S13 模式：行上下边缘，跨圆点列与内容） */}
+      {showInsertBefore && <div className="absolute inset-x-0 -top-px h-0.5 bg-primary" />}
+      {showInsertAfter && <div className="absolute inset-x-0 -bottom-px h-0.5 bg-primary" />}
+      {/* 组内小圆点（F4 保留：组内事件堆叠，小圆点 size-2 bg-primary/60 居中于轴线列——
           不再画大圆点盖线，轴线容器级贯穿；mt-[16px] = 内容中心 20px - 小圆点高 8px 中心 offset 4px） */}
       <div className="w-[22px] shrink-0">
         <span aria-hidden="true" className="mx-auto mt-[16px] block size-2 rounded-full bg-primary/60" />
       </div>
-      {/* 内容卡（事件名行 + 描述区：F6 描述在下一行全宽换行，不挤占行内元素） */}
+      {/* 内容卡（timeline.md G2 事件行：从左到右 拖拽柄 → 事件名 → tags → N 节点 → ⋯ 菜单；
+          描述区 F6 在事件名行下方全宽换行，不挤占行内元素） */}
       <div className="min-w-0 flex-1 rounded-md border border-border bg-card px-3 py-2">
         <div className="flex items-center gap-2">
+          {/* 拖拽柄（G2 恢复 F3 单条拖拽：draggable 在行根，柄为视觉指示） */}
+          <span
+            className="shrink-0 cursor-grab text-muted-foreground/60 active:cursor-grabbing"
+            title="拖拽调整事件顺序/挂载"
+            aria-hidden="true"
+          >
+            <GripVertical className="size-4" />
+          </span>
           <span className="min-w-0 truncate font-medium text-foreground" title={ev.name}>
             {ev.name}
           </span>
-          {/* 时间标签（F5 提升）：有值 → 主题色点缀（text-sm font-medium text-primary）；
-              空 → 弱化占位（text-xs italic text-muted-foreground）——层级对比见文件头注释 */}
-          {timeLabel !== "" ? (
-            <span className="shrink-0 text-sm font-medium text-primary" title={timeLabel}>
-              {timeLabel}
-            </span>
-          ) : (
-            <span className="shrink-0 text-xs italic text-muted-foreground">未标注时间</span>
-          )}
           {tags.map((tag) => (
             <span key={tag} className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
               {tag}
@@ -92,7 +130,13 @@ export function TimelineEvent({ ev, occursCount, hasOccursData, onDetail, onEdit
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={
-                  <Button variant="ghost" size="icon-sm" className="text-muted-foreground" aria-label={`${ev.name} 操作`}>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    draggable={false}
+                    className="text-muted-foreground"
+                    aria-label={`${ev.name} 操作`}
+                  >
                     <MoreHorizontal />
                   </Button>
                 }
