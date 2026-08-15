@@ -14,6 +14,7 @@ import {
   CircleAlert,
   Loader2,
   MessageSquare,
+  PanelRightClose,
   Plus,
   Send,
   Sparkles,
@@ -22,6 +23,7 @@ import {
   X,
 } from "lucide-react";
 import { useMediaQuery } from "../../hooks/use-media-query";
+import { CHAT_MIN_WIDTH } from "../../hooks/use-panels";
 import { useProjectStore } from "../../stores/project";
 import { useChatStore, type FocusContext, type ProposalCard } from "../../stores/chat";
 import type { ChatMessage } from "@whispering233/ai-editor-shared";
@@ -79,7 +81,16 @@ const asToolCall = (c: unknown): ToolCallShape => (typeof c === "object" && c !=
 
 // ============ 会话标题行：下拉切换同项目会话 + [新会话] ============
 
-function SessionTitleBar({ disabled, onClose }: { disabled: boolean; onClose?: () => void }) {
+function SessionTitleBar({
+  disabled,
+  onClose,
+  onToggleCollapse,
+}: {
+  disabled: boolean;
+  onClose?: () => void;
+  /** 收起右栏回调（F7：仅桌面静态栏传入——抽屉模式无收起能力）；渲染 PanelRightClose 按钮 */
+  onToggleCollapse?: () => void;
+}) {
   const sessions = useChatStore((s) => s.sessions);
   const currentSessionId = useChatStore((s) => s.currentSessionId);
   const setCurrentSession = useChatStore((s) => s.setCurrentSession);
@@ -140,6 +151,18 @@ function SessionTitleBar({ disabled, onClose }: { disabled: boolean; onClose?: (
       >
         <Plus className="size-4" />
       </Button>
+      {onToggleCollapse && (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="ml-auto shrink-0 text-muted-foreground"
+          onClick={onToggleCollapse}
+          aria-label="收起聊天面板"
+          title="收起聊天面板"
+        >
+          <PanelRightClose className="size-4" />
+        </Button>
+      )}
       {onClose && (
         <Button
           variant="ghost"
@@ -459,13 +482,13 @@ function MessageList({ disabled }: { disabled: boolean }) {
 
 // ============ 面板内部内容：标题行 + 横幅 + 消息流 + focus 小条 + 输入区 ============
 
-function ChatPanelBody({ onClose }: { onClose?: () => void }) {
+function ChatPanelBody({ onClose, onToggleCollapse }: { onClose?: () => void; onToggleCollapse?: () => void }) {
   const config = useProjectStore((s) => s.config);
   const disabled = !config;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <SessionTitleBar disabled={disabled} onClose={onClose} />
+      <SessionTitleBar disabled={disabled} onClose={onClose} onToggleCollapse={onToggleCollapse} />
       {!disabled && (
         <>
           <DisconnectBanner />
@@ -485,14 +508,30 @@ function ChatPanelBody({ onClose }: { onClose?: () => void }) {
 
 // ============ 外壳：桌面静态右栏（≥1024px） / 小屏抽屉（<1024px） ============
 
-export function ChatPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function ChatPanel({
+  open,
+  onClose,
+  width,
+  onToggleCollapse,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** 桌面态像素宽度（flex-basis 覆盖默认 40%）；undefined = 小屏默认百分比布局（抽屉不参与 flex） */
+  width?: number;
+  /** 收起右栏回调（F7：桌面态由 AppShell 传入；小屏抽屉无收起能力，不传即不渲染按钮） */
+  onToggleCollapse?: () => void;
+}) {
   const isDesktop = useMediaQuery("(min-width: 1024px)");
 
-  // 桌面（≥1024px）：右栏 40% 静态列（1:5:4 严格比例，layout.md §0）
+  // 桌面（≥1024px）：右栏静态列——F7 起宽度由 AppShell 传入像素（flex-basis 覆盖默认 40%），
+  // 收起按钮（PanelRightClose）在会话标题行右侧（onToggleCollapse 传入时渲染）
   if (isDesktop) {
     return (
-      <aside className="flex min-w-0 flex-[4_1_40%] flex-col border-l border-border bg-background">
-        <ChatPanelBody />
+      <aside
+        className="flex min-w-0 flex-[4_1_40%] flex-col border-l border-border bg-background"
+        style={width !== undefined ? { flex: `0 1 ${width}px`, minWidth: CHAT_MIN_WIDTH } : undefined}
+      >
+        <ChatPanelBody onToggleCollapse={onToggleCollapse} />
       </aside>
     );
   }

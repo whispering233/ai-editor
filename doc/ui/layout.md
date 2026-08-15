@@ -27,18 +27,30 @@
 └───────────────┴──────────────────────────────────────────────┴──────────────────────┘
 ```
 
-### 宽度实现（严格 1:5:4，flex-basis 百分比）
+### 宽度实现（默认 1:5:4，可拖拽调宽 + 可收起，F7 修订）
 
-`AppShell` 根容器为 `flex h-screen overflow-hidden`，三栏均为 `min-w-0` 的 flex 子项（防溢出）：
+`AppShell` 根容器为 `flex h-screen overflow-hidden`，三栏均为 `min-w-0` 的 flex 子项（防溢出）。
 
-| 栏 | 组件 | flex 类 | 背景 / 分隔 |
-|----|------|---------|-------------|
+| 栏 | 组件 | 默认 flex 类 | 背景 / 分隔 |
+|----|------|-------------|-------------|
 | 左栏 | `Sidebar` | `flex-[1_1_10%]` | `bg-sidebar` + `border-r border-border` |
 | 中栏 | `MainPanel` | `flex-[5_1_50%]` | 继承 body `bg-background`（无独立背景类） |
 | 右栏 | `ChatPanel` | `flex-[4_1_40%]` | `bg-background` + `border-l border-border` |
 
+- **F7 修订（2026-08 用户反馈）**：三栏**可拖拽调整宽度 + 可收起/展开**（决策 22 修订注记）：
+  - **拖拽手柄**：左/中栏之间、中/右栏之间各一个 resize 手柄（hover 高亮 + `cursor-col-resize`，拖拽改栏宽——按像素宽度，非百分比）；拖拽期间禁用文本选择（`select-none`），以像素宽度覆盖默认百分比。
+  - **收起/展开**：每栏可收起（左/右栏收起为窄图标条或完全隐藏 + 展开按钮；中栏**不可完全收起**，保底最小宽度）；收起态下拖拽手柄隐藏/禁用；收起/展开按钮位置随栏而定（左栏收起按钮在左栏头部或主面板边缘、右栏同理，设计以顺手为准）。
+  - **宽度与收起态持久化**：localStorage（决策 10 同哲学——纯展示层偏好，不进数据文件）；刷新/重启后恢复。
+  - **小屏抽屉不变**：`<1024px` 右栏折叠抽屉行为保持（`useMediaQuery`，开关在信息条右侧，仅小屏出现）。
+  - **弹性分配**：收起左/右栏后，剩余空间由未收起栏弹性分配（中栏自适应扩展）；拖拽与收起互斥。
+- **F7 实现细节（2026-08 落地）**：
+  - **状态与持久化**（`hooks/use-panels.ts`，key `ai-editor:panels`）：扁平 JSON `{ sidebarWidth, chatWidth, collapsedSidebar, collapsedChat }`——中栏不收起故无 collapsed.middle；解析失败/形状不符整体回退默认（防御解析）；宽度取整像素，**拖拽结束一次写入**（拖拽中只更新内存态，避免高频写存储）。
+  - **默认宽度**：首载按视口换算 1:5:4（左 10%、右 40%）再收敛到可读区间——左 160-480px、右 240-720px、中栏保底 320px（`clampPanelWidth`）；<1024px 视口直接取最小可读宽度（宽度值不参与小屏布局）。
+  - **拖拽手柄**（AppShell 内 `ResizeHandle`，左|中、中|右各一）：6px 垂直细条，hover 高亮 + GripVertical，`cursor-col-resize` + `touch-none`；pointer capture 实现拖拽（down 捕获指针，move/up 由手柄持续接收，移出窗口不丢事件）；拖拽期间根容器 `select-none` 防文本选中；对应栏收起时手柄不渲染（拖拽与收起互斥）。
+  - **收起/展开**：左栏收起按钮在产品标识行右侧（PanelLeftClose，Sidebar 内部渲染）、右栏在会话标题行右侧（PanelRightClose，ChatPanel 内部渲染）——仅桌面态传入回调时出现；收起后由 AppShell 渲染 32px 窄条（w-8，PanelLeftOpen/PanelRightOpen 展开按钮，点击恢复原宽）；宽度值保留不释放。
+  - **弹性分配（像素版）**：桌面态左/右栏 `flex: 0 1 <px>` + minWidth（覆盖默认百分比）、中栏 `flex: 1 1 0%` + minWidth 320——收起任一侧后剩余空间由中栏自动吸收；窗口收缩时 flex shrink + 中栏 minWidth 自然兜底（不强制回写宽度值）。
+  - **小屏不变**：`<1024px` 不渲染手柄/收起按钮/窄条，三栏回退默认百分比类（`flex-[1_1_10%]`/`flex-[5_1_50%]`/`flex-[4_1_40%]`），右栏抽屉行为零改动。
 - **背景统一**：三栏视觉背景一致——左栏 `bg-sidebar` 的 token 值（`--sidebar`）与 `--background` 相同（见 §3.2），中栏/右栏为 `bg-background`；栏间仅以 1px `border-border` 分隔，不做色块对比。
-- **固定不可拖拽**：左右栏无 resize 能力，比例恒定。
 - **<1024px 右栏折叠为抽屉**（`useMediaQuery("(min-width: 1024px)")`）：
   - 抽屉开关状态 `chatOpen` 由 `AppShell` 持有（`useState`），开关按钮在**信息条右侧**（`InfoBar` 渲染，仅小屏出现）；桌面态开关不渲染、状态不生效。
   - 抽屉渲染于 `ChatPanel` 外壳：`fixed inset-0 z-50` 容器 + 遮罩 `absolute inset-0 bg-foreground/40 animate-in fade-in`（点击关闭）+ 抽屉 `absolute inset-y-0 right-0 w-[85vw] max-w-md border-l border-border bg-background shadow-xl animate-in slide-in-from-right duration-300`；抽屉标题行右侧额外渲染 X 关闭按钮。关闭时不渲染（`if (!open) return null`）。

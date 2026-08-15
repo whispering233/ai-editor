@@ -3,6 +3,7 @@
 // 失败静默——信息条显示「书架」，Dashboard 引导创建/打开项目
 import { useEffect, type ReactNode } from "react";
 import type { Route } from "../../hooks/use-route";
+import { MIDDLE_MIN_WIDTH } from "../../hooks/use-panels";
 import { useProjectStore } from "../../stores/project";
 import { InfoBar } from "./InfoBar";
 import { TabBar } from "./TabBar";
@@ -11,11 +12,14 @@ export function MainPanel({
   route,
   chatOpen,
   onToggleChat,
+  isDesktop,
   children,
 }: {
   route: Route;
   chatOpen: boolean;
   onToggleChat: () => void;
+  /** 桌面态标记（F7）：中栏 flex-1 弹性吸收左右栏固定宽之外的剩余空间；小屏回退默认 50% 百分比 */
+  isDesktop: boolean;
   children: ReactNode;
 }) {
   const loadConfig = useProjectStore((s) => s.loadConfig);
@@ -26,7 +30,10 @@ export function MainPanel({
   }, [loadConfig]);
 
   return (
-    <main className="flex min-w-0 flex-[5_1_50%] flex-col">
+    <main
+      className="flex min-w-0 flex-[5_1_50%] flex-col"
+      style={isDesktop ? { flex: "1 1 0%", minWidth: MIDDLE_MIN_WIDTH } : undefined}
+    >
       <InfoBar chatOpen={chatOpen} onToggleChat={onToggleChat} />
       <div className="shrink-0 px-3 py-2">
         <TabBar route={route} />

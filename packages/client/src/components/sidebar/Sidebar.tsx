@@ -22,6 +22,7 @@ import {
   MessageSquare,
   Moon,
   MoreHorizontal,
+  PanelLeftClose,
   Plus,
   Settings,
   Sun,
@@ -30,6 +31,7 @@ import {
 } from "lucide-react";
 import { formatRelativeTime, formatTimestamp } from "@whispering233/ai-editor-shared";
 import { useTheme } from "../../hooks/use-theme";
+import { SIDEBAR_MIN_WIDTH } from "../../hooks/use-panels";
 import {
   ApiError,
   CLIENT_NETWORK_ERROR,
@@ -126,7 +128,15 @@ function SessionList() {
   );
 }
 
-export function Sidebar() {
+export function Sidebar({
+  width,
+  onToggleCollapse,
+}: {
+  /** 桌面态像素宽度（flex-basis 覆盖默认 10%）；undefined = 小屏默认百分比布局 */
+  width?: number;
+  /** 收起左栏回调（F7：桌面态由 AppShell 传入；小屏无收起能力，不传即不渲染按钮） */
+  onToggleCollapse?: () => void;
+}) {
   const { theme, toggleTheme } = useTheme();
 
   // 书架（bookshelf 与 config 无关：无项目打开也展示）
@@ -424,15 +434,31 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="flex min-w-0 flex-[1_1_10%] flex-col border-r border-border bg-sidebar">
-      {/* 产品标识：衬线斜体（layout.md §3.3），点击回 #/ */}
-      <a
-        href="#/"
-        className="flex h-12 shrink-0 items-center gap-1.5 border-b border-border px-3 font-serif text-base italic text-foreground hover:text-primary"
-      >
-        <span className="text-primary">◈</span>
-        <span className="truncate">我的小说</span>
-      </a>
+    <aside
+      className="flex min-w-0 flex-[1_1_10%] flex-col border-r border-border bg-sidebar"
+      style={width !== undefined ? { flex: `0 1 ${width}px`, minWidth: SIDEBAR_MIN_WIDTH } : undefined}
+    >
+      {/* 产品标识：衬线斜体（layout.md §3.3），点击回 #/；F7 起行右侧带收起左栏按钮（仅桌面态渲染） */}
+      <div className="flex h-12 shrink-0 items-center border-b border-border">
+        <a
+          href="#/"
+          className="flex h-full min-w-0 flex-1 items-center gap-1.5 px-3 font-serif text-base italic text-foreground hover:text-primary"
+        >
+          <span className="text-primary">◈</span>
+          <span className="truncate">我的小说</span>
+        </a>
+        {onToggleCollapse && (
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            aria-label="收起左栏"
+            title="收起左栏"
+            className="mr-1.5 flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <PanelLeftClose className="size-4" />
+          </button>
+        )}
+      </div>
 
       {/* 书架区：项目→会话二级树 + 新建项目入口（U3） */}
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
