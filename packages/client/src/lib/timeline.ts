@@ -129,6 +129,48 @@ export function eventDescription(item: EntitySummary): string {
   return typeof desc === "string" ? desc : "";
 }
 
+/**
+ * 标签输入建议（F8，timeline.md 标签输入建议节）：
+ * 按输入**最后一段**（逗号/顿号/换行分隔，trim 后）匹配已存在标签：
+ * - 最后一段为空（含整串为空/以分隔符结尾）→ 无建议（[]）——只在正在输入新标签时提示
+ * - 包含匹配（大小写不敏感）；排除已选标签（前面各段 trim 后已含的）；去重（防御 allTags 重复）
+ * - 稳定序（按 allTags 顺序）；limit 默认 5
+ */
+export function suggestTags(input: string, allTags: string[], limit = 5): string[] {
+  const segments = input.split(/[,，、\n]/);
+  const last = segments[segments.length - 1].trim();
+  if (last === "") return [];
+  const selected = new Set(
+    segments
+      .slice(0, -1)
+      .map((s) => s.trim())
+      .filter((s) => s !== ""),
+  );
+  const needle = last.toLowerCase();
+  const out: string[] = [];
+  const seen = new Set<string>(); // 去重：防御 allTags 含重复项（collectEventTags 已去重，理论不可达）
+  for (const tag of allTags) {
+    if (out.length >= limit) break;
+    if (selected.has(tag) || seen.has(tag)) continue;
+    if (tag.toLowerCase().includes(needle)) {
+      seen.add(tag);
+      out.push(tag);
+    }
+  }
+  return out;
+}
+
+/**
+ * 点选建议填入（F8）：把输入**最后一段替换为所选标签**并追加逗号——
+ * 保持逗号分隔输入兼容（parseTagsInput 多分隔符解析，统一收敛为中文逗号，同 tagsToInput 风格）；
+ * 替换后最后一段为空 → 建议区自然消失（suggestTags 空段不匹配）。
+ */
+export function applyTagSuggestion(input: string, tag: string): string {
+  const segments = input.split(/[,，、\n]/);
+  segments[segments.length - 1] = tag;
+  return segments.join("，") + "，";
+}
+
 /** 收集全部事件的标签去重（稳定序：按列表序首次出现；空串忽略——筛选器选项） */
 export function collectEventTags(items: EntitySummary[]): string[] {
   const seen = new Set<string>();

@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import {
+  applyTagSuggestion,
   buildEventDetailPatch,
   collectEventTags,
   eventDescription,
@@ -16,6 +17,7 @@ import {
   groupDropOrders,
   groupEventsByTimeLabel,
   parseTagsInput,
+  suggestTags,
   tagsToInput,
 } from "./timeline";
 
@@ -99,6 +101,44 @@ describe("filterEventsByTag（标签筛选）", () => {
 
   it("无匹配 → 空数组（「没有匹配」态）；再次点击取消由调用方传 null", () => {
     expect(filterEventsByTag(items, "不存在")).toEqual([]);
+  });
+});
+
+describe("suggestTags / applyTagSuggestion（标签输入建议，F8 timeline.md 标签输入建议节）", () => {
+  const pool = ["主线", "战争", "身世", "主线暗线", "宫廷线"];
+
+  it("最后一段包含匹配（大小写不敏感）+ 稳定序（按 allTags 顺序）", () => {
+    expect(suggestTags("主", pool)).toEqual(["主线", "主线暗线"]);
+    expect(suggestTags("MAIN", ["Main", "main2", "Other"])).toEqual(["Main", "main2"]);
+  });
+
+  it("排除已选标签（前面各段已含的不再建议；最后一段与已选相同 → 无建议）", () => {
+    expect(suggestTags("主线，主", pool)).toEqual(["主线暗线"]);
+    expect(suggestTags("主线，主线", pool)).toEqual(["主线暗线"]);
+  });
+
+  it("最后一段为空（整串空 / 以分隔符结尾）→ 无建议", () => {
+    expect(suggestTags("", pool)).toEqual([]);
+    expect(suggestTags("主线，", pool)).toEqual([]);
+    expect(suggestTags("主线、\n", pool)).toEqual([]);
+  });
+
+  it("limit 默认 5、可自定义；无匹配 → []；allTags 重复去重", () => {
+    // 池内含「线」的仅 3 个（主线/主线暗线/宫廷线）——limit 默认 5 不截断，验证用超 5 匹配的池
+    expect(suggestTags("线", pool)).toHaveLength(3);
+    const many = ["线1", "线2", "线3", "线4", "线5", "线6"];
+    expect(suggestTags("线", many)).toHaveLength(5);
+    expect(suggestTags("线", many, 2)).toEqual(["线1", "线2"]);
+    expect(suggestTags("不存在", pool)).toEqual([]);
+    expect(suggestTags("主", ["主线", "主线", "主线2"])).toEqual(["主线", "主线2"]);
+  });
+
+  it("applyTagSuggestion：最后一段替换为所选标签 + 追加逗号（多分隔符输入统一收敛为中文逗号）", () => {
+    expect(applyTagSuggestion("主", "主线")).toBe("主线，");
+    expect(applyTagSuggestion("主线，主", "主线2")).toBe("主线，主线2，");
+    expect(applyTagSuggestion("主线、战", "战争")).toBe("主线，战争，");
+    // 替换后最后一段为空 → 建议区消失（suggestTags 空段不匹配）
+    expect(suggestTags(applyTagSuggestion("主", "主线"), pool)).toEqual([]);
   });
 });
 

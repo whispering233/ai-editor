@@ -27,13 +27,17 @@ import {
   deleteEntity,
   deleteRelation,
   getEntityDetail,
+  listEntities,
   updateEntity,
   type EntityDetailRes,
   type RelationSummaryItem,
 } from "../lib/api";
 import {
+  applyTagSuggestion,
   buildEventDetailPatch,
+  collectEventTags,
   eventFormFromDetail,
+  suggestTags,
   type EventDetailForm,
 } from "../lib/timeline";
 import { buildOccursRelationBody, occursInRelations } from "../lib/timeline-detail";
@@ -41,6 +45,7 @@ import { flattenTree } from "../lib/outline-tree";
 import { cn } from "../lib/utils";
 import { Breadcrumb } from "../components/page-nav/Breadcrumb";
 import { ConfirmDialog } from "../components/outline/dialogs";
+import { TagSuggest } from "../components/timeline/TagSuggest";
 import { navigate } from "../hooks/use-route";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useProjectStore } from "../stores/project";
@@ -64,6 +69,23 @@ export default function TimelineDetail({ id }: { id: string }) {
   const [deleteRelationTarget, setDeleteRelationTarget] = useState<RelationSummaryItem | null>(null);
   // 软删确认
   const [deleteTarget, setDeleteTarget] = useState(false);
+  // 标签建议池（F8：独立补拉全量 200 聚合已存在标签；失败静默——无建议区，不影响表单）
+  const [tagPool, setTagPool] = useState<string[]>([]);
+
+  /** 补拉全量事件聚合标签池（F8；保存新标签后随 useDataRefresh 刷新，避免建议池陈旧——oracle P2） */
+  async function loadTagPool(): Promise<void> {
+    try {
+      const res = await listEntities("event", { limit: 200 });
+      setTagPool(collectEventTags(res.items));
+    } catch {
+      // 失败静默（契约：详情页独立补拉，失败仅无建议区）
+    }
+  }
+
+  useEffect(() => {
+    void loadTagPool();
+    // 依赖仅 []：挂载拉取一次；数据变更由 useDataRefresh 兜底刷新（main.tsx key=id 保证切页 remount）
+  }, []);
 
   const outline = useProjectStore((s) => s.outline);
   const nodeOptions = flattenTree(outline?.children ?? []);
@@ -95,8 +117,11 @@ export default function TimelineDetail({ id }: { id: string }) {
     // 依赖仅 [id]：loadDetail 每次渲染重建，但页面切换才需重载（同 EntityDetail）
   }, [id]);
 
-  // 数据变更信号：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉详情（表单以服务端权威为准重置）
-  useDataRefresh(() => void loadDetail());
+  // 数据变更信号：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉详情（表单以服务端权威为准重置）+ 标签池
+  useDataRefresh(() => {
+    void loadDetail();
+    void loadTagPool();
+  });
 
   // 大纲未加载时兜底拉取（节点选择器依赖；项目打开时已加载，防御直达路由场景——同 HookPanel/Timeline）
   useEffect(() => {
@@ -206,6 +231,13 @@ export default function TimelineDetail({ id }: { id: string }) {
   }
 
   const occurring = detail === null ? [] : occursInRelations(detail.relations, id);
+  // 标签建议（F8：按表单当前输入匹配标签池；空段不匹配 → 无建议区）
+  const tagSuggestions = form === null ? [] : suggestTags(form.tagsInput, tagPool);
+
+  /** 点选建议填入（F8）：替换最后一段 + 追加逗号；输入框焦点由 TagSuggest onMouseDown 保持 */
+  function pickTag(tag: string) {
+    setForm((f) => (f ? { ...f, tagsInput: applyTagSuggestion(f.tagsInput, tag) } : f));
+  }
 
   return (
     <section>
@@ -304,6 +336,12 @@ export default function TimelineDetail({ id }: { id: string }) {
                   value={form.tagsInput}
                   onChange={(e) => setForm((f) => (f ? { ...f, tagsInput: e.target.value } : f))}
                   placeholder="如：主线，战争（逗号/回车分隔）"
+                />
+                {/* 标签输入建议（F8：点选即填，替换最后一段 + 追加逗号；无匹配不显示） */}
+                <TagSuggest
+                  suggestions={tagSuggestions}
+                  visible={form.tagsInput.trim() !== ""}
+                  onPick={pickTag}
                 />
               </div>
               {saveError && <p className="text-sm text-destructive">{saveError}</p>}

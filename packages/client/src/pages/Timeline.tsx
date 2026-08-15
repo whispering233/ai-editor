@@ -30,11 +30,20 @@ import {
   updateEntity,
   type RelationSummaryItem,
 } from "../lib/api";
-import { buildEventDetailPatch, collectEventTags, filterEventsByTag, parseTagsInput, tagsToInput } from "../lib/timeline";
+import {
+  applyTagSuggestion,
+  buildEventDetailPatch,
+  collectEventTags,
+  filterEventsByTag,
+  parseTagsInput,
+  suggestTags,
+  tagsToInput,
+} from "../lib/timeline";
 import { flattenTree } from "../lib/outline-tree";
 import { cn } from "../lib/utils";
 import { ConfirmDialog } from "../components/outline/dialogs";
 import { Timeline as TimelineView } from "../components/timeline/Timeline";
+import { TagSuggest } from "../components/timeline/TagSuggest";
 import { navigate } from "../hooks/use-route";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useProjectStore } from "../stores/project";
@@ -63,6 +72,10 @@ export default function Timeline() {
 
   // 标签筛选（timeline.md：tag 从当前列表聚合；activeTag null = 全部）
   const [activeTag, setActiveTag] = useState<string | null>(null);
+
+  // 标签建议池（F8：已存在标签全集，供表单 tags 输入建议；列表不足 50 条直接聚合已拉数据，
+  // 达到默认 limit 50 说明可能截断 → 补拉全量 200；补拉失败静默降级用已拉列表聚合）
+  const [tagPool, setTagPool] = useState<string[]>([]);
 
   // 新建对话框
   const [createOpen, setCreateOpen] = useState(false);
@@ -94,7 +107,21 @@ export default function Timeline() {
     void Promise.allSettled([
       listEntities("event", {})
         .then((res) => {
-          if (!cancelled) setItems(res.items);
+          if (!cancelled) {
+            setItems(res.items);
+            // 标签建议池：先聚合已拉列表；满页（items 达到服务端 echo 的 limit，默认 50——可能截断）
+            // → 补拉全量 200 聚合，避免标签池不全（F8）；补拉失败静默降级用已拉列表聚合
+            setTagPool(collectEventTags(res.items));
+            if (res.items.length >= res.limit) {
+              void listEntities("event", { limit: 200 })
+                .then((full) => {
+                  if (!cancelled) setTagPool(collectEventTags(full.items));
+                })
+                .catch(() => {
+                  // 补拉失败静默：标签池不全只是建议少，不阻塞表单（契约：失败静默）
+                });
+            }
+          }
         })
         .catch((err) => {
           if (!cancelled) {
@@ -270,6 +297,19 @@ export default function Timeline() {
   const occursCount = (id: string): number =>
     occursEdgesFailed ? 0 : occursEdges.filter((r) => r.sourceId === id).length;
   const hasOccursData = !occursEdgesFailed;
+  // 标签建议（F8）：按各表单当前输入匹配标签池（suggestTags 空段不匹配 → 无建议区）
+  const createSuggestions = suggestTags(createForm.tagsInput, tagPool);
+  const editSuggestions = editForm === null ? [] : suggestTags(editForm.tagsInput, tagPool);
+
+  /** 点选建议填入（F8，新建表单）：替换最后一段 + 追加逗号；输入框焦点由 TagSuggest onMouseDown 保持 */
+  function pickCreateTag(tag: string) {
+    setCreateForm((f) => ({ ...f, tagsInput: applyTagSuggestion(f.tagsInput, tag) }));
+  }
+
+  /** 点选建议填入（F8，编辑表单）：同 pickCreateTag，作用于编辑对话框表单 */
+  function pickEditTag(tag: string) {
+    setEditForm((f) => (f ? { ...f, tagsInput: applyTagSuggestion(f.tagsInput, tag) } : f));
+  }
 
   return (
     <section>
@@ -412,6 +452,12 @@ export default function Timeline() {
                 onChange={(e) => setCreateForm((f) => ({ ...f, tagsInput: e.target.value }))}
                 placeholder="如：主线，战争（逗号/回车分隔）"
               />
+              {/* 标签输入建议（F8：点选即填，替换最后一段 + 追加逗号；无匹配不显示） */}
+              <TagSuggest
+                suggestions={createSuggestions}
+                visible={createForm.tagsInput.trim() !== ""}
+                onPick={pickCreateTag}
+              />
             </div>
             <div>
               <p className="mb-1 text-sm font-medium text-foreground">关联大纲节点（选填，可空）</p>
@@ -469,6 +515,12 @@ export default function Timeline() {
                   value={editForm.tagsInput}
                   onChange={(e) => setEditForm((f) => (f ? { ...f, tagsInput: e.target.value } : f))}
                   placeholder="如：主线，战争（逗号/回车分隔）"
+                />
+                {/* 标签输入建议（F8：点选即填，替换最后一段 + 追加逗号；无匹配不显示） */}
+                <TagSuggest
+                  suggestions={editSuggestions}
+                  visible={editForm.tagsInput.trim() !== ""}
+                  onPick={pickEditTag}
                 />
               </div>
               {editError && <p className="text-sm text-destructive">{editError}</p>}
