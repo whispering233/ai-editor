@@ -301,6 +301,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - 依赖：无
 - 验证：`pnpm --filter client test`（timeline.test.ts）+ `pnpm typecheck && pnpm lint` + 手工走查（编辑清空保存 → 列表行恢复「未标注时间」）
 - 回滚：单 commit
+- **状态（2026-08）**：✅ 已完成（commit `b3d76c3`；oracle 审核通过——P2 三条补用例已落实：原值缺失+表单有值 / 全空格 trim 等价清空 / 幂等「清空后重复保存不产生多余 patch」；client 测试 473 用例全绿 + typecheck/lint 通过）。
 
 ### F2 自动备份检测不到 data.db 变更（Bug，2026-08 用户反馈）
 

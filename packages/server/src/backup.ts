@@ -8,7 +8,8 @@
 //   - 保留策略：每项目保留最近 MAX_BACKUPS_PER_PROJECT 份，超出删除最旧（含覆盖前快照；
 //     新旧格式文件名均参与——parseBackupFileName 兼容解析）
 //   - 自动定时器：跟随当前项目生命周期（middleware/project.ts setCurrentProject 挂载启停），
-//     有变更才备份（三文件 mtime 与 .backups/ 最新备份时间比较，无状态、服务重启不丢）
+//     有变更才备份（三文件 + data.db-wal 伴生文件 mtime 与 .backups/ 最新备份时间比较，
+//     无状态、服务重启不丢；F2：WAL 模式写只刷新 -wal，补查避免漏检 data.db 变更）
 //   - 备份包校验（restore 与 import 共用）：zip 解析/白名单/三文件齐全/顶层契约/
 //     data.db user_version 三态分流（E4/E5，绝不静默重建）
 //   - restore：fileName 白名单 → 覆盖前自动快照 → 校验 → 原子替换三文件
@@ -528,9 +529,13 @@ function latestBackupTime(backupsDir: string): Date | null {
 }
 
 /**
- * 三文件是否在 since 之后有变更（决策 27「任一 mtime 晚于上次备份时刻」）：
- * 任一文件 mtime > since + 容差 → 有变更；文件缺失 → 视为有变更（防御：不静默跳过，
- * 让备份管道报错暴露损坏）；mtime 判定见 BACKUP_CHANGE_TOLERANCE_MS 注释。
+ * 三文件 + data.db-wal 伴生文件是否在 since 之后有变更（决策 27「任一 mtime 晚于
+ * 上次备份时刻」；F2 修订：data.db 以 WAL 模式运行，普通写事务只追加 -wal 伴生文件、
+ * 主文件 mtime 不变，故 data.db-wal 一并纳入判定）：
+ * 任一文件 mtime > since + 容差 → 有变更；**主文件缺失 → 视为有变更**（防御：不静默
+ * 跳过，让备份管道报错暴露损坏）；**data.db-wal 缺失 ≠ 变更**（无未 checkpoint 的写，
+ * 属正常状态，跳过——与主文件缺失语义不同，否则每次 tick 都误备份，产生垃圾备份）；
+ * mtime 判定见 BACKUP_CHANGE_TOLERANCE_MS 注释。
  */
 function hasFileChangesSince(project: ProjectContext, since: Date): boolean {
   const limit = since.getTime() + BACKUP_CHANGE_TOLERANCE_MS;
@@ -541,6 +546,15 @@ function hasFileChangesSince(project: ProjectContext, since: Date): boolean {
       return true;
     }
   }
+  // data.db-wal 伴生文件（F2）：wal 存在且 mtime 晚于 limit → 有变更；
+  // wal 缺失（ENOENT）= 无未 checkpoint 的写，属正常状态，不视为变更；其余错误仍防御
+  // 视为有变更（与主文件缺失语义一致）
+  const walPath = join(project.root, `${DATA_DB_FILE_NAME}-wal`);
+  try {
+    if (statSync(walPath).mtimeMs > limit) return true;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") return true;
+  }
   return false;
 }
 
@@ -549,8 +563,9 @@ function hasFileChangesSince(project: ProjectContext, since: Date): boolean {
  *
  * 1. 频率判定：关闭（null/0/非枚举）→ 直接返回 false（决策 27：null/0 = 关闭；
  *    B2.1 疑问裁决 2：读侧非枚举值按关闭处理，不开启自动备份）
- * 2. 变更判定：`.backups/` 为空（无上次备份时刻）→ 需要备份；否则三文件 mtime
- *    均早于「上次备份时刻 + 容差」→ 跳过（无变更不产生垃圾备份，决策 27）
+ * 2. 变更判定：`.backups/` 为空（无上次备份时刻）→ 需要备份；否则三文件 +
+ *    data.db-wal 伴生文件（F2：WAL 模式写只刷新 -wal）mtime 均早于
+ *    「上次备份时刻 + 容差」→ 跳过（无变更不产生垃圾备份，决策 27）
  * 3. 有变更 → writeBackup（含保留策略清理）
  *
  * @returns 本次是否生成了备份

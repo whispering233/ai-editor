@@ -202,6 +202,43 @@ describe("maybeAutoBackup（有变更才备份）", () => {
       expect(backupFileNames(dir)).toHaveLength(0);
     }
   });
+
+  it("仅 data.db-wal 变更触发备份（F2：WAL 模式下普通写事务只追加 -wal 伴生文件、主文件 mtime 不动）", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, { ...makeConfig("proj-wal", "wal 变更"), backup_frequency_minutes: 5 });
+    await openProject(dir);
+    const project = getCurrentProject() as NonNullable<ReturnType<typeof getCurrentProject>>;
+
+    expect(maybeAutoBackup(project)).toBe(true); // 首备（.backups/ 为空）
+    expect(backupFileNames(dir)).toHaveLength(1);
+
+    // 模拟 WAL 写入：-wal 文件 mtime 置为「上次备份 + 2s」（超出 1s 容差；三主文件不碰）
+    const walPath = join(dir, `${DATA_DB_FILE_NAME}-wal`);
+    writeFileSync(walPath, ""); // 确保 wal 存在（SQLite 连接打开时可能尚无 wal 文件）
+    const later = new Date(latestBackupTime(dir).getTime() + 2000);
+    utimesSync(walPath, later, later);
+    expect(maybeAutoBackup(project)).toBe(true); // 检测到 wal 变更 → 备份
+    expect(backupFileNames(dir)).toHaveLength(2);
+    // 备份管道 wal_checkpoint(TRUNCATE) 已把 wal mtime 刷新到备份时刻（容差内）→ 不持续误报；
+    // 空 wal 文件（0 字节）存在且 mtime ≈ 备份时刻 → 判定无变更（wal 缺失语义见下用例）
+    expect(maybeAutoBackup(project)).toBe(false);
+    expect(backupFileNames(dir)).toHaveLength(2);
+  });
+
+  it("data.db-wal 缺失 ≠ 变更（F2：无未 checkpoint 的写属正常状态，不产生垃圾备份）", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, { ...makeConfig("proj-wal-miss", "wal 缺失"), backup_frequency_minutes: 5 });
+    await openProject(dir);
+    const project = getCurrentProject() as NonNullable<ReturnType<typeof getCurrentProject>>;
+
+    expect(maybeAutoBackup(project)).toBe(true); // 首备
+    expect(backupFileNames(dir)).toHaveLength(1);
+
+    // 删除 wal 文件（期间无任何 DB 操作，SQLite 不会重建路径）→ 判定无变更
+    rmSync(join(dir, `${DATA_DB_FILE_NAME}-wal`), { force: true });
+    expect(maybeAutoBackup(project)).toBe(false);
+    expect(backupFileNames(dir)).toHaveLength(1);
+  });
 });
 
 // ============ writeBackup / 保留策略 ============
