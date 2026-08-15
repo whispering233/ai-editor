@@ -100,11 +100,12 @@ export function eventFormFromDetail(detail: { name: string; data: Record<string,
  * 表单 → PUT /entity/event/:id partial patch（C3 编辑对话框与 C4 详情页共用同一稀疏提交语义，
  * timeline.md 详情页字段编辑）：
  * - name：trim 后与原名不同才提交
- * - data 三字段：仅非空值进 nextData（描述/时间标签空 → 不提交，避免清空已存字段）；
- *   tags 经 parseTagsInput 收敛为数组后进 nextData（空输入 → 不提交）
+ * - data 三字段：清空语义——表单有值 → 提交 trim 后值；表单空但原值非空 → 提交空值
+ *   （description/time_label 空串 ""、tags 空数组 []）显式清除；原值本就空 → 不提交。
+ *   tags 经 parseTagsInput 收敛为数组后进 nextData
  * - nextData 与原 data 逐键 JSON 序列化比对，有变化的键才提交
  * - 全部无变化 → null（「没有变更」提示）
- * 边界：清空某字段 → changed[key] = undefined，JSON 序列化时被丢弃（服务端无操作）——C3/C4 一致。
+ * 边界：原值空/不存在时空值提交会被判为无变更，天然满足「原值本就空 → 不提交」。
  */
 export function buildEventDetailPatch(
   original: { name: string; data: Record<string, unknown> },
@@ -113,10 +114,16 @@ export function buildEventDetailPatch(
   const patch: { name?: string; data?: Record<string, unknown> } = {};
   if (form.name.trim() !== original.name) patch.name = form.name.trim();
   const nextData: Record<string, unknown> = {};
-  if (form.description.trim() !== "") nextData.description = form.description.trim();
-  if (form.timeLabel.trim() !== "") nextData.time_label = form.timeLabel.trim();
+  // 清空语义：表单空但原值非空 → 提交空串 "" 显式清除（服务端浅合并可正常写入覆盖）
+  if (form.description.trim() !== "" || original.data.description !== undefined) {
+    nextData.description = form.description.trim();
+  }
+  if (form.timeLabel.trim() !== "" || original.data.time_label !== undefined) {
+    nextData.time_label = form.timeLabel.trim();
+  }
   const tags = parseTagsInput(form.tagsInput);
-  if (tags.length > 0) nextData.tags = tags;
+  // tags 同款：空数组 [] 清除原值（原值本就空 → 不提交）
+  if (tags.length > 0 || original.data.tags !== undefined) nextData.tags = tags;
   const changed: Record<string, unknown> = {};
   for (const key of ["description", "time_label", "tags"] as const) {
     if (JSON.stringify(nextData[key]) !== JSON.stringify(original.data[key])) {

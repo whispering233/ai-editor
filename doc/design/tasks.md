@@ -287,3 +287,81 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 **验证**：`pnpm typecheck && pnpm lint` + 全仓测试 green（shared 126 / server 311 / client 468，全仓 1502）；oracle 审核通过（无 P0；P1 三项已修复：renameSync 目标冲突 409 防护 / client 提交失败 blur 竞态兜底 / 文档失焦语义对齐实现；P2 六项全部处理）。
 
 **状态（2026-08）**：✅ 已完成（决策 29 落地；oracle 审核通过——P1-1 `BACKUP_TARGET_EXISTS` 409（rename 前 existsSync 防静默覆盖）/ P1-2 onBlur saving 守卫 + catch 兜底 toast / P1-3 文档统一「Enter/确认提交、Esc/失焦取消」；P2-1 歧义措辞扩为「单字母 a/m 或以 a-/m- 开头」/ P2-2 restore 400 文案统一含 kind / P2-3 BackupKind 收敛 shared 导入 / P2-4 测试错误码换真实码 / P2-5 测试补充（连字符名称、`-m-` 空名回退、纯空白清除、目标冲突）×4 / P2-6 收尾同步）。
+
+---
+
+## 用户反馈批次（F1-F9，2026-08 用户实测反馈，逐张单点实施）
+
+> **背景**：产品使用中发现 9 项问题/需求。用户裁决（2026-08）：先分类——**Bug 2 项**（F1 时间标签无法清除、F2 修改时间轴不触发自动备份）、**交互优化 4 项**（F3 垂直时间轴 UI / F4 同时间标签归组 / F5 时间标签字体颜色 / F6 列表显示完整描述）、**新需求 3 项**（F7 三栏可收起/拖拽调宽 / F8 编辑时已存在标签提示 / F9 LLM 识别时间标签排序提案）；按 Bug → 交互优化 → 新需求顺序**逐张单点实施**（不合并），每张走「文档 → 任务卡 → 实现 → 验证 → 清理」。时间轴 UI（F3）形态裁决：**垂直轴线 + 时间点分组**（组标题 = time_label，组内堆叠；组间按拖拽 sort_order 序）；F3 前先调研 GitHub/流行组件是否可直接引入（lib-1）。
+
+### F1 事件字段无法清除（Bug，2026-08 用户反馈）
+
+- 范围：`client/src/lib/timeline.ts` `buildEventDetailPatch` 清空语义修复——原实现「空值不提交」导致 `description`/`time_label`/`tags` 一经填写无法清除；改为「原值非空时提交空值显式清除」（`""` / `[]`），原值本就为空 → 无变更不提交（`null` 语义保持）。服务端零改动（zod `z.string().optional()` / `z.array().optional()` + data 浅合并本就允许空值）。同步更新 `client/src/lib/timeline.test.ts` 旧断言（「清空 → 不提交」改为「清空 → 提交空值」）并新增三字段清空用例。
+- 文档：`doc/ui/pages/timeline.md`（详情页字段编辑清空语义）、`doc/api/endpoints.md`（PUT /entity 清空语义说明）——已完成。
+- 依赖：无
+- 验证：`pnpm --filter client test`（timeline.test.ts）+ `pnpm typecheck && pnpm lint` + 手工走查（编辑清空保存 → 列表行恢复「未标注时间」）
+- 回滚：单 commit
+
+### F2 自动备份检测不到 data.db 变更（Bug，2026-08 用户反馈）
+
+- 范围：`server/src/backup.ts` `hasFileChangesSince`（535-545 行）补查 `data.db-wal` mtime——根因：WAL 模式普通写事务只刷新 `-wal` 伴生文件、主文件 mtime 不变，自动备份永远判定「无变更」；影响所有 data.db 写（实体/关系/Delta/聊天/时间轴）。补查 wal 文件即可（备份时 `checkpointWal` 已保证打包完整）；同步补 `backup.test.ts` WAL 场景用例。
+- 文档：决策 27 无变更（修复既有实现缺陷，不改契约）；tasks.md 本卡
+- 依赖：无
+- 验证：`pnpm --filter server test` + 手工（改时间轴事件 → 等 tick → 检查 `.backups/` 新备份生成）
+- 回滚：单 commit
+
+### F3 垂直时间轴 UI（交互优化，2026-08 用户裁决：垂直轴线 + 时间点分组）
+
+- 范围：`client/src/pages/Timeline.tsx` 列表区从纯 `ul.divide-y` 重构为**垂直时间轴**：左侧时间轴线 + 节点圆点 + 事件行（拖拽柄/名称/时间标签/描述摘要/tags/节点数/⋯ 菜单保持）；排序仍为拖拽 `sort_order` 权威（事件行拖拽模式复用 S13 模式，不因视觉重构改变）。**调研结论（lib-1，2026-08）**：无现成组件可直接引入（shadcn 官方 registry 65 组件与 shadcn-ui-expansions 36 扩展均无 timeline；react-vertical-timeline-component 预打包 CSS 硬编码 #fff 且无分组；antd/MUI/Chakra/daisyUI/flowbite 均重依赖或整体系引入；SAP UI5 有原生 `ui5-timeline-group-item` 分组语义可参考但不引入）→ **自实现**（约 100-150 行，零新依赖，纯 Tailwind 4 + 现有 tokens）。结构参考 creative-tim 分片组件 + hindsight 的 absolute 轴线分组循环：容器 `relative flex flex-col` + 轴线 `absolute left-[11px] top-0 bottom-0 w-0.5 bg-border pointer-events-none`（pointer-events-none 是拖拽共存前提）+ 节点圆点 `relative z-10 rounded-full border-2 border-primary bg-background`（不透明背景盖住轴线）+ 组块（组标题大圆点 + 时间标签 + 计数徽标 + 可选折叠按钮，组内事件堆叠）+ 事件行卡片 `rounded-md bg-card border-border px-3 py-2`；拖拽只设在组块根（组内行不 draggable 防误拖），onDragOver 用 e.clientY 与各组块中点比较算插入位，插入指示 border-t-2 border-primary；分组纯函数与 UI 分离（novu 模式），组序 = 数组线性序。组件切分：`components/timeline/` 下 Timeline.tsx（容器+轴线）/ TimelineGroup.tsx（组块）/ TimelineEvent.tsx（事件行）。视觉全走 tokens（border-border/bg-card/bg-background/text-foreground/text-muted-foreground/rounded-md），**禁硬编码色类**（oracle 审核红线）。
+- 文档：`doc/ui/pages/timeline.md`（布局线框 + 交互描述重构）、decisions.md 追加 26 修订注记（UI 形态裁决）
+- 依赖：无（lib-1 调研已完成）
+- 验证：client 测试（分组/拖拽纯函数）+ 手工走查（轴线渲染/拖拽排序回归/双主题）
+- 回滚：单 commit
+
+### F4 同时间标签归组（交互优化，2026-08 用户反馈，F3 后续）
+
+- 范围：在 F3 垂直时间轴基础上，同 `time_label` 的事件**归入同一时间点组块**（组标题 = time_label 强调展示，组内事件堆叠，组间按组内最早事件 sort_order 序）；「未标注时间」事件归入独立兜底组（或按 sort_order 平铺）；拖拽跨组重排语义保持（拖拽改 sort_order，组随事件自然迁移）。
+- 文档：`doc/ui/pages/timeline.md`（分组交互 + 线框）
+- 依赖：F3
+- 验证：client 测试（分组纯函数）+ 手工走查（同标签归组/拖拽跨组）
+- 回滚：单 commit
+
+### F5 时间标签字体与颜色强调（交互优化，2026-08 用户反馈）
+
+- 范围：`client/src/pages/Timeline.tsx` 时间标签样式从 `text-xs text-muted-foreground` 提升为醒目样式（token 类内：如 `text-sm font-medium text-foreground` + 主题色点缀/背景 pill），保持 token 体系禁硬编码色类；「未标注时间」占位样式区分。
+- 文档：`doc/ui/pages/timeline.md`（信息层级表样式说明）
+- 依赖：无（可并行 F3 之后实施，避免同文件冲突）
+- 验证：手工走查（浅/深主题下对比度）
+- 回滚：单 commit
+
+### F6 时间轴列表显示完整描述（交互优化，2026-08 用户反馈）
+
+- 范围：`client/src/pages/Timeline.tsx` 事件行增加 `description` 展示（列表行摘要可见：两行截断 + 展开/收起，或详情行内展示）；`EntitySummary.summary.description` 已含该字段（exp-1 确认，无 API 改动）。
+- 文档：`doc/ui/pages/timeline.md`（信息层级表 + 行布局）
+- 依赖：无（与 F3/F5 同文件，排在 F3 之后）
+- 验证：手工走查（长描述截断/展开）+ 相关 lib 测试（如有）
+- 回滚：单 commit
+
+### F7 三栏可收起/展开 + 拖拽调宽（新需求，2026-08 用户反馈）
+
+- 范围：三栏工作台（决策 22「flex-basis 百分比固定不可拖拽」**修订**）：左/中/右栏可拖拽调整宽度（resize 手柄）+ 全部可收起/展开（图标按钮）；宽度与收起态持久化（localStorage，决策 10 同哲学——纯展示层不进数据文件）；`<1024px` 小屏抽屉行为保持。涉及 `AppShell.tsx` / `Sidebar.tsx` / `MainPanel.tsx` / `ChatPanel.tsx` / layout.md 文档。
+- 文档：decisions.md 决策 22 修订注记（或新增决策 30）、`doc/ui/layout.md` §0/§2
+- 依赖：无
+- 验证：手工走查（拖拽/收起/刷新持久化/小屏回归）+ 如有纯函数测试
+- 回滚：单 commit
+
+### F8 事件编辑时已存在标签提示（新需求，2026-08 用户反馈）
+
+- 范围：事件表单 `tags` 输入框增加**已存在标签建议**（从全量事件聚合——当前 `collectEventTags` 仅聚合当前列表，需服务端全量或列表全量拉取）；输入匹配提示 + 点选即填（保持逗号分隔输入兼容）。
+- 文档：`doc/ui/pages/timeline.md`（新建/编辑表单交互）、`doc/api/endpoints.md`（如新增全量标签聚合端点）
+- 依赖：无
+- 验证：client 测试（匹配/去重/点选纯函数）+ 手工走查
+- 回滚：单 commit
+
+### F9 LLM 识别时间标签排序 → 提案确认（新需求，2026-08 用户反馈）
+
+- 范围：AI 工具「按 time_label 语义排序」（决策 26「time_label 不解析」**修订**）：agent 新增工具（读事件列表 + time_label → 产出建议 sort_order 序），**写操作走提案确认**（决策 14 权限分级：提案 → 用户确认 → 服务端重校验 → 应用 move 序列）；前端时间轴「AI 排序」入口 + 提案预览 Diff 确认 UI。
+- 文档：decisions.md 修订注记、`doc/api/tools.md`（工具目录新增）、`doc/ui/pages/timeline.md`（AI 排序交互）
+- 依赖：F3/F4（UI 承载）后实施
+- 验证：agent/server 测试 + 手工走查（提案生成/确认/拒绝）
+- 回滚：单 commit

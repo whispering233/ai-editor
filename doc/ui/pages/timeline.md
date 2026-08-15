@@ -64,7 +64,7 @@
 
 ### 详情页（#/timeline/:id）
 
-- **字段编辑**：`name` / `description` / `time_label` / `tags` 表单 → `PUT /entity/event/:id` → toast「已保存」。
+- **字段编辑**：`name` / `description` / `time_label` / `tags` 表单 → `PUT /entity/event/:id` → toast「已保存」。**清空语义（2026-08 用户反馈 F1 修复）**：三个 data 字段均可清除——输入框清空（`description`/`time_label`）或标签输入清空（`tags`）→ 提交**空值**（`""` / `[]`）即显式清除原值；仅当原值非空时提交空值（原值本就为空 → 无变更不提交）。清空 `time_label` 后列表行恢复「未标注时间」。
 - **occurs_in 关联管理**：
   - 添加关联：从大纲树选择器选节点 → `POST /relation`（`source_type='event'`、`relation_type='occurs_in'`）。
   - 取消关联：已关联节点列表行尾 [取消关联]（二次确认）→ `DELETE /relation/:id`。

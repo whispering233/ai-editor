@@ -488,6 +488,8 @@ type: "character" | "setting" | "location" | "hook" | "event";
 
 更新实体。使用 partial update（仅修改传入字段）。
 
+**清空语义（2026-08 用户反馈 F1 修复）**：data 字段提交**空值即清除**——`""`（字符串字段）/ `[]`（数组字段）经浅合并覆盖原值；未传入的字段不受影响（partial）。event 三字段（`description`/`time_label`/`tags`）均支持此语义。
+
 ```typescript
 // Path
 type: string;

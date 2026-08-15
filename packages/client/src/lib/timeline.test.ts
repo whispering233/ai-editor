@@ -116,7 +116,7 @@ describe("eventFormFromDetail（详情响应 → 表单初始值；C3 编辑预�
   });
 });
 
-describe("buildEventDetailPatch（保存 patch，C3 编辑对话框与 C4 详情页共用同一稀疏提交语义）", () => {
+describe("buildEventDetailPatch（保存 patch，C3 编辑对话框与 C4 详情页共用同一稀疏提交语义；清空语义：表单空且原值非空 → 提交空值显式清除）", () => {
   const original = {
     name: "主角踏入宗门",
     data: { description: "拜入山门", time_label: "第二天黄昏", tags: ["主线"] },
@@ -173,16 +173,34 @@ describe("buildEventDetailPatch（保存 patch，C3 编辑对话框与 C4 详情
     expect(patch).toEqual({ data: { time_label: "少年时" } });
   });
 
-  it("清空某字段 → 该键不提交（稀疏语义：undefined 序列化被丢弃，data 为空对象 = 服务端无操作）", () => {
+  it("清空 description（原值「拜入山门」非空）→ 提交空串显式清除", () => {
     const patch = buildEventDetailPatch(original, {
       name: "主角踏入宗门",
       description: "",
       timeLabel: "第二天黄昏",
       tagsInput: "主线",
     });
-    expect(patch).not.toBeNull();
-    // 与 C3 handleEditSave 同款：changed[description] = undefined，JSON 序列化后 data 为空对象
-    expect(JSON.parse(JSON.stringify(patch))).toEqual({ data: {} });
+    expect(patch).toEqual({ data: { description: "" } });
+  });
+
+  it("清空 time_label（原值「第二天黄昏」非空）→ 提交空串显式清除", () => {
+    const patch = buildEventDetailPatch(original, {
+      name: "主角踏入宗门",
+      description: "拜入山门",
+      timeLabel: "",
+      tagsInput: "主线",
+    });
+    expect(patch).toEqual({ data: { time_label: "" } });
+  });
+
+  it("清空 tags（原值「主线」，tagsInput 空串）→ 提交空数组显式清除", () => {
+    const patch = buildEventDetailPatch(original, {
+      name: "主角踏入宗门",
+      description: "拜入山门",
+      timeLabel: "第二天黄昏",
+      tagsInput: "",
+    });
+    expect(patch).toEqual({ data: { tags: [] } });
   });
 
   it("空表单 + 空 data → null（无字段可提交）", () => {
@@ -190,6 +208,41 @@ describe("buildEventDetailPatch（保存 patch，C3 编辑对话框与 C4 详情
       buildEventDetailPatch(
         { name: "空事件", data: {} },
         { name: "空事件", description: "", timeLabel: "", tagsInput: "" },
+      ),
+    ).toBeNull();
+  });
+
+  it("原值缺失（data 无 description 键）+ 表单有值 → 提交新值", () => {
+    const patch = buildEventDetailPatch(
+      { name: "X", data: { time_label: "第二天黄昏" } },
+      { name: "X", description: "新描述", timeLabel: "第二天黄昏", tagsInput: "" },
+    );
+    expect(patch).toEqual({ data: { description: "新描述" } });
+  });
+
+  it("全空格输入（trim 后为空）→ 等价清空：提交空串显式清除", () => {
+    const patch = buildEventDetailPatch(original, {
+      name: "主角踏入宗门",
+      description: "   ",
+      timeLabel: "第二天黄昏",
+      tagsInput: "主线",
+    });
+    expect(patch).toEqual({ data: { description: "" } });
+  });
+
+  it("幂等：原值已为空串/空数组 + 空表单 → null（清空后重复保存不产生多余 patch）", () => {
+    // 仅 description 已清空（其余字段未变）→ 无变更
+    expect(
+      buildEventDetailPatch(
+        { name: "X", data: { description: "", time_label: "第二天黄昏", tags: ["主线"] } },
+        { name: "X", description: "", timeLabel: "第二天黄昏", tagsInput: "主线" },
+      ),
+    ).toBeNull();
+    // 三字段全空原值 + 全空表单 → 无变更（重点：清空后再次保存不产生多余 patch）
+    expect(
+      buildEventDetailPatch(
+        { name: "X", data: { description: "", time_label: "", tags: [] } },
+        { name: "X", description: "", timeLabel: "", tagsInput: "" },
       ),
     ).toBeNull();
   });
