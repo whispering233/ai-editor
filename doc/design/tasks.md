@@ -321,6 +321,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - 依赖：G2.1
 - 验证：server/tools/agent 测试（move 端点/挂载校验/新工具 build/executor/旧工具删除断言）+ `pnpm -r test` + typecheck + lint
 - 回滚：单 commit
+- **状态（2026-08）**：✅ 已完成（commit `a324fdd`；server：PUT /timepoint/:id/move + POST /event/:id/move_to 复合端点（事务 4 步/同点幂等/null 移出/404 前置/400 回滚）+ occurs_at 1:n 接线（EVENT_ALREADY_MOUNTED 409 / RELATION_EXISTS 判重先行）；tools：删 propose_reorder_events → 新增 propose_reorder_timepoints（集合完全相等/references 快照/preview 位移/executor reorderTimepoints）+ consistency.ts 补 timepoint 分支；agent PROPOSAL_BUILDERS 换名；db reorderTimepoints；client 连锁最小（delta-create 排除 timepoint + AI 排序注入指令换工具名）；oracle 审核通过（无 P0/P1；P2-2 occurs_at 反向方向白名单记入 G2.3、P2-3 db reorderEvents 保留通用能力）；全仓 1591 用例全绿 + lint；typecheck 剩余 client 8 处 Record 连锁（G2.3 范围））。
 
 **G2.3 前端时间轴重构：双实体 UI + 双轨拖拽 + 双入口（client）**
 - 范围：Timeline.tsx 列表区重构为「时间点组块（可拖/重命名/折叠/组内新建）+ 事件行（可拖/跨组改挂载）+ 未挂载兜底区」；header 加「+ 新建时间点」；组尾「+ 在此时间点新建事件」；事件行移除时间标签展示（F5 样式迁移到组标题已覆盖）、描述区保持（F6）；拖拽双轨（时间点 move / 事件 move / 跨组复合）；AI 排序按钮文案与注入指令改「时间点排序」（propose_reorder_timepoints）；详情页字段表单移除 time_label + 增加挂载时间点选择器；F8 标签建议不变；F1 清空语义适配（time_label 移除后仅 description/tags）
