@@ -7,25 +7,17 @@
 // 关键交互：
 //  - 新建：POST /entity/event（name/description/time_label/tags）+ 有锚点节点再 POST /relation
 //    （event → outline_node，occurs_in）→ toast + 刷新（追加至列表尾部——服务端 NULL 沉底）
-//  - 拖拽排序：原生 HTML5 DnD（复用大纲 S13 上下半插入判定模式），drop → PUT
-//    /entity/event/:id/move {order}（剔除拖拽项后计算）→ 刷新；失败 toast
+//  - 拖拽排序：组块级 HTML5 DnD（F4：同 time_label 归组后拖拽组块；组内事件不 draggable 防误拖，
+//    drop 后对组内事件按序逐个 PUT /entity/event/:id/move——见 components/timeline/Timeline.tsx）
 //  - 行 ⋯ 菜单：详情（跳 #/timeline/:id）/编辑（同新建表单预填，PUT）/移入回收站（ConfirmDialog 软删）
-//  - 标签筛选：顶部 [全部] [tag…] 客户端过滤（列表量级小；tag 从当前列表聚合，timeline.md）
+//  - 标签筛选：顶部 [全部] [tag…] 客户端过滤（筛选后再分组；tag 从当前列表聚合，timeline.md）
 //  - 数据刷新：useDataRefresh 订阅 dataVersion（AI 提案确认写库 / InfoBar 刷新按钮）
 import { useEffect, useState } from "react";
-import type { DragEvent, FormEvent } from "react";
+import type { FormEvent } from "react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
-import { GripVertical, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   ApiError,
   CLIENT_NETWORK_ERROR,
@@ -38,20 +30,11 @@ import {
   updateEntity,
   type RelationSummaryItem,
 } from "../lib/api";
-import {
-  buildEventDetailPatch,
-  collectEventTags,
-  eventDropOrder,
-  eventTagsOf,
-  eventTimeLabel,
-  filterEventsByTag,
-  parseTagsInput,
-  tagsToInput,
-  type TimelineDropInsert,
-} from "../lib/timeline";
+import { buildEventDetailPatch, collectEventTags, filterEventsByTag, parseTagsInput, tagsToInput } from "../lib/timeline";
 import { flattenTree } from "../lib/outline-tree";
 import { cn } from "../lib/utils";
 import { ConfirmDialog } from "../components/outline/dialogs";
+import { Timeline as TimelineView } from "../components/timeline/Timeline";
 import { navigate } from "../hooks/use-route";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useProjectStore } from "../stores/project";
@@ -80,11 +63,6 @@ export default function Timeline() {
 
   // 标签筛选（timeline.md：tag 从当前列表聚合；activeTag null = 全部）
   const [activeTag, setActiveTag] = useState<string | null>(null);
-
-  // 拖拽态（S13 模式：dragId + 插入目标；busy 防并发拖拽）
-  const [dragId, setDragId] = useState<string | null>(null);
-  const [dropTarget, setDropTarget] = useState<TimelineDropInsert | null>(null);
-  const [busy, setBusy] = useState(false);
 
   // 新建对话框
   const [createOpen, setCreateOpen] = useState(false);
@@ -262,50 +240,26 @@ export default function Timeline() {
     }
   }
 
-  // ============ 拖拽排序（S13 模式：上下半插入判定 + 插入指示线） ============
+  // ============ 组块移动（F4：拖拽回调实现——页面负责 move 调用） ============
 
-  /** 拖拽点相对目标行的位置：上半 → before、下半 → after（与 Outline.tsx insertSideFromEvent 同式） */
-  function insertSideFromEvent(e: DragEvent<HTMLDivElement>): "before" | "after" {
-    const rect = e.currentTarget.getBoundingClientRect();
-    return e.clientY < rect.top + rect.height / 2 ? "before" : "after";
-  }
-
-  /** 行 dragover：设置插入目标（去重防高频重渲染；side 恒为 before|after，无 end 分支） */
-  function handleDragOver(e: DragEvent<HTMLDivElement>, targetId: string) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    const side = insertSideFromEvent(e);
-    setDropTarget((prev) => {
-      if (prev !== null && prev.kind !== "end" && prev.kind === side && prev.id === targetId) return prev;
-      return { kind: side, id: targetId };
-    });
-  }
-
-  /** 行 drop：剔除拖拽项计算 order → PUT /move（拖到自身行 = 原地，跳过） */
-  async function handleDrop(e: DragEvent<HTMLDivElement>, targetId: string) {
-    e.preventDefault();
-    if (!dragId || busy) return;
-    if (targetId === dragId) {
-      setDragId(null);
-      setDropTarget(null);
-      return;
-    }
-    const ids = (items ?? []).map((i) => i.id);
-    const order = eventDropOrder(ids, { kind: insertSideFromEvent(e), id: targetId }, dragId);
-    setBusy(true);
+  /**
+   * 组块拖拽结果执行：按组内序逐次 PUT /entity/event/:id/move（moves 由组件 groupDropOrders 算好，
+   * 单事件组 = F3 单次调用）；成功 → toast；失败 → toast + 重拉（回滚为服务端实际顺序）。
+   */
+  async function handleGroupMove(moves: Array<{ id: string; order: number }>) {
     try {
-      await moveEntityEvent(dragId, { order });
+      for (const m of moves) {
+        await moveEntityEvent(m.id, { order: m.order });
+      }
       useUiStore.getState().showToast("已调整事件顺序");
-      setReloadTick((t) => t + 1);
     } catch (err) {
       useUiStore.getState().showToast(
         err instanceof ApiError ? `排序失败：${err.message}` : "排序失败，请重试",
         "error",
       );
     } finally {
-      setBusy(false);
-      setDragId(null);
-      setDropTarget(null);
+      // 成功保持新序、失败回滚——均以服务端实际顺序为准，重拉列表
+      setReloadTick((t) => t + 1);
     }
   }
 
@@ -396,101 +350,18 @@ export default function Timeline() {
         </div>
       )}
 
-      {/* 事件时间轴（F3 垂直时间轴，timeline.md 线框：垂直轴线 + 节点圆点 + 事件行卡片；拖拽行调整先后顺序） */}
+      {/* 事件时间轴（F4 时间点分组：垂直轴线 + 组块（标题 + 组内事件堆叠）+ 组块级拖拽；
+          数据编排在本页、渲染与拖拽协调在 components/timeline/） */}
       {!loading && visible !== null && visible.length > 0 && (
-        <div className="relative flex flex-col gap-2">
-          {/* 垂直轴线（left-[11px] = 节点列中心；pointer-events-none 是拖拽共存前提，行间空隙处线连续贯穿） */}
-          <div
-            aria-hidden="true"
-            className="pointer-events-none absolute bottom-0 left-[11px] top-0 w-0.5 bg-border"
-          />
-          {visible.map((ev) => {
-            const timeLabel = eventTimeLabel(ev);
-            const tags = eventTagsOf(ev);
-            const count = occursCount(ev.id);
-            const showInsertBefore = dropTarget?.kind === "before" && dropTarget.id === ev.id;
-            const showInsertAfter = dropTarget?.kind === "after" && dropTarget.id === ev.id;
-            return (
-              <div
-                key={ev.id}
-                draggable={!busy}
-                onDragStart={(e) => {
-                  e.dataTransfer.setData("text/plain", ev.id);
-                  e.dataTransfer.effectAllowed = "move";
-                  setDragId(ev.id);
-                  setDropTarget(null);
-                }}
-                onDragEnd={() => {
-                  setDragId(null);
-                  setDropTarget(null);
-                }}
-                onDragOver={(e) => handleDragOver(e, ev.id)}
-                onDrop={(e) => void handleDrop(e, ev.id)}
-                className={cn("relative flex items-start", dragId === ev.id && "opacity-50")}
-              >
-                {/* 插入指示线（S13 模式：目标行上下边缘，跨圆点列与内容卡） */}
-                {showInsertBefore && <div className="absolute inset-x-0 -top-px h-0.5 bg-primary" />}
-                {showInsertAfter && <div className="absolute inset-x-0 -bottom-px h-0.5 bg-primary" />}
-                {/* 节点圆点（block + mx-auto 水平居中于 w-[22px] 节点列 → 圆心在 left-[11px] 轴线上；
-                    z-10 + 不透明 bg-background 盖住穿过的轴线；mt-[12px] = 卡片首行内容中心
-                    （py-2 8px + 行盒中心 12px = 20px，圆点 16px 高中心 offset 8px → mt = 20 - 8 = 12px） */}
-                <div className="w-[22px] shrink-0">
-                  <span
-                    aria-hidden="true"
-                    className="relative z-10 mx-auto mt-[12px] block size-4 rounded-full border-2 border-primary bg-background"
-                  />
-                </div>
-                {/* 事件内容卡（行内 flex；行内容与重构前一致——拖拽柄 → 事件名 → 时间标签 → tags → 计数 → ⋯
-                    菜单，样式提升属 F5 卡范围） */}
-                <div className="min-w-0 flex-1 rounded-md border border-border bg-card px-3 py-2">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="cursor-grab text-muted-foreground/60 active:cursor-grabbing"
-                      title="拖拽调整事件先后顺序"
-                      aria-hidden="true"
-                    >
-                      <GripVertical className="size-4" />
-                    </span>
-                    <span className="min-w-0 truncate font-medium text-foreground" title={ev.name}>
-                      {ev.name}
-                    </span>
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      {timeLabel !== "" ? timeLabel : "未标注时间"}
-                    </span>
-                    {tags.map((tag) => (
-                      <span key={tag} className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-                        {tag}
-                      </span>
-                    ))}
-                    {hasOccursData && (
-                      <span className="shrink-0 text-xs text-muted-foreground">{count} 节点</span>
-                    )}
-                    <span className="ml-auto shrink-0">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          render={
-                            <Button variant="ghost" size="icon-sm" className="text-muted-foreground" aria-label={`${ev.name} 操作`}>
-                              <MoreHorizontal />
-                            </Button>
-                          }
-                        />
-                        <DropdownMenuContent align="end">
-                          {/* 详情页 #/timeline/:id（C4 启用） */}
-                          <DropdownMenuItem onClick={() => navigate(`/timeline/${ev.id}`)}>详情</DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => openEdit(ev)}>编辑</DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem variant="destructive" onClick={() => setDeleteTarget(ev)}>
-                            移入回收站
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </span>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <TimelineView
+          events={visible}
+          occursCount={occursCount}
+          hasOccursData={hasOccursData}
+          onMove={handleGroupMove}
+          onDetail={(ev) => navigate(`/timeline/${ev.id}`)}
+          onEdit={openEdit}
+          onDelete={setDeleteTarget}
+        />
       )}
 
       {/* 标签筛选无匹配（timeline.md 状态：「没有匹配「{tag}」的事件」） */}

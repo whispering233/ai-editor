@@ -28,6 +28,89 @@ export function eventDropOrder(ids: string[], insert: TimelineDropInsert, exclud
   return insert.kind === "before" ? idx : idx + 1;
 }
 
+/** 时间轴分组（F4，决策 26）：同 time_label 事件聚为一组（novu 模式：分组纯函数与 UI 分离） */
+export interface TimelineGroup {
+  /** 分组键（折叠状态用）：time_label trim 后非空 → 标签文本；空/缺失 → 统一 ""（兜底组） */
+  key: string;
+  /** 展示文本：正常组 = trim 后标签；兜底组 = ""（UI 占位「未标注时间」，timeline.md F4 线框） */
+  label: string;
+  /** 组内事件（保持原列表相对序） */
+  events: EntitySummary[];
+}
+
+/**
+ * 按 time_label 分组（F4，timeline.md「时间点分组」线框）：
+ * - 同标签（trim 后非空）聚为一组；组序 = 组内最早事件在列表中的 index 序
+ *   （列表即 sort_order 线性投影——组序随拖拽自然迁移，组是派生视图、无独立持久化）
+ * - 标签为空/缺失（eventTimeLabel 提取后 trim 为空，含纯空白字符串）→ 兜底组
+ *   （key = ""、label = ""），放在组序末尾；无空标签事件 → 不产生兜底组
+ * - 组内 events 保持原列表相对序
+ */
+export function groupEventsByTimeLabel(items: EntitySummary[]): TimelineGroup[] {
+  const groups: TimelineGroup[] = [];
+  const byKey = new Map<string, TimelineGroup>();
+  // 兜底组延迟入列：正常组收集完后若非空再追加（组序末尾）
+  const fallback: TimelineGroup = { key: "", label: "", events: [] };
+  for (const item of items) {
+    const label = eventTimeLabel(item).trim();
+    if (label === "") {
+      fallback.events.push(item);
+      continue;
+    }
+    let group = byKey.get(label);
+    if (group === undefined) {
+      group = { key: label, label, events: [] };
+      byKey.set(label, group);
+      groups.push(group);
+    }
+    group.events.push(item);
+  }
+  if (fallback.events.length > 0) groups.push(fallback);
+  return groups;
+}
+
+/**
+ * 组块拖拽 → 组内各事件 move order 序列（F4，决策 26）：
+ * - ids 为拖拽前的完整事件 id 序（sort_order 线性投影）；dragIds 为被拖组块的事件 id（组内序），
+ *   返回值与 dragIds 一一对应（第 i 个 order 供 dragIds[i] 的 PUT /move 调用，逐次顺序执行）
+ * - insert 为插入位：锚点 id 取目标组**首/末事件**（before → 首事件、after → 末事件）——
+ *   锚点属于目标组，必不在被拖组块内；kind="end" 为防御分支（拖到列表末尾）
+ * - 语义（单事件组退化为 F3 eventDropOrder 的单次调用，行为完全一致）：
+ *   服务端 moveEvent 先剔除自身再按 order splice 插入并整体重排（db/src/queries/entity.ts）；
+ *   多事件组按组内序逐事件移动——首个事件锚定插入位，后续事件**依次跟随上一已移动事件**
+ *   （以其为锚插到之后），最终组块保持原相对序整体落在插入位；order 每次基于当前列表
+ *   模拟计算（与服务端同式），避免先前移动导致锚点坐标漂移。
+ */
+export function groupDropOrders(ids: string[], insert: TimelineDropInsert, dragIds: string[]): number[] {
+  const orders: number[] = [];
+  if (dragIds.length === 0) return orders;
+  // 模拟服务端 moveEvent：剔除当前事件 → 按 order 插入 → 整体重排（cur 即服务端逐次 move 后的列表）
+  let cur = [...ids];
+  let prevId: string | undefined;
+  for (const id of dragIds) {
+    const rest = cur.filter((x) => x !== id);
+    let order: number;
+    if (prevId === undefined) {
+      // 首个事件：锚定插入位（before → 锚前、after → 锚后、end → 末尾；锚缺失防御 → 末尾）
+      if (insert.kind === "end") {
+        order = rest.length;
+      } else {
+        const idx = rest.indexOf(insert.id);
+        order = idx === -1 ? rest.length : insert.kind === "after" ? idx + 1 : idx;
+      }
+    } else {
+      // 后续事件：紧跟上一已移动事件之后（prevId 必在当前列表中，防御 → 末尾）
+      const idx = rest.indexOf(prevId);
+      order = idx === -1 ? rest.length : idx + 1;
+    }
+    orders.push(order);
+    rest.splice(order, 0, id);
+    cur = rest;
+    prevId = id;
+  }
+  return orders;
+}
+
 /** 事件的 tags 摘要字段（非数组/非字符串成员防御——与 db matchDataFilters 同风格）；标签聚合/行渲染共用 */
 export function eventTagsOf(item: EntitySummary): string[] {
   const tags = (item.summary as Record<string, unknown>).tags;

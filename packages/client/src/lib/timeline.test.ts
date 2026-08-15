@@ -12,17 +12,22 @@ import {
   eventTagsOf,
   eventTimeLabel,
   filterEventsByTag,
+  groupDropOrders,
+  groupEventsByTimeLabel,
   parseTagsInput,
   tagsToInput,
 } from "./timeline";
 
-/** 构造事件摘要（summary 只关心 tags） */
-function eventOf(id: string, tags?: string[]): EntitySummary {
+/** 构造事件摘要（summary 关心 tags 与 time_label——F4 分组测试） */
+function eventOf(id: string, tags?: string[], timeLabel?: string): EntitySummary {
+  const summary: Record<string, unknown> = {};
+  if (tags !== undefined) summary.tags = tags;
+  if (timeLabel !== undefined) summary.time_label = timeLabel;
   return {
     id,
     type: "event",
     name: `事件${id}`,
-    summary: tags === undefined ? {} : { tags },
+    summary,
     createdAt: "2026-08-01T00:00:00Z",
     updatedAt: "2026-08-01T00:00:00Z",
   };
@@ -260,5 +265,106 @@ describe("buildEventDetailPatch（保存 patch，C3 编辑对话框与 C4 详情
         { name: "X", description: "", timeLabel: "", tagsInput: "" },
       ),
     ).toBeNull();
+  });
+});
+
+describe("groupEventsByTimeLabel（时间点分组，F4 timeline.md 时间点分组线框）", () => {
+  it("同 time_label 聚为一组；组序 = 组内最早事件的列表 index 序（sort_order 投影）", () => {
+    // [a(黄昏), b(少年), c(黄昏)] → 黄昏组（a 先于 c）、少年组
+    const groups = groupEventsByTimeLabel([
+      eventOf("a", undefined, "第二天黄昏"),
+      eventOf("b", undefined, "少年时"),
+      eventOf("c", undefined, "第二天黄昏"),
+    ]);
+    expect(groups.map((g) => g.label)).toEqual(["第二天黄昏", "少年时"]);
+    expect(groups[0].events.map((e) => e.id)).toEqual(["a", "c"]);
+    expect(groups[1].events.map((e) => e.id)).toEqual(["b"]);
+  });
+
+  it("time_label trim 归一（' 第二天黄昏 ' 与 '第二天黄昏' 同组；label 为 trim 后值）", () => {
+    const groups = groupEventsByTimeLabel([
+      eventOf("a", undefined, "  第二天黄昏  "),
+      eventOf("b", undefined, "第二天黄昏"),
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].key).toBe("第二天黄昏");
+    expect(groups[0].label).toBe("第二天黄昏");
+  });
+
+  it("空标签（缺失/空串/非字符串）归兜底组（key ''），恒置末尾；组内按列表序平铺", () => {
+    const groups = groupEventsByTimeLabel([
+      eventOf("a", undefined, "第二天黄昏"),
+      eventOf("b"), // 缺失 time_label
+      eventOf("c", undefined, ""), // 空串
+      eventOf("d", undefined, 42 as unknown as string), // 非字符串
+      eventOf("e", undefined, "少年时"),
+    ]);
+    expect(groups.map((g) => g.key)).toEqual(["第二天黄昏", "少年时", ""]);
+    expect(groups[2].events.map((e) => e.id)).toEqual(["b", "c", "d"]);
+  });
+
+  it("全部事件均有标签 → 无兜底组；空列表 → []", () => {
+    expect(groupEventsByTimeLabel([eventOf("a", undefined, "黄昏"), eventOf("b", undefined, "少年")]).map((g) => g.key)).toEqual([
+      "黄昏",
+      "少年",
+    ]);
+    expect(groupEventsByTimeLabel([])).toEqual([]);
+  });
+
+  it("拖拽改序后分组随事件自然迁移（列表序即组序投影）", () => {
+    // 把少年时事件移到最前 → 少年组成为第一组
+    const groups = groupEventsByTimeLabel([
+      eventOf("b", undefined, "少年时"),
+      eventOf("a", undefined, "第二天黄昏"),
+      eventOf("c", undefined, "第二天黄昏"),
+    ]);
+    expect(groups.map((g) => g.label)).toEqual(["少年时", "第二天黄昏"]);
+  });
+});
+
+describe("groupDropOrders（组块拖拽插入位 → 组内各事件 move order，F4）", () => {
+  const ids = ["ev-a", "ev-b", "ev-c", "ev-d", "ev-e"];
+
+  it("多事件组移动到目标组之前：首个锚定插入位、后续跟随上一已移动事件", () => {
+    // 拖组 [ev-c, ev-e] 到 ev-b 之前：c → before b = 1；e 跟随 c 后 → 2
+    expect(groupDropOrders(ids, { kind: "before", id: "ev-b" }, ["ev-c", "ev-e"])).toEqual([1, 2]);
+  });
+
+  it("多事件组移动到目标组之后（首个 order = 锚点 index + 1；后续跟随）", () => {
+    // 拖组 [ev-a, ev-b] 到 ev-d 之后：a → after d = 3；b 跟随 a → 3
+    expect(groupDropOrders(ids, { kind: "after", id: "ev-d" }, ["ev-a", "ev-b"])).toEqual([3, 3]);
+  });
+
+  it("目标组在被拖组之后（剔除后锚点 index 修正——S13 同款防 1 位错位）", () => {
+    // 拖组 [ev-a, ev-b] 到 ev-e 之后：a → after e = 4；b 跟随 a → 4
+    expect(groupDropOrders(ids, { kind: "after", id: "ev-e" }, ["ev-a", "ev-b"])).toEqual([4, 4]);
+  });
+
+  it("end → 末尾（首个 = rest 长度；后续跟随）", () => {
+    expect(groupDropOrders(ids, { kind: "end" }, ["ev-a", "ev-b"])).toEqual([4, 4]);
+  });
+
+  it("分散组（同标签事件在列表中不相邻）：逐个 move 后仍连续落在目标位", () => {
+    // ids = [a, d, b, c, e]（a、b 分散），拖组 [a, b] 到 e 之后：
+    // a → after e = 4；b 跟随 a → 4 → 最终 [d, c, e, a, b]（连续且保持组内序）
+    expect(groupDropOrders(["ev-a", "ev-d", "ev-b", "ev-c", "ev-e"], { kind: "after", id: "ev-e" }, ["ev-a", "ev-b"])).toEqual([4, 4]);
+  });
+
+  it("单事件组与 eventDropOrder 等价（F3 行为完全一致）", () => {
+    for (const insert of [
+      { kind: "before", id: "ev-c" },
+      { kind: "after", id: "ev-c" },
+      { kind: "end" },
+    ] as const) {
+      expect(groupDropOrders(ids, insert, ["ev-a"])).toEqual([eventDropOrder(ids, insert, "ev-a")]);
+    }
+  });
+
+  it("锚点不存在 → 末尾（防御；列表与拖拽态同源，理论不可达）", () => {
+    expect(groupDropOrders(ids, { kind: "before", id: "ev-ghost" }, ["ev-a", "ev-b"])).toEqual([4, 4]);
+  });
+
+  it("空组 → 空序列（防御）", () => {
+    expect(groupDropOrders(ids, { kind: "end" }, [])).toEqual([]);
   });
 });
