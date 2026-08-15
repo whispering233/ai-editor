@@ -1,6 +1,6 @@
 {
   "name": "@whispering233/ai-editor-client",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "license": "MIT",
   "description": "React SPA 前端（仅依赖 @whispering233/ai-editor-shared）",
   "type": "module",
