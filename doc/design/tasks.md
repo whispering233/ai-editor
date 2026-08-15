@@ -313,6 +313,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - 依赖：无（F1-F9 已全部落地）
 - 验证：db 迁移测试（v2 旧库 → v3 迁移正确性：同名合并/无标签不建关系/软删事件跳过）、moveTimepoint 测试、shared 测试 + `pnpm -r test` + typecheck + lint
 - 回滚：单 commit
+- **状态（2026-08）**：✅ 已完成（commit `33b1a5f`；shared 扩 6 类型含 timepoint（tp-/timepointDataSchema/EntityType）、db SCHEMA_VERSION 3 + 003 迁移（同名 time_label 合并 + occurs_at + data 清理，事务内幂等）+ listTimepoints/moveTimepoint/eventOccursAt/assertEventSingleOccursAt（EVENT_ALREADY_MOUNTED）；oracle 审核 P1 两处已修（泛型列表排序特判扩 timepoint / ENTITY_ENDPOINT_TYPES 补 timepoint 防 find_orphan_elements 误报）；shared 131 / db 238 用例全绿；根 typecheck 剩余 client 8 处 Record<EntityType> 连锁（G2.3 范围））。
 
 **G2.2 服务端与 AI：move 端点 + 挂载校验 + 工具替换（server + tools + agent）**
 - 范围：server `PUT /entity/timepoint/:id/move` 端点（复用 entityMoveReqSchema）+ 跨组挂载复合写端点或前端按序调用（以实现简单为准：先关系后 move 两次调用，事务由 db 层保证——若拆两次调用则非事务，需评估；**推荐服务端复合写端点 `POST /entity/event/:id/move_to` 或事务内完成，实现时裁决**）；occurs_at 建关系校验（事件至多一个挂载，重复 409 或先移除旧关系）；tools 移除 `propose_reorder_events`（proposal 模块/executor/注册/PROPOSAL_BUILDERS/测试全链路删）→ 新增 `propose_reorder_timepoints`（照 F9 reorder-events 模式：build 集合校验 + references 快照 + preview.changes + executor 调 moveTimepoint/批量重排）；server 工具数断言 33→33（一删一增）
