@@ -420,3 +420,18 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - 验证：shared/tools/agent 测试（schema 校验/PROPOSAL_BUILDERS 完整性断言/executor 重排/STALE）+ client 测试（如 PROPOSAL_TYPE_LABELS）+ 手工走查（聊天让 AI 排序 → 提案卡 → 确认 → 时间轴重排；拖拽改序后 AI 排序 STALE）
 - 回滚：单 commit（实现分两个 commit：服务端链路 + 前端入口，可按卡拆）
 - **状态（2026-08）**：✅ 已完成（commit `2e4297d`；propose_reorder_events 提案工具全链路：shared schema + PROPOSAL_TOOLS/EXECUTOR_TOOLS 登记 + tools build/run（集合完全相等校验/references updated_at 快照/preview.changes 位移说明/tool_result 无预览）+ executor（db reorderEvents 事务重排 sort_order 0..n-1）+ agent PROPOSAL_BUILDERS + server SSE preview 透传 + client「AI 排序」按钮注入聊天 + 提案卡文案；拖拽改序后旧提案 409 PROPOSAL_STALE 闭环；oracle 审核通过（无 P0/P1，P2 五项前三已修）；全仓 1561 用例全绿（shared 131 / llm 59 / db 224 / tools 237 / agent 94 / server 313 / client 503）+ typecheck/lint 通过）。手工验收：`pnpm start:test-project` → 时间轴页「AI 排序」→ 聊天生成提案 → 确认后重排；先拖拽改序再确认 → 409 STALE。
+
+---
+
+## 用户反馈批次三（G3，2026-08 用户实测反馈，单点实施）
+
+> **背景**：G1/G2 完成后用户实测：对时间轴的任何操作（拖拽/重命名/新建/编辑/软删）都会重置滚动条，视觉焦点与操作点不一致。根因（已定位）：列表渲染条件带 `!loading`——操作后 `reloadTick+1` 重拉期间列表 DOM 被卸载 → 滚动容器高度塌陷 → scrollTop 被浏览器 clamp 归零 → 数据到达后列表重新挂载在顶部。修复：重拉期间保留旧数据渲染（条件去 `!loading`，loading 仅用于首次加载骨架）。
+
+### G3 时间轴操作后滚动位置保持（交互优化，2026-08 用户反馈）
+
+- 范围：`client/src/pages/Timeline.tsx` 列表渲染条件**去掉 `!loading`**——任何操作成功后重拉期间旧数据继续渲染（列表 DOM 不卸载 → 滚动容器高度不塌陷 → scrollTop 不被 clamp 归零）；loading 仅用于首次加载骨架（数据为 null 时）。
+- 文档：`doc/ui/pages/timeline.md`（滚动结构 G1 小节补充 G3 语义）
+- 依赖：无（G1 已提供独立滚动容器）
+- 验证：手工走查（滚到列表中部 → 重命名/拖拽/新建 → 滚动位置保持）+ client 测试无回归
+- 回滚：单 commit
+- **状态（2026-08）**：✅ 已完成（commit 待填；根因：列表条件带 `!loading`，重拉卸载列表 → 容器高度塌陷 → scrollTop 归零；修复：条件去 `!loading` 保留旧数据渲染，注释说明；client 507 用例全绿 + typecheck 0 错误 + lint）。

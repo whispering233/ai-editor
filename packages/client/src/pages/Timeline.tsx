@@ -582,9 +582,11 @@ export default function Timeline() {
 
         {/* 时间轴（G2 双实体：时间点组块 + 事件挂载 + 未挂载兜底区 + 双轨拖拽；
             数据编排在本页、渲染与拖拽协调在 components/timeline/；
-            标签筛选无匹配 → 仅显示提示（不渲染空组列表）） */}
-        {!loading &&
-          timepoints !== null &&
+            标签筛选无匹配 → 仅显示提示（不渲染空组列表））。
+            ⚠ 条件**不含 !loading**：重拉（操作后 reloadTick+1）期间旧数据继续渲染——
+            若卸载列表，滚动容器高度塌陷 → scrollTop 被 clamp 归零 → 操作后视觉焦点
+            与操作点不一致（G3 交互优化）；loading 仅用于首次加载骨架（数据为 null 时） */}
+        {timepoints !== null &&
           items !== null &&
           visible !== null &&
           !(activeTag !== null && visible.length === 0) && (
