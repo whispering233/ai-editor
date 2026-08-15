@@ -331,9 +331,12 @@ export default function Timeline() {
     setEditForm((f) => (f ? { ...f, tagsInput: applyTagSuggestion(f.tagsInput, tag) } : f));
   }
 
+  // 滚动结构（G1）：页面分「固定区 + 滚动区」两段——header/标签筛选器恒固定，
+  // 仅列表区独立滚动（占满 MainPanel 内容区高度：h-full 相对 flex-1 min-h-0 父级生效，
+  // 与 Canvas.tsx §631 同式高度链）；错误横幅/骨架/空态/列表归滚动区（替代列表位置语义）
   return (
-    <section>
-      {/* header：标题 + 操作（timeline.md 线框；F9「AI 排序入口」新增 AI 排序按钮） */}
+    <section className="flex h-full min-h-0 flex-col">
+      {/* 固定区：header——标题 + 操作（timeline.md 线框；F9「AI 排序入口」新增 AI 排序按钮） */}
       <div className="mb-4 flex items-center gap-3">
         <h1 className="text-xl font-semibold">时间轴</h1>
         {/* AI 排序：注入聊天预设指令（F9）；无项目禁用——外层 span 承载 title 提示
@@ -356,43 +359,8 @@ export default function Timeline() {
         </Button>
       </div>
 
-      {/* 错误横幅（列表请求失败 → 重试） */}
-      {error !== null && (
-        <div className="mb-3 flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error === CLIENT_NETWORK_ERROR ? "无法连接服务，请确认 ai-editor 服务已启动。" : "时间轴加载失败，请重试。"}
-          <Button variant="outline" className="ml-auto h-7 px-2 text-xs" type="button" onClick={() => setReloadTick((t) => t + 1)}>
-            重试
-          </Button>
-        </div>
-      )}
-
-      {/* 加载骨架（行级 animate-pulse bg-muted，timeline.md 状态） */}
-      {loading && items === null && error === null && (
-        <div className="space-y-2">
-          {Array.from({ length: 4 }, (_, i) => (
-            <div key={i} className="flex items-center gap-3 rounded-md border border-border px-3 py-2.5">
-              <div className="h-4 w-4 animate-pulse rounded bg-muted" />
-              <div className="h-4 w-1/3 animate-pulse rounded bg-muted" />
-              <div className="h-3 w-20 animate-pulse rounded bg-muted" />
-              <div className="ml-auto h-6 w-6 animate-pulse rounded bg-muted" />
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* 空态（timeline.md 原文） */}
-      {!loading && items !== null && items.length === 0 && (
-        <div className="rounded-lg border border-dashed border-border px-6 py-12 text-center">
-          <p className="text-sm text-muted-foreground">
-            还没有事件。先定义一个关键事件，再把它们排成故事的时间骨架。
-          </p>
-          <Button className="mt-4" type="button" onClick={() => setCreateOpen(true)}>
-            + 新建事件
-          </Button>
-        </div>
-      )}
-
-      {/* 标签筛选器（timeline.md：tag 从当前列表聚合；[全部] 恒在首位） */}
+      {/* 固定区：标签筛选器（timeline.md：tag 从当前列表聚合；[全部] 恒在首位）。
+          G1：恒在滚动区外——列表滚动时仍可见（用户核心诉求「标签和按钮均可见」） */}
       {items !== null && items.length > 0 && (
         <div className="mb-3 flex flex-wrap items-center gap-1.5">
           <button
@@ -425,26 +393,66 @@ export default function Timeline() {
         </div>
       )}
 
-      {/* 事件时间轴（F4 时间点分组：垂直轴线 + 组块（标题 + 组内事件堆叠）+ 组块级拖拽；
-          数据编排在本页、渲染与拖拽协调在 components/timeline/） */}
-      {!loading && visible !== null && visible.length > 0 && (
-        <TimelineView
-          events={visible}
-          occursCount={occursCount}
-          hasOccursData={hasOccursData}
-          onMove={handleGroupMove}
-          onDetail={(ev) => navigate(`/timeline/${ev.id}`)}
-          onEdit={openEdit}
-          onDelete={setDeleteTarget}
-        />
-      )}
+      {/* 滚动区：状态/列表（G1：flex-1 min-h-0 overflow-y-auto 独立滚动——错误横幅/骨架/空态/
+          列表/无匹配均替代列表位置，归滚动区；header 与筛选器在滚动区外保持固定） */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {/* 错误横幅（列表请求失败 → 重试） */}
+        {error !== null && (
+          <div className="mb-3 flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {error === CLIENT_NETWORK_ERROR ? "无法连接服务，请确认 ai-editor 服务已启动。" : "时间轴加载失败，请重试。"}
+            <Button variant="outline" className="ml-auto h-7 px-2 text-xs" type="button" onClick={() => setReloadTick((t) => t + 1)}>
+              重试
+            </Button>
+          </div>
+        )}
 
-      {/* 标签筛选无匹配（timeline.md 状态：「没有匹配「{tag}」的事件」） */}
-      {!loading && items !== null && items.length > 0 && visible !== null && visible.length === 0 && (
-        <div className="rounded-lg border border-dashed border-border px-6 py-8 text-center text-sm text-muted-foreground">
-          没有匹配「{activeTag}」的事件
-        </div>
-      )}
+        {/* 加载骨架（行级 animate-pulse bg-muted，timeline.md 状态） */}
+        {loading && items === null && error === null && (
+          <div className="space-y-2">
+            {Array.from({ length: 4 }, (_, i) => (
+              <div key={i} className="flex items-center gap-3 rounded-md border border-border px-3 py-2.5">
+                <div className="h-4 w-4 animate-pulse rounded bg-muted" />
+                <div className="h-4 w-1/3 animate-pulse rounded bg-muted" />
+                <div className="h-3 w-20 animate-pulse rounded bg-muted" />
+                <div className="ml-auto h-6 w-6 animate-pulse rounded bg-muted" />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 空态（timeline.md 原文） */}
+        {!loading && items !== null && items.length === 0 && (
+          <div className="rounded-lg border border-dashed border-border px-6 py-12 text-center">
+            <p className="text-sm text-muted-foreground">
+              还没有事件。先定义一个关键事件，再把它们排成故事的时间骨架。
+            </p>
+            <Button className="mt-4" type="button" onClick={() => setCreateOpen(true)}>
+              + 新建事件
+            </Button>
+          </div>
+        )}
+
+        {/* 事件时间轴（F4 时间点分组：垂直轴线 + 组块（标题 + 组内事件堆叠）+ 组块级拖拽；
+            数据编排在本页、渲染与拖拽协调在 components/timeline/） */}
+        {!loading && visible !== null && visible.length > 0 && (
+          <TimelineView
+            events={visible}
+            occursCount={occursCount}
+            hasOccursData={hasOccursData}
+            onMove={handleGroupMove}
+            onDetail={(ev) => navigate(`/timeline/${ev.id}`)}
+            onEdit={openEdit}
+            onDelete={setDeleteTarget}
+          />
+        )}
+
+        {/* 标签筛选无匹配（timeline.md 状态：「没有匹配「{tag}」的事件」） */}
+        {!loading && items !== null && items.length > 0 && visible !== null && visible.length === 0 && (
+          <div className="rounded-lg border border-dashed border-border px-6 py-8 text-center text-sm text-muted-foreground">
+            没有匹配「{activeTag}」的事件
+          </div>
+        )}
+      </div>
 
       {/* 新建事件对话框（timeline.md：name 必填 + description + time_label + tags + 可选锚点节点） */}
       <Dialog open={createOpen} onOpenChange={(v) => !v && setCreateOpen(false)}>

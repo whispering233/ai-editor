@@ -64,6 +64,13 @@
 - 分组纯函数与 UI 分离（novu 模式）：按 `time_label` 聚类（trim 后分组），组序 = 组内最早事件 sort_order 序；拖拽改 sort_order 后组随事件自然迁移。
 - 组件切分：`components/timeline/` 下 `Timeline.tsx`（容器 + 轴线 + 分组渲染）/ `TimelineGroup.tsx`（组块：标题 + 折叠）/ `TimelineEvent.tsx`（事件行）——F3 先建 TimelineEvent 与容器骨架，F4 加分组与折叠。
 
+## 滚动结构（G1：区块独立滚动，2026-08 实现）
+
+- **实现**：页面根容器 `<section className="flex h-full min-h-0 flex-col">`（占满 MainPanel 内容区高度——`h-full` 相对 `flex-1 min-h-0` 父级生效，与 Canvas.tsx §631 同式高度链，MainPanel 无需改动）；分「固定区 + 滚动区」两段：
+  - **固定区**（正常流，不滚动）：header（标题 + AI 排序 + 新建事件）+ 标签筛选器（仅 `items.length > 0` 时渲染）。列表滚动时两者保持可见——用户核心诉求「标签和按钮均可见」。
+  - **滚动区**（`min-h-0 flex-1 overflow-y-auto` 独立滚动）：错误横幅 / 加载骨架 / 空态 / TimelineView 列表 / 「无匹配」提示——均属「替代列表位置」的状态内容，归滚动区；筛选器 `mb-3` 间距保留在滚动区外（固定区底部与滚动区之间）。
+- 其他页面（大纲/画布等）保持整体滚动不变；本页拖拽/筛选/编辑逻辑零改动。
+
 ## 信息层级
 
 | 展示 | API 字段 |
