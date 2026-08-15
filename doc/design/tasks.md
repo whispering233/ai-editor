@@ -329,6 +329,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - 依赖：G2.1 + G2.2
 - 验证：client 测试（分组/拖拽纯函数更新、挂载选择器）+ `pnpm -r test` + typecheck + lint + 手工走查（新建时间点→组内新建→拖拽双轨→跨组挂载→重命名→软删脱钩→AI 排序提案→迁移后旧数据正确显示）
 - 回滚：单 commit（或按需再拆）
+- **状态（2026-08）**：✅ 已完成（commit `4278c9c`；数据源四路加载 + buildTimelineModel（组序=timepoint.sort_order/组内=事件全局序投影/未挂载兜底）+ TimelineGroup 时间点组块（重命名行内编辑/折叠/组尾新建/未挂载区 italic 不可拖）+ TimelineEvent 移除行内时间标签恢复行级拖拽 + 双轨拖拽（来源互斥：时间点 PUT move 只重排组间序、事件同组 PUT move/跨组 POST move_to（null=未挂载区）、筛选态全量模型算 order）+ 双入口（新建时间点/组尾新建自动挂载/顶部新建不挂载）+ 详情页挂载时间点选择器（move_to 保存失败回退）+ 8 处 Record<EntityType> 连锁修复 + PROPOSAL_TYPE_LABELS 换名 + occurs_at 方向白名单（对话框排除）；oracle 审核 P1（时间点拖拽 drop 到事件行静默无操作——handleEventDrop 分流复用组级执行）与 P2-2（重命名 rethrow 清理）已修，P2-3 筛选态锚点/P2-4 空未挂载区/P2-5 详情页 limit 50 记入 G2.4 评估；client 507 用例全绿 + 全仓 typecheck 0 错误 + lint）。
 
 **G2.4 收尾：文档与状态同步**
 - 范围：tasks.md 状态行、AGENTS.md 状态行（决策 26 修订、SCHEMA_VERSION 3、工具目录）、release-review.md（如需要）、CHANGELOG
