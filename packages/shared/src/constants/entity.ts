@@ -2,8 +2,8 @@
 // 契约来源：doc/database/schema.md（entities 表 type CHECK、预定义关系类型表第 66-80 行）
 // 常量命名 UPPER_SNAKE_CASE，as const 保持字面量类型
 
-/** 实体类型（entities 表 type 列 CHECK 约束，schema.md）——event 为时间轴事件（决策 26） */
-export const ENTITY_TYPES = ["character", "setting", "location", "hook", "event"] as const;
+/** 实体类型（entities 表 type 列 CHECK 约束，schema.md）——event 为时间轴事件（决策 26）；timepoint 为 G2 时间标签点（name=时间标签文本，data 空，决策 26 G2 修订） */
+export const ENTITY_TYPES = ["character", "setting", "location", "hook", "event", "timepoint"] as const;
 
 /** 实体类型（单数，从常量派生；与 types/entity.ts 的 EntityType 一致，测试断言保证） */
 export type EntityTypeValue = (typeof ENTITY_TYPES)[number];
@@ -11,7 +11,8 @@ export type EntityTypeValue = (typeof ENTITY_TYPES)[number];
 /**
  * 预定义关系类型（schema.md 关系类型表，共 17 个）
  * belongs_to 所属 / owns 拥有 / masters 掌握 / ally·rival·mentor·family 人物间 /
- * kills 击杀 / appears_in 出现于大纲节点 / occurs_at 发生在地点 /
+ * kills 击杀 / appears_in 出现于大纲节点 / occurs_at 发生在地点（大纲节点→地点）＋
+ *   timepoint→event 1:n 挂载（G2 时间标签点，决策 26 修订——同一关系类型双语义，端点类型区分） /
  * plot_edge 剧情连线（画布推演）/ plants·advances·resolves 伏笔管理 /
  * depends_on 伏笔依赖 / involves 伏笔涉及 /
  * occurs_in 事件锚定 发生于 | event→大纲节点，决策 26

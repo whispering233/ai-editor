@@ -21,8 +21,16 @@ import type { OutlineFileNode, OutlineFileTree, RelationQueryResult, RelationRec
 import { RELATION_TYPES, generateId } from "@whispering233/ai-editor-shared";
 import { nowIso } from "../storage/atomic.js";
 
-/** 关系操作错误码（server 层映射 HttpError：RELATION_EXISTS → 409、其余 → 400） */
-export type RelationErrorCode = "RELATION_EXISTS" | "ENDPOINT_NOT_FOUND" | "INVALID_RELATION_TYPE";
+/**
+ * 关系操作错误码（server 层映射 HttpError：RELATION_EXISTS → 409、其余 → 400；
+ * EVENT_ALREADY_MOUNTED（G2，时间轴挂载 1:n 校验，assertEventSingleOccursAt 抛出）→ 409
+ * 由 G2.2 路由层映射，见 mapRelationError 注释）
+ */
+export type RelationErrorCode =
+  | "RELATION_EXISTS"
+  | "ENDPOINT_NOT_FOUND"
+  | "INVALID_RELATION_TYPE"
+  | "EVENT_ALREADY_MOUNTED";
 
 /** 关系操作错误（带 code，与 OutlineError 同风格；路由层 catch 映射） */
 export class RelationError extends Error {
@@ -46,8 +54,9 @@ export interface RelationQuery {
 /** 大纲端点 id（relation_records 端点类型约定，schema.md） */
 export const OUTLINE_ENDPOINT_TYPE = "outline_node";
 
-/** 实体端点类型集合（entities 表 type 列；含 event 时间轴事件——occurs_in 端点校验，决策 26） */
-const ENTITY_ENDPOINT_TYPES = ["character", "setting", "location", "hook", "event"] as const;
+/** 实体端点类型集合（entities 表 type 列；含 event 时间轴事件——occurs_in 端点校验，决策 26；
+ *  含 timepoint 时间标签点——occurs_at 端点校验，G2） */
+const ENTITY_ENDPOINT_TYPES = ["character", "setting", "location", "hook", "event", "timepoint"] as const;
 
 /**
  * 构建可见性上下文：一次性收集两端点的软删集合与名称映射——
@@ -94,7 +103,7 @@ function buildEndpointContext(
 }
 
 /** 行 → RelationRow（metadata JSON 解析；坏行防御同 entity.ts parseDataColumn 风格） */
-function rowToRelationRow(row: Record<string, unknown>): RelationRow {
+export function rowToRelationRow(row: Record<string, unknown>): RelationRow {
   return {
     id: row.id as string,
     source_type: row.source_type as string,

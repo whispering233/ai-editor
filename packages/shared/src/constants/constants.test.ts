@@ -27,8 +27,8 @@ import {
 } from "./index.js";
 
 describe("实体 / 关系常量（schema.md）", () => {
-  it("ENTITY_TYPES 为 5 种实体类型（含 event 时间轴事件，决策 26），且与 types 的 EntityType 一致", () => {
-    expect(ENTITY_TYPES).toEqual(["character", "setting", "location", "hook", "event"]);
+  it("ENTITY_TYPES 为 6 种实体类型（含 event 时间轴事件，决策 26；timepoint G2 时间标签点），且与 types 的 EntityType 一致", () => {
+    expect(ENTITY_TYPES).toEqual(["character", "setting", "location", "hook", "event", "timepoint"]);
     expectTypeOf<(typeof ENTITY_TYPES)[number]>().toEqualTypeOf<EntityType>();
   });
 

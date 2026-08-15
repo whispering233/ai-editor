@@ -7,14 +7,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { closeDatabase, openDatabase, type Db } from "../connection.js";
+import { RelationError } from "./relation.js";
 import {
+  assertEventSingleOccursAt,
   countDeltasForEntity,
   createEntity,
+  eventOccursAt,
   getEntity,
   getEntitySummaryStats,
   listAllEvents,
   listEntities,
+  listTimepoints,
   moveEvent,
+  moveTimepoint,
   reorderEvents,
   softDeleteEntity,
   updateEntity,
@@ -671,5 +676,182 @@ describe("reorderEvents（F9 批量重排：LLM 排序提案确认后执行，�
     const char = createEntity(db, { type: "character", name: "张三" });
     expect(() => reorderEvents(db, [char.id], "2026-08-02T00:00:00Z")).toThrow(/事件集合与当前时间轴不一致/);
     expect(getEntity(db, char.id)).not.toBeNull(); // character 行未被触碰
+  });
+});
+
+// ============ 时间标签点（G2，决策 26 修订）：listTimepoints + moveTimepoint + occurs_at 挂载 ============
+
+describe("listTimepoints（G2 时间标签点列表，决策 26 修订）", () => {
+  /** 造 n 个 timepoint，sort_order 按给定序列赋值（NULL 表示未设） */
+  function seedTimepoints(names: string[], sortOrders: Array<number | null>): string[] {
+    const ids: string[] = [];
+    for (let i = 0; i < names.length; i++) {
+      const id = `tp-seed-${i}`;
+      ids.push(id);
+      db.prepare(
+        `INSERT INTO entities (id, type, name, sort_order, created_at, updated_at)
+         VALUES (?, 'timepoint', ?, ?, ?, ?)`,
+      ).run(id, names[i], sortOrders[i], `2026-08-0${i + 1}T00:00:00Z`, `2026-08-0${i + 1}T00:00:00Z`);
+    }
+    return ids;
+  }
+
+  it("恒按 sort_order 升序（NULL 沉底、id 稳定次序）；软删过滤（决策 12）", () => {
+    seedTimepoints(["黄昏", "拂晓", "深夜", "正午"], [2, 0, null, 1]);
+    expect(listTimepoints(db).map((r) => r.name)).toEqual(["拂晓", "正午", "黄昏", "深夜"]); // NULL 沉底
+    const rows = listTimepoints(db);
+    softDeleteEntity(db, rows[0].id, "2026-08-02T00:00:00Z");
+    expect(listTimepoints(db).map((r) => r.name)).toEqual(["正午", "黄昏", "深夜"]); // 软删不可见
+  });
+
+  it("非 timepoint 类型不参与（与其他类型互不干扰）", () => {
+    createEntity(db, { type: "event", name: "事件" });
+    createEntity(db, { type: "character", name: "张三" });
+    expect(listTimepoints(db)).toEqual([]);
+  });
+});
+
+describe("moveTimepoint（G2，同 moveEvent 语义：全局线性序 0..n-1）", () => {
+  /** 造 n 个 timepoint，sort_order 0..n-1；返回 id 数组（按序） */
+  function seedTimepoints(n: number): string[] {
+    const ids: string[] = [];
+    for (let i = 0; i < n; i++) {
+      const id = `tp-move-${i}`;
+      ids.push(id);
+      db.prepare(
+        `INSERT INTO entities (id, type, name, sort_order, created_at, updated_at)
+         VALUES (?, 'timepoint', ?, ?, ?, ?)`,
+      ).run(id, `时间点${i}`, i, "2026-08-01T00:00:00Z", "2026-08-01T00:00:00Z");
+    }
+    return ids;
+  }
+
+  /** 读全部未软删 timepoint 的 id（按 sort_order 升序、NULL 沉底） */
+  function timepointIdsInOrder(): string[] {
+    return listTimepoints(db).map((r) => r.id);
+  }
+
+  it("顺序重排：移后重写全局线性序 0..n-1，其余相对位置保持；仅被移行刷新 updated_at", () => {
+    const ids = seedTimepoints(4); // [0,1,2,3]
+    // 把 id[2] 移到位置 0 → [2,0,1,3]
+    expect(moveTimepoint(db, ids[2], 0, "2026-08-02T00:00:00Z")).toEqual({ moved: true });
+    expect(timepointIdsInOrder()).toEqual([ids[2], ids[0], ids[1], ids[3]]);
+    // 再移 id[0] 到末尾（order 3）→ [2,1,3,0]
+    expect(moveTimepoint(db, ids[0], 3, "2026-08-02T00:00:00Z")).toEqual({ moved: true });
+    expect(timepointIdsInOrder()).toEqual([ids[2], ids[1], ids[3], ids[0]]);
+    // sort_order 已重写为连续 0..n-1；仅被移行 updated_at 刷新（决策 14 版本戳语义）
+    const rows = db
+      .prepare("SELECT id, updated_at, sort_order FROM entities WHERE type = 'timepoint'")
+      .all() as Array<{ id: string; updated_at: string; sort_order: number }>;
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    expect(byId.get(ids[2])!.updated_at).toBe("2026-08-02T00:00:00Z"); // 被移行：刷新
+    expect(byId.get(ids[1])!.updated_at).toBe("2026-08-01T00:00:00Z"); // 未移行：不变
+    expect(rows.map((r) => r.sort_order).sort((a, b) => a - b)).toEqual([0, 1, 2, 3]);
+  });
+
+  it("clamp 边界：负数 → 0；超总数 → 末尾（同 moveEvent 契约）", () => {
+    const ids = seedTimepoints(3); // [0,1,2]
+    expect(moveTimepoint(db, ids[2], -5, "2026-08-02T00:00:00Z")).toEqual({ moved: true });
+    expect(timepointIdsInOrder()).toEqual([ids[2], ids[0], ids[1]]); // 负数 clamp 到 0
+    expect(moveTimepoint(db, ids[1], 999, "2026-08-02T00:00:00Z")).toEqual({ moved: true });
+    expect(timepointIdsInOrder()).toEqual([ids[2], ids[0], ids[1]]); // 999 → 末尾（已在末尾，序不变）
+  });
+
+  it("NULL sort_order 沉底参与排序：旧数据（迁移来的 NULL 序）可正常重排并清零", () => {
+    const inserts: Array<[string, number | null]> = [
+      ["tp-null-0", null],
+      ["tp-null-1", null],
+      ["tp-1", 1],
+    ];
+    for (const [id, sort] of inserts) {
+      db.prepare(
+        `INSERT INTO entities (id, type, name, sort_order, created_at, updated_at) VALUES (?, 'timepoint', ?, ?, ?, ?)`,
+      ).run(id, id, sort, "2026-08-01T00:00:00Z", "2026-08-01T00:00:00Z");
+    }
+    // 初始：tp-1（sort=1）在前，两个 NULL 沉底（id 序）
+    expect(timepointIdsInOrder()).toEqual(["tp-1", "tp-null-0", "tp-null-1"]);
+    expect(moveTimepoint(db, "tp-null-0", 0, "2026-08-02T00:00:00Z")).toEqual({ moved: true });
+    expect(timepointIdsInOrder()).toEqual(["tp-null-0", "tp-1", "tp-null-1"]);
+    // 全部行重写为连续序（NULL 清零）
+    const orders = db
+      .prepare("SELECT sort_order FROM entities WHERE type = 'timepoint' ORDER BY sort_order")
+      .all() as Array<{ sort_order: number }>;
+    expect(orders.map((o) => o.sort_order)).toEqual([0, 1, 2]);
+  });
+
+  it("软删/不存在 → null；非 timepoint 类型不受影响", () => {
+    const ids = seedTimepoints(2);
+    softDeleteEntity(db, ids[0], "2026-08-02T00:00:00Z");
+    expect(moveTimepoint(db, ids[0], 1, "2026-08-02T00:00:00Z")).toBeNull();
+    expect(moveTimepoint(db, "tp-999", 0, "2026-08-02T00:00:00Z")).toBeNull();
+    expect(timepointIdsInOrder()).toEqual([ids[1]]); // 软删行不参与排序空间
+    const char = createEntity(db, { type: "character", name: "张三" });
+    expect(moveTimepoint(db, char.id, 0, "2026-08-02T00:00:00Z")).toBeNull();
+    expect(getEntity(db, char.id)).not.toBeNull(); // character 行未被触碰
+  });
+});
+
+describe("eventOccursAt / assertEventSingleOccursAt（G2 occurs_at 1:n 挂载）", () => {
+  /** 造一个 timepoint + 一条 occurs_at 挂载（target = 指定事件；deleted = 关系软删；tpId 可传以复用同一 timepoint） */
+  function seedMount(eventId: string, deleted = false, tpId = `tp-mount-${eventId}`): void {
+    db.prepare(
+      `INSERT INTO entities (id, type, name, sort_order, created_at, updated_at) VALUES (?, 'timepoint', ?, 0, ?, ?)`,
+    ).run(tpId, "第二天黄昏", "2026-08-01T00:00:00Z", "2026-08-01T00:00:00Z");
+    db.prepare(
+      `INSERT INTO relation_records (id, source_type, source_id, target_type, target_id, relation_type, created_at, updated_at, deleted_at)
+       VALUES (?, 'timepoint', ?, 'event', ?, 'occurs_at', ?, ?, ?)`,
+    ).run(`rel-mount-${eventId}`, tpId, eventId, "2026-08-01T00:00:00Z", "2026-08-01T00:00:00Z", deleted ? "2026-08-02T00:00:00Z" : null);
+  }
+
+  it("命中：返回挂载关系（source_id = timepoint id）；未挂载 → null", () => {
+    const ev = createEntity(db, { type: "event", name: "藏经阁" });
+    expect(eventOccursAt(db, ev.id)).toBeNull(); // 未挂载
+    seedMount(ev.id);
+    const rel = eventOccursAt(db, ev.id)!;
+    expect(rel).toMatchObject({
+      id: `rel-mount-${ev.id}`,
+      source_type: "timepoint",
+      source_id: `tp-mount-${ev.id}`,
+      target_type: "event",
+      target_id: ev.id,
+      relation_type: "occurs_at",
+      deleted_at: null,
+    });
+    // 事件的挂载与前端展示（G2.3）所需字段齐备
+    expect(rel.created_at).toBe("2026-08-01T00:00:00Z");
+  });
+
+  it("关系软删 → null（决策 12 可见性）；timepoint 软删 → null（级联 + EXISTS 防御双路径）", () => {
+    const ev = createEntity(db, { type: "event", name: "事件" });
+    seedMount(ev.id, true); // 关系软删
+    expect(eventOccursAt(db, ev.id)).toBeNull();
+    // timepoint 软删（softDeleteEntity 级联软删其 occurs_at；即便级联遗漏，EXISTS 防御也兜底）
+    const ev2 = createEntity(db, { type: "event", name: "事件2" });
+    seedMount(ev2.id);
+    softDeleteEntity(db, `tp-mount-${ev2.id}`, "2026-08-02T00:00:00Z");
+    expect(eventOccursAt(db, ev2.id)).toBeNull();
+  });
+
+  it("assertEventSingleOccursAt：未挂载通过（无副作用）；已挂载抛 RelationError（EVENT_ALREADY_MOUNTED）", () => {
+    const ev = createEntity(db, { type: "event", name: "事件" });
+    expect(() => assertEventSingleOccursAt(db, ev.id)).not.toThrow(); // 未挂载 → 放行
+    seedMount(ev.id);
+    try {
+      assertEventSingleOccursAt(db, ev.id);
+      expect.unreachable("已挂载应抛错");
+    } catch (err) {
+      expect(err).toBeInstanceOf(RelationError);
+      expect((err as RelationError).code).toBe("EVENT_ALREADY_MOUNTED");
+      expect((err as Error).message).toContain("重复挂载拒绝");
+    }
+  });
+
+  it("仅 occurs_at 视为挂载：其他关系类型（appears_in 等）不干扰", () => {
+    const ev = createEntity(db, { type: "event", name: "事件" });
+    db.prepare(
+      "INSERT INTO relation_records (id, source_type, source_id, target_type, target_id, relation_type, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    ).run("rel-other", "character", "char-seed", "event", ev.id, "appears_in", "2026-08-01T00:00:00Z", "2026-08-01T00:00:00Z");
+    expect(eventOccursAt(db, ev.id)).toBeNull();
+    expect(() => assertEventSingleOccursAt(db, ev.id)).not.toThrow();
   });
 });

@@ -1,6 +1,7 @@
-// 002 迁移测试（决策 26 时间轴：entities CHECK 扩为 5 种 + sort_order 列）
+// 002 迁移测试（决策 26 时间轴：entities CHECK 扩为 5 种 + sort_order 列；v1 库经全量迁移链
+// 002→003 升到 v3——002 负责换表加 event/列，003 无事件可迁，只做同款换表加 timepoint）
 // 覆盖：手工建 v1 结构库（旧 entities DDL）→ runMigrations(MIGRATIONS) →
-// 数据保留（行数/列值）、CHECK 现含 event（插入 event 行成功）、sort_order 列存在且旧行为 NULL
+// 数据保留（行数/列值）、CHECK 现含 event（且含 timepoint）、sort_order 列存在且旧行为 NULL
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import Database from "better-sqlite3";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -69,16 +70,16 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-describe("002_event_timeline 迁移（v1 → v2，决策 26）", () => {
-  it("v1 库升级：数据保留（行数/列值）、CHECK 含 event、sort_order 列存在且旧行为 NULL", () => {
+describe("002_event_timeline 迁移（v1 → v2 → v3 全链路，决策 26 + G2）", () => {
+  it("v1 库升级：数据保留（行数/列值）、CHECK 含 event 与 timepoint、sort_order 列存在且旧行为 NULL", () => {
     db = createV1Db();
 
     const { applied } = runMigrations(db, { migrations: MIGRATIONS });
-    expect(applied.map((m) => m.version)).toEqual([2]);
+    expect(applied.map((m) => m.version)).toEqual([2, 3]); // v1→v2（002）→v3（003）
     expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
-    expect(SCHEMA_VERSION).toBe(2);
+    expect(SCHEMA_VERSION).toBe(3);
 
-    // 数据保留：3 行实体 + 1 行关系（行数与列值原样）
+    // 数据保留：3 行实体 + 1 行关系（行数与列值原样；v1 库无事件 → 003 无 time_label 可迁）
     const entities = db
       .prepare("SELECT id, type, name, data, created_at, updated_at, deleted_at FROM entities ORDER BY id")
       .all() as Array<Record<string, unknown>>;
@@ -87,7 +88,7 @@ describe("002_event_timeline 迁移（v1 → v2，决策 26）", () => {
     expect(entities[1]).toMatchObject({ id: "hook-1", type: "hook", name: "身世之谜", deleted_at: "2026-08-02T00:00:00Z" });
     expect(
       (db.prepare("SELECT COUNT(*) AS c FROM relation_records").get() as { c: number }).c,
-    ).toBe(1); // 关系表不受影响
+    ).toBe(1); // 关系表不受影响（003 无事件可迁，不建 occurs_at）
 
     // sort_order 列存在且旧行为 NULL（时间轴从空序起步）
     const cols = db.prepare("PRAGMA table_info(entities)").all() as Array<{ name: string; notnull: number }>;
@@ -99,20 +100,25 @@ describe("002_event_timeline 迁移（v1 → v2，决策 26）", () => {
       .get() as { c: number };
     expect(nullOrders.c).toBe(3);
 
-    // CHECK 现含 event：插入 event 行成功（v1 结构下会被 CHECK 拒绝）
+    // CHECK 现含 event 与 timepoint：插入 event / timepoint 行成功（v1 结构下会被 CHECK 拒绝）
     expect(() =>
       db
         .prepare("INSERT INTO entities (id, type, name, created_at, updated_at) VALUES (?, 'event', ?, ?, ?)")
         .run("ev-1", "藏经阁发现玉佩", "2026-08-03T00:00:00Z", "2026-08-03T00:00:00Z"),
     ).not.toThrow();
+    expect(() =>
+      db
+        .prepare("INSERT INTO entities (id, type, name, created_at, updated_at) VALUES (?, 'timepoint', ?, ?, ?)")
+        .run("tp-1", "第二天黄昏", "2026-08-03T00:00:00Z", "2026-08-03T00:00:00Z"),
+    ).not.toThrow();
   });
 
-  it("迁移幂等：已到 v2 的库再跑 → 无 pending 不执行", () => {
+  it("迁移幂等：已到 v3 的库再跑 → 无 pending 不执行", () => {
     db = createV1Db();
     runMigrations(db, { migrations: MIGRATIONS });
     const { applied } = runMigrations(db, { migrations: MIGRATIONS });
     expect(applied).toEqual([]);
-    expect(getUserVersion(db)).toBe(2);
+    expect(getUserVersion(db)).toBe(3);
   });
 
   it("v1 库经 ensureSchemaCompatible 完整链路迁移（含 outline.json 不动）", () => {
@@ -125,8 +131,8 @@ describe("002_event_timeline 迁移（v1 → v2，决策 26）", () => {
     expect(result.rebuilt).toBe(false);
     expect(result.migrated).toBe(true);
     expect(result.fromVersion).toBe(1);
-    expect(result.toVersion).toBe(2);
-    expect(getUserVersion(active)).toBe(2);
+    expect(result.toVersion).toBe(3);
+    expect(getUserVersion(active)).toBe(3);
     expect(
       (active.prepare("SELECT COUNT(*) AS c FROM entities").get() as { c: number }).c,
     ).toBe(3); // 数据保全

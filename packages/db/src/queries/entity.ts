@@ -12,10 +12,13 @@
 //   与 better-sqlite3 字符串列一致（chat.ts 同款风格），数据量大后再优化。
 // 级联软删边界：relations/deltas 的**查询**模块 S3.2 才建——本卡只做级联软删所需 UPDATE。
 
-import type { EntityRow, EntitySummary, EntityType } from "@whispering233/ai-editor-shared";
+import type { EntityRow, EntitySummary, EntityType, RelationRow } from "@whispering233/ai-editor-shared";
 import { ENTITY_TYPES, generateEntityId } from "@whispering233/ai-editor-shared";
 import { nowIso } from "../storage/atomic.js";
 import { withTransaction, type Db } from "../connection.js";
+// relation.ts ↔ entity.ts 循环引用（relation.ts import getEntity）：仅函数调用期使用
+// RelationError/rowToRelationRow，无模块顶层求值依赖，ESM 运行时安全。
+import { RelationError, rowToRelationRow } from "./relation.js";
 
 /** 列表查询参数（endpoints.md 第 162-169 行；缺省值语义与路由层对齐） */
 export interface EntityListQuery {
@@ -148,11 +151,11 @@ export function listEntities(db: Db, query: EntityListQuery): EntityListResult {
   // 排序白名单（列名不可参数化，只允许枚举值；id 作次级排序保证稳定分页）
   const sortCol = query.sort === "name" ? "name" : query.sort === "created_at" ? "created_at" : "updated_at";
   const orderDir = query.order === "asc" ? "ASC" : "DESC";
-  // event（时间轴事件，决策 26）固定按 sort_order 升序、NULL 沉底（endpoints.md 契约：
-  // 列表恒按 sort_order 升序，sort/order 参数不参与事件排序）——SQLite 中
+  // event / timepoint（时间轴，决策 26 + G2）固定按 sort_order 升序、NULL 沉底（endpoints.md 契约：
+  // 列表恒按 sort_order 升序，sort/order 参数不参与排序）——SQLite 中
   // `sort_order IS NULL` 为 1 的排最后，实现 NULL 沉底；id 作稳定次序
   const eventOrderSql = "sort_order IS NULL, sort_order ASC, id ASC";
-  const orderSql = query.type === "event" ? eventOrderSql : `${sortCol} ${orderDir}, id ASC`;
+  const orderSql = query.type === "event" || query.type === "timepoint" ? eventOrderSql : `${sortCol} ${orderDir}, id ASC`;
   const offset = Math.max(0, Math.trunc(query.offset ?? 0));
   const limit = Math.min(200, Math.max(1, Math.trunc(query.limit ?? 50)));
 
@@ -350,6 +353,94 @@ export function reorderEvents(db: Db, orderedIds: string[], nowIsoTimestamp: str
     }
     return orderedIds.length;
   });
+}
+
+// ============ 时间标签点（G2，决策 26 修订）：listTimepoints / moveTimepoint / occurs_at 挂载 ============
+
+/**
+ * 全部未软删时间标签点（G2）：按 sort_order 升序（NULL 沉底，id 作稳定次序）——
+ * timepoint 的全局线性序（组间序），与 listAllEvents 的 event 语义同款。
+ * G2.2/2.3（时间轴渲染、AI 排序 propose_reorder_timepoints）共用，单一事实来源查询。
+ */
+export function listTimepoints(db: Db): EntityRow[] {
+  const rows = db
+    .prepare(
+      `SELECT * FROM entities WHERE type = 'timepoint' AND deleted_at IS NULL
+       ORDER BY sort_order IS NULL, sort_order ASC, id ASC`,
+    )
+    .all() as Array<Record<string, unknown>>;
+  return rows.map((r) => rowToEntityRow(r));
+}
+
+/**
+ * 移动时间标签点（PUT /api/v1/entity/timepoint/:id/move，G2，决策 26 修订）：
+ * 语义与 moveEvent 完全一致（timepoint 全局线性序 0..n-1）——
+ * 1. 读出全部未软删 timepoint 按 sort_order 升序（NULL 沉底，id 稳定次序）排成数组
+ * 2. 目标 id 不存在或已软删 → 返回 null（路由层映射 404）
+ * 3. 剔除自身后 order clamp 到 [0, 剩余数]，splice 插入
+ * 4. 重写整个数组 sort_order 为 0..n-1，仅被移动行刷新 updated_at（决策 14 版本戳语义）
+ *
+ * 注意：拖拽 timepoint **不改其下事件序**（双独立线性序，决策 26 G2 修订）——
+ * 本函数只碰 timepoint 行，event.sort_order 与 occurs_at 关系均不动。
+ * 事务：withTransaction 包住读改写（同 moveEvent，better-sqlite3 同步单连接无竞态）。
+ * @returns { moved: true }；timepoint 不存在或已软删返回 null
+ */
+export function moveTimepoint(db: Db, id: string, order: number, updatedAt: string): { moved: true } | null {
+  return withTransaction(db, () => {
+    const rows = db
+      .prepare(
+        `SELECT * FROM entities WHERE type = 'timepoint' AND deleted_at IS NULL
+         ORDER BY sort_order IS NULL, sort_order ASC, id ASC`,
+      )
+      .all() as Array<Record<string, unknown>>;
+    const idx = rows.findIndex((r) => r.id === id);
+    if (idx < 0) return null; // 不存在或已软删（决策 12 过滤）
+    const [moved] = rows.splice(idx, 1);
+    const pos = Math.max(0, Math.min(Math.trunc(order), rows.length));
+    rows.splice(pos, 0, moved);
+    const update = db.prepare("UPDATE entities SET sort_order = ?, updated_at = ? WHERE id = ?");
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i] as { id: string; updated_at: string };
+      update.run(i, row.id === id ? updatedAt : row.updated_at, row.id);
+    }
+    return { moved: true };
+  });
+}
+
+/**
+ * 事件当前挂载的时间点关系（G2 occurs_at，timepoint → event 1:n）：
+ * 查事件未软删的 occurs_at 挂载（source 为 timepoint 且 timepoint 本身未软删——
+ * timepoint 软删时其 occurs_at 被级联软删，此处 EXISTS 校验是防御纵深）。
+ * 供 1:n 挂载校验（assertEventSingleOccursAt）与前端展示（G2.3 时间轴渲染）使用。
+ * @returns 挂载关系（RelationRow，source_id = timepoint id）；未挂载/关系软删/timepoint 软删 → null
+ */
+export function eventOccursAt(db: Db, eventId: string): RelationRow | null {
+  const row = db
+    .prepare(
+      `SELECT r.* FROM relation_records r
+       WHERE r.target_type = 'event' AND r.target_id = ? AND r.relation_type = 'occurs_at'
+         AND r.deleted_at IS NULL AND r.source_type = 'timepoint'
+         AND EXISTS (SELECT 1 FROM entities e WHERE e.id = r.source_id AND e.deleted_at IS NULL)`,
+    )
+    .get(eventId) as Record<string, unknown> | undefined;
+  return row === undefined ? null : rowToRelationRow(row);
+}
+
+/**
+ * occurs_at 1:n 挂载校验（G2，决策 26 修订：一个事件至多挂一个时间点）：
+ * 建 occurs_at 前调用——事件已有未软删挂载 → 抛 RelationError（EVENT_ALREADY_MOUNTED，
+ * 与现有关系校验风格一致，G2.2 路由层 catch 映射 409）。
+ * 未挂载 → 无副作用（void），可继续建关系。
+ * @throws RelationError EVENT_ALREADY_MOUNTED（已挂载）
+ */
+export function assertEventSingleOccursAt(db: Db, eventId: string): void {
+  const mounted = eventOccursAt(db, eventId);
+  if (mounted !== null) {
+    throw new RelationError(
+      "EVENT_ALREADY_MOUNTED",
+      `事件已挂载时间点 ${mounted.source_id}，重复挂载拒绝（occurs_at 1:n 约束，G2）`,
+    );
+  }
 }
 
 /**

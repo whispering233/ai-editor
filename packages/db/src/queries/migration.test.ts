@@ -125,9 +125,9 @@ describe("ensureSchemaCompatible 版本不匹配 → 删库重建（决策 13）
     expect(readFileSync(join(dir, "outline.json.v0.bak"), "utf8")).toBe(outlineRawBefore);
   });
 
-  it("未来版本（user_version=3 > SCHEMA_VERSION）→ 拒绝打开：抛 SchemaVersionError、数据文件未动、无 .bak 备份（E4 堵降级数据丢失）", () => {
+  it("未来版本（user_version=4 > SCHEMA_VERSION）→ 拒绝打开：抛 SchemaVersionError、数据文件未动、无 .bak 备份（E4 堵降级数据丢失）", () => {
     // 模拟「用户安装新版后回退旧版程序」：高版本库 + 数据 + 大纲
-    setUserVersion(db, 3);
+    setUserVersion(db, 4);
     insertOldEntity(db, "char-1");
     writeOutlineFile(dir, oldTree());
     const outlineRawBefore = readFileSync(join(dir, OUTLINE_FILE_NAME), "utf8");
@@ -137,20 +137,20 @@ describe("ensureSchemaCompatible 版本不匹配 → 删库重建（决策 13）
       expect.unreachable("未来版本应拒绝打开");
     } catch (err) {
       expect(err).toBeInstanceOf(SchemaVersionError);
-      expect((err as SchemaVersionError).version).toBe(3);
+      expect((err as SchemaVersionError).version).toBe(4);
       expect((err as SchemaVersionError).current).toBe(SCHEMA_VERSION);
       expect((err as Error).message).toContain("高于当前程序版本");
     }
     // 拒绝分支：本次打开的连接已关闭（无句柄泄漏，afterEach 幂等）
     expect(db.open).toBe(false);
-    // 数据原封不动：无 .bak 备份生成、data.db 主文件仍在且 user_version 仍为 3、
+    // 数据原封不动：无 .bak 备份生成、data.db 主文件仍在且 user_version 仍为 4、
     // outline.json 字节原样、实体数据仍在（未触发任何重建/写操作）
-    expect(existsSync(join(dir, "data.db.v3.bak"))).toBe(false);
-    expect(existsSync(join(dir, "outline.json.v3.bak"))).toBe(false);
+    expect(existsSync(join(dir, "data.db.v4.bak"))).toBe(false);
+    expect(existsSync(join(dir, "outline.json.v4.bak"))).toBe(false);
     expect(readFileSync(join(dir, OUTLINE_FILE_NAME), "utf8")).toBe(outlineRawBefore);
     const reopened = openDatabase(dbPath);
     try {
-      expect(getUserVersion(reopened)).toBe(3);
+      expect(getUserVersion(reopened)).toBe(4);
       expect(countEntities(reopened)).toBe(1);
     } finally {
       closeDatabase(reopened);
@@ -181,10 +181,11 @@ describe("ensureSchemaCompatible 版本不匹配 → 删库重建（决策 13）
 // ============ ensureSchemaCompatible 旧版本迁移路径（E5 注入） ============
 
 describe("ensureSchemaCompatible 旧版本有迁移路径（E5）", () => {
-  it("user_version=0 + 注入迁移链（覆盖到 SCHEMA_VERSION=2）→ 前向迁移：数据保留、无重建备份、时间戳快照生成", () => {
+  it("user_version=0 + 注入迁移链（覆盖到 SCHEMA_VERSION）→ 前向迁移：数据保留、无重建备份、时间戳快照生成", () => {
     const migrations = [
       { version: 1, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN note TEXT") },
       { version: 2, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN extra TEXT") },
+      { version: 3, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN third TEXT") },
     ];
     insertOldEntity(db, "char-1");
     writeOutlineFile(dir, oldTree());
@@ -200,17 +201,18 @@ describe("ensureSchemaCompatible 旧版本有迁移路径（E5）", () => {
     // 数据保全：实体行仍在、outline 字节原样（重建会清空/重置）
     expect(countEntities(active)).toBe(1);
     expect(readFileSync(join(dir, OUTLINE_FILE_NAME), "utf8")).toBe(outlineRawBefore);
-    // 迁移副作用可见（note/extra 列已加）
+    // 迁移副作用可见（note/extra/third 列已加）
     const cols = active.prepare("PRAGMA table_info(entities)").all() as Array<{ name: string }>;
     expect(cols.some((c) => c.name === "note")).toBe(true);
     expect(cols.some((c) => c.name === "extra")).toBe(true);
+    expect(cols.some((c) => c.name === "third")).toBe(true);
     // 无删库重建备份（data.db.v0.bak 不带时间戳的不生成）、有迁移时间戳快照
     expect(existsSync(join(dir, "data.db.v0.bak"))).toBe(false);
     expect(result.backups[0]).toMatch(/data\.db\.v0\.\d{8}T\d{6}\.\d{3}Z\.bak$/);
     closeDatabase(active);
   });
 
-  it("user_version=0 + 默认迁移集（0→2 断链：无 v1 条目）→ 无迁移路径 → 重建兜底（E5 前行为不变）", () => {
+  it("user_version=0 + 默认迁移集（0→3 断链：无 v1 条目）→ 无迁移路径 → 重建兜底（E5 前行为不变）", () => {
     insertOldEntity(db, "char-1");
     writeOutlineFile(dir, oldTree());
 
@@ -223,8 +225,8 @@ describe("ensureSchemaCompatible 旧版本有迁移路径（E5）", () => {
   });
 
   it("迁移中途失败（ora-3 S2）→ 连接已关闭（open 未生效，不留句柄）+ 版本停步 + 快照保留", () => {
-    // 注入链覆盖到 SCHEMA_VERSION=2，v2 抛错——ensureSchemaCompatible 的
-    // targetVersion=SCHEMA_VERSION=2，迁移链首个失败即可覆盖「runMigrations 中途抛错」路径
+    // 注入链覆盖到 SCHEMA_VERSION，v2 抛错——ensureSchemaCompatible 的
+    // targetVersion=SCHEMA_VERSION，迁移链首个失败即可覆盖「runMigrations 中途抛错」路径
     const migrations = [
       { version: 1, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN note TEXT") },
       {
@@ -233,6 +235,7 @@ describe("ensureSchemaCompatible 旧版本有迁移路径（E5）", () => {
           throw new Error("migration boom");
         },
       },
+      { version: 3, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN third TEXT") },
     ];
     insertOldEntity(db, "char-1");
 

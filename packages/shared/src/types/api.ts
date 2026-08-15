@@ -139,14 +139,19 @@ export const hookDataSchema = z
   })
   .passthrough();
 
-/** event 专属字段（决策 26 时间轴事件：description/time_label/tags[]；字段名 snake_case） */
+/** event 专属字段（决策 26 时间轴事件：description/tags[]；字段名 snake_case） */
 export const eventDataSchema = z
   .object({
     description: z.string().optional(),
+    // time_label 暂保留（G2.3 随前端引用一并移除——G2.1 仅数据层迁移清理旧数据，
+    // 避免中间态 client typecheck 断裂；迁移 003 已从存量 event.data 移除该键）
     time_label: z.string().optional(),
     tags: z.array(z.string()).optional(),
   })
   .passthrough(); // 允许未知字段（创作工具，用户自定义字段自由）
+
+/** timepoint 专属字段（G2 时间标签点，决策 26 修订）：data 空——时间标签文本 = name，可重命名，YAGNI 不加 data 字段 */
+export const timepointDataSchema = z.object({}).passthrough();
 
 /**
  * 各类型 data schema 注册表（服务端按实体 type 选用精确 schema 校验）
@@ -159,6 +164,7 @@ export const ENTITY_DATA_SCHEMAS = {
   location: locationDataSchema,
   hook: hookDataSchema,
   event: eventDataSchema,
+  timepoint: timepointDataSchema, // G2 时间标签点：data 空
 } as const;
 
 // ============ project 端点（endpoints.md「项目管理」） ============

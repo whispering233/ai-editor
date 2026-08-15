@@ -7,13 +7,14 @@ import { nanoid } from "nanoid";
 import type { EntityType } from "../types/entity.js";
 import type { OutlineNodeType } from "../types/outline.js";
 
-/** 实体类型 → id 前缀（endpoints.md id 约定；event 时间轴事件 ev-，决策 26） */
+/** 实体类型 → id 前缀（endpoints.md id 约定；event 时间轴事件 ev-，决策 26；timepoint 时间标签点 tp-，G2） */
 export const ENTITY_ID_PREFIX: Record<EntityType, string> = {
   character: "char-",
   setting: "set-",
   location: "loc-",
   hook: "hook-",
   event: "ev-",
+  timepoint: "tp-",
 };
 
 /** 大纲节点类型 → id 前缀（endpoints.md id 约定；root 不生成 id） */
