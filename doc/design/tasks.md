@@ -337,6 +337,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - 依赖：无（可并行 F3 之后实施，避免同文件冲突）
 - 验证：手工走查（浅/深主题下对比度）
 - 回滚：单 commit
+- **状态（2026-08）**：✅ 已完成（commit `e1673c0`；事件行内时间标签 `text-sm font-medium text-primary`（第二信息层级，与 tags 胶囊/组标题实色均区分）+ 未标注占位 `text-xs italic text-muted-foreground`；仅样式改动零 API 变化，client 488 用例全绿 + typecheck/lint 通过）。
 
 ### F6 时间轴列表显示完整描述（交互优化，2026-08 用户反馈）
 
