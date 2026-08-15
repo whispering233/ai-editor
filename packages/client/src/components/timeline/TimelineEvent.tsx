@@ -1,7 +1,9 @@
-// 时间轴事件行（F4，timeline.md 时间点分组线框：组内事件堆叠）
+// 时间轴事件行（F4，timeline.md 时间点分组线框：组内事件堆叠；F5 时间标签样式提升）
 // 职责：纯展示——组内事件行 = 小圆点 + 内容卡（事件名 → 时间标签 → tags → 「N 节点」→ ⋯ 菜单）。
 // 拖拽归组块级（TimelineGroup 根 draggable），本行**不 draggable 防误拖**（F4 线框），故无拖拽柄。
-// 行内时间标签样式保持 F3 现状（text-xs text-muted-foreground）——样式提升属 F5 卡范围，本卡不碰。
+// 行内时间标签（F5）：有值 → 主题色点缀 `text-sm font-medium text-primary`（第二信息层级，仅次于
+//   事件名；与 tags 胶囊 bg-muted 灰、组标题 text-foreground 实色均区分）；空 → 「未标注时间」占位
+//   弱化样式（text-xs italic text-muted-foreground）——已标注/未标注一眼可辨。
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -42,9 +44,13 @@ export function TimelineEvent({ ev, occursCount, hasOccursData, onDetail, onEdit
           <span className="min-w-0 truncate font-medium text-foreground" title={ev.name}>
             {ev.name}
           </span>
-          <span className="shrink-0 text-xs text-muted-foreground">
-            {timeLabel !== "" ? timeLabel : "未标注时间"}
-          </span>
+          {/* 时间标签（F5 提升）：有值 → 主题色点缀（text-sm font-medium text-primary）；
+              空 → 弱化占位（text-xs italic text-muted-foreground）——层级对比见文件头注释 */}
+          {timeLabel !== "" ? (
+            <span className="shrink-0 text-sm font-medium text-primary">{timeLabel}</span>
+          ) : (
+            <span className="shrink-0 text-xs italic text-muted-foreground">未标注时间</span>
+          )}
           {tags.map((tag) => (
             <span key={tag} className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
               {tag}
