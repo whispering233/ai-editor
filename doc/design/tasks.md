@@ -15,9 +15,9 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 
 ## 项目状态（2026-08）
 
-- **完成**：阶段 A 地基 + 切片 1-9、12、13 + 阶段 U（U1-U8）+ 交互修复批次 + 切片 10 画布（S10.1）+ 切片 11 发布（S11.1-S11.3）+ 发布阻断项 E1-E6（导出/导入、未来版本拒绝重建、增量迁移、发布链路 OIDC 全绿）+ 阶段 B 项目提示词编辑（B1，决策 24/25）+ **阶段 C 时间轴（C1-C4，决策 26）** + 画布增强批次（S10.2-S10.5，inkos 参考）+ 交互优化批次（UX1-UX4，用户实测反馈）+ **阶段 B2 自动备份与恢复（B2.1-B2.4，决策 27）** + **B2.5 备份命名增强（毫秒精度 + 自定义名称，决策 28）**——详见「项目演进路线」。
+- **完成**：阶段 A 地基 + 切片 1-9、12、13 + 阶段 U（U1-U8）+ 交互修复批次 + 切片 10 画布（S10.1）+ 切片 11 发布（S11.1-S11.3）+ 发布阻断项 E1-E6（导出/导入、未来版本拒绝重建、增量迁移、发布链路 OIDC 全绿）+ 阶段 B 项目提示词编辑（B1，决策 24/25）+ **阶段 C 时间轴（C1-C4，决策 26）** + 画布增强批次（S10.2-S10.5，inkos 参考）+ 交互优化批次（UX1-UX4，用户实测反馈）+ **阶段 B2 自动备份与恢复（B2.1-B2.4，决策 27）** + **B2.5 备份命名增强（毫秒精度 + 自定义名称，决策 28）** + **用户反馈批次 F1-F9（2026-08 实测：Bug 2 项——事件字段清空语义 / 自动备份漏检 data.db-WAL；交互优化 4 项——垂直时间轴 UI / 同标签归组 / 时间标签样式 / 行内完整描述；新需求 3 项——三栏可收起拖宽 / 标签输入建议 / LLM 时间标签排序提案）**——详见「项目演进路线」。
 - **待做**：无（MVP 与阶段 A/B/C/B2 全部完成；可选收尾 = npm 坏版本 v0.0.1/v0.0.2 deprecate 标注——需 2FA 凭据，见 E6 卡）；backlog 事项一律不做。
-- **测试**：全仓 1472 个（shared 120 / llm 59 / db 219 / server 292 / client 463 / tools 225 / agent 94）。
+- **测试**：全仓 1561 个（shared 131 / llm 59 / db 224 / server 313 / client 503 / tools 237 / agent 94）。
 - 已完成卡片的详细规格已归档（git history 可回溯）；「项目演进路线」提供脉络摘要，配合 `decisions.md`（决策 1-28 为设计主轴）理解现状。
 
 ## 执行进度（Todo）
@@ -373,3 +373,4 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - 依赖：F3/F4（UI 承载）后实施
 - 验证：shared/tools/agent 测试（schema 校验/PROPOSAL_BUILDERS 完整性断言/executor 重排/STALE）+ client 测试（如 PROPOSAL_TYPE_LABELS）+ 手工走查（聊天让 AI 排序 → 提案卡 → 确认 → 时间轴重排；拖拽改序后 AI 排序 STALE）
 - 回滚：单 commit（实现分两个 commit：服务端链路 + 前端入口，可按卡拆）
+- **状态（2026-08）**：✅ 已完成（commit `2e4297d`；propose_reorder_events 提案工具全链路：shared schema + PROPOSAL_TOOLS/EXECUTOR_TOOLS 登记 + tools build/run（集合完全相等校验/references updated_at 快照/preview.changes 位移说明/tool_result 无预览）+ executor（db reorderEvents 事务重排 sort_order 0..n-1）+ agent PROPOSAL_BUILDERS + server SSE preview 透传 + client「AI 排序」按钮注入聊天 + 提案卡文案；拖拽改序后旧提案 409 PROPOSAL_STALE 闭环；oracle 审核通过（无 P0/P1，P2 五项前三已修）；全仓 1561 用例全绿（shared 131 / llm 59 / db 224 / tools 237 / agent 94 / server 313 / client 503）+ typecheck/lint 通过）。手工验收：`pnpm start:test-project` → 时间轴页「AI 排序」→ 聊天生成提案 → 确认后重排；先拖拽改序再确认 → 409 STALE。
