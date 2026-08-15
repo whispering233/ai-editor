@@ -7,7 +7,7 @@
 //
 // 摘要字段提取（endpoints.md 第 184-188 行）：**行内解析**（SELECT 整行 → JSON.parse → JS 提取）——
 //   character → role/status、setting → category、location → type、hook → status/payoff_timing、
-//   event → description/time_label/tags（决策 26）；
+//   event → description/tags（决策 26）；
 //   取舍：json_extract 免全量 parse 但需按类型动态列，SQL 复杂化；MVP 数据量小，行内解析
 //   与 better-sqlite3 字符串列一致（chat.ts 同款风格），数据量大后再优化。
 // 级联软删边界：relations/deltas 的**查询**模块 S3.2 才建——本卡只做级联软删所需 UPDATE。
@@ -64,11 +64,10 @@ function toSummary(row: EntityRow): EntitySummary {
       if (data.status !== undefined) summary.status = data.status;
       if (data.payoff_timing !== undefined) summary.payoff_timing = data.payoff_timing;
       break;
-    // event（决策 26）：description/time_label/tags 三字段摘要（endpoints.md L269 契约；
+    // event（决策 26）：description/tags 两字段摘要（endpoints.md L269 契约；
     // tags 为数组原样返回——Record 稀疏语义，字段缺失即不出现）
     case "event":
       if (data.description !== undefined) summary.description = data.description;
-      if (data.time_label !== undefined) summary.time_label = data.time_label;
       if (data.tags !== undefined) summary.tags = data.tags;
       break;
   }
@@ -305,61 +304,11 @@ export function moveEvent(db: Db, id: string, order: number, updatedAt: string):
   });
 }
 
-/**
- * 全部未软删时间轴事件（决策 26）：按 sort_order 升序（NULL 沉底，id 作稳定次序）。
- * moveEvent / reorderEvents / 工具层（propose_reorder_timepoints 之外的事件排序场景）共用——
- * 事件排序的单一事实来源查询，避免各处手写同款 SQL。
- */
-export function listAllEvents(db: Db): EntityRow[] {
-  const rows = db
-    .prepare(
-      `SELECT * FROM entities WHERE type = 'event' AND deleted_at IS NULL
-       ORDER BY sort_order IS NULL, sort_order ASC, id ASC`,
-    )
-    .all() as Array<Record<string, unknown>>;
-  return rows.map((r) => rowToEntityRow(r));
-}
-
-/**
- * 批量重排时间轴事件（F9，决策 26 修订注记：LLM 识别 time_label 语义排序 → 提案确认后执行）：
- * 1. 事务内读出当前全部未软删 event id 集合（listAllEvents 同款序）
- * 2. **校验 orderedIds 与当前集合完全相等**（缺/多/重复 → 抛错）——正常由提案 references
- *    快照校验先拦截（决策 14），此处为防御纵深（LLM 幻觉漏事件 / 确认前用户已拖拽增删）
- * 3. 按 orderedIds 序重写全部事件 sort_order 0..n-1
- * 4. **全部事件 updated_at 统一刷新为 nowIso**——批量重排是**全量变化**（每个事件的位置
- *    都是新序的一环），与 moveEvent 只刷被移单行（决策 14 版本戳语义）区分
- *
- * @returns 重排事件数（n）
- */
-export function reorderEvents(db: Db, orderedIds: string[], nowIsoTimestamp: string): number {
-  return withTransaction(db, () => {
-    const rows = listAllEvents(db);
-    const currentIds = new Set(rows.map((r) => r.id));
-    const orderedSet = new Set(orderedIds);
-    // 缺失 = 当前集合有而新序没有（漏事件，LLM 幻觉）；多余 = 新序含当前集合没有的 id（不存在/已软删）
-    const missing = rows.map((r) => r.id).filter((id) => !orderedSet.has(id));
-    const extra = orderedIds.filter((id) => !currentIds.has(id));
-    if (orderedSet.size !== orderedIds.length || missing.length > 0 || extra.length > 0) {
-      const dup = orderedSet.size !== orderedIds.length ? "（含重复）" : "";
-      const brief = (ids: string[]): string =>
-        ids.length === 0 ? "" : `（${ids.slice(0, 5).join(", ")}${ids.length > 5 ? "…" : ""}）`;
-      throw new Error(
-        `事件集合与当前时间轴不一致${dup}: 缺失 ${missing.length} 个${brief(missing)}、多余 ${extra.length} 个${brief(extra)}`,
-      );
-    }
-    const update = db.prepare("UPDATE entities SET sort_order = ?, updated_at = ? WHERE id = ?");
-    for (let i = 0; i < orderedIds.length; i++) {
-      update.run(i, nowIsoTimestamp, orderedIds[i]);
-    }
-    return orderedIds.length;
-  });
-}
-
 // ============ 时间标签点（G2，决策 26 修订）：listTimepoints / moveTimepoint / occurs_at 挂载 ============
 
 /**
  * 全部未软删时间标签点（G2）：按 sort_order 升序（NULL 沉底，id 作稳定次序）——
- * timepoint 的全局线性序（组间序），与 listAllEvents 的 event 语义同款。
+ * timepoint 的全局线性序（组间序），与 listEntities 的 event 查询同款语义。
  * G2.2/2.3（时间轴渲染、AI 排序 propose_reorder_timepoints）共用，单一事实来源查询。
  */
 export function listTimepoints(db: Db): EntityRow[] {

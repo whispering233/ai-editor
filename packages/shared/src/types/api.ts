@@ -144,9 +144,6 @@ export const hookDataSchema = z
 export const eventDataSchema = z
   .object({
     description: z.string().optional(),
-    // time_label 暂保留（G2.3 随前端引用一并移除——G2.1 仅数据层迁移清理旧数据，
-    // 避免中间态 client typecheck 断裂；迁移 003 已从存量 event.data 移除该键）
-    time_label: z.string().optional(),
     tags: z.array(z.string()).optional(),
   })
   .passthrough(); // 允许未知字段（创作工具，用户自定义字段自由）

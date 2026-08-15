@@ -15,12 +15,10 @@ import {
   eventOccursAt,
   getEntity,
   getEntitySummaryStats,
-  listAllEvents,
   listEntities,
   listTimepoints,
   moveEvent,
   moveTimepoint,
-  reorderEvents,
   reorderTimepoints,
   softDeleteEntity,
   updateEntity,
@@ -452,16 +450,15 @@ describe("listEntities event（时间轴事件固定排序，决策 26）", () =
     expect(res.items.map((i) => i.name)).toEqual(["事件B", "事件C"]); // 仍按 sort_order 0,1
   });
 
-  it("event 摘要字段提取：description/time_label/tags（endpoints.md L269 契约；字段缺失不出现）", () => {
+  it("event 摘要字段提取：description/tags（endpoints.md L269 契约；字段缺失不出现）", () => {
     seedEvents(["事件A", "事件B"], [0, 1]);
     db.prepare("UPDATE entities SET data = ? WHERE name = '事件A'").run(
-      JSON.stringify({ description: "藏经阁发现玉佩", time_label: "第一卷·第 3 章", tags: ["主线", "伏笔"] }),
+      JSON.stringify({ description: "藏经阁发现玉佩", tags: ["主线", "伏笔"] }),
     );
     const res = listEntities(db, { type: "event" });
     const a = res.items.find((i) => i.name === "事件A")!;
     expect(a.summary).toEqual({
       description: "藏经阁发现玉佩",
-      time_label: "第一卷·第 3 章",
       tags: ["主线", "伏笔"],
     });
     // 字段缺失不出现（稀疏语义）——事件B 无 data
@@ -583,99 +580,6 @@ describe("moveEvent（PUT /api/v1/entity/event/:id/move，决策 26）", () => {
   it("非 event 类型实体不受影响（moveEvent 只处理 event 行）", () => {
     const char = createEntity(db, { type: "character", name: "张三" });
     expect(moveEvent(db, char.id, 0, "2026-08-02T00:00:00Z")).toBeNull();
-    expect(getEntity(db, char.id)).not.toBeNull(); // character 行未被触碰
-  });
-});
-
-describe("reorderEvents（F9 批量重排：LLM 排序提案确认后执行，决策 26 修订注记）", () => {
-  /** 造 n 个 event，sort_order 0..n-1；返回 id 数组（按序） */
-  function seedEvents(n: number): string[] {
-    const ids: string[] = [];
-    for (let i = 0; i < n; i++) {
-      const id = `ev-reorder-${i}`;
-      ids.push(id);
-      db.prepare(
-        `INSERT INTO entities (id, type, name, sort_order, created_at, updated_at)
-         VALUES (?, 'event', ?, ?, ?, ?)`,
-      ).run(id, `事件${i}`, i, "2026-08-01T00:00:00Z", "2026-08-01T00:00:00Z");
-    }
-    return ids;
-  }
-
-  it("正常重排：按新序重写 sort_order 0..n-1，全部事件 updated_at 刷新为传入时间戳（全量变化语义）", () => {
-    const ids = seedEvents(4); // [0,1,2,3]
-    const newOrder = [ids[3], ids[1], ids[0], ids[2]];
-    expect(reorderEvents(db, newOrder, "2026-08-02T00:00:00Z")).toBe(4);
-    expect(listAllEvents(db).map((r) => r.id)).toEqual(newOrder);
-    // 全部事件 updated_at 统一刷新（与 moveEvent 只刷单行区分——批量重排全量变化）
-    const rows = db
-      .prepare("SELECT id, updated_at FROM entities WHERE type = 'event'")
-      .all() as Array<{ id: string; updated_at: string }>;
-    expect(rows.every((r) => r.updated_at === "2026-08-02T00:00:00Z")).toBe(true);
-    // sort_order 列已重写为连续 0..n-1
-    const orders = db
-      .prepare("SELECT sort_order FROM entities WHERE type = 'event' ORDER BY sort_order")
-      .all() as Array<{ sort_order: number }>;
-    expect(orders.map((o) => o.sort_order)).toEqual([0, 1, 2, 3]);
-  });
-
-  it("集合不一致 → 抛错且零副作用（缺事件 / 多事件 / 重复 id 均拒绝）", () => {
-    const ids = seedEvents(3);
-    // 缺一个事件（LLM 幻觉漏事件）
-    expect(() => reorderEvents(db, [ids[2], ids[0]], "2026-08-02T00:00:00Z")).toThrow(/事件集合与当前时间轴不一致.*缺失 1 个/);
-    // 多一个不存在的 id
-    expect(() => reorderEvents(db, [ids[2], ids[1], ids[0], "ev-999"], "2026-08-02T00:00:00Z")).toThrow(
-      /事件集合与当前时间轴不一致.*多余 1 个/,
-    );
-    // 重复 id
-    expect(() => reorderEvents(db, [ids[0], ids[1], ids[0]], "2026-08-02T00:00:00Z")).toThrow(/事件集合与当前时间轴不一致.*含重复/);
-    // 零副作用：原序未被改动
-    expect(listAllEvents(db).map((r) => r.id)).toEqual(ids);
-  });
-
-  it("软删事件不参与集合（决策 12 过滤）：软删后必须从新序中剔除，否则抛错", () => {
-    const ids = seedEvents(3);
-    softDeleteEntity(db, ids[1], "2026-08-02T00:00:00Z");
-    // 新序含已软删事件 → 缺失集合校验（软删 id 不在当前集合中）
-    expect(() => reorderEvents(db, [ids[1], ids[0], ids[2]], "2026-08-02T00:00:00Z")).toThrow(/事件集合与当前时间轴不一致/);
-    // 按剩余未软删事件提供新序 → 正常重排（软删行不被触碰）
-    expect(reorderEvents(db, [ids[2], ids[0]], "2026-08-02T00:00:00Z")).toBe(2);
-    expect(listAllEvents(db).map((r) => r.id)).toEqual([ids[2], ids[0]]);
-    // 软删行仍保留（可回收站还原），sort_order 未被重写
-    const raw = db.prepare("SELECT sort_order, deleted_at FROM entities WHERE id = ?").get(ids[1]) as {
-      sort_order: number;
-      deleted_at: string;
-    };
-    expect(raw.deleted_at).toBe("2026-08-02T00:00:00Z");
-    expect(raw.sort_order).toBe(1);
-  });
-
-  it("NULL sort_order 沉底参与重排：旧数据（迁移来的 NULL 序）可整体重排并清零", () => {
-    const ids: string[] = [];
-    const inserts: Array<[string, number | null]> = [
-      ["ev-null-0", null],
-      ["ev-null-1", null],
-      ["ev-1", 1],
-    ];
-    for (const [id, sort] of inserts) {
-      ids.push(id);
-      db.prepare(
-        `INSERT INTO entities (id, type, name, sort_order, created_at, updated_at) VALUES (?, 'event', ?, ?, ?, ?)`,
-      ).run(id, id, sort, "2026-08-01T00:00:00Z", "2026-08-01T00:00:00Z");
-    }
-    // 当前序（NULL 沉底）：ev-1 → ev-null-0 → ev-null-1；重排为新序
-    const newOrder = [ids[1], ids[0], ids[2]];
-    expect(reorderEvents(db, newOrder, "2026-08-02T00:00:00Z")).toBe(3);
-    expect(listAllEvents(db).map((r) => r.id)).toEqual(newOrder);
-    const orders = db
-      .prepare("SELECT sort_order FROM entities WHERE type = 'event' ORDER BY sort_order")
-      .all() as Array<{ sort_order: number }>;
-    expect(orders.map((o) => o.sort_order)).toEqual([0, 1, 2]); // NULL 清零
-  });
-
-  it("非 event 类型实体不受影响（reorderEvents 只处理 event 行）", () => {
-    const char = createEntity(db, { type: "character", name: "张三" });
-    expect(() => reorderEvents(db, [char.id], "2026-08-02T00:00:00Z")).toThrow(/事件集合与当前时间轴不一致/);
     expect(getEntity(db, char.id)).not.toBeNull(); // character 行未被触碰
   });
 });

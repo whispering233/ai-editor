@@ -8,7 +8,7 @@
 //     同事务补插 plants 关系（提案承诺「确认后建立 plants 关系」，hooks.md 生命周期「埋下」）
 //   - propose_update_hook → update_entity（hook_id 即 entity_id，patches 浅合并进 data）
 //   propose_reorder_timepoints → reorder_timepoints（G2：批量重排 sort_order，见 executor/reorder-timepoints.ts，
-//   取代 F9 的 propose_reorder_events → reorder_events——事件不再带 time_label，语义序载体变为时间点实体）
+//   取代 F9 的 propose_reorder_events——事件不再带 time_label，语义序载体变为时间点实体）
 //
 // **不注册 registry**：执行类是用户确认后由本门面调用的底层写路径，**不暴露给 LLM**
 // （tools.md「核心设计原则」——AI 不可以调用执行类工具）。

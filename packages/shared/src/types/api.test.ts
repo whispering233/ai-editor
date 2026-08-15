@@ -257,15 +257,13 @@ describe("entity 端点", () => {
 });
 
 describe("event 时间轴契约（决策 26）", () => {
-  it("eventDataSchema：description/time_label/tags 全字段通过（字段名 snake_case）", () => {
+  it("eventDataSchema：description/tags 全字段通过（字段名 snake_case）", () => {
     const parsed = eventDataSchema.parse({
       description: "张三在藏经阁发现玉佩",
-      time_label: "第一卷·第 3 章",
       tags: ["主线", "伏笔"],
     });
     expect(parsed).toEqual({
       description: "张三在藏经阁发现玉佩",
-      time_label: "第一卷·第 3 章",
       tags: ["主线", "伏笔"],
     });
   });

@@ -358,10 +358,9 @@ describe("event 时间轴（C2，决策 26）", () => {
   it("泛型 CRUD：创建（data 精校验）→ 列表（summary 三字段）→ 详情 → 更新 → 软删 → 回收站还原", async () => {
     openProject();
     const app = buildApp();
-    // 创建：合法 data 通过（eventDataSchema：description/time_label/tags + passthrough）
+    // 创建：合法 data 通过（eventDataSchema：description/tags + passthrough）
     const { id } = await createEvent(app, "藏经阁发现玉佩", {
       description: "张三在藏经阁发现玉佩",
-      time_label: "第一卷·第 3 章",
       tags: ["主线", "伏笔"],
     });
     expect(id).toMatch(/^ev-/);
@@ -371,13 +370,12 @@ describe("event 时间轴（C2，决策 26）", () => {
       jsonRequest("POST", "", { name: "坏事件", data: { tags: "主线" } }),
     );
     expect(bad.status).toBe(400);
-    // 列表：summary 含三字段（C1 契约，endpoints.md L269）
+    // 列表：summary 含两字段（C1 契约，endpoints.md L269）
     const listRes = await app.request("/api/v1/entity/event", { headers: HOST_HEADERS });
     const listBody = (await listRes.json()) as { data: { items: Array<Record<string, unknown>>; total: number } };
     expect(listBody.data.total).toBe(1);
     expect(listBody.data.items[0].summary).toEqual({
       description: "张三在藏经阁发现玉佩",
-      time_label: "第一卷·第 3 章",
       tags: ["主线", "伏笔"],
     });
     // 详情：data 完整 + deltaCount 0 + relations 空
@@ -394,7 +392,7 @@ describe("event 时间轴（C2，决策 26）", () => {
     expect(upd.status).toBe(200);
     const detail2 = await app.request(`/api/v1/entity/event/${id}`, { headers: HOST_HEADERS });
     const body2 = (await detail2.json()) as { data: { data: Record<string, unknown> } };
-    expect(body2.data.data).toEqual({ description: "玉佩被夺", time_label: "第一卷·第 3 章", tags: ["主线", "伏笔"] });
+    expect(body2.data.data).toEqual({ description: "玉佩被夺", tags: ["主线", "伏笔"] });
     // 软删 → 列表不可见（决策 12）
     const del = await app.request(`/api/v1/entity/event/${id}`, { method: "DELETE", headers: HOST_HEADERS });
     expect(del.status).toBe(200);
@@ -616,7 +614,7 @@ describe("timepoint 时间轴（G2，决策 26 修订）", () => {
     expect(rels).toHaveLength(1);
     expect(rels[0]).toMatchObject({ sourceId: tp1, relationType: "occurs_at" });
     expect(rels[0].id).not.toBe(oldRelId);
-    // 事件全局序已重排：e0 在第 1 位（listAllEvents 语义经列表端点验证）
+    // 事件全局序已重排：e0 在第 1 位（事件排序语义经列表端点验证）
     const evRes = await app.request("/api/v1/entity/event", { headers: HOST_HEADERS });
     const evBody = (await evRes.json()) as { data: { items: Array<{ id: string }> } };
     expect(evBody.data.items.map((i) => i.id)).toEqual([e1, e0]);
