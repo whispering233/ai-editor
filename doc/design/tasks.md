@@ -346,6 +346,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - 依赖：无（与 F3/F5 同文件，排在 F3 之后）
 - 验证：手工走查（长描述截断/展开）+ 相关 lib 测试（如有）
 - 回滚：单 commit
+- **状态（2026-08）**：✅ 已完成（commit `2d12e05`；事件行描述区两行截断 line-clamp-2 + 「展开」仅超两行显示（clamp 态 scrollHeight > clientHeight 运行时测量）+ 收起 + 空描述不渲染；lib 新增 `eventDescription` 防御纯函数 + 测试；oracle 审核 P1 展开态 resize 重测污染修复（guard expanded + 依赖含 expanded）+ P2 四项（useLayoutEffect 消除 CLS / 按钮 draggable={false} / timeline.md 行布局同步 / 纯空白 trim）全部落实；client 489 用例全绿 + typecheck/lint 通过）。
 
 ### F7 三栏可收起/展开 + 拖拽调宽（新需求，2026-08 用户反馈）
 
