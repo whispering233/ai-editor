@@ -303,9 +303,36 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - 回滚：单 commit
 - **状态（2026-08）**：✅ 已完成（commit 待填；根容器 `flex h-full min-h-0 flex-col`——固定区（header + 标签筛选器，滚动时恒可见）+ 滚动区（`min-h-0 flex-1 overflow-y-auto` 收纳错误横幅/骨架/空态/列表/无匹配）；Dialog portal 留在滚动区外；oracle 审核通过（P0/P1 无；P2-1 卡片措辞已同步「MainPanel 零改动」/ P2-2 行为说明：滚动容器从 MainPanel 常驻 div 变为页内 div——切 tab 滚动位置重置、消除跨页滚动污染，属独立滚动自然结果）；client 503 用例全绿 + typecheck/lint/build 通过）。
 
-### G2 时间标签点/事件数据模型重构（设计讨论中，2026-08 用户提出）
+### G2 时间标签点/事件数据模型重构（设计已定稿，2026-08 用户裁决，决策 26 修订）
 
-- 范围：**时间标签从 event.data 剥离为独立实体**（新实体类型，如 `timepoint`）——时间轴上先定义时间标签点，再在时间点下新建/挂载事件；事件与时间点 1:n 关系（如 `occurs_at`）；时间点整体可拖拽（独立序）、单条事件任意可拖拽（不绑定时间标签，保存时额外存时间点↔事件关系）。涉及：schema 迁移（SCHEMA_VERSION 2→3）、实体体系扩展（ENTITY_TYPES/关系类型/id 前缀）、F1/F4 已实现能力的适配（清空语义/分组/展示）、F9 propose_reorder_events 适配、前端拖拽双轨（时间点序 + 事件序）。**待设计讨论达成共识后切卡**（决策 26 修订注记更新）。
+> **设计定稿（12 项决策，2026-08 用户逐项确认）**：① 新实体类型 `timepoint`（id 前缀 `tp-`，name = 时间标签文本，data 空）；② 挂载 = 通用关系表 `occurs_at`（timepoint→event，1:n，事件至多挂一个，服务端校验）；③ 双独立线性序（timepoint.sort_order 组间序 + event.sort_order 组内排序键，拖拽时间点不动其下事件序）；④ 跨组拖拽事件 = 即改挂载（旧 occurs_at 移除 + 新建立 + 事件 move 插入，一次性提交无确认弹窗）；⑤ 旧数据迁移 SCHEMA_VERSION 2→3（同名 time_label 合并为同一 timepoint + occurs_at + 从 event.data 移除 time_label；无标签事件不建关系）；⑥ 未挂载兜底区（列表末尾，可拖入任一时间点）；⑦ 移除 `propose_reorder_events`；⑧ 新增 `propose_reorder_timepoints`（LLM 按时间点 name 语义排序，提案确认）；⑨ 新建交互双入口 + 组内新建（header「+ 新建时间点」、时间点组内「+ 在此时间点新建事件」（自动挂载）、顶部「+ 新建事件」= 不挂载入未挂载区）；⑩ 时间点可重命名；⑪ 删除时间点 = 软删 + 事件脱钩（级联软删 occurs_at，事件变未挂载）；⑫ AI 排序入口文案改时间点。契约：decisions.md 决策 26 G2 修订注记 / schema.md（SCHEMA_VERSION 3）/ endpoints.md（6 类型、timepoint move 端点、occurs_at）/ tools.md（propose_reorder_timepoints）/ timeline.md（双实体 UI 线框）——**文档已全部定稿**。拆卡实施如下（依赖序）。
+
+**G2.1 数据层：timepoint 实体 + occurs_at + 迁移（shared + db）**
+- 范围：shared `ENTITY_TYPES` 加 `'timepoint'`、`RELATION_TYPES` 加 `'occurs_at'`、`ENTITY_ID_PREFIX` 加 `tp-`、`timepointDataSchema`（空 data）、entity list 查询 type 联合更新；db `schema.ts` SCHEMA_VERSION 2→3 + entities CHECK 扩 `'timepoint'`（建新表拷贝四步）；`migrations/003_timepoint.ts`（同名 time_label 合并建 timepoint + occurs_at 关系 + 移除 event.data.time_label，事务内失败回滚）；查询层：`moveTimepoint`（同 moveEvent 语义）、`listTimepoints`（按 sort_order 升序）、occurs_at 1:n 校验 helper（事件至多一挂载）；eventDataSchema 移除 `time_label`（shared + db）
+- 文档：已定稿（schema.md/endpoints.md/decisions.md）
+- 依赖：无（F1-F9 已全部落地）
+- 验证：db 迁移测试（v2 旧库 → v3 迁移正确性：同名合并/无标签不建关系/软删事件跳过）、moveTimepoint 测试、shared 测试 + `pnpm -r test` + typecheck + lint
+- 回滚：单 commit
+
+**G2.2 服务端与 AI：move 端点 + 挂载校验 + 工具替换（server + tools + agent）**
+- 范围：server `PUT /entity/timepoint/:id/move` 端点（复用 entityMoveReqSchema）+ 跨组挂载复合写端点或前端按序调用（以实现简单为准：先关系后 move 两次调用，事务由 db 层保证——若拆两次调用则非事务，需评估；**推荐服务端复合写端点 `POST /entity/event/:id/move_to` 或事务内完成，实现时裁决**）；occurs_at 建关系校验（事件至多一个挂载，重复 409 或先移除旧关系）；tools 移除 `propose_reorder_events`（proposal 模块/executor/注册/PROPOSAL_BUILDERS/测试全链路删）→ 新增 `propose_reorder_timepoints`（照 F9 reorder-events 模式：build 集合校验 + references 快照 + preview.changes + executor 调 moveTimepoint/批量重排）；server 工具数断言 33→33（一删一增）
+- 文档：已定稿（endpoints.md/tools.md）
+- 依赖：G2.1
+- 验证：server/tools/agent 测试（move 端点/挂载校验/新工具 build/executor/旧工具删除断言）+ `pnpm -r test` + typecheck + lint
+- 回滚：单 commit
+
+**G2.3 前端时间轴重构：双实体 UI + 双轨拖拽 + 双入口（client）**
+- 范围：Timeline.tsx 列表区重构为「时间点组块（可拖/重命名/折叠/组内新建）+ 事件行（可拖/跨组改挂载）+ 未挂载兜底区」；header 加「+ 新建时间点」；组尾「+ 在此时间点新建事件」；事件行移除时间标签展示（F5 样式迁移到组标题已覆盖）、描述区保持（F6）；拖拽双轨（时间点 move / 事件 move / 跨组复合）；AI 排序按钮文案与注入指令改「时间点排序」（propose_reorder_timepoints）；详情页字段表单移除 time_label + 增加挂载时间点选择器；F8 标签建议不变；F1 清空语义适配（time_label 移除后仅 description/tags）
+- 文档：已定稿（timeline.md）
+- 依赖：G2.1 + G2.2
+- 验证：client 测试（分组/拖拽纯函数更新、挂载选择器）+ `pnpm -r test` + typecheck + lint + 手工走查（新建时间点→组内新建→拖拽双轨→跨组挂载→重命名→软删脱钩→AI 排序提案→迁移后旧数据正确显示）
+- 回滚：单 commit（或按需再拆）
+
+**G2.4 收尾：文档与状态同步**
+- 范围：tasks.md 状态行、AGENTS.md 状态行（决策 26 修订、SCHEMA_VERSION 3、工具目录）、release-review.md（如需要）、CHANGELOG
+- 依赖：G2.1-G2.3 全部完成
+- 验证：文档一致性走查
+- 回滚：单 commit
 
 > **背景**：产品使用中发现 9 项问题/需求。用户裁决（2026-08）：先分类——**Bug 2 项**（F1 时间标签无法清除、F2 修改时间轴不触发自动备份）、**交互优化 4 项**（F3 垂直时间轴 UI / F4 同时间标签归组 / F5 时间标签字体颜色 / F6 列表显示完整描述）、**新需求 3 项**（F7 三栏可收起/拖拽调宽 / F8 编辑时已存在标签提示 / F9 LLM 识别时间标签排序提案）；按 Bug → 交互优化 → 新需求顺序**逐张单点实施**（不合并），每张走「文档 → 任务卡 → 实现 → 验证 → 清理」。时间轴 UI（F3）形态裁决：**垂直轴线 + 时间点分组**（组标题 = time_label，组内堆叠；组间按拖拽 sort_order 序）；F3 前先调研 GitHub/流行组件是否可直接引入（lib-1）。
 

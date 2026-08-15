@@ -366,17 +366,20 @@
 
 > **软删过滤（决策 12 修订）**：常规查询端点（GET 列表/详情、关系查询、Delta 查询等）**默认过滤软删对象**；回收站 API（`/api/v1/trash/*`）是访问软删对象的唯一入口。
 
-> **实体类型（决策 26 扩展，2026-08）**：`type` 现支持 **5 种**——`character` / `setting` / `location` / `hook` / **`event`（事件，时间轴）**。event 完全复用本章节泛型端点（列表/详情/创建/更新/软删），id 前缀 `ev-`；软删/回收站走 `/api/v1/trash/entity/:type/:id/*` 泛型路径（无需独立端点）。
+> **实体类型（决策 26 + G2 修订，2026-08）**：`type` 现支持 **6 种**——`character` / `setting` / `location` / `hook` / **`event`（事件，时间轴）** / **`timepoint`（时间标签点，时间轴）**。两者完全复用本章节泛型端点（列表/详情/创建/更新/软删），id 前缀 `ev-` / `tp-`；软删/回收站走 `/api/v1/trash/entity/:type/:id/*` 泛型路径（无需独立端点）。
 
-**event 的 data 字段（决策 26，精校验 + passthrough；shared `eventDataSchema`）**：
+**event 的 data 字段（决策 26 + G2 修订；shared `eventDataSchema`）**：
 
 | 字段 | 是否必选 | 数据类型 | 取值范围 | 备注 |
 | :--- | :------- | :------- | :------- | :--- |
 | `description` | 否 | string | — | 事件描述文本 |
-| `time_label` | 否 | string | — | 自由文本时间标签（如「第二天黄昏」），**不解析、不参与排序**，仅展示 |
 | `tags` | 否 | string[] | — | 标签数组，分类筛选用 |
 
-- **排序**：事件列表（`GET /api/v1/entity/event`）按 `sort_order` **升序**返回——时间轴全局事件线性序（拖拽为权威，决策 26；`time_label` 不参与排序）；`sort_order` 持久化于 data.db `entities.sort_order` 列（见 `doc/database/schema.md`），其余实体类型无该语义。
+**G2 修订（2026-08）**：`time_label` 字段**已移除**——时间标签实体化为 `timepoint`（name = 时间标签文本），事件经 `occurs_at` 关系挂载到时间点（1:n，见关系节）。旧数据经迁移 `003_timepoint.ts` 自动转换。
+
+**timepoint 实体（G2）**：`data` 空（`{}`），`name` = 时间标签文本（可重命名）。
+
+- **排序（双独立线性序，G2）**：`GET /api/v1/entity/event` 按 `sort_order` 升序（事件全局线性序，拖拽为权威，组内排序键）；`GET /api/v1/entity/timepoint` 按 `sort_order` 升序（时间点全局线性序，拖拽为权威，组间顺序）。`sort_order` 持久化于 data.db `entities.sort_order` 列（各类型内线性，见 `doc/database/schema.md`），其余实体类型无该语义。
 
 ### GET /api/v1/entity/:type
 
@@ -384,7 +387,7 @@
 
 ```typescript
 // Path
-type: "character" | "setting" | "location" | "hook" | "event";
+type: "character" | "setting" | "location" | "hook" | "event" | "timepoint";
 
 // Query
 {
@@ -406,21 +409,23 @@ type: "character" | "setting" | "location" | "hook" | "event";
 // EntitySummary（列表用摘要，不含完整 data）
 {
   id: string;
-  type: "character" | "setting" | "location" | "hook" | "event";
+  type: "character" | "setting" | "location" | "hook" | "event" | "timepoint";
   name: string;
   // 各类型的关键摘要字段：
   //   character → role, status
   //   setting   → category
   //   location  → type
   //   hook      → status, payoff_timing (从 data JSON 提取)
-  //   event     → description, time_label, tags (从 data JSON 提取)
+  //   event     → description, tags (从 data JSON 提取)
+  //   timepoint → （无专属摘要字段，G2：时间标签文本 = name）
   summary: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
 }
 
-// 注意：type="event" 时列表恒按 sort_order 升序返回（时间轴全局线性序，决策 26），
-// sort/order 查询参数不参与事件排序
+// 注意：type="event" 时列表恒按 sort_order 升序返回（事件全局线性序，决策 26/G2），
+// type="timepoint" 时列表恒按 sort_order 升序返回（时间点全局线性序，G2），
+// sort/order 查询参数不参与两者排序
 ```
 
 ### GET /api/v1/entity/:type/:id
@@ -429,7 +434,7 @@ type: "character" | "setting" | "location" | "hook" | "event";
 
 ```typescript
 // Path
-type: "character" | "setting" | "location" | "hook" | "event";
+type: "character" | "setting" | "location" | "hook" | "event" | "timepoint";
 id: string;
 
 // Res: 200
@@ -455,7 +460,7 @@ id: string;
 
 ```typescript
 // Path
-type: "character" | "setting" | "location" | "hook" | "event";
+type: "character" | "setting" | "location" | "hook" | "event" | "timepoint";
 
 // Req
 {
@@ -469,7 +474,8 @@ type: "character" | "setting" | "location" | "hook" | "event";
 // location:  { type?, parent_id?, description?, custom_fields? }
 // hook:      { status?, category?, expected_payoff?, payoff_timing?, half_life?, is_core?, notes? }
 //             (详见 database/hooks.md)
-// event:     { description?, time_label?, tags?: string[] }（决策 26，精校验 + passthrough，详见本章节开头字段表）
+// event:     { description?, tags?: string[] }（决策 26 + G2 修订，精校验 + passthrough，详见本章节开头字段表）
+// timepoint: {}（G2：时间标签文本 = name，data 无专属字段）
 
 // Res: 201
 {
@@ -488,7 +494,7 @@ type: "character" | "setting" | "location" | "hook" | "event";
 
 更新实体。使用 partial update（仅修改传入字段）。
 
-**清空语义（2026-08 用户反馈 F1 修复）**：data 字段提交**空值即清除**——`""`（字符串字段）/ `[]`（数组字段）经浅合并覆盖原值；未传入的字段不受影响（partial）。event 三字段（`description`/`time_label`/`tags`）均支持此语义。
+**清空语义（2026-08 用户反馈 F1 修复）**：data 字段提交**空值即清除**——`""`（字符串字段）/ `[]`（数组字段）经浅合并覆盖原值；未传入的字段不受影响（partial）。event 字段（`description`/`tags`）支持此语义（`time_label` 已随 G2 移除）。
 
 ```typescript
 // Path
@@ -535,7 +541,7 @@ id: string;
 
 ### PUT /api/v1/entity/event/:id/move
 
-调整事件在时间轴上的位置（拖拽重排，决策 26）。**仅 `event` 类型支持**——时间轴顺序是全局事件线性序，持久化到 data.db `entities.sort_order` 列。
+调整事件在时间轴上的位置（拖拽重排，决策 26）。**仅 `event` 类型支持**——时间轴事件顺序是全局事件线性序，持久化到 data.db `entities.sort_order` 列（组内排序键，G2）。
 
 ```typescript
 // Path
@@ -558,13 +564,39 @@ id: string;
 
 **语义**（与 `PUT /outline/:nodeId/move` 口径一致，决策 26）：
 - `order` 超过当前事件总数 → clamp 到末尾（不返回 4xx）；**负数在 HTTP 层被 schema 拒绝（400 VALIDATION_ERROR，`z.number().int().min(0)`）**——db 层 moveEvent 对负数 clamp 至 0 仅为内部防御语义（HTTP 路径不可达）。
-- 排序为拖拽权威：移动后事件列表（`GET /api/v1/entity/event`）按新 `sort_order` 升序返回；`time_label` 不参与排序（仅展示）。
+- 排序为拖拽权威：移动后事件列表（`GET /api/v1/entity/event`）按新 `sort_order` 升序返回。
+- **G2 跨组拖拽**：事件拖到另一时间点区块 = 改挂载（`occurs_at` 关系移除 + 新建）+ 本 move 端点重排——由前端按序调用（先关系后 move，或一次复合请求，以服务端实现为准），事务内完成。
+
+### PUT /api/v1/entity/timepoint/:id/move
+
+调整时间点在时间轴上的位置（拖拽重排，G2 决策 26 修订）。**仅 `timepoint` 类型支持**——时间点顺序是全局时间点线性序（组间顺序），持久化到 data.db `entities.sort_order` 列。
+
+```typescript
+// Path
+type: "timepoint";            // 仅时间点可排序
+id: string;
+
+// Req（shared: entityMoveReqSchema 同款）
+{
+  order: number;             // 目标位置（0-based 全局时间点线性序，范围 [0, 时间点总数]）
+}
+
+// Res: 200（shared: entityMoveResSchema 同款）
+{
+  moved: true;
+}
+
+// Res: 404
+{ error: { code: "ENTITY_NOT_FOUND" } }
+```
+
+**语义**：同 event move（clamp 到末尾、负数 400）。**拖拽时间点不修改其下事件序**——仅重排时间点 sort_order（整组移动不动内部，G2 双独立线性序）。
 
 ---
 
 ## 关系管理
 
-> **端点类型（决策 26 扩展）**：关系端点 source_type / target_type 支持全部实体类型（含 **`event`**）与 `outline_node`；预定义关系类型新增 **`occurs_in`**（event→outline_node，事件锚定大纲节点，多对多，决策 26）——**锚定 = 关系本身，无独立 chapter_anchor 字段**；一个事件可关联多个场景/章节，一个场景可被多个事件引用。
+> **端点类型（决策 26 + G2 扩展）**：关系端点 source_type / target_type 支持全部实体类型（含 **`event`**、**`timepoint`**）与 `outline_node`；预定义关系类型新增 **`occurs_in`**（event→outline_node，事件锚定大纲节点，多对多，决策 26）与 **`occurs_at`**（timepoint→event，**1:n，G2**）——**锚定/挂载 = 关系本身，无独立字段**；occurs_at 语义：一个事件至多挂一个时间点（服务端建关系校验，重复挂载 409 或先移除旧关系，以实现为准）；事件无挂载 = 未挂载（归入时间轴「未挂载」兜底区）。
 
 ### GET /api/v1/relation
 
