@@ -300,14 +300,15 @@ export default function Timeline() {
   // ============ AI 排序（F9，timeline.md「AI 排序入口」） ============
 
   /**
-   * AI 排序：向聊天注入预设指令（工具名 propose_reorder_events 保证出现——LLM 依赖工具名发现）；
-   * agent 循环中 LLM 读取事件列表（含 time_label）→ 调工具生成排序提案 → 提案卡展示预览 →
-   * 用户确认后 Executor 校验并重排 sort_order → notifyDataChanged → 本页 useDataRefresh 自动重拉。
+   * AI 排序：向聊天注入预设指令（工具名 propose_reorder_timepoints 保证出现——LLM 依赖工具名发现；
+   * G2：事件不再带 time_label，语义序载体变为时间点实体）；
+   * agent 循环中 LLM 读取时间点列表（name = 时间标签文本）→ 调工具生成排序提案 → 提案卡展示预览 →
+   * 用户确认后 Executor 校验并重排 timepoint.sort_order → notifyDataChanged → 本页 useDataRefresh 自动重拉。
    * 无项目态按钮已禁用（config === null），此处为状态层双保险。
    */
   function handleAiSort() {
     if (config === null) return;
-    sendMessage("请按时间标签的语义先后顺序对时间轴事件排序，并使用 propose_reorder_events 工具生成排序提案。");
+    sendMessage("请按时间标签的语义先后顺序对时间轴时间点排序，并使用 propose_reorder_timepoints 工具生成排序提案。");
   }
 
   // ============ 渲染 ============

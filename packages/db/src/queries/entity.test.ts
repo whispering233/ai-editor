@@ -21,6 +21,7 @@ import {
   moveEvent,
   moveTimepoint,
   reorderEvents,
+  reorderTimepoints,
   softDeleteEntity,
   updateEntity,
 } from "./entity.js";
@@ -788,6 +789,99 @@ describe("moveTimepoint（G2，同 moveEvent 语义：全局线性序 0..n-1）"
     const char = createEntity(db, { type: "character", name: "张三" });
     expect(moveTimepoint(db, char.id, 0, "2026-08-02T00:00:00Z")).toBeNull();
     expect(getEntity(db, char.id)).not.toBeNull(); // character 行未被触碰
+  });
+});
+
+describe("reorderTimepoints（G2 批量重排：LLM 按时间点 name 语义排序提案确认后执行）", () => {
+  /** 造 n 个 timepoint，sort_order 0..n-1；返回 id 数组（按序） */
+  function seedTimepoints(n: number): string[] {
+    const ids: string[] = [];
+    for (let i = 0; i < n; i++) {
+      const id = `tp-reorder-${i}`;
+      ids.push(id);
+      db.prepare(
+        `INSERT INTO entities (id, type, name, sort_order, created_at, updated_at)
+         VALUES (?, 'timepoint', ?, ?, ?, ?)`,
+      ).run(id, `时间点${i}`, i, "2026-08-01T00:00:00Z", "2026-08-01T00:00:00Z");
+    }
+    return ids;
+  }
+
+  it("正常重排：按新序重写 sort_order 0..n-1，全部时间点 updated_at 刷新为传入时间戳（全量变化语义）", () => {
+    const ids = seedTimepoints(4); // [0,1,2,3]
+    const newOrder = [ids[3], ids[1], ids[0], ids[2]];
+    expect(reorderTimepoints(db, newOrder, "2026-08-02T00:00:00Z")).toBe(4);
+    expect(listTimepoints(db).map((r) => r.id)).toEqual(newOrder);
+    // 全部时间点 updated_at 统一刷新（与 moveTimepoint 只刷单行区分——批量重排全量变化）
+    const rows = db
+      .prepare("SELECT id, updated_at FROM entities WHERE type = 'timepoint'")
+      .all() as Array<{ id: string; updated_at: string }>;
+    expect(rows.every((r) => r.updated_at === "2026-08-02T00:00:00Z")).toBe(true);
+    // sort_order 列已重写为连续 0..n-1
+    const orders = db
+      .prepare("SELECT sort_order FROM entities WHERE type = 'timepoint' ORDER BY sort_order")
+      .all() as Array<{ sort_order: number }>;
+    expect(orders.map((o) => o.sort_order)).toEqual([0, 1, 2, 3]);
+  });
+
+  it("集合不一致 → 抛错且零副作用（缺时间点 / 多时间点 / 重复 id 均拒绝）", () => {
+    const ids = seedTimepoints(3);
+    // 缺一个时间点（LLM 幻觉漏时间点）
+    expect(() => reorderTimepoints(db, [ids[2], ids[0]], "2026-08-02T00:00:00Z")).toThrow(/时间点集合与当前时间轴不一致.*缺失 1 个/);
+    // 多一个不存在的 id
+    expect(() => reorderTimepoints(db, [ids[2], ids[1], ids[0], "tp-999"], "2026-08-02T00:00:00Z")).toThrow(
+      /时间点集合与当前时间轴不一致.*多余 1 个/,
+    );
+    // 重复 id
+    expect(() => reorderTimepoints(db, [ids[0], ids[1], ids[0]], "2026-08-02T00:00:00Z")).toThrow(/时间点集合与当前时间轴不一致.*含重复/);
+    // 零副作用：原序未被改动
+    expect(listTimepoints(db).map((r) => r.id)).toEqual(ids);
+  });
+
+  it("软删时间点不参与集合（决策 12 过滤）：软删后必须从新序中剔除，否则抛错", () => {
+    const ids = seedTimepoints(3);
+    softDeleteEntity(db, ids[1], "2026-08-02T00:00:00Z");
+    // 新序含已软删时间点 → 集合校验（软删 id 不在当前集合中）
+    expect(() => reorderTimepoints(db, [ids[1], ids[0], ids[2]], "2026-08-02T00:00:00Z")).toThrow(/时间点集合与当前时间轴不一致/);
+    // 按剩余未软删时间点提供新序 → 正常重排（软删行不被触碰）
+    expect(reorderTimepoints(db, [ids[2], ids[0]], "2026-08-02T00:00:00Z")).toBe(2);
+    expect(listTimepoints(db).map((r) => r.id)).toEqual([ids[2], ids[0]]);
+    // 软删行仍保留（可回收站还原），sort_order 未被重写
+    const raw = db.prepare("SELECT sort_order, deleted_at FROM entities WHERE id = ?").get(ids[1]) as {
+      sort_order: number;
+      deleted_at: string;
+    };
+    expect(raw.deleted_at).toBe("2026-08-02T00:00:00Z");
+    expect(raw.sort_order).toBe(1);
+  });
+
+  it("NULL sort_order 沉底参与重排：旧数据（迁移来的 NULL 序）可整体重排并清零", () => {
+    const ids: string[] = [];
+    const inserts: Array<[string, number | null]> = [
+      ["tp-null-0", null],
+      ["tp-null-1", null],
+      ["tp-1", 1],
+    ];
+    for (const [id, sort] of inserts) {
+      ids.push(id);
+      db.prepare(
+        `INSERT INTO entities (id, type, name, sort_order, created_at, updated_at) VALUES (?, 'timepoint', ?, ?, ?, ?)`,
+      ).run(id, id, sort, "2026-08-01T00:00:00Z", "2026-08-01T00:00:00Z");
+    }
+    // 当前序（NULL 沉底）：tp-1 → tp-null-0 → tp-null-1；重排为新序
+    const newOrder = [ids[1], ids[0], ids[2]];
+    expect(reorderTimepoints(db, newOrder, "2026-08-02T00:00:00Z")).toBe(3);
+    expect(listTimepoints(db).map((r) => r.id)).toEqual(newOrder);
+    const orders = db
+      .prepare("SELECT sort_order FROM entities WHERE type = 'timepoint' ORDER BY sort_order")
+      .all() as Array<{ sort_order: number }>;
+    expect(orders.map((o) => o.sort_order)).toEqual([0, 1, 2]); // NULL 清零
+  });
+
+  it("非 timepoint 类型实体不受影响（reorderTimepoints 只处理 timepoint 行）", () => {
+    const ev = createEntity(db, { type: "event", name: "事件" });
+    expect(() => reorderTimepoints(db, [ev.id], "2026-08-02T00:00:00Z")).toThrow(/时间点集合与当前时间轴不一致/);
+    expect(getEntity(db, ev.id)).not.toBeNull(); // event 行未被触碰
   });
 });
 

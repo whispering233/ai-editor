@@ -141,7 +141,7 @@ describe("工具常量（tools.md 工具目录）", () => {
     expect(HOOK_ANALYSIS_TOOLS).toHaveLength(5);
   });
 
-  it("提案类 15 个（tools.md 9 + hooks.md 5 + F9 重排 1，无重复）", () => {
+  it("提案类 15 个（tools.md 9 + hooks.md 5 + G2 时间点重排 1，无重复）", () => {
     expect(PROPOSAL_TOOLS).toEqual([
       "propose_create_entity",
       "propose_update_entity",
@@ -157,12 +157,12 @@ describe("工具常量（tools.md 工具目录）", () => {
       "propose_advance_hook",
       "propose_resolve_hook",
       "propose_abandon_hook",
-      "propose_reorder_events",
+      "propose_reorder_timepoints",
     ]);
     expect(PROPOSAL_TOOLS).toHaveLength(15);
   });
 
-  it("执行类 13 个（tools.md「执行类」+ F9 reorder_events，不暴露给 LLM）", () => {
+  it("执行类 13 个（tools.md「执行类」+ G2 reorder_timepoints，不暴露给 LLM）", () => {
     expect(EXECUTOR_TOOLS).toEqual([
       "create_entity",
       "update_entity",
@@ -176,7 +176,7 @@ describe("工具常量（tools.md 工具目录）", () => {
       "advance_hook",
       "resolve_hook",
       "abandon_hook",
-      "reorder_events",
+      "reorder_timepoints",
     ]);
     expect(EXECUTOR_TOOLS).toHaveLength(13);
   });

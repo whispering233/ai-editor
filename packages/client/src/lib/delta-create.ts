@@ -22,7 +22,8 @@ import { targetTypeLabel } from "./delta";
  * 不校验 event 目标）——下拉泄漏会出现「事件」死选项（label 回退原文、字段列表空）。
  */
 export const DELTA_TARGET_TYPE_OPTIONS: ReadonlyArray<{ value: string; label: string }> = ENTITY_TYPES.filter(
-  (t) => t !== "event",
+  // event（决策 26：编辑事件 data 不产生 Delta）；timepoint（G2：data 恒空无可变更字段）均排除
+  (t) => t !== "event" && t !== "timepoint",
 ).map((t) => ({
   value: t,
   label: targetTypeLabel(t),

@@ -1,16 +1,34 @@
 // 实体路由（S3.3）：GET 列表 / POST 创建 / GET 详情 / PUT 部分更新 / DELETE 软删 / PUT event move（C2，决策 26）
+// + PUT timepoint move / POST event move_to（G2，决策 26 修订）
 //
 // 契约来源：doc/api/endpoints.md 第 124-276 行（实体 CRUD）+ 第 386-393 行（PUT /entity/event/:id/move）、
-// 决策 12（软删级联）、决策 26（时间轴事件：全局线性序 sort_order，仅 event 使用）。
+// 决策 12（软删级联）、决策 26（时间轴事件：全局线性序 sort_order，仅 event 使用）、
+// 决策 26 G2 修订（时间标签点实体化：timepoint 全局线性序 + occurs_at 挂载 + 跨组拖拽复合端点）。
 // 错误映射（对照 endpoints.md 错误码）：
 //   type 参数非法 / 参数校验失败 → 400 VALIDATION_ERROR（zod 抛错由 errorHandler 统一映射，含 fields）
 //   实体不存在或已软删 → 404 ENTITY_NOT_FOUND
 import { Hono } from "hono";
-import { countDeltasForEntity, createEntity, getEntity, listEntities, listRelations, moveEvent, nowIso, softDeleteEntity, updateEntity } from "@whispering233/ai-editor-db";
+import {
+  countDeltasForEntity,
+  createEntity,
+  createRelation,
+  deleteRelation,
+  eventOccursAt,
+  getEntity,
+  listEntities,
+  listRelations,
+  moveEvent,
+  moveTimepoint,
+  nowIso,
+  softDeleteEntity,
+  updateEntity,
+  withTransaction,
+} from "@whispering233/ai-editor-db";
 import type { EntityType } from "@whispering233/ai-editor-shared";
-import { ENTITY_DATA_SCHEMAS, entityCreateReqSchema, entityListQuerySchema, entityMoveReqSchema, entityTypeSchema, entityUpdateReqSchema } from "@whispering233/ai-editor-shared/schemas";
+import { ENTITY_DATA_SCHEMAS, entityCreateReqSchema, entityListQuerySchema, entityMoveReqSchema, entityTypeSchema, entityUpdateReqSchema, eventMoveToReqSchema } from "@whispering233/ai-editor-shared/schemas";
 import { HttpError, ok } from "../middleware/error.js";
 import { requireCurrentProject } from "../middleware/project.js";
+import { mapRelationError } from "./relation.js";
 
 /** 实体路由（挂载于 /api/v1/entity，index.ts） */
 export const entityRoutes = new Hono();
@@ -137,6 +155,95 @@ entityRoutes.put("/event/:id/move", async (c) => {
     throw new HttpError(404, "ENTITY_NOT_FOUND", `事件不存在: ${id}`);
   }
   return c.json(ok({ moved: true }));
+});
+
+// PUT /api/v1/entity/timepoint/:id/move —— 时间轴时间点重排（G2，决策 26 修订，endpoints.md「PUT /entity/timepoint/:id/move」）
+// 请求 { order }（0-based 全局时间点线性序；越界 clamp、负数 400 schema 拒绝——语义同 event move）；
+// 响应 200 { moved: true }；时间点不存在或已软删 → 404 ENTITY_NOT_FOUND。
+// 注意：拖拽时间点**不改其下事件序**（双独立线性序，决策 26 G2 修订）——moveTimepoint 只碰
+// timepoint 行，event.sort_order 与 occurs_at 挂载均不动。仅 timepoint 支持（专端点路径）。
+entityRoutes.put("/timepoint/:id/move", async (c) => {
+  const project = requireCurrentProject();
+  const id = c.req.param("id");
+  const raw = await c.req.json().catch(() => null);
+  const parsed = entityMoveReqSchema.safeParse(raw); // .strict()：未知键 → 400
+  if (!parsed.success) throw parsed.error;
+  const result = moveTimepoint(project.db, id, parsed.data.order, nowIso());
+  if (result === null) {
+    throw new HttpError(404, "ENTITY_NOT_FOUND", `时间点不存在: ${id}`);
+  }
+  return c.json(ok({ moved: true }));
+});
+
+/** move_to 事务内哨兵：moveEvent 返回 null（事件不存在/已软删）→ 抛错回滚事务，路由映射 404 */
+class MoveToTargetNotFoundError extends Error {}
+
+// POST /api/v1/entity/event/:id/move_to —— 事件跨组拖拽复合端点（G2，决策 26 修订，
+// endpoints.md「POST /entity/event/:id/move_to」）
+// 请求 { timepoint_id: string | null, order: number }（eventMoveToReqSchema）：
+//   事务内一次完成（原子，无中间态）——
+//   1. 事件存在性先校验（不存在/已软删 → 404，在任何写操作之前）
+//   2. 移除事件旧 occurs_at 挂载（物理删——决策 12 修订「手动删关系 = 物理删」，
+//      改挂载即重建轻量关系；**同 timepoint 幂等**：目标与旧挂载相同 → 跳过重建，关系 id 不变）
+//   3. timepoint_id 非 null 时建立新挂载（createRelation 校验 timepoint 端点存在性，失败 400）
+//   4. moveEvent 按 order 重排事件全局线性序（决策 26：组内序 = 全局序投影，跨组后全数组重排）
+//   timepoint_id = null → 移出到「未挂载」兜底区（仅重排，不建挂载）。
+// 响应 200 { moved: true }；事件不存在/已软删 → 404 ENTITY_NOT_FOUND（事务回滚，旧挂载不丢）；
+// timepoint 不存在/已软删 → 400 VALIDATION_ERROR（RelationError ENDPOINT_NOT_FOUND 映射）。
+// 决策论证（vs 前端按序调两次 DELETE+POST+move）：非事务分步有中间态风险（拖拽中断/断连残留
+// 半挂载状态），复合端点把三步收敛为一次提交——G2 设计「推荐服务端复合写端点」的实现。
+entityRoutes.post("/event/:id/move_to", async (c) => {
+  const project = requireCurrentProject();
+  const id = c.req.param("id");
+  const raw = await c.req.json().catch(() => null);
+  const parsed = eventMoveToReqSchema.safeParse(raw); // .strict()：未知键 → 400
+  if (!parsed.success) throw parsed.error;
+  try {
+    const result = withTransaction(project.db, () => {
+      // 1. 事件存在性先校验（不存在/已软删 → null → 404）——**必须在任何写操作之前**，
+      //    杜绝「建了新挂载/删了旧挂载却 404」的半状态（moveEvent 的 null 检查在最后，
+      //    不能依赖它做首查——createRelation 会在前面以 400 抢先抛出）
+      if (getEntity(project.db, id) === null) {
+        throw new MoveToTargetNotFoundError();
+      }
+      // 2. 读当前挂载（未软删 occurs_at；无挂载 → null）
+      const oldMount = eventOccursAt(project.db, id);
+      // 目标与旧挂载不同（含目标为 null 移出挂载）→ 需要重建挂载；相同 → 幂等跳过（只重排）
+      const targetChanged = oldMount === null || oldMount.source_id !== parsed.data.timepoint_id;
+      // 3. 改挂载：目标与旧挂载不同（或目标为 null）→ 移除旧挂载（物理删——决策 12 修订
+      //    「手动删关系 = 物理删」，改挂载即重建轻量关系）
+      if (oldMount !== null && targetChanged) {
+        deleteRelation(project.db, oldMount.id);
+      }
+      // 4. 建新挂载（timepoint_id 非 null 且目标已变；createRelation 校验 timepoint 端点存在性——
+      //    不存在/已软删抛 RelationError ENDPOINT_NOT_FOUND → 400；旧挂载已删，不会 RELATION_EXISTS）
+      if (parsed.data.timepoint_id !== null && targetChanged) {
+        createRelation(
+          project.db,
+          {
+            sourceType: "timepoint",
+            sourceId: parsed.data.timepoint_id,
+            targetType: "event",
+            targetId: id,
+            relationType: "occurs_at",
+          },
+          project.root,
+        );
+      }
+      // 5. 重排全局事件序（事件存在性已在第 1 步校验——moveEvent 返回 null 理论不可达，防御保留）
+      const moved = moveEvent(project.db, id, parsed.data.order, nowIso());
+      if (moved === null) {
+        throw new MoveToTargetNotFoundError();
+      }
+      return moved;
+    });
+    return c.json(ok(result));
+  } catch (err) {
+    if (err instanceof MoveToTargetNotFoundError) {
+      throw new HttpError(404, "ENTITY_NOT_FOUND", `事件不存在: ${id}`);
+    }
+    throw mapRelationError(err); // RelationError（ENDPOINT_NOT_FOUND → 400 / RELATION_EXISTS → 409）
+  }
 });
 
 // DELETE /api/v1/entity/:type/:id —— 软删（决策 12：级联软删关系与 Delta，本体保留可还原）

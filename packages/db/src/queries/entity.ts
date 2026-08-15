@@ -307,7 +307,7 @@ export function moveEvent(db: Db, id: string, order: number, updatedAt: string):
 
 /**
  * 全部未软删时间轴事件（决策 26）：按 sort_order 升序（NULL 沉底，id 作稳定次序）。
- * moveEvent / reorderEvents / 工具层（propose_reorder_events 生成与执行，F9）共用——
+ * moveEvent / reorderEvents / 工具层（propose_reorder_timepoints 之外的事件排序场景）共用——
  * 事件排序的单一事实来源查询，避免各处手写同款 SQL。
  */
 export function listAllEvents(db: Db): EntityRow[] {
@@ -441,6 +441,41 @@ export function assertEventSingleOccursAt(db: Db, eventId: string): void {
       `事件已挂载时间点 ${mounted.source_id}，重复挂载拒绝（occurs_at 1:n 约束，G2）`,
     );
   }
+}
+
+/**
+ * 批量重排时间标签点（G2，决策 26 修订注记：LLM 按时间点 name 语义排序 → 提案确认后执行）：
+ * 1. 事务内读出当前全部未软删 timepoint id 集合（listTimepoints 同款序）
+ * 2. **校验 orderedIds 与当前集合完全相等**（缺/多/重复 → 抛错）——正常由提案 references
+ *    快照校验先拦截（决策 14），此处为防御纵深（LLM 幻觉漏时间点 / 确认前用户已拖拽增删）
+ * 3. 按 orderedIds 序重写全部 timepoint sort_order 0..n-1
+ * 4. **全部时间点 updated_at 统一刷新为 nowIso**——批量重排是**全量变化**，与
+ *    moveTimepoint 只刷被移单行（决策 14 版本戳语义）区分
+ *
+ * @returns 重排时间点数（n）
+ */
+export function reorderTimepoints(db: Db, orderedIds: string[], nowIsoTimestamp: string): number {
+  return withTransaction(db, () => {
+    const rows = listTimepoints(db);
+    const currentIds = new Set(rows.map((r) => r.id));
+    const orderedSet = new Set(orderedIds);
+    // 缺失 = 当前集合有而新序没有（漏时间点，LLM 幻觉）；多余 = 新序含当前集合没有的 id（不存在/已软删）
+    const missing = rows.map((r) => r.id).filter((id) => !orderedSet.has(id));
+    const extra = orderedIds.filter((id) => !currentIds.has(id));
+    if (orderedSet.size !== orderedIds.length || missing.length > 0 || extra.length > 0) {
+      const dup = orderedSet.size !== orderedIds.length ? "（含重复）" : "";
+      const brief = (ids: string[]): string =>
+        ids.length === 0 ? "" : `（${ids.slice(0, 5).join(", ")}${ids.length > 5 ? "…" : ""}）`;
+      throw new Error(
+        `时间点集合与当前时间轴不一致${dup}: 缺失 ${missing.length} 个${brief(missing)}、多余 ${extra.length} 个${brief(extra)}`,
+      );
+    }
+    const update = db.prepare("UPDATE entities SET sort_order = ?, updated_at = ? WHERE id = ?");
+    for (let i = 0; i < orderedIds.length; i++) {
+      update.run(i, nowIsoTimestamp, orderedIds[i]);
+    }
+    return orderedIds.length;
+  });
 }
 
 /**

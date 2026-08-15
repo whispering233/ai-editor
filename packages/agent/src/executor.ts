@@ -29,7 +29,7 @@ import type {
   ProposeMoveNodeArgs,
   ProposeOutlineNodeArgs,
   ProposeRemoveRelationArgs,
-  ProposeReorderEventsArgs,
+  ProposeReorderTimepointsArgs,
   ProposeResolveHookArgs,
   ProposeUpdateEntityArgs,
   ProposeUpdateHookArgs,
@@ -47,7 +47,7 @@ import {
   buildProposeMoveNode,
   buildProposeOutlineNode,
   buildProposeRemoveRelation,
-  buildProposeReorderEvents,
+  buildProposeReorderTimepoints,
   buildProposeResolveHook,
   buildProposeUpdateEntity,
   buildProposeUpdateHook,
@@ -211,7 +211,7 @@ export const PROPOSAL_BUILDERS: Record<string, ProposalBuilder> = {
   propose_advance_hook: (ctx, args) => buildProposeAdvanceHook(ctx, args as ProposeAdvanceHookArgs),
   propose_resolve_hook: (ctx, args) => buildProposeResolveHook(ctx, args as ProposeResolveHookArgs),
   propose_abandon_hook: (ctx, args) => buildProposeAbandonHook(ctx, args as ProposeAbandonHookArgs),
-  propose_reorder_events: (ctx, args) => buildProposeReorderEvents(ctx, args as ProposeReorderEventsArgs), // F9
+  propose_reorder_timepoints: (ctx, args) => buildProposeReorderTimepoints(ctx, args as ProposeReorderTimepointsArgs), // G2（取代 F9 的 propose_reorder_events）
 };
 
 /** createToolDispatcher 选项 */
@@ -309,7 +309,7 @@ export function createToolDispatcher(ctx: ToolContext, options: CreateToolDispat
           // tool_result 严格 { proposal_id, summary }——不含预览细节（避免 LLM 误以为提案已生效而重复提案）
           content: JSON.stringify({ proposal_id: proposal.proposal_id, summary }),
           // preview 由 S7.6 经 SSE proposal 事件推 GUI（完整预览不走 tool_result）；
-          // F9 起 build 可携带结构化 preview（如 propose_reorder_events 的 { changes }）——
+          // F9/G2 起 build 可携带结构化 preview（如 propose_reorder_timepoints 的 { changes }）——
           // 有则透传，无则回退默认 { type, summary, args }（既有提案工具行为不变）
           proposal: {
             proposal_id: proposal.proposal_id,

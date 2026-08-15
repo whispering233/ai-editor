@@ -119,6 +119,10 @@ export function analyzeEntityConsistency(row: EntityRow, tree: OutlineFileTree, 
     // C1 类型补全（决策 26 event 时间轴事件：暂无一致性规则，返回空集；后续卡按需增补）
     case "event":
       return [];
+    // G2 类型补全（决策 26 G2 修订 timepoint 时间标签点：data 恒空（{}）、name 即时间标签文本，
+    // 无可分析字段——返回空集；后续卡按需增补）
+    case "timepoint":
+      return [];
   }
 }
 

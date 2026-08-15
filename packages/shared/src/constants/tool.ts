@@ -63,14 +63,14 @@ export const PROPOSAL_TOOLS = [
   "propose_advance_hook",
   "propose_resolve_hook",
   "propose_abandon_hook",
-  "propose_reorder_events", // F9（决策 26 修订注记）：LLM 按 time_label 语义排序 → 提案确认
+  "propose_reorder_timepoints", // G2（决策 26 修订注记）：LLM 按时间点 name（时间标签）语义排序 → 提案确认
 ] as const;
 
 /**
  * 执行类工具（不暴露给 LLM，tools.md「执行类」，共 13 个）
  * 用户确认提案后由 Tool Executor 调用；advance_hook/resolve_hook/abandon_hook 为复合写
  * （delta_records 记 status 变化 + relation_records 插 advances/resolves，一次提交）；
- * reorder_events 为批量重排（F9：按新序事务内重写 sort_order 0..n-1）
+ * reorder_timepoints 为批量重排（G2：按新序事务内重写 sort_order 0..n-1，取代 F9 reorder_events）
  */
 export const EXECUTOR_TOOLS = [
   "create_entity",
@@ -85,7 +85,7 @@ export const EXECUTOR_TOOLS = [
   "advance_hook",
   "resolve_hook",
   "abandon_hook",
-  "reorder_events",
+  "reorder_timepoints",
 ] as const;
 
 /** 自动级工具（查询 + 分析 + 伏笔分析，共 18 个） */

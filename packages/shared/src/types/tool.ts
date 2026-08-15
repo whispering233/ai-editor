@@ -426,17 +426,18 @@ export const proposeAbandonHookArgsSchema = z
 
 export type ProposeAbandonHookArgs = z.infer<typeof proposeAbandonHookArgsSchema>;
 
-// === propose_reorder_events（时间轴事件重排提案，F9，决策 26 修订注记） ===
+// === propose_reorder_timepoints（时间轴时间点重排提案，G2，决策 26 修订注记） ===
 
 /**
- * 入参：event_ids——LLM 按 time_label 语义排序后产出的有序事件 id **全量序列**
- * （顺序 = 建议新序，须覆盖当前全部未软删事件，缺/多/重复由生成时校验拒绝）；
- * 200 = 事件量上限，与列表 limit 对齐（endpoints.md 契约）
+ * 入参：timepoint_ids——LLM 按时间点 name（时间标签文本）语义识别先后后产出的
+ * **有序时间点 id 全量序列**（顺序 = 建议新序，须覆盖当前全部未软删时间点，缺/多/重复
+ * 由生成时校验拒绝）；200 = 时间点量上限，与列表 limit 对齐（endpoints.md 契约）。
+ * G2 取代 F9 的 propose_reorder_events：事件不再带 time_label，语义序的载体变为时间点实体
  */
-export const proposeReorderEventsArgsSchema = z
+export const proposeReorderTimepointsArgsSchema = z
   .object({
-    event_ids: z.array(z.string()).min(1).max(200),
+    timepoint_ids: z.array(z.string()).min(1).max(200),
   })
   .strict();
 
-export type ProposeReorderEventsArgs = z.infer<typeof proposeReorderEventsArgsSchema>;
+export type ProposeReorderTimepointsArgs = z.infer<typeof proposeReorderTimepointsArgsSchema>;

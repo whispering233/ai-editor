@@ -508,3 +508,207 @@ describe("event 时间轴（C2，决策 26）", () => {
     expect(((await q3.json()) as { data: { relations: unknown[] } }).data.relations).toHaveLength(1);
   });
 });
+
+// ============ 时间轴时间点（G2，决策 26 修订）：move 端点 + move_to 复合端点 ============
+
+describe("timepoint 时间轴（G2，决策 26 修订）", () => {
+  /** 创建事件辅助（201 断言，ev- 前缀由 db 层生成；本 describe 独立定义——G2.3 前事件与时间点并列测试） */
+  async function createEvent(app: Hono, name: string): Promise<{ id: string }> {
+    const res = await app.request(`/api/v1/entity/event`, jsonRequest("POST", "", { name }));
+    expect(res.status).toBe(201);
+    return (await res.json()).data as { id: string };
+  }
+
+  /** 创建时间点辅助（201 断言，tp- 前缀由 db 层生成） */
+  async function createTimepoint(app: Hono, name: string): Promise<{ id: string }> {
+    const res = await app.request(`/api/v1/entity/timepoint`, jsonRequest("POST", "", { name }));
+    expect(res.status).toBe(201);
+    return (await res.json()).data as { id: string };
+  }
+
+  /** 时间点列表 id 序（恒按 sort_order 升序——服务端契约，endpoints.md L427-428） */
+  async function timepointIds(app: Hono): Promise<string[]> {
+    const res = await app.request("/api/v1/entity/timepoint", { headers: HOST_HEADERS });
+    const body = (await res.json()) as { data: { items: Array<{ id: string }> } };
+    return body.data.items.map((i) => i.id);
+  }
+
+  /** 事件当前 occurs_at 挂载（target 方向查询，返回挂载关系数组；空 = 未挂载） */
+  async function occursAtOf(app: Hono, eventId: string): Promise<Array<Record<string, unknown>>> {
+    const res = await app.request(`/api/v1/relation?target_id=${eventId}&relation_type=occurs_at&depth=1`, {
+      headers: HOST_HEADERS,
+    });
+    const body = (await res.json()) as { data: { relations: Array<Record<string, unknown>> } };
+    return body.data.relations;
+  }
+
+  it("timepoint move：正常重排（全局线性序）——移动后列表按新序，拖拽时间点不改其下事件序（双独立线性序）", async () => {
+    openProject();
+    const app = buildApp();
+    const tp0 = (await createTimepoint(app, "拂晓")).id;
+    const tp2 = (await createTimepoint(app, "黄昏")).id;
+    const initial = await timepointIds(app);
+    expect(initial).toHaveLength(2);
+    // 把 tp2 移到 0 → 列表首位 tp2，其余相对序保持（db 层 splice 语义）
+    const mv = await app.request(`/api/v1/entity/timepoint/${tp2}/move`, jsonRequest("PUT", "", { order: 0 }));
+    expect(mv.status).toBe(200);
+    expect((await mv.json()) as { data: { moved: boolean } }).toMatchObject({ data: { moved: true } });
+    expect(await timepointIds(app)).toEqual([tp2, tp0]);
+    // 显式传 sort=created_at&order=desc → 仍按 sort_order 升序（endpoints.md 契约）
+    const desc = await app.request("/api/v1/entity/timepoint?sort=created_at&order=desc", { headers: HOST_HEADERS });
+    const descBody = (await desc.json()) as { data: { items: Array<{ id: string }> } };
+    expect(descBody.data.items.map((i) => i.id)).toEqual([tp2, tp0]);
+  });
+
+  it("timepoint move：clamp 超大→末尾；负数/缺 order/未知键 → 400；404（不存在/已软删）；专端点仅 timepoint", async () => {
+    openProject();
+    const app = buildApp();
+    const tp0 = (await createTimepoint(app, "拂晓")).id;
+    const tp2 = (await createTimepoint(app, "黄昏")).id;
+    // 超大 → clamp 末尾（endpoints.md 契约）
+    await app.request(`/api/v1/entity/timepoint/${tp2}/move`, jsonRequest("PUT", "", { order: 999 }));
+    const ids = await timepointIds(app);
+    expect(ids[ids.length - 1]).toBe(tp2);
+    // 负数 → 400（entityMoveReqSchema z.number().int().min(0)；「负数→0」为 db 层 moveTimepoint 防御语义）
+    const neg = await app.request(`/api/v1/entity/timepoint/${tp0}/move`, jsonRequest("PUT", "", { order: -1 }));
+    expect(neg.status).toBe(400);
+    expect(((await neg.json()) as { error: { code: string } }).error.code).toBe("VALIDATION_ERROR");
+    // body 校验：缺 order → 400；未知键 → 400（.strict()）
+    expect((await app.request(`/api/v1/entity/timepoint/${tp0}/move`, jsonRequest("PUT", "", {}))).status).toBe(400);
+    expect(
+      (await app.request(`/api/v1/entity/timepoint/${tp0}/move`, jsonRequest("PUT", "", { order: 0, extra: 1 }))).status,
+    ).toBe(400);
+    // 404：不存在 id / 已软删 id（moveTimepoint 过滤软删 → null → 404）
+    expect((await app.request("/api/v1/entity/timepoint/tp-nope/move", jsonRequest("PUT", "", { order: 0 }))).status).toBe(404);
+    const { id } = await createTimepoint(app, "将删时间点");
+    await app.request(`/api/v1/entity/timepoint/${id}`, { method: "DELETE", headers: HOST_HEADERS });
+    expect((await app.request(`/api/v1/entity/timepoint/${id}/move`, jsonRequest("PUT", "", { order: 0 }))).status).toBe(404);
+    // 专端点仅 timepoint：character 无 move 路径（其余实体类型无 sort_order 语义）
+    const { id: charId } = await createCharacter(app, "张三");
+    expect(
+      (await app.request(`/api/v1/entity/character/${charId}/move`, jsonRequest("PUT", "", { order: 0 }))).status,
+    ).toBe(404);
+  });
+
+  it("move_to：跨组挂载 + 重排一次提交——旧挂载移除、新挂载建立、事件全局序重排", async () => {
+    openProject();
+    const app = buildApp();
+    const tp0 = (await createTimepoint(app, "拂晓")).id;
+    const tp1 = (await createTimepoint(app, "黄昏")).id;
+    const e0 = (await createEvent(app, "事件0")).id;
+    const e1 = (await createEvent(app, "事件1")).id;
+    // 先挂载 e0 → tp0（occurs_at 建关系，201）
+    const mount = await app.request("/api/v1/relation", jsonRequest("POST", "", {
+      source_type: "timepoint",
+      source_id: tp0,
+      target_type: "event",
+      target_id: e0,
+      relation_type: "occurs_at",
+    }));
+    expect(mount.status).toBe(201);
+    const oldRelId = ((await mount.json()) as { data: { id: string } }).data.id;
+    // move_to：e0 改挂 tp1 + 移到全局序第 1 位（拖到另一时间点区块，G2 跨组拖拽语义）
+    const mv = await app.request(`/api/v1/entity/event/${e0}/move_to`, jsonRequest("POST", "", { timepoint_id: tp1, order: 1 }));
+    expect(mv.status).toBe(200);
+    expect((await mv.json()) as { data: { moved: boolean } }).toMatchObject({ data: { moved: true } });
+    // 挂载已改：occurs_at 只剩一条、指向 tp1、新关系 id（旧关系物理删）
+    const rels = await occursAtOf(app, e0);
+    expect(rels).toHaveLength(1);
+    expect(rels[0]).toMatchObject({ sourceId: tp1, relationType: "occurs_at" });
+    expect(rels[0].id).not.toBe(oldRelId);
+    // 事件全局序已重排：e0 在第 1 位（listAllEvents 语义经列表端点验证）
+    const evRes = await app.request("/api/v1/entity/event", { headers: HOST_HEADERS });
+    const evBody = (await evRes.json()) as { data: { items: Array<{ id: string }> } };
+    expect(evBody.data.items.map((i) => i.id)).toEqual([e1, e0]);
+  });
+
+  it("move_to：同 timepoint 幂等——挂载关系保留（id 不变），仅重排", async () => {
+    openProject();
+    const app = buildApp();
+    const tp0 = (await createTimepoint(app, "拂晓")).id;
+    const e0 = (await createEvent(app, "事件0")).id;
+    const mount = await app.request("/api/v1/relation", jsonRequest("POST", "", {
+      source_type: "timepoint",
+      source_id: tp0,
+      target_type: "event",
+      target_id: e0,
+      relation_type: "occurs_at",
+    }));
+    const relId = ((await mount.json()) as { data: { id: string } }).data.id;
+    // move_to 目标 = 当前挂载 → 幂等跳过重建挂载（只重排，关系 id 不变）
+    const mv = await app.request(`/api/v1/entity/event/${e0}/move_to`, jsonRequest("POST", "", { timepoint_id: tp0, order: 0 }));
+    expect(mv.status).toBe(200);
+    const rels = await occursAtOf(app, e0);
+    expect(rels).toHaveLength(1);
+    expect(rels[0].id).toBe(relId); // 关系未被删除重建
+    expect(rels[0].sourceId).toBe(tp0);
+  });
+
+  it("move_to：timepoint_id=null 移到未挂载区——旧挂载移除、仅重排（入未挂载兜底区，endpoints.md 关系节）", async () => {
+    openProject();
+    const app = buildApp();
+    const tp0 = (await createTimepoint(app, "拂晓")).id;
+    const e0 = (await createEvent(app, "事件0")).id;
+    await app.request("/api/v1/relation", jsonRequest("POST", "", {
+      source_type: "timepoint",
+      source_id: tp0,
+      target_type: "event",
+      target_id: e0,
+      relation_type: "occurs_at",
+    }));
+    expect(await occursAtOf(app, e0)).toHaveLength(1);
+    // null → 移出挂载（occurs_at 物理删），事件仍重排
+    const mv = await app.request(`/api/v1/entity/event/${e0}/move_to`, jsonRequest("POST", "", { timepoint_id: null, order: 0 }));
+    expect(mv.status).toBe(200);
+    expect(await occursAtOf(app, e0)).toEqual([]); // 未挂载
+    const evRes = await app.request("/api/v1/entity/event", { headers: HOST_HEADERS });
+    const evBody = (await evRes.json()) as { data: { items: Array<{ id: string }> } };
+    expect(evBody.data.items[0].id).toBe(e0);
+  });
+
+  it("move_to：404（事件不存在/已软删）；400（timepoint 不存在/已软删，事务回滚旧挂载不丢）", async () => {
+    openProject();
+    const app = buildApp();
+    const tp0 = (await createTimepoint(app, "拂晓")).id;
+    const e0 = (await createEvent(app, "事件0")).id;
+    await app.request("/api/v1/relation", jsonRequest("POST", "", {
+      source_type: "timepoint",
+      source_id: tp0,
+      target_type: "event",
+      target_id: e0,
+      relation_type: "occurs_at",
+    }));
+    // 404：事件不存在
+    expect(
+      (await app.request("/api/v1/entity/event/ev-nope/move_to", jsonRequest("POST", "", { timepoint_id: tp0, order: 0 }))).status,
+    ).toBe(404);
+    // 404：事件已软删
+    await app.request(`/api/v1/entity/event/${e0}`, { method: "DELETE", headers: HOST_HEADERS });
+    expect(
+      (await app.request(`/api/v1/entity/event/${e0}/move_to`, jsonRequest("POST", "", { timepoint_id: tp0, order: 0 }))).status,
+    ).toBe(404);
+    // 还原事件后继续测 400
+    await app.request(`/api/v1/trash/entity/event/${e0}/restore`, { method: "POST", headers: HOST_HEADERS });
+    // 400：timepoint 不存在（ENDPOINT_NOT_FOUND → VALIDATION_ERROR）——事务回滚，旧挂载不丢
+    const bad = await app.request(`/api/v1/entity/event/${e0}/move_to`, jsonRequest("POST", "", { timepoint_id: "tp-999", order: 0 }));
+    expect(bad.status).toBe(400);
+    expect(((await bad.json()) as { error: { code: string } }).error.code).toBe("VALIDATION_ERROR");
+    // 事务回滚验证：旧挂载 tp0 仍保留（未因「先删后建失败」丢半状态）
+    const rels = await occursAtOf(app, e0);
+    expect(rels).toHaveLength(1);
+    expect(rels[0].sourceId).toBe(tp0);
+    // 400：timepoint 已软删（getEntity 过滤 → ENDPOINT_NOT_FOUND）
+    const tp1 = (await createTimepoint(app, "黄昏")).id;
+    await app.request(`/api/v1/entity/timepoint/${tp1}`, { method: "DELETE", headers: HOST_HEADERS });
+    const soft = await app.request(`/api/v1/entity/event/${e0}/move_to`, jsonRequest("POST", "", { timepoint_id: tp1, order: 0 }));
+    expect(soft.status).toBe(400);
+    expect(await occursAtOf(app, e0)).toHaveLength(1); // 旧挂载仍保留
+    // body 校验：缺 timepoint_id → 400；负数 order → 400（.strict()/z.min(0)）
+    expect(
+      (await app.request(`/api/v1/entity/event/${e0}/move_to`, jsonRequest("POST", "", { order: 0 }))).status,
+    ).toBe(400);
+    expect(
+      (await app.request(`/api/v1/entity/event/${e0}/move_to`, jsonRequest("POST", "", { timepoint_id: tp0, order: -1 }))).status,
+    ).toBe(400);
+  });
+});

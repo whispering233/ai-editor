@@ -2,7 +2,7 @@
 // 覆盖：
 // - 15 个提案类型 → 13 个执行函数映射正确（proposal → 执行函数 → 结果落库；含 create_hook
 //   → create_entity(type=hook) + plants 关系适配、update_hook → update_entity 适配、
-//   propose_reorder_events → reorder_events 批量重排（F9））
+//   propose_reorder_timepoints → reorder_timepoints 批量重排（G2，取代 F9 的 reorder_events））
 // - 未知提案类型 → 抛错（防静默）
 // - **执行类不注册 registry**：工具注册表（LLM 可见）不包含任何 EXECUTOR_TOOLS 名
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -18,9 +18,9 @@ import {
   createRelation,
   getEntity,
   getRelation,
-  listAllEvents,
   listDeltasByTarget,
   listRelations,
+  listTimepoints,
   openDatabase,
   type Db,
 } from "@whispering233/ai-editor-db";
@@ -213,21 +213,21 @@ describe("executeProposal（proposal.type → 执行函数映射）", () => {
     expect(listDeltasByTarget(db, hook.id, dir)[0].changes).toEqual([{ field: "status", op: "update", from: "planted", to: "abandoned" }]);
   });
 
-  it("propose_reorder_events → reorder_events：批量重排 sort_order（F9，决策 26 修订注记）", () => {
-    // 造 3 个 event，sort_order 0..2（db 测试同款 INSERT 模式——createEntity 不设 sort_order）
+  it("propose_reorder_timepoints → reorder_timepoints：批量重排 sort_order（G2，取代 F9 的 reorder_events）", () => {
+    // 造 3 个 timepoint，sort_order 0..2（db 测试同款 INSERT 模式——createEntity 不设 sort_order）
     const ids: string[] = [];
     for (let i = 0; i < 3; i++) {
-      const id = `ev-exec-reorder-${i}`;
+      const id = `tp-exec-reorder-${i}`;
       ids.push(id);
       db.prepare(
         `INSERT INTO entities (id, type, name, sort_order, created_at, updated_at)
-         VALUES (?, 'event', ?, ?, ?, ?)`,
-      ).run(id, `事件${i}`, i, "2026-08-01T00:00:00Z", "2026-08-01T00:00:00Z");
+         VALUES (?, 'timepoint', ?, ?, ?, ?)`,
+      ).run(id, `时间点${i}`, i, "2026-08-01T00:00:00Z", "2026-08-01T00:00:00Z");
     }
     const newOrder = [ids[2], ids[0], ids[1]];
-    const result = executeProposal(makeCtx(), makeProposal("propose_reorder_events", { event_ids: newOrder }));
-    expect(result).toEqual({ reordered: 3 }); // 批量操作无单对象 id（ExecutorResult.id 可选，F9）
-    expect(listAllEvents(db).map((r) => r.id)).toEqual(newOrder);
+    const result = executeProposal(makeCtx(), makeProposal("propose_reorder_timepoints", { timepoint_ids: newOrder }));
+    expect(result).toEqual({ reordered: 3 }); // 批量操作无单对象 id（ExecutorResult.id 可选，F9/G2）
+    expect(listTimepoints(db).map((r) => r.id)).toEqual(newOrder);
   });
 
   it("未知提案类型 → 抛错（防静默）", () => {

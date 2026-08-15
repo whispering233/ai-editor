@@ -4,13 +4,16 @@
 // 决策 12 修订（可见性联动端点状态；手动删关系 = 物理删）。
 // 错误映射（db RelationError → HttpError，对照 endpoints.md 错误码）：
 //   RELATION_EXISTS         → 409 RELATION_EXISTS（同三元组已存在，endpoints.md 第 372-374 行）
+//   EVENT_ALREADY_MOUNTED   → 409 EVENT_ALREADY_MOUNTED（occurs_at 1:n 重复挂载，G2，决策 26 修订）
 //   ENDPOINT_NOT_FOUND      → 400 VALIDATION_ERROR（端点不存在/软删是参数问题）
 //   INVALID_RELATION_TYPE   → 400 VALIDATION_ERROR（白名单外——schema 层 enum 已拦截，防御分支）
 //   DELETE 0 影响行         → 404 RELATION_NOT_FOUND
 import { Hono } from "hono";
 import {
+  assertEventSingleOccursAt,
   createRelation,
   deleteRelation,
+  eventOccursAt,
   listRelations,
   nowIso,
   RelationError,
@@ -57,6 +60,16 @@ relationRoutes.post("/", async (c) => {
   const { source_type, source_id, target_type, target_id, relation_type, metadata } = parsed.data;
   let row;
   try {
+    // occurs_at 1:n 挂载校验（G2，决策 26 修订：一个事件至多挂一个时间点）。
+    // **判重先行语义**：同三元组重复（事件已挂载同一时间点）→ 由 createRelation 判重返回
+    // RELATION_EXISTS（与泛型创建语义一致）；事件已挂载**其他**时间点 → 1:n 约束拦截
+    // （assertEventSingleOccursAt 抛 EVENT_ALREADY_MOUNTED → 409，跨组改挂载请走 move_to 复合端点）
+    if (source_type === "timepoint" && relation_type === "occurs_at" && target_type === "event") {
+      const mount = eventOccursAt(project.db, target_id);
+      if (mount !== null && mount.source_id !== source_id) {
+        assertEventSingleOccursAt(project.db, target_id); // 已挂载其他时间点 → 抛 EVENT_ALREADY_MOUNTED
+      }
+    }
     row = createRelation(
       project.db,
       {
@@ -134,6 +147,9 @@ export function mapRelationError(err: unknown): never {
     switch (err.code) {
       case "RELATION_EXISTS":
         throw new HttpError(409, "RELATION_EXISTS", err.message);
+      case "EVENT_ALREADY_MOUNTED":
+        // occurs_at 1:n 重复挂载（G2，决策 26 修订）——409，与 RELATION_EXISTS 同冲突语义
+        throw new HttpError(409, "EVENT_ALREADY_MOUNTED", err.message);
       case "ENDPOINT_NOT_FOUND":
       case "INVALID_RELATION_TYPE":
         throw new HttpError(400, "VALIDATION_ERROR", err.message);

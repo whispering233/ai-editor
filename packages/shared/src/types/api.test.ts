@@ -46,6 +46,7 @@ describe("ErrorCode 完整性（endpoints.md 错误码对照）", () => {
       "VALIDATION_ERROR",
       "ENTITY_NOT_FOUND",
       "RELATION_EXISTS",
+      "EVENT_ALREADY_MOUNTED", // G2 occurs_at 1:n 重复挂载（assertEventSingleOccursAt 抛出 → 409）
       "RELATION_NOT_FOUND",
       "OUTLINE_NODE_NOT_FOUND",
       "OUTLINE_ANCESTOR_DELETED",

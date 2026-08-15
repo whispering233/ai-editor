@@ -565,7 +565,7 @@ id: string;
 **语义**（与 `PUT /outline/:nodeId/move` 口径一致，决策 26）：
 - `order` 超过当前事件总数 → clamp 到末尾（不返回 4xx）；**负数在 HTTP 层被 schema 拒绝（400 VALIDATION_ERROR，`z.number().int().min(0)`）**——db 层 moveEvent 对负数 clamp 至 0 仅为内部防御语义（HTTP 路径不可达）。
 - 排序为拖拽权威：移动后事件列表（`GET /api/v1/entity/event`）按新 `sort_order` 升序返回。
-- **G2 跨组拖拽**：事件拖到另一时间点区块 = 改挂载（`occurs_at` 关系移除 + 新建）+ 本 move 端点重排——由前端按序调用（先关系后 move，或一次复合请求，以服务端实现为准），事务内完成。
+- **G2 跨组拖拽**：事件拖到另一时间点区块 = 改挂载（`occurs_at` 关系移除 + 新建）+ 重排——由前端**单请求调用复合端点 `POST /entity/event/:id/move_to`**（服务端事务内一次完成，见下节；两步分调已废弃——非事务有中间态风险）。
 
 ### PUT /api/v1/entity/timepoint/:id/move
 
@@ -592,11 +592,44 @@ id: string;
 
 **语义**：同 event move（clamp 到末尾、负数 400）。**拖拽时间点不修改其下事件序**——仅重排时间点 sort_order（整组移动不动内部，G2 双独立线性序）。
 
+### POST /api/v1/entity/event/:id/move_to
+
+事件跨组拖拽复合端点（G2 决策 26 修订：改挂载 + 重排一次提交，事务原子）。**由前端跨组拖拽单请求调用**——替代「DELETE 旧 occurs_at + POST 新 occurs_at + event move」的按序两步分调（非事务有中间态风险，已废弃）。
+
+```typescript
+// Path
+id: string;                    // 事件 id（ev- 前缀）
+
+// Req（shared: eventMoveToReqSchema，.strict()）
+{
+  timepoint_id: string | null; // 目标时间点 id（须为存在且未软删的 timepoint，服务端校验）；
+                               //   null = 移出到「未挂载」兜底区（仅重排，不建挂载）
+  order: number;               // 目标位置（0-based 全局事件线性序，语义同 event move：越界 clamp、负数 400）
+}
+
+// Res: 200（shared: entityMoveResSchema 同款）
+{
+  moved: true;
+}
+
+// Res: 404
+{ error: { code: "ENTITY_NOT_FOUND" } }   // 事件不存在或已软删（事务回滚，旧挂载不丢）
+
+// Res: 400
+{ error: { code: "VALIDATION_ERROR" } }   // timepoint 不存在/已软删（ENDPOINT_NOT_FOUND 映射）、参数校验失败
+```
+
+**事务内语义**（`withTransaction` 一次提交，失败整体回滚）：
+1. 读事件当前 `occurs_at` 挂载（未软删）；
+2. **改挂载**：目标与旧挂载不同（或目标为 null）→ 物理删除旧 occurs_at（决策 12 修订：关系轻量可重建）；目标与旧挂载相同 → **幂等跳过重建**（关系 id 不变，只重排）；
+3. `timepoint_id` 非 null → 建立新 occurs_at（timepoint → event，1:n 校验在此路径天然满足——旧挂载已移除）；
+4. `moveEvent` 重排全局事件线性序（决策 26：组内序 = 全局序投影，跨组后全数组重排）。
+
 ---
 
 ## 关系管理
 
-> **端点类型（决策 26 + G2 扩展）**：关系端点 source_type / target_type 支持全部实体类型（含 **`event`**、**`timepoint`**）与 `outline_node`；预定义关系类型新增 **`occurs_in`**（event→outline_node，事件锚定大纲节点，多对多，决策 26）与 **`occurs_at`**（timepoint→event，**1:n，G2**）——**锚定/挂载 = 关系本身，无独立字段**；occurs_at 语义：一个事件至多挂一个时间点（服务端建关系校验，重复挂载 409 或先移除旧关系，以实现为准）；事件无挂载 = 未挂载（归入时间轴「未挂载」兜底区）。
+> **端点类型（决策 26 + G2 扩展）**：关系端点 source_type / target_type 支持全部实体类型（含 **`event`**、**`timepoint`**）与 `outline_node`；预定义关系类型新增 **`occurs_in`**（event→outline_node，事件锚定大纲节点，多对多，决策 26）与 **`occurs_at`**（timepoint→event，**1:n，G2**）——**锚定/挂载 = 关系本身，无独立字段**；occurs_at 语义：一个事件至多挂一个时间点（服务端建关系校验，重复挂载 **409 `EVENT_ALREADY_MOUNTED`**——先移除旧挂载再建新挂载请走复合端点 `POST /entity/event/:id/move_to`，勿两步分调）；事件无挂载 = 未挂载（归入时间轴「未挂载」兜底区）。
 
 ### GET /api/v1/relation
 

@@ -35,6 +35,7 @@ export const ERROR_CODES = [
   "VALIDATION_ERROR", // 400 参数校验失败（entity/delta/outline 创建等）
   "ENTITY_NOT_FOUND", // 404 实体不存在（详情/更新/删除/restore）
   "RELATION_EXISTS", // 409 关系已存在
+  "EVENT_ALREADY_MOUNTED", // 409 事件已挂载时间点，occurs_at 1:n 重复挂载拒绝（G2，决策 26 修订）
   "RELATION_NOT_FOUND", // 404 关系不存在
   "OUTLINE_NODE_NOT_FOUND", // 404 大纲节点不存在（compute / path / restore / purge）
   "OUTLINE_ANCESTOR_DELETED", // 409 restore 时存在软删祖先（决策 12 修订）
@@ -716,6 +717,18 @@ export const entityMoveReqSchema = z
 export const entityMoveResSchema = z.object({
   moved: z.literal(true),
 });
+
+// POST /api/v1/entity/event/:id/move_to（跨组挂载复合写，G2 决策 26 修订：事件拖到另一时间点
+// 区块 = 改挂载 + 重排一次提交；服务端事务内原子完成——endpoints.md「G2 跨组拖拽」的复合端点实现）
+export const eventMoveToReqSchema = z
+  .object({
+    // 目标时间点 id；null = 移出挂载区（仅重排，归入时间轴「未挂载」兜底区）。
+    // 事件已挂载同一时间点 → 幂等跳过重建挂载（只重排）
+    timepoint_id: z.string().nullable(),
+    // 0-based 全局事件线性序（同 entityMoveReqSchema：越界 clamp、负数 400）
+    order: z.number().int().min(0),
+  })
+  .strict();
 
 // DELETE /api/v1/outline/:nodeId（软删 + 递归级联，决策 12）
 export const outlineDeleteResSchema = z.object({

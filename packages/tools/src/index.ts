@@ -31,7 +31,7 @@ export * from "./proposal/relation.js";
 export * from "./proposal/delta.js";
 export * from "./proposal/outline.js";
 export * from "./proposal/hook.js";
-export * from "./proposal/reorder-events.js";
+export * from "./proposal/reorder-timepoints.js";
 // S6.7 执行层：导出 executor 门面与 13 个执行函数（不注册工具——见文件头注释）
 export * from "./executor/index.js";
 
@@ -58,7 +58,7 @@ const queryToolDefs: ToolDefinition[] = [
     name: "get_entity",
     description:
       "实体详情查询：按类型与 id 获取单个实体（含 data 字段完整内容）。" +
-      "type 取值 character|setting|location|hook；id 为实体 id（char-/set-/loc-/hook- 前缀）。" +
+      "type 取值 character|setting|location|hook|event|timepoint；id 为实体 id（char-/set-/loc-/hook-/ev-/tp- 前缀）。" +
       "不存在或已软删返回 null。",
     argsSchema: getEntityArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
@@ -281,7 +281,7 @@ import {
   proposeDeleteNodeArgsSchema,
   proposeMoveNodeArgsSchema,
   proposeOutlineNodeArgsSchema,
-  proposeReorderEventsArgsSchema,
+  proposeReorderTimepointsArgsSchema,
   proposeRemoveRelationArgsSchema,
   proposeResolveHookArgsSchema,
   proposeUpdateEntityArgsSchema,
@@ -309,9 +309,9 @@ import {
   runProposeMoveNode,
   runProposeOutlineNode,
 } from "./proposal/outline.js";
-import { runProposeReorderEvents } from "./proposal/reorder-events.js";
+import { runProposeReorderTimepoints } from "./proposal/reorder-timepoints.js";
 
-/** 提案类工具定义（S6.6 + F9，tools.md「提案类」+ hooks.md「工具扩展」提案类，共 15 个；权限全为 PROPOSAL）
+/** 提案类工具定义（S6.6 + F9 重排 + G2 时间点重排，tools.md「提案类」+ hooks.md「工具扩展」提案类，共 15 个；权限全为 PROPOSAL）
  * 语义：AI 不能直接修改数据——propose_* 仅产出提案（tool_result 只有 proposal_id + 一句话摘要，
  * 不含预览细节，2026-08 修订；完整预览经 SSE proposal 事件推送 GUI）；用户确认后由 S7.5 路由
  * 快照重校验并调用 S6.7 执行工具落库。 */
@@ -456,16 +456,16 @@ const proposalToolDefs: ToolDefinition[] = [
     run: runProposeAbandonHook,
   },
   {
-    name: "propose_reorder_events",
+    name: "propose_reorder_timepoints",
     description:
-      "时间轴事件重排提案（F9）：event_ids 为按时间标签（time_label）语义先后排序后的" +
-      "有序事件 id **全量序列**（顺序 = 建议新序，须覆盖当前全部未软删事件，缺/多/重复将被拒绝）。" +
-      "请先查询当前事件列表（含 name 与 time_label）确认全部事件后再排序；" +
-      "确认后服务端校验事件快照（updated_at 比对）并按新序重排时间轴。" +
+      "时间轴时间点重排提案（G2）：timepoint_ids 为按时间点名称（时间标签文本，如「第二天黄昏」「少年时」）" +
+      "语义先后排序后的有序时间点 id **全量序列**（顺序 = 建议新序，须覆盖当前全部未软删时间点，" +
+      "缺/多/重复将被拒绝）。请先查询时间点列表（search_entities type=timepoint）获取 id 与名称，" +
+      "确认全部时间点后再排序；确认后服务端校验时间点快照（updated_at 比对）并按新序重排时间轴。" +
       "仅生成提案（返回 proposal_id + 一句话摘要），需用户在界面确认后才生效——请勿重复提案或视为已重排。",
-    argsSchema: proposeReorderEventsArgsSchema,
+    argsSchema: proposeReorderTimepointsArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,
-    run: runProposeReorderEvents,
+    run: runProposeReorderTimepoints,
   },
 ];
 

@@ -7,11 +7,12 @@
 //   - propose_create_hook → create_entity 注入 type="hook" + plant_at_node_id 时
 //     同事务补插 plants 关系（提案承诺「确认后建立 plants 关系」，hooks.md 生命周期「埋下」）
 //   - propose_update_hook → update_entity（hook_id 即 entity_id，patches 浅合并进 data）
-//   propose_reorder_events → reorder_events（F9：批量重排 sort_order，见 executor/reorder-events.ts）
+//   propose_reorder_timepoints → reorder_timepoints（G2：批量重排 sort_order，见 executor/reorder-timepoints.ts，
+//   取代 F9 的 propose_reorder_events → reorder_events——事件不再带 time_label，语义序载体变为时间点实体）
 //
 // **不注册 registry**：执行类是用户确认后由本门面调用的底层写路径，**不暴露给 LLM**
 // （tools.md「核心设计原则」——AI 不可以调用执行类工具）。
-// 映射表类型安全：key 为 14 个提案类型字面量联合（Record 缺键编译期报错）；
+// 映射表类型安全：key 为 15 个提案类型字面量联合（Record 缺键编译期报错）；
 // 运行时未知 type → 查表 undefined → 抛错（防静默，S7.5 转错误响应）。
 // signal：执行类是短同步事务，不做中止检查（决策 16 ③ 只要求长工具执行中检查；
 // S7.5 确认路由在调用前做取消判定）。
@@ -26,7 +27,7 @@ import { executeCreateEntity, executeDeleteEntity, executeUpdateEntity } from ".
 import { executeAddRelation, executeRemoveRelation } from "./relation.js";
 import { executeCreateOutlineNode, executeDeleteNode, executeMoveNode } from "./outline.js";
 import { executeAbandonHook, executeAdvanceHook, executeResolveHook } from "./hook.js";
-import { executeReorderEvents } from "./reorder-events.js";
+import { executeReorderTimepoints } from "./reorder-timepoints.js";
 import { optionalRecord, requireString, type ExecutorFn, type ExecutorResult } from "./types.js";
 
 /** 提案类型字面量联合（15 个，PROPOSAL_TOOLS 常量派生——注册表/门面共用契约） */
@@ -85,7 +86,7 @@ const EXECUTE_BY_PROPOSAL_TYPE: Record<ProposalType, ExecutorFn> = {
   propose_advance_hook: executeAdvanceHook,
   propose_resolve_hook: executeResolveHook,
   propose_abandon_hook: executeAbandonHook,
-  propose_reorder_events: executeReorderEvents, // F9：批量重排 sort_order
+  propose_reorder_timepoints: executeReorderTimepoints, // G2：批量重排 sort_order（取代 F9 的 propose_reorder_events）
 };
 
 /**
@@ -108,5 +109,5 @@ export { executeAddRelation, executeRemoveRelation } from "./relation.js";
 export { executeAddDelta } from "./delta.js";
 export { executeCreateOutlineNode, executeMoveNode, executeDeleteNode } from "./outline.js";
 export { executeAdvanceHook, executeResolveHook, executeAbandonHook } from "./hook.js";
-export { executeReorderEvents } from "./reorder-events.js";
+export { executeReorderTimepoints } from "./reorder-timepoints.js";
 export { EXECUTOR_TOOLS };
