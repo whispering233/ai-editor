@@ -425,3 +425,18 @@ export const proposeAbandonHookArgsSchema = z
   .strict();
 
 export type ProposeAbandonHookArgs = z.infer<typeof proposeAbandonHookArgsSchema>;
+
+// === propose_reorder_events（时间轴事件重排提案，F9，决策 26 修订注记） ===
+
+/**
+ * 入参：event_ids——LLM 按 time_label 语义排序后产出的有序事件 id **全量序列**
+ * （顺序 = 建议新序，须覆盖当前全部未软删事件，缺/多/重复由生成时校验拒绝）；
+ * 200 = 事件量上限，与列表 limit 对齐（endpoints.md 契约）
+ */
+export const proposeReorderEventsArgsSchema = z
+  .object({
+    event_ids: z.array(z.string()).min(1).max(200),
+  })
+  .strict();
+
+export type ProposeReorderEventsArgs = z.infer<typeof proposeReorderEventsArgsSchema>;

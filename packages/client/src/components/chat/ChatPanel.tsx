@@ -49,6 +49,8 @@ const PROPOSAL_TYPE_LABELS: Record<string, string> = {
   propose_update_entity: "更新实体",
   propose_add_relation: "新增关系",
   propose_outline_node: "新建大纲节点",
+  // F9：时间轴 AI 排序提案（propose_reorder_events，见 doc/ui/pages/timeline.md「AI 排序入口」）
+  propose_reorder_events: "重排时间轴事件",
 };
 
 /** focus 实体类型 → 中文（focus 小条展示；未知类型显示原文） */
@@ -309,7 +311,8 @@ export function MessageItem({ message, toolResults }: { message: ChatMessage; to
 // ============ 提案卡（chat.md「提案卡片」；S8.2 已接 S7.5 confirm/reject 真实调用） ============
 
 /** 提案卡（chat.md「提案卡片」；S8.2 已接 S7.5 confirm/reject 真实调用；导出供渲染走查测试） */
-export function ProposalCardView({ proposal }: { proposal: ProposalCard }) {  const confirmProposal = useChatStore((s) => s.confirmProposal);
+export function ProposalCardView({ proposal }: { proposal: ProposalCard }) {
+  const confirmProposal = useChatStore((s) => s.confirmProposal);
   const rejectProposal = useChatStore((s) => s.rejectProposal);
   const label = PROPOSAL_TYPE_LABELS[proposal.type] ?? proposal.type;
   // 终态（confirmed/rejected/stale）与处理中（processing 在途）：按钮禁用——

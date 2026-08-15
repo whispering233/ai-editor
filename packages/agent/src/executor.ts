@@ -29,6 +29,7 @@ import type {
   ProposeMoveNodeArgs,
   ProposeOutlineNodeArgs,
   ProposeRemoveRelationArgs,
+  ProposeReorderEventsArgs,
   ProposeResolveHookArgs,
   ProposeUpdateEntityArgs,
   ProposeUpdateHookArgs,
@@ -46,6 +47,7 @@ import {
   buildProposeMoveNode,
   buildProposeOutlineNode,
   buildProposeRemoveRelation,
+  buildProposeReorderEvents,
   buildProposeResolveHook,
   buildProposeUpdateEntity,
   buildProposeUpdateHook,
@@ -64,7 +66,7 @@ export const PROPOSAL_TTL_MS = 10 * 60_000;
 
 /**
  * 提案条数上限（决策 14：超限淘汰 createdAt 最旧）。
- * 决策原文未定数——取 200 为数量级防御：正常会话一轮最多 14 个提案、挂卡不确认的
+ * 决策原文未定数——取 200 为数量级防御：正常会话一轮最多 15 个提案、挂卡不确认的
  * 残留按 TTL 自动过期，200 足以覆盖极端多轮场景且内存占用可忽略（防无限增长）。
  */
 export const PROPOSAL_MAX_COUNT = 200;
@@ -189,7 +191,7 @@ export const defaultProposalStore: ProposalStore = createProposalStore();
 type ProposalBuilder = (ctx: ToolContext, args: unknown) => Proposal;
 
 /**
- * 14 个 propose_* 工具名 → build 层函数。
+ * 15 个 propose_* 工具名 → build 层函数。
  * 运行时查表缺失（非 propose 工具）走普通结果路径；完整性由测试断言覆盖
  * （Object.keys(PROPOSAL_BUILDERS) === PROPOSAL_TOOLS）——S6.6 后续新增提案工具须同步登记。
  * 导出仅为完整性测试断言；业务侧经 createToolDispatcher 间接使用。
@@ -209,6 +211,7 @@ export const PROPOSAL_BUILDERS: Record<string, ProposalBuilder> = {
   propose_advance_hook: (ctx, args) => buildProposeAdvanceHook(ctx, args as ProposeAdvanceHookArgs),
   propose_resolve_hook: (ctx, args) => buildProposeResolveHook(ctx, args as ProposeResolveHookArgs),
   propose_abandon_hook: (ctx, args) => buildProposeAbandonHook(ctx, args as ProposeAbandonHookArgs),
+  propose_reorder_events: (ctx, args) => buildProposeReorderEvents(ctx, args as ProposeReorderEventsArgs), // F9
 };
 
 /** createToolDispatcher 选项 */
@@ -305,11 +308,13 @@ export function createToolDispatcher(ctx: ToolContext, options: CreateToolDispat
           isError: false,
           // tool_result 严格 { proposal_id, summary }——不含预览细节（避免 LLM 误以为提案已生效而重复提案）
           content: JSON.stringify({ proposal_id: proposal.proposal_id, summary }),
-          // preview 由 S7.6 经 SSE proposal 事件推 GUI（完整预览不走 tool_result）
+          // preview 由 S7.6 经 SSE proposal 事件推 GUI（完整预览不走 tool_result）；
+          // F9 起 build 可携带结构化 preview（如 propose_reorder_events 的 { changes }）——
+          // 有则透传，无则回退默认 { type, summary, args }（既有提案工具行为不变）
           proposal: {
             proposal_id: proposal.proposal_id,
             type: proposal.type,
-            preview: { type: proposal.type, summary: proposal.summary, args: proposal.args },
+            preview: proposal.preview ?? { type: proposal.type, summary: proposal.summary, args: proposal.args },
           },
         });
       } catch (err) {

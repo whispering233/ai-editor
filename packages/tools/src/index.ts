@@ -1,7 +1,7 @@
 // @whispering233/ai-editor-tools 入口：导出工具上下文 / 注册表 / 查询类与分析类工具实现
 // S6.3 查询类工具（自动权限，8 个）+ S6.4 分析类工具（自动权限，5 个）在此注册；
 // S6.5 伏笔 / S6.6 提案通过 registry.registerTool(s) 继续挂载（注册表是唯一事实来源）。
-// S6.7 执行类 12 个**不注册 registry**（LLM 不可见，tools.md「核心设计原则」）——
+// S6.7 执行类 13 个**不注册 registry**（LLM 不可见，tools.md「核心设计原则」）——
 // 仅经 executor 门面（executeProposal）导出，S7.5 提案确认后调用。
 //
 // 注册语义：模块副作用注册（import 即挂载）——S7.4 executor 直接 getTool(name) 调度；
@@ -31,7 +31,8 @@ export * from "./proposal/relation.js";
 export * from "./proposal/delta.js";
 export * from "./proposal/outline.js";
 export * from "./proposal/hook.js";
-// S6.7 执行层：导出 executor 门面与 12 个执行函数（不注册工具——见文件头注释）
+export * from "./proposal/reorder-events.js";
+// S6.7 执行层：导出 executor 门面与 13 个执行函数（不注册工具——见文件头注释）
 export * from "./executor/index.js";
 
 import { TOOL_PERMISSION } from "@whispering233/ai-editor-shared";
@@ -280,6 +281,7 @@ import {
   proposeDeleteNodeArgsSchema,
   proposeMoveNodeArgsSchema,
   proposeOutlineNodeArgsSchema,
+  proposeReorderEventsArgsSchema,
   proposeRemoveRelationArgsSchema,
   proposeResolveHookArgsSchema,
   proposeUpdateEntityArgsSchema,
@@ -307,8 +309,9 @@ import {
   runProposeMoveNode,
   runProposeOutlineNode,
 } from "./proposal/outline.js";
+import { runProposeReorderEvents } from "./proposal/reorder-events.js";
 
-/** 提案类工具定义（S6.6，tools.md「提案类」+ hooks.md「工具扩展」提案类，共 14 个；权限全为 PROPOSAL）
+/** 提案类工具定义（S6.6 + F9，tools.md「提案类」+ hooks.md「工具扩展」提案类，共 15 个；权限全为 PROPOSAL）
  * 语义：AI 不能直接修改数据——propose_* 仅产出提案（tool_result 只有 proposal_id + 一句话摘要，
  * 不含预览细节，2026-08 修订；完整预览经 SSE proposal 事件推送 GUI）；用户确认后由 S7.5 路由
  * 快照重校验并调用 S6.7 执行工具落库。 */
@@ -451,6 +454,18 @@ const proposalToolDefs: ToolDefinition[] = [
     argsSchema: proposeAbandonHookArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,
     run: runProposeAbandonHook,
+  },
+  {
+    name: "propose_reorder_events",
+    description:
+      "时间轴事件重排提案（F9）：event_ids 为按时间标签（time_label）语义先后排序后的" +
+      "有序事件 id **全量序列**（顺序 = 建议新序，须覆盖当前全部未软删事件，缺/多/重复将被拒绝）。" +
+      "请先查询当前事件列表（含 name 与 time_label）确认全部事件后再排序；" +
+      "确认后服务端校验事件快照（updated_at 比对）并按新序重排时间轴。" +
+      "仅生成提案（返回 proposal_id + 一句话摘要），需用户在界面确认后才生效——请勿重复提案或视为已重排。",
+    argsSchema: proposeReorderEventsArgsSchema,
+    permission: TOOL_PERMISSION.PROPOSAL,
+    run: runProposeReorderEvents,
   },
 ];
 

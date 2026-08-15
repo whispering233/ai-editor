@@ -98,6 +98,10 @@
 
 顶部标签筛选器：行 `[全部] [tag1] [tag2] …`（tag 从当前列表数据聚合），点击 tag 过滤列表（MVP 含此功能），再次点击取消；筛选态高亮当前 tag。
 
+### AI 排序入口（F9，2026-08 用户反馈）
+
+列表页头部 `[+ 新建事件]` 旁新增「AI 排序」按钮：点击 → 向右栏聊天注入预设指令（「请按时间标签的语义先后顺序对时间轴事件排序」）→ 聊天 agent 循环中 LLM 读取事件列表（含 time_label）→ 调用提案工具 `propose_reorder_events`（见 `doc/api/tools.md`）→ 提案卡展示顺序变化预览 → 用户确认 → Executor 校验后重排 `sort_order` → `notifyDataChanged` → 本页自动重拉新序。无项目打开时按钮禁用（聊天不可用）。
+
 ### 详情页（#/timeline/:id）
 
 - **字段编辑**：`name` / `description` / `time_label` / `tags` 表单 → `PUT /entity/event/:id` → toast「已保存」。**清空语义（2026-08 用户反馈 F1 修复）**：三个 data 字段均可清除——输入框清空（`description`/`time_label`）或标签输入清空（`tags`）→ 提交**空值**（`""` / `[]`）即显式清除原值；仅当原值非空时提交空值（原值本就为空 → 无变更不提交）。清空 `time_label` 后列表行恢复「未标注时间」。

@@ -193,6 +193,23 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3：任务�
     );
     expect(stale).toContain("此提案已失效");
   });
+
+  it("ProposalCardView：propose_reorder_events（F9）标题映射「重排时间轴事件」+ preview 通用 JSON 展示", () => {
+    const html = renderToString(
+      <ProposalCardView
+        proposal={{
+          proposalId: "prop-9",
+          type: "propose_reorder_events",
+          status: "pending",
+          preview: { changes: [{ id: "evt-1", order: 2 }] },
+        }}
+      />,
+    );
+    expect(html).toContain("提案");
+    expect(html).toContain("重排时间轴事件"); // PROPOSAL_TYPE_LABELS 映射（F9 新增）
+    // preview 走通用 JSON 渲染（F9 不做特化，YAGNI）：结构字段原文可见
+    expect(html).toContain("changes");
+  });
 });
 
 describe("store 层「新会话」状态迁移走查（问题 3 场景：激活会话 → 清空 → 空态）", () => {

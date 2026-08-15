@@ -141,7 +141,7 @@ describe("工具常量（tools.md 工具目录）", () => {
     expect(HOOK_ANALYSIS_TOOLS).toHaveLength(5);
   });
 
-  it("提案类 14 个（tools.md 9 + hooks.md 5，无重复）", () => {
+  it("提案类 15 个（tools.md 9 + hooks.md 5 + F9 重排 1，无重复）", () => {
     expect(PROPOSAL_TOOLS).toEqual([
       "propose_create_entity",
       "propose_update_entity",
@@ -157,11 +157,12 @@ describe("工具常量（tools.md 工具目录）", () => {
       "propose_advance_hook",
       "propose_resolve_hook",
       "propose_abandon_hook",
+      "propose_reorder_events",
     ]);
-    expect(PROPOSAL_TOOLS).toHaveLength(14);
+    expect(PROPOSAL_TOOLS).toHaveLength(15);
   });
 
-  it("执行类 12 个（tools.md「执行类」，不暴露给 LLM）", () => {
+  it("执行类 13 个（tools.md「执行类」+ F9 reorder_events，不暴露给 LLM）", () => {
     expect(EXECUTOR_TOOLS).toEqual([
       "create_entity",
       "update_entity",
@@ -175,13 +176,14 @@ describe("工具常量（tools.md 工具目录）", () => {
       "advance_hook",
       "resolve_hook",
       "abandon_hook",
+      "reorder_events",
     ]);
-    expect(EXECUTOR_TOOLS).toHaveLength(12);
+    expect(EXECUTOR_TOOLS).toHaveLength(13);
   });
 
-  it("分组无重叠且全量 44 个", () => {
+  it("分组无重叠且全量 46 个", () => {
     expect(AUTO_TOOLS).toHaveLength(18);
-    expect(TOOL_NAMES).toHaveLength(44);
+    expect(TOOL_NAMES).toHaveLength(46);
     // 各分组互不重叠
     const all = [...QUERY_TOOLS, ...ANALYSIS_TOOLS, ...HOOK_ANALYSIS_TOOLS, ...PROPOSAL_TOOLS, ...EXECUTOR_TOOLS];
     expect(new Set(all).size).toBe(all.length);

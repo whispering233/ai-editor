@@ -368,8 +368,8 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 
 ### F9 LLM 识别时间标签排序 → 提案确认（新需求，2026-08 用户反馈）
 
-- 范围：AI 工具「按 time_label 语义排序」（决策 26「time_label 不解析」**修订**）：agent 新增工具（读事件列表 + time_label → 产出建议 sort_order 序），**写操作走提案确认**（决策 14 权限分级：提案 → 用户确认 → 服务端重校验 → 应用 move 序列）；前端时间轴「AI 排序」入口 + 提案预览 Diff 确认 UI。
-- 文档：decisions.md 修订注记、`doc/api/tools.md`（工具目录新增）、`doc/ui/pages/timeline.md`（AI 排序交互）
+- 范围：AI 工具「按 time_label 语义排序」（决策 26「time_label 不解析」**修订**，决策 14 权限分级）：新增提案类工具 `propose_reorder_events`（args `{ event_ids: string[] }`——LLM 产出有序事件 id 序列）→ 提案卡（预览 = 顺序变化说明）→ 用户确认 → Tool Executor 校验 references（全部事件存在性 + updated_at 快照，409 PROPOSAL_STALE）后**按新序重排 sort_order**（db 层新增批量重排，或复用 moveEvent 逐次——以事务内一次重写为准，拖拽权威语义不变）。**前端**：时间轴页「AI 排序」入口（注入聊天引导 LLM 调用，无直接调工具入口——现有模式一切工具调用走聊天 agent 循环）+ ChatPanel `PROPOSAL_TYPE_LABELS` 中文文案。tool_result 只返回 `{ proposal_id, summary }`（tools.md 2026-08 修订防重复提案）；提案确认成功后 `notifyDataChanged` → Timeline 页 `useDataRefresh` 自动重拉。**与 backlog #15（时间线一致性分析，只读）不同能力**。
+- 文档：decisions.md 决策 26 修订注记（F9，已完成）、`doc/api/tools.md`（提案类工具新增 + 执行类新增）、`doc/ui/pages/timeline.md`（AI 排序入口交互）
 - 依赖：F3/F4（UI 承载）后实施
-- 验证：agent/server 测试 + 手工走查（提案生成/确认/拒绝）
-- 回滚：单 commit
+- 验证：shared/tools/agent 测试（schema 校验/PROPOSAL_BUILDERS 完整性断言/executor 重排/STALE）+ client 测试（如 PROPOSAL_TYPE_LABELS）+ 手工走查（聊天让 AI 排序 → 提案卡 → 确认 → 时间轴重排；拖拽改序后 AI 排序 STALE）
+- 回滚：单 commit（实现分两个 commit：服务端链路 + 前端入口，可按卡拆）

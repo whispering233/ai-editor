@@ -131,6 +131,17 @@ propose_outline_node(type, title, parent_id?)
 propose_move_node(node_id, parent_id, order)
 propose_delete_node(node_id)
   → 同上，展示在大纲树上的位置变化
+
+propose_reorder_events(event_ids)
+  → 按事件语义时间先后重排时间轴（2026-08 用户反馈 F9，决策 26 修订注记）
+  参数：{ event_ids: string[] }——LLM 按 time_label 语义识别时间先后后产出的
+        **有序事件 id 全量序列**（须覆盖当前全部未软删事件，顺序 = 建议新序）
+  预览：顺序变化说明（如「『玉佩来历揭开』从第 3 位移到第 1 位」）
+  确认后：Executor 校验全部事件 references（存在性 + updated_at 快照，任一过期
+        → 409 PROPOSAL_STALE——用户拖拽改序后 AI 提案自动失效）→ 按新序
+        事务内重排 sort_order（拖拽权威语义不变：排序结果即 sort_order 线性序）
+  用途：AI 按时间标签语义（如「第二天黄昏」「少年时」）自动识别先后顺序，
+        用户确认后采用——解决手工拖拽排序在事件多时的负担
 ```
 
 ### 执行类（用户通过 GUI 直接操作）

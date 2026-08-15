@@ -11,9 +11,13 @@
 //    drop 后对组内事件按序逐个 PUT /entity/event/:id/move——见 components/timeline/Timeline.tsx）
 //  - 行 ⋯ 菜单：详情（跳 #/timeline/:id）/编辑（同新建表单预填，PUT）/移入回收站（ConfirmDialog 软删）
 //  - 标签筛选：顶部 [全部] [tag…] 客户端过滤（筛选后再分组；tag 从当前列表聚合，timeline.md）
+//  - AI 排序（F9）：头部「AI 排序」按钮 → 聊天注入预设指令（工具名 propose_reorder_events 保证出现，
+//    LLM 依赖工具名发现）→ agent 循环调工具 → 提案卡确认后 Executor 重排 sort_order →
+//    notifyDataChanged → 本页 useDataRefresh 自动重拉（无需本页处理刷新）
 //  - 数据刷新：useDataRefresh 订阅 dataVersion（AI 提案确认写库 / InfoBar 刷新按钮）
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
+import { ListOrdered } from "lucide-react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +51,7 @@ import { TagSuggest } from "../components/timeline/TagSuggest";
 import { navigate } from "../hooks/use-route";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useProjectStore } from "../stores/project";
+import { useChatStore } from "../stores/chat";
 import { useUiStore } from "../stores/ui";
 
 /** 事件表单（新建/编辑共用；tags 为输入框字符串，提交前 parseTagsInput） */
@@ -93,8 +98,10 @@ export default function Timeline() {
   // 软删确认
   const [deleteTarget, setDeleteTarget] = useState<EntitySummary | null>(null);
 
+  const config = useProjectStore((s) => s.config);
   const outline = useProjectStore((s) => s.outline);
   const nodeOptions = flattenTree(outline?.children ?? []);
+  const sendMessage = useChatStore((s) => s.sendMessage);
 
   // 列表 + 锚定边并行（互不依赖；锚定边失败仅降级隐藏「N 节点」列）。
   // Promise.allSettled 统一收口 loading：两个请求都完成才结束骨架，避免列表慢于关系请求时
@@ -290,6 +297,19 @@ export default function Timeline() {
     }
   }
 
+  // ============ AI 排序（F9，timeline.md「AI 排序入口」） ============
+
+  /**
+   * AI 排序：向聊天注入预设指令（工具名 propose_reorder_events 保证出现——LLM 依赖工具名发现）；
+   * agent 循环中 LLM 读取事件列表（含 time_label）→ 调工具生成排序提案 → 提案卡展示预览 →
+   * 用户确认后 Executor 校验并重排 sort_order → notifyDataChanged → 本页 useDataRefresh 自动重拉。
+   * 无项目态按钮已禁用（config === null），此处为状态层双保险。
+   */
+  function handleAiSort() {
+    if (config === null) return;
+    sendMessage("请按时间标签的语义先后顺序对时间轴事件排序，并使用 propose_reorder_events 工具生成排序提案。");
+  }
+
   // ============ 渲染 ============
 
   const tagOptions = items === null ? [] : collectEventTags(items);
@@ -313,10 +333,25 @@ export default function Timeline() {
 
   return (
     <section>
-      {/* header：标题 + 新建入口（timeline.md 线框） */}
+      {/* header：标题 + 操作（timeline.md 线框；F9「AI 排序入口」新增 AI 排序按钮） */}
       <div className="mb-4 flex items-center gap-3">
         <h1 className="text-xl font-semibold">时间轴</h1>
-        <Button type="button" className="ml-auto" onClick={() => setCreateOpen(true)}>
+        {/* AI 排序：注入聊天预设指令（F9）；无项目禁用——外层 span 承载 title 提示
+            （按钮 disabled 态 pointer-events-none 吞掉 hover，原生 title 不弹） */}
+        <span className={cn("ml-auto", !config && "cursor-not-allowed")} title={config ? undefined : "请先打开项目"}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!config}
+            onClick={handleAiSort}
+            aria-label="AI 排序"
+          >
+            <ListOrdered className="size-3.5" />
+            AI 排序
+          </Button>
+        </span>
+        <Button type="button" onClick={() => setCreateOpen(true)}>
           + 新建事件
         </Button>
       </div>

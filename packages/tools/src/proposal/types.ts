@@ -15,6 +15,9 @@
 //   （存在性 + updated_at 比对，失败 409 PROPOSAL_STALE）
 // - summary：一句话摘要（tool_result + GUI 展示）
 // - createdAt：ISO 8601（应用层写入约定；TTL 计算基准）
+// - preview（F9 起可选）：结构化预览细节（如 propose_reorder_events 的 { changes: [...] }）——
+//   经 SSE proposal 事件推送 GUI 展示提案卡；未设置时 S7.4 executor 回退为
+//   { type, summary, args }（既有提案工具的默认预览形态）。
 //
 // tool_result 语义（tools.md「返回语义」2026-08 修订）：propose_* 的 run 只返回
 // { proposal_id, summary }，**不含预览细节**——避免 LLM 误以为提案已生效而重复提案；
@@ -53,6 +56,12 @@ export interface Proposal {
   references: ProposalReference[];
   /** 一句话摘要（tool_result + GUI 展示） */
   summary: string;
+  /**
+   * 结构化预览细节（F9 起可选）：如 propose_reorder_events 的 { changes: string[] }（顺序变化
+   * 说明，供前端提案卡 JSON 展示）；经 SSE proposal 事件推送 GUI。未设置时 S7.4 executor
+   * 回退为 { type, summary, args }（既有提案工具默认预览形态，行为不变）。
+   */
+  preview?: Record<string, unknown>;
   /** ISO 8601 创建时间（应用层写入约定；TTL 计算基准，S7.4） */
   createdAt: string;
 }
@@ -78,6 +87,7 @@ export function buildProposal(
   args: Record<string, unknown>,
   references: ProposalReference[],
   summary: string,
+  preview?: Record<string, unknown>,
 ): Proposal {
   return {
     proposal_id: generateRuntimeId("proposal"),
@@ -86,6 +96,7 @@ export function buildProposal(
     project_id: ctx.projectId,
     references,
     summary,
+    ...(preview === undefined ? {} : { preview }),
     createdAt: nowIso(),
   };
 }

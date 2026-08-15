@@ -1,7 +1,8 @@
 // S6.7 executor 门面测试（executeProposal）
 // 覆盖：
-// - 14 个提案类型 → 12 个执行函数映射正确（proposal → 执行函数 → 结果落库；含 create_hook
-//   → create_entity(type=hook) + plants 关系适配、update_hook → update_entity 适配）
+// - 15 个提案类型 → 13 个执行函数映射正确（proposal → 执行函数 → 结果落库；含 create_hook
+//   → create_entity(type=hook) + plants 关系适配、update_hook → update_entity 适配、
+//   propose_reorder_events → reorder_events 批量重排（F9））
 // - 未知提案类型 → 抛错（防静默）
 // - **执行类不注册 registry**：工具注册表（LLM 可见）不包含任何 EXECUTOR_TOOLS 名
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -17,6 +18,7 @@ import {
   createRelation,
   getEntity,
   getRelation,
+  listAllEvents,
   listDeltasByTarget,
   listRelations,
   openDatabase,
@@ -26,7 +28,7 @@ import { findOutlineNode, readOutlineFile, writeOutlineFile } from "@whispering2
 import { buildProposal } from "../proposal/types.js";
 import { executeProposal } from "./index.js";
 import { listTools } from "../registry.js";
-import * as toolsEntry from "../index.js"; // 副作用注册（32 个 LLM 可见工具）
+import * as toolsEntry from "../index.js"; // 副作用注册（33 个 LLM 可见工具）
 
 let dir: string;
 let db: Db;
@@ -211,18 +213,35 @@ describe("executeProposal（proposal.type → 执行函数映射）", () => {
     expect(listDeltasByTarget(db, hook.id, dir)[0].changes).toEqual([{ field: "status", op: "update", from: "planted", to: "abandoned" }]);
   });
 
+  it("propose_reorder_events → reorder_events：批量重排 sort_order（F9，决策 26 修订注记）", () => {
+    // 造 3 个 event，sort_order 0..2（db 测试同款 INSERT 模式——createEntity 不设 sort_order）
+    const ids: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const id = `ev-exec-reorder-${i}`;
+      ids.push(id);
+      db.prepare(
+        `INSERT INTO entities (id, type, name, sort_order, created_at, updated_at)
+         VALUES (?, 'event', ?, ?, ?, ?)`,
+      ).run(id, `事件${i}`, i, "2026-08-01T00:00:00Z", "2026-08-01T00:00:00Z");
+    }
+    const newOrder = [ids[2], ids[0], ids[1]];
+    const result = executeProposal(makeCtx(), makeProposal("propose_reorder_events", { event_ids: newOrder }));
+    expect(result).toEqual({ reordered: 3 }); // 批量操作无单对象 id（ExecutorResult.id 可选，F9）
+    expect(listAllEvents(db).map((r) => r.id)).toEqual(newOrder);
+  });
+
   it("未知提案类型 → 抛错（防静默）", () => {
     expect(() => executeProposal(makeCtx(), makeProposal("propose_frobnicate", { a: 1 }))).toThrow(/未知提案类型 propose_frobnicate/);
   });
 });
 
 describe("执行类不注册 registry（tools.md「核心设计原则」：AI 不可以调用执行类工具）", () => {
-  it("LLM 可见工具表（listTools）不包含任何 EXECUTOR_TOOLS 名；入口冒烟 32 个注册数不变", () => {
+  it("LLM 可见工具表（listTools）不包含任何 EXECUTOR_TOOLS 名；入口冒烟 33 个注册数不变", () => {
     const names = new Set(listTools().map((t) => t.name));
     for (const name of EXECUTOR_TOOLS) {
       expect(names.has(name)).toBe(false);
     }
-    expect(toolsEntry.toolCount()).toBe(32); // 查询 8 + 分析 5 + 伏笔 5 + 提案 14（S6.7 执行 12 不注册）
+    expect(toolsEntry.toolCount()).toBe(33); // 查询 8 + 分析 5 + 伏笔 5 + 提案 15（S6.7 执行 13 不注册）
   });
 
   it("executeProposal 导出存在（S7.5 确认路由的消费入口）", () => {

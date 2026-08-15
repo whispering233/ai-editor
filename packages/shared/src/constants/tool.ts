@@ -44,7 +44,7 @@ export const HOOK_ANALYSIS_TOOLS = [
 ] as const;
 
 /**
- * 提案类工具（需确认，tools.md「提案类」+ hooks.md「工具扩展」提案类，共 14 个）
+ * 提案类工具（需确认，tools.md「提案类」+ hooks.md「工具扩展」提案类，共 15 个）
  * AI 不能直接修改数据，propose_* 仅发出提案（proposal_id + 一句话摘要），
  * tool_result 不含预览细节（2026-08 修订）；完整预览经 SSE proposal 事件推送 GUI
  */
@@ -63,12 +63,14 @@ export const PROPOSAL_TOOLS = [
   "propose_advance_hook",
   "propose_resolve_hook",
   "propose_abandon_hook",
+  "propose_reorder_events", // F9（决策 26 修订注记）：LLM 按 time_label 语义排序 → 提案确认
 ] as const;
 
 /**
- * 执行类工具（不暴露给 LLM，tools.md「执行类」，共 12 个）
+ * 执行类工具（不暴露给 LLM，tools.md「执行类」，共 13 个）
  * 用户确认提案后由 Tool Executor 调用；advance_hook/resolve_hook/abandon_hook 为复合写
- * （delta_records 记 status 变化 + relation_records 插 advances/resolves，一次提交）
+ * （delta_records 记 status 变化 + relation_records 插 advances/resolves，一次提交）；
+ * reorder_events 为批量重排（F9：按新序事务内重写 sort_order 0..n-1）
  */
 export const EXECUTOR_TOOLS = [
   "create_entity",
@@ -83,12 +85,13 @@ export const EXECUTOR_TOOLS = [
   "advance_hook",
   "resolve_hook",
   "abandon_hook",
+  "reorder_events",
 ] as const;
 
 /** 自动级工具（查询 + 分析 + 伏笔分析，共 18 个） */
 export const AUTO_TOOLS = [...QUERY_TOOLS, ...ANALYSIS_TOOLS, ...HOOK_ANALYSIS_TOOLS] as const;
 
-/** 全部工具名（自动 18 + 提案 14 + 执行 12 = 44 个） */
+/** 全部工具名（自动 18 + 提案 15 + 执行 13 = 46 个） */
 export const TOOL_NAMES = [...AUTO_TOOLS, ...PROPOSAL_TOOLS, ...EXECUTOR_TOOLS] as const;
 
 /** 工具名（从 TOOL_NAMES 派生） */

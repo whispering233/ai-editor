@@ -2,11 +2,12 @@
 //
 // 按 proposal.type 映射执行函数（PROPOSAL_TOOLS 名 ↔ EXECUTOR_TOOLS 名）：
 //   propose_create_entity → create_entity、propose_add_relation → add_relation、
-//   propose_advance_hook → advance_hook 等（14 提案 → 12 执行）；
+//   propose_advance_hook → advance_hook 等（15 提案 → 13 执行）；
 //   propose_create_hook / propose_update_hook 为适配器（hook 即 type=hook 的实体）：
 //   - propose_create_hook → create_entity 注入 type="hook" + plant_at_node_id 时
 //     同事务补插 plants 关系（提案承诺「确认后建立 plants 关系」，hooks.md 生命周期「埋下」）
 //   - propose_update_hook → update_entity（hook_id 即 entity_id，patches 浅合并进 data）
+//   propose_reorder_events → reorder_events（F9：批量重排 sort_order，见 executor/reorder-events.ts）
 //
 // **不注册 registry**：执行类是用户确认后由本门面调用的底层写路径，**不暴露给 LLM**
 // （tools.md「核心设计原则」——AI 不可以调用执行类工具）。
@@ -25,12 +26,13 @@ import { executeCreateEntity, executeDeleteEntity, executeUpdateEntity } from ".
 import { executeAddRelation, executeRemoveRelation } from "./relation.js";
 import { executeCreateOutlineNode, executeDeleteNode, executeMoveNode } from "./outline.js";
 import { executeAbandonHook, executeAdvanceHook, executeResolveHook } from "./hook.js";
+import { executeReorderEvents } from "./reorder-events.js";
 import { optionalRecord, requireString, type ExecutorFn, type ExecutorResult } from "./types.js";
 
-/** 提案类型字面量联合（14 个，PROPOSAL_TOOLS 常量派生——注册表/门面共用契约） */
+/** 提案类型字面量联合（15 个，PROPOSAL_TOOLS 常量派生——注册表/门面共用契约） */
 export type ProposalType = (typeof PROPOSAL_TOOLS)[number];
 
-/** 执行工具名字面量联合（12 个，EXECUTOR_TOOLS 常量派生） */
+/** 执行工具名字面量联合（13 个，EXECUTOR_TOOLS 常量派生） */
 export type ExecutorToolName = (typeof EXECUTOR_TOOLS)[number];
 
 /** 适配 propose_create_hook → 复合建 hook：create_entity(type=hook) + plants 关系一次提交 */
@@ -83,6 +85,7 @@ const EXECUTE_BY_PROPOSAL_TYPE: Record<ProposalType, ExecutorFn> = {
   propose_advance_hook: executeAdvanceHook,
   propose_resolve_hook: executeResolveHook,
   propose_abandon_hook: executeAbandonHook,
+  propose_reorder_events: executeReorderEvents, // F9：批量重排 sort_order
 };
 
 /**
@@ -105,4 +108,5 @@ export { executeAddRelation, executeRemoveRelation } from "./relation.js";
 export { executeAddDelta } from "./delta.js";
 export { executeCreateOutlineNode, executeMoveNode, executeDeleteNode } from "./outline.js";
 export { executeAdvanceHook, executeResolveHook, executeAbandonHook } from "./hook.js";
+export { executeReorderEvents } from "./reorder-events.js";
 export { EXECUTOR_TOOLS };

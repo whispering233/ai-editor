@@ -16,7 +16,7 @@
 //     六类事件 + turn_start——本文件只转 SSE 帧、不产生事件）
 //   - S7.4 executor.ts（createToolDispatcher 真实现；提案仓 defaultProposalStore）
 //   - S6.1 llm client.ts（chatStream：tools 需 OpenAI function schema 格式）
-//   - S6.3-S6.6 registry.ts（listTools 32 个 AUTO+PROPOSAL 工具；执行类不注册不暴露——
+//   - S6.3-S6.6 registry.ts（listTools 33 个 AUTO+PROPOSAL 工具；执行类不注册不暴露——
 //     本文件 zod schema → JSON Schema 转换，zod 4 内置 toJSONSchema，无新依赖）
 //
 // 语义约定：
@@ -80,7 +80,7 @@ export const SESSION_HISTORY_MAX_MESSAGES = 2000;
 /**
  * 单个工具 argsSchema（zod）→ OpenAI 兼容 JSON Schema（LLMToolDefinition.parameters）。
  * 方案：**zod 4 内置 toJSONSchema**（`import { toJSONSchema } from "zod"`，v4.4+ 自带，
- * 无新增依赖）——32 个工具参数均为简单对象 + string/enum/array/record/literal/union 字段，
+ * 无新增依赖）——33 个工具参数均为简单对象 + string/enum/array/record/literal/union 字段，
  * 内置转换全覆盖且输出 draft 2020-12 合法 schema（`.strict()` → additionalProperties:false、
  * `.refine()` 仅影响校验不改变类型 schema、`z.record` → propertyNames 形态）。
  * 仅剥离顶层 `$schema` 关键字——OpenAI 兼容端点（含 DeepSeek）对 parameters 内未知关键字
@@ -94,7 +94,7 @@ export function zodArgsToJsonSchema(schema: z.ZodTypeAny): Record<string, unknow
 
 /**
  * registry 工具定义 → LLM function calling 工具定义（决策点：只转换 AUTO + PROPOSAL 权限的
- * 32 个工具——listTools 已不注册执行类（S6.7 核心设计原则「AI 只能提案不能直接写」），
+ * 33 个工具——listTools 已不注册执行类（S6.7 核心设计原则「AI 只能提案不能直接写」），
  * 此处权限过滤为双保险：未来误注册执行类工具也不会暴露给模型）。
  */
 export function toLLMToolDefinitions(defs: readonly ToolDefinition[]): LLMToolDefinition[] {

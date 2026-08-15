@@ -12,8 +12,10 @@ import type { Proposal } from "../proposal/types.js";
 /**
  * 执行结果（统一携带 id：新对象 id 或操作对象 id；扩展字段 camelCase）。
  * duplicated=true：幂等命中——(node_id, hook_id, relation_type) 已有记录，未重复写（tools.md 复合写说明）。
+ * id 可选（F9）：reorder_events 是批量操作无单对象 id，返回 { reordered: n } 即可；
+ * 其余执行器均携带 id（S7.5 响应 result 透传，契约未要求 id 必在）。
  */
-export type ExecutorResult = { id: string; duplicated?: boolean } & Record<string, unknown>;
+export type ExecutorResult = { id?: string; duplicated?: boolean } & Record<string, unknown>;
 
 /** 执行函数统一签名：直接消费 Proposal（args 规范化形态 + summary），返回可序列化结果或抛错 */
 export type ExecutorFn = (ctx: ToolContext, proposal: Proposal) => ExecutorResult;
