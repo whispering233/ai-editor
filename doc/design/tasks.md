@@ -364,6 +364,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - 依赖：无
 - 验证：client 测试（匹配/去重/点选纯函数）+ 手工走查
 - 回滚：单 commit
+- **状态（2026-08）**：✅ 已完成（commit `66227ce`；lib 纯函数 `suggestTags`（最后一段匹配/排除已选/去重/稳定序/limit 5/空段 []/大小写不敏感）+ `applyTagSuggestion`（替换最后一段 + 追加逗号）+ 测试；`TagSuggest` 组件两页共用（卡片样式/hover 高亮/onMouseDown 保焦点/!visible 不渲染）；列表页已拉聚合 + 满页补拉 200、详情页独立补拉 + useDataRefresh 刷新（保存新标签后建议池不陈旧，oracle P2）；oracle 审核通过（无 P0/P1）；client 502 用例全绿 + typecheck/lint 通过）。
 
 ### F9 LLM 识别时间标签排序 → 提案确认（新需求，2026-08 用户反馈）
 
