@@ -42,6 +42,8 @@ import {
   buildEventDetailPatch,
   collectEventTags,
   eventDropOrder,
+  eventTagsOf,
+  eventTimeLabel,
   filterEventsByTag,
   parseTagsInput,
   tagsToInput,
@@ -263,13 +265,13 @@ export default function Timeline() {
   // ============ 拖拽排序（S13 模式：上下半插入判定 + 插入指示线） ============
 
   /** 拖拽点相对目标行的位置：上半 → before、下半 → after（与 Outline.tsx insertSideFromEvent 同式） */
-  function insertSideFromEvent(e: DragEvent<HTMLLIElement>): "before" | "after" {
+  function insertSideFromEvent(e: DragEvent<HTMLDivElement>): "before" | "after" {
     const rect = e.currentTarget.getBoundingClientRect();
     return e.clientY < rect.top + rect.height / 2 ? "before" : "after";
   }
 
   /** 行 dragover：设置插入目标（去重防高频重渲染；side 恒为 before|after，无 end 分支） */
-  function handleDragOver(e: DragEvent<HTMLLIElement>, targetId: string) {
+  function handleDragOver(e: DragEvent<HTMLDivElement>, targetId: string) {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
     const side = insertSideFromEvent(e);
@@ -280,7 +282,7 @@ export default function Timeline() {
   }
 
   /** 行 drop：剔除拖拽项计算 order → PUT /move（拖到自身行 = 原地，跳过） */
-  async function handleDrop(e: DragEvent<HTMLLIElement>, targetId: string) {
+  async function handleDrop(e: DragEvent<HTMLDivElement>, targetId: string) {
     e.preventDefault();
     if (!dragId || busy) return;
     if (targetId === dragId) {
@@ -394,18 +396,22 @@ export default function Timeline() {
         </div>
       )}
 
-      {/* 事件列表（拖拽行头 ⠿ 调整先后顺序，timeline.md 线框） */}
+      {/* 事件时间轴（F3 垂直时间轴，timeline.md 线框：垂直轴线 + 节点圆点 + 事件行卡片；拖拽行调整先后顺序） */}
       {!loading && visible !== null && visible.length > 0 && (
-        <ul className="divide-y divide-border/70 overflow-hidden rounded-md border border-border">
+        <div className="relative flex flex-col gap-2">
+          {/* 垂直轴线（left-[11px] = 节点列中心；pointer-events-none 是拖拽共存前提，行间空隙处线连续贯穿） */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute bottom-0 left-[11px] top-0 w-0.5 bg-border"
+          />
           {visible.map((ev) => {
-            const data = ev.summary as Record<string, unknown>;
-            const timeLabel = typeof data.time_label === "string" ? data.time_label : "";
-            const tags = Array.isArray(data.tags) ? data.tags.filter((t): t is string => typeof t === "string") : [];
+            const timeLabel = eventTimeLabel(ev);
+            const tags = eventTagsOf(ev);
             const count = occursCount(ev.id);
             const showInsertBefore = dropTarget?.kind === "before" && dropTarget.id === ev.id;
             const showInsertAfter = dropTarget?.kind === "after" && dropTarget.id === ev.id;
             return (
-              <li
+              <div
                 key={ev.id}
                 draggable={!busy}
                 onDragStart={(e) => {
@@ -420,58 +426,71 @@ export default function Timeline() {
                 }}
                 onDragOver={(e) => handleDragOver(e, ev.id)}
                 onDrop={(e) => void handleDrop(e, ev.id)}
-                className="relative px-3 py-2"
+                className={cn("relative flex items-start", dragId === ev.id && "opacity-50")}
               >
-                {/* 插入指示线（S13 模式：目标行上下边缘） */}
+                {/* 插入指示线（S13 模式：目标行上下边缘，跨圆点列与内容卡） */}
                 {showInsertBefore && <div className="absolute inset-x-0 -top-px h-0.5 bg-primary" />}
                 {showInsertAfter && <div className="absolute inset-x-0 -bottom-px h-0.5 bg-primary" />}
-                <div className="flex items-center gap-2">
+                {/* 节点圆点（block + mx-auto 水平居中于 w-[22px] 节点列 → 圆心在 left-[11px] 轴线上；
+                    z-10 + 不透明 bg-background 盖住穿过的轴线；mt-[12px] = 卡片首行内容中心
+                    （py-2 8px + 行盒中心 12px = 20px，圆点 16px 高中心 offset 8px → mt = 20 - 8 = 12px） */}
+                <div className="w-[22px] shrink-0">
                   <span
-                    className="cursor-grab text-muted-foreground/60 active:cursor-grabbing"
-                    title="拖拽调整事件先后顺序"
                     aria-hidden="true"
-                  >
-                    <GripVertical className="size-4" />
-                  </span>
-                  <span className="min-w-0 truncate font-medium text-foreground" title={ev.name}>
-                    {ev.name}
-                  </span>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {timeLabel !== "" ? timeLabel : "未标注时间"}
-                  </span>
-                  {tags.map((tag) => (
-                    <span key={tag} className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-                      {tag}
-                    </span>
-                  ))}
-                  {hasOccursData && (
-                    <span className="shrink-0 text-xs text-muted-foreground">{count} 节点</span>
-                  )}
-                  <span className="ml-auto shrink-0">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        render={
-                          <Button variant="ghost" size="icon-sm" className="text-muted-foreground" aria-label={`${ev.name} 操作`}>
-                            <MoreHorizontal />
-                          </Button>
-                        }
-                      />
-                      <DropdownMenuContent align="end">
-                        {/* 详情页 #/timeline/:id（C4 启用） */}
-                        <DropdownMenuItem onClick={() => navigate(`/timeline/${ev.id}`)}>详情</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => openEdit(ev)}>编辑</DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem variant="destructive" onClick={() => setDeleteTarget(ev)}>
-                          移入回收站
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </span>
+                    className="relative z-10 mx-auto mt-[12px] block size-4 rounded-full border-2 border-primary bg-background"
+                  />
                 </div>
-              </li>
+                {/* 事件内容卡（行内 flex；行内容与重构前一致——拖拽柄 → 事件名 → 时间标签 → tags → 计数 → ⋯
+                    菜单，样式提升属 F5 卡范围） */}
+                <div className="min-w-0 flex-1 rounded-md border border-border bg-card px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="cursor-grab text-muted-foreground/60 active:cursor-grabbing"
+                      title="拖拽调整事件先后顺序"
+                      aria-hidden="true"
+                    >
+                      <GripVertical className="size-4" />
+                    </span>
+                    <span className="min-w-0 truncate font-medium text-foreground" title={ev.name}>
+                      {ev.name}
+                    </span>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {timeLabel !== "" ? timeLabel : "未标注时间"}
+                    </span>
+                    {tags.map((tag) => (
+                      <span key={tag} className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                        {tag}
+                      </span>
+                    ))}
+                    {hasOccursData && (
+                      <span className="shrink-0 text-xs text-muted-foreground">{count} 节点</span>
+                    )}
+                    <span className="ml-auto shrink-0">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          render={
+                            <Button variant="ghost" size="icon-sm" className="text-muted-foreground" aria-label={`${ev.name} 操作`}>
+                              <MoreHorizontal />
+                            </Button>
+                          }
+                        />
+                        <DropdownMenuContent align="end">
+                          {/* 详情页 #/timeline/:id（C4 启用） */}
+                          <DropdownMenuItem onClick={() => navigate(`/timeline/${ev.id}`)}>详情</DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => openEdit(ev)}>编辑</DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem variant="destructive" onClick={() => setDeleteTarget(ev)}>
+                            移入回收站
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </span>
+                  </div>
+                </div>
+              </div>
             );
           })}
-        </ul>
+        </div>
       )}
 
       {/* 标签筛选无匹配（timeline.md 状态：「没有匹配「{tag}」的事件」） */}

@@ -28,10 +28,16 @@ export function eventDropOrder(ids: string[], insert: TimelineDropInsert, exclud
   return insert.kind === "before" ? idx : idx + 1;
 }
 
-/** 事件的 tags 摘要字段（非数组/非字符串成员防御——与 db matchDataFilters 同风格） */
-function tagsOf(item: EntitySummary): string[] {
+/** 事件的 tags 摘要字段（非数组/非字符串成员防御——与 db matchDataFilters 同风格）；标签聚合/行渲染共用 */
+export function eventTagsOf(item: EntitySummary): string[] {
   const tags = (item.summary as Record<string, unknown>).tags;
   return Array.isArray(tags) ? tags.filter((t): t is string => typeof t === "string") : [];
+}
+
+/** 事件的 time_label 摘要字段（非字符串防御 → 空串 = 行内「未标注时间」，timeline.md 信息层级）；F3 时间轴行渲染 */
+export function eventTimeLabel(item: EntitySummary): string {
+  const label = (item.summary as Record<string, unknown>).time_label;
+  return typeof label === "string" ? label : "";
 }
 
 /** 收集全部事件的标签去重（稳定序：按列表序首次出现；空串忽略——筛选器选项） */
@@ -39,7 +45,7 @@ export function collectEventTags(items: EntitySummary[]): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const item of items) {
-    for (const tag of tagsOf(item)) {
+    for (const tag of eventTagsOf(item)) {
       if (tag !== "" && !seen.has(tag)) {
         seen.add(tag);
         out.push(tag);
@@ -52,7 +58,7 @@ export function collectEventTags(items: EntitySummary[]): string[] {
 /** 按标签过滤（null/空串 = 全部）；tag 无匹配事件 → 空数组（「没有匹配」态） */
 export function filterEventsByTag(items: EntitySummary[], tag: string | null): EntitySummary[] {
   if (tag === null || tag === "") return items;
-  return items.filter((item) => tagsOf(item).includes(tag));
+  return items.filter((item) => eventTagsOf(item).includes(tag));
 }
 
 /**

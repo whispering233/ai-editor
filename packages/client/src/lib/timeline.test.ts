@@ -9,6 +9,8 @@ import {
   collectEventTags,
   eventDropOrder,
   eventFormFromDetail,
+  eventTagsOf,
+  eventTimeLabel,
   filterEventsByTag,
   parseTagsInput,
   tagsToInput,
@@ -45,6 +47,19 @@ describe("eventDropOrder（拖拽插入位 → order，C3）", () => {
   it("锚点不存在 → 末尾（防御；列表与拖拽态同源，理论不可达）", () => {
     expect(eventDropOrder(ids, { kind: "after", id: "ev-ghost" }, "ev-a")).toBe(2);
     expect(eventDropOrder(ids, { kind: "before", id: "ev-ghost" })).toBe(3);
+  });
+});
+
+describe("eventTagsOf / eventTimeLabel（事件行摘要防御提取，F3 垂直时间轴行渲染）", () => {
+  it("eventTagsOf：tags 缺失/非数组 → 空数组；过滤非字符串成员", () => {
+    expect(eventTagsOf(eventOf("a"))).toEqual([]);
+    expect(eventTagsOf(eventOf("b", ["主线", 42 as unknown as string]))).toEqual(["主线"]);
+  });
+
+  it("eventTimeLabel：time_label 缺失/非字符串 → 空串（行内「未标注时间」）；正常值原样返回", () => {
+    expect(eventTimeLabel(eventOf("a"))).toBe("");
+    expect(eventTimeLabel({ ...eventOf("b"), summary: { time_label: 42 } })).toBe("");
+    expect(eventTimeLabel({ ...eventOf("c"), summary: { time_label: "第二天黄昏" } })).toBe("第二天黄昏");
   });
 });
 
