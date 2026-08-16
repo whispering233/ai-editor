@@ -1,5 +1,5 @@
 // 时间轴组块（G2.3，timeline.md G2 布局线框：时间点组块）
-// 职责：组标题行（大圆点 + 拖拽柄 + 时间点名 + 事件计数 + [重命名] + [+ 在此时间点新建事件] +
+// 职责：组标题行（大圆点 + 拖拽柄 + 时间点名；右侧：事件计数 + [重命名] + [+ 在此时间点新建事件] +
 //   [移入回收站] + 折叠按钮）+ 组内事件堆叠；**未挂载兜底区复用本组件**（timepoint = null）。
 // 拖拽（G2 双轨）：
 // - 时间点整组拖拽：draggable 设在**组标题行根**（组内事件行各自 draggable——G2 恢复单条拖拽，
@@ -12,7 +12,7 @@
 import { useState } from "react";
 import type { DragEvent } from "react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
-import { ChevronRight, GripVertical, Trash2 } from "lucide-react";
+import { ChevronRight, GripVertical, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "../../lib/utils";
 import { TimelineEvent, type EventDragHandlers } from "./TimelineEvent";
@@ -169,34 +169,40 @@ export function TimelineGroupBlock({
               {title}
             </span>
           )}
-          <span className="shrink-0 text-xs text-muted-foreground">{events.length} 个事件</span>
-          {/* 重命名（G2 行内编辑入口；未挂载区不渲染；H4：文字按钮带边框） */}
-          {!isUngrouped && !editing && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              draggable={false}
-              className="h-6 px-1.5 text-xs"
-              onClick={startRename}
-            >
-              重命名
-            </Button>
-          )}
-          {/* 「+ 在此时间点新建事件」（H4：从组尾移到标题行“重命名”右侧，横向排布；仅时间点组） */}
-          {timepoint !== null && !editing && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              draggable={false}
-              className="h-6 px-2 text-xs"
-              onClick={() => onAddEventAt(groupId)}
-            >
-              + 在此时间点新建事件
-            </Button>
-          )}
-          <span className="ml-auto flex shrink-0 items-center gap-0.5">
+          {/* 右侧信息与操作区（H5：事件计数、重命名、在此时间点新建事件、移入回收站、折叠全部靠右，
+              左侧只保留时间标签文本，减少干扰） */}
+          <span className="ml-auto flex shrink-0 items-center gap-1">
+            <span className="shrink-0 text-xs text-muted-foreground">{events.length} 个事件</span>
+            {/* 重命名（H5：图标按钮，减少文字干扰） */}
+            {timepoint !== null && !editing && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                draggable={false}
+                className="text-muted-foreground"
+                title="重命名"
+                aria-label={`重命名「${timepoint.name}」`}
+                onClick={startRename}
+              >
+                <Pencil className="size-3.5" />
+              </Button>
+            )}
+            {/* 在此时间点新建事件（H5：图标按钮，减少文字干扰） */}
+            {timepoint !== null && !editing && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                draggable={false}
+                className="text-muted-foreground"
+                title="在此时间点新建事件"
+                aria-label={`在此时间点新建事件`}
+                onClick={() => onAddEventAt(groupId)}
+              >
+                <Plus className="size-3.5" />
+              </Button>
+            )}
             {/* 移入回收站（H1：时间点组标题直接显示删除图标——用户反馈缺失删除入口；
                 H2：点击直接软删不弹确认；未挂载区不渲染） */}
             {timepoint !== null && !editing && (
