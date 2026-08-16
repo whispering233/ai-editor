@@ -11,7 +11,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
-import { BookOpen, GripVertical, Pencil, Trash2 } from "lucide-react";
+import { Eye, GripVertical, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { eventDescription, eventTagsOf } from "../../lib/timeline";
 import { cn } from "../../lib/utils";
@@ -130,7 +130,7 @@ export function TimelineEvent({
               aria-label={`${ev.name} 详情`}
               onClick={() => onDetail(ev)}
             >
-              <BookOpen className="size-3.5" />
+              <Eye className="size-3.5" />
             </Button>
             <Button
               variant="ghost"
