@@ -1,9 +1,9 @@
 // 时间轴事件行（G2.3，timeline.md G2 布局线框：组内事件堆叠；F5 时间标签样式已随 G2 移除——
 //   时间标签 = 组标题（时间点实体），行内不再展示；F6 行内描述展示保留）
 // 职责：纯展示 + 单条拖拽（G2 双轨：事件行 draggable，恢复 F3 能力）——
-//   行 = 小圆点 + 内容卡（拖拽柄 GripVertical → 事件名 → tags → 「N 节点」→ ⋯ 菜单 + 描述区）。
+//   行 = 小圆点 + 内容卡（拖拽柄 GripVertical → 事件名 → tags → 「N 节点」→ 直接操作按钮 + 描述区）。
 // 拖拽协调在容器（components/timeline/Timeline.tsx）——本行只负责 draggable 挂载与回调转发：
-//   行内按钮 draggable={false} 防拖（菜单/展开按钮）；opacity-50 拖拽态；插入指示线（S13 模式）。
+//   行内按钮 draggable={false} 防拖（操作按钮）；opacity-50 拖拽态；插入指示线（S13 模式）。
 // 描述区（F6）：事件名行下方全宽换行，`text-sm text-muted-foreground` 次要层级（低于事件名）；
 //   两行截断（line-clamp-2）——**超过两行才显示「展开」按钮**（clamp 态 scrollHeight > clientHeight
 //   运行时测量，窗口 resize 重测；**展开态跳过重测**——line-clamp 解除后无法测 clamp 溢出，
@@ -11,15 +11,8 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
-import { GripVertical, MoreHorizontal } from "lucide-react";
+import { BookOpen, GripVertical, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { eventDescription, eventTagsOf } from "../../lib/timeline";
 import { cn } from "../../lib/utils";
 
@@ -44,7 +37,7 @@ interface TimelineEventProps {
   showInsertBefore: boolean;
   showInsertAfter: boolean;
   eventDrag: EventDragHandlers;
-  /** 行 ⋯ 菜单回调（页面级动作：详情跳转 / 编辑对话框 / 软删直接执行） */
+  /** 行操作回调（页面级动作：详情跳转 / 编辑对话框 / 软删直接执行） */
   onDetail: (ev: EntitySummary) => void;
   onEdit: (ev: EntitySummary) => void;
   onDelete: (ev: EntitySummary) => void;
@@ -105,7 +98,7 @@ export function TimelineEvent({
       <div className="w-[22px] shrink-0">
         <span aria-hidden="true" className="mx-auto mt-[16px] block size-2 rounded-full bg-primary/60" />
       </div>
-      {/* 内容卡（timeline.md G2 事件行：从左到右 拖拽柄 → 事件名 → tags → N 节点 → ⋯ 菜单；
+      {/* 内容卡（timeline.md G2 事件行：从左到右 拖拽柄 → 事件名 → tags → N 节点 → 直接操作按钮；
           描述区 F6 在事件名行下方全宽换行，不挤占行内元素） */}
       <div className="min-w-0 flex-1 rounded-md border border-border bg-card px-3 py-2">
         <div className="flex items-center gap-2">
@@ -126,31 +119,41 @@ export function TimelineEvent({
             </span>
           ))}
           {hasOccursData && <span className="shrink-0 text-xs text-muted-foreground">{count} 节点</span>}
-          <span className="ml-auto shrink-0">
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    draggable={false}
-                    className="text-muted-foreground"
-                    aria-label={`${ev.name} 操作`}
-                  >
-                    <MoreHorizontal />
-                  </Button>
-                }
-              />
-              <DropdownMenuContent align="end">
-                {/* 详情页 #/timeline/:id（C4 启用） */}
-                <DropdownMenuItem onClick={() => onDetail(ev)}>详情</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onEdit(ev)}>编辑</DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive" onClick={() => onDelete(ev)}>
-                  移入回收站
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+          {/* 操作按钮全部展开（H3：禁止收进 ⋯ 二级展开；图标 + title/aria-label） */}
+          <span className="ml-auto flex shrink-0 items-center gap-0.5">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              draggable={false}
+              className="text-muted-foreground"
+              title="详情"
+              aria-label={`${ev.name} 详情`}
+              onClick={() => onDetail(ev)}
+            >
+              <BookOpen className="size-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              draggable={false}
+              className="text-muted-foreground"
+              title="编辑"
+              aria-label={`${ev.name} 编辑`}
+              onClick={() => onEdit(ev)}
+            >
+              <Pencil className="size-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              draggable={false}
+              className="text-muted-foreground hover:text-destructive"
+              title="移入回收站"
+              aria-label={`${ev.name} 移入回收站`}
+              onClick={() => onDelete(ev)}
+            >
+              <Trash2 className="size-3.5" />
+            </Button>
           </span>
         </div>
         {/* 描述区（F6）：text-sm text-muted-foreground 次要层级；两行截断 + 展开/收起；

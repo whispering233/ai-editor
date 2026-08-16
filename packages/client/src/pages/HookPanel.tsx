@@ -10,23 +10,16 @@
 //  - 新建：POST /entity/hook + 有埋点节点再 POST /relation（outline_node → hook，plants）
 //  - 推进/回收/废弃：复合写确认面板（提案式）——runLifecycleWrite / runAbandonWrite（lib/hook-panel），
 //    确认前展示「将写入」内容；回收面板在存在依赖者时额外提示
-//  - 行 ⋯ 菜单：详情（relations 全览）/推进/回收/废弃/编辑（data 表单）/移入回收站（H2：直接软删，不弹确认）
+//  - 行操作按钮全部展开（H3）：详情/推进/回收/废弃/编辑/移入回收站，禁止收进 ⋯ 菜单
 //  - 依赖链：行内「依赖: …」可点击展开递归链（expandDependencyChain：深度 3 + 环守卫）
 import { useEffect, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { formatTimestamp, HOOK_CATEGORIES } from "@whispering233/ai-editor-shared";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
-import { CheckCircle2, Circle, MoreHorizontal } from "lucide-react";
+import { ArrowUp, BookOpen, Check, CheckCircle2, Circle, Pencil, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   ApiError,
   CLIENT_NETWORK_ERROR,
@@ -655,7 +648,7 @@ export default function HookPanel() {
 
 // ============ 子组件 ============
 
-/** 分组卡片（活跃/已回收/已废弃；行主信息 = name + category 徽标 + ⋯ 菜单 + 依赖链） */
+/** 分组卡片（活跃/已回收/已废弃；行主信息 = name + category 徽标 + 直接操作按钮 + 依赖链） */
 function HookGroupSection({
   title,
   icon,
@@ -706,33 +699,71 @@ function HookGroupSection({
                   {category && (
                     <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">{category}</span>
                   )}
-                  <span className="ml-auto shrink-0">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        render={
-                          <Button variant="ghost" size="icon-sm" className="text-muted-foreground" aria-label={`${hook.name} 操作`}>
-                            <MoreHorizontal />
-                          </Button>
-                        }
-                      />
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => onDetail(hook)}>详情</DropdownMenuItem>
-                        <DropdownMenuItem disabled={terminal} onClick={() => onLifecycle("advance", hook)}>
-                          推进
-                        </DropdownMenuItem>
-                        <DropdownMenuItem disabled={terminal} onClick={() => onLifecycle("resolve", hook)}>
-                          回收
-                        </DropdownMenuItem>
-                        <DropdownMenuItem disabled={terminal} onClick={() => onLifecycle("abandon", hook)}>
-                          废弃
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => onEdit(hook)}>编辑</DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem variant="destructive" onClick={() => onDelete(hook)}>
-                          移入回收站
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                  {/* 操作按钮全部展开（H3：禁止收进 ⋯ 二级展开；图标 + title/aria-label） */}
+                  <span className="ml-auto flex shrink-0 items-center gap-0.5">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="text-muted-foreground"
+                      title="详情"
+                      aria-label={`${hook.name} 详情`}
+                      onClick={() => onDetail(hook)}
+                    >
+                      <BookOpen className="size-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      disabled={terminal}
+                      className="text-muted-foreground"
+                      title="推进"
+                      aria-label={`${hook.name} 推进`}
+                      onClick={() => onLifecycle("advance", hook)}
+                    >
+                      <ArrowUp className="size-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      disabled={terminal}
+                      className="text-muted-foreground"
+                      title="回收"
+                      aria-label={`${hook.name} 回收`}
+                      onClick={() => onLifecycle("resolve", hook)}
+                    >
+                      <Check className="size-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      disabled={terminal}
+                      className="text-muted-foreground"
+                      title="废弃"
+                      aria-label={`${hook.name} 废弃`}
+                      onClick={() => onLifecycle("abandon", hook)}
+                    >
+                      <X className="size-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="text-muted-foreground"
+                      title="编辑"
+                      aria-label={`${hook.name} 编辑`}
+                      onClick={() => onEdit(hook)}
+                    >
+                      <Pencil className="size-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="text-muted-foreground hover:text-destructive"
+                      title="移入回收站"
+                      aria-label={`${hook.name} 移入回收站`}
+                      onClick={() => onDelete(hook)}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
                   </span>
                 </div>
                 {/* 依赖链行（行内「依赖: …」可点击展开递归链） */}

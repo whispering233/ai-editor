@@ -9,7 +9,7 @@
 // B2（决策 27）：
 //   - 导入同名二选一：书名与书架已有书同名 → Dialog 内联冲突提示 + [重命名导入]（Input 可编辑，
 //     预填 `<名> (2)`）/ [保持原样导入]（服务端目录自动去重）；响应 mode 分流 toast（restored/new）
-//   - 项目行 ⋯ 菜单 [重命名]：仅当前项目行渲染（⋯ 最右、导出按钮在 ⋯ 左侧）；菜单项 → 行内输入框
+//   - 项目行 [重命名] 图标按钮：仅当前项目行渲染（H3：直接展示，不收进 ⋯ 菜单）；点击 → 行内输入框
 //     （预填当前名，Enter/失焦提交 POST /project/rename，Esc 取消）；成功刷新书架 + config；
 //     409 PROJECT_ALREADY_EXISTS → 行内内联错误（不关闭输入态）
 import { useEffect, useRef, useState } from "react";
@@ -21,8 +21,8 @@ import {
   Loader2,
   MessageSquare,
   Moon,
-  MoreHorizontal,
   PanelLeftClose,
+  Pencil,
   Plus,
   Settings,
   Sun,
@@ -47,7 +47,6 @@ import { useChatStore } from "../../stores/chat";
 import { useUiStore } from "../../stores/ui";
 import { Button } from "../ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "../ui/dropdown-menu";
 import { Input } from "../ui/input";
 
 /** 紧凑日期（左栏 10% 很窄）：当年显示 MM-DD，跨年显示 YY-MM-DD；非法输入原样返回 */
@@ -167,7 +166,7 @@ export function Sidebar({
   const [importConflictBase, setImportConflictBase] = useState("");
   // 导出备份进行态（当前项目行下载按钮；exporting 防连点）
   const [exporting, setExporting] = useState(false);
-  // 书架行 ⋯ 菜单 [重命名]（B2）：行内输入框状态（仅当前项目行触发，按书 path 标记）
+  // 书架行 [重命名] 图标按钮（B2/H3）：行内输入框状态（仅当前项目行触发，按书 path 标记）
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
@@ -627,26 +626,17 @@ export function Sidebar({
                     >
                       <ChevronRight className={cn("size-4 transition-transform duration-200", expanded && "rotate-90")} />
                     </button>
-                    {/* ⋯ 菜单（B2）：仅当前项目行渲染（rename 作用于当前打开项目）——
-                        ⋯ 最右、导出按钮在 ⋯ 左侧（layout.md §2.3） */}
+                    {/* 重命名图标按钮（H3：直接展示，不收进 ⋯ 菜单；仅当前项目行渲染） */}
                     {isCurrent && (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          render={
-                            <button
-                              type="button"
-                              aria-label={`《${book.name}》更多操作`}
-                              title="更多操作"
-                              className="flex h-8 w-6 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                            >
-                              <MoreHorizontal className="size-3.5" />
-                            </button>
-                          }
-                        />
-                        <DropdownMenuContent>
-                          <DropdownMenuItem onClick={() => startRename(book)}>重命名</DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      <button
+                        type="button"
+                        aria-label={`重命名《${book.name}》`}
+                        title="重命名"
+                        onClick={() => startRename(book)}
+                        className="flex h-8 w-6 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      >
+                        <Pencil className="size-3.5" />
+                      </button>
                     )}
                   </div>
                   {/* 重命名行内错误（409 同名等：不关闭输入态，可改名重试） */}
