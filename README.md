@@ -73,7 +73,7 @@ pnpm typecheck && pnpm lint && pnpm -r test
 - **项目管理**：书架模式（`books/` 子目录）、创建/打开/关闭/配置、LLM 设置（模型/key）
 - **大纲**：严格三层（卷→章→场景）增删改移、节点详情（麦基《故事》结构化字段）
 - **实体与关系**：六类实体（人物/设定/地点/伏笔/事件·时间轴/时间标签点·时间轴）CRUD、k 跳关系遍历、Delta 变更追踪与状态计算（computeState）
-- **时间轴（阶段 C + G2 修订）**：**时间标签点（timepoint）与事件双实体**——事件经 `occurs_at` 挂载到时间点（1:n），时间点与事件各有独立线性序（拖拽时间点 = 整组移动不动内部、拖拽单条事件 = 组内重排/跨组自动改挂载）；垂直时间轴 + 时间点组块 + 未挂载兜底区；时间点可重命名、组内新建事件、AI 按时间标签语义排序（提案确认）；`occurs_in` 锚定大纲场景（倒叙/多时间线可表达）；软删回收站
+- **时间轴（阶段 C + G2 修订 + H1-H6 交互优化）**：**时间标签点（timepoint）与事件双实体**——事件经 `occurs_at` 挂载到时间点（1:n），时间点与事件各有独立线性序（拖拽时间点 = 整组移动不动内部、拖拽单条事件 = 组内重排/跨组自动改挂载）；垂直时间轴 + 时间点组块 + 未挂载兜底区；时间点可重命名、组内新建事件、AI 按时间标签语义排序（提案确认）；`occurs_in` 锚定大纲场景（倒叙/多时间线可表达）；软删回收站；交互优化：删除入口直接展示、软删/还原免二次确认、操作按钮不收入 `...` 菜单、文字按钮带边框、标题行信息与操作右移、事件行“N 节点”计数靠右
 - **伏笔系统（S9 已就绪）**：伏笔池面板（活跃/已回收/已废弃分组、新建埋点、推进/回收/废弃复合写确认、依赖链展开、软删级联）+ 大纲节点伏笔标记（📌 埋设/⏩ 推进/✅ 回收徽标）；健康指标展示留后续迭代（backlog #13）
 - **回收站**：软删还原 / 彻底清除 + 启动一致性校验兜底
 - **AI 对话链路（S6-S8 已就绪）**：DeepSeek SSE 流式客户端、46 个工具（查询 8 / 分析 5 / 伏笔 5 / 提案 15 / 执行 13）、agent 主循环（8 轮 / 120s / token 三重保险）、提案确认流程（卡片确认/拒绝 + 失效处理，全链路可用）、chat SSE 路由（心跳 15-30s / 断连检测 / 全链路取消）——配置 key 后右栏 ChatPanel 可直接对话
@@ -103,7 +103,7 @@ npm install -g @whispering233/ai-editor-server
 ai-editor <项目目录>   # 启动服务 + 自动打开浏览器 http://127.0.0.1:3456
 ```
 
-> 版本说明：**当前最新版 v0.0.8**（由 CI OIDC 自动发布，发布全链路自动化已验证）；v0.0.1/v0.0.2 因发布管道缺陷（manifest 残留 `workspace:*` 协议）不可安装，已计划 deprecate 标注；安装时使用 `@whispering233/ai-editor-server@latest` 即可。
+> 版本说明：**当前最新版 v0.0.9**（由 CI OIDC 自动发布，发布全链路自动化已验证）；v0.0.1/v0.0.2 因发布管道缺陷（manifest 残留 `workspace:*` 协议）不可安装，已计划 deprecate 标注；安装时使用 `@whispering233/ai-editor-server@latest` 即可。
 
 **发布前置（一次性，npmjs 手动）**：① 开启 npm 账号 **2FA**（npmjs 要求开启两步验证才能配置包管理；开启会撤销现有 token，需重新生成 Automation token）；② 为 `@whispering233/ai-editor-shared`、`@whispering233/ai-editor-llm`、`@whispering233/ai-editor-db`、`@whispering233/ai-editor-tools`、`@whispering233/ai-editor-agent`、`@whispering233/ai-editor-server` 六包各配置 Trusted Publisher：Publisher = GitHub Actions、工作流名 = `publish.yml`；配置后 CI 无需 token（OIDC 自动换证）。
 
