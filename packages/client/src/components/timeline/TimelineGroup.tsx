@@ -1,5 +1,5 @@
 // 时间轴组块（G2.3，timeline.md G2 布局线框：时间点组块）
-// 职责：组标题行（大圆点 + 拖拽柄 + 时间点名 + 事件计数 + [重命名] + 折叠按钮）+ 组内事件堆叠
+// 职责：组标题行（大圆点 + 拖拽柄 + 时间点名 + 事件计数 + [重命名] + [移入回收站] + 折叠按钮）+ 组内事件堆叠
 //   + 组尾「+ 在此时间点新建事件」轻量按钮；**未挂载兜底区复用本组件**（timepoint = null）。
 // 拖拽（G2 双轨）：
 // - 时间点整组拖拽：draggable 设在**组标题行根**（组内事件行各自 draggable——G2 恢复单条拖拽，
@@ -12,7 +12,7 @@
 import { useState } from "react";
 import type { DragEvent } from "react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
-import { ChevronRight, GripVertical } from "lucide-react";
+import { ChevronRight, GripVertical, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "../../lib/utils";
 import { TimelineEvent, type EventDragHandlers } from "./TimelineEvent";
@@ -40,6 +40,8 @@ interface TimelineGroupBlockProps {
   onToggleCollapse: () => void;
   /** 重命名提交（页面执行 PUT /entity/timepoint/:id { name } + toast + 刷新；仅时间点组） */
   onRename: (id: string, name: string) => Promise<void>;
+  /** 移入回收站（页面打开软删确认框；仅时间点组） */
+  onDeleteTimepoint: (tp: EntitySummary) => void;
   /** 组尾「+ 在此时间点新建事件」（页面打开带预挂载的新建对话框；仅时间点组） */
   onAddEventAt: (timepointId: string) => void;
   // 组标题行拖拽（时间点整组；容器装配）
@@ -69,6 +71,7 @@ export function TimelineGroupBlock({
   showInsertAfter,
   onToggleCollapse,
   onRename,
+  onDeleteTimepoint,
   onAddEventAt,
   onDragStart,
   onDragEnd,
@@ -180,7 +183,23 @@ export function TimelineGroupBlock({
               重命名
             </Button>
           )}
-          <span className="ml-auto shrink-0">
+          <span className="ml-auto flex shrink-0 items-center gap-0.5">
+            {/* 移入回收站（H1：时间点组标题直接显示删除图标——用户反馈缺失删除入口；
+                软删确认由页面处理；未挂载区不渲染） */}
+            {timepoint !== null && !editing && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                draggable={false}
+                className="text-muted-foreground hover:text-destructive"
+                title="移入回收站"
+                aria-label={`移入回收站「${timepoint.name}」`}
+                onClick={() => onDeleteTimepoint(timepoint)}
+              >
+                <Trash2 className="size-3.5" />
+              </Button>
+            )}
             <Button
               type="button"
               variant="ghost"

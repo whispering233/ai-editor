@@ -70,6 +70,11 @@ interface EventForm {
 
 const EMPTY_FORM: EventForm = { name: "", description: "", tagsInput: "" };
 
+/** 软删确认对象（H1：事件与时间点共用同一确认框，kind 决定 DELETE 实体类型） */
+type DeleteTarget =
+  | { kind: "event"; entity: EntitySummary }
+  | { kind: "timepoint"; entity: EntitySummary };
+
 export default function Timeline() {
   // 时间点 / 事件列表（双实体，均按 sort_order 升序）
   const [timepoints, setTimepoints] = useState<EntitySummary[] | null>(null);
@@ -114,8 +119,8 @@ export default function Timeline() {
   const [editError, setEditError] = useState<string | null>(null);
   const [editSaving, setEditSaving] = useState(false);
 
-  // 软删确认
-  const [deleteTarget, setDeleteTarget] = useState<EntitySummary | null>(null);
+  // 软删确认（事件与时间点共用；kind 决定 DELETE 实体类型）
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
 
   const config = useProjectStore((s) => s.config);
   const outline = useProjectStore((s) => s.outline);
@@ -339,12 +344,12 @@ export default function Timeline() {
 
   // ============ 软删 ============
 
-  /** 软删确认后执行：DELETE → toast（级联计数）→ 刷新 */
+  /** 软删确认后执行：DELETE → toast（级联计数）→ 刷新（事件与时间点共用，H1） */
   async function handleDelete() {
-    const ev = deleteTarget;
-    if (!ev) return;
+    const target = deleteTarget;
+    if (!target) return;
     try {
-      const res = await deleteEntity("event", ev.id);
+      const res = await deleteEntity(target.kind, target.entity.id);
       const parts: string[] = [];
       if (res.cascaded.relations > 0) parts.push(`${res.cascaded.relations} 条关联`);
       if (res.cascaded.deltas > 0) parts.push(`${res.cascaded.deltas} 条变更记录`);
@@ -458,6 +463,18 @@ export default function Timeline() {
   const occursCount = (id: string): number =>
     occursEdgesFailed ? 0 : occursEdges.filter((r) => r.sourceId === id).length;
   const hasOccursData = !occursEdgesFailed;
+  // 软删确认文案：时间点额外提示其下事件将变为未挂载（H1；occurs_at 拉取失败时降级为通用文案）
+  const deleteDescription =
+    deleteTarget === null
+      ? ""
+      : deleteTarget.kind === "timepoint"
+        ? (() => {
+            const count = occursAtFailed ? 0 : occursAtEdges.filter((r) => r.sourceId === deleteTarget.entity.id).length;
+            return `将《${deleteTarget.entity.name}》移入回收站。${
+              count > 0 ? `其下 ${count} 个事件将变为未挂载，` : ""
+            }关联关系与变更记录将一并移入，可在回收站还原。`;
+          })()
+        : `将《${deleteTarget.entity.name}》移入回收站。关联关系与变更记录将一并移入，可在回收站还原。`;
   // 标签建议（F8）：按各表单当前输入匹配标签池（suggestTags 空段不匹配 → 无建议区）
   const createSuggestions = suggestTags(createForm.tagsInput, tagPool);
   const editSuggestions = editForm === null ? [] : suggestTags(editForm.tagsInput, tagPool);
@@ -604,7 +621,8 @@ export default function Timeline() {
               onAddEventAt={openCreateInTimepoint}
               onDetail={(ev) => navigate(`/timeline/${ev.id}`)}
               onEdit={openEdit}
-              onDelete={setDeleteTarget}
+              onDelete={(ev) => setDeleteTarget({ kind: "event", entity: ev })}
+              onDeleteTimepoint={(tp) => setDeleteTarget({ kind: "timepoint", entity: tp })}
             />
           )}
 
@@ -763,7 +781,7 @@ export default function Timeline() {
       {deleteTarget && (
         <ConfirmDialog
           title="移入回收站"
-          description={`将《${deleteTarget.name}》移入回收站。关联关系与变更记录将一并移入，可在回收站还原。`}
+          description={deleteDescription}
           confirmLabel="移入回收站"
           danger
           onConfirm={handleDelete}
