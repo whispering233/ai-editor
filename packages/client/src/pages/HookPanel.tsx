@@ -771,7 +771,7 @@ function HookGroupSection({
                   <button
                     type="button"
                     onClick={() => onToggleChain(hook)}
-                    className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
+                    className="mt-0.5 flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
                   >
                     依赖: {deps.join("、")}
                   </button>

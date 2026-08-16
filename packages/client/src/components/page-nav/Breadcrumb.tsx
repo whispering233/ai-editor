@@ -32,7 +32,7 @@ export function Breadcrumb({
               <button
                 type="button"
                 onClick={() => navigate(item.href!)}
-                className="rounded-md px-2.5 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                className="rounded-md border border-border px-2.5 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
                 {item.label}
               </button>

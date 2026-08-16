@@ -218,7 +218,7 @@ export default function EntityList({ type }: { type: string }) {
               type="button"
               onClick={() => navigate(`/entities/${t}`)}
               className={cn(
-                "rounded-md px-3 py-1.5 text-sm",
+                "rounded-md border border-border px-3 py-1.5 text-sm",
                 !isRelations && entityType === t
                   ? "bg-zinc-900 text-white"
                   : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800",
@@ -232,7 +232,7 @@ export default function EntityList({ type }: { type: string }) {
             type="button"
             onClick={() => navigate("/entities/relations")}
             className={cn(
-              "rounded-md px-3 py-1.5 text-sm",
+              "rounded-md border border-border px-3 py-1.5 text-sm",
               isRelations
                 ? "bg-foreground font-medium text-background"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground",

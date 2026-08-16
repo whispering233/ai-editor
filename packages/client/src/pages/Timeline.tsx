@@ -512,10 +512,10 @@ export default function Timeline() {
             type="button"
             onClick={() => setActiveTag(null)}
             className={cn(
-              "rounded-full px-2.5 py-0.5 text-xs transition-colors",
+              "rounded-full border px-2.5 py-0.5 text-xs transition-colors",
               activeTag === null
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:text-foreground",
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-muted text-muted-foreground hover:text-foreground",
             )}
           >
             全部
@@ -526,10 +526,10 @@ export default function Timeline() {
               type="button"
               onClick={() => setActiveTag((cur) => (cur === tag ? null : tag))}
               className={cn(
-                "rounded-full px-2.5 py-0.5 text-xs transition-colors",
+                "rounded-full border px-2.5 py-0.5 text-xs transition-colors",
                 activeTag === tag
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:text-foreground",
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-muted text-muted-foreground hover:text-foreground",
               )}
             >
               {tag}

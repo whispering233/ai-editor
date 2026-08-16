@@ -521,7 +521,7 @@ export default function TimelineDetail({ id }: { id: string }) {
                       type="button"
                       onClick={() => navigate(`/outline/${r.targetId}`)}
                       title="跳转大纲定位"
-                      className="min-w-0 flex-1 truncate text-left text-foreground underline-offset-2 hover:text-primary hover:underline"
+                      className="min-w-0 flex-1 truncate rounded-md border border-border px-1.5 py-0.5 text-left text-foreground hover:bg-muted hover:text-foreground"
                     >
                       {r.targetName ?? r.targetId}
                     </button>

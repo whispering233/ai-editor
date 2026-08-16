@@ -275,7 +275,7 @@ export function BackupSection() {
                 <p className="text-xs text-muted-foreground">
                   {backupsError === CLIENT_NETWORK_ERROR ? "无法连接服务" : "备份列表加载失败"}
                 </p>
-                <Button variant="ghost" size="xs" onClick={() => void loadBackups()}>
+                <Button variant="outline" size="xs" onClick={() => void loadBackups()}>
                   重试
                 </Button>
               </div>

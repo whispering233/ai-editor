@@ -89,7 +89,7 @@ function SessionList() {
       return (
         <div className="ml-3 border-l border-border py-1 pl-2">
           <p className="text-xs text-muted-foreground">会话加载失败</p>
-          <Button variant="ghost" size="xs" className="mt-0.5" onClick={() => void loadSessions()}>
+          <Button variant="outline" size="xs" className="mt-0.5" onClick={() => void loadSessions()}>
             重试
           </Button>
         </div>
@@ -529,7 +529,7 @@ export function Sidebar({
             <p className="text-xs text-muted-foreground">
               {bookshelfError === CLIENT_NETWORK_ERROR ? "无法连接服务" : "书架加载失败"}
             </p>
-            <Button variant="ghost" size="xs" onClick={() => void loadBookshelf()}>
+            <Button variant="outline" size="xs" onClick={() => void loadBookshelf()}>
               重试
             </Button>
           </div>
@@ -661,7 +661,7 @@ export function Sidebar({
           <span className="truncate">设置</span>
         </a>
         <Button
-          variant="ghost"
+          variant="outline"
           size="sm"
           className="justify-start text-muted-foreground"
           onClick={toggleTheme}

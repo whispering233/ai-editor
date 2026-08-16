@@ -347,7 +347,7 @@ export default function Dashboard() {
                   <div className="mt-4 border-t border-border pt-3">
                     <button
                       type="button"
-                      className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                      className="rounded-md border border-border px-2.5 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                       onClick={() => setShowCreateForm((v) => !v)}
                     >
                       {showCreateForm ? "收起" : "新建一本…"}
@@ -376,7 +376,7 @@ export default function Dashboard() {
               <div className="mt-4 border-t border-border pt-3">
                 <button
                   type="button"
-                  className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                  className="rounded-md border border-border px-2.5 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                   onClick={() => setShowPathForm((v) => !v)}
                 >
                   {showPathForm ? "收起" : "打开其他路径…"}
@@ -520,7 +520,7 @@ export default function Dashboard() {
                   <p className="text-xs text-muted-foreground">大纲还是空的</p>
                   {/* M1（oracle U4 审核）：新项目空态契约（dashboard.md「空态」）——[先搭大纲] 主操作 +
                       [和 AI 聊聊设定] 次操作（setCurrentSession(null) 注入右栏新会话） */}
-                  <Button variant="ghost" size="xs" type="button" onClick={() => setCurrentSession(null)}>
+                  <Button variant="outline" size="xs" type="button" onClick={() => setCurrentSession(null)}>
                     和 AI 聊聊设定
                   </Button>
                 </div>

@@ -108,7 +108,7 @@ function SessionTitleBar({
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
-            <Button variant="ghost" size="sm" disabled={disabled} className="max-w-44 justify-start gap-1 px-1.5">
+            <Button variant="outline" size="sm" disabled={disabled} className="max-w-44 justify-start gap-1 px-1.5">
               <span className="truncate text-sm font-medium" title={title}>
                 {title}
               </span>
@@ -247,7 +247,7 @@ export function ToolCallRow({
   return (
     <div className="rounded-md border border-border/70 bg-muted/40 px-2 py-1">
       <button
-        className="flex w-full items-center gap-1.5 text-left text-xs text-muted-foreground"
+        className="flex w-full items-center gap-1.5 rounded-md border border-border px-2 py-1 text-left text-xs text-muted-foreground"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
       >

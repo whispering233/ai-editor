@@ -338,7 +338,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
             type="button"
             onClick={() => setDeltaOpen((v) => !v)}
             title="展开状态预览：计算该实体在任意大纲节点处的累积状态"
-            className="text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
+            className="rounded-md border border-border px-1.5 py-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             变更记录 {detail.deltaCount} 条
           </button>

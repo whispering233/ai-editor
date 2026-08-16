@@ -171,7 +171,7 @@ export function TimelineEvent({
                 type="button"
                 draggable={false}
                 onClick={() => setExpanded((v) => !v)}
-                className="mt-1 text-xs text-primary hover:underline"
+                className="mt-1 rounded-md border border-border px-1.5 py-0.5 text-xs text-primary hover:bg-muted"
                 aria-expanded={expanded}
               >
                 {expanded ? "收起" : "展开"}

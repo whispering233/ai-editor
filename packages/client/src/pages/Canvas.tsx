@@ -669,7 +669,7 @@ export default function Canvas() {
               onClick={() => setSceneOnly(only)}
               aria-pressed={sceneOnly === only}
               className={cn(
-                "rounded-md px-2.5 py-1 text-xs transition-colors",
+                "rounded-md border border-border px-2.5 py-1 text-xs transition-colors",
                 sceneOnly === only
                   ? "bg-card text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground",
@@ -679,7 +679,7 @@ export default function Canvas() {
             </button>
           ))}
         </div>
-        <Button variant="ghost" size="sm" type="button" onClick={() => setShowHint((v) => !v)} aria-expanded={showHint}>
+        <Button variant="outline" size="sm" type="button" onClick={() => setShowHint((v) => !v)} aria-expanded={showHint}>
           <Info />
           画布说明
         </Button>

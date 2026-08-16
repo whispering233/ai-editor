@@ -1,6 +1,6 @@
 // 时间轴组块（G2.3，timeline.md G2 布局线框：时间点组块）
-// 职责：组标题行（大圆点 + 拖拽柄 + 时间点名 + 事件计数 + [重命名] + [移入回收站] + 折叠按钮）+ 组内事件堆叠
-//   + 组尾「+ 在此时间点新建事件」轻量按钮；**未挂载兜底区复用本组件**（timepoint = null）。
+// 职责：组标题行（大圆点 + 拖拽柄 + 时间点名 + 事件计数 + [重命名] + [+ 在此时间点新建事件] +
+//   [移入回收站] + 折叠按钮）+ 组内事件堆叠；**未挂载兜底区复用本组件**（timepoint = null）。
 // 拖拽（G2 双轨）：
 // - 时间点整组拖拽：draggable 设在**组标题行根**（组内事件行各自 draggable——G2 恢复单条拖拽，
 //   两者是兄弟节点不嵌套，无 F4 防误拖冲突）；dragover/drop 以标题行中点判定插入位（容器协调）
@@ -42,7 +42,7 @@ interface TimelineGroupBlockProps {
   onRename: (id: string, name: string) => Promise<void>;
   /** 移入回收站（页面直接软删，不弹确认；仅时间点组） */
   onDeleteTimepoint: (tp: EntitySummary) => void;
-  /** 组尾「+ 在此时间点新建事件」（页面打开带预挂载的新建对话框；仅时间点组） */
+  /** 标题行「+ 在此时间点新建事件」（页面打开带预挂载的新建对话框；仅时间点组） */
   onAddEventAt: (timepointId: string) => void;
   // 组标题行拖拽（时间点整组；容器装配）
   onDragStart: (e: DragEvent<HTMLDivElement>) => void;
@@ -170,17 +170,30 @@ export function TimelineGroupBlock({
             </span>
           )}
           <span className="shrink-0 text-xs text-muted-foreground">{events.length} 个事件</span>
-          {/* 重命名（G2 行内编辑入口；未挂载区不渲染） */}
+          {/* 重命名（G2 行内编辑入口；未挂载区不渲染；H4：文字按钮带边框） */}
           {!isUngrouped && !editing && (
             <Button
               type="button"
-              variant="ghost"
+              variant="outline"
               size="sm"
               draggable={false}
-              className="h-6 px-1.5 text-xs text-muted-foreground"
+              className="h-6 px-1.5 text-xs"
               onClick={startRename}
             >
               重命名
+            </Button>
+          )}
+          {/* 「+ 在此时间点新建事件」（H4：从组尾移到标题行“重命名”右侧，横向排布；仅时间点组） */}
+          {timepoint !== null && !editing && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              draggable={false}
+              className="h-6 px-2 text-xs"
+              onClick={() => onAddEventAt(groupId)}
+            >
+              + 在此时间点新建事件
             </Button>
           )}
           <span className="ml-auto flex shrink-0 items-center gap-0.5">
@@ -238,18 +251,6 @@ export function TimelineGroupBlock({
               />
             );
           })}
-          {/* 组尾「+ 在此时间点新建事件」（G2 双入口之一：自动挂载该时间点；未挂载区不渲染——
-              顶部「+ 新建事件」即未挂载入口） */}
-          {!isUngrouped && (
-            <button
-              type="button"
-              draggable={false}
-              onClick={() => onAddEventAt(groupId)}
-              className="ml-[22px] w-fit rounded-md px-3 py-1 text-left text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              + 在此时间点新建事件
-            </button>
-          )}
         </div>
       )}
     </div>

@@ -326,7 +326,7 @@ export function DeltaCreateForm({
       {/* ⑤ 提交区 */}
       {submitError !== null && <p className="text-sm text-destructive">{submitError}</p>}
       <div className="flex items-center justify-end gap-2">
-        <Button variant="ghost" size="sm" type="button" onClick={onClose} disabled={submitting}>
+        <Button variant="outline" size="sm" type="button" onClick={onClose} disabled={submitting}>
           取消
         </Button>
         <Button size="sm" type="button" onClick={() => void handleSubmit()} disabled={submitting}>
