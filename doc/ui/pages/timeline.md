@@ -47,7 +47,7 @@
 
 - **垂直轴线**：容器内绝对定位竖线 `absolute left-[11px] top-0 bottom-0 w-0.5 bg-border pointer-events-none`（left = 节点列中心；**pointer-events-none 是拖拽共存前提**，组间空隙处线连续贯穿）。
 - **节点圆点**：`relative z-10 rounded-full border-2 border-primary bg-background`（不透明背景盖住穿过轴线，尺寸 `size-4`；组内事件行用小圆点 `size-2 rounded-full bg-primary/60`）。
-- **时间点组块**（= 时间标签）：**组标题** = 大圆点 + 时间点名（`text-sm font-medium text-foreground`，F4 样式）+ 事件计数 + [重命名]（行内编辑，`PUT /entity/timepoint/:id` name）+ [移入回收站]（垃圾桶图标按钮，软删确认后 `DELETE /entity/timepoint/:id`）+ 折叠按钮（`aria-expanded`，折叠后仅标题行、轴线仍连续）；**组内事件堆叠**（各自不再画线，轴线容器级贯穿）；组尾「[+ 在此时间点新建事件]」轻量按钮（自动挂载该时间点）。
+- **时间点组块**（= 时间标签）：**组标题** = 大圆点 + 时间点名（`text-sm font-medium text-foreground`，F4 样式）+ 事件计数 + [重命名]（行内编辑，`PUT /entity/timepoint/:id` name）+ [移入回收站]（垃圾桶图标按钮，H2：直接软删不弹确认，`DELETE /entity/timepoint/:id`）+ 折叠按钮（`aria-expanded`，折叠后仅标题行、轴线仍连续）；**组内事件堆叠**（各自不再画线，轴线容器级贯穿）；组尾「[+ 在此时间点新建事件]」轻量按钮（自动挂载该时间点）。
 - **未挂载兜底区**：无 `occurs_at` 事件归入列表末尾「未挂载」组（组标题 `italic text-muted-foreground` 弱化占位；事件按 sort_order 平铺）；可直接拖拽到任一时间点完成挂载。
 - **事件行**：内容卡 `rounded-md bg-card border-border px-3 py-2`，从左到右：拖拽柄 `GripVertical` → 事件名（`truncate` + title 全文）→ tags 胶囊 → 「N 节点」计数 → ⋯ 菜单（详情/编辑/移入回收站）。**事件行内不再有时间标签**（G2：时间标签 = 组标题）。**事件名行下方为全宽描述区（F6）**：`text-sm text-muted-foreground` 次要层级，两行截断 `line-clamp-2`；**超过两行才显示「展开」按钮**（clamp 态 `scrollHeight > clientHeight` 运行时测量，窗口 resize 重测；展开态跳过重测保留上次 clamped 测量值），展开后 `line-clamp-none` 显示「收起」；描述 trim 后为空不渲染。
 - **拖拽（双轨，G2）**：
@@ -119,8 +119,8 @@
 
 ### 行操作
 
-- 事件 ⋯ 菜单：详情（跳 `#/timeline/:id`）· 编辑（对话框，同新建表单预填）· 移入回收站（软删确认框，展示级联 `cascaded.relations/deltas`）→ `DELETE /entity/event/:id` → 行消失 + toast「已移入回收站，可随时还原」。
-- 时间点组标题 [移入回收站]：软删确认框，提示「其下 N 个事件将变为未挂载」→ `DELETE /entity/timepoint/:id` → 时间点消失 + 其下事件移入「未挂载」区 + toast。
+- 事件 ⋯ 菜单：详情（跳 `#/timeline/:id`）· 编辑（对话框，同新建表单预填）· 移入回收站（H2：直接软删不弹确认）→ `DELETE /entity/event/:id` → 行消失 + toast「已移入回收站，可随时还原」。
+- 时间点组标题 [移入回收站]（H2：直接软删不弹确认）→ `DELETE /entity/timepoint/:id` → 时间点消失 + 其下事件移入「未挂载」区 + toast。
 
 ## 状态
 

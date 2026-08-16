@@ -40,7 +40,7 @@ interface TimelineGroupBlockProps {
   onToggleCollapse: () => void;
   /** 重命名提交（页面执行 PUT /entity/timepoint/:id { name } + toast + 刷新；仅时间点组） */
   onRename: (id: string, name: string) => Promise<void>;
-  /** 移入回收站（页面打开软删确认框；仅时间点组） */
+  /** 移入回收站（页面直接软删，不弹确认；仅时间点组） */
   onDeleteTimepoint: (tp: EntitySummary) => void;
   /** 组尾「+ 在此时间点新建事件」（页面打开带预挂载的新建对话框；仅时间点组） */
   onAddEventAt: (timepointId: string) => void;
@@ -185,7 +185,7 @@ export function TimelineGroupBlock({
           )}
           <span className="ml-auto flex shrink-0 items-center gap-0.5">
             {/* 移入回收站（H1：时间点组标题直接显示删除图标——用户反馈缺失删除入口；
-                软删确认由页面处理；未挂载区不渲染） */}
+                H2：点击直接软删不弹确认；未挂载区不渲染） */}
             {timepoint !== null && !editing && (
               <Button
                 type="button"

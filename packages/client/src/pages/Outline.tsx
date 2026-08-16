@@ -9,7 +9,7 @@
 // 设计契约：doc/ui/pages/outline.md（S2.4 + S13.1 修订版）——行内编辑标题/摘要（Enter 保存/Esc 取消/失焦保存）、
 //   行尾「＋ 新建」就地插入子节点（类型由父决定，root 可切卷/章）、拖拽移动（原生 HTML5 DnD，上下半判定：
 //   目标行上半 = 插到该节点前、下半 = 插到该节点后，跨父移动按决策 19 过滤，顶层空白区 = 排末尾）、
-//   弹窗仅保留：软删确认（layout.md §3.2）
+//   软删直接执行（H2：不再弹二次确认，回收站可还原；仅彻底删除保留确认）
 // 刷新策略：所有写操作成功后统一 loadOutline() 重拉整树（服务端权威——move 重排 order、软删级联子树、
 //   还原级联；本地补丁易与服务端不一致；本地文件读取毫秒级，重拉成本可忽略）。outline 树数据仍在
 //   project store（跨页共用：顶栏当前位置标题映射、画布投影），本页只持有 UI 态
@@ -18,7 +18,7 @@ import type { DragEvent, KeyboardEvent, ReactNode } from "react";
 import { formatTimestamp } from "@whispering233/ai-editor-shared";
 import type { OutlineNode } from "@whispering233/ai-editor-shared";
 import { BookOpen, Trash2 } from "lucide-react";
-import { CHILD_TYPE, ConfirmDialog, TYPE_LABEL } from "../components/outline/dialogs";
+import { CHILD_TYPE, TYPE_LABEL } from "../components/outline/dialogs";
 import { NodeHookMarkBadge } from "../components/outline/node-hook-badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -164,8 +164,6 @@ export default function Outline() {
   const [error, setError] = useState<string | null>(null);
   /** 折叠的节点 id 集合（空集 = 全部展开） */
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  /** 软删确认目标（行尾回收站图标） */
-  const [deleteTarget, setDeleteTarget] = useState<OutlineNode | null>(null);
   const [busy, setBusy] = useState(false);
   /** 新创建节点高亮（原型「成功后新节点高亮」；3s 自动消失） */
   const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null);
@@ -539,11 +537,10 @@ export default function Outline() {
     }
   }
 
-  /** 软删确认后执行；OUTLINE_NODE_NOT_FOUND（已被 purge）→ 横幅 + 刷新树；其余错误冒泡给确认框显示 */
-  async function handleDelete() {
-    if (!deleteTarget) return;
+  /** 软删直接执行（H2：不再弹二次确认）；OUTLINE_NODE_NOT_FOUND（已被 purge）→ 横幅 + 刷新树；其余错误 toast */
+  async function handleDelete(node: OutlineNode) {
     try {
-      const res = await deleteOutlineNode(deleteTarget.id);
+      const res = await deleteOutlineNode(node.id);
       const { children, relations, deltas } = res.cascaded;
       const parts: string[] = [];
       if (children > 0) parts.push(`${children} 个子节点`);
@@ -552,16 +549,17 @@ export default function Outline() {
       useUiStore.getState().showToast(
         `已移入回收站${parts.length > 0 ? `（含 ${parts.join("、")}）` : ""}`,
       );
-      setDeleteTarget(null);
       await afterTreeChanged();
     } catch (err) {
       if (err instanceof ApiError && err.code === "OUTLINE_NODE_NOT_FOUND") {
         setError(describeOutlineError("OUTLINE_NODE_NOT_FOUND"));
-        setDeleteTarget(null);
         await afterTreeChanged();
-        return; // 已处理，不冒泡
+        return;
       }
-      throw err; // 冒泡给 ConfirmDialog 内联显示
+      useUiStore.getState().showToast(
+        err instanceof ApiError ? err.message : "删除失败，请重试",
+        "error",
+      );
     }
   }
 
@@ -693,7 +691,7 @@ export default function Outline() {
                 className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive"
                 title="移入回收站"
                 aria-label="移入回收站"
-                onClick={() => setDeleteTarget(node)}
+                onClick={() => void handleDelete(node)}
               >
                 <Trash2 className="size-3.5" />
               </button>
@@ -860,17 +858,6 @@ export default function Outline() {
         </div>
       )}
 
-      {/* 对话框：软删确认（危险操作必须确认，layout.md §3.2） */}
-      {deleteTarget && (
-        <ConfirmDialog
-          title="移入回收站"
-          description={`将《${deleteTarget.title}》移入回收站。子节点与关联的关系、变化记录将一并移入，可在回收站还原。`}
-          confirmLabel="移入回收站"
-          danger
-          onConfirm={handleDelete}
-          onClose={() => setDeleteTarget(null)}
-        />
-      )}
     </section>
   );
 }

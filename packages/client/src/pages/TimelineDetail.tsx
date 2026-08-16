@@ -2,9 +2,9 @@
 // 路由：#/timeline/:id（2 段）；数据：GET /api/v1/entity/event/:id（EntityDetailRes：完整 data + relations）
 // 契约：doc/ui/pages/timeline.md「详情页（#/timeline/:id）」——字段编辑（name/description/tags，G2 无
 //   time_label）、**挂载时间点选择器（G2）**、occurs_in 关联管理（添加：大纲节点选择器 → POST /relation
-//   event → outline_node；取消：确认后 DELETE /relation/:id 物理删）、软删（级联计数 toast → 跳回列表）、
+//   event → outline_node；取消：确认后 DELETE /relation/:id 物理删）、软删（H2：直接执行，级联计数 toast → 跳回列表）、
 //   三态（加载骨架 / 404 / 保存失败内联）
-// 参照：EntityDetail.tsx（面包屑/保存交互/404 引导/软删确认）、HookPanel/Timeline OutlineNodeSelect（节点选择）
+// 参照：EntityDetail.tsx（面包屑/保存交互/404 引导/软删直接执行）、HookPanel/Timeline OutlineNodeSelect（节点选择）
 // 关键决策：
 //  - 404 错误码为 ENTITY_NOT_FOUND（事件走泛型实体路由，server/src/routes/entity.ts；timeline.md 的
 //    EVENT_NOT_FOUND 为文档示意名，ErrorCode 枚举无此码——客户端以实际契约码判定）
@@ -74,8 +74,6 @@ export default function TimelineDetail({ id }: { id: string }) {
   const [relSubmitting, setRelSubmitting] = useState(false);
   // 取消关联确认（物理删）
   const [deleteRelationTarget, setDeleteRelationTarget] = useState<RelationSummaryItem | null>(null);
-  // 软删确认
-  const [deleteTarget, setDeleteTarget] = useState(false);
   // 标签建议池（F8：独立补拉全量 200 聚合已存在标签；失败静默——无建议区，不影响表单）
   const [tagPool, setTagPool] = useState<string[]>([]);
   // 挂载选择器数据（G2）：时间点列表（选项）+ 事件列表（当前位置保位）；失败 → 选择器重试
@@ -259,7 +257,7 @@ export default function TimelineDetail({ id }: { id: string }) {
     }
   }
 
-  /** 软删确认后执行：DELETE → toast（级联计数）→ 跳回列表 */
+  /** 软删直接执行（H2：不再弹二次确认）：DELETE → toast（级联计数）→ 跳回列表 */
   async function handleDelete() {
     if (!detail) return;
     try {
@@ -270,10 +268,12 @@ export default function TimelineDetail({ id }: { id: string }) {
       useUiStore.getState().showToast(
         `已移入回收站，可随时还原${parts.length > 0 ? `（含 ${parts.join("、")}）` : ""}`,
       );
-      setDeleteTarget(false);
       navigate("/timeline");
     } catch (err) {
-      throw err; // 冒泡给 ConfirmDialog 内联显示
+      useUiStore.getState().showToast(
+        err instanceof ApiError ? err.message : "删除失败，请重试",
+        "error",
+      );
     }
   }
 
@@ -329,7 +329,7 @@ export default function TimelineDetail({ id }: { id: string }) {
             type="button"
             disabled={!detail}
             className="text-destructive hover:bg-destructive/10"
-            onClick={() => setDeleteTarget(true)}
+            onClick={() => void handleDelete()}
           >
             移入回收站
           </Button>
@@ -553,17 +553,6 @@ export default function TimelineDetail({ id }: { id: string }) {
         />
       )}
 
-      {/* 软删确认（级联说明；计数在删除后 toast 呈现，与大纲页/实体详情页一致） */}
-      {deleteTarget && (
-        <ConfirmDialog
-          title="移入回收站"
-          description={`将《${detail?.name ?? ""}》移入回收站。关联关系与变更记录将一并移入，可在回收站还原。`}
-          confirmLabel="移入回收站"
-          danger
-          onConfirm={handleDelete}
-          onClose={() => setDeleteTarget(false)}
-        />
-      )}
     </section>
   );
 }

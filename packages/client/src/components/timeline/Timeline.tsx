@@ -49,7 +49,7 @@ interface TimelineProps {
   onMoveEventTo: (id: string, timepointId: string | null, order: number) => Promise<void>;
   /** 时间点重命名提交（页面执行 PUT /entity/timepoint/:id { name }；失败抛错——页面 toast） */
   onRenameTimepoint: (id: string, name: string) => Promise<void>;
-  /** 时间点移入回收站（页面打开软删确认框） */
+  /** 时间点移入回收站（页面直接软删，不弹确认） */
   onDeleteTimepoint: (tp: EntitySummary) => void;
   /** 组尾「+ 在此时间点新建事件」（页面打开带预挂载的新建对话框） */
   onAddEventAt: (timepointId: string) => void;

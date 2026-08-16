@@ -1,6 +1,6 @@
-// 大纲页对话框组件（S2.4 修订：就地编辑/新建替代后仅保留危险操作确认）
+// 大纲页对话框组件（S2.4 修订：就地编辑/新建替代后仅保留不可恢复操作确认）
 // 保留场景（用户反馈「减少弹窗」后的必要对话框）：
-//   - ConfirmDialog：危险操作必须二次确认（layout.md §3.2——软删）
+//   - ConfirmDialog：彻底删除（purge）/ 物理删关系等不可恢复操作必须二次确认（layout.md §3.2）
 // 已移除：CreateNodeDialog/EditNodeDialog（由 Outline.tsx 行内就地编辑/新建替代）、
 //   MoveNodeDialog（S13.1：拖拽上下半判定 + 指示线已覆盖精确插入位置）
 // 契约：doc/ui/pages/outline.md「关键交互」——父节点按类型过滤（决策 19）
@@ -23,7 +23,7 @@ export const CHILD_TYPE: Record<OutlineNodeType, OutlineNodeType | null> = {
   chapter: "scene",
   scene: null,
 };
-/** 危险操作确认对话框（软删/彻底删除共用；onConfirm 抛错则保持打开并显示错误） */
+/** 危险操作确认对话框（彻底删除/物理删关系等不可恢复操作；onConfirm 抛错则保持打开并显示错误） */
 export function ConfirmDialog({
   title,
   description,

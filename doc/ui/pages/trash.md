@@ -36,6 +36,8 @@
 
 ### 还原
 
+> H2：还原直接执行，**不弹二次确认**；失败按错误态处理（404/409 等）。
+
 - **实体**：`POST /trash/entity/:type/:id/restore` → toast「已还原，连带恢复 N 条关系、N 条变更记录」；行移除。
 - **节点**：`POST /trash/outline/:nodeId/restore`：
   - 成功 → toast「已还原（含 N 个子节点）」。

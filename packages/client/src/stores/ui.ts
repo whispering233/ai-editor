@@ -1,6 +1,6 @@
 // 全局 UI 状态（doc/ui/layout.md §3.1：错误横幅 / toast / 确认对话框；§3.2 通用交互约定）
 // 错误横幅：code + message，按错误码的引导文案由各页映射；toast：轻提示自动消失；
-// 确认对话框：危险操作（软删、purge、删关系）必须二次确认并说明影响范围——渲染组件（ConfirmDialog）由后续切片卡实现
+// 确认对话框：不可恢复操作（purge、物理删关系）必须二次确认并说明影响范围；软删/还原直接执行（H2）
 import { create } from "zustand";
 import type { ErrorCode } from "@whispering233/ai-editor-shared";
 import type { ClientErrorCode } from "../lib/api";
@@ -19,11 +19,11 @@ export interface ErrorBanner {
   message: string;
 }
 
-/** 确认对话框配置（layout.md §3.2：危险操作二次确认，说明影响范围） */
+/** 确认对话框配置（layout.md §3.2：不可恢复操作二次确认，说明影响范围） */
 export interface ConfirmOptions {
   title: string;
   description?: string;
-  /** 危险操作（软删/purge/删关系）：按钮红色警示 */
+  /** 危险操作（purge/物理删关系）：按钮红色警示 */
   danger?: boolean;
 }
 

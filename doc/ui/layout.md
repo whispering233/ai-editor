@@ -239,7 +239,7 @@
 - **错误态**：区块内 `text-xs/text-sm` 文案 + [重试]（`outline xs`），单区块失败不阻塞其他区块；全局/流错误用红色横幅（`bg-destructive/10 border-destructive/30 text-destructive`）；错误文案按错误码映射（`lib/error-messages.ts` / `describeStreamError`）。
 - **空态**：一句说明 + 一个主操作按钮；可配图标（`size-7/8 text-muted-foreground/40`）。
 - **toast**：轻提示（保存成功、已移入回收站等），`showToast` 3s 自动消失；渲染 = sonner `<Toaster>`（`components/ui/sonner.tsx`，主题随 useTheme 适配），`components/feedback/` 内订阅 ui store 桥接（U6 起实现）。
-- **确认对话框**：危险操作（软删、purge、删关系）必须二次确认并说明影响范围（`confirm()`，ConfirmDialog 渲染组件后续切片实现）。
+- **确认对话框**：不可恢复操作（purge、物理删关系）必须二次确认并说明影响范围（`confirm()`，ConfirmDialog 渲染组件后续切片实现）；软删与回收站还原直接执行，不弹确认（H2）。
 - **对话框宽度（DialogContent）**：基座 `max-w-lg`（**无变体**，shadcn 标准写法）；调用点按需 `sm:max-w-sm|md|2xl` 覆盖（Sidebar 新建项目 384px / 新建实体·大纲 448px / 建立关联 672px）。⚠ 基座**禁止改回 `sm:max-w-*`**——Tailwind 4 同变体、同特异性规则按生成 CSS 顺序决胜，基座 `sm:max-w-sm` 会压掉所有调用点的 `sm:max-w-*` 覆盖（2026-08 曾因此全仓对话框静默 384px，三段式建立关联被压碎；`f653058` 根因修复）。
 - **Base UI 菜单契约（2026-08 踩坑）**：`DropdownMenuLabel`（= `Menu.GroupLabel`）**必须**用 `DropdownMenuGroup` 包裹——裸放 `DropdownMenuContent` 内，菜单打开时抛 Base UI error #31（`MenuGroupContext is missing`），曾致点击会话标题下拉整页白屏（`3e877a1` 根因修复）；新增菜单时遵守，封装文件（`components/ui/dropdown-menu.tsx`）头部有红线注释。
 - **焦点可见性**：全局 `* { outline-ring/50 }`；输入控件聚焦 `focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50`。

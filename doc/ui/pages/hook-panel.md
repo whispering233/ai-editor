@@ -63,7 +63,7 @@
 
 ### 行操作
 
-- ⋯ 菜单：详情（展开 relations 全览：埋点/推进/回收节点列表 + 依赖链 + involves 关联）· 推进 · 回收 · 废弃 · 编辑（data 表单，同 EntityDetail）· 移入回收站（软删，确认框展示 `cascaded.relations/deltas`）。
+- ⋯ 菜单：详情（展开 relations 全览：埋点/推进/回收节点列表 + 依赖链 + involves 关联）· 推进 · 回收 · 废弃 · 编辑（data 表单，同 EntityDetail）· 移入回收站（软删，H2：直接执行不弹确认，级联计数在 toast 中展示）。
 - 依赖链：行内「依赖: 玉佩来历」可点击展开递归链（depends_on）。
 
 ## 状态

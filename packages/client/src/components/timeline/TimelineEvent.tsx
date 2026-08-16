@@ -44,7 +44,7 @@ interface TimelineEventProps {
   showInsertBefore: boolean;
   showInsertAfter: boolean;
   eventDrag: EventDragHandlers;
-  /** 行 ⋯ 菜单回调（页面级动作：详情跳转 / 编辑对话框 / 软删确认） */
+  /** 行 ⋯ 菜单回调（页面级动作：详情跳转 / 编辑对话框 / 软删直接执行） */
   onDetail: (ev: EntitySummary) => void;
   onEdit: (ev: EntitySummary) => void;
   onDelete: (ev: EntitySummary) => void;

@@ -10,7 +10,7 @@
 //  - 新建：POST /entity/hook + 有埋点节点再 POST /relation（outline_node → hook，plants）
 //  - 推进/回收/废弃：复合写确认面板（提案式）——runLifecycleWrite / runAbandonWrite（lib/hook-panel），
 //    确认前展示「将写入」内容；回收面板在存在依赖者时额外提示
-//  - 行 ⋯ 菜单：详情（relations 全览）/推进/回收/废弃/编辑（data 表单）/移入回收站（软删级联提示）
+//  - 行 ⋯ 菜单：详情（relations 全览）/推进/回收/废弃/编辑（data 表单）/移入回收站（H2：直接软删，不弹确认）
 //  - 依赖链：行内「依赖: …」可点击展开递归链（expandDependencyChain：深度 3 + 环守卫）
 import { useEffect, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
@@ -62,7 +62,7 @@ import {
 import { LIFECYCLE_STATUS } from "../lib/hook-panel";
 import { flattenTree } from "../lib/outline-tree";
 import { cn } from "../lib/utils";
-import { ConfirmDialog } from "../components/outline/dialogs";
+
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
@@ -121,9 +121,6 @@ export default function HookPanel() {
   const [editForm, setEditForm] = useState<Record<string, unknown> | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
   const [editSaving, setEditSaving] = useState(false);
-
-  // 软删确认
-  const [deleteTarget, setDeleteTarget] = useState<EntitySummary | null>(null);
 
   // 新建对话框
   const [createOpen, setCreateOpen] = useState(false);
@@ -344,10 +341,8 @@ export default function HookPanel() {
 
   // ============ 软删 ============
 
-  /** 软删确认后执行：DELETE → toast（级联计数）→ 刷新 */
-  async function handleDelete() {
-    const hook = deleteTarget;
-    if (!hook) return;
+  /** 软删直接执行（H2：不再弹二次确认）：DELETE → toast（级联计数）→ 刷新 */
+  async function handleDelete(hook: EntitySummary) {
     try {
       const res = await deleteEntity("hook", hook.id);
       const parts: string[] = [];
@@ -356,10 +351,12 @@ export default function HookPanel() {
       useUiStore.getState().showToast(
         `已移入回收站，可随时还原${parts.length > 0 ? `（含 ${parts.join("、")}）` : ""}`,
       );
-      setDeleteTarget(null);
       setReloadTick((t) => t + 1);
     } catch (err) {
-      throw err; // 冒泡给 ConfirmDialog 内联显示
+      useUiStore.getState().showToast(
+        err instanceof ApiError ? err.message : "删除失败，请重试",
+        "error",
+      );
     }
   }
 
@@ -473,7 +470,7 @@ export default function HookPanel() {
             onDetail={openDetail}
             onLifecycle={openLifecycle}
             onEdit={openEdit}
-            onDelete={setDeleteTarget}
+            onDelete={(hook) => void handleDelete(hook)}
           />
           <HookGroupSection
             title="已回收"
@@ -486,7 +483,7 @@ export default function HookPanel() {
             onDetail={openDetail}
             onLifecycle={openLifecycle}
             onEdit={openEdit}
-            onDelete={setDeleteTarget}
+            onDelete={(hook) => void handleDelete(hook)}
           />
           <HookGroupSection
             title="已废弃"
@@ -499,7 +496,7 @@ export default function HookPanel() {
             onDetail={openDetail}
             onLifecycle={openLifecycle}
             onEdit={openEdit}
-            onDelete={setDeleteTarget}
+            onDelete={(hook) => void handleDelete(hook)}
           />
         </div>
       )}
@@ -652,17 +649,6 @@ export default function HookPanel() {
         </Dialog>
       )}
 
-      {/* 软删确认（级联提示，同实体详情页） */}
-      {deleteTarget && (
-        <ConfirmDialog
-          title="移入回收站"
-          description={`将《${deleteTarget.name}》移入回收站。关联关系与变更记录将一并移入，可在回收站还原。`}
-          confirmLabel="移入回收站"
-          danger
-          onConfirm={handleDelete}
-          onClose={() => setDeleteTarget(null)}
-        />
-      )}
     </section>
   );
 }

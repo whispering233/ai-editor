@@ -4,7 +4,7 @@
 // 契约：doc/ui/pages/entity-detail.md——data 表单按类型差异化（lib/entity-detail.ts detailFieldsForType）、
 //   PUT partial 浅合并（diffData 只提交变更字段）、关系 1 跳双向展示 + 创建对话框（409 RELATION_EXISTS 提示，
 //   组件抽至 components/entity/create-relation-dialog.tsx，详情模式 source 固定本实体）、
-//   删关系物理删确认（决策 12 修订：轻量可重建）、软删确认 + 级联计数、404 引导
+//   删关系物理删确认（决策 12 修订：轻量可重建）、软删直接执行（H2：不弹确认）+ 级联计数、404 引导
 // 边界：custom_fields 仅在响应 data 已有该键时显示（MVP 无法新增键）；「问 AI」入口待 chat store
 //   就绪后补（layout.md §3.3 带上下文进聊天）
 import { useEffect, useState } from "react";
@@ -174,7 +174,6 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
   const [saveError, setSaveError] = useState<string | null>(null);
   const [relationDialogOpen, setRelationDialogOpen] = useState(false);
   const [deleteRelationTarget, setDeleteRelationTarget] = useState<RelationSummaryItem | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState(false);
   /** 「变更记录 N 条」展开状态（S5.4：下方渲染状态预览区块） */
   const [deltaOpen, setDeltaOpen] = useState(false);
 
@@ -241,7 +240,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
     setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
   }
 
-  /** 软删确认后执行：DELETE → toast（级联计数）→ 跳回列表 */
+  /** 软删直接执行（H2：不再弹二次确认）：DELETE → toast（级联计数）→ 跳回列表 */
   async function handleDelete() {
     if (!detail) return;
     try {
@@ -252,10 +251,12 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
       useUiStore.getState().showToast(
         `已移入回收站，可随时还原${parts.length > 0 ? `（含 ${parts.join("、")}）` : ""}`,
       );
-      setDeleteTarget(false);
       navigate(`/entities/${entityType}`);
     } catch (err) {
-      throw err; // 冒泡给 ConfirmDialog 内联显示
+      useUiStore.getState().showToast(
+        err instanceof ApiError ? err.message : "删除失败，请重试",
+        "error",
+      );
     }
   }
 
@@ -323,7 +324,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
             type="button"
             disabled={!detail}
             className="text-red-600 hover:bg-red-50"
-            onClick={() => setDeleteTarget(true)}
+            onClick={() => void handleDelete()}
           >
             移入回收站
           </Button>
@@ -471,17 +472,6 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
         />
       )}
 
-      {/* 软删确认（级联说明；计数在删除后 toast 呈现，与大纲页一致） */}
-      {deleteTarget && (
-        <ConfirmDialog
-          title="移入回收站"
-          description={`将《${detail?.name ?? ""}》移入回收站。关联关系与变更记录将一并移入，可在回收站还原。`}
-          confirmLabel="移入回收站"
-          danger
-          onConfirm={handleDelete}
-          onClose={() => setDeleteTarget(false)}
-        />
-      )}
     </section>
   );
 }
