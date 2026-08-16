@@ -98,7 +98,7 @@ export function TimelineEvent({
       <div className="w-[22px] shrink-0">
         <span aria-hidden="true" className="mx-auto mt-[16px] block size-2 rounded-full bg-primary/60" />
       </div>
-      {/* 内容卡（timeline.md G2 事件行：从左到右 拖拽柄 → 事件名 → tags → N 节点 → 直接操作按钮；
+      {/* 内容卡（timeline.md G2 事件行：从左到右 拖拽柄 → 事件名 → tags；右侧：N 节点 + 直接操作按钮；
           描述区 F6 在事件名行下方全宽换行，不挤占行内元素） */}
       <div className="min-w-0 flex-1 rounded-md border border-border bg-card px-3 py-2">
         <div className="flex items-center gap-2">
@@ -118,9 +118,10 @@ export function TimelineEvent({
               {tag}
             </span>
           ))}
-          {hasOccursData && <span className="shrink-0 text-xs text-muted-foreground">{count} 节点</span>}
-          {/* 操作按钮全部展开（H3：禁止收进 ⋯ 二级展开；图标 + title/aria-label） */}
-          <span className="ml-auto flex shrink-0 items-center gap-0.5">
+          {/* 右侧信息与操作区（H6：N 节点计数靠右，与操作按钮一起，减少左侧干扰） */}
+          <span className="ml-auto flex shrink-0 items-center gap-1">
+            {hasOccursData && <span className="shrink-0 text-xs text-muted-foreground">{count} 节点</span>}
+            {/* 操作按钮全部展开（H3：禁止收进 ⋯ 二级展开；图标 + title/aria-label） */}
             <Button
               variant="ghost"
               size="icon-sm"

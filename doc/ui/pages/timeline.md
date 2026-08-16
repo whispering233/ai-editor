@@ -32,10 +32,10 @@
 │ 标签: [全部] [主线] [战争] [身世]                               │
 ├───────────────────────────────────────────────────────────────┤
 │  │ ● 第二天黄昏      [2 个事件][✎][+][🗑][▾] ⠿ ← 时间点整组可拖│
-│  │   ├─○ 主角踏入宗门   [主线]  2 节点 [详情][编辑][删] ⠿ ← 单条事件可拖 │
-│  │   └─○ 玉佩来历揭开   [身世][主线] 1 节点 [详情][编辑][删] ⠿        │
+│  │   ├─○ 主角踏入宗门   [主线]  [2 节点][详情][编辑][删] ⠿ ← 单条事件可拖 │
+│  │   └─○ 玉佩来历揭开   [身世][主线] [1 节点][详情][编辑][删] ⠿        │
 │  │ ● 少年时          [1 个事件][✎][+][🗑][▾] ⠿            │
-│  │   └─○ 门派考核       [主线]  1 节点 [详情][编辑][删] ⠿           │
+│  │   └─○ 门派考核       [主线]  [1 节点][详情][编辑][删] ⠿           │
 │  │ ● 未挂载           2 个事件          [▾]                       │
 │  │   └─○ 无标签事件A     [详情][编辑][删] ⠿ ← 未挂载事件可拖到任一时间点 │
 │  │                                                               │
@@ -48,7 +48,7 @@
 - **节点圆点**：`relative z-10 rounded-full border-2 border-primary bg-background`（不透明背景盖住穿过轴线，尺寸 `size-4`；组内事件行用小圆点 `size-2 rounded-full bg-primary/60`）。
 - **时间点组块**（= 时间标签）：**组标题** = 大圆点 + 时间点名（`text-sm font-medium text-foreground`，F4 样式）；**右侧信息与操作区**（H5）：事件计数 + [重命名]（Pencil 图标，行内编辑，`PUT /entity/timepoint/:id` name）+ [在此时间点新建事件]（Plus 图标，自动挂载该时间点）+ [移入回收站]（Trash2 图标，H2：直接软删不弹确认，`DELETE /entity/timepoint/:id`）+ 折叠按钮（`aria-expanded`，折叠后仅标题行、轴线仍连续）；左侧只保留时间标签文本，减少干扰；**组内事件堆叠**（各自不再画线，轴线容器级贯穿）。
 - **未挂载兜底区**：无 `occurs_at` 事件归入列表末尾「未挂载」组（组标题 `italic text-muted-foreground` 弱化占位；事件按 sort_order 平铺）；可直接拖拽到任一时间点完成挂载。
-- **事件行**：内容卡 `rounded-md bg-card border-border px-3 py-2`，从左到右：拖拽柄 `GripVertical` → 事件名（`truncate` + title 全文）→ tags 胶囊 → 「N 节点」计数 → **直接操作按钮**（H3：详情/编辑/移入回收站，禁止收进 ⋯ 菜单）。**事件行内不再有时间标签**（G2：时间标签 = 组标题）。**事件名行下方为全宽描述区（F6）**：`text-sm text-muted-foreground` 次要层级，两行截断 `line-clamp-2`；**超过两行才显示「展开」按钮**（clamp 态 `scrollHeight > clientHeight` 运行时测量，窗口 resize 重测；展开态跳过重测保留上次 clamped 测量值），展开后 `line-clamp-none` 显示「收起」；描述 trim 后为空不渲染。
+- **事件行**：内容卡 `rounded-md bg-card border-border px-3 py-2`，从左到右：拖拽柄 `GripVertical` → 事件名（`truncate` + title 全文）→ tags 胶囊；**右侧信息与操作区**（H6）：「N 节点」计数 + **直接操作按钮**（H3：详情/编辑/移入回收站，禁止收进 ⋯ 菜单）。**事件行内不再有时间标签**（G2：时间标签 = 组标题）。**事件名行下方为全宽描述区（F6）**：`text-sm text-muted-foreground` 次要层级，两行截断 `line-clamp-2`；**超过两行才显示「展开」按钮**（clamp 态 `scrollHeight > clientHeight` 运行时测量，窗口 resize 重测；展开态跳过重测保留上次 clamped 测量值），展开后 `line-clamp-none` 显示「收起」；描述 trim 后为空不渲染。
 - **拖拽（双轨，G2）**：
   - **时间点拖拽**：draggable 设在组块根（组标题行）；onDragOver 用 `e.clientY` 与各组块中点比较算插入位；drop → `PUT /entity/timepoint/:id/move`（**只重排时间点序，其下事件序不变**）；失败回滚 + toast。
   - **事件拖拽**：draggable 设在事件行根；onDragOver 同款判定；drop → 组内移动 = `PUT /entity/event/:id/move`；**跨组拖拽 = 改挂载**（旧 occurs_at 移除 + 新 occurs_at 建立 + 事件 move 插入目标位置，一次性提交，无确认弹窗）→ 失败回滚 + toast。
