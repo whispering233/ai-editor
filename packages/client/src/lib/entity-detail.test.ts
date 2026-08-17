@@ -44,7 +44,7 @@ describe("detailFieldsForType（data 表单按类型配置——schema.md 字段
   });
 });
 
-describe("relationTypeLabel（16 种预定义关系类型中文映射）", () => {
+describe("relationTypeLabel（17 种预定义关系类型中文映射，批次四 I1：occurs_in 补齐）", () => {
   it("核心映射：mentor→师徒、appears_in→出现于、masters→掌握、ally→盟友", () => {
     expect(relationTypeLabel("mentor")).toBe("师徒");
     expect(relationTypeLabel("appears_in")).toBe("出现于");
@@ -52,6 +52,11 @@ describe("relationTypeLabel（16 种预定义关系类型中文映射）", () =>
     expect(relationTypeLabel("ally")).toBe("盟友");
     expect(relationTypeLabel("plot_edge")).toBe("剧情连线");
     expect(relationTypeLabel("plants")).toBe("埋设");
+  });
+
+  it("occurs_in（决策 26 新增，批次四 I1）→锚定于，与 occurs_at 发生于区分", () => {
+    expect(relationTypeLabel("occurs_in")).toBe("锚定于");
+    expect(relationTypeLabel("occurs_at")).toBe("发生于");
   });
 
   it("未知类型原样显示（不崩溃）", () => {

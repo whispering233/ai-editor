@@ -91,7 +91,9 @@ export function detailFieldsForType(type: EntityType): DetailFieldConfig[] {
   }
 }
 
-/** 关系类型 → 中文（16 种预定义，schema.md；未收录原样显示） */
+/** 关系类型 → 中文（17 种预定义，schema.md；未收录原样显示）
+ * 2026-08 批次四 I1：补入 occurs_in「锚定于」（决策 26 新增遗漏——与 occurs_at「发生于」
+ *  地点语义区分，避免关联列表两行同文案歧义）；映射表契约同步 doc/ui/pages/entity-list.md */
 const RELATION_TYPE_LABEL: Record<string, string> = {
   belongs_to: "所属",
   owns: "拥有",
@@ -102,6 +104,7 @@ const RELATION_TYPE_LABEL: Record<string, string> = {
   family: "家族",
   kills: "击杀",
   appears_in: "出现于",
+  occurs_in: "锚定于",
   occurs_at: "发生于",
   plot_edge: "剧情连线",
   plants: "埋设",

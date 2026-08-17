@@ -84,6 +84,30 @@
 | 端点类型徽标 | `source_type`/`target_type`：character/setting/location/hook/outline_node → 人物/设定/地点/伏笔/大纲节点 |
 | 方向 | 按存储方向展示（源 → 目标）；depth=1 返回即存储方向，本视图不镜像反转 |
 
+### 关系类型中文标签（`relationTypeLabel`，契约来源 `shared/constants/entity.ts` RELATION_TYPES + schema.md 关系类型表，共 17 种）
+
+> 展示/下拉均走此映射，未收录类型原样显示（防御）。历史上 `occurs_in`（决策 26 新增）曾漏映射导致界面显示英文——2026-08 批次四 I1 修复并补录本表。
+
+| 关系类型 | 中文标签 | 方向语义（schema.md） |
+|---------|---------|---------------------|
+| `belongs_to` | 所属 | 人物→设定 |
+| `owns` | 拥有 | 人物→物品 |
+| `masters` | 掌握 | 人物→能力 |
+| `ally` | 盟友 | 人物间关系 |
+| `rival` | 对手 | 人物间关系 |
+| `mentor` | 师徒 | 人物间关系 |
+| `family` | 家族 | 人物间关系 |
+| `kills` | 击杀 | 人物→人物 |
+| `appears_in` | 出现于 | 实体→大纲节点 |
+| `occurs_in` | 锚定于 | event→大纲节点（事件锚定，决策 26；与 occurs_at「发生于（地点）」中文区分） |
+| `occurs_at` | 发生于 | 大纲节点→地点（G2 起兼 timepoint→event 挂载） |
+| `plot_edge` | 剧情连线 | 大纲节点→大纲节点（画布推演） |
+| `plants` | 埋设 | 大纲节点→hook |
+| `advances` | 推进 | 大纲节点→hook |
+| `resolves` | 回收 | 大纲节点→hook |
+| `depends_on` | 依赖 | hook→hook |
+| `involves` | 涉及 | hook→实体 |
+
 ## 关键交互
 
 - **Tab 切换**：切回四类 tab 恢复原列表视图；切进关联 tab 重置过滤（与现有「MVP 切换时重置」约定一致）。
