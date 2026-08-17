@@ -34,11 +34,12 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - [x] 用户反馈批次二 G1 区块独立滚动 · G2 时间标签点实体化（G2.1 数据层 / G2.2 服务端与AI / G2.3 前端重构 / G2.4 收尾）
 - [x] 用户反馈批次三 G3 操作后滚动位置保持
 - [x] 用户反馈批次三 H1-H6 时间轴交互与视觉优化（删除入口/免确认/按钮展开/边框/右移/图标）
-- [ ] 用户反馈批次四（2026-08，实体关系增强）：I1 `occurs_in` 中文映射补齐（bug）· I2 详情图标统一 Eye（UX）· I3 新建设定可填上级设定 + 详情页上级设定改选择器（新需求，含 #3 UX 修复）· I4 设定关系视图（新需求，#6）
+- [ ] 用户反馈批次四（2026-08，实体关系增强）：I1 `occurs_in` 中文映射补齐（bug）· I2 详情图标统一 Eye（UX）· I3 设定层级 = belongs_to（决策 30，新需求，含 #3 UX 修复）· I4 设定关系视图（新需求，#6）
   - [x] I1 `occurs_in` 中文映射（RELATION_TYPE_LABEL 补 17 种「锚定于」+ 测试 + 文档）
   - [x] I2 详情图标 BookOpen → Eye（HookPanel / Outline）
-  - [ ] I3 上级设定选择器（创建行内 + 详情页表单，setting 限定 + 存在性/自引用校验）
-  - [ ] I4 设定关系视图（按 parent_id 构建层级树 + 关联明细展示）
+  - [x] I3a 数据与校验层：shared 移除 settingDataSchema.parent_id + db 层级邻接表/防环 helper + server POST /relation 校验 + tools R5 调整 + 测试 & 文档
+  - [ ] I3b 客户端 UI：detailFieldsForType 移除 parent_id + 详情页「层级」区块（父/子 + 修改上级）+ 新建行「上级设定」弹层选择器 + 测试
+  - [ ] I4 设定关系视图（按 belongs_to 构建层级树，位置待确认）
 
 ---
 
@@ -111,7 +112,8 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 | G3 | 操作后滚动位置保持 | `f50bae6` | 交互：重拉期间保留旧数据渲染 |
 | H1-H6 | 时间轴交互与视觉优化 | git log 回溯 | 删除入口/免确认/按钮展开/边框/右移/图标 |
 | I1 | `occurs_in` 中文映射（bug） | `2563dec` | 17 种关系类型映射补全，「锚定于」与「发生于」区分；测试 + entity-list.md 补映射表 |
-| I2 | 详情图标统一 Eye（UX） | 本次 | BookOpen → Eye（Outline/HookPanel 详情入口）；Sidebar/Dashboard 书籍语义保留；outline.md 同步 |
+| I2 | 详情图标统一 Eye（UX） | `75bdf8d` | BookOpen → Eye（Outline/HookPanel 详情入口）；Sidebar/Dashboard 书籍语义保留；outline.md 同步 |
+| I3a | 设定层级 = belongs_to（决策 30）数据/校验层 | 本次 | shared 移除 settingDataSchema.parent_id；db 层级邻接表/防环 helper；server POST /relation 自指/成环 400；tools R5 仅保留 location；文档 decisions 30 + schema/endpoints/UI |
 
 ---
 

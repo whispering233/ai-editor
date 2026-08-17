@@ -53,7 +53,7 @@ CREATE TABLE entities (
 | type | data 关键字段 |
 |------|-------------|
 | `character` | `role`, `gender`, `age`, `personality[]`, `motivation`, `abilities[]`, `status`, `custom_fields` |
-| `setting` | `category`, `parent_id`, `description`, `rules[]`, `custom_fields` |
+| `setting` | `category`, `description`, `rules[]`, `custom_fields` —— **`parent_id` 已废弃（决策 30，2026-08）**：层级改由 `belongs_to` 关系表达（子设定 → 父设定），不再读写；旧字段残留由 `.passthrough()` 容错 |
 | `location` | `type`, `parent_id`, `description`, `custom_fields` |
 | `hook` | 详见 [hooks.md](./hooks.md) |
 | `event` | `description`（文本）, `tags[]`（字符串数组，分类筛选用）——**G2 修订：`time_label` 已移除**（迁移至 timepoint 实体 + occurs_at 关系，见下） |
@@ -100,7 +100,7 @@ CREATE INDEX idx_relation_type   ON relation_records(relation_type) WHERE delete
 
 | 关系类型 | 说明 | 示例 |
 |---------|------|------|
-| `belongs_to` | 所属 | 人物→设定 |
+| `belongs_to` | 所属（**层级语义，决策 30**：setting→setting 表达设定父子，子 belongs_to 父；防自指/成环由 POST /relation 校验） | 人物→设定；子设定→父设定 |
 | `owns` | 拥有 | 人物→物品 |
 | `masters` | 掌握 | 人物→能力 |
 | `ally` / `rival` / `mentor` / `family` | 人物间关系 | 人物→人物 |

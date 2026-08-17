@@ -42,7 +42,7 @@
 - **搜索**：`q` 输入防抖 300ms 发请求；空关键词跳过请求直接显示列表。
 - **排序**：`sort`（name / created_at / updated_at）× `order`（asc / desc）下拉。
 - **分页**：limit 固定 20（MVP）；前端按页码换算 `offset` 提交，用返回的 `total` 算总页数。
-- **新建**：对话框（`name` 必填 + 该类型首字段，如 character 的 `role`）→ `POST /entity/:type` → 成功跳详情页。
+- **新建**：列表首行内联编辑行（UX4：`name` 必填 + 该类型首字段，如 character 的 `role`；字段配置复用 `CREATE_FIRST_FIELD`）→ `POST /entity/:type` → 成功跳详情页。**setting 类型额外提供「上级设定（选填）」（决策 30，I3）**：弹层搜索选择器（Popover 轻量弹层 + 防抖搜索，候选 = `listEntities(setting)`）——选中父设定后创建实体成功再补 `POST /relation`（belongs_to，source=新设定 → target=父设定；关系失败不阻塞创建，toast 提示「已创建但未挂上级，可进详情页修改」）。
 - **行点击** → `#/entities/:type/:id`。
 
 ## 状态

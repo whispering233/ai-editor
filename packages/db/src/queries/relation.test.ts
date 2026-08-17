@@ -15,8 +15,10 @@ import {
   getRelation,
   listDanglingRelations,
   listRelations,
+  listSettingHierarchyEdges,
   RelationError,
   updateRelationMetadata,
+  wouldCreateSettingCycle,
 } from "./relation.js";
 import { findOutlineNode, readOutlineFile, writeOutlineFile } from "../storage/outline.js";
 
@@ -494,5 +496,68 @@ describe("listDanglingRelations（S6.4 工具 find_orphan_elements 下沉）", (
     const { charA, charB } = seedBase();
     createRelation(db, { sourceType: "character", sourceId: charA, targetType: "character", targetId: charB, relationType: "ally" }, dir);
     expect(listDanglingRelations(db, dir)).toEqual([]);
+  });
+});
+
+describe("设定层级（决策 30：belongs_to setting→setting 边集 + 防环）", () => {
+  function seedSetting(name: string) {
+    const row = createEntity(db, { type: "setting", name });
+    return row.id;
+  }
+
+  function link(childId: string, parentId: string) {
+    createRelation(db, { sourceType: "setting", sourceId: childId, targetType: "setting", targetId: parentId, relationType: "belongs_to" }, dir);
+  }
+
+  it("listSettingHierarchyEdges：只收 belongs_to 且两端均为 setting 的未软删边（方向 child→parent）", () => {
+    writeOutlineFile(dir, seedOutlineTree()); // outline_node 端点校验需要大纲文件（sc-1）
+    const a = seedSetting("世界");
+    const b = seedSetting("大陆");
+    const c = seedSetting("门派");
+    const person = createEntity(db, { type: "character", name: "张三" }).id;
+    link(c, b);
+    link(b, a);
+    // 人物→设定 belongs_to 与大纲节点出现关系不计入层级
+    createRelation(db, { sourceType: "character", sourceId: person, targetType: "setting", targetId: a, relationType: "belongs_to" }, dir);
+    createRelation(db, { sourceType: "outline_node", sourceId: "sc-1", targetType: "setting", targetId: a, relationType: "appears_in" }, dir);
+    const edges = listSettingHierarchyEdges(db);
+    expect(edges).toEqual([
+      { childId: c, parentId: b },
+      { childId: b, parentId: a },
+    ]);
+  });
+
+  it("软删端点不参与层级（决策 12 修订可见性联动）", () => {
+    const a = seedSetting("世界");
+    const b = seedSetting("大陆");
+    const c = seedSetting("门派");
+    link(c, b);
+    link(b, a);
+    softDeleteEntity(db, b, T0); // 中间节点软删 → 其边两侧均不可见
+    const edges = listSettingHierarchyEdges(db);
+    expect(edges).toEqual([]);
+  });
+
+  it("wouldCreateSettingCycle：自指/祖先链命中/新建子节点均正确判定", () => {
+    const a = seedSetting("世界");
+    const b = seedSetting("大陆");
+    const c = seedSetting("门派");
+    link(c, b);
+    link(b, a);
+    // 自指：设定作为自己的上级
+    expect(wouldCreateSettingCycle(db, a, a)).toBe(true);
+    // 环：把 a 挂到 c 下（a 的子孙 b 已经挂在 b'下……方向核对：a→? 即 a belongs_to c；
+    // c 的祖先链 = c→b→a，含 a → 成环）
+    expect(wouldCreateSettingCycle(db, a, c)).toBe(true);
+    // 把 b 挂到 c 下：c 的祖先链 c→b→a 含 b → 成环
+    expect(wouldCreateSettingCycle(db, b, c)).toBe(true);
+    // 合法：新建叶子挂到 a 下 —— d 不在树中，a 的祖先链无 d
+    const d = seedSetting("新势力");
+    expect(wouldCreateSettingCycle(db, d, a)).toBe(false);
+    // 合法：同级互挂（b 挂到另一个孤立根 e 下）——e 祖先链无 b
+    const e = seedSetting("另一世界");
+    expect(wouldCreateSettingCycle(db, b, e)).toBe(false);
+    // 重复边不误判为环（同三元组判重由 createRelation 的 RELATION_EXISTS 负责）
+    expect(wouldCreateSettingCycle(db, c, b)).toBe(false);
   });
 });

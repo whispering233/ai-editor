@@ -257,6 +257,57 @@ describe("POST /relation 创建", () => {
     });
     expect(ok.status).toBe(201);
   });
+
+  it("设定层级 belongs_to（决策 30）：自指/成环 → 400 VALIDATION_ERROR；正常与级联挂载 201", async () => {
+    const { app } = await seed();
+    const project = getCurrentProject()!;
+    const world = createEntity(project.db, { type: "setting", name: "世界" });
+    const continent = createEntity(project.db, { type: "setting", name: "大陆" });
+    const sect = createEntity(project.db, { type: "setting", name: "门派" });
+    const person = createEntity(project.db, { type: "character", name: "张三" });
+
+    const rel = (source_id: string, target_id: string) => ({
+      source_type: "setting",
+      source_id,
+      target_type: "setting",
+      target_id,
+      relation_type: "belongs_to",
+    });
+
+    // 正常：门派 → 大陆 → 世界（子 belongs_to 父，201）
+    expect((await createRel(app, rel(sect.id, continent.id))).status).toBe(201);
+    expect((await createRel(app, rel(continent.id, world.id))).status).toBe(201);
+
+    // 自指：设定作为自己的上级 → 400
+    const self = await createRel(app, rel(world.id, world.id));
+    expect(self.status).toBe(400);
+    expect(self.body.error.code).toBe("VALIDATION_ERROR");
+    expect(self.body.error.message).toContain("自己的上级");
+
+    // 成环：世界 → 门派（世界挂到门派下，而门派属于大陆属于世界）→ 400
+    const cycle = await createRel(app, rel(world.id, sect.id));
+    expect(cycle.status).toBe(400);
+    expect(cycle.body.error.code).toBe("VALIDATION_ERROR");
+    expect(cycle.body.error.message).toContain("成环");
+
+    // 成环：大陆 → 门派（把大陆挂到门派下，门派祖先链 = 门派→大陆→世界 含大陆）→ 400
+    const cycle2 = await createRel(app, rel(continent.id, sect.id));
+    expect(cycle2.status).toBe(400);
+
+    // 非层级 belongs_to（人物→设定）不受影响 → 201
+    const charRel = await createRel(app, {
+      source_type: "character",
+      source_id: person.id,
+      target_type: "setting",
+      target_id: world.id,
+      relation_type: "belongs_to",
+    });
+    expect(charRel.status).toBe(201);
+
+    // 孤儿级联挂载：新设定挂到世界下（祖先链无新设定）→ 201
+    const sect2 = createEntity(project.db, { type: "setting", name: "新势力" });
+    expect((await createRel(app, rel(sect2.id, world.id))).status).toBe(201);
+  });
 });
 
 // ============ GET /api/v1/relation ============

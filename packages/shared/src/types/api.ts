@@ -105,11 +105,11 @@ export const characterDataSchema = z
   })
   .passthrough(); // 允许未知字段（创作工具，用户自定义字段自由）
 
-/** setting 专属字段（schema.md：category/parent_id/description/rules[]/custom_fields） */
+/** setting 专属字段（schema.md：category/description/rules[]/custom_fields；
+ *  `parent_id` 已移除——决策 30 层级改由 belongs_to 关系表达，旧字段残留由 passthrough 容错） */
 export const settingDataSchema = z
   .object({
     category: z.string().optional(),
-    parent_id: z.string().optional(),
     description: z.string().optional(),
     rules: z.array(z.string()).optional(),
     custom_fields: z.record(z.string(), z.unknown()).optional(),

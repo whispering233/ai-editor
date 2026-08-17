@@ -88,7 +88,9 @@ function checkResolveNodeReference(data: Record<string, unknown>, tree: OutlineF
   return [];
 }
 
-/** R5：setting/location.data.parent_id 指向不存在/已软删的实体 → 悬空引用（warning） */
+/** R5：location.data.parent_id 指向不存在/已软删的实体 → 悬空引用（warning）。
+ * 决策 30（2026-08）：setting 的 parent_id 已废弃（层级改由 belongs_to 关系表达，
+ * 防环/存在性由 POST /relation 集中校验），R5 仅保留 location */
 function checkParentReference(data: Record<string, unknown>, db: Db): ConsistencyIssue[] {
   const parentId = data.parent_id;
   if (typeof parentId !== "string" || parentId === "") return [];
@@ -103,7 +105,8 @@ function checkParentReference(data: Record<string, unknown>, db: Db): Consistenc
  * 规则表（按类型分发，均纯函数判定）：
  * - character：R1 负年龄（error）、R2 性格反义词对（warning）
  * - hook：R3 已兑现未标注节点（warning）、R4 兑现节点悬空引用（error）
- * - setting/location：R5 parent_id 悬空引用（warning）
+ * - location：R5 parent_id 悬空引用（warning）——decision 30 起 setting 不再走 parent_id
+ *   （层级 = belongs_to 关系，由 POST /relation 校验），R5 仅适用 location
  * 实体不存在/已软删 → null（查询无结果，LLM 自纠）。
  */
 export function analyzeEntityConsistency(row: EntityRow, tree: OutlineFileTree, db: Db): ConsistencyIssue[] {
@@ -114,6 +117,8 @@ export function analyzeEntityConsistency(row: EntityRow, tree: OutlineFileTree, 
     case "hook":
       return [...checkResolvedWithoutNode(data), ...checkResolveNodeReference(data, tree)];
     case "setting":
+      // 决策 30：setting 层级走 belongs_to 关系（POST /relation 防环校验），data.parent_id 废弃——无遗留规则
+      return [];
     case "location":
       return checkParentReference(data, db);
     // C1 类型补全（决策 26 event 时间轴事件：暂无一致性规则，返回空集；后续卡按需增补）

@@ -701,6 +701,9 @@ id: string;                    // 事件 id（ev- 前缀）
 { error: { code: "RELATION_EXISTS" } }
 ```
 
+> **层级校验（决策 30，2026-08）**：`relation_type=belongs_to` 且两端均为 `setting` 时（设定层级：子设定 → 父设定）——禁自指（target ≠ source）、**防环**（新父的祖先链不得含该子设定，沿 belongs_to 边向上遍历，db 层全量边邻接表构建）——违规 → 400 `VALIDATION_ERROR` + 中文信息。其余 belongs_to（如人物→设定）与其它关系类型不受影响。
+> **父子查询约定（决策 30）**：查「X 的父」= `GET /relation?target_type=setting&target_id=X&relation_type=belongs_to&depth=1`（来源端）；查「X 的子」= `GET /relation?source_type=setting&source_id=X&relation_type=belongs_to&depth=1`（目标端）。
+
 ### PUT /api/v1/relation/:id
 
 更新关系元数据（2026-08 交互优化 I1：画布连线标签线上编辑）。**仅支持 `metadata` 字段 patch**（当前唯一用途 = `plot_edge` 连线标签）；关系三元组（source/target/relation_type）不可变——要改连接请删后重建。

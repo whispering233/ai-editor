@@ -54,6 +54,12 @@ export interface RelationQuery {
 /** 大纲端点 id（relation_records 端点类型约定，schema.md） */
 export const OUTLINE_ENDPOINT_TYPE = "outline_node";
 
+/** 设定层级边（决策 30）：childId → parentId（belongs_to 且两端均为 setting，两端点未软删） */
+export interface SettingHierarchyEdge {
+  childId: string;
+  parentId: string;
+}
+
 /** 实体端点类型集合（entities 表 type 列；含 event 时间轴事件——occurs_in 端点校验，决策 26；
  *  含 timepoint 时间标签点——occurs_at 端点校验，G2） */
 const ENTITY_ENDPOINT_TYPES = ["character", "setting", "location", "hook", "event", "timepoint"] as const;
@@ -397,6 +403,46 @@ function assertEndpointExists(db: Db, outlineDir: string, type: string, id: stri
     return;
   }
   throw new RelationError("ENDPOINT_NOT_FOUND", `非法端点类型: ${type}`);
+}
+
+/**
+ * 全量设定层级边（决策 30，2026-08）：读取所有 setting→setting 的 belongs_to 边
+ * （两端点均未软删——决策 12 修订可见性联动，软删端点不参与层级）。供防环校验与设定树
+ * 构建使用：O(N) 一次读取构建内存邻接表，避免逐条查询（用户反馈 #1 性能方案：JSON 内
+ * parent_id 需全表扫 + parse，关系表走索引）。方向：childId → parentId（child belongs_to parent）。
+ */
+export function listSettingHierarchyEdges(db: Db): SettingHierarchyEdge[] {
+  const rows = db
+    .prepare(
+      `SELECT r.source_id AS child_id, r.target_id AS parent_id
+       FROM relation_records r
+       JOIN entities s ON s.id = r.source_id AND s.deleted_at IS NULL
+       JOIN entities t ON t.id = r.target_id AND t.deleted_at IS NULL
+       WHERE r.relation_type = 'belongs_to'
+         AND r.source_type = 'setting' AND r.target_type = 'setting'
+         AND r.deleted_at IS NULL`,
+    )
+    .all() as Array<{ child_id: string; parent_id: string }>;
+  return rows.map((r) => ({ childId: r.child_id, parentId: r.parent_id }));
+}
+
+/**
+ * 设定层级防环校验（决策 30）：判断建边 child → newParent 是否成环。
+ * 规则：newParent 沿父链（child→parent 边）向上走，经过 child 即成环（child 将成为自身祖先）；
+ * 祖先链查询 O(深度)；child 不在树中（新建场景）时必为 false；child 与 newParent 相同 = 自指环。
+ */
+export function wouldCreateSettingCycle(db: Db, childId: string, newParentId: string): boolean {
+  if (childId === newParentId) return true;
+  const parentOf = new Map<string, string>();
+  for (const e of listSettingHierarchyEdges(db)) parentOf.set(e.childId, e.parentId);
+  let cur: string | undefined = newParentId;
+  const seen = new Set<string>();
+  while (cur !== undefined && !seen.has(cur)) {
+    if (cur === childId) return true;
+    seen.add(cur);
+    cur = parentOf.get(cur);
+  }
+  return false;
 }
 
 /**

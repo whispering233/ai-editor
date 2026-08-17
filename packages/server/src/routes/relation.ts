@@ -18,6 +18,7 @@ import {
   nowIso,
   RelationError,
   updateRelationMetadata,
+  wouldCreateSettingCycle,
 } from "@whispering233/ai-editor-db";
 import {
   relationCreateReqSchema,
@@ -68,6 +69,16 @@ relationRoutes.post("/", async (c) => {
       const mount = eventOccursAt(project.db, target_id);
       if (mount !== null && mount.source_id !== source_id) {
         assertEventSingleOccursAt(project.db, target_id); // 已挂载其他时间点 → 抛 EVENT_ALREADY_MOUNTED
+      }
+    }
+    // 设定层级校验（决策 30，2026-08）：belongs_to 且两端均为 setting（子 → 父）——
+    // 禁自指 + 防环（新父的祖先链不得含该子设定）。其余 belongs_to（人物→设定）不受影响。
+    if (relation_type === "belongs_to" && source_type === "setting" && target_type === "setting") {
+      if (source_id === target_id) {
+        throw new HttpError(400, "VALIDATION_ERROR", "设定不能作为自己的上级");
+      }
+      if (wouldCreateSettingCycle(project.db, source_id, target_id)) {
+        throw new HttpError(400, "VALIDATION_ERROR", "设定层级不能成环（上级的祖先链包含该设定）");
       }
     }
     row = createRelation(

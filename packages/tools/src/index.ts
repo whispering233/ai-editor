@@ -153,7 +153,7 @@ const analysisToolDefs: ToolDefinition[] = [
     name: "analyze_consistency",
     description:
       "实体档案一致性检查：检查单个实体 data 内部的矛盾（如性格反义词对并存、负年龄、" +
-      "伏笔已兑现但未标注兑现节点、expected_resolve_node_id/parent_id 悬空引用）。" +
+      "伏笔已兑现但未标注兑现节点、expected_resolve_node_id 悬空引用、location 的 parent_id 悬空引用）。" +
       "返回 issues: [{ severity: error|warning, field, description }]；实体不存在或已软删返回 null。",
     argsSchema: analyzeConsistencyArgsSchema,
     permission: TOOL_PERMISSION.AUTO,

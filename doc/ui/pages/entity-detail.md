@@ -58,7 +58,7 @@
 | 类型 | 字段与控件 |
 |------|-----------|
 | character | `role` 文本 · `gender` 文本 · `age` 数字 · `personality[]` 标签列表 · `motivation` 多行 · `abilities[]` 标签列表 · `status` 文本 · `custom_fields` 键值组 |
-| setting | `category` 文本 · `parent_id` 文本 · `description` 多行 · `rules[]` 标签列表 · `custom_fields` |
+| setting | `category` 文本 · `description` 多行 · `rules[]` 标签列表 · `custom_fields` —— **`parent_id` 已移除（决策 30）：层级改由 belongs_to 关系表达，见下方「层级区块」** |
 | location | `type` 文本 · `parent_id` 文本 · `description` 多行 · `custom_fields` |
 | hook | `status` 下拉（planted/progressing/resolved/abandoned）· `category` 文本 · `expected_payoff` 多行 · `payoff_timing` 下拉 · `half_life` 数字 · `is_core` 开关 · `notes` 多行 · `expected_resolve_node_id` 大纲节点选择器 |
 
@@ -70,6 +70,7 @@
 | 展示 | API 字段 |
 |------|---------|
 | 关系行 | `relations[].relationType` + `sourceName`/`targetName`（本实体在任一端都展示，行内标注方向箭头） |
+| 层级区块（**决策 30，仅 setting**） | 从 `relations` 中过滤 `belongs_to` 且两端均为 setting 的行分区展示：**父设定**（`targetId=本实体` 的来源端）/ **子设定**（`sourceId=本实体` 的目标端），名称可跳转详情；「修改上级」→ 弹层搜索选择器（候选 = `listEntities(setting)`，排除自身）→ 服务端防环校验后**删旧边 + 建新边**（无旧父则仅建） |
 | 计数 | `deltaCount`（元信息行「变更记录 N 条」入口，点击展开「状态预览」区块——S5 起提供 compute 预览明细，见关键交互） |
 | 时间 | `createdAt` / `updatedAt` |
 

@@ -149,16 +149,19 @@ describe("analyze_consistency hook 规则", () => {
 });
 
 describe("analyze_consistency 边界", () => {
-  it("R5 setting/location 的 parent_id 悬空引用 → warning；有效 parent 无 issues", () => {
+  it("R5（决策 30 修订）location 的 parent_id 悬空引用 → warning；setting 的 parent_id 已废弃不再检查", () => {
     writeOutlineFile(dir, seedOutlineTree());
-    const parent = createEntity(db, { type: "setting", name: "修真界" });
-    const ok = createEntity(db, { type: "setting", name: "门派", data: { parent_id: parent.id } });
+    const parent = createEntity(db, { type: "location", name: "山门" });
+    const okLocation = createEntity(db, { type: "location", name: "前殿", data: { parent_id: parent.id } });
     const dangling = createEntity(db, { type: "location", name: "藏经阁", data: { parent_id: "set-999" } });
+    // setting：data.parent_id 废弃（决策 30）——遗留字段不再产生 issues
+    const settingWithParent = createEntity(db, { type: "setting", name: "门派", data: { parent_id: parent.id } });
 
-    expect(runAnalyzeConsistency(makeCtx(), { entity_id: ok.id })!.issues).toEqual([]);
+    expect(runAnalyzeConsistency(makeCtx(), { entity_id: okLocation.id })!.issues).toEqual([]);
     const issues = runAnalyzeConsistency(makeCtx(), { entity_id: dangling.id })!.issues;
     expect(issues).toHaveLength(1);
     expect(issues[0]).toMatchObject({ severity: "warning", field: "parent_id" });
+    expect(runAnalyzeConsistency(makeCtx(), { entity_id: settingWithParent.id })!.issues).toEqual([]);
   });
 
   it("实体不存在/已软删 → null；signal 已中止 → 抛错", () => {
