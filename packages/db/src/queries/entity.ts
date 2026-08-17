@@ -55,7 +55,10 @@ function toSummary(row: EntityRow): EntitySummary {
       if (data.status !== undefined) summary.status = data.status;
       break;
     case "setting":
-      if (data.category !== undefined) summary.category = data.category;
+      // 决策 31（2026-08）：分类由 rules 标签承接——摘要暴露 tags（前 3 个，列表列展示用）
+      if (Array.isArray(data.rules)) {
+        summary.tags = (data.rules as unknown[]).filter((t): t is string => typeof t === "string" && t !== "").slice(0, 3);
+      }
       break;
     case "location":
       if (data.type !== undefined) summary.type = data.type;
@@ -469,14 +472,29 @@ export interface EntitySummaryStats {
   byRole?: Record<string, number>;
   /** character / hook：data.status 分布 */
   byStatus?: Record<string, number>;
-  /** setting：data.category 分布 */
-  byCategory?: Record<string, number>;
+  /** setting：data.rules 标签分布（决策 31：分类由 tags 承接，数组展平计数） */
+  byTags?: Record<string, number>;
   /** location：data.type 分布 */
   byType?: Record<string, number>;
   /** hook：data.payoff_timing 分布 */
   byPayoffTiming?: Record<string, number>;
   /** character：data.abilities 频率（取前 10，防 token 爆炸，决策 15） */
   topAbilities?: { ability: string; count: number }[];
+}
+
+/** 标签数组直方图（决策 31：rules 数组展平计数；非字符串项/空串不计入） */
+function countTags(values: unknown[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const v of values) {
+    if (Array.isArray(v)) {
+      for (const t of v) {
+        if (typeof t === "string" && t !== "") {
+          out[t] = (out[t] ?? 0) + 1;
+        }
+      }
+    }
+  }
+  return out;
 }
 
 /** 字符串值直方图（非字符串/空串不计入——data 字段稀疏，防御） */
@@ -511,7 +529,7 @@ function topAbilityCounts(rows: Array<Record<string, unknown>>, limit: number): 
 /**
  * 实体聚合统计（S6.3 工具 get_entity_summary 下沉，tools.md「聚合分析」）：
  * 指定类型实体的总数 + 类型专属分布。仅统计非软删实体（决策 12 修订）；
- * 分布字段按类型稀疏出现：character→byRole/byStatus/topAbilities、setting→byCategory、
+ * 分布字段按类型稀疏出现：character→byRole/byStatus/topAbilities、setting→byTags（决策 31）、
  * location→byType、hook→byStatus/byPayoffTiming；缺字段（data 未填）不报错、不计入。
  */
 export function getEntitySummaryStats(db: Db, type: EntityType): EntitySummaryStats {
@@ -528,7 +546,8 @@ export function getEntitySummaryStats(db: Db, type: EntityType): EntitySummarySt
       result.topAbilities = topAbilityCounts(rows, 10);
       break;
     case "setting":
-      result.byCategory = countBy(rows.map((r) => dataOf(r).category));
+      // 决策 31（2026-08）：分类由 rules 标签承接——分布统计标签（数组展平计数）
+      result.byTags = countTags(rows.map((r) => dataOf(r).rules));
       break;
     case "location":
       result.byType = countBy(rows.map((r) => dataOf(r).type));

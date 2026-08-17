@@ -58,8 +58,8 @@ export function runSearchEntities(ctx: ToolContext, args: SearchEntitiesArgs): S
 /**
  * 实体聚合统计（tools.md get_entity_summary(type) → 总数、角色分布、能力分布等）。
  * 透传 db getEntitySummaryStats：仅统计非软删实体（决策 12 修订）；分布字段按类型
- * 稀疏出现（character→byRole/byStatus/topAbilities、setting→byCategory、
- * location→byType、hook→byStatus/byPayoffTiming），缺字段不报错。
+ * 稀疏出现（character→byRole/byStatus/topAbilities、setting→byTags（决策 31，分类由
+ * rules 标签承接）、location→byType、hook→byStatus/byPayoffTiming），缺字段不报错。
  */
 export function runGetEntitySummary(ctx: ToolContext, args: GetEntitySummaryArgs): EntitySummaryStats {
   return getEntitySummaryStats(ctx.db, args.type);

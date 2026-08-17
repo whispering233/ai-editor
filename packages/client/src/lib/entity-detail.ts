@@ -42,12 +42,14 @@ export function detailFieldsForType(type: EntityType): DetailFieldConfig[] {
         { key: "abilities", label: "能力", control: "tags" },
         { key: "status", label: "状态", control: "text" },
       ];
-  /** 设定基础信息（决策 30：parent_id 已移除——层级由 belongs_to 关系表达，见 entity-detail.md「层级区块」） */
+  /**
+   * 设定基础信息（决策 30/31：parent_id（层级 belongs_to）与 category（分类由 rules 标签承接）
+   * 均已移除——仅 description/rules，见 entity-detail.md）
+   */
     case "setting":
       return [
-        { key: "category", label: "类别", control: "text" },
         { key: "description", label: "描述", control: "textarea" },
-        { key: "rules", label: "规则", control: "tags" },
+        { key: "rules", label: "规则/标签", control: "tags" },
       ];
     case "location":
       return [

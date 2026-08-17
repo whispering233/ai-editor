@@ -53,7 +53,8 @@ CREATE TABLE entities (
 | type | data 关键字段 |
 |------|-------------|
 | `character` | `role`, `gender`, `age`, `personality[]`, `motivation`, `abilities[]`, `status`, `custom_fields` |
-| `setting` | `category`, `description`, `rules[]`, `custom_fields` —— **`parent_id` 已废弃（决策 30，2026-08）**：层级改由 `belongs_to` 关系表达（子设定 → 父设定），不再读写；旧字段残留由 `.passthrough()` 容错 |
+| `setting` | `description`, `rules[]`（**标签 = 唯一分类手段，决策 31，2026-08**）, `custom_fields` —— **`parent_id`（决策 30）与 `category`（决策 31）均已废弃**：层级由 belongs_to 关系表达、分类由 rules 标签承接；旧字段残留由 `.passthrough()` 容错 |
+| `location` | `type`, `parent_id`, `description`, `custom_fields` |
 | `location` | `type`, `parent_id`, `description`, `custom_fields` |
 | `hook` | 详见 [hooks.md](./hooks.md) |
 | `event` | `description`（文本）, `tags[]`（字符串数组，分类筛选用）——**G2 修订：`time_label` 已移除**（迁移至 timepoint 实体 + occurs_at 关系，见下） |

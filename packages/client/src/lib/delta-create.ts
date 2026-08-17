@@ -45,8 +45,8 @@ const ENTITY_DATA_KEYS = {
     "status",
     "custom_fields",
   ] as const satisfies readonly EntityDataKey<"character">[],
-  // 决策 30（2026-08）：setting 的 parent_id 已移除（层级改由 belongs_to 关系表达）
-  setting: ["category", "description", "rules", "custom_fields"] as const satisfies readonly EntityDataKey<"setting">[],
+  // 决策 30/31（2026-08）setting 的 parent_id（层级 belongs_to）与 category（分类由 rules 标签承接）均已移除
+  setting: ["description", "rules", "custom_fields"] as const satisfies readonly EntityDataKey<"setting">[],
   location: ["type", "parent_id", "description", "custom_fields"] as const satisfies readonly EntityDataKey<"location">[],
   hook: [
     "status",

@@ -88,7 +88,7 @@ describe("listEntities", () => {
     createEntity(db, { type: "character", name: "阿强", data: { role: "主角", status: "活跃" } });
     createEntity(db, { type: "character", name: "阿珍", data: { role: "配角" } });
     createEntity(db, { type: "character", name: "李四", data: { status: "失踪" } });
-    createEntity(db, { type: "setting", name: "修仙界", data: { category: "世界" } });
+    createEntity(db, { type: "setting", name: "修仙界", data: { rules: ["世界"] } });
     const stamp = (name: string, t: string): void => {
       db.prepare("UPDATE entities SET created_at = ?, updated_at = ? WHERE name = ?").run(t, t, name);
     };
@@ -98,7 +98,7 @@ describe("listEntities", () => {
     stamp("修仙界", "2026-08-04T00:00:00Z");
   });
 
-  it("type 过滤 + 摘要字段提取（character→role/status、setting→category；缺失字段不出现）", () => {
+  it("type 过滤 + 摘要字段提取（character→role/status、setting→tags（决策 31）；缺失字段不出现）", () => {
     const chars = listEntities(db, { type: "character" });
     expect(chars.total).toBe(3);
     expect(chars.items).toHaveLength(3);
@@ -108,7 +108,7 @@ describe("listEntities", () => {
     expect(azhen.summary).toEqual({ role: "配角" }); // status 缺失不出现
     const settings = listEntities(db, { type: "setting" });
     expect(settings.total).toBe(1);
-    expect(settings.items[0].summary).toEqual({ category: "世界" });
+    expect(settings.items[0].summary).toEqual({ tags: ["世界"] });
   });
 
   it("q 模糊匹配 name（LIKE），total 同步过滤", () => {
@@ -334,7 +334,7 @@ describe("getEntitySummaryStats（S6.3 工具 get_entity_summary 下沉）", () 
     ]);
   });
 
-  it("hook：byStatus/byPayoffTiming；setting：byCategory；location：byType（稀疏分布）", () => {
+  it("hook：byStatus/byPayoffTiming；setting：byTags（决策 31）；location：byType（稀疏分布）", () => {
     createEntity(db, { type: "hook", name: "密信", data: { status: "planted", payoff_timing: "chapter" } });
     createEntity(db, { type: "hook", name: "遗物", data: { status: "planted", payoff_timing: "book" } });
     const hook = getEntitySummaryStats(db, "hook");
@@ -346,13 +346,13 @@ describe("getEntitySummaryStats（S6.3 工具 get_entity_summary 下沉）", () 
     });
     expect(hook.byRole).toBeUndefined(); // 非 character 不出现角色分布
 
-    createEntity(db, { type: "setting", name: "修真界", data: { category: "世界观" } });
-    createEntity(db, { type: "setting", name: "江湖", data: { category: "世界观" } });
-    createEntity(db, { type: "setting", name: "门派", data: { category: "组织" } });
+    createEntity(db, { type: "setting", name: "修真界", data: { rules: ["世界观"] } });
+    createEntity(db, { type: "setting", name: "江湖", data: { rules: ["世界观"] } });
+    createEntity(db, { type: "setting", name: "门派", data: { rules: ["组织"] } });
     expect(getEntitySummaryStats(db, "setting")).toEqual({
       type: "setting",
       total: 3,
-      byCategory: { 世界观: 2, 组织: 1 },
+      byTags: { 世界观: 2, 组织: 1 },
     });
 
     createEntity(db, { type: "location", name: "青城山", data: { type: "山门" } });

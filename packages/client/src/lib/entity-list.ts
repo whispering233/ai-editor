@@ -21,7 +21,8 @@ export interface SummaryColumnConfig {
 
 export const SUMMARY_COLUMNS: Record<EntityType, SummaryColumnConfig> = {
   character: { key1: "role", label1: "角色", key2: "status", label2: "状态" },
-  setting: { key1: "category", label1: "类别" },
+  // 决策 31（2026-08）：设定分类由 rules 标签承接，摘要列从「类别」改为「标签」
+  setting: { key1: "tags", label1: "标签" },
   location: { key1: "type", label1: "类型" },
   hook: { key1: "status", label1: "状态", key2: "payoff_timing", label2: "回收时机" },
   // C1 类型补全（决策 26 event 时间轴事件；服务端 event 摘要为空对象，时间轴专属 UI 由 C2 实现）
@@ -55,6 +56,11 @@ export function summaryCellText(type: EntityType, key: string, value: unknown): 
   if (value === undefined || value === null || value === "") return "—";
   if (type === "hook" && key === "status") return HOOK_STATUS_LABEL[String(value)] ?? String(value);
   if (type === "hook" && key === "payoff_timing") return HOOK_TIMING_LABEL[String(value)] ?? String(value);
+  // 标签数组（setting.tags / event.tags）：join 展示（摘要仅前 3 个，服务端已截断）
+  if (key === "tags" && Array.isArray(value)) {
+    const tags = (value as string[]).filter((t) => typeof t === "string" && t !== "");
+    return tags.length > 0 ? tags.join("、") : "—";
+  }
   return String(value);
 }
 
@@ -69,7 +75,8 @@ export interface CreateFirstFieldConfig {
 
 export const CREATE_FIRST_FIELD: Record<EntityType, CreateFirstFieldConfig> = {
   character: { key: "role", label: "角色定位", input: "text" },
-  setting: { key: "category", label: "类别", input: "text" },
+  // 决策 31（2026-08）：设定分类统一为 rules 标签，新建行仅名称（标签在详情页维护）
+  setting: { key: "", label: "", input: "text" },
   location: { key: "type", label: "地点类型", input: "text" },
   // hook.status 是受控枚举（planted → progressing → resolved / abandoned，doc/database/hooks.md）
   hook: {

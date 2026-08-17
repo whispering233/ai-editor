@@ -14,9 +14,9 @@ describe("detailFieldsForType（data 表单按类型配置——schema.md 字段
     expect(fields.find((f) => f.key === "motivation")?.control).toBe("textarea");
   });
 
-  it("setting（决策 30）：parent_id 已移除——仅 category/description/rules；location 保留 parent_id 文本", () => {
+  it("setting（决策 30/31）：parent_id 与 category 均已移除——仅 description/rules；location 保留 parent_id 文本", () => {
     expect(detailFieldsForType("setting").map((f) => f.key)).toEqual([
-      "category", "description", "rules",
+      "description", "rules",
     ]);
     expect(detailFieldsForType("location").map((f) => f.key)).toEqual([
       "type", "parent_id", "description",

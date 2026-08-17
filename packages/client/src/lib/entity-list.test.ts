@@ -19,9 +19,9 @@ describe("pageCount（分页页数计算）", () => {
 });
 
 describe("SUMMARY_COLUMNS（摘要列配置——原型信息层级表）", () => {
-  it("四类型都有列 1（character→role、setting→category、location→type、hook→status）", () => {
+  it("四类型都有列 1（character→role、setting→tags（决策 31）、location→type、hook→status）", () => {
     expect(SUMMARY_COLUMNS.character.key1).toBe("role");
-    expect(SUMMARY_COLUMNS.setting.key1).toBe("category");
+    expect(SUMMARY_COLUMNS.setting.key1).toBe("tags");
     expect(SUMMARY_COLUMNS.location.key1).toBe("type");
     expect(SUMMARY_COLUMNS.hook.key1).toBe("status");
   });
@@ -55,7 +55,8 @@ describe("summaryCellText（摘要单元格文案）", () => {
 
   it("非 hook 类型字符串原样；缺失/空值 → 「—」", () => {
     expect(summaryCellText("character", "role", "主角")).toBe("主角");
-    expect(summaryCellText("setting", "category", "力量体系")).toBe("力量体系");
+    expect(summaryCellText("setting", "tags", ["世界", "法则"])).toBe("世界、法则");
+    expect(summaryCellText("setting", "tags", [])).toBe("—");
     expect(summaryCellText("character", "role", undefined)).toBe("—");
     expect(summaryCellText("character", "role", null)).toBe("—");
     expect(summaryCellText("character", "role", "")).toBe("—");
@@ -65,7 +66,8 @@ describe("summaryCellText（摘要单元格文案）", () => {
 describe("CREATE_FIRST_FIELD（创建对话框首字段配置——原型「name + 该类型首字段」）", () => {
   it("四类型都有首字段配置", () => {
     expect(CREATE_FIRST_FIELD.character.key).toBe("role");
-    expect(CREATE_FIRST_FIELD.setting.key).toBe("category");
+    // 决策 31：设定新建行仅名称（分类由标签承接，详情页维护）
+    expect(CREATE_FIRST_FIELD.setting.key).toBe("");
     expect(CREATE_FIRST_FIELD.location.key).toBe("type");
     expect(CREATE_FIRST_FIELD.hook.key).toBe("status");
   });
