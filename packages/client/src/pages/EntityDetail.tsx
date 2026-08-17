@@ -538,9 +538,6 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
                           ))
                         )}
                       </span>
-                      <p className="text-xs text-zinc-400">
-                        层级由「所属」关系表达（决策 30），修改上级在下方关联列表中同步反映。
-                      </p>
                     </div>
                   </div>
                 );
