@@ -34,6 +34,7 @@ import { formatTimestamp } from "@whispering233/ai-editor-shared";
 import { CreateRelationDialog } from "../components/entity/create-relation-dialog";
 import { ParentSettingSelect } from "../components/entity/parent-setting-select";
 import { RelationsView } from "../components/entity/relations-view";
+import { SettingTreeView } from "../components/entity/setting-tree";
 
 const TYPE_LABEL: Record<EntityType, string> = {
   character: "人物",
@@ -64,6 +65,8 @@ const SORT_OPTIONS: Array<{
 export default function EntityList({ type }: { type: string }) {
   /** 关联 tab（U8）：type==="relations" 时渲染关联总览视图，不参与四类实体逻辑 */
   const isRelations = type === "relations";
+  /** 设定树 tab（批次四 I4，决策 30）：type==="setting-tree" 时渲染设定层级树，不参与列表逻辑 */
+  const isSettingTree = type === "setting-tree";
   // main.tsx 已把未知 type 归一化为 character；此处双保险
   const entityType = (ENTITY_TYPES as readonly string[]).includes(type) ? (type as EntityType) : "character";
 
@@ -120,9 +123,9 @@ export default function EntityList({ type }: { type: string }) {
   }, [qInput]);
 
   // 列表加载：type/q/offset/sort/order 变化驱动；卸载或参数变化时丢弃过期响应
-  // 关联 tab：列表请求不发起（RelationsView 自己拉全量关系），进出 tab 由 isRelations 触发兜底
+  // 关联/设定树 tab：列表请求不发起（各视图自拉数据），进出 tab 由对应 isXxx 触发兜底
   useEffect(() => {
-    if (isRelations) return;
+    if (isRelations || isSettingTree) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -151,7 +154,7 @@ export default function EntityList({ type }: { type: string }) {
     return () => {
       cancelled = true;
     };
-  }, [entityType, q, offset, sort, order, reloadTick, isRelations]);
+  }, [entityType, q, offset, sort, order, reloadTick, isRelations, isSettingTree]);
 
   /** 排序切换：重置页码（原型交互） */
   function handleSortChange(value: string) {
@@ -242,7 +245,7 @@ export default function EntityList({ type }: { type: string }) {
               onClick={() => navigate(`/entities/${t}`)}
               className={cn(
                 "rounded-md border border-border px-3 py-1.5 text-sm",
-                !isRelations && entityType === t
+                !isRelations && !isSettingTree && entityType === t
                   ? "bg-zinc-900 text-white"
                   : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800",
               )}
@@ -263,9 +266,22 @@ export default function EntityList({ type }: { type: string }) {
           >
             关联
           </button>
+          {/* 设定树 tab（第 6 个，批次四 I4，决策 30：设定层级视图，同「关联」tab 样式） */}
+          <button
+            type="button"
+            onClick={() => navigate("/entities/setting-tree")}
+            className={cn(
+              "rounded-md border border-border px-3 py-1.5 text-sm",
+              isSettingTree
+                ? "bg-foreground font-medium text-background"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+            )}
+          >
+            设定树
+          </button>
         </div>
         <div className="ml-auto flex items-center gap-2">
-          {!isRelations && (
+          {!isRelations && !isSettingTree && (
             <Input
               value={qInput}
               onChange={(e) => setQInput(e.target.value)}
@@ -273,15 +289,19 @@ export default function EntityList({ type }: { type: string }) {
               className="w-52"
             />
           )}
-          <Button type="button" onClick={isRelations ? () => setCreateOpen(true) : openCreateRow}>
-            {isRelations ? "+ 建立关联" : "+ 新建"}
-          </Button>
+          {!isSettingTree && (
+            <Button type="button" onClick={isRelations ? () => setCreateOpen(true) : openCreateRow}>
+              {isRelations ? "+ 建立关联" : "+ 新建"}
+            </Button>
+          )}
         </div>
       </div>
 
-      {/* 关联 tab：关系总览视图（前端过滤全量）；四类实体 tab：原列表视图（行为不变） */}
+      {/* 关联 tab：关系总览视图（前端过滤全量）；设定树 tab：设定层级树；四类实体 tab：原列表视图 */}
       {isRelations ? (
         <RelationsView reloadKey={reloadTick} onOpenCreate={() => setCreateOpen(true)} />
+      ) : isSettingTree ? (
+        <SettingTreeView reloadKey={reloadTick} />
       ) : (
         <>
       {/* 排序行 + 总数 */}
