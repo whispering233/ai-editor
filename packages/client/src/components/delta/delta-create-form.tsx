@@ -285,6 +285,7 @@ export function DeltaCreateForm({
             {op === "set" || op === "update" ? "新值" : op === "add" ? "追加值" : "移除值"}
           </p>
           <input
+            autoComplete="off"
             value={value}
             onChange={(e) => setValue(e.target.value)}
             placeholder={op === "remove" ? "按值匹配删除" : ""}

@@ -238,6 +238,7 @@ export function BackupSection() {
           ))}
         </select>
         <input
+          autoComplete="off"
           value={backupName}
           onChange={(e) => setBackupName(e.target.value)}
           maxLength={MAX_BACKUP_NAME_LENGTH}
@@ -314,6 +315,7 @@ export function BackupSection() {
                           /* 行内编辑态：input（预填当前名称）+ 确认/取消；Enter 提交 / Esc 或失焦取消 */
                           <>
                             <input
+                              autoComplete="off"
                               value={renaming.value}
                               onChange={(e) =>
                                 setRenaming((r) =>

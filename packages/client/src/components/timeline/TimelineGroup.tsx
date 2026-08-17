@@ -145,6 +145,7 @@ export function TimelineGroupBlock({
           )}
           {editing ? (
             <input
+              autoComplete="off"
               autoFocus
               value={nameValue}
               onChange={(e) => setNameValue(e.target.value)}

@@ -85,6 +85,7 @@ function inlineInput(
 ) {
   return (
     <input
+      autoComplete="off"
       autoFocus
       value={value}
       onChange={(e) => onChange(e.target.value)}
