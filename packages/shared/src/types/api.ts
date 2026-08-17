@@ -359,6 +359,8 @@ export const entityListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
   sort: z.enum(["name", "created_at", "updated_at"]).optional(),
   order: z.enum(["asc", "desc"]).optional(),
+  // 标签包含筛选（决策 31，2026-08）：data 数组字段（setting.rules / event.tags）包含该标签即命中
+  tag: z.string().optional(),
 });
 
 export const entityListResSchema = z.object({

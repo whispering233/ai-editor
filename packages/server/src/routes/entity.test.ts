@@ -142,6 +142,42 @@ describe("GET /api/v1/entity/:type 列表", () => {
     const body = (await res.json()) as { data: { items: unknown[]; total: number } };
     expect(body.data.total).toBe(0);
   });
+
+  it("标签筛选 tag（决策 31）：setting 走 data.rules 包含匹配；无匹配 → 空；event 走 data.tags", async () => {
+    openProject();
+    const app = buildApp();
+    // setting：rules 标签
+    await app.request(
+      "/api/v1/entity/setting",
+      jsonRequest("POST", "", { name: "青云门", data: { rules: ["势力", "宗门"] } }),
+    );
+    await app.request(
+      "/api/v1/entity/setting",
+      jsonRequest("POST", "", { name: "藏剑阁", data: { rules: ["势力"] } }),
+    );
+    await app.request(
+      "/api/v1/entity/setting",
+      jsonRequest("POST", "", { name: "天地法则", data: { rules: ["法则"] } }),
+    );
+    const hit = await app.request("/api/v1/entity/setting?tag=宗门", { headers: HOST_HEADERS });
+    const hitBody = (await hit.json()) as { data: { items: Array<{ name: string }>; total: number } };
+    expect(hitBody.data.total).toBe(1);
+    expect(hitBody.data.items[0].name).toBe("青云门");
+    const multi = await app.request("/api/v1/entity/setting?tag=势力", { headers: HOST_HEADERS });
+    const multiBody = (await multi.json()) as { data: { total: number } };
+    expect(multiBody.data.total).toBe(2);
+    const none = await app.request("/api/v1/entity/setting?tag=不存在", { headers: HOST_HEADERS });
+    expect(((await none.json()) as { data: { total: number } }).data.total).toBe(0);
+    // 无 tags 字段的类型：tag 筛选不命中（防御——非数组视为不匹配）
+    await createCharacter(app, "张三");
+    const charNone = await app.request("/api/v1/entity/character?tag=势力", { headers: HOST_HEADERS });
+    expect(((await charNone.json()) as { data: { total: number } }).data.total).toBe(0);
+    // 摘要：setting 暴露 tags（决策 31：rules 前 3 个）
+    const all = await app.request("/api/v1/entity/setting", { headers: HOST_HEADERS });
+    const allBody = (await all.json()) as { data: { items: Array<{ summary: Record<string, unknown> }> } };
+    const qingyun = allBody.data.items.find((i) => (i.summary.tags as string[]).includes("宗门"))!;
+    expect(qingyun.summary.tags).toEqual(["势力", "宗门"]);
+  });
 });
 
 describe("GET /api/v1/entity/:type/:id 详情", () => {

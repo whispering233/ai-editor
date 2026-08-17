@@ -82,6 +82,10 @@ export default function EntityList({ type }: { type: string }) {
   const [offset, setOffset] = useState(0);
   const [sort, setSort] = useState<"name" | "created_at" | "updated_at">("updated_at");
   const [order, setOrder] = useState<"asc" | "desc">("desc");
+  /** 标签筛选（决策 31：仅 setting 类型；"" = 全部） */
+  const [tagFilter, setTagFilter] = useState("");
+  /** 标签筛选下拉候选（聚合既有设定标签；失败静默——仅无下拉候选，不影响列表） */
+  const [tagOptions, setTagOptions] = useState<string[]>([]);
   /** 重试计数（错误后手动重新加载） */
   const [reloadTick, setReloadTick] = useState(0);
   // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉列表
@@ -115,6 +119,7 @@ export default function EntityList({ type }: { type: string }) {
     setOffset(0);
     setSort("updated_at");
     setOrder("desc");
+    setTagFilter("");
     setItems(null);
     setError(null);
     setCreateOpen(false);
@@ -143,6 +148,7 @@ export default function EntityList({ type }: { type: string }) {
       limit: PAGE_LIMIT,
       sort,
       order,
+      tag: tagFilter || undefined,
     })
       .then((res: EntityListRes) => {
         if (!cancelled) {
@@ -162,7 +168,36 @@ export default function EntityList({ type }: { type: string }) {
     return () => {
       cancelled = true;
     };
-  }, [entityType, q, offset, sort, order, reloadTick, isRelations, isSettingTree]);
+  }, [entityType, q, offset, sort, order, reloadTick, isRelations, isSettingTree, tagFilter]);
+
+  // 标签筛选候选聚合（决策 31：setting 类型才拉；全量 200 聚合既有 rules 标签——失败静默）
+  useEffect(() => {
+    if (entityType !== "setting" || isRelations || isSettingTree) {
+      setTagOptions([]);
+      setTagFilter("");
+      return;
+    }
+    let cancelled = false;
+    listEntities("setting", { limit: 200 })
+      .then((res) => {
+        if (cancelled) return;
+        const tags = new Set<string>();
+        for (const item of res.items) {
+          if (Array.isArray(item.summary.tags)) {
+            for (const t of item.summary.tags) {
+              if (typeof t === "string" && t !== "") tags.add(t);
+            }
+          }
+        }
+        setTagOptions(Array.from(tags).sort());
+      })
+      .catch(() => {
+        // 失败静默（下拉无候选，筛选功能退化为不可用但列表正常）
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [entityType, isRelations, isSettingTree, reloadTick]);
 
   /** 排序切换：重置页码（原型交互） */
   function handleSortChange(value: string) {
@@ -328,6 +363,27 @@ export default function EntityList({ type }: { type: string }) {
             ))}
           </select>
         </label>
+        {/* 标签筛选（决策 31，批次五 J3：仅设定；复用 rules 标签——聚合既有标签，与搜索/排序组合） */}
+        {entityType === "setting" && (
+          <label className="flex items-center gap-2 text-sm text-zinc-500">
+            标签:
+            <select
+              value={tagFilter}
+              onChange={(e) => {
+                setTagFilter(e.target.value);
+                setOffset(0);
+              }}
+              className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+            >
+              <option value="">全部</option>
+              {tagOptions.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <span className="ml-auto text-sm text-zinc-400">共 {total} 个</span>
       </div>
 

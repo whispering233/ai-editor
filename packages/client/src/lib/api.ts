@@ -297,13 +297,15 @@ export function purgeOutlineNode(nodeId: string): Promise<PurgeOutlineRes> {
 
 // ============ 实体 CRUD（S3.5；契约：endpoints.md「实体 CRUD」L150-283，软删过滤决策 12） ============
 
-/** GET /api/v1/entity/:type 查询参数（snake_case；q 模糊匹配 name，limit 默认 50 最大 200） */
+/** GET /api/v1/entity/:type 查询参数（snake_case；q 模糊匹配 name，limit 默认 50 最大 200；
+ *  tag = 标签包含筛选，决策 31：setting 走 data.rules、event 走 data.tags） */
 export interface ListEntitiesQuery {
   q?: string;
   offset?: number;
   limit?: number;
   sort?: "name" | "created_at" | "updated_at";
   order?: "asc" | "desc";
+  tag?: string;
 }
 
 /** GET /api/v1/entity/:type 响应（列表摘要，不含完整 data） */

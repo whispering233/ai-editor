@@ -115,13 +115,18 @@ function parseDataColumn(value: unknown): Record<string, unknown> {
 
 /**
  * data 字段过滤（S6.3 工具 search_entities 下沉，filters 语义见 EntityListQuery）：
- * status 字符串相等匹配；tags 要求 data.tags 为数组且包含全部指定 tags（AND）。
- * 匹配失败的字段（如非数组 tags）一律视为不匹配——防御，不做宽松猜测。
+ * status 字符串相等匹配；tags 要求标签字段为数组且包含全部指定 tags（AND）。
+ * **标签字段按类型路由（决策 31，2026-08）**：setting → `data.rules`（分类由标签承接）；
+ * 其余 → `data.tags`（event 等）。匹配失败（如非数组）一律视为不匹配——防御，不做宽松猜测。
  */
-function matchDataFilters(data: Record<string, unknown>, filters: { tags?: string[]; status?: string }): boolean {
+function matchDataFilters(
+  data: Record<string, unknown>,
+  filters: { tags?: string[]; status?: string },
+  type?: EntityType,
+): boolean {
   if (filters.status !== undefined && data.status !== filters.status) return false;
   if (filters.tags !== undefined && filters.tags.length > 0) {
-    const tags = data.tags;
+    const tags = type === "setting" ? data.rules : data.tags;
     if (!Array.isArray(tags)) return false;
     for (const tag of filters.tags) {
       if (!tags.includes(tag)) return false;
@@ -166,7 +171,7 @@ export function listEntities(db: Db, query: EntityListQuery): EntityListResult {
     const all = db
       .prepare(`SELECT * FROM entities WHERE ${where.join(" AND ")} ORDER BY ${orderSql}`)
       .all(...params) as Array<Record<string, unknown>>;
-    const filtered = all.filter((r) => matchDataFilters(rowToEntityRow(r).data, query.filters!));
+    const filtered = all.filter((r) => matchDataFilters(rowToEntityRow(r).data, query.filters!, query.type));
     return {
       items: filtered.slice(offset, offset + limit).map((r) => toSummary(rowToEntityRow(r))),
       total: filtered.length,

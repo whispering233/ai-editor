@@ -56,8 +56,17 @@ entityRoutes.get("/:type", (c) => {
   const type = parseTypeParam(c.req.param("type"));
   const parsed = entityListQuerySchema.safeParse(c.req.query());
   if (!parsed.success) throw parsed.error;
-  const { q, offset, limit, sort, order } = parsed.data;
-  const result = listEntities(project.db, { type, q, offset, limit, sort, order });
+  const { q, offset, limit, sort, order, tag } = parsed.data;
+  // 标签筛选（决策 31）：走既有 matchDataFilters.tags 内部管道（S6.3 工具下沉能力挂到 REST）
+  const result = listEntities(project.db, {
+    type,
+    q,
+    offset,
+    limit,
+    sort,
+    order,
+    filters: tag !== undefined ? { tags: [tag] } : undefined,
+  });
   return c.json(
     ok({
       items: result.items, // EntitySummary（db 已提取：id/type/name/summary/createdAt/updatedAt，camelCase）
