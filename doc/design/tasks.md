@@ -46,7 +46,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
   - [x] I2 详情图标 BookOpen → Eye（HookPanel / Outline）
   - [x] I3a 数据与校验层：shared 移除 settingDataSchema.parent_id + db 层级邻接表/防环 helper + server POST /relation 校验 + tools R5 调整 + 测试 & 文档
   - [x] I3b 客户端 UI：detailFieldsForType 移除 parent_id + 详情页「层级」区块（父/子 + 修改上级）+ 新建行「上级设定」弹层选择器 + 测试
-  - [x] I4 设定树视图（决策 30：第 6 tab「设定树」，buildSettingTree 纯函数 + 递归树渲染 + 折叠/跳详情）
+  - [x] I4 设定树视图（决策 30：第 6 tab「设定树」，buildSettingTree 纯函数 + 递归树渲染 + 折叠/节点点击跳详情）
 
 ---
 
@@ -84,7 +84,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 
 **用户反馈批次五（J1-J3，2026-08）——输入提示与标签筛选（决策 31）**：J1 设定分类统一为 tags——`data.category` 废弃（zod 移除 + passthrough 容错 + 无迁移），列表摘要列「类别」改「标签」（rules 前 3）、新建行移除类别输入（仅名称+上级设定）、详情字段/Delta 清单同步、`getEntitySummaryStats` 分布 byCategory → byTags（AI 工具数据源闭环）；J2 浏览器原生 **datalist 自动完成**（零依赖：新建行名称/首字段按现有数据聚合候选、设定详情 rules 标签补拉全量聚合、伏笔类别枚举；时间轴沿用 TagSuggest）；J3 设定列表**标签筛选**（REST `?tag=` 单标签包含匹配，复用 db `matchDataFilters.tags` 内部管道并按类型路由 setting→`data.rules`；前端「标签 ▾」下拉聚合既有标签，与搜索/排序/分页组合）。
 
-**用户反馈批次四（I1-I4，2026-08）——实体关系增强（决策 30）**：I1 关系类型 `occurs_in` 中文映射补齐（17 种「锚定于」，与 occurs_at「发生于」区分）；I2 详情入口图标 BookOpen 统一为 Eye；**I3 设定层级 = `belongs_to` 关系（决策 30：`data.parent_id` 废弃不再读写，zod 移除定义 + R5 仅保留 location + 无迁移，旧字段 passthrough 容错）**——db 全量层级边邻接表（`listSettingHierarchyEdges`，走关系表索引）+ 防环校验（`wouldCreateSettingCycle` 祖先链 O(深度)）、server `POST /relation` 对 belongs_to 两端均为 setting 的 400 校验（自指/成环）、客户端详情页「层级」区块（父/子分区 + 修改上级先建后删 + 清除）+ 新建行「上级设定」弹层搜索选择器（创建后补建关系）；I4 设定树视图——实体关系第 6 tab「设定树」（`buildSettingTree` 纯函数：根 = 无父设定、父截断提升为根防御；递归树 + 折叠 + 类别徽标 + 子数 + 跳详情）。
+**用户反馈批次四（I1-I4，2026-08）——实体关系增强（决策 30）**：I1 关系类型 `occurs_in` 中文映射补齐（17 种「锚定于」，与 occurs_at「发生于」区分）；I2 详情入口图标 BookOpen 统一为 Eye；**I3 设定层级 = `belongs_to` 关系（决策 30：`data.parent_id` 废弃不再读写，zod 移除定义 + R5 仅保留 location + 无迁移，旧字段 passthrough 容错）**——db 全量层级边邻接表（`listSettingHierarchyEdges`，走关系表索引）+ 防环校验（`wouldCreateSettingCycle` 祖先链 O(深度)）、server `POST /relation` 对 belongs_to 两端均为 setting 的 400 校验（自指/成环）、客户端详情页「层级」区块（父/子分区 + 修改上级先建后删 + 清除）+ 新建行「上级设定」弹层搜索选择器（创建后补建关系）；I4 设定树视图——实体关系第 6 tab「设定树」（`buildSettingTree` 纯函数：根 = 无父设定、父截断提升为根防御；递归树 + 折叠 + 类别徽标 + 子数 + 节点点击跳详情）。
 
 ---
 
@@ -126,7 +126,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 | I2 | 详情图标统一 Eye（UX） | `75bdf8d` | BookOpen → Eye（Outline/HookPanel 详情入口）；Sidebar/Dashboard 书籍语义保留；outline.md 同步 |
 | I3a | 设定层级 = belongs_to（决策 30）数据/校验层 | `5e1a831` | shared 移除 settingDataSchema.parent_id；db 层级邻接表/防环 helper；server POST /relation 自指/成环 400；tools R5 仅保留 location；文档 decisions 30 + schema/endpoints/UI |
 | I3b | 设定层级客户端 UI（决策 30） | `d6e5c19` |
-| I4 | 设定树视图（决策 30） | 本次 | 实体关系第 6 tab「设定树」；buildSettingTree 纯函数（根判定/截断孤儿提升）；递归树渲染 + 折叠 + 类别徽标 + 子数 + 跳详情；路由拦截 + 测试 +5 | detailFieldsForType 移除 parent_id；详情页「层级」区块（父/子分区 + 修改/清除上级，先建后删）+ 关联列表过滤层级边；新建行「上级设定」弹层搜索选择器 + 创建后补建 belongs_to；lib helper + 测试 |
+| I4 | 设定树视图（决策 30） | 本次 | 实体关系第 6 tab「设定树」；buildSettingTree 纯函数（根判定/截断孤儿提升）；递归树渲染 + 折叠 + 类别徽标 + 子数 + 节点点击跳详情；路由拦截 + 测试 +5 | detailFieldsForType 移除 parent_id；详情页「层级」区块（父/子分区 + 修改/清除上级，先建后删）+ 关联列表过滤层级边；新建行「上级设定」弹层搜索选择器 + 创建后补建 belongs_to；lib helper + 测试 |
 
 ---
 
