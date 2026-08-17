@@ -1,6 +1,7 @@
-// entity-detail 纯函数与配置测试（S3.6）：按类型字段配置、关系类型中文映射、表单 diff
+// entity-detail 纯函数与配置测试（S3.6 + 批次四 I3b）：按类型字段配置、关系类型中文映射、表单 diff、
+// 设定层级分区（决策 30：parent_id 废弃改为 belongs_to 关系表达）
 import { describe, expect, it } from "vitest";
-import { detailFieldsForType, diffData, relationTypeLabel } from "./entity-detail";
+import { detailFieldsForType, diffData, relationTypeLabel, settingHierarchyFromRelations } from "./entity-detail";
 
 describe("detailFieldsForType（data 表单按类型配置——schema.md 字段清单）", () => {
   it("character：role/gender/age/personality/motivation/abilities/status，控件类型正确", () => {
@@ -13,9 +14,9 @@ describe("detailFieldsForType（data 表单按类型配置——schema.md 字段
     expect(fields.find((f) => f.key === "motivation")?.control).toBe("textarea");
   });
 
-  it("setting/location：category/parent_id/description(+rules)，parent_id 为文本", () => {
+  it("setting（决策 30）：parent_id 已移除——仅 category/description/rules；location 保留 parent_id 文本", () => {
     expect(detailFieldsForType("setting").map((f) => f.key)).toEqual([
-      "category", "parent_id", "description", "rules",
+      "category", "description", "rules",
     ]);
     expect(detailFieldsForType("location").map((f) => f.key)).toEqual([
       "type", "parent_id", "description",
@@ -63,6 +64,53 @@ describe("relationTypeLabel（17 种预定义关系类型中文映射，批次�
     expect(relationTypeLabel("custom_rel")).toBe("custom_rel");
   });
 });
+
+describe("settingHierarchyFromRelations（决策 30：层级边分区——belongs_to 且两端均为 setting）", () => {
+  const rel = (id: string, src: string, tgt: string, srcType = "setting", tgtType = "setting", type = "belongs_to") => ({
+    id,
+    sourceType: srcType,
+    sourceId: src,
+    sourceName: srcType === "setting" ? `设定${src}` : `人${src}`,
+    targetType: tgtType,
+    targetId: tgt,
+    targetName: tgtType === "setting" ? `设定${tgt}` : `人${tgt}`,
+    relationType: type,
+  });
+
+  it("分区：父（target 端为本实体）与子（source 端为本实体）", () => {
+    const self = "set-1";
+    const relations = [
+      rel("rel-1", self, "set-2"), // 子：set-1 → set-2（set-1 是 set-2 的子？方向：child→parent，source=self target=set-2 → set-2 是 set-1 的父）
+      rel("rel-2", "set-3", self), // 子：set-3 → set-1（set-1 是 set-3 的父）
+      rel("rel-3", "set-4", self), // 子：set-4 → set-1
+      rel("rel-4", "char-9", self, "character"), // 人物→设定 belongs_to：非层级边，忽略
+      rel("rel-5", self, "sc-node", "setting", "outline_node", "appears_in"), // 非 belongs_to：忽略
+      rel("rel-6", self, "char-2", "setting", "character"), // setting→character belongs_to：非层级，忽略
+    ];
+    const { parent, children } = settingHierarchyFromRelations(relations, self);
+    // rel-1：source=self → self 是子，parent = set-2（target 端）
+    expect(parent).toEqual({ relationId: "rel-1", parentId: "set-2", parentName: "设定set-2", childId: self, childName: "设定set-1" });
+    expect(children).toEqual([
+      { relationId: "rel-2", parentId: self, parentName: "设定set-1", childId: "set-3", childName: "设定set-3" },
+      { relationId: "rel-3", parentId: self, parentName: "设定set-1", childId: "set-4", childName: "设定set-4" },
+    ]);
+  });
+
+  it("多父取首条（一设定一父语义：UI 只展示第一个）", () => {
+    const self = "set-1";
+    const { parent } = settingHierarchyFromRelations([rel("r1", self, "set-a"), rel("r2", self, "set-b")], self);
+    expect(parent?.relationId).toBe("r1");
+  });
+
+  it("无层级边 → parent null + children 空", () => {
+    const self = "set-1";
+    expect(settingHierarchyFromRelations([rel("r1", self, "char-2", "setting", "character")], self)).toEqual({
+      parent: null,
+      children: [],
+    });
+  });
+});
+
 
 describe("diffData（表单 partial 提交——只返回变更字段）", () => {
   const original = { role: "主角", age: 16, abilities: ["火球术"], status: "活跃" };

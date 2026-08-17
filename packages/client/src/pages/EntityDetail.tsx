@@ -12,6 +12,7 @@ import { formatTimestamp } from "@whispering233/ai-editor-shared";
 import type { EntityType } from "@whispering233/ai-editor-shared";
 import { ConfirmDialog } from "../components/outline/dialogs";
 import { CreateRelationDialog } from "../components/entity/create-relation-dialog";
+import { ParentSettingSelect } from "../components/entity/parent-setting-select";
 import { ComputePreview } from "../components/delta/compute-preview";
 import { Breadcrumb } from "../components/page-nav/Breadcrumb";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import {
   ApiError,
   CLIENT_NETWORK_ERROR,
+  createRelation,
   deleteEntity,
   deleteRelation,
   getEntityDetail,
@@ -26,7 +28,7 @@ import {
   type EntityDetailRes,
   type RelationSummaryItem,
 } from "../lib/api";
-import { detailFieldsForType, diffData, relationTypeLabel, type DetailFieldConfig } from "../lib/entity-detail";
+import { detailFieldsForType, diffData, relationTypeLabel, settingHierarchyFromRelations, type DetailFieldConfig } from "../lib/entity-detail";
 import { flattenTree } from "../lib/outline-tree";
 import { cn } from "../lib/utils";
 import { navigate } from "../hooks/use-route";
@@ -176,6 +178,9 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
   const [deleteRelationTarget, setDeleteRelationTarget] = useState<RelationSummaryItem | null>(null);
   /** 「变更记录 N 条」展开状态（S5.4：下方渲染状态预览区块） */
   const [deltaOpen, setDeltaOpen] = useState(false);
+  /** 设定层级修改态（决策 30，I3b：修改/清除上级——先建后删，防数据丢失） */
+  const [hierarchySaving, setHierarchySaving] = useState(false);
+  const [hierarchyError, setHierarchyError] = useState<string | null>(null);
 
   const fields = detailFieldsForType(entityType);
 
@@ -270,6 +275,52 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
       await loadDetail();
     } catch (err) {
       throw err;
+    }
+  }
+
+  /**
+   * 修改上级（决策 30，I3b）：先建新边再删旧父边——建失败则旧父保留（防数据丢失）；
+   * 新父与当前相同 → 幂等跳过（不重建关系）。服务端防环/自指兜底（400 VALIDATION_ERROR 内联提示）。
+   */
+  async function handleSetParent(newParentId: string) {
+    if (!detail || hierarchySaving) return;
+    const current = settingHierarchyFromRelations(detail.relations, id).parent;
+    if (newParentId === current?.parentId) return; // 幂等：未变更不重建
+    setHierarchySaving(true);
+    setHierarchyError(null);
+    try {
+      await createRelation({
+        source_type: "setting",
+        source_id: id,
+        target_type: "setting",
+        target_id: newParentId,
+        relation_type: "belongs_to",
+      });
+      if (current) await deleteRelation(current.relationId); // 先建后删
+      useUiStore.getState().showToast(current ? "已修改上级设定" : "已设置上级设定");
+      await loadDetail();
+    } catch (err) {
+      setHierarchyError(err instanceof ApiError ? err.message : "修改上级失败，请重试");
+    } finally {
+      setHierarchySaving(false);
+    }
+  }
+
+  /** 清除上级（决策 30）：删除旧父边（物理删，可重新设置） */
+  async function handleClearParent() {
+    if (!detail || hierarchySaving) return;
+    const current = settingHierarchyFromRelations(detail.relations, id).parent;
+    if (!current) return;
+    setHierarchySaving(true);
+    setHierarchyError(null);
+    try {
+      await deleteRelation(current.relationId);
+      useUiStore.getState().showToast("已清除上级设定");
+      await loadDetail();
+    } catch (err) {
+      setHierarchyError(err instanceof ApiError ? err.message : "清除上级失败，请重试");
+    } finally {
+      setHierarchySaving(false);
     }
   }
 
@@ -406,10 +457,11 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
             {saveError && <p className="mt-3 text-sm text-red-600">{saveError}</p>}
           </div>
 
-          {/* 右栏：关联（1 跳双向） */}
+          {/* 右栏：关联（1 跳双向）——setting 类型前置「层级」区块（决策 30：父子边独自分区，
+              下方关联列表过滤掉层级边，避免同一条边两处重复展示） */}
           <div className="rounded-md border border-zinc-200 p-4">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-zinc-700">关联（1 跳）</h2>
+              <h2 className="text-sm font-semibold text-zinc-700">关联</h2>
               <Button
                 variant="outline"
                 type="button"
@@ -419,34 +471,120 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
                 + 新增关联
               </Button>
             </div>
-            {detail.relations.length === 0 ? (
-              <p className="py-6 text-center text-sm text-zinc-400">暂无关联，新增一个</p>
-            ) : (
-              <ul className="divide-y divide-zinc-100">
-                {detail.relations.map((r) => {
-                  const isSource = r.sourceId === id;
-                  const left = relationEndpointName(r, "source");
-                  const right = relationEndpointName(r, "target");
-                  return (
-                    <li key={r.id} className="flex items-center gap-2 py-2 text-sm">
-                      <span className="min-w-0 max-w-28 truncate text-zinc-700">{left}</span>
-                      <span className="shrink-0 rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-500">
-                        {relationTypeLabel(r.relationType)} {isSource ? "→" : "←"}
+
+            {/* 层级区块（仅 setting）：父/子分区展示 + 设置/修改/清除上级（决策 30） */}
+            {entityType === "setting" &&
+              (() => {
+                const h = settingHierarchyFromRelations(detail.relations, id);
+                return (
+                  <div className="mb-4 border-b border-zinc-100 pb-4">
+                    <div className="mb-2 flex items-center justify-between">
+                      <h3 className="text-sm font-semibold text-zinc-700">层级（设定父子）</h3>
+                      <div className="flex items-center gap-2">
+                        <ParentSettingSelect
+                          value={h.parent?.parentId ?? null}
+                          valueName={h.parent?.parentName}
+                          excludeIds={[id]}
+                          onChange={(v) => {
+                            if (v) void handleSetParent(v);
+                          }}
+                          placeholder="设置上级"
+                        />
+                        {h.parent && (
+                          <Button
+                            variant="outline"
+                            type="button"
+                            className="h-8 px-2 text-xs text-red-600 hover:bg-red-50"
+                            disabled={hierarchySaving}
+                            onClick={() => void handleClearParent()}
+                          >
+                            清除
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                    {hierarchyError && <p className="mb-2 text-sm text-red-600">{hierarchyError}</p>}
+                    <div className="flex flex-col gap-1.5 text-sm">
+                      <span className="text-zinc-500">
+                        上级：
+                        {h.parent ? (
+                          <button
+                            type="button"
+                            title="打开上级设定"
+                            className="ml-1 rounded-md border border-border px-1.5 py-0.5 text-zinc-700 hover:bg-muted hover:text-foreground"
+                            onClick={() => navigate(`/entities/setting/${h.parent!.parentId}`)}
+                          >
+                            {h.parent.parentName ?? h.parent.parentId}
+                          </button>
+                        ) : (
+                          <span className="ml-1 text-zinc-400">（独立设定——暂无上级）</span>
+                        )}
                       </span>
-                      <span className="min-w-0 flex-1 truncate text-zinc-700">{right}</span>
-                      <Button
-                        variant="outline"
-                        type="button"
-                        className="h-7 shrink-0 px-2 text-xs text-red-600 hover:bg-red-50"
-                        onClick={() => setDeleteRelationTarget(r)}
-                      >
-                        删除
-                      </Button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+                      <span className="text-zinc-500">
+                        子设定：
+                        {h.children.length === 0 ? (
+                          <span className="ml-1 text-zinc-400">（无）</span>
+                        ) : (
+                          h.children.map((c) => (
+                            <button
+                              key={c.relationId}
+                              type="button"
+                              title="打开子设定"
+                              className="ml-1 rounded-md border border-border px-1.5 py-0.5 text-zinc-700 hover:bg-muted hover:text-foreground"
+                              onClick={() => navigate(`/entities/setting/${c.childId}`)}
+                            >
+                              {c.childName ?? c.childId}
+                            </button>
+                          ))
+                        )}
+                      </span>
+                      <p className="text-xs text-zinc-400">
+                        层级由「所属」关系表达（决策 30），修改上级在下方关联列表中同步反映。
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
+
+            {(() => {
+              // 关联列表：setting 类型过滤掉层级边（belongs_to setting→setting）
+              const list =
+                entityType === "setting"
+                  ? detail.relations.filter(
+                      (r) => !(r.relationType === "belongs_to" && r.sourceType === "setting" && r.targetType === "setting"),
+                    )
+                  : detail.relations;
+              return list.length === 0 ? (
+                <p className="py-6 text-center text-sm text-zinc-400">
+                  {entityType === "setting" ? "暂无其他关联，新增一个" : "暂无关联，新增一个"}
+                </p>
+              ) : (
+                <ul className="divide-y divide-zinc-100">
+                  {list.map((r) => {
+                    const isSource = r.sourceId === id;
+                    const left = relationEndpointName(r, "source");
+                    const right = relationEndpointName(r, "target");
+                    return (
+                      <li key={r.id} className="flex items-center gap-2 py-2 text-sm">
+                        <span className="min-w-0 max-w-28 truncate text-zinc-700">{left}</span>
+                        <span className="shrink-0 rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-500">
+                          {relationTypeLabel(r.relationType)} {isSource ? "→" : "←"}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-zinc-700">{right}</span>
+                        <Button
+                          variant="outline"
+                          type="button"
+                          className="h-7 shrink-0 px-2 text-xs text-red-600 hover:bg-red-50"
+                          onClick={() => setDeleteRelationTarget(r)}
+                        >
+                          删除
+                        </Button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              );
+            })()}
           </div>
         </div>
       )}

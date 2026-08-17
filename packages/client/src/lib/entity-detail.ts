@@ -41,10 +41,10 @@ export function detailFieldsForType(type: EntityType): DetailFieldConfig[] {
         { key: "abilities", label: "能力", control: "tags" },
         { key: "status", label: "状态", control: "text" },
       ];
+  /** 设定基础信息（决策 30：parent_id 已移除——层级由 belongs_to 关系表达，见 entity-detail.md「层级区块」） */
     case "setting":
       return [
         { key: "category", label: "类别", control: "text" },
-        { key: "parent_id", label: "上级设定", control: "text" },
         { key: "description", label: "描述", control: "textarea" },
         { key: "rules", label: "规则", control: "tags" },
       ];
@@ -116,6 +116,64 @@ const RELATION_TYPE_LABEL: Record<string, string> = {
 
 export function relationTypeLabel(t: string): string {
   return RELATION_TYPE_LABEL[t] ?? t;
+}
+
+/** 设定层级边（决策 30）：从紧邻 relations 中提取 belongs_to 且两端均为 setting 的行 */
+export interface SettingHierarchyItem {
+  /** 关系 id（改父时删除旧边用） */
+  relationId: string;
+  /** 父亲设定端点 */
+  parentId: string;
+  parentName?: string;
+  /** 子设定端点 */
+  childId: string;
+  childName?: string;
+}
+
+/**
+ * 设定层级分区（决策 30）：从 GET /entity 详情的 1 跳双向 relations 中过滤
+ * belongs_to（setting→setting）边，按 selfId 归属分区：parent（target 端为本实体，至多取首条
+ * ——产品语义一设定一父）与 children（source 端为本实体）。过滤结果供详情页「层级区块」使用，
+ * 关联列表不再重复渲染这些边。
+ */
+export function settingHierarchyFromRelations(
+  relations: Array<{
+    id: string;
+    sourceType: string;
+    sourceId: string;
+    sourceName?: string;
+    targetType: string;
+    targetId: string;
+    targetName?: string;
+    relationType: string;
+  }>,
+  selfId: string,
+): { parent: SettingHierarchyItem | null; children: SettingHierarchyItem[] } {
+  const edges = relations.filter(
+    (r) =>
+      r.relationType === "belongs_to" &&
+      r.sourceType === "setting" &&
+      r.targetType === "setting",
+  );
+  const children: SettingHierarchyItem[] = [];
+  let parent: SettingHierarchyItem | null = null;
+  for (const r of edges) {
+    const item: SettingHierarchyItem = {
+      relationId: r.id,
+      parentId: r.targetId,
+      parentName: r.targetName,
+      childId: r.sourceId,
+      childName: r.sourceName,
+    };
+    if (r.sourceId === selfId) {
+      // self 是子端（child belongs_to parent）→ 另一端 target 是父，至多取首条（一设定一父）
+      if (parent === null) parent = item;
+    } else if (r.targetId === selfId) {
+      // self 是父端（parent belongs_to 的 target）→ 另一端 source 是子
+      children.push(item);
+    }
+  }
+  return { parent, children };
 }
 
 /**

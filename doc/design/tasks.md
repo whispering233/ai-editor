@@ -15,7 +15,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 
 - **完成**：阶段 A 地基 + 切片 1-9、12、13 + 阶段 U（U1-U8）+ 交互修复批次 + 切片 10 画布（S10.1）+ 切片 11 发布（S11.1-S11.3）+ 发布阻断项 E1-E6（导出/导入、未来版本拒绝重建、增量迁移、发布链路 OIDC 全绿）+ 阶段 B（B1 项目提示词编辑）+ 阶段 C 时间轴（C1-C4，决策 26）+ 画布增强批次（S10.2-S10.5）+ 交互优化批次（UX1-UX4）+ 阶段 B2 自动备份与恢复（B2.1-B2.6，决策 27/28/29）+ **用户反馈批次一 F1-F9（2026-08 实测）** + **用户反馈批次二 G1-G3（G1 区块独立滚动 / G2 时间标签点实体化 / G3 滚动位置保持，2026-08 实测）** + **用户反馈批次三 H1-H6（时间轴交互与视觉优化，2026-08 实测）**。
 - **待做**：无。可选收尾：npm 坏版本 v0.0.1/v0.0.2 deprecate 标注（需 2FA 凭据，见 AGENTS.md 发布流程段）；backlog.md 事项一律不做。
-- **测试**：全仓 1610 个（shared 131 / llm 59 / db 238 / server 324 / client 508 / tools 237 / agent 94）。
+- **测试**：全仓 1598 个（shared 131 / llm 59 / db 241 / server 325 / client 511 / tools 237 / agent 94）。
 - 已完成卡片的详细规格已归档（git history 可回溯，见下方「任务卡归档」）；「项目演进路线」提供脉络摘要，配合 `decisions.md`（决策 1-29 为设计主轴）理解现状。
 
 ## 执行进度（Todo）
@@ -38,7 +38,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
   - [x] I1 `occurs_in` 中文映射（RELATION_TYPE_LABEL 补 17 种「锚定于」+ 测试 + 文档）
   - [x] I2 详情图标 BookOpen → Eye（HookPanel / Outline）
   - [x] I3a 数据与校验层：shared 移除 settingDataSchema.parent_id + db 层级邻接表/防环 helper + server POST /relation 校验 + tools R5 调整 + 测试 & 文档
-  - [ ] I3b 客户端 UI：detailFieldsForType 移除 parent_id + 详情页「层级」区块（父/子 + 修改上级）+ 新建行「上级设定」弹层选择器 + 测试
+  - [x] I3b 客户端 UI：detailFieldsForType 移除 parent_id + 详情页「层级」区块（父/子 + 修改上级）+ 新建行「上级设定」弹层选择器 + 测试
   - [ ] I4 设定关系视图（按 belongs_to 构建层级树，位置待确认）
 
 ---
@@ -113,7 +113,8 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 | H1-H6 | 时间轴交互与视觉优化 | git log 回溯 | 删除入口/免确认/按钮展开/边框/右移/图标 |
 | I1 | `occurs_in` 中文映射（bug） | `2563dec` | 17 种关系类型映射补全，「锚定于」与「发生于」区分；测试 + entity-list.md 补映射表 |
 | I2 | 详情图标统一 Eye（UX） | `75bdf8d` | BookOpen → Eye（Outline/HookPanel 详情入口）；Sidebar/Dashboard 书籍语义保留；outline.md 同步 |
-| I3a | 设定层级 = belongs_to（决策 30）数据/校验层 | 本次 | shared 移除 settingDataSchema.parent_id；db 层级邻接表/防环 helper；server POST /relation 自指/成环 400；tools R5 仅保留 location；文档 decisions 30 + schema/endpoints/UI |
+| I3a | 设定层级 = belongs_to（决策 30）数据/校验层 | `5e1a831` | shared 移除 settingDataSchema.parent_id；db 层级邻接表/防环 helper；server POST /relation 自指/成环 400；tools R5 仅保留 location；文档 decisions 30 + schema/endpoints/UI |
+| I3b | 设定层级客户端 UI（决策 30） | 本次 | detailFieldsForType 移除 parent_id；详情页「层级」区块（父/子分区 + 修改/清除上级，先建后删）+ 关联列表过滤层级边；新建行「上级设定」弹层搜索选择器 + 创建后补建 belongs_to；lib helper + 测试 |
 
 ---
 

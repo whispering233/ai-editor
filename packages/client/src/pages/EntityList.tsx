@@ -21,6 +21,7 @@ import {
   ApiError,
   CLIENT_NETWORK_ERROR,
   createEntity,
+  createRelation,
   listEntities,
   type EntityListRes,
 } from "../lib/api";
@@ -31,6 +32,7 @@ import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useUiStore } from "../stores/ui";
 import { formatTimestamp } from "@whispering233/ai-editor-shared";
 import { CreateRelationDialog } from "../components/entity/create-relation-dialog";
+import { ParentSettingSelect } from "../components/entity/parent-setting-select";
 import { RelationsView } from "../components/entity/relations-view";
 
 const TYPE_LABEL: Record<EntityType, string> = {
@@ -87,6 +89,8 @@ export default function EntityList({ type }: { type: string }) {
   const [firstValue, setFirstValue] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
   const [createSubmitting, setCreateSubmitting] = useState(false);
+  /** 行内新建选中父设定 id（决策 30，I3b：仅 setting 类型；创建成功后补建 belongs_to 关系） */
+  const [createParentId, setCreateParentId] = useState<string | null>(null);
 
   const col = SUMMARY_COLUMNS[entityType];
   const firstField = CREATE_FIRST_FIELD[entityType];
@@ -103,6 +107,7 @@ export default function EntityList({ type }: { type: string }) {
     setItems(null);
     setError(null);
     setCreateOpen(false);
+    setCreateParentId(null);
   }, [type]);
 
   // 搜索防抖 300ms；关键词变化时页码重置 0（同批 setState，只发一次请求）
@@ -161,6 +166,7 @@ export default function EntityList({ type }: { type: string }) {
   function openCreateRow() {
     setCreateName("");
     setFirstValue("");
+    setCreateParentId(null);
     setCreateError(null);
     setCreateOpen(true);
   }
@@ -189,6 +195,23 @@ export default function EntityList({ type }: { type: string }) {
       if (first.key !== "" && firstValue.trim()) data[first.key] = firstValue.trim();
       const res = await createEntity(entityType, { name, data });
       useUiStore.getState().showToast(`已创建${TYPE_LABEL[entityType]}《${name}》`);
+      // 决策 30（I3b）：新建设定选了上级 → 补建 belongs_to 关系（失败不阻塞跳转，toast 提示后可在详情页重设）
+      if (entityType === "setting" && createParentId) {
+        try {
+          await createRelation({
+            source_type: "setting",
+            source_id: res.id,
+            target_type: "setting",
+            target_id: createParentId,
+            relation_type: "belongs_to",
+          });
+        } catch {
+          useUiStore.getState().showToast(
+            "已创建，但上级设定关联失败，可进详情页重新设置",
+            "error",
+          );
+        }
+      }
       setCreateOpen(false);
       navigate(`/entities/${entityType}/${res.id}`);
     } catch (err) {
@@ -325,6 +348,10 @@ export default function EntityList({ type }: { type: string }) {
               className="w-40"
             />
           ))}
+          {/* 上级设定选择器（决策 30，I3b：仅 setting 类型——创建后补建 belongs_to 关系） */}
+          {entityType === "setting" && (
+            <ParentSettingSelect value={createParentId} onChange={setCreateParentId} />
+          )}
           <div className="ml-auto flex items-center gap-2">
             <Button variant="outline" type="button" size="sm" onClick={cancelCreateRow} disabled={createSubmitting}>
               取消
