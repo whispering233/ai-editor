@@ -1,7 +1,8 @@
 // 实体详情页辅助纯函数与配置（S3.6）
 // 契约来源：doc/ui/pages/entity-detail.md「data 表单按类型差异化」（schema.md entities 表 data 字段清单：
 //   character→role/gender/age/personality/motivation/abilities/status/custom_fields、
-//   setting→category/parent_id/description/rules、location→type/parent_id/description、
+//   setting→category/description/rules/custom_fields（parent_id 已随决策 30 移除——层级由 belongs_to 表达）、
+//   location→type/parent_id/description、
 //   hook→status/category/expected_payoff/payoff_timing/half_life/is_core/notes/expected_resolve_node_id）
 import type { EntityType } from "@whispering233/ai-editor-shared";
 import { HOOK_STATUS_LABEL, HOOK_TIMING_LABEL } from "./entity-list";
