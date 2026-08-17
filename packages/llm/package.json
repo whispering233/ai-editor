@@ -1,6 +1,6 @@
 {
   "name": "@whispering233/ai-editor-llm",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "license": "MIT",
   "description": "模型接入层：封装 fetch → DeepSeek API",
   "type": "module",

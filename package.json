@@ -1,6 +1,6 @@
 {
   "name": "ai-editor",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "license": "MIT",
   "private": true,
   "description": "AI 小说创作编辑器（monorepo 根）",
