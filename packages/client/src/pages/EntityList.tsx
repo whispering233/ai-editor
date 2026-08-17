@@ -35,6 +35,7 @@ import { CreateRelationDialog } from "../components/entity/create-relation-dialo
 import { ParentSettingSelect } from "../components/entity/parent-setting-select";
 import { RelationsView } from "../components/entity/relations-view";
 import { SettingTreeView } from "../components/entity/setting-tree";
+import { SuggestionDatalist, uniqueStrings } from "../components/ui/suggestion-datalist";
 
 const TYPE_LABEL: Record<EntityType, string> = {
   character: "人物",
@@ -99,6 +100,13 @@ export default function EntityList({ type }: { type: string }) {
   const firstField = CREATE_FIRST_FIELD[entityType];
   const pages = pageCount(total, PAGE_LIMIT);
   const page = Math.floor(offset / PAGE_LIMIT) + 1;
+  // 新建行 datalist 候选（批次五 J2，决策 31）：从当前列表聚合已有名称 / 首字段值
+  // （浏览器原生自动完成——输入时弹出已有候选，如输入「势」弹出「势力」）
+  const createNameSuggestions = uniqueStrings(items?.map((i) => i.name) ?? []);
+  const createFirstSuggestions =
+    firstField.key === ""
+      ? []
+      : uniqueStrings(items?.map((i) => String(i.summary[firstField.key] ?? "")) ?? []);
 
   // tab 切换（type 变化，含进出关联 tab）：重置搜索/分页/排序（原型「MVP 切换时重置搜索与分页」）
   useEffect(() => {
@@ -339,8 +347,10 @@ export default function EntityList({ type }: { type: string }) {
             disabled={createSubmitting}
             autoFocus
             aria-label="名称"
+            list={`entity-create-name-${entityType}`}
             className="w-48"
           />
+          <SuggestionDatalist id={`entity-create-name-${entityType}`} options={createNameSuggestions} />
           {/* 首字段（空 key = 无 data 首字段——timepoint 仅 name，G2.3；行内新建退化为纯名称输入） */}
           {firstField.key !== "" &&
             (firstField.input === "select" ? (
@@ -365,9 +375,11 @@ export default function EntityList({ type }: { type: string }) {
               placeholder={`${firstField.label}（选填）`}
               disabled={createSubmitting}
               aria-label={firstField.label}
+              list={`entity-create-first-${entityType}`}
               className="w-40"
             />
-          ))}
+            ))}
+          <SuggestionDatalist id={`entity-create-first-${entityType}`} options={createFirstSuggestions} />
           {/* 上级设定选择器（决策 30，I3b：仅 setting 类型——创建后补建 belongs_to 关系） */}
           {entityType === "setting" && (
             <ParentSettingSelect value={createParentId} onChange={setCreateParentId} />

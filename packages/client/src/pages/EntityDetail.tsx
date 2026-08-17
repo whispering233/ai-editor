@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import { formatTimestamp } from "@whispering233/ai-editor-shared";
 import type { EntityType } from "@whispering233/ai-editor-shared";
 import { ConfirmDialog } from "../components/outline/dialogs";
+import { SuggestionDatalist } from "../components/ui/suggestion-datalist";
 import { CreateRelationDialog } from "../components/entity/create-relation-dialog";
 import { ParentSettingSelect } from "../components/entity/parent-setting-select";
 import { ComputePreview } from "../components/delta/compute-preview";
@@ -24,6 +25,7 @@ import {
   deleteEntity,
   deleteRelation,
   getEntityDetail,
+  listEntities,
   updateEntity,
   type EntityDetailRes,
   type RelationSummaryItem,
@@ -53,15 +55,18 @@ function fieldValue(form: Record<string, unknown>, key: string): string {
   return v === undefined || v === null ? "" : String(v);
 }
 
-/** 标签列表编辑器（character.personality/abilities、setting.rules） */
+/** 标签列表编辑器（character.personality/abilities、setting.rules）。
+ * suggestions 提供时绑定 datalist（批次五 J2：浏览器原生自动完成——输入时弹出已有标签候选） */
 function TagsEditor({
   values,
   onChange,
   placeholder,
+  suggestions,
 }: {
   values: string[];
   onChange: (v: string[]) => void;
   placeholder?: string;
+  suggestions?: readonly string[];
 }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -75,6 +80,7 @@ function TagsEditor({
               onChange(next);
             }}
             placeholder={placeholder}
+            list={suggestions && suggestions.length > 0 ? "entity-tags-suggestions" : undefined}
             className="h-8 flex-1 text-sm"
           />
           <Button
@@ -95,6 +101,7 @@ function TagsEditor({
       >
         + 添加
       </Button>
+      {suggestions && suggestions.length > 0 && <SuggestionDatalist id="entity-tags-suggestions" options={suggestions} />}
     </div>
   );
 }
@@ -181,6 +188,36 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
   /** 设定层级修改态（决策 30，I3b：修改/清除上级——先建后删，防数据丢失） */
   const [hierarchySaving, setHierarchySaving] = useState(false);
   const [hierarchyError, setHierarchyError] = useState<string | null>(null);
+  /** 规则标签建议池（批次五 J2，决策 31：setting 详情 rules 输入 datalist 候选——全量聚合既有标签；失败静默） */
+  const [tagPool, setTagPool] = useState<string[]>([]);
+
+  // 补拉全量设定标签池（setting 类型才拉；复用 Timeline 详情 loadTagPool 同款模式）
+  useEffect(() => {
+    if (entityType !== "setting") {
+      setTagPool([]);
+      return;
+    }
+    let cancelled = false;
+    listEntities("setting", { limit: 200 })
+      .then((res) => {
+        if (cancelled) return;
+        const tags = new Set<string>();
+        for (const item of res.items) {
+          if (Array.isArray(item.summary.tags)) {
+            for (const t of item.summary.tags) {
+              if (typeof t === "string" && t !== "") tags.add(t);
+            }
+          }
+        }
+        setTagPool(Array.from(tags).sort());
+      })
+      .catch(() => {
+        // 失败静默（无建议不影响表单）
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [entityType]);
 
   const fields = detailFieldsForType(entityType);
 
@@ -440,6 +477,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
                     field={f}
                     value={form[f.key]}
                     onChange={(v) => setField(f.key, v)}
+                    tagPool={entityType === "setting" ? tagPool : undefined}
                   />
                 </div>
               ))}
@@ -616,10 +654,13 @@ function FormField({
   field,
   value,
   onChange,
+  tagPool,
 }: {
   field: DetailFieldConfig;
   value: unknown;
   onChange: (v: unknown) => void;
+  /** 规则标签建议池（批次五 J2：仅 setting.rules 使用；datalist 候选） */
+  tagPool?: readonly string[];
 }) {
   switch (field.control) {
     case "textarea":
@@ -646,6 +687,7 @@ function FormField({
           values={Array.isArray(value) ? (value as string[]) : []}
           onChange={onChange}
           placeholder="输入后回车添加下一项"
+          suggestions={field.key === "rules" ? tagPool : undefined}
         />
       );
     case "select":

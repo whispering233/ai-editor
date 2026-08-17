@@ -19,6 +19,7 @@ import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { ArrowUp, Check, CheckCircle2, Circle, Eye, Pencil, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SuggestionDatalist } from "@/components/ui/suggestion-datalist";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   ApiError,
@@ -965,12 +966,16 @@ function HookDataField({
       return <OutlineNodeSelect value={fieldValue({ [field.key]: value }, field.key)} onChange={onValue} nodeOptions={nodeOptions} />;
     default:
       return (
-        <Input
-          value={fieldValue({ [field.key]: value }, field.key)}
-          onChange={(e) => onValue(e.target.value)}
-          placeholder={field.key === "category" ? `如：${HOOK_CATEGORIES.join(" / ")}` : undefined}
-          className="h-8 text-sm"
-        />
+        <>
+          <Input
+            value={fieldValue({ [field.key]: value }, field.key)}
+            onChange={(e) => onValue(e.target.value)}
+            placeholder={field.key === "category" ? `如：${HOOK_CATEGORIES.join(" / ")}` : undefined}
+            list={field.key === "category" ? "hook-category-suggestions" : undefined}
+            className="h-8 text-sm"
+          />
+          {field.key === "category" && <SuggestionDatalist id="hook-category-suggestions" options={HOOK_CATEGORIES} />}
+        </>
       );
   }
 }
