@@ -88,7 +88,7 @@ describe("listEntities", () => {
     createEntity(db, { type: "character", name: "阿强", data: { role: "主角", status: "活跃" } });
     createEntity(db, { type: "character", name: "阿珍", data: { role: "配角" } });
     createEntity(db, { type: "character", name: "李四", data: { status: "失踪" } });
-    createEntity(db, { type: "setting", name: "修仙界", data: { rules: ["世界"] } });
+    createEntity(db, { type: "setting", name: "修仙界", data: { tags: ["世界"] } });
     const stamp = (name: string, t: string): void => {
       db.prepare("UPDATE entities SET created_at = ?, updated_at = ? WHERE name = ?").run(t, t, name);
     };
@@ -346,9 +346,9 @@ describe("getEntitySummaryStats（S6.3 工具 get_entity_summary 下沉）", () 
     });
     expect(hook.byRole).toBeUndefined(); // 非 character 不出现角色分布
 
-    createEntity(db, { type: "setting", name: "修真界", data: { rules: ["世界观"] } });
-    createEntity(db, { type: "setting", name: "江湖", data: { rules: ["世界观"] } });
-    createEntity(db, { type: "setting", name: "门派", data: { rules: ["组织"] } });
+    createEntity(db, { type: "setting", name: "修真界", data: { tags: ["世界观"] } });
+    createEntity(db, { type: "setting", name: "江湖", data: { tags: ["世界观"] } });
+    createEntity(db, { type: "setting", name: "门派", data: { tags: ["组织"] } });
     expect(getEntitySummaryStats(db, "setting")).toEqual({
       type: "setting",
       total: 3,

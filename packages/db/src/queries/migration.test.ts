@@ -125,9 +125,9 @@ describe("ensureSchemaCompatible 版本不匹配 → 删库重建（决策 13）
     expect(readFileSync(join(dir, "outline.json.v0.bak"), "utf8")).toBe(outlineRawBefore);
   });
 
-  it("未来版本（user_version=4 > SCHEMA_VERSION）→ 拒绝打开：抛 SchemaVersionError、数据文件未动、无 .bak 备份（E4 堵降级数据丢失）", () => {
+  it("未来版本（user_version=5 > SCHEMA_VERSION）→ 拒绝打开：抛 SchemaVersionError、数据文件未动、无 .bak 备份（E4 堵降级数据丢失）", () => {
     // 模拟「用户安装新版后回退旧版程序」：高版本库 + 数据 + 大纲
-    setUserVersion(db, 4);
+    setUserVersion(db, 5);
     insertOldEntity(db, "char-1");
     writeOutlineFile(dir, oldTree());
     const outlineRawBefore = readFileSync(join(dir, OUTLINE_FILE_NAME), "utf8");
@@ -137,7 +137,7 @@ describe("ensureSchemaCompatible 版本不匹配 → 删库重建（决策 13）
       expect.unreachable("未来版本应拒绝打开");
     } catch (err) {
       expect(err).toBeInstanceOf(SchemaVersionError);
-      expect((err as SchemaVersionError).version).toBe(4);
+      expect((err as SchemaVersionError).version).toBe(5);
       expect((err as SchemaVersionError).current).toBe(SCHEMA_VERSION);
       expect((err as Error).message).toContain("高于当前程序版本");
     }
@@ -145,12 +145,12 @@ describe("ensureSchemaCompatible 版本不匹配 → 删库重建（决策 13）
     expect(db.open).toBe(false);
     // 数据原封不动：无 .bak 备份生成、data.db 主文件仍在且 user_version 仍为 4、
     // outline.json 字节原样、实体数据仍在（未触发任何重建/写操作）
-    expect(existsSync(join(dir, "data.db.v4.bak"))).toBe(false);
-    expect(existsSync(join(dir, "outline.json.v4.bak"))).toBe(false);
+    expect(existsSync(join(dir, "data.db.v5.bak"))).toBe(false);
+    expect(existsSync(join(dir, "outline.json.v5.bak"))).toBe(false);
     expect(readFileSync(join(dir, OUTLINE_FILE_NAME), "utf8")).toBe(outlineRawBefore);
     const reopened = openDatabase(dbPath);
     try {
-      expect(getUserVersion(reopened)).toBe(4);
+      expect(getUserVersion(reopened)).toBe(5);
       expect(countEntities(reopened)).toBe(1);
     } finally {
       closeDatabase(reopened);
@@ -186,6 +186,7 @@ describe("ensureSchemaCompatible 旧版本有迁移路径（E5）", () => {
       { version: 1, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN note TEXT") },
       { version: 2, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN extra TEXT") },
       { version: 3, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN third TEXT") },
+      { version: 4, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN fourth TEXT") },
     ];
     insertOldEntity(db, "char-1");
     writeOutlineFile(dir, oldTree());
@@ -206,6 +207,7 @@ describe("ensureSchemaCompatible 旧版本有迁移路径（E5）", () => {
     expect(cols.some((c) => c.name === "note")).toBe(true);
     expect(cols.some((c) => c.name === "extra")).toBe(true);
     expect(cols.some((c) => c.name === "third")).toBe(true);
+    expect(cols.some((c) => c.name === "fourth")).toBe(true);
     // 无删库重建备份（data.db.v0.bak 不带时间戳的不生成）、有迁移时间戳快照
     expect(existsSync(join(dir, "data.db.v0.bak"))).toBe(false);
     expect(result.backups[0]).toMatch(/data\.db\.v0\.\d{8}T\d{6}\.\d{3}Z\.bak$/);
@@ -236,6 +238,7 @@ describe("ensureSchemaCompatible 旧版本有迁移路径（E5）", () => {
         },
       },
       { version: 3, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN third TEXT") },
+      { version: 4, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN fourth TEXT") },
     ];
     insertOldEntity(db, "char-1");
 

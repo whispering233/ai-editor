@@ -43,14 +43,15 @@ export function detailFieldsForType(type: EntityType): DetailFieldConfig[] {
         { key: "status", label: "状态", control: "text" },
       ];
   /**
-   * 设定基础信息（决策 30/31：parent_id（层级 belongs_to）与 category（分类由 rules 标签承接）
-   * 均已移除——仅 description/rules，见 entity-detail.md）
+   * 设定基础信息（决策 30/31 + K2 修订，2026-08）：parent_id（层级 belongs_to）与 category
+   * （废弃）不参与；`tags` = 分类标签（统一字段，快捷选择既有标签）、`rules` = 规则条款
+   * （仅详情页编辑），见 entity-detail.md
    */
     case "setting":
       return [
         { key: "description", label: "描述", control: "textarea" },
-        // K1（2026-08 用户复核）：rules 语义 = 分类标签——label 明确为「标签」
-        { key: "rules", label: "标签", control: "tags" },
+        { key: "tags", label: "标签", control: "tags" },
+        { key: "rules", label: "规则", control: "tags" },
       ];
     case "location":
       return [

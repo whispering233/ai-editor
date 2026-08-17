@@ -143,21 +143,21 @@ describe("GET /api/v1/entity/:type 列表", () => {
     expect(body.data.total).toBe(0);
   });
 
-  it("标签筛选 tag（决策 31）：setting 走 data.rules 包含匹配；无匹配 → 空；event 走 data.tags", async () => {
+  it("标签筛选 tag（决策 31 K2）：统一 data.tags 包含匹配（setting 与 event 同语义）；无匹配 → 空", async () => {
     openProject();
     const app = buildApp();
     // setting：rules 标签
     await app.request(
       "/api/v1/entity/setting",
-      jsonRequest("POST", "", { name: "青云门", data: { rules: ["势力", "宗门"] } }),
+      jsonRequest("POST", "", { name: "青云门", data: { tags: ["势力", "宗门"] } }),
     );
     await app.request(
       "/api/v1/entity/setting",
-      jsonRequest("POST", "", { name: "藏剑阁", data: { rules: ["势力"] } }),
+      jsonRequest("POST", "", { name: "藏剑阁", data: { tags: ["势力"] } }),
     );
     await app.request(
       "/api/v1/entity/setting",
-      jsonRequest("POST", "", { name: "天地法则", data: { rules: ["法则"] } }),
+      jsonRequest("POST", "", { name: "天地法则", data: { tags: ["法则"] } }),
     );
     const hit = await app.request("/api/v1/entity/setting?tag=宗门", { headers: HOST_HEADERS });
     const hitBody = (await hit.json()) as { data: { items: Array<{ name: string }>; total: number } };

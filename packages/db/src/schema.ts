@@ -13,8 +13,10 @@ import type Database from "better-sqlite3";
  * v2 → v3（G2 时间标签点实体化，决策 26 修订）：entities 表 type CHECK 扩为 6 种
  * （含 timepoint）+ 旧 event.data.time_label 由 migrations/003_timepoint.ts 迁移为
  * timepoint 实体 + occurs_at 挂载关系（从 event.data 移除 time_label）。
+ * v3 → v4（决策 31 K2 修订，2026-08）：**无 DDL**——仅 entities.data JSON 数据迁移
+ * （setting 的旧 rules 分类值复制到 data.tags 并移除 rules，migrations/004_setting_tags.ts）。
  */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 /**
  * 四张业务表 + 索引的建表 SQL（幂等：CREATE TABLE/INDEX IF NOT EXISTS）。

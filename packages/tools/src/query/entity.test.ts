@@ -189,10 +189,10 @@ describe("get_entity_summary", () => {
     expect(result.topAbilities).toBeUndefined();
   });
 
-  it("setting：byTags（决策 31）；location：byType", () => {
-    createEntity(db, { type: "setting", name: "修真界", data: { rules: ["世界观"] } });
-    createEntity(db, { type: "setting", name: "江湖", data: { rules: ["世界观"] } });
-    createEntity(db, { type: "setting", name: "门派", data: { rules: ["组织"] } });
+  it("setting：byTags（决策 31 K2：data.tags）；location：byType", () => {
+    createEntity(db, { type: "setting", name: "修真界", data: { tags: ["世界观"] } });
+    createEntity(db, { type: "setting", name: "江湖", data: { tags: ["世界观"] } });
+    createEntity(db, { type: "setting", name: "门派", data: { tags: ["组织"] } });
     expect(runGetEntitySummary(makeCtx(), { type: "setting" })).toEqual({
       type: "setting",
       total: 3,

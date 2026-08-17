@@ -45,8 +45,8 @@ const ENTITY_DATA_KEYS = {
     "status",
     "custom_fields",
   ] as const satisfies readonly EntityDataKey<"character">[],
-  // 决策 30/31（2026-08）setting 的 parent_id（层级 belongs_to）与 category（分类由 rules 标签承接）均已移除
-  setting: ["description", "rules", "custom_fields"] as const satisfies readonly EntityDataKey<"setting">[],
+  // 决策 30/31 + K2（2026-08）：setting 字段 = description/tags（分类标签）/rules（规则条款）/custom_fields
+  setting: ["description", "tags", "rules", "custom_fields"] as const satisfies readonly EntityDataKey<"setting">[],
   location: ["type", "parent_id", "description", "custom_fields"] as const satisfies readonly EntityDataKey<"location">[],
   hook: [
     "status",
@@ -77,7 +77,7 @@ function labelsOf(t: EntityType): Record<string, string> {
 /** 数组字段（op 推断：默认 add/remove；余下标量默认 set/update）——字段名须在对应清单内（单测断言） */
 const ARRAY_FIELDS: Record<string, readonly string[]> = {
   character: ["personality", "abilities"],
-  setting: ["rules"],
+  setting: ["tags", "rules"], // K2：分类标签与规则条款均为数组
 };
 
 /** 数字字段（值输入解析为 number；余下保持字符串——服务端 delta value 类型 string|number） */

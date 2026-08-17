@@ -396,8 +396,8 @@ type: "character" | "setting" | "location" | "hook" | "event" | "timepoint";
   limit?: number;       // 每页条数，默认 50，最大 200
   sort?: "name" | "created_at" | "updated_at";
   order?: "asc" | "desc";
-  tag?: string;         // 标签包含筛选（决策 31，2026-08）：data 数组字段（setting.rules / event.tags）
-                        // 包含该标签即命中（单标签精确匹配；不传 = 不过滤）
+  tag?: string;         // 标签包含筛选（决策 31 K2，2026-08）：data.tags 数组字段包含该标签即命中
+                        // （setting 与 event 同字段语义；单标签精确匹配；不传 = 不过滤）
 }
 
 // Res: 200
@@ -415,7 +415,7 @@ type: "character" | "setting" | "location" | "hook" | "event" | "timepoint";
   name: string;
   // 各类型的关键摘要字段：
   //   character → role, status
-  //   setting   → tags (data.rules 前 3 个，决策 31：分类由标签承接)
+  //   setting   → tags (data.tags 前 3 个，决策 31 K2：分类统一字段，与 event 同语义)
   //   location  → type
   //   hook      → status, payoff_timing (从 data JSON 提取)
   //   event     → description, tags (从 data JSON 提取)

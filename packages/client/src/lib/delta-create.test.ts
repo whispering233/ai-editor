@@ -53,9 +53,10 @@ describe("entityDeltaFieldOptions（字段名 = shared ENTITY_DATA_SCHEMAS keys�
 });
 
 describe("isArrayField / isNumericField", () => {
-  it("数组字段：character.personality/abilities、setting.rules（S13.3 起仅实体字段——scene 项已删）", () => {
+  it("数组字段：character.personality/abilities、setting.tags/rules（K2：分类与规则条款均为数组）", () => {
     expect(isArrayField("character", "personality")).toBe(true);
     expect(isArrayField("character", "abilities")).toBe(true);
+    expect(isArrayField("setting", "tags")).toBe(true);
     expect(isArrayField("setting", "rules")).toBe(true);
     expect(isArrayField("scene", "conflict_levels")).toBe(false);
     expect(isArrayField("character", "role")).toBe(false);

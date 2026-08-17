@@ -104,12 +104,12 @@ describe("schema.ts 建表", () => {
     }
   });
 
-  it("user_version 读写往返（决策 13/E5：SCHEMA_VERSION = 3，v1→v3 走增量迁移 002→003）", () => {
+  it("user_version 读写往返（决策 13/E5：SCHEMA_VERSION = 3，v1→v4 走增量迁移 002→003→004）", () => {
     // 新库默认 0
     expect(getUserVersion(db)).toBe(0);
     setUserVersion(db, SCHEMA_VERSION);
     expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
-    expect(SCHEMA_VERSION).toBe(3);
+    expect(SCHEMA_VERSION).toBe(4);
   });
 
   it("entities 有 sort_order 列（时间轴事件全局线性序，仅 event 使用，其余类型 NULL，决策 26）", () => {

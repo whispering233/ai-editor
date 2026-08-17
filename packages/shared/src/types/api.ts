@@ -105,12 +105,14 @@ export const characterDataSchema = z
   })
   .passthrough(); // 允许未知字段（创作工具，用户自定义字段自由）
 
-/** setting 专属字段（schema.md：description/rules[]/custom_fields；
- *  `parent_id`（决策 30 层级 belongs_to）与 `category`（决策 31 分类由 rules 标签承接）均已废弃，
- *  旧字段残留由 passthrough 容错） */
+/** setting 专属字段（schema.md：description/tags/rules/custom_fields；
+ *  `tags` = 分类标签（决策 31 K2，2026-08：分类统一字段，前后端同名）；
+ *  `rules` = 规则条款（恢复原始语义，仅设定详情页编辑）；
+ *  `parent_id`（决策 30 层级 belongs_to）与 `category`（决策 31 废弃）不参与新字段，旧残留 passthrough 容错） */
 export const settingDataSchema = z
   .object({
     description: z.string().optional(),
+    tags: z.array(z.string()).optional(),
     rules: z.array(z.string()).optional(),
     custom_fields: z.record(z.string(), z.unknown()).optional(),
   })

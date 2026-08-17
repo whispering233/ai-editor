@@ -53,7 +53,7 @@ CREATE TABLE entities (
 | type | data 关键字段 |
 |------|-------------|
 | `character` | `role`, `gender`, `age`, `personality[]`, `motivation`, `abilities[]`, `status`, `custom_fields` |
-| `setting` | `description`, `rules[]`（**标签 = 唯一分类手段，决策 31，2026-08**）, `custom_fields` —— **`parent_id`（决策 30）与 `category`（决策 31）均已废弃**：层级由 belongs_to 关系表达、分类由 rules 标签承接；旧字段残留由 `.passthrough()` 容错 |
+| `setting` | `description`, `tags[]`（**分类标签，统一字段，决策 31 K2**）, `rules[]`（**规则条款，仅详情页编辑，K2 恢复语义**）, `custom_fields` —— **`parent_id`（决策 30）与 `category`（决策 31）均已废弃**：层级由 belongs_to 关系表达、分类由 tags 承接；旧字段残留由 `.passthrough()` 容错；旧 rules 分类值经 004 迁移（SCHEMA_VERSION 4）复制到 tags |
 | `location` | `type`, `parent_id`, `description`, `custom_fields` |
 | `location` | `type`, `parent_id`, `description`, `custom_fields` |
 | `hook` | 详见 [hooks.md](./hooks.md) |

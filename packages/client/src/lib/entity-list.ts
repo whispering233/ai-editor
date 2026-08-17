@@ -75,8 +75,8 @@ export interface CreateFirstFieldConfig {
 
 export const CREATE_FIRST_FIELD: Record<EntityType, CreateFirstFieldConfig> = {
   character: { key: "role", label: "角色定位", input: "text" },
-  // K1（2026-08 用户复核，决策 31）：设定分类由 rules 标签承接——新建行直接打标签（逗号分隔多值）
-  setting: { key: "rules", label: "标签", input: "tags" },
+  // K2（2026-08 用户复核，决策 31）：设定分类统一字段 tags——新建行直接打标签（逗号分隔多值）
+  setting: { key: "tags", label: "标签", input: "tags" },
   location: { key: "type", label: "地点类型", input: "text" },
   // hook.status 是受控枚举（planted → progressing → resolved / abandoned，doc/database/hooks.md）
   hook: {

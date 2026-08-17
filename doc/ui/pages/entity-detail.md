@@ -58,7 +58,7 @@
 | 类型 | 字段与控件 |
 |------|-----------|
 | character | `role` 文本 · `gender` 文本 · `age` 数字 · `personality[]` 标签列表 · `motivation` 多行 · `abilities[]` 标签列表 · `status` 文本 · `custom_fields` 键值组 |
-| setting | `description` 多行 · `rules[]` 标签列表（**分类唯一手段，决策 31：category 已废弃；K1 起 label 明确为「标签」**）· `custom_fields` —— **`parent_id` 已移除（决策 30）：层级改由 belongs_to 关系表达，见下方「层级区块」** |
+| setting | `description` 多行 · `tags[]` 标签列表（**分类统一字段，决策 31 K2：label「标签」，datalist 补全 + 快捷选择既有标签**）· `rules[]` 标签列表（**规则条款，K2 恢复语义，label「规则」**）· `custom_fields` —— **`parent_id` 已移除（决策 30）：层级改由 belongs_to 关系表达，见下方「层级区块」** |
 | location | `type` 文本 · `parent_id` 文本 · `description` 多行 · `custom_fields` |
 | hook | `status` 下拉（planted/progressing/resolved/abandoned）· `category` 文本 · `expected_payoff` 多行 · `payoff_timing` 下拉 · `half_life` 数字 · `is_core` 开关 · `notes` 多行 · `expected_resolve_node_id` 大纲节点选择器 |
 

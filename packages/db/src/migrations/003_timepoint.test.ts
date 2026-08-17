@@ -117,9 +117,9 @@ describe("003_timepoint 迁移（v2 → v3，G2 时间标签点实体化）", ()
     ]);
 
     const { applied } = runMigrations(db, { migrations: MIGRATIONS });
-    expect(applied.map((m) => m.version)).toEqual([3]); // v2 → v3 只跑 003
+    expect(applied.map((m) => m.version)).toEqual([3, 4]); // v2 → v3 只跑 003
     expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
-    expect(SCHEMA_VERSION).toBe(3);
+    expect(SCHEMA_VERSION).toBe(4);
 
     // ---- timepoint：同名合并为 1 个，sort_order 按各组首个事件出现序 0..n-1 ----
     const tps = timepointRows(db);
@@ -183,8 +183,8 @@ describe("003_timepoint 迁移（v2 → v3，G2 时间标签点实体化）", ()
     ]);
 
     const { applied } = runMigrations(db, { migrations: MIGRATIONS });
-    expect(applied.map((m) => m.version)).toEqual([3]); // v2 → v3 只跑 003
-    expect(getUserVersion(db)).toBe(3);
+    expect(applied.map((m) => m.version)).toEqual([3, 4]); // v2 → v3 只跑 003
+    expect(getUserVersion(db)).toBe(4);
     expect(timepointRows(db)).toHaveLength(0);
     expect(occursAtRows(db)).toHaveLength(0);
     expect(rawRow(db, "ev-1")).toMatchObject({ data: '{"description":"仅此一件"}', updated_at: T0 });
@@ -206,10 +206,10 @@ describe("003_timepoint 迁移（v2 → v3，G2 时间标签点实体化）", ()
   it("幂等：迁移后 user_version = 3，重跑无 pending", () => {
     db = createV2Db([{ id: "ev-1", label: "第二天黄昏", sortOrder: 0 }]);
     runMigrations(db, { migrations: MIGRATIONS });
-    expect(getUserVersion(db)).toBe(3);
+    expect(getUserVersion(db)).toBe(4);
     const { applied } = runMigrations(db, { migrations: MIGRATIONS });
     expect(applied).toEqual([]);
-    expect(getUserVersion(db)).toBe(3);
+    expect(getUserVersion(db)).toBe(4);
     // 数据不被二次处理（timepoint 仍只有 1 个、关系仍 1 条）
     expect(timepointRows(db)).toHaveLength(1);
     expect(occursAtRows(db)).toHaveLength(1);

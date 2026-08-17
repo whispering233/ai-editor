@@ -55,18 +55,21 @@ function fieldValue(form: Record<string, unknown>, key: string): string {
   return v === undefined || v === null ? "" : String(v);
 }
 
-/** 标签列表编辑器（character.personality/abilities、setting.rules）。
- * suggestions 提供时绑定 datalist（批次五 J2：浏览器原生自动完成——输入时弹出已有标签候选） */
+/** 标签列表编辑器（character.personality/abilities、setting.tags/rules）。
+ * suggestions 提供时绑定 datalist（批次五 J2：浏览器原生自动完成——输入时弹出已有标签候选）；
+ * quickTags 提供时渲染「已有标签」快捷选择 chips（K2：点击追加到列表，已选的隐藏） */
 function TagsEditor({
   values,
   onChange,
   placeholder,
   suggestions,
+  quickTags,
 }: {
   values: string[];
   onChange: (v: string[]) => void;
   placeholder?: string;
   suggestions?: readonly string[];
+  quickTags?: readonly string[];
 }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -101,6 +104,22 @@ function TagsEditor({
       >
         + 添加
       </Button>
+      {/* 快捷选择既有标签（K2：点击追加，去重——已选的不再展示） */}
+      {quickTags && quickTags.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="text-xs text-muted-foreground">已有标签：</span>
+          {quickTags.filter((t) => !values.includes(t)).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => onChange([...values, t])}
+              className="rounded-md border border-border px-1.5 py-0.5 text-xs text-foreground hover:bg-muted hover:text-foreground"
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      )}
       {suggestions && suggestions.length > 0 && <SuggestionDatalist id="entity-tags-suggestions" options={suggestions} />}
     </div>
   );
@@ -188,7 +207,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
   /** 设定层级修改态（决策 30，I3b：修改/清除上级——先建后删，防数据丢失） */
   const [hierarchySaving, setHierarchySaving] = useState(false);
   const [hierarchyError, setHierarchyError] = useState<string | null>(null);
-  /** 规则标签建议池（批次五 J2，决策 31：setting 详情 rules 输入 datalist 候选——全量聚合既有标签；失败静默） */
+  /** 标签建议池（批次五 J2 + K2，决策 31：setting 详情 tags 输入 datalist 候选 + 快捷选择——全量聚合既有标签；失败静默） */
   const [tagPool, setTagPool] = useState<string[]>([]);
 
   // 补拉全量设定标签池（setting 类型才拉；复用 Timeline 详情 loadTagPool 同款模式）
@@ -687,7 +706,8 @@ function FormField({
           values={Array.isArray(value) ? (value as string[]) : []}
           onChange={onChange}
           placeholder="输入后回车添加下一项"
-          suggestions={field.key === "rules" ? tagPool : undefined}
+          suggestions={field.key === "tags" ? tagPool : undefined}
+          quickTags={field.key === "tags" ? tagPool : undefined}
         />
       );
     case "select":
