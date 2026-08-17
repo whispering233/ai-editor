@@ -66,8 +66,9 @@ describe("summaryCellText（摘要单元格文案）", () => {
 describe("CREATE_FIRST_FIELD（创建对话框首字段配置——原型「name + 该类型首字段」）", () => {
   it("四类型都有首字段配置", () => {
     expect(CREATE_FIRST_FIELD.character.key).toBe("role");
-    // 决策 31：设定新建行仅名称（分类由标签承接，详情页维护）
-    expect(CREATE_FIRST_FIELD.setting.key).toBe("");
+    // K1（2026-08 用户复核，决策 31）：设定首字段 = rules 标签（逗号分隔多值）
+    expect(CREATE_FIRST_FIELD.setting.key).toBe("rules");
+    expect(CREATE_FIRST_FIELD.setting.input).toBe("tags");
     expect(CREATE_FIRST_FIELD.location.key).toBe("type");
     expect(CREATE_FIRST_FIELD.hook.key).toBe("status");
   });

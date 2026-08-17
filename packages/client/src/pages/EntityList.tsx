@@ -107,10 +107,19 @@ export default function EntityList({ type }: { type: string }) {
   // 新建行 datalist 候选（批次五 J2，决策 31）：从当前列表聚合已有名称 / 首字段值
   // （浏览器原生自动完成——输入时弹出已有候选，如输入「势」弹出「势力」）
   const createNameSuggestions = uniqueStrings(items?.map((i) => i.name) ?? []);
+  // 首字段候选：text 单值取 summary 字段值；tags 多值（K1：setting.rules）flatMap 聚合数组元素
   const createFirstSuggestions =
     firstField.key === ""
       ? []
-      : uniqueStrings(items?.map((i) => String(i.summary[firstField.key] ?? "")) ?? []);
+      : firstField.input === "tags"
+        ? uniqueStrings(
+            (items ?? []).flatMap((i) =>
+              Array.isArray(i.summary[firstField.key])
+                ? (i.summary[firstField.key] as string[])
+                : [],
+            ),
+          )
+        : uniqueStrings(items?.map((i) => String(i.summary[firstField.key] ?? "")) ?? []);
 
   // tab 切换（type 变化，含进出关联 tab）：重置搜索/分页/排序（原型「MVP 切换时重置搜索与分页」）
   useEffect(() => {
@@ -238,7 +247,17 @@ export default function EntityList({ type }: { type: string }) {
       const first = CREATE_FIRST_FIELD[entityType];
       const data: Record<string, unknown> = {};
       // 空 key = 该类型无 data 首字段（timepoint：时间标签文本即 name，G2）——跳过不写 data
-      if (first.key !== "" && firstValue.trim()) data[first.key] = firstValue.trim();
+      if (first.key !== "" && firstValue.trim()) {
+        if (first.input === "tags") {
+          // K1（决策 31）：逗号分隔多值标签（中英文逗号均可）→ rules 数组
+          data[first.key] = firstValue
+            .split(/[,，]/)
+            .map((s) => s.trim())
+            .filter((s) => s !== "");
+        } else {
+          data[first.key] = firstValue.trim();
+        }
+      }
       const res = await createEntity(entityType, { name, data });
       useUiStore.getState().showToast(`已创建${TYPE_LABEL[entityType]}《${name}》`);
       // 决策 30（I3b）：新建设定选了上级 → 补建 belongs_to 关系（失败不阻塞跳转，toast 提示后可在详情页重设）
@@ -428,11 +447,11 @@ export default function EntityList({ type }: { type: string }) {
             <Input
               value={firstValue}
               onChange={(e) => setFirstValue(e.target.value)}
-              placeholder={`${firstField.label}（选填）`}
+              placeholder={firstField.input === "tags" ? `${firstField.label}（逗号分隔，如：势力,宗门）` : `${firstField.label}（选填）`}
               disabled={createSubmitting}
               aria-label={firstField.label}
               list={`entity-create-first-${entityType}`}
-              className="w-40"
+              className={firstField.input === "tags" ? "w-56" : "w-40"}
             />
             ))}
           <SuggestionDatalist id={`entity-create-first-${entityType}`} options={createFirstSuggestions} />

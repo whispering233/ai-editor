@@ -49,7 +49,8 @@ export function detailFieldsForType(type: EntityType): DetailFieldConfig[] {
     case "setting":
       return [
         { key: "description", label: "描述", control: "textarea" },
-        { key: "rules", label: "规则/标签", control: "tags" },
+        // K1（2026-08 用户复核）：rules 语义 = 分类标签——label 明确为「标签」
+        { key: "rules", label: "标签", control: "tags" },
       ];
     case "location":
       return [

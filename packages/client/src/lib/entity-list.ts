@@ -64,19 +64,19 @@ export function summaryCellText(type: EntityType, key: string, value: unknown): 
   return String(value);
 }
 
-/** 创建对话框首字段配置（原型「name 必填 + 该类型首字段，如 character 的 role」） */
+/** 创建行首字段配置（原型「name 必填 + 该类型首字段，如 character 的 role」） */
 export interface CreateFirstFieldConfig {
   key: string;
   label: string;
-  /** text = 自由输入；select = 枚举下拉（options 给出） */
-  input: "text" | "select";
+  /** text = 自由输入；select = 枚举下拉（options 给出）；tags = 逗号分隔多值标签（K1，决策 31） */
+  input: "text" | "select" | "tags";
   options?: string[];
 }
 
 export const CREATE_FIRST_FIELD: Record<EntityType, CreateFirstFieldConfig> = {
   character: { key: "role", label: "角色定位", input: "text" },
-  // 决策 31（2026-08）：设定分类统一为 rules 标签，新建行仅名称（标签在详情页维护）
-  setting: { key: "", label: "", input: "text" },
+  // K1（2026-08 用户复核，决策 31）：设定分类由 rules 标签承接——新建行直接打标签（逗号分隔多值）
+  setting: { key: "rules", label: "标签", input: "tags" },
   location: { key: "type", label: "地点类型", input: "text" },
   // hook.status 是受控枚举（planted → progressing → resolved / abandoned，doc/database/hooks.md）
   hook: {
