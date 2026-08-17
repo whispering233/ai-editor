@@ -334,7 +334,7 @@ export default function EntityList({ type }: { type: string }) {
             onKeyDown={(e) => {
               if (e.key === "Escape") cancelCreateRow();
             }}
-            placeholder={`名称（如：${entityType === "character" ? "张三" : "示例名称"}）`}
+            placeholder={entityType === "character" ? "名称（如：张三）" : "名称"}
             maxLength={100}
             disabled={createSubmitting}
             autoFocus
