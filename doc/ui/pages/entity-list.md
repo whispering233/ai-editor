@@ -43,7 +43,7 @@
 - **排序**：`sort`（name / created_at / updated_at）× `order`（asc / desc）下拉。
 - **标签筛选（决策 31，批次五 J3，仅设定）**：排序行旁「标签 ▾」下拉（聚合既有 `rules` 标签 + 全部），选后 `GET /entity/setting?tag=<标签>` 与服务端组合过滤（走 db `matchDataFilters.tags` 内部管道，`setting` 类型路由到 `data.rules`），与搜索/排序/分页组合；切换类型/tab 重置。
 - **分页**：limit 固定 20（MVP）；前端按页码换算 `offset` 提交，用返回的 `total` 算总页数。
-- **新建**：列表首行内联编辑行（UX4：`name` 必填 + 该类型首字段，如 character 的 `role`；字段配置复用 `CREATE_FIRST_FIELD`）→ `POST /entity/:type` → 成功跳详情页。**setting 类型额外提供「上级设定（选填）」（决策 30，I3）**：弹层搜索选择器（Popover 轻量弹层 + 防抖搜索，候选 = `listEntities(setting)`）——选中父设定后创建实体成功再补 `POST /relation`（belongs_to，source=新设定 → target=父设定；关系失败不阻塞创建，toast 提示「已创建但未挂上级，可进详情页修改」）。
+- **新建**：列表首行内联编辑行（UX4：`name` 必填 + 该类型首字段，如 character 的 `role`；字段配置复用 `CREATE_FIRST_FIELD`）→ `POST /entity/:type` → **创建后留在列表**（2026-08 用户反馈：不自动跳详情页——关行 + 刷新列表让新项按排序出现，需要进详情点行进入）。**setting 类型额外提供「上级设定（选填）」（决策 30，I3）**：弹层搜索选择器（Popover 轻量弹层 + 防抖搜索，候选 = `listEntities(setting)`）——选中父设定后创建实体成功再补 `POST /relation`（belongs_to，source=新设定 → target=父设定；关系失败不阻塞创建，toast 提示「已创建但未挂上级，可进详情页修改」）。
 - **行点击** → `#/entities/:type/:id`。
 
 ## 状态

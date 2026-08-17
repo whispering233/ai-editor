@@ -9,7 +9,7 @@
 //   「+ 新建」变「+ 建立关联」打开共用 CreateRelationDialog（列表模式，源可选）
 // 「+ 新建」按钮（列表头/空态两个入口）→ 列表首行内联编辑行（UX4：name + 该类型首字段——
 //   hook 的 status 下拉、其余文本；字段配置复用 lib/entity-list.ts CREATE_FIRST_FIELD；
-//   提交成功跳详情页语义保留，失败内联错误不关行）
+//   提交成功留在列表（2026-08 用户反馈：不自动跳详情），失败内联错误不关行）
 // 软删：服务端默认过滤（决策 12 修订）；回收站入口 #/trash 由 S4 卡实现，本卡不提供入口
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
@@ -232,7 +232,7 @@ export default function EntityList({ type }: { type: string }) {
     setCreateError(null);
   }
 
-  /** 行内新建提交：POST → toast → 跳详情页（原型「成功跳详情页」；失败内联错误不关行） */
+  /** 行内新建提交：POST → toast → 留在列表刷新（2026-08 用户反馈：不自动跳详情页）；失败内联错误不关行 */
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
     // name 必填（服务端 1-100 校验；前端先拦空值）
@@ -260,7 +260,7 @@ export default function EntityList({ type }: { type: string }) {
       }
       const res = await createEntity(entityType, { name, data });
       useUiStore.getState().showToast(`已创建${TYPE_LABEL[entityType]}《${name}》`);
-      // 决策 30（I3b）：新建设定选了上级 → 补建 belongs_to 关系（失败不阻塞跳转，toast 提示后可在详情页重设）
+      // 决策 30（I3b）：新建设定选了上级 → 补建 belongs_to 关系（失败不阻塞，toast 提示后可在详情页重设）
       if (entityType === "setting" && createParentId) {
         try {
           await createRelation({
@@ -277,8 +277,10 @@ export default function EntityList({ type }: { type: string }) {
           );
         }
       }
+      // 创建后留在列表（2026-08 用户反馈：不自动跳详情页——打断性行为；关行 + 刷新列表
+      // 让新项按排序出现在当前视图，需要进详情可点行进入）
       setCreateOpen(false);
-      navigate(`/entities/${entityType}/${res.id}`);
+      setReloadTick((t) => t + 1);
     } catch (err) {
       setCreateError(err instanceof ApiError ? err.message : "创建失败，请重试");
     } finally {
@@ -407,7 +409,7 @@ export default function EntityList({ type }: { type: string }) {
       </div>
 
       {/* 行内新建（UX4）：列表首行内联编辑——name + 该类型首字段（hook 的 status 下拉，其余文本；
-          字段配置复用 lib/entity-list.ts CREATE_FIRST_FIELD）；回车/「创建」提交（成功跳详情页），
+          字段配置复用 lib/entity-list.ts CREATE_FIRST_FIELD）；回车/「创建」提交（成功留在列表刷新），
           Esc/「取消」关闭，失败内联错误不关行（可修正重试） */}
       {createOpen && (
         <form id="create-entity-row" onSubmit={handleCreate} className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-border bg-card px-3 py-2">
