@@ -17,7 +17,7 @@ import { useEffect, useState } from "react";
 import type { DragEvent, KeyboardEvent, ReactNode } from "react";
 import { formatTimestamp } from "@whispering233/ai-editor-shared";
 import type { OutlineNode } from "@whispering233/ai-editor-shared";
-import { BookOpen, Trash2 } from "lucide-react";
+import { Eye, Trash2 } from "lucide-react";
 import { CHILD_TYPE, TYPE_LABEL } from "../components/outline/dialogs";
 import { NodeHookMarkBadge } from "../components/outline/node-hook-badge";
 import { Button } from "@/components/ui/button";
@@ -684,7 +684,7 @@ export default function Outline() {
                 aria-label="详情"
                 onClick={() => navigate(`/outline/${node.id}`)}
               >
-                <BookOpen className="size-3.5" />
+                <Eye className="size-3.5" />
               </button>
               <button
                 type="button"

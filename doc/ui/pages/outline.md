@@ -27,7 +27,7 @@
 - **第一行**：`[折叠箭头] [类型徽标 卷/章/场] [标题（点击就地编辑）] [＋ 就地新建] [详情图标] [回收站图标] [当前位置徽标] [更新于]`
 - **第二行**：摘要（缩进对齐标题下方，`text-xs text-muted-foreground`；**默认显示、为空不渲染**、点击可就地编辑，编辑态渲染输入行）。
 
-> **操作区布局（S13.1 修订 + H2）**：行尾操作**直接平铺**（无 ⋯ 菜单）——＋（scene 行无）/ 详情（BookOpen 图标，跳 `#/outline/:nodeId`）/ 移入回收站（Trash2 图标，直接软删，不弹确认）；顺序固定 ＋ → 详情 → 回收站 → 当前位置徽标 → 时间戳，**紧凑跟随节点内容**（不推远、不两端对齐）。
+> **操作区布局（S13.1 修订 + H2 + 批次四 I2）**：行尾操作**直接平铺**（无 ⋯ 菜单）——＋（scene 行无）/ 详情（Eye 图标，跳 `#/outline/:nodeId`；I2 起不用 BookOpen——详情入口统一视觉语义）/ 移入回收站（Trash2 图标，直接软删，不弹确认）；顺序固定 ＋ → 详情 → 回收站 → 当前位置徽标 → 时间戳，**紧凑跟随节点内容**（不推远、不两端对齐）。
 
 - 整块（两行）可**拖拽**（编辑态除外）；标题/摘要点击进入行内编辑（交互同 S2.4）。
 
@@ -65,7 +65,7 @@
 
 ### 详情（S12.2）与软删
 
-- 行尾**详情图标**（BookOpen）→ `#/outline/:nodeId` 节点详情页（变更记录列表 + 结构化 data 表单 + 相关实体）。
+- 行尾**详情图标**（Eye，批次四 I2：原 BookOpen 去除）→ `#/outline/:nodeId` 节点详情页（变更记录列表 + 结构化 data 表单 + 相关实体）。
 - 行尾**回收站图标**（Trash2）→ **直接软删**（H2：不弹确认）：`DELETE /outline/:nodeId` 响应 `cascaded.{ children, relations, deltas }` → 行消失 + toast「已移入回收站（含 N 个子节点）」。
 
 ### 当前位置（S13.1/S13.2 修订）
@@ -75,7 +75,7 @@
 
 ### 变更记录（节点触发的 Delta，S5.4）
 
-- **入口（S13.1 修订）**：行尾**详情图标**（BookOpen）→ `#/outline/:nodeId` 节点详情页；变更记录列表在详情页「变更记录」区块展示（行内展开面板已随 S12.2 详情页落地移除）。
+- **入口（S13.1 修订 + I2）**：行尾**详情图标**（Eye）→ `#/outline/:nodeId` 节点详情页；变更记录列表在详情页「变更记录」区块展示（行内展开面板已随 S12.2 详情页落地移除）。
 - **数据**：`GET /api/v1/delta/node/:nodeId` → `{ nodeId, deltas: DeltaRecord[] }`（客户端按 `order` 升序兜底排序）。
 - **行结构**：主行 = `description`（主文案）+ 创建时间（`formatTimestamp`）；次行 = 目标徽标（`targetType` 中文 + `targetName ?? targetId`）+ changes 紧凑 chips（`lib/delta.ts describeChange`：set=`field = to`、update=`field from → to`、add=`field +value`、remove=`field -value`；chip 底色 `bg-muted`）。
 - **空态**：该节点没有变更记录（轻量文案，不打断树操作）。

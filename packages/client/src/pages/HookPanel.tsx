@@ -16,7 +16,7 @@ import { useEffect, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { formatTimestamp, HOOK_CATEGORIES } from "@whispering233/ai-editor-shared";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
-import { ArrowUp, BookOpen, Check, CheckCircle2, Circle, Pencil, Trash2, X } from "lucide-react";
+import { ArrowUp, Check, CheckCircle2, Circle, Eye, Pencil, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -709,7 +709,7 @@ function HookGroupSection({
                       aria-label={`${hook.name} 详情`}
                       onClick={() => onDetail(hook)}
                     >
-                      <BookOpen className="size-3.5" />
+                      <Eye className="size-3.5" />
                     </Button>
                     <Button
                       variant="ghost"
