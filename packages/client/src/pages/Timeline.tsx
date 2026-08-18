@@ -24,8 +24,16 @@ import type { FormEvent } from "react";
 import { ListOrdered } from "lucide-react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { errorBannerClass } from "@/lib/styles";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   ApiError,
   CLIENT_NETWORK_ERROR,
@@ -71,8 +79,7 @@ const EMPTY_FORM: EventForm = { name: "", description: "", tagsInput: "" };
 
 /** 软删目标（H1：事件与时间点共用同一处理函数，kind 决定 DELETE 实体类型） */
 type DeleteTarget =
-  | { kind: "event"; entity: EntitySummary }
-  | { kind: "timepoint"; entity: EntitySummary };
+  { kind: "event"; entity: EntitySummary } | { kind: "timepoint"; entity: EntitySummary };
 
 export default function Timeline() {
   // 时间点 / 事件列表（双实体，均按 sort_order 升序）
@@ -248,10 +255,12 @@ export default function Timeline() {
         try {
           await createRelation(buildOccursAtRelationBody(createTimepointId, res.id));
         } catch (relErr) {
-          useUiStore.getState().showToast(
-            `已创建事件《${name}》，但挂载到时间点失败：${relErr instanceof ApiError ? relErr.message : "未知错误"}`,
-            "error",
-          );
+          useUiStore
+            .getState()
+            .showToast(
+              `已创建事件《${name}》，但挂载到时间点失败：${relErr instanceof ApiError ? relErr.message : "未知错误"}`,
+              "error",
+            );
           setCreateOpen(false);
           setCreateForm(EMPTY_FORM);
           setCreateTimepointId(null);
@@ -271,10 +280,12 @@ export default function Timeline() {
             relation_type: "occurs_in",
           });
         } catch (relErr) {
-          useUiStore.getState().showToast(
-            `已创建事件《${name}》，但节点关联失败：${relErr instanceof ApiError ? relErr.message : "未知错误"}`,
-            "error",
-          );
+          useUiStore
+            .getState()
+            .showToast(
+              `已创建事件《${name}》，但节点关联失败：${relErr instanceof ApiError ? relErr.message : "未知错误"}`,
+              "error",
+            );
           setCreateOpen(false);
           setCreateForm(EMPTY_FORM);
           setCreateTimepointId(null);
@@ -347,15 +358,16 @@ export default function Timeline() {
       const parts: string[] = [];
       if (res.cascaded.relations > 0) parts.push(`${res.cascaded.relations} 条关联`);
       if (res.cascaded.deltas > 0) parts.push(`${res.cascaded.deltas} 条变更记录`);
-      useUiStore.getState().showToast(
-        `已移入回收站，可随时还原${parts.length > 0 ? `（含 ${parts.join("、")}）` : ""}`,
-      );
+      useUiStore
+        .getState()
+        .showToast(
+          `已移入回收站，可随时还原${parts.length > 0 ? `（含 ${parts.join("、")}）` : ""}`,
+        );
       setReloadTick((t) => t + 1);
     } catch (err) {
-      useUiStore.getState().showToast(
-        err instanceof ApiError ? err.message : "删除失败，请重试",
-        "error",
-      );
+      useUiStore
+        .getState()
+        .showToast(err instanceof ApiError ? err.message : "删除失败，请重试", "error");
     }
   }
 
@@ -367,10 +379,12 @@ export default function Timeline() {
       await moveEntityTimepoint(id, { order });
       useUiStore.getState().showToast("已调整时间点顺序");
     } catch (err) {
-      useUiStore.getState().showToast(
-        err instanceof ApiError ? `排序失败：${err.message}` : "排序失败，请重试",
-        "error",
-      );
+      useUiStore
+        .getState()
+        .showToast(
+          err instanceof ApiError ? `排序失败：${err.message}` : "排序失败，请重试",
+          "error",
+        );
     } finally {
       setReloadTick((t) => t + 1);
     }
@@ -382,10 +396,12 @@ export default function Timeline() {
       await moveEntityEvent(id, { order });
       useUiStore.getState().showToast("已调整事件顺序");
     } catch (err) {
-      useUiStore.getState().showToast(
-        err instanceof ApiError ? `排序失败：${err.message}` : "排序失败，请重试",
-        "error",
-      );
+      useUiStore
+        .getState()
+        .showToast(
+          err instanceof ApiError ? `排序失败：${err.message}` : "排序失败，请重试",
+          "error",
+        );
     } finally {
       setReloadTick((t) => t + 1);
     }
@@ -395,12 +411,16 @@ export default function Timeline() {
   async function handleMoveEventTo(id: string, timepointId: string | null, order: number) {
     try {
       await moveEntityEventTo(id, { timepoint_id: timepointId, order });
-      useUiStore.getState().showToast(timepointId === null ? "已移至未挂载区" : "已调整事件挂载与顺序");
+      useUiStore
+        .getState()
+        .showToast(timepointId === null ? "已移至未挂载区" : "已调整事件挂载与顺序");
     } catch (err) {
-      useUiStore.getState().showToast(
-        err instanceof ApiError ? `操作失败：${err.message}` : "操作失败，请重试",
-        "error",
-      );
+      useUiStore
+        .getState()
+        .showToast(
+          err instanceof ApiError ? `操作失败：${err.message}` : "操作失败，请重试",
+          "error",
+        );
     } finally {
       setReloadTick((t) => t + 1);
     }
@@ -413,10 +433,12 @@ export default function Timeline() {
       useUiStore.getState().showToast("已重命名");
       setReloadTick((t) => t + 1);
     } catch (err) {
-      useUiStore.getState().showToast(
-        err instanceof ApiError ? `重命名失败：${err.message}` : "重命名失败，请重试",
-        "error",
-      );
+      useUiStore
+        .getState()
+        .showToast(
+          err instanceof ApiError ? `重命名失败：${err.message}` : "重命名失败，请重试",
+          "error",
+        );
     }
   }
 
@@ -449,7 +471,9 @@ export default function Timeline() {
    */
   function handleAiSort() {
     if (config === null) return;
-    sendMessage("请按时间标签的语义先后顺序对时间轴时间点排序，并使用 propose_reorder_timepoints 工具生成排序提案。");
+    sendMessage(
+      "请按时间标签的语义先后顺序对时间轴时间点排序，并使用 propose_reorder_timepoints 工具生成排序提案。",
+    );
   }
 
   // ============ 渲染 ============
@@ -483,7 +507,10 @@ export default function Timeline() {
         <h1 className="text-xl font-semibold">时间轴</h1>
         {/* AI 排序：注入聊天预设指令（F9）；无项目禁用——外层 span 承载 title 提示
             （按钮 disabled 态 pointer-events-none 吞掉 hover，原生 title 不弹） */}
-        <span className={cn("ml-auto", !config && "cursor-not-allowed")} title={config ? undefined : "请先打开项目"}>
+        <span
+          className={cn("ml-auto", !config && "cursor-not-allowed")}
+          title={config ? undefined : "请先打开项目"}
+        >
           <Button
             type="button"
             variant="outline"
@@ -543,9 +570,16 @@ export default function Timeline() {
       <div className="min-h-0 flex-1 overflow-y-auto">
         {/* 错误横幅（时间点/事件列表请求失败 → 重试全部） */}
         {error !== null && (
-          <div className="mb-3 flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {error === CLIENT_NETWORK_ERROR ? "无法连接服务，请确认 ai-editor 服务已启动。" : "时间轴加载失败，请重试。"}
-            <Button variant="outline" className="ml-auto h-7 px-2 text-xs" type="button" onClick={() => setReloadTick((t) => t + 1)}>
+          <div className={cn(errorBannerClass, "mb-3 flex items-center gap-2")}>
+            {error === CLIENT_NETWORK_ERROR
+              ? "无法连接服务，请确认 ai-editor 服务已启动。"
+              : "时间轴加载失败，请重试。"}
+            <Button
+              variant="outline"
+              className="ml-auto h-7 px-2 text-xs"
+              type="button"
+              onClick={() => setReloadTick((t) => t + 1)}
+            >
               重试
             </Button>
           </div>
@@ -555,7 +589,10 @@ export default function Timeline() {
         {loading && (timepoints === null || items === null) && error === null && (
           <div className="space-y-2">
             {Array.from({ length: 4 }, (_, i) => (
-              <div key={i} className="flex items-center gap-3 rounded-md border border-border px-3 py-2.5">
+              <div
+                key={i}
+                className="flex items-center gap-3 rounded-md border border-border px-3 py-2.5"
+              >
                 <div className="h-4 w-4 animate-pulse rounded bg-muted" />
                 <div className="h-4 w-1/3 animate-pulse rounded bg-muted" />
                 <div className="h-3 w-20 animate-pulse rounded bg-muted" />
@@ -571,14 +608,15 @@ export default function Timeline() {
           items !== null &&
           timepoints.length === 0 &&
           items.length === 0 && (
-            <div className="rounded-lg border border-dashed border-border px-6 py-12 text-center">
-              <p className="text-sm text-muted-foreground">
-                还没有时间点。先定义一个时间标签点（如「第二天黄昏」），再在其中挂载事件。
-              </p>
-              <Button className="mt-4" type="button" onClick={() => setTpCreateOpen(true)}>
-                + 新建时间点
-              </Button>
-            </div>
+            <EmptyState
+              action={
+                <Button type="button" onClick={() => setTpCreateOpen(true)}>
+                  + 新建时间点
+                </Button>
+              }
+            >
+              还没有时间点。先定义一个时间标签点（如「第二天黄昏」），再在其中挂载事件。
+            </EmptyState>
           )}
 
         {/* 时间轴（G2 双实体：时间点组块 + 事件挂载 + 未挂载兜底区 + 双轨拖拽；
@@ -611,11 +649,13 @@ export default function Timeline() {
           )}
 
         {/* 标签筛选无匹配（timeline.md 状态：「没有匹配「{tag}」的事件」） */}
-        {!loading && items !== null && items.length > 0 && visible !== null && visible.length === 0 && (
-          <div className="rounded-lg border border-dashed border-border px-6 py-8 text-center text-sm text-muted-foreground">
-            没有匹配「{activeTag}」的事件
-          </div>
-        )}
+        {!loading &&
+          items !== null &&
+          items.length > 0 &&
+          visible !== null &&
+          visible.length === 0 && (
+            <EmptyState padding="sm">没有匹配「{activeTag}」的事件</EmptyState>
+          )}
       </div>
 
       {/* 新建时间点对话框（G2：name = 时间标签文本 → POST /entity/timepoint） */}
@@ -624,7 +664,11 @@ export default function Timeline() {
           <DialogHeader>
             <DialogTitle>新建时间点</DialogTitle>
           </DialogHeader>
-          <form id="create-timepoint-form" onSubmit={handleCreateTimepoint} className="flex flex-col gap-3">
+          <form
+            id="create-timepoint-form"
+            onSubmit={handleCreateTimepoint}
+            className="flex flex-col gap-3"
+          >
             <div>
               <p className="mb-1 text-sm font-medium text-foreground">名称（必填，时间标签文本）</p>
               <Input
@@ -638,7 +682,12 @@ export default function Timeline() {
             {tpError && <p className="text-sm text-destructive">{tpError}</p>}
           </form>
           <DialogFooter>
-            <Button variant="outline" type="button" onClick={() => setTpCreateOpen(false)} disabled={tpSubmitting}>
+            <Button
+              variant="outline"
+              type="button"
+              onClick={() => setTpCreateOpen(false)}
+              disabled={tpSubmitting}
+            >
               取消
             </Button>
             <Button type="submit" form="create-timepoint-form" disabled={tpSubmitting}>
@@ -654,7 +703,9 @@ export default function Timeline() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {createTimepointId !== null ? "在此时间点新建事件（自动挂载）" : "新建事件（不挂载，入未挂载区）"}
+              {createTimepointId !== null
+                ? "在此时间点新建事件（自动挂载）"
+                : "新建事件（不挂载，入未挂载区）"}
             </DialogTitle>
           </DialogHeader>
           <form id="create-event-form" onSubmit={handleCreate} className="flex flex-col gap-3">
@@ -693,12 +744,21 @@ export default function Timeline() {
             </div>
             <div>
               <p className="mb-1 text-sm font-medium text-foreground">关联大纲节点（选填，可空）</p>
-              <OutlineNodeSelect value={createNodeId} onChange={setCreateNodeId} nodeOptions={nodeOptions} />
+              <OutlineNodeSelect
+                value={createNodeId}
+                onChange={setCreateNodeId}
+                nodeOptions={nodeOptions}
+              />
             </div>
             {createError && <p className="text-sm text-destructive">{createError}</p>}
           </form>
           <DialogFooter>
-            <Button variant="outline" type="button" onClick={() => setCreateOpen(false)} disabled={createSubmitting}>
+            <Button
+              variant="outline"
+              type="button"
+              onClick={() => setCreateOpen(false)}
+              disabled={createSubmitting}
+            >
               取消
             </Button>
             <Button type="submit" form="create-event-form" disabled={createSubmitting}>
@@ -728,7 +788,9 @@ export default function Timeline() {
                 <p className="mb-1 text-sm font-medium text-foreground">描述</p>
                 <textarea
                   value={editForm.description}
-                  onChange={(e) => setEditForm((f) => (f ? { ...f, description: e.target.value } : f))}
+                  onChange={(e) =>
+                    setEditForm((f) => (f ? { ...f, description: e.target.value } : f))
+                  }
                   rows={2}
                   className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                 />
@@ -737,7 +799,9 @@ export default function Timeline() {
                 <p className="mb-1 text-sm font-medium text-foreground">标签</p>
                 <Input
                   value={editForm.tagsInput}
-                  onChange={(e) => setEditForm((f) => (f ? { ...f, tagsInput: e.target.value } : f))}
+                  onChange={(e) =>
+                    setEditForm((f) => (f ? { ...f, tagsInput: e.target.value } : f))
+                  }
                   placeholder="如：主线，战争（逗号/回车分隔）"
                 />
                 {/* 标签输入建议（F8：点选即填，替换最后一段 + 追加逗号；无匹配不显示） */}
@@ -750,7 +814,12 @@ export default function Timeline() {
               {editError && <p className="text-sm text-destructive">{editError}</p>}
             </div>
             <DialogFooter>
-              <Button variant="outline" type="button" onClick={() => setEditTarget(null)} disabled={editSaving}>
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() => setEditTarget(null)}
+                disabled={editSaving}
+              >
                 取消
               </Button>
               <Button type="button" onClick={() => void handleEditSave()} disabled={editSaving}>
@@ -760,7 +829,6 @@ export default function Timeline() {
           </DialogContent>
         </Dialog>
       )}
-
     </section>
   );
 }

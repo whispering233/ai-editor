@@ -28,6 +28,8 @@ import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerE
 import { Info, Minus, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { EmptyState } from "@/components/ui/empty-state";
+import { errorBannerClass, skeletonClass } from "@/lib/styles";
 import {
   ApiError,
   CLIENT_NETWORK_ERROR,
@@ -163,7 +165,11 @@ export default function Canvas() {
     if (pid === null) return;
     const seq = ++edgesSeq.current;
     try {
-      const res = await listRelations({ source_type: "outline_node", relation_type: "plot_edge", depth: 1 });
+      const res = await listRelations({
+        source_type: "outline_node",
+        relation_type: "plot_edge",
+        depth: 1,
+      });
       if (seq !== edgesSeq.current) return;
       setEdges(parsePlotEdges(res.relations));
       setEdgeError(null);
@@ -308,38 +314,48 @@ export default function Canvas() {
       height: Math.round(vpRect.height),
     };
     setViewportPx((prev) =>
-      prev !== null && prev.x === next.x && prev.y === next.y && prev.width === next.width && prev.height === next.height
+      prev !== null &&
+      prev.x === next.x &&
+      prev.y === next.y &&
+      prev.width === next.width &&
+      prev.height === next.height
         ? prev
         : next,
     );
   }, []);
 
-  const setViewportRef = useCallback((el: HTMLDivElement | null) => {
-    viewportRef.current = el;
-    wheelCleanup.current?.();
-    wheelCleanup.current = null;
-    viewportRoCleanup.current?.();
-    viewportRoCleanup.current = null;
-    if (el === null) return;
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      setZoom((z) => clampZoom(Math.round((z + (e.deltaY < 0 ? 0.1 : -0.1)) * 10) / 10));
-    };
-    el.addEventListener("wheel", onWheel, { passive: false });
-    wheelCleanup.current = () => el.removeEventListener("wheel", onWheel);
-    // 小地图视口框：挂载初始同步 + 容器尺寸变化（滚动由 viewport div onScroll 承担）
-    syncViewport();
-    const ro = new ResizeObserver(() => syncViewport());
-    ro.observe(el);
-    viewportRoCleanup.current = () => ro.disconnect();
-  }, [syncViewport]);
+  const setViewportRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      viewportRef.current = el;
+      wheelCleanup.current?.();
+      wheelCleanup.current = null;
+      viewportRoCleanup.current?.();
+      viewportRoCleanup.current = null;
+      if (el === null) return;
+      const onWheel = (e: WheelEvent) => {
+        e.preventDefault();
+        setZoom((z) => clampZoom(Math.round((z + (e.deltaY < 0 ? 0.1 : -0.1)) * 10) / 10));
+      };
+      el.addEventListener("wheel", onWheel, { passive: false });
+      wheelCleanup.current = () => el.removeEventListener("wheel", onWheel);
+      // 小地图视口框：挂载初始同步 + 容器尺寸变化（滚动由 viewport div onScroll 承担）
+      syncViewport();
+      const ro = new ResizeObserver(() => syncViewport());
+      ro.observe(el);
+      viewportRoCleanup.current = () => ro.disconnect();
+    },
+    [syncViewport],
+  );
   // 页面卸载清理（wheelCleanup/RO 挂接于视口 div，页面切走/卸载时移除）
-  useEffect(() => () => {
-    wheelCleanup.current?.();
-    wheelCleanup.current = null;
-    viewportRoCleanup.current?.();
-    viewportRoCleanup.current = null;
-  }, []);
+  useEffect(
+    () => () => {
+      wheelCleanup.current?.();
+      wheelCleanup.current = null;
+      viewportRoCleanup.current?.();
+      viewportRoCleanup.current = null;
+    },
+    [],
+  );
 
   // 连线创建中按 Esc 取消
   useEffect(() => {
@@ -355,7 +371,10 @@ export default function Canvas() {
 
   const visibleNodes = sceneOnly ? filterSceneNodes(nodes) : nodes;
   const visibleIds = useMemo(() => new Set(visibleNodes.map((n) => n.id)), [visibleNodes]);
-  const visibleEdges = useMemo(() => filterVisibleEdges(edges ?? [], visibleIds), [edges, visibleIds]);
+  const visibleEdges = useMemo(
+    () => filterVisibleEdges(edges ?? [], visibleIds),
+    [edges, visibleIds],
+  );
 
   // hover 陈旧态清理（oracle 审查）：hover 卷/章时切换「仅场景」或节点被外部刷新删除 →
   // 卡片从光标下卸载不触发 mouseleave → hoverPath 残留、全部可见节点/边停留 0.2 降透明。
@@ -375,9 +394,24 @@ export default function Canvas() {
       if (!sPos || !tPos || !sNode || !tNode) continue;
       const sCenter = nodeCenter(sPos, sNode.type);
       const tCenter = nodeCenter(tPos, tNode.type);
-      const from = edgeBorderPoint(sCenter, tCenter, CANVAS_CARD_W[sNode.type], CANVAS_CARD_H[sNode.type]);
-      const to = edgeBorderPoint(tCenter, sCenter, CANVAS_CARD_W[tNode.type], CANVAS_CARD_H[tNode.type]);
-      out.push({ edge, d: edgePath(from, to), mid: edgeMidpoint(from, to), targetType: tNode.type });
+      const from = edgeBorderPoint(
+        sCenter,
+        tCenter,
+        CANVAS_CARD_W[sNode.type],
+        CANVAS_CARD_H[sNode.type],
+      );
+      const to = edgeBorderPoint(
+        tCenter,
+        sCenter,
+        CANVAS_CARD_W[tNode.type],
+        CANVAS_CARD_H[tNode.type],
+      );
+      out.push({
+        edge,
+        d: edgePath(from, to),
+        mid: edgeMidpoint(from, to),
+        targetType: tNode.type,
+      });
     }
     return out;
   }, [visibleEdges, positions, nodesById]);
@@ -388,7 +422,10 @@ export default function Canvas() {
    * 避免非路径节点/边全部降透明、看不清连线目标（canvas.md「创建连线」第 4 条）。
    */
   const hoverPath = useMemo(
-    () => (hoveredNodeId !== null && createFrom === null ? dfsForwardPath(hoveredNodeId, visibleEdges) : null),
+    () =>
+      hoveredNodeId !== null && createFrom === null
+        ? dfsForwardPath(hoveredNodeId, visibleEdges)
+        : null,
     [hoveredNodeId, createFrom, visibleEdges],
   );
 
@@ -534,7 +571,9 @@ export default function Canvas() {
         await reloadEdges();
         return;
       }
-      useUiStore.getState().showToast(err instanceof ApiError ? err.message : "创建失败，请重试", "error");
+      useUiStore
+        .getState()
+        .showToast(err instanceof ApiError ? err.message : "创建失败，请重试", "error");
     }
   }
 
@@ -559,7 +598,9 @@ export default function Canvas() {
       useUiStore.getState().showToast("已保存标签");
       await reloadEdges();
     } catch (err) {
-      useUiStore.getState().showToast(err instanceof ApiError ? err.message : "保存失败，请重试", "error");
+      useUiStore
+        .getState()
+        .showToast(err instanceof ApiError ? err.message : "保存失败，请重试", "error");
     } finally {
       setLabelSubmitting(false);
     }
@@ -604,10 +645,9 @@ export default function Canvas() {
     } catch (err) {
       const code = err instanceof ApiError ? err.code : null;
       const text = describeCanvasEdgeError(code);
-      useUiStore.getState().showToast(
-        text ?? (err instanceof ApiError ? err.message : "删除失败，请重试"),
-        "error",
-      );
+      useUiStore
+        .getState()
+        .showToast(text ?? (err instanceof ApiError ? err.message : "删除失败，请重试"), "error");
       // 404 残留（连线已被删除/物理清理）：清除选中并重拉
       if (code === "RELATION_NOT_FOUND") {
         setSelectedEdgeId(null);
@@ -632,7 +672,12 @@ export default function Canvas() {
       {/* 工具栏（canvas.md 线框：自动布局 | 缩放 | 显示切换 | 画布说明） */}
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="mr-auto font-serif text-xl font-medium">画布</h1>
-        <Button variant="outline" type="button" onClick={handleRelayout} disabled={nodes.length === 0}>
+        <Button
+          variant="outline"
+          type="button"
+          onClick={handleRelayout}
+          disabled={nodes.length === 0}
+        >
           重新布局
         </Button>
         <div className="flex items-center gap-1.5">
@@ -646,7 +691,7 @@ export default function Canvas() {
           >
             <Minus />
           </Button>
-          <span className="w-12 text-center text-sm tabular-nums text-muted-foreground">
+          <span className="w-12 text-center text-sm text-muted-foreground tabular-nums">
             {Math.round(zoom * 100)}%
           </span>
           <Button
@@ -661,7 +706,11 @@ export default function Canvas() {
           </Button>
         </div>
         {/* 显示切换（TabBar 药丸分段样式，layout.md §2.2） */}
-        <div className="flex items-center gap-1 rounded-lg bg-secondary/30 p-1" role="group" aria-label="显示模式">
+        <div
+          className="flex items-center gap-1 rounded-lg bg-secondary/30 p-1"
+          role="group"
+          aria-label="显示模式"
+        >
           {([false, true] as const).map((only) => (
             <button
               key={String(only)}
@@ -679,7 +728,13 @@ export default function Canvas() {
             </button>
           ))}
         </div>
-        <Button variant="outline" size="sm" type="button" onClick={() => setShowHint((v) => !v)} aria-expanded={showHint}>
+        <Button
+          variant="outline"
+          size="sm"
+          type="button"
+          onClick={() => setShowHint((v) => !v)}
+          aria-expanded={showHint}
+        >
           <Info />
           画布说明
         </Button>
@@ -689,7 +744,12 @@ export default function Canvas() {
       {showHint && (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           连线与坐标仅用于推演展示，不参与状态计算
-          <button type="button" className="rounded p-0.5 hover:bg-muted hover:text-foreground" aria-label="收起说明" onClick={() => setShowHint(false)}>
+          <button
+            type="button"
+            className="rounded p-0.5 hover:bg-muted hover:text-foreground"
+            aria-label="收起说明"
+            onClick={() => setShowHint(false)}
+          >
             <X className="size-3" />
           </button>
         </p>
@@ -697,9 +757,16 @@ export default function Canvas() {
 
       {/* 连线加载失败：横幅 + 重试（单区块失败不阻塞画布） */}
       {edgeError !== null && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {edgeError === CLIENT_NETWORK_ERROR ? "无法连接服务，请确认 ai-editor 服务已启动。" : "连线加载失败，请重试。"}
-          <Button variant="outline" className="ml-3" type="button" onClick={() => void reloadEdges()}>
+        <div className={cn(errorBannerClass)}>
+          {edgeError === CLIENT_NETWORK_ERROR
+            ? "无法连接服务，请确认 ai-editor 服务已启动。"
+            : "连线加载失败，请重试。"}
+          <Button
+            variant="outline"
+            className="ml-3"
+            type="button"
+            onClick={() => void reloadEdges()}
+          >
             重试
           </Button>
         </div>
@@ -709,7 +776,10 @@ export default function Canvas() {
         /* 未打开项目：引导回首页（同 Outline.tsx 分支） */
         <div className="rounded-md border border-dashed border-border px-6 py-10 text-center">
           <p className="text-sm text-muted-foreground">未打开项目，无法查看画布</p>
-          <a href="#/" className="mt-2 inline-block text-sm text-muted-foreground underline hover:text-foreground">
+          <a
+            href="#/"
+            className="mt-2 inline-block text-sm text-muted-foreground underline hover:text-foreground"
+          >
             回到首页打开或创建书籍
           </a>
         </div>
@@ -718,9 +788,9 @@ export default function Canvas() {
         <div className="flex-1 overflow-hidden rounded-md border border-border bg-muted/20 p-4">
           {Array.from({ length: 3 }, (_, i) => (
             <div key={i} className="mb-4 flex gap-4">
-              <div className="h-24 w-60 animate-pulse rounded-lg bg-muted" />
-              <div className="mt-6 h-24 w-52 animate-pulse rounded-lg bg-muted" />
-              <div className="mt-12 h-20 w-44 animate-pulse rounded-lg bg-muted" />
+              <div className={cn(skeletonClass, "h-24 w-60 rounded-lg")} />
+              <div className={cn(skeletonClass, "mt-6 h-24 w-52 rounded-lg")} />
+              <div className={cn(skeletonClass, "mt-12 h-20 w-44 rounded-lg")} />
             </div>
           ))}
         </div>
@@ -728,26 +798,37 @@ export default function Canvas() {
         /* 大纲加载失败（loadOutline 静默吞错后的兜底呈现） */
         <div className="rounded-md border border-border p-4 text-sm text-muted-foreground">
           大纲加载失败
-          <Button variant="outline" className="ml-3" type="button" onClick={() => setLoadAttempted(false)}>
+          <Button
+            variant="outline"
+            className="ml-3"
+            type="button"
+            onClick={() => setLoadAttempted(false)}
+          >
             重试
           </Button>
         </div>
       ) : outline.children.length === 0 ? (
         /* 空态：大纲无节点 → 引导去大纲页（canvas.md 状态约定） */
-        <div className="rounded-lg border border-dashed border-border px-6 py-12 text-center">
-          <p className="text-sm text-muted-foreground">大纲还是空的，先去搭大纲</p>
-          <Button className="mt-4" type="button" onClick={() => navigate("/outline")}>
-            去大纲
-          </Button>
-        </div>
+        <EmptyState
+          action={
+            <Button type="button" onClick={() => navigate("/outline")}>
+              去大纲
+            </Button>
+          }
+        >
+          大纲还是空的，先去搭大纲
+        </EmptyState>
       ) : visibleNodes.length === 0 ? (
         /* 仅场景模式无场景节点 */
-        <div className="rounded-lg border border-dashed border-border px-6 py-12 text-center">
-          <p className="text-sm text-muted-foreground">当前大纲还没有场景节点</p>
-          <Button variant="outline" className="mt-4" type="button" onClick={() => setSceneOnly(false)}>
-            显示全部节点
-          </Button>
-        </div>
+        <EmptyState
+          action={
+            <Button variant="outline" type="button" onClick={() => setSceneOnly(false)}>
+              显示全部节点
+            </Button>
+          }
+        >
+          当前大纲还没有场景节点
+        </EmptyState>
       ) : (
         /* 画布：滚动视口 + 缩放容器（transform scale，transform-origin 左上——canvas 坐标换算与 zoom 一致） */
         <div
@@ -773,7 +854,7 @@ export default function Canvas() {
           >
             {/* 连线层（SVG 绝对定位铺满内容区；容器 pointer-events-none，路径/热区显式接管点击） */}
             <svg
-              className="pointer-events-none absolute left-0 top-0"
+              className="pointer-events-none absolute top-0 left-0"
               width={contentSize.w}
               height={contentSize.h}
               style={{ overflow: "visible" }}
@@ -866,7 +947,7 @@ export default function Canvas() {
                 <span
                   key={`label-${edge.id}`}
                   className={cn(
-                    "pointer-events-none absolute max-w-44 -translate-x-1/2 -translate-y-1/2 truncate whitespace-nowrap rounded border bg-card px-1.5 py-0.5 text-[10px] text-muted-foreground",
+                    "pointer-events-none absolute max-w-44 -translate-x-1/2 -translate-y-1/2 truncate rounded border bg-card px-1.5 py-0.5 text-[10px] whitespace-nowrap text-muted-foreground",
                     selected && "pointer-events-auto cursor-text",
                   )}
                   style={{
@@ -875,9 +956,13 @@ export default function Canvas() {
                     opacity,
                     // 选中态与连线高亮紫一致（单一来源 EDGE_COLORS.highlight，S10.2）；
                     // 无标签显示占位「+ 标签」，点击进入编辑（UX1）
-                    ...(selected ? { borderColor: EDGE_COLORS.highlight, color: EDGE_COLORS.highlight } : {}),
+                    ...(selected
+                      ? { borderColor: EDGE_COLORS.highlight, color: EDGE_COLORS.highlight }
+                      : {}),
                   }}
-                  title={selected ? (edge.label === undefined ? "添加标签" : "编辑标签") : undefined}
+                  title={
+                    selected ? (edge.label === undefined ? "添加标签" : "编辑标签") : undefined
+                  }
                   onClick={(e) => {
                     e.stopPropagation();
                     startEditLabel(edge);
@@ -930,7 +1015,7 @@ export default function Canvas() {
                   key={node.id}
                   data-canvas-node-id={node.id}
                   className={cn(
-                    "group absolute cursor-grab touch-none select-none rounded-lg border bg-card p-2.5 transition-colors active:cursor-grabbing",
+                    "group absolute cursor-grab touch-none rounded-lg border bg-card p-2.5 transition-colors select-none active:cursor-grabbing",
                     isCreatingSource ? "border-primary ring-2 ring-ring/40" : "border-border",
                     isDragging && "opacity-80",
                   )}
@@ -959,27 +1044,37 @@ export default function Canvas() {
                     <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                       {TYPE_LABEL[node.type]}
                     </span>
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground" title={node.title}>
+                    <span
+                      className="min-w-0 flex-1 truncate text-sm font-medium text-foreground"
+                      title={node.title}
+                    >
                       {node.title}
                     </span>
                     {marks.length > 0 && (
                       <span className="flex shrink-0 items-center gap-0.5">
                         {marks.map((mark) => (
-                          <NodeHookMarkBadge key={`${mark.relationType}-${mark.hookId}`} mark={mark} />
+                          <NodeHookMarkBadge
+                            key={`${mark.relationType}-${mark.hookId}`}
+                            mark={mark}
+                          />
                         ))}
                       </span>
                     )}
                   </div>
                   {/* 摘要（截断两行，可选） */}
                   {node.summary && (
-                    <p className="mt-1 line-clamp-2 text-xs leading-4 text-muted-foreground">{node.summary}</p>
+                    <p className="mt-1 line-clamp-2 text-xs leading-4 text-muted-foreground">
+                      {node.summary}
+                    </p>
                   )}
                   {/* 连线拖出把手（右侧中点；按下拖到目标节点松手 → 创建连线） */}
                   <span
                     data-canvas-handle
                     className={cn(
                       "absolute top-1/2 -right-2 h-4 w-4 -translate-y-1/2 cursor-crosshair rounded-full border bg-card transition-colors",
-                      isCreatingSource ? "border-primary bg-primary/10" : "border-border hover:border-primary hover:bg-accent",
+                      isCreatingSource
+                        ? "border-primary bg-primary/10"
+                        : "border-border hover:border-primary hover:bg-accent",
                     )}
                     title="拖出连线"
                     aria-label="拖出连线"
@@ -997,7 +1092,16 @@ export default function Canvas() {
           <div className="pointer-events-none absolute right-2 bottom-2 z-10 overflow-hidden rounded-md border border-border bg-card/90 shadow-sm">
             <svg width={MINIMAP_SIZE.w} height={MINIMAP_SIZE.h}>
               {minimap.nodeRects.map((r) => (
-                <rect key={r.id} x={r.x} y={r.y} width={r.w} height={r.h} rx={2} fill={EDGE_COLORS[r.type]} opacity={0.85} />
+                <rect
+                  key={r.id}
+                  x={r.x}
+                  y={r.y}
+                  width={r.w}
+                  height={r.h}
+                  rx={2}
+                  fill={EDGE_COLORS[r.type]}
+                  opacity={0.85}
+                />
               ))}
               {minimap.viewportRect !== null && (
                 <rect

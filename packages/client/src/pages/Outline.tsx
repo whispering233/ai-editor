@@ -21,6 +21,8 @@ import { Eye, Trash2 } from "lucide-react";
 import { CHILD_TYPE, TYPE_LABEL } from "../components/outline/dialogs";
 import { NodeHookMarkBadge } from "../components/outline/node-hook-badge";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { errorBannerClass, skeletonClass } from "@/lib/styles";
 import {
   ApiError,
   createOutlineNode,
@@ -324,7 +326,9 @@ export default function Outline() {
     if (!editing || editing.nodeId !== node.id || editing.field !== field || busy) return;
     const value = editingValue;
     const commit =
-      field === "title" ? shouldCommitTitle(node.title, value) : shouldCommitSummary(node.summary, value);
+      field === "title"
+        ? shouldCommitTitle(node.title, value)
+        : shouldCommitSummary(node.summary, value);
     if (!commit) {
       cancelEdit(); // 无变化/空值：直接退出编辑态，不发请求
       return;
@@ -333,7 +337,10 @@ export default function Outline() {
     try {
       // summary 显式提交空串（S13.1 oracle S2：`|| undefined` 会被 JSON.stringify 丢弃导致清空不生效；
       // 服务端 patch.summary !== undefined 即写入，空串真正清除——与 S12.2 详情页语义一致）
-      await updateOutlineNode(node.id, field === "title" ? { title: value.trim() } : { summary: value.trim() });
+      await updateOutlineNode(
+        node.id,
+        field === "title" ? { title: value.trim() } : { summary: value.trim() },
+      );
       cancelEdit();
       useUiStore.getState().showToast("已保存");
       await afterTreeChanged();
@@ -502,7 +509,9 @@ export default function Outline() {
     if (!dragNode || !canMoveTo(dragNode, ROOT_NODE_ID, outline?.children ?? [])) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
-    setDragTarget((prev) => (sameDragTarget(prev, { kind: "root-end" }) ? prev : { kind: "root-end" }));
+    setDragTarget((prev) =>
+      sameDragTarget(prev, { kind: "root-end" }) ? prev : { kind: "root-end" },
+    );
   }
 
   function handleRootDragLeave(e: DragEvent) {
@@ -547,9 +556,9 @@ export default function Outline() {
       if (children > 0) parts.push(`${children} 个子节点`);
       if (relations > 0) parts.push(`${relations} 条关联`);
       if (deltas > 0) parts.push(`${deltas} 条变化记录`);
-      useUiStore.getState().showToast(
-        `已移入回收站${parts.length > 0 ? `（含 ${parts.join("、")}）` : ""}`,
-      );
+      useUiStore
+        .getState()
+        .showToast(`已移入回收站${parts.length > 0 ? `（含 ${parts.join("、")}）` : ""}`);
       await afterTreeChanged();
     } catch (err) {
       if (err instanceof ApiError && err.code === "OUTLINE_NODE_NOT_FOUND") {
@@ -557,10 +566,9 @@ export default function Outline() {
         await afterTreeChanged();
         return;
       }
-      useUiStore.getState().showToast(
-        err instanceof ApiError ? err.message : "删除失败，请重试",
-        "error",
-      );
+      useUiStore
+        .getState()
+        .showToast(err instanceof ApiError ? err.message : "删除失败，请重试", "error");
     }
   }
 
@@ -612,7 +620,7 @@ export default function Outline() {
             className={cn(
               "relative cursor-grab rounded-md px-2 py-1 transition-colors hover:bg-muted/60 active:cursor-grabbing",
               node.id === highlightedNodeId && "bg-accent/40", // 新建成功临时高亮（3s）
-              focused && "bg-accent ring-1 ring-inset ring-ring", // 跨页定位临时高亮（U4，3s 消失）
+              focused && "bg-accent ring-1 ring-ring ring-inset", // 跨页定位临时高亮（U4，3s 消失）
               isDragging && "opacity-50",
             )}
             style={{ paddingLeft: depth * 20 + 8 }}
@@ -701,7 +709,9 @@ export default function Outline() {
                   当前位置
                 </span>
               )}
-              <span className="shrink-0 text-xs text-muted-foreground">{formatTimestamp(node.updatedAt)}</span>
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {formatTimestamp(node.updatedAt)}
+              </span>
             </div>
             {/* 第二行：摘要（缩进对齐标题下方——w-4/w-7 占位与第一行同列；默认显示、空不渲染；点击就地编辑） */}
             {editingSummary || node.summary ? (
@@ -736,9 +746,7 @@ export default function Outline() {
             )}
           </div>
           {/* 子节点递归渲染（折叠态不渲染） */}
-          {hasChildren && !isCollapsed && (
-            <div>{renderNodes(node.children ?? [], depth + 1)}</div>
-          )}
+          {hasChildren && !isCollapsed && <div>{renderNodes(node.children ?? [], depth + 1)}</div>}
           {/* 就地新建输入行（父 children 末尾；父折叠时 startCreate 已自动展开） */}
           {creatingHere && (
             <div
@@ -749,7 +757,13 @@ export default function Outline() {
               <span className="flex h-5 w-7 shrink-0 items-center justify-center rounded bg-muted text-xs text-muted-foreground">
                 {TYPE_LABEL[creatingAt.type]}
               </span>
-              {inlineInput(createValue, setCreateValue, handleCreateKeyDown, cancelCreate, `新${TYPE_LABEL[creatingAt.type]}标题，Enter 创建`)}
+              {inlineInput(
+                createValue,
+                setCreateValue,
+                handleCreateKeyDown,
+                cancelCreate,
+                `新${TYPE_LABEL[creatingAt.type]}标题，Enter 创建`,
+              )}
             </div>
           )}
         </div>
@@ -770,7 +784,12 @@ export default function Outline() {
       <div className="mb-4 flex items-center justify-between gap-4">
         <h1 className="text-xl font-semibold">大纲</h1>
         <div className="flex gap-2">
-          <Button variant="outline" type="button" onClick={toggleAllCollapse} disabled={!outline || outline.children.length === 0}>
+          <Button
+            variant="outline"
+            type="button"
+            onClick={toggleAllCollapse}
+            disabled={!outline || outline.children.length === 0}
+          >
             {collapsed.size > 0 ? "全部展开" : "全部折叠"}
           </Button>
           <Button type="button" onClick={() => startCreate(ROOT_NODE_ID, "volume")}>
@@ -780,34 +799,33 @@ export default function Outline() {
       </div>
 
       {/* 页级错误横幅（layout.md §4.3：destructive token 类） */}
-      {error && (
-        <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error}
-        </div>
-      )}
+      {error && <div className={cn(errorBannerClass, "mb-3")}>{error}</div>}
 
       {noProject ? (
         /* 未打开项目：引导回首页（侧栏无项目可点的现状接受项，S1.6 文档已说明） */
-        <div className="rounded-md border border-dashed border-zinc-300 px-6 py-10 text-center">
-          <p className="text-sm text-zinc-600">未打开项目，无法编辑大纲</p>
-          <a href="#/" className="mt-2 inline-block text-sm text-zinc-500 underline hover:text-zinc-700">
+        <div className="rounded-md border border-dashed border-border px-6 py-10 text-center">
+          <p className="text-sm text-muted-foreground">未打开项目，无法编辑大纲</p>
+          <a
+            href="#/"
+            className="mt-2 inline-block text-sm text-muted-foreground underline hover:text-foreground"
+          >
             回到首页打开或创建书籍
           </a>
         </div>
       ) : outlineLoading && outline === null ? (
         /* 加载骨架 */
-        <div className="space-y-2 rounded-md border border-zinc-200 p-3">
+        <div className="space-y-2 rounded-md border border-border p-3">
           {Array.from({ length: 6 }, (_, i) => (
             <div
               key={i}
-              className="h-5 animate-pulse rounded bg-zinc-100"
+              className={cn(skeletonClass, "h-5")}
               style={{ width: `${92 - (i % 3) * 24}%`, marginLeft: (i % 3) * 20 }}
             />
           ))}
         </div>
       ) : outline === null ? (
         /* 加载失败（loadOutline 静默吞错后的兜底呈现） */
-        <div className="rounded-md border border-zinc-200 p-4 text-sm text-zinc-600">
+        <div className="rounded-md border border-border p-4 text-sm text-muted-foreground">
           大纲加载失败
           <Button
             variant="outline"
@@ -821,8 +839,8 @@ export default function Outline() {
       ) : outline.children.length === 0 ? (
         /* 空态：就地新建（输入行内嵌引导卡，替代原「新建第一卷」弹窗按钮） */
         creatingAt?.parentId === ROOT_NODE_ID ? (
-          <div className="rounded-lg border border-dashed border-zinc-300 px-6 py-12 text-center">
-            <p className="text-sm text-zinc-600">输入第一卷标题，Enter 创建</p>
+          <div className="rounded-lg border border-dashed border-border px-6 py-12 text-center">
+            <p className="text-sm text-muted-foreground">输入第一卷标题，Enter 创建</p>
             <div className="mx-auto mt-4 max-w-sm">
               <RootCreateRow
                 type={creatingAt.type}
@@ -835,20 +853,25 @@ export default function Outline() {
             </div>
           </div>
         ) : (
-          <div className="rounded-lg border border-dashed border-zinc-300 px-6 py-12 text-center">
-            <p className="text-sm text-zinc-600">大纲还是空的，先建第一卷</p>
-            <p className="mt-1 text-xs text-zinc-400">大纲是三层结构：卷 → 章 → 场景</p>
-            <Button className="mt-4" type="button" onClick={() => startCreate(ROOT_NODE_ID, "volume")}>
-              新建第一卷
-            </Button>
-          </div>
+          <EmptyState
+            action={
+              <Button type="button" onClick={() => startCreate(ROOT_NODE_ID, "volume")}>
+                新建第一卷
+              </Button>
+            }
+          >
+            大纲还是空的，先建第一卷
+            <span className="mt-1 block text-xs text-muted-foreground/70">
+              大纲是三层结构：卷 → 章 → 场景
+            </span>
+          </EmptyState>
         )
       ) : (
         /* 整树渲染（容器同时是 root 拖放目标：拖到空白处 = 排顶层末尾；scene 会被 canMoveTo 拒绝） */
         <div
           className={cn(
             "rounded-md border border-border p-2",
-            dragTarget?.kind === "root-end" && "ring-1 ring-inset ring-accent",
+            dragTarget?.kind === "root-end" && "ring-1 ring-accent ring-inset",
           )}
           onDragOver={handleRootDragOver}
           onDragLeave={handleRootDragLeave}
@@ -858,7 +881,6 @@ export default function Outline() {
           {renderNodes(outline.children, 0)}
         </div>
       )}
-
     </section>
   );
 }

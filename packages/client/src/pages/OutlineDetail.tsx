@@ -23,11 +23,9 @@ import { TYPE_LABEL } from "../components/outline/dialogs";
 import { Breadcrumb, type BreadcrumbItem } from "../components/page-nav/Breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  ApiError,
-  updateOutlineNode,
-  type UpdateOutlineBody,
-} from "../lib/api";
+import { EmptyState } from "@/components/ui/empty-state";
+import { SectionCard } from "@/components/ui/section-card";
+import { ApiError, updateOutlineNode, type UpdateOutlineBody } from "../lib/api";
 import { diffData } from "../lib/entity-detail";
 import {
   detailFieldsForNodeType,
@@ -36,7 +34,12 @@ import {
   toggleConflictLevel,
   type NodeFieldConfig,
 } from "../lib/outline-detail";
-import { findNode, findNodePath, shouldCommitSummary, shouldCommitTitle } from "../lib/outline-tree";
+import {
+  findNode,
+  findNodePath,
+  shouldCommitSummary,
+  shouldCommitTitle,
+} from "../lib/outline-tree";
 import { cn } from "../lib/utils";
 import { navigate } from "../hooks/use-route";
 import { useDataRefresh } from "../hooks/use-data-refresh";
@@ -46,29 +49,6 @@ import { useUiStore } from "../stores/ui";
 /** 表单控件通用样式（token 类：select/textarea） */
 const FIELD_CLASS =
   "w-full rounded-md border border-border bg-card px-3 py-1.5 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
-
-/** 区块卡样式（layout.md §2.5：rounded-xl border bg-card p-4 + font-serif 标题；action = 标题行右侧操作区） */
-function Card({
-  title,
-  children,
-  className,
-  action,
-}: {
-  title: string;
-  children: React.ReactNode;
-  className?: string;
-  action?: React.ReactNode;
-}) {
-  return (
-    <div className={cn("rounded-xl border border-border bg-card p-4", className)}>
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 className="font-serif text-base">{title}</h2>
-        {action}
-      </div>
-      {children}
-    </div>
-  );
-}
 
 export default function OutlineDetail({ nodeId }: { nodeId: string }) {
   const outline = useProjectStore((s) => s.outline);
@@ -189,20 +169,24 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
   if (notFound) {
     return (
       <section>
-        <div className="rounded-lg border border-dashed border-border px-6 py-14 text-center">
-          <p className="text-sm text-muted-foreground">该节点不存在或已被删除</p>
-          <div className="mt-4 flex justify-center gap-2">
-            <a
-              href="#/trash"
-              className="rounded-md border border-border px-4 py-1.5 text-sm text-muted-foreground hover:bg-muted"
-            >
-              去回收站
-            </a>
-            <Button variant="outline" type="button" onClick={() => navigate("/outline")}>
-              返回大纲
-            </Button>
-          </div>
-        </div>
+        <EmptyState
+          padding="lg"
+          action={
+            <div className="flex justify-center gap-2">
+              <a
+                href="#/trash"
+                className="rounded-md border border-border px-4 py-1.5 text-sm text-muted-foreground hover:bg-muted"
+              >
+                去回收站
+              </a>
+              <Button variant="outline" type="button" onClick={() => navigate("/outline")}>
+                返回大纲
+              </Button>
+            </div>
+          }
+        >
+          该节点不存在或已被删除
+        </EmptyState>
       </section>
     );
   }
@@ -233,12 +217,20 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
             variant="outline"
             type="button"
             disabled={node === null || isCurrent || settingCurrent}
-            title={isCurrent ? "当前节点已是创作进度位置" : "标记为创作进度位置（InfoBar 展示 + 定位跳转基准）"}
+            title={
+              isCurrent
+                ? "当前节点已是创作进度位置"
+                : "标记为创作进度位置（InfoBar 展示 + 定位跳转基准）"
+            }
             onClick={() => void handleSetCurrent()}
           >
             {isCurrent ? "当前位置" : "设为当前位置"}
           </Button>
-          <Button type="button" onClick={() => void handleSave()} disabled={node === null || saving}>
+          <Button
+            type="button"
+            onClick={() => void handleSave()}
+            disabled={node === null || saving}
+          >
             {saving ? "保存中…" : "保存"}
           </Button>
         </div>
@@ -247,7 +239,9 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
       {/* 元信息行：类型徽标 + 更新时间 + 当前位置（文字与大纲列表页徽标语义一致） */}
       {node && (
         <div className="mb-4 flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs">{TYPE_LABEL[node.type]}</span>
+          <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs">
+            {TYPE_LABEL[node.type]}
+          </span>
           <span>更新于 {formatTimestamp(node.updatedAt)}</span>
           {isCurrent && (
             <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-xs text-accent-foreground">
@@ -261,7 +255,10 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
         /* 未打开项目：引导回首页（同大纲列表页） */
         <div className="rounded-md border border-dashed border-border px-6 py-10 text-center">
           <p className="text-sm text-muted-foreground">未打开项目，无法编辑大纲</p>
-          <a href="#/" className="mt-2 inline-block text-sm text-muted-foreground underline hover:text-foreground">
+          <a
+            href="#/"
+            className="mt-2 inline-block text-sm text-muted-foreground underline hover:text-foreground"
+          >
             回到首页打开或创建书籍
           </a>
         </div>
@@ -280,7 +277,12 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
         /* 树加载失败（loadOutline 静默吞错后的兜底呈现，同大纲列表页） */
         <div className="rounded-md border border-border p-4 text-sm text-muted-foreground">
           大纲加载失败
-          <Button variant="outline" className="ml-3" type="button" onClick={() => setLoadAttempted(false)}>
+          <Button
+            variant="outline"
+            className="ml-3"
+            type="button"
+            onClick={() => setLoadAttempted(false)}
+          >
             重试
           </Button>
         </div>
@@ -289,7 +291,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
         <div className="grid gap-4 md:grid-cols-2">
           <div className="flex min-w-0 flex-col gap-4">
             {/* 基础信息：标题/摘要 */}
-            <Card title="基础信息">
+            <SectionCard title="基础信息">
               <div className="flex flex-col gap-3">
                 <div>
                   <p className="mb-1 text-sm font-medium text-foreground">标题</p>
@@ -313,10 +315,10 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
                   />
                 </div>
               </div>
-            </Card>
+            </SectionCard>
 
             {/* 结构化信息：data 字段表单（按层级渲染，决策 23） */}
-            <Card title={`结构化信息（${TYPE_LABEL[node.type]}）`}>
+            <SectionCard title={`结构化信息（${TYPE_LABEL[node.type]}）`}>
               <div className="flex flex-col gap-3">
                 {fields.map((f) => (
                   <div key={f.key}>
@@ -331,10 +333,10 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
                 ))}
               </div>
               {saveError && <p className="mt-3 text-sm text-destructive">{saveError}</p>}
-            </Card>
+            </SectionCard>
 
             {/* 变更记录（S5.4 行内面板逻辑迁入；「+ 新建变更」S12.3：内联表单 + 成功后重拉列表） */}
-            <Card
+            <SectionCard
               title="变更记录"
               action={
                 <Button
@@ -358,17 +360,17 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
                 />
               )}
               <NodeDeltaList nodeId={nodeId} reloadKey={deltaReloadKey} />
-            </Card>
+            </SectionCard>
 
             {/* 伏笔标记占位（S9 伏笔面板落地后接入 plants/advances/resolves 标记） */}
-            <Card title="伏笔标记" className="border-dashed">
+            <SectionCard title="伏笔标记" className="border-dashed">
               <p className="text-sm text-muted-foreground">伏笔标记将在伏笔面板（S9）落地</p>
-            </Card>
+            </SectionCard>
           </div>
 
           {/* 右栏：相关实体（本节点作为 source；scope 模式复用 RelationsView） */}
           <div className="flex min-w-0 flex-col gap-4">
-            <Card title="相关实体">
+            <SectionCard title="相关实体">
               <div className="mb-3 flex items-center justify-between">
                 <p className="text-xs text-muted-foreground">本节点作为源的关系（1 跳）</p>
                 <Button
@@ -385,7 +387,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
                 reloadKey={relKey}
                 onOpenCreate={() => setRelationDialogOpen(true)}
               />
-            </Card>
+            </SectionCard>
           </div>
         </div>
       )}
@@ -431,7 +433,10 @@ function FieldControl({
       return (
         <div className="flex flex-wrap gap-x-4 gap-y-1.5">
           {(field.options ?? []).map((opt) => (
-            <label key={opt} className="flex cursor-pointer items-center gap-1.5 text-sm text-foreground">
+            <label
+              key={opt}
+              className="flex cursor-pointer items-center gap-1.5 text-sm text-foreground"
+            >
               <input
                 type="checkbox"
                 checked={selected.includes(opt)}
@@ -455,11 +460,7 @@ function FieldControl({
           className={cn(FIELD_CLASS, current === "" && "text-muted-foreground")}
         >
           <option value="">（未设置）</option>
-          {stale && (
-            <option value={current}>
-              {current}（已删除）
-            </option>
-          )}
+          {stale && <option value={current}>{current}（已删除）</option>}
           {sceneOptions.map((o) => (
             <option key={o.id} value={o.id}>
               {"　".repeat(o.depth)}

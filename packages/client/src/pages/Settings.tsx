@@ -178,26 +178,32 @@ export default function Settings() {
     <section className="max-w-lg">
       <h1 className="mb-4 text-xl font-semibold">设置</h1>
       {loading ? (
-        <p className="text-sm text-zinc-500">加载中…</p>
+        <p className="text-sm text-muted-foreground">加载中…</p>
       ) : (
         <div className="flex flex-col gap-6">
           {/* AI 模型 */}
           <div>
-            <h2 className="mb-1 text-sm font-semibold text-zinc-700">AI 模型</h2>
-            <p className="mb-2 text-xs text-zinc-500">默认 deepseek-v4-flash（可在服务端设置页或环境变量覆盖）</p>
+            <h2 className="mb-1 text-sm font-semibold text-foreground">AI 模型</h2>
+            <p className="mb-2 text-xs text-muted-foreground">
+              默认 deepseek-v4-flash（可在服务端设置页或环境变量覆盖）
+            </p>
             <div className="flex max-w-sm gap-2">
-              <Input value={model} onChange={(e) => setModel(e.target.value)} placeholder="deepseek-v4-flash" />
+              <Input
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                placeholder="deepseek-v4-flash"
+              />
               <Button onClick={() => void handleSaveModel()} disabled={saving} type="button">
                 保存设置
               </Button>
             </div>
-            {modelError && <p className="mt-1 text-sm text-red-600">{modelError}</p>}
+            {modelError && <p className="mt-1 text-sm text-destructive">{modelError}</p>}
           </div>
 
           {/* API Key */}
           <div>
-            <h2 className="mb-1 text-sm font-semibold text-zinc-700">API Key</h2>
-            <p className="mb-2 text-xs text-zinc-500">
+            <h2 className="mb-1 text-sm font-semibold text-foreground">API Key</h2>
+            <p className="mb-2 text-xs text-muted-foreground">
               状态：{apiKeySet ? `已配置（${apiKeyMasked ?? ""}）` : "未配置"}
             </p>
             <div className="flex max-w-sm gap-2">
@@ -209,16 +215,23 @@ export default function Settings() {
               <Button onClick={() => void handleSaveKey()} disabled={saving} type="button">
                 保存 Key
               </Button>
-              <Button variant="outline" onClick={() => void handleClearKey()} disabled={saving} type="button">
+              <Button
+                variant="outline"
+                onClick={() => void handleClearKey()}
+                disabled={saving}
+                type="button"
+              >
                 清除 Key
               </Button>
             </div>
-            {keyError && <p className="mt-1 text-sm text-red-600">{keyError}</p>}
+            {keyError && <p className="mt-1 text-sm text-destructive">{keyError}</p>}
           </div>
 
           {/* 常驻说明（决策 17；原型「说明」区） */}
-          <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3 text-xs leading-relaxed text-zinc-600">
-            <p>· key 保存在用户目录配置文件（~/.ai-editor/config.json），不写入项目文件（决策 17）</p>
+          <div className="rounded-md border border-border bg-muted/50 p-3 text-xs leading-relaxed text-muted-foreground">
+            <p>
+              · key 保存在用户目录配置文件（~/.ai-editor/config.json），不写入项目文件（决策 17）
+            </p>
             <p>· 环境变量 DEEPSEEK_API_KEY 优先于此处配置；保存的 key 仅影响新请求</p>
           </div>
 
@@ -230,7 +243,8 @@ export default function Settings() {
               注入 AI 上下文「## 项目设定」段（每轮有效）；承载项目级规则/行业要求；空 = 整段跳过
             </p>
             <p className="mb-2 text-xs text-muted-foreground/70">
-              建议用 ### 及以下层级的小标题组织内容（如「### 写作规则」）；避免使用 ## 顶层标题（与系统分段标题冲突）
+              建议用 ### 及以下层级的小标题组织内容（如「### 写作规则」）；避免使用 ##
+              顶层标题（与系统分段标题冲突）
             </p>
             <textarea
               value={prompt}

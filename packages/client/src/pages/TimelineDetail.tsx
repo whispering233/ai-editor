@@ -24,6 +24,7 @@ import { useEffect, useState } from "react";
 import { formatTimestamp } from "@whispering233/ai-editor-shared";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -47,7 +48,11 @@ import {
   suggestTags,
   type EventDetailForm,
 } from "../lib/timeline";
-import { buildOccursRelationBody, occursInRelations, mountedTimepointId } from "../lib/timeline-detail";
+import {
+  buildOccursRelationBody,
+  occursInRelations,
+  mountedTimepointId,
+} from "../lib/timeline-detail";
 import { flattenTree } from "../lib/outline-tree";
 import { cn } from "../lib/utils";
 import { Breadcrumb } from "../components/page-nav/Breadcrumb";
@@ -73,7 +78,9 @@ export default function TimelineDetail({ id }: { id: string }) {
   const [relError, setRelError] = useState<string | null>(null);
   const [relSubmitting, setRelSubmitting] = useState(false);
   // 取消关联确认（物理删）
-  const [deleteRelationTarget, setDeleteRelationTarget] = useState<RelationSummaryItem | null>(null);
+  const [deleteRelationTarget, setDeleteRelationTarget] = useState<RelationSummaryItem | null>(
+    null,
+  );
   // 标签建议池（F8：独立补拉全量 200 聚合已存在标签；失败静默——无建议区，不影响表单）
   const [tagPool, setTagPool] = useState<string[]>([]);
   // 挂载选择器数据（G2）：时间点列表（选项）+ 事件列表（当前位置保位）；失败 → 选择器重试
@@ -265,15 +272,16 @@ export default function TimelineDetail({ id }: { id: string }) {
       const parts: string[] = [];
       if (res.cascaded.relations > 0) parts.push(`${res.cascaded.relations} 条关联`);
       if (res.cascaded.deltas > 0) parts.push(`${res.cascaded.deltas} 条变更记录`);
-      useUiStore.getState().showToast(
-        `已移入回收站，可随时还原${parts.length > 0 ? `（含 ${parts.join("、")}）` : ""}`,
-      );
+      useUiStore
+        .getState()
+        .showToast(
+          `已移入回收站，可随时还原${parts.length > 0 ? `（含 ${parts.join("、")}）` : ""}`,
+        );
       navigate("/timeline");
     } catch (err) {
-      useUiStore.getState().showToast(
-        err instanceof ApiError ? err.message : "删除失败，请重试",
-        "error",
-      );
+      useUiStore
+        .getState()
+        .showToast(err instanceof ApiError ? err.message : "删除失败，请重试", "error");
     }
   }
 
@@ -282,20 +290,24 @@ export default function TimelineDetail({ id }: { id: string }) {
   if (notFound) {
     return (
       <section>
-        <div className="rounded-lg border border-dashed border-border px-6 py-14 text-center">
-          <p className="text-sm text-muted-foreground">该事件不存在或已被删除</p>
-          <div className="mt-4 flex justify-center gap-2">
-            <a
-              href="#/trash"
-              className="rounded-md border border-border px-4 py-1.5 text-sm text-muted-foreground hover:bg-muted"
-            >
-              去回收站
-            </a>
-            <Button variant="outline" type="button" onClick={() => navigate("/timeline")}>
-              返回列表
-            </Button>
-          </div>
-        </div>
+        <EmptyState
+          padding="lg"
+          action={
+            <div className="flex justify-center gap-2">
+              <a
+                href="#/trash"
+                className="rounded-md border border-border px-4 py-1.5 text-sm text-muted-foreground hover:bg-muted"
+              >
+                去回收站
+              </a>
+              <Button variant="outline" type="button" onClick={() => navigate("/timeline")}>
+                返回列表
+              </Button>
+            </div>
+          }
+        >
+          该事件不存在或已被删除
+        </EmptyState>
       </section>
     );
   }
@@ -314,14 +326,16 @@ export default function TimelineDetail({ id }: { id: string }) {
       {/* header：面包屑（时间轴 › 事件名，返回列表入口）+ 操作 */}
       <div className="mb-1 flex items-center gap-3">
         <Breadcrumb
-          items={[
-            { label: "时间轴", href: "/timeline" },
-            { label: detail?.name ?? "…" },
-          ]}
+          items={[{ label: "时间轴", href: "/timeline" }, { label: detail?.name ?? "…" }]}
         />
         <h1 className="min-w-0 truncate text-xl font-semibold">{detail?.name ?? "…"}</h1>
         <div className="ml-auto flex items-center gap-2">
-          <Button variant="outline" type="button" onClick={() => void handleSave()} disabled={!detail || saving}>
+          <Button
+            variant="outline"
+            type="button"
+            onClick={() => void handleSave()}
+            disabled={!detail || saving}
+          >
             {saving ? "保存中…" : "保存"}
           </Button>
           <Button
@@ -361,8 +375,15 @@ export default function TimelineDetail({ id }: { id: string }) {
       {/* 加载失败 */}
       {!loading && !detail && loadError !== null && (
         <div className="rounded-md border border-border p-4 text-sm text-muted-foreground">
-          {loadError === CLIENT_NETWORK_ERROR ? "无法连接服务，请确认 ai-editor 服务已启动。" : "详情加载失败，请重试。"}
-          <Button variant="outline" className="ml-3" type="button" onClick={() => void loadDetail()}>
+          {loadError === CLIENT_NETWORK_ERROR
+            ? "无法连接服务，请确认 ai-editor 服务已启动。"
+            : "详情加载失败，请重试。"}
+          <Button
+            variant="outline"
+            className="ml-3"
+            type="button"
+            onClick={() => void loadDetail()}
+          >
             重试
           </Button>
         </div>
@@ -512,7 +533,9 @@ export default function TimelineDetail({ id }: { id: string }) {
               </Popover>
             </div>
             {occurring.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">暂无关联节点，新增一个</p>
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                暂无关联节点，新增一个
+              </p>
             ) : (
               <ul className="divide-y divide-border/70">
                 {occurring.map((r) => (
@@ -552,7 +575,6 @@ export default function TimelineDetail({ id }: { id: string }) {
           onClose={() => setDeleteRelationTarget(null)}
         />
       )}
-
     </section>
   );
 }

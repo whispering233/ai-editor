@@ -16,6 +16,8 @@ import type { EntityType, OutlineNode } from "@whispering233/ai-editor-shared";
 import { BookOpen } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SectionCard } from "@/components/ui/section-card";
+import { skeletonClass } from "@/lib/styles";
 import { ApiError, CLIENT_NETWORK_ERROR, listEntities } from "../lib/api";
 import { validateBookName } from "../lib/book-name";
 import { describeOpenError } from "../lib/error-messages";
@@ -105,7 +107,9 @@ export default function Dashboard() {
   const [submitting, setSubmitting] = useState(false);
 
   // 创作要素统计状态（四类型并行；任一失败 → 区块内「加载失败 [重试]」，不阻塞其他区块）
-  const [entityCounts, setEntityCounts] = useState<Partial<Record<EntityType, number>> | null>(null);
+  const [entityCounts, setEntityCounts] = useState<Partial<Record<EntityType, number>> | null>(
+    null,
+  );
   const [entitiesLoading, setEntitiesLoading] = useState(false);
   const [entitiesError, setEntitiesError] = useState<string | null>(null);
   const [entitiesTick, setEntitiesTick] = useState(0);
@@ -165,7 +169,10 @@ export default function Dashboard() {
     setEntitiesLoading(true);
     setEntitiesError(null);
     Promise.allSettled(
-      ENTITY_ORDER.map(async (type) => ({ type, total: (await listEntities(type, { limit: 1 })).total })),
+      ENTITY_ORDER.map(async (type) => ({
+        type,
+        total: (await listEntities(type, { limit: 1 })).total,
+      })),
     ).then((results) => {
       if (cancelled) return;
       const counts: Partial<Record<EntityType, number>> = {};
@@ -300,7 +307,13 @@ export default function Dashboard() {
                 ? "无法连接服务，请确认 ai-editor 服务已启动后重试。"
                 : "书架加载失败，请重试。"}
             </p>
-            <Button variant="outline" size="sm" className="mt-2" onClick={() => void loadBookshelf()} type="button">
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2"
+              onClick={() => void loadBookshelf()}
+              type="button"
+            >
               重试
             </Button>
           </div>
@@ -310,11 +323,11 @@ export default function Dashboard() {
           {shelfLoading ? (
             /* 加载中骨架（防「还没有书」误闪——bookshelf 未就绪前不渲染任何文案分支） */
             <div className="py-2">
-              <div className="mx-auto h-6 w-2/3 animate-pulse rounded bg-muted" />
-              <div className="mx-auto mt-2 h-4 w-1/2 animate-pulse rounded bg-muted" />
+              <div className={cn(skeletonClass, "mx-auto h-6 w-2/3")} />
+              <div className={cn(skeletonClass, "mx-auto mt-2 h-4 w-1/2")} />
               <div className="mt-5 space-y-2">
-                <div className="h-10 animate-pulse rounded-lg bg-muted" />
-                <div className="h-10 animate-pulse rounded-lg bg-muted" />
+                <div className={cn(skeletonClass, "h-10 rounded-lg")} />
+                <div className={cn(skeletonClass, "h-10 rounded-lg")} />
               </div>
             </div>
           ) : (
@@ -334,7 +347,9 @@ export default function Dashboard() {
                           className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted"
                         >
                           <BookOpen className="size-4 shrink-0 text-muted-foreground/60" />
-                          <span className="min-w-0 flex-1 truncate text-sm text-foreground">{book.name}</span>
+                          <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                            {book.name}
+                          </span>
                           <span className="shrink-0 text-xs text-muted-foreground">
                             {formatRelativeTime(book.updatedAt)}
                           </span>
@@ -342,7 +357,9 @@ export default function Dashboard() {
                       </li>
                     ))}
                   </ul>
-                  {bookOpenError !== null && <p className="mt-3 text-left text-sm text-destructive">{bookOpenError}</p>}
+                  {bookOpenError !== null && (
+                    <p className="mt-3 text-left text-sm text-destructive">{bookOpenError}</p>
+                  )}
                   {/* 新建次级入口（折叠表单，不删创建能力） */}
                   <div className="mt-4 border-t border-border pt-3">
                     <button
@@ -368,7 +385,9 @@ export default function Dashboard() {
                     每本书一个独立目录（books/书名/），写作数据互不干扰
                   </p>
                   {renderCreateBookForm("mx-auto mt-5 flex flex-col gap-2")}
-                  <p className="mt-2 text-xs text-muted-foreground">创建于 创作根/books/书名/ 目录</p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    创建于 创作根/books/书名/ 目录
+                  </p>
                 </>
               )}
 
@@ -414,8 +433,7 @@ export default function Dashboard() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* 区块 1：项目信息（数据 config，无失败态——项目已打开） */}
-        <section className="rounded-xl border border-border bg-card p-4">
-          <h2 className="font-serif text-base text-foreground">项目信息</h2>
+        <SectionCard title="项目信息">
           <dl className="mt-3 space-y-2 text-sm">
             <div className="flex items-baseline gap-2">
               <dt className="w-16 shrink-0 text-muted-foreground">名称</dt>
@@ -436,7 +454,11 @@ export default function Dashboard() {
                   <span className="text-muted-foreground">未设置</span>
                 )}
               </dd>
-              <a href="#/outline" onClick={goOutline} className={buttonVariants({ variant: "outline", size: "xs" })}>
+              <a
+                href="#/outline"
+                onClick={goOutline}
+                className={buttonVariants({ variant: "outline", size: "xs" })}
+              >
                 去大纲
               </a>
             </div>
@@ -444,17 +466,18 @@ export default function Dashboard() {
           <div className="mt-3 border-t border-border pt-3">
             <p className="text-xs text-muted-foreground">项目提示词</p>
             {/* 截断 2 行（dashboard.md「信息层级」） */}
-            <p className="mt-1 line-clamp-2 text-sm text-foreground/90">{config?.prompt || "（未设置）"}</p>
+            <p className="mt-1 line-clamp-2 text-sm text-foreground/90">
+              {config?.prompt || "（未设置）"}
+            </p>
           </div>
-        </section>
+        </SectionCard>
 
         {/* 区块 2：创作要素（四张计数卡；GET /entity/:type limit=1 取 total，并行） */}
-        <section className="rounded-xl border border-border bg-card p-4">
-          <h2 className="font-serif text-base text-foreground">创作要素</h2>
+        <SectionCard title="创作要素">
           {entitiesLoading && entityCounts === null ? (
             <div className="mt-3 grid grid-cols-2 gap-2">
               {[0, 1, 2, 3].map((i) => (
-                <div key={i} className="h-20 animate-pulse rounded-lg bg-muted" />
+                <div key={i} className={cn(skeletonClass, "h-20 rounded-lg")} />
               ))}
             </div>
           ) : (
@@ -480,29 +503,38 @@ export default function Dashboard() {
               {entitiesError !== null && (
                 <div className="mt-2 flex items-center gap-2 text-xs text-destructive">
                   {entitiesError}
-                  <Button variant="outline" size="xs" type="button" onClick={() => setEntitiesTick((t) => t + 1)}>
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    type="button"
+                    onClick={() => setEntitiesTick((t) => t + 1)}
+                  >
                     重试
                   </Button>
                 </div>
               )}
             </>
           )}
-        </section>
+        </SectionCard>
 
         {/* 区块 3：大纲概览（前端递归统计卷/章/场 + 最近更新 = 树最大 updatedAt） */}
-        <section className="rounded-xl border border-border bg-card p-4 lg:col-span-2">
-          <h2 className="font-serif text-base text-foreground">大纲概览</h2>
+        <SectionCard title="大纲概览" className="lg:col-span-2">
           {outline === null && (outlineLoading || !outlineAttempted) ? (
             /* 骨架：加载中或尚未尝试拉取（L2，oracle U4 审核：首帧不闪「加载失败」） */
             <div className="mt-3 space-y-2">
-              <div className="h-5 w-2/5 animate-pulse rounded bg-muted" />
-              <div className="h-4 w-1/3 animate-pulse rounded bg-muted" />
+              <div className={cn(skeletonClass, "h-5 w-2/5")} />
+              <div className={cn(skeletonClass, "h-4 w-1/3")} />
             </div>
           ) : outline === null ? (
             /* 加载失败（loadOutline 静默吞错，attempted 标记兜底呈现） */
             <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
               大纲加载失败
-              <Button variant="outline" size="xs" type="button" onClick={() => setOutlineAttempted(false)}>
+              <Button
+                variant="outline"
+                size="xs"
+                type="button"
+                onClick={() => setOutlineAttempted(false)}
+              >
                 重试
               </Button>
             </div>
@@ -513,14 +545,20 @@ export default function Dashboard() {
                 {outlineSummary?.scenes ?? 0}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                最近更新: {outlineSummary?.updatedAt ? formatRelativeTime(outlineSummary.updatedAt) : "—"}
+                最近更新:{" "}
+                {outlineSummary?.updatedAt ? formatRelativeTime(outlineSummary.updatedAt) : "—"}
               </p>
               {outline.children.length === 0 && (
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <p className="text-xs text-muted-foreground">大纲还是空的</p>
                   {/* M1（oracle U4 审核）：新项目空态契约（dashboard.md「空态」）——[先搭大纲] 主操作 +
                       [和 AI 聊聊设定] 次操作（setCurrentSession(null) 注入右栏新会话） */}
-                  <Button variant="outline" size="xs" type="button" onClick={() => setCurrentSession(null)}>
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    type="button"
+                    onClick={() => setCurrentSession(null)}
+                  >
                     和 AI 聊聊设定
                   </Button>
                 </div>
@@ -536,24 +574,28 @@ export default function Dashboard() {
               </div>
             </>
           )}
-        </section>
+        </SectionCard>
 
         {/* 区块 4：最近会话（chat store 前 5 条；点击 → 右栏恢复该会话） */}
-        <section className="rounded-xl border border-border bg-card p-4 lg:col-span-2">
-          <h2 className="font-serif text-base text-foreground">最近会话</h2>
+        <SectionCard title="最近会话" className="lg:col-span-2">
           {sessions === null ? (
             sessionsError !== null ? (
               /* 加载失败：区块内重试（NO_PROJECT_OPEN 在概览形态不会出现，兜底走通用文案） */
               <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
                 会话加载失败
-                <Button variant="outline" size="xs" type="button" onClick={() => void loadSessions()}>
+                <Button
+                  variant="outline"
+                  size="xs"
+                  type="button"
+                  onClick={() => void loadSessions()}
+                >
                   重试
                 </Button>
               </div>
             ) : (
               <div className="mt-3 space-y-2">
                 {[0, 1, 2].map((i) => (
-                  <div key={i} className="h-8 animate-pulse rounded-md bg-muted" />
+                  <div key={i} className={cn(skeletonClass, "h-8 rounded-md")} />
                 ))}
               </div>
             )
@@ -561,7 +603,13 @@ export default function Dashboard() {
             /* 空态：一句说明 + 主操作 */
             <div className="mt-3">
               <p className="text-sm text-muted-foreground">还没有会话，和 AI 聊聊设定吧</p>
-              <Button variant="outline" size="sm" className="mt-3" type="button" onClick={() => setCurrentSession(null)}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                type="button"
+                onClick={() => setCurrentSession(null)}
+              >
                 开始新对话
               </Button>
             </div>
@@ -582,7 +630,9 @@ export default function Dashboard() {
                       <span className="min-w-0 flex-1 truncate text-sm text-foreground">
                         {s.lastMessage || "（空会话）"}
                       </span>
-                      <span className="shrink-0 text-xs text-muted-foreground">{s.messageCount} 条消息</span>
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        {s.messageCount} 条消息
+                      </span>
                       <span className="shrink-0 text-xs text-muted-foreground">
                         {formatRelativeTime(s.updatedAt)}
                       </span>
@@ -591,13 +641,18 @@ export default function Dashboard() {
                 ))}
               </ul>
               <div className="mt-3">
-                <Button variant="outline" size="sm" type="button" onClick={() => setCurrentSession(null)}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  type="button"
+                  onClick={() => setCurrentSession(null)}
+                >
                   开始新对话
                 </Button>
               </div>
             </>
           )}
-        </section>
+        </SectionCard>
       </div>
     </section>
   );

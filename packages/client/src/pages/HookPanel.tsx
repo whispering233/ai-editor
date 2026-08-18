@@ -18,9 +18,17 @@ import { formatTimestamp, HOOK_CATEGORIES } from "@whispering233/ai-editor-share
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { ArrowUp, Check, CheckCircle2, Circle, Eye, Pencil, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { errorBannerClass } from "@/lib/styles";
 import { Input } from "@/components/ui/input";
 import { SuggestionDatalist } from "@/components/ui/suggestion-datalist";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   ApiError,
   CLIENT_NETWORK_ERROR,
@@ -200,7 +208,8 @@ export default function HookPanel() {
       const detail = await getEntityDetail("hook", hook.id);
       // 默认节点：current_position（决策 21 锚点口径；须在树中存在且未软删）
       const cp = useProjectStore.getState().config?.currentPosition;
-      const defaultNode = cp !== null && cp !== undefined && cp !== "" && nodeExists(outline, cp) ? cp : "";
+      const defaultNode =
+        cp !== null && cp !== undefined && cp !== "" && nodeExists(outline, cp) ? cp : "";
       setLifecycleNodeId(defaultNode);
       setLifecycleKind(kind);
       setLifecycleTarget(detail);
@@ -311,10 +320,12 @@ export default function HookPanel() {
         try {
           await createRelation(buildPlantRelationBody(res.id, createPlantNodeId));
         } catch (plantErr) {
-          useUiStore.getState().showToast(
-            `已创建伏笔《${name}》，但埋点关联失败：${plantErr instanceof ApiError ? plantErr.message : "未知错误"}`,
-            "error",
-          );
+          useUiStore
+            .getState()
+            .showToast(
+              `已创建伏笔《${name}》，但埋点关联失败：${plantErr instanceof ApiError ? plantErr.message : "未知错误"}`,
+              "error",
+            );
           setCreateOpen(false);
           setReloadTick((t) => t + 1);
           return;
@@ -342,15 +353,16 @@ export default function HookPanel() {
       const parts: string[] = [];
       if (res.cascaded.relations > 0) parts.push(`${res.cascaded.relations} 条关联`);
       if (res.cascaded.deltas > 0) parts.push(`${res.cascaded.deltas} 条变更记录`);
-      useUiStore.getState().showToast(
-        `已移入回收站，可随时还原${parts.length > 0 ? `（含 ${parts.join("、")}）` : ""}`,
-      );
+      useUiStore
+        .getState()
+        .showToast(
+          `已移入回收站，可随时还原${parts.length > 0 ? `（含 ${parts.join("、")}）` : ""}`,
+        );
       setReloadTick((t) => t + 1);
     } catch (err) {
-      useUiStore.getState().showToast(
-        err instanceof ApiError ? err.message : "删除失败，请重试",
-        "error",
-      );
+      useUiStore
+        .getState()
+        .showToast(err instanceof ApiError ? err.message : "删除失败，请重试", "error");
     }
   }
 
@@ -382,7 +394,9 @@ export default function HookPanel() {
         visited.add(id);
         const detail = await getEntityDetail("hook", id);
         names.set(id, detail.name);
-        const deps = relationsOfType(detail.relations, "depends_on").filter((r) => r.sourceId === id);
+        const deps = relationsOfType(detail.relations, "depends_on").filter(
+          (r) => r.sourceId === id,
+        );
         depsOf.set(id, deps);
         // 展示深度内的节点才需要取下一层边；更深层名称已由边 targetName 兜底
         if (depth >= 2) continue;
@@ -412,9 +426,16 @@ export default function HookPanel() {
 
       {/* 错误横幅（列表请求失败 → 重试） */}
       {error !== null && (
-        <div className="mb-3 flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error === CLIENT_NETWORK_ERROR ? "无法连接服务，请确认 ai-editor 服务已启动。" : "伏笔池加载失败，请重试。"}
-          <Button variant="outline" className="ml-auto h-7 px-2 text-xs" type="button" onClick={() => setReloadTick((t) => t + 1)}>
+        <div className={cn(errorBannerClass, "mb-3 flex items-center gap-2")}>
+          {error === CLIENT_NETWORK_ERROR
+            ? "无法连接服务，请确认 ai-editor 服务已启动。"
+            : "伏笔池加载失败，请重试。"}
+          <Button
+            variant="outline"
+            className="ml-auto h-7 px-2 text-xs"
+            type="button"
+            onClick={() => setReloadTick((t) => t + 1)}
+          >
             重试
           </Button>
         </div>
@@ -427,7 +448,10 @@ export default function HookPanel() {
             <div key={gi} className="rounded-md border border-border">
               <div className="h-4 w-20 animate-pulse rounded bg-muted px-3 py-1.5" />
               {Array.from({ length: gi === 0 ? 3 : 1 }, (_, ri) => (
-                <div key={ri} className="flex items-center gap-3 border-t border-border/70 px-3 py-2.5">
+                <div
+                  key={ri}
+                  className="flex items-center gap-3 border-t border-border/70 px-3 py-2.5"
+                >
                   <div className="h-4 w-1/3 animate-pulse rounded bg-muted" />
                   <div className="h-3 w-16 animate-pulse rounded bg-muted" />
                   <div className="ml-auto h-6 w-6 animate-pulse rounded bg-muted" />
@@ -440,14 +464,15 @@ export default function HookPanel() {
 
       {/* 空态（hook-panel.md 原文） */}
       {!loading && groups !== null && items?.length === 0 && (
-        <div className="rounded-lg border border-dashed border-border px-6 py-12 text-center">
-          <p className="text-sm text-muted-foreground">
-            还没有伏笔。好伏笔要趁早埋下——先新建一个，或在聊天里让 AI 帮你规划。
-          </p>
-          <Button className="mt-4" type="button" onClick={() => setCreateOpen(true)}>
-            + 新建伏笔
-          </Button>
-        </div>
+        <EmptyState
+          action={
+            <Button type="button" onClick={() => setCreateOpen(true)}>
+              + 新建伏笔
+            </Button>
+          }
+        >
+          还没有伏笔。好伏笔要趁早埋下——先新建一个，或在聊天里让 AI 帮你规划。
+        </EmptyState>
       )}
 
       {/* 分组列表（活跃/已回收/已废弃——hook-panel.md 线框） */}
@@ -519,12 +544,21 @@ export default function HookPanel() {
             />
             <div>
               <p className="mb-1 text-sm font-medium text-foreground">埋点节点（选填，可空）</p>
-              <OutlineNodeSelect value={createPlantNodeId} onChange={setCreatePlantNodeId} nodeOptions={nodeOptions} />
+              <OutlineNodeSelect
+                value={createPlantNodeId}
+                onChange={setCreatePlantNodeId}
+                nodeOptions={nodeOptions}
+              />
             </div>
             {createError && <p className="text-sm text-destructive">{createError}</p>}
           </form>
           <DialogFooter>
-            <Button variant="outline" type="button" onClick={() => setCreateOpen(false)} disabled={createSubmitting}>
+            <Button
+              variant="outline"
+              type="button"
+              onClick={() => setCreateOpen(false)}
+              disabled={createSubmitting}
+            >
               取消
             </Button>
             <Button type="submit" form="create-hook-form" disabled={createSubmitting}>
@@ -535,7 +569,10 @@ export default function HookPanel() {
       </Dialog>
 
       {/* 详情对话框：relations 全览（埋点/推进/回收节点 id + 依赖链 + involves） */}
-      <Dialog open={detailTarget !== null || detailLoading} onOpenChange={(v) => !v && setDetailTarget(null)}>
+      <Dialog
+        open={detailTarget !== null || detailLoading}
+        onOpenChange={(v) => !v && setDetailTarget(null)}
+      >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>伏笔详情</DialogTitle>
@@ -563,7 +600,9 @@ export default function HookPanel() {
             <div className="flex flex-col gap-3">
               {lifecycleKind !== "abandon" && (
                 <div>
-                  <p className="mb-1 text-sm font-medium text-foreground">大纲节点（默认当前位置）</p>
+                  <p className="mb-1 text-sm font-medium text-foreground">
+                    大纲节点（默认当前位置）
+                  </p>
                   <OutlineNodeSelect
                     value={lifecycleNodeId}
                     onChange={setLifecycleNodeId}
@@ -578,7 +617,9 @@ export default function HookPanel() {
                   value={lifecycleDesc}
                   onChange={(e) => setLifecycleDesc(e.target.value)}
                   rows={2}
-                  placeholder={lifecycleKind === "abandon" ? "说明废弃原因" : "说明伏笔如何被推进/回收"}
+                  placeholder={
+                    lifecycleKind === "abandon" ? "说明废弃原因" : "说明伏笔如何被推进/回收"
+                  }
                   className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                 />
               </div>
@@ -595,19 +636,30 @@ export default function HookPanel() {
                 {lifecycleKind === "resolve" && depEdgesFailed && (
                   <p className="mt-2 text-sm text-destructive">依赖关系加载失败，无法确认依赖者</p>
                 )}
-                {lifecycleKind === "resolve" && !depEdgesFailed && dependentsCount(depEdges, lifecycleTarget.id) > 0 && (
-                  <p className="mt-2 text-sm text-destructive">
-                    有 {dependentsCount(depEdges, lifecycleTarget.id)} 个伏笔依赖此伏笔
-                  </p>
-                )}
+                {lifecycleKind === "resolve" &&
+                  !depEdgesFailed &&
+                  dependentsCount(depEdges, lifecycleTarget.id) > 0 && (
+                    <p className="mt-2 text-sm text-destructive">
+                      有 {dependentsCount(depEdges, lifecycleTarget.id)} 个伏笔依赖此伏笔
+                    </p>
+                  )}
               </div>
               {lifecycleError && <p className="text-sm text-destructive">{lifecycleError}</p>}
             </div>
             <DialogFooter>
-              <Button variant="outline" type="button" onClick={() => setLifecycleTarget(null)} disabled={lifecycleSubmitting}>
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() => setLifecycleTarget(null)}
+                disabled={lifecycleSubmitting}
+              >
                 取消
               </Button>
-              <Button type="button" onClick={() => void handleLifecycleConfirm()} disabled={lifecycleSubmitting}>
+              <Button
+                type="button"
+                onClick={() => void handleLifecycleConfirm()}
+                disabled={lifecycleSubmitting}
+              >
                 {lifecycleSubmitting ? "提交中…" : `确认${LIFECYCLE_LABEL[lifecycleKind]}`}
               </Button>
             </DialogFooter>
@@ -632,7 +684,12 @@ export default function HookPanel() {
               {editError && <p className="text-sm text-destructive">{editError}</p>}
             </div>
             <DialogFooter>
-              <Button variant="outline" type="button" onClick={() => setEditTarget(null)} disabled={editSaving}>
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() => setEditTarget(null)}
+                disabled={editSaving}
+              >
                 取消
               </Button>
               <Button type="button" onClick={() => void handleEditSave()} disabled={editSaving}>
@@ -642,7 +699,6 @@ export default function HookPanel() {
           </DialogContent>
         </Dialog>
       )}
-
     </section>
   );
 }
@@ -698,7 +754,9 @@ function HookGroupSection({
                     {hook.name}
                   </span>
                   {category && (
-                    <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">{category}</span>
+                    <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                      {category}
+                    </span>
                   )}
                   {/* 操作按钮全部展开（H3：禁止收进 ⋯ 二级展开；图标 + title/aria-label） */}
                   <span className="ml-auto flex shrink-0 items-center gap-0.5">
@@ -777,8 +835,12 @@ function HookGroupSection({
                     依赖: {deps.join("、")}
                   </button>
                 )}
-                {chain?.status === "loading" && <p className="mt-0.5 text-xs text-muted-foreground">依赖链展开中…</p>}
-                {chain?.status === "error" && <p className="mt-0.5 text-xs text-destructive">依赖链加载失败</p>}
+                {chain?.status === "loading" && (
+                  <p className="mt-0.5 text-xs text-muted-foreground">依赖链展开中…</p>
+                )}
+                {chain?.status === "error" && (
+                  <p className="mt-0.5 text-xs text-destructive">依赖链加载失败</p>
+                )}
                 {chain?.status === "ready" && chain.nodes.length > 1 && (
                   <ul className="mt-1 space-y-0.5 border-l border-border pl-2">
                     {chain.nodes.slice(1).map((n) => (
@@ -811,13 +873,20 @@ function HookDetailView({ detail }: { detail: EntityDetailRes }) {
     .filter((r) => r.targetId === id)
     .map((r) => r.sourceName ?? r.sourceId);
   const involves = involvesNames(detail.relations, id);
-  const expectedResolve = typeof detail.data.expected_resolve_node_id === "string" ? detail.data.expected_resolve_node_id : "";
+  const expectedResolve =
+    typeof detail.data.expected_resolve_node_id === "string"
+      ? detail.data.expected_resolve_node_id
+      : "";
 
   return (
     <div className="flex flex-col gap-3 text-sm">
       <div className="flex items-center gap-2">
         <span className="font-medium text-foreground">{detail.name}</span>
-        {category && <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">{category}</span>}
+        {category && (
+          <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+            {category}
+          </span>
+        )}
         {status && (
           <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
             {HOOK_STATUS_LABEL[status] ?? status}
@@ -828,9 +897,18 @@ function HookDetailView({ detail }: { detail: EntityDetailRes }) {
         创建于 {formatTimestamp(detail.createdAt)} · 更新于 {formatTimestamp(detail.updatedAt)}
       </p>
       {/* 埋点/回收位置（MVP：节点 id；章节序后续迭代服务端现推——backlog #13） */}
-      <RelationBlock title="埋点节点（plants）" items={plants.map((r) => r.sourceName ?? r.sourceId)} />
-      <RelationBlock title="推进节点（advances）" items={advances.map((r) => r.sourceName ?? r.sourceId)} />
-      <RelationBlock title="回收节点（resolves）" items={resolves.map((r) => r.sourceName ?? r.sourceId)} />
+      <RelationBlock
+        title="埋点节点（plants）"
+        items={plants.map((r) => r.sourceName ?? r.sourceId)}
+      />
+      <RelationBlock
+        title="推进节点（advances）"
+        items={advances.map((r) => r.sourceName ?? r.sourceId)}
+      />
+      <RelationBlock
+        title="回收节点（resolves）"
+        items={resolves.map((r) => r.sourceName ?? r.sourceId)}
+      />
       <RelationBlock title="预计回收节点" items={expectedResolve ? [expectedResolve] : []} />
       <RelationBlock title="依赖（depends_on）" items={deps} />
       <RelationBlock title="被依赖（其他伏笔依赖本伏笔）" items={dependents} />
@@ -849,7 +927,10 @@ function RelationBlock({ title, items }: { title: string; items: string[] }) {
       ) : (
         <ul className="flex flex-wrap gap-1">
           {items.map((it, i) => (
-            <li key={`${it}-${i}`} className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
+            <li
+              key={`${it}-${i}`}
+              className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground"
+            >
               {it}
             </li>
           ))}
@@ -963,18 +1044,28 @@ function HookDataField({
         />
       );
     case "outline-node":
-      return <OutlineNodeSelect value={fieldValue({ [field.key]: value }, field.key)} onChange={onValue} nodeOptions={nodeOptions} />;
+      return (
+        <OutlineNodeSelect
+          value={fieldValue({ [field.key]: value }, field.key)}
+          onChange={onValue}
+          nodeOptions={nodeOptions}
+        />
+      );
     default:
       return (
         <>
           <Input
             value={fieldValue({ [field.key]: value }, field.key)}
             onChange={(e) => onValue(e.target.value)}
-            placeholder={field.key === "category" ? `如：${HOOK_CATEGORIES.join(" / ")}` : undefined}
+            placeholder={
+              field.key === "category" ? `如：${HOOK_CATEGORIES.join(" / ")}` : undefined
+            }
             list={field.key === "category" ? "hook-category-suggestions" : undefined}
             className="h-8 text-sm"
           />
-          {field.key === "category" && <SuggestionDatalist id="hook-category-suggestions" options={HOOK_CATEGORIES} />}
+          {field.key === "category" && (
+            <SuggestionDatalist id="hook-category-suggestions" options={HOOK_CATEGORIES} />
+          )}
         </>
       );
   }

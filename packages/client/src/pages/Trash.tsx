@@ -15,6 +15,9 @@ import { useEffect, useState } from "react";
 import type { EntityType } from "@whispering233/ai-editor-shared";
 import { formatRelativeTime } from "@whispering233/ai-editor-shared";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { errorBannerClass } from "@/lib/styles";
+import { cn } from "../lib/utils";
 import { ConfirmDialog } from "../components/outline/dialogs";
 import {
   ApiError,
@@ -53,7 +56,11 @@ const NODE_TYPE_LABEL: Record<OutlineNodeType, string> = {
 
 /** 类型徽标（token 类；实体四类 / 大纲三类共用） */
 function TypeBadge({ label }: { label: string }) {
-  return <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">{label}</span>;
+  return (
+    <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+      {label}
+    </span>
+  );
 }
 
 /** purge 确认目标（实体 / 节点） */
@@ -103,23 +110,28 @@ export default function Trash() {
   /** 404 残留（目标已被 purge 的残留请求；实体/节点两侧同码判定） */
   function isGone(err: unknown): boolean {
     return (
-      err instanceof ApiError && (err.code === "ENTITY_NOT_FOUND" || err.code === "OUTLINE_NODE_NOT_FOUND")
+      err instanceof ApiError &&
+      (err.code === "ENTITY_NOT_FOUND" || err.code === "OUTLINE_NODE_NOT_FOUND")
     );
   }
 
   /** 非 404 的还原失败 → 全局错误横幅（FeedbackHost 渲染，token 红色） */
   function reportRestoreError(err: unknown) {
-    useUiStore.getState().showError(
-      err instanceof ApiError ? err.code : CLIENT_NETWORK_ERROR,
-      err instanceof ApiError ? err.message : "操作失败，请重试",
-    );
+    useUiStore
+      .getState()
+      .showError(
+        err instanceof ApiError ? err.code : CLIENT_NETWORK_ERROR,
+        err instanceof ApiError ? err.message : "操作失败，请重试",
+      );
   }
 
   /** 还原实体：成功 → toast（连带恢复计数）→ 刷新；404 残留 → 刷新 + toast */
   async function handleRestoreEntity(item: TrashEntity) {
     try {
       const res = await restoreTrashEntity(item.type, item.id);
-      useUiStore.getState().showToast(restoreEntityToast(res.restoredRelations, res.restoredDeltas));
+      useUiStore
+        .getState()
+        .showToast(restoreEntityToast(res.restoredRelations, res.restoredDeltas));
       await reload();
     } catch (err) {
       if (isGone(err)) {
@@ -145,7 +157,9 @@ export default function Trash() {
         const ancestorId = parseAncestorId(err.message);
         if (ancestorId === null) {
           // message 格式变化（解析失败）：降级为纯提示，无快捷按钮
-          useUiStore.getState().showError("OUTLINE_ANCESTOR_DELETED", "上级节点也在回收站，请先还原上级");
+          useUiStore
+            .getState()
+            .showError("OUTLINE_ANCESTOR_DELETED", "上级节点也在回收站，请先还原上级");
           return;
         }
         setAncestorConflict({
@@ -231,8 +245,10 @@ export default function Trash() {
 
       {/* 列表请求失败：横幅 + 重试 */}
       {error !== null && (
-        <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error === CLIENT_NETWORK_ERROR ? "无法连接服务，请确认 ai-editor 服务已启动。" : "回收站加载失败，请重试。"}
+        <div className={cn(errorBannerClass, "mb-3")}>
+          {error === CLIENT_NETWORK_ERROR
+            ? "无法连接服务，请确认 ai-editor 服务已启动。"
+            : "回收站加载失败，请重试。"}
           <Button variant="outline" className="ml-3" type="button" onClick={() => void reload()}>
             重试
           </Button>
@@ -246,7 +262,10 @@ export default function Trash() {
             <div key={col} className="overflow-hidden rounded-md border border-border">
               <div className="h-9 animate-pulse bg-muted/60" />
               {Array.from({ length: 3 }, (_, i) => (
-                <div key={i} className="flex items-center gap-2 border-b border-border/70 px-3 py-2.5 last:border-0">
+                <div
+                  key={i}
+                  className="flex items-center gap-2 border-b border-border/70 px-3 py-2.5 last:border-0"
+                >
                   <div className="h-4 w-10 animate-pulse rounded bg-muted" />
                   <div className="h-4 flex-1 animate-pulse rounded bg-muted" />
                   <div className="h-4 w-16 animate-pulse rounded bg-muted" />
@@ -258,11 +277,7 @@ export default function Trash() {
       )}
 
       {/* 空态 */}
-      {!loading && isEmpty && (
-        <div className="rounded-lg border border-dashed border-border px-6 py-12 text-center text-sm text-muted-foreground">
-          回收站是空的
-        </div>
-      )}
+      {!loading && isEmpty && <EmptyState>回收站是空的</EmptyState>}
 
       {/* 分栏：实体 / 大纲节点（md 双列，窄屏堆叠） */}
       {data !== null && !isEmpty && (
@@ -279,10 +294,15 @@ export default function Trash() {
                 {data.entities.map((item) => (
                   <li key={item.id} className="flex items-center gap-2 px-3 py-2">
                     <TypeBadge label={ENTITY_TYPE_LABEL[item.type]} />
-                    <span className="min-w-0 flex-1 truncate text-sm text-foreground" title={item.name}>
+                    <span
+                      className="min-w-0 flex-1 truncate text-sm text-foreground"
+                      title={item.name}
+                    >
                       {item.name}
                     </span>
-                    <span className="shrink-0 text-xs text-muted-foreground">{formatRelativeTime(item.deletedAt)}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {formatRelativeTime(item.deletedAt)}
+                    </span>
                     <div className="flex shrink-0 items-center gap-1.5">
                       <Button
                         variant="outline"
@@ -321,14 +341,22 @@ export default function Trash() {
                   <li key={node.id} className="px-3 py-2">
                     <div className="flex items-center gap-2">
                       <TypeBadge label={NODE_TYPE_LABEL[node.type]} />
-                      <span className="min-w-0 flex-1 truncate text-sm text-foreground" title={node.title}>
+                      <span
+                        className="min-w-0 flex-1 truncate text-sm text-foreground"
+                        title={node.title}
+                      >
                         {node.title}
                       </span>
                       <span className="shrink-0 text-xs text-muted-foreground">
                         {formatRelativeTime(node.deletedAt)}
                       </span>
                       <div className="flex shrink-0 items-center gap-1.5">
-                        <Button variant="outline" size="xs" type="button" onClick={() => void handleRestoreNode(node)}>
+                        <Button
+                          variant="outline"
+                          size="xs"
+                          type="button"
+                          onClick={() => void handleRestoreNode(node)}
+                        >
                           还原
                         </Button>
                         <Button

@@ -30,9 +30,17 @@ import {
   type EntityDetailRes,
   type RelationSummaryItem,
 } from "../lib/api";
-import { detailFieldsForType, diffData, relationTypeLabel, settingHierarchyFromRelations, type DetailFieldConfig } from "../lib/entity-detail";
+import {
+  detailFieldsForType,
+  diffData,
+  relationTypeLabel,
+  settingHierarchyFromRelations,
+  type DetailFieldConfig,
+} from "../lib/entity-detail";
 import { flattenTree } from "../lib/outline-tree";
 import { cn } from "../lib/utils";
+import { skeletonClass } from "@/lib/styles";
+import { EmptyState } from "@/components/ui/empty-state";
 import { navigate } from "../hooks/use-route";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useProjectStore } from "../stores/project";
@@ -108,19 +116,23 @@ function TagsEditor({
       {quickTags && quickTags.length > 0 && (
         <div className="flex flex-wrap items-center gap-1">
           <span className="text-xs text-muted-foreground">已有标签：</span>
-          {quickTags.filter((t) => !values.includes(t)).map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => onChange([...values, t])}
-              className="rounded-md border border-border px-1.5 py-0.5 text-xs text-foreground hover:bg-muted hover:text-foreground"
-            >
-              {t}
-            </button>
-          ))}
+          {quickTags
+            .filter((t) => !values.includes(t))
+            .map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => onChange([...values, t])}
+                className="rounded-md border border-border px-1.5 py-0.5 text-xs text-foreground hover:bg-muted hover:text-foreground"
+              >
+                {t}
+              </button>
+            ))}
         </div>
       )}
-      {suggestions && suggestions.length > 0 && <SuggestionDatalist id="entity-tags-suggestions" options={suggestions} />}
+      {suggestions && suggestions.length > 0 && (
+        <SuggestionDatalist id="entity-tags-suggestions" options={suggestions} />
+      )}
     </div>
   );
 }
@@ -157,13 +169,17 @@ function CustomFieldsEditor({
         <div key={i} className="flex items-center gap-1.5">
           <Input
             value={r.key}
-            onChange={(e) => commit(rows.map((x, j) => (j === i ? { ...x, key: e.target.value } : x)))}
+            onChange={(e) =>
+              commit(rows.map((x, j) => (j === i ? { ...x, key: e.target.value } : x)))
+            }
             placeholder="键"
             className="h-8 w-28 text-sm"
           />
           <Input
             value={r.value}
-            onChange={(e) => commit(rows.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))}
+            onChange={(e) =>
+              commit(rows.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))
+            }
             placeholder="值"
             className="h-8 flex-1 text-sm"
           />
@@ -201,7 +217,9 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [relationDialogOpen, setRelationDialogOpen] = useState(false);
-  const [deleteRelationTarget, setDeleteRelationTarget] = useState<RelationSummaryItem | null>(null);
+  const [deleteRelationTarget, setDeleteRelationTarget] = useState<RelationSummaryItem | null>(
+    null,
+  );
   /** 「变更记录 N 条」展开状态（S5.4：下方渲染状态预览区块） */
   const [deltaOpen, setDeltaOpen] = useState(false);
   /** 设定层级修改态（决策 30，I3b：修改/清除上级——先建后删，防数据丢失） */
@@ -309,15 +327,16 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
       const parts: string[] = [];
       if (res.cascaded.relations > 0) parts.push(`${res.cascaded.relations} 条关联`);
       if (res.cascaded.deltas > 0) parts.push(`${res.cascaded.deltas} 条变更记录`);
-      useUiStore.getState().showToast(
-        `已移入回收站，可随时还原${parts.length > 0 ? `（含 ${parts.join("、")}）` : ""}`,
-      );
+      useUiStore
+        .getState()
+        .showToast(
+          `已移入回收站，可随时还原${parts.length > 0 ? `（含 ${parts.join("、")}）` : ""}`,
+        );
       navigate(`/entities/${entityType}`);
     } catch (err) {
-      useUiStore.getState().showToast(
-        err instanceof ApiError ? err.message : "删除失败，请重试",
-        "error",
-      );
+      useUiStore
+        .getState()
+        .showToast(err instanceof ApiError ? err.message : "删除失败，请重试", "error");
     }
   }
 
@@ -384,7 +403,10 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
   function relationEndpointName(r: RelationSummaryItem, side: "source" | "target"): string {
     const isSelf = (side === "source" ? r.sourceId : r.targetId) === id;
     if (isSelf) return detail?.name ?? "本实体";
-    return (side === "source" ? r.sourceName : r.targetName) ?? (side === "source" ? r.sourceId : r.targetId);
+    return (
+      (side === "source" ? r.sourceName : r.targetName) ??
+      (side === "source" ? r.sourceId : r.targetId)
+    );
   }
 
   // ============ 渲染 ============
@@ -392,20 +414,28 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
   if (notFound) {
     return (
       <section>
-        <div className="rounded-lg border border-dashed border-zinc-300 px-6 py-14 text-center">
-          <p className="text-sm text-zinc-600">该实体不存在或已被删除</p>
-          <div className="mt-4 flex justify-center gap-2">
-            <a
-              href="#/trash"
-              className="rounded-md border border-zinc-300 px-4 py-1.5 text-sm text-zinc-600 hover:bg-zinc-100"
-            >
-              去回收站
-            </a>
-            <Button variant="outline" type="button" onClick={() => navigate(`/entities/${entityType}`)}>
-              返回列表
-            </Button>
-          </div>
-        </div>
+        <EmptyState
+          padding="lg"
+          action={
+            <div className="flex justify-center gap-2">
+              <a
+                href="#/trash"
+                className="rounded-md border border-border px-4 py-1.5 text-sm text-muted-foreground hover:bg-muted"
+              >
+                去回收站
+              </a>
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() => navigate(`/entities/${entityType}`)}
+              >
+                返回列表
+              </Button>
+            </div>
+          }
+        >
+          该实体不存在或已被删除
+        </EmptyState>
       </section>
     );
   }
@@ -423,7 +453,12 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
         />
         <h1 className="min-w-0 truncate text-xl font-semibold">{detail?.name ?? "…"}</h1>
         <div className="ml-auto flex items-center gap-2">
-          <Button variant="outline" type="button" onClick={() => void handleSave()} disabled={!detail || saving}>
+          <Button
+            variant="outline"
+            type="button"
+            onClick={() => void handleSave()}
+            disabled={!detail || saving}
+          >
             {saving ? "保存中…" : "保存"}
           </Button>
           <Button
@@ -454,20 +489,25 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
 
       {/* 状态预览区块（S5.4：元信息行入口展开；位于表单上方） */}
       {detail && deltaOpen && (
-        <ComputePreview type={entityType} id={id} currentData={detail.data} deltaCount={detail.deltaCount} />
+        <ComputePreview
+          type={entityType}
+          id={id}
+          currentData={detail.data}
+          deltaCount={detail.deltaCount}
+        />
       )}
 
       {/* 加载骨架 */}
       {loading && !detail && (
         <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-3 rounded-md border border-zinc-200 p-4">
+          <div className="space-y-3 rounded-md border border-border p-4">
             {Array.from({ length: 5 }, (_, i) => (
-              <div key={i} className="h-9 animate-pulse rounded bg-zinc-100" />
+              <div key={i} className={cn(skeletonClass, "h-9")} />
             ))}
           </div>
-          <div className="space-y-3 rounded-md border border-zinc-200 p-4">
+          <div className="space-y-3 rounded-md border border-border p-4">
             {Array.from({ length: 3 }, (_, i) => (
-              <div key={i} className="h-9 animate-pulse rounded bg-zinc-100" />
+              <div key={i} className={cn(skeletonClass, "h-9")} />
             ))}
           </div>
         </div>
@@ -475,9 +515,16 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
 
       {/* 加载失败 */}
       {!loading && !detail && loadError !== null && (
-        <div className="rounded-md border border-zinc-200 p-4 text-sm text-zinc-600">
-          {loadError === CLIENT_NETWORK_ERROR ? "无法连接服务，请确认 ai-editor 服务已启动。" : "详情加载失败，请重试。"}
-          <Button variant="outline" className="ml-3" type="button" onClick={() => void loadDetail()}>
+        <div className="rounded-md border border-border p-4 text-sm text-muted-foreground">
+          {loadError === CLIENT_NETWORK_ERROR
+            ? "无法连接服务，请确认 ai-editor 服务已启动。"
+            : "详情加载失败，请重试。"}
+          <Button
+            variant="outline"
+            className="ml-3"
+            type="button"
+            onClick={() => void loadDetail()}
+          >
             重试
           </Button>
         </div>
@@ -486,12 +533,12 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
       {detail && form && (
         <div className="grid gap-4 md:grid-cols-2">
           {/* 左栏：data 表单（按类型差异化渲染） */}
-          <div className="rounded-md border border-zinc-200 p-4">
-            <h2 className="mb-3 text-sm font-semibold text-zinc-700">基础信息</h2>
+          <div className="rounded-md border border-border p-4">
+            <h2 className="mb-3 text-sm font-semibold text-foreground">基础信息</h2>
             <div className="flex flex-col gap-3">
               {fields.map((f) => (
                 <div key={f.key}>
-                  <p className="mb-1 text-sm font-medium text-zinc-700">{f.label}</p>
+                  <p className="mb-1 text-sm font-medium text-foreground">{f.label}</p>
                   <FormField
                     field={f}
                     value={form[f.key]}
@@ -503,7 +550,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
               {/* custom_fields：响应 data 已有该键时显示（MVP 边界：无键时不可新增，见文件头注释） */}
               {"custom_fields" in detail.data && (
                 <div>
-                  <p className="mb-1 text-sm font-medium text-zinc-700">自定义字段</p>
+                  <p className="mb-1 text-sm font-medium text-foreground">自定义字段</p>
                   <CustomFieldsEditor
                     value={form.custom_fields as Record<string, unknown> | undefined}
                     onChange={(v) => setField("custom_fields", v)}
@@ -516,9 +563,9 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
 
           {/* 右栏：关联（1 跳双向）——setting 类型前置「层级」区块（决策 30：父子边独自分区，
               下方关联列表过滤掉层级边，避免同一条边两处重复展示） */}
-          <div className="rounded-md border border-zinc-200 p-4">
+          <div className="rounded-md border border-border p-4">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-zinc-700">关联</h2>
+              <h2 className="text-sm font-semibold text-foreground">关联</h2>
               <Button
                 variant="outline"
                 type="button"
@@ -534,9 +581,9 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
               (() => {
                 const h = settingHierarchyFromRelations(detail.relations, id);
                 return (
-                  <div className="mb-4 border-b border-zinc-100 pb-4">
+                  <div className="mb-4 border-b border-border/50 pb-4">
                     <div className="mb-2 flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-zinc-700">层级（设定父子）</h3>
+                      <h3 className="text-sm font-semibold text-foreground">层级（设定父子）</h3>
                       <div className="flex items-center gap-2">
                         <ParentSettingSelect
                           value={h.parent?.parentId ?? null}
@@ -560,34 +607,38 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
                         )}
                       </div>
                     </div>
-                    {hierarchyError && <p className="mb-2 text-sm text-red-600">{hierarchyError}</p>}
+                    {hierarchyError && (
+                      <p className="mb-2 text-sm text-red-600">{hierarchyError}</p>
+                    )}
                     <div className="flex flex-col gap-1.5 text-sm">
-                      <span className="text-zinc-500">
+                      <span className="text-muted-foreground">
                         上级：
                         {h.parent ? (
                           <button
                             type="button"
                             title="打开上级设定"
-                            className="ml-1 rounded-md border border-border px-1.5 py-0.5 text-zinc-700 hover:bg-muted hover:text-foreground"
+                            className="ml-1 rounded-md border border-border px-1.5 py-0.5 text-foreground hover:bg-muted hover:text-foreground"
                             onClick={() => navigate(`/entities/setting/${h.parent!.parentId}`)}
                           >
                             {h.parent.parentName ?? h.parent.parentId}
                           </button>
                         ) : (
-                          <span className="ml-1 text-zinc-400">（独立设定——暂无上级）</span>
+                          <span className="ml-1 text-muted-foreground/70">
+                            （独立设定——暂无上级）
+                          </span>
                         )}
                       </span>
-                      <span className="text-zinc-500">
+                      <span className="text-muted-foreground">
                         子设定：
                         {h.children.length === 0 ? (
-                          <span className="ml-1 text-zinc-400">（无）</span>
+                          <span className="ml-1 text-muted-foreground/70">（无）</span>
                         ) : (
                           h.children.map((c) => (
                             <button
                               key={c.relationId}
                               type="button"
                               title="打开子设定"
-                              className="ml-1 rounded-md border border-border px-1.5 py-0.5 text-zinc-700 hover:bg-muted hover:text-foreground"
+                              className="ml-1 rounded-md border border-border px-1.5 py-0.5 text-foreground hover:bg-muted hover:text-foreground"
                               onClick={() => navigate(`/entities/setting/${c.childId}`)}
                             >
                               {c.childName ?? c.childId}
@@ -605,26 +656,31 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
               const list =
                 entityType === "setting"
                   ? detail.relations.filter(
-                      (r) => !(r.relationType === "belongs_to" && r.sourceType === "setting" && r.targetType === "setting"),
+                      (r) =>
+                        !(
+                          r.relationType === "belongs_to" &&
+                          r.sourceType === "setting" &&
+                          r.targetType === "setting"
+                        ),
                     )
                   : detail.relations;
               return list.length === 0 ? (
-                <p className="py-6 text-center text-sm text-zinc-400">
+                <p className="py-6 text-center text-sm text-muted-foreground/70">
                   {entityType === "setting" ? "暂无其他关联，新增一个" : "暂无关联，新增一个"}
                 </p>
               ) : (
-                <ul className="divide-y divide-zinc-100">
+                <ul className="divide-y divide-border/50">
                   {list.map((r) => {
                     const isSource = r.sourceId === id;
                     const left = relationEndpointName(r, "source");
                     const right = relationEndpointName(r, "target");
                     return (
                       <li key={r.id} className="flex items-center gap-2 py-2 text-sm">
-                        <span className="min-w-0 max-w-28 truncate text-zinc-700">{left}</span>
-                        <span className="shrink-0 rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-500">
+                        <span className="max-w-28 min-w-0 truncate text-foreground">{left}</span>
+                        <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                           {relationTypeLabel(r.relationType)} {isSource ? "→" : "←"}
                         </span>
-                        <span className="min-w-0 flex-1 truncate text-zinc-700">{right}</span>
+                        <span className="min-w-0 flex-1 truncate text-foreground">{right}</span>
                         <Button
                           variant="outline"
                           type="button"
@@ -663,7 +719,6 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
           onClose={() => setDeleteRelationTarget(null)}
         />
       )}
-
     </section>
   );
 }
@@ -688,7 +743,7 @@ function FormField({
           value={fieldValue({ [field.key]: value }, field.key)}
           onChange={(e) => onChange(e.target.value)}
           rows={3}
-          className="w-full rounded-md border border-zinc-300 px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+          className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         />
       );
     case "number":
@@ -715,7 +770,7 @@ function FormField({
         <select
           value={fieldValue({ [field.key]: value }, field.key)}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400"
+          className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         >
           {field.options?.map((opt) => (
             <option key={opt} value={opt}>
@@ -730,11 +785,16 @@ function FormField({
           type="checkbox"
           checked={value === true}
           onChange={(e) => onChange(e.target.checked)}
-          className="h-4 w-4 accent-zinc-900"
+          className="h-4 w-4 accent-accent-foreground"
         />
       );
     case "outline-node":
-      return <OutlineNodeSelect value={fieldValue({ [field.key]: value }, field.key)} onChange={onChange} />;
+      return (
+        <OutlineNodeSelect
+          value={fieldValue({ [field.key]: value }, field.key)}
+          onChange={onChange}
+        />
+      );
     default:
       return (
         <Input
@@ -749,7 +809,13 @@ function FormField({
 /** 大纲节点选择器（hook.expected_resolve_node_id；选项来自 outline store 的树）。
  * 清空（「未设置」）→ onChange(null)：服务端 schema 为 z.string().nullable()，「未设置」应存 null
  * 而非空串（决策 21 健康指标按 null 判定），见 lib/entity-detail.ts diffData 的 null 透传语义 */
-function OutlineNodeSelect({ value, onChange }: { value: string; onChange: (v: string | null) => void }) {
+function OutlineNodeSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string | null) => void;
+}) {
   const outline = useProjectStore((s) => s.outline);
   const options = flattenTree(outline?.children ?? []);
   return (
@@ -757,8 +823,8 @@ function OutlineNodeSelect({ value, onChange }: { value: string; onChange: (v: s
       value={value}
       onChange={(e) => onChange(e.target.value === "" ? null : e.target.value)}
       className={cn(
-        "w-full rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400",
-        value === "" && "text-zinc-400",
+        "w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+        value === "" && "text-muted-foreground/70",
       )}
     >
       <option value="">未设置</option>
