@@ -47,11 +47,11 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
   - [x] I3a 数据与校验层：shared 移除 settingDataSchema.parent_id + db 层级邻接表/防环 helper + server POST /relation 校验 + tools R5 调整 + 测试 & 文档
   - [x] I3b 客户端 UI：detailFieldsForType 移除 parent_id + 详情页「层级」区块（父/子 + 修改上级）+ 新建行「上级设定」弹层选择器 + 测试
   - [x] I4 设定树视图（决策 30：第 6 tab「设定树」，buildSettingTree 纯函数 + 递归树渲染 + 折叠/节点点击跳详情）
-- [ ] L 批次前端样式工程化（2026-08，用户反馈：className 单行难读、样式工程化不足；决策：B 为主格式化+提取重复、C 按需 CSS Modules 后置评估）：
-  - [ ] L1 工具与规范地基：client 包引入 Prettier + prettier-plugin-tailwindcss（.prettierrc + .prettierignore）+ 新建 `lib/styles.ts` 共享样式常量（iconButtonClass/inputClass/emptyStateClass/errorBannerClass/sectionCardClass 等，提取阈值 ≥3 处）+ `components/ui/EmptyState`/`SectionCard` 组件 + `ui/` 目录全量格式化 + layout.md 样式书写规范
-  - [ ] L2 外壳组件样式整理：Sidebar / AppShell / main-panel / ChatPanel / settings（backup-section）格式化 + 常量替换
-  - [ ] L3 页面样式整理：pages/ 10 文件（Dashboard/Outline/Canvas/EntityList/EntityDetail/HookPanel/Trash/Settings/Timeline/TimelineDetail）格式化 + 常量/组件替换
-  - [ ] L4 其余组件收尾：delta/、entity/、timeline/、outline/、page-nav/、feedback/ 等格式化 + 常量替换 + 全仓回归验证（typecheck/lint/test/build）
+- [x] L 批次前端样式工程化（2026-08，用户反馈：className 单行难读、样式工程化不足；决策：B 为主格式化+提取重复、C 按需 CSS Modules 后置评估）：
+  - [x] L1 工具与规范地基：client 包引入 Prettier + prettier-plugin-tailwindcss（.prettierrc + .prettierignore）+ 新建 `lib/styles.ts` 共享样式常量（iconButtonClass/inputClass/emptyStateClass/errorBannerClass/sectionCardClass 等，提取阈值 ≥3 处）+ `components/ui/EmptyState`/`SectionCard` 组件 + `ui/` 目录全量格式化 + layout.md 样式书写规范
+  - [x] L2 外壳组件样式整理：Sidebar / AppShell / main-panel / ChatPanel / settings（backup-section）格式化 + 常量替换
+  - [x] L3 页面样式整理：pages/ 10 文件（Dashboard/Outline/Canvas/EntityList/EntityDetail/HookPanel/Trash/Settings/Timeline/TimelineDetail）格式化 + 常量/组件替换 + zinc 硬编码色 token 化
+  - [x] L4 其余组件收尾：delta/、entity/、timeline/、outline/、page-nav/、feedback/ 等格式化 + 常量替换 + 全仓回归验证（typecheck/lint/1609 测试/build 全绿）
 
 ---
 
