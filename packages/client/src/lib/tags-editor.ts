@@ -22,3 +22,16 @@ export function enterBehavior(values: readonly string[], index: number): TagEnte
   if (values[index].trim() !== "") return { append: true, focusIndex: values.length };
   return null;
 }
+
+/**
+ * 数组元素移动（M3，2026-08 批次六）：from 位移到 to 位（其余元素顺移），返回新数组。
+ * 拖拽排序用——from === to（原地放下）或下标越界 → 原样返回副本（防御，不抛错）。
+ */
+export function moveArrayItem(values: readonly string[], from: number, to: number): string[] {
+  if (from === to) return [...values];
+  if (from < 0 || from >= values.length || to < 0 || to >= values.length) return [...values];
+  const next = [...values];
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  return next;
+}

@@ -8,6 +8,7 @@
 // 边界：custom_fields 仅在响应 data 已有该键时显示（MVP 无法新增键）；「问 AI」入口待 chat store
 //   就绪后补（layout.md §3.3 带上下文进聊天）
 import { useEffect, useRef, useState } from "react";
+import { GripVertical } from "lucide-react";
 import { formatTimestamp } from "@whispering233/ai-editor-shared";
 import type { EntityType } from "@whispering233/ai-editor-shared";
 import { ConfirmDialog } from "../components/outline/dialogs";
@@ -38,7 +39,7 @@ import {
   type DetailFieldConfig,
 } from "../lib/entity-detail";
 import { flattenTree } from "../lib/outline-tree";
-import { enterBehavior } from "../lib/tags-editor";
+import { enterBehavior, moveArrayItem } from "../lib/tags-editor";
 import { cn } from "../lib/utils";
 import { inputClass, skeletonClass } from "@/lib/styles";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -82,10 +83,58 @@ function TagsEditor({
 }) {
   // 输入框 ref 表（M1：回车后聚焦下一行/新行；下标即行号，追加行在渲染后经 rAF 聚焦）
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
+  // 拖拽排序态（M3）：dragIndex = 被拖行；dragOverIndex = 当前悬停目标行（高亮提示）
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   return (
     <div className="flex flex-col gap-1.5">
       {values.map((v, i) => (
-        <div key={i} className="flex items-center gap-1.5">
+        <div
+          key={i}
+          className={cn(
+            "flex items-center gap-1.5 rounded-md px-0.5 py-0.5 transition-colors",
+            dragIndex === i && "opacity-40",
+            dragOverIndex === i &&
+              dragIndex !== null &&
+              dragIndex !== i &&
+              "bg-muted/60 ring-1 ring-ring",
+          )}
+          onDragOver={(e) => {
+            // 仅自身拖拽进行中响应（dragIndex 非空）——不 preventDefault 时保留浏览器默认
+            // 行为（输入框内文本拖选/拖入照常），不干扰文本编辑
+            if (dragIndex === null) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+            if (dragOverIndex !== i) setDragOverIndex(i);
+          }}
+          onDrop={(e) => {
+            if (dragIndex === null) return;
+            e.preventDefault();
+            if (dragIndex !== i) onChange(moveArrayItem(values, dragIndex, i));
+            setDragIndex(null);
+            setDragOverIndex(null);
+          }}
+        >
+          {/* 拖拽手柄（M3：HTML5 原生 DnD，零依赖；draggable 仅手柄——输入框内文本选择不受影响） */}
+          <button
+            type="button"
+            draggable
+            title="拖拽排序"
+            aria-label="拖拽排序"
+            className="shrink-0 cursor-grab rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground active:cursor-grabbing"
+            onDragStart={(e) => {
+              setDragIndex(i);
+              e.dataTransfer.effectAllowed = "move";
+              // Firefox 需 setData 才启动拖拽（types 含 text/plain 亦可作自识别标记）
+              e.dataTransfer.setData("text/plain", String(i));
+            }}
+            onDragEnd={() => {
+              setDragIndex(null);
+              setDragOverIndex(null);
+            }}
+          >
+            <GripVertical className="size-4" />
+          </button>
           <Input
             value={v}
             onChange={(e) => {
