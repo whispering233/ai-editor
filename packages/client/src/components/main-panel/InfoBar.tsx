@@ -14,7 +14,13 @@ import { findOutlineNodeTitle, useProjectStore } from "../../stores/project";
 import { useUiStore } from "../../stores/ui";
 import { Button } from "../ui/button";
 
-export function InfoBar({ chatOpen, onToggleChat }: { chatOpen: boolean; onToggleChat: () => void }) {
+export function InfoBar({
+  chatOpen,
+  onToggleChat,
+}: {
+  chatOpen: boolean;
+  onToggleChat: () => void;
+}) {
   const config = useProjectStore((s) => s.config);
   const configLoading = useProjectStore((s) => s.configLoading);
   const outline = useProjectStore((s) => s.outline);
@@ -67,7 +73,9 @@ export function InfoBar({ chatOpen, onToggleChat }: { chatOpen: boolean; onToggl
       >
         <RefreshCw className="size-4" />
       </Button>
-      <span className="shrink-0 text-sm text-muted-foreground">语言: {config?.language ?? "—"}</span>
+      <span className="shrink-0 text-sm text-muted-foreground">
+        语言: {config?.language ?? "—"}
+      </span>
       {!isDesktop && (
         <Button
           variant="ghost"

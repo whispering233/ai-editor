@@ -19,12 +19,27 @@
 // 风格约束：token 类（bg-muted/border-border/text-muted-foreground 等），禁硬编码色类（layout.md §3）
 import { useEffect, useRef, useState } from "react";
 import { Check, Loader2, Pencil, X } from "lucide-react";
-import { ApiError, CLIENT_NETWORK_ERROR, createProjectBackup, getProjectBackups, renameProjectBackup, restoreProjectBackup, type BackupEntry } from "../../lib/api";
-import { BACKUP_FREQUENCY_OPTIONS, BACKUP_KIND_LABELS, formatBackupTime, formatBytes } from "../../lib/backup";
+import {
+  ApiError,
+  CLIENT_NETWORK_ERROR,
+  createProjectBackup,
+  getProjectBackups,
+  renameProjectBackup,
+  restoreProjectBackup,
+  type BackupEntry,
+} from "../../lib/api";
+import {
+  BACKUP_FREQUENCY_OPTIONS,
+  BACKUP_KIND_LABELS,
+  formatBackupTime,
+  formatBytes,
+} from "../../lib/backup";
 import { MAX_BACKUP_NAME_LENGTH } from "@whispering233/ai-editor-shared";
 import { useProjectStore } from "../../stores/project";
 import { useUiStore } from "../../stores/ui";
 import { useChatStore } from "../../stores/chat";
+import { cn } from "../../lib/utils";
+import { skeletonClass } from "../../lib/styles";
 import { Button } from "../ui/button";
 import { ConfirmDialog } from "../outline/dialogs";
 
@@ -62,7 +77,12 @@ export function BackupSection() {
    * fileName = 目标备份；value = 输入框当前值（预填 b.name ?? ""）；
    * saving = 提交中（禁用输入/按钮防连点）；error = 行内错误提示（400/404 透传 message，网络失败固定文案）
    */
-  const [renaming, setRenaming] = useState<{ fileName: string; value: string; saving: boolean; error: string | null } | null>(null);
+  const [renaming, setRenaming] = useState<{
+    fileName: string;
+    value: string;
+    saving: boolean;
+    error: string | null;
+  } | null>(null);
   /**
    * renaming 最新值镜像（渲染时同步，oracle P1-2）：
    * onBlur 守卫与 catch 兜底需要读「当前」而非事件绑定时闭包快照——saving 置位后 input 被
@@ -213,7 +233,9 @@ export function BackupSection() {
   const frequencyValue =
     config === null
       ? ""
-      : BACKUP_FREQUENCY_OPTIONS.some((o) => String(o.value) === String(config.backupFrequencyMinutes))
+      : BACKUP_FREQUENCY_OPTIONS.some(
+            (o) => String(o.value) === String(config.backupFrequencyMinutes),
+          )
         ? String(config.backupFrequencyMinutes)
         : "null";
 
@@ -221,7 +243,8 @@ export function BackupSection() {
     <div>
       <h2 className="mb-1 text-sm font-semibold text-foreground">自动备份</h2>
       <p className="mb-2 text-xs text-muted-foreground">
-        跟随书籍：备份与频率均为本项目独立；服务运行期间按频率自动备份，有变更才生成新备份；每项目保留最近 20 份
+        跟随书籍：备份与频率均为本项目独立；服务运行期间按频率自动备份，有变更才生成新备份；每项目保留最近
+        20 份
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <select
@@ -268,8 +291,8 @@ export function BackupSection() {
             {backupsLoading && backups === null ? (
               /* 首载骨架（重载不闪骨架：条件含 backups === null，layout.md §4.3） */
               <div className="space-y-1 p-2">
-                <div className="h-7 animate-pulse rounded-md bg-muted" />
-                <div className="h-7 animate-pulse rounded-md bg-muted" />
+                <div className={cn(skeletonClass, "h-7 rounded-md")} />
+                <div className={cn(skeletonClass, "h-7 rounded-md")} />
               </div>
             ) : backupsError !== null ? (
               <div className="flex items-center justify-between px-2 py-2">
@@ -293,7 +316,9 @@ export function BackupSection() {
                       <div className="flex items-center gap-2">
                         {/* 行身份区：时间 + 类型标签 + 自定义名称（完整文件名 title tooltip 保持） */}
                         <span className="min-w-0 flex-1 text-sm" title={b.fileName}>
-                          <span className="text-muted-foreground">{formatBackupTime(b.createdAt)}</span>
+                          <span className="text-muted-foreground">
+                            {formatBackupTime(b.createdAt)}
+                          </span>
                           {/* 类型标签（决策 29）：自动 = 中性低调徽标，手动 = primary 强调徽标 */}
                           <span
                             className={
@@ -309,7 +334,9 @@ export function BackupSection() {
                           ) : null}
                         </span>
                         {!editing ? (
-                          <span className="shrink-0 text-xs text-muted-foreground">{formatBytes(b.size)}</span>
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            {formatBytes(b.size)}
+                          </span>
                         ) : null}
                         {editing ? (
                           /* 行内编辑态：input（预填当前名称）+ 确认/取消；Enter 提交 / Esc 或失焦取消 */

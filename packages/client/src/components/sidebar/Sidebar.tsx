@@ -30,6 +30,12 @@ import {
   X,
 } from "lucide-react";
 import { formatRelativeTime, formatTimestamp } from "@whispering233/ai-editor-shared";
+import {
+  iconButtonBaseClass,
+  iconButtonDisabledClass,
+  iconButtonSize,
+  skeletonClass,
+} from "@/lib/styles";
 import { useTheme } from "../../hooks/use-theme";
 import { SIDEBAR_MIN_WIDTH } from "../../hooks/use-panels";
 import {
@@ -39,14 +45,25 @@ import {
   importProjectZip,
   renameProject,
 } from "../../lib/api";
-import { describeExportError, describeImportError, describeOpenError } from "../../lib/error-messages";
+import {
+  describeExportError,
+  describeImportError,
+  describeOpenError,
+} from "../../lib/error-messages";
 import { cn } from "../../lib/utils";
 import { validateBookName } from "../../lib/book-name";
 import { buildBookPath, useProjectStore } from "../../stores/project";
 import { useChatStore } from "../../stores/chat";
 import { useUiStore } from "../../stores/ui";
 import { Button } from "../ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../ui/dialog";
 import { Input } from "../ui/input";
 
 /** 紧凑日期（左栏 10% 很窄）：当年显示 MM-DD，跨年显示 YY-MM-DD；非法输入原样返回 */
@@ -89,17 +106,30 @@ function SessionList() {
       return (
         <div className="ml-3 border-l border-border py-1 pl-2">
           <p className="text-xs text-muted-foreground">会话加载失败</p>
-          <Button variant="outline" size="xs" className="mt-0.5" onClick={() => void loadSessions()}>
+          <Button
+            variant="outline"
+            size="xs"
+            className="mt-0.5"
+            onClick={() => void loadSessions()}
+          >
             重试
           </Button>
         </div>
       );
     }
-    return <p className="ml-3 border-l border-border py-1 pl-2 text-xs text-muted-foreground/60">会话加载中…</p>;
+    return (
+      <p className="ml-3 border-l border-border py-1 pl-2 text-xs text-muted-foreground/60">
+        会话加载中…
+      </p>
+    );
   }
 
   if (sessions.length === 0) {
-    return <p className="ml-3 border-l border-border py-1 pl-2 text-xs text-muted-foreground/60">暂无会话</p>;
+    return (
+      <p className="ml-3 border-l border-border py-1 pl-2 text-xs text-muted-foreground/60">
+        暂无会话
+      </p>
+    );
   }
 
   return (
@@ -119,7 +149,9 @@ function SessionList() {
           >
             <MessageSquare className="size-3 shrink-0 opacity-70" />
             <span className="min-w-0 flex-1 truncate">{s.lastMessage || "（空会话）"}</span>
-            <span className="shrink-0 text-[10px] text-muted-foreground/60">{formatRelativeTime(s.updatedAt)}</span>
+            <span className="shrink-0 text-[10px] text-muted-foreground/60">
+              {formatRelativeTime(s.updatedAt)}
+            </span>
           </button>
         </li>
       ))}
@@ -187,7 +219,9 @@ export function Sidebar({
       // 展开新打开的项目行（M1：Sidebar 发起的打开天然对齐展开态）
       setExpandedPath(path);
     } catch (err) {
-      useUiStore.getState().showToast(describeOpenError(err instanceof ApiError ? err.code : null), "error");
+      useUiStore
+        .getState()
+        .showToast(describeOpenError(err instanceof ApiError ? err.code : null), "error");
     }
   }
 
@@ -263,13 +297,15 @@ export function Sidebar({
       setTimeout(() => URL.revokeObjectURL(url), 0);
       useUiStore.getState().showToast(`已导出《${name}》备份`);
     } catch (err) {
-      useUiStore.getState().showToast(
-        describeExportError(
-          err instanceof ApiError ? err.code : null,
-          err instanceof ApiError ? err.message : "导出失败，请重试",
-        ),
-        "error",
-      );
+      useUiStore
+        .getState()
+        .showToast(
+          describeExportError(
+            err instanceof ApiError ? err.code : null,
+            err instanceof ApiError ? err.message : "导出失败，请重试",
+          ),
+          "error",
+        );
     } finally {
       setExporting(false);
     }
@@ -302,7 +338,10 @@ export function Sidebar({
     const trimmed = next.trim();
     const isBookName = (name: string) => bookshelf?.books.some((b) => b.name === name) ?? false;
     if (importConflict) {
-      if (trimmed === `${importConflictBase} (2)` || (trimmed === importConflictBase && isBookName(trimmed))) {
+      if (
+        trimmed === `${importConflictBase} (2)` ||
+        (trimmed === importConflictBase && isBookName(trimmed))
+      ) {
         return; // 预填名 / 回改基础名：保持冲突态
       }
       if (isBookName(trimmed)) {
@@ -355,7 +394,9 @@ export function Sidebar({
       // 决策 27 分流提示（settings.md/layout.md §2.3：restored → 已恢复备份；new → 已导入为新书）
       useUiStore
         .getState()
-        .showToast(res.mode === "restored" ? `已恢复备份《${res.name}》` : `已导入为新书《${res.name}》`);
+        .showToast(
+          res.mode === "restored" ? `已恢复备份《${res.name}》` : `已导入为新书《${res.name}》`,
+        );
       await loadBookshelf(); // 刷新书架让新书出现（失败由 bookshelfError 呈现）
       setImportOpen(false);
       setImportFile(null);
@@ -435,13 +476,15 @@ export function Sidebar({
   return (
     <aside
       className="flex min-w-0 flex-[1_1_10%] flex-col border-r border-border bg-sidebar"
-      style={width !== undefined ? { flex: `0 1 ${width}px`, minWidth: SIDEBAR_MIN_WIDTH } : undefined}
+      style={
+        width !== undefined ? { flex: `0 1 ${width}px`, minWidth: SIDEBAR_MIN_WIDTH } : undefined
+      }
     >
       {/* 产品标识：衬线斜体（layout.md §3.3），点击回 #/；F7 起行右侧带收起左栏按钮（仅桌面态渲染） */}
       <div className="flex h-12 shrink-0 items-center border-b border-border">
         <a
           href="#/"
-          className="flex h-full min-w-0 flex-1 items-center gap-1.5 px-3 font-serif text-base italic text-foreground hover:text-primary"
+          className="flex h-full min-w-0 flex-1 items-center gap-1.5 px-3 font-serif text-base text-foreground italic hover:text-primary"
         >
           <span className="text-primary">◈</span>
           <span className="truncate">我的小说</span>
@@ -452,7 +495,7 @@ export function Sidebar({
             onClick={onToggleCollapse}
             aria-label="收起左栏"
             title="收起左栏"
-            className="mr-1.5 flex size-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className={cn(iconButtonBaseClass, iconButtonSize.sm, "mr-1.5")}
           >
             <PanelLeftClose className="size-4" />
           </button>
@@ -505,7 +548,11 @@ export function Sidebar({
             且与 Esc 语义统一（都是「不创建」）。× 按钮存在时点它会先触发 input 失焦再触发 click——两条路径都走
             cancelCreate（幂等），不会误开/误建 */}
         {createOpen && (
-          <form onSubmit={handleCreateBook} className="mb-1 flex flex-col gap-1 px-1" aria-label="新建项目">
+          <form
+            onSubmit={handleCreateBook}
+            className="mb-1 flex flex-col gap-1 px-1"
+            aria-label="新建项目"
+          >
             <Input
               value={bookName}
               onChange={(e) => setBookName(e.target.value)}
@@ -539,15 +586,18 @@ export function Sidebar({
         {bookshelfLoading && bookshelf === null && (
           <div className="space-y-1 px-1 py-2">
             {[0, 1, 2].map((i) => (
-              <div key={i} className="h-8 animate-pulse rounded-lg bg-muted" />
+              <div key={i} className={cn(skeletonClass, "h-8 rounded-lg")} />
             ))}
           </div>
         )}
 
         {/* 空书架 */}
-        {bookshelfError === null && !bookshelfLoading && bookshelf && bookshelf.books.length === 0 && (
-          <p className="px-1 py-2 text-xs text-muted-foreground/70">还没有书，先创建一本</p>
-        )}
+        {bookshelfError === null &&
+          !bookshelfLoading &&
+          bookshelf &&
+          bookshelf.books.length === 0 && (
+            <p className="px-1 py-2 text-xs text-muted-foreground/70">还没有书，先创建一本</p>
+          )}
 
         {/* 项目列表（点击行打开；chevron 展开会话；无项目打开时照常展示可点击） */}
         {bookshelfError === null && bookshelf && bookshelf.books.length > 0 && (
@@ -597,9 +647,17 @@ export function Sidebar({
                             : "text-muted-foreground hover:bg-muted hover:text-foreground",
                         )}
                       >
-                        <BookOpen className={cn("size-3.5 shrink-0", isCurrent ? "text-primary" : "text-muted-foreground/60")} />
+                        <BookOpen
+                          className={cn(
+                            "size-3.5 shrink-0",
+                            isCurrent ? "text-primary" : "text-muted-foreground/60",
+                          )}
+                        />
                         <span className="min-w-0 flex-1 truncate">{book.name}</span>
-                        <span className="shrink-0 text-[10px] text-muted-foreground/60" title={formatTimestamp(book.updatedAt)}>
+                        <span
+                          className="shrink-0 text-[10px] text-muted-foreground/60"
+                          title={formatTimestamp(book.updatedAt)}
+                        >
                           {formatShortTimestamp(book.updatedAt)}
                         </span>
                       </button>
@@ -612,19 +670,36 @@ export function Sidebar({
                         disabled={exporting}
                         aria-label={`导出《${book.name}》备份`}
                         title="导出备份（zip）"
-                        className="flex h-8 w-6 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+                        className={cn(
+                          iconButtonBaseClass,
+                          iconButtonSize.bar,
+                          iconButtonDisabledClass,
+                        )}
                       >
-                        {exporting ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+                        {exporting ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <Download className="size-3.5" />
+                        )}
                       </button>
                     )}
                     <button
                       type="button"
-                      onClick={() => setExpandedPath((cur) => (cur === book.path ? null : book.path))}
+                      onClick={() =>
+                        setExpandedPath((cur) => (cur === book.path ? null : book.path))
+                      }
                       aria-expanded={expanded}
-                      aria-label={expanded ? `收起《${book.name}》会话` : `展开《${book.name}》会话`}
-                      className="flex h-8 w-6 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      aria-label={
+                        expanded ? `收起《${book.name}》会话` : `展开《${book.name}》会话`
+                      }
+                      className={cn(iconButtonBaseClass, iconButtonSize.bar)}
                     >
-                      <ChevronRight className={cn("size-4 transition-transform duration-200", expanded && "rotate-90")} />
+                      <ChevronRight
+                        className={cn(
+                          "size-4 transition-transform duration-200",
+                          expanded && "rotate-90",
+                        )}
+                      />
                     </button>
                     {/* 重命名图标按钮（H3：直接展示，不收进 ⋯ 菜单；仅当前项目行渲染） */}
                     {isCurrent && (
@@ -633,7 +708,7 @@ export function Sidebar({
                         aria-label={`重命名《${book.name}》`}
                         title="重命名"
                         onClick={() => startRename(book)}
-                        className="flex h-8 w-6 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        className={cn(iconButtonBaseClass, iconButtonSize.bar)}
                       >
                         <Pencil className="size-3.5" />
                       </button>
@@ -667,7 +742,11 @@ export function Sidebar({
           onClick={toggleTheme}
           aria-label="切换主题"
         >
-          {theme === "dark" ? <Sun className="size-4 shrink-0" /> : <Moon className="size-4 shrink-0" />}
+          {theme === "dark" ? (
+            <Sun className="size-4 shrink-0" />
+          ) : (
+            <Moon className="size-4 shrink-0" />
+          )}
           <span className="truncate">{theme === "dark" ? "浅色模式" : "深色模式"}</span>
         </Button>
       </div>
@@ -690,7 +769,8 @@ export function Sidebar({
           <DialogHeader>
             <DialogTitle>导入书籍</DialogTitle>
             <DialogDescription>
-              从备份 zip 导入；与书架已有书 id 匹配时覆盖恢复，否则导入为新书（同名可重命名或保持原样并存）
+              从备份 zip 导入；与书架已有书 id
+              匹配时覆盖恢复，否则导入为新书（同名可重命名或保持原样并存）
             </DialogDescription>
           </DialogHeader>
           <form
@@ -726,7 +806,12 @@ export function Sidebar({
             {importError && <p className="text-sm text-destructive">{importError}</p>}
           </form>
           <DialogFooter>
-            <Button variant="outline" type="button" onClick={() => setImportOpen(false)} disabled={importing}>
+            <Button
+              variant="outline"
+              type="button"
+              onClick={() => setImportOpen(false)}
+              disabled={importing}
+            >
               取消
             </Button>
             {importConflict ? (
@@ -750,7 +835,11 @@ export function Sidebar({
                 </Button>
               </>
             ) : (
-              <Button type="submit" form="import-book-form" disabled={importing || importFile === null}>
+              <Button
+                type="submit"
+                form="import-book-form"
+                disabled={importing || importFile === null}
+              >
                 {importing ? "导入中…" : "导入"}
               </Button>
             )}

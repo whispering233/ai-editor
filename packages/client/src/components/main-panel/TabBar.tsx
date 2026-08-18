@@ -1,7 +1,16 @@
 // 中栏 TabBar（doc/ui/layout.md §2.2）：七个 tab 药丸分段控件（概览/大纲/画布/实体关系/伏笔/时间轴/回收站）
 // 形态参考 inkos：容器 bg-secondary/30 rounded-lg p-1 + 激活项 bg-card shadow-sm；lucide 图标 + 中文标签
 // 当前 tab 由路由首段驱动；「实体关系」在实体列表/详情路由下均保持高亮（segment=entities，layout.md §1）
-import { CalendarClock, LayoutGrid, ListTree, Network, Puzzle, Shapes, Trash2, type LucideIcon } from "lucide-react";
+import {
+  CalendarClock,
+  LayoutGrid,
+  ListTree,
+  Network,
+  Puzzle,
+  Shapes,
+  Trash2,
+  type LucideIcon,
+} from "lucide-react";
 import type { MouseEvent } from "react";
 import type { Route } from "../../hooks/use-route";
 import { cn } from "../../lib/utils";

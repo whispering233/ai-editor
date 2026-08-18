@@ -10,6 +10,7 @@ import { GripVertical, PanelLeftOpen, PanelRightOpen } from "lucide-react";
 import type { Route } from "../hooks/use-route";
 import { usePanels } from "../hooks/use-panels";
 import { cn } from "../lib/utils";
+import { iconButtonBaseClass, iconButtonSize } from "../lib/styles";
 import { ChatPanel } from "./chat/ChatPanel";
 import { FeedbackHost } from "./feedback/FeedbackHost";
 import { MainPanel } from "./main-panel/MainPanel";
@@ -74,7 +75,7 @@ function CollapseStrip({ side, onExpand }: { side: "sidebar" | "chat"; onExpand:
         onClick={onExpand}
         aria-label={isSidebar ? "展开左栏" : "展开右栏"}
         title={isSidebar ? "展开左栏" : "展开右栏"}
-        className="mt-3 flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        className={cn(iconButtonBaseClass, iconButtonSize.md, "mt-3")}
       >
         <ExpandIcon className="size-4" />
       </button>
@@ -85,7 +86,8 @@ function CollapseStrip({ side, onExpand }: { side: "sidebar" | "chat"; onExpand:
 export function AppShell({ route, children }: { route: Route; children: ReactNode }) {
   // 小屏抽屉开关状态（桌面态恒显示静态右栏，该状态不生效）
   const [chatOpen, setChatOpen] = useState(false);
-  const { layout, isDesktop, dragSide, toggleCollapse, startResize, moveResize, endResize } = usePanels();
+  const { layout, isDesktop, dragSide, toggleCollapse, startResize, moveResize, endResize } =
+    usePanels();
   const isDragging = dragSide !== null;
 
   return (
@@ -103,15 +105,32 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
       )}
       {/* 左|中拖拽手柄：仅桌面 + 左栏展开时渲染（收起态隐藏，拖拽与收起互斥） */}
       {isDesktop && !layout.collapsedSidebar && (
-        <ResizeHandle side="sidebar" active={dragSide === "sidebar"} onStart={startResize} onMove={moveResize} onEnd={endResize} />
+        <ResizeHandle
+          side="sidebar"
+          active={dragSide === "sidebar"}
+          onStart={startResize}
+          onMove={moveResize}
+          onEnd={endResize}
+        />
       )}
       {/* 中栏：桌面态 flex-1 弹性吸收左右栏固定宽之外的剩余空间（中栏不可收起，无收起入口） */}
-      <MainPanel isDesktop={isDesktop} route={route} chatOpen={chatOpen} onToggleChat={() => setChatOpen((v) => !v)}>
+      <MainPanel
+        isDesktop={isDesktop}
+        route={route}
+        chatOpen={chatOpen}
+        onToggleChat={() => setChatOpen((v) => !v)}
+      >
         {children}
       </MainPanel>
       {/* 中|右拖拽手柄：仅桌面 + 右栏展开时渲染 */}
       {isDesktop && !layout.collapsedChat && (
-        <ResizeHandle side="chat" active={dragSide === "chat"} onStart={startResize} onMove={moveResize} onEnd={endResize} />
+        <ResizeHandle
+          side="chat"
+          active={dragSide === "chat"}
+          onStart={startResize}
+          onMove={moveResize}
+          onEnd={endResize}
+        />
       )}
       {/* 右栏：收起 → 窄条；展开 → ChatPanel（桌面传像素宽度 + 收起按钮；小屏抽屉行为不变——
           open/onClose 仅小屏生效，收起按钮不渲染） */}

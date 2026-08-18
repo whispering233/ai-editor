@@ -29,6 +29,7 @@ import { useChatStore, type FocusContext, type ProposalCard } from "../../stores
 import type { ChatMessage } from "@whispering233/ai-editor-shared";
 import { formatRelativeTime } from "@whispering233/ai-editor-shared";
 import { cn } from "../../lib/utils";
+import { skeletonClass } from "../../lib/styles";
 import { Button } from "../ui/button";
 import {
   DropdownMenu,
@@ -80,7 +81,8 @@ interface ToolCallShape {
   name?: string;
   args?: unknown;
 }
-const asToolCall = (c: unknown): ToolCallShape => (typeof c === "object" && c !== null ? (c as ToolCallShape) : {});
+const asToolCall = (c: unknown): ToolCallShape =>
+  typeof c === "object" && c !== null ? (c as ToolCallShape) : {};
 
 // ============ 会话标题行：下拉切换同项目会话 + [新会话] ============
 
@@ -108,7 +110,12 @@ function SessionTitleBar({
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
-            <Button variant="outline" size="sm" disabled={disabled} className="max-w-44 justify-start gap-1 px-1.5">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={disabled}
+              className="max-w-44 justify-start gap-1 px-1.5"
+            >
               <span className="truncate text-sm font-medium" title={title}>
                 {title}
               </span>
@@ -258,7 +265,7 @@ export function ToolCallRow({
         {ok && <span className="shrink-0 text-primary">✓</span>}
       </button>
       {open && (
-        <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap text-xs text-muted-foreground">
+        <pre className="mt-1 max-h-40 overflow-auto text-xs whitespace-pre-wrap text-muted-foreground">
           {typeof args === "string" ? args : JSON.stringify(args ?? {}, null, 2)}
         </pre>
       )}
@@ -269,7 +276,13 @@ export function ToolCallRow({
 // ============ 消息条目：user 气泡 / assistant 无气泡宋体排版 + 历史工具折叠记录 ============
 
 /** 历史 tool 消息按 toolCallId 挂到 assistant.toolCalls 行（决策 18 成对；孤儿半对不渲染；导出供渲染走查测试） */
-export function MessageItem({ message, toolResults }: { message: ChatMessage; toolResults: Map<string, ChatMessage> }) {
+export function MessageItem({
+  message,
+  toolResults,
+}: {
+  message: ChatMessage;
+  toolResults: Map<string, ChatMessage>;
+}) {
   if (message.role === "user") {
     // user 气泡：右对齐 bg-secondary 圆角气泡（chat.md 结构图）
     return (
@@ -300,11 +313,11 @@ export function MessageItem({ message, toolResults }: { message: ChatMessage; to
         );
       })}
       {message.content ? (
-        <p className="whitespace-pre-wrap font-serif text-[17px] leading-[1.72] text-foreground">{message.content}</p>
-      ) : (
-        // 空内容（流式占位 / 空消息）：不渲染占位行
-        null
-      )}
+        <p className="font-serif text-[17px] leading-[1.72] whitespace-pre-wrap text-foreground">
+          {message.content}
+        </p>
+      ) : // 空内容（流式占位 / 空消息）：不渲染占位行
+      null}
     </div>
   );
 }
@@ -325,21 +338,34 @@ export function ProposalCardView({ proposal }: { proposal: ProposalCard }) {
       <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
         <Sparkles className="size-3.5 shrink-0 text-primary" />
         <span className="min-w-0 flex-1 truncate">提案：{label}</span>
-        {proposal.status === "confirmed" && <span className="shrink-0 text-xs text-primary">✓ 已确认</span>}
-        {proposal.status === "rejected" && <span className="shrink-0 text-xs text-muted-foreground">已拒绝</span>}
-        {proposal.status === "stale" && <span className="shrink-0 text-xs text-destructive">⚠ 数据已变化，此提案已失效</span>}
+        {proposal.status === "confirmed" && (
+          <span className="shrink-0 text-xs text-primary">✓ 已确认</span>
+        )}
+        {proposal.status === "rejected" && (
+          <span className="shrink-0 text-xs text-muted-foreground">已拒绝</span>
+        )}
+        {proposal.status === "stale" && (
+          <span className="shrink-0 text-xs text-destructive">⚠ 数据已变化，此提案已失效</span>
+        )}
       </div>
       {/* preview 按 type 渲染（创建类字段键值 / 更新类 diff 列表 / 大纲类目标位置）：S7 完善结构化渲染，当前 JSON 摘要 */}
       {proposal.preview !== undefined && (
-        <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap text-xs text-muted-foreground">
-          {typeof proposal.preview === "string" ? proposal.preview : JSON.stringify(proposal.preview, null, 2)}
+        <pre className="mt-1 max-h-32 overflow-auto text-xs whitespace-pre-wrap text-muted-foreground">
+          {typeof proposal.preview === "string"
+            ? proposal.preview
+            : JSON.stringify(proposal.preview, null, 2)}
         </pre>
       )}
       <div className="mt-2 flex gap-1.5">
         <Button size="xs" disabled={busy} onClick={() => void confirmProposal(proposal.proposalId)}>
           确认
         </Button>
-        <Button size="xs" variant="outline" disabled={busy} onClick={() => void rejectProposal(proposal.proposalId)}>
+        <Button
+          size="xs"
+          variant="outline"
+          disabled={busy}
+          onClick={() => void rejectProposal(proposal.proposalId)}
+        >
           拒绝
         </Button>
       </div>
@@ -356,7 +382,9 @@ function FocusBar() {
   return (
     <div className="flex shrink-0 items-center gap-1.5 border-t border-border bg-accent/40 px-3 py-1.5 text-xs">
       <Sparkles className="size-3.5 shrink-0 text-primary" />
-      <span className="min-w-0 flex-1 truncate text-muted-foreground">正在讨论：{focusLabel(focusContext)}</span>
+      <span className="min-w-0 flex-1 truncate text-muted-foreground">
+        正在讨论：{focusLabel(focusContext)}
+      </span>
       <button
         className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted"
         onClick={clearFocusContext}
@@ -449,7 +477,11 @@ function MessageList({ disabled }: { disabled: boolean }) {
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
         {[0, 1].map((i) => (
-          <div key={i} className="animate-pulse rounded-lg bg-muted/60" style={{ height: 40, width: i % 2 ? "70%" : "90%" }} />
+          <div
+            key={i}
+            className={cn(skeletonClass, "rounded-lg bg-muted/60")}
+            style={{ height: 40, width: i % 2 ? "70%" : "90%" }}
+          />
         ))}
       </div>
     );
@@ -472,7 +504,13 @@ function MessageList({ disabled }: { disabled: boolean }) {
           ))}
           {/* 运行时工具记录（S7 SSE tool_call/tool_result 事件填充；折叠渲染同历史） */}
           {streamTools.map((t) => (
-            <ToolCallRow key={t.id} toolName={t.tool} args={t.args} result={t.result} status={t.status} />
+            <ToolCallRow
+              key={t.id}
+              toolName={t.tool}
+              args={t.args}
+              result={t.result}
+              status={t.status}
+            />
           ))}
           {/* 提案卡片（S7 SSE proposal 事件填充；决策 14 瞬态，流断开即清空） */}
           {proposals.map((p) => (
@@ -486,7 +524,13 @@ function MessageList({ disabled }: { disabled: boolean }) {
 
 // ============ 面板内部内容：标题行 + 横幅 + 消息流 + focus 小条 + 输入区 ============
 
-function ChatPanelBody({ onClose, onToggleCollapse }: { onClose?: () => void; onToggleCollapse?: () => void }) {
+function ChatPanelBody({
+  onClose,
+  onToggleCollapse,
+}: {
+  onClose?: () => void;
+  onToggleCollapse?: () => void;
+}) {
   const config = useProjectStore((s) => s.config);
   const disabled = !config;
 
@@ -533,7 +577,9 @@ export function ChatPanel({
     return (
       <aside
         className="flex min-w-0 flex-[4_1_40%] flex-col border-l border-border bg-background"
-        style={width !== undefined ? { flex: `0 1 ${width}px`, minWidth: CHAT_MIN_WIDTH } : undefined}
+        style={
+          width !== undefined ? { flex: `0 1 ${width}px`, minWidth: CHAT_MIN_WIDTH } : undefined
+        }
       >
         <ChatPanelBody onToggleCollapse={onToggleCollapse} />
       </aside>
@@ -545,9 +591,9 @@ export function ChatPanel({
   return (
     <div className="fixed inset-0 z-50">
       {/* 遮罩：点击关闭 */}
-      <div className="absolute inset-0 bg-foreground/40 animate-in fade-in" onClick={onClose} />
+      <div className="absolute inset-0 animate-in bg-foreground/40 fade-in" onClick={onClose} />
       {/* 抽屉：右侧滑入 */}
-      <div className="absolute inset-y-0 right-0 w-[85vw] max-w-md border-l border-border bg-background shadow-xl animate-in slide-in-from-right duration-300">
+      <div className="absolute inset-y-0 right-0 w-[85vw] max-w-md animate-in border-l border-border bg-background shadow-xl duration-300 slide-in-from-right">
         <ChatPanelBody onClose={onClose} />
       </div>
     </div>
