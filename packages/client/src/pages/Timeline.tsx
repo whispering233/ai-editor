@@ -25,7 +25,7 @@ import { ListOrdered } from "lucide-react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { errorBannerClass } from "@/lib/styles";
+import { inputClass, errorBannerClass } from "@/lib/styles";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -725,7 +725,7 @@ export default function Timeline() {
                 onChange={(e) => setCreateForm((f) => ({ ...f, description: e.target.value }))}
                 rows={2}
                 placeholder="事件发生了什么"
-                className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                className={cn(inputClass, "w-full")}
               />
             </div>
             <div>
@@ -792,7 +792,7 @@ export default function Timeline() {
                     setEditForm((f) => (f ? { ...f, description: e.target.value } : f))
                   }
                   rows={2}
-                  className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                  className={cn(inputClass, "w-full")}
                 />
               </div>
               <div>
@@ -849,10 +849,7 @@ function OutlineNodeSelect({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className={cn(
-        "w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-        value === "" && "text-muted-foreground",
-      )}
+      className={cn(cn(inputClass, "w-full"), value === "" && "text-muted-foreground")}
     >
       <option value="">{placeholder}</option>
       {nodeOptions.map((o) => (

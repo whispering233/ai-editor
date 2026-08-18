@@ -39,7 +39,7 @@ import {
 } from "../lib/entity-detail";
 import { flattenTree } from "../lib/outline-tree";
 import { cn } from "../lib/utils";
-import { skeletonClass } from "@/lib/styles";
+import { inputClass, skeletonClass } from "@/lib/styles";
 import { EmptyState } from "@/components/ui/empty-state";
 import { navigate } from "../hooks/use-route";
 import { useDataRefresh } from "../hooks/use-data-refresh";
@@ -743,7 +743,7 @@ function FormField({
           value={fieldValue({ [field.key]: value }, field.key)}
           onChange={(e) => onChange(e.target.value)}
           rows={3}
-          className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          className={cn(inputClass, "w-full")}
         />
       );
     case "number":
@@ -770,7 +770,7 @@ function FormField({
         <select
           value={fieldValue({ [field.key]: value }, field.key)}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          className={cn(inputClass, "w-full")}
         >
           {field.options?.map((opt) => (
             <option key={opt} value={opt}>
@@ -822,10 +822,7 @@ function OutlineNodeSelect({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value === "" ? null : e.target.value)}
-      className={cn(
-        "w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-        value === "" && "text-muted-foreground/70",
-      )}
+      className={cn(cn(inputClass, "w-full"), value === "" && "text-muted-foreground/70")}
     >
       <option value="">未设置</option>
       {options.map((o) => (

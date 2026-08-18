@@ -19,7 +19,7 @@ import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { ArrowUp, Check, CheckCircle2, Circle, Eye, Pencil, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
-import { errorBannerClass } from "@/lib/styles";
+import { inputClass, errorBannerClass } from "@/lib/styles";
 import { Input } from "@/components/ui/input";
 import { SuggestionDatalist } from "@/components/ui/suggestion-datalist";
 import {
@@ -620,7 +620,7 @@ export default function HookPanel() {
                   placeholder={
                     lifecycleKind === "abandon" ? "说明废弃原因" : "说明伏笔如何被推进/回收"
                   }
-                  className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                  className={cn(inputClass, "w-full")}
                 />
               </div>
               {/* 将写入预览（提案式确认：确认前展示写入内容） */}
@@ -1007,7 +1007,7 @@ function HookDataField({
           value={fieldValue({ [field.key]: value }, field.key)}
           onChange={(e) => onValue(e.target.value)}
           rows={2}
-          className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          className={cn(inputClass, "w-full")}
         />
       );
     case "number":
@@ -1024,7 +1024,7 @@ function HookDataField({
         <select
           value={fieldValue({ [field.key]: value }, field.key)}
           onChange={(e) => onValue(e.target.value)}
-          className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          className={cn(inputClass, "w-full")}
         >
           <option value="">未设置</option>
           {field.options?.map((opt) => (
@@ -1087,10 +1087,7 @@ function OutlineNodeSelect({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className={cn(
-        "w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-        value === "" && "text-muted-foreground",
-      )}
+      className={cn(cn(inputClass, "w-full"), value === "" && "text-muted-foreground")}
     >
       <option value="">{placeholder}</option>
       {nodeOptions.map((o) => (

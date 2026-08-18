@@ -12,7 +12,7 @@
 | **前端框架** | React 19 | 生态成熟，组件化 |
 | **前端构建** | Vite 7 | 快速 HMR，Tree-shaking（Vite 6 已停止常规维护） |
 | **状态管理** | Zustand 5 | 轻量、TypeScript 优秀、selector 自动优化 |
-| **样式** | Tailwind CSS 4 + shadcn/ui | 原子化 CSS 灵活度 + 组件开箱即用（v4 CSS-first 配置，无 tailwind.config.js） |
+| **样式** | Tailwind CSS 4 + shadcn/ui + Prettier（prettier-plugin-tailwindcss） | 原子化 CSS 灵活度 + 组件开箱即用（v4 CSS-first 配置，无 tailwind.config.js）；L 批次起长 className 自动折行 + 类排序，共享常量见 `client/src/lib/styles.ts`（layout.md §4.4） |
 | **AI 调用** | 原生 fetch → DeepSeek API（模型名可配置，默认 `deepseek-v4-flash`） | 零依赖，直接控制工具循环 |
 | **Schema 验证** | Zod 4 | 运行时类型安全，API 入参校验（v4 API，注意迁移破坏项） |
 | **路由** | 轻量 hash-based（自制 `useHashRoute`） | 单页桌面应用不需要 React Router |

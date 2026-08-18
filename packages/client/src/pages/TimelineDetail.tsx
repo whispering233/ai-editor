@@ -55,6 +55,7 @@ import {
 } from "../lib/timeline-detail";
 import { flattenTree } from "../lib/outline-tree";
 import { cn } from "../lib/utils";
+import { inputClass } from "@/lib/styles";
 import { Breadcrumb } from "../components/page-nav/Breadcrumb";
 import { ConfirmDialog } from "../components/outline/dialogs";
 import { TagSuggest } from "../components/timeline/TagSuggest";
@@ -411,7 +412,7 @@ export default function TimelineDetail({ id }: { id: string }) {
                   onChange={(e) => setForm((f) => (f ? { ...f, description: e.target.value } : f))}
                   rows={3}
                   placeholder="事件发生了什么"
-                  className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                  className={cn(inputClass, "w-full")}
                 />
               </div>
               {/* 挂载时间点选择器（G2）：显示当前挂载 + 选择器（可清空 = 移出未挂载）；
@@ -441,7 +442,7 @@ export default function TimelineDetail({ id }: { id: string }) {
                     onChange={(e) => void handleMountChange(e.target.value)}
                     disabled={mountSaving}
                     className={cn(
-                      "w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                      cn(inputClass, "w-full"),
                       mountedTimepointId(detail.relations, id) === null && "text-muted-foreground",
                     )}
                   >
@@ -595,10 +596,7 @@ function OutlineNodeSelect({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className={cn(
-        "w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-        value === "" && "text-muted-foreground",
-      )}
+      className={cn(cn(inputClass, "w-full"), value === "" && "text-muted-foreground")}
     >
       <option value="">{placeholder}</option>
       {nodeOptions.map((o) => (

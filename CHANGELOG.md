@@ -5,6 +5,22 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [v0.0.11] - 2026-08-18
+
+### Changed
+
+- **前端样式工程化（L 批次，2026-08）**——长 className 单行难读、重复模式无提取的工程化改造：
+  - client 包引入 **Prettier + prettier-plugin-tailwindcss**（`packages/client/.prettierrc.json`，printWidth 100）：长 className 自动折行、Tailwind 类顺序统一（布局 → 尺寸 → 颜色 → 状态），新代码格式由工具兑底
+  - 新建 **`lib/styles.ts` 共享样式常量**（提取阈值 ≥3 处）：`iconButtonBaseClass`/`iconButtonSize`（bar/sm/md 三档）/`iconButtonDisabledClass`/`inputClass`/`errorBannerClass`/`skeletonClass`/`sectionCardClass`——改一处样式全局生效，禁止复制粘贴重复类
+  - 新建 **`EmptyState`**（空态容器：虚线边框居中卡 + 文案 + 可选图标 + 主操作插槽，padding sm/md/lg 三档）与 **`SectionCard`**（区块卡：容器 + font-serif 标题 + action 插槽，上提自 OutlineDetail 局部实现）组件，统一全仓空态/区块样式
+  - **全仓硬编码色类清零**（zinc/white/red 共 50+ 处 → token 类）：EntityList 表格/筛选/分页、EntityDetail 表单/层级区块、Outline 骨架/空态、Settings 说明卡等；深色主题下原 zinc 亮色异常同步修复；浅色主题观感一致（暖色 token 微调）
+  - 空态统一为 EmptyState 后仅 1 处视觉微调：Timeline「标签筛选无匹配」内边距 py-8 → py-10
+  - 全仓格式化（45 个 TSX 文件），行为零变化；`doc/ui/layout.md` 新增 §4.4「样式书写规范」契约
+
+### Fixed
+
+- （无行为修复；含样式层修复：深色主题下硬编码 zinc 亮色类导致的对比度异常）
+
 ## [v0.0.10] - 2026-08-17
 
 ### Added

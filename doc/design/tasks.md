@@ -13,45 +13,20 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 
 ## 项目状态（2026-08）
 
-- **完成**：阶段 A 地基 + 切片 1-9、12、13 + 阶段 U（U1-U8）+ 交互修复批次 + 切片 10 画布（S10.1）+ 切片 11 发布（S11.1-S11.3）+ 发布阻断项 E1-E6（导出/导入、未来版本拒绝重建、增量迁移、发布链路 OIDC 全绿）+ 阶段 B（B1 项目提示词编辑）+ 阶段 C 时间轴（C1-C4，决策 26）+ 画布增强批次（S10.2-S10.5）+ 交互优化批次（UX1-UX4）+ 阶段 B2 自动备份与恢复（B2.1-B2.6，决策 27/28/29）+ **用户反馈批次一 F1-F9（2026-08 实测）** + **用户反馈批次二 G1-G3（G1 区块独立滚动 / G2 时间标签点实体化 / G3 滚动位置保持，2026-08 实测）** + **用户反馈批次三 H1-H6（时间轴交互与视觉优化，2026-08 实测）** + **用户反馈批次四 I1-I4（实体关系增强，2026-08 实测，决策 30）** + **用户反馈批次五 J1-J3 + K1/K2（输入提示与标签筛选，2026-08 实测，决策 31）** + **发布 v0.0.10（2026-08-17）** + **L 批次前端样式工程化（L1-L4，2026-08）**：occurs_in 中文映射补齐（bug）/ 详情图标统一 Eye / 设定层级 = belongs_to（parent_id 废弃 + 防环 + 层级区块 + 设定树视图）/ 分类统一 data.tags（category 废弃 + 004 迁移 SCHEMA_VERSION 4 + rules 恢复规则条款语义）/ datalist 自动完成 + 快捷选择 / 标签筛选 ?tag= / 新建不自动跳详情 / autoComplete=off。
+- **完成**：阶段 A 地基 + 切片 1-9、12、13 + 阶段 U（U1-U8）+ 交互修复批次 + 切片 10 画布（S10.1）+ 切片 11 发布（S11.1-S11.3）+ 发布阻断项 E1-E6（导出/导入、未来版本拒绝重建、增量迁移、发布链路 OIDC 全绿）+ 阶段 B（B1 项目提示词编辑）+ 阶段 C 时间轴（C1-C4，决策 26）+ 画布增强批次（S10.2-S10.5）+ 交互优化批次（UX1-UX4）+ 阶段 B2 自动备份与恢复（B2.1-B2.6，决策 27/28/29）+ **用户反馈批次一 F1-F9（2026-08 实测）** + **用户反馈批次二 G1-G3（G1 区块独立滚动 / G2 时间标签点实体化 / G3 滚动位置保持，2026-08 实测）** + **用户反馈批次三 H1-H6（时间轴交互与视觉优化，2026-08 实测）** + **用户反馈批次四 I1-I4（实体关系增强，2026-08 实测，决策 30）** + **用户反馈批次五 J1-J3 + K1/K2（输入提示与标签筛选，2026-08 实测，决策 31）** + **发布 v0.0.10（2026-08-17）**：occurs_in 中文映射补齐（bug）/ 详情图标统一 Eye / 设定层级 = belongs_to（parent_id 废弃 + 防环 + 层级区块 + 设定树视图）/ 分类统一 data.tags（category 废弃 + 004 迁移 SCHEMA_VERSION 4 + rules 恢复规则条款语义）/ datalist 自动完成 + 快捷选择 / 标签筛选 ?tag= / 新建不自动跳详情 / autoComplete=off。 + **L 批次前端样式工程化（L1-L4，2026-08）**：client 包引入 Prettier + prettier-plugin-tailwindcss（长 className 自动折行 + 类排序）；`lib/styles.ts` 共享样式常量（iconButton/input/errorBanner/skeleton/sectionCard）+ `EmptyState`/`SectionCard` 组件；全仓硬编码色类（zinc/white/red）清零 token 化；layout.md §4.4 样式书写规范；CSS Modules 评估关闭（Canvas/时间轴几何在 JS 计算、CSS 仅工具类）。 + **发布 v0.0.11（2026-08-18）**：样式工程化版本（纯前端，无 API/数据变更）。
 - **待做**：无。可选收尾：npm 坏版本 v0.0.1/v0.0.2 deprecate 标注（需 2FA 凭据，见 AGENTS.md 发布流程段）；backlog.md 事项一律不做。
 - **测试**：全仓 1609 个（shared 131 / llm 59 / db 244 / server 326 / client 518 / tools 237 / agent 94）。
 - 已完成卡片的详细规格已归档（git history 可回溯，见下方「任务卡归档」）；「项目演进路线」提供脉络摘要，配合 `decisions.md`（决策 1-31 为设计主轴）理解现状。
 
 ## 执行进度（Todo）
 
-- [x] 阶段 A 地基（T0-T7）· 切片 1 项目管理 · 2 大纲 · 3 实体与关系 · 4 回收站 · 5 Delta
-- [x] 切片 6 模型与工具层（S6.1-S6.7）· 7 对话服务（S7.1-S7.6）· 8 聊天联调 · 9 伏笔面板
-- [x] 切片 12 大纲节点详情（决策 23）· 13 大纲交互重构
-- [x] 阶段 U UI 工作台重构（U1-U8）· 交互修复批次（数据刷新信号/会话恢复/ErrorBoundary/Base UI #31）
-- [x] S10.1 画布页 · 画布增强批次（S10.2-S10.5）· 交互优化批次（UX1-UX4）
-- [x] S11.1 生产构建全链路 · S11.2 端到端冒烟 · S11.3 发布前复审
-- [x] E1-E3 导出/导入 · E4 未来版本拒绝重建 · E5 增量迁移机制 · E6 发布链路（OIDC 全绿，v0.0.4-v0.0.7）
-- [x] B1 项目提示词编辑器（决策 24/25）
-- [x] 阶段 C 时间轴（C1-C4，决策 26）
-- [x] 阶段 B2 自动备份与恢复（B2.1-B2.4，决策 27）· B2.5 备份命名增强（决策 28）· B2.6 备份类型标签 + 重命名（决策 29）
-- [x] 用户反馈批次一 F1-F9（Bug：F1 事件字段清空 / F2 备份漏检 data.db-WAL；交互：F3 垂直时间轴 UI / F4 同标签归组 / F5 标签样式 / F6 行内描述；新需求：F7 三栏收起拖宽 / F8 标签输入建议 / F9 LLM 排序提案）
-- [x] 用户反馈批次二 G1 区块独立滚动 · G2 时间标签点实体化（G2.1 数据层 / G2.2 服务端与AI / G2.3 前端重构 / G2.4 收尾）
-- [x] 用户反馈批次三 G3 操作后滚动位置保持
-- [x] 用户反馈批次三 H1-H6 时间轴交互与视觉优化（删除入口/免确认/按钮展开/边框/右移/图标）
-- [x] 批次五收尾（K1/K2，2026-08 用户复核）：新建行标签输入 + 分类字段统一为 data.tags（K2：004 迁移 + rules 恢复规则条款语义 + 快捷选择）
-  - [x] K1 设定新建行标签输入（tags 首字段类型）+ 详情页「规则/标签」→「标签」+ 文档 & 测试
-  - [x] K2 分类字段统一 data.tags（004 迁移 SCHEMA_VERSION 4 + rules 恢复规则条款语义 + 快捷选择既有标签 chips + 全仓字段核查）
-- [ ] 用户反馈批次五（2026-08，输入提示与标签筛选，决策 31）：J1 设定分类统一为 tags（category 废弃）· J2 datalist 自动完成提示 · J3 设定列表标签筛选 + 新建行布局
-  - [x] J1 设定分类统一为 tags：shared 移除 settingDataSchema.category + db 摘要改 tags + client 列表列/新建行/详情字段/Delta 清单移除 category + 文档 & 测试
-  - [x] J2 datalist 自动完成（浏览器原生候选：新建行名称/首字段聚合 + 设定详情 rules 标签 + 伏笔类别枚举）
-  - [x] J3 设定列表标签筛选（REST tag 参数 + 前端标签下拉聚合 + 新建行布局整理）
-- [ ] 用户反馈批次四（2026-08，实体关系增强）：I1 `occurs_in` 中文映射补齐（bug）· I2 详情图标统一 Eye（UX）· I3 设定层级 = belongs_to（决策 30，新需求，含 #3 UX 修复）· I4 设定关系视图（新需求，#6）
-  - [x] I1 `occurs_in` 中文映射（RELATION_TYPE_LABEL 补 17 种「锚定于」+ 测试 + 文档）
-  - [x] I2 详情图标 BookOpen → Eye（HookPanel / Outline）
-  - [x] I3a 数据与校验层：shared 移除 settingDataSchema.parent_id + db 层级邻接表/防环 helper + server POST /relation 校验 + tools R5 调整 + 测试 & 文档
-  - [x] I3b 客户端 UI：detailFieldsForType 移除 parent_id + 详情页「层级」区块（父/子 + 修改上级）+ 新建行「上级设定」弹层选择器 + 测试
-  - [x] I4 设定树视图（决策 30：第 6 tab「设定树」，buildSettingTree 纯函数 + 递归树渲染 + 折叠/节点点击跳详情）
-- [x] L 批次前端样式工程化（2026-08，用户反馈：className 单行难读、样式工程化不足；决策：B 为主格式化+提取重复、C 按需 CSS Modules 后置评估——**已评估关闭**：Canvas/时间轴几何均在 JS 计算、CSS 仅工具类，无适用样式，维持现状）：
-  - [x] L1 工具与规范地基：client 包引入 Prettier + prettier-plugin-tailwindcss（.prettierrc + .prettierignore）+ 新建 `lib/styles.ts` 共享样式常量（iconButtonClass/inputClass/emptyStateClass/errorBannerClass/sectionCardClass 等，提取阈值 ≥3 处）+ `components/ui/EmptyState`/`SectionCard` 组件 + `ui/` 目录全量格式化 + layout.md 样式书写规范
-  - [x] L2 外壳组件样式整理：Sidebar / AppShell / main-panel / ChatPanel / settings（backup-section）格式化 + 常量替换
-  - [x] L3 页面样式整理：pages/ 10 文件（Dashboard/Outline/Canvas/EntityList/EntityDetail/HookPanel/Trash/Settings/Timeline/TimelineDetail）格式化 + 常量/组件替换 + zinc 硬编码色 token 化
-  - [x] L4 其余组件收尾：delta/、entity/、timeline/、outline/、page-nav/、feedback/ 等格式化 + 常量替换 + 全仓回归验证（typecheck/lint/1609 测试/build 全绿）
+> **全部完成（v0.0.11 已发布，2026-08-18）**。历史细粒度任务卡（含 checkbox 子项）与实现 commit 见 git history 与下方「任务卡归档」；脉络摘要见「项目演进路线」。
+
+- [x] 阶段 A 地基（T0-T7）· 切片 1-13（项目管理/大纲/实体关系/回收站/Delta/工具层/对话/聊天/伏笔/节点详情/大纲重构）· 阶段 U（U1-U8）
+- [x] 画布（S10.1 + S10.2-S10.5 + UX1-UX4）· 发布（S11.1-S11.3 + E1-E6）
+- [x] 阶段 B（B1）· 阶段 C（C1-C4）· 阶段 B2（B2.1-B2.6）
+- [x] 用户反馈批次一至五（F1-F9 · G1-G3 · H1-H6 · I1-I4 · J1-J3 + K1/K2）
+- [x] L 批次前端样式工程化（L1-L4，C 项 CSS Modules 评估关闭，2026-08）
 
 ---
 
@@ -90,6 +65,8 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 **用户反馈批次五（J1-J3 + K1/K2，2026-08）——输入提示与标签筛选（决策 31）**：J1 设定分类统一为 tags——`data.category` 废弃（zod 移除 + passthrough 容错 + 无迁移），列表摘要列「类别」改「标签」（rules 前 3）、新建行移除类别输入（仅名称+上级设定）、详情字段/Delta 清单同步、`getEntitySummaryStats` 分布 byCategory → byTags（AI 工具数据源闭环）；J2 浏览器原生 **datalist 自动完成**（零依赖：新建行名称/首字段按现有数据聚合候选、设定详情 rules 标签补拉全量聚合、伏笔类别枚举；时间轴沿用 TagSuggest）；J3 设定列表**标签筛选**（REST `?tag=` 单标签包含匹配，复用 db `matchDataFilters.tags` 内部管道并按类型路由 setting→`data.rules`；前端「标签 ▾」下拉聚合既有标签，与搜索/排序/分页组合）；**K1/K2（用户复核修订）**：新建行加回标签输入（逗号分隔多值）、分类字段统一 `data.tags`（前后端同名，004 迁移 SCHEMA_VERSION 4 把旧 rules 分类值复制到 tags，rules 恢复「规则条款」语义仅详情页编辑）、标签编辑快捷选择（既有标签 chips 点击追加去重）；**交互修正（2026-08 用户反馈）**：行内新建不自动跳详情页（留在列表刷新）、全仓 `autoComplete="off"` 禁浏览器历史建议（输入提示完全由代码控制）。
 
 **用户反馈批次四（I1-I4，2026-08）——实体关系增强（决策 30）**：I1 关系类型 `occurs_in` 中文映射补齐（17 种「锚定于」，与 occurs_at「发生于」区分）；I2 详情入口图标 BookOpen 统一为 Eye；**I3 设定层级 = `belongs_to` 关系（决策 30：`data.parent_id` 废弃不再读写，zod 移除定义 + R5 仅保留 location + 无迁移，旧字段 passthrough 容错）**——db 全量层级边邻接表（`listSettingHierarchyEdges`，走关系表索引）+ 防环校验（`wouldCreateSettingCycle` 祖先链 O(深度)）、server `POST /relation` 对 belongs_to 两端均为 setting 的 400 校验（自指/成环）、客户端详情页「层级」区块（父/子分区 + 修改上级先建后删 + 清除）+ 新建行「上级设定」弹层搜索选择器（创建后补建关系）；I4 设定树视图——实体关系第 6 tab「设定树」（`buildSettingTree` 纯函数：根 = 无父设定、父截断提升为根防御；递归树 + 折叠 + 类别徽标 + 子数 + 节点点击跳详情）。
+
+**L 批次前端样式工程化（L1-L4，2026-08）——样式工程化重构**：client 包引入 **Prettier + prettier-plugin-tailwindcss**（printWidth 100 + tailwindStylesheet；长 className 自动折行、类顺序统一，新代码格式工具兑底）；新建 **`lib/styles.ts` 共享样式常量**（提取阈值 ≥3 处：iconButtonBaseClass/iconButtonSize（bar/sm/md）/iconButtonDisabledClass/inputClass（不含宽度类——Tailwind 4 同属性类按值排序、w-full 会压掉 w-40）/errorBannerClass/skeletonClass/sectionCardClass）+ **`EmptyState`**（空态容器：padding sm/md/lg 参数化规避 py-* 覆盖坑）/ **`SectionCard`**（上提自 OutlineDetail 局部 Card）组件；**全仓硬编码色类清零**（zinc/white/red 50+ 处 → token 类，EntityList 原 30+ 处，深色主题亮色异常同步修复）；空态统一后仅 1 处视觉微调（Timeline py-8→py-10）；**C 项 CSS Modules 评估关闭**——Canvas/时间轴几何均在 JS 计算、CSS 仅工具类、动画在 index.css，无 Tailwind 无法表达的样式，不硬转（契约：后续引入须同时满足「Tailwind 无法表达」+「重复 ≥3 处」）。
 
 ---
 
@@ -136,6 +113,11 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 | J2 | datalist 原生自动完成（决策 31） | `f0cb5f5` | 新建行/详情标签/伏笔类别候选聚合；SuggestionDatalist + uniqueStrings |
 | J3 | 设定列表标签筛选（决策 31） | `f174009` | REST ?tag= + 前端标签下拉聚合 + matchDataFilters 按类型路由（K2 后统一 data.tags） |
 | K1/K2 | 新建行标签输入 + 分类字段统一 data.tags（决策 31 修订） | `a85859c`/`0e332dc` | 新建行逗号分隔标签输入；004 迁移（SCHEMA_VERSION 4）；rules 恢复规则条款语义；快捷选择 chips；autoComplete=off |
+| L1 | 样式工程化地基 | `ce2cc7c` | Prettier + tailwind 插件；lib/styles.ts 常量；EmptyState/SectionCard；ui/ 格式化；layout.md §4.4 |
+| L2 | 外壳组件样式整理 | `5fe7c7d` | Sidebar/AppShell/ChatPanel/backup-section 格式化 + 常量接入 |
+| L3 | 页面样式整理 | `ad79f57` | pages/ 10 文件；EmptyState/SectionCard/errorBanner/skeleton 接入；zinc 硬编码色 token 化 |
+| L4 | 其余组件收尾 | `6ce218d` | delta/entity/timeline 等；inputClass 接入；全仓硬编码色清零；回归验证 |
+| L-C | CSS Modules 评估（C 项） | `2dba11a` | 评估关闭：Canvas/时间轴几何在 JS 计算、CSS 仅工具类，无适用样式 |
 
 ---
 

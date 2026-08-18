@@ -13,7 +13,7 @@
 | 语言 | TypeScript strict mode |
 | API 服务端 | Hono 4 + `@hono/node-server` |
 | 数据库 | better-sqlite3 ^13（WAL，N-API 预编译） |
-| 前端 | React 19 + Vite 7 + Zustand 5 + Tailwind 4 + shadcn/ui（Base UI，oklch 主题 tokens） |
+| 前端 | React 19 + Vite 7 + Zustand 5 + Tailwind 4 + shadcn/ui（Base UI，oklch 主题 tokens）+ Prettier + prettier-plugin-tailwindcss（样式工程化，L 批次） |
 | 路由 | 自制 hash 路由（`useHashRoute`，无 React Router） |
 | Schema 校验 | Zod 4（仅服务端执行，client 不打包校验函数） |
 | AI 调用 | 原生 fetch → DeepSeek API（模型可配置，默认 `deepseek-v4-flash`） |
@@ -78,6 +78,7 @@ pnpm typecheck && pnpm lint && pnpm -r test
 - **回收站**：软删还原 / 彻底清除 + 启动一致性校验兜底
 - **AI 对话链路（S6-S8 已就绪）**：DeepSeek SSE 流式客户端、46 个工具（查询 8 / 分析 5 / 伏笔 5 / 提案 15 / 执行 13）、agent 主循环（8 轮 / 120s / token 三重保险）、提案确认流程（卡片确认/拒绝 + 失效处理，全链路可用）、chat SSE 路由（心跳 15-30s / 断连检测 / 全链路取消）——配置 key 后右栏 ChatPanel 可直接对话
 - **交互体验（2026-08）**：AI 确认提案后中栏数据自动刷新 + InfoBar 全局刷新按钮；刷新页面自动恢复最近会话；渲染异常防白屏（可恢复错误卡）
+- **样式工程化（L 批次，2026-08）**：client 包 Prettier + prettier-plugin-tailwindcss 强制格式（长 className 自动折行 + 类排序）；共享样式常量 `lib/styles.ts`（图标按钮/输入框/错误横幅/骨架/区块卡）+ `EmptyState`/`SectionCard` 组件；全仓硬编码色类（zinc/white/red）清零 token 化（深色主题亮色异常同步修复）；规范见 `doc/ui/layout.md` §4.4
 - **数据备份（E1-E3 + 阶段 B2 已就绪）**：一键导出完整项目（zip 打包 project.json + outline.json + data.db，含 WAL 完整快照）/ 从备份导入（服务端校验 + 原子搬入）；**自动备份**——按频率（关闭/5/10/15/30/60 分钟，默认 10 分钟开启，跟随书籍）有变更才备份，每项目保留最近 20 份；**手动备份**——设置页「立即备份」可带自定义名称，列表以简单标签区分手动/自动（B2.5/B2.6，决策 28/29）；**备份重命名**——列表行内编辑改名称（时间与类型标签保持）；**加载备份**——设置页历史备份列表（强确认 + 覆盖前自动快照后悔药）或书架导入文件（以 project_id 为 key：匹配 → 覆盖恢复 / 不匹配 → 新书，同名不再 409 可重命名或去重并存）；书架支持重命名书名——「数据主权归用户」（product.md 原则 1）
 - **调试**：创作根 `.ai-editor/config.json` 细粒度五类别（chat/request/stream/usage/http，见上文示例；无配置文件默认关闭）
 
@@ -103,7 +104,7 @@ npm install -g @whispering233/ai-editor-server
 ai-editor <项目目录>   # 启动服务 + 自动打开浏览器 http://127.0.0.1:3456
 ```
 
-> 版本说明：**当前最新版 v0.0.10**（由 CI OIDC 自动发布，发布全链路自动化已验证）；v0.0.1/v0.0.2 因发布管道缺陷（manifest 残留 `workspace:*` 协议）不可安装，已计划 deprecate 标注；安装时使用 `@whispering233/ai-editor-server@latest` 即可。
+> 版本说明：**当前最新版 v0.0.11**（由 CI OIDC 自动发布，发布全链路自动化已验证）；v0.0.1/v0.0.2 因发布管道缺陷（manifest 残留 `workspace:*` 协议）不可安装，已计划 deprecate 标注；安装时使用 `@whispering233/ai-editor-server@latest` 即可。
 
 **发布前置（一次性，npmjs 手动）**：① 开启 npm 账号 **2FA**（npmjs 要求开启两步验证才能配置包管理；开启会撤销现有 token，需重新生成 Automation token）；② 为 `@whispering233/ai-editor-shared`、`@whispering233/ai-editor-llm`、`@whispering233/ai-editor-db`、`@whispering233/ai-editor-tools`、`@whispering233/ai-editor-agent`、`@whispering233/ai-editor-server` 六包各配置 Trusted Publisher：Publisher = GitHub Actions、工作流名 = `publish.yml`；配置后 CI 无需 token（OIDC 自动换证）。
 

@@ -49,7 +49,7 @@
   - 「实体」段：点击 → `#/entities/character`（列表默认类型）。
   - 类型段「人物」：点击 → `#/entities/character`（当前类型列表，返回上级）。
   - 当前实体名「张三」：不可点（当前段高亮）。
-- 样式与列表页类型 tab 一致（分段圆角 + 当前段高亮 `bg-zinc-900 text-white` / token 类），层级清晰可感知。
+- 样式与列表页类型 tab 一致（分段圆角 + 当前段高亮 `bg-foreground text-background` 反相对比，L 批次 token 化），层级清晰可感知。
 
 ## 信息层级
 
