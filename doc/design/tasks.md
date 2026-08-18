@@ -13,7 +13,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 
 ## 项目状态（2026-08）
 
-- **完成**：阶段 A 地基 + 切片 1-9、12、13 + 阶段 U（U1-U8）+ 交互修复批次 + 切片 10 画布（S10.1）+ 切片 11 发布（S11.1-S11.3）+ 发布阻断项 E1-E6（导出/导入、未来版本拒绝重建、增量迁移、发布链路 OIDC 全绿）+ 阶段 B（B1 项目提示词编辑）+ 阶段 C 时间轴（C1-C4，决策 26）+ 画布增强批次（S10.2-S10.5）+ 交互优化批次（UX1-UX4）+ 阶段 B2 自动备份与恢复（B2.1-B2.6，决策 27/28/29）+ **用户反馈批次一 F1-F9（2026-08 实测）** + **用户反馈批次二 G1-G3（G1 区块独立滚动 / G2 时间标签点实体化 / G3 滚动位置保持，2026-08 实测）** + **用户反馈批次三 H1-H6（时间轴交互与视觉优化，2026-08 实测）** + **用户反馈批次四 I1-I4（实体关系增强，2026-08 实测，决策 30）** + **用户反馈批次四 I1-I4（实体关系增强，2026-08 实测，决策 30）** + **用户反馈批次五 J1-J3 + K1/K2（输入提示与标签筛选，2026-08 实测，决策 31）** + **发布 v0.0.10（2026-08-17）**：occurs_in 中文映射补齐（bug）/ 详情图标统一 Eye / 设定层级 = belongs_to（parent_id 废弃 + 防环 + 层级区块 + 设定树视图）/ 分类统一 data.tags（category 废弃 + 004 迁移 SCHEMA_VERSION 4 + rules 恢复规则条款语义）/ datalist 自动完成 + 快捷选择 / 标签筛选 ?tag= / 新建不自动跳详情 / autoComplete=off。
+- **完成**：阶段 A 地基 + 切片 1-9、12、13 + 阶段 U（U1-U8）+ 交互修复批次 + 切片 10 画布（S10.1）+ 切片 11 发布（S11.1-S11.3）+ 发布阻断项 E1-E6（导出/导入、未来版本拒绝重建、增量迁移、发布链路 OIDC 全绿）+ 阶段 B（B1 项目提示词编辑）+ 阶段 C 时间轴（C1-C4，决策 26）+ 画布增强批次（S10.2-S10.5）+ 交互优化批次（UX1-UX4）+ 阶段 B2 自动备份与恢复（B2.1-B2.6，决策 27/28/29）+ **用户反馈批次一 F1-F9（2026-08 实测）** + **用户反馈批次二 G1-G3（G1 区块独立滚动 / G2 时间标签点实体化 / G3 滚动位置保持，2026-08 实测）** + **用户反馈批次三 H1-H6（时间轴交互与视觉优化，2026-08 实测）** + **用户反馈批次四 I1-I4（实体关系增强，2026-08 实测，决策 30）** + **用户反馈批次五 J1-J3 + K1/K2（输入提示与标签筛选，2026-08 实测，决策 31）** + **发布 v0.0.10（2026-08-17）** + **L 批次前端样式工程化（L1-L4，2026-08）**：occurs_in 中文映射补齐（bug）/ 详情图标统一 Eye / 设定层级 = belongs_to（parent_id 废弃 + 防环 + 层级区块 + 设定树视图）/ 分类统一 data.tags（category 废弃 + 004 迁移 SCHEMA_VERSION 4 + rules 恢复规则条款语义）/ datalist 自动完成 + 快捷选择 / 标签筛选 ?tag= / 新建不自动跳详情 / autoComplete=off。
 - **待做**：无。可选收尾：npm 坏版本 v0.0.1/v0.0.2 deprecate 标注（需 2FA 凭据，见 AGENTS.md 发布流程段）；backlog.md 事项一律不做。
 - **测试**：全仓 1609 个（shared 131 / llm 59 / db 244 / server 326 / client 518 / tools 237 / agent 94）。
 - 已完成卡片的详细规格已归档（git history 可回溯，见下方「任务卡归档」）；「项目演进路线」提供脉络摘要，配合 `decisions.md`（决策 1-31 为设计主轴）理解现状。
@@ -47,6 +47,11 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
   - [x] I3a 数据与校验层：shared 移除 settingDataSchema.parent_id + db 层级邻接表/防环 helper + server POST /relation 校验 + tools R5 调整 + 测试 & 文档
   - [x] I3b 客户端 UI：detailFieldsForType 移除 parent_id + 详情页「层级」区块（父/子 + 修改上级）+ 新建行「上级设定」弹层选择器 + 测试
   - [x] I4 设定树视图（决策 30：第 6 tab「设定树」，buildSettingTree 纯函数 + 递归树渲染 + 折叠/节点点击跳详情）
+- [ ] L 批次前端样式工程化（2026-08，用户反馈：className 单行难读、样式工程化不足；决策：B 为主格式化+提取重复、C 按需 CSS Modules 后置评估）：
+  - [ ] L1 工具与规范地基：client 包引入 Prettier + prettier-plugin-tailwindcss（.prettierrc + .prettierignore）+ 新建 `lib/styles.ts` 共享样式常量（iconButtonClass/inputClass/emptyStateClass/errorBannerClass/sectionCardClass 等，提取阈值 ≥3 处）+ `components/ui/EmptyState`/`SectionCard` 组件 + `ui/` 目录全量格式化 + layout.md 样式书写规范
+  - [ ] L2 外壳组件样式整理：Sidebar / AppShell / main-panel / ChatPanel / settings（backup-section）格式化 + 常量替换
+  - [ ] L3 页面样式整理：pages/ 10 文件（Dashboard/Outline/Canvas/EntityList/EntityDetail/HookPanel/Trash/Settings/Timeline/TimelineDetail）格式化 + 常量/组件替换
+  - [ ] L4 其余组件收尾：delta/、entity/、timeline/、outline/、page-nav/、feedback/ 等格式化 + 常量替换 + 全仓回归验证（typecheck/lint/test/build）
 
 ---
 

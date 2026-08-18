@@ -248,6 +248,16 @@
 - **动画**：仅三处高影响动效——抽屉滑入（`animate-in fade-in` / `slide-in-from-right duration-300`，tw-animate-css）、chevron 展开旋转（`transition-transform duration-200` + `rotate-90`）、骨架脉冲（`animate-pulse`）/流式加载旋转（`animate-spin`）；行级 hover 一律 `transition-colors`。其余保持克制，不叠加装饰动画。
 - **阴影**：`shadow-sm`（TabBar 激活项）、`shadow-xl`（抽屉）；卡片默认**无阴影**，以 `border-border` 分隔层级（`bg-card` 用于浮起的面）。
 
+### 4.4 样式书写规范（L 批次，2026-08）
+
+> 来源：用户反馈「className 单行难读、样式工程化不足」。**B 为主（格式化 + 提取重复），C 按需（CSS Modules 仅 Canvas/时间轴等几何/状态复杂度高的样式，B 完成后单独评估）。**
+
+- **格式化工具**：client 包启用 Prettier + `prettier-plugin-tailwindcss`（配置见 `packages/client/.prettierrc.json`）——长 className 一律由 prettier 折行；Tailwind 类顺序由插件统一（布局 → 尺寸 → 颜色 → 状态）。**新代码禁止手写超长单行 className**（>80 字符必须让 prettier 折行或用 `cn()` 多行）。
+- **共享样式常量**：高频重复（≥3 处）的纯样式字符串提取到 `client/src/lib/styles.ts` 导出命名常量（`iconButtonClass` / `inputClass` / `emptyStateClass` / `errorBannerClass` / `sectionCardClass` / `skeletonClass` 等），**禁止复制粘贴重复类**；改动一处样式只改常量。短类（≤4 个 token，如 `mb-1 text-sm font-medium`）不提取。
+- **组合模式组件**：空态 → `components/ui/empty-state.tsx`（`EmptyState`：容器 + 说明文案 + 可选图标 + 主操作插槽）；区块卡 → `components/ui/section-card.tsx`（`SectionCard`：容器 + 可选标题）。新增页面优先复用，不现场拼装。
+- **CSS Modules 适用条件**：仅几何/状态复杂度高、Tailwind 类无法清晰表达的样式（如 Canvas 画布节点/连线）；简单布局一律 Tailwind 类（含共享常量），不硬转。
+- **主题 tokens**：仍以 `client/src/index.css` 为唯一 token 源（§3），常量/组件内只允许 token 类（`bg-card`/`text-muted-foreground` 等），禁止硬编码色类（如 `bg-zinc-900`/`bg-white`）。
+
 ---
 
 ## 5. 组件结构（按代码实际）
