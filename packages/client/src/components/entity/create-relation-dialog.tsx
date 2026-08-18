@@ -17,7 +17,13 @@ import { flattenTree } from "../../lib/outline-tree";
 import { useProjectStore } from "../../stores/project";
 import { useUiStore } from "../../stores/ui";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const TYPE_LABEL: Record<EntityType, string> = {
   character: "人物",
@@ -164,7 +170,11 @@ export function CreateRelationDialog({
                       </option>
                     ))}
                   </select>
-                  <select value={sourceId} onChange={(e) => setSourceId(e.target.value)} className={SELECT_CLASS}>
+                  <select
+                    value={sourceId}
+                    onChange={(e) => setSourceId(e.target.value)}
+                    className={SELECT_CLASS}
+                  >
                     <option value="">选择{TYPE_LABEL[sourceType]}…</option>
                     {(sourceEntities ?? []).map((it) => (
                       <option key={it.id} value={it.id}>
@@ -178,7 +188,11 @@ export function CreateRelationDialog({
             {/* 中列：关系类型 + 方向箭头（mt-auto 沉底与两端实体下拉对齐，表达「源 关系→ 目标」） */}
             <div className="flex flex-col gap-2 sm:w-44">
               <p className="text-sm font-medium text-foreground">关系类型</p>
-              <select value={relationType} onChange={(e) => setRelationType(e.target.value)} className={SELECT_CLASS}>
+              <select
+                value={relationType}
+                onChange={(e) => setRelationType(e.target.value)}
+                className={SELECT_CLASS}
+              >
                 {DIALOG_RELATION_TYPES.map((t) => (
                   <option key={t} value={t}>
                     {relationTypeLabel(t)}
@@ -187,7 +201,7 @@ export function CreateRelationDialog({
               </select>
               <span
                 aria-hidden="true"
-                className="mt-auto select-none pb-1 text-center text-xl leading-none text-muted-foreground"
+                className="mt-auto pb-1 text-center text-xl leading-none text-muted-foreground select-none"
               >
                 →
               </span>
@@ -207,7 +221,11 @@ export function CreateRelationDialog({
                 <option value="outline_node">大纲节点</option>
               </select>
               {otherType === "outline_node" ? (
-                <select value={otherId} onChange={(e) => setOtherId(e.target.value)} className={SELECT_CLASS}>
+                <select
+                  value={otherId}
+                  onChange={(e) => setOtherId(e.target.value)}
+                  className={SELECT_CLASS}
+                >
                   <option value="">选择大纲节点…</option>
                   {outlineOptions.map((o) => (
                     <option key={o.id} value={o.id}>
@@ -217,7 +235,11 @@ export function CreateRelationDialog({
                   ))}
                 </select>
               ) : (
-                <select value={otherId} onChange={(e) => setOtherId(e.target.value)} className={SELECT_CLASS}>
+                <select
+                  value={otherId}
+                  onChange={(e) => setOtherId(e.target.value)}
+                  className={SELECT_CLASS}
+                >
                   <option value="">选择{TYPE_LABEL[otherType]}…</option>
                   {(otherEntities ?? []).map((it) => (
                     <option key={it.id} value={it.id}>

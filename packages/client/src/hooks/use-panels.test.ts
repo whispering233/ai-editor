@@ -56,20 +56,37 @@ describe("parsePanelLayout（防御解析）", () => {
     expect(parsePanelLayout("[]", 1600)).toEqual(defaultPanelLayout(1600));
     expect(parsePanelLayout("{}", 1600)).toEqual(defaultPanelLayout(1600));
     expect(parsePanelLayout('{"sidebarWidth": 200}', 1600)).toEqual(defaultPanelLayout(1600));
-    expect(parsePanelLayout('{"sidebarWidth": "200", "chatWidth": 300}', 1600)).toEqual(defaultPanelLayout(1600));
+    expect(parsePanelLayout('{"sidebarWidth": "200", "chatWidth": 300}', 1600)).toEqual(
+      defaultPanelLayout(1600),
+    );
   });
 
   it("合法值完整读取，收起态仅严格 true 生效", () => {
     const layout = parsePanelLayout(
-      JSON.stringify({ sidebarWidth: 200, chatWidth: 300, collapsedSidebar: true, collapsedChat: false }),
+      JSON.stringify({
+        sidebarWidth: 200,
+        chatWidth: 300,
+        collapsedSidebar: true,
+        collapsedChat: false,
+      }),
       1600,
     );
-    expect(layout).toEqual({ sidebarWidth: 200, chatWidth: 300, collapsedSidebar: true, collapsedChat: false });
+    expect(layout).toEqual({
+      sidebarWidth: 200,
+      chatWidth: 300,
+      collapsedSidebar: true,
+      collapsedChat: false,
+    });
   });
 
   it("越界宽度收敛，非法布尔按 false", () => {
     const clamped = parsePanelLayout(
-      JSON.stringify({ sidebarWidth: 30, chatWidth: 5000, collapsedSidebar: "yes", collapsedChat: 1 }),
+      JSON.stringify({
+        sidebarWidth: 30,
+        chatWidth: 5000,
+        collapsedSidebar: "yes",
+        collapsedChat: 1,
+      }),
       1600,
     );
     expect(clamped.sidebarWidth).toBe(SIDEBAR_MIN_WIDTH);

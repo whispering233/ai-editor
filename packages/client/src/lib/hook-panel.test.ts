@@ -49,11 +49,23 @@ afterEach(() => {
 
 /** 列表摘要（summary 字段仅传测试需要的键） */
 function summaryOf(id: string, name: string, status: unknown): EntitySummary {
-  return { id, type: "hook", name, summary: status === undefined ? {} : { status }, createdAt: "2026-08-01T10:00:00Z", updatedAt: "2026-08-01T10:00:00Z" };
+  return {
+    id,
+    type: "hook",
+    name,
+    summary: status === undefined ? {} : { status },
+    createdAt: "2026-08-01T10:00:00Z",
+    updatedAt: "2026-08-01T10:00:00Z",
+  };
 }
 
 /** 关系 fixture（默认 depends_on：source 依赖 target——hooks.md「B 依赖 A 先解开」） */
-function rel(sourceId: string, targetId: string, relationType = "depends_on", names?: { s?: string; t?: string }): RelationSummaryItem {
+function rel(
+  sourceId: string,
+  targetId: string,
+  relationType = "depends_on",
+  names?: { s?: string; t?: string },
+): RelationSummaryItem {
   return {
     id: `rel-${sourceId}-${targetId}`,
     sourceType: relationType === "depends_on" ? "hook" : "outline_node",
@@ -72,8 +84,31 @@ const makeTree = (): OutlineTree => ({
   type: "root",
   schemaVersion: 1,
   children: [
-    { id: "vol-1", type: "volume", title: "第一卷", updatedAt: "t", children: [{ id: "ch-1", type: "chapter", title: "第一章", updatedAt: "t", children: [{ id: "sc-1", type: "scene", title: "场景一", updatedAt: "t" }, { id: "sc-2", type: "scene", title: "场景二", updatedAt: "t" }] }] },
-    { id: "vol-2", type: "volume", title: "第二卷", updatedAt: "t", children: [{ id: "ch-2", type: "chapter", title: "第二章", updatedAt: "t" }] },
+    {
+      id: "vol-1",
+      type: "volume",
+      title: "第一卷",
+      updatedAt: "t",
+      children: [
+        {
+          id: "ch-1",
+          type: "chapter",
+          title: "第一章",
+          updatedAt: "t",
+          children: [
+            { id: "sc-1", type: "scene", title: "场景一", updatedAt: "t" },
+            { id: "sc-2", type: "scene", title: "场景二", updatedAt: "t" },
+          ],
+        },
+      ],
+    },
+    {
+      id: "vol-2",
+      type: "volume",
+      title: "第二卷",
+      updatedAt: "t",
+      children: [{ id: "ch-2", type: "chapter", title: "第二章", updatedAt: "t" }],
+    },
   ],
 });
 
@@ -152,7 +187,10 @@ describe("依赖关系解析（depends_on：source 依赖 target）", () => {
   });
 
   it("involvesNames：取另一端名称；任一端为本伏笔均可", () => {
-    const involves = [rel("hook-1", "char-3", "involves", { s: "身世之谜", t: "苏眉" }), rel("set-7", "hook-1", "involves", { s: "云梦泽", t: "身世之谜" })];
+    const involves = [
+      rel("hook-1", "char-3", "involves", { s: "身世之谜", t: "苏眉" }),
+      rel("set-7", "hook-1", "involves", { s: "云梦泽", t: "身世之谜" }),
+    ];
     expect(involvesNames(involves, "hook-1")).toEqual(["苏眉", "云梦泽"]);
   });
 });
@@ -213,7 +251,11 @@ describe("expandDependencyChain（递归依赖链，点击行内「依赖: …�
   });
 
   it("名称缺失 → 回退 id；无依赖 → 仅起点", () => {
-    const chain = expandDependencyChain({ startHookId: "hook-1", depsOf: new Map(), names: new Map() });
+    const chain = expandDependencyChain({
+      startHookId: "hook-1",
+      depsOf: new Map(),
+      names: new Map(),
+    });
     expect(chain).toEqual([{ hookId: "hook-1", name: "hook-1", depth: 0 }]);
   });
 });
@@ -228,7 +270,9 @@ describe("anchorNodeForAbandon（废弃 Delta 锚定节点）", () => {
 
   it("current_position 指向已软删节点 → 退化树末节点（决策 21 须非软删）", () => {
     const tree = makeTree();
-    (tree.children[0] as { children: { children: { deleted: boolean }[] }[] }).children[0].children[1].deleted = true;
+    (
+      tree.children[0] as { children: { children: { deleted: boolean }[] }[] }
+    ).children[0].children[1].deleted = true;
     expect(anchorNodeForAbandon(makeConfig("sc-2"), tree)).toBe("ch-2");
   });
 
@@ -237,13 +281,25 @@ describe("anchorNodeForAbandon（废弃 Delta 锚定节点）", () => {
   });
 
   it("大纲空树 → null（面板禁用提交并提示）", () => {
-    expect(anchorNodeForAbandon(makeConfig("sc-1"), { id: "root", type: "root", schemaVersion: 1, children: [] })).toBeNull();
+    expect(
+      anchorNodeForAbandon(makeConfig("sc-1"), {
+        id: "root",
+        type: "root",
+        schemaVersion: 1,
+        children: [],
+      }),
+    ).toBeNull();
   });
 });
 
 describe("lastOutlineNode / nodeExists", () => {
   it("先序最后访问的非软删节点（卷无子时自身可作锚点，同 executor）", () => {
-    const tree: OutlineTree = { id: "root", type: "root", schemaVersion: 1, children: [{ id: "vol-1", type: "volume", title: "v", updatedAt: "t" }] };
+    const tree: OutlineTree = {
+      id: "root",
+      type: "root",
+      schemaVersion: 1,
+      children: [{ id: "vol-1", type: "volume", title: "v", updatedAt: "t" }],
+    };
     expect(lastOutlineNode(tree)).toBe("vol-1");
     expect(nodeExists(tree, "vol-1")).toBe(true);
     expect(nodeExists(tree, "sc-x")).toBe(false);
@@ -254,7 +310,12 @@ describe("lastOutlineNode / nodeExists", () => {
 
 describe("复合写请求构造（hooks.md 状态变化 + 关系约定）", () => {
   it("buildStatusDeltaChange：op=update + from 当前状态 + to 目标状态", () => {
-    expect(buildStatusDeltaChange("planted", "progressing")).toEqual({ field: "status", op: "update", from: "planted", to: "progressing" });
+    expect(buildStatusDeltaChange("planted", "progressing")).toEqual({
+      field: "status",
+      op: "update",
+      from: "planted",
+      to: "progressing",
+    });
   });
 
   it("buildLifecycleRelationBody：outline_node → hook，snake_case（advances/resolves）", () => {
@@ -289,10 +350,25 @@ describe("复合写请求构造（hooks.md 状态变化 + 关系约定）", () =
 describe("runLifecycleWrite（推进/回收复合写序列）", () => {
   it("请求顺序：POST /delta → POST /relation → PUT /entity（status 同步）", async () => {
     mocked.createDelta.mockResolvedValue({ id: "delta-1", applied: {} as never });
-    mocked.createRelation.mockResolvedValue({ id: "rel-1", relation: { sourceType: "outline_node", sourceId: "sc-12", targetType: "hook", targetId: "hook-1", relationType: "advances" } });
+    mocked.createRelation.mockResolvedValue({
+      id: "rel-1",
+      relation: {
+        sourceType: "outline_node",
+        sourceId: "sc-12",
+        targetType: "hook",
+        targetId: "hook-1",
+        relationType: "advances",
+      },
+    });
     mocked.updateEntity.mockResolvedValue({ id: "hook-1", updated: true });
 
-    await runLifecycleWrite({ kind: "advance", hookId: "hook-1", fromStatus: "planted", nodeId: "sc-12", description: "主角发现玉佩秘密" });
+    await runLifecycleWrite({
+      kind: "advance",
+      hookId: "hook-1",
+      fromStatus: "planted",
+      nodeId: "sc-12",
+      description: "主角发现玉佩秘密",
+    });
 
     // delta 请求体：node_id/target_type/target_id/changes/description（snake_case）
     expect(mocked.createDelta).toHaveBeenCalledTimes(1);
@@ -313,10 +389,16 @@ describe("runLifecycleWrite（推进/回收复合写序列）", () => {
       relation_type: "advances",
     });
     // status 同步（S6.7 语义：data.status 为唯一事实来源）
-    expect(mocked.updateEntity).toHaveBeenCalledWith("hook", "hook-1", { data: { status: "progressing" } });
+    expect(mocked.updateEntity).toHaveBeenCalledWith("hook", "hook-1", {
+      data: { status: "progressing" },
+    });
 
     // 顺序断言：delta → relation → sync（按 mock 调用次序）
-    const order = [mocked.createDelta.mock.invocationCallOrder[0], mocked.createRelation.mock.invocationCallOrder[0], mocked.updateEntity.mock.invocationCallOrder[0]];
+    const order = [
+      mocked.createDelta.mock.invocationCallOrder[0],
+      mocked.createRelation.mock.invocationCallOrder[0],
+      mocked.updateEntity.mock.invocationCallOrder[0],
+    ];
     expect(order).toEqual([...order].sort((a, b) => a - b));
   });
 
@@ -324,30 +406,68 @@ describe("runLifecycleWrite（推进/回收复合写序列）", () => {
     mocked.createDelta.mockResolvedValue({ id: "delta-1", applied: {} as never });
     mocked.createRelation.mockResolvedValue({ id: "rel-1", relation: {} as never });
     mocked.updateEntity.mockResolvedValue({ id: "hook-1", updated: true });
-    await runLifecycleWrite({ kind: "resolve", hookId: "hook-1", fromStatus: "progressing", nodeId: "sc-45", description: "揭示身世" });
-    expect(mocked.createDelta).toHaveBeenCalledWith(expect.objectContaining({ changes: [{ field: "status", op: "update", from: "progressing", to: "resolved" }] }));
-    expect(mocked.createRelation).toHaveBeenCalledWith(expect.objectContaining({ relation_type: "resolves" }));
-    expect(mocked.updateEntity).toHaveBeenCalledWith("hook", "hook-1", { data: { status: "resolved" } });
+    await runLifecycleWrite({
+      kind: "resolve",
+      hookId: "hook-1",
+      fromStatus: "progressing",
+      nodeId: "sc-45",
+      description: "揭示身世",
+    });
+    expect(mocked.createDelta).toHaveBeenCalledWith(
+      expect.objectContaining({
+        changes: [{ field: "status", op: "update", from: "progressing", to: "resolved" }],
+      }),
+    );
+    expect(mocked.createRelation).toHaveBeenCalledWith(
+      expect.objectContaining({ relation_type: "resolves" }),
+    );
+    expect(mocked.updateEntity).toHaveBeenCalledWith("hook", "hook-1", {
+      data: { status: "resolved" },
+    });
   });
 
   it("幂等边界：relation 409 RELATION_EXISTS → 放行不抛错，仍完成 status 同步", async () => {
     mocked.createDelta.mockResolvedValue({ id: "delta-1", applied: {} as never });
     mocked.createRelation.mockRejectedValue(new ApiError("RELATION_EXISTS", "这条关系已经存在"));
     mocked.updateEntity.mockResolvedValue({ id: "hook-1", updated: true });
-    await expect(runLifecycleWrite({ kind: "advance", hookId: "hook-1", fromStatus: "planted", nodeId: "sc-12", description: "d" })).resolves.toBeUndefined();
+    await expect(
+      runLifecycleWrite({
+        kind: "advance",
+        hookId: "hook-1",
+        fromStatus: "planted",
+        nodeId: "sc-12",
+        description: "d",
+      }),
+    ).resolves.toBeUndefined();
     expect(mocked.updateEntity).toHaveBeenCalledTimes(1);
   });
 
   it("relation 非 409 失败 → 抛出且不做 status 同步（避免伪成功）", async () => {
     mocked.createDelta.mockResolvedValue({ id: "delta-1", applied: {} as never });
     mocked.createRelation.mockRejectedValue(new ApiError("VALIDATION_ERROR", "端点不存在"));
-    await expect(runLifecycleWrite({ kind: "advance", hookId: "hook-1", fromStatus: "planted", nodeId: "sc-x", description: "d" })).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    await expect(
+      runLifecycleWrite({
+        kind: "advance",
+        hookId: "hook-1",
+        fromStatus: "planted",
+        nodeId: "sc-x",
+        description: "d",
+      }),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
     expect(mocked.updateEntity).not.toHaveBeenCalled();
   });
 
   it("delta 失败 → 抛出，relation 与 sync 均不执行（先 delta 后 relation 的失败边界）", async () => {
     mocked.createDelta.mockRejectedValue(new ApiError("OUTLINE_NODE_NOT_FOUND", "节点不存在"));
-    await expect(runLifecycleWrite({ kind: "advance", hookId: "hook-1", fromStatus: "planted", nodeId: "sc-x", description: "d" })).rejects.toMatchObject({ code: "OUTLINE_NODE_NOT_FOUND" });
+    await expect(
+      runLifecycleWrite({
+        kind: "advance",
+        hookId: "hook-1",
+        fromStatus: "planted",
+        nodeId: "sc-x",
+        description: "d",
+      }),
+    ).rejects.toMatchObject({ code: "OUTLINE_NODE_NOT_FOUND" });
     expect(mocked.createRelation).not.toHaveBeenCalled();
     expect(mocked.updateEntity).not.toHaveBeenCalled();
   });
@@ -358,23 +478,39 @@ describe("runLifecycleWrite（推进/回收复合写序列）", () => {
     mocked.createRelation.mockResolvedValueOnce({ id: "rel-1", relation: {} as never });
     mocked.updateEntity.mockRejectedValueOnce(new ApiError("CLIENT_NETWORK_ERROR", "网络请求失败"));
     await expect(
-      runLifecycleWrite({ kind: "advance", hookId: "hook-1", fromStatus: "planted", nodeId: "sc-12", description: "d" }),
+      runLifecycleWrite({
+        kind: "advance",
+        hookId: "hook-1",
+        fromStatus: "planted",
+        nodeId: "sc-12",
+        description: "d",
+      }),
     ).rejects.toMatchObject({ code: "CLIENT_NETWORK_ERROR" });
 
     // 重试：delta 重复写（from 仍与陈旧值 planted 匹配，computeState 可正常累积）+
     // relation 409 幂等放行 + status 同步成功 → 整体成功
     mocked.createDelta.mockResolvedValueOnce({ id: "delta-2", applied: {} as never });
-    mocked.createRelation.mockRejectedValueOnce(new ApiError("RELATION_EXISTS", "这条关系已经存在"));
+    mocked.createRelation.mockRejectedValueOnce(
+      new ApiError("RELATION_EXISTS", "这条关系已经存在"),
+    );
     mocked.updateEntity.mockResolvedValueOnce({ id: "hook-1", updated: true });
     await expect(
-      runLifecycleWrite({ kind: "advance", hookId: "hook-1", fromStatus: "planted", nodeId: "sc-12", description: "d" }),
+      runLifecycleWrite({
+        kind: "advance",
+        hookId: "hook-1",
+        fromStatus: "planted",
+        nodeId: "sc-12",
+        description: "d",
+      }),
     ).resolves.toBeUndefined();
 
     // 收敛断言：两次 delta、relation 409 未重写、两次 status 同步（末次成功）
     expect(mocked.createDelta).toHaveBeenCalledTimes(2);
     expect(mocked.createRelation).toHaveBeenCalledTimes(2);
     expect(mocked.updateEntity).toHaveBeenCalledTimes(2);
-    expect(mocked.updateEntity).toHaveBeenLastCalledWith("hook", "hook-1", { data: { status: "progressing" } });
+    expect(mocked.updateEntity).toHaveBeenLastCalledWith("hook", "hook-1", {
+      data: { status: "progressing" },
+    });
   });
 });
 
@@ -382,7 +518,12 @@ describe("runAbandonWrite（废弃复合写序列）", () => {
   it("仅 POST /delta + PUT /entity（status=abandoned），不创建关系（tools.md abandon 无 relation）", async () => {
     mocked.createDelta.mockResolvedValue({ id: "delta-2", applied: {} as never });
     mocked.updateEntity.mockResolvedValue({ id: "hook-1", updated: true });
-    await runAbandonWrite({ hookId: "hook-1", fromStatus: "progressing", nodeId: "ch-2", description: "设定变更，放弃" });
+    await runAbandonWrite({
+      hookId: "hook-1",
+      fromStatus: "progressing",
+      nodeId: "ch-2",
+      description: "设定变更，放弃",
+    });
     expect(mocked.createDelta).toHaveBeenCalledWith({
       node_id: "ch-2",
       target_type: "hook",
@@ -390,7 +531,9 @@ describe("runAbandonWrite（废弃复合写序列）", () => {
       changes: [{ field: "status", op: "update", from: "progressing", to: "abandoned" }],
       description: "设定变更，放弃",
     });
-    expect(mocked.updateEntity).toHaveBeenCalledWith("hook", "hook-1", { data: { status: "abandoned" } });
+    expect(mocked.updateEntity).toHaveBeenCalledWith("hook", "hook-1", {
+      data: { status: "abandoned" },
+    });
     expect(mocked.createRelation).not.toHaveBeenCalled();
   });
 });

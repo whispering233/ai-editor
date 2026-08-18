@@ -10,13 +10,7 @@ import { HOOK_STATUS_LABEL, HOOK_TIMING_LABEL } from "./entity-list";
 /** 字段控件类型：text 单行 / textarea 多行 / number 数字 / tags 标签列表 / select 枚举下拉 /
  *  toggle 开关 / outline-node 大纲节点选择器 */
 export type DetailFieldControl =
-  | "text"
-  | "textarea"
-  | "number"
-  | "tags"
-  | "select"
-  | "toggle"
-  | "outline-node";
+  "text" | "textarea" | "number" | "tags" | "select" | "toggle" | "outline-node";
 
 /** data 表单字段配置（字段出现与否由响应 data 决定——「未出现的字段不渲染」） */
 export interface DetailFieldConfig {
@@ -42,11 +36,11 @@ export function detailFieldsForType(type: EntityType): DetailFieldConfig[] {
         { key: "abilities", label: "能力", control: "tags" },
         { key: "status", label: "状态", control: "text" },
       ];
-  /**
-   * 设定基础信息（决策 30/31 + K2 修订，2026-08）：parent_id（层级 belongs_to）与 category
-   * （废弃）不参与；`tags` = 分类标签（统一字段，快捷选择既有标签）、`rules` = 规则条款
-   * （仅详情页编辑），见 entity-detail.md
-   */
+    /**
+     * 设定基础信息（决策 30/31 + K2 修订，2026-08）：parent_id（层级 belongs_to）与 category
+     * （废弃）不参与；`tags` = 分类标签（统一字段，快捷选择既有标签）、`rules` = 规则条款
+     * （仅详情页编辑），见 entity-detail.md
+     */
     case "setting":
       return [
         { key: "description", label: "描述", control: "textarea" },
@@ -156,9 +150,7 @@ export function settingHierarchyFromRelations(
 ): { parent: SettingHierarchyItem | null; children: SettingHierarchyItem[] } {
   const edges = relations.filter(
     (r) =>
-      r.relationType === "belongs_to" &&
-      r.sourceType === "setting" &&
-      r.targetType === "setting",
+      r.relationType === "belongs_to" && r.sourceType === "setting" && r.targetType === "setting",
   );
   const children: SettingHierarchyItem[] = [];
   let parent: SettingHierarchyItem | null = null;

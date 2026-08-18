@@ -89,7 +89,8 @@ export function TimelineGroupBlock({
   const isUngrouped = timepoint === null;
   const title = isUngrouped ? "未挂载" : timepoint.name;
   // 拖拽态（G2 双轨：时间点整组 / 事件单条——拖拽来源命中本组/本行 → opacity-50）
-  const groupDragging = dragSource !== null && dragSource.kind === "timepoint" && dragSource.id === groupId;
+  const groupDragging =
+    dragSource !== null && dragSource.kind === "timepoint" && dragSource.id === groupId;
 
   function startRename() {
     if (timepoint === null) return;
@@ -163,7 +164,7 @@ export function TimelineGroupBlock({
               className={cn(
                 "min-w-0 truncate text-sm font-medium",
                 // 未挂载区占位样式（timeline.md：与正常组标题区分——muted 斜体）
-                isUngrouped ? "italic text-muted-foreground" : "text-foreground",
+                isUngrouped ? "text-muted-foreground italic" : "text-foreground",
               )}
               title={title}
             >
@@ -231,7 +232,12 @@ export function TimelineGroupBlock({
               onClick={onToggleCollapse}
             >
               {/* chevron 展开旋转惯例（layout.md §2.3）：折叠时横指，展开时向下 */}
-              <ChevronRight className={cn("size-4 transition-transform duration-200", !collapsed && "rotate-90")} />
+              <ChevronRight
+                className={cn(
+                  "size-4 transition-transform duration-200",
+                  !collapsed && "rotate-90",
+                )}
+              />
             </Button>
           </span>
         </div>
@@ -247,7 +253,9 @@ export function TimelineGroupBlock({
                 ev={ev}
                 occursCount={occursCount}
                 hasOccursData={hasOccursData}
-                dragging={dragSource !== null && dragSource.kind === "event" && dragSource.id === ev.id}
+                dragging={
+                  dragSource !== null && dragSource.kind === "event" && dragSource.id === ev.id
+                }
                 busy={busy}
                 showInsertBefore={lines.before}
                 showInsertAfter={lines.after}

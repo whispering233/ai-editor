@@ -73,7 +73,9 @@ export function toggleConflictLevel(current: string[], level: string): string[] 
 
 /** 场景节点选择器选项（树序遍历 + 仅 scene 叶子；不含卷/章——引用字段只指向场景，决策 23）。
  * 深度沿用 flattenTree 语义（root=0、卷=1、章=2）用于缩进展示 */
-export function sceneNodeOptions(nodes: OutlineNode[]): Array<{ id: string; label: string; depth: number }> {
+export function sceneNodeOptions(
+  nodes: OutlineNode[],
+): Array<{ id: string; label: string; depth: number }> {
   const options: Array<{ id: string; label: string; depth: number }> = [];
   const walk = (children: OutlineNode[], depth: number): void => {
     for (const n of children) {

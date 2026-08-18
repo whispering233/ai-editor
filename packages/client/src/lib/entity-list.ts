@@ -55,7 +55,8 @@ export const HOOK_TIMING_LABEL: Record<string, string> = {
 export function summaryCellText(type: EntityType, key: string, value: unknown): string {
   if (value === undefined || value === null || value === "") return "—";
   if (type === "hook" && key === "status") return HOOK_STATUS_LABEL[String(value)] ?? String(value);
-  if (type === "hook" && key === "payoff_timing") return HOOK_TIMING_LABEL[String(value)] ?? String(value);
+  if (type === "hook" && key === "payoff_timing")
+    return HOOK_TIMING_LABEL[String(value)] ?? String(value);
   // 标签数组（setting.tags / event.tags）：join 展示（摘要仅前 3 个，服务端已截断）
   if (key === "tags" && Array.isArray(value)) {
     const tags = (value as string[]).filter((t) => typeof t === "string" && t !== "");

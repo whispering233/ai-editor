@@ -75,7 +75,12 @@ describe("CREATE_FIRST_FIELD（创建对话框首字段配置——原型「name
 
   it("hook 用枚举下拉（status 受控枚举，doc/database/hooks.md）；其余自由文本", () => {
     expect(CREATE_FIRST_FIELD.hook.input).toBe("select");
-    expect(CREATE_FIRST_FIELD.hook.options).toEqual(["planted", "progressing", "resolved", "abandoned"]);
+    expect(CREATE_FIRST_FIELD.hook.options).toEqual([
+      "planted",
+      "progressing",
+      "resolved",
+      "abandoned",
+    ]);
     expect(CREATE_FIRST_FIELD.character.input).toBe("text");
   });
 

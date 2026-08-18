@@ -33,7 +33,9 @@ describe("describeOpenError（项目开/建错误码映射）", () => {
 
 describe("describeImportError（E3 导入错误码映射）", () => {
   it("PROJECT_ALREADY_EXISTS → 换书名引导（对话框内可立即改名重试）", () => {
-    expect(describeImportError("PROJECT_ALREADY_EXISTS", "书架已存在同名书: x")).toContain("换一个书名");
+    expect(describeImportError("PROJECT_ALREADY_EXISTS", "书架已存在同名书: x")).toContain(
+      "换一个书名",
+    );
   });
 
   it("SCHEMA_VERSION_MISMATCH → 透传服务端 message（含相对版本分流文案）", () => {
@@ -44,8 +46,12 @@ describe("describeImportError（E3 导入错误码映射）", () => {
   });
 
   it("VALIDATION_ERROR → 透传服务端 message（坏包/缺文件等具体问题描述）", () => {
-    expect(describeImportError("VALIDATION_ERROR", "不是有效的项目备份包（zip 解析失败）")).toContain("zip");
-    expect(describeImportError("VALIDATION_ERROR", "备份包缺少文件: outline.json")).toContain("outline.json");
+    expect(
+      describeImportError("VALIDATION_ERROR", "不是有效的项目备份包（zip 解析失败）"),
+    ).toContain("zip");
+    expect(describeImportError("VALIDATION_ERROR", "备份包缺少文件: outline.json")).toContain(
+      "outline.json",
+    );
   });
 
   it("NO_PROJECT_OPEN → 空串（页面分支处理）", () => {

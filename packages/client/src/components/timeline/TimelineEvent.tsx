@@ -96,7 +96,10 @@ export function TimelineEvent({
       {/* 组内小圆点（F4 保留：组内事件堆叠，小圆点 size-2 bg-primary/60 居中于轴线列——
           不再画大圆点盖线，轴线容器级贯穿；mt-[16px] = 内容中心 20px - 小圆点高 8px 中心 offset 4px） */}
       <div className="w-[22px] shrink-0">
-        <span aria-hidden="true" className="mx-auto mt-[16px] block size-2 rounded-full bg-primary/60" />
+        <span
+          aria-hidden="true"
+          className="mx-auto mt-[16px] block size-2 rounded-full bg-primary/60"
+        />
       </div>
       {/* 内容卡（timeline.md G2 事件行：从左到右 拖拽柄 → 事件名 → tags；右侧：N 节点 + 直接操作按钮；
           描述区 F6 在事件名行下方全宽换行，不挤占行内元素） */}
@@ -114,13 +117,18 @@ export function TimelineEvent({
             {ev.name}
           </span>
           {tags.map((tag) => (
-            <span key={tag} className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+            <span
+              key={tag}
+              className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
+            >
               {tag}
             </span>
           ))}
           {/* 右侧信息与操作区（H6：N 节点计数靠右，与操作按钮一起，减少左侧干扰） */}
           <span className="ml-auto flex shrink-0 items-center gap-1">
-            {hasOccursData && <span className="shrink-0 text-xs text-muted-foreground">{count} 节点</span>}
+            {hasOccursData && (
+              <span className="shrink-0 text-xs text-muted-foreground">{count} 节点</span>
+            )}
             {/* 操作按钮全部展开（H3：禁止收进 ⋯ 二级展开；图标 + title/aria-label） */}
             <Button
               variant="ghost"
@@ -163,7 +171,10 @@ export function TimelineEvent({
           <div className="mt-1.5">
             <p
               ref={descRef}
-              className={cn("text-sm leading-relaxed text-muted-foreground", !expanded && "line-clamp-2")}
+              className={cn(
+                "text-sm leading-relaxed text-muted-foreground",
+                !expanded && "line-clamp-2",
+              )}
             >
               {description}
             </p>

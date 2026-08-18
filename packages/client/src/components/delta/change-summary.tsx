@@ -28,7 +28,12 @@ export function ChangeSummary({
               isSkipped ? "text-destructive" : "text-muted-foreground",
             )}
           >
-            <span className={cn("shrink-0 font-medium", isSkipped ? "text-destructive" : "text-foreground/70")}>
+            <span
+              className={cn(
+                "shrink-0 font-medium",
+                isSkipped ? "text-destructive" : "text-foreground/70",
+              )}
+            >
               {DELTA_OP_LABEL[c.op]}
             </span>
             {describeChange(c)}

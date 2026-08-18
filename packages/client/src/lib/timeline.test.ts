@@ -98,7 +98,9 @@ describe("eventTagsOf / eventDescription（事件行摘要防御提取，F3 垂�
   it("eventDescription：description 缺失/非字符串 → 空串（行内不渲染描述区）；正常值原样返回", () => {
     expect(eventDescription(eventOf("a"))).toBe("");
     expect(eventDescription({ ...eventOf("b"), summary: { description: 42 } })).toBe("");
-    expect(eventDescription({ ...eventOf("c"), summary: { description: "拜入山门" } })).toBe("拜入山门");
+    expect(eventDescription({ ...eventOf("c"), summary: { description: "拜入山门" } })).toBe(
+      "拜入山门",
+    );
   });
 });
 
@@ -106,10 +108,11 @@ describe("buildTimelineModel（G2 双实体模型：时间点组块 + 事件挂�
   const tps = [timepointOf("tp-a", "第二天黄昏"), timepointOf("tp-b", "少年时")];
 
   it("组序 = timepoints 传入序（timepoint.sort_order 投影）；组内事件 = 事件传入序投影；未挂载独立", () => {
-    const model = buildTimelineModel(tps, [eventOf("e1"), eventOf("e2"), eventOf("e3")], [
-      mountOf("tp-a", "e2"),
-      mountOf("tp-b", "e3"),
-    ]);
+    const model = buildTimelineModel(
+      tps,
+      [eventOf("e1"), eventOf("e2"), eventOf("e3")],
+      [mountOf("tp-a", "e2"), mountOf("tp-b", "e3")],
+    );
     expect(model.groups.map((g) => g.timepoint.id)).toEqual(["tp-a", "tp-b"]);
     expect(model.groups[0].events.map((e) => e.id)).toEqual(["e2"]);
     expect(model.groups[1].events.map((e) => e.id)).toEqual(["e3"]);
@@ -124,11 +127,15 @@ describe("buildTimelineModel（G2 双实体模型：时间点组块 + 事件挂�
   });
 
   it("非 occurs_at / 非 timepoint 源的边不参与挂载（防御：occurs_at 双语义——appears_in 等不入映射）", () => {
-    const model = buildTimelineModel(tps, [eventOf("e1")], [
-      mountOf("tp-a", "e1"),
-      { ...mountOf("tp-b", "e1"), relationType: "occurs_in" },
-      { ...mountOf("tp-b", "e1"), sourceType: "outline_node" },
-    ]);
+    const model = buildTimelineModel(
+      tps,
+      [eventOf("e1")],
+      [
+        mountOf("tp-a", "e1"),
+        { ...mountOf("tp-b", "e1"), relationType: "occurs_in" },
+        { ...mountOf("tp-b", "e1"), sourceType: "outline_node" },
+      ],
+    );
     expect(model.groups[0].events.map((e) => e.id)).toEqual(["e1"]);
     expect(model.groups[1].events).toEqual([]);
     expect(model.ungrouped).toEqual([]);
@@ -140,7 +147,11 @@ describe("buildTimelineModel（G2 双实体模型：时间点组块 + 事件挂�
   });
 
   it("单事件多条挂载边 → 首次出现者胜（防御：服务端 1:n 校验，理论不可达）", () => {
-    const model = buildTimelineModel(tps, [eventOf("e1")], [mountOf("tp-a", "e1"), mountOf("tp-b", "e1")]);
+    const model = buildTimelineModel(
+      tps,
+      [eventOf("e1")],
+      [mountOf("tp-a", "e1"), mountOf("tp-b", "e1")],
+    );
     expect(model.groups[0].events.map((e) => e.id)).toEqual(["e1"]);
     expect(model.groups[1].events).toEqual([]);
   });
@@ -195,7 +206,11 @@ describe("eventOrderIntoGroup（事件拖入组块的插入位 order，G2 双轨
 
 describe("collectEventTags（标签聚合，timeline.md 筛选器）", () => {
   it("去重 + 稳定序（按列表序首次出现）", () => {
-    const tags = collectEventTags([eventOf("a", ["主线", "战争"]), eventOf("b", ["身世", "主线"]), eventOf("c", ["战争"])]);
+    const tags = collectEventTags([
+      eventOf("a", ["主线", "战争"]),
+      eventOf("b", ["身世", "主线"]),
+      eventOf("c", ["战争"]),
+    ]);
     expect(tags).toEqual(["主线", "战争", "身世"]);
   });
 
@@ -315,7 +330,10 @@ describe("buildEventDetailPatch（保存 patch，稀疏提交 + 清空语义；G
   });
 
   it("description 变化 → 仅提交 data.description（其余未改字段不提交）", () => {
-    const patch = buildEventDetailPatch(original, { ...baseForm, description: "拜入山门，遇见师兄" });
+    const patch = buildEventDetailPatch(original, {
+      ...baseForm,
+      description: "拜入山门，遇见师兄",
+    });
     expect(patch).toEqual({ data: { description: "拜入山门，遇见师兄" } });
   });
 

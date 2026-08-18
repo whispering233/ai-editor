@@ -64,14 +64,20 @@ export function ComputePreview({
     setComputing(true);
     setError(null);
     try {
-      const res = await computeDeltaState({ target_type: type, target_id: id, at_node_id: atNodeId });
+      const res = await computeDeltaState({
+        target_type: type,
+        target_id: id,
+        at_node_id: atNodeId,
+      });
       setResult(res);
     } catch (err) {
       setResult(null);
       if (err instanceof ApiError && err.code === "OUTLINE_NODE_NOT_FOUND") {
         setError("该节点已不存在，请重新选择计算节点");
       } else {
-        setError(err instanceof ApiError ? err.message : "无法连接服务，请确认 ai-editor 服务已启动");
+        setError(
+          err instanceof ApiError ? err.message : "无法连接服务，请确认 ai-editor 服务已启动",
+        );
       }
     } finally {
       setComputing(false);
@@ -94,11 +100,18 @@ export function ComputePreview({
           {/* 计算节点选择 + [计算] */}
           <div className="flex flex-wrap items-end gap-2">
             <div className="flex flex-col gap-1">
-              <span className="text-xs text-muted-foreground">计算节点（到达该节点时的累积状态）</span>
+              <span className="text-xs text-muted-foreground">
+                计算节点（到达该节点时的累积状态）
+              </span>
               {outline === null ? (
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground">大纲未加载</span>
-                  <Button variant="outline" size="xs" type="button" onClick={() => void loadOutline()}>
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    type="button"
+                    onClick={() => void loadOutline()}
+                  >
                     加载大纲
                   </Button>
                 </div>
@@ -190,7 +203,8 @@ function ComputeResult({
           <ul className="mt-1 space-y-0.5">
             {result.conflicts.map((c, i) => (
               <li key={i} className="text-xs text-destructive">
-                {c.field}：记录应为 {formatDeltaValue(c.expected)}，实际为 {formatDeltaValue(c.actual)}
+                {c.field}：记录应为 {formatDeltaValue(c.expected)}，实际为{" "}
+                {formatDeltaValue(c.actual)}
               </li>
             ))}
           </ul>
@@ -200,7 +214,8 @@ function ComputeResult({
       {/* ② 状态差异（相对当前 data） */}
       <div>
         <h3 className="mb-1.5 text-xs font-medium text-muted-foreground">
-          状态差异（相对当前数据 · 到达《{atNodeTitle}》{diffs.length > 0 ? `，${diffs.length} 处` : ""}）
+          状态差异（相对当前数据 · 到达《{atNodeTitle}》
+          {diffs.length > 0 ? `，${diffs.length} 处` : ""}）
         </h3>
         {diffs.length === 0 ? (
           <p className="text-xs text-muted-foreground">计算状态与当前数据一致</p>
@@ -231,7 +246,10 @@ function ComputeResult({
             {result.appliedDeltas.map((d, i) => (
               <li key={i} className="px-3 py-2">
                 <div className="flex flex-wrap items-baseline gap-2">
-                  <span className="min-w-0 flex-1 truncate text-sm text-foreground" title={d.description}>
+                  <span
+                    className="min-w-0 flex-1 truncate text-sm text-foreground"
+                    title={d.description}
+                  >
                     {d.description}
                   </span>
                   <span className="shrink-0 text-xs text-muted-foreground">
@@ -243,14 +261,18 @@ function ComputeResult({
                   <ul className="mt-1 space-y-0.5">
                     {d.skipped.map((s) => (
                       <li key={s.index} className="text-xs text-destructive">
-                        {s.field}：记录应为 {formatDeltaValue(s.expected)}，实际 {formatDeltaValue(s.actual)}
+                        {s.field}：记录应为 {formatDeltaValue(s.expected)}，实际{" "}
+                        {formatDeltaValue(s.actual)}
                         （已跳过）
                       </li>
                     ))}
                   </ul>
                 )}
                 <div className="mt-1.5">
-                  <ChangeSummary changes={d.changes as DeltaChange[]} skipped={d.skipped?.map((s) => s.index)} />
+                  <ChangeSummary
+                    changes={d.changes as DeltaChange[]}
+                    skipped={d.skipped?.map((s) => s.index)}
+                  />
                 </div>
               </li>
             ))}

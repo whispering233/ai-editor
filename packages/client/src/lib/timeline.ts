@@ -16,9 +16,7 @@ import type { RelationSummaryItem } from "./api";
 
 /** 拖拽插入目标（事件列表无层级——outline-tree.ts DragTarget 的扁平化版本） */
 export type TimelineDropInsert =
-  | { kind: "before"; id: string }
-  | { kind: "after"; id: string }
-  | { kind: "end" };
+  { kind: "before"; id: string } | { kind: "after"; id: string } | { kind: "end" };
 
 /**
  * 拖拽插入位 → order（0-based 全局线性序，决策 26/G2）：
@@ -27,7 +25,11 @@ export type TimelineDropInsert =
  * 锚点不存在 → 末尾（防御；列表与拖拽态同源，理论不可达）。
  * G2 双实体共用：时间点序（组间）与事件序（组内排序键）各自独立调用。
  */
-export function eventDropOrder(ids: string[], insert: TimelineDropInsert, excludeId?: string): number {
+export function eventDropOrder(
+  ids: string[],
+  insert: TimelineDropInsert,
+  excludeId?: string,
+): number {
   const siblings = excludeId === undefined ? ids : ids.filter((id) => id !== excludeId);
   if (insert.kind === "end") return siblings.length;
   const idx = siblings.indexOf(insert.id);
@@ -104,7 +106,10 @@ export function eventOrderIntoGroup(
   side: "before" | "after",
   draggedId: string,
 ): number {
-  const allIds = [...groups.flatMap((g) => g.events.map((e) => e.id)), ...ungrouped.map((e) => e.id)];
+  const allIds = [
+    ...groups.flatMap((g) => g.events.map((e) => e.id)),
+    ...ungrouped.map((e) => e.id),
+  ];
   let anchor: EntitySummary | undefined;
   if (targetIndex === -1) {
     anchor = side === "before" ? ungrouped[0] : ungrouped[ungrouped.length - 1];
@@ -242,7 +247,9 @@ export function parseTagsInput(raw: string): string[] {
 
 /** tags 数组 → 输入框展示字符串（与 parseTagsInput 互逆的展示侧；非数组防御） */
 export function tagsToInput(tags: unknown): string {
-  return Array.isArray(tags) ? tags.filter((t): t is string => typeof t === "string").join("，") : "";
+  return Array.isArray(tags)
+    ? tags.filter((t): t is string => typeof t === "string").join("，")
+    : "";
 }
 
 // ============ 事件表单（C3 编辑对话框与 C4 详情页共用） ============
@@ -256,7 +263,10 @@ export interface EventDetailForm {
 }
 
 /** 详情响应 → 表单初始值（data 两字段防御提取；tags 数组 → 逗号输入串）——C3 编辑预填与 C4 详情页共用 */
-export function eventFormFromDetail(detail: { name: string; data: Record<string, unknown> }): EventDetailForm {
+export function eventFormFromDetail(detail: {
+  name: string;
+  data: Record<string, unknown>;
+}): EventDetailForm {
   const data = detail.data;
   return {
     name: detail.name,

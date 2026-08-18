@@ -43,7 +43,7 @@ import {
 
 // ============ fixtures ============
 
-/** 三层大纲树 fixture：卷1（章1[场景A,场景B]、章2）、卷2（直挂章3[场景C]）、直挂章4（root 下） */function outlineFixture(): OutlineTree {
+/** 三层大纲树 fixture：卷1（章1[场景A,场景B]、章2）、卷2（直挂章3[场景C]）、直挂章4（root 下） */ function outlineFixture(): OutlineTree {
   return {
     id: "root",
     type: "root",
@@ -103,7 +103,11 @@ import {
 }
 
 /** 关系 fixture（默认 plot_edge，双端点 outline_node） */
-function rel(sourceId: string, targetId: string, overrides?: Partial<RelationSummaryItem>): RelationSummaryItem {
+function rel(
+  sourceId: string,
+  targetId: string,
+  overrides?: Partial<RelationSummaryItem>,
+): RelationSummaryItem {
   return {
     id: `rel-${sourceId}-${targetId}`,
     sourceType: "outline_node",
@@ -142,7 +146,17 @@ afterEach(() => {
 describe("flattenCanvasNodes（大纲树 → 画布节点扁平列表）", () => {
   it("树序遍历：先序（卷→章→场景），含直接父 id 与深度", () => {
     const nodes = flattenCanvasNodes(outlineFixture());
-    expect(nodes.map((n) => n.id)).toEqual(["vol-1", "ch-1", "sc-1", "sc-2", "ch-2", "vol-2", "ch-3", "sc-3", "ch-4"]);
+    expect(nodes.map((n) => n.id)).toEqual([
+      "vol-1",
+      "ch-1",
+      "sc-1",
+      "sc-2",
+      "ch-2",
+      "vol-2",
+      "ch-3",
+      "sc-3",
+      "ch-4",
+    ]);
     const ch1 = nodes.find((n) => n.id === "ch-1")!;
     expect(ch1.parentId).toBe("vol-1");
     expect(ch1.depth).toBe(1);
@@ -171,7 +185,9 @@ describe("flattenCanvasNodes（大纲树 → 画布节点扁平列表）", () =>
 
   it("空树/未加载 → []（不抛错）", () => {
     expect(flattenCanvasNodes(null)).toEqual([]);
-    expect(flattenCanvasNodes({ id: "root", type: "root", schemaVersion: 1, children: [] })).toEqual([]);
+    expect(
+      flattenCanvasNodes({ id: "root", type: "root", schemaVersion: 1, children: [] }),
+    ).toEqual([]);
   });
 });
 
@@ -296,7 +312,11 @@ describe("mergeLayout（树变化后保持既有坐标）", () => {
     { id: "sc-1", type: "scene", title: "场景A", parentId: "ch-1", depth: 2 },
     { id: "sc-2", type: "scene", title: "场景B", parentId: "ch-1", depth: 2 },
   ];
-  const fallback: CanvasNodePositions = { "vol-1": { x: 48, y: 48 }, "sc-1": { x: 104, y: 172 }, "sc-2": { x: 104, y: 248 } };
+  const fallback: CanvasNodePositions = {
+    "vol-1": { x: 48, y: 48 },
+    "sc-1": { x: 104, y: 172 },
+    "sc-2": { x: 104, y: 248 },
+  };
 
   it("stored 有记录的节点保留（用户拖拽结果不被自动布局覆盖）", () => {
     const merged = mergeLayout({ "sc-1": { x: 999, y: 777 } }, fallback, nodes);
@@ -311,7 +331,7 @@ describe("mergeLayout（树变化后保持既有坐标）", () => {
   });
 
   it("已不在树中的 id 丢弃（stored 陈旧坐标不累积）", () => {
-    const merged = mergeLayout({ "sc-1": { x: 9, y: 9 }, "ghost": { x: 1, y: 1 } }, fallback, nodes);
+    const merged = mergeLayout({ "sc-1": { x: 9, y: 9 }, ghost: { x: 1, y: 1 } }, fallback, nodes);
     expect(merged).not.toHaveProperty("ghost");
   });
 
@@ -320,7 +340,7 @@ describe("mergeLayout（树变化后保持既有坐标）", () => {
   });
 
   it("空节点列表 → 空坐标表", () => {
-    expect(mergeLayout({ "ghost": { x: 1, y: 1 } }, fallback, [])).toEqual({});
+    expect(mergeLayout({ ghost: { x: 1, y: 1 } }, fallback, [])).toEqual({});
   });
 });
 
@@ -362,11 +382,7 @@ describe("parsePlotEdges（关系行 → 画布连线）", () => {
   });
 
   it("id 排序确定化（乱序输入 → 输出有序）", () => {
-    const edges = parsePlotEdges([
-      rel("sc-3", "sc-1"),
-      rel("sc-1", "sc-2"),
-      rel("sc-2", "sc-3"),
-    ]);
+    const edges = parsePlotEdges([rel("sc-3", "sc-1"), rel("sc-1", "sc-2"), rel("sc-2", "sc-3")]);
     expect(edges.map((e) => e.id)).toEqual(["rel-sc-1-sc-2", "rel-sc-2-sc-3", "rel-sc-3-sc-1"]);
   });
 
@@ -404,7 +420,9 @@ describe("连线几何（贝塞尔路径 + 中点标签锚点）", () => {
 
   it("edgePath：M 起点 + C 三次贝塞尔（控制点水平出/入）", () => {
     const d = edgePath(from, to);
-    const m = d.match(/^M ([\d.]+) ([\d.]+) C ([\d.]+) ([\d.]+), ([\d.]+) ([\d.]+), ([\d.]+) ([\d.]+)$/);
+    const m = d.match(
+      /^M ([\d.]+) ([\d.]+) C ([\d.]+) ([\d.]+), ([\d.]+) ([\d.]+), ([\d.]+) ([\d.]+)$/,
+    );
     expect(m).not.toBeNull();
     const [, mx, my, c1x, c1y, c2x, c2y, x2, y2] = m!;
     expect([Number(mx), Number(my)]).toEqual([from.x, from.y]);
@@ -595,8 +613,12 @@ describe("minimapRectangles（S10.3：归一化矩形 + 视口框）", () => {
 
   it("视口 null / 宽高非正 → 无视口框（节点矩形照常）", () => {
     expect(minimapRectangles(nodes, positions, 1, null).viewportRect).toBeNull();
-    expect(minimapRectangles(nodes, positions, 1, { x: 0, y: 0, width: 0, height: 600 }).viewportRect).toBeNull();
-    expect(minimapRectangles(nodes, positions, 1, { x: 0, y: 0, width: 900, height: 0 }).viewportRect).toBeNull();
+    expect(
+      minimapRectangles(nodes, positions, 1, { x: 0, y: 0, width: 0, height: 600 }).viewportRect,
+    ).toBeNull();
+    expect(
+      minimapRectangles(nodes, positions, 1, { x: 0, y: 0, width: 900, height: 0 }).viewportRect,
+    ).toBeNull();
     expect(minimapRectangles(nodes, positions, 1, viewport).nodeRects).toHaveLength(3);
   });
 
@@ -606,8 +628,14 @@ describe("minimapRectangles（S10.3：归一化矩形 + 视口框）", () => {
     const r = mm.nodeRects[0];
     expect(r.w).toBeCloseTo(CANVAS_CARD_W.scene, 5); // scale = 1（clamp 生效）
     expect(r.h).toBeCloseTo(CANVAS_CARD_H.scene, 5);
-    expect(r.x).toBeCloseTo(MINIMAP_PAD + (MINIMAP_SIZE.w - 2 * MINIMAP_PAD - CANVAS_CARD_W.scene) / 2, 5);
-    expect(r.y).toBeCloseTo(MINIMAP_PAD + (MINIMAP_SIZE.h - 2 * MINIMAP_PAD - CANVAS_CARD_H.scene) / 2, 5);
+    expect(r.x).toBeCloseTo(
+      MINIMAP_PAD + (MINIMAP_SIZE.w - 2 * MINIMAP_PAD - CANVAS_CARD_W.scene) / 2,
+      5,
+    );
+    expect(r.y).toBeCloseTo(
+      MINIMAP_PAD + (MINIMAP_SIZE.h - 2 * MINIMAP_PAD - CANVAS_CARD_H.scene) / 2,
+      5,
+    );
   });
 
   it("极大内容：scale clamp 下限（不归零，矩形仍可渲染）", () => {
@@ -631,7 +659,10 @@ describe("重新布局（S10.4：一键重排幂等语义——旧坐标不动�
       { id: "sc-1", type: "scene", title: "场景A", parentId: "ch-1", depth: 2 },
     ];
     const fallback = autoLayout(nodes);
-    const dragged: CanvasNodePositions = { "vol-1": { x: 999, y: 111 }, "sc-1": { x: 555, y: 666 } };
+    const dragged: CanvasNodePositions = {
+      "vol-1": { x: 999, y: 111 },
+      "sc-1": { x: 555, y: 666 },
+    };
     expect(mergeLayout(dragged, fallback, nodes)).toEqual(dragged);
   });
 
@@ -710,7 +741,8 @@ describe("dfsForwardPath（S10.5：沿出边向前 DFS，visited 防环，双集
 
   it("长链不截断：visited 终止而非深度限制（51 节点 50 边全收集）", () => {
     const chain: CanvasEdge[] = [];
-    for (let i = 0; i < 50; i += 1) chain.push({ id: `c${i}`, sourceId: `n${i}`, targetId: `n${i + 1}` });
+    for (let i = 0; i < 50; i += 1)
+      chain.push({ id: `c${i}`, sourceId: `n${i}`, targetId: `n${i + 1}` });
     const { nodeIds, edgeIds } = dfsForwardPath("n0", chain);
     expect(nodeIds.size).toBe(51);
     expect(edgeIds.size).toBe(50);
@@ -729,7 +761,9 @@ describe("describeCanvasEdgeError（连线操作错误码 → 文案）", () => 
   });
 
   it("CLIENT_NETWORK_ERROR → 连接失败引导", () => {
-    expect(describeCanvasEdgeError("CLIENT_NETWORK_ERROR")).toBe("无法连接服务，请确认 ai-editor 服务已启动");
+    expect(describeCanvasEdgeError("CLIENT_NETWORK_ERROR")).toBe(
+      "无法连接服务，请确认 ai-editor 服务已启动",
+    );
   });
 
   it("未知/空错误码 → null（调用方用 err.message 兜底）", () => {

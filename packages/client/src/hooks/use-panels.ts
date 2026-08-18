@@ -54,8 +54,14 @@ export function clampPanelWidth(width: number, min: number, max: number): number
 export function defaultPanelLayout(viewport: number): PanelLayout {
   const vp = Number.isFinite(viewport) && viewport > 0 ? viewport : FALLBACK_VIEWPORT;
   return {
-    sidebarWidth: vp < DESKTOP_BREAKPOINT ? SIDEBAR_MIN_WIDTH : clampPanelWidth(vp * 0.1, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH),
-    chatWidth: vp < DESKTOP_BREAKPOINT ? CHAT_MIN_WIDTH : clampPanelWidth(vp * 0.4, CHAT_MIN_WIDTH, CHAT_MAX_WIDTH),
+    sidebarWidth:
+      vp < DESKTOP_BREAKPOINT
+        ? SIDEBAR_MIN_WIDTH
+        : clampPanelWidth(vp * 0.1, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH),
+    chatWidth:
+      vp < DESKTOP_BREAKPOINT
+        ? CHAT_MIN_WIDTH
+        : clampPanelWidth(vp * 0.4, CHAT_MIN_WIDTH, CHAT_MAX_WIDTH),
     collapsedSidebar: false,
     collapsedChat: false,
   };
@@ -76,7 +82,8 @@ export function parsePanelLayout(raw: string | null, viewport: number): PanelLay
   } catch {
     return defaultPanelLayout(viewport);
   }
-  if (typeof data !== "object" || data === null || Array.isArray(data)) return defaultPanelLayout(viewport);
+  if (typeof data !== "object" || data === null || Array.isArray(data))
+    return defaultPanelLayout(viewport);
   const rec = data as Record<string, unknown>;
   const sidebarWidth = rec.sidebarWidth;
   const chatWidth = rec.chatWidth;
@@ -139,11 +146,18 @@ function getViewport(): number {
  * endResize 用函数式更新保证取到最新宽度后一次写入存储
  */
 export function usePanels() {
-  const [layout, setLayout] = useState<PanelLayout>(() => parsePanelLayout(readStorage(), getViewport()));
+  const [layout, setLayout] = useState<PanelLayout>(() =>
+    parsePanelLayout(readStorage(), getViewport()),
+  );
   const [dragSide, setDragSide] = useState<SideKey | null>(null);
   const isDesktop = useMediaQuery("(min-width: 1024px)");
   // 拖拽起点快照（pointerdown 记录；move/up 期间由手柄持续回调，移出窗口也不丢事件）
-  const dragRef = useRef<{ side: SideKey; startX: number; startWidth: number; lastX: number } | null>(null);
+  const dragRef = useRef<{
+    side: SideKey;
+    startX: number;
+    startWidth: number;
+    lastX: number;
+  } | null>(null);
 
   // 跨断点清理（P2-2）：拖拽中视口缩至 <1024px 时手柄卸载（pointer capture 随之释放），
   // pointerup 不再路由到手柄 → endResize 永不触发；此处兜底清拖拽态，
@@ -158,9 +172,10 @@ export function usePanels() {
   /** 拖拽宽度计算：起点 + 增量，静态 [min, max] 收敛（视口收缩由 flex shrink + minWidth 兜底） */
   function dragWidth(drag: NonNullable<typeof dragRef.current>): number {
     const delta = drag.lastX - drag.startX;
-    const [min, max] = drag.side === "sidebar"
-      ? [SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH]
-      : [CHAT_MIN_WIDTH, CHAT_MAX_WIDTH];
+    const [min, max] =
+      drag.side === "sidebar"
+        ? [SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH]
+        : [CHAT_MIN_WIDTH, CHAT_MAX_WIDTH];
     // 左柄（sidebar）= 左栏右边界：右拖变宽（+delta）；右柄（chat）= 右栏左边界：左拖变宽（-delta）。
     // 两者语义一致——手柄即栏边界，拖到哪边界到哪（边界跟随指针）
     const width = drag.side === "sidebar" ? drag.startWidth + delta : drag.startWidth - delta;
@@ -206,9 +221,10 @@ export function usePanels() {
   /** 切换收起态（收起为窄条 + 展开按钮；宽度保留，展开恢复原宽）；立即持久化 */
   function toggleCollapse(side: SideKey) {
     setLayout((prev) => {
-      const next = side === "sidebar"
-        ? { ...prev, collapsedSidebar: !prev.collapsedSidebar }
-        : { ...prev, collapsedChat: !prev.collapsedChat };
+      const next =
+        side === "sidebar"
+          ? { ...prev, collapsedSidebar: !prev.collapsedSidebar }
+          : { ...prev, collapsedChat: !prev.collapsedChat };
       writeStorage(serializeLayout(next));
       return next;
     });

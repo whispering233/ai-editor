@@ -20,7 +20,10 @@ function neverEndingStream(): ReadableStream<Uint8Array> {
 }
 
 function mockSseResponse(stream: ReadableStream<Uint8Array>, status = 200) {
-  vi.stubGlobal("fetch", vi.fn(async () => new Response(stream, { status })));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => new Response(stream, { status })),
+  );
 }
 
 /** 等待微任务链（fetch 解析 → read → 解码 → 分发）完成 */
@@ -46,9 +49,9 @@ describe("parseSSEFrames（按空行切帧）", () => {
 
 describe("parseSSEFrame（单帧解析）", () => {
   it("解析 event + data", () => {
-    expect(parseSSEFrame("event: text\ndata: {\"delta\":\"你好\"}")).toEqual({
+    expect(parseSSEFrame('event: text\ndata: {"delta":"你好"}')).toEqual({
       event: "text",
-      data: "{\"delta\":\"你好\"}",
+      data: '{"delta":"你好"}',
     });
   });
 
@@ -78,7 +81,7 @@ describe("parseSSEFrame（单帧解析）", () => {
 
 describe("fetchSSE（流式分发）", () => {
   it("跨 chunk 分片的 data: 行正确拼接", async () => {
-    mockSseResponse(streamOf(["event: text\ndata: {\"delta\":\"你好", "世界\"}\n\n"]));
+    mockSseResponse(streamOf(['event: text\ndata: {"delta":"你好', '世界"}\n\n']));
     const events: Array<[string, unknown]> = [];
     fetchSSE("/api/v1/chat", { onEvent: (e, d) => events.push([e, d]) });
     await flush();
@@ -104,14 +107,17 @@ describe("fetchSSE（流式分发）", () => {
   it("[DONE] 哨兵终止解析，后续帧不再分发", async () => {
     mockSseResponse(
       streamOf([
-        "event: text\ndata: {\"delta\":\"a\"}\n\n",
+        'event: text\ndata: {"delta":"a"}\n\n',
         "data: [DONE]\n\n",
-        "event: text\ndata: {\"delta\":\"b\"}\n\n",
+        'event: text\ndata: {"delta":"b"}\n\n',
       ]),
     );
     const events: Array<[string, unknown]> = [];
     let ended = false;
-    fetchSSE("/api/v1/chat", { onEvent: (e, d) => events.push([e, d]), onEnd: () => (ended = true) });
+    fetchSSE("/api/v1/chat", {
+      onEvent: (e, d) => events.push([e, d]),
+      onEnd: () => (ended = true),
+    });
     await flush();
     expect(events).toEqual([["text", { delta: "a" }]]);
     expect(ended).toBe(true);
@@ -120,8 +126,8 @@ describe("fetchSSE（流式分发）", () => {
   it("error 事件透传并终止解析", async () => {
     mockSseResponse(
       streamOf([
-        "event: error\ndata: {\"code\":\"AGENT_TIMEOUT\",\"message\":\"单轮超时\"}\n\n",
-        "event: text\ndata: {\"delta\":\"x\"}\n\n",
+        'event: error\ndata: {"code":"AGENT_TIMEOUT","message":"单轮超时"}\n\n',
+        'event: text\ndata: {"delta":"x"}\n\n',
       ]),
     );
     const events: Array<[string, unknown]> = [];
@@ -131,7 +137,7 @@ describe("fetchSSE（流式分发）", () => {
   });
 
   it("EOF 无结尾空行时 flush 残余帧", async () => {
-    mockSseResponse(streamOf(["event: done\ndata: {\"session_id\":\"sess_1\"}"])); // 无 \n\n 结尾
+    mockSseResponse(streamOf(['event: done\ndata: {"session_id":"sess_1"}'])); // 无 \n\n 结尾
     const events: Array<[string, unknown]> = [];
     fetchSSE("/api/v1/chat", { onEvent: (e, d) => events.push([e, d]) });
     await flush();
@@ -139,10 +145,16 @@ describe("fetchSSE（流式分发）", () => {
   });
 
   it("非 2xx 响应透传 REST 错误包裹为 error 事件", async () => {
-    const body = JSON.stringify({ success: false, error: { code: "VALIDATION_ERROR", message: "参数错误" } });
+    const body = JSON.stringify({
+      success: false,
+      error: { code: "VALIDATION_ERROR", message: "参数错误" },
+    });
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => new Response(body, { status: 400, headers: { "Content-Type": "application/json" } })),
+      vi.fn(
+        async () =>
+          new Response(body, { status: 400, headers: { "Content-Type": "application/json" } }),
+      ),
     );
     const events: Array<[string, unknown]> = [];
     fetchSSE("/api/v1/chat", { onEvent: (e, d) => events.push([e, d]) });
@@ -152,7 +164,10 @@ describe("fetchSSE（流式分发）", () => {
 
   it("60s 无任何事件触发 onTimeout 并中止（决策 20 半开连接兜底）", async () => {
     vi.useFakeTimers();
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(neverEndingStream())));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(neverEndingStream())),
+    );
     const onTimeout = vi.fn();
     const onEnd = vi.fn();
     fetchSSE("/api/v1/chat", {
@@ -212,7 +227,10 @@ describe("fetchSSE（流式分发）", () => {
     );
     const events: Array<[string, unknown]> = [];
     let ended = false;
-    fetchSSE("/api/v1/chat", { onEvent: (e, d) => events.push([e, d]), onEnd: () => (ended = true) });
+    fetchSSE("/api/v1/chat", {
+      onEvent: (e, d) => events.push([e, d]),
+      onEnd: () => (ended = true),
+    });
     await flush();
     expect(events).toEqual([["error", { code: "CLIENT_NETWORK_ERROR", message: "网络请求失败" }]]);
     expect(ended).toBe(false); // 网络失败 ≠ 正常关闭：onEnd 语义（正常结束才触发）不得误触发
@@ -220,7 +238,10 @@ describe("fetchSSE（流式分发）", () => {
 
   it("返回的 abort 函数取消流，不触发 onTimeout / onEnd", async () => {
     vi.useFakeTimers();
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(neverEndingStream())));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(neverEndingStream())),
+    );
     const onTimeout = vi.fn();
     const onEnd = vi.fn();
     const abort = fetchSSE("/api/v1/chat", {

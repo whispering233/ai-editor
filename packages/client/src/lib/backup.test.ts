@@ -65,7 +65,7 @@ describe("BACKUP_FREQUENCY_OPTIONS（决策 27：关闭 + 5/10/15/30/60，与 sh
     expect(BACKUP_FREQUENCY_OPTIONS[5]).toEqual({ value: 60, label: "每 60 分钟" });
   });
 
-  it("option value 字符串化：null → \"null\"、数字 → \"N\"（select 受控 value 契约）", () => {
+  it('option value 字符串化：null → "null"、数字 → "N"（select 受控 value 契约）', () => {
     expect(String(BACKUP_FREQUENCY_OPTIONS[0].value)).toBe("null");
     expect(String(BACKUP_FREQUENCY_OPTIONS[2].value)).toBe("10");
   });

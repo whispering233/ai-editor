@@ -14,7 +14,12 @@ import {
 
 describe("DELTA_TARGET_TYPE_OPTIONS（S13.3 收紧：仅实体类型）", () => {
   it("四类实体齐备（character/setting/location/hook）", () => {
-    expect(DELTA_TARGET_TYPE_OPTIONS.map((o) => o.value)).toEqual(["character", "setting", "location", "hook"]);
+    expect(DELTA_TARGET_TYPE_OPTIONS.map((o) => o.value)).toEqual([
+      "character",
+      "setting",
+      "location",
+      "hook",
+    ]);
     expect(DELTA_TARGET_TYPE_OPTIONS.map((o) => o.label)).toEqual(["人物", "设定", "地点", "伏笔"]);
   });
 
@@ -101,59 +106,135 @@ describe("inferOpOptions（op 推断）", () => {
   });
 
   it("标量 + 值不可作 from（字段缺失/布尔）→ 仅 [set]", () => {
-    expect(inferOpOptions({ array: false, currentValue: undefined })).toEqual({ options: ["set"], default: "set" });
-    expect(inferOpOptions({ array: false, currentValue: true })).toEqual({ options: ["set"], default: "set" });
+    expect(inferOpOptions({ array: false, currentValue: undefined })).toEqual({
+      options: ["set"],
+      default: "set",
+    });
+    expect(inferOpOptions({ array: false, currentValue: true })).toEqual({
+      options: ["set"],
+      default: "set",
+    });
   });
 });
 
 describe("buildDeltaChange（per-op 必填语义 + update 自动 from）", () => {
   it("add：value 必填", () => {
-    expect(buildDeltaChange({ field: "abilities", op: "add", rawValue: "御剑", numeric: false, currentValue: undefined })).toEqual({
+    expect(
+      buildDeltaChange({
+        field: "abilities",
+        op: "add",
+        rawValue: "御剑",
+        numeric: false,
+        currentValue: undefined,
+      }),
+    ).toEqual({
       change: { field: "abilities", op: "add", value: "御剑" },
     });
   });
 
   it("remove：value 必填（按值匹配删除）", () => {
-    expect(buildDeltaChange({ field: "abilities", op: "remove", rawValue: "御剑", numeric: false, currentValue: undefined })).toEqual({
+    expect(
+      buildDeltaChange({
+        field: "abilities",
+        op: "remove",
+        rawValue: "御剑",
+        numeric: false,
+        currentValue: undefined,
+      }),
+    ).toEqual({
       change: { field: "abilities", op: "remove", value: "御剑" },
     });
   });
 
   it("set：to = 解析后的值", () => {
-    expect(buildDeltaChange({ field: "status", op: "set", rawValue: "中立", numeric: false, currentValue: undefined })).toEqual({
+    expect(
+      buildDeltaChange({
+        field: "status",
+        op: "set",
+        rawValue: "中立",
+        numeric: false,
+        currentValue: undefined,
+      }),
+    ).toEqual({
       change: { field: "status", op: "set", to: "中立" },
     });
   });
 
   it("update：from 自动取当前值（作者无需手填）", () => {
     expect(
-      buildDeltaChange({ field: "status", op: "update", rawValue: "中立", numeric: false, currentValue: "活跃" }),
+      buildDeltaChange({
+        field: "status",
+        op: "update",
+        rawValue: "中立",
+        numeric: false,
+        currentValue: "活跃",
+      }),
     ).toEqual({ change: { field: "status", op: "update", from: "活跃", to: "中立" } });
   });
 
   it("update：当前值为 null → from 为 null（「旧值：空」可写）", () => {
-    expect(buildDeltaChange({ field: "status", op: "update", rawValue: "中立", numeric: false, currentValue: null })).toEqual({
+    expect(
+      buildDeltaChange({
+        field: "status",
+        op: "update",
+        rawValue: "中立",
+        numeric: false,
+        currentValue: null,
+      }),
+    ).toEqual({
       change: { field: "status", op: "update", from: null, to: "中立" },
     });
   });
 
   it("update：当前值不可表达 → 报错引导改「设为」", () => {
-    expect(buildDeltaChange({ field: "is_core", op: "update", rawValue: "true", numeric: false, currentValue: false })).toEqual({
+    expect(
+      buildDeltaChange({
+        field: "is_core",
+        op: "update",
+        rawValue: "true",
+        numeric: false,
+        currentValue: false,
+      }),
+    ).toEqual({
       error: expect.stringContaining("无法确定旧值"),
     });
   });
 
   it("数字字段解析为 number；非数字输入回退字符串", () => {
-    expect(buildDeltaChange({ field: "age", op: "set", rawValue: "16", numeric: true, currentValue: undefined })).toEqual({
+    expect(
+      buildDeltaChange({
+        field: "age",
+        op: "set",
+        rawValue: "16",
+        numeric: true,
+        currentValue: undefined,
+      }),
+    ).toEqual({
       change: { field: "age", op: "set", to: 16 },
     });
-    expect(buildDeltaChange({ field: "age", op: "set", rawValue: "十六", numeric: true, currentValue: undefined })).toEqual({
+    expect(
+      buildDeltaChange({
+        field: "age",
+        op: "set",
+        rawValue: "十六",
+        numeric: true,
+        currentValue: undefined,
+      }),
+    ).toEqual({
       change: { field: "age", op: "set", to: "十六" },
     });
   });
 
   it("空值 → 报错", () => {
-    expect(buildDeltaChange({ field: "status", op: "set", rawValue: "  ", numeric: false, currentValue: undefined })).toEqual({
+    expect(
+      buildDeltaChange({
+        field: "status",
+        op: "set",
+        rawValue: "  ",
+        numeric: false,
+        currentValue: undefined,
+      }),
+    ).toEqual({
       error: "请填写值",
     });
   });

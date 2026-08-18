@@ -12,8 +12,16 @@ import { ApiError, CLIENT_NETWORK_ERROR, getDeltasByNode } from "../../lib/api";
 import { targetTypeLabel } from "../../lib/delta";
 import { Button } from "@/components/ui/button";
 import { ChangeSummary } from "./change-summary";
+import { cn } from "../../lib/utils";
+import { skeletonClass } from "../../lib/styles";
 
-export function NodeDeltaList({ nodeId, reloadKey }: { nodeId: string; /** 外部刷新信号（S12.3：新建变更成功后 +1 重拉，同 RelationsView reloadKey 模式） */ reloadKey?: number }) {
+export function NodeDeltaList({
+  nodeId,
+  reloadKey,
+}: {
+  nodeId: string;
+  /** 外部刷新信号（S12.3：新建变更成功后 +1 重拉，同 RelationsView reloadKey 模式） */ reloadKey?: number;
+}) {
   const [deltas, setDeltas] = useState<DeltaRecord[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,8 +55,8 @@ export function NodeDeltaList({ nodeId, reloadKey }: { nodeId: string; /** 外�
       {/* 加载骨架（首次） */}
       {loading && deltas === null && error === null && (
         <div className="space-y-2 py-1">
-          <div className="h-4 w-2/3 animate-pulse rounded bg-muted" />
-          <div className="h-4 w-1/2 animate-pulse rounded bg-muted" />
+          <div className={cn(skeletonClass, "h-4 w-2/3")} />
+          <div className={cn(skeletonClass, "h-4 w-1/2")} />
         </div>
       )}
 
@@ -82,10 +90,15 @@ export function NodeDeltaList({ nodeId, reloadKey }: { nodeId: string; /** 外�
           {deltas.map((d) => (
             <li key={d.id} className="py-2 first:pt-0 last:pb-0">
               <div className="flex items-baseline gap-2">
-                <span className="min-w-0 flex-1 truncate text-sm text-foreground" title={d.description}>
+                <span
+                  className="min-w-0 flex-1 truncate text-sm text-foreground"
+                  title={d.description}
+                >
                   {d.description}
                 </span>
-                <span className="shrink-0 text-xs text-muted-foreground">{formatTimestamp(d.createdAt)}</span>
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {formatTimestamp(d.createdAt)}
+                </span>
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-1.5">
                 <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">

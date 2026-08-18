@@ -64,9 +64,7 @@ export function useHashRoute(): Route {
 
 /** 导航辅助（layout.md §1：导航统一走 <a href="#/..."> 或 navigate(path)） */
 export function navigate(path: string): void {
-  const target = path.startsWith("#")
-    ? path
-    : `#${path.startsWith("/") ? path : `/${path}`}`;
+  const target = path.startsWith("#") ? path : `#${path.startsWith("/") ? path : `/${path}`}`;
   if (window.location.hash !== target) {
     window.location.hash = target;
   }

@@ -64,7 +64,9 @@ afterEach(() => {
 
 describe("createProject（POST /api/v1/project/create）", () => {
   it("请求方法/路径/body 形状（path + config，snake_case）", async () => {
-    const calls = mockFetchOnce({ body: { success: true, data: { id: "proj-1", path: "/tmp/p", created: true } } });
+    const calls = mockFetchOnce({
+      body: { success: true, data: { id: "proj-1", path: "/tmp/p", created: true } },
+    });
     const res = await createProject("/tmp/p", { name: "我的小说", language: "zh" });
     expect(res).toEqual({ id: "proj-1", path: "/tmp/p", created: true });
     expect(calls).toHaveLength(1);
@@ -77,7 +79,9 @@ describe("createProject（POST /api/v1/project/create）", () => {
   });
 
   it("不传 config 时请求体不含 config 键", async () => {
-    const calls = mockFetchOnce({ body: { success: true, data: { id: "proj-1", path: "/tmp/p", created: true } } });
+    const calls = mockFetchOnce({
+      body: { success: true, data: { id: "proj-1", path: "/tmp/p", created: true } },
+    });
     await createProject("/tmp/p");
     expect(JSON.parse(String(calls[0].init?.body))).toEqual({ path: "/tmp/p" });
   });
@@ -109,7 +113,14 @@ describe("openProject（POST /api/v1/project/open）", () => {
     const calls = mockFetchOnce({
       body: {
         success: true,
-        data: { id: "proj-1", name: "我的小说", language: "zh", config, rebuilt: true, fromVersion: 0 },
+        data: {
+          id: "proj-1",
+          name: "我的小说",
+          language: "zh",
+          config,
+          rebuilt: true,
+          fromVersion: 0,
+        },
       },
     });
     const res = await openProject("/tmp/p");
@@ -135,7 +146,14 @@ describe("openProject（POST /api/v1/project/open）", () => {
     mockFetchOnce({
       body: {
         success: true,
-        data: { id: "proj-1", name: "我的小说", language: "zh", config, migrated: true, fromVersion: 0 },
+        data: {
+          id: "proj-1",
+          name: "我的小说",
+          language: "zh",
+          config,
+          migrated: true,
+          fromVersion: 0,
+        },
       },
     });
     const res = await openProject("/tmp/p");
@@ -171,8 +189,16 @@ describe("listProjects（GET /api/v1/project/list，S1.5 书架）", () => {
         data: {
           rootPath: "/home/me/novels",
           books: [
-            { name: "我的小说", path: "/home/me/novels/books/我的小说", updatedAt: "2026-08-01T22:30:00Z" },
-            { name: "第二本", path: "/home/me/novels/books/第二本", updatedAt: "2026-07-30T10:12:00Z" },
+            {
+              name: "我的小说",
+              path: "/home/me/novels/books/我的小说",
+              updatedAt: "2026-08-01T22:30:00Z",
+            },
+            {
+              name: "第二本",
+              path: "/home/me/novels/books/第二本",
+              updatedAt: "2026-07-30T10:12:00Z",
+            },
           ],
         },
       },
@@ -199,10 +225,17 @@ describe("listProjects（GET /api/v1/project/list，S1.5 书架）", () => {
 describe("settings/llm（S1.3 端点）", () => {
   it("getSettingsLlm：GET /settings/llm 返回 model/apiKeySet/apiKeyMasked", async () => {
     const calls = mockFetchOnce({
-      body: { success: true, data: { model: "deepseek-v4-flash", apiKeySet: true, apiKeyMasked: "sk-****1234" } },
+      body: {
+        success: true,
+        data: { model: "deepseek-v4-flash", apiKeySet: true, apiKeyMasked: "sk-****1234" },
+      },
     });
     const res = await getSettingsLlm();
-    expect(res).toEqual({ model: "deepseek-v4-flash", apiKeySet: true, apiKeyMasked: "sk-****1234" });
+    expect(res).toEqual({
+      model: "deepseek-v4-flash",
+      apiKeySet: true,
+      apiKeyMasked: "sk-****1234",
+    });
     expect(calls[0].url).toBe("/api/v1/settings/llm");
     expect(calls[0].init?.method).toBe("GET");
   });
@@ -234,10 +267,21 @@ describe("大纲端点（S2.3，严格三层决策 19）", () => {
     const calls = mockFetchOnce({
       body: {
         success: true,
-        data: { id: "vol-2", type: "volume", title: "第二卷", parentId: "root", updatedAt: "2026-08-02T00:00:00Z" },
+        data: {
+          id: "vol-2",
+          type: "volume",
+          title: "第二卷",
+          parentId: "root",
+          updatedAt: "2026-08-02T00:00:00Z",
+        },
       },
     });
-    const res = await createOutlineNode({ type: "volume", title: "第二卷", parent_id: "root", summary: "主线" });
+    const res = await createOutlineNode({
+      type: "volume",
+      title: "第二卷",
+      parent_id: "root",
+      summary: "主线",
+    });
     expect(res).toMatchObject({ id: "vol-2", parentId: "root" });
     expect(calls[0].url).toBe("/api/v1/outline");
     expect(calls[0].init?.method).toBe("POST");
@@ -251,7 +295,10 @@ describe("大纲端点（S2.3，严格三层决策 19）", () => {
 
   it("createOutlineNode：scene 挂 chapter（parent_id 必填透传）；400 VALIDATION_ERROR → ApiError", async () => {
     const calls = mockFetchOnce({
-      body: { success: true, data: { id: "sc-9", type: "scene", title: "新场景", parentId: "ch-1", updatedAt: "t" } },
+      body: {
+        success: true,
+        data: { id: "sc-9", type: "scene", title: "新场景", parentId: "ch-1", updatedAt: "t" },
+      },
     });
     await createOutlineNode({ type: "scene", title: "新场景", parent_id: "ch-1" });
     expect(JSON.parse(String(calls[0].init?.body))).toEqual({
@@ -261,16 +308,23 @@ describe("大纲端点（S2.3，严格三层决策 19）", () => {
     });
     mockFetchOnce({
       status: 400,
-      body: { success: false, error: { code: "VALIDATION_ERROR", message: "parent_id is required" } },
+      body: {
+        success: false,
+        error: { code: "VALIDATION_ERROR", message: "parent_id is required" },
+      },
     });
-    await expect(createOutlineNode({ type: "scene", title: "x", parent_id: "" })).rejects.toMatchObject({
+    await expect(
+      createOutlineNode({ type: "scene", title: "x", parent_id: "" }),
+    ).rejects.toMatchObject({
       code: "VALIDATION_ERROR",
     });
   });
 
   it("updateOutlineNode：PUT /outline/:nodeId，body 部分更新（title/summary）", async () => {
     const calls = mockFetchOnce({ body: { success: true, data: { updated: true } } });
-    await expect(updateOutlineNode("ch-3", { title: "新标题" })).resolves.toEqual({ updated: true });
+    await expect(updateOutlineNode("ch-3", { title: "新标题" })).resolves.toEqual({
+      updated: true,
+    });
     expect(calls[0].url).toBe("/api/v1/outline/ch-3");
     expect(calls[0].init?.method).toBe("PUT");
     expect(JSON.parse(String(calls[0].init?.body))).toEqual({ title: "新标题" });
@@ -321,7 +375,9 @@ describe("回收站端点（S2.3，决策 12）", () => {
         success: true,
         data: {
           entities: [],
-          nodes: [{ id: "ch-2", type: "chapter", title: "已删章", deletedAt: "2026-08-01T00:00:00Z" }],
+          nodes: [
+            { id: "ch-2", type: "chapter", title: "已删章", deletedAt: "2026-08-01T00:00:00Z" },
+          ],
         },
       },
     });
@@ -347,9 +403,14 @@ describe("回收站端点（S2.3，决策 12）", () => {
   it("restoreOutlineNode：409 OUTLINE_ANCESTOR_DELETED → ApiError（祖先软删提示）", async () => {
     mockFetchOnce({
       status: 409,
-      body: { success: false, error: { code: "OUTLINE_ANCESTOR_DELETED", message: "存在软删祖先" } },
+      body: {
+        success: false,
+        error: { code: "OUTLINE_ANCESTOR_DELETED", message: "存在软删祖先" },
+      },
     });
-    await expect(restoreOutlineNode("ch-3")).rejects.toMatchObject({ code: "OUTLINE_ANCESTOR_DELETED" });
+    await expect(restoreOutlineNode("ch-3")).rejects.toMatchObject({
+      code: "OUTLINE_ANCESTOR_DELETED",
+    });
   });
 
   it("purgeOutlineNode：DELETE /trash/outline/:nodeId；{ purged: true }", async () => {
@@ -367,7 +428,14 @@ describe("实体端点（S3.5，契约 endpoints.md「实体 CRUD」）", () => 
         success: true,
         data: {
           items: [
-            { id: "char-1", type: "character", name: "张三", summary: { role: "主角", status: "活跃" }, createdAt: "t0", updatedAt: "t1" },
+            {
+              id: "char-1",
+              type: "character",
+              name: "张三",
+              summary: { role: "主角", status: "活跃" },
+              createdAt: "t0",
+              updatedAt: "t1",
+            },
           ],
           total: 1,
           offset: 0,
@@ -375,15 +443,25 @@ describe("实体端点（S3.5，契约 endpoints.md「实体 CRUD」）", () => 
         },
       },
     });
-    const res = await listEntities("character", { q: "张", offset: 0, limit: 20, sort: "updated_at", order: "desc" });
+    const res = await listEntities("character", {
+      q: "张",
+      offset: 0,
+      limit: 20,
+      sort: "updated_at",
+      order: "desc",
+    });
     expect(res.items[0].name).toBe("张三");
     expect(res.total).toBe(1);
-    expect(calls[0].url).toBe("/api/v1/entity/character?q=%E5%BC%A0&offset=0&limit=20&sort=updated_at&order=desc");
+    expect(calls[0].url).toBe(
+      "/api/v1/entity/character?q=%E5%BC%A0&offset=0&limit=20&sort=updated_at&order=desc",
+    );
     expect(calls[0].init?.method).toBe("GET");
   });
 
   it("listEntities：空 query 不拼多余参数（undefined 跳过）", async () => {
-    const calls = mockFetchOnce({ body: { success: true, data: { items: [], total: 0, offset: 0, limit: 50 } } });
+    const calls = mockFetchOnce({
+      body: { success: true, data: { items: [], total: 0, offset: 0, limit: 50 } },
+    });
     await listEntities("hook");
     expect(calls[0].url).toBe("/api/v1/entity/hook");
   });
@@ -392,7 +470,16 @@ describe("实体端点（S3.5，契约 endpoints.md「实体 CRUD」）", () => 
     const calls = mockFetchOnce({
       body: {
         success: true,
-        data: { id: "char-1", type: "character", name: "张三", data: { role: "主角" }, relations: [], deltaCount: 2, createdAt: "t0", updatedAt: "t1" },
+        data: {
+          id: "char-1",
+          type: "character",
+          name: "张三",
+          data: { role: "主角" },
+          relations: [],
+          deltaCount: 2,
+          createdAt: "t0",
+          updatedAt: "t1",
+        },
       },
     });
     const res = await getEntityDetail("character", "char-1");
@@ -403,18 +490,32 @@ describe("实体端点（S3.5，契约 endpoints.md「实体 CRUD」）", () => 
 
   it("createEntity：POST body { name, data }；201 响应透传 id", async () => {
     const calls = mockFetchOnce({
-      body: { success: true, data: { id: "char-9", type: "character", name: "李四", data: { role: "配角" }, createdAt: "t" } },
+      body: {
+        success: true,
+        data: {
+          id: "char-9",
+          type: "character",
+          name: "李四",
+          data: { role: "配角" },
+          createdAt: "t",
+        },
+      },
     });
     const res = await createEntity("character", { name: "李四", data: { role: "配角" } });
     expect(res.id).toBe("char-9");
     expect(calls[0].url).toBe("/api/v1/entity/character");
     expect(calls[0].init?.method).toBe("POST");
-    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ name: "李四", data: { role: "配角" } });
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({
+      name: "李四",
+      data: { role: "配角" },
+    });
   });
 
   it("updateEntity：PUT body partial（仅传修改字段）", async () => {
     const calls = mockFetchOnce({ body: { success: true, data: { id: "char-1", updated: true } } });
-    await expect(updateEntity("character", "char-1", { data: { status: "退场" } })).resolves.toEqual({ id: "char-1", updated: true });
+    await expect(
+      updateEntity("character", "char-1", { data: { status: "退场" } }),
+    ).resolves.toEqual({ id: "char-1", updated: true });
     expect(calls[0].url).toBe("/api/v1/entity/character/char-1");
     expect(calls[0].init?.method).toBe("PUT");
     expect(JSON.parse(String(calls[0].init?.body))).toEqual({ data: { status: "退场" } });
@@ -428,8 +529,13 @@ describe("实体端点（S3.5，契约 endpoints.md「实体 CRUD」）", () => 
     expect(res.cascaded).toEqual({ relations: 3, deltas: 1 });
     expect(calls[0].url).toBe("/api/v1/entity/location/loc-1");
     expect(calls[0].init?.method).toBe("DELETE");
-    mockFetchOnce({ status: 404, body: { success: false, error: { code: "ENTITY_NOT_FOUND", message: "不存在" } } });
-    await expect(deleteEntity("location", "loc-999")).rejects.toMatchObject({ code: "ENTITY_NOT_FOUND" });
+    mockFetchOnce({
+      status: 404,
+      body: { success: false, error: { code: "ENTITY_NOT_FOUND", message: "不存在" } },
+    });
+    await expect(deleteEntity("location", "loc-999")).rejects.toMatchObject({
+      code: "ENTITY_NOT_FOUND",
+    });
   });
 });
 
@@ -440,7 +546,17 @@ describe("关系端点（S3.6，契约 endpoints.md「关系」）", () => {
         success: true,
         data: {
           relations: [
-            { id: "rel-1", sourceType: "character", sourceId: "char-1", sourceName: "张三", targetType: "outline_node", targetId: "sc-1", targetName: "灵根测试", relationType: "appears_in", createdAt: "t" },
+            {
+              id: "rel-1",
+              sourceType: "character",
+              sourceId: "char-1",
+              sourceName: "张三",
+              targetType: "outline_node",
+              targetId: "sc-1",
+              targetName: "灵根测试",
+              relationType: "appears_in",
+              createdAt: "t",
+            },
           ],
         },
       },
@@ -454,18 +570,48 @@ describe("关系端点（S3.6，契约 endpoints.md「关系」）", () => {
     const calls = mockFetchOnce({
       body: {
         success: true,
-        data: { id: "rel-9", relation: { sourceType: "character", sourceId: "char-1", targetType: "hook", targetId: "hook-1", relationType: "plants" } },
+        data: {
+          id: "rel-9",
+          relation: {
+            sourceType: "character",
+            sourceId: "char-1",
+            targetType: "hook",
+            targetId: "hook-1",
+            relationType: "plants",
+          },
+        },
       },
     });
-    const res = await createRelation({ source_type: "character", source_id: "char-1", target_type: "hook", target_id: "hook-1", relation_type: "plants" });
+    const res = await createRelation({
+      source_type: "character",
+      source_id: "char-1",
+      target_type: "hook",
+      target_id: "hook-1",
+      relation_type: "plants",
+    });
     expect(res.id).toBe("rel-9");
     expect(calls[0].url).toBe("/api/v1/relation");
     expect(calls[0].init?.method).toBe("POST");
     expect(JSON.parse(String(calls[0].init?.body))).toEqual({
-      source_type: "character", source_id: "char-1", target_type: "hook", target_id: "hook-1", relation_type: "plants",
+      source_type: "character",
+      source_id: "char-1",
+      target_type: "hook",
+      target_id: "hook-1",
+      relation_type: "plants",
     });
-    mockFetchOnce({ status: 409, body: { success: false, error: { code: "RELATION_EXISTS", message: "已存在" } } });
-    await expect(createRelation({ source_type: "character", source_id: "char-1", target_type: "hook", target_id: "hook-1", relation_type: "plants" })).rejects.toMatchObject({ code: "RELATION_EXISTS" });
+    mockFetchOnce({
+      status: 409,
+      body: { success: false, error: { code: "RELATION_EXISTS", message: "已存在" } },
+    });
+    await expect(
+      createRelation({
+        source_type: "character",
+        source_id: "char-1",
+        target_type: "hook",
+        target_id: "hook-1",
+        relation_type: "plants",
+      }),
+    ).rejects.toMatchObject({ code: "RELATION_EXISTS" });
   });
 
   it("deleteRelation：DELETE /relation/:id（物理删）；404 → ApiError", async () => {
@@ -473,13 +619,18 @@ describe("关系端点（S3.6，契约 endpoints.md「关系」）", () => {
     await expect(deleteRelation("rel-1")).resolves.toEqual({ deleted: true });
     expect(calls[0].url).toBe("/api/v1/relation/rel-1");
     expect(calls[0].init?.method).toBe("DELETE");
-    mockFetchOnce({ status: 404, body: { success: false, error: { code: "RELATION_NOT_FOUND", message: "不存在" } } });
+    mockFetchOnce({
+      status: 404,
+      body: { success: false, error: { code: "RELATION_NOT_FOUND", message: "不存在" } },
+    });
     await expect(deleteRelation("rel-999")).rejects.toMatchObject({ code: "RELATION_NOT_FOUND" });
   });
 
   it("updateRelationMeta：PUT /relation/:id body { metadata } 整体替换；200 透传；404 → ApiError", async () => {
     const calls = mockFetchOnce({ body: { success: true, data: { updated: true } } });
-    await expect(updateRelationMeta("rel-1", { label: "新标签" })).resolves.toEqual({ updated: true });
+    await expect(updateRelationMeta("rel-1", { label: "新标签" })).resolves.toEqual({
+      updated: true,
+    });
     expect(calls[0].url).toBe("/api/v1/relation/rel-1");
     expect(calls[0].init?.method).toBe("PUT");
     expect(JSON.parse(String(calls[0].init?.body))).toEqual({ metadata: { label: "新标签" } });
@@ -487,8 +638,13 @@ describe("关系端点（S3.6，契约 endpoints.md「关系」）", () => {
     const empty = mockFetchOnce({ body: { success: true, data: { updated: true } } });
     await updateRelationMeta("rel-1", {});
     expect(JSON.parse(String(empty[0].init?.body))).toEqual({ metadata: {} });
-    mockFetchOnce({ status: 404, body: { success: false, error: { code: "RELATION_NOT_FOUND", message: "不存在" } } });
-    await expect(updateRelationMeta("rel-999", {})).rejects.toMatchObject({ code: "RELATION_NOT_FOUND" });
+    mockFetchOnce({
+      status: 404,
+      body: { success: false, error: { code: "RELATION_NOT_FOUND", message: "不存在" } },
+    });
+    await expect(updateRelationMeta("rel-999", {})).rejects.toMatchObject({
+      code: "RELATION_NOT_FOUND",
+    });
   });
 });
 
@@ -515,8 +671,13 @@ describe("delta 端点（S5.4；契约 endpoints.md「Delta 变更追踪」）",
     expect(res).toEqual(body);
     expect(calls[0].url).toBe("/api/v1/delta/node/sc-37");
     expect(calls[0].init?.method).toBe("GET");
-    mockFetchOnce({ status: 404, body: { success: false, error: { code: "OUTLINE_NODE_NOT_FOUND", message: "节点不存在" } } });
-    await expect(getDeltasByNode("sc-999")).rejects.toMatchObject({ code: "OUTLINE_NODE_NOT_FOUND" });
+    mockFetchOnce({
+      status: 404,
+      body: { success: false, error: { code: "OUTLINE_NODE_NOT_FOUND", message: "节点不存在" } },
+    });
+    await expect(getDeltasByNode("sc-999")).rejects.toMatchObject({
+      code: "OUTLINE_NODE_NOT_FOUND",
+    });
   });
 
   it("computeDeltaState：POST /delta/compute body snake_case；响应透传（state/appliedDeltas/conflicts）", async () => {
@@ -526,12 +687,21 @@ describe("delta 端点（S5.4；契约 endpoints.md「Delta 变更追踪」）",
       atNodeId: "sc-37",
       state: { combat_power: 150 },
       appliedDeltas: [
-        { nodeId: "sc-37", description: "张三获得断剑认可", changes: [], skipped: [{ index: 0, field: "combat_power", expected: "100", actual: "999" }] },
+        {
+          nodeId: "sc-37",
+          description: "张三获得断剑认可",
+          changes: [],
+          skipped: [{ index: 0, field: "combat_power", expected: "100", actual: "999" }],
+        },
       ],
       conflicts: [{ deltaId: "delta-1", field: "combat_power", expected: "100", actual: "999" }],
     };
     const calls = mockFetchOnce({ body: { success: true, data: body } });
-    const res = await computeDeltaState({ target_type: "character", target_id: "char-3", at_node_id: "sc-37" });
+    const res = await computeDeltaState({
+      target_type: "character",
+      target_id: "char-3",
+      at_node_id: "sc-37",
+    });
     expect(res).toEqual(body);
     expect(calls[0].url).toBe("/api/v1/delta/compute");
     expect(calls[0].init?.method).toBe("POST");
@@ -543,7 +713,10 @@ describe("delta 端点（S5.4；契约 endpoints.md「Delta 变更追踪」）",
   });
 
   it("computeDeltaState：404 OUTLINE_NODE_NOT_FOUND（at_node 已 purge）→ ApiError", async () => {
-    mockFetchOnce({ status: 404, body: { success: false, error: { code: "OUTLINE_NODE_NOT_FOUND", message: "节点不存在" } } });
+    mockFetchOnce({
+      status: 404,
+      body: { success: false, error: { code: "OUTLINE_NODE_NOT_FOUND", message: "节点不存在" } },
+    });
     await expect(
       computeDeltaState({ target_type: "character", target_id: "char-3", at_node_id: "sc-999" }),
     ).rejects.toMatchObject({ code: "OUTLINE_NODE_NOT_FOUND" });
@@ -582,16 +755,27 @@ describe("delta 端点（S5.4；契约 endpoints.md「Delta 变更追踪」）",
       changes: [{ field: "status", op: "update", from: "活跃", to: "中立" }],
       description: "张三获得断剑认可",
     });
-    mockFetchOnce({ status: 404, body: { success: false, error: { code: "OUTLINE_NODE_NOT_FOUND", message: "节点不存在" } } });
+    mockFetchOnce({
+      status: 404,
+      body: { success: false, error: { code: "OUTLINE_NODE_NOT_FOUND", message: "节点不存在" } },
+    });
     await expect(
-      createDelta({ node_id: "sc-999", target_type: "character", target_id: "char-3", changes: [{ field: "status", op: "set", to: "x" }], description: "d" }),
+      createDelta({
+        node_id: "sc-999",
+        target_type: "character",
+        target_id: "char-3",
+        changes: [{ field: "status", op: "set", to: "x" }],
+        description: "d",
+      }),
     ).rejects.toMatchObject({ code: "OUTLINE_NODE_NOT_FOUND" });
   });
 });
 
 describe("提案确认/拒绝（S8.2，契约 endpoints.md「提案确认」L848-888 + shared proposal*ResSchema）", () => {
   it("confirmProposal：POST /proposal/:id/confirm，无 body；响应透传 confirmed + result", async () => {
-    const calls = mockFetchOnce({ body: { success: true, data: { confirmed: true, result: "char-9" } } });
+    const calls = mockFetchOnce({
+      body: { success: true, data: { confirmed: true, result: "char-9" } },
+    });
     const res = await confirmProposal("prop-1");
     expect(res).toEqual({ confirmed: true, result: "char-9" });
     expect(calls[0].url).toBe("/api/v1/proposal/prop-1/confirm");
@@ -602,19 +786,27 @@ describe("提案确认/拒绝（S8.2，契约 endpoints.md「提案确认」L848
   it("confirmProposal：409 PROPOSAL_STALE → ApiError 透传（前端标 stale 引导重新生成）", async () => {
     mockFetchOnce({
       status: 409,
-      body: { success: false, error: { code: "PROPOSAL_STALE", message: "提案引用对象已变化: entity char-9" } },
+      body: {
+        success: false,
+        error: { code: "PROPOSAL_STALE", message: "提案引用对象已变化: entity char-9" },
+      },
     });
     await expect(confirmProposal("prop-1")).rejects.toMatchObject({ code: "PROPOSAL_STALE" });
   });
 
   it("confirmProposal：404 PROPOSAL_NOT_FOUND / 409 PROPOSAL_PROJECT_MISMATCH → ApiError 透传", async () => {
-    mockFetchOnce({ status: 404, body: { success: false, error: { code: "PROPOSAL_NOT_FOUND", message: "不存在" } } });
+    mockFetchOnce({
+      status: 404,
+      body: { success: false, error: { code: "PROPOSAL_NOT_FOUND", message: "不存在" } },
+    });
     await expect(confirmProposal("prop-1")).rejects.toMatchObject({ code: "PROPOSAL_NOT_FOUND" });
     mockFetchOnce({
       status: 409,
       body: { success: false, error: { code: "PROPOSAL_PROJECT_MISMATCH", message: "项目不一致" } },
     });
-    await expect(confirmProposal("prop-1")).rejects.toMatchObject({ code: "PROPOSAL_PROJECT_MISMATCH" });
+    await expect(confirmProposal("prop-1")).rejects.toMatchObject({
+      code: "PROPOSAL_PROJECT_MISMATCH",
+    });
   });
 
   it("rejectProposal：POST /proposal/:id/reject，无 body；响应 { rejected: true }", async () => {
@@ -629,7 +821,9 @@ describe("提案确认/拒绝（S8.2，契约 endpoints.md「提案确认」L848
 
 /** mock fetch 返回二进制/任意响应（export 走 apiFetch 之外的裸 fetch） */
 function mockRawResponse(body: BodyInit | null, status: number, headers: Record<string, string>) {
-  globalThis.fetch = vi.fn(async () => new Response(body, { status, headers })) as unknown as typeof fetch;
+  globalThis.fetch = vi.fn(
+    async () => new Response(body, { status, headers }),
+  ) as unknown as typeof fetch;
 }
 
 describe("exportProjectZip（GET /project/export：二进制 zip 与 JSON 错误分流）", () => {
@@ -681,12 +875,18 @@ describe("exportProjectZip（GET /project/export：二进制 zip 与 JSON 错误
       409,
       { "Content-Type": "application/json" },
     );
-    await expect(exportProjectZip()).rejects.toMatchObject({ code: "NO_PROJECT_OPEN", message: "未打开项目" });
+    await expect(exportProjectZip()).rejects.toMatchObject({
+      code: "NO_PROJECT_OPEN",
+      message: "未打开项目",
+    });
   });
 
   it("500 INTERNAL_ERROR（JSON 错误包裹）→ 抛 ApiError code 透传", async () => {
     mockRawResponse(
-      JSON.stringify({ success: false, error: { code: "INTERNAL_ERROR", message: "项目数据文件缺失" } }),
+      JSON.stringify({
+        success: false,
+        error: { code: "INTERNAL_ERROR", message: "项目数据文件缺失" },
+      }),
       500,
       { "Content-Type": "application/json" },
     );
@@ -712,9 +912,9 @@ describe("parseContentDispositionFilename（RFC 5987 文件名解析）", () => 
   });
 
   it("filename* 为非法 percent 序列 → 回退 ASCII filename", () => {
-    expect(parseContentDispositionFilename('attachment; filename="book.zip"; filename*=UTF-8\'\'%zz%zz')).toBe(
-      "book.zip",
-    );
+    expect(
+      parseContentDispositionFilename("attachment; filename=\"book.zip\"; filename*=UTF-8''%zz%zz"),
+    ).toBe("book.zip");
   });
 
   it("无 header → project.zip（兜底）", () => {
@@ -730,9 +930,17 @@ describe("importProjectZip（POST /project/import：FormData multipart 上传）
         data: { imported: true, id: "proj-9", path: "/books/新书", name: "新书", mode: "new" },
       },
     });
-    const file = new File([new Uint8Array([0x50, 0x4b, 0x03, 0x04])], "backup.zip", { type: "application/zip" });
+    const file = new File([new Uint8Array([0x50, 0x4b, 0x03, 0x04])], "backup.zip", {
+      type: "application/zip",
+    });
     const res = await importProjectZip(file, "新书");
-    expect(res).toEqual({ imported: true, id: "proj-9", path: "/books/新书", name: "新书", mode: "new" });
+    expect(res).toEqual({
+      imported: true,
+      id: "proj-9",
+      path: "/books/新书",
+      name: "新书",
+      mode: "new",
+    });
     expect(calls[0].url).toBe("/api/v1/project/import");
     expect(calls[0].init?.method).toBe("POST");
     // FormData 原样透传（E3 apiFetch 扩展：不 JSON.stringify、不设 Content-Type）
@@ -743,7 +951,7 @@ describe("importProjectZip（POST /project/import：FormData multipart 上传）
     expect(calls[0].init?.headers).toBeUndefined();
   });
 
-  it("mode: \"restored\"（id 匹配覆盖恢复，决策 27）→ 字段透传", async () => {
+  it('mode: "restored"（id 匹配覆盖恢复，决策 27）→ 字段透传', async () => {
     mockFetchOnce({
       body: {
         success: true,
@@ -763,7 +971,10 @@ describe("importProjectZip（POST /project/import：FormData multipart 上传）
   it("409 PROJECT_ALREADY_EXISTS → ApiError code 透传", async () => {
     mockFetchOnce({
       status: 409,
-      body: { success: false, error: { code: "PROJECT_ALREADY_EXISTS", message: "书架已存在同名书: 新书" } },
+      body: {
+        success: false,
+        error: { code: "PROJECT_ALREADY_EXISTS", message: "书架已存在同名书: 新书" },
+      },
     });
     await expect(importProjectZip(new File(["x"], "b.zip"), "新书")).rejects.toMatchObject({
       code: "PROJECT_ALREADY_EXISTS",
@@ -775,7 +986,10 @@ describe("importProjectZip（POST /project/import：FormData multipart 上传）
       status: 409,
       body: {
         success: false,
-        error: { code: "SCHEMA_VERSION_MISMATCH", message: "备份包 data.db 版本 (2) 备份来自更高版本程序" },
+        error: {
+          code: "SCHEMA_VERSION_MISMATCH",
+          message: "备份包 data.db 版本 (2) 备份来自更高版本程序",
+        },
       },
     });
     await expect(importProjectZip(new File(["x"], "b.zip"), "新书")).rejects.toMatchObject({
@@ -787,7 +1001,10 @@ describe("importProjectZip（POST /project/import：FormData multipart 上传）
   it("400 VALIDATION_ERROR（坏包）→ ApiError code 透传", async () => {
     mockFetchOnce({
       status: 400,
-      body: { success: false, error: { code: "VALIDATION_ERROR", message: "不是有效的项目备份包" } },
+      body: {
+        success: false,
+        error: { code: "VALIDATION_ERROR", message: "不是有效的项目备份包" },
+      },
     });
     await expect(importProjectZip(new File(["x"], "b.zip"), "新书")).rejects.toMatchObject({
       code: "VALIDATION_ERROR",
@@ -802,8 +1019,19 @@ describe("备份管理（B2.4 + B2.6 决策 29；endpoints.md「备份管理」�
         success: true,
         data: {
           backups: [
-            { fileName: "20260813-101500000.zip", size: 1258291, createdAt: "2026-08-13T10:15:00", kind: "auto" },
-            { fileName: "20260813-094500123-定稿.zip", size: 1009664, createdAt: "2026-08-13T09:45:00.123", kind: "manual", name: "定稿" },
+            {
+              fileName: "20260813-101500000.zip",
+              size: 1258291,
+              createdAt: "2026-08-13T10:15:00",
+              kind: "auto",
+            },
+            {
+              fileName: "20260813-094500123-定稿.zip",
+              size: 1009664,
+              createdAt: "2026-08-13T09:45:00.123",
+              kind: "manual",
+              name: "定稿",
+            },
           ],
         },
       },
@@ -823,7 +1051,14 @@ describe("备份管理（B2.4 + B2.6 决策 29；endpoints.md「备份管理」�
     const calls = mockFetchOnce({
       body: {
         success: true,
-        data: { backup: { fileName: "20260813-110000000-m.zip", size: 1024, createdAt: "2026-08-13T11:00:00", kind: "manual" } },
+        data: {
+          backup: {
+            fileName: "20260813-110000000-m.zip",
+            size: 1024,
+            createdAt: "2026-08-13T11:00:00",
+            kind: "manual",
+          },
+        },
       },
     });
     const res = await createProjectBackup();
@@ -837,7 +1072,15 @@ describe("备份管理（B2.4 + B2.6 决策 29；endpoints.md「备份管理」�
     const calls = mockFetchOnce({
       body: {
         success: true,
-        data: { backup: { fileName: "20260813-110000123-定稿.zip", size: 1024, createdAt: "2026-08-13T11:00:00.123", kind: "manual", name: "定稿" } },
+        data: {
+          backup: {
+            fileName: "20260813-110000123-定稿.zip",
+            size: 1024,
+            createdAt: "2026-08-13T11:00:00.123",
+            kind: "manual",
+            name: "定稿",
+          },
+        },
       },
     });
     const res = await createProjectBackup("定稿");
@@ -850,7 +1093,17 @@ describe("备份管理（B2.4 + B2.6 决策 29；endpoints.md「备份管理」�
 
   it("createProjectBackup()：不传名称 → 无请求体（undefined body，决策 28 缺省纯时间戳）", async () => {
     const calls = mockFetchOnce({
-      body: { success: true, data: { backup: { fileName: "20260813-110000000.zip", size: 1024, createdAt: "2026-08-13T11:00:00", kind: "auto" } } },
+      body: {
+        success: true,
+        data: {
+          backup: {
+            fileName: "20260813-110000000.zip",
+            size: 1024,
+            createdAt: "2026-08-13T11:00:00",
+            kind: "auto",
+          },
+        },
+      },
     });
     await createProjectBackup();
     expect(calls[0].init?.body).toBeUndefined();
@@ -860,13 +1113,24 @@ describe("备份管理（B2.4 + B2.6 决策 29；endpoints.md「备份管理」�
     const calls = mockFetchOnce({
       body: {
         success: true,
-        data: { backup: { fileName: "20260813-110000123-终稿.zip", size: 1024, createdAt: "2026-08-13T11:00:00.123", kind: "manual", name: "终稿" } },
+        data: {
+          backup: {
+            fileName: "20260813-110000123-终稿.zip",
+            size: 1024,
+            createdAt: "2026-08-13T11:00:00.123",
+            kind: "manual",
+            name: "终稿",
+          },
+        },
       },
     });
     const res = await renameProjectBackup("20260813-110000123.zip", "  终稿  ");
     expect(calls[0].url).toBe("/api/v1/project/backup/rename");
     expect(calls[0].init?.method).toBe("POST");
-    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ fileName: "20260813-110000123.zip", name: "终稿" });
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({
+      fileName: "20260813-110000123.zip",
+      name: "终稿",
+    });
     expect(res.backup).toEqual({
       fileName: "20260813-110000123-终稿.zip",
       size: 1024,
@@ -876,14 +1140,30 @@ describe("备份管理（B2.4 + B2.6 决策 29；endpoints.md「备份管理」�
     });
   });
 
-  it("renameProjectBackup：空名称（纯空格 / undefined）→ body 均含 name: \"\"（明确清除意图，防 JSON.stringify 丢字段）", async () => {
+  it('renameProjectBackup：空名称（纯空格 / undefined）→ body 均含 name: ""（明确清除意图，防 JSON.stringify 丢字段）', async () => {
     const calls = mockFetchOnce({
-      body: { success: true, data: { backup: { fileName: "20260813-110000000.zip", size: 1024, createdAt: "2026-08-13T11:00:00", kind: "auto" } } },
+      body: {
+        success: true,
+        data: {
+          backup: {
+            fileName: "20260813-110000000.zip",
+            size: 1024,
+            createdAt: "2026-08-13T11:00:00",
+            kind: "auto",
+          },
+        },
+      },
     });
     await renameProjectBackup("20260813-110000000.zip", "   ");
-    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ fileName: "20260813-110000000.zip", name: "" });
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({
+      fileName: "20260813-110000000.zip",
+      name: "",
+    });
     await renameProjectBackup("20260813-110000000.zip");
-    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ fileName: "20260813-110000000.zip", name: "" });
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({
+      fileName: "20260813-110000000.zip",
+      name: "",
+    });
   });
 
   it("renameProjectBackup：404（备份不存在）/ 400（名称非法）→ ApiError code + message 透传（与 restore 一致，404 也返回 VALIDATION_ERROR）", async () => {
@@ -950,7 +1230,10 @@ describe("备份管理（B2.4 + B2.6 决策 29；endpoints.md「备份管理」�
   it("renameProject：409 PROJECT_ALREADY_EXISTS → ApiError code 透传（行内错误不关闭输入态）", async () => {
     mockFetchOnce({
       status: 409,
-      body: { success: false, error: { code: "PROJECT_ALREADY_EXISTS", message: "书架已存在同名书: 新名" } },
+      body: {
+        success: false,
+        error: { code: "PROJECT_ALREADY_EXISTS", message: "书架已存在同名书: 新名" },
+      },
     });
     await expect(renameProject("新名")).rejects.toMatchObject({ code: "PROJECT_ALREADY_EXISTS" });
   });

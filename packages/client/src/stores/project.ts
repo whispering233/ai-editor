@@ -1,7 +1,12 @@
 // 项目状态（doc/ui/layout.md §3.1：config + outline 树——顶栏标题映射、多页共用，避免重复请求）
 // S1.4 扩展：loadError（区分「未打开项目」与网络失败）、openProjectAt/createProjectAt/closeProject
 import { create } from "zustand";
-import type { OutlineNode, OutlineTree, ProjectConfig, ProjectLanguage } from "@whispering233/ai-editor-shared";
+import type {
+  OutlineNode,
+  OutlineTree,
+  ProjectConfig,
+  ProjectLanguage,
+} from "@whispering233/ai-editor-shared";
 import {
   ApiError,
   closeProject as apiCloseProject,
@@ -39,7 +44,10 @@ interface ProjectState {
   /** 打开项目（POST /project/open）：成功刷新 config/outline；rebuilt 时 toast 提示（决策 13） */
   openProjectAt: (path: string) => Promise<void>;
   /** 创建项目（POST /project/create）后打开；config 可选（名称/语言/提示词） */
-  createProjectAt: (path: string, config?: { name?: string; language?: ProjectLanguage; prompt?: string }) => Promise<void>;
+  createProjectAt: (
+    path: string,
+    config?: { name?: string; language?: ProjectLanguage; prompt?: string },
+  ) => Promise<void>;
   /** 关闭当前项目（POST /project/close）：清空本地 config/outline */
   closeProject: () => Promise<void>;
 }
@@ -114,12 +122,16 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       // 删库重建提示（决策 13 修订 + endpoints.md「向客户端提示已重建」）
       useUiStore
         .getState()
-        .showToast(`项目已按新版本重建${res.fromVersion !== undefined ? `（v${res.fromVersion}）` : ""}，备份已保留`);
+        .showToast(
+          `项目已按新版本重建${res.fromVersion !== undefined ? `（v${res.fromVersion}）` : ""}，备份已保留`,
+        );
     } else if (res.migrated) {
       // 前向迁移提示（E5：旧版本经增量迁移自动升级，数据保全；与 rebuilt 互斥）
       useUiStore
         .getState()
-        .showToast(`项目数据已自动升级${res.fromVersion !== undefined ? `（v${res.fromVersion} → 当前版本）` : ""}，快照已保留`);
+        .showToast(
+          `项目数据已自动升级${res.fromVersion !== undefined ? `（v${res.fromVersion} → 当前版本）` : ""}，快照已保留`,
+        );
     }
     await get().loadOutline();
   },

@@ -43,7 +43,7 @@ export class ErrorBoundary extends Component<Props, State> {
           <p className="max-w-md text-sm text-muted-foreground">
             数据不会丢失，请重新加载页面继续写作。
           </p>
-          <p className="max-w-md break-all font-mono text-xs text-destructive/80">
+          <p className="max-w-md font-mono text-xs break-all text-destructive/80">
             {error.message || String(error)}
           </p>
           <div className="mt-2 flex gap-2">

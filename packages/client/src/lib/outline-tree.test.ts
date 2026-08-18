@@ -31,10 +31,16 @@ const tree: OutlineNode[] = [
     title: "第一卷",
     updatedAt: "t0",
     children: [
-      { id: "ch-1", type: "chapter", title: "第一章", updatedAt: "t0", children: [
-        { id: "sc-1", type: "scene", title: "场景一", updatedAt: "t0" },
-        { id: "sc-2", type: "scene", title: "场景二", updatedAt: "t0" },
-      ] },
+      {
+        id: "ch-1",
+        type: "chapter",
+        title: "第一章",
+        updatedAt: "t0",
+        children: [
+          { id: "sc-1", type: "scene", title: "场景一", updatedAt: "t0" },
+          { id: "sc-2", type: "scene", title: "场景二", updatedAt: "t0" },
+        ],
+      },
       { id: "ch-2", type: "chapter", title: "第二章", updatedAt: "t0" },
     ],
   },
@@ -211,7 +217,15 @@ describe("editFailureRecovery（行内编辑失败恢复决策，S2.4 oracle 补
 describe("flattenTree（大纲节点选择器选项，S3.6）", () => {
   it("树序遍历展开（卷→章→场），带深度（root=0、卷=1、章=2）", () => {
     const flat = flattenTree(tree);
-    expect(flat.map((o) => o.id)).toEqual(["vol-1", "ch-1", "sc-1", "sc-2", "ch-2", "vol-2", "ch-3"]);
+    expect(flat.map((o) => o.id)).toEqual([
+      "vol-1",
+      "ch-1",
+      "sc-1",
+      "sc-2",
+      "ch-2",
+      "vol-2",
+      "ch-3",
+    ]);
     expect(flat[0]).toEqual({ id: "vol-1", label: "第一卷", depth: 0 });
     expect(flat[1].depth).toBe(1);
     expect(flat[2].depth).toBe(2);
@@ -255,12 +269,20 @@ describe("dropInsertOrder（拖拽插入位置 → order，S13.1）", () => {
 describe("sameDragTarget（dragover 高频去重，S13.1）", () => {
   it("同位置等价（含 null），不同位置不等价", () => {
     expect(sameDragTarget(null, null)).toBe(true);
-    expect(sameDragTarget({ kind: "before", nodeId: "ch-1" }, { kind: "before", nodeId: "ch-1" })).toBe(true);
-    expect(sameDragTarget({ kind: "after", nodeId: "ch-1" }, { kind: "after", nodeId: "ch-1" })).toBe(true);
+    expect(
+      sameDragTarget({ kind: "before", nodeId: "ch-1" }, { kind: "before", nodeId: "ch-1" }),
+    ).toBe(true);
+    expect(
+      sameDragTarget({ kind: "after", nodeId: "ch-1" }, { kind: "after", nodeId: "ch-1" }),
+    ).toBe(true);
     expect(sameDragTarget({ kind: "root-end" }, { kind: "root-end" })).toBe(true);
     expect(sameDragTarget(null, { kind: "before", nodeId: "ch-1" })).toBe(false);
-    expect(sameDragTarget({ kind: "before", nodeId: "ch-1" }, { kind: "after", nodeId: "ch-1" })).toBe(false);
-    expect(sameDragTarget({ kind: "before", nodeId: "ch-1" }, { kind: "before", nodeId: "ch-2" })).toBe(false);
+    expect(
+      sameDragTarget({ kind: "before", nodeId: "ch-1" }, { kind: "after", nodeId: "ch-1" }),
+    ).toBe(false);
+    expect(
+      sameDragTarget({ kind: "before", nodeId: "ch-1" }, { kind: "before", nodeId: "ch-2" }),
+    ).toBe(false);
     expect(sameDragTarget({ kind: "root-end" }, { kind: "before", nodeId: "ch-1" })).toBe(false);
   });
 });
@@ -275,7 +297,12 @@ describe("findParentIdOf / findNodePosition（拖拽目标父与原地判定，S
   });
 
   it("findParentIdOf：root 直挂章（决策 19 chapter 可挂 root）", () => {
-    const rootChapter: OutlineNode = { id: "ch-9", type: "chapter", title: "直挂章", updatedAt: "t0" };
+    const rootChapter: OutlineNode = {
+      id: "ch-9",
+      type: "chapter",
+      title: "直挂章",
+      updatedAt: "t0",
+    };
     expect(findParentIdOf([rootChapter], "ch-9")).toBe(ROOT_NODE_ID);
     expect(findParentIdOf([rootChapter], "ghost")).toBe(null);
   });

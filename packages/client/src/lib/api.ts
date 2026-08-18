@@ -134,7 +134,9 @@ export interface UpdateProjectConfigRes {
 }
 
 /** PUT /api/v1/project/config */
-export function updateProjectConfig(patch: UpdateProjectConfigBody): Promise<UpdateProjectConfigRes> {
+export function updateProjectConfig(
+  patch: UpdateProjectConfigBody,
+): Promise<UpdateProjectConfigRes> {
   return apiFetch<UpdateProjectConfigRes>("/project/config", { method: "PUT", body: patch });
 }
 
@@ -179,7 +181,10 @@ export interface UpdateOutlineBody {
 }
 
 /** 更新大纲节点标题/摘要 */
-export function updateOutlineNode(nodeId: string, patch: UpdateOutlineBody): Promise<{ updated: true }> {
+export function updateOutlineNode(
+  nodeId: string,
+  patch: UpdateOutlineBody,
+): Promise<{ updated: true }> {
   return apiFetch<{ updated: true }>(`/outline/${nodeId}`, { method: "PUT", body: patch });
 }
 
@@ -317,7 +322,10 @@ export interface EntityListRes {
 }
 
 /** 列出实体（软删对象默认过滤——决策 12 修订，回收站是唯一访问入口） */
-export function listEntities(type: EntityType, query: ListEntitiesQuery = {}): Promise<EntityListRes> {
+export function listEntities(
+  type: EntityType,
+  query: ListEntitiesQuery = {},
+): Promise<EntityListRes> {
   // ListEntitiesQuery（interface）无索引签名，赋给 ApiQuery（Record）需断言——字段均为 ApiQuery 值子集
   return apiFetch<EntityListRes>(`/entity/${type}`, { query: query as ApiQuery });
 }
@@ -372,7 +380,10 @@ export function updateEntity(
   id: string,
   patch: UpdateEntityBody,
 ): Promise<{ id: string; updated: true }> {
-  return apiFetch<{ id: string; updated: true }>(`/entity/${type}/${id}`, { method: "PUT", body: patch });
+  return apiFetch<{ id: string; updated: true }>(`/entity/${type}/${id}`, {
+    method: "PUT",
+    body: patch,
+  });
 }
 
 /** DELETE /api/v1/entity/:type/:id 响应（软删 + 级联计数，决策 12） */
@@ -452,7 +463,10 @@ export interface ListRelationsQuery {
 /** GET /api/v1/relation 响应（MVP 用 depth=1：直接关系；paths 是 depth>=2 附加） */
 export interface ListRelationsRes {
   relations: RelationSummaryItem[];
-  paths?: Array<{ nodes: Array<{ type: string; id: string; name: string }>; edges: Array<{ from: string; to: string; relationType: string }> }>;
+  paths?: Array<{
+    nodes: Array<{ type: string; id: string; name: string }>;
+    edges: Array<{ from: string; to: string; relationType: string }>;
+  }>;
 }
 
 /** 查询关系（端点过滤可选；详情页用 source 或 target = 当前实体查 1 跳）。
@@ -513,7 +527,10 @@ export interface UpdateRelationMetaRes {
 }
 
 /** 更新关系元数据（整体替换；画布连线标签线上编辑用——endpoints.md「PUT /relation/:id」） */
-export function updateRelationMeta(id: string, metadata: Record<string, unknown>): Promise<UpdateRelationMetaRes> {
+export function updateRelationMeta(
+  id: string,
+  metadata: Record<string, unknown>,
+): Promise<UpdateRelationMetaRes> {
   return apiFetch<UpdateRelationMetaRes>(`/relation/${id}`, { method: "PUT", body: { metadata } });
 }
 
@@ -603,7 +620,10 @@ export interface CreateProjectRes {
 }
 
 /** 创建项目（错误：400 INVALID_PROJECT_PATH / 409 PROJECT_ALREADY_EXISTS） */
-export function createProject(path: string, config?: CreateProjectBody["config"]): Promise<CreateProjectRes> {
+export function createProject(
+  path: string,
+  config?: CreateProjectBody["config"],
+): Promise<CreateProjectRes> {
   return apiFetch<CreateProjectRes>("/project/create", {
     method: "POST",
     body: { path, ...(config !== undefined ? { config } : {}) },
@@ -692,7 +712,10 @@ export async function exportProjectZip(): Promise<ExportProjectZipRes> {
   const contentType = res.headers.get("content-type") ?? "";
   if (res.ok && (contentType.includes("zip") || contentType.includes("octet-stream"))) {
     const blob = await res.blob();
-    return { blob, filename: parseContentDispositionFilename(res.headers.get("content-disposition")) };
+    return {
+      blob,
+      filename: parseContentDispositionFilename(res.headers.get("content-disposition")),
+    };
   }
   if (contentType.includes("application/json")) {
     const json: unknown = await res.json().catch(() => null);
@@ -778,7 +801,10 @@ export interface RestoreBackupRes {
  *   前端阻断提示——message 已按相对版本分流，透传展示）
  */
 export function restoreProjectBackup(fileName: string): Promise<RestoreBackupRes> {
-  return apiFetch<RestoreBackupRes>("/project/backup/restore", { method: "POST", body: { fileName } });
+  return apiFetch<RestoreBackupRes>("/project/backup/restore", {
+    method: "POST",
+    body: { fileName },
+  });
 }
 
 /** POST /api/v1/project/backup/rename 响应（重命名备份，决策 29：只改名称段，时间戳与 kind 保持） */

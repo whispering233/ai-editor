@@ -149,7 +149,9 @@ export function fetchSSE(url: string, options: SSEOptions): () => void {
         // 非 2xx：尝试解析 REST 错误包裹并透传为 error 事件后结束（不视为正常结束）
         const json: unknown = await res.json().catch(() => null);
         const code = isErrorPayload(json) ? json.error.code : CLIENT_NETWORK_ERROR;
-        const message = isErrorPayload(json) ? json.error.message : `SSE 请求失败（HTTP ${res.status}）`;
+        const message = isErrorPayload(json)
+          ? json.error.message
+          : `SSE 请求失败（HTTP ${res.status}）`;
         done = true;
         failed = true;
         onEvent("error", { code, message });

@@ -43,7 +43,10 @@ describe("occursInRelations（详情 relations → 锚定节点关系，timeline
   });
 
   it("忽略非 occurs_in 关系类型（详情 relations 含全部 1 跳类型）", () => {
-    const relations = [relOf({ id: "r1", relationType: "plot_edge" }), relOf({ id: "r2", relationType: "involves" })];
+    const relations = [
+      relOf({ id: "r1", relationType: "plot_edge" }),
+      relOf({ id: "r2", relationType: "involves" }),
+    ];
     expect(occursInRelations(relations, "ev-a")).toEqual([]);
   });
 

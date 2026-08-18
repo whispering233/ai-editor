@@ -15,7 +15,11 @@
 // 展示可恢复错误卡（错误信息 + 重新加载/回到首页）而非无提示白屏（下方有兜底行为验证用例）。
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToString } from "react-dom/server";
-import type { ChatMessage, ChatSessionSummary, ProjectConfig } from "@whispering233/ai-editor-shared";
+import type {
+  ChatMessage,
+  ChatSessionSummary,
+  ProjectConfig,
+} from "@whispering233/ai-editor-shared";
 import { ErrorBoundary } from "../feedback/ErrorBoundary";
 
 vi.mock("../../lib/api", async (importOriginal) => {
@@ -141,11 +145,23 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3：任务�
       createdAt: "t1",
     };
     const toolResults = new Map<string, ChatMessage>([
-      ["call-1", { id: "t1", sessionId: "sess-1", role: "tool", toolCallId: "call-1", content: '{"name":"张三"}', createdAt: "t1" }],
+      [
+        "call-1",
+        {
+          id: "t1",
+          sessionId: "sess-1",
+          role: "tool",
+          toolCallId: "call-1",
+          content: '{"name":"张三"}',
+          createdAt: "t1",
+        },
+      ],
     ]);
     const userHtml = renderToString(<MessageItem message={userMsg} toolResults={toolResults} />);
     expect(userHtml).toContain("帮我看看这个设定有没有漏洞");
-    const assistantHtml = renderToString(<MessageItem message={assistantMsg} toolResults={toolResults} />);
+    const assistantHtml = renderToString(
+      <MessageItem message={assistantMsg} toolResults={toolResults} />,
+    );
     expect(assistantHtml).toContain("好的，我来分析一下");
     // 成对渲染：有 tool result 的调用行 ✓、无 result 的孤儿调用行（tool 消息不单独渲染）；
     // 注意 SSR 会在文本与表达式间插入 <!-- --> 注释节点，断言用关键词而非整句
@@ -159,37 +175,62 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3：任务�
       sessionId: "sess-1",
       role: "tool",
       toolCallId: "call-1",
-      content: "{\"name\":\"张三\"}",
+      content: '{"name":"张三"}',
       createdAt: "t1",
     };
     expect(renderToString(<MessageItem message={toolMsg} toolResults={new Map()} />)).toBe("");
   });
 
   it("ToolCallRow：running / ok / error 三态渲染不抛异常（含 args 字符串与对象两种形状）", () => {
-    const running = renderToString(<ToolCallRow toolName="get_entity" args={{ id: "char-1" }} status="running" />);
+    const running = renderToString(
+      <ToolCallRow toolName="get_entity" args={{ id: "char-1" }} status="running" />,
+    );
     expect(running).toContain("get_entity");
     const ok = renderToString(
-      <ToolCallRow toolName="get_entity" args={JSON.stringify({ id: "char-1" })} result={'{"name":"张三"}'} status="ok" />,
+      <ToolCallRow
+        toolName="get_entity"
+        args={JSON.stringify({ id: "char-1" })}
+        result={'{"name":"张三"}'}
+        status="ok"
+      />,
     );
     expect(ok).toContain("get_entity");
     expect(ok).toContain("✓"); // result 存在 → 成功标记
-    const error = renderToString(<ToolCallRow toolName="update_entity" args={undefined} result="错误：实体不存在" status="error" />);
+    const error = renderToString(
+      <ToolCallRow
+        toolName="update_entity"
+        args={undefined}
+        result="错误：实体不存在"
+        status="error"
+      />,
+    );
     expect(error).toContain("update_entity");
     expect(error).toContain("✗");
   });
 
   it("ProposalCardView：pending / confirmed / stale 三态 + preview 存在/缺失渲染不抛异常", () => {
     const pending = renderToString(
-      <ProposalCardView proposal={{ proposalId: "prop-1", type: "propose_create_entity", status: "pending", preview: { summary: "创建角色张三" } }} />,
+      <ProposalCardView
+        proposal={{
+          proposalId: "prop-1",
+          type: "propose_create_entity",
+          status: "pending",
+          preview: { summary: "创建角色张三" },
+        }}
+      />,
     );
     expect(pending).toContain("提案");
     expect(pending).toContain("新建实体"); // PROPOSAL_TYPE_LABELS 映射
     const confirmed = renderToString(
-      <ProposalCardView proposal={{ proposalId: "prop-1", type: "propose_create_entity", status: "confirmed" }} />,
+      <ProposalCardView
+        proposal={{ proposalId: "prop-1", type: "propose_create_entity", status: "confirmed" }}
+      />,
     );
     expect(confirmed).toContain("已确认");
     const stale = renderToString(
-      <ProposalCardView proposal={{ proposalId: "prop-1", type: "propose_update_entity", status: "stale" }} />,
+      <ProposalCardView
+        proposal={{ proposalId: "prop-1", type: "propose_update_entity", status: "stale" }}
+      />,
     );
     expect(stale).toContain("此提案已失效");
   });

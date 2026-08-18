@@ -10,7 +10,13 @@
 // 样式 token 类（layout.md §3，oracle 红线：禁止硬编码色类）
 import { useEffect, useState } from "react";
 import type { DeltaOp, EntitySummary, EntityType } from "@whispering233/ai-editor-shared";
-import { ApiError, CLIENT_NETWORK_ERROR, createDelta, getEntityDetail, listEntities } from "../../lib/api";
+import {
+  ApiError,
+  CLIENT_NETWORK_ERROR,
+  createDelta,
+  getEntityDetail,
+  listEntities,
+} from "../../lib/api";
 import {
   DELTA_TARGET_TYPE_OPTIONS,
   buildDeltaChange,
@@ -134,7 +140,10 @@ export function DeltaCreateForm({
   /** 字段切换 → 按推断重置 op（作者随后可手动切换）；currentValue 须取新字段的目标当前值（闭包内是旧字段） */
   function handleFieldChange(next: string) {
     setField(next);
-    setOp(inferOpOptions({ array: isArrayField(targetType, next), currentValue: targetData?.[next] }).default);
+    setOp(
+      inferOpOptions({ array: isArrayField(targetType, next), currentValue: targetData?.[next] })
+        .default,
+    );
   }
 
   // ============ 提交 ============
@@ -154,7 +163,13 @@ export function DeltaCreateForm({
       setSubmitError("请填写描述（本节点触发了什么变化）");
       return;
     }
-    const built = buildDeltaChange({ field, op, rawValue: value, numeric: isNumericField(targetType, field), currentValue });
+    const built = buildDeltaChange({
+      field,
+      op,
+      rawValue: value,
+      numeric: isNumericField(targetType, field),
+      currentValue,
+    });
     if ("error" in built) {
       setSubmitError(built.error);
       return;
@@ -221,14 +236,21 @@ export function DeltaCreateForm({
                   ? "无法连接服务，请确认 ai-editor 服务已启动"
                   : "实体列表加载失败"}
               </span>
-              <Button variant="outline" size="xs" type="button" onClick={() => setEntityListTick((t) => t + 1)}>
+              <Button
+                variant="outline"
+                size="xs"
+                type="button"
+                onClick={() => setEntityListTick((t) => t + 1)}
+              >
                 重试
               </Button>
             </div>
           ) : entityList === null ? (
             <p className="py-1 text-xs text-muted-foreground">加载中…</p>
           ) : entityList.length === 0 ? (
-            <p className="py-1 text-xs text-muted-foreground">暂无{targetTypeLabelOf(entityType)}</p>
+            <p className="py-1 text-xs text-muted-foreground">
+              暂无{targetTypeLabelOf(entityType)}
+            </p>
           ) : (
             <select
               value={targetId}
@@ -304,9 +326,7 @@ export function DeltaCreateForm({
               ）——可将操作改为「设为」
             </>
           ) : (
-            <>
-              旧值：{formatDeltaValue(currentValue)}（自动取自目标当前数据，无需手填）
-            </>
+            <>旧值：{formatDeltaValue(currentValue)}（自动取自目标当前数据，无需手填）</>
           )}
         </p>
       )}

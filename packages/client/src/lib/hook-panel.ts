@@ -3,7 +3,13 @@
 //   doc/design/decisions.md 决策 21（data.status 缺失视为 planted；current_position 锚点口径）、
 //   packages/tools/src/executor/hook.ts（复合写与 status 同步语义参照——REST 链路上的等价逼近）
 // MVP 简化（backlog #13）：本模块不消费 _health 字段、不计算章节序——只处理基础字段与生命周期
-import type { DeltaChange, EntitySummary, OutlineNode, OutlineTree, ProjectConfig } from "@whispering233/ai-editor-shared";
+import type {
+  DeltaChange,
+  EntitySummary,
+  OutlineNode,
+  OutlineTree,
+  ProjectConfig,
+} from "@whispering233/ai-editor-shared";
 import {
   ApiError,
   createDelta,
@@ -55,14 +61,20 @@ export function relationsOfType(
  * 本伏笔「依赖的伏笔」名字（depends_on 中 sourceId === hookId → target 名；targetName 缺省用 id）。
  * 行内「依赖: xxx」展示（hook-panel.md 行主信息）
  */
-export function dependencyNames(relations: readonly RelationSummaryItem[], hookId: string): string[] {
+export function dependencyNames(
+  relations: readonly RelationSummaryItem[],
+  hookId: string,
+): string[] {
   return relationsOfType(relations, "depends_on")
     .filter((r) => r.sourceId === hookId)
     .map((r) => r.targetName ?? r.targetId);
 }
 
 /** 依赖本伏笔的伏笔名（depends_on 中 targetId === hookId；回收确认面板「有 N 个伏笔依赖此伏笔」） */
-export function dependentNames(relations: readonly RelationSummaryItem[], hookId: string): string[] {
+export function dependentNames(
+  relations: readonly RelationSummaryItem[],
+  hookId: string,
+): string[] {
   return relationsOfType(relations, "depends_on")
     .filter((r) => r.targetId === hookId)
     .map((r) => r.sourceName ?? r.sourceId);
@@ -162,7 +174,10 @@ export function lastOutlineNode(tree: OutlineTree | null): string | null {
  * 废弃 Delta 锚定节点：current_position 有效（存在且未软删）优先，否则退化树末节点；
  * 大纲空树 → null（面板禁用提交并内联提示——无锚点不可记录，同 executor 抛错语义）
  */
-export function anchorNodeForAbandon(config: ProjectConfig | null, tree: OutlineTree | null): string | null {
+export function anchorNodeForAbandon(
+  config: ProjectConfig | null,
+  tree: OutlineTree | null,
+): string | null {
   const cp = config?.currentPosition;
   if (cp !== null && cp !== undefined && cp !== "" && nodeExists(tree, cp)) return cp;
   return lastOutlineNode(tree);

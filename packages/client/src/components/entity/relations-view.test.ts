@@ -17,10 +17,42 @@ const makeRel = (over: Partial<RelationSummaryItem> & { id: string }): RelationS
 });
 
 const SAMPLE = [
-  makeRel({ id: "r1", sourceType: "character", sourceName: "张三", targetType: "location", targetName: "灵根峰", relationType: "appears_in" }),
-  makeRel({ id: "r2", sourceType: "character", sourceName: "李四", targetType: "character", targetName: "王五", relationType: "rival" }),
-  makeRel({ id: "r3", sourceType: "setting", sourceName: "修真界", targetType: "outline_node", sourceId: "set-1", targetId: "ch-1", targetName: "第一章·入门", relationType: "involves" }),
-  makeRel({ id: "r4", sourceType: "outline_node", sourceName: "第二章·试炼", sourceId: "ch-2", targetType: "hook", targetId: "hook-1", targetName: "身世之谜", relationType: "plants" }),
+  makeRel({
+    id: "r1",
+    sourceType: "character",
+    sourceName: "张三",
+    targetType: "location",
+    targetName: "灵根峰",
+    relationType: "appears_in",
+  }),
+  makeRel({
+    id: "r2",
+    sourceType: "character",
+    sourceName: "李四",
+    targetType: "character",
+    targetName: "王五",
+    relationType: "rival",
+  }),
+  makeRel({
+    id: "r3",
+    sourceType: "setting",
+    sourceName: "修真界",
+    targetType: "outline_node",
+    sourceId: "set-1",
+    targetId: "ch-1",
+    targetName: "第一章·入门",
+    relationType: "involves",
+  }),
+  makeRel({
+    id: "r4",
+    sourceType: "outline_node",
+    sourceName: "第二章·试炼",
+    sourceId: "ch-2",
+    targetType: "hook",
+    targetId: "hook-1",
+    targetName: "身世之谜",
+    relationType: "plants",
+  }),
 ];
 
 describe("filterRelations（关联总览前端过滤）", () => {
@@ -47,10 +79,21 @@ describe("filterRelations（关联总览前端过滤）", () => {
     expect(upper.map((r) => r.id)).toEqual(["r1"]);
     // 拉丁字母真正触达 toLowerCase 分支（中文无大小写概念）
     const latin = [
-      makeRel({ id: "r6", sourceType: "character", sourceName: "Avatar", targetType: "character", targetName: "Zhong San", relationType: "ally" }),
+      makeRel({
+        id: "r6",
+        sourceType: "character",
+        sourceName: "Avatar",
+        targetType: "character",
+        targetName: "Zhong San",
+        relationType: "ally",
+      }),
     ];
-    expect(filterRelations(latin, { ...EMPTY_RELATION_FILTER, nameQuery: "avatar" })).toHaveLength(1);
-    expect(filterRelations(latin, { ...EMPTY_RELATION_FILTER, nameQuery: "zhong" })).toHaveLength(1);
+    expect(filterRelations(latin, { ...EMPTY_RELATION_FILTER, nameQuery: "avatar" })).toHaveLength(
+      1,
+    );
+    expect(filterRelations(latin, { ...EMPTY_RELATION_FILTER, nameQuery: "zhong" })).toHaveLength(
+      1,
+    );
   });
 
   it("名称搜索：目标名命中", () => {
@@ -60,10 +103,21 @@ describe("filterRelations（关联总览前端过滤）", () => {
 
   it("名称搜索：sourceName/targetName 缺失时回退 id 匹配", () => {
     const noName = [
-      makeRel({ id: "r5", sourceName: undefined, targetName: undefined, sourceId: "char-9", targetId: "loc-9", relationType: "appears_in" }),
+      makeRel({
+        id: "r5",
+        sourceName: undefined,
+        targetName: undefined,
+        sourceId: "char-9",
+        targetId: "loc-9",
+        relationType: "appears_in",
+      }),
     ];
-    expect(filterRelations(noName, { ...EMPTY_RELATION_FILTER, nameQuery: "char-9" })).toHaveLength(1);
-    expect(filterRelations(noName, { ...EMPTY_RELATION_FILTER, nameQuery: "loc-9" })).toHaveLength(1);
+    expect(filterRelations(noName, { ...EMPTY_RELATION_FILTER, nameQuery: "char-9" })).toHaveLength(
+      1,
+    );
+    expect(filterRelations(noName, { ...EMPTY_RELATION_FILTER, nameQuery: "loc-9" })).toHaveLength(
+      1,
+    );
   });
 
   it("名称搜索：空白关键词视为不过滤", () => {
@@ -71,9 +125,17 @@ describe("filterRelations（关联总览前端过滤）", () => {
   });
 
   it("多条件叠加（AND）", () => {
-    const out = filterRelations(SAMPLE, { ...EMPTY_RELATION_FILTER, endpointType: "outline_node", nameQuery: "入门" });
+    const out = filterRelations(SAMPLE, {
+      ...EMPTY_RELATION_FILTER,
+      endpointType: "outline_node",
+      nameQuery: "入门",
+    });
     expect(out.map((r) => r.id)).toEqual(["r3"]);
-    const none = filterRelations(SAMPLE, { ...EMPTY_RELATION_FILTER, endpointType: "hook", relationType: "rival" });
+    const none = filterRelations(SAMPLE, {
+      ...EMPTY_RELATION_FILTER,
+      endpointType: "hook",
+      relationType: "rival",
+    });
     expect(none).toHaveLength(0);
   });
 });

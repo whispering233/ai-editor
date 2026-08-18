@@ -8,7 +8,13 @@ import { useState } from "react";
 import type { OutlineNodeType } from "../../lib/api";
 import { ApiError } from "../../lib/api";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 /** 类型徽标/按钮文案（卷/章/场） */
 export const TYPE_LABEL: Record<OutlineNodeType, string> = {

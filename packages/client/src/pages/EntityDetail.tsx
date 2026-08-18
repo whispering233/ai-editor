@@ -465,7 +465,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
             variant="outline"
             type="button"
             disabled={!detail}
-            className="text-red-600 hover:bg-red-50"
+            className="text-destructive hover:bg-destructive/10"
             onClick={() => void handleDelete()}
           >
             移入回收站
@@ -558,7 +558,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
                 </div>
               )}
             </div>
-            {saveError && <p className="mt-3 text-sm text-red-600">{saveError}</p>}
+            {saveError && <p className="mt-3 text-sm text-destructive">{saveError}</p>}
           </div>
 
           {/* 右栏：关联（1 跳双向）——setting 类型前置「层级」区块（决策 30：父子边独自分区，
@@ -598,7 +598,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
                           <Button
                             variant="outline"
                             type="button"
-                            className="h-8 px-2 text-xs text-red-600 hover:bg-red-50"
+                            className="h-8 px-2 text-xs text-destructive hover:bg-destructive/10"
                             disabled={hierarchySaving}
                             onClick={() => void handleClearParent()}
                           >
@@ -608,7 +608,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
                       </div>
                     </div>
                     {hierarchyError && (
-                      <p className="mb-2 text-sm text-red-600">{hierarchyError}</p>
+                      <p className="mb-2 text-sm text-destructive">{hierarchyError}</p>
                     )}
                     <div className="flex flex-col gap-1.5 text-sm">
                       <span className="text-muted-foreground">
@@ -684,7 +684,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
                         <Button
                           variant="outline"
                           type="button"
-                          className="h-7 shrink-0 px-2 text-xs text-red-600 hover:bg-red-50"
+                          className="h-7 shrink-0 px-2 text-xs text-destructive hover:bg-destructive/10"
                           onClick={() => setDeleteRelationTarget(r)}
                         >
                           删除

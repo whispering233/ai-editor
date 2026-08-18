@@ -62,7 +62,11 @@ export function findNode(nodes: OutlineNode[], nodeId: string): OutlineNode | nu
  * 根到节点的祖先链（含节点自身，不含虚拟 root），如 ["vol-1","ch-3","sc-9"]；
  * 找不到返回 null。跨页定位用（U4）：展开折叠祖先使节点进入 DOM + 确认节点存在。
  */
-export function findNodePath(nodes: OutlineNode[], nodeId: string, path: string[] = []): string[] | null {
+export function findNodePath(
+  nodes: OutlineNode[],
+  nodeId: string,
+  path: string[] = [],
+): string[] | null {
   for (const n of nodes) {
     const next = [...path, n.id];
     if (n.id === nodeId) return next;
@@ -112,7 +116,11 @@ export function isDescendant(nodes: OutlineNode[], nodeId: string, targetId: str
  * - 目标父必须是该节点类型的合法父（parentOptionsForType，决策 19）
  * - 不能挂到自己（targetId === nodeId）或自己的后代（子树）
  */
-export function canMoveTo(node: OutlineNode, targetParentId: string, nodes: OutlineNode[]): boolean {
+export function canMoveTo(
+  node: OutlineNode,
+  targetParentId: string,
+  nodes: OutlineNode[],
+): boolean {
   if (targetParentId === node.id) return false;
   if (isDescendant(nodes, node.id, targetParentId)) return false;
   return parentOptionsForType(nodes, node.type).some((o) => o.id === targetParentId);
@@ -168,9 +176,7 @@ export type DragTarget =
 
 /** 拖拽插入位置（order 计算输入；end = 目标父 children 末尾） */
 export type DropInsert =
-  | { kind: "before"; nodeId: string }
-  | { kind: "after"; nodeId: string }
-  | { kind: "end" };
+  { kind: "before"; nodeId: string } | { kind: "after"; nodeId: string } | { kind: "end" };
 
 /**
  * 插入位置 → order（0-based）：before = 目标 index；after = index + 1；end = siblings.length（末尾）。
@@ -235,7 +241,12 @@ export function findNodePosition(
  * 的位置恰与当前 index 相同即原地；order 与当前 index 的偏差即真实位移，无需再模拟服务端 clamp。
  * 跨父移动 → false（必然移动）。
  */
-export function isNoopDrop(nodes: OutlineNode[], dragNodeId: string, targetParentId: string, order: number): boolean {
+export function isNoopDrop(
+  nodes: OutlineNode[],
+  dragNodeId: string,
+  targetParentId: string,
+  order: number,
+): boolean {
   const pos = findNodePosition(nodes, dragNodeId);
   if (pos === null || pos.parentId !== targetParentId) return false;
   return order === pos.index;

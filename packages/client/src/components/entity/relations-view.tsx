@@ -18,6 +18,9 @@ import { relationTypeLabel } from "../../lib/entity-detail";
 import { ConfirmDialog } from "../outline/dialogs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "../../lib/utils";
+import { skeletonClass } from "../../lib/styles";
+import { EmptyState } from "../ui/empty-state";
 import { navigate } from "../../hooks/use-route";
 import { useUiStore } from "../../stores/ui";
 
@@ -47,10 +50,17 @@ export const EMPTY_RELATION_FILTER: RelationFilter = {
 };
 
 /** 按过滤条件筛选关系（纯函数；名称缺失回退 id，id 也能被搜到） */
-export function filterRelations(relations: RelationSummaryItem[], filter: RelationFilter): RelationSummaryItem[] {
+export function filterRelations(
+  relations: RelationSummaryItem[],
+  filter: RelationFilter,
+): RelationSummaryItem[] {
   const q = filter.nameQuery.trim().toLowerCase();
   return relations.filter((r) => {
-    if (filter.endpointType !== "" && r.sourceType !== filter.endpointType && r.targetType !== filter.endpointType) {
+    if (
+      filter.endpointType !== "" &&
+      r.sourceType !== filter.endpointType &&
+      r.targetType !== filter.endpointType
+    ) {
       return false;
     }
     if (filter.relationType !== "" && r.relationType !== filter.relationType) {
@@ -79,8 +89,7 @@ function EndpointBadge({ type }: { type: string }) {
 /** 端点名（含徽标）：四类实体跳实体详情；大纲节点（S12.2 起）跳节点详情 #/outline/:nodeId；未知类型灰显不可点 */
 function EndpointLink({ type, id, name }: { type: string; id: string; name?: string }) {
   const label = name ?? id;
-  const clickable =
-    (ENTITY_TYPES as readonly string[]).includes(type) || type === "outline_node";
+  const clickable = (ENTITY_TYPES as readonly string[]).includes(type) || type === "outline_node";
   if (!clickable) {
     return (
       <span className="flex min-w-0 items-center gap-1.5">
@@ -181,7 +190,7 @@ export function RelationsView({
     <div>
       {/* 过滤区：端点类型 + 关系类型 + 名称搜索（前端过滤；scope 模式隐藏——列表已按端点过滤） */}
       {scope === undefined && (
-        <div className="mb-2 mt-3 flex flex-wrap items-center gap-3">
+        <div className="mt-3 mb-2 flex flex-wrap items-center gap-3">
           <select
             value={filter.endpointType}
             onChange={(e) => setFilter((f) => ({ ...f, endpointType: e.target.value }))}
@@ -220,8 +229,15 @@ export function RelationsView({
       {/* 错误态：请求失败 → 区块内重试 */}
       {error !== null && (
         <div className="mb-3 rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
-          {error === CLIENT_NETWORK_ERROR ? "无法连接服务，请确认 ai-editor 服务已启动。" : "关系加载失败，请重试。"}
-          <Button variant="outline" className="ml-3" type="button" onClick={() => setTick((t) => t + 1)}>
+          {error === CLIENT_NETWORK_ERROR
+            ? "无法连接服务，请确认 ai-editor 服务已启动。"
+            : "关系加载失败，请重试。"}
+          <Button
+            variant="outline"
+            className="ml-3"
+            type="button"
+            onClick={() => setTick((t) => t + 1)}
+          >
             重试
           </Button>
         </div>
@@ -231,11 +247,14 @@ export function RelationsView({
       {loading && relations === null && error === null && (
         <div className="overflow-hidden rounded-md border border-border">
           {Array.from({ length: 5 }, (_, i) => (
-            <div key={i} className="flex items-center gap-3 border-b border-border px-3 py-3 last:border-0">
-              <div className="h-4 w-1/4 animate-pulse rounded bg-muted" />
-              <div className="h-4 w-1/6 animate-pulse rounded bg-muted" />
-              <div className="h-4 w-1/4 animate-pulse rounded bg-muted" />
-              <div className="ml-auto h-4 w-12 animate-pulse rounded bg-muted" />
+            <div
+              key={i}
+              className="flex items-center gap-3 border-b border-border px-3 py-3 last:border-0"
+            >
+              <div className={cn(skeletonClass, "h-4 w-1/4")} />
+              <div className={cn(skeletonClass, "h-4 w-1/6")} />
+              <div className={cn(skeletonClass, "h-4 w-1/4")} />
+              <div className={cn(skeletonClass, "ml-auto h-4 w-12")} />
             </div>
           ))}
         </div>
@@ -243,20 +262,30 @@ export function RelationsView({
 
       {/* 空态两种：无任何关系 vs 过滤无结果 */}
       {!loading && relations !== null && relations.length === 0 && (
-        <div className="rounded-lg border border-dashed border-border px-6 py-12 text-center">
-          <p className="text-sm text-muted-foreground">还没有关联，建立一条</p>
-          <Button className="mt-4" type="button" onClick={onOpenCreate}>
-            + 建立关联
-          </Button>
-        </div>
+        <EmptyState
+          action={
+            <Button type="button" onClick={onOpenCreate}>
+              + 建立关联
+            </Button>
+          }
+        >
+          还没有关联，建立一条
+        </EmptyState>
       )}
       {!loading && relations !== null && relations.length > 0 && filtered.length === 0 && (
-        <div className="rounded-lg border border-dashed border-border px-6 py-12 text-center">
-          <p className="text-sm text-muted-foreground">没有匹配的关联</p>
-          <Button variant="outline" className="mt-4" type="button" onClick={() => setFilter(EMPTY_RELATION_FILTER)}>
-            清空过滤
-          </Button>
-        </div>
+        <EmptyState
+          action={
+            <Button
+              variant="outline"
+              type="button"
+              onClick={() => setFilter(EMPTY_RELATION_FILTER)}
+            >
+              清空过滤
+            </Button>
+          }
+        >
+          没有匹配的关联
+        </EmptyState>
       )}
 
       {/* 关联列表：scope 模式行 = 关系类型 → 目标 + [删除]（源固定为本端点）；列表模式三列（源/关系/目标） */}

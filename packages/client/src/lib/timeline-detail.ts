@@ -55,7 +55,10 @@ export function mountedTimepointId(
 }
 
 /** occurs_at 挂载请求体（timepoint → event，G2；组内「+ 在此时间点新建事件」挂载用） */
-export function buildOccursAtRelationBody(timepointId: string, eventId: string): CreateRelationBody {
+export function buildOccursAtRelationBody(
+  timepointId: string,
+  eventId: string,
+): CreateRelationBody {
   return {
     source_type: "timepoint",
     source_id: timepointId,

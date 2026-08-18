@@ -70,7 +70,9 @@ afterEach(() => {
 describe("loadConfig 的错误区分（无项目 vs 网络失败）", () => {
   it("NO_PROJECT_OPEN → config=null + loadError=NO_PROJECT_OPEN", async () => {
     // NO_PROJECT_OPEN 为 server 侧自定义码（不在 shared ErrorCode 枚举），运行时按字符串处理
-    mocked.getProjectConfig.mockRejectedValue(new ApiError("NO_PROJECT_OPEN" as ApiError["code"], "未打开项目"));
+    mocked.getProjectConfig.mockRejectedValue(
+      new ApiError("NO_PROJECT_OPEN" as ApiError["code"], "未打开项目"),
+    );
     await useProjectStore.getState().loadConfig();
     const s = useProjectStore.getState();
     expect(s.config).toBeNull();
@@ -94,8 +96,18 @@ describe("loadConfig 的错误区分（无项目 vs 网络失败）", () => {
 
 describe("openProjectAt（打开项目 + rebuilt 提示）", () => {
   it("成功 → config 更新 + loadOutline 拉取", async () => {
-    mocked.openProject.mockResolvedValue({ id: "proj-1", name: "我的小说", language: "zh", config: sampleConfig });
-    mocked.getOutline.mockResolvedValue({ id: "root", type: "root", schemaVersion: 1, children: [] });
+    mocked.openProject.mockResolvedValue({
+      id: "proj-1",
+      name: "我的小说",
+      language: "zh",
+      config: sampleConfig,
+    });
+    mocked.getOutline.mockResolvedValue({
+      id: "root",
+      type: "root",
+      schemaVersion: 1,
+      children: [],
+    });
     await useProjectStore.getState().openProjectAt("/tmp/p");
     expect(useProjectStore.getState().config).toEqual(sampleConfig);
     expect(mocked.getOutline).toHaveBeenCalledTimes(1);
@@ -131,7 +143,12 @@ describe("openProjectAt（打开项目 + rebuilt 提示）", () => {
   });
 
   it("rebuilt 未返回 → 无 toast", async () => {
-    mocked.openProject.mockResolvedValue({ id: "proj-1", name: "我的小说", language: "zh", config: sampleConfig });
+    mocked.openProject.mockResolvedValue({
+      id: "proj-1",
+      name: "我的小说",
+      language: "zh",
+      config: sampleConfig,
+    });
     await useProjectStore.getState().openProjectAt("/tmp/p");
     expect(useUiStore.getState().toast).toBeNull();
   });
@@ -140,16 +157,34 @@ describe("openProjectAt（打开项目 + rebuilt 提示）", () => {
 describe("createProjectAt / closeProject", () => {
   it("create → open 顺序调用（create 不打开项目，S1.2 语义）", async () => {
     mocked.createProject.mockResolvedValue({ id: "proj-1", path: "/tmp/p", created: true });
-    mocked.openProject.mockResolvedValue({ id: "proj-1", name: "我的小说", language: "zh", config: sampleConfig });
-    mocked.getOutline.mockResolvedValue({ id: "root", type: "root", schemaVersion: 1, children: [] });
-    await useProjectStore.getState().createProjectAt("/tmp/p", { name: "我的小说", language: "zh" });
-    expect(mocked.createProject).toHaveBeenCalledWith("/tmp/p", { name: "我的小说", language: "zh" });
+    mocked.openProject.mockResolvedValue({
+      id: "proj-1",
+      name: "我的小说",
+      language: "zh",
+      config: sampleConfig,
+    });
+    mocked.getOutline.mockResolvedValue({
+      id: "root",
+      type: "root",
+      schemaVersion: 1,
+      children: [],
+    });
+    await useProjectStore
+      .getState()
+      .createProjectAt("/tmp/p", { name: "我的小说", language: "zh" });
+    expect(mocked.createProject).toHaveBeenCalledWith("/tmp/p", {
+      name: "我的小说",
+      language: "zh",
+    });
     expect(mocked.openProject).toHaveBeenCalledWith("/tmp/p");
     expect(useProjectStore.getState().config).toEqual(sampleConfig);
   });
 
   it("close → 清空 config/outline", async () => {
-    useProjectStore.setState({ config: sampleConfig, outline: { id: "root", type: "root", schemaVersion: 1, children: [] } });
+    useProjectStore.setState({
+      config: sampleConfig,
+      outline: { id: "root", type: "root", schemaVersion: 1, children: [] },
+    });
     mocked.closeProject.mockResolvedValue({ saved: true });
     await useProjectStore.getState().closeProject();
     const s = useProjectStore.getState();
@@ -163,7 +198,13 @@ describe("书架 loadBookshelf（S1.5）", () => {
   it("成功 → bookshelf 设置 + bookshelfError 清空", async () => {
     mocked.listProjects.mockResolvedValue({
       rootPath: "/home/me/novels",
-      books: [{ name: "我的小说", path: "/home/me/novels/books/我的小说", updatedAt: "2026-08-01T22:30:00Z" }],
+      books: [
+        {
+          name: "我的小说",
+          path: "/home/me/novels/books/我的小说",
+          updatedAt: "2026-08-01T22:30:00Z",
+        },
+      ],
     });
     await useProjectStore.getState().loadBookshelf();
     const s = useProjectStore.getState();

@@ -16,16 +16,24 @@ describe("describeChange（op/field/from→to 紧凑摘要）", () => {
   });
 
   it("add：field +value（value 优先，to 兜底）", () => {
-    expect(describeChange({ field: "abilities", op: "add", value: "御剑" })).toBe("abilities +御剑");
-    expect(describeChange({ field: "abilities", op: "add", to: "火球术" })).toBe("abilities +火球术");
+    expect(describeChange({ field: "abilities", op: "add", value: "御剑" })).toBe(
+      "abilities +御剑",
+    );
+    expect(describeChange({ field: "abilities", op: "add", to: "火球术" })).toBe(
+      "abilities +火球术",
+    );
   });
 
   it("remove：field -value", () => {
-    expect(describeChange({ field: "abilities", op: "remove", value: "御剑" })).toBe("abilities -御剑");
+    expect(describeChange({ field: "abilities", op: "remove", value: "御剑" })).toBe(
+      "abilities -御剑",
+    );
   });
 
   it("null 值 → 「空」", () => {
-    expect(describeChange({ field: "name", op: "update", from: null, to: "新名" })).toBe("name 空 → 新名");
+    expect(describeChange({ field: "name", op: "update", from: null, to: "新名" })).toBe(
+      "name 空 → 新名",
+    );
   });
 });
 

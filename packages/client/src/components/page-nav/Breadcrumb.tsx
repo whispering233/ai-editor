@@ -3,7 +3,7 @@
 //   （高亮不可点）；段间以「›」分隔，层级一目了然。点击统一走 navigate（自制 hash 路由，
 //   与 EntityList 列表 tab 一致）。
 // 样式红线（layout.md §3，token 类，禁止硬编码色类）：
-//   激活段 bg-foreground/text-background（反相高对比，对应列表页类型 tab bg-zinc-900/text-white 观感），
+//   激活段 bg-foreground/text-background（反相高对比，同 EntityList 类型 tab 激活态观感），
 //   未激活段 text-muted-foreground + hover:bg-muted/hover:text-foreground（对应列表 tab 未激活态）。
 import { cn } from "@/lib/utils";
 import { navigate } from "../../hooks/use-route";
@@ -15,13 +15,7 @@ export interface BreadcrumbItem {
 }
 
 /** tab 化分段面包屑：`实体 › 人物 › 张三`——最后一段（无 href）为当前位置，中间段点击返回上级 */
-export function Breadcrumb({
-  items,
-  className,
-}: {
-  items: BreadcrumbItem[];
-  className?: string;
-}) {
+export function Breadcrumb({ items, className }: { items: BreadcrumbItem[]; className?: string }) {
   return (
     <nav aria-label="面包屑" className={cn("inline-flex items-center gap-1", className)}>
       {items.map((item, i) => {
@@ -44,7 +38,7 @@ export function Breadcrumb({
                 {item.label}
               </span>
             )}
-            {!isLast && <span className="select-none text-sm text-muted-foreground/40">›</span>}
+            {!isLast && <span className="text-sm text-muted-foreground/40 select-none">›</span>}
           </span>
         );
       })}

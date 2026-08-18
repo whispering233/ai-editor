@@ -1,13 +1,24 @@
 // entity-detail 纯函数与配置测试（S3.6 + 批次四 I3b）：按类型字段配置、关系类型中文映射、表单 diff、
 // 设定层级分区（决策 30：parent_id 废弃改为 belongs_to 关系表达）
 import { describe, expect, it } from "vitest";
-import { detailFieldsForType, diffData, relationTypeLabel, settingHierarchyFromRelations } from "./entity-detail";
+import {
+  detailFieldsForType,
+  diffData,
+  relationTypeLabel,
+  settingHierarchyFromRelations,
+} from "./entity-detail";
 
 describe("detailFieldsForType（data 表单按类型配置——schema.md 字段清单）", () => {
   it("character：role/gender/age/personality/motivation/abilities/status，控件类型正确", () => {
     const fields = detailFieldsForType("character");
     expect(fields.map((f) => f.key)).toEqual([
-      "role", "gender", "age", "personality", "motivation", "abilities", "status",
+      "role",
+      "gender",
+      "age",
+      "personality",
+      "motivation",
+      "abilities",
+      "status",
     ]);
     expect(fields.find((f) => f.key === "age")?.control).toBe("number");
     expect(fields.find((f) => f.key === "personality")?.control).toBe("tags");
@@ -16,10 +27,14 @@ describe("detailFieldsForType（data 表单按类型配置——schema.md 字段
 
   it("setting（决策 30/31 + K2）：description/tags（分类）/rules（规则条款）；location 保留 parent_id 文本", () => {
     expect(detailFieldsForType("setting").map((f) => f.key)).toEqual([
-      "description", "tags", "rules",
+      "description",
+      "tags",
+      "rules",
     ]);
     expect(detailFieldsForType("location").map((f) => f.key)).toEqual([
-      "type", "parent_id", "description",
+      "type",
+      "parent_id",
+      "description",
     ]);
   });
 
@@ -29,7 +44,11 @@ describe("detailFieldsForType（data 表单按类型配置——schema.md 字段
     expect(status.control).toBe("select");
     expect(status.options).toEqual(["planted", "progressing", "resolved", "abandoned"]);
     expect(fields.find((f) => f.key === "payoff_timing")?.options).toEqual([
-      "immediate", "near_term", "mid_arc", "slow_burn", "endgame",
+      "immediate",
+      "near_term",
+      "mid_arc",
+      "slow_burn",
+      "endgame",
     ]);
     expect(fields.find((f) => f.key === "expected_resolve_node_id")?.control).toBe("outline-node");
     expect(fields.find((f) => f.key === "is_core")?.control).toBe("toggle");
@@ -66,7 +85,14 @@ describe("relationTypeLabel（17 种预定义关系类型中文映射，批次�
 });
 
 describe("settingHierarchyFromRelations（决策 30：层级边分区——belongs_to 且两端均为 setting）", () => {
-  const rel = (id: string, src: string, tgt: string, srcType = "setting", tgtType = "setting", type = "belongs_to") => ({
+  const rel = (
+    id: string,
+    src: string,
+    tgt: string,
+    srcType = "setting",
+    tgtType = "setting",
+    type = "belongs_to",
+  ) => ({
     id,
     sourceType: srcType,
     sourceId: src,
@@ -89,28 +115,50 @@ describe("settingHierarchyFromRelations（决策 30：层级边分区——belon
     ];
     const { parent, children } = settingHierarchyFromRelations(relations, self);
     // rel-1：source=self → self 是子，parent = set-2（target 端）
-    expect(parent).toEqual({ relationId: "rel-1", parentId: "set-2", parentName: "设定set-2", childId: self, childName: "设定set-1" });
+    expect(parent).toEqual({
+      relationId: "rel-1",
+      parentId: "set-2",
+      parentName: "设定set-2",
+      childId: self,
+      childName: "设定set-1",
+    });
     expect(children).toEqual([
-      { relationId: "rel-2", parentId: self, parentName: "设定set-1", childId: "set-3", childName: "设定set-3" },
-      { relationId: "rel-3", parentId: self, parentName: "设定set-1", childId: "set-4", childName: "设定set-4" },
+      {
+        relationId: "rel-2",
+        parentId: self,
+        parentName: "设定set-1",
+        childId: "set-3",
+        childName: "设定set-3",
+      },
+      {
+        relationId: "rel-3",
+        parentId: self,
+        parentName: "设定set-1",
+        childId: "set-4",
+        childName: "设定set-4",
+      },
     ]);
   });
 
   it("多父取首条（一设定一父语义：UI 只展示第一个）", () => {
     const self = "set-1";
-    const { parent } = settingHierarchyFromRelations([rel("r1", self, "set-a"), rel("r2", self, "set-b")], self);
+    const { parent } = settingHierarchyFromRelations(
+      [rel("r1", self, "set-a"), rel("r2", self, "set-b")],
+      self,
+    );
     expect(parent?.relationId).toBe("r1");
   });
 
   it("无层级边 → parent null + children 空", () => {
     const self = "set-1";
-    expect(settingHierarchyFromRelations([rel("r1", self, "char-2", "setting", "character")], self)).toEqual({
+    expect(
+      settingHierarchyFromRelations([rel("r1", self, "char-2", "setting", "character")], self),
+    ).toEqual({
       parent: null,
       children: [],
     });
   });
 });
-
 
 describe("diffData（表单 partial 提交——只返回变更字段）", () => {
   const original = { role: "主角", age: 16, abilities: ["火球术"], status: "活跃" };
@@ -150,17 +198,23 @@ describe("diffData（表单 partial 提交——只返回变更字段）", () =>
     expect(diffData({ age: 16 }, { age: undefined })).toBeNull();
     expect(diffData(original, { ...original, age: undefined })).toBeNull();
     // 其他字段的变更不受影响（undefined 键被排除，不混入提交）
-    expect(diffData(original, { ...original, age: undefined, status: "退场" })).toEqual({ status: "退场" });
+    expect(diffData(original, { ...original, age: undefined, status: "退场" })).toEqual({
+      status: "退场",
+    });
   });
 
   it("null 正常提交（expected_resolve_node_id 清空——「未设置」存 null 而非空串，决策 21）", () => {
     // 原值有节点 → 清空 → 提交 null（服务端 z.string().nullable() 接受）
-    expect(diffData({ expected_resolve_node_id: "sc-1" }, { expected_resolve_node_id: null })).toEqual({
+    expect(
+      diffData({ expected_resolve_node_id: "sc-1" }, { expected_resolve_node_id: null }),
+    ).toEqual({
       expected_resolve_node_id: null,
     });
     // 原值本就无该键 + null → 无变更
     expect(diffData({}, { expected_resolve_node_id: null })).toBeNull();
     // 空串与 null 比较等价（同「未设置」语义）——旧值空串清空不产生提交
-    expect(diffData({ expected_resolve_node_id: "" }, { expected_resolve_node_id: null })).toBeNull();
+    expect(
+      diffData({ expected_resolve_node_id: "" }, { expected_resolve_node_id: null }),
+    ).toBeNull();
   });
 });

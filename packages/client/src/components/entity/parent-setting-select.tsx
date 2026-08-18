@@ -45,7 +45,11 @@ export function ParentSettingSelect({
         limit: CANDIDATE_LIMIT,
         sort: "name",
       });
-      setCandidates(excludeIds && excludeIds.length > 0 ? res.items.filter((c) => !excludeIds.includes(c.id)) : res.items);
+      setCandidates(
+        excludeIds && excludeIds.length > 0
+          ? res.items.filter((c) => !excludeIds.includes(c.id))
+          : res.items,
+      );
     } catch {
       setCandidates(null);
       setFailed(true);
@@ -82,7 +86,9 @@ export function ParentSettingSelect({
             title={value ? `上级设定：${displayName}` : placeholder}
           >
             {value ? `上级：${displayName}` : placeholder}
-            <span aria-hidden="true" className="ml-1 text-muted-foreground">&#9662;</span>
+            <span aria-hidden="true" className="ml-1 text-muted-foreground">
+              &#9662;
+            </span>
           </Button>
         }
       />
@@ -100,7 +106,13 @@ export function ParentSettingSelect({
           ) : failed ? (
             <div className="flex items-center justify-between gap-2 px-2 py-3">
               <span className="text-xs text-destructive">列表加载失败</span>
-              <Button variant="outline" type="button" size="sm" className="h-7 px-2 text-xs" onClick={() => void loadCandidates()}>
+              <Button
+                variant="outline"
+                type="button"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => void loadCandidates()}
+              >
                 重试
               </Button>
             </div>
@@ -125,7 +137,9 @@ export function ParentSettingSelect({
                   )}
                 >
                   <span className="min-w-0 truncate">{c.name}</span>
-                  {category && <span className="shrink-0 text-xs text-muted-foreground">{category}</span>}
+                  {category && (
+                    <span className="shrink-0 text-xs text-muted-foreground">{category}</span>
+                  )}
                 </button>
               );
             })

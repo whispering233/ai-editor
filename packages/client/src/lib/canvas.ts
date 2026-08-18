@@ -56,7 +56,11 @@ export interface CanvasEdge {
 // ============ 布局/卡片尺寸常量（自动布局与卡片渲染共用单一来源） ============
 
 /** 各类型卡片尺寸（宽 × 高；自动布局的行距/列宽以此计算，卡片渲染固定此尺寸保证布局可复现） */
-export const CANVAS_CARD_W: Record<CanvasNodeType, number> = { volume: 248, chapter: 208, scene: 168 };
+export const CANVAS_CARD_W: Record<CanvasNodeType, number> = {
+  volume: 248,
+  chapter: 208,
+  scene: 168,
+};
 export const CANVAS_CARD_H: Record<CanvasNodeType, number> = { volume: 96, chapter: 88, scene: 76 };
 
 /** 自动布局间距（canvas.md 线框：卷为容器横向成列、章缩进、场景为叶子） */
@@ -159,7 +163,12 @@ export function parseCanvasLayout(parsed: unknown): CanvasLayout | null {
   for (const [id, v] of Object.entries(nodes)) {
     if (typeof v !== "object" || v === null) return null;
     const p = v as { x?: unknown; y?: unknown };
-    if (typeof p.x !== "number" || typeof p.y !== "number" || !Number.isFinite(p.x) || !Number.isFinite(p.y)) {
+    if (
+      typeof p.x !== "number" ||
+      typeof p.y !== "number" ||
+      !Number.isFinite(p.x) ||
+      !Number.isFinite(p.y)
+    ) {
       return null;
     }
     out[id] = { x: p.x, y: p.y };
@@ -221,7 +230,8 @@ export function parsePlotEdges(relations: readonly RelationSummaryItem[]): Canva
     if (r.relationType !== PLOT_EDGE_TYPE) continue;
     if (r.sourceType !== "outline_node" || r.targetType !== "outline_node") continue;
     const rawLabel = r.metadata?.label;
-    const label = typeof rawLabel === "string" && rawLabel.trim() !== "" ? rawLabel.trim() : undefined;
+    const label =
+      typeof rawLabel === "string" && rawLabel.trim() !== "" ? rawLabel.trim() : undefined;
     edges.push({ id: r.id, sourceId: r.sourceId, targetId: r.targetId, label });
   }
   edges.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
@@ -278,7 +288,12 @@ export function nodeCenter(pos: CanvasPoint, type: CanvasNodeType): CanvasPoint 
  * 原 center-to-center 端点藏在卡片下方；t = min(半宽/|dx|, 半高/|dy|) 取先碰到的边）。
  * 两点重合（dx = dy = 0）→ 原样返回（退化连线防御，不除零）。
  */
-export function edgeBorderPoint(center: CanvasPoint, other: CanvasPoint, w: number, h: number): CanvasPoint {
+export function edgeBorderPoint(
+  center: CanvasPoint,
+  other: CanvasPoint,
+  w: number,
+  h: number,
+): CanvasPoint {
   const dx = other.x - center.x;
   const dy = other.y - center.y;
   if (dx === 0 && dy === 0) return center;

@@ -63,7 +63,13 @@ interface TimelineProps {
  * （锚 = 组首/末事件 id，空组 null——组块边缘指示线）；时间点拖拽 = 组间插入位（组块边缘） */
 type DropTarget =
   | { kind: "timepoint"; side: "before" | "after"; groupId: string }
-  | { kind: "event"; at: "row" | "group"; side: "before" | "after"; groupId: string; anchorId: string | null };
+  | {
+      kind: "event";
+      at: "row" | "group";
+      side: "before" | "after";
+      groupId: string;
+      anchorId: string | null;
+    };
 
 export function Timeline({
   timepoints,
@@ -94,7 +100,11 @@ export function Timeline({
   // 视图组列表：真实时间点组 + 未挂载兜底区（有未挂载事件才追加；组标题「未挂载」）
   const viewGroups = useMemo<GroupView[]>(
     () => [
-      ...renderModel.groups.map((g) => ({ timepoint: g.timepoint, groupId: g.timepoint.id, events: g.events })),
+      ...renderModel.groups.map((g) => ({
+        timepoint: g.timepoint,
+        groupId: g.timepoint.id,
+        events: g.events,
+      })),
       ...(renderModel.ungrouped.length > 0
         ? [{ timepoint: null as EntitySummary | null, groupId: "", events: renderModel.ungrouped }]
         : []),
@@ -192,7 +202,10 @@ export function Timeline({
     const side = insertSideFromEvent(e);
     if (cur.kind === "timepoint") {
       setDropTarget((prev) =>
-        prev !== null && prev.kind === "timepoint" && prev.side === side && prev.groupId === g.groupId
+        prev !== null &&
+        prev.kind === "timepoint" &&
+        prev.side === side &&
+        prev.groupId === g.groupId
           ? prev
           : { kind: "timepoint", side, groupId: g.groupId },
       );
@@ -222,7 +235,10 @@ export function Timeline({
       // React 清空，updater 延迟执行时访问 e.currentTarget 会得到 null（拖拽崩溃根因）
       const side = insertSideFromEvent(e);
       setDropTarget((prev) =>
-        prev !== null && prev.kind === "timepoint" && prev.side === side && prev.groupId === g.groupId
+        prev !== null &&
+        prev.kind === "timepoint" &&
+        prev.side === side &&
+        prev.groupId === g.groupId
           ? prev
           : { kind: "timepoint", side, groupId: g.groupId },
       );
@@ -235,7 +251,11 @@ export function Timeline({
   // ============ drop（落点执行：按拖拽来源 + 落点判定调对应 move） ============
 
   /** 事件拖拽 drop 执行（行级/组级统一）：同组 → move；跨组/未挂载区 → move_to */
-  async function executeEventDrop(e: DragEvent<HTMLDivElement>, g: GroupView, anchorId: string | null) {
+  async function executeEventDrop(
+    e: DragEvent<HTMLDivElement>,
+    g: GroupView,
+    anchorId: string | null,
+  ) {
     const cur = drag;
     if (cur === null || cur.kind !== "event" || busy) return;
     e.preventDefault();
@@ -245,7 +265,13 @@ export function Timeline({
       return;
     }
     const side = insertSideFromEvent(e);
-    const order = eventOrderIntoGroup(orderModel.groups, orderModel.ungrouped, targetIndexOf(g.groupId), side, cur.id);
+    const order = eventOrderIntoGroup(
+      orderModel.groups,
+      orderModel.ungrouped,
+      targetIndexOf(g.groupId),
+      side,
+      cur.id,
+    );
     const currentGroupId = eventGroupOf.get(cur.id) ?? "";
     setBusy(true);
     try {
@@ -285,7 +311,11 @@ export function Timeline({
     // 事件拖拽：组级锚点 = 组首/末事件（空组 → null）
     const side = insertSideFromEvent(e);
     const anchorId =
-      g.events.length === 0 ? null : side === "before" ? g.events[0].id : g.events[g.events.length - 1].id;
+      g.events.length === 0
+        ? null
+        : side === "before"
+          ? g.events[0].id
+          : g.events[g.events.length - 1].id;
     void executeEventDrop(e, g, anchorId);
   }
 
@@ -312,13 +342,18 @@ export function Timeline({
   return (
     <div className="relative flex flex-col gap-2">
       {/* 垂直轴线（left-[11px] = 节点列中心；pointer-events-none 是拖拽共存前提，行间/组间空隙处线连续贯穿） */}
-      <div aria-hidden="true" className="pointer-events-none absolute bottom-0 left-[11px] top-0 w-0.5 bg-border" />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute top-0 bottom-0 left-[11px] w-0.5 bg-border"
+      />
       {viewGroups.map((g) => {
         // 组块级指示线：时间点插入位（该组）或事件组级落点（该组；含空组无锚点）
         const groupLine =
           dropTarget !== null &&
           ((dropTarget.kind === "timepoint" && dropTarget.groupId === g.groupId) ||
-            (dropTarget.kind === "event" && dropTarget.at === "group" && dropTarget.groupId === g.groupId));
+            (dropTarget.kind === "event" &&
+              dropTarget.at === "group" &&
+              dropTarget.groupId === g.groupId));
         const showInsertBefore = groupLine && dropTarget !== null && dropTarget.side === "before";
         const showInsertAfter = groupLine && dropTarget !== null && dropTarget.side === "after";
         // 行级指示线：事件拖拽锚点行（at === "row" 且锚点匹配）
@@ -335,7 +370,8 @@ export function Timeline({
         const eventDragHandlers = {
           onDragStart: handleEventDragStart,
           onDragEnd: clearDrag,
-          onDragOver: (e: DragEvent<HTMLDivElement>, ev: EntitySummary) => handleEventDragOver(e, ev, g),
+          onDragOver: (e: DragEvent<HTMLDivElement>, ev: EntitySummary) =>
+            handleEventDragOver(e, ev, g),
           onDrop: (e: DragEvent<HTMLDivElement>, ev: EntitySummary) => handleEventDrop(e, ev, g),
         };
         return (
@@ -361,8 +397,16 @@ export function Timeline({
             onDrop={(e) => handleGroupDrop(e, g)}
             eventDrag={eventDragHandlers}
             eventInsertLines={(eventId) => ({
-              before: rowLineBefore && dropTarget !== null && dropTarget.kind === "event" && dropTarget.anchorId === eventId,
-              after: rowLineAfter && dropTarget !== null && dropTarget.kind === "event" && dropTarget.anchorId === eventId,
+              before:
+                rowLineBefore &&
+                dropTarget !== null &&
+                dropTarget.kind === "event" &&
+                dropTarget.anchorId === eventId,
+              after:
+                rowLineAfter &&
+                dropTarget !== null &&
+                dropTarget.kind === "event" &&
+                dropTarget.anchorId === eventId,
             })}
             onDetail={onDetail}
             onEdit={onEdit}

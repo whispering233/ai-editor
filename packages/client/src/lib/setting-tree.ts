@@ -31,7 +31,10 @@ export interface BuiltSettingTree {
   hasOrphanEdges: boolean;
 }
 
-export function buildSettingTree(settings: SettingTreeInput[], edges: SettingTreeEdge[]): BuiltSettingTree {
+export function buildSettingTree(
+  settings: SettingTreeInput[],
+  edges: SettingTreeEdge[],
+): BuiltSettingTree {
   const byId = new Map<string, SettingTreeInput>();
   for (const s of settings) byId.set(s.id, s);
 
@@ -52,7 +55,9 @@ export function buildSettingTree(settings: SettingTreeInput[], edges: SettingTre
     const node: SettingTreeNode = {
       id: raw.id,
       name: raw.name,
-      ...(typeof raw.category === "string" && raw.category !== "" ? { category: raw.category } : {}),
+      ...(typeof raw.category === "string" && raw.category !== ""
+        ? { category: raw.category }
+        : {}),
       children: [],
     };
     const kids = childOf.get(id) ?? [];

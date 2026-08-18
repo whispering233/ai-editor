@@ -8,26 +8,19 @@ import { Button } from "@/components/ui/button";
 import { listEntities, listRelations } from "../../lib/api";
 import { buildSettingTree, type SettingTreeNode } from "../../lib/setting-tree";
 import { cn } from "../../lib/utils";
+import { skeletonClass } from "../../lib/styles";
+import { EmptyState } from "../ui/empty-state";
 import { navigate } from "../../hooks/use-route";
 
 /** 设定树拉取上限（listEntities limit 最大 200；超量截断提示 + 孤儿提升防御） */
 const TREE_SETTING_LIMIT = 200;
 
-function SettingTreeNodeRow({
-  node,
-  depth,
-}: {
-  node: SettingTreeNode;
-  depth: number;
-}) {
+function SettingTreeNodeRow({ node, depth }: { node: SettingTreeNode; depth: number }) {
   const [expanded, setExpanded] = useState(true);
   const hasChildren = node.children.length > 0;
   return (
     <li>
-      <div
-        className="flex items-center gap-1.5 py-1"
-        style={{ paddingLeft: `${depth * 16}px` }}
-      >
+      <div className="flex items-center gap-1.5 py-1" style={{ paddingLeft: `${depth * 16}px` }}>
         {/* 折叠箭头（叶子占位保缩进对齐）；点击切展开态，不跳转 */}
         <button
           type="button"
@@ -39,7 +32,13 @@ function SettingTreeNodeRow({
           onClick={() => setExpanded((v) => !v)}
           disabled={!hasChildren}
         >
-          <svg viewBox="0 0 16 16" className={cn("size-3.5 transition-transform", !expanded && "-rotate-90")} fill="none" stroke="currentColor" strokeWidth="1.5">
+          <svg
+            viewBox="0 0 16 16"
+            className={cn("size-3.5 transition-transform", !expanded && "-rotate-90")}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+          >
             <path d="m6 4 4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
@@ -52,10 +51,14 @@ function SettingTreeNodeRow({
           {node.name}
         </button>
         {node.category && (
-          <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">{node.category}</span>
+          <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+            {node.category}
+          </span>
         )}
         {hasChildren && (
-          <span className="shrink-0 text-xs text-muted-foreground/70">{node.children.length} 个子设定</span>
+          <span className="shrink-0 text-xs text-muted-foreground/70">
+            {node.children.length} 个子设定
+          </span>
         )}
       </div>
       {hasChildren && expanded && (
@@ -95,7 +98,10 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
           }),
         ]);
         if (cancelled) return;
-        const edges = edgesRes.relations.map((r) => ({ childId: r.sourceId, parentId: r.targetId }));
+        const edges = edgesRes.relations.map((r) => ({
+          childId: r.sourceId,
+          parentId: r.targetId,
+        }));
         const tree = buildSettingTree(settingRes.items, edges);
         setRoots(tree.roots);
         setHasOrphanEdges(tree.hasOrphanEdges);
@@ -127,7 +133,11 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     return (
       <div className="mt-3 flex flex-col gap-1">
         {Array.from({ length: 6 }, (_, i) => (
-          <div key={i} className="h-7 animate-pulse rounded bg-muted" style={{ marginLeft: `${(i % 3) * 16}px` }} />
+          <div
+            key={i}
+            className={cn(skeletonClass, "h-7")}
+            style={{ marginLeft: `${(i % 3) * 16}px` }}
+          />
         ))}
       </div>
     );
@@ -135,12 +145,16 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
 
   if (roots !== null && roots.length === 0) {
     return (
-      <div className="mt-3 rounded-lg border border-dashed border-border px-6 py-12 text-center">
-        <p className="text-sm text-muted-foreground">还没有设定，先新建一个吧</p>
-        <Button className="mt-4" type="button" onClick={() => navigate("/entities/setting")}>
-          去「设定」tab 新建
-        </Button>
-      </div>
+      <EmptyState
+        className="mt-3"
+        action={
+          <Button type="button" onClick={() => navigate("/entities/setting")}>
+            去「设定」tab 新建
+          </Button>
+        }
+      >
+        还没有设定，先新建一个吧
+      </EmptyState>
     );
   }
 
@@ -153,7 +167,9 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
       </ul>
       {(truncated || hasOrphanEdges) && (
         <p className="mt-3 text-xs text-muted-foreground">
-          {truncated ? `设定数量超过 ${TREE_SETTING_LIMIT}，仅展示前 ${TREE_SETTING_LIMIT} 个（可按名称搜索定位）；` : ""}
+          {truncated
+            ? `设定数量超过 ${TREE_SETTING_LIMIT}，仅展示前 ${TREE_SETTING_LIMIT} 个（可按名称搜索定位）；`
+            : ""}
           {hasOrphanEdges ? "部分设定的上级未在展示范围内，已作为独立节点展示。" : ""}
         </p>
       )}

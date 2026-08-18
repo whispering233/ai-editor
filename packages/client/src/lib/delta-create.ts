@@ -21,17 +21,19 @@ import { targetTypeLabel } from "./delta";
  * 不产生 Delta（决策 26：时间轴为结构化数据，变更追踪语义未定义；服务端 delta 端点亦
  * 不校验 event 目标）——下拉泄漏会出现「事件」死选项（label 回退原文、字段列表空）。
  */
-export const DELTA_TARGET_TYPE_OPTIONS: ReadonlyArray<{ value: string; label: string }> = ENTITY_TYPES.filter(
-  // event（决策 26：编辑事件 data 不产生 Delta）；timepoint（G2：data 恒空无可变更字段）均排除
-  (t) => t !== "event" && t !== "timepoint",
-).map((t) => ({
-  value: t,
-  label: targetTypeLabel(t),
-}));
+export const DELTA_TARGET_TYPE_OPTIONS: ReadonlyArray<{ value: string; label: string }> =
+  ENTITY_TYPES.filter(
+    // event（决策 26：编辑事件 data 不产生 Delta）；timepoint（G2：data 恒空无可变更字段）均排除
+    (t) => t !== "event" && t !== "timepoint",
+  ).map((t) => ({
+    value: t,
+    label: targetTypeLabel(t),
+  }));
 
 // ============ 字段清单（编译期断言 = shared ENTITY_DATA_SCHEMAS 的 keys） ============
 
-type EntityDataKey<T extends keyof typeof ENTITY_DATA_SCHEMAS> = keyof typeof ENTITY_DATA_SCHEMAS[T]["shape"];
+type EntityDataKey<T extends keyof typeof ENTITY_DATA_SCHEMAS> =
+  keyof (typeof ENTITY_DATA_SCHEMAS)[T]["shape"];
 
 /** 各实体类型 data 字段名（全量含 custom_fields；断言见下——shared schema 增删字段会编译报错） */
 const ENTITY_DATA_KEYS = {
@@ -46,8 +48,18 @@ const ENTITY_DATA_KEYS = {
     "custom_fields",
   ] as const satisfies readonly EntityDataKey<"character">[],
   // 决策 30/31 + K2（2026-08）：setting 字段 = description/tags（分类标签）/rules（规则条款）/custom_fields
-  setting: ["description", "tags", "rules", "custom_fields"] as const satisfies readonly EntityDataKey<"setting">[],
-  location: ["type", "parent_id", "description", "custom_fields"] as const satisfies readonly EntityDataKey<"location">[],
+  setting: [
+    "description",
+    "tags",
+    "rules",
+    "custom_fields",
+  ] as const satisfies readonly EntityDataKey<"setting">[],
+  location: [
+    "type",
+    "parent_id",
+    "description",
+    "custom_fields",
+  ] as const satisfies readonly EntityDataKey<"location">[],
   hook: [
     "status",
     "category",
@@ -111,7 +123,11 @@ export function entityDeltaFieldOptions(type: string): DeltaFieldOption[] {
   const keys = (ENTITY_DATA_KEYS as Record<string, readonly string[]>)[type] ?? [];
   return keys
     .filter((k) => k !== "custom_fields")
-    .map((k) => ({ key: k, label: ENTITY_FIELD_LABELS[type]?.[k] ?? k, array: isArrayField(type, k) }));
+    .map((k) => ({
+      key: k,
+      label: ENTITY_FIELD_LABELS[type]?.[k] ?? k,
+      array: isArrayField(type, k),
+    }));
 }
 
 // ============ op 推断与 changes 构造 ============
@@ -130,10 +146,10 @@ export function resolvableFromValue(v: unknown): string | number | null | undefi
 
 /** op 选项与默认值：数组 → [add, remove] 默认 add；标量 → 当前值可作 from 时 [update, set] 默认 update，
  *  否则仅 [set]（update 无旧值可写，避免提交被 400 拒绝） */
-export function inferOpOptions(args: {
-  array: boolean;
-  currentValue: unknown;
-}): { options: DeltaOp[]; default: DeltaOp } {
+export function inferOpOptions(args: { array: boolean; currentValue: unknown }): {
+  options: DeltaOp[];
+  default: DeltaOp;
+} {
   if (args.array) return { options: ["add", "remove"], default: "add" };
   return resolvableFromValue(args.currentValue) !== undefined
     ? { options: ["update", "set"], default: "update" }

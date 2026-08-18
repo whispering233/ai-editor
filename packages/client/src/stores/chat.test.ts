@@ -2,7 +2,12 @@
 // 订阅在 chat.ts 模块加载时激活：测试通过操作 useProjectStore.setState({config}) 驱动联动
 // mock lib/api 模块（保留 ApiError 类真实实现）与 use-sse（fetchSSE 捕获 options 后手动驱动事件回调）
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ChatMessage, ChatSessionSummary, ErrorCode, ProjectConfig } from "@whispering233/ai-editor-shared";
+import type {
+  ChatMessage,
+  ChatSessionSummary,
+  ErrorCode,
+  ProjectConfig,
+} from "@whispering233/ai-editor-shared";
 import { ApiError } from "../lib/api";
 
 vi.mock("../lib/api", async (importOriginal) => {
@@ -27,7 +32,12 @@ import {
   rejectProposal as apiRejectProposal,
 } from "../lib/api";
 import { fetchSSE } from "../hooks/use-sse";
-import { describeProposalActionError, describeStreamError, useChatStore, type ProposalCard } from "./chat";
+import {
+  describeProposalActionError,
+  describeStreamError,
+  useChatStore,
+  type ProposalCard,
+} from "./chat";
 import { useProjectStore } from "./project";
 import { useUiStore } from "./ui";
 
@@ -194,8 +204,20 @@ describe("loadMessages（U5：会话历史恢复）", () => {
       sessionId: "sess-1",
       messages: [
         { id: "m1", role: "user", content: "你好", createdAt: "t0" },
-        { id: "m2", role: "assistant", content: "你好！", toolCalls: [{ id: "call-1", tool: "get_entity" }], createdAt: "t1" },
-        { id: "m3", role: "tool", toolCallId: "call-1", content: "{\"name\":\"张三\"}", createdAt: "t2" },
+        {
+          id: "m2",
+          role: "assistant",
+          content: "你好！",
+          toolCalls: [{ id: "call-1", tool: "get_entity" }],
+          createdAt: "t1",
+        },
+        {
+          id: "m3",
+          role: "tool",
+          toolCallId: "call-1",
+          content: '{"name":"张三"}',
+          createdAt: "t2",
+        },
       ],
     });
     await useChatStore.getState().loadMessages("sess-1");
@@ -208,7 +230,9 @@ describe("loadMessages（U5：会话历史恢复）", () => {
   });
 
   it("失败 → messages 清空（静默 → 空态引导语）", async () => {
-    mocked.getSessionMessages.mockRejectedValue(new ApiError("CLIENT_NETWORK_ERROR", "网络请求失败"));
+    mocked.getSessionMessages.mockRejectedValue(
+      new ApiError("CLIENT_NETWORK_ERROR", "网络请求失败"),
+    );
     useChatStore.setState({ messages: [makeMsg({ id: "old" })] });
     await useChatStore.getState().loadMessages("sess-1");
     expect(useChatStore.getState().messages).toEqual([]);
@@ -226,7 +250,10 @@ describe("loadMessages（U5：会话历史恢复）", () => {
       messages: [{ id: "mb", role: "user", content: "B 的", createdAt: "t" }],
     });
     await useChatStore.getState().loadMessages("sess-b");
-    resolveA({ sessionId: "sess-a", messages: [{ id: "ma", role: "user", content: "A 的", createdAt: "t" }] });
+    resolveA({
+      sessionId: "sess-a",
+      messages: [{ id: "ma", role: "user", content: "A 的", createdAt: "t" }],
+    });
     await pA;
     const s = useChatStore.getState();
     expect(s.messages).toHaveLength(1);
@@ -328,15 +355,21 @@ describe("focus context 与断连标记（U5）", () => {
 
 describe("describeStreamError（U5：错误文案映射）", () => {
   it("HTTP 404 → 通用防御文案「聊天服务暂不可用」（S8.1：S7 已实现，分支仅防旧构建/服务未起）", () => {
-    expect(describeStreamError("CLIENT_NETWORK_ERROR", "SSE 请求失败（HTTP 404）")).toBe("聊天服务暂不可用");
+    expect(describeStreamError("CLIENT_NETWORK_ERROR", "SSE 请求失败（HTTP 404）")).toBe(
+      "聊天服务暂不可用",
+    );
   });
 
   it("网络失败 → 连接失败提示", () => {
-    expect(describeStreamError("CLIENT_NETWORK_ERROR", "fetch failed")).toBe("连接失败，请确认服务已启动");
+    expect(describeStreamError("CLIENT_NETWORK_ERROR", "fetch failed")).toBe(
+      "连接失败，请确认服务已启动",
+    );
   });
 
   it("非 2xx 无 REST 包裹（proxy 500）→ 透传 HTTP 状态文案，不误判「连接失败」（S8.1 oracle S2）", () => {
-    expect(describeStreamError("CLIENT_NETWORK_ERROR", "SSE 请求失败（HTTP 500）")).toBe("SSE 请求失败（HTTP 500）");
+    expect(describeStreamError("CLIENT_NETWORK_ERROR", "SSE 请求失败（HTTP 500）")).toBe(
+      "SSE 请求失败（HTTP 500）",
+    );
   });
 
   it("服务端 error 事件 → 透传 message", () => {
@@ -346,11 +379,15 @@ describe("describeStreamError（U5：错误文案映射）", () => {
 
 describe("describeProposalActionError（S8.2：提案动作非契约错误文案）", () => {
   it("INTERNAL_ERROR（500 执行失败）→ 引导重新生成提案", () => {
-    expect(describeProposalActionError("INTERNAL_ERROR", "提案执行失败")).toBe("提案执行失败，请让 AI 重新生成提案");
+    expect(describeProposalActionError("INTERNAL_ERROR", "提案执行失败")).toBe(
+      "提案执行失败，请让 AI 重新生成提案",
+    );
   });
 
   it("CLIENT_NETWORK_ERROR → 网络重试文案（不透传原始 fetch 错误）", () => {
-    expect(describeProposalActionError("CLIENT_NETWORK_ERROR", "fetch failed")).toBe("网络请求失败，请重试");
+    expect(describeProposalActionError("CLIENT_NETWORK_ERROR", "fetch failed")).toBe(
+      "网络请求失败，请重试",
+    );
   });
 
   it("未知码 → 透传服务端 message（防御兜底）", () => {
@@ -409,7 +446,10 @@ describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
     onEvent("text", { delta: "我" });
     onEvent("text", { delta: "好" });
     onEvent("ping", {});
-    expect(useChatStore.getState().messages[1]).toMatchObject({ role: "assistant", content: "我好" });
+    expect(useChatStore.getState().messages[1]).toMatchObject({
+      role: "assistant",
+      content: "我好",
+    });
   });
 
   it("tool_call / tool_result 事件 → 运行时工具记录（成对更新；result 为字符串——S8.1 对齐 S7.6 帧契约）", () => {
@@ -420,7 +460,11 @@ describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
       { id: "call-1", tool: "get_entity", args: { id: "char-1" }, status: "running" },
     ]);
     // S7.6 帧事实契约（chat.test.ts）：result 为字符串——JSON.stringify 结果或错误文案，非对象
-    onEvent("tool_result", { tool: "get_entity", result: JSON.stringify({ name: "张三" }), id: "call-1" });
+    onEvent("tool_result", {
+      tool: "get_entity",
+      result: JSON.stringify({ name: "张三" }),
+      id: "call-1",
+    });
     expect(useChatStore.getState().streamTools[0]).toMatchObject({
       status: "ok",
       result: JSON.stringify({ name: "张三" }),
@@ -430,9 +474,18 @@ describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
   it("proposal 事件 → 提案卡累积（pending）", () => {
     useChatStore.getState().sendMessage("你好");
     const { onEvent } = sseOptions();
-    onEvent("proposal", { proposal_id: "prop-1", type: "propose_update_entity", preview: { from: 1, to: 2 } });
+    onEvent("proposal", {
+      proposal_id: "prop-1",
+      type: "propose_update_entity",
+      preview: { from: 1, to: 2 },
+    });
     expect(useChatStore.getState().proposals).toEqual([
-      { proposalId: "prop-1", type: "propose_update_entity", preview: { from: 1, to: 2 }, status: "pending" },
+      {
+        proposalId: "prop-1",
+        type: "propose_update_entity",
+        preview: { from: 1, to: 2 },
+        status: "pending",
+      },
     ]);
   });
 
@@ -457,7 +510,11 @@ describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
     onEvent("text", { delta: "第一段" });
     onEvent("text", { delta: "第二段" });
     // tool_call → 工具行 running
-    onEvent("tool_call", { tool: "propose_create_entity", args: { type: "character", name: "张三" }, id: "call_1" });
+    onEvent("tool_call", {
+      tool: "propose_create_entity",
+      args: { type: "character", name: "张三" },
+      id: "call_1",
+    });
     // tool_result（S7.6 帧契约：result 为字符串；proposal 在对应 tool_result 之后）
     onEvent("tool_result", {
       tool: "propose_create_entity",
@@ -467,7 +524,11 @@ describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
     onEvent("proposal", {
       proposal_id: "prop_1",
       type: "propose_create_entity",
-      preview: { type: "propose_create_entity", summary: "创建角色张三", args: { type: "character", name: "张三" } },
+      preview: {
+        type: "propose_create_entity",
+        summary: "创建角色张三",
+        args: { type: "character", name: "张三" },
+      },
     });
     // 收尾文本 + done（新会话 sess_ 前缀，endpoints.md id 约定）
     onEvent("text", { delta: "完成" });
@@ -491,7 +552,11 @@ describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
       {
         proposalId: "prop_1",
         type: "propose_create_entity",
-        preview: { type: "propose_create_entity", summary: "创建角色张三", args: { type: "character", name: "张三" } },
+        preview: {
+          type: "propose_create_entity",
+          summary: "创建角色张三",
+          args: { type: "character", name: "张三" },
+        },
         status: "pending",
       },
     ]);
@@ -607,7 +672,12 @@ describe("confirmProposal / rejectProposal（S8.2：提案卡接入 S7.5 confirm
     await useChatStore.getState().confirmProposal("prop-1");
     expect(mocked.confirmProposal).toHaveBeenCalledWith("prop-1");
     expect(useChatStore.getState().proposals).toEqual([
-      { proposalId: "prop-1", type: "propose_create_entity", status: "confirmed", processing: false },
+      {
+        proposalId: "prop-1",
+        type: "propose_create_entity",
+        status: "confirmed",
+        processing: false,
+      },
     ]);
   });
 
@@ -632,25 +702,37 @@ describe("confirmProposal / rejectProposal（S8.2：提案卡接入 S7.5 confirm
     useChatStore.setState({ proposals: [makeProposal({ proposalId: "prop-1" })] });
     await useChatStore.getState().rejectProposal("prop-1");
     expect(mocked.rejectProposal).toHaveBeenCalledWith("prop-1");
-    expect(useChatStore.getState().proposals[0]).toMatchObject({ status: "rejected", processing: false });
+    expect(useChatStore.getState().proposals[0]).toMatchObject({
+      status: "rejected",
+      processing: false,
+    });
   });
 
   it("409 PROPOSAL_STALE → status=stale（卡标「⚠ 数据已变化，此提案已失效」+ 按钮禁用）", async () => {
-    mocked.confirmProposal.mockRejectedValue(new ApiError("PROPOSAL_STALE", "提案引用对象已变化: entity char-9"));
+    mocked.confirmProposal.mockRejectedValue(
+      new ApiError("PROPOSAL_STALE", "提案引用对象已变化: entity char-9"),
+    );
     useChatStore.setState({ proposals: [makeProposal({ proposalId: "prop-1" })] });
     await useChatStore.getState().confirmProposal("prop-1");
-    expect(useChatStore.getState().proposals[0]).toMatchObject({ status: "stale", processing: false });
+    expect(useChatStore.getState().proposals[0]).toMatchObject({
+      status: "stale",
+      processing: false,
+    });
   });
 
   it("404 PROPOSAL_NOT_FOUND → 移除卡片（提案已过期清除/SSE 断开作废）", async () => {
-    mocked.confirmProposal.mockRejectedValue(new ApiError("PROPOSAL_NOT_FOUND", "提案不存在或已过期"));
+    mocked.confirmProposal.mockRejectedValue(
+      new ApiError("PROPOSAL_NOT_FOUND", "提案不存在或已过期"),
+    );
     useChatStore.setState({ proposals: [makeProposal({ proposalId: "prop-1" })] });
     await useChatStore.getState().confirmProposal("prop-1");
     expect(useChatStore.getState().proposals).toEqual([]);
   });
 
   it("409 PROPOSAL_PROJECT_MISMATCH → 移除卡片（防御：切项目已清空提案，理论不可达）", async () => {
-    mocked.rejectProposal.mockRejectedValue(new ApiError("PROPOSAL_PROJECT_MISMATCH", "提案所属项目与当前项目不一致"));
+    mocked.rejectProposal.mockRejectedValue(
+      new ApiError("PROPOSAL_PROJECT_MISMATCH", "提案所属项目与当前项目不一致"),
+    );
     useChatStore.setState({ proposals: [makeProposal({ proposalId: "prop-1" })] });
     await useChatStore.getState().rejectProposal("prop-1");
     expect(useChatStore.getState().proposals).toEqual([]);
@@ -659,10 +741,15 @@ describe("confirmProposal / rejectProposal（S8.2：提案卡接入 S7.5 confirm
   it("其他错误（500 INTERNAL_ERROR 执行失败）→ 保持 pending 可重试 + toast 错误提示（U6 全局反馈）", async () => {
     // INTERNAL_ERROR 不在 shared ErrorCode 枚举（proposal.ts 注释：契约未定义该错误码，前端按通用错误呈现）——
     // 运行时错误码是普通字符串，store default 分支按字符串匹配，测试构造仅需类型断言
-    mocked.confirmProposal.mockRejectedValue(new ApiError("INTERNAL_ERROR" as ErrorCode, "提案执行失败"));
+    mocked.confirmProposal.mockRejectedValue(
+      new ApiError("INTERNAL_ERROR" as ErrorCode, "提案执行失败"),
+    );
     useChatStore.setState({ proposals: [makeProposal({ proposalId: "prop-1" })] });
     await useChatStore.getState().confirmProposal("prop-1");
-    expect(useChatStore.getState().proposals[0]).toMatchObject({ status: "pending", processing: false });
+    expect(useChatStore.getState().proposals[0]).toMatchObject({
+      status: "pending",
+      processing: false,
+    });
     expect(useUiStore.getState().toast).toMatchObject({
       kind: "error",
       text: "提案执行失败，请让 AI 重新生成提案",
@@ -673,7 +760,10 @@ describe("confirmProposal / rejectProposal（S8.2：提案卡接入 S7.5 confirm
     mocked.confirmProposal.mockRejectedValue(new ApiError("CLIENT_NETWORK_ERROR", "fetch failed"));
     useChatStore.setState({ proposals: [makeProposal({ proposalId: "prop-1" })] });
     await useChatStore.getState().confirmProposal("prop-1");
-    expect(useChatStore.getState().proposals[0]).toMatchObject({ status: "pending", processing: false });
+    expect(useChatStore.getState().proposals[0]).toMatchObject({
+      status: "pending",
+      processing: false,
+    });
     expect(useUiStore.getState().toast?.text).toBe("网络请求失败，请重试");
   });
 
@@ -691,7 +781,9 @@ describe("confirmProposal / rejectProposal（S8.2：提案卡接入 S7.5 confirm
   });
 
   it("防重复：非 pending（已确认）再次调用忽略", async () => {
-    useChatStore.setState({ proposals: [makeProposal({ proposalId: "prop-1", status: "confirmed" })] });
+    useChatStore.setState({
+      proposals: [makeProposal({ proposalId: "prop-1", status: "confirmed" })],
+    });
     await useChatStore.getState().confirmProposal("prop-1");
     expect(mocked.confirmProposal).not.toHaveBeenCalled();
   });

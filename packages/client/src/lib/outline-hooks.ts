@@ -40,7 +40,9 @@ function typeRank(relationType: string): number {
  * - 稳定排序：类型序（HOOK_MARK_TYPE_ORDER）→ 名称 → id（同节点多标记排列确定化，跨请求合并后不乱序）
  * 纯函数：调用方负责取数（Outline.tsx 并行三请求后传入合并结果）；返回 Map 仅含「有标记的节点」
  */
-export function buildNodeHookMarks(relations: readonly RelationSummaryItem[]): Map<string, NodeHookMark[]> {
+export function buildNodeHookMarks(
+  relations: readonly RelationSummaryItem[],
+): Map<string, NodeHookMark[]> {
   const marksByNode = new Map<string, NodeHookMark[]>();
   for (const r of relations) {
     // 形状防御：类型必须属于标记集、且符合 hooks.md「outline_node → hook」方向（source 节点侧）
