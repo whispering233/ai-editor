@@ -13,7 +13,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 
 ## 项目状态（2026-08）
 
-- **完成**：阶段 A 地基 + 切片 1-9、12、13 + 阶段 U（U1-U8）+ 交互修复批次 + 切片 10 画布（S10.1）+ 切片 11 发布（S11.1-S11.3）+ 发布阻断项 E1-E6（导出/导入、未来版本拒绝重建、增量迁移、发布链路 OIDC 全绿）+ 阶段 B（B1 项目提示词编辑）+ 阶段 C 时间轴（C1-C4，决策 26）+ 画布增强批次（S10.2-S10.5）+ 交互优化批次（UX1-UX4）+ 阶段 B2 自动备份与恢复（B2.1-B2.6，决策 27/28/29）+ **用户反馈批次一 F1-F9（2026-08 实测）** + **用户反馈批次二 G1-G3（G1 区块独立滚动 / G2 时间标签点实体化 / G3 滚动位置保持，2026-08 实测）** + **用户反馈批次三 H1-H6（时间轴交互与视觉优化，2026-08 实测）** + **用户反馈批次四 I1-I4（实体关系增强，2026-08 实测，决策 30）** + **用户反馈批次五 J1-J3 + K1/K2（输入提示与标签筛选，2026-08 实测，决策 31）** + **发布 v0.0.10（2026-08-17）**：occurs_in 中文映射补齐（bug）/ 详情图标统一 Eye / 设定层级 = belongs_to（parent_id 废弃 + 防环 + 层级区块 + 设定树视图）/ 分类统一 data.tags（category 废弃 + 004 迁移 SCHEMA_VERSION 4 + rules 恢复规则条款语义）/ datalist 自动完成 + 快捷选择 / 标签筛选 ?tag= / 新建不自动跳详情 / autoComplete=off。 + **L 批次前端样式工程化（L1-L4，2026-08）**：client 包引入 Prettier + prettier-plugin-tailwindcss（长 className 自动折行 + 类排序）；`lib/styles.ts` 共享样式常量（iconButton/input/errorBanner/skeleton/sectionCard）+ `EmptyState`/`SectionCard` 组件；全仓硬编码色类（zinc/white/red）清零 token 化；layout.md §4.4 样式书写规范；CSS Modules 评估关闭（Canvas/时间轴几何在 JS 计算、CSS 仅工具类）。 + **发布 v0.0.11（2026-08-18）**：样式工程化版本（纯前端，无 API/数据变更）。
+- **完成**：阶段 A 地基 + 切片 1-9、12、13 + 阶段 U（U1-U8）+ 交互修复批次 + 切片 10 画布（S10.1）+ 切片 11 发布（S11.1-S11.3）+ 发布阻断项 E1-E6（导出/导入、未来版本拒绝重建、增量迁移、发布链路 OIDC 全绿）+ 阶段 B（B1 项目提示词编辑）+ 阶段 C 时间轴（C1-C4，决策 26）+ 画布增强批次（S10.2-S10.5）+ 交互优化批次（UX1-UX4）+ 阶段 B2 自动备份与恢复（B2.1-B2.6，决策 27/28/29）+ **用户反馈批次一 F1-F9（2026-08 实测）** + **用户反馈批次二 G1-G3（G1 区块独立滚动 / G2 时间标签点实体化 / G3 滚动位置保持，2026-08 实测）** + **用户反馈批次三 H1-H6（时间轴交互与视觉优化，2026-08 实测）** + **用户反馈批次四 I1-I4（实体关系增强，2026-08 实测，决策 30）** + **用户反馈批次五 J1-J3 + K1/K2（输入提示与标签筛选，2026-08 实测，决策 31）** + **发布 v0.0.10（2026-08-17）**：occurs_in 中文映射补齐（bug）/ 详情图标统一 Eye / 设定层级 = belongs_to（parent_id 废弃 + 防环 + 层级区块 + 设定树视图）/ 分类统一 data.tags（category 废弃 + 004 迁移 SCHEMA_VERSION 4 + rules 恢复规则条款语义）/ datalist 自动完成 + 快捷选择 / 标签筛选 ?tag= / 新建不自动跳详情 / autoComplete=off。 + **L 批次前端样式工程化（L1-L4，2026-08）**：client 包引入 Prettier + prettier-plugin-tailwindcss（长 className 自动折行 + 类排序）；`lib/styles.ts` 共享样式常量（iconButton/input/errorBanner/skeleton/sectionCard）+ `EmptyState`/`SectionCard` 组件；全仓硬编码色类（zinc/white/red）清零 token 化；layout.md §4.4 样式书写规范；CSS Modules 评估关闭（Canvas/时间轴几何在 JS 计算、CSS 仅工具类）。 + **发布 v0.0.11（2026-08-18）**：样式工程化版本（纯前端，无 API/数据变更）。 + **用户反馈批次六 M1-M3（2026-08）**：M1 标签编辑器回车添加下一项（bug）/ M2 设定列表行显示上级设定与描述（交互，EntitySummary 契约扩展）/ M3 标签列表拖拽排序（新需求，零依赖）。
 - **待做**：无。可选收尾：npm 坏版本 v0.0.1/v0.0.2 deprecate 标注（需 2FA 凭据，见 AGENTS.md 发布流程段）；backlog.md 事项一律不做。
 - **测试**：全仓 1609 个（shared 131 / llm 59 / db 244 / server 326 / client 518 / tools 237 / agent 94）。
 - 已完成卡片的详细规格已归档（git history 可回溯，见下方「任务卡归档」）；「项目演进路线」提供脉络摘要，配合 `decisions.md`（决策 1-31 为设计主轴）理解现状。
@@ -30,9 +30,9 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 
 ## 批次六（M1-M3，2026-08 用户反馈）
 
-- [ ] M1（bug）实体详情页标签编辑器「输入后回车添加下一项」——回车无行为（placeholder 承诺未兑现）；修复：行内回车 = 添加下一项（非末行聚焦下一行 / 末行非空追加空行并聚焦 / 末行空回车无操作）→ `lib/tags-editor.ts` 纯函数 + 测试
-- [ ] M2（交互）设定列表行显示上级设定与描述：EntitySummary 新增 `parentId`/`parentName`（仅 setting，服务端列表补查 belongs_to 层级边映射）；setting summary 新增 description（截断 100 字符）；前端列表列改为 名称|标签|上级设定|描述|更新时间，上级设定 chip 可点击跳父详情
-- [ ] M3（新需求）详情页标签列表（rules/tags/personality/abilities）拖拽排序：GripVertical 手柄 + HTML5 原生 DnD（零依赖）；仅拖拽进行中响应 drop（不干扰输入框文本拖选）；`moveArrayItem` 纯函数 + 测试
+- [x] M1（bug）实体详情页标签编辑器「输入后回车添加下一项」——回车无行为（placeholder 承诺未兑现）；修复：行内回车 = 添加下一项（非末行聚焦下一行 / 末行非空追加空行并聚焦 / 末行空回车无操作）→ `lib/tags-editor.ts` 纯函数 + 测试（`abf346d`）
+- [x] M2（交互）设定列表行显示上级设定与描述：EntitySummary 新增 `parentId`/`parentName`（仅 setting，服务端列表补查 belongs_to 层级边映射）；setting summary 新增 description（截断 100 字符）；前端列表列改为 名称|标签|上级设定|描述|更新时间，上级设定 chip 可点击跳父详情（`1069bb1`）
+- [x] M3（新需求）详情页标签列表（rules/tags/personality/abilities）拖拽排序：GripVertical 手柄 + HTML5 原生 DnD（零依赖）；仅拖拽进行中响应 drop（不干扰输入框文本拖选）；`moveArrayItem` 纯函数 + 测试（`715eb0d`）
 
 ---
 
@@ -73,6 +73,8 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 **用户反馈批次四（I1-I4，2026-08）——实体关系增强（决策 30）**：I1 关系类型 `occurs_in` 中文映射补齐（17 种「锚定于」，与 occurs_at「发生于」区分）；I2 详情入口图标 BookOpen 统一为 Eye；**I3 设定层级 = `belongs_to` 关系（决策 30：`data.parent_id` 废弃不再读写，zod 移除定义 + R5 仅保留 location + 无迁移，旧字段 passthrough 容错）**——db 全量层级边邻接表（`listSettingHierarchyEdges`，走关系表索引）+ 防环校验（`wouldCreateSettingCycle` 祖先链 O(深度)）、server `POST /relation` 对 belongs_to 两端均为 setting 的 400 校验（自指/成环）、客户端详情页「层级」区块（父/子分区 + 修改上级先建后删 + 清除）+ 新建行「上级设定」弹层搜索选择器（创建后补建关系）；I4 设定树视图——实体关系第 6 tab「设定树」（`buildSettingTree` 纯函数：根 = 无父设定、父截断提升为根防御；递归树 + 折叠 + 类别徽标 + 子数 + 节点点击跳详情）。
 
 **L 批次前端样式工程化（L1-L4，2026-08）——样式工程化重构**：client 包引入 **Prettier + prettier-plugin-tailwindcss**（printWidth 100 + tailwindStylesheet；长 className 自动折行、类顺序统一，新代码格式工具兑底）；新建 **`lib/styles.ts` 共享样式常量**（提取阈值 ≥3 处：iconButtonBaseClass/iconButtonSize（bar/sm/md）/iconButtonDisabledClass/inputClass（不含宽度类——Tailwind 4 同属性类按值排序、w-full 会压掉 w-40）/errorBannerClass/skeletonClass/sectionCardClass）+ **`EmptyState`**（空态容器：padding sm/md/lg 参数化规避 py-* 覆盖坑）/ **`SectionCard`**（上提自 OutlineDetail 局部 Card）组件；**全仓硬编码色类清零**（zinc/white/red 50+ 处 → token 类，EntityList 原 30+ 处，深色主题亮色异常同步修复）；空态统一后仅 1 处视觉微调（Timeline py-8→py-10）；**C 项 CSS Modules 评估关闭**——Canvas/时间轴几何均在 JS 计算、CSS 仅工具类、动画在 index.css，无 Tailwind 无法表达的样式，不硬转（契约：后续引入须同时满足「Tailwind 无法表达」+「重复 ≥3 处」）。
+
+**用户反馈批次六（M1-M3，2026-08）——实体/规则编辑与列表展示**：M1 标签编辑器回车添加下一项（bug：placeholder 承诺未兑现——非末行聚焦下一行 / 末行非空追加空行并聚焦 / 末行空无操作防空行跑马灯；`enterBehavior` 纯函数）；M2 设定列表行显示上级设定与描述（交互：EntitySummary 契约扩展 `parentId`/`parentName` 仅 setting 填充——服务端列表补查全量 belongs_to 层级边按 childId 映射，软删可见性复用 listRelations；setting 摘要新增 description 截断 100 字符防 search_entities 上下文膨胀；前端列 名称|标签|上级设定|描述|更新时间，上级 chip 点击跳父详情；顺带修正 entity-list.md 决策 31 后过期的 summary.category）；M3 标签列表拖拽排序（新需求：GripVertical 手柄 + HTML5 原生 DnD 零依赖，仅拖拽进行中响应 drop 不干扰输入框文本拖选，`moveArrayItem` 纯函数；TagsEditor 共用组件故 rules/tags/personality/abilities 四列表同步受益；排序只改本地表单数组随 data 提交，无独立 API）。
 
 ---
 
@@ -124,6 +126,9 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 | L3 | 页面样式整理 | `ad79f57` | pages/ 10 文件；EmptyState/SectionCard/errorBanner/skeleton 接入；zinc 硬编码色 token 化 |
 | L4 | 其余组件收尾 | `6ce218d` | delta/entity/timeline 等；inputClass 接入；全仓硬编码色清零；回归验证 |
 | L-C | CSS Modules 评估（C 项） | `2dba11a` | 评估关闭：Canvas/时间轴几何在 JS 计算、CSS 仅工具类，无适用样式 |
+| M1 | 标签编辑器回车添加下一项（bug） | `abf346d` | 回车 = 非末行聚焦下一行/末行非空追加空行并聚焦/末行空无操作；enterBehavior 纯函数 + 测试 |
+| M2 | 设定列表行显示上级设定与描述（交互） | `1069bb1` | EntitySummary +parentId/parentName（仅 setting，服务端补查 belongs_to 映射）；setting 摘要 +description（截断 100）；列表 5 列 + 上级 chip 跳父详情；顺带修正 entity-list.md 过期 category |
+| M3 | 标签列表拖拽排序（新需求） | `715eb0d` | GripVertical 手柄 + HTML5 原生 DnD（零依赖）；仅拖拽中响应 drop 不干扰文本拖选；moveArrayItem + 测试 |
 
 ---
 
