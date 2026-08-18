@@ -5,6 +5,24 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [v0.0.12] - 2026-08-18
+
+### Fixed
+
+- **实体详情标签编辑器「输入后回车添加下一项」（M1，2026-08 用户反馈批次六）**——placeholder 承诺了回车行为但未实现（回车无任何反应）：行内回车现在 = 添加下一项——非末行聚焦下一行、末行且非空追加空行并聚焦、末行且为空无操作（防空行跑马灯）；行为决策下沉 `lib/tags-editor.ts` 纯函数（`enterBehavior`）+ vitest 覆盖
+
+### Changed
+
+- **设定列表行显示上级设定与描述（M2，交互优化，2026-08 用户反馈批次六）**：
+  - `GET /entity/:type` 列表响应：`EntitySummary` 新增 `parentId`/`parentName`（**仅 setting 填充**——服务端补查全量 belongs_to 层级边按 childId 映射，无父的设定不出现该字段，软删端点由既有可见性过滤兜底）
+  - setting 摘要新增 `description`（**截断 100 字符**——列表行展示用，防 `search_entities` AI 工具上下文膨胀；完整文本在详情页）
+  - 前端设定列表列：名称 | 标签 | 上级设定 | 描述 | 更新时间；上级设定渲染为可点击 chip（点击直达父设定详情，不触发行点击）；描述行 truncate + hover title 查看
+  - 契约文档同步：`endpoints.md` EntitySummary 契约 + `entity-list.md` 信息层级表（顺带修正决策 31 后过期的 `summary.category` 表述）
+
+### Added
+
+- **标签列表拖拽排序（M3，新需求，2026-08 用户反馈批次六）**——详情页标签编辑器（`rules`/`tags`/`personality`/`abilities` 共用组件）每行前置拖拽手柄（GripVertical + **HTML5 原生 DnD，零新依赖**）：拖动行降透明度 + 目标行 ring 高亮；仅在自身拖拽进行中响应 drop（不干扰输入框内文本拖选/拖入）；Firefox setData 兼容；排序只改本地表单数组随 `data` 提交（数组顺序即存储顺序，无独立 API）；`moveArrayItem` 纯函数 + 测试
+
 ## [v0.0.11] - 2026-08-18
 
 ### Changed
