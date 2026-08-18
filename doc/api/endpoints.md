@@ -415,12 +415,18 @@ type: "character" | "setting" | "location" | "hook" | "event" | "timepoint";
   name: string;
   // 各类型的关键摘要字段：
   //   character → role, status
-  //   setting   → tags (data.tags 前 3 个，决策 31 K2：分类统一字段，与 event 同语义)
+  //   setting   → tags (data.tags 前 3 个，决策 31 K2：分类统一字段，与 event 同语义),
+  //               description (M2，2026-08：data.description 截断 100 字符——列表行展示；
+  //               截断防 search_entities 工具上下文膨胀，完整文本在详情页)
   //   location  → type
   //   hook      → status, payoff_timing (从 data JSON 提取)
   //   event     → description, tags (从 data JSON 提取)
   //   timepoint → （无专属摘要字段，G2：时间标签文本 = name）
   summary: Record<string, unknown>;
+  // M2（2026-08 批次六）：**仅 setting 类型填充**——层级 = belongs_to 关系（决策 30），
+  // 服务端列表响应时补查设定间层级边，按 childId 映射附加；无父的设定不出现该字段（稀疏）
+  parentId?: string;
+  parentName?: string;
   createdAt: string;
   updatedAt: string;
 }

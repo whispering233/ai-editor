@@ -350,6 +350,9 @@ export const entitySummarySchema: z.ZodType<EntitySummary> = z.object({
   type: entityTypeSchema,
   name: z.string(),
   summary: z.record(z.string(), z.unknown()), // 从 data 提取的关键摘要字段
+  // M2（2026-08 批次六）：仅 setting 列表填充（决策 30 层级 = belongs_to）
+  parentId: z.string().optional(),
+  parentName: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

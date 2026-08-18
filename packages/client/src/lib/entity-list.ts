@@ -11,18 +11,32 @@ export function pageCount(total: number, limit: number): number {
   return Math.max(1, Math.ceil(total / limit));
 }
 
-/** 摘要列配置（列表表格列；key = EntitySummary.summary 字段名；key2 可选——部分类型只有一列摘要） */
+/** 摘要列配置（列表表格列；key = EntitySummary.summary 字段名；key2/key3 可选——部分类型只有一列摘要）
+ * 特殊约定：key2 === "parent"（仅 setting）为**上级设定列**——值取 EntitySummary 顶层
+ * parentId/parentName（M2，2026-08 批次六：层级 = belongs_to 关系，非 summary 字段），
+ * 渲染为可点击 chip 跳父设定详情；无父 → 「—」占位 */
 export interface SummaryColumnConfig {
   key1: string;
   label1: string;
   key2?: string;
   label2?: string;
+  key3?: string;
+  label3?: string;
 }
 
 export const SUMMARY_COLUMNS: Record<EntityType, SummaryColumnConfig> = {
   character: { key1: "role", label1: "角色", key2: "status", label2: "状态" },
   // 决策 31（2026-08）：设定分类由 rules 标签承接，摘要列从「类别」改为「标签」
-  setting: { key1: "tags", label1: "标签" },
+  // M2（2026-08 批次六）：追加「上级设定」列（key2="parent" 特殊列）与「描述」列（summary.description，
+  // 服务端截断 100 字符——endpoints.md EntitySummary 契约）
+  setting: {
+    key1: "tags",
+    label1: "标签",
+    key2: "parent",
+    label2: "上级设定",
+    key3: "description",
+    label3: "描述",
+  },
   location: { key1: "type", label1: "类型" },
   hook: { key1: "status", label1: "状态", key2: "payoff_timing", label2: "回收时机" },
   // C1 类型补全（决策 26 event 时间轴事件；服务端 event 摘要为空对象，时间轴专属 UI 由 C2 实现）
@@ -63,6 +77,11 @@ export function summaryCellText(type: EntityType, key: string, value: unknown): 
     return tags.length > 0 ? tags.join("、") : "—";
   }
   return String(value);
+}
+
+/** 上级设定列文案（M2，2026-08 批次六）：parentName 非空 → 名称；无父 → 「—」占位 */
+export function parentCellText(item: { parentName?: string }): string {
+  return item.parentName !== undefined && item.parentName !== "" ? item.parentName : "—";
 }
 
 /** 创建行首字段配置（原型「name 必填 + 该类型首字段，如 character 的 role」） */

@@ -32,6 +32,10 @@ export interface EntitySummary {
   type: EntityType;
   name: string;
   summary: Record<string, unknown>;
+  /** 上级设定（M2，2026-08 批次六）：**仅 setting 类型填充**——层级 = belongs_to 关系（决策 30），
+   * 服务端列表响应时补查设定间层级边按 childId 映射附加；无父的设定不出现（稀疏语义） */
+  parentId?: string;
+  parentName?: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -31,6 +31,7 @@ import {
   CREATE_FIRST_FIELD,
   PAGE_LIMIT,
   pageCount,
+  parentCellText,
   SUMMARY_COLUMNS,
   summaryCellText,
 } from "../lib/entity-list";
@@ -530,6 +531,7 @@ export default function EntityList({ type }: { type: string }) {
                   <div className={cn(skeletonClass, "h-4 w-1/4")} />
                   <div className={cn(skeletonClass, "h-4 w-1/6")} />
                   {col.key2 && <div className={cn(skeletonClass, "h-4 w-1/6")} />}
+                  {col.key3 && <div className={cn(skeletonClass, "h-4 w-1/6")} />}
                   <div className={cn(skeletonClass, "ml-auto h-4 w-16")} />
                 </div>
               ))}
@@ -567,6 +569,7 @@ export default function EntityList({ type }: { type: string }) {
                     <th className="px-3 py-2 font-normal">名称</th>
                     <th className="px-3 py-2 font-normal">{col.label1}</th>
                     {col.key2 && <th className="px-3 py-2 font-normal">{col.label2}</th>}
+                    {col.key3 && <th className="px-3 py-2 font-normal">{col.label3}</th>}
                     <th className="px-3 py-2 text-right font-normal">更新时间</th>
                   </tr>
                 </thead>
@@ -584,9 +587,43 @@ export default function EntityList({ type }: { type: string }) {
                       <td className="max-w-40 truncate px-3 py-2 text-muted-foreground">
                         {summaryCellText(entityType, col.key1, item.summary[col.key1])}
                       </td>
-                      {col.key2 && (
-                        <td className="max-w-40 truncate px-3 py-2 text-muted-foreground">
-                          {summaryCellText(entityType, col.key2, item.summary[col.key2])}
+                      {col.key2 &&
+                        (col.key2 === "parent" ? (
+                          // 上级设定列（M2，仅 setting）：parentId 存在 → 可点击 chip 跳父详情（stopPropagation
+                          // 不触发行点击）；无父 → 「—」占位（parentCellText 文案，防御缺字段）
+                          <td className="max-w-32 truncate px-3 py-2">
+                            {item.parentId ? (
+                              <button
+                                type="button"
+                                title={`打开上级设定《${parentCellText(item)}》`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(`/entities/setting/${item.parentId}`);
+                                }}
+                                className="rounded-md border border-border px-1.5 py-0.5 text-xs text-foreground hover:bg-muted hover:text-foreground"
+                              >
+                                {parentCellText(item)}
+                              </button>
+                            ) : (
+                              <span className="text-muted-foreground/70">—</span>
+                            )}
+                          </td>
+                        ) : (
+                          <td className="max-w-40 truncate px-3 py-2 text-muted-foreground">
+                            {summaryCellText(entityType, col.key2, item.summary[col.key2])}
+                          </td>
+                        ))}
+                      {col.key3 && (
+                        // 描述列（M2，仅 setting）：行内 truncate + hover title 查看完整摘要（服务端已截断 100 字符）
+                        <td
+                          className="max-w-40 truncate px-3 py-2 text-muted-foreground"
+                          title={
+                            typeof item.summary[col.key3] === "string"
+                              ? (item.summary[col.key3] as string)
+                              : undefined
+                          }
+                        >
+                          {summaryCellText(entityType, col.key3, item.summary[col.key3])}
                         </td>
                       )}
                       <td className="px-3 py-2 text-right text-xs whitespace-nowrap text-muted-foreground/70">

@@ -67,6 +67,28 @@ entityRoutes.get("/:type", (c) => {
     order,
     filters: tag !== undefined ? { tags: [tag] } : undefined,
   });
+  // M2（2026-08 批次六）：setting 列表附加上级设定（决策 30 层级 = belongs_to）——
+  // 补查全量设定间层级边（listRelations 已做软删端点可见性过滤），按 childId 映射附加
+  // parentId/parentName（稀疏：无父的设定不出现该字段）；其余类型不附加（契约：仅 setting）
+  if (type === "setting") {
+    const { relations } = listRelations(
+      project.db,
+      { sourceType: "setting", targetType: "setting", relationType: "belongs_to" },
+      1,
+      project.root,
+    );
+    const parentByChild = new Map<string, { parentId: string; parentName?: string }>();
+    for (const r of relations) {
+      parentByChild.set(r.sourceId, {
+        parentId: r.targetId,
+        ...(r.targetName !== undefined ? { parentName: r.targetName } : {}),
+      });
+    }
+    result.items = result.items.map((item) => {
+      const parent = parentByChild.get(item.id);
+      return parent !== undefined ? { ...item, ...parent } : item;
+    });
+  }
   return c.json(
     ok({
       items: result.items, // EntitySummary（db 已提取：id/type/name/summary/createdAt/updatedAt，camelCase）

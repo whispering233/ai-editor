@@ -1,6 +1,12 @@
 // entity-list 纯函数与配置测试（S3.5）：分页计算、摘要列配置完整性、单元格文案映射、创建首字段配置
 import { describe, expect, it } from "vitest";
-import { CREATE_FIRST_FIELD, pageCount, SUMMARY_COLUMNS, summaryCellText } from "./entity-list";
+import {
+  CREATE_FIRST_FIELD,
+  pageCount,
+  parentCellText,
+  SUMMARY_COLUMNS,
+  summaryCellText,
+} from "./entity-list";
 
 describe("pageCount（分页页数计算）", () => {
   it("total 0 → 1 页（空态仍显示「第 1 / 1 页」）", () => {
@@ -26,10 +32,14 @@ describe("SUMMARY_COLUMNS（摘要列配置——原型信息层级表）", () =
     expect(SUMMARY_COLUMNS.hook.key1).toBe("status");
   });
 
-  it("character 与 hook 有列 2（status / payoff_timing），setting/location 无", () => {
+  it("character 与 hook 有列 2（status / payoff_timing）；setting 有列 2 上级设定（M2 特殊列）+ 列 3 描述；location 无列 2", () => {
     expect(SUMMARY_COLUMNS.character.key2).toBe("status");
     expect(SUMMARY_COLUMNS.hook.key2).toBe("payoff_timing");
-    expect(SUMMARY_COLUMNS.setting.key2).toBeUndefined();
+    // M2（2026-08 批次六）：key2="parent" 为上级设定特殊列（值取 EntitySummary 顶层 parentName，非 summary）
+    expect(SUMMARY_COLUMNS.setting.key2).toBe("parent");
+    expect(SUMMARY_COLUMNS.setting.label2).toBe("上级设定");
+    expect(SUMMARY_COLUMNS.setting.key3).toBe("description");
+    expect(SUMMARY_COLUMNS.setting.label3).toBe("描述");
     expect(SUMMARY_COLUMNS.location.key2).toBeUndefined();
   });
 
@@ -60,6 +70,18 @@ describe("summaryCellText（摘要单元格文案）", () => {
     expect(summaryCellText("character", "role", undefined)).toBe("—");
     expect(summaryCellText("character", "role", null)).toBe("—");
     expect(summaryCellText("character", "role", "")).toBe("—");
+  });
+});
+
+describe("parentCellText（上级设定列文案——M2）", () => {
+  it("parentName 非空 → 原样返回", () => {
+    expect(parentCellText({ parentName: "修真界" })).toBe("修真界");
+  });
+
+  it("无父 / 空串 → 「—」占位", () => {
+    expect(parentCellText({})).toBe("—");
+    expect(parentCellText({ parentName: "" })).toBe("—");
+    expect(parentCellText({ parentName: undefined })).toBe("—");
   });
 });
 

@@ -6,7 +6,7 @@
 // 时间约定（schema.md 第 16 行）：ISO 8601 应用层写入（nowIso），模块内不生成时间。
 //
 // 摘要字段提取（endpoints.md 第 184-188 行）：**行内解析**（SELECT 整行 → JSON.parse → JS 提取）——
-//   character → role/status、setting → category、location → type、hook → status/payoff_timing、
+//   character → role/status、setting → tags/description（M2 批次六）、location → type、hook → status/payoff_timing、
 //   event → description/tags（决策 26）；
 //   取舍：json_extract 免全量 parse 但需按类型动态列，SQL 复杂化；MVP 数据量小，行内解析
 //   与 better-sqlite3 字符串列一致（chat.ts 同款风格），数据量大后再优化。
@@ -58,6 +58,11 @@ function toSummary(row: EntityRow): EntitySummary {
       // 决策 31 K2（2026-08）：分类由 data.tags 承接（与 event 同字段语义）——摘要暴露 tags（前 3 个）
       if (Array.isArray(data.tags)) {
         summary.tags = (data.tags as unknown[]).filter((t): t is string => typeof t === "string" && t !== "").slice(0, 3);
+      }
+      // M2（2026-08 批次六）：描述摘要截断 100 字符——列表行展示用；截断防 search_entities
+      // 工具上下文膨胀（limit 200 × 长文描述会打爆 token 预算，决策 15），完整文本在详情页
+      if (typeof data.description === "string" && data.description !== "") {
+        summary.description = data.description.slice(0, 100);
       }
       break;
     case "location":

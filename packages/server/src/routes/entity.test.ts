@@ -178,6 +178,65 @@ describe("GET /api/v1/entity/:type 列表", () => {
     const qingyun = allBody.data.items.find((i) => (i.summary.tags as string[]).includes("宗门"))!;
     expect(qingyun.summary.tags).toEqual(["势力", "宗门"]);
   });
+
+  it("M2（批次六）：setting 列表附加上级设定（parentId/parentName，belongs_to 映射）与描述摘要（截断 100 字符）", async () => {
+    openProject();
+    const app = buildApp();
+    const parentRes = await app.request(
+      "/api/v1/entity/setting",
+      jsonRequest("POST", "", { name: "修真界", data: { description: "修仙世界总纲，包含灵气、境界、宗门三大体系。" } }),
+    );
+    const parentId = ((await parentRes.json()) as { data: { id: string } }).data.id;
+    const childRes = await app.request(
+      "/api/v1/entity/setting",
+      jsonRequest("POST", "", { name: "青云门", data: { description: "青云门是修真界第一宗门。" } }),
+    );
+    const childId = ((await childRes.json()) as { data: { id: string } }).data.id;
+    // 建 belongs_to 层级边（child → parent）
+    const project = getCurrentProject()!;
+    createRelation(
+      project.db,
+      { sourceType: "setting", sourceId: childId, targetType: "setting", targetId: parentId, relationType: "belongs_to" },
+      project.root,
+    );
+    const res = await app.request("/api/v1/entity/setting", { headers: HOST_HEADERS });
+    const body = (await res.json()) as {
+      data: {
+        items: Array<{
+          id: string;
+          name: string;
+          parentId?: string;
+          parentName?: string;
+          summary: Record<string, unknown>;
+        }>;
+      };
+    };
+    // 子设定：parent 字段填充 + 描述摘要
+    const childItem = body.data.items.find((i) => i.id === childId)!;
+    expect(childItem.parentId).toBe(parentId);
+    expect(childItem.parentName).toBe("修真界");
+    expect(childItem.summary.description).toBe("青云门是修真界第一宗门。");
+    // 无父的设定：parent 字段不出现（稀疏语义）
+    const parentItem = body.data.items.find((i) => i.id === parentId)!;
+    expect(parentItem.parentId).toBeUndefined();
+    expect(parentItem.parentName).toBeUndefined();
+    // 超长描述截断 100 字符（防 AI 工具上下文膨胀）
+    await app.request(
+      "/api/v1/entity/setting",
+      jsonRequest("POST", "", { name: "藏剑阁", data: { description: "玄".repeat(150) } }),
+    );
+    const res2 = await app.request("/api/v1/entity/setting", { headers: HOST_HEADERS });
+    const body2 = (await res2.json()) as {
+      data: { items: Array<{ name: string; summary: Record<string, unknown> }> };
+    };
+    const longItem = body2.data.items.find((i) => i.name === "藏剑阁")!;
+    expect(longItem.summary.description).toBe("玄".repeat(100));
+    // 非 setting 类型不带 parent 字段（契约：仅 setting）
+    await createCharacter(app, "张三");
+    const charRes = await app.request("/api/v1/entity/character", { headers: HOST_HEADERS });
+    const charBody = (await charRes.json()) as { data: { items: Array<{ parentId?: string }> } };
+    expect(charBody.data.items[0].parentId).toBeUndefined();
+  });
 });
 
 describe("GET /api/v1/entity/:type/:id 详情", () => {
