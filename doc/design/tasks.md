@@ -28,6 +28,12 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - [x] 用户反馈批次一至五（F1-F9 · G1-G3 · H1-H6 · I1-I4 · J1-J3 + K1/K2）
 - [x] L 批次前端样式工程化（L1-L4，C 项 CSS Modules 评估关闭，2026-08）
 
+## 批次六（M1-M3，2026-08 用户反馈）
+
+- [ ] M1（bug）实体详情页标签编辑器「输入后回车添加下一项」——回车无行为（placeholder 承诺未兑现）；修复：行内回车 = 添加下一项（非末行聚焦下一行 / 末行非空追加空行并聚焦 / 末行空回车无操作）→ `lib/tags-editor.ts` 纯函数 + 测试
+- [ ] M2（交互）设定列表行显示上级设定与描述：EntitySummary 新增 `parentId`/`parentName`（仅 setting，服务端列表补查 belongs_to 层级边映射）；setting summary 新增 description（截断 100 字符）；前端列表列改为 名称|标签|上级设定|描述|更新时间，上级设定 chip 可点击跳父详情
+- [ ] M3（新需求）详情页标签列表（rules/tags/personality/abilities）拖拽排序：GripVertical 手柄 + HTML5 原生 DnD（零依赖）；仅拖拽进行中响应 drop（不干扰输入框文本拖选）；`moveArrayItem` 纯函数 + 测试
+
 ---
 
 ## 项目演进路线（2026-08，已完成工作摘要）

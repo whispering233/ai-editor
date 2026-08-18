@@ -7,7 +7,7 @@
 //   删关系物理删确认（决策 12 修订：轻量可重建）、软删直接执行（H2：不弹确认）+ 级联计数、404 引导
 // 边界：custom_fields 仅在响应 data 已有该键时显示（MVP 无法新增键）；「问 AI」入口待 chat store
 //   就绪后补（layout.md §3.3 带上下文进聊天）
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatTimestamp } from "@whispering233/ai-editor-shared";
 import type { EntityType } from "@whispering233/ai-editor-shared";
 import { ConfirmDialog } from "../components/outline/dialogs";
@@ -38,6 +38,7 @@ import {
   type DetailFieldConfig,
 } from "../lib/entity-detail";
 import { flattenTree } from "../lib/outline-tree";
+import { enterBehavior } from "../lib/tags-editor";
 import { cn } from "../lib/utils";
 import { inputClass, skeletonClass } from "@/lib/styles";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -79,6 +80,8 @@ function TagsEditor({
   suggestions?: readonly string[];
   quickTags?: readonly string[];
 }) {
+  // 输入框 ref 表（M1：回车后聚焦下一行/新行；下标即行号，追加行在渲染后经 rAF 聚焦）
+  const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
   return (
     <div className="flex flex-col gap-1.5">
       {values.map((v, i) => (
@@ -89,6 +92,20 @@ function TagsEditor({
               const next = [...values];
               next[i] = e.target.value;
               onChange(next);
+            }}
+            ref={(el) => {
+              inputRefs.current[i] = el;
+            }}
+            onKeyDown={(e) => {
+              // M1（2026-08 用户反馈）：「输入后回车添加下一项」——回车 = 非末行聚焦下一行 /
+              // 末行非空追加空行并聚焦 / 末行空无操作（决策纯函数 enterBehavior）
+              if (e.key !== "Enter") return;
+              e.preventDefault();
+              const b = enterBehavior(values, i);
+              if (!b) return;
+              if (b.append) onChange([...values, ""]);
+              // 追加行渲染完成后聚焦（rAF 确保新输入框已挂载）
+              requestAnimationFrame(() => inputRefs.current[b.focusIndex]?.focus());
             }}
             placeholder={placeholder}
             list={suggestions && suggestions.length > 0 ? "entity-tags-suggestions" : undefined}
