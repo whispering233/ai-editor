@@ -398,6 +398,12 @@ type: "character" | "setting" | "location" | "hook" | "event" | "timepoint";
   order?: "asc" | "desc";
   tag?: string;         // 标签包含筛选（决策 31 K2，2026-08）：data.tags 数组字段包含该标签即命中
                         // （setting 与 event 同字段语义；单标签精确匹配；不传 = 不过滤）
+  parent_id?: string;   // 上级设定筛选（决策 32，2026-08，仅 setting 类型生效，其他类型传入忽略）：
+                        //   匹配 = 实体在设定层级树（belongs_to，决策 30）中直接或间接属于该上级
+                        //   （**递归子树，不含上级自身**）；复用 listSettingHierarchyEdges 建邻接表 DFS
+                        //   收集后代集合，走 db JS 过滤路径（total = 过滤后总数，分页正确）；
+                        //   与 q/tag/排序/分页组合过滤（AND）；指向不存在的设定（含已软删）→ 空结果
+                        //   （宽松，同 tag 无匹配不 404）；不传 = 不过滤
 }
 
 // Res: 200

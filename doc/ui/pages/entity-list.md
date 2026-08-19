@@ -42,7 +42,8 @@
 - **Tab 切换**：改 hash（`#/entities/location`）；MVP 切换时重置搜索与分页（保持简单）。
 - **搜索**：`q` 输入防抖 300ms 发请求；空关键词跳过请求直接显示列表。
 - **排序**：`sort`（name / created_at / updated_at）× `order`（asc / desc）下拉。
-- **标签筛选（决策 31，批次五 J3，仅设定）**：排序行旁「标签 ▾」下拉（聚合既有 `rules` 标签 + 全部），选后 `GET /entity/setting?tag=<标签>` 与服务端组合过滤（走 db `matchDataFilters.tags` 内部管道，`setting` 类型路由到 `data.rules`），与搜索/排序/分页组合；切换类型/tab 重置。
+- **标签筛选（决策 31，批次五 J3，仅设定）**：排序行旁「标签 ▾」下拉（聚合既有 `data.tags` 标签集 + 全部，K2 修订后 tags 为分类统一字段），选后 `GET /entity/setting?tag=<标签>` 与服务端组合过滤（走 db `matchDataFilters.tags` 内部管道），与搜索/排序/分页组合；切换类型/tab 重置。
+- **上级设定筛选（决策 32，2026-08 新需求，仅设定）**：排序行旁「上级设定 ▾」下拉（候选 = 全部设定按名称排序 +「全部」重置项；标签筛选并列），选后 `GET /entity/setting?parent_id=<id>` 服务端**递归子树**过滤——匹配该上级的**所有后代**（直接或间接属于，不含上级自身，决策 30 belongs_to 层级、决策 32），与搜索/标签/排序/分页组合（AND）；当前 tab 列表行点击父 chip（M2）与设定树（I4）职责不变；切换类型/tab 重置；选中父下无设定 → 空态文案「《…》下暂无设定」。
 - **分页**：limit 固定 20（MVP）；前端按页码换算 `offset` 提交，用返回的 `total` 算总页数。
 - **新建**：列表首行内联编辑行（UX4：`name` 必填 + 该类型首字段，如 character 的 `role`；字段配置复用 `CREATE_FIRST_FIELD`）→ `POST /entity/:type` → **创建后留在列表**（2026-08 用户反馈：不自动跳详情页——关行 + 刷新列表让新项按排序出现，需要进详情点行进入）。**setting 类型额外提供「上级设定（选填）」（决策 30，I3）**：弹层搜索选择器（Popover 轻量弹层 + 防抖搜索，候选 = `listEntities(setting)`）——选中父设定后创建实体成功再补 `POST /relation`（belongs_to，source=新设定 → target=父设定；关系失败不阻塞创建，toast 提示「已创建但未挂上级，可进详情页修改」）。
 - **行点击** → `#/entities/:type/:id`。
