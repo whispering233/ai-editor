@@ -28,6 +28,7 @@ import { executeAddRelation, executeRemoveRelation } from "./relation.js";
 import { executeCreateOutlineNode, executeDeleteNode, executeMoveNode } from "./outline.js";
 import { executeAbandonHook, executeAdvanceHook, executeResolveHook } from "./hook.js";
 import { executeReorderTimepoints } from "./reorder-timepoints.js";
+import { executeCreateReference } from "./reference.js";
 import { optionalRecord, requireString, type ExecutorFn, type ExecutorResult } from "./types.js";
 
 /** 提案类型字面量联合（15 个，PROPOSAL_TOOLS 常量派生——注册表/门面共用契约） */
@@ -87,6 +88,7 @@ const EXECUTE_BY_PROPOSAL_TYPE: Record<ProposalType, ExecutorFn> = {
   propose_resolve_hook: executeResolveHook,
   propose_abandon_hook: executeAbandonHook,
   propose_reorder_timepoints: executeReorderTimepoints, // G2：批量重排 sort_order（取代 F9 的 propose_reorder_events）
+  propose_create_reference: executeCreateReference, // 决策 36：确认后写入参考资料实体（type 缺省 material）
 };
 
 /**
@@ -105,6 +107,7 @@ export function executeProposal(ctx: ToolContext, proposal: Proposal): ExecutorR
 // 执行工具名常量再导出（S7.5 校验/日志用；不注册 registry——见文件头注释）
 export type { ExecutorFn, ExecutorResult } from "./types.js";
 export { executeCreateEntity, executeUpdateEntity, executeDeleteEntity } from "./entity.js";
+export { executeCreateReference } from "./reference.js";
 export { executeAddRelation, executeRemoveRelation } from "./relation.js";
 export { executeAddDelta } from "./delta.js";
 export { executeCreateOutlineNode, executeMoveNode, executeDeleteNode } from "./outline.js";

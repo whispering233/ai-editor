@@ -17,6 +17,7 @@ export type ToolPermission = (typeof TOOL_PERMISSION)[keyof typeof TOOL_PERMISSI
 export const QUERY_TOOLS = [
   "get_entity",
   "search_entities",
+  "search_references", // 决策 36（批次九）：参考资料搜索（自动权限）
   "query_relationships",
   "get_outline",
   "get_outline_path",
@@ -44,7 +45,7 @@ export const HOOK_ANALYSIS_TOOLS = [
 ] as const;
 
 /**
- * 提案类工具（需确认，tools.md「提案类」+ hooks.md「工具扩展」提案类，共 15 个）
+ * 提案类工具（需确认，tools.md「提案类」+ hooks.md「工具扩展」提案类，共 16 个）
  * AI 不能直接修改数据，propose_* 仅发出提案（proposal_id + 一句话摘要），
  * tool_result 不含预览细节（2026-08 修订）；完整预览经 SSE proposal 事件推送 GUI
  */
@@ -64,6 +65,7 @@ export const PROPOSAL_TOOLS = [
   "propose_resolve_hook",
   "propose_abandon_hook",
   "propose_reorder_timepoints", // G2（决策 26 修订注记）：LLM 按时间点 name（时间标签）语义排序 → 提案确认
+  "propose_create_reference", // 决策 36（批次九）：AI 建议保存参考资料（外部素材/灵感笔记）
 ] as const;
 
 /**

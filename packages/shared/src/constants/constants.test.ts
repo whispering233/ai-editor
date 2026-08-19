@@ -105,10 +105,11 @@ describe("工具常量（tools.md 工具目录）", () => {
     expect(TOOL_PERMISSION).toEqual({ AUTO: "auto", PROPOSAL: "proposal" });
   });
 
-  it("查询类 8 个（tools.md「查询类」）", () => {
+  it("查询类 9 个（tools.md「查询类」+ 决策 36 search_references）", () => {
     expect(QUERY_TOOLS).toEqual([
       "get_entity",
       "search_entities",
+      "search_references", // 决策 36（批次九）
       "query_relationships",
       "get_outline",
       "get_outline_path",
@@ -116,7 +117,7 @@ describe("工具常量（tools.md 工具目录）", () => {
       "get_delta_history",
       "get_entity_summary",
     ]);
-    expect(QUERY_TOOLS).toHaveLength(8);
+    expect(QUERY_TOOLS).toHaveLength(9);
   });
 
   it("分析类 5 个（tools.md「分析类」）", () => {
@@ -141,7 +142,7 @@ describe("工具常量（tools.md 工具目录）", () => {
     expect(HOOK_ANALYSIS_TOOLS).toHaveLength(5);
   });
 
-  it("提案类 15 个（tools.md 9 + hooks.md 5 + G2 时间点重排 1，无重复）", () => {
+  it("提案类 16 个（tools.md 9 + hooks.md 5 + G2 时间点重排 1 + 决策 36 参考资料 1，无重复）", () => {
     expect(PROPOSAL_TOOLS).toEqual([
       "propose_create_entity",
       "propose_update_entity",
@@ -158,8 +159,9 @@ describe("工具常量（tools.md 工具目录）", () => {
       "propose_resolve_hook",
       "propose_abandon_hook",
       "propose_reorder_timepoints",
+      "propose_create_reference",
     ]);
-    expect(PROPOSAL_TOOLS).toHaveLength(15);
+    expect(PROPOSAL_TOOLS).toHaveLength(16);
   });
 
   it("执行类 13 个（tools.md「执行类」+ G2 reorder_timepoints，不暴露给 LLM）", () => {
@@ -181,9 +183,9 @@ describe("工具常量（tools.md 工具目录）", () => {
     expect(EXECUTOR_TOOLS).toHaveLength(13);
   });
 
-  it("分组无重叠且全量 46 个", () => {
-    expect(AUTO_TOOLS).toHaveLength(18);
-    expect(TOOL_NAMES).toHaveLength(46);
+  it("分组无重叠且全量 47 个", () => {
+    expect(AUTO_TOOLS).toHaveLength(19); // +search_references（决策 36）
+    expect(TOOL_NAMES).toHaveLength(48); // 46 + search_references(自动) + propose_create_reference(提案)
     // 各分组互不重叠
     const all = [...QUERY_TOOLS, ...ANALYSIS_TOOLS, ...HOOK_ANALYSIS_TOOLS, ...PROPOSAL_TOOLS, ...EXECUTOR_TOOLS];
     expect(new Set(all).size).toBe(all.length);

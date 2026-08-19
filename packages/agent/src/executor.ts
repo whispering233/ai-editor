@@ -29,6 +29,7 @@ import type {
   ProposeMoveNodeArgs,
   ProposeOutlineNodeArgs,
   ProposeRemoveRelationArgs,
+  ProposeCreateReferenceArgs,
   ProposeReorderTimepointsArgs,
   ProposeResolveHookArgs,
   ProposeUpdateEntityArgs,
@@ -42,6 +43,7 @@ import {
   buildProposeAdvanceHook,
   buildProposeCreateEntity,
   buildProposeCreateHook,
+  buildProposeCreateReference,
   buildProposeDeleteEntity,
   buildProposeDeleteNode,
   buildProposeMoveNode,
@@ -212,6 +214,7 @@ export const PROPOSAL_BUILDERS: Record<string, ProposalBuilder> = {
   propose_resolve_hook: (ctx, args) => buildProposeResolveHook(ctx, args as ProposeResolveHookArgs),
   propose_abandon_hook: (ctx, args) => buildProposeAbandonHook(ctx, args as ProposeAbandonHookArgs),
   propose_reorder_timepoints: (ctx, args) => buildProposeReorderTimepoints(ctx, args as ProposeReorderTimepointsArgs), // G2（取代 F9 的 propose_reorder_events）
+  propose_create_reference: (ctx, args) => buildProposeCreateReference(ctx, args as ProposeCreateReferenceArgs), // 决策 36
 };
 
 /** createToolDispatcher 选项 */

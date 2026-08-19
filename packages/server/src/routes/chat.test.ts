@@ -613,9 +613,9 @@ describe("zod → JSON Schema 转换（S7.6 决策点：zod 4 内置 toJSONSchem
     expect(js.$schema).toBeUndefined();
   });
 
-  it("registry 33 个 AUTO+PROPOSAL 工具全部可转换（执行类不注册不暴露，S6.7）", () => {
+  it("registry 35 个 AUTO+PROPOSAL 工具全部可转换（执行类不注册不暴露，S6.7；决策 36 +search_references/propose_create_reference）", () => {
     const defs = toLLMToolDefinitions(listTools());
-    expect(defs.length).toBe(33);
+    expect(defs.length).toBe(35);
     for (const d of defs) {
       expect(typeof d.name).toBe("string");
       expect(typeof d.description).toBe("string");

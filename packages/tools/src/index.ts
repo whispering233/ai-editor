@@ -18,6 +18,7 @@ export * from "./query/entity.js";
 export * from "./query/relation.js";
 export * from "./query/outline.js";
 export * from "./query/delta.js";
+export * from "./query/reference.js";
 export * from "./analysis/utils.js";
 export * from "./analysis/consistency.js";
 export * from "./analysis/conflict.js";
@@ -32,6 +33,7 @@ export * from "./proposal/delta.js";
 export * from "./proposal/outline.js";
 export * from "./proposal/hook.js";
 export * from "./proposal/reorder-timepoints.js";
+export * from "./proposal/reference.js";
 // S6.7 执行层：导出 executor 门面与 13 个执行函数（不注册工具——见文件头注释）
 export * from "./executor/index.js";
 
@@ -45,9 +47,11 @@ import {
   getOutlinePathArgsSchema,
   queryRelationshipsArgsSchema,
   searchEntitiesArgsSchema,
+  searchReferencesArgsSchema,
 } from "@whispering233/ai-editor-shared/schemas/tools";
 import { registerTools, type ToolDefinition } from "./registry.js";
 import { runGetEntity, runGetEntitySummary, runSearchEntities } from "./query/entity.js";
+import { runSearchReferences } from "./query/reference.js";
 import { runQueryRelationships } from "./query/relation.js";
 import { runGetOutline, runGetOutlinePath } from "./query/outline.js";
 import { runComputeState, runGetDeltaHistory } from "./query/delta.js";
@@ -129,6 +133,16 @@ const queryToolDefs: ToolDefinition[] = [
     argsSchema: getEntitySummaryArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
     run: runGetEntitySummary,
+  },
+  {
+    name: "search_references",
+    description:
+      "参考资料搜索（决策 36）：按关键词搜索标题+标签命中的参考资料摘要列表（type 分类枚举可选过滤：material 素材摘抄/" +
+      "inspiration 灵感记录/theory 写作理论/reference 设定参考；tags 标签 AND 过滤）。" +
+      "返回摘要（content 截断 120 字）——取全文请用 get_entity 的 reference 类型。用于 AI 不知道书里有哪些参考资料时先检索。",
+    argsSchema: searchReferencesArgsSchema,
+    permission: TOOL_PERMISSION.AUTO,
+    run: runSearchReferences,
   },
 ];
 
@@ -281,6 +295,7 @@ import {
   proposeDeleteNodeArgsSchema,
   proposeMoveNodeArgsSchema,
   proposeOutlineNodeArgsSchema,
+  proposeCreateReferenceArgsSchema,
   proposeReorderTimepointsArgsSchema,
   proposeRemoveRelationArgsSchema,
   proposeResolveHookArgsSchema,
@@ -310,6 +325,7 @@ import {
   runProposeOutlineNode,
 } from "./proposal/outline.js";
 import { runProposeReorderTimepoints } from "./proposal/reorder-timepoints.js";
+import { runProposeCreateReference } from "./proposal/reference.js";
 
 /** 提案类工具定义（S6.6 + F9 重排 + G2 时间点重排，tools.md「提案类」+ hooks.md「工具扩展」提案类，共 15 个；权限全为 PROPOSAL）
  * 语义：AI 不能直接修改数据——propose_* 仅产出提案（tool_result 只有 proposal_id + 一句话摘要，
@@ -466,6 +482,17 @@ const proposalToolDefs: ToolDefinition[] = [
     argsSchema: proposeReorderTimepointsArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,
     run: runProposeReorderTimepoints,
+  },
+  {
+    name: "propose_create_reference",
+    description:
+      "创建参考资料提案（决策 36）：向用户提议把读到/总结的素材、灵感或写作要点保存为参考资料（外部素材/灵感笔记，" +
+      "非本书正文）。name 标题必填，type 分类可选（material 素材摘抄/inspiration 灵感记录/theory 写作理论/reference 设定参考，" +
+      "缺省 material），content 全文长文本，source 来源（URL/书名/作者）可选，tags 标签数组可选。" +
+      "仅生成提案（返回 proposal_id + 一句话摘要），需用户在界面确认后才写入——请勿重复提案或视为已保存。",
+    argsSchema: proposeCreateReferenceArgsSchema,
+    permission: TOOL_PERMISSION.PROPOSAL,
+    run: runProposeCreateReference,
   },
 ];
 

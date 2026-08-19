@@ -28,15 +28,15 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
     expect(typeof m.runProposeCreateEntity).toBe("function");
     expect(typeof m.runProposeAddDelta).toBe("function");
     expect(typeof m.runProposeAdvanceHook).toBe("function");
-    // 入口副作用注册：查询 8 + 分析 5 + 伏笔 5 + 提案 15 = 33 个
-    expect(m.toolCount()).toBe(33);
+    // 入口副作用注册：查询 9 + 分析 5 + 伏笔 5 + 提案 16 = 35 个（search_references + propose_create_reference，决策 36）
+    expect(m.toolCount()).toBe(35);
     expect(m.getTool("get_entity")).toBeDefined();
     // 提案类工具权限为 PROPOSAL（tools.md「提案类（需确认）」）
     expect(m.getTool("propose_create_entity")!.permission).toBe("proposal");
     expect(m.getTool("propose_abandon_hook")!.permission).toBe("proposal");
     expect(m.getTool("propose_reorder_timepoints")!.permission).toBe("proposal");
-    // 15 个提案工具全部注册（PROPOSAL_TOOLS 常量与注册表一致，tools.md 契约）
-    expect(PROPOSAL_TOOLS.length).toBe(15);
+    // 16 个提案工具全部注册（PROPOSAL_TOOLS 常量与注册表一致，tools.md 契约；决策 36 +propose_create_reference）
+    expect(PROPOSAL_TOOLS.length).toBe(16);
     for (const name of PROPOSAL_TOOLS) {
       expect(m.getTool(name)).toBeDefined();
     }
