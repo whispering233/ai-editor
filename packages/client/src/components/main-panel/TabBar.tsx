@@ -3,6 +3,7 @@
 // 当前 tab 由路由首段驱动；「实体关系」在实体列表/详情路由下均保持高亮（segment=entities，layout.md §1）
 // （画布 tab 已移除，批次八 O6 决策 33）
 import {
+  BookOpenText,
   CalendarClock,
   LayoutGrid,
   ListTree,
@@ -32,6 +33,8 @@ const TABS: TabItem[] = [
   { label: "伏笔", href: "#/hooks", segment: "hooks", icon: Puzzle },
   // 时间轴（C3，决策 26）：事件线性序列，layout.md §1 路由表
   { label: "时间轴", href: "#/timeline", segment: "timeline", icon: CalendarClock },
+  // 参考资料（决策 36，批次九）：外部素材/灵感笔记库；位置在时间轴之后、回收站之前
+  { label: "参考资料", href: "#/references", segment: "references", icon: BookOpenText },
   { label: "回收站", href: "#/trash", segment: "trash", icon: Trash2 },
 ];
 

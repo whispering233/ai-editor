@@ -8,6 +8,12 @@ export const ENTITY_TYPES = ["character", "setting", "location", "hook", "event"
 /** 实体类型（单数，从常量派生；与 types/entity.ts 的 EntityType 一致，测试断言保证） */
 export type EntityTypeValue = (typeof ENTITY_TYPES)[number];
 
+/** 参考资料分类枚举（决策 36：外部素材/灵感笔记，非本书正文；data.type 取值） */
+export const REFERENCE_TYPES = ["material", "inspiration", "theory", "reference"] as const;
+
+/** 参考资料分类（从 REFERENCE_TYPES 派生） */
+export type ReferenceTypeValue = (typeof REFERENCE_TYPES)[number];
+
 /**
  * 预定义关系类型（schema.md 关系类型表，共 17 个）
  * belongs_to 所属 / owns 拥有 / masters 掌握 / ally·rival·mentor·family 人物间 /

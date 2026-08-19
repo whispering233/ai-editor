@@ -8,7 +8,7 @@
 // zod 版本：^4（注意 v4 API：z.record 必须两参、z.enum 接受 readonly 数组）
 
 import { z } from "zod";
-import { ENTITY_TYPES, RELATION_TYPES } from "../constants/entity.js";
+import { ENTITY_TYPES, REFERENCE_TYPES, RELATION_TYPES } from "../constants/entity.js";
 import { HOOK_STATUSES, PAYOFF_TIMING } from "../constants/hook.js";
 import { CONFLICT_LEVELS } from "../constants/outline.js";
 import { BACKUP_FREQUENCIES } from "../constants/backup.js";
@@ -152,10 +152,6 @@ export const eventDataSchema = z
 
 /** timepoint 专属字段（G2 时间标签点，决策 26 修订）：data 空——时间标签文本 = name，可重命名，YAGNI 不加 data 字段 */
 export const timepointDataSchema = z.object({}).passthrough();
-
-/** 参考资料分类枚举（决策 36：外部素材/灵感笔记，非本书正文） */
-export const REFERENCE_TYPES = ["material", "inspiration", "theory", "reference"] as const;
-export type ReferenceTypeValue = (typeof REFERENCE_TYPES)[number];
 
 /** reference 专属字段（决策 36 参考资料：type 分类枚举 / content 全文长文本 / source 来源 / tags 标签数组） */
 export const referenceDataSchema = z

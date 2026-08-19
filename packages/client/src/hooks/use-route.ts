@@ -19,6 +19,7 @@ export const KNOWN_ROUTE_SEGMENTS = [
   "entities",
   "hooks",
   "timeline",
+  "references",
   "trash",
   "settings",
 ] as const;

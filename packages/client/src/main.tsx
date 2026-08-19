@@ -14,6 +14,8 @@ import EntityDetail from "./pages/EntityDetail";
 import HookPanel from "./pages/HookPanel";
 import Timeline from "./pages/Timeline";
 import TimelineDetail from "./pages/TimelineDetail";
+import ReferenceList from "./pages/ReferenceList";
+import ReferenceDetail from "./pages/ReferenceDetail";
 import Trash from "./pages/Trash";
 import Settings from "./pages/Settings";
 import "./index.css";
@@ -58,6 +60,9 @@ function renderPage(route: Route): ReactNode {
       // 按段数区分——1 段（#/timeline）→ 列表页；2 段（#/timeline/:id）→ 事件详情页
       // （timeline.md 路由；key = id 变化强制卸载重挂——详情页表单按事件重置）
       return second !== undefined ? <TimelineDetail key={second} id={second} /> : <Timeline />;
+    case "references":
+      // 参考资料（决策 36）：1 段（#/references）→ 列表；2 段（#/references/:id）→ 详情
+      return second !== undefined ? <ReferenceDetail key={second} id={second} /> : <ReferenceList />;
     case "trash":
       return <Trash />;
     case "settings":

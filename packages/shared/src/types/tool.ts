@@ -8,8 +8,7 @@
 //   client 浏览器包不打包 zod 校验函数（与 types/api.ts 同款约束，见 index.ts 头注释）。
 
 import { z } from "zod";
-import { ENTITY_TYPES, RELATION_TYPES } from "../constants/entity.js";
-import { REFERENCE_TYPES } from "./api.js";
+import { ENTITY_TYPES, REFERENCE_TYPES, RELATION_TYPES } from "../constants/entity.js";
 import { deltaChangeSchema } from "./api.js"; // 复用 delta 单条变更 schema（api.ts 已导出）
 
 // ============ get_entity（实体详情，tools.md「实体查询」） ============
