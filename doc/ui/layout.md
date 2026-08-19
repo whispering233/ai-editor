@@ -14,7 +14,7 @@
 │               │ ┌────────────────────────────────────────────┐ │                      │
 │ ◈ 我的小说      │ │ 信息条：项目名 | 当前位置 | 语言 | (聊天开关) │ │ 会话标题（下拉切换）    │
 │ (衬线斜体标识)  │ ├────────────────────────────────────────────┤ │  [+ 新会话]          │
-│               │ │ TabBar：概览|大纲|画布|实体关系|伏笔|时间轴|回收站 │ │ ───────────────────  │
+│               │ │ TabBar：概览|大纲|实体关系|伏笔|时间轴|回收站 │ │ ─────────────────── │
 │ 书架           │ ├────────────────────────────────────────────┤ │ [⚠ 上次会话已取消]     │
 │  ▸ 项目行       │ │                                            │ │ 消息流               │
 │    ▸ 会话行     │ │             页面内容区（按路由渲染）          │ │  （user 气泡 /        │
@@ -67,14 +67,13 @@
 
 ## 1. 路由结构（hash 路由）
 
-前端用自制 `useHashRoute`（`hooks/use-route.ts`，不引入 React Router）。路由表（**11 路由**）：
+前端用自制 `useHashRoute`（`hooks/use-route.ts`，不引入 React Router）。路由表（**10 路由**）：
 
 | hash | 页面 | 归属 |
 |------|------|------|
 | `#/` | Dashboard 概览（默认落地；无项目时为引导形态） | 中栏 tab「概览」 |
 | `#/outline` | Outline 大纲树 | 中栏 tab「大纲」 |
 | `#/outline/:nodeId` | OutlineDetail 节点详情（S12.2） | 中栏 tab「大纲」 |
-| `#/canvas` | Canvas 画布 | 中栏 tab「画布」 |
 | `#/entities/:type?` | EntityList 实体列表 | 中栏 tab「实体关系」 |
 | `#/entities/:type/:id` | EntityDetail 实体详情 | 中栏 tab「实体关系」 |
 | `#/hooks` | HookPanel 伏笔面板 | 中栏 tab「伏笔」 |
@@ -85,10 +84,11 @@
 
 说明：
 
-- **tab 与路由一一对应**：`KNOWN_ROUTE_SEGMENTS = [outline, entities, canvas, hooks, timeline, trash, settings]`；TabBar 高亮由路由首段驱动（根路由 `#/` 用 `null` 表达），「实体关系」tab 在实体列表/详情路由下均保持高亮。
+- **tab 与路由一一对应**：`KNOWN_ROUTE_SEGMENTS = [outline, entities, hooks, timeline, trash, settings]`；TabBar 高亮由路由首段驱动（根路由 `#/` 用 `null` 表达），「实体关系」tab 在实体列表/详情路由下均保持高亮。
 - 路由解析按段数区分：`#/entities/character`（2 段）→ 列表页；`#/entities/character/char-abc`（3 段）→ 详情页；type 缺省回退 `character`。大纲同款二级路由（S12.2）：`#/outline`（1 段）→ 大纲树；`#/outline/:nodeId`（2 段）→ 节点详情页（main.tsx outline 分支拦截第二段，仿实体详情分支）。
 - 未知首段 hash 回退 `#/`（`window.location.replace` 拉回 URL，不污染历史）。
 - **`#/chat` 已移除**：聊天常驻右栏，无独立页；原「带上下文进聊天」改为注入右栏当前会话 focus 小条（见 §4.2）。
+- **`#/canvas` 已移除（决策 33，2026-08）**：画布页删除（1000 章后无实际价值），未知 hash 回退 `#/` 兜底；`plot_edge` 关系类型与数据能力保留（决策 10 数据模型不变，仅无 UI 入口）。
 - 导航跳转统一走 `<a href="#/...">` 或 `navigate(path)` 辅助函数，保证 hash 变更触发重渲染。
 
 ---
@@ -111,7 +111,7 @@
 ### 2.2 中栏 TabBar（药丸分段控件）
 
 - 外壳：`flex items-center gap-1 rounded-lg bg-secondary/30 p-1`（外包一层 `shrink-0 px-3 py-2`）。
-- 七个 tab：概览（LayoutGrid）/ 大纲（ListTree）/ 画布（Shapes）/ 实体关系（Network）/ 伏笔（Puzzle）/ 时间轴（CalendarClock）/ 回收站（Trash2），lucide 图标 `size-4` + 中文标签。
+- 六个 tab：概览（LayoutGrid）/ 大纲（ListTree）/ 实体关系（Network）/ 伏笔（Puzzle）/ 时间轴（CalendarClock）/ 回收站（Trash2），lucide 图标 `size-4` + 中文标签。
 - 每项：`flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground`；激活项 `bg-card text-foreground shadow-sm`（+ `aria-current="page"`）。
 - 当前 tab 由路由首段驱动；点击即跳对应 hash。
 
@@ -295,7 +295,6 @@ client/src/
 |------|------|---------|------|
 | Dashboard（概览/引导） | `#/` | project/config、project/list、entity/:type ×4、outline、chat/sessions | pages/dashboard.md |
 | Outline | `#/outline`、`#/outline/:nodeId`（节点详情） | outline CRUD、project/config（设当前位置）、delta/node、relation | pages/outline.md |
-| Canvas | `#/canvas` | outline、relation（plot_edge）、localStorage 布局 | pages/canvas.md |
 | EntityList | `#/entities/:type`、`#/entities/relations`（关联 tab） | entity/:type（列表）、relation（depth=1） | pages/entity-list.md |
 | EntityDetail | `#/entities/:type/:id` | entity/:type/:id、relation、delta/compute | pages/entity-detail.md |
 | ChatPanel（右栏常驻） | —（无独立路由） | chat（SSE）、chat/sessions、proposal | pages/chat.md |
@@ -304,4 +303,4 @@ client/src/
 | Trash | `#/trash` | trash/* | pages/trash.md |
 | Settings | `#/settings` | settings/llm | pages/settings.md |
 
-后续 S 系列切片接入方式：S4 回收站页、S9 伏笔面板、S10 画布页均作为**中栏内容区页面**（`pages/` 下新组件 + 路由表新增首段 + TabBar 已有对应 tab），外壳样式（区块卡 `rounded-xl border bg-card p-4`、骨架/空态/错误态、标题 `font-serif`）沿用 §2.5 概览页规范。
+后续 S 系列切片接入方式：S4 回收站页、S9 伏笔面板均作为**中栏内容区页面**（`pages/` 下新组件 + 路由表新增首段 + TabBar 已有对应 tab），外壳样式（区块卡 `rounded-xl border bg-card p-4`、骨架/空态/错误态、标题 `font-serif`）沿用 §2.5 概览页规范。画布页已移除（决策 33，2026-08）：代码与文档清理见 `tasks.md` 批次八 O6。

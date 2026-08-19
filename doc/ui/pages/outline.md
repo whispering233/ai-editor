@@ -87,7 +87,7 @@
 - **数据**：`GET /api/v1/relation`（source_type=outline_node，relation_type 三类**并行**单值查询，depth=1）→ `lib/outline-hooks.ts buildNodeHookMarks` 按 source_id 聚合为「节点 → 标记列表」（targetName 联表名优先、缺省 targetId 兜底——hooks.md 关系 target 为伏笔侧）。
 - **刷新**：依赖 outline store 树对象——树重拉（写操作 afterTreeChanged）后自动重拉标记。
 - **降级**：任一类型请求失败 → 该类型空集；全部失败 → 标记列隐藏（`hookMarks=null`），不阻塞大纲渲染、无错误横幅（纯展示增强）。
-- **范围**：标记随行渲染、**不聚合后代**——折叠父行自身标记仍显示，子树标记随展开可见；画布节点标记留 S10。
+- **范围**：标记随行渲染、**不聚合后代**——折叠父行自身标记仍显示，子树标记随展开可见。
 
 ## 状态
 

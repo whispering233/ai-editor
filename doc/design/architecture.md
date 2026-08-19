@@ -133,7 +133,6 @@ ai-editor/
 │       │   │   ├── Dashboard.tsx    # 中栏「概览」tab（含无项目引导态：有书列出可打开）
 │       │   │   ├── Outline.tsx
 │       │   │   ├── OutlineDetail.tsx # 大纲节点详情页（S12.2：结构化 data 表单/变更记录/相关实体）
-│       │   │   ├── Canvas.tsx
 │       │   │   ├── EntityList.tsx
 │       │   │   ├── EntityDetail.tsx
 │       │   │   ├── HookPanel.tsx
@@ -150,7 +149,6 @@ ai-editor/
 │       │   │   ├── page-nav/      # 页面导航（U7：面包屑）
 │       │   │   ├── entity/        # 实体列表/详情/关联组件
 │       │   │   ├── outline/       # 大纲组件（dialogs 等）
-│       │   │   ├── canvas/        # 画布（拖拽/连线，S10 规划）
 │       │   │   └── hook/          # 伏笔面板（S9 规划）
 │       │   ├── stores/            # Zustand
 │       │   │   ├── chat.ts        # 会话归属项目：currentProjectId + currentSessionId

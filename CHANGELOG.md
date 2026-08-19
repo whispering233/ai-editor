@@ -5,6 +5,14 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### Changed
+
+- **批次八（O1-O6，2026-08 用户反馈批次——画布重构与体验优化，决策 33）**（开发中）：
+  - 设定/标签筛选可搜索下拉（O1）；大纲页操作区右移 + 顺序详情/添加/删除 + 移除修改时间显示（O2）；时间轴移除拖拽柄视觉、保留拖拽提示（O3）；时间轴折叠/展开按钮移至组标题左侧（O4）；设定树「全部展开/全部折叠」按钮（O5）；
+  - **画布页移除（O6，决策 33）**：删除 `#/canvas` 路由/中栏 tab/画布页面与工具库（`pages/Canvas.tsx`、`lib/canvas.ts`）及测试，`plot_edge` 数据模型与关系接口能力保留（仅无 UI 入口）；旧 localStorage 坐标为无害残留。
+
 ## [v0.0.13] - 2026-08-19
 
 ### Added
