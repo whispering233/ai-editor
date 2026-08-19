@@ -15,7 +15,6 @@
 //   project store（跨页共用：顶栏当前位置标题映射、画布投影），本页只持有 UI 态
 import { useEffect, useState } from "react";
 import type { DragEvent, KeyboardEvent, ReactNode } from "react";
-import { formatTimestamp } from "@whispering233/ai-editor-shared";
 import type { OutlineNode } from "@whispering233/ai-editor-shared";
 import { Eye, Trash2 } from "lucide-react";
 import { CHILD_TYPE, TYPE_LABEL } from "../components/outline/dialogs";
@@ -589,7 +588,7 @@ export default function Outline() {
   }
 
   /** 整树渲染（内部递归函数，闭包共享页面 state；S13.1 两行结构：
-   * 第一行 = 折叠箭头 | 类型徽标（w-7 固定宽，第二行占位精确对齐）| 标题 | 操作区 | 当前位置徽标 | 时间戳；
+   * 第一行 = 折叠箭头 | 类型徽标（w-7 固定宽，第二行占位精确对齐）| 标题 | 伏笔标记 | 右端操作区（详情/添加/回收站）| 当前位置徽标；
    * 第二行 = 摘要（缩进对齐标题下方，默认显示、空不渲染、点击就地编辑）；
    * 拖拽：整节点块可拖，目标行上半/下半 → 插入指示线（accent 2px 绝对定位层，pointer-events-none 不拦截事件） */
   function renderNodes(nodes: OutlineNode[], depth: number): ReactNode {
@@ -626,7 +625,7 @@ export default function Outline() {
             style={{ paddingLeft: depth * 20 + 8 }}
             title="拖动到目标行即可移动（上半=插前、下半=插后）"
           >
-            {/* 第一行：折叠箭头 | 类型徽标 | 标题 | 操作区 | 当前位置徽标 | 时间戳 */}
+            {/* 第一行：折叠箭头 | 类型徽标 | 标题 | 伏笔标记 | 右端操作区（详情/添加/回收站）| 当前位置徽标（O2 起：操作区 ml-auto 右端对齐，时间戳显示已移除） */}
             <div className="flex items-center gap-2">
               {hasChildren ? (
                 <button
@@ -674,43 +673,42 @@ export default function Outline() {
                   ))}
                 </span>
               )}
-              {/* 操作区：紧凑跟随节点内容（不推远）；顺序：＋ → 详情图标 → 回收站图标 → 当前位置徽标 → 时间戳 */}
-              {childType !== null && (
+              {/* 操作区（批次八 O2）：右端对齐（ml-auto）；固定顺序 详情 → ＋ 就地新建（scene 行无）→ 回收站 → 当前位置徽标 */}
+              <span className="ml-auto flex shrink-0 items-center gap-1">
                 <button
                   type="button"
-                  className="shrink-0 rounded px-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                  title={`就地新建${TYPE_LABEL[childType]}`}
-                  aria-label={`新建${TYPE_LABEL[childType]}`}
-                  onClick={() => startCreate(node.id, childType)}
+                  className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  title="详情"
+                  aria-label="详情"
+                  onClick={() => navigate(`/outline/${node.id}`)}
                 >
-                  ＋
+                  <Eye className="size-3.5" />
                 </button>
-              )}
-              <button
-                type="button"
-                className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-                title="详情"
-                aria-label="详情"
-                onClick={() => navigate(`/outline/${node.id}`)}
-              >
-                <Eye className="size-3.5" />
-              </button>
-              <button
-                type="button"
-                className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive"
-                title="移入回收站"
-                aria-label="移入回收站"
-                onClick={() => void handleDelete(node)}
-              >
-                <Trash2 className="size-3.5" />
-              </button>
-              {isCurrent && (
-                <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-xs text-accent-foreground">
-                  当前位置
-                </span>
-              )}
-              <span className="shrink-0 text-xs text-muted-foreground">
-                {formatTimestamp(node.updatedAt)}
+                {childType !== null && (
+                  <button
+                    type="button"
+                    className="shrink-0 rounded px-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    title={`就地新建${TYPE_LABEL[childType]}`}
+                    aria-label={`新建${TYPE_LABEL[childType]}`}
+                    onClick={() => startCreate(node.id, childType)}
+                  >
+                    ＋
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive"
+                  title="移入回收站"
+                  aria-label="移入回收站"
+                  onClick={() => void handleDelete(node)}
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+                {isCurrent && (
+                  <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-xs text-accent-foreground">
+                    当前位置
+                  </span>
+                )}
               </span>
             </div>
             {/* 第二行：摘要（缩进对齐标题下方——w-4/w-7 占位与第一行同列；默认显示、空不渲染；点击就地编辑） */}
