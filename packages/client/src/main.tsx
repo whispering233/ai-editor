@@ -9,7 +9,6 @@ import { ErrorBoundary } from "./components/feedback/ErrorBoundary";
 import Dashboard from "./pages/Dashboard";
 import Outline from "./pages/Outline";
 import OutlineDetail from "./pages/OutlineDetail";
-import Canvas from "./pages/Canvas";
 import EntityList from "./pages/EntityList";
 import EntityDetail from "./pages/EntityDetail";
 import HookPanel from "./pages/HookPanel";
@@ -29,8 +28,6 @@ function renderPage(route: Route): ReactNode {
       // S12.2：按段数区分——1 段（#/outline）→ 大纲树；2 段（#/outline/:nodeId）→ 节点详情
       // （二级路由，仿实体详情分支；key = nodeId 变化强制卸载重挂，详情页表单按节点重置）
       return second !== undefined ? <OutlineDetail key={second} nodeId={second} /> : <Outline />;
-    case "canvas":
-      return <Canvas />;
     case "entities": {
       // 关联 tab（U8，entity-list.md「关联 Tab」）：先于类型归一化拦截——relations 不是实体类型
       if (second === "relations") {

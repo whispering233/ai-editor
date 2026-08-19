@@ -6,7 +6,7 @@
 //    toast 的自动消失由 store 定时器负责，这里不做任何定时逻辑。
 // 3) ErrorBanner 错误横幅：store error 非空时渲染红色横幅（bg-destructive/10 border-destructive/30 text-destructive，
 //    §4.3 全局/流错误样式），fixed 顶部居中，关闭按钮调 clearError()。
-// 4) ConfirmDialog 桥（S10.1 画布删连线用 ui store confirm()）：store confirmState 非空时渲染全局确认对话框，
+// 4) ConfirmDialog 桥（删关系/删节点等破坏性操作用 ui store confirm()：confirmState 非空时渲染全局确认对话框，
 //    确认/取消分别调 resolveConfirm(true/false) 归还 Promise（layout.md §4.1「确认对话框（confirm/resolveConfirm，
 //    ConfirmDialog 实现于 components/outline/dialogs.tsx）」的渲染宿主；各页既有局部 ConfirmDialog 不受影响）。
 import { useEffect, useRef } from "react";

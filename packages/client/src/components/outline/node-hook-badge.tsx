@@ -1,5 +1,5 @@
-// 大纲节点伏笔标记徽标（S9.2 大纲页 / S10.1 画布节点卡共用；S9.2 起 Outline.tsx 行内渲染，
-// 画布卡落地时上提为共享组件——layout.md §5「跨页复用的纯展示组件上提到 components/ 对应子目录」）
+// 大纲节点伏笔标记徽标（S9.2 大纲页行内渲染；S10.1 起上提为共享组件——
+// layout.md §5「跨页复用的纯展示组件上提到 components/ 对应子目录」）
 // 数据源：lib/outline-hooks buildNodeHookMarks 聚合的「节点 id → 标记列表」；本组件纯展示
 import { CheckCircle2, FastForward, Pin } from "lucide-react";
 import type { NodeHookMark } from "../../lib/outline-hooks";

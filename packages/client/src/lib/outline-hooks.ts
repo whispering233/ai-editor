@@ -1,7 +1,7 @@
 // 大纲节点伏笔标记纯函数（S9.2）
 // 契约来源：doc/database/hooks.md（plants/advances/resolves：outline_node → hook 关系，source 为节点侧、
 //   target 为伏笔侧；「大纲节点上的伏笔标记」示意：sc-12 (玉佩的秘密) [📌身世之谜↑]）、
-//   doc/design/tasks.md S9.2（大纲节点上 plants/advances/resolves 标记展示；画布标记留 S10）、
+//   doc/design/tasks.md S9.2（大纲节点上 plants/advances/resolves 标记展示）、
 //   S9.1 lib/hook-panel.ts 关系解析先例（relationsOfType/name 兜底口径：联表名优先、缺省 id）
 // 数据流：Outline.tsx 并行三请求（GET /relation，source_type=outline_node，relation_type 单值）→
 //   本模块 buildNodeHookMarks 聚合为「节点 id → 标记列表」→ 节点行 title 尾紧凑徽标渲染

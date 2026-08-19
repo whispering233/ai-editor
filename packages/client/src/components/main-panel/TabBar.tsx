@@ -1,13 +1,13 @@
-// 中栏 TabBar（doc/ui/layout.md §2.2）：七个 tab 药丸分段控件（概览/大纲/画布/实体关系/伏笔/时间轴/回收站）
+// 中栏 TabBar（doc/ui/layout.md §2.2）：六个 tab 药丸分段控件（概览/大纲/实体关系/伏笔/时间轴/回收站）
 // 形态参考 inkos：容器 bg-secondary/30 rounded-lg p-1 + 激活项 bg-card shadow-sm；lucide 图标 + 中文标签
 // 当前 tab 由路由首段驱动；「实体关系」在实体列表/详情路由下均保持高亮（segment=entities，layout.md §1）
+// （画布 tab 已移除，批次八 O6 决策 33）
 import {
   CalendarClock,
   LayoutGrid,
   ListTree,
   Network,
   Puzzle,
-  Shapes,
   Trash2,
   type LucideIcon,
 } from "lucide-react";
@@ -28,7 +28,6 @@ interface TabItem {
 const TABS: TabItem[] = [
   { label: "概览", href: "#/", segment: null, icon: LayoutGrid },
   { label: "大纲", href: "#/outline", segment: "outline", icon: ListTree },
-  { label: "画布", href: "#/canvas", segment: "canvas", icon: Shapes },
   { label: "实体关系", href: "#/entities/character", segment: "entities", icon: Network },
   { label: "伏笔", href: "#/hooks", segment: "hooks", icon: Puzzle },
   // 时间轴（C3，决策 26）：事件线性序列，layout.md §1 路由表

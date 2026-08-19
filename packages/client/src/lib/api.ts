@@ -201,7 +201,7 @@ export interface MoveOutlineRes {
   newParentId: string;
 }
 
-/** 移动大纲节点（画布投影自动更新，决策 1；错误：404 OUTLINE_NODE_NOT_FOUND / 400 VALIDATION_ERROR） */
+/** 移动大纲节点（节点在树间重新排序，决策 1；错误：404 OUTLINE_NODE_NOT_FOUND / 400 VALIDATION_ERROR） */
 export function moveOutlineNode(nodeId: string, body: MoveOutlineBody): Promise<MoveOutlineRes> {
   return apiFetch<MoveOutlineRes>(`/outline/${nodeId}/move`, { method: "PUT", body });
 }
@@ -528,7 +528,7 @@ export interface UpdateRelationMetaRes {
   updated: true;
 }
 
-/** 更新关系元数据（整体替换；画布连线标签线上编辑用——endpoints.md「PUT /relation/:id」） */
+/** 更新关系元数据（整体替换；关系标签线上编辑用——endpoints.md「PUT /relation/:id」） */
 export function updateRelationMeta(
   id: string,
   metadata: Record<string, unknown>,

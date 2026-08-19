@@ -4,7 +4,7 @@
 //   （拖拽修复后已覆盖）；拖拽上下半判定 + 插入指示线（同级排序可用）；摘要移到标题下方独立行（默认显示）；
 //   删除底部回收站折叠区（Trash tab 已覆盖）；「设为当前位置」入口迁往详情页（S13.2）；当前位置徽标 token 化；
 //   S9.2 伏笔标记：title 行尾紧凑徽标（plants/advances/resolves 图标 + title tooltip 伏笔名），
-//   数据 = GET /relation（source_type=outline_node）三类并行拉取聚合（lib/outline-hooks）；画布标记留 S10）
+//   数据 = GET /relation（source_type=outline_node）三类并行拉取聚合（lib/outline-hooks）
 // 路由：#/outline；数据：GET /api/v1/outline（整树）+ GET /api/v1/relation（伏笔标记，S9.2）；操作：POST/PUT/DELETE /outline、PUT /project/config（设当前位置）
 // 设计契约：doc/ui/pages/outline.md（S2.4 + S13.1 修订版）——行内编辑标题/摘要（Enter 保存/Esc 取消/失焦保存）、
 //   行尾「＋ 新建」就地插入子节点（类型由父决定，root 可切卷/章）、拖拽移动（原生 HTML5 DnD，上下半判定：
@@ -12,7 +12,7 @@
 //   软删直接执行（H2：不再弹二次确认，回收站可还原；仅彻底删除保留确认）
 // 刷新策略：所有写操作成功后统一 loadOutline() 重拉整树（服务端权威——move 重排 order、软删级联子树、
 //   还原级联；本地补丁易与服务端不一致；本地文件读取毫秒级，重拉成本可忽略）。outline 树数据仍在
-//   project store（跨页共用：顶栏当前位置标题映射、画布投影），本页只持有 UI 态
+//   project store（跨页共用：顶栏当前位置标题映射、节点 id → title 映射），本页只持有 UI 态
 import { useEffect, useState } from "react";
 import type { DragEvent, KeyboardEvent, ReactNode } from "react";
 import type { OutlineNode } from "@whispering233/ai-editor-shared";
@@ -143,7 +143,7 @@ function RootCreateRow({
 }
 
 // ============ 伏笔标记徽标（S9.2） ============
-// 徽标组件已上提为共享组件 components/outline/node-hook-badge.tsx（S10.1 画布节点卡复用，
+// 徽标组件已上提为共享组件 components/outline/node-hook-badge.tsx（S10.1 上提为跨页复用，
 // layout.md §5 上提约定）；本页仅消费 buildNodeHookMarks 聚合结果渲染
 
 export default function Outline() {

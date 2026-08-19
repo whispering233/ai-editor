@@ -499,7 +499,7 @@ export default function Timeline() {
 
   // 滚动结构（G1）：页面分「固定区 + 滚动区」两段——header/标签筛选器恒固定，
   // 仅列表区独立滚动（占满 MainPanel 内容区高度：h-full 相对 flex-1 min-h-0 父级生效，
-  // 与 Canvas.tsx §631 同式高度链）；错误横幅/骨架/空态/列表归滚动区（替代列表位置语义）
+  // （错误横幅/骨架/空态/列表归滚动区（替代列表位置语义）
   return (
     <section className="flex h-full min-h-0 flex-col">
       {/* 固定区：header——标题 + 操作（timeline.md G2 线框：AI 排序 + 新建事件 + 新建时间点） */}
