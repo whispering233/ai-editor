@@ -276,6 +276,12 @@ function CustomFieldsEditor({
 export default function EntityDetail({ type, id }: { type: string; id: string }) {
   const entityType = type as EntityType;
 
+  // 决策 35：挂载/切换实体时上报页面焦点（InfoBar「问 AI」携带当前实体上下文注入右栏；路由切换时已清空）
+  const setCurrentFocus = useUiStore((s) => s.setCurrentFocus);
+  useEffect(() => {
+    setCurrentFocus({ focus_entity_type: entityType, focus_entity_id: id });
+  }, [entityType, id, setCurrentFocus]);
+
   const [detail, setDetail] = useState<EntityDetailRes | null>(null);
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);

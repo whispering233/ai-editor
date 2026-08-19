@@ -32,6 +32,12 @@ interface EditForm {
 }
 
 export default function ReferenceDetail({ id }: { id: string }) {
+  // 决策 35：挂载/切换时上报页面焦点（当前参考资料作为「问 AI」上下文）
+  const setCurrentFocus = useUiStore((s) => s.setCurrentFocus);
+  useEffect(() => {
+    setCurrentFocus({ focus_entity_type: "reference", focus_entity_id: id });
+  }, [id, setCurrentFocus]);
+
   const [detail, setDetail] = useState<EntityDetailRes | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadTick, setReloadTick] = useState(0);

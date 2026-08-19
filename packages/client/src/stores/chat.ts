@@ -19,15 +19,13 @@ import {
   type SendChatMessageBody,
 } from "../lib/api";
 import { fetchSSE } from "../hooks/use-sse";
+import type { FocusContext } from "../lib/focus";
 import { useProjectStore } from "./project";
 import { useUiStore } from "./ui";
 
-/** focus context（layout.md §4.2：跨页注入「问 AI」；POST /chat 请求体 context 字段） */
-export interface FocusContext {
-  focus_entity_type?: string;
-  focus_entity_id?: string;
-  focus_node_id?: string;
-}
+/** focus context（layout.md §4.2：跨页注入「问 AI」；POST /chat 请求体 context 字段）
+ * 定义提移至 lib/focus.ts（决策 35：ui store currentFocus 共用，避免 store 循环依赖） */
+export type { FocusContext } from "../lib/focus";
 
 /** 运行时工具调用记录（SSE tool_call / tool_result 事件，瞬态；历史消息走 messages 的 toolCalls/toolCallId 成对渲染） */
 export interface StreamToolRecord {

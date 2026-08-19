@@ -4,6 +4,7 @@
 import { create } from "zustand";
 import type { ErrorCode } from "@whispering233/ai-editor-shared";
 import type { ClientErrorCode } from "../lib/api";
+import type { FocusContext } from "../lib/focus";
 
 export type ToastKind = "success" | "error";
 
@@ -52,6 +53,15 @@ interface UiState {
   focusOutlineNodeId: string | null;
   setFocusOutlineNode: (id: string) => void;
   clearFocusOutlineNode: () => void;
+
+  /**
+   * 当前页面焦点（决策 35：InfoBar「问 AI」入口的数据源）——页面挂载/选中变化时上报
+   * 「正在看什么」（focus_entity_type/id 或 focus_node_id）；InfoBar 读它注入右栏聊天；
+   * 路由切换时清空（页面卸载后旧焦点不残留）。
+   */
+  currentFocus: FocusContext | null;
+  setCurrentFocus: (ctx: FocusContext | null) => void;
+  clearCurrentFocus: () => void;
 
   /**
    * 数据版本信号（交互批次，问题 1）：AI 提案确认写库后 / InfoBar 刷新按钮点击时 +1，
@@ -103,6 +113,10 @@ export const useUiStore = create<UiState>((set, get) => ({
   focusOutlineNodeId: null,
   setFocusOutlineNode: (id) => set({ focusOutlineNodeId: id }),
   clearFocusOutlineNode: () => set({ focusOutlineNodeId: null }),
+
+  currentFocus: null,
+  setCurrentFocus: (ctx) => set({ currentFocus: ctx }),
+  clearCurrentFocus: () => set({ currentFocus: null }),
 
   dataVersion: 0,
   notifyDataChanged: () => set((s) => ({ dataVersion: s.dataVersion + 1 })),
