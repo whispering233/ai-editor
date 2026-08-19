@@ -97,6 +97,10 @@ export default function EntityList({ type }: { type: string }) {
   const [tagFilter, setTagFilter] = useState("");
   /** 标签筛选下拉候选（聚合既有设定标签；失败静默——仅无下拉候选，不影响列表） */
   const [tagOptions, setTagOptions] = useState<string[]>([]);
+  /** 上级设定筛选（决策 32：仅 setting；"" = 全部；服务端递归子树——含所有后代、不含自身） */
+  const [parentFilter, setParentFilter] = useState("");
+  /** 上级设定筛选下拉候选（聚合全部设定 id/name，按名称排序；失败静默——仅无下拉候选） */
+  const [parentOptions, setParentOptions] = useState<Array<{ id: string; name: string }>>([]);
   /** 重试计数（错误后手动重新加载） */
   const [reloadTick, setReloadTick] = useState(0);
   // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉列表
@@ -115,6 +119,8 @@ export default function EntityList({ type }: { type: string }) {
   const firstField = CREATE_FIRST_FIELD[entityType];
   const pages = pageCount(total, PAGE_LIMIT);
   const page = Math.floor(offset / PAGE_LIMIT) + 1;
+  // 上级筛选选中项名称（决策 32：空态文案用；候选未加载/已不可见时退回「该上级」）
+  const parentName = parentOptions.find((p) => p.id === parentFilter)?.name;
   // 新建行 datalist 候选（批次五 J2，决策 31）：从当前列表聚合已有名称 / 首字段值
   // （浏览器原生自动完成——输入时弹出已有候选，如输入「势」弹出「势力」）
   const createNameSuggestions = uniqueStrings(items?.map((i) => i.name) ?? []);
@@ -140,6 +146,8 @@ export default function EntityList({ type }: { type: string }) {
     setSort("updated_at");
     setOrder("desc");
     setTagFilter("");
+    setParentFilter("");
+    setParentOptions([]);
     setItems(null);
     setError(null);
     setCreateOpen(false);
@@ -169,6 +177,7 @@ export default function EntityList({ type }: { type: string }) {
       sort,
       order,
       tag: tagFilter || undefined,
+      parent_id: parentFilter || undefined,
     })
       .then((res: EntityListRes) => {
         if (!cancelled) {
@@ -188,17 +197,21 @@ export default function EntityList({ type }: { type: string }) {
     return () => {
       cancelled = true;
     };
-  }, [entityType, q, offset, sort, order, reloadTick, isRelations, isSettingTree, tagFilter]);
+  }, [entityType, q, offset, sort, order, reloadTick, isRelations, isSettingTree, tagFilter, parentFilter]);
 
-  // 标签筛选候选聚合（决策 31：setting 类型才拉；全量 200 聚合既有 rules 标签——失败静默）
+  // 设定 tab 筛选候选聚合（决策 31 tag + 决策 32 上级设定，2026-08 合并一次请求）：
+  // 拉全量设定（sort name——上级候选按名排序；tags 聚合后自身排序不受影响）同时产出标签集与
+  // 上级 id/name 候选；失败静默（仅下拉无候选，不影响列表）；切走设定 tab 清空两者并重置筛选
   useEffect(() => {
     if (entityType !== "setting" || isRelations || isSettingTree) {
       setTagOptions([]);
       setTagFilter("");
+      setParentOptions([]);
+      setParentFilter("");
       return;
     }
     let cancelled = false;
-    listEntities("setting", { limit: 200 })
+    listEntities("setting", { limit: 200, sort: "name" })
       .then((res) => {
         if (cancelled) return;
         const tags = new Set<string>();
@@ -210,6 +223,8 @@ export default function EntityList({ type }: { type: string }) {
           }
         }
         setTagOptions(Array.from(tags).sort());
+        // 决策 32：上级设定候选 = 全部设定 id/name（已按名称排序）
+        setParentOptions(res.items.map((i) => ({ id: i.id, name: i.name })));
       })
       .catch(() => {
         // 失败静默（下拉无候选，筛选功能退化为不可用但列表正常）
@@ -394,7 +409,33 @@ export default function EntityList({ type }: { type: string }) {
                 ))}
               </select>
             </label>
-            {/* 标签筛选（决策 31，批次五 J3：仅设定；复用 rules 标签——聚合既有标签，与搜索/排序组合） */}
+            {/* 上级设定筛选（决策 32，2026-08 新需求：仅设定；候选 = 全部设定按名排序 + 全部重置；
+              服务端递归子树——选中上级后显示其直接及所有后代设定，与搜索/标签/排序/分页 AND 组合；
+              已选父在候选中不可见（软删/超 200 截断）时补兜底 option 防 select 空白） */}
+            {entityType === "setting" && (
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                上级设定:
+                <select
+                  value={parentFilter}
+                  onChange={(e) => {
+                    setParentFilter(e.target.value);
+                    setOffset(0);
+                  }}
+                  className="rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                >
+                  <option value="">全部</option>
+                  {parentFilter !== "" && !parentOptions.some((p) => p.id === parentFilter) && (
+                    <option value={parentFilter}>（已删除或不可见）</option>
+                  )}
+                  {parentOptions.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {/* 标签筛选（决策 31，批次五 J3：仅设定；聚合既有 data.tags——与搜索/排序组合） */}
             {entityType === "setting" && (
               <label className="flex items-center gap-2 text-sm text-muted-foreground">
                 标签:
@@ -547,6 +588,17 @@ export default function EntityList({ type }: { type: string }) {
                   <Button variant="outline" type="button" onClick={clearSearch}>
                     清空搜索
                   </Button>
+                ) : parentFilter ? (
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={() => {
+                      setParentFilter("");
+                      setOffset(0);
+                    }}
+                  >
+                    清除上级筛选
+                  </Button>
                 ) : (
                   <Button type="button" onClick={openCreateRow}>
                     + 新建{TYPE_LABEL[entityType]}
@@ -556,7 +608,9 @@ export default function EntityList({ type }: { type: string }) {
             >
               {q
                 ? `没有匹配「${q}」的${TYPE_LABEL[entityType]}`
-                : `还没有${TYPE_LABEL[entityType]}，新建一个`}
+                : parentFilter
+                  ? `《${parentName ?? "该上级"}》下暂无设定（含其所有层级的设定）`
+                  : `还没有${TYPE_LABEL[entityType]}，新建一个`}
             </EmptyState>
           )}
 
