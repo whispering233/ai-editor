@@ -45,6 +45,7 @@ import { ParentSettingSelect } from "../components/entity/parent-setting-select"
 import { RelationsView } from "../components/entity/relations-view";
 import { SettingTreeView } from "../components/entity/setting-tree";
 import { SuggestionDatalist, uniqueStrings } from "../components/ui/suggestion-datalist";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 
 const TYPE_LABEL: Record<EntityType, string> = {
   character: "人物",
@@ -197,7 +198,18 @@ export default function EntityList({ type }: { type: string }) {
     return () => {
       cancelled = true;
     };
-  }, [entityType, q, offset, sort, order, reloadTick, isRelations, isSettingTree, tagFilter, parentFilter]);
+  }, [
+    entityType,
+    q,
+    offset,
+    sort,
+    order,
+    reloadTick,
+    isRelations,
+    isSettingTree,
+    tagFilter,
+    parentFilter,
+  ]);
 
   // 设定 tab 筛选候选聚合（决策 31 tag + 决策 32 上级设定，2026-08 合并一次请求）：
   // 拉全量设定（sort name——上级候选按名排序；tags 聚合后自身排序不受影响）同时产出标签集与
@@ -409,52 +421,42 @@ export default function EntityList({ type }: { type: string }) {
                 ))}
               </select>
             </label>
-            {/* 上级设定筛选（决策 32，2026-08 新需求：仅设定；候选 = 全部设定按名排序 + 全部重置；
+            {/* 上级设定筛选（决策 32，2026-08 新需求：仅设定；候选 = 全部设定按名排序 +「全部」清除项；
               服务端递归子树——选中上级后显示其直接及所有后代设定，与搜索/标签/排序/分页 AND 组合；
-              已选父在候选中不可见（软删/超 200 截断）时补兜底 option 防 select 空白） */}
+              批次八 O1 改可搜索下拉（SearchableSelect，客户端过滤已聚合候选）；已选父在候选中不可见
+              （软删/超 200 截断）时 fallbackLabel 兑底「（已删除或不可见）」） */}
             {entityType === "setting" && (
-              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span className="flex items-center gap-2 text-sm text-muted-foreground">
                 上级设定:
-                <select
+                <SearchableSelect
                   value={parentFilter}
-                  onChange={(e) => {
-                    setParentFilter(e.target.value);
+                  options={parentOptions.map((p) => ({ value: p.id, label: p.name }))}
+                  fallbackLabel="（已删除或不可见）"
+                  onChange={(v) => {
+                    setParentFilter(v);
                     setOffset(0);
                   }}
-                  className="rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                >
-                  <option value="">全部</option>
-                  {parentFilter !== "" && !parentOptions.some((p) => p.id === parentFilter) && (
-                    <option value={parentFilter}>（已删除或不可见）</option>
-                  )}
-                  {parentOptions.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  placeholder="全部"
+                  ariaLabel="上级设定筛选"
+                />
+              </span>
             )}
-            {/* 标签筛选（决策 31，批次五 J3：仅设定；聚合既有 data.tags——与搜索/排序组合） */}
+            {/* 标签筛选（决策 31，批次五 J3：仅设定；聚合既有 data.tags——与搜索/排序组合；
+              批次八 O1 改可搜索下拉（SearchableSelect，客户端过滤已聚合候选）） */}
             {entityType === "setting" && (
-              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span className="flex items-center gap-2 text-sm text-muted-foreground">
                 标签:
-                <select
+                <SearchableSelect
                   value={tagFilter}
-                  onChange={(e) => {
-                    setTagFilter(e.target.value);
+                  options={tagOptions.map((t) => ({ value: t, label: t }))}
+                  onChange={(v) => {
+                    setTagFilter(v);
                     setOffset(0);
                   }}
-                  className="rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                >
-                  <option value="">全部</option>
-                  {tagOptions.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  placeholder="全部"
+                  ariaLabel="标签筛选"
+                />
+              </span>
             )}
             <span className="ml-auto text-sm text-muted-foreground/70">共 {total} 个</span>
           </div>
