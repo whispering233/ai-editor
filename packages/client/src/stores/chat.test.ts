@@ -489,6 +489,19 @@ describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
     ]);
   });
 
+  it("done 事件带 usage → 记录 lastUsage（需求 3：上下文占用显示的数据源）", async () => {
+    mocked.listSessions.mockResolvedValue([sampleSession]);
+    useChatStore.getState().sendMessage("你好");
+    const { onEvent } = sseOptions();
+    onEvent("done", { session_id: "sess-1", usage: { prompt_tokens: 1200, completion_tokens: 300, total_tokens: 1500 } });
+    expect(useChatStore.getState().lastUsage).toEqual({ prompt_tokens: 1200, completion_tokens: 300, total_tokens: 1500 });
+    // 无 usage 的 done 不覆盖上次值（保持最近一次有值）
+    useChatStore.getState().sendMessage("再问");
+    const { onEvent: onEvent2 } = sseOptions();
+    onEvent2("done", { session_id: "sess-1" });
+    expect(useChatStore.getState().lastUsage).toEqual({ prompt_tokens: 1200, completion_tokens: 300, total_tokens: 1500 });
+  });
+
   it("done 事件 → streaming=false + currentSessionId 更新（续聊）+ 刷新会话列表", async () => {
     mocked.listSessions.mockResolvedValue([sampleSession]);
     useChatStore.getState().sendMessage("你好");

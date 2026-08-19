@@ -25,6 +25,7 @@ import {
 import { useMediaQuery } from "../../hooks/use-media-query";
 import { CHAT_MIN_WIDTH } from "../../hooks/use-panels";
 import { useProjectStore } from "../../stores/project";
+import { getSettingsLlm, updateSettingsLlm, type SettingsLlmConfig } from "../../lib/api";
 import { useChatStore, type FocusContext, type ProposalCard } from "../../stores/chat";
 import type { ChatMessage } from "@whispering233/ai-editor-shared";
 import { formatRelativeTime } from "@whispering233/ai-editor-shared";
@@ -83,6 +84,90 @@ interface ToolCallShape {
 }
 const asToolCall = (c: unknown): ToolCallShape =>
   typeof c === "object" && c !== null ? (c as ToolCallShape) : {};
+
+// ============ AI 设置工具条（需求 3，决策 34/35）：模型选择 + 思考强度 + 上下文占用 ============
+
+/** 思考强度中文标签（off=关闭 / low 低 / medium 中 / high 强；决策 34 pi-ai reasoning 映射） */
+const THINKING_LABELS: Record<string, string> = { off: "思考关闭", low: "思考弱", medium: "思考中", high: "思考强" };
+
+function ChatModelBar({ disabled }: { disabled: boolean }) {
+  const [settings, setSettings] = useState<SettingsLlmConfig | null>(null);
+  const lastUsage = useChatStore((s) => s.lastUsage);
+
+  // 挂载/项目就绪后拉取 LLM 设置（模型目录 + 当前模型 + 思考强度；失败静默——工具条降级隐藏）
+  useEffect(() => {
+    if (disabled) return;
+    let cancelled = false;
+    void getSettingsLlm()
+      .then((res) => { if (!cancelled) setSettings(res); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [disabled]);
+
+  const currentModel = settings?.models.find((m) => m.id === settings.model) ?? null;
+  const contextWindow = currentModel?.contextWindow ?? 0;
+  // 上下文占用：最近一轮真实 usage.total / 当前模型 contextWindow（需求 3）
+  const usagePct =
+    lastUsage !== null && contextWindow > 0
+      ? Math.min(100, Math.round((lastUsage.total_tokens / contextWindow) * 100))
+      : null;
+
+  function changeModel(id: string): void {
+    setSettings((s) => (s ? { ...s, model: id } : s)); // 乐观更新（失败静默，下拉回后端实际值）
+    void updateSettingsLlm({ model: id }).catch(() => {});
+  }
+
+  function changeThinking(level: "off" | "low" | "medium" | "high"): void {
+    setSettings((s) => (s ? { ...s, thinkingLevel: level } : s));
+    void updateSettingsLlm({ thinking_level: level }).catch(() => {});
+  }
+
+  if (settings === null) return null; // 设置未拉取：不阻塞聊天
+
+  return (
+    <div className="flex h-9 shrink-0 items-center gap-1.5 border-b border-border px-2.5">
+      <select
+        className="h-6 w-max max-w-28 shrink-0 rounded-md border border-input bg-transparent px-1.5 text-xs text-foreground outline-none focus-visible:border-ring"
+        value={settings.model}
+        disabled={disabled}
+        onChange={(e) => changeModel(e.target.value)}
+        title="选择模型"
+        aria-label="选择模型"
+      >
+        {settings.models.map((m) => (
+          <option key={m.id} value={m.id}>
+            {m.displayName ?? m.id}
+          </option>
+        ))}
+      </select>
+      <select
+        className="h-6 w-max shrink-0 rounded-md border border-input bg-transparent px-1.5 text-xs text-foreground outline-none focus-visible:border-ring"
+        value={settings.thinkingLevel}
+        disabled={disabled || !currentModel?.reasoning}
+        onChange={(e) => changeThinking(e.target.value as "off" | "low" | "medium" | "high")}
+        title="思考强度"
+        aria-label="思考强度"
+      >
+        {(["off", "low", "medium", "high"] as const).map((l) => (
+          <option key={l} value={l}>
+            {THINKING_LABELS[l]}
+          </option>
+        ))}
+      </select>
+      {usagePct !== null && (
+        <div className="ml-auto flex shrink-0 items-center gap-1" title={`上下文占用：${lastUsage?.total_tokens ?? 0} / ${contextWindow} tokens`}>
+          <div className="h-1.5 w-16 overflow-hidden rounded-full bg-secondary">
+            <div
+              className={cn("h-full rounded-full", usagePct >= 90 ? "bg-destructive" : usagePct >= 70 ? "bg-amber-500" : "bg-primary")}
+              style={{ width: `${usagePct}%` }}
+            />
+          </div>
+          <span className="text-[10px] text-muted-foreground">{usagePct}%</span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ============ 会话标题行：下拉切换同项目会话 + [新会话] ============
 
@@ -537,6 +622,7 @@ function ChatPanelBody({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <SessionTitleBar disabled={disabled} onClose={onClose} onToggleCollapse={onToggleCollapse} />
+      <ChatModelBar disabled={disabled} />
       {!disabled && (
         <>
           <DisconnectBanner />

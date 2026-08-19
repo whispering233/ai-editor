@@ -47,20 +47,27 @@ function seedConfig(config: Record<string, unknown>): void {
 }
 
 describe("GET /api/v1/settings/llm", () => {
-  it("无任何配置 → 默认模型 + apiKeySet=false（无掩码字段）", async () => {
+  it("无任何配置 → 默认模型 + thinkingLevel=high + apiKeySet=false + 模型目录（决策 34）", async () => {
     const res = await buildApp().request("/api/v1/settings/llm", { headers: HOST_HEADERS });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ success: true, data: { model: "deepseek-v4-flash", apiKeySet: false } });
+    const body = await res.json();
+    expect(body.data.model).toBe("deepseek-v4-flash");
+    expect(body.data.thinkingLevel).toBe("high");
+    expect(body.data.apiKeySet).toBe(false);
+    expect(body.data.apiKeyMasked).toBeUndefined();
+    expect(Array.isArray(body.data.models)).toBe(true);
+    expect(body.data.models.length).toBeGreaterThan(0);
+    expect(body.data.models[0]).toMatchObject({ id: expect.any(String), contextWindow: expect.any(Number) });
   });
 
   it("环境变量 DEEPSEEK_API_KEY → apiKeySet=true + 掩码 sk-****1234 形状", async () => {
     process.env[DEEPSEEK_API_KEY_ENV] = "sk-abcdefghijkl1234";
     const res = await buildApp().request("/api/v1/settings/llm", { headers: HOST_HEADERS });
     const body = await res.json();
-    expect(body).toEqual({
-      success: true,
-      data: { model: "deepseek-v4-flash", apiKeySet: true, apiKeyMasked: "sk-****1234" },
-    });
+    expect(body.data.model).toBe("deepseek-v4-flash");
+    expect(body.data.apiKeySet).toBe(true);
+    expect(body.data.apiKeyMasked).toBe("sk-****1234");
+    expect(Array.isArray(body.data.models)).toBe(true);
   });
 
   it("config.json 有 key（无环境变量）→ apiKeySet=true", async () => {

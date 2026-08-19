@@ -844,11 +844,23 @@ export function renameProject(name: string): Promise<RenameProjectRes> {
 
 // ============ 设置（S1.4；契约：endpoints.md「系统设置」+ S1.3 server 路由） ============
 
-/** GET /api/v1/settings/llm 响应（决策 17：key 不回传明文，仅掩码） */
+/** 模型目录条目（GET /settings/llm；决策 34 getAvailableModels） */
+export interface LlmModelInfo {
+  id: string;
+  provider: string;
+  displayName: string;
+  contextWindow: number;
+  maxTokens: number;
+  reasoning: boolean;
+}
+
+/** GET /api/v1/settings/llm 响应（决策 17：key 不回传明文，仅掩码；决策 34：模型目录 + 思考强度） */
 export interface SettingsLlmConfig {
   model: string;
+  thinkingLevel: "off" | "low" | "medium" | "high";
   apiKeySet: boolean;
   apiKeyMasked?: string;
+  models: LlmModelInfo[];
 }
 
 /** 读取 LLM 配置（默认模型 deepseek-v4-flash；key 状态与掩码） */
@@ -856,9 +868,10 @@ export function getSettingsLlm(): Promise<SettingsLlmConfig> {
   return apiFetch<SettingsLlmConfig>("/settings/llm");
 }
 
-/** PUT /api/v1/settings/llm 请求体（api_key 空字符串 = 清除已保存 key） */
+/** PUT /api/v1/settings/llm 请求体（api_key 空字符串 = 清除已保存 key；thinking_level 决策 34） */
 export interface UpdateSettingsLlmBody {
   model?: string;
+  thinking_level?: "off" | "low" | "medium" | "high";
   api_key?: string;
 }
 

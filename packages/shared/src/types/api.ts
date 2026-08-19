@@ -858,17 +858,35 @@ export const proposalRejectResSchema = z.object({
 
 // ============ settings 端点（endpoints.md「系统设置」，决策 17） ============
 
-// GET /api/v1/settings/llm（key 不回传明文）
+/** 思考强度（决策 34：pi-ai reasoning 统一接口；off = 不加 reasoning 参数） */
+export const THINKING_LEVELS = ["off", "low", "medium", "high"] as const;
+export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
+
+/** 模型目录条目（GET /settings/llm 返回，供前端模型下拉与上下文占用分母） */
+export const modelInfoSchema = z.object({
+  id: z.string(),
+  provider: z.string(),
+  displayName: z.string(),
+  contextWindow: z.number(),
+  maxTokens: z.number(),
+  reasoning: z.boolean(),
+});
+export type LlmModelInfo = z.infer<typeof modelInfoSchema>;
+
+// GET /api/v1/settings/llm（key 不回传明文；models 为可用模型目录，当前 model 必在 list 内）
 export const settingsLlmGetResSchema = z.object({
   model: z.string(), // 默认 "deepseek-v4-flash"
+  thinkingLevel: z.enum(THINKING_LEVELS), // 思考强度（决策 34；缺省 high）
   apiKeySet: z.boolean(),
   apiKeyMasked: z.string().optional(), // 掩码展示（utils/format.ts maskApiKey）
+  models: z.array(modelInfoSchema), // 模型目录（决策 34 getAvailableModels）
 });
 
 // PUT /api/v1/settings/llm（写入 ~/.ai-editor/config.json，绝不入项目文件，决策 17）
 export const settingsLlmPutReqSchema = z
   .object({
     model: z.string().optional(),
+    thinking_level: z.enum(THINKING_LEVELS).optional(),
     api_key: z.string().optional(), // 空字符串 = 清除已保存 key
   })
   .strict();

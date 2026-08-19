@@ -85,6 +85,10 @@ interface ChatState {
   // ---- U5：focus context（跨页注入） ----
   focusContext: FocusContext | null;
   setFocusContext: (ctx: FocusContext | null) => void;
+
+  /** 上下文占用（需求 3，决策 34）：最近一轮的 token usage（done SSE 帧附带）；前端据此计算占用比例 */
+  lastUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null;
+  setLastUsage: (u: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null) => void;
   clearFocusContext: () => void;
 
   // ---- U5：断连横幅 ----
@@ -342,6 +346,8 @@ export const useChatStore = create<ChatState>((set, get) => {
     focusContext: null,
     setFocusContext: (ctx) => set({ focusContext: ctx }),
     clearFocusContext: () => set({ focusContext: null }),
+    lastUsage: null,
+    setLastUsage: (u) => set({ lastUsage: u }),
 
     disconnected: false,
     setDisconnected: (v) => set({ disconnected: v }),
@@ -461,7 +467,10 @@ export const useChatStore = create<ChatState>((set, get) => {
               // 本轮结束：记录 session_id 供续聊（新会话场景下拉列表随之刷新）
               if (currentStreamMsgId === null) break; // 流已被切会话/项目作废，忽略
               const sid = (data as { session_id?: string })?.session_id;
+              // 需求 3（决策 34）：上下文占用显示——记录本轮真实 usage（done SSE 帧附带）
+              const usage = (data as { usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } })?.usage;
               set({ streaming: false, currentSessionId: sid ?? get().currentSessionId });
+              if (usage !== undefined) get().setLastUsage({ prompt_tokens: usage.prompt_tokens ?? 0, completion_tokens: usage.completion_tokens ?? 0, total_tokens: usage.total_tokens ?? 0 });
               if (sid) void get().loadSessions(); // 新会话已落库：刷新列表（下拉可切回）
               break;
             }

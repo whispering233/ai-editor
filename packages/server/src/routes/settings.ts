@@ -8,7 +8,8 @@ import { dirname, join } from "node:path";
 import { Hono } from "hono";
 import { maskApiKey } from "@whispering233/ai-editor-shared";
 import { writeJsonAtomic } from "@whispering233/ai-editor-db";
-import { settingsLlmGetResSchema, settingsLlmPutReqSchema } from "@whispering233/ai-editor-shared/schemas";
+import { settingsLlmGetResSchema, settingsLlmPutReqSchema, type ThinkingLevel } from "@whispering233/ai-editor-shared/schemas";
+import { getAvailableModels } from "@whispering233/ai-editor-llm";
 import { ok } from "../middleware/error.js";
 
 /** 默认模型名（endpoints.md settings 端点） */
@@ -23,8 +24,13 @@ export const USER_CONFIG_RELATIVE_PATH = join(".ai-editor", "config.json");
 /** 用户级配置文件结构（~/.ai-editor/config.json） */
 export interface UserConfigFile {
   model?: string;
+  /** 思考强度（决策 34：pi-ai reasoning 统一接口；缺省 high——DeepSeek 默认推理） */
+  thinking_level?: ThinkingLevel;
   api_key?: string;
 }
+
+/** 缺省思考强度（与 SharedConfig 缺省一致，读侧兜底） */
+export const DEFAULT_THINKING_LEVEL: ThinkingLevel = "high";
 
 /** 用户级配置文件绝对路径（os.homedir() 读 $HOME，测试设 HOME 即可隔离） */
 export function userConfigPath(): string {
@@ -54,6 +60,7 @@ export function saveUserConfig(partial: Partial<UserConfigFile>): UserConfigFile
   const file = userConfigPath();
   const next: UserConfigFile = { ...getUserConfig() };
   if (partial.model !== undefined) next.model = partial.model;
+  if (partial.thinking_level !== undefined) next.thinking_level = partial.thinking_level;
   if (partial.api_key !== undefined) next.api_key = partial.api_key;
   if (next.api_key === "") {
     delete next.api_key; // 空字符串 = 清除已保存 key（endpoints.md PUT 语义）
@@ -82,8 +89,18 @@ settingsRoutes.get("/llm", (c) => {
   const { key, masked } = effectiveApiKey();
   const payload = settingsLlmGetResSchema.parse({
     model: getUserConfig().model ?? DEFAULT_MODEL,
+    thinkingLevel: getUserConfig().thinking_level ?? DEFAULT_THINKING_LEVEL,
     apiKeySet: key !== null,
     ...(masked ? { apiKeyMasked: masked } : {}),
+    // 模型目录（决策 34 getAvailableModels）：当前 model 若不在列表（配置漂移）仍显示——前端下拉按 id 匹配
+    models: getAvailableModels().map((m) => ({
+      id: m.id,
+      provider: m.provider,
+      displayName: m.displayName,
+      contextWindow: m.contextWindow,
+      maxTokens: m.maxTokens,
+      reasoning: m.reasoning,
+    })),
   });
   return c.json(ok(payload));
 });
@@ -97,6 +114,7 @@ settingsRoutes.put("/llm", async (c) => {
   }
   saveUserConfig({
     model: parsed.data.model,
+    thinking_level: parsed.data.thinking_level,
     api_key: parsed.data.api_key,
   });
   return c.json(ok({ saved: true })); // settingsLlmPutResSchema 形状

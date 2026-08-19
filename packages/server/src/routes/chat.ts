@@ -64,7 +64,7 @@ import { chatMessagesResSchema, chatSendReqSchema, chatSessionsResSchema } from 
 import { HttpError, ok } from "../middleware/error.js";
 import { requireCurrentProject, type ProjectContext } from "../middleware/project.js";
 import { debugLog, isCategoryEnabled } from "../debug.js";
-import { DEFAULT_MODEL, effectiveApiKey, getUserConfig } from "./settings.js";
+import { DEFAULT_MODEL, DEFAULT_THINKING_LEVEL, effectiveApiKey, getUserConfig } from "./settings.js";
 
 // ============ 常量 ============
 
@@ -119,10 +119,12 @@ function createRealProduce(
   model: string,
   tools: LLMToolDefinition[],
   debugStream: boolean,
+  thinking: "off" | "low" | "medium" | "high" = "high",
 ): RunAgentDeps["produce"] {
   return (messages: LLMMessage[], signal?: AbortSignalLike, onEvent?: Parameters<RunAgentDeps["produce"]>[2]) =>
     // debugStream 显式传布尔（含 false）——stream 类别关时压过 env，保证配置文件类别隔离语义
-    chatStream({ apiKey, model, messages, tools, signal, onEvent, debugStream });
+    // reasoning（思考强度，决策 34）：off 不传（模型默认推理），low/medium/high 传 pi-ai 统一接口
+    chatStream({ apiKey, model, messages, tools, signal, onEvent, debugStream, reasoning: thinking });
 }
 
 // ============ [llm] 请求 / usage 调试日志装饰器（细粒度类别 request / usage） ============
@@ -342,6 +344,8 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
     // 守卫收窄：deps.produce 注入（测试）时不使用 apiKey；否则 envKey 已保证非 null
     const apiKey = envKey ?? "";
     const model = deps.model ?? getUserConfig().model ?? DEFAULT_MODEL;
+    // 思考强度（决策 34）：用户级配置持久化，POST /chat 读取后传 llm（chatStream reasoning）
+    const thinking = getUserConfig().thinking_level ?? DEFAULT_THINKING_LEVEL;
     const tools = deps.tools ?? toLLMToolDefinitions(listTools());
     const store = deps.store ?? defaultProposalStore;
     const now = deps.now ?? nowIso;
@@ -445,7 +449,8 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
               });
               return;
             case "done":
-              void writeEvent("done", { session_id: event.sessionId });
+              // 需求 3（决策 34）：附带本轮真实 usage，前端计算上下文占用
+              void writeEvent("done", { session_id: event.sessionId, ...(lastUsage !== null ? { usage: lastUsage } : {}) });
               return;
             case "error":
               // 用户取消/断开（aborted=true）：客户端已不可达，不写 error 帧（写了也失败）
@@ -477,7 +482,7 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
         // debugStream 按 stream 类别显式传入（false 也传——压过 env，保证类别隔离语义）
         const produce =
           deps.produce ??
-          createLLMRequestLogger(createRealProduce(apiKey, model, tools, isCategoryEnabled("stream")), {
+          createLLMRequestLogger(createRealProduce(apiKey, model, tools, isCategoryEnabled("stream"), thinking), {
             model,
             tools,
           });
@@ -485,13 +490,24 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
         const dispatcher =
           deps.dispatcher ?? createToolDispatcher({ db: project.db, outlineDir: project.root, projectId: project.config.id }, { store });
 
+        // ---- 9.5 上下文占用数据（需求 3，决策 34）：包裹 produce 捕获流内 finish 事件的真实 usage，
+        //      在 done SSE 帧附带——前端据此计算上下文占用（usage.total / 模型 contextWindow） ----
+        let lastUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null = null;
+        const produceWithUsage: RunAgentDeps["produce"] = async (messages, signal, onEvent) => {
+          const tee: typeof onEvent = (e) => {
+            if (e?.type === "finish") lastUsage = e.usage as typeof lastUsage;
+            onEvent?.(e);
+          };
+          return produce(messages, signal, tee);
+        };
+
         const result = await runAgent({
           sessionId,
           userMessage: message, // runAgent 追加进会话（传入 session 不应已含本轮消息）
           session,
           focus,
           projectPrompt: project.config.prompt || undefined, // 决策 7 项目层
-          deps: { produce, dispatcher, onEvent, onMessages },
+          deps: { produce: produceWithUsage, dispatcher, onEvent, onMessages },
           signal: controller.signal, // 决策 16：断开即取消（abort 永不重试）
         });
 

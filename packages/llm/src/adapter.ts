@@ -245,13 +245,15 @@ export interface AdapterStreamParams {
   signal?: AbortSignalLike;
   maxTokens?: number;
   temperature?: number;
+  /** 思考强度（决策 34：pi-ai reasoning 统一接口；'off' = 不传 reasoning 参数，其余映射 low/medium/high） */
+  reasoning?: "off" | "low" | "medium" | "high";
   onEvent?: (event: LLMStreamEvent) => void;
   debugStream?: boolean;
 }
 
 /** 核心流式调用：调 pi-ai models.stream 并转发事件；返回 ChatStreamResult */
 export async function streamChat(params: AdapterStreamParams): Promise<ChatStreamResult> {
-  const { apiKey, model, messages, tools, signal, maxTokens, temperature, onEvent, debugStream } = params;
+  const { apiKey, model, messages, tools, signal, maxTokens, temperature, reasoning, onEvent, debugStream } = params;
   const models = getModels();
 
   // 模型解析：找不到指定模型时回退默认（配置漂移防御）
@@ -274,6 +276,8 @@ export async function streamChat(params: AdapterStreamParams): Promise<ChatStrea
       ...(signal !== undefined ? { signal: signal as AbortSignal } : {}),
       ...(maxTokens !== undefined ? { maxTokens } : {}),
       ...(temperature !== undefined ? { temperature } : {}),
+      // 思考强度（决策 34）：off 不传（模型默认），low/medium/high 传 pi-ai reasoning 统一接口
+      ...(reasoning !== undefined && reasoning !== "off" ? { reasoning } : {}),
       // 总是记录 HTTP status（错误分类需要；debugStream 时打印响应状态——[llm] stream 类别调试日志）
       onResponse: (res: { status: number }) => {
         statusHint = res.status;
