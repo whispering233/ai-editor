@@ -13,7 +13,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 
 ## 项目状态（2026-08-19，v0.0.14 已发布）
 
-全量交付完成（含批次八）**：阶段 A 地基（T0-T7）+ 切片 1-13 + 阶段 U 三栏工作台（U1-U8）+ 画布 S10（S10.1-S10.5 + UX1-UX4，**批次八 O6 已按决策 33 移除**）+ 发布 S11 + 发布阻断项 E1-E6 + 阶段 B 项目提示词（B1）+ 阶段 C 时间轴（C1-C4，决策 26 + G2 timepoint 实体化修订）+ 阶段 B2 自动备份与恢复（B2.1-B2.6，决策 27/28/29）+ 用户反馈批次一至八（F1-F9 · G1-G3 · H1-H6 · I1-I4 · J1-J3 + K1/K2 · M1-M3 · N1-N2（决策 32）· O1-O6（决策 33））+ L 批次样式工程化（L1-L4）+ **发布 v0.0.1-v0.0.14 全链路全绿**。**批次九（2026-08 进行中：决策 34 pi-ai 引擎换核 / 决策 35 工具核查与中栏演进 / 决策 36 参考资料页）**。
+全量交付完成（含批次八）**：阶段 A 地基（T0-T7）+ 切片 1-13 + 阶段 U 三栏工作台（U1-U8）+ 画布 S10（S10.1-S10.5 + UX1-UX4，**批次八 O6 已按决策 33 移除**）+ 发布 S11 + 发布阻断项 E1-E6 + 阶段 B 项目提示词（B1）+ 阶段 C 时间轴（C1-C4，决策 26 + G2 timepoint 实体化修订）+ 阶段 B2 自动备份与恢复（B2.1-B2.6，决策 27/28/29）+ 用户反馈批次一至八（F1-F9 · G1-G3 · H1-H6 · I1-I4 · J1-J3 + K1/K2 · M1-M3 · N1-N2（决策 32）· O1-O6（决策 33））+ L 批次样式工程化（L1-L4）+ **发布 v0.0.1-v0.0.14 全链路全绿**。**批次九（2026-08 已完成：决策 34 pi-ai 引擎换核 / 决策 35 工具核查与中栏演进 / 决策 36 参考资料页）**——**无待做项**（发布 v0.0.15 待新版本发布时执行）。
 
 - **设计主轴**：`decisions.md` 决策 1-33；架构分包见 `architecture.md`；文档即契约（`doc/api`、`doc/database`、`doc/ui`）。
 - **测试**：全仓 1562 个（shared 131 / llm 59 / db 244 / server 328 / client 469（28 文件）/ tools 237 / agent 94）。
@@ -23,14 +23,14 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 
 - [x] 历史批次（git log / CHANGELOG 回溯规格）：阶段 A + 切片 1-13 · 阶段 U · 画布 S10（O6 移除）· 发布 S11 + E1-E6 · 阶段 B/C/B2 · 批次一至六（F1-F9 · G1-G3 · H1-H6 · I1-I4 · J1-J3+K1/K2 · M1-M3）· L 批次（L1-L4）· 批次七（N1-N2，决策 32）
 - [x] **批次八（O1-O6，决策 33，2026-08-19）**：O1 设定筛选可搜索下拉 `5dfa1dc` / O2 大纲操作区右移+去时间戳 `42df33e` / O3 时间轴去拖拽柄保留提示 `6d0e0cc` / O4 时间轴折叠按钮左移 `7aca264` / O5 设定树全部展开/折叠 `dbeb52c` / O6 画布页移除（决策 33）`232d396`；收官文档 `7aca8ce`
-- [ ] **批次九（N2 后，2026-08，决策 34/35/36 设计已完成）**：
-  - [ ] 卡 9.1（T1.1）**llm 包引入 pi-ai + adapter**：依赖 @earendil-works/pi-ai（providers/deepseek 子路径）+ adapter.ts（LLMMessage→Context 转换 / 流事件转发 / usage 转换 / 错误归一化 + onResponse 恢复 status）+ 删除手写 SSE/流式累积，client.test.ts 重写为不联网单测；保留 retry.ts/token.ts（决策 15/6）
-  - [ ] 卡 9.2（T1.2）**模型目录接口**：getAvailableModels()/resolveModelInfo(id)（id/provider/contextWindow/maxTokens/reasoning），llm 包导出（适配 API 层 settings get 扩展 model list 返回）
-  - [ ] 卡 9.3（T2）**右栏模型选择/思考强度/上下文占用显示**（依赖 T1）：模型下拉（getAvailableModels + 设置持久化）/ 思考强度下拉（minimal/low/medium/high 映射 baseline 偏好）/ 上下文占用条（usage 真值 / contextWindow 分母，SSE 消息带 usage 事件/或 chat GET 返回）
-  - [ ] 卡 9.4（T3a）**后端 reference 类型 + 迁移 005 + CRUD**：ENTITY_TYPES 扩入 reference + SCHEMA_VERSION 5 迁移（建新表四步）+ 实体 CRUD 白名单含 reference + 列表摘要截断（content 120 字）+ 详情全文
-  - [ ] 卡 9.5（T3b）**工具 search_references + propose_create_reference**：查询工具（标题+tags 关键词搜索→摘要列表）+ 提案工具（预览 + 确认后 create_entity 写入）
-  - [ ] 卡 9.6（T3c）**参考资料前端页**：TabBar 新增 tab + 路由 references（列表/详情）+ 新建/编辑 Dialog（类型/标签/来源/内容）+ 软删入口 + 与时间轴同款滚动结构
-  - [ ] 卡 9.7（T4）**InfoBar 问 AI 入口 + 页面焦点上报**：InfoBar 新增「问 AI」按钮（读 ui store currentFocus 注入 focusContext） + 各页面上报 currentFocus（大纲选中节点/实体当前对象/参考资料当前条）+ 继续当前会话语义
+- [x] **批次九（2026-08，决策 34/35/36 设计已完成）**：
+  - [x] 卡 9.1（T1.1）**llm 包引入 pi-ai + adapter**：依赖 @earendil-works/pi-ai（providers/deepseek 子路径）+ adapter.ts（LLMMessage→Context 转换 / 流事件转发 / usage 转换 / 错误归一化 + onResponse 恢复 status）+ 删除手写 SSE/流式累积，client.test.ts 重写为不联网单测；保留 retry.ts/token.ts（决策 15/6）
+  - [x] 卡 9.2（T1.2）**模型目录接口**：getAvailableModels()/resolveModelInfo(id)（id/provider/contextWindow/maxTokens/reasoning），llm 包导出（适配 API 层 settings get 扩展 model list 返回）
+  - [x] 卡 9.3（T2）**右栏模型选择/思考强度/上下文占用显示**（依赖 T1）：模型下拉（getAvailableModels + 设置持久化）/ 思考强度下拉（minimal/low/medium/high 映射 baseline 偏好）/ 上下文占用条（usage 真值 / contextWindow 分母，SSE 消息带 usage 事件/或 chat GET 返回）
+  - [x] 卡 9.4（T3a）**后端 reference 类型 + 迁移 005 + CRUD**：ENTITY_TYPES 扩入 reference + SCHEMA_VERSION 5 迁移（建新表四步）+ 实体 CRUD 白名单含 reference + 列表摘要截断（content 120 字）+ 详情全文
+  - [x] 卡 9.5（T3b）**工具 search_references + propose_create_reference**：查询工具（标题+tags 关键词搜索→摘要列表）+ 提案工具（预览 + 确认后 create_entity 写入）
+  - [x] 卡 9.6（T3c）**参考资料前端页**：TabBar 新增 tab + 路由 references（列表/详情）+ 新建/编辑 Dialog（类型/标签/来源/内容）+ 软删入口 + 与时间轴同款滚动结构
+  - [x] 卡 9.7（T4）**InfoBar 问 AI 入口 + 页面焦点上报**：InfoBar 新增「问 AI」按钮（读 ui store currentFocus 注入 focusContext） + 各页面上报 currentFocus（大纲选中节点/实体当前对象/参考资料当前条）+ 继续当前会话语义
   - [ ] 批文：设计文档落地（决策 34/35/36 已写）+ CHANGELOG + 发布 v0.0.15
 
 > 各卡详细规格、坑记录与提交历史可 `git log` 回溯（commit 见 CHANGELOG.md / release-review.md 发布进展记录）。
@@ -59,7 +59,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 
 **发布与阻断项（E1-E6，2026-08）**——导出/导入（E1-E3：fflate zip 三文件）、schema 安全（E4 未来版本拒绝重建 / E5 增量迁移）、发布链路（E6：6 包 npm + OIDC Trusted Publisher + CI 全绿，v0.0.1-v0.0.14）。发布管道坑记录见文末。
 
-**批次九（2026-08 进行中：决策 34 pi-ai 引擎换核 / 决策 35 工具核查与中栏演进 / 决策 36 参考资料页）**——llm 引擎换核（pi-ai adapter 单向转换保留契约）+ 模型目录/思考强度/上下文占用（右栏增强）+ 参考资料第 7 实体类型（CRUD/工具/页面）+ InfoBar 问 AI 统一入口 + 页面焦点上报；设计阶段完成（决策 34/35/36 成文 + schema/tools/layout/references 文档更新）
+**批次九（2026-08 已完成：决策 34 pi-ai 引擎换核 / 决策 35 工具核查与中栏演进 / 决策 36 参考资料页 + 发布 v0.0.15 待发）**——llm 引擎换核（引入 @earendil-works/pi-ai 替换手写 SSE/流式累积；agent 394+ server 层契约零破坏；getAvailableModels 模型目录）；右栏增强（模型选择 / 思考强度 low·medium·high / 上下文占用条 usage÷contextWindow）；参考资料第 7 实体类型（SCHEMA_VERSION 5 + search_references / propose_create_reference 工具 + TabBar/列表/详情页）；InfoBar 问 AI 统一入口 + 页面焦点上报（决策 35：入口集中化，页面零按钮只上报 currentFocus）；全仓 1555 测试全绿
 
 ---
 
