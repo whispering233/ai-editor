@@ -857,7 +857,7 @@ export interface LlmModelInfo {
 /** GET /api/v1/settings/llm 响应（决策 17：key 不回传明文，仅掩码；决策 34：模型目录 + 思考强度） */
 export interface SettingsLlmConfig {
   model: string;
-  thinkingLevel: "off" | "low" | "medium" | "high";
+  thinkingLevel: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
   apiKeySet: boolean;
   apiKeyMasked?: string;
   models: LlmModelInfo[];
@@ -871,7 +871,7 @@ export function getSettingsLlm(): Promise<SettingsLlmConfig> {
 /** PUT /api/v1/settings/llm 请求体（api_key 空字符串 = 清除已保存 key；thinking_level 决策 34） */
 export interface UpdateSettingsLlmBody {
   model?: string;
-  thinking_level?: "off" | "low" | "medium" | "high";
+  thinking_level?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
   api_key?: string;
 }
 

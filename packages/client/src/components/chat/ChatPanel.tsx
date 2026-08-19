@@ -87,8 +87,9 @@ const asToolCall = (c: unknown): ToolCallShape =>
 
 // ============ AI 设置工具条（需求 3，决策 34/35）：模型选择 + 思考强度 + 上下文占用 ============
 
-/** 思考强度中文标签（off=关闭 / low 低 / medium 中 / high 强；决策 34 pi-ai reasoning 映射） */
-const THINKING_LABELS: Record<string, string> = { off: "思考关闭", low: "思考弱", medium: "思考中", high: "思考强" };
+/** 思考强度档位（决策 34 参考 pi ThinkingLevel：off/minimal/low/medium/high/xhigh/max；显示英文原文） */
+const THINKING_LEVEL_OPTIONS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
+type ThinkingOption = (typeof THINKING_LEVEL_OPTIONS)[number];
 
 function ChatModelBar({ disabled }: { disabled: boolean }) {
   const [settings, setSettings] = useState<SettingsLlmConfig | null>(null);
@@ -117,7 +118,7 @@ function ChatModelBar({ disabled }: { disabled: boolean }) {
     void updateSettingsLlm({ model: id }).catch(() => {});
   }
 
-  function changeThinking(level: "off" | "low" | "medium" | "high"): void {
+  function changeThinking(level: ThinkingOption): void {
     setSettings((s) => (s ? { ...s, thinkingLevel: level } : s));
     void updateSettingsLlm({ thinking_level: level }).catch(() => {});
   }
@@ -144,13 +145,13 @@ function ChatModelBar({ disabled }: { disabled: boolean }) {
         className="h-6 w-max shrink-0 rounded-md border border-input bg-transparent px-1.5 text-xs text-foreground outline-none focus-visible:border-ring"
         value={settings.thinkingLevel}
         disabled={disabled || !currentModel?.reasoning}
-        onChange={(e) => changeThinking(e.target.value as "off" | "low" | "medium" | "high")}
-        title="思考强度"
+        onChange={(e) => changeThinking(e.target.value as ThinkingOption)}
+        title="Thinking level"
         aria-label="思考强度"
       >
-        {(["off", "low", "medium", "high"] as const).map((l) => (
+        {THINKING_LEVEL_OPTIONS.map((l) => (
           <option key={l} value={l}>
-            {THINKING_LABELS[l]}
+            {l}
           </option>
         ))}
       </select>
@@ -487,6 +488,12 @@ function InputArea({ disabled }: { disabled: boolean }) {
   const [text, setText] = useState("");
   const streaming = useChatStore((s) => s.streaming);
   const sendMessage = useChatStore((s) => s.sendMessage);
+  const focusInputSeq = useChatStore((s) => s.focusInputSeq);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  // 决策 35 增补：InfoBar「问 AI」点击触发聚焦（详见 chat store focusInputSeq 注释）
+  useEffect(() => {
+    if (focusInputSeq > 0) textareaRef.current?.focus();
+  }, [focusInputSeq]);
   const canSend = !disabled && !streaming && text.trim().length > 0;
 
   const handleSend = () => {
@@ -499,6 +506,7 @@ function InputArea({ disabled }: { disabled: boolean }) {
     <div className="shrink-0 border-t border-border p-3">
       <div className="flex items-end gap-2">
         <textarea
+          ref={textareaRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {

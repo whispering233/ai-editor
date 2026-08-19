@@ -119,7 +119,7 @@ function createRealProduce(
   model: string,
   tools: LLMToolDefinition[],
   debugStream: boolean,
-  thinking: "off" | "low" | "medium" | "high" = "high",
+  thinking: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" = DEFAULT_THINKING_LEVEL,
 ): RunAgentDeps["produce"] {
   return (messages: LLMMessage[], signal?: AbortSignalLike, onEvent?: Parameters<RunAgentDeps["produce"]>[2]) =>
     // debugStream 显式传布尔（含 false）——stream 类别关时压过 env，保证配置文件类别隔离语义

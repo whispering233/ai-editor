@@ -89,6 +89,11 @@ interface ChatState {
   /** 上下文占用（需求 3，决策 34）：最近一轮的 token usage（done SSE 帧附带）；前端据此计算占用比例 */
   lastUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null;
   setLastUsage: (u: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null) => void;
+
+  /** 「问 AI」聚焦输入框信号（决策 35 增补）：InfoBar 点「问 AI」后 +1，InputArea 监听后聚焦 textarea——
+   *  无页面焦点（currentFocus=null）时用户仍可直接打字提问，按钮不「无反应」 */
+  focusInputSeq: number;
+  requestFocusInput: () => void;
   clearFocusContext: () => void;
 
   // ---- U5：断连横幅 ----
@@ -348,6 +353,8 @@ export const useChatStore = create<ChatState>((set, get) => {
     clearFocusContext: () => set({ focusContext: null }),
     lastUsage: null,
     setLastUsage: (u) => set({ lastUsage: u }),
+    focusInputSeq: 0,
+    requestFocusInput: () => set((s) => ({ focusInputSeq: s.focusInputSeq + 1 })),
 
     disconnected: false,
     setDisconnected: (v) => set({ disconnected: v }),

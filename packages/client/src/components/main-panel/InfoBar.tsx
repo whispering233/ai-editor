@@ -29,6 +29,7 @@ export function InfoBar({
   const notifyDataChanged = useUiStore((s) => s.notifyDataChanged);
   const currentFocus = useUiStore((s) => s.currentFocus);
   const setFocusContext = useChatStore((s) => s.setFocusContext);
+  const requestFocusInput = useChatStore((s) => s.requestFocusInput);
   const isDesktop = useMediaQuery("(min-width: 1024px)");
 
   // 当前位置：null → 「未设置」；有 id 时优先 outline 树映射标题，未加载 outline 则显示 id 占位
@@ -72,7 +73,10 @@ export function InfoBar({
         size="icon-sm"
         className="ml-auto shrink-0 text-muted-foreground"
         disabled={!config}
-        onClick={() => setFocusContext(currentFocus)}
+        onClick={() => {
+          setFocusContext(currentFocus); // 有页面焦点时注入（聚焦小条出现）；无焦点 = 普通进入聊天
+          requestFocusInput(); // 始终聚焦右栏输入框——按钮点击必有反应（可立即打字提问）
+        }}
         aria-label="问 AI"
         title={currentFocus ? "带着当前页面上下文去问 AI" : "去问 AI"}
       >

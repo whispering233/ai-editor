@@ -245,8 +245,8 @@ export interface AdapterStreamParams {
   signal?: AbortSignalLike;
   maxTokens?: number;
   temperature?: number;
-  /** 思考强度（决策 34：pi-ai reasoning 统一接口；'off' = 不传 reasoning 参数，其余映射 low/medium/high） */
-  reasoning?: "off" | "low" | "medium" | "high";
+  /** 思考强度（决策 34：参考 pi ThinkingLevel——off/minimal/low/medium/high/xhigh/max；'off' = 不传 reasoning 参数） */
+  reasoning?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
   onEvent?: (event: LLMStreamEvent) => void;
   debugStream?: boolean;
 }

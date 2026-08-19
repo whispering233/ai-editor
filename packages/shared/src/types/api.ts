@@ -858,8 +858,8 @@ export const proposalRejectResSchema = z.object({
 
 // ============ settings 端点（endpoints.md「系统设置」，决策 17） ============
 
-/** 思考强度（决策 34：pi-ai reasoning 统一接口；off = 不加 reasoning 参数） */
-export const THINKING_LEVELS = ["off", "low", "medium", "high"] as const;
+/** 思考强度（决策 34：参考 pi 的 ThinkingLevel 档位——off / minimal / low / medium / high / xhigh / max；off = 不加 reasoning 参数） */
+export const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 export type ThinkingLevel = (typeof THINKING_LEVELS)[number];
 
 /** 模型目录条目（GET /settings/llm 返回，供前端模型下拉与上下文占用分母） */
