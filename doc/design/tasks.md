@@ -18,20 +18,20 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 ----------------
 - **批次七（N1-N2，2026-08 新需求，决策 32）已完成**：设定列表**上级设定筛选（递归子树）**——选择上级设定后只显示其下（直接或间接）设定的全部后代（不含自身）；复用既有 `listSettingHierarchyEdges` 邻接表 DFS 收集后代，走 db JS 过滤路径（total 正确）；REST `?parent_id=`（仅 setting，其他类型忽略，不存在→空结果不 404）；前端「上级设定 ▾」下拉（全部设定候选 + 全部重置 + 已删父兑底，与搜索/标签/排序/分页 AND 组合，tab 重置，空态三文档）。Oracle 审核无 P0/P1；P2 已处理（空串防御）或记入后续卡。可选收尾：npm 坏版本 v0.0.1/v0.0.2 deprecate 标注（需 2FA 凭据，见 AGENTS.md 发布流程段）；backlog.md 事项一律不做。
 ----------------
-- **批次八（O1-O6，2026-08 用户反馈批次——画布重构与体验优化，决策 33）进行中**：交互优化 4 卡（O1 设定筛选可搜索下拉 / O2 大纲操作区右移+顺序+去时间戳 / O3 时间轴去拖拽柄视觉保留提示 / O4 时间轴折叠按钮左移）+ 新需求 2 卡（O5 设定树全部展开/折叠 / O6 画布页删除与清理）。**阶段序：交互优化批次先行（3 条 worktree 并行：O1 ‖ O2 ‖ O3→O4 串行同 worktree）→ 新需求批次后行（2 条 worktree 并行：O5 ‖ O6）**；每卡独立分支 + worktree，父会话验证后合 main；文档已先行（决策 33 + layout.md/architecture.md/pages 文档同步）。发布 v0.0.14（可选，待批次结束后）。
-- **测试**：全仓 1622 个（shared 131 / llm 59 / db 244 / server 328 / client 529 / tools 237 / agent 94）。
+- **批次八（O1-O6，2026-08 用户反馈批次——体验优化与画布重构，决策 33）已完成（2026-08-19，本批次暂不发布 v0.0.14，待用户裁决）**：交互优化 4 卡（O1 `5dfa1dc` 设定筛选可搜索下拉 / O2 `42df33e` 大纲操作区右移+顺序+去时间戳 / O3 `6d0e0cc` 时间轴去拖拽柄视觉保留提示 / O4 `7aca264` 时间轴折叠按钮左移）+ 新需求 2 卡（O5 `dbeb52c` 设定树全部展开/折叠 / O6 `232d396` 画布页删除与清理，决策 33）。**阶段序：交互优化批次先行（3 条 worktree 并行：O1 ‖ O2 ‖ O3→O4 串行同 worktree）→ 新需求批次后行（2 条 worktree 并行：O5 ‖ O6）**；每卡独立临时分支 + worktree、实现后独立 oracle 审验（全部 VERDICT=PASS 无 P0/P1）→ 父会话 rebase/ff 合 main 清理分支；文档先行（决策 33 + layout/architecture/pages 同步）；P2 修复（画布死后 CSS 删除 + Timeline 注释整理 + layout.md 目录注释 Canvas 清除）随卡。**测试从 1622 降为 1562（画布两测试文件删除，client 30→28 文件）**。发布 v0.0.14 未执行（无用户指令）。
+- **测试**：全仓 1562 个（shared 131 / llm 59 / db 244 / server 328 / client 469（批次八删画布两测试文件后 28 文件）/ tools 237 / agent 94）。
 - 已完成卡片的详细规格已归档（git history 可回溯，见下方「任务卡归档」）；「项目演进路线」提供脉络摘要，配合 `decisions.md`（决策 1-33 为设计主轴）理解现状。
 
-## 执行进度（批次八，进行中）
+## 执行进度（批次八，已完成）
 
-> 批次八（O1-O6）2026-08 用户反馈批次：交互优化先（批次一）→ 新需求后（批次二）。文档契约先行已提交（决策 33 等，见 docs-prep commit）。
+> 批次八（O1-O6）2026-08 用户反馈批次：交互优化先（批次一）→ 新需求后（批次二）。文档契约先行已提交（决策 33 等，见 `fe205b4` docs-prep commit）。每卡独立 oracle 审验全 PASS；提交已合 main。
 
-- [ ] 批次一·O1 设定筛选可搜索下拉（交互）——EntityList.tsx 上级设定/标签筛选改可搜索 combobox（关键词过滤候选 + 全部重置，复用既有候选聚合），新增共享组件 + 单测
-- [ ] 批次一·O2 大纲操作区右移 + 顺序详情/添加/删除 + 删时间戳（交互）
-- [ ] 批次一·O3 时间轴去拖拽柄视觉保留拖拽提示（交互）
-- [ ] 批次一·O4 时间轴折叠按钮移组标题左侧（交互）
-- [ ] 批次二·O5 设定树「全部展开/全部折叠」按钮（新需求）
-- [ ] 批次二·O6 画布页删除与清理（新需求，决策 33）——Canvas.tsx/canvas.test.tsx/lib/canvas(.test).ts 删除、TabBar/main/use-route 接线清理、文档已先行
+- [x] 批次一·O1 设定筛选可搜索下拉（交互）——`5dfa1dc` 上级设定/标签筛选改可搜索 combobox（SearchableSelect + filterOptions 纯函数 + 5 单测，客户端过滤已聚合候选 +「全部」重置 + fallbackLabel 兑底）
+- [x] 批次一·O2 大纲操作区右移 + 顺序详情/添加/删除 + 删时间戳——`42df33e`（ml-auto 右端对齐 + formatTimestamp 移除）
+- [x] 批次一·O3 时间轴去拖拽柄视觉保留拖拽提示——`6d0e0cc`（GripVertical 移除、draggable 与 title 提示保留行根）
+- [x] 批次一·O4 时间轴折叠按钮移组标题左侧——`7aca264`（ChevronRight 至标题前，aria 语义保留）
+- [x] 批次二·O5 设定树「全部展开/全部折叠」按钮（新需求）——`dbeb52c`（折叠态提升 SettingTreeView 受控 + expandableSettingNodeIds 纯 helper + 5 单测）
+- [x] 批次二·O6 画布页删除与清理（新需求，决策 33）——`232d396`（Canvas.tsx/canvas.test.tsx/lib/canvas(.test).ts 删除、TabBar/main/use-route 接线清理、plot_edge 数据能力保留、零逻辑改动）
 
 ---
 
@@ -86,6 +86,8 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 **用户反馈批次六（M1-M3，2026-08）——实体/规则编辑与列表展示**：M1 标签编辑器回车添加下一项（bug：placeholder 承诺未兑现——非末行聚焦下一行 / 末行非空追加空行并聚焦 / 末行空无操作防空行跑马灯；`enterBehavior` 纯函数）；M2 设定列表行显示上级设定与描述（交互：EntitySummary 契约扩展 `parentId`/`parentName` 仅 setting 填充——服务端列表补查全量 belongs_to 层级边按 childId 映射，软删可见性复用 listRelations；setting 摘要新增 description 截断 100 字符防 search_entities 上下文膨胀；前端列 名称|标签|上级设定|描述|更新时间，上级 chip 点击跳父详情；顺带修正 entity-list.md 决策 31 后过期的 summary.category）；M3 标签列表拖拽排序（新需求：GripVertical 手柄 + HTML5 原生 DnD 零依赖，仅拖拽进行中响应 drop 不干扰输入框文本拖选，`moveArrayItem` 纯函数；TagsEditor 共用组件故 rules/tags/personality/abilities 四列表同步受益；排序只改本地表单数组随 data 提交，无独立 API）。
 
 **用户反馈批次七（N1-N2，2026-08）——设定列表上级设定筛选（决策 32，递归子树）**：N1 后端——`GET /entity/setting` 新增可选 `parent_id`（仅 setting 生效、其他类型忽略），匹配语义 = 设定层级树（belongs_to，决策 30）中直接或间接属于该父（**递归子树、不含自身**）；复用 db 既有 `listSettingHierarchyEdges` 全量边建 childOf 邻接表栈式 DFS 收集后代集合（防环守卫 = Set 去重），走 `listEntities` 既有 JS 过滤路径（与 tag filters 合并分支，total=过滤后总数、分页正确，无 filters/parentId 时仍走 COUNT+LIMIT SQL 路径零回归）；指向不存在/已软删的父 → 空结果（宽松同 tag 不 404）；软删联动由边查询可见性天然保证；N2 前端——排序行「上级设定 ▾」下拉（候选=全部设定按名排序 +「全部」重置，与标签下拉并列；候选聚合与 tag 候选合并一次请求 limit 200 sort name），列表请求带 `parent_id` 与搜索/标签/排序/分页 AND 组合，tab/类型切换重置，父已软删或超截断时 select 兑底 option 防空白，空态三文档《X》下暂无设定 + 清除上级筛选；oracle 审核无 P0/P1（P2：parent_id 空串防御归一化 + 空态文档补三文档已随卡处理）。
+
+**批次八（O1-O6，2026-08）——体验优化与画布重构（决策 33）**：O1 设定筛选可搜索下拉（SearchableSelect：Popover + 关键词客户端过滤已聚合候选 +「全部」清除 + fallbackLabel 兑底，区别于 parent-setting-select 的服务端防抖搜索）；O2 大纲节点行操作区右端对齐（ml-auto）+ 顺序详情/添加/删除 + 移除行尾时间戳显示；O3 时间轴移除 GripVertical 拖拽柄视觉（draggable 与 title 提示保留行根，参考大纲页无柄拖拽）；O4 时间轴折叠/展开按钮移至组标题左侧（参考大纲页折叠箭头位序）；O5 设定树「全部展开/全部折叠」按钮（折叠态提升 SettingTreeView 受控层 + `expandableSettingNodeIds` 纯 helper）；**O6 画布页删除（决策 33）**——`pages/Canvas.tsx`/`lib/canvas.ts` 及测试删除、TabBar 7→6 tab、`#/canvas` 路由移除（未知 hash 回退 `#/` 兑底），**plot_edge 数据模型与关系接口能力保留（决策 10 不变）**、旧 localStorage 坐标为无害残留不清理；文档同步（layout.md 路由表/架构图、canvas.md 标废弃、architecture.md 目录树）、画布死后 CSS（canvas-edge-flow）删除；每卡临时分支 + worktree 并行（批次一 O1‖O2‖O3O4→批次二 O5‖O6）+ 独立 oracle 审验全 PASS。
 
 ---
 
@@ -143,6 +145,12 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 | N1 | 设定列表上级设定筛选后端（决策 32） | `6b27ec5` | shared entityListQuerySchema +parent_id（仅 setting）；db listEntities +parentId 递归子树过滤（listSettingHierarchyEdges 邻接表 DFS 后代集合，JS 过滤路径，total 正确）；server 路由接线；vitest：递归子树/自身排除/不存在空结果/与 tag 组合/分页 total/软删联动/非 setting 忽略 |
 | N2 | 设定列表上级设定筛选前端（决策 32） | `0c53a09` | 「上级设定 ▾」下拉（全部设定候选 + 全部重置 + 已删父兑底，与标签下拉并列）；候选聚合与列表请求带 parent_id；与搜索/标签/排序/分页组合；tab/类型切换重置；空态三文档「《…》下暂无设定」 |
 | P2 | Oracle 审核 P2 修复 | `c139b07` | parent_id 空串防御归一化（？parent_id= 与「不传」等价）；列表空态文档「两种→三种」 |
+| O1 | 设定筛选可搜索下拉（交互） | `5dfa1dc` | SearchableSelect（Popover + 客户端过滤已聚合候选 + 全部清除 + fallbackLabel兑底）；filterOptions 纯函数 + 5 单测 |
+| O2 | 大纲操作区右移 + 顺序/去时间戳（交互） | `42df33e` | ml-auto 右端对齐；详情→＋→回收站→当前位置徽标；formatTimestamp 移除 |
+| O3 | 时间轴去拖拽柄保留提示（交互） | `6d0e0cc` | GripVertical 视觉移除、draggable+title 保留行根，两组件 |
+| O4 | 时间轴折叠按钮左移（交互） | `7aca264` | ChevronRight 移至组标题左侧，aria 语义保留 |
+| O5 | 设定树全部展开/折叠（新需求） | `dbeb52c` | 折叠态提升 SettingTreeView 受控 + expandableSettingNodeIds + 5 单测 |
+| O6 | 画布页删除与清理（新需求/决策 33） | `232d396` | 删 4 画布文件 + TabBar/main/use-route 接线 + 注释清理；plot_edge 能力保留；0 逻辑改动 |
 
 ---
 

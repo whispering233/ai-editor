@@ -142,13 +142,3 @@
   --sidebar-border: oklch(0.3 0.02 250);
   --sidebar-ring: oklch(0.78 0.14 85);
 }
-
-/* 画布连线流动虚线动画（S10.2：选中/hover 路径边；strokeDasharray 6 4 周期 10 → dashoffset -10 无缝循环） */
-@keyframes canvas-edge-flow {
-  to {
-    stroke-dashoffset: -10;
-  }
-}
-.canvas-edge-flow {
-  animation: canvas-edge-flow 0.8s linear infinite;
-}

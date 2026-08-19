@@ -277,7 +277,7 @@ client/src/
                    #   node-delta-panel（大纲节点变更记录）、compute-preview（实体状态预览）
     page-nav/      # Breadcrumb 面包屑（tab 化分段，跨页复用）
     feedback/      # 全局反馈宿主：Toaster 挂载 + ui store toast→sonner 桥接 + ErrorBanner 错误横幅
-  pages/           # 页面级组件（只做数据编排与状态绑定）：Dashboard / Outline / Canvas /
+  pages/           # 页面级组件（只做数据编排与状态绑定）：Dashboard / Outline /
                    #   EntityList / EntityDetail / HookPanel / Trash / Settings
   hooks/           # use-route（hash 路由）、use-theme、use-media-query、use-sse（SSE 解析）、use-api
   stores/          # project / chat / ui（Zustand）
