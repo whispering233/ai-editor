@@ -16,7 +16,7 @@ import type Database from "better-sqlite3";
  * v3 → v4（决策 31 K2 修订，2026-08）：**无 DDL**——仅 entities.data JSON 数据迁移
  * （setting 的旧 rules 分类值复制到 data.tags 并移除 rules，migrations/004_setting_tags.ts）。
  */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5; // 决策 36：+reference（005_reference.ts 四步换表）
 
 /**
  * 四张业务表 + 索引的建表 SQL（幂等：CREATE TABLE/INDEX IF NOT EXISTS）。
@@ -33,7 +33,7 @@ export const CREATE_TABLES_SQL = `
 -- entities：实体表（人物/设定/地点/伏笔/时间轴事件/时间标签点）
 CREATE TABLE IF NOT EXISTS entities (
   id          TEXT PRIMARY KEY,
-  type        TEXT NOT NULL CHECK(type IN ('character', 'setting', 'location', 'hook', 'event', 'timepoint')),
+  type        TEXT NOT NULL CHECK(type IN ('character', 'setting', 'location', 'hook', 'event', 'timepoint', 'reference')),
   name        TEXT NOT NULL,
   data        TEXT NOT NULL DEFAULT '{}',  -- JSON: 各类型的专属字段
   sort_order  INTEGER,         -- 时间轴线性序（决策 26 + G2 修订）：event 与 timepoint 各类型内线性（各自 0..n-1），其余类型恒为 NULL

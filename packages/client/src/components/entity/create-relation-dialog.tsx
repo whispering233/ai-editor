@@ -34,6 +34,8 @@ const TYPE_LABEL: Record<EntityType, string> = {
   event: "事件",
   // G2.3 类型补全（G2 时间标签点；源端下拉随 ENTITY_TYPES 出现——挂载关系不在此对话框创建）
   timepoint: "时间点",
+  // 决策 36（批次九）参考资料 reference
+  reference: "参考资料",
 };
 
 /**

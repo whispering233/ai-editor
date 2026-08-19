@@ -153,6 +153,20 @@ export const eventDataSchema = z
 /** timepoint 专属字段（G2 时间标签点，决策 26 修订）：data 空——时间标签文本 = name，可重命名，YAGNI 不加 data 字段 */
 export const timepointDataSchema = z.object({}).passthrough();
 
+/** 参考资料分类枚举（决策 36：外部素材/灵感笔记，非本书正文） */
+export const REFERENCE_TYPES = ["material", "inspiration", "theory", "reference"] as const;
+export type ReferenceTypeValue = (typeof REFERENCE_TYPES)[number];
+
+/** reference 专属字段（决策 36 参考资料：type 分类枚举 / content 全文长文本 / source 来源 / tags 标签数组） */
+export const referenceDataSchema = z
+  .object({
+    type: z.enum(REFERENCE_TYPES).optional(), // 缺省 material（写入侧兜底）
+    content: z.string().optional(),
+    source: z.string().nullable().optional(),
+    tags: z.array(z.string()).optional(),
+  })
+  .passthrough(); // 允许未知字段（创作工具，用户自定义字段自由）
+
 /**
  * 各类型 data schema 注册表（服务端按实体 type 选用精确 schema 校验）
  * 创建/更新请求中的 data 本体使用宽松 record（entityCreateReqSchema），
@@ -165,6 +179,7 @@ export const ENTITY_DATA_SCHEMAS = {
   hook: hookDataSchema,
   event: eventDataSchema,
   timepoint: timepointDataSchema, // G2 时间标签点：data 空
+  reference: referenceDataSchema, // 参考资料（决策 36）
 } as const;
 
 // ============ project 端点（endpoints.md「项目管理」） ============

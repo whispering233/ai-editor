@@ -16,7 +16,7 @@
 // - 失败 → 该迁移回滚 + 版本停在前一迁移后，下次 open 重试
 // - 无迁移路径的旧版本（如 v0 且无 0→1 条目）保持删库重建兜底（决策 13）
 //
-// **当前状态**：SCHEMA_VERSION = 3；真实迁移 002（v1→v2：entities 表 CHECK 扩为 5 种 +
+// **当前状态**：SCHEMA_VERSION = 5；真实迁移 002（v1→v2：entities 表 CHECK 扩为 5 种 +
 // sort_order 列，决策 26 时间轴）、003（v2→v3：entities CHECK 扩 6 种含 timepoint +
 // event.data.time_label 迁移为 timepoint 实体 + occurs_at 挂载关系，G2 决策 26 修订）。
 // v0 库无 0→1 迁移条目，仍走删库重建兜底（决策 13）。
@@ -25,6 +25,7 @@ import type { Db } from "../connection.js";
 import migration002 from "./002_event_timeline.js";
 import migration003 from "./003_timepoint.js";
 import migration004 from "./004_setting_tags.js";
+import migration005 from "./005_reference.js";
 
 /** 单条增量迁移（version = 迁移完成后 data.db 的 user_version） */
 export interface Migration {
@@ -34,5 +35,5 @@ export interface Migration {
 }
 
 /** 全量迁移集（按 version 升序：002 时间轴事件（决策 26）、003 时间标签点实体化（G2）、
- *  004 设定分类字段 tags（决策 31 K2 修订）） */
-export const MIGRATIONS: readonly Migration[] = [migration002, migration003, migration004];
+ *  004 设定分类字段 tags（决策 31 K2 修订）、005 参考资料 reference（决策 36）） */
+export const MIGRATIONS: readonly Migration[] = [migration002, migration003, migration004, migration005];

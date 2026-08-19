@@ -57,6 +57,8 @@ const TYPE_LABEL: Record<EntityType, string> = {
   event: "事件",
   // G2.3 类型补全（G2 时间标签点；泛型详情页可用——仅名称可编辑，data 空）
   timepoint: "时间点",
+  // 决策 36（批次九）参考资料 reference
+  reference: "参考资料",
 };
 
 /** 字段值 → 表单字符串（undefined/null → 空串） */

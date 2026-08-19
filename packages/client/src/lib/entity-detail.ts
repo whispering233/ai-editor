@@ -87,6 +87,14 @@ export function detailFieldsForType(type: EntityType): DetailFieldConfig[] {
     // 无 data 字段区；详情页表单按「未出现的字段不渲染」自然退化为纯名称表单）
     case "timepoint":
       return [];
+    // 决策 36（批次九）参考资料 reference：type 分类枚举 / content 全文 textarea / source 来源 / tags 标签
+    case "reference":
+      return [
+        { key: "type", label: "分类", control: "select", options: ["material", "inspiration", "theory", "reference"] },
+        { key: "content", label: "内容", control: "textarea" },
+        { key: "source", label: "来源", control: "text" },
+        { key: "tags", label: "标签", control: "tags" },
+      ];
   }
 }
 

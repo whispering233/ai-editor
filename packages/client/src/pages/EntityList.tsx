@@ -56,6 +56,8 @@ const TYPE_LABEL: Record<EntityType, string> = {
   event: "事件",
   // G2.3 类型补全（G2 时间标签点；tab 随 ENTITY_TYPES 自动出现，列表 = 泛型视图）
   timepoint: "时间点",
+  // 决策 36（批次九）参考资料 reference
+  reference: "参考资料",
 };
 
 /** 排序下拉选项（sort × order 组合；默认更新时间倒序） */

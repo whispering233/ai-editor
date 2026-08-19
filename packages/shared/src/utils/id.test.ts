@@ -23,7 +23,7 @@ describe("generateId", () => {
 });
 
 describe("前缀映射（endpoints.md id 约定）", () => {
-  it("实体类型前缀：char-/set-/loc-/hook-/ev-/tp-（ev- 时间轴事件决策 26；tp- 时间标签点 G2）", () => {
+  it("实体类型前缀：char-/set-/loc-/hook-/ev-/tp-/ref-（ev- 时间轴事件决策 26；tp- 时间标签点 G2；ref- 参考资料决策 36）", () => {
     expect(ENTITY_ID_PREFIX).toEqual({
       character: "char-",
       setting: "set-",
@@ -31,6 +31,7 @@ describe("前缀映射（endpoints.md id 约定）", () => {
       hook: "hook-",
       event: "ev-",
       timepoint: "tp-",
+      reference: "ref-",
     });
     expect(generateEntityId("character")).toMatch(/^char-/);
     expect(generateEntityId("setting")).toMatch(/^set-/);
@@ -38,6 +39,7 @@ describe("前缀映射（endpoints.md id 约定）", () => {
     expect(generateEntityId("hook")).toMatch(/^hook-/);
     expect(generateEntityId("event")).toMatch(/^ev-/);
     expect(generateEntityId("timepoint")).toMatch(/^tp-/);
+    expect(generateEntityId("reference")).toMatch(/^ref-/);
   });
 
   it("大纲节点前缀：vol-/ch-/sc-", () => {

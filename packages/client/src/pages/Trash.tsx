@@ -46,6 +46,8 @@ const ENTITY_TYPE_LABEL: Record<EntityType, string> = {
   event: "事件",
   // G2.3 类型补全（G2 时间标签点；软删/还原走 /trash/entity/:type/:id 泛型路径）
   timepoint: "时间点",
+  // 决策 36（批次九）参考资料 reference
+  reference: "参考资料",
 };
 
 const NODE_TYPE_LABEL: Record<OutlineNodeType, string> = {

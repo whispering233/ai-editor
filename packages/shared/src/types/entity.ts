@@ -5,8 +5,8 @@
 
 // ============ 实体 ============
 
-/** 实体类型（entities 表 type 列，schema.md；event 为时间轴事件，决策 26；timepoint 为 G2 时间标签点，name=时间标签文本） */
-export type EntityType = "character" | "setting" | "location" | "hook" | "event" | "timepoint";
+/** 实体类型（entities 表 type 列，schema.md；event 为时间轴事件，决策 26；timepoint 为 G2 时间标签点，name=时间标签文本；reference 为参考资料，决策 36） */
+export type EntityType = "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "reference";
 
 /**
  * 实体（API 响应形态，camelCase；对应 GET /api/v1/entity/:type/:id 详情）

@@ -37,6 +37,8 @@ const TYPE_LABEL: Record<EntityType, string> = {
   event: "事件",
   // G2.3 类型补全（G2 时间标签点；概览卡仍为四卡——时间点无独立统计卡）
   timepoint: "时间点",
+  // 决策 36（批次九）参考资料 reference
+  reference: "参考资料",
 };
 const ENTITY_ORDER: EntityType[] = ["character", "setting", "location", "hook"];
 

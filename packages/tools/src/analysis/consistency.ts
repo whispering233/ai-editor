@@ -128,6 +128,9 @@ export function analyzeEntityConsistency(row: EntityRow, tree: OutlineFileTree, 
     // 无可分析字段——返回空集；后续卡按需增补）
     case "timepoint":
       return [];
+    // 决策 36（批次九）参考资料 reference：素材库无一致性规则（与 event 同哲学），返回空集
+    case "reference":
+      return [];
   }
 }
 

@@ -15,6 +15,7 @@ export const ENTITY_ID_PREFIX: Record<EntityType, string> = {
   hook: "hook-",
   event: "ev-",
   timepoint: "tp-",
+  reference: "ref-", // 参考资料（决策 36）
 };
 
 /** 大纲节点类型 → id 前缀（endpoints.md id 约定；root 不生成 id） */

@@ -44,6 +44,8 @@ export const SUMMARY_COLUMNS: Record<EntityType, SummaryColumnConfig> = {
   // G2.3 类型补全（G2 时间标签点：data 空、无专属摘要字段——endpoints.md「timepoint → 无专属摘要字段」，
   // 空 key = 摘要列渲染「—」占位，与 event 摘要缺失同款防御）
   timepoint: { key1: "", label1: "" },
+  // 决策 36（批次九）参考资料 reference：type 分类 + content 摘要截断 120 字 + tags 前 3
+  reference: { key1: "type", label1: "分类", key2: "content", label2: "摘要", key3: "tags", label3: "标签" },
 };
 
 /** hook 枚举值 → 中文（展示映射；未收录的原样显示）；详情页表单下拉复用（S3.6） */
@@ -110,4 +112,6 @@ export const CREATE_FIRST_FIELD: Record<EntityType, CreateFirstFieldConfig> = {
   // G2.3 类型补全（G2 时间标签点：data 空——name = 时间标签文本即全部字段；
   // 空 key = 行内新建仅 name 输入，EntityList 对空 key 跳过 data 字段与首字段输入）
   timepoint: { key: "", label: "", input: "text" },
+  // 决策 36（批次九）参考资料 reference：首字段 = 分类枚举（受控 select）
+  reference: { key: "type", label: "分类", input: "select", options: ["material", "inspiration", "theory", "reference"] },
 };
