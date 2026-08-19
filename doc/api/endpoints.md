@@ -28,7 +28,8 @@
   config?: {
     name?: string;       // 项目名称，默认取目录名
     language?: "zh" | "en";
-    prompt?: string;     // 项目级提示词
+    // prompt 已废弃（决策 41）：不再接受（strict schema 传入 → 400 VALIDATION_ERROR）；
+    // 项目规则改由 PUT /api/v1/project/agents 写入 AGENTS.md
   };
 }
 
@@ -127,7 +128,8 @@
   id: string;
   name: string;
   language: "zh" | "en";
-  prompt: string;            // 项目提示词
+  // prompt 字段已废弃（决策 41）：不再返回——项目规则唯一事实源改为项目目录 AGENTS.md
+  // （见 GET /api/v1/project/agents）；旧 project.json 中的 prompt 残留字段不再读取
   schemaVersion: number;     // schema 版本（对应 project.json 的 schema_version，决策 13）
   currentPosition: string | null;  // 大纲「当前位置」节点 id（project.json，伏笔健康指标依赖）
   backupFrequencyMinutes: number | null;  // 自动备份频率（分钟，决策 27；null = 关闭；缺省 10）
@@ -145,7 +147,8 @@
 {
   name?: string;
   language?: "zh" | "en";
-  prompt?: string;
+  // prompt 已废弃（决策 41）：不再接受（strict schema 传入 → 400 VALIDATION_ERROR）；
+  // 项目规则改由 PUT /api/v1/project/agents 写入 AGENTS.md
   current_position?: string | null;  // 更新「当前位置」（须指向存在的非软删大纲节点）
   backup_frequency_minutes?: number | null;  // 自动备份频率（决策 27；null = 关闭；仅接受枚举值 5/10/15/30/60，其他（含 0）→ 400 VALIDATION_ERROR——0 仅读侧兼容旧数据，写侧不接受）
 }
@@ -155,6 +158,51 @@
   updated: true;
 }
 ```
+
+### GET /api/v1/project/agents
+
+读取当前项目规则文件 AGENTS.md 内容（决策 41：项目规则**唯一事实源**，取代 project.json `prompt` 字段）。
+
+```typescript
+// Query: (none)
+
+// Res: 200
+{
+  content: string;          // AGENTS.md 文件内容（文件不存在 → 空串）
+  exists: boolean;          // 文件是否存在（false 时 content 为空串）
+  updatedAt: string | null; // 文件 mtime（ISO 8601；文件不存在 → null）——外部修改检测依据
+}
+```
+
+**语义**：
+- 无当前项目 → 409 `NO_PROJECT_OPEN`（与 `/config` 一致）。
+- **文件不存在不报错**：AGENTS.md 是可选文件（新项目/未迁移项目可能没有），返回 `exists: false` + 空串，前端据此展示空编辑区。
+- `updatedAt` = 文件系统 mtime（ISO 8601）——**外部修改检测（决策 41）**：用户在文件管理器中直接编辑 AGENTS.md 后 mtime 变化，前端比对上次读取的 `updatedAt`，不一致即提示「文件已被外部修改，请刷新/重新加载」。
+- 读取为**每次实时读文件**（不缓存）——外部编辑立即可见。
+
+### PUT /api/v1/project/agents
+
+写入当前项目规则文件 AGENTS.md（决策 41：设置页直接编辑 AGENTS.md 文件内容）。
+
+```typescript
+// Req
+{
+  content: string;   // AGENTS.md 完整内容（整体替换；空串 = 清空规则文件，保留空文件不删除）
+}
+
+// Res: 200
+{
+  saved: true;
+  updatedAt: string;  // 写入后的文件 mtime（ISO 8601）——前端更新本地比对基线
+}
+```
+
+**语义**：
+- 无当前项目 → 409 `NO_PROJECT_OPEN`。
+- **整体替换**（非追加）：`content` 为 AGENTS.md 完整内容；空串 = 清空规则（保留空文件，不删除——`exists` 语义稳定）。
+- 文件不存在时自动创建；写入走**原子写**（临时文件 + fsync + rename，决策 11 同款）——防崩溃/断电损坏。
+- 写入后返回新 mtime，前端更新本地比对基线（外部修改检测用）。
+- 写入失败 → 500 `INTERNAL_ERROR`。
 
 ### GET /api/v1/project/export
 

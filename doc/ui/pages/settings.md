@@ -25,13 +25,14 @@
 │    config.json），不写入项目文件                    │
 │  · 环境变量 DEEPSEEK_API_KEY 优先于此处配置         │
 │                                                  │
-│ 项目提示词（B1，决策 25）                           │
-│  · 注入 AI 上下文「## 项目设定」段（每轮有效）        │
-│  · 承载项目级规则/行业要求；空 = 整段跳过             │
-│  · 建议 ### 及以下层级小标题；避免 ## 顶层标题        │
-│    （与系统分段标题冲突）                           │
-│  [多行文本域…                            ]        │
-│  [保存提示词]                                     │
+│ 项目规则文件 AGENTS.md（决策 41，修订决策 25）            │
+│  · 项目目录下 AGENTS.md 为项目规则唯一事实源               │
+│  · 注入 AI 上下文「## 项目设定」段（每轮有效）              │
+│  · 空文件 = 整段跳过                                     │
+│  · 可在文件管理器中直接编辑；web 读取检测外部修改           │
+│    （mtime 比对，外部修改后提示刷新/重新加载）              │
+│  [多行文本域…                            ]              │
+│  [保存 AGENTS.md]                                       │
 │                                                  │
 │ 自动备份（B2 决策 27 + 决策 28 + 决策 29）            │
 │  · 跟随书籍：备份/频率均为本项目独立                  │
@@ -60,7 +61,7 @@
 | 模型名 | GET → `model`；PUT → `model` |
 | key 状态 | GET → `apiKeySet`（布尔）；已配置时展示 `apiKeyMasked` 掩码 |
 | key 编辑 | PUT → `api_key`（新 key；空字符串 = 清除） |
-| 项目提示词（B1） | GET/PUT `/api/v1/project/config` → `prompt` |
+| 项目规则文件 AGENTS.md（决策 41，修订决策 25） | 读写走文件接口（GET/PUT 项目目录下 AGENTS.md 文件内容；`project.json` `prompt` 字段废弃） |
 | 备份频率（B2） | GET/PUT `/api/v1/project/config` → `backupFrequencyMinutes` / `backup_frequency_minutes` |
 | 备份列表（B2 + B2.5 + B2.6） | `GET /api/v1/project/backups` → `backups[]`（fileName/size/createdAt/kind/name?） |
 | 立即备份（B2.5） | `POST /api/v1/project/backup` 可选 `{ name }` → `backup`（fileName/size/createdAt/kind:"manual"/name?） |
@@ -74,7 +75,10 @@
   - 未配置（`apiKeySet=false`）→ 显示「未配置」+ 输入框。
   - 已配置 → 显示掩码 + [更换]（展开输入框）+ [清除]（提交 `api_key: ""`）。
 - **保存**：`PUT /settings/llm` → toast「已保存，仅影响新请求」（决策 17：运行中的 agent 循环不受扰动）。
-- **项目提示词（B1）**：`GET /project/config` 载入当前 `prompt` → 多行文本域编辑 → [保存提示词] `PUT /project/config { prompt }` → toast + `dataVersion` +1（中栏数据页刷新）；清空保存 = 移除项目提示词（后续请求「## 项目设定」整段跳过）。
+- **项目规则文件 AGENTS.md（决策 41，修订决策 25）**：设置页「项目提示词」改为**直接编辑项目目录下 AGENTS.md 文件内容**（读写走文件接口）——载入当前内容 → 多行文本域编辑 → [保存 AGENTS.md] 写回文件 → toast + `dataVersion` +1（中栏数据页刷新）；清空保存 = 空文件（后续请求「## 项目设定」整段跳过）。
+  - **唯一事实源**：AGENTS.md 取代 project.json `prompt`（`prompt` 字段废弃，不再读写）；打开项目时若 `prompt` 存在且无 AGENTS.md → **自动迁移**写入 AGENTS.md（内容原样，一次迁移后 prompt 不再使用）。
+  - **外部编辑支持**：用户可在文件管理器中直接编辑 AGENTS.md；web 读取时检测外部修改（**mtime 比对**，外部修改后提示刷新/重新加载）。
+  - **注入逻辑保留**：system prompt「## 项目设定」段逻辑不变，数据源从 project.json `prompt` 改为 AGENTS.md 文件内容。
 - **备份频率（B2）**：下拉选择（关闭 / 每 5 / 10 / 15 / 30 / 60 分钟）→ 选择即保存 `PUT /project/config { backup_frequency_minutes }`（null = 关闭）→ toast + 列表/定时器按新频率生效；无项目打开时整区禁用（404/409 时显示引导提示）。
 - **立即备份（B2 + B2.5）**：旁侧「备份名称（可选）」输入框（maxLength 30，决策 28）——trim 后非空 → 随请求提交 `POST /project/backup { name }`，文件名 `<时间戳>-m-<名称>.zip`，成功后清空输入 + toast「已备份「名称」」；空输入 → 不传 name（`<时间戳>-m.zip`，决策 29：无名称手动备份带 `-m` 段，列表仍标「手动」）。失败（如磁盘错误）→ toast。
 - **备份列表（B2.5 + B2.6）**：时间显示补秒（当年 `MM-DD HH:mm:ss` / 跨年 `YY-MM-DD HH:mm:ss`——同分钟内多次备份可区分）；**类型标签（决策 29）**：行内简单标签区分手动/自动（`kind` 字段，如小徽标「手动」「自动」；快照归「自动」）；自定义名称行内展示（时间置灰 + 名称强调，无名称备份只显示时间+标签）；完整文件名在行 tooltip。

@@ -10,6 +10,7 @@
 │   └── <书名>/               # 每本书一个目录（创建书 = 新建子目录）
 │       ├── project.json       # 项目配置（id/schema_version/current_position 等，见下文契约）
 │       ├── outline.json       # 大纲树（卷 → 章 → 场景，严格三层，无游离节点）
+│       ├── AGENTS.md          # 项目规则文件（决策 41：项目规则唯一事实源，可选文件，见下文）
 │       └── data.db            # SQLite
 │           ├── entities       # 人物 / 设定 / 地点 / 伏笔 / 事件
 │           ├── relation_records  # 通用关系表
@@ -215,7 +216,6 @@ CREATE INDEX idx_chat_session ON chat_messages(session_id, created_at);
   "id": "proj-abc123",
   "name": "我的小说",
   "language": "zh",
-  "prompt": "力量体系：练气→筑基→金丹",
   "schema_version": 1,
   "current_position": "sc-42",
   "backup_frequency_minutes": 10,
@@ -224,12 +224,14 @@ CREATE INDEX idx_chat_session ON chat_messages(session_id, created_at);
 }
 ```
 
+> **`prompt` 字段已废弃（决策 41，2026-08 批次十）**：项目规则唯一事实源改为项目目录 `AGENTS.md` 文件（见下节），`prompt` **不再读写**——新写入不再产生该字段；旧文件中的残留字段宽松读取（不参与 schema_version 判定）。打开项目时若 `prompt` 存在且无 AGENTS.md → 自动迁移写入 AGENTS.md（内容原样，一次性）。
+
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `id` | string | 项目唯一 id，首次初始化时生成（前缀 `proj-` + nanoid），**跨启动稳定**；画布布局 localStorage 的隔离 key（决策 10）；**备份/恢复的唯一 key（决策 27）**——导入/加载备份时以 zip 内 id 与书架比对，匹配 → 覆盖恢复，不匹配 → 导入为新书 |
 | `name` | string | 项目名称，默认取目录名；**与目录名绑定**（「目录名 = 书名」不变式，决策 27：同名并存时目录与 name 同步去重为 `<书名> (N)`） |
 | `language` | `"zh"` \| `"en"` | 语言 |
-| `prompt` | string | 项目级提示词（决策 7 三层注入的项目层） |
+| `prompt` | string | **已废弃（决策 41）**：项目级提示词——不再读写；项目规则改由项目目录 `AGENTS.md` 承载（见下节）。旧文件中的残留字段宽松读取（不参与 schema_version 判定），新写入不再产生该字段 |
 | `schema_version` | number | JSON 结构版本（决策 13；与 outline.json 顶层同步写入） |
 | `current_position` | string \| null | 大纲「当前位置」节点 id（伏笔健康指标依赖，见 `hooks.md`；null = 未设置；须指向存在的非软删节点） |
 | `backup_frequency_minutes` | number \| null | **自动备份频率（决策 27，可选字段）**：分钟数，仅接受枚举 5/10/15/30/60；`null` / `0` = 关闭；**缺省 = 10**（新项目默认开启）；随书籍（每项目独立）；不参与 schema_version 判定（宽松读取，缺省兜底） |
@@ -239,5 +241,25 @@ CREATE INDEX idx_chat_session ON chat_messages(session_id, created_at);
 - DeepSeek API key **绝不写入本文件**（决策 17）——只走环境变量 `DEEPSEEK_API_KEY` 或用户级配置 `~/.ai-editor/config.json`。
 - 文件写入遵循决策 11 的原子写流程（outline.json 同款：临时文件 + fsync + rename）。
 - **自动备份目录（决策 27 + 决策 28 + 决策 29）**：项目目录内 `.backups/` 子目录存放备份 zip（时间戳命名 `<YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip` 毫秒精度，**kind 类型标记段（决策 29）**：`m` = 手动（无名称也带 `-m` 段，与自动可靠区分）/ `a` = 自动备份重命名后带名称；自动备份与覆盖前快照为纯时间戳 `<YYYYMMDD-HHmmssSSS>.zip`；手动带名称 `<YYYYMMDD-HHmmssSSS>-m-<名称>.zip`；**旧格式兼容解析不迁移**：旧秒级 `<YYYYMMDD-HHmmss>.zip` → auto、旧带名称无 kind 段 `<YYYYMMDD-HHmmssSSS>-<名称>.zip` → manual、纯时间戳 → auto；格式 = E1 导出包：project.json + outline.json + data.db）；**每项目保留最近 20 份**（超出删除最旧，含覆盖前自动快照；清理失败不阻塞备份主流程）；备份文件不入 git、不算数据文件（可随时删除）。**实现细节（2026-08 实测）**：同毫秒冲突用「时间戳 +1 毫秒循环去重」（保持文件名格式契约可解析）；「有变更才备份」的 mtime 判定加 1s 容差（备份管道内 wal_checkpoint 会把 data.db mtime 刷新到备份时刻，严格 `mtime > 上次备份时刻` 会自激误判——决策 28 毫秒精度下文件名截断误差已消除，但粗粒度 mtime 文件系统（如 FAT/exFAT 2s 粒度）下容差仍是必要防御，`BACKUP_CHANGE_TOLERANCE_MS` 保留 1s）；重命名备份只改名称段（时间戳与 kind 保持，决策 29，同目录 rename 原子）。
+
+## AGENTS.md — 项目规则文件（决策 41，2026-08 批次十）
+
+项目目录下的 `AGENTS.md` 是**项目规则唯一事实源**（取代 project.json `prompt` 字段，修订决策 25——当时否决的是「另立 rules.md 与 prompt 并存」的双通道方案，本决策将规则文件定义为唯一事实源，不存在双通道漂移）。**不是 project.json 内字段**，是项目目录下的独立文件（与代码仓库 AGENTS.md 惯例一致，用户可在文件管理器中直接编辑、可纳入版本管理）。
+
+**文件位置**：`books/<书名>/AGENTS.md`（项目目录下，与 project.json / outline.json / data.db 同级）。
+
+**可选文件**：新项目默认不创建；无 AGENTS.md 时项目规则为空（system prompt「## 项目设定」段跳过）。
+
+**自动迁移（打开项目时，决策 41）**：
+- 触发条件：project.json 存在 `prompt` 字段（非空）**且**项目目录无 AGENTS.md；
+- 动作：将 `prompt` 内容**原样**写入 AGENTS.md（原子写，决策 11 同款）；
+- **一次性**：迁移后 AGENTS.md 存在，条件不再满足，`prompt` 不再使用（字段可保留为遗留数据，宽松读取）；
+- 迁移在 open 流程内完成（与 E5 迁移同生命周期），失败不阻塞打开（记录日志，下次 open 重试）。
+
+**schema_version 评估（决策 41）**：**不升 schema_version**——`prompt` 字段废弃是「读侧不再使用」的语义变更，字段本身仍可存在于旧文件（宽松读取，不参与 JSON 结构判定），与 `backup_frequency_minutes` 可选字段先例一致（决策 27：可选字段宽松读取不升版本）。
+
+**外部编辑支持（决策 41）**：用户可在文件管理器中直接编辑 AGENTS.md；web 读取（`GET /project/agents`）返回文件 mtime，前端比对检测外部修改，不一致提示刷新/重新加载。
+
+**写入**：设置页直接编辑 AGENTS.md（`PUT /project/agents`，整体替换，原子写）。
 
 **画布视图**：大纲中的节点通过 `relation_records` 中的关系形成有向图，支持多线推演和路径分析（参见 [`../api/tools.md`](../api/tools.md) 中的分析类工具）。画布连线通过 `relation_records` 的 `plot_edge` 类型存储（决策 10），不进入 outline.json；节点坐标与画布缩放存浏览器 localStorage（决策 10），不进任何数据文件。

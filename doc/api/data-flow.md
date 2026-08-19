@@ -39,6 +39,33 @@ Browser                  Server                   agent               ai        
   │  SSE 流式响应           │                        │                   │                 │
 ```
 
+## 项目规则数据流（决策 41，2026-08 批次十）
+
+项目规则（system prompt「## 项目设定」段）的唯一事实源从 project.json `prompt` 字段改为项目目录 `AGENTS.md` 文件：
+
+```
+Browser (设置页)              Server (Hono)              项目目录
+      │                            │                        │
+      │  GET /project/agents       │                        │
+      │───────────────────────────▶│  readFile(AGENTS.md)   │
+      │                            │───────────────────────▶│
+      │        ◀───────────────────│                        │
+      │  {content, exists, updatedAt}                       │
+      │                            │                        │
+      │  PUT /project/agents       │                        │
+      │  {content}                 │  writeFile(AGENTS.md)  │
+      │───────────────────────────▶│  （原子写，决策 11）    │
+      │                            │───────────────────────▶│
+      │        ◀───────────────────│                        │
+      │  {saved, updatedAt}        │                        │
+```
+
+**注入链路（数据源变更）**：server chat 路由读取 AGENTS.md 文件内容 → 传入 runAgent → buildContext（`projectPrompt` 参数）→ buildSystemBase 拼装「## 项目设定」段（`PROJECT_PROMPT_TITLE`，空内容跳过）→ 喂给模型。**注入逻辑与段标题不变**（决策 41：注入逻辑保留，数据源从 project.json `prompt` 改为 AGENTS.md 文件内容）。
+
+**自动迁移**：打开项目时若 project.json `prompt` 存在且无 AGENTS.md → 自动迁移写入 AGENTS.md（内容原样，一次性；迁移后 prompt 不再使用）。
+
+**外部修改检测**：web 读取时比对文件 mtime（`GET /project/agents` 返回 `updatedAt`），外部修改后提示刷新/重新加载。
+
 ## 关键数据流特性
 
 | 特性 | 说明 |
@@ -51,3 +78,4 @@ Browser                  Server                   agent               ai        
 | 数据库持久化 | 每个 API 调用直接操作 `better-sqlite3` 的同步 API，写入即时落盘（WAL 模式 + `synchronous=FULL`） |
 | SSE 全链路取消 | 浏览器刷新/断网导致 SSE 断开时，AbortController 终止 agent 循环并中止 DeepSeek fetch；未确认提案按会话作废；写操作顺序固定「先 DB 后 JSON」，不一致由**启动一致性校验**兜底补标（以大纲节点软删为准补标关联记录，决策 16 修订）。断开检测三路并用（决策 20）：`stream.onAbort` + `c.req.raw` close/error 监听 + 心跳写失败（SSE 每 15-30s 发 `ping` 事件探活） |
 | 对话历史持久化 | 会话消息写入 data.db 的 `chat_messages` 表（session_id / project_id / role / content / tool_calls / tool_call_id，决策 18 修订），服务重启后同 session_id 可继续对话；历史按 `assistant.tool_calls[].id` ↔ `tool.tool_call_id` 成对重组喂回模型，滑动窗口裁剪必须成对；会话列表走 `GET /api/v1/chat/sessions`；滑动窗口裁剪与摘要压缩在 agent/session.ts 运行时完成 |
+| 项目规则数据流（决策 41） | 项目规则唯一事实源 = 项目目录 `AGENTS.md` 文件（取代 project.json `prompt`，不再读写）；打开项目时 prompt 存在且无 AGENTS.md → 自动迁移写入（原样，一次性）；system prompt「## 项目设定」段注入逻辑保留，数据源从 project.json `prompt` 改为 AGENTS.md 文件内容（server chat 路由读取 → runAgent → buildContext 传入 `projectPrompt`）；web 读取比对文件 mtime 检测外部修改 |

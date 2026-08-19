@@ -231,7 +231,7 @@
 
 ### 4.2 跨页跳转约定
 
-- **带上下文进聊天（不跳页）**：任一页「问 AI」→ 注入右栏当前会话：chat store 写入 `focusContext`（`focus_entity_type` / `focus_entity_id` / `focus_node_id`，对应 POST /api/v1/chat 请求体 `context` 字段），右栏输入框上方显示 focus 小条（§2.4 ④）。
+- **带上下文进聊天（不跳页）**：任一页「问 AI」（InfoBar 统一入口，决策 35）或行级**右键菜单「注入会话上下文」**（决策 40，见 §4.6）→ 注入右栏当前会话：chat store 写入 `focusContext`（`focus_entity_type` / `focus_entity_id` / `focus_node_id`，对应 POST /api/v1/chat 请求体 `context` 字段），右栏输入框上方显示 focus 小条（§2.4 ④）。
 - **当前位置定位**：InfoBar / 概览页点击「当前位置」→ ui store 设置 `focusOutlineNodeId`（transient）→ 跳 `#/outline`；Outline 页消费（展开祖先 + 滚动 + 临时高亮）后清除。
 - **软删成功**：跳回列表/大纲页 + toast「已移入回收站，可随时还原」。
 
@@ -242,7 +242,7 @@
 - **空态**：一句说明 + 一个主操作按钮；可配图标（`size-7/8 text-muted-foreground/40`）。
 - **toast**：轻提示（保存成功、已移入回收站等），`showToast` 3s 自动消失；渲染 = sonner `<Toaster>`（`components/ui/sonner.tsx`，主题随 useTheme 适配），`components/feedback/` 内订阅 ui store 桥接（U6 起实现）。
 - **确认对话框**：不可恢复操作（purge、物理删关系）必须二次确认并说明影响范围（`confirm()`，ConfirmDialog 渲染组件后续切片实现）；软删与回收站还原直接执行，不弹确认（H2）。
-- **操作按钮禁止收进 `...`/更多菜单（H3）**：所有操作按钮一律直接展示，禁止用 `MoreHorizontal`/`⋯` 做二级展开（时间轴事件行、伏笔行、书架项目行重命名等）；下拉菜单仅保留“会话选择”等选择器场景，不作为操作按钮容器。
+- **操作按钮禁止收进 `...`/更多菜单（H3）**：所有操作按钮一律直接展示，禁止用 `MoreHorizontal`/`⋯` 做二级展开（时间轴事件行、伏笔行、书架项目行重命名等）；下拉菜单仅保留“会话选择”等选择器场景，不作为操作按钮容器。**右键菜单（决策 40，§4.6）不违反本红线**——右键菜单是「需要时出现」的上下文交互（桌面通用心智），非「操作按钮收进 ⋯ 二级展开」；行级常驻操作按钮仍直接展示。
 - **文字型按钮必须有边框（H4）**：所有以文字为主的操作按钮（重命名、新建、重试、展开/收起、标签筛选等）必须带可见边框（`border` + `border-border`，或用 `Button variant="outline"`），避免看起来像普通文本；图标按钮不受此限。
 - **对话框宽度（DialogContent）**：基座 `max-w-lg`（**无变体**，shadcn 标准写法）；调用点按需 `sm:max-w-sm|md|2xl` 覆盖（Sidebar 新建项目 384px / 新建实体·大纲 448px / 建立关联 672px）。⚠ 基座**禁止改回 `sm:max-w-*`**——Tailwind 4 同变体、同特异性规则按生成 CSS 顺序决胜，基座 `sm:max-w-sm` 会压掉所有调用点的 `sm:max-w-*` 覆盖（2026-08 曾因此全仓对话框静默 384px，三段式建立关联被压碎；`f653058` 根因修复）。
 - **Base UI 菜单契约（2026-08 踩坑）**：`DropdownMenuLabel`（= `Menu.GroupLabel`）**必须**用 `DropdownMenuGroup` 包裹——裸放 `DropdownMenuContent` 内，菜单打开时抛 Base UI error #31（`MenuGroupContext is missing`），曾致点击会话标题下拉整页白屏（`3e877a1` 根因修复）；新增菜单时遵守，封装文件（`components/ui/dropdown-menu.tsx`）头部有红线注释。
@@ -259,6 +259,27 @@
 - **组合模式组件**：空态 → `components/ui/empty-state.tsx`（`EmptyState`：容器 + 说明文案 + 可选图标 + 主操作插槽）；区块卡 → `components/ui/section-card.tsx`（`SectionCard`：容器 + 可选标题）。新增页面优先复用，不现场拼装。
 - **CSS Modules 适用条件**：仅几何/状态复杂度高、Tailwind 类无法清晰表达的样式（如 Canvas 画布节点/连线）；简单布局一律 Tailwind 类（含共享常量），不硬转。**2026-08 L 批次评估结论**：Canvas/时间轴几何（坐标/缩放/连线路径）均在 JS/TS 计算，CSS 仅 `absolute`/`transform` 等工具类，动画 keyframes 在 `index.css`——无适用样式，C 项关闭；后续引入须同时满足「Tailwind 无法表达」+「重复 ≥3 处」两个条件。
 - **主题 tokens**：仍以 `client/src/index.css` 为唯一 token 源（§3），常量/组件内只允许 token 类（`bg-card`/`text-muted-foreground` 等），禁止硬编码色类（如 `bg-zinc-900`/`bg-white`）。
+
+### 4.5 行级交互模式（决策 37/38/42 统一，2026-08 批次十）
+
+> 大纲 / 时间轴 / 实体设定树等「树/组 + 行」结构页面统一行级交互心智（决策 37/38/42），行级操作按钮收敛为**只保留删除**：
+
+- **双击 = 详情**：双击行跳转详情页（大纲 `#/outline/:nodeId`、事件 `#/timeline/:id`、实体 `#/entities/:type/:id`、时间点详情等）。
+- **点击标题 = 行内编辑**：单击标题进入行内编辑（Enter 确认、Esc 取消、失焦保存）。
+- **Enter = 新建子级**：选中节点后按 Enter → 就地输入行出现在该节点子级末尾（层级由父节点推导，Enter 确认创建、Esc 取消）。
+- **行级只保留删除按钮**：「详情」「＋新建」「编辑」等入口由双击 / 行内编辑 / Enter 承担；删除按钮 H3 起直接展示（不收 ⋯ 菜单）。
+- **拖拽排序/移动保留**（HTML5 DnD，层级约束与防环校验沿用各页既有语义）。
+
+### 4.6 右键菜单（context menu，决策 40，2026-08 批次十）
+
+> 行级右键菜单作为行级「带上下文问 AI」AskAiButton 的替代——**删除全部 6 处行级 AskAiButton**（实体/伏笔/参考资料/大纲/时间点/事件行）。
+
+- **触发范围**：大纲节点行、实体行（人物/设定/地点/伏笔）、伏笔行、参考资料行、时间点行、事件行。
+- **菜单项**：
+  - **「注入会话上下文」**：复用 chat store focusContext 机制（决策 35）——右键行 → 菜单项 → 写入 focusContext → 右栏 focus 小条显示，继续当前会话（同 §4.2 带上下文进聊天）。
+  - **「建立关联」**：打开关联建立弹层（新建 relation_records 关联，决策 2 通用关系表；类型/端点按行实体类型预填）。
+- **InfoBar「问 AI」统一入口保留**：决策 35 的集中式入口不变——右键菜单是行级快捷入口的替代形态，不改变「全局入口在 InfoBar」的架构。
+- **不违反 H3 红线**：右键菜单是「需要时出现」的上下文交互（桌面通用心智），非「操作按钮收进 ⋯ 二级展开」——行级常驻操作按钮仍直接展示（H3，见 §4.3）。
 
 ---
 
