@@ -30,7 +30,7 @@
   - `user_version > SCHEMA_VERSION`（未来版本，E4）→ **拒绝打开** 409 `PROJECT_VERSION_NEWER`（数据原封不动，提示升级程序）；
   - `user_version < SCHEMA_VERSION`（旧版本）→ **有迁移路径**（`packages/db/src/migrations/` 存在从当前版本到目标版本的连续迁移链）→ `runMigrations` 前向迁移；**无迁移路径** → 删库重建兜底（决策 13，备份 `data.db.v{n}.bak` + `outline.json.v{n}.bak`）。
 - **迁移机制（E5）**：`migrations/` 目录每个文件导出一个 `Migration = { version, up }`（`001_xxx.ts` → version 1），`index.ts` 按 version 升序聚合导出 `MIGRATIONS`（tsc 编译进 dist 随包分发，无运行时目录读取）。`runMigrations` 对缺失版本逐个执行：**每个迁移一个事务（`up(db)` + `setUserVersion(version)` 原子提交——成功 ⇒ 版本已写入；失败 ⇒ 版本未变）**；**整批迁移前自动快照** data.db → `data.db.v{n}.{YYYYMMDDHHmmssSSSZ}.bak`（checkpoint 后复制主文件，时间戳命名不覆盖旧备份，失败重试现场保留）。迁移失败 → 该迁移回滚 + 版本停在前一迁移后，下次 open 重试。
-- 当前 `SCHEMA_VERSION = 4`；迁移链：`002_event_timeline.ts`（version 2，决策 26：entities 表 CHECK 扩入 `'event'` + 新增 `sort_order` 列）、`003_timepoint.ts`（version 3，G2 决策 26 修订：entities 表 CHECK 扩入 `'timepoint'` + `event.data.time_label` 迁移为 timepoint 实体 + occurs_at 关系，同名 time_label 合并为同一 timepoint）、`004_setting_tags.ts`（version 4，决策 31 K2 修订：**无 DDL**——setting 旧 `data.rules` 分类值复制到 `data.tags` 并移除 rules，仅 data JSON 数据迁移）。**SQLite 无法直接修改 CHECK 约束**，迁移走「建新表（新 CHECK）→ 拷贝数据 → drop 旧表 → rename」四步（`relation_records`/`delta_records` 无外键指向 entities，迁移只动 entities 表）；v1 → v4 迁移链存在 ⇒ 旧库 open 时自动前向迁移，不再走删库重建兜底。
+- 当前 `SCHEMA_VERSION = 5`；迁移链：`002_event_timeline.ts`（version 2，决策 26：entities 表 CHECK 扩入 `'event'` + 新增 `sort_order` 列）、`003_timepoint.ts`（version 3，G2 决策 26 修订：entities 表 CHECK 扩入 `'timepoint'` + `event.data.time_label` 迁移为 timepoint 实体 + occurs_at 关系，同名 time_label 合并为同一 timepoint）、`004_setting_tags.ts`（version 4，决策 31 K2 修订：**无 DDL**——setting 旧 `data.rules` 分类值复制到 `data.tags` 并移除 rules，仅 data JSON 数据迁移）、`005_reference.ts`（version 5，决策 36：entities 表 CHECK 扩入 `'reference'`，无数据搬移仅 DDL）。**SQLite 无法直接修改 CHECK 约束**，迁移走「建新表（新 CHECK）→ 拷贝数据 → drop 旧表 → rename」四步（`relation_records`/`delta_records` 无外键指向 entities，迁移只动 entities 表）；v1 → v5 迁移链存在 ⇒ 旧库 open 时自动前向迁移，不再走删库重建兜底。
 - **import 侧联动（E5 决议）**：导入备份时 `user_version < SCHEMA_VERSION` 且**有迁移路径** → 接受（搬入后 open 自动迁移，v1/v2/v3 备份经 E5 迁移升到 v4）；无路径 → 409 `SCHEMA_VERSION_MISMATCH`；`>` 当前 → 409（E4 语义）。
 
 ## entities — 实体表
@@ -38,7 +38,7 @@
 ```sql
 CREATE TABLE entities (
   id          TEXT PRIMARY KEY,
-  type        TEXT NOT NULL CHECK(type IN ('character', 'setting', 'location', 'hook', 'event', 'timepoint')),
+  type        TEXT NOT NULL CHECK(type IN ('character', 'setting', 'location', 'hook', 'event', 'timepoint', 'reference')),
   name        TEXT NOT NULL,
   data        TEXT NOT NULL DEFAULT '{}',  -- JSON: 各类型的专属字段
   sort_order  INTEGER,                     -- 时间轴线性序（决策 26 + G2 修订）：event 与 timepoint 各类型内线性（各自 0..n-1），NULL = 未参与排序；其余类型恒为 NULL
@@ -59,6 +59,7 @@ CREATE TABLE entities (
 | `hook` | 详见 [hooks.md](./hooks.md) |
 | `event` | `description`（文本）, `tags[]`（字符串数组，分类筛选用）——**G2 修订：`time_label` 已移除**（迁移至 timepoint 实体 + occurs_at 关系，见下） |
 | `timepoint` | `{}`（无专属字段——**G2：时间标签文本 = name**，可重命名；YAGNI 不加 data） |
+| `reference` | `type`（`material` 素材摘抄）/ `inspiration` 灵感记录）/ `theory` 写作理论）/ `reference` 设定参考），缺省 `material`）、`content` 内容全文（长文本无上限，列表接口摘要截断 120 字、详情接口返回全文）、`source` 来源（URL/书名/作者，可选）、`tags[]`（标签数组，决策 31 统一字段）——**决策 36（批次九）**：参考资料是外部素材/灵感笔记（非本书正文），AI 可读取参考、提案写入；第 7 种实体类型复用实体体系（泛型 CRUD/软删/回收站自动获得） |
 
 ### 时间轴（决策 26 + G2 修订：时间标签点实体化）
 

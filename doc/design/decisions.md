@@ -552,3 +552,58 @@ B2.5 上线后用户反馈两点体验痛点：① **手动/自动备份在列�
 - **localStorage 残留**：既有用户画布坐标（`ai-editor:canvas:{project_id}`）不再被读取，为无害残留，不清理、不做迁移。
 
 **为什么**：画布是同一大纲数据的可视化投影，随章节量增大（1000 章）自动布局/拖拽失去可用性，维护成本高于价值；删除是纯前端范围变更（决策 10 的数据模型与接口均为通用关系能力，不属于画布专属），因此不做数据迁移、不破坏 `plot_edge` 兼容性（历史数据/API 消费者不受影响）。
+
+## 决策 34：LLM 引擎换核 —— 引入 pi-ai 替换自研 llm 层（2026-08 用户裁决，批次九）
+
+用户需求（2026-08）：不自己维护复杂 LLM 调用接口（手写 SSE 解码/流式 tool_call 累积/错误归一化），引入 pi 生态的 `@earendil-works/pi-ai`（统一多提供商 LLM API，支持 DeepSeek/OpenAI/Anthropic/Google 等 20+ 厂商）直接使用其接口。经调研与逐点确认：
+
+- **集成形态＝方案 A（llm 包保留对外契约、内部换引擎）**：llm 包对外接口（`chatStream` 事件流 / `LLMStreamEvent` / `LLMError` / `LLMUsage` / `LLMToolDefinition`）签名不变，内部实现从手写 fetch/SSE 替换为 pi-ai 的 `models.stream`——agent 层（run.ts 的 produce 注入）、server 层（chat 路由的 createRealProduce / 调试日志装饰器）、shared 契约、前端零改动。**用户诉求达成**：手写 SSE 解码/splitSSEFrames/流式 tool_call 累积/usage 解析/错误 body 归一化（client.ts 约 300 行）整体删除，换为声明式事件转发 adapter（约 200 行）。
+- **消息模型**：ai-editor 的 `LLMMessage`（OpenAI wire 格式：system/user/assistant+tool_calls/tool+tool_call_id）与 pi-ai 的 Context（content blocks 数组 + toolResult 独立消息）是两套结构——转换不可避免，但方案 A 把转换压成**单向有界的声明式 adapter**：DB 行 → pi-ai Context（入站一处构建）+ 流事件转发（出站纯事件映射），而不是方案 B 的双向结构转换摊在 agent/DB/前端三层。storage 对比结论：pi 的 JSONL 文件会话存储（按 cwd 目录隔离 + 每会话一文件 + parentSession 会话树）支持多项目多会话，但它是「文件枚举 + 读元数据」级别的管理，没有 ai-editor 需要的 SQL 关系查询（按 project_id 隔离、会话摘要聚合、按条裁剪重组）——chat_messages 表（决策 18）保留不动。
+- **适配映射（实现要点）**：
+  - 消息：system→Context.systemPrompt；user→UserMessage；assistant→AssistantMessage（tool_calls→ToolCall 块）；tool→ToolResultMessage（content 纯文本块）
+  - 事件：text_delta→text；toolcall_end→tool_call（id/name/arguments 完整对象 + rawArguments）；done(带 usage)→finish+done；error→error（归一化）
+  - usage：pi-ai `input` 不含缓存（input = prompt-cacheRead-cacheWrite，源码 openai-completions.ts 1202 行）→ `prompt_tokens = input+cacheRead+cacheWrite`（= DeepSeek 原生口径）、`completion_tokens = output`、`total = totalTokens`
+  - 错误：openai-completions 用官方 openai SDK，`normalizeProviderError` 会把 HTTP status + body JSON 折入 errorMessage；adapter 在流开始时的 `onResponse` 回调记录 status 结合 errorMessage 关键词恢复 `LLMError.status/code`——`classifyLLMError`（决策 15 分类语义）原逻辑不变
+  - 工具 schema：LLMToolDefinition.parameters 是 JSON Schema 对象，pi-ai 的 Tool.parameters 是 TypeBox TSchema 但发送层直接透传（`parameters as any`，源码 1173 行）；adapter 原样映射 + TS 断言；`validateToolCall` 不调用（ai-editor 的 executor 自己用 zod 校验，决策 14 语义不变）
+  - 思考（thinking）流：MVP 不展示思考过程（YAGNI），流事件中忽略 thinking_start/delta/end，仅做思考强度参数控制（reasoning: minimal/low/medium/high 等）
+- **key 管理（决策 17 不变）**：pi-ai 的 DeepSeek provider 默认 `envApiKeyAuth(["DEEPSEEK_API_KEY"])`（环境变量优先语义与现状一致）；用户级 `~/.ai-editor/config.json` 的 api_key 通过自定义 `auth.resolve` 桥接（创建 provider 时注入 effectiveApiKey 逻辑）——key 依然不进项目文件。
+- **保留**：`retry.ts`（决策 15 重试语义，pi-ai 无内置重试）、`token.ts`（决策 6 滑动窗口估算 + 裁剪预算）、AbortSignal 四层穿透（决策 16，pi-ai 的 stream option 支持 signal）。
+- **新增接口**：`getAvailableModels(): ModelInfo[]`（模型目录：id/提供商标识/contextWindow/maxTokens/reasoning 支持）——支撑需求 3 的模型选择下拉与上下文占用显示的分母，是 llm 包对外契约的向后兼容增量（不影响现有合约）。
+- **依赖变更**：llm 包新增依赖 `@earendil-works/pi-ai`（可 tree-shaking 的子路径 `providers/deepseek` 注册），发布链路 6 包不变（新依赖从 npm registry 拉取）——**架构约束修订**：llm 包此前的「零依赖/lib 仅 ES2022/types 空」硬约束因引入 pi-ai 放宽（pi-ai 自带类型声明），写入 architecture.md 依赖声明修订。
+
+**为什么**：LLM 传输层是纯机械工作（SSE 解码/流式累积/usage 解析）不属于产品核心（对话组织/权限/提案才是核心），外包给成熟维护的 pi-ai 换开发速度与多模型演进空间；保留 llm 包外壳+单向 adapter 是标准防腐层——上层契约稳定、测试面收窄到 llm 包单点、pi-ai 快速演进被隔离在 llm 包内；成本仅剩一次性的 adapter 编写与测试重写。
+
+## 决策 35：工具调用核查与中栏 AI 集成演进（2026-08 用户裁决，批次九）
+
+核查结论（现状盘点）：工具调用链已完整闭环（zod schema → JSON Schema → LLMToolDefinition → pi-ai 透传 → executor 调度 → zod 校验 → 执行 → 结构化 tool_result），三档权限模型（自动/提案/执行）与 pi-ai 的单色执行模型兼容（pi 的工具无权限概念、全靠调用方控制；executor 自研不依赖 pi-ai 的 validateToolCall）；中栏 6 个 tab 中仅时间轴有页面内 AI 入口（AI 排序按钮），其余页面 AI 能力全部集中在右栏聊天对话驱动。用户需求（2026-08）：中栏主要功能如何跟 LLM 集成与演进。经讨论确认：
+
+- **入口模式＝集中式（InfoBar 统一入口 + 页面焦点上报）**：
+  - **「问 AI」入口放 InfoBar（中栏统一头部，全 tab 常驻）**——与现有「刷新数据」按钮同构（全局工具条上的常驻入口），不侵入各页面结构：页面增删改不碰按钮。
+  - **页面只上报焦点状态**：页面挂载/选中变化时写入 ui store `currentFocus`（focus_entity_type/focus_entity_id/focus_node_id）；新增页面只加一行上报（可选，不报即无焦点语义），删页面焦点自然消失——零耦合。
+  - 点击「问 AI」→ 读 currentFocus → 写入 chat store focusContext → 右栏小条显示——**继续当前会话**（不自动开新会话，params 的一致性优先心智，决策 22「一项目一会话」；用户想隔离话题时右栏「+ 新会话」是主动入口）。
+- **页面业务按钮范本**：时间轴「AI 排序」是页面特有操作的业务按钮（留在页内，注入预设指令触发 propose_reorder_timepoints 走提案确认）——通用「带上下文问 AI」在外壳 InfoBar，页面特有 AI 操作按需增补（复刻时间轴模式）。
+- **工具目录随数据源演进**：新数据源（决策 36 参考资料）落地时同步扩展工具目录（search 查询 + propose 提案）作为演进落地场景；不新增「页面 AI 结果面板」形态（与「AI 是创作顾问、形态保留对话式」的产品心智一致，YAGNI）。
+
+**为什么**：集中式入口消除页面结构耦合（新增页面零外壳改动）且符合「全局工具条」的既有架构（刷新按钮先例）；焦点上报把「页面在关注什么」语义化暴露给聊天层，是较低成本的高价值演进；继续当前会话保持对话连贯性，新会话归用户主动行为。
+
+## 决策 36：参考资料页（第 7 种实体类型 reference，2026-08 用户裁决，批次九）
+
+用户需求（2026-08）：中栏新增「参考资料」tab（位置在时间轴之后、回收站之前），存放创作参考素材（书籍摘抄/灵感记录/写作理论/设定参考）并供 LLM 读取参考、写入记录。经设计讨论：
+
+- **定位边界（先决确认）**：参考资料 = **外部素材/灵感笔记（非本书正文）**——AI 读取不违反决策 24（正文边界）；本书正文片段暂不开放（决策 24 复审条件依然生效：若「建议缺乏正文依据」成高频诉求再评估按场景正文参考，单独决策）。
+- **实体设计（第 7 种实体类型 reference，id 前缀 `ref-`）**：复用 entities 表（泛型 CRUD/软删/回收站/标签筛选/搜索/分页自动获得，event/timepoint 先例）：
+  - `name`：标题（必填）
+  - `data.type`：分类枚举 `material`（素材摘抄）/ `inspiration`（灵感记录）/ `theory`（写作理论）/ `reference`（设定参考），缺省 `material`（分类是单枚枚举，与多选标签互补）
+  - `data.content`：内容全文（长文本无上限，存 data JSON；SQLite TEXT 上限 1GB 无压力）
+  - `data.source`：来源（URL/书名/作者，可选，展示为链接或文本）
+  - `data.tags`：标签数组（决策 31 统一字段，复用既有标签筛选管道与 datalist 自动完成）
+  - `sort_order` 恒 NULL（不参与时间轴线性序）；不开放关联（YAGNI：参考资料为独立素材库，relation 关联留待有真实需求再扩）；不加 custom_fields
+- **Schema 演进**：SCHEMA_VERSION 4→5 迁移（entities 表 type CHECK 扩入 `'reference'`，走 002/003 同款「建新表拷贝四步」迁移；无数据搬移，仅 DDL）。
+- **LLM 集成（读取参考 + 写入记录）**：
+  - 读取：新增自动工具 `search_references(query)`（标题+tags 关键词搜索，返回摘要列表）+ 详情复用 get_entity 的 reference 分支——AI 不知道书里有哪些参考资料时先搜索再按需取全文（决策 6 分层策略：不主动注入聚焦层，靠工具按需拉取保护 token 预算）
+  - 写记录：新增提案工具 `propose_create_reference(name, type, content, source?, tags?)`——AI 读到灵感/素材后建议保存，提案卡预览（标题+内容摘要+标签）→ 用户确认 → executor 写入实体（决策 14 提案仅内存 + 快照重校验 + 404/409 语义原样延续）
+  - 上下文配合：参考资料不主动注入聚焦层（token 预算保护），可选注入开关留待需求 3 上下文占用显示上线后评估。
+- **页面（需求 4 承接，批次九 C）**：路由 `#/references`（列表：类型徽标+标签筛选+搜索+分页+摘要截断 120 字）/ `#/references/:id`（详情：全文阅读+编辑+来源+标签管理+软删入口）；TabBar 新增「参考资料」tab（时间轴后、回收站前，路由表与 KNOWN_ROUTE_SEGMENTS 同步）。
+
+**为什么**：参考资料是创作顾问的「知识库」定位的自然延伸（作者把外部素材结构化沉淀，AI 基于它们提建议），既填补「AI 建议缺乏依据」的短板又未突破正文边界；复用实体体系与标签/软删/CRUD 管道零新增机制成本（决策 26 已验证先例）；AI 读写走既有工具分级（自动查询 + 提案写入）保持「笔在用户手里」的产品叙事。
+

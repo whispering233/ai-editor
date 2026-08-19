@@ -62,6 +62,12 @@ get_delta_history(target_type, target_id)
 // === 聚合分析 ===
 get_entity_summary(type)
   → 指定类型实体的统计数据（总数、角色分布、能力分布等）
+
+// === 参考资料查询（决策 36，批次九） ===
+search_references(query, type?, tags?)
+  → 匹配的参考资料列表（标题 + 类型 + 标签 + 内容摘要截断 120 字）
+  用途：AI 不知道书里有哪些参考资料时先搜索（标题+tags 关键词命中）再按需取全文
+  （详情取全文走 get_entity('reference', id) 的 reference 分支——列表摘要/详情全文分离防长文撑爆响应）
 ```
 
 ### 分析类（自动）
@@ -144,6 +150,14 @@ propose_reorder_timepoints(timepoint_ids)
         事务内重排 timepoint.sort_order（拖拽权威语义不变）
   用途：AI 按时间标签语义（如「第二天黄昏」「少年时」）自动识别先后顺序，
         用户确认后采用——时间点是语义序的天然载体
+
+propose_create_reference(name, type, content, source?, tags?)
+  → { proposal_id, preview, conflicts_with? }
+  用途：AI 读到灵感/素材后建议保存为参考资料（决策 36：外部素材/灵感笔记，非本书正文）
+  参数说明：type 枚举 (material 素材摘抄 / inspiration 灵感记录 / theory 写作理论 /
+    reference 设定参考，缺省 material)；content 为全文长文本；tags 标签数组（决策 31 字段）
+  预览：标题 + 内容摘要 + 标签（决策 14 提案仅内存 + 快照重校验）
+  确认后：Executor 校验 references 存在性 + 快照 → create_entity(type='reference') 写入
 ```
 
 ### 执行类（用户通过 GUI 直接操作）
