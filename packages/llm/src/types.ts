@@ -30,31 +30,7 @@ export interface LLMToolDefinition {
   parameters: Record<string, unknown>;
 }
 
-// ============ 流式 chunk（OpenAI chat.completion.chunk） ============
 
-/** 流式 chunk：delta 增量 + finish_reason；usage 仅部分 chunk 携带（include_usage 时在末 chunk） */
-export interface LLMStreamChunk {
-  id?: string;
-  choices: Array<{
-    index: number;
-    delta: {
-      role?: string;
-      /** 文本增量片段；role-only chunk 为 null */
-      content?: string | null;
-      /** 工具调用增量（按 index 定位，arguments 为增量片段） */
-      tool_calls?: Array<{
-        index: number;
-        id?: string;
-        type?: string;
-        function?: { name?: string; arguments?: string };
-      }>;
-    };
-    /** 结束原因：stop / tool_calls / length 等；未结束为 null */
-    finish_reason: string | null;
-  }>;
-  /** 真实 token 用量（include_usage 时随末 chunk 到达；S6.2 优先采用） */
-  usage?: LLMUsage | null;
-}
 
 /** token 用量（DeepSeek 返回） */
 export interface LLMUsage {
@@ -107,50 +83,12 @@ export type ChatStreamResult =
 
 // ============ 最小 Web API 结构类型 ============
 // llm 包零依赖硬约束：lib 仅 ES2022、types 为空（tsconfig 不可改），
-// 不引 DOM lib / @types/node。fetch / ReadableStream / TextDecoder / AbortSignal 均为
-// 运行时全局（Node ≥ 18 与浏览器自带），这里只声明本包用到的字段（结构化类型）。
+// 不引 DOM lib / @types/node。决策 34 换核后 fetch/ReadableStream/TextDecoder 的声明
+// 已删除（pi-ai 内部接管传输），仅保留 AbortSignalLike（决策 16 取消信号全链路穿透）。
 
 /** 取消信号的最小结构（决策 16：逐 chunk 检查 + 监听 abort） */
 export interface AbortSignalLike {
   readonly aborted: boolean;
   addEventListener(type: "abort", listener: () => void, options?: { once?: boolean }): void;
   removeEventListener(type: "abort", listener: () => void): void;
-}
-
-/** ReadableStream reader 的最小结构 */
-export interface FetchReaderLike {
-  read(): Promise<{ done: boolean; value?: Uint8Array }>;
-  cancel(reason?: unknown): Promise<void>;
-}
-
-/** 响应体最小结构 */
-export interface FetchBodyLike {
-  getReader(): FetchReaderLike;
-}
-
-/** fetch 响应最小结构 */
-export interface FetchResponseLike {
-  ok: boolean;
-  status: number;
-  statusText: string;
-  body: FetchBodyLike | null;
-  text(): Promise<string>;
-}
-
-/** fetch 请求参数最小结构 */
-export interface FetchInitLike {
-  method?: string;
-  headers?: Record<string, string>;
-  body?: string;
-  signal?: AbortSignalLike;
-}
-
-/** 可注入的 fetch 实现（默认取全局 fetch；测试注入 mock） */
-export interface FetchLike {
-  (input: string, init?: FetchInitLike): Promise<FetchResponseLike>;
-}
-
-/** TextDecoder 最小结构（UTF-8 流式解码） */
-export interface TextDecoderLike {
-  decode(input?: Uint8Array, options?: { stream?: boolean }): string;
 }

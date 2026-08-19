@@ -13,7 +13,7 @@
 | **前端构建** | Vite 7 | 快速 HMR，Tree-shaking（Vite 6 已停止常规维护） |
 | **状态管理** | Zustand 5 | 轻量、TypeScript 优秀、selector 自动优化 |
 | **样式** | Tailwind CSS 4 + shadcn/ui + Prettier（prettier-plugin-tailwindcss） | 原子化 CSS 灵活度 + 组件开箱即用（v4 CSS-first 配置，无 tailwind.config.js）；L 批次起长 className 自动折行 + 类排序，共享常量见 `client/src/lib/styles.ts`（layout.md §4.4） |
-| **AI 调用** | 原生 fetch → DeepSeek API（模型名可配置，默认 `deepseek-v4-flash`） | 零依赖，直接控制工具循环 |
+| **AI 调用** | `@earendil-works/pi-ai`（决策 34：统一多提供商 LLM 接口，默认 DeepSeek；模型名/思考强度可配置） | 传输/SSE/usage 解析由 pi-ai 接管，llm 包单向 adapter 保留对外契约 |
 | **Schema 验证** | Zod 4 | 运行时类型安全，API 入参校验（v4 API，注意迁移破坏项） |
 | **路由** | 轻量 hash-based（自制 `useHashRoute`） | 单页桌面应用不需要 React Router |
 
@@ -50,7 +50,8 @@ ai-editor/
 │   │
 │   ├── llm/                       # @whispering233/ai-editor-llm（模型接入层）
 │   │   ├── src/
-│   │   │   ├── client.ts          # LLMClient 类（fetch → DeepSeek API）
+│   │   │   ├── client.ts          # chatStream 薄封装（决策 34：内部委托 pi-ai models.stream，对外契约不变）
+│   │   │   ├── adapter.ts          # pi-ai 适配层（LLMMessage→Context / 事件转发 / usage / 错误归一化 / 模型目录）
 │   │   │   ├── retry.ts           # 重试/退避逻辑
 │   │   │   ├── token.ts           # Token 估算
 │   │   │   └── types.ts           # LLM 请求/响应类型
@@ -185,7 +186,7 @@ shared（纯类型 + 常量 + 工具函数，零 Node 依赖）
   │   可被 client 安全引用（tree-shake 掉未用代码）
   │
   ├── llm（AI 模型接入）
-  │     └── client.ts → 封装 fetch → DeepSeek API
+  │     └── client.ts → 委托 adapter → @earendil-works/pi-ai（models.stream）
   │
   ├── db（数据库操作）
   │     └── queries/ → better-sqlite3
@@ -236,7 +237,10 @@ shared ← client（仅类型/常量，零运行时）
 // packages/llm/package.json
 {
   "name": "@whispering233/ai-editor-llm",
-  "dependencies": { "@whispering233/ai-editor-shared": "workspace:*" }
+  "dependencies": {
+    "@whispering233/ai-editor-shared": "workspace:*",
+    "@earendil-works/pi-ai": "^0.81.1"   // 决策 34：统一多提供商 LLM 接口（可 tree-shaking 子路径注册）
+  }
 }
 
 // packages/db/package.json
@@ -399,7 +403,7 @@ export interface Entity { id: string; type: EntityType; name: string; }
 | 包 | 变更理由 | 可独立复用 |
 |----|---------|-----------|
 | `shared` | 数据结构/常量变更 | ✅ 任何需要类型定义的项目 |
-| `llm` | 模型/API 变更 | ✅ 任何需要调 DeepSeek 的项目 |
+| `llm` | 模型/API 变更 | ✅ 任何需要统一 LLM 接口的项目（pi-ai，多提供商） |
 | `db` | 数据库/查询变更 | ❌ 紧耦合 shared |
 | `tools` | 工具定义/逻辑变更 | ❌ 紧耦合 db + shared |
 | `agent` | AI 交互逻辑变更 | ❌ 紧耦合 llm + tools |

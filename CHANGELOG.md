@@ -5,6 +5,18 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [v0.0.15] - 2026-08-19
+
+### Changed
+
+- **批次九（决策 34/35/36，2026-08）——LLM 引擎换核 + 中栏演进 + 参考资料页**：
+  - **决策 34：引入 `@earendil-works/pi-ai` 替换自研 LLM 调用层**——llm 包保留对外契约（chatStream/LLMStreamEvent/LLMError），内部改单向声明式 adapter（LLMMessage→pi-ai Context、流事件转发、usage 口径、错误归一化 onResponse 恢复 status）；手写 SSE 解码/流式 tool_call 累积/错误 body 归一化（~300 行）删除；agent/server 上层契约零破坏；保留 retry.ts（决策 15）/token.ts（决策 6）；新增 `getAvailableModels` 模型目录接口（id/provider/contextWindow/maxTokens/reasoning）
+  - **决策 35：中栏 AI 集成演进**——InfoBar 统一「问 AI」入口（无特定对象时纯进入聊天并聚焦输入框）；页面行级「带上下文问 AI」按钮（Sparkles：大纲节点/实体行/伏笔行/时间轴事件与时间点/参考资料行，注入该对象 focus + 聚焦聊天——回归 layout.md §4.2 原始设计，补齐「有焦点」显式入口）；页面焦点上报（EntityDetail/ReferenceDetail 挂载上报 currentFocus，MainPanel 路由切换 useLayoutEffect 清空）；继续当前会话语义（不自动开新会话）
+  - **决策 36：参考资料页（第 7 种实体类型 reference）**：`ref-` 前缀，SCHEMA_VERSION 4→5 迁移（CHECK 扩 7 种四步换表）；data 字段 type 分类枚举（material/inspiration/theory/reference）+ content 全文长文本 + source 来源 + tags 标签；列表摘要截断 120 字 / 详情全文（防 AI 工具上下文膨胀）；TabBar 新增「参考资料」tab（时间轴后回收站前）+ 列表/详情页（分类/标签/搜索筛选 + 全文详读）；LLM 集成 `search_references`（自动查询，summary.type 过滤）+ `propose_create_reference`（提案写入，确认后落库，type 缺省 material）
+  - **右栏增强**：模型选择下拉（用户级配置持久化 getAvailableModels）+ 思考强度选择（档位对齐 pi ThinkingLevel：off/minimal/low/medium/high/xhigh/max，off 不传 reasoning）+ 上下文占用进度条（真实 usage.total ÷ 模型 contextWindow，done SSE 帧附带 usage）
+  - 冗余清理：llm 包死类型（LLMStreamChunk/FetchLike/FetchResponseLike/TextDecoderLike 等）与 retry.test 死 helper 删除
+  - 全仓 1556 测试全绿 + typecheck/build 通过；发布 v0.0.15（8 包版本同步）
+
 ## [v0.0.14] - 2026-08-19
 
 ### Changed

@@ -2,10 +2,10 @@
 // mock produce + vitest fake timers：重试次数 / 退避间隔 / 配额不重试 /
 // abort 中断（含退避 sleep 期间）/ 非重试错误直返 / withRetry 包 chatStream 集成
 import { describe, expect, it, vi } from "vitest";
-import { chatStream, LLM_TRANSPORT_ERROR_CODES, SSE_DONE } from "./client";
+import { chatStream, LLM_TRANSPORT_ERROR_CODES } from "./client";
 import { _setModels, _setModelLookup } from "./adapter";
 import { classifyChatStreamOutcome, classifyLLMError, withRetry } from "./retry";
-import type { ChatStreamResult, FetchLike, FetchResponseLike, LLMError } from "./types";
+import type { ChatStreamResult, LLMError } from "./types";
 
 /** 构造 LLMError 形态错误 */
 function llmErr(status: number, code?: string, message = "err"): LLMError {
@@ -16,39 +16,6 @@ function llmErr(status: number, code?: string, message = "err"): LLMError {
 function retryableErrorOnly(outcome: { type: "value" | "error"; value?: unknown; error?: unknown }): boolean {
   if (outcome.type === "value") return false;
   return classifyLLMError(outcome.error);
-}
-
-/** 固定分片序列的 mock SSE 响应 */
-function sseResponse(chunks: string[], status = 200): FetchResponseLike {
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      const encoder = new TextEncoder();
-      for (const c of chunks) controller.enqueue(encoder.encode(c));
-      controller.close();
-    },
-  });
-  return new Response(stream, {
-    status,
-    headers: { "content-type": "text/event-stream" },
-  }) as unknown as FetchResponseLike;
-}
-
-/** 可手动控制的响应流（abort 集成测试用） */
-function controllableResponse(): {
-  response: FetchResponseLike;
-  push: (s: string) => void;
-} {
-  let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
-  const stream = new ReadableStream<Uint8Array>({
-    start(c) {
-      controller = c; // start 同步执行，构造完成即可用
-    },
-  });
-  const encoder = new TextEncoder();
-  return {
-    response: new Response(stream) as unknown as FetchResponseLike,
-    push: (s: string) => controller?.enqueue(encoder.encode(s)),
-  };
 }
 
 describe("classifyLLMError 分类（决策 15）", () => {

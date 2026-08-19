@@ -88,6 +88,3 @@ describe("executeCreateReference（决策 36 确认后写入）", () => {
   });
 });
 
-function T0(): string {
-  return "2026-08-01T10:00:00Z";
-}

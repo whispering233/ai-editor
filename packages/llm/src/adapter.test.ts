@@ -2,7 +2,6 @@
 // 覆盖：buildPiContext 消息转换 / toPiTools 工具透传 / convertUsage 口径 / 错误归一化
 //       streamChat 事件转发（注入 fake models 模拟流事件）/ 模型目录查询
 import { describe, expect, it } from "vitest";
-import type { Context, Tool } from "@earendil-works/pi-ai";
 import {
   buildPiContext,
   convertUsage,
@@ -11,14 +10,12 @@ import {
   extractCodeFromMessage,
   toLLMError,
   getAvailableModels,
-  resolveModelInfo,
   streamChat,
   _setModels,
   _setModelLookup,
 } from "./adapter.js";
 import type { LLMMessage, LLMToolDefinition } from "./types.js";
 
-const msg = (role: string, content: string | null = null): LLMMessage => ({ role: role as never, content }) as never;
 
 describe("adapter.消息转换 buildPiContext", () => {
   const tools: LLMToolDefinition[] = [
