@@ -3,6 +3,7 @@
 // abort 中断（含退避 sleep 期间）/ 非重试错误直返 / withRetry 包 chatStream 集成
 import { describe, expect, it, vi } from "vitest";
 import { chatStream, LLM_TRANSPORT_ERROR_CODES, SSE_DONE } from "./client";
+import { _setModels, _setModelLookup } from "./adapter";
 import { classifyChatStreamOutcome, classifyLLMError, withRetry } from "./retry";
 import type { ChatStreamResult, FetchLike, FetchResponseLike, LLMError } from "./types";
 
@@ -234,80 +235,78 @@ describe("withRetry 退避与 abort（决策 15）", () => {
   });
 });
 
-describe("withRetry 包 chatStream 集成", () => {
+describe("withRetry 包 chatStream 集成（决策 34 换核后 fake models 注入）", () => {
+  const fakeModel = { id: "m", name: "m", provider: "deepseek", contextWindow: 64000, maxTokens: 8192, reasoning: true };
+
+  function fakeStream(events: unknown[]) {
+    const asyncIter = (async function* () { for (const e of events) yield e; })();
+    return Object.assign(asyncIter, { result: async () => ({ content: [], usage: undefined }) }) as AsyncIterable<unknown> & { result(): Promise<unknown> };
+  }
+
   it("网络错误（NETWORK_ERROR）自动重试后成功", async () => {
-    let fetchCalls = 0;
-    const fetchMock: FetchLike = async () => {
-      fetchCalls++;
-      if (fetchCalls === 1) throw new TypeError("fetch failed"); // → NETWORK_ERROR
-      return sseResponse(["data: " + SSE_DONE + "\n\n"]);
+    let calls = 0;
+    const models = {
+      getModel: () => fakeModel,
+      stream: () => {
+        calls++;
+        if (calls === 1) throw new TypeError("fetch failed"); // mock 抛错 → NETWORK_ERROR
+        return fakeStream([{ type: "done", reason: "stop", message: { usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } } }]);
+      },
     };
+    _setModels(() => models as never);
+    _setModelLookup(() => fakeModel as never);
+
     const result = await withRetry(
-      () =>
-        chatStream({
-          apiKey: "k",
-          model: "m",
-          messages: [{ role: "user", content: "hi" }],
-          fetchImpl: fetchMock,
-        }),
+      () => chatStream({ apiKey: "k", model: "m", messages: [{ role: "user", content: "hi" }], tools: [] }),
       { isRetryable: classifyChatStreamOutcome, baseDelayMs: 5 },
     );
     expect(result.ok).toBe(true);
-    expect(fetchCalls).toBe(2);
+    expect(calls).toBe(2); // 首抛错重试一次成功
   });
 
   it("流式截断（STREAM_TRUNCATED）自动重试后成功", async () => {
-    let fetchCalls = 0;
-    const fetchMock: FetchLike = async () => {
-      fetchCalls++;
-      if (fetchCalls === 1) {
-        // 无 [DONE] 即 EOF → STREAM_TRUNCATED
-        return sseResponse([
-          'data: {"choices":[{"index":0,"delta":{"content":"半"},"finish_reason":null}]}\n\n',
-        ]);
-      }
-      return sseResponse(["data: " + SSE_DONE + "\n\n"]);
+    let calls = 0;
+    const models = {
+      getModel: () => fakeModel,
+      stream: () => {
+        calls++;
+        if (calls === 1) throw new Error("Stream ended without finish_reason"); // 无 done 事件终止 → STREAM_TRUNCATED
+        return fakeStream([{ type: "done", reason: "stop", message: { usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } } }]);
+      },
     };
+    _setModels(() => models as never);
+    _setModelLookup(() => fakeModel as never);
+
     const result = await withRetry(
-      () =>
-        chatStream({
-          apiKey: "k",
-          model: "m",
-          messages: [{ role: "user", content: "hi" }],
-          fetchImpl: fetchMock,
-        }),
+      () => chatStream({ apiKey: "k", model: "m", messages: [{ role: "user", content: "hi" }], tools: [] }),
       { isRetryable: classifyChatStreamOutcome, baseDelayMs: 5 },
     );
     expect(result.ok).toBe(true);
-    expect(fetchCalls).toBe(2);
+    expect(calls).toBe(2);
   });
 
   it("流中 abort：aborted 结果原样返回，不重试", async () => {
-    const ctrl = controllableResponse();
     const ac = new AbortController();
-    let fetchCalls = 0;
-    const resultP = withRetry(
-      () =>
-        chatStream({
-          apiKey: "k",
-          model: "m",
-          messages: [{ role: "user", content: "hi" }],
-          fetchImpl: async () => {
-            fetchCalls++;
-            return ctrl.response;
-          },
-          signal: ac.signal,
-        }),
+    let calls = 0;
+    const models = {
+      getModel: () => fakeModel,
+      stream: () => {
+        calls++;
+        return fakeStream([{ type: "error", reason: "aborted", error: { errorMessage: "Request was aborted" } }]);
+      },
+    };
+    _setModels(() => models as never);
+    _setModelLookup(() => fakeModel as never);
+
+    const result = await withRetry(
+      () => chatStream({ apiKey: "k", model: "m", messages: [{ role: "user", content: "hi" }], tools: [], signal: ac.signal }),
       { isRetryable: classifyChatStreamOutcome, baseDelayMs: 5 },
     );
-    await new Promise((r) => setTimeout(r, 10)); // 确保已进入读循环（挂起在首个 read）
-    ac.abort(); // 读循环命中 abort → chatStream 返回 aborted 结果
-    const result = await resultP;
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.aborted).toBe(true);
       expect(result.error.code).toBe(LLM_TRANSPORT_ERROR_CODES.ABORTED);
     }
-    expect(fetchCalls).toBe(1); // 不重试
+    expect(calls).toBe(1); // 不重试
   });
 });

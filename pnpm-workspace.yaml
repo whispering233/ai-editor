@@ -5,5 +5,7 @@ packages:
 # 注：pnpm 11.8 已用 allowBuilds（包名→布尔）取代 pnpm 10 的 onlyBuiltDependencies，
 # 后者会被 pnpm 自动迁移为哨兵值 "set this to true or false" 导致构建被忽略。
 allowBuilds:
+  '@google/genai': true
   better-sqlite3: true
   esbuild: true
+  protobufjs: true
