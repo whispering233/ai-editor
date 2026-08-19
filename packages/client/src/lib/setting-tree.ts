@@ -82,3 +82,19 @@ export function buildSettingTree(
   }
   return { roots, hasOrphanEdges };
 }
+
+/**
+ * 收集所有非叶子（有子节点）设定节点 id ——「全部折叠」用（批次八 O5，2026-08）。
+ * 叶子无折叠箭头不参与；返回序为树先根序（折叠态集合无序，序无关紧要，保持确定性便于测试）。
+ */
+export function expandableSettingNodeIds(roots: readonly SettingTreeNode[]): string[] {
+  const out: string[] = [];
+  function walk(node: SettingTreeNode): void {
+    if (node.children.length > 0) {
+      out.push(node.id);
+      for (const c of node.children) walk(c);
+    }
+  }
+  for (const r of roots) walk(r);
+  return out;
+}

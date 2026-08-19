@@ -1,6 +1,6 @@
 // 设定树构建纯函数测试（批次四 I4，决策 30）：根判定 / 父子组装 / 截断孤儿提升防御
 import { describe, expect, it } from "vitest";
-import { buildSettingTree } from "./setting-tree";
+import { buildSettingTree, expandableSettingNodeIds } from "./setting-tree";
 
 const settings = [
   { id: "set-a", name: "修真界", category: "世界" },
@@ -57,5 +57,53 @@ describe("buildSettingTree（决策 30：belongs_to 子→父，childId → pare
 
   it("空设定 → 空树", () => {
     expect(buildSettingTree([], [])).toEqual({ roots: [], hasOrphanEdges: false });
+  });
+});
+
+describe("expandableSettingNodeIds（批次八 O5：全部折叠用，仅收非叶子）", () => {
+  it("空树 → 空数组", () => {
+    expect(expandableSettingNodeIds([])).toEqual([]);
+  });
+
+  it("全部为叶子（无子）→ 空数组（叶子无箭头不参与折叠）", () => {
+    const roots = [
+      { id: "set-a", name: "A", children: [] },
+      { id: "set-b", name: "B", children: [] },
+    ];
+    expect(expandableSettingNodeIds(roots)).toEqual([]);
+  });
+
+  it("单层：仅父设收集，叶子不收", () => {
+    const roots = [
+      { id: "set-a", name: "A", children: [{ id: "set-b", name: "B", children: [] }] },
+    ];
+    expect(expandableSettingNodeIds(roots)).toEqual(["set-a"]);
+  });
+
+  it("多层嵌套：所有有子节点的 id 按先根序收集", () => {
+    const roots = [
+      {
+        id: "set-a",
+        name: "A",
+        children: [
+          {
+            id: "set-b",
+            name: "B",
+            children: [{ id: "set-c", name: "C", children: [] }],
+          },
+          { id: "set-d", name: "D", children: [] },
+        ],
+      },
+    ];
+    // set-a（有子）→ set-b（有子）→ set-c（叶子跳过）；set-d 叶子跳过
+    expect(expandableSettingNodeIds(roots)).toEqual(["set-a", "set-b"]);
+  });
+
+  it("多根各自递归，互不干扰", () => {
+    const roots = [
+      { id: "set-a", name: "A", children: [{ id: "set-b", name: "B", children: [] }] },
+      { id: "set-x", name: "X", children: [] },
+    ];
+    expect(expandableSettingNodeIds(roots)).toEqual(["set-a"]);
   });
 });
