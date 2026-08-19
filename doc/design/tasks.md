@@ -15,17 +15,17 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 
 - **完成**：阶段 A 地基 + 切片 1-9、12、13 + 阶段 U（U1-U8）+ 交互修复批次 + 切片 10 画布（S10.1）+ 切片 11 发布（S11.1-S11.3）+ 发布阻断项 E1-E6（导出/导入、未来版本拒绝重建、增量迁移、发布链路 OIDC 全绿）+ 阶段 B（B1 项目提示词编辑）+ 阶段 C 时间轴（C1-C4，决策 26）+ 画布增强批次（S10.2-S10.5）+ 交互优化批次（UX1-UX4）+ 阶段 B2 自动备份与恢复（B2.1-B2.6，决策 27/28/29）+ **用户反馈批次一至六（F1-F9 · G1-G3 · H1-H6 · I1-I4 · J1-J3 + K1/K2 · M1-M3，2026-08 实测）** + **发布 v0.0.4-v0.0.11**（导出/导入、未来版本拒绝重建、增量迁移、发布链路 OIDC 全绿；occurs_in 映射 / 设定层级 belongs_to（决策 30）/ 分类统一 data.tags（决策 31）/ datalist + 标签筛选 / 样式工程化 L 批次等）。 + **发布 v0.0.12（2026-08-18）**：批次六 M1-M3——标签编辑器回车添加下一项（bug）/ 设定列表行显示上级设定与描述（交互，EntitySummary 契约扩展 parentId/parentName + description 摘要）/ 标签列表拖拽排序（新需求，HTML5 原生 DnD 零依赖）。
 ----------------
-- **待做（批次七 N1-N2，2026-08 新需求，决策 32）**：设定列表**上级设定筛选（递归子树）**——选择上级设定后只显示其下（直接或间接）设定的全部后代；复用既有 `listSettingHierarchyEdges` 邻接表 DFS 收集后代，走 db JS 过滤路径；前端「上级设定 ▾」下拉（全部设定候选 + 全部重置，与搜索/标签/排序/分页 AND 组合）。可选收尾：npm 坏版本 v0.0.1/v0.0.2 deprecate 标注（需 2FA 凭据，见 AGENTS.md 发布流程段）；backlog.md 事项一律不做。
+- **批次七（N1-N2，2026-08 新需求，决策 32）已完成**：设定列表**上级设定筛选（递归子树）**——选择上级设定后只显示其下（直接或间接）设定的全部后代（不含自身）；复用既有 `listSettingHierarchyEdges` 邻接表 DFS 收集后代，走 db JS 过滤路径（total 正确）；REST `?parent_id=`（仅 setting，其他类型忽略，不存在→空结果不 404）；前端「上级设定 ▾」下拉（全部设定候选 + 全部重置 + 已删父兑底，与搜索/标签/排序/分页 AND 组合，tab 重置，空态三文档）。Oracle 审核无 P0/P1；P2 已处理（空串防御）或记入后续卡。可选收尾：npm 坏版本 v0.0.1/v0.0.2 deprecate 标注（需 2FA 凭据，见 AGENTS.md 发布流程段）；backlog.md 事项一律不做。
 - **测试**：全仓 1621 个（shared 131 / llm 59 / db 244 / server 327 / client 529 / tools 237 / agent 94）。
 - 已完成卡片的详细规格已归档（git history 可回溯，见下方「任务卡归档」）；「项目演进路线」提供脉络摘要，配合 `decisions.md`（决策 1-31 为设计主轴）理解现状。
 
-## 执行进度（批次七进行中）
+## 执行进度（全部完成）
 
-> **v0.0.12 已发布（2026-08-18）**。历史批次全部完成；批次七（决策 32）进行中：卡 + 文档/切卡 → 卡 N1（后端）→ 卡 N2（前端）→ 验证 → 清理。
+> **v0.0.12 已发布（2026-08-18）**。批次七（决策 32）2026-08 完成；历史批次全部完成；各卡 commit 见「任务卡归档」；脉络摘要见「项目演进路线」。
 
 - [x] 阶段 A 地基（T0-T7）· 切片 1-13 · 阶段 U（U1-U8）· 画布（S10.1-S10.5 + UX1-UX4）· 发布（S11 + E1-E6）· 阶段 B/C/B2（B1 · C1-C4 · B2.1-B2.6）
 - [x] 用户反馈批次一至六（F1-F9 · G1-G3 · H1-H6 · I1-I4 · J1-J3 + K1/K2 · M1-M3）· L 批次样式工程化（L1-L4）
-- [ ] 批次七（N1-N2，决策 32）：设定列表上级设定筛选（递归子树）——N1 契约+后端（shared parent_id → db parentId 递归子树过滤 → server 路由 + vitest）/ N2 前端筛选下拉（候选聚合 + 组合过滤 + 空态文案 + tab 重置）
+- [x] 批次七（N1-N2，决策 32）：设定列表上级设定筛选（递归子树）——N1 `6b27ec5` 契约+后端（shared parent_id → db parentId 递归子树过滤 → server 路由 + vitest 8 用例）/ N2 `0c53a09` 前端筛选下拉（候选聚合 + 组合过滤 + 空态文案 + tab 重置）/ P2 修复 `c139b07`（空串防御 + 空态文档）
 
 ---
 
@@ -68,6 +68,8 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 **L 批次前端样式工程化（L1-L4，2026-08）——样式工程化重构**：client 包引入 **Prettier + prettier-plugin-tailwindcss**（printWidth 100 + tailwindStylesheet；长 className 自动折行、类顺序统一，新代码格式工具兑底）；新建 **`lib/styles.ts` 共享样式常量**（提取阈值 ≥3 处：iconButtonBaseClass/iconButtonSize（bar/sm/md）/iconButtonDisabledClass/inputClass（不含宽度类——Tailwind 4 同属性类按值排序、w-full 会压掉 w-40）/errorBannerClass/skeletonClass/sectionCardClass）+ **`EmptyState`**（空态容器：padding sm/md/lg 参数化规避 py-* 覆盖坑）/ **`SectionCard`**（上提自 OutlineDetail 局部 Card）组件；**全仓硬编码色类清零**（zinc/white/red 50+ 处 → token 类，EntityList 原 30+ 处，深色主题亮色异常同步修复）；空态统一后仅 1 处视觉微调（Timeline py-8→py-10）；**C 项 CSS Modules 评估关闭**——Canvas/时间轴几何均在 JS 计算、CSS 仅工具类、动画在 index.css，无 Tailwind 无法表达的样式，不硬转（契约：后续引入须同时满足「Tailwind 无法表达」+「重复 ≥3 处」）。
 
 **用户反馈批次六（M1-M3，2026-08）——实体/规则编辑与列表展示**：M1 标签编辑器回车添加下一项（bug：placeholder 承诺未兑现——非末行聚焦下一行 / 末行非空追加空行并聚焦 / 末行空无操作防空行跑马灯；`enterBehavior` 纯函数）；M2 设定列表行显示上级设定与描述（交互：EntitySummary 契约扩展 `parentId`/`parentName` 仅 setting 填充——服务端列表补查全量 belongs_to 层级边按 childId 映射，软删可见性复用 listRelations；setting 摘要新增 description 截断 100 字符防 search_entities 上下文膨胀；前端列 名称|标签|上级设定|描述|更新时间，上级 chip 点击跳父详情；顺带修正 entity-list.md 决策 31 后过期的 summary.category）；M3 标签列表拖拽排序（新需求：GripVertical 手柄 + HTML5 原生 DnD 零依赖，仅拖拽进行中响应 drop 不干扰输入框文本拖选，`moveArrayItem` 纯函数；TagsEditor 共用组件故 rules/tags/personality/abilities 四列表同步受益；排序只改本地表单数组随 data 提交，无独立 API）。
+
+**用户反馈批次七（N1-N2，2026-08）——设定列表上级设定筛选（决策 32，递归子树）**：N1 后端——`GET /entity/setting` 新增可选 `parent_id`（仅 setting 生效、其他类型忽略），匹配语义 = 设定层级树（belongs_to，决策 30）中直接或间接属于该父（**递归子树、不含自身**）；复用 db 既有 `listSettingHierarchyEdges` 全量边建 childOf 邻接表栈式 DFS 收集后代集合（防环守卫 = Set 去重），走 `listEntities` 既有 JS 过滤路径（与 tag filters 合并分支，total=过滤后总数、分页正确，无 filters/parentId 时仍走 COUNT+LIMIT SQL 路径零回归）；指向不存在/已软删的父 → 空结果（宽松同 tag 不 404）；软删联动由边查询可见性天然保证；N2 前端——排序行「上级设定 ▾」下拉（候选=全部设定按名排序 +「全部」重置，与标签下拉并列；候选聚合与 tag 候选合并一次请求 limit 200 sort name），列表请求带 `parent_id` 与搜索/标签/排序/分页 AND 组合，tab/类型切换重置，父已软删或超截断时 select 兑底 option 防空白，空态三文档《X》下暂无设定 + 清除上级筛选；oracle 审核无 P0/P1（P2：parent_id 空串防御归一化 + 空态文档补三文档已随卡处理）。
 
 ---
 
@@ -122,8 +124,9 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 | M1 | 标签编辑器回车添加下一项（bug） | `abf346d` | 回车 = 非末行聚焦下一行/末行非空追加空行并聚焦/末行空无操作；enterBehavior 纯函数 + 测试 |
 | M2 | 设定列表行显示上级设定与描述（交互） | `1069bb1` | EntitySummary +parentId/parentName（仅 setting，服务端补查 belongs_to 映射）；setting 摘要 +description（截断 100）；列表 5 列 + 上级 chip 跳父详情；顺带修正 entity-list.md 过期 category |
 | M3 | 标签列表拖拽排序（新需求） | `715eb0d` | GripVertical 手柄 + HTML5 原生 DnD（零依赖）；仅拖拽中响应 drop 不干扰文本拖选；moveArrayItem + 测试 |
-| N1 | 设定列表上级设定筛选后端（决策 32） | `（开发中）` | shared entityListQuerySchema +parent_id（仅 setting）；db listEntities +parentId 递归子树过滤（listSettingHierarchyEdges 邻接表 DFS 后代集合，JS 过滤路径，total 正确）；server 路由接线；vitest：递归子树/自身排除/不存在空结果/与 tag 组合/软删联动 |
-| N2 | 设定列表上级设定筛选前端（决策 32） | `（开发中）` | 「上级设定 ▾」下拉（全部设定候选 + 全部重置，与标签下拉并列）；候选聚合与列表请求带 parent_id；与搜索/标签/排序/分页组合；tab/类型切换重置；空态文案「《…》下暂无设定」 |
+| N1 | 设定列表上级设定筛选后端（决策 32） | `6b27ec5` | shared entityListQuerySchema +parent_id（仅 setting）；db listEntities +parentId 递归子树过滤（listSettingHierarchyEdges 邻接表 DFS 后代集合，JS 过滤路径，total 正确）；server 路由接线；vitest：递归子树/自身排除/不存在空结果/与 tag 组合/分页 total/软删联动/非 setting 忽略 |
+| N2 | 设定列表上级设定筛选前端（决策 32） | `0c53a09` | 「上级设定 ▾」下拉（全部设定候选 + 全部重置 + 已删父兑底，与标签下拉并列）；候选聚合与列表请求带 parent_id；与搜索/标签/排序/分页组合；tab/类型切换重置；空态三文档「《…》下暂无设定」 |
+| P2 | Oracle 审核 P2 修复 | `c139b07` | parent_id 空串防御归一化（？parent_id= 与「不传」等价）；列表空态文档「两种→三种」 |
 
 ---
 
