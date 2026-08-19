@@ -149,3 +149,4 @@
 - **v0.0.11（2026-08-18）**：L 批次前端样式工程化（L1-L4：Prettier + tailwind 插件 / lib/styles.ts 共享常量 / EmptyState / SectionCard / 全仓硬编码色类清零；纯前端无 API/数据变更）发布。
 - **v0.0.12（2026-08-18）**：批次六 M1-M3（标签编辑器回车添加下一项 Bug / 设定列表上级设定与描述行 / 标签列表拖拽排序）发布；server 328 测试全绿。
 - **v0.0.13（2026-08-19）**：批次七 N1-N2（决策 32 设定列表上级设定筛选——REST `?parent_id=` 递归子树复用 listSettingHierarchyEdges 邻接表 DFS / 前端上级设定 ▾ 下拉组合筛选）发布；全仓 1622 测试全绿 + typecheck/lint/build 通过，oracle reviewer 独立审核无 P0/P1 后合并。
+- **v0.0.14（2026-08-19）**：批次八 O1-O6（决策 33）发布——O1 设定筛选可搜索下拉（SearchableSelect）/ O2 大纲操作区右移+顺序+去时间戳 / O3 时间轴去拖拽柄视觉保留提示 / O4 时间轴折叠按钮左移 / O5 设定树全部展开/折叠 / O6 **画布页移除**（`#/canvas` 路由 + 中栏 tab 删除、Canvas/lib/canvas 及测试删除，plot_edge 数据/接口能力保留）；全仓 1562 测试全绿（画布两测试文件移除后）+ typecheck/lint/build 通过，每卡独立 oracle 审验无 P0/P1 后线性合入。

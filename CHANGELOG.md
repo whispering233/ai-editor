@@ -5,18 +5,18 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [v0.0.14] - 2026-08-19
 
 ### Changed
 
-- **批次八（O1-O6，2026-08 用户反馈批次——体验优化与画布重构，决策 33）已完成未发布（v0.0.14 待用户裁决）**：
+- **批次八（O1-O6，2026-08 用户反馈批次——体验优化与画布重构，决策 33）**：
   - O1 设定/标签筛选可搜索下拉（`SearchableSelect`：Popover + 关键词客户端过滤已聚合候选 +「全部」清除 + fallbackLabel 兑底，重构原原生 `<select>`）；
   - O2 大纲页节点行操作区右端对齐 + 顺序改「详情 → 添加 → 删除」（＋ 就地新建），移除行尾修改时间显示；
   - O3 时间轴移除 GripVertical 拖拽柄视觉（draggable 与悬停拖拽提示保留在行根，参考大纲页无柄拖拽）；
   - O4 时间轴折叠/展开按钮移至时间点组标题左侧（参考大纲页折叠箭头位序）；
   - O5 设定树视图新增「全部展开 / 全部折叠」工具栏按钮（折叠态提升受控层 + `expandableSettingNodeIds` 纯函数）；
-  - **O6 画布页移除（决策 33）**：删除 `#/canvas` 路由、中栏「画布」tab、`pages/Canvas.tsx` 与 `lib/canvas.ts`（及测试）；`plot_edge` 数据模型与 `POST/GET/DELETE /relation` 关系接口能力完整保留（仅无 UI 入口）；旧 localStorage 画布坐标为无害残留不清理；同步删除画布死后 CSS（`canvas-edge-flow`）。
-  - 每卡临时分支 + git worktree 并行开发（批次一 O1‖O2‖O3O4 → 批次二 O5‖O6），独立 oracle 审验全 PASS，线性合入 main；全仓测试 1562 个全绿。
+  - **O6 画布页移除（决策 33）**：删除 `#/canvas` 路由、中栏「画布」tab（7→6 tab）、`pages/Canvas.tsx` 与 `lib/canvas.ts`（及测试）；`plot_edge` 数据模型与 `POST/GET/DELETE /relation` 关系接口能力完整保留（仅无 UI 入口）；旧 localStorage 画布坐标为无害残留不清理；同步删除画布死后 CSS（`canvas-edge-flow`）。
+  - 每卡临时分支 + git worktree 并行开发（批次一 O1‖O2‖O3O4 → 批次二 O5‖O6），独立 oracle 审验全 PASS，线性合入 main；全仓测试 1562 个全绿 + typecheck/lint/build 通过。
 
 ## [v0.0.13] - 2026-08-19
 

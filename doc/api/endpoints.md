@@ -997,7 +997,7 @@ nodeId: string;
   newParentId: string;
 }
 
-// 画布视图中的投影自动更新（决策 1）
+// 大纲树节点移动（决策 1/19：节点即大纲，无游离节点、无独立投影）
 ```
 
 ### DELETE /api/v1/outline/:nodeId

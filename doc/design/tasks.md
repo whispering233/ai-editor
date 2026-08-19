@@ -1,156 +1,54 @@
 # 开发任务清单（Task Cards）
 
-MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）后，每个切片 = 一个端到端功能（后端 → API 路由 → 前端页面），切片完成即可独立演示验证。依据：`architecture.md`（分包/命令）、`endpoints.md`（API 契约）、`schema.md`（数据结构）、`tools.md`（工具目录）、`hooks.md`（伏笔）、`decisions.md`（决策 1-31）。
+MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）后，每个切片 = 一个端到端功能（后端 → API 路由 → 前端页面），切片完成即可独立演示验证。依据：`architecture.md`（分包/命令）、`endpoints.md`（API 契约）、`schema.md`（数据结构）、`tools.md`（工具目录）、`decisions.md`（决策 1-33）。
 
 **执行纪律**：
 - 一次只做一张任务卡，验证通过（含测试）才算完成，然后独立 commit（一张卡一个 commit，回滚 = revert 该 commit）。
-- **推进节奏**：每张卡完成后向用户汇报验证结果，用户确认后开下一张；每切片结束时演示一次端到端功能验收。
 - 卡内不做卡外顺手改动；backlog.md 事项一律不做。
 - 契约以 `doc/api`、`doc/database` 为准，发现文档矛盾先停下提问，不要自行发明。
 - 测试框架：vitest（各包独立 `test` script，`pnpm --filter <包> test`）。
-- **批次八起（2026-08 用户裁决）：并行卡片在临时分支 + 临时 git worktree（`worktree: true` 从 main HEAD 分叉）开发，每卡独立提交，父会话验证后合回 main 清理分支。**
+- 并行卡片在临时分支 + 临时 git worktree（`worktree: true`）开发，父会话验证（含 oracle 审验）后合回 main 清理分支（批次八起实践）。
 
 ---
 
-## 项目状态（2026-08）
+## 项目状态（2026-08-19，v0.0.14 已发布）
 
-- **完成**：阶段 A 地基 + 切片 1-9、12、13 + 阶段 U（U1-U8）+ 交互修复批次 + 切片 10 画布（S10.1）+ 切片 11 发布（S11.1-S11.3）+ 发布阻断项 E1-E6（导出/导入、未来版本拒绝重建、增量迁移、发布链路 OIDC 全绿）+ 阶段 B（B1 项目提示词编辑）+ 阶段 C 时间轴（C1-C4，决策 26）+ 画布增强批次（S10.2-S10.5）+ 交互优化批次（UX1-UX4）+ 阶段 B2 自动备份与恢复（B2.1-B2.6，决策 27/28/29）+ **用户反馈批次一至六（F1-F9 · G1-G3 · H1-H6 · I1-I4 · J1-J3 + K1/K2 · M1-M3，2026-08 实测）** + **发布 v0.0.4-v0.0.11**（导出/导入、未来版本拒绝重建、增量迁移、发布链路 OIDC 全绿；occurs_in 映射 / 设定层级 belongs_to（决策 30）/ 分类统一 data.tags（决策 31）/ datalist + 标签筛选 / 样式工程化 L 批次等）。 + **发布 v0.0.12（2026-08-18）**：批次六 M1-M3——标签编辑器回车添加下一项（bug）/ 设定列表行显示上级设定与描述（交互，EntitySummary 契约扩展 parentId/parentName + description 摘要）/ 标签列表拖拽排序（新需求，HTML5 原生 DnD 零依赖）。 + **发布 v0.0.13（2026-08-19）**：批次七 N1-N2——设定列表上级设定筛选（递归子树，决策 32，oracle 审核无 P0/P1）。
-----------------
-- **批次七（N1-N2，2026-08 新需求，决策 32）已完成**：设定列表**上级设定筛选（递归子树）**——选择上级设定后只显示其下（直接或间接）设定的全部后代（不含自身）；复用既有 `listSettingHierarchyEdges` 邻接表 DFS 收集后代，走 db JS 过滤路径（total 正确）；REST `?parent_id=`（仅 setting，其他类型忽略，不存在→空结果不 404）；前端「上级设定 ▾」下拉（全部设定候选 + 全部重置 + 已删父兑底，与搜索/标签/排序/分页 AND 组合，tab 重置，空态三文档）。Oracle 审核无 P0/P1；P2 已处理（空串防御）或记入后续卡。可选收尾：npm 坏版本 v0.0.1/v0.0.2 deprecate 标注（需 2FA 凭据，见 AGENTS.md 发布流程段）；backlog.md 事项一律不做。
-----------------
-- **批次八（O1-O6，2026-08 用户反馈批次——体验优化与画布重构，决策 33）已完成（2026-08-19，本批次暂不发布 v0.0.14，待用户裁决）**：交互优化 4 卡（O1 `5dfa1dc` 设定筛选可搜索下拉 / O2 `42df33e` 大纲操作区右移+顺序+去时间戳 / O3 `6d0e0cc` 时间轴去拖拽柄视觉保留提示 / O4 `7aca264` 时间轴折叠按钮左移）+ 新需求 2 卡（O5 `dbeb52c` 设定树全部展开/折叠 / O6 `232d396` 画布页删除与清理，决策 33）。**阶段序：交互优化批次先行（3 条 worktree 并行：O1 ‖ O2 ‖ O3→O4 串行同 worktree）→ 新需求批次后行（2 条 worktree 并行：O5 ‖ O6）**；每卡独立临时分支 + worktree、实现后独立 oracle 审验（全部 VERDICT=PASS 无 P0/P1）→ 父会话 rebase/ff 合 main 清理分支；文档先行（决策 33 + layout/architecture/pages 同步）；P2 修复（画布死后 CSS 删除 + Timeline 注释整理 + layout.md 目录注释 Canvas 清除）随卡。**测试从 1622 降为 1562（画布两测试文件删除，client 30→28 文件）**。发布 v0.0.14 未执行（无用户指令）。
-- **测试**：全仓 1562 个（shared 131 / llm 59 / db 244 / server 328 / client 469（批次八删画布两测试文件后 28 文件）/ tools 237 / agent 94）。
-- 已完成卡片的详细规格已归档（git history 可回溯，见下方「任务卡归档」）；「项目演进路线」提供脉络摘要，配合 `decisions.md`（决策 1-33 为设计主轴）理解现状。
+**全量交付完成**：阶段 A 地基（T0-T7）+ 切片 1-13 + 阶段 U 三栏工作台（U1-U8）+ 画布 S10（S10.1-S10.5 + UX1-UX4，**批次八 O6 已按决策 33 移除**）+ 发布 S11 + 发布阻断项 E1-E6 + 阶段 B 项目提示词（B1）+ 阶段 C 时间轴（C1-C4，决策 26 + G2 timepoint 实体化修订）+ 阶段 B2 自动备份与恢复（B2.1-B2.6，决策 27/28/29）+ 用户反馈批次一至八（F1-F9 · G1-G3 · H1-H6 · I1-I4 · J1-J3 + K1/K2 · M1-M3 · N1-N2（决策 32）· O1-O6（决策 33））+ L 批次样式工程化（L1-L4）+ **发布 v0.0.1-v0.0.14 全链路全绿**。
 
-## 执行进度（批次八，已完成）
+- **设计主轴**：`decisions.md` 决策 1-33；架构分包见 `architecture.md`；文档即契约（`doc/api`、`doc/database`、`doc/ui`）。
+- **测试**：全仓 1562 个（shared 131 / llm 59 / db 244 / server 328 / client 469（28 文件）/ tools 237 / agent 94）。
+- **无待做项**；可选收尾：npm 坏版本 v0.0.1/v0.0.2 deprecate 标注（需 2FA 凭据）；backlog.md 事项一律不做。
 
-> 批次八（O1-O6）2026-08 用户反馈批次：交互优化先（批次一）→ 新需求后（批次二）。文档契约先行已提交（决策 33 等，见 `fe205b4` docs-prep commit）。每卡独立 oracle 审验全 PASS；提交已合 main。
+## 执行进度（全部完成）
 
-- [x] 批次一·O1 设定筛选可搜索下拉（交互）——`5dfa1dc` 上级设定/标签筛选改可搜索 combobox（SearchableSelect + filterOptions 纯函数 + 5 单测，客户端过滤已聚合候选 +「全部」重置 + fallbackLabel 兑底）
-- [x] 批次一·O2 大纲操作区右移 + 顺序详情/添加/删除 + 删时间戳——`42df33e`（ml-auto 右端对齐 + formatTimestamp 移除）
-- [x] 批次一·O3 时间轴去拖拽柄视觉保留拖拽提示——`6d0e0cc`（GripVertical 移除、draggable 与 title 提示保留行根）
-- [x] 批次一·O4 时间轴折叠按钮移组标题左侧——`7aca264`（ChevronRight 至标题前，aria 语义保留）
-- [x] 批次二·O5 设定树「全部展开/全部折叠」按钮（新需求）——`dbeb52c`（折叠态提升 SettingTreeView 受控 + expandableSettingNodeIds 纯 helper + 5 单测）
-- [x] 批次二·O6 画布页删除与清理（新需求，决策 33）——`232d396`（Canvas.tsx/canvas.test.tsx/lib/canvas(.test).ts 删除、TabBar/main/use-route 接线清理、plot_edge 数据能力保留、零逻辑改动）
+- [x] 历史批次（git log / CHANGELOG 回溯规格）：阶段 A + 切片 1-13 · 阶段 U · 画布 S10（O6 移除）· 发布 S11 + E1-E6 · 阶段 B/C/B2 · 批次一至六（F1-F9 · G1-G3 · H1-H6 · I1-I4 · J1-J3+K1/K2 · M1-M3）· L 批次（L1-L4）· 批次七（N1-N2，决策 32）
+- [x] **批次八（O1-O6，决策 33，2026-08-19）**：O1 设定筛选可搜索下拉 `5dfa1dc` / O2 大纲操作区右移+去时间戳 `42df33e` / O3 时间轴去拖拽柄保留提示 `6d0e0cc` / O4 时间轴折叠按钮左移 `7aca264` / O5 设定树全部展开/折叠 `dbeb52c` / O6 画布页移除（决策 33）`232d396`；收官文档 `7aca8ce`
+
+> 各卡详细规格、坑记录与提交历史可 `git log` 回溯（commit 见 CHANGELOG.md / release-review.md 发布进展记录）。
 
 ---
 
-## 执行进度（历史批次，全部完成）
-
-> **v0.0.13 已发布（2026-08-19）**。批次七（决策 32）2026-08 完成；历史批次全部完成；各卡 commit 见「任务卡归档」；脉络摘要见「项目演进路线」。
-
-- [x] 阶段 A 地基（T0-T7）· 切片 1-13 · 阶段 U（U1-U8）· 画布（S10.1-S10.5 + UX1-UX4）· 发布（S11 + E1-E6）· 阶段 B/C/B2（B1 · C1-C4 · B2.1-B2.6）
-- [x] 用户反馈批次一至六（F1-F9 · G1-G3 · H1-H6 · I1-I4 · J1-J3 + K1/K2 · M1-M3）· L 批次样式工程化（L1-L4）
-- [x] 批次七（N1-N2，决策 32）：设定列表上级设定筛选（递归子树）——N1 `6b27ec5` 契约+后端（shared parent_id → db parentId 递归子树过滤 → server 路由 + vitest 8 用例）/ N2 `0c53a09` 前端筛选下拉（候选聚合 + 组合过滤 + 空态文案 + tab 重置）/ P2 修复 `c139b07`（空串防御 + 空态文档）
-
----
-
-## 项目演进路线（2026-08，已完成工作摘要）
+## 项目演进路线（脉络摘要）
 
 > 供后续理解项目脉络；每项一行 = 目标 + 关键决策（决策编号见 `decisions.md`）。详细契约以 `doc/api`、`doc/database`、`doc/ui` 各文档为准。
 
-**阶段 A：地基**（T0-T7）——pnpm 7 包 monorepo（shared → llm/db/tools → agent → server，client 只依赖 shared）；shared 纯类型/常量/纯函数（zod 仅服务端经 `./schemas` 子路径导出，client 打包安全）；vitest/tsc/eslint 三件套；schema 演进删库重建（决策 13）；存储三文件（outline.json / data.db / project.json）原子写（决策 11）。
+**阶段 A：地基**（T0-T7）——pnpm 7 包 monorepo（shared → llm/db/tools → agent → server，client 只依赖 shared）；shared 纯类型/常量/纯函数（zod 仅服务端）；vitest/tsc/eslint；schema 演进（决策 13）；存储三文件原子写（决策 11）。
 
-**切片 1-5（项目管理/大纲/实体关系/回收站/Delta）**——create/open/close/config + 书架模式（books/，决策 8 修订）+ 启动待命语义；大纲严格三层卷→章→场景、无游离节点（决策 19）；四类实体（人物/设定/地点/伏笔）CRUD + 通用关系表 `relation_records`（决策 2，含 plot_edge）+ k 跳遍历 + 软删级联（决策 12）；回收站还原/purge + 启动一致性校验兜底（决策 16 修订）；`delta_records` 独立表 + computeState 只沿大纲树父链累积已确认 Delta（决策 9：op=update from 校验失败跳过 + conflicts 标注）。
+**切片 1-5**——项目管理/大纲（严格三层卷→章→场景，决策 19）/实体（四类 + 通用关系表 `relation_records`，决策 2）/回收站（软删级联，决策 12）/Delta（独立表 + computeState 沿父链累积，决策 9）。
 
-**切片 6 模型与工具层**——LLM 客户端（fetch → DeepSeek 手写 SSE 解析/[DONE] 哨兵/abort 三保险/length 截断防御）；重试分类（配额/计费不可重试、指数退避、abort 永不重试）；token 估算；**工具注册**（查询 8/分析 5/伏笔 5/提案 15/执行 13）——SQL 一律下沉 db 查询层、提案仅产出对象零落盘（决策 14）、执行类不暴露 LLM。
+**切片 6-9**——LLM 客户端 + 工具注册（查询/分析/伏笔/提案/执行）；会话管理与成对裁剪（决策 18）；上下文分层注入（决策 6/7）；agent 三重保险（8 轮/120s/token）；提案仓仅内存 + 快照重校验（决策 14/19）；chat SSE（心跳 + 三路断开检测，决策 16/20）；伏笔面板（MVP 简化：不展示 _health 与章节序，backlog #13）。
 
-**切片 7-9（对话/聊天/伏笔）**——会话管理（决策 18：tool_call/tool_result 成对裁剪、孤儿整对丢弃）；上下文组装（决策 6/7 分层注入 + 预算）；runAgent 三重保险（8 轮/120s/token）六类事件序列；提案仓（TTL 10min/上限/项目绑定）+ 快照重校验（决策 14/19）；chat SSE 路由（心跳/三路断开检测/全链路取消，决策 16/20）；提案卡接入（confirm/reject 三错误码分支）；伏笔分组列表 + 复合写确认面板 + 依赖链递归展开 + 大纲节点伏笔标记（**MVP 简化：不展示 _health 与章节序**，backlog #13）。
+**切片 12/13**——节点结构化 data（决策 23 麦基字段集）+ 节点详情页；大纲交互重构（操作平铺图标化/拖拽排序/摘要独立行）。
 
-**切片 12/13（2026-08 用户反馈）**——节点结构化 data（决策 23 麦基《故事》字段集）+ `#/outline/:nodeId` 详情页；大纲交互重构（操作平铺图标化/拖拽上下半排序/摘要独立行）。
+**阶段 U：UI 工作台重构**（U1-U8，决策 22 + F7 修订）——三栏 1:5:4 布局（左书架/中信息条 + 7 tab/右 ChatPanel 常驻，可拖拽调宽 + 收起）；shadcn + oklch 文学氛围双主题；会话归属项目；全局反馈。
 
-**阶段 U：UI 工作台重构**（U1-U8，决策 22 + F7 修订）——三栏 1:5:4 布局（左书架树/中信息条+7 tab/右 ChatPanel 常驻，`<1024px` 抽屉；**F7 起可拖拽调宽 + 收起/展开**，use-panels + localStorage 持久化）；shadcn 集成 + oklch 文学氛围双主题；会话归属项目；全局反馈（toast/错误横幅/确认对话框）。
+**画布 S10 + 增强（S10.1-S10.5 + UX1-UX4）→ 批次八 O6 已移除（决策 33）**——大纲节点画布投影 + plot_edge 连线 + localStorage 坐标（决策 10）；**2026-08 按用户裁决删除画布页与全部画布代码**（1000 章后无实际价值），plot_edge 数据/接口能力保留（仅无 UI 入口）。
 
-**切片 10 画布 + 增强批次（S10.1-S10.5）**——大纲节点画布投影（确定性树布局/localStorage 坐标防抖/缩放/仅场景模式）；plot_edge 连线创建与删除 + 语义色三级优先级 + 箭头 + 流动虚线；小地图（自研零依赖）；「一键重排」（`mergeLayout` 幂等——已存坐标保留仅新节点补位）；hover 路径 DFS 高亮（非路径降透明 0.2）；**UX1 拖出即连 + 连线标签线上编辑（`PUT /relation/:id`）**。
+**阶段 B/C/B2**——B1 项目提示词编辑（决策 24/25：创作伴侣定位，不编辑/存储/读取正文）；C 时间轴（决策 26 + G2：timepoint 实体 + occurs_at 挂载 + 双独立线性序 + SCHEMA_VERSION 3）；B2 自动备份与恢复（决策 27/28/29：项目级频率/命名 kind 标记/重命名、project_id 唯一 key 覆盖分流、`.backups/` 保留 20 份）。
 
-**切片 11 发布 + E1-E6（2026-08）**——生产构建全链路 + 端到端冒烟（9 步链路 123+ 断言）+ 发布前复审；导出/导入（E1-E3：fflate zip 三文件 + wal_checkpoint 快照 / import 校验 + 原子搬入 / 书架 UI）；schema 安全（E4 未来版本拒绝重建 / E5 增量迁移机制）；发布链路（E6：6 包 npm 发布 + OIDC Trusted Publisher + CI 全绿 **v0.0.4-v0.0.7**）。发布管道坑记录见文末。
+**用户反馈批次一至八（2026-08，含 L 样式工程化）**——F1-F9（字段清空语义/备份 WAL/时间轴视觉重构/三栏收放/标签建议/LLM 排序）；G1-G3（区块滚动/时间标签点实体化/滚动保持）；H1-H6（时间轴交互：删除入口/免确认/按钮展开/边框/右移/图标）；批次四 I1-I4（决策 30：设定层级 = belongs_to）；批次五 J1-J3 + K1/K2（决策 31：分类统一 data.tags，SCHEMA_VERSION 4，datalist 自动完成 + ?tag= 筛选）；批次六 M1-M3（标签编辑器回车/上级+描述行/标签拖拽排序）；批次七 N1-N2（决策 32：设定列表上级设定筛选——递归子树）；**批次八 O1-O6（决策 33，画布移除）**——O1 设定筛选可搜索下拉 / O2 大纲操作区右移+去时间戳 / O3-O4 时间轴拖拽柄无视觉 + 折叠按钮左移 / O5 设定树全部展开折叠 / O6 画布页移除。
 
-**阶段 B：项目提示词编辑**（B1，决策 24/25）——创作伴侣定位（不编辑/存储/读取正文，AI 基于结构化数据建议）；项目 `prompt` 字段（跟随书籍）是唯一持久化上下文通道，设置页编辑 UI（按项目身份载入防写错、空值清除、无项目禁用）。
-
-**阶段 C：时间轴（C1-C4 + F3-F6 + G2，决策 26）**——第 5/6 种实体类型 `event`（`ev-`）/ `timepoint`（`tp-`，**G2 时间标签点实体化**：name = 时间标签文本，data 空）；`occurs_in` 关系锚定大纲节点 + **`occurs_at` 关系挂载事件到时间点（1:n）**；**双独立线性序**（timepoint.sort_order 组间序 + event.sort_order 组内排序键，拖拽时间点不动其下事件序）；SCHEMA_VERSION 1→2→3（002/003 迁移，E5 首个真实用例）；列表页 `#/timeline`（垂直时间轴 + 时间点组块 + 未挂载兜底区 + **双轨拖拽**：时间点整组 / 事件单条跨组改挂载 `POST /event/:id/move_to` 复合端点）+ 详情页（字段编辑 + occurs_in 关联 + **挂载时间点选择器**）；AI 工具 `propose_reorder_timepoints`（LLM 按时间点语义排序提案确认，G2 取代 F9 的 propose_reorder_events）；**MVP 无 AI 一致性分析工具**（backlog #15）。
-
-**阶段 B2：自动备份与恢复**（B2.1-B2.6，决策 27/28/29）——备份/频率/列表均项目级：自动备份定时器（有变更才备份：三文件 mtime + **data.db-wal 伴生文件**（F2 修复）+ 1s 容差；`.backups/` 保留 20 份）；频率 = project.json `backup_frequency_minutes`（缺省 10，枚举）；**唯一 key = project_id**（zip 内 id 匹配 → 覆盖恢复保留 id 防会话断连 + 覆盖前自动快照 / 不匹配 → 导入新书，同名不再 409）；重命名书名（原子移动目录）；文件名毫秒精度 `<YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip`（决策 28/29：自定义名称 + 手动/自动 kind 标记段 + `POST /backup/rename`，旧格式兼容解析不迁移）。
-
-**用户反馈批次一（F1-F9，2026-08）**——F1 事件字段清空语义（空值提交即清除）；F2 自动备份补查 `data.db-wal`（WAL 模式写只刷新伴生文件，主文件 mtime 不变导致漏检——影响全部 data.db 写）；F3-F6 时间轴视觉重构（垂直轴线+节点 / 同标签归组 / 时间标签样式强调 / 行内完整描述展开收起）；F7 三栏可收起/拖宽（use-panels）；F8 标签输入建议（suggestTags + TagSuggest）；F9 LLM 时间标签排序提案（propose_reorder_events，G2 后被 timepoints 版取代）。
-
-**用户反馈批次二（G1-G3，2026-08）**——G1 时间轴区块独立滚动（header/筛选器固定，仅列表区滚动）；G2 时间标签点实体化（决策 26 重大修订，四卡：G2.1 数据层 003 迁移 / G2.2 服务端 move_to 复合端点 + 工具替换 / G2.3 前端双实体 UI + 双轨拖拽 / G2.4 收尾）；G3 操作后滚动位置保持（重拉期间保留旧数据渲染，`!loading` 从列表条件移除）。
-
-**用户反馈批次三（H1-H6，2026-08）——时间轴交互与视觉优化**：H1 时间点删除入口补齐；H2 软删/还原免二次确认；H3 操作按钮全部展开（禁止 `...` 菜单）；H4 时间轴新建事件按钮横向排布 + 全仓文字按钮加边框；H5 时间轴标题行信息与操作右移 + 重命名/新建事件改图标按钮；H6 事件行「N 节点」计数靠右。
-
-**用户反馈批次五（J1-J3 + K1/K2，2026-08）——输入提示与标签筛选（决策 31）**：J1 设定分类统一为 tags——`data.category` 废弃（zod 移除 + passthrough 容错 + 无迁移），列表摘要列「类别」改「标签」（rules 前 3）、新建行移除类别输入（仅名称+上级设定）、详情字段/Delta 清单同步、`getEntitySummaryStats` 分布 byCategory → byTags（AI 工具数据源闭环）；J2 浏览器原生 **datalist 自动完成**（零依赖：新建行名称/首字段按现有数据聚合候选、设定详情 rules 标签补拉全量聚合、伏笔类别枚举；时间轴沿用 TagSuggest）；J3 设定列表**标签筛选**（REST `?tag=` 单标签包含匹配，复用 db `matchDataFilters.tags` 内部管道并按类型路由 setting→`data.rules`；前端「标签 ▾」下拉聚合既有标签，与搜索/排序/分页组合）；**K1/K2（用户复核修订）**：新建行加回标签输入（逗号分隔多值）、分类字段统一 `data.tags`（前后端同名，004 迁移 SCHEMA_VERSION 4 把旧 rules 分类值复制到 tags，rules 恢复「规则条款」语义仅详情页编辑）、标签编辑快捷选择（既有标签 chips 点击追加去重）；**交互修正（2026-08 用户反馈）**：行内新建不自动跳详情页（留在列表刷新）、全仓 `autoComplete="off"` 禁浏览器历史建议（输入提示完全由代码控制）。
-
-**用户反馈批次四（I1-I4，2026-08）——实体关系增强（决策 30）**：I1 关系类型 `occurs_in` 中文映射补齐（17 种「锚定于」，与 occurs_at「发生于」区分）；I2 详情入口图标 BookOpen 统一为 Eye；**I3 设定层级 = `belongs_to` 关系（决策 30：`data.parent_id` 废弃不再读写，zod 移除定义 + R5 仅保留 location + 无迁移，旧字段 passthrough 容错）**——db 全量层级边邻接表（`listSettingHierarchyEdges`，走关系表索引）+ 防环校验（`wouldCreateSettingCycle` 祖先链 O(深度)）、server `POST /relation` 对 belongs_to 两端均为 setting 的 400 校验（自指/成环）、客户端详情页「层级」区块（父/子分区 + 修改上级先建后删 + 清除）+ 新建行「上级设定」弹层搜索选择器（创建后补建关系）；I4 设定树视图——实体关系第 6 tab「设定树」（`buildSettingTree` 纯函数：根 = 无父设定、父截断提升为根防御；递归树 + 折叠 + 类别徽标 + 子数 + 节点点击跳详情）。
-
-**L 批次前端样式工程化（L1-L4，2026-08）——样式工程化重构**：client 包引入 **Prettier + prettier-plugin-tailwindcss**（printWidth 100 + tailwindStylesheet；长 className 自动折行、类顺序统一，新代码格式工具兑底）；新建 **`lib/styles.ts` 共享样式常量**（提取阈值 ≥3 处：iconButtonBaseClass/iconButtonSize（bar/sm/md）/iconButtonDisabledClass/inputClass（不含宽度类——Tailwind 4 同属性类按值排序、w-full 会压掉 w-40）/errorBannerClass/skeletonClass/sectionCardClass）+ **`EmptyState`**（空态容器：padding sm/md/lg 参数化规避 py-* 覆盖坑）/ **`SectionCard`**（上提自 OutlineDetail 局部 Card）组件；**全仓硬编码色类清零**（zinc/white/red 50+ 处 → token 类，EntityList 原 30+ 处，深色主题亮色异常同步修复）；空态统一后仅 1 处视觉微调（Timeline py-8→py-10）；**C 项 CSS Modules 评估关闭**——Canvas/时间轴几何均在 JS 计算、CSS 仅工具类、动画在 index.css，无 Tailwind 无法表达的样式，不硬转（契约：后续引入须同时满足「Tailwind 无法表达」+「重复 ≥3 处」）。
-
-**用户反馈批次六（M1-M3，2026-08）——实体/规则编辑与列表展示**：M1 标签编辑器回车添加下一项（bug：placeholder 承诺未兑现——非末行聚焦下一行 / 末行非空追加空行并聚焦 / 末行空无操作防空行跑马灯；`enterBehavior` 纯函数）；M2 设定列表行显示上级设定与描述（交互：EntitySummary 契约扩展 `parentId`/`parentName` 仅 setting 填充——服务端列表补查全量 belongs_to 层级边按 childId 映射，软删可见性复用 listRelations；setting 摘要新增 description 截断 100 字符防 search_entities 上下文膨胀；前端列 名称|标签|上级设定|描述|更新时间，上级 chip 点击跳父详情；顺带修正 entity-list.md 决策 31 后过期的 summary.category）；M3 标签列表拖拽排序（新需求：GripVertical 手柄 + HTML5 原生 DnD 零依赖，仅拖拽进行中响应 drop 不干扰输入框文本拖选，`moveArrayItem` 纯函数；TagsEditor 共用组件故 rules/tags/personality/abilities 四列表同步受益；排序只改本地表单数组随 data 提交，无独立 API）。
-
-**用户反馈批次七（N1-N2，2026-08）——设定列表上级设定筛选（决策 32，递归子树）**：N1 后端——`GET /entity/setting` 新增可选 `parent_id`（仅 setting 生效、其他类型忽略），匹配语义 = 设定层级树（belongs_to，决策 30）中直接或间接属于该父（**递归子树、不含自身**）；复用 db 既有 `listSettingHierarchyEdges` 全量边建 childOf 邻接表栈式 DFS 收集后代集合（防环守卫 = Set 去重），走 `listEntities` 既有 JS 过滤路径（与 tag filters 合并分支，total=过滤后总数、分页正确，无 filters/parentId 时仍走 COUNT+LIMIT SQL 路径零回归）；指向不存在/已软删的父 → 空结果（宽松同 tag 不 404）；软删联动由边查询可见性天然保证；N2 前端——排序行「上级设定 ▾」下拉（候选=全部设定按名排序 +「全部」重置，与标签下拉并列；候选聚合与 tag 候选合并一次请求 limit 200 sort name），列表请求带 `parent_id` 与搜索/标签/排序/分页 AND 组合，tab/类型切换重置，父已软删或超截断时 select 兑底 option 防空白，空态三文档《X》下暂无设定 + 清除上级筛选；oracle 审核无 P0/P1（P2：parent_id 空串防御归一化 + 空态文档补三文档已随卡处理）。
-
-**批次八（O1-O6，2026-08）——体验优化与画布重构（决策 33）**：O1 设定筛选可搜索下拉（SearchableSelect：Popover + 关键词客户端过滤已聚合候选 +「全部」清除 + fallbackLabel 兑底，区别于 parent-setting-select 的服务端防抖搜索）；O2 大纲节点行操作区右端对齐（ml-auto）+ 顺序详情/添加/删除 + 移除行尾时间戳显示；O3 时间轴移除 GripVertical 拖拽柄视觉（draggable 与 title 提示保留行根，参考大纲页无柄拖拽）；O4 时间轴折叠/展开按钮移至组标题左侧（参考大纲页折叠箭头位序）；O5 设定树「全部展开/全部折叠」按钮（折叠态提升 SettingTreeView 受控层 + `expandableSettingNodeIds` 纯 helper）；**O6 画布页删除（决策 33）**——`pages/Canvas.tsx`/`lib/canvas.ts` 及测试删除、TabBar 7→6 tab、`#/canvas` 路由移除（未知 hash 回退 `#/` 兑底），**plot_edge 数据模型与关系接口能力保留（决策 10 不变）**、旧 localStorage 坐标为无害残留不清理；文档同步（layout.md 路由表/架构图、canvas.md 标废弃、architecture.md 目录树）、画布死后 CSS（canvas-edge-flow）删除；每卡临时分支 + worktree 并行（批次一 O1‖O2‖O3O4→批次二 O5‖O6）+ 独立 oracle 审验全 PASS。
-
----
-
-## 任务卡归档（已完成，详细规格见 git history）
-
-> 每卡 = 实现 commit（docs 收官 commit 略）；oracle 审核无 P0/P1 遗留（P2 已处理或记入后续卡）。详细卡规格、坑记录与提交历史可 `git log` 回溯。
-
-| 批次 | 卡 | 实现 commit | 要点 |
-|------|----|------------|------|
-| 地基/切片 | T0-T7 / S1-S13 | git log 回溯 | 地基 + 项目管理/大纲/实体/回收站/Delta/工具层/对话/聊天/伏笔/节点详情/大纲重构 |
-| 阶段 U | U1-U8 | git log 回溯 | 三栏工作台重构 + 双主题 + 会话归属项目 |
-| 画布 | S10.1 | git log 回溯 | 画布投影 + 连线 + 坐标持久化 |
-| 画布增强 | S10.2-S10.5 | git log 回溯 | 连线质量/小地图/重布局/hover 路径 |
-| 交互优化 | UX1-UX4 | git log 回溯 | 拖出即连/行内新建/轻量弹层 |
-| 发布 | S11.1-S11.3 | git log 回溯 | 构建全链路/冒烟/复审 |
-| 阻断项 | E1-E6 | git log 回溯 | 导出导入/未来版本拒绝/增量迁移/发布链路（坑记录见文末） |
-| 阶段 B | B1 | `66785bc` | 项目提示词编辑器 |
-| 阶段 C | C1-C4 | git log 回溯 | 时间轴事件实体 + 排序 + 锚定 |
-| 阶段 B2 | B2.1-B2.4 | `0f1cc92`/`cf51cfe`/`16a312d`/`0ce5f4d` | 自动备份 + 恢复 + import 分流 |
-| B2.5 | 备份命名增强 | `2d8e5eb` | 毫秒精度 + 自定义名称（决策 28） |
-| B2.6 | 备份类型标签 + 重命名 | `544769e` | kind 标记段 + POST /backup/rename（决策 29） |
-| F1 | 事件字段清空语义 | `b3d76c3` | Bug：空值提交即清除 |
-| F2 | 备份漏检 data.db-WAL | `2fb0735` | Bug：补查 `-wal` mtime |
-| F3 | 垂直时间轴 UI | `532282a` | 交互：轴线 + 节点 + 事件卡 |
-| F4 | 同标签归组 | `9eb7660` | 交互：组块 + 组块级拖拽（17,500 例暴力验证） |
-| F5 | 时间标签样式 | `e1673c0` | 交互：主题色点缀 + 未标注占位 |
-| F6 | 行内完整描述 | `2d12e05` | 交互：两行截断 + 展开/收起 |
-| F7 | 三栏收起/拖宽 | `e17132e` | 新需求：use-panels + 持久化（决策 22 修订） |
-| F8 | 标签输入建议 | `66227ce` | 新需求：suggestTags + TagSuggest |
-| F9 | LLM 排序提案 | `2e4297d` | 新需求：propose_reorder_events（G2 后换 timepoints 版） |
-| G1 | 区块独立滚动 | `6f81a99` | 交互：header/筛选器固定 |
-| G2.1 | 数据层 | `33b1a5f` | timepoint 实体 + occurs_at + SCHEMA_VERSION 3 迁移 |
-| G2.2 | 服务端与 AI | `a324fdd` | move 端点 + move_to 复合 + 工具替换 |
-| G2.3 | 前端重构 | `4278c9c` | 双实体 UI + 双轨拖拽 + 双入口 |
-| G2.4 | 收尾 | `4be73d5` | 文档与状态同步 |
-| G3 | 操作后滚动位置保持 | `f50bae6` | 交互：重拉期间保留旧数据渲染 |
-| H1-H6 | 时间轴交互与视觉优化 | git log 回溯 | 删除入口/免确认/按钮展开/边框/右移/图标 |
-| I1 | `occurs_in` 中文映射（bug） | `2563dec` | 17 种关系类型映射补全，「锚定于」与「发生于」区分；测试 + entity-list.md 补映射表 |
-| I2 | 详情图标统一 Eye（UX） | `75bdf8d` | BookOpen → Eye（Outline/HookPanel 详情入口）；Sidebar/Dashboard 书籍语义保留；outline.md 同步 |
-| I3a | 设定层级 = belongs_to（决策 30）数据/校验层 | `5e1a831` | shared 移除 settingDataSchema.parent_id；db 层级邻接表/防环 helper；server POST /relation 自指/成环 400；tools R5 仅保留 location；文档 decisions 30 + schema/endpoints/UI |
-| I3b | 设定层级客户端 UI（决策 30） | `d6e5c19` | detailFieldsForType 移除 parent_id；详情页「层级」区块（父/子分区 + 修改/清除上级，先建后删）+ 关联列表过滤层级边；新建行「上级设定」弹层搜索选择器 + 创建后补建 belongs_to；lib helper + 测试 |
-| I4 | 设定树视图（决策 30） | `3a4a92b` | 实体关系第 6 tab「设定树」；buildSettingTree 纯函数（根判定/截断孤儿提升）；递归树渲染 + 折叠 + 类别徽标 + 子数 + 节点点击跳详情；路由拦截 + 测试 +5 |
-| J1 | 设定分类统一为 tags（决策 31） | `89a9cf1` | category 废弃；摘要列改标签；统计 byTags；Delta 清单同步 |
-| J2 | datalist 原生自动完成（决策 31） | `f0cb5f5` | 新建行/详情标签/伏笔类别候选聚合；SuggestionDatalist + uniqueStrings |
-| J3 | 设定列表标签筛选（决策 31） | `f174009` | REST ?tag= + 前端标签下拉聚合 + matchDataFilters 按类型路由（K2 后统一 data.tags） |
-| K1/K2 | 新建行标签输入 + 分类字段统一 data.tags（决策 31 修订） | `a85859c`/`0e332dc` | 新建行逗号分隔标签输入；004 迁移（SCHEMA_VERSION 4）；rules 恢复规则条款语义；快捷选择 chips；autoComplete=off |
-| L1 | 样式工程化地基 | `ce2cc7c` | Prettier + tailwind 插件；lib/styles.ts 常量；EmptyState/SectionCard；ui/ 格式化；layout.md §4.4 |
-| L2 | 外壳组件样式整理 | `5fe7c7d` | Sidebar/AppShell/ChatPanel/backup-section 格式化 + 常量接入 |
-| L3 | 页面样式整理 | `ad79f57` | pages/ 10 文件；EmptyState/SectionCard/errorBanner/skeleton 接入；zinc 硬编码色 token 化 |
-| L4 | 其余组件收尾 | `6ce218d` | delta/entity/timeline 等；inputClass 接入；全仓硬编码色清零；回归验证 |
-| L-C | CSS Modules 评估（C 项） | `2dba11a` | 评估关闭：Canvas/时间轴几何在 JS 计算、CSS 仅工具类，无适用样式 |
-| M1 | 标签编辑器回车添加下一项（bug） | `abf346d` | 回车 = 非末行聚焦下一行/末行非空追加空行并聚焦/末行空无操作；enterBehavior 纯函数 + 测试 |
-| M2 | 设定列表行显示上级设定与描述（交互） | `1069bb1` | EntitySummary +parentId/parentName（仅 setting，服务端补查 belongs_to 映射）；setting 摘要 +description（截断 100）；列表 5 列 + 上级 chip 跳父详情；顺带修正 entity-list.md 过期 category |
-| M3 | 标签列表拖拽排序（新需求） | `715eb0d` | GripVertical 手柄 + HTML5 原生 DnD（零依赖）；仅拖拽中响应 drop 不干扰文本拖选；moveArrayItem + 测试 |
-| N1 | 设定列表上级设定筛选后端（决策 32） | `6b27ec5` | shared entityListQuerySchema +parent_id（仅 setting）；db listEntities +parentId 递归子树过滤（listSettingHierarchyEdges 邻接表 DFS 后代集合，JS 过滤路径，total 正确）；server 路由接线；vitest：递归子树/自身排除/不存在空结果/与 tag 组合/分页 total/软删联动/非 setting 忽略 |
-| N2 | 设定列表上级设定筛选前端（决策 32） | `0c53a09` | 「上级设定 ▾」下拉（全部设定候选 + 全部重置 + 已删父兑底，与标签下拉并列）；候选聚合与列表请求带 parent_id；与搜索/标签/排序/分页组合；tab/类型切换重置；空态三文档「《…》下暂无设定」 |
-| P2 | Oracle 审核 P2 修复 | `c139b07` | parent_id 空串防御归一化（？parent_id= 与「不传」等价）；列表空态文档「两种→三种」 |
-| O1 | 设定筛选可搜索下拉（交互） | `5dfa1dc` | SearchableSelect（Popover + 客户端过滤已聚合候选 + 全部清除 + fallbackLabel兑底）；filterOptions 纯函数 + 5 单测 |
-| O2 | 大纲操作区右移 + 顺序/去时间戳（交互） | `42df33e` | ml-auto 右端对齐；详情→＋→回收站→当前位置徽标；formatTimestamp 移除 |
-| O3 | 时间轴去拖拽柄保留提示（交互） | `6d0e0cc` | GripVertical 视觉移除、draggable+title 保留行根，两组件 |
-| O4 | 时间轴折叠按钮左移（交互） | `7aca264` | ChevronRight 移至组标题左侧，aria 语义保留 |
-| O5 | 设定树全部展开/折叠（新需求） | `dbeb52c` | 折叠态提升 SettingTreeView 受控 + expandableSettingNodeIds + 5 单测 |
-| O6 | 画布页删除与清理（新需求/决策 33） | `232d396` | 删 4 画布文件 + TabBar/main/use-route 接线 + 注释清理；plot_edge 能力保留；0 逻辑改动 |
+**发布与阻断项（E1-E6，2026-08）**——导出/导入（E1-E3：fflate zip 三文件）、schema 安全（E4 未来版本拒绝重建 / E5 增量迁移）、发布链路（E6：6 包 npm + OIDC Trusted Publisher + CI 全绿，v0.0.1-v0.0.14）。发布管道坑记录见文末。
 
 ---
 
