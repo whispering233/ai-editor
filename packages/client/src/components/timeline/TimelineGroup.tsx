@@ -1,7 +1,8 @@
 // 时间轴组块（G2.3，timeline.md G2 布局线框：时间点组块）
-// 职责：组标题行（大圆点 + 时间点名；右侧：事件计数 + [重命名] + [+ 在此时间点新建事件] +
-//   [移入回收站] + 折叠按钮）+ 组内事件堆叠；**未挂载兜底区复用本组件**（timepoint = null）。
+// 职责：组标题行（大圆点 + 左侧折叠按钮 + 时间点名；右侧：事件计数 + [重命名] + [+ 在此时间点新建事件] +
+//   [移入回收站]）+ 组内事件堆叠；**未挂载兜底区复用本组件**（timepoint = null）。
 // 拖拽柄视觉已移除（批次八 O3）：draggable 仍设在组标题行根，悬停 title 提示拖拽能力，无 GripVertical 图标。
+// 折叠按钮位序（批次八 O4）：移至组标题**左侧**（标题前，同大纲页折叠箭头在标题左边），不再靠右。
 // 拖拽（G2 双轨）：
 // - 时间点整组拖拽：draggable 设在**组标题行根**（组内事件行各自 draggable——G2 恢复单条拖拽，
 //   两者是兄弟节点不嵌套，无 F4 防误拖冲突）；dragover/drop 以标题行中点判定插入位（容器协调）
@@ -136,6 +137,25 @@ export function TimelineGroupBlock({
           />
         </div>
         <div className="flex min-w-0 flex-1 items-center gap-2 py-1">
+          {/* 折叠/展开按钮（批次八 O4：移至组标题左侧、标题前，同大纲页折叠箭头位序；折叠后仅标题行） */}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            draggable={false}
+            className="text-muted-foreground"
+            aria-expanded={!collapsed}
+            aria-label={`${collapsed ? "展开" : "折叠"}「${title}」组`}
+            onClick={onToggleCollapse}
+          >
+            {/* chevron 展开旋转惯例（layout.md §2.3）：折叠时横指，展开时向下 */}
+            <ChevronRight
+              className={cn(
+                "size-4 transition-transform duration-200",
+                !collapsed && "rotate-90",
+              )}
+            />
+          </Button>
           {editing ? (
             <input
               autoComplete="off"
@@ -163,8 +183,8 @@ export function TimelineGroupBlock({
               {title}
             </span>
           )}
-          {/* 右侧信息与操作区（H5：事件计数、重命名、在此时间点新建事件、移入回收站、折叠全部靠右，
-              左侧只保留时间标签文本，减少干扰） */}
+          {/* 右侧信息与操作区（H5：事件计数、重命名、在此时间点新建事件、移入回收站全部靠右；
+              折叠按钮已移至左侧（批次八 O4）） */}
           <span className="ml-auto flex shrink-0 items-center gap-1">
             <span className="shrink-0 text-xs text-muted-foreground">{events.length} 个事件</span>
             {/* 重命名（H5：图标按钮，减少文字干扰） */}
@@ -213,24 +233,6 @@ export function TimelineGroupBlock({
                 <Trash2 className="size-3.5" />
               </Button>
             )}
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              draggable={false}
-              className="text-muted-foreground"
-              aria-expanded={!collapsed}
-              aria-label={`${collapsed ? "展开" : "折叠"}「${title}」组`}
-              onClick={onToggleCollapse}
-            >
-              {/* chevron 展开旋转惯例（layout.md §2.3）：折叠时横指，展开时向下 */}
-              <ChevronRight
-                className={cn(
-                  "size-4 transition-transform duration-200",
-                  !collapsed && "rotate-90",
-                )}
-              />
-            </Button>
           </span>
         </div>
       </div>
