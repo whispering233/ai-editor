@@ -1,9 +1,10 @@
 // 时间轴事件行（G2.3，timeline.md G2 布局线框：组内事件堆叠；F5 时间标签样式已随 G2 移除——
 //   时间标签 = 组标题（时间点实体），行内不再展示；F6 行内描述展示保留）
 // 职责：纯展示 + 单条拖拽（G2 双轨：事件行 draggable，恢复 F3 能力）——
-//   行 = 小圆点 + 内容卡（拖拽柄 GripVertical → 事件名 → tags → 「N 节点」→ 直接操作按钮 + 描述区）。
+//   行 = 小圆点 + 内容卡（事件名 → tags → 「N 节点」→ 直接操作按钮 + 描述区）。
 // 拖拽协调在容器（components/timeline/Timeline.tsx）——本行只负责 draggable 挂载与回调转发：
 //   行内按钮 draggable={false} 防拖（操作按钮）；opacity-50 拖拽态；插入指示线（S13 模式）。
+// 拖拽柄视觉已移除（批次八 O3）：draggable 在行根 + 悬停 title 提示，无 GripVertical 图标。
 // 描述区（F6）：事件名行下方全宽换行，`text-sm text-muted-foreground` 次要层级（低于事件名）；
 //   两行截断（line-clamp-2）——**超过两行才显示「展开」按钮**（clamp 态 scrollHeight > clientHeight
 //   运行时测量，窗口 resize 重测；**展开态跳过重测**——line-clamp 解除后无法测 clamp 溢出，
@@ -11,7 +12,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
-import { Eye, GripVertical, Pencil, Trash2 } from "lucide-react";
+import { Eye, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { eventDescription, eventTagsOf } from "../../lib/timeline";
 import { cn } from "../../lib/utils";
@@ -88,6 +89,7 @@ export function TimelineEvent({
       onDragEnd={eventDrag.onDragEnd}
       onDragOver={(e) => eventDrag.onDragOver(e, ev)}
       onDrop={(e) => eventDrag.onDrop(e, ev)}
+      title="拖拽调整事件顺序/挂载"
       className={cn("relative flex items-start", dragging && "opacity-50")}
     >
       {/* 插入指示线（S13 模式：行上下边缘，跨圆点列与内容） */}
@@ -101,18 +103,10 @@ export function TimelineEvent({
           className="mx-auto mt-[16px] block size-2 rounded-full bg-primary/60"
         />
       </div>
-      {/* 内容卡（timeline.md G2 事件行：从左到右 拖拽柄 → 事件名 → tags；右侧：N 节点 + 直接操作按钮；
+      {/* 内容卡（timeline.md G2 事件行：从左到右 事件名 → tags；右侧：N 节点 + 直接操作按钮；
           描述区 F6 在事件名行下方全宽换行，不挤占行内元素） */}
       <div className="min-w-0 flex-1 rounded-md border border-border bg-card px-3 py-2">
         <div className="flex items-center gap-2">
-          {/* 拖拽柄（G2 恢复 F3 单条拖拽：draggable 在行根，柄为视觉指示） */}
-          <span
-            className="shrink-0 cursor-grab text-muted-foreground/60 active:cursor-grabbing"
-            title="拖拽调整事件顺序/挂载"
-            aria-hidden="true"
-          >
-            <GripVertical className="size-4" />
-          </span>
           <span className="min-w-0 truncate font-medium text-foreground" title={ev.name}>
             {ev.name}
           </span>

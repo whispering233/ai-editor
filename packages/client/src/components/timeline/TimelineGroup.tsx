@@ -1,6 +1,7 @@
 // 时间轴组块（G2.3，timeline.md G2 布局线框：时间点组块）
-// 职责：组标题行（大圆点 + 拖拽柄 + 时间点名；右侧：事件计数 + [重命名] + [+ 在此时间点新建事件] +
+// 职责：组标题行（大圆点 + 时间点名；右侧：事件计数 + [重命名] + [+ 在此时间点新建事件] +
 //   [移入回收站] + 折叠按钮）+ 组内事件堆叠；**未挂载兜底区复用本组件**（timepoint = null）。
+// 拖拽柄视觉已移除（批次八 O3）：draggable 仍设在组标题行根，悬停 title 提示拖拽能力，无 GripVertical 图标。
 // 拖拽（G2 双轨）：
 // - 时间点整组拖拽：draggable 设在**组标题行根**（组内事件行各自 draggable——G2 恢复单条拖拽，
 //   两者是兄弟节点不嵌套，无 F4 防误拖冲突）；dragover/drop 以标题行中点判定插入位（容器协调）
@@ -12,7 +13,7 @@
 import { useState } from "react";
 import type { DragEvent } from "react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
-import { ChevronRight, GripVertical, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "../../lib/utils";
 import { TimelineEvent, type EventDragHandlers } from "./TimelineEvent";
@@ -112,13 +113,14 @@ export function TimelineGroupBlock({
       {/* 插入指示线（S13 模式：目标组块上下边缘，跨圆点列与内容） */}
       {showInsertBefore && <div className="absolute inset-x-0 -top-px h-0.5 bg-primary" />}
       {showInsertAfter && <div className="absolute inset-x-0 -bottom-px h-0.5 bg-primary" />}
-      {/* 组标题行（draggable：时间点整组拖拽柄；未挂载区/编辑态不 draggable） */}
+      {/* 组标题行（draggable：时间点整组拖拽，无视觉拖拽柄（批次八 O3）；未挂载区/编辑态不 draggable） */}
       <div
         draggable={!isUngrouped && !busy && !editing}
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
         onDragOver={onDragOver}
         onDrop={onDrop}
+        title={!isUngrouped ? "拖拽调整时间点顺序（组内事件不动）" : undefined}
         className={cn("flex items-start", !isUngrouped && groupDragging && "opacity-50")}
       >
         {/* 大圆点（F4 样式：mx-auto 居中于轴线列，圆心 = 轴线；z-10 + 不透明背景盖住穿过的轴线；
@@ -134,16 +136,6 @@ export function TimelineGroupBlock({
           />
         </div>
         <div className="flex min-w-0 flex-1 items-center gap-2 py-1">
-          {/* 拖拽柄（时间点整组；未挂载区不渲染——本区不可拖） */}
-          {!isUngrouped && (
-            <span
-              className="shrink-0 cursor-grab text-muted-foreground/60 active:cursor-grabbing"
-              title="拖拽调整时间点顺序（组内事件不动）"
-              aria-hidden="true"
-            >
-              <GripVertical className="size-4" />
-            </span>
-          )}
           {editing ? (
             <input
               autoComplete="off"
