@@ -20,6 +20,7 @@ import { Eye, Trash2 } from "lucide-react";
 import { CHILD_TYPE, TYPE_LABEL } from "../components/outline/dialogs";
 import { NodeHookMarkBadge } from "../components/outline/node-hook-badge";
 import { Button } from "@/components/ui/button";
+import { AskAiButton } from "@/components/chat/AskAiButton";
 import { EmptyState } from "@/components/ui/empty-state";
 import { errorBannerClass, skeletonClass } from "@/lib/styles";
 import {
@@ -673,8 +674,10 @@ export default function Outline() {
                   ))}
                 </span>
               )}
-              {/* 操作区（批次八 O2）：右端对齐（ml-auto）；固定顺序 详情 → ＋ 就地新建（scene 行无）→ 回收站 → 当前位置徽标 */}
+              {/* 操作区（批次八 O2 + 决策 35 修订）：右端对齐（ml-auto）；固定顺序 问AI → 详情 → ＋ 就地新建（scene 行无）→ 回收站 → 当前位置徽标 */}
               <span className="ml-auto flex shrink-0 items-center gap-1">
+                {/* 行级「带上下文问 AI」（决策 35 修订：方案 A 显式有焦点入口） */}
+                <AskAiButton focus={{ focus_node_id: node.id }} title={`带节点「${node.title}」问 AI`} />
                 <button
                   type="button"
                   className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"

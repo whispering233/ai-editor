@@ -15,6 +15,7 @@ import { useState } from "react";
 import type { DragEvent } from "react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
+import { AskAiButton } from "../chat/AskAiButton";
 import { Button } from "@/components/ui/button";
 import { cn } from "../../lib/utils";
 import { TimelineEvent, type EventDragHandlers } from "./TimelineEvent";
@@ -187,6 +188,12 @@ export function TimelineGroupBlock({
               折叠按钮已移至左侧（批次八 O4）） */}
           <span className="ml-auto flex shrink-0 items-center gap-1">
             <span className="shrink-0 text-xs text-muted-foreground">{events.length} 个事件</span>
+            {/* 行级「带上下文问 AI」（决策 35 修订）：时间点是时间语义对象 */}
+            {timepoint !== null && !editing && (
+              <span className="inline-flex shrink-0" draggable={false}>
+                <AskAiButton focus={{ focus_entity_type: "timepoint", focus_entity_id: groupId }} title={`带时间点「${timepoint.name}」问 AI`} />
+              </span>
+            )}
             {/* 重命名（H5：图标按钮，减少文字干扰） */}
             {timepoint !== null && !editing && (
               <Button

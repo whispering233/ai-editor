@@ -13,6 +13,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import type { DragEvent } from "react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { Eye, Pencil, Trash2 } from "lucide-react";
+import { AskAiButton } from "../chat/AskAiButton";
 import { Button } from "@/components/ui/button";
 import { eventDescription, eventTagsOf } from "../../lib/timeline";
 import { cn } from "../../lib/utils";
@@ -124,6 +125,10 @@ export function TimelineEvent({
               <span className="shrink-0 text-xs text-muted-foreground">{count} 节点</span>
             )}
             {/* 操作按钮全部展开（H3：禁止收进 ⋯ 二级展开；图标 + title/aria-label） */}
+            {/* 行级「带上下文问 AI」（决策 35 修订）；draggable=false 防事件行拖拽误触发 */}
+            <span className="inline-flex shrink-0" draggable={false}>
+              <AskAiButton focus={{ focus_entity_type: "event", focus_entity_id: ev.id }} title={`带事件《${ev.name}》问 AI`} />
+            </span>
             <Button
               variant="ghost"
               size="icon-sm"

@@ -21,6 +21,7 @@ import { errorBannerClass, inputClass, sectionCardClass, skeletonClass } from ".
 import { Button } from "../components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { TagSuggest } from "../components/timeline/TagSuggest";
+import { AskAiButton } from "../components/chat/AskAiButton";
 import { EmptyState } from "../components/ui/empty-state";
 
 /** 分类中文映射（列表徽标 / 下拉选项） */
@@ -388,6 +389,8 @@ function RefRow({ item, onOpen, onDelete, onGoto }: RefRowProps) {
         <button type="button" onClick={onGoto} className="min-w-0 flex-1 truncate text-left text-sm font-medium text-foreground hover:text-primary">
           {item.name}
         </button>
+        {/* 行级「带上下文问 AI」（决策 35 修订） */}
+        <AskAiButton focus={{ focus_entity_type: "reference", focus_entity_id: item.id }} title={`带《${item.name}》问 AI`} />
         <Button variant="ghost" size="icon-sm" className="text-muted-foreground" onClick={() => onOpen(item)} aria-label="编辑" title="编辑">
           <Pencil className="size-3.5" />
         </Button>

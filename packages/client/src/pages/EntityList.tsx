@@ -35,6 +35,7 @@ import {
   SUMMARY_COLUMNS,
   summaryCellText,
 } from "../lib/entity-list";
+import { AskAiButton } from "@/components/chat/AskAiButton";
 import { cn } from "../lib/utils";
 import { navigate } from "../hooks/use-route";
 import { useDataRefresh } from "../hooks/use-data-refresh";
@@ -684,6 +685,12 @@ export default function EntityList({ type }: { type: string }) {
                           {summaryCellText(entityType, col.key3, item.summary[col.key3])}
                         </td>
                       )}
+                      <td className="px-3 py-2 text-right">
+                        {/* 行级「带上下文问 AI」（决策 35 修订）：stopPropagation 防触发行跳转 */}
+                        <span onClick={(e) => e.stopPropagation()} className="inline-flex">
+                          <AskAiButton focus={{ focus_entity_type: entityType, focus_entity_id: item.id }} title={`带《${item.name}》问 AI`} />
+                        </span>
+                      </td>
                       <td className="px-3 py-2 text-right text-xs whitespace-nowrap text-muted-foreground/70">
                         {formatTimestamp(item.updatedAt)}
                       </td>

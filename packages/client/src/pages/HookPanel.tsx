@@ -17,6 +17,7 @@ import type { FormEvent, ReactNode } from "react";
 import { formatTimestamp, HOOK_CATEGORIES } from "@whispering233/ai-editor-shared";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { ArrowUp, Check, CheckCircle2, Circle, Eye, Pencil, Trash2, X } from "lucide-react";
+import { AskAiButton } from "@/components/chat/AskAiButton";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { inputClass, errorBannerClass } from "@/lib/styles";
@@ -760,6 +761,8 @@ function HookGroupSection({
                   )}
                   {/* 操作按钮全部展开（H3：禁止收进 ⋯ 二级展开；图标 + title/aria-label） */}
                   <span className="ml-auto flex shrink-0 items-center gap-0.5">
+                    {/* 行级「带上下文问 AI」（决策 35 修订） */}
+                    <AskAiButton focus={{ focus_entity_type: "hook", focus_entity_id: hook.id }} title={`带伏笔《${hook.name}》问 AI`} />
                     <Button
                       variant="ghost"
                       size="icon-sm"
