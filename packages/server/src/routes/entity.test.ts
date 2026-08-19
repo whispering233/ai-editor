@@ -237,6 +237,74 @@ describe("GET /api/v1/entity/:type 列表", () => {
     const charBody = (await charRes.json()) as { data: { items: Array<{ parentId?: string }> } };
     expect(charBody.data.items[0].parentId).toBeUndefined();
   });
+
+  it("N1（批次七，决策 32）：parent_id 上级设定筛选——递归子树（含所有后代、不含自身）、不存在空结果、与 tag 组合、软删联动、分页正确、非 setting 忽略", async () => {
+    openProject();
+    const app = buildApp();
+    // 三级层级：世界 → 大陆 → 门派；另设无父设定「天地法则」
+    const createSetting = async (name: string, tags?: string[]) => {
+      const res = await app.request(
+        "/api/v1/entity/setting",
+        jsonRequest("POST", "", { name, data: tags !== undefined ? { tags } : {} }),
+      );
+      return ((await res.json()) as { data: { id: string } }).data.id;
+    };
+    const worldId = await createSetting("世界", ["法则", "范围"]);
+    const continentId = await createSetting("大陆", ["范围"]);
+    const sectId = await createSetting("门派", ["势力"]);
+    await createSetting("天地法则", ["法则"]);
+    const project = getCurrentProject()!;
+    const link = (childId: string, parentId: string) =>
+      createRelation(
+        project.db,
+        { sourceType: "setting", sourceId: childId, targetType: "setting", targetId: parentId, relationType: "belongs_to" },
+        project.root,
+      );
+    link(continentId, worldId); // 大陆 belongs_to 世界
+    link(sectId, continentId); // 门派 belongs_to 大陆
+
+    const list = async (url: string) => {
+      const res = await app.request(url, { headers: HOST_HEADERS });
+      const body = (await res.json()) as { data: { items: Array<{ id: string; name: string }>; total: number } };
+      return body.data;
+    };
+
+    // 递归子树：世界 → [大陆, 门派]（不含自身；无父「天地法则」不出现）
+    const all = await list(`/api/v1/entity/setting?parent_id=${worldId}`);
+    expect(all.total).toBe(2);
+    expect(new Set(all.items.map((i) => i.id))).toEqual(new Set([continentId, sectId]));
+    // 一级：大陆 → [门派]
+    const one = await list(`/api/v1/entity/setting?parent_id=${continentId}`);
+    expect(one.total).toBe(1);
+    expect(one.items[0].id).toBe(sectId);
+    // 叶子：门派 → 空
+    const leaf = await list(`/api/v1/entity/setting?parent_id=${sectId}`);
+    expect(leaf.total).toBe(0);
+    expect(leaf.items).toEqual([]);
+    // 不存在的父（宽松语义，同 tag 无匹配）：空结果不 404
+    const ghost = await list("/api/v1/entity/setting?parent_id=set-ghost");
+    expect(ghost.total).toBe(0);
+    // 与 tag 组合（AND）：世界下且标签含「范围」→ 仅大陆
+    const combo = await list(`/api/v1/entity/setting?parent_id=${worldId}&tag=范围`);
+    expect(combo.total).toBe(1);
+    expect(combo.items[0].id).toBe(continentId);
+    // 分页正确（JS 过滤路径 total 为过滤后总数）：limit=1 时 total 仍为 2（未过滤分页前的总量）
+    const page1 = await list(`/api/v1/entity/setting?parent_id=${worldId}&limit=1&offset=0`);
+    expect(page1.total).toBe(2);
+    expect(page1.items).toHaveLength(1);
+    const page2 = await list(`/api/v1/entity/setting?parent_id=${worldId}&limit=1&offset=1`);
+    expect(page2.total).toBe(2);
+    expect(page2.items).toHaveLength(1);
+    // 软删联动：软删门派后，大陆下不再命中（listSettingHierarchyEdges 已过滤软删端点）
+    const del = await app.request(`/api/v1/entity/setting/${sectId}`, jsonRequest("DELETE", ""));
+    expect(del.status).toBe(200);
+    const after = await list(`/api/v1/entity/setting?parent_id=${continentId}`);
+    expect(after.total).toBe(0);
+    // 非 setting 类型忽略 parent_id（契约：仅 setting）
+    await createCharacter(app, "张三");
+    const charAll = await list(`/api/v1/entity/character?parent_id=${worldId}`);
+    expect(charAll.total).toBe(1);
+  });
 });
 
 describe("GET /api/v1/entity/:type/:id 详情", () => {

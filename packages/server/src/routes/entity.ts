@@ -56,8 +56,9 @@ entityRoutes.get("/:type", (c) => {
   const type = parseTypeParam(c.req.param("type"));
   const parsed = entityListQuerySchema.safeParse(c.req.query());
   if (!parsed.success) throw parsed.error;
-  const { q, offset, limit, sort, order, tag } = parsed.data;
+  const { q, offset, limit, sort, order, tag, parent_id } = parsed.data;
   // 标签筛选（决策 31）：走既有 matchDataFilters.tags 内部管道（S6.3 工具下沉能力挂到 REST）
+  // 上级设定筛选（决策 32）：仅 setting 类型生效（其他类型传入忽略——契约约定，决策 32）
   const result = listEntities(project.db, {
     type,
     q,
@@ -66,6 +67,7 @@ entityRoutes.get("/:type", (c) => {
     sort,
     order,
     filters: tag !== undefined ? { tags: [tag] } : undefined,
+    parentId: type === "setting" ? parent_id : undefined,
   });
   // M2（2026-08 批次六）：setting 列表附加上级设定（决策 30 层级 = belongs_to）——
   // 补查全量设定间层级边（listRelations 已做软删端点可见性过滤），按 childId 映射附加

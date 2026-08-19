@@ -366,6 +366,11 @@ export const entityListQuerySchema = z.object({
   order: z.enum(["asc", "desc"]).optional(),
   // 标签包含筛选（决策 31，2026-08）：data 数组字段（setting.rules / event.tags）包含该标签即命中
   tag: z.string().optional(),
+  // 上级设定筛选（决策 32，2026-08，仅 setting 类型生效，其他类型路由层忽略）：匹配 = 实体在设定层级树
+  // （belongs_to，决策 30）中直接或间接属于该上级（递归子树，不含上级自身）；复用 listSettingHierarchyEdges
+  // 建邻接表 DFS 收集后代集合走 db JS 过滤路径（total = 过滤后总数）；与 q/tag/排序/分页组合（AND）；
+  // 指向不存在的设定（含已软删）→ 空结果（宽松，同 tag 无匹配不 404）；不传 = 不过滤
+  parent_id: z.string().optional(),
 });
 
 export const entityListResSchema = z.object({

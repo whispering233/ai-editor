@@ -18,7 +18,7 @@ import { nowIso } from "../storage/atomic.js";
 import { withTransaction, type Db } from "../connection.js";
 // relation.ts ↔ entity.ts 循环引用（relation.ts import getEntity）：仅函数调用期使用
 // RelationError/rowToRelationRow，无模块顶层求值依赖，ESM 运行时安全。
-import { RelationError, rowToRelationRow } from "./relation.js";
+import { listSettingHierarchyEdges, RelationError, rowToRelationRow } from "./relation.js";
 
 /** 列表查询参数（endpoints.md 第 162-169 行；缺省值语义与路由层对齐） */
 export interface EntityListQuery {
@@ -37,6 +37,13 @@ export interface EntityListQuery {
   limit?: number;
   sort?: "name" | "created_at" | "updated_at";
   order?: "asc" | "desc";
+  /**
+   * 上级设定筛选（决策 32，2026-08，仅 setting）：匹配 = 实体在设定层级树（belongs_to，决策 30）中
+   * 直接或间接属于该上级（**递归子树，不含上级自身**）。复用既有 listSettingHierarchyEdges 全量边建
+   * childOf 邻接表 DFS 收集后代 id 集合后走 JS 过滤路径（见 listEntities 注释，total 为过滤后总数）。
+   * 指向不存在的设定（含已软删）→ 后代集合为空 → 空结果（宽松，同 tag 无匹配不 404）。
+   */
+  parentId?: string;
 }
 
 /** 列表结果（endpoints.md 第 171-177 行；items 为 API 形态 EntitySummary，与 chat.ts 同款风格） */
@@ -137,13 +144,40 @@ function matchDataFilters(data: Record<string, unknown>, filters: { tags?: strin
 }
 
 /**
+ * 收集设定层级树中某节点的全部后代 id（决策 32，2026-08）：复用 listSettingHierarchyEdges 全量边
+ * （只读、O(N)、走关系表索引，两端未软删）构建 childOf 邻接表（parentId → 直接子 id 列表），
+ * DFS 收集**不含自身**的递归后代集合。防环守卫：结果 Set 去重——已收集节点不再入栈，
+ * 数据异常成环也不死循环。父不存在/已软删 → 空集合（边集合已做软删可见性过滤）。
+ */
+function collectSettingDescendants(db: Db, rootId: string): Set<string> {
+  const childOf = new Map<string, string[]>();
+  for (const e of listSettingHierarchyEdges(db)) {
+    const kids = childOf.get(e.parentId) ?? [];
+    kids.push(e.childId);
+    childOf.set(e.parentId, kids);
+  }
+  const result = new Set<string>();
+  const stack = [rootId];
+  while (stack.length > 0) {
+    const id = stack.pop()!;
+    for (const kid of childOf.get(id) ?? []) {
+      if (result.has(kid)) continue;
+      result.add(kid);
+      stack.push(kid);
+    }
+  }
+  return result;
+}
+
+/**
  * 实体列表（GET /api/v1/entity/:type，endpoints.md 第 154-193 行）：
  * type 过滤 + q 模糊搜索（name LIKE）+ 排序（name/created_at/updated_at × asc/desc，
  * 白名单防注入）+ 分页（limit clamp 1-200）+ **默认过滤软删**（决策 12）。
  * total 为过滤后总数（不含分页）。
  * filters 语义（S6.3 下沉）：data 字段 JS 过滤（列表摘要不含 data），此时 SQL 只做
  * type/q/软删过滤，filters + 分页在 JS 层（MVP 数据量小，全行查询可接受）；
- * 无 filters 时保持 COUNT + LIMIT SQL 原路径（行为不变）。
+ * parentId 语义（决策 32 上层筛选）：同上——复用 listSettingHierarchyEdges 收集递归后代集合，
+ * 与 filters 同款 JS 过滤路径（两者可同时存在，AND 组合；SQL 路径保持 COUNT+LIMIT 行为不变）。
  */
 export function listEntities(db: Db, query: EntityListQuery): EntityListResult {
   const where = ["deleted_at IS NULL"];
@@ -167,12 +201,21 @@ export function listEntities(db: Db, query: EntityListQuery): EntityListResult {
   const offset = Math.max(0, Math.trunc(query.offset ?? 0));
   const limit = Math.min(200, Math.max(1, Math.trunc(query.limit ?? 50)));
 
-  // filters 分支：SQL 取全量候选行（type/q/软删），filters + 分页在 JS 层
-  if (query.filters !== undefined) {
+  // JS 过滤路径（决策 32 扩展）：filters（S6.3 工具下沉）或 parentId（决策 32 上级设定筛选）存在时，
+  // SQL 取全量候选行（type/q/软删），JS 层执行 data/层级过滤 + 分页（MVP 数据量小，全行查询可接受）；
+  // 两者皆无时保持 COUNT + LIMIT SQL 原路径（行为不变）。
+  if (query.filters !== undefined || query.parentId !== undefined) {
     const all = db
       .prepare(`SELECT * FROM entities WHERE ${where.join(" AND ")} ORDER BY ${orderSql}`)
       .all(...params) as Array<Record<string, unknown>>;
-    const filtered = all.filter((r) => matchDataFilters(rowToEntityRow(r).data, query.filters!));
+    const descendants =
+      query.parentId !== undefined ? collectSettingDescendants(db, query.parentId) : null;
+    const filtered = all.filter((r) => {
+      const row = rowToEntityRow(r);
+      if (query.filters !== undefined && !matchDataFilters(row.data, query.filters)) return false;
+      if (descendants !== null && !descendants.has(row.id)) return false;
+      return true;
+    });
     return {
       items: filtered.slice(offset, offset + limit).map((r) => toSummary(rowToEntityRow(r))),
       total: filtered.length,
