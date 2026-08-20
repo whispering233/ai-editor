@@ -645,7 +645,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
                 {tags.map((t) => (
                   <span
                     key={t}
-                    className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
+                    className="rounded bg-primary/80 px-1.5 py-0.5 text-xs text-primary-foreground"
                   >
                     {t}
                   </span>

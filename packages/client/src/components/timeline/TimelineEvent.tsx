@@ -198,7 +198,7 @@ export function TimelineEvent({
           {tags.map((tag) => (
             <span
               key={tag}
-              className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
+              className="shrink-0 rounded bg-primary/80 px-1.5 py-0.5 text-xs text-primary-foreground"
             >
               {tag}
             </span>

@@ -464,7 +464,7 @@ function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowP
             {tags.map((t) => (
               <span
                 key={t}
-                className="rounded bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                className="rounded bg-primary/80 px-1.5 py-0.5 text-[10px] text-primary-foreground"
               >
                 {t}
               </span>
