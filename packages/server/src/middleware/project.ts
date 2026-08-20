@@ -15,7 +15,7 @@ import type { Context, MiddlewareHandler } from "hono";
 import type { ProjectFileConfig } from "@whispering233/ai-editor-shared";
 import { generateProjectId, DEFAULT_BACKUP_FREQUENCY_MINUTES } from "@whispering233/ai-editor-shared";
 import { closeDatabase, openDatabase, setUserVersion, type Db } from "@whispering233/ai-editor-db";
-import { readProjectFile, writeProjectFile } from "@whispering233/ai-editor-db";
+import { readAgentsFile, readProjectFile, writeAgentsFile, writeProjectFile } from "@whispering233/ai-editor-db";
 import { writeOutlineFile } from "@whispering233/ai-editor-db";
 import { SCHEMA_VERSION } from "@whispering233/ai-editor-db";
 import { nowIso } from "@whispering233/ai-editor-db";
@@ -100,7 +100,32 @@ export function detectProject(root: string): ProjectContext | null {
   if (existing === null) {
     return null;
   }
-  return { root, config: existing, db: openDatabase(join(root, DATA_DB_FILE_NAME)) };
+  const project: ProjectContext = { root, config: existing, db: openDatabase(join(root, DATA_DB_FILE_NAME)) };
+  // 决策 41 自动迁移：project.json 有非空 prompt 且无 AGENTS.md → 迁移写入（原样，一次性）
+  migratePromptToAgents(project);
+  return project;
+}
+
+/**
+ * 决策 41 自动迁移：project.json 存在非空 `prompt` 且项目目录无 AGENTS.md →
+ * 将 prompt 内容**原样**写入 AGENTS.md（原子写，决策 11 同款），一次性——
+ * 迁移后 AGENTS.md 存在，条件不再满足，prompt 不再使用（字段可保留为遗留数据，宽松读取）。
+ *
+ * 触发点：打开项目时（detectProject 启动即打开 + open 路由），与 E5 迁移同生命周期。
+ * **失败不阻塞打开**（schema.md「迁移在 open 流程内完成，失败不阻塞打开，记录日志，下次 open 重试」）。
+ *
+ * @param project 已打开的项目上下文（root 指向项目目录）
+ */
+export function migratePromptToAgents(project: ProjectContext): void {
+  const prompt = project.config.prompt;
+  if (typeof prompt !== "string" || prompt.trim() === "") return; // 无 prompt 无需迁移
+  if (readAgentsFile(project.root) !== null) return; // 已有 AGENTS.md 不覆盖（一次性）
+  try {
+    writeAgentsFile(project.root, prompt);
+  } catch (err) {
+    // 迁移失败不阻塞打开：记录日志，下次 open 重试
+    console.error("[server] AGENTS.md 自动迁移失败（下次打开重试）:", err);
+  }
 }
 
 /**
@@ -110,14 +135,15 @@ export function detectProject(root: string): ProjectContext | null {
  * 应用层写当前 ISO 时间）→ 写 outline.json 最小空树 → openDatabase 建 data.db（自动建表）
  * → setUserVersion(SCHEMA_VERSION)（S1.1 审核建议：brand-new 库立即写版本号，
  * 避免后续 open 时 ensureSchemaCompatible 触发无意义重建并留空库 data.db.v0.bak）。
+ * 注：`prompt` 已废弃（决策 41）——新项目不再写入该字段（项目规则改由 AGENTS.md 承载）。
  *
- * @param configOverride 可选覆盖 {name?, language?, prompt?}（create 请求的 config 字段）；
+ * @param configOverride 可选覆盖 {name?, language?}（create 请求的 config 字段）；
  *   传入时 updated_at 一并刷新
  * @returns 已打开的项目上下文（调用方负责 closeProject；create 路由创建后即关闭）
  */
 export function initProject(
   root: string,
-  configOverride?: Partial<Pick<ProjectFileConfig, "name" | "language" | "prompt">>,
+  configOverride?: Partial<Pick<ProjectFileConfig, "name" | "language">>,
 ): ProjectContext {
   mkdirSync(root, { recursive: true });
   const now = nowIso();
@@ -125,7 +151,6 @@ export function initProject(
     id: generateProjectId(), // proj- 前缀（endpoints.md id 约定）
     name: basename(root),
     language: "zh",
-    prompt: "",
     schema_version: SCHEMA_VERSION,
     current_position: null,
     // 决策 27：新项目默认开启自动备份（显式写入缺省 10，跟随书籍）

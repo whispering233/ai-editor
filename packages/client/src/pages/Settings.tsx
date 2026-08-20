@@ -3,8 +3,11 @@
 // 交互：模型名输入 + 保存；API key 状态行（掩码）+ 新 key 输入 + 保存/清除；
 //   常驻说明：key 只存本机用户配置（~/.ai-editor/config.json），不入项目文件（决策 17）；
 //   环境变量 DEEPSEEK_API_KEY 优先于此处配置（页面仍可保存，实际生效以环境变量为准）
-//   B1（决策 25）：项目提示词区——GET/PUT /project/config → prompt；载入优先读 project store
-//   已缓存 config；保存后 toast + dataVersion +1（中栏数据页刷新）；无项目打开灰显禁用
+//   决策 41（2026-08 批次十）：项目规则区改为编辑项目目录 AGENTS.md 文件内容——
+//   GET/PUT /project/agents（项目规则唯一事实源，取代 project.json `prompt`）；
+//   载入优先读 project store 已缓存 agents；保存后 toast + dataVersion +1（中栏数据页刷新）；
+//   外部修改检测：GET 返回 mtime，与上次读取比对不一致提示「文件已被外部修改，请刷新/重新加载」；
+//   无项目打开灰显禁用
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +27,13 @@ export default function Settings() {
   const notifyDataChanged = useUiStore((s) => s.notifyDataChanged);
   const config = useProjectStore((s) => s.config);
   const configLoading = useProjectStore((s) => s.configLoading);
-  const updateConfig = useProjectStore((s) => s.updateConfig);
+  const agents = useProjectStore((s) => s.agents);
+  const agentsProjectId = useProjectStore((s) => s.agentsProjectId);
+  const agentsLoading = useProjectStore((s) => s.agentsLoading);
+  const agentsError = useProjectStore((s) => s.agentsError);
+  const agentsExternalModified = useProjectStore((s) => s.agentsExternalModified);
+  const loadAgents = useProjectStore((s) => s.loadAgents);
+  const saveAgents = useProjectStore((s) => s.saveAgents);
 
   const [loading, setLoading] = useState(true);
   const [model, setModel] = useState("");
@@ -35,14 +44,16 @@ export default function Settings() {
   const [modelError, setModelError] = useState<string | null>(null);
   /** key 区表单内联错误（原型 settings.md「错误态：VALIDATION_ERROR → 表单内联错误」） */
   const [keyError, setKeyError] = useState<string | null>(null);
-  // —— B1 项目提示词（决策 25）——
-  const [prompt, setPrompt] = useState("");
-  /** 已填充提示词的项目 id（null = 尚未/无项目）：id 变化（切换项目）→ 重新填充；
-   *  同项目内 store 重拉（updateConfig 内部 loadConfig）→ 不覆盖用户草稿 */
-  const [promptLoadedFor, setPromptLoadedFor] = useState<string | null>(null);
-  const [promptSaving, setPromptSaving] = useState(false);
-  /** 提示词区表单内联错误（原型「错误态：VALIDATION_ERROR → 表单内联错误」） */
-  const [promptError, setPromptError] = useState<string | null>(null);
+  // —— 决策 41 项目规则 AGENTS.md ——
+  const [agentsContent, setAgentsContent] = useState("");
+  /** 已加载 AGENTS.md 的项目 id（null = 尚未/无项目）：id 变化（切换项目）→ 重新加载；
+   *  同项目内 store 重拉（loadAgents）→ 不覆盖用户草稿 */
+  const [agentsLoadedFor, setAgentsLoadedFor] = useState<string | null>(null);
+  const [agentsSaving, setAgentsSaving] = useState(false);
+  /** 规则区表单内联错误（原型「错误态：VALIDATION_ERROR → 表单内联错误」） */
+  const [agentsErrorLocal, setAgentsErrorLocal] = useState<string | null>(null);
+  /** 外部修改提示（决策 41）：store 检测到 mtime 变化 → 展示「文件已被外部修改，请刷新/重新加载」 */
+  const [externalModified, setExternalModified] = useState(false);
 
   /** 拉取当前配置（保存/清除后刷新掩码状态） */
   async function refresh() {
@@ -62,7 +73,7 @@ export default function Settings() {
     void refresh();
   }, []);
 
-  // B1 载入：进入设置页优先用 project store 已缓存 config（AppShell 挂载时已拉取）；
+  // 决策 41 载入：进入设置页优先用 project store 已缓存 config（AppShell 挂载时已拉取）；
   //   无缓存（store 尚未拉取）补拉一次——仅本挂载触发一次（store 内部有并发防抖），
   //   避免「无项目/失败后 config 恒为 null」时本 effect 反复重拉
   useEffect(() => {
@@ -72,38 +83,49 @@ export default function Settings() {
     }
   }, []);
 
-  // config 就绪后按项目身份填充提示词：关闭项目（null）→ 重置；切换项目（id 变化）→
-  // 重新填充（丢弃旧项目草稿是正确行为）；同项目内 store 重拉 → 不覆盖用户正在编辑的草稿
+  // config 就绪后按项目身份加载 AGENTS.md：关闭项目（null）→ 重置；切换项目（id 变化）→
+  // 重新加载（清空旧草稿，等待新项目加载完成）；同项目内 store 重拉 → 不覆盖用户正在编辑的草稿
   useEffect(() => {
     if (config === null) {
-      setPromptLoadedFor(null);
+      setAgentsLoadedFor(null);
+      setAgentsContent("");
+      setExternalModified(false);
       return;
     }
-    if (config.id !== promptLoadedFor) {
-      setPrompt(config.prompt);
-      setPromptLoadedFor(config.id);
+    if (config.id !== agentsLoadedFor) {
+      setAgentsLoadedFor(config.id);
+      setAgentsContent(""); // 切换项目：清空旧草稿，等待新项目加载
+      setExternalModified(false);
+      void loadAgents();
     }
-  }, [config, promptLoadedFor]);
+  }, [config, agentsLoadedFor]);
 
-  /** B1 保存提示词：空值/纯空白 = 清除（服务端「## 项目设定」整段跳过，决策 25）；
-   *  store updateConfig 内部 PUT 成功后自动重拉 config；toast + dataVersion +1 触发中栏数据页刷新 */
-  async function handleSavePrompt() {
-    setPromptError(null);
-    setPromptSaving(true);
+  // agents 加载完成 → 填充（仅当前项目：agentsProjectId 与 config.id 一致才填充，防串项目）；
+  // 外部修改检测结果同步展示（决策 41）
+  useEffect(() => {
+    if (agents !== null && agentsProjectId === config?.id) {
+      setAgentsContent(agents.content);
+      setExternalModified(agentsExternalModified);
+    }
+  }, [agents, agentsProjectId, config, agentsExternalModified]);
+
+  /** 决策 41 保存规则：整体替换 AGENTS.md 内容（空值 = 清空规则文件，保留空文件）；
+   *  store saveAgents 内部 PUT 成功后更新本地基线（新 mtime）；toast + dataVersion +1 触发中栏数据页刷新 */
+  async function handleSaveAgents() {
+    setAgentsErrorLocal(null);
+    setAgentsSaving(true);
     try {
-      const value = prompt.trim();
-      await updateConfig({ prompt: value });
-      setPrompt(value);
-      showToast("提示词已保存，仅影响新请求");
+      await saveAgents(agentsContent);
+      showToast("规则已保存，仅影响新请求");
       notifyDataChanged();
     } catch (err) {
       if (errorCodeOf(err) === CLIENT_NETWORK_ERROR) {
-        showError("CLIENT_NETWORK_ERROR", "无法连接服务，提示词未保存");
+        showError("CLIENT_NETWORK_ERROR", "无法连接服务，规则未保存");
       } else {
-        setPromptError("保存失败，请重试");
+        setAgentsErrorLocal("保存失败，请重试");
       }
     } finally {
-      setPromptSaving(false);
+      setAgentsSaving(false);
     }
   }
 
@@ -235,39 +257,45 @@ export default function Settings() {
             <p>· 环境变量 DEEPSEEK_API_KEY 优先于此处配置；保存的 key 仅影响新请求</p>
           </div>
 
-          {/* 项目提示词（B1，决策 25）：注入 AI 上下文「## 项目设定」段（每轮有效）；
-              空值保存 = 清除（服务端整段跳过）；无项目打开灰显禁用 + 提示 */}
+          {/* 项目规则 AGENTS.md（决策 41）：编辑项目目录 AGENTS.md 文件内容（GET/PUT /project/agents）；
+              注入 AI 上下文「## 项目设定」段（每轮有效）；空 = 整段跳过；无项目打开灰显禁用 + 提示；
+              外部修改检测：GET 返回 mtime，与上次读取比对不一致提示刷新/重新加载 */}
           <div>
-            <h2 className="mb-1 text-sm font-semibold text-foreground">项目提示词</h2>
+            <h2 className="mb-1 text-sm font-semibold text-foreground">项目规则（AGENTS.md）</h2>
             <p className="mb-2 text-xs text-muted-foreground">
-              注入 AI 上下文「## 项目设定」段（每轮有效）；承载项目级规则/行业要求；空 = 整段跳过
+              编辑项目目录下 AGENTS.md 文件内容，注入 AI 上下文「## 项目设定」段（每轮有效）；空 = 整段跳过
             </p>
             <p className="mb-2 text-xs text-muted-foreground/70">
-              建议用 ### 及以下层级的小标题组织内容（如「### 写作规则」）；避免使用 ##
-              顶层标题（与系统分段标题冲突）
+              可直接在文件管理器中编辑 AGENTS.md（外部修改后此处会提示刷新/重新加载）
             </p>
+            {externalModified && (
+              <p className="mb-2 text-sm text-destructive">文件已被外部修改，请刷新/重新加载</p>
+            )}
             <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
+              value={agentsContent}
+              onChange={(e) => setAgentsContent(e.target.value)}
               rows={6}
-              // 首填完成前不可输入（含 config 拉取中/切换项目后未填充），消除草稿被首填覆盖窗口
-              disabled={config === null || config.id !== promptLoadedFor}
-              placeholder="输入项目级规则/行业要求…"
+              // 首填完成前不可输入（含 config 拉取中/切换项目后未加载），消除草稿被首填覆盖窗口
+              disabled={config === null || config.id !== agentsLoadedFor || agentsLoading}
+              placeholder="输入项目规则/行业要求…"
               className="w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
             />
             <div className="mt-2 flex items-center gap-3">
               <Button
-                onClick={() => void handleSavePrompt()}
-                disabled={promptSaving || config === null || config.id !== promptLoadedFor}
+                onClick={() => void handleSaveAgents()}
+                disabled={agentsSaving || config === null || config.id !== agentsLoadedFor}
                 type="button"
               >
-                保存提示词
+                保存规则
               </Button>
               {config === null && !configLoading && (
                 <p className="text-xs text-muted-foreground/70">打开项目后可用</p>
               )}
             </div>
-            {promptError && <p className="mt-1 text-sm text-destructive">{promptError}</p>}
+            {agentsErrorLocal && <p className="mt-1 text-sm text-destructive">{agentsErrorLocal}</p>}
+            {agentsError !== null && agentsError !== "NO_PROJECT_OPEN" && (
+              <p className="mt-1 text-sm text-destructive">规则文件加载失败，请重试</p>
+            )}
           </div>
 
           {/* 自动备份（B2，决策 27）：频率下拉（选择即保存）/ 立即备份 / 历史备份列表 + 加载强确认 */}

@@ -209,7 +209,7 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     // ============ 步骤 1：建项目（create + open + config，三文件落地） ============
     const created = await api(app, "POST", "/api/v1/project/create", {
       path: projectDir,
-      config: { name: "冒烟测试书", prompt: "测试提示词" },
+      config: { name: "冒烟测试书" },
     });
     expect(created.status).toBe(200);
     expect(created.body.data.created).toBe(true);
@@ -237,7 +237,6 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(config.status).toBe(200);
     expect(config.body.data.id).toBe(projectId);
     expect(config.body.data.name).toBe("冒烟测试书");
-    expect(config.body.data.prompt).toBe("测试提示词");
     expect(config.body.data.currentPosition).toBeNull();
     expect(config.body.data.schemaVersion).toBeTypeOf("number");
 

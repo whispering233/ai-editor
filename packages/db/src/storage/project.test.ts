@@ -1,11 +1,20 @@
 // T2.2 project.json 存储模块测试：缺失返回 null / 写读往返 / 原子写不残留 / 损坏抛错
+// + 决策 41：AGENTS.md 项目规则文件读写（readAgentsFile/writeAgentsFile/agentsFileMtimeIso）
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { ProjectFileConfig } from "@whispering233/ai-editor-shared";
-import { PROJECT_FILE_NAME, readProjectFile, writeProjectFile } from "./project.js";
+import {
+  AGENTS_FILE_NAME,
+  PROJECT_FILE_NAME,
+  agentsFileMtimeIso,
+  readAgentsFile,
+  readProjectFile,
+  writeAgentsFile,
+  writeProjectFile,
+} from "./project.js";
 
 let dir: string;
 
@@ -75,5 +84,38 @@ describe("writeProjectFile", () => {
     const updated = { ...makeConfig(), name: "改名", updated_at: "2026-08-02T10:00:00Z" };
     writeProjectFile(dir, updated);
     expect(readProjectFile(dir)).toEqual(updated);
+  });
+});
+
+// ============ AGENTS.md 项目规则文件（决策 41） ============
+
+describe("AGENTS.md 读写（决策 41：项目规则唯一事实源）", () => {
+  it("readAgentsFile：文件不存在返回 null（可选文件语义）", () => {
+    expect(readAgentsFile(dir)).toBeNull();
+  });
+
+  it("写读往返：writeAgentsFile 后读回内容一致（原样文本，不追加换行）", () => {
+    writeAgentsFile(dir, "力量体系：练气→筑基→金丹");
+    expect(readAgentsFile(dir)).toBe("力量体系：练气→筑基→金丹");
+  });
+
+  it("writeAgentsFile 走决策 11 原子写：完成后无临时文件残留", () => {
+    writeAgentsFile(dir, "规则内容");
+    expect(existsSync(join(dir, AGENTS_FILE_NAME))).toBe(true);
+    expect(existsSync(join(dir, `.${AGENTS_FILE_NAME}.tmp`))).toBe(false);
+  });
+
+  it("空串写入 = 清空规则（保留空文件不删除，exists 语义稳定）", () => {
+    writeAgentsFile(dir, "旧规则");
+    writeAgentsFile(dir, "");
+    expect(readAgentsFile(dir)).toBe("");
+    expect(existsSync(join(dir, AGENTS_FILE_NAME))).toBe(true);
+  });
+
+  it("agentsFileMtimeIso：文件存在返回 ISO 8601；不存在返回 null", () => {
+    expect(agentsFileMtimeIso(dir)).toBeNull();
+    writeAgentsFile(dir, "规则");
+    const mtime = agentsFileMtimeIso(dir);
+    expect(mtime).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 });

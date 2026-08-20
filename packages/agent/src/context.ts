@@ -62,7 +62,7 @@ export interface BuildContextInput {
   history: SessionMessage[];
   /** 内核提示词（默认 KERNEL_PROMPT；测试可覆盖） */
   kernelPrompt?: string;
-  /** 项目提示词（决策 7 项目层，调用方从 ProjectConfig.prompt 传入；可空） */
+  /** 项目提示词（决策 7 项目层；决策 41 起数据源 = 项目目录 AGENTS.md 文件内容，调用方读取后传入；可空） */
   projectPrompt?: string;
   /** 临时指令（决策 7 临时层，即时输入不持久化；可空） */
   instruction?: string;

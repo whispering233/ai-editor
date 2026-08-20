@@ -12,7 +12,7 @@ import { ENTITY_TYPES, REFERENCE_TYPES, RELATION_TYPES } from "../constants/enti
 import { HOOK_STATUSES, PAYOFF_TIMING } from "../constants/hook.js";
 import { CONFLICT_LEVELS } from "../constants/outline.js";
 import { BACKUP_FREQUENCIES } from "../constants/backup.js";
-import type { ComputeStateResult, DeltaRecord, EntitySummary, ProjectConfig, RelationRecord } from "./index.js";
+import type { ComputeStateResult, DeltaRecord, EntitySummary, ProjectAgents, ProjectConfig, RelationRecord } from "./index.js";
 
 // ============ 基础 schema ============
 
@@ -180,12 +180,12 @@ export const ENTITY_DATA_SCHEMAS = {
 
 // ============ project 端点（endpoints.md「项目管理」） ============
 
-/** ProjectConfig 响应（GET /api/v1/project/config；与 types/project.ts 的 ProjectConfig 对齐） */
+/** ProjectConfig 响应（GET /api/v1/project/config；与 types/project.ts 的 ProjectConfig 对齐；
+ *  `prompt` 已废弃（决策 41）不再返回——项目规则唯一事实源改为项目目录 AGENTS.md） */
 export const projectConfigSchema: z.ZodType<ProjectConfig> = z.object({
   id: z.string(),
   name: z.string(),
   language: projectLanguageSchema,
-  prompt: z.string(), // 项目级提示词（决策 7）
   schemaVersion: z.number().int(), // 决策 13
   currentPosition: z.string().nullable(), // 「当前位置」节点 id；null = 未设置（决策 21）
   backupFrequencyMinutes: z.number().int().nullable(), // 自动备份频率（决策 27）；null = 关闭；缺省 10 由读侧兜底
@@ -201,8 +201,10 @@ export const projectCreateReqSchema = z
       .object({
         name: z.string().optional(),
         language: projectLanguageSchema.optional(),
-        prompt: z.string().optional(),
+        // prompt 已废弃（决策 41）：不再接受（strict schema 传入 → 400 VALIDATION_ERROR）；
+        // 项目规则改由 PUT /api/v1/project/agents 写入 AGENTS.md
       })
+      .strict()
       .optional(),
   })
   .strict();
@@ -258,7 +260,8 @@ export const projectConfigUpdateReqSchema = z
   .object({
     name: z.string().optional(),
     language: projectLanguageSchema.optional(),
-    prompt: z.string().optional(),
+    // prompt 已废弃（决策 41）：不再接受（strict schema 传入 → 400 VALIDATION_ERROR）；
+    // 项目规则改由 PUT /api/v1/project/agents 写入 AGENTS.md
     current_position: z.string().nullable().optional(), // 须指向存在的非软删大纲节点（服务端校验）
     /**
      * 自动备份频率（决策 27）：仅接受枚举 5/10/15/30/60（BACKUP_FREQUENCIES），其他（含 0）→ 400
@@ -270,6 +273,29 @@ export const projectConfigUpdateReqSchema = z
 
 export const projectConfigUpdateResSchema = z.object({
   updated: z.literal(true),
+});
+
+// GET /api/v1/project/agents（决策 41：项目规则文件 AGENTS.md——唯一事实源，取代 project.json `prompt`）
+// 语义：无当前项目 → 409 NO_PROJECT_OPEN；文件不存在不报错（exists:false + 空串）；
+//   updatedAt = 文件 mtime（ISO 8601，外部修改检测依据）；读取每次实时读文件不缓存
+export const projectAgentsGetResSchema: z.ZodType<ProjectAgents> = z.object({
+  content: z.string(), // AGENTS.md 文件内容（文件不存在 → 空串）
+  exists: z.boolean(), // 文件是否存在（false 时 content 为空串）
+  updatedAt: z.string().nullable(), // 文件 mtime（ISO 8601；文件不存在 → null）
+});
+
+// PUT /api/v1/project/agents（决策 41：设置页直接编辑 AGENTS.md 文件内容）
+// 语义：整体替换（非追加）；空串 = 清空规则（保留空文件不删除）；文件不存在自动创建；
+//   写入走原子写（决策 11 同款）；写入后返回新 mtime（前端更新本地比对基线）
+export const projectAgentsPutReqSchema = z
+  .object({
+    content: z.string(), // AGENTS.md 完整内容（整体替换；空串 = 清空规则文件，保留空文件不删除）
+  })
+  .strict();
+
+export const projectAgentsPutResSchema = z.object({
+  saved: z.literal(true),
+  updatedAt: z.string(), // 写入后的文件 mtime（ISO 8601）——前端更新本地比对基线
 });
 
 // POST /api/v1/project/backup（决策 28 新增：手动备份可携带自定义名称）

@@ -1,5 +1,6 @@
 // project store 测试（S1.4：openProjectAt 的 rebuilt toast、loadConfig 的 loadError 区分）
 // + S1.5：书架 loadBookshelf 成功/失败、buildBookPath 路径拼接
+// + 决策 41：loadAgents/saveAgents（AGENTS.md 加载/保存 + 外部修改检测）
 // mock lib/api 模块（保留 ApiError 类真实实现）
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ProjectConfig } from "@whispering233/ai-editor-shared";
@@ -17,6 +18,8 @@ vi.mock("../lib/api", async (importOriginal) => {
     getOutline: vi.fn(),
     updateProjectConfig: vi.fn(),
     listProjects: vi.fn(),
+    getProjectAgents: vi.fn(),
+    saveProjectAgents: vi.fn(),
   };
 });
 
@@ -24,9 +27,11 @@ import {
   closeProject as apiCloseProject,
   createProject as apiCreateProject,
   getOutline as apiGetOutline,
+  getProjectAgents as apiGetProjectAgents,
   getProjectConfig as apiGetProjectConfig,
   listProjects as apiListProjects,
   openProject as apiOpenProject,
+  saveProjectAgents as apiSaveProjectAgents,
 } from "../lib/api";
 import { buildBookPath, useProjectStore } from "./project";
 import { useUiStore } from "./ui";
@@ -38,13 +43,14 @@ const mocked = {
   closeProject: vi.mocked(apiCloseProject),
   getOutline: vi.mocked(apiGetOutline),
   listProjects: vi.mocked(apiListProjects),
+  getProjectAgents: vi.mocked(apiGetProjectAgents),
+  saveProjectAgents: vi.mocked(apiSaveProjectAgents),
 };
 
 const sampleConfig: ProjectConfig = {
   id: "proj-1",
   name: "我的小说",
   language: "zh",
-  prompt: "",
   schemaVersion: 1,
   currentPosition: null,
   backupFrequencyMinutes: 10, // 决策 27（B2.1 新增字段）
@@ -63,6 +69,11 @@ afterEach(() => {
     bookshelf: null,
     bookshelfLoading: false,
     bookshelfError: null,
+    agents: null,
+    agentsProjectId: null,
+    agentsLoading: false,
+    agentsError: null,
+    agentsExternalModified: false,
   });
   useUiStore.setState({ toast: null, error: null });
 });
@@ -219,6 +230,86 @@ describe("书架 loadBookshelf（S1.5）", () => {
     const s = useProjectStore.getState();
     expect(s.bookshelf).toBeNull();
     expect(s.bookshelfError).toBe("CLIENT_NETWORK_ERROR");
+  });
+});
+
+describe("AGENTS.md loadAgents/saveAgents（决策 41）", () => {
+  it("loadAgents 成功 → agents 设置 + agentsProjectId 绑定当前项目 + 无外部修改标记", async () => {
+    useProjectStore.setState({ config: sampleConfig });
+    mocked.getProjectAgents.mockResolvedValue({
+      content: "力量体系：练气→筑基",
+      exists: true,
+      updatedAt: "2026-08-01T10:00:00Z",
+    });
+    await useProjectStore.getState().loadAgents();
+    const s = useProjectStore.getState();
+    expect(s.agents).toEqual({ content: "力量体系：练气→筑基", exists: true, updatedAt: "2026-08-01T10:00:00Z" });
+    expect(s.agentsProjectId).toBe("proj-1");
+    expect(s.agentsExternalModified).toBe(false);
+    expect(s.agentsError).toBeNull();
+  });
+
+  it("loadAgents 文件不存在 → content 空串 + exists:false + updatedAt:null（不报错）", async () => {
+    useProjectStore.setState({ config: sampleConfig });
+    mocked.getProjectAgents.mockResolvedValue({ content: "", exists: false, updatedAt: null });
+    await useProjectStore.getState().loadAgents();
+    const s = useProjectStore.getState();
+    expect(s.agents).toEqual({ content: "", exists: false, updatedAt: null });
+    expect(s.agentsError).toBeNull();
+  });
+
+  it("loadAgents 外部修改检测：上次读取后 mtime 变化 → agentsExternalModified=true（决策 41）", async () => {
+    useProjectStore.setState({ config: sampleConfig });
+    // 首次加载（基线 mtime A）
+    mocked.getProjectAgents.mockResolvedValueOnce({
+      content: "旧规则",
+      exists: true,
+      updatedAt: "2026-08-01T10:00:00Z",
+    });
+    await useProjectStore.getState().loadAgents();
+    expect(useProjectStore.getState().agentsExternalModified).toBe(false);
+    // 外部修改后重新加载（mtime 变化）→ 标记
+    mocked.getProjectAgents.mockResolvedValueOnce({
+      content: "外部改的规则",
+      exists: true,
+      updatedAt: "2026-08-01T11:00:00Z",
+    });
+    await useProjectStore.getState().loadAgents();
+    expect(useProjectStore.getState().agentsExternalModified).toBe(true);
+  });
+
+  it("loadAgents 失败 → agents=null + agentsError 记录", async () => {
+    useProjectStore.setState({ config: sampleConfig });
+    mocked.getProjectAgents.mockRejectedValue(new ApiError("CLIENT_NETWORK_ERROR", "网络请求失败"));
+    await useProjectStore.getState().loadAgents();
+    const s = useProjectStore.getState();
+    expect(s.agents).toBeNull();
+    expect(s.agentsError).toBe("CLIENT_NETWORK_ERROR");
+  });
+
+  it("saveAgents 成功 → 更新本地基线（新 mtime）+ 清空外部修改标记", async () => {
+    useProjectStore.setState({ config: sampleConfig, agentsExternalModified: true });
+    mocked.saveProjectAgents.mockResolvedValue({ saved: true, updatedAt: "2026-08-01T12:00:00Z" });
+    await useProjectStore.getState().saveAgents("新规则");
+    const s = useProjectStore.getState();
+    expect(mocked.saveProjectAgents).toHaveBeenCalledWith("新规则");
+    expect(s.agents).toEqual({ content: "新规则", exists: true, updatedAt: "2026-08-01T12:00:00Z" });
+    expect(s.agentsExternalModified).toBe(false);
+  });
+
+  it("closeProject 清空 agents 状态（决策 41：切换/关闭项目不串数据）", async () => {
+    useProjectStore.setState({
+      config: sampleConfig,
+      agents: { content: "规则", exists: true, updatedAt: "2026-08-01T10:00:00Z" },
+      agentsProjectId: "proj-1",
+      agentsExternalModified: true,
+    });
+    mocked.closeProject.mockResolvedValue({ saved: true });
+    await useProjectStore.getState().closeProject();
+    const s = useProjectStore.getState();
+    expect(s.agents).toBeNull();
+    expect(s.agentsProjectId).toBeNull();
+    expect(s.agentsExternalModified).toBe(false);
   });
 });
 

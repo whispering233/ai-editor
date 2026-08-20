@@ -62,7 +62,6 @@ const makeConfig = (id: string): ProjectConfig => ({
   id,
   name: "我的小说",
   language: "zh",
-  prompt: "",
   schemaVersion: 1,
   currentPosition: null,
   backupFrequencyMinutes: 10, // 决策 27（B2.1 新增字段）

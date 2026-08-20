@@ -6,13 +6,13 @@ export type ProjectLanguage = "zh" | "en";
 
 /**
  * 项目配置（API 响应形态，GET /api/v1/project/config，endpoints.md）
+ * 注：`prompt` 字段已废弃（决策 41）——不再返回；项目规则唯一事实源改为项目目录 AGENTS.md
+ * （见 GET /api/v1/project/agents）
  */
 export interface ProjectConfig {
   id: string;
   name: string;
   language: ProjectLanguage;
-  /** 项目级提示词（决策 7 三层注入的项目层） */
-  prompt: string;
   /** schema 版本（对应 project.json 的 schema_version，决策 13） */
   schemaVersion: number;
   /** 大纲「当前位置」节点 id（伏笔健康指标依赖，决策 21）；null = 未设置 */
@@ -31,7 +31,11 @@ export interface ProjectFileConfig {
   id: string;
   name: string;
   language: ProjectLanguage;
-  prompt: string;
+  /**
+   * **已废弃（决策 41）**：项目级提示词——不再读写；项目规则改由项目目录 AGENTS.md 承载。
+   * 旧文件中的残留字段宽松读取（不参与 schema_version 判定），新写入不再产生该字段
+   */
+  prompt?: string;
   schema_version: number;
   current_position: string | null;
   /**
@@ -42,4 +46,17 @@ export interface ProjectFileConfig {
   backup_frequency_minutes?: number | null;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * 项目规则文件 AGENTS.md（决策 41：项目规则唯一事实源，取代 project.json `prompt` 字段）
+ * GET /api/v1/project/agents 响应形态（endpoints.md）
+ */
+export interface ProjectAgents {
+  /** AGENTS.md 文件内容（文件不存在 → 空串） */
+  content: string;
+  /** 文件是否存在（false 时 content 为空串） */
+  exists: boolean;
+  /** 文件 mtime（ISO 8601；文件不存在 → null）——外部修改检测依据（决策 41） */
+  updatedAt: string | null;
 }

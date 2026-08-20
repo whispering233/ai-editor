@@ -243,13 +243,13 @@ function resolveBackupFrequencyMinutes(value: number | null | undefined): number
   return value;
 }
 
-/** ProjectFileConfig → ProjectConfig（schema_version → schemaVersion、current_position → currentPosition、backup 频率读侧兜底） */
+/** ProjectFileConfig → ProjectConfig（schema_version → schemaVersion、current_position → currentPosition、backup 频率读侧兜底；
+ *  `prompt` 已废弃（决策 41）不再映射——项目规则唯一事实源改为项目目录 AGENTS.md） */
 export function mapProjectFileToConfig(file: ProjectFileConfig): ProjectConfig {
   return {
     id: file.id,
     name: file.name,
     language: file.language,
-    prompt: file.prompt,
     schemaVersion: file.schema_version,
     currentPosition: file.current_position,
     backupFrequencyMinutes: resolveBackupFrequencyMinutes(file.backup_frequency_minutes),
@@ -258,13 +258,13 @@ export function mapProjectFileToConfig(file: ProjectFileConfig): ProjectConfig {
   };
 }
 
-/** ProjectConfig → ProjectFileConfig（全量映射：backup_frequency_minutes 恒写入——本函数非 patch 路径，写全对象即显式） */
+/** ProjectConfig → ProjectFileConfig（全量映射：backup_frequency_minutes 恒写入——本函数非 patch 路径，写全对象即显式；
+ *  `prompt` 已废弃（决策 41）不再写出——新写入不再产生该字段） */
 export function mapConfigToProjectFile(config: ProjectConfig): ProjectFileConfig {
   return {
     id: config.id,
     name: config.name,
     language: config.language,
-    prompt: config.prompt,
     schema_version: config.schemaVersion,
     current_position: config.currentPosition,
     backup_frequency_minutes: config.backupFrequencyMinutes,
