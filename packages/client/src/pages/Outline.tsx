@@ -441,9 +441,13 @@ export default function Outline() {
     setSelectedNodeId(nodeId);
   }
 
-  /** 行单击（决策 37）：非标题/摘要/按钮区 → 选中该节点；折叠箭头/操作按钮/输入框等交互元素跳过 */
+  /** 行单击（决策 37）：非标题/摘要/按钮区 → 选中该节点；折叠箭头/操作按钮/输入框等交互元素跳过——
+   * 交互元素同样 stopPropagation（oracle 修复：行内按钮/输入框点击不冒泡到容器，避免清除选中） */
   function handleRowClick(e: MouseEvent<HTMLDivElement>, node: OutlineNode) {
-    if ((e.target as HTMLElement).closest("button, input, a")) return;
+    if ((e.target as HTMLElement).closest("button, input, a")) {
+      e.stopPropagation(); // oracle 修复：行内按钮/输入框交互不视为「点击空白区」，不触发容器清除选中
+      return;
+    }
     e.stopPropagation(); // 阻止冒泡到树容器（容器 onClick 清除选中）
     selectNode(node.id);
   }
@@ -459,9 +463,11 @@ export default function Outline() {
 
   /** 行键盘（决策 37）：选中节点按 Enter → 新建子级（子级类型由父层级推导 CHILD_TYPE，
    * 就地输入行出现在子级末尾，Enter 确认/Esc 取消——commitCreate 逻辑复用）；
-   * 编辑态/新建态/拖拽中/busy/scene（无子级）时禁用 */
+   * 编辑态/新建态/拖拽中/busy/scene（无子级）时禁用；
+   * 仅行 div 自身聚焦时响应（oracle 修复：子元素按钮/输入框聚焦时交给子元素处理，不劫持按钮 Enter→click） */
   function handleRowKeyDown(e: KeyboardEvent<HTMLDivElement>, node: OutlineNode) {
     if (e.key !== "Enter") return;
+    if (e.target !== e.currentTarget) return; // oracle 修复：仅行自身聚焦响应，子元素（按钮/输入框）聚焦交给子元素
     const childType = CHILD_TYPE[node.type];
     if (childType === null) return; // scene 是叶子，无子级可建
     if (editing !== null || creatingAt !== null || dragNodeId !== null || busy) return;
