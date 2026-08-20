@@ -53,9 +53,12 @@ interface TimelineProps {
   onDeleteTimepoint: (tp: EntitySummary) => void;
   /** 组尾「+ 在此时间点新建事件」（页面打开带预挂载的新建对话框） */
   onAddEventAt: (timepointId: string) => void;
+  /** 组标题行双击 → 时间点详情（页面跳 #/entities/timepoint/:id） */
+  onDetailTimepoint: (tp: EntitySummary) => void;
   /** 事件行操作回调（页面级动作） */
   onDetail: (ev: EntitySummary) => void;
-  onEdit: (ev: EntitySummary) => void;
+  /** 事件名行内编辑提交（页面执行 PUT /entity/event/:id { name }；失败抛错——页面 toast） */
+  onEditName: (id: string, name: string) => Promise<void>;
   onDelete: (ev: EntitySummary) => void;
 }
 
@@ -84,8 +87,9 @@ export function Timeline({
   onRenameTimepoint,
   onDeleteTimepoint,
   onAddEventAt,
+  onDetailTimepoint,
   onDetail,
-  onEdit,
+  onEditName,
   onDelete,
 }: TimelineProps) {
   // 渲染模型（已筛选事件）与 order 计算模型（全量事件）——组序同源（timepoints 序）
@@ -391,6 +395,7 @@ export function Timeline({
             onRename={onRenameTimepoint}
             onDeleteTimepoint={onDeleteTimepoint}
             onAddEventAt={onAddEventAt}
+            onDetailTimepoint={onDetailTimepoint}
             onDragStart={(e) => handleTimepointDragStart(e, g)}
             onDragEnd={clearDrag}
             onDragOver={(e) => handleGroupDragOver(e, g)}
@@ -409,7 +414,7 @@ export function Timeline({
                 dropTarget.anchorId === eventId,
             })}
             onDetail={onDetail}
-            onEdit={onEdit}
+            onEditName={onEditName}
             onDelete={onDelete}
           />
         );

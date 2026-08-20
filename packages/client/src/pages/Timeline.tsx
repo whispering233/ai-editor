@@ -1,4 +1,4 @@
-// 时间轴列表页（C3，决策 26；G2.3 双实体重构）
+// 时间轴列表页（C3，决策 26；G2.3 双实体重构；决策 38 行级交互对齐大纲）
 // 路由：#/timeline（1 段 → 列表页）；#/timeline/:id 详情页见 TimelineDetail.tsx（C4，main.tsx 2 段分支）
 // 数据（G2 双实体，timeline.md「路由与数据」）：
 //   GET /api/v1/entity/timepoint（时间点实体，恒按 sort_order 升序——组间顺序，拖拽为权威）
@@ -7,14 +7,17 @@
 //     timepoint → event 1:n——构建 eventId → timepointId 挂载映射）
 //   + GET /api/v1/relation?source_type=event&relation_type=occurs_in&depth=1（全量锚定边，
 //     行内「N 节点」计数——同 HookPanel depEdges 模式）
-// 契约：doc/ui/pages/timeline.md（G2 布局线框/双实体模型/双入口/双轨拖拽/信息层级/状态）
-// 关键交互（G2）：
+// 契约：doc/ui/pages/timeline.md（G2 布局线框/双实体模型/双入口/双轨拖拽/信息层级/状态；决策 38 行操作）
+// 关键交互（G2 + 决策 38）：
 //  - 新建时间点：POST /entity/timepoint（name = 时间标签文本）→ 时间轴末尾追加
 //  - 新建事件（双入口）：顶部「+ 新建事件」= 不挂载（入未挂载区）；组尾「+ 在此时间点新建事件」=
 //    POST /entity/event + POST /relation（timepoint → event，occurs_at 挂载该时间点）
 //  - 拖拽（双轨）：时间点整组 = PUT /entity/timepoint/:id/move（只重排组间序，内部事件不动）；
 //    事件单条 = 同组 PUT /entity/event/:id/move；跨组 POST /entity/event/:id/move_to（改挂载+重排）
-//  - 时间点重命名：组标题 [重命名] 行内编辑 → PUT /entity/timepoint/:id { name }
+//  - 行级交互（决策 38）：双击事件行 = 详情（#/timeline/:id）、双击组标题行 = 时间点详情
+//    （#/entities/timepoint/:id 通用实体详情页）、点击事件名/时间点名 = 行内编辑
+//    （PUT /entity/event/:id { name } / PUT /entity/timepoint/:id { name }）；「详情/编辑/重命名」
+//    按钮已移除（只留删除 + AskAiButton）
 //  - AI 排序（F9）：注入聊天预设指令（工具名 propose_reorder_timepoints 保证出现——LLM 依赖
 //    工具名发现）→ 提案卡确认后 Executor 重排 timepoint.sort_order → notifyDataChanged → 本页
 //    useDataRefresh 自动重拉（无需本页处理刷新）
@@ -50,12 +53,10 @@ import {
 } from "../lib/api";
 import {
   applyTagSuggestion,
-  buildEventDetailPatch,
   collectEventTags,
   filterEventsByTag,
   parseTagsInput,
   suggestTags,
-  tagsToInput,
 } from "../lib/timeline";
 import { buildOccursAtRelationBody } from "../lib/timeline-detail";
 import { flattenTree } from "../lib/outline-tree";
@@ -118,12 +119,6 @@ export default function Timeline() {
   const [tpName, setTpName] = useState("");
   const [tpError, setTpError] = useState<string | null>(null);
   const [tpSubmitting, setTpSubmitting] = useState(false);
-
-  // 编辑对话框（预填 name + data；saveName 记录打开时的原名——name 变更才提交）
-  const [editTarget, setEditTarget] = useState<EntitySummary | null>(null);
-  const [editForm, setEditForm] = useState<EventForm | null>(null);
-  const [editError, setEditError] = useState<string | null>(null);
-  const [editSaving, setEditSaving] = useState(false);
 
   const config = useProjectStore((s) => s.config);
   const outline = useProjectStore((s) => s.outline);
@@ -307,45 +302,21 @@ export default function Timeline() {
     }
   }
 
-  // ============ 编辑 ============
+  // ============ 行内编辑（决策 38：点击事件名/时间点名行内编辑，替代原「编辑/重命名」按钮） ============
 
-  /** 打开编辑：预填表单（name + data 两字段；tags 数组 → 逗号输入串；G2 无 time_label） */
-  function openEdit(ev: EntitySummary) {
-    const data = ev.summary as Record<string, unknown>;
-    setEditTarget(ev);
-    setEditError(null);
-    setEditForm({
-      name: ev.name,
-      description: typeof data.description === "string" ? data.description : "",
-      tagsInput: tagsToInput(data.tags),
-    });
-  }
-
-  /** 编辑保存：buildEventDetailPatch 只提交变更字段（PUT partial 浅合并，与详情页共用同一实现） */
-  async function handleEditSave() {
-    const target = editTarget;
-    const form = editForm;
-    if (!target || !form || editSaving) return;
-    setEditSaving(true);
-    setEditError(null);
+  /** 事件名行内编辑提交：PUT /entity/event/:id { name }；失败 toast（组件已退出编辑态，无需 rethrow——调用方不消费） */
+  async function handleEditEventName(id: string, name: string) {
     try {
-      const patch = buildEventDetailPatch(
-        { name: target.name, data: target.summary as Record<string, unknown> },
-        form,
-      );
-      if (patch === null) {
-        useUiStore.getState().showToast("没有变更");
-        setEditTarget(null);
-        return;
-      }
-      await updateEntity("event", target.id, patch);
+      await updateEntity("event", id, { name });
       useUiStore.getState().showToast("已保存");
-      setEditTarget(null);
       setReloadTick((t) => t + 1);
     } catch (err) {
-      setEditError(err instanceof ApiError ? err.message : "保存失败，请重试");
-    } finally {
-      setEditSaving(false);
+      useUiStore
+        .getState()
+        .showToast(
+          err instanceof ApiError ? `保存失败：${err.message}` : "保存失败，请重试",
+          "error",
+        );
     }
   }
 
@@ -483,18 +454,12 @@ export default function Timeline() {
   const occursCount = (id: string): number =>
     occursEdgesFailed ? 0 : occursEdges.filter((r) => r.sourceId === id).length;
   const hasOccursData = !occursEdgesFailed;
-  // 标签建议（F8）：按各表单当前输入匹配标签池（suggestTags 空段不匹配 → 无建议区）
+  // 标签建议（F8）：按新建表单当前输入匹配标签池（suggestTags 空段不匹配 → 无建议区）
   const createSuggestions = suggestTags(createForm.tagsInput, tagPool);
-  const editSuggestions = editForm === null ? [] : suggestTags(editForm.tagsInput, tagPool);
 
   /** 点选建议填入（F8，新建表单）：替换最后一段 + 追加逗号；输入框焦点由 TagSuggest onMouseDown 保持 */
   function pickCreateTag(tag: string) {
     setCreateForm((f) => ({ ...f, tagsInput: applyTagSuggestion(f.tagsInput, tag) }));
-  }
-
-  /** 点选建议填入（F8，编辑表单）：同 pickCreateTag，作用于编辑对话框表单 */
-  function pickEditTag(tag: string) {
-    setEditForm((f) => (f ? { ...f, tagsInput: applyTagSuggestion(f.tagsInput, tag) } : f));
   }
 
   // 滚动结构（G1）：页面分「固定区 + 滚动区」两段——header/标签筛选器恒固定，
@@ -641,8 +606,9 @@ export default function Timeline() {
               onMoveEventTo={handleMoveEventTo}
               onRenameTimepoint={handleRenameTimepoint}
               onAddEventAt={openCreateInTimepoint}
+              onDetailTimepoint={(tp) => navigate(`/entities/timepoint/${tp.id}`)}
               onDetail={(ev) => navigate(`/timeline/${ev.id}`)}
-              onEdit={openEdit}
+              onEditName={handleEditEventName}
               onDelete={(ev) => void handleDelete({ kind: "event", entity: ev })}
               onDeleteTimepoint={(tp) => void handleDelete({ kind: "timepoint", entity: tp })}
             />
@@ -767,68 +733,6 @@ export default function Timeline() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* 编辑事件对话框（同新建表单预填；G2 无 time_label；timeline.md 行操作） */}
-      {editTarget && editForm && (
-        <Dialog open onOpenChange={(v) => !v && !editSaving && setEditTarget(null)}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>编辑事件《{editTarget.name}》</DialogTitle>
-            </DialogHeader>
-            <div className="flex flex-col gap-3">
-              <div>
-                <p className="mb-1 text-sm font-medium text-foreground">名称（必填）</p>
-                <Input
-                  value={editForm.name}
-                  onChange={(e) => setEditForm((f) => (f ? { ...f, name: e.target.value } : f))}
-                  maxLength={100}
-                />
-              </div>
-              <div>
-                <p className="mb-1 text-sm font-medium text-foreground">描述</p>
-                <textarea
-                  value={editForm.description}
-                  onChange={(e) =>
-                    setEditForm((f) => (f ? { ...f, description: e.target.value } : f))
-                  }
-                  rows={2}
-                  className={cn(inputClass, "w-full")}
-                />
-              </div>
-              <div>
-                <p className="mb-1 text-sm font-medium text-foreground">标签</p>
-                <Input
-                  value={editForm.tagsInput}
-                  onChange={(e) =>
-                    setEditForm((f) => (f ? { ...f, tagsInput: e.target.value } : f))
-                  }
-                  placeholder="如：主线，战争（逗号/回车分隔）"
-                />
-                {/* 标签输入建议（F8：点选即填，替换最后一段 + 追加逗号；无匹配不显示） */}
-                <TagSuggest
-                  suggestions={editSuggestions}
-                  visible={editForm.tagsInput.trim() !== ""}
-                  onPick={pickEditTag}
-                />
-              </div>
-              {editError && <p className="text-sm text-destructive">{editError}</p>}
-            </div>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                type="button"
-                onClick={() => setEditTarget(null)}
-                disabled={editSaving}
-              >
-                取消
-              </Button>
-              <Button type="button" onClick={() => void handleEditSave()} disabled={editSaving}>
-                {editSaving ? "保存中…" : "保存"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
     </section>
   );
 }

@@ -1,18 +1,22 @@
 // 时间轴事件行（G2.3，timeline.md G2 布局线框：组内事件堆叠；F5 时间标签样式已随 G2 移除——
-//   时间标签 = 组标题（时间点实体），行内不再展示；F6 行内描述展示保留）
+//   时间标签 = 组标题（时间点实体），行内不再展示；F6 行内描述展示保留；
+//   决策 38：事件行对齐大纲交互模式——双击 = 详情（#/timeline/:id）、点击事件名 = 行内编辑
+//   （Enter 确认 / Esc 取消 / 失焦保存）、移除「详情/编辑」按钮（只留删除 + AskAiButton））
 // 职责：纯展示 + 单条拖拽（G2 双轨：事件行 draggable，恢复 F3 能力）——
 //   行 = 小圆点 + 内容卡（事件名 → tags → 「N 节点」→ 直接操作按钮 + 描述区）。
 // 拖拽协调在容器（components/timeline/Timeline.tsx）——本行只负责 draggable 挂载与回调转发：
 //   行内按钮 draggable={false} 防拖（操作按钮）；opacity-50 拖拽态；插入指示线（S13 模式）。
 // 拖拽柄视觉已移除（批次八 O3）：draggable 在行根 + 悬停 title 提示，无 GripVertical 图标。
+// 名称行内编辑（决策 38）：点击事件名进入（span → 输入框），Enter 提交 / Esc 取消 / 失焦保存；
+//   saving 守卫防 Enter+blur 双提交（悲观提交：提交期间保持编辑态，成功后退出——同大纲 busy 守卫语义）。
 // 描述区（F6）：事件名行下方全宽换行，`text-sm text-muted-foreground` 次要层级（低于事件名）；
 //   两行截断（line-clamp-2）——**超过两行才显示「展开」按钮**（clamp 态 scrollHeight > clientHeight
 //   运行时测量，窗口 resize 重测；**展开态跳过重测**——line-clamp 解除后无法测 clamp 溢出，
 //   保留上次 clamped 测量值）；展开后 line-clamp-none 显示「收起」；空描述不渲染。
 import { useLayoutEffect, useRef, useState } from "react";
-import type { DragEvent } from "react";
+import type { DragEvent, MouseEvent } from "react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
-import { Eye, Pencil, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { AskAiButton } from "../chat/AskAiButton";
 import { Button } from "@/components/ui/button";
 import { eventDescription, eventTagsOf } from "../../lib/timeline";
@@ -39,9 +43,10 @@ interface TimelineEventProps {
   showInsertBefore: boolean;
   showInsertAfter: boolean;
   eventDrag: EventDragHandlers;
-  /** 行操作回调（页面级动作：详情跳转 / 编辑对话框 / 软删直接执行） */
+  /** 行操作回调（页面级动作：详情跳转 / 名称行内编辑提交 / 软删直接执行） */
   onDetail: (ev: EntitySummary) => void;
-  onEdit: (ev: EntitySummary) => void;
+  /** 名称行内编辑提交（页面执行 PUT /entity/event/:id { name }；失败抛错——页面 toast） */
+  onEditName: (id: string, name: string) => Promise<void>;
   onDelete: (ev: EntitySummary) => void;
 }
 
@@ -55,12 +60,17 @@ export function TimelineEvent({
   showInsertAfter,
   eventDrag,
   onDetail,
-  onEdit,
+  onEditName,
   onDelete,
 }: TimelineEventProps) {
   const tags = eventTagsOf(ev);
   const description = eventDescription(ev);
   const count = occursCount(ev.id);
+  // 名称行内编辑（决策 38：点击事件名进入；Enter 提交 / Esc 取消 / 失焦保存）
+  const [editing, setEditing] = useState(false);
+  const [nameValue, setNameValue] = useState("");
+  /** 提交在途（防 Enter+blur 双提交；悲观提交：提交期间保持编辑态，成功后退出——同大纲 busy 守卫语义） */
+  const [saving, setSaving] = useState(false);
   // 描述展开态（F6：事件行级独立 state；展开后 line-clamp-none）
   const [expanded, setExpanded] = useState(false);
   // 描述是否超过两行（clamp 态 scrollHeight > clientHeight → 才显示「展开」按钮）。
@@ -83,13 +93,47 @@ export function TimelineEvent({
     return () => window.removeEventListener("resize", check);
   }, [description, expanded]);
 
+  /** 点击事件名进入行内编辑（预填当前名） */
+  function startEdit() {
+    setNameValue(ev.name);
+    setEditing(true);
+  }
+
+  /** Enter/失焦提交：trim 后空/未变 → 退出编辑不发请求；否则交页面（PUT + toast + 刷新）；
+   * saving 守卫防 Enter+blur 双提交（悲观提交：提交期间保持编辑态，成功后退出——同大纲 busy 守卫语义） */
+  async function commitEdit() {
+    if (saving) return;
+    const name = nameValue.trim();
+    if (name === "" || name === ev.name) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      await onEditName(ev.id, name);
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /** 行双击（决策 38）：双击 = 详情（#/timeline/:id）；
+   * 冲突防护：双击标题 = 编辑（第一击已把 span 换成输入框，dblclick 的 target 是输入框被 closest 拦截；
+   * 极端时序下 target 仍是标题 span 时由 editing 守卫拦截）；双击按钮区同样不跳详情 */
+  function handleRowDoubleClick(e: MouseEvent<HTMLDivElement>) {
+    if ((e.target as HTMLElement).closest("button, input, a")) return;
+    if (editing) return;
+    onDetail(ev);
+  }
+
   return (
     <div
-      draggable={!busy}
+      draggable={!busy && !editing}
       onDragStart={(e) => eventDrag.onDragStart(e, ev)}
       onDragEnd={eventDrag.onDragEnd}
       onDragOver={(e) => eventDrag.onDragOver(e, ev)}
       onDrop={(e) => eventDrag.onDrop(e, ev)}
+      onDoubleClick={handleRowDoubleClick}
       title="拖拽调整事件顺序/挂载"
       className={cn("relative flex items-start", dragging && "opacity-50")}
     >
@@ -108,9 +152,35 @@ export function TimelineEvent({
           描述区 F6 在事件名行下方全宽换行，不挤占行内元素） */}
       <div className="min-w-0 flex-1 rounded-md border border-border bg-card px-3 py-2">
         <div className="flex items-center gap-2">
-          <span className="min-w-0 truncate font-medium text-foreground" title={ev.name}>
-            {ev.name}
-          </span>
+          {/* 事件名：点击行内编辑（决策 38，Enter 提交 / Esc 取消 / 失焦保存）；stopPropagation 隔离——
+              单击标题 = 编辑而非其他行为（决策 38 冲突设计） */}
+          {editing ? (
+            <input
+              autoComplete="off"
+              autoFocus
+              value={nameValue}
+              onChange={(e) => setNameValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void commitEdit();
+                else if (e.key === "Escape") setEditing(false);
+              }}
+              onBlur={() => void commitEdit()}
+              maxLength={100}
+              aria-label="事件名称"
+              className="min-w-0 flex-1 rounded-md border border-border bg-background px-1.5 py-0.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            />
+          ) : (
+            <span
+              className="min-w-0 cursor-text truncate font-medium text-foreground hover:underline"
+              title="点击编辑名称"
+              onClick={(e) => {
+                e.stopPropagation();
+                startEdit();
+              }}
+            >
+              {ev.name}
+            </span>
+          )}
           {tags.map((tag) => (
             <span
               key={tag}
@@ -119,7 +189,8 @@ export function TimelineEvent({
               {tag}
             </span>
           ))}
-          {/* 右侧信息与操作区（H6：N 节点计数靠右，与操作按钮一起，减少左侧干扰） */}
+          {/* 右侧信息与操作区（H6：N 节点计数靠右，与操作按钮一起，减少左侧干扰；
+              决策 38：详情/编辑按钮已移除——双击 = 详情、点击标题 = 行内编辑，只留删除 + AskAiButton） */}
           <span className="ml-auto flex shrink-0 items-center gap-1">
             {hasOccursData && (
               <span className="shrink-0 text-xs text-muted-foreground">{count} 节点</span>
@@ -127,30 +198,11 @@ export function TimelineEvent({
             {/* 操作按钮全部展开（H3：禁止收进 ⋯ 二级展开；图标 + title/aria-label） */}
             {/* 行级「带上下文问 AI」（决策 35 修订）；draggable=false 防事件行拖拽误触发 */}
             <span className="inline-flex shrink-0" draggable={false}>
-              <AskAiButton focus={{ focus_entity_type: "event", focus_entity_id: ev.id }} title={`带事件《${ev.name}》问 AI`} />
+              <AskAiButton
+                focus={{ focus_entity_type: "event", focus_entity_id: ev.id }}
+                title={`带事件《${ev.name}》问 AI`}
+              />
             </span>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              draggable={false}
-              className="text-muted-foreground"
-              title="详情"
-              aria-label={`${ev.name} 详情`}
-              onClick={() => onDetail(ev)}
-            >
-              <Eye className="size-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              draggable={false}
-              className="text-muted-foreground"
-              title="编辑"
-              aria-label={`${ev.name} 编辑`}
-              onClick={() => onEdit(ev)}
-            >
-              <Pencil className="size-3.5" />
-            </Button>
             <Button
               variant="ghost"
               size="icon-sm"
