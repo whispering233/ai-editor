@@ -229,7 +229,9 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
   }
 
   /** 提交编辑（悲观提交）：trim 后空/未变 → 退出不发请求；成功退出编辑态 + 刷新；
-   * 失败保持编辑态 + 保留输入值（输入框已失焦，点击即可修正重试——同大纲 editFailureRecovery 语义） */
+   * 失败按错误码分流（对齐大纲 editFailureRecovery 语义）：
+   * - ENTITY_NOT_FOUND（设定被并发删除/purge）→ 放弃编辑 + 重拉树同步视图（编辑态可退出）
+   * - 其余错误 → 保持编辑态 + 保留输入值（输入框已失焦，点击即可修正重试） */
   async function commitEdit(node: SettingTreeNode) {
     if (busy || editingId !== node.id) return;
     const name = editingValue.trim();
@@ -244,6 +246,14 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
       cancelEdit();
       reload();
     } catch (err) {
+      if (err instanceof ApiError && err.code === "ENTITY_NOT_FOUND") {
+        // 设定已不存在（被删除/purge）：放弃编辑 + 重拉树（对齐大纲 abandon 分支）
+        cancelEdit();
+        useUiStore.getState().showToast("设定已不存在，列表已刷新", "error");
+        reload();
+        return;
+      }
+      // 其余错误：保持编辑态 + 保留输入值（可修正后重试）
       useUiStore
         .getState()
         .showToast(
@@ -848,7 +858,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
       {(truncated || hasOrphanEdges) && (
         <p className="mt-3 text-xs text-muted-foreground">
           {truncated
-            ? `设定数量超过 ${TREE_SETTING_LIMIT}，仅展示前 ${TREE_SETTING_LIMIT} 个（可按名称搜索定位）；`
+            ? `设定数量超过 ${TREE_SETTING_LIMIT}，仅展示前 ${TREE_SETTING_LIMIT} 个设定；`
             : ""}
           {hasOrphanEdges ? "部分设定的上级未在展示范围内，已作为独立节点展示。" : ""}
         </p>
