@@ -111,7 +111,8 @@ export function TimelineGroupBlock({
   }
 
   /** Enter/失焦提交：trim 后空/未变 → 退出编辑不发请求；否则交页面（PUT + toast + 刷新）；
-   * saving 守卫防 Enter+blur 双提交（悲观提交：提交期间保持编辑态，成功后退出——同大纲 busy 守卫语义） */
+   * saving 守卫防 Enter+blur 双提交（悲观提交：提交期间保持编辑态，成功后退出——同大纲 busy 守卫语义）；
+   * 失败保持编辑态 + 保留输入值（页面已 toast，此处 catch 吞掉防 unhandled rejection）——同大纲 editFailureRecovery */
   async function commitRename() {
     if (timepoint === null || saving) return;
     const name = nameValue.trim();
@@ -123,13 +124,17 @@ export function TimelineGroupBlock({
     try {
       await onRename(timepoint.id, name);
       setEditing(false);
+    } catch {
+      // 失败保持编辑态（setEditing(false) 未执行）+ 输入值保留，可修正后重试；页面已 toast，不重复提示
     } finally {
       setSaving(false);
     }
   }
 
   /** 组标题行双击（决策 38）：双击 = 时间点详情（#/entities/timepoint/:id——通用实体详情页承载，
-   * 无独立时间点详情路由）；冲突防护：双击标题 = 编辑（第一击已把 span 换成输入框，dblclick 的
+   * 无独立时间点详情路由；不用 #/timeline/:id 是因为 TimelineDetail 会把 timepoint 当事件渲染
+   * （eventFormFromDetail），而通用实体详情页可正常渲染 timepoint 纯名称表单）；
+   * 冲突防护：双击标题 = 编辑（第一击已把 span 换成输入框，dblclick 的
    * target 是输入框被 closest 拦截；极端时序下 target 仍是标题 span 时由 editing 守卫拦截）；
    * 双击按钮区同样不跳详情；未挂载区无详情 */
   function handleRowDoubleClick(e: MouseEvent<HTMLDivElement>) {
@@ -192,8 +197,12 @@ export function TimelineGroupBlock({
               value={nameValue}
               onChange={(e) => setNameValue(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") void commitRename();
-                else if (e.key === "Escape") setEditing(false);
+                if (e.key === "Enter") {
+                  e.preventDefault(); // 对齐大纲 handleEditKeyDown：防未来被包进 form 触发提交
+                  void commitRename();
+                } else if (e.key === "Escape") {
+                  setEditing(false);
+                }
               }}
               onBlur={() => void commitRename()}
               maxLength={100}

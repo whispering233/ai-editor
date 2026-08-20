@@ -100,7 +100,8 @@ export function TimelineEvent({
   }
 
   /** Enter/失焦提交：trim 后空/未变 → 退出编辑不发请求；否则交页面（PUT + toast + 刷新）；
-   * saving 守卫防 Enter+blur 双提交（悲观提交：提交期间保持编辑态，成功后退出——同大纲 busy 守卫语义） */
+   * saving 守卫防 Enter+blur 双提交（悲观提交：提交期间保持编辑态，成功后退出——同大纲 busy 守卫语义）；
+   * 失败保持编辑态 + 保留输入值（页面已 toast，此处 catch 吞掉防 unhandled rejection）——同大纲 editFailureRecovery */
   async function commitEdit() {
     if (saving) return;
     const name = nameValue.trim();
@@ -112,6 +113,8 @@ export function TimelineEvent({
     try {
       await onEditName(ev.id, name);
       setEditing(false);
+    } catch {
+      // 失败保持编辑态（setEditing(false) 未执行）+ 输入值保留，可修正后重试；页面已 toast，不重复提示
     } finally {
       setSaving(false);
     }
@@ -134,7 +137,7 @@ export function TimelineEvent({
       onDragOver={(e) => eventDrag.onDragOver(e, ev)}
       onDrop={(e) => eventDrag.onDrop(e, ev)}
       onDoubleClick={handleRowDoubleClick}
-      title="拖拽调整事件顺序/挂载"
+      title="拖拽调整事件顺序/挂载；双击查看详情"
       className={cn("relative flex items-start", dragging && "opacity-50")}
     >
       {/* 插入指示线（S13 模式：行上下边缘，跨圆点列与内容） */}
@@ -161,8 +164,12 @@ export function TimelineEvent({
               value={nameValue}
               onChange={(e) => setNameValue(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") void commitEdit();
-                else if (e.key === "Escape") setEditing(false);
+                if (e.key === "Enter") {
+                  e.preventDefault(); // 对齐大纲 handleEditKeyDown：防未来被包进 form 触发提交
+                  void commitEdit();
+                } else if (e.key === "Escape") {
+                  setEditing(false);
+                }
               }}
               onBlur={() => void commitEdit()}
               maxLength={100}

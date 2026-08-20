@@ -304,7 +304,7 @@ export default function Timeline() {
 
   // ============ 行内编辑（决策 38：点击事件名/时间点名行内编辑，替代原「编辑/重命名」按钮） ============
 
-  /** 事件名行内编辑提交：PUT /entity/event/:id { name }；失败 toast（组件已退出编辑态，无需 rethrow——调用方不消费） */
+  /** 事件名行内编辑提交：PUT /entity/event/:id { name }；失败 toast 后 rethrow——组件保持编辑态 + 保留输入值（对齐大纲 editFailureRecovery） */
   async function handleEditEventName(id: string, name: string) {
     try {
       await updateEntity("event", id, { name });
@@ -317,6 +317,7 @@ export default function Timeline() {
           err instanceof ApiError ? `保存失败：${err.message}` : "保存失败，请重试",
           "error",
         );
+      throw err; // 契约：失败 rethrow——组件 catch 保持编辑态 + 保留输入值（可修正后重试）
     }
   }
 
@@ -397,7 +398,7 @@ export default function Timeline() {
     }
   }
 
-  /** 时间点重命名：PUT /entity/timepoint/:id { name }；失败 toast（组件已退出编辑态，无需 rethrow——调用方不消费） */
+  /** 时间点重命名：PUT /entity/timepoint/:id { name }；失败 toast 后 rethrow——组件保持编辑态 + 保留输入值（对齐大纲 editFailureRecovery） */
   async function handleRenameTimepoint(id: string, name: string) {
     try {
       await updateEntity("timepoint", id, { name });
@@ -410,6 +411,7 @@ export default function Timeline() {
           err instanceof ApiError ? `重命名失败：${err.message}` : "重命名失败，请重试",
           "error",
         );
+      throw err; // 契约：失败 rethrow——组件 catch 保持编辑态 + 保留输入值（可修正后重试）
     }
   }
 
