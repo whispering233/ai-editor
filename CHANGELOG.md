@@ -5,6 +5,21 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [v0.0.17] - 2026-08-20
+
+### Added
+
+- **批次十一（决策 43，2026-08 用户反馈——参考资料两类承载：本地 md 文件 + 外源链接）**：
+  - **参考资料两类承载**——`data.kind` = `file`（本地 md 文档）/ `link`（外源链接）；存量条目运行时兼容（无 kind 按 link 类展示），无 DDL 迁移（SCHEMA_VERSION 保持 5）
+  - **文件 = 真相源，DB 索引 = 派生镜像**——md 文件 = YAML frontmatter（title/category/tags）+ markdown 正文，项目目录 `references/` 自包含；应用内编辑先原子写文件再更新 DB（正文真相在文件）；外部编辑/新增/删除靠扫描同步（mtime 快照比对，幂等全量，新增/更新/还原/软删四向）
+  - **扫描重建**——`POST /api/v1/reference/scan`（added/updated/restored/removed/skipped/errors 统计）+ `GET /reference/scan/status` 只读探测（未同步计数，无副作用）；列表页「扫描」按钮 + 未同步提示条引导
+  - **页面**——新建入口分流「新建 md 文档」/「新建外源链接」（草稿态详情页）；md 详情页内嵌 markdown 编辑器（@uiw/react-md-editor 4.1.1：textarea 源文本 + 分屏实时预览，data-color-mode 随主题联动）+ 分类/标签编辑 + 导入 md 文档（纯前端 FileReader + frontmatter 解析预填）+ 建立关联面板；外源链接详情页（URL 必填 + 备注 + 关联面板）；列表交互对齐大纲（点击标题行内编辑、双击详情、只留删除、行信息 [标题/分类/标签/来源]）；右键菜单复用（注入会话上下文 + 建立关联）
+  - **存档体系联动**——备份/导出/导入/恢复 zip 打包 `references/` 目录（含 `.trash/`，项目自包含）；自动备份变更检测加 references/ mtime
+  - **AI 工具联动**——propose_create_reference 创建的条目归 link 类（source → url）；search_references / get_entity 经 content 镜像纯 DB 读取
+  - **软删/回收站文件联动**——file 类软删文件移入 `references/.trash/`，restore 移回、purge 物理删
+  - 跨书籍导入参考资料记录为未来迭代（backlog #16）
+  - 全仓 1639 测试全绿 + typecheck/lint/build 通过；列表编辑对话框异步回填竞态（B1）随交互重构根除
+
 ## [v0.0.16] - 2026-08-20
 
 ### Changed
