@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { z } from "zod";
-import { insertChatMessage, listMessages } from "@whispering233/ai-editor-db";
+import { insertChatMessage, listMessages, writeAgentsFile } from "@whispering233/ai-editor-db";
 import { defaultProposalStore, type RunAgentDeps, type ToolDispatcher } from "@whispering233/ai-editor-agent";
 import { ABORT_ERROR } from "@whispering233/ai-editor-llm";
 import type { AbortSignalLike, LLMMessage } from "@whispering233/ai-editor-llm";
@@ -588,6 +588,46 @@ describe("POST /chat 会话重建（决策 18 续聊）", () => {
     // 历史为空：只有 system + 本轮新消息（A 的历史不可见）
     expect(captured?.map((m) => m.role)).toEqual(["system", "user"]);
     expect((captured?.[1] as { content: string }).content).toBe("B 的新消息");
+  });
+});
+
+describe("POST /chat 项目规则注入（决策 41：AGENTS.md 为「## 项目设定」段数据源）", () => {
+  it("AGENTS.md 存在 → system 消息含「## 项目设定」段（内容原样注入）", async () => {
+    const project = openProject();
+    writeAgentsFile(project.root, "力量体系：练气→筑基→金丹");
+
+    let captured: LLMMessage[] | null = null as LLMMessage[] | null;
+    const produce = vi.fn<RunAgentDeps["produce"]>(async (messages) => {
+      captured = messages;
+      return { ok: true, stopReason: "stop", usage: null };
+    });
+    const res = await buildApp(createChatRoutes({ produce })).request(
+      "/api/v1/chat",
+      postChat({ message: "你好" }),
+    );
+    const frames = await readSseFrames(res);
+    expect(frames.map((f) => f.event)).toEqual(["done"]);
+    const system = captured?.[0] as { content: string };
+    expect(system.content).toContain("## 项目设定");
+    expect(system.content).toContain("力量体系：练气→筑基→金丹");
+  });
+
+  it("AGENTS.md 不存在 → 不注入「## 项目设定」段（空规则跳过）", async () => {
+    openProject(); // initProject 不创建 AGENTS.md
+
+    let captured: LLMMessage[] | null = null as LLMMessage[] | null;
+    const produce = vi.fn<RunAgentDeps["produce"]>(async (messages) => {
+      captured = messages;
+      return { ok: true, stopReason: "stop", usage: null };
+    });
+    const res = await buildApp(createChatRoutes({ produce })).request(
+      "/api/v1/chat",
+      postChat({ message: "你好" }),
+    );
+    const frames = await readSseFrames(res);
+    expect(frames.map((f) => f.event)).toEqual(["done"]);
+    const system = captured?.[0] as { content: string };
+    expect(system.content).not.toContain("## 项目设定");
   });
 });
 

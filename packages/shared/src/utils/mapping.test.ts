@@ -186,7 +186,6 @@ describe("项目映射", () => {
     id: "proj-1",
     name: "我的小说",
     language: "zh",
-    prompt: "力量体系：练气→筑基",
     schema_version: 1,
     current_position: "sc-42",
     created_at: "2026-08-01T10:00:00Z",

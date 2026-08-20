@@ -35,8 +35,10 @@ import {
   openDatabase,
   OUTLINE_FILE_NAME,
   PROJECT_FILE_NAME,
+  readAgentsFile,
   readProjectFile,
   SCHEMA_VERSION,
+  writeAgentsFile,
 } from "@whispering233/ai-editor-db";
 import { HttpError } from "./middleware/error.js";
 import type { ProjectContext } from "./middleware/project.js";
@@ -672,6 +674,34 @@ export function writeProjectFilesFromBackup(
 }
 
 /**
+ * 决策 41 自动迁移：project.json 存在非空 `prompt` 且项目目录无 AGENTS.md →
+ * 将 prompt 内容**原样**写入 AGENTS.md（原子写，决策 11 同款），一次性——
+ * 迁移后 AGENTS.md 存在，条件不再满足，prompt 不再使用（字段可保留为遗留数据，宽松读取）。
+ *
+ * 触发点：打开项目时（detectProject 启动即打开 + open 路由）+ restore/import 覆盖路径
+ * （overwriteProjectFiles 同步 config 后——向无 AGENTS.md 的项目恢复含遗留 prompt 的旧备份时，
+ * 内存 config 有 prompt 但 AGENTS.md 未创建，chat 读 AGENTS.md 为 null，恢复的 prompt 在下次
+ * open 前不注入）。**幂等**（prompt 非空且无 AGENTS.md 才迁移），**失败不阻塞**（记录日志，
+ * 下次 open 重试——schema.md「迁移在 open 流程内完成，失败不阻塞打开」）。
+ *
+ * 注：本函数置于 backup.ts 而非 middleware/project.ts——backup 模块不依赖 middleware
+ * （避免运行时循环依赖，见文件头注释），middleware 侧经 ../backup.js 导入复用。
+ *
+ * @param project 已打开的项目上下文（root 指向项目目录）
+ */
+export function migratePromptToAgents(project: ProjectContext): void {
+  const prompt = project.config.prompt;
+  if (typeof prompt !== "string" || prompt.trim() === "") return; // 无 prompt 无需迁移
+  if (readAgentsFile(project.root) !== null) return; // 已有 AGENTS.md 不覆盖（一次性）
+  try {
+    writeAgentsFile(project.root, prompt);
+  } catch (err) {
+    // 迁移失败不阻塞打开：记录日志，下次 open 重试
+    console.error("[server] AGENTS.md 自动迁移失败（下次打开重试）:", err);
+  }
+}
+
+/**
  * 覆盖管道（restore 与 import 覆盖当前打开的书共用，B2.3 从 restoreBackup 提取）：
  *
  * 1. 释放当前 data.db 连接（替换 data.db 前必须；顺带清理陈旧 WAL/SHM 残留——
@@ -680,7 +710,8 @@ export function writeProjectFilesFromBackup(
  * 3. 重连 + 版本对齐（v < 当前且有迁移路径 → 前向迁移，E5；v === 当前 → 原样。
  *    校验阶段已拒绝 v > 当前与无路径旧版，此处不会触发重建/拒绝）
  * 4. 同步内存 config（刚原子写入，readProjectFile 必非 null；损坏抛错由 catch 恢复连接）
- * 5. 重启定时器（备份包内频率可能不同：5 → 60 等）
+ * 5. 决策 41：migratePromptToAgents（恢复的 project.json 含遗留 prompt 且无 AGENTS.md → 迁移）
+ * 6. 重启定时器（备份包内频率可能不同：5 → 60 等）
  *
   * 调用方职责：覆盖前自动快照 + 备份包校验（validateBackupPackage）。
   * 失败时尝试恢复连接（原库可能未被替换或已替换为校验过的有效库），保证后续请求
@@ -720,6 +751,11 @@ export function overwriteProjectFiles(
       throw new HttpError(500, "INTERNAL_ERROR", "覆盖后 project.json 读取失败");
     }
     project.config = restoredConfig;
+    // 决策 41（oracle 评审修复）：restore/import 覆盖路径同步触发 AGENTS.md 迁移——
+    // 向无 AGENTS.md 的项目恢复含遗留 prompt 的旧备份时，内存 config 有 prompt 但 AGENTS.md
+    // 未创建，chat 读 AGENTS.md 为 null，恢复的 prompt 在下次 open 前不注入。
+    // migratePromptToAgents 幂等（prompt 非空且无 AGENTS.md 才迁移），失败不阻塞覆盖。
+    migratePromptToAgents(project);
   } catch (err) {
     // P1-2：替换/重连失败——writeProjectFilesFromBackup 已记录文件替换清单（含快照名），
     // 此处尝试恢复连接（原库可能未被替换或已替换为校验过的有效库）；重连失败时连接悬挂，

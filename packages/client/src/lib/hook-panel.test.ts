@@ -116,7 +116,6 @@ const makeConfig = (currentPosition: string | null): ProjectConfig => ({
   id: "proj-1",
   name: "我的小说",
   language: "zh",
-  prompt: "",
   schemaVersion: 1,
   currentPosition,
   createdAt: "2026-08-01T10:00:00Z",

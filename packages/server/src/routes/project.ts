@@ -27,9 +27,20 @@ import { ensureSchemaCompatible, DATA_DB_FILE_NAME } from "@whispering233/ai-edi
 import { SchemaVersionError, type MigrationResult, type Db } from "@whispering233/ai-editor-db";
 import { OUTLINE_FILE_NAME } from "@whispering233/ai-editor-db";
 import { PROJECT_FILE_NAME } from "@whispering233/ai-editor-db";
-import { findOutlineNode, readOutlineFile, readProjectFile, writeProjectFile } from "@whispering233/ai-editor-db";
+import {
+  agentsFileMtimeIso,
+  findOutlineNode,
+  readAgentsFile,
+  readOutlineFile,
+  readProjectFile,
+  writeAgentsFile,
+  writeProjectFile,
+} from "@whispering233/ai-editor-db";
 import { nowIso } from "@whispering233/ai-editor-db";
 import {
+  projectAgentsGetResSchema,
+  projectAgentsPutReqSchema,
+  projectAgentsPutResSchema,
   projectBackupRenameReqSchema,
   projectBackupReqSchema,
   projectConfigUpdateReqSchema,
@@ -37,7 +48,7 @@ import {
   projectListResSchema,
   projectOpenReqSchema,
 } from "@whispering233/ai-editor-shared/schemas";
-import { createBackupZip, listBackups, overwriteProjectFiles, renameBackup, restoreBackup, snapshotBookDir, validateBackupPackage, writeBackup, writeProjectFilesFromBackup } from "../backup.js";
+import { createBackupZip, listBackups, migratePromptToAgents, overwriteProjectFiles, renameBackup, restoreBackup, snapshotBookDir, validateBackupPackage, writeBackup, writeProjectFilesFromBackup } from "../backup.js";
 import { HttpError, ok } from "../middleware/error.js";
 import {
   closeProject,
@@ -202,6 +213,9 @@ projectRoutes.post("/open", async (c) => {
     }
     const project: ProjectContext = { root: dir, config, db: activeDb };
     setCurrentProject(project);
+    // 决策 41 自动迁移：project.json 有非空 prompt 且无 AGENTS.md → 迁移写入（原样，一次性；
+    // 失败不阻塞打开，记录日志下次 open 重试——schema.md「迁移在 open 流程内完成」）
+    migratePromptToAgents(project);
     // S4.2 启动一致性校验（决策 16 修订）：打开项目即以大纲节点软删为准补标 DB 关联记录
     //（先 DB 后 JSON 崩溃窗口的幽灵形态兜底，幂等；无软删节点不输出日志）
     logSoftDeleteReconcile(reconcileSoftDelete(project));
@@ -498,6 +512,8 @@ projectRoutes.get("/config", (c) => {
 });
 
 // PUT /api/v1/project/config —— 更新当前项目配置
+// 注：`prompt` 已废弃（决策 41）——strict schema 不再接受该字段（传入 → 400 VALIDATION_ERROR）；
+// 项目规则改由 PUT /api/v1/project/agents 写入 AGENTS.md
 projectRoutes.put("/config", async (c) => {
   const project = requireCurrentProject();
   const raw = await c.req.json().catch(() => null);
@@ -505,7 +521,7 @@ projectRoutes.put("/config", async (c) => {
   if (!parsed.success) {
     throw parsed.error;
   }
-  const { name, language, prompt, current_position, backup_frequency_minutes } = parsed.data;
+  const { name, language, current_position, backup_frequency_minutes } = parsed.data;
 
   // current_position 校验：须指向存在的**非软删**大纲节点（endpoints.md 第 115 行）；
   // 400 + OUTLINE_NODE_NOT_FOUND（参数语义错误用 400，非资源访问 404）
@@ -529,7 +545,6 @@ projectRoutes.put("/config", async (c) => {
     ...project.config,
     ...(name !== undefined ? { name } : {}),
     ...(language !== undefined ? { language } : {}),
-    ...(prompt !== undefined ? { prompt } : {}),
     ...(current_position !== undefined ? { current_position } : {}),
     ...(backup_frequency_minutes !== undefined ? { backup_frequency_minutes } : {}),
     updated_at: nowIso(),
@@ -538,6 +553,44 @@ projectRoutes.put("/config", async (c) => {
   project.config = next;
 
   return c.json(ok({ updated: true as const }));
+});
+
+// GET /api/v1/project/agents —— 读取项目规则文件 AGENTS.md（决策 41：项目规则唯一事实源）
+//
+// 语义（endpoints.md）：
+// - 无当前项目 → 409 NO_PROJECT_OPEN（与 /config 一致）
+// - **文件不存在不报错**：AGENTS.md 是可选文件（新项目/未迁移项目可能没有），返回
+//   exists:false + 空串，前端据此展示空编辑区
+// - updatedAt = 文件系统 mtime（ISO 8601）——外部修改检测依据（决策 41）
+// - 读取为**每次实时读文件**（不缓存）——外部编辑立即可见
+projectRoutes.get("/agents", (c) => {
+  const project = requireCurrentProject();
+  // 实时读文件（不缓存）——外部编辑立即可见；readAgentsFile 返回 null = 文件不存在
+  const fileContent = readAgentsFile(project.root);
+  const content = fileContent ?? "";
+  const exists = fileContent !== null; // 空文件（清空规则后保留）exists 仍为 true
+  const updatedAt = agentsFileMtimeIso(project.root);
+  return c.json(ok(projectAgentsGetResSchema.parse({ content, exists, updatedAt })));
+});
+
+// PUT /api/v1/project/agents —— 写入项目规则文件 AGENTS.md（决策 41：设置页直接编辑文件内容）
+//
+// 语义（endpoints.md）：
+// - 无当前项目 → 409 NO_PROJECT_OPEN
+// - **整体替换**（非追加）：content 为 AGENTS.md 完整内容；空串 = 清空规则（保留空文件不删除）
+// - 文件不存在时自动创建；写入走**原子写**（临时文件 + fsync + rename，决策 11 同款）
+// - 写入后返回新 mtime，前端更新本地比对基线（外部修改检测用）
+// - 写入失败 → 500 INTERNAL_ERROR（errorHandler 兜底）
+projectRoutes.put("/agents", async (c) => {
+  const project = requireCurrentProject();
+  const raw = await c.req.json().catch(() => null);
+  const parsed = projectAgentsPutReqSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw parsed.error; // → app.onError → 400 VALIDATION_ERROR（含 fields）
+  }
+  writeAgentsFile(project.root, parsed.data.content);
+  const updatedAt = agentsFileMtimeIso(project.root);
+  return c.json(ok(projectAgentsPutResSchema.parse({ saved: true as const, updatedAt: updatedAt ?? nowIso() })));
 });
 
 // ============ 备份管理（B2.2，决策 27：endpoints.md「备份管理」节） ============

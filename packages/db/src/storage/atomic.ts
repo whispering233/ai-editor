@@ -96,6 +96,47 @@ function fsyncDir(dir: string): void {
   }
 }
 
+/**
+ * 文本文件原子写（决策 11 同款流程：临时文件 + fsync + rename，schema.md 第 186 行）。
+ * 与 writeJsonAtomic 的区别：内容为**原始文本**（不 JSON 序列化）——AGENTS.md 等
+ * 非 JSON 数据文件用（决策 41：项目规则文件写入走原子写，防崩溃/断电损坏）。
+ *
+ * @param filePath 目标文件绝对路径（父目录必须存在）
+ * @param content 文本内容（原样写入，不追加换行）
+ * @throws 目录不可写 / 磁盘错误时抛出，且原文件保持完好
+ */
+export function writeTextAtomic(filePath: string, content: string): void {
+  const dir = dirname(filePath);
+  const tmpPath = join(dir, `.${basename(filePath)}.tmp`);
+  let fd: number | undefined;
+  try {
+    // 清理上次崩溃可能残留的临时文件（ENOENT 忽略，其余错误上抛）
+    try {
+      unlinkSync(tmpPath);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    }
+    // "wx"：独占创建——若存在文件（含并发竞争）立即失败，绝不覆盖他人临时文件
+    fd = openSync(tmpPath, "wx", 0o644);
+    writeFileSync(fd, content);
+    fsyncSync(fd); // 文件数据落盘后再 rename
+    closeSync(fd);
+    fd = undefined;
+    renameSync(tmpPath, filePath); // 原子覆盖
+    fsyncDir(dir);
+  } catch (err) {
+    // 失败：关闭可能还开着的 fd，保留临时文件供排查，异常向上抛（原文件未被触碰）
+    if (fd !== undefined) {
+      try {
+        closeSync(fd);
+      } catch {
+        // 忽略关闭失败，原始异常优先
+      }
+    }
+    throw err;
+  }
+}
+
 /** 读取 UTF-8 文本文件；文件不存在返回 null，其余错误上抛 */
 export function readTextFileOrNull(filePath: string): string | null {
   try {

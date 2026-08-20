@@ -465,13 +465,8 @@ export default function Dashboard() {
               </a>
             </div>
           </dl>
-          <div className="mt-3 border-t border-border pt-3">
-            <p className="text-xs text-muted-foreground">项目提示词</p>
-            {/* 截断 2 行（dashboard.md「信息层级」） */}
-            <p className="mt-1 line-clamp-2 text-sm text-foreground/90">
-              {config?.prompt || "（未设置）"}
-            </p>
-          </div>
+          {/* 项目提示词展示已移除（决策 41）：prompt 字段废弃不再返回——项目规则唯一事实源
+              改为项目目录 AGENTS.md（设置页编辑，见 #/settings） */}
         </SectionCard>
 
         {/* 区块 2：创作要素（四张计数卡；GET /entity/:type limit=1 取 total，并行） */}

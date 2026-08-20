@@ -20,7 +20,7 @@ import { writeOutlineFile } from "@whispering233/ai-editor-db";
 import { SCHEMA_VERSION } from "@whispering233/ai-editor-db";
 import { nowIso } from "@whispering233/ai-editor-db";
 import { HttpError, fail, type ApiErrorCode } from "./error.js";
-import { startAutoBackup, stopAutoBackup } from "../backup.js";
+import { migratePromptToAgents, startAutoBackup, stopAutoBackup } from "../backup.js";
 
 /** data.db 文件名（决策 8：项目根目录） */
 export const DATA_DB_FILE_NAME = "data.db";
@@ -100,7 +100,11 @@ export function detectProject(root: string): ProjectContext | null {
   if (existing === null) {
     return null;
   }
-  return { root, config: existing, db: openDatabase(join(root, DATA_DB_FILE_NAME)) };
+  const project: ProjectContext = { root, config: existing, db: openDatabase(join(root, DATA_DB_FILE_NAME)) };
+  // 决策 41 自动迁移：project.json 有非空 prompt 且无 AGENTS.md → 迁移写入（原样，一次性）
+  //（实现位于 backup.ts——backup 模块不依赖 middleware，middleware 侧经 ../backup.js 复用）
+  migratePromptToAgents(project);
+  return project;
 }
 
 /**
@@ -110,14 +114,15 @@ export function detectProject(root: string): ProjectContext | null {
  * 应用层写当前 ISO 时间）→ 写 outline.json 最小空树 → openDatabase 建 data.db（自动建表）
  * → setUserVersion(SCHEMA_VERSION)（S1.1 审核建议：brand-new 库立即写版本号，
  * 避免后续 open 时 ensureSchemaCompatible 触发无意义重建并留空库 data.db.v0.bak）。
+ * 注：`prompt` 已废弃（决策 41）——新项目不再写入该字段（项目规则改由 AGENTS.md 承载）。
  *
- * @param configOverride 可选覆盖 {name?, language?, prompt?}（create 请求的 config 字段）；
+ * @param configOverride 可选覆盖 {name?, language?}（create 请求的 config 字段）；
  *   传入时 updated_at 一并刷新
  * @returns 已打开的项目上下文（调用方负责 closeProject；create 路由创建后即关闭）
  */
 export function initProject(
   root: string,
-  configOverride?: Partial<Pick<ProjectFileConfig, "name" | "language" | "prompt">>,
+  configOverride?: Partial<Pick<ProjectFileConfig, "name" | "language">>,
 ): ProjectContext {
   mkdirSync(root, { recursive: true });
   const now = nowIso();
@@ -125,7 +130,6 @@ export function initProject(
     id: generateProjectId(), // proj- 前缀（endpoints.md id 约定）
     name: basename(root),
     language: "zh",
-    prompt: "",
     schema_version: SCHEMA_VERSION,
     current_position: null,
     // 决策 27：新项目默认开启自动备份（显式写入缺省 10，跟随书籍）

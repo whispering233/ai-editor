@@ -11,12 +11,14 @@ import { zipSync } from "fflate";
 import type { OutlineFileTree, ProjectFileConfig } from "@whispering233/ai-editor-shared";
 import { parseBackupFileName } from "@whispering233/ai-editor-shared";
 import {
+  AGENTS_FILE_NAME,
   closeDatabase,
   DATA_DB_FILE_NAME,
   listSessions,
   openDatabase,
   OUTLINE_FILE_NAME,
   PROJECT_FILE_NAME,
+  readAgentsFile,
   readProjectFile,
   SCHEMA_VERSION,
   setUserVersion,
@@ -744,6 +746,39 @@ describe("POST /project/backup/restore", () => {
     expect(readProjectFile(dirA)?.name).toBe(basename(dirA)); // 归一为目录名（makeTmpDir 随机目录）
     expect(readProjectFile(dirA)?.name).not.toBe("书B"); // 不再使用备份包内 name
     expect(readProjectFile(dirA)?.prompt).toBe("B 的提示词");
+  });
+
+  it("restore 含遗留 prompt 的旧备份 → 覆盖路径触发 AGENTS.md 迁移（决策 41 oracle 评审修复）", async () => {
+    const dirA = makeTmpDir();
+    initProjectDir(dirA, makeConfig("proj-mig-restore", "书A")); // 无 prompt、无 AGENTS.md
+    await openProject(dirA);
+
+    // 异项目备份 B：project.json 含遗留 prompt（旧备份形态——决策 41 前创建的备份）
+    const dirB = makeTmpDir();
+    initProjectDir(dirB, { ...makeConfig("proj-B", "书B"), prompt: "B 的遗留提示词" });
+    const ctxB = {
+      root: dirB,
+      config: readProjectFile(dirB) as ProjectFileConfig,
+      db: openDatabase(join(dirB, DATA_DB_FILE_NAME)),
+    };
+    const bkpB = writeBackup(ctxB);
+    closeDatabase(ctxB.db);
+    const backupsDirA = join(dirA, BACKUPS_DIR_NAME);
+    mkdirSync(backupsDirA, { recursive: true });
+    copyFileSync(join(dirB, BACKUPS_DIR_NAME, bkpB.fileName), join(backupsDirA, bkpB.fileName));
+
+    // 恢复前 A 无 AGENTS.md（open 未触发迁移——A 的 project.json 无 prompt）
+    expect(readAgentsFile(dirA)).toBeNull();
+
+    const res = await buildApp().request("/api/v1/project/backup/restore", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ fileName: bkpB.fileName }),
+    });
+    expect(res.status).toBe(200);
+    // 覆盖路径同步迁移：AGENTS.md 已创建（内容 = 备份内遗留 prompt，原样）
+    expect(existsSync(join(dirA, AGENTS_FILE_NAME))).toBe(true);
+    expect(readAgentsFile(dirA)).toBe("B 的遗留提示词");
   });
 
   it("跨项目恢复（P1-1）：chat_messages 会话归属迁移为当前项目 id，会话列表按当前 id 可查", async () => {

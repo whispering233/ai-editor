@@ -19,10 +19,19 @@ import {
   setUserVersion,
 } from "@whispering233/ai-editor-db";
 import { PROJECT_EXPORT_FILE_NAMES } from "@whispering233/ai-editor-shared/schemas";
-import { readOutlineFile, readProjectFile, writeOutlineFile, writeProjectFile } from "@whispering233/ai-editor-db";
+import {
+  AGENTS_FILE_NAME,
+  readAgentsFile,
+  readOutlineFile,
+  readProjectFile,
+  writeAgentsFile,
+  writeOutlineFile,
+  writeProjectFile,
+} from "@whispering233/ai-editor-db";
 import { errorHandler } from "../middleware/error.js";
 import {
   closeProject,
+  detectProject,
   getCurrentProject,
   originCheckMiddleware,
   projectMiddleware,
@@ -189,19 +198,30 @@ describe("POST /project/create", () => {
     expect(readProjectFile(dir)?.id).toMatch(/^proj-/);
   });
 
-  it("config 覆盖参数生效：name/language/prompt 写入 project.json 且 updated_at 刷新", async () => {
+  it("config 覆盖参数生效：name/language 写入 project.json 且 updated_at 刷新（prompt 已废弃决策 41，strict 拒绝）", async () => {
     const dir = makeTmpDir();
     const res = await buildApp().request("/api/v1/project/create", {
       method: "POST",
       headers: HOST_HEADERS,
-      body: JSON.stringify({ path: dir, config: { name: "指定名", language: "en", prompt: "力量体系" } }),
+      body: JSON.stringify({ path: dir, config: { name: "指定名", language: "en" } }),
     });
     expect(res.status).toBe(200);
     const config = readProjectFile(dir);
     expect(config?.name).toBe("指定名");
     expect(config?.language).toBe("en");
-    expect(config?.prompt).toBe("力量体系");
+    expect(config?.prompt).toBeUndefined(); // 决策 41：新写入不再产生 prompt 字段
     expect(config?.updated_at).not.toBe(T0);
+  });
+
+  it("create config 传 prompt → 400 VALIDATION_ERROR（决策 41：prompt 废弃，strict schema 拒绝）", async () => {
+    const dir = makeTmpDir();
+    const res = await buildApp().request("/api/v1/project/create", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: dir, config: { prompt: "力量体系" } }),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("VALIDATION_ERROR");
   });
 
   it("目录已是项目（含 project.json）→ 409 PROJECT_ALREADY_EXISTS（create 不幂等复用）", async () => {
@@ -282,7 +302,6 @@ describe("POST /project/open", () => {
       id: "proj-9",
       name: "我的小说",
       language: "zh",
-      prompt: "提示词",
       schemaVersion: SCHEMA_VERSION,
       currentPosition: "sc-1",
       backupFrequencyMinutes: 10, // 旧文件缺字段 → 读侧缺省兜底 10（决策 27）
@@ -558,7 +577,7 @@ describe("GET/PUT /project/config", () => {
     });
   });
 
-  it("GET 读回全量配置（camelCase 映射：schemaVersion/currentPosition/backupFrequencyMinutes/createdAt/updatedAt）", async () => {
+  it("GET 读回全量配置（camelCase 映射：schemaVersion/currentPosition/backupFrequencyMinutes/createdAt/updatedAt；prompt 已废弃决策 41 不再返回）", async () => {
     const dir = makeTmpDir();
     const app = await openProject(dir);
     const res = await app.request("/api/v1/project/config", { headers: HOST_HEADERS });
@@ -569,7 +588,6 @@ describe("GET/PUT /project/config", () => {
         id: "proj-cfg",
         name: "配置项目",
         language: "zh",
-        prompt: "",
         schemaVersion: SCHEMA_VERSION,
         currentPosition: null,
         backupFrequencyMinutes: 10, // makeConfig 缺字段 → 读侧缺省兜底 10（决策 27）
@@ -579,14 +597,14 @@ describe("GET/PUT /project/config", () => {
     });
   });
 
-  it("PUT 更新 name/prompt/language → updated:true，GET 读回新值，project.json updated_at 刷新", async () => {
+  it("PUT 更新 name/language → updated:true，GET 读回新值，project.json updated_at 刷新", async () => {
     const dir = makeTmpDir();
     const app = await openProject(dir);
 
     const res = await app.request("/api/v1/project/config", {
       method: "PUT",
       headers: HOST_HEADERS,
-      body: JSON.stringify({ name: "新名字", prompt: "新提示词", language: "en" }),
+      body: JSON.stringify({ name: "新名字", language: "en" }),
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ success: true, data: { updated: true } });
@@ -594,11 +612,22 @@ describe("GET/PUT /project/config", () => {
     const getRes = await app.request("/api/v1/project/config", { headers: HOST_HEADERS });
     const body = await getRes.json();
     expect(body.data.name).toBe("新名字");
-    expect(body.data.prompt).toBe("新提示词");
     expect(body.data.language).toBe("en");
     expect(body.data.updatedAt).not.toBe(T0);
     // 盘上同步（写入 project.json）
     expect(readProjectFile(dir)?.name).toBe("新名字");
+  });
+
+  it("PUT 传 prompt → 400 VALIDATION_ERROR（决策 41：prompt 废弃，strict schema 拒绝）", async () => {
+    const dir = makeTmpDir();
+    const app = await openProject(dir);
+    const res = await app.request("/api/v1/project/config", {
+      method: "PUT",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ prompt: "新提示词" }),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("VALIDATION_ERROR");
   });
 
   it("PUT current_position 指向存在的非软删节点 → 更新成功", async () => {
@@ -751,6 +780,171 @@ describe("GET/PUT /project/config", () => {
       body: JSON.stringify({ name: "x" }),
     });
     expect(res.status).toBe(409);
+  });
+});
+
+// ============ GET/PUT /api/v1/project/agents（决策 41：项目规则文件 AGENTS.md） ============
+
+describe("GET/PUT /project/agents（决策 41：项目规则文件 AGENTS.md）", () => {
+  /** 打开新项目并返回 app（makeConfig 无 prompt → 不触发迁移，agents 为空态） */
+  async function openProject(dir: string): Promise<Hono> {
+    initProjectDir(dir, makeConfig("proj-agents", "规则项目"));
+    const app = buildApp();
+    const res = await app.request("/api/v1/project/open", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: dir }),
+    });
+    expect(res.status).toBe(200);
+    return app;
+  }
+
+  it("无当前项目时 GET /agents → 409 NO_PROJECT_OPEN（与 /config 一致）", async () => {
+    const res = await buildApp().request("/api/v1/project/agents", { headers: HOST_HEADERS });
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.code).toBe("NO_PROJECT_OPEN");
+  });
+
+  it("文件不存在 → 200 { content: '', exists: false, updatedAt: null }（不报错，前端展示空编辑区）", async () => {
+    const dir = makeTmpDir();
+    const app = await openProject(dir);
+    const res = await app.request("/api/v1/project/agents", { headers: HOST_HEADERS });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      success: true,
+      data: { content: "", exists: false, updatedAt: null },
+    });
+  });
+
+  it("文件存在 → 200 返回内容 + exists:true + mtime（ISO 8601）", async () => {
+    const dir = makeTmpDir();
+    const app = await openProject(dir);
+    writeAgentsFile(dir, "力量体系：练气→筑基→金丹");
+    const res = await app.request("/api/v1/project/agents", { headers: HOST_HEADERS });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.content).toBe("力量体系：练气→筑基→金丹");
+    expect(body.data.exists).toBe(true);
+    expect(body.data.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/); // ISO 8601
+  });
+
+  it("PUT 整体替换 → 200 { saved:true, updatedAt }；GET 读回新内容；mtime 更新", async () => {
+    const dir = makeTmpDir();
+    const app = await openProject(dir);
+    const res = await app.request("/api/v1/project/agents", {
+      method: "PUT",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ content: "新规则：主角必须成长" }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.saved).toBe(true);
+    expect(body.data.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    // 盘上原子写（无临时文件残留）
+    expect(readAgentsFile(dir)).toBe("新规则：主角必须成长");
+    expect(existsSync(join(dir, `.${AGENTS_FILE_NAME}.tmp`))).toBe(false);
+    // GET 读回
+    const getRes = await app.request("/api/v1/project/agents", { headers: HOST_HEADERS });
+    expect((await getRes.json()).data.content).toBe("新规则：主角必须成长");
+  });
+
+  it("PUT 空串 = 清空规则（保留空文件不删除，exists 语义稳定）", async () => {
+    const dir = makeTmpDir();
+    const app = await openProject(dir);
+    writeAgentsFile(dir, "旧规则");
+    const res = await app.request("/api/v1/project/agents", {
+      method: "PUT",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ content: "" }),
+    });
+    expect(res.status).toBe(200);
+    expect(readAgentsFile(dir)).toBe(""); // 空文件保留
+    expect(existsSync(join(dir, AGENTS_FILE_NAME))).toBe(true);
+    const getRes = await app.request("/api/v1/project/agents", { headers: HOST_HEADERS });
+    const body = await getRes.json();
+    expect(body.data.content).toBe("");
+    expect(body.data.exists).toBe(true); // 空文件 exists 仍为 true
+  });
+
+  it("PUT 请求体缺 content / 非法 → 400 VALIDATION_ERROR", async () => {
+    const dir = makeTmpDir();
+    const app = await openProject(dir);
+    for (const bad of [{}, { content: 123 }, null]) {
+      const res = await app.request("/api/v1/project/agents", {
+        method: "PUT",
+        headers: HOST_HEADERS,
+        body: JSON.stringify(bad),
+      });
+      expect(res.status).toBe(400);
+      expect((await res.json()).error.code).toBe("VALIDATION_ERROR");
+    }
+  });
+
+  it("无当前项目时 PUT /agents → 409 NO_PROJECT_OPEN", async () => {
+    const res = await buildApp().request("/api/v1/project/agents", {
+      method: "PUT",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ content: "x" }),
+    });
+    expect(res.status).toBe(409);
+  });
+});
+
+// ============ 决策 41 自动迁移：prompt → AGENTS.md（打开项目时） ============
+
+describe("决策 41 自动迁移（prompt 存在且无 AGENTS.md → 打开时迁移写入）", () => {
+  it("open 时 prompt 存在且无 AGENTS.md → 迁移写入（内容原样，一次性）", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, { ...makeConfig("proj-mig", "迁移书"), prompt: "力量体系：练气→筑基" });
+    const app = buildApp();
+    const res = await app.request("/api/v1/project/open", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: dir }),
+    });
+    expect(res.status).toBe(200);
+    // AGENTS.md 已迁移（内容原样）
+    expect(readAgentsFile(dir)).toBe("力量体系：练气→筑基");
+    // GET /agents 读回迁移内容
+    const getRes = await app.request("/api/v1/project/agents", { headers: HOST_HEADERS });
+    expect((await getRes.json()).data.content).toBe("力量体系：练气→筑基");
+  });
+
+  it("已有 AGENTS.md → 不覆盖（一次性语义）；prompt 为空 → 不迁移", async () => {
+    // 已有 AGENTS.md：prompt 存在但文件已存在 → 保留文件内容
+    const dir = makeTmpDir();
+    initProjectDir(dir, { ...makeConfig("proj-mig2", "迁移书2"), prompt: "旧提示词" });
+    writeAgentsFile(dir, "用户手写规则");
+    const app = buildApp();
+    const res = await app.request("/api/v1/project/open", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: dir }),
+    });
+    expect(res.status).toBe(200);
+    expect(readAgentsFile(dir)).toBe("用户手写规则"); // 未被 prompt 覆盖
+
+    // prompt 为空（makeConfig 无 prompt）→ 不创建 AGENTS.md
+    const dir2 = makeTmpDir();
+    initProjectDir(dir2, makeConfig("proj-mig3", "迁移书3"));
+    const app2 = buildApp();
+    const res2 = await app2.request("/api/v1/project/open", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: dir2 }),
+    });
+    expect(res2.status).toBe(200);
+    expect(existsSync(join(dir2, AGENTS_FILE_NAME))).toBe(false);
+  });
+
+  it("detectProject（启动即打开）同样触发迁移", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, { ...makeConfig("proj-mig4", "迁移书4"), prompt: "启动迁移内容" });
+    // 直接调 detectProject（startServer 启动路径），不经过 open 路由
+    const project = detectProject(dir);
+    expect(project).not.toBeNull();
+    expect(readAgentsFile(dir)).toBe("启动迁移内容");
+    closeProject(project!);
   });
 });
 
@@ -1428,7 +1622,7 @@ describe("POST /project/import（E2：zip 导入新书）", () => {
     expect(readdirSync(join(dirB, ".backups")).length).toBeGreaterThan(0);
     // 当前打开的书A 不受影响（连接与数据完好）
     const cfg = await app.request("/api/v1/project/config", { headers: HOST_HEADERS });
-    expect((await cfg.json()).data.prompt).toBe("A 当前");
+    expect((await cfg.json()).data.name).toBe("书A");
     expect(getCurrentProject()?.root).toBe(dirA);
   });
 });

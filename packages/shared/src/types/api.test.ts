@@ -27,6 +27,9 @@ import {
   outlineTreeSchema,
   outlineUpdateReqSchema,
   projectBackupReqSchema,
+  projectAgentsGetResSchema,
+  projectAgentsPutReqSchema,
+  projectAgentsPutResSchema,
   projectConfigSchema,
   projectConfigUpdateReqSchema,
   projectImportResSchema,
@@ -80,12 +83,11 @@ describe("ErrorCode 完整性（endpoints.md 错误码对照）", () => {
 });
 
 describe("project 端点", () => {
-  it("projectConfigSchema：endpoints.md 示例响应 parse 通过", () => {
+  it("projectConfigSchema：endpoints.md 示例响应 parse 通过（prompt 已废弃决策 41 不再返回）", () => {
     const config = projectConfigSchema.parse({
       id: "proj-1",
       name: "我的小说",
       language: "zh",
-      prompt: "力量体系：练气→筑基→金丹",
       schemaVersion: 1,
       currentPosition: "sc-42",
       backupFrequencyMinutes: 10,
@@ -93,6 +95,43 @@ describe("project 端点", () => {
       updatedAt: "2026-08-01T10:00:00Z",
     });
     expect(config.currentPosition).toBe("sc-42");
+  });
+
+  it("projectConfigUpdateReqSchema：prompt 已废弃（决策 41）strict 拒绝", () => {
+    expect(projectConfigUpdateReqSchema.safeParse({ prompt: "力量体系" }).success).toBe(false);
+    expect(projectConfigUpdateReqSchema.safeParse({ name: "x", prompt: "力量体系" }).success).toBe(false);
+  });
+
+  it("projectAgentsGetResSchema：合法响应 parse 通过（文件存在/不存在两态）", () => {
+    expect(
+      projectAgentsGetResSchema.parse({ content: "力量体系：练气→筑基", exists: true, updatedAt: "2026-08-01T10:00:00Z" }),
+    ).toEqual({ content: "力量体系：练气→筑基", exists: true, updatedAt: "2026-08-01T10:00:00Z" });
+    // 文件不存在：content 空串 + exists:false + updatedAt:null
+    expect(projectAgentsGetResSchema.parse({ content: "", exists: false, updatedAt: null })).toEqual({
+      content: "",
+      exists: false,
+      updatedAt: null,
+    });
+    // 类型不符拒绝
+    expect(projectAgentsGetResSchema.safeParse({ content: "", exists: "yes", updatedAt: null }).success).toBe(false);
+    expect(projectAgentsGetResSchema.safeParse({ content: "", exists: false }).success).toBe(false); // 缺 updatedAt
+  });
+
+  it("projectAgentsPutReqSchema：content 必填 string；strict 拒绝未知字段", () => {
+    expect(projectAgentsPutReqSchema.parse({ content: "新规则" }).content).toBe("新规则");
+    expect(projectAgentsPutReqSchema.parse({ content: "" }).content).toBe(""); // 空串 = 清空规则
+    expect(projectAgentsPutReqSchema.safeParse({}).success).toBe(false); // 缺 content
+    expect(projectAgentsPutReqSchema.safeParse({ content: 123 }).success).toBe(false);
+    expect(projectAgentsPutReqSchema.safeParse({ content: "x", extra: 1 }).success).toBe(false); // strict
+  });
+
+  it("projectAgentsPutResSchema：{ saved: true, updatedAt } parse 通过", () => {
+    expect(projectAgentsPutResSchema.parse({ saved: true, updatedAt: "2026-08-01T10:00:00Z" })).toEqual({
+      saved: true,
+      updatedAt: "2026-08-01T10:00:00Z",
+    });
+    expect(projectAgentsPutResSchema.safeParse({ saved: false, updatedAt: "x" }).success).toBe(false);
+    expect(projectAgentsPutResSchema.safeParse({ saved: true }).success).toBe(false); // 缺 updatedAt
   });
 
   it("language 非法拒绝；currentPosition null 允许；backupFrequencyMinutes null（关闭）允许", () => {
@@ -536,13 +575,12 @@ describe("导出/导入契约（E1，release-review §二）", () => {
   });
 });
 
-/** 构造合法 ProjectConfig 测试数据 */
+/** 构造合法 ProjectConfig 测试数据（prompt 已废弃决策 41，不再包含） */
 function validConfig() {
   return {
     id: "proj-1",
     name: "我的小说",
     language: "zh" as const,
-    prompt: "力量体系",
     schemaVersion: 1,
     currentPosition: "sc-42",
     backupFrequencyMinutes: 10,

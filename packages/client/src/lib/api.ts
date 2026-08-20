@@ -13,6 +13,7 @@ import type {
   EntitySummary,
   ErrorCode,
   OutlineTree,
+  ProjectAgents,
   ProjectConfig,
   ProjectImportRes,
   ProjectLanguage,
@@ -119,11 +120,11 @@ export function getProjectConfig(): Promise<ProjectConfig> {
   return apiFetch<ProjectConfig>("/project/config");
 }
 
-/** PUT /api/v1/project/config 请求体（契约：projectConfigUpdateReqSchema，snake_case） */
+/** PUT /api/v1/project/config 请求体（契约：projectConfigUpdateReqSchema，snake_case；
+ *  `prompt` 已废弃（决策 41）不再接受——项目规则改由 PUT /project/agents 写入 AGENTS.md） */
 export interface UpdateProjectConfigBody {
   name?: string;
   language?: ProjectLanguage;
-  prompt?: string;
   current_position?: string | null; // 须指向存在的非软删大纲节点（服务端校验）
   /** 自动备份频率（决策 27）：null = 关闭；仅枚举 5/10/15/30/60（BACKUP_FREQUENCIES），其他 → 400 */
   backup_frequency_minutes?: number | null;
@@ -138,6 +139,38 @@ export function updateProjectConfig(
   patch: UpdateProjectConfigBody,
 ): Promise<UpdateProjectConfigRes> {
   return apiFetch<UpdateProjectConfigRes>("/project/config", { method: "PUT", body: patch });
+}
+
+// ============ 项目规则文件 AGENTS.md（决策 41：唯一事实源，取代 project.json `prompt`） ============
+
+/** GET /api/v1/project/agents 响应（契约：shared projectAgentsGetResSchema） */
+export type ProjectAgentsRes = ProjectAgents;
+
+/**
+ * 读取项目规则文件 AGENTS.md（决策 41）：
+ * - 无当前项目 → 409 NO_PROJECT_OPEN
+ * - 文件不存在不报错：返回 exists:false + 空串（前端展示空编辑区）
+ * - updatedAt = 文件 mtime（ISO 8601）——外部修改检测依据（决策 41）
+ */
+export function getProjectAgents(): Promise<ProjectAgentsRes> {
+  return apiFetch<ProjectAgentsRes>("/project/agents");
+}
+
+/** PUT /api/v1/project/agents 响应（契约：shared projectAgentsPutResSchema） */
+export interface SaveProjectAgentsRes {
+  saved: true;
+  /** 写入后的文件 mtime（ISO 8601）——前端更新本地比对基线（外部修改检测用） */
+  updatedAt: string;
+}
+
+/**
+ * 写入项目规则文件 AGENTS.md（决策 41：设置页直接编辑文件内容）：
+ * - 整体替换（非追加）；空串 = 清空规则（保留空文件不删除）
+ * - 文件不存在自动创建；写入走原子写（决策 11 同款）
+ * - 无当前项目 → 409 NO_PROJECT_OPEN
+ */
+export function saveProjectAgents(content: string): Promise<SaveProjectAgentsRes> {
+  return apiFetch<SaveProjectAgentsRes>("/project/agents", { method: "PUT", body: { content } });
 }
 
 /** GET /api/v1/outline（契约：shared types/api.ts outlineTreeSchema） */
@@ -604,13 +637,13 @@ export function listProjects(): Promise<ProjectList> {
 
 // ============ 项目开/建/关（S1.4；契约：endpoints.md「项目管理」+ S1.2 server 路由） ============
 
-/** POST /api/v1/project/create 请求体（snake_case；config 可选） */
+/** POST /api/v1/project/create 请求体（snake_case；config 可选；
+ *  `prompt` 已废弃（决策 41）不再接受——项目规则改由 PUT /project/agents 写入 AGENTS.md） */
 export interface CreateProjectBody {
   path: string;
   config?: {
     name?: string;
     language?: ProjectLanguage;
-    prompt?: string;
   };
 }
 

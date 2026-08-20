@@ -4,6 +4,7 @@ import { create } from "zustand";
 import type {
   OutlineNode,
   OutlineTree,
+  ProjectAgents,
   ProjectConfig,
   ProjectLanguage,
 } from "@whispering233/ai-editor-shared";
@@ -12,9 +13,11 @@ import {
   closeProject as apiCloseProject,
   createProject as apiCreateProject,
   getOutline,
+  getProjectAgents,
   getProjectConfig,
   listProjects,
   openProject as apiOpenProject,
+  saveProjectAgents as apiSaveProjectAgents,
   updateProjectConfig as apiUpdateConfig,
   type ProjectList,
   type UpdateProjectConfigBody,
@@ -35,6 +38,15 @@ interface ProjectState {
   bookshelfLoading: boolean;
   /** 书架加载失败的错误码（CLIENT_NETWORK_ERROR 等；null = 无错误/未加载） */
   bookshelfError: string | null;
+  /** 项目规则文件 AGENTS.md（GET /project/agents，决策 41）；null = 未加载/加载失败 */
+  agents: ProjectAgents | null;
+  /** agents 数据所属项目 id（null = 无）——切换项目后旧数据不串项目（填充/外部修改检测防串） */
+  agentsProjectId: string | null;
+  agentsLoading: boolean;
+  /** AGENTS.md 加载失败的错误码（CLIENT_NETWORK_ERROR 等；null = 无错误/未加载） */
+  agentsError: string | null;
+  /** 外部修改检测（决策 41）：上次读取后文件 mtime 变化 → true（提示刷新/重新加载） */
+  agentsExternalModified: boolean;
   loadConfig: () => Promise<void>;
   /** 更新配置（PUT /project/config，请求体 snake_case）；成功后重新拉取最新配置 */
   updateConfig: (patch: UpdateProjectConfigBody) => Promise<void>;
@@ -43,13 +55,17 @@ interface ProjectState {
   loadBookshelf: () => Promise<void>;
   /** 打开项目（POST /project/open）：成功刷新 config/outline；rebuilt 时 toast 提示（决策 13） */
   openProjectAt: (path: string) => Promise<void>;
-  /** 创建项目（POST /project/create）后打开；config 可选（名称/语言/提示词） */
+  /** 创建项目（POST /project/create）后打开；config 可选（名称/语言） */
   createProjectAt: (
     path: string,
-    config?: { name?: string; language?: ProjectLanguage; prompt?: string },
+    config?: { name?: string; language?: ProjectLanguage },
   ) => Promise<void>;
   /** 关闭当前项目（POST /project/close）：清空本地 config/outline */
   closeProject: () => Promise<void>;
+  /** 加载项目规则文件 AGENTS.md（GET /project/agents，决策 41）；含外部修改检测（mtime 比对） */
+  loadAgents: () => Promise<void>;
+  /** 保存项目规则文件 AGENTS.md（PUT /project/agents，决策 41）；成功后更新本地基线（新 mtime） */
+  saveAgents: (content: string) => Promise<void>;
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
@@ -61,6 +77,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   bookshelf: null,
   bookshelfLoading: false,
   bookshelfError: null,
+  agents: null,
+  agentsProjectId: null,
+  agentsLoading: false,
+  agentsError: null,
+  agentsExternalModified: false,
 
   loadConfig: async () => {
     // 并发防抖：已在加载中则跳过
@@ -116,6 +137,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const res = await apiOpenProject(path);
     // open 响应含完整 config（S1.2），直接用省一次请求；outline 需重新拉取（新项目树不同）
     set({ config: res.config, loadError: null });
+    // 决策 41：切换项目后清空 AGENTS.md 缓存（旧项目数据不串项目；设置页按项目重新加载）
+    set({ agents: null, agentsProjectId: null, agentsError: null, agentsExternalModified: false });
     // L3（oracle U4 审核）：切项目后清除未消费的大纲定位目标（旧 id 对新树无意义，防残留）
     useUiStore.getState().clearFocusOutlineNode();
     if (res.rebuilt) {
@@ -144,9 +167,53 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   closeProject: async () => {
     await apiCloseProject();
-    set({ config: null, loadError: null, outline: null });
+    set({
+      config: null,
+      loadError: null,
+      outline: null,
+      agents: null,
+      agentsProjectId: null,
+      agentsError: null,
+      agentsExternalModified: false,
+    });
     // L3（oracle U4 审核）：关闭项目同样清除未消费的大纲定位目标
     useUiStore.getState().clearFocusOutlineNode();
+  },
+
+  loadAgents: async () => {
+    // 并发防抖：已在加载中则跳过
+    if (get().agentsLoading) return;
+    set({ agentsLoading: true });
+    try {
+      const res = await getProjectAgents();
+      const prev = get().agents;
+      // 外部修改检测（决策 41）：已有基线（非 null）且新 mtime 与基线不同 → 外部修改
+      //（文件在文件管理器中直接编辑后 mtime 变化；首次加载无基线不误报）
+      const externalModified =
+        prev !== null && prev.updatedAt !== null && res.updatedAt !== null && prev.updatedAt !== res.updatedAt;
+      set({
+        agents: res,
+        agentsProjectId: get().config?.id ?? null,
+        agentsError: null,
+        agentsExternalModified: externalModified,
+      });
+    } catch (err) {
+      const code = err instanceof ApiError ? err.code : "CLIENT_NETWORK_ERROR";
+      set({ agents: null, agentsProjectId: null, agentsError: code });
+    } finally {
+      set({ agentsLoading: false });
+    }
+  },
+
+  saveAgents: async (content) => {
+    const res = await apiSaveProjectAgents(content);
+    // 更新本地基线：写入后 mtime 即新基线（外部修改检测用）；空串保存 = 清空规则（文件保留，exists 稳定）
+    set({
+      agents: { content, exists: true, updatedAt: res.updatedAt },
+      agentsProjectId: get().config?.id ?? null,
+      agentsError: null,
+      agentsExternalModified: false,
+    });
   },
 }));
 

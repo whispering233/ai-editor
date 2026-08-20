@@ -56,6 +56,7 @@ import {
   listMessages,
   listSessions,
   nowIso,
+  readAgentsFile,
   readOutlineFile,
 } from "@whispering233/ai-editor-db";
 import type { ChatMessage, ChatSessionSummary } from "@whispering233/ai-editor-shared";
@@ -506,7 +507,9 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
           userMessage: message, // runAgent 追加进会话（传入 session 不应已含本轮消息）
           session,
           focus,
-          projectPrompt: project.config.prompt || undefined, // 决策 7 项目层
+          // 决策 41：项目规则唯一事实源 = 项目目录 AGENTS.md（取代 project.config.prompt）——
+          // 每次对话实时读文件（外部编辑立即可见）；文件不存在 → undefined（「## 项目设定」段跳过）
+          projectPrompt: readAgentsFile(project.root) ?? undefined,
           deps: { produce: produceWithUsage, dispatcher, onEvent, onMessages },
           signal: controller.signal, // 决策 16：断开即取消（abort 永不重试）
         });
