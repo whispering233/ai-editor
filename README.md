@@ -13,7 +13,7 @@
 | 语言 | TypeScript strict mode |
 | API 服务端 | Hono 4 + `@hono/node-server` |
 | 数据库 | better-sqlite3 ^13（WAL，N-API 预编译） |
-| 前端 | React 19 + Vite 7 + Zustand 5 + Tailwind 4 + shadcn/ui（Base UI，oklch 主题 tokens）+ Prettier + prettier-plugin-tailwindcss（样式工程化，L 批次） |
+| 前端 | React 19 + Vite 7 + Zustand 5 + Tailwind 4 + shadcn/ui（Base UI，oklch 主题 tokens）+ Prettier + prettier-plugin-tailwindcss（样式工程化，L 批次）+ @uiw/react-md-editor（markdown 编辑器，决策 43） |
 | 路由 | 自制 hash 路由（`useHashRoute`，无 React Router） |
 | Schema 校验 | Zod 4（仅服务端执行，client 不打包校验函数） |
 | AI 调用 | `@earendil-works/pi-ai`（决策 34：统一多提供商 LLM 接口，默认 DeepSeek；模型/思考强度可配置；llm 包单向 adapter 保留对外契约） |
@@ -74,7 +74,7 @@ pnpm typecheck && pnpm lint && pnpm -r test
 - **大纲**：严格三层（卷→章→场景）增删改移（行尾操作区右端对齐：详情/添加/删除，无时间戳显示，批次八 O2）、节点详情（麦基《故事》结构化字段）
 - **实体与关系**：七类实体（人物/设定/地点/伏笔/事件·时间轴/时间标签点·时间轴/参考资料）CRUD、k 跳关系遍历、Delta 变更追踪与状态计算（computeState）；**设定层级（决策 30）**——父子关系用 `belongs_to` 表达（防环校验），详情页「层级」区块 + 实体关系页「设定树」tab（递归树视图）；**标签分类（决策 31）**——设定分类统一 `data.tags`，列表标签列 + 标签筛选（`?tag=`）+ 新建行标签输入（datalist 自动完成 + 快捷选择）；**列表与编辑增强（批次六 M1-M3，2026-08）**——设定列表行显示上级设定（chip 点击直达父详情）与描述（截断展示 + hover 查看）；标签/规则编辑器回车添加下一项 + 拖拽排序（HTML5 原生 DnD）；**上级设定筛选（决策 32，批次七）**——设定列表新增「上级设定」下拉，选定后只显示其直接及**所有后代设定（递归子树）**，与标签筛选/搜索/排序组合（AND）；**批次八（O1/O5）**——「上级设定 / 标签」筛选改为**可搜索下拉**（输入关键词过滤候选 +「全部」重置），设定树视图新增**「全部展开 / 全部折叠」**工具栏按钮；**设定/标签筛选可搜索下拉（O1）**与**设定树全部展开/折叠（O5）**
 - **时间轴（阶段 C + G2 修订 + H1-H6 交互优化）**：**时间标签点（timepoint）与事件双实体**——事件经 `occurs_at` 挂载到时间点（1:n），时间点与事件各有独立线性序（拖拽时间点 = 整组移动不动内部、拖拽单条事件 = 组内重排/跨组自动改挂载）；垂直时间轴 + 时间点组块 + 未挂载兜底区；时间点可重命名、组内新建事件、AI 按时间标签语义排序（提案确认）；`occurs_in` 锚定大纲场景（倒叙/多时间线可表达）；软删回收站；交互优化：删除入口直接展示、软删/还原免二次确认、操作按钮不收入 `...` 菜单、文字按钮带边框、标题行信息与操作右移、事件行“N 节点”计数靠右、**拖拽无可见手柄（提示保留）与折叠按钮移至组标题左侧（批次八 O3/O4，参考大纲页拖拽/折叠位序）**
-- **参考资料（批次九决策 36，2026-08）**：第 7 种实体类型 reference（`ref-` 前缀，SCHEMA_VERSION 5）——外部素材/灵感笔记（非本书正文，决策 24 边界）；data 字段 type 分类枚举（素材摘抄/灵感记录/写作理论/设定参考）+ content 全文 + source 来源 + tags 标签；列表摘要截断 120 字 / 详情全文详读；TabBar「参考资料」tab（时间轴后回收站前）列表/详情页（分类/标签/搜索筛选 + 新建/编辑/软删）；LLM 集成 `search_references`（自动查询）+ `propose_create_reference`（AI 建议保存 → 提案确认后写库）
+- **参考资料（决策 36 + 决策 43，2026-08）**：第 7 种实体类型 reference（`ref-` 前缀，SCHEMA_VERSION 5）——外部素材/灵感笔记（非本书正文，决策 24 边界）；**两类承载（批次十一）**——本地 md 文档（`references/` 项目目录自包含，YAML frontmatter（title/category/tags）+ markdown 正文，**文件 = 真相源、DB 索引 = 派生镜像**：应用内编辑先原子写文件再更新 DB，外部编辑/新增/删除靠扫描同步——mtime 快照比对幂等全量，索引丢失可完整重建；软删文件移 `references/.trash/`）/ 外源链接（URL 必填仅索引）；列表行信息 [标题/分类/标签/来源]，交互对齐大纲（点击标题行内编辑/双击详情/只留删除/右键菜单注入上下文与建立关联）；新建分流两按钮 → 草稿态详情页：md 内嵌 **@uiw/react-md-editor** 分屏编辑器（暗色联动）+ 导入 md 文档（frontmatter 解析预填）+ 建立关联面板；外源链接详情页 URL 必填 + 备注 + 关联面板；**扫描同步**——列表「扫描」按钮 + 未同步提示条（只读探测）；**存档联动**——备份/导出/导入/恢复打包 references/，自动备份变更检测覆盖本地文档；LLM 集成 `search_references`（自动查询，纯 DB 读取）+ `propose_create_reference`（AI 建议保存 → 提案确认后写库，归外源链接类）
 - **伏笔系统（S9 已就绪）**：伏笔池面板（活跃/已回收/已废弃分组、新建埋点、推进/回收/废弃复合写确认、依赖链展开、软删级联）+ 大纲节点伏笔标记（📌 埋设/⏩ 推进/✅ 回收徽标）；健康指标展示留后续迭代（backlog #13）
 - **回收站**：软删还原 / 彻底清除 + 启动一致性校验兜底
 - **AI 对话链路（S6-S8 + 批次九决策 34/35）**：llm 引擎换核为 `@earendil-works/pi-ai`（决策 34，手写 SSE/流式累积删除，对外契约保留）；48 个工具（查询 9 / 分析 5 / 伏笔 5 / 提案 16 / 执行 13 = LLM 可见 35 + 执行 13）；agent 主循环（8 轮 / 120s / token 三重保险）；提案确认流程（卡片确认/拒绝 + 失效处理）；chat SSE 路由（心跳 / 断连检测 / 全链路取消）；**右栏增强**——模型选择下拉 + 思考强度选择（off/minimal/low/medium/high/xhigh/max，对齐 pi）+ 上下文占用进度条（真实 usage ÷ 模型 contextWindow）；**问 AI 入口（决策 35 + 决策 40）**——InfoBar 统一入口（纯进入聊天）+ 行级**右键菜单**（大纲/实体/伏笔/事件/时间点/参考资料行，右键「注入会话上下文」带对象提问 +「建立关联」新建关系；决策 40 已移除行级 AskAiButton）——配置 key 后右栏 ChatPanel 可直接对话
@@ -106,7 +106,7 @@ npm install -g @whispering233/ai-editor-server
 ai-editor <项目目录>   # 启动服务 + 自动打开浏览器 http://127.0.0.1:3456
 ```
 
-> 版本说明：**当前最新版 v0.0.16**（由 CI OIDC 自动发布，发布全链路自动化已验证）；v0.0.1/v0.0.2 因发布管道缺陷（manifest 残留 `workspace:*` 协议）不可安装，已计划 deprecate 标注；安装时使用 `@whispering233/ai-editor-server@latest` 即可。
+> 版本说明：**当前最新版 v0.0.17**（由 CI OIDC 自动发布，发布全链路自动化已验证）；v0.0.1/v0.0.2 因发布管道缺陷（manifest 残留 `workspace:*` 协议）不可安装，已计划 deprecate 标注；安装时使用 `@whispering233/ai-editor-server@latest` 即可。
 
 **发布前置（一次性，npmjs 手动）**：① 开启 npm 账号 **2FA**（npmjs 要求开启两步验证才能配置包管理；开启会撤销现有 token，需重新生成 Automation token）；② 为 `@whispering233/ai-editor-shared`、`@whispering233/ai-editor-llm`、`@whispering233/ai-editor-db`、`@whispering233/ai-editor-tools`、`@whispering233/ai-editor-agent`、`@whispering233/ai-editor-server` 六包各配置 Trusted Publisher：Publisher = GitHub Actions、工作流名 = `publish.yml`；配置后 CI 无需 token（OIDC 自动换证）。
 
@@ -116,7 +116,7 @@ ai-editor <项目目录>   # 启动服务 + 自动打开浏览器 http://127.0.0
 
 | 目录 | 内容 |
 |------|------|
-| `doc/design/` | 产品定位、架构与分包、关键决策 1-42、backlog、任务清单与进度 |
+| `doc/design/` | 产品定位、架构与分包、关键决策 1-43、backlog、任务清单与进度 |
 | `doc/api/` | 端点契约、AI 工具目录、数据流 |
 | `doc/database/` | 表结构 / outline.json / project.json 契约、伏笔系统 |
 | `doc/ui/` | 当前 UI 布局样式设计（三栏工作台 `layout.md` + 各页面细案） |

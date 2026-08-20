@@ -1,6 +1,6 @@
 {
   "name": "@whispering233/ai-editor-db",
-  "version": "0.0.16",
+  "version": "0.0.17",
   "license": "MIT",
   "description": "数据库层：better-sqlite3 连接 / 建表 / 查询",
   "type": "module",
