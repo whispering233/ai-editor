@@ -369,7 +369,15 @@ export default function ReferenceDetail({
               onClick={() => setTitleEditing(true)}
               title="点击编辑标题"
             >
-              {isDraft ? (draft === "md" ? "新建 md 文档" : "新建外源链接") : detail!.name}
+              {/* R1 修复（批次十二）：标题显示 form.name 优先——草稿态用户编辑后失焦退出编辑态不再丢失输入
+                  （旧实现写死 isDraft ? "新建 md 文档" : detail!.name，编辑内容被吞）；空时回退占位文案 */}
+              {form.name.trim() !== ""
+                ? form.name
+                : isDraft
+                  ? draft === "md"
+                    ? "新建 md 文档"
+                    : "新建外源链接"
+                  : detail!.name}
             </h1>
           )}
           <span className="rounded-md border border-border bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">

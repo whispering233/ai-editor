@@ -68,6 +68,8 @@ search_references(query, type?, tags?)
   → 匹配的参考资料列表（标题 + 类型 + 标签 + 内容摘要截断 120 字）
   用途：AI 不知道书里有哪些参考资料时先搜索（标题+tags 关键词命中）再按需取全文
   （详情取全文走 get_entity('reference', id) 的 reference 分支——列表摘要/详情全文分离防长文撑爆响应）
+  type 参数（决策 44 修订）：**自由文本分类**（原预置枚举已取消），建议沿用项目内已有分类；
+    过滤为结果层原始值比对（summary.type === type）
 ```
 
 ### 分析类（自动）
@@ -154,8 +156,8 @@ propose_reorder_timepoints(timepoint_ids)
 propose_create_reference(name, type, content, source?, tags?)
   → { proposal_id, preview, conflicts_with? }
   用途：AI 读到灵感/素材后建议保存为参考资料（决策 36：外部素材/灵感笔记，非本书正文）
-  参数说明：type 枚举 (material 素材摘抄 / inspiration 灵感记录 / theory 写作理论 /
-    reference 设定参考，缺省 material)；content 为全文长文本；tags 标签数组（决策 31 字段）
+  参数说明：type 分类**自由文本**（决策 44 修订：原枚举已取消，建议沿用项目内已有分类，
+    缺省 material 写入侧兜底）；content 为全文长文本；tags 标签数组（决策 31 字段）
   预览：标题 + 内容摘要 + 标签（决策 14 提案仅内存 + 快照重校验）
   确认后：Executor 校验 references 存在性 + 快照 → create_entity(type='reference') 写入
   **决策 43（批次十一）**：AI 创建的条目归 **link 类**（data.kind='link'，source → url；

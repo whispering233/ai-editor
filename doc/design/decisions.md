@@ -704,3 +704,17 @@ B2.5 上线后用户反馈两点体验痛点：① **手动/自动备份在列�
 
 **为什么**：参考资料从「纯文本条目」演进为「文件 + 链接」两类，是真实使用场景的投影（用户把外部素材以 md 文档形态沉淀、以 URL 收藏外源）；文件为真相源 + frontmatter 自包含使索引可完整重建（方案 A 价值）、外部编辑/新增/删除天然可同步（mtime 快照比对）、备份随目录自包含；复用实体体系与决策 37/38/40 交互模式零新增机制成本；无 DDL 迁移使存量数据零风险兼容。
 
+
+## 决策 44：参考资料分类自定义——取消预置枚举，自由文本 + 项目内聚合建议（2026-08 用户裁决，批次十二）
+
+用户反馈（2026-08 批次十二）：参考资料页分类**不要预置固定类型**，支持用户自定义分类。经设计讨论，用户裁决：**方案 A 变体**——分类从固定枚举（material/inspiration/theory/reference）改为**自由文本**；输入建议**仅聚合项目内已用过的分类**（不含 4 个原默认分类）；用户可自由输入任意新分类。
+
+- **数据契约**：`data.type` 从 `z.enum(REFERENCE_TYPES)` 放宽为 **`z.string().optional()`**（`REFERENCE_TYPES` 常量与 `ReferenceTypeValue` 类型**删除**——shared 不再导出预置分类枚举）；缺省 `material` 兜底保留在写入侧（server reference-files / executor `?? "material"`，存量兼容语义不变）。**无 DDL 迁移，SCHEMA_VERSION 保持 5**（type 是 data JSON 字段，沿用决策 43 kind 先例：JSON 层演进不 bump）。
+- **存量兼容**：已有 material/inspiration/theory/reference 条目**原样保留**；前端保留 `TYPE_LABELS` **仅作存量回显映射**（material→素材摘抄 等，注释明确「非可选建议、仅存量显示」），无映射的新分类原样显示字符串。
+- **详情页分类输入**：`select` 改为**文本框 + datalist 自动补全**——建议项 = **项目内已用过的分类**（从现有 reference 条目聚合去重，显示回显名、填入原始值），不含任何预置分类；用户可自由输入任意新分类（Enter/失焦即用，保存时写入）。
+- **列表筛选**：分类下拉选项 = 「全部分类」+ 项目内已用分类（聚合逻辑同详情页；原生 select 即可，分类数量少，YAGNI 不做可搜索下拉）。
+- **AI 工具**：`search_references` / `propose_create_reference` 的 `type` 参数从 `z.enum` 放宽为 `z.string`；工具描述文本去掉枚举列举，改为「分类自由文本（建议沿用项目内已有分类）」；search 结果层 JS 过滤逻辑不变（`summary.type === args.type` 原始值比对）。
+- **md 文件 frontmatter**：`category` 字段本就是自由字符串解析（shared `parseReferenceFrontmatter` 无枚举校验），仅放宽服务端类型标注 `ReferenceTypeValue → string`；写入/扫描/回显链路不变。
+- **不做**：设置页分类管理（YAGNI，datalist 聚合已满足自定义诉求）；分类重命名/合并（backlog 候选，本轮不做）。
+
+**为什么**：预置枚举是产品对用户素材的臆断分类，实际创作中分类因人而异；自由文本 + 项目内聚合建议零配置满足「自定义」诉求，且天然收敛（建议项随使用增长）；放宽 schema 是纯 JSON 层演进，存量数据零风险；AI 工具 type 参数放宽为 string 后仍可传存量分类过滤，行为不变。
