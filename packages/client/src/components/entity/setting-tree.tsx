@@ -1,99 +1,60 @@
-// 设定树视图（批次四 I4，决策 30 + 批次八 O5）：实体关系页第 6 个 tab「设定树」。
-// 契约：doc/ui/pages/entity-list.md「设定树 Tab」——全量 setting + 全量 belongs_to 层级边
-// → buildSettingTree 组装递归树；父节点折叠箭头（默认全展开）、节点行 = 名称 + 类别徽标 +
-// 直接子数、点击跳详情；只读视图（改父在详情页「层级」区块单一入口）；设定 > 200 截断提示 +
-// 父截断提升为根防御。顶栏「全部展开 / 全部折叠」按钮（O5 起：展开态提升到视图层 collapsedIds，
-// 缺省空 = 全展开；全部折叠 = 收集所有非叶子 id 仅保留根级）。样式 token 类（layout.md §3），
-// 重试按钮带边框（H4）。
+// 设定树形视图（决策 42，2026-08 批次十任务卡 6）：实体关系页「设定」tab 的交互式树形视图，
+// 与原「设定树」tab（批次四 I4 只读树）合并——#/entities/setting 即树形视图，原 #/entities/setting-tree
+// 路由已移除（main.tsx 重定向到设定 tab）。
+// 契约：doc/ui/pages/entity-list.md「设定 Tab（树形视图）」——全量 setting（limit 200 + 名称排序）+
+// 全量 belongs_to 层级边 → buildSettingTree 组装递归树；行级交互对齐大纲（决策 37/38 模式，layout.md §4.5）：
+//   - 折叠/展开：父节点 ▾/▸ 切换 + 顶栏「全部展开 / 全部折叠」（全部折叠 = 仅保留根级）
+//   - 行内编辑（点击标题）：Enter 确认 PUT /entity/setting/:id { name }、Esc 取消、失焦保存
+//   - Enter 新建子级：选中节点按 Enter → 就地输入行出现在该节点子级末尾（POST /entity/setting +
+//     POST /relation belongs_to 挂父；子级类型 = 设定）；root 级「+ 新建」输入行无父
+//   - 双击详情：双击行 → #/entities/setting/:id（详情页含层级区块与全部关联）
+//   - 行级只留删除：行尾 Trash2 → 直接软删（H2 不弹确认）→ DELETE /entity/setting/:id
+//   - 拖拽调整层级：HTML5 DnD **嵌套语义**（拖到行上 = 成为该行子级、拖到空白区 = 移为顶层根）——
+//     belongs_to 防环沿用决策 30（canMoveSettingTo 客户端预校验 + 服务端兜底 400 VALIDATION_ERROR）；
+//     改父 = 先建新边后删旧边（对齐 EntityDetail.handleSetParent 先建后删防数据丢失）；
+//     **设定无 sort_order（API 约束，勿改数据模型）**——同级顺序 = 名称序，同父拖拽为 no-op
+//   - 筛选 = 搜索 + 标签（树内过滤 filterSettingTree：命中节点及祖先链保留，非命中子树隐藏）；无分页
+// 溢出防御：设定 > 200 截断提示 + 父截断提升为根（buildSettingTree 既有语义）。
+// 样式全 token 类（layout.md §3）；文字按钮带边框（H4）；本视图不加 AskAiButton（决策 40 另行全局移除）。
 import { useEffect, useState } from "react";
+import type { DragEvent, KeyboardEvent, MouseEvent, ReactNode } from "react";
+import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { listEntities, listRelations } from "../../lib/api";
+import { Input } from "@/components/ui/input";
+import { EmptyState } from "@/components/ui/empty-state";
+import { SearchableSelect } from "@/components/ui/searchable-select";
+import { errorBannerClass, skeletonClass } from "@/lib/styles";
+import {
+  ApiError,
+  createEntity,
+  createRelation,
+  deleteEntity,
+  deleteRelation,
+  listEntities,
+  listRelations,
+  updateEntity,
+} from "../../lib/api";
 import {
   buildSettingTree,
+  canMoveSettingTo,
   expandableSettingNodeIds,
+  filterSettingTree,
+  findSettingNode,
+  nodeTags,
   type SettingTreeNode,
 } from "../../lib/setting-tree";
 import { cn } from "../../lib/utils";
-import { skeletonClass } from "../../lib/styles";
-import { EmptyState } from "../ui/empty-state";
 import { navigate } from "../../hooks/use-route";
+import { useUiStore } from "../../stores/ui";
 
 /** 设定树拉取上限（listEntities limit 最大 200；超量截断提示 + 孤儿提升防御） */
 const TREE_SETTING_LIMIT = 200;
 
-function SettingTreeNodeRow({
-  node,
-  depth,
-  collapsedIds,
-  onToggle,
-}: {
-  node: SettingTreeNode;
-  depth: number;
-  /** 折叠节点 id 集合（O5 起提升，受控：节点展开态 = !collapsedIds.has(node.id)） */
-  collapsedIds: ReadonlySet<string>;
-  onToggle: (id: string) => void;
-}) {
-  const hasChildren = node.children.length > 0;
-  const expanded = !collapsedIds.has(node.id);
-  return (
-    <li>
-      <div className="flex items-center gap-1.5 py-1" style={{ paddingLeft: `${depth * 16}px` }}>
-        {/* 折叠箭头（叶子占位保缩进对齐）；点击切展开态，不跳转 */}
-        <button
-          type="button"
-          aria-label={hasChildren ? (expanded ? "折叠" : "展开") : undefined}
-          className={cn(
-            "shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground",
-            !hasChildren && "invisible",
-          )}
-          onClick={() => onToggle(node.id)}
-          disabled={!hasChildren}
-        >
-          <svg
-            viewBox="0 0 16 16"
-            className={cn("size-3.5 transition-transform", !expanded && "-rotate-90")}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-          >
-            <path d="m6 4 4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          onClick={() => navigate(`/entities/setting/${node.id}`)}
-          title={`打开《${node.name}》`}
-          className="min-w-0 truncate rounded-md px-1 py-0.5 text-sm text-foreground hover:bg-muted hover:text-foreground"
-        >
-          {node.name}
-        </button>
-        {node.category && (
-          <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-            {node.category}
-          </span>
-        )}
-        {hasChildren && (
-          <span className="shrink-0 text-xs text-muted-foreground/70">
-            {node.children.length} 个子设定
-          </span>
-        )}
-      </div>
-      {hasChildren && expanded && (
-        <ul>
-          {node.children.map((c) => (
-            <SettingTreeNodeRow
-              key={c.id}
-              node={c}
-              depth={depth + 1}
-              collapsedIds={collapsedIds}
-              onToggle={onToggle}
-            />
-          ))}
-        </ul>
-      )}
-    </li>
-  );
-}
+/** 拖拽目标（决策 42 嵌套语义）：row = 拖到该行上（成为其子级）；root = 拖到空白区（移为顶层根） */
+type SettingDragTarget = { kind: "row"; id: string } | { kind: "root" } | null;
+
+/** 就地新建目标：parentId null = root 顶层（无父）；非 null = 该节点子级末尾 */
+type CreatingState = { parentId: string | null } | null;
 
 export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
   const [roots, setRoots] = useState<SettingTreeNode[] | null>(null);
@@ -101,41 +62,49 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
   const [hasOrphanEdges, setHasOrphanEdges] = useState(false);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
-  /** 内部重载计数（错误重试） */
+  /** 内部重载计数（操作成功后刷新 / 错误重试） */
   const [tick, setTick] = useState(0);
-  /** 折叠节点 id 集合（O5 起提升到视图层，缺省空 = 全展开，支持顶栏全部展开/折叠）；
-   *  reload/tick 重拉后指向已删 id 的残留无害、不清空（集合只作存在性判断） */
+  /** 折叠节点 id 集合（缺省空 = 全展开；重拉后指向已删 id 的残留无害、不清空） */
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
+  /** childId → belongs_to 关系 id（拖拽改父删旧边用；边拉取失败 = 空 Map，删旧边退化为跳过） */
+  const [relationIdOfChild, setRelationIdOfChild] = useState<Map<string, string>>(new Map());
+  /** 选中节点 id（决策 42：单击行选中，选中后按 Enter 新建子级）；null = 无选中 */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  /** 行内编辑（点击标题）目标 id；null = 未编辑 */
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState("");
+  /** 就地新建目标（null = 未新建；{ parentId: null } = root 顶层） */
+  const [creatingAt, setCreatingAt] = useState<CreatingState>(null);
+  const [createValue, setCreateValue] = useState("");
+  /** 新创建节点高亮（3s 自动消失） */
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  /** 拖拽中的节点 id；null = 无 */
+  const [dragNodeId, setDragNodeId] = useState<string | null>(null);
+  /** 拖拽目标（悬停高亮 + drop 落点）；null = 无有效目标 */
+  const [dragTarget, setDragTarget] = useState<SettingDragTarget>(null);
+  /** 提交在途（防并发；拖拽/编辑/新建共用） */
+  const [busy, setBusy] = useState(false);
+  /** 搜索框即时值（防抖输入） */
+  const [qInput, setQInput] = useState("");
+  /** 防抖后的查询关键词（空 = 不过滤） */
+  const [q, setQ] = useState("");
+  /** 标签筛选（决策 42 树内过滤；"" = 全部） */
+  const [tagFilter, setTagFilter] = useState("");
+  /** 标签筛选候选（聚合既有设定 tags；失败静默——仅无下拉候选，不影响树） */
+  const [tagOptions, setTagOptions] = useState<string[]>([]);
 
-  /** 单个节点折叠切换（可展开节点 onToggle；叶子 disabled 不触发） */
-  function toggleCollapse(id: string) {
-    setCollapsedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  /** 操作成功后刷新（tick +1 触发加载 effect；保留旧数据渲染，避免骨架闪烁） */
+  function reload() {
+    setTick((t) => t + 1);
   }
 
-  /** 全部折叠：收集所有非叶子节点 id（仅保留根级，叶子无箭头不在集合） */
-  function collapseAll() {
-    if (roots === null) return;
-    setCollapsedIds(new Set(expandableSettingNodeIds(roots)));
-  }
-
-  /** 全部展开：清空折叠集合 */
-  function expandAll() {
-    setCollapsedIds(new Set());
-  }
-
-  /** 树是否可交互（非加载/非空态/非失败时渲染按钮；加载/空态分支已提前 return） */
-  const canToggle = roots !== null && roots.length > 0;
-
+  // 数据加载：全量 setting + 全量 belongs_to 层级边 → buildSettingTree 组装树；
+  // 同时产出关系 id 映射（删旧边用）与标签候选（筛选下拉）。重拉期间保留旧数据渲染
+  // （roots 不清空——操作后刷新不闪骨架，仅首载 roots === null 显示骨架）。
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setFailed(false);
-    setRoots(null);
     (async () => {
       try {
         const [settingRes, edgesRes] = await Promise.all([
@@ -151,14 +120,40 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
         const edges = edgesRes.relations.map((r) => ({
           childId: r.sourceId,
           parentId: r.targetId,
+          relationId: r.id,
         }));
-        const tree = buildSettingTree(settingRes.items, edges);
+        const tree = buildSettingTree(
+          settingRes.items.map((s) => ({
+            id: s.id,
+            name: s.name,
+            category: s.summary.category,
+            summary: s.summary,
+            parentId: s.parentId,
+          })),
+          edges,
+        );
         setRoots(tree.roots);
         setHasOrphanEdges(tree.hasOrphanEdges);
         setTruncated(settingRes.total > TREE_SETTING_LIMIT); // total 为准（截断提示）
+        setRelationIdOfChild(new Map(edges.map((e) => [e.childId, e.relationId])));
+        // 标签候选（决策 31 统一字段 data.tags → summary.tags）
+        const tags = new Set<string>();
+        for (const item of settingRes.items) {
+          if (Array.isArray(item.summary.tags)) {
+            for (const t of item.summary.tags) {
+              if (typeof t === "string" && t !== "") tags.add(t);
+            }
+          }
+        }
+        setTagOptions(Array.from(tags).sort());
+        // 数据重拉后旧 id 可能失效（被删/改父）：清理选中/编辑/新建态防残留
+        setSelectedId(null);
+        setEditingId(null);
+        setEditingValue("");
+        setCreatingAt(null);
+        setCreateValue("");
       } catch {
         if (!cancelled) setFailed(true);
-        setRoots(null);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -168,10 +163,524 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     };
   }, [reloadKey, tick]);
 
-  if (failed) {
+  // 搜索防抖 300ms（与列表页搜索同节奏）
+  useEffect(() => {
+    const t = setTimeout(() => setQ(qInput.trim()), 300);
+    return () => clearTimeout(t);
+  }, [qInput]);
+
+  // 新节点高亮自动消失（3s；每次设置高亮重开定时器）
+  useEffect(() => {
+    if (highlightedId === null) return;
+    const t = setTimeout(() => setHighlightedId(null), 3000);
+    return () => clearTimeout(t);
+  }, [highlightedId]);
+
+  // 选中节点失效清理（树重拉后选中节点不存在 → 清除选中，防残留）
+  useEffect(() => {
+    if (selectedId === null || roots === null) return;
+    if (!findSettingNode(roots, selectedId)) setSelectedId(null);
+  }, [roots, selectedId]);
+
+  // ============ 折叠/展开 ============
+
+  function toggleCollapse(id: string) {
+    setCollapsedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  /** 展开节点（collapsed 中移除该 id） */
+  function expand(id: string) {
+    setCollapsedIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }
+
+  /** 全部折叠：收集当前可见（过滤后）树的所有非叶子 id，仅保留根级 */
+  function collapseAll() {
+    if (roots === null) return;
+    setCollapsedIds(new Set(expandableSettingNodeIds(filterSettingTree(roots, q, tagFilter))));
+  }
+
+  /** 全部展开：清空折叠集合 */
+  function expandAll() {
+    setCollapsedIds(new Set());
+  }
+
+  // ============ 行内编辑（点击标题：Enter 确认 / Esc 取消 / 失焦保存） ============
+
+  function startEdit(node: SettingTreeNode) {
+    cancelCreate();
+    setSelectedId(null); // 编辑态与选中态互斥（编辑输入框接管 Enter）
+    setEditingId(node.id);
+    setEditingValue(node.name);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditingValue("");
+  }
+
+  /** 提交编辑（悲观提交）：trim 后空/未变 → 退出不发请求；成功退出编辑态 + 刷新；
+   * 失败保持编辑态 + 保留输入值（输入框已失焦，点击即可修正重试——同大纲 editFailureRecovery 语义） */
+  async function commitEdit(node: SettingTreeNode) {
+    if (busy || editingId !== node.id) return;
+    const name = editingValue.trim();
+    if (name === "" || name === node.name) {
+      cancelEdit();
+      return;
+    }
+    setBusy(true);
+    try {
+      await updateEntity("setting", node.id, { name });
+      useUiStore.getState().showToast("已保存");
+      cancelEdit();
+      reload();
+    } catch (err) {
+      useUiStore
+        .getState()
+        .showToast(
+          err instanceof ApiError ? `保存失败：${err.message}` : "保存失败，请重试",
+          "error",
+        );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function handleEditKeyDown(node: SettingTreeNode) {
+    return (e: KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Enter") {
+        e.preventDefault(); // 对齐大纲：防未来被包进 form 触发提交
+        void commitEdit(node);
+      } else if (e.key === "Escape") {
+        cancelEdit();
+      }
+    };
+  }
+
+  // ============ 就地新建（Enter 子级 / 工具栏 root 级）：Enter 创建 / Esc 或失焦取消 ============
+
+  function startCreate(parentId: string | null) {
+    cancelEdit();
+    setSelectedId(null); // 新建态与选中态互斥（创建输入框接管 Enter）
+    setCreatingAt({ parentId });
+    setCreateValue("");
+    if (parentId !== null) expand(parentId); // 新建输入显示在父子级末尾
+  }
+
+  function cancelCreate() {
+    setCreatingAt(null);
+    setCreateValue("");
+  }
+
+  /** 空值 = 取消（不误建）；成功 → 展开父 + 高亮新节点 + 刷新；带父补建 belongs_to 关系
+   * （失败不阻塞创建，toast 提示后可在详情页重设——同 EntityList 既有语义） */
+  async function commitCreate() {
+    if (creatingAt === null) return;
+    const name = createValue.trim();
+    const { parentId } = creatingAt;
+    if (!name) {
+      cancelCreate();
+      return;
+    }
+    cancelCreate();
+    try {
+      const res = await createEntity("setting", { name });
+      if (parentId !== null) {
+        try {
+          await createRelation({
+            source_type: "setting",
+            source_id: res.id,
+            target_type: "setting",
+            target_id: parentId,
+            relation_type: "belongs_to",
+          });
+        } catch {
+          useUiStore
+            .getState()
+            .showToast(`已创建《${name}》，但上级设定关联失败，可进详情页重新设置`, "error");
+          reload();
+          return;
+        }
+      }
+      useUiStore.getState().showToast(`已创建设定《${name}》`);
+      if (parentId !== null) expand(parentId);
+      setHighlightedId(res.id);
+      reload();
+    } catch (err) {
+      useUiStore
+        .getState()
+        .showToast(err instanceof ApiError ? err.message : "创建失败，请重试", "error");
+    }
+  }
+
+  function handleCreateKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      void commitCreate();
+    } else if (e.key === "Escape") {
+      cancelCreate();
+    }
+  }
+
+  // ============ 选中与行级交互（决策 42：单击选中 / Enter 新建子级 / 双击详情） ============
+  // 交互冲突设计（对齐大纲决策 37）：
+  //   标题单击 = 行内编辑（onClick stopPropagation 隔离，不触发行选中）；
+  //   行区（非标题/按钮）单击 = 选中；行区双击 = 详情。
+  // 双击会先触发两次单击——第一击仅设置选中高亮（无害），第二击后 dblclick 才跳转；
+  // 双击标题时第一击已把 span 换成输入框，dblclick 的 e.target 是输入框（closest("input") 拦截），
+  // 极端时序下 target 仍是标题 span 时由 editing 守卫拦截——双击标题 = 编辑，不误跳详情。
+
+  /** 选中节点：与编辑/新建态互斥 */
+  function selectNode(id: string) {
+    cancelEdit();
+    cancelCreate();
+    setSelectedId(id);
+  }
+
+  /** 行单击：非标题/按钮/输入框区 → 选中该节点；交互元素 stopPropagation（oracle 修复：
+   * 行内按钮/输入框点击不冒泡到容器，避免清除选中） */
+  function handleRowClick(e: MouseEvent<HTMLDivElement>, node: SettingTreeNode) {
+    if ((e.target as HTMLElement).closest("button, input, a")) {
+      e.stopPropagation();
+      return;
+    }
+    e.stopPropagation(); // 阻止冒泡到树容器（容器 onClick 清除选中）
+    selectNode(node.id);
+  }
+
+  /** 行双击：双击 = 详情（#/entities/setting/:id）；按钮区/编辑态不触发（同大纲冲突防护） */
+  function handleRowDoubleClick(e: MouseEvent<HTMLDivElement>, node: SettingTreeNode) {
+    if ((e.target as HTMLElement).closest("button, input, a")) return;
+    if (editingId === node.id) return;
+    navigate(`/entities/setting/${node.id}`);
+  }
+
+  /** 行键盘：选中节点按 Enter → 就地新建子级（子级类型 = 设定）；编辑态/新建态/拖拽中/busy 禁用；
+   * 仅行 div 自身聚焦时响应（oracle 修复：子元素按钮/输入框聚焦时交给子元素处理） */
+  function handleRowKeyDown(e: KeyboardEvent<HTMLDivElement>, node: SettingTreeNode) {
+    if (e.key !== "Enter") return;
+    if (e.target !== e.currentTarget) return;
+    if (editingId !== null || creatingAt !== null || dragNodeId !== null || busy) return;
+    if (selectedId !== node.id) return;
+    e.preventDefault();
+    startCreate(node.id);
+  }
+
+  // ============ 拖拽调整层级（决策 42 嵌套语义：拖到行 = 成为其子级；空白区 = 移为根） ============
+  // belongs_to 防环沿用决策 30（canMoveSettingTo 客户端预校验 + 服务端兜底）；改父 = 先建新边
+  // 后删旧边（对齐 EntityDetail.handleSetParent）；设定无 sort_order，同父拖拽为 no-op。
+
+  function handleDragStart(e: DragEvent, node: SettingTreeNode) {
+    e.dataTransfer.setData("text/plain", node.id);
+    e.dataTransfer.effectAllowed = "move";
+    setDragNodeId(node.id);
+    setDragTarget(null);
+  }
+
+  function clearDrag() {
+    setDragNodeId(null);
+    setDragTarget(null);
+  }
+
+  /** 行 dragover：canMoveSettingTo 预校验 → 高亮目标行（拖到行上 = 成为该行子级）；stopPropagation
+   * 防冒泡到容器（容器空白区 = 移根语义，行内不触发） */
+  function handleRowDragOver(e: DragEvent, node: SettingTreeNode) {
+    e.stopPropagation();
+    const dragNode = dragNodeId ? findSettingNode(roots ?? [], dragNodeId) : null;
+    if (!dragNode) return;
+    if (!canMoveSettingTo(dragNode, node.id, roots ?? [])) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragTarget((prev) =>
+      prev?.kind === "row" && prev.id === node.id ? prev : { kind: "row", id: node.id },
+    );
+  }
+
+  /** 行 dragleave：仅真正离开该行才清除该行的目标高亮（子元素间移动不触发） */
+  function handleRowDragLeave(e: DragEvent, node: SettingTreeNode) {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setDragTarget((prev) => (prev?.kind === "row" && prev.id === node.id ? null : prev));
+    }
+  }
+
+  /** 行 drop：拖到行上 = 成为该行子级（改父） */
+  async function handleRowDrop(e: DragEvent, node: SettingTreeNode) {
+    e.stopPropagation();
+    e.preventDefault();
+    await executeDrop(node.id);
+  }
+
+  /** 容器（空白区）dragover：移到根（无上级） */
+  function handleRootDragOver(e: DragEvent) {
+    const dragNode = dragNodeId ? findSettingNode(roots ?? [], dragNodeId) : null;
+    if (!dragNode) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragTarget((prev) => (prev?.kind === "root" ? prev : { kind: "root" }));
+  }
+
+  function handleRootDragLeave(e: DragEvent) {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setDragTarget((prev) => (prev?.kind === "root" ? null : prev));
+    }
+  }
+
+  /** 容器 drop：空白区 = 移为顶层根 */
+  async function handleRootDrop(e: DragEvent) {
+    e.preventDefault();
+    await executeDrop(null);
+  }
+
+  /** 拖放执行（改父）：同父 = no-op（设定无 sort_order，同级顺序 = 名称序，无顺序持久化能力）；
+   * 改父 = 先建新边后删旧边（建失败 → 旧父保留防数据丢失；删失败不阻塞，重拉后以新边为准） */
+  async function executeDrop(targetParentId: string | null) {
+    if (dragNodeId === null || busy) return;
+    const dragNode = findSettingNode(roots ?? [], dragNodeId);
+    if (!dragNode) return;
+    // 同父（含已是根拖到空白区）→ 原地放置，不发请求
+    if ((targetParentId ?? undefined) === dragNode.parentId) {
+      clearDrag();
+      return;
+    }
+    setBusy(true);
+    try {
+      if (targetParentId !== null) {
+        await createRelation({
+          source_type: "setting",
+          source_id: dragNode.id,
+          target_type: "setting",
+          target_id: targetParentId,
+          relation_type: "belongs_to",
+        });
+      }
+      const oldEdgeId = relationIdOfChild.get(dragNode.id);
+      if (oldEdgeId) {
+        try {
+          await deleteRelation(oldEdgeId);
+        } catch {
+          // 旧边删除失败（如已 404）→ 不阻塞；重拉后以新边为准（先建后删语义）
+        }
+      }
+      useUiStore
+        .getState()
+        .showToast(targetParentId === null ? "已移至顶层（无上级）" : "已调整层级");
+      reload();
+    } catch (err) {
+      useUiStore
+        .getState()
+        .showToast(
+          err instanceof ApiError ? `调整层级失败：${err.message}` : "调整层级失败，请重试",
+          "error",
+        );
+    } finally {
+      setBusy(false);
+      clearDrag();
+    }
+  }
+
+  // ============ 软删（H2：直接执行不弹确认） ============
+
+  async function handleDelete(node: SettingTreeNode) {
+    if (selectedId === node.id) setSelectedId(null); // 删除选中节点即清除选中
+    try {
+      const res = await deleteEntity("setting", node.id);
+      const parts: string[] = [];
+      if (res.cascaded.relations > 0) parts.push(`${res.cascaded.relations} 条关联`);
+      if (res.cascaded.deltas > 0) parts.push(`${res.cascaded.deltas} 条变更记录`);
+      useUiStore
+        .getState()
+        .showToast(
+          `已移入回收站，可随时还原${parts.length > 0 ? `（含 ${parts.join("、")}）` : ""}`,
+        );
+      reload();
+    } catch (err) {
+      useUiStore
+        .getState()
+        .showToast(err instanceof ApiError ? err.message : "删除失败，请重试", "error");
+    }
+  }
+
+  // ============ 渲染 ============
+
+  const filterActive = q !== "" || tagFilter !== "";
+
+  /** 就地输入框（行内编辑/新建共用样式；autoFocus 进入即聚焦） */
+  function inlineInput(
+    value: string,
+    onChange: (v: string) => void,
+    onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void,
+    onBlur: () => void,
+    placeholder: string,
+  ) {
+    return (
+      <input
+        autoComplete="off"
+        autoFocus
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={onKeyDown}
+        onBlur={onBlur}
+        maxLength={100}
+        placeholder={placeholder}
+        className="min-w-0 flex-1 rounded border border-border bg-card px-1.5 py-0.5 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      />
+    );
+  }
+
+  /** 整树递归渲染（闭包共享页面 state；决策 42 行级交互：单击选中 / Enter 新建子级 / 双击详情 /
+   * 点击标题行内编辑 / 拖拽嵌套改层级 / 行尾只留删除） */
+  function renderNodes(nodes: SettingTreeNode[], depth: number): ReactNode {
+    return nodes.map((node) => {
+      const hasChildren = node.children.length > 0;
+      const isCollapsed = collapsedIds.has(node.id);
+      const editing = editingId === node.id;
+      const selected = selectedId === node.id;
+      const creatingHere = creatingAt?.parentId === node.id;
+      const isDragging = dragNodeId === node.id;
+      const isDragTarget = dragTarget?.kind === "row" && dragTarget.id === node.id;
+      const highlighted = highlightedId === node.id;
+      const tags = nodeTags(node);
+      return (
+        <li key={node.id}>
+          {/* 节点行：折叠箭头 | 名称（点击行内编辑）| 标签徽标 | 子设定数 | 行尾删除；
+              可拖拽（编辑态/自身拖拽中/busy 禁用，防输入误拖与嵌套拖动）；
+              tabIndex=-1 使行可聚焦（选中后按 Enter 触发新建子级 onKeyDown） */}
+          <div
+            draggable={!editing && !isDragging && !busy}
+            tabIndex={-1}
+            onDragStart={(e) => handleDragStart(e, node)}
+            onDragEnd={clearDrag}
+            onDragOver={(e) => handleRowDragOver(e, node)}
+            onDragLeave={(e) => handleRowDragLeave(e, node)}
+            onDrop={(e) => void handleRowDrop(e, node)}
+            onClick={(e) => handleRowClick(e, node)}
+            onDoubleClick={(e) => handleRowDoubleClick(e, node)}
+            onKeyDown={(e) => handleRowKeyDown(e, node)}
+            className={cn(
+              "relative flex items-center gap-1.5 rounded-md py-1 pr-1 transition-colors hover:bg-muted/60",
+              highlighted && "bg-accent/40", // 新建成功临时高亮（3s）
+              isDragTarget && "bg-accent/40 ring-1 ring-accent ring-inset", // 拖拽目标（将成其子级）
+              isDragging && "opacity-50",
+              selected && "bg-primary/10 ring-1 ring-primary/30 ring-inset", // 选中态
+            )}
+            style={{ paddingLeft: `${depth * 16 + 8}px` }}
+            title="拖到行上 = 成为其子级；拖到空白区 = 移为顶层"
+          >
+            {/* 折叠箭头（叶子占位保缩进对齐）；点击切展开态，不选中/不跳转 */}
+            <button
+              type="button"
+              aria-label={hasChildren ? (isCollapsed ? "展开" : "折叠") : undefined}
+              className={cn(
+                "shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground",
+                !hasChildren && "invisible",
+              )}
+              onClick={() => toggleCollapse(node.id)}
+              disabled={!hasChildren}
+            >
+              <svg
+                viewBox="0 0 16 16"
+                className={cn("size-3.5 transition-transform", isCollapsed && "-rotate-90")}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+              >
+                <path d="m6 4 4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            {/* 名称：点击行内编辑（Enter 确认 / Esc 取消 / 失焦保存）；stopPropagation 隔离——
+                单击标题 = 编辑而非选中（决策 42 冲突设计） */}
+            {editing ? (
+              inlineInput(
+                editingValue,
+                setEditingValue,
+                handleEditKeyDown(node),
+                () => void commitEdit(node),
+                "设定名称",
+              )
+            ) : (
+              <span
+                className="min-w-0 cursor-text truncate text-sm text-foreground hover:underline"
+                title="点击编辑名称，双击查看详情"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  startEdit(node);
+                }}
+              >
+                {node.name}
+              </span>
+            )}
+            {/* 标签徽标（summary.tags 前 3，决策 31 统一字段；替代已废弃的 category 徽标） */}
+            {tags.length > 0 && (
+              <span className="flex shrink-0 items-center gap-0.5">
+                {tags.map((t) => (
+                  <span
+                    key={t}
+                    className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
+                  >
+                    {t}
+                  </span>
+                ))}
+              </span>
+            )}
+            {/* 直接子设定数（>0 时显示） */}
+            {hasChildren && (
+              <span className="shrink-0 text-xs text-muted-foreground/70">
+                {node.children.length} 个子设定
+              </span>
+            )}
+            {/* 行尾操作区（决策 42：行级只留删除，H2 直接软删不弹确认；无 AskAiButton——决策 40） */}
+            <span className="ml-auto flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive"
+                title="移入回收站"
+                aria-label={`移入回收站「${node.name}」`}
+                onClick={(e) => {
+                  e.stopPropagation(); // 不触发行选中（handleRowClick 的 closest 已拦截，双保险）
+                  void handleDelete(node);
+                }}
+              >
+                <Trash2 className="size-3.5" />
+              </button>
+            </span>
+          </div>
+          {/* 子节点递归渲染（折叠态不渲染） */}
+          {hasChildren && !isCollapsed && <ul>{renderNodes(node.children, depth + 1)}</ul>}
+          {/* 就地新建输入行（父 children 末尾；父折叠时 startCreate 已自动展开） */}
+          {creatingHere && (
+            <div
+              className="flex items-center gap-1.5 py-1"
+              style={{ paddingLeft: `${(depth + 1) * 16 + 8}px` }}
+            >
+              <span className="w-4 shrink-0" />
+              {inlineInput(
+                createValue,
+                setCreateValue,
+                handleCreateKeyDown,
+                cancelCreate,
+                "新设定名称，Enter 创建",
+              )}
+            </div>
+          )}
+        </li>
+      );
+    });
+  }
+
+  // 加载失败（首载 roots 为 null）→ 整区错误态
+  if (failed && roots === null) {
     return (
       <div className="mt-3 flex items-center justify-center gap-3 rounded-md border border-border px-3 py-6 text-sm text-muted-foreground">
-        设定树加载失败
+        设定加载失败
         <Button variant="outline" type="button" size="sm" onClick={() => setTick((t) => t + 1)}>
           重试
         </Button>
@@ -179,6 +688,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     );
   }
 
+  // 首载骨架（roots 为 null；重拉期间保留旧树渲染不闪骨架）
   if (loading && roots === null) {
     return (
       <div className="mt-3 flex flex-col gap-1">
@@ -193,49 +703,148 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     );
   }
 
-  if (roots !== null && roots.length === 0) {
+  // 树未就绪（roots 仍为 null 且非加载/失败——理论不可达，防御兜底）
+  if (roots === null) {
     return (
-      <EmptyState
-        className="mt-3"
-        action={
-          <Button type="button" onClick={() => navigate("/entities/setting")}>
-            去「设定」tab 新建
-          </Button>
-        }
-      >
-        还没有设定，先新建一个吧
-      </EmptyState>
+      <div className="mt-3 rounded-md border border-border p-4 text-sm text-muted-foreground">
+        设定加载失败
+        <Button
+          variant="outline"
+          className="ml-3"
+          type="button"
+          onClick={() => setTick((t) => t + 1)}
+        >
+          重试
+        </Button>
+      </div>
     );
   }
 
+  // 树已就绪（上方 roots === null 分支已 return）：树内过滤（命中节点及祖先链保留）
+  const visibleRoots = filterSettingTree(roots, q, tagFilter);
+  const canToggle = visibleRoots.length > 0;
+
   return (
     <div className="mt-3">
-      {/* 顶栏操作：全部展开 / 全部折叠（批次八 O5，与大纲页顶栏同款 border 文字按钮，H4） */}
-      <div className="mb-2 flex items-center gap-2">
-        <Button variant="outline" type="button" size="sm" disabled={!canToggle} onClick={expandAll}>
-          全部展开
-        </Button>
-        <Button
-          variant="outline"
-          type="button"
-          size="sm"
-          disabled={!canToggle}
-          onClick={collapseAll}
-        >
-          全部折叠
-        </Button>
-      </div>
-      <ul>
-        {roots?.map((n) => (
-          <SettingTreeNodeRow
-            key={n.id}
-            node={n}
-            depth={0}
-            collapsedIds={collapsedIds}
-            onToggle={toggleCollapse}
+      {/* 重拉失败但保留旧树：顶部错误横幅（可重试） */}
+      {failed && (
+        <div className={cn(errorBannerClass, "mb-3 flex items-center gap-2")}>
+          设定刷新失败，当前显示的是上次数据
+          <Button
+            variant="outline"
+            className="ml-auto h-7 px-2 text-xs"
+            type="button"
+            onClick={() => setTick((t) => t + 1)}
+          >
+            重试
+          </Button>
+        </div>
+      )}
+
+      {/* 工具栏：搜索 + 标签筛选（树内过滤）+ 全部展开/折叠 + 新建（root 级） */}
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <Input
+          value={qInput}
+          onChange={(e) => setQInput(e.target.value)}
+          placeholder="搜索设定名称…"
+          className="w-48"
+        />
+        <span className="flex items-center gap-2 text-sm text-muted-foreground">
+          标签:
+          <SearchableSelect
+            value={tagFilter}
+            options={tagOptions.map((t) => ({ value: t, label: t }))}
+            onChange={setTagFilter}
+            placeholder="全部"
+            ariaLabel="标签筛选"
           />
-        ))}
-      </ul>
+        </span>
+        <span className="ml-auto flex items-center gap-2">
+          <Button
+            variant="outline"
+            type="button"
+            size="sm"
+            disabled={!canToggle}
+            onClick={expandAll}
+          >
+            全部展开
+          </Button>
+          <Button
+            variant="outline"
+            type="button"
+            size="sm"
+            disabled={!canToggle}
+            onClick={collapseAll}
+          >
+            全部折叠
+          </Button>
+          <Button type="button" size="sm" onClick={() => startCreate(null)}>
+            + 新建
+          </Button>
+        </span>
+      </div>
+
+      {/* root 级就地新建输入行（工具栏「+ 新建」触发；无父设定） */}
+      {creatingAt?.parentId === null && (
+        <div className="mb-2 flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1">
+          <span className="w-4 shrink-0" />
+          {inlineInput(
+            createValue,
+            setCreateValue,
+            handleCreateKeyDown,
+            cancelCreate,
+            "新设定名称，Enter 创建",
+          )}
+        </div>
+      )}
+
+      {/* 筛选/空态/树 */}
+      {visibleRoots.length === 0 ? (
+        <EmptyState
+          className="mt-2"
+          action={
+            filterActive ? (
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() => {
+                  setQInput("");
+                  setQ("");
+                  setTagFilter("");
+                }}
+              >
+                清空筛选
+              </Button>
+            ) : (
+              <Button type="button" onClick={() => startCreate(null)}>
+                + 新建设定
+              </Button>
+            )
+          }
+        >
+          {filterActive
+            ? q
+              ? `没有匹配「${q}」的设定`
+              : `没有带「${tagFilter}」标签的设定`
+            : "还没有设定，新建一个"}
+        </EmptyState>
+      ) : (
+        /* 树容器（同时是 root 拖放目标：拖到空白处 = 移为顶层根） */
+        <div
+          className={cn(
+            "rounded-md border border-border p-2",
+            dragTarget?.kind === "root" && "ring-1 ring-accent ring-inset",
+          )}
+          onClick={() => setSelectedId(null)} // 点击空白区清除选中（行点击已 stopPropagation 隔离）
+          onDragOver={handleRootDragOver}
+          onDragLeave={handleRootDragLeave}
+          onDrop={(e) => void handleRootDrop(e)}
+        >
+          <ul>{renderNodes(visibleRoots, 0)}</ul>
+        </div>
+      )}
+
+      {/* 溢出/孤儿提示（buildSettingTree 防御语义） */}
       {(truncated || hasOrphanEdges) && (
         <p className="mt-3 text-xs text-muted-foreground">
           {truncated
