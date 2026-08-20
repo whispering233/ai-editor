@@ -1,23 +1,21 @@
-// 参考资料列表页（决策 36，批次九；references.md）
-// 结构：固定区（标题 + 新建）+ 筛选行（分类/标签/搜索）+ 列表（divide-y 卡片）
-// 数据：listEntities("reference", { q, tag, limit: 200 }) 一次全量拉取（参考资料量小），
-//   type 分类过滤在前端（列表摘要 summary.type 由 db toSummary 提供）；
-// 交互：新建/编辑 Dialog（标题/分类/内容/来源/标签）、软删直接执行 + toast（H2 语义）、
-//   行点击跳详情 #/references/:id
+// 参考资料列表页（决策 36 + 决策 43 批次十一；references.md）
+// 卡 11.1 交互重构（决策 43 + B1 修复）：
+//   - 点击标题 = 行内编辑（Enter 提交 / Esc 取消 / 失焦保存，决策 37/38 模式）
+//   - 双击行 = 进详情页（编辑态/按钮区不触发）
+//   - 移除 Pencil 编辑按钮与编辑 Dialog（B1 异步回填竞态根除——完整编辑收敛到详情页）
+//   - 行信息 = [标题、分类徽标、标签、来源]（来源列按旧 source 字段先行，kind 细化随 11.2）
+//   - 保留删除按钮、右键菜单（决策 40 复用）、新建 Dialog（11.4 分流为两按钮后移除）
+// 数据：listEntities("reference", { limit: 200 }) 一次全量拉取（参考资料量小），
+//   分类/标签/关键词过滤在前端（列表摘要 summary.type/tags/source 由 db toSummary 提供）
 import { useEffect, useMemo, useState } from "react";
-import { BookOpenText, Loader2, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import type { MouseEvent } from "react";
+import { BookOpenText, ExternalLink, Loader2, Plus, Search, Trash2 } from "lucide-react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { REFERENCE_TYPES } from "@whispering233/ai-editor-shared";
 import type { ReferenceTypeValue } from "@whispering233/ai-editor-shared";
-import {
-  createEntity,
-  deleteEntity,
-  getEntityDetail,
-  listEntities,
-  updateEntity,
-} from "../lib/api";
+import { createEntity, deleteEntity, listEntities, updateEntity } from "../lib/api";
 import { ApiError } from "../lib/api";
-import { applyTagSuggestion, parseTagsInput, suggestTags, tagsToInput } from "../lib/timeline";
+import { parseTagsInput } from "../lib/timeline";
 import { navigate } from "../hooks/use-route";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useProjectStore } from "../stores/project";
@@ -26,7 +24,6 @@ import { cn } from "../lib/utils";
 import { errorBannerClass, inputClass, sectionCardClass, skeletonClass } from "../lib/styles";
 import { Button } from "../components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
-import { TagSuggest } from "../components/timeline/TagSuggest";
 import { RowContextMenu } from "../components/entity/row-context-menu";
 import { EmptyState } from "../components/ui/empty-state";
 
@@ -38,7 +35,7 @@ const TYPE_LABELS: Record<ReferenceTypeValue, string> = {
   reference: "设定参考",
 };
 
-/** 参考资料表单（新建/编辑共用） */
+/** 新建表单（11.4 分流前暂用 Dialog；仅新建，编辑已收敛详情页——B1 修复） */
 interface RefForm {
   name: string;
   type: ReferenceTypeValue;
@@ -61,9 +58,8 @@ export default function ReferenceList() {
   const [activeType, setActiveType] = useState<ReferenceTypeValue | "all">("all");
   const [activeTag, setActiveTag] = useState<string | null>(null);
 
-  // 新建/编辑对话框（editTarget 非空 = 编辑态）
+  // 新建对话框（仅新建；编辑入口 = 双击详情页，B1 修复语义）
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<EntitySummary | null>(null);
   const [form, setForm] = useState<RefForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -96,10 +92,7 @@ export default function ReferenceList() {
     return [...set].sort((a, b) => a.localeCompare(b));
   }, [items]);
 
-  // 标签输入建议（复用 F8 纯函数）
-  const tagSuggestions = suggestTags(form.tagsInput, tagPool);
-
-  // 过滤后可见列表：标签（服务端已筛） + 分类（前端）+ 关键词（前端 name/摘要命中）
+  // 过滤后可见列表：分类 + 标签 + 关键词（前端过滤，列表量小）
   const visible = useMemo(() => {
     if (items === null) return null;
     const kw = keyword.trim().toLowerCase();
@@ -122,37 +115,12 @@ export default function ReferenceList() {
   }, [items, keyword, activeType, activeTag]);
 
   function openCreate() {
-    setEditTarget(null);
     setForm(EMPTY_FORM);
     setFormError(null);
     setDialogOpen(true);
   }
 
-  function openEdit(item: EntitySummary) {
-    setEditTarget(item);
-    const data = item.summary; // 列表摘要——编辑需完整 data，详情接口另行获取
-    setForm({
-      name: item.name,
-      type: (data?.type as ReferenceTypeValue) ?? "material",
-      content: typeof data?.content === "string" ? (data.content as string).slice(0, 0) : "", // 摘要截断——编辑以详情为准
-      source: "",
-      tagsInput: "",
-    });
-    // 编辑用完整详情（列表摘要 content 截断 120 字，需详情接口取全文）
-    void getEntityDetail("reference", item.id).then((d) => {
-      setForm({
-        name: d.name,
-        type: (d.data?.type as ReferenceTypeValue) ?? "material",
-        content: typeof d.data?.content === "string" ? (d.data.content as string) : "",
-        source: typeof d.data?.source === "string" ? (d.data.source as string) : "",
-        tagsInput: tagsToInput(d.data?.tags),
-      });
-    });
-    setFormError(null);
-    setDialogOpen(true);
-  }
-
-  async function handleSave() {
+  async function handleCreate() {
     const name = form.name.trim();
     if (name === "") {
       setFormError("标题必填");
@@ -169,13 +137,8 @@ export default function ReferenceList() {
           ? { tags: parseTagsInput(form.tagsInput) }
           : {}),
       };
-      if (editTarget === null) {
-        await createEntity("reference", { name, data });
-        useUiStore.getState().showToast(`已创建参考资料《${name}》`);
-      } else {
-        await updateEntity("reference", editTarget.id, { data });
-        useUiStore.getState().showToast("已保存");
-      }
+      await createEntity("reference", { name, data });
+      useUiStore.getState().showToast(`已创建参考资料《${name}》`);
       setDialogOpen(false);
       useUiStore.getState().notifyDataChanged();
       setReloadTick((t) => t + 1);
@@ -183,6 +146,20 @@ export default function ReferenceList() {
       setFormError(e instanceof ApiError ? e.message : "保存失败，请重试");
     } finally {
       setSaving(false);
+    }
+  }
+
+  /** 行内编辑标题提交（决策 43：点击标题行内编辑，PUT name；失败 toast 后 rethrow——组件保持编辑态 + 保留输入值，对齐时间轴 editFailureRecovery） */
+  async function handleRename(id: string, name: string) {
+    try {
+      await updateEntity("reference", id, { name });
+      useUiStore.getState().notifyDataChanged();
+      setReloadTick((t) => t + 1);
+    } catch (e) {
+      useUiStore
+        .getState()
+        .showToast(e instanceof ApiError ? e.message : "保存失败，请重试", "error");
+      throw e;
     }
   }
 
@@ -305,7 +282,7 @@ export default function ReferenceList() {
               <RefRow
                 key={it.id}
                 item={it}
-                onOpen={openEdit}
+                onRename={handleRename}
                 onDelete={handleDelete}
                 onGoto={() => navigate(`#/references/${it.id}`)}
                 onRelationCreated={() => setReloadTick((t) => t + 1)}
@@ -315,11 +292,11 @@ export default function ReferenceList() {
         )}
       </div>
 
-      {/* 新建/编辑对话框 */}
+      {/* 新建对话框（仅新建；编辑已收敛详情页——B1 修复；11.4 分流两按钮后移除） */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>{editTarget === null ? "新建参考资料" : "编辑参考资料"}</DialogTitle>
+            <DialogTitle>新建参考资料</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div className="flex items-start gap-2">
@@ -390,20 +367,13 @@ export default function ReferenceList() {
                   <option key={t} value={t} />
                 ))}
               </datalist>
-              <TagSuggest
-                suggestions={tagSuggestions}
-                visible={form.tagsInput.trim() !== ""}
-                onPick={(t) =>
-                  setForm((f) => ({ ...f, tagsInput: applyTagSuggestion(f.tagsInput, t) }))
-                }
-              />
             </div>
             {formError !== null && <p className="text-xs text-destructive">{formError}</p>}
             <div className="flex justify-end gap-1.5 pt-1">
               <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>
                 取消
               </Button>
-              <Button onClick={handleSave} disabled={saving}>
+              <Button onClick={handleCreate} disabled={saving}>
                 {saving && <Loader2 className="size-3.5 animate-spin" />}
                 保存
               </Button>
@@ -417,52 +387,108 @@ export default function ReferenceList() {
 
 interface RefRowProps {
   item: EntitySummary;
-  onOpen: (item: EntitySummary) => void;
+  /** 行内编辑标题提交（页面 PUT name + 刷新；失败 rethrow——组件保持编辑态） */
+  onRename: (id: string, name: string) => Promise<void>;
   onDelete: (item: EntitySummary) => void;
+  /** 双击行进详情页 */
   onGoto: () => void;
   /** 建立关联成功后的数据刷新（页面 reloadTick+1） */
   onRelationCreated: () => void;
 }
 
-/** 列表行：分类徽标 + 标题 + 摘要/content + 标签 + 来源 + 操作（决策 40：行级右键菜单替代 AskAiButton） */
-function RefRow({ item, onOpen, onDelete, onGoto, onRelationCreated }: RefRowProps) {
+/** 列表行（决策 43 卡 11.1）：第一行 [标题（点击行内编辑）+ 分类徽标 + 删除]，第二行 [标签 + 来源]；
+ * 双击行 = 进详情页；右键菜单 [注入会话上下文、建立关联] 复用决策 40 */
+function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowProps) {
   const type = (item.summary?.type as ReferenceTypeValue | undefined) ?? "material";
-  const content = typeof item.summary?.content === "string" ? (item.summary.content as string) : "";
   const tags = Array.isArray(item.summary?.tags)
     ? (item.summary?.tags as string[]).filter((t): t is string => typeof t === "string" && t !== "")
     : [];
+  const source = typeof item.summary?.source === "string" ? (item.summary.source as string) : "";
+
+  // 标题行内编辑（决策 43：点击标题进入，Enter 提交 / Esc 取消 / 失焦保存；对齐时间轴 TimelineEvent 模式）
+  const [editing, setEditing] = useState(false);
+  const [nameValue, setNameValue] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  /** 点击标题进入行内编辑（预填当前名） */
+  function startEdit() {
+    setNameValue(item.name);
+    setEditing(true);
+  }
+
+  /** Enter/失焦提交：trim 后空/未变 → 退出编辑不发请求；saving 守卫防 Enter+blur 双提交；
+   * 失败保持编辑态 + 保留输入值（页面已 toast，此处 catch 吞掉防 unhandled rejection） */
+  async function commitEdit() {
+    if (saving) return;
+    const name = nameValue.trim();
+    if (name === "" || name === item.name) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      await onRename(item.id, name);
+      setEditing(false);
+    } catch {
+      // 失败保持编辑态（setEditing(false) 未执行）+ 输入值保留，可修正后重试
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /** 行双击（决策 43）：双击 = 详情；冲突防护：双击标题 = 编辑（第一击已把 span 换成输入框，
+   * dblclick target 是输入框被 closest 拦截；极端时序由 editing 守卫拦截）；双击按钮区不跳详情 */
+  function handleRowDoubleClick(e: MouseEvent<HTMLDivElement>) {
+    if ((e.target as HTMLElement).closest("button, input, a")) return;
+    if (editing) return;
+    onGoto();
+  }
+
   return (
     <RowContextMenu
       focus={{ focus_entity_type: "reference", focus_entity_id: item.id }}
       source={{ type: "reference", id: item.id, name: item.name }}
       onCreated={onRelationCreated}
-      trigger={<div className="group px-3 py-2.5" />}
+      trigger={
+        <div className="group px-3 py-2.5" onDoubleClick={handleRowDoubleClick} title="双击查看详情" />
+      }
     >
       <div className="flex items-center gap-2">
-        <span className="rounded-md border border-border bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+        {editing ? (
+          <input
+            autoComplete="off"
+            autoFocus
+            value={nameValue}
+            onChange={(e) => setNameValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void commitEdit();
+              } else if (e.key === "Escape") {
+                setEditing(false);
+              }
+            }}
+            onBlur={() => void commitEdit()}
+            className={cn(inputClass, "h-7 min-w-0 flex-1 px-1.5 text-sm font-medium")}
+            disabled={saving}
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={startEdit}
+            className="min-w-0 flex-1 truncate text-left text-sm font-medium text-foreground hover:text-primary"
+            title="点击编辑标题"
+          >
+            {item.name}
+          </button>
+        )}
+        <span className="shrink-0 rounded-md border border-border bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
           {TYPE_LABELS[type] ?? type}
         </span>
-        <button
-          type="button"
-          onClick={onGoto}
-          className="min-w-0 flex-1 truncate text-left text-sm font-medium text-foreground hover:text-primary"
-        >
-          {item.name}
-        </button>
         <Button
           variant="ghost"
           size="icon-sm"
-          className="text-muted-foreground"
-          onClick={() => onOpen(item)}
-          aria-label="编辑"
-          title="编辑"
-        >
-          <Pencil className="size-3.5" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="text-muted-foreground hover:text-destructive"
+          className="shrink-0 text-muted-foreground hover:text-destructive"
           onClick={() => onDelete(item)}
           aria-label="删除"
           title="移入回收站"
@@ -470,11 +496,8 @@ function RefRow({ item, onOpen, onDelete, onGoto, onRelationCreated }: RefRowPro
           <Trash2 className="size-3.5" />
         </Button>
       </div>
-      {content !== "" && (
-        <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{content}</p>
-      )}
-      {tags.length > 0 && (
-        <div className="mt-1 flex flex-wrap gap-1">
+      {(tags.length > 0 || source !== "") && (
+        <div className="mt-1 flex flex-wrap items-center gap-1.5">
           {tags.map((t) => (
             <span
               key={t}
@@ -483,6 +506,23 @@ function RefRow({ item, onOpen, onDelete, onGoto, onRelationCreated }: RefRowPro
               {t}
             </span>
           ))}
+          {source !== "" &&
+            (/^https?:\/\//.test(source) ? (
+              <a
+                href={source}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                title={source}
+              >
+                <span className="max-w-56 truncate">{source}</span>
+                <ExternalLink className="size-3 shrink-0" />
+              </a>
+            ) : (
+              <span className="max-w-72 truncate text-xs text-muted-foreground" title={source}>
+                {source}
+              </span>
+            ))}
         </div>
       )}
     </RowContextMenu>

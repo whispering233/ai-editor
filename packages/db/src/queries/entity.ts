@@ -85,7 +85,8 @@ function toSummary(row: EntityRow): EntitySummary {
       if (data.description !== undefined) summary.description = data.description;
       if (data.tags !== undefined) summary.tags = data.tags;
       break;
-    // reference（决策 36 参考资料）：type 分类 + content 摘要截断 120 字 + tags 前 3——
+    // reference（决策 36 参考资料 + 决策 43 卡 11.1）：type 分类 + content 摘要截断 120 字 + tags 前 3
+    // + source 来源（11.1 补齐：列表来源列渲染依据；11.2 将扩展 kind/file_name/url）——
     // 全文长文本不随列表返回（防列表响应与 search_entities 工具上下文膨胀，决策 15），
     // 完整 content 在详情页（get_entity 全量 data）
     case "reference":
@@ -93,6 +94,7 @@ function toSummary(row: EntityRow): EntitySummary {
       if (typeof data.content === "string" && data.content !== "") {
         summary.content = data.content.slice(0, 120);
       }
+      if (typeof data.source === "string" && data.source !== "") summary.source = data.source;
       if (Array.isArray(data.tags)) {
         summary.tags = (data.tags as unknown[]).filter((t): t is string => typeof t === "string" && t !== "").slice(0, 3);
       }
