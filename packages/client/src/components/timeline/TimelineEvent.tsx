@@ -1,7 +1,8 @@
 // 时间轴事件行（G2.3，timeline.md G2 布局线框：组内事件堆叠；F5 时间标签样式已随 G2 移除——
 //   时间标签 = 组标题（时间点实体），行内不再展示；F6 行内描述展示保留；
-//   决策 38：事件行对齐大纲交互模式——双击 = 详情（#/timeline/:id）、点击事件名 = 行内编辑
-//   （Enter 确认 / Esc 取消 / 失焦保存）、移除「详情/编辑」按钮（只留删除 + AskAiButton））
+// 决策 38：事件行对齐大纲交互模式——双击 = 详情（#/timeline/:id）、点击事件名 = 行内编辑
+//   （Enter 确认 / Esc 取消 / 失焦保存）、移除「详情/编辑」按钮（只留删除；
+//   决策 40：AskAiButton 已移除——右键菜单替代（注入会话上下文 + 建立关联）））
 // 职责：纯展示 + 单条拖拽（G2 双轨：事件行 draggable，恢复 F3 能力）——
 //   行 = 小圆点 + 内容卡（事件名 → tags → 「N 节点」→ 直接操作按钮 + 描述区）。
 // 拖拽协调在容器（components/timeline/Timeline.tsx）——本行只负责 draggable 挂载与回调转发：
@@ -17,7 +18,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import type { DragEvent, MouseEvent } from "react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { Trash2 } from "lucide-react";
-import { AskAiButton } from "../chat/AskAiButton";
+import { RowContextMenu } from "../entity/row-context-menu";
 import { Button } from "@/components/ui/button";
 import { eventDescription, eventTagsOf } from "../../lib/timeline";
 import { cn } from "../../lib/utils";
@@ -48,6 +49,8 @@ interface TimelineEventProps {
   /** 名称行内编辑提交（页面执行 PUT /entity/event/:id { name }；失败抛错——页面 toast） */
   onEditName: (id: string, name: string) => Promise<void>;
   onDelete: (ev: EntitySummary) => void;
+  /** 建立关联成功后的数据刷新（页面 reloadTick+1；事件行右键菜单用） */
+  onRelationCreated: () => void;
 }
 
 export function TimelineEvent({
@@ -62,6 +65,7 @@ export function TimelineEvent({
   onDetail,
   onEditName,
   onDelete,
+  onRelationCreated,
 }: TimelineEventProps) {
   const tags = eventTagsOf(ev);
   const description = eventDescription(ev);
@@ -129,17 +133,20 @@ export function TimelineEvent({
     onDetail(ev);
   }
 
-  return (
-    <div
-      draggable={!busy && !editing}
-      onDragStart={(e) => eventDrag.onDragStart(e, ev)}
-      onDragEnd={eventDrag.onDragEnd}
-      onDragOver={(e) => eventDrag.onDragOver(e, ev)}
-      onDrop={(e) => eventDrag.onDrop(e, ev)}
-      onDoubleClick={handleRowDoubleClick}
-      title="拖拽调整事件顺序/挂载；双击查看详情"
-      className={cn("relative flex items-start", dragging && "opacity-50")}
-    >
+  // 事件行根 props（右键菜单 trigger 与普通 div 共用）
+  const rowProps = {
+    draggable: !busy && !editing,
+    onDragStart: (e: DragEvent<HTMLDivElement>) => eventDrag.onDragStart(e, ev),
+    onDragEnd: eventDrag.onDragEnd,
+    onDragOver: (e: DragEvent<HTMLDivElement>) => eventDrag.onDragOver(e, ev),
+    onDrop: (e: DragEvent<HTMLDivElement>) => eventDrag.onDrop(e, ev),
+    onDoubleClick: handleRowDoubleClick,
+    title: "拖拽调整事件顺序/挂载；双击查看详情",
+    className: cn("relative flex items-start", dragging && "opacity-50"),
+  };
+  // 事件行内容（插入指示线 + 圆点列 + 内容卡）
+  const rowChildren = (
+    <>
       {/* 插入指示线（S13 模式：行上下边缘，跨圆点列与内容） */}
       {showInsertBefore && <div className="absolute inset-x-0 -top-px h-0.5 bg-primary" />}
       {showInsertAfter && <div className="absolute inset-x-0 -bottom-px h-0.5 bg-primary" />}
@@ -197,19 +204,13 @@ export function TimelineEvent({
             </span>
           ))}
           {/* 右侧信息与操作区（H6：N 节点计数靠右，与操作按钮一起，减少左侧干扰；
-              决策 38：详情/编辑按钮已移除——双击 = 详情、点击标题 = 行内编辑，只留删除 + AskAiButton） */}
+              决策 38：详情/编辑按钮已移除——双击 = 详情、点击标题 = 行内编辑，只留删除；
+              决策 40：AskAiButton 已移除——右键菜单替代） */}
           <span className="ml-auto flex shrink-0 items-center gap-1">
             {hasOccursData && (
               <span className="shrink-0 text-xs text-muted-foreground">{count} 节点</span>
             )}
             {/* 操作按钮全部展开（H3：禁止收进 ⋯ 二级展开；图标 + title/aria-label） */}
-            {/* 行级「带上下文问 AI」（决策 35 修订）；draggable=false 防事件行拖拽误触发 */}
-            <span className="inline-flex shrink-0" draggable={false}>
-              <AskAiButton
-                focus={{ focus_entity_type: "event", focus_entity_id: ev.id }}
-                title={`带事件《${ev.name}》问 AI`}
-              />
-            </span>
             <Button
               variant="ghost"
               size="icon-sm"
@@ -250,6 +251,19 @@ export function TimelineEvent({
           </div>
         )}
       </div>
-    </div>
+    </>
+  );
+  // 编辑态（事件名行内输入）不挂右键菜单：保留原生文本菜单（复制/粘贴），不干扰输入
+  return editing ? (
+    <div {...rowProps}>{rowChildren}</div>
+  ) : (
+    <RowContextMenu
+      focus={{ focus_entity_type: "event", focus_entity_id: ev.id }}
+      source={{ type: "event", id: ev.id, name: ev.name }}
+      onCreated={onRelationCreated}
+      trigger={<div {...rowProps} />}
+    >
+      {rowChildren}
+    </RowContextMenu>
   );
 }

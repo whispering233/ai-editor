@@ -60,6 +60,8 @@ interface TimelineProps {
   /** 事件名行内编辑提交（页面执行 PUT /entity/event/:id { name }；失败抛错——页面 toast） */
   onEditName: (id: string, name: string) => Promise<void>;
   onDelete: (ev: EntitySummary) => void;
+  /** 建立关联成功后的数据刷新（页面 reloadTick+1；时间点行/事件行右键菜单用） */
+  onRelationCreated: () => void;
 }
 
 /** 事件拖拽落点（指示线 + drop 计算）：行级 = 锚定该行（行边缘指示线）；组级 = 组首/组尾
@@ -91,6 +93,7 @@ export function Timeline({
   onDetail,
   onEditName,
   onDelete,
+  onRelationCreated,
 }: TimelineProps) {
   // 渲染模型（已筛选事件）与 order 计算模型（全量事件）——组序同源（timepoints 序）
   const renderModel = useMemo(
@@ -416,6 +419,7 @@ export function Timeline({
             onDetail={onDetail}
             onEditName={onEditName}
             onDelete={onDelete}
+            onRelationCreated={onRelationCreated}
           />
         );
       })}
