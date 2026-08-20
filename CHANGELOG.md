@@ -5,6 +5,19 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [v0.0.16] - 2026-08-20
+
+### Changed
+
+- **批次十（决策 37-42，2026-08 用户反馈——交互优化与新需求）**：
+  - **决策 37：大纲交互优化**——移除行级「详情」「＋新建」按钮（只留删除）；选中节点按 Enter 新建子级（就地输入行出现在子级末尾，Enter 确认/Esc 取消）；双击节点查看详情（#/outline/:nodeId）；点击标题行内编辑（现有单击编辑保留）；拖拽排序保留（HTML5 DnD）
+  - **决策 38：时间轴交互参考大纲**——事件行与组标题行采用大纲交互模式：双击=详情、点击标题=行内编辑、移除「详情/编辑」按钮（保留删除）；新建/拖拽/折叠/标签筛选等现有能力保留
+  - **决策 39：移除实体二级页列表更新时间**——实体关系设定列表（EntityList 表格）移除「更新时间」列与排序选项；详情页（EntityDetail 等）创建/更新时间元信息保留
+  - **决策 40：右键菜单替代行级问 AI**——删除全部 6 处行级 AskAiButton（实体/伏笔/参考资料/大纲/时间点/事件）；新增右键菜单（Base UI ContextMenu 封装）——「注入会话上下文」（复用 chat store focusContext）与「建立关联」（新建 relation_records，源端点按行对象预填）；InfoBar「问 AI」统一入口保留
+  - **决策 41：项目规则文件 AGENTS.md**——项目目录 AGENTS.md 为项目规则唯一事实源；project.json `prompt` 字段废弃——打开项目时 prompt 存在且无 AGENTS.md 则自动迁移写入；设置页改为直接编辑 AGENTS.md；web 读取检测外部修改（mtime）；「## 项目设定」注入逻辑保留（数据源改为 AGENTS.md）；修订决策 25（rules.md 否决记录被取代）
+  - **决策 42：实体设定页树形视图**——设定列表改为树形视图（参考大纲页设计）与设定树 tab 合并——层级天然展示；折叠/展开、行内编辑、拖拽调整层级（belongs_to 防环沿用决策 30，先建新边后删旧边）、Enter 新建子级、双击详情；筛选改为搜索+标签过滤（树内过滤），移除表格分页；`#/entities/setting-tree` 重定向到 `#/entities/setting`
+  - 每卡临时分支 + git worktree 并行开发（4 波次），独立 oracle 审验全 PASS，线性合入 main；全仓 1600 测试全绿 + typecheck/lint/build 通过；发布 v0.0.16（8 包版本同步）
+
 ## [v0.0.15] - 2026-08-19
 
 ### Changed
