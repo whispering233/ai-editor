@@ -217,16 +217,18 @@
 //  Headers:
 //   Content-Type: application/zip
 //   Content-Disposition: attachment; filename="book.zip"; filename*=UTF-8''<书名>.zip  // RFC 5987（中文书名 percent-encoded）
-//  Body: zip 内三文件（条目名 = 数据文件原名，import 侧按此固定名校验）
+//  Body: zip 内文件（条目名 = 数据文件原名/相对路径，import 侧按此固定名校验；决策 43 扩展）
 //   project.json
 //   outline.json
 //   data.db        // 导出前服务端 wal_checkpoint(TRUNCATE)——主文件为完整快照，无需附带 -wal/-shm
+//   references/**  // 决策 43（批次十一）：参考资料目录（含 .trash/ 回收站文件）随包导出——项目自包含
 ```
 
 **语义**：
 - 导出**当前打开项目**（无项目 → 409 `NO_PROJECT_OPEN`，与 `/config` 一致）。
 - zip 天然不含 DeepSeek key（决策 17：key 存用户级配置 `~/.ai-editor/config.json`，不入项目文件）。
 - 三文件缺失任一 → 500 `INTERNAL_ERROR`（打开的项目三文件必然齐全，缺失即损坏，不导出半成品包）。
+- **references/ 目录（决策 43）**：存在则递归打包（条目名 `references/<相对路径>`，含 `.trash/`）；不存在则跳过（旧项目无目录不报错）。
 
 ### POST /api/v1/project/import
 
@@ -257,7 +259,7 @@
 1. `content-length` 预检（> 50MB 快速拒绝，防超大请求先缓冲）+ `file.size` 复核
 2. 书名校验（防路径逃逸）
 3. zip 解压（fflate Unzip 流式 + **解压总字节预算 200MB**——zip 炸弹防御；解析失败/零条目 → 400 `VALIDATION_ERROR`「不是有效的项目备份包」）
-4. **条目白名单**：只接受 `PROJECT_EXPORT_FILE_NAMES` 三文件名（未知条目严格拒绝——逐名比对天然防 zip 路径穿越）
+4. **条目白名单**：接受 `PROJECT_EXPORT_FILE_NAMES` 三文件名 + `references/` 前缀条目（决策 43：`references/` 开头且不含 `..` 路径段才接受；未知条目严格拒绝——逐名比对天然防 zip 路径穿越）
 5. 三文件齐全（缺任一 → 400）
 6. `project.json`/`outline.json` 顶层契约（JSON 可解析 + id/name/schema_version；`{id:"root",type:"root",schema_version,children[]}`）
 7. `data.db`：**文件大小 > 0 → 打开成功（非 SQLite/空文件 → 400 坏包）→ `user_version` === 当前版本，或 < 当前版本且有迁移路径**（搬入后首次 open 由 E5 自动前向迁移）
@@ -270,9 +272,11 @@
 
 ---
 
-## 备份管理（决策 27 + 决策 28 + 决策 29）
+## 备份管理（决策 27 + 决策 28 + 决策 29 + 决策 43 扩展）
 
-> 自动备份由服务端定时器驱动（服务运行期间生效，频率 = project.json `backup_frequency_minutes`，缺省 10 分钟）。备份文件存项目目录内 `.backups/`，时间戳命名（决策 28 毫秒精度 + **决策 29 类型标记段**：`<YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip`——kind 为 `m`（手动）/ `a`（自动带名称），自动备份/快照为纯时间戳；手动备份无名称也带 `-m` 段，与自动备份可靠区分；**旧格式兼容解析不迁移**：旧秒级 `<YYYYMMDD-HHmmss>.zip` → auto、旧带名称无 kind 段 `<YYYYMMDD-HHmmssSSS>-<名称>.zip` → manual、纯时间戳 → auto——历史备份仍可列出/恢复/参与保留策略），格式与 E1 导出 zip 完全一致（三文件 + wal_checkpoint），**每项目保留最近 20 份**（超出删除最旧，含覆盖前自动快照）。全部端点要求当前项目已打开（无项目 → 409 `NO_PROJECT_OPEN`，与 `/config` 一致）。
+> 自动备份由服务端定时器驱动（服务运行期间生效，频率 = project.json `backup_frequency_minutes`，缺省 10 分钟）。备份文件存项目目录内 `.backups/`，时间戳命名（决策 28 毫秒精度 + **决策 29 类型标记段**：`<YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip`——kind 为 `m`（手动）/ `a`（自动带名称），自动备份/快照为纯时间戳；手动备份无名称也带 `-m` 段，与自动备份可靠区分；**旧格式兼容解析不迁移**：旧秒级 `<YYYYMMDD-HHmmss>.zip` → auto、旧带名称无 kind 段 `<YYYYMMDD-HHmmssSSS>-<名称>.zip` → manual、纯时间戳 → auto——历史备份仍可列出/恢复/参与保留策略），格式与 E1 导出 zip 完全一致（三文件 + wal_checkpoint；**决策 43 起含 `references/**` 目录条目**），**每项目保留最近 20 份**（超出删除最旧，含覆盖前自动快照）。全部端点要求当前项目已打开（无项目 → 409 `NO_PROJECT_OPEN`，与 `/config` 一致）。
+
+> **变更检测（决策 43 扩展）**：自动备份「有变更才备份」判定在三文件 mtime 基础上增加 **references/ 目录内全部文件（含 .trash/）最大 mtime**——本地新增/外部编辑 md 文档同样触发自动备份。
 
 ### GET /api/v1/project/backups
 
@@ -414,7 +418,7 @@
 
 > **软删过滤（决策 12 修订）**：常规查询端点（GET 列表/详情、关系查询、Delta 查询等）**默认过滤软删对象**；回收站 API（`/api/v1/trash/*`）是访问软删对象的唯一入口。
 
-> **实体类型（决策 26 + G2 修订，2026-08）**：`type` 现支持 **6 种**——`character` / `setting` / `location` / `hook` / **`event`（事件，时间轴）** / **`timepoint`（时间标签点，时间轴）**。两者完全复用本章节泛型端点（列表/详情/创建/更新/软删），id 前缀 `ev-` / `tp-`；软删/回收站走 `/api/v1/trash/entity/:type/:id/*` 泛型路径（无需独立端点）。
+> **实体类型（决策 26 + G2 修订，2026-08；决策 43 扩展）**：`type` 现支持 **7 种**——`character` / `setting` / `location` / `hook` / **`event`（事件，时间轴）** / **`timepoint`（时间标签点，时间轴）** / **`reference`（参考资料，决策 36）**。前 6 种完全复用本章节泛型端点（列表/详情/创建/更新/软删），id 前缀 `ev-` / `tp-`；软删/回收站走 `/api/v1/trash/entity/:type/:id/*` 泛型路径（无需独立端点）。**reference 特例（决策 43，批次十一）**：`kind='file'` 时服务端**文件联动**——create 落盘 `references/<标题>.md`（YAML frontmatter + 正文）+ 建索引；update **先原子写文件再更新 DB**（文件写失败操作报错、DB 失败 scan 自愈）；软删移文件入 `references/.trash/`、restore 移回、purge 物理删（trash 泛型端点内部分支）；`kind='link'` 纯 DB 无文件联动；详情见 `doc/ui/pages/references.md` 与决策 43。
 
 **event 的 data 字段（决策 26 + G2 修订；shared `eventDataSchema`）**：
 
@@ -435,7 +439,7 @@
 
 ```typescript
 // Path
-type: "character" | "setting" | "location" | "hook" | "event" | "timepoint";
+type: "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "reference";
 
 // Query
 {
@@ -465,7 +469,7 @@ type: "character" | "setting" | "location" | "hook" | "event" | "timepoint";
 // EntitySummary（列表用摘要，不含完整 data）
 {
   id: string;
-  type: "character" | "setting" | "location" | "hook" | "event" | "timepoint";
+  type: "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "reference";
   name: string;
   // 各类型的关键摘要字段：
   //   character → role, status
@@ -476,6 +480,8 @@ type: "character" | "setting" | "location" | "hook" | "event" | "timepoint";
   //   hook      → status, payoff_timing (从 data JSON 提取)
   //   event     → description, tags (从 data JSON 提取)
   //   timepoint → （无专属摘要字段，G2：时间标签文本 = name）
+  //   reference → type, tags, source（决策 36）；决策 43：kind（file/link）、file_name（file 类相对路径）、
+  //               url（link 类）——来源列渲染依据
   summary: Record<string, unknown>;
   // M2（2026-08 批次六）：**仅 setting 类型填充**——层级 = belongs_to 关系（决策 30），
   // 服务端列表响应时补查设定间层级边，按 childId 映射附加；无父的设定不出现该字段（稀疏）
@@ -522,7 +528,7 @@ id: string;
 
 ```typescript
 // Path
-type: "character" | "setting" | "location" | "hook" | "event" | "timepoint";
+type: "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "reference";
 
 // Req
 {
@@ -538,10 +544,16 @@ type: "character" | "setting" | "location" | "hook" | "event" | "timepoint";
 //             (详见 database/hooks.md)
 // event:     { description?, tags?: string[] }（决策 26 + G2 修订，精校验 + passthrough，详见本章节开头字段表）
 // timepoint: {}（G2：时间标签文本 = name，data 无专属字段）
+// reference: （决策 43，批次十一）两类承载：
+//   file 类：{ kind: "file", type?, tags?, content? }——服务端落盘 references/<标题 sanitize>.md
+//     （YAML frontmatter: title/category/tags + 正文；重名自动 `标题 (N).md`）+ 建索引
+//     （data.file_name 相对路径 / content 正文镜像 / file_mtime 同步快照）；kind 缺省视为 link
+//   link 类：{ kind: "link", url, type?, tags?, content? }——url **必填**（非空字符串），纯 DB 无文件
+// 备注：新建条目不再写入 source 字段（存量旧条目兼容保留）
 
 // Res: 201
 {
-  id: string;                // 自动生成，如 "char-9", "hook-3", "ev-1"（ev- 为事件形状示意）
+  id: string;                // 自动生成，如 "char-9", "hook-3", "ev-1", "ref-1"（形状示意）
   type: string;
   name: string;
   data: Record<string, unknown>;
@@ -569,6 +581,11 @@ id: string;
   data?: Partial<Record<string, unknown>>;  // 只合并传入的 data 字段，不覆盖全部
 }
 
+// reference file 类特例（决策 43）：先原子写文件再更新 DB——
+//   正文真相在文件：请求未携带 data.content 时（行内编辑标题/分类/标签场景）服务端读原文件正文
+//   与最新元数据重写 frontmatter 保留正文；文件读失败（外部删除）→ 409 REFERENCE_FILE_MISSING
+//   提示先扫描；文件名不随标题重命名（创建时确定）
+
 // Res: 200
 {
   id: string;
@@ -581,7 +598,7 @@ id: string;
 
 ### DELETE /api/v1/entity/:type/:id
 
-软删实体（决策 12）：标记 `deleted_at`，**本体保留**可还原；级联移除其关联的关系与 Delta 记录。
+软删实体（决策 12）：标记 `deleted_at`，**本体保留**可还原；级联移除其关联的关系与 Delta 记录。**reference file 类特例（决策 43）**：文件同时移入 `references/.trash/`（restore 移回、purge 物理删）。
 
 ```typescript
 // Path
@@ -600,6 +617,33 @@ id: string;
 // Res: 404
 { error: { code: "ENTITY_NOT_FOUND" } }
 ```
+
+### POST /api/v1/reference/scan
+
+扫描重建参考资料索引（决策 43，批次十一）——幂等全量比对，**文件 = 真相源**：
+
+```typescript
+// Req: {}（无参数）
+
+// Res: 200
+{
+  scanned: {
+    added: number;      // 新建索引（references/ 下无匹配索引的 md 文件）
+    updated: number;    // 更新索引（mtime 不一致 → 以文件为准重新解析 frontmatter + 正文）
+    restored: number;   // 还原索引（文件回归 references/ 且存在软删索引匹配）
+    removed: number;    // 软删索引（非软删 file 类索引对应文件在 references/ 与 .trash/ 均缺失）
+    skipped: number;    // 跳过（索引存在且 file_mtime 与文件 mtime 一致）
+    errors: string[];   // 解析失败文件列表（frontmatter 非法容错为纯 markdown，一般不产生）
+  }
+}
+```
+
+**语义**：
+- 遍历 `references/` 顶层 `*.md`（**排除 `.trash/`**，已软删文件不重复建索引）；
+- 匹配规则：非软删索引 `data.kind='file'` 且 `file_name` 相同 → mtime 比对（**一致跳过**，不一致以文件为准更新 title/category/tags/content/file_mtime/updated_at）；软删索引匹配 → 还原（`deleted_at=NULL`，文件留原地）并更新；无匹配 → 新建；
+- 反向：所有非软删 file 类索引，文件在 `references/` 与 `.trash/` 均缺失 → 索引同步软删（进回收站可还原，决策 12 语义）；
+- frontmatter 缺失/非法 → 容错纯 markdown（title=文件名去扩展名、category=material、tags=[]），不报错；
+- 仅处理顶层文件（不支持子目录，YAGNI）；无项目 → 409 `NO_PROJECT_OPEN`。
 
 ### PUT /api/v1/entity/event/:id/move
 

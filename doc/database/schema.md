@@ -60,7 +60,7 @@ CREATE TABLE entities (
 | `hook` | 详见 [hooks.md](./hooks.md) |
 | `event` | `description`（文本）, `tags[]`（字符串数组，分类筛选用）——**G2 修订：`time_label` 已移除**（迁移至 timepoint 实体 + occurs_at 关系，见下） |
 | `timepoint` | `{}`（无专属字段——**G2：时间标签文本 = name**，可重命名；YAGNI 不加 data） |
-| `reference` | `type`（`material` 素材摘抄）/ `inspiration` 灵感记录）/ `theory` 写作理论）/ `reference` 设定参考），缺省 `material`）、`content` 内容全文（长文本无上限，列表接口摘要截断 120 字、详情接口返回全文）、`source` 来源（URL/书名/作者，可选）、`tags[]`（标签数组，决策 31 统一字段）——**决策 36（批次九）**：参考资料是外部素材/灵感笔记（非本书正文），AI 可读取参考、提案写入；第 7 种实体类型复用实体体系（泛型 CRUD/软删/回收站自动获得） |
+| `reference` | `type`（`material` 素材摘抄）/ `inspiration` 灵感记录）/ `theory` 写作理论）/ `reference` 设定参考），缺省 `material`）、`content` 内容全文（长文本无上限，列表接口摘要截断 120 字、详情接口返回全文）、`source` 来源（URL/书名/作者，可选）、`tags[]`（标签数组，决策 31 统一字段）——**决策 36（批次九）**：参考资料是外部素材/灵感笔记（非本书正文），AI 可读取参考、提案写入；**决策 43（批次十一，2026-08 修订）**：参考资料两类承载——`kind` = `file`（本地 md 文档，`file_name` 相对路径 + `content` 正文镜像 + `file_mtime` 上次同步快照）/ `link`（外源链接，`url` **必填** + `content` 可选备注）；缺省视为 link（存量无 kind 条目运行时兼容）；`source` 字段仅存量旧条目使用（link 类展示兼容），新建条目不再写入 |
 
 ### 时间轴（决策 26 + G2 修订：时间标签点实体化）
 

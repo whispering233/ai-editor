@@ -158,6 +158,9 @@ propose_create_reference(name, type, content, source?, tags?)
     reference 设定参考，缺省 material)；content 为全文长文本；tags 标签数组（决策 31 字段）
   预览：标题 + 内容摘要 + 标签（决策 14 提案仅内存 + 快照重校验）
   确认后：Executor 校验 references 存在性 + 快照 → create_entity(type='reference') 写入
+  **决策 43（批次十一）**：AI 创建的条目归 **link 类**（data.kind='link'，source → url；
+    无 URL 时 url 留空、content 存摘录）——AI 不直接落盘文件（文件写入走用户编辑器保存）；
+    search_references / get_entity 详情全文照常（file 类经 content 镜像纯 DB 读取）
 ```
 
 ### 执行类（用户通过 GUI 直接操作）
