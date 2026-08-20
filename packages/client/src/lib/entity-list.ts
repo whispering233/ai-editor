@@ -3,6 +3,9 @@
 //   setting→category、location→type、hook→status/payoff_timing）+ 分页（limit 固定 20、total 驱动）
 import type { EntityType } from "@whispering233/ai-editor-shared";
 
+/** 实体二级 tab 可列表类型（批次十二 T3：参考资料已有独立中栏 tab #/references，实体页泛型表格不再渲染） */
+export type ListableEntityType = Exclude<EntityType, "reference">;
+
 /** MVP 每页条数（原型：limit 固定 20；服务端默认 50 最大 200） */
 export const PAGE_LIMIT = 20;
 
@@ -21,7 +24,7 @@ export interface SummaryColumnConfig {
   label3?: string;
 }
 
-export const SUMMARY_COLUMNS: Record<EntityType, SummaryColumnConfig> = {
+export const SUMMARY_COLUMNS: Record<ListableEntityType, SummaryColumnConfig> = {
   character: { key1: "role", label1: "角色", key2: "status", label2: "状态" },
   // 决策 31（2026-08）：设定分类由 rules 标签承接，摘要列从「类别」改为「标签」
   // 决策 42（2026-08 批次十）：设定 tab 改为树形视图（不走表格），「上级设定」特殊列
@@ -39,16 +42,9 @@ export const SUMMARY_COLUMNS: Record<EntityType, SummaryColumnConfig> = {
   // G2.3 类型补全（G2 时间标签点：data 空、无专属摘要字段——endpoints.md「timepoint → 无专属摘要字段」，
   // 空 key = 摘要列渲染「—」占位，与 event 摘要缺失同款防御）
   timepoint: { key1: "", label1: "" },
-  // 决策 36（批次九）参考资料 reference：type 分类 + content 摘要截断 120 字 + tags 前 3
-  reference: {
-    key1: "type",
-    label1: "分类",
-    key2: "content",
-    label2: "摘要",
-    key3: "tags",
-    label3: "标签",
-  },
 };
+// 注：reference 列配置已随批次十二 T3 移除——参考资料已有独立中栏 tab（#/references），
+// 实体二级 tab 不再渲染泛型表格（旧路由重定向），此处无 reference 分支。
 
 /** hook 枚举值 → 中文（展示映射；未收录的原样显示）；详情页表单下拉复用（S3.6） */
 export const HOOK_STATUS_LABEL: Record<string, string> = {
@@ -92,7 +88,7 @@ export interface CreateFirstFieldConfig {
   options?: string[];
 }
 
-export const CREATE_FIRST_FIELD: Record<EntityType, CreateFirstFieldConfig> = {
+export const CREATE_FIRST_FIELD: Record<ListableEntityType, CreateFirstFieldConfig> = {
   character: { key: "role", label: "角色定位", input: "text" },
   // K2（2026-08 用户复核，决策 31）：设定分类统一字段 tags——新建行直接打标签（逗号分隔多值）
   setting: { key: "tags", label: "标签", input: "tags" },
@@ -109,11 +105,6 @@ export const CREATE_FIRST_FIELD: Record<EntityType, CreateFirstFieldConfig> = {
   // G2.3 类型补全（G2 时间标签点：data 空——name = 时间标签文本即全部字段；
   // 空 key = 行内新建仅 name 输入，EntityList 对空 key 跳过 data 字段与首字段输入）
   timepoint: { key: "", label: "", input: "text" },
-  // 决策 36（批次九）参考资料 reference：首字段 = 分类枚举（受控 select）
-  reference: {
-    key: "type",
-    label: "分类",
-    input: "select",
-    options: ["material", "inspiration", "theory", "reference"],
-  },
 };
+// 注：reference 首字段配置已随批次十二 T3 移除——参考资料已有独立中栏 tab（#/references），
+// 实体二级 tab 不再渲染泛型表格（旧路由重定向），此处无 reference 分支（含决策 44 过时枚举）。

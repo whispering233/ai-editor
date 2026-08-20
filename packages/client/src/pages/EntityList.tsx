@@ -18,7 +18,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { ENTITY_TYPES } from "@whispering233/ai-editor-shared";
-import type { EntitySummary, EntityType } from "@whispering233/ai-editor-shared";
+import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -32,6 +32,7 @@ import {
 } from "../lib/api";
 import {
   CREATE_FIRST_FIELD,
+  ListableEntityType,
   PAGE_LIMIT,
   pageCount,
   SUMMARY_COLUMNS,
@@ -47,7 +48,7 @@ import { RelationsView } from "../components/entity/relations-view";
 import { SettingTreeView } from "../components/entity/setting-tree";
 import { SuggestionDatalist, uniqueStrings } from "../components/ui/suggestion-datalist";
 
-const TYPE_LABEL: Record<EntityType, string> = {
+const TYPE_LABEL: Record<ListableEntityType, string> = {
   character: "人物",
   setting: "设定",
   location: "地点",
@@ -56,9 +57,9 @@ const TYPE_LABEL: Record<EntityType, string> = {
   event: "事件",
   // G2.3 类型补全（G2 时间标签点；tab 随 ENTITY_TYPES 自动出现，列表 = 泛型视图）
   timepoint: "时间点",
-  // 决策 36（批次九）参考资料 reference
-  reference: "参考资料",
 };
+// 注：TYPE_LABEL.reference 已随批次十二 T3 移除——实体二级 tab 不再渲染参考资料
+//（独立中栏 tab #/references，旧路由重定向）。
 
 /** 排序下拉选项（sort × order 组合；决策 39：移除 updated_at 项，默认创建时间倒序） */
 const SORT_OPTIONS: Array<{
@@ -78,8 +79,8 @@ export default function EntityList({ type }: { type: string }) {
   const isRelations = type === "relations";
   // main.tsx 已把未知 type 归一化为 character；此处双保险
   const entityType = (ENTITY_TYPES as readonly string[]).includes(type)
-    ? (type as EntityType)
-    : "character";
+    ? (type as ListableEntityType)
+    : ("character" as ListableEntityType);
 
   const [items, setItems] = useState<EntitySummary[] | null>(null);
   const [total, setTotal] = useState(0);
