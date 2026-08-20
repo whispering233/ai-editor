@@ -42,7 +42,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - [x] **卡 R3 修订（交互）**：参考资料列表分类列去徽标包裹，直接显示文字（对齐 EntityList 数据列样式）。`f7e2529`
 - [x] **卡 T1（交互，设定树）**：设定树行标签移位——`setting-tree.tsx` 行结构从「折叠箭头 | 名称 | 标签 | 子设定数 | ml-auto 删除」改为「折叠箭头 | 名称 | 子设定数 | ml-auto 标签 | 删除」（标签收进行尾操作区、删除按钮左边，不干扰树呈现）。`08d975c`
 - [x] **卡 T2（交互，全仓标签样式）**：标签徽标样式强化——全仓 3 处展示型标签徽标（设定树行 / 时间轴事件行 / 参考资料列表）从 `bg-muted/bg-secondary + text-muted-foreground` 统一改为 `bg-primary/80 + text-primary-foreground`（参考新建按钮色系：背景淡一档、文字用按钮前景色——浅色主题白字）；layout.md §4.3 补标签徽标规范（禁止回退旧样式）。`5b85a41`（验证：全仓 1639 测试全绿 + test-project 冒烟 SPA/API 正常）
-- [ ] **卡 T3（交互，入口去重）**：实体关系页二级 tab 移除「参考资料」——`EntityList.tsx` tab 渲染 `ENTITY_TYPES.filter(t => t !== "reference")`（参考资料已有独立中栏 tab `#/references`，泛型表格重复入口）；`main.tsx` 旧路由 `#/entities/reference[/:id]` 重定向 `#/references[/:id]`（对齐决策 42 设定树先例）。
+- [x] **卡 T3（交互，入口去重）**：实体关系页二级 tab 移除「参考资料」——`EntityList.tsx` tab 渲染 `ENTITY_TYPES.filter(t => t !== "reference")`（参考资料已有独立中栏 tab `#/references`，泛型表格重复入口）；`main.tsx` 旧路由 `#/entities/reference[/:id]` 重定向 `#/references[/:id]`（对齐决策 42 设定树先例）。`c729a51`（验证：client 496 测试全绿 + build 通过 + SPA 冒烟 200）
 
 ---
 
