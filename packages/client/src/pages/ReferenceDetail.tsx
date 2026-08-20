@@ -6,10 +6,12 @@
 //   - link 类：标题 + URL（必填）+ 分类 + 标签 + 内容（备注）+ 建立关联 + 删除
 //   - 草稿态：标题必填（md）/ URL 必填（link）→ POST 创建（file 落盘）→ 跳转编辑态
 // 焦点上报（决策 35）：编辑态上报 focus_entity_type/id；草稿态无实体不上报
-import { useEffect, useState } from "react";
-import { ExternalLink, Loader2, Link2, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import type { ChangeEvent } from "react";
+import { ExternalLink, FileUp, Loader2, Link2, Trash2 } from "lucide-react";
 import MDEditor from "@uiw/react-md-editor";
 import "@uiw/react-md-editor/markdown-editor.css"; // N3 选型：@uiw/react-md-editor 自带样式（textarea + 分屏预览）
+import { parseReferenceFrontmatter } from "@whispering233/ai-editor-shared";
 import type { EntityDetailRes } from "../lib/api";
 import { createEntity, deleteEntity, getEntityDetail, listEntities, updateEntity } from "../lib/api";
 import { ApiError } from "../lib/api";
@@ -162,6 +164,43 @@ export default function ReferenceDetail({
     }
   }
 
+  // 导入 md 文档（决策 43 N4，卡 11.6：纯前端——FileReader 读文本 + frontmatter 解析预填，
+  // 内容进编辑器，保存走既有 PUT/POST 由服务端落盘；无独立上传端点）
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+
+  /** 文件选择 → 读文本 → 解析 frontmatter 预填标题/分类/标签 + 正文进编辑器 */
+  function handleImportFile(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // 允许重复选择同一文件
+    if (file === undefined) return;
+    setImporting(true);
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const text = String(reader.result ?? "");
+        const parsed = parseReferenceFrontmatter(text); // 容错：无 frontmatter → 全当正文
+        setForm((f) => ({
+          ...f,
+          name: parsed.title ?? file.name.replace(/\.md$/i, ""),
+          type: (parsed.category as ReferenceTypeValue | undefined) ?? f.type,
+          tagsInput: parsed.tags.join(", "),
+          content: parsed.body,
+        }));
+        useUiStore.getState().showToast(`已导入《${file.name}》——检查内容后保存`);
+      } catch {
+        useUiStore.getState().showToast("导入失败：文件读取异常", "error");
+      } finally {
+        setImporting(false);
+      }
+    };
+    reader.onerror = () => {
+      setImporting(false);
+      useUiStore.getState().showToast("导入失败：文件读取异常", "error");
+    };
+    reader.readAsText(file);
+  }
+
   /** 保存（编辑态 PUT / 草稿态 POST + 跳转）；file 类由服务端落盘（先写文件后更新 DB） */
   async function handleSave() {
     const name = form.name.trim();
@@ -264,6 +303,27 @@ export default function ReferenceDetail({
           {isDraft ? (draft === "md" ? "新建 md 文档" : "新建外源链接") : detail!.name}
         </span>
         <div className="ml-auto flex items-center gap-1.5">
+          {currentKind === "file" && (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".md,.markdown,text/markdown"
+                className="hidden"
+                onChange={handleImportFile}
+                aria-label="导入 md 文档"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={importing}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {importing ? <Loader2 className="size-3.5 animate-spin" /> : <FileUp className="size-3.5" />}
+                导入 md 文档
+              </Button>
+            </>
+          )}
           <Button variant="outline" size="sm" onClick={() => setRelationOpen(true)} disabled={isDraft}>
             <Link2 className="size-3.5" />
             建立关联
