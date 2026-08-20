@@ -8,6 +8,8 @@
 // 焦点上报（决策 35）：编辑态上报 focus_entity_type/id；草稿态无实体不上报
 import { useEffect, useState } from "react";
 import { ExternalLink, Loader2, Link2, Trash2 } from "lucide-react";
+import MDEditor from "@uiw/react-md-editor";
+import "@uiw/react-md-editor/markdown-editor.css"; // N3 选型：@uiw/react-md-editor 自带样式（textarea + 分屏预览）
 import type { EntityDetailRes } from "../lib/api";
 import { createEntity, deleteEntity, getEntityDetail, listEntities, updateEntity } from "../lib/api";
 import { ApiError } from "../lib/api";
@@ -15,6 +17,7 @@ import { REFERENCE_TYPES } from "@whispering233/ai-editor-shared";
 import type { ReferenceTypeValue } from "@whispering233/ai-editor-shared";
 import { applyTagSuggestion, parseTagsInput, suggestTags, tagsToInput } from "../lib/timeline";
 import { navigate } from "../hooks/use-route";
+import { useThemeMode } from "../hooks/use-theme-mode";
 import { useUiStore } from "../stores/ui";
 import { cn } from "../lib/utils";
 import { errorBannerClass, inputClass, skeletonClass } from "../lib/styles";
@@ -49,6 +52,9 @@ export default function ReferenceDetail({
 }) {
   const isDraft = draft !== undefined;
   const kind = draft === "md" ? "file" : "link"; // 草稿态 kind 由路由决定；编辑态从 data 读取
+
+  // 卡 11.5：markdown 编辑器暗色联动（data-color-mode 跟随 html.dark，MutationObserver 即时生效）
+  const themeMode = useThemeMode();
 
   // 决策 35：挂载/切换时上报页面焦点（当前参考资料作为「问 AI」上下文；草稿态无实体不上报）
   const setCurrentFocus = useUiStore((s) => s.setCurrentFocus);
@@ -402,23 +408,34 @@ export default function ReferenceDetail({
             />
           </div>
         </div>
-        {/* 内容：file → markdown 正文（11.5 换 @uiw/react-md-editor）；link → 备注 */}
-        <div className="flex items-start gap-2">
-          <label className="mt-2 w-12 shrink-0 text-sm text-muted-foreground">
-            {currentKind === "file" ? "内容" : "备注"}
-          </label>
-          <textarea
-            className={cn(inputClass, "min-h-64 flex-1 resize-y leading-6")}
-            value={form.content}
-            onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
-            placeholder={
-              currentKind === "file"
-                ? "markdown 正文（11.5 起为分屏编辑器）…"
-                : "可选：外源链接备注 / 摘录…"
-            }
-            disabled={saving}
-          />
-        </div>
+        {/* 内容：file → markdown 编辑器（N3 选型 @uiw/react-md-editor：textarea 源文本 + 分屏实时预览，
+            data-color-mode 随主题）；link → 备注 textarea */}
+        {currentKind === "file" ? (
+          <div className="flex items-start gap-2">
+            <label className="mt-2 w-12 shrink-0 text-sm text-muted-foreground">内容</label>
+            <div className="min-w-0 flex-1" data-color-mode={themeMode}>
+              <MDEditor
+                value={form.content}
+                onChange={(v) => setForm((f) => ({ ...f, content: v ?? "" }))}
+                height={440}
+                preview="live"
+                textareaProps={{ placeholder: "markdown 正文…", disabled: saving }}
+                visibleDragbar={false}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-start gap-2">
+            <label className="mt-2 w-12 shrink-0 text-sm text-muted-foreground">备注</label>
+            <textarea
+              className={cn(inputClass, "min-h-40 flex-1 resize-y leading-6")}
+              value={form.content}
+              onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
+              placeholder="可选：外源链接备注 / 摘录…"
+              disabled={saving}
+            />
+          </div>
+        )}
         {formError !== null && <p className="text-xs text-destructive">{formError}</p>}
         {/* 操作 */}
         <div className="flex justify-end gap-1.5 pt-1">
