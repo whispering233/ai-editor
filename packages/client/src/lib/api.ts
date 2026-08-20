@@ -435,6 +435,24 @@ export function deleteEntity(type: EntityType, id: string): Promise<DeleteEntity
   return apiFetch<DeleteEntityRes>(`/entity/${type}/${id}`, { method: "DELETE" });
 }
 
+/** 扫描重建参考资料索引（决策 43 N6：POST /api/v1/reference/scan；返回统计） */
+export interface ScanReferencesRes {
+  added: number;
+  updated: number;
+  restored: number;
+  removed: number;
+  skipped: number;
+  errors: string[];
+}
+export function scanReferences(): Promise<ScanReferencesRes> {
+  return apiFetch<ScanReferencesRes>("/reference/scan", { method: "POST" });
+}
+
+/** 只读探测：references/ 下未同步文件数（决策 43 N6：GET /api/v1/reference/scan/status，无副作用） */
+export function getReferenceScanStatus(): Promise<{ unsynced: number }> {
+  return apiFetch<{ unsynced: number }>("/reference/scan/status");
+}
+
 /** PUT /api/v1/entity/event/:id/move 请求体（order：0-based 全局事件线性序，决策 26；负数由 schema 拒绝） */
 export interface MoveEventBody {
   order: number;

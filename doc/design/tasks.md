@@ -32,7 +32,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
   - [ ] 11.3 存档体系（N5）：备份 zip 白名单扩展打包 references/（含 .trash/）+ export/import/restore 同步 + 自动备份变更检测加 references/ mtime
   - [x] 11.5 编辑器集成（N3）：@uiw/react-md-editor 4.1.1（React 19 peer 兼容）+ react-markdown 10.1 试装验证；接入 md 详情页（textarea 源文本 + 分屏实时预览，data-color-mode 随 html.dark MutationObserver 即时联动）；bundle：JS 1758KB（gzip 575KB）/ CSS 100KB（编辑器增量 ~150KB 可接受，本地创作工具非 CDN 场景）；视觉/样式冲突留浏览器人工验收点
   - [x] 11.6 导入 md 文档（N4）：文件选择 → FileReader 读文本 → frontmatter 解析预填（复用 shared parseReferenceFrontmatter，容错无 frontmatter）→ 正文入编辑器 → 保存走既有 PUT/POST 落盘（纯前端，无上传端点）
-  - [ ] 11.7 扫描 UI（N6）：列表页「扫描」按钮 + 打开项目检测未索引/mtime 不一致提示
+  - [x] 11.7 扫描 UI（N6）：列表页「扫描」按钮（loading + toast 统计 + 刷新）+ 打开项目/刷新时只读探测（GET /scan/status，无副作用）未同步文件数 → 提示条引导「立即扫描」
   - [ ] 11.8 收官（D）：tasks.md 勾选 + release-review + AGENTS.md 状态 + backlog #16 跨书籍导入未来迭代 + CHANGELOG（发布 v0.0.17）
 > 各卡详细规格、坑记录与提交历史可 `git log` 回溯（commit 见 CHANGELOG.md / release-review.md 发布进展记录）。
 

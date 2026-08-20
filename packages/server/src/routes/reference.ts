@@ -6,7 +6,7 @@
 import { Hono } from "hono";
 import { ok } from "../middleware/error.js";
 import { requireCurrentProject } from "../middleware/project.js";
-import { scanReferences } from "../reference-files.js";
+import { countUnsyncedReferenceFiles, scanReferences } from "../reference-files.js";
 
 /** 参考资料路由（挂载于 /api/v1/reference，index.ts） */
 export const referenceRoutes = new Hono();
@@ -16,4 +16,11 @@ export const referenceRoutes = new Hono();
 referenceRoutes.post("/scan", (c) => {
   const project = requireCurrentProject();
   return c.json(ok(scanReferences(project.root, project.db)));
+});
+
+// GET /api/v1/reference/scan/status —— 只读探测：references/ 下未同步文件数（无副作用）
+// 列表页打开项目提示条用（「检测到 N 个未同步的本地文档」）；扫描按钮执行后应为 0
+referenceRoutes.get("/scan/status", (c) => {
+  const project = requireCurrentProject();
+  return c.json(ok({ unsynced: countUnsyncedReferenceFiles(project.root, project.db) }));
 });

@@ -10,11 +10,11 @@
 //   分类/标签/关键词过滤在前端（列表摘要 summary.type/tags/kind/file_name/url 由 db toSummary 提供）
 import { useEffect, useMemo, useState } from "react";
 import type { MouseEvent } from "react";
-import { BookOpenText, ExternalLink, FileText, Link2, Search, Trash2 } from "lucide-react";
+import { BookOpenText, ExternalLink, FileText, Link2, Loader2, RefreshCw, Search, Trash2 } from "lucide-react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { REFERENCE_TYPES } from "@whispering233/ai-editor-shared";
 import type { ReferenceTypeValue } from "@whispering233/ai-editor-shared";
-import { deleteEntity, listEntities, updateEntity } from "../lib/api";
+import { deleteEntity, getReferenceScanStatus, listEntities, scanReferences, updateEntity } from "../lib/api";
 import { ApiError } from "../lib/api";
 import { navigate } from "../hooks/use-route";
 import { useDataRefresh } from "../hooks/use-data-refresh";
@@ -45,6 +45,57 @@ export default function ReferenceList() {
   const [keyword, setKeyword] = useState("");
   const [activeType, setActiveType] = useState<ReferenceTypeValue | "all">("all");
   const [activeTag, setActiveTag] = useState<string | null>(null);
+
+  // 扫描同步（决策 43 N6）：unsynced = 未同步文件数（null = 未探测/无项目）；
+  // 列表加载/刷新时只读探测（无副作用），>0 显示提示条引导扫描
+  const [scanBusy, setScanBusy] = useState(false);
+  const [unsynced, setUnsynced] = useState<number | null>(null);
+
+  // 探测未同步文件（数据刷新后重跑——本地新增/外部修改后列表刷新即重新提示）
+  useEffect(() => {
+    if (config === null) {
+      setUnsynced(null);
+      return;
+    }
+    let cancelled = false;
+    getReferenceScanStatus()
+      .then((res) => {
+        if (!cancelled) setUnsynced(res.unsynced);
+      })
+      .catch(() => {
+        if (!cancelled) setUnsynced(null); // 探测失败不阻塞列表（静默）
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [config, reloadTick]);
+
+  /** 扫描重建索引（POST /scan → toast 统计 + 刷新列表 + 清提示条） */
+  async function handleScan() {
+    if (scanBusy) return;
+    setScanBusy(true);
+    try {
+      const r = await scanReferences();
+      const parts = [
+        r.added > 0 ? `新增 ${r.added}` : null,
+        r.updated > 0 ? `更新 ${r.updated}` : null,
+        r.restored > 0 ? `还原 ${r.restored}` : null,
+        r.removed > 0 ? `移除 ${r.removed}` : null,
+      ].filter((s): s is string => s !== null);
+      useUiStore.getState().showToast(
+        parts.length > 0 ? `扫描完成：${parts.join(" / ")}` : "扫描完成：已是最新",
+      );
+      setUnsynced(0);
+      useUiStore.getState().notifyDataChanged();
+      setReloadTick((t) => t + 1);
+    } catch (e) {
+      useUiStore
+        .getState()
+        .showToast(e instanceof ApiError ? e.message : "扫描失败，请重试", "error");
+    } finally {
+      setScanBusy(false);
+    }
+  }
 
   // 数据加载
   useEffect(() => {
@@ -133,6 +184,16 @@ export default function ReferenceList() {
           className={cn("ml-auto flex items-center gap-2", disabled && "cursor-not-allowed")}
           title={disabled ? "请先打开项目" : undefined}
         >
+          <Button
+            type="button"
+            variant="outline"
+            disabled={disabled || scanBusy}
+            onClick={handleScan}
+            title="扫描项目目录 references/ 下的本地文档，同步到索引"
+          >
+            <RefreshCw className={cn("size-3.5", scanBusy && "animate-spin")} />
+            扫描
+          </Button>
           <Button type="button" variant="outline" disabled={disabled} onClick={() => navigate("#/references/new/md")}>
             <FileText className="size-3.5" />
             新建 md 文档
@@ -180,6 +241,20 @@ export default function ReferenceList() {
           ))}
         </select>
       </div>
+
+      {/* 未同步提示条（决策 43 N6）：检测到本地新增/外部修改 → 引导扫描（只读探测无副作用） */}
+      {unsynced !== null && unsynced > 0 && (
+        <div className="mb-2 flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
+          <RefreshCw className="size-3.5 shrink-0 text-primary" />
+          <span className="flex-1">
+            检测到 <b>{unsynced}</b> 个未同步的本地文档（文件管理器新增或修改）——扫描后将同步到索引
+          </span>
+          <Button variant="outline" size="xs" onClick={handleScan} disabled={scanBusy}>
+            {scanBusy && <Loader2 className="size-3.5 animate-spin" />}
+            立即扫描
+          </Button>
+        </div>
+      )}
 
       {/* 错误条（单区块失败不阻塞其他） */}
       {error !== null && (

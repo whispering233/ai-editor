@@ -169,6 +169,52 @@ export interface ScanReferenceResult {
   errors: string[];
 }
 
+/** file 类索引读取（live/softDeleted 双 Map，scan 与只读统计共用） */
+function readReferenceIndexes(db: Db): {
+  live: Map<string, { id: string; name: string; data: Record<string, unknown> }>;
+  softDeleted: Map<string, { id: string; name: string; data: Record<string, unknown> }>;
+} {
+  const rows = db
+    .prepare("SELECT id, name, data, deleted_at FROM entities WHERE type = 'reference'")
+    .all() as Array<{ id: string; name: string; data: string; deleted_at: string | null }>;
+  const live = new Map<string, { id: string; name: string; data: Record<string, unknown> }>();
+  const softDeleted = new Map<string, { id: string; name: string; data: Record<string, unknown> }>();
+  for (const r of rows) {
+    let data: Record<string, unknown>;
+    try {
+      data = JSON.parse(r.data) as Record<string, unknown>;
+    } catch {
+      continue; // 坏行防御（rowToEntityRow 同款语义，跳过不阻塞）
+    }
+    if (data.kind !== "file" || typeof data.file_name !== "string") continue;
+    if (r.deleted_at === null) live.set(data.file_name, { id: r.id, name: r.name, data });
+    else softDeleted.set(data.file_name, { id: r.id, name: r.name, data });
+  }
+  return { live, softDeleted };
+}
+
+/** 只读统计：references/ 下未同步文件数（无匹配索引 或 mtime 不一致；**无副作用**——
+ * 列表页打开项目提示条用，不触发索引写入/软删） */
+export function countUnsyncedReferenceFiles(root: string, db: Db): number {
+  ensureReferenceDirs(root);
+  const { live } = readReferenceIndexes(db);
+  let unsynced = 0;
+  for (const fileName of listReferenceFiles(root)) {
+    const file = readReferenceFile(root, fileName);
+    if (file === null) continue;
+    const index = live.get(fileName);
+    if (index === undefined) {
+      unsynced += 1; // 无索引（本地新增）
+      continue;
+    }
+    const stored = typeof index.data.file_mtime === "string" ? new Date(index.data.file_mtime).getTime() : NaN;
+    if (Number.isNaN(stored) || Math.abs(file.mtimeMs - stored) > REFERENCE_MTIME_TOLERANCE_MS) {
+      unsynced += 1; // mtime 不一致（外部修改）
+    }
+  }
+  return unsynced;
+}
+
 /**
  * 扫描重建参考资料索引（POST /api/v1/reference/scan，endpoints.md）。
  * 规则（决策 43 + 2026-08 修订：软删文件归 .trash/，references/ 下缺失即视为外部删除）：
@@ -184,23 +230,8 @@ export function scanReferences(root: string, db: Db): ScanReferenceResult {
   const result: ScanReferenceResult = { added: 0, updated: 0, restored: 0, removed: 0, skipped: 0, errors: [] };
   ensureReferenceDirs(root);
 
-  // 现有 file 类索引（含软删——还原判定用）：原始 SQL 读取（listEntities 无 data 完整字段）
-  const rows = db
-    .prepare("SELECT id, name, data, deleted_at FROM entities WHERE type = 'reference'")
-    .all() as Array<{ id: string; name: string; data: string; deleted_at: string | null }>;
-  const liveIndex = new Map<string, { id: string; name: string; data: Record<string, unknown> }>(); // file_name → 非软删
-  const softDeletedIndex = new Map<string, { id: string; name: string; data: Record<string, unknown> }>(); // file_name → 软删
-  for (const r of rows) {
-    let data: Record<string, unknown>;
-    try {
-      data = JSON.parse(r.data) as Record<string, unknown>;
-    } catch {
-      continue; // 坏行防御（rowToEntityRow 同款语义，scan 跳过不阻塞）
-    }
-    if (data.kind !== "file" || typeof data.file_name !== "string") continue;
-    if (r.deleted_at === null) liveIndex.set(data.file_name, { id: r.id, name: r.name, data });
-    else softDeletedIndex.set(data.file_name, { id: r.id, name: r.name, data });
-  }
+  // 现有 file 类索引（含软删——还原判定用）
+  const { live: liveIndex, softDeleted: softDeletedIndex } = readReferenceIndexes(db);
 
   // 1. 正向：文件 → 索引
   for (const fileName of listReferenceFiles(root)) {

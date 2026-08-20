@@ -394,6 +394,26 @@ describe("POST /api/v1/reference/scan", () => {
     expect((res.json as { error: { code: string } }).error.code).toBe("NO_PROJECT_OPEN");
   });
 
+  it("GET /scan/status：无未同步文件 → 0；外部新增/修改 → 计数；无副作用（不建索引）", async () => {
+    openProject();
+    const app = buildApp();
+    const root = getCurrentProject()!.root;
+    const refDir = ensureRefDir(root);
+    // 空目录 → 0
+    let res = await api(app, "GET", "/api/v1/reference/scan/status");
+    expect((res.json as { data: { unsynced: number } }).data.unsynced).toBe(0);
+    // 外部新增文件 → 1（只读探测不建索引）
+    writeFileSync(join(refDir, "新文件.md"), "内容");
+    res = await api(app, "GET", "/api/v1/reference/scan/status");
+    expect((res.json as { data: { unsynced: number } }).data.unsynced).toBe(1);
+    const countBefore = (getCurrentProject()!.db.prepare("SELECT COUNT(*) AS c FROM entities WHERE type='reference'").get() as { c: number }).c;
+    expect(countBefore).toBe(0); // 探测无副作用
+    // 扫描后 → 0
+    await api(app, "POST", "/api/v1/reference/scan");
+    res = await api(app, "GET", "/api/v1/reference/scan/status");
+    expect((res.json as { data: { unsynced: number } }).data.unsynced).toBe(0);
+  });
+
   it("扫描本地新增文件建索引 + 返回统计", async () => {
     openProject();
     const app = buildApp();
