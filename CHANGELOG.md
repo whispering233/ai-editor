@@ -5,6 +5,25 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [v0.0.18] - 2026-08-20
+
+### Fixed
+
+- **批次十二 R1（2026-08 用户反馈）**：参考资料新建 md 文档草稿态标题编辑丢失——编辑标题后焦点移到正文，标题仍显示「新建 md 文档」（显示逻辑写死占位文案、不读表单值）；修复为标题显示 `form.name` 优先，草稿态编辑即时反映
+
+### Changed
+
+- **批次十二（2026-08 用户反馈——参考资料页体验优化 + 决策 44 分类自定义 + 设定树/标签样式）**：
+  - **R2 空态去重**——参考资料空态移除书籍图标与「新建 md 文档/新建外源链接」按钮（顶部标题行已有新建入口），保留纯文字提示；筛选无匹配分支保留「清空筛选」
+  - **R3 列表表格平铺**——行信息改 thead 四列（标题/分类/标签/来源）+ 单行 tr（对齐实体列表表格样式），行高减半；分类列直接显示文字不包裹徽标；保留点击标题行内编辑/双击详情/删除/右键菜单
+  - **R4 草稿态去分类徽标**——新建时标题右侧不再显示分类徽标（分类未定且下方已有分类输入区）
+  - **R5 面包屑组件化**——详情页顶部「← 参考资料 / 标题」纯文本改为 Breadcrumb 分段 pill（对齐实体/大纲详情页）
+  - **决策 44：参考资料分类自定义**——取消预置枚举（material/inspiration/theory/reference）：`data.type` 放宽自由文本（shared schema 与 AI 工具 search_references/propose_create_reference 参数 `z.enum → z.string`，缺省 material 写入侧兜底，无 DDL 迁移 SCHEMA_VERSION 5 不变）；详情页分类 select 改为文本框 + datalist（建议项 = 项目内已用分类，可自由输入新分类）；列表筛选下拉聚合现有分类；存量枚举值保留并回显中文名；md 文件 frontmatter category 自由文本同步
+  - **T1 设定树标签移行尾**——设定树行标签收进行尾操作区、删除按钮左边，不再紧跟名称干扰树呈现
+  - **T2 全仓标签徽标样式强化**——3 处展示型标签徽标（设定树行/时间轴事件行/参考资料列表）从 `bg-muted/bg-secondary + 灰字` 改为 `bg-primary/80 + text-primary-foreground`（参考新建按钮强调色系：背景淡一档、浅色主题白字）；layout.md §4.3 补标签徽标规范
+  - **T3 实体关系页入口去重**——实体二级 tab 移除「参考资料」（已有独立中栏 tab `#/references`，泛型表格重复入口），旧路由 `#/entities/reference[/:id]` 重定向 `#/references[/:id]`（对齐决策 42 先例）；清理实体泛型视图 reference 死代码（含决策 44 过时枚举）
+  - 全仓 1639 测试全绿 + typecheck/lint/build 通过
+
 ## [v0.0.17] - 2026-08-20
 
 ### Added
