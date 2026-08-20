@@ -10,7 +10,7 @@
 //   分类/标签/关键词过滤在前端（列表摘要 summary.type/tags/kind/file_name/url 由 db toSummary 提供）
 import { useEffect, useMemo, useState } from "react";
 import type { MouseEvent } from "react";
-import { BookOpenText, ExternalLink, FileText, Link2, Loader2, RefreshCw, Search, Trash2 } from "lucide-react";
+import { ExternalLink, FileText, Link2, Loader2, RefreshCw, Search, Trash2 } from "lucide-react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { REFERENCE_TYPES } from "@whispering233/ai-editor-shared";
 import type { ReferenceTypeValue } from "@whispering233/ai-editor-shared";
@@ -276,8 +276,9 @@ export default function ReferenceList() {
             ))}
           </div>
         ) : visible === null || visible.length === 0 ? (
+          /* 空态（批次十二 R2）：无条目分支去重——纯文字提示，不显示书籍图标与新建按钮
+             （顶部标题行已有两个新建入口）；筛选/搜索无匹配分支保留「清空筛选」操作 */
           <EmptyState
-            icon={<BookOpenText className="size-7 text-muted-foreground/40" />}
             action={
               keyword !== "" || activeType !== "all" || activeTag !== null ? (
                 <Button
@@ -291,16 +292,7 @@ export default function ReferenceList() {
                 >
                   清空筛选
                 </Button>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <Button size="sm" variant="outline" disabled={disabled} onClick={() => navigate("#/references/new/md")}>
-                    新建 md 文档
-                  </Button>
-                  <Button size="sm" disabled={disabled} onClick={() => navigate("#/references/new/link")}>
-                    新建外源链接
-                  </Button>
-                </div>
-              )
+              ) : undefined
             }
           >
             {keyword !== "" || activeType !== "all" || activeTag !== null
