@@ -140,7 +140,7 @@
 - 路由：`#/entities/setting`（设定 tab，树形视图；原 `#/entities/setting-tree` 已合并移除）
 - 数据：`GET /api/v1/entity/setting`（全量，limit 200 上限 + 名称排序）+ `GET /api/v1/relation?source_type=setting&target_type=setting&relation_type=belongs_to&depth=1`（全量层级边）→ 前端构建树（纯函数 `buildSettingTree`：邻接表组装 + 根判定 + 父在 map 外的子节点提升为根的溢出防御）
 - 语义：层级 = `belongs_to`（子 → 父，决策 30）；软删端点已由服务端可见性过滤，悬空引用自动归根
-- 操作：`POST /entity/setting`（建）、`PUT /entity/setting/:id`（改）、`PUT /entity/setting/:id/move`（移）、`DELETE /entity/setting/:id`（软删）、`POST /relation`（belongs_to 挂父）
+- 操作：`POST /entity/setting`（建）、`PUT /entity/setting/:id`（改）、`DELETE /entity/setting/:id`（软删）、`POST /relation`（belongs_to 挂父）——**无 `PUT /entity/setting/:id/move` 端点**（设定无 sort_order 语义，服务端不存在该端点；拖拽调整层级 = 删旧边 + 建新边，见「关键交互」）
 
 ## 布局线框
 
@@ -164,7 +164,7 @@
 
 | 元素 | 内容 |
 |------|------|
-| 节点行 | 名称（**点击行内编辑**，双击跳详情 `#/entities/setting/:id`）+ 类别徽标（`summary.category`）+ 直接子设定数「N 个子设定」（>0 时显示）+ 行尾删除按钮（Trash2，H2 直接软删不弹确认） |
+| 节点行 | 名称（**点击行内编辑**，双击跳详情 `#/entities/setting/:id`）+ 标签徽标（`summary.tags`，决策 31 统一字段，替代已废弃的 category）+ 直接子设定数「N 个子设定」（>0 时显示）+ 行尾删除按钮（Trash2，H2 直接软删不弹确认） |
 | 折叠箭头 | 父节点 ▾/▸ 切换（默认全部展开；叶子无箭头占位保缩进） |
 | 工具栏 | 「全部展开 / 全部折叠」按钮（批次八 O5）+ 搜索框 + 标签筛选（树内过滤）+ [+ 新建]（root 级） |
 | 缩进 | 嵌套 `ul` + 左边线连接（ml + border-l），层级视觉清晰 |
@@ -174,7 +174,7 @@
 - **折叠/展开**：父节点 ▾/▸ 切换；工具栏「全部展开 / 全部折叠」（全部折叠 = 仅保留根级）。
 - **行内编辑（点击标题）**：点击设定名 → 行内输入框（预填当前名）→ Enter 确认 `PUT /entity/setting/:id { name }`、Esc 取消、失焦保存。
 - **Enter 新建子级**：选中节点后按 Enter → 就地输入行出现在该节点子级末尾（`POST /entity/setting` + `POST /relation` belongs_to 挂父；root 顶层「+ 新建」输入行无父）；Enter 确认创建、Esc 取消。
-- **拖拽调整层级/顺序**：HTML5 DnD（参考大纲页）——拖拽改挂载（belongs_to 层级约束 + **防环校验沿用决策 30**，服务端拒绝环）；同级拖拽改顺序（`PUT /entity/setting/:id/move`）。
+- **拖拽调整层级**：HTML5 DnD（参考大纲页）——**嵌套语义**：拖到行上 = 成为该行子级、拖到空白区 = 移为顶层根（belongs_to 层级约束 + **防环校验沿用决策 30**，服务端拒绝环）；改父 = 先建新边后删旧边（`POST /relation` + `DELETE /relation/:id`）。**设定无 sort_order，同级顺序 = 名称序，同父拖拽为 no-op**——拖拽仅用于调整层级（嵌套/移根），不提供同级手动排序。
 - **双击详情**：双击节点 → `#/entities/setting/:id`（详情页含该设定的层级区块与全部关联）。
 - **筛选（树内过滤）**：搜索 + 标签过滤在树内进行——命中节点及其祖先链保留展示（非命中子树折叠/隐藏）；**无表格分页**（整树展示，层级即导航）。
 - **删除**：行尾 Trash2 → 直接软删（H2 不弹确认）→ `DELETE /entity/setting/:id` → 行消失 + toast「已移入回收站，可随时还原」。

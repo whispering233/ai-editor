@@ -2,8 +2,9 @@
 // 路由表见 doc/ui/layout.md §1（8 路由，#/chat 已移除——聊天常驻右栏 ChatPanel，U2 起不再作为独立页渲染）
 import { StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
+import { useEffect } from "react";
 import { ENTITY_TYPES } from "@whispering233/ai-editor-shared";
-import { useHashRoute, type Route } from "./hooks/use-route";
+import { navigate, useHashRoute, type Route } from "./hooks/use-route";
 import { AppShell } from "./components/AppShell";
 import { ErrorBoundary } from "./components/feedback/ErrorBoundary";
 import Dashboard from "./pages/Dashboard";
@@ -20,6 +21,14 @@ import Trash from "./pages/Trash";
 import Settings from "./pages/Settings";
 import "./index.css";
 
+/** 旧路由重定向（决策 42：设定树 tab 已合并移除——#/entities/setting-tree 重定向到设定 tab 树形视图） */
+function RedirectTo({ to }: { to: string }) {
+  useEffect(() => {
+    navigate(to);
+  }, [to]);
+  return null;
+}
+
 /** 按路由分段渲染页面；未知 hash 已由 useHashRoute 回退 #/ */
 function renderPage(route: Route): ReactNode {
   const [first, second, third] = route.segments;
@@ -35,9 +44,9 @@ function renderPage(route: Route): ReactNode {
       if (second === "relations") {
         return <EntityList type="relations" />;
       }
-      // 设定树 tab（批次四 I4，决策 30，entity-list.md「设定树 Tab」）：第 6 个 tab，同「关联」先于归一化拦截
+      // 决策 42：设定树 tab 已合并移除——旧路由 #/entities/setting-tree 重定向到设定 tab（树形视图）
       if (second === "setting-tree") {
-        return <EntityList type="setting-tree" />;
+        return <RedirectTo to="/entities/setting" />;
       }
       // 按段数区分：2 段（#/entities/:type）→ 列表；3 段（#/entities/:type/:id）→ 详情（layout.md §1）
       // type 缺省 character（entity-list.md：type ∈ character|setting|location|hook）
@@ -62,7 +71,11 @@ function renderPage(route: Route): ReactNode {
       return second !== undefined ? <TimelineDetail key={second} id={second} /> : <Timeline />;
     case "references":
       // 参考资料（决策 36）：1 段（#/references）→ 列表；2 段（#/references/:id）→ 详情
-      return second !== undefined ? <ReferenceDetail key={second} id={second} /> : <ReferenceList />;
+      return second !== undefined ? (
+        <ReferenceDetail key={second} id={second} />
+      ) : (
+        <ReferenceList />
+      );
     case "trash":
       return <Trash />;
     case "settings":

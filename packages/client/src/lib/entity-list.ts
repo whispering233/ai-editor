@@ -11,10 +11,7 @@ export function pageCount(total: number, limit: number): number {
   return Math.max(1, Math.ceil(total / limit));
 }
 
-/** 摘要列配置（列表表格列；key = EntitySummary.summary 字段名；key2/key3 可选——部分类型只有一列摘要）
- * 特殊约定：key2 === "parent"（仅 setting）为**上级设定列**——值取 EntitySummary 顶层
- * parentId/parentName（M2，2026-08 批次六：层级 = belongs_to 关系，非 summary 字段），
- * 渲染为可点击 chip 跳父设定详情；无父 → 「—」占位 */
+/** 摘要列配置（列表表格列；key = EntitySummary.summary 字段名；key2/key3 可选——部分类型只有一列摘要） */
 export interface SummaryColumnConfig {
   key1: string;
   label1: string;
@@ -27,13 +24,11 @@ export interface SummaryColumnConfig {
 export const SUMMARY_COLUMNS: Record<EntityType, SummaryColumnConfig> = {
   character: { key1: "role", label1: "角色", key2: "status", label2: "状态" },
   // 决策 31（2026-08）：设定分类由 rules 标签承接，摘要列从「类别」改为「标签」
-  // M2（2026-08 批次六）：追加「上级设定」列（key2="parent" 特殊列）与「描述」列（summary.description，
-  // 服务端截断 100 字符——endpoints.md EntitySummary 契约）
+  // 决策 42（2026-08 批次十）：设定 tab 改为树形视图（不走表格），「上级设定」特殊列
+  // （key2="parent"，M2）随表格移除；「描述」列保留配置（树形视图不渲染表格，无实际作用）
   setting: {
     key1: "tags",
     label1: "标签",
-    key2: "parent",
-    label2: "上级设定",
     key3: "description",
     label3: "描述",
   },
@@ -45,7 +40,14 @@ export const SUMMARY_COLUMNS: Record<EntityType, SummaryColumnConfig> = {
   // 空 key = 摘要列渲染「—」占位，与 event 摘要缺失同款防御）
   timepoint: { key1: "", label1: "" },
   // 决策 36（批次九）参考资料 reference：type 分类 + content 摘要截断 120 字 + tags 前 3
-  reference: { key1: "type", label1: "分类", key2: "content", label2: "摘要", key3: "tags", label3: "标签" },
+  reference: {
+    key1: "type",
+    label1: "分类",
+    key2: "content",
+    label2: "摘要",
+    key3: "tags",
+    label3: "标签",
+  },
 };
 
 /** hook 枚举值 → 中文（展示映射；未收录的原样显示）；详情页表单下拉复用（S3.6） */
@@ -81,11 +83,6 @@ export function summaryCellText(type: EntityType, key: string, value: unknown): 
   return String(value);
 }
 
-/** 上级设定列文案（M2，2026-08 批次六）：parentName 非空 → 名称；无父 → 「—」占位 */
-export function parentCellText(item: { parentName?: string }): string {
-  return item.parentName !== undefined && item.parentName !== "" ? item.parentName : "—";
-}
-
 /** 创建行首字段配置（原型「name 必填 + 该类型首字段，如 character 的 role」） */
 export interface CreateFirstFieldConfig {
   key: string;
@@ -113,5 +110,10 @@ export const CREATE_FIRST_FIELD: Record<EntityType, CreateFirstFieldConfig> = {
   // 空 key = 行内新建仅 name 输入，EntityList 对空 key 跳过 data 字段与首字段输入）
   timepoint: { key: "", label: "", input: "text" },
   // 决策 36（批次九）参考资料 reference：首字段 = 分类枚举（受控 select）
-  reference: { key: "type", label: "分类", input: "select", options: ["material", "inspiration", "theory", "reference"] },
+  reference: {
+    key: "type",
+    label: "分类",
+    input: "select",
+    options: ["material", "inspiration", "theory", "reference"],
+  },
 };
