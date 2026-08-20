@@ -453,11 +453,9 @@ function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowP
           </button>
         )}
       </td>
-      {/* 分类列：存量回显名 / 新分类原样文本 */}
-      <td className="max-w-28 px-3 py-2">
-        <span className="rounded-md border border-border bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
-          {TYPE_LABELS[type] ?? type}
-        </span>
+      {/* 分类列（批次十二修订）：直接显示文字，不包裹徽标——表格形态下与标签列区分，对齐 EntityList 数据列样式 */}
+      <td className="max-w-28 truncate px-3 py-2 text-muted-foreground">
+        {TYPE_LABELS[type] ?? type}
       </td>
       {/* 标签列：tags 前 3 个徽标 */}
       <td className="px-3 py-2">
