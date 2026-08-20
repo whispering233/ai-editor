@@ -40,7 +40,6 @@ import { cn } from "../lib/utils";
 import { navigate } from "../hooks/use-route";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useUiStore } from "../stores/ui";
-import { formatTimestamp } from "@whispering233/ai-editor-shared";
 import { CreateRelationDialog } from "../components/entity/create-relation-dialog";
 import { ParentSettingSelect } from "../components/entity/parent-setting-select";
 import { RelationsView } from "../components/entity/relations-view";
@@ -61,15 +60,13 @@ const TYPE_LABEL: Record<EntityType, string> = {
   reference: "参考资料",
 };
 
-/** 排序下拉选项（sort × order 组合；默认更新时间倒序） */
+/** 排序下拉选项（sort × order 组合；决策 39：移除 updated_at 项，默认创建时间倒序） */
 const SORT_OPTIONS: Array<{
   value: string;
   label: string;
-  sort: "name" | "created_at" | "updated_at";
+  sort: "name" | "created_at";
   order: "asc" | "desc";
 }> = [
-  { value: "updated_at:desc", label: "更新时间（新→旧）", sort: "updated_at", order: "desc" },
-  { value: "updated_at:asc", label: "更新时间（旧→新）", sort: "updated_at", order: "asc" },
   { value: "name:asc", label: "名称（A→Z）", sort: "name", order: "asc" },
   { value: "name:desc", label: "名称（Z→A）", sort: "name", order: "desc" },
   { value: "created_at:desc", label: "创建时间（新→旧）", sort: "created_at", order: "desc" },
@@ -95,7 +92,7 @@ export default function EntityList({ type }: { type: string }) {
   /** 防抖后的查询关键词（空 = 不过滤） */
   const [q, setQ] = useState("");
   const [offset, setOffset] = useState(0);
-  const [sort, setSort] = useState<"name" | "created_at" | "updated_at">("updated_at");
+  const [sort, setSort] = useState<"name" | "created_at">("created_at");
   const [order, setOrder] = useState<"asc" | "desc">("desc");
   /** 标签筛选（决策 31：仅 setting 类型；"" = 全部） */
   const [tagFilter, setTagFilter] = useState("");
@@ -147,7 +144,7 @@ export default function EntityList({ type }: { type: string }) {
     setQInput("");
     setQ("");
     setOffset(0);
-    setSort("updated_at");
+    setSort("created_at");
     setOrder("desc");
     setTagFilter("");
     setParentFilter("");
@@ -629,7 +626,6 @@ export default function EntityList({ type }: { type: string }) {
                     <th className="px-3 py-2 font-normal">{col.label1}</th>
                     {col.key2 && <th className="px-3 py-2 font-normal">{col.label2}</th>}
                     {col.key3 && <th className="px-3 py-2 font-normal">{col.label3}</th>}
-                    <th className="px-3 py-2 text-right font-normal">更新时间</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -690,9 +686,6 @@ export default function EntityList({ type }: { type: string }) {
                         <span onClick={(e) => e.stopPropagation()} className="inline-flex">
                           <AskAiButton focus={{ focus_entity_type: entityType, focus_entity_id: item.id }} title={`带《${item.name}》问 AI`} />
                         </span>
-                      </td>
-                      <td className="px-3 py-2 text-right text-xs whitespace-nowrap text-muted-foreground/70">
-                        {formatTimestamp(item.updatedAt)}
                       </td>
                     </tr>
                   ))}
