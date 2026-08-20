@@ -1,20 +1,23 @@
 // 时间轴组块（G2.3，timeline.md G2 布局线框：时间点组块）
-// 职责：组标题行（大圆点 + 左侧折叠按钮 + 时间点名；右侧：事件计数 + [重命名] + [+ 在此时间点新建事件] +
+// 职责：组标题行（大圆点 + 左侧折叠按钮 + 时间点名；右侧：事件计数 + [+ 在此时间点新建事件] +
 //   [移入回收站]）+ 组内事件堆叠；**未挂载兜底区复用本组件**（timepoint = null）。
+// 决策 38：组标题行对齐大纲交互模式——双击 = 时间点详情（#/entities/timepoint/:id 通用实体详情页）、
+//   点击时间点名 = 行内编辑（Enter 提交 / Esc 取消 / 失焦保存）、**重命名按钮已移除**（只留删除 + AskAiButton）。
 // 拖拽柄视觉已移除（批次八 O3）：draggable 仍设在组标题行根，悬停 title 提示拖拽能力，无 GripVertical 图标。
 // 折叠按钮位序（批次八 O4）：移至组标题**左侧**（标题前，同大纲页折叠箭头在标题左边），不再靠右。
 // 拖拽（G2 双轨）：
 // - 时间点整组拖拽：draggable 设在**组标题行根**（组内事件行各自 draggable——G2 恢复单条拖拽，
 //   两者是兄弟节点不嵌套，无 F4 防误拖冲突）；dragover/drop 以标题行中点判定插入位（容器协调）
 // - 未挂载区**不可拖拽**（无时间点可排，timeline.md 线框）；组内事件可拖入（move_to null 移除挂载）
-// 重命名（G2）：[重命名] → 行内输入框（预填当前名）→ Enter 提交（onRename 回调交页面 PUT + 刷新）、
-//   Esc/失焦取消；编辑态禁用标题行拖拽（防输入误拖）。
+// 行内编辑（决策 38：点击时间点名进入，替代原「重命名」按钮）：Enter 提交（onRename 回调交页面
+//   PUT + 刷新）、Esc 取消、失焦保存；saving 守卫防 Enter+blur 双提交（悲观提交：提交期间保持编辑态，
+//   成功后退出——同大纲 busy 守卫语义）；编辑态禁用标题行拖拽（防输入误拖）。
 // 折叠（collapsed）：折叠后仅标题行、轴线仍连续（容器级贯穿）；折叠按钮 aria-expanded。
 // 视觉全走 tokens（layout.md §3 纪律）：无硬编码色类。
 import { useState } from "react";
-import type { DragEvent } from "react";
+import type { DragEvent, MouseEvent } from "react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
-import { ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronRight, Plus, Trash2 } from "lucide-react";
 import { AskAiButton } from "../chat/AskAiButton";
 import { Button } from "@/components/ui/button";
 import { cn } from "../../lib/utils";
@@ -47,6 +50,8 @@ interface TimelineGroupBlockProps {
   onDeleteTimepoint: (tp: EntitySummary) => void;
   /** 标题行「+ 在此时间点新建事件」（页面打开带预挂载的新建对话框；仅时间点组） */
   onAddEventAt: (timepointId: string) => void;
+  /** 组标题行双击 → 时间点详情（页面跳 #/entities/timepoint/:id；仅时间点组） */
+  onDetailTimepoint: (tp: EntitySummary) => void;
   // 组标题行拖拽（时间点整组；容器装配）
   onDragStart: (e: DragEvent<HTMLDivElement>) => void;
   onDragEnd: () => void;
@@ -57,7 +62,8 @@ interface TimelineGroupBlockProps {
   /** 行级插入指示线判定（事件拖拽落点；由容器 dropTarget 状态计算） */
   eventInsertLines: (eventId: string) => { before: boolean; after: boolean };
   onDetail: (ev: EntitySummary) => void;
-  onEdit: (ev: EntitySummary) => void;
+  /** 事件名行内编辑提交（页面执行 PUT /entity/event/:id { name }；失败抛错——页面 toast） */
+  onEditName: (id: string, name: string) => Promise<void>;
   onDelete: (ev: EntitySummary) => void;
 }
 
@@ -76,6 +82,7 @@ export function TimelineGroupBlock({
   onRename,
   onDeleteTimepoint,
   onAddEventAt,
+  onDetailTimepoint,
   onDragStart,
   onDragEnd,
   onDragOver,
@@ -83,12 +90,14 @@ export function TimelineGroupBlock({
   eventDrag,
   eventInsertLines,
   onDetail,
-  onEdit,
+  onEditName,
   onDelete,
 }: TimelineGroupBlockProps) {
-  // 重命名行内编辑（G2：按钮 → 输入框预填 → Enter 提交、Esc/失焦取消）
+  // 行内编辑（决策 38：点击时间点名进入，替代原「重命名」按钮；Enter 提交 / Esc 取消 / 失焦保存）
   const [editing, setEditing] = useState(false);
   const [nameValue, setNameValue] = useState("");
+  /** 提交在途（防 Enter+blur 双提交；悲观提交：提交期间保持编辑态，成功后退出——同大纲 busy 守卫语义） */
+  const [saving, setSaving] = useState(false);
   const isUngrouped = timepoint === null;
   const title = isUngrouped ? "未挂载" : timepoint.name;
   // 拖拽态（G2 双轨：时间点整组 / 事件单条——拖拽来源命中本组/本行 → opacity-50）
@@ -101,13 +110,38 @@ export function TimelineGroupBlock({
     setEditing(true);
   }
 
-  /** Enter 提交：trim 后空/未变 → 直接退出编辑；否则交页面（PUT + toast + 刷新）；失败由页面 toast（已退出编辑态，可重新点重命名） */
+  /** Enter/失焦提交：trim 后空/未变 → 退出编辑不发请求；否则交页面（PUT + toast + 刷新）；
+   * saving 守卫防 Enter+blur 双提交（悲观提交：提交期间保持编辑态，成功后退出——同大纲 busy 守卫语义）；
+   * 失败保持编辑态 + 保留输入值（页面已 toast，此处 catch 吞掉防 unhandled rejection）——同大纲 editFailureRecovery */
   async function commitRename() {
-    if (timepoint === null) return;
+    if (timepoint === null || saving) return;
     const name = nameValue.trim();
-    setEditing(false);
-    if (name === "" || name === timepoint.name) return;
-    await onRename(timepoint.id, name);
+    if (name === "" || name === timepoint.name) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      await onRename(timepoint.id, name);
+      setEditing(false);
+    } catch {
+      // 失败保持编辑态（setEditing(false) 未执行）+ 输入值保留，可修正后重试；页面已 toast，不重复提示
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  /** 组标题行双击（决策 38）：双击 = 时间点详情（#/entities/timepoint/:id——通用实体详情页承载，
+   * 无独立时间点详情路由；不用 #/timeline/:id 是因为 TimelineDetail 会把 timepoint 当事件渲染
+   * （eventFormFromDetail），而通用实体详情页可正常渲染 timepoint 纯名称表单）；
+   * 冲突防护：双击标题 = 编辑（第一击已把 span 换成输入框，dblclick 的
+   * target 是输入框被 closest 拦截；极端时序下 target 仍是标题 span 时由 editing 守卫拦截）；
+   * 双击按钮区同样不跳详情；未挂载区无详情 */
+  function handleRowDoubleClick(e: MouseEvent<HTMLDivElement>) {
+    if (timepoint === null) return;
+    if ((e.target as HTMLElement).closest("button, input, a")) return;
+    if (editing) return;
+    onDetailTimepoint(timepoint);
   }
 
   return (
@@ -115,13 +149,15 @@ export function TimelineGroupBlock({
       {/* 插入指示线（S13 模式：目标组块上下边缘，跨圆点列与内容） */}
       {showInsertBefore && <div className="absolute inset-x-0 -top-px h-0.5 bg-primary" />}
       {showInsertAfter && <div className="absolute inset-x-0 -bottom-px h-0.5 bg-primary" />}
-      {/* 组标题行（draggable：时间点整组拖拽，无视觉拖拽柄（批次八 O3）；未挂载区/编辑态不 draggable） */}
+      {/* 组标题行（draggable：时间点整组拖拽，无视觉拖拽柄（批次八 O3）；未挂载区/编辑态不 draggable；
+          决策 38：双击 = 时间点详情（onDoubleClick，编辑态/按钮区/未挂载区不触发）） */}
       <div
         draggable={!isUngrouped && !busy && !editing}
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
         onDragOver={onDragOver}
         onDrop={onDrop}
+        onDoubleClick={handleRowDoubleClick}
         title={!isUngrouped ? "拖拽调整时间点顺序（组内事件不动）" : undefined}
         className={cn("flex items-start", !isUngrouped && groupDragging && "opacity-50")}
       >
@@ -151,10 +187,7 @@ export function TimelineGroupBlock({
           >
             {/* chevron 展开旋转惯例（layout.md §2.3）：折叠时横指，展开时向下 */}
             <ChevronRight
-              className={cn(
-                "size-4 transition-transform duration-200",
-                !collapsed && "rotate-90",
-              )}
+              className={cn("size-4 transition-transform duration-200", !collapsed && "rotate-90")}
             />
           </Button>
           {editing ? (
@@ -164,10 +197,14 @@ export function TimelineGroupBlock({
               value={nameValue}
               onChange={(e) => setNameValue(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") void commitRename();
-                else if (e.key === "Escape") setEditing(false);
+                if (e.key === "Enter") {
+                  e.preventDefault(); // 对齐大纲 handleEditKeyDown：防未来被包进 form 触发提交
+                  void commitRename();
+                } else if (e.key === "Escape") {
+                  setEditing(false);
+                }
               }}
-              onBlur={() => setEditing(false)}
+              onBlur={() => void commitRename()}
               maxLength={100}
               aria-label="时间点名称"
               className="w-40 rounded-md border border-border bg-background px-2 py-0.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
@@ -176,38 +213,33 @@ export function TimelineGroupBlock({
             <span
               className={cn(
                 "min-w-0 truncate text-sm font-medium",
-                // 未挂载区占位样式（timeline.md：与正常组标题区分——muted 斜体）
-                isUngrouped ? "text-muted-foreground italic" : "text-foreground",
+                // 未挂载区占位样式（timeline.md：与正常组标题区分——muted 斜体；不可编辑）
+                isUngrouped
+                  ? "text-muted-foreground italic"
+                  : "cursor-text text-foreground hover:underline",
               )}
               title={title}
+              onClick={(e) => {
+                if (timepoint === null) return; // 未挂载区不可编辑
+                e.stopPropagation(); // 标题单击 = 编辑而非其他行为（决策 38 冲突设计）
+                startRename();
+              }}
             >
               {title}
             </span>
           )}
-          {/* 右侧信息与操作区（H5：事件计数、重命名、在此时间点新建事件、移入回收站全部靠右；
-              折叠按钮已移至左侧（批次八 O4）） */}
+          {/* 右侧信息与操作区（H5：事件计数、在此时间点新建事件、移入回收站全部靠右；
+              折叠按钮已移至左侧（批次八 O4）；决策 38：重命名按钮已移除——点击标题行内编辑） */}
           <span className="ml-auto flex shrink-0 items-center gap-1">
             <span className="shrink-0 text-xs text-muted-foreground">{events.length} 个事件</span>
             {/* 行级「带上下文问 AI」（决策 35 修订）：时间点是时间语义对象 */}
             {timepoint !== null && !editing && (
               <span className="inline-flex shrink-0" draggable={false}>
-                <AskAiButton focus={{ focus_entity_type: "timepoint", focus_entity_id: groupId }} title={`带时间点「${timepoint.name}」问 AI`} />
+                <AskAiButton
+                  focus={{ focus_entity_type: "timepoint", focus_entity_id: groupId }}
+                  title={`带时间点「${timepoint.name}」问 AI`}
+                />
               </span>
-            )}
-            {/* 重命名（H5：图标按钮，减少文字干扰） */}
-            {timepoint !== null && !editing && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                draggable={false}
-                className="text-muted-foreground"
-                title="重命名"
-                aria-label={`重命名「${timepoint.name}」`}
-                onClick={startRename}
-              >
-                <Pencil className="size-3.5" />
-              </Button>
             )}
             {/* 在此时间点新建事件（H5：图标按钮，减少文字干扰） */}
             {timepoint !== null && !editing && (
@@ -262,7 +294,7 @@ export function TimelineGroupBlock({
                 showInsertAfter={lines.after}
                 eventDrag={eventDrag}
                 onDetail={onDetail}
-                onEdit={onEdit}
+                onEditName={onEditName}
                 onDelete={onDelete}
               />
             );
