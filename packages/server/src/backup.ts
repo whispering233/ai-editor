@@ -46,6 +46,33 @@ import type { ProjectContext } from "./middleware/project.js";
 /** 备份目录名（决策 27：项目目录内 .backups/，随书籍移动自然携带） */
 export const BACKUPS_DIR_NAME = ".backups";
 
+/** 参考资料目录名（决策 43：项目目录内 references/，随备份 zip 打包） */
+const REFERENCE_DIR_NAME = "references";
+
+/** 备份包条目白名单判定（决策 43 扩展：三文件 + references/ 前缀——逐名比对天然防 zip 路径穿越；
+ * references/ 子路径拒绝含 `..` 的条目防相对路径逃逸） */
+export function isAllowedBackupEntry(name: string): boolean {
+  if ((PROJECT_EXPORT_FILE_NAMES as readonly string[]).includes(name)) return true;
+  return name.startsWith(`${REFERENCE_DIR_NAME}/`) && !name.split("/").includes("..");
+}
+
+/** references/ 目录内全部文件（递归，含 .trash/）相对路径（`/` 分隔）；目录缺失 → [] */
+function listReferenceDirFiles(root: string): string[] {
+  const base = join(root, REFERENCE_DIR_NAME);
+  if (!existsSync(base)) return [];
+  const out: string[] = [];
+  const walk = (dir: string, prefix: string): void => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const rel = prefix === "" ? e.name : `${prefix}/${e.name}`;
+      const full = join(dir, e.name);
+      if (e.isDirectory()) walk(full, rel);
+      else out.push(rel);
+    }
+  };
+  walk(base, "");
+  return out;
+}
+
 /** 解压总字节预算（200MB，zip 炸弹防御——与 import 同款，restore 复用） */
 const MAX_UNZIP_BUDGET = 200 * 1024 * 1024;
 
@@ -92,22 +119,25 @@ function assertBackupFileNameFormat(fileName: string): NonNullable<ReturnType<ty
 // ============ 备份管道（复用 E1 打包，避免复制） ============
 
 /**
- * 打包当前项目三文件为 zip（E1 export 同款管道）：
+ * 打包当前项目为 zip（E1 export 同款管道；决策 43 扩展）：
  * wal_checkpoint(TRUNCATE) 把 WAL 合并回主文件（zip 内 data.db 为完整快照，
- * 无需附带 -wal/-shm）→ zipSync 打包（键序稳定：project.json → outline.json → data.db）。
+ * 无需附带 -wal/-shm）→ zipSync 打包（键序稳定：project.json → outline.json → data.db
+ * → references/**（决策 43：参考资料目录含 .trash/ 随包——项目自包含））。
  * 三文件缺失任一 → 抛错（打开的项目三文件必然齐全，缺失即损坏，不导出半成品包）。
  */
 export function createBackupZip(project: ProjectContext): Uint8Array<ArrayBuffer> {
   const dir = project.root;
   checkpointWal(project.db);
-  return zipSync(
-    {
-      [PROJECT_FILE_NAME]: readFileSync(join(dir, PROJECT_FILE_NAME)),
-      [OUTLINE_FILE_NAME]: readFileSync(join(dir, OUTLINE_FILE_NAME)),
-      [DATA_DB_FILE_NAME]: readFileSync(join(dir, DATA_DB_FILE_NAME)),
-    },
-    { level: 6 },
-  );
+  const zipEntries: Record<string, Uint8Array> = {
+    [PROJECT_FILE_NAME]: readFileSync(join(dir, PROJECT_FILE_NAME)),
+    [OUTLINE_FILE_NAME]: readFileSync(join(dir, OUTLINE_FILE_NAME)),
+    [DATA_DB_FILE_NAME]: readFileSync(join(dir, DATA_DB_FILE_NAME)),
+  };
+  // 决策 43：references/ 目录随包（存在则递归打包；不存在跳过——旧项目无目录不报错）
+  for (const rel of listReferenceDirFiles(dir)) {
+    zipEntries[`${REFERENCE_DIR_NAME}/${rel}`] = readFileSync(join(dir, REFERENCE_DIR_NAME, rel));
+  }
+  return zipSync(zipEntries, { level: 6 });
 }
 
 /**
@@ -356,7 +386,7 @@ function unzipWithBudget(zipData: Uint8Array, budget: number): { entries: Record
   let total = 0;
   const unzipper = new Unzip((file) => {
     names.push(file.name);
-    if (!(PROJECT_EXPORT_FILE_NAMES as readonly string[]).includes(file.name)) return; // 未知条目不解压
+    if (!isAllowedBackupEntry(file.name)) return; // 未知条目不解压（白名单 = 三文件 + references/，决策 43）
     const chunks: Uint8Array[] = [];
     let size = 0;
     file.ondata = (err, chunk, final) => {
@@ -418,7 +448,7 @@ function isValidOutlineFile(parsed: unknown): boolean {
  * @throws HttpError 400（坏包/缺文件/未知条目/契约不符）/ 409 SCHEMA_VERSION_MISMATCH
  */
 export function validateBackupPackage(zipData: Uint8Array): { entries: Record<string, Uint8Array>; projectId: string } {
-  // 1/2. 解压 + 白名单（严格拒绝）：只接受三数据文件名
+  // 1/2. 解压 + 白名单（严格拒绝）：三数据文件名 + references/ 前缀（决策 43）
   let entries: Record<string, Uint8Array>;
   let entryNames: string[];
   try {
@@ -429,9 +459,9 @@ export function validateBackupPackage(zipData: Uint8Array): { entries: Record<st
     if (err instanceof HttpError) throw err;
     throw new HttpError(400, "VALIDATION_ERROR", "不是有效的项目备份包（zip 解析失败）");
   }
-  const unknown = entryNames.filter((k) => !(PROJECT_EXPORT_FILE_NAMES as readonly string[]).includes(k));
+  const unknown = entryNames.filter((k) => !isAllowedBackupEntry(k));
   if (unknown.length > 0) {
-    throw new HttpError(400, "VALIDATION_ERROR", `备份包含未知条目: ${unknown.join(", ")}（只接受 ${PROJECT_EXPORT_FILE_NAMES.join("/")}）`);
+    throw new HttpError(400, "VALIDATION_ERROR", `备份包含未知条目: ${unknown.join(", ")}（只接受 ${PROJECT_EXPORT_FILE_NAMES.join("/")} 与 references/）`);
   }
   const missing = PROJECT_EXPORT_FILE_NAMES.filter((f) => !(f in entries));
   if (missing.length > 0) {
@@ -557,6 +587,16 @@ function hasFileChangesSince(project: ProjectContext, since: Date): boolean {
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") return true;
   }
+  // references/ 目录（决策 43）：内文件（含 .trash/）任一 mtime 晚于 limit → 有变更——
+  // 本地新增/外部编辑 md 文档同样触发自动备份；目录缺失 = 无文件跳过；
+  // 遍历竞态（读取中删除）→ 防御视为无变更（下一 tick 重检）
+  try {
+    for (const rel of listReferenceDirFiles(project.root)) {
+      if (statSync(join(project.root, REFERENCE_DIR_NAME, rel)).mtimeMs > limit) return true;
+    }
+  } catch {
+    // 忽略（下一 tick 重检）
+  }
   return false;
 }
 
@@ -643,8 +683,8 @@ export function writeProjectFilesFromBackup(
   entries: Record<string, Uint8Array>,
   opts: { keepId?: string; name?: string; snapshotFileName?: string } = {},
 ): void {
-  // 替换顺序：JSON 两文件在前，data.db 最后——db 替换失败时其余已替换（校验已通过，
-  // 文件内容本身有效，部分替换可经重新恢复修复）；replaced 清单供失败日志使用（P1-2）
+  // 替换顺序：JSON 两文件在前，data.db 最后，references/ 收尾——db 替换失败时其余已替换
+  // （校验已通过，文件内容本身有效，部分替换可经重新恢复修复）；replaced 清单供失败日志使用（P1-2）
   const targetNames = [PROJECT_FILE_NAME, OUTLINE_FILE_NAME, DATA_DB_FILE_NAME];
   const replaced: string[] = [];
   try {
@@ -660,6 +700,18 @@ export function writeProjectFilesFromBackup(
     replaced.push(OUTLINE_FILE_NAME);
     writeFileAtomic(join(dir, DATA_DB_FILE_NAME), entries[DATA_DB_FILE_NAME]);
     replaced.push(DATA_DB_FILE_NAME);
+    // 决策 43：references/ 目录整体覆盖（清空现有 → 写回备份条目；含 .trash/）——
+    // 恢复/导入是「整体还原」语义，目录以备份内容为准，本地残留不混入
+    const refDir = join(dir, REFERENCE_DIR_NAME);
+    if (existsSync(refDir)) rmSync(refDir, { recursive: true, force: true });
+    for (const key of Object.keys(entries)) {
+      if (!key.startsWith(`${REFERENCE_DIR_NAME}/`)) continue;
+      const rel = key.slice(REFERENCE_DIR_NAME.length + 1);
+      if (rel === "" || rel.split("/").includes("..")) continue; // 白名单已校验，双保险
+      const target = join(refDir, ...rel.split("/"));
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileAtomic(target, entries[key]);
+    }
   } catch (err) {
     // P1-2：失败路径日志（对齐「记日志暴露部分替换」承诺）——已替换/未替换文件清单 + 覆盖前快照名
     const notReplaced = targetNames.filter((n) => !replaced.includes(n));

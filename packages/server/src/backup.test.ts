@@ -35,7 +35,8 @@ import {
   setCurrentProject,
 } from "./middleware/project.js";
 import { projectRoutes, setProjectRoot } from "./routes/project.js";
-import { BACKUPS_DIR_NAME, maybeAutoBackup, pruneBackups, renameBackup, writeBackup, writeProjectFilesFromBackup } from "./backup.js";
+import { BACKUPS_DIR_NAME, createBackupZip, isAllowedBackupEntry, maybeAutoBackup, pruneBackups, renameBackup, validateBackupPackage, writeBackup, writeProjectFilesFromBackup } from "./backup.js";
+import { unzipSync } from "fflate";
 
 const HOST_HEADERS = { host: "127.0.0.1:3456" }; // 来源校验 host 白名单（决策 17 修订）
 const T0 = "2026-08-01T10:00:00Z";
@@ -1092,5 +1093,97 @@ describe("自动定时器（open 启 / close 停 / 切换重启）", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+// ============ 卡 11.3：references/ 随备份（决策 43） ============
+
+describe("备份含 references/ 目录（决策 43）", () => {
+  it("createBackupZip 打包 references/**（含 .trash/）；无目录 → 无条目", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-ref1", "参考资料备份"));
+    await openProject(dir);
+    // 写入参考资料文件 + .trash/ 软删文件
+    mkdirSync(join(dir, "references", ".trash"), { recursive: true });
+    writeFileSync(join(dir, "references", "五行.md"), "---\ntitle: 五行\n---\n正文");
+    writeFileSync(join(dir, "references", ".trash", "旧文档.md"), "软删内容");
+    const project = getCurrentProject() as NonNullable<ReturnType<typeof getCurrentProject>>;
+    const zip = createBackupZip(project);
+    const entries = unzipSync(zip);
+    expect(Object.keys(entries).sort()).toEqual(["data.db", "outline.json", "project.json", "references/.trash/旧文档.md", "references/五行.md"]);
+    expect(new TextDecoder().decode(entries["references/五行.md"])).toContain("title: 五行");
+
+    // 无 references/ 目录 → zip 无 references 条目
+    const dir2 = makeTmpDir();
+    initProjectDir(dir2, makeConfig("proj-ref2", "无参考资料"));
+    await openProject(dir2);
+    const project2 = getCurrentProject() as NonNullable<ReturnType<typeof getCurrentProject>>;
+    const zip2 = createBackupZip(project2);
+    const entries2 = unzipSync(zip2);
+    expect(Object.keys(entries2)).not.toContain(expect.stringMatching(/^references\//));
+  });
+
+  it("writeProjectFilesFromBackup 恢复 references/（整体覆盖：清本地残留 + 写回备份条目含 .trash/）", async () => {
+    const src = makeTmpDir();
+    initProjectDir(src, makeConfig("proj-ref3", "源项目"));
+    await openProject(src);
+    mkdirSync(join(src, "references"), { recursive: true });
+    writeFileSync(join(src, "references", "a.md"), "A 内容");
+    const zip = createBackupZip(getCurrentProject() as NonNullable<ReturnType<typeof getCurrentProject>>);
+    const entries = unzipSync(zip);
+
+    // 目标项目：已有 references/ 本地残留（备份里没有的 c.md 与 .trash/d.md）
+    const dst = makeTmpDir();
+    initProjectDir(dst, makeConfig("proj-ref3", "目标项目"));
+    mkdirSync(join(dst, "references", ".trash"), { recursive: true });
+    writeFileSync(join(dst, "references", "c.md"), "本地残留");
+    writeFileSync(join(dst, "references", ".trash", "d.md"), "本地软删残留");
+    writeProjectFilesFromBackup(dst, entries as unknown as Record<string, Uint8Array>);
+
+    expect(readFileSync(join(dst, "references", "a.md"), "utf8")).toBe("A 内容");
+    expect(existsSync(join(dst, "references", "c.md"))).toBe(false); // 本地残留被清
+    expect(existsSync(join(dst, "references", ".trash", "d.md"))).toBe(false);
+  });
+
+  it("白名单：references/ 前缀接受；references/../ 与未知条目拒绝；裸 references 拒绝", () => {
+    expect(isAllowedBackupEntry("project.json")).toBe(true);
+    expect(isAllowedBackupEntry("references/五行.md")).toBe(true);
+    expect(isAllowedBackupEntry("references/.trash/旧.md")).toBe(true);
+    expect(isAllowedBackupEntry("references")).toBe(false); // 目录条目（无斜杠后缀）不接受
+    expect(isAllowedBackupEntry("references/../evil.md")).toBe(false); // 路径穿越
+    expect(isAllowedBackupEntry("evil.txt")).toBe(false);
+  });
+
+  it("validateBackupPackage：references/../ 穿越条目 → 400 未知条目拒绝", () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-ref4", "坏包"));
+    const zip = zipSync({
+      project: readFileSync(join(dir, PROJECT_FILE_NAME)),
+      outline: readFileSync(join(dir, OUTLINE_FILE_NAME)),
+      "data.db": readFileSync(join(dir, DATA_DB_FILE_NAME)),
+      "references/../evil.md": new TextEncoder().encode("x"),
+    });
+    expect(() => validateBackupPackage(zip)).toThrowError(/未知条目/);
+  });
+
+  it("maybeAutoBackup：references/ 文件变更（外部新增/修改）触发自动备份", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, { ...makeConfig("proj-ref5", "参考变更检测"), backup_frequency_minutes: 5 });
+    await openProject(dir);
+    const project = getCurrentProject() as NonNullable<ReturnType<typeof getCurrentProject>>;
+    expect(maybeAutoBackup(project)).toBe(true); // 首备
+    expect(backupFileNames(dir)).toHaveLength(1);
+
+    // 外部新增 references/ 文件：mtime 置为「上次备份 + 2s」→ 判定有变更
+    mkdirSync(join(dir, "references"), { recursive: true });
+    writeFileSync(join(dir, "references", "外部新增.md"), "内容");
+    const later = new Date(latestBackupTime(dir).getTime() + 2000);
+    utimesSync(join(dir, "references", "外部新增.md"), later, later);
+    expect(maybeAutoBackup(project)).toBe(true);
+    expect(backupFileNames(dir)).toHaveLength(2);
+    // 新备份内包含该文件
+    const zip = readFileSync(join(dir, BACKUPS_DIR_NAME, backupFileNames(dir)[1]));
+    const entries = unzipSync(zip);
+    expect(new TextDecoder().decode(entries["references/外部新增.md"])).toBe("内容");
   });
 });
