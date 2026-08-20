@@ -9,7 +9,13 @@ import { BookOpenText, Loader2, Pencil, Plus, Search, Trash2 } from "lucide-reac
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { REFERENCE_TYPES } from "@whispering233/ai-editor-shared";
 import type { ReferenceTypeValue } from "@whispering233/ai-editor-shared";
-import { createEntity, deleteEntity, getEntityDetail, listEntities, updateEntity } from "../lib/api";
+import {
+  createEntity,
+  deleteEntity,
+  getEntityDetail,
+  listEntities,
+  updateEntity,
+} from "../lib/api";
 import { ApiError } from "../lib/api";
 import { applyTagSuggestion, parseTagsInput, suggestTags, tagsToInput } from "../lib/timeline";
 import { navigate } from "../hooks/use-route";
@@ -21,7 +27,7 @@ import { errorBannerClass, inputClass, sectionCardClass, skeletonClass } from ".
 import { Button } from "../components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { TagSuggest } from "../components/timeline/TagSuggest";
-import { AskAiButton } from "../components/chat/AskAiButton";
+import { RowContextMenu } from "../components/entity/row-context-menu";
 import { EmptyState } from "../components/ui/empty-state";
 
 /** 分类中文映射（列表徽标 / 下拉选项） */
@@ -84,7 +90,8 @@ export default function ReferenceList() {
     const set = new Set<string>();
     for (const it of items ?? []) {
       const tags = it.summary?.tags;
-      if (Array.isArray(tags)) for (const t of tags) if (typeof t === "string" && t !== "") set.add(t);
+      if (Array.isArray(tags))
+        for (const t of tags) if (typeof t === "string" && t !== "") set.add(t);
     }
     return [...set].sort((a, b) => a.localeCompare(b));
   }, [items]);
@@ -103,7 +110,10 @@ export default function ReferenceList() {
         if (activeTag !== null && !(it.summary?.tags as string[]).includes(activeTag)) return false;
         if (kw !== "") {
           const name = it.name.toLowerCase();
-          const content = typeof it.summary?.content === "string" ? (it.summary.content as string).toLowerCase() : "";
+          const content =
+            typeof it.summary?.content === "string"
+              ? (it.summary.content as string).toLowerCase()
+              : "";
           if (!name.includes(kw) && !content.includes(kw)) return false;
         }
         return true;
@@ -155,7 +165,9 @@ export default function ReferenceList() {
         type: form.type,
         ...(form.content.trim() !== "" ? { content: form.content } : {}),
         ...(form.source.trim() !== "" ? { source: form.source } : {}),
-        ...(parseTagsInput(form.tagsInput).length > 0 ? { tags: parseTagsInput(form.tagsInput) } : {}),
+        ...(parseTagsInput(form.tagsInput).length > 0
+          ? { tags: parseTagsInput(form.tagsInput) }
+          : {}),
       };
       if (editTarget === null) {
         await createEntity("reference", { name, data });
@@ -180,7 +192,9 @@ export default function ReferenceList() {
       useUiStore.getState().showToast(`已移入回收站：《${item.name}》，可随时还原`);
       setReloadTick((t) => t + 1);
     } catch (e) {
-      useUiStore.getState().showToast(e instanceof ApiError ? e.message : "删除失败，请重试", "error");
+      useUiStore
+        .getState()
+        .showToast(e instanceof ApiError ? e.message : "删除失败，请重试", "error");
     }
   }
 
@@ -191,7 +205,10 @@ export default function ReferenceList() {
       {/* 固定区：标题 + 操作 */}
       <div className="mb-4 flex items-center gap-3">
         <h1 className="text-xl font-semibold">参考资料</h1>
-        <span className={cn("ml-auto", disabled && "cursor-not-allowed")} title={disabled ? "请先打开项目" : undefined}>
+        <span
+          className={cn("ml-auto", disabled && "cursor-not-allowed")}
+          title={disabled ? "请先打开项目" : undefined}
+        >
           <Button type="button" disabled={disabled} onClick={openCreate}>
             <Plus className="size-3.5" />
             新建参考资料
@@ -202,7 +219,7 @@ export default function ReferenceList() {
       {/* 筛选行：关键词搜索 + 分类 select + 标签 select */}
       <div className="mb-3 flex shrink-0 flex-wrap items-center gap-2">
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <input
             className={cn(inputClass, "w-48 pl-8")}
             placeholder="搜索标题 / 内容摘要…"
@@ -249,7 +266,8 @@ export default function ReferenceList() {
       {/* 滚动区：列表 */}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {items === null ? (
-          <div className="space-y-2">{/* 骨架 × 3 */}
+          <div className="space-y-2">
+            {/* 骨架 × 3 */}
             {[0, 1, 2].map((i) => (
               <div key={i} className={cn(skeletonClass, "h-16 w-full")} />
             ))}
@@ -259,7 +277,15 @@ export default function ReferenceList() {
             icon={<BookOpenText className="size-7 text-muted-foreground/40" />}
             action={
               keyword !== "" || activeType !== "all" || activeTag !== null ? (
-                <Button variant="outline" size="sm" onClick={() => { setKeyword(""); setActiveType("all"); setActiveTag(null); }}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setKeyword("");
+                    setActiveType("all");
+                    setActiveTag(null);
+                  }}
+                >
                   清空筛选
                 </Button>
               ) : (
@@ -276,7 +302,14 @@ export default function ReferenceList() {
         ) : (
           <div className={sectionCardClass + " divide-y divide-border"}>
             {visible.map((it) => (
-              <RefRow key={it.id} item={it} onOpen={openEdit} onDelete={handleDelete} onGoto={() => navigate(`#/references/${it.id}`)} />
+              <RefRow
+                key={it.id}
+                item={it}
+                onOpen={openEdit}
+                onDelete={handleDelete}
+                onGoto={() => navigate(`#/references/${it.id}`)}
+                onRelationCreated={() => setReloadTick((t) => t + 1)}
+              />
             ))}
           </div>
         )}
@@ -303,7 +336,9 @@ export default function ReferenceList() {
               <select
                 className={cn(inputClass, "flex-1")}
                 value={form.type}
-                onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as ReferenceTypeValue }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, type: e.target.value as ReferenceTypeValue }))
+                }
               >
                 {(REFERENCE_TYPES as readonly ReferenceTypeValue[]).map((t) => (
                   <option key={t} value={t}>
@@ -338,7 +373,11 @@ export default function ReferenceList() {
                 onChange={(e) => setForm((f) => ({ ...f, tagsInput: e.target.value }))}
                 onKeyDown={(e) => {
                   // Enter 追加逗号继续输入（F8 回车添加下一项 + M1 修复）
-                  if (e.key === "Enter" && !e.nativeEvent.isComposing && form.tagsInput.trim() !== "") {
+                  if (
+                    e.key === "Enter" &&
+                    !e.nativeEvent.isComposing &&
+                    form.tagsInput.trim() !== ""
+                  ) {
                     e.preventDefault();
                     setForm((f) => ({ ...f, tagsInput: `${f.tagsInput},` }));
                   }
@@ -351,7 +390,13 @@ export default function ReferenceList() {
                   <option key={t} value={t} />
                 ))}
               </datalist>
-              <TagSuggest suggestions={tagSuggestions} visible={form.tagsInput.trim() !== ""} onPick={(t) => setForm((f) => ({ ...f, tagsInput: applyTagSuggestion(f.tagsInput, t) }))} />
+              <TagSuggest
+                suggestions={tagSuggestions}
+                visible={form.tagsInput.trim() !== ""}
+                onPick={(t) =>
+                  setForm((f) => ({ ...f, tagsInput: applyTagSuggestion(f.tagsInput, t) }))
+                }
+              />
             </div>
             {formError !== null && <p className="text-xs text-destructive">{formError}</p>}
             <div className="flex justify-end gap-1.5 pt-1">
@@ -375,26 +420,53 @@ interface RefRowProps {
   onOpen: (item: EntitySummary) => void;
   onDelete: (item: EntitySummary) => void;
   onGoto: () => void;
+  /** 建立关联成功后的数据刷新（页面 reloadTick+1） */
+  onRelationCreated: () => void;
 }
 
-/** 列表行：分类徽标 + 标题 + 摘要/content + 标签 + 来源 + 操作 */
-function RefRow({ item, onOpen, onDelete, onGoto }: RefRowProps) {
+/** 列表行：分类徽标 + 标题 + 摘要/content + 标签 + 来源 + 操作（决策 40：行级右键菜单替代 AskAiButton） */
+function RefRow({ item, onOpen, onDelete, onGoto, onRelationCreated }: RefRowProps) {
   const type = (item.summary?.type as ReferenceTypeValue | undefined) ?? "material";
   const content = typeof item.summary?.content === "string" ? (item.summary.content as string) : "";
-  const tags = Array.isArray(item.summary?.tags) ? (item.summary?.tags as string[]).filter((t): t is string => typeof t === "string" && t !== "") : [];
+  const tags = Array.isArray(item.summary?.tags)
+    ? (item.summary?.tags as string[]).filter((t): t is string => typeof t === "string" && t !== "")
+    : [];
   return (
-    <div className="group px-3 py-2.5">
+    <RowContextMenu
+      focus={{ focus_entity_type: "reference", focus_entity_id: item.id }}
+      source={{ type: "reference", id: item.id, name: item.name }}
+      onCreated={onRelationCreated}
+      trigger={<div className="group px-3 py-2.5" />}
+    >
       <div className="flex items-center gap-2">
-        <span className="rounded-md border border-border bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">{TYPE_LABELS[type] ?? type}</span>
-        <button type="button" onClick={onGoto} className="min-w-0 flex-1 truncate text-left text-sm font-medium text-foreground hover:text-primary">
+        <span className="rounded-md border border-border bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+          {TYPE_LABELS[type] ?? type}
+        </span>
+        <button
+          type="button"
+          onClick={onGoto}
+          className="min-w-0 flex-1 truncate text-left text-sm font-medium text-foreground hover:text-primary"
+        >
           {item.name}
         </button>
-        {/* 行级「带上下文问 AI」（决策 35 修订） */}
-        <AskAiButton focus={{ focus_entity_type: "reference", focus_entity_id: item.id }} title={`带《${item.name}》问 AI`} />
-        <Button variant="ghost" size="icon-sm" className="text-muted-foreground" onClick={() => onOpen(item)} aria-label="编辑" title="编辑">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="text-muted-foreground"
+          onClick={() => onOpen(item)}
+          aria-label="编辑"
+          title="编辑"
+        >
           <Pencil className="size-3.5" />
         </Button>
-        <Button variant="ghost" size="icon-sm" className="text-muted-foreground hover:text-destructive" onClick={() => onDelete(item)} aria-label="删除" title="移入回收站">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="text-muted-foreground hover:text-destructive"
+          onClick={() => onDelete(item)}
+          aria-label="删除"
+          title="移入回收站"
+        >
           <Trash2 className="size-3.5" />
         </Button>
       </div>
@@ -404,12 +476,15 @@ function RefRow({ item, onOpen, onDelete, onGoto }: RefRowProps) {
       {tags.length > 0 && (
         <div className="mt-1 flex flex-wrap gap-1">
           {tags.map((t) => (
-            <span key={t} className="rounded bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">
+            <span
+              key={t}
+              className="rounded bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground"
+            >
               {t}
             </span>
           ))}
         </div>
       )}
-    </div>
+    </RowContextMenu>
   );
 }

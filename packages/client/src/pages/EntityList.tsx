@@ -10,7 +10,7 @@
 // 决策 42（2026-08 批次十）：设定 tab（entityType==="setting"）改为**树形视图**（SettingTreeView，
 //   与设定树 tab 合并——原「设定树」tab/路由已移除，main.tsx 重定向到设定 tab）；设定不走表格/分页，
 //   搜索+标签筛选在树内进行（树形视图自带工具栏），上级设定筛选（决策 32）被树形导航吸收（下拉移除）；
-//   character/location/hook 保持表格视图（含行级 AskAiButton——决策 40 另行全局移除）
+//   character/location/hook 保持表格视图（决策 40：行级 AskAiButton 已移除——右键菜单替代）
 // 「+ 新建」按钮（列表头/空态两个入口）→ 列表首行内联编辑行（UX4：name + 该类型首字段——
 //   hook 的 status 下拉、其余文本；字段配置复用 lib/entity-list.ts CREATE_FIRST_FIELD；
 //   提交成功留在列表（2026-08 用户反馈：不自动跳详情），失败内联错误不关行）
@@ -37,12 +37,12 @@ import {
   SUMMARY_COLUMNS,
   summaryCellText,
 } from "../lib/entity-list";
-import { AskAiButton } from "@/components/chat/AskAiButton";
 import { cn } from "../lib/utils";
 import { navigate } from "../hooks/use-route";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useUiStore } from "../stores/ui";
 import { CreateRelationDialog } from "../components/entity/create-relation-dialog";
+import { RowContextMenu } from "../components/entity/row-context-menu";
 import { RelationsView } from "../components/entity/relations-view";
 import { SettingTreeView } from "../components/entity/setting-tree";
 import { SuggestionDatalist, uniqueStrings } from "../components/ui/suggestion-datalist";
@@ -483,11 +483,21 @@ export default function EntityList({ type }: { type: string }) {
                 </thead>
                 <tbody>
                   {items.map((item) => (
-                    <tr
+                    // 行级右键菜单（决策 40）：注入会话上下文（focus_entity_type/id）+ 建立关联
+                    // （源端点按行实体类型预填）；行点击跳详情保持（ContextMenuTrigger 内建
+                    //   onContextMenu 处理右键，不干扰行 onClick）
+                    <RowContextMenu
                       key={item.id}
-                      className="cursor-pointer border-b border-border/50 transition-colors last:border-0 hover:bg-muted"
-                      onClick={() => navigate(`/entities/${entityType}/${item.id}`)}
-                      title={`打开《${item.name}》`}
+                      focus={{ focus_entity_type: entityType, focus_entity_id: item.id }}
+                      source={{ type: entityType, id: item.id, name: item.name }}
+                      onCreated={() => setReloadTick((t) => t + 1)}
+                      trigger={
+                        <tr
+                          className="cursor-pointer border-b border-border/50 transition-colors last:border-0 hover:bg-muted"
+                          onClick={() => navigate(`/entities/${entityType}/${item.id}`)}
+                          title={`打开《${item.name}》`}
+                        />
+                      }
                     >
                       <td className="max-w-64 truncate px-3 py-2 font-medium text-foreground">
                         {item.name}
@@ -513,16 +523,7 @@ export default function EntityList({ type }: { type: string }) {
                           {summaryCellText(entityType, col.key3, item.summary[col.key3])}
                         </td>
                       )}
-                      <td className="px-3 py-2 text-right">
-                        {/* 行级「带上下文问 AI」（决策 35 修订）：stopPropagation 防触发行跳转 */}
-                        <span onClick={(e) => e.stopPropagation()} className="inline-flex">
-                          <AskAiButton
-                            focus={{ focus_entity_type: entityType, focus_entity_id: item.id }}
-                            title={`带《${item.name}》问 AI`}
-                          />
-                        </span>
-                      </td>
-                    </tr>
+                    </RowContextMenu>
                   ))}
                 </tbody>
               </table>

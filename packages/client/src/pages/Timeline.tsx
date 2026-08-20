@@ -17,7 +17,7 @@
 //  - 行级交互（决策 38）：双击事件行 = 详情（#/timeline/:id）、双击组标题行 = 时间点详情
 //    （#/entities/timepoint/:id 通用实体详情页）、点击事件名/时间点名 = 行内编辑
 //    （PUT /entity/event/:id { name } / PUT /entity/timepoint/:id { name }）；「详情/编辑/重命名」
-//    按钮已移除（只留删除 + AskAiButton）
+//    按钮已移除（只留删除；决策 40：AskAiButton 已移除——右键菜单替代）
 //  - AI 排序（F9）：注入聊天预设指令（工具名 propose_reorder_timepoints 保证出现——LLM 依赖
 //    工具名发现）→ 提案卡确认后 Executor 重排 timepoint.sort_order → notifyDataChanged → 本页
 //    useDataRefresh 自动重拉（无需本页处理刷新）
@@ -613,6 +613,7 @@ export default function Timeline() {
               onEditName={handleEditEventName}
               onDelete={(ev) => void handleDelete({ kind: "event", entity: ev })}
               onDeleteTimepoint={(tp) => void handleDelete({ kind: "timepoint", entity: tp })}
+              onRelationCreated={() => setReloadTick((t) => t + 1)}
             />
           )}
 

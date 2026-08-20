@@ -7,7 +7,7 @@
 //   数据 = GET /relation（source_type=outline_node）三类并行拉取聚合（lib/outline-hooks）
 //   决策 37 交互收敛：行级「详情」「＋ 新建」按钮移除（只留删除 + 当前位置徽标）——单击行选中、
 //   选中后 Enter 新建子级（类型由父层级推导）、双击行跳详情、单击标题/摘要行内编辑、拖拽排序保留；
-//   AskAiButton 保留（任务卡 1+4 决策 40 另行移除）
+//   决策 40：行级 AskAiButton 已移除——右键菜单替代（RowContextMenu：注入会话上下文 + 建立关联）
 // 路由：#/outline；数据：GET /api/v1/outline（整树）+ GET /api/v1/relation（伏笔标记，S9.2）；操作：POST/PUT/DELETE /outline、PUT /project/config（设当前位置）
 // 设计契约：doc/ui/pages/outline.md（S2.4 + S13.1 + 决策 37 修订版）——行内编辑标题/摘要（Enter 保存/Esc 取消/失焦保存）、
 //   选中节点按 Enter 就地插入子节点（类型由父决定，root 可切卷/章）、拖拽移动（原生 HTML5 DnD，上下半判定：
@@ -23,7 +23,7 @@ import { Trash2 } from "lucide-react";
 import { CHILD_TYPE, TYPE_LABEL } from "../components/outline/dialogs";
 import { NodeHookMarkBadge } from "../components/outline/node-hook-badge";
 import { Button } from "@/components/ui/button";
-import { AskAiButton } from "@/components/chat/AskAiButton";
+import { RowContextMenu } from "@/components/entity/row-context-menu";
 import { EmptyState } from "@/components/ui/empty-state";
 import { errorBannerClass, skeletonClass } from "@/lib/styles";
 import {
@@ -670,144 +670,160 @@ export default function Outline() {
       const creatingHere = creatingAt?.parentId === node.id;
       const focused = node.id === focusedNodeId;
       const selected = selectedNodeId === node.id;
+      // 行根元素 props（右键菜单 trigger 与普通 div 共用；编辑态退化为普通 div）
+      const rowProps = {
+        "data-node-id": node.id,
+        draggable: !editingTitle && !editingSummary && !isDragging && !busy,
+        tabIndex: -1,
+        onDragStart: (e: DragEvent<HTMLDivElement>) => handleDragStart(e, node),
+        onDragEnd: handleDragEnd,
+        onDragOver: (e: DragEvent<HTMLDivElement>) => handleDragOver(e, node.id),
+        onDragLeave: (e: DragEvent<HTMLDivElement>) => handleDragLeave(e, node.id),
+        onDrop: (e: DragEvent<HTMLDivElement>) => void handleDrop(e, node.id),
+        onClick: (e: MouseEvent<HTMLDivElement>) => handleRowClick(e, node),
+        onDoubleClick: (e: MouseEvent<HTMLDivElement>) => handleRowDoubleClick(e, node),
+        onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => handleRowKeyDown(e, node),
+        className: cn(
+          "relative cursor-grab rounded-md px-2 py-1 transition-colors hover:bg-muted/60 active:cursor-grabbing",
+          node.id === highlightedNodeId && "bg-accent/40", // 新建成功临时高亮（3s）
+          focused && "bg-accent ring-1 ring-ring ring-inset", // 跨页定位临时高亮（U4，3s 消失）
+          isDragging && "opacity-50",
+          selected && "bg-primary/10 ring-1 ring-primary/30 ring-inset", // 选中态（决策 37：primary 淡染 + 描边，区别于临时高亮）
+        ),
+        style: { paddingLeft: depth * 20 + 8 },
+        title: "拖动到目标行即可移动（上半=插前、下半=插后）",
+      };
+      // 行内容（第一行 + 摘要第二行 + 插入指示线）
+      const rowChildren = (
+        <>
+          {/* 第一行：折叠箭头 | 类型徽标 | 标题 | 伏笔标记 | 右端操作区（回收站）| 当前位置徽标
+              （O2 起：操作区 ml-auto 右端对齐，时间戳显示已移除；决策 37：详情/＋新建按钮移除；
+               决策 40：AskAiButton 移除——右键菜单替代（注入会话上下文 + 建立关联）） */}
+          <div className="flex items-center gap-2">
+            {hasChildren ? (
+              <button
+                type="button"
+                className="w-4 shrink-0 text-muted-foreground hover:text-foreground"
+                onClick={() => toggleCollapsed(node.id)}
+                aria-label={isCollapsed ? "展开" : "折叠"}
+              >
+                {isCollapsed ? "▸" : "▾"}
+              </button>
+            ) : (
+              <span className="w-4 shrink-0" />
+            )}
+            <span className="flex h-5 w-7 shrink-0 items-center justify-center rounded bg-muted text-xs text-muted-foreground">
+              {TYPE_LABEL[node.type]}
+            </span>
+            {/* 标题：点击就地编辑（Enter 保存 / Esc 取消 / 失焦保存）；stopPropagation 隔离——
+                单击标题 = 编辑而非选中（决策 37 冲突设计） */}
+            {editingTitle ? (
+              inlineInput(
+                editingValue,
+                setEditingValue,
+                handleEditKeyDown(node, "title"),
+                () => void commitEdit(node, "title"),
+                "标题",
+              )
+            ) : (
+              <span
+                className={cn(
+                  "min-w-0 cursor-text truncate text-sm hover:underline",
+                  focused ? "text-accent-foreground" : "text-foreground", // 定位高亮时切换前景色保对比度（深色主题 bg-accent 是暗底）
+                )}
+                title="点击编辑标题"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  startEdit(node, "title");
+                }}
+              >
+                {node.title}
+              </span>
+            )}
+            {/* 伏笔标记（S9.2）：title 行尾紧凑徽标——plants/advances/resolves 图标 + title tooltip
+                伏笔名（多标记按 lib/outline-hooks 排序排列）；标记随行渲染：折叠父行自身标记仍显示、
+                子树标记随展开可见（数据为节点自身关系，不聚合后代）；加载失败 hookMarks=null 不渲染 */}
+            {hookMarks !== null && (hookMarks.get(node.id)?.length ?? 0) > 0 && (
+              <span className="flex shrink-0 items-center gap-0.5">
+                {(hookMarks.get(node.id) ?? []).map((mark) => (
+                  <NodeHookMarkBadge key={`${mark.relationType}-${mark.hookId}`} mark={mark} />
+                ))}
+              </span>
+            )}
+            {/* 操作区（决策 37 修订）：右端对齐（ml-auto）；回收站 → 当前位置徽标；
+                详情/＋ 就地新建按钮已移除——详情改双击、新建改选中后 Enter；决策 40：AskAiButton 移除 */}
+            <span className="ml-auto flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive"
+                title="移入回收站"
+                aria-label="移入回收站"
+                onClick={() => void handleDelete(node)}
+              >
+                <Trash2 className="size-3.5" />
+              </button>
+              {isCurrent && (
+                <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-xs text-accent-foreground">
+                  当前位置
+                </span>
+              )}
+            </span>
+          </div>
+          {/* 第二行：摘要（缩进对齐标题下方——w-4/w-7 占位与第一行同列；默认显示、空不渲染；点击就地编辑） */}
+          {editingSummary || node.summary ? (
+            <div className="mt-0.5 flex items-center gap-2">
+              <span className="w-4 shrink-0" />
+              <span className="w-7 shrink-0" />
+              {editingSummary ? (
+                inlineInput(
+                  editingValue,
+                  setEditingValue,
+                  handleEditKeyDown(node, "summary"),
+                  () => void commitEdit(node, "summary"),
+                  "摘要",
+                )
+              ) : (
+                <span
+                  className="min-w-0 cursor-text truncate text-xs text-muted-foreground hover:underline"
+                  title="点击编辑摘要"
+                  onClick={(e) => {
+                    e.stopPropagation(); // 摘要单击 = 编辑而非选中（决策 37 冲突设计，同标题）
+                    startEdit(node, "summary");
+                  }}
+                >
+                  {node.summary}
+                </span>
+              )}
+            </div>
+          ) : null}
+          {/* 插入指示线（S13.1）：目标行上边缘（插前）/下边缘（插后），accent 2px；绝对定位层不遮挡内容 */}
+          {insertBefore && (
+            <span className="pointer-events-none absolute inset-x-0 -top-px h-0.5 rounded bg-accent" />
+          )}
+          {insertAfter && (
+            <span className="pointer-events-none absolute inset-x-0 -bottom-px h-0.5 rounded bg-accent" />
+          )}
+        </>
+      );
       return (
         <div key={node.id}>
           {/* 节点块（第一行 + 摘要第二行；整块可拖拽：编辑态/自身拖拽中禁用 draggable，避免文本选择与嵌套拖动）；
               data-node-id 为跨页定位锚点（U4：InfoBar 点击当前位置 → scrollIntoView 定位）；
-              tabIndex=-1 使行可聚焦（决策 37：单击选中后按 Enter 触发新建子级 onKeyDown） */}
-          <div
-            data-node-id={node.id}
-            draggable={!editingTitle && !editingSummary && !isDragging && !busy}
-            tabIndex={-1}
-            onDragStart={(e) => handleDragStart(e, node)}
-            onDragEnd={handleDragEnd}
-            onDragOver={(e) => handleDragOver(e, node.id)}
-            onDragLeave={(e) => handleDragLeave(e, node.id)}
-            onDrop={(e) => void handleDrop(e, node.id)}
-            onClick={(e) => handleRowClick(e, node)}
-            onDoubleClick={(e) => handleRowDoubleClick(e, node)}
-            onKeyDown={(e) => handleRowKeyDown(e, node)}
-            className={cn(
-              "relative cursor-grab rounded-md px-2 py-1 transition-colors hover:bg-muted/60 active:cursor-grabbing",
-              node.id === highlightedNodeId && "bg-accent/40", // 新建成功临时高亮（3s）
-              focused && "bg-accent ring-1 ring-ring ring-inset", // 跨页定位临时高亮（U4，3s 消失）
-              isDragging && "opacity-50",
-              selected && "bg-primary/10 ring-1 ring-primary/30 ring-inset", // 选中态（决策 37：primary 淡染 + 描边，区别于临时高亮）
-            )}
-            style={{ paddingLeft: depth * 20 + 8 }}
-            title="拖动到目标行即可移动（上半=插前、下半=插后）"
-          >
-            {/* 第一行：折叠箭头 | 类型徽标 | 标题 | 伏笔标记 | 右端操作区（问AI/回收站）| 当前位置徽标（O2 起：操作区 ml-auto 右端对齐，时间戳显示已移除；决策 37：详情/＋新建按钮移除） */}
-            <div className="flex items-center gap-2">
-              {hasChildren ? (
-                <button
-                  type="button"
-                  className="w-4 shrink-0 text-muted-foreground hover:text-foreground"
-                  onClick={() => toggleCollapsed(node.id)}
-                  aria-label={isCollapsed ? "展开" : "折叠"}
-                >
-                  {isCollapsed ? "▸" : "▾"}
-                </button>
-              ) : (
-                <span className="w-4 shrink-0" />
-              )}
-              <span className="flex h-5 w-7 shrink-0 items-center justify-center rounded bg-muted text-xs text-muted-foreground">
-                {TYPE_LABEL[node.type]}
-              </span>
-              {/* 标题：点击就地编辑（Enter 保存 / Esc 取消 / 失焦保存）；stopPropagation 隔离——
-                  单击标题 = 编辑而非选中（决策 37 冲突设计） */}
-              {editingTitle ? (
-                inlineInput(
-                  editingValue,
-                  setEditingValue,
-                  handleEditKeyDown(node, "title"),
-                  () => void commitEdit(node, "title"),
-                  "标题",
-                )
-              ) : (
-                <span
-                  className={cn(
-                    "min-w-0 cursor-text truncate text-sm hover:underline",
-                    focused ? "text-accent-foreground" : "text-foreground", // 定位高亮时切换前景色保对比度（深色主题 bg-accent 是暗底）
-                  )}
-                  title="点击编辑标题"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    startEdit(node, "title");
-                  }}
-                >
-                  {node.title}
-                </span>
-              )}
-              {/* 伏笔标记（S9.2）：title 行尾紧凑徽标——plants/advances/resolves 图标 + title tooltip
-                  伏笔名（多标记按 lib/outline-hooks 排序排列）；标记随行渲染：折叠父行自身标记仍显示、
-                  子树标记随展开可见（数据为节点自身关系，不聚合后代）；加载失败 hookMarks=null 不渲染 */}
-              {hookMarks !== null && (hookMarks.get(node.id)?.length ?? 0) > 0 && (
-                <span className="flex shrink-0 items-center gap-0.5">
-                  {(hookMarks.get(node.id) ?? []).map((mark) => (
-                    <NodeHookMarkBadge key={`${mark.relationType}-${mark.hookId}`} mark={mark} />
-                  ))}
-                </span>
-              )}
-              {/* 操作区（决策 37 修订）：右端对齐（ml-auto）；固定顺序 问AI → 回收站 → 当前位置徽标；
-                  详情/＋ 就地新建按钮已移除——详情改双击、新建改选中后 Enter */}
-              <span className="ml-auto flex shrink-0 items-center gap-1">
-                {/* 行级「带上下文问 AI」（决策 35 修订：方案 A 显式有焦点入口；任务卡 1+4 决策 40 另行移除） */}
-                <AskAiButton
-                  focus={{ focus_node_id: node.id }}
-                  title={`带节点「${node.title}」问 AI`}
-                />
-                <button
-                  type="button"
-                  className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive"
-                  title="移入回收站"
-                  aria-label="移入回收站"
-                  onClick={() => void handleDelete(node)}
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
-                {isCurrent && (
-                  <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-xs text-accent-foreground">
-                    当前位置
-                  </span>
-                )}
-              </span>
-            </div>
-            {/* 第二行：摘要（缩进对齐标题下方——w-4/w-7 占位与第一行同列；默认显示、空不渲染；点击就地编辑） */}
-            {editingSummary || node.summary ? (
-              <div className="mt-0.5 flex items-center gap-2">
-                <span className="w-4 shrink-0" />
-                <span className="w-7 shrink-0" />
-                {editingSummary ? (
-                  inlineInput(
-                    editingValue,
-                    setEditingValue,
-                    handleEditKeyDown(node, "summary"),
-                    () => void commitEdit(node, "summary"),
-                    "摘要",
-                  )
-                ) : (
-                  <span
-                    className="min-w-0 cursor-text truncate text-xs text-muted-foreground hover:underline"
-                    title="点击编辑摘要"
-                    onClick={(e) => {
-                      e.stopPropagation(); // 摘要单击 = 编辑而非选中（决策 37 冲突设计，同标题）
-                      startEdit(node, "summary");
-                    }}
-                  >
-                    {node.summary}
-                  </span>
-                )}
-              </div>
-            ) : null}
-            {/* 插入指示线（S13.1）：目标行上边缘（插前）/下边缘（插后），accent 2px；绝对定位层不遮挡内容 */}
-            {insertBefore && (
-              <span className="pointer-events-none absolute inset-x-0 -top-px h-0.5 rounded bg-accent" />
-            )}
-            {insertAfter && (
-              <span className="pointer-events-none absolute inset-x-0 -bottom-px h-0.5 rounded bg-accent" />
-            )}
-          </div>
+              tabIndex=-1 使行可聚焦（决策 37：单击选中后按 Enter 触发新建子级 onKeyDown）；
+              决策 40：行级右键菜单（RowContextMenu）——注入会话上下文（focus_node_id）+ 建立关联
+              （outline_node 源端点）；编辑态不挂右键菜单（行内输入框保留原生文本菜单：复制/粘贴） */}
+          {editingTitle || editingSummary ? (
+            <div {...rowProps}>{rowChildren}</div>
+          ) : (
+            <RowContextMenu
+              focus={{ focus_node_id: node.id }}
+              source={{ type: "outline_node", id: node.id, name: node.title }}
+              onCreated={() => useUiStore.getState().notifyDataChanged()}
+              trigger={<div {...rowProps} />}
+            >
+              {rowChildren}
+            </RowContextMenu>
+          )}
           {/* 子节点递归渲染（折叠态不渲染） */}
           {hasChildren && !isCollapsed && <div>{renderNodes(node.children ?? [], depth + 1)}</div>}
           {/* 就地新建输入行（父 children 末尾；父折叠时 startCreate 已自动展开） */}

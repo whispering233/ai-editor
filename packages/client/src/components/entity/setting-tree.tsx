@@ -15,10 +15,12 @@
 //     **设定无 sort_order（API 约束，勿改数据模型）**——同级顺序 = 名称序，同父拖拽为 no-op
 //   - 筛选 = 搜索 + 标签（树内过滤 filterSettingTree：命中节点及祖先链保留，非命中子树隐藏）；无分页
 // 溢出防御：设定 > 200 截断提示 + 父截断提升为根（buildSettingTree 既有语义）。
-// 样式全 token 类（layout.md §3）；文字按钮带边框（H4）；本视图不加 AskAiButton（决策 40 另行全局移除）。
+// 样式全 token 类（layout.md §3）；文字按钮带边框（H4）；决策 40：行级右键菜单（RowContextMenu——
+//   注入会话上下文 + 建立关联）替代行级问 AI 入口（本视图原本无 AskAiButton，右键菜单补齐）。
 import { useEffect, useState } from "react";
 import type { DragEvent, KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { Trash2 } from "lucide-react";
+import { RowContextMenu } from "./row-context-menu";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -559,110 +561,129 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
       const isDragTarget = dragTarget?.kind === "row" && dragTarget.id === node.id;
       const highlighted = highlightedId === node.id;
       const tags = nodeTags(node);
+      // 节点行根 props（右键菜单 trigger 与普通 div 共用）
+      const rowProps = {
+        draggable: !editing && !isDragging && !busy,
+        tabIndex: -1,
+        onDragStart: (e: DragEvent) => handleDragStart(e, node),
+        onDragEnd: clearDrag,
+        onDragOver: (e: DragEvent) => handleRowDragOver(e, node),
+        onDragLeave: (e: DragEvent) => handleRowDragLeave(e, node),
+        onDrop: (e: DragEvent) => void handleRowDrop(e, node),
+        onClick: (e: MouseEvent<HTMLDivElement>) => handleRowClick(e, node),
+        onDoubleClick: (e: MouseEvent<HTMLDivElement>) => handleRowDoubleClick(e, node),
+        onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => handleRowKeyDown(e, node),
+        className: cn(
+          "relative flex items-center gap-1.5 rounded-md py-1 pr-1 transition-colors hover:bg-muted/60",
+          highlighted && "bg-accent/40", // 新建成功临时高亮（3s）
+          isDragTarget && "bg-accent/40 ring-1 ring-accent ring-inset", // 拖拽目标（将成其子级）
+          isDragging && "opacity-50",
+          selected && "bg-primary/10 ring-1 ring-primary/30 ring-inset", // 选中态
+        ),
+        style: { paddingLeft: `${depth * 16 + 8}px` },
+        title: "拖到行上 = 成为其子级；拖到空白区 = 移为顶层",
+      };
+      // 节点行内容（折叠箭头 + 名称 + 标签 + 子设定数 + 行尾删除）
+      const rowChildren = (
+        <>
+          {/* 折叠箭头（叶子占位保缩进对齐）；点击切展开态，不选中/不跳转 */}
+          <button
+            type="button"
+            aria-label={hasChildren ? (isCollapsed ? "展开" : "折叠") : undefined}
+            className={cn(
+              "shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground",
+              !hasChildren && "invisible",
+            )}
+            onClick={() => toggleCollapse(node.id)}
+            disabled={!hasChildren}
+          >
+            <svg
+              viewBox="0 0 16 16"
+              className={cn("size-3.5 transition-transform", isCollapsed && "-rotate-90")}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            >
+              <path d="m6 4 4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          {/* 名称：点击行内编辑（Enter 确认 / Esc 取消 / 失焦保存）；stopPropagation 隔离——
+              单击标题 = 编辑而非选中（决策 42 冲突设计） */}
+          {editing ? (
+            inlineInput(
+              editingValue,
+              setEditingValue,
+              handleEditKeyDown(node),
+              () => void commitEdit(node),
+              "设定名称",
+            )
+          ) : (
+            <span
+              className="min-w-0 cursor-text truncate text-sm text-foreground hover:underline"
+              title="点击编辑名称，双击查看详情"
+              onClick={(e) => {
+                e.stopPropagation();
+                startEdit(node);
+              }}
+            >
+              {node.name}
+            </span>
+          )}
+          {/* 标签徽标（summary.tags 前 3，决策 31 统一字段；替代已废弃的 category 徽标） */}
+          {tags.length > 0 && (
+            <span className="flex shrink-0 items-center gap-0.5">
+              {tags.map((t) => (
+                <span
+                  key={t}
+                  className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
+                >
+                  {t}
+                </span>
+              ))}
+            </span>
+          )}
+          {/* 直接子设定数（>0 时显示） */}
+          {hasChildren && (
+            <span className="shrink-0 text-xs text-muted-foreground/70">
+              {node.children.length} 个子设定
+            </span>
+          )}
+          {/* 行尾操作区（决策 42：行级只留删除，H2 直接软删不弹确认；决策 40：右键菜单替代行级问 AI） */}
+          <span className="ml-auto flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive"
+              title="移入回收站"
+              aria-label={`移入回收站「${node.name}」`}
+              onClick={(e) => {
+                e.stopPropagation(); // 不触发行选中（handleRowClick 的 closest 已拦截，双保险）
+                void handleDelete(node);
+              }}
+            >
+              <Trash2 className="size-3.5" />
+            </button>
+          </span>
+        </>
+      );
       return (
         <li key={node.id}>
           {/* 节点行：折叠箭头 | 名称（点击行内编辑）| 标签徽标 | 子设定数 | 行尾删除；
               可拖拽（编辑态/自身拖拽中/busy 禁用，防输入误拖与嵌套拖动）；
-              tabIndex=-1 使行可聚焦（选中后按 Enter 触发新建子级 onKeyDown） */}
-          <div
-            draggable={!editing && !isDragging && !busy}
-            tabIndex={-1}
-            onDragStart={(e) => handleDragStart(e, node)}
-            onDragEnd={clearDrag}
-            onDragOver={(e) => handleRowDragOver(e, node)}
-            onDragLeave={(e) => handleRowDragLeave(e, node)}
-            onDrop={(e) => void handleRowDrop(e, node)}
-            onClick={(e) => handleRowClick(e, node)}
-            onDoubleClick={(e) => handleRowDoubleClick(e, node)}
-            onKeyDown={(e) => handleRowKeyDown(e, node)}
-            className={cn(
-              "relative flex items-center gap-1.5 rounded-md py-1 pr-1 transition-colors hover:bg-muted/60",
-              highlighted && "bg-accent/40", // 新建成功临时高亮（3s）
-              isDragTarget && "bg-accent/40 ring-1 ring-accent ring-inset", // 拖拽目标（将成其子级）
-              isDragging && "opacity-50",
-              selected && "bg-primary/10 ring-1 ring-primary/30 ring-inset", // 选中态
-            )}
-            style={{ paddingLeft: `${depth * 16 + 8}px` }}
-            title="拖到行上 = 成为其子级；拖到空白区 = 移为顶层"
-          >
-            {/* 折叠箭头（叶子占位保缩进对齐）；点击切展开态，不选中/不跳转 */}
-            <button
-              type="button"
-              aria-label={hasChildren ? (isCollapsed ? "展开" : "折叠") : undefined}
-              className={cn(
-                "shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground",
-                !hasChildren && "invisible",
-              )}
-              onClick={() => toggleCollapse(node.id)}
-              disabled={!hasChildren}
+              tabIndex=-1 使行可聚焦（选中后按 Enter 触发新建子级 onKeyDown）；
+              决策 40：行级右键菜单（RowContextMenu）——注入会话上下文（focus_entity_type=setting）+
+              建立关联（setting 源端点）；编辑态不挂右键菜单（行内输入框保留原生文本菜单：复制/粘贴） */}
+          {editing ? (
+            <div {...rowProps}>{rowChildren}</div>
+          ) : (
+            <RowContextMenu
+              focus={{ focus_entity_type: "setting", focus_entity_id: node.id }}
+              source={{ type: "setting", id: node.id, name: node.name }}
+              onCreated={reload}
+              trigger={<div {...rowProps} />}
             >
-              <svg
-                viewBox="0 0 16 16"
-                className={cn("size-3.5 transition-transform", isCollapsed && "-rotate-90")}
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-              >
-                <path d="m6 4 4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </button>
-            {/* 名称：点击行内编辑（Enter 确认 / Esc 取消 / 失焦保存）；stopPropagation 隔离——
-                单击标题 = 编辑而非选中（决策 42 冲突设计） */}
-            {editing ? (
-              inlineInput(
-                editingValue,
-                setEditingValue,
-                handleEditKeyDown(node),
-                () => void commitEdit(node),
-                "设定名称",
-              )
-            ) : (
-              <span
-                className="min-w-0 cursor-text truncate text-sm text-foreground hover:underline"
-                title="点击编辑名称，双击查看详情"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  startEdit(node);
-                }}
-              >
-                {node.name}
-              </span>
-            )}
-            {/* 标签徽标（summary.tags 前 3，决策 31 统一字段；替代已废弃的 category 徽标） */}
-            {tags.length > 0 && (
-              <span className="flex shrink-0 items-center gap-0.5">
-                {tags.map((t) => (
-                  <span
-                    key={t}
-                    className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
-                  >
-                    {t}
-                  </span>
-                ))}
-              </span>
-            )}
-            {/* 直接子设定数（>0 时显示） */}
-            {hasChildren && (
-              <span className="shrink-0 text-xs text-muted-foreground/70">
-                {node.children.length} 个子设定
-              </span>
-            )}
-            {/* 行尾操作区（决策 42：行级只留删除，H2 直接软删不弹确认；无 AskAiButton——决策 40） */}
-            <span className="ml-auto flex shrink-0 items-center gap-1">
-              <button
-                type="button"
-                className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive"
-                title="移入回收站"
-                aria-label={`移入回收站「${node.name}」`}
-                onClick={(e) => {
-                  e.stopPropagation(); // 不触发行选中（handleRowClick 的 closest 已拦截，双保险）
-                  void handleDelete(node);
-                }}
-              >
-                <Trash2 className="size-3.5" />
-              </button>
-            </span>
-          </div>
+              {rowChildren}
+            </RowContextMenu>
+          )}
           {/* 子节点递归渲染（折叠态不渲染） */}
           {hasChildren && !isCollapsed && <ul>{renderNodes(node.children, depth + 1)}</ul>}
           {/* 就地新建输入行（父 children 末尾；父折叠时 startCreate 已自动展开） */}

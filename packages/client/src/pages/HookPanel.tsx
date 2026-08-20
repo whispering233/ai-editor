@@ -17,7 +17,7 @@ import type { FormEvent, ReactNode } from "react";
 import { formatTimestamp, HOOK_CATEGORIES } from "@whispering233/ai-editor-shared";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { ArrowUp, Check, CheckCircle2, Circle, Eye, Pencil, Trash2, X } from "lucide-react";
-import { AskAiButton } from "@/components/chat/AskAiButton";
+import { RowContextMenu } from "../components/entity/row-context-menu";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { inputClass, errorBannerClass } from "@/lib/styles";
@@ -491,6 +491,7 @@ export default function HookPanel() {
             onLifecycle={openLifecycle}
             onEdit={openEdit}
             onDelete={(hook) => void handleDelete(hook)}
+            onRelationCreated={() => setReloadTick((t) => t + 1)}
           />
           <HookGroupSection
             title="已回收"
@@ -504,6 +505,7 @@ export default function HookPanel() {
             onLifecycle={openLifecycle}
             onEdit={openEdit}
             onDelete={(hook) => void handleDelete(hook)}
+            onRelationCreated={() => setReloadTick((t) => t + 1)}
           />
           <HookGroupSection
             title="已废弃"
@@ -517,6 +519,7 @@ export default function HookPanel() {
             onLifecycle={openLifecycle}
             onEdit={openEdit}
             onDelete={(hook) => void handleDelete(hook)}
+            onRelationCreated={() => setReloadTick((t) => t + 1)}
           />
         </div>
       )}
@@ -719,6 +722,7 @@ function HookGroupSection({
   onLifecycle,
   onEdit,
   onDelete,
+  onRelationCreated,
 }: {
   title: string;
   icon: ReactNode;
@@ -731,6 +735,8 @@ function HookGroupSection({
   onLifecycle: (kind: HookLifecycleKind, hook: EntitySummary) => void;
   onEdit: (hook: EntitySummary) => void;
   onDelete: (hook: EntitySummary) => void;
+  /** 建立关联成功后的数据刷新（页面 reloadTick+1） */
+  onRelationCreated: () => void;
 }) {
   return (
     <div className="overflow-hidden rounded-md border border-border">
@@ -749,7 +755,15 @@ function HookGroupSection({
             const chain = chains[hook.id];
             const category = typeof hook.summary.category === "string" ? hook.summary.category : "";
             return (
-              <li key={hook.id} className="px-3 py-2">
+              // 行级右键菜单（决策 40）：注入会话上下文（focus_entity_type=hook）+ 建立关联
+              // （源端点按行实体类型预填）；操作按钮全部展开（H3）不受影响
+              <RowContextMenu
+                key={hook.id}
+                focus={{ focus_entity_type: "hook", focus_entity_id: hook.id }}
+                source={{ type: "hook", id: hook.id, name: hook.name }}
+                onCreated={onRelationCreated}
+                trigger={<li className="px-3 py-2" />}
+              >
                 <div className="flex items-center gap-2">
                   <span className="min-w-0 truncate font-medium text-foreground" title={hook.name}>
                     {hook.name}
@@ -759,10 +773,9 @@ function HookGroupSection({
                       {category}
                     </span>
                   )}
-                  {/* 操作按钮全部展开（H3：禁止收进 ⋯ 二级展开；图标 + title/aria-label） */}
+                  {/* 操作按钮全部展开（H3：禁止收进 ⋯ 二级展开；图标 + title/aria-label）；
+                      决策 40：AskAiButton 已移除——右键菜单替代 */}
                   <span className="ml-auto flex shrink-0 items-center gap-0.5">
-                    {/* 行级「带上下文问 AI」（决策 35 修订） */}
-                    <AskAiButton focus={{ focus_entity_type: "hook", focus_entity_id: hook.id }} title={`带伏笔《${hook.name}》问 AI`} />
                     <Button
                       variant="ghost"
                       size="icon-sm"
@@ -854,7 +867,7 @@ function HookGroupSection({
                     ))}
                   </ul>
                 )}
-              </li>
+              </RowContextMenu>
             );
           })}
         </ul>
