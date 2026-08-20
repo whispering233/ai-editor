@@ -70,7 +70,11 @@ function renderPage(route: Route): ReactNode {
       // （timeline.md 路由；key = id 变化强制卸载重挂——详情页表单按事件重置）
       return second !== undefined ? <TimelineDetail key={second} id={second} /> : <Timeline />;
     case "references":
-      // 参考资料（决策 36）：1 段（#/references）→ 列表；2 段（#/references/:id）→ 详情
+      // 参考资料（决策 36 + 决策 43 卡 11.4）：
+      //   #/references → 列表；#/references/:id → 详情（编辑态）；
+      //   #/references/new/md → 新建 md 文档草稿态；#/references/new/link → 新建外源链接草稿态
+      if (second === "new" && third === "md") return <ReferenceDetail draft="md" />;
+      if (second === "new" && third === "link") return <ReferenceDetail draft="link" />;
       return second !== undefined ? (
         <ReferenceDetail key={second} id={second} />
       ) : (

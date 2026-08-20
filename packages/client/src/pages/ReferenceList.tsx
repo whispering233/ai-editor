@@ -1,21 +1,21 @@
 // 参考资料列表页（决策 36 + 决策 43 批次十一；references.md）
-// 卡 11.1 交互重构（决策 43 + B1 修复）：
+// 卡 11.1 交互重构 + 卡 11.4 新建分流：
 //   - 点击标题 = 行内编辑（Enter 提交 / Esc 取消 / 失焦保存，决策 37/38 模式）
 //   - 双击行 = 进详情页（编辑态/按钮区不触发）
 //   - 移除 Pencil 编辑按钮与编辑 Dialog（B1 异步回填竞态根除——完整编辑收敛到详情页）
-//   - 行信息 = [标题、分类徽标、标签、来源]（来源列按旧 source 字段先行，kind 细化随 11.2）
-//   - 保留删除按钮、右键菜单（决策 40 复用）、新建 Dialog（11.4 分流为两按钮后移除）
+//   - 行信息 = [标题、分类徽标、标签、来源]（来源列 11.4 起按 kind：file → 相对路径、link → URL 可点击）
+//   - 新建入口分流两按钮（11.4）：「新建 md 文档」→ #/references/new/md、「新建外源链接」→ #/references/new/link
+//   - 保留删除按钮、右键菜单（决策 40 复用）
 // 数据：listEntities("reference", { limit: 200 }) 一次全量拉取（参考资料量小），
-//   分类/标签/关键词过滤在前端（列表摘要 summary.type/tags/source 由 db toSummary 提供）
+//   分类/标签/关键词过滤在前端（列表摘要 summary.type/tags/kind/file_name/url 由 db toSummary 提供）
 import { useEffect, useMemo, useState } from "react";
 import type { MouseEvent } from "react";
-import { BookOpenText, ExternalLink, Loader2, Plus, Search, Trash2 } from "lucide-react";
+import { BookOpenText, ExternalLink, FileText, Link2, Search, Trash2 } from "lucide-react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { REFERENCE_TYPES } from "@whispering233/ai-editor-shared";
 import type { ReferenceTypeValue } from "@whispering233/ai-editor-shared";
-import { createEntity, deleteEntity, listEntities, updateEntity } from "../lib/api";
+import { deleteEntity, listEntities, updateEntity } from "../lib/api";
 import { ApiError } from "../lib/api";
-import { parseTagsInput } from "../lib/timeline";
 import { navigate } from "../hooks/use-route";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useProjectStore } from "../stores/project";
@@ -23,7 +23,6 @@ import { useUiStore } from "../stores/ui";
 import { cn } from "../lib/utils";
 import { errorBannerClass, inputClass, sectionCardClass, skeletonClass } from "../lib/styles";
 import { Button } from "../components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { RowContextMenu } from "../components/entity/row-context-menu";
 import { EmptyState } from "../components/ui/empty-state";
 
@@ -34,17 +33,6 @@ const TYPE_LABELS: Record<ReferenceTypeValue, string> = {
   theory: "写作理论",
   reference: "设定参考",
 };
-
-/** 新建表单（11.4 分流前暂用 Dialog；仅新建，编辑已收敛详情页——B1 修复） */
-interface RefForm {
-  name: string;
-  type: ReferenceTypeValue;
-  content: string;
-  source: string;
-  tagsInput: string;
-}
-
-const EMPTY_FORM: RefForm = { name: "", type: "material", content: "", source: "", tagsInput: "" };
 
 export default function ReferenceList() {
   const config = useProjectStore((s) => s.config);
@@ -57,12 +45,6 @@ export default function ReferenceList() {
   const [keyword, setKeyword] = useState("");
   const [activeType, setActiveType] = useState<ReferenceTypeValue | "all">("all");
   const [activeTag, setActiveTag] = useState<string | null>(null);
-
-  // 新建对话框（仅新建；编辑入口 = 双击详情页，B1 修复语义）
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState<RefForm>(EMPTY_FORM);
-  const [saving, setSaving] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
 
   // 数据加载
   useEffect(() => {
@@ -114,41 +96,6 @@ export default function ReferenceList() {
       .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
   }, [items, keyword, activeType, activeTag]);
 
-  function openCreate() {
-    setForm(EMPTY_FORM);
-    setFormError(null);
-    setDialogOpen(true);
-  }
-
-  async function handleCreate() {
-    const name = form.name.trim();
-    if (name === "") {
-      setFormError("标题必填");
-      return;
-    }
-    setSaving(true);
-    setFormError(null);
-    try {
-      const data = {
-        type: form.type,
-        ...(form.content.trim() !== "" ? { content: form.content } : {}),
-        ...(form.source.trim() !== "" ? { source: form.source } : {}),
-        ...(parseTagsInput(form.tagsInput).length > 0
-          ? { tags: parseTagsInput(form.tagsInput) }
-          : {}),
-      };
-      await createEntity("reference", { name, data });
-      useUiStore.getState().showToast(`已创建参考资料《${name}》`);
-      setDialogOpen(false);
-      useUiStore.getState().notifyDataChanged();
-      setReloadTick((t) => t + 1);
-    } catch (e) {
-      setFormError(e instanceof ApiError ? e.message : "保存失败，请重试");
-    } finally {
-      setSaving(false);
-    }
-  }
-
   /** 行内编辑标题提交（决策 43：点击标题行内编辑，PUT name；失败 toast 后 rethrow——组件保持编辑态 + 保留输入值，对齐时间轴 editFailureRecovery） */
   async function handleRename(id: string, name: string) {
     try {
@@ -183,12 +130,16 @@ export default function ReferenceList() {
       <div className="mb-4 flex items-center gap-3">
         <h1 className="text-xl font-semibold">参考资料</h1>
         <span
-          className={cn("ml-auto", disabled && "cursor-not-allowed")}
+          className={cn("ml-auto flex items-center gap-2", disabled && "cursor-not-allowed")}
           title={disabled ? "请先打开项目" : undefined}
         >
-          <Button type="button" disabled={disabled} onClick={openCreate}>
-            <Plus className="size-3.5" />
-            新建参考资料
+          <Button type="button" variant="outline" disabled={disabled} onClick={() => navigate("#/references/new/md")}>
+            <FileText className="size-3.5" />
+            新建 md 文档
+          </Button>
+          <Button type="button" disabled={disabled} onClick={() => navigate("#/references/new/link")}>
+            <Link2 className="size-3.5" />
+            新建外源链接
           </Button>
         </span>
       </div>
@@ -266,9 +217,14 @@ export default function ReferenceList() {
                   清空筛选
                 </Button>
               ) : (
-                <Button size="sm" disabled={disabled} onClick={openCreate}>
-                  新建参考资料
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" disabled={disabled} onClick={() => navigate("#/references/new/md")}>
+                    新建 md 文档
+                  </Button>
+                  <Button size="sm" disabled={disabled} onClick={() => navigate("#/references/new/link")}>
+                    新建外源链接
+                  </Button>
+                </div>
               )
             }
           >
@@ -291,96 +247,6 @@ export default function ReferenceList() {
           </div>
         )}
       </div>
-
-      {/* 新建对话框（仅新建；编辑已收敛详情页——B1 修复；11.4 分流两按钮后移除） */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>新建参考资料</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="flex items-start gap-2">
-              <label className="mt-2 w-12 shrink-0 text-sm text-muted-foreground">标题</label>
-              <input
-                className={cn(inputClass, "flex-1")}
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="如：五行相生与相克 摘抄"
-              />
-            </div>
-            <div className="flex items-start gap-2">
-              <label className="mt-2 w-12 shrink-0 text-sm text-muted-foreground">分类</label>
-              <select
-                className={cn(inputClass, "flex-1")}
-                value={form.type}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, type: e.target.value as ReferenceTypeValue }))
-                }
-              >
-                {(REFERENCE_TYPES as readonly ReferenceTypeValue[]).map((t) => (
-                  <option key={t} value={t}>
-                    {TYPE_LABELS[t]}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex items-start gap-2">
-              <label className="mt-2 w-12 shrink-0 text-sm text-muted-foreground">内容</label>
-              <textarea
-                className={cn(inputClass, "min-h-32 flex-1 resize-y leading-6")}
-                value={form.content}
-                onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
-                placeholder="粘贴或记录参考内容全文…"
-              />
-            </div>
-            <div className="flex items-start gap-2">
-              <label className="mt-2 w-12 shrink-0 text-sm text-muted-foreground">来源</label>
-              <input
-                className={cn(inputClass, "flex-1")}
-                value={form.source}
-                onChange={(e) => setForm((f) => ({ ...f, source: e.target.value }))}
-                placeholder="可选：URL / 书名 / 作者"
-              />
-            </div>
-            <div className="flex items-start gap-2">
-              <label className="mt-2 w-12 shrink-0 text-sm text-muted-foreground">标签</label>
-              <input
-                className={cn(inputClass, "flex-1")}
-                value={form.tagsInput}
-                onChange={(e) => setForm((f) => ({ ...f, tagsInput: e.target.value }))}
-                onKeyDown={(e) => {
-                  // Enter 追加逗号继续输入（F8 回车添加下一项 + M1 修复）
-                  if (
-                    e.key === "Enter" &&
-                    !e.nativeEvent.isComposing &&
-                    form.tagsInput.trim() !== ""
-                  ) {
-                    e.preventDefault();
-                    setForm((f) => ({ ...f, tagsInput: `${f.tagsInput},` }));
-                  }
-                }}
-                list="reference-tags"
-                placeholder="逗号分隔，如：五行, 设定"
-              />
-              <datalist id="reference-tags">
-                {tagPool.map((t) => (
-                  <option key={t} value={t} />
-                ))}
-              </datalist>
-            </div>
-            {formError !== null && <p className="text-xs text-destructive">{formError}</p>}
-            <div className="flex justify-end gap-1.5 pt-1">
-              <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>
-                取消
-              </Button>
-              <Button onClick={handleCreate} disabled={saving}>
-                {saving && <Loader2 className="size-3.5 animate-spin" />}
-                保存
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </section>
   );
 }
@@ -396,14 +262,23 @@ interface RefRowProps {
   onRelationCreated: () => void;
 }
 
-/** 列表行（决策 43 卡 11.1）：第一行 [标题（点击行内编辑）+ 分类徽标 + 删除]，第二行 [标签 + 来源]；
+/** 列表行（决策 43 卡 11.1 + 11.4）：第一行 [标题（点击行内编辑）+ 分类徽标 + 删除]，第二行 [标签 + 来源]；
+ * 来源列按 kind 渲染（11.4）：file → 相对路径文本、link → URL 可点击（存量无 kind 条目 → source 兼容）；
  * 双击行 = 进详情页；右键菜单 [注入会话上下文、建立关联] 复用决策 40 */
 function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowProps) {
   const type = (item.summary?.type as ReferenceTypeValue | undefined) ?? "material";
   const tags = Array.isArray(item.summary?.tags)
     ? (item.summary?.tags as string[]).filter((t): t is string => typeof t === "string" && t !== "")
     : [];
-  const source = typeof item.summary?.source === "string" ? (item.summary.source as string) : "";
+  // 来源：file → references/<file_name> 相对路径（文本）；link → url（可点击）；存量 → source 文本兼容
+  const isFile = item.summary?.kind === "file";
+  const source = isFile
+    ? `references/${typeof item.summary?.file_name === "string" ? (item.summary.file_name as string) : ""}`
+    : typeof item.summary?.url === "string"
+      ? (item.summary.url as string)
+      : typeof item.summary?.source === "string"
+        ? (item.summary.source as string)
+        : "";
 
   // 标题行内编辑（决策 43：点击标题进入，Enter 提交 / Esc 取消 / 失焦保存；对齐时间轴 TimelineEvent 模式）
   const [editing, setEditing] = useState(false);
@@ -507,7 +382,7 @@ function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowP
             </span>
           ))}
           {source !== "" &&
-            (/^https?:\/\//.test(source) ? (
+            (!isFile && /^https?:\/\//.test(source) ? (
               <a
                 href={source}
                 target="_blank"

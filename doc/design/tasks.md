@@ -28,6 +28,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
   - [x] 11.1 列表页交互重构（U2+B1）：点击标题行内编辑、双击行进详情、移除 Pencil/Dialog 编辑（B1 竞态根除）、行信息 [标题/分类徽标/标签/来源]（来源列按旧 source 字段先行，kind 细化随 11.2）`3392fb6`
   - [x] 11.2 存储地基（N1）：data.kind 字段（file/link）+ shared frontmatter 读写/文件名 sanitize 纯函数 + 服务端 file 联动（create 落盘建索引 / update 先写文件后更新 DB / 软删移 .trash/ / restore 移回 / purge 物理删）+ scan 端点（mtime 快照比对幂等全量，返回 added/updated/restored/removed/skipped/errors）
   - [x] 11.3 存档体系（N5）：备份 zip 白名单扩展打包 references/（含 .trash/）+ export/import/restore 同步 + 自动备份变更检测加 references/ mtime
+  - [x] 11.4 页面分流（N2）：新建按钮改两枚（新建 md 文档/新建外源链接）+ 外源链接详情页（URL 必填 + 关联面板）+ md 文档详情页骨架（草稿态 + 分类/标签/标题行内编辑 + 关联面板；内容 textarea 占位，11.5 换编辑器）
   - [ ] 11.3 存档体系（N5）：备份 zip 白名单扩展打包 references/（含 .trash/）+ export/import/restore 同步 + 自动备份变更检测加 references/ mtime
   - [ ] 11.4 页面分流（N2）：新建按钮改两枚（新建 md 文档/新建外源链接）+ 外源链接详情页（URL 必填 + 关联面板）+ md 文档详情页骨架（草稿态 + 分类/标签 + 关联面板）
   - [ ] 11.5 编辑器集成（N3）：@uiw/react-md-editor + react-markdown 预览、暗色联动、CSS 冲突排查、bundle 体积验证（试装 smoke 可与 11.1 并行）

@@ -85,16 +85,21 @@ function toSummary(row: EntityRow): EntitySummary {
       if (data.description !== undefined) summary.description = data.description;
       if (data.tags !== undefined) summary.tags = data.tags;
       break;
-    // reference（决策 36 参考资料 + 决策 43 卡 11.1）：type 分类 + content 摘要截断 120 字 + tags 前 3
-    // + source 来源（11.1 补齐：列表来源列渲染依据；11.2 将扩展 kind/file_name/url）——
-    // 全文长文本不随列表返回（防列表响应与 search_entities 工具上下文膨胀，决策 15），
-    // 完整 content 在详情页（get_entity 全量 data）
+    // reference（决策 36 参考资料 + 决策 43：type 分类 + content 摘要截断 120 字 + tags 前 3
+    // + 来源字段（11.1 补 source；11.4 起按 kind 区分：file → file_name、link → url、
+    // 存量无 kind 条目 → source 兼容）——全文长文本不随列表返回（防列表响应与
+    // search_entities 工具上下文膨胀，决策 15），完整 content 在详情页（get_entity 全量 data）
     case "reference":
       if (data.type !== undefined) summary.type = data.type;
+      if (data.kind === "file") {
+        if (typeof data.file_name === "string" && data.file_name !== "") summary.file_name = data.file_name;
+      } else {
+        if (typeof data.url === "string" && data.url !== "") summary.url = data.url;
+        else if (typeof data.source === "string" && data.source !== "") summary.source = data.source; // 存量兼容
+      }
       if (typeof data.content === "string" && data.content !== "") {
         summary.content = data.content.slice(0, 120);
       }
-      if (typeof data.source === "string" && data.source !== "") summary.source = data.source;
       if (Array.isArray(data.tags)) {
         summary.tags = (data.tags as unknown[]).filter((t): t is string => typeof t === "string" && t !== "").slice(0, 3);
       }
