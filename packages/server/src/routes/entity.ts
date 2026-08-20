@@ -26,7 +26,7 @@ import {
   updateEntity,
   withTransaction,
 } from "@whispering233/ai-editor-db";
-import type { EntityType, ReferenceTypeValue } from "@whispering233/ai-editor-shared";
+import type { EntityType } from "@whispering233/ai-editor-shared";
 import { sanitizeReferenceFileName } from "@whispering233/ai-editor-shared";
 import { ENTITY_DATA_SCHEMAS, entityCreateReqSchema, entityListQuerySchema, entityMoveReqSchema, entityTypeSchema, entityUpdateReqSchema, eventMoveToReqSchema } from "@whispering233/ai-editor-shared/schemas";
 import { HttpError, ok } from "../middleware/error.js";
@@ -178,7 +178,7 @@ entityRoutes.post("/:type", async (c) => {
       const { mtime } = writeReferenceFile(
         project.root,
         fileName,
-        { title: parsed.data.name, category: (data.type as ReferenceTypeValue) ?? "material", tags: Array.isArray(data.tags) ? (data.tags as string[]) : [] },
+        { title: parsed.data.name, category: (data.type as string | undefined) ?? "material", tags: Array.isArray(data.tags) ? (data.tags as string[]) : [] },
         body,
       );
       data = {
@@ -226,7 +226,7 @@ entityRoutes.put("/:type/:id", async (c) => {
       }
       // 元数据 = 请求新值 ?? 文件现状 ?? 索引现状；正文 = data.content 传入 ? 新值 : 文件正文
       const nextTitle = name ?? file.title ?? existing.row.name;
-      const nextCategory = (data?.type as ReferenceTypeValue | undefined) ?? file.category ?? "material";
+      const nextCategory = (data?.type as string | undefined) ?? file.category ?? "material";
       const nextTags = Array.isArray(data?.tags) ? (data.tags as string[]) : file.tags;
       const nextBody = typeof data?.content === "string" ? data.content : file.body;
       const { mtime } = writeReferenceFile(

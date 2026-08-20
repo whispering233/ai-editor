@@ -12,8 +12,6 @@ import { useEffect, useMemo, useState } from "react";
 import type { MouseEvent } from "react";
 import { ExternalLink, FileText, Link2, Loader2, RefreshCw, Search, Trash2 } from "lucide-react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
-import { REFERENCE_TYPES } from "@whispering233/ai-editor-shared";
-import type { ReferenceTypeValue } from "@whispering233/ai-editor-shared";
 import { deleteEntity, getReferenceScanStatus, listEntities, scanReferences, updateEntity } from "../lib/api";
 import { ApiError } from "../lib/api";
 import { navigate } from "../hooks/use-route";
@@ -26,8 +24,8 @@ import { Button } from "../components/ui/button";
 import { RowContextMenu } from "../components/entity/row-context-menu";
 import { EmptyState } from "../components/ui/empty-state";
 
-/** 分类中文映射（列表徽标 / 下拉选项） */
-const TYPE_LABELS: Record<ReferenceTypeValue, string> = {
+/** 分类回显映射（决策 44：**仅存量显示**——material 等旧枚举值回显中文名，非可选建议；新自定义分类无映射原样显示） */
+const TYPE_LABELS: Record<string, string> = {
   material: "素材摘抄",
   inspiration: "灵感记录",
   theory: "写作理论",
@@ -43,7 +41,7 @@ export default function ReferenceList() {
 
   // 筛选状态
   const [keyword, setKeyword] = useState("");
-  const [activeType, setActiveType] = useState<ReferenceTypeValue | "all">("all");
+  const [activeType, setActiveType] = useState<string | "all">("all");
   const [activeTag, setActiveTag] = useState<string | null>(null);
 
   // 扫描同步（决策 43 N6）：unsynced = 未同步文件数（null = 未探测/无项目）；
@@ -121,6 +119,16 @@ export default function ReferenceList() {
       const tags = it.summary?.tags;
       if (Array.isArray(tags))
         for (const t of tags) if (typeof t === "string" && t !== "") set.add(t);
+    }
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [items]);
+
+  // 聚合分类池（决策 44：筛选下拉选项 = 项目内已用分类，无预置枚举）
+  const typePool = useMemo(() => {
+    const set = new Set<string>();
+    for (const it of items ?? []) {
+      const t = it.summary?.type;
+      if (typeof t === "string" && t !== "") set.add(t);
     }
     return [...set].sort((a, b) => a.localeCompare(b));
   }, [items]);
@@ -219,12 +227,12 @@ export default function ReferenceList() {
         <select
           className={cn(inputClass, "w-32")}
           value={activeType}
-          onChange={(e) => setActiveType(e.target.value as ReferenceTypeValue | "all")}
+          onChange={(e) => setActiveType(e.target.value === "all" ? "all" : e.target.value)}
         >
           <option value="all">全部分类</option>
-          {(REFERENCE_TYPES as readonly ReferenceTypeValue[]).map((t) => (
+          {typePool.map((t) => (
             <option key={t} value={t}>
-              {TYPE_LABELS[t]}
+              {TYPE_LABELS[t] ?? t}
             </option>
           ))}
         </select>
@@ -348,7 +356,7 @@ interface RefRowProps {
  * 来源列按 kind 渲染（11.4）：file → 相对路径文本、link → URL 可点击（存量无 kind 条目 → source 兼容）；
  * 双击行 = 进详情页；右键菜单 [注入会话上下文、建立关联] 复用决策 40 */
 function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowProps) {
-  const type = (item.summary?.type as ReferenceTypeValue | undefined) ?? "material";
+  const type = (item.summary?.type as string | undefined) ?? "material";
   const tags = Array.isArray(item.summary?.tags)
     ? (item.summary?.tags as string[]).filter((t): t is string => typeof t === "string" && t !== "")
     : [];

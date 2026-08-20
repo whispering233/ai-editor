@@ -8,7 +8,7 @@
 //   client 浏览器包不打包 zod 校验函数（与 types/api.ts 同款约束，见 index.ts 头注释）。
 
 import { z } from "zod";
-import { ENTITY_TYPES, REFERENCE_TYPES, RELATION_TYPES } from "../constants/entity.js";
+import { ENTITY_TYPES, RELATION_TYPES } from "../constants/entity.js";
 import { deltaChangeSchema } from "./api.js"; // 复用 delta 单条变更 schema（api.ts 已导出）
 
 // ============ get_entity（实体详情，tools.md「实体查询」） ============
@@ -445,13 +445,14 @@ export type ProposeReorderTimepointsArgs = z.infer<typeof proposeReorderTimepoin
 // ============ search_references（参考资料搜索，决策 36，批次九） ============
 
 /**
- * search_references 入参：query 关键词（标题+tags 命中）+ 可选 type 枚举过滤 + 可选 tags 过滤。
+ * search_references 入参：query 关键词（标题+tags 命中）+ 可选 type 分类过滤（自由文本，决策 44：
+ * 原预置枚举已取消，建议沿用项目内已有分类）+ 可选 tags 过滤。
  * 返回摘要列表（content 摘要截断 120 字由 db toSummary 承担——全文长文本不随列表返回，防 token 膨胀）
  */
 export const searchReferencesArgsSchema = z
   .object({
     query: z.string(),
-    type: z.enum(REFERENCE_TYPES).optional(),
+    type: z.string().optional(),
     tags: z.array(z.string()).optional(),
   })
   .strict();
@@ -461,13 +462,14 @@ export type SearchReferencesArgs = z.infer<typeof searchReferencesArgsSchema>;
 // === propose_create_reference（创建参考资料提案，决策 36） ===
 
 /**
- * 入参：name 标题（必填）+ type 分类枚举（缺省 material）+ content 全文长文本 +
+ * 入参：name 标题（必填）+ type 分类（自由文本，决策 44：原枚举已取消，建议沿用项目内已有分类，
+ * 缺省 material 写入侧兜底）+ content 全文长文本 +
  * source 来源（可选）+ tags 标签数组（可选）。无引用对象（新实体 id 由执行时生成）。
  */
 export const proposeCreateReferenceArgsSchema = z
   .object({
     name: z.string().min(1),
-    type: z.enum(REFERENCE_TYPES).optional(),
+    type: z.string().optional(),
     content: z.string().optional(),
     source: z.string().nullable().optional(),
     tags: z.array(z.string()).optional(),

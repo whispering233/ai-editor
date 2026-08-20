@@ -15,8 +15,6 @@ import { parseReferenceFrontmatter } from "@whispering233/ai-editor-shared";
 import type { EntityDetailRes } from "../lib/api";
 import { createEntity, deleteEntity, getEntityDetail, listEntities, updateEntity } from "../lib/api";
 import { ApiError } from "../lib/api";
-import { REFERENCE_TYPES } from "@whispering233/ai-editor-shared";
-import type { ReferenceTypeValue } from "@whispering233/ai-editor-shared";
 import { applyTagSuggestion, parseTagsInput, suggestTags, tagsToInput } from "../lib/timeline";
 import { navigate } from "../hooks/use-route";
 import { useThemeMode } from "../hooks/use-theme-mode";
@@ -28,17 +26,19 @@ import { Breadcrumb } from "../components/page-nav/Breadcrumb";
 import { TagSuggest } from "../components/timeline/TagSuggest";
 import { CreateRelationDialog, type RelationSource } from "../components/entity/create-relation-dialog";
 
-const TYPE_LABELS: Record<ReferenceTypeValue, string> = {
+/** 分类回显映射（决策 44：**仅存量显示**——material 等旧枚举值回显中文名，非可选建议；新自定义分类无映射原样显示） */
+const TYPE_LABELS: Record<string, string> = {
   material: "素材摘抄",
   inspiration: "灵感记录",
   theory: "写作理论",
   reference: "设定参考",
 };
 
-/** 详情页表单（编辑态/草稿态共用；11.5 起 content 由 markdown 编辑器驱动） */
+/** 详情页表单（编辑态/草稿态共用；11.5 起 content 由 markdown 编辑器驱动；
+ * type 为自由文本分类（决策 44）——详情页输入 = 文本框 + datalist 建议（聚合项目内已用分类） */
 interface EditForm {
   name: string;
-  type: ReferenceTypeValue;
+  type: string;
   tagsInput: string;
   content: string;
   url: string;
@@ -83,18 +83,24 @@ export default function ReferenceDetail({
 
   // 标签建议池（详情页独立聚合：datalist 自动补全 + TagSuggest 快捷选择，与列表页一致体验）
   const [tagPool, setTagPool] = useState<string[]>([]);
+  // 分类建议池（决策 44：datalist 建议 = 项目内已用分类，无预置枚举；与 tagPool 同一次拉取聚合）
+  const [typePool, setTypePool] = useState<string[]>([]);
   useEffect(() => {
     let cancelled = false;
     listEntities("reference", { limit: 200 })
       .then((res) => {
         if (cancelled) return;
-        const set = new Set<string>();
+        const tagSet = new Set<string>();
+        const typeSet = new Set<string>();
         for (const it of res.items) {
           const tags = it.summary?.tags;
           if (Array.isArray(tags))
-            for (const t of tags) if (typeof t === "string" && t !== "") set.add(t);
+            for (const t of tags) if (typeof t === "string" && t !== "") tagSet.add(t);
+          const t = it.summary?.type;
+          if (typeof t === "string" && t !== "") typeSet.add(t);
         }
-        setTagPool([...set].sort((a, b) => a.localeCompare(b)));
+        setTagPool([...tagSet].sort((a, b) => a.localeCompare(b)));
+        setTypePool([...typeSet].sort((a, b) => a.localeCompare(b)));
       })
       .catch(() => {
         /* 建议池加载失败不阻塞编辑（仅自动补全缺失） */
@@ -117,7 +123,7 @@ export default function ReferenceDetail({
         const data = d.data as Record<string, unknown>;
         setForm({
           name: d.name,
-          type: (data?.type as ReferenceTypeValue | undefined) ?? "material",
+          type: (data?.type as string | undefined) ?? "material",
           tagsInput: tagsToInput(data?.tags),
           content: typeof data?.content === "string" ? (data.content as string) : "",
           url: typeof data?.url === "string" ? (data.url as string) : "",
@@ -184,7 +190,7 @@ export default function ReferenceDetail({
         setForm((f) => ({
           ...f,
           name: parsed.title ?? file.name.replace(/\.md$/i, ""),
-          type: (parsed.category as ReferenceTypeValue | undefined) ?? f.type,
+          type: parsed.category ?? f.type,
           tagsInput: parsed.tags.join(", "),
           content: parsed.body,
         }));
@@ -422,20 +428,27 @@ export default function ReferenceDetail({
 
       {/* 表单区（编辑态 = 详情页即编辑器；分类/标签/内容编辑） */}
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
-        {/* 分类 */}
+        {/* 分类（决策 44）：文本框 + datalist 自动补全——建议项 = 项目内已用分类（存量回显名），
+            不含预置枚举，用户可自由输入任意新分类 */}
         <div className="flex items-start gap-2">
           <label className="mt-2 w-12 shrink-0 text-sm text-muted-foreground">分类</label>
-          <select
-            className={cn(inputClass, "flex-1")}
-            value={form.type}
-            onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as ReferenceTypeValue }))}
-          >
-            {(REFERENCE_TYPES as readonly ReferenceTypeValue[]).map((t) => (
-              <option key={t} value={t}>
-                {TYPE_LABELS[t]}
-              </option>
-            ))}
-          </select>
+          <div className="relative min-w-0 flex-1">
+            <input
+              className={cn(inputClass, "w-full")}
+              value={form.type}
+              onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
+              list="ref-detail-types"
+              placeholder="如：素材摘抄、人物设定考据…（可自定义）"
+              disabled={saving}
+            />
+            <datalist id="ref-detail-types">
+              {typePool.map((t) => (
+                <option key={t} value={t}>
+                  {TYPE_LABELS[t] ?? t}
+                </option>
+              ))}
+            </datalist>
+          </div>
         </div>
         {/* link 类：URL（必填） */}
         {currentKind === "link" && (

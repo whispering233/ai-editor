@@ -21,7 +21,7 @@ export const FRONTMATTER_DELIMITER = "---";
 export interface ReferenceFrontmatter {
   /** frontmatter title（缺失 → undefined，调用方兜底文件名） */
   title?: string;
-  /** 分类枚举（缺失 → undefined，调用方兜底 material） */
+  /** 分类（自由文本，决策 44：不再预置枚举；缺失 → undefined，调用方兜底 material） */
   category?: string;
   /** 标签数组（缺失/非数组 → 空数组） */
   tags: string[];

@@ -26,7 +26,7 @@ import {
   updateEntity,
   type Db,
 } from "@whispering233/ai-editor-db";
-import type { EntityRow, ReferenceTypeValue } from "@whispering233/ai-editor-shared";
+import type { EntityRow } from "@whispering233/ai-editor-shared";
 
 /** 参考资料目录（项目根下，决策 43：书籍项目文件夹自包含参考资料） */
 export const REFERENCE_DIR = "references";
@@ -74,7 +74,7 @@ export function uniqueFileNameIn(dir: string, base: string): string {
 export function writeReferenceFile(
   root: string,
   fileName: string,
-  meta: { title: string; category: ReferenceTypeValue; tags: string[]; extraLines?: readonly string[] },
+  meta: { title: string; category: string; tags: string[]; extraLines?: readonly string[] },
   body: string,
 ): { fileName: string; mtime: string } {
   ensureReferenceDirs(root);
@@ -85,7 +85,7 @@ export function writeReferenceFile(
 /** 解析后的参考文件（meta + body + mtime） */
 export interface ParsedReferenceFile {
   title: string | undefined;
-  category: ReferenceTypeValue | undefined;
+  category: string | undefined;
   tags: string[];
   body: string;
   /** 未知 frontmatter 行（外部编辑器自定义字段，序列化时原样保留） */
@@ -105,7 +105,7 @@ export function readReferenceFile(root: string, fileName: string): ParsedReferen
   const st = statSync(full);
   return {
     title: parsed.title,
-    category: parsed.category as ReferenceTypeValue | undefined,
+    category: parsed.category,
     tags: parsed.tags,
     body: parsed.body,
     extraLines: parsed.extraLines,

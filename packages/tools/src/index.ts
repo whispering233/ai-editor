@@ -137,8 +137,8 @@ const queryToolDefs: ToolDefinition[] = [
   {
     name: "search_references",
     description:
-      "参考资料搜索（决策 36）：按关键词搜索标题+标签命中的参考资料摘要列表（type 分类枚举可选过滤：material 素材摘抄/" +
-      "inspiration 灵感记录/theory 写作理论/reference 设定参考；tags 标签 AND 过滤）。" +
+      "参考资料搜索（决策 36 + 决策 44 修订）：按关键词搜索标题+标签命中的参考资料摘要列表（type 分类可选过滤：自由文本分类，" +
+      "建议沿用项目内已有分类；tags 标签 AND 过滤）。" +
       "返回摘要（content 截断 120 字）——取全文请用 get_entity 的 reference 类型。用于 AI 不知道书里有哪些参考资料时先检索。",
     argsSchema: searchReferencesArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
@@ -486,9 +486,8 @@ const proposalToolDefs: ToolDefinition[] = [
   {
     name: "propose_create_reference",
     description:
-      "创建参考资料提案（决策 36）：向用户提议把读到/总结的素材、灵感或写作要点保存为参考资料（外部素材/灵感笔记，" +
-      "非本书正文）。name 标题必填，type 分类可选（material 素材摘抄/inspiration 灵感记录/theory 写作理论/reference 设定参考，" +
-      "缺省 material），content 全文长文本，source 来源（URL/书名/作者）可选，tags 标签数组可选。" +
+      "创建参考资料提案（决策 36 + 决策 44 修订）：向用户提议把读到/总结的素材、灵感或写作要点保存为参考资料（外部素材/灵感笔记，" +
+      "非本书正文）。name 标题必填，type 分类可选（自由文本，建议沿用项目内已有分类，缺省 material），content 全文长文本，source 来源（URL/书名/作者）可选，tags 标签数组可选。" +
       "仅生成提案（返回 proposal_id + 一句话摘要），需用户在界面确认后才写入——请勿重复提案或视为已保存。",
     argsSchema: proposeCreateReferenceArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,

@@ -8,7 +8,7 @@
 // zod 版本：^4（注意 v4 API：z.record 必须两参、z.enum 接受 readonly 数组）
 
 import { z } from "zod";
-import { ENTITY_TYPES, REFERENCE_TYPES, RELATION_TYPES } from "../constants/entity.js";
+import { ENTITY_TYPES, RELATION_TYPES } from "../constants/entity.js";
 import { HOOK_STATUSES, PAYOFF_TIMING } from "../constants/hook.js";
 import { CONFLICT_LEVELS } from "../constants/outline.js";
 import { BACKUP_FREQUENCIES } from "../constants/backup.js";
@@ -154,13 +154,14 @@ export const eventDataSchema = z
 /** timepoint 专属字段（G2 时间标签点，决策 26 修订）：data 空——时间标签文本 = name，可重命名，YAGNI 不加 data 字段 */
 export const timepointDataSchema = z.object({}).passthrough();
 
-/** reference 专属字段（决策 36 参考资料：type 分类枚举 / content 全文长文本 / source 来源 / tags 标签数组；
+/** reference 专属字段（决策 36 参考资料：type 分类 / content 全文长文本 / source 来源 / tags 标签数组；
+ *  决策 44 修订：type 为自由文本分类（不再预置枚举，缺省 material 写入侧兜底）；
  *  决策 43 修订：两类承载——kind = file（本地 md 文档：file_name 相对路径 + content 正文镜像 + file_mtime
  *  上次同步快照）/ link（外源链接：url 必填 + content 可选备注）；kind 缺省视为 link（存量条目运行时兼容）；
  *  source 仅存量旧条目使用（新建不再写入）） */
 export const referenceDataSchema = z
   .object({
-    type: z.enum(REFERENCE_TYPES).optional(), // 缺省 material（写入侧兜底）
+    type: z.string().optional(), // 自由文本分类（决策 44：取消预置枚举；缺省 material 写入侧兜底）
     kind: z.enum(["file", "link"]).optional(), // 决策 43：缺省视为 link
     file_name: z.string().optional(), // file 类：references/ 下相对路径（服务端写入，客户端只读）
     file_mtime: z.string().optional(), // file 类：上次同步时文件 mtime（scan 比对基准，服务端写入）
