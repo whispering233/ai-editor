@@ -21,7 +21,7 @@ import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
 import { cn } from "../lib/utils";
-import { errorBannerClass, inputClass, sectionCardClass, skeletonClass } from "../lib/styles";
+import { errorBannerClass, inputClass, skeletonClass } from "../lib/styles";
 import { Button } from "../components/ui/button";
 import { RowContextMenu } from "../components/entity/row-context-menu";
 import { EmptyState } from "../components/ui/empty-state";
@@ -300,17 +300,32 @@ export default function ReferenceList() {
               : "还没有参考资料，先新建一条——把书籍摘抄、灵感记录、写作理论保存到这里，AI 创作顾问会参考它们给出建议"}
           </EmptyState>
         ) : (
-          <div className={sectionCardClass + " divide-y divide-border"}>
-            {visible.map((it) => (
-              <RefRow
-                key={it.id}
-                item={it}
-                onRename={handleRename}
-                onDelete={handleDelete}
-                onGoto={() => navigate(`#/references/${it.id}`)}
-                onRelationCreated={() => setReloadTick((t) => t + 1)}
-              />
-            ))}
+          /* 表格平铺（批次十二 R3）：thead 四列 + 单行 tr，行高从两行收为一行；
+             对齐 EntityList 表格样式（border + thead bg-muted/50） */
+          <div className="overflow-hidden rounded-lg border border-border">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/50 text-xs text-muted-foreground/70">
+                  <th className="px-3 py-2 font-normal">标题</th>
+                  <th className="px-3 py-2 font-normal">分类</th>
+                  <th className="px-3 py-2 font-normal">标签</th>
+                  <th className="px-3 py-2 font-normal">来源</th>
+                  <th className="w-10 px-3 py-2" />
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((it) => (
+                  <RefRow
+                    key={it.id}
+                    item={it}
+                    onRename={handleRename}
+                    onDelete={handleDelete}
+                    onGoto={() => navigate(`#/references/${it.id}`)}
+                    onRelationCreated={() => setReloadTick((t) => t + 1)}
+                  />
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
@@ -329,7 +344,7 @@ interface RefRowProps {
   onRelationCreated: () => void;
 }
 
-/** 列表行（决策 43 卡 11.1 + 11.4）：第一行 [标题（点击行内编辑）+ 分类徽标 + 删除]，第二行 [标签 + 来源]；
+/** 列表行（决策 43 卡 11.1 + 11.4 + 批次十二 R3 表格平铺）：单行 tr，四列 [标题（点击行内编辑）、分类、标签、来源] + 删除；
  * 来源列按 kind 渲染（11.4）：file → 相对路径文本、link → URL 可点击（存量无 kind 条目 → source 兼容）；
  * 双击行 = 进详情页；右键菜单 [注入会话上下文、建立关联] 复用决策 40 */
 function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowProps) {
@@ -392,10 +407,15 @@ function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowP
       source={{ type: "reference", id: item.id, name: item.name }}
       onCreated={onRelationCreated}
       trigger={
-        <div className="group px-3 py-2.5" onDoubleClick={handleRowDoubleClick} title="双击查看详情" />
+        <tr
+          className="group cursor-default border-b border-border/50 transition-colors last:border-0 hover:bg-muted"
+          onDoubleClick={handleRowDoubleClick}
+          title="双击查看详情"
+        />
       }
     >
-      <div className="flex items-center gap-2">
+      {/* 标题列：点击 = 行内编辑（Enter 提交 / Esc 取消 / 失焦保存） */}
+      <td className="max-w-56 px-3 py-2">
         {editing ? (
           <input
             autoComplete="off"
@@ -411,62 +431,74 @@ function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowP
               }
             }}
             onBlur={() => void commitEdit()}
-            className={cn(inputClass, "h-7 min-w-0 flex-1 px-1.5 text-sm font-medium")}
+            className={cn(inputClass, "h-7 w-full px-1.5 text-sm font-medium")}
             disabled={saving}
           />
         ) : (
           <button
             type="button"
             onClick={startEdit}
-            className="min-w-0 flex-1 truncate text-left text-sm font-medium text-foreground hover:text-primary"
+            className="block w-full truncate text-left text-sm font-medium text-foreground hover:text-primary"
             title="点击编辑标题"
           >
             {item.name}
           </button>
         )}
-        <span className="shrink-0 rounded-md border border-border bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+      </td>
+      {/* 分类列：存量回显名 / 新分类原样文本 */}
+      <td className="max-w-28 px-3 py-2">
+        <span className="rounded-md border border-border bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
           {TYPE_LABELS[type] ?? type}
         </span>
+      </td>
+      {/* 标签列：tags 前 3 个徽标 */}
+      <td className="px-3 py-2">
+        {tags.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1">
+            {tags.map((t) => (
+              <span
+                key={t}
+                className="rounded bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground"
+              >
+                {t}
+              </span>
+            ))}
+          </div>
+        )}
+      </td>
+      {/* 来源列：file → 相对路径文本；link → URL 可点击 */}
+      <td className="max-w-44 px-3 py-2">
+        {source !== "" &&
+          (!isFile && /^https?:\/\//.test(source) ? (
+            <a
+              href={source}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex max-w-full items-center gap-1 text-xs text-primary hover:underline"
+              title={source}
+            >
+              <span className="truncate">{source}</span>
+              <ExternalLink className="size-3 shrink-0" />
+            </a>
+          ) : (
+            <span className="block truncate text-xs text-muted-foreground" title={source}>
+              {source}
+            </span>
+          ))}
+      </td>
+      {/* 操作列：删除（H3 直接平铺不收 ⋯） */}
+      <td className="w-10 px-2 py-2 text-right">
         <Button
           variant="ghost"
           size="icon-sm"
-          className="shrink-0 text-muted-foreground hover:text-destructive"
+          className="text-muted-foreground hover:text-destructive"
           onClick={() => onDelete(item)}
           aria-label="删除"
           title="移入回收站"
         >
           <Trash2 className="size-3.5" />
         </Button>
-      </div>
-      {(tags.length > 0 || source !== "") && (
-        <div className="mt-1 flex flex-wrap items-center gap-1.5">
-          {tags.map((t) => (
-            <span
-              key={t}
-              className="rounded bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground"
-            >
-              {t}
-            </span>
-          ))}
-          {source !== "" &&
-            (!isFile && /^https?:\/\//.test(source) ? (
-              <a
-                href={source}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                title={source}
-              >
-                <span className="max-w-56 truncate">{source}</span>
-                <ExternalLink className="size-3 shrink-0" />
-              </a>
-            ) : (
-              <span className="max-w-72 truncate text-xs text-muted-foreground" title={source}>
-                {source}
-              </span>
-            ))}
-        </div>
-      )}
+      </td>
     </RowContextMenu>
   );
 }
