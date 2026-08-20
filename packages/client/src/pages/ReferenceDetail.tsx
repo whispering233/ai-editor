@@ -380,9 +380,12 @@ export default function ReferenceDetail({
                   : detail!.name}
             </h1>
           )}
-          <span className="rounded-md border border-border bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
-            {TYPE_LABELS[form.type] ?? form.type}
-          </span>
+          {/* 分类徽标（批次十二 R4）：草稿态不显示——新建时分类未定且下方已有分类输入区；编辑态保留 */}
+          {!isDraft && (
+            <span className="rounded-md border border-border bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+              {TYPE_LABELS[form.type] ?? form.type}
+            </span>
+          )}
         </div>
         {/* 元信息：来源 + 创建/更新时间（决策 39：详情页保留） */}
         <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
