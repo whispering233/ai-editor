@@ -39,6 +39,9 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - [x] **卡 R4（交互）**：草稿态标题右侧不显示分类徽标——`ReferenceDetail.tsx` 标题旁徽标 `isDraft` 时不渲染（编辑态保留）。`6f84a49`
 - [x] **卡 R5（交互）**：详情页面包屑换 `Breadcrumb` 组件——`ReferenceDetail.tsx` 顶部「← 参考资料 / 标题」纯文本改为分段 pill（参考资料 › 标题，对齐 EntityDetail/OutlineDetail）。`81ca848`
 - [x] **卡 R6（新需求，决策 44）**：分类自定义——shared 删除 `REFERENCE_TYPES`/`ReferenceTypeValue`，`referenceDataSchema.type` 与 tools 两处 `z.enum` 放宽 `z.string().optional()`（缺省 material 写入侧兜底保留）；tools 描述文本去枚举列举；server `ReferenceTypeValue → string` 两文件；前端列表筛选下拉聚合现有分类（存量回显名）、详情页分类 select → 文本框 + datalist（聚合项目内已用分类，不含预置，可自由输入）；TYPE_LABELS 保留仅存量回显；无 DDL 迁移（SCHEMA_VERSION 5 不变）。`a27fdac`（验证：全仓 1639 测试全绿 + test-project 实测自定义分类创建/编辑/列表/scan frontmatter 往返）
+- [x] **卡 R3 修订（交互）**：参考资料列表分类列去徽标包裹，直接显示文字（对齐 EntityList 数据列样式）。`f7e2529`
+- [ ] **卡 T1（交互，设定树）**：设定树行标签移位——`setting-tree.tsx` 行结构从「折叠箭头 | 名称 | 标签 | 子设定数 | ml-auto 删除」改为「折叠箭头 | 名称 | 子设定数 | ml-auto 标签 | 删除」（标签收进行尾操作区、删除按钮左边，不干扰树呈现）。
+- [ ] **卡 T2（交互，全仓标签样式）**：标签徽标样式强化——全仓 3 处展示型标签徽标（设定树行 / 时间轴事件行 / 参考资料列表）从 `bg-muted/bg-secondary + text-muted-foreground` 统一改为 `bg-primary/80 + text-primary-foreground`（参考新建按钮色系：背景淡一档、文字用按钮前景色——浅色主题白字）；layout.md §4 补标签徽标规范。
 
 ---
 

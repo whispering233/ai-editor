@@ -629,27 +629,29 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
               {node.name}
             </span>
           )}
-          {/* 标签徽标（summary.tags 前 3，决策 31 统一字段；替代已废弃的 category 徽标） */}
-          {tags.length > 0 && (
-            <span className="flex shrink-0 items-center gap-0.5">
-              {tags.map((t) => (
-                <span
-                  key={t}
-                  className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
-                >
-                  {t}
-                </span>
-              ))}
-            </span>
-          )}
           {/* 直接子设定数（>0 时显示） */}
           {hasChildren && (
             <span className="shrink-0 text-xs text-muted-foreground/70">
               {node.children.length} 个子设定
             </span>
           )}
-          {/* 行尾操作区（决策 42：行级只留删除，H2 直接软删不弹确认；决策 40：右键菜单替代行级问 AI） */}
-          <span className="ml-auto flex shrink-0 items-center gap-1">
+          {/* 行尾操作区（批次十二 T1：标签徽标 + 删除按钮——标签收进行尾、删除按钮左边，
+              不紧跟名称干扰树呈现；决策 42：行级只留删除，H2 直接软删不弹确认；
+              决策 40：右键菜单替代行级问 AI） */}
+          <span className="ml-auto flex shrink-0 items-center gap-1.5">
+            {/* 标签徽标（summary.tags 前 3，决策 31 统一字段；替代已废弃的 category 徽标） */}
+            {tags.length > 0 && (
+              <span className="flex shrink-0 items-center gap-0.5">
+                {tags.map((t) => (
+                  <span
+                    key={t}
+                    className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
+                  >
+                    {t}
+                  </span>
+                ))}
+              </span>
+            )}
             <button
               type="button"
               className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive"
@@ -667,7 +669,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
       );
       return (
         <li key={node.id}>
-          {/* 节点行：折叠箭头 | 名称（点击行内编辑）| 标签徽标 | 子设定数 | 行尾删除；
+          {/* 节点行：折叠箭头 | 名称（点击行内编辑）| 子设定数 | 行尾区（标签徽标 + 删除，批次十二 T1）；
               可拖拽（编辑态/自身拖拽中/busy 禁用，防输入误拖与嵌套拖动）；
               tabIndex=-1 使行可聚焦（选中后按 Enter 触发新建子级 onKeyDown）；
               决策 40：行级右键菜单（RowContextMenu）——注入会话上下文（focus_entity_type=setting）+
