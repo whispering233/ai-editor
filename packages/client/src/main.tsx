@@ -48,6 +48,11 @@ function renderPage(route: Route): ReactNode {
       if (second === "setting-tree") {
         return <RedirectTo to="/entities/setting" />;
       }
+      // 批次十二 T3：参考资料已有独立中栏 tab（#/references）——实体关系页泛型表格重复入口
+      // 移除，旧路由 #/entities/reference[/:id] 重定向到参考资料页（对齐决策 42 设定树先例）
+      if (second === "reference") {
+        return <RedirectTo to={third !== undefined ? `/references/${third}` : "/references"} />;
+      }
       // 按段数区分：2 段（#/entities/:type）→ 列表；3 段（#/entities/:type/:id）→ 详情（layout.md §1）
       // type 缺省 character（entity-list.md：type ∈ character|setting|location|hook）
       const type =

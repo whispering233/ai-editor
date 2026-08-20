@@ -258,7 +258,8 @@ export default function EntityList({ type }: { type: string }) {
           （设定 tab 为树形视图（决策 42），自带工具栏——搜索/新建在树内，顶部不重复渲染） */}
       <div className="flex flex-wrap items-center gap-3 border-b border-border pb-3">
         <div className="flex gap-1">
-          {ENTITY_TYPES.map((t) => (
+          {/* 批次十二 T3：参考资料已有独立中栏 tab（#/references），实体二级 tab 排除——入口去重 */}
+          {ENTITY_TYPES.filter((t) => t !== "reference").map((t) => (
             <button
               key={t}
               type="button"

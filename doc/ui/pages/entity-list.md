@@ -2,7 +2,7 @@
 
 ## 路由与数据
 
-- 路由：`#/entities/:type?`（type ∈ character|setting|location|hook，缺省 character；tab 切换即改 hash）
+- 路由：`#/entities/:type?`（type ∈ character|setting|location|hook，缺省 character；tab 切换即改 hash；**批次十二 T3：参考资料 reference 从实体二级 tab 排除**——已有独立中栏 tab `#/references`，旧路由 `#/entities/reference[/:id]` 重定向到参考资料页，对齐决策 42 设定树先例）
 - 数据：`GET /api/v1/entity/:type?q=&offset=&limit=&sort=&order=`
 - 新建：`POST /api/v1/entity/:type`
 - **设定类型（决策 42，2026-08 批次十）**：`#/entities/setting` 为**树形视图**（与设定树 tab 合并，见下方「设定 Tab（树形视图）」）——不走表格/分页；character/location/hook 保持表格视图。
