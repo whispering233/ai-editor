@@ -15,12 +15,12 @@ import type { Context, MiddlewareHandler } from "hono";
 import type { ProjectFileConfig } from "@whispering233/ai-editor-shared";
 import { generateProjectId, DEFAULT_BACKUP_FREQUENCY_MINUTES } from "@whispering233/ai-editor-shared";
 import { closeDatabase, openDatabase, setUserVersion, type Db } from "@whispering233/ai-editor-db";
-import { readAgentsFile, readProjectFile, writeAgentsFile, writeProjectFile } from "@whispering233/ai-editor-db";
+import { readProjectFile, writeProjectFile } from "@whispering233/ai-editor-db";
 import { writeOutlineFile } from "@whispering233/ai-editor-db";
 import { SCHEMA_VERSION } from "@whispering233/ai-editor-db";
 import { nowIso } from "@whispering233/ai-editor-db";
 import { HttpError, fail, type ApiErrorCode } from "./error.js";
-import { startAutoBackup, stopAutoBackup } from "../backup.js";
+import { migratePromptToAgents, startAutoBackup, stopAutoBackup } from "../backup.js";
 
 /** data.db 文件名（决策 8：项目根目录） */
 export const DATA_DB_FILE_NAME = "data.db";
@@ -102,30 +102,9 @@ export function detectProject(root: string): ProjectContext | null {
   }
   const project: ProjectContext = { root, config: existing, db: openDatabase(join(root, DATA_DB_FILE_NAME)) };
   // 决策 41 自动迁移：project.json 有非空 prompt 且无 AGENTS.md → 迁移写入（原样，一次性）
+  //（实现位于 backup.ts——backup 模块不依赖 middleware，middleware 侧经 ../backup.js 复用）
   migratePromptToAgents(project);
   return project;
-}
-
-/**
- * 决策 41 自动迁移：project.json 存在非空 `prompt` 且项目目录无 AGENTS.md →
- * 将 prompt 内容**原样**写入 AGENTS.md（原子写，决策 11 同款），一次性——
- * 迁移后 AGENTS.md 存在，条件不再满足，prompt 不再使用（字段可保留为遗留数据，宽松读取）。
- *
- * 触发点：打开项目时（detectProject 启动即打开 + open 路由），与 E5 迁移同生命周期。
- * **失败不阻塞打开**（schema.md「迁移在 open 流程内完成，失败不阻塞打开，记录日志，下次 open 重试」）。
- *
- * @param project 已打开的项目上下文（root 指向项目目录）
- */
-export function migratePromptToAgents(project: ProjectContext): void {
-  const prompt = project.config.prompt;
-  if (typeof prompt !== "string" || prompt.trim() === "") return; // 无 prompt 无需迁移
-  if (readAgentsFile(project.root) !== null) return; // 已有 AGENTS.md 不覆盖（一次性）
-  try {
-    writeAgentsFile(project.root, prompt);
-  } catch (err) {
-    // 迁移失败不阻塞打开：记录日志，下次 open 重试
-    console.error("[server] AGENTS.md 自动迁移失败（下次打开重试）:", err);
-  }
 }
 
 /**

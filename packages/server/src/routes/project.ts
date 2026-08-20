@@ -48,13 +48,12 @@ import {
   projectListResSchema,
   projectOpenReqSchema,
 } from "@whispering233/ai-editor-shared/schemas";
-import { createBackupZip, listBackups, overwriteProjectFiles, renameBackup, restoreBackup, snapshotBookDir, validateBackupPackage, writeBackup, writeProjectFilesFromBackup } from "../backup.js";
+import { createBackupZip, listBackups, migratePromptToAgents, overwriteProjectFiles, renameBackup, restoreBackup, snapshotBookDir, validateBackupPackage, writeBackup, writeProjectFilesFromBackup } from "../backup.js";
 import { HttpError, ok } from "../middleware/error.js";
 import {
   closeProject,
   getCurrentProject,
   initProject,
-  migratePromptToAgents,
   requireCurrentProject,
   setCurrentProject,
   type ProjectContext,

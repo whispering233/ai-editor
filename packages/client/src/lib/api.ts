@@ -120,11 +120,11 @@ export function getProjectConfig(): Promise<ProjectConfig> {
   return apiFetch<ProjectConfig>("/project/config");
 }
 
-/** PUT /api/v1/project/config 请求体（契约：projectConfigUpdateReqSchema，snake_case） */
+/** PUT /api/v1/project/config 请求体（契约：projectConfigUpdateReqSchema，snake_case；
+ *  `prompt` 已废弃（决策 41）不再接受——项目规则改由 PUT /project/agents 写入 AGENTS.md） */
 export interface UpdateProjectConfigBody {
   name?: string;
   language?: ProjectLanguage;
-  prompt?: string;
   current_position?: string | null; // 须指向存在的非软删大纲节点（服务端校验）
   /** 自动备份频率（决策 27）：null = 关闭；仅枚举 5/10/15/30/60（BACKUP_FREQUENCIES），其他 → 400 */
   backup_frequency_minutes?: number | null;
@@ -637,13 +637,13 @@ export function listProjects(): Promise<ProjectList> {
 
 // ============ 项目开/建/关（S1.4；契约：endpoints.md「项目管理」+ S1.2 server 路由） ============
 
-/** POST /api/v1/project/create 请求体（snake_case；config 可选） */
+/** POST /api/v1/project/create 请求体（snake_case；config 可选；
+ *  `prompt` 已废弃（决策 41）不再接受——项目规则改由 PUT /project/agents 写入 AGENTS.md） */
 export interface CreateProjectBody {
   path: string;
   config?: {
     name?: string;
     language?: ProjectLanguage;
-    prompt?: string;
   };
 }
 
