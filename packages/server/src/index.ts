@@ -41,6 +41,7 @@ import { outlineRoutes } from "./routes/outline.js";
 import { proposalRoutes } from "./routes/proposal.js";
 import { trashRoutes } from "./routes/trash.js";
 import { relationRoutes } from "./routes/relation.js";
+import { referenceRoutes } from "./routes/reference.js"; // 决策 43：参考资料专属端点（scan）
 import { logSoftDeleteReconcile, reconcileSoftDelete } from "./consistency.js";
 
 /** 默认端口（决策 8 / 17；dev 态 Vite proxy 写死 3456） */
@@ -202,6 +203,7 @@ export async function startServer(projectRoot: string, options: StartServerOptio
 
   // 关系路由（S3.4）：查询（k 跳）/创建（判重）/物理删（决策 2/12）
   app.route("/api/v1/relation", relationRoutes);
+  app.route("/api/v1/reference", referenceRoutes); // 决策 43：参考资料专属端点（scan）
 
   // Delta 路由（S5.3）：追加 / 按节点查询 / compute 状态计算（决策 9/12）
   app.route("/api/v1/delta", deltaRoutes);

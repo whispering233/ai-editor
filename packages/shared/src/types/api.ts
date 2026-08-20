@@ -46,6 +46,7 @@ export const ERROR_CODES = [
   "SCHEMA_VERSION_MISMATCH", // 409 导入 zip 的 data.db user_version 与当前程序版本不匹配（E2；拒绝导入，不静默重建，release-review §二）
   "PROJECT_VERSION_NEWER", // 409 open 时项目 data.db user_version 高于当前程序版本（E4；拒绝打开并提示升级程序，堵降级数据丢失，release-review §一）
   "BACKUP_TARGET_EXISTS", // 409 重命名备份目标文件名已存在（决策 29，B2.6：renameSync 目标存在会静默覆盖——显式拒绝防数据丢失）
+  "REFERENCE_FILE_MISSING", // 409 参考资料 file 类文件缺失（决策 43：PUT 更新时读原文件失败——外部删除，提示先扫描同步）
   // ---- 废弃（保留兼容）----
   "DELTA_CONFLICT", // 已废弃（2026-08 修订：computeState 以 conflicts 字段替代 409）
   // ---- tools.md 决策 15/16 补充命名（SSE error 事件用）----
@@ -153,12 +154,19 @@ export const eventDataSchema = z
 /** timepoint 专属字段（G2 时间标签点，决策 26 修订）：data 空——时间标签文本 = name，可重命名，YAGNI 不加 data 字段 */
 export const timepointDataSchema = z.object({}).passthrough();
 
-/** reference 专属字段（决策 36 参考资料：type 分类枚举 / content 全文长文本 / source 来源 / tags 标签数组） */
+/** reference 专属字段（决策 36 参考资料：type 分类枚举 / content 全文长文本 / source 来源 / tags 标签数组；
+ *  决策 43 修订：两类承载——kind = file（本地 md 文档：file_name 相对路径 + content 正文镜像 + file_mtime
+ *  上次同步快照）/ link（外源链接：url 必填 + content 可选备注）；kind 缺省视为 link（存量条目运行时兼容）；
+ *  source 仅存量旧条目使用（新建不再写入）） */
 export const referenceDataSchema = z
   .object({
     type: z.enum(REFERENCE_TYPES).optional(), // 缺省 material（写入侧兜底）
+    kind: z.enum(["file", "link"]).optional(), // 决策 43：缺省视为 link
+    file_name: z.string().optional(), // file 类：references/ 下相对路径（服务端写入，客户端只读）
+    file_mtime: z.string().optional(), // file 类：上次同步时文件 mtime（scan 比对基准，服务端写入）
+    url: z.string().optional(), // link 类：外源链接 URL（创建时必填校验在服务端 route 层）
     content: z.string().optional(),
-    source: z.string().nullable().optional(),
+    source: z.string().nullable().optional(), // 存量旧条目兼容（决策 43：新建不再写入）
     tags: z.array(z.string()).optional(),
   })
   .passthrough(); // 允许未知字段（创作工具，用户自定义字段自由）

@@ -10,11 +10,16 @@ import { Hono } from "hono";
 import { cascadePurge, cascadeRestore, getOutlinePathIds, readOutlineFile } from "@whispering233/ai-editor-db";
 import { listDeletedEntities, listDeletedNodes, purgeEntity, purgeOutlineNode, restoreEntity, restoreOutlineNode } from "@whispering233/ai-editor-db";
 import type { OutlineFileNode, OutlineFileTree } from "@whispering233/ai-editor-shared";
-import { nowIso } from "@whispering233/ai-editor-db";
+import { nowIso, updateEntity } from "@whispering233/ai-editor-db";
 import { HttpError, ok } from "../middleware/error.js";
 import { requireCurrentProject } from "../middleware/project.js";
 import { collectSubtreeIds, mapOutlineError } from "./outline.js";
 import { parseTypeParam } from "./entity.js";
+import {
+  getReferenceRowAny,
+  removeReferenceFile,
+  restoreReferenceFromTrash,
+} from "../reference-files.js";
 
 /** 回收站路由（挂载于 /api/v1/trash，index.ts） */
 export const trashRoutes = new Hono();
@@ -90,6 +95,20 @@ trashRoutes.post("/entity/:type/:id/restore", (c) => {
   const project = requireCurrentProject();
   const type = parseTypeParam(c.req.param("type"));
   const id = c.req.param("id");
+  // reference file 类（决策 43）：先移回文件（.trash/ → references/）再 DB 还原——
+  // 文件缺失（外部清理）不阻塞还原（仅还原索引，详情读取时 409 REFERENCE_FILE_MISSING）；
+  // references/ 同名冲突 → 递增命名 + 更新索引 file_name（uniqueFileNameIn）；
+  // DB 还原失败（罕见）→ 文件已回 references/ + 索引仍软删 → scan「软删索引 + 文件回归」还原自愈
+  if (type === "reference") {
+    const existing = getReferenceRowAny(project.db, id);
+    if (existing !== null && existing.data.kind === "file" && typeof existing.data.file_name === "string") {
+      const fileName = existing.data.file_name;
+      const restoredName = restoreReferenceFromTrash(project.root, fileName);
+      if (restoredName !== null && restoredName !== fileName) {
+        updateEntity(project.db, id, { data: { file_name: restoredName } });
+      }
+    }
+  }
   const result = restoreEntity(project.db, type, id);
   if (result === null) {
     throw new HttpError(404, "ENTITY_NOT_FOUND", `实体不存在或未软删: ${id}`);
@@ -116,6 +135,15 @@ trashRoutes.delete("/entity/:type/:id", (c) => {
   }
   if (row.deleted_at === null) {
     throw new HttpError(400, "VALIDATION_ERROR", `实体未软删，purge 仅用于回收站清理: ${id}`);
+  }
+  // reference file 类（决策 43）：先物理删文件（references/ 与 .trash/ 都尝试）再 DB purge——
+  // 文件 = 真相源，删除是主操作；DB purge 失败（罕见）→ 残留软删索引（回收站可见可重试），
+  // 不会出现「文件残留被 scan 复活成新条目」的困惑
+  if (type === "reference") {
+    const existing = getReferenceRowAny(project.db, id);
+    if (existing !== null && existing.data.kind === "file" && typeof existing.data.file_name === "string") {
+      removeReferenceFile(project.root, existing.data.file_name);
+    }
   }
   if (purgeEntity(project.db, type, id) === null) {
     throw new HttpError(404, "ENTITY_NOT_FOUND", `实体不存在: ${id}`); // 防御（上一步已确认存在）

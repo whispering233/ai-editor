@@ -10,12 +10,15 @@ import type { ProposeCreateReferenceArgs } from "@whispering233/ai-editor-shared
 import type { ToolContext } from "../context.js";
 import { buildProposal, checkProposalAborted, type ToolProposalResult } from "./types.js";
 
-/** 产出创建参考资料提案（无引用对象——新实体 id 由执行时生成，决策 36） */
+/** 产出创建参考资料提案（无引用对象——新实体 id 由执行时生成，决策 36）
+ *  决策 43：AI 创建的条目归 link 类（data.kind='link'）——source 参数映射为 url（无 URL 时 url 留空、
+ *  content 存摘录）；AI 不直接落盘文件（文件写入走用户编辑器保存） */
 export function buildProposeCreateReference(ctx: ToolContext, args: ProposeCreateReferenceArgs): ReturnType<typeof buildProposal> {
-  const data: Record<string, unknown> = {};
+  const data: Record<string, unknown> = { kind: "link" };
   if (args.type !== undefined) data.type = args.type;
   if (args.content !== undefined) data.content = args.content;
-  if (args.source !== undefined) data.source = args.source;
+  // 决策 43：source → url（link 类来源列渲染依据）；无 source 时 url 留空（content 存摘录）
+  if (args.source !== undefined) data.url = args.source;
   if (args.tags !== undefined) data.tags = args.tags;
   return buildProposal(
     ctx,

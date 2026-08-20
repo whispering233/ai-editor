@@ -25,8 +25,8 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - [x] **批次九（决策 34/35/36，2026-08，发布 v0.0.15）**：9.1 llm 引入 pi-ai + adapter（契约保留，delete 手写 SSE）→ 9.2 模型目录接口 → 9.3 右栏模型/思考强度（对齐 pi）/上下文占用 → 9.4 reference 类型 + 迁移 005 → 9.5 search_references + propose_create_reference 工具 → 9.6 参考资料页（TabBar/列表/详情）→ 9.7 InfoBar 问 AI + 页面焦点上报（+ 行级 AskAiButton 修订方案 A）+ 批文（CHANGELOG/tasks/AGENTS 同步，发布 v0.0.15）
 - [x] **批次十（决策 37-42，2026-08，发布 v0.0.16）**：大纲交互优化（决策 37：去详情/新建按钮、Enter 新建子级、双击详情、点击标题编辑、只留删除）/ 时间轴交互参考大纲（决策 38：事件行+组标题行双击详情/点击编辑、移除详情/编辑按钮）/ 移除实体列表更新时间（决策 39）/ 右键菜单替代行级问 AI（决策 40：删除 6 处 AskAiButton、注入会话上下文 + 建立关联、InfoBar 保留）/ 项目规则文件 AGENTS.md（决策 41：唯一事实源 + prompt 自动迁移 + 设置页直编 + mtime 外部修改检测）/ 实体设定页树形视图（决策 42：与设定树合并、折叠/展开/行内编辑/拖拽调层级/Enter 新建/双击详情、搜索+标签树内过滤、移除分页）
 - [ ] **批次十一（决策 43，2026-08 进行中）**：
-  - [ ] 11.1 列表页交互重构（U2+B1）：点击标题行内编辑、双击行进详情、移除 Pencil/Dialog 编辑（B1 竞态根除）、行信息 [标题/分类徽标/标签/来源]（来源列按旧 source 字段先行，kind 细化随 11.2）
-  - [ ] 11.2 存储地基（N1）：data.kind 字段（file/link）+ shared frontmatter 读写/文件名 sanitize 纯函数 + 服务端 file 联动（create 落盘建索引 / update 先写文件后更新 DB / 软删移 .trash/ / restore 移回 / purge 物理删）+ scan 端点（mtime 快照比对幂等全量，返回 added/updated/restored/removed/skipped/errors）
+  - [x] 11.1 列表页交互重构（U2+B1）：点击标题行内编辑、双击行进详情、移除 Pencil/Dialog 编辑（B1 竞态根除）、行信息 [标题/分类徽标/标签/来源]（来源列按旧 source 字段先行，kind 细化随 11.2）`3392fb6`
+  - [x] 11.2 存储地基（N1）：data.kind 字段（file/link）+ shared frontmatter 读写/文件名 sanitize 纯函数 + 服务端 file 联动（create 落盘建索引 / update 先写文件后更新 DB / 软删移 .trash/ / restore 移回 / purge 物理删）+ scan 端点（mtime 快照比对幂等全量，返回 added/updated/restored/removed/skipped/errors）
   - [ ] 11.3 存档体系（N5）：备份 zip 白名单扩展打包 references/（含 .trash/）+ export/import/restore 同步 + 自动备份变更检测加 references/ mtime
   - [ ] 11.4 页面分流（N2）：新建按钮改两枚（新建 md 文档/新建外源链接）+ 外源链接详情页（URL 必填 + 关联面板）+ md 文档详情页骨架（草稿态 + 分类/标签 + 关联面板）
   - [ ] 11.5 编辑器集成（N3）：@uiw/react-md-editor + react-markdown 预览、暗色联动、CSS 冲突排查、bundle 体积验证（试装 smoke 可与 11.1 并行）

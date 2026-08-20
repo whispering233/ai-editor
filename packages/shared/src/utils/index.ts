@@ -4,3 +4,4 @@ export * from "./id.js";
 export * from "./format.js";
 export * from "./mapping.js";
 export * from "./backup.js";
+export * from "./reference-file.js"; // 决策 43：参考资料文件 frontmatter/文件名纯函数
