@@ -53,7 +53,7 @@ CREATE TABLE entities (
 
 | type | data 关键字段 |
 |------|-------------|
-| `character` | `role`, `gender`, `age`, `personality[]`, `motivation`, `abilities[]`, `status`（**自由文本：人物当前处境状态，如「活跃、退场、已故」——决策 45：列表不展示该列，详情页保留可编辑，输入框带示例引导**）, `custom_fields` |
+| `character` | `role`, `gender`, `age`, `personality[]`, `motivation`, `abilities[]`, `status`（**自由文本：人物当前处境状态，如「活跃、退场、已故」——决策 45 + 修订：列表与详情页表单均不再展示，存量数据 .passthrough() 容错保留，AI 工具 filters.status 语义不变**）, `custom_fields` |
 | `setting` | `description`, `tags[]`（**分类标签，统一字段，决策 31 K2**）, `rules[]`（**规则条款，仅详情页编辑，K2 恢复语义**）, `custom_fields` —— **`parent_id`（决策 30）与 `category`（决策 31）均已废弃**：层级由 belongs_to 关系表达、分类由 tags 承接；旧字段残留由 `.passthrough()` 容错；旧 rules 分类值经 004 迁移（SCHEMA_VERSION 4）复制到 tags |
 | `location` | `type`, `parent_id`, `description`, `custom_fields` |
 | `location` | `type`, `parent_id`, `description`, `custom_fields` |

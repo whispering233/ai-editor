@@ -32,8 +32,11 @@ describe("SUMMARY_COLUMNS（摘要列配置——原型信息层级表）", () =
     expect(SUMMARY_COLUMNS.hook.key1).toBe("status");
   });
 
-  it("hook 有列 2（payoff_timing）；character 状态列已移除（决策 45）、setting 有列 3 描述（决策 42 表格移除后无列 2）；location 无列 2", () => {
-    expect(SUMMARY_COLUMNS.character.key2).toBeUndefined();
+  it("character 角色/性格/能力独立成列（决策 45 用户修订）；hook 有列 2（payoff_timing）；setting 有列 3 描述；location 无列 2", () => {
+    expect(SUMMARY_COLUMNS.character.key2).toBe("personality");
+    expect(SUMMARY_COLUMNS.character.label2).toBe("性格");
+    expect(SUMMARY_COLUMNS.character.key3).toBe("abilities");
+    expect(SUMMARY_COLUMNS.character.label3).toBe("能力");
     expect(SUMMARY_COLUMNS.hook.key2).toBe("payoff_timing");
     // 决策 42（2026-08 批次十）：设定 tab 改为树形视图（不走表格），「上级设定」特殊列
     // （key2="parent"，M2）随表格移除；「描述」列配置保留
@@ -73,8 +76,8 @@ describe("summaryCellText（摘要单元格文案）", () => {
   });
 });
 
-describe("characterRowInfo（决策 45 两行式行布局数据提取）", () => {
-  it("提取角色/动机/性格能力 chips（防御性截断）", () => {
+describe("characterRowInfo（决策 45 人物行数据提取：角色/性格/能力独立列 + 动机摘要）", () => {
+  it("提取角色/动机/性格/能力（各自独立，防御性截断）", () => {
     const info = characterRowInfo({
       role: "主角",
       motivation: "复仇".repeat(30),
@@ -83,11 +86,17 @@ describe("characterRowInfo（决策 45 两行式行布局数据提取）", () =>
     });
     expect(info.role).toBe("主角");
     expect(info.motivation).toBe("复仇".repeat(20)); // 40 字符截断
-    expect(info.chips).toEqual(["坚韧", "孤僻", "剑术", "阵法"]);
+    expect(info.personality).toEqual(["坚韧", "孤僻"]); // 前 2
+    expect(info.abilities).toEqual(["剑术", "阵法"]); // 前 2
   });
 
   it("空值归一为空串/空数组（行内不渲染空段）", () => {
-    expect(characterRowInfo({})).toEqual({ role: "", motivation: "", chips: [] });
+    expect(characterRowInfo({})).toEqual({
+      role: "",
+      motivation: "",
+      personality: [],
+      abilities: [],
+    });
     expect(
       characterRowInfo({
         role: undefined,
@@ -98,7 +107,8 @@ describe("characterRowInfo（决策 45 两行式行布局数据提取）", () =>
     ).toEqual({
       role: "",
       motivation: "",
-      chips: ["剑术"],
+      personality: [],
+      abilities: ["剑术"],
     });
   });
 });

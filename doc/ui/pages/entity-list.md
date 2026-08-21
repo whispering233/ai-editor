@@ -30,13 +30,13 @@
 
 | 列 | character | location | hook |
 |----|-----------|----------|------|
-| 行布局 | **两行式（决策 45）**：第一行 名称 + 角色徽标（`summary.role`）；第二行（弱化）动机摘要（`summary.motivation` 截断 40）+ 性格/能力 chips（`summary.personality`/`summary.abilities` 各前 2） | 单行三列 | 单行三列 |
-| 名称 | `name` | `name` | `name` |
+| 行布局 | **四列（决策 45 + 用户修订，批次十三卡 13.6）**：名称列 = 名称（第一行）+ 动机摘要（第二行弱化，`summary.motivation` 截断 40，hover 完整）；角色 / 性格 / 能力独立成列（`summary.role` 徽标 / `summary.personality` chips / `summary.abilities` chips，各前 2，空值「—」） | 单行三列 | 单行三列 |
+| 名称 | `name`（+ 第二行 `summary.motivation`） | `name` | `name` |
 | 摘要列 1 | `summary.role`（角色徽标） | `summary.type` | `summary.status` |
-| 摘要列 2 | `summary.motivation`（第二行动机摘要） | — | `summary.payoff_timing` |
-| 标签 chips | `summary.personality` + `summary.abilities`（第二行，各前 2） | — | — |
+| 摘要列 2 | `summary.personality`（性格 chips） | — | `summary.payoff_timing` |
+| 摘要列 3 | `summary.abilities`（能力 chips） | — | — |
 
-> **状态列已移除（决策 45，2026-08 批次十三）**：character 列表不再展示「状态」列（原 `summary.status`）——字段无定义且存量恒空导致困惑；`data.status` 详情页保留可编辑，输入框带示例 placeholder「如：活跃、退场、已故」。
+> **状态已从列表与详情页全部移除（决策 45 + 修订，2026-08 批次十三卡 13.6）**：character 不再展示「状态」（原 `summary.status` 列 + 详情页表单字段）——字段无定义且存量恒空导致困惑；存量 `data.status` 容错保留，AI 工具 filters.status 语义不变。首版两行式布局因单 td 与双列表头错位致角色列空白、且性格/能力合并 chips 无法分辨——用户复核后改为独立成列。
 
 分页元数据：`total` / `offset` / `limit`（设定树形视图无分页）。
 

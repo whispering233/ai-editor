@@ -25,9 +25,16 @@ export interface SummaryColumnConfig {
 }
 
 export const SUMMARY_COLUMNS: Record<ListableEntityType, SummaryColumnConfig> = {
-  // 决策 45（2026-08 批次十三）：状态列移除——character.status 无定义且存量恒空致困惑，
-  // 列表不再展示（data.status 详情页保留可编辑，AI 工具 filters.status 语义不变）
-  character: { key1: "role", label1: "角色" },
+  // 决策 45（2026-08 批次十三）+ 用户修订：状态列移除（详情页表单亦移除）；角色/性格/能力
+  // 独立成列（修订：原「角色徽标内联名称旁」改独立列——首版行布局表头/表体错位致角色列空白）
+  character: {
+    key1: "role",
+    label1: "角色",
+    key2: "personality",
+    label2: "性格",
+    key3: "abilities",
+    label3: "能力",
+  },
   // 决策 31（2026-08）：设定分类由 rules 标签承接，摘要列从「类别」改为「标签」
   // 决策 42（2026-08 批次十）：设定 tab 改为树形视图（不走表格），「上级设定」特殊列
   // （key2="parent"，M2）随表格移除；「描述」列保留配置（树形视图不渲染表格，无实际作用）
@@ -55,18 +62,19 @@ export const SUMMARY_COLUMNS: Record<ListableEntityType, SummaryColumnConfig> = 
 export function characterRowInfo(summary: Record<string, unknown>): {
   role: string;
   motivation: string;
-  chips: string[];
+  personality: string[];
+  abilities: string[];
 } {
   const str = (v: unknown): string => (typeof v === "string" ? v : "");
   const tagList = (v: unknown, cap: number): string[] =>
     Array.isArray(v)
       ? (v as unknown[]).filter((t): t is string => typeof t === "string" && t !== "").slice(0, cap)
       : [];
-  const chips = [...tagList(summary.personality, 2), ...tagList(summary.abilities, 2)];
   return {
     role: str(summary.role),
     motivation: str(summary.motivation).slice(0, 40),
-    chips,
+    personality: tagList(summary.personality, 2),
+    abilities: tagList(summary.abilities, 2),
   };
 }
 

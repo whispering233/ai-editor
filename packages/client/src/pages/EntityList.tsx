@@ -516,12 +516,14 @@ export default function EntityList({ type }: { type: string }) {
                           </td>
                         </>
                       )}
-                      {col.key2 && (
+                      {/* 决策 45 修订：character 四列（名称+动机第二行 / 角色 / 性格 / 能力）由
+                          CharacterRow 自渲染，通用 key2/key3 单元格跳过（防表头/表体错位） */}
+                      {entityType !== "character" && col.key2 && (
                         <td className="max-w-40 truncate px-3 py-2 text-muted-foreground">
                           {summaryCellText(entityType, col.key2, item.summary[col.key2])}
                         </td>
                       )}
-                      {col.key3 && (
+                      {entityType !== "character" && col.key3 && (
                         // 描述列（M2，仅 setting）：行内 truncate + hover title 查看完整摘要（服务端已截断 100 字符）
                         <td
                           className="max-w-40 truncate px-3 py-2 text-muted-foreground"
@@ -580,40 +582,64 @@ export default function EntityList({ type }: { type: string }) {
   );
 }
 
-/** 人物行两行式布局（决策 45，2026-08 批次十三）：第一行 名称 + 角色徽标
- * （summary.role，T2 标签徽标样式）；第二行 动机摘要（截断 40，hover title 查看完整）
- * + 性格/能力 chips（各前 2）。空段不渲染——行高随内容自适应。 */
+/** 人物行四列布局（决策 45 + 用户修订，2026-08 批次十三）：名称列（第一行名称 + 第二行动机
+ * 摘要，hover title 查看完整）+ 角色列（summary.role，T2 标签徽标样式）+ 性格列 + 能力列
+ * （各前 2 个 chips，T2 徽标样式；空数组显示「—」占位与其余类型缺失语义一致）。
+ * 角色/性格/能力独立成列——列头即区分，修复首版合并 chips 无法分辨的反馈。 */
 function CharacterRow({ item }: { item: EntitySummary }) {
-  const { role, motivation, chips } = characterRowInfo(item.summary);
+  const { role, motivation, personality, abilities } = characterRowInfo(item.summary);
+  const badge = (text: string) => (
+    <span
+      key={text}
+      className="shrink-0 rounded bg-primary/80 px-1.5 py-0.5 text-xs text-primary-foreground"
+    >
+      {text}
+    </span>
+  );
   return (
-    <td className="px-3 py-2">
-      <div className="flex min-w-0 items-center gap-2">
-        <span className="max-w-64 truncate font-medium text-foreground" title={item.name}>
-          {item.name}
-        </span>
-        {role !== "" && (
-          <span className="shrink-0 rounded bg-primary/80 px-1.5 py-0.5 text-xs text-primary-foreground">
-            {role}
+    <>
+      {/* 名称列：名称 + 动机第二行（弱化样式，空动机不渲染） */}
+      <td className="px-3 py-2">
+        <div className="min-w-0">
+          <span className="block max-w-64 truncate font-medium text-foreground" title={item.name}>
+            {item.name}
           </span>
-        )}
-      </div>
-      {(motivation !== "" || chips.length > 0) && (
-        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1">
           {motivation !== "" && (
-            <span className="max-w-72 truncate text-xs text-muted-foreground" title={motivation}>
+            <span
+              className="mt-0.5 block max-w-72 truncate text-xs text-muted-foreground"
+              title={motivation}
+            >
               {motivation}
             </span>
           )}
-          {chips.map((chip) => (
-            <span
-              key={chip}
-              className="shrink-0 rounded bg-primary/80 px-1.5 py-0.5 text-xs text-primary-foreground"
-            >
-              {chip}
-            </span>
-          ))}
         </div>
-      )}
-    </td>
+      </td>
+      {/* 角色列 */}
+      <td className="px-3 py-2">
+        {role !== "" ? (
+          <span className="shrink-0 rounded bg-primary/80 px-1.5 py-0.5 text-xs text-primary-foreground">
+            {role}
+          </span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </td>
+      {/* 性格列（前 2 chips） */}
+      <td className="flex flex-wrap items-center gap-1 px-3 py-2">
+        {personality.length > 0 ? (
+          personality.map(badge)
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </td>
+      {/* 能力列（前 2 chips） */}
+      <td className="flex flex-wrap items-center gap-1 px-3 py-2">
+        {abilities.length > 0 ? (
+          abilities.map(badge)
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </td>
+    </>
   );
 }

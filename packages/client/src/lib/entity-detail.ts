@@ -36,7 +36,8 @@ export function detailFieldsForType(type: EntityType): DetailFieldConfig[] {
         { key: "personality", label: "性格", control: "tags" },
         { key: "motivation", label: "动机", control: "textarea" },
         { key: "abilities", label: "能力", control: "tags" },
-        { key: "status", label: "状态", control: "text", placeholder: "如：活跃、退场、已故" },
+        // 决策 45 修订（2026-08 用户反馈）：状态字段详情页表单一并移除——列表与详情均不再展示
+        // （存量 data.status 由 .passthrough() 容错保留，AI 工具 filters.status 语义不变）
       ];
     /**
      * 设定基础信息（决策 30/31 + K2 修订，2026-08）：parent_id（层级 belongs_to）与 category

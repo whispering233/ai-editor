@@ -32,6 +32,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
   - [x] 卡 13.3（UX）：设定树行显示描述摘要（summary.description 名称下弱化行 + hover title，空描述不渲染）`cd00699`
   - [x] 卡 13.4（新需求，决策 46 数据/API 地基）：EntitySummary.sortOrder（仅 setting）+ db moveSetting 复合端点（改父+同级重排事务，防环沿用决策 30；坑：删旧边按 target_id=旧父 精确匹配——按 source_id 会误删新建边）+ shared settingMoveReqSchema + server 路由 PUT /entity/setting/:id/move `640064c`
   - [x] 卡 13.5（新需求，决策 46 前端）：设定树排序方式切换器（名称/创建时间/手动）+ 同级排序纯函数 + 手动模式 ↑↓ 箭头按钮 + 拖拽行间插入线重排 + 改父流程切复合端点（order 计算按服务端「移除自身后组内位置」语义）`4f1596d`
+  - [x] 卡 13.6（bug+UX 修订，2026-08 用户复核）：人物行改四列——角色/性格/能力独立成列（修复首版单 td 与双列表头错位致角色列空白 + 合并 chips 无法分辨性格/能力），动机仍为名称列第二行；状态字段从详情页表单一并移除（列表与详情均不再展示）
 
 > 各卡详细规格、坑记录与提交历史可 `git log` 回溯（commit 见 CHANGELOG.md / release-review.md 发布进展记录）。
 

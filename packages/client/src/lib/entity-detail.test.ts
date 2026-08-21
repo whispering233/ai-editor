@@ -9,7 +9,7 @@ import {
 } from "./entity-detail";
 
 describe("detailFieldsForType（data 表单按类型配置——schema.md 字段清单）", () => {
-  it("character：role/gender/age/personality/motivation/abilities/status，控件类型正确", () => {
+  it("character：role/gender/age/personality/motivation/abilities（决策 45 修订：status 从详情页表单移除）", () => {
     const fields = detailFieldsForType("character");
     expect(fields.map((f) => f.key)).toEqual([
       "role",
@@ -18,7 +18,6 @@ describe("detailFieldsForType（data 表单按类型配置——schema.md 字段
       "personality",
       "motivation",
       "abilities",
-      "status",
     ]);
     expect(fields.find((f) => f.key === "age")?.control).toBe("number");
     expect(fields.find((f) => f.key === "personality")?.control).toBe("tags");

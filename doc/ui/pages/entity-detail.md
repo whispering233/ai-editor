@@ -57,7 +57,7 @@
 
 | 类型 | 字段与控件 |
 |------|-----------|
-| character | `role` 文本 · `gender` 文本 · `age` 数字 · `personality[]` 标签列表 · `motivation` 多行 · `abilities[]` 标签列表 · `status` 文本 · `custom_fields` 键值组 |
+| character | `role` 文本 · `gender` 文本 · `age` 数字 · `personality[]` 标签列表 · `motivation` 多行 · `abilities[]` 标签列表 · `custom_fields` 键值组（**`status` 已从表单移除（决策 45 修订，2026-08 批次十三卡 13.6）——存量数据容错保留，不展示不编辑**） |
 | setting | `description` 多行 · `tags[]` 标签列表（**分类统一字段，决策 31 K2：label「标签」，datalist 补全 + 快捷选择既有标签**）· `rules[]` 标签列表（**规则条款，K2 恢复语义，label「规则」**）· `custom_fields` —— **`parent_id` 已移除（决策 30）：层级改由 belongs_to 关系表达，见下方「层级区块」** |
 
 > **标签列表编辑器（M1/M3，2026-08 用户反馈批次六）**：`personality[]`/`abilities[]`/`tags[]`/`rules[]` 共用 `TagsEditor` 组件——行内输入框**回车 = 添加下一项**（非末行聚焦下一行、末行且非空追加空行并聚焦、末行且为空回车无操作，防空行跑马灯）；每行左侧**拖拽手柄**（GripVertical）支持**拖拽排序**（HTML5 原生 DnD，零依赖；拖动行高亮 + 目标行 ring 提示；仅在拖拽进行中响应 drop，不干扰输入框内文本拖选）。排序只改本地表单数组顺序，保存时随 `data` 提交（数组顺序即存储顺序，无独立 API）。
