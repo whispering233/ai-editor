@@ -18,7 +18,14 @@ import { nowIso } from "../storage/atomic.js";
 import { withTransaction, type Db } from "../connection.js";
 // relation.ts ↔ entity.ts 循环引用（relation.ts import getEntity）：仅函数调用期使用
 // RelationError/rowToRelationRow，无模块顶层求值依赖，ESM 运行时安全。
-import { listSettingHierarchyEdges, RelationError, rowToRelationRow } from "./relation.js";
+import {
+  createRelation,
+  deleteRelation,
+  listSettingHierarchyEdges,
+  RelationError,
+  rowToRelationRow,
+  wouldCreateSettingCycle,
+} from "./relation.js";
 
 /** 列表查询参数（endpoints.md 第 162-169 行；缺省值语义与路由层对齐） */
 export interface EntityListQuery {
@@ -125,6 +132,8 @@ function toSummary(row: EntityRow): EntitySummary {
     type: row.type,
     name: row.name,
     summary,
+    // 决策 46（2026-08 批次十三）：仅 setting 暴露同级手动排序位（稀疏——NULL 不出现）
+    ...(row.type === "setting" && row.sort_order !== null ? { sortOrder: row.sort_order } : {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -137,6 +146,8 @@ export function rowToEntityRow(row: Record<string, unknown>): EntityRow {
     type: row.type as EntityType,
     name: row.name as string,
     data: parseDataColumn(row.data),
+    // 决策 46：setting 复用 sort_order 列承载同级手动排序位（NULL = 未参与）；event/timepoint 为全局线性序
+    sort_order: (row.sort_order as number | null) ?? null,
     created_at: row.created_at as string,
     updated_at: row.updated_at as string,
     deleted_at: (row.deleted_at as string | null) ?? null,
@@ -305,6 +316,8 @@ export function createEntity(
     type: input.type,
     name: input.name,
     data: input.data ?? {},
+    // 决策 46：新实体默认不参与手动排序（setting 首次手动移动时按组重写）
+    sort_order: null,
     created_at: now,
     updated_at: now,
     deleted_at: null,
@@ -437,6 +450,120 @@ export function moveTimepoint(db: Db, id: string, order: number, updatedAt: stri
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i] as { id: string; updated_at: string };
       update.run(i, row.id === id ? updatedAt : row.updated_at, row.id);
+    }
+    return { moved: true };
+  });
+}
+
+// ============ 设定手动排序（决策 46，2026-08 批次十三）：同级组内线性序 ============
+
+/**
+ * 移动设定（PUT /api/v1/entity/setting/:id/move，决策 46；修订决策 42「设定无 sort_order 语义」）：
+ * **复合写**——改父 + 同级重排一次事务提交（对齐 G2 event move_to 先例）：
+ * 1. 存在性：目标设定不存在/已软删 → null（路由层映射 404）
+ * 2. 防环（决策 30 语义，与 POST /relation 同级校验）：目标父 = 自身 → 自指；
+ *    目标父的祖先链含该设定 → 成环——均抛 RelationError SETTING_CYCLE（路由层映射 400）
+ * 3. 改父（targetParentId ≠ 当前父）→ 事务内先建新 belongs_to 边（createRelation 校验
+ *    父端点存在性 → ENDPOINT_NOT_FOUND）后物理删旧边（先建后删防数据丢失，对齐 EntityDetail）
+ * 4. 同级重排：目标组 = 新父的子级组 / 根 = 无父设定组（改父后按新边计算）；
+ *    组内按（sort_order NULL 沉底 → sort_order → name → id）排齐，剔除自身后按 order
+ *    （0-based，缺省 = 组尾）splice 插入，重写组内 sort_order 0..n-1——
+ *    仅被移行刷新 updated_at（决策 14 版本戳语义），其余行时间戳不动
+ * @returns { moved: true }；设定不存在/已软删返回 null
+ * @throws RelationError SETTING_CYCLE（自指/成环）/ ENDPOINT_NOT_FOUND（目标父不存在/已软删）
+ */
+export function moveSetting(
+  db: Db,
+  id: string,
+  input: { parentId: string | null; order?: number },
+  outlineDir: string,
+): { moved: true } | null {
+  return withTransaction(db, () => {
+    const row = getEntity(db, id);
+    if (row === null) return null; // 不存在或已软删（决策 12 过滤）
+    const edges = listSettingHierarchyEdges(db);
+    const parentOf = new Map(edges.map((e) => [e.childId, e.parentId]));
+    const currentParent = parentOf.get(id) ?? null;
+    const targetParent = input.parentId;
+    // 防环/自指（决策 30）：先于任何写操作校验——目标父的祖先链不得含该设定
+    if (targetParent !== null) {
+      if (targetParent === id) {
+        throw new RelationError("SETTING_CYCLE", "设定不能作为自己的上级");
+      }
+      if (wouldCreateSettingCycle(db, id, targetParent)) {
+        throw new RelationError("SETTING_CYCLE", "设定层级不能成环（上级的祖先链包含该设定）");
+      }
+      // 父端点存在性（createRelation 也会校验——此处提前给出明确错误定位）
+      if (getEntity(db, targetParent) === null) {
+        throw new RelationError("ENDPOINT_NOT_FOUND", `上级设定不存在或已软删: ${targetParent}`);
+      }
+    }
+    // 改父：先建新边后删旧边（同父含同为根 → 跳过）
+    if (targetParent !== currentParent) {
+      if (targetParent !== null) {
+        createRelation(
+          db,
+          {
+            sourceType: "setting",
+            sourceId: id,
+            targetType: "setting",
+            targetId: targetParent,
+            relationType: "belongs_to",
+          },
+          outlineDir,
+        );
+      }
+      // 删旧边：按旧父 target_id 精确匹配——**不能按 source_id 删**（刚建的新边同 source，
+      // 会连同被删导致改父结果丢失，debug 实测踩坑）；一设定一父（决策 30），至多一条
+      if (currentParent !== null) {
+        const oldRows = db
+          .prepare(
+            `SELECT id FROM relation_records WHERE source_type = 'setting' AND source_id = ? AND target_id = ? AND relation_type = 'belongs_to' AND target_type = 'setting' AND deleted_at IS NULL`,
+          )
+          .all(id, currentParent) as Array<{ id: string }>;
+        for (const r of oldRows) {
+          deleteRelation(db, r.id); // 手动删关系 = 物理删（决策 12 修订）
+        }
+      }
+    }
+    // 目标同级组（改父后按新边计算：新父子级组 / 根 = 无父设定组）
+    const edgesAfter = listSettingHierarchyEdges(db);
+    const parentOfAfter = new Map(edgesAfter.map((e) => [e.childId, e.parentId]));
+    let groupIds: string[];
+    if (targetParent === null) {
+      const all = db
+        .prepare("SELECT id FROM entities WHERE type = 'setting' AND deleted_at IS NULL")
+        .all() as Array<{ id: string }>;
+      groupIds = all.map((r) => r.id).filter((gid) => !parentOfAfter.has(gid));
+    } else {
+      groupIds = edgesAfter.filter((e) => e.parentId === targetParent).map((e) => e.childId);
+    }
+    // 组内排齐（NULL 沉底 → sort_order → name → id，与 SQLite 排序语义一致）
+    const rows = (
+      db
+        .prepare(`SELECT id, name, sort_order, updated_at FROM entities WHERE id IN (${groupIds.map(() => "?").join(",")})`)
+        .all(...groupIds) as Array<{ id: string; name: string; sort_order: number | null; updated_at: string }>
+    ).sort((a, b) => {
+      const ao = a.sort_order === null ? 1 : 0;
+      const bo = b.sort_order === null ? 1 : 0;
+      if (ao !== bo) return ao - bo;
+      const av = a.sort_order ?? 0;
+      const bv = b.sort_order ?? 0;
+      if (av !== bv) return av - bv;
+      if (a.name !== b.name) return a.name < b.name ? -1 : 1;
+      return a.id < b.id ? -1 : 1;
+    });
+    const idx = rows.findIndex((r) => r.id === id);
+    const moved = idx >= 0 ? rows.splice(idx, 1)[0] : { id, name: "", sort_order: null, updated_at: row.updated_at };
+    // order 缺省 = 组尾；clamp 到 [0, 剩余数]（负数 400 schema 拒绝，此处防御）
+    const pos = input.order === undefined
+      ? rows.length
+      : Math.max(0, Math.min(Math.trunc(input.order), rows.length));
+    rows.splice(pos, 0, moved);
+    const update = db.prepare("UPDATE entities SET sort_order = ?, updated_at = ? WHERE id = ?");
+    const now = nowIso();
+    for (let i = 0; i < rows.length; i++) {
+      update.run(i, rows[i].id === id ? now : rows[i].updated_at, rows[i].id);
     }
     return { moved: true };
   });

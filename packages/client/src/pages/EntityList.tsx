@@ -600,10 +600,7 @@ function CharacterRow({ item }: { item: EntitySummary }) {
       {(motivation !== "" || chips.length > 0) && (
         <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1">
           {motivation !== "" && (
-            <span
-              className="max-w-72 truncate text-xs text-muted-foreground"
-              title={motivation}
-            >
+            <span className="max-w-72 truncate text-xs text-muted-foreground" title={motivation}>
               {motivation}
             </span>
           )}

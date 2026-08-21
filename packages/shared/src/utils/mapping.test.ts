@@ -37,6 +37,8 @@ describe("实体映射", () => {
       // 嵌套对象内部字段原样透传（2026-08 修订）：snake_case 不转换为 camelCase
       custom_fields: { expected_payoff: "揭示身世", half_life: 8 },
     },
+    // 决策 46：sort_order 为存储列（API 形态不暴露，映射默认 null）
+    sort_order: null,
     created_at: "2026-08-01T10:00:00Z",
     updated_at: "2026-08-01T11:00:00Z",
     deleted_at: null,

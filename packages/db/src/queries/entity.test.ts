@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { closeDatabase, openDatabase, type Db } from "../connection.js";
-import { RelationError } from "./relation.js";
+import { createRelation, listSettingHierarchyEdges, RelationError } from "./relation.js";
 import {
   assertEventSingleOccursAt,
   countDeltasForEntity,
@@ -18,6 +18,7 @@ import {
   listEntities,
   listTimepoints,
   moveEvent,
+  moveSetting,
   moveTimepoint,
   reorderTimepoints,
   softDeleteEntity,
@@ -864,5 +865,155 @@ describe("eventOccursAt / assertEventSingleOccursAt（G2 occurs_at 1:n 挂载）
     ).run("rel-other", "character", "char-seed", "event", ev.id, "appears_in", "2026-08-01T00:00:00Z", "2026-08-01T00:00:00Z");
     expect(eventOccursAt(db, ev.id)).toBeNull();
     expect(() => assertEventSingleOccursAt(db, ev.id)).not.toThrow();
+  });
+});
+
+describe("moveSetting（决策 46 设定同级手动排序：改父 + 同级重排复合写）", () => {
+  /** 创建设定（ASCII 名：码点序可预测 A<B<C<D，NULL 名称序断言不依赖拼音） */
+  function addSetting(name: string): string {
+    return createEntity(db, { type: "setting", name }).id;
+  }
+  /** 建立 belongs_to 边（child → parent） */
+  function addEdge(childId: string, parentId: string): void {
+    createRelation(
+      db,
+      { sourceType: "setting", sourceId: childId, targetType: "setting", targetId: parentId, relationType: "belongs_to" },
+      dir,
+    );
+  }
+  /** 读取全部设定行（id/name/sort_order） */
+  function rows(): Array<{ id: string; name: string; sort_order: number | null }> {
+    return db
+      .prepare("SELECT id, name, sort_order FROM entities WHERE type = 'setting' AND deleted_at IS NULL")
+      .all() as Array<{ id: string; name: string; sort_order: number | null }>;
+  }
+  /** 读取某父（null = 根）的直接子 id（边序——父子关系；同级序看 sort_order） */
+  function childrenOf(parentId: string | null): string[] {
+    const edges = listSettingHierarchyEdges(db);
+    if (parentId === null) {
+      const parented = new Set(edges.map((e) => e.childId));
+      return rows().map((r) => r.id).filter((id) => !parented.has(id));
+    }
+    return edges.filter((e) => e.parentId === parentId).map((e) => e.childId);
+  }
+
+  it("根组同级重排（order 0-based clamp；边不变、组内 sort_order 重写）", () => {
+    const a = addSetting("A");
+    const b = addSetting("B");
+    const c = addSetting("C");
+    // 初始 NULL：按名称序 A/B/C
+    expect(moveSetting(db, c, { parentId: null, order: 0 }, dir)).toEqual({ moved: true });
+    const r = rows();
+    expect(r.find((x) => x.id === c)!.sort_order).toBe(0);
+    expect(r.find((x) => x.id === a)!.sort_order).toBe(1);
+    expect(r.find((x) => x.id === b)!.sort_order).toBe(2);
+    expect(childrenOf(null)).toEqual([a, b, c]); // 根组边不变
+    // order 越界 → clamp 组尾
+    expect(moveSetting(db, c, { parentId: null, order: 999 }, dir)).toEqual({ moved: true });
+    expect(rows().find((x) => x.id === c)!.sort_order).toBe(2);
+  });
+
+  it("子级组内重排 + order 缺省追加组尾（NULL 名称序 B/C/D）", () => {
+    const a = addSetting("A");
+    const b = addSetting("B");
+    const c = addSetting("C");
+    const d = addSetting("D");
+    addEdge(b, a);
+    addEdge(c, a);
+    addEdge(d, a);
+    // 缺省 order = 组尾：C 移到 D 后（B/C/D → B/D/C）
+    expect(moveSetting(db, c, { parentId: a }, dir)).toEqual({ moved: true });
+    expect(childrenOf(a)).toEqual([b, c, d]); // 父子边不变（同级序 = sort_order 列，非边序）
+    const r1 = rows();
+    expect(r1.find((x) => x.id === b)!.sort_order).toBe(0);
+    expect(r1.find((x) => x.id === d)!.sort_order).toBe(1);
+    expect(r1.find((x) => x.id === c)!.sort_order).toBe(2);
+    // 显式 order=0：C 移组首
+    expect(moveSetting(db, c, { parentId: a, order: 0 }, dir)).toEqual({ moved: true });
+    const r2 = rows();
+    expect(r2.find((x) => x.id === c)!.sort_order).toBe(0);
+    expect(r2.find((x) => x.id === b)!.sort_order).toBe(1);
+    expect(r2.find((x) => x.id === d)!.sort_order).toBe(2);
+  });
+
+  it("改父 + 新父组首（旧父组重排收敛；B 改挂 D）", () => {
+    const a = addSetting("A");
+    const b = addSetting("B");
+    const c = addSetting("C");
+    const d = addSetting("D");
+    addEdge(b, a);
+    addEdge(c, a);
+    addEdge(d, a);
+    expect(moveSetting(db, b, { parentId: d, order: 0 }, dir)).toEqual({ moved: true });
+    expect(childrenOf(d)).toEqual([b]); // 边：B 的新父是 D
+    expect(childrenOf(a)).toEqual([c, d]); // 边：B 的旧边已删
+    const r = rows();
+    expect(r.find((x) => x.id === b)!.sort_order).toBe(0); // D 组内序：B（组首）
+    // 旧父组不重排（决策 46 只重排目标组——相对序不受影响，NULL 沉底语义保持不变）
+    expect(r.find((x) => x.id === c)!.sort_order).toBeNull();
+    expect(r.find((x) => x.id === d)!.sort_order).toBeNull();
+  });
+
+  it("改父为根（移出层级，旧父组收敛）", () => {
+    const a = addSetting("A");
+    const b = addSetting("B");
+    const c = addSetting("C");
+    addEdge(b, a);
+    addEdge(c, a);
+    expect(moveSetting(db, b, { parentId: null }, dir)).toEqual({ moved: true });
+    expect(childrenOf(a)).toEqual([c]);
+    expect(childrenOf(null)).toContain(b);
+  });
+
+  it("防环（决策 30）：目标父为自身子孙 → SETTING_CYCLE；自指 → SETTING_CYCLE", () => {
+    const a = addSetting("A");
+    const b = addSetting("B");
+    addEdge(b, a);
+    expect(() => moveSetting(db, a, { parentId: b }, dir)).toThrow(/不能成环/);
+    expect(() => moveSetting(db, b, { parentId: b }, dir)).toThrow(/不能作为自己的上级/);
+    try {
+      moveSetting(db, a, { parentId: b }, dir);
+      expect.unreachable();
+    } catch (err) {
+      expect(err).toBeInstanceOf(RelationError);
+      expect((err as RelationError).code).toBe("SETTING_CYCLE");
+    }
+  });
+
+  it("目标父不存在/已软删 → ENDPOINT_NOT_FOUND；自身不存在 → null", () => {
+    const a = addSetting("A");
+    expect(() => moveSetting(db, a, { parentId: "set-nope" }, dir)).toThrow(/上级设定不存在/);
+    expect(moveSetting(db, "set-nope", { parentId: null }, dir)).toBeNull();
+  });
+
+  it("存量 NULL 沉底（未参与手动排序的设定按名称序排齐后重写）", () => {
+    const a = addSetting("A");
+    const b = addSetting("B");
+    const c = addSetting("C");
+    addEdge(b, a);
+    addEdge(c, a);
+    // C 移组首：NULL 组按名称（B/C）排齐 → C 移除 → B → 插入组首 → C/B
+    expect(moveSetting(db, c, { parentId: a, order: 0 }, dir)).toEqual({ moved: true });
+    expect(childrenOf(a)).toEqual([b, c]); // 父子边不变
+    expect(rows().find((x) => x.id === c)!.sort_order).toBe(0);
+    expect(rows().find((x) => x.id === b)!.sort_order).toBe(1);
+  });
+
+  it("仅被移行刷 updated_at（决策 14 版本戳语义）", () => {
+    const a = addSetting("A");
+    const b = addSetting("B");
+    const c = addSetting("C");
+    addEdge(b, a);
+    addEdge(c, a);
+    const upd = (id: string): string =>
+      (db.prepare("SELECT updated_at FROM entities WHERE id = ?").get(id) as { updated_at: string }).updated_at;
+    // 拨旧被移行时间戳（同毫秒内创建/移动会假阴性——决策 14 断言需可分辨）
+    db.prepare("UPDATE entities SET updated_at = '2020-01-01T00:00:00.000Z' WHERE id = ?").run(c);
+    const updB = upd(b);
+    const updCBefore = upd(c);
+    expect(updCBefore).toBe("2020-01-01T00:00:00.000Z");
+    expect(moveSetting(db, c, { parentId: a, order: 2 }, dir)).toEqual({ moved: true });
+    expect(upd(b)).toBe(updB); // 未移动行时间戳不变
+    expect(upd(c)).not.toBe(updCBefore); // 被移行刷新
   });
 });

@@ -399,6 +399,8 @@ export const entitySummarySchema: z.ZodType<EntitySummary> = z.object({
   // M2（2026-08 批次六）：仅 setting 列表填充（决策 30 层级 = belongs_to）
   parentId: z.string().optional(),
   parentName: z.string().optional(),
+  // 手动排序位（决策 46，2026-08 批次十三）：仅 setting 类型填充（entities.sort_order 列）
+  sortOrder: z.number().int().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
@@ -772,6 +774,18 @@ export const entityMoveReqSchema = z
 export const entityMoveResSchema = z.object({
   moved: z.literal(true),
 });
+
+// PUT /api/v1/entity/setting/:id/move（设定同级重排 / 改父 + 重排，决策 46，2026-08 批次十三；
+// 修订决策 42「设定无 sort_order 语义」约束——复用 entities.sort_order 列，无 DDL 迁移）
+export const settingMoveReqSchema = z
+  .object({
+    // 目标父设定 id；null = 移为顶层根（无上级）。与当前父相同（含同为根）→ 仅重排
+    parent_id: z.string().nullable(),
+    // 0-based 同级组内序（改父后 = 新父子级组内位置 / 未改父 = 当前同级组内位置）；
+    // 越界 clamp（负数 400 schema 拒绝；超组内数 → 组尾）；缺省 = 追加组尾
+    order: z.number().int().min(0).optional(),
+  })
+  .strict();
 
 // POST /api/v1/entity/event/:id/move_to（跨组挂载复合写，G2 决策 26 修订：事件拖到另一时间点
 // 区块 = 改挂载 + 重排一次提交；服务端事务内原子完成——endpoints.md「G2 跨组拖拽」的复合端点实现）

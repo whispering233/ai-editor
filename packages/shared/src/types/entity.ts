@@ -36,6 +36,9 @@ export interface EntitySummary {
    * 服务端列表响应时补查设定间层级边按 childId 映射附加；无父的设定不出现（稀疏语义） */
   parentId?: string;
   parentName?: string;
+  /** 手动排序位（决策 46，2026-08 批次十三）：**仅 setting 类型填充**——同级组内线性序
+   * （同父/同根组内 0..n-1，entities.sort_order 列）；NULL = 未参与手动排序（不出现） */
+  sortOrder?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -47,6 +50,9 @@ export interface EntityRow {
   name: string;
   /** JSON 列解析后的对象 */
   data: Record<string, unknown>;
+  /** 线性序（决策 26 + G2）：event/timepoint 类型内线性；setting 为同级组内线性序（决策 46）；
+   * NULL = 未参与排序 */
+  sort_order: number | null;
   created_at: string; // ISO 8601，应用层写入
   updated_at: string; // ISO 8601（提案快照比对，决策 14）
   deleted_at: string | null; // 软删标记（决策 12），NULL = 未删除

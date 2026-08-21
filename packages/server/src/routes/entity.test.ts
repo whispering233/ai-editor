@@ -873,3 +873,97 @@ describe("timepoint 时间轴（G2，决策 26 修订）", () => {
     ).toBe(400);
   });
 });
+
+// ============ 设定手动排序（决策 46，2026-08 批次十三）：PUT /entity/setting/:id/move ============
+describe("设定 move（决策 46：同级重排 / 改父 + 重排复合写）", () => {
+  /** 创建设定，返回 id */
+  async function createSetting(app: Hono, name: string): Promise<string> {
+    const res = await app.request("/api/v1/entity/setting", jsonRequest("POST", "", { name }));
+    expect(res.status).toBe(201);
+    return ((await res.json()) as { data: { id: string } }).data.id;
+  }
+  /** 建 belongs_to 边（child → parent） */
+  async function addEdge(app: Hono, childId: string, parentId: string): Promise<void> {
+    const res = await app.request(
+      "/api/v1/relation",
+      jsonRequest("POST", "", {
+        source_type: "setting",
+        source_id: childId,
+        target_type: "setting",
+        target_id: parentId,
+        relation_type: "belongs_to",
+      }),
+    );
+    expect(res.status).toBe(201);
+  }
+  /** 设定列表 items（含 sortOrder 摘要） */
+  async function settingItems(app: Hono): Promise<Array<{ id: string; sortOrder?: number }>> {
+    const res = await app.request("/api/v1/entity/setting?limit=200", { headers: HOST_HEADERS });
+    const body = (await res.json()) as { data: { items: Array<{ id: string; sortOrder?: number }> } };
+    return body.data.items;
+  }
+
+  it("同级重排：order 组内序；摘要 sortOrder 仅 setting 填充（character 稀疏）", async () => {
+    openProject();
+    const app = buildApp();
+    const a = await createSetting(app, "A");
+    const b = await createSetting(app, "B");
+    const c = await createSetting(app, "C");
+    // character 摘要无 sortOrder（决策 46 稀疏契约：仅 setting）
+    const char = await createCharacter(app, "张三");
+    const chars = (await (await app.request("/api/v1/entity/character", { headers: HOST_HEADERS })).json()) as {
+      data: { items: Array<{ id: string; sortOrder?: number }> },
+    };
+    expect(chars.data.items.find((i) => i.id === char.id)!.sortOrder).toBeUndefined();
+    // C 移根组首 → 组内序 C=0/A=1/B=2
+    const mv = await app.request(`/api/v1/entity/setting/${c}/move`, jsonRequest("PUT", "", { parent_id: null, order: 0 }));
+    expect(mv.status).toBe(200);
+    expect(((await mv.json()) as { data: { moved: boolean } }).data).toEqual({ moved: true });
+    const items = await settingItems(app);
+    expect(items.find((i) => i.id === c)!.sortOrder).toBe(0);
+    expect(items.find((i) => i.id === a)!.sortOrder).toBe(1);
+    expect(items.find((i) => i.id === b)!.sortOrder).toBe(2);
+  });
+
+  it("改父 + 组首（复合写）：边变更 + 目标组重排；防环/自指/目标父缺失 → 400；不存在 → 404；schema 校验", async () => {
+    openProject();
+    const app = buildApp();
+    const a = await createSetting(app, "A");
+    const b = await createSetting(app, "B");
+    const c = await createSetting(app, "C");
+    await addEdge(app, b, a);
+    await addEdge(app, c, a);
+    // B 改挂 C（组首；此时层级 B→A、C→A）
+    const mv = await app.request(`/api/v1/entity/setting/${b}/move`, jsonRequest("PUT", "", { parent_id: c, order: 0 }));
+    expect(mv.status).toBe(200);
+    // 边验证：B→C 建立、B→A 删除
+    const rels = (await (await app.request("/api/v1/relation?depth=1", { headers: HOST_HEADERS })).json()) as {
+      data: { relations: Array<{ sourceId: string; targetId: string; relationType: string }> },
+    };
+    const edges = rels.data.relations
+      .filter((r) => r.relationType === "belongs_to")
+      .map((r) => r.sourceId + "->" + r.targetId);
+    expect(edges).toContain(b + "->" + c);
+    expect(edges).not.toContain(b + "->" + a);
+    // 防环（决策 30）：当前链 B→C→A，A 挂 B → A 成为 B 的祖先链成员 → 400
+    const cyc = await app.request(`/api/v1/entity/setting/${a}/move`, jsonRequest("PUT", "", { parent_id: b, order: 0 }));
+    expect(cyc.status).toBe(400);
+    expect(((await cyc.json()) as { error: { code: string } }).error.code).toBe("VALIDATION_ERROR");
+    // 自指 → 400
+    const self = await app.request(`/api/v1/entity/setting/${a}/move`, jsonRequest("PUT", "", { parent_id: a, order: 0 }));
+    expect(self.status).toBe(400);
+    // 目标父不存在 → 400
+    const nop = await app.request(`/api/v1/entity/setting/${a}/move`, jsonRequest("PUT", "", { parent_id: "set-nope", order: 0 }));
+    expect(nop.status).toBe(400);
+    // 自身不存在 → 404
+    const nf = await app.request("/api/v1/entity/setting/set-nope/move", jsonRequest("PUT", "", { parent_id: null, order: 0 }));
+    expect(nf.status).toBe(404);
+    // schema：负数 → 400；未知键 → 400（.strict()）
+    expect(
+      (await app.request(`/api/v1/entity/setting/${a}/move`, jsonRequest("PUT", "", { parent_id: null, order: -1 }))).status,
+    ).toBe(400);
+    expect(
+      (await app.request(`/api/v1/entity/setting/${a}/move`, jsonRequest("PUT", "", { parent_id: null, order: 0, extra: 1 }))).status,
+    ).toBe(400);
+  });
+});

@@ -20,15 +20,17 @@ import {
   listEntities,
   listRelations,
   moveEvent,
+  moveSetting,
   moveTimepoint,
   nowIso,
+  RelationError,
   softDeleteEntity,
   updateEntity,
   withTransaction,
 } from "@whispering233/ai-editor-db";
 import type { EntityType } from "@whispering233/ai-editor-shared";
 import { sanitizeReferenceFileName } from "@whispering233/ai-editor-shared";
-import { ENTITY_DATA_SCHEMAS, entityCreateReqSchema, entityListQuerySchema, entityMoveReqSchema, entityTypeSchema, entityUpdateReqSchema, eventMoveToReqSchema } from "@whispering233/ai-editor-shared/schemas";
+import { ENTITY_DATA_SCHEMAS, entityCreateReqSchema, entityListQuerySchema, entityMoveReqSchema, entityTypeSchema, entityUpdateReqSchema, eventMoveToReqSchema, settingMoveReqSchema } from "@whispering233/ai-editor-shared/schemas";
 import { HttpError, ok } from "../middleware/error.js";
 import { requireCurrentProject } from "../middleware/project.js";
 import {
@@ -290,6 +292,42 @@ entityRoutes.put("/timepoint/:id/move", async (c) => {
 
 /** move_to 事务内哨兵：moveEvent 返回 null（事件不存在/已软删）→ 抛错回滚事务，路由映射 404 */
 class MoveToTargetNotFoundError extends Error {}
+
+// PUT /api/v1/entity/setting/:id/move —— 设定同级重排 / 改父 + 重排（决策 46，2026-08 批次十三，
+// 修订决策 42「设定无 sort_order 语义」约束；endpoints.md「PUT /entity/setting/:id/move」）
+// 请求 { parent_id: string | null, order?: number }（settingMoveReqSchema，strict）：
+//   复合写端点（对齐 G2 event move_to 先例）——改父 + 目标同级组重排一次事务提交：
+//   改父 = 事务内建新 belongs_to 边（防环沿用决策 30，违反 → 400 VALIDATION_ERROR）+ 删旧边；
+//   重排 = 目标组内 sort_order 重写 0..n-1（NULL 沉底，仅被移行刷 updated_at——决策 14）。
+// 响应 200 { moved: true }；设定不存在/已软删 → 404 ENTITY_NOT_FOUND；
+// 自指/成环/目标父不存在 → 400 VALIDATION_ERROR（RelationError SETTING_CYCLE/ENDPOINT_NOT_FOUND 映射）。
+entityRoutes.put("/setting/:id/move", async (c) => {
+  const project = requireCurrentProject();
+  const id = c.req.param("id");
+  const raw = await c.req.json().catch(() => null);
+  const parsed = settingMoveReqSchema.safeParse(raw); // .strict()：未知键 → 400
+  if (!parsed.success) throw parsed.error;
+  try {
+    const result = moveSetting(
+      project.db,
+      id,
+      { parentId: parsed.data.parent_id, order: parsed.data.order },
+      project.root,
+    );
+    if (result === null) {
+      throw new HttpError(404, "ENTITY_NOT_FOUND", `设定不存在: ${id}`);
+    }
+    return c.json(ok(result));
+  } catch (err) {
+    // 防环/自指/目标父缺失 → 400（与 POST /relation 的设定层级校验同语义）
+    if (err instanceof RelationError) {
+      if (err.code === "SETTING_CYCLE" || err.code === "ENDPOINT_NOT_FOUND") {
+        throw new HttpError(400, "VALIDATION_ERROR", err.message);
+      }
+    }
+    throw mapRelationError(err);
+  }
+});
 
 // POST /api/v1/entity/event/:id/move_to —— 事件跨组拖拽复合端点（G2，决策 26 修订，
 // endpoints.md「POST /entity/event/:id/move_to」）

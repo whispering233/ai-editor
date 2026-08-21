@@ -1,6 +1,12 @@
 // entity-list 纯函数与配置测试（S3.5）：分页计算、摘要列配置完整性、单元格文案映射、创建首字段配置
 import { describe, expect, it } from "vitest";
-import { characterRowInfo, CREATE_FIRST_FIELD, pageCount, SUMMARY_COLUMNS, summaryCellText } from "./entity-list";
+import {
+  characterRowInfo,
+  CREATE_FIRST_FIELD,
+  pageCount,
+  SUMMARY_COLUMNS,
+  summaryCellText,
+} from "./entity-list";
 
 describe("pageCount（分页页数计算）", () => {
   it("total 0 → 1 页（空态仍显示「第 1 / 1 页」）", () => {
@@ -82,7 +88,14 @@ describe("characterRowInfo（决策 45 两行式行布局数据提取）", () =>
 
   it("空值归一为空串/空数组（行内不渲染空段）", () => {
     expect(characterRowInfo({})).toEqual({ role: "", motivation: "", chips: [] });
-    expect(characterRowInfo({ role: undefined, motivation: 123, personality: "非数组", abilities: ["", "剑术"] })).toEqual({
+    expect(
+      characterRowInfo({
+        role: undefined,
+        motivation: 123,
+        personality: "非数组",
+        abilities: ["", "剑术"],
+      }),
+    ).toEqual({
       role: "",
       motivation: "",
       chips: ["剑术"],

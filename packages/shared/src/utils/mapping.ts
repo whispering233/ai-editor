@@ -53,6 +53,8 @@ export function mapEntityToRow(entity: Entity): EntityRow {
     type: entity.type,
     name: entity.name,
     data: entity.data,
+    // 决策 46：API 形态不暴露 sort_order（列表摘要 sortOrder 由服务端从行提取），映射默认 null
+    sort_order: null,
     created_at: entity.createdAt,
     updated_at: entity.updatedAt,
     deleted_at: entity.deletedAt ?? null,

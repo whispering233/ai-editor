@@ -60,9 +60,7 @@ export function characterRowInfo(summary: Record<string, unknown>): {
   const str = (v: unknown): string => (typeof v === "string" ? v : "");
   const tagList = (v: unknown, cap: number): string[] =>
     Array.isArray(v)
-      ? (v as unknown[])
-          .filter((t): t is string => typeof t === "string" && t !== "")
-          .slice(0, cap)
+      ? (v as unknown[]).filter((t): t is string => typeof t === "string" && t !== "").slice(0, cap)
       : [];
   const chips = [...tagList(summary.personality, 2), ...tagList(summary.abilities, 2)];
   return {

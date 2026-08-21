@@ -30,7 +30,9 @@ export type RelationErrorCode =
   | "RELATION_EXISTS"
   | "ENDPOINT_NOT_FOUND"
   | "INVALID_RELATION_TYPE"
-  | "EVENT_ALREADY_MOUNTED";
+  | "EVENT_ALREADY_MOUNTED"
+  // 决策 46（2026-08 批次十三）：设定手动排序自指/成环（moveSetting 抛出，路由层映射 400）
+  | "SETTING_CYCLE";
 
 /** 关系操作错误（带 code，与 OutlineError 同风格；路由层 catch 映射） */
 export class RelationError extends Error {

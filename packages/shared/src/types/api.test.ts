@@ -16,6 +16,7 @@ import {
   entityListQuerySchema,
   entityListResSchema,
   entityMoveReqSchema,
+  settingMoveReqSchema,
   entityMoveResSchema,
   entitySummarySchema,
   entityUpdateResSchema,
@@ -325,6 +326,16 @@ describe("event 时间轴契约（决策 26）", () => {
     expect(entityMoveReqSchema.safeParse({ order: 1.5 }).success).toBe(false);
     expect(entityMoveReqSchema.safeParse({}).success).toBe(false);
     expect(entityMoveReqSchema.safeParse({ order: 3, parent_id: "root" }).success).toBe(false);
+
+  });
+
+  it("settingMoveReqSchema（决策 46）：parent_id 必填 nullable；order 可选非负整数；strict 拒绝未知键", () => {
+    expect(settingMoveReqSchema.parse({ parent_id: null }).parent_id).toBeNull();
+    expect(settingMoveReqSchema.parse({ parent_id: "set-1", order: 3 }).order).toBe(3);
+    expect(settingMoveReqSchema.safeParse({ parent_id: 1 }).success).toBe(false); // 非字符串
+    expect(settingMoveReqSchema.safeParse({ order: -1 }).success).toBe(false); // 缺 parent_id + 负数
+    expect(settingMoveReqSchema.safeParse({ parent_id: null, order: 1.5 }).success).toBe(false); // 小数
+    expect(settingMoveReqSchema.safeParse({ parent_id: null, extra: 1 }).success).toBe(false); // strict
   });
 
   it("entityMoveResSchema：{ moved: true } 字面量（响应 200）", () => {
