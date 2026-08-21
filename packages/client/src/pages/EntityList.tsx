@@ -31,6 +31,7 @@ import {
   type EntityListRes,
 } from "../lib/api";
 import {
+  characterRowInfo,
   CREATE_FIRST_FIELD,
   ListableEntityType,
   PAGE_LIMIT,
@@ -501,12 +502,20 @@ export default function EntityList({ type }: { type: string }) {
                         />
                       }
                     >
-                      <td className="max-w-64 truncate px-3 py-2 font-medium text-foreground">
-                        {item.name}
-                      </td>
-                      <td className="max-w-40 truncate px-3 py-2 text-muted-foreground">
-                        {summaryCellText(entityType, col.key1, item.summary[col.key1])}
-                      </td>
+                      {/* 决策 45：character 两行式行布局——第一行 名称 + 角色徽标；第二行
+                          动机摘要 + 性格/能力标签 chips（弱化样式，空段不渲染）；其余类型保持原表格列 */}
+                      {entityType === "character" ? (
+                        <CharacterRow item={item} />
+                      ) : (
+                        <>
+                          <td className="max-w-64 truncate px-3 py-2 font-medium text-foreground">
+                            {item.name}
+                          </td>
+                          <td className="max-w-40 truncate px-3 py-2 text-muted-foreground">
+                            {summaryCellText(entityType, col.key1, item.summary[col.key1])}
+                          </td>
+                        </>
+                      )}
                       {col.key2 && (
                         <td className="max-w-40 truncate px-3 py-2 text-muted-foreground">
                           {summaryCellText(entityType, col.key2, item.summary[col.key2])}
@@ -568,5 +577,46 @@ export default function EntityList({ type }: { type: string }) {
         />
       )}
     </section>
+  );
+}
+
+/** 人物行两行式布局（决策 45，2026-08 批次十三）：第一行 名称 + 角色徽标
+ * （summary.role，T2 标签徽标样式）；第二行 动机摘要（截断 40，hover title 查看完整）
+ * + 性格/能力 chips（各前 2）。空段不渲染——行高随内容自适应。 */
+function CharacterRow({ item }: { item: EntitySummary }) {
+  const { role, motivation, chips } = characterRowInfo(item.summary);
+  return (
+    <td className="px-3 py-2">
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="max-w-64 truncate font-medium text-foreground" title={item.name}>
+          {item.name}
+        </span>
+        {role !== "" && (
+          <span className="shrink-0 rounded bg-primary/80 px-1.5 py-0.5 text-xs text-primary-foreground">
+            {role}
+          </span>
+        )}
+      </div>
+      {(motivation !== "" || chips.length > 0) && (
+        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1">
+          {motivation !== "" && (
+            <span
+              className="max-w-72 truncate text-xs text-muted-foreground"
+              title={motivation}
+            >
+              {motivation}
+            </span>
+          )}
+          {chips.map((chip) => (
+            <span
+              key={chip}
+              className="shrink-0 rounded bg-primary/80 px-1.5 py-0.5 text-xs text-primary-foreground"
+            >
+              {chip}
+            </span>
+          ))}
+        </div>
+      )}
+    </td>
   );
 }

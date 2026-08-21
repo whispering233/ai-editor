@@ -1,6 +1,6 @@
 // entity-list 纯函数与配置测试（S3.5）：分页计算、摘要列配置完整性、单元格文案映射、创建首字段配置
 import { describe, expect, it } from "vitest";
-import { CREATE_FIRST_FIELD, pageCount, SUMMARY_COLUMNS, summaryCellText } from "./entity-list";
+import { characterRowInfo, CREATE_FIRST_FIELD, pageCount, SUMMARY_COLUMNS, summaryCellText } from "./entity-list";
 
 describe("pageCount（分页页数计算）", () => {
   it("total 0 → 1 页（空态仍显示「第 1 / 1 页」）", () => {
@@ -64,6 +64,29 @@ describe("summaryCellText（摘要单元格文案）", () => {
     expect(summaryCellText("character", "role", undefined)).toBe("—");
     expect(summaryCellText("character", "role", null)).toBe("—");
     expect(summaryCellText("character", "role", "")).toBe("—");
+  });
+});
+
+describe("characterRowInfo（决策 45 两行式行布局数据提取）", () => {
+  it("提取角色/动机/性格能力 chips（防御性截断）", () => {
+    const info = characterRowInfo({
+      role: "主角",
+      motivation: "复仇".repeat(30),
+      personality: ["坚韧", "孤僻", "善良"],
+      abilities: ["剑术", "阵法"],
+    });
+    expect(info.role).toBe("主角");
+    expect(info.motivation).toBe("复仇".repeat(20)); // 40 字符截断
+    expect(info.chips).toEqual(["坚韧", "孤僻", "剑术", "阵法"]);
+  });
+
+  it("空值归一为空串/空数组（行内不渲染空段）", () => {
+    expect(characterRowInfo({})).toEqual({ role: "", motivation: "", chips: [] });
+    expect(characterRowInfo({ role: undefined, motivation: 123, personality: "非数组", abilities: ["", "剑术"] })).toEqual({
+      role: "",
+      motivation: "",
+      chips: ["剑术"],
+    });
   });
 });
 

@@ -48,6 +48,30 @@ export const SUMMARY_COLUMNS: Record<ListableEntityType, SummaryColumnConfig> = 
 // 注：reference 列配置已随批次十二 T3 移除——参考资料已有独立中栏 tab（#/references），
 // 实体二级 tab 不再渲染泛型表格（旧路由重定向），此处无 reference 分支。
 
+/** 人物行两行式行布局数据提取（决策 45，2026-08 批次十三）：
+ * 第一行 = 名称 + 角色徽标（summary.role）；第二行 = 动机摘要 + 性格/能力标签 chips。
+ * 服务端摘要已截断（motivation 40 / personality·abilities 各前 2），此处防御性再截断；
+ * 空值一律归一为空串/空数组（行内不渲染空段）。 */
+export function characterRowInfo(summary: Record<string, unknown>): {
+  role: string;
+  motivation: string;
+  chips: string[];
+} {
+  const str = (v: unknown): string => (typeof v === "string" ? v : "");
+  const tagList = (v: unknown, cap: number): string[] =>
+    Array.isArray(v)
+      ? (v as unknown[])
+          .filter((t): t is string => typeof t === "string" && t !== "")
+          .slice(0, cap)
+      : [];
+  const chips = [...tagList(summary.personality, 2), ...tagList(summary.abilities, 2)];
+  return {
+    role: str(summary.role),
+    motivation: str(summary.motivation).slice(0, 40),
+    chips,
+  };
+}
+
 /** hook 枚举值 → 中文（展示映射；未收录的原样显示）；详情页表单下拉复用（S3.6） */
 export const HOOK_STATUS_LABEL: Record<string, string> = {
   planted: "已埋设",

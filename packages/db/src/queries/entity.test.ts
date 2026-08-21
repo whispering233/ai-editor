@@ -111,6 +111,19 @@ describe("listEntities", () => {
     expect(settings.items[0].summary).toEqual({ tags: ["世界"] });
   });
 
+  it("character 摘要含两行式行布局字段（决策 45：motivation 截断 40 / personality / abilities 各前 2；缺失不出现）", () => {
+    const longMotivation = "他".repeat(60);
+    createEntity(db, { type: "character", name: "行布局测试", data: { motivation: longMotivation, personality: ["坚韧", "孤僻", "善良"], abilities: ["剑术", "阵法", "医术"] } });
+    createEntity(db, { type: "character", name: "行布局空", data: { role: "配角" } });
+    const items = listEntities(db, { type: "character" }).items;
+    const rich = items.find((i) => i.name === "行布局测试")!;
+    expect(rich.summary.motivation).toBe("他".repeat(40)); // 截断 40
+    expect(rich.summary.personality).toEqual(["坚韧", "孤僻"]); // 前 2
+    expect(rich.summary.abilities).toEqual(["剑术", "阵法"]); // 前 2
+    const empty = items.find((i) => i.name === "行布局空")!;
+    expect(empty.summary).toEqual({ role: "配角" }); // 新字段缺失不出现
+  });
+
   it("q 模糊匹配 name（LIKE），total 同步过滤", () => {
     const res = listEntities(db, { type: "character", q: "阿" });
     expect(res.total).toBe(2);

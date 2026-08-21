@@ -60,6 +60,21 @@ function toSummary(row: EntityRow): EntitySummary {
     case "character":
       if (data.role !== undefined) summary.role = data.role;
       if (data.status !== undefined) summary.status = data.status;
+      // 决策 45（2026-08 批次十三）：两行式行布局字段——动机摘要截断 40 字符（防
+      // search_entities 工具上下文膨胀，决策 15 同款语义）+ 性格/能力标签各前 2 个（行 chips）
+      if (typeof data.motivation === "string" && data.motivation !== "") {
+        summary.motivation = data.motivation.slice(0, 40);
+      }
+      if (Array.isArray(data.personality)) {
+        summary.personality = (data.personality as unknown[])
+          .filter((t): t is string => typeof t === "string" && t !== "")
+          .slice(0, 2);
+      }
+      if (Array.isArray(data.abilities)) {
+        summary.abilities = (data.abilities as unknown[])
+          .filter((t): t is string => typeof t === "string" && t !== "")
+          .slice(0, 2);
+      }
       break;
     case "setting":
       // 决策 31 K2（2026-08）：分类由 data.tags 承接（与 event 同字段语义）——摘要暴露 tags（前 3 个）
