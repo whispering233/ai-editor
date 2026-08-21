@@ -65,6 +65,8 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 
 **批次十一（2026-08 已完成并发布 v0.0.17：决策 43 参考资料两类承载）**——本地 md 文件（YAML frontmatter 自包含 + mtime 快照同步 + references/ 目录）与外源链接（URL 必填仅索引）两类承载；文件 = 真相源、DB 索引 = 派生镜像（应用内编辑先写文件后更新 DB，外部编辑靠 scan 幂等全量比对自愈）；新建入口分流两按钮；列表交互对齐决策 37/38（点击标题编辑/双击详情/只留删除/右键菜单复用决策 40）；详情页内嵌 markdown 编辑器（@uiw/react-md-editor + react-markdown，调研选型）+ 导入 md + 关联面板；存档体系扩展打包 references/；B1 列表编辑对话框竞态随重构根除；跨书籍导入记录 backlog #16 未来迭代。
 
+**批次十三（2026-08 已完成，决策 45/46：人物列表行信息修订 + 设定树手动排序）**——状态列移除（character.status 保留详情页 + placeholder 引导「如：活跃、退场、已故」）/ 人物行两行式布局（名称+角色徽标 / 动机摘要 + 性格能力 chips，toSummary 扩展 motivation 截断 40 + personality·abilities 各前 2）/ 设定树行描述摘要展示（summary.description 弱化行 + hover 完整）/ 设定树排序（修订决策 42「无 sort_order」约束：同级组内线性序复用 entities.sort_order 列零迁移、EntitySummary.sortOrder 仅 setting 填充、复合端点 PUT /entity/setting/:id/move 改父+重排一次事务（防环沿用决策 30，删旧边按 target_id=旧父 精确匹配）、排序方式切换器 名称/创建时间/手动、手动模式 ↑↓ 箭头 + 行间插入线拖拽重排（order = 移除自身后组内位置语义）、拖到行中段仍 = 调层级）。
+
 ---
 
 ## 发布管道坑记录（E6 遗留，供后续发布参考）
