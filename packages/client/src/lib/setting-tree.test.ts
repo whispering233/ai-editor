@@ -272,7 +272,13 @@ describe("决策 42 交互树：nodeTags / matchesSettingSearch / matchesSetting
 describe("sortSettingChildren（决策 46：同级排序模式）", () => {
   const nodes = [
     { id: "set-1", name: "丙", createdAt: "2026-08-01T00:00:00Z", sortOrder: 2, children: [] },
-    { id: "set-2", name: "甲", createdAt: "2026-08-03T00:00:00Z", sortOrder: undefined, children: [] },
+    {
+      id: "set-2",
+      name: "甲",
+      createdAt: "2026-08-03T00:00:00Z",
+      sortOrder: undefined,
+      children: [],
+    },
     { id: "set-3", name: "乙", createdAt: "2026-08-02T00:00:00Z", sortOrder: 1, children: [] },
     { id: "set-4", name: "丁", createdAt: undefined, sortOrder: 0, children: [] },
   ];
