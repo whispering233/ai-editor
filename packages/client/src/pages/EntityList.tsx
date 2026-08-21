@@ -502,8 +502,8 @@ export default function EntityList({ type }: { type: string }) {
                         />
                       }
                     >
-                      {/* 决策 45：character 两行式行布局——第一行 名称 + 角色徽标；第二行
-                          动机摘要 + 性格/能力标签 chips（弱化样式，空段不渲染）；其余类型保持原表格列 */}
+                      {/* 决策 45（用户复核修订）：character 四列（名称+动机第二行 / 角色 / 性格 /
+                          能力）由 CharacterRow 自渲染；其余类型保持原表格列 */}
                       {entityType === "character" ? (
                         <CharacterRow item={item} />
                       ) : (

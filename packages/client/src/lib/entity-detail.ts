@@ -21,8 +21,6 @@ export interface DetailFieldConfig {
   options?: string[];
   /** select 用：枚举值 → 中文标签（缺省显示原值） */
   optionsLabels?: Record<string, string>;
-  /** text/textarea 用：输入框 placeholder 引导（决策 45：character.status 示例「如：活跃、退场、已故」） */
-  placeholder?: string;
 }
 
 /** 按类型的 data 字段配置（详情页表单渲染驱动；顺序 = 展示顺序） */

@@ -5,6 +5,22 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [v0.0.19] - 2026-08-21
+
+### Fixed
+
+- **批次十三卡 13.1（2026-08 用户反馈——人物页「状态是什么？」）**：character 列表「状态」列移除——`data.status` 为无定义自由文本、存量恒空、列表恒显示「—」，用户无法理解其含义（信息展示缺陷）；详情页表单字段一并移除（列表与详情均不再展示，存量数据容错保留，AI 工具 filters.status 语义不变）
+- **批次十三卡 13.6（2026-08 用户复核）**：人物行首版两行式布局两处缺陷修复——①单 `<td>` 渲染与「名称|角色」双列表头错位致**角色列空白**；②性格/能力合并 chips 无法分辨；用户裁决改为**角色/性格/能力独立成列**
+- **批次十三卡 13.6 复修（2026-08 实测）**：四列版性格/能力两个 `<td>` 直接加 `flex` 类，覆盖 `table-cell` 后被浏览器表格布局塞进同一列槽（Chromium 实测两列 left 同为 573px 完全重叠）——改为 td 保持 table-cell、flex 移入内层容器；红线补入 layout.md §4.4
+
+### Changed
+
+- **批次十三（2026-08 用户反馈——人物列表行信息修订 + 设定树体验增强，决策 45/46）**：
+  - **人物行四列布局（决策 45 修订）**——名称列（名称 + 第二行动机摘要，`summary.motivation` 截断 40）/ 角色列（`summary.role` 徽标）/ 性格列（`summary.personality` 前 2 chips）/ 能力列（`summary.abilities` 前 2 chips），空值「—」占位；服务端 toSummary character 摘要扩展（motivation 截断 40 + personality/abilities 各前 2，防工具上下文膨胀决策 15 同款语义）
+  - **设定树行显示描述（批次十三）**——`summary.description`（截断 100）以弱化行显示于名称下方，hover title 查看完整，空描述不渲染
+  - **设定树手动排序（决策 46，修订决策 42「设定无 sort_order」约束）**——工具栏「排序方式」切换器（名称 / 创建时间 / 手动，同级组内排序、层级不变）；手动模式行悬停 **↑↓ 箭头按钮** + 拖拽**行间插入线**重排（拖到行中段仍 = 调层级）；复用 `entities.sort_order` 列承载同级组内线性序（**无 DDL 迁移，SCHEMA_VERSION 5 不变**），`EntitySummary.sortOrder` 仅 setting 填充；**复合端点 `PUT /api/v1/entity/setting/:id/move`**（改父 + 组内重排一次事务提交，防环沿用决策 30，仅被移行刷 updated_at——决策 14 版本戳语义），前端改父流程由「建边+删边两步」收敛为复合端点
+  - 全仓 1657 测试全绿 + typecheck/lint/build 通过；真实浏览器（Chromium）几何断言验证四列对齐
+
 ## [v0.0.18] - 2026-08-20
 
 ### Fixed

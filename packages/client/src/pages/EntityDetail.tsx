@@ -817,7 +817,6 @@ function FormField({
           value={fieldValue({ [field.key]: value }, field.key)}
           onChange={(e) => onChange(e.target.value)}
           rows={3}
-          placeholder={field.placeholder}
           className={cn(inputClass, "w-full")}
         />
       );
@@ -875,7 +874,6 @@ function FormField({
         <Input
           value={fieldValue({ [field.key]: value }, field.key)}
           onChange={(e) => onChange(e.target.value)}
-          placeholder={field.placeholder}
           className="h-8 text-sm"
         />
       );
