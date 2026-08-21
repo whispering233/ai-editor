@@ -25,7 +25,9 @@ export interface SummaryColumnConfig {
 }
 
 export const SUMMARY_COLUMNS: Record<ListableEntityType, SummaryColumnConfig> = {
-  character: { key1: "role", label1: "角色", key2: "status", label2: "状态" },
+  // 决策 45（2026-08 批次十三）：状态列移除——character.status 无定义且存量恒空致困惑，
+  // 列表不再展示（data.status 详情页保留可编辑，AI 工具 filters.status 语义不变）
+  character: { key1: "role", label1: "角色" },
   // 决策 31（2026-08）：设定分类由 rules 标签承接，摘要列从「类别」改为「标签」
   // 决策 42（2026-08 批次十）：设定 tab 改为树形视图（不走表格），「上级设定」特殊列
   // （key2="parent"，M2）随表格移除；「描述」列保留配置（树形视图不渲染表格，无实际作用）

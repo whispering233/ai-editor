@@ -42,7 +42,7 @@ CREATE TABLE entities (
   type        TEXT NOT NULL CHECK(type IN ('character', 'setting', 'location', 'hook', 'event', 'timepoint', 'reference')),
   name        TEXT NOT NULL,
   data        TEXT NOT NULL DEFAULT '{}',  -- JSON: 各类型的专属字段
-  sort_order  INTEGER,                     -- 时间轴线性序（决策 26 + G2 修订）：event 与 timepoint 各类型内线性（各自 0..n-1），NULL = 未参与排序；其余类型恒为 NULL
+  sort_order  INTEGER,                     -- 线性序：event/timepoint 各类型内线性（决策 26 + G2，各自 0..n-1）；setting 为**同级组内线性序**（决策 46，同父/同根组内 0..n-1，NULL = 未参与手动排序）；其余类型恒为 NULL
   created_at  TEXT NOT NULL,               -- ISO 8601，应用层写入
   updated_at  TEXT NOT NULL,               -- ISO 8601，应用层写入（提案快照比对，决策 14）
   deleted_at  TEXT             -- 软删标记（决策 12），NULL 表示未删除；非 NULL 时该实体进入回收站，本体保留可还原
@@ -53,7 +53,7 @@ CREATE TABLE entities (
 
 | type | data 关键字段 |
 |------|-------------|
-| `character` | `role`, `gender`, `age`, `personality[]`, `motivation`, `abilities[]`, `status`, `custom_fields` |
+| `character` | `role`, `gender`, `age`, `personality[]`, `motivation`, `abilities[]`, `status`（**自由文本：人物当前处境状态，如「活跃、退场、已故」——决策 45：列表不展示该列，详情页保留可编辑，输入框带示例引导**）, `custom_fields` |
 | `setting` | `description`, `tags[]`（**分类标签，统一字段，决策 31 K2**）, `rules[]`（**规则条款，仅详情页编辑，K2 恢复语义**）, `custom_fields` —— **`parent_id`（决策 30）与 `category`（决策 31）均已废弃**：层级由 belongs_to 关系表达、分类由 tags 承接；旧字段残留由 `.passthrough()` 容错；旧 rules 分类值经 004 迁移（SCHEMA_VERSION 4）复制到 tags |
 | `location` | `type`, `parent_id`, `description`, `custom_fields` |
 | `location` | `type`, `parent_id`, `description`, `custom_fields` |

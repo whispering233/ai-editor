@@ -21,6 +21,8 @@ export interface DetailFieldConfig {
   options?: string[];
   /** select 用：枚举值 → 中文标签（缺省显示原值） */
   optionsLabels?: Record<string, string>;
+  /** text/textarea 用：输入框 placeholder 引导（决策 45：character.status 示例「如：活跃、退场、已故」） */
+  placeholder?: string;
 }
 
 /** 按类型的 data 字段配置（详情页表单渲染驱动；顺序 = 展示顺序） */
@@ -34,7 +36,7 @@ export function detailFieldsForType(type: EntityType): DetailFieldConfig[] {
         { key: "personality", label: "性格", control: "tags" },
         { key: "motivation", label: "动机", control: "textarea" },
         { key: "abilities", label: "能力", control: "tags" },
-        { key: "status", label: "状态", control: "text" },
+        { key: "status", label: "状态", control: "text", placeholder: "如：活跃、退场、已故" },
       ];
     /**
      * 设定基础信息（决策 30/31 + K2 修订，2026-08）：parent_id（层级 belongs_to）与 category

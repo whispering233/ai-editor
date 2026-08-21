@@ -718,3 +718,27 @@ B2.5 上线后用户反馈两点体验痛点：① **手动/自动备份在列�
 - **不做**：设置页分类管理（YAGNI，datalist 聚合已满足自定义诉求）；分类重命名/合并（backlog 候选，本轮不做）。
 
 **为什么**：预置枚举是产品对用户素材的臆断分类，实际创作中分类因人而异；自由文本 + 项目内聚合建议零配置满足「自定义」诉求，且天然收敛（建议项随使用增长）；放宽 schema 是纯 JSON 层演进，存量数据零风险；AI 工具 type 参数放宽为 string 后仍可传存量分类过滤，行为不变。
+
+## 决策 45：人物列表行信息修订——状态列移除 + 两行式行布局（2026-08 用户反馈，批次十三）
+
+用户反馈（2026-08 批次十三）：实体关系人物页①「状态是什么？」——character 的 `data.status` 是**无定义的自由文本**（schema.md 仅列字段、无任何语义说明），列表「状态」列无 tooltip/引导，实测存量数据该字段几乎恒为空 → 列恒显示「—」，用户无法理解其含义；②「行显示信息太少」——人物 data 有 `motivation`/`personality[]`/`abilities[]`/`gender`/`age` 等丰富字段，列表只展示名称 + 角色 + 状态 3 列。经设计讨论，用户裁决：
+
+- **状态列从列表移除**（`SUMMARY_COLUMNS.character` 去掉 `key2: status`）——`data.status` 字段**保留**（详情页表单保留、AI 工具 search_entities filters.status 语义不变、服务端 toSummary 提取保留——列表不展示不代表数据契约变更）；**详情页 status 输入框补 placeholder 引导**「如：活跃、退场、已故」（回答「状态是什么」= 人物当前处境状态，自由文本），列表与详情文案口径一致。
+- **人物行改两行式行布局**（对齐大纲/参考资料行模式）：第一行 = 名称 + 角色徽标（`summary.role`，`bg-primary/80 + text-primary-foreground` 标签徽标样式，T2 规范）；第二行（弱化样式，`text-xs text-muted-foreground`）= 动机摘要（`summary.motivation` 截断 40 字符）+ 性格/能力标签 chips（`summary.personality`/`summary.abilities` 各前 2 个，服务端摘要截断）。
+- **服务端摘要扩展**（toSummary character 分支）：`motivation`（截断 40 字符）、`personality`（前 2 个）、`abilities`（前 2 个）加入 `summary`——截断语义沿用 M2 description 先例（防 search_entities 工具上下文膨胀，决策 15）；`role`/`status` 提取不变。
+- **不做**：状态改受控枚举（用户裁决保留自由文本）；性别/年龄入列（信息价值低且存量稀疏，YAGNI）；location/hook 行布局不动（无反馈）。
+
+**为什么**：状态列无定义、无引导、恒空——展示一个用户无法理解且从不填写的列是信息缺陷；两行式布局在列宽受限下最大化信息密度（动机是创作中最常用的上下文，性格/能力标签一眼可读）；服务端摘要截断与既有 M2/决策 15 语义一致，零数据迁移。
+
+## 决策 46：设定树手动排序——同级 sort_order + 复合 move 端点 + 排序模式切换（2026-08 用户反馈，批次十三）
+
+用户反馈（2026-08 批次十三）：实体关系设定页需要排序功能——创建时间排序、名称排序、拖拽排序、上下箭头按钮排序。现状（决策 42）：设定树固定名称排序、拖拽仅调层级（「设定无 sort_order 语义、同父拖拽为 no-op」）——本决策**修订该约束**。经设计讨论，用户裁决：
+
+- **排序粒度 = 同级兄弟**（每个父节点/根级的子列表内排序），层级结构不变；排序方式**切换器**（工具栏「排序: [名称 ▾]」下拉：名称 / 创建时间 / 手动），切换即重排同级。
+- **手动排序持久化**：复用 `entities.sort_order` 列（决策 26 引入，setting 行当前恒为 NULL）——**新语义：setting 的 sort_order = 同级线性序（同父组内 0..n-1，NULL = 未参与手动排序）**；**无 DDL 迁移**（列已存在，SCHEMA_VERSION 保持 5——纯语义扩展 + 数据填充）。手动模式排序键 = `sort_order IS NULL, sort_order ASC, name ASC`（存量 NULL 沉底后按名称，渐进生效）；名称/创建时间模式 = 纯前端排序（items 已含 name/createdAt，YAGNI 不加服务端参数）。
+- **复合 move 端点** `PUT /api/v1/entity/setting/:id/move`（Req `{ parent_id: string | null, order: number }`，决策 42 拖拽改父流程 + 重排**收敛为一次事务提交**，对齐 G2 event move_to 复合端点先例）：①改父（parent_id ≠ 当前父）→ 事务内建新 belongs_to 边（**防环沿用决策 30**，违反 → 400）+ 删旧边；②重排目标同级组（改父后 = 新父的子级组 / 未改父 = 当前同级组，order 0-based clamp）→ 组内重写 sort_order 0..n-1，仅被移行刷 updated_at（决策 14 版本戳语义）。改父且 order 缺省语义 = 追加到新父子级末尾。
+- **拖拽/箭头交互（重排仅限手动模式，用户裁决）**：手动模式下 ①行悬停显示 **↑↓ 箭头按钮**（同级组内上移/下移一位）；②拖拽新增**行间插入线语义**（拖到行上方/下方 1/3 处显示插入线 = 同级重排到该位置），**拖到行上仍 = 调层级**（既有语义不变）；名称/创建时间模式下拖拽仅保留调层级，行间插入线/箭头不出现（排序模式语义清晰不打架）。前端改父流程从「createRelation + deleteRelation 两步」切换为复合 move 端点（详情页 handleSetParent 流程不动，超范围）。
+- **前端树排序实现**：`lib/setting-tree.ts` 新增纯函数（同级组排序：name / createdAt / sortOrder+name 三种模式），树构建后对每层 children 按模式排序；`EntitySummary` 增加可选 `sortOrder?: number`（**仅 setting 类型填充**，服务端 toSummary 从行取）。
+- **不做**：跨父拖拽时保留插入位（改父即追加末尾，YAGNI）；手动排序的 AI 提案能力（backlog 候选）；character/location/hook 表格的拖拽排序（无反馈，表格已有名称/创建时间排序下拉）。
+
+**为什么**：设定是层级树，全局线性序（event 先例）无法表达「同父内排序」语义——同级组序是树排序的最小完整模型；复用现有 sort_order 列零迁移；复合端点把改父+重排收敛为原子提交，杜绝两步调用的中间态（G2 move_to 已验证该模式）；重排仅限手动模式避免「自动排序被悄悄打破」的认知冲突。

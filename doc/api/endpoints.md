@@ -472,7 +472,9 @@ type: "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "r
   type: "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "reference";
   name: string;
   // 各类型的关键摘要字段：
-  //   character → role, status
+  //   character → role, status（决策 45：列表不再展示状态列，摘要提取保留供 AI 工具/详情使用）,
+  //               motivation (data.motivation 截断 40 字符——两行式行布局第二行动机摘要),
+  //               personality / abilities (各前 2 个——行布局标签 chips)
   //   setting   → tags (data.tags 前 3 个，决策 31 K2：分类统一字段，与 event 同语义),
   //               description (M2，2026-08：data.description 截断 100 字符——列表行展示；
   //               截断防 search_entities 工具上下文膨胀，完整文本在详情页)
@@ -483,6 +485,9 @@ type: "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "r
   //   reference → type, tags, source（决策 36）；决策 43：kind（file/link）、file_name（file 类相对路径）、
   //               url（link 类）——来源列渲染依据
   summary: Record<string, unknown>;
+  // 手动排序位置（决策 46，2026-08 批次十三）：**仅 setting 类型填充**——同级组内线性序
+  // （同父/同根组内 0..n-1，NULL = 未参与手动排序）；其余类型不出现（稀疏语义）
+  sortOrder?: number;
   // M2（2026-08 批次六）：**仅 setting 类型填充**——层级 = belongs_to 关系（决策 30），
   // 服务端列表响应时补查设定间层级边，按 childId 映射附加；无父的设定不出现该字段（稀疏）
   parentId?: string;
@@ -697,6 +702,39 @@ id: string;
 ```
 
 **语义**：同 event move（clamp 到末尾、负数 400）。**拖拽时间点不修改其下事件序**——仅重排时间点 sort_order（整组移动不动内部，G2 双独立线性序）。
+
+
+### PUT /api/v1/entity/setting/:id/move
+
+设定同级重排 / 改父 + 重排（决策 46，2026-08 批次十三；修订决策 42「设定无 sort_order 语义」约束）。**仅 `setting` 类型支持**——设定手动排序 = 同级组内线性序（同父/同根组内 0..n-1），持久化到 data.db `entities.sort_order` 列（决策 46 新语义；列本身决策 26 已引入，**无 DDL 迁移，SCHEMA_VERSION 保持 5**）。
+
+```typescript
+// Path
+id: string;   // 设定实体 id（set- 前缀）
+
+// Req（snake_case）
+{
+  // 目标父设定 id；null = 移为顶层根（无上级）。null 与「不传」均视为根目标；
+  // 与当前父相同（含同为根）→ 不改父，仅重排
+  parent_id: string | null;
+  // 目标位置（0-based 同级组内序）：改父后 = 新父子级组内位置 / 未改父 = 当前同级组内位置；
+  // 越界 clamp（负数 400 schema 拒绝；超组内数 → 组尾）；不传 = 追加到组尾
+  order?: number;
+}
+
+// Res: 200
+{
+  moved: true;
+}
+```
+
+**语义**：
+
+- **复合写端点（对齐 G2 event move_to 先例）**：改父 + 重排**一次事务提交**——①目标父存在性校验（不存在/已软删 → 400 `VALIDATION_ERROR`）；②改父（parent_id ≠ 当前父）→ 事务内建新 belongs_to 边（**防环沿用决策 30**，自指/成环 → 400 `VALIDATION_ERROR`）+ 删旧边；③重排目标同级组（组内 0..n-1 重写 sort_order，仅被移行刷 updated_at——决策 14 版本戳语义；组内排序键 = `sort_order IS NULL, sort_order ASC, name ASC`，存量 NULL 沉底）。
+- 设定不存在/已软删 → 404 `ENTITY_NOT_FOUND`。
+- **幂等 no-op**：parent_id 与当前父相同且 order 指向当前位置 → 仅重写组内序（无副作用等价结果）。
+- 前端「设定树」：手动排序模式拖拽行间插入线 / ↑↓ 箭头按钮走本端点；拖拽改父流程由原「createRelation + deleteRelation 两步」切换为本端点（详情页 handleSetParent 流程不动，超范围）。
+- 其余实体类型无此端点（同 event move 先例，endpoints.md 第 393 行约束）。
 
 ### POST /api/v1/entity/event/:id/move_to
 

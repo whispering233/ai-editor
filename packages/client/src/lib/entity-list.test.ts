@@ -26,8 +26,8 @@ describe("SUMMARY_COLUMNS（摘要列配置——原型信息层级表）", () =
     expect(SUMMARY_COLUMNS.hook.key1).toBe("status");
   });
 
-  it("character 与 hook 有列 2（status / payoff_timing）；setting 有列 3 描述（决策 42 表格移除后无列 2）；location 无列 2", () => {
-    expect(SUMMARY_COLUMNS.character.key2).toBe("status");
+  it("hook 有列 2（payoff_timing）；character 状态列已移除（决策 45）、setting 有列 3 描述（决策 42 表格移除后无列 2）；location 无列 2", () => {
+    expect(SUMMARY_COLUMNS.character.key2).toBeUndefined();
     expect(SUMMARY_COLUMNS.hook.key2).toBe("payoff_timing");
     // 决策 42（2026-08 批次十）：设定 tab 改为树形视图（不走表格），「上级设定」特殊列
     // （key2="parent"，M2）随表格移除；「描述」列配置保留
