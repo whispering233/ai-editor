@@ -574,7 +574,8 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
         onDoubleClick: (e: MouseEvent<HTMLDivElement>) => handleRowDoubleClick(e, node),
         onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => handleRowKeyDown(e, node),
         className: cn(
-          "relative flex items-center gap-1.5 rounded-md py-1 pr-1 transition-colors hover:bg-muted/60",
+          // 决策 45（批次十三）：两行式——第一行 箭头|名称|计数|行尾区，第二行描述摘要（弱化）
+          "relative flex flex-col rounded-md py-1 pr-1 transition-colors hover:bg-muted/60",
           highlighted && "bg-accent/40", // 新建成功临时高亮（3s）
           isDragTarget && "bg-accent/40 ring-1 ring-accent ring-inset", // 拖拽目标（将成其子级）
           isDragging && "opacity-50",
@@ -583,88 +584,104 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
         style: { paddingLeft: `${depth * 16 + 8}px` },
         title: "拖到行上 = 成为其子级；拖到空白区 = 移为顶层",
       };
-      // 节点行内容（折叠箭头 + 名称 + 标签 + 子设定数 + 行尾删除）
+      // 节点行内容（折叠箭头 + 名称 + 标签 + 子设定数 + 行尾删除；决策 45 批次十三：
+      // 行下方追加描述摘要行——summary.description 截断 100（服务端），hover title 查看完整）
+      const rowDescription =
+        typeof node.summary?.description === "string" && node.summary.description !== ""
+          ? node.summary.description
+          : null;
       const rowChildren = (
         <>
-          {/* 折叠箭头（叶子占位保缩进对齐）；点击切展开态，不选中/不跳转 */}
-          <button
-            type="button"
-            aria-label={hasChildren ? (isCollapsed ? "展开" : "折叠") : undefined}
-            className={cn(
-              "shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground",
-              !hasChildren && "invisible",
-            )}
-            onClick={() => toggleCollapse(node.id)}
-            disabled={!hasChildren}
-          >
-            <svg
-              viewBox="0 0 16 16"
-              className={cn("size-3.5 transition-transform", isCollapsed && "-rotate-90")}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-            >
-              <path d="m6 4 4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-          {/* 名称：点击行内编辑（Enter 确认 / Esc 取消 / 失焦保存）；stopPropagation 隔离——
-              单击标题 = 编辑而非选中（决策 42 冲突设计） */}
-          {editing ? (
-            inlineInput(
-              editingValue,
-              setEditingValue,
-              handleEditKeyDown(node),
-              () => void commitEdit(node),
-              "设定名称",
-            )
-          ) : (
-            <span
-              className="min-w-0 cursor-text truncate text-sm text-foreground hover:underline"
-              title="点击编辑名称，双击查看详情"
-              onClick={(e) => {
-                e.stopPropagation();
-                startEdit(node);
-              }}
-            >
-              {node.name}
-            </span>
-          )}
-          {/* 直接子设定数（>0 时显示） */}
-          {hasChildren && (
-            <span className="shrink-0 text-xs text-muted-foreground/70">
-              {node.children.length} 个子设定
-            </span>
-          )}
-          {/* 行尾操作区（批次十二 T1：标签徽标 + 删除按钮——标签收进行尾、删除按钮左边，
-              不紧跟名称干扰树呈现；决策 42：行级只留删除，H2 直接软删不弹确认；
-              决策 40：右键菜单替代行级问 AI） */}
-          <span className="ml-auto flex shrink-0 items-center gap-1.5">
-            {/* 标签徽标（summary.tags 前 3，决策 31 统一字段；替代已废弃的 category 徽标） */}
-            {tags.length > 0 && (
-              <span className="flex shrink-0 items-center gap-0.5">
-                {tags.map((t) => (
-                  <span
-                    key={t}
-                    className="rounded bg-primary/80 px-1.5 py-0.5 text-xs text-primary-foreground"
-                  >
-                    {t}
-                  </span>
-                ))}
-              </span>
-            )}
+          <div className="flex min-w-0 items-center gap-1.5">
+            {/* 折叠箭头（叶子占位保缩进对齐）；点击切展开态，不选中/不跳转 */}
             <button
               type="button"
-              className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive"
-              title="移入回收站"
-              aria-label={`移入回收站「${node.name}」`}
-              onClick={(e) => {
-                e.stopPropagation(); // 不触发行选中（handleRowClick 的 closest 已拦截，双保险）
-                void handleDelete(node);
-              }}
+              aria-label={hasChildren ? (isCollapsed ? "展开" : "折叠") : undefined}
+              className={cn(
+                "shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground",
+                !hasChildren && "invisible",
+              )}
+              onClick={() => toggleCollapse(node.id)}
+              disabled={!hasChildren}
             >
-              <Trash2 className="size-3.5" />
+              <svg
+                viewBox="0 0 16 16"
+                className={cn("size-3.5 transition-transform", isCollapsed && "-rotate-90")}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+              >
+                <path d="m6 4 4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </button>
-          </span>
+            {/* 名称：点击行内编辑（Enter 确认 / Esc 取消 / 失焦保存）；stopPropagation 隔离——
+              单击标题 = 编辑而非选中（决策 42 冲突设计） */}
+            {editing ? (
+              inlineInput(
+                editingValue,
+                setEditingValue,
+                handleEditKeyDown(node),
+                () => void commitEdit(node),
+                "设定名称",
+              )
+            ) : (
+              <span
+                className="min-w-0 cursor-text truncate text-sm text-foreground hover:underline"
+                title="点击编辑名称，双击查看详情"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  startEdit(node);
+                }}
+              >
+                {node.name}
+              </span>
+            )}
+            {/* 直接子设定数（>0 时显示） */}
+            {hasChildren && (
+              <span className="shrink-0 text-xs text-muted-foreground/70">
+                {node.children.length} 个子设定
+              </span>
+            )}
+            {/* 行尾操作区（批次十二 T1：标签徽标 + 删除按钮——标签收进行尾、删除按钮左边，
+              不紧跟名称干扰树呈现；决策 42：行级只留删除，H2 直接软删不弹确认；
+              决策 40：右键菜单替代行级问 AI） */}
+            <span className="ml-auto flex shrink-0 items-center gap-1.5">
+              {/* 标签徽标（summary.tags 前 3，决策 31 统一字段；替代已废弃的 category 徽标） */}
+              {tags.length > 0 && (
+                <span className="flex shrink-0 items-center gap-0.5">
+                  {tags.map((t) => (
+                    <span
+                      key={t}
+                      className="rounded bg-primary/80 px-1.5 py-0.5 text-xs text-primary-foreground"
+                    >
+                      {t}
+                    </span>
+                  ))}
+                </span>
+              )}
+              <button
+                type="button"
+                className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive"
+                title="移入回收站"
+                aria-label={`移入回收站「${node.name}」`}
+                onClick={(e) => {
+                  e.stopPropagation(); // 不触发行选中（handleRowClick 的 closest 已拦截，双保险）
+                  void handleDelete(node);
+                }}
+              >
+                <Trash2 className="size-3.5" />
+              </button>
+            </span>
+          </div>
+          {/* 描述摘要行（决策 45 批次十三）：弱化样式，空描述不渲染；title 查看完整摘要 */}
+          {rowDescription !== null && (
+            <span
+              className="min-w-0 truncate pl-5 text-xs text-muted-foreground"
+              title={rowDescription}
+            >
+              {rowDescription}
+            </span>
+          )}
         </>
       );
       return (
