@@ -421,6 +421,22 @@ export function updateEntity(
   });
 }
 
+/** PUT /api/v1/entity/setting/:id/move（决策 46：设定同级重排 / 改父 + 重排复合写） */
+export interface MoveSettingBody {
+  /** 目标父设定 id；null = 移为顶层根（无上级）。与当前父相同（含同为根）→ 仅重排 */
+  parentId: string | null;
+  /** 0-based 同级组内序（改父后 = 新父子级组内位置 / 未改父 = 当前同级组内位置）；越界 clamp；缺省 = 组尾 */
+  order?: number;
+}
+
+/** 移动设定（404 ENTITY_NOT_FOUND；自指/成环/目标父缺失 → 400 VALIDATION_ERROR） */
+export function moveSetting(id: string, body: MoveSettingBody): Promise<{ moved: true }> {
+  return apiFetch<{ moved: true }>(`/entity/setting/${id}/move`, {
+    method: "PUT",
+    body: { parent_id: body.parentId, ...(body.order !== undefined ? { order: body.order } : {}) },
+  });
+}
+
 /** DELETE /api/v1/entity/:type/:id 响应（软删 + 级联计数，决策 12） */
 export interface DeleteEntityRes {
   deleted: true;

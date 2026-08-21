@@ -24,6 +24,10 @@ export interface SettingTreeInput {
   summary?: Record<string, unknown>;
   /** 直接父设定 id（决策 42 交互树：拖拽 no-op 判定；根节点无此字段） */
   parentId?: string;
+  /** 创建时间（决策 46 排序模式「创建时间」用；EntitySummary.createdAt） */
+  createdAt?: string;
+  /** 同级手动排序位（决策 46：EntitySummary.sortOrder，NULL = 未参与 → 不出现） */
+  sortOrder?: number;
 }
 
 export interface SettingTreeNode {
@@ -34,6 +38,10 @@ export interface SettingTreeNode {
   summary?: Record<string, unknown>;
   /** 直接父设定 id（决策 42 交互树：拖拽 no-op 判定；根节点无此字段） */
   parentId?: string;
+  /** 创建时间（决策 46 排序模式「创建时间」用） */
+  createdAt?: string;
+  /** 同级手动排序位（决策 46：NULL = 未参与 → 不出现，手动模式沉底按名称） */
+  sortOrder?: number;
   children: SettingTreeNode[];
 }
 
@@ -73,6 +81,8 @@ export function buildSettingTree(
         : {}),
       ...(raw.summary !== undefined ? { summary: raw.summary } : {}),
       ...(raw.parentId !== undefined ? { parentId: raw.parentId } : {}),
+      ...(raw.createdAt !== undefined ? { createdAt: raw.createdAt } : {}),
+      ...(raw.sortOrder !== undefined ? { sortOrder: raw.sortOrder } : {}),
       children: [],
     };
     const kids = childOf.get(id) ?? [];
@@ -201,4 +211,48 @@ export function filterSettingTree(
     return null;
   };
   return roots.map(filterNode).filter((n): n is SettingTreeNode => n !== null);
+}
+
+// ============ 决策 46（2026-08 批次十三）：同级排序模式 ============
+
+/** 设定树排序方式（决策 46）：name = 名称（原默认）；created = 创建时间（新→旧）；
+ * manual = 手动排序（sortOrder 升序，NULL 沉底按名称——未参与手动排序的渐进生效）。
+ * 排序粒度 = 同级兄弟（每个父/根级的子列表），层级结构不变。 */
+export type SettingSortMode = "name" | "created" | "manual";
+
+/** 排序键辅助：字符串比较（与 SQLite 默认字节序一致，名称排序可预期） */
+function compareName(a: string, b: string): number {
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+}
+
+/**
+ * 同级组排序（决策 46）：返回**新数组**（不改原数组——原树保持组装序）：
+ * - name：名称升序（id 决胜稳定）
+ * - created：创建时间降序（新→旧；缺失时间戳沉底，id 决胜）
+ * - manual：sortOrder 升序（NULL/缺失 = 未参与 → 沉底按名称），同序值按名称
+ */
+export function sortSettingChildren(
+  nodes: readonly SettingTreeNode[],
+  mode: SettingSortMode,
+): SettingTreeNode[] {
+  const list = [...nodes];
+  list.sort((a, b) => {
+    if (mode === "created") {
+      if (a.createdAt !== undefined && b.createdAt !== undefined && a.createdAt !== b.createdAt) {
+        return a.createdAt < b.createdAt ? 1 : -1; // 新→旧
+      }
+      if (a.createdAt === undefined && b.createdAt !== undefined) return 1; // 缺失沉底
+      if (a.createdAt !== undefined && b.createdAt === undefined) return -1;
+    } else if (mode === "manual") {
+      const ao = a.sortOrder ?? Number.POSITIVE_INFINITY;
+      const bo = b.sortOrder ?? Number.POSITIVE_INFINITY;
+      if (ao !== bo) return ao - bo;
+    }
+    const nameCmp = compareName(a.name, b.name);
+    if (nameCmp !== 0) return nameCmp;
+    return a.id < b.id ? -1 : 1;
+  });
+  return list;
 }

@@ -11,6 +11,7 @@ import {
   matchesSettingSearch,
   matchesSettingTag,
   nodeTags,
+  sortSettingChildren,
 } from "./setting-tree";
 
 const settings = [
@@ -265,5 +266,36 @@ describe("决策 42 交互树：nodeTags / matchesSettingSearch / matchesSetting
     expect(filterSettingTree(roots, "不存在", "")).toEqual([]);
     expect(filterSettingTree(roots, "", "不存在")).toEqual([]);
     expect(filterSettingTree([], "x", "")).toEqual([]);
+  });
+});
+
+describe("sortSettingChildren（决策 46：同级排序模式）", () => {
+  const nodes = [
+    { id: "set-1", name: "丙", createdAt: "2026-08-01T00:00:00Z", sortOrder: 2, children: [] },
+    { id: "set-2", name: "甲", createdAt: "2026-08-03T00:00:00Z", sortOrder: undefined, children: [] },
+    { id: "set-3", name: "乙", createdAt: "2026-08-02T00:00:00Z", sortOrder: 1, children: [] },
+    { id: "set-4", name: "丁", createdAt: undefined, sortOrder: 0, children: [] },
+  ];
+
+  it("name：名称升序（码点序——与 SQLite 默认字节序一致）", () => {
+    const sorted = sortSettingChildren(nodes, "name");
+    expect(sorted.map((n) => n.id)).toEqual(["set-4", "set-1", "set-3", "set-2"]); // 丁 丙 乙 甲（码点序）
+  });
+
+  it("created：创建时间降序（新→旧），缺失时间戳沉底", () => {
+    const sorted = sortSettingChildren(nodes, "created");
+    expect(sorted.map((n) => n.id)).toEqual(["set-2", "set-3", "set-1", "set-4"]); // 03 02 01 缺失
+  });
+
+  it("manual：sortOrder 升序，NULL/缺失沉底按名称", () => {
+    const sorted = sortSettingChildren(nodes, "manual");
+    expect(sorted.map((n) => n.id)).toEqual(["set-4", "set-3", "set-1", "set-2"]); // 0 1 2 缺失
+  });
+
+  it("不改原数组（纯函数）；空数组安全", () => {
+    const copy = [...nodes];
+    sortSettingChildren(nodes, "manual");
+    expect(nodes).toEqual(copy);
+    expect(sortSettingChildren([], "manual")).toEqual([]);
   });
 });
