@@ -251,6 +251,8 @@
 - **动画**：仅三处高影响动效——抽屉滑入（`animate-in fade-in` / `slide-in-from-right duration-300`，tw-animate-css）、chevron 展开旋转（`transition-transform duration-200` + `rotate-90`）、骨架脉冲（`animate-pulse`）/流式加载旋转（`animate-spin`）；行级 hover 一律 `transition-colors`。其余保持克制，不叠加装饰动画。
 - **阴影**：`shadow-sm`（TabBar 激活项）、`shadow-xl`（抽屉）；卡片默认**无阴影**，以 `border-border` 分隔层级（`bg-card` 用于浮起的面）。
 
+> **红线：`<td>` 禁止直接加 `display: flex`（2026-08 批次十三卡 13.6 实测踩坑）**——`<td>` 的默认 `table-cell` 被覆盖后不再是表格单元，浏览器表格布局会把它包进匿名单元并**塞进同一列槽**（能力列与性格列实测完全重叠，left 同为 573px）；需要 flex 布局时包内层 `<div className="flex ...">`，td 保持 `table-cell`。
+
 ### 4.4 样式书写规范（L 批次，2026-08）
 
 > 来源：用户反馈「className 单行难读、样式工程化不足」。**B 为主（格式化 + 提取重复），C 按需（CSS Modules 仅 Canvas/时间轴等几何/状态复杂度高的样式，B 完成后单独评估）——2026-08 已评估，C 项关闭**：Canvas/时间轴几何均在 JS 计算、CSS 仅工具类，Tailwind 已清晰表达，无 CSS Modules 适用样式（维持现状；后续出现真正的复杂样式再按下方条件引入）。

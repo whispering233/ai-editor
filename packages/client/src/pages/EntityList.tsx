@@ -624,21 +624,26 @@ function CharacterRow({ item }: { item: EntitySummary }) {
           <span className="text-muted-foreground">—</span>
         )}
       </td>
-      {/* 性格列（前 2 chips） */}
-      <td className="flex flex-wrap items-center gap-1 px-3 py-2">
-        {personality.length > 0 ? (
-          personality.map(badge)
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        )}
+      {/* 性格列（前 2 chips）：td 保持 table-cell（禁止直接加 flex——浏览器表格布局会把
+          非 cell 盒塞进同一列槽，能力列与性格列重叠，实测踩坑），flex 只作用内层容器 */}
+      <td className="px-3 py-2">
+        <div className="flex flex-wrap items-center gap-1">
+          {personality.length > 0 ? (
+            personality.map(badge)
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
+        </div>
       </td>
-      {/* 能力列（前 2 chips） */}
-      <td className="flex flex-wrap items-center gap-1 px-3 py-2">
-        {abilities.length > 0 ? (
-          abilities.map(badge)
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        )}
+      {/* 能力列（前 2 chips）：同上 */}
+      <td className="px-3 py-2">
+        <div className="flex flex-wrap items-center gap-1">
+          {abilities.length > 0 ? (
+            abilities.map(badge)
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
+        </div>
       </td>
     </>
   );
