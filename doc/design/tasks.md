@@ -11,29 +11,18 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 
 ---
 
-## 项目状态（2026-08-21，v0.0.19 已发布）
+## 项目状态（2026-08-23，v0.0.20 已发布）
 
-全量交付完成（含批次八）**：阶段 A 地基（T0-T7）+ 切片 1-13 + 阶段 U 三栏工作台（U1-U8）+ 画布 S10（S10.1-S10.5 + UX1-UX4，**批次八 O6 已按决策 33 移除**）+ 发布 S11 + 发布阻断项 E1-E6 + 阶段 B 项目提示词（B1）+ 阶段 C 时间轴（C1-C4，决策 26 + G2 timepoint 实体化修订）+ 阶段 B2 自动备份与恢复（B2.1-B2.6，决策 27/28/29）+ 用户反馈批次一至八（F1-F9 · G1-G3 · H1-H6 · I1-I4 · J1-J3 + K1/K2 · M1-M3 · N1-N2（决策 32）· O1-O6（决策 33））+ L 批次样式工程化（L1-L4）+ **发布 v0.0.1-v0.0.14 全链路全绿**。**批次九（2026-08 已完成并发布 v0.0.15：决策 34 pi-ai 引擎换核 / 决策 35 工具核查与中栏演进 / 决策 36 参考资料页）**。**批次十（2026-08 已完成并发布 v0.0.16：决策 37 大纲交互优化 / 决策 38 时间轴交互参考大纲 / 决策 39 移除实体列表更新时间 / 决策 40 右键菜单替代行级问 AI / 决策 41 项目规则文件 AGENTS.md / 决策 42 实体设定页树形视图）**。**批次十一（2026-08 已完成并发布 v0.0.17：决策 43 参考资料两类承载——本地 md 文件 + 外源链接，任务卡 11.1-11.8）**。**批次十二（2026-08 已完成并发布 v0.0.18：决策 44 参考资料分类自定义 + 参考资料页体验优化 R1-R6 + 设定树/标签样式 T1-T3，详见执行进度）**。**批次十三（2026-08 已完成并发布 v0.0.19：决策 45/46——人物列表行信息修订（状态列移除 + 四列布局）/ 设定树描述展示 / 设定树手动排序（同级 sort_order + 复合 move 端点 + 排序方式切换器），任务卡 13.1-13.6，详见执行进度）**。**批次十四（2026-08 已完成，决策 47/48 + 决策 27 修订：工具调用展示人类可读化（names/resolve 批量名称解析 + 摘要渲染）/ 备份频率新增 1 分钟选项 / 用户级配置格式正式化 schema v1（多供应商 v2 用户裁决放弃，记录 backlog #17），任务卡 14.1-14.5，详见执行进度）**。可选收尾：npm 坏版本 v0.0.1/v0.0.2 deprecate 标注（需 2FA 凭据）；backlog.md 事项一律不做。
+全量交付完成：阶段 A 地基（T0-T7）+ 切片 1-13 + 阶段 U 三栏工作台（U1-U8）+ 画布 S10（批次八 O6 已按决策 33 移除）+ 发布 S11 + 发布阻断项 E1-E6 + 阶段 B/C/B2 + 用户反馈批次一至十四（F1-F9 · G1-G3 · H1-H6 · I1-I4 · J1-J3+K1/K2 · M1-M3 · N1-N2 · O1-O6 · L 样式工程化 + 批次九至十四，详见执行进度与演进路线）+ **发布 v0.0.1-v0.0.20 全链路全绿**。**批次十四（2026-08 已完成并发布 v0.0.20：决策 47 工具调用展示人类可读化（names/resolve 批量名称解析 + 摘要渲染）/ 决策 48 用户级配置格式正式化 schema v1（多供应商 v2 用户裁决放弃，记录 backlog #17）/ 决策 27 修订备份频率新增 1 分钟档，任务卡 14.1-14.5）**。可选收尾：npm 坏版本 v0.0.1/v0.0.2 deprecate 标注（需 2FA 凭据）；backlog.md 事项一律不做。
 
-- **设计主轴**：`decisions.md` 决策 1-46；架构分包见 `architecture.md`；文档即契约（`doc/api`、`doc/database`、`doc/ui`）。
+- **设计主轴**：`decisions.md` 决策 1-48；架构分包见 `architecture.md`；文档即契约（`doc/api`、`doc/database`、`doc/ui`）。
 - **测试**：全仓 1690 个（shared 156 / llm 41 / db 258 / server 383 / client 516 / tools 242 / agent 94）。SCHEMA_VERSION = 5（决策 36/43/46：kind 与 setting sort_order 均为 JSON/列语义演进，无 DDL 迁移）。
 
 ## 执行进度（全部完成）
 
 - [x] 历史批次（git log / CHANGELOG 回溯规格）：阶段 A + 切片 1-13 · 阶段 U · 画布 S10（O6 移除）· 发布 S11 + E1-E6 · 阶段 B/C/B2 · 批次一至六（F1-F9 · G1-G3 · H1-H6 · I1-I4 · J1-J3+K1/K2 · M1-M3）· L 批次（L1-L4）· 批次七（N1-N2，决策 32）
-- [x] **批次八（O1-O6，决策 33，2026-08-19）**：O1 设定筛选可搜索下拉 `5dfa1dc` / O2 大纲操作区右移+去时间戳 `42df33e` / O3 时间轴去拖拽柄保留提示 `6d0e0cc` / O4 时间轴折叠按钮左移 `7aca264` / O5 设定树全部展开/折叠 `dbeb52c` / O6 画布页移除（决策 33）`232d396`；收官文档 `7aca8ce`
-- [x] **批次九（决策 34/35/36，2026-08，发布 v0.0.15）**：9.1 llm 引入 pi-ai + adapter（契约保留，delete 手写 SSE）→ 9.2 模型目录接口 → 9.3 右栏模型/思考强度（对齐 pi）/上下文占用 → 9.4 reference 类型 + 迁移 005 → 9.5 search_references + propose_create_reference 工具 → 9.6 参考资料页（TabBar/列表/详情）→ 9.7 InfoBar 问 AI + 页面焦点上报（+ 行级 AskAiButton 修订方案 A）+ 批文（CHANGELOG/tasks/AGENTS 同步，发布 v0.0.15）
-- [x] **批次十（决策 37-42，2026-08，发布 v0.0.16）**：大纲交互优化（决策 37：去详情/新建按钮、Enter 新建子级、双击详情、点击标题编辑、只留删除）/ 时间轴交互参考大纲（决策 38：事件行+组标题行双击详情/点击编辑、移除详情/编辑按钮）/ 移除实体列表更新时间（决策 39）/ 右键菜单替代行级问 AI（决策 40：删除 6 处 AskAiButton、注入会话上下文 + 建立关联、InfoBar 保留）/ 项目规则文件 AGENTS.md（决策 41：唯一事实源 + prompt 自动迁移 + 设置页直编 + mtime 外部修改检测）/ 实体设定页树形视图（决策 42：与设定树合并、折叠/展开/行内编辑/拖拽调层级/Enter 新建/双击详情、搜索+标签树内过滤、移除分页）
-- [x] **批次十一（决策 43，2026-08，发布 v0.0.17）**：参考资料两类承载——本地 md 文档（YAML frontmatter 自包含 + references/ 目录 + mtime 快照同步 + scan 扫描重建，文件 = 真相源、DB 索引 = 派生镜像，软删文件移 .trash/）与外源链接（URL 必填仅索引）/ 新建入口分流两按钮 + 两类详情页（草稿态/编辑态，md 内嵌 @uiw/react-md-editor 编辑器 + 导入 md 文档 + 建立关联面板）/ 列表交互对齐大纲（点击标题行内编辑/双击详情/只留删除）+ 右键菜单复用 / 存档体系联动（备份/导出/导入/恢复打包 references/，自动备份变更检测扩展）/ AI 提案归 link 类 / B1 列表编辑对话框竞态随重构根除 / 跨书籍导入记录 backlog #16 未来迭代（各卡 commit：b5d2812 文档 → 3392fb6 列表交互 → b1f071f 存储地基 → 8bc4a4b 存档联动 → 44583d4 页面分流 → 999da09 编辑器 → 0e0c830 导入 → 6d9b504 扫描 UI → d97cb6e 收官）
-- [x] **批次十二（决策 44 + R1-R6 + T1-T3，2026-08，发布 v0.0.18）**：R1 草稿态标题编辑丢失 bug 修复（form.name 优先）`292db04` / R2 空态去重（去书籍图标与新建按钮）`fbe4fc2` / R3 列表改表格平铺（thead 四列 + 单行 tr）+ 修订分类列去徽标 `7e2b1c9`+`f7e2529` / R4 草稿态标题右侧去分类徽标 `6f84a49` / R5 详情页面包屑换 Breadcrumb `81ca848` / R6 决策 44 分类自定义（删除 REFERENCE_TYPES 预置枚举、z.enum 放宽 z.string、详情页分类文本框 + datalist 聚合已用分类、列表筛选聚合、TYPE_LABELS 仅存量回显、无 DDL 迁移）`a27fdac` / T1 设定树行标签移行尾（删除按钮左边）`08d975c` / T2 全仓标签徽标样式强化（bg-primary/80 + text-primary-foreground，layout.md §4.3 补规范）`5b85a41` / T3 实体二级 tab 移除参考资料入口（旧路由重定向 #/references，对齐决策 42 先例）+ 泛型视图 reference 死代码清理（含决策 44 过时枚举）`c729a51`+`a1f7382` / 收官文档 `0a65df4`+`1c730f7`
-- [x] **批次十三（决策 45/46，2026-08，发布 v0.0.19）**：卡 13.1 人物列表移除状态列 + 详情页 status placeholder 引导 `98a86e1` / 13.2 人物行两行式布局（toSummary 摘要扩展 motivation 截断 40 + personality·abilities 各前 2）`5992ff9` / 13.3 设定树行描述摘要展示 `cd00699` / 13.4 设定排序地基（EntitySummary.sortOrder 仅 setting + moveSetting 复合端点 + PUT /entity/setting/:id/move；删旧边按 target_id=旧父 精确匹配坑）`640064c` / 13.5 排序切换器 + 手动模式箭头/插入线重排 `4f1596d` / 13.6 用户复核修订（角色/性格/能力独立成列 + 详情页去状态字段）`6035540` + td flex 列重叠实测修复（layout.md §4.4 补红线）`07a1677` / 收官文档 `41acea0`+`fa1631e`+`0be4e2a`
-    > 坑记录：①首版两行式单 td 与双列表头错位致角色列空白——改四列；②四列版 td 直接加 `flex` 被表格布局塞进同一列槽（性格/能力列重叠，Chromium 实测 left 同为 573px）——flex 移内层 div，红线补 layout.md §4.4
-- [x] **批次十四（决策 47/48 + 决策 27 修订，2026-08，已完成）**：
-  - [x] 14.1 `POST /api/v1/names/resolve` 批量名称解析端点（决策 47：shared schema + server 路由按 id 前缀分流 + endpoints.md 契约 + 单测）`3d12c8b`
-  - [x] 14.2 工具调用展示人类可读化（决策 47：client `summarizeToolCall`/`summarizePreview` 纯函数 + ToolCallRow 展开摘要渲染（批量解析 id 显示名称）+ ProposalCardView preview 摘要化 + 历史回放同路径 + 回退 JSON 兜底 + 组件走查）`4345643` + formatValue 对象数组 → 项数补充修复（propose_add_delta changes 不再输出 [object Object]）`e07c0ac`
-  - [x] 14.3 备份频率新增 1 分钟选项（决策 27 修订：`BACKUP_FREQUENCIES` 加 1 + 服务端校验/前端下拉自动生效 + 端到端用例 + schema.md 同步）`f9b0fa3`
-  - [x] 14.4 用户级配置格式正式化（决策 48：shared `userConfigFileSchema`（schema_version=1 宽松读取）+ 读侧兼容不写回 + server settings.ts 改用 shared schema + 保存时自然升级 v1）`253153e`
-  - [x] 14.5 收官（本卡）：tasks.md 勾选 + CHANGELOG Unreleased 段 + AGENTS.md 状态同步（release-review 发布进展留发布时写）；全仓 1690 测试全绿 + typecheck/lint 通过；14.1-14.4 均经 oracle 独立验证无阻断项
+- [x] **批次八至十三（2026-08，发布 v0.0.14-v0.0.19）**：O1-O6 画布移除（决策 33）/ 批次九（决策 34/35/36，v0.0.15）/ 批次十（决策 37-42，v0.0.16）/ 批次十一（决策 43，v0.0.17）/ 批次十二（决策 44 + R1-R6 + T1-T3，v0.0.18）/ 批次十三（决策 45/46，v0.0.19）——各卡规格、坑记录与提交历史 `git log` 回溯（commit 见 CHANGELOG.md / release-review.md）
+- [x] **批次十四（决策 47/48 + 决策 27 修订，2026-08，发布 v0.0.20）**：14.1 `POST /api/v1/names/resolve` 批量名称解析端点（按 id 前缀分流查库，rel-/未知/软删 → null）`3d12c8b` / 14.2 工具调用展示人类可读化（`summarizeToolCall`/`summarizePreview` 摘要渲染 + ToolCallRow 展开态批量解析 id 显示名称 + 提案卡 preview 摘要化 + 历史回放同路径 + 回退 JSON 兜底）`4345643` + formatValue 对象数组 → 项数补充修复 `e07c0ac` / 14.3 备份频率新增 1 分钟档（`BACKUP_FREQUENCIES` 加 1，纯增量）`f9b0fa3` / 14.4 用户级配置格式正式化 schema v1（`userConfigFileSchema` 宽松读取 + 读侧兼容不写回 + 保存时自然升级）`253153e` / 14.5 收官文档（本卡）`4d2b85d`；14.1-14.4 均经 oracle 独立验证无阻断项
 
 > 各卡详细规格、坑记录与提交历史可 `git log` 回溯（commit 见 CHANGELOG.md / release-review.md 发布进展记录）。
 
@@ -61,13 +50,15 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 
 **发布与阻断项（E1-E6，2026-08）**——导出/导入（E1-E3：fflate zip 三文件）、schema 安全（E4 未来版本拒绝重建 / E5 增量迁移）、发布链路（E6：6 包 npm + OIDC Trusted Publisher + CI 全绿，v0.0.1-v0.0.14）。发布管道坑记录见文末。
 
-**批次九（2026-08 已完成：决策 34 pi-ai 引擎换核 / 决策 35 工具核查与中栏演进 / 决策 36 参考资料页 + 发布 v0.0.15 待发）**——llm 引擎换核（引入 @earendil-works/pi-ai 替换手写 SSE/流式累积；agent 394+ server 层契约零破坏；getAvailableModels 模型目录）；右栏增强（模型选择 / 思考强度 low·medium·high / 上下文占用条 usage÷contextWindow）；参考资料第 7 实体类型（SCHEMA_VERSION 5 + search_references / propose_create_reference 工具 + TabBar/列表/详情页）；InfoBar 问 AI 统一入口 + 页面焦点上报（决策 35：入口集中化，页面零按钮只上报 currentFocus）；全仓 1555 测试全绿
+**批次九（2026-08 已完成并发布 v0.0.15：决策 34 pi-ai 引擎换核 / 决策 35 工具核查与中栏演进 / 决策 36 参考资料页）**——llm 引擎换核（引入 @earendil-works/pi-ai 替换手写 SSE/流式累积；agent 394+ server 层契约零破坏；getAvailableModels 模型目录）；右栏增强（模型选择 / 思考强度 low·medium·high / 上下文占用条 usage÷contextWindow）；参考资料第 7 实体类型（SCHEMA_VERSION 5 + search_references / propose_create_reference 工具 + TabBar/列表/详情页）；InfoBar 问 AI 统一入口 + 页面焦点上报（决策 35：入口集中化，页面零按钮只上报 currentFocus）；全仓 1555 测试全绿
 
 **批次十（2026-08 已完成并发布 v0.0.16：决策 37-42）**——大纲交互优化（决策 37：移除详情/新建按钮、Enter 创建子级、双击详情、点击标题编辑、只留删除）；时间轴交互参考大纲（决策 38：事件行+组标题行双击详情/点击编辑、移除详情/编辑按钮）；移除实体列表更新时间（决策 39：EntityList 去更新时间列与排序，详情页保留）；右键菜单替代行级问 AI（决策 40：删除 6 处 AskAiButton，右键菜单含注入会话上下文 + 建立关联，InfoBar 入口保留）；项目规则文件 AGENTS.md（决策 41：唯一事实源 + prompt 自动迁移 + 设置页直编 + 外部修改检测，修订决策 25）；实体设定页树形视图（决策 42：与设定树合并、折叠/展开/行内编辑/拖拽/Enter 新建/双击详情、搜索+标签树内过滤、移除分页）。
 
 **批次十一（2026-08 已完成并发布 v0.0.17：决策 43 参考资料两类承载）**——本地 md 文件（YAML frontmatter 自包含 + mtime 快照同步 + references/ 目录）与外源链接（URL 必填仅索引）两类承载；文件 = 真相源、DB 索引 = 派生镜像（应用内编辑先写文件后更新 DB，外部编辑靠 scan 幂等全量比对自愈）；新建入口分流两按钮；列表交互对齐决策 37/38（点击标题编辑/双击详情/只留删除/右键菜单复用决策 40）；详情页内嵌 markdown 编辑器（@uiw/react-md-editor + react-markdown，调研选型）+ 导入 md + 关联面板；存档体系扩展打包 references/；B1 列表编辑对话框竞态随重构根除；跨书籍导入记录 backlog #16 未来迭代。
 
 **批次十三（2026-08 已完成并发布 v0.0.19，决策 45/46：人物列表行信息修订 + 设定树手动排序）**——状态列移除且详情页表单一并移除（存量 data.status 容错保留）/ 人物行四列布局（名称+动机第二行 / 角色 / 性格 / 能力独立成列——用户复核修订首版两行式，toSummary 扩展 motivation 截断 40 + personality·abilities 各前 2）/ 设定树行描述摘要展示（summary.description 弱化行 + hover 完整）/ 设定树排序（修订决策 42「无 sort_order」约束：同级组内线性序复用 entities.sort_order 列零迁移、EntitySummary.sortOrder 仅 setting 填充、复合端点 PUT /entity/setting/:id/move 改父+重排一次事务（防环沿用决策 30，删旧边按 target_id=旧父 精确匹配）、排序方式切换器 名称/创建时间/手动、手动模式 ↑↓ 箭头 + 行间插入线拖拽重排（order = 移除自身后组内位置语义）、拖到行中段仍 = 调层级）。
+
+**批次十四（2026-08 已完成并发布 v0.0.20，决策 47/48 + 决策 27 修订：工具调用展示人类可读化 + 备份 1 分钟档 + 配置格式 schema v1）**——会话中工具调用行/提案卡不再 JSON dump 原始参数（含裸 id）：新增 `POST /api/v1/names/resolve` 批量名称解析端点（按 id 前缀分流查库，rel-/未知/软删 → null）+ client summarizeToolCall/summarizePreview 摘要渲染（ToolCallRow 展开态批量解析 id 显示名称、提案卡 preview 摘要化、历史回放同路径、解析失败/未知工具回退原始 JSON 兜底）；备份频率新增 1 分钟档（BACKUP_FREQUENCIES = [1,5,10,15,30,60]，纯增量，决策 27 修订）；用户级配置格式正式化 schema v1（shared userConfigFileSchema：schema_version=1 可选 + model/thinking_level/api_key，宽松读取未知字段保留，旧格式读侧兼容不写回、设置页保存时自然升级；多供应商 v2 用户裁决放弃，记录 backlog #17）。
 
 ---
 
