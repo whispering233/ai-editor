@@ -208,9 +208,9 @@ describe("工具常量（tools.md 工具目录）", () => {
 });
 
 describe("自动备份常量（决策 27，B2.1）", () => {
-  it("BACKUP_FREQUENCIES 为 [5, 10, 15, 30, 60]（schema.md 枚举，含缺省 10）", () => {
-    expect(BACKUP_FREQUENCIES).toEqual([5, 10, 15, 30, 60]);
-    expect(BACKUP_FREQUENCIES).toHaveLength(5);
+  it("BACKUP_FREQUENCIES 为 [1, 5, 10, 15, 30, 60]（schema.md 枚举，含缺省 10；1 分钟档为批次十四决策 27 修订新增）", () => {
+    expect(BACKUP_FREQUENCIES).toEqual([1, 5, 10, 15, 30, 60]);
+    expect(BACKUP_FREQUENCIES).toHaveLength(6);
     expect(BACKUP_FREQUENCIES).toContain(DEFAULT_BACKUP_FREQUENCY_MINUTES);
   });
 

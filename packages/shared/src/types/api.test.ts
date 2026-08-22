@@ -141,9 +141,9 @@ describe("project 端点", () => {
     expect(projectConfigSchema.parse({ ...validConfig(), backupFrequencyMinutes: null }).backupFrequencyMinutes).toBeNull();
   });
 
-  it("projectConfigUpdateReqSchema：backup_frequency_minutes 接受枚举值/null/省略，拒绝其他（决策 27）", () => {
+  it("projectConfigUpdateReqSchema：backup_frequency_minutes 接受枚举值/null/省略，拒绝其他（决策 27 + 批次十四修订加 1 分钟档）", () => {
     // 枚举值全接受
-    for (const v of [5, 10, 15, 30, 60]) {
+    for (const v of [1, 5, 10, 15, 30, 60]) {
       expect(projectConfigUpdateReqSchema.safeParse({ backup_frequency_minutes: v }).success).toBe(true);
     }
     // null = 关闭；省略 = 不更新该字段

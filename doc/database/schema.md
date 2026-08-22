@@ -234,7 +234,7 @@ CREATE INDEX idx_chat_session ON chat_messages(session_id, created_at);
 | `prompt` | string | **已废弃（决策 41）**：项目级提示词——不再读写；项目规则改由项目目录 `AGENTS.md` 承载（见下节）。旧文件中的残留字段宽松读取（不参与 schema_version 判定），新写入不再产生该字段 |
 | `schema_version` | number | JSON 结构版本（决策 13；与 outline.json 顶层同步写入） |
 | `current_position` | string \| null | 大纲「当前位置」节点 id（伏笔健康指标依赖，见 `hooks.md`；null = 未设置；须指向存在的非软删节点） |
-| `backup_frequency_minutes` | number \| null | **自动备份频率（决策 27，可选字段）**：分钟数，仅接受枚举 5/10/15/30/60；`null` / `0` = 关闭；**缺省 = 10**（新项目默认开启）；随书籍（每项目独立）；不参与 schema_version 判定（宽松读取，缺省兜底） |
+| `backup_frequency_minutes` | number \| null | **自动备份频率（决策 27 + 批次十四修订，可选字段）**：分钟数，仅接受枚举 1/5/10/15/30/60；`null` / `0` = 关闭；**缺省 = 10**（新项目默认开启）；随书籍（每项目独立）；不参与 schema_version 判定（宽松读取，缺省兜底） |
 | `created_at` / `updated_at` | string | ISO 8601，应用层写入；首次初始化写 `created_at`，配置变更更新 `updated_at` |
 
 **约束**：

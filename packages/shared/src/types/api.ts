@@ -273,7 +273,7 @@ export const projectConfigUpdateReqSchema = z
     // 项目规则改由 PUT /api/v1/project/agents 写入 AGENTS.md
     current_position: z.string().nullable().optional(), // 须指向存在的非软删大纲节点（服务端校验）
     /**
-     * 自动备份频率（决策 27）：仅接受枚举 5/10/15/30/60（BACKUP_FREQUENCIES），其他（含 0）→ 400
+     * 自动备份频率（决策 27 + 批次十四修订）：仅接受枚举 1/5/10/15/30/60（BACKUP_FREQUENCIES），其他（含 0）→ 400
      * VALIDATION_ERROR；null = 关闭（写入 null）——0 仅读侧兼容旧数据语义，写侧一律用 null 表示关闭
      */
     backup_frequency_minutes: z.union(BACKUP_FREQUENCIES.map((v) => z.literal(v))).nullable().optional(),

@@ -54,19 +54,19 @@ describe("formatBytes（settings.md 线框「1.2 MB」「986 KB」）", () => {
   });
 });
 
-describe("BACKUP_FREQUENCY_OPTIONS（决策 27：关闭 + 5/10/15/30/60，与 shared 对齐）", () => {
+describe("BACKUP_FREQUENCY_OPTIONS（决策 27 + 批次十四修订：关闭 + 1/5/10/15/30/60，与 shared 对齐）", () => {
   it("选项集与 shared BACKUP_FREQUENCIES 对齐，且「关闭」在首位", () => {
     expect(BACKUP_FREQUENCY_OPTIONS[0]).toEqual({ value: null, label: "关闭" });
     expect(BACKUP_FREQUENCY_OPTIONS.slice(1).map((o) => o.value)).toEqual([...BACKUP_FREQUENCIES]);
   });
 
   it("label 格式：每 N 分钟", () => {
-    expect(BACKUP_FREQUENCY_OPTIONS[1]).toEqual({ value: 5, label: "每 5 分钟" });
-    expect(BACKUP_FREQUENCY_OPTIONS[5]).toEqual({ value: 60, label: "每 60 分钟" });
+    expect(BACKUP_FREQUENCY_OPTIONS[1]).toEqual({ value: 1, label: "每 1 分钟" }); // 批次十四新增档位
+    expect(BACKUP_FREQUENCY_OPTIONS[6]).toEqual({ value: 60, label: "每 60 分钟" });
   });
 
   it('option value 字符串化：null → "null"、数字 → "N"（select 受控 value 契约）', () => {
     expect(String(BACKUP_FREQUENCY_OPTIONS[0].value)).toBe("null");
-    expect(String(BACKUP_FREQUENCY_OPTIONS[2].value)).toBe("10");
+    expect(String(BACKUP_FREQUENCY_OPTIONS[3].value)).toBe("10");
   });
 });

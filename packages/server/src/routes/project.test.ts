@@ -708,6 +708,20 @@ describe("GET/PUT /project/config", () => {
     expect(readProjectFile(dir)?.backup_frequency_minutes).toBe(30);
   });
 
+  it("PUT backup_frequency_minutes 1（批次十四新增档位）→ updated:true，GET 读回 1", async () => {
+    const dir = makeTmpDir();
+    const app = await openProject(dir);
+    const res = await app.request("/api/v1/project/config", {
+      method: "PUT",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ backup_frequency_minutes: 1 }),
+    });
+    expect(res.status).toBe(200);
+    const getRes = await app.request("/api/v1/project/config", { headers: HOST_HEADERS });
+    expect((await getRes.json()).data.backupFrequencyMinutes).toBe(1);
+    expect(readProjectFile(dir)?.backup_frequency_minutes).toBe(1);
+  });
+
   it("PUT backup_frequency_minutes: null → 关闭（写盘 null，GET 返回 null）", async () => {
     const dir = makeTmpDir();
     const app = await openProject(dir);
