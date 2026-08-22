@@ -25,7 +25,18 @@ import {
 import { useMediaQuery } from "../../hooks/use-media-query";
 import { CHAT_MIN_WIDTH } from "../../hooks/use-panels";
 import { useProjectStore } from "../../stores/project";
-import { getSettingsLlm, updateSettingsLlm, type SettingsLlmConfig } from "../../lib/api";
+import {
+  getSettingsLlm,
+  resolveNames,
+  updateSettingsLlm,
+  type ResolvedNames,
+  type SettingsLlmConfig,
+} from "../../lib/api";
+import {
+  collectIdCandidates,
+  summarizePreview,
+  summarizeToolCall,
+} from "../../lib/tool-call-summary";
 import { useChatStore, type FocusContext, type ProposalCard } from "../../stores/chat";
 import type { ChatMessage } from "@whispering233/ai-editor-shared";
 import { formatRelativeTime } from "@whispering233/ai-editor-shared";
@@ -100,9 +111,13 @@ function ChatModelBar({ disabled }: { disabled: boolean }) {
     if (disabled) return;
     let cancelled = false;
     void getSettingsLlm()
-      .then((res) => { if (!cancelled) setSettings(res); })
+      .then((res) => {
+        if (!cancelled) setSettings(res);
+      })
       .catch(() => {});
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [disabled]);
 
   const currentModel = settings?.models.find((m) => m.id === settings.model) ?? null;
@@ -156,10 +171,16 @@ function ChatModelBar({ disabled }: { disabled: boolean }) {
         ))}
       </select>
       {usagePct !== null && (
-        <div className="ml-auto flex shrink-0 items-center gap-1" title={`上下文占用：${lastUsage?.total_tokens ?? 0} / ${contextWindow} tokens`}>
+        <div
+          className="ml-auto flex shrink-0 items-center gap-1"
+          title={`上下文占用：${lastUsage?.total_tokens ?? 0} / ${contextWindow} tokens`}
+        >
           <div className="h-1.5 w-16 overflow-hidden rounded-full bg-secondary">
             <div
-              className={cn("h-full rounded-full", usagePct >= 90 ? "bg-destructive" : usagePct >= 70 ? "bg-amber-500" : "bg-primary")}
+              className={cn(
+                "h-full rounded-full",
+                usagePct >= 90 ? "bg-destructive" : usagePct >= 70 ? "bg-amber-500" : "bg-primary",
+              )}
               style={{ width: `${usagePct}%` }}
             />
           </div>
@@ -322,7 +343,9 @@ function ErrorBar() {
 
 // ============ 工具调用折叠记录行（历史 assistant.toolCalls 与运行时 streamTools 共用） ============
 
-/** 工具调用行：折叠态「调用了 {tool}」，展开显示 args 摘要与结果状态（chat.md「工具调用折叠记录」；导出供渲染走查测试） */
+/** 工具调用行：折叠态「调用了 {tool}」，展开显示 args 摘要与结果状态（chat.md「工具调用折叠记录」；导出供渲染走查测试）
+ *  决策 47：展开态摘要渲染——id 参数经 names/resolve 解析为名称（不显示裸 id）；
+ *  解析失败/未知工具 → 回退原始 JSON（不丢信息） */
 export function ToolCallRow({
   toolName,
   args,
@@ -335,8 +358,48 @@ export function ToolCallRow({
   status?: "running" | "ok" | "error";
 }) {
   const [open, setOpen] = useState(false);
+  /** 决策 47：id 批量解析结果（null = 未展开/解析中）；解析请求失败 → resolveFailed → 回退原始 JSON */
+  const [names, setNames] = useState<ResolvedNames | null>(null);
+  const [resolveFailed, setResolveFailed] = useState(false);
   // 结果状态图标：成功 ✓ / 失败 ✗ / 进行中无标记（决策 18 成对：tool_result 挂到对应调用行）
   const ok = status === "ok" || result !== undefined;
+
+  // 展开时收集 args 中的 id 候选 → names/resolve 批量解析（历史回放/流式同路径，决策 47）；
+  // 无候选不发请求；折叠/参数变化 → 重置（重新展开再解析）
+  useEffect(() => {
+    if (!open) {
+      setNames(null);
+      setResolveFailed(false);
+      return;
+    }
+    const candidates = collectIdCandidates(args);
+    if (candidates.length === 0) {
+      setNames({});
+      setResolveFailed(false);
+      return;
+    }
+    let cancelled = false;
+    setNames(null); // 重新展开 → 解析中（id 字段暂省略，完成后补全）
+    setResolveFailed(false);
+    void resolveNames(candidates)
+      .then((res) => {
+        if (!cancelled) setNames(res.names);
+      })
+      .catch(() => {
+        if (!cancelled) setResolveFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, args]);
+
+  // 摘要行：names=null（解析中）时 id 字段省略、非 id 字段照常（解析完成后自动补全）
+  const summary = useMemo(
+    () =>
+      names === null ? null : summarizeToolCall(toolName, args as Record<string, unknown>, names),
+    [toolName, args, names],
+  );
+
   return (
     <div className="rounded-md border border-border/70 bg-muted/40 px-2 py-1">
       <button
@@ -351,9 +414,18 @@ export function ToolCallRow({
         {ok && <span className="shrink-0 text-primary">✓</span>}
       </button>
       {open && (
-        <pre className="mt-1 max-h-40 overflow-auto text-xs whitespace-pre-wrap text-muted-foreground">
-          {typeof args === "string" ? args : JSON.stringify(args ?? {}, null, 2)}
-        </pre>
+        <div className="mt-1 max-h-40 overflow-auto text-xs whitespace-pre-wrap text-muted-foreground">
+          {/* 决策 47：摘要渲染优先；未知工具 / 解析请求失败 → 原始 JSON 兜底 */}
+          {resolveFailed || summary === null ? (
+            <pre>{typeof args === "string" ? args : JSON.stringify(args ?? {}, null, 2)}</pre>
+          ) : (
+            <ul className="space-y-0.5">
+              {summary.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
     </div>
   );
@@ -410,7 +482,8 @@ export function MessageItem({
 
 // ============ 提案卡（chat.md「提案卡片」；S8.2 已接 S7.5 confirm/reject 真实调用） ============
 
-/** 提案卡（chat.md「提案卡片」；S8.2 已接 S7.5 confirm/reject 真实调用；导出供渲染走查测试） */
+/** 提案卡（chat.md「提案卡片」；S8.2 已接 S7.5 confirm/reject 真实调用；导出供渲染走查测试）
+ *  决策 47：preview 摘要化渲染（summary/changes/args 人类可读，不再 JSON dump） */
 export function ProposalCardView({ proposal }: { proposal: ProposalCard }) {
   const confirmProposal = useChatStore((s) => s.confirmProposal);
   const rejectProposal = useChatStore((s) => s.rejectProposal);
@@ -419,6 +492,50 @@ export function ProposalCardView({ proposal }: { proposal: ProposalCard }) {
   // 409 PROPOSAL_STALE 由 store 标 stale（卡标文案见上）+ 按钮随之禁用；
   // 404 NOT_FOUND / 409 MISMATCH 由 store 移除卡片（组件无需处理）；notFound 不渲染
   const busy = proposal.status !== "pending" || proposal.processing === true;
+
+  // 决策 47：收集 preview 中 args/changes 的 id 候选 → names/resolve 批量解析（名称渲染）
+  const [names, setNames] = useState<ResolvedNames | null>(null);
+  const [resolveFailed, setResolveFailed] = useState(false);
+  useEffect(() => {
+    const preview = proposal.preview;
+    if (typeof preview !== "object" || preview === null) return; // 字符串/无 preview 无需解析
+    const obj = preview as Record<string, unknown>;
+    const candidates: string[] = [];
+    if (typeof obj.args === "object" && obj.args !== null) {
+      candidates.push(...collectIdCandidates(obj.args));
+    }
+    if (Array.isArray(obj.changes)) {
+      for (const c of obj.changes) {
+        if (typeof c === "object" && c !== null && typeof (c as { id?: unknown }).id === "string") {
+          candidates.push((c as { id: string }).id);
+        }
+      }
+    }
+    if (candidates.length === 0) return; // 无候选不发请求（changes 字符串已含名称）
+    let cancelled = false;
+    setNames(null);
+    setResolveFailed(false);
+    void resolveNames(candidates)
+      .then((res) => {
+        if (!cancelled) setNames(res.names);
+      })
+      .catch(() => {
+        if (!cancelled) setResolveFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [proposal.preview]);
+
+  // 摘要行（决策 47）：预览数据人类可读；未知形态/解析失败 → 原始 JSON 兜底
+  const previewLines = useMemo(
+    () => summarizePreview(proposal.type, proposal.preview, names),
+    [proposal.type, proposal.preview, names],
+  );
+  const showRawPreview =
+    proposal.preview !== undefined &&
+    (resolveFailed || (previewLines === null && typeof proposal.preview !== "string"));
+
   return (
     <div className="rounded-lg border border-primary/25 bg-primary/5 p-2.5">
       <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
@@ -434,8 +551,15 @@ export function ProposalCardView({ proposal }: { proposal: ProposalCard }) {
           <span className="shrink-0 text-xs text-destructive">⚠ 数据已变化，此提案已失效</span>
         )}
       </div>
-      {/* preview 按 type 渲染（创建类字段键值 / 更新类 diff 列表 / 大纲类目标位置）：S7 完善结构化渲染，当前 JSON 摘要 */}
-      {proposal.preview !== undefined && (
+      {/* 决策 47：preview 摘要渲染（summary 优先 + changes/args 逐行；不再 JSON dump） */}
+      {previewLines !== null && (
+        <ul className="mt-1 max-h-32 space-y-0.5 overflow-auto text-xs whitespace-pre-wrap text-muted-foreground">
+          {previewLines.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+      )}
+      {showRawPreview && (
         <pre className="mt-1 max-h-32 overflow-auto text-xs whitespace-pre-wrap text-muted-foreground">
           {typeof proposal.preview === "string"
             ? proposal.preview

@@ -952,6 +952,26 @@ export function updateSettingsLlm(patch: UpdateSettingsLlmBody): Promise<UpdateS
   return apiFetch<UpdateSettingsLlmRes>("/settings/llm", { method: "PUT", body: patch });
 }
 
+// ============ 名称解析（决策 47，批次十四；契约：endpoints.md「POST /api/v1/names/resolve」） ============
+
+/** 名称解析结果（label = 类型中文，name = 实体名/节点标题；未命中 = null） */
+export interface ResolvedName {
+  label: string;
+  name: string;
+}
+
+export type ResolvedNames = Record<string, ResolvedName | null>;
+
+/** POST /api/v1/names/resolve 响应（决策 47：names 键集 = 请求 ids 去重后全集，未命中 = null） */
+export interface ResolveNamesRes {
+  names: ResolvedNames;
+}
+
+/** 批量名称解析：把工具参数中的 id 解析为人类可读名称（上限 50，服务端去重） */
+export function resolveNames(ids: string[]): Promise<ResolveNamesRes> {
+  return apiFetch<ResolveNamesRes>("/names/resolve", { method: "POST", body: { ids } });
+}
+
 // ============ 会话（U3；契约：endpoints.md「chat/sessions」L795-834，决策 18 按项目隔离） ============
 
 /** GET /api/v1/chat/sessions 响应（契约：{sessions: ChatSessionSummary[]}，按最后活动倒序、仅当前项目） */

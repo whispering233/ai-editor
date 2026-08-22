@@ -30,6 +30,7 @@ vi.mock("../../lib/api", async (importOriginal) => {
     getSessionMessages: vi.fn(),
     confirmProposal: vi.fn(),
     rejectProposal: vi.fn(),
+    resolveNames: vi.fn(),
   };
 });
 
@@ -234,7 +235,7 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3：任务�
     expect(stale).toContain("此提案已失效");
   });
 
-  it("ProposalCardView：propose_reorder_timepoints（F9 + G2 修订）标题映射「重排时间轴时间点」+ preview 通用 JSON 展示", () => {
+  it("ProposalCardView：propose_reorder_timepoints（F9 + G2 修订）标题映射「重排时间轴时间点」+ preview 摘要渲染（决策 47，不再 JSON dump）", () => {
     const html = renderToString(
       <ProposalCardView
         proposal={{
@@ -247,8 +248,10 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3：任务�
     );
     expect(html).toContain("提案");
     expect(html).toContain("重排时间轴时间点"); // PROPOSAL_TYPE_LABELS 映射（G2 修订：propose_reorder_timepoints）
-    // preview 走通用 JSON 渲染（F9 不做特化，YAGNI）：结构字段原文可见
-    expect(html).toContain("changes");
+    // 决策 47：preview 摘要渲染——changes 对象项 id 未解析（SSR 不跑 useEffect）→ 兜底「调整位置」；
+    // 不再 JSON dump（changes 字面量不出现）
+    expect(html).toContain("调整位置");
+    expect(html).not.toContain("changes");
   });
 });
 
