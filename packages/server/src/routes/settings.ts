@@ -7,8 +7,14 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { Hono } from "hono";
 import { maskApiKey } from "@whispering233/ai-editor-shared";
+import type { UserConfigFile } from "@whispering233/ai-editor-shared";
 import { writeJsonAtomic } from "@whispering233/ai-editor-db";
-import { settingsLlmGetResSchema, settingsLlmPutReqSchema, type ThinkingLevel } from "@whispering233/ai-editor-shared/schemas";
+import {
+  settingsLlmGetResSchema,
+  settingsLlmPutReqSchema,
+  userConfigFileSchema,
+  type ThinkingLevel,
+} from "@whispering233/ai-editor-shared/schemas";
 import { getAvailableModels } from "@whispering233/ai-editor-llm";
 import { ok } from "../middleware/error.js";
 
@@ -21,14 +27,6 @@ export const DEEPSEEK_API_KEY_ENV = "DEEPSEEK_API_KEY";
 /** 用户级配置文件相对 HOME 的路径（决策 17：不入项目文件） */
 export const USER_CONFIG_RELATIVE_PATH = join(".ai-editor", "config.json");
 
-/** 用户级配置文件结构（~/.ai-editor/config.json） */
-export interface UserConfigFile {
-  model?: string;
-  /** 思考强度（决策 34：pi-ai reasoning 统一接口；缺省 high——DeepSeek 默认推理） */
-  thinking_level?: ThinkingLevel;
-  api_key?: string;
-}
-
 /** 缺省思考强度（与 SharedConfig 缺省一致，读侧兜底） */
 export const DEFAULT_THINKING_LEVEL: ThinkingLevel = "high";
 
@@ -38,12 +36,16 @@ export function userConfigPath(): string {
 }
 
 /**
- * 读取用户级配置；文件不存在或 JSON 损坏 → 返回空配置（默认值语义，不抛错）
+ * 读取用户级配置；文件不存在 / JSON 损坏 / schema 不合法 → 返回空配置（默认值语义，不抛错）。
+ * 决策 48：schema 正式化（shared userConfigFileSchema，非 strict 宽松读取——用户自有文件，
+ * 未来版本追加字段不使整份配置失效）；v0 旧格式（无 schema_version）与 v1 同结构直接兼容，
+ * 不迁移不写回（用户下次在设置页保存时自然落新格式）。
  */
 export function getUserConfig(): UserConfigFile {
   try {
     const raw = readFileSync(userConfigPath(), "utf8");
-    return JSON.parse(raw) as UserConfigFile;
+    const parsed = userConfigFileSchema.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : {};
   } catch {
     return {};
   }
@@ -65,6 +67,8 @@ export function saveUserConfig(partial: Partial<UserConfigFile>): UserConfigFile
   if (next.api_key === "") {
     delete next.api_key; // 空字符串 = 清除已保存 key（endpoints.md PUT 语义）
   }
+  // 保存时落新格式（决策 48）：写入 schema_version 标记当前格式版本（读侧兼容已保证旧文件零破坏）
+  next.schema_version = 1;
   mkdirSync(dirname(file), { recursive: true }); // writeJsonAtomic 不负责建目录
   writeJsonAtomic(file, next);
   return next;

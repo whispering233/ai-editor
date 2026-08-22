@@ -944,6 +944,26 @@ export const settingsLlmPutResSchema = z.object({
   saved: z.literal(true),
 });
 
+// ============ 用户级配置文件（决策 48，批次十四）：~/.ai-editor/config.json schema v1 ============
+// 契约来源：doc/design/decisions.md 决策 48、doc/api/endpoints.md「用户级配置文件」节。
+// 设计要点：
+// - 非 strict（宽松读取）：config.json 是用户自有文件，未来版本追加字段不应使整份配置失效
+//   （zod 默认 strip 未知字段，safeParse 仍成功）
+// - schema_version 可选：缺省 = v0 旧格式，与 v1 同结构（model/thinking_level/api_key）直接兼容，
+//   不迁移不写回（决策 48：读侧兼容；用户下次在设置页保存时自然落新格式）
+// - 校验仅在服务端执行（settings.ts 消费）；client 只消费推断类型
+
+export const userConfigFileSchema = z
+  .object({
+    schema_version: z.literal(1).optional(), // 格式版本；缺省 = v0 旧格式（同结构兼容）
+    model: z.string().optional(), // 当前模型名（缺省 deepseek-v4-flash）
+    thinking_level: z.enum(THINKING_LEVELS).optional(), // 思考强度（决策 34；缺省 high）
+    api_key: z.string().optional(), // DeepSeek API key（不入项目文件，决策 17）
+  })
+  .passthrough(); // 未知字段保留不校验（用户自有文件，未来版本追加字段不应使整份配置失效）
+
+export type UserConfigFile = z.infer<typeof userConfigFileSchema>;
+
 // ============ names 端点（endpoints.md「POST /api/v1/names/resolve」，决策 47 工具调用人类可读化） ============
 
 // 批量名称解析：把工具参数中的 id 解析为人类可读名称（label = 类型中文，name = 实体名/节点标题）

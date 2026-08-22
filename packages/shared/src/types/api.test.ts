@@ -42,6 +42,7 @@ import {
   sseProposalEventSchema,
   sseToolCallEventSchema,
   sseToolResultEventSchema,
+  userConfigFileSchema,
 } from "./api.js";
 
 describe("ErrorCode 完整性（endpoints.md 错误码对照）", () => {
@@ -583,6 +584,44 @@ describe("导出/导入契约（E1，release-review §二）", () => {
     expect(projectImportResSchema.safeParse({ imported: false, id: "proj-1", path: "/x", name: "x", mode: "new" }).success).toBe(false);
     expect(projectImportResSchema.safeParse({ imported: true, id: "proj-1", path: "/x", name: "x" }).success).toBe(false); // 缺 mode
     expect(projectImportResSchema.safeParse({ imported: true, id: "proj-1" }).success).toBe(false);
+  });
+});
+
+describe("userConfigFileSchema（决策 48，批次十四：~/.ai-editor/config.json schema v1）", () => {
+  it("v1 全字段 parse（schema_version=1 + model + thinking_level + api_key）", () => {
+    const parsed = userConfigFileSchema.parse({
+      schema_version: 1,
+      model: "deepseek-v4-flash",
+      thinking_level: "high",
+      api_key: "sk-xxx",
+    });
+    expect(parsed).toEqual({
+      schema_version: 1,
+      model: "deepseek-v4-flash",
+      thinking_level: "high",
+      api_key: "sk-xxx",
+    });
+  });
+
+  it("v0 旧格式（无 schema_version）直接兼容：与 v1 同结构读取，不迁移不写回", () => {
+    const parsed = userConfigFileSchema.parse({ model: "deepseek-v4-flash", api_key: "sk-xxx" });
+    expect(parsed.schema_version).toBeUndefined();
+    expect(parsed.model).toBe("deepseek-v4-flash");
+  });
+
+  it("空对象 parse 成功（所有字段可选）", () => {
+    expect(userConfigFileSchema.parse({})).toEqual({});
+  });
+
+  it("宽松读取：未知字段保留不拒绝（用户自有文件，未来版本追加字段不应使整份配置失效）", () => {
+    const parsed = userConfigFileSchema.parse({ model: "x", future_field: 42 });
+    expect(parsed.future_field).toBe(42);
+  });
+
+  it("非法值拒绝：thinking_level 非枚举、model 非字符串、schema_version 非 1", () => {
+    expect(userConfigFileSchema.safeParse({ thinking_level: "bogus" }).success).toBe(false);
+    expect(userConfigFileSchema.safeParse({ model: 42 }).success).toBe(false);
+    expect(userConfigFileSchema.safeParse({ schema_version: 2 }).success).toBe(false);
   });
 });
 

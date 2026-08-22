@@ -102,6 +102,22 @@ describe("GET /api/v1/settings/llm", () => {
     const body = (await res.json()) as { data: { apiKeySet: boolean } };
     expect(body.data.apiKeySet).toBe(false);
   });
+
+  it("config.json schema v1（决策 48）：带 schema_version=1 的配置正常读取；非法 thinking_level 降级默认值", async () => {
+    seedConfig({ schema_version: 1, model: "deepseek-v4-flash", thinking_level: "low", api_key: "sk-schema1key123456" });
+    const res = await buildApp().request("/api/v1/settings/llm", { headers: HOST_HEADERS });
+    const body = (await res.json()) as { data: { model: string; thinkingLevel: string; apiKeySet: boolean } };
+    expect(body.data.model).toBe("deepseek-v4-flash");
+    expect(body.data.thinkingLevel).toBe("low");
+    expect(body.data.apiKeySet).toBe(true);
+
+    // 非法字段值 → 整份配置按空读取（降级默认值，不抛错）
+    seedConfig({ schema_version: 1, thinking_level: "bogus", api_key: "sk-x" });
+    const bad = await buildApp().request("/api/v1/settings/llm", { headers: HOST_HEADERS });
+    const badBody = (await bad.json()) as { data: { thinkingLevel: string; apiKeySet: boolean } };
+    expect(badBody.data.thinkingLevel).toBe("high");
+    expect(badBody.data.apiKeySet).toBe(false);
+  });
 });
 
 describe("PUT /api/v1/settings/llm", () => {
@@ -119,6 +135,20 @@ describe("PUT /api/v1/settings/llm", () => {
     // 写入位置：临时 HOME 下（真实用户 HOME 不受污染）
     const onDisk = JSON.parse(readFileSync(userConfigPath(), "utf8")) as { model: string };
     expect(onDisk.model).toBe("deepseek-v4-flash");
+  });
+
+  it("保存后落盘新格式（决策 48）：schema_version 写入 1；旧格式文件保存后升级为 v1", async () => {
+    // 旧格式（无 schema_version）→ PUT 保存 → 落盘带 schema_version: 1
+    seedConfig({ model: "deepseek-r1", api_key: "sk-oldkey12345678" });
+    const put = await buildApp().request(
+      "/api/v1/settings/llm",
+      { method: "PUT", headers: { ...HOST_HEADERS, "content-type": "application/json" }, body: JSON.stringify({ model: "deepseek-v4-flash" }) },
+    );
+    expect(put.status).toBe(200);
+    const onDisk = JSON.parse(readFileSync(userConfigPath(), "utf8")) as { schema_version?: number; model?: string; api_key?: string };
+    expect(onDisk.schema_version).toBe(1);
+    expect(onDisk.model).toBe("deepseek-v4-flash");
+    expect(onDisk.api_key).toBe("sk-oldkey12345678"); // 未传字段保留（合并语义不变）
   });
 
   it("写入 api_key → GET apiKeySet=true + 掩码正确", async () => {
