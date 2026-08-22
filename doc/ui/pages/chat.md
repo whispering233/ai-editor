@@ -46,7 +46,7 @@
 |------|----------|------|
 | `ping` | `{}` | 忽略（维持心跳）；客户端用它判定「60s 无任何事件 → 断开」 |
 | `text` | `{ delta }` | 追加到当前 AI 消息（流式打字效果不做，直接追加即可） |
-| `tool_call` | `{ tool, args, id }` | 工具调用记录行（折叠态：`🔧 调用了 {tool}`，展开见 args 摘要） |
+| `tool_call` | `{ tool, args, id }` | 工具调用记录行（折叠态：`🔧 调用了 {tool}`；展开见决策 47 摘要渲染——不显示裸 id） |
 | `tool_result` | `{ tool, result, id }` | 挂到对应调用行，显示结果状态（成功/失败图标） |
 | `proposal` | `{ proposal_id, type, preview }` | 提案卡片（见下） |
 | `done` | `{ session_id }` | 本轮结束：输入框恢复可用；记录 session_id 供续聊 |
@@ -55,15 +55,22 @@
 ### 提案卡片
 
 - 标题：`type` 映射中文（propose_create_entity →「新建实体」、propose_update_entity →「更新实体」、propose_add_relation →「新增关系」、propose_outline_node →「新建大纲节点」等；未知 type 显示原始名）。
-- 内容：`preview` 按 type 渲染——创建类显示字段键值、更新类显示 diff 列表（from → to）、大纲类显示目标位置。
+- 内容（决策 47 摘要化，不再 JSON dump）：`preview` 按 type 渲染——创建类显示字段键值（id 字段经 names/resolve 解析为名称）、更新类显示 diff 列表（from → to）、大纲类显示目标位置（节点标题）；回退形态 `{ type, summary, args }` 只显示 `summary` 摘要 + 参数摘要行；结构化 preview（如 `{ changes }`）逐行渲染（「时间点「…」→ 位置 N」）。
 - 操作：
   - 确认 → `POST /proposal/:id/confirm` → 成功替换为「✓ 已确认」态（`result` 含新实体 id 时可渲染为链接跳详情）；失败 `PROPOSAL_STALE`（409）→ 卡片标「⚠ 数据已变化，此提案已失效」，按钮禁用，提示让 AI 重新生成；`PROPOSAL_NOT_FOUND`（404）→ 移除卡片。
   - 拒绝 → `POST /proposal/:id/reject` → 「已拒绝」态。
 - 流断开：清空全部未确认提案卡片（决策 16）。
 
+### 工具调用记录行（决策 47 人类可读化，2026-08 批次十四）
+
+- **折叠态**：`🔧 调用了 {tool}` + 结果状态图标（成功 ✓ / 失败 ✗）。
+- **展开态 = 摘要渲染（不再 JSON dump 原始 args）**：展开时收集 args 中 id 类字段（`id`/`entity_id`/`node_id`/`parent_id`/`source_id`/`target_id`/`hook_id`/`relation_id`/`outline_node_id`/`at_node_id`/`from_node_id`/`to_node_id`/`target` 等）→ `POST /api/v1/names/resolve` 批量解析 → 按工具名参数映射渲染摘要行（如「查询实体：人物「张三」」/「更新实体：人物「张三」」+ 变更字段）。
+- **兜底**：解析失败 / 未知工具 / 未知 id 前缀 → 回退原始 JSON 展示（不丢信息）；解析中显示轻量占位。
+- 历史消息回放（`toolCalls`）走同一渲染路径。
+
 ### 历史消息（GET /chat/sessions/:id/messages）
 
-- `role=user` / `assistant` → 气泡；assistant 的 `toolCalls` 渲染为折叠工具记录。
+- `role=user` / `assistant` → 气泡；assistant 的 `toolCalls` 渲染为折叠工具记录（决策 47 摘要渲染）。
 - `role=tool` → 附属于对应 `toolCallId` 的记录行（成对重组；孤儿半对不渲染，决策 18）。
 
 ## 关键交互

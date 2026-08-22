@@ -744,3 +744,42 @@ B2.5 上线后用户反馈两点体验痛点：① **手动/自动备份在列�
 - **不做**：跨父拖拽时保留插入位（改父即追加末尾，YAGNI）；手动排序的 AI 提案能力（backlog 候选）；character/location/hook 表格的拖拽排序（无反馈，表格已有名称/创建时间排序下拉）。
 
 **为什么**：设定是层级树，全局线性序（event 先例）无法表达「同父内排序」语义——同级组序是树排序的最小完整模型；复用现有 sort_order 列零迁移；复合端点把改父+重排收敛为原子提交，杜绝两步调用的中间态（G2 move_to 已验证该模式）；重排仅限手动模式避免「自动排序被悄悄打破」的认知冲突。
+
+## 决策 47：工具调用展示人类可读化 —— 批量名称解析端点 + 摘要渲染（2026-08 用户反馈，批次十四）
+
+用户反馈（2026-08 批次十四）：会话过程中 tool calling 获取数据/设置数据时，UI 显示的是 sqlite id（如 `char-xxx`、`sc-xxx`），对用户毫无意义。现状：右栏 ChatPanel 的 `ToolCallRow` 展开态直接 `JSON.stringify(args)` 渲染原始参数 JSON（含 `id`/`entity_id`/`node_id`/`parent_id`/`source_id`/`target_id`/`hook_id`/`relation_id`/`outline_node_id` 等字段）；`ProposalCardView` 提案卡 preview 同样 JSON dump（回退形态 `{ type, summary, args }` 的 args 与 `propose_reorder_timepoints` 的结构化 `{ changes: [{ id, order }] }` 均含原始 id）；历史会话消息（chat_messages 回放）走同一渲染路径。经设计讨论与用户裁决：
+
+- **新增批量名称解析端点** `POST /api/v1/names/resolve`（Req `{ ids: string[] }` → Res `{ names: Record<string, { label: string; name: string } | null> }`）：服务端按 **id 前缀分流**解析——`char-`/`set-`/`loc-`/`hook-` → 实体（label = 类型中文，name = 实体名）；`vol-`/`ch-`/`sc-` → 大纲节点（label = 层级中文，name = 标题）；`ref-` → 参考资料（label = 「参考资料」，name = 标题）；`tp-` → 时间点（label = 「时间点」，name = 名称）；`rel-` → 关系（**无名称 → null**，关系 id 不应暴露）；未知/不存在/已软删 → null。**不做**客户端拼 4-5 个现有接口 + 缓存（解析收敛服务端单点，契约测试可控）。
+- **client 新增 `summarizeToolCall(tool, args, names)` 纯函数**：按工具名定义参数→友好标签映射（如 `get_entity` → 「查询实体：角色「张三」」、`propose_update_entity` → 「更新实体：角色「张三」」+ 变更字段列表）；id 类字段值经 names 解析为名称，解析失败字段省略不显示。
+- **ToolCallRow 展开态改摘要渲染**：展开时收集 args 中 id 类字段 → 调 names/resolve 批量解析 → 渲染摘要行（解析中骨架）；**解析失败 / 未知工具 → 回退原始 JSON**（防御兜底，不丢信息）。
+- **ProposalCardView preview 摘要化**：回退形态 `{ type, summary, args }` 只显示 summary + 摘要行（不再 dump args）；结构化 preview（如 `{ changes }`）逐行摘要（「时间点「…」→ 位置 N」）。
+- **历史消息回放同路径生效**（渲染层统一，无需区分流式/历史）。
+- **不做**：tool_result 内容展示（现状只显示成功/失败图标，保持）；agent/server 层不改动（tool_call 事件仍透传原始 args，解析纯展示层职责）。
+
+**为什么**：工具调用行是「AI 在做什么」的透明性窗口，原始 id 对创作者无信息量——解析为实体/节点名称让「查询/修改了谁」一目了然；解析收敛服务端单点避免客户端多处拼装与缓存一致性；回退 JSON 保证极端情况（新工具/未知 id 前缀）不丢信息。
+
+## 决策 48：用户级配置格式正式化 —— `~/.ai-editor/config.json` schema v1（2026-08 用户裁决，批次十四）
+
+用户需求（2026-08 批次十四）：整理定义出配置格式；配置文件路径 `~/.ai-editor/config.json`。现状：`UserConfigFile` 是 server 包内临时接口（settings.ts 本地定义 `{ model?, thinking_level?, api_key? }`），无正式 schema、无文档（doc/api/endpoints.md 仅一句话带过）；debug.ts 另读项目级 `.ai-editor/config.json`（同名不同目录，不在本决策范围）。经设计讨论与用户裁决（**多供应商 v2 迭代先行放弃**，保持现状只接入 DeepSeek，见 backlog.md）：
+
+- **正式 schema（shared 定义，服务端校验）**：`userConfigFileSchema`（zod，放 `@whispering233/ai-editor-shared/schemas`）：
+  ```json
+  {
+    "schema_version": 1,
+    "model": "deepseek-v4-flash",
+    "thinking_level": "high",
+    "api_key": "sk-xxx"
+  }
+  ```
+  - `schema_version`：可选字面量 `1`（缺省 = v0 旧格式，同结构直接兼容，无需迁移）；**为未来多供应商迭代预留演进位**（v2 将引入 `providers` 数组与 `model` 复合引用 `provider/model`，本决策不做）
+  - `model`/`thinking_level`/`api_key` 语义与现状完全一致（决策 17/34）
+- **读侧兼容不写回**：读取时 `safeParse` 失败 → 空配置（现状 catch 语义）；v0 旧格式（无 `schema_version`）直接按同结构读取；**不主动改写用户文件**（config.json 是用户自有文件，避免意外写入——与决策 41 的 AGENTS.md 自动迁移不同，那个是应用自有数据；用户下次在设置页保存时自然落新格式）。
+- **server settings.ts 改造**：删除本地 `UserConfigFile` 接口，改用 shared schema 推导类型 + `safeParse` 校验读入；写入路径复用 `writeJsonAtomic`（决策 11 同款，不变）。
+- **文档落点**：配置格式完整说明写入 doc/api/endpoints.md「系统设置」区（含示例与优先级：环境变量 `DEEPSEEK_API_KEY` > config.json）；decisions.md 本决策为格式总纲。
+- **不做**：多供应商（providers 数组、baseUrl、自定义模型列表）——2026-08 用户裁决放弃，记录 backlog.md 待后续迭代；配置 schema 的跨版本迁移框架（v1 单格式无迁移需求，YAGNI）。
+
+**为什么**：配置格式是用户与产品的持久契约，临时接口导致文档与实现漂移；schema 正式化让「整理定义出配置格式」有单一事实源（shared zod + endpoints.md），读侧兼容保证存量 config.json 零破坏；schema_version 预留位使未来多供应商迭代不破坏 v1 文件。
+
+## 决策 27 修订：备份频率新增 1 分钟选项（2026-08 用户反馈，批次十四）
+
+用户需求（2026-08 批次十四）：备份功能支持 1 分钟备份 1 次选项（高频备份场景：写作密集期希望每次修改都有存档）。决策 27 原选项枚举为关闭 / 5 / 10 / 15 / 30 / 60 分钟。**修订**：`BACKUP_FREQUENCIES = [1, 5, 10, 15, 30, 60]`（shared 常量，前后端同源）；纯增量加选项，不动其他逻辑——服务端校验 `includes()` 自动生效、client 下拉自动生成「每 1 分钟」；「有变更才备份」语义天然避免 1 分钟频率产生垃圾备份（无变更 tick 跳过）；每项目保留 20 份策略不变。**为什么**：1 分钟档满足「每次修改都有存档」的高频场景，纯常量增量零风险；变更检测兜底保证不刷盘。

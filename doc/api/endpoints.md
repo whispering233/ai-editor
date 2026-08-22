@@ -1343,6 +1343,27 @@ id: string;                  // session_id
 // 按 created_at 升序；仅返回当前项目的会话
 ```
 
+### POST /api/v1/names/resolve
+
+批量名称解析（决策 47：工具调用展示人类可读化）。把工具参数中的 id 解析为人类可读名称，供前端渲染摘要行（不暴露裸 id）。**解析收敛服务端单点**——按 id 前缀分流查库，不依赖调用方预知类型。
+
+```typescript
+// Req
+{
+  ids: string[];   // 待解析 id 列表（去重、上限 50；非法形状 400 VALIDATION_ERROR）
+}
+
+// Res: 200
+{
+  names: Record<string, { label: string; name: string } | null>;
+  // label = 类型中文（人物/设定/地点/伏笔/卷/章/场景/参考资料/时间点…），name = 实体名/节点标题
+  // 不存在 / 已软删 / 未知前缀 / 运行时对象（prop_/sess_/call_）→ null（前端省略该字段或回退）
+}
+```
+
+**前缀分流**（id 约定见本节开头）：`char-`/`set-`/`loc-`/`hook-` → entities 表（label = 类型中文，name = name 列）；`ev-` → 时间轴事件（label = 事件，name = name 列）；`tp-` → 时间点（label = 时间点，name = name 列）；`ref-` → 参考资料（label = 参考资料，name = 标题）；`vol-`/`ch-`/`sc-` → outline.json 节点（label = 卷/章/场景，name = 标题）；`rel-` → 关系（**无名称语义 → null**）；其余（含 `proj-`、`prop_`/`sess_`/`call_`）→ null。响应 key 集合 = 请求 ids 去重后的全集（每个 id 必有条目，未命中 = null）。
+```
+
 ---
 
 ## 提案确认
@@ -1390,6 +1411,28 @@ proposalId: string;
 ---
 
 ## 系统设置
+
+### 用户级配置文件 `~/.ai-editor/config.json`（决策 48 正式 schema）
+
+用户级 LLM 配置存放于 `$HOME/.ai-editor/config.json`（HOME 可覆盖——测试隔离依赖），**绝不写入项目文件**（决策 17）。格式 schema 定义于 `@whispering233/ai-editor-shared/schemas`（`userConfigFileSchema`，服务端校验；client 只消费类型）。
+
+```json
+{
+  "schema_version": 1,
+  "model": "deepseek-v4-flash",
+  "thinking_level": "high",
+  "api_key": "sk-xxx"
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `schema_version` | `1`（可选） | 格式版本；缺省 = v0 旧格式（同结构直接兼容，不迁移不写回）；未来多供应商 v2 演进位 |
+| `model` | string（可选） | 当前模型名，缺省 `deepseek-v4-flash` |
+| `thinking_level` | enum（可选） | 思考强度 `off/minimal/low/medium/high/xhigh/max`（决策 34），缺省 `high` |
+| `api_key` | string（可选） | DeepSeek API key；空字符串语义 = 清除（仅写入路径） |
+
+**来源优先级**：环境变量 `DEEPSEEK_API_KEY` > config.json `api_key`（决策 17）。文件不存在 / JSON 损坏 / schema 不合法 → 按空配置读取（默认值语义，不抛错）；**不主动改写用户文件**（决策 48：用户下次在设置页保存时自然落新格式）。
 
 ### GET /api/v1/settings/llm
 
