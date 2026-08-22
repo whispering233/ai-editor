@@ -8,6 +8,17 @@ export const ENTITY_TYPES = ["character", "setting", "location", "hook", "event"
 /** 实体类型（单数，从常量派生；与 types/entity.ts 的 EntityType 一致，测试断言保证） */
 export type EntityTypeValue = (typeof ENTITY_TYPES)[number];
 
+/** 实体类型 → 中文标签（决策 47 names/resolve 与前端徽标共用；口径对齐 client 主流页面——character 用「人物」） */
+export const ENTITY_TYPE_LABELS: Record<EntityTypeValue, string> = {
+  character: "人物",
+  setting: "设定",
+  location: "地点",
+  hook: "伏笔",
+  event: "事件",
+  timepoint: "时间点",
+  reference: "参考资料",
+};
+
 /**
  * 预定义关系类型（schema.md 关系类型表，共 17 个）
  * belongs_to 所属 / owns 拥有 / masters 掌握 / ally·rival·mentor·family 人物间 /

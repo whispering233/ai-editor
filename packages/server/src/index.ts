@@ -38,6 +38,7 @@ import {
 } from "./middleware/project.js";
 import { projectRoutes, setProjectRoot } from "./routes/project.js";
 import { outlineRoutes } from "./routes/outline.js";
+import { namesRoutes } from "./routes/names.js"; // 决策 47：批量名称解析（工具调用人类可读化）
 import { proposalRoutes } from "./routes/proposal.js";
 import { trashRoutes } from "./routes/trash.js";
 import { relationRoutes } from "./routes/relation.js";
@@ -197,6 +198,9 @@ export async function startServer(projectRoot: string, options: StartServerOptio
 
   // 大纲路由（S2.2）：整树/创建/更新/移动/软删/路径（严格三层，决策 19）
   app.route("/api/v1/outline", outlineRoutes);
+
+  // 名称解析路由（决策 47）：POST /api/v1/names/resolve 批量名称解析（工具调用展示人类可读化）
+  app.route("/api/v1/names", namesRoutes);
 
   // 回收站路由（S2.2 大纲侧；实体侧 S4 扩展）：列表/还原/物理清除（决策 12）
   app.route("/api/v1/trash", trashRoutes);

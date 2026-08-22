@@ -8,3 +8,10 @@ export const CONFLICT_LEVELS = ["inner", "personal", "extra_personal"] as const;
 
 /** 冲突层次（从 CONFLICT_LEVELS 派生） */
 export type ConflictLevel = (typeof CONFLICT_LEVELS)[number];
+
+/** 大纲节点层级 → 中文标签（决策 47 names/resolve 用；口径对齐 client outline 页面——卷/章/场景） */
+export const OUTLINE_NODE_TYPE_LABELS: Record<"volume" | "chapter" | "scene", string> = {
+  volume: "卷",
+  chapter: "章",
+  scene: "场景",
+};

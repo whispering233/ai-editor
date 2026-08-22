@@ -944,6 +944,22 @@ export const settingsLlmPutResSchema = z.object({
   saved: z.literal(true),
 });
 
+// ============ names 端点（endpoints.md「POST /api/v1/names/resolve」，决策 47 工具调用人类可读化） ============
+
+// 批量名称解析：把工具参数中的 id 解析为人类可读名称（label = 类型中文，name = 实体名/节点标题）
+// 前缀分流（char-/set-/loc-/hook-/ev-/tp-/ref- → 实体；vol-/ch-/sc- → 大纲节点；rel- → null；其余 → null）
+export const namesResolveReqSchema = z
+  .object({
+    ids: z.array(z.string()).max(50), // 上限 50；服务端去重（保持请求顺序）
+  })
+  .strict();
+
+export const namesResolveResSchema = z.object({
+  names: z.record(z.string(), z.object({ label: z.string(), name: z.string() }).nullable()),
+});
+
+export type NamesResolveResult = z.infer<typeof namesResolveResSchema>;
+
 // ============ SSE 事件（endpoints.md chat 端点事件流，第 738-765 行） ============
 
 /** 心跳 ping（每 15-30s，决策 20）：空 payload */

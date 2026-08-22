@@ -10,6 +10,7 @@ import {
   DEFAULT_BACKUP_FREQUENCY_MINUTES,
   DEFAULT_HALF_LIFE,
   ENTITY_TYPES,
+  ENTITY_TYPE_LABELS,
   EXECUTOR_TOOLS,
   HOOK_ANALYSIS_TOOLS,
   HOOK_CATEGORIES,
@@ -17,6 +18,7 @@ import {
   HOOK_STATUSES,
   MAX_BACKUP_NAME_LENGTH,
   MAX_BACKUPS_PER_PROJECT,
+  OUTLINE_NODE_TYPE_LABELS,
   PAYOFF_TIMING,
   PLOT_EDGE_TYPE,
   PROPOSAL_TOOLS,
@@ -30,6 +32,17 @@ describe("实体 / 关系常量（schema.md）", () => {
   it("ENTITY_TYPES 为 7 种实体类型（含 event 时间轴事件，决策 26；timepoint G2 时间标签点；reference 参考资料，决策 36），且与 types 的 EntityType 一致", () => {
     expect(ENTITY_TYPES).toEqual(["character", "setting", "location", "hook", "event", "timepoint", "reference"]);
     expectTypeOf<(typeof ENTITY_TYPES)[number]>().toEqualTypeOf<EntityType>();
+  });
+
+  it("ENTITY_TYPE_LABELS 覆盖全部实体类型（决策 47 names/resolve 用；character 口径 = 人物）", () => {
+    expect(Object.keys(ENTITY_TYPE_LABELS).sort()).toEqual([...ENTITY_TYPES].sort());
+    expect(ENTITY_TYPE_LABELS.character).toBe("人物");
+    expect(ENTITY_TYPE_LABELS.reference).toBe("参考资料");
+    expect(ENTITY_TYPE_LABELS.timepoint).toBe("时间点");
+  });
+
+  it("OUTLINE_NODE_TYPE_LABELS 覆盖卷/章/场景（决策 47 names/resolve 用）", () => {
+    expect(OUTLINE_NODE_TYPE_LABELS).toEqual({ volume: "卷", chapter: "章", scene: "场景" });
   });
 
   it("RELATION_TYPES 含全部 17 个预定义关系类型（schema.md 第 66-80 行 + occurs_in 决策 26）", () => {
