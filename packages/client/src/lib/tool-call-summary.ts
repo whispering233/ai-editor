@@ -138,10 +138,14 @@ const TOOL_DISPLAY_SPECS: Record<string, ToolDisplaySpec> = {
   },
 };
 
-/** 值 → 展示文本：字符串原样；数字/布尔 String；数组 join；对象 → 键名列表（避免整段 JSON） */
+/** 值 → 展示文本：字符串原样；数字/布尔 String；对象数组 → 项数（对象项 String() 会成 [object Object]）；字符串数组 join；对象 → 键名列表（避免整段 JSON） */
 export function formatValue(v: unknown): string {
   if (typeof v === "string") return v;
-  if (Array.isArray(v)) return v.map((x) => String(x)).join("、");
+  if (Array.isArray(v)) {
+    // 对象数组（如 propose_add_delta 的 changes: DeltaChange[]）→ 项数（避免 [object Object] 刷屏）
+    if (v.length > 0 && typeof v[0] === "object" && v[0] !== null) return `${v.length} 项`;
+    return v.map((x) => String(x)).join("、");
+  }
   if (typeof v === "object" && v !== null) return Object.keys(v).join("、");
   return String(v);
 }

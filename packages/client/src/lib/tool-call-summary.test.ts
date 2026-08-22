@@ -1,7 +1,7 @@
 // lib/tool-call-summary 纯函数测试（决策 47，批次十四）：
 // summarizeToolCall 摘要渲染（id 解析/未知工具回退/字段省略/对象值键名列表）+ collectIdCandidates 收集
 import { describe, expect, it } from "vitest";
-import { collectIdCandidates, summarizeToolCall } from "./tool-call-summary";
+import { collectIdCandidates, formatValue, summarizeToolCall } from "./tool-call-summary";
 import type { ResolvedNames } from "./api";
 
 /** 解析结果 fixture（决策 47：label = 类型中文，name = 名称） */
@@ -109,5 +109,18 @@ describe("collectIdCandidates", () => {
     expect(collectIdCandidates(null)).toEqual([]);
     expect(collectIdCandidates(undefined)).toEqual([]);
     expect(collectIdCandidates("x")).toEqual([]);
+  });
+});
+
+describe("formatValue", () => {
+  it("对象数组 → 项数（不输出 [object Object]）", () => {
+    expect(formatValue([{ op: "update", field: "name" }, { op: "set", field: "age" }])).toBe("2 项");
+  });
+
+  it("字符串数组 → join；对象 → 键名列表；标量 → String", () => {
+    expect(formatValue(["a", "b"])).toBe("a、b");
+    expect(formatValue({ a: 1, b: 2 })).toBe("a、b");
+    expect(formatValue(3)).toBe("3");
+    expect(formatValue(true)).toBe("true");
   });
 });
