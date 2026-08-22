@@ -29,8 +29,8 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - [x] **批次十三（决策 45/46，2026-08，发布 v0.0.19）**：卡 13.1 人物列表移除状态列 + 详情页 status placeholder 引导 `98a86e1` / 13.2 人物行两行式布局（toSummary 摘要扩展 motivation 截断 40 + personality·abilities 各前 2）`5992ff9` / 13.3 设定树行描述摘要展示 `cd00699` / 13.4 设定排序地基（EntitySummary.sortOrder 仅 setting + moveSetting 复合端点 + PUT /entity/setting/:id/move；删旧边按 target_id=旧父 精确匹配坑）`640064c` / 13.5 排序切换器 + 手动模式箭头/插入线重排 `4f1596d` / 13.6 用户复核修订（角色/性格/能力独立成列 + 详情页去状态字段）`6035540` + td flex 列重叠实测修复（layout.md §4.4 补红线）`07a1677` / 收官文档 `41acea0`+`fa1631e`+`0be4e2a`
     > 坑记录：①首版两行式单 td 与双列表头错位致角色列空白——改四列；②四列版 td 直接加 `flex` 被表格布局塞进同一列槽（性格/能力列重叠，Chromium 实测 left 同为 573px）——flex 移内层 div，红线补 layout.md §4.4
 - [ ] **批次十四（决策 47/48 + 决策 27 修订，2026-08，进行中）**：
-  - [ ] 14.1 `POST /api/v1/names/resolve` 批量名称解析端点（决策 47：shared schema + server 路由按 id 前缀分流 + endpoints.md 契约 + 单测）
-  - [ ] 14.2 工具调用展示人类可读化（决策 47：client `summarizeToolCall` 纯函数 + ToolCallRow 展开摘要渲染 + ProposalCardView preview 摘要化 + 历史回放同路径 + 回退 JSON 兜底 + 组件走查）
+  - [x] 14.1 `POST /api/v1/names/resolve` 批量名称解析端点（决策 47：shared schema + server 路由按 id 前缀分流 + endpoints.md 契约 + 单测）`3d12c8b`
+  - [x] 14.2 工具调用展示人类可读化（决策 47：client `summarizeToolCall`/`summarizePreview` 纯函数 + ToolCallRow 展开摘要渲染（批量解析 id 显示名称）+ ProposalCardView preview 摘要化 + 历史回放同路径 + 回退 JSON 兜底 + 组件走查）`4345643`
   - [ ] 14.3 备份频率新增 1 分钟选项（决策 27 修订：`BACKUP_FREQUENCIES` 加 1 + 文档同步 + 单测）
   - [ ] 14.4 用户级配置格式正式化（决策 48：shared `userConfigFileSchema` + 读侧兼容不写回 + server settings.ts 改用 shared schema + endpoints.md 配置格式文档）
   - [ ] 14.5 收官：tasks.md/CHANGELOG/AGENTS.md/release-review.md 同步 + 全仓验证（typecheck/lint/test）
