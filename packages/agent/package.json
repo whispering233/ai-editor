@@ -1,6 +1,6 @@
 {
   "name": "@whispering233/ai-editor-agent",
-  "version": "0.0.20",
+  "version": "0.0.21",
   "license": "MIT",
   "description": "AI 对话循环：会话管理 / 上下文组装 / 工具调度",
   "type": "module",

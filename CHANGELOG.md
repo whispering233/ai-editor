@@ -5,6 +5,12 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [v0.0.21] - 2026-08-23
+
+### Changed
+
+- **pnpm 11.8.0 → 11.22.0 升级（2026-08 工程维护）**：`packageManager` 声明与 CI `pnpm/action-setup` 硬编码版本同步更新；corepack 缓存清理旧版本（10.31.0/11.7.0）；`pnpm install --frozen-lockfile` 与 allowBuilds 配置在 11.22.0 下验证兼容（lockfile 零变更）
+
 ## [v0.0.20] - 2026-08-23
 
 ### Changed
