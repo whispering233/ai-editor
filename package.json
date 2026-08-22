@@ -5,7 +5,7 @@
   "private": true,
   "description": "AI 小说创作编辑器（monorepo 根）",
   "type": "module",
-  "packageManager": "pnpm@11.22.0",
+  "packageManager": "pnpm@11.8.0",
   "engines": {
     "node": ">=22.12"
   },
