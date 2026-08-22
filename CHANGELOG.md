@@ -5,6 +5,16 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### Changed
+
+- **批次十四（2026-08 用户反馈，决策 47/48 + 决策 27 修订）**：
+  - **工具调用展示人类可读化（决策 47）**——会话中工具调用行/提案卡不再 JSON dump 原始参数（含裸 id）：新增 `POST /api/v1/names/resolve` 批量名称解析端点（按 id 前缀分流查库：实体/大纲节点/时间点/参考资料；`rel-` 与未知/软删 → null）；右栏 ToolCallRow 展开态与 ProposalCardView preview 改摘要渲染（「查询实体：人物「张三」」级），id 字段解析失败/未知工具回退原始 JSON 兜底，历史消息回放同路径
+  - **备份频率新增 1 分钟档（决策 27 修订）**——`BACKUP_FREQUENCIES` 加 1，服务端校验/前端下拉自动生效（纯增量，其他逻辑不动）
+  - **用户级配置格式正式化（决策 48）**——`~/.ai-editor/config.json` schema v1：shared `userConfigFileSchema`（schema_version=1 可选、宽松读取、未知字段保留），旧格式读侧兼容不写回、设置页保存时自然升级；多供应商 v2 用户裁决放弃，记录 backlog #17
+  - 全仓 1690 测试全绿 + typecheck/lint 通过
+
 ## [v0.0.19] - 2026-08-21
 
 ### Fixed
