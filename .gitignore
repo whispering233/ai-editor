@@ -41,3 +41,5 @@ project.json
 test-project/*
 !test-project/.ai-editor/
 !test-project/.ai-editor/config.json
+
+packages/server/books
