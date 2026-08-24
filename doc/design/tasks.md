@@ -24,9 +24,9 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 - [x] **批次八至十三（2026-08，发布 v0.0.14-v0.0.19）**：O1-O6 画布移除（决策 33）/ 批次九（决策 34/35/36，v0.0.15）/ 批次十（决策 37-42，v0.0.16）/ 批次十一（决策 43，v0.0.17）/ 批次十二（决策 44 + R1-R6 + T1-T3，v0.0.18）/ 批次十三（决策 45/46，v0.0.19）——各卡规格、坑记录与提交历史 `git log` 回溯（commit 见 CHANGELOG.md / release-review.md）
 - [x] **批次十四（决策 47/48 + 决策 27 修订，2026-08，发布 v0.0.20）**：14.1 `POST /api/v1/names/resolve` 批量名称解析端点（按 id 前缀分流查库，rel-/未知/软删 → null）`3d12c8b` / 14.2 工具调用展示人类可读化（`summarizeToolCall`/`summarizePreview` 摘要渲染 + ToolCallRow 展开态批量解析 id 显示名称 + 提案卡 preview 摘要化 + 历史回放同路径 + 回退 JSON 兜底）`4345643` + formatValue 对象数组 → 项数补充修复 `e07c0ac` / 14.3 备份频率新增 1 分钟档（`BACKUP_FREQUENCIES` 加 1，纯增量）`f9b0fa3` / 14.4 用户级配置格式正式化 schema v1（`userConfigFileSchema` 宽松读取 + 读侧兼容不写回 + 保存时自然升级）`253153e` / 14.5 收官文档（本卡）`4d2b85d`；14.1-14.4 均经 oracle 独立验证无阻断项
 - [ ] **批次十五（决策 49：db 查询层 drizzle-orm 集成，2026-08，进行中）**：
-  - [ ] 15.0 文档先行（本卡）：决策 49 写入 decisions.md + 任务卡清单 + architecture.md/schema.md 声明层说明，commit
-  - [ ] 15.1 卡 0 地基：加 drizzle-orm 依赖（stable 非 rc）；新建 `tables.ts`（4 表 sqliteTable 定义 + 同文件 DDL 常量 + 5 个索引）；`schema.ts` 瘦身（createTables 改执行 tables.ts DDL，user_version 工具不动）；schema.test.ts 增「DDL 与定义对齐」断言；**8 个查询模块一行不动**；全仓测试 + typecheck + lint + build 全绿
-  - [ ] 15.2 卡 1 试点 trash.ts：queryDb 辅助（WeakMap 缓存 drizzle 实例）+ 13 处 prepare 重写（builder/混合）+ trash.test.ts 一字不改全绿 + 三疑点验证记录（① native 事务内 drizzle 查询连接级共享 ② data 列 text + rowToEntityRow 路径 ③ 热路径循环性能）
+  - [x] 15.0 文档先行（本卡）：决策 49 写入 decisions.md + 任务卡清单 + architecture.md/schema.md 声明层说明，commit `4ce807b`
+  - [x] 15.1 卡 0 地基：加 drizzle-orm 依赖（stable 非 rc）；新建 `tables.ts`（4 表 sqliteTable 定义 + 同文件 DDL 常量 + 5 个索引）；`schema.ts` 瘦身（createTables 改执行 tables.ts DDL，user_version 工具不动）；schema.test.ts 增「DDL 与定义对齐」断言；**8 个查询模块一行不动**；全仓测试 + typecheck + lint + build 全绿 `d510f25`
+  - [x] 15.2 卡 1 试点 trash.ts：queryDb 辅助（WeakMap 缓存 drizzle 实例）+ 13 处 prepare 重写（builder/混合）+ trash.test.ts 一字不改全绿 + 三疑点验证记录（① native 事务内 drizzle 查询连接级共享：异常回滚两侧不可见、提交两侧一致 ② data 列 text + rowToEntityRow 路径：drizzle 返回原始 JSON 字符串坏 JSON 不抛错 ③ queryDb WeakMap 缓存同连接复用）`52c7c13`
   - [ ] 15.3 卡 2 重写 delta.ts（9 处）
   - [ ] 15.4 卡 3 重写 chat.ts（5 处，tool_calls JSON 防御解析）
   - [ ] 15.5 卡 4 重写 relation.ts（11 处，注意与 entity 循环引用）
