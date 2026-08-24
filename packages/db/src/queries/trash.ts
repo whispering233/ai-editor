@@ -16,10 +16,23 @@
 //
 // 级联 helper（cascadeRestore/cascadePurge）自 server/routes/outline.ts 下沉（trash.ts 注释
 // 留痕的「S3 建模块后可下沉」项，S4.1 兑现）：参数与 SQL 语义不变，仅补充单库事务包裹。
+//
+// 批次十五（决策 49，15.2 试点）：**全部查询经 queryDb 走 drizzle 构建器**（本卡为试点模块，
+// 混合风格 4A：本模块均为单一表条件更新/删除/查询，builder 表达清晰，无 sql 模板需求）。
+// 语义逐句对照旧实现（git show d510f25^:packages/db/src/queries/trash.ts）：
+//   - deleted_at IS NOT NULL ↔ isNotNull()；排序 desc(deleted_at) ↔ ORDER BY deleted_at DESC
+//   - (source_id = ? OR target_id = ?) ↔ or(eq,eq)；IN 占位符 ↔ inArray()（空集自动恒假）
+//   - UPDATE ... WHERE 同列多重条件 ↔ and() 组合；set({ deleted_at: null }) ↔ SET deleted_at = NULL
+//   - 幂等语义不变：存在性检查限定 deleted_at IS NOT NULL / UPDATE 均带软删过滤
+// 事务沿用 withTransaction（native db.transaction）：drizzle 查询与 native 事务**连接级共享**——
+// 同一连接上 builder 执行的语句在事务边界内，见 15.2 验证记录①。
 
 import type { EntityType } from "@whispering233/ai-editor-shared";
+import { eq, and, isNotNull, or, desc, inArray } from "drizzle-orm";
+import { deltaRecords, entities, relationRecords } from "../tables.js";
 import { nowIso } from "../storage/atomic.js";
 import { withTransaction, type Db } from "../connection.js";
+import { queryDb } from "../query-db.js";
 
 /** 回收站实体条目（GET /api/v1/trash entities 项，endpoints.md 第 671 行） */
 export interface DeletedEntityInfo {
@@ -35,10 +48,15 @@ export interface DeletedEntityInfo {
  * 常规查询默认过滤软删（决策 12），回收站 API 是访问软删对象的唯一入口。
  */
 export function listDeletedEntities(db: Db): DeletedEntityInfo[] {
-  const rows = db
-    .prepare("SELECT id, type, name, deleted_at FROM entities WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC")
-    .all() as Array<{ id: string; type: EntityType; name: string; deleted_at: string }>;
-  return rows.map((r) => ({ id: r.id, type: r.type, name: r.name, deletedAt: r.deleted_at }));
+  const q = queryDb(db);
+  const rows = q
+    .select({ id: entities.id, type: entities.type, name: entities.name, deletedAt: entities.deleted_at })
+    .from(entities)
+    .where(isNotNull(entities.deleted_at))
+    .orderBy(desc(entities.deleted_at))
+    .all();
+  // drizzle 行映射：字段即 Shared 契约形态（snake→camel 在 select 别名处完成）
+  return rows.map((r) => ({ id: r.id, type: r.type as EntityType, name: r.name, deletedAt: r.deletedAt as string }));
 }
 
 /**
@@ -62,19 +80,27 @@ export function restoreEntity(
   id: string,
 ): { restoredRelations: number; restoredDeltas: number } | null {
   return withTransaction(db, () => {
-    const exists = db
-      .prepare("SELECT id FROM entities WHERE id = ? AND type = ? AND deleted_at IS NOT NULL")
-      .get(id, type);
+    const q = queryDb(db);
+    const exists = q
+      .select({ id: entities.id })
+      .from(entities)
+      .where(and(eq(entities.id, id), eq(entities.type, type), isNotNull(entities.deleted_at)))
+      .get();
     if (exists === undefined) return null;
-    const rel = db
-      .prepare(
-        `UPDATE relation_records SET deleted_at = NULL WHERE deleted_at IS NOT NULL AND (source_id = ? OR target_id = ?)`,
-      )
-      .run(id, id);
-    const delta = db
-      .prepare(`UPDATE delta_records SET deleted_at = NULL WHERE deleted_at IS NOT NULL AND target_id = ?`)
-      .run(id);
-    db.prepare("UPDATE entities SET deleted_at = NULL, updated_at = ? WHERE id = ?").run(nowIso(), id);
+    const rel = q
+      .update(relationRecords)
+      .set({ deleted_at: null })
+      .where(and(isNotNull(relationRecords.deleted_at), or(eq(relationRecords.source_id, id), eq(relationRecords.target_id, id))))
+      .run();
+    const delta = q
+      .update(deltaRecords)
+      .set({ deleted_at: null })
+      .where(and(isNotNull(deltaRecords.deleted_at), eq(deltaRecords.target_id, id)))
+      .run();
+    q.update(entities)
+      .set({ deleted_at: null, updated_at: nowIso() })
+      .where(eq(entities.id, id))
+      .run();
     return { restoredRelations: rel.changes, restoredDeltas: delta.changes };
   });
 }
@@ -92,18 +118,14 @@ export function restoreEntity(
  */
 export function purgeEntity(db: Db, type: EntityType, id: string): true | null {
   return withTransaction(db, () => {
-    const exists = db.prepare("SELECT id FROM entities WHERE id = ? AND type = ?").get(id, type);
+    const q = queryDb(db);
+    const exists = q.select({ id: entities.id }).from(entities).where(and(eq(entities.id, id), eq(entities.type, type))).get();
     if (exists === undefined) return null;
-    db.prepare("DELETE FROM relation_records WHERE source_id = ? OR target_id = ?").run(id, id);
-    db.prepare("DELETE FROM delta_records WHERE target_id = ?").run(id);
-    db.prepare("DELETE FROM entities WHERE id = ?").run(id);
+    q.delete(relationRecords).where(or(eq(relationRecords.source_id, id), eq(relationRecords.target_id, id))).run();
+    q.delete(deltaRecords).where(eq(deltaRecords.target_id, id)).run();
+    q.delete(entities).where(eq(entities.id, id)).run();
     return true;
   });
-}
-
-/** 生成 SQL IN 占位符串（id 集来自服务端生成的 nanoid，无注入面；空集返回 "(NULL)" 恒假） */
-function inPlaceholders(ids: string[]): string {
-  return ids.length === 0 ? "(NULL)" : `(${ids.map(() => "?").join(",")})`;
 }
 
 /**
@@ -115,15 +137,17 @@ function inPlaceholders(ids: string[]): string {
  */
 export function cascadeRestore(db: Db, subtreeIds: string[]): { relations: number; deltas: number } {
   return withTransaction(db, () => {
-    const rel = db
-      .prepare(
-        `UPDATE relation_records SET deleted_at = NULL WHERE deleted_at IS NOT NULL AND
-         (source_id IN ${inPlaceholders(subtreeIds)} OR target_id IN ${inPlaceholders(subtreeIds)})`,
-      )
-      .run(...subtreeIds, ...subtreeIds);
-    const delta = db
-      .prepare(`UPDATE delta_records SET deleted_at = NULL WHERE deleted_at IS NOT NULL AND node_id IN ${inPlaceholders(subtreeIds)}`)
-      .run(...subtreeIds);
+    const q = queryDb(db);
+    const rel = q
+      .update(relationRecords)
+      .set({ deleted_at: null })
+      .where(and(isNotNull(relationRecords.deleted_at), or(inArray(relationRecords.source_id, subtreeIds), inArray(relationRecords.target_id, subtreeIds))))
+      .run();
+    const delta = q
+      .update(deltaRecords)
+      .set({ deleted_at: null })
+      .where(and(isNotNull(deltaRecords.deleted_at), inArray(deltaRecords.node_id, subtreeIds)))
+      .run();
     return { relations: rel.changes, deltas: delta.changes };
   });
 }
@@ -136,9 +160,10 @@ export function cascadeRestore(db: Db, subtreeIds: string[]): { relations: numbe
  */
 export function cascadePurge(db: Db, subtreeIds: string[]): void {
   withTransaction(db, () => {
-    db.prepare(
-      `DELETE FROM relation_records WHERE source_id IN ${inPlaceholders(subtreeIds)} OR target_id IN ${inPlaceholders(subtreeIds)}`,
-    ).run(...subtreeIds, ...subtreeIds);
-    db.prepare(`DELETE FROM delta_records WHERE node_id IN ${inPlaceholders(subtreeIds)}`).run(...subtreeIds);
+    const q = queryDb(db);
+    q.delete(relationRecords)
+      .where(or(inArray(relationRecords.source_id, subtreeIds), inArray(relationRecords.target_id, subtreeIds)))
+      .run();
+    q.delete(deltaRecords).where(inArray(deltaRecords.node_id, subtreeIds)).run();
   });
 }
