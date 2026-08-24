@@ -5,10 +5,25 @@
 // 时间约定（schema.md 第 16 行）：created_at 统一 ISO 8601 字符串、由应用层写入，本模块不生成时间。
 // 注意：本模块只处理 chat_messages 表，不涉及会话元数据——会话列表信息（createdAt/updatedAt/
 // messageCount/lastMessage）全部由消息行实时聚合得出，无独立会话表。
+//
+// 批次十五（决策 49，15.4 卡 3）：**查询经 queryDb 走 drizzle 构建器**（混合风格 4A）。
+// 语义逐句对照旧实现：
+//   - INSERT 命名参数 ↔ insert(chatMessages).values({...})（tool_calls JSON.stringify 落库不变）
+//   - UPDATE ... SET project_id ↔ update().set({ project_id }).where(eq(...))
+//   - WHERE session_id = ? AND project_id = ? ↔ and(eq,eq)；ORDER BY created_at ASC, rowid ASC ↔
+//     orderBy(chatMessages.created_at, sql`rowid ASC`)（rowid 为 SQLite 内部列，经 sql 模板原样透传）
+//   - listSessions 为相关子查询 + GROUP BY 聚合 + rowid 排序的复合 SQL，**保留 sql 模板**表达
+//     （builder 强行翻译需三层嵌套别名，违背 4A「需要 SQL 技巧就原生，不强行翻译」）；
+//     projectId 两次注入均走 sql 模板参数绑定（安全，防注入）
+//   - parseToolCalls / reassembleMessages 为纯函数，不涉及 SQL，未改动
+//   - JSON 列 tool_calls 保持 text 模式：drizzle 行读出来是 string，解析防御仍在 parseToolCalls
 
 import { nanoid } from "nanoid";
+import { and, eq, sql } from "drizzle-orm";
 import { truncate, type ChatMessage, type ChatMessageRow, type ChatRole, type ChatSessionSummary } from "@whispering233/ai-editor-shared";
 import type { Db } from "../connection.js";
+import { queryDb } from "../query-db.js";
+import { chatMessages } from "../tables.js";
 
 /** 会话列表 lastMessage 截断长度（endpoints.md 仅要求「截断」，长度为本实现约定，未入文档契约） */
 export const SESSION_LAST_MESSAGE_MAX_LEN = 50;
@@ -29,19 +44,19 @@ export function insertChatMessage(
   row: Pick<ChatMessageRow, "session_id" | "project_id" | "role" | "created_at"> &
     Partial<Pick<ChatMessageRow, "id" | "content" | "tool_calls" | "tool_call_id">>,
 ): void {
-  db.prepare(
-    `INSERT INTO chat_messages (id, session_id, project_id, role, content, tool_calls, tool_call_id, created_at)
-     VALUES (@id, @session_id, @project_id, @role, @content, @tool_calls, @tool_call_id, @created_at)`,
-  ).run({
-    id: row.id ?? nanoid(),
-    session_id: row.session_id,
-    project_id: row.project_id,
-    role: row.role,
-    content: row.content ?? null,
-    tool_calls: row.tool_calls == null ? null : JSON.stringify(row.tool_calls),
-    tool_call_id: row.tool_call_id ?? null,
-    created_at: row.created_at,
-  });
+  queryDb(db)
+    .insert(chatMessages)
+    .values({
+      id: row.id ?? nanoid(),
+      session_id: row.session_id,
+      project_id: row.project_id,
+      role: row.role,
+      content: row.content ?? null,
+      tool_calls: row.tool_calls == null ? null : JSON.stringify(row.tool_calls),
+      tool_call_id: row.tool_call_id ?? null,
+      created_at: row.created_at,
+    })
+    .run();
 }
 
 /**
@@ -55,7 +70,11 @@ export function insertChatMessage(
  * @returns 受影响行数（0 = 无该旧 id 的消息；重复执行幂等——第二次起返回 0）
  */
 export function migrateChatMessagesProject(db: Db, fromProjectId: string, toProjectId: string): number {
-  const info = db.prepare("UPDATE chat_messages SET project_id = ? WHERE project_id = ?").run(toProjectId, fromProjectId);
+  const info = queryDb(db)
+    .update(chatMessages)
+    .set({ project_id: toProjectId })
+    .where(eq(chatMessages.project_id, fromProjectId))
+    .run();
   return info.changes;
 }
 
@@ -67,28 +86,28 @@ export function migrateChatMessagesProject(db: Db, fromProjectId: string, toProj
  * - lastMessage = 最后一条消息的 content 截断（无 content 时为空串）
  */
 export function listSessions(db: Db, projectId: string): ChatSessionSummary[] {
-  const rows = db
-    .prepare(
-      `SELECT
-         t.session_id  AS id,
-         t.message_count,
-         t.created_at,
-         t.updated_at,
-         (SELECT lm.content FROM chat_messages lm
-           WHERE lm.session_id = t.session_id AND lm.project_id = ?
-           ORDER BY lm.created_at DESC, lm.rowid DESC LIMIT 1) AS last_content
-       FROM (
-         SELECT session_id,
-                COUNT(*)        AS message_count,
-                MIN(created_at) AS created_at,
-                MAX(created_at) AS updated_at
-         FROM chat_messages
-         WHERE project_id = ?
-         GROUP BY session_id
-       ) t
-       ORDER BY t.updated_at DESC, t.session_id ASC`,
-    )
-    .all(projectId, projectId) as Array<{
+  // 相关子查询（取每会话最后一条消息）+ GROUP BY 聚合（count/min/max）的复合 SQL：
+  // sql 模板表达（4A 混合风格），projectId 两次注入走参数绑定
+  const rows = queryDb(db).all(sql`
+    SELECT
+      t.session_id  AS id,
+      t.message_count,
+      t.created_at,
+      t.updated_at,
+      (SELECT lm.content FROM chat_messages lm
+        WHERE lm.session_id = t.session_id AND lm.project_id = ${projectId}
+        ORDER BY lm.created_at DESC, lm.rowid DESC LIMIT 1) AS last_content
+    FROM (
+      SELECT session_id,
+             COUNT(*)        AS message_count,
+             MIN(created_at) AS created_at,
+             MAX(created_at) AS updated_at
+      FROM chat_messages
+      WHERE project_id = ${projectId}
+      GROUP BY session_id
+    ) t
+    ORDER BY t.updated_at DESC, t.session_id ASC
+  `) as Array<{
     id: string;
     message_count: number;
     created_at: string;
@@ -127,14 +146,21 @@ export function parseToolCalls(json: string | null): unknown[] | null {
  * - 存储形态 → API 形态：tool_calls JSON 解析、tool_call_id → toolCallId、snake_case → camelCase
  */
 export function listMessages(db: Db, sessionId: string, projectId: string): ChatMessage[] {
-  const rows = db
-    .prepare(
-      `SELECT id, session_id, project_id, role, content, tool_calls, tool_call_id, created_at
-       FROM chat_messages
-       WHERE session_id = ? AND project_id = ?
-       ORDER BY created_at ASC, rowid ASC`,
-    )
-    .all(sessionId, projectId) as Array<{
+  const rows = queryDb(db)
+    .select({
+      id: chatMessages.id,
+      session_id: chatMessages.session_id,
+      project_id: chatMessages.project_id,
+      role: chatMessages.role,
+      content: chatMessages.content,
+      tool_calls: chatMessages.tool_calls,
+      tool_call_id: chatMessages.tool_call_id,
+      created_at: chatMessages.created_at,
+    })
+    .from(chatMessages)
+    .where(and(eq(chatMessages.session_id, sessionId), eq(chatMessages.project_id, projectId)))
+    .orderBy(chatMessages.created_at, sql`rowid ASC`)
+    .all() as Array<{
     id: string;
     session_id: string;
     project_id: string;
@@ -165,14 +191,21 @@ export function listMessages(db: Db, sessionId: string, projectId: string): Chat
  * - 查询语义与 listMessages 一致：按 project_id 隔离、created_at 升序 + rowid 稳定序。
  */
 export function listMessageRows(db: Db, sessionId: string, projectId: string): ChatMessageRow[] {
-  const rows = db
-    .prepare(
-      `SELECT id, session_id, project_id, role, content, tool_calls, tool_call_id, created_at
-       FROM chat_messages
-       WHERE session_id = ? AND project_id = ?
-       ORDER BY created_at ASC, rowid ASC`,
-    )
-    .all(sessionId, projectId) as Array<{
+  const rows = queryDb(db)
+    .select({
+      id: chatMessages.id,
+      session_id: chatMessages.session_id,
+      project_id: chatMessages.project_id,
+      role: chatMessages.role,
+      content: chatMessages.content,
+      tool_calls: chatMessages.tool_calls,
+      tool_call_id: chatMessages.tool_call_id,
+      created_at: chatMessages.created_at,
+    })
+    .from(chatMessages)
+    .where(and(eq(chatMessages.session_id, sessionId), eq(chatMessages.project_id, projectId)))
+    .orderBy(chatMessages.created_at, sql`rowid ASC`)
+    .all() as Array<{
     id: string;
     session_id: string;
     project_id: string;
@@ -183,8 +216,14 @@ export function listMessageRows(db: Db, sessionId: string, projectId: string): C
     created_at: string;
   }>;
   return rows.map((r) => ({
-    ...r,
+    id: r.id,
+    session_id: r.session_id,
+    project_id: r.project_id,
+    role: r.role,
+    content: r.content,
     tool_calls: parseToolCalls(r.tool_calls), // TEXT 列 → 解析后的数组（NULL/损坏 → null）
+    tool_call_id: r.tool_call_id,
+    created_at: r.created_at,
   }));
 }
 
