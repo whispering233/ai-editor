@@ -8,7 +8,7 @@
 | **运行时** | Node ≥ 22.12，**全仓 ESM** | nanoid v5 ESM-only 消费、`require(esm)` 默认开启；避免 CJS/ESM 混合坑 |
 | **语言** | TypeScript (strict mode) | 全栈统一类型，减少运行时错误 |
 | **API 服务端** | Hono 4 + `@hono/node-server` | 轻量、TypeScript 友好、SSE 原生支持 |
-| **数据库** | better-sqlite3 ^13 (WAL mode) | N-API 重写（v13），全局安装无 ABI 失配；同步 API 简单可靠，零配置，内嵌 |
+| **数据库** | better-sqlite3 ^13 (WAL mode) + drizzle-orm | N-API 重写（v13），全局安装无 ABI 失配；同步 API 简单可靠，零配置，内嵌；drizzle-orm 查询构建层（决策 49：查询构建+行类型推断，不引入 drizzle-kit，迁移/事务/JSON 防御语义不变） |
 | **前端框架** | React 19 | 生态成熟，组件化 |
 | **前端构建** | Vite 7 | 快速 HMR，Tree-shaking（Vite 6 已停止常规维护） |
 | **状态管理** | Zustand 5 | 轻量、TypeScript 优秀、selector 自动优化 |
@@ -60,15 +60,21 @@ ai-editor/
 │   │
 │   ├── db/                        # @whispering233/ai-editor-db（数据库层）
 │   │   ├── src/
-│   │   │   ├── schema.ts          # 建表 SQL + migration
-│   │   │   ├── connection.ts      # Database 类（连接/事务/WAL）
-│   │   │   └── queries/           # 查询函数
-│   │   │       ├── entity.ts      # 实体 CRUD
-│   │   │       ├── relation.ts    # 关系查询
+│   │   │   ├── connection.ts      # Database 连接/事务/WAL（better-sqlite3 同步，事务连接级共享）
+│   │   │   ├── schema.ts          # schema 版本工具（user_version 三态分流，决策 13）
+│   │   │   ├── tables.ts          # drizzle 表声明：sqliteTable 定义 + DDL 常量同文件（决策 49）
+│   │   │   ├── query-db.ts        # queryDb 辅助：native 连接 → drizzle 实例（WeakMap 缓存）
+│   │   │   ├── migrations/        # 自建增量迁移（002-005，决策 13 修订 E5）
+│   │   │   └── queries/           # 查询函数（签名 (db: Db)；内部 drizzle builder/模板混合）
+│   │   │       ├── entity.ts      # 实体 CRUD（动态 where/JS 过滤/级联软删）
+│   │   │       ├── relation.ts    # 关系查询（含递归子树辅助、与 entity 循环引用）
 │   │   │       ├── delta.ts       # Delta 增删查
-│   │   │       ├── outline.ts     # 大纲操作
-│   │   │       └── project.ts     # 项目配置
-│   │   ├── package.json           # deps: @whispering233/ai-editor-shared, better-sqlite3
+│   │   │       ├── chat.ts        # 对话历史（tool_calls JSON 防御解析）
+│   │   │       ├── trash.ts       # 回收站/级联软删
+│   │   │       ├── compute-state.ts  # 状态累积（纯应用层，无 prepare）
+│   │   │       ├── outline-ops.ts # 大纲操作（纯调用层，无 prepare）
+│   │   │       └── migration.ts   # 迁移管线（保持 native）
+│   │   ├── package.json           # deps: @whispering233/ai-editor-shared, better-sqlite3, drizzle-orm
 │   │   └── tsconfig.json
 │   │
 │   ├── tools/                     # @whispering233/ai-editor-tools（工具定义 + 执行器）

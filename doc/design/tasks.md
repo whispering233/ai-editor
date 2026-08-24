@@ -13,16 +13,26 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 
 ## 项目状态（2026-08-23，v0.0.20 已发布）
 
-全量交付完成：阶段 A 地基（T0-T7）+ 切片 1-13 + 阶段 U 三栏工作台（U1-U8）+ 画布 S10（批次八 O6 已按决策 33 移除）+ 发布 S11 + 发布阻断项 E1-E6 + 阶段 B/C/B2 + 用户反馈批次一至十四（F1-F9 · G1-G3 · H1-H6 · I1-I4 · J1-J3+K1/K2 · M1-M3 · N1-N2 · O1-O6 · L 样式工程化 + 批次九至十四，详见执行进度与演进路线）+ **发布 v0.0.1-v0.0.20 全链路全绿**。**批次十四（2026-08 已完成并发布 v0.0.20：决策 47 工具调用展示人类可读化（names/resolve 批量名称解析 + 摘要渲染）/ 决策 48 用户级配置格式正式化 schema v1（多供应商 v2 用户裁决放弃，记录 backlog #17）/ 决策 27 修订备份频率新增 1 分钟档，任务卡 14.1-14.5）**。可选收尾：npm 坏版本 v0.0.1/v0.0.2 deprecate 标注（需 2FA 凭据）；backlog.md 事项一律不做。
+全量交付完成：阶段 A 地基（T0-T7）+ 切片 1-13 + 阶段 U 三栏工作台（U1-U8）+ 画布 S10（批次八 O6 已按决策 33 移除）+ 发布 S11 + 发布阻断项 E1-E6 + 阶段 B/C/B2 + 用户反馈批次一至十四（F1-F9 · G1-G3 · H1-H6 · I1-I4 · J1-J3+K1/K2 · M1-M3 · N1-N2 · O1-O6 · L 样式工程化 + 批次九至十四，详见执行进度与演进路线）+ **发布 v0.0.1-v0.0.21 全链路全绿**。**批次十四（2026-08 已完成并发布 v0.0.20：决策 47 工具调用展示人类可读化（names/resolve 批量名称解析 + 摘要渲染）/ 决策 48 用户级配置格式正式化 schema v1（多供应商 v2 用户裁决放弃，记录 backlog #17）/ 决策 27 修订备份频率新增 1 分钟档，任务卡 14.1-14.5）**。**批次十五（2026-08 进行中：决策 49 db 查询层 drizzle-orm 集成，任务卡 15.0-15.8 见执行进度）**。可选收尾：npm 坏版本 v0.0.1/v0.0.2 deprecate 标注（需 2FA 凭据）；backlog.md 事项一律不做。
 
 - **设计主轴**：`decisions.md` 决策 1-48；架构分包见 `architecture.md`；文档即契约（`doc/api`、`doc/database`、`doc/ui`）。
 - **测试**：全仓 1690 个（shared 156 / llm 41 / db 258 / server 383 / client 516 / tools 242 / agent 94）。SCHEMA_VERSION = 5（决策 36/43/46：kind 与 setting sort_order 均为 JSON/列语义演进，无 DDL 迁移）。
 
-## 执行进度（全部完成）
+## 执行进度
 
 - [x] 历史批次（git log / CHANGELOG 回溯规格）：阶段 A + 切片 1-13 · 阶段 U · 画布 S10（O6 移除）· 发布 S11 + E1-E6 · 阶段 B/C/B2 · 批次一至六（F1-F9 · G1-G3 · H1-H6 · I1-I4 · J1-J3+K1/K2 · M1-M3）· L 批次（L1-L4）· 批次七（N1-N2，决策 32）
 - [x] **批次八至十三（2026-08，发布 v0.0.14-v0.0.19）**：O1-O6 画布移除（决策 33）/ 批次九（决策 34/35/36，v0.0.15）/ 批次十（决策 37-42，v0.0.16）/ 批次十一（决策 43，v0.0.17）/ 批次十二（决策 44 + R1-R6 + T1-T3，v0.0.18）/ 批次十三（决策 45/46，v0.0.19）——各卡规格、坑记录与提交历史 `git log` 回溯（commit 见 CHANGELOG.md / release-review.md）
 - [x] **批次十四（决策 47/48 + 决策 27 修订，2026-08，发布 v0.0.20）**：14.1 `POST /api/v1/names/resolve` 批量名称解析端点（按 id 前缀分流查库，rel-/未知/软删 → null）`3d12c8b` / 14.2 工具调用展示人类可读化（`summarizeToolCall`/`summarizePreview` 摘要渲染 + ToolCallRow 展开态批量解析 id 显示名称 + 提案卡 preview 摘要化 + 历史回放同路径 + 回退 JSON 兜底）`4345643` + formatValue 对象数组 → 项数补充修复 `e07c0ac` / 14.3 备份频率新增 1 分钟档（`BACKUP_FREQUENCIES` 加 1，纯增量）`f9b0fa3` / 14.4 用户级配置格式正式化 schema v1（`userConfigFileSchema` 宽松读取 + 读侧兼容不写回 + 保存时自然升级）`253153e` / 14.5 收官文档（本卡）`4d2b85d`；14.1-14.4 均经 oracle 独立验证无阻断项
+- [ ] **批次十五（决策 49：db 查询层 drizzle-orm 集成，2026-08，进行中）**：
+  - [ ] 15.0 文档先行（本卡）：决策 49 写入 decisions.md + 任务卡清单 + architecture.md/schema.md 声明层说明，commit
+  - [ ] 15.1 卡 0 地基：加 drizzle-orm 依赖（stable 非 rc）；新建 `tables.ts`（4 表 sqliteTable 定义 + 同文件 DDL 常量 + 5 个索引）；`schema.ts` 瘦身（createTables 改执行 tables.ts DDL，user_version 工具不动）；schema.test.ts 增「DDL 与定义对齐」断言；**8 个查询模块一行不动**；全仓测试 + typecheck + lint + build 全绿
+  - [ ] 15.2 卡 1 试点 trash.ts：queryDb 辅助（WeakMap 缓存 drizzle 实例）+ 13 处 prepare 重写（builder/混合）+ trash.test.ts 一字不改全绿 + 三疑点验证记录（① native 事务内 drizzle 查询连接级共享 ② data 列 text + rowToEntityRow 路径 ③ 热路径循环性能）
+  - [ ] 15.3 卡 2 重写 delta.ts（9 处）
+  - [ ] 15.4 卡 3 重写 chat.ts（5 处，tool_calls JSON 防御解析）
+  - [ ] 15.5 卡 4 重写 relation.ts（11 处，注意与 entity 循环引用）
+  - [ ] 15.6 卡 5 重写 entity.ts（23 处，动态 where/LIKE 透传/白名单排序/JS 过滤路径/IN 动态占位符/批量 sort_order/级联软删）
+  - [ ] 15.7 卡 6 compute-state.ts + outline-ops.ts（0 prepare，纯调用层）签名不变零改动确认收口
+  - [ ] 15.8 卡 7 收尾：migration.ts 保持 native 确认；文档复核（architecture.md/decisions.md/schema.md/tasks.md）；全仓验收；发布 v0.0.22 或并入下一批次（届时确认）
 
 > 各卡详细规格、坑记录与提交历史可 `git log` 回溯（commit 见 CHANGELOG.md / release-review.md 发布进展记录）。
 
@@ -57,6 +67,8 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 **批次十一（2026-08 已完成并发布 v0.0.17：决策 43 参考资料两类承载）**——本地 md 文件（YAML frontmatter 自包含 + mtime 快照同步 + references/ 目录）与外源链接（URL 必填仅索引）两类承载；文件 = 真相源、DB 索引 = 派生镜像（应用内编辑先写文件后更新 DB，外部编辑靠 scan 幂等全量比对自愈）；新建入口分流两按钮；列表交互对齐决策 37/38（点击标题编辑/双击详情/只留删除/右键菜单复用决策 40）；详情页内嵌 markdown 编辑器（@uiw/react-md-editor + react-markdown，调研选型）+ 导入 md + 关联面板；存档体系扩展打包 references/；B1 列表编辑对话框竞态随重构根除；跨书籍导入记录 backlog #16 未来迭代。
 
 **批次十三（2026-08 已完成并发布 v0.0.19，决策 45/46：人物列表行信息修订 + 设定树手动排序）**——状态列移除且详情页表单一并移除（存量 data.status 容错保留）/ 人物行四列布局（名称+动机第二行 / 角色 / 性格 / 能力独立成列——用户复核修订首版两行式，toSummary 扩展 motivation 截断 40 + personality·abilities 各前 2）/ 设定树行描述摘要展示（summary.description 弱化行 + hover 完整）/ 设定树排序（修订决策 42「无 sort_order」约束：同级组内线性序复用 entities.sort_order 列零迁移、EntitySummary.sortOrder 仅 setting 填充、复合端点 PUT /entity/setting/:id/move 改父+重排一次事务（防环沿用决策 30，删旧边按 target_id=旧父 精确匹配）、排序方式切换器 名称/创建时间/手动、手动模式 ↑↓ 箭头 + 行间插入线拖拽重排（order = 移除自身后组内位置语义）、拖到行中段仍 = 调层级）。
+
+**批次十五（2026-08 进行中：决策 49 db 查询层 drizzle-orm 集成）**——查询层引入 drizzle-orm（查询构建 + 行类型推断）提升开发体验：不引入 drizzle-kit（迁移管线维持自建 user_version 三态分流，决策 13）；表结构声明收敛 `tables.ts`（sqliteTable 定义 + DDL 常量同文件，schema.test.ts 断言锁对齐）；data JSON 列保持 text 模式 + 防御解析（drizzle json mode 坏 JSON 抛错）；shared 契约类型不动；签名保持 (db: Db) + queryDb 包装（调用方零改动）；混合风格（builder + sql 模板）逐模块渐进替换（15.1-15.8）。
 
 **批次十四（2026-08 已完成并发布 v0.0.20，决策 47/48 + 决策 27 修订：工具调用展示人类可读化 + 备份 1 分钟档 + 配置格式 schema v1）**——会话中工具调用行/提案卡不再 JSON dump 原始参数（含裸 id）：新增 `POST /api/v1/names/resolve` 批量名称解析端点（按 id 前缀分流查库，rel-/未知/软删 → null）+ client summarizeToolCall/summarizePreview 摘要渲染（ToolCallRow 展开态批量解析 id 显示名称、提案卡 preview 摘要化、历史回放同路径、解析失败/未知工具回退原始 JSON 兜底）；备份频率新增 1 分钟档（BACKUP_FREQUENCIES = [1,5,10,15,30,60]，纯增量，决策 27 修订）；用户级配置格式正式化 schema v1（shared userConfigFileSchema：schema_version=1 可选 + model/thinking_level/api_key，宽松读取未知字段保留，旧格式读侧兼容不写回、设置页保存时自然升级；多供应商 v2 用户裁决放弃，记录 backlog #17）。
 

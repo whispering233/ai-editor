@@ -23,6 +23,8 @@
 
 **时间约定**：所有时间列/字段统一 ISO 8601 字符串（如 `2026-08-01T10:00:00Z`），由应用层写入，不使用 SQLite 内置 `datetime('now')`——回收站按 `deleted_at` 排序需跨 SQLite 与 outline.json 统一格式。
 
+**表结构声明层（决策 49，2026-08）**：表结构的**当前声明**在 db 包 `src/tables.ts`（drizzle `sqliteTable` 定义 + 手写 DDL 常量，同文件、`schema.test.ts` 断言锁对齐）；`db/src/migrations/` 的迁移 SQL 是历史轨迹（自建 user_version 管线，决策 13 修订）；下表以当前 DDL 为准。
+
 **schema 版本与迁移（E5，决策 13 增补）**：
 
 - **版本判定**：以 data.db 的 `PRAGMA user_version` 为准（`packages/db/src/schema.ts` 的 `SCHEMA_VERSION` 常量）；`project.json`/`outline.json` 顶层的 `schema_version` 仅用于 JSON 结构判断（决策 13）。

@@ -97,6 +97,10 @@ llm 包**对外契约不变**（`chatStream`/`LLMStreamEvent`/`LLMError`），�
 
 项目目录 **AGENTS.md** 是**唯一**持久化上下文通道（取代 project.json `prompt` 字段——打开项目时 prompt 存在且无 AGENTS.md 则自动迁移，一次迁移后 prompt 不再使用），注入 system「## 项目设定」段。设置页直编 AGENTS.md（GET/PUT `/project/agents`，原子写）+ 用户可在文件管理器中直接编辑（web 读取 mtime 检测外部修改）；聊天框消息即临时指令层（决策 7）。AGENTS.md 是社区广泛接受的「项目规则」惯例，可见、可版本化，prompt 字段藏于 project.json 不可见不可控。
 
+## 决策 49：db 查询层引入 drizzle-orm
+
+db 包查询层引入 drizzle-orm（查询构建器 + 行类型推断）提升开发体验，**但只做查询层**，四件事不变：① 驱动仍是 better-sqlite3 同步连接，事务（决策 16 先 DB 后 JSON 的同步语义）与 WAL 持久化原样；② **不引入 drizzle-kit**——迁移管线维持自建 `PRAGMA user_version` 三态分流（决策 13：E4 防降级 / E5 增量迁移），表结构声明收敛到 db 包 `tables.ts`（sqliteTable 定义 + 手写 DDL 常量同文件，schema.test.ts 断言锁对齐）；③ `data` JSON 列**保持 text 模式 + rowToEntityRow 防御解析**（drizzle `mode:'json'` 对坏 JSON 直接抛错，破坏「单条坏行不打挂整表查询」的防御）；④ shared 的 API 契约类型（EntityRow 等）不动、类型不反向流入 shared（shared 是依赖树最底层）。查询模块函数签名保持 `(db: Db)`，内部经 `queryDb` 辅助包装 drizzle 实例（WeakMap 缓存）——调用方零改动，逐模块渐进替换（混合风格：简单 CRUD 用 builder，复杂排序/跨表 UPDATE 用 `sql` 模板逃生舱，不强行翻译）。
+
 ---
 
 ## 决策总索引表
@@ -154,3 +158,4 @@ llm 包**对外契约不变**（`chatStream`/`LLMStreamEvent`/`LLMError`），�
 | 决策 46 | 历史档案 | 设定树手动排序：同级 sort_order+复合 move 端点 |
 | 决策 47 | 历史档案 | 工具调用人类可读化：names/resolve 批量名称解析+摘要渲染 |
 | 决策 48 | 历史档案 | 用户级配置正式化：~/.ai-editor/config.json schema v1 |
+| 决策 49 | 本文档 | db 查询层 drizzle-orm：查询构建+类型推断，迁移/事务/JSON 防御语义不变，混合风格渐进替换 |
