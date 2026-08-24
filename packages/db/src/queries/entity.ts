@@ -11,11 +11,29 @@
 //   取舍：json_extract 免全量 parse 但需按类型动态列，SQL 复杂化；MVP 数据量小，行内解析
 //   与 better-sqlite3 字符串列一致（chat.ts 同款风格），数据量大后再优化。
 // 级联软删边界：relations/deltas 的**查询**模块 S3.2 才建——本卡只做级联软删所需 UPDATE。
+//
+// 批次十五（决策 49，15.6 卡 5）：查询全部经 queryDb 走 drizzle 构建器（混合风格 4A）。
+// 语义逐句对照改造（git show 52c7c13^:packages/db/src/queries/entity.ts）：
+//   - deleted_at IS NULL ↔ isNull()；软删过滤语义不变（决策 12）
+//   - name LIKE ? ↔ like(entities.name, `%${q}%`)——通配符 %/_ 原样透传（模糊搜索语义）
+//   - 排序白名单（name/created_at/updated_at × asc/desc）↔ 动态选列对象 desc/asc（无字符串拼接）
+//   - event/timepoint 固定排序 `sort_order IS NULL, sort_order ASC, id ASC` ↔ orderBy(sql 模板)（NULL 沉底）
+//   - COUNT(*) ↔ count()；IN 占位符 ↔ inArray()（空集生成恒假 SQL，原生 IN (NULL) 语义等价）
+//   - EXISTS 子查询（eventOccursAt）↔ sql 模板（跨表互引，builder 难表达，4A 允许）
+//   - 热循环（moveEvent/moveTimepoint/moveSetting/reorderTimepoints 批量重写 sort_order）：
+//     builder 版循环内每次 .run() 重新编译 SQL（prepare 不复用）；数据量小可接受，
+//     如需极致性能可改 sql 模板（决策 49 混合风格边界）——循环处注释明示
+//   - data 等 JSON 列保持 text 模式：drizzle 行读出 string，写入 JSON.stringify，
+//     parseDataColumn 防御解析不动（坏行返回 {}，决策 49/15.2 验证）
+// 事务沿用 withTransaction（native db.transaction），连接级共享已验证（15.2 验证记录①）。
 
 import type { EntityRow, EntitySummary, EntityType, RelationRow } from "@whispering233/ai-editor-shared";
 import { ENTITY_TYPES, generateEntityId } from "@whispering233/ai-editor-shared";
+import { and, asc, count, desc, eq, inArray, isNull, like, or, sql, type SQLWrapper } from "drizzle-orm";
 import { nowIso } from "../storage/atomic.js";
 import { withTransaction, type Db } from "../connection.js";
+import { deltaRecords, entities, relationRecords } from "../tables.js";
+import { queryDb } from "../query-db.js";
 // relation.ts ↔ entity.ts 循环引用（relation.ts import getEntity）：仅函数调用期使用
 // RelationError/rowToRelationRow，无模块顶层求值依赖，ESM 运行时安全。
 import {
@@ -223,26 +241,34 @@ function collectSettingDescendants(db: Db, rootId: string): Set<string> {
  * type/q/软删过滤，filters + 分页在 JS 层（MVP 数据量小，全行查询可接受）；
  * parentId 语义（决策 32 上层筛选）：同上——复用 listSettingHierarchyEdges 收集递归后代集合，
  * 与 filters 同款 JS 过滤路径（两者可同时存在，AND 组合；SQL 路径保持 COUNT+LIMIT 行为不变）。
+ *
+ * drizzle 改造（决策 49）：where 动态条件 and() 组合（顺序与旧 where.join 一致：
+ * 软删过滤恒为首条）；排序白名单映射为**列对象**（asc/desc 包装，禁止字符串拼接；
+ * event/timepoint 固定 sql 模板排序 NULL 沉底）。
  */
 export function listEntities(db: Db, query: EntityListQuery): EntityListResult {
-  const where = ["deleted_at IS NULL"];
-  const params: unknown[] = [];
+  const q = queryDb(db);
+  const conds: SQLWrapper[] = [isNull(entities.deleted_at)];
   if (query.type !== undefined) {
-    where.push("type = ?");
-    params.push(query.type);
+    conds.push(eq(entities.type, query.type));
   }
   if (query.q !== undefined && query.q !== "") {
-    where.push("name LIKE ?");
-    params.push(`%${query.q}%`);
+    // LIKE 通配符 %/_ 原样透传——模糊搜索语义（注释明示，不转义）
+    conds.push(like(entities.name, `%${query.q}%`));
   }
+  const whereExpr = and(...conds);
   // 排序白名单（列名不可参数化，只允许枚举值；id 作次级排序保证稳定分页）
-  const sortCol = query.sort === "name" ? "name" : query.sort === "created_at" ? "created_at" : "updated_at";
-  const orderDir = query.order === "asc" ? "ASC" : "DESC";
+  const sortCol =
+    query.sort === "name" ? entities.name : query.sort === "created_at" ? entities.created_at : entities.updated_at;
+  // 默认降序（query.order === "asc" 才升序，与旧 `"ASC" : "DESC"` 语义一致）
+  const orderAsc = query.order === "asc";
   // event / timepoint（时间轴，决策 26 + G2）固定按 sort_order 升序、NULL 沉底（endpoints.md 契约：
-  // 列表恒按 sort_order 升序，sort/order 参数不参与排序）——SQLite 中
-  // `sort_order IS NULL` 为 1 的排最后，实现 NULL 沉底；id 作稳定次序
-  const eventOrderSql = "sort_order IS NULL, sort_order ASC, id ASC";
-  const orderSql = query.type === "event" || query.type === "timepoint" ? eventOrderSql : `${sortCol} ${orderDir}, id ASC`;
+  // 列表恒按 sort_order 升序，sort/order 参数不参与排序）——`sort_order IS NULL` 为 1 的排最后
+  //（SQLite 布尔序），实现 NULL 沉底；id 作稳定次序
+  const orderByExpr =
+    query.type === "event" || query.type === "timepoint"
+      ? [sql`${entities.sort_order} IS NULL`, asc(entities.sort_order), asc(entities.id)]
+      : [orderAsc ? asc(sortCol) : desc(sortCol), asc(entities.id)];
   const offset = Math.max(0, Math.trunc(query.offset ?? 0));
   const limit = Math.min(200, Math.max(1, Math.trunc(query.limit ?? 50)));
 
@@ -250,11 +276,10 @@ export function listEntities(db: Db, query: EntityListQuery): EntityListResult {
   // SQL 取全量候选行（type/q/软删），JS 层执行 data/层级过滤 + 分页（MVP 数据量小，全行查询可接受）；
   // 两者皆无时保持 COUNT + LIMIT SQL 原路径（行为不变）。
   if (query.filters !== undefined || query.parentId !== undefined) {
-    const all = db
-      .prepare(`SELECT * FROM entities WHERE ${where.join(" AND ")} ORDER BY ${orderSql}`)
-      .all(...params) as Array<Record<string, unknown>>;
-    const descendants =
-      query.parentId !== undefined ? collectSettingDescendants(db, query.parentId) : null;
+    const all = q.select().from(entities).where(whereExpr).orderBy(...orderByExpr).all() as unknown as Array<
+      Record<string, unknown>
+    >;
+    const descendants = query.parentId !== undefined ? collectSettingDescendants(db, query.parentId) : null;
     const filtered = all.filter((r) => {
       const row = rowToEntityRow(r);
       if (query.filters !== undefined && !matchDataFilters(row.data, query.filters)) return false;
@@ -267,33 +292,37 @@ export function listEntities(db: Db, query: EntityListQuery): EntityListResult {
     };
   }
 
-  const total = (
-    db.prepare(`SELECT COUNT(*) AS c FROM entities WHERE ${where.join(" AND ")}`).get(...params) as { c: number }
-  ).c;
-  const rows = db
-    .prepare(
-      `SELECT * FROM entities WHERE ${where.join(" AND ")}
-       ORDER BY ${orderSql} LIMIT ? OFFSET ?`,
-    )
-    .all(...params, limit, offset) as Array<Record<string, unknown>>;
+  const total = (q.select({ c: count() }).from(entities).where(whereExpr).get() as { c: number }).c;
+  const rows = q
+    .select()
+    .from(entities)
+    .where(whereExpr)
+    .orderBy(...orderByExpr)
+    .limit(limit)
+    .offset(offset)
+    .all() as unknown as Array<Record<string, unknown>>;
 
   return { items: rows.map((r) => toSummary(rowToEntityRow(r))), total };
 }
 
 /** 按 id 取实体详情（GET /api/v1/entity/:type/:id）；不存在或已软删返回 null（决策 12 过滤） */
 export function getEntity(db: Db, id: string): EntityRow | null {
-  const row = db
-    .prepare("SELECT * FROM entities WHERE id = ? AND deleted_at IS NULL")
-    .get(id) as Record<string, unknown> | undefined;
+  const row = queryDb(db)
+    .select()
+    .from(entities)
+    .where(and(eq(entities.id, id), isNull(entities.deleted_at)))
+    .get() as unknown as Record<string, unknown> | undefined;
   return row === undefined ? null : rowToEntityRow(row);
 }
 
 /** 实体的 Delta 计数（详情响应 deltaCount；决策 12 修订：目标实体软删的 Delta 不可见） */
 export function countDeltasForEntity(db: Db, id: string): number {
   return (
-    db
-      .prepare("SELECT COUNT(*) AS c FROM delta_records WHERE target_id = ? AND deleted_at IS NULL")
-      .get(id) as { c: number }
+    queryDb(db)
+      .select({ c: count() })
+      .from(deltaRecords)
+      .where(and(eq(deltaRecords.target_id, id), isNull(deltaRecords.deleted_at)))
+      .get() as { c: number }
   ).c;
 }
 
@@ -322,14 +351,17 @@ export function createEntity(
     updated_at: now,
     deleted_at: null,
   };
-  db.prepare("INSERT INTO entities (id, type, name, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)").run(
-    row.id,
-    row.type,
-    row.name,
-    JSON.stringify(row.data),
-    row.created_at,
-    row.updated_at,
-  );
+  queryDb(db)
+    .insert(entities)
+    .values({
+      id: row.id,
+      type: row.type,
+      name: row.name,
+      data: JSON.stringify(row.data), // JSON 列 text 模式（决策 49）
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    })
+    .run();
   return row;
 }
 
@@ -355,12 +387,15 @@ export function updateEntity(
       data: patch.data === undefined ? existing.data : { ...existing.data, ...patch.data },
       updated_at: nowIso(),
     };
-    db.prepare("UPDATE entities SET name = ?, data = ?, updated_at = ? WHERE id = ?").run(
-      next.name,
-      JSON.stringify(next.data),
-      next.updated_at,
-      id,
-    );
+    queryDb(db)
+      .update(entities)
+      .set({
+        name: next.name,
+        data: JSON.stringify(next.data), // JSON 列 text 模式（决策 49）
+        updated_at: next.updated_at,
+      })
+      .where(eq(entities.id, id))
+      .run();
     return next;
   });
 }
@@ -380,13 +415,14 @@ export function updateEntity(
  */
 export function moveEvent(db: Db, id: string, order: number, updatedAt: string): { moved: true } | null {
   return withTransaction(db, () => {
+    const q = queryDb(db);
     // 全部未软删 event，按 sort_order 升序（NULL 沉底）排成数组（id 作稳定次序）
-    const rows = db
-      .prepare(
-        `SELECT * FROM entities WHERE type = 'event' AND deleted_at IS NULL
-         ORDER BY sort_order IS NULL, sort_order ASC, id ASC`,
-      )
-      .all() as Array<Record<string, unknown>>;
+    const rows = q
+      .select()
+      .from(entities)
+      .where(and(eq(entities.type, "event"), isNull(entities.deleted_at)))
+      .orderBy(sql`${entities.sort_order} IS NULL`, asc(entities.sort_order), asc(entities.id))
+      .all() as unknown as Array<Record<string, unknown>>;
     const idx = rows.findIndex((r) => r.id === id);
     if (idx < 0) return null; // 不存在或已软删（决策 12 过滤）
     const [moved] = rows.splice(idx, 1);
@@ -394,10 +430,14 @@ export function moveEvent(db: Db, id: string, order: number, updatedAt: string):
     const pos = Math.max(0, Math.min(Math.trunc(order), rows.length));
     rows.splice(pos, 0, moved);
     // 重写全局线性序 0..n-1；被移动行刷新 updated_at（决策 14 版本戳语义），其余行不动
-    const update = db.prepare("UPDATE entities SET sort_order = ?, updated_at = ? WHERE id = ?");
+    // 热循环：builder 每次 .run() 重新编译 SQL（prepare 不复用）；数据量小可接受，
+    // 如需极致性能可改 sql 模板（决策 49 混合风格边界）
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i] as { id: string; updated_at: string };
-      update.run(i, row.id === id ? updatedAt : row.updated_at, row.id);
+      q.update(entities)
+        .set({ sort_order: i, updated_at: row.id === id ? updatedAt : row.updated_at })
+        .where(eq(entities.id, row.id))
+        .run();
     }
     return { moved: true };
   });
@@ -411,12 +451,12 @@ export function moveEvent(db: Db, id: string, order: number, updatedAt: string):
  * G2.2/2.3（时间轴渲染、AI 排序 propose_reorder_timepoints）共用，单一事实来源查询。
  */
 export function listTimepoints(db: Db): EntityRow[] {
-  const rows = db
-    .prepare(
-      `SELECT * FROM entities WHERE type = 'timepoint' AND deleted_at IS NULL
-       ORDER BY sort_order IS NULL, sort_order ASC, id ASC`,
-    )
-    .all() as Array<Record<string, unknown>>;
+  const rows = queryDb(db)
+    .select()
+    .from(entities)
+    .where(and(eq(entities.type, "timepoint"), isNull(entities.deleted_at)))
+    .orderBy(sql`${entities.sort_order} IS NULL`, asc(entities.sort_order), asc(entities.id))
+    .all() as unknown as Array<Record<string, unknown>>;
   return rows.map((r) => rowToEntityRow(r));
 }
 
@@ -435,21 +475,25 @@ export function listTimepoints(db: Db): EntityRow[] {
  */
 export function moveTimepoint(db: Db, id: string, order: number, updatedAt: string): { moved: true } | null {
   return withTransaction(db, () => {
-    const rows = db
-      .prepare(
-        `SELECT * FROM entities WHERE type = 'timepoint' AND deleted_at IS NULL
-         ORDER BY sort_order IS NULL, sort_order ASC, id ASC`,
-      )
-      .all() as Array<Record<string, unknown>>;
+    const q = queryDb(db);
+    const rows = q
+      .select()
+      .from(entities)
+      .where(and(eq(entities.type, "timepoint"), isNull(entities.deleted_at)))
+      .orderBy(sql`${entities.sort_order} IS NULL`, asc(entities.sort_order), asc(entities.id))
+      .all() as unknown as Array<Record<string, unknown>>;
     const idx = rows.findIndex((r) => r.id === id);
     if (idx < 0) return null; // 不存在或已软删（决策 12 过滤）
     const [moved] = rows.splice(idx, 1);
     const pos = Math.max(0, Math.min(Math.trunc(order), rows.length));
     rows.splice(pos, 0, moved);
-    const update = db.prepare("UPDATE entities SET sort_order = ?, updated_at = ? WHERE id = ?");
+    // 热循环：同 moveEvent（决策 49 混合风格边界注释）
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i] as { id: string; updated_at: string };
-      update.run(i, row.id === id ? updatedAt : row.updated_at, row.id);
+      q.update(entities)
+        .set({ sort_order: i, updated_at: row.id === id ? updatedAt : row.updated_at })
+        .where(eq(entities.id, row.id))
+        .run();
     }
     return { moved: true };
   });
@@ -479,6 +523,7 @@ export function moveSetting(
   outlineDir: string,
 ): { moved: true } | null {
   return withTransaction(db, () => {
+    const q = queryDb(db);
     const row = getEntity(db, id);
     if (row === null) return null; // 不存在或已软删（决策 12 过滤）
     const edges = listSettingHierarchyEdges(db);
@@ -516,11 +561,20 @@ export function moveSetting(
       // 删旧边：按旧父 target_id 精确匹配——**不能按 source_id 删**（刚建的新边同 source，
       // 会连同被删导致改父结果丢失，debug 实测踩坑）；一设定一父（决策 30），至多一条
       if (currentParent !== null) {
-        const oldRows = db
-          .prepare(
-            `SELECT id FROM relation_records WHERE source_type = 'setting' AND source_id = ? AND target_id = ? AND relation_type = 'belongs_to' AND target_type = 'setting' AND deleted_at IS NULL`,
+        const oldRows = q
+          .select({ id: relationRecords.id })
+          .from(relationRecords)
+          .where(
+            and(
+              eq(relationRecords.source_type, "setting"),
+              eq(relationRecords.source_id, id),
+              eq(relationRecords.target_id, currentParent),
+              eq(relationRecords.relation_type, "belongs_to"),
+              eq(relationRecords.target_type, "setting"),
+              isNull(relationRecords.deleted_at),
+            ),
           )
-          .all(id, currentParent) as Array<{ id: string }>;
+          .all();
         for (const r of oldRows) {
           deleteRelation(db, r.id); // 手动删关系 = 物理删（决策 12 修订）
         }
@@ -531,18 +585,23 @@ export function moveSetting(
     const parentOfAfter = new Map(edgesAfter.map((e) => [e.childId, e.parentId]));
     let groupIds: string[];
     if (targetParent === null) {
-      const all = db
-        .prepare("SELECT id FROM entities WHERE type = 'setting' AND deleted_at IS NULL")
-        .all() as Array<{ id: string }>;
+      const all = q
+        .select({ id: entities.id })
+        .from(entities)
+        .where(and(eq(entities.type, "setting"), isNull(entities.deleted_at)))
+        .all();
       groupIds = all.map((r) => r.id).filter((gid) => !parentOfAfter.has(gid));
     } else {
       groupIds = edgesAfter.filter((e) => e.parentId === targetParent).map((e) => e.childId);
     }
-    // 组内排齐（NULL 沉底 → sort_order → name → id，与 SQLite 排序语义一致）
+    // 组内排齐（NULL 沉底 → sort_order → name → id，与 SQLite 排序语义一致）；
+    // inArray 空集生成恒假 SQL（无组 → 空集，原 IN (NULL) 语义等价）
     const rows = (
-      db
-        .prepare(`SELECT id, name, sort_order, updated_at FROM entities WHERE id IN (${groupIds.map(() => "?").join(",")})`)
-        .all(...groupIds) as Array<{ id: string; name: string; sort_order: number | null; updated_at: string }>
+      q
+        .select({ id: entities.id, name: entities.name, sort_order: entities.sort_order, updated_at: entities.updated_at })
+        .from(entities)
+        .where(inArray(entities.id, groupIds))
+        .all()
     ).sort((a, b) => {
       const ao = a.sort_order === null ? 1 : 0;
       const bo = b.sort_order === null ? 1 : 0;
@@ -560,10 +619,13 @@ export function moveSetting(
       ? rows.length
       : Math.max(0, Math.min(Math.trunc(input.order), rows.length));
     rows.splice(pos, 0, moved);
-    const update = db.prepare("UPDATE entities SET sort_order = ?, updated_at = ? WHERE id = ?");
+    // 热循环：builder 每次 .run() 重新编译 SQL（prepare 不复用）；数据量小可接受（决策 49 边界）
     const now = nowIso();
     for (let i = 0; i < rows.length; i++) {
-      update.run(i, rows[i].id === id ? now : rows[i].updated_at, rows[i].id);
+      q.update(entities)
+        .set({ sort_order: i, updated_at: rows[i].id === id ? now : rows[i].updated_at })
+        .where(eq(entities.id, rows[i].id))
+        .run();
     }
     return { moved: true };
   });
@@ -577,14 +639,22 @@ export function moveSetting(
  * @returns 挂载关系（RelationRow，source_id = timepoint id）；未挂载/关系软删/timepoint 软删 → null
  */
 export function eventOccursAt(db: Db, eventId: string): RelationRow | null {
-  const row = db
-    .prepare(
-      `SELECT r.* FROM relation_records r
-       WHERE r.target_type = 'event' AND r.target_id = ? AND r.relation_type = 'occurs_at'
-         AND r.deleted_at IS NULL AND r.source_type = 'timepoint'
-         AND EXISTS (SELECT 1 FROM entities e WHERE e.id = r.source_id AND e.deleted_at IS NULL)`,
+  const row = queryDb(db)
+    .select()
+    .from(relationRecords)
+    .where(
+      and(
+        eq(relationRecords.target_type, "event"),
+        eq(relationRecords.target_id, eventId),
+        eq(relationRecords.relation_type, "occurs_at"),
+        isNull(relationRecords.deleted_at),
+        eq(relationRecords.source_type, "timepoint"),
+        // EXISTS 防御（决策 12 修订）：timepoint 软删时 occurs_at 已级联软删，
+        // 此处兜底校验 source 端点未软删（跨表互引，sql 模板表达，4A 允许）
+        sql`EXISTS (SELECT 1 FROM entities e WHERE e.id = ${relationRecords.source_id} AND e.deleted_at IS NULL)`,
+      ),
     )
-    .get(eventId) as Record<string, unknown> | undefined;
+    .get() as unknown as Record<string, unknown> | undefined;
   return row === undefined ? null : rowToRelationRow(row);
 }
 
@@ -632,9 +702,13 @@ export function reorderTimepoints(db: Db, orderedIds: string[], nowIsoTimestamp:
         `时间点集合与当前时间轴不一致${dup}: 缺失 ${missing.length} 个${brief(missing)}、多余 ${extra.length} 个${brief(extra)}`,
       );
     }
-    const update = db.prepare("UPDATE entities SET sort_order = ?, updated_at = ? WHERE id = ?");
+    const q = queryDb(db);
+    // 热循环：同 moveEvent（决策 49 混合风格边界注释）
     for (let i = 0; i < orderedIds.length; i++) {
-      update.run(i, nowIsoTimestamp, orderedIds[i]);
+      q.update(entities)
+        .set({ sort_order: i, updated_at: nowIsoTimestamp })
+        .where(eq(entities.id, orderedIds[i]))
+        .run();
     }
     return orderedIds.length;
   });
@@ -652,22 +726,29 @@ export function reorderTimepoints(db: Db, orderedIds: string[], nowIsoTimestamp:
  */
 export function softDeleteEntity(db: Db, id: string, deletedAt: string): { relations: number; deltas: number } | null {
   return withTransaction(db, () => {
-    const exists = db.prepare("SELECT id FROM entities WHERE id = ? AND deleted_at IS NULL").get(id);
+    const q = queryDb(db);
+    const exists = q.select({ id: entities.id }).from(entities).where(and(eq(entities.id, id), isNull(entities.deleted_at))).get();
     if (exists === undefined) return null;
-    const rel = db
-      .prepare(
-        `UPDATE relation_records SET deleted_at = ? WHERE deleted_at IS NULL AND (source_id = ? OR target_id = ?)`,
+    const rel = q
+      .update(relationRecords)
+      .set({ deleted_at: deletedAt })
+      .where(
+        and(
+          isNull(relationRecords.deleted_at),
+          or(eq(relationRecords.source_id, id), eq(relationRecords.target_id, id)),
+        ),
       )
-      .run(deletedAt, id, id);
-    const delta = db
-      .prepare(`UPDATE delta_records SET deleted_at = ? WHERE deleted_at IS NULL AND target_id = ?`)
-      .run(deletedAt, id);
-  db.prepare("UPDATE entities SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL").run(
-    deletedAt,
-    deletedAt,
-    id,
-  );
-  return { relations: rel.changes, deltas: delta.changes };
+      .run();
+    const delta = q
+      .update(deltaRecords)
+      .set({ deleted_at: deletedAt })
+      .where(and(isNull(deltaRecords.deleted_at), eq(deltaRecords.target_id, id)))
+      .run();
+    q.update(entities)
+      .set({ deleted_at: deletedAt, updated_at: deletedAt })
+      .where(and(eq(entities.id, id), isNull(entities.deleted_at)))
+      .run();
+    return { relations: rel.changes, deltas: delta.changes };
   });
 }
 
@@ -743,9 +824,11 @@ function topAbilityCounts(rows: Array<Record<string, unknown>>, limit: number): 
  * location→byType、hook→byStatus/byPayoffTiming；缺字段（data 未填）不报错、不计入。
  */
 export function getEntitySummaryStats(db: Db, type: EntityType): EntitySummaryStats {
-  const rows = db
-    .prepare("SELECT data FROM entities WHERE type = ? AND deleted_at IS NULL")
-    .all(type) as Array<Record<string, unknown>>;
+  const rows = queryDb(db)
+    .select({ data: entities.data })
+    .from(entities)
+    .where(and(eq(entities.type, type), isNull(entities.deleted_at)))
+    .all() as unknown as Array<Record<string, unknown>>;
 
   const result: EntitySummaryStats = { type, total: rows.length };
   const dataOf = (r: Record<string, unknown>): Record<string, unknown> => parseDataColumn(r.data);
