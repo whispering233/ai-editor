@@ -4,9 +4,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { getTableConfig, type SQLiteTable } from "drizzle-orm/sqlite-core";
 
 import { openDatabase, closeDatabase, type Db } from "./connection.js";
 import { createTables, getUserVersion, SCHEMA_VERSION, setUserVersion } from "./schema.js";
+import { chatMessages, CREATE_TABLES_SQL, deltaRecords, entities, relationRecords } from "./tables.js";
 
 let dir: string;
 let dbPath: string;
@@ -45,6 +47,79 @@ function expectConstraintError(fn: () => unknown, code: string): void {
   } catch (err) {
     expect((err as { code?: string }).code).toBe(code);
   }
+}
+
+describe("tables.ts 双份声明对齐（决策 49）", () => {
+  // drizzle 侧声明（键 = 表名）
+  const drizzleTables: Record<string, SQLiteTable> = {
+    entities,
+    relation_records: relationRecords,
+    delta_records: deltaRecords,
+    chat_messages: chatMessages,
+  };
+
+  it("DDL 常量与 sqliteTable 定义列级对齐（列名/类型/notNull/主键）", () => {
+    const ddl = parseDdlColumns(CREATE_TABLES_SQL);
+    // 表集合双向一致
+    expect([...ddl.keys()].sort()).toEqual(Object.keys(drizzleTables).sort());
+    for (const [tableName, table] of Object.entries(drizzleTables)) {
+      const ddlCols = ddl.get(tableName);
+      expect(ddlCols, `${tableName} 应在 DDL 中存在`).toBeDefined();
+      const drizzleCols = new Map(
+        getTableConfig(table).columns.map((c) => [
+          c.name,
+          { type: c.getSQLType().toLowerCase(), notNull: c.notNull, primaryKey: c.primary },
+        ]),
+      );
+      // 列名集合一致（防漏列/多列）
+      expect([...drizzleCols.keys()].sort(), `${tableName} 列名集合`).toEqual([...ddlCols!.keys()].sort());
+      // 每列 type/notNull/primary 一致（防类型或约束漂移）
+      for (const [colName, actual] of drizzleCols) {
+        expect(actual, `${tableName}.${colName} 声明不一致`).toEqual(ddlCols!.get(colName));
+      }
+    }
+  });
+
+  it("DDL 常量引用的表均已在 drizzle 侧声明（防 DDL 新增表漏声明）", () => {
+    const ddl = parseDdlColumns(CREATE_TABLES_SQL);
+    for (const tableName of ddl.keys()) {
+      expect(drizzleTables[tableName], `${tableName} 未在 tables.ts 声明`).toBeDefined();
+    }
+  });
+});
+
+/**
+ * 从 DDL 常量解析每张表的列声明（顶层两空格缩进行）：
+ * `  <列名>  <类型> <其余约束...>`，列名可能带双引号（"order" 关键字列）。
+ * 返回 表名 → 列名 → { type: 'text'|'integer', notNull, primaryKey }。
+ * 注释行（-- 开头）与空行忽略。
+ */
+function parseDdlColumns(
+  ddl: string,
+): Map<string, Map<string, { type: "text" | "integer"; notNull: boolean; primaryKey: boolean }>> {
+  const result = new Map<string, Map<string, { type: "text" | "integer"; notNull: boolean; primaryKey: boolean }>>();
+  for (const m of ddl.matchAll(/CREATE TABLE IF NOT EXISTS (\w+) \(([\s\S]*?)\);/g)) {
+    const cols = new Map<string, { type: "text" | "integer"; notNull: boolean; primaryKey: boolean }>();
+    for (const line of m[2].split("\n")) {
+      const trimmed = line.trim();
+      if (trimmed === "" || trimmed.startsWith("--")) continue;
+      const colMatch = line.match(/^\s{2}(?:"([^"]+)"|(\w+))\s+(\w+)(.*)$/);
+      if (!colMatch) continue;
+      const colName = colMatch[1] ?? colMatch[2];
+      const rawType = colMatch[3].toLowerCase();
+      const rest = colMatch[4];
+      cols.set(colName, {
+        // 本项目 DDL 仅 TEXT/INTEGER 两种（每列 getSQLType 输出同为 text/integer）
+        type: rawType === "text" ? "text" : "integer",
+        // SQLite 中（INTEGER PRIMARY KEY rowid 别名除外）主键隐式 NOT NULL——
+        // DDL 文本不显式写 NOT NULL 时语义仍为 NOT NULL，与 drizzle .primaryKey() 对齐
+        notNull: /NOT NULL/.test(rest) || /PRIMARY KEY/.test(rest),
+        primaryKey: /PRIMARY KEY/.test(rest),
+      });
+    }
+    result.set(m[1], cols);
+  }
+  return result;
 }
 
 describe("schema.ts 建表", () => {
