@@ -20,11 +20,24 @@
 //   目标端点未软删——实体 target 查 entities 软删集合（一次 IN 查询），
 //   大纲节点 target 走 outline.json
 // - name 联表同路径：实体 → entities.name、大纲节点 → outline.json title
+//
+// 批次十五（决策 49，15.3 卡 2）：查询经 queryDb 走 drizzle 构建器（混合风格 4A）。
+// 语义逐句对照旧实现（git show 52c7c13^:packages/db/src/queries/delta.ts）：
+//   - order 全局单调：SELECT COALESCE(MAX("order"),0)+1 ↔ select({ next: sql<number> }) 聚合模板
+//     （MAX 聚合无法用 builder 列表达，用 sql 模板；COALESCE 保证恒有行——聚合无分组恒单行）
+//   - INSERT ↔ insert().values().run()；changes 列写入保持 JSON.stringify（text 模式，决策 49）
+//   - deleted_at IS NULL ↔ isNull()；node_id/target_id/type 等值 ↔ eq()；IN 占位符 ↔ inArray()
+//   - ORDER BY "order" ASC ↔ orderBy(asc(deltaRecords.order))（escapeName 双引号安全）
+//   - 实体软删集合/名称映射两次批量 IN 查询 ↔ distinct select（id / id+name）保持一次查询语义
+//   - 纯 JS 逻辑（三态判定、targetName 联表、悬空诊断分类）原样保留
 
 import type { DeltaChange, DeltaRecord, DeltaRow, OutlineFileTree } from "@whispering233/ai-editor-shared";
 import { generateId, mapRowToDelta } from "@whispering233/ai-editor-shared";
+import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { deltaRecords, entities } from "../tables.js";
 import { nowIso } from "../storage/atomic.js";
 import { withTransaction, type Db } from "../connection.js";
+import { queryDb } from "../query-db.js";
 import { findOutlineNode, readOutlineFile } from "../storage/outline.js";
 
 /**
@@ -91,9 +104,15 @@ export interface InsertDeltaInput {
  */
 export function insertDelta(db: Db, input: InsertDeltaInput): DeltaRow {
   return withTransaction(db, () => {
+    const q = queryDb(db);
     const now = nowIso();
-    const order = (
-      db.prepare('SELECT COALESCE(MAX("order"), 0) + 1 AS next FROM delta_records').get() as { next: number }
+    // order 全局单调：MAX("order") + 1（COALESCE 空表兜底为 0+1=1）。
+    // 聚合无分组恒返回单行，断言结构与旧实现一致（as { next: number }）。
+    const next = (
+      q
+        .select({ next: sql<number>`COALESCE(MAX(${deltaRecords.order}), 0) + 1` })
+        .from(deltaRecords)
+        .get() as { next: number }
     ).next;
     const row: DeltaRow = {
       id: generateId("delta-"),
@@ -102,24 +121,24 @@ export function insertDelta(db: Db, input: InsertDeltaInput): DeltaRow {
       target_id: input.targetId,
       changes: input.changes,
       description: input.description,
-      order,
+      order: next,
       created_at: now,
       updated_at: now,
       deleted_at: null,
     };
-    db.prepare(
-      'INSERT INTO delta_records (id, node_id, target_type, target_id, changes, description, "order", created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ).run(
-      row.id,
-      row.node_id,
-      row.target_type,
-      row.target_id,
-      JSON.stringify(row.changes),
-      row.description,
-      row.order,
-      row.created_at,
-      row.updated_at,
-    );
+    q.insert(deltaRecords)
+      .values({
+        id: row.id,
+        node_id: row.node_id,
+        target_type: row.target_type,
+        target_id: row.target_id,
+        changes: JSON.stringify(row.changes), // text 模式（决策 49）：写入序列化字符串
+        description: row.description,
+        order: row.order,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+      })
+      .run();
     return row;
   });
 }
@@ -139,6 +158,7 @@ export function insertDelta(db: Db, input: InsertDeltaInput): DeltaRow {
  * @param tree 已读取的 outline.json 树（调用方读取一次，避免重复 I/O）
  */
 function filterVisibleDeltas(db: Db, rows: Array<Record<string, unknown>>, tree: OutlineFileTree): DeltaRecord[] {
+  const q = queryDb(db);
   // 目标实体端点：一次 IN 查询收集软删集合与名称映射（含软删实体——名称填充不受
   // 可见性影响，过滤在另一层；relation.ts 同款取舍）。重复 target_id 用 Set 去重
   // （同一节点多条 Delta 指向同一实体时常见），避免 IN 参数重复
@@ -152,14 +172,19 @@ function filterVisibleDeltas(db: Db, rows: Array<Record<string, unknown>>, tree:
   const entitySoftDeleted = new Set<string>();
   const entityNames = new Map<string, string>();
   if (entityIds.length > 0) {
-    const placeholders = entityIds.map(() => "?").join(",");
-    const softRows = db
-      .prepare(`SELECT id FROM entities WHERE deleted_at IS NOT NULL AND id IN (${placeholders})`)
-      .all(...entityIds) as Array<{ id: string }>;
+    // 软删集合：WHERE deleted_at IS NOT NULL AND id IN (...)
+    const softRows = q
+      .select({ id: entities.id })
+      .from(entities)
+      .where(and(isNotNull(entities.deleted_at), inArray(entities.id, entityIds)))
+      .all();
     for (const r of softRows) entitySoftDeleted.add(r.id);
-    const nameRows = db
-      .prepare(`SELECT id, name FROM entities WHERE id IN (${placeholders})`)
-      .all(...entityIds) as Array<{ id: string; name: string }>;
+    // 名称映射：WHERE id IN (...)
+    const nameRows = q
+      .select({ id: entities.id, name: entities.name })
+      .from(entities)
+      .where(inArray(entities.id, entityIds))
+      .all();
     for (const r of nameRows) entityNames.set(r.id, r.name);
   }
 
@@ -198,9 +223,12 @@ function filterVisibleDeltas(db: Db, rows: Array<Record<string, unknown>>, tree:
  * @returns 完整行（DeltaRow，changes 已解析）；不存在或已软删返回 null
  */
 export function getDeltaRow(db: Db, id: string): DeltaRow | null {
-  const row = db.prepare("SELECT * FROM delta_records WHERE id = ? AND deleted_at IS NULL").get(id) as
-    | Record<string, unknown>
-    | undefined;
+  const q = queryDb(db);
+  const row = q
+    .select()
+    .from(deltaRecords)
+    .where(and(eq(deltaRecords.id, id), isNull(deltaRecords.deleted_at)))
+    .get();
   if (row === undefined) return null;
   return rowToDeltaRow(row);
 }
@@ -213,9 +241,13 @@ export function getDeltaRow(db: Db, id: string): DeltaRow | null {
  * @param outlineDir 项目根（触发节点与大纲 target 的软删/标题校验读 outline.json）
  */
 export function listDeltasByNode(db: Db, nodeId: string, outlineDir: string): DeltaRecord[] {
-  const rows = db
-    .prepare('SELECT * FROM delta_records WHERE node_id = ? AND deleted_at IS NULL ORDER BY "order" ASC')
-    .all(nodeId) as Array<Record<string, unknown>>;
+  const q = queryDb(db);
+  const rows = q
+    .select()
+    .from(deltaRecords)
+    .where(and(eq(deltaRecords.node_id, nodeId), isNull(deltaRecords.deleted_at)))
+    .orderBy(asc(deltaRecords.order))
+    .all();
   if (rows.length === 0) return [];
 
   const tree = readOutlineFile(outlineDir);
@@ -236,9 +268,13 @@ export function listDeltasByNode(db: Db, nodeId: string, outlineDir: string): De
  * @param outlineDir 项目根（触发节点与大纲 target 的软删/标题校验读 outline.json）
  */
 export function listDeltasByTarget(db: Db, targetId: string, outlineDir: string): DeltaRecord[] {
-  const rows = db
-    .prepare('SELECT * FROM delta_records WHERE target_id = ? AND deleted_at IS NULL ORDER BY "order" ASC')
-    .all(targetId) as Array<Record<string, unknown>>;
+  const q = queryDb(db);
+  const rows = q
+    .select()
+    .from(deltaRecords)
+    .where(and(eq(deltaRecords.target_id, targetId), isNull(deltaRecords.deleted_at)))
+    .orderBy(asc(deltaRecords.order))
+    .all();
   if (rows.length === 0) return [];
 
   const tree = readOutlineFile(outlineDir);
@@ -272,9 +308,13 @@ export interface DanglingDeltaInfo {
  * @param outlineDir 项目根（触发节点与大纲 target 的存在性/软删校验读 outline.json）
  */
 export function listDanglingDeltas(db: Db, outlineDir: string): DanglingDeltaInfo[] {
-  const rows = db
-    .prepare('SELECT * FROM delta_records WHERE deleted_at IS NULL ORDER BY "order" ASC')
-    .all() as Array<Record<string, unknown>>;
+  const q = queryDb(db);
+  const rows = q
+    .select()
+    .from(deltaRecords)
+    .where(isNull(deltaRecords.deleted_at))
+    .orderBy(asc(deltaRecords.order))
+    .all();
   if (rows.length === 0) return [];
 
   const tree = readOutlineFile(outlineDir);
@@ -288,10 +328,11 @@ export function listDanglingDeltas(db: Db, outlineDir: string): DanglingDeltaInf
   ];
   const entityStates = new Map<string, "ok" | "missing" | "deleted">();
   if (entityIds.length > 0) {
-    const placeholders = entityIds.map(() => "?").join(",");
-    const found = db
-      .prepare(`SELECT id, deleted_at FROM entities WHERE id IN (${placeholders})`)
-      .all(...entityIds) as Array<{ id: string; deleted_at: string | null }>;
+    const found = q
+      .select({ id: entities.id, deleted_at: entities.deleted_at })
+      .from(entities)
+      .where(inArray(entities.id, entityIds))
+      .all();
     const foundIds = new Set(found.map((f) => f.id));
     for (const id of entityIds) {
       if (!foundIds.has(id)) {
