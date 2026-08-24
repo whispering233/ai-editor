@@ -15,13 +15,13 @@
 
 | 目录 | 内容 | 何时读 |
 |------|------|--------|
-| `doc/design/` | `product.md` 产品定位、`architecture.md` 架构与分包、`decisions.md` 关键决策 1-48、`backlog.md` 迭代优化清单（MVP 不做）、`tasks.md` 开发任务清单与进度 | 任何改动前 |
+| `doc/design/` | `product.md` 产品定位、`architecture.md` 架构与分包、`decisions.md` 核心架构理念（精简版+决策总索引表，完整设计历史见 `decisions-history.md`）、`backlog.md` 迭代优化清单（MVP 不做）、`tasks.md` 开发任务清单与进度 | 任何改动前 |
 | `doc/api/` | `endpoints.md` 端点契约、`tools.md` AI 工具目录、`data-flow.md` 数据流 | 前后端改动 |
 | `doc/database/` | `schema.md` 表结构与 outline.json/project.json 契约、`hooks.md` 伏笔系统与健康指标 | 数据/后端改动 |
 | `doc/ui/` | **当前 UI 布局样式设计**：`layout.md` 三栏工作台外壳与样式规范（2026-08 已从原型更新为实现样式）、`pages/*.md` 各页面（字段标注 API 响应字段） | 前端改动 |
 | `test-project/` | 测试项目目录（借鉴 inkos test-project 模式，运行时数据不入库），日常开发测试用 | 测试/联调前 |
 
-阅读顺序（见 `doc/README.md`）：`design/product.md` → `design/architecture.md` → `design/decisions.md`（决策 9-19 是数据模型与安全基线，20/21 为 SSE 断开检测与伏笔健康指标，22 为三栏工作台布局与会话归属模型，23 为大纲节点结构化信息麦基字段集，24 为正文边界创作伴侣定位，25 为项目提示词编辑 UI，26 为时间轴（事件实体 + **G2 修订：时间标签点 timepoint 实体化**），27 为自动备份与恢复（**批次十四修订：频率新增 1 分钟档**），28 为备份命名增强，29 为备份类型标签+重命名，30 为设定层级 belongs_to，31 为分类统一 data.tags，32 为设定上级筛选，33 为画布移除，34 为 pi-ai 引擎换核，35 为工具核查与中栏 AI 演进，36 为参考资料页，37-42 为批次十交互优化（大纲/时间轴/更新时间/右键菜单/AGENTS.md/树形视图），43 为参考资料两类承载（本地 md 文件 + 外源链接：frontmatter 自包含/mtime 同步/scan 重建/存档联动），44 为参考资料分类自定义，45/46 为批次十三（人物行四列布局 + 设定树手动排序），**47/48 为批次十四（工具调用展示人类可读化——names/resolve 批量名称解析 + 摘要渲染；用户级配置格式正式化——~/.ai-editor/config.json schema v1）**）→ 按职责读 `api/` 与 `database/`；前端实现前必读 `doc/ui/layout.md`（当前实现样式，含组件结构与样式细节规范）。
+阅读顺序（见 `doc/README.md`）：`design/product.md` → `design/architecture.md` → `design/decisions.md`（核心架构理念精简版：**数据模型与安全基线**——决策 1 节点即大纲/2 通用关系表/3 Delta 追踪/4 双轮驱动/5 存储双轨/6-7 上下文分层与提示词注入/8 单命令单进程部署/9 Delta 树链累积（推演只读）/11 原子写/12 软删回收站/13 schema 演进/14 提案仅内存/15 agent 硬终止/17 安全基线/19 严格三层无游离节点；**2026-08 重大架构**——22 三栏工作台与会话归属、23 麦基字段集、26 时间轴（event+timepoint 实体化）、34 pi-ai 引擎换核、41 AGENTS.md 上下文通道；文末**决策总索引表**锚定全部「决策 N」引用，完整历史见 `decisions-history.md`）→ 按职责读 `api/` 与 `database/`；前端实现前必读 `doc/ui/layout.md`（当前实现样式，含组件结构与样式细节规范）。
 
 ## 易踩坑的架构约束
 
