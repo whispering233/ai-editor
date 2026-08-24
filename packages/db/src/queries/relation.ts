@@ -13,13 +13,26 @@
 //
 // 级联软删：S3.1 的 softDeleteEntity 已内联 relation_records 级联 UPDATE（source_id/target_id
 // 命中即标 deleted_at）——本卡不重复实现，注释确认。
+//
+// 批次十五（决策 49，15.5 卡 4）：**全部查询经 queryDb 走 drizzle 构建器**（混合风格 4A）。
+// 语义逐句对照旧实现（git show 52c7c13^:packages/db/src/queries/relation.ts）:
+//   - deleted_at IS NULL ↔ isNull()；deleted_at IS NOT NULL ↔ isNotNull()；IN 占位符 ↔ inArray()；
+//     动态 where 拼接 ↔ and(...)(SQL[])；ORDER BY r.created_at ↔ orderBy(relationRecords.created_at)
+//   - listSettingHierarchyEdges 的同表双 JOIN（s/t 别名，均 INNER + deleted_at IS NULL）
+//     ↔ drizzle alias(entities) 两次 innerJoin（同表两次需别名才可 join）
+//   - SELECT 1 判重 ↔ select({ id }) 存在性（语义等同：有行即重复）
+// 事务/纯 JS 逻辑（collectPaths/buildEndpointContext 的 outline 部分/防环）不变。
 
 import { findOutlineNode, readOutlineFile } from "../storage/outline.js";
 import { getEntity } from "./entity.js";
 import type { Db } from "../connection.js";
 import type { OutlineFileNode, OutlineFileTree, RelationQueryResult, RelationRecord, RelationRow } from "@whispering233/ai-editor-shared";
 import { RELATION_TYPES, generateId } from "@whispering233/ai-editor-shared";
+import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
+import { entities, relationRecords } from "../tables.js";
 import { nowIso } from "../storage/atomic.js";
+import { queryDb } from "../query-db.js";
 
 /**
  * 关系操作错误码（server 层映射 HttpError：RELATION_EXISTS → 409、其余 → 400；
@@ -79,16 +92,16 @@ function buildEndpointContext(
   const names = new Map<string, string>();
   const entityIds = [...endpointIds].filter((id) => id !== "root"); // root 非实体端点（无实际关系）
   if (entityIds.length > 0) {
-    const placeholders = entityIds.map(() => "?").join(",");
+    const q = queryDb(db);
     // 软删实体集合
-    const softRows = db
-      .prepare(`SELECT id FROM entities WHERE deleted_at IS NOT NULL AND id IN (${placeholders})`)
-      .all(...entityIds) as Array<{ id: string }>;
+    const softRows = q
+      .select({ id: entities.id })
+      .from(entities)
+      .where(and(isNotNull(entities.deleted_at), inArray(entities.id, entityIds)))
+      .all();
     for (const r of softRows) softDeleted.add(r.id);
     // 名称映射（含软删实体——名称填充不受可见性影响，过滤在另一层）
-    const nameRows = db
-      .prepare(`SELECT id, name FROM entities WHERE id IN (${placeholders})`)
-      .all(...entityIds) as Array<{ id: string; name: string }>;
+    const nameRows = q.select({ id: entities.id, name: entities.name }).from(entities).where(inArray(entities.id, entityIds)).all();
     for (const r of nameRows) names.set(r.id, r.name);
   }
   // 大纲端点：读一次树，收集软删节点与标题
@@ -200,31 +213,18 @@ export function listRelations(
 
 /** 查询关系行：includeSourceTarget=false 时跳过 source_id/target_id 过滤（BFS 全图模式） */
 function queryRelationRows(db: Db, query: RelationQuery, includeSourceTarget: boolean): RelationRow[] {
-  const where = ["r.deleted_at IS NULL"];
-  const params: unknown[] = [];
-  if (query.sourceType !== undefined) {
-    where.push("r.source_type = ?");
-    params.push(query.sourceType);
-  }
-  if (includeSourceTarget && query.sourceId !== undefined) {
-    where.push("r.source_id = ?");
-    params.push(query.sourceId);
-  }
-  if (query.targetType !== undefined) {
-    where.push("r.target_type = ?");
-    params.push(query.targetType);
-  }
-  if (includeSourceTarget && query.targetId !== undefined) {
-    where.push("r.target_id = ?");
-    params.push(query.targetId);
-  }
-  if (query.relationType !== undefined) {
-    where.push("r.relation_type = ?");
-    params.push(query.relationType);
-  }
-  const rows = db
-    .prepare(`SELECT r.* FROM relation_records r WHERE ${where.join(" AND ")} ORDER BY r.created_at`)
-    .all(...params) as Array<Record<string, unknown>>;
+  const conditions = [isNull(relationRecords.deleted_at)];
+  if (query.sourceType !== undefined) conditions.push(eq(relationRecords.source_type, query.sourceType));
+  if (includeSourceTarget && query.sourceId !== undefined) conditions.push(eq(relationRecords.source_id, query.sourceId));
+  if (query.targetType !== undefined) conditions.push(eq(relationRecords.target_type, query.targetType));
+  if (includeSourceTarget && query.targetId !== undefined) conditions.push(eq(relationRecords.target_id, query.targetId));
+  if (query.relationType !== undefined) conditions.push(eq(relationRecords.relation_type, query.relationType));
+  const rows = queryDb(db)
+    .select()
+    .from(relationRecords)
+    .where(and(...conditions))
+    .orderBy(relationRecords.created_at)
+    .all() as unknown as Array<Record<string, unknown>>;
   return rows.map(rowToRelationRow);
 }
 
@@ -304,9 +304,11 @@ function collectPaths(
  * @param outlineDir 大纲端点软删校验读 outline.json
  */
 export function getRelation(db: Db, id: string, outlineDir: string): RelationRow | null {
-  const row = db.prepare("SELECT * FROM relation_records WHERE id = ? AND deleted_at IS NULL").get(id) as
-    | Record<string, unknown>
-    | undefined;
+  const row = queryDb(db)
+    .select()
+    .from(relationRecords)
+    .where(and(eq(relationRecords.id, id), isNull(relationRecords.deleted_at)))
+    .get() as unknown as Record<string, unknown> | undefined;
   if (row === undefined) return null;
   const relation = rowToRelationRow(row);
   const ctx = buildEndpointContext(db, outlineDir, new Set([relation.source_id, relation.target_id]));
@@ -345,11 +347,11 @@ export function createRelation(
   assertEndpointExists(db, outlineDir, input.sourceType, input.sourceId);
   assertEndpointExists(db, outlineDir, input.targetType, input.targetId);
   // 判重（同三元组未软删即视为已存在）
-  const dup = db
-    .prepare(
-      "SELECT 1 FROM relation_records WHERE source_id = ? AND target_id = ? AND relation_type = ? AND deleted_at IS NULL",
-    )
-    .get(input.sourceId, input.targetId, input.relationType);
+  const dup = queryDb(db)
+    .select({ id: relationRecords.id })
+    .from(relationRecords)
+    .where(and(eq(relationRecords.source_id, input.sourceId), eq(relationRecords.target_id, input.targetId), eq(relationRecords.relation_type, input.relationType), isNull(relationRecords.deleted_at)))
+    .get();
   if (dup !== undefined) {
     throw new RelationError("RELATION_EXISTS", `关系已存在: ${input.sourceId} → ${input.targetId} (${input.relationType})`);
   }
@@ -368,20 +370,21 @@ export function createRelation(
     updated_at: now,
     deleted_at: null,
   };
-  db.prepare(
-    `INSERT INTO relation_records (id, source_type, source_id, target_type, target_id, relation_type, metadata, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(
-    row.id,
-    row.source_type,
-    row.source_id,
-    row.target_type,
-    row.target_id,
-    row.relation_type,
-    row.metadata === null ? null : JSON.stringify(row.metadata),
-    row.created_at,
-    row.updated_at,
-  );
+  queryDb(db)
+    .insert(relationRecords)
+    .values({
+      id: row.id,
+      source_type: row.source_type,
+      source_id: row.source_id,
+      target_type: row.target_type,
+      target_id: row.target_id,
+      relation_type: row.relation_type,
+      // metadata 为可空 text 列（JSON 扩展元数据，JSON.stringify 序列化写入；null 直接写空）
+      metadata: row.metadata === null ? null : JSON.stringify(row.metadata),
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    })
+    .run();
   return row;
 }
 
@@ -414,18 +417,25 @@ function assertEndpointExists(db: Db, outlineDir: string, type: string, id: stri
  * parent_id 需全表扫 + parse，关系表走索引）。方向：childId → parentId（child belongs_to parent）。
  */
 export function listSettingHierarchyEdges(db: Db): SettingHierarchyEdge[] {
-  const rows = db
-    .prepare(
-      `SELECT r.source_id AS child_id, r.target_id AS parent_id
-       FROM relation_records r
-       JOIN entities s ON s.id = r.source_id AND s.deleted_at IS NULL
-       JOIN entities t ON t.id = r.target_id AND t.deleted_at IS NULL
-       WHERE r.relation_type = 'belongs_to'
-         AND r.source_type = 'setting' AND r.target_type = 'setting'
-         AND r.deleted_at IS NULL`,
+  // 同表双 JOIN（source 实体 / target 实体均为非软删 setting）——IDs 的表对象在 FROM 中已占用，
+  // 二次 join 需 alias 区分（s/t，语义与旧实现 SELECT R JOIN entities s JOIN entities t 一致）
+  const sourceEntities = alias(entities, "s");
+  const targetEntities = alias(entities, "t");
+  const rows = queryDb(db)
+    .select({ childId: relationRecords.source_id, parentId: relationRecords.target_id })
+    .from(relationRecords)
+    .innerJoin(sourceEntities, and(eq(sourceEntities.id, relationRecords.source_id), isNull(sourceEntities.deleted_at)))
+    .innerJoin(targetEntities, and(eq(targetEntities.id, relationRecords.target_id), isNull(targetEntities.deleted_at)))
+    .where(
+      and(
+        eq(relationRecords.relation_type, "belongs_to"),
+        eq(relationRecords.source_type, "setting"),
+        eq(relationRecords.target_type, "setting"),
+        isNull(relationRecords.deleted_at),
+      ),
     )
-    .all() as Array<{ child_id: string; parent_id: string }>;
-  return rows.map((r) => ({ childId: r.child_id, parentId: r.parent_id }));
+    .all();
+  return rows.map((r) => ({ childId: r.childId, parentId: r.parentId }));
 }
 
 /**
@@ -453,7 +463,7 @@ export function wouldCreateSettingCycle(db: Db, childId: string, newParentId: st
  * @returns 影响行数（0 = 不存在，路由层映射 404 RELATION_NOT_FOUND）
  */
 export function deleteRelation(db: Db, id: string): number {
-  return db.prepare("DELETE FROM relation_records WHERE id = ?").run(id).changes;
+  return queryDb(db).delete(relationRecords).where(eq(relationRecords.id, id)).run().changes;
 }
 
 /**
@@ -470,9 +480,11 @@ export function updateRelationMetadata(
   metadata: Record<string, unknown>,
   updatedAt: string,
 ): { id: string } | null {
-  const result = db
-    .prepare("UPDATE relation_records SET metadata = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL")
-    .run(JSON.stringify(metadata), updatedAt, id);
+  const result = queryDb(db)
+    .update(relationRecords)
+    .set({ metadata: JSON.stringify(metadata), updated_at: updatedAt })
+    .where(and(eq(relationRecords.id, id), isNull(relationRecords.deleted_at)))
+    .run();
   return result.changes === 0 ? null : { id };
 }
 
@@ -521,9 +533,12 @@ function checkEndpointState(
  * @param outlineDir 项目根（大纲端点存在性/软删校验读 outline.json）
  */
 export function listDanglingRelations(db: Db, outlineDir: string): DanglingRelationInfo[] {
-  const rows = db
-    .prepare("SELECT * FROM relation_records WHERE deleted_at IS NULL ORDER BY created_at")
-    .all() as Array<Record<string, unknown>>;
+  const rows = queryDb(db)
+    .select()
+    .from(relationRecords)
+    .where(isNull(relationRecords.deleted_at))
+    .orderBy(relationRecords.created_at)
+    .all() as unknown as Array<Record<string, unknown>>;
   if (rows.length === 0) return [];
 
   const tree = readOutlineFile(outlineDir);
@@ -536,10 +551,11 @@ export function listDanglingRelations(db: Db, outlineDir: string): DanglingRelat
   }
   const entityStates = new Map<string, "ok" | "missing" | "deleted">();
   if (entityIds.size > 0) {
-    const placeholders = [...entityIds].map(() => "?").join(",");
-    const found = db
-      .prepare(`SELECT id, deleted_at FROM entities WHERE id IN (${placeholders})`)
-      .all(...entityIds) as Array<{ id: string; deleted_at: string | null }>;
+    const found = queryDb(db)
+      .select({ id: entities.id, deleted_at: entities.deleted_at })
+      .from(entities)
+      .where(inArray(entities.id, [...entityIds]))
+      .all() as unknown as Array<{ id: string; deleted_at: string | null }>;
     const foundIds = new Set(found.map((f) => f.id));
     for (const id of entityIds) {
       if (!foundIds.has(id)) {
