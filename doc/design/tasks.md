@@ -27,12 +27,12 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
   - [x] 15.0 文档先行（本卡）：决策 49 写入 decisions.md + 任务卡清单 + architecture.md/schema.md 声明层说明，commit `4ce807b`
   - [x] 15.1 卡 0 地基：加 drizzle-orm 依赖（stable 非 rc）；新建 `tables.ts`（4 表 sqliteTable 定义 + 同文件 DDL 常量 + 5 个索引）；`schema.ts` 瘦身（createTables 改执行 tables.ts DDL，user_version 工具不动）；schema.test.ts 增「DDL 与定义对齐」断言；**8 个查询模块一行不动**；全仓测试 + typecheck + lint + build 全绿 `d510f25`
   - [x] 15.2 卡 1 试点 trash.ts：queryDb 辅助（WeakMap 缓存 drizzle 实例）+ 13 处 prepare 重写（builder/混合）+ trash.test.ts 一字不改全绿 + 三疑点验证记录（① native 事务内 drizzle 查询连接级共享：异常回滚两侧不可见、提交两侧一致 ② data 列 text + rowToEntityRow 路径：drizzle 返回原始 JSON 字符串坏 JSON 不抛错 ③ queryDb WeakMap 缓存同连接复用）`52c7c13`
-  - [ ] 15.3 卡 2 重写 delta.ts（9 处）
-  - [ ] 15.4 卡 3 重写 chat.ts（5 处，tool_calls JSON 防御解析）
-  - [ ] 15.5 卡 4 重写 relation.ts（11 处，注意与 entity 循环引用）
-  - [ ] 15.6 卡 5 重写 entity.ts（23 处，动态 where/LIKE 透传/白名单排序/JS 过滤路径/IN 动态占位符/批量 sort_order/级联软删）
-  - [ ] 15.7 卡 6 compute-state.ts + outline-ops.ts（0 prepare，纯调用层）签名不变零改动确认收口
-  - [ ] 15.8 卡 7 收尾：migration.ts 保持 native 确认；文档复核（architecture.md/decisions.md/schema.md/tasks.md）；全仓验收；发布 v0.0.22 或并入下一批次（届时确认）
+  - [x] 15.3 卡 2 重写 delta.ts（9 处）`d1cd068`（8 builder + 1 sql 模板：order 全局单调聚合）
+  - [x] 15.4 卡 3 重写 chat.ts（5 处，tool_calls JSON 防御解析）`ed64015`（listSessions 相关子查询聚合走 sql 模板参数绑定）
+  - [x] 15.5 卡 4 重写 relation.ts（11 处，同表二次 join 用 alias）`84c70f8`，循环引用结构未动
+  - [x] 15.6 卡 5 重写 entity.ts（23 处，动态 where/LIKE 透传/白名单排序/JS 过滤路径/inArray/批量 sort_order/级联软删）`b08abb3`（sql 模板 2 处：NULL 沉底 + EXISTS 跨表）
+  - [x] 15.7 卡 6 compute-state.ts + outline-ops.ts（0 prepare，纯调用层）零改动确认收口：无直接 db 调用，仅经已 drizzle 化模块
+  - [ ] 15.8 卡 7 收尾：migration.ts 保持 native 确认 ✓；文档复核（architecture.md/decisions.md/schema.md/tasks.md ✓）；全仓验收；发布 v0.0.22 或并入下一批次（届时确认）
 
 > 各卡详细规格、坑记录与提交历史可 `git log` 回溯（commit 见 CHANGELOG.md / release-review.md 发布进展记录）。
 
