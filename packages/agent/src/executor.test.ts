@@ -1,12 +1,10 @@
 // S7.4 工具调度 + 提案内存仓测试
 // 覆盖：批量校验 fail fast / 工具不存在与执行抛错 isError 结构化 / AbortedError 取消传播 /
-//   提案执行（仓内可查 + proposal 事件数据构造 + tool_result 严格无预览）/ 假时钟 TTL /
-//   条数上限淘汰（最旧）/ 项目隔离 / clear() / 同序等长回填 / 构建表完整性
-// 契约来源：doc/design/tasks.md S7.4、doc/api/tools.md「工具执行契约」/「提案类」、
-//   doc/design/decisions.md 决策 14/15/16。
+// 提案执行（仓内可查 + proposal 事件数据构造 + tool_result 严格无预览）/ 假时钟 TTL /
+// 条数上限淘汰（最旧）/ 项目隔离 / clear / 同序等长回填 / 构建表完整性
 // 策略：真注册表 + 唯一名 mock 工具（exec_test_*）+ 真 propose 工具（propose_outline_node
-//   最小参数走纯函数路径，无 db/文件 I/O）；提案仓用独立实例 + 假时钟。agent 不依赖 db——
-//   ToolContext.db 用 never 占位（registry.test.ts 同款模式），executor 只透传不触达。
+// 最小参数走纯函数路径，无 db/文件 I/O）；提案仓用独立实例 + 假时钟。agent 不依赖 db——
+// ToolContext.db 用 never 占位（registry.test.ts 同款模式），executor 只透传不触达。
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PROPOSAL_TOOLS, TOOL_PERMISSION } from "@whispering233/ai-editor-shared";
 import { getEntityArgsSchema } from "@whispering233/ai-editor-shared/schemas/tools";
@@ -107,7 +105,7 @@ describe("createToolDispatcher 工具调度（S7.4）", () => {
     capturedSignals.length = 0;
   });
 
-  it("多调用按输入顺序等长回填（成功/失败混合，id 一一对应——run.ts 契约）", async () => {
+  it("多调用按输入顺序等长回填（成功/失败混合，id 一一对应——run.ts ）", async () => {
     const dispatcher = createToolDispatcher(makeCtx());
     const calls: DispatchToolCall[] = [
       { id: "call_1", tool: "exec_test_echo", args: { type: "character", id: "char-1" } },
@@ -126,20 +124,20 @@ describe("createToolDispatcher 工具调度（S7.4）", () => {
       "exec_test_throw",
       "get_entity",
     ]);
-    // 成功：结果序列化回填（ok 与 isError 同义同步赋值——run.ts 接口保留双字段，S7.3 审核 S4）
+ // 成功：结果序列化回填（ok 与 isError 同义同步赋值——run.ts 接口保留双字段，S7.3 审核 S4）
     expect(results[0]).toMatchObject({ id: "call_1", ok: true, isError: false, content: '{"result":42}' });
-    // propose 成功：proposal 透传（proposal 事件数据在 tool_result 后由 run.ts 发出）
+ // propose 成功：proposal 透传（proposal 事件数据在 tool_result 后由 run.ts 发出）
     expect(results[1].isError).toBe(false);
     expect(results[1].proposal?.type).toBe("propose_outline_node");
-    // 工具不存在 → isError（不中断其他）
+ // 工具不存在 → isError（不中断其他）
     expect(results[2]).toMatchObject({ id: "call_3", tool: "no_such_tool", ok: false, isError: true });
     expect(results[2].content).toContain("no_such_tool");
-    // 执行抛错 → isError 结构化（工具名 + 参数 + 错误信息，决策 15 喂回自纠）
+ // 执行抛错 → isError 结构化（工具名 + 参数 + 错误信息， 喂回自纠）
     expect(results[3]).toMatchObject({ id: "call_4", tool: "exec_test_throw", ok: false, isError: true });
     expect(results[3].content).toContain("exec_test_throw");
     expect(results[3].content).toContain("char-2");
     expect(results[3].content).toContain("boom");
-    // 参数校验失败 → isError（未执行）
+ // 参数校验失败 → isError（未执行）
     expect(results[4]).toMatchObject({ id: "call_5", tool: "get_entity", ok: false, isError: true });
     expect(results[4].content).toContain("参数校验失败");
     expect(results[4].content).toContain("id");
@@ -178,7 +176,7 @@ describe("createToolDispatcher 工具调度（S7.4）", () => {
     ).rejects.toBeInstanceOf(AbortedError);
   });
 
-  it("调度前 signal 已中止 → 抛 AbortedError，任何工具不执行（决策 16 ③）", async () => {
+  it("调度前 signal 已中止 → 抛 AbortedError，任何工具不执行（）", async () => {
     const controller = new AbortController();
     controller.abort();
     const dispatcher = createToolDispatcher(makeCtx());
@@ -191,7 +189,7 @@ describe("createToolDispatcher 工具调度（S7.4）", () => {
     expect(capturedSignals).toHaveLength(0); // 一个工具都没执行
   });
 
-  it("批量执行间隙取消 → 中止后续工具并传播取消（决策 16 ③）", async () => {
+  it("批量执行间隙取消 → 中止后续工具并传播取消（）", async () => {
     const controller = new AbortController();
     selfAbortState.controller = controller;
     const dispatcher = createToolDispatcher(makeCtx());
@@ -205,7 +203,7 @@ describe("createToolDispatcher 工具调度（S7.4）", () => {
         controller.signal,
       ),
     ).rejects.toBeInstanceOf(AbortedError);
-    // 仅首个工具执行过（其 run 内中止 signal）；后续工具在间隙检查被拦截，取消按抛错路径传播
+ // 仅首个工具执行过（其 run 内中止 signal）；后续工具在间隙检查被拦截，取消按抛错路径传播
     expect(capturedSignals).toHaveLength(1);
     selfAbortState.controller = null;
   });
@@ -214,8 +212,8 @@ describe("createToolDispatcher 工具调度（S7.4）", () => {
     const controller = new AbortController();
     selfAbortState.controller = controller;
     const dispatcher = createToolDispatcher(makeCtx());
-    // 工具执行中用户取消但工具未检查 signal、抛普通 Error：catch 以 signal.aborted 双保险
-    // 识别 → 原样抛穿（run.ts 侧按取消终止 aborted=true），而不是 isError 回填喂回 LLM
+ // 工具执行中用户取消但工具未检查 signal、抛普通 Error：catch 以 signal.aborted 双保险
+ // 识别 → 原样抛穿（run.ts 侧按取消终止 aborted=true），而不是 isError 回填喂回 LLM
     await expect(
       dispatcher(
         [{ id: "a", tool: "exec_test_abort_then_throw", args: { type: "character", id: "char-1" } }],
@@ -226,7 +224,7 @@ describe("createToolDispatcher 工具调度（S7.4）", () => {
     selfAbortState.controller = null;
   });
 
-  it("signal 透传到 run（决策 16 ③「run 调用传 signal」）", async () => {
+  it("signal 透传到 run（「run 调用传 signal」）", async () => {
     const controller = new AbortController();
     const dispatcher = createToolDispatcher(makeCtx());
     await dispatcher(
@@ -250,11 +248,11 @@ describe("createToolDispatcher 工具调度（S7.4）", () => {
     const r = results[0];
     expect(r.isError).toBe(false);
     expect(r.ok).toBe(true);
-    // tool_result 严格 { proposal_id, summary }——无预览细节（tools.md「提案类」2026-08 修订）
+ // tool_result 严格 { proposal_id, summary }——无预览细节（「提案类」2026-08 修订）
     const parsed = JSON.parse(r.content) as { proposal_id: string; summary: string };
     expect(Object.keys(parsed).sort()).toEqual(["proposal_id", "summary"]);
     expect(parsed.proposal_id.startsWith("prop_")).toBe(true);
-    // proposal 事件数据（S7.6 推 GUI）：proposal_id/type/preview{type,summary,args}
+ // proposal 事件数据（S7.6 推 GUI）：proposal_id/type/preview{type,summary,args}
     expect(r.proposal?.proposal_id).toBe(parsed.proposal_id);
     expect(r.proposal?.type).toBe("propose_outline_node");
     expect(r.proposal?.preview).toEqual({
@@ -262,7 +260,7 @@ describe("createToolDispatcher 工具调度（S7.4）", () => {
       summary: parsed.summary,
       args: { type: "chapter", title: "第一卷" },
     });
-    // 仓内可查（S7.5 confirm 取用）：完整 Proposal，id 与 tool_result / 事件一致
+ // 仓内可查（S7.5 confirm 取用）：完整 Proposal，id 与 tool_result / 事件一致
     const stored = store.get(parsed.proposal_id, "proj-1");
     expect(stored).not.toBeNull();
     expect(stored?.proposal_id).toBe(parsed.proposal_id);
@@ -297,7 +295,7 @@ describe("createToolDispatcher 工具调度（S7.4）", () => {
   });
 });
 
-// ============ 提案内存仓（决策 14） ============
+// ============ 提案内存仓 ============
 
 describe("提案内存仓（TTL / 上限 / 项目绑定 / clear）", () => {
   beforeEach(() => {
@@ -364,7 +362,7 @@ describe("提案内存仓（TTL / 上限 / 项目绑定 / clear）", () => {
     expect(store.get("prop_3", "proj-1")).not.toBeNull();
   });
 
-  it("clear() 清空全部项目提案（决策 14 修订：切换项目语义）", () => {
+  it("clear() 清空全部项目提案（切换项目语义）", () => {
     const store = createProposalStore();
     store.set(makeProposal("prop_1", "proj-1"));
     store.set(makeProposal("prop_2", "proj-2"));

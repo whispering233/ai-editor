@@ -1,14 +1,14 @@
-// 提案类工具：实体（S6.6，tools.md「提案类」3 个）
+// 提案类工具：实体（S6.6，「提案类」3 个）
 // propose_create_entity / propose_update_entity / propose_delete_entity
 //
 // 语义：AI 不能直接修改数据——build 函数只**产出提案对象**（buildProposal，prop_ 运行时 id），
-// run 返回 { proposal_id, summary }（tools.md 2026-08 修订：tool_result 不含预览细节，
+// run 返回 { proposal_id, summary }（ 2026-08 修订：tool_result 不含预览细节，
 // 防 LLM 误以为提案已生效而重复提案）；**不落盘、不写任何数据**（与 S6.7 执行工具的核心差异——
 // 本模块零写操作）。
-// 生成时校验（决策 14/19）：引用实体存在且未软删（getEntity 已过滤软删，决策 12），
+// 生成时校验：引用实体存在且未软删（getEntity 已过滤软删），
 // 采集实体自身 updated_at 快照供确认时比对。
 //
-// 参数契约：packages/shared/src/types/tool.ts propose*ArgsSchema（snake_case 与 tools.md 对齐）
+// 参数packages/shared/src/types/tool.ts propose*ArgsSchema（snake_case 与 对齐）
 
 import { getEntity } from "@whispering233/ai-editor-db";
 import type { ProposeCreateEntityArgs, ProposeDeleteEntityArgs, ProposeUpdateEntityArgs } from "@whispering233/ai-editor-shared";
@@ -17,7 +17,7 @@ import { buildProposal, checkProposalAborted, refEntity, type Proposal, type Too
 
 /** 产出创建实体提案（无引用对象——新实体 id 由 S6.7 执行时生成） */
 export function buildProposeCreateEntity(ctx: ToolContext, args: ProposeCreateEntityArgs): Proposal {
-  // 引用为空：不依赖任何现存对象（type/name/data 已由 schema 校验）
+ // 引用为空：不依赖任何现存对象（type/name/data 已由 schema 校验）
   return buildProposal(
     ctx,
     "propose_create_entity",
@@ -38,7 +38,7 @@ export function runProposeCreateEntity(
   return { proposal_id: proposal.proposal_id, summary: proposal.summary };
 }
 
-/** 产出更新实体提案（引用实体存在 + updated_at 快照，决策 14） */
+/** 产出更新实体提案（引用实体存在 + updated_at 快照） */
 export function buildProposeUpdateEntity(ctx: ToolContext, args: ProposeUpdateEntityArgs): Proposal {
   const entity = getEntity(ctx.db, args.entity_id);
   if (entity === null) {
@@ -65,7 +65,7 @@ export function runProposeUpdateEntity(
   return { proposal_id: proposal.proposal_id, summary: proposal.summary };
 }
 
-/** 产出删除实体提案（软删 + 级联关系与 Delta，可回收站还原，决策 12） */
+/** 产出删除实体提案（软删 + 级联关系与 Delta，可回收站还原） */
 export function buildProposeDeleteEntity(ctx: ToolContext, args: ProposeDeleteEntityArgs): Proposal {
   const entity = getEntity(ctx.db, args.entity_id);
   if (entity === null) {

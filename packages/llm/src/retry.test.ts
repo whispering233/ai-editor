@@ -18,7 +18,7 @@ function retryableErrorOnly(outcome: { type: "value" | "error"; value?: unknown;
   return classifyLLMError(outcome.error);
 }
 
-describe("classifyLLMError 分类（决策 15）", () => {
+describe("classifyLLMError 分类（）", () => {
   it("可重试：429 / 5xx / 网络断开 / 流截断", () => {
     expect(classifyLLMError(llmErr(429))).toBe(true);
     expect(classifyLLMError(llmErr(500))).toBe(true);
@@ -101,7 +101,7 @@ describe("withRetry 基础行为", () => {
   });
 });
 
-describe("withRetry 退避与 abort（决策 15）", () => {
+describe("withRetry 退避与 abort（）", () => {
   it("指数退避：baseDelay * 2^(attempt-1)，间隔精确（fake timers）", async () => {
     vi.useFakeTimers();
     try {
@@ -113,7 +113,7 @@ describe("withRetry 退避与 abort（决策 15）", () => {
         maxRetries: 2,
         baseDelayMs: 1000,
       });
-      // 提前挂接断言（防未处理 rejection），再推进时间
+ // 提前挂接断言（防未处理 rejection），再推进时间
       const assertion = expect(p).rejects.toMatchObject({ status: 500 });
       await vi.advanceTimersByTimeAsync(0); // 首次尝试完成 → 进入第一次退避（1000ms）
       expect(produce).toHaveBeenCalledTimes(1);
@@ -202,7 +202,7 @@ describe("withRetry 退避与 abort（决策 15）", () => {
   });
 });
 
-describe("withRetry 包 chatStream 集成（决策 34 换核后 fake models 注入）", () => {
+describe("withRetry 包 chatStream 集成（ 换核后 fake models 注入）", () => {
   const fakeModel = { id: "m", name: "m", provider: "deepseek", contextWindow: 64000, maxTokens: 8192, reasoning: true };
 
   function fakeStream(events: unknown[]) {

@@ -9,7 +9,7 @@
  * workspace:~ → ~版本；workspace:1.2.3 → 原样。
  * 无 workspace: 依赖时直接跳过（不做备份/写入，避免无谓 churn）。
  * 备份到 .package.json.publish-backup，postpack 恢复；校验残留 workspace: 则恢复并退出 1。
- * 原子写：临时文件 + rename（决策 11 精神，避免中断半写）。
+ * 原子写：临时文件 + rename（避免中断半写）。
  */
 import { readFile, writeFile, copyFile, rm, rename, readdir } from "node:fs/promises";
 import { join, dirname } from "node:path";

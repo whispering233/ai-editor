@@ -1,7 +1,6 @@
 // 错误码 → 引导文案映射（纯函数，S1.4）
-// 契约来源：doc/ui/layout.md §3.2「错误横幅：code + message，按错误码给出引导文案（各页定义映射）」
 // 用途：Dashboard 项目开/建页的表单错误提示；页面分支用 loadError 判断形态（如 NO_PROJECT_OPEN
-//   引导开/建、CLIENT_NETWORK_ERROR 连接失败重试），本函数负责文案层
+// 引导开/建、CLIENT_NETWORK_ERROR 连接失败重试），本函数负责文案层
 
 /**
  * 项目开/建相关错误码 → 用户可读引导文案
@@ -13,10 +12,10 @@ export function describeOpenError(code: string | null): string {
     case "INVALID_PROJECT_PATH":
       return "路径无效：请使用绝对路径，且目标目录须已含 project.json（不是项目目录）";
     case "PROJECT_ALREADY_EXISTS":
-      // S1.5 修订：书架形态下对应动作是列表行「打开」或折叠区「打开其他路径」
+ // S1.5 修订：书架形态下对应动作是列表行「打开」或折叠区「打开其他路径」
       return "该目录已是项目，请直接打开（书架列表或「打开其他路径」）";
     case "PROJECT_VERSION_NEWER":
-      // E4：项目由更高版本程序创建（open 409，堵降级数据丢失——release-review §一）
+ // 项目由更高版本程序创建（open 409，堵降级数据丢失）
       return "该项目由更高版本的 ai-editor 创建，请升级程序后再打开（避免降级导致数据丢失）";
     case "NO_PROJECT_OPEN":
       return "";
@@ -28,10 +27,10 @@ export function describeOpenError(code: string | null): string {
 }
 
 /**
- * 导入备份错误码 → 引导文案（E3：书架导入对话框内联错误）。
+ * 导入备份错误码 → 引导文案（书架导入对话框内联错误）。
  * - VALIDATION_ERROR / SCHEMA_VERSION_MISMATCH **透传服务端 message**——坏包/缺文件/书名
- *   非法等具体问题由服务端描述，SCHEMA_VERSION_MISMATCH 的 message 已按相对版本分流
- *   （「备份来自更高版本程序」/「备份来自旧版本程序」），透传最准确
+ * 非法等具体问题由服务端描述，SCHEMA_VERSION_MISMATCH 的 message 已按相对版本分流
+ * （「备份来自更高版本程序」/「备份来自旧版本程序」），透传最准确
  * - PROJECT_ALREADY_EXISTS 本地映射换书名引导（对话框内可立即改名重试）
  */
 export function describeImportError(code: string | null, message: string): string {
@@ -52,7 +51,7 @@ export function describeImportError(code: string | null, message: string): strin
 }
 
 /**
- * 导出备份错误码 → 引导文案（E3：书架导出按钮 toast）。
+ * 导出备份错误码 → 引导文案（书架导出按钮 toast）。
  * 导出失败均为服务端/网络异常（无表单可修正），服务端 message 具体则透传；
  * 仅网络失败映射连接引导
  */

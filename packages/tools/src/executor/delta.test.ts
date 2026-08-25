@@ -1,6 +1,6 @@
 // S6.7 执行类工具测试：Delta（add_delta）
 // 覆盖：写路径正确性（order 服务端全局单调生成、changes 原样落库）、
-//   description 取 **proposal.summary**（S6.6 delta.ts 契约：执行器取 summary 作人类可读描述）
+// description 取 **proposal.summary**（S6.6 delta.ts 执行器取 summary 作人类可读描述）
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

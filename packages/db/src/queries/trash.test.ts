@@ -1,7 +1,7 @@
 // S4.1 回收站数据层测试：实体列表/级联还原/物理清除 + 级联 helper（自 server 下沉）
 // 覆盖：deleted_at 倒序列表、restore 级联还原计数与 updated_at 刷新、幂等（未软删/不存在/
-//       类型不匹配/重复还原）、另一端仍软删的关系也全部还原（决策 12 修订）、
-//       purge 物理清除本体+关系+Delta、cascadeRestore/cascadePurge 语义不变
+// 类型不匹配/重复还原）、另一端仍软删的关系也全部还原、
+// purge 物理清除本体+关系+Delta、cascadeRestore/cascadePurge 语义不变
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -79,7 +79,7 @@ describe("listDeletedEntities（GET /api/v1/trash entities 侧）", () => {
   });
 });
 
-describe("restoreEntity（决策 12 修订）", () => {
+describe("restoreEntity（）", () => {
   it("级联还原关系（任一端点）+ Delta（target_id），计数正确；自身 deleted_at 置 NULL + updated_at 刷新", () => {
     const row = createEntity(db, { type: "hook", name: "伏笔" });
     seedRelation(row.id);
@@ -88,7 +88,7 @@ describe("restoreEntity（决策 12 修订）", () => {
 
     const r = restoreEntity(db, "hook", row.id)!;
     expect(r).toEqual({ restoredRelations: 1, restoredDeltas: 1 });
-    // 自身：deleted_at 置 NULL + updated_at 刷新（决策 12 修订——刷新时间 >= 软删时间）
+ // 自身：deleted_at 置 NULL + updated_at 刷新（刷新时间 >= 软删时间）
     const raw = db.prepare("SELECT deleted_at, updated_at FROM entities WHERE id = ?").get(row.id) as {
       deleted_at: string | null;
       updated_at: string;
@@ -96,7 +96,7 @@ describe("restoreEntity（决策 12 修订）", () => {
     expect(raw.deleted_at).toBeNull();
     expect(Date.parse(raw.updated_at)).toBeGreaterThanOrEqual(Date.parse(T2));
     expect(raw.updated_at).not.toBe(T2); // 还原刷新（nowIso 当前时间 > 固定软删时间）
-    // 级联行已还原
+ // 级联行已还原
     expect(
       (db.prepare("SELECT deleted_at FROM relation_records WHERE id = ?").get(`rel-${row.id}`) as { deleted_at: string | null }).deleted_at,
     ).toBeNull();
@@ -105,7 +105,7 @@ describe("restoreEntity（决策 12 修订）", () => {
     ).toBeNull();
   });
 
-  it("另一端仍软删的关系也被还原（决策 12 修订：全部还原，不跳过）", () => {
+  it("另一端仍软删的关系也被还原（全部还原，不跳过）", () => {
     const a = createEntity(db, { type: "character", name: "甲" });
     const b = createEntity(db, { type: "hook", name: "乙" });
     seedRelationBetween(`rel-${a.id}`, a.id, b.id); // a → b
@@ -115,7 +115,7 @@ describe("restoreEntity（决策 12 修订）", () => {
 
     const r = restoreEntity(db, "character", a.id)!;
     expect(r).toEqual({ restoredRelations: 1, restoredDeltas: 1 });
-    // 关系已还原，即使另一端 b 仍软删
+ // 关系已还原，即使另一端 b 仍软删
     expect(
       (db.prepare("SELECT deleted_at FROM relation_records WHERE id = ?").get(`rel-${a.id}`) as { deleted_at: string | null }).deleted_at,
     ).toBeNull();
@@ -128,7 +128,7 @@ describe("restoreEntity（决策 12 修订）", () => {
   });
 
   it("幂等：未软删/不存在/类型不匹配 → null 且无副作用", () => {
-    // 未软删（含已还原）→ null：updated_at 与级联行均不受影响
+ // 未软删（含已还原）→ null：updated_at 与级联行均不受影响
     const alive = createEntity(db, { type: "character", name: "存活" });
     seedRelation(alive.id);
     const before = db.prepare("SELECT updated_at FROM entities WHERE id = ?").get(alive.id) as { updated_at: string };
@@ -140,9 +140,9 @@ describe("restoreEntity（决策 12 修订）", () => {
       (db.prepare("SELECT deleted_at FROM relation_records WHERE id = ?").get(`rel-${alive.id}`) as { deleted_at: string | null }).deleted_at,
     ).toBeNull(); // 级联行未被触碰
 
-    // 不存在 → null
+ // 不存在 → null
     expect(restoreEntity(db, "character", "char-999")).toBeNull();
-    // 类型不匹配 → null（视同不存在）
+ // 类型不匹配 → null（视同不存在）
     const b = createEntity(db, { type: "hook", name: "乙" });
     softDeleteEntity(db, b.id, T2);
     expect(restoreEntity(db, "setting", b.id)).toBeNull();

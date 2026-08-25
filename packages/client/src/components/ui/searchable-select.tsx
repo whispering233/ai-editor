@@ -2,7 +2,7 @@
 // 场景：设定列表「上级设定 / 标签」筛选（候选已由页面聚合：parentOptions ≤200、tagOptions），
 // 区别于 parent-setting-select.tsx（服务端防抖搜索）——本组件候选一次性传入、客户端过滤。
 // 能力：顶部恒有「全部」清除项；已选值不在候选中（软删/超截断）时用 fallbackLabel 兜底显示；
-// 输入内 Enter 选中首个过滤结果、Esc/点外部关闭（Popover 默认）；样式全 token 类（layout.md §3），
+// 输入内 Enter 选中首个过滤结果、Esc/点外部关闭（Popover 默认）；样式全 token 类（），
 // 触发钮为 border 文字按钮（H4）。
 import { useState } from "react";
 import type { KeyboardEvent } from "react";
@@ -33,16 +33,16 @@ export function SearchableSelect({
   ariaLabel,
   fallbackLabel,
 }: {
-  /** 当前选中值（"" = 全部） */
+ /** 当前选中值（"" = 全部） */
   value: string;
-  /** 候选（页面已聚合；按需排序） */
+ /** 候选（页面已聚合；按需排序） */
   options: readonly SearchableSelectOption[];
-  /** 选中回调（"" = 清除筛选） */
+ /** 选中回调（"" = 清除筛选） */
   onChange: (value: string) => void;
-  /** 空值显示（如「全部」）；同时作弹层顶部清除项文案 */
+ /** 空值显示（如「全部」）；同时作弹层顶部清除项文案 */
   placeholder: string;
   ariaLabel: string;
-  /** 已选值不在候选中时的兜底显示名（如「（已删除或不可见）」）；缺省回退 value 原文 */
+ /** 已选值不在候选中时的兜底显示名（如「（已删除或不可见）」）；缺省回退 value 原文 */
   fallbackLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -50,7 +50,7 @@ export function SearchableSelect({
   const selected = options.find((o) => o.value === value);
   const displayLabel = selected?.label ?? (value !== "" ? (fallbackLabel ?? value) : "");
 
-  // 打开时清空上次搜索词（防残留关键词影响新一次选择）；关闭时不动搜索词（下次打开再清）
+ // 打开时清空上次搜索词（防残留关键词影响新一次选择）；关闭时不动搜索词（下次打开再清）
   function handleOpenChange(next: boolean) {
     setOpen(next);
     if (next) setQ("");
@@ -58,7 +58,7 @@ export function SearchableSelect({
 
   const filtered = filterOptions(options, q);
 
-  /** 输入内 Enter：选中首个过滤结果（清除走显式「全部」行）；Esc 关闭 */
+ /** 输入内 Enter：选中首个过滤结果（清除走显式「全部」行）；Esc 关闭 */
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter") {
       if (filtered.length === 0) return;

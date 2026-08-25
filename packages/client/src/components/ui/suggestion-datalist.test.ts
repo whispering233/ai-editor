@@ -1,4 +1,4 @@
-// datalist 辅助测试（批次五 J2，决策 31）：uniqueStrings 聚合去重
+// datalist 辅助测试（批次五 J2）：uniqueStrings 聚合去重
 import { describe, expect, it } from "vitest";
 import { uniqueStrings } from "./suggestion-datalist";
 

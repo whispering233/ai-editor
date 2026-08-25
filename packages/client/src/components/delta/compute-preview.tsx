@@ -1,9 +1,9 @@
-// 实体详情「变更记录 · 状态预览」区块（S5.4；契约 doc/ui/pages/entity-detail.md + endpoints.md L464-510）
+// 实体详情「变更记录 · 状态预览」区块（S5.4； + ）
 // 数据：POST /api/v1/delta/compute { target_type, target_id, at_node_id } → ComputeStateResult
-//   （决策 9 修订：update from 不匹配 → 跳过 + conflicts 标注，非 409）
+// （update from 不匹配 → 跳过 + conflicts 标注，非 409）
 // 交互：at_node 选择器（默认 project store 的 currentPosition，须在大纲树中存在；未设置 → 要求手动选择）
-//   + [计算] → 结果区三段：状态差异（diffStateFields，相对当前 data）/ 应用的变更记录（含 skipped 内联标注）/
-//   conflicts 警示块（border-destructive/30 bg-destructive/10 text-destructive + TriangleAlert）
+// + [计算] → 结果区三段：状态差异（diffStateFields，相对当前 data）/ 应用的变更记录（含 skipped 内联标注）/
+// conflicts 警示块（border-destructive/30 bg-destructive/10 text-destructive + TriangleAlert）
 // 空态：deltaCount === 0 → 轻量文案（当前状态即初始状态），不展示计算控件
 import { useEffect, useState } from "react";
 import { TriangleAlert } from "lucide-react";
@@ -22,13 +22,13 @@ export function ComputePreview({
   currentData,
   deltaCount,
 }: {
-  /** 目标实体类型（target_type） */
+ /** 目标实体类型（target_type） */
   type: string;
-  /** 目标实体 id（target_id） */
+ /** 目标实体 id（target_id） */
   id: string;
-  /** 实体当前 data（GET /entity/:type/:id 响应；状态差异比较基准） */
+ /** 实体当前 data（GET /entity/:type/:id 响应；状态差异比较基准） */
   currentData: Record<string, unknown>;
-  /** 实体 Delta 计数（0 条 → 轻量空态，不展示计算控件） */
+ /** 实体 Delta 计数（0 条 → 轻量空态，不展示计算控件） */
   deltaCount: number;
 }) {
   const outline = useProjectStore((s) => s.outline);
@@ -36,7 +36,7 @@ export function ComputePreview({
   const loadOutline = useProjectStore((s) => s.loadOutline);
 
   const [atNodeId, setAtNodeId] = useState<string>(() => {
-    // 默认取当前位置：须在大纲树中存在（软删后选择无意义，回退为空要求手动选择）
+ // 默认取当前位置：须在大纲树中存在（软删后选择无意义，回退为空要求手动选择）
     const cp = useProjectStore.getState().config?.currentPosition ?? "";
     const tree = useProjectStore.getState().outline?.children ?? [];
     return cp !== "" && flattenTree(tree).some((o) => o.id === cp) ? cp : "";
@@ -45,8 +45,8 @@ export function ComputePreview({
   const [result, setResult] = useState<ComputeStateResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // config/outline 异步到位后的回填：惰性初始化只跑一次，若当时 currentPosition 未加载
-  // （或树未就绪）会得到空——此处补上；用户已手动选择（prev 非空）不覆盖
+ // config/outline 异步到位后的回填：惰性初始化只跑一次，若当时 currentPosition 未加载
+ // （或树未就绪）会得到空——此处补上；用户已手动选择（prev 非空）不覆盖
   useEffect(() => {
     setAtNodeId((prev) => {
       if (prev !== "") return prev;
@@ -58,7 +58,7 @@ export function ComputePreview({
   const options = flattenTree(outline?.children ?? []);
   const nodeTitles = new Map(options.map((o) => [o.id, o.label]));
 
-  /** [计算] → POST /delta/compute；OUTLINE_NODE_NOT_FOUND → 行内提示重新选择 */
+ /** [计算] → POST /delta/compute；OUTLINE_NODE_NOT_FOUND → 行内提示重新选择 */
   async function handleCompute() {
     if (!atNodeId || computing) return;
     setComputing(true);
@@ -190,7 +190,7 @@ function ComputeResult({
 
   return (
     <div className="mt-3 space-y-3">
-      {/* ① conflicts 警示块（醒目弱化样式；决策 9 修订：跳过 + 标注，非 409） */}
+      {/* ① conflicts 警示块（醒目弱化样式；跳过 + 标注，非 409） */}
       {result.conflicts.length > 0 && (
         <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2">
           <div className="flex items-center gap-1.5 text-sm font-medium text-destructive">
@@ -256,7 +256,7 @@ function ComputeResult({
                     《{nodeTitles.get(d.nodeId) ?? d.nodeId}》
                   </span>
                 </div>
-                {/* skipped：该 delta 中被跳过的 change（决策 9 修订），destructive 弱化标注 */}
+                {/* skipped：该 delta 中被跳过的 change，destructive 弱化标注 */}
                 {d.skipped !== undefined && d.skipped.length > 0 && (
                   <ul className="mt-1 space-y-0.5">
                     {d.skipped.map((s) => (

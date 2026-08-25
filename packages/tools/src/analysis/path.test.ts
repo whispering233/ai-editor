@@ -1,6 +1,6 @@
 // S6.4 分析工具测试：trace_plot_paths
 // 覆盖：树路径（顺向推进/回溯）/ plot_edge 连线路径（终点过滤）/ 不同分支无树路径 /
-//   risk_factors（缺 goal/reversal、路径过长、软删节点）/ 节点不存在或软删 → null / signal aborted
+// risk_factors（缺 goal/reversal、路径过长、软删节点）/ 节点不存在或软删 → null / signal aborted
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -76,7 +76,7 @@ function makeCtx(): ToolContext {
   return { db, outlineDir: dir, projectId: "proj-test" };
 }
 
-/** 大纲节点间 plot_edge 连线（决策 10 画布连线） */
+/** 大纲节点间 plot_edge 连线（ 画布连线） */
 function addEdge(source: string, target: string): void {
   createRelation(
     db,
@@ -134,7 +134,7 @@ describe("trace_plot_paths 树路径", () => {
 describe("trace_plot_paths risk_factors", () => {
   it("scene 缺 goal → 风险；chapter 缺 reversal → 风险", () => {
     const tree = seedOutlineTree();
-    // ch-1 带 reversal、sc-1 带 goal；ch-2/sc-3 均缺
+ // ch-1 带 reversal、sc-1 带 goal；ch-2/sc-3 均缺
     const ch1 = tree.children[0].children?.[0];
     if (ch1?.type !== "chapter") throw new Error("fixture 缺失 ch-1");
     ch1.data = { reversal: "反转" };
@@ -151,7 +151,7 @@ describe("trace_plot_paths risk_factors", () => {
 
   it("连线路径 4 节点（3 跳推演上限）→ 路径过长风险；树路径途经软删节点 → 数据不一致风险", () => {
     writeOutlineFile(dir, seedOutlineTree());
-    // 先追加 sc-4/sc-5 于 ch-2（sc-3 兄弟），再建连线（createRelation 校验端点存在）
+ // 先追加 sc-4/sc-5 于 ch-2（sc-3 兄弟），再建连线（createRelation 校验端点存在）
     const tree = readOutlineFile(dir);
     const ch2 = findOutlineNode(tree, "ch-2");
     if (ch2?.type !== "chapter") throw new Error("fixture 缺失 ch-2");
@@ -165,13 +165,13 @@ describe("trace_plot_paths risk_factors", () => {
     addEdge("sc-3", "sc-4");
     addEdge("sc-4", "sc-5");
 
-    // 连线链 sc-1→sc-3→sc-4→sc-5 = 4 节点 3 跳（depth=3 全量深度）→ 过长风险
+ // 连线链 sc-1→sc-3→sc-4→sc-5 = 4 节点 3 跳（depth=3 全量深度）→ 过长风险
     const result = runTracePlotPaths(makeCtx(), { from_node_id: "sc-1", to_node_id: "sc-5" })!;
     expect(result.paths).toHaveLength(1);
     expect(result.paths[0].nodes).toHaveLength(4);
     expect(result.paths[0].risk_factors).toEqual(expect.arrayContaining([expect.stringContaining("路径过长")]));
 
-    // 树路径途经软删节点（软删中间 ch-1，from/to 未软删）→ 数据不一致风险
+ // 树路径途经软删节点（软删中间 ch-1，from/to 未软删）→ 数据不一致风险
     softDeleteNode("ch-1");
     const withSoft = runTracePlotPaths(makeCtx(), { from_node_id: "vol-1", to_node_id: "sc-1" })!;
     expect(withSoft.paths[0].nodes.map((n) => n.id)).toEqual(["vol-1", "ch-1", "sc-1"]);

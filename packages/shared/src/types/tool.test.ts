@@ -1,6 +1,6 @@
 // 工具参数 schema 测试（G2）：propose_reorder_timepoints 入参形状校验
 // 覆盖：正常通过 / 非数组拒绝 / 空数组拒绝 / 超 200 拒绝（时间点量上限与列表 limit 对齐）/
-//   未知键拒绝（.strict()）/ 元素非字符串拒绝
+// 未知键拒绝（.strict）/ 元素非字符串拒绝
 import { describe, expect, it } from "vitest";
 import { proposeReorderTimepointsArgsSchema } from "./tool.js";
 

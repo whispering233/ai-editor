@@ -1,7 +1,7 @@
 // S6.3 查询工具测试：compute_state / get_delta_history
 // 覆盖：compute_state 透传 db 累积语义（conflicts 标注不抛 409）/ 目标实体缺失 → null /
-//   at_node 不存在 → 抛错（工具失败语义）/ get_delta_history 按 order 排序 /
-//   targetName 联表填充 / 可见性三态过滤（delta 自身 / 触发节点 / 目标端点软删，决策 12 修订）
+// at_node 不存在 → 抛错（工具失败语义）/ get_delta_history 按 order 排序 /
+// targetName 联表填充 / 可见性三态过滤（delta 自身 / 触发节点 / 目标端点软删）
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -111,7 +111,7 @@ describe("compute_state", () => {
     expect(result!.atNodeId).toBe("sc-1");
   });
 
-  it("目标实体不存在/已软删 → null（决策 12 过滤）", () => {
+  it("目标实体不存在/已软删 → null（）", () => {
     const { charA } = seedBase();
     expect(
       runComputeState(makeCtx(), { target_type: "character", target_id: "char-999", at_node_id: "sc-1" }),
@@ -156,7 +156,7 @@ describe("get_delta_history", () => {
     expect(records[0].description).toBe("指向阿强");
   });
 
-  it("可见性三态过滤（决策 12 修订）：delta 自身软删 / 触发节点软删均不可见", () => {
+  it("可见性三态过滤（）：delta 自身软删 / 触发节点软删均不可见", () => {
     const { charA } = seedBase();
     addDelta("vol-1", charA, [{ field: "power", op: "set", to: "200" }], "卷级");
     const scDelta = insertDelta(db, {
@@ -167,12 +167,12 @@ describe("get_delta_history", () => {
       description: "场景级",
     });
 
-    // a. delta 自身软删 → 过滤
+ // a. delta 自身软删 → 过滤
     db.prepare("UPDATE delta_records SET deleted_at = ? WHERE id = ?").run(T0, scDelta.id);
     let records = runGetDeltaHistory(makeCtx(), { target_type: "character", target_id: charA });
     expect(records.map((r) => r.description)).toEqual(["卷级"]);
 
-    // b. 触发节点软删 → 该节点全部 delta 不可见
+ // b. 触发节点软删 → 该节点全部 delta 不可见
     db.prepare("UPDATE delta_records SET deleted_at = NULL WHERE id = ?").run(scDelta.id);
     softDeleteNode("sc-1");
     records = runGetDeltaHistory(makeCtx(), { target_type: "character", target_id: charA });
@@ -185,7 +185,7 @@ describe("get_delta_history", () => {
     db.prepare("UPDATE entities SET deleted_at = ? WHERE id = ?").run(T0, charA);
     expect(runGetDeltaHistory(makeCtx(), { target_type: "character", target_id: charA })).toEqual([]);
 
-    // 大纲节点作为 delta 目标（如状态标记场景自身）
+ // 大纲节点作为 delta 目标（如状态标记场景自身）
     insertDelta(db, {
       nodeId: "sc-1",
       targetType: "outline_node",
@@ -196,7 +196,7 @@ describe("get_delta_history", () => {
     const nodeRecords = runGetDeltaHistory(makeCtx(), { target_type: "outline_node", target_id: "sc-2" });
     expect(nodeRecords).toHaveLength(1);
     expect(nodeRecords[0].targetName).toBe("场景二"); // 大纲节点联表名（outline.json title）
-    // 大纲目标软删 → 不可见
+ // 大纲目标软删 → 不可见
     softDeleteNode("sc-2");
     expect(runGetDeltaHistory(makeCtx(), { target_type: "outline_node", target_id: "sc-2" })).toEqual([]);
   });

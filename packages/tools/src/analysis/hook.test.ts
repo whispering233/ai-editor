@@ -1,7 +1,7 @@
-// S6.5 伏笔分析工具测试：_health 指标（决策 21 口径）+ 5 个工具
+// S6.5 伏笔分析工具测试：_health 指标+ 5 个工具
 // 覆盖：half_life 显式/缺省映射（payoff_timing 各档与缺失）、age/dormancy/stale/overdue、
-//   ready_to_resolve（设置/未设置不猜测）、blocked（依赖未回收）、advances 跨章推进 dormancy 重置、
-//   current_position 推进口径、节点 move 后章节序不陈旧、**data 未写回**、软删不可见、signal aborted
+// ready_to_resolve（设置/未设置不猜测）、blocked（依赖未回收）、advances 跨章推进 dormancy 重置、
+// current_position 推进口径、节点 move 后章节序不陈旧、**data 未写回**、软删不可见、signal aborted
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -119,7 +119,7 @@ function depend(hookA: string, hookB: string): void {
   createRelation(db, { sourceType: "hook", sourceId: hookA, targetType: "hook", targetId: hookB, relationType: "depends_on" }, dir);
 }
 
-/** 深比较 data 未写回：调用后实体行与调用前逐字段一致（决策 21：_health 绝不写回 data） */
+/** 深比较 data 未写回：调用后实体行与调用前逐字段一致（_health 绝不写回 data） */
 function expectDataUnchanged(hookId: string, before: Record<string, unknown>): void {
   const after = getEntity(db, hookId)!.data;
   expect(JSON.stringify(after)).toBe(JSON.stringify(before));
@@ -139,27 +139,27 @@ function makeRecord(entity: EntityRow, relations: { plants?: string[]; advances?
   };
 }
 
-describe("computeHookHealth（决策 21 口径）", () => {
+describe("computeHookHealth（）", () => {
   it("age/dormancy/stale/overdue：显式 half_life + advances 跨章推进（dormancy 重置）", () => {
     seedBase("sc-5"); // 当前第 3 章
     const hook = getEntity(db, makeHook("身世之谜", { status: "progressing", half_life: 2 }))!;
     const chapterIndex = buildChapterIndex(makeCtx());
-    // 埋设 sc-1（第 1 章）、推进 sc-2（第 1 章）→ 最后活跃第 1 章
+ // 埋设 sc-1（第 1 章）、推进 sc-2（第 1 章）→ 最后活跃第 1 章
     const rec = makeRecord(hook, { plants: ["sc-1"], advances: ["sc-2"] });
     let health = computeHookHealth(chapterIndex, rec, new Map([["", "progressing"]]));
-    // stale 边界：dormancy(2) == half_life(2) → 不 stale（严格大于）
+ // stale 边界：dormancy(2) == half_life(2) → 不 stale（严格大于）
     expect(health).toMatchObject({ age: 2, dormancy: 2, stale: false, overdue: false, half_life: 2 });
-    // 推进到 sc-3（第 2 章）→ dormancy 重置为 1
+ // 推进到 sc-3（第 2 章）→ dormancy 重置为 1
     const rec2 = makeRecord(hook, { plants: ["sc-1"], advances: ["sc-3"] });
     health = computeHookHealth(chapterIndex, rec2, new Map([["", "progressing"]]));
     expect(health).toMatchObject({ age: 2, dormancy: 1, stale: false });
-    // 推进到 sc-5（第 3 章）→ dormancy 0
+ // 推进到 sc-5（第 3 章）→ dormancy 0
     const rec3 = makeRecord(hook, { plants: ["sc-1"], advances: ["sc-5"] });
     health = computeHookHealth(chapterIndex, rec3, new Map([["", "progressing"]]));
     expect(health).toMatchObject({ age: 2, dormancy: 0 });
-    // half_life=1：dormancy=2 > 1 → stale；age=2 > 1*2? 否——用 age=2 与 half_life=1：overdue 需 age > 2 不触发；
-    // 直接以「埋设第 1 章 + 当前第 3 章 + half_life=1」age=2：stale=true、overdue=false；
-    // overdue=true 用 half_life=1 且 age=3 不可达（三章树）——overdue 真值由下方 hook2 的 age=2/half_life=1 覆盖
+ // half_life=1：dormancy=2 > 1 → stale；age=2 > 1*2? 否——用 age=2 与 half_life=1：overdue 需 age > 2 不触发；
+ // 直接以「埋设第 1 章 + 当前第 3 章 + half_life=1」age=2：stale=true、overdue=false；
+ // overdue=true 用 half_life=1 且 age=3 不可达（三章树）——overdue 真值由下方 hook2 的 age=2/half_life=1 覆盖
     const hook2 = getEntity(db, makeHook("快节奏", { status: "progressing", half_life: 1 }))!;
     const rec4 = makeRecord(hook2, { plants: ["sc-1"], advances: ["sc-2"] });
     health = computeHookHealth(chapterIndex, rec4, new Map([["", "progressing"]]));
@@ -167,7 +167,7 @@ describe("computeHookHealth（决策 21 口径）", () => {
   });
 
   it("overdue 真值：埋设较早 + 当前较晚 → age > half_life*2（四章树，age=3）", () => {
-    // 四章树：ch-4[sc-7,sc-8]（第 4 章）——age 上限提升到 3
+ // 四章树：ch-4[sc-7,sc-8]（第 4 章）——age 上限提升到 3
     const base = seedOutlineTree();
     const vol = base.children[0];
     if (vol.type !== "volume") throw new Error("fixture 缺失 volume");
@@ -190,7 +190,7 @@ describe("computeHookHealth（决策 21 口径）", () => {
       current_position: "sc-7", created_at: T0, updated_at: T0,
     });
     const chapterIndex = buildChapterIndex(makeCtx());
-    // 埋设 sc-1（第 1 章），half_life=1 → age=3 > 1*2=2 → overdue
+ // 埋设 sc-1（第 1 章），half_life=1 → age=3 > 1*2=2 → overdue
     const hook = getEntity(db, makeHook("积压伏笔", { status: "progressing", half_life: 1 }))!;
     const health = computeHookHealth(chapterIndex, makeRecord(hook, { plants: ["sc-1"], advances: ["sc-2"] }), new Map());
     expect(health).toMatchObject({ age: 3, overdue: true, stale: true });
@@ -206,16 +206,16 @@ describe("computeHookHealth（决策 21 口径）", () => {
       const health = computeHookHealth(chapterIndex, makeRecord(hook, { plants: ["sc-1"] }), statuses);
       expect(health.half_life).toBe(expected);
     }
-    // payoff_timing 缺失 / 非法值 → slow_burn
+ // payoff_timing 缺失 / 非法值 → slow_burn
     const noTiming = getEntity(db, makeHook("无节奏", { status: "planted" }))!;
     expect(computeHookHealth(chapterIndex, makeRecord(noTiming, { plants: ["sc-1"] }), statuses).half_life).toBe(25);
     const badTiming = getEntity(db, makeHook("坏节奏", { status: "planted", payoff_timing: "weekly" }))!;
     expect(computeHookHealth(chapterIndex, makeRecord(badTiming, { plants: ["sc-1"] }), statuses).half_life).toBe(25);
-    // 显式 half_life 优先于 payoff_timing
+ // 显式 half_life 优先于 payoff_timing
     const explicit = getEntity(db, makeHook("显式", { status: "planted", payoff_timing: "endgame", half_life: 5 }))!;
     expect(computeHookHealth(chapterIndex, makeRecord(explicit, { plants: ["sc-1"] }), statuses).half_life).toBe(5);
-    // 小数防御（oracle 修复轮）：0 < half_life < 1 截断为 0 会让 stale/overdue 恒真——
-    // 退化走 payoff_timing 映射（immediate → 3）
+ // 小数防御（oracle 修复轮）：0 < half_life < 1 截断为 0 会让 stale/overdue 恒真——
+ // 退化走 payoff_timing 映射（immediate → 3）
     const fractional = getEntity(db, makeHook("小数半衰期", { status: "planted", payoff_timing: "immediate", half_life: 0.5 }))!;
     expect(computeHookHealth(chapterIndex, makeRecord(fractional, { plants: ["sc-1"] }), statuses).half_life).toBe(3);
   });
@@ -224,19 +224,19 @@ describe("computeHookHealth（决策 21 口径）", () => {
     seedBase("sc-3"); // 当前第 2 章
     const chapterIndex = buildChapterIndex(makeCtx());
     const statuses = new Map<string, string>();
-    // sc-2 第 1 章：current(2) >= 1 → true
+ // sc-2 第 1 章：current(2) >= 1 → true
     const early = getEntity(db, makeHook("早回收", { status: "progressing", expected_resolve_node_id: "sc-2" }))!;
     expect(computeHookHealth(chapterIndex, makeRecord(early), statuses).ready_to_resolve).toBe(true);
-    // sc-5 第 3 章：current(2) < 3 → false
+ // sc-5 第 3 章：current(2) < 3 → false
     const late = getEntity(db, makeHook("晚回收", { status: "progressing", expected_resolve_node_id: "sc-5" }))!;
     expect(computeHookHealth(chapterIndex, makeRecord(late), statuses).ready_to_resolve).toBe(false);
-    // 未设置 → null
+ // 未设置 → null
     const unset = getEntity(db, makeHook("未设", { status: "progressing" }))!;
     expect(computeHookHealth(chapterIndex, makeRecord(unset), statuses).ready_to_resolve).toBeNull();
-    // 指向不存在的节点 → null（无法推导章节序，不猜测）
+ // 指向不存在的节点 → null（无法推导章节序，不猜测）
     const dangling = getEntity(db, makeHook("悬空", { status: "progressing", expected_resolve_node_id: "sc-999" }))!;
     expect(computeHookHealth(chapterIndex, makeRecord(dangling), statuses).ready_to_resolve).toBeNull();
-    // 指向软删节点 → null（决策 12 可见性：软删节点不可作为兑现依据，与 consistency R4 同口径）
+ // 指向软删节点 → null（ 可见性：软删节点不可作为兑现依据，与 consistency R4 同口径）
     const tree = readOutlineFile(dir);
     const sc4 = findOutlineNode(tree, "sc-4")!;
     sc4.deleted = true;
@@ -278,19 +278,19 @@ describe("computeHookHealth（决策 21 口径）", () => {
 describe("analyze_hook_health 聚合", () => {
   it("activeCount/stale/overdue/blockedChains/warnings；软删与已回收不参与", () => {
     seedBase("sc-5"); // 当前第 3 章
-    // 活跃：埋设第 1 章无推进，half_life=1 → dormancy=2 > 1 → stale；age=2 > 2? 否
+ // 活跃：埋设第 1 章无推进，half_life=1 → dormancy=2 > 1 → stale；age=2 > 2? 否
     const stale = makeHook("掉队伏笔", { status: "progressing", half_life: 1 });
     plant(stale, "sc-1");
-    // 活跃：埋设第 1 章，half_life=1，age=2 > 2? 否——需要 age > 2：第 3 章 current 时埋设第 1 章 age=2 不 overdue；
-    // 用 half_life=1 与 age=3 场景：current 第 3 章 + 埋设 sc-1？age=2。构造 overdue：half_life 使 age > 2*half
-    // half_life=1 时 age=2 == 2 不触发；改为埋设第 1 章且 half_life=1 且 current 第 3 章 → age=2 → overdue 需 age>2 → 不触发。
-    // 简化：直接构造 age=3 场景（half_life=1）：current_position=sc-5（第 3 章）时埋设于第 0 章不存在——
-    // 用「埋设于卷级（无章号）」不可行。改为推进测试：stale 已覆盖；overdue 用例单独构造 current 更大。
+ // 活跃：埋设第 1 章，half_life=1，age=2 > 2? 否——需要 age > 2：第 3 章 current 时埋设第 1 章 age=2 不 overdue；
+ // 用 half_life=1 与 age=3 场景：current 第 3 章 + 埋设 sc-1？age=2。构造 overdue：half_life 使 age > 2*half
+ // half_life=1 时 age=2 == 2 不触发；改为埋设第 1 章且 half_life=1 且 current 第 3 章 → age=2 → overdue 需 age>2 → 不触发。
+ // 简化：直接构造 age=3 场景（half_life=1）：current_position=sc-5（第 3 章）时埋设于第 0 章不存在——
+ // 用「埋设于卷级（无章号）」不可行。改为推进测试：stale 已覆盖；overdue 用例单独构造 current 更大。
     void stale;
-    // 回收的伏笔不参与统计
+ // 回收的伏笔不参与统计
     const resolved = makeHook("已回收伏笔", { status: "resolved", half_life: 1 });
     plant(resolved, "sc-1");
-    // 软删伏笔不参与
+ // 软删伏笔不参与
     const deleted = makeHook("幽灵伏笔", { status: "progressing", half_life: 1 });
     plant(deleted, "sc-1");
     softDeleteEntity(db, deleted, T0);
@@ -308,8 +308,8 @@ describe("analyze_hook_health 聚合", () => {
 
   it("overdue 检出与 blockedChains；current_position 推进后指标变化（口径一致性）", () => {
     seedBase("sc-5"); // 当前第 3 章
-    // 三章树 age 最大 2（埋设第 1 章 + current 第 3 章），half_life=1 时 overdue 需 age > 2 不可达；
-    // 聚合层 overdue 检出由下一用例（四章树）覆盖，此处验证聚合结构与 blockedChains。
+ // 三章树 age 最大 2（埋设第 1 章 + current 第 3 章），half_life=1 时 overdue 需 age > 2 不可达；
+ // 聚合层 overdue 检出由下一用例（四章树）覆盖，此处验证聚合结构与 blockedChains。
     const a = makeHook("依赖源", { status: "progressing", half_life: 5 });
     const b = makeHook("被阻塞", { status: "progressing", half_life: 5 });
     plant(a, "sc-1");
@@ -324,7 +324,7 @@ describe("analyze_hook_health 聚合", () => {
   });
 
   it("聚合层 overdue 检出（四章树）：current 第 4 章 + 埋设第 1 章 + half_life=1 → age=3 > 2", () => {
-    // 四章树（oracle 修复轮：覆盖聚合层 if (health.overdue) 分支与 warnings 第二条）
+ // 四章树（oracle 修复轮：覆盖聚合层 if (health.overdue) 分支与 warnings 第二条）
     const base = seedOutlineTree();
     const vol = base.children[0];
     if (vol.type !== "volume") throw new Error("fixture 缺失 volume");
@@ -381,9 +381,9 @@ describe("trace_hook_lifecycle", () => {
     expect(result.advances.map((e) => e.nodeId)).toEqual(["sc-1", "sc-3"]); // 章节序升序
     expect(result.resolve!.nodeId).toBe("sc-5");
     expect(result.resolve!.nodeName).toBe("场景五");
-    // dormancy = current - advances 最新（hooks.md 公式；resolve 不参与——回收后休眠语义由 status=resolved 表达）
+ // dormancy = current - advances 最新（ 公式；resolve 不参与——回收后休眠语义由 status=resolved 表达）
     expect(result.dormancy).toBe(1); // 最后推进 sc-3（第 2 章），当前第 3 章
-    // timelineGraph：plant/advance/resolve 按章节序合并
+ // timelineGraph：plant/advance/resolve 按章节序合并
     expect(result.timeline_graph.events.map((e) => `${e.kind}:${e.nodeId}`)).toEqual([
       "plant:sc-1",
       "advance:sc-1",
@@ -410,12 +410,12 @@ describe("suggest_hook_payoff", () => {
     plant(hookId, "sc-1"); // 理想回收点 = 1 + 8 = 9（超过树末章 3——取最近场景）
     const result = runSuggestHookPayoff(makeCtx(), { hook_id: hookId })!;
     expect(result.suggestions).toHaveLength(3);
-    // 全部候选章节 >= 当前第 1 章；与理想点 9 距离升序：第 3 章(距离6) < 第 2 章(7) < 第 1 章(8)
+ // 全部候选章节 >= 当前第 1 章；与理想点 9 距离升序：第 3 章(距离6) < 第 2 章(7) < 第 1 章(8)
     expect(result.suggestions[0].at_node).toMatch(/^sc-[56]$/); // 第 3 章场景
     expect(result.suggestions[0].reason).toContain("半衰期 8");
     expect(result.suggestions[0].reason).toContain("理想回收点约第 9 章");
 
-    // 已回收节点排除：resolve sc-5 → 不再建议 sc-5
+ // 已回收节点排除：resolve sc-5 → 不再建议 sc-5
     resolve(hookId, "sc-5");
     const after = runSuggestHookPayoff(makeCtx(), { hook_id: hookId })!;
     expect(after.suggestions.every((s) => s.at_node !== "sc-5")).toBe(true);
@@ -448,7 +448,7 @@ describe("find_hook_opportunities", () => {
 
   it("R3 冲突外部层面 → world_building；R4 价值转向 → character_growth；已有伏笔 → R1 不触发", () => {
     seedBase();
-    // sc-2 带麦基字段（决策 23）
+ // sc-2 带麦基字段
     const tree = readOutlineFile(dir);
     const sc2 = findOutlineNode(tree, "sc-2")!;
     sc2.data = { conflict_levels: ["inner", "extra_personal"], value_from: "平静", value_to: "绝望" };
@@ -461,7 +461,7 @@ describe("find_hook_opportunities", () => {
     expect(byCategory.get("character_growth")).toContain("平静");
     expect(byCategory.get("character_growth")).toContain("绝望");
 
-    // 已有 plants 关系 → R1（mystery）不触发
+ // 已有 plants 关系 → R1（mystery）不触发
     const hookId = makeHook("已有伏笔", { status: "planted" });
     plant(hookId, "sc-2");
     const withPlant = runFindHookOpportunities(makeCtx(), { outline_node_id: "sc-2" })!;
@@ -527,7 +527,7 @@ describe("detect_hook_conflicts", () => {
 });
 
 describe("hook 工具边界（data 未写回 / signal / current_position 口径）", () => {
-  it("data 未被写回：全部工具调用后实体行与调用前逐字段一致（决策 21：_health 不落库）", () => {
+  it("data 未被写回：全部工具调用后实体行与调用前逐字段一致（_health 不落库）", () => {
     seedBase("sc-5");
     const hookId = makeHook("身世之谜", { status: "progressing", half_life: 2, expected_resolve_node_id: "sc-4" });
     plant(hookId, "sc-1");
@@ -540,14 +540,14 @@ describe("hook 工具边界（data 未写回 / signal / current_position 口径�
     runDetectHookConflicts(makeCtx(), {});
     expectDataUnchanged(hookId, before);
 
-    // 非本 hook 的实体也不受影响
+ // 非本 hook 的实体也不受影响
     const charId = createEntity(db, { type: "character", name: "阿强", data: { role: "主角" } }).id;
     const charBefore = getEntity(db, charId)!.data;
     runFindHookOpportunities(makeCtx(), { outline_node_id: "sc-1" });
     expectDataUnchanged(charId, charBefore);
   });
 
-  it("节点 move 后章节序不陈旧：advances 节点移动后 dormancy 重新推导（决策 21：章节不落库）", () => {
+  it("节点 move 后章节序不陈旧：advances 节点移动后 dormancy 重新推导（章节不落库）", () => {
     seedBase("sc-5"); // 当前第 3 章
     const hookId = makeHook("身世之谜", { status: "progressing", half_life: 5 });
     plant(hookId, "sc-1");
@@ -556,7 +556,7 @@ describe("hook 工具边界（data 未写回 / signal / current_position 口径�
     const before = runTraceHookLifecycle(makeCtx(), { hook_id: hookId })!;
     expect(before.dormancy).toBe(1);
 
-    // move sc-3 到 ch-3（第 3 章）——直接改树（moveOutlineNode 亦可，测试直写）
+ // move sc-3 到 ch-3（第 3 章）——直接改树（moveOutlineNode 亦可，测试直写）
     const tree = readOutlineFile(dir);
     const ch2 = findOutlineNode(tree, "ch-2");
     if (ch2?.type !== "chapter") throw new Error("fixture 缺失 ch-2");
@@ -580,7 +580,7 @@ describe("hook 工具边界（data 未写回 / signal / current_position 口径�
     expect(overview.current_chapter).toBe(1);
     expect(overview.stale).toEqual([]); // dormancy 0
 
-    // 推进到第 3 章 → dormancy=2 > half_life=2? 否（严格大于）——half_life=1 更敏感
+ // 推进到第 3 章 → dormancy=2 > half_life=2? 否（严格大于）——half_life=1 更敏感
     writeProjectFile(dir, {
       id: "proj-test", name: "测试书", language: "zh", prompt: "", schema_version: 1,
       current_position: "sc-5", created_at: T0, updated_at: T0,
@@ -588,7 +588,7 @@ describe("hook 工具边界（data 未写回 / signal / current_position 口径�
     const after = runAnalyzeHookHealth(makeCtx(), {});
     expect(after.current_chapter).toBe(3);
     expect(after.stale).toEqual([]); // dormancy=2 == half_life=2 边界不触发（严格大于）
-    // 无 current_position 时退化树末章（第 3 章）——口径一致
+ // 无 current_position 时退化树末章（第 3 章）——口径一致
     writeProjectFile(dir, {
       id: "proj-test", name: "测试书", language: "zh", prompt: "", schema_version: 1,
       current_position: null, created_at: T0, updated_at: T0,

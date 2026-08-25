@@ -1,17 +1,17 @@
-// 提案类工具：伏笔（S6.6，hooks.md「工具扩展」提案类 5 个）
+// 提案类工具：伏笔（S6.6，「工具扩展」提案类 5 个）
 // propose_create_hook / propose_update_hook / propose_advance_hook /
 // propose_resolve_hook / propose_abandon_hook
 //
 // 语义：只产出提案对象并返回 { proposal_id, summary }（2026-08 修订：tool_result 不含预览）；
 // **不落盘、不写任何数据**（与 S6.7 advance_hook/resolve_hook/abandon_hook 复合写对比的核心差异）。
 //
-// 生成时校验（决策 14/19/12）：
-// - 伏笔即 type=hook 的实体（hooks.md：用户手动创建或 AI 提案创建）——requireHook 校验
-//   存在、未软删且类型一致，采集实体自身 updated_at 快照（决策 14）
+// 生成时校验：
+// - 伏笔即 type=hook 的实体（：用户手动创建或 AI 提案创建）——requireHook 校验
+// 存在、未软删且类型一致，采集实体自身 updated_at 快照
 // - 推进/回收的节点（node_id）与埋设节点（plant_at_node_id）存在且未软删——
-//   节点级 updated_at 快照（决策 19）
+// 节点级 updated_at 快照
 // - 确认后的复合写（delta_records 记 status + relation_records 插 advances/resolves，
-//   一次提交、幂等）由 S6.7 执行工具承担，本模块只产出提案
+// 一次提交、幂等）由 S6.7 执行工具承担，本模块只产出提案
 
 import type {
   ProposeAbandonHookArgs,
@@ -53,7 +53,7 @@ export function runProposeCreateHook(
   return { proposal_id: proposal.proposal_id, summary: proposal.summary };
 }
 
-/** 产出更新伏笔提案（引用伏笔实体 updated_at 快照，决策 14） */
+/** 产出更新伏笔提案（引用伏笔实体 updated_at 快照） */
 export function buildProposeUpdateHook(ctx: ToolContext, args: ProposeUpdateHookArgs): Proposal {
   const hook = requireHook(ctx, args.hook_id);
   const fieldCount = Object.keys(args.patches).length;

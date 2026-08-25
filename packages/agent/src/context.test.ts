@@ -1,6 +1,5 @@
 // S7.2 上下文组装测试：三层注入 / 聚焦注入 / 工具清单 / 预算截断 / usage 基线重置 / 极端输入
-// 契约来源：doc/design/decisions.md 决策 6（分层预算 + usage 基线）、决策 7（三层注入）、
-// 决策 18（成对裁剪语义复用 session）；纯内存断言，无 I/O。
+// （成对裁剪语义复用 session）；纯内存断言，无 I/O。
 import { describe, expect, it } from "vitest";
 import type { LLMUsage } from "@whispering233/ai-editor-llm";
 import { listTools } from "@whispering233/ai-editor-tools";
@@ -46,7 +45,7 @@ const MOCK_TOOLS: ToolListEntry[] = [
   { name: "analyze_conflict", description: "分析冲突结构" },
 ];
 
-// ============ 三层注入（决策 7） ============
+// ============ 三层注入 ============
 
 describe("buildContext 三层提示词注入", () => {
   it("内核/项目/临时各自就位：system 消息包含三段内容与段标题", () => {
@@ -59,13 +58,13 @@ describe("buildContext 三层提示词注入", () => {
     const system = ctx.messages[0];
     expect(system.role).toBe("system");
     const content = system.content;
-    // 内核层（默认 KERNEL_PROMPT，代码固定）
+ // 内核层（默认 KERNEL_PROMPT，代码固定）
     expect(content).toContain(KERNEL_PROMPT);
     expect(content).toContain("创作顾问");
-    // 项目层（用户可编辑，来自 project.json）
+ // 项目层（用户可编辑，来自 project.json）
     expect(content).toContain(PROJECT_PROMPT_TITLE);
     expect(content).toContain("力量体系：练气→筑基→金丹");
-    // 临时层（即时输入）
+ // 临时层（即时输入）
     expect(content).toContain(INSTRUCTION_TITLE);
     expect(content).toContain("今天只讨论第三卷");
   });
@@ -85,7 +84,7 @@ describe("buildContext 三层提示词注入", () => {
   });
 });
 
-// ============ 聚焦注入（决策 6 聚焦层，有/无两态） ============
+// ============ 聚焦注入（ 聚焦层，有/无两态） ============
 
 describe("buildContext 聚焦注入", () => {
   it("有 focus：注入独立 system 消息（标题 + 内容），位于基础 system 与历史之间", () => {
@@ -100,7 +99,7 @@ describe("buildContext 聚焦注入", () => {
     expect(focusMsg.content).toContain(FOCUS_TITLE);
     expect(focusMsg.content).toContain("当前聚焦实体：张三");
     expect(ctx.messages[2]).toEqual(user("Q1"));
-    // 聚焦 token 计入 meta
+ // 聚焦 token 计入 meta
     expect(ctx.tokens.focus).toBeGreaterThan(0);
   });
 
@@ -139,7 +138,7 @@ describe("buildContext 工具清单注入", () => {
   });
 });
 
-// ============ 预算截断：历史成对裁剪（决策 6 + 决策 18 同裁同留） ============
+// ============ 预算截断：历史成对裁剪（ 同裁同留） ============
 
 describe("buildContext 历史预算裁剪", () => {
   it("超预算裁历史不拆对：配对块完整保留或整块丢弃，无孤儿半对", () => {
@@ -149,7 +148,7 @@ describe("buildContext 历史预算裁剪", () => {
       toolResult("tc-a"),
       toolResult("tc-b"),
     ];
-    // 预算 60：整条 91 tokens 超限 → 裁掉头部 user，保留尾部配对块（41 tokens）
+ // 预算 60：整条 91 tokens 超限 → 裁掉头部 user，保留尾部配对块（41 tokens）
     const ctx = buildContext({ history, budgets: { history: 60 } });
     expect(ctx.meta.historyTrimmed).toBe(true);
     expect(ctx.messages.slice(1)).toEqual([
@@ -167,7 +166,7 @@ describe("buildContext 历史预算裁剪", () => {
       toolResult("tc-a"),
       toolResult("tc-b"),
     ];
-    // 预算 5：配对块 41 tokens 放不下 → 整块丢弃，回退保留 user("hi")
+ // 预算 5：配对块 41 tokens 放不下 → 整块丢弃，回退保留 user("hi")
     const ctx = buildContext({ history, budgets: { history: 5 } });
     expect(ctx.meta.historyTrimmed).toBe(true);
     expect(ctx.messages.slice(1)).toEqual([user("hi")]);
@@ -200,7 +199,7 @@ describe("buildContext 历史预算裁剪", () => {
   });
 });
 
-// ============ usage 基线：裁剪后重置，防预算漂移（决策 6，2026-08 补充） ============
+// ============ usage 基线：裁剪后重置，防预算漂移（2026-08 补充） ============
 
 describe("buildContext usage 基线", () => {
   const smallUsage: LLMUsage = { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 };
@@ -216,10 +215,10 @@ describe("buildContext usage 基线", () => {
     const history = [user("Q1")];
     const hugeUsage: LLMUsage = { prompt_tokens: 99999, completion_tokens: 1, total_tokens: 100000 };
     const ctx = buildContext({ history, lastUsage: hugeUsage, budgets: { history: 30 } });
-    // 基线 100000 + 消息估算 ≫ 30 → 判定超限触发裁剪流程
+ // 基线 100000 + 消息估算 ≫ 30 → 判定超限触发裁剪流程
     expect(ctx.meta.lastUsageReset).toBe(true);
     expect(ctx.meta.effectiveLastUsage).toBeNull();
-    // 消息本身（无基线估算）不超预算 → 未裁条数，但估算不虚高（无漂移）
+ // 消息本身（无基线估算）不超预算 → 未裁条数，但估算不虚高（无漂移）
     expect(ctx.meta.historyTrimmed).toBe(false);
     expect(ctx.tokens.history).toBeLessThanOrEqual(30);
   });
@@ -233,7 +232,7 @@ describe("buildContext usage 基线", () => {
     expect(ctx.meta.historyTrimmed).toBe(true);
     expect(ctx.meta.lastUsageReset).toBe(true);
     expect(ctx.meta.effectiveLastUsage).toBeNull();
-    // 重置后按 chars/4 估算（≈50 tokens，不含陈旧基线 12）
+ // 重置后按 chars/4 估算（≈50 tokens，不含陈旧基线 12）
     expect(ctx.tokens.history).toBeLessThanOrEqual(60);
   });
 
@@ -244,7 +243,7 @@ describe("buildContext usage 基线", () => {
   });
 
   it("恰好边界：基线 + 历史估算 == 预算时不重置（严格大于才触发裁剪）", () => {
-    // 历史 "1234567890" = 10 chars → ceil(10/4) = 3 tokens；基线 27 → 27+3 == 30 == 预算
+ // 历史 "1234567890" = 10 chars → ceil(10/4) = 3 tokens；基线 27 → 27+3 == 30 == 预算
     const history = [user("1234567890")];
     const boundaryUsage: LLMUsage = { prompt_tokens: 27, completion_tokens: 0, total_tokens: 27 };
     const ctx = buildContext({ history, lastUsage: boundaryUsage, budgets: { history: 30 } });
@@ -269,9 +268,9 @@ describe("buildContext 聚焦预算截断", () => {
     const focusContent = focusMsg.role === "system" ? focusMsg.content : "";
     expect(focusContent).toContain(FOCUS_TITLE);
     expect(focusContent).toContain(FOCUS_TRUNCATION_NOTICE);
-    // 截断后聚焦内容长度受限
+ // 截断后聚焦内容长度受限
     expect(focusContent.length).toBeLessThan(200);
-    // 基础 system 完整（内核仍在）
+ // 基础 system 完整（内核仍在）
     expect(ctx.messages[0].content).toContain(KERNEL_PROMPT);
   });
 
@@ -284,7 +283,7 @@ describe("buildContext 聚焦预算截断", () => {
   });
 
   it("恰好边界：聚焦估算 == 预算时不截断（严格大于才截断）", () => {
-    // 80 chars → ceil(80/4) == 20 == 预算 focus
+ // 80 chars → ceil(80/4) == 20 == 预算 focus
     const focus = "a".repeat(80);
     const ctx = buildContext({ history: [], focus, budgets: { focus: 20 } });
     expect(ctx.meta.focusTruncated).toBe(false);
@@ -304,7 +303,7 @@ describe("buildContext 系统层与极端输入", () => {
       budgets: { system: 50 },
     });
     expect(ctx.meta.systemOverBudget).toBe(true);
-    // 内容完整未被裁剪
+ // 内容完整未被裁剪
     expect(ctx.messages[0].content).toContain("p".repeat(4000));
   });
 
@@ -315,7 +314,7 @@ describe("buildContext 系统层与极端输入", () => {
     expect(ctx.tokens.total).toBeGreaterThan(0);
   });
 
-  it("默认预算常量为决策 6 分层值", () => {
+  it("默认预算常量为 分层值", () => {
     expect(DEFAULT_CONTEXT_BUDGETS).toEqual({ system: 500, focus: 3000, history: 6000 });
   });
 });

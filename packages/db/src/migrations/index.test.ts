@@ -1,4 +1,4 @@
-// E5 增量迁移机制测试：runMigrations（顺序执行/失败回滚/快照）+ hasMigrationPath + snapshotDbFile
+// 增量迁移机制测试：runMigrations（顺序执行/失败回滚/快照）+ hasMigrationPath + snapshotDbFile
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -50,7 +50,7 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-describe("runMigrations（E5 前向迁移）", () => {
+describe("runMigrations（ 前向迁移）", () => {
   it("连续迁移链顺序执行：每步 setUserVersion、全部完成后版本对齐、副作用逐级可见", () => {
     seedEntity(db);
     setUserVersion(db, 0); // 显式旧版本（新库默认 0，此处冗余但语义清晰）
@@ -61,19 +61,19 @@ describe("runMigrations（E5 前向迁移）", () => {
       dbPath,
     });
 
-    // 执行顺序 = version 升序（v1 → v2 → v3）
+ // 执行顺序 = version 升序（v1 → v2 → v3）
     expect(applied.map((m) => m.version)).toEqual([1, 2, 3]);
     expect(getUserVersion(db)).toBe(3); // 对齐 targetVersion
-    // 副作用逐级可见：v1 加列 → v2 填值 → v3 插行
+ // 副作用逐级可见：v1 加列 → v2 填值 → v3 插行
     const cols = db.prepare("PRAGMA table_info(entities)").all() as Array<{ name: string }>;
     expect(cols.some((c) => c.name === "note")).toBe(true);
     const row = db.prepare("SELECT note FROM entities WHERE id = ?").get("char-1") as { note: string };
     expect(row.note).toBe("migrated");
     expect(countEntities(db)).toBe(2); // char-1 + char-m3
-    // 迁移前快照已生成（带时间戳命名）
+ // 迁移前快照已生成（带时间戳命名）
     expect(snapshot).toMatch(/data\.db\.v0\.\d{8}T\d{6}\.\d{3}Z\.bak$/);
     expect(existsSync(snapshot!)).toBe(true);
-    // 快照内容 = 迁移前状态（user_version=0、实体 1 行）
+ // 快照内容 = 迁移前状态（user_version=0、实体 1 行）
     const snapDb = openDatabase(snapshot!);
     try {
       expect(getUserVersion(snapDb)).toBe(0);
@@ -100,7 +100,7 @@ describe("runMigrations（E5 前向迁移）", () => {
   });
 });
 
-describe("runMigrations 失败回滚（E5 原子性）", () => {
+describe("runMigrations 失败回滚（ 原子性）", () => {
   it("某迁移抛错 → 该迁移事务整体回滚（副作用与版本号均不落）、后续不执行、快照保留", () => {
     seedEntity(db);
     const failing: Migration[] = [
@@ -116,14 +116,14 @@ describe("runMigrations 失败回滚（E5 原子性）", () => {
     ];
 
     expect(() => runMigrations(db, { migrations: failing, targetVersion: 3, dbPath })).toThrow("migration boom");
-    // 版本停在前一迁移后（v1 已提交，v2 未生效）
+ // 版本停在前一迁移后（v1 已提交，v2 未生效）
     expect(getUserVersion(db)).toBe(1);
-    // v2 副作用回滚：note 列存在（v1 提交）但值未写（v2 UPDATE 回滚）
+ // v2 副作用回滚：note 列存在（v1 提交）但值未写（v2 UPDATE 回滚）
     const row = db.prepare("SELECT note FROM entities WHERE id = ?").get("char-1") as { note: string | null };
     expect(row.note).toBeNull();
-    // v3 未执行
+ // v3 未执行
     expect(countEntities(db)).toBe(1);
-    // 迁移前快照保留（重试现场）：data.db.v0.{时间戳}.bak 存在（函数抛错返回值拿不到，扫目录确认）
+ // 迁移前快照保留（重试现场）：data.db.v0.{时间戳}.bak 存在（函数抛错返回值拿不到，扫目录确认）
     const snapFiles = readdirSync(dir).filter((f) => /^data\.db\.v0\.\d{8}T\d{6}\.\d{3}Z\.bak$/.test(f));
     expect(snapFiles.length).toBeGreaterThan(0);
   });
@@ -139,7 +139,7 @@ describe("runMigrations 失败回滚（E5 原子性）", () => {
         },
       },
     ];
-    // 第一次：v2 抛错（模拟瞬时失败）
+ // 第一次：v2 抛错（模拟瞬时失败）
     const boom: Migration[] = [
       flaky[0],
       {
@@ -152,7 +152,7 @@ describe("runMigrations 失败回滚（E5 原子性）", () => {
     ];
     expect(() => runMigrations(db, { migrations: boom, targetVersion: 2, dbPath })).toThrow("boom");
     expect(getUserVersion(db)).toBe(1);
-    // 第二次：正常迁移链 → 从 v2 续跑
+ // 第二次：正常迁移链 → 从 v2 续跑
     const { applied } = runMigrations(db, { migrations: flaky, targetVersion: 2, dbPath });
     expect(applied.map((m) => m.version)).toEqual([2]);
     expect(getUserVersion(db)).toBe(2);
@@ -161,7 +161,7 @@ describe("runMigrations 失败回滚（E5 原子性）", () => {
   });
 });
 
-describe("hasMigrationPath（E5 纯函数）", () => {
+describe("hasMigrationPath（ 纯函数）", () => {
   it("连续链 true / 断链 false / 空迁移 false / 目标已达成 true", () => {
     expect(hasMigrationPath(0, 3, fakeMigrations)).toBe(true); // v1,v2,v3 连续
     expect(hasMigrationPath(1, 3, fakeMigrations)).toBe(true); // v2,v3
@@ -177,13 +177,13 @@ describe("hasMigrationPath（E5 纯函数）", () => {
   });
 });
 
-describe("snapshotDbFile（E5 时间戳快照）", () => {
+describe("snapshotDbFile（ 时间戳快照）", () => {
   it("命名含版本号与毫秒时间戳；快照文件保留", () => {
     seedEntity(db);
     const snap1 = snapshotDbFile(dbPath, 0);
     expect(snap1).toMatch(/data\.db\.v0\.\d{8}T\d{6}\.\d{3}Z\.bak$/);
     expect(existsSync(snap1)).toBe(true);
-    // 毫秒时间戳区分重试快照（同毫秒内两次调用可能同名——内容相同，覆盖无害；
-    // 真实重试间隔远大于 1ms）
+ // 毫秒时间戳区分重试快照（同毫秒内两次调用可能同名——内容相同，覆盖无害；
+ // 真实重试间隔远大于 1ms）
   });
 });

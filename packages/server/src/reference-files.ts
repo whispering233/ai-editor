@@ -1,16 +1,15 @@
-// 参考资料文件服务（决策 43，批次十一）
+// 参考资料文件服务（批次十一）
 //
-// 单一事实来源：doc/design/decisions.md 决策 43、doc/ui/pages/references.md。
 // 职责：references/ 目录（项目文件夹内自包含）的读写/原子写/移动（软删 .trash/）/物理删，
-//   + 扫描重建索引（文件 = 真相源，DB 索引 = 派生镜像，mtime 快照比对）。
-// 同步方案（决策 43，与用户确认）：
-//   - 应用内编辑：先原子写文件再更新 DB（文件写失败 → 操作报错 DB 不动；DB 失败 → 文件已写，
-//     scan 以文件为准自愈——文件可重建 DB 而 DB 不可重建文件）
-//   - 外部编辑/新增/删除：scan 幂等全量比对——「已索引跳过」= 索引存在 且 文件 mtime === 索引
-//     file_mtime；mtime 不一致 → 以文件为准重新解析 frontmatter + 正文更新索引
-//   - 软删：文件移 references/.trash/ + 索引 deleted_at；restore 移回；purge 物理删
+// + 扫描重建索引（文件 = 真相源，DB 索引 = 派生镜像，mtime 快照比对）。
+// 同步方案（与用户确认）：
+// - 应用内编辑：先原子写文件再更新 DB（文件写失败 → 操作报错 DB 不动；DB 失败 → 文件已写，
+// scan 以文件为准自愈——文件可重建 DB 而 DB 不可重建文件）
+// - 外部编辑/新增/删除：scan 幂等全量比对——「已索引跳过」= 索引存在 且 文件 mtime === 索引
+// file_mtime；mtime 不一致 → 以文件为准重新解析 frontmatter + 正文更新索引
+// - 软删：文件移 references/.trash/ + 索引 deleted_at；restore 移回；purge 物理删
 // 依赖方向：本模块只依赖 shared 纯函数与 db 包实体查询（getEntity/updateEntity/softDeleteEntity/
-//   restoreEntity——scan 用），不依赖 route/middleware（避免循环依赖）。
+// restoreEntity——scan 用），不依赖 route/middleware（避免循环依赖）。
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, openSync, fsyncSync, closeSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -28,10 +27,10 @@ import {
 } from "@whispering233/ai-editor-db";
 import type { EntityRow } from "@whispering233/ai-editor-shared";
 
-/** 参考资料目录（项目根下，决策 43：书籍项目文件夹自包含参考资料） */
+/** 参考资料目录（项目根下，书籍项目文件夹自包含参考资料） */
 export const REFERENCE_DIR = "references";
 
-/** 软删回收目录（references/.trash/，决策 43：软删文件移入，restore 移回、purge 物理删） */
+/** 软删回收目录（references/.trash/，软删文件移入，restore 移回、purge 物理删） */
 export const REFERENCE_TRASH_DIR = ".trash";
 
 /** 文件 mtime 比对容差（毫秒）：**仅防御 ISO 毫秒截断 roundtrip**（mtimeMs 浮点 → toISOString
@@ -40,7 +39,7 @@ export const REFERENCE_TRASH_DIR = ".trash";
  * 应用内写入：writeFileAtomic 后 stat 与 scan 读取的 mtime 必然一致（同一文件），严格相等即可。 */
 export const REFERENCE_MTIME_TOLERANCE_MS = 2;
 
-/** 原子写（决策 11 同款：临时文件 + fsync + rename；参考资料 md 文件同样禁止直接覆盖） */
+/** 原子写（ 同款：临时文件 + fsync + rename；参考资料 md 文件同样禁止直接覆盖） */
 export function writeFileAtomic(filePath: string, data: string): void {
   const tmp = `${filePath}.tmp`;
   const fd = openSync(tmp, "w");
@@ -88,11 +87,11 @@ export interface ParsedReferenceFile {
   category: string | undefined;
   tags: string[];
   body: string;
-  /** 未知 frontmatter 行（外部编辑器自定义字段，序列化时原样保留） */
+ /** 未知 frontmatter 行（外部编辑器自定义字段，序列化时原样保留） */
   extraLines: string[];
-  /** 文件 mtime（ISO，毫秒精度） */
+ /** 文件 mtime（ISO，毫秒精度） */
   mtime: string;
-  /** mtime 毫秒数值（scan 容差比对用） */
+ /** mtime 毫秒数值（scan 容差比对用） */
   mtimeMs: number;
 }
 
@@ -159,7 +158,7 @@ function referenceDataOf(row: EntityRow): Record<string, unknown> {
   return (row.data ?? {}) as Record<string, unknown>;
 }
 
-/** 扫描结果统计（决策 43：幂等全量比对） */
+/** 扫描结果统计（幂等全量比对） */
 export interface ScanReferenceResult {
   added: number;
   updated: number;
@@ -216,30 +215,30 @@ export function countUnsyncedReferenceFiles(root: string, db: Db): number {
 }
 
 /**
- * 扫描重建参考资料索引（POST /api/v1/reference/scan，endpoints.md）。
- * 规则（决策 43 + 2026-08 修订：软删文件归 .trash/，references/ 下缺失即视为外部删除）：
- *   1. 遍历 references/ 顶层 *.md（排除 .trash/）：
- *      - 非软删索引匹配（kind='file' 且 file_name === 文件名）→ mtime 一致（容差内）跳过；
- *        不一致 → 以文件为准更新（title/category/tags/content/file_mtime/updated_at）
- *      - 软删索引匹配 → 还原（deleted_at=NULL，文件留 references/ 原地）+ 更新数据
- *      - 无匹配 → 新建（title=frontmatter title ?? 文件名去扩展名、category ?? material）
- *   2. 反向：非软删 file 类索引，references/ 下对应文件缺失 → 索引同步软删（进回收站可还原）
+ * 扫描重建参考资料索引（POST /api/v1/reference/scan，）。
+ * 规则（ + 2026-08 修订：软删文件归 .trash/，references/ 下缺失即视为外部删除）：
+ * 1. 遍历 references/ 顶层 *.md（排除 .trash/）：
+ * - 非软删索引匹配（kind='file' 且 file_name === 文件名）→ mtime 一致（容差内）跳过；
+ * 不一致 → 以文件为准更新（title/category/tags/content/file_mtime/updated_at）
+ * - 软删索引匹配 → 还原（deleted_at=NULL，文件留 references/ 原地）+ 更新数据
+ * - 无匹配 → 新建（title=frontmatter title ?? 文件名去扩展名、category ?? material）
+ * 2. 反向：非软删 file 类索引，references/ 下对应文件缺失 → 索引同步软删（进回收站可还原）
  * 幂等：重复执行无副作用；只处理顶层文件。
  */
 export function scanReferences(root: string, db: Db): ScanReferenceResult {
   const result: ScanReferenceResult = { added: 0, updated: 0, restored: 0, removed: 0, skipped: 0, errors: [] };
   ensureReferenceDirs(root);
 
-  // 现有 file 类索引（含软删——还原判定用）
+ // 现有 file 类索引（含软删——还原判定用）
   const { live: liveIndex, softDeleted: softDeletedIndex } = readReferenceIndexes(db);
 
-  // 1. 正向：文件 → 索引
+ // 1. 正向：文件 → 索引
   for (const fileName of listReferenceFiles(root)) {
     const file = readReferenceFile(root, fileName);
     if (file === null) continue; // 竞态（读取间被删）→ 下一轮 scan 处理
     const live = liveIndex.get(fileName);
     if (live !== undefined) {
-      // mtime 容差比对：一致跳过
+ // mtime 容差比对：一致跳过
       const stored = typeof live.data.file_mtime === "string" ? new Date(live.data.file_mtime).getTime() : NaN;
       if (!Number.isNaN(stored) && Math.abs(file.mtimeMs - stored) <= REFERENCE_MTIME_TOLERANCE_MS) {
         result.skipped += 1;
@@ -251,13 +250,13 @@ export function scanReferences(root: string, db: Db): ScanReferenceResult {
     }
     const soft = softDeletedIndex.get(fileName);
     if (soft !== undefined) {
-      // 软删索引 + 文件回归 references/ → 还原 + 更新
+ // 软删索引 + 文件回归 references/ → 还原 + 更新
       restoreEntity(db, "reference", soft.id);
       applyFileToIndex(db, soft.id, file, fileName);
       result.restored += 1;
       continue;
     }
-    // 无匹配 → 新建（title/category 兜底）
+ // 无匹配 → 新建（title/category 兜底）
     const title = file.title ?? fileName.replace(/\.md$/, "");
     const category = file.category ?? "material";
     const data = {
@@ -272,7 +271,7 @@ export function scanReferences(root: string, db: Db): ScanReferenceResult {
     result.added += 1;
   }
 
-  // 2. 反向：非软删 file 类索引，references/ 下文件缺失 → 软删
+ // 2. 反向：非软删 file 类索引，references/ 下文件缺失 → 软删
   const files = new Set(listReferenceFiles(root));
   for (const [fileName, live] of liveIndex) {
     if (!files.has(fileName)) {

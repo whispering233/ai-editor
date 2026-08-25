@@ -1,11 +1,11 @@
 // Delta 路由测试（S5.3）：POST 追加 / GET /node/:nodeId / POST /compute
 // 覆盖：201 ok 包裹与 applied 全字段、order 全局单调递增、空 changes/非法 op/per-op 缺必填（400，
-//       四 op 全表驱动）、触发节点前置校验（404 OUTLINE_NODE_NOT_FOUND，防死记录，含软删）、
-//       S13.3 target_type 白名单（outline_node/未知类型 → 400 VALIDATION_ERROR；character → 201 回归）、
-//       GET 可见性（软删触发节点 → 空数组）与 order 升序、
-//       compute 树路径累积（决策 9 双层排序）+ 回显（targetType/targetId/atNodeId）、
-//       update 冲突（conflicts + 保持手动值）、compute 404 映射（OUTLINE_NODE_NOT_FOUND /
-//       ENTITY_NOT_FOUND，含 at_node 软删）
+// 四 op 全表驱动）、触发节点前置校验（404 OUTLINE_NODE_NOT_FOUND，防死记录，含软删）、
+// S13.3 target_type 白名单（outline_node/未知类型 → 400 VALIDATION_ERROR；character → 201 回归）、
+// GET 可见性（软删触发节点 → 空数组）与 order 升序、
+// compute 树路径累积（ 双层排序）+ 回显（targetType/targetId/atNodeId）、
+// update 冲突（conflicts + 保持手动值）、compute 404 映射（OUTLINE_NODE_NOT_FOUND /
+// ENTITY_NOT_FOUND，含 at_node 软删）
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -80,7 +80,7 @@ function standardOutline(): OutlineFileTree {
   };
 }
 
-/** 大纲树变体：sc-1 已软删（决策 12 软删语义；路由前置校验应 404） */
+/** 大纲树变体：sc-1 已软删（ 软删语义；路由前置校验应 404） */
 function softDeletedSceneOutline(): OutlineFileTree {
   return {
     id: "root",
@@ -294,11 +294,11 @@ describe("POST /api/v1/delta 追加", () => {
     expect(status).toBe(400);
     expect(body.error?.code).toBe("VALIDATION_ERROR");
     expect(body.error?.message).toContain("outline_node");
-    // oracle 可选建议：锁定合法类型列表措辞，防未来列表变更与 endpoints.md 漂移无感
+ // oracle 可选建议：锁定合法类型列表措辞，防未来列表变更与 漂移无感
     expect(body.error?.message).toContain("character/setting/location/hook");
   });
 
-  it("target_type=event → 400 VALIDATION_ERROR（决策 26：event 不产生 Delta，C2 收紧）", async () => {
+  it("target_type=event → 400 VALIDATION_ERROR（event 不产生 Delta，C2 收紧）", async () => {
     const { app, charId } = await seed();
     const { status, body } = await postDelta(app, {
       node_id: "sc-1",
@@ -351,7 +351,7 @@ describe("POST /api/v1/delta 追加", () => {
 
   it("node_id 指向软删节点 → 404 OUTLINE_NODE_NOT_FOUND（防死记录）", async () => {
     const { app, charId } = await seed();
-    // 重写大纲树：sc-1 标 deleted（决策 12 软删语义）
+ // 重写大纲树：sc-1 标 deleted（ 软删语义）
     const project = getCurrentProject()!;
     writeOutlineFile(project.root, softDeletedSceneOutline());
     const { status, body } = await postDelta(app, {
@@ -402,16 +402,16 @@ describe("GET /api/v1/delta/node/:nodeId", () => {
     expect((await res.json()) as { data: unknown }).toEqual({ success: true, data: { nodeId: "ch-1", deltas: [] } });
   });
 
-  it("节点不存在 → 200 空数组（非 404——契约未定义该端点 404）", async () => {
+  it("节点不存在 → 200 空数组（非 404——未定义该端点 404）", async () => {
     const { app } = await seed();
     const res = await app.request("/api/v1/delta/node/sc-999", { headers: HOST_HEADERS });
     expect(res.status).toBe(200);
     expect((await res.json()) as { data: unknown }).toEqual({ success: true, data: { nodeId: "sc-999", deltas: [] } });
   });
 
-  it("触发节点已软删 → 200 空数组（决策 12 可见性联动：先挂 Delta 再软删，记录被过滤）", async () => {
+  it("触发节点已软删 → 200 空数组（ 可见性联动：先挂 Delta 再软删，记录被过滤）", async () => {
     const { app, charId } = await seed();
-    // 先挂一条正常可见的 Delta（触发节点 sc-1 未删）
+ // 先挂一条正常可见的 Delta（触发节点 sc-1 未删）
     await postDelta(app, {
       node_id: "sc-1",
       target_type: "character",
@@ -419,7 +419,7 @@ describe("GET /api/v1/delta/node/:nodeId", () => {
       changes: [{ field: "a", op: "set", to: 1 }],
       description: "d1",
     });
-    // 软删触发节点：其全部 Delta 视同不可见（listDeltasByNode 三态过滤）
+ // 软删触发节点：其全部 Delta 视同不可见（listDeltasByNode 三态过滤）
     const project = getCurrentProject()!;
     writeOutlineFile(project.root, softDeletedSceneOutline());
     const res = await app.request("/api/v1/delta/node/sc-1", { headers: HOST_HEADERS });
@@ -431,9 +431,9 @@ describe("GET /api/v1/delta/node/:nodeId", () => {
 // ============ POST /api/v1/delta/compute ============
 
 describe("POST /api/v1/delta/compute 状态计算", () => {
-  it("树路径累积：ch-1 与 sc-1 的 Delta 按路径序应用（决策 9 双层排序）", async () => {
+  it("树路径累积：ch-1 与 sc-1 的 Delta 按路径序应用（ 双层排序）", async () => {
     const { app, charId } = await seed();
-    // 章上的 Delta（先应用）：set status=alive
+ // 章上的 Delta（先应用）：set status=alive
     await postDelta(app, {
       node_id: "ch-1",
       target_type: "character",
@@ -441,7 +441,7 @@ describe("POST /api/v1/delta/compute 状态计算", () => {
       changes: [{ field: "status", op: "set", to: "alive" }],
       description: "章内变更",
     });
-    // 场景上的 Delta（后应用）：set combat_power=150 + add tags
+ // 场景上的 Delta（后应用）：set combat_power=150 + add tags
     await postDelta(app, {
       node_id: "sc-1",
       target_type: "character",
@@ -469,7 +469,7 @@ describe("POST /api/v1/delta/compute 状态计算", () => {
       };
     };
     expect(body.success).toBe(true);
-    // 回显断言（oracle 建议补齐）：targetType/targetId/atNodeId 原样回显
+ // 回显断言（oracle 建议补齐）：targetType/targetId/atNodeId 原样回显
     expect(body.data.targetType).toBe("character");
     expect(body.data.targetId).toBe(charId);
     expect(body.data.atNodeId).toBe("sc-1");
@@ -482,10 +482,10 @@ describe("POST /api/v1/delta/compute 状态计算", () => {
 
   it("update 冲突：手动改值后 from 断裂 → conflicts 非空 + state 保持手动值", async () => {
     const { app, charId } = await seed();
-    // 手动编辑 data（不产生 Delta，决策 9 修订属正常用户行为）：combat_power 100 → 250
+ // 手动编辑 data（不产生 Delta，属正常用户行为）：combat_power 100 → 250
     const project = getCurrentProject()!;
     updateEntity(project.db, charId, { data: { combat_power: 250 } });
-    // 挂 update Delta（from=100 已与当前值断裂）
+ // 挂 update Delta（from=100 已与当前值断裂）
     await postDelta(app, {
       node_id: "sc-1",
       target_type: "character",
@@ -528,7 +528,7 @@ describe("POST /api/v1/delta/compute 状态计算", () => {
 
   it("at_node_id 指向软删节点 → 404 OUTLINE_NODE_NOT_FOUND（路由层前置校验）", async () => {
     const { app, charId } = await seed();
-    // 重写大纲树：sc-1 标 deleted（决策 12 软删语义；assertOutlineNode 同 POST 前置校验）
+ // 重写大纲树：sc-1 标 deleted（ 软删语义；assertOutlineNode 同 POST 前置校验）
     const project = getCurrentProject()!;
     writeOutlineFile(project.root, softDeletedSceneOutline());
     const res = await app.request(

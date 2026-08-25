@@ -90,14 +90,14 @@ const makeProposal = (over: Partial<ProposalCard> & { proposalId: string }): Pro
 });
 
 beforeEach(() => {
-  // 默认 mock：历史为空、fetchSSE 返回空 abort 函数（用例内按需覆盖）
+ // 默认 mock：历史为空、fetchSSE 返回空 abort 函数（用例内按需覆盖）
   mocked.getSessionMessages.mockResolvedValue({ sessionId: "sess-x", messages: [] });
   mocked.fetchSSE.mockReturnValue(() => {});
 });
 
 afterEach(() => {
   vi.clearAllMocks();
-  // 先关项目（触发订阅清空，不产生请求），再重置 chat store 与 project store 其余字段
+ // 先关项目（触发订阅清空，不产生请求），再重置 chat store 与 project store 其余字段
   useProjectStore.setState({
     config: null,
     loadError: null,
@@ -122,7 +122,7 @@ afterEach(() => {
     proposals: [],
     streamTools: [],
   });
-  // 全局反馈状态复位（提案动作 toast 断言用；ui store 的 toast 定时器按 id 守卫，旧定时器不污染新 toast）
+ // 全局反馈状态复位（提案动作 toast 断言用；ui store 的 toast 定时器按 id 守卫，旧定时器不污染新 toast）
   useUiStore.setState({ error: null, toast: null, confirmState: null, dataVersion: 0 });
 });
 
@@ -156,14 +156,14 @@ describe("loadSessions", () => {
   });
 
   it("非空列表且无当前会话 → 自动激活最近会话（问题 2：刷新页面/切项目后恢复最近对话）", async () => {
-    // sessions[0] = 服务端按最后活动倒序的最近会话（决策 22「一项目一会话」心智）
+ // sessions[0] = 服务端按最后活动倒序的最近会话（「一项目一会话」心智）
     const older = { ...sampleSession, id: "sess-older", updatedAt: "2026-08-01T09:00:00Z" };
     mocked.listSessions.mockResolvedValue([sampleSession, older]);
     await useChatStore.getState().loadSessions();
     const s = useChatStore.getState();
     expect(s.sessions).toEqual([sampleSession, older]);
     expect(s.currentSessionId).toBe("sess-1"); // 最近会话（列表 [0]）
-    // 激活即恢复历史（setCurrentSession → loadMessages）
+ // 激活即恢复历史（setCurrentSession → loadMessages）
     await vi.waitFor(() => expect(mocked.getSessionMessages).toHaveBeenCalledWith("sess-1"));
   });
 
@@ -198,7 +198,7 @@ describe("loadSessions", () => {
 });
 
 describe("loadMessages（U5：会话历史恢复）", () => {
-  it("成功 → messages 设置（响应条目补全 sessionId，shared ChatMessage 契约）", async () => {
+  it("成功 → messages 设置（响应条目补全 sessionId，shared ChatMessage ）", async () => {
     mocked.getSessionMessages.mockResolvedValue({
       sessionId: "sess-1",
       messages: [
@@ -272,7 +272,7 @@ describe("setCurrentSession / newSession / clearSessions（U5：选择即恢复�
     await vi.waitFor(() => expect(mocked.getSessionMessages).toHaveBeenCalledWith("sess-1"));
     await vi.waitFor(() => expect(useChatStore.getState().messages).toHaveLength(1));
 
-    // newSession：清空消息区显示「新会话」（含瞬态：streaming/disconnected/focus/提案）
+ // newSession：清空消息区显示「新会话」（含瞬态：streaming/disconnected/focus/提案）
     useChatStore.setState({
       streaming: true,
       disconnected: true,
@@ -338,7 +338,7 @@ describe("focus context 与断连标记（U5）", () => {
     expect(useChatStore.getState().focusContext).toEqual({ focus_node_id: "ch-3" });
     useChatStore.getState().clearFocusContext();
     expect(useChatStore.getState().focusContext).toBeNull();
-    // setFocusContext(null) 亦清除
+ // setFocusContext(null) 亦清除
     useChatStore.getState().setFocusContext({ focus_entity_id: "char-1" });
     useChatStore.getState().setFocusContext(null);
     expect(useChatStore.getState().focusContext).toBeNull();
@@ -376,7 +376,7 @@ describe("describeStreamError（U5：错误文案映射）", () => {
   });
 });
 
-describe("describeProposalActionError（S8.2：提案动作非契约错误文案）", () => {
+describe("describeProposalActionError（S8.2：提案动作非错误文案）", () => {
   it("INTERNAL_ERROR（500 执行失败）→ 引导重新生成提案", () => {
     expect(describeProposalActionError("INTERNAL_ERROR", "提案执行失败")).toBe(
       "提案执行失败，请让 AI 重新生成提案",
@@ -451,14 +451,14 @@ describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
     });
   });
 
-  it("tool_call / tool_result 事件 → 运行时工具记录（成对更新；result 为字符串——S8.1 对齐 S7.6 帧契约）", () => {
+  it("tool_call / tool_result 事件 → 运行时工具记录（成对更新；result 为字符串——S8.1 对齐 S7.6 帧）", () => {
     useChatStore.getState().sendMessage("你好");
     const { onEvent } = sseOptions();
     onEvent("tool_call", { tool: "get_entity", args: { id: "char-1" }, id: "call-1" });
     expect(useChatStore.getState().streamTools).toEqual([
       { id: "call-1", tool: "get_entity", args: { id: "char-1" }, status: "running" },
     ]);
-    // S7.6 帧事实契约（chat.test.ts）：result 为字符串——JSON.stringify 结果或错误文案，非对象
+ // S7.6 帧事实（chat.test.ts）：result 为字符串——JSON.stringify 结果或错误文案，非对象
     onEvent("tool_result", {
       tool: "get_entity",
       result: JSON.stringify({ name: "张三" }),
@@ -494,7 +494,7 @@ describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
     const { onEvent } = sseOptions();
     onEvent("done", { session_id: "sess-1", usage: { prompt_tokens: 1200, completion_tokens: 300, total_tokens: 1500 } });
     expect(useChatStore.getState().lastUsage).toEqual({ prompt_tokens: 1200, completion_tokens: 300, total_tokens: 1500 });
-    // 无 usage 的 done 不覆盖上次值（保持最近一次有值）
+ // 无 usage 的 done 不覆盖上次值（保持最近一次有值）
     useChatStore.getState().sendMessage("再问");
     const { onEvent: onEvent2 } = sseOptions();
     onEvent2("done", { session_id: "sess-1" });
@@ -516,18 +516,18 @@ describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
     mocked.listSessions.mockResolvedValue([sampleSession]);
     useChatStore.getState().sendMessage("你好");
     const { onEvent } = sseOptions();
-    // 心跳（空 payload，决策 20）：不产生任何状态变化
+ // 心跳（空 payload）：不产生任何状态变化
     onEvent("ping", {});
-    // text 流式追加（多段；与 tool 轮次交错）
+ // text 流式追加（多段；与 tool 轮次交错）
     onEvent("text", { delta: "第一段" });
     onEvent("text", { delta: "第二段" });
-    // tool_call → 工具行 running
+ // tool_call → 工具行 running
     onEvent("tool_call", {
       tool: "propose_create_entity",
       args: { type: "character", name: "张三" },
       id: "call_1",
     });
-    // tool_result（S7.6 帧契约：result 为字符串；proposal 在对应 tool_result 之后）
+ // tool_result（S7.6 帧result 为字符串；proposal 在对应 tool_result 之后）
     onEvent("tool_result", {
       tool: "propose_create_entity",
       result: JSON.stringify({ proposal_id: "prop_1", summary: "创建角色张三" }),
@@ -542,14 +542,14 @@ describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
         args: { type: "character", name: "张三" },
       },
     });
-    // 收尾文本 + done（新会话 sess_ 前缀，endpoints.md id 约定）
+ // 收尾文本 + done（新会话 sess_ 前缀， id 约定）
     onEvent("text", { delta: "完成" });
     onEvent("done", { session_id: "sess_1" });
 
     const s = useChatStore.getState();
-    // 文本流式追加累积（含工具轮之间的段落）
+ // 文本流式追加累积（含工具轮之间的段落）
     expect(s.messages[1]).toMatchObject({ role: "assistant", content: "第一段第二段完成" });
-    // 工具行状态迁移 running → ok，result 按字符串原文挂载
+ // 工具行状态迁移 running → ok，result 按字符串原文挂载
     expect(s.streamTools).toEqual([
       {
         id: "call_1",
@@ -559,7 +559,7 @@ describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
         status: "ok",
       },
     ]);
-    // 提案卡填充（pending）
+ // 提案卡填充（pending）
     expect(s.proposals).toEqual([
       {
         proposalId: "prop_1",
@@ -572,7 +572,7 @@ describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
         status: "pending",
       },
     ]);
-    // done：流结束 + currentSessionId 更新 + 会话列表刷新
+ // done：流结束 + currentSessionId 更新 + 会话列表刷新
     expect(s.streaming).toBe(false);
     expect(s.currentSessionId).toBe("sess_1");
     await vi.waitFor(() => expect(mocked.listSessions).toHaveBeenCalled());
@@ -587,11 +587,11 @@ describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
     expect(s.streamError).toBe("单轮超时");
   });
 
-  it("S8.1 联调：服务端真实错误码（LLM 层非 ErrorCode 枚举）→ 文案透传 message（帧契约 chat.test.ts）", () => {
+  it("S8.1 联调：服务端真实错误码（LLM 层非 ErrorCode 枚举）→ 文案透传 message（帧chat.test.ts）", () => {
     useChatStore.getState().sendMessage("你好");
     const { onEvent } = sseOptions();
-    // S7.6 帧事实契约：配额类错误帧 { code: "insufficient_quota", message: "余额不足" }——
-    // code 不经 ErrorCode 枚举，文案映射只认 message（describeStreamError 透传分支）
+ // S7.6 帧事实配额类错误帧 { code: "insufficient_quota", message: "余额不足" }——
+ // code 不经 ErrorCode 枚举，文案映射只认 message（describeStreamError 透传分支）
     onEvent("error", { code: "insufficient_quota", message: "余额不足" });
     const s = useChatStore.getState();
     expect(s.streaming).toBe(false);
@@ -605,7 +605,7 @@ describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
     expect(useChatStore.getState().streamError).toBe("聊天服务暂不可用");
   });
 
-  it("onTimeout（60s 无事件）→ disconnected=true + streaming=false + 清空提案（决策 16）", () => {
+  it("onTimeout（60s 无事件）→ disconnected=true + streaming=false + 清空提案（）", () => {
     useChatStore.getState().sendMessage("你好");
     const { onEvent, onTimeout } = sseOptions();
     onEvent("proposal", { proposal_id: "prop-1", type: "propose_create_entity", preview: {} });
@@ -635,7 +635,7 @@ describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
     expect(mocked.fetchSSE).toHaveBeenCalledTimes(1);
     const s = useChatStore.getState();
     expect(s.disconnected).toBe(false);
-    // 残留的 user 消息与空 AI 占位被移除，重发后仅 1 条 user + 新占位
+ // 残留的 user 消息与空 AI 占位被移除，重发后仅 1 条 user + 新占位
     expect(s.messages.filter((m) => m.role === "user")).toHaveLength(1);
     expect(s.messages[0].content).toBe("你好");
   });
@@ -650,7 +650,7 @@ describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
     useChatStore.getState().resendLast();
     expect(mocked.fetchSSE).toHaveBeenCalledTimes(1);
     const s = useChatStore.getState();
-    // 半截 assistant（"我好"）被无条件移除，重发后仅 1 条空占位 assistant + 1 条 user（无重复气泡）
+ // 半截 assistant（"我好"）被无条件移除，重发后仅 1 条空占位 assistant + 1 条 user（无重复气泡）
     const assistants = s.messages.filter((m) => m.role === "assistant");
     expect(assistants).toHaveLength(1);
     expect(assistants[0].content).toBe("");
@@ -662,16 +662,16 @@ describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
     useChatStore.getState().sendMessage("第一轮");
     const first = sseOptions();
     first.onEvent("done", { session_id: "sess-1" }); // 本轮结束（onEnd 尚未触发）
-    // 微窗口内新发一轮：streaming 重新为 true，流身份已指向新流
+ // 微窗口内新发一轮：streaming 重新为 true，流身份已指向新流
     useChatStore.getState().sendMessage("第二轮");
     expect(useChatStore.getState().streaming).toBe(true);
-    // 旧流收尾回调此刻才到 → 身份守卫拦截：不得复位新流 streaming / 置断连
+ // 旧流收尾回调此刻才到 → 身份守卫拦截：不得复位新流 streaming / 置断连
     first.onEnd();
     first.onTimeout();
     const s = useChatStore.getState();
     expect(s.streaming).toBe(true);
     expect(s.disconnected).toBe(false);
-    // 新流自身 onEnd 仍正常收尾
+ // 新流自身 onEnd 仍正常收尾
     sseOptions().onEnd();
     expect(useChatStore.getState().streaming).toBe(false);
   });
@@ -751,8 +751,8 @@ describe("confirmProposal / rejectProposal（S8.2：提案卡接入 S7.5 confirm
   });
 
   it("其他错误（500 INTERNAL_ERROR 执行失败）→ 保持 pending 可重试 + toast 错误提示（U6 全局反馈）", async () => {
-    // INTERNAL_ERROR 不在 shared ErrorCode 枚举（proposal.ts 注释：契约未定义该错误码，前端按通用错误呈现）——
-    // 运行时错误码是普通字符串，store default 分支按字符串匹配，测试构造仅需类型断言
+ // INTERNAL_ERROR 不在 shared ErrorCode 枚举（proposal.ts 注释：未定义该错误码，前端按通用错误呈现）——
+ // 运行时错误码是普通字符串，store default 分支按字符串匹配，测试构造仅需类型断言
     mocked.confirmProposal.mockRejectedValue(
       new ApiError("INTERNAL_ERROR" as ErrorCode, "提案执行失败"),
     );
@@ -784,7 +784,7 @@ describe("confirmProposal / rejectProposal（S8.2：提案卡接入 S7.5 confirm
     mocked.confirmProposal.mockImplementationOnce(() => new Promise((r) => (resolveFirst = r)));
     useChatStore.setState({ proposals: [makeProposal({ proposalId: "prop-1" })] });
     const p1 = useChatStore.getState().confirmProposal("prop-1");
-    // 在途（processing=true）：重复点击被状态层忽略
+ // 在途（processing=true）：重复点击被状态层忽略
     await useChatStore.getState().confirmProposal("prop-1");
     expect(mocked.confirmProposal).toHaveBeenCalledTimes(1);
     resolveFirst({ confirmed: true, result: undefined });
@@ -813,7 +813,7 @@ describe("项目切换联动（U5：清空消息/运行态 + 中止在途流）"
     useProjectStore.setState({ config: makeConfig("proj-a") });
     await vi.waitFor(() => expect(useChatStore.getState().sessions).toEqual([sampleSession]));
     expect(mocked.listSessions).toHaveBeenCalledTimes(1);
-    // 切项目时旧项目会话不残留；新项目列表加载后自动激活最近会话（问题 2 行为）
+ // 切项目时旧项目会话不残留；新项目列表加载后自动激活最近会话（问题 2 行为）
     await vi.waitFor(() => expect(useChatStore.getState().currentSessionId).toBe("sess-1"));
   });
 
@@ -831,9 +831,9 @@ describe("项目切换联动（U5：清空消息/运行态 + 中止在途流）"
   it("切项目 → 清空消息/streaming/disconnected/focusContext 并中止在途 SSE 流", async () => {
     const abortFn = vi.fn();
     mocked.fetchSSE.mockReturnValue(abortFn);
-    // 在途流：sendMessage 建立（streaming=true + abortCurrentStream 挂载）
+ // 在途流：sendMessage 建立（streaming=true + abortCurrentStream 挂载）
     useChatStore.getState().sendMessage("你好");
-    // 注入切项目前应被清理的残留状态（focusContext 不被发送流程触碰，可真实模拟）
+ // 注入切项目前应被清理的残留状态（focusContext 不被发送流程触碰，可真实模拟）
     useChatStore.setState({
       focusContext: { focus_entity_id: "char-1" },
       disconnected: true,
@@ -849,7 +849,7 @@ describe("项目切换联动（U5：清空消息/运行态 + 中止在途流）"
     expect(s.focusContext).toBeNull();
     expect(s.proposals).toEqual([]);
     expect(s.streamError).toBeNull();
-    // 新项目列表自动加载
+ // 新项目列表自动加载
     mocked.listSessions.mockResolvedValue([sampleSession]);
     await vi.waitFor(() => expect(useChatStore.getState().sessions).toEqual([sampleSession]));
   });
@@ -861,21 +861,21 @@ describe("项目切换联动（U5：清空消息/运行态 + 中止在途流）"
     );
     const sessionA = { ...sampleSession, id: "sess-a", lastMessage: "A 的会话" };
     const sessionB = { ...sampleSession, id: "sess-b", lastMessage: "B 的会话" };
-    // 打开项目 A → 列表请求挂起
+ // 打开项目 A → 列表请求挂起
     useProjectStore.setState({ config: makeConfig("proj-a") });
     expect(useChatStore.getState().sessionsLoading).toBe(true);
-    // 切到项目 B → 新请求立即返回
+ // 切到项目 B → 新请求立即返回
     mocked.listSessions.mockResolvedValueOnce([sessionB]);
     useProjectStore.setState({ config: makeConfig("proj-b") });
     await vi.waitFor(() => expect(useChatStore.getState().sessions).toEqual([sessionB]));
-    // 旧请求（A）此刻才完成 → 必须被作废
+ // 旧请求（A）此刻才完成 → 必须被作废
     resolveFirst([sessionA]);
     await Promise.resolve();
     expect(useChatStore.getState().sessions).toEqual([sessionB]);
     expect(useChatStore.getState().sessionsLoading).toBe(false);
   });
 
-  it("requestFocusInput 递增聚焦信号（决策 35：InfoBar 问 AI 无焦点时也聚焦输入框）", () => {
+  it("requestFocusInput 递增聚焦信号（InfoBar 问 AI 无焦点时也聚焦输入框）", () => {
     const before = useChatStore.getState().focusInputSeq;
     useChatStore.getState().requestFocusInput();
     useChatStore.getState().requestFocusInput();

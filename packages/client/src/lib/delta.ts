@@ -1,5 +1,5 @@
-// Delta 展示辅助纯函数（S5.4；契约：shared types/entity.ts DeltaChange/DeltaRecord/ComputeStateResult +
-//   endpoints.md「Delta 变更追踪」——op 语义 set/update/add/remove，2026-08 修订）
+// Delta 展示辅助纯函数（S5.4；shared types/entity.ts DeltaChange/DeltaRecord/ComputeStateResult +
+// 「Delta 变更追踪」——op 语义 set/update/add/remove，2026-08 修订）
 // 用途：大纲节点变更记录面板与实体详情状态预览共用；保持薄封装，UI 组件只做编排
 import type { DeltaChange, DeltaOp } from "@whispering233/ai-editor-shared";
 
@@ -32,7 +32,7 @@ export function formatDeltaValue(v: unknown): string {
 }
 
 /**
- * 单条 change 的紧凑摘要（op/field/from→to 语义，endpoints.md）：
+ * 单条 change 的紧凑摘要（op/field/from→to 语义，）：
  * set → `field = to`；update → `field from → to`；add → `field +value`；remove → `field -value`
  */
 export function describeChange(c: DeltaChange): string {
@@ -60,8 +60,8 @@ export interface FieldDiff {
  * 比较基准 = JSON 序列化（undefined/null 归一）；计算态新增字段 from=undefined（展示「（无）」）、
  * 当前态独有字段 to=undefined（展示「（已移除）」）
  * 注：JSON.stringify 比较对**键序不同**的等价对象会误报差异（如 {a:1,b:2} vs {b:2,a:1}）；
- *   当前数据流两侧均源自服务端同一份 data 的深拷贝（set 类变更整体替换），键序一致，不会触发；
- *   若未来引入手动拼装对象的变更来源，需改为递归深比较
+ * 当前数据流两侧均源自服务端同一份 data 的深拷贝（set 类变更整体替换），键序一致，不会触发；
+ * 若未来引入手动拼装对象的变更来源，需改为递归深比较
  */
 export function diffStateFields(
   original: Record<string, unknown>,

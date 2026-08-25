@@ -1,5 +1,5 @@
 // lib/delta 纯函数测试（S5.4）：describeChange 四 op 摘要 / formatDeltaValue 边界 /
-//   targetTypeLabel 映射 / diffStateFields 状态差异
+// targetTypeLabel 映射 / diffStateFields 状态差异
 import { describe, expect, it } from "vitest";
 import type { DeltaChange } from "@whispering233/ai-editor-shared";
 import { describeChange, diffStateFields, formatDeltaValue, targetTypeLabel } from "./delta";

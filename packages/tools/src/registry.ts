@@ -1,12 +1,11 @@
 // 工具注册表（S6.3）：统一工具定义结构 + 注册/查询 API
-// 契约来源：doc/api/tools.md（工具分级、工具执行契约）；doc/design/decisions.md 决策 14/15。
 // 供后续切片扩展：S6.4 分析类 / S6.5 伏笔 / S6.6 提案 / S6.7 执行 + executor 均可
 // registerTool 挂载新工具；S7.4 executor 通过 getTool(name) 按名调度。
 //
 // 定义结构 { name, description, argsSchema, permission, run }：
 // - argsSchema：zod 参数校验（执行前 preflight 校验，批量 tool_call 先全部校验再执行，
-//   tools.md「工具执行契约」）；校验失败即抛错（executor 统一转结构化 tool_result 喂回 LLM）
-// - permission：TOOL_PERMISSION.AUTO（自动）/ PROPOSAL（提案确认）两级（tools.md「工具分级」）
+// 「工具执行」）；校验失败即抛错（executor 统一转结构化 tool_result 喂回 LLM）
+// - permission：TOOL_PERMISSION.AUTO（自动）/ PROPOSAL（提案确认）两级（「工具分级」）
 // - run(ctx, args)：同步执行，返回 JSON 可序列化结果；抛错即失败（不把失败编码进正常 content）
 //
 // 注册语义：重复注册同名工具抛错（防 S6.4-6.7 与查询类撞名；注册表是唯一事实来源）。
@@ -23,19 +22,19 @@ import type { ToolContext } from "./context.js";
  * 运行时由 argsSchema 兜底，类型层面双变无实际风险。
  */
 export interface ToolDefinition<TSchema extends z.ZodTypeAny = z.ZodTypeAny> {
-  /** 工具名（tools.md 工具目录，如 get_entity；LLM tool_call 的 tool 字段） */
+ /** 工具名（ 工具目录，如 get_entity；LLM tool_call 的 tool 字段） */
   name: string;
-  /** 人类可读描述（注入 LLM 工具列表，说明用途与参数语义） */
+ /** 人类可读描述（注入 LLM 工具列表，说明用途与参数语义） */
   description: string;
-  /** 参数 zod schema（入参校验；推断类型即 run 的 args 类型） */
+ /** 参数 zod schema（入参校验；推断类型即 run 的 args 类型） */
   argsSchema: TSchema;
-  /** 权限级别（TOOL_PERMISSION.AUTO / PROPOSAL） */
+ /** 权限级别（TOOL_PERMISSION.AUTO / PROPOSAL） */
   permission: ToolPermission;
-  /**
-   * 执行函数：注入 ToolContext（db/outlineDir/projectId），返回可序列化结果或抛错。
-   * signal：可选取消通道（决策 16 ③「长工具执行中检查 signal」）——S6.4 分析类
-   * 是长任务候选，executor 在 SSE 断开时中止在途工具；同步短工具可不检查。
-   */
+ /**
+ * 执行函数：注入 ToolContext（db/outlineDir/projectId），返回可序列化结果或抛错。
+ * signal：可选取消通道（「长工具执行中检查 signal」）——S6.4 分析类
+ * 是长任务候选，executor 在 SSE 断开时中止在途工具；同步短工具可不检查。
+ */
   run(ctx: ToolContext, args: z.infer<TSchema>, signal?: AbortSignal): unknown;
 }
 

@@ -36,7 +36,7 @@ function buildApp(): Hono {
   app.use("*", originCheckMiddleware());
   app.use("*", projectMiddleware());
   app.route("/api/v1/relation", relationRoutes);
-  // trash 路由（G2 occurs_at 测试：还原事件验证级联还原挂载，决策 12）
+ // trash 路由（G2 occurs_at 测试：还原事件验证级联还原挂载）
   app.route("/api/v1/trash", trashRoutes);
   return app;
 }
@@ -180,7 +180,7 @@ describe("POST /relation 创建", () => {
     expect(body.error.code).toBe("VALIDATION_ERROR");
     expect(body.error.message).toContain("char-999");
 
-    // 软删端点
+ // 软删端点
     const project = getCurrentProject()!;
     const ghost = createEntity(project.db, { type: "character", name: "幽灵" });
     softDeleteEntity(project.db, ghost.id, nowIso());
@@ -208,14 +208,14 @@ describe("POST /relation 创建", () => {
     expect(body.data.relation.sourceType).toBe("outline_node");
   });
 
-  it("occurs_at 1:n（G2，决策 26 修订）：重复挂载 → 409 EVENT_ALREADY_MOUNTED；换时间点挂载需先删旧关系", async () => {
+  it("occurs_at 1:n（G2，）：重复挂载 → 409 EVENT_ALREADY_MOUNTED；换时间点挂载需先删旧关系", async () => {
     const { app } = await seed();
     const project = getCurrentProject()!;
-    // 造两个 timepoint + 一个 event（直接 db 层建，快）
+ // 造两个 timepoint + 一个 event（直接 db 层建，快）
     const tpA = createEntity(project.db, { type: "timepoint", name: "第二天黄昏" });
     const tpB = createEntity(project.db, { type: "timepoint", name: "少年时" });
     const ev = createEntity(project.db, { type: "event", name: "玉佩事件" });
-    // 首次挂载 → 201
+ // 首次挂载 → 201
     const first = await createRel(app, {
       source_type: "timepoint",
       source_id: tpA.id,
@@ -224,7 +224,7 @@ describe("POST /relation 创建", () => {
       relation_type: "occurs_at",
     });
     expect(first.status).toBe(201);
-    // 重复挂载（同一时间点）→ 409 RELATION_EXISTS（判重先行语义：同三元组重复与泛型创建一致）
+ // 重复挂载（同一时间点）→ 409 RELATION_EXISTS（判重先行语义：同三元组重复与泛型创建一致）
     const dupSame = await createRel(app, {
       source_type: "timepoint",
       source_id: tpA.id,
@@ -234,8 +234,8 @@ describe("POST /relation 创建", () => {
     });
     expect(dupSame.status).toBe(409);
     expect(dupSame.body.error.code).toBe("RELATION_EXISTS");
-    // 换时间点挂载（事件已挂载 tpA）→ 409 EVENT_ALREADY_MOUNTED（occurs_at 1:n 约束，
-    // assertEventSingleOccursAt 在 createRelation 前拦截——跨组拖拽走 move_to 复合端点）
+ // 换时间点挂载（事件已挂载 tpA）→ 409 EVENT_ALREADY_MOUNTED（occurs_at 1:n 约束，
+ // assertEventSingleOccursAt 在 createRelation 前拦截——跨组拖拽走 move_to 复合端点）
     const dupOther = await createRel(app, {
       source_type: "timepoint",
       source_id: tpB.id,
@@ -246,7 +246,7 @@ describe("POST /relation 创建", () => {
     expect(dupOther.status).toBe(409);
     expect(dupOther.body.error.code).toBe("EVENT_ALREADY_MOUNTED");
     expect(dupOther.body.error.message).toContain("重复挂载拒绝");
-    // 其他事件不受影响：未挂载事件可正常挂载
+ // 其他事件不受影响：未挂载事件可正常挂载
     const ev2 = createEntity(project.db, { type: "event", name: "第二次交手" });
     const ok = await createRel(app, {
       source_type: "timepoint",
@@ -258,7 +258,7 @@ describe("POST /relation 创建", () => {
     expect(ok.status).toBe(201);
   });
 
-  it("设定层级 belongs_to（决策 30）：自指/成环 → 400 VALIDATION_ERROR；正常与级联挂载 201", async () => {
+  it("设定层级 belongs_to（）：自指/成环 → 400 VALIDATION_ERROR；正常与级联挂载 201", async () => {
     const { app } = await seed();
     const project = getCurrentProject()!;
     const world = createEntity(project.db, { type: "setting", name: "世界" });
@@ -274,27 +274,27 @@ describe("POST /relation 创建", () => {
       relation_type: "belongs_to",
     });
 
-    // 正常：门派 → 大陆 → 世界（子 belongs_to 父，201）
+ // 正常：门派 → 大陆 → 世界（子 belongs_to 父，201）
     expect((await createRel(app, rel(sect.id, continent.id))).status).toBe(201);
     expect((await createRel(app, rel(continent.id, world.id))).status).toBe(201);
 
-    // 自指：设定作为自己的上级 → 400
+ // 自指：设定作为自己的上级 → 400
     const self = await createRel(app, rel(world.id, world.id));
     expect(self.status).toBe(400);
     expect(self.body.error.code).toBe("VALIDATION_ERROR");
     expect(self.body.error.message).toContain("自己的上级");
 
-    // 成环：世界 → 门派（世界挂到门派下，而门派属于大陆属于世界）→ 400
+ // 成环：世界 → 门派（世界挂到门派下，而门派属于大陆属于世界）→ 400
     const cycle = await createRel(app, rel(world.id, sect.id));
     expect(cycle.status).toBe(400);
     expect(cycle.body.error.code).toBe("VALIDATION_ERROR");
     expect(cycle.body.error.message).toContain("成环");
 
-    // 成环：大陆 → 门派（把大陆挂到门派下，门派祖先链 = 门派→大陆→世界 含大陆）→ 400
+ // 成环：大陆 → 门派（把大陆挂到门派下，门派祖先链 = 门派→大陆→世界 含大陆）→ 400
     const cycle2 = await createRel(app, rel(continent.id, sect.id));
     expect(cycle2.status).toBe(400);
 
-    // 非层级 belongs_to（人物→设定）不受影响 → 201
+ // 非层级 belongs_to（人物→设定）不受影响 → 201
     const charRel = await createRel(app, {
       source_type: "character",
       source_id: person.id,
@@ -304,7 +304,7 @@ describe("POST /relation 创建", () => {
     });
     expect(charRel.status).toBe(201);
 
-    // 孤儿级联挂载：新设定挂到世界下（祖先链无新设定）→ 201
+ // 孤儿级联挂载：新设定挂到世界下（祖先链无新设定）→ 201
     const sect2 = createEntity(project.db, { type: "setting", name: "新势力" });
     expect((await createRel(app, rel(sect2.id, world.id))).status).toBe(201);
   });
@@ -338,7 +338,7 @@ describe("GET /relation 查询", () => {
 
   it("depth=2：paths 结构（nodes/edges camelCase）；depth=3 更远路径", async () => {
     const { app, charA, charB } = await seed();
-    // 链：A→B→sc-1
+ // 链：A→B→sc-1
     await createRel(app, { source_type: "character", source_id: charA, target_type: "character", target_id: charB, relation_type: "ally" });
     await createRel(app, { source_type: "character", source_id: charB, target_type: "outline_node", target_id: "sc-1", relation_type: "mentor" });
 
@@ -352,12 +352,12 @@ describe("GET /relation 查询", () => {
       { type: "outline_node", id: "sc-1", name: "场景一" },
     ]);
     expect(twoHop.edges[1]).toEqual({ from: charB, to: "sc-1", relationType: "mentor" });
-    // depth=3 等价（无更远路径）
+ // depth=3 等价（无更远路径）
     const d3 = await app.request(`/api/v1/relation?source_id=${charA}&depth=3`, { headers: HOST_HEADERS });
     expect((await d3.json()).data.paths).toHaveLength(2);
   });
 
-  it("可见性（决策 12 修订）：source 软删后关系不可见", async () => {
+  it("可见性（）：source 软删后关系不可见", async () => {
     const { app, charA, charB } = await seed();
     await createRel(app, { source_type: "character", source_id: charA, target_type: "character", target_id: charB, relation_type: "ally" });
     const project = getCurrentProject()!;
@@ -392,11 +392,11 @@ describe("DELETE /relation/:id 物理删", () => {
     expect(res.status).toBe(200);
     expect((await res.json()).data).toEqual({ deleted: true });
 
-    // 已删 → 404
+ // 已删 → 404
     const again = await app.request(`/api/v1/relation/${id}`, { method: "DELETE", headers: HOST_HEADERS });
     expect(again.status).toBe(404);
     expect((await again.json()).error.code).toBe("RELATION_NOT_FOUND");
-    // 不存在 id → 404
+ // 不存在 id → 404
     const missing = await app.request("/api/v1/relation/rel-999", { method: "DELETE", headers: HOST_HEADERS });
     expect(missing.status).toBe(404);
   });
@@ -415,7 +415,7 @@ describe("DELETE /relation/:id 物理删", () => {
 // ============ PUT /api/v1/relation/:id ============
 
 describe("PUT /relation/:id 更新元数据", () => {
-  /** PUT 请求 helper（返回 status + body） */
+ /** PUT 请求 helper（返回 status + body） */
   async function putRel(
     app: Hono,
     id: string,
@@ -508,10 +508,10 @@ describe("PUT /relation/:id 更新元数据", () => {
   });
 });
 
-// ============ occurs_at 挂载（G2，决策 26 修订）：timepoint → event 1:n ============
+// ============ occurs_at 挂载（G2）：timepoint → event 1:n ============
 
-describe("occurs_at 1:n 挂载（G2，决策 26 修订）", () => {
-  /** 种子：open 项目 + timepoint ×2 + event ×1（db 层直插，复用 createEntity），返回 { app, tp0, tp1, ev } */
+describe("occurs_at 1:n 挂载（G2，）", () => {
+ /** 种子：open 项目 + timepoint ×2 + event ×1（db 层直插，复用 createEntity），返回 { app, tp0, tp1, ev } */
   function seedTimepointEvent(): { app: Hono; tp0: string; tp1: string; ev: string } {
     setCurrentProject(initProject(makeTmpDir()));
     const project = getCurrentProject()!;
@@ -546,13 +546,13 @@ describe("occurs_at 1:n 挂载（G2，决策 26 修订）", () => {
       source_type: "timepoint", source_id: tp0, target_type: "event", target_id: ev, relation_type: "occurs_at",
     });
     expect(first.status).toBe(201);
-    // 同一事件挂到另一时间点 → 409（occurs_at 1:n 约束，assertEventSingleOccursAt）
+ // 同一事件挂到另一时间点 → 409（occurs_at 1:n 约束，assertEventSingleOccursAt）
     const dup = await createRel(app, {
       source_type: "timepoint", source_id: tp1, target_type: "event", target_id: ev, relation_type: "occurs_at",
     });
     expect(dup.status).toBe(409);
     expect(dup.body.error!.code).toBe("EVENT_ALREADY_MOUNTED");
-    // 关系表只保留第一条（无半挂载残留）
+ // 关系表只保留第一条（无半挂载残留）
     const list = await app.request(`/api/v1/relation?target_id=${ev}&relation_type=occurs_at&depth=1`, {
       headers: HOST_HEADERS,
     });
@@ -572,20 +572,20 @@ describe("occurs_at 1:n 挂载（G2，决策 26 修订）", () => {
     expect(dup.body.error!.code).toBe("RELATION_EXISTS"); // 1:n 校验只拦「换时间点」场景（见 POST /relation 创建测试）
   });
 
-  it("事件软删后其 occurs_at 级联软删（决策 12）→ 挂载不可见，且不参与 1:n 校验（新建关系被端点软删拦截，400 而非 409）", async () => {
+  it("事件软删后其 occurs_at 级联软删（）→ 挂载不可见，且不参与 1:n 校验（新建关系被端点软删拦截，400 而非 409）", async () => {
     const { app, tp0, tp1, ev } = seedTimepointEvent();
     await createRel(app, {
       source_type: "timepoint", source_id: tp0, target_type: "event", target_id: ev, relation_type: "occurs_at",
     });
-    // 软删事件 → occurs_at 级联软删（决策 12）——挂载不可见
+ // 软删事件 → occurs_at 级联软删——挂载不可见
     const project = getCurrentProject()!;
     softDeleteEntity(project.db, ev, nowIso());
     const list = await app.request(`/api/v1/relation?target_id=${ev}&relation_type=occurs_at&depth=1`, {
       headers: HOST_HEADERS,
     });
     expect((await list.json()).data.relations).toEqual([]);
-    // 软删挂载不再参与 1:n 校验（否则会 409 EVENT_ALREADY_MOUNTED）——
-    // 但事件本身已软删不可建新关系（决策 12 修订：软删端点拒绝）→ 400 VALIDATION_ERROR
+ // 软删挂载不再参与 1:n 校验（否则会 409 EVENT_ALREADY_MOUNTED）——
+ // 但事件本身已软删不可建新关系（软删端点拒绝）→ 400 VALIDATION_ERROR
     const remount = await createRel(app, {
       source_type: "timepoint", source_id: tp1, target_type: "event", target_id: ev, relation_type: "occurs_at",
     });

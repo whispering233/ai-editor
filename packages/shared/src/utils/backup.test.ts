@@ -1,13 +1,11 @@
-// 备份文件名纯函数测试（B2.1 决策 27 + B2.5 决策 28 + B2.6 决策 29）：毫秒级
-//   <YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip 生成/解析、类型标签（auto/manual）、
-//   自定义名称、旧格式兼容、sanitizeBackupName 规则
-// 契约来源：doc/database/schema.md「自动备份目录」（时间戳命名）、doc/api/endpoints.md
-//   POST /project/backup/restore（fileName 白名单：拒绝路径分隔符 / ..，防路径穿越）
+// 备份文件名纯函数测试（B2.1 + B2.5 + B2.6 ）：毫秒级
+// <YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip 生成/解析、类型标签（auto/manual）、
+// 自定义名称、旧格式兼容、sanitizeBackupName 规则
 import { describe, expect, it } from "vitest";
 import { MAX_BACKUP_NAME_LENGTH } from "../constants/backup.js";
 import { formatBackupFileName, parseBackupFileName, sanitizeBackupName } from "./backup.js";
 
-describe("formatBackupFileName（Date → <YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip，决策 28 毫秒 + 决策 29 kind 段）", () => {
+describe("formatBackupFileName（Date → <YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip， 毫秒 +  kind 段）", () => {
   it("本地时间各分量按 2 位补零 + 毫秒 3 位补零生成（kind 缺省 auto 无名称 → 纯时间戳）", () => {
     const date = new Date(2026, 7, 13, 10, 15, 30, 123);
     expect(formatBackupFileName(date)).toBe("20260813-101530123.zip");
@@ -24,7 +22,7 @@ describe("formatBackupFileName（Date → <YYYYMMDD-HHmmssSSS>[-<kind>][-<名称
     expect(formatBackupFileName(date)).toBe("20260813-101530000.zip");
   });
 
-  it("四类输出（决策 29）：auto 无名称纯时间戳 / auto 带名称 -a- / manual 无名称 -m / manual 带名称 -m-", () => {
+  it("四类输出（）：auto 无名称纯时间戳 / auto 带名称 -a- / manual 无名称 -m / manual 带名称 -m-", () => {
     const date = new Date(2026, 7, 13, 10, 15, 30, 123);
     expect(formatBackupFileName(date, { kind: "auto" })).toBe("20260813-101530123.zip");
     expect(formatBackupFileName(date, { kind: "auto", name: "定稿" })).toBe("20260813-101530123-a-定稿.zip");
@@ -32,7 +30,7 @@ describe("formatBackupFileName（Date → <YYYYMMDD-HHmmssSSS>[-<kind>][-<名称
     expect(formatBackupFileName(date, { kind: "manual", name: "定稿" })).toBe("20260813-101530123-m-定稿.zip");
   });
 
-  it("kind 缺省 auto：仅传名称 → -a-<名称> 段（决策 29）", () => {
+  it("kind 缺省 auto：仅传名称 → -a-<名称> 段（）", () => {
     const date = new Date(2026, 7, 13, 10, 15, 30, 123);
     expect(formatBackupFileName(date, { name: "定稿" })).toBe("20260813-101530123-a-定稿.zip");
   });
@@ -44,7 +42,7 @@ describe("formatBackupFileName（Date → <YYYYMMDD-HHmmssSSS>[-<kind>][-<名称
   });
 });
 
-describe("parseBackupFileName（→ { time, kind, name? } | null，决策 28 + 决策 29）", () => {
+describe("parseBackupFileName（→ { time, kind, name? } | null，）", () => {
   it("新格式毫秒级文件名解析为对应本地时间 + kind auto，与 format 往返一致", () => {
     const date = new Date(2026, 7, 13, 10, 15, 30, 123);
     const name = formatBackupFileName(date);
@@ -53,7 +51,7 @@ describe("parseBackupFileName（→ { time, kind, name? } | null，决策 28 + �
     expect(formatBackupFileName(parsed!.time)).toBe(name);
   });
 
-  it("新格式 kind 段解析（决策 29）：-m.zip → manual 无名称；-m-名称 → manual+名称；-a-名称 → auto+名称", () => {
+  it("新格式 kind 段解析（）：-m.zip → manual 无名称；-m-名称 → manual+名称；-a-名称 → auto+名称", () => {
     expect(parseBackupFileName("20260813-101530123-m.zip")).toEqual({
       time: new Date(2026, 7, 13, 10, 15, 30, 123),
       kind: "manual",
@@ -68,7 +66,7 @@ describe("parseBackupFileName（→ { time, kind, name? } | null，决策 28 + �
       kind: "auto",
       name: "定稿",
     });
-    // 新格式名称可含连字符（oracle P2-5）：-m-定稿-最终版.zip → manual + 名称「定稿-最终版」
+ // 新格式名称可含连字符（oracle P2-5）：-m-定稿-最终版.zip → manual + 名称「定稿-最终版」
     expect(parseBackupFileName("20260813-101530123-m-定稿-最终版.zip")).toEqual({
       time: new Date(2026, 7, 13, 10, 15, 30, 123),
       kind: "manual",
@@ -77,7 +75,7 @@ describe("parseBackupFileName（→ { time, kind, name? } | null，决策 28 + �
   });
 
   it("kind 段后空名称（-m-.zip）→ 新格式不匹配，回退旧带名称解析为 manual + 名称「m-」（oracle P2-5 钉死现状）", () => {
-    // 新格式要求名称 ≥1 字符：-m- 后空 → 正则 1 整组回退；旧带名称正则把「m-」当作名称
+ // 新格式要求名称 ≥1 字符：-m- 后空 → 正则 1 整组回退；旧带名称正则把「m-」当作名称
     expect(parseBackupFileName("20260813-101530123-m-.zip")).toEqual({
       time: new Date(2026, 7, 13, 10, 15, 30, 123),
       kind: "manual",
@@ -85,16 +83,16 @@ describe("parseBackupFileName（→ { time, kind, name? } | null，决策 28 + �
     });
   });
 
-  it("歧义用例（决策 29，接受）：旧「名称恰为单字母 a/m」的备份按新格式解析为 kind 标记（无名称）", () => {
-    // 旧带名称格式 <时间戳>-m.zip / -a.zip（名称恰为单字母）→ 按新格式 kind 段解析：
-    // -m.zip → manual 无名称、-a.zip → auto 无名称
+  it("歧义用例（，接受）：旧「名称恰为单字母 a/m」的备份按新格式解析为 kind 标记（无名称）", () => {
+ // 旧带名称格式 <时间戳>-m.zip / -a.zip（名称恰为单字母）→ 按新格式 kind 段解析：
+ // -m.zip → manual 无名称、-a.zip → auto 无名称
     expect(parseBackupFileName("20260813-101530123-m.zip")?.kind).toBe("manual");
     expect(parseBackupFileName("20260813-101530123-m.zip")?.name).toBeUndefined();
     expect(parseBackupFileName("20260813-101530123-a.zip")?.kind).toBe("auto");
     expect(parseBackupFileName("20260813-101530123-a.zip")?.name).toBeUndefined();
   });
 
-  it("旧带名称（无 kind 段，决策 28 格式）解析出 time/name + kind manual（兼容为手动）", () => {
+  it("旧带名称（无 kind 段， 格式）解析出 time/name + kind manual（兼容为手动）", () => {
     const parsed = parseBackupFileName("20260813-101530123-定稿-最终版 v2.zip");
     expect(parsed?.time).toEqual(new Date(2026, 7, 13, 10, 15, 30, 123));
     expect(parsed?.kind).toBe("manual");
@@ -108,7 +106,7 @@ describe("parseBackupFileName（→ { time, kind, name? } | null，决策 28 + �
     expect(parsed?.time.getMilliseconds()).toBe(123);
   });
 
-  it("旧秒级格式兼容解析（决策 28/29 不迁移；毫秒 = 0、无名称、kind auto）", () => {
+  it("旧秒级格式兼容解析（ 不迁移；毫秒 = 0、无名称、kind auto）", () => {
     const parsed = parseBackupFileName("20260813-101500.zip");
     expect(parsed).toEqual({ time: new Date(2026, 7, 13, 10, 15, 0), kind: "auto" });
     expect(parsed?.time.getMilliseconds()).toBe(0);
@@ -142,9 +140,9 @@ describe("parseBackupFileName（→ { time, kind, name? } | null，决策 28 + �
     expect(parseBackupFileName("20260813-101500123.ZIP")).toBeNull(); // 大小写不符
     expect(parseBackupFileName("")).toBeNull();
     expect(parseBackupFileName("20260813-101500123.zipx")).toBeNull();
-    expect(parseBackupFileName("20260813-101500123-.zip")).toBeNull(); // 空名称（-后无字符）
+    expect(parseBackupFileName("20260813-101500123-.zip")).toBeNull(); // 空名称（后无字符）
     expect(parseBackupFileName("20260813-101500123-a-.zip")?.name).toBe("a-"); // 新格式空名称不匹配 → 回退旧带名称（名称 "a-"）
-    // kind 段仅接受 a/m：其他单字母（如 x）按旧带名称回退解析（决策 28 备份名 "x" 仍可解析/恢复）
+ // kind 段仅接受 a/m：其他单字母（如 x）按旧带名称回退解析（ 备份名 "x" 仍可解析/恢复）
     expect(parseBackupFileName("20260813-101500123-x.zip")).toEqual({
       time: new Date(2026, 7, 13, 10, 15, 0, 123),
       kind: "manual",
@@ -163,7 +161,7 @@ describe("parseBackupFileName（→ { time, kind, name? } | null，决策 28 + �
   });
 });
 
-describe("sanitizeBackupName（决策 28 名称规则，写侧权威校验）", () => {
+describe("sanitizeBackupName（ 名称规则，写侧权威校验）", () => {
   it("合法名称原样返回（中文/空格/连字符/点/括号）", () => {
     expect(sanitizeBackupName("定稿")).toBe("定稿");
     expect(sanitizeBackupName("初稿-最终版 v2")).toBe("初稿-最终版 v2");
@@ -191,9 +189,9 @@ describe("sanitizeBackupName（决策 28 名称规则，写侧权威校验）", 
   it("超长（> MAX_BACKUP_NAME_LENGTH）→ null", () => {
     expect(sanitizeBackupName("a".repeat(MAX_BACKUP_NAME_LENGTH))).toBe("a".repeat(MAX_BACKUP_NAME_LENGTH));
     expect(sanitizeBackupName("a".repeat(MAX_BACKUP_NAME_LENGTH + 1))).toBeNull();
-    // 剥 .zip 前超长但剥离后不超长 → 合法（先剥后判长）
+ // 剥 .zip 前超长但剥离后不超长 → 合法（先剥后判长）
     expect(sanitizeBackupName("a".repeat(MAX_BACKUP_NAME_LENGTH) + ".zip")).toBe("a".repeat(MAX_BACKUP_NAME_LENGTH));
-    // 剥 .zip 后仍超长 → null
+ // 剥 .zip 后仍超长 → null
     expect(sanitizeBackupName("a".repeat(MAX_BACKUP_NAME_LENGTH + 1) + ".zip")).toBeNull();
   });
 

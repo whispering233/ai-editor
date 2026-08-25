@@ -1,5 +1,4 @@
 // 分析类工具：analyze_consistency（实体档案一致性检查，S6.4）
-// 契约来源：doc/api/tools.md「一致性分析」→ { issues: [{ severity, field, description }] }
 // 语义：检查单个实体 data 档案内部的矛盾（「性格坚韧但曾因小事放弃」类）。
 // 规则表驱动（单一职责、可扩展）：每条规则纯函数判定，按实体类型分发。
 // 数据访问：db 查询层（getEntity 过滤软删）+ outline.json 读取（引用字段校验），无原生 SQL。
@@ -15,10 +14,10 @@ import type { AnalyzeConsistencyArgs } from "@whispering233/ai-editor-shared";
 /** 一致性问题的严重级别（error = 确定矛盾；warning = 可疑/待确认） */
 export type IssueSeverity = "error" | "warning";
 
-/** 单条一致性问题（tools.md analyze_consistency 返回项） */
+/** 单条一致性问题（ analyze_consistency 返回项） */
 export interface ConsistencyIssue {
   severity: IssueSeverity;
-  /** 矛盾的 data 字段名（如 "personality" / "expected_resolve_node_id"） */
+ /** 矛盾的 data 字段名（如 "personality" / "expected_resolve_node_id"） */
   field: string;
   description: string;
 }
@@ -89,7 +88,7 @@ function checkResolveNodeReference(data: Record<string, unknown>, tree: OutlineF
 }
 
 /** R5：location.data.parent_id 指向不存在/已软删的实体 → 悬空引用（warning）。
- * 决策 30（2026-08）：setting 的 parent_id 已废弃（层级改由 belongs_to 关系表达，
+ * （2026-08）：setting 的 parent_id 已废弃（层级改由 belongs_to 关系表达，
  * 防环/存在性由 POST /relation 集中校验），R5 仅保留 location */
 function checkParentReference(data: Record<string, unknown>, db: Db): ConsistencyIssue[] {
   const parentId = data.parent_id;
@@ -101,12 +100,12 @@ function checkParentReference(data: Record<string, unknown>, db: Db): Consistenc
 }
 
 /**
- * 实体档案一致性检查（tools.md analyze_consistency(entity_id)）。
+ * 实体档案一致性检查（ analyze_consistency(entity_id)）。
  * 规则表（按类型分发，均纯函数判定）：
  * - character：R1 负年龄（error）、R2 性格反义词对（warning）
  * - hook：R3 已兑现未标注节点（warning）、R4 兑现节点悬空引用（error）
  * - location：R5 parent_id 悬空引用（warning）——decision 30 起 setting 不再走 parent_id
- *   （层级 = belongs_to 关系，由 POST /relation 校验），R5 仅适用 location
+ * （层级 = belongs_to 关系，由 POST /relation 校验），R5 仅适用 location
  * 实体不存在/已软删 → null（查询无结果，LLM 自纠）。
  */
 export function analyzeEntityConsistency(row: EntityRow, tree: OutlineFileTree, db: Db): ConsistencyIssue[] {
@@ -117,18 +116,18 @@ export function analyzeEntityConsistency(row: EntityRow, tree: OutlineFileTree, 
     case "hook":
       return [...checkResolvedWithoutNode(data), ...checkResolveNodeReference(data, tree)];
     case "setting":
-      // 决策 30：setting 层级走 belongs_to 关系（POST /relation 防环校验），data.parent_id 废弃——无遗留规则
+ // setting 层级走 belongs_to 关系（POST /relation 防环校验），data.parent_id 废弃——无遗留规则
       return [];
     case "location":
       return checkParentReference(data, db);
-    // C1 类型补全（决策 26 event 时间轴事件：暂无一致性规则，返回空集；后续卡按需增补）
+ // C1 类型补全（ event 时间轴事件：暂无一致性规则，返回空集；后续卡按需增补）
     case "event":
       return [];
-    // G2 类型补全（决策 26 G2 修订 timepoint 时间标签点：data 恒空（{}）、name 即时间标签文本，
-    // 无可分析字段——返回空集；后续卡按需增补）
+ // G2 类型补全（ G2 修订 timepoint 时间标签点：data 恒空（{}）、name 即时间标签文本，
+ // 无可分析字段——返回空集；后续卡按需增补）
     case "timepoint":
       return [];
-    // 决策 36（批次九）参考资料 reference：素材库无一致性规则（与 event 同哲学），返回空集
+ // （批次九）参考资料 reference：素材库无一致性规则（与 event 同哲学），返回空集
     case "reference":
       return [];
   }

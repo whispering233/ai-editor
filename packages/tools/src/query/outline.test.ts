@@ -1,6 +1,6 @@
 // S6.3 查询工具测试：get_outline / get_outline_path
 // 覆盖：完整树（camelCase API 形态 + 递归 children）/ 默认无 metadata（省 token）/
-//   软删节点整棵剔除（决策 12 修订）/ 路径含 root / 节点不存在 → null / 软删节点路径 → null
+// 软删节点整棵剔除/ 路径含 root / 节点不存在 → null / 软删节点路径 → null
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -88,7 +88,7 @@ describe("get_outline", () => {
               type: "chapter",
               title: "第一章",
               updated_at: T0,
-              data: { reversal: "反转" }, // 决策 23 节点结构化信息原样透传
+              data: { reversal: "反转" }, // 节点结构化信息原样透传
               children: [{ id: "sc-1", type: "scene", title: "场景一", updated_at: T0 }],
             },
           ],
@@ -107,21 +107,21 @@ describe("get_outline", () => {
       title: "第一章",
       data: { reversal: "反转" },
     });
-    // chapter 类型收窄后断言场景层（联合类型 children 可选）
+ // chapter 类型收窄后断言场景层（联合类型 children 可选）
     const scene = chapter !== undefined && "children" in chapter ? chapter.children?.[0] : undefined;
     expect(scene?.id).toBe("sc-1");
   });
 
-  it("默认不含 metadata（省 token，tools.md）", () => {
+  it("默认不含 metadata", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const tree = runGetOutline(makeCtx());
-    // 任一节点（含递归层）均无 metadata 字段
+ // 任一节点（含递归层）均无 metadata 字段
     const node = tree.children[0].children?.[0];
     expect(node!.metadata).toBeUndefined();
     expect("metadata" in node!).toBe(false);
   });
 
-  it("软删节点整棵剔除（决策 12 修订：不返回回收站对象）", () => {
+  it("软删节点整棵剔除（不返回回收站对象）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     softDeleteNode("ch-1"); // 软删章 → 其下场景一并不可见
     const tree = runGetOutline(makeCtx());
@@ -129,7 +129,7 @@ describe("get_outline", () => {
   });
 
   it("outline.json 缺失（项目刚初始化/空树）：返回空树不抛错（readOutlineFile 空树语义）", () => {
-    // 不写 outline.json（临时目录中仅 data.db）
+ // 不写 outline.json（临时目录中仅 data.db）
     const tree = runGetOutline(makeCtx());
     expect(tree.id).toBe("root");
     expect(tree.schemaVersion).toBeGreaterThanOrEqual(1);
@@ -149,11 +149,11 @@ describe("get_outline_path", () => {
     expect(runGetOutlinePath(makeCtx(), { node_id: "sc-999" })).toBeNull();
   });
 
-  it("目标节点软删 → null（决策 12 修订：软删对象不可见）", () => {
+  it("目标节点软删 → null（软删对象不可见）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     softDeleteNode("sc-1");
     expect(runGetOutlinePath(makeCtx(), { node_id: "sc-1" })).toBeNull();
-    // 路径中间节点软删（手改树的不一致形态）→ 同样不可见
+ // 路径中间节点软删（手改树的不一致形态）→ 同样不可见
     writeOutlineFile(dir, seedOutlineTree());
     softDeleteNode("ch-1");
     expect(runGetOutlinePath(makeCtx(), { node_id: "sc-2" })).toBeNull();

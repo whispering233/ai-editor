@@ -28,7 +28,7 @@ afterEach(() => {
 
 const T0 = "2026-08-01T10:00:00Z";
 
-/** 构造一个严格三层的大纲树（卷→章→场景，决策 19） */
+/** 构造一个严格三层的大纲树（卷→章→场景） */
 function makeTree(): OutlineFileTree {
   return {
     id: "root",
@@ -72,7 +72,7 @@ function allUpdatedAt(tree: OutlineFileTree): Record<string, string> {
 }
 
 describe("readOutlineFile", () => {
-  it("文件不存在返回最小空树（schema_version 取当前常量，决策 13）", () => {
+  it("文件不存在返回最小空树（schema_version 取当前常量，）", () => {
     const tree = readOutlineFile(dir);
     expect(tree).toEqual({ id: "root", type: "root", schema_version: SCHEMA_VERSION, children: [] });
   });
@@ -94,7 +94,7 @@ describe("readOutlineFile", () => {
     expect(() => readOutlineFile(dir)).toThrow();
   });
 
-  it("顶层结构不符契约抛错（id/type/schema_version/children 任一缺失）", () => {
+  it("顶层结构不符抛错（id/type/schema_version/children 任一缺失）", () => {
     writeFileSync(join(dir, OUTLINE_FILE_NAME), '{"id":"root","type":"root","children":[]}', "utf8"); // 缺 schema_version
     expect(() => readOutlineFile(dir)).toThrow(/顶层结构不符/);
     writeFileSync(join(dir, OUTLINE_FILE_NAME), '{"id":"vol-1","type":"volume","schema_version":1,"children":[]}', "utf8");
@@ -108,7 +108,7 @@ describe("findOutlineNode", () => {
     expect(findOutlineNode(tree, "vol-1")?.title).toBe("第一卷");
     expect(findOutlineNode(tree, "ch-1")?.title).toBe("第一章");
     expect(findOutlineNode(tree, "sc-2")?.title).toBe("拜入山门");
-    // 无 children 的卷（vol-2）也能被找到
+ // 无 children 的卷（vol-2）也能被找到
     expect(findOutlineNode(tree, "vol-2")?.title).toBe("第二卷");
   });
 
@@ -117,7 +117,7 @@ describe("findOutlineNode", () => {
   });
 });
 
-describe("touchOutlineNode（决策 19：版本戳统一更新）", () => {
+describe("touchOutlineNode（版本戳统一更新）", () => {
   it("目标节点 updated_at 更新，其余节点 updated_at 不变", () => {
     const tree = makeTree();
     const before = allUpdatedAt(tree);
@@ -128,7 +128,7 @@ describe("touchOutlineNode（决策 19：版本戳统一更新）", () => {
 
     expect(after["ch-1"]).toBe(t1);
     expect(after["ch-1"]).not.toBe(before["ch-1"]);
-    // 其余节点（含父卷与子场景）版本戳不变
+ // 其余节点（含父卷与子场景）版本戳不变
     for (const id of Object.keys(after)) {
       if (id !== "ch-1") expect(after[id]).toBe(before[id]);
     }
@@ -139,7 +139,7 @@ describe("touchOutlineNode（决策 19：版本戳统一更新）", () => {
   });
 });
 
-describe("updateOutlineNode（字段更新 + 版本戳统一更新，决策 19）", () => {
+describe("updateOutlineNode（字段更新 + 版本戳统一更新，）", () => {
   it("title/summary 更新且 updated_at 统一更新，其余节点不变", () => {
     const tree = makeTree();
     const before = allUpdatedAt(tree);
@@ -154,11 +154,11 @@ describe("updateOutlineNode（字段更新 + 版本戳统一更新，决策 19�
     for (const id of Object.keys(after)) {
       if (id !== "sc-1") expect(after[id]).toBe(before[id]);
     }
-    // 修改的是树内同一引用（就地修改）
+ // 修改的是树内同一引用（就地修改）
     expect(findOutlineNode(tree, "sc-1")?.title).toBe("灵根测试失败");
   });
 
-  it("软删字段可更新（决策 12：deleted + deleted_at）", () => {
+  it("软删字段可更新（deleted + deleted_at）", () => {
     const tree = makeTree();
     updateOutlineNode(tree, "vol-2", { deleted: true, deleted_at: T0 }, T0);
     const vol2 = findOutlineNode(tree, "vol-2");

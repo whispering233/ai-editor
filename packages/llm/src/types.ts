@@ -1,10 +1,9 @@
 // @whispering233/ai-editor-llm 类型定义（S6.1）
-// 契约来源：doc/api/endpoints.md POST /api/v1/chat、doc/design/decisions.md 决策 15/16/17/18
 // DeepSeek 为 OpenAI 兼容 chat completions 格式（请求 /chat/completions，SSE 流式返回）。
-// 本包只管「怎么调模型」（architecture.md 分包）：key 注入、消息序列、工具定义均由调用方提供，
+// 本包只管「怎么调模型」（ 分包）：key 注入、消息序列、工具定义均由调用方提供，
 // 对话组织（历史裁剪 / 成对重组）在 agent 包，重试 / token 估算在 S6.2。
 
-// ============ 请求消息（OpenAI 兼容四角色；决策 18 消息配对约束） ============
+// ============ 请求消息（OpenAI 兼容四角色； 消息配对约束） ============
 
 /** 聊天消息（wire 格式；assistant 带 tool_calls 时 content 可为 null） */
 export type LLMMessage =
@@ -26,7 +25,7 @@ export interface LLMToolCallRequest {
 export interface LLMToolDefinition {
   name: string;
   description: string;
-  /** JSON Schema 对象（OpenAI 兼容 parameters） */
+ /** JSON Schema 对象（OpenAI 兼容 parameters） */
   parameters: Record<string, unknown>;
 }
 
@@ -47,9 +46,9 @@ export interface LLMUsage {
  * - 传输层（abort / 网络断开 / 流截断）：status = 0，code 为本包错误码
  */
 export interface LLMError {
-  /** HTTP 状态码；传输层错误为 0 */
+ /** HTTP 状态码；传输层错误为 0 */
   status: number;
-  /** 服务端错误码（如 invalid_api_key / insufficient_quota）；无则缺省 */
+ /** 服务端错误码（如 invalid_api_key / insufficient_quota）；无则缺省 */
   code?: string;
   message: string;
 }
@@ -58,11 +57,11 @@ export interface LLMError {
 export interface LLMToolCallResult {
   id: string;
   name: string;
-  /** 解析成功的参数对象（失败 / 截断标记时缺省） */
+ /** 解析成功的参数对象（失败 / 截断标记时缺省） */
   arguments?: Record<string, unknown>;
-  /** 原始 arguments 字符串（诊断 / 重发用） */
+ /** 原始 arguments 字符串（诊断 / 重发用） */
   rawArguments: string;
-  /** 参数解析失败或 finish_reason=length 截断的说明（决策 15） */
+ /** 参数解析失败或 finish_reason=length 截断的说明 */
   error?: string;
 }
 
@@ -83,10 +82,10 @@ export type ChatStreamResult =
 
 // ============ 最小 Web API 结构类型 ============
 // llm 包零依赖硬约束：lib 仅 ES2022、types 为空（tsconfig 不可改），
-// 不引 DOM lib / @types/node。决策 34 换核后 fetch/ReadableStream/TextDecoder 的声明
-// 已删除（pi-ai 内部接管传输），仅保留 AbortSignalLike（决策 16 取消信号全链路穿透）。
+// 不引 DOM lib / @types/node。 换核后 fetch/ReadableStream/TextDecoder 的声明
+// 已删除（pi-ai 内部接管传输），仅保留 AbortSignalLike（ 取消信号全链路穿透）。
 
-/** 取消信号的最小结构（决策 16：逐 chunk 检查 + 监听 abort） */
+/** 取消信号的最小结构（逐 chunk 检查 + 监听 abort） */
 export interface AbortSignalLike {
   readonly aborted: boolean;
   addEventListener(type: "abort", listener: () => void, options?: { once?: boolean }): void;

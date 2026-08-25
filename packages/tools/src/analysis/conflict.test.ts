@@ -1,7 +1,7 @@
 // S6.4 分析工具测试：detect_conflicts
 // 覆盖：R1 对称关系单向缺失（ally/family，error）/ R2 互斥关系并存（ally+rival，warning）/
-//   R3 互杀（双向 kills，error）/ 双向对称正常无检出 / types 过滤 / relation_filter 过滤 /
-//   软删实体不可见（决策 12）/ signal aborted
+// R3 互杀（双向 kills，error）/ 双向对称正常无检出 / types 过滤 / relation_filter 过滤 /
+// 软删实体不可见/ signal aborted
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -109,7 +109,7 @@ describe("detect_conflicts 规则检出", () => {
 
     const { conflicts } = runDetectConflicts(makeCtx(), {});
     expect(conflicts).toHaveLength(1);
-    // pair 按 id 字典序归一，entity_a/entity_b 顺序不依赖创建顺序
+ // pair 按 id 字典序归一，entity_a/entity_b 顺序不依赖创建顺序
     expect(new Set([conflicts[0].entity_a, conflicts[0].entity_b])).toEqual(new Set([a, b]));
     expect(conflicts[0].description).toContain("互相击杀");
   });
@@ -121,14 +121,14 @@ describe("detect_conflicts 过滤与边界", () => {
     rel(a, b, "ally"); // 单向 ally 矛盾（character）
     const h1 = createEntity(db, { type: "hook", name: "伏笔一" }).id;
     const h2 = createEntity(db, { type: "hook", name: "伏笔二" }).id;
-    // hook 间关系需显式标注端点类型（rel helper 硬编码 character）
+ // hook 间关系需显式标注端点类型（rel helper 硬编码 character）
     createRelation(db, { sourceType: "hook", sourceId: h1, targetType: "hook", targetId: h2, relationType: "ally" }, dir);
 
-    // 只查 hook → 只检出 hook 对
+ // 只查 hook → 只检出 hook 对
     const hooks = runDetectConflicts(makeCtx(), { types: ["hook"] });
     expect(hooks.conflicts).toHaveLength(1);
     expect(new Set([hooks.conflicts[0].entity_a, hooks.conflicts[0].entity_b])).toEqual(new Set([h1, h2]));
-    // 只查 character → 只检出角色对
+ // 只查 character → 只检出角色对
     const chars = runDetectConflicts(makeCtx(), { types: ["character"] });
     expect(chars.conflicts).toHaveLength(1);
     expect(chars.conflicts[0].entity_a).toBe(a);
@@ -140,17 +140,17 @@ describe("detect_conflicts 过滤与边界", () => {
     rel(b, a, "kills");
     rel(a, b, "kills"); // 互杀
 
-    // 只检测 kills → ally 单向缺失不报；互杀仍报
+ // 只检测 kills → ally 单向缺失不报；互杀仍报
     const killsOnly = runDetectConflicts(makeCtx(), { relation_filter: ["kills"] });
     expect(killsOnly.conflicts).toHaveLength(1);
     expect(killsOnly.conflicts[0].description).toContain("互相击杀");
-    // 只检测 ally → 互杀不报；互斥对（ally+kills 非内置互斥对）不报
+ // 只检测 ally → 互杀不报；互斥对（ally+kills 非内置互斥对）不报
     const allyOnly = runDetectConflicts(makeCtx(), { relation_filter: ["ally"] });
     expect(allyOnly.conflicts).toHaveLength(1);
     expect(allyOnly.conflicts[0].description).toContain("单向 ally");
   });
 
-  it("软删实体不可见：其关系不参与检测（决策 12）", () => {
+  it("软删实体不可见：其关系不参与检测（）", () => {
     const { a, b } = seedBase();
     rel(a, b, "ally");
     softDeleteEntity(db, b, T0); // 端点软删 → 关系不可见 → 无检出

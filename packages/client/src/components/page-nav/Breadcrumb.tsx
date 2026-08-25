@@ -1,10 +1,10 @@
 // 页面级 tab 化分段面包屑（任务卡 U7：实体详情页返回入口；通用组件，可复用于其他页面）
 // 设计：分段 pill 视觉——有 href 的段可点击返回上级（hover 反馈），无 href 的段为当前位置
-//   （高亮不可点）；段间以「›」分隔，层级一目了然。点击统一走 navigate（自制 hash 路由，
-//   与 EntityList 列表 tab 一致）。
-// 样式红线（layout.md §3，token 类，禁止硬编码色类）：
-//   激活段 bg-foreground/text-background（反相高对比，同 EntityList 类型 tab 激活态观感），
-//   未激活段 text-muted-foreground + hover:bg-muted/hover:text-foreground（对应列表 tab 未激活态）。
+// （高亮不可点）；段间以「›」分隔，层级一目了然。点击统一走 navigate（自制 hash 路由，
+// 与 EntityList 列表 tab 一致）。
+// 样式红线（，token 类，禁止硬编码色类）：
+// 激活段 bg-foreground/text-background（反相高对比，同 EntityList 类型 tab 激活态观感），
+// 未激活段 text-muted-foreground + hover:bg-muted/hover:text-foreground（对应列表 tab 未激活态）。
 import { cn } from "@/lib/utils";
 import { navigate } from "../../hooks/use-route";
 

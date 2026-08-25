@@ -1,10 +1,8 @@
-// 大纲树辅助纯函数（S2.3）：父节点按类型过滤（决策 19 严格三层）+ 子节点查找（move order 计算）
-// 契约来源：doc/ui/pages/outline.md「父节点按类型过滤：volume → 固定 root；chapter → root 或 volume；
-//   scene → 仅 chapter」+ endpoints.md「POST /outline parent_id 必填（volume→root、chapter→volume/root、scene→chapter）」
+// 大纲树辅助纯函数（S2.3）：父节点按类型过滤（ 严格三层）+ 子节点查找（move order 计算）
 import type { OutlineNode } from "@whispering233/ai-editor-shared";
 import type { OutlineNodeType } from "./api";
 
-/** 大纲根（虚拟）id——volume/chapter 挂 root 时使用的 parent_id（决策 19） */
+/** 大纲根（虚拟）id——volume/chapter 挂 root 时使用的 parent_id */
 export const ROOT_NODE_ID = "root";
 
 /** 父节点候选（树形下拉选项；depth：root=0、卷=1、章=2，用于缩进展示） */
@@ -21,7 +19,7 @@ export const ROOT_PARENT_OPTION: ParentOption = { id: ROOT_NODE_ID, label: "（�
 type TreeNode = OutlineNode & { children?: TreeNode[] };
 
 /**
- * 按类型返回合法父节点候选（严格三层，决策 19）：
+ * 按类型返回合法父节点候选（严格三层）：
  * - volume → 仅 root（隐藏选择器场景由调用方处理，本函数仍返回 [root]）
  * - chapter → root + 全部 volume
  * - scene → 全部 chapter（不含 root/volume）
@@ -113,7 +111,7 @@ export function isDescendant(nodes: OutlineNode[], nodeId: string, targetId: str
 
 /**
  * 拖拽移动合法性（严格三层 + 不自挂/不挂子树）：
- * - 目标父必须是该节点类型的合法父（parentOptionsForType，决策 19）
+ * - 目标父必须是该节点类型的合法父（parentOptionsForType）
  * - 不能挂到自己（targetId === nodeId）或自己的后代（子树）
  */
 export function canMoveTo(
@@ -189,7 +187,7 @@ export type DropInsert =
 export function dropInsertOrder(
   children: OutlineNode[],
   insert: DropInsert,
-  /** 拖拽节点 id（同父重排时剔除；交叉父/顶层 end 时数组不含它，剔除无效果） */
+ /** 拖拽节点 id（同父重排时剔除；交叉父/顶层 end 时数组不含它，剔除无效果） */
   excludeId?: string,
 ): number {
   const siblings = excludeId === undefined ? children : children.filter((n) => n.id !== excludeId);

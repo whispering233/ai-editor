@@ -1,25 +1,25 @@
-// 时间轴事件详情页（C4，决策 26；G2.3 修订：time_label 移除 + 挂载时间点选择器）
+// 时间轴事件详情页（C4，；G2.3 修订：time_label 移除 + 挂载时间点选择器）
 // 路由：#/timeline/:id（2 段）；数据：GET /api/v1/entity/event/:id（EntityDetailRes：完整 data + relations）
-// 契约：doc/ui/pages/timeline.md「详情页（#/timeline/:id）」——字段编辑（name/description/tags，G2 无
-//   time_label）、**挂载时间点选择器（G2）**、occurs_in 关联管理（添加：大纲节点选择器 → POST /relation
-//   event → outline_node；取消：确认后 DELETE /relation/:id 物理删）、软删（H2：直接执行，级联计数 toast → 跳回列表）、
-//   三态（加载骨架 / 404 / 保存失败内联）
+// 「详情页（#/timeline/:id）」——字段编辑（name/description/tags，G2 无
+// time_label）、**挂载时间点选择器（G2）**、occurs_in 关联管理（添加：大纲节点选择器 → POST /relation
+// event → outline_node；取消：确认后 DELETE /relation/:id 物理删）、软删（H2：直接执行，级联计数 toast → 跳回列表）、
+// 三态（加载骨架 / 404 / 保存失败内联）
 // 参照：EntityDetail.tsx（面包屑/保存交互/404 引导/软删直接执行）、HookPanel/Timeline OutlineNodeSelect（节点选择）
 // 关键决策：
-//  - 404 错误码为 ENTITY_NOT_FOUND（事件走泛型实体路由，server/src/routes/entity.ts；timeline.md 的
-//    EVENT_NOT_FOUND 为文档示意名，ErrorCode 枚举无此码——客户端以实际契约码判定）
-//  - 已关联节点标题取关系 targetName（服务端联表填充大纲节点标题，endpoints.md L430），点击跳
-//    #/outline/:nodeId 定位；节点选择器允许重复选择——服务端 409 RELATION_EXISTS 判重（选实现最简，
-//    提示沿用 entity-detail.md「这条关系已经存在」）
-//  - 关联节点选择器（UX3）：全屏模态 Dialog → Base UI Popover 轻量非模态弹层（components/ui/popover.tsx）——
-//    不打断详情页编辑；409 内联提示保留在 Popover 内，选择后提交成功关闭 + 重拉详情
-//  - **挂载选择器（G2）**：当前挂载 = detail.relations 中 occurs_at（timepoint → event，事件为 target 端）
-//    的 sourceId；变更即保存——POST /entity/event/:id/move_to { timepoint_id, order }（以 move_to 语义
-//    统一，事务原子），order = 事件在当前全局序中的位置（列表 index，保位不跳位）；空 = 移出未挂载。
-//    时间点/事件列表预拉（选择器选项 + 当前位置）；拉取失败 → 选择器重试（不阻塞详情主体）
-//  - 元信息行不展示「变更记录 N 条」入口：事件不产生 Delta（决策 26），timeline.md 信息层级仅
-//    createdAt/updatedAt
-//  - 未保存离开守卫：EntityDetail 无此模式，不做（避免过度设计）
+// - 404 错误码为 ENTITY_NOT_FOUND（事件走泛型实体路由，server/src/routes/entity.ts； 的
+// EVENT_NOT_FOUND 为文档示意名，ErrorCode 枚举无此码——客户端以实际码判定）
+// - 已关联节点标题取关系 targetName（服务端联表填充大纲节点标题，），点击跳
+// #/outline/:nodeId 定位；节点选择器允许重复选择——服务端 409 RELATION_EXISTS 判重（选实现最简，
+// 提示沿用 「这条关系已经存在」）
+// - 关联节点选择器（UX3）：全屏模态 Dialog → Base UI Popover 轻量非模态弹层（components/ui/popover.tsx）——
+// 不打断详情页编辑；409 内联提示保留在 Popover 内，选择后提交成功关闭 + 重拉详情
+// - **挂载选择器（G2）**：当前挂载 = detail.relations 中 occurs_at（timepoint → event，事件为 target 端）
+// 的 sourceId；变更即保存——POST /entity/event/:id/move_to { timepoint_id, order }（以 move_to 语义
+// 统一，事务原子），order = 事件在当前全局序中的位置（列表 index，保位不跳位）；空 = 移出未挂载。
+// 时间点/事件列表预拉（选择器选项 + 当前位置）；拉取失败 → 选择器重试（不阻塞详情主体）
+// - 元信息行不展示「变更记录 N 条」入口：事件不产生 Delta， 信息层级仅
+// createdAt/updatedAt
+// - 未保存离开守卫：EntityDetail 无此模式，不做（避免过度设计）
 import { useEffect, useState } from "react";
 import { formatTimestamp } from "@whispering233/ai-editor-shared";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
@@ -69,43 +69,43 @@ export default function TimelineDetail({ id }: { id: string }) {
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  /** 表单值（详情 data 副本；null = 未加载） */
+ /** 表单值（详情 data 副本；null = 未加载） */
   const [form, setForm] = useState<EventDetailForm | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  // 关联节点选择器 Popover（UX3 轻量弹层：非模态，不打断详情页）
+ // 关联节点选择器 Popover（UX3 轻量弹层：非模态，不打断详情页）
   const [relationOpen, setRelationOpen] = useState(false);
   const [relNodeId, setRelNodeId] = useState("");
   const [relError, setRelError] = useState<string | null>(null);
   const [relSubmitting, setRelSubmitting] = useState(false);
-  // 取消关联确认（物理删）
+ // 取消关联确认（物理删）
   const [deleteRelationTarget, setDeleteRelationTarget] = useState<RelationSummaryItem | null>(
     null,
   );
-  // 标签建议池（F8：独立补拉全量 200 聚合已存在标签；失败静默——无建议区，不影响表单）
+ // 标签建议池（F8：独立补拉全量 200 聚合已存在标签；失败静默——无建议区，不影响表单）
   const [tagPool, setTagPool] = useState<string[]>([]);
-  // 挂载选择器数据（G2）：时间点列表（选项）+ 事件列表（当前位置保位）；失败 → 选择器重试
+ // 挂载选择器数据（G2）：时间点列表（选项）+ 事件列表（当前位置保位）；失败 → 选择器重试
   const [timepoints, setTimepoints] = useState<EntitySummary[] | null>(null);
   const [events, setEvents] = useState<EntitySummary[] | null>(null);
   const [mountDataFailed, setMountDataFailed] = useState(false);
   const [mountSaving, setMountSaving] = useState(false);
   const [mountError, setMountError] = useState<string | null>(null);
 
-  /** 补拉全量事件聚合标签池（F8；保存新标签后随 useDataRefresh 刷新，避免建议池陈旧——oracle P2） */
+ /** 补拉全量事件聚合标签池（F8；保存新标签后随 useDataRefresh 刷新，避免建议池陈旧——oracle P2） */
   async function loadTagPool(): Promise<void> {
     try {
       const res = await listEntities("event", { limit: 200 });
       setTagPool(collectEventTags(res.items));
     } catch {
-      // 失败静默（契约：详情页独立补拉，失败仅无建议区）
+ // 失败静默（详情页独立补拉，失败仅无建议区）
     }
   }
 
-  /**
-   * 挂载选择器数据（G2）：时间点列表（选项）+ 事件列表（当前位置——move_to 保位用；
-   * limit 200 拉全量——全局事件线性序，避免 >50 时 findIndex 落空）。
-   * 失败 → mountDataFailed（选择器显示重试，不阻塞详情主体/表单）。
-   */
+ /**
+ * 挂载选择器数据（G2）：时间点列表（选项）+ 事件列表（当前位置——move_to 保位用；
+ * limit 200 拉全量——全局事件线性序，避免 >50 时 findIndex 落空）。
+ * 失败 → mountDataFailed（选择器显示重试，不阻塞详情主体/表单）。
+ */
   async function loadMountData(): Promise<void> {
     setMountDataFailed(false);
     try {
@@ -125,13 +125,13 @@ export default function TimelineDetail({ id }: { id: string }) {
   useEffect(() => {
     void loadTagPool();
     void loadMountData();
-    // 依赖仅 []：挂载拉取一次；数据变更由 useDataRefresh 兜底刷新（main.tsx key=id 保证切页 remount）
+ // 依赖仅 []：挂载拉取一次；数据变更由 useDataRefresh 兜底刷新（main.tsx key=id 保证切页 remount）
   }, []);
 
   const outline = useProjectStore((s) => s.outline);
   const nodeOptions = flattenTree(outline?.children ?? []);
 
-  /** 加载详情（id 变化重载；成功重置表单为 name + data 副本） */
+ /** 加载详情（id 变化重载；成功重置表单为 name + data 副本） */
   async function loadDetail() {
     setLoading(true);
     setLoadError(null);
@@ -155,24 +155,24 @@ export default function TimelineDetail({ id }: { id: string }) {
 
   useEffect(() => {
     void loadDetail();
-    // 依赖仅 [id]：loadDetail 每次渲染重建，但页面切换才需重载（同 EntityDetail）
+ // 依赖仅 [id]：loadDetail 每次渲染重建，但页面切换才需重载（同 EntityDetail）
   }, [id]);
 
-  // 数据变更信号：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉详情（表单以服务端权威为准重置）+ 标签池 + 挂载数据
+ // 数据变更信号：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉详情（表单以服务端权威为准重置）+ 标签池 + 挂载数据
   useDataRefresh(() => {
     void loadDetail();
     void loadTagPool();
     void loadMountData();
   });
 
-  // 大纲未加载时兜底拉取（节点选择器依赖；项目打开时已加载，防御直达路由场景——同 HookPanel/Timeline）
+ // 大纲未加载时兜底拉取（节点选择器依赖；项目打开时已加载，防御直达路由场景——同 HookPanel/Timeline）
   useEffect(() => {
     if (useProjectStore.getState().outline === null && useProjectStore.getState().config !== null) {
       void useProjectStore.getState().loadOutline();
     }
   }, []);
 
-  /** 保存：buildEventDetailPatch 只提交变更字段（partial 浅合并，与 C3 编辑对话框同语义）；成功后重拉 */
+ /** 保存：buildEventDetailPatch 只提交变更字段（partial 浅合并，与 C3 编辑对话框同语义）；成功后重拉 */
   async function handleSave() {
     if (!detail || !form || saving) return;
     const patch = buildEventDetailPatch({ name: detail.name, data: detail.data }, form);
@@ -197,14 +197,14 @@ export default function TimelineDetail({ id }: { id: string }) {
     }
   }
 
-  /**
-   * 挂载变更即保存（G2，以 move_to 语义统一）：
-   * POST /entity/event/:id/move_to { timepoint_id（空 = 移出未挂载）, order }——
-   * order = 事件在当前全局事件序中的 index（保位不跳位：改挂载不动位置）；
-   * 列表未拉到/未找到（防御）→ 全局序末尾（length——不改动其他事件相对序）。
-   * 成功 → toast + 重拉详情（relations 更新）；失败 → 内联错误 + 选择器回退原值
-   * （受控 value = mountedId，未变更 state 即回退）。
-   */
+ /**
+ * 挂载变更即保存（G2，以 move_to 语义统一）：
+ * POST /entity/event/:id/move_to { timepoint_id（空 = 移出未挂载）, order }——
+ * order = 事件在当前全局事件序中的 index（保位不跳位：改挂载不动位置）；
+ * 列表未拉到/未找到（防御）→ 全局序末尾（length——不改动其他事件相对序）。
+ * 成功 → toast + 重拉详情（relations 更新）；失败 → 内联错误 + 选择器回退原值
+ * （受控 value = mountedId，未变更 state 即回退）。
+ */
   async function handleMountChange(nextTimepointId: string) {
     if (!detail || mountSaving || !timepoints || !events) return;
     const current = mountedTimepointId(detail.relations, id);
@@ -231,7 +231,7 @@ export default function TimelineDetail({ id }: { id: string }) {
     }
   }
 
-  /** 添加关联：POST /relation（event → outline_node，occurs_in）；409 判重内联提示，不关闭 Popover */
+ /** 添加关联：POST /relation（event → outline_node，occurs_in）；409 判重内联提示，不关闭 Popover */
   async function handleAddRelation() {
     if (relNodeId === "" || relSubmitting) return;
     setRelSubmitting(true);
@@ -252,7 +252,7 @@ export default function TimelineDetail({ id }: { id: string }) {
     }
   }
 
-  /** 取消关联（物理删，确认后执行；冒泡错误给 ConfirmDialog 内联显示） */
+ /** 取消关联（物理删，确认后执行；冒泡错误给 ConfirmDialog 内联显示） */
   async function handleDeleteRelation() {
     if (!deleteRelationTarget) return;
     try {
@@ -265,7 +265,7 @@ export default function TimelineDetail({ id }: { id: string }) {
     }
   }
 
-  /** 软删直接执行（H2：不再弹二次确认）：DELETE → toast（级联计数）→ 跳回列表 */
+ /** 软删直接执行（H2：不再弹二次确认）：DELETE → toast（级联计数）→ 跳回列表 */
   async function handleDelete() {
     if (!detail) return;
     try {
@@ -286,7 +286,7 @@ export default function TimelineDetail({ id }: { id: string }) {
     }
   }
 
-  // ============ 渲染 ============
+ // ============ 渲染 ============
 
   if (notFound) {
     return (
@@ -314,10 +314,10 @@ export default function TimelineDetail({ id }: { id: string }) {
   }
 
   const occurring = detail === null ? [] : occursInRelations(detail.relations, id);
-  // 标签建议（F8：按表单当前输入匹配标签池；空段不匹配 → 无建议区）
+ // 标签建议（F8：按表单当前输入匹配标签池；空段不匹配 → 无建议区）
   const tagSuggestions = form === null ? [] : suggestTags(form.tagsInput, tagPool);
 
-  /** 点选建议填入（F8）：替换最后一段 + 追加逗号；输入框焦点由 TagSuggest onMouseDown 保持 */
+ /** 点选建议填入（F8）：替换最后一段 + 追加逗号；输入框焦点由 TagSuggest onMouseDown 保持 */
   function pickTag(tag: string) {
     setForm((f) => (f ? { ...f, tagsInput: applyTagSuggestion(f.tagsInput, tag) } : f));
   }
@@ -350,7 +350,7 @@ export default function TimelineDetail({ id }: { id: string }) {
           </Button>
         </div>
       </div>
-      {/* 元信息行（事件不产生 Delta——决策 26，仅展示时间，timeline.md 信息层级） */}
+      {/* 元信息行（事件不产生 Delta——，仅展示时间， 信息层级） */}
       {detail && (
         <p className="mb-4 text-xs text-muted-foreground">
           创建于 {formatTimestamp(detail.createdAt)} · 更新于 {formatTimestamp(detail.updatedAt)}
@@ -392,8 +392,7 @@ export default function TimelineDetail({ id }: { id: string }) {
 
       {detail && form && (
         <div className="grid gap-4 md:grid-cols-2">
-          {/* 左栏：基础信息表单（name + data 两字段，G2 无 time_label——时间标签 = 挂载，
-              timeline.md 详情页字段编辑 + 挂载时间点选择器） */}
+          {/* 左栏：基础信息表单（name + data 两字段，G2 无 time_label——时间标签 = 挂载，详情页字段编辑 + 挂载时间点选择器） */}
           <div className="rounded-md border border-border p-4">
             <h2 className="mb-3 text-sm font-semibold text-foreground">基础信息</h2>
             <div className="flex flex-col gap-3">
@@ -475,7 +474,7 @@ export default function TimelineDetail({ id }: { id: string }) {
             </div>
           </div>
 
-          {/* 右栏：occurs_in 关联节点管理（timeline.md 详情页核心交互；UX3：选择器为 Popover 轻量弹层） */}
+          {/* 右栏：occurs_in 关联节点管理（ 详情页核心交互；UX3：选择器为 Popover 轻量弹层） */}
           <div className="rounded-md border border-border p-4">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-foreground">关联节点（occurs_in）</h2>
@@ -483,12 +482,12 @@ export default function TimelineDetail({ id }: { id: string }) {
                 open={relationOpen}
                 onOpenChange={(v) => {
                   if (v) {
-                    // 打开时重置选择态（防上次残留）
+ // 打开时重置选择态（防上次残留）
                     setRelNodeId("");
                     setRelError(null);
                     setRelationOpen(true);
                   } else if (!relSubmitting) {
-                    // 提交中禁止关闭（409 内联提示需要停留；Esc/点击外部同理被守卫）
+ // 提交中禁止关闭（409 内联提示需要停留；Esc/点击外部同理被守卫）
                     setRelationOpen(false);
                   }
                 }}

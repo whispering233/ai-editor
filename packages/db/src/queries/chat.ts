@@ -1,22 +1,21 @@
 // @whispering233/ai-editor-db 对话历史数据层查询（T2.3）
 //
-// 单一事实来源：doc/database/schema.md（chat_messages 表结构，决策 18）、
-// doc/api/endpoints.md（chat/sessions 会话列表、chat/sessions/:id/messages 消息历史）。
-// 时间约定（schema.md 第 16 行）：created_at 统一 ISO 8601 字符串、由应用层写入，本模块不生成时间。
+// （chat/sessions 会话列表、chat/sessions/:id/messages 消息历史）。
+// 时间约定（）：created_at 统一 ISO 8601 字符串、由应用层写入，本模块不生成时间。
 // 注意：本模块只处理 chat_messages 表，不涉及会话元数据——会话列表信息（createdAt/updatedAt/
 // messageCount/lastMessage）全部由消息行实时聚合得出，无独立会话表。
 //
-// 批次十五（决策 49，15.4 卡 3）：**查询经 queryDb 走 drizzle 构建器**（混合风格 4A）。
+// 批次十五（15.4 卡 3）：**查询经 queryDb 走 drizzle 构建器**（混合风格 4A）。
 // 语义逐句对照旧实现：
-//   - INSERT 命名参数 ↔ insert(chatMessages).values({...})（tool_calls JSON.stringify 落库不变）
-//   - UPDATE ... SET project_id ↔ update().set({ project_id }).where(eq(...))
-//   - WHERE session_id = ? AND project_id = ? ↔ and(eq,eq)；ORDER BY created_at ASC, rowid ASC ↔
-//     orderBy(chatMessages.created_at, sql`rowid ASC`)（rowid 为 SQLite 内部列，经 sql 模板原样透传）
-//   - listSessions 为相关子查询 + GROUP BY 聚合 + rowid 排序的复合 SQL，**保留 sql 模板**表达
-//     （builder 强行翻译需三层嵌套别名，违背 4A「需要 SQL 技巧就原生，不强行翻译」）；
-//     projectId 两次注入均走 sql 模板参数绑定（安全，防注入）
-//   - parseToolCalls / reassembleMessages 为纯函数，不涉及 SQL，未改动
-//   - JSON 列 tool_calls 保持 text 模式：drizzle 行读出来是 string，解析防御仍在 parseToolCalls
+// - INSERT 命名参数 ↔ insert(chatMessages).values({...})（tool_calls JSON.stringify 落库不变）
+// - UPDATE ... SET project_id ↔ update.set({ project_id }).where(eq(...))
+// - WHERE session_id = ? AND project_id = ? ↔ and(eq,eq)；ORDER BY created_at ASC, rowid ASC ↔
+// orderBy(chatMessages.created_at, sql`rowid ASC`)（rowid 为 SQLite 内部列，经 sql 模板原样透传）
+// - listSessions 为相关子查询 + GROUP BY 聚合 + rowid 排序的复合 SQL，**保留 sql 模板**表达
+// （builder 强行翻译需三层嵌套别名，违背 4A「需要 SQL 技巧就原生，不强行翻译」）；
+// projectId 两次注入均走 sql 模板参数绑定（安全，防注入）
+// - parseToolCalls / reassembleMessages 为纯函数，不涉及 SQL，未改动
+// - JSON 列 tool_calls 保持 text 模式：drizzle 行读出来是 string，解析防御仍在 parseToolCalls
 
 import { nanoid } from "nanoid";
 import { and, eq, sql } from "drizzle-orm";
@@ -25,19 +24,19 @@ import type { Db } from "../connection.js";
 import { queryDb } from "../query-db.js";
 import { chatMessages } from "../tables.js";
 
-/** 会话列表 lastMessage 截断长度（endpoints.md 仅要求「截断」，长度为本实现约定，未入文档契约） */
+/** 会话列表 lastMessage 截断长度（ 仅要求「截断」，长度为本实现约定，未入文档） */
 export const SESSION_LAST_MESSAGE_MAX_LEN = 50;
 
 /**
  * 插入一条对话消息。
  *
- * id 生成约定：chat_messages 表 id 无文档前缀（endpoints.md id 约定仅覆盖
+ * id 生成约定：chat_messages 表 id 无文档前缀（ id 约定仅覆盖
  * char-/set-/loc-/hook-、sc-/ch-/vol-、proj- 与运行时 prop_/sess_/call_），
  * 省略 id 时直接用 nanoid 生成（与消息 id 前缀空缺保持一致）。
  *
- * 存储形态转换：row.tool_calls 按 shared 类型契约为「解析后的数组」，
+ * 存储形态转换：row.tool_calls 按 shared 类型为「解析后的数组」，
  * 本函数负责 JSON.stringify 落库（列存 TEXT）；created_at 必须由调用方
- * 提供 ISO 8601 字符串（应用层写入，决策 18）。
+ * 提供 ISO 8601 字符串（应用层写入）。
  */
 export function insertChatMessage(
   db: Db,
@@ -60,10 +59,10 @@ export function insertChatMessage(
 }
 
 /**
- * 会话归属迁移（B2.2 审核 P1-1，决策 18/27）：
+ * 会话归属迁移（B2.2 审核 P1-1）：
  * 跨项目恢复（备份包内 project_id ≠ 当前项目 id）后，chat_messages 的 project_id
  * 从旧 id 批量迁移为当前项目 id——「保留 id 保会话」的理由在跨项目场景同样成立：
- * 不迁移则恢复后聊天面板静默为空、旧会话行成孤儿数据（决策 18：会话按 project_id 隔离）。
+ * 不迁移则恢复后聊天面板静默为空、旧会话行成孤儿数据（会话按 project_id 隔离）。
  *
  * @param fromProjectId 备份包内 project.json 的 id（旧归属）
  * @param toProjectId 当前项目 id（迁移目标；调用方保证两者不等）
@@ -80,14 +79,14 @@ export function migrateChatMessagesProject(db: Db, fromProjectId: string, toProj
 
 /**
  * 会话列表（GET /api/v1/chat/sessions）：
- * - 按 project_id 隔离（决策 18 修订：会话按项目隔离）
+ * - 按 project_id 隔离（会话按项目隔离）
  * - 仅返回含消息的会话；updatedAt = 该会话最后一条消息的 created_at
  * - 按最后活动时间（updatedAt）倒序，同时间戳按 session_id 升序保证稳定
  * - lastMessage = 最后一条消息的 content 截断（无 content 时为空串）
  */
 export function listSessions(db: Db, projectId: string): ChatSessionSummary[] {
-  // 相关子查询（取每会话最后一条消息）+ GROUP BY 聚合（count/min/max）的复合 SQL：
-  // sql 模板表达（4A 混合风格），projectId 两次注入走参数绑定
+ // 相关子查询（取每会话最后一条消息）+ GROUP BY 聚合（count/min/max）的复合 SQL：
+ // sql 模板表达（4A 混合风格），projectId 两次注入走参数绑定
   const rows = queryDb(db).all(sql`
     SELECT
       t.session_id  AS id,
@@ -134,14 +133,14 @@ export function parseToolCalls(json: string | null): unknown[] | null {
     const parsed: unknown = JSON.parse(json);
     return Array.isArray(parsed) ? parsed : null;
   } catch {
-    // 非法 JSON：按无工具调用处理，不向上抛（查询层不阻断会话恢复）
+ // 非法 JSON：按无工具调用处理，不向上抛（查询层不阻断会话恢复）
     return null;
   }
 }
 
 /**
  * 消息历史（GET /api/v1/chat/sessions/:id/messages）：
- * - 按 project_id 隔离（决策 18 修订）
+ * - 按 project_id 隔离
  * - 按 created_at 升序，同时间戳按 rowid（插入序）升序保证稳定
  * - 存储形态 → API 形态：tool_calls JSON 解析、tool_call_id → toolCallId、snake_case → camelCase
  */
@@ -186,8 +185,8 @@ export function listMessages(db: Db, sessionId: string, projectId: string): Chat
 /**
  * 消息历史原始行（S7.6 续聊重建专用）：
  * - listMessages 输出 API 形态（camelCase，供 GET /messages）；本函数输出**存储形态**
- *   （snake_case ChatMessageRow，tool_calls 已解析为数组）——直供 agent 包
- *   loadHistory/restoreSession（决策 18 成对重组），避免 server 层做 API→存储形态反映射。
+ * （snake_case ChatMessageRow，tool_calls 已解析为数组）——直供 agent 包
+ * loadHistory/restoreSession（ 成对重组），避免 server 层做 API→存储形态反映射。
  * - 查询语义与 listMessages 一致：按 project_id 隔离、created_at 升序 + rowid 稳定序。
  */
 export function listMessageRows(db: Db, sessionId: string, projectId: string): ChatMessageRow[] {
@@ -227,40 +226,40 @@ export function listMessageRows(db: Db, sessionId: string, projectId: string): C
   }));
 }
 
-/** 成对重组后喂给 LLM 的历史消息形态（决策 18 修订：DeepSeek 要求 tool_call 与 tool 结果严格配对） */
+/** 成对重组后喂给 LLM 的历史消息形态（DeepSeek 要求 tool_call 与 tool 结果严格配对） */
 export interface ReassembledChatMessage {
   role: ChatRole;
   content?: string | null;
-  /** assistant 消息的工具调用数组（仅当该组全部调用均成对成功时保留） */
+ /** assistant 消息的工具调用数组（仅当该组全部调用均成对成功时保留） */
   toolCalls?: unknown[];
-  /** tool 消息关联的调用 id（与所属 assistant 消息 tool_calls[].id 配对） */
+ /** tool 消息关联的调用 id（与所属 assistant 消息 tool_calls[].id 配对） */
   toolCallId?: string | null;
 }
 
 /**
- * 成对重组历史消息（决策 18 修订：assistant.tool_calls[].id ↔ tool.tool_call_id 成对重组喂回模型）。
+ * 成对重组历史消息（assistant.tool_calls[].id ↔ tool.tool_call_id 成对重组喂回模型）。
  *
  * 用途：服务重启后凭 session_id 重建「继续上次对话」上下文，或会话级滑动窗口裁剪前的重组。
- * 注意：本函数是纯函数，输入为 ChatMessageRow（tool_calls 已按 shared 类型契约为解析后的数组，
+ * 注意：本函数是纯函数，输入为 ChatMessageRow（tool_calls 已按 shared 类型为解析后的数组，
  * 由调用方先经 parseToolCalls / 直接构造）。
  *
  * 算法：
  * 1. 按 created_at 升序稳定排序（同时间戳保持输入顺序）
  * 2. 第一遍收集 tool 消息：tool_call_id → content（同一 id 多条结果取最先到达者，防御性处理）
  * 3. 第二遍顺序扫描：
- *    - user 消息：原样保留
- *    - assistant 消息（无 tool_calls）：原样保留
- *    - assistant 消息（有 tool_calls）：逐个调用校验——任一调用缺 id 或缺对应 tool 结果
- *      即判定为孤儿半对，该 assistant 消息与其工具结果**整组丢弃**（决策 18 修订：
- *      孤儿半对整对丢弃，不返回 409 也不部分保留）；全部配对成功则输出 assistant 消息，
- *      工具结果按 tool_calls 数组顺序紧随其后（tool 消息保留 toolCallId 供模型配对）
- *    - tool 消息：不单独输出——未被任何保留的 assistant 消息引用的即孤儿，整对丢弃
+ * - user 消息：原样保留
+ * - assistant 消息（无 tool_calls）：原样保留
+ * - assistant 消息（有 tool_calls）：逐个调用校验——任一调用缺 id 或缺对应 tool 结果
+ * 即判定为孤儿半对，该 assistant 消息与其工具结果**整组丢弃**（
+ * 孤儿半对整对丢弃，不返回 409 也不部分保留）；全部配对成功则输出 assistant 消息，
+ * 工具结果按 tool_calls 数组顺序紧随其后（tool 消息保留 toolCallId 供模型配对）
+ * - tool 消息：不单独输出——未被任何保留的 assistant 消息引用的即孤儿，整对丢弃
  */
 export function reassembleMessages(rows: ChatMessageRow[]): ReassembledChatMessage[] {
-  // 1. 按 created_at 升序稳定排序
+ // 1. 按 created_at 升序稳定排序
   const sorted = [...rows].sort((a, b) => a.created_at.localeCompare(b.created_at));
 
-  // 2. 收集 tool 消息：tool_call_id → content
+ // 2. 收集 tool 消息：tool_call_id → content
   const toolResults = new Map<string, string | null>();
   for (const r of sorted) {
     if (r.role === "tool" && r.tool_call_id !== null && !toolResults.has(r.tool_call_id)) {
@@ -268,7 +267,7 @@ export function reassembleMessages(rows: ChatMessageRow[]): ReassembledChatMessa
     }
   }
 
-  // 3. 顺序扫描重组
+ // 3. 顺序扫描重组
   const out: ReassembledChatMessage[] = [];
   for (const r of sorted) {
     if (r.role === "user") {
@@ -282,7 +281,7 @@ export function reassembleMessages(rows: ChatMessageRow[]): ReassembledChatMessa
         continue;
       }
       const callIds = calls.map((c) => (c as { id?: unknown }).id);
-      // 任一调用缺 id 或缺对应结果 → 整组丢弃
+ // 任一调用缺 id 或缺对应结果 → 整组丢弃
       const allPaired = callIds.every(
         (cid): cid is string => typeof cid === "string" && toolResults.has(cid),
       );
@@ -293,7 +292,7 @@ export function reassembleMessages(rows: ChatMessageRow[]): ReassembledChatMessa
       }
       continue;
     }
-    // role === "tool"：仅作为上面对应的结果被引用；孤儿在此自然丢弃
+ // role === "tool"：仅作为上面对应的结果被引用；孤儿在此自然丢弃
   }
   return out;
 }

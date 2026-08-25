@@ -1,5 +1,4 @@
 // S7.1 会话管理测试：成对裁剪 / 孤儿半对丢弃 / 重建格式 / 末条约束 / 重试 payload
-// 契约来源：doc/design/decisions.md 决策 18、doc/design/tasks.md S7.1
 // 纯内存断言，无 I/O——直接构造 mock 消息序列调用 session 状态机函数链。
 import { describe, expect, it } from "vitest";
 import type { ChatMessageRow } from "@whispering233/ai-editor-shared";
@@ -60,8 +59,8 @@ function row(
 // ============ 成对裁剪（同裁同留，不拆对） ============
 
 describe("trimSession 成对裁剪", () => {
-  /** 成对不变式：窗口内每个 tool 消息都有其 assistant（且 assistant 在窗口内），
-   *  每个带 tool_calls 的 assistant 都有全部 tool 结果（同裁同留，无孤儿半对） */
+ /** 成对不变式：窗口内每个 tool 消息都有其 assistant（且 assistant 在窗口内），
+ * 每个带 tool_calls 的 assistant 都有全部 tool 结果（同裁同留，无孤儿半对） */
   function assertPairInvariant(trimmed: SessionMessage[]): void {
     const toolResults = new Set(trimmed.filter((m) => m.role === "tool").map((m) => (m as { tool_call_id: string }).tool_call_id));
     const calledIds = new Set(
@@ -69,13 +68,13 @@ describe("trimSession 成对裁剪", () => {
         .filter((m) => m.role === "assistant" && (m as { tool_calls?: unknown[] }).tool_calls?.length)
         .flatMap((m) => (m as { tool_calls: Array<{ id: string }> }).tool_calls.map((c) => c.id)),
     );
-    // 窗口内的 tool 结果必须全部被窗口内的 assistant 引用（无孤儿 tool）
+ // 窗口内的 tool 结果必须全部被窗口内的 assistant 引用（无孤儿 tool）
     expect(calledIds).toEqual(toolResults);
   }
 
   it("裁剪边界恰在 tool 消息处时不拆对：放不下的整对整块丢弃，不留下孤儿 tool", () => {
-    // 尾部配对块 [assistant(tc-a, tc-b), tool(a), tool(b)] 共 3 条，maxCount=2 放不下——
-    // 裸条数截取会留下 [tool(a), tool(b)] 孤儿半对；块级裁剪整块丢弃、回退到更早的 user
+ // 尾部配对块 [assistant(tc-a, tc-b), tool(a), tool(b)] 共 3 条，maxCount=2 放不下——
+ // 裸条数截取会留下 [tool(a), tool(b)] 孤儿半对；块级裁剪整块丢弃、回退到更早的 user
     const session: SessionMessage[] = [
       user("Q1"),
       toolCallingAssistant(null, ["tc-a", "tc-b"]),
@@ -88,7 +87,7 @@ describe("trimSession 成对裁剪", () => {
   });
 
   it("尾部整对恰好放满窗口时完整保留（不因差一条而拆对）", () => {
-    // 配对块 [assistant(tc-a, tc-b), tool(a), tool(b)] 恰 3 条 = maxCount → 完整保留
+ // 配对块 [assistant(tc-a, tc-b), tool(a), tool(b)] 恰 3 条 = maxCount → 完整保留
     const session: SessionMessage[] = [
       user("Q1"),
       user("Q2"),
@@ -138,7 +137,7 @@ describe("trimSession 成对裁剪", () => {
       user("Q3"),
     ];
     const trimmed = trimSession(session, 4);
-    // 尾部累计：块[user3](1) → 块[assistant A2](1) → 块[assistant(tc-2), tool(tc-2)](2) 恰好满 4
+ // 尾部累计：块[user3](1) → 块[assistant A2](1) → 块[assistant(tc-2), tool(tc-2)](2) 恰好满 4
     expect(trimmed).toEqual([
       toolCallingAssistant(null, ["tc-2"]),
       toolResult("tc-2"),
@@ -164,7 +163,7 @@ describe("loadHistory 孤儿半对丢弃", () => {
         content: null,
         tool_calls: [{ id: "tc-a", type: "function", function: { name: "query_entity", arguments: "{}" } }],
       }),
-      // 缺 tool(tc-a) 行
+ // 缺 tool(tc-a) 行
     ];
     const rebuilt = loadHistory(rows);
     expect(rebuilt).toEqual([user("问题")]);
@@ -192,7 +191,7 @@ describe("loadHistory 孤儿半对丢弃", () => {
         content: null,
         tool_calls: [{ id: "tc-2", type: "function", function: { name: "query_entity", arguments: "{}" } }],
       }),
-      // 缺 tool(tc-2) → m5 半对
+ // 缺 tool(tc-2) → m5 半对
       row("user", "m6", "2026-08-01T00:00:05.000Z", { content: "Q3" }),
     ];
     const rebuilt = loadHistory(rows);
@@ -248,7 +247,7 @@ describe("loadHistory 成对重组", () => {
           { id: "tc-b", type: "function", function: { name: "analyze_conflict", arguments: "{}" } },
         ],
       },
-      // 结果按 tool_calls 数组顺序输出（tc-a 在前），不随落库顺序
+ // 结果按 tool_calls 数组顺序输出（tc-a 在前），不随落库顺序
       toolResult("tc-a"),
       toolResult("tc-b"),
       user("Q2"),
@@ -308,9 +307,9 @@ describe("buildPayload 末条约束", () => {
   });
 
   it("裁剪 + 喂回全链：末条恒 user/tool（含全 assistant 极端序列返回空数组）", () => {
-    // 极端：只有 assistant 消息的序列 → 修正后为空（S7.3 视为无有效上下文）
+ // 极端：只有 assistant 消息的序列 → 修正后为空（S7.3 视为无有效上下文）
     expect(buildPayload([plainAssistant("孤立回答")])).toEqual([]);
-    // 全链：历史重建 → 追加失败轮半条 → 裁剪 → 喂回，末条恒 user/tool
+ // 全链：历史重建 → 追加失败轮半条 → 裁剪 → 喂回，末条恒 user/tool
     const session = appendMessage(
       loadHistory([
         row("user", "m1", "2026-08-01T00:00:00.000Z", { content: "Q1" }),
@@ -328,9 +327,9 @@ describe("buildPayload 末条约束", () => {
 
 describe("retryPayload 重试复用", () => {
   it("重试复用原请求 messages 数组，不含失败轮半条 assistant", () => {
-    // 第一次请求的 payload（成功发送给模型的那份）
+ // 第一次请求的 payload（成功发送给模型的那份）
     const original: LLMMessage[] = [user("Q1")];
-    // 失败轮产生的半条 assistant（绝不能追加进重试序列）
+ // 失败轮产生的半条 assistant（绝不能追加进重试序列）
     const failedTail: SessionMessage = plainAssistant("半条回答");
 
     const retried = retryPayload(original);

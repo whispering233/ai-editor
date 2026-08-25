@@ -1,13 +1,13 @@
 // 变更记录创建表单（S12.3；S13.3 收紧：变更目标仅实体类型——「大纲节点」选项已移除，目标类型默认空需选择）
-// 契约 doc/ui/pages/outline.md「变更记录 · 新建变更」+ endpoints.md L395-434
+// 「变更记录 · 新建变更」+ 
 // 数据：POST /api/v1/delta（createDelta）——node_id = 当前节点，目标/字段/op/值/描述由作者填写；
-//   目标实体列表 GET /entity/:type；目标实体详情 GET /entity/:type/:id（update 自动取 from）
+// 目标实体列表 GET /entity/:type；目标实体详情 GET /entity/:type/:id（update 自动取 from）
 // 交互：内联展开（就地为主不弹窗）；目标类型默认空（占位「请选择目标类型」，用户确认选择——S13.3）；
-//   字段下拉按目标实体类型 = ENTITY_DATA_SCHEMAS keys；op 推断纯函数（数组 add/remove、
-//   标量 set/update——update 的 from 自动取目标当前 data 值并标注「旧值：xxx」，作者无需手填；
-//   data 后续被改 → compute 时跳过 + conflicts 标注，决策 9 修订机制兜底）；值/描述必填校验；
-//   成功 → onCreated（父刷新列表 + 收起）；VALIDATION_ERROR → 行内提示；OUTLINE_NODE_NOT_FOUND → toast + 收起
-// 样式 token 类（layout.md §3，oracle 红线：禁止硬编码色类）
+// 字段下拉按目标实体类型 = ENTITY_DATA_SCHEMAS keys；op 推断纯函数（数组 add/remove、
+// 标量 set/update——update 的 from 自动取目标当前 data 值并标注「旧值：xxx」，作者无需手填；
+// data 后续被改 → compute 时跳过 + conflicts 标注，机制兜底）；值/描述必填校验；
+// 成功 → onCreated（父刷新列表 + 收起）；VALIDATION_ERROR → 行内提示；OUTLINE_NODE_NOT_FOUND → toast + 收起
+// 样式 token 类（，oracle 红线：禁止硬编码色类）
 import { useEffect, useState } from "react";
 import type { DeltaOp, EntitySummary, EntityType } from "@whispering233/ai-editor-shared";
 import {
@@ -47,16 +47,16 @@ export function DeltaCreateForm({
   onCreated,
   onClose,
 }: {
-  /** 触发节点（node_id 固定 = 当前详情节点） */
+ /** 触发节点（node_id 固定 = 当前详情节点） */
   nodeId: string;
-  /** 创建成功回调（父：刷新变更记录列表 + 收起表单） */
+ /** 创建成功回调（父：刷新变更记录列表 + 收起表单） */
   onCreated: () => void;
   onClose: () => void;
 }) {
-  // ============ 表单草稿状态 ============
-  /** 目标类型（S13.3 收紧：默认空——用户确认选择实体类型；大纲节点不再可选） */
+ // ============ 表单草稿状态 ============
+ /** 目标类型（S13.3 收紧：默认空——用户确认选择实体类型；大纲节点不再可选） */
   const [targetType, setTargetType] = useState<string>("");
-  /** 目标实体 id（待选） */
+ /** 目标实体 id（待选） */
   const [targetId, setTargetId] = useState<string>("");
   const [field, setField] = useState("");
   const [op, setOp] = useState<DeltaOp>("add");
@@ -65,14 +65,14 @@ export function DeltaCreateForm({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // ============ 目标实体列表 / 详情 data（update 自动 from） ============
+ // ============ 目标实体列表 / 详情 data（update 自动 from） ============
   const [entityList, setEntityList] = useState<EntitySummary[] | null>(null);
   const [entityListError, setEntityListError] = useState<string | null>(null);
   const [entityListTick, setEntityListTick] = useState(0);
   const [targetData, setTargetData] = useState<Record<string, unknown> | null>(null);
   const [dataError, setDataError] = useState<string | null>(null);
 
-  // 目标类型切换：重置目标等待选择 + 拉该类型实体列表（S13.3 起仅实体类型）
+ // 目标类型切换：重置目标等待选择 + 拉该类型实体列表（S13.3 起仅实体类型）
   useEffect(() => {
     setTargetId("");
     setTargetData(null);
@@ -100,7 +100,7 @@ export function DeltaCreateForm({
     };
   }, [targetType, entityListTick]);
 
-  // 目标实体详情（op=update 的 from 数据源）；目标变更时重拉
+ // 目标实体详情（op=update 的 from 数据源）；目标变更时重拉
   useEffect(() => {
     if (targetType === "" || targetId === "") return;
     let cancelled = false;
@@ -121,23 +121,23 @@ export function DeltaCreateForm({
     };
   }, [targetType, targetId]);
 
-  // 目标切换 → 重置字段/值/提交错误（防止跨目标沿用旧字段语义与旧值）
+ // 目标切换 → 重置字段/值/提交错误（防止跨目标沿用旧字段语义与旧值）
   useEffect(() => {
     setField("");
     setValue("");
     setSubmitError(null);
   }, [targetType, targetId]);
 
-  // ============ 派生值（字段选项 / 当前值 / op 可用集） ============
+ // ============ 派生值（字段选项 / 当前值 / op 可用集） ============
 
-  /** 字段下拉项（实体按类型 schema keys——S13.3 起仅实体目标） */
+ /** 字段下拉项（实体按类型 schema keys——S13.3 起仅实体目标） */
   const fieldOptions = entityDeltaFieldOptions(targetType);
-  /** 目标当前值（update from 来源：实体详情 data） */
+ /** 目标当前值（update from 来源：实体详情 data） */
   const currentValue = targetData?.[field];
-  /** 当前字段的 op 可用集（数组 add/remove、标量 update/set 或仅 set） */
+ /** 当前字段的 op 可用集（数组 add/remove、标量 update/set 或仅 set） */
   const opInfo = inferOpOptions({ array: isArrayField(targetType, field), currentValue });
 
-  /** 字段切换 → 按推断重置 op（作者随后可手动切换）；currentValue 须取新字段的目标当前值（闭包内是旧字段） */
+ /** 字段切换 → 按推断重置 op（作者随后可手动切换）；currentValue 须取新字段的目标当前值（闭包内是旧字段） */
   function handleFieldChange(next: string) {
     setField(next);
     setOp(
@@ -146,7 +146,7 @@ export function DeltaCreateForm({
     );
   }
 
-  // ============ 提交 ============
+ // ============ 提交 ============
 
   async function handleSubmit() {
     if (submitting) return;
@@ -188,7 +188,7 @@ export function DeltaCreateForm({
       onCreated();
     } catch (err) {
       if (err instanceof ApiError && err.code === "OUTLINE_NODE_NOT_FOUND") {
-        // 节点已被 purge：记录无意义 → toast + 收起（父页面将随树刷新进入 404 态）
+ // 节点已被 purge：记录无意义 → toast + 收起（父页面将随树刷新进入 404 态）
         useUiStore.getState().showToast("节点不存在（可能已被删除），无法记录变更", "error");
         onClose();
         return;
@@ -199,10 +199,10 @@ export function DeltaCreateForm({
     }
   }
 
-  // ============ 渲染 ============
+ // ============ 渲染 ============
 
-  // S13.3：targetType 仅四类实体（默认 "" 未选态）；cast 到 EntityType 仅在非空分支使用
-  //（targetId 守卫/字段选项均以空串短路），运行时安全——渲染分支才做实体化处理
+ // S13.3：targetType 仅四类实体（默认 "" 未选态）；cast 到 EntityType 仅在非空分支使用
+ //（targetId 守卫/字段选项均以空串短路），运行时安全——渲染分支才做实体化处理
   const entityType = targetType as EntityType;
 
   return (
@@ -316,7 +316,7 @@ export function DeltaCreateForm({
         </div>
       </div>
 
-      {/* ③ update 的 from 自动取值标注（决策 9 修订：作者无需手填旧值；data 后续被改 → compute 冲突标注兜底） */}
+      {/* ③ update 的 from 自动取值标注（作者无需手填旧值；data 后续被改 → compute 冲突标注兜底） */}
       {op === "update" && (
         <p className="text-xs text-muted-foreground">
           {dataError !== null ? (

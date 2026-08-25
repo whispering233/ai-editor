@@ -1,7 +1,7 @@
 // S6.3 注册表测试：注册/查询 API + S6.3 八个查询工具注册完整性
 // 覆盖：registerTool/getTool/listTools/toolCount / 重复注册抛错 /
-//   入口副作用注册（import index 即挂载 8 个查询工具，权限 AUTO）/
-//   argsSchema 严格校验（strict：未知参数拒绝；depth 必填 1|2|3）
+// 入口副作用注册（import index 即挂载 8 个查询工具，权限 AUTO）/
+// argsSchema 严格校验（strict：未知参数拒绝；depth 必填 1|2|3）
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { TOOL_PERMISSION } from "@whispering233/ai-editor-shared";
@@ -61,7 +61,7 @@ describe("registry 注册/查询 API", () => {
     expect(getTool("ctx_test_tool")!.run(noopCtx, {})).toBe("proj-test");
   });
 
-  it("run 取消通道：signal 透传（决策 16 ③长工具执行中检查 signal；S6.4 分析类预留）", () => {
+  it("run 取消通道：signal 透传（长工具执行中检查 signal；S6.4 分析类预留）", () => {
     const def: ToolDefinition = {
       name: "signal_test_tool",
       description: "signal 透传测试",
@@ -80,14 +80,14 @@ describe("registry 注册/查询 API", () => {
 
 describe("S6.3+S6.4 工具注册（入口副作用，import ./index.js 触发）", () => {
   beforeEach(async () => {
-    // 确保 index.ts 的注册副作用已执行（vitest 按文件隔离模块图，显式导入）
+ // 确保 index.ts 的注册副作用已执行（vitest 按文件隔离模块图，显式导入）
     await import("./index.js");
   });
 
   it("13 个工具全部注册（8 查询 + 5 分析）且权限为 AUTO、description 非空", () => {
     const names = listTools().map((t) => t.name);
     for (const expected of [
-      // S6.3 查询类（tools.md「查询类（自动）」）
+ // S6.3 查询类（「查询类（自动）」）
       "get_entity",
       "search_entities",
       "query_relationships",
@@ -96,7 +96,7 @@ describe("S6.3+S6.4 工具注册（入口副作用，import ./index.js 触发）
       "compute_state",
       "get_delta_history",
       "get_entity_summary",
-      // S6.4 分析类（tools.md「分析类（自动）」）
+ // S6.4 分析类（「分析类（自动）」）
       "analyze_consistency",
       "detect_conflicts",
       "trace_plot_paths",

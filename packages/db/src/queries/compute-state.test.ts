@@ -1,9 +1,9 @@
-// S5.2 computeState 测试：沿大纲树父链累积 Delta 计算实体到达状态（决策 9 + endpoints.md 四段规则）
+// S5.2 computeState 测试：沿大纲树父链累积 Delta 计算实体到达状态（ + 四段规则）
 // 覆盖：基础累积（跨节点依赖证明节点间按树路径序）/ 同节点内按 order /
-//   四 op 语义（set/update/add/remove，含 remove 首个匹配与值不存在静默忽略）/
-//   update 冲突跳过 + skipped/conflicts 标注（后续 change 继续累积、跨 delta 扁平聚合）/
-//   非路径节点不参与（兄弟场景 + at_node 提前截断）/ 软删过滤（触发节点、delta 自身）/
-//   add 非数组静默跳过 / 目标实体缺失 → null / 未涉及字段保持初始值 / target_id 过滤
+// 四 op 语义（set/update/add/remove，含 remove 首个匹配与值不存在静默忽略）/
+// update 冲突跳过 + skipped/conflicts 标注（后续 change 继续累积、跨 delta 扁平聚合）/
+// 非路径节点不参与（兄弟场景 + at_node 提前截断）/ 软删过滤（触发节点、delta 自身）/
+// add 非数组静默跳过 / 目标实体缺失 → null / 未涉及字段保持初始值 / target_id 过滤
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -84,8 +84,8 @@ function softDeleteScene(sceneId: string): void {
 describe("computeState 双层排序", () => {
   it("基础累积：卷→章→场景 各一 delta，结果 = 初始 data + 三 delta；跨节点依赖证明节点间按树路径序", () => {
     const { charA } = seedBase({ power: "100" });
-    // vol-1 先 set 覆盖初始值；ch-1 的 update 依赖 vol-1 set 后的值；sc-1 的 update
-    // 依赖 ch-1 的值——任何乱序都会让 from 校验失败，从而证明「节点间按路径序」应用
+ // vol-1 先 set 覆盖初始值；ch-1 的 update 依赖 vol-1 set 后的值；sc-1 的 update
+ // 依赖 ch-1 的值——任何乱序都会让 from 校验失败，从而证明「节点间按路径序」应用
     addDelta("vol-1", charA, [{ field: "power", op: "set", to: "200" }], "卷级变更");
     addDelta("ch-1", charA, [{ field: "power", op: "update", from: "200", to: "300" }], "章级变更");
     addDelta("sc-1", charA, [{ field: "power", op: "update", from: "300", to: "400" }], "场景级变更");
@@ -95,9 +95,9 @@ describe("computeState 双层排序", () => {
     expect(result!.state).toEqual({ power: "400" });
     expect(result!.appliedDeltas.map((d) => d.nodeId)).toEqual(["vol-1", "ch-1", "sc-1"]);
     expect(result!.conflicts).toEqual([]);
-    // 无跳过 → 每个 delta 不带 skipped 字段
+ // 无跳过 → 每个 delta 不带 skipped 字段
     for (const d of result!.appliedDeltas) expect(d.skipped).toBeUndefined();
-    // 响应回显 Req 字段
+ // 响应回显 Req 字段
     expect(result!.targetType).toBe("character");
     expect(result!.targetId).toBe(charA);
     expect(result!.atNodeId).toBe("sc-1");
@@ -163,7 +163,7 @@ describe("computeState 四 op 语义", () => {
   });
 });
 
-describe("computeState update 冲突（决策 9 修订：跳过 + 标注，不抛 409）", () => {
+describe("computeState update 冲突（跳过 + 标注，不抛 409）", () => {
   it("from 与实际不符 → state 不变 + skipped（index/field/expected/actual）+ conflicts；后续 change 继续应用", () => {
     const { charA } = seedBase({ power: "500" });
     const d = insertDelta(db, {
@@ -236,7 +236,7 @@ describe("computeState 路径与过滤", () => {
     expect(atScene!.state.power).toBe("200");
     expect(atScene!.appliedDeltas.map((d) => d.nodeId)).toEqual(["sc-1"]);
 
-    // at_node = ch-1 时，场景级 delta 全部不在路径上 → state = 初始 data
+ // at_node = ch-1 时，场景级 delta 全部不在路径上 → state = 初始 data
     const atChapter = computeState(db, dir, { targetType: "character", targetId: charA, atNodeId: "ch-1" });
     expect(atChapter!.state).toEqual({ power: "100" });
     expect(atChapter!.appliedDeltas).toEqual([]);
@@ -260,7 +260,7 @@ describe("computeState 路径与过滤", () => {
     expect(result!.appliedDeltas).toHaveLength(1);
   });
 
-  it("软删过滤：触发节点软删 → 该节点全部 delta 不参与；delta 自身软删 → 不参与（决策 12 修订）", () => {
+  it("软删过滤：触发节点软删 → 该节点全部 delta 不参与；delta 自身软删 → 不参与（）", () => {
     const { charA } = seedBase({ power: "100" });
     addDelta("vol-1", charA, [{ field: "power", op: "set", to: "200" }], "卷级");
     const chDelta = insertDelta(db, {
@@ -278,20 +278,20 @@ describe("computeState 路径与过滤", () => {
       description: "场景级",
     });
 
-    // a. delta 自身软删 → 不参与（直写 UPDATE，隔离验证 delta 层过滤）
+ // a. delta 自身软删 → 不参与（直写 UPDATE，隔离验证 delta 层过滤）
     db.prepare("UPDATE delta_records SET deleted_at = ? WHERE id = ?").run(T0, chDelta.id);
     let result = computeState(db, dir, { targetType: "character", targetId: charA, atNodeId: "sc-1" });
     expect(result!.state.power).toBe("300"); // 卷级与场景级生效，章级被过滤
     expect(result!.appliedDeltas.map((d) => d.description)).toEqual(["卷级", "场景级"]);
 
-    // b. 触发节点软删 → 该节点全部 delta 不可见（决策 12 修订）
+ // b. 触发节点软删 → 该节点全部 delta 不可见
     softDeleteScene("sc-1");
     result = computeState(db, dir, { targetType: "character", targetId: charA, atNodeId: "sc-1" });
     expect(result!.state.power).toBe("200"); // 只剩卷级
     expect(result!.appliedDeltas.map((d) => d.nodeId)).toEqual(["vol-1"]);
   });
 
-  it("目标实体不存在 → null（含已软删——getEntity 默认过滤，决策 12）", () => {
+  it("目标实体不存在 → null（含已软删——getEntity 默认过滤，）", () => {
     const { charA } = seedBase();
     expect(computeState(db, dir, { targetType: "character", targetId: "char-999", atNodeId: "sc-1" })).toBeNull();
     db.prepare("UPDATE entities SET deleted_at = ? WHERE id = ?").run(T0, charA);
@@ -305,7 +305,7 @@ describe("computeState 路径与过滤", () => {
     const result = computeState(db, dir, { targetType: "character", targetId: charA, atNodeId: "sc-1" });
     expect(result!.state).toEqual({ power: "200", tags: ["a"], notes: "初始" });
 
-    // oracle 建议：断言互不影响（深拷贝）——修改计算态后实体行不被污染，重算结果不变
+ // oracle 建议：断言互不影响（深拷贝）——修改计算态后实体行不被污染，重算结果不变
     (result!.state as Record<string, unknown>).power = "hacked";
     const again = computeState(db, dir, { targetType: "character", targetId: charA, atNodeId: "sc-1" });
     expect(again!.state).toEqual({ power: "200", tags: ["a"], notes: "初始" });

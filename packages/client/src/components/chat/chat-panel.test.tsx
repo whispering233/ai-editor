@@ -65,7 +65,7 @@ const makeConfig = (id: string): ProjectConfig => ({
   language: "zh",
   schemaVersion: 1,
   currentPosition: null,
-  backupFrequencyMinutes: 10, // 决策 27（B2.1 新增字段）
+  backupFrequencyMinutes: 10, // （B2.1 新增字段）
   createdAt: "2026-08-01T10:00:00Z",
   updatedAt: "2026-08-01T10:00:00Z",
 });
@@ -80,14 +80,14 @@ beforeEach(() => {
   vi.stubGlobal("window", windowStub);
   mocked.listSessions.mockResolvedValue([sampleSession]);
   mocked.getSessionMessages.mockResolvedValue({ sessionId: "sess-1", messages: [] });
-  // 打开项目：触发 chat store 订阅联动（clearSessions + loadSessions——问题 2 行为自动激活最近会话）
+ // 打开项目：触发 chat store 订阅联动（clearSessions + loadSessions——问题 2 行为自动激活最近会话）
   useProjectStore.setState({ config: makeConfig("proj-a"), configLoading: false });
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.clearAllMocks();
-  // 关闭项目（触发订阅清空）后重置两 store，防跨用例状态残留
+ // 关闭项目（触发订阅清空）后重置两 store，防跨用例状态残留
   useProjectStore.setState({
     config: null,
     loadError: null,
@@ -118,7 +118,7 @@ describe("ChatPanel 挂载渲染冒烟（SSR 初始态：zustand v5 getServerSna
   });
 
   it("初始态（已打开项目）渲染不抛异常：空态引导 + 「新会话」标题", async () => {
-    // 等订阅联动 settle（避免与下方断言竞态；SSR 渲染仍取初始态，故这里只验证不抛异常）
+ // 等订阅联动 settle（避免与下方断言竞态；SSR 渲染仍取初始态，故这里只验证不抛异常）
     await vi.waitFor(() => expect(useChatStore.getState().sessions).toEqual([sampleSession]));
     expect(() => renderToString(<ChatPanel open={false} onClose={() => {}} />)).not.toThrow();
   });
@@ -163,13 +163,13 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3：任务�
       <MessageItem message={assistantMsg} toolResults={toolResults} />,
     );
     expect(assistantHtml).toContain("好的，我来分析一下");
-    // 成对渲染：有 tool result 的调用行 ✓、无 result 的孤儿调用行（tool 消息不单独渲染）；
-    // 注意 SSR 会在文本与表达式间插入 <!-- --> 注释节点，断言用关键词而非整句
+ // 成对渲染：有 tool result 的调用行 ✓、无 result 的孤儿调用行（tool 消息不单独渲染）；
+ // 注意 SSR 会在文本与表达式间插入 <!-- --> 注释节点，断言用关键词而非整句
     expect(assistantHtml).toContain("get_entity");
     expect(assistantHtml).toContain("list_entities");
   });
 
-  it("MessageItem：tool 消息本身返回 null（决策 18 成对渲染，不单独出现）", () => {
+  it("MessageItem：tool 消息本身返回 null（ 成对渲染，不单独出现）", () => {
     const toolMsg: ChatMessage = {
       id: "t1",
       sessionId: "sess-1",
@@ -235,7 +235,7 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3：任务�
     expect(stale).toContain("此提案已失效");
   });
 
-  it("ProposalCardView：propose_reorder_timepoints（F9 + G2 修订）标题映射「重排时间轴时间点」+ preview 摘要渲染（决策 47，不再 JSON dump）", () => {
+  it("ProposalCardView：propose_reorder_timepoints（F9 + G2 修订）标题映射「重排时间轴时间点」+ preview 摘要渲染（，不再 JSON dump）", () => {
     const html = renderToString(
       <ProposalCardView
         proposal={{
@@ -248,8 +248,8 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3：任务�
     );
     expect(html).toContain("提案");
     expect(html).toContain("重排时间轴时间点"); // PROPOSAL_TYPE_LABELS 映射（G2 修订：propose_reorder_timepoints）
-    // 决策 47：preview 摘要渲染——changes 对象项 id 未解析（SSR 不跑 useEffect）→ 兜底「调整位置」；
-    // 不再 JSON dump（changes 字面量不出现）
+ // preview 摘要渲染——changes 对象项 id 未解析（SSR 不跑 useEffect）→ 兜底「调整位置」；
+ // 不再 JSON dump（changes 字面量不出现）
     expect(html).toContain("调整位置");
     expect(html).not.toContain("changes");
   });
@@ -285,9 +285,9 @@ describe("store 层「新会话」状态迁移走查（问题 3 场景：激活�
 });
 
 describe("ErrorBoundary 兜底（问题 3 防护：渲染异常 → 可恢复错误卡而非白屏）", () => {
-  // 注意：React 设计上 renderToString 不会让 error boundary 捕获渲染异常（边界仅客户端渲染生效，
-  // SSR 异常直接上抛调用方）——本测试只能验证「无异常时正常透传 children」；边界捕获行为
-  // （getDerivedStateFromError → fallback 错误卡）需真实浏览器验证，列入交付走查清单
+ // 注意：React 设计上 renderToString 不会让 error boundary 捕获渲染异常（边界仅客户端渲染生效，
+ // SSR 异常直接上抛调用方）——本测试只能验证「无异常时正常透传 children」；边界捕获行为
+ // （getDerivedStateFromError → fallback 错误卡）需真实浏览器验证，列入交付走查清单
   it("无异常时正常渲染 children（错误卡不出现）", () => {
     const html = renderToString(
       <ErrorBoundary>
@@ -299,7 +299,7 @@ describe("ErrorBoundary 兜底（问题 3 防护：渲染异常 → 可恢复错
   });
 });
 
-// ============ Base UI Menu 契约护栏（问题 3 实机根因：error #31） ============
+// ============ Base UI Menu 护栏（问题 3 实机根因：error #31） ============
 // 根因（已确证）：SessionTitleBar 曾把 DropdownMenuLabel（= Menu.GroupLabel）**裸**放在
 // DropdownMenuContent（Popup）内——点击 trigger 打开菜单 → Popup 挂载 → GroupLabel 读
 // MenuGroupContext 缺失 → 抛「Base UI error #31; visit https://base-ui.com/production-error?code=31」
@@ -307,7 +307,7 @@ describe("ErrorBoundary 兜底（问题 3 防护：渲染异常 → 可恢复错
 // <Menu.RadioGroup>.）。此前无 ErrorBoundary 时 = 整页白屏（原始问题 3 现象），ErrorBoundary 落地后
 // = 错误卡（用户实测确认）。修复：Label 用 DropdownMenuGroup（= Menu.Group）包裹（ChatPanel.tsx）。
 // 护栏说明：打开态菜单无法在 SSR 复现（Menu 的 mounted 状态由 effect 驱动，SSR 不执行 effect →
-// Portal 返回 null 不渲染 Popup），故直接渲染 GroupLabel 本体命中同一契约（hooks 在 SSR 同样执行）。
+// Portal 返回 null 不渲染 Popup），故直接渲染 GroupLabel 本体命中同一（hooks 在 SSR 同样执行）。
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -318,9 +318,9 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 
-describe("Base UI Menu 契约（error #31 根因护栏）", () => {
-  it("裸 DropdownMenuLabel（无 Group）→ 抛 MenuGroupContext is missing（#31 契约）", () => {
-    // 生产态压缩为「Base UI error #31; visit ...code=31」；测试环境 NODE_ENV=test → dev 完整消息
+describe("Base UI Menu （error #31 根因护栏）", () => {
+  it("裸 DropdownMenuLabel（无 Group）→ 抛 MenuGroupContext is missing（#31 ）", () => {
+ // 生产态压缩为「Base UI error #31; visit ...code=31」；测试环境 NODE_ENV=test → dev 完整消息
     expect(() => renderToString(<DropdownMenuLabel>会话（本项目）</DropdownMenuLabel>)).toThrow(
       /MenuGroupContext is missing/,
     );
@@ -336,8 +336,8 @@ describe("Base UI Menu 契约（error #31 根因护栏）", () => {
   });
 
   it("完整菜单结构（Trigger + Content + Group/Label + Item + Separator）渲染不抛异常", () => {
-    // open 受控传入：SSR 下 mounted 由 effect 驱动不执行 → Portal 不挂载 Popup（MenuPortal 返回
-    // null），此用例验证结构合法性；打开态崩溃由上面两个契约用例覆盖
+ // open 受控传入：SSR 下 mounted 由 effect 驱动不执行 → Portal 不挂载 Popup（MenuPortal 返回
+ // null），此用例验证结构合法性；打开态崩溃由上面两个用例覆盖
     expect(() =>
       renderToString(
         <DropdownMenu open>

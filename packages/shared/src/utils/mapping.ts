@@ -1,8 +1,8 @@
-// 文件字段 ↔ API 字段映射（endpoints.md 通用约定指定位置：@whispering233/ai-editor-shared/utils）
-// 约定（endpoints.md 第 10 行）：请求体/查询参数 snake_case，响应体 camelCase，
-//   outline.json / project.json / data.db 行内部 snake_case；
-//   **嵌套 data 对象内部字段原样透传**（如 expected_payoff 保持 snake_case，2026-08 修订），
-//   camelCase 映射仅应用于 API 顶层契约字段。
+// 文件字段 ↔ API 字段映射（ 通用约定指定位置：@whispering233/ai-editor-shared/utils）
+// 约定（）：请求体/查询参数 snake_case，响应体 camelCase，
+// outline.json / project.json / data.db 行内部 snake_case；
+// **嵌套 data 对象内部字段原样透传**（如 expected_payoff 保持 snake_case，2026-08 修订），
+// camelCase 映射仅应用于 API 顶层字段。
 // 两侧锚点：T1.1 定义的双套类型（*Row / OutlineFile* / ProjectFileConfig ↔ API 形态）
 
 import type { DeltaRecord, DeltaRow, Entity, EntityRow, RelationRecord, RelationRow } from "../types/entity.js";
@@ -21,7 +21,7 @@ import type {
 import type { ProjectConfig, ProjectFileConfig } from "../types/project.js";
 import { DEFAULT_BACKUP_FREQUENCY_MINUTES } from "../constants/backup.js";
 
-/** 单层键映射：snake_case → camelCase（仅用于顶层契约字段，不递归 data） */
+/** 单层键映射：snake_case → camelCase（仅用于顶层字段，不递归 data） */
 export function snakeToCamelKey(key: string): string {
   return key.replace(/_([a-z])/g, (_m, c: string) => c.toUpperCase());
 }
@@ -53,7 +53,7 @@ export function mapEntityToRow(entity: Entity): EntityRow {
     type: entity.type,
     name: entity.name,
     data: entity.data,
-    // 决策 46：API 形态不暴露 sort_order（列表摘要 sortOrder 由服务端从行提取），映射默认 null
+ // API 形态不暴露 sort_order（列表摘要 sortOrder 由服务端从行提取），映射默认 null
     sort_order: null,
     created_at: entity.createdAt,
     updated_at: entity.updatedAt,
@@ -65,7 +65,7 @@ export function mapEntityToRow(entity: Entity): EntityRow {
 
 /**
  * RelationRow → RelationRecord（字段映射；metadata NULL → undefined）
- * 注意：存储的 updated_at / deleted_at 在 API 形态中不暴露（endpoints.md RelationRecord 仅 createdAt）；
+ * 注意：存储的 updated_at / deleted_at 在 API 形态中不暴露（ RelationRecord 仅 createdAt）；
  * sourceName/targetName 为服务端联表填充，Row 本身不含
  */
 export function mapRowToRelation(row: RelationRow): RelationRecord {
@@ -106,7 +106,7 @@ function mapFileVolumeToVolume(file: OutlineFileVolume): OutlineVolume {
     type: "volume",
     title: file.title,
     summary: file.summary,
-    data: file.data, // 嵌套 data 原样透传（决策 23，不做递归 camelCase）
+    data: file.data, // 嵌套 data 原样透传（不做递归 camelCase）
     updatedAt: file.updated_at,
     deleted: file.deleted,
     deletedAt: file.deleted_at,
@@ -121,7 +121,7 @@ function mapFileChapterToChapter(file: OutlineFileChapter): OutlineChapter {
     type: "chapter",
     title: file.title,
     summary: file.summary,
-    data: file.data, // 嵌套 data 原样透传（决策 23）
+    data: file.data, // 嵌套 data 原样透传
     updatedAt: file.updated_at,
     deleted: file.deleted,
     deletedAt: file.deleted_at,
@@ -136,14 +136,14 @@ function mapFileSceneToScene(file: OutlineFileScene): OutlineScene {
     type: "scene",
     title: file.title,
     summary: file.summary,
-    data: file.data, // 嵌套 data 原样透传（决策 23）
+    data: file.data, // 嵌套 data 原样透传
     updatedAt: file.updated_at,
     deleted: file.deleted,
     deletedAt: file.deleted_at,
   };
 }
 
-/** OutlineFileNode → OutlineNode（按 type 分派递归映射；支持决策 19「chapter 直挂 root」） */
+/** OutlineFileNode → OutlineNode（按 type 分派递归映射；支持「chapter 直挂 root」） */
 function mapFileNodeToNode(file: OutlineFileNode): OutlineNode {
   switch (file.type) {
     case "volume":
@@ -161,7 +161,7 @@ export function mapOutlineFileToTree(file: OutlineFileTree): OutlineTree {
     id: file.id,
     type: "root",
     schemaVersion: file.schema_version,
-    // root.children 为 (volume|chapter) 联合（决策 19 允许直挂章），按 type 分派映射
+ // root.children 为 (volume|chapter) 联合（ 允许直挂章），按 type 分派映射
     children: file.children.map(mapFileNodeToNode) as OutlineTree["children"],
   };
 }
@@ -173,7 +173,7 @@ function mapVolumeToFileVolume(node: OutlineVolume): OutlineFileVolume {
     type: "volume",
     title: node.title,
     summary: node.summary,
-    data: node.data, // 嵌套 data 原样透传（决策 23）
+    data: node.data, // 嵌套 data 原样透传
     updated_at: node.updatedAt,
     deleted: node.deleted,
     deleted_at: node.deletedAt,
@@ -188,7 +188,7 @@ function mapChapterToFileChapter(node: OutlineChapter): OutlineFileChapter {
     type: "chapter",
     title: node.title,
     summary: node.summary,
-    data: node.data, // 嵌套 data 原样透传（决策 23）
+    data: node.data, // 嵌套 data 原样透传
     updated_at: node.updatedAt,
     deleted: node.deleted,
     deleted_at: node.deletedAt,
@@ -203,14 +203,14 @@ function mapSceneToFileScene(node: OutlineScene): OutlineFileScene {
     type: "scene",
     title: node.title,
     summary: node.summary,
-    data: node.data, // 嵌套 data 原样透传（决策 23）
+    data: node.data, // 嵌套 data 原样透传
     updated_at: node.updatedAt,
     deleted: node.deleted,
     deleted_at: node.deletedAt,
   };
 }
 
-/** OutlineNode → OutlineFileNode（按 type 分派递归映射；支持决策 19「chapter 直挂 root」） */
+/** OutlineNode → OutlineFileNode（按 type 分派递归映射；支持「chapter 直挂 root」） */
 function mapNodeToFileNode(node: OutlineNode): OutlineFileNode {
   switch (node.type) {
     case "volume":
@@ -235,7 +235,7 @@ export function mapTreeToOutlineFile(tree: OutlineTree): OutlineFileTree {
 // ============ 项目（project.json ↔ API） ============
 
 /**
- * 备份频率读侧语义（决策 27 / schema.md project.json 契约，宽松读取）：
+ * 备份频率读侧语义（ / project.json ，宽松读取）：
  * 字段缺失 → 缺省 10（新项目默认开启）；显式 null / 0 → null（关闭）；
  * 其余数值原样透传（枚举校验只在写侧执行，旧数据脏值不在此拦截）
  */
@@ -246,7 +246,7 @@ function resolveBackupFrequencyMinutes(value: number | null | undefined): number
 }
 
 /** ProjectFileConfig → ProjectConfig（schema_version → schemaVersion、current_position → currentPosition、backup 频率读侧兜底；
- *  `prompt` 已废弃（决策 41）不再映射——项目规则唯一事实源改为项目目录 AGENTS.md） */
+ * `prompt` 已废弃不再映射——项目规则唯一事实源改为项目目录 ） */
 export function mapProjectFileToConfig(file: ProjectFileConfig): ProjectConfig {
   return {
     id: file.id,
@@ -261,7 +261,7 @@ export function mapProjectFileToConfig(file: ProjectFileConfig): ProjectConfig {
 }
 
 /** ProjectConfig → ProjectFileConfig（全量映射：backup_frequency_minutes 恒写入——本函数非 patch 路径，写全对象即显式；
- *  `prompt` 已废弃（决策 41）不再写出——新写入不再产生该字段） */
+ * `prompt` 已废弃不再写出——新写入不再产生该字段） */
 export function mapConfigToProjectFile(config: ProjectConfig): ProjectFileConfig {
   return {
     id: config.id,

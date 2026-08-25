@@ -1,7 +1,7 @@
 // S6.4 分析工具测试：find_orphan_elements
 // 覆盖：unused_characters（从未出场 / 最后活跃章 < 最新章）/ unresolved_deltas（目标不可见）/
-//   dangling_relations（端点 purge）/ inconsistent_soft_deletes（节点软删未级联 relation/delta）/
-//   软删对象不出现（决策 12）/ signal aborted
+// dangling_relations（端点 purge）/ inconsistent_soft_deletes（节点软删未级联 relation/delta）/
+// 软删对象不出现/ signal aborted
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -30,7 +30,7 @@ afterEach(() => {
 
 const T0 = "2026-08-01T10:00:00Z";
 
-/** 两章结构：ch-1[sc-1,sc-2]（第 1 章）+ ch-2[sc-3,sc-4]（第 2 章）——章节序现推（决策 21） */
+/** 两章结构：ch-1[sc-1,sc-2]（第 1 章）+ ch-2[sc-3,sc-4]（第 2 章）——章节序现推 */
 function seedOutlineTree(): OutlineFileTree {
   return {
     id: "root",
@@ -138,8 +138,8 @@ describe("find_orphan_elements unused_characters", () => {
     expect(byName.has("幽灵角色")).toBe(false); // 软删不参与
   });
 
-  it("「当前最新章」口径 = current_position（决策 21）：规划未写章节的活跃角色不误报", () => {
-    // 三章树：ch-1[sc-1]（第 1 章）/ ch-2[sc-2]（第 2 章）/ ch-3[sc-3]（第 3 章）
+  it("「当前最新章」口径 = current_position（）：规划未写章节的活跃角色不误报", () => {
+ // 三章树：ch-1[sc-1]（第 1 章）/ ch-2[sc-2]（第 2 章）/ ch-3[sc-3]（第 3 章）
     writeOutlineFile(dir, {
       id: "root",
       type: "root",
@@ -176,7 +176,7 @@ describe("find_orphan_elements unused_characters", () => {
         },
       ],
     });
-    // 写到第 1 章（current_position = sc-1）；树规划 3 章
+ // 写到第 1 章（current_position = sc-1）；树规划 3 章
     writeProjectFile(dir, {
       id: "proj-test",
       name: "测试书",
@@ -197,7 +197,7 @@ describe("find_orphan_elements unused_characters", () => {
     expect(byName.has("预写角色")).toBe(false); // 活跃于未写章节不算闲置（新口径）
     expect(byName.has("当前角色")).toBe(false);
 
-    // 推进 current_position 到第 3 章后：预写角色第 2 章 < 当前第 3 章 → 闲置
+ // 推进 current_position 到第 3 章后：预写角色第 2 章 < 当前第 3 章 → 闲置
     writeProjectFile(dir, {
       id: "proj-test",
       name: "测试书",
@@ -212,7 +212,7 @@ describe("find_orphan_elements unused_characters", () => {
     const byName2 = new Map(advanced.unused_characters.map((u) => [u.name, u]));
     expect(byName2.get("预写角色")).toMatchObject({ lastActiveChapter: 2 });
     expect(byName2.get("预写角色")!.description).toContain("当前最新第 3 章");
-    // 「当前角色」最后活跃第 1 章，写到第 3 章后同样闲置（口径一致性：以 current_position 为基准）
+ // 「当前角色」最后活跃第 1 章，写到第 3 章后同样闲置（口径一致性：以 current_position 为基准）
     expect(byName2.get("当前角色")).toMatchObject({ lastActiveChapter: 1 });
   });
 });
@@ -248,10 +248,10 @@ describe("find_orphan_elements 悬空与不一致", () => {
     expect(inconsistent_soft_deletes).toEqual([]);
   });
 
-  it("inconsistent_soft_deletes：大纲节点软删但 relation/delta 未级联（幽灵形态，决策 16 修订诊断）", () => {
+  it("inconsistent_soft_deletes：大纲节点软删但 relation/delta 未级联（幽灵形态，诊断）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const a = createEntity(db, { type: "character", name: "阿强" }).id;
-    // 软删节点 sc-2：关系 + delta 均指向它但未级联（绕过级联直接构造）
+ // 软删节点 sc-2：关系 + delta 均指向它但未级联（绕过级联直接构造）
     insertRelationRaw({ sourceType: "character", sourceId: a, targetType: "outline_node", targetId: "sc-2", relationType: "appears_in" });
     insertDelta(db, { nodeId: "sc-2", targetType: "character", targetId: a, changes: [{ field: "a", op: "set", to: "1" }], description: "软删节点的变更" });
     softDeleteNode("sc-2");

@@ -1,26 +1,25 @@
 // @whispering233/ai-editor-db 关系管理（S3.2）：查询（k 跳遍历）/ 创建（判重）/ 物理删除
 //
-// 单一事实来源：doc/database/schema.md 第 41-80 行（relation_records 表 + 16 个预定义关系类型）、
-// doc/api/endpoints.md 第 304-391 行（关系端点）、决策 2（通用关系表）、
-// 决策 12 修订（关系可见性联动端点状态：任一端点软删即不可见；手动删关系 = 物理删）、
-// 决策 10（plot_edge 剧情连线同规则处理）。
+// 第 304-391 行（关系端点）、（通用关系表）、
+// （关系可见性联动端点状态：任一端点软删即不可见；手动删关系 = 物理删）、
+// （plot_edge 剧情连线同规则处理）。
 //
-// 可见性过滤实现（决策 12 修订）：
+// 可见性过滤实现：
 // - SQL 层：关系自身 deleted_at IS NULL + 各过滤条件
 // - JS 层（统一处理两端点）：实体端点查 entities 软删集合（一次 IN 查询）；
-//   大纲端点读 outline.json（readOutlineFile 收集 deleted 节点 id 集合）
+// 大纲端点读 outline.json（readOutlineFile 收集 deleted 节点 id 集合）
 // - name 联表填充同路径：实体查 entities.name、大纲节点用 outline.json title
 //
 // 级联软删：S3.1 的 softDeleteEntity 已内联 relation_records 级联 UPDATE（source_id/target_id
 // 命中即标 deleted_at）——本卡不重复实现，注释确认。
 //
-// 批次十五（决策 49，15.5 卡 4）：**全部查询经 queryDb 走 drizzle 构建器**（混合风格 4A）。
+// 批次十五（15.5 卡 4）：**全部查询经 queryDb 走 drizzle 构建器**（混合风格 4A）。
 // 语义逐句对照旧实现（git show 52c7c13^:packages/db/src/queries/relation.ts）:
-//   - deleted_at IS NULL ↔ isNull()；deleted_at IS NOT NULL ↔ isNotNull()；IN 占位符 ↔ inArray()；
-//     动态 where 拼接 ↔ and(...)(SQL[])；ORDER BY r.created_at ↔ orderBy(relationRecords.created_at)
-//   - listSettingHierarchyEdges 的同表双 JOIN（s/t 别名，均 INNER + deleted_at IS NULL）
-//     ↔ drizzle alias(entities) 两次 innerJoin（同表两次需别名才可 join）
-//   - SELECT 1 判重 ↔ select({ id }) 存在性（语义等同：有行即重复）
+// - deleted_at IS NULL ↔ isNull；deleted_at IS NOT NULL ↔ isNotNull；IN 占位符 ↔ inArray；
+// 动态 where 拼接 ↔ and(...)(SQL[])；ORDER BY r.created_at ↔ orderBy(relationRecords.created_at)
+// - listSettingHierarchyEdges 的同表双 JOIN（s/t 别名，均 INNER + deleted_at IS NULL）
+// ↔ drizzle alias(entities) 两次 innerJoin（同表两次需别名才可 join）
+// - SELECT 1 判重 ↔ select({ id }) 存在性（语义等同：有行即重复）
 // 事务/纯 JS 逻辑（collectPaths/buildEndpointContext 的 outline 部分/防环）不变。
 
 import { findOutlineNode, readOutlineFile } from "../storage/outline.js";
@@ -44,7 +43,7 @@ export type RelationErrorCode =
   | "ENDPOINT_NOT_FOUND"
   | "INVALID_RELATION_TYPE"
   | "EVENT_ALREADY_MOUNTED"
-  // 决策 46（2026-08 批次十三）：设定手动排序自指/成环（moveSetting 抛出，路由层映射 400）
+ // （2026-08 批次十三）：设定手动排序自指/成环（moveSetting 抛出，路由层映射 400）
   | "SETTING_CYCLE";
 
 /** 关系操作错误（带 code，与 OutlineError 同风格；路由层 catch 映射） */
@@ -57,7 +56,7 @@ export class RelationError extends Error {
   }
 }
 
-/** 关系查询过滤条件（endpoints.md 第 311-318 行；全部可选，组合过滤） */
+/** 关系查询过滤条件（；全部可选，组合过滤） */
 export interface RelationQuery {
   sourceType?: string;
   sourceId?: string;
@@ -66,17 +65,17 @@ export interface RelationQuery {
   relationType?: string;
 }
 
-/** 大纲端点 id（relation_records 端点类型约定，schema.md） */
+/** 大纲端点 id（relation_records 端点类型约定，） */
 export const OUTLINE_ENDPOINT_TYPE = "outline_node";
 
-/** 设定层级边（决策 30）：childId → parentId（belongs_to 且两端均为 setting，两端点未软删） */
+/** 设定层级边：childId → parentId（belongs_to 且两端均为 setting，两端点未软删） */
 export interface SettingHierarchyEdge {
   childId: string;
   parentId: string;
 }
 
-/** 实体端点类型集合（entities 表 type 列；含 event 时间轴事件——occurs_in 端点校验，决策 26；
- *  含 timepoint 时间标签点——occurs_at 端点校验，G2） */
+/** 实体端点类型集合（entities 表 type 列；含 event 时间轴事件——occurs_in 端点校验，；
+ * 含 timepoint 时间标签点——occurs_at 端点校验，G2） */
 const ENTITY_ENDPOINT_TYPES = ["character", "setting", "location", "hook", "event", "timepoint"] as const;
 
 /**
@@ -93,21 +92,21 @@ function buildEndpointContext(
   const entityIds = [...endpointIds].filter((id) => id !== "root"); // root 非实体端点（无实际关系）
   if (entityIds.length > 0) {
     const q = queryDb(db);
-    // 软删实体集合
+ // 软删实体集合
     const softRows = q
       .select({ id: entities.id })
       .from(entities)
       .where(and(isNotNull(entities.deleted_at), inArray(entities.id, entityIds)))
       .all();
     for (const r of softRows) softDeleted.add(r.id);
-    // 名称映射（含软删实体——名称填充不受可见性影响，过滤在另一层）
+ // 名称映射（含软删实体——名称填充不受可见性影响，过滤在另一层）
     const nameRows = q.select({ id: entities.id, name: entities.name }).from(entities).where(inArray(entities.id, entityIds)).all();
     for (const r of nameRows) names.set(r.id, r.name);
   }
-  // 大纲端点：读一次树，收集软删节点与标题
+ // 大纲端点：读一次树，收集软删节点与标题
   if (endpointIds.size > 0) {
     const tree = readOutlineFile(outlineDir);
-    // 递归遍历（OutlineFileNode 联合：卷/章/场景，children 可选）
+ // 递归遍历（OutlineFileNode 联合：卷/章/场景，children 可选）
     const visit = (node: OutlineFileNode): void => {
       if (endpointIds.has(node.id)) {
         names.set(node.id, node.title);
@@ -151,12 +150,12 @@ function parseMetadata(value: unknown): Record<string, unknown> | null {
 }
 
 /**
- * 关系列表 + k 跳路径（GET /api/v1/relation，endpoints.md 第 306-343 行）：
- * 过滤条件组合（全部可选）+ 可见性过滤（关系自身未软删 + 两端点均未软删，决策 12 修订）。
+ * 关系列表 + k 跳路径（GET /api/v1/relation，）：
+ * 过滤条件组合（全部可选）+ 可见性过滤（关系自身未软删 + 两端点均未软删）。
  * depth=1：直接关系（relations，联表填充 sourceName/targetName）。
  * depth=2/3：追加 k 跳路径（paths：nodes/edges 结构）——**BFS 图不受 source_id/target_id
  * 过滤限制**（起点定位用 source_id，图遍历需要全量可见边，否则中间节点的出边被过滤截断）；
- * relations 数组仍按全部过滤条件返回（endpoints.md「追加路径信息」语义）。
+ * relations 数组仍按全部过滤条件返回（「追加路径信息」语义）。
  *
  * @param outlineDir 项目根（大纲端点软删/标题校验读 outline.json）
  */
@@ -166,9 +165,9 @@ export function listRelations(
   depth: 1 | 2 | 3,
   outlineDir: string,
 ): RelationQueryResult {
-  // relations 查询：全部过滤条件（source/target 参与）
+ // relations 查询：全部过滤条件（source/target 参与）
   const relationRows = queryRelationRows(db, query, true);
-  // BFS 图查询（depth>=2）：仅 type/relation_type 过滤，source_id/target_id 不参与
+ // BFS 图查询（depth>=2）：仅 type/relation_type 过滤，source_id/target_id 不参与
   const graphRows = depth >= 2 ? queryRelationRows(db, query, false) : [];
 
   const endpointIds = new Set<string>();
@@ -181,7 +180,7 @@ export function listRelations(
     (r) => !ctx.softDeleted.has(r.source_id) && !ctx.softDeleted.has(r.target_id),
   );
 
-  // name 联表填充
+ // name 联表填充
   const records: RelationRecord[] = visible.map((r) => ({
     id: r.id,
     sourceType: r.source_type,
@@ -198,7 +197,7 @@ export function listRelations(
   if (depth === 1) {
     return { relations: records };
   }
-  // BFS 图的可见性过滤（独立上下文——图端点集合与 relations 端点集合不同）
+ // BFS 图的可见性过滤（独立上下文——图端点集合与 relations 端点集合不同）
   const graphEndpointIds = new Set<string>();
   for (const r of graphRows) {
     graphEndpointIds.add(r.source_id);
@@ -229,7 +228,7 @@ function queryRelationRows(db: Db, query: RelationQuery, includeSourceTarget: bo
 }
 
 /**
- * k 跳路径收集（depth=2/3，endpoints.md 第 337-341 行）：
+ * k 跳路径收集（depth=2/3，）：
  * 有向 BFS（沿 source→target 出边）——关系有方向，遍历沿建立方向；
  * 起点 = query.sourceId（缺省时多起点：所有满足 sourceType 过滤的节点）。
  * 防环：路径级 visited（同一条路径不重复经过节点；不同路径可共享节点）。
@@ -243,14 +242,14 @@ function collectPaths(
   query: RelationQuery,
   depth: 2 | 3,
 ): NonNullable<RelationQueryResult["paths"]> {
-  // 邻接表（出边）
+ // 邻接表（出边）
   const adj = new Map<string, Array<{ toId: string; toType: string; relationType: string }>>();
   for (const r of visible) {
     const list = adj.get(r.source_id) ?? [];
     list.push({ toId: r.target_id, toType: r.target_type, relationType: r.relation_type });
     adj.set(r.source_id, list);
   }
-  // 起点集合：sourceId 优先；缺省时所有出现过的节点（满足过滤条件的图内节点）
+ // 起点集合：sourceId 优先；缺省时所有出现过的节点（满足过滤条件的图内节点）
   const allIds = new Set<string>();
   for (const r of visible) {
     allIds.add(r.source_id);
@@ -268,7 +267,7 @@ function collectPaths(
   const paths: NonNullable<RelationQueryResult["paths"]> = [];
   for (const start of starts) {
     if (typeOf.get(start) === undefined) continue; // 起点不在图内（过滤条件外）——跳过
-    // BFS：{ nodeId, nodes, edges }，路径级 visited 防环
+ // BFS：{ nodeId, nodes, edges }，路径级 visited 防环
     type BfsItem = { nodeId: string; nodes: { type: string; id: string; name: string }[]; edges: { from: string; to: string; relationType: string }[] };
     const queue: BfsItem[] = [
       {
@@ -283,7 +282,7 @@ function collectPaths(
         const item = queue.shift()!;
         const outEdges = adj.get(item.nodeId) ?? [];
         for (const edge of outEdges) {
-          // 路径级防环：目标已在当前路径上则跳过
+ // 路径级防环：目标已在当前路径上则跳过
           if (item.nodes.some((n) => n.id === edge.toId)) continue;
           const path: BfsItem = {
             nodeId: edge.toId,
@@ -300,7 +299,7 @@ function collectPaths(
 }
 
 /**
- * 单条关系（含可见性过滤，决策 12 修订）；不存在/不可见返回 null。
+ * 单条关系（含可见性过滤）；不存在/不可见返回 null。
  * @param outlineDir 大纲端点软删校验读 outline.json
  */
 export function getRelation(db: Db, id: string, outlineDir: string): RelationRow | null {
@@ -319,9 +318,9 @@ export function getRelation(db: Db, id: string, outlineDir: string): RelationRow
 }
 
 /**
- * 创建关系（POST /api/v1/relation，endpoints.md 第 345-374 行）：
+ * 创建关系（POST /api/v1/relation，）：
  * - **判重**：同 (source_id, target_id, relation_type) 且未软删已存在 → RELATION_EXISTS（409 语义）
- * - relation_type 白名单（schema.md 16 个预定义类型，含 plot_edge 剧情连线——同规则，决策 10）
+ * - relation_type 白名单（ 16 个预定义类型，含 plot_edge 剧情连线——同规则）
  * - **端点存在性**：实体端点查 entities（非软删）、大纲端点读 outline.json（存在且非软删）
  * - 时间戳应用层 ISO
  *
@@ -343,10 +342,10 @@ export function createRelation(
   if (!(RELATION_TYPES as readonly string[]).includes(input.relationType)) {
     throw new RelationError("INVALID_RELATION_TYPE", `非法关系类型: ${input.relationType}`);
   }
-  // 端点存在性（决策 12 修订：软删端点不可建立新关系）
+ // 端点存在性（软删端点不可建立新关系）
   assertEndpointExists(db, outlineDir, input.sourceType, input.sourceId);
   assertEndpointExists(db, outlineDir, input.targetType, input.targetId);
-  // 判重（同三元组未软删即视为已存在）
+ // 判重（同三元组未软删即视为已存在）
   const dup = queryDb(db)
     .select({ id: relationRecords.id })
     .from(relationRecords)
@@ -356,8 +355,8 @@ export function createRelation(
     throw new RelationError("RELATION_EXISTS", `关系已存在: ${input.sourceId} → ${input.targetId} (${input.relationType})`);
   }
   const now = nowIso();
-  // 关系 id：endpoints.md id 约定未列 rel- 前缀（运行时对象为 prop_/sess_/call_），
-  // 用 generateId("rel-") 保证唯一（前缀 + nanoid，与实体/节点同构）
+ // 关系 id： id 约定未列 rel- 前缀（运行时对象为 prop_/sess_/call_），
+ // 用 generateId("rel-") 保证唯一（前缀 + nanoid，与实体/节点同构）
   const row: RelationRow = {
     id: generateId("rel-"),
     source_type: input.sourceType,
@@ -379,7 +378,7 @@ export function createRelation(
       target_type: row.target_type,
       target_id: row.target_id,
       relation_type: row.relation_type,
-      // metadata 为可空 text 列（JSON 扩展元数据，JSON.stringify 序列化写入；null 直接写空）
+ // metadata 为可空 text 列（JSON 扩展元数据，JSON.stringify 序列化写入；null 直接写空）
       metadata: row.metadata === null ? null : JSON.stringify(row.metadata),
       created_at: row.created_at,
       updated_at: row.updated_at,
@@ -411,14 +410,14 @@ function assertEndpointExists(db: Db, outlineDir: string, type: string, id: stri
 }
 
 /**
- * 全量设定层级边（决策 30，2026-08）：读取所有 setting→setting 的 belongs_to 边
- * （两端点均未软删——决策 12 修订可见性联动，软删端点不参与层级）。供防环校验与设定树
+ * 全量设定层级边（2026-08）：读取所有 setting→setting 的 belongs_to 边
+ * （两端点均未软删——可见性联动，软删端点不参与层级）。供防环校验与设定树
  * 构建使用：O(N) 一次读取构建内存邻接表，避免逐条查询（用户反馈 #1 性能方案：JSON 内
  * parent_id 需全表扫 + parse，关系表走索引）。方向：childId → parentId（child belongs_to parent）。
  */
 export function listSettingHierarchyEdges(db: Db): SettingHierarchyEdge[] {
-  // 同表双 JOIN（source 实体 / target 实体均为非软删 setting）——IDs 的表对象在 FROM 中已占用，
-  // 二次 join 需 alias 区分（s/t，语义与旧实现 SELECT R JOIN entities s JOIN entities t 一致）
+ // 同表双 JOIN（source 实体 / target 实体均为非软删 setting）——IDs 的表对象在 FROM 中已占用，
+ // 二次 join 需 alias 区分（s/t，语义与旧实现 SELECT R JOIN entities s JOIN entities t 一致）
   const sourceEntities = alias(entities, "s");
   const targetEntities = alias(entities, "t");
   const rows = queryDb(db)
@@ -439,7 +438,7 @@ export function listSettingHierarchyEdges(db: Db): SettingHierarchyEdge[] {
 }
 
 /**
- * 设定层级防环校验（决策 30）：判断建边 child → newParent 是否成环。
+ * 设定层级防环校验：判断建边 child → newParent 是否成环。
  * 规则：newParent 沿父链（child→parent 边）向上走，经过 child 即成环（child 将成为自身祖先）；
  * 祖先链查询 O(深度)；child 不在树中（新建场景）时必为 false；child 与 newParent 相同 = 自指环。
  */
@@ -458,7 +457,7 @@ export function wouldCreateSettingCycle(db: Db, childId: string, newParentId: st
 }
 
 /**
- * 物理删除关系（DELETE /api/v1/relation/:id，endpoints.md 第 376-391 行，决策 12 修订：
+ * 物理删除关系（DELETE /api/v1/relation/:id，，
  * 手动删关系 = 物理删，不进回收站）。
  * @returns 影响行数（0 = 不存在，路由层映射 404 RELATION_NOT_FOUND）
  */
@@ -467,10 +466,10 @@ export function deleteRelation(db: Db, id: string): number {
 }
 
 /**
- * 更新关系元数据（PUT /api/v1/relation/:id，endpoints.md「PUT /relation/:id」）：
+ * 更新关系元数据（PUT /api/v1/relation/:id，「PUT /relation/:id」）：
  * metadata **整体替换**（非浅合并）——画布连线标签编辑传 `{ label }`，清空传 `{}`；
  * 同时刷新 updated_at（应用层 ISO，与全仓时间约定一致）。
- * 不存在或已软删（deleted_at IS NOT NULL）→ null（404 语义，软删关系不可编辑，决策 12）。
+ * 不存在或已软删（deleted_at IS NOT NULL）→ null（404 语义，软删关系不可编辑）。
  * 端点可见性不在此校验——编辑不改变三元组，与可见性无关。
  * @returns 更新后的 { id }；不存在/已软删 → null
  */
@@ -523,11 +522,11 @@ function checkEndpointState(
 }
 
 /**
- * 全量悬空关系诊断（S6.4 工具 find_orphan_elements 下沉，tools.md「孤立元素」）：
+ * 全量悬空关系诊断（S6.4 工具 find_orphan_elements 下沉，「孤立元素」）：
  * 关系自身未软删，但端点异常——**每端点一条**记录（同一关系两端点异常时出两条）：
  * - *_missing：端点已物理删除（实体 purge / 大纲节点 purge）——dangling_relations 侧
- * - *_deleted：端点已软删但关系未级联软删（跨存储不一致的 relation 侧，决策 12 修订
- *   级联软删/启动一致性校验（决策 16 修订）兜底的对象同源）——inconsistent_soft_deletes 侧
+ * - *_deleted：端点已软删但关系未级联软删（跨存储不一致的 relation 侧，
+ * 级联软删/启动一致性校验兜底的对象同源）——inconsistent_soft_deletes 侧
  * 软删自身的关系（回收站对象）**不在此列**——由回收站管理，非悬空。
  * 实体端点状态一次 IN 批量收集（避免逐行查询——buildEndpointContext 同款先例）。
  * @param outlineDir 项目根（大纲端点存在性/软删校验读 outline.json）
@@ -542,7 +541,7 @@ export function listDanglingRelations(db: Db, outlineDir: string): DanglingRelat
   if (rows.length === 0) return [];
 
   const tree = readOutlineFile(outlineDir);
-  // 实体端点 id 集合（一次 IN 批量收集状态）
+ // 实体端点 id 集合（一次 IN 批量收集状态）
   const entityIds = new Set<string>();
   for (const raw of rows) {
     const r = rowToRelationRow(raw);

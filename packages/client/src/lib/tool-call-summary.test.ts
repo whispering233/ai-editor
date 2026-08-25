@@ -1,10 +1,10 @@
-// lib/tool-call-summary 纯函数测试（决策 47，批次十四）：
+// lib/tool-call-summary 纯函数测试（批次十四）：
 // summarizeToolCall 摘要渲染（id 解析/未知工具回退/字段省略/对象值键名列表）+ collectIdCandidates 收集
 import { describe, expect, it } from "vitest";
 import { collectIdCandidates, formatValue, summarizeToolCall } from "./tool-call-summary";
 import type { ResolvedNames } from "./api";
 
-/** 解析结果 fixture（决策 47：label = 类型中文，name = 名称） */
+/** 解析结果 fixture（label = 类型中文，name = 名称） */
 const names: ResolvedNames = {
   "char-1": { label: "人物", name: "张三" },
   "sc-2": { label: "场景", name: "决斗现场" },
@@ -37,10 +37,10 @@ describe("summarizeToolCall", () => {
   });
 
   it("id 解析失败（null）→ 该字段省略；全部省略 → 仅动词短语", () => {
-    // rel-9 解析为 null → 省略字段
+ // rel-9 解析为 null → 省略字段
     const lines = summarizeToolCall("propose_remove_relation", { relation_id: "rel-9" }, names);
     expect(lines).toEqual(["移除关系"]);
-    // 未知 id 同理
+ // 未知 id 同理
     const unknown = summarizeToolCall("suggest_connections", { entity_id: "char-不存在" }, names);
     expect(unknown).toEqual(["关系发现"]);
   });
@@ -82,7 +82,7 @@ describe("summarizeToolCall", () => {
   });
 
   it("未收录字段不渲染（不泄漏裸 id）", () => {
-    // get_entity 的 fields 无 parent_id 定义 → 不渲染该字段
+ // get_entity 的 fields 无 parent_id 定义 → 不渲染该字段
     const lines = summarizeToolCall(
       "get_entity",
       { type: "character", id: "char-1", parent_id: "char-99" },

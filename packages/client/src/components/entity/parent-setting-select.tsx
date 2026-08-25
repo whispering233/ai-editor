@@ -1,9 +1,9 @@
-// 上级设定选择器（批次四 I3b，决策 30）：设定层级 = belongs_to 关系（子 → 父），
+// 上级设定选择器（批次四 I3b）：设定层级 = belongs_to 关系（子 → 父），
 // data.parent_id 已废弃——选择器候选 = 现有 setting 列表（listEntities 防抖搜索）。
 // 复用 UX3 轻量弹层模式（Popover 非模态：不打断页面，点外部/Esc 关闭）；
-// 候选 limit 100 + 名称排序，「设定数量超 100 时用搜索补位」（决策 30 性能方案，
+// 候选 limit 100 + 名称排序，「设定数量超 100 时用搜索补位」（ 性能方案，
 // 不做虚拟滚动等过度设计）。
-// 样式 token 类（layout.md §3）；文字按钮带边框（H4）。
+// 样式 token 类（）；文字按钮带边框（H4）。
 import { useEffect, useState } from "react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { Input } from "@/components/ui/input";
@@ -21,11 +21,11 @@ export function ParentSettingSelect({
   onChange,
   placeholder = "上级设定（选填）",
 }: {
-  /** 当前选中父设定 id（null = 未设置） */
+ /** 当前选中父设定 id（null = 未设置） */
   value: string | null;
-  /** 外部已知的选中显示名（详情页来自 relations 联表；缺省用候选匹配/id 兜底） */
+ /** 外部已知的选中显示名（详情页来自 relations 联表；缺省用候选匹配/id 兜底） */
   valueName?: string;
-  /** 候选排除 id（详情页排除自身；新建场景为空） */
+ /** 候选排除 id（详情页排除自身；新建场景为空） */
   excludeIds?: string[];
   onChange: (id: string | null) => void;
   placeholder?: string;
@@ -58,7 +58,7 @@ export function ParentSettingSelect({
     }
   }
 
-  // 打开时拉首屏；搜索防抖 300ms（与列表页搜索同节奏）
+ // 打开时拉首屏；搜索防抖 300ms（与列表页搜索同节奏）
   useEffect(() => {
     if (!open) return;
     void loadCandidates();
@@ -70,7 +70,7 @@ export function ParentSettingSelect({
     return () => clearTimeout(t);
   }, [q, open]);
 
-  // 触发按钮显示：选中名称（外部提供 > 候选匹配 > id 兜底）；未选中渲染占位
+ // 触发按钮显示：选中名称（外部提供 > 候选匹配 > id 兜底）；未选中渲染占位
   const displayName = value
     ? (valueName ?? candidates?.find((c) => c.id === value)?.name ?? value)
     : "";

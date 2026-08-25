@@ -1,7 +1,7 @@
 // S6.7 执行类工具测试：关系（add_relation / remove_relation）
 // 覆盖：写路径正确性（端点类型透传 / metadata 透传 / 判重 RELATION_EXISTS 抛错 /
-//   端点不存在抛错）、remove_relation **物理删**（决策 12 修订：不置 deleted_at、不进回收站）、
-//   0 行影响抛错（fail-fast）
+// 端点不存在抛错）、remove_relation **物理删**（不置 deleted_at、不进回收站）、
+// 0 行影响抛错（fail-fast）
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -113,7 +113,7 @@ describe("add_relation", () => {
     expect(() => executeAddRelation(makeCtx(), makeProposal("propose_add_relation", args))).toThrow(/关系已存在/);
   });
 
-  it("端点不存在 → 抛错（db 层端点存在性校验，决策 12）", () => {
+  it("端点不存在 → 抛错（db 层端点存在性校验，）", () => {
     expect(() =>
       executeAddRelation(
         makeCtx(),
@@ -130,7 +130,7 @@ describe("add_relation", () => {
 });
 
 describe("remove_relation", () => {
-  it("写路径：物理删除（决策 12 修订——行真删、不置 deleted_at、不进回收站）", () => {
+  it("写路径：物理删除（——行真删、不置 deleted_at、不进回收站）", () => {
     const a = createEntity(db, { type: "character", name: "甲" });
     const b = createEntity(db, { type: "character", name: "乙" });
     const rel = executeAddRelation(
@@ -146,7 +146,7 @@ describe("remove_relation", () => {
     const result = executeRemoveRelation(makeCtx(), makeProposal("propose_remove_relation", { relation_id: rel.id }));
     expect(result).toEqual({ id: rel.id, deleted: true });
     expect(getRelation(db, rel.id as string, dir)).toBeNull();
-    // 物理删：回收站（deleted_at）无该关系
+ // 物理删：回收站（deleted_at）无该关系
     expect(db.prepare("SELECT id FROM relation_records WHERE id = ?").get(rel.id)).toBeUndefined();
   });
 

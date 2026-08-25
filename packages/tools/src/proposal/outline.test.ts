@@ -1,8 +1,8 @@
 // S6.6 提案类工具测试：大纲（propose_outline_node / propose_move_node / propose_delete_node）
 // 覆盖：tool_result 仅 { proposal_id, summary } 无预览 / 完整提案结构（references 节点级
-//   updated_at 快照，决策 19）/ **不落盘**（outline.json 零变化——S6.7 对比核心差异）/
-//   严格三层层级校验（决策 19：scene 无 parent 拒绝、scene 挂卷拒绝、章挂章拒绝）/
-//   父节点不存在/软删抛错 / signal aborted
+// updated_at 快照）/ **不落盘**（outline.json 零变化——S6.7 对比核心差异）/
+// 严格三层层级校验（scene 无 parent 拒绝、scene 挂卷拒绝、章挂章拒绝）/
+// 父节点不存在/软删抛错 / signal aborted
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -89,7 +89,7 @@ describe("propose_outline_node", () => {
     expect(result.summary).toBe("新增大纲节点「第二章」（chapter，挂 vol-1）");
   });
 
-  it("完整提案结构：parent_id 缺省挂根（无引用）；指定父 → 父节点级 updated_at 快照（决策 19）", () => {
+  it("完整提案结构：parent_id 缺省挂根（无引用）；指定父 → 父节点级 updated_at 快照（）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const noParent = buildProposeOutlineNode(makeCtx(), { type: "volume", title: "第二卷" });
     expect(noParent.args).toEqual({ type: "volume", title: "第二卷" }); // 不含 parent_id
@@ -109,12 +109,12 @@ describe("propose_outline_node", () => {
     expect(findOutlineNode(tree, "ch-2")).toBeUndefined();
   });
 
-  it("严格三层（决策 19）：scene 无 parent 拒绝；scene 挂卷拒绝；章挂章拒绝", () => {
+  it("严格三层（）：scene 无 parent 拒绝；scene 挂卷拒绝；章挂章拒绝", () => {
     writeOutlineFile(dir, seedOutlineTree());
     expect(() => runProposeOutlineNode(makeCtx(), { type: "scene", title: "孤儿场景" })).toThrow(/层级非法/);
     expect(() => runProposeOutlineNode(makeCtx(), { type: "scene", title: "场景", parent_id: "vol-1" })).toThrow(/层级非法/);
     expect(() => runProposeOutlineNode(makeCtx(), { type: "chapter", title: "章", parent_id: "ch-1" })).toThrow(/层级非法/);
-    // 合法组合不抛
+ // 合法组合不抛
     expect(() => runProposeOutlineNode(makeCtx(), { type: "scene", title: "场景三", parent_id: "ch-1" })).not.toThrow();
     expect(() => runProposeOutlineNode(makeCtx(), { type: "chapter", title: "直挂根章" })).not.toThrow();
   });
@@ -128,7 +128,7 @@ describe("propose_outline_node", () => {
 });
 
 describe("propose_move_node", () => {
-  it("完整提案结构：节点 + 目标父两端点引用快照（决策 19）", () => {
+  it("完整提案结构：节点 + 目标父两端点引用快照（）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const proposal = buildProposeMoveNode(makeCtx(), { node_id: "sc-1", parent_id: "ch-1", order: 2 });
     expect(proposal.args).toEqual({ node_id: "sc-1", parent_id: "ch-1", order: 2 });
@@ -148,20 +148,20 @@ describe("propose_move_node", () => {
     expect(ch1.children!.map((c) => c.id)).toEqual(["sc-1", "sc-2"]); // 未交换
   });
 
-  it("目标父为 root（决策 19：volume/chapter 可挂根）：提案成功，快照不含 root 引用", () => {
+  it("目标父为 root（volume/chapter 可挂根）：提案成功，快照不含 root 引用", () => {
     writeOutlineFile(dir, seedOutlineTree());
-    // volume 移到树根（树首）→ 合法，references 只有节点自身（root 非引用对象）
+ // volume 移到树根（树首）→ 合法，references 只有节点自身（root 非引用对象）
     const proposal = buildProposeMoveNode(makeCtx(), { node_id: "vol-1", parent_id: "root", order: 0 });
     expect(proposal.args).toEqual({ node_id: "vol-1", parent_id: "root", order: 0 });
     expect(proposal.references).toEqual([{ kind: "outline_node", id: "vol-1", updated_at: T0 }]);
     const result = runProposeMoveNode(makeCtx(), { node_id: "vol-1", parent_id: "root", order: 0 });
     expect(Object.keys(result).sort()).toEqual(["proposal_id", "summary"]);
     expect(result.summary).toContain("树根");
-    // scene 不能挂 root（严格三层，决策 19）→ 拒绝
+ // scene 不能挂 root（严格三层）→ 拒绝
     expect(() => runProposeMoveNode(makeCtx(), { node_id: "sc-1", parent_id: "root", order: 0 })).toThrow(/层级非法/);
   });
 
-  it("目标父层级非法（决策 19）→ 抛错；节点/父不存在 → 抛错", () => {
+  it("目标父层级非法（）→ 抛错；节点/父不存在 → 抛错", () => {
     writeOutlineFile(dir, seedOutlineTree());
     expect(() => runProposeMoveNode(makeCtx(), { node_id: "sc-1", parent_id: "vol-1", order: 0 })).toThrow(/层级非法/);
     expect(() => runProposeMoveNode(makeCtx(), { node_id: "sc-999", parent_id: "ch-1", order: 0 })).toThrow(/大纲节点不存在或已软删/);
@@ -172,7 +172,7 @@ describe("propose_move_node", () => {
 });
 
 describe("propose_delete_node", () => {
-  it("完整提案结构：引用为节点级 updated_at（决策 19）；tool_result 无预览", () => {
+  it("完整提案结构：引用为节点级 updated_at（）；tool_result 无预览", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const proposal = buildProposeDeleteNode(makeCtx(), { node_id: "ch-1" });
     expect(proposal.references).toEqual([{ kind: "outline_node", id: "ch-1", updated_at: T0 }]);
@@ -182,7 +182,7 @@ describe("propose_delete_node", () => {
     expect(result.summary).toContain("删除大纲节点「第一章」");
   });
 
-  it("不落盘：调用后节点仍存在且未标软删（决策 12：软删是执行时才发生）", () => {
+  it("不落盘：调用后节点仍存在且未标软删（软删是执行时才发生）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     runProposeDeleteNode(makeCtx(), { node_id: "ch-1" });
     const node = findOutlineNode(readOutlineFile(dir), "ch-1")!;
@@ -197,7 +197,7 @@ describe("propose_delete_node", () => {
   });
 });
 
-describe("signal aborted（决策 16 ③）", () => {
+describe("signal aborted（）", () => {
   it("三个大纲提案工具在 signal 已中止时抛 AbortedError", () => {
     const controller = new AbortController();
     controller.abort();

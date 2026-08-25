@@ -1,6 +1,5 @@
-// 参考资料专属路由（决策 43，批次十一）：扫描重建索引端点
+// 参考资料专属路由（批次十一）：扫描重建索引端点
 //
-// 契约来源：doc/api/endpoints.md「POST /api/v1/reference/scan」、决策 43（文件 = 真相源，
 // DB 索引 = 派生镜像；mtime 快照比对幂等全量）。实体 CRUD 走泛型 /api/v1/entity/reference
 // （文件联动在 routes/entity.ts + routes/trash.ts 内部完成），本路由只承载参考资料专属端点。
 import { Hono } from "hono";

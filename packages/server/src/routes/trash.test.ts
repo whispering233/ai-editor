@@ -1,6 +1,6 @@
 // 回收站路由测试（S4.3）：实体侧 restore/purge + GET 列表 entities 填充
 // 覆盖：列表 entities 字段（deletedAt camelCase 透传）、restore 计数与级联可见性恢复、
-//       purge 未软删 400 拦截 + 物理清除、404 残留请求、非法 type 400。
+// purge 未软删 400 拦截 + 物理清除、404 残留请求、非法 type 400。
 // 大纲侧端点行为由 outline.test.ts 既有用例覆盖（同一 trashRoutes 实例，此处仅挂载确认不冲突）。
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -127,7 +127,7 @@ describe("POST /api/v1/trash/entity/:type/:id/restore", () => {
     seedRelation(a, b);
     seedDelta(a);
     await app.request(`/api/v1/entity/character/${a}`, { method: "DELETE", headers: HOST_HEADERS }); // 软删 + 级联
-    // 软删后：常规查询不可见、回收站可见
+ // 软删后：常规查询不可见、回收站可见
     expect((await app.request(`/api/v1/entity/character/${a}`, { headers: HOST_HEADERS })).status).toBe(404);
     const trash = await app.request("/api/v1/trash", { headers: HOST_HEADERS });
     expect(((await trash.json()) as { data: { entities: unknown[] } }).data.entities).toHaveLength(1);
@@ -141,13 +141,13 @@ describe("POST /api/v1/trash/entity/:type/:id/restore", () => {
       success: true,
       data: { restored: true, restoredRelations: 1, restoredDeltas: 1 },
     });
-    // 实体恢复可见（详情联查关系与 deltaCount）
+ // 实体恢复可见（详情联查关系与 deltaCount）
     const detail = await app.request(`/api/v1/entity/character/${a}`, { headers: HOST_HEADERS });
     expect(detail.status).toBe(200);
     const detailBody = (await detail.json()) as { data: { relations: unknown[]; deltaCount: number } };
     expect(detailBody.data.relations).toHaveLength(1); // 级联关系恢复可见
     expect(detailBody.data.deltaCount).toBe(1); // 级联 Delta 恢复可见
-    // 回收站清空（还原后移出）
+ // 回收站清空（还原后移出）
     const after = await app.request("/api/v1/trash", { headers: HOST_HEADERS });
     expect(((await after.json()) as { data: { entities: unknown[] } }).data.entities).toEqual([]);
   });
@@ -184,7 +184,7 @@ describe("DELETE /api/v1/trash/entity/:type/:id（purge）", () => {
     const res = await app.request(`/api/v1/trash/entity/character/${id}`, { method: "DELETE", headers: HOST_HEADERS });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: { code: string } }).error.code).toBe("VALIDATION_ERROR");
-    // 实体仍在（常规查询可见，未被误清）
+ // 实体仍在（常规查询可见，未被误清）
     expect((await app.request(`/api/v1/entity/character/${id}`, { headers: HOST_HEADERS })).status).toBe(200);
   });
 
@@ -200,15 +200,15 @@ describe("DELETE /api/v1/trash/entity/:type/:id（purge）", () => {
     const res = await app.request(`/api/v1/trash/entity/character/${a}`, { method: "DELETE", headers: HOST_HEADERS });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ success: true, data: { purged: true } });
-    // 本体物理清除：常规查询 404
+ // 本体物理清除：常规查询 404
     expect((await app.request(`/api/v1/entity/character/${a}`, { headers: HOST_HEADERS })).status).toBe(404);
-    // 关联关系物理清除：b 的详情不再有该关系
+ // 关联关系物理清除：b 的详情不再有该关系
     const bDetail = await app.request(`/api/v1/entity/character/${b}`, { headers: HOST_HEADERS });
     expect(((await bDetail.json()) as { data: { relations: unknown[] } }).data.relations).toEqual([]);
-    // 回收站清空
+ // 回收站清空
     const trash = await app.request("/api/v1/trash", { headers: HOST_HEADERS });
     expect(((await trash.json()) as { data: { entities: unknown[] } }).data.entities).toEqual([]);
-    // 残留请求（对象已被 purge）：restore 与 purge 均 404
+ // 残留请求（对象已被 purge）：restore 与 purge 均 404
     const staleRestore = await app.request(`/api/v1/trash/entity/character/${a}/restore`, {
       method: "POST",
       headers: HOST_HEADERS,

@@ -39,7 +39,7 @@ describe("truncate", () => {
 });
 
 describe("maskApiKey", () => {
-  it("长 key：保留前 3 后 4，中间掩码（endpoints.md 示例 sk-****1234）", () => {
+  it("长 key：保留前 3 后 4，中间掩码", () => {
     expect(maskApiKey("sk-abcdefgh1234")).toBe("sk-****1234");
     expect(maskApiKey("sk-1234567890abcdef")).toBe("sk-****cdef");
   });

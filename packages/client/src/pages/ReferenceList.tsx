@@ -1,13 +1,13 @@
-// 参考资料列表页（决策 36 + 决策 43 批次十一；references.md）
+// 参考资料列表页（ 批次十一；）
 // 卡 11.1 交互重构 + 卡 11.4 新建分流：
-//   - 点击标题 = 行内编辑（Enter 提交 / Esc 取消 / 失焦保存，决策 37/38 模式）
-//   - 双击行 = 进详情页（编辑态/按钮区不触发）
-//   - 移除 Pencil 编辑按钮与编辑 Dialog（B1 异步回填竞态根除——完整编辑收敛到详情页）
-//   - 行信息 = [标题、分类徽标、标签、来源]（来源列 11.4 起按 kind：file → 相对路径、link → URL 可点击）
-//   - 新建入口分流两按钮（11.4）：「新建 md 文档」→ #/references/new/md、「新建外源链接」→ #/references/new/link
-//   - 保留删除按钮、右键菜单（决策 40 复用）
+// - 点击标题 = 行内编辑（Enter 提交 / Esc 取消 / 失焦保存， 模式）
+// - 双击行 = 进详情页（编辑态/按钮区不触发）
+// - 移除 Pencil 编辑按钮与编辑 Dialog（B1 异步回填竞态根除——完整编辑收敛到详情页）
+// - 行信息 = [标题、分类徽标、标签、来源]（来源列 11.4 起按 kind：file → 相对路径、link → URL 可点击）
+// - 新建入口分流两按钮（11.4）：「新建 md 文档」→ #/references/new/md、「新建外源链接」→ #/references/new/link
+// - 保留删除按钮、右键菜单（ 复用）
 // 数据：listEntities("reference", { limit: 200 }) 一次全量拉取（参考资料量小），
-//   分类/标签/关键词过滤在前端（列表摘要 summary.type/tags/kind/file_name/url 由 db toSummary 提供）
+// 分类/标签/关键词过滤在前端（列表摘要 summary.type/tags/kind/file_name/url 由 db toSummary 提供）
 import { useEffect, useMemo, useState } from "react";
 import type { MouseEvent } from "react";
 import { ExternalLink, FileText, Link2, Loader2, RefreshCw, Search, Trash2 } from "lucide-react";
@@ -24,7 +24,7 @@ import { Button } from "../components/ui/button";
 import { RowContextMenu } from "../components/entity/row-context-menu";
 import { EmptyState } from "../components/ui/empty-state";
 
-/** 分类回显映射（决策 44：**仅存量显示**——material 等旧枚举值回显中文名，非可选建议；新自定义分类无映射原样显示） */
+/** 分类回显映射（**仅存量显示**——material 等旧枚举值回显中文名，非可选建议；新自定义分类无映射原样显示） */
 const TYPE_LABELS: Record<string, string> = {
   material: "素材摘抄",
   inspiration: "灵感记录",
@@ -39,17 +39,17 @@ export default function ReferenceList() {
   const [reloadTick, setReloadTick] = useState(0);
   useDataRefresh(() => setReloadTick((t) => t + 1));
 
-  // 筛选状态
+ // 筛选状态
   const [keyword, setKeyword] = useState("");
   const [activeType, setActiveType] = useState<string | "all">("all");
   const [activeTag, setActiveTag] = useState<string | null>(null);
 
-  // 扫描同步（决策 43 N6）：unsynced = 未同步文件数（null = 未探测/无项目）；
-  // 列表加载/刷新时只读探测（无副作用），>0 显示提示条引导扫描
+ // 扫描同步（ N6）：unsynced = 未同步文件数（null = 未探测/无项目）；
+ // 列表加载/刷新时只读探测（无副作用），>0 显示提示条引导扫描
   const [scanBusy, setScanBusy] = useState(false);
   const [unsynced, setUnsynced] = useState<number | null>(null);
 
-  // 探测未同步文件（数据刷新后重跑——本地新增/外部修改后列表刷新即重新提示）
+ // 探测未同步文件（数据刷新后重跑——本地新增/外部修改后列表刷新即重新提示）
   useEffect(() => {
     if (config === null) {
       setUnsynced(null);
@@ -68,7 +68,7 @@ export default function ReferenceList() {
     };
   }, [config, reloadTick]);
 
-  /** 扫描重建索引（POST /scan → toast 统计 + 刷新列表 + 清提示条） */
+ /** 扫描重建索引（POST /scan → toast 统计 + 刷新列表 + 清提示条） */
   async function handleScan() {
     if (scanBusy) return;
     setScanBusy(true);
@@ -95,7 +95,7 @@ export default function ReferenceList() {
     }
   }
 
-  // 数据加载
+ // 数据加载
   useEffect(() => {
     let cancelled = false;
     setItems(null);
@@ -112,7 +112,7 @@ export default function ReferenceList() {
     };
   }, [reloadTick]);
 
-  // 聚合标签池（列表摘要 tags 前 3 个 —— 为覆盖全量已用 limit 200 拉取）
+ // 聚合标签池（列表摘要 tags 前 3 个 —— 为覆盖全量已用 limit 200 拉取）
   const tagPool = useMemo(() => {
     const set = new Set<string>();
     for (const it of items ?? []) {
@@ -123,7 +123,7 @@ export default function ReferenceList() {
     return [...set].sort((a, b) => a.localeCompare(b));
   }, [items]);
 
-  // 聚合分类池（决策 44：筛选下拉选项 = 项目内已用分类，无预置枚举）
+ // 聚合分类池（筛选下拉选项 = 项目内已用分类，无预置枚举）
   const typePool = useMemo(() => {
     const set = new Set<string>();
     for (const it of items ?? []) {
@@ -133,7 +133,7 @@ export default function ReferenceList() {
     return [...set].sort((a, b) => a.localeCompare(b));
   }, [items]);
 
-  // 过滤后可见列表：分类 + 标签 + 关键词（前端过滤，列表量小）
+ // 过滤后可见列表：分类 + 标签 + 关键词（前端过滤，列表量小）
   const visible = useMemo(() => {
     if (items === null) return null;
     const kw = keyword.trim().toLowerCase();
@@ -155,7 +155,7 @@ export default function ReferenceList() {
       .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
   }, [items, keyword, activeType, activeTag]);
 
-  /** 行内编辑标题提交（决策 43：点击标题行内编辑，PUT name；失败 toast 后 rethrow——组件保持编辑态 + 保留输入值，对齐时间轴 editFailureRecovery） */
+ /** 行内编辑标题提交（点击标题行内编辑，PUT name；失败 toast 后 rethrow——组件保持编辑态 + 保留输入值，对齐时间轴 editFailureRecovery） */
   async function handleRename(id: string, name: string) {
     try {
       await updateEntity("reference", id, { name });
@@ -250,7 +250,7 @@ export default function ReferenceList() {
         </select>
       </div>
 
-      {/* 未同步提示条（决策 43 N6）：检测到本地新增/外部修改 → 引导扫描（只读探测无副作用） */}
+      {/* 未同步提示条（ N6）：检测到本地新增/外部修改 → 引导扫描（只读探测无副作用） */}
       {unsynced !== null && unsynced > 0 && (
         <div className="mb-2 flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
           <RefreshCw className="size-3.5 shrink-0 text-primary" />
@@ -343,24 +343,24 @@ export default function ReferenceList() {
 
 interface RefRowProps {
   item: EntitySummary;
-  /** 行内编辑标题提交（页面 PUT name + 刷新；失败 rethrow——组件保持编辑态） */
+ /** 行内编辑标题提交（页面 PUT name + 刷新；失败 rethrow——组件保持编辑态） */
   onRename: (id: string, name: string) => Promise<void>;
   onDelete: (item: EntitySummary) => void;
-  /** 双击行进详情页 */
+ /** 双击行进详情页 */
   onGoto: () => void;
-  /** 建立关联成功后的数据刷新（页面 reloadTick+1） */
+ /** 建立关联成功后的数据刷新（页面 reloadTick+1） */
   onRelationCreated: () => void;
 }
 
-/** 列表行（决策 43 卡 11.1 + 11.4 + 批次十二 R3 表格平铺）：单行 tr，四列 [标题（点击行内编辑）、分类、标签、来源] + 删除；
+/** 列表行（ 卡 11.1 + 11.4 + 批次十二 R3 表格平铺）：单行 tr，四列 [标题（点击行内编辑）、分类、标签、来源] + 删除；
  * 来源列按 kind 渲染（11.4）：file → 相对路径文本、link → URL 可点击（存量无 kind 条目 → source 兼容）；
- * 双击行 = 进详情页；右键菜单 [注入会话上下文、建立关联] 复用决策 40 */
+ * 双击行 = 进详情页；右键菜单 [注入会话上下文、建立关联] 复用 */
 function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowProps) {
   const type = (item.summary?.type as string | undefined) ?? "material";
   const tags = Array.isArray(item.summary?.tags)
     ? (item.summary?.tags as string[]).filter((t): t is string => typeof t === "string" && t !== "")
     : [];
-  // 来源：file → references/<file_name> 相对路径（文本）；link → url（可点击）；存量 → source 文本兼容
+ // 来源：file → references/<file_name> 相对路径（文本）；link → url（可点击）；存量 → source 文本兼容
   const isFile = item.summary?.kind === "file";
   const source = isFile
     ? `references/${typeof item.summary?.file_name === "string" ? (item.summary.file_name as string) : ""}`
@@ -370,19 +370,19 @@ function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowP
         ? (item.summary.source as string)
         : "";
 
-  // 标题行内编辑（决策 43：点击标题进入，Enter 提交 / Esc 取消 / 失焦保存；对齐时间轴 TimelineEvent 模式）
+ // 标题行内编辑（点击标题进入，Enter 提交 / Esc 取消 / 失焦保存；对齐时间轴 TimelineEvent 模式）
   const [editing, setEditing] = useState(false);
   const [nameValue, setNameValue] = useState("");
   const [saving, setSaving] = useState(false);
 
-  /** 点击标题进入行内编辑（预填当前名） */
+ /** 点击标题进入行内编辑（预填当前名） */
   function startEdit() {
     setNameValue(item.name);
     setEditing(true);
   }
 
-  /** Enter/失焦提交：trim 后空/未变 → 退出编辑不发请求；saving 守卫防 Enter+blur 双提交；
-   * 失败保持编辑态 + 保留输入值（页面已 toast，此处 catch 吞掉防 unhandled rejection） */
+ /** Enter/失焦提交：trim 后空/未变 → 退出编辑不发请求；saving 守卫防 Enter+blur 双提交；
+ * 失败保持编辑态 + 保留输入值（页面已 toast，此处 catch 吞掉防 unhandled rejection） */
   async function commitEdit() {
     if (saving) return;
     const name = nameValue.trim();
@@ -395,14 +395,14 @@ function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowP
       await onRename(item.id, name);
       setEditing(false);
     } catch {
-      // 失败保持编辑态（setEditing(false) 未执行）+ 输入值保留，可修正后重试
+ // 失败保持编辑态（setEditing(false) 未执行）+ 输入值保留，可修正后重试
     } finally {
       setSaving(false);
     }
   }
 
-  /** 行双击（决策 43）：双击 = 详情；冲突防护：双击标题 = 编辑（第一击已把 span 换成输入框，
-   * dblclick target 是输入框被 closest 拦截；极端时序由 editing 守卫拦截）；双击按钮区不跳详情 */
+ /** 行双击：双击 = 详情；冲突防护：双击标题 = 编辑（第一击已把 span 换成输入框，
+ * dblclick target 是输入框被 closest 拦截；极端时序由 editing 守卫拦截）；双击按钮区不跳详情 */
   function handleRowDoubleClick(e: MouseEvent<HTMLDivElement>) {
     if ((e.target as HTMLElement).closest("button, input, a")) return;
     if (editing) return;

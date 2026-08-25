@@ -1,14 +1,13 @@
 // 大纲路由（S2.2）：GET/POST /outline、PUT /outline/:nodeId、PUT move、DELETE、GET path
 //
-// 契约来源：doc/api/endpoints.md 第 516-657 行（大纲操作）、决策 12（软删/级联）、决策 19（严格三层）。
-// 错误映射（db OutlineError → HttpError，对照 endpoints.md 错误码）：
-//   NODE_NOT_FOUND             → 404 OUTLINE_NODE_NOT_FOUND
-//   PARENT_NOT_FOUND           → 400 OUTLINE_NODE_NOT_FOUND（父不存在是参数问题，非资源访问）
-//   INVALID_HIERARCHY          → 400 VALIDATION_ERROR（严格三层违反）
-//   OUTLINE_ANCESTOR_DELETED   → 409 OUTLINE_ANCESTOR_DELETED（决策 12 修订）
+// 错误映射（db OutlineError → HttpError，对照 错误码）：
+// NODE_NOT_FOUND → 404 OUTLINE_NODE_NOT_FOUND
+// PARENT_NOT_FOUND → 400 OUTLINE_NODE_NOT_FOUND（父不存在是参数问题，非资源访问）
+// INVALID_HIERARCHY → 400 VALIDATION_ERROR（严格三层违反）
+// OUTLINE_ANCESTOR_DELETED → 409 OUTLINE_ANCESTOR_DELETED
 // 说明：级联还原/物理清除（cascadeRestore/cascadePurge）已下沉 db 包 queries/trash.ts（S4.1）；
-//   级联软删（cascadeSoftDelete）保留在路由层——与软删端点同文件内联，S4.1 任务边界只下沉
-//   还原/清除两个 helper（trash.ts 路由直接 import @whispering233/ai-editor-db）。
+// 级联软删（cascadeSoftDelete）保留在路由层——与软删端点同文件内联，S4.1 任务边界只下沉
+// 还原/清除两个 helper（trash.ts 路由直接 import @whispering233/ai-editor-db）。
 import { Hono } from "hono";
 import type { Db } from "@whispering233/ai-editor-db";
 import { findOutlineNode, readOutlineFile } from "@whispering233/ai-editor-db";
@@ -37,7 +36,7 @@ import { requireCurrentProject } from "../middleware/project.js";
 export const outlineRoutes = new Hono();
 
 /**
- * 按节点层级精确校验 data（决策 23：麦基字段集，OUTLINE_NODE_DATA_SCHEMAS；
+ * 按节点层级精确校验 data（麦基字段集，OUTLINE_NODE_DATA_SCHEMAS；
  * 宽松 record 之外的精校验，与 entity.ts validateDataByType 同构；
  * 失败 → errorHandler → 400 VALIDATION_ERROR（含 fields））
  */
@@ -48,7 +47,7 @@ function validateNodeData(type: Exclude<OutlineNodeType, "root">, data: Record<s
   }
 }
 
-/** 递归过滤软删节点（决策 12：常规查询默认过滤；deleted 节点整棵子树丢弃） */
+/** 递归过滤软删节点（常规查询默认过滤；deleted 节点整棵子树丢弃） */
 function filterDeletedTree(tree: OutlineFileTree): OutlineFileTree {
   const filterNodes = (nodes: readonly OutlineFileNode[]): OutlineFileNode[] =>
     nodes
@@ -57,8 +56,8 @@ function filterDeletedTree(tree: OutlineFileTree): OutlineFileTree {
         const kids = (n as { children?: OutlineFileNode[] }).children;
         return (kids === undefined ? { ...n } : { ...n, children: filterNodes(kids) }) as OutlineFileNode;
       });
-  // 递归产物为宽 OutlineFileNode[]，结构上满足严格三层（输入树合法 ⇒ 过滤后仍合法），
-  // 此处断言收窄回 OutlineFileTree（storage 形态判别联合的已知递归映射限制）
+ // 递归产物为宽 OutlineFileNode[]，结构上满足严格三层（输入树合法 ⇒ 过滤后仍合法），
+ // 此处断言收窄回 OutlineFileTree（storage 形态判别联合的已知递归映射限制）
   return { ...tree, children: filterNodes(tree.children) } as OutlineFileTree;
 }
 
@@ -84,7 +83,7 @@ export function inPlaceholders(ids: string[]): string {
 }
 
 /**
- * 级联软删该节点及子树关联的 relation/delta（决策 12：任一端点软删即不可见）：
+ * 级联软删该节点及子树关联的 relation/delta（任一端点软删即不可见）：
  * - relations：source 或 target 命中子树任一节点 → 标 deleted_at（含 plot_edge 画布连线）
  * - deltas：node_id 命中子树任一节点 → 标 deleted_at
  * 返回 { relations, deltas } 实际级联数（UPDATE.changes）。
@@ -110,8 +109,8 @@ outlineRoutes.get("/", (c) => {
     throw query.error;
   }
   const tree = readOutlineFile(project.root);
-  // shared 映射（oracle 回修后支持决策 19「chapter 直挂 root」——换回 mapOutlineFileToTree，
-  // 删除 S2.2 的自写 mapTreeToApi 绕过）
+ // shared 映射（oracle 回修后支持「chapter 直挂 root」——换回 mapOutlineFileToTree，
+ // 删除 S2.2 的自写 mapTreeToApi 绕过）
   const apiTree = mapOutlineFileToTree(filterDeletedTree(tree));
   if (query.data.with_metadata === true) {
     attachMetadata(apiTree, project.db);
@@ -120,11 +119,11 @@ outlineRoutes.get("/", (c) => {
 });
 
 /**
- * with_metadata 联查统计（跨 outline.json × data.db，endpoints.md 第 523 行）：
- * - hookCount：该节点出发的伏笔管理关系（plants/advances/resolves，source=outline_node → hook，hooks.md）
- * - charCount：appears_in 指向该节点的关系数（决策 2 示例：char → 大纲节点）
+ * with_metadata 联查统计（跨 outline.json × data.db，）：
+ * - hookCount：该节点出发的伏笔管理关系（plants/advances/resolves，source=outline_node → hook，）
+ * - charCount：appears_in 指向该节点的关系数（ 示例：char → 大纲节点）
  * - deltaCount：该节点触发的 Delta 数（delta_records.node_id）
- * 均为运行时计算，不写回数据（决策 21 _health 同款口径）。
+ * 均为运行时计算，不写回数据（ _health 同款口径）。
  */
 function attachMetadata(tree: OutlineTree, db: Db): void {
   const hookStmt = db.prepare(
@@ -152,7 +151,7 @@ function attachMetadata(tree: OutlineTree, db: Db): void {
   for (const vol of tree.children) visit(vol);
 }
 
-// POST /api/v1/outline —— 创建节点（严格三层，parent_id 必填，决策 19；data 按层级精校验，决策 23）
+// POST /api/v1/outline —— 创建节点（严格三层，parent_id 必填，；data 按层级精校验）
 outlineRoutes.post("/", async (c) => {
   const project = requireCurrentProject();
   const raw = await c.req.json().catch(() => null);
@@ -182,7 +181,7 @@ outlineRoutes.post("/", async (c) => {
   );
 });
 
-// PUT /api/v1/outline/:nodeId —— 更新标题/描述/结构化 data（data 部分合并，决策 23）
+// PUT /api/v1/outline/:nodeId —— 更新标题/描述/结构化 data（data 部分合并）
 outlineRoutes.put("/:nodeId", async (c) => {
   const project = requireCurrentProject();
   const raw = await c.req.json().catch(() => null);
@@ -191,7 +190,7 @@ outlineRoutes.put("/:nodeId", async (c) => {
     throw parsed.error;
   }
   const nodeId = c.req.param("nodeId");
-  // data 精校验需要节点实际层级（请求体不含 type）：先定位节点（404 语义），再按层级校验
+ // data 精校验需要节点实际层级（请求体不含 type）：先定位节点（404 语义），再按层级校验
   if (parsed.data.data !== undefined) {
     const node = findOutlineNode(readOutlineFile(project.root), nodeId);
     if (node === undefined) {
@@ -229,21 +228,21 @@ outlineRoutes.put("/:nodeId/move", async (c) => {
   return c.json(ok({ moved: true as const, ...result }));
 });
 
-// DELETE /api/v1/outline/:nodeId —— 软删 + 递归级联（决策 12）
-// 写序（决策 16）：**先 DB 后 JSON**——先级联软删 relation/delta，再原子写 outline.json；
+// DELETE /api/v1/outline/:nodeId —— 软删 + 递归级联
+// 写序：**先 DB 后 JSON**——先级联软删 relation/delta，再原子写 outline.json；
 // 崩溃残留方向（DB 已级联、JSON 未标，节点未标 deleted）：无法从 DB 记录可靠反推
 // （实体侧级联会软删节点↔实体关系而节点仍存活），不在 S4.2 补标范围；
 // S4.2 启动一致性校验（consistency.ts）兜底幽灵反向：节点已软删而关联 relation/delta
-// 未软删 → 以节点软删为准补标 DB 记录（决策 16 修订，幂等自愈）
+// 未软删 → 以节点软删为准补标 DB 记录（幂等自愈）
 outlineRoutes.delete("/:nodeId", (c) => {
   const project = requireCurrentProject();
   const nodeId = c.req.param("nodeId");
   const tree = readOutlineFile(project.root);
   const subtreeIds = collectSubtreeIds(tree, nodeId); // 404 语义
   const deletedAt = nowIso();
-  // 1. DB 级联软删关联关系与 Delta（决策 12：节点/端点软删即不可见）
+ // 1. DB 级联软删关联关系与 Delta（节点/端点软删即不可见）
   const { relations, deltas } = cascadeSoftDelete(project.db, subtreeIds, deletedAt);
-  // 2. JSON 原子写（软删节点 + 递归子树，决策 19 版本戳）
+ // 2. JSON 原子写（软删节点 + 递归子树， 版本戳）
   let children: number;
   try {
     children = deleteOutlineNode(project.root, nodeId, deletedAt).children;
@@ -267,7 +266,7 @@ outlineRoutes.get("/:nodeId/path", (c) => {
   return c.json(ok({ nodeId, path }));
 });
 
-/** OutlineError → HttpError 映射（对照 endpoints.md 错误码，文件头注释表） */
+/** OutlineError → HttpError 映射（对照 错误码，文件头注释表） */
 export function mapOutlineError(err: unknown): never {
   if (err instanceof OutlineError) {
     switch (err.code) {

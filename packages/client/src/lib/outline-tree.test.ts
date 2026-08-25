@@ -1,5 +1,5 @@
-// outline-tree 纯函数测试（S2.3 + 就地编辑 S2.4）：父节点过滤（决策 19）、子节点查找、
-//   拖拽移动合法性（canMoveTo/isDescendant）、行内编辑提交判定
+// outline-tree 纯函数测试（S2.3 + 就地编辑 S2.4）：父节点过滤、子节点查找、
+// 拖拽移动合法性（canMoveTo/isDescendant）、行内编辑提交判定
 import { describe, expect, it } from "vitest";
 import type { OutlineNode } from "@whispering233/ai-editor-shared";
 import {
@@ -53,7 +53,7 @@ const tree: OutlineNode[] = [
   },
 ];
 
-describe("parentOptionsForType（父节点按类型过滤，决策 19）", () => {
+describe("parentOptionsForType（父节点按类型过滤，）", () => {
   it("volume → 仅 root（严格三层：卷只能挂根）", () => {
     expect(parentOptionsForType(tree, "volume")).toEqual([ROOT_PARENT_OPTION]);
   });
@@ -82,7 +82,7 @@ describe("parentOptionsForType（父节点按类型过滤，决策 19）", () =>
     expect(parentOptionsForType([], "volume")).toEqual([ROOT_PARENT_OPTION]);
   });
 
-  it("scene 不收集挂在 root 下的 chapter（决策 19 合法场景）", () => {
+  it("scene 不收集挂在 root 下的 chapter（ 合法场景）", () => {
     const flat: OutlineNode[] = [
       { id: "ch-9", type: "chapter", title: "根下章", updatedAt: "t0" },
       ...tree,
@@ -237,7 +237,7 @@ describe("flattenTree（大纲节点选择器选项，S3.6）", () => {
 });
 
 describe("dropInsertOrder（拖拽插入位置 → order，S13.1）", () => {
-  /** tree[0] = 卷1（children: [ch-1, ch-2]）——索引访问不做判别收窄，显式断言 */
+ /** tree[0] = 卷1（children: [ch-1, ch-2]）——索引访问不做判别收窄，显式断言 */
   const children = ((tree[0] as { children?: OutlineNode[] }).children ?? []) as OutlineNode[];
 
   it("before = 目标 index；after = index + 1；end = children.length", () => {
@@ -254,13 +254,13 @@ describe("dropInsertOrder（拖拽插入位置 → order，S13.1）", () => {
   });
 
   it("excludeId：剔除拖拽节点后计算（oracle M1 方案 B——同父重排不错位）", () => {
-    // [ch-1, ch-2] 剔除 ch-2 后 = [ch-1]：after ch-1 → 1（= ch-2 当前 index → 原地）
+ // [ch-1, ch-2] 剔除 ch-2 后 = [ch-1]：after ch-1 → 1（= ch-2 当前 index → 原地）
     expect(dropInsertOrder(children, { kind: "after", nodeId: "ch-1" }, "ch-2")).toBe(1);
-    // 剔除 ch-2 后 = [ch-1]：before ch-1 → 0（= 移到最前）
+ // 剔除 ch-2 后 = [ch-1]：before ch-1 → 0（= 移到最前）
     expect(dropInsertOrder(children, { kind: "before", nodeId: "ch-1" }, "ch-2")).toBe(0);
-    // 剔除 ch-1 后 = [ch-2]：after ch-2 → 1（末尾）
+ // 剔除 ch-1 后 = [ch-2]：after ch-2 → 1（末尾）
     expect(dropInsertOrder(children, { kind: "after", nodeId: "ch-2" }, "ch-1")).toBe(1);
-    // 交叉父/锚点不在 children：剔除无效果（行为与不传一致）
+ // 交叉父/锚点不在 children：剔除无效果（行为与不传一致）
     expect(dropInsertOrder(children, { kind: "before", nodeId: "ch-2" }, "ghost")).toBe(1);
     expect(dropInsertOrder(children, { kind: "end" }, "ch-1")).toBe(1);
   });
@@ -296,7 +296,7 @@ describe("findParentIdOf / findNodePosition（拖拽目标父与原地判定，S
     expect(findParentIdOf(tree, "ghost")).toBe(null);
   });
 
-  it("findParentIdOf：root 直挂章（决策 19 chapter 可挂 root）", () => {
+  it("findParentIdOf：root 直挂章（ chapter 可挂 root）", () => {
     const rootChapter: OutlineNode = {
       id: "ch-9",
       type: "chapter",
@@ -318,8 +318,8 @@ describe("findParentIdOf / findNodePosition（拖拽目标父与原地判定，S
 });
 
 describe("isNoopDrop（原地放置判定，S13.1 oracle M1 方案 B 修订）", () => {
-  // children [ch-1, ch-2] 在 vol-1 下；ch-1 index 0、ch-2 index 1；
-  // order 语义 = 剔除拖拽节点后的插入位置（dropInsertOrder 第三参）——order === 当前 index 即原地
+ // children [ch-1, ch-2] 在 vol-1 下；ch-1 index 0、ch-2 index 1；
+ // order 语义 = 剔除拖拽节点后的插入位置（dropInsertOrder 第三参）——order === 当前 index 即原地
   it("同父且 order === 当前 index → 原地", () => {
     expect(isNoopDrop(tree, "ch-1", "vol-1", 0)).toBe(true);
     expect(isNoopDrop(tree, "ch-2", "vol-1", 1)).toBe(true);
@@ -339,7 +339,7 @@ describe("isNoopDrop（原地放置判定，S13.1 oracle M1 方案 B 修订）",
 });
 
 describe("同父重排端到端模拟（oracle S1：dropInsertOrder → isNoopDrop → 服务端 remove-then-insert）", () => {
-  /** 四兄弟 [a,b,c,d] 挂卷 vol-x 下（≥3 兄弟才能暴露 pre-removal 数组 off-by-one，oracle M1） */
+ /** 四兄弟 [a,b,c,d] 挂卷 vol-x 下（≥3 兄弟才能暴露 pre-removal 数组 off-by-one，oracle M1） */
   const four: OutlineNode[] = [
     { id: "a", type: "chapter", title: "A", updatedAt: "t0" },
     { id: "b", type: "chapter", title: "B", updatedAt: "t0" },
@@ -350,13 +350,13 @@ describe("同父重排端到端模拟（oracle S1：dropInsertOrder → isNoopDr
     { id: "vol-x", type: "volume", title: "卷", updatedAt: "t0", children: four },
   ] as OutlineNode[];
 
-  /**
-   * 模拟完整拖放链（与 Outline.tsx handleDrop 同逻辑）：
-   * 1) 锚点 = 拖拽节点自身 → 原地（handleDrop 提前拦截——剔除后锚点消失会误回退末尾）
-   * 2) dropInsertOrder(children, insert, dragId)（剔除拖拽节点）
-   * 3) isNoopDrop 判定 → 原地则返回原序
-   * 4) 服务端语义：从 children 移除 dragId 后插入 order（越界 clamp）→ 断言最终顺序
-   */
+ /**
+ * 模拟完整拖放链（与 Outline.tsx handleDrop 同逻辑）：
+ * 1) 锚点 = 拖拽节点自身 → 原地（handleDrop 提前拦截——剔除后锚点消失会误回退末尾）
+ * 2) dropInsertOrder(children, insert, dragId)（剔除拖拽节点）
+ * 3) isNoopDrop 判定 → 原地则返回原序
+ * 4) 服务端语义：从 children 移除 dragId 后插入 order（越界 clamp）→ 断言最终顺序
+ */
   function simulateDrop(dragId: string, insert: DropInsert): string[] {
     const children = (findNodeChildren(tree4, "vol-x") ?? []) as OutlineNode[];
     if (insert.kind !== "end" && insert.nodeId === dragId) {

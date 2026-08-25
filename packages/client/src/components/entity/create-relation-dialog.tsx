@@ -1,12 +1,12 @@
-// 建立关联对话框（U8 抽共用；契约 doc/ui/pages/entity-detail.md「新增关联」+ entity-list.md「关联 Tab」）
+// 建立关联对话框（U8 抽共用；「新增关联」+ 「关联 Tab」）
 // 两模式：
 // - 详情模式（source 非 null）：源固定为本端点——实体详情页「本实体：{name}」、大纲节点详情页（S12.2）
-//   「本节点：{name}」（source.type 支持 outline_node，schema.md 端点类型），方向「本端点 → 关联对象」
+// 「本节点：{name}」（source.type 支持 outline_node， 端点类型），方向「本端点 → 关联对象」
 // - 列表模式（source 为 null）：暴露源实体选择（类型下拉默认 character + 实体下拉 listEntities limit 100），方向「源 → 目标」
 // 目标端类型支持四类实体 + 大纲节点（outline store 树，无需请求）；409 RELATION_EXISTS → 内联「这条关系已经存在」；
-// 成功 → toast「已建立关系」→ onCreated() → onClose()。样式 token 类（layout.md §3）。
+// 成功 → toast「已建立关系」→ onCreated → onClose。样式 token 类（）。
 // 布局：左右三段式「源 -关系-> 目标」——grid-cols-[1fr_auto_1fr]（sm 起），窄屏垂直堆叠；
-//   中列关系类型下拉 + 「→」箭头（mt-auto 沉底对齐两端实体下拉），三列各有小标题（源实体/关系类型/目标实体）。
+// 中列关系类型下拉 + 「→」箭头（mt-auto 沉底对齐两端实体下拉），三列各有小标题（源实体/关系类型/目标实体）。
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { ENTITY_TYPES, RELATION_TYPES } from "@whispering233/ai-editor-shared";
@@ -30,11 +30,11 @@ const TYPE_LABEL: Record<EntityType, string> = {
   setting: "设定",
   location: "地点",
   hook: "伏笔",
-  // C1 类型补全（决策 26 event 时间轴事件；时间轴专属 UI 由 C2 实现）
+ // C1 类型补全（ event 时间轴事件；时间轴专属 UI 由 C2 实现）
   event: "事件",
-  // G2.3 类型补全（G2 时间标签点；源端下拉随 ENTITY_TYPES 出现——挂载关系不在此对话框创建）
+ // G2.3 类型补全（G2 时间标签点；源端下拉随 ENTITY_TYPES 出现——挂载关系不在此对话框创建）
   timepoint: "时间点",
-  // 决策 36（批次九）参考资料 reference
+ // （批次九）参考资料 reference
   reference: "参考资料",
 };
 
@@ -46,12 +46,12 @@ const TYPE_LABEL: Record<EntityType, string> = {
  */
 const DIALOG_RELATION_TYPES = RELATION_TYPES.filter((t) => t !== "occurs_at");
 
-/** 下拉选择框样式（token 类，layout.md §3） */
+/** 下拉选择框样式（token 类，） */
 const SELECT_CLASS =
   "w-full rounded-md border border-border bg-card px-3 py-1.5 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 /** 源端点（详情模式传入；null = 列表模式自由选择源）。
- * 四类实体（EntityType）+ 大纲节点（outline_node，S12.2 节点详情页作为源建立关系——schema.md 端点类型） */
+ * 四类实体（EntityType）+ 大纲节点（outline_node，S12.2 节点详情页作为源建立关系—— 端点类型） */
 export interface RelationSource {
   type: EntityType | "outline_node";
   id: string;
@@ -68,11 +68,11 @@ export function CreateRelationDialog({
   onClose: () => void;
 }) {
   const outline = useProjectStore((s) => s.outline);
-  // 列表模式源端（详情模式不用）
+ // 列表模式源端（详情模式不用）
   const [sourceType, setSourceType] = useState<EntityType>("character");
   const [sourceEntities, setSourceEntities] = useState<EntitySummary[] | null>(null);
   const [sourceId, setSourceId] = useState("");
-  // 目标端（两模式共用；"outline_node" = 大纲节点，schema.md relation_records 端点类型）
+ // 目标端（两模式共用；"outline_node" = 大纲节点， relation_records 端点类型）
   const [otherType, setOtherType] = useState<EntityType | "outline_node">("character");
   const [otherEntities, setOtherEntities] = useState<EntitySummary[] | null>(null);
   const [otherId, setOtherId] = useState("");
@@ -80,7 +80,7 @@ export function CreateRelationDialog({
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // 列表模式：源类型变化 → 拉实体列表
+ // 列表模式：源类型变化 → 拉实体列表
   useEffect(() => {
     if (source) return;
     setSourceId("");
@@ -90,7 +90,7 @@ export function CreateRelationDialog({
       .catch(() => setSourceEntities([]));
   }, [source, sourceType]);
 
-  // 目标端类型变化 → 拉实体列表（大纲节点用 outline store 的树，无需请求）
+ // 目标端类型变化 → 拉实体列表（大纲节点用 outline store 的树，无需请求）
   useEffect(() => {
     setOtherId("");
     if (otherType === "outline_node") {

@@ -1,6 +1,6 @@
-// 参考资料工具测试（决策 36，批次九）
+// 参考资料工具测试（批次九）
 // 覆盖：search_references（标题/摘要返回 + type 分类过滤 + 软删不可见）/ propose_create_reference（提案产出/不落库）
-//      / executor executeCreateReference（确认后写入 + type 缺省 material）
+// / executor executeCreateReference（确认后写入 + type 缺省 material）
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -55,7 +55,7 @@ describe("search_references", () => {
     expect(r.items[0].name).toBe("B");
   });
 
-  it("软删参考资料不可见（决策 12 修订查询工具默认过滤）", () => {
+  it("软删参考资料不可见（查询工具默认过滤）", () => {
     const row = createEntity(db, { type: "reference", name: "C", data: { type: "material" } });
     softDeleteEntity(db, row.id, "2026-08-02T00:00:00Z");
     const r = runSearchReferences(makeCtx(), { query: "" });
@@ -70,14 +70,14 @@ describe("propose_create_reference", () => {
     expect(proposal.type).toBe("propose_create_reference");
     expect(proposal.args).toMatchObject({ name: "江湖三要素", data: { type: "theory", content: "恩怨、情仇、得失", tags: ["方法论"] } });
     expect(proposal.references).toEqual([]); // 无引用对象
-    // 不落库：无 reference 实体被创建
+ // 不落库：无 reference 实体被创建
     const result = runProposeCreateReference(ctx, { name: "江湖三要素", type: "theory", content: "x" });
     expect(result.proposal_id).toMatch(/^prop_/); // 随机运行时 id
     expect(typeof result.summary).toBe("string");
   });
 });
 
-describe("executeCreateReference（决策 36 确认后写入）", () => {
+describe("executeCreateReference（ 确认后写入）", () => {
   it("写入 reference 实体（type 缺省 material 补默认），返回新 id", () => {
     const ctx = makeCtx();
     const proposal = buildProposeCreateReference(ctx, { name: "素材库第一条", type: undefined });

@@ -1,7 +1,7 @@
 // S6.6 提案类工具测试：Delta（propose_add_delta）
 // 覆盖：tool_result 仅 { proposal_id, summary } 无预览 / 完整提案结构（args 规范化执行形态 +
-//   触发节点/目标两端点引用快照，决策 14/19）/ **不落盘**（Delta 表零新增——S6.7 对比核心差异）/
-//   节点不存在/软删、目标不存在抛错 / signal aborted
+// 触发节点/目标两端点引用快照）/ **不落盘**（Delta 表零新增——S6.7 对比核心差异）/
+// 节点不存在/软删、目标不存在抛错 / signal aborted
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -85,7 +85,7 @@ describe("propose_add_delta", () => {
     expect(result.summary).toContain("追加 1 项属性变更");
   });
 
-  it("完整提案结构：args 规范化执行形态 + 触发节点/目标两端点引用快照（决策 14/19）", () => {
+  it("完整提案结构：args 规范化执行形态 + 触发节点/目标两端点引用快照（）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const char = createEntity(db, { type: "character", name: "阿强" });
     const changes: DeltaChange[] = [
@@ -96,8 +96,8 @@ describe("propose_add_delta", () => {
     expect(proposal.type).toBe("propose_add_delta");
     expect(proposal.args).toEqual({ node_id: "sc-1", target_type: "character", target_id: char.id, changes });
     expect(proposal.references).toEqual([
-      { kind: "outline_node", id: "sc-1", updated_at: T0 }, // 节点级 updated_at（决策 19）
-      { kind: "entity", id: char.id, updated_at: char.updated_at }, // 实体自身 updated_at（决策 14）
+      { kind: "outline_node", id: "sc-1", updated_at: T0 }, // 节点级 updated_at
+      { kind: "entity", id: char.id, updated_at: char.updated_at }, // 实体自身 updated_at
     ]);
     expect(proposal.project_id).toBe("proj-test");
   });
@@ -140,7 +140,7 @@ describe("propose_add_delta", () => {
   });
 });
 
-describe("signal aborted（决策 16 ③）", () => {
+describe("signal aborted（）", () => {
   it("signal 已中止 → 抛 AbortedError", () => {
     const controller = new AbortController();
     controller.abort();

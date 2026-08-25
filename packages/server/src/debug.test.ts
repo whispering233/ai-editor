@@ -1,8 +1,8 @@
 // 服务端调试日志层测试（纯配置文件模式：<创作根>/.ai-editor/config.json）
 //
 // 覆盖：配置文件解析（enabled/categories 组合）、边界语义（无 root/文件不存在/非法 JSON/
-//   结构不符 → 全关）、缺省语义（enabled 缺失全关 / categories 缺失全部类别）、
-//   未知名类别忽略、initDebugConfig 可重复调用（快照重置）、debugLog 类别门控
+// 结构不符 → 全关）、缺省语义（enabled 缺失全关 / categories 缺失全部类别）、
+// 未知名类别忽略、initDebugConfig 可重复调用（快照重置）、debugLog 类别门控
 // 状态重置：每个用例后 initDebugConfig(undefined) 回全关态（模块状态测试间隔离）
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

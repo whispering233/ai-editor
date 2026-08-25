@@ -1,4 +1,4 @@
-// API 契约 schema 测试（T1.4）：按 endpoints.md 示例做 parse 通过与拒绝用例
+// API schema 测试（T1.4）：按 示例做 parse 通过与拒绝用例
 import { describe, expect, it } from "vitest";
 import {
   ENTITY_DATA_SCHEMAS,
@@ -45,8 +45,8 @@ import {
   userConfigFileSchema,
 } from "./api.js";
 
-describe("ErrorCode 完整性（endpoints.md 错误码对照）", () => {
-  it("包含 endpoints.md 全部 10 个现行错误码", () => {
+describe("ErrorCode 完整性", () => {
+  it("包含全部 10 个现行错误码", () => {
     for (const code of [
       "VALIDATION_ERROR",
       "ENTITY_NOT_FOUND",
@@ -68,7 +68,7 @@ describe("ErrorCode 完整性（endpoints.md 错误码对照）", () => {
     expect(ERROR_CODES).toContain("DELTA_CONFLICT");
   });
 
-  it("补充码（tools.md 决策 15）：工具结果截断 + agent 终止", () => {
+  it("补充码：工具结果截断 + agent 终止", () => {
     expect(ERROR_CODES).toContain("TOOL_RESULT_TOO_LARGE");
     expect(ERROR_CODES).toContain("AGENT_MAX_ITERATIONS");
     expect(ERROR_CODES).toContain("AGENT_TIMEOUT");
@@ -85,7 +85,7 @@ describe("ErrorCode 完整性（endpoints.md 错误码对照）", () => {
 });
 
 describe("project 端点", () => {
-  it("projectConfigSchema：endpoints.md 示例响应 parse 通过（prompt 已废弃决策 41 不再返回）", () => {
+  it("projectConfigSchema：示例响应 parse 通过（prompt 已废弃 不再返回）", () => {
     const config = projectConfigSchema.parse({
       id: "proj-1",
       name: "我的小说",
@@ -99,7 +99,7 @@ describe("project 端点", () => {
     expect(config.currentPosition).toBe("sc-42");
   });
 
-  it("projectConfigUpdateReqSchema：prompt 已废弃（决策 41）strict 拒绝", () => {
+  it("projectConfigUpdateReqSchema：prompt 已废弃（）strict 拒绝", () => {
     expect(projectConfigUpdateReqSchema.safeParse({ prompt: "力量体系" }).success).toBe(false);
     expect(projectConfigUpdateReqSchema.safeParse({ name: "x", prompt: "力量体系" }).success).toBe(false);
   });
@@ -108,13 +108,13 @@ describe("project 端点", () => {
     expect(
       projectAgentsGetResSchema.parse({ content: "力量体系：练气→筑基", exists: true, updatedAt: "2026-08-01T10:00:00Z" }),
     ).toEqual({ content: "力量体系：练气→筑基", exists: true, updatedAt: "2026-08-01T10:00:00Z" });
-    // 文件不存在：content 空串 + exists:false + updatedAt:null
+ // 文件不存在：content 空串 + exists:false + updatedAt:null
     expect(projectAgentsGetResSchema.parse({ content: "", exists: false, updatedAt: null })).toEqual({
       content: "",
       exists: false,
       updatedAt: null,
     });
-    // 类型不符拒绝
+ // 类型不符拒绝
     expect(projectAgentsGetResSchema.safeParse({ content: "", exists: "yes", updatedAt: null }).success).toBe(false);
     expect(projectAgentsGetResSchema.safeParse({ content: "", exists: false }).success).toBe(false); // 缺 updatedAt
   });
@@ -142,15 +142,15 @@ describe("project 端点", () => {
     expect(projectConfigSchema.parse({ ...validConfig(), backupFrequencyMinutes: null }).backupFrequencyMinutes).toBeNull();
   });
 
-  it("projectConfigUpdateReqSchema：backup_frequency_minutes 接受枚举值/null/省略，拒绝其他（决策 27 + 批次十四修订加 1 分钟档）", () => {
-    // 枚举值全接受
+  it("projectConfigUpdateReqSchema：backup_frequency_minutes 接受枚举值/null/省略，拒绝其他（ + 批次十四修订加 1 分钟档）", () => {
+ // 枚举值全接受
     for (const v of [1, 5, 10, 15, 30, 60]) {
       expect(projectConfigUpdateReqSchema.safeParse({ backup_frequency_minutes: v }).success).toBe(true);
     }
-    // null = 关闭；省略 = 不更新该字段
+ // null = 关闭；省略 = 不更新该字段
     expect(projectConfigUpdateReqSchema.parse({ backup_frequency_minutes: null }).backup_frequency_minutes).toBeNull();
     expect(projectConfigUpdateReqSchema.parse({ name: "x" }).backup_frequency_minutes).toBeUndefined();
-    // 非枚举拒绝：0（关闭语义写侧一律用 null）、7、小数、字符串、布尔
+ // 非枚举拒绝：0（关闭语义写侧一律用 null）、7、小数、字符串、布尔
     expect(projectConfigUpdateReqSchema.safeParse({ backup_frequency_minutes: 0 }).success).toBe(false);
     expect(projectConfigUpdateReqSchema.safeParse({ backup_frequency_minutes: 7 }).success).toBe(false);
     expect(projectConfigUpdateReqSchema.safeParse({ backup_frequency_minutes: 5.5 }).success).toBe(false);
@@ -158,20 +158,20 @@ describe("project 端点", () => {
     expect(projectConfigUpdateReqSchema.safeParse({ backup_frequency_minutes: true }).success).toBe(false);
   });
 
-  it("projectBackupReqSchema：仅形状校验（决策 28 + oracle P2-1——名称规则权威判定在 sanitizeBackupName，schema 不重复判长）", () => {
-    // 缺省/空对象 → 通过（无自定义名称）
+  it("projectBackupReqSchema：仅形状校验（ + oracle P2-1——名称规则权威判定在 sanitizeBackupName，schema 不重复判长）", () => {
+ // 缺省/空对象 → 通过（无自定义名称）
     expect(projectBackupReqSchema.safeParse({}).success).toBe(true);
     expect(projectBackupReqSchema.parse({}).name).toBeUndefined();
-    // 任意 string（含超长/.zip 后缀/空格等——是否合法由 sanitizeBackupName 判定，schema 不拦截）
+ // 任意 string（含超长/.zip 后缀/空格等——是否合法由 sanitizeBackupName 判定，schema 不拦截）
     expect(projectBackupReqSchema.safeParse({ name: "定稿" }).success).toBe(true);
     expect(projectBackupReqSchema.safeParse({ name: "a".repeat(100) }).success).toBe(true); // 超长放行（writeBackup → 400）
     expect(projectBackupReqSchema.safeParse({ name: "a".repeat(30) + ".zip" }).success).toBe(true); // 剥 .zip 后 30 字符（P2-1 回归：不得误拒）
     expect(projectBackupReqSchema.safeParse({ name: "  " }).success).toBe(true); // 空白放行（writeBackup → 400）
-    // 类型不符拒绝：非 string / null / 数字
+ // 类型不符拒绝：非 string / null / 数字
     expect(projectBackupReqSchema.safeParse({ name: 123 }).success).toBe(false);
     expect(projectBackupReqSchema.safeParse({ name: null }).success).toBe(false);
     expect(projectBackupReqSchema.safeParse({ name: true }).success).toBe(false);
-    // strict：未知字段拒绝
+ // strict：未知字段拒绝
     expect(projectBackupReqSchema.safeParse({ name: "x", extra: 1 }).success).toBe(false);
   });
 
@@ -189,16 +189,16 @@ describe("project 端点", () => {
   });
 
   it("projectListResSchema：books 为空数组合法；缺字段/类型不符拒绝", () => {
-    // 空书架合法
+ // 空书架合法
     expect(projectListResSchema.parse({ rootPath: "/x", books: [] }).books).toEqual([]);
-    // 书缺 updatedAt → 拒绝
+ // 书缺 updatedAt → 拒绝
     expect(
       projectListResSchema.safeParse({
         rootPath: "/x",
         books: [{ name: "书", path: "/x/books/书" }],
       }).success,
     ).toBe(false);
-    // rootPath 非 string → 拒绝
+ // rootPath 非 string → 拒绝
     expect(projectListResSchema.safeParse({ rootPath: 1, books: [] }).success).toBe(false);
   });
 });
@@ -209,7 +209,7 @@ describe("entity 端点", () => {
       name: "张三",
       data: { role: "主角", custom_fields: { expected_payoff: "揭示身世" } },
     });
-    // data 为宽松 record 原样透传（含 snake_case 内层字段）
+ // data 为宽松 record 原样透传（含 snake_case 内层字段）
     expect(req.data).toEqual({ role: "主角", custom_fields: { expected_payoff: "揭示身世" } });
   });
 
@@ -267,7 +267,7 @@ describe("entity 端点", () => {
     });
     expect(detail.relations).toHaveLength(1);
     expect(detail.deltaCount).toBe(3);
-    // relations 元素按 relationRecordSchema 校验（双向紧邻查询的两种方向同构）
+ // relations 元素按 relationRecordSchema 校验（双向紧邻查询的两种方向同构）
     expect(detail.relations[0]).toMatchObject({ sourceId: "char-1", targetId: "char-2", relationType: "ally" });
   });
 
@@ -297,7 +297,7 @@ describe("entity 端点", () => {
   });
 });
 
-describe("event 时间轴契约（决策 26）", () => {
+describe("event 时间轴（）", () => {
   it("eventDataSchema：description/tags 全字段通过（字段名 snake_case）", () => {
     const parsed = eventDataSchema.parse({
       description: "张三在藏经阁发现玉佩",
@@ -330,7 +330,7 @@ describe("event 时间轴契约（决策 26）", () => {
 
   });
 
-  it("settingMoveReqSchema（决策 46）：parent_id 必填 nullable；order 可选非负整数；strict 拒绝未知键", () => {
+  it("settingMoveReqSchema（）：parent_id 必填 nullable；order 可选非负整数；strict 拒绝未知键", () => {
     expect(settingMoveReqSchema.parse({ parent_id: null }).parent_id).toBeNull();
     expect(settingMoveReqSchema.parse({ parent_id: "set-1", order: 3 }).order).toBe(3);
     expect(settingMoveReqSchema.safeParse({ parent_id: 1 }).success).toBe(false); // 非字符串
@@ -383,7 +383,7 @@ describe("delta 端点", () => {
   it("追加：changes 空数组拒绝；node_id 必填（snake_case）", () => {
     expect(deltaCreateReqSchema.safeParse({ node_id: "sc-1", target_type: "character", target_id: "char-1", changes: [], description: "x" }).success).toBe(false);
     expect(deltaCreateReqSchema.safeParse({ target_type: "character", target_id: "char-1", changes: [{ field: "a", op: "set", to: 1 }], description: "x" }).success).toBe(false);
-    // camelCase 键被 strict 拒绝
+ // camelCase 键被 strict 拒绝
     expect(deltaCreateReqSchema.safeParse({ nodeId: "sc-1", target_type: "character", target_id: "char-1", changes: [{ field: "a", op: "set", to: 1 }], description: "x" }).success).toBe(false);
   });
 
@@ -396,7 +396,7 @@ describe("delta 端点", () => {
 });
 
 describe("outline 端点", () => {
-  it("创建：parent_id 必填（决策 19 无默认值）", () => {
+  it("创建：parent_id 必填（ 无默认值）", () => {
     expect(outlineCreateReqSchema.safeParse({ type: "scene", title: "灵根测试" }).success).toBe(false);
   });
 
@@ -410,13 +410,13 @@ describe("outline 端点", () => {
   it("查询 with_metadata：显式 false → false（回归：z.coerce.boolean 会把 \"false\" 解析为 true）", () => {
     expect(outlineGetQuerySchema.parse({ with_metadata: "false" }).with_metadata).toBe(false);
     expect(outlineGetQuerySchema.parse({ with_metadata: "true" }).with_metadata).toBe(true);
-    // 不传 → undefined（默认关闭 metadata 统计语义）
+ // 不传 → undefined（默认关闭 metadata 统计语义）
     expect(outlineGetQuerySchema.parse({}).with_metadata).toBeUndefined();
-    // 非法值拒绝（enum 方案）
+ // 非法值拒绝（enum 方案）
     expect(outlineGetQuerySchema.safeParse({ with_metadata: "yes" }).success).toBe(false);
   });
 
-  it("创建/更新：data 为宽松 record 可选字段（决策 23，精校验在服务端路由层）", () => {
+  it("创建/更新：data 为宽松 record 可选字段（，精校验在服务端路由层）", () => {
     const req = outlineCreateReqSchema.parse({
       type: "scene",
       title: "灵根测试",
@@ -424,16 +424,16 @@ describe("outline 端点", () => {
       data: { goal: "确认灵根品质", conflict_levels: ["inner", "personal"] },
     });
     expect(req.data).toEqual({ goal: "确认灵根品质", conflict_levels: ["inner", "personal"] });
-    // 更新：data 可选（部分合并语义由服务端保证）
+ // 更新：data 可选（部分合并语义由服务端保证）
     expect(
       outlineUpdateReqSchema.parse({ data: { goal: "新目标" } }).data,
     ).toEqual({ goal: "新目标" });
-    // 不传 data 合法
+ // 不传 data 合法
     expect(outlineUpdateReqSchema.safeParse({ title: "x" }).success).toBe(true);
   });
 
-  it("响应节点 schema：data 可选且原样透传（schema.md 示例）", () => {
-    // outlineNodeSchema 为 lazy 递归 schema（ZodTypeAny），parse 结果用 safeParse + 断言收窄
+  it("响应节点 schema：data 可选且原样透传", () => {
+ // outlineNodeSchema 为 lazy 递归 schema（ZodTypeAny），parse 结果用 safeParse + 断言收窄
     const parsed = outlineNodeSchema.safeParse({
       id: "sc-1",
       type: "scene",
@@ -449,7 +449,7 @@ describe("outline 端点", () => {
     });
   });
 
-  it("整树响应：schema.md 三层示例 parse 通过（递归 children）", () => {
+  it("整树响应：三层示例 parse 通过（递归 children）", () => {
     const tree = outlineTreeSchema.parse({
       id: "root",
       type: "root",
@@ -474,7 +474,7 @@ describe("outline 端点", () => {
         },
       ],
     });
-    // 递归结构断言（toMatchObject 避免依赖递归 schema 的推断类型）
+ // 递归结构断言（toMatchObject 避免依赖递归 schema 的推断类型）
     expect(tree).toMatchObject({
       id: "root",
       schemaVersion: 1,
@@ -483,7 +483,7 @@ describe("outline 端点", () => {
   });
 });
 
-describe("OUTLINE_NODE_DATA_SCHEMAS（决策 23，麦基字段集，schema.md outline.json 节）", () => {
+describe("OUTLINE_NODE_DATA_SCHEMAS", () => {
   it("scene：麦基字段集全字段通过（goal/conflict_levels/value_from/value_to）", () => {
     const parsed = OUTLINE_NODE_DATA_SCHEMAS.scene.parse({
       goal: "确认灵根品质",
@@ -507,16 +507,16 @@ describe("OUTLINE_NODE_DATA_SCHEMAS（决策 23，麦基字段集，schema.md ou
 
   it("scene：value_to 超 200 字符拒绝（与 value_from 同限，麦基「收场价值」）", () => {
     expect(OUTLINE_NODE_DATA_SCHEMAS.scene.safeParse({ value_to: "a".repeat(201) }).success).toBe(false);
-    // 边界 200 合法
+ // 边界 200 合法
     expect(OUTLINE_NODE_DATA_SCHEMAS.scene.parse({ value_to: "a".repeat(200) }).value_to).toHaveLength(200);
   });
 
-  it("chapter：reversal/climax_scene 通过；reversal 超 1000 拒绝；引用字段仅类型校验（宽松，决策 23）", () => {
+  it("chapter：reversal/climax_scene 通过；reversal 超 1000 拒绝；引用字段仅类型校验（宽松，）", () => {
     expect(
       OUTLINE_NODE_DATA_SCHEMAS.chapter.parse({ reversal: "张三决定叛出师门", climax_scene: "sc-5" }),
     ).toEqual({ reversal: "张三决定叛出师门", climax_scene: "sc-5" });
     expect(OUTLINE_NODE_DATA_SCHEMAS.chapter.safeParse({ reversal: "a".repeat(1001) }).success).toBe(false);
-    // 引用字段指向任意场景 id 均通过（MVP 不校验引用范围）；非字符串拒绝
+ // 引用字段指向任意场景 id 均通过（MVP 不校验引用范围）；非字符串拒绝
     expect(OUTLINE_NODE_DATA_SCHEMAS.chapter.safeParse({ climax_scene: "sc-999" }).success).toBe(true);
     expect(OUTLINE_NODE_DATA_SCHEMAS.chapter.safeParse({ climax_scene: 42 }).success).toBe(false);
   });
@@ -547,7 +547,7 @@ describe("chat 端点", () => {
   });
 });
 
-describe("SSE 事件（endpoints.md 第 738-765 行）", () => {
+describe("SSE 事件", () => {
   it("tool_call / tool_result / proposal / done 事件 data parse", () => {
     expect(sseToolCallEventSchema.parse({ tool: "get_entity", args: { type: "character", id: "char-1" }, id: "call_1" }).id).toBe("call_1");
     expect(sseToolResultEventSchema.parse({ tool: "get_entity", result: { id: "char-1" }, id: "call_1" }).tool).toBe("get_entity");
@@ -558,7 +558,7 @@ describe("SSE 事件（endpoints.md 第 738-765 行）", () => {
   });
 });
 
-describe("导出/导入契约（E1，release-review §二）", () => {
+describe("导出/导入（）", () => {
   it("导出 zip 三文件名常量与数据文件原名一致（import 侧按此固定名校验）", () => {
     expect(PROJECT_EXPORT_FILE_NAMES).toEqual(["project.json", "outline.json", "data.db"]);
   });
@@ -568,26 +568,26 @@ describe("导出/导入契约（E1，release-review §二）", () => {
     expect(errorCodeSchema.safeParse("SCHEMA_VERSION_MISMATCH").success).toBe(true);
   });
 
-  it("ErrorCode 含 PROJECT_VERSION_NEWER（409：open 时项目版本高于程序版本，E4 拒绝打开堵降级数据丢失）", () => {
+  it("ErrorCode 含 PROJECT_VERSION_NEWER（409：open 时项目版本高于程序版本， 拒绝打开堵降级数据丢失）", () => {
     expect(ERROR_CODES).toContain("PROJECT_VERSION_NEWER");
     expect(errorCodeSchema.safeParse("PROJECT_VERSION_NEWER").success).toBe(true);
   });
 
-  it("import 响应 { imported: true, id, path, name, mode } parse（B2.3 契约同步：mode 分流字段必填）", () => {
+  it("import 响应 { imported: true, id, path, name, mode } parse（B2.3 同步：mode 分流字段必填）", () => {
     expect(
       projectImportResSchema.parse({ imported: true, id: "proj-1", path: "/books/我的小说", name: "我的小说", mode: "new" }),
     ).toEqual({ imported: true, id: "proj-1", path: "/books/我的小说", name: "我的小说", mode: "new" });
-    // mode 枚举：restored/new 通过（决策 27 分流），其他值拒绝
+ // mode 枚举：restored/new 通过（ 分流），其他值拒绝
     expect(projectImportResSchema.parse({ imported: true, id: "proj-1", path: "/books/我的小说", name: "我的小说", mode: "restored" }).mode).toBe("restored");
     expect(projectImportResSchema.safeParse({ imported: true, id: "proj-1", path: "/x", name: "x", mode: "overwrite" }).success).toBe(false);
-    // 契约收紧：imported 字面量 true、mode 必填、其余字段必填
+ // 收紧：imported 字面量 true、mode 必填、其余字段必填
     expect(projectImportResSchema.safeParse({ imported: false, id: "proj-1", path: "/x", name: "x", mode: "new" }).success).toBe(false);
     expect(projectImportResSchema.safeParse({ imported: true, id: "proj-1", path: "/x", name: "x" }).success).toBe(false); // 缺 mode
     expect(projectImportResSchema.safeParse({ imported: true, id: "proj-1" }).success).toBe(false);
   });
 });
 
-describe("userConfigFileSchema（决策 48，批次十四：~/.ai-editor/config.json schema v1）", () => {
+describe("userConfigFileSchema（，批次十四：~/.ai-editor/config.json schema v1）", () => {
   it("v1 全字段 parse（schema_version=1 + model + thinking_level + api_key）", () => {
     const parsed = userConfigFileSchema.parse({
       schema_version: 1,
@@ -625,7 +625,7 @@ describe("userConfigFileSchema（决策 48，批次十四：~/.ai-editor/config.
   });
 });
 
-/** 构造合法 ProjectConfig 测试数据（prompt 已废弃决策 41，不再包含） */
+/** 构造合法 ProjectConfig 测试数据（prompt 已废弃，不再包含） */
 function validConfig() {
   return {
     id: "proj-1",

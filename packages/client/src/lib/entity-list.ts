@@ -1,6 +1,4 @@
 // 实体列表页辅助纯函数与配置（S3.5）
-// 契约来源：doc/ui/pages/entity-list.md「信息层级」——各类型摘要列（character→role/status、
-//   setting→category、location→type、hook→status/payoff_timing）+ 分页（limit 固定 20、total 驱动）
 import type { EntityType } from "@whispering233/ai-editor-shared";
 
 /** 实体二级 tab 可列表类型（批次十二 T3：参考资料已有独立中栏 tab #/references，实体页泛型表格不再渲染） */
@@ -25,8 +23,8 @@ export interface SummaryColumnConfig {
 }
 
 export const SUMMARY_COLUMNS: Record<ListableEntityType, SummaryColumnConfig> = {
-  // 决策 45（2026-08 批次十三）+ 用户修订：状态列移除（详情页表单亦移除）；角色/性格/能力
-  // 独立成列（修订：原「角色徽标内联名称旁」改独立列——首版行布局表头/表体错位致角色列空白）
+ // （2026-08 批次十三）+ 用户修订：状态列移除（详情页表单亦移除）；角色/性格/能力
+ // 独立成列（修订：原「角色徽标内联名称旁」改独立列——首版行布局表头/表体错位致角色列空白）
   character: {
     key1: "role",
     label1: "角色",
@@ -35,9 +33,9 @@ export const SUMMARY_COLUMNS: Record<ListableEntityType, SummaryColumnConfig> = 
     key3: "abilities",
     label3: "能力",
   },
-  // 决策 31（2026-08）：设定分类由 rules 标签承接，摘要列从「类别」改为「标签」
-  // 决策 42（2026-08 批次十）：设定 tab 改为树形视图（不走表格），「上级设定」特殊列
-  // （key2="parent"，M2）随表格移除；「描述」列保留配置（树形视图不渲染表格，无实际作用）
+ // （2026-08）：设定分类由 rules 标签承接，摘要列从「类别」改为「标签」
+ // （2026-08 批次十）：设定 tab 改为树形视图（不走表格），「上级设定」特殊列
+ // （key2="parent"，M2）随表格移除；「描述」列保留配置（树形视图不渲染表格，无实际作用）
   setting: {
     key1: "tags",
     label1: "标签",
@@ -46,16 +44,16 @@ export const SUMMARY_COLUMNS: Record<ListableEntityType, SummaryColumnConfig> = 
   },
   location: { key1: "type", label1: "类型" },
   hook: { key1: "status", label1: "状态", key2: "payoff_timing", label2: "回收时机" },
-  // C1 类型补全（决策 26 event 时间轴事件；服务端 event 摘要为空对象，时间轴专属 UI 由 C2 实现）
+ // C1 类型补全（ event 时间轴事件；服务端 event 摘要为空对象，时间轴专属 UI 由 C2 实现）
   event: { key1: "description", label1: "描述" },
-  // G2.3 类型补全（G2 时间标签点：data 空、无专属摘要字段——endpoints.md「timepoint → 无专属摘要字段」，
-  // 空 key = 摘要列渲染「—」占位，与 event 摘要缺失同款防御）
+ // G2.3 类型补全（G2 时间标签点：data 空、无专属摘要字段——「timepoint → 无专属摘要字段」，
+ // 空 key = 摘要列渲染「—」占位，与 event 摘要缺失同款防御）
   timepoint: { key1: "", label1: "" },
 };
 // 注：reference 列配置已随批次十二 T3 移除——参考资料已有独立中栏 tab（#/references），
 // 实体二级 tab 不再渲染泛型表格（旧路由重定向），此处无 reference 分支。
 
-/** 人物行两行式行布局数据提取（决策 45，2026-08 批次十三）：
+/** 人物行两行式行布局数据提取（2026-08 批次十三）：
  * 第一行 = 名称 + 角色徽标（summary.role）；第二行 = 动机摘要 + 性格/能力标签 chips。
  * 服务端摘要已截断（motivation 40 / personality·abilities 各前 2），此处防御性再截断；
  * 空值一律归一为空串/空数组（行内不渲染空段）。 */
@@ -103,7 +101,7 @@ export function summaryCellText(type: EntityType, key: string, value: unknown): 
   if (type === "hook" && key === "status") return HOOK_STATUS_LABEL[String(value)] ?? String(value);
   if (type === "hook" && key === "payoff_timing")
     return HOOK_TIMING_LABEL[String(value)] ?? String(value);
-  // 标签数组（setting.tags / event.tags）：join 展示（摘要仅前 3 个，服务端已截断）
+ // 标签数组（setting.tags / event.tags）：join 展示（摘要仅前 3 个，服务端已截断）
   if (key === "tags" && Array.isArray(value)) {
     const tags = (value as string[]).filter((t) => typeof t === "string" && t !== "");
     return tags.length > 0 ? tags.join("、") : "—";
@@ -115,28 +113,28 @@ export function summaryCellText(type: EntityType, key: string, value: unknown): 
 export interface CreateFirstFieldConfig {
   key: string;
   label: string;
-  /** text = 自由输入；select = 枚举下拉（options 给出）；tags = 逗号分隔多值标签（K1，决策 31） */
+ /** text = 自由输入；select = 枚举下拉（options 给出）；tags = 逗号分隔多值标签（K1） */
   input: "text" | "select" | "tags";
   options?: string[];
 }
 
 export const CREATE_FIRST_FIELD: Record<ListableEntityType, CreateFirstFieldConfig> = {
   character: { key: "role", label: "角色定位", input: "text" },
-  // K2（2026-08 用户复核，决策 31）：设定分类统一字段 tags——新建行直接打标签（逗号分隔多值）
+ // K2（2026-08 用户复核）：设定分类统一字段 tags——新建行直接打标签（逗号分隔多值）
   setting: { key: "tags", label: "标签", input: "tags" },
   location: { key: "type", label: "地点类型", input: "text" },
-  // hook.status 是受控枚举（planted → progressing → resolved / abandoned，doc/database/hooks.md）
+ // hook.status 是受控枚举（planted → progressing → resolved / abandoned）
   hook: {
     key: "status",
     label: "状态",
     input: "select",
     options: ["planted", "progressing", "resolved", "abandoned"],
   },
-  // C1 类型补全（决策 26 event 时间轴事件；时间轴专属创建 UI 由 C2 实现）
+ // C1 类型补全（ event 时间轴事件；时间轴专属创建 UI 由 C2 实现）
   event: { key: "description", label: "描述", input: "text" },
-  // G2.3 类型补全（G2 时间标签点：data 空——name = 时间标签文本即全部字段；
-  // 空 key = 行内新建仅 name 输入，EntityList 对空 key 跳过 data 字段与首字段输入）
+ // G2.3 类型补全（G2 时间标签点：data 空——name = 时间标签文本即全部字段；
+ // 空 key = 行内新建仅 name 输入，EntityList 对空 key 跳过 data 字段与首字段输入）
   timepoint: { key: "", label: "", input: "text" },
 };
 // 注：reference 首字段配置已随批次十二 T3 移除——参考资料已有独立中栏 tab（#/references），
-// 实体二级 tab 不再渲染泛型表格（旧路由重定向），此处无 reference 分支（含决策 44 过时枚举）。
+// 实体二级 tab 不再渲染泛型表格（旧路由重定向），此处无 reference 分支（含 过时枚举）。

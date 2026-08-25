@@ -1,7 +1,7 @@
 // S6.6 提案公共层测试：提案对象结构（buildProposal）+ 端点/节点/伏笔解析辅助
 // 覆盖：proposal_id prop_ 前缀 / type/args/project_id/references 快照/summary/createdAt 结构完整、
-//   refEntity/refRelation/refOutlineNode 快照取值（决策 14/19）、resolveEndpoint 实体/大纲节点
-//   识别与软删拒绝（决策 12）、requireOutlineNode/requireHook 类型一致性、signal aborted
+// refEntity/refRelation/refOutlineNode 快照取值、resolveEndpoint 实体/大纲节点
+// 识别与软删拒绝、requireOutlineNode/requireHook 类型一致性、signal aborted
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -87,14 +87,14 @@ const sampleRefs: ProposalReference[] = [
   { kind: "outline_node", id: "ch-1", updated_at: T0 },
 ];
 
-describe("buildProposal（提案对象结构，决策 14）", () => {
+describe("buildProposal（提案对象结构，）", () => {
   it("结构完整：proposal_id prop_ 前缀 + type/args/project_id/references/summary/createdAt", () => {
     const ctx = makeCtx();
     const proposal = buildProposal(ctx, "propose_update_entity", { entity_id: "char-1", patches: { status: "dead" } }, sampleRefs, "更新实体「阿强」的 1 个字段");
     expect(proposal.proposal_id.startsWith("prop_")).toBe(true);
     expect(proposal.type).toBe("propose_update_entity");
     expect(proposal.args).toEqual({ entity_id: "char-1", patches: { status: "dead" } });
-    expect(proposal.project_id).toBe("proj-test"); // 项目绑定（决策 14 修订）
+    expect(proposal.project_id).toBe("proj-test"); // 项目绑定
     expect(proposal.references).toEqual(sampleRefs); // 引用快照原样携带
     expect(proposal.summary).toBe("更新实体「阿强」的 1 个字段");
     expect(Number.isNaN(Date.parse(proposal.createdAt))).toBe(false); // ISO 8601（应用层写入约定）
@@ -107,13 +107,13 @@ describe("buildProposal（提案对象结构，决策 14）", () => {
   });
 });
 
-describe("引用快照辅助（决策 14/19）", () => {
+describe("引用快照辅助（）", () => {
   it("refEntity 用实体自身 updated_at", () => {
     const row = createEntity(db, { type: "character", name: "阿强" });
     expect(refEntity(row)).toEqual({ kind: "entity", id: row.id, updated_at: row.updated_at });
   });
 
-  it("refOutlineNode 用节点级 updated_at（决策 19）", () => {
+  it("refOutlineNode 用节点级 updated_at（）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const node = findOutlineNode(readOutlineFile(dir), "ch-1")!;
     expect(refOutlineNode(node)).toEqual({ kind: "outline_node", id: "ch-1", updated_at: T0 });
@@ -127,7 +127,7 @@ describe("引用快照辅助（决策 14/19）", () => {
   });
 });
 
-describe("resolveEndpoint（端点识别，决策 12 修订）", () => {
+describe("resolveEndpoint（端点识别，）", () => {
   it("实体 id → 实体类型 + 实体快照", () => {
     const row = createEntity(db, { type: "character", name: "阿强" });
     const resolved = resolveEndpoint(makeCtx(), row.id);
@@ -187,7 +187,7 @@ describe("requireHook（伏笔类型一致性校验）", () => {
   });
 });
 
-describe("checkProposalAborted（signal 中止，决策 16 ③）", () => {
+describe("checkProposalAborted（signal 中止，）", () => {
   it("signal 已中止 → 抛 AbortedError", () => {
     const controller = new AbortController();
     controller.abort();

@@ -162,7 +162,7 @@ describe("fetchSSE（流式分发）", () => {
     expect(events).toEqual([["error", { code: "VALIDATION_ERROR", message: "参数错误" }]]);
   });
 
-  it("60s 无任何事件触发 onTimeout 并中止（决策 20 半开连接兜底）", async () => {
+  it("60s 无任何事件触发 onTimeout 并中止（ 半开连接兜底）", async () => {
     vi.useFakeTimers();
     vi.stubGlobal(
       "fetch",
@@ -185,7 +185,7 @@ describe("fetchSSE（流式分发）", () => {
 
   it("有事件到达时重置超时（心跳 keep-alive 不被误判断开）", async () => {
     vi.useFakeTimers();
-    // 模拟：25s 一个 ping（心跳周期 15-30s，决策 20），持续 90s——不应触发超时
+ // 模拟：25s 一个 ping（心跳周期 15-30s），持续 90s——不应触发超时
     const chunks: string[] = [];
     for (let i = 0; i < 3; i++) chunks.push("event: ping\ndata: {}\n\n");
     vi.stubGlobal(

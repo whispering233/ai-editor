@@ -1,22 +1,22 @@
-// 设置页「自动备份」区（B2 决策 27 + B2.5 决策 28 + B2.6 决策 29；doc/ui/pages/settings.md「自动备份」区）
-// 交互（settings.md「关键交互」+ 任务卡 B2.4/B2.5/B2.6）：
-//  - 频率下拉：选择即保存 PUT /project/config { backup_frequency_minutes }（null = 关闭，
-//    仅枚举 5/10/15/30/60）；载入用 config.backupFrequencyMinutes（缺省 10 / null → 关闭选中）
-//  - [备份名称（可选）输入框] + [立即备份]：POST /project/backup（带 name，决策 28）→
-//    清空输入 + 刷新列表 + toast「已备份」；失败 toast（磁盘错误透传 message）
-//  - 历史备份列表：GET /project/backups → 行 = 时间（当年 MM-DD HH:mm:ss / 跨年 YY-MM-DD
-//    HH:mm:ss，决策 28 补秒）+ 类型标签（决策 29：自动=中性徽标 / 手动=强调徽标）+ 自定义
-//    名称（如有）+ 大小（KB/MB 人类可读）+ [重命名] [加载]
-//  - [重命名]（决策 29 行内编辑，无 Dialog）：铅笔按钮 → 该行切编辑态（行内 input 预填当前
-//    名称 + 确认/取消按钮）；Enter/确认提交 POST /project/backup/rename（空输入 = 清除名称段）、
-//    Esc/失焦取消、输入未变更不发请求（幂等保护）；400/404 行内错误提示并保持编辑态，成功
-//    toast「已重命名」+ 刷新列表
-//  - [加载] → 强确认 Dialog（ConfirmDialog，danger）→ POST /project/backup/restore → 成功 toast
-//    （含覆盖前自动快照文件名）→ 刷新 config/outline（dataVersion 信号驱动中栏数据页）+ 会话重载
-//    （chat store 订阅仅响应 config.id 变化，restore 保留 id → 手动 clearSessions + loadSessions）；
-//    409 SCHEMA_VERSION_MISMATCH（备份来自更高版本）→ ConfirmDialog 内阻断提示（透传服务端 message）
-//  - 空态：「暂无备份，自动备份将在数据变更后按频率生成」；无项目打开 → 整区禁用 + 引导文案
-// 风格约束：token 类（bg-muted/border-border/text-muted-foreground 等），禁硬编码色类（layout.md §3）
+// 设置页「自动备份」区（B2 + B2.5 + B2.6 ；「自动备份」区）
+// 交互（「关键交互」+ 任务卡 B2.4/B2.5/B2.6）：
+// - 频率下拉：选择即保存 PUT /project/config { backup_frequency_minutes }（null = 关闭，
+// 仅枚举 5/10/15/30/60）；载入用 config.backupFrequencyMinutes（缺省 10 / null → 关闭选中）
+// - [备份名称（可选）输入框] + [立即备份]：POST /project/backup（带 name）→
+// 清空输入 + 刷新列表 + toast「已备份」；失败 toast（磁盘错误透传 message）
+// - 历史备份列表：GET /project/backups → 行 = 时间（当年 MM-DD HH:mm:ss / 跨年 YY-MM-DD
+// HH:mm:ss， 补秒）+ 类型标签（自动=中性徽标 / 手动=强调徽标）+ 自定义
+// 名称（如有）+ 大小（KB/MB 人类可读）+ [重命名] [加载]
+// - [重命名]（ 行内编辑，无 Dialog）：铅笔按钮 → 该行切编辑态（行内 input 预填当前
+// 名称 + 确认/取消按钮）；Enter/确认提交 POST /project/backup/rename（空输入 = 清除名称段）、
+// Esc/失焦取消、输入未变更不发请求（幂等保护）；400/404 行内错误提示并保持编辑态，成功
+// toast「已重命名」+ 刷新列表
+// - [加载] → 强确认 Dialog（ConfirmDialog，danger）→ POST /project/backup/restore → 成功 toast
+// （含覆盖前自动快照文件名）→ 刷新 config/outline（dataVersion 信号驱动中栏数据页）+ 会话重载
+// （chat store 订阅仅响应 config.id 变化，restore 保留 id → 手动 clearSessions + loadSessions）；
+// 409 SCHEMA_VERSION_MISMATCH（备份来自更高版本）→ ConfirmDialog 内阻断提示（透传服务端 message）
+// - 空态：「暂无备份，自动备份将在数据变更后按频率生成」；无项目打开 → 整区禁用 + 引导文案
+// 风格约束：token 类（bg-muted/border-border/text-muted-foreground 等），禁硬编码色类（）
 import { useEffect, useRef, useState } from "react";
 import { Check, Loader2, Pencil, X } from "lucide-react";
 import {
@@ -60,39 +60,39 @@ export function BackupSection() {
   const loadConfig = useProjectStore((s) => s.loadConfig);
   const loadOutline = useProjectStore((s) => s.loadOutline);
 
-  /** 频率保存中（选择即保存；保存中禁用下拉防连点） */
+ /** 频率保存中（选择即保存；保存中禁用下拉防连点） */
   const [frequencySaving, setFrequencySaving] = useState(false);
-  /** 备份列表；null = 未加载/加载失败 */
+ /** 备份列表；null = 未加载/加载失败 */
   const [backups, setBackups] = useState<BackupEntry[] | null>(null);
   const [backupsLoading, setBackupsLoading] = useState(false);
-  /** 列表加载失败的错误码（CLIENT_NETWORK_ERROR 等；null = 无错误/未加载） */
+ /** 列表加载失败的错误码（CLIENT_NETWORK_ERROR 等；null = 无错误/未加载） */
   const [backupsError, setBackupsError] = useState<string | null>(null);
   const [backupNowRunning, setBackupNowRunning] = useState(false);
-  /** 待加载的备份（非 null 时渲染强确认 Dialog） */
+ /** 待加载的备份（非 null 时渲染强确认 Dialog） */
   const [restoreTarget, setRestoreTarget] = useState<BackupEntry | null>(null);
-  /** 立即备份的自定义名称（决策 28；trim 后非空才随请求提交，成功后清空） */
+ /** 立即备份的自定义名称（trim 后非空才随请求提交，成功后清空） */
   const [backupName, setBackupName] = useState("");
-  /**
-   * 行内重命名编辑态（决策 29，单行同时编辑；null = 无编辑中）：
-   * fileName = 目标备份；value = 输入框当前值（预填 b.name ?? ""）；
-   * saving = 提交中（禁用输入/按钮防连点）；error = 行内错误提示（400/404 透传 message，网络失败固定文案）
-   */
+ /**
+ * 行内重命名编辑态（单行同时编辑；null = 无编辑中）：
+ * fileName = 目标备份；value = 输入框当前值（预填 b.name ?? ""）；
+ * saving = 提交中（禁用输入/按钮防连点）；error = 行内错误提示（400/404 透传 message，网络失败固定文案）
+ */
   const [renaming, setRenaming] = useState<{
     fileName: string;
     value: string;
     saving: boolean;
     error: string | null;
   } | null>(null);
-  /**
-   * renaming 最新值镜像（渲染时同步，oracle P1-2）：
-   * onBlur 守卫与 catch 兜底需要读「当前」而非事件绑定时闭包快照——saving 置位后 input 被
-   * disabled，浏览器对持有焦点的禁用元素自动触发 blur，此时必须能读到 saving 已为 true
-   */
+ /**
+ * renaming 最新值镜像（渲染时同步，oracle P1-2）：
+ * onBlur 守卫与 catch 兜底需要读「当前」而非事件绑定时闭包快照——saving 置位后 input 被
+ * disabled，浏览器对持有焦点的禁用元素自动触发 blur，此时必须能读到 saving 已为 true
+ */
   const renamingRef = useRef(renaming);
   renamingRef.current = renaming;
 
-  /** 拉取备份列表（仅项目打开时有效；无项目 → 直接返回防 409 NO_PROJECT_OPEN 误报）；
-   *  代际守卫：响应落地时校验请求序号未变（关项目/切项目时在途响应丢弃，P2-1） */
+ /** 拉取备份列表（仅项目打开时有效；无项目 → 直接返回防 409 NO_PROJECT_OPEN 误报）；
+ * 代际守卫：响应落地时校验请求序号未变（关项目/切项目时在途响应丢弃，P2-1） */
   async function loadBackups() {
     if (useProjectStore.getState().config === null) return;
     const seq = ++backupListSeq;
@@ -111,8 +111,8 @@ export function BackupSection() {
     }
   }
 
-  // 项目身份驱动：切项目（id 变化）→ 重拉列表；关闭项目（null）→ 清空 + 作废在途请求 + 关闭残留确认框。
-  // prevProjectId 初始 null：挂载时项目已打开（store 缓存）也能触发首载
+ // 项目身份驱动：切项目（id 变化）→ 重拉列表；关闭项目（null）→ 清空 + 作废在途请求 + 关闭残留确认框。
+ // prevProjectId 初始 null：挂载时项目已打开（store 缓存）也能触发首载
   const projectId = config?.id ?? null;
   const prevProjectId = useRef<string | null>(null);
   useEffect(() => {
@@ -131,7 +131,7 @@ export function BackupSection() {
     }
   }, [projectId]);
 
-  /** 频率选择即保存（决策 27：null = 关闭；select 受控值回弹由 store config 重拉保证） */
+ /** 频率选择即保存（null = 关闭；select 受控值回弹由 store config 重拉保证） */
   async function handleFrequencyChange(raw: string) {
     if (config === null) return;
     const value = raw === "null" ? null : Number(raw);
@@ -151,13 +151,13 @@ export function BackupSection() {
     }
   }
 
-  /** 立即备份：成功刷新列表（新条目在顶部）+ toast；失败 toast（磁盘错误透传服务端 message） */
+ /** 立即备份：成功刷新列表（新条目在顶部）+ toast；失败 toast（磁盘错误透传服务端 message） */
   async function handleBackupNow() {
     if (config === null || backupNowRunning) return;
     setBackupNowRunning(true);
     try {
       const name = backupName.trim();
-      await createProjectBackup(name.length > 0 ? name : undefined); // 决策 28：空输入不传 name
+      await createProjectBackup(name.length > 0 ? name : undefined); // 空输入不传 name
       setBackupName(""); // 成功后清空（同频率下拉「选择即保存」惯例）
       showToast(name.length > 0 ? `已备份「${name}」` : "已备份");
       await loadBackups();
@@ -173,12 +173,12 @@ export function BackupSection() {
     }
   }
 
-  /**
-   * 加载备份（强确认通过后）：restore → toast（含覆盖前快照文件名）→ 刷新项目数据：
-   * config/outline 重拉（中栏数据页经 dataVersion 信号重拉）+ 会话重载（chat store 订阅
-   * 仅响应 config.id 变化，restore 保留 id → 手动 clearSessions + loadSessions）；
-   * 失败（409 SCHEMA_VERSION_MISMATCH 等）抛给 ConfirmDialog 显示并保持打开
-   */
+ /**
+ * 加载备份（强确认通过后）：restore → toast（含覆盖前快照文件名）→ 刷新项目数据：
+ * config/outline 重拉（中栏数据页经 dataVersion 信号重拉）+ 会话重载（chat store 订阅
+ * 仅响应 config.id 变化，restore 保留 id → 手动 clearSessions + loadSessions）；
+ * 失败（409 SCHEMA_VERSION_MISMATCH 等）抛给 ConfirmDialog 显示并保持打开
+ */
   async function handleRestore() {
     if (restoreTarget === null) return;
     const res = await restoreProjectBackup(restoreTarget.fileName);
@@ -190,16 +190,16 @@ export function BackupSection() {
     void loadBackups(); // 顶部出现覆盖前自动快照
   }
 
-  /**
-   * 行内重命名提交（决策 29）：
-   * - 幂等保护：输入 trim 后与原名称一致 → 不发请求直接退出编辑态
-   * - 空输入 = 清除名称段（renameProjectBackup 收到空串/undefined → body 传 { name: "" }）
-   * - 成功：退出编辑态 + toast + 刷新列表（backupListSeq 代际守卫在 loadBackups 内）；
-   *   400/404：行内错误提示（透传服务端 message），保持编辑态；网络失败：行内固定文案
-   * - 失败兜底（oracle P1-2）：saving 期间 input 被 disabled 触发的 blur 已被 onBlur 守卫挡住，
-   *   正常流程行内错误必有挂点；但若编辑态被其他路径清掉（如提交中关项目），catch 读 ref 兜底
-   *   toast，保证失败必有反馈（toast 放 updater 外，避免 StrictMode 下 updater 双执行的副作用）
-   */
+ /**
+ * 行内重命名提交：
+ * - 幂等保护：输入 trim 后与原名称一致 → 不发请求直接退出编辑态
+ * - 空输入 = 清除名称段（renameProjectBackup 收到空串/undefined → body 传 { name: "" }）
+ * - 成功：退出编辑态 + toast + 刷新列表（backupListSeq 代际守卫在 loadBackups 内）；
+ * 400/404：行内错误提示（透传服务端 message），保持编辑态；网络失败：行内固定文案
+ * - 失败兜底（oracle P1-2）：saving 期间 input 被 disabled 触发的 blur 已被 onBlur 守卫挡住，
+ * 正常流程行内错误必有挂点；但若编辑态被其他路径清掉（如提交中关项目），catch 读 ref 兜底
+ * toast，保证失败必有反馈（toast 放 updater 外，避免 StrictMode 下 updater 双执行的副作用）
+ */
   async function handleRenameSubmit() {
     if (renaming === null || renaming.saving) return;
     const originalName = backups?.find((b) => b.fileName === renaming.fileName)?.name ?? "";
@@ -220,7 +220,7 @@ export function BackupSection() {
           ? err.message
           : "无法连接服务，重命名失败";
       if (renamingRef.current === null) {
-        // 编辑态已被清掉（行内错误无处可挂）→ 兜底 toast，避免静默失败
+ // 编辑态已被清掉（行内错误无处可挂）→ 兜底 toast，避免静默失败
         showToast(message, "error");
         return;
       }
@@ -228,8 +228,8 @@ export function BackupSection() {
     }
   }
 
-  /** 频率下拉选中值：缺省 10 → 「每 10 分钟」；null → 关闭；非枚举脏值（旧数据手工写入，读侧
-   *  原样透传）→ 归为关闭——与服务端定时器 resolveBackupFrequency（非枚举 = 关闭）语义一致 */
+ /** 频率下拉选中值：缺省 10 → 「每 10 分钟」；null → 关闭；非枚举脏值（旧数据手工写入，读侧
+ * 原样透传）→ 归为关闭——与服务端定时器 resolveBackupFrequency（非枚举 = 关闭）语义一致 */
   const frequencyValue =
     config === null
       ? ""
@@ -289,7 +289,7 @@ export function BackupSection() {
           <p className="mb-1 text-xs font-medium text-muted-foreground">历史备份</p>
           <div className="overflow-hidden rounded-lg border border-border">
             {backupsLoading && backups === null ? (
-              /* 首载骨架（重载不闪骨架：条件含 backups === null，layout.md §4.3） */
+              /* 首载骨架（重载不闪骨架：条件含 backups === null，） */
               <div className="space-y-1 p-2">
                 <div className={cn(skeletonClass, "h-7 rounded-md")} />
                 <div className={cn(skeletonClass, "h-7 rounded-md")} />
@@ -319,7 +319,7 @@ export function BackupSection() {
                           <span className="text-muted-foreground">
                             {formatBackupTime(b.createdAt)}
                           </span>
-                          {/* 类型标签（决策 29）：自动 = 中性低调徽标，手动 = primary 强调徽标 */}
+                          {/* 类型标签：自动 = 中性低调徽标，手动 = primary 强调徽标 */}
                           <span
                             className={
                               b.kind === "manual"
@@ -354,10 +354,10 @@ export function BackupSection() {
                                 else if (e.key === "Escape") setRenaming(null);
                               }}
                               onBlur={() => {
-                                // oracle P1-2 竞态守卫：saving 置位后 input 被 disabled，浏览器对
-                                // 聚焦中的禁用元素自动触发 blur——此时不清编辑态，否则异步失败返回时
-                                // 行内错误无处可挂（静默失败）。saving 期间 Esc/取消按钮均被禁用，
-                                // 编辑态只能由成功路径/兜底 toast 路径收尾
+ // oracle P1-2 竞态守卫：saving 置位后 input 被 disabled，浏览器对
+ // 聚焦中的禁用元素自动触发 blur——此时不清编辑态，否则异步失败返回时
+ // 行内错误无处可挂（静默失败）。saving 期间 Esc/取消按钮均被禁用，
+ // 编辑态只能由成功路径/兜底 toast 路径收尾
                                 if (!renamingRef.current?.saving) setRenaming(null);
                               }}
                               maxLength={MAX_BACKUP_NAME_LENGTH}
@@ -430,7 +430,7 @@ export function BackupSection() {
         </div>
       )}
 
-      {/* 加载强确认（settings.md「关键交互」：展示备份时间 + 类型标签 + 名称 + 大小 + 覆盖说明 +
+      {/* 加载强确认（「关键交互」：展示备份时间 + 类型标签 + 名称 + 大小 + 覆盖说明 +
           后悔药提示）；409 SCHEMA_VERSION_MISMATCH 时 ConfirmDialog 显示服务端 message 保持打开（阻断） */}
       {restoreTarget !== null && (
         <ConfirmDialog

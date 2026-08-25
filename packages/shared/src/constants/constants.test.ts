@@ -1,5 +1,5 @@
 // 常量断言测试（T1.2）：常量集与文档逐一核对
-// 文档来源：schema.md 关系类型表、hooks.md hook 字段、决策 21 half_life 映射、tools.md 工具目录
+// 文档来源： 关系类型表、 hook 字段、 half_life 映射、 工具目录
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { EntityType } from "../types/entity.js";
 import {
@@ -28,24 +28,24 @@ import {
   TOOL_PERMISSION,
 } from "./index.js";
 
-describe("实体 / 关系常量（schema.md）", () => {
-  it("ENTITY_TYPES 为 7 种实体类型（含 event 时间轴事件，决策 26；timepoint G2 时间标签点；reference 参考资料，决策 36），且与 types 的 EntityType 一致", () => {
+describe("实体 / 关系常量", () => {
+  it("ENTITY_TYPES 为 7 种实体类型（含 event 时间轴事件，；timepoint G2 时间标签点；reference 参考资料，），且与 types 的 EntityType 一致", () => {
     expect(ENTITY_TYPES).toEqual(["character", "setting", "location", "hook", "event", "timepoint", "reference"]);
     expectTypeOf<(typeof ENTITY_TYPES)[number]>().toEqualTypeOf<EntityType>();
   });
 
-  it("ENTITY_TYPE_LABELS 覆盖全部实体类型（决策 47 names/resolve 用；character 口径 = 人物）", () => {
+  it("ENTITY_TYPE_LABELS 覆盖全部实体类型（ names/resolve 用；character 口径 = 人物）", () => {
     expect(Object.keys(ENTITY_TYPE_LABELS).sort()).toEqual([...ENTITY_TYPES].sort());
     expect(ENTITY_TYPE_LABELS.character).toBe("人物");
     expect(ENTITY_TYPE_LABELS.reference).toBe("参考资料");
     expect(ENTITY_TYPE_LABELS.timepoint).toBe("时间点");
   });
 
-  it("OUTLINE_NODE_TYPE_LABELS 覆盖卷/章/场景（决策 47 names/resolve 用）", () => {
+  it("OUTLINE_NODE_TYPE_LABELS 覆盖卷/章/场景（ names/resolve 用）", () => {
     expect(OUTLINE_NODE_TYPE_LABELS).toEqual({ volume: "卷", chapter: "章", scene: "场景" });
   });
 
-  it("RELATION_TYPES 含全部 17 个预定义关系类型（schema.md 第 66-80 行 + occurs_in 决策 26）", () => {
+  it("RELATION_TYPES 含全部 17 个预定义关系类型", () => {
     expect(RELATION_TYPES).toEqual([
       "belongs_to",
       "owns",
@@ -74,14 +74,14 @@ describe("实体 / 关系常量（schema.md）", () => {
   });
 });
 
-describe("大纲节点常量（决策 23 麦基字段集）", () => {
+describe("大纲节点常量（ 麦基字段集）", () => {
   it("CONFLICT_LEVELS 为麦基冲突三层次（inner/personal/extra_personal）", () => {
     expect(CONFLICT_LEVELS).toEqual(["inner", "personal", "extra_personal"]);
     expect(CONFLICT_LEVELS).toHaveLength(3);
   });
 });
 
-describe("伏笔常量（hooks.md + 决策 21）", () => {
+describe("伏笔常量", () => {
   it("HOOK_STATUSES 4 个状态（planted → progressing → resolved / abandoned）", () => {
     expect(HOOK_STATUSES).toEqual(["planted", "progressing", "resolved", "abandoned"]);
     expect(HOOK_STATUSES).toHaveLength(4);
@@ -92,7 +92,7 @@ describe("伏笔常量（hooks.md + 决策 21）", () => {
     expect(PAYOFF_TIMING).toHaveLength(5);
   });
 
-  it("DEFAULT_HALF_LIFE 缺省映射与决策 21 一致（单位：章）", () => {
+  it("DEFAULT_HALF_LIFE 缺省映射与 一致（单位：章）", () => {
     expect(DEFAULT_HALF_LIFE).toEqual({
       immediate: 3,
       near_term: 8,
@@ -102,7 +102,7 @@ describe("伏笔常量（hooks.md + 决策 21）", () => {
     });
   });
 
-  it("HOOK_CATEGORIES 为前端建议值（hooks.md 自由分类示例）", () => {
+  it("HOOK_CATEGORIES 为前端建议值", () => {
     expect(HOOK_CATEGORIES).toEqual([
       "mystery",
       "relationship",
@@ -113,16 +113,16 @@ describe("伏笔常量（hooks.md + 决策 21）", () => {
   });
 });
 
-describe("工具常量（tools.md 工具目录）", () => {
+describe("工具常量", () => {
   it("TOOL_PERMISSION 两级权限：自动 / 提案确认", () => {
     expect(TOOL_PERMISSION).toEqual({ AUTO: "auto", PROPOSAL: "proposal" });
   });
 
-  it("查询类 9 个（tools.md「查询类」+ 决策 36 search_references）", () => {
+  it("查询类 9 个", () => {
     expect(QUERY_TOOLS).toEqual([
       "get_entity",
       "search_entities",
-      "search_references", // 决策 36（批次九）
+      "search_references", // （批次九）
       "query_relationships",
       "get_outline",
       "get_outline_path",
@@ -133,7 +133,7 @@ describe("工具常量（tools.md 工具目录）", () => {
     expect(QUERY_TOOLS).toHaveLength(9);
   });
 
-  it("分析类 5 个（tools.md「分析类」）", () => {
+  it("分析类 5 个", () => {
     expect(ANALYSIS_TOOLS).toEqual([
       "analyze_consistency",
       "detect_conflicts",
@@ -144,7 +144,7 @@ describe("工具常量（tools.md 工具目录）", () => {
     expect(ANALYSIS_TOOLS).toHaveLength(5);
   });
 
-  it("伏笔分析 5 个（hooks.md 工具扩展分析类）", () => {
+  it("伏笔分析 5 个", () => {
     expect(HOOK_ANALYSIS_TOOLS).toEqual([
       "analyze_hook_health",
       "trace_hook_lifecycle",
@@ -155,7 +155,7 @@ describe("工具常量（tools.md 工具目录）", () => {
     expect(HOOK_ANALYSIS_TOOLS).toHaveLength(5);
   });
 
-  it("提案类 16 个（tools.md 9 + hooks.md 5 + G2 时间点重排 1 + 决策 36 参考资料 1，无重复）", () => {
+  it("提案类 16 个", () => {
     expect(PROPOSAL_TOOLS).toEqual([
       "propose_create_entity",
       "propose_update_entity",
@@ -177,7 +177,7 @@ describe("工具常量（tools.md 工具目录）", () => {
     expect(PROPOSAL_TOOLS).toHaveLength(16);
   });
 
-  it("执行类 13 个（tools.md「执行类」+ G2 reorder_timepoints，不暴露给 LLM）", () => {
+  it("执行类 13 个", () => {
     expect(EXECUTOR_TOOLS).toEqual([
       "create_entity",
       "update_entity",
@@ -197,32 +197,32 @@ describe("工具常量（tools.md 工具目录）", () => {
   });
 
   it("分组无重叠且全量 47 个", () => {
-    expect(AUTO_TOOLS).toHaveLength(19); // +search_references（决策 36）
+    expect(AUTO_TOOLS).toHaveLength(19); // +search_references
     expect(TOOL_NAMES).toHaveLength(48); // 46 + search_references(自动) + propose_create_reference(提案)
-    // 各分组互不重叠
+ // 各分组互不重叠
     const all = [...QUERY_TOOLS, ...ANALYSIS_TOOLS, ...HOOK_ANALYSIS_TOOLS, ...PROPOSAL_TOOLS, ...EXECUTOR_TOOLS];
     expect(new Set(all).size).toBe(all.length);
-    // 全量集合 = 各分组之和
+ // 全量集合 = 各分组之和
     expect(new Set(TOOL_NAMES)).toEqual(new Set(all));
   });
 });
 
-describe("自动备份常量（决策 27，B2.1）", () => {
-  it("BACKUP_FREQUENCIES 为 [1, 5, 10, 15, 30, 60]（schema.md 枚举，含缺省 10；1 分钟档为批次十四决策 27 修订新增）", () => {
+describe("自动备份常量（，B2.1）", () => {
+  it("BACKUP_FREQUENCIES 为 [1, 5, 10, 15, 30, 60]", () => {
     expect(BACKUP_FREQUENCIES).toEqual([1, 5, 10, 15, 30, 60]);
     expect(BACKUP_FREQUENCIES).toHaveLength(6);
     expect(BACKUP_FREQUENCIES).toContain(DEFAULT_BACKUP_FREQUENCY_MINUTES);
   });
 
-  it("缺省频率 = 10（决策 27：新项目默认开启）", () => {
+  it("缺省频率 = 10（新项目默认开启）", () => {
     expect(DEFAULT_BACKUP_FREQUENCY_MINUTES).toBe(10);
   });
 
-  it("每项目保留最近 20 份（决策 27：超出删除最旧，含覆盖前自动快照）", () => {
+  it("每项目保留最近 20 份（超出删除最旧，含覆盖前自动快照）", () => {
     expect(MAX_BACKUPS_PER_PROJECT).toBe(20);
   });
 
-  it("手动备份自定义名称最大长度 = 30（决策 28）", () => {
+  it("手动备份自定义名称最大长度 = 30（）", () => {
     expect(MAX_BACKUP_NAME_LENGTH).toBe(30);
   });
 });

@@ -1,5 +1,5 @@
 // entity-detail 纯函数与配置测试（S3.6 + 批次四 I3b）：按类型字段配置、关系类型中文映射、表单 diff、
-// 设定层级分区（决策 30：parent_id 废弃改为 belongs_to 关系表达）
+// 设定层级分区（parent_id 废弃改为 belongs_to 关系表达）
 import { describe, expect, it } from "vitest";
 import {
   detailFieldsForType,
@@ -8,8 +8,8 @@ import {
   settingHierarchyFromRelations,
 } from "./entity-detail";
 
-describe("detailFieldsForType（data 表单按类型配置——schema.md 字段清单）", () => {
-  it("character：role/gender/age/personality/motivation/abilities（决策 45 修订：status 从详情页表单移除）", () => {
+describe("detailFieldsForType", () => {
+  it("character：role/gender/age/personality/motivation/abilities（status 从详情页表单移除）", () => {
     const fields = detailFieldsForType("character");
     expect(fields.map((f) => f.key)).toEqual([
       "role",
@@ -24,7 +24,7 @@ describe("detailFieldsForType（data 表单按类型配置——schema.md 字段
     expect(fields.find((f) => f.key === "motivation")?.control).toBe("textarea");
   });
 
-  it("setting（决策 30/31 + K2）：description/tags（分类）/rules（规则条款）；location 保留 parent_id 文本", () => {
+  it("setting（ + K2）：description/tags（分类）/rules（规则条款）；location 保留 parent_id 文本", () => {
     expect(detailFieldsForType("setting").map((f) => f.key)).toEqual([
       "description",
       "tags",
@@ -54,7 +54,7 @@ describe("detailFieldsForType（data 表单按类型配置——schema.md 字段
     expect(fields.find((f) => f.key === "half_life")?.control).toBe("number");
   });
 
-  it("event（决策 26）：description/tags——G2 移除 time_label（时间标签 = 时间点挂载）", () => {
+  it("event（）：description/tags——G2 移除 time_label（时间标签 = 时间点挂载）", () => {
     expect(detailFieldsForType("event").map((f) => f.key)).toEqual(["description", "tags"]);
   });
 
@@ -73,7 +73,7 @@ describe("relationTypeLabel（17 种预定义关系类型中文映射，批次�
     expect(relationTypeLabel("plants")).toBe("埋设");
   });
 
-  it("occurs_in（决策 26 新增，批次四 I1）→锚定于，与 occurs_at 发生于区分", () => {
+  it("occurs_in（ 新增，批次四 I1）→锚定于，与 occurs_at 发生于区分", () => {
     expect(relationTypeLabel("occurs_in")).toBe("锚定于");
     expect(relationTypeLabel("occurs_at")).toBe("发生于");
   });
@@ -83,7 +83,7 @@ describe("relationTypeLabel（17 种预定义关系类型中文映射，批次�
   });
 });
 
-describe("settingHierarchyFromRelations（决策 30：层级边分区——belongs_to 且两端均为 setting）", () => {
+describe("settingHierarchyFromRelations（层级边分区——belongs_to 且两端均为 setting）", () => {
   const rel = (
     id: string,
     src: string,
@@ -113,7 +113,7 @@ describe("settingHierarchyFromRelations（决策 30：层级边分区——belon
       rel("rel-6", self, "char-2", "setting", "character"), // setting→character belongs_to：非层级，忽略
     ];
     const { parent, children } = settingHierarchyFromRelations(relations, self);
-    // rel-1：source=self → self 是子，parent = set-2（target 端）
+ // rel-1：source=self → self 是子，parent = set-2（target 端）
     expect(parent).toEqual({
       relationId: "rel-1",
       parentId: "set-2",
@@ -179,7 +179,7 @@ describe("diffData（表单 partial 提交——只返回变更字段）", () =>
 
   it("空值规约：空串/空数组与缺失等价（清空字段不产生无意义提交）", () => {
     expect(diffData(original, { ...original, role: "" })).toEqual({ role: "" });
-    // 原值已是空串时，清空不提交
+ // 原值已是空串时，清空不提交
     expect(diffData({ role: "" }, { role: "" })).toBeNull();
     expect(diffData({ abilities: [] }, { abilities: [] })).toBeNull();
   });
@@ -193,25 +193,25 @@ describe("diffData（表单 partial 提交——只返回变更字段）", () =>
   });
 
   it("form 值为 undefined 的键跳过不提交（数字控件清空——age/half_life 不产生 age:null 导致 400）", () => {
-    // 清空数字：undefined 键被跳过，diff 结果为 null（保留服务端原值）
+ // 清空数字：undefined 键被跳过，diff 结果为 null（保留服务端原值）
     expect(diffData({ age: 16 }, { age: undefined })).toBeNull();
     expect(diffData(original, { ...original, age: undefined })).toBeNull();
-    // 其他字段的变更不受影响（undefined 键被排除，不混入提交）
+ // 其他字段的变更不受影响（undefined 键被排除，不混入提交）
     expect(diffData(original, { ...original, age: undefined, status: "退场" })).toEqual({
       status: "退场",
     });
   });
 
-  it("null 正常提交（expected_resolve_node_id 清空——「未设置」存 null 而非空串，决策 21）", () => {
-    // 原值有节点 → 清空 → 提交 null（服务端 z.string().nullable() 接受）
+  it("null 正常提交（expected_resolve_node_id 清空——「未设置」存 null 而非空串，）", () => {
+ // 原值有节点 → 清空 → 提交 null（服务端 z.string.nullable 接受）
     expect(
       diffData({ expected_resolve_node_id: "sc-1" }, { expected_resolve_node_id: null }),
     ).toEqual({
       expected_resolve_node_id: null,
     });
-    // 原值本就无该键 + null → 无变更
+ // 原值本就无该键 + null → 无变更
     expect(diffData({}, { expected_resolve_node_id: null })).toBeNull();
-    // 空串与 null 比较等价（同「未设置」语义）——旧值空串清空不产生提交
+ // 空串与 null 比较等价（同「未设置」语义）——旧值空串清空不产生提交
     expect(
       diffData({ expected_resolve_node_id: "" }, { expected_resolve_node_id: null }),
     ).toBeNull();

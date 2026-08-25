@@ -1,6 +1,6 @@
 // S5.1 Delta 增删查测试：insertDelta（order 全局单调 + 返回行完整）/ listDeltasByNode
 // （按节点 + order 升序、targetName 联表两路径、目标缺失省略 name、
-//   可见性三态（决策 12 修订）：自身软删 / 触发节点软删 / 目标实体或大纲节点软删）
+// 可见性三态：自身软删 / 触发节点软删 / 目标实体或大纲节点软删）
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -102,7 +102,7 @@ describe("insertDelta", () => {
       description: "第三次",
     });
     expect([d1.order, d2.order, d3.order]).toEqual([1, 2, 3]); // 全新库从 1 起，全局不回落
-    // 库内实际持久化顺序一致
+ // 库内实际持久化顺序一致
     const rows = db
       .prepare('SELECT id, "order" FROM delta_records ORDER BY "order" ASC')
       .all() as Array<{ id: string; order: number }>;
@@ -133,7 +133,7 @@ describe("insertDelta", () => {
     expect(Number.isNaN(Date.parse(row.created_at))).toBe(false);
     expect(row.created_at).toBe(row.updated_at); // 创建时相同
     expect(row.deleted_at).toBeNull();
-    // 落库形态：changes 存 JSON 字符串
+ // 落库形态：changes 存 JSON 字符串
     const stored = db
       .prepare("SELECT changes FROM delta_records WHERE id = ?")
       .get(row.id) as { changes: string };
@@ -153,7 +153,7 @@ describe("listDeltasByNode", () => {
     expect(records.map((r) => r.id)).toEqual([d1.id, d2.id]);
     expect(records.map((r) => r.order)).toEqual([1, 2]);
     expect(records[0].description).toBe("一");
-    // 存在的节点但无记录 → 空数组
+ // 存在的节点但无记录 → 空数组
     expect(listDeltasByNode(db, "ch-1", dir)).toEqual([]);
   });
 
@@ -169,7 +169,7 @@ describe("listDeltasByNode", () => {
     const byId = new Map(records.map((r) => [r.id, r]));
     expect(byId.get(toEntity.id)!.targetName).toBe("阿强"); // entities.name
     expect(byId.get(toOutline.id)!.targetName).toBe("场景二"); // outline.json title
-    // 目标不存在 → 记录仍返回但 targetName 省略（relation.ts 端点缺失语义）
+ // 目标不存在 → 记录仍返回但 targetName 省略（relation.ts 端点缺失语义）
     expect(byId.get(toMissingOutline.id)!.targetName).toBeUndefined();
     expect(byId.get(toMissingEntity.id)!.targetName).toBeUndefined();
   });
@@ -178,7 +178,7 @@ describe("listDeltasByNode", () => {
     const { charA } = seedBase();
     const d1 = insertDelta(db, { nodeId: "sc-1", targetType: "character", targetId: charA, changes: change("a", "1", "2"), description: "一" });
     insertDelta(db, { nodeId: "sc-1", targetType: "character", targetId: charA, changes: change("b", "1", "2"), description: "二" });
-    // 直写脏数据（绕过应用层，模拟外部写入/损坏）：changes 列非法 JSON
+ // 直写脏数据（绕过应用层，模拟外部写入/损坏）：changes 列非法 JSON
     db.prepare("UPDATE delta_records SET changes = 'not-json' WHERE id = ?").run(d1.id);
 
     const records = listDeltasByNode(db, "sc-1", dir);
@@ -189,7 +189,7 @@ describe("listDeltasByNode", () => {
   });
 });
 
-describe("listDeltasByNode 可见性三态（决策 12 修订：任一命中即过滤）", () => {
+describe("listDeltasByNode 可见性三态（任一命中即过滤）", () => {
   it("a. delta 自身软删 → 过滤", () => {
     const { charA } = seedBase();
     const d1 = insertDelta(db, { nodeId: "sc-1", targetType: "character", targetId: charA, changes: change("a", "1", "2"), description: "一" });
@@ -217,13 +217,13 @@ describe("listDeltasByNode 可见性三态（决策 12 修订：任一命中即�
     const charB = createEntity(db, { type: "character", name: "阿珍" });
     const toA = insertDelta(db, { nodeId: "sc-1", targetType: "character", targetId: charA, changes: change("a", "1", "2"), description: "指向阿强" });
     const toB = insertDelta(db, { nodeId: "sc-1", targetType: "character", targetId: charB.id, changes: change("b", "1", "2"), description: "指向阿珍" });
-    // 只软删实体、不级联标 delta——隔离验证「目标实体软删」过滤层
+ // 只软删实体、不级联标 delta——隔离验证「目标实体软删」过滤层
     db.prepare("UPDATE entities SET deleted_at = ? WHERE id = ?").run(T0, charA);
 
     const records = listDeltasByNode(db, "sc-1", dir);
     expect(records).toHaveLength(1);
     expect(records[0].id).toBe(toB.id);
-    // delta 自身未被级联标删（过滤来自目标实体层）
+ // delta 自身未被级联标删（过滤来自目标实体层）
     const deltaDeletedAt = db
       .prepare("SELECT deleted_at FROM delta_records WHERE id = ?")
       .get(toA.id) as { deleted_at: string | null };
@@ -236,7 +236,7 @@ describe("listDeltasByNode 可见性三态（决策 12 修订：任一命中即�
     softDeleteScene("sc-2");
     expect(listDeltasByNode(db, "sc-1", dir)).toEqual([]);
 
-    // 还原：清软删标记（deleted=false 即可恢复可见——判断仅看 deleted === true）
+ // 还原：清软删标记（deleted=false 即可恢复可见——判断仅看 deleted === true）
     const tree = readOutlineFile(dir);
     const sc2 = findOutlineNode(tree, "sc-2")!;
     sc2.deleted = false;
@@ -253,14 +253,14 @@ describe("listDeltasByNode 可见性三态（决策 12 修订：任一命中即�
     insertDelta(db, { nodeId: "sc-1", targetType: "character", targetId: charA, changes: change("a", "1", "2"), description: "一" });
     insertDelta(db, { nodeId: "sc-1", targetType: "character", targetId: charA, changes: change("b", "1", "2"), description: "二" });
     const other = insertDelta(db, { nodeId: "sc-2", targetType: "character", targetId: charA, changes: change("c", "1", "2"), description: "三" });
-    // 物理删除 sc-1（构造不含该节点的树；purge 后 delta 残留的脏引用场景）
+ // 物理删除 sc-1（构造不含该节点的树；purge 后 delta 残留的脏引用场景）
     const tree = readOutlineFile(dir);
     const chapter = findOutlineNode(tree, "ch-1");
     if (chapter?.type !== "chapter") throw new Error("fixture 缺失 ch-1");
     chapter.children = chapter.children!.filter((c) => c.id !== "sc-1");
     writeOutlineFile(dir, tree);
 
-    expect(listDeltasByNode(db, "sc-1", dir)).toEqual([]); // 触发节点缺失视同不可见（决策 12 修订兜底）
+    expect(listDeltasByNode(db, "sc-1", dir)).toEqual([]); // 触发节点缺失视同不可见（兜底）
     expect(listDeltasByNode(db, "sc-2", dir).map((r) => r.id)).toEqual([other.id]); // 其他节点不受影响
   });
 });
@@ -291,17 +291,17 @@ describe("listDeltasByTarget（S6.3 工具 get_delta_history 下沉）", () => {
     expect(records[0].description).toBe("指向阿强");
   });
 
-  it("可见性三态（决策 12 修订）：delta 自身软删 / 触发节点软删均过滤（与 listDeltasByNode 同语义）", () => {
+  it("可见性三态（）：delta 自身软删 / 触发节点软删均过滤（与 listDeltasByNode 同语义）", () => {
     const { charA } = seedBase();
     insertDelta(db, { nodeId: "vol-1", targetType: "character", targetId: charA, changes: change("a", "1", "2"), description: "卷级" });
     const scDelta = insertDelta(db, { nodeId: "sc-1", targetType: "character", targetId: charA, changes: change("b", "1", "2"), description: "场景级" });
 
-    // a. delta 自身软删 → 过滤
+ // a. delta 自身软删 → 过滤
     db.prepare("UPDATE delta_records SET deleted_at = ? WHERE id = ?").run(T0, scDelta.id);
     let records = listDeltasByTarget(db, charA, dir);
     expect(records.map((r) => r.description)).toEqual(["卷级"]);
 
-    // b. 触发节点软删 → 该节点全部 delta 不可见
+ // b. 触发节点软删 → 该节点全部 delta 不可见
     db.prepare("UPDATE delta_records SET deleted_at = NULL WHERE id = ?").run(scDelta.id);
     softDeleteScene("sc-1");
     records = listDeltasByTarget(db, charA, dir);
@@ -311,12 +311,12 @@ describe("listDeltasByTarget（S6.3 工具 get_delta_history 下沉）", () => {
   it("目标端点软删（实体 / 大纲节点）→ 过滤；大纲 target 联表名（outline.json title）", () => {
     const { charA } = seedBase();
     insertDelta(db, { nodeId: "sc-1", targetType: "character", targetId: charA, changes: change("a", "1", "2"), description: "指向阿强" });
-    // 目标实体软删 → 全部不可见
+ // 目标实体软删 → 全部不可见
     db.prepare("UPDATE entities SET deleted_at = ? WHERE id = ?").run(T0, charA);
     expect(listDeltasByTarget(db, charA, dir)).toEqual([]);
     db.prepare("UPDATE entities SET deleted_at = NULL WHERE id = ?").run(charA);
 
-    // 大纲节点目标（targetType=outline_node）→ 联表名 + 软删过滤
+ // 大纲节点目标（targetType=outline_node）→ 联表名 + 软删过滤
     insertDelta(db, { nodeId: "sc-1", targetType: "outline_node", targetId: "sc-2", changes: change("c", "1", "2"), description: "指向场景二" });
     const nodeRecords = listDeltasByTarget(db, "sc-2", dir);
     expect(nodeRecords).toHaveLength(1);
@@ -331,7 +331,7 @@ describe("listDeltasByTarget（S6.3 工具 get_delta_history 下沉）", () => {
     expect(listDeltasByTarget(db, "char-999", dir)).toEqual([]); // 目标不存在
 
     insertDelta(db, { nodeId: "sc-1", targetType: "character", targetId: charA, changes: change("a", "1", "2"), description: "一" });
-    // 物理删除 sc-1（构造不含该节点的树——purge 后 delta 残留的脏引用）
+ // 物理删除 sc-1（构造不含该节点的树——purge 后 delta 残留的脏引用）
     const tree = readOutlineFile(dir);
     const chapter = findOutlineNode(tree, "ch-1");
     if (chapter?.type !== "chapter") throw new Error("fixture 缺失 ch-1");
@@ -341,7 +341,7 @@ describe("listDeltasByTarget（S6.3 工具 get_delta_history 下沉）", () => {
   });
 });
 
-describe("getDeltaRow（S7.5 提案快照重校验，决策 14）", () => {
+describe("getDeltaRow（S7.5 提案快照重校验，）", () => {
   it("正常行取回：与 insertDelta 返回行一致（changes 已解析、updated_at 原样）", () => {
     const { charA } = seedBase();
     const row = insertDelta(db, { nodeId: "sc-1", targetType: "character", targetId: charA, changes: change("a", "1", "2"), description: "快照引用" });
@@ -358,7 +358,7 @@ describe("getDeltaRow（S7.5 提案快照重校验，决策 14）", () => {
 });
 
 describe("listDanglingDeltas（S6.4 工具 find_orphan_elements 下沉）", () => {
-  /** 移除大纲中指定节点（模拟 purge：物理删除） */
+ /** 移除大纲中指定节点（模拟 purge：物理删除） */
   function purgeNode(nodeId: string): void {
     const tree = readOutlineFile(dir);
     const chapter = findOutlineNode(tree, "ch-1");

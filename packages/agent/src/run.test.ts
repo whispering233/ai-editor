@@ -1,7 +1,6 @@
 // S7.3 主循环测试：终止条件 / 事件顺序 / length 截断 / 重试与超时 / abort 双形态归一 /
 // 工具失败结构化喂回 / 持久化回调
-// 契约来源：doc/design/tasks.md S7.3、doc/design/decisions.md 决策 15/16/18、
-// doc/api/endpoints.md POST /api/v1/chat 事件契约（tool_call/tool_result/proposal/text/done/error）。
+// POST /api/v1/chat 事件（tool_call/tool_result/proposal/text/done/error）。
 // 策略：mock produce 固定响应序列（逐次 shift 脚本）+ mock dispatcher，纯内存断言，无 I/O。
 import { describe, expect, it, vi } from "vitest";
 import type { AbortSignalLike, ChatStreamResult, LLMMessage, LLMStreamEvent, LLMUsage } from "@whispering233/ai-editor-llm";
@@ -106,7 +105,7 @@ function runBasic(
 
 // ============ 终止条件 ============
 
-describe("runAgent 终止条件（决策 15）", () => {
+describe("runAgent 终止条件（）", () => {
   it("无 tool_call：text 流式转发 + done 终止（done 携带 session_id）", async () => {
     const { produce, calls } = createMockProduce([
       { result: okResult(), events: [textEvent("你好，"), textEvent("顾问")] },
@@ -123,9 +122,9 @@ describe("runAgent 终止条件（决策 15）", () => {
     expect(result.rounds).toBe(1);
     expect(events.map((e) => e.type)).toEqual(["turn_start", "text", "text", "done"]);
     expect(events[events.length - 1]).toMatchObject({ type: "done", sessionId: "sess_1" });
-    // 持久化回调：本轮新消息 = [assistant]；用户消息不入 onMessages（S7.6 自行持久化）
+ // 持久化回调：本轮新消息 = [assistant]；用户消息不入 onMessages（S7.6 自行持久化）
     expect(messages).toEqual([[{ role: "assistant", content: "你好，顾问" }]]);
-    // 用户消息已入喂回 payload
+ // 用户消息已入喂回 payload
     expect(calls[0].messages.some((m) => m.role === "user" && m.content === "分析第三章")).toBe(true);
   });
 
@@ -152,7 +151,7 @@ describe("runAgent 终止条件（决策 15）", () => {
   it("120s 单轮超时（含重试退避）→ error AGENT_TIMEOUT（fake timers）", async () => {
     vi.useFakeTimers();
     try {
-      // produce 挂起直到 attempt 控制器 abort（模拟长调用被超时中止）
+ // produce 挂起直到 attempt 控制器 abort（模拟长调用被超时中止）
       const produce = vi.fn(async (_m: LLMMessage[], signal?: AbortSignalLike): Promise<ChatStreamResult> => {
         await sleepUntilAborted(signal, 1_000_000);
         return { ok: false, aborted: true, error: ABORT_ERROR };
@@ -171,7 +170,7 @@ describe("runAgent 终止条件（决策 15）", () => {
       await vi.advanceTimersByTimeAsync(0);
       const result = await p;
       expect(result.ok).toBe(false);
-      expect(result.aborted).toBe(false); // 超时 ≠ 用户取消（决策 15 分离语义）
+      expect(result.aborted).toBe(false); // 超时 ≠ 用户取消（ 分离语义）
       expect(result.error?.code).toBe("AGENT_TIMEOUT");
       expect(produce).toHaveBeenCalledTimes(1); // 轮次预算耗尽：isRetryable 拒绝再重试
       expect(events[events.length - 1]).toMatchObject({ type: "error", code: "AGENT_TIMEOUT", aborted: false });
@@ -205,7 +204,7 @@ describe("runAgent 终止条件（决策 15）", () => {
     expect(result.ok).toBe(false);
     expect(result.aborted).toBe(false);
     expect(result.error?.code).toBe("insufficient_quota");
-    expect(produce).toHaveBeenCalledTimes(1); // 配额/计费类快失败不重试（决策 15）
+    expect(produce).toHaveBeenCalledTimes(1); // 配额/计费类快失败不重试
     expect(events[events.length - 1]).toMatchObject({ type: "error", code: "insufficient_quota" });
     expect(events.some((e) => e.type === "done")).toBe(false); // error 后终止，无 done
   });
@@ -213,7 +212,7 @@ describe("runAgent 终止条件（决策 15）", () => {
 
 // ============ 事件顺序 ============
 
-describe("runAgent 事件顺序（endpoints.md）", () => {
+describe("runAgent 事件顺序", () => {
   it("text → tool_call → tool_result → proposal（在 tool_result 后、循环继续前）→ done", async () => {
     const { produce } = createMockProduce([
       {
@@ -245,15 +244,15 @@ describe("runAgent 事件顺序（endpoints.md）", () => {
       "tool_result", "tool_result", "proposal",
       "turn_start", "text", "done",
     ]);
-    // tool_result 按 id 回填（决策 18 配对）
+ // tool_result 按 id 回填（ 配对）
     expect(events[4]).toMatchObject({ type: "tool_result", id: "call_a" });
     expect(events[5]).toMatchObject({ type: "tool_result", id: "call_b" });
-    // proposal 在对应 tool_result 之后、下一轮/循环继续之前
+ // proposal 在对应 tool_result 之后、下一轮/循环继续之前
     expect(events[6]).toEqual({
       type: "proposal",
       proposal: { proposal_id: "prop_1", type: "propose_create_entity", preview: { name: "张三", type: "character" } },
     });
-    // 持久化回调：第 1 轮 = assistant（含 tool_calls）+ 2 条 tool 结果
+ // 持久化回调：第 1 轮 = assistant（含 tool_calls）+ 2 条 tool 结果
     expect(messages[0]).toHaveLength(3);
     expect(messages[0][0]).toMatchObject({ role: "assistant", content: "我来查一下" });
     expect(messages[0][1]).toMatchObject({ role: "tool", tool_call_id: "call_a", content: "{\"id\":\"char-1\"}" });
@@ -287,14 +286,14 @@ describe("runAgent 事件顺序（endpoints.md）", () => {
   });
 });
 
-// ============ length 截断（决策 15） ============
+// ============ length 截断 ============
 
-describe("finish_reason=length 截断（决策 15）", () => {
+describe("finish_reason=length 截断（）", () => {
   it("工具不执行（dispatcher 不被调用）+ 全部标错喂回重发", async () => {
     const { produce, calls } = createMockProduce([
       {
         result: okResult("length"),
-        // 参数看似解析成功但流式拼接可能静默不完整——一律不执行
+ // 参数看似解析成功但流式拼接可能静默不完整——一律不执行
         events: [toolCallEvent("call_1", "get_entity", { id: "char-1" })],
       },
       { result: okResult(), events: [textEvent("好的，我重新规划")] },
@@ -304,14 +303,14 @@ describe("finish_reason=length 截断（决策 15）", () => {
     const result = await runBasic({ produce, dispatcher, onEvent: (e) => events.push(e) });
     expect(result.ok).toBe(true);
     expect(dispatcher).not.toHaveBeenCalled(); // length 截断：任何 tool_call 都不执行
-    // 第二轮喂回 payload 含标错 tool 消息（模型据此重发）
+ // 第二轮喂回 payload 含标错 tool 消息（模型据此重发）
     const round2 = calls[1].messages;
     const toolMsg = round2.find((m) => m.role === "tool");
     expect(toolMsg).toBeDefined();
     expect((toolMsg as { content: string }).content).toContain("length");
-    // 截断轮仍发出 tool_call 事件（客户端可见模型尝试过调用）
+ // 截断轮仍发出 tool_call 事件（客户端可见模型尝试过调用）
     expect(events.some((e) => e.type === "tool_call" && e.id === "call_1")).toBe(true);
-    // length 是完整响应：assistant（含 tool_calls）已入会话与持久化
+ // length 是完整响应：assistant（含 tool_calls）已入会话与持久化
     expect(calls[1].messages.some((m) => m.role === "assistant" && (m as { tool_calls?: unknown[] }).tool_calls?.length === 1)).toBe(true);
   });
 
@@ -332,9 +331,9 @@ describe("finish_reason=length 截断（决策 15）", () => {
   });
 });
 
-// ============ 重试与超时/取消分离（决策 15/16） ============
+// ============ 重试与超时/取消分离 ============
 
-describe("模型失败重试与取消（决策 15/16）", () => {
+describe("模型失败重试与取消（）", () => {
   it("可重试错误重试后成功：重试不消耗轮次、报告值累计（不清零）、半条 assistant 不重发", async () => {
     const { produce, calls } = createMockProduce([
       { result: errResult(500, "SERVER_ERROR", "服务端繁忙") },
@@ -345,10 +344,10 @@ describe("模型失败重试与取消（决策 15/16）", () => {
       { maxRetries: 3, retryBaseDelayMs: 1 },
     );
     expect(result.ok).toBe(true);
-    expect(result.rounds).toBe(1); // 重试与轮次分开计量（决策 15：不互相消耗）
+    expect(result.rounds).toBe(1); // 重试与轮次分开计量（不互相消耗）
     expect(result.retries).toBe(1); // 累计报告值：成功轮前重试过 1 次（ora S7.3 审核 S6 口径）
     expect(produce).toHaveBeenCalledTimes(2);
-    // 决策 18：重试复用原 payload（失败轮的半条 assistant 绝不追加）
+ // 重试复用原 payload（失败轮的半条 assistant 绝不追加）
     expect(calls[0].messages).toEqual(calls[1].messages);
     expect(calls[1].messages.some((m) => m.role === "assistant")).toBe(false); // 无任何 assistant 半条
   });
@@ -404,7 +403,7 @@ describe("模型失败重试与取消（决策 15/16）", () => {
     const result = await p;
     expect(result.ok).toBe(false);
     expect(result.aborted).toBe(true);
-    expect(produce).toHaveBeenCalledTimes(1); // 取消不重试（决策 16）
+    expect(produce).toHaveBeenCalledTimes(1); // 取消不重试
   });
 
   it("重试退避期间用户取消：withRetry 抛 ABORT_ERROR → 归一为 aborted 终止", async () => {
@@ -436,7 +435,7 @@ describe("模型失败重试与取消（决策 15/16）", () => {
   });
 });
 
-// ============ 工具失败结构化喂回（决策 15 自纠） ============
+// ============ 工具失败结构化喂回（ 自纠） ============
 
 describe("工具失败结构化喂回", () => {
   it("isError 结果回填 tool 消息（不终止循环），下一轮模型收到错误内容", async () => {
@@ -450,10 +449,10 @@ describe("工具失败结构化喂回", () => {
     const events: AgentEvent[] = [];
     const result = await runBasic({ produce, dispatcher, onEvent: (e) => events.push(e) });
     expect(result.ok).toBe(true); // 工具失败不终止
-    // 下一轮模型收到的 payload 含错误 tool 消息（结构化喂回自纠）
+ // 下一轮模型收到的 payload 含错误 tool 消息（结构化喂回自纠）
     const round2 = calls[1].messages;
     expect(round2.some((m) => m.role === "tool" && m.content === "错误：实体 char-9 不存在")).toBe(true);
-    // tool_result 事件携带失败内容
+ // tool_result 事件携带失败内容
     expect(events.some((e) => e.type === "tool_result" && (e as { result: string }).result === "错误：实体 char-9 不存在")).toBe(true);
   });
 
@@ -482,14 +481,14 @@ describe("工具失败结构化喂回", () => {
   });
 });
 
-// ============ dispatcher 取消传播（S7.4 契约：AbortedError → 用户取消语义） ============
+// ============ dispatcher 取消传播（S7.4 AbortedError → 用户取消语义） ============
 
 describe("dispatcher 取消传播（S7.4 executor 抛 AbortedError）", () => {
   it("工具执行中取消 → 按用户取消终止（aborted=true，非 AGENT_DISPATCH_ERROR、不重试）", async () => {
     const { produce } = createMockProduce([
       { result: okResult("tool_calls"), events: [toolCallEvent("call_1")] },
     ]);
-    // S7.4 真实现契约：executor 在工具执行中检查 signal，命中取消抛 AbortedError（tools analysis/utils）
+ // S7.4 真实现executor 在工具执行中检查 signal，命中取消抛 AbortedError（tools analysis/utils）
     const dispatcher = vi.fn(async (): Promise<DispatchResult[]> => {
       throw new AbortedError();
     });
@@ -500,12 +499,12 @@ describe("dispatcher 取消传播（S7.4 executor 抛 AbortedError）", () => {
     expect(result.error).toEqual(ABORT_ERROR);
     expect(result.error?.code).not.toBe("AGENT_DISPATCH_ERROR"); // 取消不是调度器缺陷
     expect(events[events.length - 1]).toMatchObject({ type: "error", aborted: true });
-    expect(produce).toHaveBeenCalledTimes(1); // 不重试（决策 16：取消不重试）
+    expect(produce).toHaveBeenCalledTimes(1); // 不重试（取消不重试）
   });
 
   it("signal 在 LLM 调用期间中止且 dispatcher 抛普通错误 → 按取消终止（signal 识别兜底）", async () => {
-    // 场景：produce 期间用户取消（决策 16 ① fetch abort），但竞态下 produce 仍 resolve ok；
-    // dispatcher 抛普通错误（未抛 AbortedError）——run.ts catch 以 signal.aborted 双保险识别
+ // 场景：produce 期间用户取消（ ① fetch abort），但竞态下 produce 仍 resolve ok；
+ // dispatcher 抛普通错误（未抛 AbortedError）——run.ts catch 以 signal.aborted 双保险识别
     const controller = new AbortController();
     const produce = vi.fn(
       async (_m: LLMMessage[], _s?: AbortSignalLike, onEvent?: (e: LLMStreamEvent) => void): Promise<ChatStreamResult> => {
@@ -530,7 +529,7 @@ describe("dispatcher 取消传播（S7.4 executor 抛 AbortedError）", () => {
   });
 });
 
-// ============ 持久化回调（S7.6 消费契约） ============
+// ============ 持久化回调（S7.6 消费） ============
 
 describe("onMessages 持久化回调", () => {
   it("每轮输出新消息序列（assistant + tool 结果），且用户消息不在其中", async () => {
@@ -547,10 +546,10 @@ describe("onMessages 持久化回调", () => {
     expect(messages).toHaveLength(2);
     expect(messages[0]).toHaveLength(3); // assistant + 2 tool
     expect(messages[1]).toHaveLength(1); // 纯 assistant
-    // 用户消息由 S7.6 自行持久化，不在本回调输出
+ // 用户消息由 S7.6 自行持久化，不在本回调输出
     const all = messages.flat();
     expect(all.every((m) => m.role !== "user")).toBe(true);
-    // 半条 assistant 不重发：失败轮未产生 onMessages 输出
+ // 半条 assistant 不重发：失败轮未产生 onMessages 输出
     expect(messages[0][0]).toMatchObject({ role: "assistant", content: null, tool_calls: [{ id: "call_a" }, { id: "call_b" }] });
   });
 });
@@ -561,7 +560,7 @@ describe("ora S7.3 审核修复：轮次预算覆盖工具执行 / id 校验 / �
   it("S6：attempt 超时 → 归一可重试 → 重试成功（超时轮不算成功轮，预算内重试）", async () => {
     vi.useFakeTimers();
     try {
-      // 第一次调用挂起直到 attempt 超时 abort；第二次调用直接成功
+ // 第一次调用挂起直到 attempt 超时 abort；第二次调用直接成功
       let first = true;
       const produce = vi.fn(
         async (_m: LLMMessage[], signal?: AbortSignalLike, onEvent?: (e: LLMStreamEvent) => void): Promise<ChatStreamResult> => {
@@ -605,7 +604,7 @@ describe("ora S7.3 审核修复：轮次预算覆盖工具执行 / id 校验 / �
       const produce = vi.fn(async (_m: LLMMessage[], signal?: AbortSignalLike): Promise<ChatStreamResult> => {
         if (first) {
           first = false;
-          // 等待 attempt 超时 abort 触发后仍正常 resolve（竞态：timedOut 已置位、produce 却返回 ok）
+ // 等待 attempt 超时 abort 触发后仍正常 resolve（竞态：timedOut 已置位、produce 却返回 ok）
           await new Promise<void>((resolve) => {
             if (signal?.aborted) {
               resolve();
@@ -645,7 +644,7 @@ describe("ora S7.3 审核修复：轮次预算覆盖工具执行 / id 校验 / �
       ]);
       const { dispatcher } = createMockDispatcher();
       const events: AgentEvent[] = [];
-      // produce 成功返回后把时钟拨过 roundDeadline（模拟 attempt 阶段时间流逝耗尽预算）
+ // produce 成功返回后把时钟拨过 roundDeadline（模拟 attempt 阶段时间流逝耗尽预算）
       const base = Date.now();
       const produceWrapped = vi.fn(
         async (m: LLMMessage[], s?: AbortSignalLike, onEvent?: (e: LLMStreamEvent) => void): Promise<ChatStreamResult> => {
@@ -744,7 +743,7 @@ describe("ora S7.3 审核修复：轮次预算覆盖工具执行 / id 校验 / �
     const result = await runAgent({
       userMessage: "hi",
       session: [],
-      tokenBudget: 1, // 同时构造 token 超限：aborted 应优先（决策 16 取消语义）
+      tokenBudget: 1, // 同时构造 token 超限：aborted 应优先（ 取消语义）
       signal: ac.signal as unknown as AbortSignalLike,
       deps: { produce, dispatcher: createMockDispatcher().dispatcher, onEvent: (e) => events.push(e) },
     });

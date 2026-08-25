@@ -1,16 +1,15 @@
 // 实体 / 关系 / Delta 数据类型（API 形态 camelCase + 存储形态 snake_case 两套）
-// 契约来源：doc/api/endpoints.md、doc/database/schema.md、doc/database/hooks.md
-// 命名约定（endpoints.md「通用约定」）：请求体/查询参数 snake_case，响应体 camelCase；
+// 命名约定（「通用约定」）：请求体/查询参数 snake_case，响应体 camelCase；
 // 嵌套 data 对象内部字段原样透传（snake_case，如 expected_payoff）。
 
 // ============ 实体 ============
 
-/** 实体类型（entities 表 type 列，schema.md；event 为时间轴事件，决策 26；timepoint 为 G2 时间标签点，name=时间标签文本；reference 为参考资料，决策 36） */
+/** 实体类型（entities 表 type 列，；event 为时间轴事件，；timepoint 为 G2 时间标签点，name=时间标签文本；reference 为参考资料） */
 export type EntityType = "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "reference";
 
 /**
  * 实体（API 响应形态，camelCase；对应 GET /api/v1/entity/:type/:id 详情）
- * data 为各类型专属字段（Record 透传，snake_case 原样），结构见 schema.md 与 hooks.md
+ * data 为各类型专属字段（Record 透传，snake_case 原样），结构见 与 
  */
 export interface Entity {
   id: string;
@@ -18,13 +17,13 @@ export interface Entity {
   name: string;
   data: Record<string, unknown>;
   createdAt: string; // ISO 8601，应用层写入
-  updatedAt: string; // ISO 8601（提案快照比对，决策 14）
-  /** 软删标记（决策 12）；常规查询默认过滤，回收站 API 返回 */
+  updatedAt: string; // ISO 8601（提案快照比对）
+ /** 软删标记；常规查询默认过滤，回收站 API 返回 */
   deletedAt?: string | null;
 }
 
 /**
- * 实体列表摘要（GET /api/v1/entity/:type 列表项，endpoints.md）
+ * 实体列表摘要（GET /api/v1/entity/:type 列表项，）
  * summary 为从 data 提取的关键摘要字段（如 character → role/status、hook → status/payoff_timing）
  */
 export interface EntitySummary {
@@ -32,167 +31,167 @@ export interface EntitySummary {
   type: EntityType;
   name: string;
   summary: Record<string, unknown>;
-  /** 上级设定（M2，2026-08 批次六）：**仅 setting 类型填充**——层级 = belongs_to 关系（决策 30），
-   * 服务端列表响应时补查设定间层级边按 childId 映射附加；无父的设定不出现（稀疏语义） */
+ /** 上级设定（M2，2026-08 批次六）：**仅 setting 类型填充**——层级 = belongs_to 关系，
+ * 服务端列表响应时补查设定间层级边按 childId 映射附加；无父的设定不出现（稀疏语义） */
   parentId?: string;
   parentName?: string;
-  /** 手动排序位（决策 46，2026-08 批次十三）：**仅 setting 类型填充**——同级组内线性序
-   * （同父/同根组内 0..n-1，entities.sort_order 列）；NULL = 未参与手动排序（不出现） */
+ /** 手动排序位（2026-08 批次十三）：**仅 setting 类型填充**——同级组内线性序
+ * （同父/同根组内 0..n-1，entities.sort_order 列）；NULL = 未参与手动排序（不出现） */
   sortOrder?: number;
   createdAt: string;
   updatedAt: string;
 }
 
-/** entities 表行（存储形态 snake_case，schema.md） */
+/** entities 表行（存储形态 snake_case，） */
 export interface EntityRow {
   id: string;
   type: EntityType;
   name: string;
-  /** JSON 列解析后的对象 */
+ /** JSON 列解析后的对象 */
   data: Record<string, unknown>;
-  /** 线性序（决策 26 + G2）：event/timepoint 类型内线性；setting 为同级组内线性序（决策 46）；
-   * NULL = 未参与排序 */
+ /** 线性序（ + G2）：event/timepoint 类型内线性；setting 为同级组内线性序；
+ * NULL = 未参与排序 */
   sort_order: number | null;
   created_at: string; // ISO 8601，应用层写入
-  updated_at: string; // ISO 8601（提案快照比对，决策 14）
-  deleted_at: string | null; // 软删标记（决策 12），NULL = 未删除
+  updated_at: string; // ISO 8601（提案快照比对）
+  deleted_at: string | null; // 软删标记，NULL = 未删除
 }
 
 // ============ 关系 ============
 
-/** 关系（API 响应形态，GET /api/v1/relation depth=1，endpoints.md） */
+/** 关系（API 响应形态，GET /api/v1/relation depth=1，） */
 export interface RelationRecord {
   id: string;
   sourceType: string;
   sourceId: string;
-  /** 联表查询填充（endpoints.md） */
+ /** 联表查询填充（） */
   sourceName?: string;
   targetType: string;
   targetId: string;
   targetName?: string;
-  relationType: string; // 预定义类型见 schema.md（belongs_to/owns/plants/plot_edge 等）
+  relationType: string; // 预定义类型见 （belongs_to/owns/plants/plot_edge 等）
   metadata?: Record<string, unknown>; // JSON 扩展元数据
   createdAt: string;
 }
 
-/** 路径节点（depth>=2 时的 paths 结构，endpoints.md） */
+/** 路径节点（depth>=2 时的 paths 结构，） */
 export interface RelationPathNode {
   type: string;
   id: string;
   name: string;
 }
 
-/** 路径边（depth>=2 时的 paths 结构，endpoints.md） */
+/** 路径边（depth>=2 时的 paths 结构，） */
 export interface RelationPathEdge {
   from: string;
   to: string;
   relationType: string;
 }
 
-/** 一条 k 跳路径（depth>=2 时的 paths 结构，endpoints.md） */
+/** 一条 k 跳路径（depth>=2 时的 paths 结构，） */
 export interface RelationPath {
   nodes: RelationPathNode[];
   edges: RelationPathEdge[];
 }
 
-/** 关系查询响应（GET /api/v1/relation，endpoints.md） */
+/** 关系查询响应（GET /api/v1/relation，） */
 export interface RelationQueryResult {
   relations: RelationRecord[];
-  /** depth>=2 时追加路径信息 */
+ /** depth>=2 时追加路径信息 */
   paths?: RelationPath[];
 }
 
-/** relation_records 表行（存储形态 snake_case，schema.md） */
+/** relation_records 表行（存储形态 snake_case，） */
 export interface RelationRow {
   id: string;
-  /** 端点类型：实体 'character'|'setting'|'location'|'hook'，大纲节点 'outline_node' */
+ /** 端点类型：实体 'character'|'setting'|'location'|'hook'，大纲节点 'outline_node' */
   source_type: string;
   source_id: string;
   target_type: string;
   target_id: string;
   relation_type: string;
-  /** JSON 扩展元数据，NULL 表示无 */
+ /** JSON 扩展元数据，NULL 表示无 */
   metadata: Record<string, unknown> | null;
   created_at: string;
-  updated_at: string; // 提案快照比对（决策 14）；软删/还原亦更新（决策 12 修订）
-  /** 级联软删标记（决策 12）：仅实体/节点级联删除时写入；手动删关系 = 物理删 */
+  updated_at: string; // 提案快照比对；软删/还原亦更新
+ /** 级联软删标记：仅实体/节点级联删除时写入；手动删关系 = 物理删 */
   deleted_at: string | null;
 }
 
 // ============ Delta ============
 
-/** 变更操作类型（POST /api/v1/delta changes[].op，endpoints.md） */
+/** 变更操作类型（POST /api/v1/delta changes[].op，） */
 export type DeltaOp = "set" | "update" | "add" | "remove";
 
 /**
- * 单条属性变更（POST /api/v1/delta Req changes 项，endpoints.md）
+ * 单条属性变更（POST /api/v1/delta Req changes 项，）
  * op 语义（2026-08 修订）：set=直接替换；update=旧值→新值（写入端不校验 from，
- *   冲突在 computeState 时以跳过+conflicts 呈现，决策 9 修订）；add=按 value 向数组追加；
- *   remove=按值匹配从数组移除（不存在的值静默忽略）
+ * 冲突在 computeState 时以跳过+conflicts 呈现）；add=按 value 向数组追加；
+ * remove=按值匹配从数组移除（不存在的值静默忽略）
  */
 export interface DeltaChange {
   field: string;
   op: DeltaOp;
-  /** 旧值（op=update 时必填） */
+ /** 旧值（op=update 时必填） */
   from?: string | number | null;
-  /** 新值（op=set/update 时必填；add/remove 用 value） */
+ /** 新值（op=set/update 时必填；add/remove 用 value） */
   to?: string | number | null;
-  /** 值（op=add/remove 时使用） */
+ /** 值（op=add/remove 时使用） */
   value?: string | number;
 }
 
-/** Delta 记录（API 响应形态，endpoints.md） */
+/** Delta 记录（API 响应形态，） */
 export interface DeltaRecord {
   id: string;
-  /** 触发变更的大纲节点 id */
+ /** 触发变更的大纲节点 id */
   nodeId: string;
   targetType: string;
   targetId: string;
-  /** 联表填充 */
+ /** 联表填充 */
   targetName?: string;
   changes: DeltaChange[];
   description: string; // 人类可读描述
-  /** 同一节点内多个 Delta 的排序（全局单调递增，服务端生成） */
+ /** 同一节点内多个 Delta 的排序（全局单调递增，服务端生成） */
   order: number;
   createdAt: string;
 }
 
-/** delta_records 表行（存储形态 snake_case，schema.md） */
+/** delta_records 表行（存储形态 snake_case，） */
 export interface DeltaRow {
   id: string;
   node_id: string;
   target_type: string;
   target_id: string;
-  /** JSON 列解析后的数组 */
+ /** JSON 列解析后的数组 */
   changes: DeltaChange[];
   description: string;
-  /** 同一节点内多个 Delta 的排序（全局单调递增，服务端生成） */
+ /** 同一节点内多个 Delta 的排序（全局单调递增，服务端生成） */
   order: number;
   created_at: string;
-  updated_at: string; // 提案快照比对（决策 14）
-  /** 级联软删标记（决策 12 修订）：触发节点或目标实体任一软删即不可见 */
+  updated_at: string; // 提案快照比对
+ /** 级联软删标记：触发节点或目标实体任一软删即不可见 */
   deleted_at: string | null;
 }
 
 // ============ 状态计算（computeState） ============
 
-/** 被跳过的单个 change（决策 9 修订：op=update 且当前值 ≠ from） */
+/** 被跳过的单个 change（op=update 且当前值 ≠ from） */
 export interface AppliedDeltaSkippedChange {
-  /** 在 changes 数组中的下标 */
+ /** 在 changes 数组中的下标 */
   index: number;
   field: string;
-  /** delta 中声明的 from */
+ /** delta 中声明的 from */
   expected: unknown;
-  /** 应用时的实际值 */
+ /** 应用时的实际值 */
   actual: unknown;
 }
 
-/** 参与状态计算的一个 Delta（computeState 响应项，endpoints.md） */
+/** 参与状态计算的一个 Delta（computeState 响应项，） */
 export interface AppliedDelta {
   nodeId: string;
   description: string;
   changes: unknown[];
-  /** 该 delta 中被跳过的 change（决策 9 修订） */
+ /** 该 delta 中被跳过的 change */
   skipped?: AppliedDeltaSkippedChange[];
 }
 
@@ -200,18 +199,18 @@ export interface AppliedDelta {
 export interface DeltaConflict {
   deltaId: string;
   field: string;
-  /** delta 中 from */
+ /** delta 中 from */
   expected: unknown;
-  /** 应用时实际值 */
+ /** 应用时实际值 */
   actual: unknown;
 }
 
-/** 状态计算结果（POST /api/v1/delta/compute 响应，endpoints.md） */
+/** 状态计算结果（POST /api/v1/delta/compute 响应，） */
 export interface ComputeStateResult {
   targetType: string;
   targetId: string;
   atNodeId: string;
-  /** 初始 data + 树路径上所有 Delta 累积后的结果（决策 9：只沿大纲树父链累积） */
+ /** 初始 data + 树路径上所有 Delta 累积后的结果（只沿大纲树父链累积） */
   state: Record<string, unknown>;
   appliedDeltas: AppliedDelta[];
   conflicts: DeltaConflict[];

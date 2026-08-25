@@ -1,16 +1,16 @@
 // 回收站页（S4.4；替换 T7.1 占位壳）
-// 路由：#/trash（跨实体/大纲的全局入口，layout.md §2.2）
+// 路由：#/trash（跨实体/大纲的全局入口，）
 // 数据：GET /api/v1/trash → { entities, nodes }；还原 POST /trash/entity|outline/:id/restore、
-//   彻底删除 DELETE /trash/...（决策 12 软删 + 回收站；契约 trash.md + endpoints.md L660-736）
-// 关键交互（trash.md）：
+// 彻底删除 DELETE /trash/...（ 软删 + 回收站； + ）
+// 关键交互（）：
 // - 分栏：实体 (N) / 大纲节点 (M)，每行类型徽标 + 名称 + 相对时间（formatRelativeTime）+ [还原] [彻底删除]
 // - 还原实体：toast 连带恢复计数（lib/trash restoreEntityToast，计数 0 省略）；404 残留 → 刷新 + toast「该对象已不存在」
 // - 还原节点：409 OUTLINE_ANCESTOR_DELETED → 行内「上级节点也在回收站」+ 祖先名 + [还原上级] 快捷按钮——
-//   祖先 id 从 409 message 解析（lib/trash parseAncestorId），名字从当前列表 nodes 匹配（软删祖先必在列表）；
-//   还原祖先成功自动重试当前节点，更上级仍软删会再次 409 更新提示（服务端路径自顶向下首遇即抛——报
-//   **最顶层**软删祖先，级联还原一次解整条链，重试必收敛）；解析失败降级为纯提示无按钮
-// - purge：ConfirmDialog danger + 「确认彻底删除」文案（trash.md 44-49 行 MVP 语义：单次确认 + 明确文案）
-//   → 行移除 + toast「已彻底删除」；404 残留同还原（刷新 + toast）；其他错误冒泡 ConfirmDialog 内联显示
+// 祖先 id 从 409 message 解析（lib/trash parseAncestorId），名字从当前列表 nodes 匹配（软删祖先必在列表）；
+// 还原祖先成功自动重试当前节点，更上级仍软删会再次 409 更新提示（服务端路径自顶向下首遇即抛——报
+// **最顶层**软删祖先，级联还原一次解整条链，重试必收敛）；解析失败降级为纯提示无按钮
+// - purge：ConfirmDialog danger + 「确认彻底删除」文案（ 44-49 行 MVP 语义：单次确认 + 明确文案）
+// → 行移除 + toast「已彻底删除」；404 残留同还原（刷新 + toast）；其他错误冒泡 ConfirmDialog 内联显示
 import { useEffect, useState } from "react";
 import type { EntityType } from "@whispering233/ai-editor-shared";
 import { formatRelativeTime } from "@whispering233/ai-editor-shared";
@@ -42,11 +42,11 @@ const ENTITY_TYPE_LABEL: Record<EntityType, string> = {
   setting: "设定",
   location: "地点",
   hook: "伏笔",
-  // C1 类型补全（决策 26 event 时间轴事件；时间轴专属 UI 由 C2 实现）
+ // C1 类型补全（ event 时间轴事件；时间轴专属 UI 由 C2 实现）
   event: "事件",
-  // G2.3 类型补全（G2 时间标签点；软删/还原走 /trash/entity/:type/:id 泛型路径）
+ // G2.3 类型补全（G2 时间标签点；软删/还原走 /trash/entity/:type/:id 泛型路径）
   timepoint: "时间点",
-  // 决策 36（批次九）参考资料 reference
+ // （批次九）参考资料 reference
   reference: "参考资料",
 };
 
@@ -71,21 +71,21 @@ type PurgeTarget = { kind: "entity"; item: TrashEntity } | { kind: "node"; item:
 export default function Trash() {
   const [data, setData] = useState<TrashListRes | null>(null);
   const [loading, setLoading] = useState(false);
-  /** 列表请求失败（错误码；null = 正常） */
+ /** 列表请求失败（错误码；null = 正常） */
   const [error, setError] = useState<string | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
-  // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉回收站列表
-  // （AI 软删实体/节点会级联入回收站；ref 守卫防首帧重复拉）
+ // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉回收站列表
+ // （AI 软删实体/节点会级联入回收站；ref 守卫防首帧重复拉）
   useDataRefresh(() => setReloadTick((t) => t + 1));
   const [purgeTarget, setPurgeTarget] = useState<PurgeTarget | null>(null);
-  /** 节点还原 409 祖先冲突（行内展示：最近一个软删祖先 + 还原快捷按钮） */
+ /** 节点还原 409 祖先冲突（行内展示：最近一个软删祖先 + 还原快捷按钮） */
   const [ancestorConflict, setAncestorConflict] = useState<{
     node: TrashOutlineNode;
     ancestorId: string;
     ancestorName: string;
   } | null>(null);
 
-  // 列表加载（reloadTick 驱动重试/刷新；卸载或重载丢弃过期响应）
+ // 列表加载（reloadTick 驱动重试/刷新；卸载或重载丢弃过期响应）
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -109,7 +109,7 @@ export default function Trash() {
     setReloadTick((t) => t + 1);
   }
 
-  /** 404 残留（目标已被 purge 的残留请求；实体/节点两侧同码判定） */
+ /** 404 残留（目标已被 purge 的残留请求；实体/节点两侧同码判定） */
   function isGone(err: unknown): boolean {
     return (
       err instanceof ApiError &&
@@ -117,7 +117,7 @@ export default function Trash() {
     );
   }
 
-  /** 非 404 的还原失败 → 全局错误横幅（FeedbackHost 渲染，token 红色） */
+ /** 非 404 的还原失败 → 全局错误横幅（FeedbackHost 渲染，token 红色） */
   function reportRestoreError(err: unknown) {
     useUiStore
       .getState()
@@ -127,7 +127,7 @@ export default function Trash() {
       );
   }
 
-  /** 还原实体：成功 → toast（连带恢复计数）→ 刷新；404 残留 → 刷新 + toast */
+ /** 还原实体：成功 → toast（连带恢复计数）→ 刷新；404 残留 → 刷新 + toast */
   async function handleRestoreEntity(item: TrashEntity) {
     try {
       const res = await restoreTrashEntity(item.type, item.id);
@@ -145,20 +145,20 @@ export default function Trash() {
     }
   }
 
-  /** 还原节点：成功 → toast（含子节点计数）→ 刷新；409 → 行内祖先提示；404 → 刷新 + toast */
+ /** 还原节点：成功 → toast（含子节点计数）→ 刷新；409 → 行内祖先提示；404 → 刷新 + toast */
   async function handleRestoreNode(node: TrashOutlineNode) {
     setAncestorConflict(null);
     try {
       const res = await restoreOutlineNode(node.id);
       useUiStore.getState().showToast(restoreNodeToast(res.restoredChildren));
       await reload();
-      // 大纲 tab 联动：outline 树是 project store 全局快照，还原后重拉（Outline 页订阅自动刷新）
+ // 大纲 tab 联动：outline 树是 project store 全局快照，还原后重拉（Outline 页订阅自动刷新）
       useProjectStore.getState().loadOutline();
     } catch (err) {
       if (err instanceof ApiError && err.code === "OUTLINE_ANCESTOR_DELETED") {
         const ancestorId = parseAncestorId(err.message);
         if (ancestorId === null) {
-          // message 格式变化（解析失败）：降级为纯提示，无快捷按钮
+ // message 格式变化（解析失败）：降级为纯提示，无快捷按钮
           useUiStore
             .getState()
             .showError("OUTLINE_ANCESTOR_DELETED", "上级节点也在回收站，请先还原上级");
@@ -180,13 +180,13 @@ export default function Trash() {
     }
   }
 
-  /** 还原祖先快捷按钮：祖先还原成功 → 自动重试当前节点（更上级仍软删会再次 409 更新提示） */
+ /** 还原祖先快捷按钮：祖先还原成功 → 自动重试当前节点（更上级仍软删会再次 409 更新提示） */
   async function handleRestoreAncestor() {
     const conflict = ancestorConflict;
     if (!conflict) return;
     try {
       await restoreOutlineNode(conflict.ancestorId);
-      // 祖先恢复立即可见（即使重试当前节点再次 409 报更上级，树也已变化）
+ // 祖先恢复立即可见（即使重试当前节点再次 409 报更上级，树也已变化）
       useProjectStore.getState().loadOutline();
       await handleRestoreNode(conflict.node);
     } catch (err) {
@@ -200,8 +200,8 @@ export default function Trash() {
     }
   }
 
-  /** purge 确认执行：成功 → toast + 刷新；404 残留 → 刷新 + toast（不抛，对话框关闭）；
-   *  其他错误抛给 ConfirmDialog 内联显示（保持打开） */
+ /** purge 确认执行：成功 → toast + 刷新；404 残留 → 刷新 + toast（不抛，对话框关闭）；
+ * 其他错误抛给 ConfirmDialog 内联显示（保持打开） */
   async function handlePurgeConfirm() {
     if (!purgeTarget) return;
     try {
@@ -209,7 +209,7 @@ export default function Trash() {
         await purgeTrashEntity(purgeTarget.item.type, purgeTarget.item.id);
       } else {
         await purgeOutlineNode(purgeTarget.item.id);
-        // 大纲 tab 联动：purge 后节点从全局树移除
+ // 大纲 tab 联动：purge 后节点从全局树移除
         useProjectStore.getState().loadOutline();
       }
       useUiStore.getState().showToast("已彻底删除");
@@ -397,7 +397,7 @@ export default function Trash() {
         </div>
       )}
 
-      {/* purge 二次确认（danger + 「确认彻底删除」文案；影响范围说明，trash.md 44-49 行 MVP 语义） */}
+      {/* purge 二次确认（danger + 「确认彻底删除」文案；影响范围说明， 44-49 行 MVP 语义） */}
       {purgeTarget && (
         <ConfirmDialog
           title="彻底删除"

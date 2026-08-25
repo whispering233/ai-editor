@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { estimateMessagesTokens, estimateTokens, truncateToolResult } from "./token";
 import type { LLMMessage, LLMToolDefinition, LLMUsage } from "./types";
 
-describe("estimateTokens（决策 6：chars/4）", () => {
+describe("estimateTokens（chars/4）", () => {
   it("chars/4 向上取整边界", () => {
     expect(estimateTokens("")).toBe(0);
     expect(estimateTokens("a")).toBe(1);
@@ -59,7 +59,7 @@ describe("estimateMessagesTokens", () => {
   });
 });
 
-describe("truncateToolResult（决策 15：不得静默截断）", () => {
+describe("truncateToolResult（不得静默截断）", () => {
   it("未超限：原样返回，truncated=false", () => {
     const content = "a".repeat(100); // 25 tokens
     const r = truncateToolResult(content, 100);
@@ -85,9 +85,9 @@ describe("truncateToolResult（决策 15：不得静默截断）", () => {
     expect(r.keptChars).toBeLessThan(200); // 50 tokens * 4 chars 之内（预留说明空间）
     expect(r.content.startsWith("a".repeat(r.keptChars))).toBe(true); // 保留原始前缀
     expect(r.content).toContain("已截断"); // 显式标记
-    expect(r.content).toContain("缩小查询范围"); // 引导提示（决策 15）
+    expect(r.content).toContain("缩小查询范围"); // 引导提示
     expect(r.content.length).toBe(r.keptChars + 40); // 说明部分固定 40 字符
-    // 截断后内容（含说明）估算不超过预算（启发式容差 ±1）
+ // 截断后内容（含说明）估算不超过预算（启发式容差 ±1）
     expect(estimateTokens(r.content)).toBeLessThanOrEqual(51);
   });
 

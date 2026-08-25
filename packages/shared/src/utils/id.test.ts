@@ -1,4 +1,4 @@
-// ID 生成测试（T1.3）：前缀映射（endpoints.md id 约定）+ 唯一性
+// ID 生成测试（T1.3）：前缀映射（ id 约定）+ 唯一性
 import { describe, expect, it } from "vitest";
 import {
   ENTITY_ID_PREFIX,
@@ -22,8 +22,8 @@ describe("generateId", () => {
   });
 });
 
-describe("前缀映射（endpoints.md id 约定）", () => {
-  it("实体类型前缀：char-/set-/loc-/hook-/ev-/tp-/ref-（ev- 时间轴事件决策 26；tp- 时间标签点 G2；ref- 参考资料决策 36）", () => {
+describe("前缀映射", () => {
+  it("实体类型前缀：char-/set-/loc-/hook-/ev-/tp-/ref-（ev- 时间轴事件；tp- 时间标签点 G2；ref- 参考资料）", () => {
     expect(ENTITY_ID_PREFIX).toEqual({
       character: "char-",
       setting: "set-",

@@ -1,6 +1,6 @@
 // T2.3 对话历史数据层测试
-// 覆盖：插入 / 项目隔离（决策 18 修订）/ 会话列表倒序与截断 / 消息历史升序与 JSON 解析 /
-// 成对重组（决策 18 修订：孤儿半对整对丢弃，多轮交错）
+// 覆盖：插入 / 项目隔离/ 会话列表倒序与截断 / 消息历史升序与 JSON 解析 /
+// 成对重组（孤儿半对整对丢弃，多轮交错）
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -81,43 +81,43 @@ describe("chat.ts insertChatMessage", () => {
   });
 });
 
-describe("chat.ts 项目隔离（决策 18 修订）", () => {
+describe("chat.ts 项目隔离（）", () => {
   it("两个项目的数据互不可见：会话列表与消息历史均按 project_id 过滤", () => {
     insertChatMessage(db, msg({ session_id: "sess-1", project_id: "proj-a", role: "user", content: "A 项目消息", created_at: "2026-08-01T10:00:00Z" }));
     insertChatMessage(db, msg({ session_id: "sess-2", project_id: "proj-b", role: "user", content: "B 项目消息", created_at: "2026-08-01T11:00:00Z" }));
 
-    // 会话列表互相不可见
+ // 会话列表互相不可见
     const aSessions = listSessions(db, "proj-a");
     const bSessions = listSessions(db, "proj-b");
     expect(aSessions.map((s) => s.id)).toEqual(["sess-1"]);
     expect(bSessions.map((s) => s.id)).toEqual(["sess-2"]);
 
-    // 消息历史：跨项目查询同 session_id 返回空（同 id 不同项目互不可见）
+ // 消息历史：跨项目查询同 session_id 返回空（同 id 不同项目互不可见）
     expect(listMessages(db, "sess-1", "proj-b")).toEqual([]);
     expect(listMessages(db, "sess-2", "proj-a")).toEqual([]);
-    // 本项目内正常返回
+ // 本项目内正常返回
     expect(listMessages(db, "sess-1", "proj-a")).toHaveLength(1);
   });
 });
 
 describe("chat.ts migrateChatMessagesProject（B2.2 审核 P1-1：跨项目恢复会话归属迁移）", () => {
-  it("旧 id 行全部迁移为新 id，其他 id 行不动；迁移后按新 id 可查（决策 18 隔离语义）", () => {
+  it("旧 id 行全部迁移为新 id，其他 id 行不动；迁移后按新 id 可查（ 隔离语义）", () => {
     insertChatMessage(db, msg({ session_id: "sess-old", project_id: "proj-old", role: "user", content: "旧项目消息 1", created_at: "2026-08-01T10:00:00Z" }));
     insertChatMessage(db, msg({ session_id: "sess-old", project_id: "proj-old", role: "assistant", content: "旧项目消息 2", created_at: "2026-08-01T10:00:01Z" }));
     insertChatMessage(db, msg({ session_id: "sess-other", project_id: "proj-other", role: "user", content: "无关项目消息", created_at: "2026-08-01T11:00:00Z" }));
 
-    // 迁移前：新 id 查不到旧会话
+ // 迁移前：新 id 查不到旧会话
     expect(listSessions(db, "proj-new")).toEqual([]);
     const changed = migrateChatMessagesProject(db, "proj-old", "proj-new");
     expect(changed).toBe(2); // 仅旧 id 的两行受影响
 
-    // 迁移后：旧 id 会话在新 id 下可查；无关项目数据不动
+ // 迁移后：旧 id 会话在新 id 下可查；无关项目数据不动
     expect(listSessions(db, "proj-new").map((s) => s.id)).toEqual(["sess-old"]);
     expect(listMessages(db, "sess-old", "proj-new")).toHaveLength(2);
     expect(listSessions(db, "proj-old")).toEqual([]);
     expect(listSessions(db, "proj-other")).toEqual([{ id: "sess-other", messageCount: 1, createdAt: "2026-08-01T11:00:00Z", updatedAt: "2026-08-01T11:00:00Z", lastMessage: "无关项目消息" }]);
 
-    // 幂等：无该旧 id 行后再执行返回 0
+ // 幂等：无该旧 id 行后再执行返回 0
     expect(migrateChatMessagesProject(db, "proj-old", "proj-new")).toBe(0);
   });
 });
@@ -130,7 +130,7 @@ describe("chat.ts listSessions", () => {
     insertChatMessage(db, msg({ session_id: "sess-2", project_id: "proj-a", role: "user", content: "另一个会话", created_at: "2026-08-01T11:00:00Z" }));
 
     const sessions = listSessions(db, "proj-a");
-    // sess-2 最后活动更晚 → 排最前
+ // sess-2 最后活动更晚 → 排最前
     expect(sessions.map((s) => s.id)).toEqual(["sess-2", "sess-1"]);
     expect(sessions[1]).toMatchObject({
       id: "sess-1",
@@ -149,7 +149,7 @@ describe("chat.ts listSessions", () => {
     const [s] = listSessions(db, "proj-a");
     expect(s.lastMessage.length).toBeLessThanOrEqual(50);
     expect(s.lastMessage.endsWith("…")).toBe(true);
-    // 截断前 49 字 + 省略号
+ // 截断前 49 字 + 省略号
     expect(s.lastMessage).toBe(`${long.slice(0, 49)}…`);
   });
 
@@ -188,18 +188,18 @@ describe("chat.ts listMessages", () => {
       "2026-08-01T10:01:00Z",
       "2026-08-01T10:02:00Z",
     ]);
-    // tool_calls JSON 解析为数组
+ // tool_calls JSON 解析为数组
     expect(messages[1].toolCalls).toEqual([{ id: "call_1", name: "query_entity", arguments: { id: "char-1" } }]);
-    // tool_call_id 映射为 toolCallId
+ // tool_call_id 映射为 toolCallId
     expect(messages[2].toolCallId).toBe("call_1");
     expect(messages[2].content).toBe('{"name":"张三"}');
-    // 无工具调用的消息不出现 toolCalls 字段（undefined）
+ // 无工具调用的消息不出现 toolCalls 字段（undefined）
     expect(messages[0].toolCalls).toBeUndefined();
   });
 
   it("tool_calls 列为非法 JSON / 非数组时防御性返回 undefined，不抛错", () => {
     insertChatMessage(db, msg({ session_id: "sess-1", project_id: "proj-a", role: "assistant", content: "坏数据", created_at: "2026-08-01T10:00:00Z" }));
-    // 直接写坏 JSON 到 tool_calls 列
+ // 直接写坏 JSON 到 tool_calls 列
     db.prepare("UPDATE chat_messages SET tool_calls = '{not-json' WHERE id = ?").run("m-1");
 
     const [m] = listMessages(db, "sess-1", "proj-a");
@@ -207,7 +207,7 @@ describe("chat.ts listMessages", () => {
   });
 });
 
-describe("chat.ts reassembleMessages 成对重组（决策 18 修订）", () => {
+describe("chat.ts reassembleMessages 成对重组（）", () => {
   it("正常成对：assistant tool_call → tool 结果保留，工具结果按 tool_calls 顺序紧随其后", () => {
     const rows = [
       msg({ session_id: "sess-1", project_id: "proj-a", role: "user", content: "查两个人", created_at: "t1" }),
@@ -238,7 +238,7 @@ describe("chat.ts reassembleMessages 成对重组（决策 18 修订）", () => 
       }),
     ];
     const out = reassembleMessages(rows);
-    // user 保留，assistant（半对）整组丢弃
+ // user 保留，assistant（半对）整组丢弃
     expect(out).toEqual([{ role: "user", content: "查一下" }]);
   });
 
@@ -257,7 +257,7 @@ describe("chat.ts reassembleMessages 成对重组（决策 18 修订）", () => 
       msg({ session_id: "sess-1", project_id: "proj-a", role: "assistant", content: "处理中", tool_calls: [{ id: "call_1" }], created_at: "t2" }),
       msg({ session_id: "sess-1", project_id: "proj-a", role: "tool", content: "结果A", tool_call_id: "call_1", created_at: "t3" }),
       msg({ session_id: "sess-1", project_id: "proj-a", role: "user", content: "第二轮", created_at: "t4" }),
-      // 夹在中间的孤儿 tool 消息（无对应调用）
+ // 夹在中间的孤儿 tool 消息（无对应调用）
       msg({ session_id: "sess-1", project_id: "proj-a", role: "tool", content: "孤儿", tool_call_id: "call_99", created_at: "t5" }),
       msg({ session_id: "sess-1", project_id: "proj-a", role: "assistant", content: "继续", tool_calls: [{ id: "call_2" }], created_at: "t6" }),
       msg({ session_id: "sess-1", project_id: "proj-a", role: "tool", content: "结果B", tool_call_id: "call_2", created_at: "t7" }),
@@ -277,7 +277,7 @@ describe("chat.ts reassembleMessages 成对重组（决策 18 修订）", () => 
     const rows = [
       msg({ session_id: "sess-1", project_id: "proj-a", role: "assistant", content: "开始查", tool_calls: [{ id: "call_1" }, { id: "call_2" }], created_at: "t1" }),
       msg({ session_id: "sess-1", project_id: "proj-a", role: "tool", content: "结果1", tool_call_id: "call_1", created_at: "t2" }),
-      // call_2 无结果
+ // call_2 无结果
     ];
     const out = reassembleMessages(rows);
     expect(out).toEqual([]);
@@ -318,7 +318,7 @@ describe("chat.ts reassembleMessages 成对重组（决策 18 修订）", () => 
       msg({ session_id: "sess-1", project_id: "proj-a", role: "tool", content: "结果-后", tool_call_id: "call_1", created_at: "t3" }),
     ];
     const out = reassembleMessages(rows);
-    // 后到的重复结果被跳过：tool 消息只输出一次，且 content 为最先到达者
+ // 后到的重复结果被跳过：tool 消息只输出一次，且 content 为最先到达者
     expect(out).toEqual([
       { role: "assistant", content: "调用", toolCalls: [{ id: "call_1" }] },
       { role: "tool", toolCallId: "call_1", content: "结果-先" },
@@ -331,7 +331,7 @@ describe("chat.ts reassembleMessages 成对重组（决策 18 修订）", () => 
       msg({ session_id: "sess-1", project_id: "proj-a", role: "tool", content: "结果", tool_call_id: "call_1", created_at: "t2" }),
     ];
     const out = reassembleMessages(rows);
-    // 字符串元素取 id 为 undefined → 缺 id 判定孤儿半对 → assistant + 其结果整组丢弃
+ // 字符串元素取 id 为 undefined → 缺 id 判定孤儿半对 → assistant + 其结果整组丢弃
     expect(out).toEqual([]);
   });
 });

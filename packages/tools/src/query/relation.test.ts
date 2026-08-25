@@ -1,7 +1,7 @@
 // S6.3 查询工具测试：query_relationships
 // 覆盖：depth=1 直接关系（含联表 name）/ 端点过滤 / relation_type 过滤 /
-//   端点软删不可见（决策 12 修订：实体端点软删 / 大纲节点软删均不可见）/
-//   depth=3 全量路径结构
+// 端点软删不可见（实体端点软删 / 大纲节点软删均不可见）/
+// depth=3 全量路径结构
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -113,14 +113,14 @@ describe("query_relationships depth=1", () => {
     expect(runQueryRelationships(makeCtx(), { depth: 1, relation_type: "appears_in" }).relations).toHaveLength(1);
   });
 
-  it("实体端点软删 → 关系不可见（决策 12 修订）", () => {
+  it("实体端点软删 → 关系不可见（）", () => {
     const { charB } = seedBase();
     softDeleteEntity(db, charB, T0);
     const result = runQueryRelationships(makeCtx(), { depth: 1 });
     expect(result.relations).toEqual([]);
   });
 
-  it("大纲节点端点软删 → 关系不可见（决策 12 修订：端点软删联动）", () => {
+  it("大纲节点端点软删 → 关系不可见（端点软删联动）", () => {
     const { charA } = seedBase();
     createRelation(
       db,
@@ -129,7 +129,7 @@ describe("query_relationships depth=1", () => {
     );
     softDeleteNode("sc-1");
     const result = runQueryRelationships(makeCtx(), { depth: 1 });
-    // 只剩 charA → charB 的 ally；appears_in 因端点软删不可见
+ // 只剩 charA → charB 的 ally；appears_in 因端点软删不可见
     expect(result.relations.map((r) => r.relationType)).toEqual(["ally"]);
   });
 });
@@ -146,11 +146,11 @@ describe("query_relationships depth=2/3", () => {
     const result = runQueryRelationships(makeCtx(), { depth: 3, source_id: a });
     expect(result.relations).toHaveLength(1); // relations 按过滤条件返回
     expect(result.paths).toBeDefined();
-    // 路径 a→b 与 a→b→c
+ // 路径 a→b 与 a→b→c
     const paths = result.paths!;
     expect(paths.some((p) => p.nodes.map((n) => n.id).join(">") === `${a}>${b}`)).toBe(true);
     expect(paths.some((p) => p.nodes.map((n) => n.id).join(">") === `${a}>${b}>${c}`)).toBe(true);
-    // 路径边携带关系类型与名称
+ // 路径边携带关系类型与名称
     const twoHop = paths.find((p) => p.nodes.length === 3)!;
     expect(twoHop.edges).toEqual([
       { from: a, to: b, relationType: "ally" },
@@ -159,7 +159,7 @@ describe("query_relationships depth=2/3", () => {
     expect(twoHop.nodes.map((n) => n.name)).toEqual(["阿强", "阿珍", "阿刚"]);
   });
 
-  it("k 跳路径同样过滤软删端点（BFS 图可见性，决策 12 修订）", () => {
+  it("k 跳路径同样过滤软删端点（BFS 图可见性，）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const a = createEntity(db, { type: "character", name: "阿强" }).id;
     const b = createEntity(db, { type: "character", name: "阿珍" }).id;

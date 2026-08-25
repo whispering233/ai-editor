@@ -1,8 +1,8 @@
-// 空态容器（layout.md §4.3 空态规范 + §4.4 L 批次组件契约）：虚线边框居中卡 + 说明文案 + 可选主操作
+// 空态容器（ 空态规范 + §4.4 L 批次组件）：虚线边框居中卡 + 说明文案 + 可选主操作
 // 用法：
-//   <EmptyState>还没有书，先创建一本</EmptyState>
-//   <EmptyState icon={<BookOpen className="size-7 text-muted-foreground/40" />}
-//     action={<Button onClick={...}>去大纲</Button>}>大纲还是空的</EmptyState>
+// <EmptyState>还没有书，先创建一本</EmptyState>
+// <EmptyState icon={<BookOpen className="size-7 text-muted-foreground/40" />}
+// action={<Button onClick={...}>去大纲</Button>}>大纲还是空的</EmptyState>
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
@@ -14,15 +14,15 @@ const PADDING_CLASS = {
 } as const;
 
 export interface EmptyStateProps {
-  /** 说明文案（一行文字） */
+ /** 说明文案（一行文字） */
   children: ReactNode;
-  /** 可选图标（约定 size-7/8 text-muted-foreground/40，layout.md §4.3） */
+ /** 可选图标（约定 size-7/8 text-muted-foreground/40，） */
   icon?: ReactNode;
-  /** 主操作按钮区（渲染于文案下方，自带 mt-4） */
+ /** 主操作按钮区（渲染于文案下方，自带 mt-4） */
   action?: ReactNode;
-  /** 内边距档位：sm = py-10 / md = py-12（默认）/ lg = py-14 */
+ /** 内边距档位：sm = py-10 / md = py-12（默认）/ lg = py-14 */
   padding?: keyof typeof PADDING_CLASS;
-  /** 覆盖类（如 mt-3 / rounded-md——rounded-md 排序在 rounded-lg 后，可覆盖） */
+ /** 覆盖类（如 mt-3 / rounded-md——rounded-md 排序在 rounded-lg 后，可覆盖） */
   className?: string;
 }
 

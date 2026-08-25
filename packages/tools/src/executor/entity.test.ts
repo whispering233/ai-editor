@@ -1,7 +1,7 @@
 // S6.7 执行类工具测试：实体（create_entity / update_entity / delete_entity）
 // 覆盖：写路径正确性（创建 id 前缀 + data 落库 / 更新浅合并 + updated_at 刷新 /
-//   软删级联 relations+deltas 且本体保留）、失败语义（实体不存在/已软删抛错）、
-//   参数防御（缺字段抛错）
+// 软删级联 relations+deltas 且本体保留）、失败语义（实体不存在/已软删抛错）、
+// 参数防御（缺字段抛错）
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -98,14 +98,14 @@ describe("update_entity", () => {
     expect(result).toMatchObject({ id: row.id, updated: true });
     const updated = getEntity(db, row.id)!;
     expect(updated.data).toEqual({ role: "主角", status: "dead" }); // role 保留（浅合并）
-    expect(updated.updated_at >= row.updated_at).toBe(true); // updated_at 应用层刷新（决策 14 快照比对）
+    expect(updated.updated_at >= row.updated_at).toBe(true); // updated_at 应用层刷新（ 快照比对）
   });
 
   it("实体不存在 → 抛错（fail-fast）", () => {
     expect(() => executeUpdateEntity(makeCtx(), makeProposal("propose_update_entity", { entity_id: "char-999", patches: { a: 1 } }))).toThrow(/实体不存在或已软删/);
   });
 
-  it("软删实体不可更新 → 抛错（决策 12：getEntity 过滤）", () => {
+  it("软删实体不可更新 → 抛错（getEntity 过滤）", () => {
     const row = createEntity(db, { type: "character", name: "阿强" });
     db.prepare("UPDATE entities SET deleted_at = ? WHERE id = ?").run(T0, row.id);
     expect(() => executeUpdateEntity(makeCtx(), makeProposal("propose_update_entity", { entity_id: row.id, patches: { a: 1 } }))).toThrow(/实体不存在或已软删/);
@@ -113,7 +113,7 @@ describe("update_entity", () => {
 });
 
 describe("delete_entity", () => {
-  it("写路径：软删 + 级联关系与 Delta（决策 12），本体保留可还原", () => {
+  it("写路径：软删 + 级联关系与 Delta（），本体保留可还原", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const a = createEntity(db, { type: "character", name: "甲" });
     const b = createEntity(db, { type: "character", name: "乙" });
@@ -121,7 +121,7 @@ describe("delete_entity", () => {
     insertDelta(db, { nodeId: "sc-1", targetType: "character", targetId: a.id, changes: [{ field: "hp", op: "set", to: 1 }], description: "d" });
     const result = executeDeleteEntity(makeCtx(), makeProposal("propose_delete_entity", { entity_id: a.id }));
     expect(result).toMatchObject({ id: a.id, deleted: true, cascaded: { relations: 1, deltas: 1 } });
-    // 本体保留（回收站可还原），常规查询不可见
+ // 本体保留（回收站可还原），常规查询不可见
     expect(getEntity(db, a.id)).toBeNull();
     expect(db.prepare("SELECT id FROM entities WHERE id = ? AND deleted_at IS NOT NULL").get(a.id)).toBeDefined();
     expect(listRelations(db, {}, 3, dir).relations).toHaveLength(0); // 关系级联软删
@@ -135,7 +135,7 @@ describe("delete_entity", () => {
   });
 });
 
-describe("signal（决策 16 ③）", () => {
+describe("signal（）", () => {
   it("执行类是短同步事务，无 signal 参数（中止检查由 S7.5 确认路由承担——见 executor/types.ts 注释）", () => {
     const result = executeCreateEntity(makeCtx(), makeProposal("propose_create_entity", { type: "setting", name: "宗门" }));
     expect(getEntity(db, result.id as string)!.name).toBe("宗门");

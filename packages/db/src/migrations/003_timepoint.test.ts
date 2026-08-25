@@ -65,7 +65,7 @@ function createV2Db(events: EventSeed[]): Db {
        VALUES (?, 'event', ?, ?, ?, ?, ?, ?)`,
     ).run(e.id, e.id, data, e.sortOrder, T0, T0, e.deleted === true ? "2026-08-02T00:00:00Z" : null);
   }
-  // 非 event 实体（data 含 time_label 也不应被迁移触碰）
+ // 非 event 实体（data 含 time_label 也不应被迁移触碰）
   d.prepare(
     `INSERT INTO entities (id, type, name, data, created_at, updated_at) VALUES (?, 'character', ?, ?, ?, ?)`,
   ).run("char-1", "张三", '{"time_label":"不应迁移"}', T0, T0);
@@ -106,8 +106,8 @@ afterEach(() => {
 describe("003_timepoint 迁移（v2 → v3，G2 时间标签点实体化）", () => {
   it("同名合并 + 无标签不建关系 + 软删跳过 + data 移除 time_label + sort_order 按出现序", () => {
     db = createV2Db([
-      // 列表序（sort_order 升序、NULL 沉底、id 稳定）：ev-5(0) → ev-1(1) → ev-3(2) → ev-2(3)
-      // 首现序 → timepoint sort_order：第三天=0（ev-5 首个出现）、第二天黄昏=1（ev-1 首个出现）
+ // 列表序（sort_order 升序、NULL 沉底、id 稳定）：ev-5(0) → ev-1(1) → ev-3(2) → ev-2(3)
+ // 首现序 → timepoint sort_order：第三天=0（ev-5 首个出现）、第二天黄昏=1（ev-1 首个出现）
       { id: "ev-1", label: "第二天黄昏", sortOrder: 1, extraData: '{"description":"藏经阁发现玉佩","time_label":"第二天黄昏","tags":["主线"]}' },
       { id: "ev-2", label: "第二天黄昏", sortOrder: 3 },
       { id: "ev-3", label: null, sortOrder: 2, extraData: '{"description":"无标签事件"}' },
@@ -121,7 +121,7 @@ describe("003_timepoint 迁移（v2 → v3，G2 时间标签点实体化）", ()
     expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
     expect(SCHEMA_VERSION).toBe(5);
 
-    // ---- timepoint：同名合并为 1 个，sort_order 按各组首个事件出现序 0..n-1 ----
+ // ---- timepoint：同名合并为 1 个，sort_order 按各组首个事件出现序 0..n-1 ----
     const tps = timepointRows(db);
     expect(tps).toHaveLength(2);
     expect(tps[0]).toMatchObject({ type: "timepoint", name: "第三天", data: "{}", sort_order: 0, deleted_at: null });
@@ -132,7 +132,7 @@ describe("003_timepoint 迁移（v2 → v3，G2 时间标签点实体化）", ()
       expect(tp.created_at).toBe(tp.updated_at);
     }
 
-    // ---- occurs_at：带标签未软删事件各一条，指向合并后的 timepoint ----
+ // ---- occurs_at：带标签未软删事件各一条，指向合并后的 timepoint ----
     const rels = occursAtRows(db);
     expect(rels).toHaveLength(3);
     const relByTarget = new Map(rels.map((r) => [r.target_id, r]));
@@ -149,12 +149,12 @@ describe("003_timepoint 迁移（v2 → v3，G2 时间标签点实体化）", ()
     expect(String(r1.id)).toMatch(/^rel-/); // 沿用 db 关系 id 生成机制
     expect(r1.source_id).toBe(relByTarget.get("ev-2")!.source_id); // 同名合并 → 同一 timepoint
     expect(relByTarget.get("ev-5")!.source_id).toBe(tpByName.get("第三天"));
-    // 无标签 / 纯空白 / 软删事件不建关系
+ // 无标签 / 纯空白 / 软删事件不建关系
     expect(relByTarget.has("ev-3")).toBe(false);
     expect(relByTarget.has("ev-6")).toBe(false);
     expect(relByTarget.has("ev-4")).toBe(false);
 
-    // ---- event.data：time_label 移除 + updated_at 刷新（仅被迁移的事件）----
+ // ---- event.data：time_label 移除 + updated_at 刷新（仅被迁移的事件）----
     const ev1 = rawRow(db, "ev-1");
     expect(JSON.parse(String(ev1.data))).toEqual({ description: "藏经阁发现玉佩", tags: ["主线"] }); // time_label 已移除，其余字段保留
     expect(ev1.updated_at).toBe(tps[0].updated_at); // 迁移时间戳统一
@@ -162,17 +162,17 @@ describe("003_timepoint 迁移（v2 → v3，G2 时间标签点实体化）", ()
     expect(JSON.parse(String(rawRow(db, "ev-2").data))).toEqual({});
     expect(JSON.parse(String(rawRow(db, "ev-5").data))).toEqual({});
 
-    // ---- 无标签事件：不建关系、data 原样（字节级）、updated_at 不变 ----
+ // ---- 无标签事件：不建关系、data 原样（字节级）、updated_at 不变 ----
     expect(rawRow(db, "ev-3")).toMatchObject({ data: '{"description":"无标签事件"}', updated_at: T0 });
-    // 纯空白标签事件同样原样保留（含 time_label 键——按无标签处理）
+ // 纯空白标签事件同样原样保留（含 time_label 键——按无标签处理）
     expect(rawRow(db, "ev-6")).toMatchObject({ data: '{"time_label":"   "}', updated_at: T0 });
 
-    // ---- 软删事件完全跳过：data 原样（time_label 保留）、无 timepoint/关系 ----
+ // ---- 软删事件完全跳过：data 原样（time_label 保留）、无 timepoint/关系 ----
     const ev4 = rawRow(db, "ev-4");
     expect(ev4).toMatchObject({ deleted_at: "2026-08-02T00:00:00Z", data: '{"time_label":"第三纪元"}', updated_at: T0 });
     expect(db.prepare("SELECT id FROM entities WHERE name = '第三纪元'").get()).toBeUndefined();
 
-    // ---- 非 event 实体不受影响 ----
+ // ---- 非 event 实体不受影响 ----
     expect(rawRow(db, "char-1")).toMatchObject({ data: '{"time_label":"不应迁移"}', updated_at: T0 });
   });
 
@@ -192,7 +192,7 @@ describe("003_timepoint 迁移（v2 → v3，G2 时间标签点实体化）", ()
 
   it("坏行防御：data 为非法 JSON 的事件跳过（不建关系、不改 data）", () => {
     db = createV2Db([]);
-    // 预插一条 data 为非法 JSON 的 event（手改库/异常写入）
+ // 预插一条 data 为非法 JSON 的 event（手改库/异常写入）
     db.prepare(
       `INSERT INTO entities (id, type, name, data, sort_order, created_at, updated_at) VALUES (?, 'event', ?, ?, ?, ?, ?)`,
     ).run("ev-bad", "坏行", "{ 这不是 JSON", 0, T0, T0);
@@ -210,7 +210,7 @@ describe("003_timepoint 迁移（v2 → v3，G2 时间标签点实体化）", ()
     const { applied } = runMigrations(db, { migrations: MIGRATIONS });
     expect(applied).toEqual([]);
     expect(getUserVersion(db)).toBe(5);
-    // 数据不被二次处理（timepoint 仍只有 1 个、关系仍 1 条）
+ // 数据不被二次处理（timepoint 仍只有 1 个、关系仍 1 条）
     expect(timepointRows(db)).toHaveLength(1);
     expect(occursAtRows(db)).toHaveLength(1);
   });

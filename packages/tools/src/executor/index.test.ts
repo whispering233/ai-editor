@@ -1,8 +1,8 @@
 // S6.7 executor 门面测试（executeProposal）
 // 覆盖：
 // - 15 个提案类型 → 13 个执行函数映射正确（proposal → 执行函数 → 结果落库；含 create_hook
-//   → create_entity(type=hook) + plants 关系适配、update_hook → update_entity 适配、
-//   propose_reorder_timepoints → reorder_timepoints 批量重排（G2，取代 F9 的 reorder_events））
+// → create_entity(type=hook) + plants 关系适配、update_hook → update_entity 适配、
+// propose_reorder_timepoints → reorder_timepoints 批量重排（G2，取代 F9 的 reorder_events））
 // - 未知提案类型 → 抛错（防静默）
 // - **执行类不注册 registry**：工具注册表（LLM 可见）不包含任何 EXECUTOR_TOOLS 名
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -159,7 +159,7 @@ describe("executeProposal（proposal.type → 执行函数映射）", () => {
     const hook = getEntity(db, result.id as string)!;
     expect(hook.type).toBe("hook");
     expect(hook.data).toEqual({ payoff_timing: "near_term" });
-    // plants 关系（大纲节点 → hook）
+ // plants 关系（大纲节点 → hook）
     const relations = listRelations(db, { sourceId: "sc-1" }, 1, dir).relations;
     expect(relations).toEqual([
       expect.objectContaining({ sourceType: "outline_node", sourceId: "sc-1", targetId: result.id, relationType: "plants" }),
@@ -214,7 +214,7 @@ describe("executeProposal（proposal.type → 执行函数映射）", () => {
   });
 
   it("propose_reorder_timepoints → reorder_timepoints：批量重排 sort_order（G2，取代 F9 的 reorder_events）", () => {
-    // 造 3 个 timepoint，sort_order 0..2（db 测试同款 INSERT 模式——createEntity 不设 sort_order）
+ // 造 3 个 timepoint，sort_order 0..2（db 测试同款 INSERT 模式——createEntity 不设 sort_order）
     const ids: string[] = [];
     for (let i = 0; i < 3; i++) {
       const id = `tp-exec-reorder-${i}`;
@@ -235,7 +235,7 @@ describe("executeProposal（proposal.type → 执行函数映射）", () => {
   });
 });
 
-describe("执行类不注册 registry（tools.md「核心设计原则」：AI 不可以调用执行类工具）", () => {
+describe("执行类不注册 registry", () => {
   it("LLM 可见工具表（listTools）不包含任何 EXECUTOR_TOOLS 名；入口冒烟 35 个注册数不变", () => {
     const names = new Set(listTools().map((t) => t.name));
     for (const name of EXECUTOR_TOOLS) {

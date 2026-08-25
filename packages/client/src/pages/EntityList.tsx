@@ -1,20 +1,20 @@
 // 实体列表页（S3.5；替换 T7.1 占位壳；U8 增补第 5 个「关联」tab）
 // 路由：#/entities/:type?（type ∈ character|setting|location|hook|…，缺省 character——main.tsx 归一化；
-//   "relations" 由 main.tsx 先拦截传入本页，不参与归一化）；
-//   四类 tab 切换即改 hash（useHashRoute 驱动），hash 变化 → main.tsx 传新 type → 本页重置查询状态
+// "relations" 由 main.tsx 先拦截传入本页，不参与归一化）；
+// 四类 tab 切换即改 hash（useHashRoute 驱动），hash 变化 → main.tsx 传新 type → 本页重置查询状态
 // 数据：GET /api/v1/entity/:type?q=&offset=&limit=&sort=&order=（EntitySummary 摘要列表）
-// 契约：doc/ui/pages/entity-list.md——tab/搜索防抖 300ms/排序下拉/分页（limit 20、total 驱动）/
-//   摘要列按类型（lib/entity-list.ts SUMMARY_COLUMNS）/空态两种文案区分/行点击跳详情（S3.6）；
-//   「关联 Tab（U8 增补）」——type==="relations" 渲染 RelationsView（前端过滤全量关系），
-//   「+ 新建」变「+ 建立关联」打开共用 CreateRelationDialog（列表模式，源可选）
-// 决策 42（2026-08 批次十）：设定 tab（entityType==="setting"）改为**树形视图**（SettingTreeView，
-//   与设定树 tab 合并——原「设定树」tab/路由已移除，main.tsx 重定向到设定 tab）；设定不走表格/分页，
-//   搜索+标签筛选在树内进行（树形视图自带工具栏），上级设定筛选（决策 32）被树形导航吸收（下拉移除）；
-//   character/location/hook 保持表格视图（决策 40：行级 AskAiButton 已移除——右键菜单替代）
+// ——tab/搜索防抖 300ms/排序下拉/分页（limit 20、total 驱动）/
+// 摘要列按类型（lib/entity-list.ts SUMMARY_COLUMNS）/空态两种文案区分/行点击跳详情（S3.6）；
+// 「关联 Tab（U8 增补）」——type==="relations" 渲染 RelationsView（前端过滤全量关系），
+// 「+ 新建」变「+ 建立关联」打开共用 CreateRelationDialog（列表模式，源可选）
+// （2026-08 批次十）：设定 tab（entityType==="setting"）改为**树形视图**（SettingTreeView，
+// 与设定树 tab 合并——原「设定树」tab/路由已移除，main.tsx 重定向到设定 tab）；设定不走表格/分页，
+// 搜索+标签筛选在树内进行（树形视图自带工具栏），上级设定筛选被树形导航吸收（下拉移除）；
+// character/location/hook 保持表格视图（行级 AskAiButton 已移除——右键菜单替代）
 // 「+ 新建」按钮（列表头/空态两个入口）→ 列表首行内联编辑行（UX4：name + 该类型首字段——
-//   hook 的 status 下拉、其余文本；字段配置复用 lib/entity-list.ts CREATE_FIRST_FIELD；
-//   提交成功留在列表（2026-08 用户反馈：不自动跳详情），失败内联错误不关行）
-// 软删：服务端默认过滤（决策 12 修订）；回收站入口 #/trash 由 S4 卡实现，本卡不提供入口
+// hook 的 status 下拉、其余文本；字段配置复用 lib/entity-list.ts CREATE_FIRST_FIELD；
+// 提交成功留在列表（2026-08 用户反馈：不自动跳详情），失败内联错误不关行）
+// 软删：服务端默认过滤；回收站入口 #/trash 由 S4 卡实现，本卡不提供入口
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { ENTITY_TYPES } from "@whispering233/ai-editor-shared";
@@ -54,15 +54,15 @@ const TYPE_LABEL: Record<ListableEntityType, string> = {
   setting: "设定",
   location: "地点",
   hook: "伏笔",
-  // C1 类型补全（决策 26 event 时间轴事件；时间轴专属 UI 由 C2 实现）
+ // C1 类型补全（ event 时间轴事件；时间轴专属 UI 由 C2 实现）
   event: "事件",
-  // G2.3 类型补全（G2 时间标签点；tab 随 ENTITY_TYPES 自动出现，列表 = 泛型视图）
+ // G2.3 类型补全（G2 时间标签点；tab 随 ENTITY_TYPES 自动出现，列表 = 泛型视图）
   timepoint: "时间点",
 };
 // 注：TYPE_LABEL.reference 已随批次十二 T3 移除——实体二级 tab 不再渲染参考资料
 //（独立中栏 tab #/references，旧路由重定向）。
 
-/** 排序下拉选项（sort × order 组合；决策 39：移除 updated_at 项，默认创建时间倒序） */
+/** 排序下拉选项（sort × order 组合；移除 updated_at 项，默认创建时间倒序） */
 const SORT_OPTIONS: Array<{
   value: string;
   label: string;
@@ -76,9 +76,9 @@ const SORT_OPTIONS: Array<{
 ];
 
 export default function EntityList({ type }: { type: string }) {
-  /** 关联 tab（U8）：type==="relations" 时渲染关联总览视图，不参与四类实体逻辑 */
+ /** 关联 tab（U8）：type==="relations" 时渲染关联总览视图，不参与四类实体逻辑 */
   const isRelations = type === "relations";
-  // main.tsx 已把未知 type 归一化为 character；此处双保险
+ // main.tsx 已把未知 type 归一化为 character；此处双保险
   const entityType = (ENTITY_TYPES as readonly string[]).includes(type)
     ? (type as ListableEntityType)
     : ("character" as ListableEntityType);
@@ -87,20 +87,20 @@ export default function EntityList({ type }: { type: string }) {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  /** 搜索框即时值（防抖输入） */
+ /** 搜索框即时值（防抖输入） */
   const [qInput, setQInput] = useState("");
-  /** 防抖后的查询关键词（空 = 不过滤） */
+ /** 防抖后的查询关键词（空 = 不过滤） */
   const [q, setQ] = useState("");
   const [offset, setOffset] = useState(0);
   const [sort, setSort] = useState<"name" | "created_at">("created_at");
   const [order, setOrder] = useState<"asc" | "desc">("desc");
-  /** 重试计数（错误后手动重新加载） */
+ /** 重试计数（错误后手动重新加载） */
   const [reloadTick, setReloadTick] = useState(0);
-  // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉列表
-  // （关联 tab 的 RelationsView 以 reloadKey={reloadTick} 联动刷新；设定 tab 树形视图同 key；
-  //   ref 守卫防首帧重复拉）
+ // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉列表
+ // （关联 tab 的 RelationsView 以 reloadKey={reloadTick} 联动刷新；设定 tab 树形视图同 key；
+ // ref 守卫防首帧重复拉）
   useDataRefresh(() => setReloadTick((t) => t + 1));
-  // 行内新建（UX4）打开态与表单状态
+ // 行内新建（UX4）打开态与表单状态
   const [createOpen, setCreateOpen] = useState(false);
   const [createName, setCreateName] = useState("");
   const [firstValue, setFirstValue] = useState("");
@@ -111,10 +111,10 @@ export default function EntityList({ type }: { type: string }) {
   const firstField = CREATE_FIRST_FIELD[entityType];
   const pages = pageCount(total, PAGE_LIMIT);
   const page = Math.floor(offset / PAGE_LIMIT) + 1;
-  // 新建行 datalist 候选（批次五 J2，决策 31）：从当前列表聚合已有名称 / 首字段值
-  // （浏览器原生自动完成——输入时弹出已有候选，如输入「势」弹出「势力」）
+ // 新建行 datalist 候选（批次五 J2）：从当前列表聚合已有名称 / 首字段值
+ // （浏览器原生自动完成——输入时弹出已有候选，如输入「势」弹出「势力」）
   const createNameSuggestions = uniqueStrings(items?.map((i) => i.name) ?? []);
-  // 首字段候选：text 单值取 summary 字段值；tags 多值（K1：setting.rules）flatMap 聚合数组元素
+ // 首字段候选：text 单值取 summary 字段值；tags 多值（K1：setting.rules）flatMap 聚合数组元素
   const createFirstSuggestions =
     firstField.key === ""
       ? []
@@ -128,7 +128,7 @@ export default function EntityList({ type }: { type: string }) {
           )
         : uniqueStrings(items?.map((i) => String(i.summary[firstField.key] ?? "")) ?? []);
 
-  // tab 切换（type 变化，含进出关联 tab）：重置搜索/分页/排序（原型「MVP 切换时重置搜索与分页」）
+ // tab 切换（type 变化，含进出关联 tab）：重置搜索/分页/排序（原型「MVP 切换时重置搜索与分页」）
   useEffect(() => {
     setQInput("");
     setQ("");
@@ -140,7 +140,7 @@ export default function EntityList({ type }: { type: string }) {
     setCreateOpen(false);
   }, [type]);
 
-  // 搜索防抖 300ms；关键词变化时页码重置 0（同批 setState，只发一次请求）
+ // 搜索防抖 300ms；关键词变化时页码重置 0（同批 setState，只发一次请求）
   useEffect(() => {
     const t = setTimeout(() => {
       setQ(qInput.trim());
@@ -149,8 +149,8 @@ export default function EntityList({ type }: { type: string }) {
     return () => clearTimeout(t);
   }, [qInput]);
 
-  // 列表加载：type/q/offset/sort/order 变化驱动；卸载或参数变化时丢弃过期响应
-  // 关联 tab / 设定 tab（树形视图自拉数据）：列表请求不发起，进出 tab 由对应分支触发兜底
+ // 列表加载：type/q/offset/sort/order 变化驱动；卸载或参数变化时丢弃过期响应
+ // 关联 tab / 设定 tab（树形视图自拉数据）：列表请求不发起，进出 tab 由对应分支触发兜底
   useEffect(() => {
     if (isRelations || entityType === "setting") return;
     let cancelled = false;
@@ -183,7 +183,7 @@ export default function EntityList({ type }: { type: string }) {
     };
   }, [entityType, q, offset, sort, order, reloadTick, isRelations]);
 
-  /** 排序切换：重置页码（原型交互） */
+ /** 排序切换：重置页码（原型交互） */
   function handleSortChange(value: string) {
     const opt = SORT_OPTIONS.find((o) => o.value === value);
     if (!opt) return;
@@ -192,7 +192,7 @@ export default function EntityList({ type }: { type: string }) {
     setOffset(0);
   }
 
-  /** 打开行内新建（UX4）：重置表单防上次残留；实体 tab 用（关联 tab 走 CreateRelationDialog） */
+ /** 打开行内新建（UX4）：重置表单防上次残留；实体 tab 用（关联 tab 走 CreateRelationDialog） */
   function openCreateRow() {
     setCreateName("");
     setFirstValue("");
@@ -200,16 +200,16 @@ export default function EntityList({ type }: { type: string }) {
     setCreateOpen(true);
   }
 
-  /** 取消行内新建（Esc / 取消按钮共用） */
+ /** 取消行内新建（Esc / 取消按钮共用） */
   function cancelCreateRow() {
     setCreateOpen(false);
     setCreateError(null);
   }
 
-  /** 行内新建提交：POST → toast → 留在列表刷新（2026-08 用户反馈：不自动跳详情页）；失败内联错误不关行 */
+ /** 行内新建提交：POST → toast → 留在列表刷新（2026-08 用户反馈：不自动跳详情页）；失败内联错误不关行 */
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
-    // name 必填（服务端 1-100 校验；前端先拦空值）
+ // name 必填（服务端 1-100 校验；前端先拦空值）
     const name = createName.trim();
     if (!name) {
       setCreateError("请输入名称");
@@ -220,10 +220,10 @@ export default function EntityList({ type }: { type: string }) {
     try {
       const first = CREATE_FIRST_FIELD[entityType];
       const data: Record<string, unknown> = {};
-      // 空 key = 该类型无 data 首字段（timepoint：时间标签文本即 name，G2）——跳过不写 data
+ // 空 key = 该类型无 data 首字段（timepoint：时间标签文本即 name，G2）——跳过不写 data
       if (first.key !== "" && firstValue.trim()) {
         if (first.input === "tags") {
-          // K1（决策 31）：逗号分隔多值标签（中英文逗号均可）→ rules 数组
+ // K1：逗号分隔多值标签（中英文逗号均可）→ rules 数组
           data[first.key] = firstValue
             .split(/[,，]/)
             .map((s) => s.trim())
@@ -234,8 +234,8 @@ export default function EntityList({ type }: { type: string }) {
       }
       await createEntity(entityType, { name, data });
       useUiStore.getState().showToast(`已创建${TYPE_LABEL[entityType]}《${name}》`);
-      // 创建后留在列表（2026-08 用户反馈：不自动跳详情页——打断性行为；关行 + 刷新列表
-      // 让新项按排序出现在当前视图，需要进详情可点行进入）
+ // 创建后留在列表（2026-08 用户反馈：不自动跳详情页——打断性行为；关行 + 刷新列表
+ // 让新项按排序出现在当前视图，需要进详情可点行进入）
       setCreateOpen(false);
       setReloadTick((t) => t + 1);
     } catch (err) {
@@ -245,7 +245,7 @@ export default function EntityList({ type }: { type: string }) {
     }
   }
 
-  /** 清空搜索（搜索空态操作） */
+ /** 清空搜索（搜索空态操作） */
   function clearSearch() {
     setQInput("");
     setQ("");
@@ -257,7 +257,7 @@ export default function EntityList({ type }: { type: string }) {
       <h1 className="mb-4 text-xl font-semibold">实体</h1>
 
       {/* 顶部：实体类型 tab（含关联，U8）+ 搜索 + 新建/建立关联
-          （设定 tab 为树形视图（决策 42），自带工具栏——搜索/新建在树内，顶部不重复渲染） */}
+          （设定 tab 为树形视图（），自带工具栏——搜索/新建在树内，顶部不重复渲染） */}
       <div className="flex flex-wrap items-center gap-3 border-b border-border pb-3">
         <div className="flex gap-1">
           {/* 批次十二 T3：参考资料已有独立中栏 tab（#/references），实体二级 tab 排除——入口去重 */}
@@ -307,7 +307,7 @@ export default function EntityList({ type }: { type: string }) {
         </div>
       </div>
 
-      {/* 关联 tab：关系总览视图（前端过滤全量）；设定 tab：树形视图（决策 42，与设定树合并——
+      {/* 关联 tab：关系总览视图（前端过滤全量）；设定 tab：树形视图（与设定树合并——
           搜索+标签树内过滤、无分页、上级筛选被树形导航吸收）；其余类型 tab：原表格视图 */}
       {isRelations ? (
         <RelationsView reloadKey={reloadTick} onOpenCreate={() => setCreateOpen(true)} />
@@ -486,9 +486,9 @@ export default function EntityList({ type }: { type: string }) {
                 </thead>
                 <tbody>
                   {items.map((item) => (
-                    // 行级右键菜单（决策 40）：注入会话上下文（focus_entity_type/id）+ 建立关联
-                    // （源端点按行实体类型预填）；行点击跳详情保持（ContextMenuTrigger 内建
-                    //   onContextMenu 处理右键，不干扰行 onClick）
+ // 行级右键菜单：注入会话上下文（focus_entity_type/id）+ 建立关联
+ // （源端点按行实体类型预填）；行点击跳详情保持（ContextMenuTrigger 内建
+ // onContextMenu 处理右键，不干扰行 onClick）
                     <RowContextMenu
                       key={item.id}
                       focus={{ focus_entity_type: entityType, focus_entity_id: item.id }}
@@ -502,7 +502,7 @@ export default function EntityList({ type }: { type: string }) {
                         />
                       }
                     >
-                      {/* 决策 45（用户复核修订）：character 四列（名称+动机第二行 / 角色 / 性格 /
+                      {/* （用户复核修订）：character 四列（名称+动机第二行 / 角色 / 性格 /
                           能力）由 CharacterRow 自渲染；其余类型保持原表格列 */}
                       {entityType === "character" ? (
                         <CharacterRow item={item} />
@@ -516,7 +516,7 @@ export default function EntityList({ type }: { type: string }) {
                           </td>
                         </>
                       )}
-                      {/* 决策 45 修订：character 四列（名称+动机第二行 / 角色 / 性格 / 能力）由
+                      {/* character 四列（名称+动机第二行 / 角色 / 性格 / 能力）由
                           CharacterRow 自渲染，通用 key2/key3 单元格跳过（防表头/表体错位） */}
                       {entityType !== "character" && col.key2 && (
                         <td className="max-w-40 truncate px-3 py-2 text-muted-foreground">
@@ -524,7 +524,7 @@ export default function EntityList({ type }: { type: string }) {
                         </td>
                       )}
                       {entityType !== "character" && col.key3 && (
-                        // 描述列（M2，仅 setting）：行内 truncate + hover title 查看完整摘要（服务端已截断 100 字符）
+ // 描述列（M2，仅 setting）：行内 truncate + hover title 查看完整摘要（服务端已截断 100 字符）
                         <td
                           className="max-w-40 truncate px-3 py-2 text-muted-foreground"
                           title={
@@ -582,7 +582,7 @@ export default function EntityList({ type }: { type: string }) {
   );
 }
 
-/** 人物行四列布局（决策 45 + 用户修订，2026-08 批次十三）：名称列（第一行名称 + 第二行动机
+/** 人物行四列布局（ + 用户修订，2026-08 批次十三）：名称列（第一行名称 + 第二行动机
  * 摘要，hover title 查看完整）+ 角色列（summary.role，T2 标签徽标样式）+ 性格列 + 能力列
  * （各前 2 个 chips，T2 徽标样式；空数组显示「—」占位与其余类型缺失语义一致）。
  * 角色/性格/能力独立成列——列头即区分，修复首版合并 chips 无法分辨的反馈。 */

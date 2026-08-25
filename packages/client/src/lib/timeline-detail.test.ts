@@ -1,7 +1,7 @@
-// lib/timeline-detail 纯函数测试（C4，决策 26；G2.3 修订：occurs_at 挂载提取/请求体构造）
+// lib/timeline-detail 纯函数测试（C4，；G2.3 修订：occurs_at 挂载提取/请求体构造）
 // 覆盖：occurs_in 关系提取（详情页关联节点列表）、occurs_at 挂载提取（详情页挂载选择器）、
-//       关联/挂载请求体构造
-//       （事件表单共享函数 eventFormFromDetail / buildEventDetailPatch 已随函数迁入 timeline.test.ts）
+// 关联/挂载请求体构造
+// （事件表单共享函数 eventFormFromDetail / buildEventDetailPatch 已随函数迁入 timeline.test.ts）
 import { describe, expect, it } from "vitest";
 import type { RelationSummaryItem } from "./api";
 import {
@@ -25,8 +25,8 @@ function relOf(over: Partial<RelationSummaryItem>): RelationSummaryItem {
   };
 }
 
-describe("occursInRelations（详情 relations → 锚定节点关系，timeline.md 关联列表）", () => {
-  it("仅提取 occurs_in 且 sourceId === 本事件（事件为 source 端，决策 26 方向约定）", () => {
+describe("occursInRelations", () => {
+  it("仅提取 occurs_in 且 sourceId === 本事件（事件为 source 端， 方向约定）", () => {
     const relations = [
       relOf({ id: "r1", sourceId: "ev-a", targetId: "sc-1", targetName: "第3章·灵根测试" }),
       relOf({ id: "r2", sourceId: "ev-a", targetId: "sc-9", targetName: "第5章·宗门大比" }),
@@ -55,7 +55,7 @@ describe("occursInRelations（详情 relations → 锚定节点关系，timeline
   });
 });
 
-describe("buildOccursRelationBody（关联请求体，endpoints.md POST /relation）", () => {
+describe("buildOccursRelationBody", () => {
   it("event → outline_node，occurs_in；id 原样透传", () => {
     expect(buildOccursRelationBody("ev-a", "ch-3")).toEqual({
       source_type: "event",

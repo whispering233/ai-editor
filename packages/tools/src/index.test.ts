@@ -10,12 +10,12 @@ import * as m from "./index";
 describe("@whispering233/ai-editor-tools 入口冒烟", () => {
   it("可正常导入：注册表/上下文/工具 API 导出，且查询/分析/伏笔/提案工具已注册", () => {
     expect(m).toBeDefined();
-    // registry API
+ // registry API
     expect(typeof m.registerTool).toBe("function");
     expect(typeof m.registerTools).toBe("function");
     expect(typeof m.getTool).toBe("function");
     expect(typeof m.listTools).toBe("function");
-    // 查询工具实现导出（S6.3）
+ // 查询工具实现导出（S6.3）
     expect(typeof m.runGetEntity).toBe("function");
     expect(typeof m.runSearchEntities).toBe("function");
     expect(typeof m.runQueryRelationships).toBe("function");
@@ -24,18 +24,18 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
     expect(typeof m.runComputeState).toBe("function");
     expect(typeof m.runGetDeltaHistory).toBe("function");
     expect(typeof m.runGetEntitySummary).toBe("function");
-    // 提案工具实现导出（S6.6）
+ // 提案工具实现导出（S6.6）
     expect(typeof m.runProposeCreateEntity).toBe("function");
     expect(typeof m.runProposeAddDelta).toBe("function");
     expect(typeof m.runProposeAdvanceHook).toBe("function");
-    // 入口副作用注册：查询 9 + 分析 5 + 伏笔 5 + 提案 16 = 35 个（search_references + propose_create_reference，决策 36）
+ // 入口副作用注册：查询 9 + 分析 5 + 伏笔 5 + 提案 16 = 35 个（search_references + propose_create_reference）
     expect(m.toolCount()).toBe(35);
     expect(m.getTool("get_entity")).toBeDefined();
-    // 提案类工具权限为 PROPOSAL（tools.md「提案类（需确认）」）
+ // 提案类工具权限为 PROPOSAL（「提案类（需确认）」）
     expect(m.getTool("propose_create_entity")!.permission).toBe("proposal");
     expect(m.getTool("propose_abandon_hook")!.permission).toBe("proposal");
     expect(m.getTool("propose_reorder_timepoints")!.permission).toBe("proposal");
-    // 16 个提案工具全部注册（PROPOSAL_TOOLS 常量与注册表一致，tools.md 契约；决策 36 +propose_create_reference）
+ // 16 个提案工具全部注册（PROPOSAL_TOOLS 常量与注册表一致， ； +propose_create_reference）
     expect(PROPOSAL_TOOLS.length).toBe(16);
     for (const name of PROPOSAL_TOOLS) {
       expect(m.getTool(name)).toBeDefined();

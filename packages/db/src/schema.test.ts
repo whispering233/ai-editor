@@ -49,8 +49,8 @@ function expectConstraintError(fn: () => unknown, code: string): void {
   }
 }
 
-describe("tables.ts 双份声明对齐（决策 49）", () => {
-  // drizzle 侧声明（键 = 表名）
+describe("tables.ts 双份声明对齐（）", () => {
+ // drizzle 侧声明（键 = 表名）
   const drizzleTables: Record<string, SQLiteTable> = {
     entities,
     relation_records: relationRecords,
@@ -60,7 +60,7 @@ describe("tables.ts 双份声明对齐（决策 49）", () => {
 
   it("DDL 常量与 sqliteTable 定义列级对齐（列名/类型/notNull/主键）", () => {
     const ddl = parseDdlColumns(CREATE_TABLES_SQL);
-    // 表集合双向一致
+ // 表集合双向一致
     expect([...ddl.keys()].sort()).toEqual(Object.keys(drizzleTables).sort());
     for (const [tableName, table] of Object.entries(drizzleTables)) {
       const ddlCols = ddl.get(tableName);
@@ -71,9 +71,9 @@ describe("tables.ts 双份声明对齐（决策 49）", () => {
           { type: c.getSQLType().toLowerCase(), notNull: c.notNull, primaryKey: c.primary },
         ]),
       );
-      // 列名集合一致（防漏列/多列）
+ // 列名集合一致（防漏列/多列）
       expect([...drizzleCols.keys()].sort(), `${tableName} 列名集合`).toEqual([...ddlCols!.keys()].sort());
-      // 每列 type/notNull/primary 一致（防类型或约束漂移）
+ // 每列 type/notNull/primary 一致（防类型或约束漂移）
       for (const [colName, actual] of drizzleCols) {
         expect(actual, `${tableName}.${colName} 声明不一致`).toEqual(ddlCols!.get(colName));
       }
@@ -90,9 +90,9 @@ describe("tables.ts 双份声明对齐（决策 49）", () => {
 
 /**
  * 从 DDL 常量解析每张表的列声明（顶层两空格缩进行）：
- * `  <列名>  <类型> <其余约束...>`，列名可能带双引号（"order" 关键字列）。
+ * ` <列名> <类型> <其余约束...>`，列名可能带双引号（"order" 关键字列）。
  * 返回 表名 → 列名 → { type: 'text'|'integer', notNull, primaryKey }。
- * 注释行（-- 开头）与空行忽略。
+ * 注释行（ 开头）与空行忽略。
  */
 function parseDdlColumns(
   ddl: string,
@@ -109,10 +109,10 @@ function parseDdlColumns(
       const rawType = colMatch[3].toLowerCase();
       const rest = colMatch[4];
       cols.set(colName, {
-        // 本项目 DDL 仅 TEXT/INTEGER 两种（每列 getSQLType 输出同为 text/integer）
+ // 本项目 DDL 仅 TEXT/INTEGER 两种（每列 getSQLType 输出同为 text/integer）
         type: rawType === "text" ? "text" : "integer",
-        // SQLite 中（INTEGER PRIMARY KEY rowid 别名除外）主键隐式 NOT NULL——
-        // DDL 文本不显式写 NOT NULL 时语义仍为 NOT NULL，与 drizzle .primaryKey() 对齐
+ // SQLite 中（INTEGER PRIMARY KEY rowid 别名除外）主键隐式 NOT NULL——
+ // DDL 文本不显式写 NOT NULL 时语义仍为 NOT NULL，与 drizzle .primaryKey 对齐
         notNull: /NOT NULL/.test(rest) || /PRIMARY KEY/.test(rest),
         primaryKey: /PRIMARY KEY/.test(rest),
       });
@@ -129,11 +129,11 @@ describe("schema.ts 建表", () => {
     );
   });
 
-  it("relation_records 有 3 个部分索引（WHERE deleted_at IS NULL，决策 12 修订）", () => {
+  it("relation_records 有 3 个部分索引（WHERE deleted_at IS NULL，）", () => {
     const indexes = listIndexes(db, "relation_records");
     const names = indexes.map((i) => i.name).sort();
     expect(names).toEqual(["idx_relation_source", "idx_relation_target", "idx_relation_type"].sort());
-    // 全部为部分索引（partial=1）
+ // 全部为部分索引（partial=1）
     for (const idx of indexes) {
       expect(idx.partial).toBe(1);
     }
@@ -151,16 +151,16 @@ describe("schema.ts 建表", () => {
     expect(listTables(db)).toHaveLength(4);
   });
 
-  it("entities.type CHECK 约束生效：非法 type 插入报错，合法 type 可插入（含 event 决策 26、timepoint G2）", () => {
+  it("entities.type CHECK 约束生效：非法 type 插入报错，合法 type 可插入（含 event 、timepoint G2）", () => {
     const insert = db.prepare(
       "INSERT INTO entities (id, type, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
     );
-    // 非法 type：SQLITE_CONSTRAINT_CHECK
+ // 非法 type：SQLITE_CONSTRAINT_CHECK
     expectConstraintError(
       () => insert.run("char-1", "invalid", "测试", "2026-08-01T10:00:00Z", "2026-08-01T10:00:00Z"),
       "SQLITE_CONSTRAINT_CHECK",
     );
-    // 合法 type：六类均可插入
+ // 合法 type：六类均可插入
     for (const type of ["character", "setting", "location", "hook", "event", "timepoint"]) {
       expect(() => insert.run(`e-${type}`, type, "测试", "2026-08-01T10:00:00Z", "2026-08-01T10:00:00Z")).not.toThrow();
     }
@@ -179,18 +179,18 @@ describe("schema.ts 建表", () => {
     }
   });
 
-  it("user_version 读写往返（决策 13/E5：SCHEMA_VERSION = 5，v1→v5 走增量迁移 002→003→004→005）", () => {
-    // 新库默认 0
+  it("user_version 读写往返（/SCHEMA_VERSION = 5，v1→v5 走增量迁移 002→003→004→005）", () => {
+ // 新库默认 0
     expect(getUserVersion(db)).toBe(0);
     setUserVersion(db, SCHEMA_VERSION);
     expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
     expect(SCHEMA_VERSION).toBe(5);
   });
 
-  it("entities 有 sort_order 列（时间轴事件全局线性序，仅 event 使用，其余类型 NULL，决策 26）", () => {
+  it("entities 有 sort_order 列（时间轴事件全局线性序，仅 event 使用，其余类型 NULL，）", () => {
     const cols = db.prepare("PRAGMA table_info(entities)").all() as Array<{ name: string; dflt_value: string | null }>;
     expect(cols.some((c) => c.name === "sort_order")).toBe(true);
-    // 非 event 类型插入后 sort_order 为 NULL（未显式指定走默认）
+ // 非 event 类型插入后 sort_order 为 NULL（未显式指定走默认）
     db.prepare(
       "INSERT INTO entities (id, type, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
     ).run("char-1", "character", "张三", "2026-08-01T10:00:00Z", "2026-08-01T10:00:00Z");
@@ -199,10 +199,10 @@ describe("schema.ts 建表", () => {
   });
 
   it("setUserVersion 拒绝非整数版本号（防模板拼接注入面）", () => {
-    // 非整数：1.5 / NaN / 字符串数字均拒绝
+ // 非整数：1.5 / NaN / 字符串数字均拒绝
     expect(() => setUserVersion(db, 1.5)).toThrow(/必须是整数/);
     expect(() => setUserVersion(db, Number.NaN)).toThrow(/必须是整数/);
-    // 整数正常写入
+ // 整数正常写入
     expect(() => setUserVersion(db, 2)).not.toThrow();
     expect(getUserVersion(db)).toBe(2);
   });

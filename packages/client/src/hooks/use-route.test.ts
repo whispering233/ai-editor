@@ -44,7 +44,7 @@ describe("parseHashRoute", () => {
 });
 
 
-  it("references 参考资料段解析（1 段列表 / 2 段详情，决策 36）", () => {
+  it("references 参考资料段解析（1 段列表 / 2 段详情，）", () => {
     expect(parseHashRoute("#/references")).toEqual({ path: "/references", segments: ["references"], isFallback: false });
     expect(parseHashRoute("#/references/ref-abc")).toEqual({ path: "/references/ref-abc", segments: ["references", "ref-abc"], isFallback: false });
   });

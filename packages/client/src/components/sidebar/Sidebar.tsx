@@ -1,17 +1,17 @@
-// 左栏 Sidebar（doc/ui/layout.md §2.3）：产品标识 + 书架（项目→会话二级树）+ 底部设置/主题切换
+// 左栏 Sidebar：产品标识 + 书架（项目→会话二级树）+ 底部设置/主题切换
 // U3 实现：书架树——bookshelf 列表（挂载即拉取，与 config 无关，无项目时照常展示）；
-//   点击项目行 openProjectAt（当前项目 name 匹配高亮）；chevron 单展开会话列表（归属项目，决策 22，
-//   展开时 chat store 自动 loadSessions）；书架头部 [+ 新建项目] 行内输入（UX2：bookshelf.rootPath +
-//   buildBookPath）；主题切换用 use-theme hook（layout.md §3.4 Sun/Moon，localStorage 持久化）
-// E3 导出/导入（release-review §二「数据主权归用户」载体）：
-//   - 书架头部行 [+ 导入备份]（Upload，zip 恢复为新书，导入不自动打开 → 刷新书架）；
-//   - 当前项目行尾部 [导出备份]（Download，点击即下载 zip；无项目打开时不渲染——「导出当前项目」语义）
-// B2（决策 27）：
-//   - 导入同名二选一：书名与书架已有书同名 → Dialog 内联冲突提示 + [重命名导入]（Input 可编辑，
-//     预填 `<名> (2)`）/ [保持原样导入]（服务端目录自动去重）；响应 mode 分流 toast（restored/new）
-//   - 项目行 [重命名] 图标按钮：仅当前项目行渲染（H3：直接展示，不收进 ⋯ 菜单）；点击 → 行内输入框
-//     （预填当前名，Enter/失焦提交 POST /project/rename，Esc 取消）；成功刷新书架 + config；
-//     409 PROJECT_ALREADY_EXISTS → 行内内联错误（不关闭输入态）
+// 点击项目行 openProjectAt（当前项目 name 匹配高亮）；chevron 单展开会话列表（归属项目，，
+// 展开时 chat store 自动 loadSessions）；书架头部 [+ 新建项目] 行内输入（UX2：bookshelf.rootPath +
+// buildBookPath）；主题切换用 use-theme hook（ Sun/Moon，localStorage 持久化）
+// 导出/导入（「数据主权归用户」载体）：
+// - 书架头部行 [+ 导入备份]（Upload，zip 恢复为新书，导入不自动打开 → 刷新书架）；
+// - 当前项目行尾部 [导出备份]（Download，点击即下载 zip；无项目打开时不渲染——「导出当前项目」语义）
+// B2：
+// - 导入同名二选一：书名与书架已有书同名 → Dialog 内联冲突提示 + [重命名导入]（Input 可编辑，
+// 预填 `<名> (2)`）/ [保持原样导入]（服务端目录自动去重）；响应 mode 分流 toast（restored/new）
+// - 项目行 [重命名] 图标按钮：仅当前项目行渲染（H3：直接展示，不收进 ⋯ 菜单）；点击 → 行内输入框
+// （预填当前名，Enter/失焦提交 POST /project/rename，Esc 取消）；成功刷新书架 + config；
+// 409 PROJECT_ALREADY_EXISTS → 行内内联错误（不关闭输入态）
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import {
@@ -85,8 +85,8 @@ function SessionList() {
   const currentSessionId = useChatStore((s) => s.currentSessionId);
   const setCurrentSession = useChatStore((s) => s.setCurrentSession);
 
-  // 展开时若列表「从未尝试加载」→ 拉取（oracle U3 审核 H1：失败后停住，
-  // 由下方错误 UI 的手动重试按钮负责重试——避免失败时 sessions 保持 null 触发无限循环）
+ // 展开时若列表「从未尝试加载」→ 拉取（oracle U3 审核 H1：失败后停住，
+ // 由下方错误 UI 的手动重试按钮负责重试——避免失败时 sessions 保持 null 触发无限循环）
   useEffect(() => {
     if (sessions === null && !sessionsLoading && sessionsError === null) {
       void loadSessions();
@@ -95,7 +95,7 @@ function SessionList() {
 
   if (sessions === null) {
     if (sessionsError !== null) {
-      // 无项目打开时服务端返回 NO_PROJECT_OPEN：展示提示而非错误（会话归属项目，决策 22）
+ // 无项目打开时服务端返回 NO_PROJECT_OPEN：展示提示而非错误（会话归属项目）
       if (sessionsError === "NO_PROJECT_OPEN") {
         return (
           <p className="ml-3 border-l border-border py-1 pl-2 text-xs text-muted-foreground/60">
@@ -163,14 +163,14 @@ export function Sidebar({
   width,
   onToggleCollapse,
 }: {
-  /** 桌面态像素宽度（flex-basis 覆盖默认 10%）；undefined = 小屏默认百分比布局 */
+ /** 桌面态像素宽度（flex-basis 覆盖默认 10%）；undefined = 小屏默认百分比布局 */
   width?: number;
-  /** 收起左栏回调（F7：桌面态由 AppShell 传入；小屏无收起能力，不传即不渲染按钮） */
+ /** 收起左栏回调（F7：桌面态由 AppShell 传入；小屏无收起能力，不传即不渲染按钮） */
   onToggleCollapse?: () => void;
 }) {
   const { theme, toggleTheme } = useTheme();
 
-  // 书架（bookshelf 与 config 无关：无项目打开也展示）
+ // 书架（bookshelf 与 config 无关：无项目打开也展示）
   const config = useProjectStore((s) => s.config);
   const bookshelf = useProjectStore((s) => s.bookshelf);
   const bookshelfLoading = useProjectStore((s) => s.bookshelfLoading);
@@ -179,44 +179,44 @@ export function Sidebar({
   const openProjectAt = useProjectStore((s) => s.openProjectAt);
   const createProjectAt = useProjectStore((s) => s.createProjectAt);
 
-  // 展开的项目行（单展开：同一时刻只展开一本，布局 §2.3 推荐）；展开会话由 SessionList 按需加载
+ // 展开的项目行（单展开：同一时刻只展开一本，布局 §2.3 推荐）；展开会话由 SessionList 按需加载
   const [expandedPath, setExpandedPath] = useState<string | null>(null);
-  // 新建项目行内输入（UX2：书架头部「＋」展开单字段输入；状态仅行内使用）
+ // 新建项目行内输入（UX2：书架头部「＋」展开单字段输入；状态仅行内使用）
   const [createOpen, setCreateOpen] = useState(false);
   const [bookName, setBookName] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
-  // 导入备份 Dialog（E3）
+ // 导入备份 Dialog
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importName, setImportName] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
-  // 导入同名冲突（B2，决策 27）：书名与书架已有书同名时进入冲突态——
-  // importConflictBase = 冲突基础名（「保持原样导入」提交它；服务端目录自动去重）
+ // 导入同名冲突（B2）：书名与书架已有书同名时进入冲突态——
+ // importConflictBase = 冲突基础名（「保持原样导入」提交它；服务端目录自动去重）
   const [importConflict, setImportConflict] = useState(false);
   const [importConflictBase, setImportConflictBase] = useState("");
-  // 导出备份进行态（当前项目行下载按钮；exporting 防连点）
+ // 导出备份进行态（当前项目行下载按钮；exporting 防连点）
   const [exporting, setExporting] = useState(false);
-  // 书架行 [重命名] 图标按钮（B2/H3）：行内输入框状态（仅当前项目行触发，按书 path 标记）
+ // 书架行 [重命名] 图标按钮（B2/H3）：行内输入框状态（仅当前项目行触发，按书 path 标记）
   const [renamingPath, setRenamingPath] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
   const [renamingSubmitting, setRenamingSubmitting] = useState(false);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
-  // 挂载时加载书架（Sidebar 常驻；Dashboard 书架形态已加载则不重复）
+ // 挂载时加载书架（Sidebar 常驻；Dashboard 书架形态已加载则不重复）
   useEffect(() => {
     if (!bookshelfLoading && bookshelf === null && bookshelfError === null) {
       void loadBookshelf();
     }
   }, [bookshelfLoading, bookshelf, bookshelfError, loadBookshelf]);
 
-  /** 打开书籍（走 openProjectAt：store 自动刷新 config/outline；chat store 订阅联动重载会话） */
+ /** 打开书籍（走 openProjectAt：store 自动刷新 config/outline；chat store 订阅联动重载会话） */
   async function handleOpenBook(path: string) {
     try {
       await openProjectAt(path);
-      // 展开新打开的项目行（M1：Sidebar 发起的打开天然对齐展开态）
+ // 展开新打开的项目行（M1：Sidebar 发起的打开天然对齐展开态）
       setExpandedPath(path);
     } catch (err) {
       useUiStore
@@ -225,8 +225,8 @@ export function Sidebar({
     }
   }
 
-  // M1（oracle U3 审核）：项目切换（含 Dashboard 卡片等其他入口）时收起展开态，
-  // 避免「A 行展开却展示 B 项目会话」的错位呈现（chat store 数据已随项目切换，仅展开态需收敛）
+ // M1（oracle U3 审核）：项目切换（含 Dashboard 卡片等其他入口）时收起展开态，
+ // 避免「A 行展开却展示 B 项目会话」的错位呈现（chat store 数据已随项目切换，仅展开态需收敛）
   const projectId = config?.id ?? null;
   const prevProjectId = useRef(projectId);
   useEffect(() => {
@@ -237,18 +237,18 @@ export function Sidebar({
     }
   }, [projectId]);
 
-  /** 取消行内新建（× 按钮 / Esc / 失焦共用）：清空输入与错误，防下次展开残留 */
+ /** 取消行内新建（× 按钮 / Esc / 失焦共用）：清空输入与错误，防下次展开残留 */
   function cancelCreate() {
     setBookName("");
     setCreateError(null);
     setCreateOpen(false);
   }
 
-  /** 新建项目（行内输入提交）：书名 → 创作根/books/<书名>/，create（不打开）→ open 进入新书 → toast + 刷新书架 + 展开新书行 */
+ /** 新建项目（行内输入提交）：书名 → 创作根/books/<书名>/，create（不打开）→ open 进入新书 → toast + 刷新书架 + 展开新书行 */
   async function handleCreateBook(e: FormEvent) {
     e.preventDefault();
     const name = bookName.trim();
-    // 书名校验（UX2 抽取：lib/book-name.validateBookName——L3 防路径逃逸规则，创建/导入共用）
+ // 书名校验（UX2 抽取：lib/book-name.validateBookName——L3 防路径逃逸规则，创建/导入共用）
     const err = validateBookName(name);
     if (err !== null) {
       setCreateError(err);
@@ -264,7 +264,7 @@ export function Sidebar({
       await createProjectAt(buildBookPath(bookshelf.rootPath, name), { name, language: "zh" });
       useUiStore.getState().showToast(`已创建并打开《${name}》`);
       await loadBookshelf(); // 刷新书架让新书出现（失败由 bookshelfError 呈现）
-      // 展开新书所在行（用刷新后的列表按名匹配；config 已指向新项目）
+ // 展开新书所在行（用刷新后的列表按名匹配；config 已指向新项目）
       const book = useProjectStore.getState().bookshelf?.books.find((b) => b.name === name);
       if (book) setExpandedPath(book.path);
       setBookName("");
@@ -276,11 +276,11 @@ export function Sidebar({
     }
   }
 
-  /**
-   * 导出当前项目备份（E3：GET /project/export 二进制 zip → 临时 <a> 触发浏览器下载）。
-   * 按钮仅渲染在当前项目行（无项目打开时无入口，与「导出当前项目」语义一致）；
-   * 导出中按钮 loading 防连点；失败 toast（网络/服务端 message 映射）
-   */
+ /**
+ * 导出当前项目备份（GET /project/export 二进制 zip → 临时 <a> 触发浏览器下载）。
+ * 按钮仅渲染在当前项目行（无项目打开时无入口，与「导出当前项目」语义一致）；
+ * 导出中按钮 loading 防连点；失败 toast（网络/服务端 message 映射）
+ */
   async function handleExportBook(name: string) {
     if (exporting) return;
     setExporting(true);
@@ -293,7 +293,7 @@ export function Sidebar({
       document.body.appendChild(a);
       a.click();
       a.remove();
-      // 延迟到下一帧 revoke（ora-1：旧版 Safari 下载开始前即 revoke 会中断下载的竞态防御）
+ // 延迟到下一帧 revoke（ora-1：旧版 Safari 下载开始前即 revoke 会中断下载的竞态防御）
       setTimeout(() => URL.revokeObjectURL(url), 0);
       useUiStore.getState().showToast(`已导出《${name}》备份`);
     } catch (err) {
@@ -311,8 +311,8 @@ export function Sidebar({
     }
   }
 
-  /** 文件选择：书名预填为文件名去 .zip 扩展名（zip 未解析前拿不到 project.json 内部 name）；
-   *  预填名与书架已有书同名 → 同步进入冲突态（B2，决策 27） */
+ /** 文件选择：书名预填为文件名去 .zip 扩展名（zip 未解析前拿不到 project.json 内部 name）；
+ * 预填名与书架已有书同名 → 同步进入冲突态（B2） */
   function handleImportFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] ?? null;
     setImportFile(file);
@@ -325,15 +325,15 @@ export function Sidebar({
     }
   }
 
-  /**
-   * 导入同名冲突评估（B2，决策 27：同名 id 不同不再 409，改由前端二选一）：
-   * - 非冲突态：输入名与书架已有书同名 → 进入冲突态（记录基础名 + 预填 `<名> (2)`，可编辑）
-   * - 冲突态内（粘性，直到用户明确选择/改名）：
-   *   · 值 = 预填名（重命名导入流程）或回改回基础名 → 保持冲突态
-   *   · 编辑为另一冲突名 → 更新基础名并重新预填
-   *   · 编辑为非冲突名 → 退出冲突态（回到普通导入）
-   * 预填导致的 onChange（值 = 预填名）不会退出冲突态——「保持原样」入口不被预填破坏
-   */
+ /**
+ * 导入同名冲突评估（B2，同名 id 不同不再 409，改由前端二选一）：
+ * - 非冲突态：输入名与书架已有书同名 → 进入冲突态（记录基础名 + 预填 `<名> (2)`，可编辑）
+ * - 冲突态内（粘性，直到用户明确选择/改名）：
+ * · 值 = 预填名（重命名导入流程）或回改回基础名 → 保持冲突态
+ * · 编辑为另一冲突名 → 更新基础名并重新预填
+ * · 编辑为非冲突名 → 退出冲突态（回到普通导入）
+ * 预填导致的 onChange（值 = 预填名）不会退出冲突态——「保持原样」入口不被预填破坏
+ */
   function evaluateImportConflict(next: string) {
     const trimmed = next.trim();
     const isBookName = (name: string) => bookshelf?.books.some((b) => b.name === name) ?? false;
@@ -360,28 +360,28 @@ export function Sidebar({
     }
   }
 
-  /** 书名输入（编辑即重新评估冲突；空名不进入冲突态） */
+ /** 书名输入（编辑即重新评估冲突；空名不进入冲突态） */
   function handleImportNameChange(e: ChangeEvent<HTMLInputElement>) {
     const next = e.target.value;
     setImportName(next);
     evaluateImportConflict(next);
   }
 
-  /**
-   * 导入备份（E3 + B2 决策 27）：multipart 上传 zip + 书名 → 服务端校验后原子搬入/覆盖 →
-   * 刷新书架。书名由调用方传入（普通导入 = 当前输入名；冲突态二选一 = 基础名「保持原样」/ 编辑后新名
-   * 「重命名导入」）；响应 mode 分流 toast——restored（id 匹配覆盖恢复）/ new（导入为新书，name 为
-   * 服务端实际目录名，含自动去重）。导入不自动打开（与 create 一致）；失败内联显示保持打开可重试
-   */
+ /**
+ * 导入备份（ + B2 ）：multipart 上传 zip + 书名 → 服务端校验后原子搬入/覆盖 →
+ * 刷新书架。书名由调用方传入（普通导入 = 当前输入名；冲突态二选一 = 基础名「保持原样」/ 编辑后新名
+ * 「重命名导入」）；响应 mode 分流 toast——restored（id 匹配覆盖恢复）/ new（导入为新书，name 为
+ * 服务端实际目录名，含自动去重）。导入不自动打开（与 create 一致）；失败内联显示保持打开可重试
+ */
   async function handleImportSubmit(name: string, e?: FormEvent) {
     e?.preventDefault();
     const trimmed = name.trim();
-    // 客户端预检（与服务端同规则，快速反馈；最终以服务端校验为准）
+ // 客户端预检（与服务端同规则，快速反馈；最终以服务端校验为准）
     if (!importFile) {
       setImportError("请选择备份文件");
       return;
     }
-    // 书名校验与新建项目共用（UX2 抽取）
+ // 书名校验与新建项目共用（UX2 抽取）
     const err = validateBookName(trimmed);
     if (err !== null) {
       setImportError(err);
@@ -391,7 +391,7 @@ export function Sidebar({
     setImportError(null);
     try {
       const res = await importProjectZip(importFile, trimmed);
-      // 决策 27 分流提示（settings.md/layout.md §2.3：restored → 已恢复备份；new → 已导入为新书）
+ // 分流提示（：restored → 已恢复备份；new → 已导入为新书）
       useUiStore
         .getState()
         .showToast(
@@ -409,16 +409,16 @@ export function Sidebar({
         err instanceof ApiError ? err.message : "导入失败，请重试",
       );
       setImportError(text);
-      // 兜底反馈（ora-1）：onOpenChange 未守卫 importing——导入中途关闭对话框后内联错误不可见，
-      // toast 保证失败一定有反馈（框开闭均提示；空文案如 NO_PROJECT_OPEN 不打扰）
+ // 兜底反馈（ora-1）：onOpenChange 未守卫 importing——导入中途关闭对话框后内联错误不可见，
+ // toast 保证失败一定有反馈（框开闭均提示；空文案如 NO_PROJECT_OPEN 不打扰）
       if (text !== "") useUiStore.getState().showToast(text, "error");
     } finally {
       setImporting(false);
     }
   }
 
-  /** 打开行内重命名输入（菜单项点击）：预填当前书名；菜单关闭动画期间 Base UI 会把焦点还给 trigger，
-   *  延迟到动画后聚焦输入框，避免刚挂载的输入被抢焦触发「失焦提交」误退出 */
+ /** 打开行内重命名输入（菜单项点击）：预填当前书名；菜单关闭动画期间 Base UI 会把焦点还给 trigger，
+ * 延迟到动画后聚焦输入框，避免刚挂载的输入被抢焦触发「失焦提交」误退出 */
   function startRename(book: { name: string; path: string }) {
     setRenamingPath(book.path);
     setRenameValue(book.name);
@@ -426,18 +426,18 @@ export function Sidebar({
     window.setTimeout(() => renameInputRef.current?.focus(), 150);
   }
 
-  /** 取消行内重命名（Esc / 成功 / 未变化）：清空输入与错误，防下次展开残留 */
+ /** 取消行内重命名（Esc / 成功 / 未变化）：清空输入与错误，防下次展开残留 */
   function cancelRename() {
     setRenamingPath(null);
     setRenameValue("");
     setRenameError(null);
   }
 
-  /**
-   * 行内重命名提交（Enter / 失焦）：POST /project/rename → 成功刷新书架 + config（name 变化驱动
-   * 当前行高亮与 InfoBar 项目名）；409 PROJECT_ALREADY_EXISTS → 行内内联错误（不关闭输入态，可改名重试）；
-   * 值未变化（含菜单关闭抢焦的误失焦）→ 直接退出不请求
-   */
+ /**
+ * 行内重命名提交（Enter / 失焦）：POST /project/rename → 成功刷新书架 + config（name 变化驱动
+ * 当前行高亮与 InfoBar 项目名）；409 PROJECT_ALREADY_EXISTS → 行内内联错误（不关闭输入态，可改名重试）；
+ * 值未变化（含菜单关闭抢焦的误失焦）→ 直接退出不请求
+ */
   async function handleRenameSubmit() {
     if (renamingPath === null || renamingSubmitting) return;
     const name = renameValue.trim();
@@ -445,7 +445,7 @@ export function Sidebar({
       cancelRename();
       return;
     }
-    // 书名校验与新建项目共用（UX2 抽取：禁路径分隔符/纯点/控制字符）
+ // 书名校验与新建项目共用（UX2 抽取：禁路径分隔符/纯点/控制字符）
     const err = validateBookName(name);
     if (err !== null) {
       setRenameError(err);
@@ -459,7 +459,7 @@ export function Sidebar({
       await Promise.all([loadBookshelf(), useProjectStore.getState().loadConfig()]);
       cancelRename();
     } catch (err) {
-      // 服务端补充码 PROJECT_ALREADY_EXISTS 不在 shared ErrorCode 枚举，统一按 string 比较
+ // 服务端补充码 PROJECT_ALREADY_EXISTS 不在 shared ErrorCode 枚举，统一按 string 比较
       const code: string | null = err instanceof ApiError ? err.code : null;
       if (code === "PROJECT_ALREADY_EXISTS") {
         setRenameError("书架已有同名书籍，请换一个名字"); // 不关闭输入态
@@ -480,7 +480,7 @@ export function Sidebar({
         width !== undefined ? { flex: `0 1 ${width}px`, minWidth: SIDEBAR_MIN_WIDTH } : undefined
       }
     >
-      {/* 产品标识：衬线斜体（layout.md §3.3），点击回 #/；F7 起行右侧带收起左栏按钮（仅桌面态渲染） */}
+      {/* 产品标识：衬线斜体（），点击回 #/；F7 起行右侧带收起左栏按钮（仅桌面态渲染） */}
       <div className="flex h-12 shrink-0 items-center border-b border-border">
         <a
           href="#/"
@@ -570,7 +570,7 @@ export function Sidebar({
           </form>
         )}
 
-        {/* 书架加载失败：错误 + 重试（layout.md §3.2 错误呈现） */}
+        {/* 书架加载失败：错误 + 重试（ 错误呈现） */}
         {bookshelfError !== null && (
           <div className="flex flex-col items-start gap-1 px-1 py-2">
             <p className="text-xs text-muted-foreground">
@@ -604,8 +604,8 @@ export function Sidebar({
           <ul className="space-y-0.5">
             {bookshelf.books.map((book) => {
               const expanded = expandedPath === book.path;
-              // 当前项目高亮：config.id 与书无直接映射（open 响应无 path 字段），
-              // MVP 用书名匹配（创建时书名 = 目录名 = config.name；改名后 loadConfig 刷新）
+ // 当前项目高亮：config.id 与书无直接映射（open 响应无 path 字段），
+ // MVP 用书名匹配（创建时书名 = 目录名 = config.name；改名后 loadConfig 刷新）
               const isCurrent = config !== null && book.name === config.name;
               const isRenaming = renamingPath === book.path;
               return (
@@ -662,7 +662,7 @@ export function Sidebar({
                         </span>
                       </button>
                     )}
-                    {/* 导出备份（E3）：仅当前项目行渲染——「导出当前项目」语义；无项目打开时无入口 */}
+                    {/* 导出备份：仅当前项目行渲染——「导出当前项目」语义；无项目打开时无入口 */}
                     {isCurrent && (
                       <button
                         type="button"
@@ -726,7 +726,7 @@ export function Sidebar({
         )}
       </div>
 
-      {/* 底部区：设置入口 + 主题切换（layout.md §2.3） */}
+      {/* 底部区：设置入口 + 主题切换（） */}
       <div className="flex shrink-0 flex-col gap-1 border-t border-border p-2">
         <a
           href="#/settings"
@@ -751,7 +751,7 @@ export function Sidebar({
         </Button>
       </div>
 
-      {/* 导入备份 Dialog（E3：选 zip + 书名 → 导入为新书，不自动打开；失败内联显示保持打开可重试） */}
+      {/* 导入备份 Dialog（选 zip + 书名 → 导入为新书，不自动打开；失败内联显示保持打开可重试） */}
       <Dialog
         open={importOpen}
         onOpenChange={(v) => {
@@ -781,7 +781,7 @@ export function Sidebar({
             }}
             className="flex flex-col gap-3"
           >
-            {/* 文件选择（accept zip；token 类样式，layout.md §3；file: 变体美化原生按钮） */}
+            {/* 文件选择（accept zip；token 类样式，；file: 变体美化原生按钮） */}
             <input
               type="file"
               accept=".zip,application/zip"
@@ -797,7 +797,7 @@ export function Sidebar({
               maxLength={60}
               disabled={importing}
             />
-            {/* 同名冲突提示（B2，决策 27）：预填 `<名> (2)` 后可编辑；保持原样由服务端目录自动去重 */}
+            {/* 同名冲突提示（B2）：预填 `<名> (2)` 后可编辑；保持原样由服务端目录自动去重 */}
             {importConflict && (
               <p className="text-sm text-primary">
                 书架已有同名书籍《{importConflictBase}》——可重命名导入，或保持原样（服务端自动去重）

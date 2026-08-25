@@ -1,9 +1,9 @@
-// 参考资料文件服务与路由测试（决策 43，批次十一）
+// 参考资料文件服务与路由测试（批次十一）
 // 覆盖：
-//   模块级（reference-files.ts）：写/读 roundtrip、文件名唯一化、软删移动/还原/物理删、
-//     scan（新增/幂等跳过/外部修改更新/外部删除软删/软删索引还原/容错）
-//   路由级（entity/trash/reference）：file 类创建落盘、link 类 url 必填、PUT 先写文件后更新 DB、
-//     409 REFERENCE_FILE_MISSING、软删文件入 .trash/、restore 移回、purge 物理删、scan 端点
+// 模块级（reference-files.ts）：写/读 roundtrip、文件名唯一化、软删移动/还原/物理删、
+// scan（新增/幂等跳过/外部修改更新/外部删除软删/软删索引还原/容错）
+// 路由级（entity/trash/reference）：file 类创建落盘、link 类 url 必填、PUT 先写文件后更新 DB、
+// 409 REFERENCE_FILE_MISSING、软删文件入 .trash/、restore 移回、purge 物理删、scan 端点
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -111,7 +111,7 @@ describe("reference-files 文件读写", () => {
     expect(file!.tags).toEqual(["a", "b"]);
     expect(file!.extraLines).toEqual(["author: 张三"]);
     expect(file!.body).toBe("正文第一行\n\n第二段");
-    // 文件内容：frontmatter 在顶部
+ // 文件内容：frontmatter 在顶部
     const raw = readFileSync(join(root, REFERENCE_DIR, "测试.md"), "utf8");
     expect(raw.startsWith("---\ntitle: 测试标题\ncategory: material\ntags: [a, b]\nauthor: 张三\n---")).toBe(true);
   });
@@ -131,16 +131,16 @@ describe("reference-files 文件读写", () => {
   it("软删移动 → 还原 → 物理删", () => {
     const root = makeTmpDir();
     writeReferenceFile(root, "文档.md", { title: "t", category: "material", tags: [] }, "body");
-    // 移动入 .trash/
+ // 移动入 .trash/
     const trashName = moveReferenceToTrash(root, "文档.md");
     expect(trashName).toBe("文档.md");
     expect(existsSync(join(root, REFERENCE_DIR, "文档.md"))).toBe(false);
     expect(existsSync(join(root, REFERENCE_DIR, REFERENCE_TRASH_DIR, "文档.md"))).toBe(true);
-    // 还原
+ // 还原
     const restored = restoreReferenceFromTrash(root, "文档.md");
     expect(restored).toBe("文档.md");
     expect(existsSync(join(root, REFERENCE_DIR, "文档.md"))).toBe(true);
-    // 物理删（references/ 与 .trash/ 都清）
+ // 物理删（references/ 与 .trash/ 都清）
     removeReferenceFile(root, "文档.md");
     expect(existsSync(join(root, REFERENCE_DIR, "文档.md"))).toBe(false);
   });
@@ -148,14 +148,14 @@ describe("reference-files 文件读写", () => {
   it("软删移动冲突递增 + 还原冲突递增", () => {
     const root = makeTmpDir();
     writeReferenceFile(root, "文档.md", { title: "t", category: "material", tags: [] }, "body");
-    // .trash/ 预置同名文件（模拟外部放入）
+ // .trash/ 预置同名文件（模拟外部放入）
     const trashDir = join(root, REFERENCE_DIR, REFERENCE_TRASH_DIR);
     writeFileSync(join(trashDir, "文档.md"), "外部文件");
     const trashName = moveReferenceToTrash(root, "文档.md");
     expect(trashName).toBe("文档 (2).md");
     expect(existsSync(join(trashDir, "文档 (2).md"))).toBe(true);
     expect(existsSync(join(trashDir, "文档.md"))).toBe(true); // 外部文件未被动
-    // 还原：references/ 预置同名 → 递增移回
+ // 还原：references/ 预置同名 → 递增移回
     writeFileSync(join(root, REFERENCE_DIR, "文档 (2).md"), "外部新建");
     const restored = restoreReferenceFromTrash(root, "文档 (2).md");
     expect(restored).toBe("文档 (2) (2).md");
@@ -183,7 +183,7 @@ describe("scanReferences", () => {
     writeFileSync(join(refDir, "纯笔记.md"), "没有 frontmatter 的笔记");
     const r = scanReferences(root, getCurrentProject()!.db);
     expect(r.added).toBe(2);
-    // 索引内容校验
+ // 索引内容校验
     const db = getCurrentProject()!.db;
     const rows = db.prepare("SELECT name, data FROM entities WHERE type='reference'").all() as Array<{ name: string; data: string }>;
     const byName = new Map(rows.map((x) => [x.name, JSON.parse(x.data) as Record<string, unknown>]));
@@ -191,7 +191,7 @@ describe("scanReferences", () => {
     expect(byName.get("五行相生相克")?.tags).toEqual(["五行", "设定"]);
     expect(byName.get("五行相生相克")?.content).toBe("五行正文");
     expect(byName.get("五行相生相克")?.type).toBe("material"); // category 缺省
-    // 无 frontmatter → title 兜底 = 文件名去扩展名（决策 43 容错语义）
+ // 无 frontmatter → title 兜底 = 文件名去扩展名（ 容错语义）
     expect(byName.get("纯笔记")?.content).toBe("没有 frontmatter 的笔记");
     expect(byName.get("纯笔记")?.file_name).toBe("纯笔记.md");
   });
@@ -242,11 +242,11 @@ describe("scanReferences", () => {
     const refDir = ensureRefDir(root);
     writeFileSync(join(refDir, "a.md"), "---\ntitle: A\n---\n内容");
     scanReferences(root, getCurrentProject()!.db);
-    // 软删（走路由：文件移入 .trash/）
+ // 软删（走路由：文件移入 .trash/）
     const id = (getCurrentProject()!.db.prepare("SELECT id FROM entities WHERE type='reference'").get() as { id: string }).id;
     await api(buildApp(), "DELETE", `/api/v1/entity/reference/${id}`);
     expect(existsSync(join(refDir, "a.md"))).toBe(false);
-    // 外部把文件移回 references/（模拟）
+ // 外部把文件移回 references/（模拟）
     const trashDir = join(root, REFERENCE_DIR, REFERENCE_TRASH_DIR);
     writeFileSync(join(refDir, "a.md"), readFileSync(join(trashDir, "a.md")));
     const r = scanReferences(root, getCurrentProject()!.db);
@@ -258,7 +258,7 @@ describe("scanReferences", () => {
 
 // ============ 路由级：entity CRUD 文件联动 ============
 
-describe("entity/reference 文件联动（决策 43）", () => {
+describe("entity/reference 文件联动（）", () => {
   it("创建 file 类：落盘 + 索引（kind/file_name/file_mtime/content 镜像）", async () => {
     openProject();
     const app = buildApp();
@@ -314,13 +314,13 @@ describe("entity/reference 文件联动（决策 43）", () => {
     });
     const id = (created.json as { data: { id: string } }).data.id;
     const root = getCurrentProject()!.root;
-    // 只改标题（行内编辑场景）：frontmatter title 更新、正文保留、文件名不变
+ // 只改标题（行内编辑场景）：frontmatter title 更新、正文保留、文件名不变
     const res = await api(app, "PUT", `/api/v1/entity/reference/${id}`, { name: "新标题" });
     expect(res.status).toBe(200);
     const raw = readFileSync(join(root, REFERENCE_DIR, "原标题.md"), "utf8");
     expect(raw).toContain("title: 新标题");
     expect(raw).toContain("正文");
-    // 改分类 + 正文
+ // 改分类 + 正文
     await api(app, "PUT", `/api/v1/entity/reference/${id}`, {
       data: { type: "theory", content: "新正文" },
     });
@@ -328,7 +328,7 @@ describe("entity/reference 文件联动（决策 43）", () => {
     expect(raw2).toContain("category: theory");
     expect(raw2).toContain("新正文");
     expect(raw2).not.toContain("\n\n正文\n"); // 旧正文（frontmatter 后独立行）被替换
-    // 索引 content 镜像同步
+ // 索引 content 镜像同步
     const row = getCurrentProject()!.db.prepare("SELECT data FROM entities WHERE id=?").get(id) as { data: string };
     expect((JSON.parse(row.data) as Record<string, unknown>).content).toBe("新正文");
   });
@@ -351,16 +351,16 @@ describe("entity/reference 文件联动（决策 43）", () => {
     const created = await api(app, "POST", "/api/v1/entity/reference", { name: "回收站验证", data: { kind: "file", content: "内容" } });
     const id = (created.json as { data: { id: string } }).data.id;
     const root = getCurrentProject()!.root;
-    // 软删
+ // 软删
     const del = await api(app, "DELETE", `/api/v1/entity/reference/${id}`);
     expect(del.status).toBe(200);
     expect(existsSync(join(root, REFERENCE_DIR, "回收站验证.md"))).toBe(false);
     expect(existsSync(join(root, REFERENCE_DIR, REFERENCE_TRASH_DIR, "回收站验证.md"))).toBe(true);
-    // restore
+ // restore
     const rest = await api(app, "POST", `/api/v1/trash/entity/reference/${id}/restore`);
     expect(rest.status).toBe(200);
     expect(existsSync(join(root, REFERENCE_DIR, "回收站验证.md"))).toBe(true);
-    // 再软删 + purge
+ // 再软删 + purge
     await api(app, "DELETE", `/api/v1/entity/reference/${id}`);
     const purge = await api(app, "DELETE", `/api/v1/trash/entity/reference/${id}`);
     expect(purge.status).toBe(200);
@@ -379,7 +379,7 @@ describe("entity/reference 文件联动（决策 43）", () => {
     const id = (created.json as { data: { id: string } }).data.id;
     const del = await api(app, "DELETE", `/api/v1/entity/reference/${id}`);
     expect(del.status).toBe(200);
-    // 无 references/ 目录产生（link 类不落盘）
+ // 无 references/ 目录产生（link 类不落盘）
     expect(existsSync(join(getCurrentProject()!.root, REFERENCE_DIR))).toBe(false);
   });
 });
@@ -399,16 +399,16 @@ describe("POST /api/v1/reference/scan", () => {
     const app = buildApp();
     const root = getCurrentProject()!.root;
     const refDir = ensureRefDir(root);
-    // 空目录 → 0
+ // 空目录 → 0
     let res = await api(app, "GET", "/api/v1/reference/scan/status");
     expect((res.json as { data: { unsynced: number } }).data.unsynced).toBe(0);
-    // 外部新增文件 → 1（只读探测不建索引）
+ // 外部新增文件 → 1（只读探测不建索引）
     writeFileSync(join(refDir, "新文件.md"), "内容");
     res = await api(app, "GET", "/api/v1/reference/scan/status");
     expect((res.json as { data: { unsynced: number } }).data.unsynced).toBe(1);
     const countBefore = (getCurrentProject()!.db.prepare("SELECT COUNT(*) AS c FROM entities WHERE type='reference'").get() as { c: number }).c;
     expect(countBefore).toBe(0); // 探测无副作用
-    // 扫描后 → 0
+ // 扫描后 → 0
     await api(app, "POST", "/api/v1/reference/scan");
     res = await api(app, "GET", "/api/v1/reference/scan/status");
     expect((res.json as { data: { unsynced: number } }).data.unsynced).toBe(0);

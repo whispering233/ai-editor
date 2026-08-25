@@ -1,7 +1,7 @@
 // S6.4 分析工具测试：analyze_consistency
 // 覆盖：性格反义词对（warning）/ 负年龄（error）/ 伏笔已兑现未标注节点（warning）/
-//   兑现节点不存在与软删（error）/ parent_id 悬空（warning）/ 正常档案无 issues /
-//   软删实体 → null / signal aborted
+// 兑现节点不存在与软删（error）/ parent_id 悬空（warning）/ 正常档案无 issues /
+// 软删实体 → null / signal aborted
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -149,12 +149,12 @@ describe("analyze_consistency hook 规则", () => {
 });
 
 describe("analyze_consistency 边界", () => {
-  it("R5（决策 30 修订）location 的 parent_id 悬空引用 → warning；setting 的 parent_id 已废弃不再检查", () => {
+  it("R5（）location 的 parent_id 悬空引用 → warning；setting 的 parent_id 已废弃不再检查", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const parent = createEntity(db, { type: "location", name: "山门" });
     const okLocation = createEntity(db, { type: "location", name: "前殿", data: { parent_id: parent.id } });
     const dangling = createEntity(db, { type: "location", name: "藏经阁", data: { parent_id: "set-999" } });
-    // setting：data.parent_id 废弃（决策 30）——遗留字段不再产生 issues
+ // setting：data.parent_id 废弃——遗留字段不再产生 issues
     const settingWithParent = createEntity(db, { type: "setting", name: "门派", data: { parent_id: parent.id } });
 
     expect(runAnalyzeConsistency(makeCtx(), { entity_id: okLocation.id })!.issues).toEqual([]);
@@ -173,7 +173,7 @@ describe("analyze_consistency 边界", () => {
 
     const controller = new AbortController();
     controller.abort();
-    // 专用 AbortedError（name="AbortError"）——S7.4 executor 判别「取消」与「工具失败」
+ // 专用 AbortedError（name="AbortError"）——S7.4 executor 判别「取消」与「工具失败」
     expect(() => runAnalyzeConsistency(makeCtx(), { entity_id: "char-x" }, controller.signal)).toThrowError(AbortedError);
     try {
       runAnalyzeConsistency(makeCtx(), { entity_id: "char-x" }, controller.signal);

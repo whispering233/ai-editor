@@ -1,4 +1,4 @@
-// 主题模式跟随 hook（决策 43 卡 11.5：markdown 编辑器暗色联动）
+// 主题模式跟随 hook（ 卡 11.5：markdown 编辑器暗色联动）
 // 问题：useTheme 是多处独立实例（Sidebar 的 toggleTheme 只更新自身 state），外部组件
 // （@uiw/react-md-editor 的 data-color-mode）需要跟随全局主题——html.dark class 是唯一事实源。
 // 实现：MutationObserver 监听 documentElement class 变化，切换即时生效（无 Provider 依赖）。

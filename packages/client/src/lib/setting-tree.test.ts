@@ -1,4 +1,4 @@
-// 设定树构建纯函数测试（批次四 I4，决策 30 + 决策 42 交互树扩展）：
+// 设定树构建纯函数测试（批次四 I4， 交互树扩展）：
 // 根判定 / 父子组装 / 截断孤儿提升防御 / 交互树辅助（findSettingNode / canMoveSettingTo / 树内过滤）
 import { describe, expect, it } from "vitest";
 import {
@@ -22,7 +22,7 @@ const settings = [
   { id: "set-e", name: "天地法则", category: "法则" },
 ];
 
-describe("buildSettingTree（决策 30：belongs_to 子→父，childId → parentId）", () => {
+describe("buildSettingTree（belongs_to 子→父，childId → parentId）", () => {
   it("根判定：无父的设定为根；父子按边组装为嵌套树（保持输入序）", () => {
     const edges = [
       { childId: "set-b", parentId: "set-a" }, // 灵界大陆 belongs_to 修真界
@@ -51,7 +51,7 @@ describe("buildSettingTree（决策 30：belongs_to 子→父，childId → pare
     ];
     const { roots, hasOrphanEdges } = buildSettingTree(settings, edges);
     expect(hasOrphanEdges).toBe(true);
-    // set-b 提升为根（含其子树 set-c）；无父的 set-a/d/e 也是根
+ // set-b 提升为根（含其子树 set-c）；无父的 set-a/d/e 也是根
     expect(roots.map((r) => r.id).sort()).toEqual(["set-a", "set-b", "set-d", "set-e"]);
     const b = roots.find((r) => r.id === "set-b")!;
     expect(b.children.map((c) => c.id)).toEqual(["set-c"]);
@@ -71,7 +71,7 @@ describe("buildSettingTree（决策 30：belongs_to 子→父，childId → pare
     expect(buildSettingTree([], [])).toEqual({ roots: [], hasOrphanEdges: false });
   });
 
-  it("决策 42：summary / parentId 透传到节点（交互树标签过滤/拖拽判定用）；缺省省略", () => {
+  it("summary / parentId 透传到节点（交互树标签过滤/拖拽判定用）；缺省省略", () => {
     const s = [
       { id: "set-a", name: "修真界", summary: { tags: ["世界"] } },
       { id: "set-b", name: "青云门", summary: { tags: ["门派"] }, parentId: "set-a" },
@@ -119,7 +119,7 @@ describe("expandableSettingNodeIds（批次八 O5：全部折叠用，仅收非�
         ],
       },
     ];
-    // set-a（有子）→ set-b（有子）→ set-c（叶子跳过）；set-d 叶子跳过
+ // set-a（有子）→ set-b（有子）→ set-c（叶子跳过）；set-d 叶子跳过
     expect(expandableSettingNodeIds(roots)).toEqual(["set-a", "set-b"]);
   });
 
@@ -132,8 +132,8 @@ describe("expandableSettingNodeIds（批次八 O5：全部折叠用，仅收非�
   });
 });
 
-describe("决策 42 交互树：findSettingNode / isSettingDescendant / canMoveSettingTo", () => {
-  // 树：a → b → c；a → d；e（独立根）
+describe(" 交互树：findSettingNode / isSettingDescendant / canMoveSettingTo", () => {
+ // 树：a → b → c；a → d；e（独立根）
   const roots = [
     {
       id: "set-a",
@@ -180,9 +180,9 @@ describe("决策 42 交互树：findSettingNode / isSettingDescendant / canMoveS
   });
 });
 
-describe("决策 42 交互树：nodeTags / matchesSettingSearch / matchesSettingTag / filterSettingTree", () => {
-  // 树：修真界（tags: [世界]）→ 灵界大陆（tags: [区域, 修真]）→ 青云门（tags: [门派]）；
-  //    幽冥界（tags: [区域]）；天地法则（tags: [法则]）
+describe(" 交互树：nodeTags / matchesSettingSearch / matchesSettingTag / filterSettingTree", () => {
+ // 树：修真界（tags: [世界]）→ 灵界大陆（tags: [区域, 修真]）→ 青云门（tags: [门派]）；
+ // 幽冥界（tags: [区域]）；天地法则（tags: [法则]）
   const roots = [
     {
       id: "set-a",
@@ -217,7 +217,7 @@ describe("决策 42 交互树：nodeTags / matchesSettingSearch / matchesSetting
   });
 
   it("matchesSettingTag：tags 包含；空 tag = 全部", () => {
-    // roots[0].children[0] = 灵界大陆（tags: [区域, 修真]）
+ // roots[0].children[0] = 灵界大陆（tags: [区域, 修真]）
     const lingjie = roots[0].children[0];
     expect(matchesSettingTag(lingjie, "区域")).toBe(true);
     expect(matchesSettingTag(lingjie, "世界")).toBe(false);
@@ -232,7 +232,7 @@ describe("决策 42 交互树：nodeTags / matchesSettingSearch / matchesSetting
   });
 
   it("filterSettingTree：搜索命中节点及其祖先链保留，非命中子树裁剪", () => {
-    // 搜「青云门」→ 命中 set-c；祖先 set-b / set-a 保留为链；set-d（兄弟，不命中）裁剪
+ // 搜「青云门」→ 命中 set-c；祖先 set-b / set-a 保留为链；set-d（兄弟，不命中）裁剪
     const filtered = filterSettingTree(roots, "青云门", "");
     expect(filtered.map((r) => r.id)).toEqual(["set-a"]);
     expect(filtered[0].children.map((c) => c.id)).toEqual(["set-b"]);
@@ -240,7 +240,7 @@ describe("决策 42 交互树：nodeTags / matchesSettingSearch / matchesSetting
   });
 
   it("filterSettingTree：命中节点的非命中子节点被裁剪（只留命中链）", () => {
-    // 搜「灵界」→ 命中 set-b；set-c（子，不命中）裁剪；set-a 保留为祖先链；set-d 裁剪
+ // 搜「灵界」→ 命中 set-b；set-c（子，不命中）裁剪；set-a 保留为祖先链；set-d 裁剪
     const filtered = filterSettingTree(roots, "灵界", "");
     expect(filtered.map((r) => r.id)).toEqual(["set-a"]);
     expect(filtered[0].children.map((c) => c.id)).toEqual(["set-b"]);
@@ -248,7 +248,7 @@ describe("决策 42 交互树：nodeTags / matchesSettingSearch / matchesSetting
   });
 
   it("filterSettingTree：标签过滤同语义（命中节点及祖先链保留）", () => {
-    // 标签「区域」→ 命中 set-b / set-d；set-b 的祖先 set-a 保留；set-c（不命中）裁剪；set-e 裁剪
+ // 标签「区域」→ 命中 set-b / set-d；set-b 的祖先 set-a 保留；set-c（不命中）裁剪；set-e 裁剪
     const filtered = filterSettingTree(roots, "", "区域");
     expect(filtered.map((r) => r.id)).toEqual(["set-a"]);
     expect(filtered[0].children.map((c) => c.id)).toEqual(["set-b", "set-d"]);
@@ -256,7 +256,7 @@ describe("决策 42 交互树：nodeTags / matchesSettingSearch / matchesSetting
   });
 
   it("filterSettingTree：搜索 + 标签 AND 组合（须同时命中）", () => {
-    // 搜「灵」+ 标签「区域」→ 命中 set-b；set-a 保留为链
+ // 搜「灵」+ 标签「区域」→ 命中 set-b；set-a 保留为链
     const filtered = filterSettingTree(roots, "灵", "区域");
     expect(filtered.map((r) => r.id)).toEqual(["set-a"]);
     expect(filtered[0].children.map((c) => c.id)).toEqual(["set-b"]);
@@ -269,7 +269,7 @@ describe("决策 42 交互树：nodeTags / matchesSettingSearch / matchesSetting
   });
 });
 
-describe("sortSettingChildren（决策 46：同级排序模式）", () => {
+describe("sortSettingChildren（同级排序模式）", () => {
   const nodes = [
     { id: "set-1", name: "丙", createdAt: "2026-08-01T00:00:00Z", sortOrder: 2, children: [] },
     {

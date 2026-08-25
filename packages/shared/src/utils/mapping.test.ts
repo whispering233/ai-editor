@@ -34,10 +34,10 @@ describe("实体映射", () => {
     name: "张三",
     data: {
       role: "主角",
-      // 嵌套对象内部字段原样透传（2026-08 修订）：snake_case 不转换为 camelCase
+ // 嵌套对象内部字段原样透传（2026-08 修订）：snake_case 不转换为 camelCase
       custom_fields: { expected_payoff: "揭示身世", half_life: 8 },
     },
-    // 决策 46：sort_order 为存储列（API 形态不暴露，映射默认 null）
+ // sort_order 为存储列（API 形态不暴露，映射默认 null）
     sort_order: null,
     created_at: "2026-08-01T10:00:00Z",
     updated_at: "2026-08-01T11:00:00Z",
@@ -49,7 +49,7 @@ describe("实体映射", () => {
     expect(entity.createdAt).toBe("2026-08-01T10:00:00Z");
     expect(entity.updatedAt).toBe("2026-08-01T11:00:00Z");
     expect(entity.deletedAt).toBeNull();
-    // 关键约束：嵌套 data 不做递归 camelCase（expected_payoff 保持 snake_case）
+ // 关键约束：嵌套 data 不做递归 camelCase（expected_payoff 保持 snake_case）
     expect(entity.data).toEqual(row.data);
     expect(entity.data.custom_fields).toEqual({ expected_payoff: "揭示身世", half_life: 8 });
     expect("expectedPayoff" in entity.data).toBe(false);
@@ -57,7 +57,7 @@ describe("实体映射", () => {
 
   it("往返一致：mapRowToEntity → mapEntityToRow 字段不丢", () => {
     expect(mapEntityToRow(mapRowToEntity(row))).toEqual(row);
-    // 软删非空路径
+ // 软删非空路径
     const deletedRow = { ...row, deleted_at: "2026-08-02T00:00:00Z" };
     expect(mapEntityToRow(mapRowToEntity(deletedRow))).toEqual(deletedRow);
   });
@@ -82,7 +82,7 @@ describe("关系 / Delta 映射", () => {
     expect(rel.targetId).toBe("sc-5");
     expect(rel.relationType).toBe("appears_in");
     expect(rel.metadata).toBeUndefined();
-    // 有 metadata 时透传
+ // 有 metadata 时透传
     expect(mapRowToRelation({ ...row, metadata: { chapter: 5 } }).metadata).toEqual({ chapter: 5 });
   });
 
@@ -155,7 +155,7 @@ describe("大纲映射（递归 children + 软删字段）", () => {
     expect(mapTreeToOutlineFile(mapOutlineFileToTree(fileTree))).toEqual(fileTree);
   });
 
-  it("直挂 root 的 chapter 映射正确（决策 19：chapter → volume 或 root；oracle 回修）", () => {
+  it("直挂 root 的 chapter 映射正确（chapter → volume 或 root；oracle 回修）", () => {
     const file: OutlineFileTree = {
       id: "root",
       type: "root",
@@ -171,14 +171,14 @@ describe("大纲映射（递归 children + 软删字段）", () => {
         },
       ],
     };
-    // 正向：直挂章不被误映射为 volume，递归 children 正确
+ // 正向：直挂章不被误映射为 volume，递归 children 正确
     const tree = mapOutlineFileToTree(file);
     expect(tree.children).toHaveLength(2);
     expect(tree.children[0].type).toBe("volume");
     expect(tree.children[1].type).toBe("chapter");
     expect(tree.children[1].title).toBe("直挂章");
     expect(tree.children[1].children?.[0].type).toBe("scene");
-    // 反向：往返一致
+ // 反向：往返一致
     expect(mapTreeToOutlineFile(tree)).toEqual(file);
   });
 });
@@ -194,12 +194,12 @@ describe("项目映射", () => {
     updated_at: "2026-08-01T10:00:00Z",
   };
 
-  it("mapProjectFileToConfig：schema_version/current_position → camelCase；backup 频率读侧兜底（决策 27）", () => {
+  it("mapProjectFileToConfig：schema_version/current_position → camelCase；backup 频率读侧兜底（）", () => {
     const config = mapProjectFileToConfig(file);
     expect(config.schemaVersion).toBe(1);
     expect(config.currentPosition).toBe("sc-42");
     expect(config.language).toBe("zh");
-    // 字段缺失 → 缺省 10（新项目默认开启）
+ // 字段缺失 → 缺省 10（新项目默认开启）
     expect(config.backupFrequencyMinutes).toBe(10);
   });
 

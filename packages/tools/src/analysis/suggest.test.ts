@@ -1,6 +1,6 @@
 // S6.4 分析工具测试：suggest_connections
 // 覆盖：共享场景信号（S1 优先）/ 共同邻居信号（S2）/ 已有直接关系跳过 / 无信号无建议 /
-//   软删对象不出现（决策 12）/ 实体不存在 → null / 信号强度排序与 top 上限 / signal aborted
+// 软删对象不出现/ 实体不存在 → null / 信号强度排序与 top 上限 / signal aborted
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -114,7 +114,7 @@ describe("suggest_connections 信号", () => {
     const byTarget = new Map(suggestions.map((s) => [s.target_id, s]));
     expect(byTarget.has(neighbor)).toBe(true);
     expect(byTarget.get(neighbor)!.reason).toContain("中间人");
-    // 场景信号排在前（场景 > 邻居）
+ // 场景信号排在前（场景 > 邻居）
     expect(suggestions[0].target_id).toBe(sceneBuddy);
     expect(suggestions[0].reason).toContain("共同出现");
   });
@@ -143,7 +143,7 @@ describe("suggest_connections 边界", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const a = createEntity(db, { type: "character", name: "独行侠" }).id;
     const b = createEntity(db, { type: "character", name: "另一个人" }).id;
-    // 无 appears_in、无共同邻居
+ // 无 appears_in、无共同邻居
     expect(runSuggestConnections(makeCtx(), { entity_id: a })).toEqual({ suggestions: [] });
     expect(runSuggestConnections(makeCtx(), { entity_id: "char-999" })).toBeNull();
     softDeleteEntity(db, b, T0);

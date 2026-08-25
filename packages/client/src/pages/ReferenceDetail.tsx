@@ -1,11 +1,11 @@
-// 参考资料详情页（决策 36 + 决策 43 批次十一；references.md）
+// 参考资料详情页（ 批次十一；）
 // 卡 11.4：三类形态——草稿 md（#/references/new/md）、草稿 link（#/references/new/link）、编辑态（#/references/:id）
-//   - 编辑态 = 详情页即编辑器（决策 43：无「阅读/编辑」切换；列表页编辑入口已收敛于此，B1 修复）
-//   - file 类：标题（点击行内编辑）+ 分类 + 标签（datalist + TagSuggest）+ 内容编辑器
-//     （11.5 换 @uiw/react-md-editor，当前 textarea 骨架）+ 建立关联 + 删除；保存 PUT（服务端先写文件后更新 DB）
-//   - link 类：标题 + URL（必填）+ 分类 + 标签 + 内容（备注）+ 建立关联 + 删除
-//   - 草稿态：标题必填（md）/ URL 必填（link）→ POST 创建（file 落盘）→ 跳转编辑态
-// 焦点上报（决策 35）：编辑态上报 focus_entity_type/id；草稿态无实体不上报
+// - 编辑态 = 详情页即编辑器（无「阅读/编辑」切换；列表页编辑入口已收敛于此，B1 修复）
+// - file 类：标题（点击行内编辑）+ 分类 + 标签（datalist + TagSuggest）+ 内容编辑器
+// （11.5 换 @uiw/react-md-editor，当前 textarea 骨架）+ 建立关联 + 删除；保存 PUT（服务端先写文件后更新 DB）
+// - link 类：标题 + URL（必填）+ 分类 + 标签 + 内容（备注）+ 建立关联 + 删除
+// - 草稿态：标题必填（md）/ URL 必填（link）→ POST 创建（file 落盘）→ 跳转编辑态
+// 焦点上报：编辑态上报 focus_entity_type/id；草稿态无实体不上报
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { ExternalLink, FileUp, Loader2, Link2, Trash2 } from "lucide-react";
@@ -26,7 +26,7 @@ import { Breadcrumb } from "../components/page-nav/Breadcrumb";
 import { TagSuggest } from "../components/timeline/TagSuggest";
 import { CreateRelationDialog, type RelationSource } from "../components/entity/create-relation-dialog";
 
-/** 分类回显映射（决策 44：**仅存量显示**——material 等旧枚举值回显中文名，非可选建议；新自定义分类无映射原样显示） */
+/** 分类回显映射（**仅存量显示**——material 等旧枚举值回显中文名，非可选建议；新自定义分类无映射原样显示） */
 const TYPE_LABELS: Record<string, string> = {
   material: "素材摘抄",
   inspiration: "灵感记录",
@@ -35,7 +35,7 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 /** 详情页表单（编辑态/草稿态共用；11.5 起 content 由 markdown 编辑器驱动；
- * type 为自由文本分类（决策 44）——详情页输入 = 文本框 + datalist 建议（聚合项目内已用分类） */
+ * type 为自由文本分类——详情页输入 = 文本框 + datalist 建议（聚合项目内已用分类） */
 interface EditForm {
   name: string;
   type: string;
@@ -56,10 +56,10 @@ export default function ReferenceDetail({
   const isDraft = draft !== undefined;
   const kind = draft === "md" ? "file" : "link"; // 草稿态 kind 由路由决定；编辑态从 data 读取
 
-  // 卡 11.5：markdown 编辑器暗色联动（data-color-mode 跟随 html.dark，MutationObserver 即时生效）
+ // 卡 11.5：markdown 编辑器暗色联动（data-color-mode 跟随 html.dark，MutationObserver 即时生效）
   const themeMode = useThemeMode();
 
-  // 决策 35：挂载/切换时上报页面焦点（当前参考资料作为「问 AI」上下文；草稿态无实体不上报）
+ // 挂载/切换时上报页面焦点（当前参考资料作为「问 AI」上下文；草稿态无实体不上报）
   const setCurrentFocus = useUiStore((s) => s.setCurrentFocus);
   useEffect(() => {
     if (id !== undefined) {
@@ -71,19 +71,19 @@ export default function ReferenceDetail({
   const [error, setError] = useState<string | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
 
-  // 表单（编辑态由 detail 同步填充——无异步回填竞态，B1 修复语义；草稿态空表单）
+ // 表单（编辑态由 detail 同步填充——无异步回填竞态，B1 修复语义；草稿态空表单）
   const [form, setForm] = useState<EditForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  // 标题行内编辑（详情页标题点击编辑，Enter 确认/Esc 取消）
+ // 标题行内编辑（详情页标题点击编辑，Enter 确认/Esc 取消）
   const [titleEditing, setTitleEditing] = useState(false);
 
-  // 建立关联对话框（决策 43：两类详情页均含关联面板，源端点预填当前 reference）
+ // 建立关联对话框（两类详情页均含关联面板，源端点预填当前 reference）
   const [relationOpen, setRelationOpen] = useState(false);
 
-  // 标签建议池（详情页独立聚合：datalist 自动补全 + TagSuggest 快捷选择，与列表页一致体验）
+ // 标签建议池（详情页独立聚合：datalist 自动补全 + TagSuggest 快捷选择，与列表页一致体验）
   const [tagPool, setTagPool] = useState<string[]>([]);
-  // 分类建议池（决策 44：datalist 建议 = 项目内已用分类，无预置枚举；与 tagPool 同一次拉取聚合）
+ // 分类建议池（datalist 建议 = 项目内已用分类，无预置枚举；与 tagPool 同一次拉取聚合）
   const [typePool, setTypePool] = useState<string[]>([]);
   useEffect(() => {
     let cancelled = false;
@@ -110,7 +110,7 @@ export default function ReferenceDetail({
     };
   }, []);
 
-  // 编辑态：加载详情 → 同步填充表单（无竞态：表单在数据就绪后才渲染可编辑）
+ // 编辑态：加载详情 → 同步填充表单（无竞态：表单在数据就绪后才渲染可编辑）
   useEffect(() => {
     if (id === undefined) return;
     let cancelled = false;
@@ -139,7 +139,7 @@ export default function ReferenceDetail({
 
   const tagSuggestions = suggestTags(form.tagsInput, tagPool);
 
-  /** 编辑态元数据（kind/url/file_name——来源列与保存分支判定） */
+ /** 编辑态元数据（kind/url/file_name——来源列与保存分支判定） */
   const detailKind = (detail?.data as Record<string, unknown> | undefined)?.kind === "file" ? "file" : "link";
   const detailSource =
     detailKind === "file"
@@ -150,7 +150,7 @@ export default function ReferenceDetail({
           ? ((detail?.data as Record<string, unknown>).source as string)
           : "";
 
-  /** 标题行内编辑提交（详情页：Enter 确认，失败 toast 后保持编辑态） */
+ /** 标题行内编辑提交（详情页：Enter 确认，失败 toast 后保持编辑态） */
   async function commitTitle() {
     const name = form.name.trim();
     if (name === "" || detail === null || name === detail.name) {
@@ -171,12 +171,12 @@ export default function ReferenceDetail({
     }
   }
 
-  // 导入 md 文档（决策 43 N4，卡 11.6：纯前端——FileReader 读文本 + frontmatter 解析预填，
-  // 内容进编辑器，保存走既有 PUT/POST 由服务端落盘；无独立上传端点）
+ // 导入 md 文档（ N4，卡 11.6：纯前端——FileReader 读文本 + frontmatter 解析预填，
+ // 内容进编辑器，保存走既有 PUT/POST 由服务端落盘；无独立上传端点）
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
 
-  /** 文件选择 → 读文本 → 解析 frontmatter 预填标题/分类/标签 + 正文进编辑器 */
+ /** 文件选择 → 读文本 → 解析 frontmatter 预填标题/分类/标签 + 正文进编辑器 */
   function handleImportFile(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = ""; // 允许重复选择同一文件
@@ -208,7 +208,7 @@ export default function ReferenceDetail({
     reader.readAsText(file);
   }
 
-  /** 保存（编辑态 PUT / 草稿态 POST + 跳转）；file 类由服务端落盘（先写文件后更新 DB） */
+ /** 保存（编辑态 PUT / 草稿态 POST + 跳转）；file 类由服务端落盘（先写文件后更新 DB） */
   async function handleSave() {
     const name = form.name.trim();
     if (name === "") {
@@ -268,7 +268,7 @@ export default function ReferenceDetail({
     }
   }
 
-  // ============ 错误 / 加载态（编辑态） ============
+ // ============ 错误 / 加载态（编辑态） ============
   if (!isDraft && error !== null) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3">
@@ -304,7 +304,7 @@ export default function ReferenceDetail({
           items={[
             { label: "参考资料", href: "/references" },
             {
-              // 当前段：草稿态占位 / 编辑态标题（form.name 优先——R1 语义，草稿编辑后即时反映）
+ // 当前段：草稿态占位 / 编辑态标题（form.name 优先——R1 语义，草稿编辑后即时反映）
               label:
                 form.name.trim() !== ""
                   ? form.name
@@ -401,7 +401,7 @@ export default function ReferenceDetail({
             </span>
           )}
         </div>
-        {/* 元信息：来源 + 创建/更新时间（决策 39：详情页保留） */}
+        {/* 元信息：来源 + 创建/更新时间（详情页保留） */}
         <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           {currentKind === "link" && !isDraft && source !== "" && (
             <a
@@ -428,7 +428,7 @@ export default function ReferenceDetail({
 
       {/* 表单区（编辑态 = 详情页即编辑器；分类/标签/内容编辑） */}
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
-        {/* 分类（决策 44）：文本框 + datalist 自动补全——建议项 = 项目内已用分类（存量回显名），
+        {/* 分类：文本框 + datalist 自动补全——建议项 = 项目内已用分类（存量回显名），
             不含预置枚举，用户可自由输入任意新分类 */}
         <div className="flex items-start gap-2">
           <label className="mt-2 w-12 shrink-0 text-sm text-muted-foreground">分类</label>
@@ -472,7 +472,7 @@ export default function ReferenceDetail({
               value={form.tagsInput}
               onChange={(e) => setForm((f) => ({ ...f, tagsInput: e.target.value }))}
               onKeyDown={(e) => {
-                // Enter 追加逗号继续输入（F8 回车添加下一项 + M1 修复）
+ // Enter 追加逗号继续输入（F8 回车添加下一项 + M1 修复）
                 if (
                   e.key === "Enter" &&
                   !e.nativeEvent.isComposing &&
@@ -543,7 +543,7 @@ export default function ReferenceDetail({
         </div>
       </div>
 
-      {/* 建立关联对话框（决策 43：两类详情页均含；源端点预填当前 reference） */}
+      {/* 建立关联对话框（两类详情页均含；源端点预填当前 reference） */}
       {relationOpen && detail !== null && (
         <CreateRelationDialog
           source={{ type: "reference", id: detail.id, name: detail.name } as RelationSource}

@@ -1,4 +1,4 @@
-// 冒烟测试：验证 @whispering233/ai-editor-shared 入口可正常导入（T0.3）+ 契约类型断言（T1.1）
+// 冒烟测试：验证 @whispering233/ai-editor-shared 入口可正常导入（T0.3）+ 类型断言（T1.1）
 import { describe, expect, expectTypeOf, it } from "vitest";
 import * as m from "./index.js";
 import type {
@@ -33,8 +33,8 @@ describe("@whispering233/ai-editor-shared 入口冒烟", () => {
   });
 });
 
-// T1.1 契约类型断言：字段形态与文档（endpoints.md / schema.md）一致
-describe("@whispering233/ai-editor-shared 契约类型（T1.1）", () => {
+// T1.1 类型断言：字段形态与文档（ / ）一致
+describe("@whispering233/ai-editor-shared 类型（T1.1）", () => {
   it("Entity / EntitySummary 字段为 API 形态（camelCase）", () => {
     expectTypeOf<Entity>().toMatchTypeOf<{
       id: string;
@@ -47,7 +47,7 @@ describe("@whispering233/ai-editor-shared 契约类型（T1.1）", () => {
     expectTypeOf<EntitySummary>().toHaveProperty("summary").toEqualTypeOf<Record<string, unknown>>();
   });
 
-  it("RelationRecord / DeltaChange / ComputeStateResult 契约字段", () => {
+  it("RelationRecord / DeltaChange / ComputeStateResult 字段", () => {
     expectTypeOf<RelationRecord>().toMatchTypeOf<{
       id: string;
       sourceType: string;
@@ -64,7 +64,7 @@ describe("@whispering233/ai-editor-shared 契约类型（T1.1）", () => {
     >();
   });
 
-  it("OutlineTree 严格三层（决策 19）：根下卷、卷下章、章下场景、场景无 children", () => {
+  it("OutlineTree 严格三层（）：根下卷、卷下章、章下场景、场景无 children", () => {
     expectTypeOf<OutlineTree["id"]>().toEqualTypeOf<"root">();
     expectTypeOf<OutlineTree["children"][number]["type"]>().toEqualTypeOf<"volume">();
     expectTypeOf<ProjectConfig["language"]>().toEqualTypeOf<"zh" | "en">();

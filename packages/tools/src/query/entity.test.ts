@@ -1,6 +1,6 @@
 // S6.3 查询工具测试：get_entity / search_entities / get_entity_summary
-// 覆盖：详情返回（data 解析）/ type 不一致 → null / 软删不可见（决策 12 修订）/
-//   search filters（status/tags）/ 摘要结构（character→role/status）/ 聚合统计分布与软删不计入
+// 覆盖：详情返回（data 解析）/ type 不一致 → null / 软删不可见/
+// search filters（status/tags）/ 摘要结构（character→role/status）/ 聚合统计分布与软删不计入
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -57,7 +57,7 @@ describe("get_entity", () => {
     expect(runGetEntity(makeCtx(), { type: "setting", id: row.id })).toBeNull();
   });
 
-  it("不存在 → null；已软删 → null（决策 12 修订：回收站对象不可见）", () => {
+  it("不存在 → null；已软删 → null（回收站对象不可见）", () => {
     expect(runGetEntity(makeCtx(), { type: "character", id: "char-999" })).toBeNull();
     const row = createEntity(db, { type: "character", name: "阿强" });
     softDeleteEntity(db, row.id, T0);
@@ -121,7 +121,7 @@ describe("search_entities", () => {
     expect(r3.items).toEqual([]);
   });
 
-  it("软删实体不可见（决策 12 修订）", () => {
+  it("软删实体不可见（）", () => {
     const { charA } = seedSearch();
     softDeleteEntity(db, charA, T0);
     const result = runSearchEntities(makeCtx(), { type: "character", query: "阿" });
@@ -129,7 +129,7 @@ describe("search_entities", () => {
   });
 
   it("limit 传 200（db clamp 上限）：超过默认 50 条时全量返回", () => {
-    // 插入 60 条同名前缀实体（name 均含「批量」）；默认 listEntities limit 50 会截断
+ // 插入 60 条同名前缀实体（name 均含「批量」）；默认 listEntities limit 50 会截断
     for (let i = 0; i < 60; i++) {
       createEntity(db, { type: "character", name: `批量角色${i}` });
     }
@@ -165,13 +165,13 @@ describe("get_entity_summary", () => {
       name: "阿灭",
       data: { role: "反派", status: "dead", abilities: ["毒术"] },
     });
-    softDeleteEntity(db, dead.id, T0); // 软删不计入统计（决策 12 修订）
+    softDeleteEntity(db, dead.id, T0); // 软删不计入统计
 
     const result = runGetEntitySummary(makeCtx(), { type: "character" });
     expect(result.total).toBe(2);
     expect(result.byRole).toEqual({ 主角: 1, 配角: 1 });
     expect(result.byStatus).toEqual({ alive: 2 });
-    // 能力分布按频率降序（同频按名称序）
+ // 能力分布按频率降序（同频按名称序）
     expect(result.topAbilities).toEqual([
       { ability: "剑术", count: 2 },
       { ability: "轻功", count: 1 },
@@ -189,7 +189,7 @@ describe("get_entity_summary", () => {
     expect(result.topAbilities).toBeUndefined();
   });
 
-  it("setting：byTags（决策 31 K2：data.tags）；location：byType", () => {
+  it("setting：byTags（ K2：data.tags）；location：byType", () => {
     createEntity(db, { type: "setting", name: "修真界", data: { tags: ["世界观"] } });
     createEntity(db, { type: "setting", name: "江湖", data: { tags: ["世界观"] } });
     createEntity(db, { type: "setting", name: "门派", data: { tags: ["组织"] } });

@@ -6,7 +6,7 @@
 // （Base UI 菜单等），本地工具应用加轻量 ErrorBoundary 兜底是低成本高价值的：异常时展示
 // 可恢复的错误卡（错误信息 + 重新加载 / 回到首页），而不是无提示白屏。
 // 实现约束：错误边界必须是 class 组件（React 对函数组件无 componentDidCatch）；
-// 样式用 token 类（layout.md §3，oracle 红线：禁止硬编码色类）
+// 样式用 token 类（，oracle 红线：禁止硬编码色类）
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { CircleAlert, RotateCcw } from "lucide-react";
 import { Button } from "../ui/button";
@@ -16,7 +16,7 @@ interface Props {
 }
 
 interface State {
-  /** 渲染异常信息（null = 无异常） */
+ /** 渲染异常信息（null = 无异常） */
   error: Error | null;
 }
 
@@ -28,7 +28,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    // 异常上抛给全局（浏览器控制台可见原始堆栈，便于排查），UI 侧由本组件承接
+ // 异常上抛给全局（浏览器控制台可见原始堆栈，便于排查），UI 侧由本组件承接
     console.error("[ErrorBoundary] 渲染异常:", error, info.componentStack);
   }
 
@@ -55,7 +55,7 @@ export class ErrorBoundary extends Component<Props, State> {
               variant="outline"
               type="button"
               onClick={() => {
-                // 回到首页：重置 hash 后 reload 完整恢复（仅重置 hash 可能仍落在异常路由上）
+ // 回到首页：重置 hash 后 reload 完整恢复（仅重置 hash 可能仍落在异常路由上）
                 window.location.hash = "#/";
                 window.location.reload();
               }}

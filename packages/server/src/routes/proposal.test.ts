@@ -1,10 +1,10 @@
 // 提案路由测试（S7.5）：POST /api/v1/proposal/:proposalId/confirm | reject
 // 覆盖：confirm 成功（无引用 create / 实体引用 update / 关系 remove / Delta 引用）、
-//       快照过期（实体 updated_at 变化 / 实体软删 / 关系物理删 / 大纲节点 updated_at 变化 /
-//       大纲节点软删 / Delta 级联软删 → 409 PROPOSAL_STALE，且提案被一次性移除）、
-//       404 PROPOSAL_NOT_FOUND（不存在）、409 PROPOSAL_PROJECT_MISMATCH（跨项目，提案保留）、
-//       执行失败 → 500 INTERNAL_ERROR（幂等冲突，提案同样移除）、
-//       reject 成功移除 / 404 / 409 MISMATCH（决策 14 修订：reject 同校验）
+// 快照过期（实体 updated_at 变化 / 实体软删 / 关系物理删 / 大纲节点 updated_at 变化 /
+// 大纲节点软删 / Delta 级联软删 → 409 PROPOSAL_STALE，且提案被一次性移除）、
+// 404 PROPOSAL_NOT_FOUND（不存在）、409 PROPOSAL_PROJECT_MISMATCH（跨项目，提案保留）、
+// 执行失败 → 500 INTERNAL_ERROR（幂等冲突，提案同样移除）、
+// reject 成功移除 / 404 / 409 MISMATCH（reject 同校验）
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -66,7 +66,7 @@ function postRequest(): RequestInit {
   return { method: "POST", headers: HOST_HEADERS };
 }
 
-/** 标准大纲树：卷 vol-1 → 章 ch-1 → 场景 sc-1（节点级 updated_at，决策 19） */
+/** 标准大纲树：卷 vol-1 → 章 ch-1 → 场景 sc-1（节点级 updated_at） */
 function standardOutline(): OutlineFileTree {
   return {
     id: "root",
@@ -92,7 +92,7 @@ function standardOutline(): OutlineFileTree {
   };
 }
 
-/** 大纲树变体：sc-1 已软删（决策 12 软删语义；outline_node 引用快照应 409 STALE） */
+/** 大纲树变体：sc-1 已软删（ 软删语义；outline_node 引用快照应 409 STALE） */
 function softDeletedSceneOutline(): OutlineFileTree {
   return {
     id: "root",
@@ -253,7 +253,7 @@ describe("POST /api/v1/proposal/:proposalId/confirm 成功", () => {
     expect(after.updated_at).not.toBe(before.updated_at);
   });
 
-  it("关系引用提案（propose_remove_relation）→ 200 + 关系物理删除（决策 12）", async () => {
+  it("关系引用提案（propose_remove_relation）→ 200 + 关系物理删除（）", async () => {
     const { app, relId } = await seed();
     const rel = getRelation(getCurrentProject()!.db, relId, getCurrentProject()!.root)!;
     const proposal = buildProposal(
@@ -290,7 +290,7 @@ describe("POST /api/v1/proposal/:proposalId/confirm 成功", () => {
   });
 });
 
-// ============ 快照过期（决策 14：存在性 + updated_at 任一失败 → 409 PROPOSAL_STALE） ============
+// ============ 快照过期（存在性 + updated_at 任一失败 → 409 PROPOSAL_STALE） ============
 
 describe("confirm 快照重校验 → 409 PROPOSAL_STALE", () => {
   it("实体 updated_at 变化（确认前被手动编辑）→ 409 + 提案移除", async () => {
@@ -304,7 +304,7 @@ describe("confirm 快照重校验 → 409 PROPOSAL_STALE", () => {
       "更新实体",
     );
     defaultProposalStore.set(proposal);
-    // 入仓后手动编辑实体：updated_at 刷新（决策 12 修订），快照断裂
+ // 入仓后手动编辑实体：updated_at 刷新，快照断裂
     await tick(); // 确保编辑时间戳严格晚于快照（毫秒精度，防同毫秒相等误判）
     updateEntity(getCurrentProject()!.db, charId, { data: { status: "wounded" } });
 
@@ -325,7 +325,7 @@ describe("confirm 快照重校验 → 409 PROPOSAL_STALE", () => {
       "删除实体",
     );
     defaultProposalStore.set(proposal);
-    // 入仓后实体被软删（getEntity 过滤软删 → 不存在）
+ // 入仓后实体被软删（getEntity 过滤软删 → 不存在）
     softDeleteEntity(getCurrentProject()!.db, charId, "2026-08-02T10:00:00Z");
 
     const { status, body } = await confirmProposal(app, proposal.proposal_id);
@@ -351,7 +351,7 @@ describe("confirm 快照重校验 → 409 PROPOSAL_STALE", () => {
     expect(body.error?.code).toBe("PROPOSAL_STALE");
   });
 
-  it("大纲节点 updated_at 变化（节点级快照，决策 19）→ 409 PROPOSAL_STALE", async () => {
+  it("大纲节点 updated_at 变化（节点级快照，）→ 409 PROPOSAL_STALE", async () => {
     const { app, charId } = await seed();
     const proposal = buildProposal(
       toolCtx(),
@@ -361,7 +361,7 @@ describe("confirm 快照重校验 → 409 PROPOSAL_STALE", () => {
       "为节点追加变更",
     );
     defaultProposalStore.set(proposal);
-    // 入仓后节点信息被编辑：节点级 updated_at 刷新（决策 19）
+ // 入仓后节点信息被编辑：节点级 updated_at 刷新
     updateOutlineNodeInfo(getCurrentProject()!.root, "sc-1", { title: "场景一（改）" }, "2026-08-02T10:00:00Z");
 
     const { status, body } = await confirmProposal(app, proposal.proposal_id);
@@ -389,7 +389,7 @@ describe("confirm 快照重校验 → 409 PROPOSAL_STALE", () => {
   it("引用 Delta 被级联软删（目标实体软删联动）→ 409 PROPOSAL_STALE", async () => {
     const { app, charId } = await seed();
     const project = getCurrentProject()!;
-    // 先造一条 Delta 记录作为引用对象（delta_records 自身 updated_at 快照）
+ // 先造一条 Delta 记录作为引用对象（delta_records 自身 updated_at 快照）
     const refsProposal = buildProposal(
       toolCtx(),
       "propose_add_delta",
@@ -401,8 +401,8 @@ describe("confirm 快照重校验 → 409 PROPOSAL_STALE", () => {
     const { body } = await confirmProposal(app, refsProposal.proposal_id);
     const deltaId = String(body.data?.result?.id);
     expect(deltaId).toMatch(/^delta-/);
-    // 手构造带 kind=delta 引用的提案（S6.6 现无工具产出该 kind，契约仍须支持——决策 14 四类引用）；
-    // updated_at 取刚插入行的真实值（confirm 结果不含 updated_at，读库取准）
+ // 手构造带 kind=delta 引用的提案（S6.6 现无工具产出该 kind，仍须支持—— 四类引用）；
+ // updated_at 取刚插入行的真实值（confirm 结果不含 updated_at，读库取准）
     const deltaProposal: Proposal = {
       ...buildProposal(
         toolCtx(),
@@ -414,7 +414,7 @@ describe("confirm 快照重校验 → 409 PROPOSAL_STALE", () => {
       references: [{ kind: "delta", id: deltaId, updated_at: getDeltaRow(project.db, deltaId)!.updated_at }],
     };
     defaultProposalStore.set(deltaProposal);
-    // 入仓后目标实体软删 → 级联软删其 Delta（决策 12）→ 引用记录消失
+ // 入仓后目标实体软删 → 级联软删其 Delta→ 引用记录消失
     softDeleteEntity(project.db, charId, "2026-08-02T10:00:00Z");
 
     const { status, body: staleBody } = await confirmProposal(app, deltaProposal.proposal_id);
@@ -458,7 +458,7 @@ describe("confirm 执行失败", () => {
   it("关系已存在（幂等冲突）→ 500 INTERNAL_ERROR + 提案移除", async () => {
     const { app, charId } = await seed();
     const project = getCurrentProject()!;
-    // 引用端点快照仍新鲜（char 未变、sc-1 未变），但同三元组关系已存在
+ // 引用端点快照仍新鲜（char 未变、sc-1 未变），但同三元组关系已存在
     const char = getEntity(project.db, charId)!;
     const proposal = buildProposal(
       toolCtx(),
@@ -510,7 +510,7 @@ describe("POST /api/v1/proposal/:proposalId/reject", () => {
     expect(body.error?.code).toBe("PROPOSAL_NOT_FOUND");
   });
 
-  it("提案属于其他项目 → 409 PROPOSAL_PROJECT_MISMATCH（决策 14 修订：reject 同 confirm 校验）", async () => {
+  it("提案属于其他项目 → 409 PROPOSAL_PROJECT_MISMATCH（reject 同 confirm 校验）", async () => {
     const { app } = await seed();
     const proposal = buildProposal(
       toolCtx(),

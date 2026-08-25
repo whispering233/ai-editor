@@ -1,5 +1,5 @@
 // RelationsView 纯逻辑测试（U8 关联 tab）：仓库无 jsdom / @testing-library 环境（node 纯逻辑测试），
-// 只测过滤纯函数 filterRelations——前端过滤是关联视图的核心契约（服务端不支持「任一端」OR 与名称模糊）。
+// 只测过滤纯函数 filterRelations——前端过滤是关联视图的核心（服务端不支持「任一端」OR 与名称模糊）。
 import { describe, expect, it } from "vitest";
 import type { RelationSummaryItem } from "../../lib/api";
 import { EMPTY_RELATION_FILTER, filterRelations } from "./relations-view";
@@ -77,7 +77,7 @@ describe("filterRelations（关联总览前端过滤）", () => {
     expect(out.map((r) => r.id)).toEqual(["r1"]);
     const upper = filterRelations(SAMPLE, { ...EMPTY_RELATION_FILTER, nameQuery: "灵根" });
     expect(upper.map((r) => r.id)).toEqual(["r1"]);
-    // 拉丁字母真正触达 toLowerCase 分支（中文无大小写概念）
+ // 拉丁字母真正触达 toLowerCase 分支（中文无大小写概念）
     const latin = [
       makeRel({
         id: "r6",

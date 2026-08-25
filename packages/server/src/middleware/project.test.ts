@@ -1,4 +1,4 @@
-// 项目上下文中间件测试（T6.1）：来源校验（决策 17 修订）+ 自动初始化（决策 8）
+// 项目上下文中间件测试（T6.1）：来源校验+ 自动初始化
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -43,7 +43,7 @@ function buildApp(root: string) {
   return { app, project };
 }
 
-describe("来源校验（决策 17 修订：host 白名单，不校验端口）", () => {
+describe("来源校验（host 白名单，不校验端口）", () => {
   it("Host 为本机白名单内通过", async () => {
     const { app } = buildApp(makeTmpDir());
     const res = await app.request("http://127.0.0.1:3456/api/v1/health", { headers: { host: "127.0.0.1:3456" } });
@@ -85,11 +85,11 @@ describe("来源校验（决策 17 修订：host 白名单，不校验端口）"
   });
 });
 
-describe("项目检测与初始化（决策 8 修订：启动待命，不无条件初始化）", () => {
+describe("项目检测与初始化（启动待命，不无条件初始化）", () => {
   it("空目录：detectProject 返回 null，且不创建任何文件（含目录）", () => {
     const dir = makeTmpDir();
     expect(detectProject(dir)).toBeNull();
-    // 三文件均不存在（不初始化）
+ // 三文件均不存在（不初始化）
     expect(existsSync(join(dir, "project.json"))).toBe(false);
     expect(existsSync(join(dir, "outline.json"))).toBe(false);
     expect(existsSync(join(dir, "data.db"))).toBe(false);
@@ -106,11 +106,11 @@ describe("项目检测与初始化（决策 8 修订：启动待命，不无条�
     const p1 = initProject(dir);
     const id1 = p1.config.id;
     closeProject(p1);
-    // 第二次检测（模拟重启后）：打开而非重复初始化
+ // 第二次检测（模拟重启后）：打开而非重复初始化
     const p2 = detectProject(dir);
     try {
       expect(p2).not.toBeNull();
-      expect(p2!.config.id).toBe(id1); // id 跨启动稳定（决策 8/10）
+      expect(p2!.config.id).toBe(id1); // id 跨启动稳定
       expect(p2!.db.open).toBe(true);
     } finally {
       closeProject(p2!);
@@ -118,22 +118,22 @@ describe("项目检测与初始化（决策 8 修订：启动待命，不无条�
   });
 
   it("initProject 显式初始化：建嵌套目录 + 三文件 + proj- 前缀 id + schema_version 同步写库（create 路由语义）", () => {
-    // 两级不存在的目录（父目录也不存在）——initProject 负责建目录（原 ensureProject mkdir 语义迁移至此）
+ // 两级不存在的目录（父目录也不存在）——initProject 负责建目录（原 ensureProject mkdir 语义迁移至此）
     const dir = join(makeTmpDir(), "nested", "deep", "proj");
     const project = initProject(dir, { name: "指定名" });
     try {
-      // 目录被创建
+ // 目录被创建
       expect(existsSync(dir)).toBe(true);
-      // project.json：id/name/schema_version + config 覆盖参数生效
+ // project.json：id/name/schema_version + config 覆盖参数生效
       const config = JSON.parse(readFileSync(join(dir, "project.json"), "utf8"));
       expect(config.id).toMatch(/^proj-/);
       expect(config.name).toBe("指定名");
       expect(config.schema_version).toBeTypeOf("number");
       expect(config.current_position).toBeNull();
-      // outline.json：空树 + schema_version 同步
+ // outline.json：空树 + schema_version 同步
       const outline = JSON.parse(readFileSync(join(dir, "outline.json"), "utf8"));
       expect(outline).toEqual({ id: "root", type: "root", schema_version: config.schema_version, children: [] });
-      // data.db：SQLite 文件 + user_version 已写（S1.1 审核建议：避免 open 时无意义重建）
+ // data.db：SQLite 文件 + user_version 已写（S1.1 审核建议：避免 open 时无意义重建）
       const dbHead = readFileSync(join(dir, "data.db"));
       expect(dbHead.subarray(0, 15).toString("utf8")).toBe("SQLite format 3");
       expect(getUserVersion(project.db)).toBe(SCHEMA_VERSION);

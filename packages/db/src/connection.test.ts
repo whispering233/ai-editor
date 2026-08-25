@@ -40,9 +40,9 @@ describe("connection.ts openDatabase", () => {
     expect(existsSync(dbPath)).toBe(true);
   });
 
-  it("WAL 模式 + synchronous=FULL（data-flow.md 第 51 行：写入即时落盘）", () => {
+  it("WAL 模式 + synchronous=FULL", () => {
     expect(db.pragma("journal_mode", { simple: true })).toBe("wal");
-    // PRAGMA synchronous: 0=OFF 1=NORMAL 2=FULL
+ // PRAGMA synchronous: 0=OFF 1=NORMAL 2=FULL
     expect(db.pragma("synchronous", { simple: true })).toBe(2);
   });
 
@@ -63,7 +63,7 @@ describe("connection.ts withTransaction", () => {
       return countEntities();
     });
     expect(result).toBe(1);
-    // 提交后数据落盘可见
+ // 提交后数据落盘可见
     expect(countEntities()).toBe(1);
   });
 
@@ -75,9 +75,9 @@ describe("connection.ts withTransaction", () => {
         throw new Error("模拟事务中途失败");
       }),
     ).toThrow("模拟事务中途失败");
-    // 回滚后两条插入均不可见
+ // 回滚后两条插入均不可见
     expect(countEntities()).toBe(0);
-    // 连接仍可用（事务已干净回滚）
+ // 连接仍可用（事务已干净回滚）
     expect(db.prepare("SELECT 1 AS ok").get()).toEqual({ ok: 1 });
   });
 
@@ -94,14 +94,14 @@ describe("connection.ts withTransaction", () => {
   it("嵌套事务：内层抛错回滚到 SAVEPOINT，外层捕获后仍可继续并提交", () => {
     withTransaction(db, () => {
       insertEntity("char-1");
-      // 内层失败：回滚到 SAVEPOINT，char-2 不落盘
+ // 内层失败：回滚到 SAVEPOINT，char-2 不落盘
       expect(() =>
         withTransaction(db, () => {
           insertEntity("char-2");
           throw new Error("内层失败");
         }),
       ).toThrow("内层失败");
-      // 外层捕获后继续插入并正常提交
+ // 外层捕获后继续插入并正常提交
       insertEntity("char-3");
     });
     expect(countEntities()).toBe(2); // char-1 + char-3，内层 char-2 已回滚

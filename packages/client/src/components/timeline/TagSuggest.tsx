@@ -1,4 +1,4 @@
-// 标签输入建议区（F8，timeline.md 标签输入建议节）
+// 标签输入建议区（F8， 标签输入建议节）
 // 职责：纯展示——tags 输入框下方卡片（mt-1 + bg-card border border-border rounded-md，规格）展示
 // 匹配建议，行内轻量样式（text-xs + hover 高亮 + cursor-pointer），点选回调父组件填入
 // （applyTagSuggestion：替换最后一段 + 追加逗号）。两页共用（列表页新建/编辑对话框、详情页表单）；
@@ -8,11 +8,11 @@
 // 焦点保持：onMouseDown preventDefault 阻止输入框失焦（点选后输入框保持焦点、建议区随输入更新）。
 // 样式：全部 token 类（bg-card/border-border/text-muted-foreground/hover:bg-muted），禁硬编码色类。
 interface TagSuggestProps {
-  /** 建议标签列表（已按 suggestTags 匹配/排除/截断；空 → 不渲染） */
+ /** 建议标签列表（已按 suggestTags 匹配/排除/截断；空 → 不渲染） */
   suggestions: string[];
-  /** 显式可见开关（false = 不渲染；调用方额外条件，如输入框为空） */
+ /** 显式可见开关（false = 不渲染；调用方额外条件，如输入框为空） */
   visible: boolean;
-  /** 点选回调（父组件 applyTagSuggestion 填入 + 保持表单 state） */
+ /** 点选回调（父组件 applyTagSuggestion 填入 + 保持表单 state） */
   onPick: (tag: string) => void;
 }
 

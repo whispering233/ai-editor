@@ -1,10 +1,10 @@
 // 大纲节点伏笔标记徽标（S9.2 大纲页行内渲染；S10.1 起上提为共享组件——
-// layout.md §5「跨页复用的纯展示组件上提到 components/ 对应子目录」）
+// 「跨页复用的纯展示组件上提到 components/ 对应子目录」）
 // 数据源：lib/outline-hooks buildNodeHookMarks 聚合的「节点 id → 标记列表」；本组件纯展示
 import { CheckCircle2, FastForward, Pin } from "lucide-react";
 import type { NodeHookMark } from "../../lib/outline-hooks";
 
-/** 标记类型 → 文案（title tooltip 前缀；hooks.md 生命周期动作：埋下 → 推进 → 回收） */
+/** 标记类型 → 文案（title tooltip 前缀； 生命周期动作：埋下 → 推进 → 回收） */
 export const HOOK_MARK_LABEL: Record<NodeHookMark["relationType"], string> = {
   plants: "埋设",
   advances: "推进",

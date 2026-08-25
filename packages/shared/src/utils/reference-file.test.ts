@@ -1,5 +1,5 @@
-// 参考资料文件工具纯函数测试（决策 43，批次十一）
-// 契约：doc/design/decisions.md 决策 43（frontmatter 自包含 / 文件名 sanitize 规则）
+// 参考资料文件工具纯函数测试（批次十一）
+// （frontmatter 自包含 / 文件名 sanitize 规则）
 import { describe, expect, it } from "vitest";
 import {
   parseReferenceFrontmatter,
@@ -65,7 +65,7 @@ tags:
 ---
 body`;
     const r = parseReferenceFrontmatter(text);
-    // 单行 key-value 解析器不识多行数组 → tags 空，行保留
+ // 单行 key-value 解析器不识多行数组 → tags 空，行保留
     expect(r.tags).toEqual([]);
     expect(r.body).toBe("body");
   });

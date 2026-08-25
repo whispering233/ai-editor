@@ -1,8 +1,8 @@
-// lib/timeline 纯函数测试（C3，决策 26；G2.3 修订）
+// lib/timeline 纯函数测试（C3，；G2.3 修订）
 // 覆盖：拖拽插入位计算（eventDropOrder，双轨共用）、G2 双实体模型（buildTimelineModel——
-//   时间点组块 + 事件挂载 + 未挂载兜底区）、事件拖入组块 order（eventOrderIntoGroup）、
-//   标签收集/筛选/解析、事件表单共享函数（eventFormFromDetail / buildEventDetailPatch——
-//   C3 编辑对话框与 C4 详情页共用，原测试位于 timeline-detail.test.ts，随函数迁入本文件）
+// 时间点组块 + 事件挂载 + 未挂载兜底区）、事件拖入组块 order（eventOrderIntoGroup）、
+// 标签收集/筛选/解析、事件表单共享函数（eventFormFromDetail / buildEventDetailPatch——
+// C3 编辑对话框与 C4 详情页共用，原测试位于 timeline-detail.test.ts，随函数迁入本文件）
 import { describe, expect, it } from "vitest";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import type { RelationSummaryItem } from "./api";
@@ -72,9 +72,9 @@ describe("eventDropOrder（拖拽插入位 → order，C3；G2 双轨共用—�
   });
 
   it("剔除拖拽项：锚点在拖拽项下方时修正 1 位错位（S13 同款语义）", () => {
-    // 拖 ev-a 到 ev-c 之后：剔除 ev-a 后 [ev-b, ev-c]，after ev-c → 2（真实位移 ev-a → 末尾）
+ // 拖 ev-a 到 ev-c 之后：剔除 ev-a 后 [ev-b, ev-c]，after ev-c → 2（真实位移 ev-a → 末尾）
     expect(eventDropOrder(ids, { kind: "after", id: "ev-c" }, "ev-a")).toBe(2);
-    // 拖 ev-c 到 ev-a 之前：剔除 ev-c 后 [ev-a, ev-b]，before ev-a → 0
+ // 拖 ev-c 到 ev-a 之前：剔除 ev-c 后 [ev-a, ev-b]，before ev-a → 0
     expect(eventDropOrder(ids, { kind: "before", id: "ev-a" }, "ev-c")).toBe(0);
   });
 
@@ -164,31 +164,31 @@ describe("buildTimelineModel（G2 双实体模型：时间点组块 + 事件挂�
 });
 
 describe("eventOrderIntoGroup（事件拖入组块的插入位 order，G2 双轨拖拽）", () => {
-  // 模型：tp-a 组 [e1, e2]、tp-b 组 [e3]、tp-c 空组；未挂载 [u1, u2]
+ // 模型：tp-a 组 [e1, e2]、tp-b 组 [e3]、tp-c 空组；未挂载 [u1, u2]
   const tps = [timepointOf("tp-a", "A"), timepointOf("tp-b", "B"), timepointOf("tp-c", "C")];
   const events = [eventOf("e1"), eventOf("e2"), eventOf("e3"), eventOf("u1"), eventOf("u2")];
   const edges = [mountOf("tp-a", "e1"), mountOf("tp-a", "e2"), mountOf("tp-b", "e3")];
   const model = buildTimelineModel(tps, events, edges);
-  // 投影序：e1, e2, e3, u1, u2（组块序 + 未挂载区序）
+ // 投影序：e1, e2, e3, u1, u2（组块序 + 未挂载区序）
 
   it("组内 before/after：锚定组首/末事件（剔除拖拽项后 index）", () => {
-    // 拖 e3 到 tp-a 组前（before）→ 剔除 e3 后 [e1, e2, u1, u2]，before e1 → 0
+ // 拖 e3 到 tp-a 组前（before）→ 剔除 e3 后 [e1, e2, u1, u2]，before e1 → 0
     expect(eventOrderIntoGroup(model.groups, model.ungrouped, 0, "before", "e3")).toBe(0);
-    // 拖 u1 到 tp-b 组后（after）→ 剔除 u1 后 [e1, e2, e3, u2]，after e3 → 3
+ // 拖 u1 到 tp-b 组后（after）→ 剔除 u1 后 [e1, e2, e3, u2]，after e3 → 3
     expect(eventOrderIntoGroup(model.groups, model.ungrouped, 1, "after", "u1")).toBe(3);
   });
 
   it("未挂载区 before/after：锚定未挂载首/末事件", () => {
-    // 拖 e1 到未挂载区前（before）→ 剔除 e1 后 [e2, e3, u1, u2]，before u1 → 2
+ // 拖 e1 到未挂载区前（before）→ 剔除 e1 后 [e2, e3, u1, u2]，before u1 → 2
     expect(eventOrderIntoGroup(model.groups, model.ungrouped, -1, "before", "e1")).toBe(2);
-    // 拖 e1 到未挂载区后（after）→ 剔除 e1 后 [e2, e3, u1, u2]，after u2 → 4
+ // 拖 e1 到未挂载区后（after）→ 剔除 e1 后 [e2, e3, u1, u2]，after u2 → 4
     expect(eventOrderIntoGroup(model.groups, model.ungrouped, -1, "after", "e1")).toBe(4);
   });
 
   it("空组：before → 其后最近非空组首事件前；after → 其前最近非空组末事件后（空组无锚点事件）", () => {
-    // tp-c 空组：before → 其后无非空组 → 兜底首事件前 = 0；after → 其前最近非空组 = tp-b 末事件 e3 后
+ // tp-c 空组：before → 其后无非空组 → 兜底首事件前 = 0；after → 其前最近非空组 = tp-b 末事件 e3 后
     expect(eventOrderIntoGroup(model.groups, model.ungrouped, 2, "before", "u1")).toBe(0);
-    // 剔除 u1 后 [e1, e2, e3, u2]，after e3 → 3
+ // 剔除 u1 后 [e1, e2, e3, u2]，after e3 → 3
     expect(eventOrderIntoGroup(model.groups, model.ungrouped, 2, "after", "u1")).toBe(3);
   });
 
@@ -199,12 +199,12 @@ describe("eventOrderIntoGroup（事件拖入组块的插入位 order，G2 双轨
   });
 
   it("拖拽事件在目标组内（剔除自身后锚点 index 修正——S13 同款防 1 位错位）", () => {
-    // 拖 e1（tp-a 组内）到同组 e2 之后：剔除 e1 后 [e2, e3, u1, u2]，after e2 → 1
+ // 拖 e1（tp-a 组内）到同组 e2 之后：剔除 e1 后 [e2, e3, u1, u2]，after e2 → 1
     expect(eventOrderIntoGroup(model.groups, model.ungrouped, 0, "after", "e1")).toBe(1);
   });
 });
 
-describe("collectEventTags（标签聚合，timeline.md 筛选器）", () => {
+describe("collectEventTags", () => {
   it("去重 + 稳定序（按列表序首次出现）", () => {
     const tags = collectEventTags([
       eventOf("a", ["主线", "战争"]),
@@ -235,7 +235,7 @@ describe("filterEventsByTag（标签筛选）", () => {
   });
 });
 
-describe("suggestTags / applyTagSuggestion（标签输入建议，F8 timeline.md 标签输入建议节）", () => {
+describe("suggestTags / applyTagSuggestion", () => {
   const pool = ["主线", "战争", "身世", "主线暗线", "宫廷线"];
 
   it("最后一段包含匹配（大小写不敏感）+ 稳定序（按 allTags 顺序）", () => {
@@ -255,7 +255,7 @@ describe("suggestTags / applyTagSuggestion（标签输入建议，F8 timeline.md
   });
 
   it("limit 默认 5、可自定义；无匹配 → []；allTags 重复去重", () => {
-    // 池内含「线」的仅 3 个（主线/主线暗线/宫廷线）——limit 默认 5 不截断，验证用超 5 匹配的池
+ // 池内含「线」的仅 3 个（主线/主线暗线/宫廷线）——limit 默认 5 不截断，验证用超 5 匹配的池
     expect(suggestTags("线", pool)).toHaveLength(3);
     const many = ["线1", "线2", "线3", "线4", "线5", "线6"];
     expect(suggestTags("线", many)).toHaveLength(5);
@@ -268,7 +268,7 @@ describe("suggestTags / applyTagSuggestion（标签输入建议，F8 timeline.md
     expect(applyTagSuggestion("主", "主线")).toBe("主线，");
     expect(applyTagSuggestion("主线，主", "主线2")).toBe("主线，主线2，");
     expect(applyTagSuggestion("主线、战", "战争")).toBe("主线，战争，");
-    // 替换后最后一段为空 → 建议区消失（suggestTags 空段不匹配）
+ // 替换后最后一段为空 → 建议区消失（suggestTags 空段不匹配）
     expect(suggestTags(applyTagSuggestion("主", "主线"), pool)).toEqual([]);
   });
 });
@@ -375,14 +375,14 @@ describe("buildEventDetailPatch（保存 patch，稀疏提交 + 清空语义；G
   });
 
   it("幂等：原值已为空串/空数组 + 空表单 → null（清空后重复保存不产生多余 patch）", () => {
-    // 仅 description 已清空（其余字段未变）→ 无变更
+ // 仅 description 已清空（其余字段未变）→ 无变更
     expect(
       buildEventDetailPatch(
         { name: "X", data: { description: "", tags: ["主线"] } },
         { name: "X", description: "", tagsInput: "主线" },
       ),
     ).toBeNull();
-    // 两字段全空原值 + 全空表单 → 无变更（重点：清空后再次保存不产生多余 patch）
+ // 两字段全空原值 + 全空表单 → 无变更（重点：清空后再次保存不产生多余 patch）
     expect(
       buildEventDetailPatch(
         { name: "X", data: { description: "", tags: [] } },

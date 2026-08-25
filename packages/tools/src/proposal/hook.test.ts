@@ -1,8 +1,8 @@
 // S6.6 提案类工具测试：伏笔（propose_create/update/advance/resolve/abandon_hook）
 // 覆盖：tool_result 仅 { proposal_id, summary } 无预览 / 完整提案结构（伏笔实体自身
-//   updated_at + 节点级 updated_at 快照，决策 14/19）/ **不落盘**（实体/关系表零变化——
-//   S6.7 复合写对比核心差异）/ 伏笔不存在/软删/类型不一致、节点不存在抛错 /
-//   signal aborted
+// updated_at + 节点级 updated_at 快照）/ **不落盘**（实体/关系表零变化——
+// S6.7 复合写对比核心差异）/ 伏笔不存在/软删/类型不一致、节点不存在抛错 /
+// signal aborted
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -99,7 +99,7 @@ describe("propose_create_hook", () => {
     expect(proposal.project_id).toBe("proj-test");
   });
 
-  it("指定埋设节点：引用为节点级 updated_at 快照（决策 19）", () => {
+  it("指定埋设节点：引用为节点级 updated_at 快照（）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const proposal = buildProposeCreateHook(makeCtx(), { name: "玉佩来历", plant_at_node_id: "sc-1" });
     expect(proposal.references).toEqual([{ kind: "outline_node", id: "sc-1", updated_at: T0 }]);
@@ -116,7 +116,7 @@ describe("propose_create_hook", () => {
 });
 
 describe("propose_update_hook", () => {
-  it("完整提案结构：引用为伏笔实体自身 updated_at（决策 14）", () => {
+  it("完整提案结构：引用为伏笔实体自身 updated_at（）", () => {
     const hook = seedHook();
     const proposal = buildProposeUpdateHook(makeCtx(), { hook_id: hook.id, patches: { payoff_timing: "slow_burn" } });
     expect(proposal.args).toEqual({ hook_id: hook.id, patches: { payoff_timing: "slow_burn" } });
@@ -139,7 +139,7 @@ describe("propose_update_hook", () => {
 });
 
 describe("propose_advance_hook / propose_resolve_hook", () => {
-  it("完整提案结构：伏笔实体 + 推进/回收节点双引用快照（决策 14/19）", () => {
+  it("完整提案结构：伏笔实体 + 推进/回收节点双引用快照（）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const hook = seedHook();
     const advance = buildProposeAdvanceHook(makeCtx(), { hook_id: hook.id, node_id: "sc-1", description: "玉佩现身" });
@@ -192,7 +192,7 @@ describe("propose_abandon_hook", () => {
   });
 });
 
-describe("signal aborted（决策 16 ③）", () => {
+describe("signal aborted（）", () => {
   it("五个伏笔提案工具在 signal 已中止时抛 AbortedError", () => {
     const controller = new AbortController();
     controller.abort();

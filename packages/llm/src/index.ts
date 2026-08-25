@@ -1,5 +1,5 @@
-// @whispering233/ai-editor-llm 入口（决策 34，批次九重写：pi-ai 引擎换核）
-// 职责：只管「怎么调模型」（architecture.md 分包）——模型目录查询 + 流式调用（adapter 适配 pi-ai）
+// @whispering233/ai-editor-llm 入口（批次九重写：pi-ai 引擎换核）
+// 职责：只管「怎么调模型」（ 分包）——模型目录查询 + 流式调用（adapter 适配 pi-ai）
 // 重试/错误分类（retry.ts） token 估算（token.ts）对话组织在 agent 包
 import { SHARED_PKG_NAME } from "@whispering233/ai-editor-shared";
 

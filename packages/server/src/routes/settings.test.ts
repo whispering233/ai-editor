@@ -9,7 +9,7 @@ import { Hono } from "hono";
 import { errorHandler } from "../middleware/error.js";
 import { DEEPSEEK_API_KEY_ENV, settingsRoutes, userConfigPath } from "./settings.js";
 
-const HOST_HEADERS = { host: "127.0.0.1:3456" }; // 来源校验 host 白名单（决策 17 修订）
+const HOST_HEADERS = { host: "127.0.0.1:3456" }; // 来源校验 host 白名单
 
 /** 组装带错误处理的测试 app（settings 路由 + 统一错误包裹） */
 function buildApp(): Hono {
@@ -47,7 +47,7 @@ function seedConfig(config: Record<string, unknown>): void {
 }
 
 describe("GET /api/v1/settings/llm", () => {
-  it("无任何配置 → 默认模型 + thinkingLevel=high + apiKeySet=false + 模型目录（决策 34）", async () => {
+  it("无任何配置 → 默认模型 + thinkingLevel=high + apiKeySet=false + 模型目录（）", async () => {
     const res = await buildApp().request("/api/v1/settings/llm", { headers: HOST_HEADERS });
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -78,7 +78,7 @@ describe("GET /api/v1/settings/llm", () => {
     expect(body.data.apiKeyMasked).toBe("sk-****3456"); // 前 3 后 4
   });
 
-  it("环境变量优先于 config.json（两者都有 → 掩码来自环境变量，决策 17）", async () => {
+  it("环境变量优先于 config.json（两者都有 → 掩码来自环境变量，）", async () => {
     process.env[DEEPSEEK_API_KEY_ENV] = "sk-envkeyabcdefgh"; // 17 字符：前3 sk- + **** + 后4 efgh
     seedConfig({ api_key: "sk-filekey12345678" });
     const res = await buildApp().request("/api/v1/settings/llm", { headers: HOST_HEADERS });
@@ -103,7 +103,7 @@ describe("GET /api/v1/settings/llm", () => {
     expect(body.data.apiKeySet).toBe(false);
   });
 
-  it("config.json schema v1（决策 48）：带 schema_version=1 的配置正常读取；非法 thinking_level 降级默认值", async () => {
+  it("config.json schema v1（）：带 schema_version=1 的配置正常读取；非法 thinking_level 降级默认值", async () => {
     seedConfig({ schema_version: 1, model: "deepseek-v4-flash", thinking_level: "low", api_key: "sk-schema1key123456" });
     const res = await buildApp().request("/api/v1/settings/llm", { headers: HOST_HEADERS });
     const body = (await res.json()) as { data: { model: string; thinkingLevel: string; apiKeySet: boolean } };
@@ -111,7 +111,7 @@ describe("GET /api/v1/settings/llm", () => {
     expect(body.data.thinkingLevel).toBe("low");
     expect(body.data.apiKeySet).toBe(true);
 
-    // 非法字段值 → 整份配置按空读取（降级默认值，不抛错）
+ // 非法字段值 → 整份配置按空读取（降级默认值，不抛错）
     seedConfig({ schema_version: 1, thinking_level: "bogus", api_key: "sk-x" });
     const bad = await buildApp().request("/api/v1/settings/llm", { headers: HOST_HEADERS });
     const badBody = (await bad.json()) as { data: { thinkingLevel: string; apiKeySet: boolean } };
@@ -132,13 +132,13 @@ describe("PUT /api/v1/settings/llm", () => {
     const get = await buildApp().request("/api/v1/settings/llm", { headers: HOST_HEADERS });
     const body = (await get.json()) as { data: { model: string } };
     expect(body.data.model).toBe("deepseek-v4-flash");
-    // 写入位置：临时 HOME 下（真实用户 HOME 不受污染）
+ // 写入位置：临时 HOME 下（真实用户 HOME 不受污染）
     const onDisk = JSON.parse(readFileSync(userConfigPath(), "utf8")) as { model: string };
     expect(onDisk.model).toBe("deepseek-v4-flash");
   });
 
-  it("保存后落盘新格式（决策 48）：schema_version 写入 1；旧格式文件保存后升级为 v1", async () => {
-    // 旧格式（无 schema_version）→ PUT 保存 → 落盘带 schema_version: 1
+  it("保存后落盘新格式（）：schema_version 写入 1；旧格式文件保存后升级为 v1", async () => {
+ // 旧格式（无 schema_version）→ PUT 保存 → 落盘带 schema_version: 1
     seedConfig({ model: "deepseek-r1", api_key: "sk-oldkey12345678" });
     const put = await buildApp().request(
       "/api/v1/settings/llm",

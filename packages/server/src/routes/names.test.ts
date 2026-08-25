@@ -1,7 +1,7 @@
-// 名称解析路由测试（14.1，决策 47）：POST /api/v1/names/resolve
+// 名称解析路由测试（14.1）：POST /api/v1/names/resolve
 // 覆盖：实体 id（character/timepoint/reference 前缀分流 + 类型中文 label）、大纲节点 id（vol/ch/sc）、
-//       软删实体 → null、未知 id / rel- → null、空数组 → 空对象、重复 id 去重、超过 50 个 → 400、
-//       无项目 → 409 NO_PROJECT_OPEN
+// 软删实体 → null、未知 id / rel- → null、空数组 → 空对象、重复 id 去重、超过 50 个 → 400、
+// 无项目 → 409 NO_PROJECT_OPEN
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -134,7 +134,7 @@ describe("POST /api/v1/names/resolve", () => {
     expect(names[volId]).toBeNull();
   });
 
-  it("未知 id / rel- 前缀 / 运行时对象前缀 → null（关系无名称语义，决策 47）", async () => {
+  it("未知 id / rel- 前缀 / 运行时对象前缀 → null（关系无名称语义，）", async () => {
     openProject();
     const app = buildApp();
     const { names } = await resolveIds(app, ["rel-abc123", "prop_abc", "sess_abc", "call_abc", "proj-abc", "xxx-nope", "char-不存在的id"]);
@@ -176,7 +176,7 @@ describe("POST /api/v1/names/resolve", () => {
   });
 
   it("无项目打开 → 409 NO_PROJECT_OPEN", async () => {
-    // 不 openProject：单例为空 → requireCurrentProject 兜底 409
+ // 不 openProject：单例为空 → requireCurrentProject 兜底 409
     const app = buildApp();
     const res = await app.request("/api/v1/names/resolve", jsonRequest("POST", "", { ids: ["char-x"] }));
     expect(res.status).toBe(409);

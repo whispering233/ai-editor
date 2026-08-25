@@ -1,10 +1,10 @@
 // 大纲节点「变更记录」列表区块（S12.2：自 S5.4 行内面板 node-delta-panel 迁移——详情页整区块形态，
-//   无树缩进；契约 doc/ui/pages/outline.md「节点详情页」+ endpoints.md L436-462）
+// 无树缩进；「节点详情页」+ ）
 // 数据：GET /api/v1/delta/node/:nodeId → { nodeId, deltas: DeltaRecord[] }
 // 交互：列表按 order 升序（客户端兜底排序）；行 = description + 创建时间 + 目标徽标
-//   （targetType 中文 + targetName ?? targetId）+ changes 紧凑 chips；空态轻提示；网络失败 → 行内错误 + [重试]
-// 防御分支：OUTLINE_NODE_NOT_FOUND 分支当前**不可达**——契约（endpoints.md L436-462）未定义该端点
-//   404，节点缺失/软删 → 200 空数组（server delta.ts 三态过滤），缺失即空态；分支保留以防契约未来变化
+// （targetType 中文 + targetName ?? targetId）+ changes 紧凑 chips；空态轻提示；网络失败 → 行内错误 + [重试]
+// 防御分支：OUTLINE_NODE_NOT_FOUND 分支当前**不可达**——（）未定义该端点
+// 404，节点缺失/软删 → 200 空数组（server delta.ts 三态过滤），缺失即空态；分支保留以防未来变化
 import { useEffect, useState } from "react";
 import { formatTimestamp } from "@whispering233/ai-editor-shared";
 import type { DeltaRecord } from "@whispering233/ai-editor-shared";
@@ -20,12 +20,12 @@ export function NodeDeltaList({
   reloadKey,
 }: {
   nodeId: string;
-  /** 外部刷新信号（S12.3：新建变更成功后 +1 重拉，同 RelationsView reloadKey 模式） */ reloadKey?: number;
+ /** 外部刷新信号（S12.3：新建变更成功后 +1 重拉，同 RelationsView reloadKey 模式） */ reloadKey?: number;
 }) {
   const [deltas, setDeltas] = useState<DeltaRecord[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  /** 重试计数（错误 [重试] 触发重拉） */
+ /** 重试计数（错误 [重试] 触发重拉） */
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
@@ -35,7 +35,7 @@ export function NodeDeltaList({
     getDeltasByNode(nodeId)
       .then((res) => {
         if (cancelled) return;
-        // 服务端按 order 返回，客户端兜底排序（全局单调递增，决策 3/9）
+ // 服务端按 order 返回，客户端兜底排序（全局单调递增）
         setDeltas([...res.deltas].sort((a, b) => a.order - b.order));
       })
       .catch((err) => {
@@ -60,7 +60,7 @@ export function NodeDeltaList({
         </div>
       )}
 
-      {/* 错误态：防御分支（契约当前不返回 404——缺失即空态；节点已 purge / 网络失败 → 行内提示 + 重试） */}
+      {/* 错误态：防御分支（当前不返回 404——缺失即空态；节点已 purge / 网络失败 → 行内提示 + 重试） */}
       {error !== null && (
         <div className="flex items-center gap-2 text-xs text-destructive">
           <span>

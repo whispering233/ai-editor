@@ -1,6 +1,6 @@
 // lib/delta-create 纯函数测试（S12.3；S13.3 收紧：变更目标仅实体类型——DELTA_TARGET_TYPE_OPTIONS
-//   不含 outline_node、节点字段选项已删除）：字段选项（实体 schema keys）、op 推断
-//   （数组 add/remove、标量 set/update）、changes 构造（update 自动 from）、值解析（数字字段）
+// 不含 outline_node、节点字段选项已删除）：字段选项（实体 schema keys）、op 推断
+// （数组 add/remove、标量 set/update）、changes 构造（update 自动 from）、值解析（数字字段）
 import { describe, expect, it } from "vitest";
 import {
   DELTA_TARGET_TYPE_OPTIONS,

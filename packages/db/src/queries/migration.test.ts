@@ -1,4 +1,4 @@
-// S1.1 schema 演进删库重建测试（决策 13）
+// S1.1 schema 演进删库重建测试
 // 覆盖：版本匹配不重建 / 版本不匹配重建（备份+重置）/ 备份内容可读 / 旧版本号命名 / outline 缺失兜底
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
@@ -74,36 +74,36 @@ describe("ensureSchemaCompatible 版本匹配", () => {
   });
 });
 
-describe("ensureSchemaCompatible 版本不匹配 → 删库重建（决策 13）", () => {
+describe("ensureSchemaCompatible 版本不匹配 → 删库重建（）", () => {
   it("user_version=0 的旧库：重建后版本号正确、表空、outline 重置为空树、备份存在且旧连接已关闭", () => {
-    // 旧库（user_version=0，新库默认）+ 脏数据
+ // 旧库（user_version=0，新库默认）+ 脏数据
     insertOldEntity(db, "char-1");
     insertOldEntity(db, "char-2");
     writeOutlineFile(dir, oldTree());
 
     const { db: active, result } = ensureSchemaCompatible(db, dir, dbPath);
 
-    // 结果信息
+ // 结果信息
     expect(result.rebuilt).toBe(true);
     expect(result.fromVersion).toBe(0);
     expect(result.toVersion).toBe(SCHEMA_VERSION);
-    // 新库：版本号已写、表空（回收站天然为空，决策 13 无需单独清空）
+ // 新库：版本号已写、表空（回收站天然为空， 无需单独清空）
     expect(getUserVersion(active)).toBe(SCHEMA_VERSION);
     expect(countEntities(active)).toBe(0);
-    // outline.json 重置为最小空树（与 readOutlineFile 缺失语义同形）
+ // outline.json 重置为最小空树（与 readOutlineFile 缺失语义同形）
     expect(readOutlineFile(dir)).toEqual({
       id: "root",
       type: "root",
       schema_version: SCHEMA_VERSION,
       children: [],
     });
-    // 备份文件存在且已登记
+ // 备份文件存在且已登记
     const dbBackup = join(dir, "data.db.v0.bak");
     const outlineBackup = join(dir, "outline.json.v0.bak");
     expect(existsSync(dbBackup)).toBe(true);
     expect(existsSync(outlineBackup)).toBe(true);
     expect(result.backups).toEqual([dbBackup, outlineBackup]);
-    // 旧连接已被关闭（调用方应使用返回的新连接）
+ // 旧连接已被关闭（调用方应使用返回的新连接）
     expect(db.open).toBe(false);
     expect(active).not.toBe(db);
     closeDatabase(active);
@@ -117,16 +117,16 @@ describe("ensureSchemaCompatible 版本不匹配 → 删库重建（决策 13）
     const { db: active } = ensureSchemaCompatible(db, dir, dbPath);
     closeDatabase(active);
 
-    // 打开备份库：旧数据行仍在（openDatabase 幂等建表，不影响读取）
+ // 打开备份库：旧数据行仍在（openDatabase 幂等建表，不影响读取）
     const backupDb = openDatabase(join(dir, "data.db.v0.bak"));
     expect(countEntities(backupDb)).toBe(1); // char-1
     closeDatabase(backupDb);
-    // 备份的旧大纲字节与重建前一致（复制保留原始字节）
+ // 备份的旧大纲字节与重建前一致（复制保留原始字节）
     expect(readFileSync(join(dir, "outline.json.v0.bak"), "utf8")).toBe(outlineRawBefore);
   });
 
-  it("未来版本（user_version=SCHEMA_VERSION+1 > SCHEMA_VERSION）→ 拒绝打开：抛 SchemaVersionError、数据文件未动、无 .bak 备份（E4 堵降级数据丢失）", () => {
-    // 模拟「用户安装新版后回退旧版程序」：高版本库 + 数据 + 大纲
+  it("未来版本（user_version=SCHEMA_VERSION+1 > SCHEMA_VERSION）→ 拒绝打开：抛 SchemaVersionError、数据文件未动、无 .bak 备份（ 堵降级数据丢失）", () => {
+ // 模拟「用户安装新版后回退旧版程序」：高版本库 + 数据 + 大纲
     setUserVersion(db, SCHEMA_VERSION + 1);
     insertOldEntity(db, "char-1");
     writeOutlineFile(dir, oldTree());
@@ -141,10 +141,10 @@ describe("ensureSchemaCompatible 版本不匹配 → 删库重建（决策 13）
       expect((err as SchemaVersionError).current).toBe(SCHEMA_VERSION);
       expect((err as Error).message).toContain("高于当前程序版本");
     }
-    // 拒绝分支：本次打开的连接已关闭（无句柄泄漏，afterEach 幂等）
+ // 拒绝分支：本次打开的连接已关闭（无句柄泄漏，afterEach 幂等）
     expect(db.open).toBe(false);
-    // 数据原封不动：无 .bak 备份生成、data.db 主文件仍在且 user_version 仍为 4、
-    // outline.json 字节原样、实体数据仍在（未触发任何重建/写操作）
+ // 数据原封不动：无 .bak 备份生成、data.db 主文件仍在且 user_version 仍为 4、
+ // outline.json 字节原样、实体数据仍在（未触发任何重建/写操作）
     expect(existsSync(join(dir, "data.db.v5.bak"))).toBe(false);
     expect(existsSync(join(dir, "outline.json.v5.bak"))).toBe(false);
     expect(readFileSync(join(dir, OUTLINE_FILE_NAME), "utf8")).toBe(outlineRawBefore);
@@ -159,15 +159,15 @@ describe("ensureSchemaCompatible 版本不匹配 → 删库重建（决策 13）
 
   it("outline.json 缺失（异常状态）时重建仍成功：跳过备份但重置为空树", () => {
     insertOldEntity(db, "char-1");
-    // 不写 outline.json
+ // 不写 outline.json
 
     const { db: active, result } = ensureSchemaCompatible(db, dir, dbPath);
 
     expect(result.rebuilt).toBe(true);
-    // 仅 data.db 备份，outline 备份跳过
+ // 仅 data.db 备份，outline 备份跳过
     expect(result.backups).toEqual([join(dir, "data.db.v0.bak")]);
     expect(existsSync(join(dir, "outline.json.v0.bak"))).toBe(false);
-    // outline.json 仍被重置
+ // outline.json 仍被重置
     expect(readOutlineFile(dir)).toEqual({
       id: "root",
       type: "root",
@@ -178,9 +178,9 @@ describe("ensureSchemaCompatible 版本不匹配 → 删库重建（决策 13）
   });
 });
 
-// ============ ensureSchemaCompatible 旧版本迁移路径（E5 注入） ============
+// ============ ensureSchemaCompatible 旧版本迁移路径（ 注入） ============
 
-describe("ensureSchemaCompatible 旧版本有迁移路径（E5）", () => {
+describe("ensureSchemaCompatible 旧版本有迁移路径（）", () => {
   it("user_version=0 + 注入迁移链（覆盖到 SCHEMA_VERSION）→ 前向迁移：数据保留、无重建备份、时间戳快照生成", () => {
     const migrations = [
       { version: 1, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN note TEXT") },
@@ -195,27 +195,27 @@ describe("ensureSchemaCompatible 旧版本有迁移路径（E5）", () => {
 
     const { db: active, result } = ensureSchemaCompatible(db, dir, dbPath, { migrations });
 
-    // 走迁移而非重建
+ // 走迁移而非重建
     expect(result.rebuilt).toBe(false);
     expect(result.migrated).toBe(true);
     expect(result.fromVersion).toBe(0);
     expect(getUserVersion(active)).toBe(SCHEMA_VERSION);
-    // 数据保全：实体行仍在、outline 字节原样（重建会清空/重置）
+ // 数据保全：实体行仍在、outline 字节原样（重建会清空/重置）
     expect(countEntities(active)).toBe(1);
     expect(readFileSync(join(dir, OUTLINE_FILE_NAME), "utf8")).toBe(outlineRawBefore);
-    // 迁移副作用可见（note/extra/third 列已加）
+ // 迁移副作用可见（note/extra/third 列已加）
     const cols = active.prepare("PRAGMA table_info(entities)").all() as Array<{ name: string }>;
     expect(cols.some((c) => c.name === "note")).toBe(true);
     expect(cols.some((c) => c.name === "extra")).toBe(true);
     expect(cols.some((c) => c.name === "third")).toBe(true);
     expect(cols.some((c) => c.name === "fourth")).toBe(true);
-    // 无删库重建备份（data.db.v0.bak 不带时间戳的不生成）、有迁移时间戳快照
+ // 无删库重建备份（data.db.v0.bak 不带时间戳的不生成）、有迁移时间戳快照
     expect(existsSync(join(dir, "data.db.v0.bak"))).toBe(false);
     expect(result.backups[0]).toMatch(/data\.db\.v0\.\d{8}T\d{6}\.\d{3}Z\.bak$/);
     closeDatabase(active);
   });
 
-  it("user_version=0 + 默认迁移集（0→3 断链：无 v1 条目）→ 无迁移路径 → 重建兜底（E5 前行为不变）", () => {
+  it("user_version=0 + 默认迁移集（0→3 断链：无 v1 条目）→ 无迁移路径 → 重建兜底（ 前行为不变）", () => {
     insertOldEntity(db, "char-1");
     writeOutlineFile(dir, oldTree());
 
@@ -228,8 +228,8 @@ describe("ensureSchemaCompatible 旧版本有迁移路径（E5）", () => {
   });
 
   it("迁移中途失败（ora-3 S2）→ 连接已关闭（open 未生效，不留句柄）+ 版本停步 + 快照保留", () => {
-    // 注入链覆盖到 SCHEMA_VERSION，v2 抛错——ensureSchemaCompatible 的
-    // targetVersion=SCHEMA_VERSION，迁移链首个失败即可覆盖「runMigrations 中途抛错」路径
+ // 注入链覆盖到 SCHEMA_VERSION，v2 抛错——ensureSchemaCompatible 的
+ // targetVersion=SCHEMA_VERSION，迁移链首个失败即可覆盖「runMigrations 中途抛错」路径
     const migrations = [
       { version: 1, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN note TEXT") },
       {
@@ -245,9 +245,9 @@ describe("ensureSchemaCompatible 旧版本有迁移路径（E5）", () => {
     insertOldEntity(db, "char-1");
 
     expect(() => ensureSchemaCompatible(db, dir, dbPath, { migrations })).toThrow("migration boom");
-    // 迁移失败 = open 未生效：本次打开的连接已关闭（与 E4 拒绝分支同语义）
+ // 迁移失败 = open 未生效：本次打开的连接已关闭（与 拒绝分支同语义）
     expect(db.open).toBe(false);
-    // 版本停步（v1 已提交，v2 未生效，仍为 1）、数据未动
+ // 版本停步（v1 已提交，v2 未生效，仍为 1）、数据未动
     const reopened = openDatabase(dbPath);
     try {
       expect(getUserVersion(reopened)).toBe(1);
@@ -255,7 +255,7 @@ describe("ensureSchemaCompatible 旧版本有迁移路径（E5）", () => {
     } finally {
       closeDatabase(reopened);
     }
-    // 迁移前快照保留（重试现场）
+ // 迁移前快照保留（重试现场）
     const snapFiles = readdirSync(dir).filter((f) => /^data\.db\.v0\.\d{8}T\d{6}\.\d{3}Z\.bak$/.test(f));
     expect(snapFiles.length).toBeGreaterThan(0);
   });

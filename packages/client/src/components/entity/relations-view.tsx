@@ -1,15 +1,15 @@
-// 关联 tab 视图（U8；契约 doc/ui/pages/entity-list.md「关联 Tab（实体关系总览）」）
+// 关联 tab 视图（U8；「关联 Tab（实体关系总览）」）
 // 数据：GET /api/v1/relation?depth=1 一次拉全量（MVP 关系量级小），过滤全部前端实现：
-//   服务端 source_type+target_type 同时传是 AND 语义，无法表达「任一端」OR 过滤；名称 q 服务端也不支持。
+// 服务端 source_type+target_type 同时传是 AND 语义，无法表达「任一端」OR 过滤；名称 q 服务端也不支持。
 // 过滤（filterRelations 纯函数，可单测）：端点类型（sourceType/targetType 任一匹配）/ 关系类型 /
-//   名称（sourceName/targetName 包含、大小写不敏感；名称可能 undefined——回退 id）。
+// 名称（sourceName/targetName 包含、大小写不敏感；名称可能 undefined——回退 id）。
 // 行：源名（端点类型徽标）→ 关系类型标签（relationTypeLabel + 方向箭头 →）→ 目标名（徽标）→ [删除]；
-//   端点名为四类实体时点击跳详情 #/entities/:type/:id；大纲节点（S12.2 起）跳 #/outline/:nodeId。
+// 端点名为四类实体时点击跳详情 #/entities/:type/:id；大纲节点（S12.2 起）跳 #/outline/:nodeId。
 // 删除：ConfirmDialog 物理删确认（不可恢复，可重新建立）→ DELETE → toast「已删除关系」→ 重拉。
 // 空态两种：无任何关系「还没有关联，建立一条」+ [建立关联]；过滤无结果「没有匹配的关联」+ [清空过滤]。
 // scope 模式（S12.2 大纲节点详情页）：传入端点范围 → 服务端过滤该端点作为 source 的关系
-//   （source_type+source_id，depth=1），隐藏前端过滤区（列表短，无过滤必要）。
-// 样式 token 类（layout.md §3，禁止硬编码色类）。
+// （source_type+source_id，depth=1），隐藏前端过滤区（列表短，无过滤必要）。
+// 样式 token 类（，禁止硬编码色类）。
 import { useEffect, useState } from "react";
 import { ENTITY_TYPES, RELATION_TYPES } from "@whispering233/ai-editor-shared";
 import { ApiError, CLIENT_NETWORK_ERROR, deleteRelation, listRelations } from "../../lib/api";
@@ -24,7 +24,7 @@ import { EmptyState } from "../ui/empty-state";
 import { navigate } from "../../hooks/use-route";
 import { useUiStore } from "../../stores/ui";
 
-/** 端点类型 → 中文徽标（relation_records 端点类型，schema.md；未知原样显示） */
+/** 端点类型 → 中文徽标（relation_records 端点类型，；未知原样显示） */
 export const ENDPOINT_TYPE_LABEL: Record<string, string> = {
   character: "人物",
   setting: "设定",
@@ -35,11 +35,11 @@ export const ENDPOINT_TYPE_LABEL: Record<string, string> = {
 
 /** 过滤条件（"" = 全部） */
 export interface RelationFilter {
-  /** 端点类型：sourceType 或 targetType 任一匹配（服务端 AND 语义无法表达，前端过滤） */
+ /** 端点类型：sourceType 或 targetType 任一匹配（服务端 AND 语义无法表达，前端过滤） */
   endpointType: string;
-  /** 关系类型 */
+ /** 关系类型 */
   relationType: string;
-  /** 名称关键词（源/目标名称包含；大小写不敏感；trim 后为空忽略） */
+ /** 名称关键词（源/目标名称包含；大小写不敏感；trim 后为空忽略） */
   nameQuery: string;
 }
 
@@ -128,23 +128,23 @@ export function RelationsView({
   onOpenCreate,
   scope,
 }: {
-  /** 外部重载信号（建立关联成功后由宿主 +1，触发重拉） */
+ /** 外部重载信号（建立关联成功后由宿主 +1，触发重拉） */
   reloadKey: number;
-  /** 打开建立关联对话框（空态按钮用；宿主持有对话框） */
+ /** 打开建立关联对话框（空态按钮用；宿主持有对话框） */
   onOpenCreate: () => void;
-  /** 端点范围（S12.2 大纲节点详情页用）：仅查该端点作为 source 的 1 跳关系（服务端过滤），隐藏前端过滤区 */
+ /** 端点范围（S12.2 大纲节点详情页用）：仅查该端点作为 source 的 1 跳关系（服务端过滤），隐藏前端过滤区 */
   scope?: { type: string; id: string };
 }) {
   const [relations, setRelations] = useState<RelationSummaryItem[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  /** 内部重载计数（错误重试 / 删除后刷新） */
+ /** 内部重载计数（错误重试 / 删除后刷新） */
   const [tick, setTick] = useState(0);
   const [filter, setFilter] = useState<RelationFilter>(EMPTY_RELATION_FILTER);
   const [deleteTarget, setDeleteTarget] = useState<RelationSummaryItem | null>(null);
 
-  // 拉关系列表：scope 模式按端点过滤（source_type+source_id，depth=1）；
-  // 列表模式拉全量（depth=1 双向紧邻；进入 tab 挂载即拉，外部 reloadKey / 内部 tick 变化重拉）
+ // 拉关系列表：scope 模式按端点过滤（source_type+source_id，depth=1）；
+ // 列表模式拉全量（depth=1 双向紧邻；进入 tab 挂载即拉，外部 reloadKey / 内部 tick 变化重拉）
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -171,7 +171,7 @@ export function RelationsView({
     };
   }, [reloadKey, tick, scope?.type, scope?.id]);
 
-  /** 删除关系（物理删，确认后执行；成功 toast + 重拉） */
+ /** 删除关系（物理删，确认后执行；成功 toast + 重拉） */
   async function handleDelete() {
     if (!deleteTarget) return;
     try {

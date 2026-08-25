@@ -131,7 +131,7 @@ describe("openProject（POST /api/v1/project/open）", () => {
     expect(JSON.parse(String(calls[0].init?.body))).toEqual({ path: "/tmp/p" });
   });
 
-  it("响应透传 migrated 附加字段（E5：前向迁移自动升级提示，与 rebuilt 互斥）", async () => {
+  it("响应透传 migrated 附加字段（前向迁移自动升级提示，与 rebuilt 互斥）", async () => {
     const config = {
       id: "proj-1",
       name: "我的小说",
@@ -251,7 +251,7 @@ describe("settings/llm（S1.3 端点）", () => {
       throw new TypeError("fetch failed");
     }) as unknown as typeof fetch;
     await expect(getSettingsLlm()).rejects.toMatchObject({ code: CLIENT_NETWORK_ERROR });
-    // ApiError 类型断言（code 字段可访问）
+ // ApiError 类型断言（code 字段可访问）
     try {
       await getSettingsLlm();
     } catch (err) {
@@ -260,7 +260,7 @@ describe("settings/llm（S1.3 端点）", () => {
   });
 });
 
-describe("大纲端点（S2.3，严格三层决策 19）", () => {
+describe("大纲端点（S2.3，严格三层）", () => {
   it("createOutlineNode：POST /outline，body snake_case（type/title/parent_id/summary）", async () => {
     const calls = mockFetchOnce({
       body: {
@@ -366,7 +366,7 @@ describe("大纲端点（S2.3，严格三层决策 19）", () => {
   });
 });
 
-describe("回收站端点（S2.3，决策 12）", () => {
+describe("回收站端点（S2.3，）", () => {
   it("getTrashList：GET /trash；nodes（大纲节点）解析", async () => {
     const calls = mockFetchOnce({
       body: {
@@ -419,7 +419,7 @@ describe("回收站端点（S2.3，决策 12）", () => {
   });
 });
 
-describe("实体端点（S3.5，契约 endpoints.md「实体 CRUD」）", () => {
+describe("实体端点", () => {
   it("listEntities：GET /entity/:type + snake_case query（q/offset/limit/sort/order）", async () => {
     const calls = mockFetchOnce({
       body: {
@@ -537,7 +537,7 @@ describe("实体端点（S3.5，契约 endpoints.md「实体 CRUD」）", () => 
   });
 });
 
-describe("关系端点（S3.6，契约 endpoints.md「关系」）", () => {
+describe("关系端点", () => {
   it("listRelations：GET /relation，query snake_case（depth 必填 + 端点过滤）", async () => {
     const calls = mockFetchOnce({
       body: {
@@ -632,7 +632,7 @@ describe("关系端点（S3.6，契约 endpoints.md「关系」）", () => {
     expect(calls[0].url).toBe("/api/v1/relation/rel-1");
     expect(calls[0].init?.method).toBe("PUT");
     expect(JSON.parse(String(calls[0].init?.body))).toEqual({ metadata: { label: "新标签" } });
-    // 清空标签 → 传 {}
+ // 清空标签 → 传 {}
     const empty = mockFetchOnce({ body: { success: true, data: { updated: true } } });
     await updateRelationMeta("rel-1", {});
     expect(JSON.parse(String(empty[0].init?.body))).toEqual({ metadata: {} });
@@ -646,7 +646,7 @@ describe("关系端点（S3.6，契约 endpoints.md「关系」）", () => {
   });
 });
 
-describe("delta 端点（S5.4；契约 endpoints.md「Delta 变更追踪」）", () => {
+describe("delta 端点", () => {
   it("getDeltasByNode：GET /delta/node/:nodeId；响应透传；404 → ApiError", async () => {
     const body = {
       nodeId: "sc-37",
@@ -769,7 +769,7 @@ describe("delta 端点（S5.4；契约 endpoints.md「Delta 变更追踪」）",
   });
 });
 
-describe("提案确认/拒绝（S8.2，契约 endpoints.md「提案确认」L848-888 + shared proposal*ResSchema）", () => {
+describe("提案确认/拒绝", () => {
   it("confirmProposal：POST /proposal/:id/confirm，无 body；响应透传 confirmed + result", async () => {
     const calls = mockFetchOnce({
       body: { success: true, data: { confirmed: true, result: "char-9" } },
@@ -815,7 +815,7 @@ describe("提案确认/拒绝（S8.2，契约 endpoints.md「提案确认」L848
     expect(calls[0].init?.body).toBeUndefined();
   });
 });
-// ============ E3：导出/导入（二进制 zip 分流 + FormData 上传） ============
+// ============ 导出/导入（二进制 zip 分流 + FormData 上传） ============
 
 /** mock fetch 返回二进制/任意响应（export 走 apiFetch 之外的裸 fetch） */
 function mockRawResponse(body: BodyInit | null, status: number, headers: Record<string, string>) {
@@ -834,7 +834,7 @@ describe("exportProjectZip（GET /project/export：二进制 zip 与 JSON 错误
     const res = await exportProjectZip();
     expect(res.filename).toBe("我的书.zip");
     expect(new Uint8Array(await res.blob.arrayBuffer())).toEqual(zipBytes);
-    // 请求：GET /api/v1/project/export（裸 fetch，无 options——GET 无 body/header）
+ // 请求：GET /api/v1/project/export（裸 fetch，无 options——GET 无 body/header）
     expect(globalThis.fetch).toHaveBeenCalledWith("/api/v1/project/export");
   });
 
@@ -846,7 +846,7 @@ describe("exportProjectZip（GET /project/export：二进制 zip 与 JSON 错误
     await expect(exportProjectZip().then((r) => r.filename)).resolves.toBe("book.zip");
   });
 
-  it("无 Content-Disposition → 回退 project.zip（endpoints.md 兜底）", async () => {
+  it("无 Content-Disposition → 回退 project.zip", async () => {
     mockRawResponse(new Blob(["zip"]), 200, { "Content-Type": "application/zip" });
     await expect(exportProjectZip().then((r) => r.filename)).resolves.toBe("project.zip");
   });
@@ -941,7 +941,7 @@ describe("importProjectZip（POST /project/import：FormData multipart 上传）
     });
     expect(calls[0].url).toBe("/api/v1/project/import");
     expect(calls[0].init?.method).toBe("POST");
-    // FormData 原样透传（E3 apiFetch 扩展：不 JSON.stringify、不设 Content-Type）
+ // FormData 原样透传（ apiFetch 扩展：不 JSON.stringify、不设 Content-Type）
     expect(calls[0].init?.body).toBeInstanceOf(FormData);
     const form = calls[0].init?.body as FormData;
     expect(form.get("name")).toBe("新书");
@@ -949,7 +949,7 @@ describe("importProjectZip（POST /project/import：FormData multipart 上传）
     expect(calls[0].init?.headers).toBeUndefined();
   });
 
-  it('mode: "restored"（id 匹配覆盖恢复，决策 27）→ 字段透传', async () => {
+  it('mode: "restored"（id 匹配覆盖恢复，）→ 字段透传', async () => {
     mockFetchOnce({
       body: {
         success: true,
@@ -1010,8 +1010,8 @@ describe("importProjectZip（POST /project/import：FormData multipart 上传）
   });
 });
 
-describe("备份管理（B2.4 + B2.6 决策 29；endpoints.md「备份管理」，决策 27）", () => {
-  it("getProjectBackups：GET /project/backups，响应 backups[] 透传（含决策 29 kind 字段）", async () => {
+describe("备份管理", () => {
+  it("getProjectBackups：GET /project/backups，响应 backups[] 透传（含 kind 字段）", async () => {
     mockFetchOnce({
       body: {
         success: true,
@@ -1066,7 +1066,7 @@ describe("备份管理（B2.4 + B2.6 决策 29；endpoints.md「备份管理」�
     expect(res.backup.kind).toBe("manual");
   });
 
-  it("createProjectBackup(name)：带自定义名称 → 请求体含 { name }（决策 28）；响应 kind manual", async () => {
+  it("createProjectBackup(name)：带自定义名称 → 请求体含 { name }（）；响应 kind manual", async () => {
     const calls = mockFetchOnce({
       body: {
         success: true,
@@ -1089,7 +1089,7 @@ describe("备份管理（B2.4 + B2.6 决策 29；endpoints.md「备份管理」�
     expect(res.backup.kind).toBe("manual");
   });
 
-  it("createProjectBackup()：不传名称 → 无请求体（undefined body，决策 28 缺省纯时间戳）", async () => {
+  it("createProjectBackup()：不传名称 → 无请求体（undefined body， 缺省纯时间戳）", async () => {
     const calls = mockFetchOnce({
       body: {
         success: true,

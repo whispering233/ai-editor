@@ -7,7 +7,7 @@ export interface UseApiResult<T> {
   data: T | null;
   loading: boolean;
   error: ApiError | null;
-  /** 手动重新请求（不依赖 deps） */
+ /** 手动重新请求（不依赖 deps） */
   refetch: () => Promise<void>;
 }
 
@@ -21,11 +21,11 @@ export function useApi<T>(fn: () => Promise<T>, deps: unknown[] = []): UseApiRes
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
 
-  // fn 存 ref：effect 只依赖 deps，调用方内联函数不会导致死循环
+ // fn 存 ref：effect 只依赖 deps，调用方内联函数不会导致死循环
   const fnRef = useRef(fn);
   fnRef.current = fn;
 
-  // 请求序号：仅最新一次请求的结果落 state（过期响应丢弃）
+ // 请求序号：仅最新一次请求的结果落 state（过期响应丢弃）
   const seqRef = useRef(0);
 
   const run = useCallback(async () => {
@@ -47,7 +47,7 @@ export function useApi<T>(fn: () => Promise<T>, deps: unknown[] = []): UseApiRes
 
   useEffect(() => {
     void run();
-    // deps 即契约：变化重新请求（fn 由 ref 持有，见上）
+ // deps 即变化重新请求（fn 由 ref 持有，见上）
   }, deps);
 
   return { data, loading, error, refetch: run };

@@ -59,7 +59,7 @@ function summaryOf(id: string, name: string, status: unknown): EntitySummary {
   };
 }
 
-/** 关系 fixture（默认 depends_on：source 依赖 target——hooks.md「B 依赖 A 先解开」） */
+/** 关系 fixture（默认 depends_on：source 依赖 target——「B 依赖 A 先解开」） */
 function rel(
   sourceId: string,
   targetId: string,
@@ -132,7 +132,7 @@ describe("hookGroupOf（状态 → 分组）", () => {
     expect(hookGroupOf("abandoned")).toBe("abandoned");
   });
 
-  it("缺失/未知状态归活跃（决策 21：data.status 缺失视为 planted——创建即埋设）", () => {
+  it("缺失/未知状态归活跃（data.status 缺失视为 planted——创建即埋设）", () => {
     expect(hookGroupOf(undefined)).toBe("active");
     expect(hookGroupOf("custom_state")).toBe("active");
   });
@@ -197,7 +197,7 @@ describe("依赖关系解析（depends_on：source 依赖 target）", () => {
 // ============ 依赖链展开 ============
 
 describe("expandDependencyChain（递归依赖链，点击行内「依赖: …」展开）", () => {
-  /** 构造 depsOf/names 映射：edges = 直接依赖边（source 依赖 target） */
+ /** 构造 depsOf/names 映射：edges = 直接依赖边（source 依赖 target） */
   function mapsFor(edges: Array<[string, string, string]>): {
     depsOf: Map<string, RelationSummaryItem[]>;
     names: Map<string, string>;
@@ -267,7 +267,7 @@ describe("anchorNodeForAbandon（废弃 Delta 锚定节点）", () => {
     expect(anchorNodeForAbandon(makeConfig("ch-2"), makeTree())).toBe("ch-2");
   });
 
-  it("current_position 指向已软删节点 → 退化树末节点（决策 21 须非软删）", () => {
+  it("current_position 指向已软删节点 → 退化树末节点（ 须非软删）", () => {
     const tree = makeTree();
     (
       tree.children[0] as { children: { children: { deleted: boolean }[] }[] }
@@ -307,7 +307,7 @@ describe("lastOutlineNode / nodeExists", () => {
 
 // ============ 请求构造 ============
 
-describe("复合写请求构造（hooks.md 状态变化 + 关系约定）", () => {
+describe("复合写请求构造", () => {
   it("buildStatusDeltaChange：op=update + from 当前状态 + to 目标状态", () => {
     expect(buildStatusDeltaChange("planted", "progressing")).toEqual({
       field: "status",
@@ -333,7 +333,7 @@ describe("复合写请求构造（hooks.md 状态变化 + 关系约定）", () =
     expect(buildPlantRelationBody("hook-9", "sc-5").source_id).toBe("sc-5");
   });
 
-  it("currentHookStatus：data.status 缺失/空串 → planted（决策 21）", () => {
+  it("currentHookStatus：data.status 缺失/空串 → planted（）", () => {
     expect(currentHookStatus({ status: "progressing" })).toBe("progressing");
     expect(currentHookStatus({})).toBe("planted");
     expect(currentHookStatus({ status: "" })).toBe("planted");
@@ -369,7 +369,7 @@ describe("runLifecycleWrite（推进/回收复合写序列）", () => {
       description: "主角发现玉佩秘密",
     });
 
-    // delta 请求体：node_id/target_type/target_id/changes/description（snake_case）
+ // delta 请求体：node_id/target_type/target_id/changes/description（snake_case）
     expect(mocked.createDelta).toHaveBeenCalledTimes(1);
     expect(mocked.createDelta).toHaveBeenCalledWith({
       node_id: "sc-12",
@@ -378,7 +378,7 @@ describe("runLifecycleWrite（推进/回收复合写序列）", () => {
       changes: [{ field: "status", op: "update", from: "planted", to: "progressing" }],
       description: "主角发现玉佩秘密",
     });
-    // relation 请求体（advances）
+ // relation 请求体（advances）
     expect(mocked.createRelation).toHaveBeenCalledTimes(1);
     expect(mocked.createRelation).toHaveBeenCalledWith({
       source_type: "outline_node",
@@ -387,12 +387,12 @@ describe("runLifecycleWrite（推进/回收复合写序列）", () => {
       target_id: "hook-1",
       relation_type: "advances",
     });
-    // status 同步（S6.7 语义：data.status 为唯一事实来源）
+ // status 同步（S6.7 语义：data.status 为唯一事实来源）
     expect(mocked.updateEntity).toHaveBeenCalledWith("hook", "hook-1", {
       data: { status: "progressing" },
     });
 
-    // 顺序断言：delta → relation → sync（按 mock 调用次序）
+ // 顺序断言：delta → relation → sync（按 mock 调用次序）
     const order = [
       mocked.createDelta.mock.invocationCallOrder[0],
       mocked.createRelation.mock.invocationCallOrder[0],
@@ -472,7 +472,7 @@ describe("runLifecycleWrite（推进/回收复合写序列）", () => {
   });
 
   it("status 同步失败（第 3 步）→ 抛出（半状态：delta/relation 已写、data.status 未同步），后续重试收敛", async () => {
-    // 第 1 次提交：delta + relation 成功，PUT 失败（模拟网络抖动/服务端瞬时错误）
+ // 第 1 次提交：delta + relation 成功，PUT 失败（模拟网络抖动/服务端瞬时错误）
     mocked.createDelta.mockResolvedValueOnce({ id: "delta-1", applied: {} as never });
     mocked.createRelation.mockResolvedValueOnce({ id: "rel-1", relation: {} as never });
     mocked.updateEntity.mockRejectedValueOnce(new ApiError("CLIENT_NETWORK_ERROR", "网络请求失败"));
@@ -486,8 +486,8 @@ describe("runLifecycleWrite（推进/回收复合写序列）", () => {
       }),
     ).rejects.toMatchObject({ code: "CLIENT_NETWORK_ERROR" });
 
-    // 重试：delta 重复写（from 仍与陈旧值 planted 匹配，computeState 可正常累积）+
-    // relation 409 幂等放行 + status 同步成功 → 整体成功
+ // 重试：delta 重复写（from 仍与陈旧值 planted 匹配，computeState 可正常累积）+
+ // relation 409 幂等放行 + status 同步成功 → 整体成功
     mocked.createDelta.mockResolvedValueOnce({ id: "delta-2", applied: {} as never });
     mocked.createRelation.mockRejectedValueOnce(
       new ApiError("RELATION_EXISTS", "这条关系已经存在"),
@@ -503,7 +503,7 @@ describe("runLifecycleWrite（推进/回收复合写序列）", () => {
       }),
     ).resolves.toBeUndefined();
 
-    // 收敛断言：两次 delta、relation 409 未重写、两次 status 同步（末次成功）
+ // 收敛断言：两次 delta、relation 409 未重写、两次 status 同步（末次成功）
     expect(mocked.createDelta).toHaveBeenCalledTimes(2);
     expect(mocked.createRelation).toHaveBeenCalledTimes(2);
     expect(mocked.updateEntity).toHaveBeenCalledTimes(2);
@@ -514,7 +514,7 @@ describe("runLifecycleWrite（推进/回收复合写序列）", () => {
 });
 
 describe("runAbandonWrite（废弃复合写序列）", () => {
-  it("仅 POST /delta + PUT /entity（status=abandoned），不创建关系（tools.md abandon 无 relation）", async () => {
+  it("仅 POST /delta + PUT /entity（status=abandoned），不创建关系", async () => {
     mocked.createDelta.mockResolvedValue({ id: "delta-2", applied: {} as never });
     mocked.updateEntity.mockResolvedValue({ id: "hook-1", updated: true });
     await runAbandonWrite({

@@ -1,7 +1,7 @@
 // S6.6 提案类工具测试：实体（propose_create/update/delete_entity）
 // 覆盖：tool_result 仅 { proposal_id(prop_ 前缀), summary } 无预览细节（2026-08 修订）/
-//   **不落盘**（调用后实体零变化——与 S6.7 执行工具对比的核心差异）/
-//   引用不存在/已软删抛错（决策 12/14）/ signal aborted（AbortedError）
+// **不落盘**（调用后实体零变化——与 S6.7 执行工具对比的核心差异）/
+// 引用不存在/已软删抛错/ signal aborted（AbortedError）
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -53,7 +53,7 @@ describe("propose_create_entity", () => {
 });
 
 describe("propose_update_entity", () => {
-  it("完整提案结构：type/args/project_id/引用快照（实体自身 updated_at，决策 14）/summary", () => {
+  it("完整提案结构：type/args/project_id/引用快照（实体自身 updated_at，）/summary", () => {
     const row = createEntity(db, { type: "character", name: "阿强", data: { status: "alive" } });
     const proposal = buildProposeUpdateEntity(makeCtx(), { entity_id: row.id, patches: { status: "dead" } });
     expect(proposal.type).toBe("propose_update_entity");
@@ -63,12 +63,12 @@ describe("propose_update_entity", () => {
     expect(proposal.summary).toContain("更新实体「阿强」的 1 个字段");
   });
 
-  it("返回 { proposal_id, summary }，引用快照取实体自身 updated_at（决策 14）", () => {
+  it("返回 { proposal_id, summary }，引用快照取实体自身 updated_at（）", () => {
     const row = createEntity(db, { type: "character", name: "阿强", data: { status: "alive" } });
     const result = runProposeUpdateEntity(makeCtx(), { entity_id: row.id, patches: { status: "dead" } });
     expect(Object.keys(result).sort()).toEqual(["proposal_id", "summary"]);
     expect(result.summary).toContain("更新实体「阿强」的 1 个字段");
-    // 快照语义：软删/编辑会更新 updated_at（决策 12 修订），此处实体未动，快照即创建时刻
+ // 快照语义：软删/编辑会更新 updated_at，此处实体未动，快照即创建时刻
     const fresh = getEntity(db, row.id)!;
     expect(fresh.updated_at).toBe(row.updated_at);
   });
@@ -81,7 +81,7 @@ describe("propose_update_entity", () => {
     expect(fresh.updated_at).toBe(row.updated_at);
   });
 
-  it("引用不存在 / 已软删 → 抛错（决策 12 修订）", () => {
+  it("引用不存在 / 已软删 → 抛错（）", () => {
     expect(() => runProposeUpdateEntity(makeCtx(), { entity_id: "char-999", patches: { status: "dead" } })).toThrow(
       /实体不存在或已软删: char-999/,
     );
@@ -121,7 +121,7 @@ describe("propose_delete_entity", () => {
   });
 });
 
-describe("signal aborted（决策 16 ③）", () => {
+describe("signal aborted（）", () => {
   it("三个实体提案工具在 signal 已中止时抛 AbortedError", () => {
     const controller = new AbortController();
     controller.abort();

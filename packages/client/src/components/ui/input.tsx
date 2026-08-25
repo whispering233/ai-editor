@@ -7,9 +7,9 @@ function Input({ className, type, autoComplete = "off", ...props }: React.Compon
   return (
     <InputPrimitive
       type={type}
-      // 2026-08 用户反馈：禁浏览器表单历史建议（autoComplete="off"）——输入提示完全由
-      // datalist 候选/代码控制，避免 Chrome 历史值幽灵提示（如「龙隐洞天」）；
-      // 显式传入 autoComplete 可覆盖（本应用无登录/地址等需浏览器填充的场景）
+ // 2026-08 用户反馈：禁浏览器表单历史建议（autoComplete="off"）——输入提示完全由
+ // datalist 候选/代码控制，避免 Chrome 历史值幽灵提示（如「龙隐洞天」）；
+ // 显式传入 autoComplete 可覆盖（本应用无登录/地址等需浏览器填充的场景）
       autoComplete={autoComplete}
       data-slot="input"
       className={cn(

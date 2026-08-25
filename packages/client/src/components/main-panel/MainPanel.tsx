@@ -1,5 +1,5 @@
-// 中栏 MainPanel（doc/ui/layout.md §2）：信息条 + TabBar + 页面内容区（按路由渲染 children）
-// loadConfig 挂载拉取逻辑自原 AppShell 迁移（信息条标题映射数据源，layout.md §3.1）；
+// 中栏 MainPanel：信息条 + TabBar + 页面内容区（按路由渲染 children）
+// loadConfig 挂载拉取逻辑自原 AppShell 迁移（信息条标题映射数据源，）；
 // 失败静默——信息条显示「书架」，Dashboard 引导创建/打开项目
 import { useEffect, useLayoutEffect, type ReactNode } from "react";
 import type { Route } from "../../hooks/use-route";
@@ -19,16 +19,16 @@ export function MainPanel({
   route: Route;
   chatOpen: boolean;
   onToggleChat: () => void;
-  /** 桌面态标记（F7）：中栏 flex-1 弹性吸收左右栏固定宽之外的剩余空间；小屏回退默认 50% 百分比 */
+ /** 桌面态标记（F7）：中栏 flex-1 弹性吸收左右栏固定宽之外的剩余空间；小屏回退默认 50% 百分比 */
   isDesktop: boolean;
   children: ReactNode;
 }) {
   const loadConfig = useProjectStore((s) => s.loadConfig);
-  // 决策 35：路由切换清空页面焦点（useLayoutEffect 父先于子——在子页面 mount 上报新焦点前
-  // 清掉旧页残留，避免切页后「问 AI」注入过期上下文）
+ // 路由切换清空页面焦点（useLayoutEffect 父先于子——在子页面 mount 上报新焦点前
+ // 清掉旧页残留，避免切页后「问 AI」注入过期上下文）
   const clearCurrentFocus = useUiStore((s) => s.clearCurrentFocus);
 
-  // 挂载时拉取项目配置（失败静默，信息条显示「书架」不阻塞）
+ // 挂载时拉取项目配置（失败静默，信息条显示「书架」不阻塞）
   useEffect(() => {
     void loadConfig();
   }, [loadConfig]);

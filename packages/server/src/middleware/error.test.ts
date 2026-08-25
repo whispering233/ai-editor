@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { errorHandler, fail, HttpError, ok } from "./error.js";
 
-describe("ok / fail 帮助函数（endpoints.md 通用约定）", () => {
+describe("ok / fail 帮助函数", () => {
   it("ok 返回成功包裹", () => {
     expect(ok({ a: 1 })).toEqual({ success: true, data: { a: 1 } });
   });
@@ -46,11 +46,11 @@ describe("errorHandler", () => {
     });
   });
 
-  it("ZodError → 400 VALIDATION_ERROR（含 fields，endpoints.md L228）", async () => {
+  it("ZodError → 400 VALIDATION_ERROR", async () => {
     const app = new Hono();
     app.onError(errorHandler());
     app.get("/zod", () => {
-      // 路由层 schema 校验失败的真实路径（如 S1.3 settings PUT 的 safeParse 抛错）
+ // 路由层 schema 校验失败的真实路径（如 S1.3 settings PUT 的 safeParse 抛错）
       throw z.object({ name: z.string() }).parse({}); // name 缺失 → ZodError
     });
     const res = await app.request("http://127.0.0.1/zod");

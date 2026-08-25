@@ -1,6 +1,6 @@
 // S3.2 关系管理测试：创建（判重/白名单/端点校验）/ 查询（depth 1/2/3 + 可见性过滤）/ 物理删除
-// 覆盖：决策 12 修订（可见性联动端点状态：实体与大纲节点软删均不可见）、
-//       k 跳路径组装与防环、plot_edge 同规则、手动删除 = 物理删
+// 覆盖：（可见性联动端点状态：实体与大纲节点软删均不可见）、
+// k 跳路径组装与防环、plot_edge 同规则、手动删除 = 物理删
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -93,7 +93,7 @@ describe("createRelation", () => {
     expect(rel.source_id).toBe(charA);
     expect(rel.target_id).toBe(charB);
     expect(Number.isNaN(Date.parse(rel.created_at))).toBe(false);
-    // 大纲端点 + plot_edge 同规则（决策 10）
+ // 大纲端点 + plot_edge 同规则
     const edge = createRelation(
       db,
       { sourceType: "outline_node", sourceId: "sc-1", targetType: "outline_node", targetId: "vol-1", relationType: "plot_edge" },
@@ -118,7 +118,7 @@ describe("createRelation", () => {
         ),
       "RELATION_EXISTS",
     );
-    // 不同关系类型不判重
+ // 不同关系类型不判重
     expect(() =>
       createRelation(
         db,
@@ -128,7 +128,7 @@ describe("createRelation", () => {
     ).not.toThrow();
   });
 
-  it("relation_type 白名单拒绝（schema.md 16 类型外）→ INVALID_RELATION_TYPE", () => {
+  it("relation_type 白名单拒绝→ INVALID_RELATION_TYPE", () => {
     const { charA, charB } = seedBase();
     expectRelationError(
       () =>
@@ -143,7 +143,7 @@ describe("createRelation", () => {
 
   it("端点不存在/软删拒绝 → ENDPOINT_NOT_FOUND（实体与大纲节点两路径）", () => {
     const { charA } = seedBase();
-    // 实体不存在
+ // 实体不存在
     expectRelationError(
       () =>
         createRelation(
@@ -153,7 +153,7 @@ describe("createRelation", () => {
         ),
       "ENDPOINT_NOT_FOUND",
     );
-    // 实体已软删
+ // 实体已软删
     const ghost = createEntity(db, { type: "character", name: "幽灵" });
     softDeleteEntity(db, ghost.id, T0);
     expectRelationError(
@@ -165,7 +165,7 @@ describe("createRelation", () => {
         ),
       "ENDPOINT_NOT_FOUND",
     );
-    // 大纲节点不存在
+ // 大纲节点不存在
     expectRelationError(
       () =>
         createRelation(
@@ -202,14 +202,14 @@ describe("listRelations depth=1（紧邻 + 可见性）", () => {
       targetName: "阿珍",
       relationType: "ally",
     });
-    // 大纲端点 name = title
+ // 大纲端点 name = title
     const scRes = listRelations(db, { sourceId: "sc-1" }, 1, dir);
     expect(scRes.relations[0].sourceName).toBe("场景一");
-    // 过滤组合（relation_type）
+ // 过滤组合（relation_type）
     expect(listRelations(db, { relationType: "rival" }, 1, dir).relations).toHaveLength(0);
   });
 
-  it("可见性过滤（决策 12 修订）：source 实体软删后关系不可见", () => {
+  it("可见性过滤（）：source 实体软删后关系不可见", () => {
     const { charA, charB } = seedBase();
     createRelation(
       db,
@@ -218,7 +218,7 @@ describe("listRelations depth=1（紧邻 + 可见性）", () => {
     );
     softDeleteEntity(db, charA, T0);
     expect(listRelations(db, { sourceId: charA }, 1, dir).relations).toHaveLength(0);
-    // target 软删同样不可见
+ // target 软删同样不可见
     const { charA: a2, charB: b2 } = seedBase();
     createRelation(
       db,
@@ -236,14 +236,14 @@ describe("listRelations depth=1（紧邻 + 可见性）", () => {
       { sourceType: "outline_node", sourceId: "sc-1", targetType: "character", targetId: charA, relationType: "appears_in" },
       dir,
     );
-    // 软删大纲节点（直接改 outline.json——db 包无大纲软删 API 的读路径在本卡测试直接写）
+ // 软删大纲节点（直接改 outline.json——db 包无大纲软删 API 的读路径在本卡测试直接写）
     const tree = readOutlineFile(dir);
     const sc = tree.children[0].children![0].children![0];
     sc.deleted = true;
     sc.deleted_at = T0;
     writeOutlineFile(dir, tree);
     expect(listRelations(db, {}, 1, dir).relations).toHaveLength(0);
-    // getRelation 同样不可见
+ // getRelation 同样不可见
     const relId = db.prepare("SELECT id FROM relation_records LIMIT 1").get() as { id: string };
     expect(getRelation(db, relId.id, dir)).toBeNull();
   });
@@ -261,7 +261,7 @@ describe("listRelations depth=1（紧邻 + 可见性）", () => {
 });
 
 describe("listRelations depth=2/3（k 跳路径）", () => {
-  /** 链式图：charA -ally-> charB -rival-> charC；charB -mentor-> sc-1（大纲节点） */
+ /** 链式图：charA -ally-> charB -rival-> charC；charB -mentor-> sc-1（大纲节点） */
   function seedChain(): { charA: string; charB: string; charC: string } {
     writeOutlineFile(dir, seedOutlineTree());
     const a = createEntity(db, { type: "character", name: "甲" });
@@ -277,9 +277,9 @@ describe("listRelations depth=2/3（k 跳路径）", () => {
     const { charA, charB, charC } = seedChain();
     const res = listRelations(db, { sourceId: charA }, 2, dir);
     const paths = res.paths!;
-    // A→B（1 跳）、A→B→C、A→B→sc-1（2 跳，seedChain 有 3 条出边链）
+ // A→B（1 跳）、A→B→C、A→B→sc-1（2 跳，seedChain 有 3 条出边链）
     expect(paths).toHaveLength(3);
-    // 1 跳路径（BFS 第一层先产出）
+ // 1 跳路径（BFS 第一层先产出）
     expect(paths[0]).toEqual({
       nodes: [
         { type: "character", id: charA, name: "甲" },
@@ -287,7 +287,7 @@ describe("listRelations depth=2/3（k 跳路径）", () => {
       ],
       edges: [{ from: charA, to: charB, relationType: "ally" }],
     });
-    // 2 跳路径（A→B→C）
+ // 2 跳路径（A→B→C）
     const twoHop = paths.find((p) => p.edges[1]?.relationType === "rival")!;
     expect(twoHop.edges).toEqual([
       { from: charA, to: charB, relationType: "ally" },
@@ -299,7 +299,7 @@ describe("listRelations depth=2/3（k 跳路径）", () => {
     const { charA } = seedChain();
     const d1 = listRelations(db, { sourceId: charA }, 1, dir);
     expect(d1.paths).toBeUndefined();
-    // depth=3：A→B→C 与 A→B→sc-1（2 跳内无更远——B 的出边到 C 和 sc-1，均 2 跳）
+ // depth=3：A→B→C 与 A→B→sc-1（2 跳内无更远——B 的出边到 C 和 sc-1，均 2 跳）
     const d3 = listRelations(db, { sourceId: charA }, 3, dir);
     const len2 = d3.paths!.filter((p) => p.nodes.length === 2).length;
     const len3 = d3.paths!.filter((p) => p.nodes.length === 3).length;
@@ -314,7 +314,7 @@ describe("listRelations depth=2/3（k 跳路径）", () => {
     createRelation(db, { sourceType: "character", sourceId: a.id, targetType: "character", targetId: b.id, relationType: "ally" }, dir);
     createRelation(db, { sourceType: "character", sourceId: b.id, targetType: "character", targetId: a.id, relationType: "rival" }, dir);
     const res = listRelations(db, { sourceId: a.id }, 3, dir);
-    // A→B、A→B→A 被防环跳过（B→A 的路径中 A 已访问）——只有 A→B 一条路径
+ // A→B、A→B→A 被防环跳过（B→A 的路径中 A 已访问）——只有 A→B 一条路径
     expect(res.paths).toHaveLength(1);
     expect(res.paths![0].nodes.map((n) => n.id)).toEqual([a.id, b.id]);
   });
@@ -322,14 +322,14 @@ describe("listRelations depth=2/3（k 跳路径）", () => {
   it("缺省起点（无 sourceId）：多起点遍历图内全部节点路径", () => {
     const { charA, charB } = seedChain();
     const res = listRelations(db, {}, 2, dir);
-    // 起点 = 图内全部节点：A→B、B→C、B→sc-1 产生路径；C/sc-1 无出边不产生路径（起点自身不输出）
+ // 起点 = 图内全部节点：A→B、B→C、B→sc-1 产生路径；C/sc-1 无出边不产生路径（起点自身不输出）
     const startNodes = new Set(res.paths!.map((p) => p.nodes[0].id));
     expect(startNodes.has(charA)).toBe(true);
     expect(startNodes.has(charB)).toBe(true);
   });
 });
 
-describe("deleteRelation（物理删，决策 12 修订）", () => {
+describe("deleteRelation（物理删，）", () => {
   it("物理删除：行消失；再次删除 → 0（404 语义）", () => {
     const { charA, charB } = seedBase();
     const rel = createRelation(
@@ -356,7 +356,7 @@ describe("deleteRelation（物理删，决策 12 修订）", () => {
   });
 });
 
-describe("updateRelationMetadata（整体替换 + 404 语义，endpoints.md「PUT /relation/:id」）", () => {
+describe("updateRelationMetadata", () => {
   it("更新：metadata 整体替换（旧键不残留）+ updated_at 刷新", () => {
     const { charA, charB } = seedBase();
     const rel = createRelation(
@@ -368,7 +368,7 @@ describe("updateRelationMetadata（整体替换 + 404 语义，endpoints.md「PU
     const res = updateRelationMetadata(db, rel.id, { label: "新标签", extra: 1 }, "2026-08-12T10:00:00Z");
     expect(res).toEqual({ id: rel.id });
     const row = getRelation(db, rel.id, dir)!;
-    // 整体替换：旧 label/note 不残留，新键完整
+ // 整体替换：旧 label/note 不残留，新键完整
     expect(row.metadata).toEqual({ label: "新标签", extra: 1 });
     expect(row.updated_at).toBe("2026-08-12T10:00:00Z");
     expect(row.updated_at).not.toBe(before.updated_at);
@@ -383,7 +383,7 @@ describe("updateRelationMetadata（整体替换 + 404 语义，endpoints.md「PU
     );
     expect(updateRelationMetadata(db, rel.id, {}, "2026-08-12T10:00:00Z")).toEqual({ id: rel.id });
     const row = getRelation(db, rel.id, dir)!;
-    // 整体替换语义：空对象字面存储（parseMetadata("{}") → {}），label 键不残留
+ // 整体替换语义：空对象字面存储（parseMetadata("{}") → {}），label 键不残留
     expect(row.metadata).toEqual({});
     expect(row.metadata?.label).toBeUndefined();
     expect(listRelations(db, {}, 1, dir).relations[0].metadata).toEqual({});
@@ -393,7 +393,7 @@ describe("updateRelationMetadata（整体替换 + 404 语义，endpoints.md「PU
     expect(updateRelationMetadata(db, "rel-999", { label: "x" }, "2026-08-12T10:00:00Z")).toBeNull();
   });
 
-  it("已软删 → null，且行未被触碰（软删关系不可编辑，决策 12）", () => {
+  it("已软删 → null，且行未被触碰（软删关系不可编辑，）", () => {
     const { charA, charB } = seedBase();
     const rel = createRelation(
       db,
@@ -414,15 +414,15 @@ describe("updateRelationMetadata（整体替换 + 404 语义，endpoints.md「PU
 });
 
 describe("listDanglingRelations（S6.4 工具 find_orphan_elements 下沉）", () => {
-  /** 实体物理删除（purge 语义：直接 DELETE） */
+ /** 实体物理删除（purge 语义：直接 DELETE） */
   function purgeEntity(id: string): void {
     db.prepare("DELETE FROM entities WHERE id = ?").run(id);
   }
 
-  /**
-   * 直接 SQL 插入关系行（绕过 createRelation 的端点存在性校验）——
-   * 悬空关系无法经正常 API 构造，需模拟「端点已 purge 但关系残留」的脏数据形态
-   */
+ /**
+ * 直接 SQL 插入关系行（绕过 createRelation 的端点存在性校验）——
+ * 悬空关系无法经正常 API 构造，需模拟「端点已 purge 但关系残留」的脏数据形态
+ */
   function insertRelationRaw(
     db: Db,
     input: { sourceType: string; sourceId: string; targetType: string; targetId: string; relationType: string },
@@ -435,7 +435,7 @@ describe("listDanglingRelations（S6.4 工具 find_orphan_elements 下沉）", (
     return { id };
   }
 
-  /** 直接改 outline.json 软删指定节点 */
+ /** 直接改 outline.json 软删指定节点 */
   function softDeleteNode(nodeId: string): void {
     const tree = readOutlineFile(dir);
     const node = findOutlineNode(tree, nodeId)!;
@@ -447,7 +447,7 @@ describe("listDanglingRelations（S6.4 工具 find_orphan_elements 下沉）", (
   it("正常关系（端点健在）不列入；端点物理删除 → source/target_missing", () => {
     const { charA, charB } = seedBase();
     createRelation(db, { sourceType: "character", sourceId: charA, targetType: "character", targetId: charB, relationType: "ally" }, dir);
-    // 悬空关系无法经 createRelation 构造（端点存在性校验）——直接 INSERT 模拟 purge 后残留
+ // 悬空关系无法经 createRelation 构造（端点存在性校验）——直接 INSERT 模拟 purge 后残留
     const missing = insertRelationRaw(db, { sourceType: "character", sourceId: charA, targetType: "character", targetId: "char-gone", relationType: "ally" });
     const outlineMissing = insertRelationRaw(db, { sourceType: "character", sourceId: charA, targetType: "outline_node", targetId: "sc-gone", relationType: "appears_in" });
 
@@ -466,8 +466,8 @@ describe("listDanglingRelations（S6.4 工具 find_orphan_elements 下沉）", (
     const nodeDeleted = createRelation(db, { sourceType: "character", sourceId: charA, targetType: "outline_node", targetId: "sc-1", relationType: "appears_in" }, dir);
     const selfSoft = insertRelationRaw(db, { sourceType: "character", sourceId: charA, targetType: "outline_node", targetId: "sc-2", relationType: "appears_in" });
 
-    // 直接 UPDATE 实体软删（绕过 softDeleteEntity 的级联软删——级联会把关系一并标删，
-    // 无法构造「端点软删但关系未级联」的幽灵形态）
+ // 直接 UPDATE 实体软删（绕过 softDeleteEntity 的级联软删——级联会把关系一并标删，
+ // 无法构造「端点软删但关系未级联」的幽灵形态）
     db.prepare("UPDATE entities SET deleted_at = ? WHERE id = ?").run(T0, charB);
     softDeleteNode("sc-1");
     db.prepare("UPDATE relation_records SET deleted_at = ? WHERE id = ?").run(T0, selfSoft.id);
@@ -484,7 +484,7 @@ describe("listDanglingRelations（S6.4 工具 find_orphan_elements 下沉）", (
     const rel = insertRelationRaw(db, { sourceType: "character", sourceId: charA, targetType: "character", targetId: "char-gone", relationType: "ally" });
     const rows = listDanglingRelations(db, dir);
     expect(rows.filter((r) => r.id === rel.id)).toHaveLength(1); // 仅 target 异常
-    // 再 purge source → 两端点各一条
+ // 再 purge source → 两端点各一条
     purgeEntity(charA);
     const rows2 = listDanglingRelations(db, dir);
     const mine = rows2.filter((r) => r.id === rel.id);
@@ -499,7 +499,7 @@ describe("listDanglingRelations（S6.4 工具 find_orphan_elements 下沉）", (
   });
 });
 
-describe("设定层级（决策 30：belongs_to setting→setting 边集 + 防环）", () => {
+describe("设定层级（belongs_to setting→setting 边集 + 防环）", () => {
   function seedSetting(name: string) {
     const row = createEntity(db, { type: "setting", name });
     return row.id;
@@ -517,7 +517,7 @@ describe("设定层级（决策 30：belongs_to setting→setting 边集 + 防�
     const person = createEntity(db, { type: "character", name: "张三" }).id;
     link(c, b);
     link(b, a);
-    // 人物→设定 belongs_to 与大纲节点出现关系不计入层级
+ // 人物→设定 belongs_to 与大纲节点出现关系不计入层级
     createRelation(db, { sourceType: "character", sourceId: person, targetType: "setting", targetId: a, relationType: "belongs_to" }, dir);
     createRelation(db, { sourceType: "outline_node", sourceId: "sc-1", targetType: "setting", targetId: a, relationType: "appears_in" }, dir);
     const edges = listSettingHierarchyEdges(db);
@@ -527,7 +527,7 @@ describe("设定层级（决策 30：belongs_to setting→setting 边集 + 防�
     ]);
   });
 
-  it("软删端点不参与层级（决策 12 修订可见性联动）", () => {
+  it("软删端点不参与层级（可见性联动）", () => {
     const a = seedSetting("世界");
     const b = seedSetting("大陆");
     const c = seedSetting("门派");
@@ -544,20 +544,20 @@ describe("设定层级（决策 30：belongs_to setting→setting 边集 + 防�
     const c = seedSetting("门派");
     link(c, b);
     link(b, a);
-    // 自指：设定作为自己的上级
+ // 自指：设定作为自己的上级
     expect(wouldCreateSettingCycle(db, a, a)).toBe(true);
-    // 环：把 a 挂到 c 下（a 的子孙 b 已经挂在 b'下……方向核对：a→? 即 a belongs_to c；
-    // c 的祖先链 = c→b→a，含 a → 成环）
+ // 环：把 a 挂到 c 下（a 的子孙 b 已经挂在 b'下……方向核对：a→? 即 a belongs_to c；
+ // c 的祖先链 = c→b→a，含 a → 成环）
     expect(wouldCreateSettingCycle(db, a, c)).toBe(true);
-    // 把 b 挂到 c 下：c 的祖先链 c→b→a 含 b → 成环
+ // 把 b 挂到 c 下：c 的祖先链 c→b→a 含 b → 成环
     expect(wouldCreateSettingCycle(db, b, c)).toBe(true);
-    // 合法：新建叶子挂到 a 下 —— d 不在树中，a 的祖先链无 d
+ // 合法：新建叶子挂到 a 下 —— d 不在树中，a 的祖先链无 d
     const d = seedSetting("新势力");
     expect(wouldCreateSettingCycle(db, d, a)).toBe(false);
-    // 合法：同级互挂（b 挂到另一个孤立根 e 下）——e 祖先链无 b
+ // 合法：同级互挂（b 挂到另一个孤立根 e 下）——e 祖先链无 b
     const e = seedSetting("另一世界");
     expect(wouldCreateSettingCycle(db, b, e)).toBe(false);
-    // 重复边不误判为环（同三元组判重由 createRelation 的 RELATION_EXISTS 负责）
+ // 重复边不误判为环（同三元组判重由 createRelation 的 RELATION_EXISTS 负责）
     expect(wouldCreateSettingCycle(db, c, b)).toBe(false);
   });
 });

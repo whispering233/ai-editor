@@ -1,6 +1,6 @@
 // startServer 集成测试（T6.1）：
-//   health 探活 / SPA fallback（fixture clientDist）/ 静态文件 / 未知 API 404 /
-//   clientDist 缺失优雅降级 / 端口策略（生产 +1、dev 报错）/ close 释放
+// health 探活 / SPA fallback（fixture clientDist）/ 静态文件 / 未知 API 404 /
+// clientDist 缺失优雅降级 / 端口策略（生产 +1、dev 报错）/ close 释放
 import { createServer, type Server } from "node:http";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -73,9 +73,9 @@ describe("startServer 基础路由", () => {
   });
 
   it("相对路径创作根 → list 返回绝对 rootPath（2026-08 修复：前端拼路径可过 isAbsolute 校验）", async () => {
-    // 模拟 CLI 相对路径启动（node dist/index.js test-project）：startServer 内部须归一化为
-    // 绝对路径（基于 process.cwd() resolve），否则 list 返回相对 rootPath → 前端
-    // buildBookPath 拼出相对路径 → POST /project/create 的 resolveProjectDir 400 拒绝
+ // 模拟 CLI 相对路径启动（node dist/index.js test-project）：startServer 内部须归一化为
+ // 绝对路径（基于 process.cwd resolve），否则 list 返回相对 rootPath → 前端
+ // buildBookPath 拼出相对路径 → POST /project/create 的 resolveProjectDir 400 拒绝
     const dir = makeTmpDir();
     const handle = await startServer(relative(process.cwd(), dir), { port: 0, openBrowser: false });
     try {
@@ -90,7 +90,7 @@ describe("startServer 基础路由", () => {
   });
 });
 
-describe("SPA 静态服务（决策 8 单进程架构）", () => {
+describe("SPA 静态服务（ 单进程架构）", () => {
   it("非 /api GET → fallback 到 index.html", async () => {
     const handle = await startServer(makeTmpDir(), {
       port: 0,
@@ -146,7 +146,7 @@ describe("SPA 静态服务（决策 8 单进程架构）", () => {
     const handle = await startServer(makeTmpDir(), { port: 0, openBrowser: false, clientDist: dist });
     try {
       const res = await handle.app.request("http://127.0.0.1/../../etc/passwd", { headers: { host: "127.0.0.1" } });
-      // 不返回文件内容（回退到 index.html 或 404）
+ // 不返回文件内容（回退到 index.html 或 404）
       const text = await res.text();
       expect(text).not.toContain("root:");
     } finally {
@@ -156,10 +156,10 @@ describe("SPA 静态服务（决策 8 单进程架构）", () => {
 });
 
 describe("defaultClientDist 双路径探测（resolveClientDist 纯函数）", () => {
-  // fixture 结构（模拟模块目录）：
-  //   <tmp>/packages/server/dist           → baseDir（对应 dist 或 src）
-  //   <tmp>/packages/client/dist           → monorepo 路径（resolve ../../client/dist）
-  //   <tmp>/packages/server/client-dist    → 安装态路径（resolve ../client-dist）
+ // fixture 结构（模拟模块目录）：
+ // <tmp>/packages/server/dist → baseDir（对应 dist 或 src）
+ // <tmp>/packages/client/dist → monorepo 路径（resolve ../../client/dist）
+ // <tmp>/packages/server/client-dist → 安装态路径（resolve ../client-dist）
   it("monorepo 路径存在时优先", () => {
     const dir = makeTmpDir();
     const baseDir = join(dir, "packages", "server", "dist");
@@ -200,13 +200,13 @@ describe("AI_EDITOR_PORT 解析（parsePortEnv）", () => {
   });
 });
 
-describe("端口策略（决策 8 / 17 修订）", () => {
+describe("端口策略（）", () => {
   it("生产态端口被占自动 +1", async () => {
     const occupiedPort = await occupyPort();
     const handle = await startServer(makeTmpDir(), { port: occupiedPort, openBrowser: false });
     try {
       expect(handle.port).toBe(occupiedPort + 1);
-      // 实际可访问
+ // 实际可访问
       const res = await fetch(`http://127.0.0.1:${handle.port}/api/v1/health`);
       expect(res.status).toBe(200);
     } finally {

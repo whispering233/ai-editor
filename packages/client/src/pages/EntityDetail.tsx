@@ -1,12 +1,12 @@
 // 实体详情/编辑页（S3.6；替换 T7.1 占位壳；U8 起「新增关联」用共用 CreateRelationDialog；
-//   S5.4 起元信息行「变更记录 N 条」展开「状态预览」区块——POST /delta/compute + conflicts 标注）
+// S5.4 起元信息行「变更记录 N 条」展开「状态预览」区块——POST /delta/compute + conflicts 标注）
 // 路由：#/entities/:type/:id；数据：GET /api/v1/entity/:type/:id（含双向 relations + deltaCount）
-// 契约：doc/ui/pages/entity-detail.md——data 表单按类型差异化（lib/entity-detail.ts detailFieldsForType）、
-//   PUT partial 浅合并（diffData 只提交变更字段）、关系 1 跳双向展示 + 创建对话框（409 RELATION_EXISTS 提示，
-//   组件抽至 components/entity/create-relation-dialog.tsx，详情模式 source 固定本实体）、
-//   删关系物理删确认（决策 12 修订：轻量可重建）、软删直接执行（H2：不弹确认）+ 级联计数、404 引导
+// ——data 表单按类型差异化（lib/entity-detail.ts detailFieldsForType）、
+// PUT partial 浅合并（diffData 只提交变更字段）、关系 1 跳双向展示 + 创建对话框（409 RELATION_EXISTS 提示，
+// 组件抽至 components/entity/create-relation-dialog.tsx，详情模式 source 固定本实体）、
+// 删关系物理删确认（轻量可重建）、软删直接执行（H2：不弹确认）+ 级联计数、404 引导
 // 边界：custom_fields 仅在响应 data 已有该键时显示（MVP 无法新增键）；「问 AI」入口待 chat store
-//   就绪后补（layout.md §3.3 带上下文进聊天）
+// 就绪后补（ 带上下文进聊天）
 import { useEffect, useRef, useState } from "react";
 import { GripVertical } from "lucide-react";
 import { formatTimestamp } from "@whispering233/ai-editor-shared";
@@ -53,11 +53,11 @@ const TYPE_LABEL: Record<EntityType, string> = {
   setting: "设定",
   location: "地点",
   hook: "伏笔",
-  // C1 类型补全（决策 26 event 时间轴事件；时间轴专属 UI 由 C2 实现）
+ // C1 类型补全（ event 时间轴事件；时间轴专属 UI 由 C2 实现）
   event: "事件",
-  // G2.3 类型补全（G2 时间标签点；泛型详情页可用——仅名称可编辑，data 空）
+ // G2.3 类型补全（G2 时间标签点；泛型详情页可用——仅名称可编辑，data 空）
   timepoint: "时间点",
-  // 决策 36（批次九）参考资料 reference
+ // （批次九）参考资料 reference
   reference: "参考资料",
 };
 
@@ -83,9 +83,9 @@ function TagsEditor({
   suggestions?: readonly string[];
   quickTags?: readonly string[];
 }) {
-  // 输入框 ref 表（M1：回车后聚焦下一行/新行；下标即行号，追加行在渲染后经 rAF 聚焦）
+ // 输入框 ref 表（M1：回车后聚焦下一行/新行；下标即行号，追加行在渲染后经 rAF 聚焦）
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
-  // 拖拽排序态（M3）：dragIndex = 被拖行；dragOverIndex = 当前悬停目标行（高亮提示）
+ // 拖拽排序态（M3）：dragIndex = 被拖行；dragOverIndex = 当前悬停目标行（高亮提示）
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   return (
@@ -102,8 +102,8 @@ function TagsEditor({
               "bg-muted/60 ring-1 ring-ring",
           )}
           onDragOver={(e) => {
-            // 仅自身拖拽进行中响应（dragIndex 非空）——不 preventDefault 时保留浏览器默认
-            // 行为（输入框内文本拖选/拖入照常），不干扰文本编辑
+ // 仅自身拖拽进行中响应（dragIndex 非空）——不 preventDefault 时保留浏览器默认
+ // 行为（输入框内文本拖选/拖入照常），不干扰文本编辑
             if (dragIndex === null) return;
             e.preventDefault();
             e.dataTransfer.dropEffect = "move";
@@ -127,7 +127,7 @@ function TagsEditor({
             onDragStart={(e) => {
               setDragIndex(i);
               e.dataTransfer.effectAllowed = "move";
-              // Firefox 需 setData 才启动拖拽（types 含 text/plain 亦可作自识别标记）
+ // Firefox 需 setData 才启动拖拽（types 含 text/plain 亦可作自识别标记）
               e.dataTransfer.setData("text/plain", String(i));
             }}
             onDragEnd={() => {
@@ -148,14 +148,14 @@ function TagsEditor({
               inputRefs.current[i] = el;
             }}
             onKeyDown={(e) => {
-              // M1（2026-08 用户反馈）：「输入后回车添加下一项」——回车 = 非末行聚焦下一行 /
-              // 末行非空追加空行并聚焦 / 末行空无操作（决策纯函数 enterBehavior）
+ // M1（2026-08 用户反馈）：「输入后回车添加下一项」——回车 = 非末行聚焦下一行 /
+ // 末行非空追加空行并聚焦 / 末行空无操作（决策纯函数 enterBehavior）
               if (e.key !== "Enter") return;
               e.preventDefault();
               const b = enterBehavior(values, i);
               if (!b) return;
               if (b.append) onChange([...values, ""]);
-              // 追加行渲染完成后聚焦（rAF 确保新输入框已挂载）
+ // 追加行渲染完成后聚焦（rAF 确保新输入框已挂载）
               requestAnimationFrame(() => inputRefs.current[b.focusIndex]?.focus());
             }}
             placeholder={placeholder}
@@ -217,7 +217,7 @@ function CustomFieldsEditor({
     Object.entries(value ?? {}).map(([k, v]) => ({ key: k, value: String(v ?? "") })),
   );
 
-  // 外部值变化（重拉详情）时同步
+ // 外部值变化（重拉详情）时同步
   useEffect(() => {
     setRows(Object.entries(value ?? {}).map(([k, v]) => ({ key: k, value: String(v ?? "") })));
   }, [value]);
@@ -276,7 +276,7 @@ function CustomFieldsEditor({
 export default function EntityDetail({ type, id }: { type: string; id: string }) {
   const entityType = type as EntityType;
 
-  // 决策 35：挂载/切换实体时上报页面焦点（InfoBar「问 AI」携带当前实体上下文注入右栏；路由切换时已清空）
+ // 挂载/切换实体时上报页面焦点（InfoBar「问 AI」携带当前实体上下文注入右栏；路由切换时已清空）
   const setCurrentFocus = useUiStore((s) => s.setCurrentFocus);
   useEffect(() => {
     setCurrentFocus({ focus_entity_type: entityType, focus_entity_id: id });
@@ -286,7 +286,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  /** 表单值（detail.data 副本；null = 未加载） */
+ /** 表单值（detail.data 副本；null = 未加载） */
   const [form, setForm] = useState<Record<string, unknown> | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -294,15 +294,15 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
   const [deleteRelationTarget, setDeleteRelationTarget] = useState<RelationSummaryItem | null>(
     null,
   );
-  /** 「变更记录 N 条」展开状态（S5.4：下方渲染状态预览区块） */
+ /** 「变更记录 N 条」展开状态（S5.4：下方渲染状态预览区块） */
   const [deltaOpen, setDeltaOpen] = useState(false);
-  /** 设定层级修改态（决策 30，I3b：修改/清除上级——先建后删，防数据丢失） */
+ /** 设定层级修改态（I3b：修改/清除上级——先建后删，防数据丢失） */
   const [hierarchySaving, setHierarchySaving] = useState(false);
   const [hierarchyError, setHierarchyError] = useState<string | null>(null);
-  /** 标签建议池（批次五 J2 + K2，决策 31：setting 详情 tags 输入 datalist 候选 + 快捷选择——全量聚合既有标签；失败静默） */
+ /** 标签建议池（批次五 J2 + K2，setting 详情 tags 输入 datalist 候选 + 快捷选择——全量聚合既有标签；失败静默） */
   const [tagPool, setTagPool] = useState<string[]>([]);
 
-  // 补拉全量设定标签池（setting 类型才拉；复用 Timeline 详情 loadTagPool 同款模式）
+ // 补拉全量设定标签池（setting 类型才拉；复用 Timeline 详情 loadTagPool 同款模式）
   useEffect(() => {
     if (entityType !== "setting") {
       setTagPool([]);
@@ -323,7 +323,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
         setTagPool(Array.from(tags).sort());
       })
       .catch(() => {
-        // 失败静默（无建议不影响表单）
+ // 失败静默（无建议不影响表单）
       });
     return () => {
       cancelled = true;
@@ -332,7 +332,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
 
   const fields = detailFieldsForType(entityType);
 
-  /** 加载详情（id/type 变化重载；成功重置表单为 data 副本） */
+ /** 加载详情（id/type 变化重载；成功重置表单为 data 副本） */
   async function loadDetail() {
     setLoading(true);
     setLoadError(null);
@@ -356,14 +356,14 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
 
   useEffect(() => {
     void loadDetail();
-    // 依赖仅 [entityType, id]：loadDetail 每次渲染重建，但页面切换才需重载（项目未启用 exhaustive-deps 检查）
+ // 依赖仅 [entityType, id]：loadDetail 每次渲染重建，但页面切换才需重载（项目未启用 exhaustive-deps 检查）
   }, [entityType, id]);
 
-  // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉详情——
-  // 表单以服务端权威为准整体重置（AI 改动的字段随之同步，本地未保存编辑被覆盖属预期语义）
+ // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉详情——
+ // 表单以服务端权威为准整体重置（AI 改动的字段随之同步，本地未保存编辑被覆盖属预期语义）
   useDataRefresh(() => void loadDetail());
 
-  /** 保存：diffData 只提交变更字段（partial 浅合并）；成功后重拉（服务端权威） */
+ /** 保存：diffData 只提交变更字段（partial 浅合并）；成功后重拉（服务端权威） */
   async function handleSave() {
     if (!detail || !form || saving) return;
     const changed = diffData(detail.data, form);
@@ -388,12 +388,12 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
     }
   }
 
-  /** 设置字段值（tags/select 等通用入口） */
+ /** 设置字段值（tags/select 等通用入口） */
   function setField(key: string, value: unknown) {
     setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
   }
 
-  /** 软删直接执行（H2：不再弹二次确认）：DELETE → toast（级联计数）→ 跳回列表 */
+ /** 软删直接执行（H2：不再弹二次确认）：DELETE → toast（级联计数）→ 跳回列表 */
   async function handleDelete() {
     if (!detail) return;
     try {
@@ -414,7 +414,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
     }
   }
 
-  /** 删除关系（物理删，确认后执行） */
+ /** 删除关系（物理删，确认后执行） */
   async function handleDeleteRelation() {
     if (!deleteRelationTarget) return;
     try {
@@ -427,10 +427,10 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
     }
   }
 
-  /**
-   * 修改上级（决策 30，I3b）：先建新边再删旧父边——建失败则旧父保留（防数据丢失）；
-   * 新父与当前相同 → 幂等跳过（不重建关系）。服务端防环/自指兜底（400 VALIDATION_ERROR 内联提示）。
-   */
+ /**
+ * 修改上级（I3b）：先建新边再删旧父边——建失败则旧父保留（防数据丢失）；
+ * 新父与当前相同 → 幂等跳过（不重建关系）。服务端防环/自指兜底（400 VALIDATION_ERROR 内联提示）。
+ */
   async function handleSetParent(newParentId: string) {
     if (!detail || hierarchySaving) return;
     const current = settingHierarchyFromRelations(detail.relations, id).parent;
@@ -455,7 +455,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
     }
   }
 
-  /** 清除上级（决策 30）：删除旧父边（物理删，可重新设置） */
+ /** 清除上级：删除旧父边（物理删，可重新设置） */
   async function handleClearParent() {
     if (!detail || hierarchySaving) return;
     const current = settingHierarchyFromRelations(detail.relations, id).parent;
@@ -473,7 +473,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
     }
   }
 
-  /** 关系行端点名称（本实体端用名称，另一端优先联表名称，缺省 id） */
+ /** 关系行端点名称（本实体端用名称，另一端优先联表名称，缺省 id） */
   function relationEndpointName(r: RelationSummaryItem, side: "source" | "target"): string {
     const isSelf = (side === "source" ? r.sourceId : r.targetId) === id;
     if (isSelf) return detail?.name ?? "本实体";
@@ -483,7 +483,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
     );
   }
 
-  // ============ 渲染 ============
+ // ============ 渲染 ============
 
   if (notFound) {
     return (
@@ -635,7 +635,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
             {saveError && <p className="mt-3 text-sm text-destructive">{saveError}</p>}
           </div>
 
-          {/* 右栏：关联（1 跳双向）——setting 类型前置「层级」区块（决策 30：父子边独自分区，
+          {/* 右栏：关联（1 跳双向）——setting 类型前置「层级」区块（父子边独自分区，
               下方关联列表过滤掉层级边，避免同一条边两处重复展示） */}
           <div className="rounded-md border border-border p-4">
             <div className="mb-3 flex items-center justify-between">
@@ -650,7 +650,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
               </Button>
             </div>
 
-            {/* 层级区块（仅 setting）：父/子分区展示 + 设置/修改/清除上级（决策 30） */}
+            {/* 层级区块（仅 setting）：父/子分区展示 + 设置/修改/清除上级 */}
             {entityType === "setting" &&
               (() => {
                 const h = settingHierarchyFromRelations(detail.relations, id);
@@ -726,7 +726,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
               })()}
 
             {(() => {
-              // 关联列表：setting 类型过滤掉层级边（belongs_to setting→setting）
+ // 关联列表：setting 类型过滤掉层级边（belongs_to setting→setting）
               const list =
                 entityType === "setting"
                   ? detail.relations.filter(
@@ -807,7 +807,7 @@ function FormField({
   field: DetailFieldConfig;
   value: unknown;
   onChange: (v: unknown) => void;
-  /** 规则标签建议池（批次五 J2：仅 setting.rules 使用；datalist 候选） */
+ /** 规则标签建议池（批次五 J2：仅 setting.rules 使用；datalist 候选） */
   tagPool?: readonly string[];
 }) {
   switch (field.control) {
@@ -881,8 +881,8 @@ function FormField({
 }
 
 /** 大纲节点选择器（hook.expected_resolve_node_id；选项来自 outline store 的树）。
- * 清空（「未设置」）→ onChange(null)：服务端 schema 为 z.string().nullable()，「未设置」应存 null
- * 而非空串（决策 21 健康指标按 null 判定），见 lib/entity-detail.ts diffData 的 null 透传语义 */
+ * 清空（「未设置」）→ onChange(null)：服务端 schema 为 z.string.nullable，「未设置」应存 null
+ * 而非空串（ 健康指标按 null 判定），见 lib/entity-detail.ts diffData 的 null 透传语义 */
 function OutlineNodeSelect({
   value,
   onChange,

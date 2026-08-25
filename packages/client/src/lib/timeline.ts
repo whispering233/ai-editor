@@ -1,16 +1,16 @@
-// 时间轴列表页 + 事件表单辅助纯函数（C3，决策 26；G2.3 修订：双实体模型）
-// 契约：doc/ui/pages/timeline.md（G2 布局线框：时间点组块 + 事件挂载 + 未挂载兜底区、标签筛选、
-//   拖拽插入位、标签输入解析、详情页字段编辑）、endpoints.md（event/timepoint 列表 EntitySummary、
-//   occurs_at 关系挂载，G2 修订）
-// G2 模型（决策 26 G2 修订）：时间轴数据项 = 时间点实体（timepoint，name = 时间标签文本）+ 事件实体
-//   （event，经 occurs_at 挂载到时间点，1:n）；渲染 = buildTimelineModel 按 timepoint.sort_order
-//   组块序 + 事件 sort_order 组内投影 + 未挂载兜底区。F4 的 groupEventsByTimeLabel 分组（time_label
-//   派生组）已随 G2 废弃——分组 = 真实时间点实体 + occurs_at 关系。
+// 时间轴列表页 + 事件表单辅助纯函数（C3，；G2.3 修订：双实体模型）
+// （G2 布局线框：时间点组块 + 事件挂载 + 未挂载兜底区、标签筛选、
+// 拖拽插入位、标签输入解析、详情页字段编辑）、（event/timepoint 列表 EntitySummary、
+// occurs_at 关系挂载，G2 修订）
+// G2 模型（ G2 修订）：时间轴数据项 = 时间点实体（timepoint，name = 时间标签文本）+ 事件实体
+// （event，经 occurs_at 挂载到时间点，1:n）；渲染 = buildTimelineModel 按 timepoint.sort_order
+// 组块序 + 事件 sort_order 组内投影 + 未挂载兜底区。F4 的 groupEventsByTimeLabel 分组（time_label
+// 派生组）已随 G2 废弃——分组 = 真实时间点实体 + occurs_at 关系。
 // 风格：与 outline-tree.ts（dropInsertOrder）同构——拖拽插入位剔除拖拽项后计算；
-//       与 entity-list.ts 同构——summary 稀疏字段防御（非字符串数组成员过滤）。
+// 与 entity-list.ts 同构——summary 稀疏字段防御（非字符串数组成员过滤）。
 // 事件表单共享（C3 列表页编辑对话框 / C4 详情页共用，单一实现消除同步风险）：
-//   EventDetailForm / eventFormFromDetail / buildEventDetailPatch 原属 lib/timeline-detail.ts（C4），
-//   为按卡拆分 commit 而迁入本文件——Timeline.tsx 只依赖本文件（C3 产物），详情页单向依赖本文件。
+// EventDetailForm / eventFormFromDetail / buildEventDetailPatch 原属 lib/timeline-detail.ts（C4），
+// 为按卡拆分 commit 而迁入本文件——Timeline.tsx 只依赖本文件（C3 产物），详情页单向依赖本文件。
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import type { RelationSummaryItem } from "./api";
 
@@ -19,7 +19,7 @@ export type TimelineDropInsert =
   { kind: "before"; id: string } | { kind: "after"; id: string } | { kind: "end" };
 
 /**
- * 拖拽插入位 → order（0-based 全局线性序，决策 26/G2）：
+ * 拖拽插入位 → order（0-based 全局线性序，/G2）：
  * **剔除拖拽节点后计算**（同 dropInsertOrder 第三参语义）——服务端 move（event/timepoint 同款）
  * 先移除自身再按 order 插入；同列表重排时锚点在拖拽项下方会出现 1 位错位，须先剔除。
  * 锚点不存在 → 末尾（防御；列表与拖拽态同源，理论不可达）。
@@ -41,29 +41,29 @@ export function eventDropOrder(
 
 /** 时间点组块（G2）：时间点实体 + 组内事件（组内序 = 事件全局 sort_order 投影——events 入参已按序） */
 export interface TimepointGroup {
-  /** 时间点实体（name = 时间标签文本，可重命名） */
+ /** 时间点实体（name = 时间标签文本，可重命名） */
   timepoint: EntitySummary;
-  /** 组内事件（保持传入列表相对序——列表即 sort_order 线性投影） */
+ /** 组内事件（保持传入列表相对序——列表即 sort_order 线性投影） */
   events: EntitySummary[];
 }
 
-/** 时间轴渲染模型（G2，timeline.md 布局线框）：组块序 + 未挂载兜底区 */
+/** 时间轴渲染模型（G2， 布局线框）：组块序 + 未挂载兜底区 */
 export interface TimelineModel {
-  /** 时间点组块（按 timepoints 传入序 = timepoint.sort_order 线性投影；空组保留——时间点是真实实体） */
+ /** 时间点组块（按 timepoints 传入序 = timepoint.sort_order 线性投影；空组保留——时间点是真实实体） */
   groups: TimepointGroup[];
-  /** 未挂载事件（无 occurs_at 或挂载点不在时间点列表——防御；按事件 sort_order 平铺） */
+ /** 未挂载事件（无 occurs_at 或挂载点不在时间点列表——防御；按事件 sort_order 平铺） */
   ungrouped: EntitySummary[];
 }
 
 /**
- * 构建时间轴渲染模型（G2，timeline.md「数据源重构」）：
+ * 构建时间轴渲染模型（G2，「数据源重构」）：
  * - groups：按时间点列表序（sort_order 投影）分组；事件经 occursAtEdges 的挂载映射归组
  * - ungrouped：无挂载 / 挂载点缺失（occursAtEdges 引用了时间点列表之外的时间点——防御，
- *   正常不可达：服务端级联软删保证 occurs_at 端点存活）的事件
+ * 正常不可达：服务端级联软删保证 occurs_at 端点存活）的事件
  * - 挂载映射构建：relation_type === "occurs_at" 且 sourceType === "timepoint" 的边，
- *   targetId（事件）→ sourceId（时间点）；单事件多条挂载边（服务端 1:n 校验，理论不可达）→
- *   首次出现者胜（防御）
- * - 组内/未挂载区事件均保持 events 传入相对序（列表即 sort_order 线性投影，决策 26）
+ * targetId（事件）→ sourceId（时间点）；单事件多条挂载边（服务端 1:n 校验，理论不可达）→
+ * 首次出现者胜（防御）
+ * - 组内/未挂载区事件均保持 events 传入相对序（列表即 sort_order 线性投影）
  */
 export function buildTimelineModel(
   timepoints: readonly EntitySummary[],
@@ -72,7 +72,7 @@ export function buildTimelineModel(
 ): TimelineModel {
   const groups: TimepointGroup[] = timepoints.map((timepoint) => ({ timepoint, events: [] }));
   const groupById = new Map(groups.map((g) => [g.timepoint.id, g]));
-  // 挂载映射（事件 → 时间点；1:n 由服务端保证，防御性首次胜出）
+ // 挂载映射（事件 → 时间点；1:n 由服务端保证，防御性首次胜出）
   const mountOf = new Map<string, string>();
   for (const edge of occursAtEdges) {
     if (edge.relationType !== "occurs_at" || edge.sourceType !== "timepoint") continue;
@@ -91,11 +91,11 @@ export function buildTimelineModel(
 
 /**
  * 事件拖入组块（时间点组 / 未挂载区）的插入位 order（G2 双轨拖拽）：
- * - targetIndex：groups 下标（-1 = 未挂载兜底区）
+ * - targetIndex：groups 下标（1 = 未挂载兜底区）
  * - side：before → 组内首事件前；after → 组内末事件后
  * - **空组**（时间点无事件）：before → 其后最近非空组的首事件前（再无 → 列表末尾）；
- *   after → 其前最近非空组的末事件后（再无 → 组首位置 0）——空组无锚点事件，
- *   以相邻有事件组的边界事件为锚（视觉等价：事件落在空组所在区间）
+ * after → 其前最近非空组的末事件后（再无 → 组首位置 0）——空组无锚点事件，
+ * 以相邻有事件组的边界事件为锚（视觉等价：事件落在空组所在区间）
  * - 未挂载区：before → 未挂载首事件前；after → 未挂载末事件后；区空 → 列表末尾
  * - order = 全部事件投影序（组块序 + 未挂载区序）**剔除拖拽事件后**的插入位（eventDropOrder 语义）
  */
@@ -119,7 +119,7 @@ export function eventOrderIntoGroup(
       if (side === "before") {
         anchor = group.events[0];
         if (anchor === undefined) {
-          // 空组：向后找最近非空组的首事件
+ // 空组：向后找最近非空组的首事件
           for (let i = targetIndex + 1; i < groups.length; i++) {
             const first = groups[i].events[0];
             if (first !== undefined) {
@@ -131,7 +131,7 @@ export function eventOrderIntoGroup(
       } else {
         anchor = group.events[group.events.length - 1];
         if (anchor === undefined) {
-          // 空组：向前找最近非空组的末事件
+ // 空组：向前找最近非空组的末事件
           for (let i = targetIndex - 1; i >= 0; i--) {
             const last = groups[i].events[groups[i].events.length - 1];
             if (last !== undefined) {
@@ -146,7 +146,7 @@ export function eventOrderIntoGroup(
   if (anchor !== undefined) {
     return eventDropOrder(allIds, { kind: side, id: anchor.id }, draggedId);
   }
-  // 无任何锚点（空组且前后均无事件 / 防御）：全部事件剔除拖拽项后的首事件前（= 0）或末尾
+ // 无任何锚点（空组且前后均无事件 / 防御）：全部事件剔除拖拽项后的首事件前（= 0）或末尾
   const first = allIds.find((id) => id !== draggedId);
   return first === undefined ? 0 : eventDropOrder(allIds, { kind: "before", id: first }, draggedId);
 }
@@ -159,14 +159,14 @@ export function eventTagsOf(item: EntitySummary): string[] {
   return Array.isArray(tags) ? tags.filter((t): t is string => typeof t === "string") : [];
 }
 
-/** 事件的 description 摘要字段（非字符串防御 → 空串 = 行内不渲染描述区，timeline.md 信息层级）；F6 行内描述展示 */
+/** 事件的 description 摘要字段（非字符串防御 → 空串 = 行内不渲染描述区， 信息层级）；F6 行内描述展示 */
 export function eventDescription(item: EntitySummary): string {
   const desc = (item.summary as Record<string, unknown>).description;
   return typeof desc === "string" ? desc : "";
 }
 
 /**
- * 标签输入建议（F8，timeline.md 标签输入建议节）：
+ * 标签输入建议（F8， 标签输入建议节）：
  * 按输入**最后一段**（逗号/顿号/换行分隔，trim 后）匹配已存在标签：
  * - 最后一段为空（含整串为空/以分隔符结尾）→ 无建议（[]）——只在正在输入新标签时提示
  * - 包含匹配（大小写不敏感）；排除已选标签（前面各段 trim 后已含的）；去重（防御 allTags 重复）
@@ -277,11 +277,11 @@ export function eventFormFromDetail(detail: {
 
 /**
  * 表单 → PUT /entity/event/:id partial patch（C3 编辑对话框与 C4 详情页共用同一稀疏提交语义，
- * timeline.md 详情页字段编辑；G2 修订：仅 description/tags——time_label 已移除）：
+ * 详情页字段编辑；G2 修订：仅 description/tags——time_label 已移除）：
  * - name：trim 后与原名不同才提交
  * - data 两字段：清空语义——表单有值 → 提交 trim 后值；表单空但原值非空 → 提交空值
- *   （description 空串 ""、tags 空数组 []）显式清除；原值本就空 → 不提交。
- *   tags 经 parseTagsInput 收敛为数组后进 nextData
+ * （description 空串 ""、tags 空数组 []）显式清除；原值本就空 → 不提交。
+ * tags 经 parseTagsInput 收敛为数组后进 nextData
  * - nextData 与原 data 逐键 JSON 序列化比对，有变化的键才提交
  * - 全部无变化 → null（「没有变更」提示）
  * 边界：原值空/不存在时空值提交会被判为无变更，天然满足「原值本就空 → 不提交」。
@@ -293,12 +293,12 @@ export function buildEventDetailPatch(
   const patch: { name?: string; data?: Record<string, unknown> } = {};
   if (form.name.trim() !== original.name) patch.name = form.name.trim();
   const nextData: Record<string, unknown> = {};
-  // 清空语义：表单空但原值非空 → 提交空串 "" 显式清除（服务端浅合并可正常写入覆盖）
+ // 清空语义：表单空但原值非空 → 提交空串 "" 显式清除（服务端浅合并可正常写入覆盖）
   if (form.description.trim() !== "" || original.data.description !== undefined) {
     nextData.description = form.description.trim();
   }
   const tags = parseTagsInput(form.tagsInput);
-  // tags 同款：空数组 [] 清除原值（原值本就空 → 不提交）
+ // tags 同款：空数组 [] 清除原值（原值本就空 → 不提交）
   if (tags.length > 0 || original.data.tags !== undefined) nextData.tags = tags;
   const changed: Record<string, unknown> = {};
   for (const key of ["description", "tags"] as const) {

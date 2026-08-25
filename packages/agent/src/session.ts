@@ -1,6 +1,5 @@
 // @whispering233/ai-editor-agent 会话管理（S7.1）
 //
-// 契约来源：doc/design/tasks.md S7.1、doc/design/decisions.md 决策 18（历史重建 / 成对裁剪 /
 // 孤儿半对整对丢弃 / 末条约束）、packages/llm/src/types.ts（LLMMessage 四角色 wire 形态）、
 // packages/db/src/queries/chat.ts（数据层参照——本包**不依赖 db**，仅对齐重组算法语义）。
 //
@@ -32,7 +31,7 @@ export type SessionState = SessionMessage[];
 /**
  * 行内 tool_calls（unknown[]，来自 chat_messages.tool_calls JSON 列）→ wire 形态。
  * 任一调用形态不合法（缺 id / type 非 function / function 字段缺失）即返回 null——
- * 决策 18：缺 id 即孤儿半对，该 assistant 消息与其工具结果**整组丢弃**（由调用方判定）。
+ * 缺 id 即孤儿半对，该 assistant 消息与其工具结果**整组丢弃**（由调用方判定）。
  */
 function toToolCallRequests(raw: unknown[]): LLMToolCallRequest[] | null {
   const out: LLMToolCallRequest[] = [];
@@ -63,8 +62,8 @@ function toToolCallRequests(raw: unknown[]): LLMToolCallRequest[] | null {
 }
 
 /**
- * 收集全部 tool 结果：tool_call_id → content（决策 18 修订：同一 id 多条结果取最先到达者）。
- * 与 db 包 reassembleMessages 的收集口径一致（本包不依赖 db，按文档契约独立实现）。
+ * 收集全部 tool 结果：tool_call_id → content（同一 id 多条结果取最先到达者）。
+ * 与 db 包 reassembleMessages 的收集口径一致（本包不依赖 db，按文档独立实现）。
  */
 function collectToolResults(messages: readonly SessionMessage[]): Map<string, string | null> {
   const toolResults = new Map<string, string | null>();
@@ -82,11 +81,11 @@ interface Block {
 }
 
 /**
- * 把消息序列切成「配对块」（决策 18 成对重组算法）：
+ * 把消息序列切成「配对块」（ 成对重组算法）：
  * - user 消息：独立块
  * - assistant 无 tool_calls：独立块
  * - assistant 带 tool_calls：全部调用有对应结果才成块（assistant + 结果按 tool_calls 顺序）；
- *   任一调用缺结果 / 形态不合法 → 孤儿半对，**整块丢弃**
+ * 任一调用缺结果 / 形态不合法 → 孤儿半对，**整块丢弃**
  * - tool 消息：仅作为其 assistant 块的组成部分；未被任何 assistant 引用的孤儿在此自然丢弃
  * 输出天然无孤儿，是成对裁剪与重建喂回的共同基础。
  */
@@ -104,7 +103,7 @@ function toBlocks(messages: readonly SessionMessage[]): Block[] {
         blocks.push({ messages: [m] });
         continue;
       }
-      // 任一调用缺对应 tool 结果 → 整组丢弃（不部分保留）
+ // 任一调用缺对应 tool 结果 → 整组丢弃（不部分保留）
       if (!calls.every((c) => toolResults.has(c.id))) continue;
       blocks.push({
         messages: [
@@ -118,7 +117,7 @@ function toBlocks(messages: readonly SessionMessage[]): Block[] {
       });
       continue;
     }
-    // role === "tool"：仅作为上面 assistant 块的组成部分；孤儿在此自然丢弃
+ // role === "tool"：仅作为上面 assistant 块的组成部分；孤儿在此自然丢弃
   }
   return blocks;
 }
@@ -131,7 +130,7 @@ export function createSession(): SessionState {
 }
 
 /**
- * 加载历史：持久化行 → 运行时消息（决策 18 成对重组）。
+ * 加载历史：持久化行 → 运行时消息（ 成对重组）。
  * 输入 ChatMessageRow[]（由 server 层经 db 包查询得到），纯内存重组、无 I/O。
  * - 按 created_at 升序稳定排序（同时间戳保持输入序，与 db 查询口径一致）
  * - 孤儿半对整对丢弃（tool_call 已写 tool_result 未写，或反之）
@@ -139,7 +138,7 @@ export function createSession(): SessionState {
  */
 export function loadHistory(rows: ChatMessageRow[]): SessionState {
   const sorted = [...rows].sort((a, b) => a.created_at.localeCompare(b.created_at));
-  // 预收集 tool 结果（决策 18 修订：同一 id 多条结果取最先到达者）
+ // 预收集 tool 结果（同一 id 多条结果取最先到达者）
   const toolResults = new Map<string, string | null>();
   for (const r of sorted) {
     if (r.role === "tool" && r.tool_call_id !== null && !toolResults.has(r.tool_call_id)) {
@@ -155,11 +154,11 @@ export function loadHistory(rows: ChatMessageRow[]): SessionState {
     if (r.role === "assistant") {
       const rawCalls = r.tool_calls;
       if (rawCalls == null || rawCalls.length === 0) {
-        // 普通 assistant（无工具调用）：原样保留
+ // 普通 assistant（无工具调用）：原样保留
         out.push({ role: "assistant", content: r.content });
         continue;
       }
-      // 有 tool_calls：形态必须合法且全部配对，否则孤儿整组丢弃（决策 18）
+ // 有 tool_calls：形态必须合法且全部配对，否则孤儿整组丢弃
       const calls = toToolCallRequests(rawCalls);
       if (calls === null) continue;
       if (!calls.every((c) => toolResults.has(c.id))) continue;
@@ -169,7 +168,7 @@ export function loadHistory(rows: ChatMessageRow[]): SessionState {
       }
       continue;
     }
-    // role === "tool"：仅作为上面 assistant 的结果被引用；孤儿在此自然丢弃
+ // role === "tool"：仅作为上面 assistant 的结果被引用；孤儿在此自然丢弃
   }
   return out;
 }
@@ -180,7 +179,7 @@ export function appendMessage(session: SessionState, message: SessionMessage): S
 }
 
 /**
- * 滑动窗口成对裁剪（决策 18：tool_call 与对应 tool_result **同裁同留**）。
+ * 滑动窗口成对裁剪（tool_call 与对应 tool_result **同裁同留**）。
  * 以「配对块」为单位从尾部保留，最多 maxCount 条：
  * - 窗口边界恰在 tool 消息处时**不拆对**——放不下的块整块丢弃（宁可窗口略小，不拆散配对）
  * - 裁剪前先经 toBlocks 清理孤儿（孤儿半对整对丢弃，不进入窗口）
@@ -190,7 +189,7 @@ export function trimSession(session: SessionState, maxCount: number): SessionSta
   if (maxCount <= 0) return [];
   const blocks = toBlocks(session);
   const kept: SessionMessage[] = [];
-  // 从尾部向前累计；放不下的块整块跳过（同裁同留，不拆对）
+ // 从尾部向前累计；放不下的块整块跳过（同裁同留，不拆对）
   for (let i = blocks.length - 1; i >= 0; i--) {
     const block = blocks[i];
     if (block.messages.length + kept.length > maxCount) continue;
@@ -201,7 +200,7 @@ export function trimSession(session: SessionState, maxCount: number): SessionSta
 }
 
 /**
- * 输出喂回模型的 messages 数组（决策 18 末条约束的最终防御）。
+ * 输出喂回模型的 messages 数组（ 末条约束的最终防御）。
  * 末条**必须**是 user 或 tool 消息——assistant 结尾 DeepSeek 直接拒绝。
  * 修正策略（最简防御）：从尾部丢弃连续的 assistant 消息。tool 消息的配对 assistant
  * 位于其**前方**，丢弃尾部 assistant 不会产生新孤儿；带 tool_calls 的 assistant 若以
@@ -218,7 +217,7 @@ export function buildPayload(session: SessionState): LLMMessage[] {
 }
 
 /**
- * 重试 payload 复用（决策 18 末条约束补充，S7.3 主循环消费）。
+ * 重试 payload 复用（ 末条约束补充，S7.3 主循环消费）。
  * 模型调用失败重试时**必须复用原请求的 messages 数组**——绝不追加失败轮的半条
  * assistant 产物（失败轮未产出完整回复，其内容不入重试序列）。
  * 本函数返回原数组的浅拷贝，防御调用方原地修改；调用方直接传原 payload 亦等效。

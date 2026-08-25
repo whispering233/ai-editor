@@ -1,10 +1,10 @@
 // 变更记录创建表单辅助纯函数与配置（S12.3；S13.3 收紧：变更目标仅实体类型——大纲节点代表的故事
-//   导致实体发生变更，节点结构化信息不应出现在变更记录中，决策 2026-08）
-// 契约：endpoints.md L395-434（POST /delta per-op 必填语义：set→to、update→from+to、add/remove→value；
-//   S13.3 target_type 注释：仅 character/setting/location/hook）、
-//   决策 9 修订（update 的 from 由客户端自动取目标当前 data 值——作者无需手填；data 后续被改 →
-//   compute 时跳过 + conflicts 标注，机制兜底）、
-//   shared ENTITY_DATA_SCHEMAS（字段名编译期断言：client 只消费类型不打包 zod，schema 变更即编译报错防漂移）
+// 导致实体发生变更，节点结构化信息不应出现在变更记录中，-08）
+// （POST /delta per-op 必填语义：set→to、update→from+to、add/remove→value；
+// S13.3 target_type 注释：仅 character/setting/location/hook）、
+// （update 的 from 由客户端自动取目标当前 data 值——作者无需手填；data 后续被改 →
+// compute 时跳过 + conflicts 标注，机制兜底）、
+// shared ENTITY_DATA_SCHEMAS（字段名编译期断言：client 只消费类型不打包 zod，schema 变更即编译报错防漂移）
 import type { DeltaChange, DeltaOp, EntityType } from "@whispering233/ai-editor-shared";
 import { ENTITY_TYPES } from "@whispering233/ai-editor-shared";
 // 类型-only 导入 schema 常量（编译期擦除，不打包 zod；用于断言本地字段清单 = shared schema keys）
@@ -17,14 +17,14 @@ import { targetTypeLabel } from "./delta";
 /**
  * 变更目标类型下拉（S13.3 收紧：仅四类实体——大纲节点不可作为变更目标；历史 outline_node
  * 目标数据保留展示）。
- * **过滤 event（oracle 审查，决策 26）**：ENTITY_TYPES 扩为 5 种后，event（时间轴事件）
- * 不产生 Delta（决策 26：时间轴为结构化数据，变更追踪语义未定义；服务端 delta 端点亦
+ * **过滤 event（oracle 审查）**：ENTITY_TYPES 扩为 5 种后，event（时间轴事件）
+ * 不产生 Delta（时间轴为结构化数据，变更追踪语义未定义；服务端 delta 端点亦
  * 不校验 event 目标）——下拉泄漏会出现「事件」死选项（label 回退原文、字段列表空）。
  */
 export const DELTA_TARGET_TYPE_OPTIONS: ReadonlyArray<{ value: string; label: string }> =
   ENTITY_TYPES.filter(
-    // event（决策 26：编辑事件 data 不产生 Delta）；timepoint（G2：data 恒空无可变更字段）；
-    // reference（决策 36：参考资料素材库，变更追踪语义未定义）均排除
+ // event（编辑事件 data 不产生 Delta）；timepoint（G2：data 恒空无可变更字段）；
+ // reference（参考资料素材库，变更追踪语义未定义）均排除
     (t) => t !== "event" && t !== "timepoint" && t !== "reference",
   ).map((t) => ({
     value: t,
@@ -48,7 +48,7 @@ const ENTITY_DATA_KEYS = {
     "status",
     "custom_fields",
   ] as const satisfies readonly EntityDataKey<"character">[],
-  // 决策 30/31 + K2（2026-08）：setting 字段 = description/tags（分类标签）/rules（规则条款）/custom_fields
+ // + K2（2026-08）：setting 字段 = description/tags（分类标签）/rules（规则条款）/custom_fields
   setting: [
     "description",
     "tags",
@@ -115,7 +115,7 @@ export function isNumericField(scope: string, key: string): boolean {
 export interface DeltaFieldOption {
   key: string;
   label: string;
-  /** 数组字段（op 推断依据） */
+ /** 数组字段（op 推断依据） */
   array: boolean;
 }
 
@@ -146,7 +146,7 @@ export function resolvableFromValue(v: unknown): string | number | null | undefi
 }
 
 /** op 选项与默认值：数组 → [add, remove] 默认 add；标量 → 当前值可作 from 时 [update, set] 默认 update，
- *  否则仅 [set]（update 无旧值可写，避免提交被 400 拒绝） */
+ * 否则仅 [set]（update 无旧值可写，避免提交被 400 拒绝） */
 export function inferOpOptions(args: { array: boolean; currentValue: unknown }): {
   options: DeltaOp[];
   default: DeltaOp;
@@ -161,16 +161,16 @@ export function inferOpOptions(args: { array: boolean; currentValue: unknown }):
 export interface BuildDeltaChangeArgs {
   field: string;
   op: DeltaOp;
-  /** 值输入原文（trim 后非空校验；数字字段解析 Number，NaN 回退字符串） */
+ /** 值输入原文（trim 后非空校验；数字字段解析 Number，NaN 回退字符串） */
   rawValue: string;
   numeric: boolean;
-  /** op=update 用：目标当前值（实体详情 data；自动取 from，决策 9 修订） */
+ /** op=update 用：目标当前值（实体详情 data；自动取 from） */
   currentValue: unknown;
 }
 
 export type BuildDeltaChangeResult = { change: DeltaChange } | { error: string };
 
-/** 构造单条 change（per-op 必填语义对齐 endpoints.md；update 自动填 from——不可解析则报错引导改「设为」） */
+/** 构造单条 change（per-op 必填语义对齐 ；update 自动填 from——不可解析则报错引导改「设为」） */
 export function buildDeltaChange(args: BuildDeltaChangeArgs): BuildDeltaChangeResult {
   const v = args.rawValue.trim();
   if (v === "") return { error: "请填写值" };

@@ -1,55 +1,54 @@
 // 大纲树数据类型：API 形态（camelCase）+ outline.json 存储形态（snake_case）两套
-// 契约来源：doc/api/endpoints.md（OutlineNode/OutlineTree）、doc/database/schema.md（outline.json）
-// 核心约束（决策 19）：严格三层 volume → chapter → scene，无游离节点；
-//   节点携带 updated_at 版本戳（决策 19），顶层携带 schema_version（决策 13 修订）。
+// 核心约束：严格三层 volume → chapter → scene，无游离节点；
+// 节点携带 updated_at 版本戳，顶层携带 schema_version。
 
 /** 大纲节点类型（含树根 "root"） */
 export type OutlineNodeType = "root" | "volume" | "chapter" | "scene";
 
-/** 节点 metadata 统计（仅 with_metadata=true 时返回，跨 outline.json × data.db 联查，endpoints.md） */
+/** 节点 metadata 统计（仅 with_metadata=true 时返回，跨 outline.json × data.db 联查，） */
 export interface OutlineNodeMetadata {
-  /** 关联的伏笔数 */
+ /** 关联的伏笔数 */
   hookCount?: number;
-  /** 关联角色数 */
+ /** 关联角色数 */
   charCount?: number;
-  /** 此节点触发的 Delta 数 */
+ /** 此节点触发的 Delta 数 */
   deltaCount?: number;
 }
 
-/** 大纲节点公共字段（API 形态 camelCase，endpoints.md） */
+/** 大纲节点公共字段（API 形态 camelCase，） */
 export interface OutlineNodeBase {
   id: string; // 如 "vol-1", "ch-3", "sc-15"（前缀 + nanoid）
   title: string;
-  /** 可选描述 */
+ /** 可选描述 */
   summary?: string;
-  /**
-   * 节点结构化信息（决策 23，麦基《故事》字段集）：按层级 schema 校验
-   * （scene：goal/conflict_levels/value_from/value_to；chapter：reversal/climax_scene；
-   * volume：climax_scene/inciting_scene）；嵌套字段原样透传（snake_case），无 data 时省略
-   */
+ /**
+ * 节点结构化信息（麦基《故事》字段集）：按层级 schema 校验
+ * （scene：goal/conflict_levels/value_from/value_to；chapter：reversal/climax_scene；
+ * volume：climax_scene/inciting_scene）；嵌套字段原样透传（snake_case），无 data 时省略
+ */
   data?: Record<string, unknown>;
-  /** 节点版本戳（决策 19，提案快照比对） */
+ /** 节点版本戳（提案快照比对） */
   updatedAt: string;
-  /** 软删标记（决策 12）：常规查询默认过滤软删节点；字段供回收站等管理视图与映射完整性（endpoints.md 契约未列） */
+ /** 软删标记：常规查询默认过滤软删节点；字段供回收站等管理视图与映射完整性（ 未列） */
   deleted?: boolean;
-  /** 软删时间（决策 12） */
+ /** 软删时间 */
   deletedAt?: string;
   metadata?: OutlineNodeMetadata;
 }
 
-/** 卷节点：children 只能是章（严格三层，决策 19） */
+/** 卷节点：children 只能是章（严格三层） */
 export interface OutlineVolume extends OutlineNodeBase {
   type: "volume";
   children?: OutlineChapter[];
 }
 
-/** 章节点：children 只能是场景（严格三层，决策 19） */
+/** 章节点：children 只能是场景（严格三层） */
 export interface OutlineChapter extends OutlineNodeBase {
   type: "chapter";
   children?: OutlineScene[];
 }
 
-/** 场景节点：叶子，无 children（严格三层，决策 19） */
+/** 场景节点：叶子，无 children（严格三层） */
 export interface OutlineScene extends OutlineNodeBase {
   type: "scene";
 }
@@ -57,33 +56,33 @@ export interface OutlineScene extends OutlineNodeBase {
 /** 大纲节点（判别联合：type 区分层级，类型层面强制严格三层） */
 export type OutlineNode = OutlineVolume | OutlineChapter | OutlineScene;
 
-/** 完整大纲树（GET /api/v1/outline 响应，endpoints.md） */
+/** 完整大纲树（GET /api/v1/outline 响应，） */
 export interface OutlineTree {
   id: "root";
   type: "root";
-  /** outline.json 顶层 schema_version（决策 13） */
+ /** outline.json 顶层 schema_version */
   schemaVersion: number;
-  /** 根下可挂卷或直挂章（决策 19：chapter → volume 或 root）；卷下只有章、章下只有场景 */
+ /** 根下可挂卷或直挂章（chapter → volume 或 root）；卷下只有章、章下只有场景 */
   children: (OutlineVolume | OutlineChapter)[];
 }
 
-// ============ outline.json 存储形态（snake_case，schema.md） ============
+// ============ outline.json 存储形态（snake_case，） ============
 
-/** outline.json 节点公共字段（内部 snake_case；软删字段见决策 12） */
+/** outline.json 节点公共字段（内部 snake_case；软删字段见） */
 export interface OutlineFileNodeBase {
   id: string;
   title: string;
   summary?: string;
-  /**
-   * 节点结构化信息（决策 23）：与实体 data 同构（Record<string, unknown>，默认省略），
-   * 按层级 schema（OUTLINE_NODE_DATA_SCHEMAS）校验；编辑 data 不自动生成 Delta（决策 9 修订语义）
-   */
+ /**
+ * 节点结构化信息：与实体 data 同构（Record<string, unknown>，默认省略），
+ * 按层级 schema（OUTLINE_NODE_DATA_SCHEMAS）校验；编辑 data 不自动生成 Delta（语义）
+ */
   data?: Record<string, unknown>;
-  /** 节点版本戳（决策 19），任何字段变更由服务端原子写时统一更新 */
+ /** 节点版本戳，任何字段变更由服务端原子写时统一更新 */
   updated_at: string;
-  /** 软删标记（决策 12）：默认 false，省略即未删 */
+ /** 软删标记：默认 false，省略即未删 */
   deleted?: boolean;
-  /** 软删时间（决策 12）：支撑回收站排序与定期清理 */
+ /** 软删时间：支撑回收站排序与定期清理 */
   deleted_at?: string;
 }
 
@@ -107,12 +106,12 @@ export interface OutlineFileScene extends OutlineFileNodeBase {
 /** outline.json 节点（存储形态判别联合） */
 export type OutlineFileNode = OutlineFileVolume | OutlineFileChapter | OutlineFileScene;
 
-/** outline.json 顶层（schema.md 契约） */
+/** outline.json 顶层（ ） */
 export interface OutlineFileTree {
   id: "root";
   type: "root";
-  /** 与 project.json 的 schema_version 同步写入（决策 13 修订） */
+ /** 与 project.json 的 schema_version 同步写入 */
   schema_version: number;
-  /** 根下可挂卷或直挂章（决策 19：chapter → volume 或 root） */
+ /** 根下可挂卷或直挂章（chapter → volume 或 root） */
   children: (OutlineFileVolume | OutlineFileChapter)[];
 }

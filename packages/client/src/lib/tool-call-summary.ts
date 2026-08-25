@@ -1,11 +1,11 @@
-// 工具调用摘要渲染纯函数（决策 47，批次十四）：
+// 工具调用摘要渲染纯函数（批次十四）：
 // 把工具参数 args 渲染为人类可读摘要行——id 字段经 names/resolve 解析为名称（不暴露裸 id），
-// 其余字段显示 label: value。契约来源：doc/design/decisions.md 决策 47、
-//   doc/ui/pages/chat.md「工具调用记录行」、packages/shared/src/types/tool.ts 工具参数 schema。
+// 其余字段显示 label: value。 、
+// 「工具调用记录行」、packages/shared/src/types/tool.ts 工具参数 schema。
 // 设计要点：
 // - 按工具名定义「行首动词短语 + 有序字段显示定义」（TOOL_DISPLAY_SPECS）——未知工具返回 null，
-//   由调用方回退原始 JSON（不丢信息）
-// - id 字段（id: true）：解析失败/为 null → 该字段省略（决策 47：解析失败字段省略不显示）
+// 由调用方回退原始 JSON（不丢信息）
+// - id 字段（id: true）：解析失败/为 null → 该字段省略（解析失败字段省略不显示）
 // - 对象值（patches/data/changes 等）→ 键名列表（避免整段 JSON 刷屏）
 import type { ResolvedNames } from "./api";
 
@@ -21,9 +21,9 @@ interface ToolDisplaySpec {
   fields: Record<string, FieldDisplaySpec>;
 }
 
-/** 工具 → 显示定义（key 与 tools.md/registry 工具名一致；未知工具 → 无定义 → 回退 JSON） */
+/** 工具 → 显示定义（key 与 /registry 工具名一致；未知工具 → 无定义 → 回退 JSON） */
 const TOOL_DISPLAY_SPECS: Record<string, ToolDisplaySpec> = {
-  // —— 查询类（tools.md「查询类（自动）」） ——
+ // —— 查询类（「查询类（自动）」） ——
   get_entity: {
     lead: "查询实体",
     fields: { id: { label: "实体", id: true }, type: { label: "类型" } },
@@ -53,7 +53,7 @@ const TOOL_DISPLAY_SPECS: Record<string, ToolDisplaySpec> = {
     lead: "搜索参考资料",
     fields: { query: { label: "关键词" }, type: { label: "分类" }, tags: { label: "标签" } },
   },
-  // —— 分析类（tools.md「分析类（自动）」） ——
+ // —— 分析类（「分析类（自动）」） ——
   analyze_consistency: { lead: "一致性分析", fields: { entity_id: { label: "实体", id: true } } },
   detect_conflicts: { lead: "跨实体矛盾检测", fields: {} },
   trace_plot_paths: {
@@ -73,7 +73,7 @@ const TOOL_DISPLAY_SPECS: Record<string, ToolDisplaySpec> = {
     fields: { outline_node_id: { label: "节点", id: true } },
   },
   detect_hook_conflicts: { lead: "伏笔矛盾检测", fields: {} },
-  // —— 提案类（tools.md「提案类（需确认）」；preview 的 args 走同一摘要） ——
+ // —— 提案类（「提案类（需确认）」；preview 的 args 走同一摘要） ——
   propose_create_entity: {
     lead: "新建实体",
     fields: { name: { label: "名称" }, type: { label: "类型" }, data: { label: "字段" } },
@@ -130,7 +130,7 @@ const TOOL_DISPLAY_SPECS: Record<string, ToolDisplaySpec> = {
     fields: { hook_id: { label: "伏笔", id: true }, node_id: { label: "节点", id: true } },
   },
   propose_abandon_hook: { lead: "废弃伏笔", fields: { hook_id: { label: "伏笔", id: true } } },
-  // 重排时间点的可读描述由 preview.changes 承载（服务端已解析名称，tools proposal/reorder-timepoints.ts）
+ // 重排时间点的可读描述由 preview.changes 承载（服务端已解析名称，tools proposal/reorder-timepoints.ts）
   propose_reorder_timepoints: { lead: "重排时间点", fields: {} },
   propose_create_reference: {
     lead: "新建参考资料",
@@ -142,7 +142,7 @@ const TOOL_DISPLAY_SPECS: Record<string, ToolDisplaySpec> = {
 export function formatValue(v: unknown): string {
   if (typeof v === "string") return v;
   if (Array.isArray(v)) {
-    // 对象数组（如 propose_add_delta 的 changes: DeltaChange[]）→ 项数（避免 [object Object] 刷屏）
+ // 对象数组（如 propose_add_delta 的 changes: DeltaChange[]）→ 项数（避免 [object Object] 刷屏）
     if (v.length > 0 && typeof v[0] === "object" && v[0] !== null) return `${v.length} 项`;
     return v.map((x) => String(x)).join("、");
   }
@@ -150,7 +150,7 @@ export function formatValue(v: unknown): string {
   return String(v);
 }
 
-/** 单字段渲染：id 字段解析失败 → null（省略该字段，决策 47）；无值 → null */
+/** 单字段渲染：id 字段解析失败 → null（省略该字段）；无值 → null */
 function renderField(
   spec: FieldDisplaySpec,
   value: unknown,
@@ -167,7 +167,7 @@ function renderField(
 }
 
 /**
- * 工具调用摘要（决策 47）：返回人类可读摘要行数组。
+ * 工具调用摘要：返回人类可读摘要行数组。
  * - 未知工具（无显示定义）→ null（调用方回退原始 JSON）
  * - 首行 = `{动词短语}：{主参}`，其余字段逐行
  * - id 字段解析失败 → 省略；全部字段省略 → 仅动词短语行
@@ -182,8 +182,8 @@ export function summarizeToolCall(
   const spec = TOOL_DISPLAY_SPECS[tool];
   if (spec === undefined) return null;
   if (typeof args !== "object" || args === null) return [spec.lead];
-  // 按 args 字段顺序收集可渲染行（id 字段优先作主参——LLM 生成的字段顺序不可控，
-  // type 等前置字段不应抢走「查询实体：实体「名称」」的主位）
+ // 按 args 字段顺序收集可渲染行（id 字段优先作主参——LLM 生成的字段顺序不可控，
+ // type 等前置字段不应抢走「查询实体：实体「名称」」的主位）
   const rows: Array<{ isId: boolean; text: string }> = [];
   for (const [key, value] of Object.entries(args)) {
     const field = spec.fields[key];
@@ -214,7 +214,7 @@ export function collectIdCandidates(args: unknown): string[] {
 }
 
 /**
- * 提案卡 preview 摘要化（决策 47）：不再 JSON dump。
+ * 提案卡 preview 摘要化：不再 JSON dump。
  * 渲染顺序：summary（回退形态 { type, summary, args } 只显示摘要）→ changes（服务端已解析名称的
  * 字符串数组，如 propose_reorder_timepoints 的「「黄昏」从第 3 位移到第 2 位」；对象项按 id 解析）
  * → args（走 summarizeToolCall）→ 其余字段键值行。无可渲染内容 → null。

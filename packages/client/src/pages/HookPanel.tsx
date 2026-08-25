@@ -1,17 +1,17 @@
 // 伏笔面板页（S9.1；替换 T7.1 占位壳）
-// 路由：#/hooks（KNOWN_ROUTE_SEGMENTS + TabBar「伏笔」已就绪，layout.md §2.2）
+// 路由：#/hooks（KNOWN_ROUTE_SEGMENTS + TabBar「伏笔」已就绪，）
 // 数据：GET /api/v1/entity/hook（列表，EntitySummary：summary.status/summary.payoff_timing）+
-//   GET /api/v1/relation?source_type=hook&relation_type=depends_on&depth=1（全量依赖边，行内「依赖:」展示）；
-//   详情 GET /api/v1/entity/hook/:id（relations：plants/advances/resolves/depends_on/involves）
-// 契约：doc/ui/pages/hook-panel.md（布局线框/信息层级/关键交互/状态）
+// GET /api/v1/relation?source_type=hook&relation_type=depends_on&depth=1（全量依赖边，行内「依赖:」展示）；
+// 详情 GET /api/v1/entity/hook/:id（relations：plants/advances/resolves/depends_on/involves）
+// （布局线框/信息层级/关键交互/状态）
 // MVP 简化（backlog #13）：不展示 _health 指标与章节序（埋点章/预计回收章）——位置展示为详情
-//   relations 的节点 id（plants source_id / resolves / data.expected_resolve_node_id）
-// 关键交互（hook-panel.md）：
-//  - 新建：POST /entity/hook + 有埋点节点再 POST /relation（outline_node → hook，plants）
-//  - 推进/回收/废弃：复合写确认面板（提案式）——runLifecycleWrite / runAbandonWrite（lib/hook-panel），
-//    确认前展示「将写入」内容；回收面板在存在依赖者时额外提示
-//  - 行操作按钮全部展开（H3）：详情/推进/回收/废弃/编辑/移入回收站，禁止收进 ⋯ 菜单
-//  - 依赖链：行内「依赖: …」可点击展开递归链（expandDependencyChain：深度 3 + 环守卫）
+// relations 的节点 id（plants source_id / resolves / data.expected_resolve_node_id）
+// 关键交互（）：
+// - 新建：POST /entity/hook + 有埋点节点再 POST /relation（outline_node → hook，plants）
+// - 推进/回收/废弃：复合写确认面板（提案式）——runLifecycleWrite / runAbandonWrite（lib/hook-panel），
+// 确认前展示「将写入」内容；回收面板在存在依赖者时额外提示
+// - 行操作按钮全部展开（H3）：详情/推进/回收/废弃/编辑/移入回收站，禁止收进 ⋯ 菜单
+// - 依赖链：行内「依赖: …」可点击展开递归链（expandDependencyChain：深度 3 + 环守卫）
 import { useEffect, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { formatTimestamp, HOOK_CATEGORIES } from "@whispering233/ai-editor-shared";
@@ -77,7 +77,7 @@ const LIFECYCLE_LABEL: Record<HookLifecycleKind, string> = {
   abandon: "废弃",
 };
 
-/** 终态判定（resolved/abandoned 为生命周期终态——hooks.md；推进/回收/废弃入口禁用） */
+/** 终态判定（resolved/abandoned 为生命周期终态——；推进/回收/废弃入口禁用） */
 function isTerminal(status: unknown): boolean {
   return status === "resolved" || status === "abandoned";
 }
@@ -99,19 +99,19 @@ export default function HookPanel() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
-  // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉列表 + 依赖边
-  // （AI 可能新建/推进/回收伏笔；ref 守卫防首帧重复拉）
+ // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉列表 + 依赖边
+ // （AI 可能新建/推进/回收伏笔；ref 守卫防首帧重复拉）
   useDataRefresh(() => setReloadTick((t) => t + 1));
-  /** 全量 depends_on 边（GET /relation 一次拉全；行内「依赖:」与依赖者计数用；失败不阻塞列表） */
+ /** 全量 depends_on 边（GET /relation 一次拉全；行内「依赖:」与依赖者计数用；失败不阻塞列表） */
   const [depEdges, setDepEdges] = useState<RelationSummaryItem[]>([]);
   const [depEdgesFailed, setDepEdgesFailed] = useState(false);
 
-  // 详情对话框（relations 全览）
+ // 详情对话框（relations 全览）
   const [detailTarget, setDetailTarget] = useState<EntityDetailRes | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
-  // 复合写确认面板（推进/回收/废弃）
+ // 复合写确认面板（推进/回收/废弃）
   const [lifecycleTarget, setLifecycleTarget] = useState<EntityDetailRes | null>(null);
   const [lifecycleKind, setLifecycleKind] = useState<HookLifecycleKind>("advance");
   const [lifecycleNodeId, setLifecycleNodeId] = useState("");
@@ -119,13 +119,13 @@ export default function HookPanel() {
   const [lifecycleError, setLifecycleError] = useState<string | null>(null);
   const [lifecycleSubmitting, setLifecycleSubmitting] = useState(false);
 
-  // 编辑对话框（data 表单，同 EntityDetail）
+ // 编辑对话框（data 表单，同 EntityDetail）
   const [editTarget, setEditTarget] = useState<EntityDetailRes | null>(null);
   const [editForm, setEditForm] = useState<Record<string, unknown> | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
   const [editSaving, setEditSaving] = useState(false);
 
-  // 新建对话框
+ // 新建对话框
   const [createOpen, setCreateOpen] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createData, setCreateData] = useState<Record<string, unknown>>({});
@@ -133,7 +133,7 @@ export default function HookPanel() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [createSubmitting, setCreateSubmitting] = useState(false);
 
-  // 依赖链展开（行内「依赖: …」点击）
+ // 依赖链展开（行内「依赖: …」点击）
   const [chains, setChains] = useState<Record<string, ChainState>>({});
 
   const config = useProjectStore((s) => s.config);
@@ -141,15 +141,15 @@ export default function HookPanel() {
   const nodeOptions = flattenTree(outline?.children ?? []);
   const groups: HookGroups | null = items === null ? null : groupHooksByStatus(items);
 
-  // 列表加载（reloadTick 驱动重试/刷新；卸载或重载丢弃过期响应）
+ // 列表加载（reloadTick 驱动重试/刷新；卸载或重载丢弃过期响应）
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
     setDepEdgesFailed(false);
-    // 重载后旧依赖链状态失效（伏笔可能已删除/关系变化）——清空避免残留展开
+ // 重载后旧依赖链状态失效（伏笔可能已删除/关系变化）——清空避免残留展开
     setChains({});
-    // 列表 + 全量依赖边并行（互不依赖；依赖边失败仅降级隐藏「依赖:」列）
+ // 列表 + 全量依赖边并行（互不依赖；依赖边失败仅降级隐藏「依赖:」列）
     void listEntities("hook", {})
       .then((res) => {
         if (!cancelled) setItems(res.items);
@@ -175,16 +175,16 @@ export default function HookPanel() {
     };
   }, [reloadTick]);
 
-  // 大纲未加载时兜底拉取（新建/面板节点选择器依赖；项目打开时已加载，防御直达路由场景）
+ // 大纲未加载时兜底拉取（新建/面板节点选择器依赖；项目打开时已加载，防御直达路由场景）
   useEffect(() => {
     if (useProjectStore.getState().outline === null && useProjectStore.getState().config !== null) {
       void useProjectStore.getState().loadOutline();
     }
   }, []);
 
-  // ============ 详情 ============
+ // ============ 详情 ============
 
-  /** 打开详情（GET 详情；relations 全览） */
+ /** 打开详情（GET 详情；relations 全览） */
   async function openDetail(hook: EntitySummary) {
     setDetailTarget(null);
     setDetailLoading(true);
@@ -198,16 +198,16 @@ export default function HookPanel() {
     }
   }
 
-  // ============ 推进/回收/废弃（复合写确认面板） ============
+ // ============ 推进/回收/废弃（复合写确认面板） ============
 
-  /** 打开复合写面板：先拉详情（delta 的 from = 当前 data.status，决策 9 修订自动取） */
+ /** 打开复合写面板：先拉详情（delta 的 from = 当前 data.status，自动取） */
   async function openLifecycle(kind: HookLifecycleKind, hook: EntitySummary) {
     setLifecycleTarget(null);
     setLifecycleError(null);
     setLifecycleDesc("");
     try {
       const detail = await getEntityDetail("hook", hook.id);
-      // 默认节点：current_position（决策 21 锚点口径；须在树中存在且未软删）
+ // 默认节点：current_position（ 锚点口径；须在树中存在且未软删）
       const cp = useProjectStore.getState().config?.currentPosition;
       const defaultNode =
         cp !== null && cp !== undefined && cp !== "" && nodeExists(outline, cp) ? cp : "";
@@ -219,7 +219,7 @@ export default function HookPanel() {
     }
   }
 
-  /** 复合写确认：按动作走 runLifecycleWrite / runAbandonWrite → toast → 刷新 */
+ /** 复合写确认：按动作走 runLifecycleWrite / runAbandonWrite → toast → 刷新 */
   async function handleLifecycleConfirm() {
     const detail = lifecycleTarget;
     if (!detail || lifecycleSubmitting) return;
@@ -228,7 +228,7 @@ export default function HookPanel() {
     setLifecycleError(null);
     try {
       if (kind === "abandon") {
-        // 废弃锚点：current_position 优先，退化树末节点（anchorNodeForAbandon，同 executor 语义）
+ // 废弃锚点：current_position 优先，退化树末节点（anchorNodeForAbandon，同 executor 语义）
         const anchor = anchorNodeForAbandon(config, outline);
         if (anchor === null) {
           setLifecycleError("大纲为空，无法记录废弃变更");
@@ -263,9 +263,9 @@ export default function HookPanel() {
     }
   }
 
-  // ============ 编辑（data 表单） ============
+ // ============ 编辑（data 表单） ============
 
-  /** 打开编辑对话框：拉详情 → 表单初始化为 data 副本 */
+ /** 打开编辑对话框：拉详情 → 表单初始化为 data 副本 */
   async function openEdit(hook: EntitySummary) {
     setEditTarget(null);
     setEditError(null);
@@ -278,7 +278,7 @@ export default function HookPanel() {
     }
   }
 
-  /** 编辑保存：diffData 只提交变更字段（PUT partial 浅合并） */
+ /** 编辑保存：diffData 只提交变更字段（PUT partial 浅合并） */
   async function handleEditSave() {
     if (!editTarget || !editForm || editSaving) return;
     const changed = diffData(editTarget.data, editForm);
@@ -301,9 +301,9 @@ export default function HookPanel() {
     }
   }
 
-  // ============ 新建 ============
+ // ============ 新建 ============
 
-  /** 新建提交：POST /entity/hook → 有埋点节点再 POST /relation（plants）→ toast + 刷新 */
+ /** 新建提交：POST /entity/hook → 有埋点节点再 POST /relation（plants）→ toast + 刷新 */
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
     const name = createName.trim();
@@ -315,8 +315,8 @@ export default function HookPanel() {
     setCreateError(null);
     try {
       const res = await createEntity("hook", { name, data: createData });
-      // 有埋点节点才建 plants 关系（hook-panel.md 新建交互）；新伏笔 id 必不存在同三元组——
-      // 失败（如节点已软删 400）不阻塞创建：提示后刷新，可后续在详情补关联
+ // 有埋点节点才建 plants 关系（ 新建交互）；新伏笔 id 必不存在同三元组——
+ // 失败（如节点已软删 400）不阻塞创建：提示后刷新，可后续在详情补关联
       if (createPlantNodeId !== "") {
         try {
           await createRelation(buildPlantRelationBody(res.id, createPlantNodeId));
@@ -345,9 +345,9 @@ export default function HookPanel() {
     }
   }
 
-  // ============ 软删 ============
+ // ============ 软删 ============
 
-  /** 软删直接执行（H2：不再弹二次确认）：DELETE → toast（级联计数）→ 刷新 */
+ /** 软删直接执行（H2：不再弹二次确认）：DELETE → toast（级联计数）→ 刷新 */
   async function handleDelete(hook: EntitySummary) {
     try {
       const res = await deleteEntity("hook", hook.id);
@@ -367,13 +367,13 @@ export default function HookPanel() {
     }
   }
 
-  // ============ 依赖链展开 ============
+ // ============ 依赖链展开 ============
 
-  /**
-   * 行内「依赖: …」点击展开/收起递归链：
-   * BFS 按需 fetch 各伏笔详情累积 depends_on 边（层级 ≤ 展示深度），环守卫防死循环；
-   * 名称优先详情 name，未 fetch 到的层级用关系的 targetName 兜底
-   */
+ /**
+ * 行内「依赖: …」点击展开/收起递归链：
+ * BFS 按需 fetch 各伏笔详情累积 depends_on 边（层级 ≤ 展示深度），环守卫防死循环；
+ * 名称优先详情 name，未 fetch 到的层级用关系的 targetName 兜底
+ */
   async function toggleChain(hook: EntitySummary) {
     if (chains[hook.id]) {
       setChains((c) => {
@@ -399,7 +399,7 @@ export default function HookPanel() {
           (r) => r.sourceId === id,
         );
         depsOf.set(id, deps);
-        // 展示深度内的节点才需要取下一层边；更深层名称已由边 targetName 兜底
+ // 展示深度内的节点才需要取下一层边；更深层名称已由边 targetName 兜底
         if (depth >= 2) continue;
         for (const d of deps) {
           if (!names.has(d.targetId)) names.set(d.targetId, d.targetName ?? d.targetId);
@@ -413,11 +413,11 @@ export default function HookPanel() {
     }
   }
 
-  // ============ 渲染 ============
+ // ============ 渲染 ============
 
   return (
     <section>
-      {/* header：标题 + 新建入口（hook-panel.md 线框） */}
+      {/* header：标题 + 新建入口（ 线框） */}
       <div className="mb-4 flex items-center gap-3">
         <h1 className="text-xl font-semibold">伏笔池</h1>
         <Button type="button" className="ml-auto" onClick={() => setCreateOpen(true)}>
@@ -442,7 +442,7 @@ export default function HookPanel() {
         </div>
       )}
 
-      {/* 加载骨架（分组骨架——hook-panel.md 状态） */}
+      {/* 加载骨架（分组骨架—— 状态） */}
       {loading && groups === null && error === null && (
         <div className="space-y-4">
           {Array.from({ length: 3 }, (_, gi) => (
@@ -463,7 +463,7 @@ export default function HookPanel() {
         </div>
       )}
 
-      {/* 空态（hook-panel.md 原文） */}
+      {/* 空态（ 原文） */}
       {!loading && groups !== null && items?.length === 0 && (
         <EmptyState
           action={
@@ -476,7 +476,7 @@ export default function HookPanel() {
         </EmptyState>
       )}
 
-      {/* 分组列表（活跃/已回收/已废弃——hook-panel.md 线框） */}
+      {/* 分组列表（活跃/已回收/已废弃—— 线框） */}
       {groups !== null && items && items.length > 0 && (
         <div className="space-y-4">
           <HookGroupSection
@@ -524,7 +524,7 @@ export default function HookPanel() {
         </div>
       )}
 
-      {/* 新建伏笔对话框：name + data 表单 + 埋点节点选择（hook-panel.md 新建交互） */}
+      {/* 新建伏笔对话框：name + data 表单 + 埋点节点选择（ 新建交互） */}
       <Dialog open={createOpen} onOpenChange={(v) => !v && setCreateOpen(false)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -735,7 +735,7 @@ function HookGroupSection({
   onLifecycle: (kind: HookLifecycleKind, hook: EntitySummary) => void;
   onEdit: (hook: EntitySummary) => void;
   onDelete: (hook: EntitySummary) => void;
-  /** 建立关联成功后的数据刷新（页面 reloadTick+1） */
+ /** 建立关联成功后的数据刷新（页面 reloadTick+1） */
   onRelationCreated: () => void;
 }) {
   return (
@@ -755,8 +755,8 @@ function HookGroupSection({
             const chain = chains[hook.id];
             const category = typeof hook.summary.category === "string" ? hook.summary.category : "";
             return (
-              // 行级右键菜单（决策 40）：注入会话上下文（focus_entity_type=hook）+ 建立关联
-              // （源端点按行实体类型预填）；操作按钮全部展开（H3）不受影响
+ // 行级右键菜单：注入会话上下文（focus_entity_type=hook）+ 建立关联
+ // （源端点按行实体类型预填）；操作按钮全部展开（H3）不受影响
               <RowContextMenu
                 key={hook.id}
                 focus={{ focus_entity_type: "hook", focus_entity_id: hook.id }}
@@ -774,7 +774,7 @@ function HookGroupSection({
                     </span>
                   )}
                   {/* 操作按钮全部展开（H3：禁止收进 ⋯ 二级展开；图标 + title/aria-label）；
-                      决策 40：AskAiButton 已移除——右键菜单替代 */}
+                      AskAiButton 已移除——右键菜单替代 */}
                   <span className="ml-auto flex shrink-0 items-center gap-0.5">
                     <Button
                       variant="ghost"
@@ -958,7 +958,7 @@ function RelationBlock({ title, items }: { title: string; items: string[] }) {
 
 // ============ 表单控件 ============
 
-/** 新建对话框的 data 字段配置（不含 status——创建即埋设，决策 21；不含 expected_resolve_node_id 之外的引用） */
+/** 新建对话框的 data 字段配置（不含 status——创建即埋设，；不含 expected_resolve_node_id 之外的引用） */
 const CREATE_DATA_FIELDS: DetailFieldConfig[] = [
   { key: "category", label: "类别", control: "text" },
   { key: "expected_payoff", label: "预期回收", control: "textarea" },

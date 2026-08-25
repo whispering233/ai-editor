@@ -1,9 +1,9 @@
 // 书架封面占位色相派生（S1.6）：书名 → 0-360 色相，同书同色、稳定可测
-// 设计依据：doc/ui/pages/dashboard.md「封面占位：渐变底色块 + 书名首字，色相由书名 hash 稳定派生
-//   （同书同色、稳定），无任何数据依赖」——纯前端派生，不需要后端提供封面图字段
+// 设计依据：「封面占位：渐变底色块 + 书名首字，色相由书名 hash 稳定派生
+// （同书同色、稳定），无任何数据依赖」——纯前端派生，不需要后端提供封面图字段
 // 实现：djb2 字符串 hash → 无符号 32 位 → 对 360 取模（JS 取模对负数结果可能为负，先 >>> 0 归正）
 // 保留理由（U4，oracle 审核 M2）：书架卡片网格已随 U4 移入左栏树，本模块暂无生产引用；
-//   保留供未来「封面图/卡片形态回归」（dashboard.md 未来扩展：卡片副行、真实封面图）复用，测试继续覆盖
+// 保留供未来「封面图/卡片形态回归」（ 未来扩展：卡片副行、真实封面图）复用，测试继续覆盖
 import type { CSSProperties } from "react";
 
 /**
@@ -13,8 +13,8 @@ import type { CSSProperties } from "react";
 export function bookCoverHue(name: string): number {
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
-    // 31 倍变体：(hash << 5) - hash = 32h - h = 31h，即 hash * 31 + char（非标准 djb2 的 33 倍）；
-    // >>> 0 保持无符号 32 位（避免溢出后取模出负数）
+ // 31 倍变体：(hash << 5) - hash = 32h - h = 31h，即 hash * 31 + char（非标准 djb2 的 33 倍）；
+ // >>> 0 保持无符号 32 位（避免溢出后取模出负数）
     hash = ((hash << 5) - hash + name.charCodeAt(i)) >>> 0;
   }
   return hash % 360;

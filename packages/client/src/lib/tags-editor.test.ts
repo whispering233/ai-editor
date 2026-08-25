@@ -11,7 +11,7 @@ describe("enterBehavior（标签行内回车行为决策——M1「输入后回�
   it("末行且当前值非空：追加空行并聚焦新行", () => {
     expect(enterBehavior(["a", "b"], 1)).toEqual({ append: true, focusIndex: 2 });
     expect(enterBehavior(["规则一"], 0)).toEqual({ append: true, focusIndex: 1 });
-    // 纯空格视为空值（trim 判定）——不追加
+ // 纯空格视为空值（trim 判定）——不追加
     expect(enterBehavior(["a", "   "], 1)).toBeNull();
   });
 

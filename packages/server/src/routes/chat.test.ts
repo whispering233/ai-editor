@@ -1,13 +1,13 @@
 // 对话历史路由测试（U3 切片 1 + S7.6）：GET /api/v1/chat/sessions 会话列表、
-//   GET /api/v1/chat/sessions/:id/messages 消息历史、POST /api/v1/chat（POST + SSE 对话端点）
+// GET /api/v1/chat/sessions/:id/messages 消息历史、POST /api/v1/chat（POST + SSE 对话端点）
 // U3 覆盖：项目隔离（proj-a 消息不出现在 proj-b）、空项目空数组、created_at 升序、
-//   tool/assistant 消息工具字段（toolCallId/toolCalls）、lastMessage 截断（50 字符）、
-//   会话倒序、无当前项目 409、跨项目取消息空数组（不泄露存在性）
+// tool/assistant 消息工具字段（toolCallId/toolCalls）、lastMessage 截断（50 字符）、
+// 会话倒序、无当前项目 409、跨项目取消息空数组（不泄露存在性）
 // S7.6 覆盖：请求校验（400/409 开流前 JSON）、事件序列（text→tool_call→tool_result→proposal→
-//   text→done）、落库配对（user/assistant/tool + tool_calls/tool_call_id）、心跳 ping、
-//   断开全链路取消（produce signal abort + 未确认提案作废，决策 16 B2 取舍 b）、
-//   会话重建（session_id 续聊：历史喂回 + 新消息落库 + done 回显）、新建会话 sess_ 前缀、
-//   模型最终失败 error 事件、zod→JSON Schema 转换（32 工具全量 + $schema 剥离）
+// text→done）、落库配对（user/assistant/tool + tool_calls/tool_call_id）、心跳 ping、
+// 断开全链路取消（produce signal abort + 未确认提案作废， B2 取舍 b）、
+// 会话重建（session_id 续聊：历史喂回 + 新消息落库 + done 回显）、新建会话 sess_ 前缀、
+// 模型最终失败 error 事件、zod→JSON Schema 转换（32 工具全量 + $schema 剥离）
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -87,7 +87,7 @@ function seedMessage(
   });
 }
 
-/** 构造一条最小 Proposal（S7.6 测试预置提案仓用；决策 14 结构） */
+/** 构造一条最小 Proposal（S7.6 测试预置提案仓用； 结构） */
 function seedProposal(project: ProjectContext, proposalId = "prop_seed"): Proposal {
   return {
     proposal_id: proposalId,
@@ -134,7 +134,7 @@ function parseSseFrame(raw: string): SseFrame | null {
   try {
     data = JSON.parse(text);
   } catch {
-    // 保留原文（非 JSON data 属异常流，测试中不应出现）
+ // 保留原文（非 JSON data 属异常流，测试中不应出现）
   }
   return { event, data };
 }
@@ -184,8 +184,8 @@ beforeEach(() => {
   tmpRoot = mkdtempSync(join(tmpdir(), "ai-editor-chat-"));
   setCurrentProject(null);
   defaultProposalStore.clear(); // 提案仓为模块级单例（S7.4），测试间隔离（proposal.test.ts 同款）
-  // 用户级配置与 key 隔离（决策 17 key 来源；settings.test.ts 同款临时 HOME 策略）——
-  // 保证 effectiveApiKey() 在测试内确定（无 key），S7.6 缺 key 用例可稳定复现
+ // 用户级配置与 key 隔离（ key 来源；settings.test.ts 同款临时 HOME 策略）——
+ // 保证 effectiveApiKey 在测试内确定（无 key），S7.6 缺 key 用例可稳定复现
   originalHome = process.env.HOME;
   originalKey = process.env.DEEPSEEK_API_KEY;
   process.env.HOME = tmpRoot;
@@ -230,10 +230,10 @@ describe("GET /chat/sessions 会话列表", () => {
 
   it("camelCase 全字段 + 按最后活动倒序 + lastMessage 截断（50 字符）", async () => {
     const project = openProject();
-    // sess-a：1 条消息（10:00），lastMessage 超长触发截断
+ // sess-a：1 条消息（10:00），lastMessage 超长触发截断
     const longText = "甲".repeat(60);
     seedMessage(project, "sess-a", { role: "user", content: longText, createdAt: "2026-08-01T10:00:00Z" });
-    // sess-b：2 条消息（10:02 / 10:05，最后活动更晚 → 排在前）
+ // sess-b：2 条消息（10:02 / 10:05，最后活动更晚 → 排在前）
     seedMessage(project, "sess-b", { role: "user", content: "b-1", createdAt: "2026-08-01T10:02:00Z" });
     seedMessage(project, "sess-b", { role: "assistant", content: "b-2", createdAt: "2026-08-01T10:05:00Z" });
 
@@ -248,17 +248,17 @@ describe("GET /chat/sessions 会话列表", () => {
       createdAt: "2026-08-01T10:02:00Z",
       updatedAt: "2026-08-01T10:05:00Z",
     });
-    // 截断：总长（含省略号）≤ 50，即前 49 字符 + …
+ // 截断：总长（含省略号）≤ 50，即前 49 字符 + …
     expect(data.sessions[1].lastMessage).toBe(`${"甲".repeat(49)}…`);
     expect(data.sessions[1].lastMessage).toHaveLength(50);
     expect(data.sessions[1].messageCount).toBe(1);
   });
 
-  it("项目隔离：proj-a 的会话不出现在 proj-b（决策 18）", async () => {
+  it("项目隔离：proj-a 的会话不出现在 proj-b（）", async () => {
     const projectA = openProject();
     seedMessage(projectA, "sess-a", { role: "user", content: "仅属于 A", createdAt: "2026-08-01T10:00:00Z" });
 
-    // 切换到项目 B（新 initProject → 新 project_id）
+ // 切换到项目 B（新 initProject → 新 project_id）
     openProject();
     const res = await buildApp().request("/api/v1/chat/sessions", { headers: HOST_HEADERS });
     expect(res.status).toBe(200);
@@ -296,7 +296,7 @@ describe("GET /chat/sessions/:id/messages 消息历史", () => {
     const { data } = await res.json();
     expect(data.sessionId).toBe("sess-1");
     expect(data.messages.map((m: { role: string }) => m.role)).toEqual(["user", "assistant", "tool"]);
-    // 契约 parse 剥离 db 附加字段（sessionId/projectId）；null 保留（toolCallId 列缺省）
+ // parse 剥离 db 附加字段（sessionId/projectId）；null 保留（toolCallId 列缺省）
     expect(data.messages[0]).toEqual({
       id: expect.any(String),
       role: "user",
@@ -325,14 +325,14 @@ describe("GET /chat/sessions/:id/messages 消息历史", () => {
     const projectA = openProject();
     seedMessage(projectA, "sess-a", { role: "user", content: "仅属于 A", createdAt: "2026-08-01T10:00:00Z" });
 
-    // 切到项目 B 后按 A 的 session_id 取消息
+ // 切到项目 B 后按 A 的 session_id 取消息
     openProject();
     const res = await buildApp().request("/api/v1/chat/sessions/sess-a/messages", { headers: HOST_HEADERS });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ success: true, data: { sessionId: "sess-a", messages: [] } });
   });
 
-  it("会话不存在 → 200 空数组（endpoints.md 未定义 404 语义）", async () => {
+  it("会话不存在 → 200 空数组", async () => {
     openProject();
     const res = await buildApp().request("/api/v1/chat/sessions/sess-ghost/messages", { headers: HOST_HEADERS });
     expect(res.status).toBe(200);
@@ -364,7 +364,7 @@ describe("POST /chat 请求校验（开流前 JSON 错误，非 SSE）", () => {
     expect(body.error.fields).toContain("message");
   });
 
-  it("未配置 DeepSeek key → 400 LLM_API_KEY_MISSING（决策 17；隔离 HOME 无 key）", async () => {
+  it("未配置 DeepSeek key → 400 LLM_API_KEY_MISSING（；隔离 HOME 无 key）", async () => {
     openProject();
     const res = await buildApp(createChatRoutes({})).request("/api/v1/chat", postChat({ message: "你好" }));
     expect(res.status).toBe(400);
@@ -372,11 +372,11 @@ describe("POST /chat 请求校验（开流前 JSON 错误，非 SSE）", () => {
   });
 });
 
-describe("POST /chat SSE 事件序列与落库（决策 18）", () => {
+describe("POST /chat SSE 事件序列与落库（）", () => {
   it("text → tool_call → tool_result → proposal → text → done 全序列 + 帧形态", async () => {
     const project = openProject();
-    // mock produce：第 1 轮流式输出文本 + 一个工具调用；第 2 轮纯文本收尾
-    // （显式泛型 vi.fn<RunAgentDeps["produce"]> 使返回字面量保持 ok:true 字面类型——ChatStreamResult 判别联合）
+ // mock produce：第 1 轮流式输出文本 + 一个工具调用；第 2 轮纯文本收尾
+ // （显式泛型 vi.fn<RunAgentDeps["produce"]> 使返回字面量保持 ok:true 字面类型——ChatStreamResult 判别联合）
     const produce = vi.fn<RunAgentDeps["produce"]>(async (_messages, _signal, onEvent) => {
       if (produce.mock.calls.length === 1) {
         onEvent?.({ type: "text", delta: "第一段" });
@@ -395,7 +395,7 @@ describe("POST /chat SSE 事件序列与落库（决策 18）", () => {
       onEvent?.({ type: "text", delta: "完成" });
       return { ok: true, stopReason: "stop", usage: null };
     });
-    // mock dispatcher：按输入序返回（含提案——触发 proposal 事件，顺序在 tool_result 后）
+ // mock dispatcher：按输入序返回（含提案——触发 proposal 事件，顺序在 tool_result 后）
     const dispatcher = vi.fn<ToolDispatcher>(async (calls) =>
       calls.map((call) => ({
         id: call.id,
@@ -419,7 +419,7 @@ describe("POST /chat SSE 事件序列与落库（决策 18）", () => {
     expect(res.headers.get("content-type")).toContain("text/event-stream");
 
     const frames = await readSseFrames(res);
-    // endpoints.md 事件契约：proposal 在对应 tool_result 之后、循环继续之前
+ // 事件proposal 在对应 tool_result 之后、循环继续之前
     expect(frames.map((f) => f.event)).toEqual(["text", "text", "tool_call", "tool_result", "proposal", "text", "done"]);
     expect(frames[0].data).toEqual({ delta: "第一段" });
     expect(frames[1].data).toEqual({ delta: "第二段" });
@@ -436,14 +436,14 @@ describe("POST /chat SSE 事件序列与落库（决策 18）", () => {
     });
     expect(frames[5].data).toEqual({ delta: "完成" });
     const done = frames[6].data as { session_id: string };
-    expect(done.session_id).toMatch(/^sess_/); // 新建会话（endpoints.md id 约定）
+    expect(done.session_id).toMatch(/^sess_/); // 新建会话（ id 约定）
 
-    // 落库（决策 18）：user（路由层）+ assistant/tool（onMessages 层）配对字段
+ // 落库：user（路由层）+ assistant/tool（onMessages 层）配对字段
     const msgs = listMessages(project.db, done.session_id, project.config.id);
     expect(msgs.map((m) => m.role)).toEqual(["user", "assistant", "tool", "assistant"]);
     expect(msgs[0].content).toBe("你好");
     expect(msgs[1].content).toBe("第一段第二段"); // 流式 delta 累积
-    // assistant.tool_calls 存 wire 形态（决策 18 配对依赖 id ↔ tool.tool_call_id）
+ // assistant.tool_calls 存 wire 形态（ 配对依赖 id ↔ tool.tool_call_id）
     expect(msgs[1].toolCalls).toEqual([
       {
         id: "call_1",
@@ -477,12 +477,12 @@ describe("POST /chat SSE 事件序列与落库（决策 18）", () => {
     }));
     const res = await buildApp(createChatRoutes({ produce })).request("/api/v1/chat", postChat({ message: "你好" }));
     const frames = await readSseFrames(res);
-    // error 后流立即关闭（endpoints.md）：只此一帧
+ // error 后流立即关闭（）：只此一帧
     expect(frames).toEqual([{ event: "error", data: { code: "insufficient_quota", message: "余额不足" } }]);
   });
 });
 
-describe("POST /chat 心跳与断开取消（决策 16/20）", () => {
+describe("POST /chat 心跳与断开取消（）", () => {
   it("心跳：随机间隔 ping（注入毫秒级）先于 done 到达", async () => {
     openProject();
     const produce = vi.fn<RunAgentDeps["produce"]>(async () => {
@@ -496,19 +496,19 @@ describe("POST /chat 心跳与断开取消（决策 16/20）", () => {
     const frames = await readSseFrames(res);
     const pingIdx = frames.findIndex((f) => f.event === "ping");
     expect(pingIdx).toBeGreaterThanOrEqual(0);
-    expect(frames[pingIdx].data).toEqual({}); // ping 空 payload（决策 20）
+    expect(frames[pingIdx].data).toEqual({}); // ping 空 payload
     const doneIdx = frames.findIndex((f) => f.event === "done");
     expect(pingIdx).toBeLessThan(doneIdx);
   });
 
-  it("断开 → 全链路取消（produce 收到 abort）+ 未确认提案作废（B2 取舍 b，决策 16）", async () => {
+  it("断开 → 全链路取消（produce 收到 abort）+ 未确认提案作废（B2 取舍 b，）", async () => {
     const project = openProject();
     defaultProposalStore.set(seedProposal(project)); // 预置本会话产生的未确认提案
     expect(defaultProposalStore.size()).toBe(1);
 
-    // mock produce：等待 abort 后返回 aborted 结果（模拟 DeepSeek fetch 被取消的 resolve 形态）
-    // 注：`null as AbortSignalLike | null`——TS 5.9 对 let 初始化收紧为 null 字面量，
-    // 直接 `= null` 会让后续 `attemptSignal?.aborted` 在 never 上报错（闭包赋值不参与窄化）
+ // mock produce：等待 abort 后返回 aborted 结果（模拟 DeepSeek fetch 被取消的 resolve 形态）
+ // 注：`null as AbortSignalLike | null`——TS 5.9 对 let 初始化收紧为 null 字面量，
+ // 直接 `= null` 会让后续 `attemptSignal?.aborted` 在 never 上报错（闭包赋值不参与窄化）
     let attemptSignal: AbortSignalLike | null = null as AbortSignalLike | null;
     const produce = vi.fn<RunAgentDeps["produce"]>(async (_messages, signal) => {
       attemptSignal = signal ?? null;
@@ -528,24 +528,24 @@ describe("POST /chat 心跳与断开取消（决策 16/20）", () => {
       await waitFor(() => attemptSignal !== null); // 等 runAgent 开始调用 produce
       expect(attemptSignal?.aborted).toBe(false);
       await reader.cancel(); // 模拟客户端断开：响应流 cancel → stream.onAbort → controller.abort()
-      await waitFor(() => attemptSignal?.aborted === true); // 取消信号穿透到 produce（决策 16 四层之①）
+      await waitFor(() => attemptSignal?.aborted === true); // 取消信号穿透到 produce（ 四层之①）
     } finally {
       await reader.cancel().catch(() => {});
     }
     expect(produce).toHaveBeenCalled();
-    // agent 终止后路由按取舍 b 全量清空提案仓（未确认提案随会话取消作废）
+ // agent 终止后路由按取舍 b 全量清空提案仓（未确认提案随会话取消作废）
     await waitFor(() => defaultProposalStore.size() === 0);
     expect(defaultProposalStore.size()).toBe(0);
   });
 });
 
-describe("POST /chat 会话重建（决策 18 续聊）", () => {
+describe("POST /chat 会话重建（ 续聊）", () => {
   it("session_id 提供 → 历史加载喂回 produce + 新消息落库 + done 回显 session_id", async () => {
     const project = openProject();
     seedMessage(project, "sess-old", { role: "user", content: "旧消息一", createdAt: "2026-08-01T10:00:00Z" });
     seedMessage(project, "sess-old", { role: "assistant", content: "旧回复", createdAt: "2026-08-01T10:01:00Z" });
 
-    // `null as LLMMessage[] | null`：同 attemptSignal 的 TS 5.9 收紧问题（闭包赋值不参与窄化）
+ // `null as LLMMessage[] | null`：同 attemptSignal 的 TS 5.9 收紧问题（闭包赋值不参与窄化）
     let captured: LLMMessage[] | null = null as LLMMessage[] | null;
     const produce = vi.fn<RunAgentDeps["produce"]>(async (messages) => {
       captured = messages;
@@ -558,12 +558,12 @@ describe("POST /chat 会话重建（决策 18 续聊）", () => {
     const frames = await readSseFrames(res);
     expect(frames.map((f) => f.event)).toEqual(["done"]);
     expect((frames[0].data as { session_id: string }).session_id).toBe("sess-old");
-    // 喂回形态（S7.2）：system + 旧历史（loadHistory 重组）+ 本轮新消息（runAgent 追加）
+ // 喂回形态（S7.2）：system + 旧历史（loadHistory 重组）+ 本轮新消息（runAgent 追加）
     expect(captured?.map((m) => m.role)).toEqual(["system", "user", "assistant", "user"]);
     expect((captured?.[1] as { content: string }).content).toBe("旧消息一");
     expect((captured?.[2] as { content: string }).content).toBe("旧回复");
     expect((captured?.[3] as { content: string }).content).toBe("新消息");
-    // 落库：原 2 条 + 用户消息 + assistant 回复
+ // 落库：原 2 条 + 用户消息 + assistant 回复
     const msgs = listMessages(project.db, "sess-old", project.config.id);
     expect(msgs.map((m) => m.role)).toEqual(["user", "assistant", "user", "assistant"]);
     expect(msgs[2].content).toBe("新消息");
@@ -585,13 +585,13 @@ describe("POST /chat 会话重建（决策 18 续聊）", () => {
     );
     const frames = await readSseFrames(res);
     expect((frames[0].data as { session_id: string }).session_id).toBe("sess-a");
-    // 历史为空：只有 system + 本轮新消息（A 的历史不可见）
+ // 历史为空：只有 system + 本轮新消息（A 的历史不可见）
     expect(captured?.map((m) => m.role)).toEqual(["system", "user"]);
     expect((captured?.[1] as { content: string }).content).toBe("B 的新消息");
   });
 });
 
-describe("POST /chat 项目规则注入（决策 41：AGENTS.md 为「## 项目设定」段数据源）", () => {
+describe("POST /chat 项目规则注入", () => {
   it("AGENTS.md 存在 → system 消息含「## 项目设定」段（内容原样注入）", async () => {
     const project = openProject();
     writeAgentsFile(project.root, "力量体系：练气→筑基→金丹");
@@ -613,7 +613,7 @@ describe("POST /chat 项目规则注入（决策 41：AGENTS.md 为「## 项目�
   });
 
   it("AGENTS.md 不存在 → 不注入「## 项目设定」段（空规则跳过）", async () => {
-    openProject(); // initProject 不创建 AGENTS.md
+    openProject(); // initProject 不创建 
 
     let captured: LLMMessage[] | null = null as LLMMessage[] | null;
     const produce = vi.fn<RunAgentDeps["produce"]>(async (messages) => {
@@ -653,7 +653,7 @@ describe("zod → JSON Schema 转换（S7.6 决策点：zod 4 内置 toJSONSchem
     expect(js.$schema).toBeUndefined();
   });
 
-  it("registry 35 个 AUTO+PROPOSAL 工具全部可转换（执行类不注册不暴露，S6.7；决策 36 +search_references/propose_create_reference）", () => {
+  it("registry 35 个 AUTO+PROPOSAL 工具全部可转换（执行类不注册不暴露，S6.7； +search_references/propose_create_reference）", () => {
     const defs = toLLMToolDefinitions(listTools());
     expect(defs.length).toBe(35);
     for (const d of defs) {
@@ -666,7 +666,7 @@ describe("zod → JSON Schema 转换（S7.6 决策点：zod 4 内置 toJSONSchem
 
 // ============ [chat] 调试日志（配置文件 chat 类别，服务端对话链路） ============
 // 覆盖：类别开启时 onEvent 转发逐事件打 [chat] 日志（工具名/参数摘要/proposal_id/文本长度）、
-//   关闭（无配置文件）时 console.debug 零调用（零开销早退）、长参数/长结果截断（200 字符 + 原长标注）
+// 关闭（无配置文件）时 console.debug 零调用（零开销早退）、长参数/长结果截断（200 字符 + 原长标注）
 
 describe("[chat] 调试日志（配置文件 chat 类别）", () => {
   it("开启时 onEvent 转发产生 [chat] 日志（turn_start/text 长度/tool_call 参数/tool_result/proposal/done）", async () => {
@@ -675,7 +675,7 @@ describe("[chat] 调试日志（配置文件 chat 类别）", () => {
     openProject();
     const produce = vi.fn<RunAgentDeps["produce"]>(async (_messages, _signal, onEvent) => {
       if (produce.mock.calls.length === 1) {
-        // 仅第 1 轮流式输出文本 + 工具调用；第 2 轮无事件 → done（防无限工具循环）
+ // 仅第 1 轮流式输出文本 + 工具调用；第 2 轮无事件 → done（防无限工具循环）
         onEvent?.({ type: "text", delta: "你好" });
         onEvent?.({
           type: "tool_call",
@@ -730,7 +730,7 @@ describe("[chat] 调试日志（配置文件 chat 类别）", () => {
     openProject();
     const produce = vi.fn<RunAgentDeps["produce"]>(async (_messages, _signal, onEvent) => {
       if (produce.mock.calls.length === 1) {
-        // 仅第 1 轮流式输出工具调用（防无限工具循环）
+ // 仅第 1 轮流式输出工具调用（防无限工具循环）
         onEvent?.({
           type: "tool_call",
           toolCall: {
@@ -763,8 +763,8 @@ describe("[chat] 调试日志（配置文件 chat 类别）", () => {
 
 // ============ [llm] 请求/usage 调试日志（配置文件 request/usage 类别，produce 装饰器） ============
 // 覆盖：request 日志（模型名 + 完整 messages JSON 不截断 + 工具名列表）、usage 日志（真实
-//   token 数 + stop 原因）、敏感红线（日志中绝不出现密钥值/Bearer/apiKey 字样）、
-//   关闭时零开销直通（无日志、onEvent 同引用不包装）
+// token 数 + stop 原因）、敏感红线（日志中绝不出现密钥值/Bearer/apiKey 字样）、
+// 关闭时零开销直通（无日志、onEvent 同引用不包装）
 // 注：装饰器独立于路由（createLLMRequestLogger 包 mock produce 直测），不经真实 DeepSeek 调用
 
 describe("[llm] 请求/usage 调试日志（配置文件 request/usage 类别）", () => {
@@ -795,7 +795,7 @@ describe("[llm] 请求/usage 调试日志（配置文件 request/usage 类别）
     const msgLine = lines.find((l) => l.includes("[llm] request messages="))!;
     expect(msgLine).toContain('"role": "system"'); // 完整 JSON（pretty 打印，不截断）
     expect(msgLine).toContain("帮我查一下张三");
-    // 敏感红线：密钥值 / Bearer 头 / apiKey 字样绝不入日志
+ // 敏感红线：密钥值 / Bearer 头 / apiKey 字样绝不入日志
     for (const l of lines) {
       expect(l).not.toContain("sk-test-secret-123456");
       expect(l).not.toContain("Bearer");
@@ -839,11 +839,11 @@ describe("[llm] 请求/usage 调试日志（配置文件 request/usage 类别）
 
 // ============ 调试类别隔离（配置文件模式，细粒度开关） ============
 // 覆盖：只开 request 时路由 [chat] 事件日志不打（createChatEventLogger 类别门控）、
-//   request/usage 分开判定（只开 usage → request 不打；只开 request → usage 不打）、
-//   stream 类别经 isCategoryEnabled 判定（未列 stream 不开启）
+// request/usage 分开判定（只开 usage → request 不打；只开 request → usage 不打）、
+// stream 类别经 isCategoryEnabled 判定（未列 stream 不开启）
 // 注：llm client 的 debugStream 选项透传行为（true 开/缺省关）在 llm 包测试覆盖
 // 状态：本 describe 用临时创作根写 .ai-editor/config.json + initDebugConfig 进入配置态；
-//   文件级 beforeEach/afterEach 已 initDebugConfig(undefined) 重置
+// 文件级 beforeEach/afterEach 已 initDebugConfig(undefined) 重置
 
 /** 写入调试配置文件（<root>/.ai-editor/config.json；创作根 = tmpRoot） */
 function writeDebugConfig(projectRoot: string, content: unknown): void {

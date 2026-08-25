@@ -1,18 +1,18 @@
-// 大纲节点详情页（S12.2；决策 23 麦基字段集；契约 doc/ui/pages/outline.md「节点详情页」；
-//   S13.2：header 加「设为当前位置」——入口自大纲页迁入，PUT /project/config { current_position }，
-//   已是当前位置禁用；store updateConfig 自动重拉 config 联动 InfoBar/行尾徽标/compute 默认节点）
+// 大纲节点详情页（S12.2； 麦基字段集；「节点详情页」；
+// S13.2：header 加「设为当前位置」——入口自大纲页迁入，PUT /project/config { current_position }，
+// 已是当前位置禁用；store updateConfig 自动重拉 config 联动 InfoBar/行尾徽标/compute 默认节点）
 // 路由：#/outline/:nodeId（中栏大纲 tab 二级路由，main.tsx outline 分支拦截第二段，仿实体详情）
 // 数据：节点本体来自 project store 的 outline 树（GET /outline 已含 data）——findNode 按 id 查找，
-//   软删/缺失 → 404 态；变更记录 GET /delta/node/:nodeId（NodeDeltaList 区块）；
-//   相关实体 GET /relation?source_type=outline_node&source_id=:nodeId&depth=1（RelationsView scope 模式）
+// 软删/缺失 → 404 态；变更记录 GET /delta/node/:nodeId（NodeDeltaList 区块）；
+// 相关实体 GET /relation?source_type=outline_node&source_id=:nodeId&depth=1（RelationsView scope 模式）
 // 编辑：PUT /outline/:nodeId——title/summary/data 部分更新（data 浅合并）；diff 只提交变更字段：
-//   title 非空且有变化（shouldCommitTitle）、summary 有变化且允许清空（提交空串真正清除——
-//   服务端 patch.summary !== undefined 即写入）、data diffData（lib/entity-detail，空值规约）；
-//   引用字段（climax_scene/inciting_scene）「未设置」→ 空串（服务端 z.string().optional() 不接受 null）
+// title 非空且有变化（shouldCommitTitle）、summary 有变化且允许清空（提交空串真正清除——
+// 服务端 patch.summary !== undefined 即写入）、data diffData（lib/entity-detail，空值规约）；
+// 引用字段（climax_scene/inciting_scene）「未设置」→ 空串（服务端 z.string.optional 不接受 null）
 // 交互：面包屑「大纲 › … › 节点名」（父级段跳 #/outline/:parentId）；header [保存] 整表单一次提交；
-//   VALIDATION_ERROR → 结构化信息卡底部行内错误；「+ 新建变更」（S12.3）→ 内联表单（目标/字段/op/值/
-//   描述，update 自动取旧值）→ 成功后 toast + 重拉变更记录列表
-// 样式 token 类（layout.md §3，oracle 红线：禁止硬编码色类）
+// VALIDATION_ERROR → 结构化信息卡底部行内错误；「+ 新建变更」（S12.3）→ 内联表单（目标/字段/op/值/
+// 描述，update 自动取旧值）→ 成功后 toast + 重拉变更记录列表
+// 样式 token 类（，oracle 红线：禁止硬编码色类）
 import { useEffect, useState } from "react";
 import { formatTimestamp } from "@whispering233/ai-editor-shared";
 import { CreateRelationDialog } from "../components/entity/create-relation-dialog";
@@ -56,23 +56,23 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
   const config = useProjectStore((s) => s.config);
   const configLoading = useProjectStore((s) => s.configLoading);
   const loadOutline = useProjectStore((s) => s.loadOutline);
-  // S13.2：设为当前位置（写 project.json current_position；store 内部自动重拉 config，联动 InfoBar/行尾徽标/compute 默认节点）
+ // S13.2：设为当前位置（写 project.json current_position；store 内部自动重拉 config，联动 InfoBar/行尾徽标/compute 默认节点）
   const updateConfig = useProjectStore((s) => s.updateConfig);
 
-  // 首次加载标记：loadOutline 在 store 内静默吞错，用 loadAttempted 呈现「加载失败 + 重试」（同大纲列表页）
+ // 首次加载标记：loadOutline 在 store 内静默吞错，用 loadAttempted 呈现「加载失败 + 重试」（同大纲列表页）
   const [loadAttempted, setLoadAttempted] = useState(false);
-  // 表单（node 数据副本；树刷新后重置为服务端权威值）
+ // 表单（node 数据副本；树刷新后重置为服务端权威值）
   const [titleValue, setTitleValue] = useState("");
   const [summaryValue, setSummaryValue] = useState("");
   const [dataForm, setDataForm] = useState<Record<string, unknown> | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  // 设为当前位置提交态（防重复提交）
+ // 设为当前位置提交态（防重复提交）
   const [settingCurrent, setSettingCurrent] = useState(false);
-  // 相关实体：新建关系对话框 + 重载信号
+ // 相关实体：新建关系对话框 + 重载信号
   const [relationDialogOpen, setRelationDialogOpen] = useState(false);
   const [relKey, setRelKey] = useState(0);
-  // 变更记录：新建表单展开态 + 列表重载信号（S12.3）
+ // 变更记录：新建表单展开态 + 列表重载信号（S12.3）
   const [deltaFormOpen, setDeltaFormOpen] = useState(false);
   const [deltaReloadKey, setDeltaReloadKey] = useState(0);
 
@@ -83,8 +83,8 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
     }
   }, [outline, outlineLoading, loadAttempted, loadOutline]);
 
-  // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉整树（node 变化驱动
-  // 表单重置）+ 相关实体与变更记录区块重载（AI 可能为本节点新增关系/变更记录）
+ // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉整树（node 变化驱动
+ // 表单重置）+ 相关实体与变更记录区块重载（AI 可能为本节点新增关系/变更记录）
   useDataRefresh(() => {
     void loadOutline();
     setRelKey((k) => k + 1);
@@ -97,7 +97,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
   const sceneOptions = sceneNodeOptions(outline?.children ?? []);
   const isCurrent = config?.currentPosition === nodeId;
 
-  // 节点 → 表单（依赖 node 引用：outline 未刷新则引用稳定不重置；保存后 loadOutline 新树 → 重置）
+ // 节点 → 表单（依赖 node 引用：outline 未刷新则引用稳定不重置；保存后 loadOutline 新树 → 重置）
   useEffect(() => {
     if (node === null) return;
     setTitleValue(node.title);
@@ -105,7 +105,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
     setDataForm(JSON.parse(JSON.stringify(node.data ?? {})) as Record<string, unknown>);
   }, [node]);
 
-  /** 保存：diff 只提交变更字段（title/summary/data 一次提交，服务端部分更新 + data 浅合并） */
+ /** 保存：diff 只提交变更字段（title/summary/data 一次提交，服务端部分更新 + data 浅合并） */
   async function handleSave() {
     if (node === null || saving) return;
     const title = titleValue.trim();
@@ -130,7 +130,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
       await loadOutline();
     } catch (err) {
       if (err instanceof ApiError && err.code === "OUTLINE_NODE_NOT_FOUND") {
-        // 节点已被 purge：重拉树后自然进入 404 态（节点不在树中）
+ // 节点已被 purge：重拉树后自然进入 404 态（节点不在树中）
         await loadOutline();
         return;
       }
@@ -140,17 +140,17 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
     }
   }
 
-  /** 设置 data 表单字段值 */
+ /** 设置 data 表单字段值 */
   function setDataField(key: string, value: unknown) {
     setDataForm((prev) => (prev ? { ...prev, [key]: value } : prev));
   }
 
-  /**
-   * 设为当前位置（S13.2，自大纲页迁入）：PUT /project/config { current_position: nodeId }——
-   * store 内部 updateConfig 成功后自动重拉 config，联动 InfoBar「当前位置」/大纲行尾徽标/
-   * compute 预览默认节点（S5.4）/S9 伏笔健康指标基准（决策 21）。已是当前位置 → 按钮禁用不触发。
-   * 失败：泛化 error toast（与 S13.1 前大纲页语义一致；节点能渲染说明在树中，失败主要为网络/服务端拒绝）
-   */
+ /**
+ * 设为当前位置（S13.2，自大纲页迁入）：PUT /project/config { current_position: nodeId }——
+ * store 内部 updateConfig 成功后自动重拉 config，联动 InfoBar「当前位置」/大纲行尾徽标/
+ * compute 预览默认节点（S5.4）/S9 伏笔健康指标基准。已是当前位置 → 按钮禁用不触发。
+ * 失败：泛化 error toast（与 S13.1 前大纲页语义一致；节点能渲染说明在树中，失败主要为网络/服务端拒绝）
+ */
   async function handleSetCurrent() {
     if (node === null || settingCurrent || isCurrent) return;
     setSettingCurrent(true);
@@ -164,7 +164,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
     }
   }
 
-  // ============ 渲染 ============
+ // ============ 渲染 ============
 
   if (notFound) {
     return (
@@ -193,7 +193,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
 
   const noProject = config === null && !configLoading;
 
-  // 面包屑：大纲 › 父链…（可点跳 #/outline/:parentId）› 当前节点（高亮不可点）
+ // 面包屑：大纲 › 父链…（可点跳 #/outline/:parentId）› 当前节点（高亮不可点）
   const breadcrumbItems: BreadcrumbItem[] = [{ label: "大纲", href: "/outline" }];
   if (node !== null) {
     const pathIds = findNodePath(outline?.children ?? [], nodeId) ?? [];
@@ -317,7 +317,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
               </div>
             </SectionCard>
 
-            {/* 结构化信息：data 字段表单（按层级渲染，决策 23） */}
+            {/* 结构化信息：data 字段表单（按层级渲染） */}
             <SectionCard title={`结构化信息（${TYPE_LABEL[node.type]}）`}>
               <div className="flex flex-col gap-3">
                 {fields.map((f) => (
@@ -413,7 +413,7 @@ function FieldControl({
 }: {
   field: NodeFieldConfig;
   value: unknown;
-  /** scene-select 用：场景节点选项（树中全部 scene 叶子） */
+ /** scene-select 用：场景节点选项（树中全部 scene 叶子） */
   sceneOptions: Array<{ id: string; label: string; depth: number }>;
   onChange: (v: unknown) => void;
 }) {
@@ -451,7 +451,7 @@ function FieldControl({
     }
     case "scene-select": {
       const current = sceneSelectValue(value);
-      // 防御分支：当前引用不在选项集（引用节点已被删/purge）→ 追加临时 option 标注，避免 select 静默空白
+ // 防御分支：当前引用不在选项集（引用节点已被删/purge）→ 追加临时 option 标注，避免 select 静默空白
       const stale = current !== "" && !sceneOptions.some((o) => o.id === current);
       return (
         <select

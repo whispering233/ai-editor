@@ -5,7 +5,7 @@
  * 行为：前台 spawn 安装目录的 bin（node_modules/.bin/ai-editor），stdio inherit——
  *   阻塞前台运行，Ctrl-C 退出（SIGINT 由 server 的 shutdown 处理优雅退出）。
  *   创作根 = 安装目录本身（无 project.json → 书架模式待命，浏览器自动打开界面，
- *   生产态默认 openBrowser=true，URL 为 127.0.0.1:{port}，决策 8）。
+ *   生产态默认 openBrowser=true，URL 为 127.0.0.1:{port}）。
  * 端口：AI_EDITOR_PORT 环境变量可覆盖默认 3456（与 dev server 并存时指定独立端口）。
  */
 import { existsSync } from "node:fs";

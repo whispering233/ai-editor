@@ -1,5 +1,5 @@
-// @whispering233/ai-editor-client 入口（architecture.md：main.tsx 挂载 + App 路由分发）
-// 路由表见 doc/ui/layout.md §1（8 路由，#/chat 已移除——聊天常驻右栏 ChatPanel，U2 起不再作为独立页渲染）
+// @whispering233/ai-editor-client 入口（：main.tsx 挂载 + App 路由分发）
+// 路由表见 （8 路由，#/chat 已移除——聊天常驻右栏 ChatPanel，U2 起不再作为独立页渲染）
 import { StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { useEffect } from "react";
@@ -21,7 +21,7 @@ import Trash from "./pages/Trash";
 import Settings from "./pages/Settings";
 import "./index.css";
 
-/** 旧路由重定向（决策 42：设定树 tab 已合并移除——#/entities/setting-tree 重定向到设定 tab 树形视图） */
+/** 旧路由重定向（设定树 tab 已合并移除——#/entities/setting-tree 重定向到设定 tab 树形视图） */
 function RedirectTo({ to }: { to: string }) {
   useEffect(() => {
     navigate(to);
@@ -36,32 +36,32 @@ function renderPage(route: Route): ReactNode {
     case undefined:
       return <Dashboard />;
     case "outline":
-      // S12.2：按段数区分——1 段（#/outline）→ 大纲树；2 段（#/outline/:nodeId）→ 节点详情
-      // （二级路由，仿实体详情分支；key = nodeId 变化强制卸载重挂，详情页表单按节点重置）
+ // S12.2：按段数区分——1 段（#/outline）→ 大纲树；2 段（#/outline/:nodeId）→ 节点详情
+ // （二级路由，仿实体详情分支；key = nodeId 变化强制卸载重挂，详情页表单按节点重置）
       return second !== undefined ? <OutlineDetail key={second} nodeId={second} /> : <Outline />;
     case "entities": {
-      // 关联 tab（U8，entity-list.md「关联 Tab」）：先于类型归一化拦截——relations 不是实体类型
+ // 关联 tab（U8，「关联 Tab」）：先于类型归一化拦截——relations 不是实体类型
       if (second === "relations") {
         return <EntityList type="relations" />;
       }
-      // 决策 42：设定树 tab 已合并移除——旧路由 #/entities/setting-tree 重定向到设定 tab（树形视图）
+ // 设定树 tab 已合并移除——旧路由 #/entities/setting-tree 重定向到设定 tab（树形视图）
       if (second === "setting-tree") {
         return <RedirectTo to="/entities/setting" />;
       }
-      // 批次十二 T3：参考资料已有独立中栏 tab（#/references）——实体关系页泛型表格重复入口
-      // 移除，旧路由 #/entities/reference[/:id] 重定向到参考资料页（对齐决策 42 设定树先例）
+ // 批次十二 T3：参考资料已有独立中栏 tab（#/references）——实体关系页泛型表格重复入口
+ // 移除，旧路由 #/entities/reference[/:id] 重定向到参考资料页（对齐 设定树先例）
       if (second === "reference") {
         return <RedirectTo to={third !== undefined ? `/references/${third}` : "/references"} />;
       }
-      // 按段数区分：2 段（#/entities/:type）→ 列表；3 段（#/entities/:type/:id）→ 详情（layout.md §1）
-      // type 缺省 character（entity-list.md：type ∈ character|setting|location|hook）
+ // 按段数区分：2 段（#/entities/:type）→ 列表；3 段（#/entities/:type/:id）→ 详情（）
+ // type 缺省 character（：type ∈ character|setting|location|hook）
       const type =
         second !== undefined && (ENTITY_TYPES as readonly string[]).includes(second)
           ? second
           : "character";
-      // key = 实体身份：type/id 变化强制卸载重挂——详情页本地 state（deltaOpen、ComputePreview
-      //   result/atNodeId 等）跨实体复用会残留错位（S5.4 审核 M1：关系行跳详情 A→B 用 A 的 result 做 diff）；
-      //   重挂同时让 ComputePreview 的 atNodeId 惰性初始化重新读取 currentPosition
+ // key = 实体身份：type/id 变化强制卸载重挂——详情页本地 state（deltaOpen、ComputePreview
+ // result/atNodeId 等）跨实体复用会残留错位（S5.4 审核 M1：关系行跳详情 A→B 用 A 的 result 做 diff）；
+ // 重挂同时让 ComputePreview 的 atNodeId 惰性初始化重新读取 currentPosition
       return third !== undefined ? (
         <EntityDetail key={`${type}:${third}`} type={type} id={third} />
       ) : (
@@ -71,13 +71,13 @@ function renderPage(route: Route): ReactNode {
     case "hooks":
       return <HookPanel />;
     case "timeline":
-      // 按段数区分——1 段（#/timeline）→ 列表页；2 段（#/timeline/:id）→ 事件详情页
-      // （timeline.md 路由；key = id 变化强制卸载重挂——详情页表单按事件重置）
+ // 按段数区分——1 段（#/timeline）→ 列表页；2 段（#/timeline/:id）→ 事件详情页
+ // （ 路由；key = id 变化强制卸载重挂——详情页表单按事件重置）
       return second !== undefined ? <TimelineDetail key={second} id={second} /> : <Timeline />;
     case "references":
-      // 参考资料（决策 36 + 决策 43 卡 11.4）：
-      //   #/references → 列表；#/references/:id → 详情（编辑态）；
-      //   #/references/new/md → 新建 md 文档草稿态；#/references/new/link → 新建外源链接草稿态
+ // 参考资料（ 卡 11.4）：
+ // #/references → 列表；#/references/:id → 详情（编辑态）；
+ // #/references/new/md → 新建 md 文档草稿态；#/references/new/link → 新建外源链接草稿态
       if (second === "new" && third === "md") return <ReferenceDetail draft="md" />;
       if (second === "new" && third === "link") return <ReferenceDetail draft="link" />;
       return second !== undefined ? (

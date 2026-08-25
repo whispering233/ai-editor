@@ -1,8 +1,8 @@
-// 启动一致性校验测试（S4.2，决策 16 修订）：
-//   (a) 不一致 fixture：outline.json 节点已软删、DB 关系/Delta 未软删 → 补标并返回计数
-//   (b) 一致：节点与关联记录均已软删 → 零补标
-//   (c) 幂等：二次运行零补标
-//   (d) 无软删节点 → 零补标（常规启动）；无关关系不受影响
+// 启动一致性校验测试（S4.2）：
+// (a) 不一致 fixture：outline.json 节点已软删、DB 关系/Delta 未软删 → 补标并返回计数
+// (b) 一致：节点与关联记录均已软删 → 零补标
+// (c) 幂等：二次运行零补标
+// (d) 无软删节点 → 零补标（常规启动）；无关关系不受影响
 // fixture 风格与 routes/outline.test.ts seedVolWithRelation 一致（直接 INSERT，绕过端点校验）；
 // 项目装配沿用 middleware/project.test.ts（initProject + 临时目录）。
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -78,7 +78,7 @@ function deletedAtOf(db: Db, table: "relation_records" | "delta_records", id: st
   return (db.prepare(`SELECT deleted_at FROM ${table} WHERE id = ?`).get(id) as { deleted_at: string | null }).deleted_at;
 }
 
-describe("reconcileSoftDelete（S4.2，决策 16 修订）", () => {
+describe("reconcileSoftDelete（S4.2，）", () => {
   it("不一致：节点已软删、DB 关系/Delta 未软删 → 补标并返回计数", () => {
     const { project, nodeId } = makeProjectWithDeletedNode();
     try {
@@ -88,7 +88,7 @@ describe("reconcileSoftDelete（S4.2，决策 16 修订）", () => {
       const result = reconcileSoftDelete(project);
       expect(result).toEqual({ deletedNodes: 1, relations: 1, deltas: 1 });
 
-      // 补标值符合应用层 ISO 8601 约定（schema.md 第 16 行）
+ // 补标值符合应用层 ISO 8601 约定（）
       expect(deletedAtOf(project.db, "relation_records", "rel-1")).toMatch(/^\d{4}-\d{2}-\d{2}T/);
       expect(deletedAtOf(project.db, "delta_records", "delta-1")).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     } finally {
@@ -99,12 +99,12 @@ describe("reconcileSoftDelete（S4.2，决策 16 修订）", () => {
   it("一致：节点与关联记录均已软删 → 零补标", () => {
     const { project, nodeId } = makeProjectWithDeletedNode();
     try {
-      // 已软删的 relation/delta（deleted_at 非空）——模拟「DB 已级联」的干净状态
+ // 已软删的 relation/delta（deleted_at 非空）——模拟「DB 已级联」的干净状态
       insertRelation(project.db, "rel-2", "outline_node", nodeId, "character", "char-2", "appears_in", T0);
       insertDelta(project.db, "delta-2", nodeId, "char-2", T0);
 
       expect(reconcileSoftDelete(project)).toEqual({ deletedNodes: 1, relations: 0, deltas: 0 });
-      // 原有 deleted_at 不被改写（保持 T0 原值）
+ // 原有 deleted_at 不被改写（保持 T0 原值）
       expect(deletedAtOf(project.db, "relation_records", "rel-2")).toBe(T0);
       expect(deletedAtOf(project.db, "delta_records", "delta-2")).toBe(T0);
     } finally {
@@ -118,7 +118,7 @@ describe("reconcileSoftDelete（S4.2，决策 16 修订）", () => {
       insertRelation(project.db, "rel-3", "outline_node", nodeId, "character", "char-3");
 
       expect(reconcileSoftDelete(project)).toEqual({ deletedNodes: 1, relations: 1, deltas: 0 });
-      // 第二次：全部已补标 → 零补标（无副作用）
+ // 第二次：全部已补标 → 零补标（无副作用）
       expect(reconcileSoftDelete(project)).toEqual({ deletedNodes: 1, relations: 0, deltas: 0 });
     } finally {
       closeProject(project);
@@ -135,7 +135,7 @@ describe("reconcileSoftDelete（S4.2，决策 16 修订）", () => {
         updatedAt: nowIso(),
       });
       insertRelation(project.db, "rel-4", "character", "char-1", "character", "char-2", "ally");
-      // 存活节点上的关系同样不补标（驱动集合为空，不执行任何 UPDATE）
+ // 存活节点上的关系同样不补标（驱动集合为空，不执行任何 UPDATE）
       insertRelation(project.db, "rel-5", "outline_node", node.id, "character", "char-1");
 
       expect(reconcileSoftDelete(project)).toEqual({ deletedNodes: 0, relations: 0, deltas: 0 });

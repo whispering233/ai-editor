@@ -1,12 +1,12 @@
-// 右栏 ChatPanel（doc/ui/layout.md §2.4 + pages/chat.md U5 契约）：
+// 右栏 ChatPanel（ + U5 ）：
 // 常驻右栏（40% 栏宽，1:5:4 三栏布局），<1024px 折叠为抽屉（fixed + 遮罩，开关在信息条右侧）
 // 结构（自上而下）：会话标题行（下拉切换同项目会话 + 新会话）→ 断连横幅 → 错误条 →
-//   消息流（user 气泡 / assistant 无气泡宋体排版 / 历史工具折叠记录 / 运行时工具行 / 提案卡）→
-//   focus 小条 → 输入区（Enter 发送 / Shift+Enter 换行）
-// 无项目打开时整体禁用（灰显 + 「打开项目后可用」，不请求会话数据，chat.md「位置与形态」）
+// 消息流（user 气泡 / assistant 无气泡宋体排版 / 历史工具折叠记录 / 运行时工具行 / 提案卡）→
+// focus 小条 → 输入区（Enter 发送 / Shift+Enter 换行）
+// 无项目打开时整体禁用（灰显 + 「打开项目后可用」，不请求会话数据，「位置与形态」）
 // S7 数据源已接入（S8.1 联调完成）：proposals（提案卡）/ streamTools（运行时工具行）
-//   由 SSE 事件经 store 瞬态字段自动填充渲染；提案确认/拒绝已接 S7.5 真实 API（S8.2 解锁，
-//   store 驱动状态迁移：confirmed/rejected/stale 终态 + 404 移除卡片）
+// 由 SSE 事件经 store 瞬态字段自动填充渲染；提案确认/拒绝已接 S7.5 真实 API（S8.2 解锁，
+// store 驱动状态迁移：confirmed/rejected/stale 终态 + 404 移除卡片）
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronDown,
@@ -53,17 +53,17 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 
-// ============ 文案映射（chat.md：会话切换/提案卡/focus 小条） ============
+// ============ 文案映射（：会话切换/提案卡/focus 小条） ============
 // 会话相对时间用 shared formatRelativeTime（Sidebar/Dashboard 同源；≥30 天回退绝对时间，非法输入原样返回）
 
-/** 提案 type → 中文标题（chat.md「提案卡片」；未知 type 显示原始名） */
+/** 提案 type → 中文标题（「提案卡片」；未知 type 显示原始名） */
 const PROPOSAL_TYPE_LABELS: Record<string, string> = {
   propose_create_entity: "新建实体",
   propose_update_entity: "更新实体",
   propose_add_relation: "新增关系",
   propose_outline_node: "新建大纲节点",
-  // F9 + G2 修订：时间轴 AI 排序提案（propose_reorder_timepoints 取代 propose_reorder_events——
-  //   事件不再带 time_label，语义序载体为时间点实体，见 doc/ui/pages/timeline.md「AI 排序入口」）
+ // F9 + G2 修订：时间轴 AI 排序提案（propose_reorder_timepoints 取代 propose_reorder_events——
+ // 事件不再带 time_label，语义序载体为时间点实体，见 「AI 排序入口」）
   propose_reorder_timepoints: "重排时间轴时间点",
 };
 
@@ -75,7 +75,7 @@ const FOCUS_TYPE_LABELS: Record<string, string> = {
   hook: "伏笔",
 };
 
-/** focus 小条名称（chat.md「focus 小条」：MVP 简化——不查实体名，显示 id 原文 + 类型名；S7 完善：查实体名） */
+/** focus 小条名称（「focus 小条」：MVP 简化——不查实体名，显示 id 原文 + 类型名；S7 完善：查实体名） */
 function focusLabel(ctx: FocusContext): string {
   const name = ctx.focus_entity_id ?? ctx.focus_node_id ?? "";
   const typeLabel = ctx.focus_entity_type
@@ -86,7 +86,7 @@ function focusLabel(ctx: FocusContext): string {
   return typeLabel ? `${typeLabel} ${name}` : name || "当前内容";
 }
 
-/** 防御性读取历史工具调用字段（tool_calls JSON 列形状见 schema.md，未知形状容错） */
+/** 防御性读取历史工具调用字段（tool_calls JSON 列形状见 ，未知形状容错） */
 interface ToolCallShape {
   id?: string;
   tool?: string;
@@ -96,9 +96,9 @@ interface ToolCallShape {
 const asToolCall = (c: unknown): ToolCallShape =>
   typeof c === "object" && c !== null ? (c as ToolCallShape) : {};
 
-// ============ AI 设置工具条（需求 3，决策 34/35）：模型选择 + 思考强度 + 上下文占用 ============
+// ============ AI 设置工具条（需求 3）：模型选择 + 思考强度 + 上下文占用 ============
 
-/** 思考强度档位（决策 34 参考 pi ThinkingLevel：off/minimal/low/medium/high/xhigh/max；显示英文原文） */
+/** 思考强度档位（ 参考 pi ThinkingLevel：off/minimal/low/medium/high/xhigh/max；显示英文原文） */
 const THINKING_LEVEL_OPTIONS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 type ThinkingOption = (typeof THINKING_LEVEL_OPTIONS)[number];
 
@@ -106,7 +106,7 @@ function ChatModelBar({ disabled }: { disabled: boolean }) {
   const [settings, setSettings] = useState<SettingsLlmConfig | null>(null);
   const lastUsage = useChatStore((s) => s.lastUsage);
 
-  // 挂载/项目就绪后拉取 LLM 设置（模型目录 + 当前模型 + 思考强度；失败静默——工具条降级隐藏）
+ // 挂载/项目就绪后拉取 LLM 设置（模型目录 + 当前模型 + 思考强度；失败静默——工具条降级隐藏）
   useEffect(() => {
     if (disabled) return;
     let cancelled = false;
@@ -122,7 +122,7 @@ function ChatModelBar({ disabled }: { disabled: boolean }) {
 
   const currentModel = settings?.models.find((m) => m.id === settings.model) ?? null;
   const contextWindow = currentModel?.contextWindow ?? 0;
-  // 上下文占用：最近一轮真实 usage.total / 当前模型 contextWindow（需求 3）
+ // 上下文占用：最近一轮真实 usage.total / 当前模型 contextWindow（需求 3）
   const usagePct =
     lastUsage !== null && contextWindow > 0
       ? Math.min(100, Math.round((lastUsage.total_tokens / contextWindow) * 100))
@@ -200,14 +200,14 @@ function SessionTitleBar({
 }: {
   disabled: boolean;
   onClose?: () => void;
-  /** 收起右栏回调（F7：仅桌面静态栏传入——抽屉模式无收起能力）；渲染 PanelRightClose 按钮 */
+ /** 收起右栏回调（F7：仅桌面静态栏传入——抽屉模式无收起能力）；渲染 PanelRightClose 按钮 */
   onToggleCollapse?: () => void;
 }) {
   const sessions = useChatStore((s) => s.sessions);
   const currentSessionId = useChatStore((s) => s.currentSessionId);
   const setCurrentSession = useChatStore((s) => s.setCurrentSession);
   const newSession = useChatStore((s) => s.newSession);
-  // 当前会话 = 列表中 id 匹配项；未选（null）/ 列表未加载 / 不在列表 → 新会话
+ // 当前会话 = 列表中 id 匹配项；未选（null）/ 列表未加载 / 不在列表 → 新会话
   const currentSession = sessions?.find((s) => s.id === currentSessionId) ?? null;
   const title = currentSession ? currentSession.lastMessage || "（空会话）" : "新会话";
 
@@ -231,8 +231,8 @@ function SessionTitleBar({
           }
         />
         <DropdownMenuContent align="start" className="w-64">
-          {/* GroupLabel 必须由 <Menu.Group> 提供上下文（Base UI 契约，缺失抛 error #31——
-              曾导致点击下拉整页白屏，见 chat-panel.test.tsx「Base UI Menu 契约」护栏用例）；
+          {/* GroupLabel 必须由 <Menu.Group> 提供上下文（Base UI ，缺失抛 error #31——
+              曾导致点击下拉整页白屏，见 chat-panel.test.tsx「Base UI Menu 」护栏用例）；
               外层 div 的 aria-labelledby 关联也由 Group 的 role="group" 提供（无障碍） */}
           <DropdownMenuGroup>
             <DropdownMenuLabel>会话（本项目）</DropdownMenuLabel>
@@ -295,7 +295,7 @@ function SessionTitleBar({
   );
 }
 
-// ============ 断连横幅：60s 无事件 / 流中断 → 「上次会话已取消」+ [重新发送]（chat.md「断连」） ============
+// ============ 断连横幅：60s 无事件 / 流中断 → 「上次会话已取消」+ [重新发送]（「断连」） ============
 
 function DisconnectBanner() {
   const disconnected = useChatStore((s) => s.disconnected);
@@ -320,7 +320,7 @@ function DisconnectBanner() {
   );
 }
 
-// ============ 错误条：error 事件 / 服务未就绪 / 网络失败（chat.md「错误态」） ============
+// ============ 错误条：error 事件 / 服务未就绪 / 网络失败（「错误态」） ============
 
 function ErrorBar() {
   const streamError = useChatStore((s) => s.streamError);
@@ -343,9 +343,9 @@ function ErrorBar() {
 
 // ============ 工具调用折叠记录行（历史 assistant.toolCalls 与运行时 streamTools 共用） ============
 
-/** 工具调用行：折叠态「调用了 {tool}」，展开显示 args 摘要与结果状态（chat.md「工具调用折叠记录」；导出供渲染走查测试）
- *  决策 47：展开态摘要渲染——id 参数经 names/resolve 解析为名称（不显示裸 id）；
- *  解析失败/未知工具 → 回退原始 JSON（不丢信息） */
+/** 工具调用行：折叠态「调用了 {tool}」，展开显示 args 摘要与结果状态（「工具调用折叠记录」；导出供渲染走查测试）
+ * 展开态摘要渲染——id 参数经 names/resolve 解析为名称（不显示裸 id）；
+ * 解析失败/未知工具 → 回退原始 JSON（不丢信息） */
 export function ToolCallRow({
   toolName,
   args,
@@ -358,14 +358,14 @@ export function ToolCallRow({
   status?: "running" | "ok" | "error";
 }) {
   const [open, setOpen] = useState(false);
-  /** 决策 47：id 批量解析结果（null = 未展开/解析中）；解析请求失败 → resolveFailed → 回退原始 JSON */
+ /** id 批量解析结果（null = 未展开/解析中）；解析请求失败 → resolveFailed → 回退原始 JSON */
   const [names, setNames] = useState<ResolvedNames | null>(null);
   const [resolveFailed, setResolveFailed] = useState(false);
-  // 结果状态图标：成功 ✓ / 失败 ✗ / 进行中无标记（决策 18 成对：tool_result 挂到对应调用行）
+ // 结果状态图标：成功 ✓ / 失败 ✗ / 进行中无标记（ 成对：tool_result 挂到对应调用行）
   const ok = status === "ok" || result !== undefined;
 
-  // 展开时收集 args 中的 id 候选 → names/resolve 批量解析（历史回放/流式同路径，决策 47）；
-  // 无候选不发请求；折叠/参数变化 → 重置（重新展开再解析）
+ // 展开时收集 args 中的 id 候选 → names/resolve 批量解析（历史回放/流式同路径）；
+ // 无候选不发请求；折叠/参数变化 → 重置（重新展开再解析）
   useEffect(() => {
     if (!open) {
       setNames(null);
@@ -393,7 +393,7 @@ export function ToolCallRow({
     };
   }, [open, args]);
 
-  // 摘要行：names=null（解析中）时 id 字段省略、非 id 字段照常（解析完成后自动补全）
+ // 摘要行：names=null（解析中）时 id 字段省略、非 id 字段照常（解析完成后自动补全）
   const summary = useMemo(
     () =>
       names === null ? null : summarizeToolCall(toolName, args as Record<string, unknown>, names),
@@ -415,7 +415,7 @@ export function ToolCallRow({
       </button>
       {open && (
         <div className="mt-1 max-h-40 overflow-auto text-xs whitespace-pre-wrap text-muted-foreground">
-          {/* 决策 47：摘要渲染优先；未知工具 / 解析请求失败 → 原始 JSON 兜底 */}
+          {/* 摘要渲染优先；未知工具 / 解析请求失败 → 原始 JSON 兜底 */}
           {resolveFailed || summary === null ? (
             <pre>{typeof args === "string" ? args : JSON.stringify(args ?? {}, null, 2)}</pre>
           ) : (
@@ -433,7 +433,7 @@ export function ToolCallRow({
 
 // ============ 消息条目：user 气泡 / assistant 无气泡宋体排版 + 历史工具折叠记录 ============
 
-/** 历史 tool 消息按 toolCallId 挂到 assistant.toolCalls 行（决策 18 成对；孤儿半对不渲染；导出供渲染走查测试） */
+/** 历史 tool 消息按 toolCallId 挂到 assistant.toolCalls 行（ 成对；孤儿半对不渲染；导出供渲染走查测试） */
 export function MessageItem({
   message,
   toolResults,
@@ -442,7 +442,7 @@ export function MessageItem({
   toolResults: Map<string, ChatMessage>;
 }) {
   if (message.role === "user") {
-    // user 气泡：右对齐 bg-secondary 圆角气泡（chat.md 结构图）
+ // user 气泡：右对齐 bg-secondary 圆角气泡（ 结构图）
     return (
       <div className="flex justify-end">
         <div className="max-w-[85%] rounded-lg bg-secondary px-3 py-2 text-sm text-secondary-foreground">
@@ -451,8 +451,8 @@ export function MessageItem({
       </div>
     );
   }
-  if (message.role === "tool") return null; // tool 消息仅在所属 assistant 调用行内渲染（决策 18）
-  // assistant：无气泡纯排版（chat.md：assistant 无气泡纯排版；正文宋体栈 17px/1.72，layout.md §3.3）
+  if (message.role === "tool") return null; // tool 消息仅在所属 assistant 调用行内渲染
+ // assistant：无气泡纯排版（：assistant 无气泡纯排版；正文宋体栈 17px/1.72，）
   const toolCalls = Array.isArray(message.toolCalls) ? message.toolCalls : [];
   return (
     <div className="space-y-1.5">
@@ -480,20 +480,20 @@ export function MessageItem({
   );
 }
 
-// ============ 提案卡（chat.md「提案卡片」；S8.2 已接 S7.5 confirm/reject 真实调用） ============
+// ============ 提案卡（「提案卡片」；S8.2 已接 S7.5 confirm/reject 真实调用） ============
 
-/** 提案卡（chat.md「提案卡片」；S8.2 已接 S7.5 confirm/reject 真实调用；导出供渲染走查测试）
- *  决策 47：preview 摘要化渲染（summary/changes/args 人类可读，不再 JSON dump） */
+/** 提案卡（「提案卡片」；S8.2 已接 S7.5 confirm/reject 真实调用；导出供渲染走查测试）
+ * preview 摘要化渲染（summary/changes/args 人类可读，不再 JSON dump） */
 export function ProposalCardView({ proposal }: { proposal: ProposalCard }) {
   const confirmProposal = useChatStore((s) => s.confirmProposal);
   const rejectProposal = useChatStore((s) => s.rejectProposal);
   const label = PROPOSAL_TYPE_LABELS[proposal.type] ?? proposal.type;
-  // 终态（confirmed/rejected/stale）与处理中（processing 在途）：按钮禁用——
-  // 409 PROPOSAL_STALE 由 store 标 stale（卡标文案见上）+ 按钮随之禁用；
-  // 404 NOT_FOUND / 409 MISMATCH 由 store 移除卡片（组件无需处理）；notFound 不渲染
+ // 终态（confirmed/rejected/stale）与处理中（processing 在途）：按钮禁用——
+ // 409 PROPOSAL_STALE 由 store 标 stale（卡标文案见上）+ 按钮随之禁用；
+ // 404 NOT_FOUND / 409 MISMATCH 由 store 移除卡片（组件无需处理）；notFound 不渲染
   const busy = proposal.status !== "pending" || proposal.processing === true;
 
-  // 决策 47：收集 preview 中 args/changes 的 id 候选 → names/resolve 批量解析（名称渲染）
+ // 收集 preview 中 args/changes 的 id 候选 → names/resolve 批量解析（名称渲染）
   const [names, setNames] = useState<ResolvedNames | null>(null);
   const [resolveFailed, setResolveFailed] = useState(false);
   useEffect(() => {
@@ -527,7 +527,7 @@ export function ProposalCardView({ proposal }: { proposal: ProposalCard }) {
     };
   }, [proposal.preview]);
 
-  // 摘要行（决策 47）：预览数据人类可读；未知形态/解析失败 → 原始 JSON 兜底
+ // 摘要行：预览数据人类可读；未知形态/解析失败 → 原始 JSON 兜底
   const previewLines = useMemo(
     () => summarizePreview(proposal.type, proposal.preview, names),
     [proposal.type, proposal.preview, names],
@@ -551,7 +551,7 @@ export function ProposalCardView({ proposal }: { proposal: ProposalCard }) {
           <span className="shrink-0 text-xs text-destructive">⚠ 数据已变化，此提案已失效</span>
         )}
       </div>
-      {/* 决策 47：preview 摘要渲染（summary 优先 + changes/args 逐行；不再 JSON dump） */}
+      {/* preview 摘要渲染（summary 优先 + changes/args 逐行；不再 JSON dump） */}
       {previewLines !== null && (
         <ul className="mt-1 max-h-32 space-y-0.5 overflow-auto text-xs whitespace-pre-wrap text-muted-foreground">
           {previewLines.map((line) => (
@@ -583,7 +583,7 @@ export function ProposalCardView({ proposal }: { proposal: ProposalCard }) {
   );
 }
 
-// ============ focus 小条：输入区上方「正在讨论：…」（layout.md §4.2，可关闭） ============
+// ============ focus 小条：输入区上方「正在讨论：…」（，可关闭） ============
 
 function FocusBar() {
   const focusContext = useChatStore((s) => s.focusContext);
@@ -614,7 +614,7 @@ function InputArea({ disabled }: { disabled: boolean }) {
   const sendMessage = useChatStore((s) => s.sendMessage);
   const focusInputSeq = useChatStore((s) => s.focusInputSeq);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  // 决策 35 增补：InfoBar「问 AI」点击触发聚焦（详见 chat store focusInputSeq 注释）
+ // InfoBar「问 AI」点击触发聚焦（详见 chat store focusInputSeq 注释）
   useEffect(() => {
     if (focusInputSeq > 0) textareaRef.current?.focus();
   }, [focusInputSeq]);
@@ -634,7 +634,7 @@ function InputArea({ disabled }: { disabled: boolean }) {
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
-            // Enter 发送 / Shift+Enter 换行（chat.md「关键交互·发送」）
+ // Enter 发送 / Shift+Enter 换行（「关键交互·发送」）
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
               handleSend();
@@ -663,7 +663,7 @@ function MessageList({ disabled }: { disabled: boolean }) {
   const proposals = useChatStore((s) => s.proposals);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // 历史 tool 消息按 toolCallId 索引（决策 18 成对：assistant.toolCalls ↔ tool.tool_call_id）
+ // 历史 tool 消息按 toolCallId 索引（ 成对：assistant.toolCalls ↔ tool.tool_call_id）
   const toolResults = useMemo(() => {
     const map = new Map<string, ChatMessage>();
     for (const m of messages) {
@@ -672,7 +672,7 @@ function MessageList({ disabled }: { disabled: boolean }) {
     return map;
   }, [messages]);
 
-  // 新消息/加载完成自动滚动到底部（streaming 期间持续跟随）
+ // 新消息/加载完成自动滚动到底部（streaming 期间持续跟随）
   const tail = messages.length;
   useEffect(() => {
     const el = scrollRef.current;
@@ -680,7 +680,7 @@ function MessageList({ disabled }: { disabled: boolean }) {
   }, [tail, messagesLoading, streamTools.length, proposals.length]);
 
   if (disabled) {
-    // 无项目打开：右栏禁用（chat.md「位置与形态」：灰显 + 「打开项目后可用」）
+ // 无项目打开：右栏禁用（「位置与形态」：灰显 + 「打开项目后可用」）
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-4">
         <MessageSquare className="size-8 text-muted-foreground/40" />
@@ -690,7 +690,7 @@ function MessageList({ disabled }: { disabled: boolean }) {
   }
 
   if (messagesLoading) {
-    // 恢复历史加载态（chat.md「状态·加载态」：消息区骨架）
+ // 恢复历史加载态（「状态·加载态」：消息区骨架）
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
         {[0, 1].map((i) => (
@@ -708,7 +708,7 @@ function MessageList({ disabled }: { disabled: boolean }) {
   return (
     <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
       {empty ? (
-        // 空态引导语（chat.md「空态」）
+ // 空态引导语（「空态」）
         <div className="flex h-full flex-col items-center justify-center gap-1.5 p-4 text-center">
           <MessageSquare className="size-7 text-muted-foreground/40" />
           <p className="text-sm text-muted-foreground">试试问：这个设定有没有漏洞？</p>
@@ -729,7 +729,7 @@ function MessageList({ disabled }: { disabled: boolean }) {
               status={t.status}
             />
           ))}
-          {/* 提案卡片（S7 SSE proposal 事件填充；决策 14 瞬态，流断开即清空） */}
+          {/* 提案卡片（S7 SSE proposal 事件填充； 瞬态，流断开即清空） */}
           {proposals.map((p) => (
             <ProposalCardView key={p.proposalId} proposal={p} />
           ))}
@@ -782,15 +782,15 @@ export function ChatPanel({
 }: {
   open: boolean;
   onClose: () => void;
-  /** 桌面态像素宽度（flex-basis 覆盖默认 40%）；undefined = 小屏默认百分比布局（抽屉不参与 flex） */
+ /** 桌面态像素宽度（flex-basis 覆盖默认 40%）；undefined = 小屏默认百分比布局（抽屉不参与 flex） */
   width?: number;
-  /** 收起右栏回调（F7：桌面态由 AppShell 传入；小屏抽屉无收起能力，不传即不渲染按钮） */
+ /** 收起右栏回调（F7：桌面态由 AppShell 传入；小屏抽屉无收起能力，不传即不渲染按钮） */
   onToggleCollapse?: () => void;
 }) {
   const isDesktop = useMediaQuery("(min-width: 1024px)");
 
-  // 桌面（≥1024px）：右栏静态列——F7 起宽度由 AppShell 传入像素（flex-basis 覆盖默认 40%），
-  // 收起按钮（PanelRightClose）在会话标题行右侧（onToggleCollapse 传入时渲染）
+ // 桌面（≥1024px）：右栏静态列——F7 起宽度由 AppShell 传入像素（flex-basis 覆盖默认 40%），
+ // 收起按钮（PanelRightClose）在会话标题行右侧（onToggleCollapse 传入时渲染）
   if (isDesktop) {
     return (
       <aside
@@ -804,7 +804,7 @@ export function ChatPanel({
     );
   }
 
-  // 小屏（<1024px）：fixed 抽屉 + 遮罩；关闭时不渲染
+ // 小屏（<1024px）：fixed 抽屉 + 遮罩；关闭时不渲染
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50">

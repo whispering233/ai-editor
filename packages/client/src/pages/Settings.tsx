@@ -1,13 +1,13 @@
 // Settings 设置页（S1.4，替换占位壳）
-// 路由：#/settings；数据：GET/PUT /api/v1/settings/llm（doc/ui/pages/settings.md 原型）
+// 路由：#/settings；数据：GET/PUT /api/v1/settings/llm（ 原型）
 // 交互：模型名输入 + 保存；API key 状态行（掩码）+ 新 key 输入 + 保存/清除；
-//   常驻说明：key 只存本机用户配置（~/.ai-editor/config.json），不入项目文件（决策 17）；
-//   环境变量 DEEPSEEK_API_KEY 优先于此处配置（页面仍可保存，实际生效以环境变量为准）
-//   决策 41（2026-08 批次十）：项目规则区改为编辑项目目录 AGENTS.md 文件内容——
-//   GET/PUT /project/agents（项目规则唯一事实源，取代 project.json `prompt`）；
-//   载入优先读 project store 已缓存 agents；保存后 toast + dataVersion +1（中栏数据页刷新）；
-//   外部修改检测：GET 返回 mtime，与上次读取比对不一致提示「文件已被外部修改，请刷新/重新加载」；
-//   无项目打开灰显禁用
+// 常驻说明：key 只存本机用户配置（~/.ai-editor/config.json），不入项目文件；
+// 环境变量 DEEPSEEK_API_KEY 优先于此处配置（页面仍可保存，实际生效以环境变量为准）
+// （2026-08 批次十）：项目规则区改为编辑项目目录 文件内容——
+// GET/PUT /project/agents（项目规则唯一事实源，取代 project.json `prompt`）；
+// 载入优先读 project store 已缓存 agents；保存后 toast + dataVersion +1（中栏数据页刷新）；
+// 外部修改检测：GET 返回 mtime，与上次读取比对不一致提示「文件已被外部修改，请刷新/重新加载」；
+// 无项目打开灰显禁用
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,20 +42,20 @@ export default function Settings() {
   const [newKey, setNewKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [modelError, setModelError] = useState<string | null>(null);
-  /** key 区表单内联错误（原型 settings.md「错误态：VALIDATION_ERROR → 表单内联错误」） */
+ /** key 区表单内联错误（原型 「错误态：VALIDATION_ERROR → 表单内联错误」） */
   const [keyError, setKeyError] = useState<string | null>(null);
-  // —— 决策 41 项目规则 AGENTS.md ——
+ // —— 项目规则 ——
   const [agentsContent, setAgentsContent] = useState("");
-  /** 已加载 AGENTS.md 的项目 id（null = 尚未/无项目）：id 变化（切换项目）→ 重新加载；
-   *  同项目内 store 重拉（loadAgents）→ 不覆盖用户草稿 */
+ /** 已加载 的项目 id（null = 尚未/无项目）：id 变化（切换项目）→ 重新加载；
+ * 同项目内 store 重拉（loadAgents）→ 不覆盖用户草稿 */
   const [agentsLoadedFor, setAgentsLoadedFor] = useState<string | null>(null);
   const [agentsSaving, setAgentsSaving] = useState(false);
-  /** 规则区表单内联错误（原型「错误态：VALIDATION_ERROR → 表单内联错误」） */
+ /** 规则区表单内联错误（原型「错误态：VALIDATION_ERROR → 表单内联错误」） */
   const [agentsErrorLocal, setAgentsErrorLocal] = useState<string | null>(null);
-  /** 外部修改提示（决策 41）：store 检测到 mtime 变化 → 展示「文件已被外部修改，请刷新/重新加载」 */
+ /** 外部修改提示：store 检测到 mtime 变化 → 展示「文件已被外部修改，请刷新/重新加载」 */
   const [externalModified, setExternalModified] = useState(false);
 
-  /** 拉取当前配置（保存/清除后刷新掩码状态） */
+ /** 拉取当前配置（保存/清除后刷新掩码状态） */
   async function refresh() {
     try {
       const config = await getSettingsLlm();
@@ -73,9 +73,9 @@ export default function Settings() {
     void refresh();
   }, []);
 
-  // 决策 41 载入：进入设置页优先用 project store 已缓存 config（AppShell 挂载时已拉取）；
-  //   无缓存（store 尚未拉取）补拉一次——仅本挂载触发一次（store 内部有并发防抖），
-  //   避免「无项目/失败后 config 恒为 null」时本 effect 反复重拉
+ // 载入：进入设置页优先用 project store 已缓存 config（AppShell 挂载时已拉取）；
+ // 无缓存（store 尚未拉取）补拉一次——仅本挂载触发一次（store 内部有并发防抖），
+ // 避免「无项目/失败后 config 恒为 null」时本 effect 反复重拉
   useEffect(() => {
     const state = useProjectStore.getState();
     if (state.config === null && !state.configLoading) {
@@ -83,8 +83,8 @@ export default function Settings() {
     }
   }, []);
 
-  // config 就绪后按项目身份加载 AGENTS.md：关闭项目（null）→ 重置；切换项目（id 变化）→
-  // 重新加载（清空旧草稿，等待新项目加载完成）；同项目内 store 重拉 → 不覆盖用户正在编辑的草稿
+ // config 就绪后按项目身份加载 ：关闭项目（null）→ 重置；切换项目（id 变化）→
+ // 重新加载（清空旧草稿，等待新项目加载完成）；同项目内 store 重拉 → 不覆盖用户正在编辑的草稿
   useEffect(() => {
     if (config === null) {
       setAgentsLoadedFor(null);
@@ -100,8 +100,8 @@ export default function Settings() {
     }
   }, [config, agentsLoadedFor]);
 
-  // agents 加载完成 → 填充（仅当前项目：agentsProjectId 与 config.id 一致才填充，防串项目）；
-  // 外部修改检测结果同步展示（决策 41）
+ // agents 加载完成 → 填充（仅当前项目：agentsProjectId 与 config.id 一致才填充，防串项目）；
+ // 外部修改检测结果同步展示
   useEffect(() => {
     if (agents !== null && agentsProjectId === config?.id) {
       setAgentsContent(agents.content);
@@ -109,8 +109,8 @@ export default function Settings() {
     }
   }, [agents, agentsProjectId, config, agentsExternalModified]);
 
-  /** 决策 41 保存规则：整体替换 AGENTS.md 内容（空值 = 清空规则文件，保留空文件）；
-   *  store saveAgents 内部 PUT 成功后更新本地基线（新 mtime）；toast + dataVersion +1 触发中栏数据页刷新 */
+ /** 保存规则：整体替换 内容（空值 = 清空规则文件，保留空文件）；
+ * store saveAgents 内部 PUT 成功后更新本地基线（新 mtime）；toast + dataVersion +1 触发中栏数据页刷新 */
   async function handleSaveAgents() {
     setAgentsErrorLocal(null);
     setAgentsSaving(true);
@@ -129,7 +129,7 @@ export default function Settings() {
     }
   }
 
-  /** 保存模型名（非空校验，原型：保存时非空校验）；表单错误内联，网络错误走全局横幅 */
+ /** 保存模型名（非空校验，原型：保存时非空校验）；表单错误内联，网络错误走全局横幅 */
   async function handleSaveModel() {
     if (!model.trim()) {
       setModelError("模型名不能为空");
@@ -152,7 +152,7 @@ export default function Settings() {
     }
   }
 
-  /** 保存新 key（输入为空时内联提示；覆盖旧 key） */
+ /** 保存新 key（输入为空时内联提示；覆盖旧 key） */
   async function handleSaveKey() {
     if (!newKey.trim()) {
       setKeyError("请输入新 key");
@@ -176,7 +176,7 @@ export default function Settings() {
     }
   }
 
-  /** 清除已保存 key（PUT api_key: ""，endpoints.md 语义） */
+ /** 清除已保存 key（PUT api_key: ""， 语义） */
   async function handleClearKey() {
     setKeyError(null);
     setSaving(true);
@@ -249,19 +249,19 @@ export default function Settings() {
             {keyError && <p className="mt-1 text-sm text-destructive">{keyError}</p>}
           </div>
 
-          {/* 常驻说明（决策 17；原型「说明」区） */}
+          {/* 常驻说明（原型「说明」区） */}
           <div className="rounded-md border border-border bg-muted/50 p-3 text-xs leading-relaxed text-muted-foreground">
             <p>
-              · key 保存在用户目录配置文件（~/.ai-editor/config.json），不写入项目文件（决策 17）
+              · key 保存在用户目录配置文件（~/.ai-editor/config.json），不写入项目文件（）
             </p>
             <p>· 环境变量 DEEPSEEK_API_KEY 优先于此处配置；保存的 key 仅影响新请求</p>
           </div>
 
-          {/* 项目规则 AGENTS.md（决策 41）：编辑项目目录 AGENTS.md 文件内容（GET/PUT /project/agents）；
+          {/* 项目规则 ：编辑项目目录 文件内容（GET/PUT /project/agents）；
               注入 AI 上下文「## 项目设定」段（每轮有效）；空 = 整段跳过；无项目打开灰显禁用 + 提示；
               外部修改检测：GET 返回 mtime，与上次读取比对不一致提示刷新/重新加载 */}
           <div>
-            <h2 className="mb-1 text-sm font-semibold text-foreground">项目规则（AGENTS.md）</h2>
+            <h2 className="mb-1 text-sm font-semibold text-foreground">项目规则</h2>
             <p className="mb-2 text-xs text-muted-foreground">
               编辑项目目录下 AGENTS.md 文件内容，注入 AI 上下文「## 项目设定」段（每轮有效）；空 = 整段跳过
             </p>
@@ -275,7 +275,7 @@ export default function Settings() {
               value={agentsContent}
               onChange={(e) => setAgentsContent(e.target.value)}
               rows={6}
-              // 首填完成前不可输入（含 config 拉取中/切换项目后未加载），消除草稿被首填覆盖窗口
+ // 首填完成前不可输入（含 config 拉取中/切换项目后未加载），消除草稿被首填覆盖窗口
               disabled={config === null || config.id !== agentsLoadedFor || agentsLoading}
               placeholder="输入项目规则/行业要求…"
               className="w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
@@ -298,7 +298,7 @@ export default function Settings() {
             )}
           </div>
 
-          {/* 自动备份（B2，决策 27）：频率下拉（选择即保存）/ 立即备份 / 历史备份列表 + 加载强确认 */}
+          {/* 自动备份（B2）：频率下拉（选择即保存）/ 立即备份 / 历史备份列表 + 加载强确认 */}
           <BackupSection />
         </div>
       )}

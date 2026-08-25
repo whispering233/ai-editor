@@ -1,6 +1,4 @@
 // API 客户端基础封装（T7.2）
-// 契约来源：doc/api/endpoints.md「通用约定」——前缀 /api/v1、请求体 snake_case、响应体 camelCase、
-//   成功 {success:true,data:T} / 失败 {success:false,error:{code,message}} 包裹、ErrorCode 枚举统一
 // 响应类型沿用 @whispering233/ai-editor-shared 的导出类型（z.infer 的结果，仅类型、编译期消失）；
 // 本文件不 import zod 运行时（校验执行边界：zod 校验仅在服务端执行，避免 50KB 级依赖进浏览器包）
 import type {
@@ -37,12 +35,12 @@ export class ApiError extends Error {
   }
 }
 
-/** 查询参数（snake_case，endpoints.md 命名约定）；undefined / null 自动跳过 */
+/** 查询参数（snake_case， 命名约定）；undefined / null 自动跳过 */
 export type ApiQuery = Record<string, string | number | boolean | undefined | null>;
 
 export interface ApiFetchOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-  /** 请求体：自动 JSON 序列化（请求契约字段 snake_case） */
+ /** 请求体：自动 JSON 序列化（请求字段 snake_case） */
   body?: unknown;
   query?: ApiQuery;
   headers?: HeadersInit;
@@ -83,10 +81,10 @@ function isErrorEnvelope(
 }
 
 /**
- * 通用 fetch 封装：拼 /api/v1 前缀、JSON 序列化、解析统一响应包裹（endpoints.md）
+ * 通用 fetch 封装：拼 /api/v1 前缀、JSON 序列化、解析统一响应包裹（）
  * 成功返回 data；失败抛 ApiError（code 为服务端 ErrorCode；网络层/解析失败为 CLIENT_NETWORK_ERROR）
- * E3 扩展：body 为 FormData（导入 multipart 上传）时不 JSON 序列化、不手动设 Content-Type——
- *   浏览器自动带 multipart boundary；其余 body（JSON）语义不变
+ * body 为 FormData（导入 multipart 上传）时不 JSON 序列化、不手动设 Content-Type——
+ * 浏览器自动带 multipart boundary；其余 body（JSON）语义不变
  */
 export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
   const { method = "GET", body, query, headers, signal } = options;
@@ -103,7 +101,7 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
       signal,
     });
   } catch (err) {
-    // 网络层失败（断网 / 代理不可达 / 被 abort）
+ // 网络层失败（断网 / 代理不可达 / 被 abort）
     throw new ApiError(CLIENT_NETWORK_ERROR, err instanceof Error ? err.message : "网络请求失败");
   }
 
@@ -115,18 +113,18 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
 
 // ============ 端点函数（本卡 3 个示例验证封装；完整端点按各切片卡需求补充） ============
 
-/** GET /api/v1/project/config（契约：shared types/api.ts projectConfigResSchema） */
+/** GET /api/v1/project/config（shared types/api.ts projectConfigResSchema） */
 export function getProjectConfig(): Promise<ProjectConfig> {
   return apiFetch<ProjectConfig>("/project/config");
 }
 
-/** PUT /api/v1/project/config 请求体（契约：projectConfigUpdateReqSchema，snake_case；
- *  `prompt` 已废弃（决策 41）不再接受——项目规则改由 PUT /project/agents 写入 AGENTS.md） */
+/** PUT /api/v1/project/config 请求体（projectConfigUpdateReqSchema，snake_case；
+ * `prompt` 已废弃不再接受——项目规则改由 PUT /project/agents 写入 ） */
 export interface UpdateProjectConfigBody {
   name?: string;
   language?: ProjectLanguage;
   current_position?: string | null; // 须指向存在的非软删大纲节点（服务端校验）
-  /** 自动备份频率（决策 27 + 批次十四修订）：null = 关闭；仅枚举 1/5/10/15/30/60（BACKUP_FREQUENCIES），其他 → 400 */
+ /** 自动备份频率（ + 批次十四修订）：null = 关闭；仅枚举 1/5/10/15/30/60（BACKUP_FREQUENCIES），其他 → 400 */
   backup_frequency_minutes?: number | null;
 }
 
@@ -141,46 +139,46 @@ export function updateProjectConfig(
   return apiFetch<UpdateProjectConfigRes>("/project/config", { method: "PUT", body: patch });
 }
 
-// ============ 项目规则文件 AGENTS.md（决策 41：唯一事实源，取代 project.json `prompt`） ============
+// ============ 项目规则文件 （唯一事实源，取代 project.json `prompt`） ============
 
-/** GET /api/v1/project/agents 响应（契约：shared projectAgentsGetResSchema） */
+/** GET /api/v1/project/agents 响应（shared projectAgentsGetResSchema） */
 export type ProjectAgentsRes = ProjectAgents;
 
 /**
- * 读取项目规则文件 AGENTS.md（决策 41）：
+ * 读取项目规则文件 ：
  * - 无当前项目 → 409 NO_PROJECT_OPEN
  * - 文件不存在不报错：返回 exists:false + 空串（前端展示空编辑区）
- * - updatedAt = 文件 mtime（ISO 8601）——外部修改检测依据（决策 41）
+ * - updatedAt = 文件 mtime（ISO 8601）——外部修改检测依据
  */
 export function getProjectAgents(): Promise<ProjectAgentsRes> {
   return apiFetch<ProjectAgentsRes>("/project/agents");
 }
 
-/** PUT /api/v1/project/agents 响应（契约：shared projectAgentsPutResSchema） */
+/** PUT /api/v1/project/agents 响应（shared projectAgentsPutResSchema） */
 export interface SaveProjectAgentsRes {
   saved: true;
-  /** 写入后的文件 mtime（ISO 8601）——前端更新本地比对基线（外部修改检测用） */
+ /** 写入后的文件 mtime（ISO 8601）——前端更新本地比对基线（外部修改检测用） */
   updatedAt: string;
 }
 
 /**
- * 写入项目规则文件 AGENTS.md（决策 41：设置页直接编辑文件内容）：
+ * 写入项目规则文件 （设置页直接编辑文件内容）：
  * - 整体替换（非追加）；空串 = 清空规则（保留空文件不删除）
- * - 文件不存在自动创建；写入走原子写（决策 11 同款）
+ * - 文件不存在自动创建；写入走原子写（ 同款）
  * - 无当前项目 → 409 NO_PROJECT_OPEN
  */
 export function saveProjectAgents(content: string): Promise<SaveProjectAgentsRes> {
   return apiFetch<SaveProjectAgentsRes>("/project/agents", { method: "PUT", body: { content } });
 }
 
-/** GET /api/v1/outline（契约：shared types/api.ts outlineTreeSchema） */
+/** GET /api/v1/outline（shared types/api.ts outlineTreeSchema） */
 export function getOutline(): Promise<OutlineTree> {
   return apiFetch<OutlineTree>("/outline");
 }
 
-// ============ 大纲操作（S2.3；契约：endpoints.md「大纲操作」L514-656，严格三层决策 19） ============
+// ============ 大纲操作（S2.3；「大纲操作」L514-656，严格三层） ============
 
-/** 大纲节点类型（严格三层：volume → chapter → scene，决策 19） */
+/** 大纲节点类型（严格三层：volume → chapter → scene） */
 export type OutlineNodeType = "volume" | "chapter" | "scene";
 
 /** POST /api/v1/outline 请求体（parent_id 必填：volume→root、chapter→volume/root、scene→chapter） */
@@ -205,11 +203,11 @@ export function createOutlineNode(body: CreateOutlineBody): Promise<CreateOutlin
   return apiFetch<CreateOutlineRes>("/outline", { method: "POST", body });
 }
 
-/** PUT /api/v1/outline/:nodeId 请求体（标题/摘要/结构化 data 可部分更新；data 浅合并——未传字段保留，决策 23） */
+/** PUT /api/v1/outline/:nodeId 请求体（标题/摘要/结构化 data 可部分更新；data 浅合并——未传字段保留） */
 export interface UpdateOutlineBody {
   title?: string;
   summary?: string;
-  /** 节点结构化信息（决策 23）：按节点层级的 OUTLINE_NODE_DATA_SCHEMAS 校验（服务端），失败 400 VALIDATION_ERROR */
+ /** 节点结构化信息：按节点层级的 OUTLINE_NODE_DATA_SCHEMAS 校验（服务端），失败 400 VALIDATION_ERROR */
   data?: Record<string, unknown>;
 }
 
@@ -234,12 +232,12 @@ export interface MoveOutlineRes {
   newParentId: string;
 }
 
-/** 移动大纲节点（节点在树间重新排序，决策 1；错误：404 OUTLINE_NODE_NOT_FOUND / 400 VALIDATION_ERROR） */
+/** 移动大纲节点（节点在树间重新排序，；错误：404 OUTLINE_NODE_NOT_FOUND / 400 VALIDATION_ERROR） */
 export function moveOutlineNode(nodeId: string, body: MoveOutlineBody): Promise<MoveOutlineRes> {
   return apiFetch<MoveOutlineRes>(`/outline/${nodeId}/move`, { method: "PUT", body });
 }
 
-/** DELETE /api/v1/outline/:nodeId 响应（软删，决策 12；cascaded = 级联移除的子节点/关系/Delta 计数） */
+/** DELETE /api/v1/outline/:nodeId 响应（软删，；cascaded = 级联移除的子节点/关系/Delta 计数） */
 export interface DeleteOutlineRes {
   deleted: true;
   cascaded: {
@@ -265,7 +263,7 @@ export function getOutlinePath(nodeId: string): Promise<OutlinePathRes> {
   return apiFetch<OutlinePathRes>(`/outline/${nodeId}/path`);
 }
 
-// ============ 回收站（S2.3 大纲侧 + S4.4 实体侧补齐；契约：endpoints.md「回收站」L660-736） ============
+// ============ 回收站（S2.3 大纲侧 + S4.4 实体侧补齐；「回收站」L660-736） ============
 
 /** GET /api/v1/trash 响应（实体侧条目；type 为四类实体之一） */
 export interface TrashEntity {
@@ -293,7 +291,7 @@ export function getTrashList(): Promise<TrashListRes> {
   return apiFetch<TrashListRes>("/trash");
 }
 
-/** POST /api/v1/trash/entity/:type/:id/restore 响应（级联还原关系/Delta，决策 12 修订） */
+/** POST /api/v1/trash/entity/:type/:id/restore 响应（级联还原关系/Delta） */
 export interface RestoreTrashEntityRes {
   restored: true;
   restoredRelations: number;
@@ -310,7 +308,7 @@ export function purgeTrashEntity(type: EntityType, id: string): Promise<PurgeOut
   return apiFetch<PurgeOutlineRes>(`/trash/entity/${type}/${id}`, { method: "DELETE" });
 }
 
-/** POST /api/v1/trash/outline/:nodeId/restore 响应（级联还原子节点/关系/Delta，决策 12 修订） */
+/** POST /api/v1/trash/outline/:nodeId/restore 响应（级联还原子节点/关系/Delta） */
 export interface RestoreOutlineRes {
   restored: true;
   restoredChildren: number;
@@ -333,11 +331,11 @@ export function purgeOutlineNode(nodeId: string): Promise<PurgeOutlineRes> {
   return apiFetch<PurgeOutlineRes>(`/trash/outline/${nodeId}`, { method: "DELETE" });
 }
 
-// ============ 实体 CRUD（S3.5；契约：endpoints.md「实体 CRUD」L150-283，软删过滤决策 12） ============
+// ============ 实体 CRUD（S3.5；「实体 CRUD」L150-283，软删过滤） ============
 
 /** GET /api/v1/entity/:type 查询参数（snake_case；q 模糊匹配 name，limit 默认 50 最大 200；
- *  tag = 标签包含筛选，决策 31：setting 走 data.rules、event 走 data.tags；
- *  parent_id = 上级设定筛选（决策 32，仅 setting）：递归子树（含所有后代、不含自身） */
+ * tag = 标签包含筛选，setting 走 data.rules、event 走 data.tags；
+ * parent_id = 上级设定筛选（仅 setting）：递归子树（含所有后代、不含自身） */
 export interface ListEntitiesQuery {
   q?: string;
   offset?: number;
@@ -356,12 +354,12 @@ export interface EntityListRes {
   limit: number;
 }
 
-/** 列出实体（软删对象默认过滤——决策 12 修订，回收站是唯一访问入口） */
+/** 列出实体（软删对象默认过滤——，回收站是唯一访问入口） */
 export function listEntities(
   type: EntityType,
   query: ListEntitiesQuery = {},
 ): Promise<EntityListRes> {
-  // ListEntitiesQuery（interface）无索引签名，赋给 ApiQuery（Record）需断言——字段均为 ApiQuery 值子集
+ // ListEntitiesQuery（interface）无索引签名，赋给 ApiQuery（Record）需断言——字段均为 ApiQuery 值子集
   return apiFetch<EntityListRes>(`/entity/${type}`, { query: query as ApiQuery });
 }
 
@@ -371,7 +369,7 @@ export interface EntityDetailRes {
   type: EntityType;
   name: string;
   data: Record<string, unknown>;
-  /** 双向紧邻关系（形状同 RelationSummaryItem，见关系段定义——联表填充端点名称） */
+ /** 双向紧邻关系（形状同 RelationSummaryItem，见关系段定义——联表填充端点名称） */
   relations: RelationSummaryItem[];
   deltaCount: number;
   createdAt: string;
@@ -421,11 +419,11 @@ export function updateEntity(
   });
 }
 
-/** PUT /api/v1/entity/setting/:id/move（决策 46：设定同级重排 / 改父 + 重排复合写） */
+/** PUT /api/v1/entity/setting/:id/move（设定同级重排 / 改父 + 重排复合写） */
 export interface MoveSettingBody {
-  /** 目标父设定 id；null = 移为顶层根（无上级）。与当前父相同（含同为根）→ 仅重排 */
+ /** 目标父设定 id；null = 移为顶层根（无上级）。与当前父相同（含同为根）→ 仅重排 */
   parentId: string | null;
-  /** 0-based 同级组内序（改父后 = 新父子级组内位置 / 未改父 = 当前同级组内位置）；越界 clamp；缺省 = 组尾 */
+ /** 0-based 同级组内序（改父后 = 新父子级组内位置 / 未改父 = 当前同级组内位置）；越界 clamp；缺省 = 组尾 */
   order?: number;
 }
 
@@ -437,7 +435,7 @@ export function moveSetting(id: string, body: MoveSettingBody): Promise<{ moved:
   });
 }
 
-/** DELETE /api/v1/entity/:type/:id 响应（软删 + 级联计数，决策 12） */
+/** DELETE /api/v1/entity/:type/:id 响应（软删 + 级联计数） */
 export interface DeleteEntityRes {
   deleted: true;
   cascaded: {
@@ -451,7 +449,7 @@ export function deleteEntity(type: EntityType, id: string): Promise<DeleteEntity
   return apiFetch<DeleteEntityRes>(`/entity/${type}/${id}`, { method: "DELETE" });
 }
 
-/** 扫描重建参考资料索引（决策 43 N6：POST /api/v1/reference/scan；返回统计） */
+/** 扫描重建参考资料索引（ N6：POST /api/v1/reference/scan；返回统计） */
 export interface ScanReferencesRes {
   added: number;
   updated: number;
@@ -464,22 +462,22 @@ export function scanReferences(): Promise<ScanReferencesRes> {
   return apiFetch<ScanReferencesRes>("/reference/scan", { method: "POST" });
 }
 
-/** 只读探测：references/ 下未同步文件数（决策 43 N6：GET /api/v1/reference/scan/status，无副作用） */
+/** 只读探测：references/ 下未同步文件数（ N6：GET /api/v1/reference/scan/status，无副作用） */
 export function getReferenceScanStatus(): Promise<{ unsynced: number }> {
   return apiFetch<{ unsynced: number }>("/reference/scan/status");
 }
 
-/** PUT /api/v1/entity/event/:id/move 请求体（order：0-based 全局事件线性序，决策 26；负数由 schema 拒绝） */
+/** PUT /api/v1/entity/event/:id/move 请求体（order：0-based 全局事件线性序，；负数由 schema 拒绝） */
 export interface MoveEventBody {
   order: number;
 }
 
-/** PUT /api/v1/entity/event/:id/move 响应（endpoints.md L386-393；仅 event 支持，其余实体无 sort_order 语义） */
+/** PUT /api/v1/entity/event/:id/move 响应（；仅 event 支持，其余实体无 sort_order 语义） */
 export interface MoveEventRes {
   moved: true;
 }
 
-/** 移动时间轴事件（拖拽排序，决策 26；error：404 ENTITY_NOT_FOUND / 400 VALIDATION_ERROR） */
+/** 移动时间轴事件（拖拽排序，；error：404 ENTITY_NOT_FOUND / 400 VALIDATION_ERROR） */
 export function moveEntityEvent(id: string, body: MoveEventBody): Promise<MoveEventRes> {
   return apiFetch<MoveEventRes>(`/entity/event/${id}/move`, { method: "PUT", body });
 }
@@ -491,9 +489,9 @@ export function moveEntityTimepoint(id: string, body: MoveEventBody): Promise<Mo
 
 /** POST /api/v1/entity/event/:id/move_to 请求体（复合端点：改挂载 + 重排一次事务提交，G2） */
 export interface MoveEventToBody {
-  /** 目标时间点 id（null = 移出到「未挂载」兜底区，仅重排不建挂载） */
+ /** 目标时间点 id（null = 移出到「未挂载」兜底区，仅重排不建挂载） */
   timepoint_id: string | null;
-  /** 目标位置（0-based 全局事件线性序，语义同 event move：越界 clamp、负数 400） */
+ /** 目标位置（0-based 全局事件线性序，语义同 event move：越界 clamp、负数 400） */
   order: number;
 }
 
@@ -503,7 +501,7 @@ export function moveEntityEventTo(id: string, body: MoveEventToBody): Promise<Mo
   return apiFetch<MoveEventRes>(`/entity/event/${id}/move_to`, { method: "POST", body });
 }
 
-// ============ 关系（S3.6；契约：endpoints.md「关系」L300-391，物理删决策 12 修订） ============
+// ============ 关系（S3.6；「关系」L300-391，物理删） ============
 
 /** GET /api/v1/relation 列表项（联表填充的端点名称；depth=1 紧邻展示用） */
 export interface RelationSummaryItem {
@@ -595,7 +593,7 @@ export interface UpdateRelationMetaRes {
   updated: true;
 }
 
-/** 更新关系元数据（整体替换；关系标签线上编辑用——endpoints.md「PUT /relation/:id」） */
+/** 更新关系元数据（整体替换；关系标签线上编辑用——「PUT /relation/:id」） */
 export function updateRelationMeta(
   id: string,
   metadata: Record<string, unknown>,
@@ -603,22 +601,22 @@ export function updateRelationMeta(
   return apiFetch<UpdateRelationMetaRes>(`/relation/${id}`, { method: "PUT", body: { metadata } });
 }
 
-// ============ Delta（S5.4；契约：endpoints.md「Delta 变更追踪」L395-510 + shared delta*Schema） ============
+// ============ Delta（S5.4；「Delta 变更追踪」L395-510 + shared delta*Schema） ============
 
-/** GET /api/v1/delta/node/:nodeId 响应（按节点查该节点触发的全部 Delta，endpoints.md L436-462） */
+/** GET /api/v1/delta/node/:nodeId 响应（按节点查该节点触发的全部 Delta，） */
 export interface DeltaByNodeRes {
   nodeId: string;
   deltas: DeltaRecord[];
 }
 
 /** 获取大纲节点触发的变更记录。
- * 契约（endpoints.md L436-462）未定义该端点 404：节点缺失/软删 → 200 空数组（server 三态过滤）；
+ * （）未定义该端点 404：节点缺失/软删 → 200 空数组（server 三态过滤）；
  * 调用方无需处理 OUTLINE_NODE_NOT_FOUND（node-delta-list.tsx 错误分支仅为防御） */
 export function getDeltasByNode(nodeId: string): Promise<DeltaByNodeRes> {
   return apiFetch<DeltaByNodeRes>(`/delta/node/${nodeId}`);
 }
 
-/** POST /api/v1/delta/compute 请求体（snake_case；决策 9/19：服务端自动计算根 → at_node 的树路径） */
+/** POST /api/v1/delta/compute 请求体（snake_case；服务端自动计算根 → at_node 的树路径） */
 export interface ComputeDeltaBody {
   target_type: string;
   target_id: string;
@@ -626,15 +624,15 @@ export interface ComputeDeltaBody {
 }
 
 /**
- * 计算实体到达指定大纲节点时的累积状态（决策 9 修订：op=update from 不匹配 → 跳过 +
+ * 计算实体到达指定大纲节点时的累积状态（op=update from 不匹配 → 跳过 +
  * conflicts 标注，非 409；404 OUTLINE_NODE_NOT_FOUND——at_node 已 purge）
  */
 export function computeDeltaState(body: ComputeDeltaBody): Promise<ComputeStateResult> {
   return apiFetch<ComputeStateResult>("/delta/compute", { method: "POST", body });
 }
 
-/** POST /api/v1/delta 请求体（snake_case；契约 deltaCreateReqSchema：changes min 1、无 order 入参——服务端生成；
- *  per-op 必填语义：set→to、update→from+to、add→value、remove→value，缺失 400 VALIDATION_ERROR） */
+/** POST /api/v1/delta 请求体（snake_case；deltaCreateReqSchema：changes min 1、无 order 入参——服务端生成；
+ * per-op 必填语义：set→to、update→from+to、add→value、remove→value，缺失 400 VALIDATION_ERROR） */
 export interface CreateDeltaBody {
   node_id: string; // 触发变更的大纲节点 ID
   target_type: string;
@@ -654,12 +652,12 @@ export function createDelta(body: CreateDeltaBody): Promise<CreateDeltaRes> {
   return apiFetch<CreateDeltaRes>("/delta", { method: "POST", body });
 }
 
-// ============ 书架（S1.5；契约：GET /api/v1/project/list，服务端扫描 books/ 子目录） ============
+// ============ 书架（S1.5；GET /api/v1/project/list，服务端扫描 books/ 子目录） ============
 
-/** GET /api/v1/project/list 响应（books 元素类型复用 shared ProjectListBook——契约单一来源；
- * shared 未导出响应根类型命名，本地组合 ProjectList，字段契约同 projectListResSchema） */
+/** GET /api/v1/project/list 响应（books 元素类型复用 shared ProjectListBook——单一来源；
+ * shared 未导出响应根类型命名，本地组合 ProjectList，字段同 projectListResSchema） */
 export interface ProjectList {
-  /** 创作根（启动目录）绝对路径 */
+ /** 创作根（启动目录）绝对路径 */
   rootPath: string;
   books: ProjectListBook[];
 }
@@ -669,10 +667,10 @@ export function listProjects(): Promise<ProjectList> {
   return apiFetch<ProjectList>("/project/list");
 }
 
-// ============ 项目开/建/关（S1.4；契约：endpoints.md「项目管理」+ S1.2 server 路由） ============
+// ============ 项目开/建/关（S1.4；「项目管理」+ S1.2 server 路由） ============
 
 /** POST /api/v1/project/create 请求体（snake_case；config 可选；
- *  `prompt` 已废弃（决策 41）不再接受——项目规则改由 PUT /project/agents 写入 AGENTS.md） */
+ * `prompt` 已废弃不再接受——项目规则改由 PUT /project/agents 写入 ） */
 export interface CreateProjectBody {
   path: string;
   config?: {
@@ -681,7 +679,7 @@ export interface CreateProjectBody {
   };
 }
 
-/** POST /api/v1/project/create 响应（endpoints.md L36-41） */
+/** POST /api/v1/project/create 响应（） */
 export interface CreateProjectRes {
   id: string;
   path: string;
@@ -705,11 +703,11 @@ export interface OpenProjectRes {
   name: string;
   language: ProjectLanguage;
   config: ProjectConfig;
-  /** schema 版本不匹配时删库重建提示（决策 13 修订，endpoints.md「向客户端提示已重建」） */
+ /** schema 版本不匹配时删库重建提示（「向客户端提示已重建」） */
   rebuilt?: boolean;
-  /** 前向迁移提示（E5：旧版本经 runMigrations 自动升级时 true，与 rebuilt 互斥） */
+ /** 前向迁移提示（旧版本经 runMigrations 自动升级时 true，与 rebuilt 互斥） */
   migrated?: boolean;
-  /** 重建/迁移前的 schema 版本号（决策 13：备份文件命名 v{n}） */
+ /** 重建/迁移前的 schema 版本号（备份文件命名 v{n}） */
   fromVersion?: number;
 }
 
@@ -723,20 +721,20 @@ export interface CloseProjectRes {
   saved: true;
 }
 
-/** 关闭当前项目（释放数据库连接，data-flow.md 第 46 行） */
+/** 关闭当前项目（释放数据库连接，） */
 export function closeProject(): Promise<CloseProjectRes> {
   return apiFetch<CloseProjectRes>("/project/close", { method: "POST" });
 }
 
-// ============ 导出/导入（E3；契约：endpoints.md「项目管理」段末尾 + shared types/api.ts
-//   PROJECT_EXPORT_FILE_NAMES 注释——zip 内三文件 project.json/outline.json/data.db） ============
+// ============ 导出/导入（「项目管理」段末尾 + shared types/api.ts
+// PROJECT_EXPORT_FILE_NAMES 注释——zip 内三文件 project.json/outline.json/data.db） ============
 
 /**
  * 解析 Content-Disposition 的文件名（RFC 5987，服务端格式
  * `attachment; filename="book.zip"; filename*=UTF-8''<书名>.zip`）：
  * - `filename*`（percent 编码，中文书名）优先，decodeURIComponent 解码
  * - 回退 ASCII `filename="..."`；解码失败（非法 percent 序列）/无 header → "project.zip"
- * 纯函数（可单测）；endpoints.md：文件名缺失回退 "project.zip"
+ * 纯函数（可单测）；：文件名缺失回退 "project.zip"
  */
 export function parseContentDispositionFilename(header: string | null): string {
   if (header !== null) {
@@ -745,7 +743,7 @@ export function parseContentDispositionFilename(header: string | null): string {
       try {
         return decodeURIComponent(star[1]);
       } catch {
-        // 非法 percent 序列 → 继续回退 ASCII filename
+ // 非法 percent 序列 → 继续回退 ASCII filename
       }
     }
     const plain = /filename\s*=\s*"?([^";]+)"?/i.exec(header);
@@ -757,18 +755,18 @@ export function parseContentDispositionFilename(header: string | null): string {
 /** GET /api/v1/project/export 响应（二进制 zip 例外：不走 apiFetch 的 JSON 解析） */
 export interface ExportProjectZipRes {
   blob: Blob;
-  /** 下载文件名（Content-Disposition 解析；缺失回退 "project.zip"） */
+ /** 下载文件名（Content-Disposition 解析；缺失回退 "project.zip"） */
   filename: string;
 }
 
 /**
- * 导出当前项目为 zip 备份包（E1 服务端 / E3 前端；endpoints.md「GET /project/export」）。
+ * 导出当前项目为 zip 备份包（ / 「GET /project/export」）。
  * **不走 apiFetch**——成功响应是 application/zip **二进制**（通用约定「成功 {success,data}
  * JSON 包裹」的显式例外），错误响应仍是 JSON 包裹（409 NO_PROJECT_OPEN / 500 INTERNAL_ERROR）。
  * 响应分流（ora-1 守卫收紧）：
  * - **白名单式判定二进制**：仅 2xx 且 Content-Type 含 zip/octet-stream 才当 zip 返回
- *   （服务端恒发 application/zip，octet-stream 为中间层改写兼容；守卫零误伤）——
- *   其余 2xx（如中间层 200 text/html）抛 CLIENT_NETWORK_ERROR，不把 HTML 当 zip 下载
+ * （服务端恒发 application/zip，octet-stream 为中间层改写兼容；守卫零误伤）——
+ * 其余 2xx（如中间层 200 text/html）抛 CLIENT_NETWORK_ERROR，不把 HTML 当 zip 下载
  * - JSON（或非 2xx）：复用统一错误包裹解析抛 ApiError（错误码透传）
  */
 export async function exportProjectZip(): Promise<ExportProjectZipRes> {
@@ -790,7 +788,7 @@ export async function exportProjectZip(): Promise<ExportProjectZipRes> {
     const json: unknown = await res.json().catch(() => null);
     if (isErrorEnvelope(json)) throw new ApiError(json.error.code, json.error.message);
   }
-  // 非预期响应（2xx 非 zip / 非 JSON 错误响应）：不当作 zip 下载
+ // 非预期响应（2xx 非 zip / 非 JSON 错误响应）：不当作 zip 下载
   throw new ApiError(CLIENT_NETWORK_ERROR, `非预期响应（HTTP ${res.status}）`);
 }
 
@@ -798,10 +796,10 @@ export async function exportProjectZip(): Promise<ExportProjectZipRes> {
 export type ImportProjectRes = ProjectImportRes;
 
 /**
- * 导入备份 zip 为新书（E2 服务端 / E3 前端；endpoints.md「POST /project/import」）。
+ * 导入备份 zip 为新书（ / 「POST /project/import」）。
  * multipart/form-data：`file` = zip 二进制 + `name` = 新书目录名（禁路径分隔符，服务端校验；
- *   目标目录由服务端决定 创作根/books/<name>/，客户端不可指定路径防越权）。
- * 走 apiFetch（E3 扩展：body 为 FormData 时保持原样 + 浏览器自动带 boundary）；
+ * 目标目录由服务端决定 创作根/books/<name>/，客户端不可指定路径防越权）。
+ * 走 apiFetch（body 为 FormData 时保持原样 + 浏览器自动带 boundary）；
  * 错误码：400 VALIDATION_ERROR（坏包/缺文件/书名非法/超限）、409 SCHEMA_VERSION_MISMATCH
  * （版本不兼容，文案区分更高/旧版本程序）、409 PROJECT_ALREADY_EXISTS（同名书已存在）——
  * ApiError.code 透传；成功不自动打开（与 create 一致），前端刷新书架
@@ -813,16 +811,16 @@ export async function importProjectZip(file: File, name: string): Promise<Import
   return apiFetch<ImportProjectRes>("/project/import", { method: "POST", body: form });
 }
 
-// ============ 备份管理（B2.4 + B2.6 决策 29；契约：endpoints.md「备份管理」L225-295，决策 27） ============
+// ============ 备份管理（B2.4 + B2.6 ；「备份管理」L225-295） ============
 
 /** 备份条目（GET /project/backups 列表元素 / POST /project/backup 响应 backup） */
 export interface BackupEntry {
-  fileName: string; // 时间戳命名（决策 28 毫秒精度 <YYYYMMDD-HHmmssSSS>.zip；restore 用此引用）
+  fileName: string; // 时间戳命名（ 毫秒精度 <YYYYMMDD-HHmmssSSS>.zip；restore 用此引用）
   size: number; // 字节数
   createdAt: string; // 备份时间（ISO 8601，由文件名时间戳解析）
-  /** 备份类型（决策 29 必填，文件名解析：自动/快照/旧秒级 = auto；手动/旧带名称 = manual） */
+ /** 备份类型（ 必填，文件名解析：自动/快照/旧秒级 = auto；手动/旧带名称 = manual） */
   kind: BackupKind;
-  /** 手动备份自定义名称（决策 28/29；由文件名解析——自动备份/覆盖前快照/旧备份无此字段） */
+ /** 手动备份自定义名称（由文件名解析——自动备份/覆盖前快照/旧备份无此字段） */
   name?: string;
 }
 
@@ -843,8 +841,8 @@ export interface CreateBackupRes {
 
 /**
  * 立即备份当前项目（手动触发，设置页「立即备份」按钮）。
- * @param name 自定义备份名称（决策 28，可选）：trim 后 1-30 字符，服务端校验；
- *   缺省 → 纯时间戳文件名
+ * @param name 自定义备份名称（可选）：trim 后 1-30 字符，服务端校验；
+ * 缺省 → 纯时间戳文件名
  */
 export function createProjectBackup(name?: string): Promise<CreateBackupRes> {
   return apiFetch<CreateBackupRes>("/project/backup", {
@@ -853,10 +851,10 @@ export function createProjectBackup(name?: string): Promise<CreateBackupRes> {
   });
 }
 
-/** POST /api/v1/project/backup/restore 响应（覆盖恢复，决策 27） */
+/** POST /api/v1/project/backup/restore 响应（覆盖恢复） */
 export interface RestoreBackupRes {
   restored: true;
-  /** 覆盖前自动生成的当前状态快照（后悔药，已计入保留策略） */
+ /** 覆盖前自动生成的当前状态快照（后悔药，已计入保留策略） */
   snapshot: {
     fileName: string;
     createdAt: string;
@@ -865,9 +863,9 @@ export interface RestoreBackupRes {
 
 /**
  * 从备份列表恢复当前项目（覆盖恢复）：
- * - 覆盖前服务端自动快照当前状态 → 原子替换三文件 → 会话归属迁移（跨项目恢复，决策 18 保护）
+ * - 覆盖前服务端自动快照当前状态 → 原子替换三文件 → 会话归属迁移（跨项目恢复， 保护）
  * - 错误：404 VALIDATION_ERROR（备份不存在）、409 SCHEMA_VERSION_MISMATCH（备份来自更高版本，
- *   前端阻断提示——message 已按相对版本分流，透传展示）
+ * 前端阻断提示——message 已按相对版本分流，透传展示）
  */
 export function restoreProjectBackup(fileName: string): Promise<RestoreBackupRes> {
   return apiFetch<RestoreBackupRes>("/project/backup/restore", {
@@ -876,7 +874,7 @@ export function restoreProjectBackup(fileName: string): Promise<RestoreBackupRes
   });
 }
 
-/** POST /api/v1/project/backup/rename 响应（重命名备份，决策 29：只改名称段，时间戳与 kind 保持） */
+/** POST /api/v1/project/backup/rename 响应（重命名备份，只改名称段，时间戳与 kind 保持） */
 export interface RenameBackupRes {
   backup: BackupEntry;
 }
@@ -893,7 +891,7 @@ export function renameProjectBackup(fileName: string, name?: string): Promise<Re
   });
 }
 
-/** POST /api/v1/project/rename 响应（重命名当前书籍，决策 27） */
+/** POST /api/v1/project/rename 响应（重命名当前书籍） */
 export interface RenameProjectRes {
   renamed: true;
   path: string; // 新书目录绝对路径（创作根/books/<新名>/）
@@ -909,9 +907,9 @@ export function renameProject(name: string): Promise<RenameProjectRes> {
   return apiFetch<RenameProjectRes>("/project/rename", { method: "POST", body: { name } });
 }
 
-// ============ 设置（S1.4；契约：endpoints.md「系统设置」+ S1.3 server 路由） ============
+// ============ 设置（S1.4；「系统设置」+ S1.3 server 路由） ============
 
-/** 模型目录条目（GET /settings/llm；决策 34 getAvailableModels） */
+/** 模型目录条目（GET /settings/llm； getAvailableModels） */
 export interface LlmModelInfo {
   id: string;
   provider: string;
@@ -921,7 +919,7 @@ export interface LlmModelInfo {
   reasoning: boolean;
 }
 
-/** GET /api/v1/settings/llm 响应（决策 17：key 不回传明文，仅掩码；决策 34：模型目录 + 思考强度） */
+/** GET /api/v1/settings/llm 响应（key 不回传明文，仅掩码；模型目录 + 思考强度） */
 export interface SettingsLlmConfig {
   model: string;
   thinkingLevel: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
@@ -935,7 +933,7 @@ export function getSettingsLlm(): Promise<SettingsLlmConfig> {
   return apiFetch<SettingsLlmConfig>("/settings/llm");
 }
 
-/** PUT /api/v1/settings/llm 请求体（api_key 空字符串 = 清除已保存 key；thinking_level 决策 34） */
+/** PUT /api/v1/settings/llm 请求体（api_key 空字符串 = 清除已保存 key；thinking_level ） */
 export interface UpdateSettingsLlmBody {
   model?: string;
   thinking_level?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
@@ -947,12 +945,12 @@ export interface UpdateSettingsLlmRes {
   saved: true;
 }
 
-/** 更新 LLM 配置（写入 ~/.ai-editor/config.json，绝不入项目文件，决策 17） */
+/** 更新 LLM 配置（写入 ~/.ai-editor/config.json，绝不入项目文件） */
 export function updateSettingsLlm(patch: UpdateSettingsLlmBody): Promise<UpdateSettingsLlmRes> {
   return apiFetch<UpdateSettingsLlmRes>("/settings/llm", { method: "PUT", body: patch });
 }
 
-// ============ 名称解析（决策 47，批次十四；契约：endpoints.md「POST /api/v1/names/resolve」） ============
+// ============ 名称解析（批次十四；「POST /api/v1/names/resolve」） ============
 
 /** 名称解析结果（label = 类型中文，name = 实体名/节点标题；未命中 = null） */
 export interface ResolvedName {
@@ -962,7 +960,7 @@ export interface ResolvedName {
 
 export type ResolvedNames = Record<string, ResolvedName | null>;
 
-/** POST /api/v1/names/resolve 响应（决策 47：names 键集 = 请求 ids 去重后全集，未命中 = null） */
+/** POST /api/v1/names/resolve 响应（names 键集 = 请求 ids 去重后全集，未命中 = null） */
 export interface ResolveNamesRes {
   names: ResolvedNames;
 }
@@ -972,9 +970,9 @@ export function resolveNames(ids: string[]): Promise<ResolveNamesRes> {
   return apiFetch<ResolveNamesRes>("/names/resolve", { method: "POST", body: { ids } });
 }
 
-// ============ 会话（U3；契约：endpoints.md「chat/sessions」L795-834，决策 18 按项目隔离） ============
+// ============ 会话（U3；「chat/sessions」L795-834， 按项目隔离） ============
 
-/** GET /api/v1/chat/sessions 响应（契约：{sessions: ChatSessionSummary[]}，按最后活动倒序、仅当前项目） */
+/** GET /api/v1/chat/sessions 响应（{sessions: ChatSessionSummary[]}，按最后活动倒序、仅当前项目） */
 export interface ChatSessionListRes {
   sessions: ChatSessionSummary[];
 }
@@ -985,16 +983,16 @@ export function listSessions(): Promise<ChatSessionSummary[]> {
 }
 
 /**
- * GET /api/v1/chat/sessions/:id/messages 消息条目（契约：chatMessagesResSchema.messages 元素，
- * endpoints.md L813-834——响应不含 sessionId；shared 未导出该元素类型，本地组合，参照 ProjectList 先例）
+ * GET /api/v1/chat/sessions/:id/messages 消息条目（chatMessagesResSchema.messages 元素，
+ * ——响应不含 sessionId；shared 未导出该元素类型，本地组合，参照 ProjectList 先例）
  */
 export interface ChatSessionMessage {
   id: string;
   role: ChatRole;
   content?: string | null;
-  /** assistant 消息的工具调用数组 */
+ /** assistant 消息的工具调用数组 */
   toolCalls?: unknown[];
-  /** tool 消息关联的 assistant 工具调用 id（决策 18 修订） */
+ /** tool 消息关联的 assistant 工具调用 id */
   toolCallId?: string | null;
   createdAt: string;
 }
@@ -1010,18 +1008,18 @@ export function getSessionMessages(sessionId: string): Promise<ChatSessionMessag
   return apiFetch<ChatSessionMessagesRes>(`/chat/sessions/${sessionId}/messages`);
 }
 
-// ============ 发送消息（U5；契约：chatSendReqSchema，endpoints.md「POST /api/v1/chat」L742-793） ============
+// ============ 发送消息（U5；chatSendReqSchema，「POST /api/v1/chat」L742-793） ============
 
 /**
  * POST /api/v1/chat 请求体（snake_case；message 必填，session_id 不传则创建新会话）。
  * 注意：实际发送由 use-sse 的 fetchSSE 承担（chat store 内联调用 fetchSSE("/api/v1/chat", …)，
- * 返回 SSE 事件流，不走 apiFetch 的 JSON 包裹）——本文件只保留请求体契约（事实来源），
- * 不再提供发送函数；请求体契约已与 S7.6 实现对齐（endpoints.md L742-793），以本契约为准
+ * 返回 SSE 事件流，不走 apiFetch 的 JSON 包裹）——本文件只保留请求体（事实来源），
+ * 不再提供发送函数；请求体已与 S7.6 实现对齐（），以本为准
  */
 export interface SendChatMessageBody {
   message: string;
   session_id?: string;
-  /** focus 上下文（layout.md §4.2：跨页「问 AI」注入；仅 focus 小条存在时携带） */
+ /** focus 上下文（：跨页「问 AI」注入；仅 focus 小条存在时携带） */
   context?: {
     focus_entity_type?: string;
     focus_entity_id?: string;
@@ -1029,18 +1027,18 @@ export interface SendChatMessageBody {
   };
 }
 
-// ============ 提案确认/拒绝（S8.2；契约：endpoints.md「提案确认」L848-888 + shared proposalConfirmResSchema/proposalRejectResSchema） ============
+// ============ 提案确认/拒绝（S8.2；「提案确认」L848-888 + shared proposalConfirmResSchema/proposalRejectResSchema） ============
 
-/** POST /api/v1/proposal/:proposalId/confirm 响应（字段契约同 shared proposalConfirmResSchema） */
+/** POST /api/v1/proposal/:proposalId/confirm 响应（字段同 shared proposalConfirmResSchema） */
 export interface ConfirmProposalRes {
   confirmed: true;
-  /** 执行结果（如新创建的 entity id） */
+ /** 执行结果（如新创建的 entity id） */
   result: unknown;
 }
 
 /**
- * 确认提案（一次性消费，决策 14：确认动作即终态，服务端处理完立即移除）。
- * 错误码语义（endpoints.md L864-874，ApiError.code 透传）：
+ * 确认提案（一次性消费，确认动作即终态，服务端处理完立即移除）。
+ * 错误码语义（，ApiError.code 透传）：
  * - 409 PROPOSAL_STALE——确认时快照重校验失败（引用实体/节点已变化或删除）→ 前端提示重新生成提案
  * - 404 PROPOSAL_NOT_FOUND——proposal_id 不存在（已过期清除 / SSE 断开作废）
  * - 409 PROPOSAL_PROJECT_MISMATCH——提案所属项目 ≠ 当前项目（防御性，切换项目时提案已清空）
@@ -1049,7 +1047,7 @@ export function confirmProposal(proposalId: string): Promise<ConfirmProposalRes>
   return apiFetch<ConfirmProposalRes>(`/proposal/${proposalId}/confirm`, { method: "POST" });
 }
 
-/** POST /api/v1/proposal/:proposalId/reject 响应（字段契约同 shared proposalRejectResSchema） */
+/** POST /api/v1/proposal/:proposalId/reject 响应（字段同 shared proposalRejectResSchema） */
 export interface RejectProposalRes {
   rejected: true;
 }

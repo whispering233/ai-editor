@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { RelationSummaryItem } from "./api";
 import { buildNodeHookMarks, HOOK_MARK_TYPE_ORDER, HOOK_MARK_TYPES } from "./outline-hooks";
 
-/** 关系 fixture（默认 outline_node → hook 的 plants；hooks.md 标记关系方向） */
+/** 关系 fixture（默认 outline_node → hook 的 plants； 标记关系方向） */
 function rel(
   sourceId: string,
   targetId: string,
@@ -24,7 +24,7 @@ function rel(
 }
 
 describe("HOOK_MARK_TYPES（标记类型常量）", () => {
-  it("恰为 plants/advances/resolves 三类（hooks.md 生命周期关系）", () => {
+  it("恰为 plants/advances/resolves 三类", () => {
     expect(HOOK_MARK_TYPES).toEqual(["plants", "advances", "resolves"]);
   });
 });
@@ -76,7 +76,7 @@ describe("buildNodeHookMarks（关系行 → 节点标记映射）", () => {
   });
 
   it("稳定排序：类型序（plants → advances → resolves）优先，同类型按名称、名称同按 id", () => {
-    // 乱序输入（跨请求合并后顺序不定）→ 输出按类型序 + 名称 + id 全序确定化
+ // 乱序输入（跨请求合并后顺序不定）→ 输出按类型序 + 名称 + id 全序确定化
     const map = buildNodeHookMarks([
       rel("sc-1", "hook-z", "resolves"),
       rel("sc-1", "hook-a", "advances"),

@@ -1,8 +1,4 @@
-// 自写 SSE 客户端（T7.2 核心；chat 端点 POST + SSE，浏览器原生 EventSource 只支持 GET，决策 20）
-// 契约来源：doc/api/endpoints.md 第 738-769 行（事件流格式 + 客户端解析约束）：
-//   - 跨 chunk 的 data: 行拼接、多行 data: 合并、注释行（: 开头）跳过、空行分帧、[DONE] 哨兵
-//   - error 事件后流立即关闭（客户端收到即终止解析）
-//   - 60s 无任何事件 → 判定连接断开（决策 20 半开连接兜底），回调 onTimeout 并中止 fetch
+// 自写 SSE 客户端（T7.2 核心；chat 端点 POST + SSE，浏览器原生 EventSource 只支持 GET）
 // 帧解析抽为纯函数（parseSSEFrames / parseSSEFrame）便于单测
 import type { ErrorCode } from "@whispering233/ai-editor-shared";
 import { CLIENT_NETWORK_ERROR } from "../lib/api";
@@ -15,21 +11,21 @@ export interface SSEMessage {
 
 export const SSE_DONE = "[DONE]";
 
-/** 默认超时：60s 无任何事件即判定断开（决策 20 客户端兜底） */
+/** 默认超时：60s 无任何事件即判定断开（ 客户端兜底） */
 export const DEFAULT_SSE_TIMEOUT_MS = 60_000;
 
 export interface SSEOptions {
-  /** 事件分发：event 名 + data（JSON 解析成功为对象/数组，解析失败按原文字符串透传） */
+ /** 事件分发：event 名 + data（JSON 解析成功为对象/数组，解析失败按原文字符串透传） */
   onEvent: (event: string, data: unknown) => void;
-  /** 无任何事件的超时阈值（默认 60s，决策 20） */
+ /** 无任何事件的超时阈值（默认 60s） */
   timeoutMs?: number;
-  /** 超时回调（随后自动中止 fetch） */
+ /** 超时回调（随后自动中止 fetch） */
   onTimeout?: () => void;
-  /** 流正常结束（服务端关闭 / [DONE] / error 事件终止）；手动 abort 与超时不触发 */
+ /** 流正常结束（服务端关闭 / [DONE] / error 事件终止）；手动 abort 与超时不触发 */
   onEnd?: () => void;
-  /** 外部取消信号（与返回的 abort 函数等效） */
+ /** 外部取消信号（与返回的 abort 函数等效） */
   signal?: AbortSignal;
-  /** 请求体（chat 端点 POST 必需：message / session_id / context） */
+ /** 请求体（chat 端点 POST 必需：message / session_id / context） */
   body?: unknown;
 }
 
@@ -50,8 +46,8 @@ export function parseSSEFrames(buffer: string): { frames: string[]; rest: string
 
 /**
  * 解析单个帧为 {event, data}（纯函数，可单测）
- * SSE 规范：注释行（: 开头）跳过、无字段行忽略；event: 行取事件名；
- *   data: 行合并（多行以 \n 拼接，仅剥离一个前导空格）；无 data 的帧返回 null
+ * SSE 规范：注释行（ 开头）跳过、无字段行忽略；event: 行取事件名；
+ * data: 行合并（多行以 \n 拼接，仅剥离一个前导空格）；无 data 的帧返回 null
  */
 export function parseSSEFrame(frame: string): SSEMessage | null {
   let event = "message";
@@ -65,7 +61,7 @@ export function parseSSEFrame(frame: string): SSEMessage | null {
       if (value.startsWith(" ")) value = value.slice(1); // 仅剥离一个前导空格
       dataLines.push(value);
     }
-    // id: / retry: 字段本客户端不需要，忽略
+ // id: / retry: 字段本客户端不需要，忽略
   }
   if (dataLines.length === 0) return null;
   return { event, data: dataLines.join("\n") };
@@ -121,17 +117,17 @@ export function fetchSSE(url: string, options: SSEOptions): () => void {
     }, timeoutMs);
   };
 
-  /** 分发一帧；返回 false 表示应终止解析（[DONE] 哨兵 / error 事件） */
+ /** 分发一帧；返回 false 表示应终止解析（[DONE] 哨兵 / error 事件） */
   const dispatch = (msg: SSEMessage): boolean => {
     if (msg.data === SSE_DONE) return false; // 哨兵终止
     let payload: unknown = msg.data;
     try {
       payload = JSON.parse(msg.data) as unknown;
     } catch {
-      // data 非 JSON：按原文字符串透传（如 text 事件异常负载）
+ // data 非 JSON：按原文字符串透传（如 text 事件异常负载）
     }
     onEvent(msg.event, payload);
-    return msg.event !== "error"; // error 事件后流立即关闭（endpoints.md）
+    return msg.event !== "error"; // error 事件后流立即关闭（）
   };
 
   armTimer();
@@ -146,7 +142,7 @@ export function fetchSSE(url: string, options: SSEOptions): () => void {
       });
 
       if (!res.ok || !res.body) {
-        // 非 2xx：尝试解析 REST 错误包裹并透传为 error 事件后结束（不视为正常结束）
+ // 非 2xx：尝试解析 REST 错误包裹并透传为 error 事件后结束（不视为正常结束）
         const json: unknown = await res.json().catch(() => null);
         const code = isErrorPayload(json) ? json.error.code : CLIENT_NETWORK_ERROR;
         const message = isErrorPayload(json)
@@ -164,7 +160,7 @@ export function fetchSSE(url: string, options: SSEOptions): () => void {
       while (!done) {
         const { done: streamDone, value } = await reader.read();
         if (streamDone) break;
-        // 追加解码 + 归一化 CRLF（\r 可能跨 chunk 分片，整 buffer 归一化最稳）
+ // 追加解码 + 归一化 CRLF（\r 可能跨 chunk 分片，整 buffer 归一化最稳）
         buffer = (buffer + decoder.decode(value, { stream: true })).replace(/\r\n/g, "\n");
         const { frames, rest } = parseSSEFrames(buffer);
         buffer = rest;
@@ -175,21 +171,21 @@ export function fetchSSE(url: string, options: SSEOptions): () => void {
             done = true; // [DONE] / error：终止解析
             break;
           }
-          armTimer(); // 有事件即重置超时（决策 20：60s 无任何事件才判定断开）
+          armTimer(); // 有事件即重置超时（60s 无任何事件才判定断开）
         }
       }
 
-      // EOF 时 flush 残余 buffer（服务端可能不写结尾空行）
+ // EOF 时 flush 残余 buffer（服务端可能不写结尾空行）
       if (!done && buffer.trim() !== "") {
         const msg = parseSSEFrame(buffer.trim());
         if (msg && !dispatch(msg)) done = true;
       }
     } catch {
-      // 区分终止原因（S8.1 oracle S1 补丁）：
-      // - timedOut / manualAbort（AbortError 已由超时/手动取消置位）→ 静默：
-      //   超时走 onTimeout、手动取消由 abort 调用方感知（既有语义）
-      // - 其他错误（fetch 网络层失败——服务未起/断网/DNS，或读流中途连接重置）→ 补发
-      //   error 事件 + failed 置位：避免「气泡无回复无提示」静默失败；onEnd 不被误触发
+ // 区分终止原因（S8.1 oracle S1 补丁）：
+ // - timedOut / manualAbort（AbortError 已由超时/手动取消置位）→ 静默：
+ // 超时走 onTimeout、手动取消由 abort 调用方感知（既有语义）
+ // - 其他错误（fetch 网络层失败——服务未起/断网/DNS，或读流中途连接重置）→ 补发
+ // error 事件 + failed 置位：避免「气泡无回复无提示」静默失败；onEnd 不被误触发
       if (!timedOut && !manualAbort) {
         done = true;
         failed = true;
@@ -203,7 +199,7 @@ export function fetchSSE(url: string, options: SSEOptions): () => void {
     }
   })();
 
-  /** 取消流（用户手动停止生成） */
+ /** 取消流（用户手动停止生成） */
   return () => {
     if (done) return;
     manualAbort = true;

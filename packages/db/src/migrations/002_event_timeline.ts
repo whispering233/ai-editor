@@ -1,4 +1,4 @@
-// 迁移 002：时间轴事件（决策 26）——entities 表 type CHECK 扩为 5 种 + 新增 sort_order 列
+// 迁移 002：时间轴事件——entities 表 type CHECK 扩为 5 种 + 新增 sort_order 列
 //
 // 背景：v1 的 entities.type CHECK 不含 'event'，且无 sort_order 列（时间轴事件全局线性序）。
 // SQLite 的 CHECK 约束无法 ALTER 修改——必须「建新表 → 拷数据 → drop 旧表 → rename」四步。
@@ -27,16 +27,16 @@ CREATE TABLE entities_v2 (
 export default {
   version: 2,
   up: (db: Db) => {
-    // 1. 建新表（v2 结构：CHECK 含 event + sort_order 列）
+ // 1. 建新表（v2 结构：CHECK 含 event + sort_order 列）
     db.exec(ENTITIES_V2_DDL);
-    // 2. 拷数据（sort_order 旧库无此列，全部为 NULL——event 时间轴从空序起步，由 move 端点重排）
+ // 2. 拷数据（sort_order 旧库无此列，全部为 NULL——event 时间轴从空序起步，由 move 端点重排）
     db.exec(
       `INSERT INTO entities_v2 (id, type, name, data, created_at, updated_at, deleted_at)
        SELECT id, type, name, data, created_at, updated_at, deleted_at FROM entities`,
     );
-    // 3. 删旧表
+ // 3. 删旧表
     db.exec("DROP TABLE entities");
-    // 4. 新表更名为 entities
+ // 4. 新表更名为 entities
     db.exec("ALTER TABLE entities_v2 RENAME TO entities");
   },
 } satisfies Migration;

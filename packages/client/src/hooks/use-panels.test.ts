@@ -28,7 +28,7 @@ describe("clampPanelWidth", () => {
 
 describe("defaultPanelLayout", () => {
   it("按视口 1:5:4 换算（左 10% / 右 40%），默认未收起", () => {
-    // 1600 视口下 10% = 160、40% = 640 均在可读区间内，比例严格还原
+ // 1600 视口下 10% = 160、40% = 640 均在可读区间内，比例严格还原
     const layout = defaultPanelLayout(1600);
     expect(layout.sidebarWidth).toBe(160);
     expect(layout.chatWidth).toBe(640);

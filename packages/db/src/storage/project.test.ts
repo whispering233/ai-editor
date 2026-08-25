@@ -1,5 +1,5 @@
 // T2.2 project.json 存储模块测试：缺失返回 null / 写读往返 / 原子写不残留 / 损坏抛错
-// + 决策 41：AGENTS.md 项目规则文件读写（readAgentsFile/writeAgentsFile/agentsFileMtimeIso）
+// + 项目规则文件读写（readAgentsFile/writeAgentsFile/agentsFileMtimeIso）
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -26,7 +26,7 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-/** 合法 project.json 配置（schema.md 契约字段全量） */
+/** 合法 project.json 配置（ 字段全量） */
 function makeConfig(): ProjectFileConfig {
   return {
     id: "proj-abc123",
@@ -41,7 +41,7 @@ function makeConfig(): ProjectFileConfig {
 }
 
 describe("readProjectFile", () => {
-  it("文件不存在返回 null（未初始化语义，决策 8 由上层创建）", () => {
+  it("文件不存在返回 null（未初始化语义， 由上层创建）", () => {
     expect(readProjectFile(dir)).toBeNull();
   });
 
@@ -56,7 +56,7 @@ describe("readProjectFile", () => {
     expect(() => readProjectFile(dir)).toThrow();
   });
 
-  it("顶层结构不符契约抛错：id / name / schema_version 任一缺失或类型不符（与 outline 校验对称）", () => {
+  it("顶层结构不符抛错：id / name / schema_version 任一缺失或类型不符（与 outline 校验对称）", () => {
     const cases: Array<{ label: string; json: string }> = [
       { label: "缺 id", json: '{"name":"我的小说","schema_version":1}' },
       { label: "id 非 string", json: '{"id":123,"name":"我的小说","schema_version":1}' },
@@ -72,7 +72,7 @@ describe("readProjectFile", () => {
 });
 
 describe("writeProjectFile", () => {
-  it("走决策 11 原子写：完成后无临时文件残留（schema.md 第 186 行）", () => {
+  it("走 原子写：完成后无临时文件残留", () => {
     writeProjectFile(dir, makeConfig());
     expect(existsSync(join(dir, PROJECT_FILE_NAME))).toBe(true);
     expect(existsSync(join(dir, ".project.json.tmp"))).toBe(false);
@@ -87,9 +87,9 @@ describe("writeProjectFile", () => {
   });
 });
 
-// ============ AGENTS.md 项目规则文件（决策 41） ============
+// ============ 项目规则文件 ============
 
-describe("AGENTS.md 读写（决策 41：项目规则唯一事实源）", () => {
+describe("AGENTS.md 读写（项目规则唯一事实源）", () => {
   it("readAgentsFile：文件不存在返回 null（可选文件语义）", () => {
     expect(readAgentsFile(dir)).toBeNull();
   });
@@ -99,7 +99,7 @@ describe("AGENTS.md 读写（决策 41：项目规则唯一事实源）", () => 
     expect(readAgentsFile(dir)).toBe("力量体系：练气→筑基→金丹");
   });
 
-  it("writeAgentsFile 走决策 11 原子写：完成后无临时文件残留", () => {
+  it("writeAgentsFile 走 原子写：完成后无临时文件残留", () => {
     writeAgentsFile(dir, "规则内容");
     expect(existsSync(join(dir, AGENTS_FILE_NAME))).toBe(true);
     expect(existsSync(join(dir, `.${AGENTS_FILE_NAME}.tmp`))).toBe(false);

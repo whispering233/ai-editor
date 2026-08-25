@@ -1,22 +1,22 @@
-// @whispering233/ai-editor-llm pi-ai 适配层（决策 34，批次九）
+// @whispering233/ai-editor-llm pi-ai 适配层（批次九）
 // 职责：把 ai-editor 的 LLMMessage[]（OpenAI wire 格式）转换为 pi-ai 的 Context 消息，
 // 调用 pi-ai 的 models.stream 并把其事件转发为 ai-editor 的 LLMStreamEvent 事件流，
 // 完成 usage/错误/工具 schema 的转换——这是把手写 SSE 解码/流式 tool_call 累积/
 // 错误 body 归一化（旧 client.ts 约 300 行）替换为声明式单点适配的核心文件。
 //
-// 设计要点（决策 34）：
+// 设计要点：
 // - 单向有界转换：DB 行 → pi-ai Context 只在此一处构建；出站是纯事件转发
-//   （text_delta→text / toolcall_end→tool_call / done→finish+done / error→error）
+// （text_delta→text / toolcall_end→tool_call / done→finish+done / error→error）
 // - 事件映射：pi-ai 的 thinking_* 事件忽略不转发（YAGNI：MVP 不展示思考过程）
 // - 错误归一化：openai-completions 用官方 openai SDK，normalizeProviderError 会把
-//   HTTP status + body JSON 折入 errorMessage（格式 "429: {..}" / "(429): {..}"）；
-//   适配层在流开始时经 onResponse 记录真实 status + 解析 errorMessage 中的 code 关键词
-//   恢复 LLMError.status/code——classifyLLMError（决策 15 分类语义）原逻辑不变
+// HTTP status + body JSON 折入 errorMessage（格式 "429: {..}" / "(429): {..}"）；
+// 适配层在流开始时经 onResponse 记录真实 status + 解析 errorMessage 中的 code 关键词
+// 恢复 LLMError.status/code——classifyLLMError（ 分类语义）原逻辑不变
 // - 工具 schema：LLMToolDefinition.parameters 是 JSON Schema 对象，pi-ai 的 Tool.parameters
-//   是 TypeBox TSchema 但发送层直接透传（parameters as any）；原样映射 + 类型断言；
-//   validateToolCall 不调用（ai-editor 的 executor 自己用 zod 校验，决策 14 语义不变）
+// 是 TypeBox TSchema 但发送层直接透传（parameters as any）；原样映射 + 类型断言；
+// validateToolCall 不调用（ai-editor 的 executor 自己用 zod 校验，不变）
 // - key 管理：apiKey 随 chatStream.params 传入（经 stream options 的 apiKey 字段注入，
-//   applyAuth 的 options.apiKey 优先于 provider 的 env 解析——决策 17 语义不变）
+// applyAuth 的 options.apiKey 优先于 provider 的 env 解析——不变）
 import { createModels, type Model, type Context, type Tool, type Usage as PiUsage, type Message } from "@earendil-works/pi-ai";
 import type { TSchema } from "@earendil-works/pi-ai"; // pi-ai 从 typebox 转发导出
 import { deepseekProvider } from "@earendil-works/pi-ai/providers/deepseek";
@@ -88,12 +88,12 @@ function emptyPiUsage(): PiUsage {
 }
 
 /** 将 LLMMessage[] 组装为 pi-ai Context（system 提取为 systemPrompt，其余映射为 messages）
- * 注：LLM 工具调用成对性（决策 18 修订）由上层（agent/session.ts）保证——本层不做配对校验（防御性
+ * 注：LLM 工具调用成对性由上层（agent/session.ts）保证——本层不做配对校验（防御性
  * 由 run.ts 前置条件约束） */
 export function buildPiContext(messages: readonly LLMMessage[], tools: readonly LLMToolDefinition[]): Context {
   const systemPrompt = messages.find((m) => m.role === "system")?.content;
   const nonSystem = messages.filter((m) => m.role !== "system");
-  // 维护 tool_call_id → toolName 映射（assistant 的 tool_calls 在 tool 消息之前到达）
+ // 维护 tool_call_id → toolName 映射（assistant 的 tool_calls 在 tool 消息之前到达）
   const toolNameById = new Map<string, string>();
   const piMessages = nonSystem.map((m): Message => {
     switch (m.role) {
@@ -167,7 +167,7 @@ export function extractStatusFromMessage(message: string): number | undefined {
   return Number.isInteger(status) && status >= 100 && status <= 599 ? status : undefined;
 }
 
-/** 从 errorMessage 中提取服务端错误码关键词（insufficient_quota 等，决策 15 分类依赖） */
+/** 从 errorMessage 中提取服务端错误码关键词（insufficient_quota 等， 分类依赖） */
 export function extractCodeFromMessage(message: string): string | undefined {
   const QUOTA_KEYWORDS = ["insufficient_quota", "billing", "quota", "rate limit", "rate_limit", "invalid_api_key", "authentication"];
   const lower = message.toLowerCase();
@@ -182,7 +182,7 @@ export function toLLMError(
   error: unknown,
   statusHint?: number,
 ): { error: LLMError; aborted: boolean } {
-  // 显式 abort（signal 中止）优先（Error 实例或消息含 abort 关键词——pi-ai 的 aborted 消息恒为 "Request was aborted"）
+ // 显式 abort（signal 中止）优先（Error 实例或消息含 abort 关键词——pi-ai 的 aborted 消息恒为 "Request was aborted"）
   const alt = error as { errorMessage?: unknown; message?: unknown; status?: unknown };
   const rawMsg = typeof alt.errorMessage === "string" ? alt.errorMessage : typeof alt.message === "string" ? alt.message : String(error ?? "");
   if (error instanceof Error && (error.name === "AbortError" || error.message.includes("abort")) || rawMsg.includes("abort")) {
@@ -245,7 +245,7 @@ export interface AdapterStreamParams {
   signal?: AbortSignalLike;
   maxTokens?: number;
   temperature?: number;
-  /** 思考强度（决策 34：参考 pi ThinkingLevel——off/minimal/low/medium/high/xhigh/max；'off' = 不传 reasoning 参数） */
+ /** 思考强度（参考 pi ThinkingLevel——off/minimal/low/medium/high/xhigh/max；'off' = 不传 reasoning 参数） */
   reasoning?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
   onEvent?: (event: LLMStreamEvent) => void;
   debugStream?: boolean;
@@ -256,7 +256,7 @@ export async function streamChat(params: AdapterStreamParams): Promise<ChatStrea
   const { apiKey, model, messages, tools, signal, maxTokens, temperature, reasoning, onEvent, debugStream } = params;
   const models = getModels();
 
-  // 模型解析：找不到指定模型时回退默认（配置漂移防御）
+ // 模型解析：找不到指定模型时回退默认（配置漂移防御）
   const resolved = modelLookup("deepseek", model) ?? modelLookup("deepseek", FALLBACK_MODEL);
   if (resolved === undefined) {
     const error: LLMError = { status: 0, code: LLM_TRANSPORT_ERROR_CODES.ENV_UNSUPPORTED, message: `Model not available: ${model}` };
@@ -268,7 +268,7 @@ export async function streamChat(params: AdapterStreamParams): Promise<ChatStrea
   let statusHint: number | undefined;
   let finalUsage: LLMUsage | null = null;
   let stopReason: string | null = null;
-  const pendingToolCalls: LLMToolCallResult[] = []; // 缓存 tool_call 事件直到 done（决策 15 收尾统一判 length）
+  const pendingToolCalls: LLMToolCallResult[] = []; // 缓存 tool_call 事件直到 done（ 收尾统一判 length）
 
   try {
     const stream = models.stream(resolved, context, {
@@ -276,9 +276,9 @@ export async function streamChat(params: AdapterStreamParams): Promise<ChatStrea
       ...(signal !== undefined ? { signal: signal as AbortSignal } : {}),
       ...(maxTokens !== undefined ? { maxTokens } : {}),
       ...(temperature !== undefined ? { temperature } : {}),
-      // 思考强度（决策 34）：off 不传（模型默认），low/medium/high 传 pi-ai reasoning 统一接口
+ // 思考强度：off 不传（模型默认），low/medium/high 传 pi-ai reasoning 统一接口
       ...(reasoning !== undefined && reasoning !== "off" ? { reasoning } : {}),
-      // 总是记录 HTTP status（错误分类需要；debugStream 时打印响应状态——[llm] stream 类别调试日志）
+ // 总是记录 HTTP status（错误分类需要；debugStream 时打印响应状态——[llm] stream 类别调试日志）
       onResponse: (res: { status: number }) => {
         statusHint = res.status;
         if (debugStream === true) {
@@ -296,7 +296,7 @@ export async function streamChat(params: AdapterStreamParams): Promise<ChatStrea
         }
         case "toolcall_end": {
           const tc = event.toolCall;
-          // 缓存到收尾统一发（决策 15：length 截断时全部标错——旧 finalizeToolCalls 同语义）
+ // 缓存到收尾统一发（length 截断时全部标错——旧 finalizeToolCalls 同语义）
           pendingToolCalls.push({
             id: tc.id,
             name: tc.name,
@@ -308,13 +308,13 @@ export async function streamChat(params: AdapterStreamParams): Promise<ChatStrea
         case "done": {
           finalUsage = convertUsage(event.message.usage);
           stopReason = normalizeStopReason(event.reason);
-          // 决策 15：finish_reason=length（截断）时参数可能解析成功但静默不完整——
-          // 所有缓存的工具调用标记错误后发出，让模型重发（旧 finalizeToolCalls 同语义）
+ // finish_reason=length（截断）时参数可能解析成功但静默不完整——
+ // 所有缓存的工具调用标记错误后发出，让模型重发（旧 finalizeToolCalls 同语义）
           if (event.reason === "length") {
             for (const call of pendingToolCalls) {
               onEvent?.({
                 type: "tool_call",
-                toolCall: { ...call, error: "finish_reason=length：参数可能不完整，不执行（决策 15）" },
+                toolCall: { ...call, error: "finish_reason=length：参数可能不完整，不执行（）" },
               });
             }
           } else {
@@ -329,11 +329,11 @@ export async function streamChat(params: AdapterStreamParams): Promise<ChatStrea
           onEvent?.({ type: "error", error, aborted });
           return { ok: false, aborted, error };
         }
-        // thinking_* 事件忽略不转发（YAGNI：本轮不展示思考过程；仅做参数控制）
+ // thinking_* 事件忽略不转发（YAGNI：本轮不展示思考过程；仅做参数控制）
       }
     }
   } catch (err) {
-    // 流迭代异常：区分截断（STREAM_TRUNCATED）与网络错误（NETWORK_ERROR）——决策 15 两者均可重试
+ // 流迭代异常：区分截断（STREAM_TRUNCATED）与网络错误（NETWORK_ERROR）—— 两者均可重试
     const msg = err instanceof Error ? err.message : String(err ?? "");
     const isTruncated = /stream ended|finish_reason|truncat/i.test(msg);
     const error: LLMError = {
@@ -345,7 +345,7 @@ export async function streamChat(params: AdapterStreamParams): Promise<ChatStrea
     return { ok: false, aborted: false, error };
   }
 
-  // 流结束：发 finish（带 usage）+ done（正常结束）
+ // 流结束：发 finish（带 usage）+ done（正常结束）
   onEvent?.({ type: "finish", stopReason: stopReason ?? "stop", usage: finalUsage });
   onEvent?.({ type: "done" });
   return { ok: true, stopReason: stopReason ?? "stop", usage: finalUsage };

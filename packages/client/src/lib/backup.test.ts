@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { BACKUP_FREQUENCIES } from "@whispering233/ai-editor-shared";
 import { BACKUP_FREQUENCY_OPTIONS, formatBackupTime, formatBytes } from "./backup";
 
-describe("formatBackupTime（当年 MM-DD HH:mm:ss / 跨年 YY-MM-DD HH:mm:ss，settings.md 线框，决策 28 补秒）", () => {
-  // 固定基准时间：2026-08-13 12:00（本地时区构造，与实现同用本地时间）
+describe("formatBackupTime", () => {
+ // 固定基准时间：2026-08-13 12:00（本地时区构造，与实现同用本地时间）
   const now = new Date(2026, 7, 13, 12, 0, 0);
 
   it("当年：MM-DD HH:mm:ss（08-13 10:15:00）", () => {
@@ -19,7 +19,7 @@ describe("formatBackupTime（当年 MM-DD HH:mm:ss / 跨年 YY-MM-DD HH:mm:ss，
     expect(formatBackupTime("2026-01-01T00:05:00", now)).toBe("01-01 00:05:00");
   });
 
-  it("同分钟内不同秒可区分（决策 28：与毫秒级文件名配套，快速连备可见差异）", () => {
+  it("同分钟内不同秒可区分（与毫秒级文件名配套，快速连备可见差异）", () => {
     expect(formatBackupTime("2026-08-13T10:15:09", now)).toBe("08-13 10:15:09");
     expect(formatBackupTime("2026-08-13T10:15:31", now)).toBe("08-13 10:15:31");
   });
@@ -30,7 +30,7 @@ describe("formatBackupTime（当年 MM-DD HH:mm:ss / 跨年 YY-MM-DD HH:mm:ss，
   });
 });
 
-describe("formatBytes（settings.md 线框「1.2 MB」「986 KB」）", () => {
+describe("formatBytes", () => {
   it("B：小于 1 KB", () => {
     expect(formatBytes(0)).toBe("0 B");
     expect(formatBytes(512)).toBe("512 B");
@@ -54,7 +54,7 @@ describe("formatBytes（settings.md 线框「1.2 MB」「986 KB」）", () => {
   });
 });
 
-describe("BACKUP_FREQUENCY_OPTIONS（决策 27 + 批次十四修订：关闭 + 1/5/10/15/30/60，与 shared 对齐）", () => {
+describe("BACKUP_FREQUENCY_OPTIONS（ + 批次十四修订：关闭 + 1/5/10/15/30/60，与 shared 对齐）", () => {
   it("选项集与 shared BACKUP_FREQUENCIES 对齐，且「关闭」在首位", () => {
     expect(BACKUP_FREQUENCY_OPTIONS[0]).toEqual({ value: null, label: "关闭" });
     expect(BACKUP_FREQUENCY_OPTIONS.slice(1).map((o) => o.value)).toEqual([...BACKUP_FREQUENCIES]);
@@ -65,7 +65,7 @@ describe("BACKUP_FREQUENCY_OPTIONS（决策 27 + 批次十四修订：关闭 + 1
     expect(BACKUP_FREQUENCY_OPTIONS[6]).toEqual({ value: 60, label: "每 60 分钟" });
   });
 
-  it('option value 字符串化：null → "null"、数字 → "N"（select 受控 value 契约）', () => {
+  it('option value 字符串化：null → "null"、数字 → "N"（select 受控 value ）', () => {
     expect(String(BACKUP_FREQUENCY_OPTIONS[0].value)).toBe("null");
     expect(String(BACKUP_FREQUENCY_OPTIONS[3].value)).toBe("10");
   });

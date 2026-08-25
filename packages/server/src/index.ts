@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 // @whispering233/ai-editor-server 入口（T6.1 服务骨架）
 //
-// 职责（doc/design/architecture.md 第 307-336 行「构建与部署」）：
-//   - startServer(projectRoot, opts?)：检测/初始化项目（决策 8）→ 装配 Hono（错误中间件 +
-//     来源校验 + 项目上下文 + /api/v1/health 探活）→ 端口策略监听（dev 被占报错 / 生产 +1）→
-//     可选打开浏览器（127.0.0.1，决策 8：禁 localhost）
-//   - SPA 静态托管：client/dist 静态文件 + 非 /api GET fallback 到 index.html（决策 8 单进程架构）
-//   - 直接执行（node packages/server/dist/index.js [projectRoot]）时自动启动；业务路由（routes/）
-//     留到切片 1 挂载（结构预留：health 旁并列注册即可）
-//   - bin 入口（打包安装）：package.json "bin": {"ai-editor": "dist/index.js"}——
-//     shebang 必须是文件首行（tsc 构建保留），npm 全局/本地安装后生成 ai-editor 命令；
-//     argv[2] 为项目根（缺省 cwd），NODE_ENV 非 development 即生产态（端口占用自动 +1）
+// 职责（ 第 307-336 行「构建与部署」）：
+// - startServer(projectRoot, opts?)：检测/初始化项目→ 装配 Hono（错误中间件 +
+// 来源校验 + 项目上下文 + /api/v1/health 探活）→ 端口策略监听（dev 被占报错 / 生产 +1）→
+// 可选打开浏览器（127.0.0.1，禁 localhost）
+// - SPA 静态托管：client/dist 静态文件 + 非 /api GET fallback 到 index.html（ 单进程架构）
+// - 直接执行（node packages/server/dist/index.js [projectRoot]）时自动启动；业务路由（routes/）
+// 留到切片 1 挂载（结构预留：health 旁并列注册即可）
+// - bin 入口（打包安装）：package.json "bin": {"ai-editor": "dist/index.js"}——
+// shebang 必须是文件首行（tsc 构建保留），npm 全局/本地安装后生成 ai-editor 命令；
+// argv[2] 为项目根（缺省 cwd），NODE_ENV 非 development 即生产态（端口占用自动 +1）
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { existsSync, realpathSync } from "node:fs";
@@ -38,17 +38,17 @@ import {
 } from "./middleware/project.js";
 import { projectRoutes, setProjectRoot } from "./routes/project.js";
 import { outlineRoutes } from "./routes/outline.js";
-import { namesRoutes } from "./routes/names.js"; // 决策 47：批量名称解析（工具调用人类可读化）
+import { namesRoutes } from "./routes/names.js"; // 批量名称解析（工具调用人类可读化）
 import { proposalRoutes } from "./routes/proposal.js";
 import { trashRoutes } from "./routes/trash.js";
 import { relationRoutes } from "./routes/relation.js";
-import { referenceRoutes } from "./routes/reference.js"; // 决策 43：参考资料专属端点（scan）
+import { referenceRoutes } from "./routes/reference.js"; // 参考资料专属端点（scan）
 import { logSoftDeleteReconcile, reconcileSoftDelete } from "./consistency.js";
 
-/** 默认端口（决策 8 / 17；dev 态 Vite proxy 写死 3456） */
+/** 默认端口（dev 态 Vite proxy 写死 3456） */
 export const DEFAULT_PORT = 3456;
 
-/** 生产态端口 +1 重试上限（决策 8：占用自动 +1） */
+/** 生产态端口 +1 重试上限（占用自动 +1） */
 const MAX_PORT_ATTEMPTS = 20;
 
 /** 静态文件 MIME（client/dist 产物类型） */
@@ -70,27 +70,27 @@ const CONTENT_TYPES: Record<string, string> = {
 };
 
 export interface StartServerOptions {
-  /** 监听端口（默认 3456；0 = 系统分配，测试用） */
+ /** 监听端口（默认 3456；0 = 系统分配，测试用） */
   port?: number;
-  /**
-   * dev 态：端口被占直接报错（Vite proxy 写死 3456，自动 +1 会造成 proxy 与实际监听不一致，
-   * 决策 17 修订）；默认取 NODE_ENV === "development"
-   */
+ /**
+ * dev 态：端口被占直接报错（Vite proxy 写死 3456，自动 +1 会造成 proxy 与实际监听不一致，
+ * ）；默认取 NODE_ENV === "development"
+ */
   dev?: boolean;
-  /** 启动后打开浏览器（默认非 dev 态开启；测试传 false） */
+ /** 启动后打开浏览器（默认非 dev 态开启；测试传 false） */
   openBrowser?: boolean;
-  /** client/dist 目录覆盖（默认从 server 包相对位置推导；测试用临时 fixture） */
+ /** client/dist 目录覆盖（默认从 server 包相对位置推导；测试用临时 fixture） */
   clientDist?: string;
 }
 
 export interface ServerHandle {
   app: Hono<{ Variables: ProjectVariables }>;
   server: ServerType;
-  /** 实际监听端口（port=0 时为系统分配值） */
+ /** 实际监听端口（port=0 时为系统分配值） */
   port: number;
-  /** 启动时检测到的项目（目录含 project.json）；null = 待命（前端引导 create/open） */
+ /** 启动时检测到的项目（目录含 project.json）；null = 待命（前端引导 create/open） */
   project: ProjectContext | null;
-  /** 关闭服务并释放数据库连接（data-flow.md 第 46 行） */
+ /** 关闭服务并释放数据库连接（） */
   close: () => Promise<void>;
 }
 
@@ -98,7 +98,7 @@ export interface ServerHandle {
  * 探测 client/dist 位置（双路径解析，纯函数——baseDir 为当前模块所在目录）：
  * 1. **monorepo 开发态**：packages/server/{dist,src} → ../../client/dist（Vite 构建产物原位）
  * 2. **打包安装态**（fallback）：node_modules/@whispering233/ai-editor-server/dist → ../client-dist
- *    （prepack 时由 scripts/copy-client-dist.mjs 复制到包根，随 tarball 携带）
+ * （prepack 时由 scripts/copy-client-dist.mjs 复制到包根，随 tarball 携带）
  * 探测优先：monorepo 路径存在即用（开发态 client/dist 已构建时走 1）；都不存在返回 2 的路径，
  * SPA fallback 优雅降级（404 JSON 提示「client/dist 未构建」，不崩溃）。
  * 导出供单测以 fixture 目录覆盖三种探测情形（defaultClientDist 保持私有调用）。
@@ -129,9 +129,9 @@ async function readFileSafe(filePath: string): Promise<Buffer | null> {
 }
 
 /**
- * 启动服务（决策 8 / 17）：
+ * 启动服务：
  * 1. 检测项目（detectProject）：目录含 project.json → 打开并设为当前项目（部署场景「启动即用」）；
- *    无 project.json → 待命（不初始化、不建文件——前端 Dashboard 引导 create/open，S1.4）
+ * 无 project.json → 待命（不初始化、不建文件——前端 Dashboard 引导 create/open，S1.4）
  * 2. 装配 Hono：errorHandler → originCheck → projectMiddleware → 路由（health + project + settings + SPA）
  * 3. 监听端口：dev 被占直接报错；生产被占自动 +1 重试
  * 4. 非 dev 且 openBrowser 默认开启时，打开 http://127.0.0.1:{实际端口}
@@ -142,83 +142,83 @@ export async function startServer(projectRoot: string, options: StartServerOptio
   const openBrowser = options.openBrowser ?? !dev;
   const clientDist = options.clientDist ?? defaultClientDist();
 
-  // 创作根归一化（2026-08 修复）：CLI 以相对路径启动（node packages/server/dist/index.js
-  // test-project）时，原值直接注入会导致 GET /api/v1/project/list 返回相对 rootPath，
-  // 前端 buildBookPath(rootPath, name) 拼出相对路径后，POST /project/create 的
-  // resolveProjectDir 中 isAbsolute 校验失败 → 400 INVALID_PROJECT_PATH。此处统一基于
-  // process.cwd() resolve 为绝对路径（对绝对输入幂等），detectProject/setProjectRoot
-  // 及其下游消费方全部使用归一化值；create/open 请求体 path 仍要求绝对（安全校验不变）。
+ // 创作根归一化（2026-08 修复）：CLI 以相对路径启动（node packages/server/dist/index.js
+ // test-project）时，原值直接注入会导致 GET /api/v1/project/list 返回相对 rootPath，
+ // 前端 buildBookPath(rootPath, name) 拼出相对路径后，POST /project/create 的
+ // resolveProjectDir 中 isAbsolute 校验失败 → 400 INVALID_PROJECT_PATH。此处统一基于
+ // process.cwd resolve 为绝对路径（对绝对输入幂等），detectProject/setProjectRoot
+ // 及其下游消费方全部使用归一化值；create/open 请求体 path 仍要求绝对（安全校验不变）。
   const root = resolve(projectRoot);
 
-  // 调试配置初始化（**启动读一次**：<创作根>/.ai-editor/config.json——唯一来源，细粒度
-  // 五类别 chat/request/stream/usage/http；文件不存在/非法 JSON/结构不符 → 全关；
-  // 不阻断启动。运行中改配置文件不生效——热加载 YAGNI）
+ // 调试配置初始化（**启动读一次**：<创作根>/.ai-editor/config.json——唯一来源，细粒度
+ // 五类别 chat/request/stream/usage/http；文件不存在/非法 JSON/结构不符 → 全关；
+ // 不阻断启动。运行中改配置文件不生效——热加载 YAGNI）
   initDebugConfig(root);
 
-  // 检测语义（设计缺陷修复）：不再无条件初始化——待命态下 GET /project/config → 409
-  // NO_PROJECT_OPEN，前端引导「新建/打开项目」（client store loadConfig 已处理该错误码）
+ // 检测语义（设计缺陷修复）：不再无条件初始化——待命态下 GET /project/config → 409
+ // NO_PROJECT_OPEN，前端引导「新建/打开项目」（client store loadConfig 已处理该错误码）
   const project = detectProject(root);
   if (project !== null) {
-    setCurrentProject(project); // 启动即打开（决策 8 部署场景）；null 则保持待命
-    // S4.2 启动一致性校验（决策 16 修订）：以大纲节点软删为准补标 DB 关联记录
-    //（先 DB 后 JSON 崩溃窗口的幽灵形态兜底，幂等；无软删节点不输出日志）
+    setCurrentProject(project); // 启动即打开（ 部署场景）；null 则保持待命
+ // S4.2 启动一致性校验：以大纲节点软删为准补标 DB 关联记录
+ //（先 DB 后 JSON 崩溃窗口的幽灵形态兜底，幂等；无软删节点不输出日志）
     logSoftDeleteReconcile(reconcileSoftDelete(project));
   }
 
-  // 书架模式（S1.5）：root = 创作根，GET /api/v1/project/list 扫描 books/ 子目录
-  // 需要创作根路径（与 currentProject 无关——待命态也要能列书）；兼容旧语义：
-  // 创作根自身有 project.json 仍按 detectProject 打开，list 只列 books/（根自身不是书）
+ // 书架模式（S1.5）：root = 创作根，GET /api/v1/project/list 扫描 books/ 子目录
+ // 需要创作根路径（与 currentProject 无关——待命态也要能列书）；兼容旧语义：
+ // 创作根自身有 project.json 仍按 detectProject 打开，list 只列 books/（根自身不是书）
   setProjectRoot(root);
 
   const app = new Hono<{ Variables: ProjectVariables }>();
 
-  // 中间件装配顺序：错误兜底 →（调试）请求日志 → 来源校验 → 项目上下文注入
+ // 中间件装配顺序：错误兜底 →（调试）请求日志 → 来源校验 → 项目上下文注入
   app.onError(errorHandler());
-  // 请求日志（hono 内置中间件，零新依赖）：**仅 http 类别开启时挂载**——测试与日常
-  // 启动默认输出干净（hono logger 逐请求打印会刷屏）；调试配置 categories 含 "http"（或
-  // env 回退全开）时每个请求打一行（方法 路径 状态码 耗时，hono logger 内置格式，
-  // console.log stdout）
+ // 请求日志（hono 内置中间件，零新依赖）：**仅 http 类别开启时挂载**——测试与日常
+ // 启动默认输出干净（hono logger 逐请求打印会刷屏）；调试配置 categories 含 "http"（或
+ // env 回退全开）时每个请求打一行（方法 路径 状态码 耗时，hono logger 内置格式，
+ // console.log stdout）
   if (isCategoryEnabled("http")) {
     app.use("*", logger());
   }
   app.use("*", originCheckMiddleware());
   app.use("*", projectMiddleware());
 
-  // 探活路由（本卡基础路由；切片 1 起在下方并列挂载 routes/ 业务路由）
+ // 探活路由（本卡基础路由；切片 1 起在下方并列挂载 routes/ 业务路由）
   app.get("/api/v1/health", (c) => c.json(ok({ status: "ok" })));
 
-  // 设置路由（S1.3）：GET/PUT /api/v1/settings/llm（用户级配置，决策 17）
+ // 设置路由（S1.3）：GET/PUT /api/v1/settings/llm（用户级配置）
   app.route("/api/v1/settings", settingsRoutes);
 
-  // 实体路由（S3.3）：GET/POST /api/v1/entity/:type、GET/PUT/DELETE /:type/:id
+ // 实体路由（S3.3）：GET/POST /api/v1/entity/:type、GET/PUT/DELETE /:type/:id
   app.route("/api/v1/entity", entityRoutes);
 
-  // 项目路由（S1.2）：create/open/close/config（项目管理，决策 8/13/17）
+ // 项目路由（S1.2）：create/open/close/config（项目管理）
   app.route("/api/v1/project", projectRoutes);
 
-  // 大纲路由（S2.2）：整树/创建/更新/移动/软删/路径（严格三层，决策 19）
+ // 大纲路由（S2.2）：整树/创建/更新/移动/软删/路径（严格三层）
   app.route("/api/v1/outline", outlineRoutes);
 
-  // 名称解析路由（决策 47）：POST /api/v1/names/resolve 批量名称解析（工具调用展示人类可读化）
+ // 名称解析路由：POST /api/v1/names/resolve 批量名称解析（工具调用展示人类可读化）
   app.route("/api/v1/names", namesRoutes);
 
-  // 回收站路由（S2.2 大纲侧；实体侧 S4 扩展）：列表/还原/物理清除（决策 12）
+ // 回收站路由（S2.2 大纲侧；实体侧 S4 扩展）：列表/还原/物理清除
   app.route("/api/v1/trash", trashRoutes);
 
-  // 关系路由（S3.4）：查询（k 跳）/创建（判重）/物理删（决策 2/12）
+ // 关系路由（S3.4）：查询（k 跳）/创建（判重）/物理删
   app.route("/api/v1/relation", relationRoutes);
-  app.route("/api/v1/reference", referenceRoutes); // 决策 43：参考资料专属端点（scan）
+  app.route("/api/v1/reference", referenceRoutes); // 参考资料专属端点（scan）
 
-  // Delta 路由（S5.3）：追加 / 按节点查询 / compute 状态计算（决策 9/12）
+ // Delta 路由（S5.3）：追加 / 按节点查询 / compute 状态计算
   app.route("/api/v1/delta", deltaRoutes);
 
-  // 对话路由（U3）：会话列表 / 消息历史（决策 18 按项目隔离；POST SSE 端点属后续切片）
+ // 对话路由（U3）：会话列表 / 消息历史（ 按项目隔离；POST SSE 端点属后续切片）
   app.route("/api/v1/chat", chatRoutes);
 
-  // 提案路由（S7.5）：confirm/reject（决策 14：仅内存提案 + 快照重校验 + 项目绑定）
+ // 提案路由（S7.5）：confirm/reject（仅内存提案 + 快照重校验 + 项目绑定）
   app.route("/api/v1/proposal", proposalRoutes);
 
-  // 兜底：/api/* → JSON 404；其他 GET/HEAD → 静态文件 → SPA fallback index.html（决策 8）
+ // 兜底：/api/* → JSON 404；其他 GET/HEAD → 静态文件 → SPA fallback index.html
   app.notFound(async (c) => {
     const path = c.req.path;
     if (path.startsWith("/api/")) {
@@ -227,7 +227,7 @@ export async function startServer(projectRoot: string, options: StartServerOptio
     if (c.req.method !== "GET" && c.req.method !== "HEAD") {
       return c.json(fail("NOT_FOUND", `未知端点: ${path}`), 404);
     }
-    // 静态文件（含 client 的 public/ 拷贝）：路径必须解析在 clientDist 内（防目录穿越）
+ // 静态文件（含 client 的 public/ 拷贝）：路径必须解析在 clientDist 内（防目录穿越）
     const clientRoot = resolve(clientDist);
     const candidate = resolve(clientRoot, `.${path}`);
     if (candidate.startsWith(clientRoot + sep)) {
@@ -236,7 +236,7 @@ export async function startServer(projectRoot: string, options: StartServerOptio
         return new Response(data, { headers: { "Content-Type": contentTypeFor(candidate) } });
       }
     }
-    // SPA fallback（决策 8：/* → index.html；client/dist 未构建时优雅降级提示）
+ // SPA fallback（/* → index.html；client/dist 未构建时优雅降级提示）
     const html = await readFileSafe(join(clientRoot, "index.html"));
     if (!html) {
       return c.json(
@@ -247,7 +247,7 @@ export async function startServer(projectRoot: string, options: StartServerOptio
     return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
   });
 
-  // 端口策略：dev 单次尝试（被占报错）；生产 EADDRINUSE 自动 +1（决策 8 / 17 修订）
+ // 端口策略：dev 单次尝试（被占报错）；生产 EADDRINUSE 自动 +1
   const maxPort = dev ? port : port + MAX_PORT_ATTEMPTS - 1;
   let server: ServerType | null = null;
   let actualPort = port;
@@ -266,13 +266,13 @@ export async function startServer(projectRoot: string, options: StartServerOptio
         }
         throw err;
       }
-      // 生产态：+1 重试
+ // 生产态：+1 重试
     }
   }
   if (server === null) throw new Error("端口监听失败（不可达）");
 
   if (openBrowser) {
-    await openBrowserUrl(`http://127.0.0.1:${actualPort}`); // 127.0.0.1 而非 localhost（决策 8）
+    await openBrowserUrl(`http://127.0.0.1:${actualPort}`); // 127.0.0.1 而非 localhost
   }
 
   return {
@@ -281,7 +281,7 @@ export async function startServer(projectRoot: string, options: StartServerOptio
     port: actualPort,
     project,
     close: async () => {
-      stopAutoBackup(); // B2.2（决策 27）：服务关闭停止自动备份调度（无残留句柄）
+      stopAutoBackup(); // B2.2：服务关闭停止自动备份调度（无残留句柄）
       await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
       if (project !== null) {
         closeProject(project); // 待命态（project=null）无连接可释放
@@ -302,7 +302,7 @@ function listenOnce(fetchHandler: Parameters<typeof createAdaptorServer>[0]["fet
   });
 }
 
-/** 打开浏览器（决策 8：xdg-open/open/start，失败静默——无图形环境不阻塞） */
+/** 打开浏览器（xdg-open/open/start，失败静默——无图形环境不阻塞） */
 export async function openBrowserUrl(url: string): Promise<void> {
   const platform = process.platform;
   const cmd = platform === "win32" ? "cmd" : platform === "darwin" ? "open" : "xdg-open";
@@ -312,7 +312,7 @@ export async function openBrowserUrl(url: string): Promise<void> {
       execFile(cmd, args, (err) => (err ? reject(err) : resolveOpen()));
     });
   } catch {
-    // 打开失败静默（无图形环境等）
+ // 打开失败静默（无图形环境等）
   }
 }
 
@@ -344,8 +344,8 @@ const isDirectRun =
 if (isDirectRun) {
   const projectRoot = process.argv[2] ?? process.cwd();
   const dev = process.env.NODE_ENV === "development";
-  // AI_EDITOR_PORT 环境变量可覆盖默认端口（决策 8 端口策略；测试/多实例场景用，
-  // 如打包安装冒烟与 dev server 并存时指定独立端口）；非法值（NaN/越界）回退默认 3456
+ // AI_EDITOR_PORT 环境变量可覆盖默认端口（ 端口策略；测试/多实例场景用，
+ // 如打包安装冒烟与 dev server 并存时指定独立端口）；非法值（NaN/越界）回退默认 3456
   const port = parsePortEnv(process.env.AI_EDITOR_PORT);
   const handle = await startServer(projectRoot, { dev, ...(port !== undefined ? { port } : {}) });
   console.log(

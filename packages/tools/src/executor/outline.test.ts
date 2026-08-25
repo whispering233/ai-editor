@@ -1,6 +1,6 @@
 // S6.7 执行类工具测试：大纲（create_outline_node / move_node / delete_node）
 // 覆盖：写路径正确性（缺省挂根 / 显式父 / scene 挂 chapter、移动重排 + 父版本戳、
-//   软删 + 递归子树可还原——决策 12）、失败语义（层级非法/节点不存在抛错）
+// 软删 + 递归子树可还原）、失败语义（层级非法/节点不存在抛错）
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -78,7 +78,7 @@ function childrenOf(node: OutlineFileNode | undefined): OutlineFileNode[] {
 }
 
 describe("create_outline_node", () => {
-  it("写路径：parent_id 缺省挂根（决策 19 volume 挂根），返回新 id（vol- 前缀）", () => {
+  it("写路径：parent_id 缺省挂根（ volume 挂根），返回新 id（vol- 前缀）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const result = executeCreateOutlineNode(makeCtx(), makeProposal("propose_outline_node", { type: "volume", title: "第二卷" }));
     expect(result.id).toMatch(/^vol-/);
@@ -92,11 +92,11 @@ describe("create_outline_node", () => {
     const result = executeCreateOutlineNode(makeCtx(), makeProposal("propose_outline_node", { type: "scene", title: "场景三", parent_id: "ch-1" }));
     expect(result.id).toMatch(/^sc-/);
     expect(childrenOf(nodeOf("ch-1")).map((c) => c.id)).toContain(result.id);
-    // 父节点版本戳刷新（决策 19）
+ // 父节点版本戳刷新
     expect(nodeOf("ch-1")!.updated_at >= T0).toBe(true);
   });
 
-  it("层级非法 → 抛错（scene 不能挂根/挂卷，决策 19 严格三层）", () => {
+  it("层级非法 → 抛错（scene 不能挂根/挂卷， 严格三层）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     expect(() => executeCreateOutlineNode(makeCtx(), makeProposal("propose_outline_node", { type: "scene", title: "游离场景" }))).toThrow(/层级非法/);
     expect(() => executeCreateOutlineNode(makeCtx(), makeProposal("propose_outline_node", { type: "chapter", title: "章", parent_id: "ch-1" }))).toThrow(/层级非法/);
@@ -116,7 +116,7 @@ describe("move_node", () => {
     expect(childrenOf(nodeOf("ch-1")).map((c) => c.id)).toEqual(["sc-2", "sc-1"]); // 移动到 0 位
   });
 
-  it("移到 root（决策 19：chapter 可挂根）", () => {
+  it("移到 root（chapter 可挂根）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const result = executeMoveNode(makeCtx(), makeProposal("propose_move_node", { node_id: "ch-1", parent_id: "root", order: 0 }));
     expect(result.newParentId).toBe("root");
@@ -136,7 +136,7 @@ describe("move_node", () => {
 });
 
 describe("delete_node", () => {
-  it("写路径：软删 + 递归子树（决策 12），本体保留（deleted 标记）可回收站还原", () => {
+  it("写路径：软删 + 递归子树（），本体保留（deleted 标记）可回收站还原", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const result = executeDeleteNode(makeCtx(), makeProposal("propose_delete_node", { node_id: "ch-1" }));
     expect(result).toMatchObject({ id: "ch-1", deleted: true, cascadedChildren: 2 }); // sc-1/sc-2 级联

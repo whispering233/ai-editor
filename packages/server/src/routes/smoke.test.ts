@@ -1,19 +1,19 @@
 // S11.2 端到端冒烟测试：脚本化走查核心链路
-//   建项目 → 建大纲 → 建实体 → 建关系 → Delta → 回收站 → 伏笔 → 对话 → 提案确认
+// 建项目 → 建大纲 → 建实体 → 建关系 → Delta → 回收站 → 伏笔 → 对话 → 提案确认
 //
 // 形态（任务卡既定决策）：
-//   - 走 HTTP 层：Hono app.request + 真实中间件（errorHandler/originCheck/projectMiddleware）
-//     + 真实 tmp 项目目录（project.json/outline.json/data.db 三文件落盘），非独立 node 脚本——
-//     沿用仓库测试基建，`pnpm --filter @whispering233/ai-editor-server test` 全绿即「脚本全绿」。
-//   - 对话链路用 mock produce 注入（createChatRoutes({ produce })，不经真实 DeepSeek）：
-//     mock 模仿真实 LLM——第 1 轮输出文本 + get_outline 工具调用（**不注入 dispatcher**，
-//     走真实 createToolDispatcher 在真实项目上执行真实工具），第 2 轮纯文本收尾；
-//     步骤 9 独立 mock 走 propose_create_entity → proposal 事件 → confirm → 真实落库（决策 14）。
-//   - 自包含：不修改任何现有文件；SSE 解析/装配 helper 参照 chat.test.ts 同款写法复制。
+// - 走 HTTP 层：Hono app.request + 真实中间件（errorHandler/originCheck/projectMiddleware）
+// + 真实 tmp 项目目录（project.json/outline.json/data.db 三文件落盘），非独立 node 脚本——
+// 沿用仓库测试基建，`pnpm --filter @whispering233/ai-editor-server test` 全绿即「脚本全绿」。
+// - 对话链路用 mock produce 注入（createChatRoutes({ produce })，不经真实 DeepSeek）：
+// mock 模仿真实 LLM——第 1 轮输出文本 + get_outline 工具调用（**不注入 dispatcher**，
+// 走真实 createToolDispatcher 在真实项目上执行真实工具），第 2 轮纯文本收尾；
+// 步骤 9 独立 mock 走 propose_create_entity → proposal 事件 → confirm → 真实落库。
+// - 自包含：不修改任何现有文件；SSE 解析/装配 helper 参照 chat.test.ts 同款写法复制。
 //
 // 断言风格：单条长 it 按 9 步顺序执行（步骤间强依赖 id 流转，连贯性优先，可读性靠
-//   编号注释保证）；响应包裹契约 {success:true,data}/{success:false,error:{code,message}}；
-//   请求体 snake_case、响应 camelCase；软删/还原级联计数只断言 >= 1（非本卡目标，不死抠数字）。
+// 编号注释保证）；响应包裹{success:true,data}/{success:false,error:{code,message}}；
+// 请求体 snake_case、响应 camelCase；软删/还原级联计数只断言 >= 1（非本卡目标，不死抠数字）。
 import { mkdtempSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -76,8 +76,8 @@ function buildApp(chat: Hono): Hono {
 
 /**
  * JSON 接口调用辅助（GET/POST/PUT/DELETE 通用）：
- * 返回状态码 + 完整响应体（body 类型沿用 Hono Response.json() 的松散推断——与现有路由测试
- * 的 `(await res.json()).data` 断言风格一致，避免逐字段类型收窄样板）。
+ * 返回状态码 + 完整响应体（body 类型沿用 Hono Response.json 的松散推断——与现有路由测试
+ * 的 `(await res.json).data` 断言风格一致，避免逐字段类型收窄样板）。
  */
 async function api(app: Hono, method: string, path: string, body?: unknown) {
   const res = await app.request(path, {
@@ -113,7 +113,7 @@ function parseSseFrame(raw: string): SseFrame | null {
   try {
     data = JSON.parse(text);
   } catch {
-    // 保留原文（非 JSON data 属异常流，测试中不应出现）
+ // 保留原文（非 JSON data 属异常流，测试中不应出现）
   }
   return { event, data };
 }
@@ -159,7 +159,7 @@ beforeEach(() => {
   defaultProposalStore.clear(); // 提案仓为模块级单例，测试间隔离（get_outline 不产提案，防御性清空）
   originalHome = process.env.HOME;
   originalKey = process.env.DEEPSEEK_API_KEY;
-  process.env.HOME = tmpRoot; // 用户级配置隔离（决策 17 key 来源；mock produce 注入时不读 key，防御性）
+  process.env.HOME = tmpRoot; // 用户级配置隔离（ key 来源；mock produce 注入时不读 key，防御性）
   delete process.env.DEEPSEEK_API_KEY;
   initDebugConfig(undefined); // 调试默认全关（无配置文件）
 });
@@ -189,9 +189,9 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
   it("完整链路 8 步走查全绿", async () => {
     const projectDir = makeTmpDir();
 
-    // mock LLM（决策：对话链路注入 mock produce，不经真实 DeepSeek）：
-    // 第 1 轮：文本 + get_outline 工具调用（真实 dispatcher 在真实项目上执行真实工具）；
-    // 第 2 轮：纯文本收尾（stop）。显式泛型保持 ok:true 字面类型（ChatStreamResult 判别联合）。
+ // mock LLM（决策：对话链路注入 mock produce，不经真实 DeepSeek）：
+ // 第 1 轮：文本 + get_outline 工具调用（真实 dispatcher 在真实项目上执行真实工具）；
+ // 第 2 轮：纯文本收尾（stop）。显式泛型保持 ok:true 字面类型（ChatStreamResult 判别联合）。
     const produce = vi.fn<RunAgentDeps["produce"]>(async (_messages, _signal, onEvent) => {
       if (produce.mock.calls.length === 1) {
         onEvent?.({ type: "text", delta: "让我看看大纲。" });
@@ -206,7 +206,7 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     });
     const app = buildApp(createChatRoutes({ produce }));
 
-    // ============ 步骤 1：建项目（create + open + config，三文件落地） ============
+ // ============ 步骤 1：建项目（create + open + config，三文件落地） ============
     const created = await api(app, "POST", "/api/v1/project/create", {
       path: projectDir,
       config: { name: "冒烟测试书" },
@@ -217,12 +217,12 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(created.body.data.path).toBe(projectDir);
     const projectId = created.body.data.id;
 
-    // 三文件落地（决策 8：project.json + outline.json + data.db）
+ // 三文件落地（project.json + outline.json + data.db）
     expect(existsSync(join(projectDir, "project.json"))).toBe(true);
     expect(existsSync(join(projectDir, "outline.json"))).toBe(true);
     expect(existsSync(join(projectDir, "data.db"))).toBe(true);
 
-    // create 不自动打开（S1.2 语义：config 仍 409 NO_PROJECT_OPEN）→ open 后 config 可读
+ // create 不自动打开（S1.2 语义：config 仍 409 NO_PROJECT_OPEN）→ open 后 config 可读
     const preOpen = await api(app, "GET", "/api/v1/project/config");
     expect(preOpen.status).toBe(409);
     expect(preOpen.body.error.code).toBe("NO_PROJECT_OPEN");
@@ -240,7 +240,7 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(config.body.data.currentPosition).toBeNull();
     expect(config.body.data.schemaVersion).toBeTypeOf("number");
 
-    // ============ 步骤 2：建大纲（严格三层，parent_id 必填，决策 19） ============
+ // ============ 步骤 2：建大纲（严格三层，parent_id 必填） ============
     const vol = await api(app, "POST", "/api/v1/outline", { type: "volume", title: "第一卷", parent_id: "root" });
     expect(vol.status).toBe(201);
     expect(vol.body.data.id).toMatch(/^vol-/);
@@ -263,7 +263,7 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(sc2.body.data.id).toMatch(/^sc-/);
     const sc2Id = sc2.body.data.id;
 
-    // 整树结构验证：卷→章→场景严格三层
+ // 整树结构验证：卷→章→场景严格三层
     const tree = await api(app, "GET", "/api/v1/outline");
     expect(tree.status).toBe(200);
     expect(tree.body.data.id).toBe("root");
@@ -276,7 +276,7 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(chNode.type).toBe("chapter");
     expect(chNode.children.map((n: { id: string }) => n.id)).toEqual([sc1Id, sc2Id]);
 
-    // ============ 步骤 3：建实体（四类各一，id 前缀校验） ============
+ // ============ 步骤 3：建实体（四类各一，id 前缀校验） ============
     const char = await api(app, "POST", "/api/v1/entity/character", {
       name: "林晚",
       data: { role: "主角", status: "active" },
@@ -294,7 +294,7 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(loc.status).toBe(201);
     expect(loc.body.data.id).toMatch(/^loc-/);
     const locId = loc.body.data.id;
-    // 详情可访问（详情页契约字段：data 完整透传）
+ // 详情可访问（详情页字段：data 完整透传）
     const locDetail = await api(app, "GET", `/api/v1/entity/location/${locId}`);
     expect(locDetail.status).toBe(200);
     expect(locDetail.body.data.name).toBe("临江码头");
@@ -308,8 +308,8 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(hook.body.data.id).toMatch(/^hook-/);
     const hookId = hook.body.data.id;
 
-    // ============ 步骤 4：建关系（实体关系 + plot_edge；重复三元组 409） ============
-    // ① 实体关系（character → setting，belongs_to）
+ // ============ 步骤 4：建关系（实体关系 + plot_edge；重复三元组 409） ============
+ // ① 实体关系（character → setting，belongs_to）
     const rel = await api(app, "POST", "/api/v1/relation", {
       source_type: "character",
       source_id: charId,
@@ -327,7 +327,7 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
       relationType: "belongs_to",
     });
 
-    // 重复建同三元组 → 409 RELATION_EXISTS
+ // 重复建同三元组 → 409 RELATION_EXISTS
     const dup = await api(app, "POST", "/api/v1/relation", {
       source_type: "character",
       source_id: charId,
@@ -338,7 +338,7 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(dup.status).toBe(409);
     expect(dup.body.error.code).toBe("RELATION_EXISTS");
 
-    // ② plot_edge（scene1 → scene2，metadata.label，画布连线，决策 10）
+ // ② plot_edge（scene1 → scene2，metadata.label，画布连线）
     const edge = await api(app, "POST", "/api/v1/relation", {
       source_type: "outline_node",
       source_id: sc1Id,
@@ -351,7 +351,7 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(edge.body.data.id).toMatch(/^rel-/);
     const edgeId = edge.body.data.id;
 
-    // GET /relation 按 relation_type 过滤（depth=1 紧邻）
+ // GET /relation 按 relation_type 过滤（depth=1 紧邻）
     const edges = await api(app, "GET", "/api/v1/relation?depth=1&relation_type=plot_edge");
     expect(edges.status).toBe(200);
     const edgeRow = edges.body.data.relations.find((r: { id: string }) => r.id === edgeId);
@@ -360,7 +360,7 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(edgeRow.targetId).toBe(sc2Id);
     expect(edgeRow.metadata).toEqual({ label: "路径A" });
 
-    // ============ 步骤 5：Delta（决策 9：父链累积 + 兄弟分支不累积） ============
+ // ============ 步骤 5：Delta（父链累积 + 兄弟分支不累积） ============
     const delta = await api(app, "POST", "/api/v1/delta", {
       node_id: sc1Id,
       target_type: "character",
@@ -372,7 +372,7 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(delta.body.data.id).toMatch(/^delta-/);
     expect(delta.body.data.applied.changes[0]).toEqual({ field: "status", op: "update", from: "active", to: "wounded" });
 
-    // 到达 scene1：树路径上累积 Delta → status = wounded
+ // 到达 scene1：树路径上累积 Delta → status = wounded
     const compute = await api(app, "POST", "/api/v1/delta/compute", {
       target_type: "character",
       target_id: charId,
@@ -384,7 +384,7 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(compute.body.data.appliedDeltas).toHaveLength(1);
     expect(compute.body.data.conflicts).toEqual([]);
 
-    // 到达 scene2（兄弟分支）：scene1 的 Delta 不在路径上 → 状态不累积（决策 9 树路径语义）
+ // 到达 scene2（兄弟分支）：scene1 的 Delta 不在路径上 → 状态不累积（ 树路径语义）
     const computeSc2 = await api(app, "POST", "/api/v1/delta/compute", {
       target_type: "character",
       target_id: charId,
@@ -393,19 +393,19 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(computeSc2.status).toBe(200);
     expect(computeSc2.body.data.state.status).toBe("active");
 
-    // ============ 步骤 6：回收站（决策 12：软删 → 列表 → 级联还原 → 常规查询恢复） ============
+ // ============ 步骤 6：回收站（软删 → 列表 → 级联还原 → 常规查询恢复） ============
     const del = await api(app, "DELETE", `/api/v1/entity/character/${charId}`);
     expect(del.status).toBe(200);
     expect(del.body.data.deleted).toBe(true);
     expect(del.body.data.cascaded.relations).toBeGreaterThanOrEqual(1); // belongs_to 级联软删
     expect(del.body.data.cascaded.deltas).toBeGreaterThanOrEqual(1); // 步骤 5 的 Delta 级联软删
 
-    // 软删后常规查询 404（决策 12 修订：常规查询默认过滤软删对象）
+ // 软删后常规查询 404（常规查询默认过滤软删对象）
     const afterDelete = await api(app, "GET", `/api/v1/entity/character/${charId}`);
     expect(afterDelete.status).toBe(404);
     expect(afterDelete.body.error.code).toBe("ENTITY_NOT_FOUND");
 
-    // 回收站列表包含该实体
+ // 回收站列表包含该实体
     const trash = await api(app, "GET", "/api/v1/trash");
     expect(trash.status).toBe(200);
     const inTrash = trash.body.data.entities.find((e: { id: string }) => e.id === charId);
@@ -414,14 +414,14 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(inTrash.name).toBe("林晚");
     expect(inTrash.deletedAt).toBeTypeOf("string");
 
-    // 还原（级联还原关联关系与 Delta）
+ // 还原（级联还原关联关系与 Delta）
     const restore = await api(app, "POST", `/api/v1/trash/entity/character/${charId}/restore`);
     expect(restore.status).toBe(200);
     expect(restore.body.data.restored).toBe(true);
     expect(restore.body.data.restoredRelations).toBeGreaterThanOrEqual(1);
     expect(restore.body.data.restoredDeltas).toBeGreaterThanOrEqual(1);
 
-    // 还原生效：回收站不再包含 + 常规查询可访问（决策 12：还原后端点可见）
+ // 还原生效：回收站不再包含 + 常规查询可访问（还原后端点可见）
     const trash2 = await api(app, "GET", "/api/v1/trash");
     expect(trash2.status).toBe(200);
     expect(trash2.body.data.entities.find((e: { id: string }) => e.id === charId)).toBeUndefined();
@@ -433,7 +433,7 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(detail.body.data.relations[0].relationType).toBe("belongs_to");
     expect(detail.body.data.deltaCount).toBeGreaterThanOrEqual(1); // Delta 级联还原
 
-    // Delta 级联还原后 compute 语义恢复
+ // Delta 级联还原后 compute 语义恢复
     const compute2 = await api(app, "POST", "/api/v1/delta/compute", {
       target_type: "character",
       target_id: charId,
@@ -442,7 +442,7 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(compute2.status).toBe(200);
     expect(compute2.body.data.state.status).toBe("wounded");
 
-    // ============ 步骤 7：伏笔（plants/advances 关系，outline_node → hook，hooks.md 方向） ============
+ // ============ 步骤 7：伏笔（plants/advances 关系，outline_node → hook， 方向） ============
     const plant = await api(app, "POST", "/api/v1/relation", {
       source_type: "outline_node",
       source_id: sc1Id,
@@ -461,7 +461,7 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     });
     expect(advance.status).toBe(201);
 
-    // S9.2 语义：伏笔标记数据源（source_type=outline_node & relation_type=plants）
+ // S9.2 语义：伏笔标记数据源（source_type=outline_node & relation_type=plants）
     const plants = await api(app, "GET", "/api/v1/relation?depth=1&source_type=outline_node&relation_type=plants");
     expect(plants.status).toBe(200);
     expect(plants.body.data.relations).toHaveLength(1);
@@ -473,7 +473,7 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(advances.status).toBe(200);
     expect(advances.body.data.relations.map((r: { sourceId: string }) => r.sourceId)).toEqual([sc2Id]);
 
-    // ============ 步骤 8：对话（mock LLM 两轮：tool_call 轮 + 文本收尾轮；SSE 六类事件子集） ============
+ // ============ 步骤 8：对话（mock LLM 两轮：tool_call 轮 + 文本收尾轮；SSE 六类事件子集） ============
     const chatRes = await app.request("/api/v1/chat", {
       method: "POST",
       headers: { ...HOST_HEADERS, "Content-Type": "application/json" },
@@ -483,11 +483,11 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(chatRes.headers.get("content-type")).toContain("text/event-stream");
 
     const frames = await readSseFrames(chatRes);
-    // 事件序列：text → tool_call → tool_result → text → done（endpoints.md 六类事件子集）
+ // 事件序列：text → tool_call → tool_result → text → done（ 六类事件子集）
     expect(frames.map((f) => f.event)).toEqual(["text", "tool_call", "tool_result", "text", "done"]);
     expect(frames[0].data).toEqual({ delta: "让我看看大纲。" });
     expect(frames[1].data).toEqual({ tool: "get_outline", args: {}, id: "call_1" });
-    // tool_result 为真实工具执行结果（真实 dispatcher + 真实项目）：大纲树 JSON
+ // tool_result 为真实工具执行结果（真实 dispatcher + 真实项目）：大纲树 JSON
     const toolResult = frames[2].data as { tool: string; result: string; id: string };
     expect(toolResult.tool).toBe("get_outline");
     expect(toolResult.id).toBe("call_1");
@@ -496,10 +496,10 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(outlineJson.children[0].title).toBe("第一卷");
     expect(frames[3].data).toEqual({ delta: "大纲共一卷、一章、两场，结构完整。" });
     const done = frames[4].data as { session_id: string };
-    expect(done.session_id).toMatch(/^sess_/); // 新建会话（endpoints.md id 约定）
+    expect(done.session_id).toMatch(/^sess_/); // 新建会话（ id 约定）
     const sessionId = done.session_id;
 
-    // 会话落库（决策 18）：列表 + 消息配对（user/assistant/tool + tool_calls/tool_call_id）
+ // 会话落库：列表 + 消息配对（user/assistant/tool + tool_calls/tool_call_id）
     const sessions = await api(app, "GET", "/api/v1/chat/sessions");
     expect(sessions.status).toBe(200);
     expect(sessions.body.data.sessions).toHaveLength(1);
@@ -515,10 +515,10 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(msgs.body.data.messages[2].toolCallId).toBe("call_1");
     expect(msgs.body.data.messages[3].content).toBe("大纲共一卷、一章、两场，结构完整。");
 
-    // ============ 步骤 9：提案链路（oracle 审核建议——AI 写操作端到端：propose → proposal 事件 → confirm → 真实落库，决策 14） ============
-    // 独立 mock produce：第 1 轮 = propose_create_entity 工具调用（真实 dispatcher 在真实项目执行 →
-    //   提案入仓 + proposal 事件），第 2 轮纯文本收尾；与步骤 8 共用同一 open 项目（defaultProposalStore
-    //   是模块级单例，跨 app 实例共享——proposal 事件与 confirm 路由同仓，符合生产单进程语义）
+ // ============ 步骤 9：提案链路（oracle 审核建议——AI 写操作端到端：propose → proposal 事件 → confirm → 真实落库） ============
+ // 独立 mock produce：第 1 轮 = propose_create_entity 工具调用（真实 dispatcher 在真实项目执行 →
+ // 提案入仓 + proposal 事件），第 2 轮纯文本收尾；与步骤 8 共用同一 open 项目（defaultProposalStore
+ // 是模块级单例，跨 app 实例共享——proposal 事件与 confirm 路由同仓，符合生产单进程语义）
     const proposeProduce = vi.fn<RunAgentDeps["produce"]>(async (_messages, _signal, onEvent) => {
       if (proposeProduce.mock.calls.length === 1) {
         onEvent?.({
@@ -544,30 +544,30 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(proposeRes.status).toBe(200);
 
     const proposeFrames = await readSseFrames(proposeRes);
-    // 事件序列：tool_call(propose) → tool_result → proposal → text → done（proposal 在对应 tool_result 后、循环继续前）
+ // 事件序列：tool_call(propose) → tool_result → proposal → text → done（proposal 在对应 tool_result 后、循环继续前）
     expect(proposeFrames.map((f) => f.event)).toEqual(["tool_call", "tool_result", "proposal", "text", "done"]);
     expect((proposeFrames[0].data as { tool: string }).tool).toBe("propose_create_entity");
     const proposal = proposeFrames[2].data as { proposal_id: string; type: string };
     expect(proposal.proposal_id).toMatch(/^prop_/);
     expect(proposal.type).toBe("propose_create_entity");
 
-    // confirm → executor 真实落库（决策 14：快照重校验 + 一次性消费；result = 新建实体 { id }）
+ // confirm → executor 真实落库（快照重校验 + 一次性消费；result = 新建实体 { id }）
     const confirmed = await api(proposeApp, "POST", `/api/v1/proposal/${proposal.proposal_id}/confirm`);
     expect(confirmed.status).toBe(200);
     expect(confirmed.body.data.confirmed).toBe(true);
     expect(confirmed.body.data.result.id).toMatch(/^char-/);
 
-    // 实体真实落库可见（GET /entity/character 列表含新角色）
+ // 实体真实落库可见（GET /entity/character 列表含新角色）
     const chars = await api(proposeApp, "GET", "/api/v1/entity/character");
     expect(chars.status).toBe(200);
     expect(chars.body.data.items.map((e: { name: string }) => e.name)).toContain("AI 提案角色");
 
-    // 一次性消费：重复 confirm → 404 PROPOSAL_NOT_FOUND（决策 14 终态守卫）
+ // 一次性消费：重复 confirm → 404 PROPOSAL_NOT_FOUND（ 终态守卫）
     const dupConfirm = await api(proposeApp, "POST", `/api/v1/proposal/${proposal.proposal_id}/confirm`);
     expect(dupConfirm.status).toBe(404);
     expect(dupConfirm.body.error.code).toBe("PROPOSAL_NOT_FOUND");
 
-    // 会话落库（步骤 8 + 步骤 9 共 2 个会话，决策 18 按项目隔离）
+ // 会话落库（步骤 8 + 步骤 9 共 2 个会话， 按项目隔离）
     const sessions2 = await api(proposeApp, "GET", "/api/v1/chat/sessions");
     expect(sessions2.status).toBe(200);
     expect(sessions2.body.data.sessions).toHaveLength(2);

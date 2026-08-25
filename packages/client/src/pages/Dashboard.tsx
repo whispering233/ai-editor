@@ -1,14 +1,14 @@
-// 概览页（U4，2026-08 修订版契约 doc/ui/pages/dashboard.md；S13.4 引导形态修复）：中栏默认 tab（#/）
+// 概览页（U4，2026-08 修订版；S13.4 引导形态修复）：中栏默认 tab（#/）
 // 两种形态：
-//   - 引导形态（无项目，config === null && !configLoading）：按书架状态分派——**有书 → 卡内列出书籍
-//     可直接打开**（+ 新建次级折叠 + 打开其他路径折叠）；空书架 → 创建引导（原样）；加载中 → 骨架
-//     （防「还没有书」误闪）；加载失败 → 错误块 + 卡内中性占位。修复：书架有书未打开时不再显示误导性
-//     「还没有书，先创建一本」（books 列表此前只展示在左栏 Sidebar，本页无条件渲染空态卡）
-//   - 概览形态（项目已打开）：四个区块——项目信息（config）/ 创作要素（GET /entity/:type ×4 并行取 total）/
-//     大纲概览（GET /outline 前端递归统计卷章场 + 最近更新）/ 最近会话（chat store 前 5 条，点击注入右栏）
+// - 引导形态（无项目，config === null && !configLoading）：按书架状态分派——**有书 → 卡内列出书籍
+// 可直接打开**（+ 新建次级折叠 + 打开其他路径折叠）；空书架 → 创建引导（原样）；加载中 → 骨架
+// （防「还没有书」误闪）；加载失败 → 错误块 + 卡内中性占位。修复：书架有书未打开时不再显示误导性
+// 「还没有书，先创建一本」（books 列表此前只展示在左栏 Sidebar，本页无条件渲染空态卡）
+// - 概览形态（项目已打开）：四个区块——项目信息（config）/ 创作要素（GET /entity/:type ×4 并行取 total）/
+// 大纲概览（GET /outline 前端递归统计卷章场 + 最近更新）/ 最近会话（chat store 前 5 条，点击注入右栏）
 // 交互：当前位置/去大纲 → #/outline 并定位节点（ui store focusOutlineNodeId，方案 A 跨页传参）；
-//   会话行 → chat store setCurrentSession(id)（右栏恢复会话）；[开始新对话] → setCurrentSession(null)
-// 错误/加载/空态按 layout.md §4.3：区块级骨架、区块内「加载失败 [重试]」、空态一句说明 + 主操作
+// 会话行 → chat store setCurrentSession(id)（右栏恢复会话）；[开始新对话] → setCurrentSession(null)
+// 错误/加载/空态按 ：区块级骨架、区块内「加载失败 [重试]」、空态一句说明 + 主操作
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { formatRelativeTime } from "@whispering233/ai-editor-shared";
@@ -33,21 +33,21 @@ const TYPE_LABEL: Record<EntityType, string> = {
   setting: "设定",
   location: "地点",
   hook: "伏笔",
-  // C1 类型补全（决策 26 event 时间轴事件；概览卡仍为四卡，时间轴专属 UI 由 C2 实现）
+ // C1 类型补全（ event 时间轴事件；概览卡仍为四卡，时间轴专属 UI 由 C2 实现）
   event: "事件",
-  // G2.3 类型补全（G2 时间标签点；概览卡仍为四卡——时间点无独立统计卡）
+ // G2.3 类型补全（G2 时间标签点；概览卡仍为四卡——时间点无独立统计卡）
   timepoint: "时间点",
-  // 决策 36（批次九）参考资料 reference
+ // （批次九）参考资料 reference
   reference: "参考资料",
 };
 const ENTITY_ORDER: EntityType[] = ["character", "setting", "location", "hook"];
 
-/** 大纲概览统计结果（dashboard.md「信息层级」：无现成汇总字段，前端自算） */
+/** 大纲概览统计结果（「信息层级」：无现成汇总字段，前端自算） */
 interface OutlineSummary {
   volumes: number;
   chapters: number;
   scenes: number;
-  /** 树中最大 updatedAt（ISO 字符串字典序比较，时间格式统一由应用层保证）；空树 → null */
+ /** 树中最大 updatedAt（ISO 字符串字典序比较，时间格式统一由应用层保证）；空树 → null */
   updatedAt: string | null;
 }
 
@@ -78,37 +78,37 @@ export default function Dashboard() {
   const outline = useProjectStore((s) => s.outline);
   const outlineLoading = useProjectStore((s) => s.outlineLoading);
   const loadOutline = useProjectStore((s) => s.loadOutline);
-  // 书架用于 rootPath（buildBookPath）+ 引导卡书籍列表（S13.4：有书时列出可打开）；
-  // 左栏 Sidebar 书架树与左栏 store 同源数据
+ // 书架用于 rootPath（buildBookPath）+ 引导卡书籍列表（S13.4：有书时列出可打开）；
+ // 左栏 Sidebar 书架树与左栏 store 同源数据
   const bookshelf = useProjectStore((s) => s.bookshelf);
   const bookshelfLoading = useProjectStore((s) => s.bookshelfLoading);
   const bookshelfError = useProjectStore((s) => s.bookshelfError);
   const loadBookshelf = useProjectStore((s) => s.loadBookshelf);
   const openProjectAt = useProjectStore((s) => s.openProjectAt);
   const createProjectAt = useProjectStore((s) => s.createProjectAt);
-  // 会话（chat store 已按项目联动加载：切项目自动重载，本页仅补拉与消费）
+ // 会话（chat store 已按项目联动加载：切项目自动重载，本页仅补拉与消费）
   const sessions = useChatStore((s) => s.sessions);
   const sessionsLoading = useChatStore((s) => s.sessionsLoading);
   const sessionsError = useChatStore((s) => s.sessionsError);
   const loadSessions = useChatStore((s) => s.loadSessions);
   const setCurrentSession = useChatStore((s) => s.setCurrentSession);
   const currentSessionId = useChatStore((s) => s.currentSessionId);
-  // 跨页定位（方案 A）：点击当前位置/去大纲 → 设置 transient 目标后跳 #/outline，Outline 页消费
+ // 跨页定位（方案 A）：点击当前位置/去大纲 → 设置 transient 目标后跳 #/outline，Outline 页消费
   const setFocusOutlineNode = useUiStore((s) => s.setFocusOutlineNode);
 
-  // 引导表单状态
+ // 引导表单状态
   const [bookName, setBookName] = useState("");
   const [bookError, setBookError] = useState<string | null>(null);
-  /** 有书形态下书籍点击打开失败的行内错误（S13.4；describeOpenError 映射，同 pathError 模式） */
+ /** 有书形态下书籍点击打开失败的行内错误（S13.4；describeOpenError 映射，同 pathError 模式） */
   const [bookOpenError, setBookOpenError] = useState<string | null>(null);
-  /** 有书形态「新建一本…」折叠表单展开态 */
+ /** 有书形态「新建一本…」折叠表单展开态 */
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showPathForm, setShowPathForm] = useState(false);
   const [path, setPath] = useState("");
   const [pathError, setPathError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // 创作要素统计状态（四类型并行；任一失败 → 区块内「加载失败 [重试]」，不阻塞其他区块）
+ // 创作要素统计状态（四类型并行；任一失败 → 区块内「加载失败 [重试]」，不阻塞其他区块）
   const [entityCounts, setEntityCounts] = useState<Partial<Record<EntityType, number>> | null>(
     null,
   );
@@ -116,44 +116,44 @@ export default function Dashboard() {
   const [entitiesError, setEntitiesError] = useState<string | null>(null);
   const [entitiesTick, setEntitiesTick] = useState(0);
 
-  // 大纲概览：outline 已在 project store（openProjectAt 会加载）；未加载则补拉，
-  // 失败用本地 attempted 标记呈现「加载失败 [重试]」（store 的 loadOutline 静默吞错）
+ // 大纲概览：outline 已在 project store（openProjectAt 会加载）；未加载则补拉，
+ // 失败用本地 attempted 标记呈现「加载失败 [重试]」（store 的 loadOutline 静默吞错）
   const [outlineAttempted, setOutlineAttempted] = useState(false);
 
   const noProject = config === null && !configLoading;
   const outlineSummary = outline ? summarizeOutline(outline.children) : null;
-  // 当前位置标题（id→title 映射；outline 未加载时回退 id 占位，与 InfoBar 同语义）
+ // 当前位置标题（id→title 映射；outline 未加载时回退 id 占位，与 InfoBar 同语义）
   const positionTitle =
     config?.currentPosition != null
       ? (findOutlineNodeTitle(outline, config.currentPosition) ?? config.currentPosition)
       : null;
 
-  // 无项目时自动加载书架（Sidebar 常驻也会加载，此处兜底；失败由 bookshelfError 呈现 + 重试）
+ // 无项目时自动加载书架（Sidebar 常驻也会加载，此处兜底；失败由 bookshelfError 呈现 + 重试）
   useEffect(() => {
     if (noProject && !bookshelfLoading && bookshelf === null && bookshelfError === null) {
       void loadBookshelf();
     }
   }, [noProject, bookshelfLoading, bookshelf, bookshelfError, loadBookshelf]);
 
-  // 项目切换（同页不卸载场景：Sidebar 开新项目）时重置大纲加载标记，使新项目树重新拉取
+ // 项目切换（同页不卸载场景：Sidebar 开新项目）时重置大纲加载标记，使新项目树重新拉取
   useEffect(() => {
     setOutlineAttempted(false);
   }, [config?.id]);
 
-  // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉各区块
-  // （要素计数 + 大纲概览 + 最近会话；书架与 AI 无关不刷新；ref 守卫防首帧重复拉）
+ // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉各区块
+ // （要素计数 + 大纲概览 + 最近会话；书架与 AI 无关不刷新；ref 守卫防首帧重复拉）
   useDataRefresh(() => {
     setEntitiesTick((t) => t + 1);
     void loadOutline();
     void loadSessions();
   });
 
-  // 项目切换同样清除书籍打开错误（防下次进入引导形态时残留上次失败文案）
+ // 项目切换同样清除书籍打开错误（防下次进入引导形态时残留上次失败文案）
   useEffect(() => {
     setBookOpenError(null);
   }, [config?.id]);
 
-  // 概览态：大纲树未加载则补拉（outlineLoading 由 store 管理；attempted 防重复）
+ // 概览态：大纲树未加载则补拉（outlineLoading 由 store 管理；attempted 防重复）
   useEffect(() => {
     if (config === null) return;
     if (outline === null && !outlineLoading && !outlineAttempted) {
@@ -162,8 +162,8 @@ export default function Dashboard() {
     }
   }, [config, outline, outlineLoading, outlineAttempted, loadOutline]);
 
-  // 概览态：创作要素四类型并行统计（limit=1 仅取 total，dashboard.md「各取 total」）；
-  // entitiesTick 变化 = 区块内重试；任一失败记录 entitiesError，成功类型照常展示
+ // 概览态：创作要素四类型并行统计（limit=1 仅取 total，「各取 total」）；
+ // entitiesTick 变化 = 区块内重试；任一失败记录 entitiesError，成功类型照常展示
   useEffect(() => {
     if (config === null) return;
     let cancelled = false;
@@ -192,7 +192,7 @@ export default function Dashboard() {
     };
   }, [config, entitiesTick]);
 
-  // 概览态：会话列表补拉（chat store 订阅项目切换已自动加载；此处兜底「未尝试过」的场景）
+ // 概览态：会话列表补拉（chat store 订阅项目切换已自动加载；此处兜底「未尝试过」的场景）
   useEffect(() => {
     if (config === null) return;
     if (sessions === null && !sessionsLoading && sessionsError === null) {
@@ -200,11 +200,11 @@ export default function Dashboard() {
     }
   }, [config, sessions, sessionsLoading, sessionsError, loadSessions]);
 
-  /** 新建书籍：书名 → 创作根/books/<书名>/，create（不打开）→ open 进入新书（config 就绪后本页切概览形态） */
+ /** 新建书籍：书名 → 创作根/books/<书名>/，create（不打开）→ open 进入新书（config 就绪后本页切概览形态） */
   async function handleCreateBook(e: FormEvent) {
     e.preventDefault();
     const name = bookName.trim();
-    // 书名校验复用 lib/book-name（与 Sidebar 新建/导入同款规则——L3 防路径逃逸，错误文案直接用于内联提示）
+ // 书名校验复用 lib/book-name（与 Sidebar 新建/导入同款规则——L3 防路径逃逸，错误文案直接用于内联提示）
     const nameError = validateBookName(name);
     if (nameError !== null) {
       setBookError(nameError);
@@ -218,9 +218,9 @@ export default function Dashboard() {
     setBookError(null);
     try {
       await createProjectAt(buildBookPath(bookshelf.rootPath, name), { name, language: "zh" });
-      // 成功后刷新书架（新书出现在左栏树）；config 已由 openProjectAt 刷新 → 本页切概览形态
+ // 成功后刷新书架（新书出现在左栏树）；config 已由 openProjectAt 刷新 → 本页切概览形态
       await loadBookshelf();
-      // L4（oracle U4 审核）：与 Sidebar 新建同款提示
+ // L4（oracle U4 审核）：与 Sidebar 新建同款提示
       useUiStore.getState().showToast(`已创建并打开《${name}》`);
       setBookName("");
     } catch (err) {
@@ -230,7 +230,7 @@ export default function Dashboard() {
     }
   }
 
-  /** 打开其他路径（S1.4 保留能力；绝对路径 openProjectAt） */
+ /** 打开其他路径（S1.4 保留能力；绝对路径 openProjectAt） */
   async function handleOpenPath(e: FormEvent) {
     e.preventDefault();
     if (!path.trim()) {
@@ -248,8 +248,8 @@ export default function Dashboard() {
     }
   }
 
-  /** 打开书籍（S13.4 引导卡书籍行；openProjectAt → store 刷新 config/outline，本页切概览形态；
-   * 失败行内展示 describeOpenError（同 handleOpenPath 模式——侧栏用 toast，页内表单区用行内） */
+ /** 打开书籍（S13.4 引导卡书籍行；openProjectAt → store 刷新 config/outline，本页切概览形态；
+ * 失败行内展示 describeOpenError（同 handleOpenPath 模式——侧栏用 toast，页内表单区用行内） */
   async function handleOpenBook(path: string) {
     setBookOpenError(null);
     try {
@@ -259,12 +259,12 @@ export default function Dashboard() {
     }
   }
 
-  /** 跳大纲并定位当前位置节点（当前位置未设置时仅跳转；dashboard.md「操作流」） */
+ /** 跳大纲并定位当前位置节点（当前位置未设置时仅跳转；「操作流」） */
   function goOutline() {
     if (config?.currentPosition != null) setFocusOutlineNode(config.currentPosition);
   }
 
-  // ============ 加载态（config 拉取中：未判定形态前不渲染引导/概览） ============
+ // ============ 加载态（config 拉取中：未判定形态前不渲染引导/概览） ============
   if (configLoading) {
     return (
       <section>
@@ -273,13 +273,13 @@ export default function Dashboard() {
     );
   }
 
-  // ============ 引导形态（无项目：按书架状态分派——有书列出书籍 / 空书架创建引导 / 加载中骨架 / 失败占位） ============
+ // ============ 引导形态（无项目：按书架状态分派——有书列出书籍 / 空书架创建引导 / 加载中骨架 / 失败占位） ============
   if (noProject) {
     const shelfLoading = bookshelf === null && bookshelfLoading;
     const shelfError = bookshelfError !== null;
     const shelfHasBooks = bookshelf !== null && bookshelf.books.length > 0;
 
-    /** 新建表单（空书架主操作 / 有书折叠次级共用；错误与提交态由页面持有） */
+ /** 新建表单（空书架主操作 / 有书折叠次级共用；错误与提交态由页面持有） */
     function renderCreateBookForm(className: string) {
       return (
         <form onSubmit={handleCreateBook} className={className}>
@@ -426,7 +426,7 @@ export default function Dashboard() {
     );
   }
 
-  // ============ 概览形态（项目已打开） ============
+ // ============ 概览形态（项目已打开） ============
   return (
     <section>
       <div className="mb-4">
@@ -465,7 +465,7 @@ export default function Dashboard() {
               </a>
             </div>
           </dl>
-          {/* 项目提示词展示已移除（决策 41）：prompt 字段废弃不再返回——项目规则唯一事实源
+          {/* 项目提示词展示已移除：prompt 字段废弃不再返回——项目规则唯一事实源
               改为项目目录 AGENTS.md（设置页编辑，见 #/settings） */}
         </SectionCard>
 
@@ -548,7 +548,7 @@ export default function Dashboard() {
               {outline.children.length === 0 && (
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <p className="text-xs text-muted-foreground">大纲还是空的</p>
-                  {/* M1（oracle U4 审核）：新项目空态契约（dashboard.md「空态」）——[先搭大纲] 主操作 +
+                  {/* M1（oracle U4 审核）：新项目空态（「空态」）——[先搭大纲] 主操作 +
                       [和 AI 聊聊设定] 次操作（setCurrentSession(null) 注入右栏新会话） */}
                   <Button
                     variant="outline"

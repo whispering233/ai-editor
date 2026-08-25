@@ -1,10 +1,10 @@
-// 应用外壳（doc/ui/layout.md §0/§2）：三栏装配——左栏 Sidebar + 中栏 MainPanel + 右栏 ChatPanel
+// 应用外壳（§2）：三栏装配——左栏 Sidebar + 中栏 MainPanel + 右栏 ChatPanel
 // F7 修订（2026-08 用户反馈）：桌面态（≥1024px）三栏宽度可拖拽（像素）+ 左/右栏可收起/展开，
-//   宽度与收起态 localStorage 持久化（hooks/use-panels，决策 10 同哲学——纯展示层不进数据文件）；
-//   装配顺序 Sidebar（或收起窄条）→ 拖拽手柄 → MainPanel（flex-1 弹性吸收剩余空间）→ 拖拽手柄 →
-//   ChatPanel（或收起窄条）；收起态下手柄隐藏/禁用（拖拽与收起互斥）。
-//   <1024px 小屏不渲染手柄/收起条，三栏回退默认百分比类（右栏抽屉行为不变，开关在 InfoBar 右侧，
-//   抽屉渲染在 ChatPanel；open 状态在此持有）
+// 宽度与收起态 localStorage 持久化（hooks/use-panels， 同哲学——纯展示层不进数据文件）；
+// 装配顺序 Sidebar（或收起窄条）→ 拖拽手柄 → MainPanel（flex-1 弹性吸收剩余空间）→ 拖拽手柄 →
+// ChatPanel（或收起窄条）；收起态下手柄隐藏/禁用（拖拽与收起互斥）。
+// <1024px 小屏不渲染手柄/收起条，三栏回退默认百分比类（右栏抽屉行为不变，开关在 InfoBar 右侧，
+// 抽屉渲染在 ChatPanel；open 状态在此持有）
 import { useState, type ReactNode } from "react";
 import { GripVertical, PanelLeftOpen, PanelRightOpen } from "lucide-react";
 import type { Route } from "../hooks/use-route";
@@ -17,7 +17,7 @@ import { MainPanel } from "./main-panel/MainPanel";
 import { Sidebar } from "./sidebar/Sidebar";
 
 /** 拖拽手柄（桌面态、对应栏展开时渲染）：6px 垂直细条，hover 高亮 + GripVertical 提示；
- *  pointer capture 实现拖拽——down 捕获指针后 move/up 持续由本手柄接收（移出窗口也不丢事件） */
+ * pointer capture 实现拖拽——down 捕获指针后 move/up 持续由本手柄接收（移出窗口也不丢事件） */
 function ResizeHandle({
   side,
   active,
@@ -26,7 +26,7 @@ function ResizeHandle({
   onEnd,
 }: {
   side: "sidebar" | "chat";
-  /** 当前拖拽是否发生在本手柄（决定拖拽态高亮） */
+ /** 当前拖拽是否发生在本手柄（决定拖拽态高亮） */
   active: boolean;
   onStart: (side: "sidebar" | "chat", clientX: number) => void;
   onMove: (side: "sidebar" | "chat", clientX: number) => void;
@@ -39,7 +39,7 @@ function ResizeHandle({
       aria-label={side === "sidebar" ? "调整左栏宽度" : "调整右栏宽度"}
       title={side === "sidebar" ? "拖动调整左栏宽度" : "拖动调整右栏宽度"}
       onPointerDown={(e) => {
-        // preventDefault 防文本选择起点；capture 保证拖出窗口后指针事件仍路由到手柄
+ // preventDefault 防文本选择起点；capture 保证拖出窗口后指针事件仍路由到手柄
         e.preventDefault();
         e.currentTarget.setPointerCapture(e.pointerId);
         onStart(side, e.clientX);
@@ -84,14 +84,14 @@ function CollapseStrip({ side, onExpand }: { side: "sidebar" | "chat"; onExpand:
 }
 
 export function AppShell({ route, children }: { route: Route; children: ReactNode }) {
-  // 小屏抽屉开关状态（桌面态恒显示静态右栏，该状态不生效）
+ // 小屏抽屉开关状态（桌面态恒显示静态右栏，该状态不生效）
   const [chatOpen, setChatOpen] = useState(false);
   const { layout, isDesktop, dragSide, toggleCollapse, startResize, moveResize, endResize } =
     usePanels();
   const isDragging = dragSide !== null;
 
   return (
-    // 拖拽期间根容器禁文本选中（指针已 capture 在手柄上，兜底防边缘选中）
+ // 拖拽期间根容器禁文本选中（指针已 capture 在手柄上，兜底防边缘选中）
     <div className={cn("flex h-screen overflow-hidden", isDragging && "select-none")}>
       {/* 左栏：收起 → 窄条；展开 → Sidebar（桌面传像素宽度覆盖默认 10%，小屏不传走默认百分比）；
           收起按钮（PanelLeftClose）渲染在产品标识行右侧（Sidebar 内部，仅桌面态传入回调时出现） */}

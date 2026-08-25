@@ -1,4 +1,4 @@
-// 004 迁移测试（决策 31 K2 修订：setting 旧 rules 分类值 → data.tags，移除 rules）
+// 004 迁移测试（ K2 修订：setting 旧 rules 分类值 → data.tags，移除 rules）
 // 覆盖：v3 库手工建表（含 setting 行）→ runMigrations → rules 复制到 tags + rules 移除 /
 // 空 rules 不动 / 坏 JSON 跳过 / 非 setting 不动 / updated_at 刷新 / 幂等（user_version = 5）
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -84,7 +84,7 @@ function settingData(id: string): Record<string, unknown> | null {
   }
 }
 
-describe("迁移 004（setting 旧 rules → data.tags，决策 31 K2 修订）", () => {
+describe("迁移 004（setting 旧 rules → data.tags， K2 修订）", () => {
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "ai-editor-mig-004-"));
     db = createV3Db([
@@ -108,7 +108,7 @@ describe("迁移 004（setting 旧 rules → data.tags，决策 31 K2 修订）"
     expect(settingData("set-a")).toEqual({
       description: "修真界",
       tags: ["势力", "宗门"],
-      // rules 键已移除
+ // rules 键已移除
     });
     expect(settingData("set-a").rules).toBeUndefined();
     const row = db.prepare("SELECT updated_at FROM entities WHERE id = ?").get("set-a") as { updated_at: string };
@@ -126,7 +126,7 @@ describe("迁移 004（setting 旧 rules → data.tags，决策 31 K2 修订）"
   it("幂等：user_version 已到 5 不再执行（无 tags 不重复注入）", () => {
     runMigrations(db, MIGRATIONS);
     const setA = JSON.stringify(settingData("set-a"));
-    // 手工回退版本后重跑（模拟异常重试路径）——004 幂等性由版本门控保证
+ // 手工回退版本后重跑（模拟异常重试路径）——004 幂等性由版本门控保证
     setUserVersion(db as unknown as Database.Database, 3);
     runMigrations(db, MIGRATIONS);
     expect(JSON.stringify(settingData("set-a"))).toBe(setA);

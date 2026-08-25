@@ -1,5 +1,5 @@
 // describeOpenError 纯函数测试（S1.4 补丁）：错误码 → 引导文案映射锁定
-// E3 追加：describeImportError / describeExportError（导出/导入错误码映射）
+// 追加：describeImportError / describeExportError（导出/导入错误码映射）
 import { describe, expect, it } from "vitest";
 import { describeExportError, describeImportError, describeOpenError } from "./error-messages";
 
@@ -13,7 +13,7 @@ describe("describeOpenError（项目开/建错误码映射）", () => {
     expect(describeOpenError("PROJECT_ALREADY_EXISTS")).toContain("打开");
   });
 
-  it("PROJECT_VERSION_NEWER → 升级程序引导（E4：项目由更高版本创建，open 409）", () => {
+  it("PROJECT_VERSION_NEWER → 升级程序引导（项目由更高版本创建，open 409）", () => {
     expect(describeOpenError("PROJECT_VERSION_NEWER")).toContain("升级");
   });
 
@@ -31,7 +31,7 @@ describe("describeOpenError（项目开/建错误码映射）", () => {
   });
 });
 
-describe("describeImportError（E3 导入错误码映射）", () => {
+describe("describeImportError（ 导入错误码映射）", () => {
   it("PROJECT_ALREADY_EXISTS → 换书名引导（对话框内可立即改名重试）", () => {
     expect(describeImportError("PROJECT_ALREADY_EXISTS", "书架已存在同名书: x")).toContain(
       "换一个书名",
@@ -68,7 +68,7 @@ describe("describeImportError（E3 导入错误码映射）", () => {
   });
 });
 
-describe("describeExportError（E3 导出错误码映射）", () => {
+describe("describeExportError（ 导出错误码映射）", () => {
   it("CLIENT_NETWORK_ERROR → 连接失败引导", () => {
     expect(describeExportError("CLIENT_NETWORK_ERROR", "x")).toContain("无法连接服务");
   });

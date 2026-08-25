@@ -1,12 +1,12 @@
 // Base UI ContextMenu 封装（shadcn base-nova 风格；@base-ui/react/context-menu）
-// 决策 40（批次十）：行级右键菜单替代行级 AskAiButton——「注入会话上下文」+「建立关联」。
+// （批次十）：行级右键菜单替代行级 AskAiButton——「注入会话上下文」+「建立关联」。
 // 触发 = 行级 onContextMenu：ContextMenuTrigger 内建 preventDefault + 右键/长按打开（行级
-//   onContextMenu 语义由组件承担，页面无需手写）；菜单弹出在指针位置（ContextMenuRoot 内建）。
-// 契约红线（同 dropdown-menu.tsx，Base UI error #31）：ContextMenuLabel（= Menu.GroupLabel）
-//   **必须**由 ContextMenuGroup（= Menu.Group）包裹——GroupLabel 读取 Group 上下文，缺失即抛
-//   「MenuGroupContext is missing」。Item/Separator 无此要求。
+// onContextMenu 语义由组件承担，页面无需手写）；菜单弹出在指针位置（ContextMenuRoot 内建）。
+// 红线（同 dropdown-menu.tsx，Base UI error #31）：ContextMenuLabel（= Menu.GroupLabel）
+// **必须**由 ContextMenuGroup（= Menu.Group）包裹——GroupLabel 读取 Group 上下文，缺失即抛
+// 「MenuGroupContext is missing」。Item/Separator 无此要求。
 // 与 DropdownMenu 的差异：ContextMenu 无 Trigger 按钮——Trigger 是「弹出区域」本身（render 行元素）；
-//   Popup 宽度不取锚点宽（w-(--anchor-width) 会让菜单撑满整行），改用 w-auto 自适应内容。
+// Popup 宽度不取锚点宽（w-(--anchor-width) 会让菜单撑满整行），改用 w-auto 自适应内容。
 import { ContextMenu as ContextMenuPrimitive } from "@base-ui/react/context-menu";
 
 import { cn } from "@/lib/utils";
