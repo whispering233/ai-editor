@@ -15,6 +15,8 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 
 全量交付完成：阶段 A 地基（T0-T7）+ 切片 1-13 + 阶段 U 三栏工作台（U1-U8）+ 画布 S10（批次八 O6 已按决策 33 移除）+ 发布 S11 + 发布阻断项 E1-E6 + 阶段 B/C/B2 + 用户反馈批次一至十五（F1-F9 · G1-G3 · H1-H6 · I1-I4 · J1-J3+K1/K2 · M1-M3 · N1-N2 · O1-O6 · L 样式工程化 + 批次九至十五，详见执行进度与演进路线）+ **发布 v0.0.1-v0.0.22 全链路全绿**。**批次十四（2026-08 已完成并发布 v0.0.20：决策 47/48 + 决策 27 修订）与批次十五（2026-08 已完成并发布 v0.0.22：决策 49 db 查询层 drizzle-orm 集成）**。可选收尾：npm 坏版本 v0.0.1/v0.0.2 deprecate 标注（需 2FA 凭据）；backlog.md 事项一律不做。
 
+**文档重构（2026-08）**：删除 `decisions.md`/`decisions-history.md`/`release-review.md`——已由详细设计四篇（`data-model.md`/`context.md`/`agent-loop.md`/`security.md`）承接仍生效契约；全仓「决策 N」编号体系与注释中设计文档引用全部清除（代码注释只保留实现意图，文档增删不再牵连注释）；历史事实由 `git log`/CHANGELOG 回溯，本文档执行进度段保留原编号。
+
 - **设计主轴**：详细设计见 `data-model.md`/`context.md`/`agent-loop.md`/`security.md`；架构分包见 `architecture.md`；文档即契约（`doc/api`、`doc/database`、`doc/ui`）。
 - **测试**：全仓 1690 个（shared 156 / llm 41 / db 258 / server 383 / client 516 / tools 242 / agent 94）。SCHEMA_VERSION = 5（kind 与 setting sort_order 均为 JSON/列语义演进，无 DDL 迁移）。
 
