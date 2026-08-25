@@ -12,7 +12,7 @@
 | 运行时 | Node ≥ 22.12，全仓 ESM |
 | 语言 | TypeScript strict mode |
 | API 服务端 | Hono 4 + `@hono/node-server` |
-| 数据库 | better-sqlite3 ^13（WAL，N-API 预编译） |
+| 数据库 | better-sqlite3 ^13（WAL，N-API 预编译）+ drizzle-orm 0.45（查询构建层，决策 49） |
 | 前端 | React 19 + Vite 7 + Zustand 5 + Tailwind 4 + shadcn/ui（Base UI，oklch 主题 tokens）+ Prettier + prettier-plugin-tailwindcss（样式工程化，L 批次）+ @uiw/react-md-editor（markdown 编辑器，决策 43） |
 | 路由 | 自制 hash 路由（`useHashRoute`，无 React Router） |
 | Schema 校验 | Zod 4（仅服务端执行，client 不打包校验函数） |
@@ -36,7 +36,7 @@ shared → llm / db / tools → agent → server    （依赖方向，client 只
 ```
 
 - `@whispering233/ai-editor-shared`：前后端共享类型 / 常量 / 工具 / API 契约（零 Node 依赖，浏览器安全）
-- `@whispering233/ai-editor-db`：SQLite 建表 / 查询 / outline.json 原子写 / schema 演进（增量迁移 E5 + 未来版本拒绝打开 E4，无迁移路径时删库重建兜底）
+- `@whispering233/ai-editor-db`：SQLite 建表（drizzle `tables.ts` 双份声明）/ 查询（drizzle-orm 构建器，决策 49）/ outline.json 原子写 / schema 演进（增量迁移 E5 + 未来版本拒绝打开 E4，无迁移路径时删库重建兜底）
 - `@whispering233/ai-editor-server`：Hono API + SPA 静态托管（单进程部署）
 - `@whispering233/ai-editor-client`：React SPA
 
@@ -106,7 +106,7 @@ npm install -g @whispering233/ai-editor-server
 ai-editor <项目目录>   # 启动服务 + 自动打开浏览器 http://127.0.0.1:3456
 ```
 
-> 版本说明：**当前最新版 v0.0.21**（由 CI OIDC 自动发布，发布全链路自动化已验证）；v0.0.1/v0.0.2 因发布管道缺陷（manifest 残留 `workspace:*` 协议）不可安装，已计划 deprecate 标注；安装时使用 `@whispering233/ai-editor-server@latest` 即可。
+> 版本说明：**当前最新版 v0.0.22**（由 CI OIDC 自动发布，发布全链路自动化已验证）；v0.0.1/v0.0.2 因发布管道缺陷（manifest 残留 `workspace:*` 协议）不可安装，已计划 deprecate 标注；安装时使用 `@whispering233/ai-editor-server@latest` 即可。
 
 **发布前置（一次性，npmjs 手动）**：① 开启 npm 账号 **2FA**（npmjs 要求开启两步验证才能配置包管理；开启会撤销现有 token，需重新生成 Automation token）；② 为 `@whispering233/ai-editor-shared`、`@whispering233/ai-editor-llm`、`@whispering233/ai-editor-db`、`@whispering233/ai-editor-tools`、`@whispering233/ai-editor-agent`、`@whispering233/ai-editor-server` 六包各配置 Trusted Publisher：Publisher = GitHub Actions、工作流名 = `publish.yml`；配置后 CI 无需 token（OIDC 自动换证）。
 

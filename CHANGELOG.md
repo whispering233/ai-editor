@@ -5,6 +5,17 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [v0.0.22] - 2026-08-24
+
+### Changed
+
+- **批次十五：db 查询层引入 drizzle-orm（决策 49）**——查询构建器 + 行类型推断提升开发体验，纯工程重构（无 API/数据/前端变更）：
+  - 引入 `drizzle-orm` 0.45.2（stable，better-sqlite3 同步驱动）；**不引入 drizzle-kit**——迁移管线维持自建 `PRAGMA user_version` 三态分流（E4 未来版本拒绝打开 / E5 增量迁移）
+  - 表结构声明收敛 `packages/db/src/tables.ts`（4 表 `sqliteTable` 定义 + 手写 DDL 常量同文件，schema.test.ts「列名/类型/notNull/主键」对齐断言锁双份同步）；`schema.ts` 瘦身为版本工具（user_version 三态）
+  - 查询模块函数签名保持 `(db: Db)` 不变（调用方零改动），内部经 `queryDb` 辅助（WeakMap 缓存 drizzle 实例）混合风格渐进替换：**实现层 61 处 prepare 全部清零**——trash（13）/ delta（9：8 builder + 1 sql 模板 order 聚合）/ chat（5：listSessions 相关子查询聚合走 sql 模板参数绑定）/ relation（11：同表二次 join 用 alias）/ entity（23：动态 where、LIKE 通配符透传、排序白名单列对象、JS 过滤路径、inArray 动态占位符、批量 sort_order、级联软删，复杂排序/EXISTS 跨表 2 处 sql 模板）；compute-state/outline-ops（0 prepare 纯调用层）零改动；migration 管线保持 native
+  - **约束保持**：JSON 列（data/changes/metadata/tool_calls）text 模式 + 行映射层防御解析（drizzle json mode 对坏 JSON 抛错，弃用）；shared API 契约类型不动（类型不反向流入 shared）；事务仍为 native `withTransaction`（连接级共享已验证：异常回滚两侧不可见）
+  - 全仓 1692 测试全绿（测试文件一字未改）+ typecheck/lint/build 通过；15.1-15.6 每卡「并行 worker 实现 + oracle 独立审查」零阻断
+
 ## [v0.0.21] - 2026-08-23
 
 ### Changed

@@ -138,6 +138,7 @@
 
 ## 七、发布进展记录（2026-08）
 
+- **v0.0.22（2026-08-24）**：批次十五发布——**决策 49 db 查询层 drizzle-orm 集成**（引入 drizzle-orm 0.45.2 查询构建器 + 行类型推断；不引入 drizzle-kit，迁移管线维持自建 user_version 三态分流 E4/E5 不动；表结构声明收敛 `tables.ts`（sqliteTable 定义 + 手写 DDL 常量同文件，schema.test.ts 列级对齐断言锁）；schema.ts 瘦身为版本工具；查询模块签名保持 (db: Db) + queryDb 辅助（WeakMap 缓存）；JSON 列 text 模式 + 行映射层防御；shared 契约类型不动；混合风格渐进替换——**实现层 61 处 prepare 全部清零**（trash 13 / delta 9 / chat 5 / relation 11 / entity 23，migration 保持 native，compute-state/outline-ops 纯调用层零改动）；事务 native 连接级共享验证（异常回滚两侧不可见）；全仓 1692 测试全绿（测试文件一字未改）+ typecheck/lint/build 通过；15.2-15.6 并行 worker 实现 + oracle 独立审查零阻断；发布前检查无残留 prepare/死代码，清理 tasks.md/README.md/AGENTS.md 过时版本引用）
 - **v0.0.1-v0.0.3（2026-08-04）**：首个可安装版本；发布管道坑记录见 tasks.md E6 卡（npm 12 manifest 时序 / automation token 限制）。
 - **v0.0.4（2026-08-04）**：CI OIDC 发布链路启用，6 包自动发布 + 安装态冒烟全绿。
 - **v0.0.5（2026-08-12）**：阶段 B（提示词编辑）+ 阶段 C（时间轴）+ 画布增强（S10.2-S10.5）+ 交互优化（UX1-UX4）发布；CI 冒烟超时窗口修复（verify-installed 重试 10×30s）。
