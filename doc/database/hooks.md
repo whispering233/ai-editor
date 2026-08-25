@@ -48,11 +48,11 @@ CREATE TABLE entities (
 | `status` | enum | `planted` → `progressing` → `resolved` 或 `abandoned` |
 | `category` | string | 自由填，例如：`mystery` / `relationship` / `item` / `character_growth` / `world_building` |
 | `expected_payoff` | string | 预期回收方式描述 |
-| `payoff_timing` | enum | `immediate` / `near_term` / `mid_arc` / `slow_burn` / `endgame`（`half_life` 未设置时的缺省映射来源，见决策 21） |
-| `half_life` | number | 超过此章数未推进算"遗忘"（stale）；显式值优先，缺省按 `payoff_timing` 映射（决策 21） |
+| `payoff_timing` | enum | `immediate` / `near_term` / `mid_arc` / `slow_burn` / `endgame`（`half_life` 未设置时的缺省映射来源，见下文「章节序与缺省映射」） |
+| `half_life` | number | 超过此章数未推进算"遗忘"（stale）；显式值优先，缺省按 `payoff_timing` 映射（见下文「章节序与缺省映射」） |
 | `is_core` | boolean | 主线伏笔 |
 | `notes` | string | 自由备注 |
-| `expected_resolve_node_id` | string \| null | 可选：预计回收的大纲节点 id（`ready_to_resolve` 指标依据，决策 21） |
+| `expected_resolve_node_id` | string \| null | 可选：预计回收的大纲节点 id（`ready_to_resolve` 指标依据） |
 
 ### 伏笔关系约定（relation_records）
 
@@ -80,7 +80,7 @@ VALUES ('hook', 'hook-1', 'character', 'char-3', 'involves', '{}');
 VALUES ('hook', 'hook-1', 'setting', 'set-7', 'involves', '{}');
 ```
 
-> **chapter 不落库（2026-08 修订）**：`plants` / `advances` / `resolves` 关系的章节信息**不写入 metadata**——由服务端基于 `source_id` 从大纲树**查询时现推**（章节序推导规则见决策 21；节点 move 后不陈旧），调用方（AI 工具 / 前端）不必手工填写。
+> **chapter 不落库（2026-08 修订）**：`plants` / `advances` / `resolves` 关系的章节信息**不写入 metadata**——由服务端基于 `source_id` 从大纲树**查询时现推**（章节序推导规则见下文「章节序与缺省映射」；节点 move 后不陈旧），调用方（AI 工具 / 前端）不必手工填写。
 
 ### 伏笔状态变化（delta_records）
 
@@ -125,16 +125,22 @@ VALUES ('sc-45', 'hook', 'hook-1',
 
 > **MVP 简化（2026-08 决策，backlog #13）**：以下 `_health` 附加字段**契约未定义、不对外承诺**——REST 响应不含该字段，伏笔面板不展示健康指标与章节序（见 `doc/ui/pages/hook-panel.md`）；本节为后续迭代的设计草案。
 
-每次查询伏笔时实时计算 `_health`，**仅作为响应附加字段返回，不写回 data**。**「当前章节」来源于 project.json 的 `current_position`**（已纳入 project.json 契约，见 `schema.md`；`current_position` 指向某大纲节点，**章节序推导规则见决策 21**：全局章序号、scene 归入所属章）；未设置时为 null，相关指标返回未计算。
+每次查询伏笔时实时计算 `_health`，**仅作为响应附加字段返回，不写回 data**。**「当前章节」来源于 project.json 的 `current_position`**（已纳入 project.json 契约，见 `schema.md`；`current_position` 指向某大纲节点，章节序推导规则见下文）；未设置时为 null，相关指标返回未计算。
 
 | 指标 | 计算方式 |
 |------|---------|
 | `age` | 当前章节 - 埋下章节（`plants` 关系的节点现推章节序） |
 | `dormancy` | 当前章节 - 最近推进章节（`advances` 关系的最新节点章节序） |
-| `stale` | `dormancy > half_life`（`half_life` 缺省映射见决策 21） |
+| `stale` | `dormancy > half_life`（`half_life` 缺省映射见下文） |
 | `overdue` | `age > half_life * 2` |
 | `ready_to_resolve` | `expected_resolve_node_id` 已设置时：当前章节 >= 该节点章节序；未设置返回未计算 |
 | `blocked` | 存在 `depends_on` 关系的伏笔尚未 resolved |
+
+### 章节序与缺省映射
+
+**章节序推导**：全局**章**序号（跨卷连续累计），按大纲树先序遍历编号（root → 卷 → 章，直接挂 root 的 chapter 按兄弟顺序编号）；scene 归入所属 chapter，不单独编号；`current_position` 指向 scene 时取其所属章序号。
+
+**half_life 缺省映射**（`payoff_timing` → 章）：`immediate`=3、`near_term`=8、`mid_arc`=15、`slow_burn`=25、`endgame`=40；显式 `half_life` 优先。
 
 ## 工具扩展
 

@@ -10,30 +10,30 @@
 │   └── <书名>/               # 每本书一个目录（创建书 = 新建子目录）
 │       ├── project.json       # 项目配置（id/schema_version/current_position 等，见下文契约）
 │       ├── outline.json       # 大纲树（卷 → 章 → 场景，严格三层，无游离节点）
-│       ├── AGENTS.md          # 项目规则文件（决策 41：项目规则唯一事实源，可选文件，见下文）
+│       ├── AGENTS.md          # 项目规则文件（项目规则唯一事实源，可选文件，见下文）
 │       └── data.db            # SQLite
 │           ├── entities       # 人物 / 设定 / 地点 / 伏笔 / 事件
 │           ├── relation_records  # 通用关系表
 │           ├── delta_records    # 属性变更记录
-│           └── chat_messages    # 对话历史（决策 18）
+│           └── chat_messages    # 对话历史
 
-# 兼容：启动目录本身含 project.json 时按旧语义打开（决策 8 修订）；
+# 兼容：启动目录本身含 project.json 时按旧语义打开；
 # 无 project.json 时进入书架模式——Dashboard 引导创建（自动建 books/<书名>/）或打开
 ```
 
 **时间约定**：所有时间列/字段统一 ISO 8601 字符串（如 `2026-08-01T10:00:00Z`），由应用层写入，不使用 SQLite 内置 `datetime('now')`——回收站按 `deleted_at` 排序需跨 SQLite 与 outline.json 统一格式。
 
-**表结构声明层（决策 49，2026-08）**：表结构的**当前声明**在 db 包 `src/tables.ts`（drizzle `sqliteTable` 定义 + 手写 DDL 常量，同文件、`schema.test.ts` 断言锁对齐）；`db/src/migrations/` 的迁移 SQL 是历史轨迹（自建 user_version 管线，决策 13 修订）；下表以当前 DDL 为准。
+**表结构声明层（2026-08）**：表结构的**当前声明**在 db 包 `src/tables.ts`（drizzle `sqliteTable` 定义 + 手写 DDL 常量，同文件、`schema.test.ts` 断言锁对齐）；`db/src/migrations/` 的迁移 SQL 是历史轨迹（自建 user_version 管线）；下表以当前 DDL 为准。
 
-**schema 版本与迁移（E5，决策 13 增补）**：
+**schema 版本与迁移**：
 
-- **版本判定**：以 data.db 的 `PRAGMA user_version` 为准（`packages/db/src/schema.ts` 的 `SCHEMA_VERSION` 常量）；`project.json`/`outline.json` 顶层的 `schema_version` 仅用于 JSON 结构判断（决策 13）。
+- **版本判定**：以 data.db 的 `PRAGMA user_version` 为准（`packages/db/src/schema.ts` 的 `SCHEMA_VERSION` 常量）；`project.json`/`outline.json` 顶层的 `schema_version` 仅用于 JSON 结构判断。
 - **三态分流（open 时，`ensureSchemaCompatible`）**：
   - `user_version === SCHEMA_VERSION` → 正常打开；
   - `user_version > SCHEMA_VERSION`（未来版本，E4）→ **拒绝打开** 409 `PROJECT_VERSION_NEWER`（数据原封不动，提示升级程序）；
-  - `user_version < SCHEMA_VERSION`（旧版本）→ **有迁移路径**（`packages/db/src/migrations/` 存在从当前版本到目标版本的连续迁移链）→ `runMigrations` 前向迁移；**无迁移路径** → 删库重建兜底（决策 13，备份 `data.db.v{n}.bak` + `outline.json.v{n}.bak`）。
+  - `user_version < SCHEMA_VERSION`（旧版本）→ **有迁移路径**（`packages/db/src/migrations/` 存在从当前版本到目标版本的连续迁移链）→ `runMigrations` 前向迁移；**无迁移路径** → 删库重建兜底（备份 `data.db.v{n}.bak` + `outline.json.v{n}.bak`）。
 - **迁移机制（E5）**：`migrations/` 目录每个文件导出一个 `Migration = { version, up }`（`001_xxx.ts` → version 1），`index.ts` 按 version 升序聚合导出 `MIGRATIONS`（tsc 编译进 dist 随包分发，无运行时目录读取）。`runMigrations` 对缺失版本逐个执行：**每个迁移一个事务（`up(db)` + `setUserVersion(version)` 原子提交——成功 ⇒ 版本已写入；失败 ⇒ 版本未变）**；**整批迁移前自动快照** data.db → `data.db.v{n}.{YYYYMMDDHHmmssSSSZ}.bak`（checkpoint 后复制主文件，时间戳命名不覆盖旧备份，失败重试现场保留）。迁移失败 → 该迁移回滚 + 版本停在前一迁移后，下次 open 重试。
-- 当前 `SCHEMA_VERSION = 5`；迁移链：`002_event_timeline.ts`（version 2，决策 26：entities 表 CHECK 扩入 `'event'` + 新增 `sort_order` 列）、`003_timepoint.ts`（version 3，G2 决策 26 修订：entities 表 CHECK 扩入 `'timepoint'` + `event.data.time_label` 迁移为 timepoint 实体 + occurs_at 关系，同名 time_label 合并为同一 timepoint）、`004_setting_tags.ts`（version 4，决策 31 K2 修订：**无 DDL**——setting 旧 `data.rules` 分类值复制到 `data.tags` 并移除 rules，仅 data JSON 数据迁移）、`005_reference.ts`（version 5，决策 36：entities 表 CHECK 扩入 `'reference'`，无数据搬移仅 DDL）。**SQLite 无法直接修改 CHECK 约束**，迁移走「建新表（新 CHECK）→ 拷贝数据 → drop 旧表 → rename」四步（`relation_records`/`delta_records` 无外键指向 entities，迁移只动 entities 表）；v1 → v5 迁移链存在 ⇒ 旧库 open 时自动前向迁移，不再走删库重建兜底。
+- 当前 `SCHEMA_VERSION = 5`；迁移链：`002_event_timeline.ts`（version 2：entities 表 CHECK 扩入 `'event'` + 新增 `sort_order` 列）、`003_timepoint.ts`（version 3，G2 修订：entities 表 CHECK 扩入 `'timepoint'` + `event.data.time_label` 迁移为 timepoint 实体 + occurs_at 关系，同名 time_label 合并为同一 timepoint）、`004_setting_tags.ts`（version 4，K2 修订：**无 DDL**——setting 旧 `data.rules` 分类值复制到 `data.tags` 并移除 rules，仅 data JSON 数据迁移）、`005_reference.ts`（version 5：entities 表 CHECK 扩入 `'reference'`，无数据搬移仅 DDL）。**SQLite 无法直接修改 CHECK 约束**，迁移走「建新表（新 CHECK）→ 拷贝数据 → drop 旧表 → rename」四步（`relation_records`/`delta_records` 无外键指向 entities，迁移只动 entities 表）；v1 → v5 迁移链存在 ⇒ 旧库 open 时自动前向迁移，不再走删库重建兜底。
 - **import 侧联动（E5 决议）**：导入备份时 `user_version < SCHEMA_VERSION` 且**有迁移路径** → 接受（搬入后 open 自动迁移，v1/v2/v3 备份经 E5 迁移升到 v4）；无路径 → 409 `SCHEMA_VERSION_MISMATCH`；`>` 当前 → 409（E4 语义）。
 
 ## entities — 实体表
@@ -44,10 +44,10 @@ CREATE TABLE entities (
   type        TEXT NOT NULL CHECK(type IN ('character', 'setting', 'location', 'hook', 'event', 'timepoint', 'reference')),
   name        TEXT NOT NULL,
   data        TEXT NOT NULL DEFAULT '{}',  -- JSON: 各类型的专属字段
-  sort_order  INTEGER,                     -- 线性序：event/timepoint 各类型内线性（决策 26 + G2，各自 0..n-1）；setting 为**同级组内线性序**（决策 46，同父/同根组内 0..n-1，NULL = 未参与手动排序）；其余类型恒为 NULL
+  sort_order  INTEGER,                     -- 线性序：event/timepoint 各类型内线性（各自 0..n-1）；setting 为**同级组内线性序**（同父/同根组内 0..n-1，NULL = 未参与手动排序）；其余类型恒为 NULL
   created_at  TEXT NOT NULL,               -- ISO 8601，应用层写入
-  updated_at  TEXT NOT NULL,               -- ISO 8601，应用层写入（提案快照比对，决策 14）
-  deleted_at  TEXT             -- 软删标记（决策 12），NULL 表示未删除；非 NULL 时该实体进入回收站，本体保留可还原
+  updated_at  TEXT NOT NULL,               -- ISO 8601，应用层写入（提案快照比对）
+  deleted_at  TEXT             -- 软删标记，NULL 表示未删除；非 NULL 时该实体进入回收站，本体保留可还原
 );
 ```
 
@@ -55,18 +55,18 @@ CREATE TABLE entities (
 
 | type | data 关键字段 |
 |------|-------------|
-| `character` | `role`, `gender`, `age`, `personality[]`, `motivation`, `abilities[]`, `status`（**自由文本：人物当前处境状态，如「活跃、退场、已故」——决策 45 + 修订：列表与详情页表单均不再展示，存量数据 .passthrough() 容错保留，AI 工具 filters.status 语义不变**）, `custom_fields` |
-| `setting` | `description`, `tags[]`（**分类标签，统一字段，决策 31 K2**）, `rules[]`（**规则条款，仅详情页编辑，K2 恢复语义**）, `custom_fields` —— **`parent_id`（决策 30）与 `category`（决策 31）均已废弃**：层级由 belongs_to 关系表达、分类由 tags 承接；旧字段残留由 `.passthrough()` 容错；旧 rules 分类值经 004 迁移（SCHEMA_VERSION 4）复制到 tags |
+| `character` | `role`, `gender`, `age`, `personality[]`, `motivation`, `abilities[]`, `status`（**自由文本：人物当前处境状态，如「活跃、退场、已故」——列表与详情页表单均不再展示，存量数据 .passthrough() 容错保留，AI 工具 filters.status 语义不变**）, `custom_fields` |
+| `setting` | `description`, `tags[]`（**分类标签，统一字段**）, `rules[]`（**规则条款，仅详情页编辑**）, `custom_fields` —— **`parent_id` 与 `category` 均已废弃**：层级由 belongs_to 关系表达、分类由 tags 承接；旧字段残留由 `.passthrough()` 容错；旧 rules 分类值经 004 迁移（SCHEMA_VERSION 4）复制到 tags |
 | `location` | `type`, `parent_id`, `description`, `custom_fields` |
 | `location` | `type`, `parent_id`, `description`, `custom_fields` |
 | `hook` | 详见 [hooks.md](./hooks.md) |
 | `event` | `description`（文本）, `tags[]`（字符串数组，分类筛选用）——**G2 修订：`time_label` 已移除**（迁移至 timepoint 实体 + occurs_at 关系，见下） |
 | `timepoint` | `{}`（无专属字段——**G2：时间标签文本 = name**，可重命名；YAGNI 不加 data） |
-| `reference` | `type`（**自由文本分类，决策 44 修订：不再预置枚举**——缺省 `material` 写入侧兜底，存量枚举值原样保留）、`content` 内容全文（长文本无上限，列表接口摘要截断 120 字、详情接口返回全文）、`source` 来源（URL/书名/作者，可选）、`tags[]`（标签数组，决策 31 统一字段）——**决策 36（批次九）**：参考资料是外部素材/灵感笔记（非本书正文），AI 可读取参考、提案写入；**决策 43（批次十一，2026-08 修订）**：参考资料两类承载——`kind` = `file`（本地 md 文档，`file_name` 相对路径 + `content` 正文镜像 + `file_mtime` 上次同步快照）/ `link`（外源链接，`url` **必填** + `content` 可选备注）；缺省视为 link（存量无 kind 条目运行时兼容）；`source` 字段仅存量旧条目使用（link 类展示兼容），新建条目不再写入；**决策 44（批次十二）**：`type` schema 放宽为 `z.string().optional()`，无 DDL 迁移（JSON 层演进，SCHEMA_VERSION 保持 5） |
+| `reference` | `type`（**自由文本分类，修订：不再预置枚举**——缺省 `material` 写入侧兜底，存量枚举值原样保留）、`content` 内容全文（长文本无上限，列表接口摘要截断 120 字、详情接口返回全文）、`source` 来源（URL/书名/作者，可选）、`tags[]`（标签数组，统一字段）——**批次九**：参考资料是外部素材/灵感笔记（非本书正文），AI 可读取参考、提案写入；**批次十一（2026-08 修订）**：参考资料两类承载——`kind` = `file`（本地 md 文档，`file_name` 相对路径 + `content` 正文镜像 + `file_mtime` 上次同步快照）/ `link`（外源链接，`url` **必填** + `content` 可选备注）；缺省视为 link（存量无 kind 条目运行时兼容）；`source` 字段仅存量旧条目使用（link 类展示兼容），新建条目不再写入；**批次十二**：`type` schema 放宽为 `z.string().optional()`，无 DDL 迁移（JSON 层演进，SCHEMA_VERSION 保持 5） |
 
-### 时间轴（决策 26 + G2 修订：时间标签点实体化）
+### 时间轴（时间标签点实体化）
 
-**G2 设计（2026-08 用户裁决，决策 26 修订注记）**：时间轴数据项分两类——**时间标签点（timepoint）** 与 **事件（event）**，时间标签从事件剥离为独立实体：
+**G2 设计（2026-08 用户裁决）**：时间轴数据项分两类——**时间标签点（timepoint）** 与 **事件（event）**，时间标签从事件剥离为独立实体：
 
 - **第 6 种实体类型 `timepoint`（时间标签点）**：id 前缀 `tp-`；`name` = 时间标签文本（如「第二天黄昏」「第三纪元」，可重命名）；`data` 空；`sort_order` = 时间点全局线性序（拖拽为权威，组间顺序）。
 - **第 5 种实体类型 `event`（事件）**：id 前缀 `ev-`；`data` 含 `description` / `tags[]`（`time_label` 已移除）；`sort_order` = 事件全局线性序（拖拽为权威，**组内排序键**——渲染时组内按事件全局序投影排序）。
@@ -88,30 +88,30 @@ CREATE TABLE relation_records (
   relation_type TEXT NOT NULL,
   metadata      TEXT,             -- JSON 扩展元数据
   created_at    TEXT NOT NULL,               -- ISO 8601，应用层写入
-  updated_at  TEXT NOT NULL,               -- ISO 8601，应用层写入（提案快照比对，决策 14；软删/还原亦更新，决策 12 修订）
-  deleted_at    TEXT              -- 级联软删标记（决策 12）：仅实体/节点级联删除时写入；
+  updated_at  TEXT NOT NULL,               -- ISO 8601，应用层写入（提案快照比对；软删/还原亦更新）
+  deleted_at    TEXT              -- 级联软删标记：仅实体/节点级联删除时写入；
                                   -- 手动删除关系 = 物理删（不置 deleted_at，不进入回收站）
 );
 
--- 索引（决策 12 修订补）：k 跳遍历与高频关系查询
+-- 索引（修订补）：k 跳遍历与高频关系查询
 CREATE INDEX idx_relation_source ON relation_records(source_id) WHERE deleted_at IS NULL;
 CREATE INDEX idx_relation_target ON relation_records(target_id) WHERE deleted_at IS NULL;
 CREATE INDEX idx_relation_type   ON relation_records(relation_type) WHERE deleted_at IS NULL;
 ```
 
-> **可见性过滤（决策 12 修订）**：常规查询过滤关系时需 join 校验 source/target 端点均未软删——任一端点软删即不可见；restore 级联还原全部关系，端点还原后自动可见。
+> **可见性过滤**：常规查询过滤关系时需 join 校验 source/target 端点均未软删——任一端点软删即不可见；restore 级联还原全部关系，端点还原后自动可见。
 
 预定义关系类型：
 
 | 关系类型 | 说明 | 示例 |
 |---------|------|------|
-| `belongs_to` | 所属（**层级语义，决策 30**：setting→setting 表达设定父子，子 belongs_to 父；防自指/成环由 POST /relation 校验） | 人物→设定；子设定→父设定 |
+| `belongs_to` | 所属（**层级语义**：setting→setting 表达设定父子，子 belongs_to 父；防自指/成环由 POST /relation 校验） | 人物→设定；子设定→父设定 |
 | `owns` | 拥有 | 人物→物品 |
 | `masters` | 掌握 | 人物→能力 |
 | `ally` / `rival` / `mentor` / `family` | 人物间关系 | 人物→人物 |
 | `kills` | 击杀 | 人物→人物 |
 | `appears_in` | 出现于大纲节点 | 实体→大纲节点 |
-| `occurs_in` | 发生于大纲节点（事件锚定，决策 26） | event→大纲节点（多对多：一个事件可关联多个场景/章节，一个场景可被多个事件引用；**锚定 = 关系，无独立 chapter_anchor 字段**） |
+| `occurs_in` | 发生于大纲节点（事件锚定） | event→大纲节点（多对多：一个事件可关联多个场景/章节，一个场景可被多个事件引用；**锚定 = 关系，无独立 chapter_anchor 字段**） |
 | `occurs_at` | 发生在地点 | 大纲节点→地点 |
 | `plot_edge` | 剧情连线（画布推演） | 大纲节点→大纲节点，`metadata` 存连线标签 |
 | `plants` / `advances` / `resolves` | 伏笔管理 | 大纲节点→hook |
@@ -130,38 +130,38 @@ CREATE TABLE delta_records (
   description TEXT NOT NULL,       -- 人类可读描述
   "order"     INTEGER NOT NULL DEFAULT 0,  -- 同一节点内多个 Delta 的排序（全局单调递增，服务端生成）
   created_at  TEXT NOT NULL,               -- ISO 8601，应用层写入
-  updated_at  TEXT NOT NULL,               -- ISO 8601，应用层写入（提案快照比对，决策 14）
-  deleted_at  TEXT              -- 级联软删标记（决策 12）：仅实体/节点级联删除时写入。
-                                -- 可见性联动触发节点与目标实体（决策 12 修订）：任一端软删即不可见
+  updated_at  TEXT NOT NULL,               -- ISO 8601，应用层写入（提案快照比对）
+  deleted_at  TEXT              -- 级联软删标记：仅实体/节点级联删除时写入。
+                                -- 可见性联动触发节点与目标实体：任一端软删即不可见
 );
 ```
 
-> 状态计算只沿大纲树父链累积已确认 Delta（决策 9）：`computeState` 从根到目标节点收集路径上所有 Delta，**节点间按树路径顺序、同一节点内按 `order` 应用**（双层排序）；`plot_edge` 连线不参与。大纲严格三层、无游离节点（决策 19）。
+> 状态计算只沿大纲树父链累积已确认 Delta：`computeState` 从根到目标节点收集路径上所有 Delta，**节点间按树路径顺序、同一节点内按 `order` 应用**（双层排序）；`plot_edge` 连线不参与。大纲严格三层、无游离节点。
 
 ## chat_messages — 对话历史表
 
-对话消息持久化（决策 18），与 data.db 同库存储。
+对话消息持久化，与 data.db 同库存储。
 
 ```sql
 CREATE TABLE chat_messages (
   id            TEXT PRIMARY KEY,
   session_id    TEXT NOT NULL,
-  project_id    TEXT NOT NULL,          -- 会话按项目隔离（决策 18 修订）
+  project_id    TEXT NOT NULL,          -- 会话按项目隔离
   role          TEXT NOT NULL CHECK(role IN ('user','assistant','tool')),
   content       TEXT,
   tool_calls    TEXT,                   -- JSON: 助手消息的工具调用数组
-  tool_call_id  TEXT,                   -- tool 消息关联的 assistant 工具调用 id（决策 18 修订）
+  tool_call_id  TEXT,                   -- tool 消息关联的 assistant 工具调用 id
   created_at    TEXT NOT NULL           -- ISO 8601，应用层写入
 );
 
 CREATE INDEX idx_chat_session ON chat_messages(session_id, created_at);
 ```
 
-> MVP 只存原始消息，不做摘要持久化；会话级滑动窗口裁剪与摘要压缩在 agent/session.ts 运行时完成（决策 6）。**历史重建规则（决策 18 修订）**：按 `assistant.tool_calls[].id` ↔ `tool.tool_call_id` 成对重组喂回模型；滑动窗口裁剪必须成对（tool_call 与对应 tool_result 同裁同留）。服务重启后凭 `session_id` 重建「继续上次对话」，会话列表走 `GET /api/v1/chat/sessions`。
+> MVP 只存原始消息，不做摘要持久化；会话级滑动窗口裁剪与摘要压缩在 agent/session.ts 运行时完成。**历史重建规则**：按 `assistant.tool_calls[].id` ↔ `tool.tool_call_id` 成对重组喂回模型；滑动窗口裁剪必须成对（tool_call 与对应 tool_result 同裁同留）。服务重启后凭 `session_id` 重建「继续上次对话」，会话列表走 `GET /api/v1/chat/sessions`。
 
 ## outline.json — 大纲树
 
-大纲树是纯 JSON 文件，不与 SQLite 混合。**严格三层（卷 → 章 → 场景），无游离节点（决策 19）**。
+大纲树是纯 JSON 文件，不与 SQLite 混合。**严格三层（卷 → 章 → 场景），无游离节点**。
 
 ```json
 {
@@ -191,9 +191,9 @@ CREATE INDEX idx_chat_session ON chat_messages(session_id, created_at);
 
 **理由**：大纲的树形结构与实体关系表对存储格式的要求天然不同——大纲需要整树读写、拖拽重排，JSON 文件更合适。
 
-**节点版本戳（决策 19）**：每个节点携带 `updated_at`（ISO 8601），节点任何字段变更（title/summary/data/children 重排）时由服务端在原子写流程中统一更新，支撑决策 14 的提案快照比对。
+**节点版本戳**：每个节点携带 `updated_at`（ISO 8601），节点任何字段变更（title/summary/data/children 重排）时由服务端在原子写流程中统一更新，支撑提案快照比对。
 
-**节点结构化信息 `data`（决策 23，2026-08 新增）**：可选 `data` 字段（`Record<string, unknown>`，默认省略），按层级 schema（`OUTLINE_NODE_DATA_SCHEMAS`）校验，字段集基于麦基《故事》理论：
+**节点结构化信息 `data`（2026-08 新增）**：可选 `data` 字段（`Record<string, unknown>`，默认省略），按层级 schema（`OUTLINE_NODE_DATA_SCHEMAS`）校验，字段集基于麦基《故事》理论：
 
 | 层级 | data 字段 | 说明 |
 |------|-----------|------|
@@ -202,16 +202,16 @@ CREATE INDEX idx_chat_session ON chat_messages(session_id, created_at);
 | `volume` | `climax_scene`（场景节点 id 引用，可选）、`inciting_scene`（激励事件落位，可选） | 幕高潮、激励事件 |
 
 - 引用字段宽松校验：`climax_scene`/`inciting_scene` 引用任意场景节点 id，MVP 不校验引用范围（UI 提示建议本层内），详情页可跳转。
-- 编辑节点 data **不自动生成 Delta**（决策 9 修订语义不变）；变更记录由「+ 新建变更」显式创建（S5.6）。
+- 编辑节点 data **不自动生成 Delta**（手动编辑 data 不产生变更记录属正常行为）；变更记录由「+ 新建变更」显式创建（S5.6）。
 - 关联（人物/地点/伏笔）一律走 `relation_records`，不在 data 中重复建模。
 
-**顶层 `schema_version`（决策 13 修订）**：与 project.json 同步写入，用于 outline.json 文件格式演进判定；删库重建时同步重置。
+**顶层 `schema_version`**：与 project.json 同步写入，用于 outline.json 文件格式演进判定；删库重建时同步重置。
 
-**软删字段（决策 12）**：节点可选 `deleted: bool`（默认 false，省略即未删）与 `deleted_at: string`（ISO 时间，软删时写入）。软删节点本体仍保留在文件中，常规查询/渲染默认过滤，回收站列表按 `deleted_at` 排序，定期清理按 `deleted_at` 判定保留时长；还原时清除标记即可。
+**软删字段**：节点可选 `deleted: bool`（默认 false，省略即未删）与 `deleted_at: string`（ISO 时间，软删时写入）。软删节点本体仍保留在文件中，常规查询/渲染默认过滤，回收站列表按 `deleted_at` 排序，定期清理按 `deleted_at` 判定保留时长；还原时清除标记即可。
 
 ## project.json — 项目配置契约
 
-项目根目录的配置文件，是**数据文件**（非代码）。首次初始化时自动创建（决策 8），此后跨启动稳定存在；**实现任何 project 相关端点前先读本节**。
+项目根目录的配置文件，是**数据文件**（非代码）。首次初始化时自动创建，此后跨启动稳定存在；**实现任何 project 相关端点前先读本节**。
 
 ```json
 {
@@ -226,42 +226,42 @@ CREATE INDEX idx_chat_session ON chat_messages(session_id, created_at);
 }
 ```
 
-> **`prompt` 字段已废弃（决策 41，2026-08 批次十）**：项目规则唯一事实源改为项目目录 `AGENTS.md` 文件（见下节），`prompt` **不再读写**——新写入不再产生该字段；旧文件中的残留字段宽松读取（不参与 schema_version 判定）。打开项目时若 `prompt` 存在且无 AGENTS.md → 自动迁移写入 AGENTS.md（内容原样，一次性）。
+> **`prompt` 字段已废弃（2026-08 批次十）**：项目规则唯一事实源改为项目目录 `AGENTS.md` 文件（见下节），`prompt` **不再读写**——新写入不再产生该字段；旧文件中的残留字段宽松读取（不参与 schema_version 判定）。打开项目时若 `prompt` 存在且无 AGENTS.md → 自动迁移写入 AGENTS.md（内容原样，一次性）。
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `id` | string | 项目唯一 id，首次初始化时生成（前缀 `proj-` + nanoid），**跨启动稳定**；画布布局 localStorage 的隔离 key（决策 10）；**备份/恢复的唯一 key（决策 27）**——导入/加载备份时以 zip 内 id 与书架比对，匹配 → 覆盖恢复，不匹配 → 导入为新书 |
-| `name` | string | 项目名称，默认取目录名；**与目录名绑定**（「目录名 = 书名」不变式，决策 27：同名并存时目录与 name 同步去重为 `<书名> (N)`） |
+| `id` | string | 项目唯一 id，首次初始化时生成（前缀 `proj-` + nanoid），**跨启动稳定**；画布布局 localStorage 的隔离 key；**备份/恢复的唯一 key**——导入/加载备份时以 zip 内 id 与书架比对，匹配 → 覆盖恢复，不匹配 → 导入为新书 |
+| `name` | string | 项目名称，默认取目录名；**与目录名绑定**（「目录名 = 书名」不变式：同名并存时目录与 name 同步去重为 `<书名> (N)`） |
 | `language` | `"zh"` \| `"en"` | 语言 |
-| `prompt` | string | **已废弃（决策 41）**：项目级提示词——不再读写；项目规则改由项目目录 `AGENTS.md` 承载（见下节）。旧文件中的残留字段宽松读取（不参与 schema_version 判定），新写入不再产生该字段 |
-| `schema_version` | number | JSON 结构版本（决策 13；与 outline.json 顶层同步写入） |
+| `prompt` | string | **已废弃**：项目级提示词——不再读写；项目规则改由项目目录 `AGENTS.md` 承载（见下节）。旧文件中的残留字段宽松读取（不参与 schema_version 判定），新写入不再产生该字段 |
+| `schema_version` | number | JSON 结构版本（与 outline.json 顶层同步写入） |
 | `current_position` | string \| null | 大纲「当前位置」节点 id（伏笔健康指标依赖，见 `hooks.md`；null = 未设置；须指向存在的非软删节点） |
-| `backup_frequency_minutes` | number \| null | **自动备份频率（决策 27 + 批次十四修订，可选字段）**：分钟数，仅接受枚举 1/5/10/15/30/60；`null` / `0` = 关闭；**缺省 = 10**（新项目默认开启）；随书籍（每项目独立）；不参与 schema_version 判定（宽松读取，缺省兜底） |
+| `backup_frequency_minutes` | number \| null | **自动备份频率（可选字段）**：分钟数，仅接受枚举 1/5/10/15/30/60；`null` / `0` = 关闭；**缺省 = 10**（新项目默认开启）；随书籍（每项目独立）；不参与 schema_version 判定（宽松读取，缺省兜底） |
 | `created_at` / `updated_at` | string | ISO 8601，应用层写入；首次初始化写 `created_at`，配置变更更新 `updated_at` |
 
 **约束**：
-- DeepSeek API key **绝不写入本文件**（决策 17）——只走环境变量 `DEEPSEEK_API_KEY` 或用户级配置 `~/.ai-editor/config.json`。
-- 文件写入遵循决策 11 的原子写流程（outline.json 同款：临时文件 + fsync + rename）。
-- **自动备份目录（决策 27 + 决策 28 + 决策 29）**：项目目录内 `.backups/` 子目录存放备份 zip（时间戳命名 `<YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip` 毫秒精度，**kind 类型标记段（决策 29）**：`m` = 手动（无名称也带 `-m` 段，与自动可靠区分）/ `a` = 自动备份重命名后带名称；自动备份与覆盖前快照为纯时间戳 `<YYYYMMDD-HHmmssSSS>.zip`；手动带名称 `<YYYYMMDD-HHmmssSSS>-m-<名称>.zip`；**旧格式兼容解析不迁移**：旧秒级 `<YYYYMMDD-HHmmss>.zip` → auto、旧带名称无 kind 段 `<YYYYMMDD-HHmmssSSS>-<名称>.zip` → manual、纯时间戳 → auto；格式 = E1 导出包：project.json + outline.json + data.db）；**每项目保留最近 20 份**（超出删除最旧，含覆盖前自动快照；清理失败不阻塞备份主流程）；备份文件不入 git、不算数据文件（可随时删除）。**实现细节（2026-08 实测）**：同毫秒冲突用「时间戳 +1 毫秒循环去重」（保持文件名格式契约可解析）；「有变更才备份」的 mtime 判定加 1s 容差（备份管道内 wal_checkpoint 会把 data.db mtime 刷新到备份时刻，严格 `mtime > 上次备份时刻` 会自激误判——决策 28 毫秒精度下文件名截断误差已消除，但粗粒度 mtime 文件系统（如 FAT/exFAT 2s 粒度）下容差仍是必要防御，`BACKUP_CHANGE_TOLERANCE_MS` 保留 1s）；重命名备份只改名称段（时间戳与 kind 保持，决策 29，同目录 rename 原子）。
+- DeepSeek API key **绝不写入本文件**——只走环境变量 `DEEPSEEK_API_KEY` 或用户级配置 `~/.ai-editor/config.json`。
+- 文件写入遵循原子写流程（outline.json 同款：临时文件 + fsync + rename）。
+- **自动备份目录**：项目目录内 `.backups/` 子目录存放备份 zip（时间戳命名 `<YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip` 毫秒精度，**kind 类型标记段**：`m` = 手动（无名称也带 `-m` 段，与自动可靠区分）/ `a` = 自动备份重命名后带名称；自动备份与覆盖前快照为纯时间戳 `<YYYYMMDD-HHmmssSSS>.zip`；手动带名称 `<YYYYMMDD-HHmmssSSS>-m-<名称>.zip`；**旧格式兼容解析不迁移**：旧秒级 `<YYYYMMDD-HHmmss>.zip` → auto、旧带名称无 kind 段 `<YYYYMMDD-HHmmssSSS>-<名称>.zip` → manual、纯时间戳 → auto；格式 = 导出包：project.json + outline.json + data.db）；**每项目保留最近 20 份**（超出删除最旧，含覆盖前自动快照；清理失败不阻塞备份主流程）；备份文件不入 git、不算数据文件（可随时删除）。**实现细节（2026-08 实测）**：同毫秒冲突用「时间戳 +1 毫秒循环去重」（保持文件名格式契约可解析）；「有变更才备份」的 mtime 判定加 1s 容差（备份管道内 wal_checkpoint 会把 data.db mtime 刷新到备份时刻，严格 `mtime > 上次备份时刻` 会自激误判——毫秒精度下文件名截断误差已消除，但粗粒度 mtime 文件系统（如 FAT/exFAT 2s 粒度）下容差仍是必要防御，`BACKUP_CHANGE_TOLERANCE_MS` 保留 1s）；重命名备份只改名称段（时间戳与 kind 保持，同目录 rename 原子）。
 
-## AGENTS.md — 项目规则文件（决策 41，2026-08 批次十）
+## AGENTS.md — 项目规则文件（2026-08 批次十）
 
-项目目录下的 `AGENTS.md` 是**项目规则唯一事实源**（取代 project.json `prompt` 字段，修订决策 25——当时否决的是「另立 rules.md 与 prompt 并存」的双通道方案，本决策将规则文件定义为唯一事实源，不存在双通道漂移）。**不是 project.json 内字段**，是项目目录下的独立文件（与代码仓库 AGENTS.md 惯例一致，用户可在文件管理器中直接编辑、可纳入版本管理）。
+项目目录下的 `AGENTS.md` 是**项目规则唯一事实源**（取代 project.json `prompt` 字段；此前曾否决「另立 rules.md 与 prompt 并存」的双通道方案，规则文件定义为唯一事实源，不存在双通道漂移）。**不是 project.json 内字段**，是项目目录下的独立文件（与代码仓库 AGENTS.md 惯例一致，用户可在文件管理器中直接编辑、可纳入版本管理）。
 
 **文件位置**：`books/<书名>/AGENTS.md`（项目目录下，与 project.json / outline.json / data.db 同级）。
 
 **可选文件**：新项目默认不创建；无 AGENTS.md 时项目规则为空（system prompt「## 项目设定」段跳过）。
 
-**自动迁移（打开项目时，决策 41）**：
+**自动迁移（打开项目时）**：
 - 触发条件：project.json 存在 `prompt` 字段（非空）**且**项目目录无 AGENTS.md；
-- 动作：将 `prompt` 内容**原样**写入 AGENTS.md（原子写，决策 11 同款）；
+- 动作：将 `prompt` 内容**原样**写入 AGENTS.md（原子写同款）；
 - **一次性**：迁移后 AGENTS.md 存在，条件不再满足，`prompt` 不再使用（字段可保留为遗留数据，宽松读取）；
 - 迁移在 open 流程内完成（与 E5 迁移同生命周期），失败不阻塞打开（记录日志，下次 open 重试）。
 
-**schema_version 评估（决策 41）**：**不升 schema_version**——`prompt` 字段废弃是「读侧不再使用」的语义变更，字段本身仍可存在于旧文件（宽松读取，不参与 JSON 结构判定），与 `backup_frequency_minutes` 可选字段先例一致（决策 27：可选字段宽松读取不升版本）。
+**schema_version 评估**：**不升 schema_version**——`prompt` 字段废弃是「读侧不再使用」的语义变更，字段本身仍可存在于旧文件（宽松读取，不参与 JSON 结构判定），与 `backup_frequency_minutes` 可选字段先例一致（可选字段宽松读取不升版本）。
 
-**外部编辑支持（决策 41）**：用户可在文件管理器中直接编辑 AGENTS.md；web 读取（`GET /project/agents`）返回文件 mtime，前端比对检测外部修改，不一致提示刷新/重新加载。
+**外部编辑支持**：用户可在文件管理器中直接编辑 AGENTS.md；web 读取（`GET /project/agents`）返回文件 mtime，前端比对检测外部修改，不一致提示刷新/重新加载。
 
 **写入**：设置页直接编辑 AGENTS.md（`PUT /project/agents`，整体替换，原子写）。
 
-**画布视图**：大纲中的节点通过 `relation_records` 中的关系形成有向图，支持多线推演和路径分析（参见 [`../api/tools.md`](../api/tools.md) 中的分析类工具）。画布连线通过 `relation_records` 的 `plot_edge` 类型存储（决策 10），不进入 outline.json；节点坐标与画布缩放存浏览器 localStorage（决策 10），不进任何数据文件。
+**画布视图**：大纲中的节点通过 `relation_records` 中的关系形成有向图，支持多线推演和路径分析（参见 [`../api/tools.md`](../api/tools.md) 中的分析类工具）。画布连线通过 `relation_records` 的 `plot_edge` 类型存储，不进入 outline.json；节点坐标与画布缩放存浏览器 localStorage，不进任何数据文件。

@@ -2,10 +2,10 @@
 
 ## 路由与数据
 
-- 路由：`#/entities/:type?`（type ∈ character|setting|location|hook，缺省 character；tab 切换即改 hash；**批次十二 T3：参考资料 reference 从实体二级 tab 排除**——已有独立中栏 tab `#/references`，旧路由 `#/entities/reference[/:id]` 重定向到参考资料页，对齐决策 42 设定树先例）
+- 路由：`#/entities/:type?`（type ∈ character|setting|location|hook，缺省 character；tab 切换即改 hash；**批次十二 T3：参考资料 reference 从实体二级 tab 排除**——已有独立中栏 tab `#/references`，旧路由 `#/entities/reference[/:id]` 重定向到参考资料页，对齐设定树先例）
 - 数据：`GET /api/v1/entity/:type?q=&offset=&limit=&sort=&order=`
 - 新建：`POST /api/v1/entity/:type`
-- **设定类型（决策 42，2026-08 批次十）**：`#/entities/setting` 为**树形视图**（与设定树 tab 合并，见下方「设定 Tab（树形视图）」）——不走表格/分页；character/location/hook 保持表格视图。
+- **设定类型（2026-08 批次十）**：`#/entities/setting` 为**树形视图**（与设定树 tab 合并，见下方「设定 Tab（树形视图）」）——不走表格/分页；character/location/hook 保持表格视图。
 
 ## 布局线框（character/location/hook 表格；设定为树形视图，见下）
 
@@ -26,17 +26,17 @@
 
 ## 信息层级
 
-列表接口返回 `EntitySummary`（不含完整 data），各类型摘要列取自 `summary`（**设定类型为树形视图（决策 42），不走表格**——其名称/类别/子设定数/标签见「设定 Tab（树形视图）」）：
+列表接口返回 `EntitySummary`（不含完整 data），各类型摘要列取自 `summary`（**设定类型为树形视图，不走表格**——其名称/类别/子设定数/标签见「设定 Tab（树形视图）」）：
 
 | 列 | character | location | hook |
 |----|-----------|----------|------|
-| 行布局 | **四列（决策 45 + 用户修订，批次十三卡 13.6）**：名称列 = 名称（第一行）+ 动机摘要（第二行弱化，`summary.motivation` 截断 40，hover 完整）；角色 / 性格 / 能力独立成列（`summary.role` 徽标 / `summary.personality` chips / `summary.abilities` chips，各前 2，空值「—」） | 单行三列 | 单行三列 |
+| 行布局 | **四列（2026-08 批次十三卡 13.6 修订）**：名称列 = 名称（第一行）+ 动机摘要（第二行弱化，`summary.motivation` 截断 40，hover 完整）；角色 / 性格 / 能力独立成列（`summary.role` 徽标 / `summary.personality` chips / `summary.abilities` chips，各前 2，空值「—」） | 单行三列 | 单行三列 |
 | 名称 | `name`（+ 第二行 `summary.motivation`） | `name` | `name` |
 | 摘要列 1 | `summary.role`（角色徽标） | `summary.type` | `summary.status` |
 | 摘要列 2 | `summary.personality`（性格 chips） | — | `summary.payoff_timing` |
 | 摘要列 3 | `summary.abilities`（能力 chips） | — | — |
 
-> **状态已从列表与详情页全部移除（决策 45 + 修订，2026-08 批次十三卡 13.6）**：character 不再展示「状态」（原 `summary.status` 列 + 详情页表单字段）——字段无定义且存量恒空导致困惑；存量 `data.status` 容错保留，AI 工具 filters.status 语义不变。首版两行式布局因单 td 与双列表头错位致角色列空白、且性格/能力合并 chips 无法分辨——用户复核后改为独立成列。
+> **状态已从列表与详情页全部移除（2026-08 批次十三卡 13.6）**：character 不再展示「状态」（原 `summary.status` 列 + 详情页表单字段）——字段无定义且存量恒空导致困惑；存量 `data.status` 容错保留，AI 工具 filters.status 语义不变。首版两行式布局因单 td 与双列表头错位致角色列空白、且性格/能力合并 chips 无法分辨——用户复核后改为独立成列。
 
 分页元数据：`total` / `offset` / `limit`（设定树形视图无分页）。
 
@@ -44,10 +44,10 @@
 
 - **Tab 切换**：改 hash（`#/entities/location`）；MVP 切换时重置搜索与分页（保持简单）。
 - **搜索**：`q` 输入防抖 300ms 发请求；空关键词跳过请求直接显示列表（**设定类型为树内过滤**，见「设定 Tab（树形视图）」）。
-- **排序**：`sort`（name / created_at）× `order`（asc / desc）下拉（**决策 39：移除 updated_at 项**）。
-- **标签筛选（决策 31，批次五 J3，仅设定）**：**树内过滤**（决策 42）——见「设定 Tab（树形视图）」；character/location/hook 无标签筛选。
-- **上级设定筛选（决策 32）已由树形导航吸收（决策 42）**：设定列表改为树形视图后，层级天然展示，「按上级筛选」下拉移除——树内折叠/展开即导航（见「设定 Tab（树形视图）」）；`?parent_id=` 递归子树接口能力保留（决策 32 不变）。
-- **分页**：limit 固定 20（MVP）；前端按页码换算 `offset` 提交，用返回的 `total` 算总页数（**设定类型无分页**——树形视图整树展示，层级即导航，决策 42）。
+- **排序**：`sort`（name / created_at）× `order`（asc / desc）下拉（**移除 updated_at 项**）。
+- **标签筛选（批次五 J3，仅设定）**：**树内过滤**——见「设定 Tab（树形视图）」；character/location/hook 无标签筛选。
+- **上级设定筛选已由树形导航吸收**：设定列表改为树形视图后，层级天然展示，「按上级筛选」下拉移除——树内折叠/展开即导航（见「设定 Tab（树形视图）」）；`?parent_id=` 递归子树接口能力保留（不变）。
+- **分页**：limit 固定 20（MVP）；前端按页码换算 `offset` 提交，用返回的 `total` 算总页数（**设定类型无分页**——树形视图整树展示，层级即导航）。
 - **新建**：列表首行内联编辑行（UX4：`name` 必填 + 该类型首字段，如 character 的 `role`；字段配置复用 `CREATE_FIRST_FIELD`）→ `POST /entity/:type` → **创建后留在列表**（2026-08 用户反馈：不自动跳详情页——关行 + 刷新列表让新项按排序出现，需要进详情点行进入）。**setting 类型新建走树形视图「Enter 新建子级」**（见「设定 Tab（树形视图）」）。
 - **行点击** → `#/entities/:type/:id`（设定类型：**双击详情**，见「设定 Tab（树形视图）」）。
 
@@ -93,7 +93,7 @@
 
 ### 关系类型中文标签（`relationTypeLabel`，契约来源 `shared/constants/entity.ts` RELATION_TYPES + schema.md 关系类型表，共 17 种）
 
-> 展示/下拉均走此映射，未收录类型原样显示（防御）。历史上 `occurs_in`（决策 26 新增）曾漏映射导致界面显示英文——2026-08 批次四 I1 修复并补录本表。
+> 展示/下拉均走此映射，未收录类型原样显示（防御）。历史上 `occurs_in` 曾漏映射导致界面显示英文——2026-08 批次四 I1 修复并补录本表。
 
 | 关系类型 | 中文标签 | 方向语义（schema.md） |
 |---------|---------|---------------------|
@@ -106,9 +106,9 @@
 | `family` | 家族 | 人物间关系 |
 | `kills` | 击杀 | 人物→人物 |
 | `appears_in` | 出现于 | 实体→大纲节点 |
-| `occurs_in` | 锚定于 | event→大纲节点（事件锚定，决策 26；与 occurs_at「发生于（地点）」中文区分） |
+| `occurs_in` | 锚定于 | event→大纲节点（事件锚定；与 occurs_at「发生于（地点）」中文区分） |
 | `occurs_at` | 发生于 | 大纲节点→地点（G2 起兼 timepoint→event 挂载） |
-| `plot_edge` | 剧情连线 | 大纲节点→大纲节点（决策 10；画布 UI 已移除（决策 33，批次八 O6），数据/接口能力保留） |
+| `plot_edge` | 剧情连线 | 大纲节点→大纲节点（画布 UI 已移除（批次八 O6），数据/接口能力保留） |
 | `plants` | 埋设 | 大纲节点→hook |
 | `advances` | 推进 | 大纲节点→hook |
 | `resolves` | 回收 | 大纲节点→hook |
@@ -135,15 +135,15 @@
 
 ---
 
-# 设定 Tab（树形视图，决策 42，2026-08 批次十）
+# 设定 Tab（树形视图，2026-08 批次十）
 
-> 决策 42：实体关系设定列表改为**树形视图**（参考大纲页设计），与设定树 tab（I4）**合并**——`#/entities/setting` 即树形视图，原「设定树」tab 移除（路由 `#/entities/setting-tree` 不再存在）；层级天然展示，上级设定筛选（决策 32）被树形导航吸收。
+> 实体关系设定列表改为**树形视图**（参考大纲页设计），与设定树 tab（I4）**合并**——`#/entities/setting` 即树形视图，原「设定树」tab 移除（路由 `#/entities/setting-tree` 不再存在）；层级天然展示，上级设定筛选被树形导航吸收。
 
 ## 路由与数据
 
 - 路由：`#/entities/setting`（设定 tab，树形视图；原 `#/entities/setting-tree` 已合并移除）
 - 数据：`GET /api/v1/entity/setting`（全量，limit 200 上限 + 名称排序）+ `GET /api/v1/relation?source_type=setting&target_type=setting&relation_type=belongs_to&depth=1`（全量层级边）→ 前端构建树（纯函数 `buildSettingTree`：邻接表组装 + 根判定 + 父在 map 外的子节点提升为根的溢出防御）
-- 语义：层级 = `belongs_to`（子 → 父，决策 30）；软删端点已由服务端可见性过滤，悬空引用自动归根
+- 语义：层级 = `belongs_to`（子 → 父）；软删端点已由服务端可见性过滤，悬空引用自动归根
 - 操作：`POST /entity/setting`（建）、`PUT /entity/setting/:id`（改）、`DELETE /entity/setting/:id`（软删）、`POST /relation`（belongs_to 挂父）——**无 `PUT /entity/setting/:id/move` 端点**（设定无 sort_order 语义，服务端不存在该端点；拖拽调整层级 = 删旧边 + 建新边，见「关键交互」）
 
 ## 布局线框
@@ -168,20 +168,20 @@
 
 | 元素 | 内容 |
 |------|------|
-| 节点行 | 名称（**点击行内编辑**，双击跳详情 `#/entities/setting/:id`）+ **描述摘要行（决策 45/批次十三：`summary.description` 截断 100 字符，弱化样式显示于名称下方，空描述不渲染；hover title 查看完整摘要）** + 直接子设定数「N 个子设定」（>0 时显示）+ 行尾区（**标签徽标** `summary.tags` 决策 31 统一字段 + 删除按钮——批次十二 T1：标签收进行尾、删除按钮左边，不紧跟名称干扰树呈现）+ 行尾删除按钮（Trash2，H2 直接软删不弹确认）+ **手动排序模式行悬停 ↑↓ 箭头按钮（决策 46，同级组内上移/下移一位）** |
+| 节点行 | 名称（**点击行内编辑**，双击跳详情 `#/entities/setting/:id`）+ **描述摘要行（批次十三：`summary.description` 截断 100 字符，弱化样式显示于名称下方，空描述不渲染；hover title 查看完整摘要）** + 直接子设定数「N 个子设定」（>0 时显示）+ 行尾区（**标签徽标** `summary.tags` 统一字段 + 删除按钮——批次十二 T1：标签收进行尾、删除按钮左边，不紧跟名称干扰树呈现）+ 行尾删除按钮（Trash2，H2 直接软删不弹确认）+ **手动排序模式行悬停 ↑↓ 箭头按钮（同级组内上移/下移一位）** |
 | 折叠箭头 | 父节点 ▾/▸ 切换（默认全部展开；叶子无箭头占位保缩进） |
 | 工具栏 | 「全部展开 / 全部折叠」按钮（批次八 O5）+ 搜索框 + 标签筛选（树内过滤）+ [+ 新建]（root 级） |
 | 缩进 | 嵌套 `ul` + 左边线连接（ml + border-l），层级视觉清晰 |
 
-## 关键交互（决策 42：参考大纲页交互模式，决策 37 复用）
+## 关键交互（参考大纲页交互模式）
 
 - **折叠/展开**：父节点 ▾/▸ 切换；工具栏「全部展开 / 全部折叠」（全部折叠 = 仅保留根级）。
 - **行内编辑（点击标题）**：点击设定名 → 行内输入框（预填当前名）→ Enter 确认 `PUT /entity/setting/:id { name }`、Esc 取消、失焦保存。
 - **Enter 新建子级**：选中节点后按 Enter → 就地输入行出现在该节点子级末尾（`POST /entity/setting` + `POST /relation` belongs_to 挂父；root 顶层「+ 新建」输入行无父）；Enter 确认创建、Esc 取消。
-- **排序方式切换器（决策 46，2026-08 批次十三）**：工具栏「排序: [名称 ▾]」下拉（名称 / 创建时间 / 手动）——**同级组内排序**（每个父/根级的子列表），层级不变；名称/创建时间模式为纯前端排序（items 已含 name/createdAt）；**手动模式**下启用行悬停 **↑↓ 箭头按钮**与**拖拽行间插入线重排**（见下），排序键 = `sort_order`（NULL 沉底按名称）。
-- **拖拽调整层级（所有模式可用）**：HTML5 DnD（参考大纲页）——**嵌套语义**：拖到行上 = 成为该行子级、拖到空白区 = 移为顶层根（belongs_to 层级约束 + **防环校验沿用决策 30**，服务端拒绝环）；**决策 46：改父流程收敛为复合端点 `PUT /entity/setting/:id/move`（改父+重排一次事务提交，原「先建新边后删旧边」两步废弃）**。
-- **手动模式拖拽行间插入线重排（决策 46）**：拖到行上方/下方 1/3 处显示插入线 = 同级重排到该位置（`PUT /entity/setting/:id/move` order）；拖到行中段（1/3-2/3）= 调层级（既有语义）。
-- **手动模式 ↑↓ 箭头按钮（决策 46）**：行悬停显示，同级组内上移/下移一位（同 move 端点）。
+- **排序方式切换器（2026-08 批次十三）**：工具栏「排序: [名称 ▾]」下拉（名称 / 创建时间 / 手动）——**同级组内排序**（每个父/根级的子列表），层级不变；名称/创建时间模式为纯前端排序（items 已含 name/createdAt）；**手动模式**下启用行悬停 **↑↓ 箭头按钮**与**拖拽行间插入线重排**（见下），排序键 = `sort_order`（NULL 沉底按名称）。
+- **拖拽调整层级（所有模式可用）**：HTML5 DnD（参考大纲页）——**嵌套语义**：拖到行上 = 成为该行子级、拖到空白区 = 移为顶层根（belongs_to 层级约束 + **防环校验**，服务端拒绝环）；**改父流程收敛为复合端点 `PUT /entity/setting/:id/move`（改父+重排一次事务提交，原「先建新边后删旧边」两步废弃）**。
+- **手动模式拖拽行间插入线重排**：拖到行上方/下方 1/3 处显示插入线 = 同级重排到该位置（`PUT /entity/setting/:id/move` order）；拖到行中段（1/3-2/3）= 调层级（既有语义）。
+- **手动模式 ↑↓ 箭头按钮**：行悬停显示，同级组内上移/下移一位（同 move 端点）。
 - **双击详情**：双击节点 → `#/entities/setting/:id`（详情页含该设定的层级区块与全部关联）。
 - **筛选（树内过滤）**：搜索 + 标签过滤在树内进行——命中节点及其祖先链保留展示（非命中子树折叠/隐藏）；**无表格分页**（整树展示，层级即导航）。
 - **删除**：行尾 Trash2 → 直接软删（H2 不弹确认）→ `DELETE /entity/setting/:id` → 行消失 + toast「已移入回收站，可随时还原」。

@@ -8,12 +8,12 @@
 | **运行时** | Node ≥ 22.12，**全仓 ESM** | nanoid v5 ESM-only 消费、`require(esm)` 默认开启；避免 CJS/ESM 混合坑 |
 | **语言** | TypeScript (strict mode) | 全栈统一类型，减少运行时错误 |
 | **API 服务端** | Hono 4 + `@hono/node-server` | 轻量、TypeScript 友好、SSE 原生支持 |
-| **数据库** | better-sqlite3 ^13 (WAL mode) + drizzle-orm | N-API 重写（v13），全局安装无 ABI 失配；同步 API 简单可靠，零配置，内嵌；drizzle-orm 查询构建层（决策 49：查询构建+行类型推断，不引入 drizzle-kit，迁移/事务/JSON 防御语义不变） |
+| **数据库** | better-sqlite3 ^13 (WAL mode) + drizzle-orm | N-API 重写（v13），全局安装无 ABI 失配；同步 API 简单可靠，零配置，内嵌；drizzle-orm 查询构建层（查询构建+行类型推断，不引入 drizzle-kit，迁移/事务/JSON 防御语义不变） |
 | **前端框架** | React 19 | 生态成熟，组件化 |
 | **前端构建** | Vite 7 | 快速 HMR，Tree-shaking（Vite 6 已停止常规维护） |
 | **状态管理** | Zustand 5 | 轻量、TypeScript 优秀、selector 自动优化 |
 | **样式** | Tailwind CSS 4 + shadcn/ui + Prettier（prettier-plugin-tailwindcss） | 原子化 CSS 灵活度 + 组件开箱即用（v4 CSS-first 配置，无 tailwind.config.js）；L 批次起长 className 自动折行 + 类排序，共享常量见 `client/src/lib/styles.ts`（layout.md §4.4） |
-| **AI 调用** | `@earendil-works/pi-ai`（决策 34：统一多提供商 LLM 接口，默认 DeepSeek；模型名/思考强度可配置） | 传输/SSE/usage 解析由 pi-ai 接管，llm 包单向 adapter 保留对外契约 |
+| **AI 调用** | `@earendil-works/pi-ai`（统一多提供商 LLM 接口，默认 DeepSeek；模型名/思考强度可配置） | 传输/SSE/usage 解析由 pi-ai 接管，llm 包单向 adapter 保留对外契约 |
 | **Schema 验证** | Zod 4 | 运行时类型安全，API 入参校验（v4 API，注意迁移破坏项） |
 | **路由** | 轻量 hash-based（自制 `useHashRoute`） | 单页桌面应用不需要 React Router |
 
@@ -50,7 +50,7 @@ ai-editor/
 │   │
 │   ├── llm/                       # @whispering233/ai-editor-llm（模型接入层）
 │   │   ├── src/
-│   │   │   ├── client.ts          # chatStream 薄封装（决策 34：内部委托 pi-ai models.stream，对外契约不变）
+│   │   │   ├── client.ts          # chatStream 薄封装（内部委托 pi-ai models.stream，对外契约不变）
 │   │   │   ├── adapter.ts          # pi-ai 适配层（LLMMessage→Context / 事件转发 / usage / 错误归一化 / 模型目录）
 │   │   │   ├── retry.ts           # 重试/退避逻辑
 │   │   │   ├── token.ts           # Token 估算
@@ -61,10 +61,10 @@ ai-editor/
 │   ├── db/                        # @whispering233/ai-editor-db（数据库层）
 │   │   ├── src/
 │   │   │   ├── connection.ts      # Database 连接/事务/WAL（better-sqlite3 同步，事务连接级共享）
-│   │   │   ├── schema.ts          # schema 版本工具（user_version 三态分流，决策 13）
-│   │   │   ├── tables.ts          # drizzle 表声明：sqliteTable 定义 + DDL 常量同文件（决策 49）
+│   │   │   ├── schema.ts          # schema 版本工具（user_version 三态分流）
+│   │   │   ├── tables.ts          # drizzle 表声明：sqliteTable 定义 + DDL 常量同文件
 │   │   │   ├── query-db.ts        # queryDb 辅助：native 连接 → drizzle 实例（WeakMap 缓存）
-│   │   │   ├── migrations/        # 自建增量迁移（002-005，决策 13 修订 E5）
+│   │   │   ├── migrations/        # 自建增量迁移（002-005）
 │   │   │   └── queries/           # 查询函数（签名 (db: Db)；内部 drizzle builder/模板混合）
 │   │   │       ├── entity.ts      # 实体 CRUD（动态 where/JS 过滤/级联软删）
 │   │   │       ├── relation.ts    # 关系查询（含递归子树辅助、与 entity 循环引用）
@@ -173,7 +173,7 @@ ai-editor/
 │       │       ├── entity-detail.ts # 实体 data 字段配置与表单辅助
 │       │       ├── delta.ts        # 变更记录展示纯函数（op 摘要/值格式化）
 │       │       ├── delta-create.ts # 变更记录创建纯函数（字段选项/op 推断/changes 构造）
-│       │       ├── outline-detail.ts # 节点详情页字段配置（决策 23 麦基字段集）
+│       │       ├── outline-detail.ts # 节点详情页字段配置（麦基字段集）
 │       │       ├── error-messages.ts # 错误码 → 中文文案
 │       │       └── utils.ts
 │       ├── index.html
@@ -245,7 +245,7 @@ shared ← client（仅类型/常量，零运行时）
   "name": "@whispering233/ai-editor-llm",
   "dependencies": {
     "@whispering233/ai-editor-shared": "workspace:*",
-    "@earendil-works/pi-ai": "^0.81.1"   // 决策 34：统一多提供商 LLM 接口（可 tree-shaking 子路径注册）
+    "@earendil-works/pi-ai": "^0.81.1"   // 统一多提供商 LLM 接口（可 tree-shaking 子路径注册）
   }
 }
 
@@ -347,7 +347,7 @@ export interface Entity { id: string; type: EntityType; name: string; }
   packages/agent:   tsc --watch
   # dev 态端口被占直接报错（不自动 +1）——Vite proxy 写死 3456，
   # 自动 +1 会造成 proxy 与实际监听不一致（与生产态行为不同，2026-08 修订）
-  # 来源校验（决策 17 修订）：仅校验 host ∈ {127.0.0.1, localhost, ::1}，不校验端口；
+  # 来源校验（修订）：仅校验 host ∈ {127.0.0.1, localhost, ::1}，不校验端口；
   # Vite proxy 无需 changeOrigin（转发后 Origin/Host 端口为 5173，不影响校验）
 
 发布态（pnpm build）:
@@ -383,8 +383,8 @@ export interface Entity { id: string; type: EntityType; name: string; }
     → 书架模式（2026-08，参考 inkos）：创建书 = 创作根/books/<书名>/ 子目录（三文件），
       GET /api/v1/project/list 扫描 books/ 列书（不依赖当前项目，待命态可用）；
       create/open 契约不变，前端拼 创作根/books/<书名>/ 路径调用；
-      自动备份（决策 27 + 决策 28 + 决策 29）：书目录内 .backups/ 存备份 zip（毫秒级时间戳命名，
-      手动备份可带自定义名称；类型标记段 `-m`/`-a`（决策 29，手动/自动重命名区分，无状态）；
+      自动备份：书目录内 .backups/ 存备份 zip（毫秒级时间戳命名，
+      手动备份可带自定义名称；类型标记段 `-m`/`-a`（手动/自动重命名区分，无状态）；
       旧秒级格式兼容解析；保留 20 份，覆盖恢复前自动快照；备份重命名只改名称段（kind 保持）；
       频率 = project.json backup_frequency_minutes，缺省 10 分钟）
     → 启动 Hono (port 3456，占用时生产态自动 +1；AI_EDITOR_PORT 可覆盖)
@@ -398,7 +398,7 @@ export interface Entity { id: string; type: EntityType; name: string; }
       （环境变量开关已移除；默认关闭防刷屏）
     → 加载 SPA（defaultClientDist 双路径：monorepo 开发态 ../../client/dist /
       打包安装态 ../client-dist——随 tarball 携带）为 SPA fallback
-    → 打开浏览器（127.0.0.1，决策 8）
+    → 打开浏览器（127.0.0.1）
   测试项目目录: test-project/（借鉴 inkos test-project 模式，运行时数据不入库，见其 README）
 ```
 

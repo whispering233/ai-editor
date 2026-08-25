@@ -34,7 +34,7 @@
 
 ## 数据
 
-- 发送：`POST /api/v1/chat`（**fetch + ReadableStream 自写 SSE 解析**，`client/src/hooks/use-sse.ts`；EventSource 不支持 POST，见决策 20）
+- 发送：`POST /api/v1/chat`（**fetch + ReadableStream 自写 SSE 解析**，`client/src/hooks/use-sse.ts`；EventSource 不支持 POST）
 - 会话列表：`GET /api/v1/chat/sessions`（按项目归属过滤）；历史：`GET /api/v1/chat/sessions/:id/messages`
 - 提案：`POST /api/v1/proposal/:proposalId/confirm` | `/reject`
 
@@ -46,7 +46,7 @@
 |------|----------|------|
 | `ping` | `{}` | 忽略（维持心跳）；客户端用它判定「60s 无任何事件 → 断开」 |
 | `text` | `{ delta }` | 追加到当前 AI 消息（流式打字效果不做，直接追加即可） |
-| `tool_call` | `{ tool, args, id }` | 工具调用记录行（折叠态：`🔧 调用了 {tool}`；展开见决策 47 摘要渲染——不显示裸 id） |
+| `tool_call` | `{ tool, args, id }` | 工具调用记录行（折叠态：`🔧 调用了 {tool}`；展开见摘要渲染——不显示裸 id） |
 | `tool_result` | `{ tool, result, id }` | 挂到对应调用行，显示结果状态（成功/失败图标） |
 | `proposal` | `{ proposal_id, type, preview }` | 提案卡片（见下） |
 | `done` | `{ session_id }` | 本轮结束：输入框恢复可用；记录 session_id 供续聊 |
@@ -55,13 +55,13 @@
 ### 提案卡片
 
 - 标题：`type` 映射中文（propose_create_entity →「新建实体」、propose_update_entity →「更新实体」、propose_add_relation →「新增关系」、propose_outline_node →「新建大纲节点」等；未知 type 显示原始名）。
-- 内容（决策 47 摘要化，不再 JSON dump）：`preview` 按 type 渲染——创建类显示字段键值（id 字段经 names/resolve 解析为名称）、更新类显示 diff 列表（from → to）、大纲类显示目标位置（节点标题）；回退形态 `{ type, summary, args }` 只显示 `summary` 摘要 + 参数摘要行；结构化 preview（如 `{ changes }`）逐行渲染（「时间点「…」→ 位置 N」）。
+- 内容（摘要化，不再 JSON dump）：`preview` 按 type 渲染——创建类显示字段键值（id 字段经 names/resolve 解析为名称）、更新类显示 diff 列表（from → to）、大纲类显示目标位置（节点标题）；回退形态 `{ type, summary, args }` 只显示 `summary` 摘要 + 参数摘要行；结构化 preview（如 `{ changes }`）逐行渲染（「时间点「…」→ 位置 N」）。
 - 操作：
   - 确认 → `POST /proposal/:id/confirm` → 成功替换为「✓ 已确认」态（`result` 含新实体 id 时可渲染为链接跳详情）；失败 `PROPOSAL_STALE`（409）→ 卡片标「⚠ 数据已变化，此提案已失效」，按钮禁用，提示让 AI 重新生成；`PROPOSAL_NOT_FOUND`（404）→ 移除卡片。
   - 拒绝 → `POST /proposal/:id/reject` → 「已拒绝」态。
-- 流断开：清空全部未确认提案卡片（决策 16）。
+- 流断开：清空全部未确认提案卡片。
 
-### 工具调用记录行（决策 47 人类可读化，2026-08 批次十四）
+### 工具调用记录行（人类可读化，2026-08 批次十四）
 
 - **折叠态**：`🔧 调用了 {tool}` + 结果状态图标（成功 ✓ / 失败 ✗）。
 - **展开态 = 摘要渲染（不再 JSON dump 原始 args）**：展开时收集 args 中 id 类字段（`id`/`entity_id`/`node_id`/`parent_id`/`source_id`/`target_id`/`hook_id`/`relation_id`/`outline_node_id`/`at_node_id`/`from_node_id`/`to_node_id`/`target` 等）→ `POST /api/v1/names/resolve` 批量解析 → 按工具名参数映射渲染摘要行（如「查询实体：人物「张三」」/「更新实体：人物「张三」」+ 变更字段）。
@@ -70,15 +70,15 @@
 
 ### 历史消息（GET /chat/sessions/:id/messages）
 
-- `role=user` / `assistant` → 气泡；assistant 的 `toolCalls` 渲染为折叠工具记录（决策 47 摘要渲染）。
-- `role=tool` → 附属于对应 `toolCallId` 的记录行（成对重组；孤儿半对不渲染，决策 18）。
+- `role=user` / `assistant` → 气泡；assistant 的 `toolCalls` 渲染为折叠工具记录（摘要渲染）。
+- `role=tool` → 附属于对应 `toolCallId` 的记录行（成对重组；孤儿半对不渲染）。
 
 ## 关键交互
 
 - **发送**：输入 → `POST /chat`（新会话不带 session_id；续聊带）→ 输入框禁用 + 「AI 思考中…」；`done` 后恢复。携带 `context`（focus 字段）仅当存在 focus 小条时。
-- **断连（关键）**：流结束 / onAbort / 60s 无任何事件 → 顶部横幅「上次会话已取消」（决策 16/20）+ 清空提案卡片 + [重新发送] 快捷按钮；横幅可关闭。
+- **断连（关键）**：流结束 / onAbort / 60s 无任何事件 → 顶部横幅「上次会话已取消」+ 清空提案卡片 + [重新发送] 快捷按钮；横幅可关闭。
 - **会话切换**：右栏顶部会话标题下拉（同项目会话列表，`lastMessage` 截断 + `updatedAt` 相对时间 + `messageCount`）→ 切换后拉历史恢复；[+ 新会话] 清空当前视图。左栏书架项目展开的会话列表为同一切换入口（见 layout.md §2.3）。
-- **会话恢复（2026-08）**：刷新页面/打开项目时，会话列表加载后若无当前会话且列表非空 → **自动激活最近会话**（服务端按最后活动倒序第一条），符合「一项目一会话」恢复心智（决策 22）；newSession 作废在途列表请求，防止自动激活把「开新会话」意图拉回。
+- **会话恢复（2026-08）**：刷新页面/打开项目时，会话列表加载后若无当前会话且列表非空 → **自动激活最近会话**（服务端按最后活动倒序第一条），符合「一项目一会话」恢复心智；newSession 作废在途列表请求，防止自动激活把「开新会话」意图拉回。
 - **focus 小条**：显示「正在讨论：{实体名/节点名}」，可关闭；关闭后后续请求不再带 context。来源：任一页「问 AI」（跨页注入当前会话，见 layout.md §4.2）。
 - **空态**：无消息 → 引导语：「试试问：这个设定有没有漏洞？／第 4 章剧情往哪走合理？」
 - **错误态**：`error` 事件（模型失败/超限）→ 红色错误条显示 `message`；fetch 网络失败 → 「连接失败，请确认服务已启动」。
@@ -86,7 +86,7 @@
 ## 状态
 
 - **加载态**：恢复历史时消息区骨架；发送中输入框禁用。
-- **恢复会话的 tool 消息**：与历史渲染一致（成对折叠记录），不展开为提案卡片（提案是瞬态对象，历史中不保留，决策 14）。
+- **恢复会话的 tool 消息**：与历史渲染一致（成对折叠记录），不展开为提案卡片（提案是瞬态对象，历史中不保留）。
 - **项目切换**：切换项目后清空当前会话与消息区，显示该项目会话列表。
 - **数据刷新（2026-08）**：AI 提案确认成功 → ui store `dataVersion` +1 → 中栏 7 个数据页（实体列表/详情、大纲/大纲详情、伏笔、回收站、概览）自动重拉；InfoBar 全局刷新按钮（RefreshCw）触发同一信号。
 - **异常兜底（2026-08）**：应用级 ErrorBoundary（main.tsx 包裹）——渲染异常显示可恢复错误卡（错误信息 + 重新加载/回首页）而非白屏。

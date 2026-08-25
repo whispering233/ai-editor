@@ -41,7 +41,7 @@
 |------|---------|
 | 行主信息 | `name`、`summary.category` |
 | 状态分组 | `summary.status`：planted/progressing → 活跃；resolved → 已回收；abandoned → 已废弃 |
-| 埋点/回收位置 | 详情 `relations`：`plants` 关系 `source_id`（埋点节点）、`resolves`（已回收节点）、data 字段 `expected_resolve_node_id`（预计回收节点）——MVP 展示节点 id，章节序后续迭代由服务端现推（决策 21） |
+| 埋点/回收位置 | 详情 `relations`：`plants` 关系 `source_id`（埋点节点）、`resolves`（已回收节点）、data 字段 `expected_resolve_node_id`（预计回收节点）——MVP 展示节点 id，章节序后续迭代由服务端现推 |
 | 依赖链 | `relations[relationType=depends_on]` → 目标 hook 名 |
 | 时间 | `createdAt` / `updatedAt` |
 

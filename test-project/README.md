@@ -8,7 +8,7 @@
 # 方式一：生产态（构建后）
 pnpm -r build
 node packages/server/dist/index.js test-project
-# → 浏览器自动打开 http://127.0.0.1:3456（127.0.0.1，决策 8）
+# → 浏览器自动打开 http://127.0.0.1:3456（127.0.0.1）
 
 # 方式二：打包安装（验证发布产物，见 backlog #8）
 # pnpm pack 各包 → 测试目录 npm install → npx ai-editor test-project

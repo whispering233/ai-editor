@@ -23,11 +23,11 @@
 └──────────────────────────────────────────────────────────┘
 ```
 
-**两行结构（S13.1 修订 + 决策 37）**：每个节点 = 两行——
+**两行结构（S13.1 修订）**：每个节点 = 两行——
 - **第一行**：`[折叠箭头] [类型徽标 卷/章/场] [标题（点击就地编辑）] [伏笔标记] [ml-auto 操作区：回收站] [当前位置徽标]`（修改时间显示已移除，批次八 O2）
 - **第二行**：摘要（缩进对齐标题下方，`text-xs text-muted-foreground`；**默认显示、为空不渲染**、点击可就地编辑，编辑态渲染输入行）。
 
-> **操作区布局（S13.1 修订 + H2 + 批次四 I2 + 批次八 O2 + 决策 37）**：行尾操作**直接平铺**（无 ⋯ 菜单）并**右端对齐（ml-auto，与标题两端拉开）**——**仅保留移入回收站**（Trash2 图标，直接软删，不弹确认）；「详情」「＋ 就地新建」按钮已移除（决策 37：详情改双击、新建改 Enter，见下）；**固定顺序 回收站 → 当前位置徽标**（时间戳显示已移除，O2）
+> **操作区布局（S13.1 修订 + H2 + 批次四 I2 + 批次八 O2）**：行尾操作**直接平铺**（无 ⋯ 菜单）并**右端对齐（ml-auto，与标题两端拉开）**——**仅保留移入回收站**（Trash2 图标，直接软删，不弹确认）；「详情」「＋ 就地新建」按钮已移除（详情改双击、新建改 Enter，见下）；**固定顺序 回收站 → 当前位置徽标**（时间戳显示已移除，O2）
 
 - 整块（两行）可**拖拽**（编辑态除外）；标题/摘要点击进入行内编辑（交互同 S2.4）。
 
@@ -37,45 +37,45 @@
 |------|---------|
 | 树 | `GET /outline` → `children[]`（OutlineNode：`id` / `type` / `title` / `summary` / `children` / `updatedAt`） |
 | 伏笔标记（S9.2） | `GET /relation`（source_type=outline_node × 三类并行）→ `lib/outline-hooks buildNodeHookMarks` 聚合（targetName ?? targetId） |
-| 层级约束 | 严格三层 volume → chapter → scene，无游离节点（决策 19）；渲染层不做任何「容错展示」 |
+| 层级约束 | 严格三层 volume → chapter → scene，无游离节点；渲染层不做任何「容错展示」 |
 
 ## 关键交互（S2.4 修订：就地为主，弹窗仅保留必要场景）
 
-### 就地编辑标题/摘要（决策 37：现有单击编辑保留）
+### 就地编辑标题/摘要（现有单击编辑保留）
 
 - 点击标题或摘要 → 行内变输入框（自动聚焦、`maxLength=200`）。
 - **Enter 保存**（`PUT /outline/:nodeId { title? / summary? }`）→ toast「已保存」+ 重拉树；**Esc 取消**；**失焦保存**。
 - 提交判定（`lib/outline-tree.ts` 纯函数）：标题非空且有变化才提交；摘要允许清空（清除摘要）；无变化不发请求。
 - 摘要非高频但同样行内（不弹窗）；编辑态行禁用拖拽。
 
-### 就地新建节点（决策 37：行级「＋」按钮移除，改选中节点按 Enter）
+### 就地新建节点（行级「＋」按钮移除，改选中节点按 Enter）
 
 - **选中节点后按 Enter** → 该节点子级末尾插入行内输入框（缩进对齐下一层，自动展开父）；Esc 取消。
-- 类型由父决定（`CHILD_TYPE`）：卷 → 章、章 → 场；**root 顶层**（顶部「+ 新建」/空态）输入行带「卷/章」切换（决策 19：chapter 可挂 root）。
+- 类型由父决定（`CHILD_TYPE`）：卷 → 章、章 → 场；**root 顶层**（顶部「+ 新建」/空态）输入行带「卷/章」切换（chapter 可挂 root）。
 - **Enter 创建**（`POST /outline { type, title, parent_id }`）→ 就地出现在树中 + 高亮（3s）；**Esc 或失焦取消**（空值不误建）。
 
 ### 移动（S13.1：拖拽上下半判定 + 插入指示线，同级排序可用）
 
 - **原生 HTML5 DnD**（无第三方库）：整块拖拽（编辑态除外）→ 悬停目标行，**目标行上半 = 插到该节点前（行上边缘 accent 2px 指示线）、下半 = 插到该节点后（行下边缘指示线）**；指示线为绝对定位层（`pointer-events-none`），不遮挡行内编辑/点击。
-- **层级合法性**：目标父 = 目标行的父（`findParentIdOf`），按 `canMoveTo` 纯函数过滤（决策 19 层级约束 + 不能挂自己/子树）——scene 拖到 chapter 行会被正确拒绝（实际插入目标是 volume，非法）；同父排序自然通过。
+- **层级合法性**：目标父 = 目标行的父（`findParentIdOf`），按 `canMoveTo` 纯函数过滤（层级约束 + 不能挂自己/子树）——scene 拖到 chapter 行会被正确拒绝（实际插入目标是 volume，非法）；同父排序自然通过。
 - **顶层空白区** = 排 root 末尾（保留原语义，容器 ring-accent 高亮；scene 会被 canMoveTo 拒绝）。
 - **order 计算**（`lib/outline-tree.ts dropInsertOrder` 纯函数，第三参 `excludeId`）：**剔除拖拽节点后**的目标父 children 上计算——插到某节点前 = 该节点 index；插到某节点后 = index + 1；末尾 = 剔除后 children.length（oracle M1 修订：服务端 move 是「先移除再插入 order」，同父重排若在含拖拽节点的原数组上计算，锚点在下方时错位 1 位）。drop 瞬间按鼠标位置重新判定上下半（防异步渲染滞后）；锚点 = 拖拽节点自身 → 直接原地（剔除后锚点消失会误回退末尾）。
 - **原地放置**（`isNoopDrop` 纯函数：父不变且剔除后 order === 当前 index）→ 不发请求直接清理拖拽态（避免误导 toast「已移动」）。
 - 「移动到…」对话框**已删除**（拖拽已覆盖精确插入位置）。
 
-### 详情（S12.2，决策 37：行尾详情按钮移除，改双击）与软删
+### 详情（S12.2：行尾详情按钮移除，改双击）与软删
 
-- **双击节点** → `#/outline/:nodeId` 节点详情页（变更记录列表 + 结构化 data 表单 + 相关实体）——行尾详情图标已移除（决策 37）。
+- **双击节点** → `#/outline/:nodeId` 节点详情页（变更记录列表 + 结构化 data 表单 + 相关实体）——行尾详情图标已移除。
 - 行尾**回收站图标**（Trash2）→ **直接软删**（H2：不弹确认）：`DELETE /outline/:nodeId` 响应 `cascaded.{ children, relations, deltas }` → 行消失 + toast「已移入回收站（含 N 个子节点）」。
 
 ### 当前位置（S13.1/S13.2 修订）
 
 - **入口已迁往节点详情页（S13.2）**——详情页 header「设为当前位置」按钮（`PUT /project/config { current_position: nodeId }`）；大纲列表页不再提供入口。
-- 生效后行尾显示「当前位置」徽标（`bg-accent text-accent-foreground` token 类，已去 amber 硬编码），顶栏同步更新（project store 广播）；伏笔面板健康指标依赖此值（决策 21）；未设置时该节点行无徽标。
+- 生效后行尾显示「当前位置」徽标（`bg-accent text-accent-foreground` token 类，已去 amber 硬编码），顶栏同步更新（project store 广播）；伏笔面板健康指标依赖此值；未设置时该节点行无徽标。
 
 ### 变更记录（节点触发的 Delta，S5.4）
 
-- **入口（S13.1 修订 + I2 + 决策 37）**：**双击节点** → `#/outline/:nodeId` 节点详情页（行尾详情图标已移除）；变更记录列表在详情页「变更记录」区块展示（行内展开面板已随 S12.2 详情页落地移除）。
+- **入口（S13.1 修订 + I2）**：**双击节点** → `#/outline/:nodeId` 节点详情页（行尾详情图标已移除）；变更记录列表在详情页「变更记录」区块展示（行内展开面板已随 S12.2 详情页落地移除）。
 - **数据**：`GET /api/v1/delta/node/:nodeId` → `{ nodeId, deltas: DeltaRecord[] }`（客户端按 `order` 升序兜底排序）。
 - **行结构**：主行 = `description`（主文案）+ 创建时间（`formatTimestamp`）；次行 = 目标徽标（`targetType` 中文 + `targetName ?? targetId`）+ changes 紧凑 chips（`lib/delta.ts describeChange`：set=`field = to`、update=`field from → to`、add=`field +value`、remove=`field -value`；chip 底色 `bg-muted`）。
 - **空态**：该节点没有变更记录（轻量文案，不打断树操作）。
@@ -101,9 +101,9 @@
 
 ---
 
-# OutlineDetail 节点详情页（S12.2，决策 23）
+# OutlineDetail 节点详情页（S12.2）
 
-> 大纲节点的编辑权威页：标题/摘要 + 结构化 data（麦基字段集）表单、变更记录列表、相关实体；大纲树列表页**双击节点**进入（决策 37；S13.1 起无 ⋯ 菜单）。契约：决策 23、schema.md outline.json「节点结构化信息 data」节、endpoints.md 大纲端点（GET /outline 返回 data、PUT /outline/:nodeId 支持 data 部分合并）。
+> 大纲节点的编辑权威页：标题/摘要 + 结构化 data（麦基字段集）表单、变更记录列表、相关实体；大纲树列表页**双击节点**进入（S13.1 起无 ⋯ 菜单）。契约：schema.md outline.json「节点结构化信息 data」节、endpoints.md 大纲端点（GET /outline 返回 data、PUT /outline/:nodeId 支持 data 部分合并）。
 
 ## 路由与数据
 
@@ -183,7 +183,7 @@
   - summary：有变化才提交，允许清空（提交空串 `""`——服务端 `patch.summary !== undefined` 即写入，真正清除摘要）。
   - data：`diffData`（lib/entity-detail，JSON 序列化 + 空值规约）只提交变更字段 → `PUT { data }` 浅合并。
   - 成功 → toast「已保存」+ 重拉 outline 树（节点 updatedAt 刷新，表单重置为服务端权威值）；`VALIDATION_ERROR`（字段超长/非法枚举）→ 表单卡底部行内错误横幅；`OUTLINE_NODE_NOT_FOUND`（节点已被 purge）→ 404 态。
-- **设为当前位置（S13.2，入口自大纲页迁入）**：header 操作区「设为当前位置」按钮（保存按钮左侧，`variant="outline"`）——`PUT /project/config { current_position: nodeId }` → toast「已设为当前位置」；**已是当前位置**（`config.currentPosition === nodeId`）→ 按钮禁用 + 文案变「当前位置」（动作入口与元信息行状态徽标共存，参照 S13.1 前大纲页 `disabled={isCurrent || busy}` 语义）；`settingCurrent` 提交态防重复。**联动**：project store `updateConfig` 成功自动重拉 config——InfoBar「当前位置」（标题 + 点击跳转定位）、大纲行尾「当前位置」徽标、compute 预览默认 at_node（S5.4）、S9 伏笔健康指标基准（决策 21）同步刷新。失败 → error toast「设置失败：该节点可能已删除，无法设为当前位置」。
+- **设为当前位置（S13.2，入口自大纲页迁入）**：header 操作区「设为当前位置」按钮（保存按钮左侧，`variant="outline"`）——`PUT /project/config { current_position: nodeId }` → toast「已设为当前位置」；**已是当前位置**（`config.currentPosition === nodeId`）→ 按钮禁用 + 文案变「当前位置」（动作入口与元信息行状态徽标共存，参照 S13.1 前大纲页 `disabled={isCurrent || busy}` 语义）；`settingCurrent` 提交态防重复。**联动**：project store `updateConfig` 成功自动重拉 config——InfoBar「当前位置」（标题 + 点击跳转定位）、大纲行尾「当前位置」徽标、compute 预览默认 at_node（S5.4）、S9 伏笔健康指标基准同步刷新。失败 → error toast「设置失败：该节点可能已删除，无法设为当前位置」。
 - **变更记录区块**：`components/delta/node-delta-list.tsx`（S5.4 行内面板逻辑迁移：加载/错误重试/空态/列表行 + changes chips）；「+ 新建变更」入口 S12.3 提供，见下「新建变更」。
 
 ### 变更记录 · 新建变更（S12.3）
@@ -195,12 +195,12 @@
   - 实体目标：按类型拉列表（`GET /entity/:type`，加载中/失败重试/空态提示）；选择后拉详情 `GET /entity/:type/:id`（update 自动 from 的数据源）。
 - **字段**（`field`）：按目标类型生成下拉——
   - 实体：`ENTITY_DATA_SCHEMAS` 的字段名（**client 只消费类型不打包 zod**：本地字段清单经 `import type` + `keyof ...["shape"]` 编译期断言 = shared schema keys，schema 增删字段即编译报错防漂移）；排除 `custom_fields`（record 无法用标量值表达）；标签复用 `lib/entity-detail detailFieldsForType`。
-  - 大纲节点：决策 23 字段集（`lib/outline-detail detailFieldsForNodeType`，按选中节点层级；节点缺失 → 三层并集兜底）。
+  - 大纲节点：麦基字段集（`lib/outline-detail detailFieldsForNodeType`，按选中节点层级；节点缺失 → 三层并集兜底）。
 - **操作**（`op`，可手动切换；推断逻辑 = `lib/delta-create.ts inferOpOptions` 纯函数）：
   - 数组字段（character.personality/abilities、setting.rules、scene.conflict_levels）→ [追加 add / 移除 remove]，默认 add。
   - 标量字段 → 当前值可作 from 时 [更新 update / 设为 set] 默认 update；**值不可表达（字段缺失/布尔/数组/对象）时仅 [设为]**——避免提交被 400 拒绝。
 - **值**：set/update → 「新值」输入；add → 「追加值」；remove → 「移除值（按值匹配删除）」。数字字段（character.age、hook.half_life）提交时解析为 number，NaN 回退字符串（`buildDeltaChange`）。
-- **旧值自动取值**（决策 9 修订）：op=update 时表单标注「旧值：xxx（自动取自目标当前数据，无需手填）」——实体目标取详情 data、节点目标取树中 node.data；作者不手填 from，**data 后续被手动编辑 → compute 时跳过 + conflicts 标注，机制兜底**。目标数据获取失败（`ENTITY_NOT_FOUND`/网络）→ 行内提示并引导改「设为」。
+- **旧值自动取值**（修订语义）：op=update 时表单标注「旧值：xxx（自动取自目标当前数据，无需手填）」——实体目标取详情 data、节点目标取树中 node.data；作者不手填 from，**data 后续被手动编辑 → compute 时跳过 + conflicts 标注，机制兜底**。目标数据获取失败（`ENTITY_NOT_FOUND`/网络）→ 行内提示并引导改「设为」。
 - **描述**：必填（trim 非空校验），placeholder「本节点触发了什么变化，如：张三获得断剑认可」。
 - **提交**：`POST /api/v1/delta { node_id: 当前节点, target_type, target_id, changes: [单条], description }`（per-op 必填语义 set→to / update→from+to / add·remove→value 由 `buildDeltaChange` 构造保证）。
 - **错误态**：`VALIDATION_ERROR`（per-op 字段缺失等）→ 表单内行内提示（服务端 message）；`OUTLINE_NODE_NOT_FOUND`（节点已被 purge）→ toast「节点不存在…」+ 收起表单（树刷新后页面进入 404 态）；网络失败 → 行内提示。

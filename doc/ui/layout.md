@@ -37,10 +37,10 @@
 | 中栏 | `MainPanel` | `flex-[5_1_50%]` | 继承 body `bg-background`（无独立背景类） |
 | 右栏 | `ChatPanel` | `flex-[4_1_40%]` | `bg-background` + `border-l border-border` |
 
-- **F7 修订（2026-08 用户反馈）**：三栏**可拖拽调整宽度 + 可收起/展开**（决策 22 修订注记）：
+- **F7 修订（2026-08 用户反馈）**：三栏**可拖拽调整宽度 + 可收起/展开**：
   - **拖拽手柄**：左/中栏之间、中/右栏之间各一个 resize 手柄（hover 高亮 + `cursor-col-resize`，拖拽改栏宽——按像素宽度，非百分比）；拖拽期间禁用文本选择（`select-none`），以像素宽度覆盖默认百分比。
   - **收起/展开**：每栏可收起（左/右栏收起为窄图标条或完全隐藏 + 展开按钮；中栏**不可完全收起**，保底最小宽度）；收起态下拖拽手柄隐藏/禁用；收起/展开按钮位置随栏而定（左栏收起按钮在左栏头部或主面板边缘、右栏同理，设计以顺手为准）。
-  - **宽度与收起态持久化**：localStorage（决策 10 同哲学——纯展示层偏好，不进数据文件）；刷新/重启后恢复。
+  - **宽度与收起态持久化**：localStorage（纯展示层偏好，不进数据文件）；刷新/重启后恢复。
   - **小屏抽屉不变**：`<1024px` 右栏折叠抽屉行为保持（`useMediaQuery`，开关在信息条右侧，仅小屏出现）。
   - **弹性分配**：收起左/右栏后，剩余空间由未收起栏弹性分配（中栏自适应扩展）；拖拽与收起互斥。
 - **F7 实现细节（2026-08 落地）**：
@@ -90,7 +90,7 @@
 - 路由解析按段数区分：`#/entities/character`（2 段）→ 列表页；`#/entities/character/char-abc`（3 段）→ 详情页；type 缺省回退 `character`。大纲同款二级路由（S12.2）：`#/outline`（1 段）→ 大纲树；`#/outline/:nodeId`（2 段）→ 节点详情页（main.tsx outline 分支拦截第二段，仿实体详情分支）。
 - 未知首段 hash 回退 `#/`（`window.location.replace` 拉回 URL，不污染历史）。
 - **`#/chat` 已移除**：聊天常驻右栏，无独立页；原「带上下文进聊天」改为注入右栏当前会话 focus 小条（见 §4.2）。
-- **`#/canvas` 已移除（决策 33，2026-08）**：画布页删除（1000 章后无实际价值），未知 hash 回退 `#/` 兜底；`plot_edge` 关系类型与数据能力保留（决策 10 数据模型不变，仅无 UI 入口）。
+- **`#/canvas` 已移除（2026-08）**：画布页删除（1000 章后无实际价值），未知 hash 回退 `#/` 兜底；`plot_edge` 关系类型与数据能力保留（数据模型不变，仅无 UI 入口）。
 - 导航跳转统一走 `<a href="#/...">` 或 `navigate(path)` 辅助函数，保证 hash 变更触发重渲染。
 
 ---
@@ -121,10 +121,10 @@
 
 - **产品标识**：`flex h-12 shrink-0 items-center gap-1.5 border-b border-border px-3 font-serif text-base italic text-foreground hover:text-primary`——衬线**斜体**产品名「我的小说」+ `◈` 标记 `text-primary`；点击回 `#/`。
 - **书架区**（`min-h-0 flex-1 overflow-y-auto px-2 py-2`，挂载即拉取，无项目也展示）：
-  - 头部行：标签「书架」`text-xs font-medium text-muted-foreground` + 右侧 `[+]` 导入备份（E3+B2：Upload 图标 `icon-xs`，Dialog 选 zip 文件 + 书名 Input（预填文件名去 .zip 扩展名）；**同名冲突处理（决策 27）**——输入书名与书架已有书同名时 Dialog 内联提示冲突，提供两选：`[重命名导入]`（Input 可编辑，预填 `<书名> (2)`，以新名导入）`[保持原样]`（不改名，服务端目录自动去重 `books/<书名> (N)/`）；zip 内 id 与书架已有项目匹配时服务端自动走**覆盖恢复**（`mode: "restored"`，响应 toast「已恢复备份」）；导入成功刷新书架）+ `[+]` 新建项目（`Button ghost icon-xs`，Dialog 表单，`sm:max-w-sm`，书名禁路径分隔符）。
-  - **项目行**：`flex h-8 min-w-0 flex-1 items-center gap-1.5 rounded-lg px-2 text-left text-sm transition-colors`；当前项目 `bg-muted font-medium text-foreground`，其余 `text-muted-foreground hover:bg-muted hover:text-foreground`；BookOpen 图标 `size-3.5`（当前项目 `text-primary`）；行尾紧凑日期 `text-[10px] text-muted-foreground/60`（当年 MM-DD、跨年 YY-MM-DD，title 悬浮完整时间）；**当前项目行尾部 [导出备份]**（E3：Download 图标 `icon-xs`，点击即下载 zip（临时 `<a download>` + objectURL，revoke 延迟），导出中 Loader2 `animate-spin` 防连点；无项目打开时不渲染——「导出当前项目」语义）；**行尾 [重命名] 图标按钮（B2，决策 27；H3 起直接展示不收 ⋯）**：**仅当前项目行**渲染（与导出按钮一致——rename 作用于「当前打开项目」，无项目时不渲染）——点击 Pencil 图标 → 行内输入框预填当前名，Enter/失焦提交 `POST /project/rename`，成功刷新书架与 config；新名与书架冲突 409 → 内联错误。（重命名按钮在导出按钮右侧，均仅当前行可见防拥挤）
+  - 头部行：标签「书架」`text-xs font-medium text-muted-foreground` + 右侧 `[+]` 导入备份（Upload 图标 `icon-xs`，Dialog 选 zip 文件 + 书名 Input（预填文件名去 .zip 扩展名）；**同名冲突处理**——输入书名与书架已有书同名时 Dialog 内联提示冲突，提供两选：`[重命名导入]`（Input 可编辑，预填 `<书名> (2)`，以新名导入）`[保持原样]`（不改名，服务端目录自动去重 `books/<书名> (N)/`）；zip 内 id 与书架已有项目匹配时服务端自动走**覆盖恢复**（`mode: "restored"`，响应 toast「已恢复备份」）；导入成功刷新书架）+ `[+]` 新建项目（`Button ghost icon-xs`，Dialog 表单，`sm:max-w-sm`，书名禁路径分隔符）。
+  - **项目行**：`flex h-8 min-w-0 flex-1 items-center gap-1.5 rounded-lg px-2 text-left text-sm transition-colors`；当前项目 `bg-muted font-medium text-foreground`，其余 `text-muted-foreground hover:bg-muted hover:text-foreground`；BookOpen 图标 `size-3.5`（当前项目 `text-primary`）；行尾紧凑日期 `text-[10px] text-muted-foreground/60`（当年 MM-DD、跨年 YY-MM-DD，title 悬浮完整时间）；**当前项目行尾部 [导出备份]**（Download 图标 `icon-xs`，点击即下载 zip（临时 `<a download>` + objectURL，revoke 延迟），导出中 Loader2 `animate-spin` 防连点；无项目打开时不渲染——「导出当前项目」语义）；**行尾 [重命名] 图标按钮（B2；H3 起直接展示不收 ⋯）**：**仅当前项目行**渲染（与导出按钮一致——rename 作用于「当前打开项目」，无项目时不渲染）——点击 Pencil 图标 → 行内输入框预填当前名，Enter/失焦提交 `POST /project/rename`，成功刷新书架与 config；新名与书架冲突 409 → 内联错误。（重命名按钮在导出按钮右侧，均仅当前行可见防拥挤）
   - **chevron 展开按钮**（行右侧 `w-6 h-8 rounded-lg`）：ChevronRight `size-4`，展开时 `rotate-90`，`transition-transform duration-200`；**单展开**（同一时刻只展开一本）。
-  - **会话子列表**（展开的项目行下方，归属项目，决策 22）：`ml-3 border-l border-border py-0.5 pl-1.5`——左边缘线形成树状缩进；行 `flex h-7 w-full items-center gap-1.5 rounded-md px-2 text-left text-xs transition-colors`，当前会话 `bg-accent font-medium text-accent-foreground`，其余 `text-muted-foreground hover:bg-muted hover:text-foreground`；MessageSquare `size-3 opacity-70` + 首条消息截断 + 相对时间 `text-[10px]`。展开时按需加载（未尝试过才请求）；未展开/失败/空态：`ml-3 border-l border-border py-1 pl-2 text-xs text-muted-foreground/60`（「会话加载中…」「暂无会话」「打开项目后查看会话」+ 失败时 [重试]）。
+  - **会话子列表**（展开的项目行下方，归属项目）：`ml-3 border-l border-border py-0.5 pl-1.5`——左边缘线形成树状缩进；行 `flex h-7 w-full items-center gap-1.5 rounded-md px-2 text-left text-xs transition-colors`，当前会话 `bg-accent font-medium text-accent-foreground`，其余 `text-muted-foreground hover:bg-muted hover:text-foreground`；MessageSquare `size-3 opacity-70` + 首条消息截断 + 相对时间 `text-[10px]`。展开时按需加载（未尝试过才请求）；未展开/失败/空态：`ml-3 border-l border-border py-1 pl-2 text-xs text-muted-foreground/60`（「会话加载中…」「暂无会话」「打开项目后查看会话」+ 失败时 [重试]）。
   - **状态呈现**：首载骨架 3 条 `h-8 animate-pulse rounded-lg bg-muted`；空书架「还没有书，先创建一本」`text-xs text-muted-foreground/70`；加载失败「无法连接服务/书架加载失败」+ [重试]。
 - **底部区**（`shrink-0 flex flex-col gap-1 border-t border-border p-2`）：
   - 设置入口：`flex h-8 items-center gap-2 rounded-lg px-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground`，Settings `size-4`，指向 `#/settings`。
@@ -231,7 +231,7 @@
 
 ### 4.2 跨页跳转约定
 
-- **带上下文进聊天（不跳页）**：任一页「问 AI」（InfoBar 统一入口，决策 35）或行级**右键菜单「注入会话上下文」**（决策 40，见 §4.6）→ 注入右栏当前会话：chat store 写入 `focusContext`（`focus_entity_type` / `focus_entity_id` / `focus_node_id`，对应 POST /api/v1/chat 请求体 `context` 字段），右栏输入框上方显示 focus 小条（§2.4 ④）。
+- **带上下文进聊天（不跳页）**：任一页「问 AI」（InfoBar 统一入口）或行级**右键菜单「注入会话上下文」**（见 §4.6）→ 注入右栏当前会话：chat store 写入 `focusContext`（`focus_entity_type` / `focus_entity_id` / `focus_node_id`，对应 POST /api/v1/chat 请求体 `context` 字段），右栏输入框上方显示 focus 小条（§2.4 ④）。
 - **当前位置定位**：InfoBar / 概览页点击「当前位置」→ ui store 设置 `focusOutlineNodeId`（transient）→ 跳 `#/outline`；Outline 页消费（展开祖先 + 滚动 + 临时高亮）后清除。
 - **软删成功**：跳回列表/大纲页 + toast「已移入回收站，可随时还原」。
 
@@ -242,7 +242,7 @@
 - **空态**：一句说明 + 一个主操作按钮；可配图标（`size-7/8 text-muted-foreground/40`）。
 - **toast**：轻提示（保存成功、已移入回收站等），`showToast` 3s 自动消失；渲染 = sonner `<Toaster>`（`components/ui/sonner.tsx`，主题随 useTheme 适配），`components/feedback/` 内订阅 ui store 桥接（U6 起实现）。
 - **确认对话框**：不可恢复操作（purge、物理删关系）必须二次确认并说明影响范围（`confirm()`，ConfirmDialog 渲染组件后续切片实现）；软删与回收站还原直接执行，不弹确认（H2）。
-- **操作按钮禁止收进 `...`/更多菜单（H3）**：所有操作按钮一律直接展示，禁止用 `MoreHorizontal`/`⋯` 做二级展开（时间轴事件行、伏笔行、书架项目行重命名等）；下拉菜单仅保留“会话选择”等选择器场景，不作为操作按钮容器。**右键菜单（决策 40，§4.6）不违反本红线**——右键菜单是「需要时出现」的上下文交互（桌面通用心智），非「操作按钮收进 ⋯ 二级展开」；行级常驻操作按钮仍直接展示。
+- **操作按钮禁止收进 `...`/更多菜单（H3）**：所有操作按钮一律直接展示，禁止用 `MoreHorizontal`/`⋯` 做二级展开（时间轴事件行、伏笔行、书架项目行重命名等）；下拉菜单仅保留“会话选择”等选择器场景，不作为操作按钮容器。**右键菜单（§4.6）不违反本红线**——右键菜单是「需要时出现」的上下文交互（桌面通用心智），非「操作按钮收进 ⋯ 二级展开」；行级常驻操作按钮仍直接展示。
 - **文字型按钮必须有边框（H4）**：所有以文字为主的操作按钮（重命名、新建、重试、展开/收起、标签筛选等）必须带可见边框（`border` + `border-border`，或用 `Button variant="outline"`），避免看起来像普通文本；图标按钮不受此限。
 - **对话框宽度（DialogContent）**：基座 `max-w-lg`（**无变体**，shadcn 标准写法）；调用点按需 `sm:max-w-sm|md|2xl` 覆盖（Sidebar 新建项目 384px / 新建实体·大纲 448px / 建立关联 672px）。⚠ 基座**禁止改回 `sm:max-w-*`**——Tailwind 4 同变体、同特异性规则按生成 CSS 顺序决胜，基座 `sm:max-w-sm` 会压掉所有调用点的 `sm:max-w-*` 覆盖（2026-08 曾因此全仓对话框静默 384px，三段式建立关联被压碎；`f653058` 根因修复）。
 - **Base UI 菜单契约（2026-08 踩坑）**：`DropdownMenuLabel`（= `Menu.GroupLabel`）**必须**用 `DropdownMenuGroup` 包裹——裸放 `DropdownMenuContent` 内，菜单打开时抛 Base UI error #31（`MenuGroupContext is missing`），曾致点击会话标题下拉整页白屏（`3e877a1` 根因修复）；新增菜单时遵守，封装文件（`components/ui/dropdown-menu.tsx`）头部有红线注释。
@@ -263,9 +263,9 @@
 - **CSS Modules 适用条件**：仅几何/状态复杂度高、Tailwind 类无法清晰表达的样式（如 Canvas 画布节点/连线）；简单布局一律 Tailwind 类（含共享常量），不硬转。**2026-08 L 批次评估结论**：Canvas/时间轴几何（坐标/缩放/连线路径）均在 JS/TS 计算，CSS 仅 `absolute`/`transform` 等工具类，动画 keyframes 在 `index.css`——无适用样式，C 项关闭；后续引入须同时满足「Tailwind 无法表达」+「重复 ≥3 处」两个条件。
 - **主题 tokens**：仍以 `client/src/index.css` 为唯一 token 源（§3），常量/组件内只允许 token 类（`bg-card`/`text-muted-foreground` 等），禁止硬编码色类（如 `bg-zinc-900`/`bg-white`）。
 
-### 4.5 行级交互模式（决策 37/38/42 统一，2026-08 批次十）
+### 4.5 行级交互模式（2026-08 批次十）
 
-> 大纲 / 时间轴 / 实体设定树等「树/组 + 行」结构页面统一行级交互心智（决策 37/38/42），行级操作按钮收敛为**只保留删除**：
+> 大纲 / 时间轴 / 实体设定树等「树/组 + 行」结构页面统一行级交互心智，行级操作按钮收敛为**只保留删除**：
 
 - **双击 = 详情**：双击行跳转详情页（大纲 `#/outline/:nodeId`、事件 `#/timeline/:id`、实体 `#/entities/:type/:id`、时间点详情等）。
 - **点击标题 = 行内编辑**：单击标题进入行内编辑（Enter 确认、Esc 取消、失焦保存）。
@@ -273,15 +273,15 @@
 - **行级只保留删除按钮**：「详情」「＋新建」「编辑」等入口由双击 / 行内编辑 / Enter 承担；删除按钮 H3 起直接展示（不收 ⋯ 菜单）。
 - **拖拽排序/移动保留**（HTML5 DnD，层级约束与防环校验沿用各页既有语义）。
 
-### 4.6 右键菜单（context menu，决策 40，2026-08 批次十）
+### 4.6 右键菜单（context menu，2026-08 批次十）
 
 > 行级右键菜单作为行级「带上下文问 AI」AskAiButton 的替代——**删除全部 6 处行级 AskAiButton**（实体/伏笔/参考资料/大纲/时间点/事件行）。
 
 - **触发范围**：大纲节点行、实体行（人物/设定/地点/伏笔）、伏笔行、参考资料行、时间点行、事件行。
 - **菜单项**：
-  - **「注入会话上下文」**：复用 chat store focusContext 机制（决策 35）——右键行 → 菜单项 → 写入 focusContext → 右栏 focus 小条显示，继续当前会话（同 §4.2 带上下文进聊天）。
-  - **「建立关联」**：打开关联建立弹层（新建 relation_records 关联，决策 2 通用关系表；类型/端点按行实体类型预填）。
-- **InfoBar「问 AI」统一入口保留**：决策 35 的集中式入口不变——右键菜单是行级快捷入口的替代形态，不改变「全局入口在 InfoBar」的架构。
+  - **「注入会话上下文」**：复用 chat store focusContext 机制——右键行 → 菜单项 → 写入 focusContext → 右栏 focus 小条显示，继续当前会话（同 §4.2 带上下文进聊天）。
+  - **「建立关联」**：打开关联建立弹层（新建 relation_records 关联，通用关系表；类型/端点按行实体类型预填）。
+- **InfoBar「问 AI」统一入口保留**：集中式入口不变——右键菜单是行级快捷入口的替代形态，不改变「全局入口在 InfoBar」的架构。
 - **不违反 H3 红线**：右键菜单是「需要时出现」的上下文交互（桌面通用心智），非「操作按钮收进 ⋯ 二级展开」——行级常驻操作按钮仍直接展示（H3，见 §4.3）。
 
 ---
@@ -330,4 +330,4 @@ client/src/
 | Trash | `#/trash` | trash/* | pages/trash.md |
 | Settings | `#/settings` | settings/llm | pages/settings.md |
 
-后续 S 系列切片接入方式：S4 回收站页、S9 伏笔面板均作为**中栏内容区页面**（`pages/` 下新组件 + 路由表新增首段 + TabBar 已有对应 tab），外壳样式（区块卡 `rounded-xl border bg-card p-4`、骨架/空态/错误态、标题 `font-serif`）沿用 §2.5 概览页规范。画布页已移除（决策 33，2026-08）：代码与文档清理见 `tasks.md` 批次八 O6。
+后续 S 系列切片接入方式：S4 回收站页、S9 伏笔面板均作为**中栏内容区页面**（`pages/` 下新组件 + 路由表新增首段 + TabBar 已有对应 tab），外壳样式（区块卡 `rounded-xl border bg-card p-4`、骨架/空态/错误态、标题 `font-serif`）沿用 §2.5 概览页规范。画布页已移除（2026-08）：代码与文档清理见 `tasks.md` 批次八 O6。

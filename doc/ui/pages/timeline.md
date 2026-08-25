@@ -1,10 +1,10 @@
 # Timeline 时间轴面板原型
 
-> 决策 26（2026-08）：时间轴为**事件线性序列**——事件是独立实体（`entities` 表 CHECK 含 `'event'`），全局 `sort_order` 线性序（拖拽为权威），`time_label` 仅作自由文本展示、**不参与排序、不解析**（见 `doc/database/schema.md`）。
+> 2026-08：时间轴为**事件线性序列**——事件是独立实体（`entities` 表 CHECK 含 `'event'`），全局 `sort_order` 线性序（拖拽为权威），`time_label` 仅作自由文本展示、**不参与排序、不解析**（见 `doc/database/schema.md`）。
 >
-> **修订注记（2026-08，决策 26 F3/F4）**：UI 形态裁决为**垂直时间轴 + 时间点分组**（自实现，零新依赖）——左侧垂直时间轴线 + 节点圆点；同 `time_label` 事件归入同一「时间点」组块；组间按拖拽 `sort_order` 序（拖拽仍为权威）。F3 落地轴线 + 节点 + 事件行（本页线框），F4 落地同标签归组（「时间点分组」线框）。
+> **修订注记（2026-08，F3/F4）**：UI 形态裁决为**垂直时间轴 + 时间点分组**（自实现，零新依赖）——左侧垂直时间轴线 + 节点圆点；同 `time_label` 事件归入同一「时间点」组块；组间按拖拽 `sort_order` 序（拖拽仍为权威）。F3 落地轴线 + 节点 + 事件行（本页线框），F4 落地同标签归组（「时间点分组」线框）。
 >
-> **修订注记（2026-08，决策 26 G2）——时间标签点实体化**：时间标签从事件剥离为独立实体 **`timepoint`**（name = 时间标签文本）——时间轴数据项分两类：时间标签点与事件；事件经 `occurs_at` 关系挂载到时间点（1:n，事件至多挂一个）。**双独立线性序**：时间点序（组间）+ 事件序（组内排序键）；拖拽时间点不修改其下事件序，单条事件任意可拖（跨组拖拽即改挂载）。未挂载事件归入列表末尾「未挂载」兜底区。详见 `doc/database/schema.md`（SCHEMA_VERSION 3）与 `doc/api/endpoints.md`。
+> **修订注记（2026-08，G2）——时间标签点实体化**：时间标签从事件剥离为独立实体 **`timepoint`**（name = 时间标签文本）——时间轴数据项分两类：时间标签点与事件；事件经 `occurs_at` 关系挂载到时间点（1:n，事件至多挂一个）。**双独立线性序**：时间点序（组间）+ 事件序（组内排序键）；拖拽时间点不修改其下事件序，单条事件任意可拖（跨组拖拽即改挂载）。未挂载事件归入列表末尾「未挂载」兜底区。详见 `doc/database/schema.md`（SCHEMA_VERSION 3）与 `doc/api/endpoints.md`。
 
 ## 路由与数据
 
@@ -46,9 +46,9 @@
 
 - **垂直轴线**：容器内绝对定位竖线 `absolute left-[11px] top-0 bottom-0 w-0.5 bg-border pointer-events-none`（left = 节点列中心；**pointer-events-none 是拖拽共存前提**，组间空隙处线连续贯穿）。
 - **节点圆点**：`relative z-10 rounded-full border-2 border-primary bg-background`（不透明背景盖住穿过轴线，尺寸 `size-4`；组内事件行用小圆点 `size-2 rounded-full bg-primary/60`）。
-- **时间点组块**（= 时间标签）：**组标题** = 大圆点 + **折叠/展开按钮（批次八 O4：移至组标题左侧、标题前，同大纲页折叠箭头位序；ChevronRight 水平/旋转 90° 指示折叠/展开，`aria-expanded`，折叠后仅标题行、轴线仍连续）** + 时间点名（`text-sm font-medium text-foreground`，F4 样式；**点击行内编辑，双击跳 timepoint 详情，决策 38**）+ **右侧信息与操作区**（H5 + 决策 38）：事件计数 + [在此时间点新建事件]（Plus 图标，自动挂载该时间点）+ [移入回收站]（Trash2 图标，H2：直接软删不弹确认，`DELETE /entity/timepoint/:id`）；**重命名按钮已移除（决策 38：点击标题行内编辑）**；**左侧不再显示拖拽柄图标（批次八 O3：移除 GripVertical 视觉，draggable 保留在标题行根、悬停 title 拖拽提示保留）**；**组内事件堆叠**（各自不再画线，轴线容器级贯穿）。
+- **时间点组块**（= 时间标签）：**组标题** = 大圆点 + **折叠/展开按钮（批次八 O4：移至组标题左侧、标题前，同大纲页折叠箭头位序；ChevronRight 水平/旋转 90° 指示折叠/展开，`aria-expanded`，折叠后仅标题行、轴线仍连续）** + 时间点名（`text-sm font-medium text-foreground`，F4 样式；**点击行内编辑，双击跳 timepoint 详情**）+ **右侧信息与操作区**（H5）：事件计数 + [在此时间点新建事件]（Plus 图标，自动挂载该时间点）+ [移入回收站]（Trash2 图标，H2：直接软删不弹确认，`DELETE /entity/timepoint/:id`）；**重命名按钮已移除（点击标题行内编辑）**；**左侧不再显示拖拽柄图标（批次八 O3：移除 GripVertical 视觉，draggable 保留在标题行根、悬停 title 拖拽提示保留）**；**组内事件堆叠**（各自不再画线，轴线容器级贯穿）。
 - **未挂载兜底区**：无 `occurs_at` 事件归入列表末尾「未挂载」组（组标题 `italic text-muted-foreground` 弱化占位；事件按 sort_order 平铺）；可直接拖拽到任一时间点完成挂载。
-- **事件行**：内容卡 `rounded-md bg-card border-border px-3 py-2`，从左到右：拖拽柄 `GripVertical` → 事件名（`truncate` + title 全文；**点击行内编辑，双击跳详情，决策 38**）→ tags 胶囊；**右侧信息与操作区**（H6 + 决策 38）：「N 节点」计数 + **直接操作按钮**（H3：**仅移入回收站**，禁止收进 ⋯ 菜单；详情/编辑按钮已移除——双击 = 详情、点击标题 = 行内编辑）。**事件行内不再有时间标签**（G2：时间标签 = 组标题）。**事件名行下方为全宽描述区（F6）**：`text-sm text-muted-foreground` 次要层级，两行截断 `line-clamp-2`；**超过两行才显示「展开」按钮**（clamp 态 `scrollHeight > clientHeight` 运行时测量，窗口 resize 重测；展开态跳过重测保留上次 clamped 测量值），展开后 `line-clamp-none` 显示「收起」；描述 trim 后为空不渲染。
+- **事件行**：内容卡 `rounded-md bg-card border-border px-3 py-2`，从左到右：拖拽柄 `GripVertical` → 事件名（`truncate` + title 全文；**点击行内编辑，双击跳详情**）→ tags 胶囊；**右侧信息与操作区**（H6）：「N 节点」计数 + **直接操作按钮**（H3：**仅移入回收站**，禁止收进 ⋯ 菜单；详情/编辑按钮已移除——双击 = 详情、点击标题 = 行内编辑）。**事件行内不再有时间标签**（G2：时间标签 = 组标题）。**事件名行下方为全宽描述区（F6）**：`text-sm text-muted-foreground` 次要层级，两行截断 `line-clamp-2`；**超过两行才显示「展开」按钮**（clamp 态 `scrollHeight > clientHeight` 运行时测量，窗口 resize 重测；展开态跳过重测保留上次 clamped 测量值），展开后 `line-clamp-none` 显示「收起」；描述 trim 后为空不渲染。
 - **拖拽（双轨，G2）**：
   - **时间点拖拽**：draggable 设在组块根（组标题行）；onDragOver 用 `e.clientY` 与各组块中点比较算插入位；drop → `PUT /entity/timepoint/:id/move`（**只重排时间点序，其下事件序不变**）；失败回滚 + toast。
   - **事件拖拽**：draggable 设在事件行根；onDragOver 同款判定；drop → 组内移动 = `PUT /entity/event/:id/move`；**跨组拖拽 = 改挂载**（旧 occurs_at 移除 + 新 occurs_at 建立 + 事件 move 插入目标位置，一次性提交，无确认弹窗）→ 失败回滚 + toast。
@@ -96,7 +96,7 @@
 - **事件拖拽**（事件行 ⠿）：单条移动 → `PUT /entity/event/:id/move`（`{order}`，服务端按新位重排事件全局序）。
 - **跨组拖拽**（事件拖到另一时间点区块）：**即改挂载**——旧 occurs_at 移除 + 新 occurs_at 建立 + 事件 move 插入目标位置，一次性提交（无确认弹窗）；失败 → 回滚 + toast。
 
-### 时间点重命名（G2 + 决策 38：重命名按钮移除，改点击标题行内编辑）
+### 时间点重命名（G2：重命名按钮移除，改点击标题行内编辑）
 
 **点击组标题时间点名** → 行内输入框（预填当前名）→ Enter/确认提交 `PUT /entity/timepoint/:id { name }`、Esc/失焦取消；成功后组标题更新。
 
@@ -116,7 +116,7 @@
   - 取消关联：已关联节点列表行尾 [取消关联]（二次确认）→ `DELETE /relation/:id`。
   - 已关联节点列表展示大纲节点标题，点击跳 `#/outline/:nodeId` 定位。
 
-### 行操作（决策 38：对齐大纲交互模式）
+### 行操作（对齐大纲交互模式）
 
 - **双击事件行** → `#/timeline/:id` 事件详情页（详情按钮已移除）；**点击事件名行内编辑**（Enter 确认、Esc 取消，`PUT /entity/event/:id`）。
 - **双击组标题行** → 对应 timepoint 详情页；**点击时间点名行内编辑**（见「时间点重命名」）。

@@ -57,8 +57,8 @@
 
 | 类型 | 字段与控件 |
 |------|-----------|
-| character | `role` 文本 · `gender` 文本 · `age` 数字 · `personality[]` 标签列表 · `motivation` 多行 · `abilities[]` 标签列表 · `custom_fields` 键值组（**`status` 已从表单移除（决策 45 修订，2026-08 批次十三卡 13.6）——存量数据容错保留，不展示不编辑**） |
-| setting | `description` 多行 · `tags[]` 标签列表（**分类统一字段，决策 31 K2：label「标签」，datalist 补全 + 快捷选择既有标签**）· `rules[]` 标签列表（**规则条款，K2 恢复语义，label「规则」**）· `custom_fields` —— **`parent_id` 已移除（决策 30）：层级改由 belongs_to 关系表达，见下方「层级区块」** |
+| character | `role` 文本 · `gender` 文本 · `age` 数字 · `personality[]` 标签列表 · `motivation` 多行 · `abilities[]` 标签列表 · `custom_fields` 键值组（**`status` 已从表单移除（2026-08 批次十三卡 13.6）——存量数据容错保留，不展示不编辑**） |
+| setting | `description` 多行 · `tags[]` 标签列表（**分类统一字段：label「标签」，datalist 补全 + 快捷选择既有标签**）· `rules[]` 标签列表（**规则条款，label「规则」**）· `custom_fields` —— **`parent_id` 已移除：层级改由 belongs_to 关系表达，见下方「层级区块」** |
 
 > **标签列表编辑器（M1/M3，2026-08 用户反馈批次六）**：`personality[]`/`abilities[]`/`tags[]`/`rules[]` 共用 `TagsEditor` 组件——行内输入框**回车 = 添加下一项**（非末行聚焦下一行、末行且非空追加空行并聚焦、末行且为空回车无操作，防空行跑马灯）；每行左侧**拖拽手柄**（GripVertical）支持**拖拽排序**（HTML5 原生 DnD，零依赖；拖动行高亮 + 目标行 ring 提示；仅在拖拽进行中响应 drop，不干扰输入框内文本拖选）。排序只改本地表单数组顺序，保存时随 `data` 提交（数组顺序即存储顺序，无独立 API）。
 | location | `type` 文本 · `parent_id` 文本 · `description` 多行 · `custom_fields` |
@@ -72,7 +72,7 @@
 | 展示 | API 字段 |
 |------|---------|
 | 关系行 | `relations[].relationType` + `sourceName`/`targetName`（本实体在任一端都展示，行内标注方向箭头） |
-| 层级区块（**决策 30，仅 setting**） | 从 `relations` 中过滤 `belongs_to` 且两端均为 setting 的行分区展示：**父设定**（`targetId=本实体` 的来源端）/ **子设定**（`sourceId=本实体` 的目标端），名称可跳转详情；「修改上级」→ 弹层搜索选择器（候选 = `listEntities(setting)`，排除自身）→ 服务端防环校验后**删旧边 + 建新边**（无旧父则仅建） |
+| 层级区块（仅 setting） | 从 `relations` 中过滤 `belongs_to` 且两端均为 setting 的行分区展示：**父设定**（`targetId=本实体` 的来源端）/ **子设定**（`sourceId=本实体` 的目标端），名称可跳转详情；「修改上级」→ 弹层搜索选择器（候选 = `listEntities(setting)`，排除自身）→ 服务端防环校验后**删旧边 + 建新边**（无旧父则仅建） |
 | 计数 | `deltaCount`（元信息行「变更记录 N 条」入口，点击展开「状态预览」区块——S5 起提供 compute 预览明细，见关键交互） |
 | 时间 | `createdAt` / `updatedAt` |
 
@@ -90,10 +90,10 @@
 
 - **入口**：元信息行「变更记录 N 条」点击 → 行内展开「状态预览」区块（位于元信息行下方、表单上方）；再点收起；0 条时同样可展开（显示轻量空态，见下）。
 - **计算节点选择**：下拉列出全部大纲节点（树序遍历缩进，复用 `flattenTree`）；**默认取 project store 的 `currentPosition`**（须在大纲树中存在——软删后选择无意义，回退为空）；未设置当前位置 → 提示「未设置当前位置，请手动选择计算节点」。
-- **[计算]** → `POST /api/v1/delta/compute { target_type, target_id, at_node_id }`（决策 9：只沿大纲树父链累积）→ 结果区三段：
+- **[计算]** → `POST /api/v1/delta/compute { target_type, target_id, at_node_id }`（只沿大纲树父链累积）→ 结果区三段：
   - **状态差异**：`lib/delta.ts diffStateFields`（纯函数）比较计算 `state` 与当前 `data`——仅列值有变化的字段（`field：当前值 → 计算值`；计算态新增/缺失字段标注「（无）」「（已移除）」）；无差异显示「计算状态与当前数据一致」。标题带到达节点名「到达《X》」。
   - **应用的变更记录**：按路径顺序列出 `appliedDeltas`——description + 触发节点标题（大纲树映射，缺省 id）+ changes 紧凑 chips（`describeChange`：set=`field = to`、update=`field from → to`、add=`field +value`、remove=`field -value`）；含 `skipped` 的 delta 逐条内联标注（destructive 弱化样式「field：记录应为 expected，实际 actual（已跳过）」）。
-  - **conflicts**（如有）：结果区顶部警示块（`border-destructive/30 bg-destructive/10 text-destructive` + TriangleAlert）——「发现 N 处状态冲突：手动编辑的数据与变更记录不一致」，逐条 `field：记录应为 expected，实际为 actual`（决策 9 修订：update from 不匹配 → 跳过 + 标注，非 409；conflicts 仅含 deltaId 无法回溯 description，不展示来源）。
+  - **conflicts**（如有）：结果区顶部警示块（`border-destructive/30 bg-destructive/10 text-destructive` + TriangleAlert）——「发现 N 处状态冲突：手动编辑的数据与变更记录不一致」，逐条 `field：记录应为 expected，实际为 actual`（update from 不匹配 → 跳过 + 标注，非 409；conflicts 仅含 deltaId 无法回溯 description，不展示来源）。
 - **空态**：`deltaCount === 0` → 区块仅显示「暂无变更记录——实体当前状态即初始状态」，不展示计算控件。
 - **错误态**：计算失败 `OUTLINE_NODE_NOT_FOUND` → 行内「该节点已不存在，请重新选择计算节点」；网络失败 → 无法连接提示；大纲未加载（outline store 为 null）→ 行内 [加载大纲]。
 

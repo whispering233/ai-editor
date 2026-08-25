@@ -9,7 +9,7 @@ InkOS 按 sessionKind 切换工具集（chat/play/write 各有不同工具），
 | **自动** | 直接执行，结果返回 LLM | 无感 |
 | **提案确认** | 展示提案卡片，用户审阅后确认/拒绝修改后再执行 | 弹窗卡片 |
 
-（2026-08 修订：原「二次确认」级无任何工具挂靠，删除。删除操作由提案确认 + 回收站软删兜底覆盖——决策 12 软删可还原、决策 14 提案确认，用户始终是最终决策者。）
+（2026-08 修订：原「二次确认」级无任何工具挂靠，删除。删除操作由提案确认 + 回收站软删兜底覆盖——软删可还原、提案确认，用户始终是最终决策者。）
 
 ## 工具目录
 
@@ -17,7 +17,7 @@ InkOS 按 sessionKind 切换工具集（chat/play/write 各有不同工具），
 
 目标是让 AI 有能力探索整个创作数据库，不需要用户干预。
 
-> 所有查询类工具**默认过滤软删对象**（决策 12 修订）：`get_entity` / `search_entities` / `query_relationships` 等不会返回或遍历回收站中的对象；`query_relationships` 额外校验关系端点均未软删（任一端点软删即不可见，决策 12 修订）。
+> 所有查询类工具**默认过滤软删对象**：`get_entity` / `search_entities` / `query_relationships` 等不会返回或遍历回收站中的对象；`query_relationships` 额外校验关系端点均未软删（任一端点软删即不可见）。
 
 ```typescript
 // === 实体查询 ===
@@ -39,7 +39,7 @@ query_relationships(opts: {
 
 // === 大纲查询 ===
 get_outline()
-  → 完整大纲树（严格三层，无游离节点，决策 19）
+  → 完整大纲树（严格三层，无游离节点）
   注意：默认不含 metadata 统计（省 token）；需统计走 API `GET /outline?with_metadata=`
 
 get_outline_path(node_id)
@@ -50,7 +50,7 @@ get_outline_path(node_id)
 compute_state(target_type, target_id, at_node_id)
   → 实体到达指定节点时的累积状态
   用途：AI 说"张三在第30章时的战力是多少"
-  语义：只沿大纲树父链（根 → at_node_id）累积已确认 Delta（决策 9/19 修订）：
+  语义：只沿大纲树父链（根 → at_node_id）累积已确认 Delta：
         节点间按树路径顺序、同一节点内按 order 双层排序；plot_edge 连线不参与；
         op=update 校验当前值等于 from，不匹配**跳过该 change 并继续累积**，结果在
         conflicts 中标注 { field, expected, actual }（不再返回 409——手动编辑 data 是
@@ -63,12 +63,12 @@ get_delta_history(target_type, target_id)
 get_entity_summary(type)
   → 指定类型实体的统计数据（总数、角色分布、能力分布等）
 
-// === 参考资料查询（决策 36，批次九） ===
+// === 参考资料查询（批次九） ===
 search_references(query, type?, tags?)
   → 匹配的参考资料列表（标题 + 类型 + 标签 + 内容摘要截断 120 字）
   用途：AI 不知道书里有哪些参考资料时先搜索（标题+tags 关键词命中）再按需取全文
   （详情取全文走 get_entity('reference', id) 的 reference 分支——列表摘要/详情全文分离防长文撑爆响应）
-  type 参数（决策 44 修订）：**自由文本分类**（原预置枚举已取消），建议沿用项目内已有分类；
+  type 参数（2026-08 修订）：**自由文本分类**（原预置枚举已取消），建议沿用项目内已有分类；
     过滤为结果层原始值比对（summary.type === type）
 ```
 
@@ -99,7 +99,7 @@ find_orphan_elements()
   用途：发现"写到第30章，但角色C第10章后就没出现"
   inconsistent_soft_deletes：诊断跨存储软删不一致（outline.json 节点已标 deleted 但关联
       relation/delta 未软删——「可见记录指向已软删节点」的幽灵形态）。兜底修复已由**启动
-      一致性校验**承担（决策 16 修订：打开项目时自动比对，以大纲节点软删为准补标 DB 记录
+      一致性校验**承担（打开项目时自动比对，以大纲节点软删为准补标 DB 记录
       deleted_at，写日志），本工具保留诊断与引导修复用途
 
 // === 关系发现 ===
@@ -141,7 +141,7 @@ propose_delete_node(node_id)
   → 同上，展示在大纲树上的位置变化
 
 propose_reorder_timepoints(timepoint_ids)
-  → 按时间标签语义先后重排时间轴时间点（2026-08 G2，决策 26 修订注记；
+  → 按时间标签语义先后重排时间轴时间点（2026-08 G2 修订；
     取代 F9 的 propose_reorder_events——G2 后事件不再带 time_label，语义序的载体
     变为时间点实体）
   参数：{ timepoint_ids: string[] }——LLM 按时间点 name（时间标签文本）语义识别
@@ -155,12 +155,12 @@ propose_reorder_timepoints(timepoint_ids)
 
 propose_create_reference(name, type, content, source?, tags?)
   → { proposal_id, preview, conflicts_with? }
-  用途：AI 读到灵感/素材后建议保存为参考资料（决策 36：外部素材/灵感笔记，非本书正文）
-  参数说明：type 分类**自由文本**（决策 44 修订：原枚举已取消，建议沿用项目内已有分类，
-    缺省 material 写入侧兜底）；content 为全文长文本；tags 标签数组（决策 31 字段）
-  预览：标题 + 内容摘要 + 标签（决策 14 提案仅内存 + 快照重校验）
+  用途：AI 读到灵感/素材后建议保存为参考资料（外部素材/灵感笔记，非本书正文）
+  参数说明：type 分类**自由文本**（原枚举已取消，建议沿用项目内已有分类，
+    缺省 material 写入侧兜底）；content 为全文长文本；tags 标签数组
+  预览：标题 + 内容摘要 + 标签（提案仅内存 + 快照重校验）
   确认后：Executor 校验 references 存在性 + 快照 → create_entity(type='reference') 写入
-  **决策 43（批次十一）**：AI 创建的条目归 **link 类**（data.kind='link'，source → url；
+  AI 创建的条目归 **link 类**（批次十一：data.kind='link'，source → url；
     无 URL 时 url 留空、content 存摘录）——AI 不直接落盘文件（文件写入走用户编辑器保存）；
     search_references / get_entity 详情全文照常（file 类经 content 镜像纯 DB 读取）
 ```
@@ -223,11 +223,11 @@ AI 不可以：
 
 - **抛错即失败，不抛穿循环**：executor 对每个工具统一 try/catch——工具执行抛错 = 失败，错误统一转换为结构化 tool_result（`isError: true` + 工具名 + 参数 + 错误信息）喂回 LLM 自纠；工具自身**不得把失败编码进正常 content**（pi：execute 抛错即失败，不要编码进 content）。
 - **批量 tool_call 先校验后执行**：一条 assistant 消息含多个 tool_call 时，executor **先全部参数校验（fail fast）再逐个执行**，结果按 `tool_call_id` 一一回填（pi：preflight 全部通过才执行，结果按源顺序回填）。
-- **截断必须显式告知**：工具结果超 token 预算截断时，返回内容注明「已截断 + 提示缩小范围」——静默截断会让 LLM 基于残缺数据继续推理（如 get_outline 整树、query_relationships depth=3，决策 15）。
+- **截断必须显式告知**：工具结果超 token 预算截断时，返回内容注明「已截断 + 提示缩小范围」——静默截断会让 LLM 基于残缺数据继续推理（如 get_outline 整树、query_relationships depth=3）。
 
 ## agent 循环终止与失败处理
 
-对应 [`../design/decisions.md`](../design/decisions.md) 决策 15。主循环设三重保险，任一超限即终止：
+对应 [`../design/agent-loop.md`](../design/agent-loop.md) §1。主循环设三重保险，任一超限即终止：
 
 | 保险 | 上限 | 超限行为 |
 |------|------|---------|
@@ -239,5 +239,5 @@ AI 不可以：
 失败处理：
 - **工具执行失败**：以结构化文本（工具名 + 参数 + 错误信息）喂回 LLM 自纠，不直接终止。
 - **模型调用失败**（429/5xx/超时）：按 `llm/retry.ts` 的退避重试策略重试，最终失败以 `error` 事件呈现给用户。
-- **工具结果过大**：`get_outline` 整树或 `depth=3` 全图可能撑爆上下文窗口，工具结果序列化后先估算 token，超限即截断/拒绝（决策 15 补充）。
-- SSE 断开时全链路取消见 [`endpoints.md`](./endpoints.md) chat 端点（决策 16）。
+- **工具结果过大**：`get_outline` 整树或 `depth=3` 全图可能撑爆上下文窗口，工具结果序列化后先估算 token，超限即截断/拒绝。
+- SSE 断开时全链路取消见 [`endpoints.md`](./endpoints.md) chat 端点。
