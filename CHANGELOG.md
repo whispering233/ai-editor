@@ -5,6 +5,15 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [v0.0.23] - 2026-08-25
+
+### Changed
+
+- **文档体系重构（2026-08 批次）**：删除 `doc/design/decisions.md` / `decisions-history.md` / `release-review.md`——历史决策档案由 `git log`/CHANGELOG 回溯；仍生效的架构契约由**详细设计四篇**承接（`data-model.md` 数据模型与存储 / `context.md` 上下文与提示词 / `agent-loop.md` agent 循环与提案 / `security.md` 安全基线，只承载「为什么 + 不变式」，字段/端点清单仍以 schema.md/endpoints.md 为准）
+- **全仓「决策 N」编号体系清除**：代码注释与文档中 2344 处「决策 N」引用、79 处「契约来源：doc/...」头注释段、E1-E6 里程碑代号、release-review §引用全部移除——代码注释只保留实现意图（语义无损，括号内约束/理由描述保留），文档自包含；**注释与文档彻底解耦，文档增删不再牵连注释**
+- **AGENTS.md 重构**：去除「决策 N」编号体系，保留浓缩约束清单，导航指向详细设计四篇；状态段同步更新
+- **纯文档/注释变更**：无 API/数据/前端行为变更；全仓 1692 测试全绿 + typecheck/lint 通过
+
 ## [v0.0.22] - 2026-08-24
 
 ### Changed

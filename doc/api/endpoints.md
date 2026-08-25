@@ -60,7 +60,7 @@
   // ProjectConfig 含 schema_version: number（对应 project.json 的 schema_version）
   // 附加字段（shared projectOpenResSchema 未含，服务端附加构造）：
   //   rebuilt?: true    —— 删库重建发生（提示客户端「已重建」）
-  //   migrated?: true   —— 前向迁移发生（E5：旧版本经 runMigrations 自动升级；与 rebuilt 互斥）
+  //   migrated?: true   —— 前向迁移发生（旧版本经 runMigrations 自动升级；与 rebuilt 互斥）
   //   fromVersion?: number —— 重建/迁移前的旧版本号（备份/快照命名 v{n}）
 }
 ```
@@ -76,7 +76,7 @@
   - **旧版本**（`user_version` < 当前）：
     - **有迁移路径**（`MIGRATIONS` 存在从当前版本到目标版本的连续迁移链，见 `doc/database/schema.md` 迁移机制）→ **前向迁移**（`runMigrations`：整批迁移前自动快照 `data.db.v{n}.{时间戳}.bak` + 每迁移一个事务原子提交）；响应附加 `migrated: true` + `fromVersion`；数据保全完整。
     - **无迁移路径** → **删库重建兜底**（备份 `data.db.v{n}.bak` + `outline.json.v{n}.bak`、重置 outline 空树、清空回收站）；响应附加 `rebuilt: true` + `fromVersion`。
-  - **未来版本**（`user_version` > 当前，E4——堵「装新版后回退旧版 → 降级重建清零」的降级数据丢失路径）：**拒绝打开**，返回 409 `PROJECT_VERSION_NEWER`（message 提示「项目 data.db 版本高于当前程序版本，请升级程序后打开」）；**不触发任何重建/备份/写操作**，数据文件原封不动。
+  - **未来版本**（`user_version` > 当前——堵「装新版后回退旧版 → 降级重建清零」的降级数据丢失路径）：**拒绝打开**，返回 409 `PROJECT_VERSION_NEWER`（message 提示「项目 data.db 版本高于当前程序版本，请升级程序后打开」）；**不触发任何重建/备份/写操作**，数据文件原封不动。
 - `project.json` 的 `schema_version` 仅用于 JSON 结构判断。
 
 ### POST /api/v1/project/close
@@ -253,7 +253,7 @@
 **分流逻辑（在校验通过后）**：
 1. 解压校验完成后读取 zip 内 `project.json` 的 `id`；
 2. **id 与书架已有项目匹配**（遍历 `books/*/project.json` 比对）→ **覆盖恢复**：走 restore 同款管道（覆盖前自动快照当前状态 → 原子替换三文件 → 返回 `mode: "restored"`）；覆盖目标按 id 定位目录（不是按 name）；**覆盖时 project.json 内 `name` 归一为当前目录名**（id 是身份、name 是展示名——维持「目录名 = 书名」不变式，恢复的是数据不是身份；改名需求走 `/project/rename`）；覆盖目标是当前打开的书 → data.db 重连 + 定时器重启（同 restore 语义），未打开的书无连接无需重连；
-3. **id 不匹配** → 导入为新书（原 E2 语义）：目标 `books/<name>/` 冲突时**不再 409**——若前端已选择重命名（name 为新名）则无冲突；若保持原样（name 与书架冲突）则**目录自动去重为 `books/<书名> (N)/`**（N 为最小正整数，project.json 内部 name 同步为去重名，维持「目录名 = 书名」不变式）。
+3. **id 不匹配** → 导入为新书：目标 `books/<name>/` 冲突时**不再 409**——若前端已选择重命名（name 为新名）则无冲突；若保持原样（name 与书架冲突）则**目录自动去重为 `books/<书名> (N)/`**（N 为最小正整数，project.json 内部 name 同步为去重名，维持「目录名 = 书名」不变式）。
 
 **校验顺序**（任一步失败即拒绝，不触发删库重建逻辑）：
 1. `content-length` 预检（> 50MB 快速拒绝，防超大请求先缓冲）+ `file.size` 复核
@@ -262,11 +262,11 @@
 4. **条目白名单**：接受 `PROJECT_EXPORT_FILE_NAMES` 三文件名 + `references/` 前缀条目（`references/` 开头且不含 `..` 路径段才接受；未知条目严格拒绝——逐名比对天然防 zip 路径穿越）
 5. 三文件齐全（缺任一 → 400）
 6. `project.json`/`outline.json` 顶层契约（JSON 可解析 + id/name/schema_version；`{id:"root",type:"root",schema_version,children[]}`）
-7. `data.db`：**文件大小 > 0 → 打开成功（非 SQLite/空文件 → 400 坏包）→ `user_version` === 当前版本，或 < 当前版本且有迁移路径**（搬入后首次 open 由 E5 自动前向迁移）
+7. `data.db`：**文件大小 > 0 → 打开成功（非 SQLite/空文件 → 400 坏包）→ `user_version` === 当前版本，或 < 当前版本且有迁移路径**（搬入后首次 open 自动前向迁移）
 
 **错误码**：
 - 400 `VALIDATION_ERROR`：坏包/缺文件/未知条目/契约不符/书名非法/超大小上限
-- 409 `SCHEMA_VERSION_MISMATCH`：data.db `user_version` 与当前程序版本不匹配且**无迁移路径**（`v > 当前` → 「备份来自更高版本程序」（E4 语义，零触碰）；`v < 当前` 但有迁移路径 → 放行，搬入后 open 自动前向迁移（E5））；**一律不静默重建**
+- 409 `SCHEMA_VERSION_MISMATCH`：data.db `user_version` 与当前程序版本不匹配且**无迁移路径**（`v > 当前` → 「备份来自更高版本程序」，零触碰；`v < 当前` 但有迁移路径 → 放行，搬入后 open 自动前向迁移）；**一律不静默重建**
 
 **原子搬入/覆盖**：校验在 `mkdtemp` 临时目录完成（无论成败清理）；通过后 `mkdir` + 复制三文件到 `books/<name>/`（或覆盖目标目录，覆盖前先快照），任一失败清理半成品（不留下残缺书）。导入**不自动打开**（与 create 一致，前端刷新书架）。
 
@@ -380,7 +380,7 @@
 **恢复流程**：
 1. fileName 白名单校验（仅允许 `.backups/` 下时间戳格式——兼容 `<YYYYMMDD-HHmmssSSS>.zip` 毫秒级 / `<YYYYMMDD-HHmmssSSS>-<名称>.zip` 带自定义名称 / 旧秒级 `<YYYYMMDD-HHmmss>.zip`；时间戳部分 ^$ 锚定纯数字 + 名称部分拒绝路径分隔符，防 `..` 穿越）
 2. **覆盖前自动快照**：将当前三文件打包为快照存入 `.backups/`（复用备份管道）
-3. 备份包校验（同 import 校验顺序 3-7：zip 解析/白名单/三文件齐全/顶层契约/data.db user_version 三态分流——E4/E5 语义，绝不静默重建）
+3. 备份包校验（同 import 校验顺序 3-7：zip 解析/白名单/三文件齐全/顶层契约/data.db user_version 三态分流——绝不静默重建）
 4. **原子替换**：临时目录解压校验通过后，三文件覆盖写入项目目录（原子写）；**project.json 内 `name` 归一为当前目录名**（与 import 覆盖一致，维持「目录名 = 书名」不变式；`id` 保留当前项目 id）
 5. **data.db 会话归属迁移（B2.2 审核 P1-1）**：备份包内 `project_id` ≠ 当前项目 id 时（跨项目恢复），替换后执行 `UPDATE chat_messages SET project_id = ? WHERE project_id = ?`（旧 id → 当前 id）——「保留 id 保会话」的理由在跨项目场景同样成立，聊天历史不静默消失
 6. 服务端当前项目引用不变（id 保留）；前端刷新 config/outline/会话数据

@@ -30,11 +30,11 @@
 - **版本判定**：以 data.db 的 `PRAGMA user_version` 为准（`packages/db/src/schema.ts` 的 `SCHEMA_VERSION` 常量）；`project.json`/`outline.json` 顶层的 `schema_version` 仅用于 JSON 结构判断。
 - **三态分流（open 时，`ensureSchemaCompatible`）**：
   - `user_version === SCHEMA_VERSION` → 正常打开；
-  - `user_version > SCHEMA_VERSION`（未来版本，E4）→ **拒绝打开** 409 `PROJECT_VERSION_NEWER`（数据原封不动，提示升级程序）；
+  - `user_version > SCHEMA_VERSION`（未来版本）→ **拒绝打开** 409 `PROJECT_VERSION_NEWER`（数据原封不动，提示升级程序）；
   - `user_version < SCHEMA_VERSION`（旧版本）→ **有迁移路径**（`packages/db/src/migrations/` 存在从当前版本到目标版本的连续迁移链）→ `runMigrations` 前向迁移；**无迁移路径** → 删库重建兜底（备份 `data.db.v{n}.bak` + `outline.json.v{n}.bak`）。
-- **迁移机制（E5）**：`migrations/` 目录每个文件导出一个 `Migration = { version, up }`（`001_xxx.ts` → version 1），`index.ts` 按 version 升序聚合导出 `MIGRATIONS`（tsc 编译进 dist 随包分发，无运行时目录读取）。`runMigrations` 对缺失版本逐个执行：**每个迁移一个事务（`up(db)` + `setUserVersion(version)` 原子提交——成功 ⇒ 版本已写入；失败 ⇒ 版本未变）**；**整批迁移前自动快照** data.db → `data.db.v{n}.{YYYYMMDDHHmmssSSSZ}.bak`（checkpoint 后复制主文件，时间戳命名不覆盖旧备份，失败重试现场保留）。迁移失败 → 该迁移回滚 + 版本停在前一迁移后，下次 open 重试。
+- **迁移机制**：`migrations/` 目录每个文件导出一个 `Migration = { version, up }`（`001_xxx.ts` → version 1），`index.ts` 按 version 升序聚合导出 `MIGRATIONS`（tsc 编译进 dist 随包分发，无运行时目录读取）。`runMigrations` 对缺失版本逐个执行：**每个迁移一个事务（`up(db)` + `setUserVersion(version)` 原子提交——成功 ⇒ 版本已写入；失败 ⇒ 版本未变）**；**整批迁移前自动快照** data.db → `data.db.v{n}.{YYYYMMDDHHmmssSSSZ}.bak`（checkpoint 后复制主文件，时间戳命名不覆盖旧备份，失败重试现场保留）。迁移失败 → 该迁移回滚 + 版本停在前一迁移后，下次 open 重试。
 - 当前 `SCHEMA_VERSION = 5`；迁移链：`002_event_timeline.ts`（version 2：entities 表 CHECK 扩入 `'event'` + 新增 `sort_order` 列）、`003_timepoint.ts`（version 3，G2 修订：entities 表 CHECK 扩入 `'timepoint'` + `event.data.time_label` 迁移为 timepoint 实体 + occurs_at 关系，同名 time_label 合并为同一 timepoint）、`004_setting_tags.ts`（version 4，K2 修订：**无 DDL**——setting 旧 `data.rules` 分类值复制到 `data.tags` 并移除 rules，仅 data JSON 数据迁移）、`005_reference.ts`（version 5：entities 表 CHECK 扩入 `'reference'`，无数据搬移仅 DDL）。**SQLite 无法直接修改 CHECK 约束**，迁移走「建新表（新 CHECK）→ 拷贝数据 → drop 旧表 → rename」四步（`relation_records`/`delta_records` 无外键指向 entities，迁移只动 entities 表）；v1 → v5 迁移链存在 ⇒ 旧库 open 时自动前向迁移，不再走删库重建兜底。
-- **import 侧联动（E5 决议）**：导入备份时 `user_version < SCHEMA_VERSION` 且**有迁移路径** → 接受（搬入后 open 自动迁移，v1/v2/v3 备份经 E5 迁移升到 v4）；无路径 → 409 `SCHEMA_VERSION_MISMATCH`；`>` 当前 → 409（E4 语义）。
+- **import 侧联动**：导入备份时 `user_version < SCHEMA_VERSION` 且**有迁移路径** → 接受（搬入后 open 自动迁移，v1/v2/v3 备份经增量迁移升到 v4）；无路径 → 409 `SCHEMA_VERSION_MISMATCH`；`>` 当前 → 409（未来版本语义）。
 
 ## entities — 实体表
 
@@ -74,7 +74,7 @@ CREATE TABLE entities (
 - **挂载关系**：`occurs_at`（timepoint → event，**1:n**——一个事件至多挂一个时间点，服务端建关系校验；事件无挂载 = 未挂载，归入时间轴「未挂载」兜底区）。
 - **软删/回收站**：timepoint 软删 → 其下事件 occurs_at 级联软删 → 事件变未挂载（事件本身不删），restore 级联还原。
 - **迁移（003_timepoint.ts）**：旧 `event.data.time_label` 按值聚合——同名合并为同一 timepoint + 建 occurs_at + 从 event.data 移除 time_label；无 time_label 事件不建关系。
-- **导出/导入**：自动覆盖（data.db 整库 zip）；导入端 open 时经 E5 迁移升到 v3。
+- **导出/导入**：自动覆盖（data.db 整库 zip）；导入端 open 时经增量迁移升到 v3。
 
 ## relation_records — 通用关系表
 
@@ -256,7 +256,7 @@ CREATE INDEX idx_chat_session ON chat_messages(session_id, created_at);
 - 触发条件：project.json 存在 `prompt` 字段（非空）**且**项目目录无 AGENTS.md；
 - 动作：将 `prompt` 内容**原样**写入 AGENTS.md（原子写同款）；
 - **一次性**：迁移后 AGENTS.md 存在，条件不再满足，`prompt` 不再使用（字段可保留为遗留数据，宽松读取）；
-- 迁移在 open 流程内完成（与 E5 迁移同生命周期），失败不阻塞打开（记录日志，下次 open 重试）。
+- 迁移在 open 流程内完成（与增量迁移同生命周期），失败不阻塞打开（记录日志，下次 open 重试）。
 
 **schema_version 评估**：**不升 schema_version**——`prompt` 字段废弃是「读侧不再使用」的语义变更，字段本身仍可存在于旧文件（宽松读取，不参与 JSON 结构判定），与 `backup_frequency_minutes` 可选字段先例一致（可选字段宽松读取不升版本）。
 
