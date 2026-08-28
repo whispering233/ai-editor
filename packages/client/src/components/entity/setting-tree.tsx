@@ -98,7 +98,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
  /** 标签筛选候选（聚合既有设定 tags；失败静默——仅无下拉候选，不影响树） */
   const [tagOptions, setTagOptions] = useState<string[]>([]);
  /** 排序方式（2026-08 批次十三）：name 默认（原行为）；created 创建时间；manual 手动（重排入口） */
-  const [sortMode, setSortMode] = useState<SettingSortMode>("name");
+  const [sortMode, setSortMode] = useState<SettingSortMode>("manual");
 
  /** 操作成功后刷新（tick +1 触发加载 effect；保留旧数据渲染，避免骨架闪烁） */
   function reload() {
