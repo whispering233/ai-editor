@@ -1,13 +1,13 @@
-// 设置路由测试（S1.3）：GET/PUT /api/v1/settings/llm
-// 隔离策略：临时 HOME（os.tmpdir + mkdtemp）——用户级配置写入/读取不出测试沙箱；
-// 环境变量 DEEPSEEK_API_KEY 在每个用例前后设置/恢复
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+// 设置路由测试（S1.3 + 批次十六多 provider）：GET/PUT /api/v1/settings/llm
+// 隔离策略：临时 HOME（os.tmpdir + mkdtemp）——用户级配置 + pi-agent auth 读写不出测试沙箱；
+// 各 provider 环境变量在每个用例前后设置/恢复
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { errorHandler } from "../middleware/error.js";
-import { DEEPSEEK_API_KEY_ENV, settingsRoutes, userConfigPath } from "./settings.js";
+import { DEEPSEEK_API_KEY_ENV, OPENCODE_API_KEY_ENV, piAgentAuthPath, settingsRoutes, userConfigPath } from "./settings.js";
 
 const HOST_HEADERS = { host: "127.0.0.1:3456" }; // 来源校验 host 白名单
 
@@ -21,19 +21,24 @@ function buildApp(): Hono {
 
 let homeDir: string;
 let originalHome: string | undefined;
-let originalKey: string | undefined;
+const ORIGINAL_ENVS: Record<string, string | undefined> = {};
+
+const ENVS = [DEEPSEEK_API_KEY_ENV, OPENCODE_API_KEY_ENV] as const;
 
 beforeEach(() => {
   originalHome = process.env.HOME;
-  originalKey = process.env.DEEPSEEK_API_KEY;
+  for (const e of ENVS) ORIGINAL_ENVS[e] = process.env[e];
   homeDir = mkdtempSync(join(tmpdir(), "ai-editor-home-"));
-  process.env.HOME = homeDir; // HOME 可覆盖（用户级配置隔离）
-  delete process.env[DEEPSEEK_API_KEY_ENV];
+  process.env.HOME = homeDir; // HOME 可覆盖（用户级配置/pi-agent auth 隔离）
+  for (const e of ENVS) delete process.env[e];
 });
 
 afterEach(() => {
-  delete process.env[DEEPSEEK_API_KEY_ENV];
-  if (originalKey !== undefined) process.env.DEEPSEEK_API_KEY = originalKey;
+  for (const e of ENVS) {
+    const v = ORIGINAL_ENVS[e];
+    if (v !== undefined) process.env[e] = v;
+    else delete process.env[e];
+  }
   if (originalHome !== undefined) process.env.HOME = originalHome;
   else delete process.env.HOME;
   rmSync(homeDir, { recursive: true, force: true });
@@ -46,171 +51,250 @@ function seedConfig(config: Record<string, unknown>): void {
   writeFileSync(file, JSON.stringify(config), "utf8");
 }
 
-describe("GET /api/v1/settings/llm", () => {
-  it("无任何配置 → 默认模型 + thinkingLevel=high + apiKeySet=false + 模型目录（）", async () => {
-    const res = await buildApp().request("/api/v1/settings/llm", { headers: HOST_HEADERS });
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.data.model).toBe("deepseek-v4-flash");
-    expect(body.data.thinkingLevel).toBe("high");
-    expect(body.data.apiKeySet).toBe(false);
-    expect(body.data.apiKeyMasked).toBeUndefined();
-    expect(Array.isArray(body.data.models)).toBe(true);
-    expect(body.data.models.length).toBeGreaterThan(0);
-    expect(body.data.models[0]).toMatchObject({ id: expect.any(String), contextWindow: expect.any(Number) });
+/** 预写 pi-agent auth.json（只读兜底来源） */
+function seedPiAuth(auth: unknown): void {
+  const file = piAgentAuthPath();
+  mkdirSync(join(file, ".."), { recursive: true });
+  writeFileSync(file, JSON.stringify(auth), "utf8");
+}
+
+async function getData(): Promise<{ data: Record<string, unknown> }> {
+  const res = await buildApp().request("/api/v1/settings/llm", { headers: HOST_HEADERS });
+  expect(res.status).toBe(200);
+  return (await res.json()) as { data: Record<string, unknown> };
+}
+
+interface ProviderEntry {
+  id: string;
+  displayName: string;
+  apiKeySet: boolean;
+  apiKeyMasked?: string;
+  models: Array<{ id: string; provider: string; contextWindow: number }>;
+}
+
+describe("GET /api/v1/settings/llm（批次十六多 provider）", () => {
+  it("无任何配置 → 激活 deepseek + 默认模型；providers 两卡（deepseek 2 模型 / opencode-go 17 模型）均 apiKeySet=false", async () => {
+    const { data } = await getData();
+    expect(data.provider).toBe("deepseek");
+    expect(data.model).toBe("deepseek-v4-flash");
+    expect(data.thinkingLevel).toBe("high");
+    const providers = data.providers as ProviderEntry[];
+    expect(providers.map((p) => p.id)).toEqual(["deepseek", "opencode-go"]);
+    const deep = providers[0];
+    expect(deep.displayName).toBe("DeepSeek");
+    expect(deep.apiKeySet).toBe(false);
+    expect(deep.apiKeyMasked).toBeUndefined();
+    expect(deep.models.map((m) => m.id)).toEqual(["deepseek-v4-flash", "deepseek-v4-pro"]);
+    const og = providers[1];
+    expect(og.apiKeySet).toBe(false);
+    // opencode-go 目录含撞名模型（provider 消歧基础）与订阅专属模型
+    const ogIds = og.models.map((m) => m.id);
+    expect(ogIds).toContain("deepseek-v4-flash");
+    expect(ogIds).toContain("qwen3.7-max");
+    expect(og.models.find((m) => m.id === "qwen3.7-max")).toMatchObject({ provider: "opencode-go" });
   });
 
-  it("环境变量 DEEPSEEK_API_KEY → apiKeySet=true + 掩码 sk-****1234 形状", async () => {
+  it("DEEPSEEK_API_KEY env → deepseek 卡 set + 掩码；opencode-go 卡仍 false", async () => {
     process.env[DEEPSEEK_API_KEY_ENV] = "sk-abcdefghijkl1234";
-    const res = await buildApp().request("/api/v1/settings/llm", { headers: HOST_HEADERS });
-    const body = await res.json();
-    expect(body.data.model).toBe("deepseek-v4-flash");
-    expect(body.data.apiKeySet).toBe(true);
-    expect(body.data.apiKeyMasked).toBe("sk-****1234");
-    expect(Array.isArray(body.data.models)).toBe(true);
+    const { data } = await getData();
+    const providers = data.providers as ProviderEntry[];
+    expect(providers[0].apiKeySet).toBe(true);
+    expect(providers[0].apiKeyMasked).toBe("sk-****1234");
+    expect(providers[1].apiKeySet).toBe(false);
   });
 
-  it("config.json 有 key（无环境变量）→ apiKeySet=true", async () => {
-    seedConfig({ api_key: "sk-secretkey123456" });
-    const res = await buildApp().request("/api/v1/settings/llm", { headers: HOST_HEADERS });
-    const body = (await res.json()) as { data: { apiKeySet: boolean; apiKeyMasked: string } };
-    expect(body.data.apiKeySet).toBe(true);
-    expect(body.data.apiKeyMasked).toBe("sk-****3456"); // 前 3 后 4
+  it("OPENCODE_API_KEY env → opencode-go 卡 set + 掩码", async () => {
+    process.env[OPENCODE_API_KEY_ENV] = "oc-abcdefghijkl1234";
+    const { data } = await getData();
+    const providers = data.providers as ProviderEntry[];
+    expect(providers[0].apiKeySet).toBe(false);
+    expect(providers[1].apiKeySet).toBe(true);
+    expect(providers[1].apiKeyMasked).toBe("oc-****1234");
   });
 
-  it("环境变量优先于 config.json（两者都有 → 掩码来自环境变量，）", async () => {
-    process.env[DEEPSEEK_API_KEY_ENV] = "sk-envkeyabcdefgh"; // 17 字符：前3 sk- + **** + 后4 efgh
-    seedConfig({ api_key: "sk-filekey12345678" });
-    const res = await buildApp().request("/api/v1/settings/llm", { headers: HOST_HEADERS });
-    const body = (await res.json()) as { data: { apiKeyMasked: string } };
-    expect(body.data.apiKeyMasked).toBe("sk-****efgh"); // 来自 env 的 sk-envkeyabcdefgh
+  it("config v2 api_keys → 各家卡状态；v1 旧 api_key 字段视为 deepseek 卡", async () => {
+    seedConfig({ schema_version: 2, api_keys: { "opencode-go": "oc-filekey12345678" } });
+    let providers = ((await getData()).data.providers as ProviderEntry[]);
+    expect(providers[1].apiKeySet).toBe(true);
+    expect(providers[1].apiKeyMasked).toBe("oc-****5678");
+
+    seedConfig({ schema_version: 1, api_key: "sk-legacykey123456" });
+    providers = ((await getData()).data.providers as ProviderEntry[]);
+    expect(providers[0].apiKeySet).toBe(true);
+    expect(providers[0].apiKeyMasked).toBe("sk-****3456");
+    expect(providers[1].apiKeySet).toBe(false);
   });
 
-  it("config.json 的 model 被读取（默认值覆盖）", async () => {
-    seedConfig({ model: "deepseek-r1" });
-    const res = await buildApp().request("/api/v1/settings/llm", { headers: HOST_HEADERS });
-    const body = (await res.json()) as { data: { model: string } };
-    expect(body.data.model).toBe("deepseek-r1");
+  it("config api_keys 显式空串 = 清除该家（不回落到 v1 旧 api_key）", async () => {
+    seedConfig({ api_key: "sk-legacykey123456", api_keys: { deepseek: "" } });
+    const providers = ((await getData()).data.providers as ProviderEntry[]);
+    expect(providers[0].apiKeySet).toBe(false);
   });
 
-  it("config.json 损坏（非法 JSON）→ 降级为默认值（不抛错）", async () => {
+  it("pi-agent auth.json 只读兜底：opencode-go 条目 api_key 生效；非法/缺项跳过", async () => {
+    seedPiAuth({ "opencode-go": { type: "api_key", key: "oc-piagentkey123456" } });
+    const providers = ((await getData()).data.providers as ProviderEntry[]);
+    expect(providers[1].apiKeySet).toBe(true);
+    expect(providers[1].apiKeyMasked).toBe("oc-****3456");
+
+    // 非法形态：type 非 api_key / key 非字符串 / 文件损坏 / 无该项 → 跳过
+    seedPiAuth({ "opencode-go": { type: "oauth", key: "oc-x" } });
+    expect((((await getData()).data.providers as ProviderEntry[])[1]).apiKeySet).toBe(false);
+    seedPiAuth({ "opencode-go": { type: "api_key", key: 42 } });
+    expect((((await getData()).data.providers as ProviderEntry[])[1]).apiKeySet).toBe(false);
+    seedPiAuth("{not-json");
+    expect((((await getData()).data.providers as ProviderEntry[])[1]).apiKeySet).toBe(false);
+    seedPiAuth({});
+    expect((((await getData()).data.providers as ProviderEntry[])[1]).apiKeySet).toBe(false);
+  });
+
+  it("config.json 的 provider/model/thinking_level 被读取", async () => {
+    seedConfig({ schema_version: 2, provider: "opencode-go", model: "qwen3.7-max", thinking_level: "low" });
+    const { data } = await getData();
+    expect(data.provider).toBe("opencode-go");
+    expect(data.model).toBe("qwen3.7-max");
+    expect(data.thinkingLevel).toBe("low");
+  });
+
+  it("config.provider 未知（漂移）→ 兜底 deepseek；model 不在激活目录仍显示（前端按 id 匹配）", async () => {
+    seedConfig({ schema_version: 2, provider: "not-a-provider", model: "qwen3.7-max" });
+    const { data } = await getData();
+    expect(data.provider).toBe("deepseek");
+    expect(data.model).toBe("qwen3.7-max"); // 漂移模型原样显示，llm 层兜底防御
+  });
+
+  it("损坏文件 / 非法 schema → 全默认（不抛错）", async () => {
     seedConfig({ broken: true });
     const file = userConfigPath();
     writeFileSync(file, "{not-json", "utf8");
-    const res = await buildApp().request("/api/v1/settings/llm", { headers: HOST_HEADERS });
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { data: { apiKeySet: boolean } };
-    expect(body.data.apiKeySet).toBe(false);
-  });
-
-  it("config.json schema v1（）：带 schema_version=1 的配置正常读取；非法 thinking_level 降级默认值", async () => {
-    seedConfig({ schema_version: 1, model: "deepseek-v4-flash", thinking_level: "low", api_key: "sk-schema1key123456" });
-    const res = await buildApp().request("/api/v1/settings/llm", { headers: HOST_HEADERS });
-    const body = (await res.json()) as { data: { model: string; thinkingLevel: string; apiKeySet: boolean } };
-    expect(body.data.model).toBe("deepseek-v4-flash");
-    expect(body.data.thinkingLevel).toBe("low");
-    expect(body.data.apiKeySet).toBe(true);
-
- // 非法字段值 → 整份配置按空读取（降级默认值，不抛错）
-    seedConfig({ schema_version: 1, thinking_level: "bogus", api_key: "sk-x" });
-    const bad = await buildApp().request("/api/v1/settings/llm", { headers: HOST_HEADERS });
-    const badBody = (await bad.json()) as { data: { thinkingLevel: string; apiKeySet: boolean } };
-    expect(badBody.data.thinkingLevel).toBe("high");
-    expect(badBody.data.apiKeySet).toBe(false);
+    const { data } = await getData();
+    expect(data.provider).toBe("deepseek");
+    expect(data.model).toBe("deepseek-v4-flash");
+    expect(((data.providers as ProviderEntry[])[0]).apiKeySet).toBe(false);
   });
 });
 
-describe("PUT /api/v1/settings/llm", () => {
-  it("写入 model → GET 读回；config.json 落在临时 HOME 下", async () => {
+describe("PUT /api/v1/settings/llm（批次十六）", () => {
+  it("跨 provider 激活：provider+model 成对写入 → GET 读回；落盘 schema_version=2", async () => {
     const put = await buildApp().request(
+      "/api/v1/settings/llm",
+      { method: "PUT", headers: { ...HOST_HEADERS, "content-type": "application/json" }, body: JSON.stringify({ provider: "opencode-go", model: "qwen3.7-max" }) },
+    );
+    expect(put.status).toBe(200);
+    const { data } = await getData();
+    expect(data.provider).toBe("opencode-go");
+    expect(data.model).toBe("qwen3.7-max");
+    const onDisk = JSON.parse(readFileSync(userConfigPath(), "utf8")) as { schema_version: number; provider: string; model: string };
+    expect(onDisk.schema_version).toBe(2);
+    expect(onDisk.provider).toBe("opencode-go");
+  });
+
+  it("model 只给不撞名的 → 归属唯一 provider 自动采用；撞名（deepseek-v4-flash）无 provider → 400 歧义", async () => {
+    let put = await buildApp().request(
+      "/api/v1/settings/llm",
+      { method: "PUT", headers: { ...HOST_HEADERS, "content-type": "application/json" }, body: JSON.stringify({ model: "qwen3.7-max" }) },
+    );
+    expect(put.status).toBe(200);
+    expect(((await getData()).data as { provider: string }).provider).toBe("opencode-go");
+
+    put = await buildApp().request(
       "/api/v1/settings/llm",
       { method: "PUT", headers: { ...HOST_HEADERS, "content-type": "application/json" }, body: JSON.stringify({ model: "deepseek-v4-flash" }) },
     );
-    expect(put.status).toBe(200);
-    expect(await put.json()).toEqual({ success: true, data: { saved: true } });
-
-    const get = await buildApp().request("/api/v1/settings/llm", { headers: HOST_HEADERS });
-    const body = (await get.json()) as { data: { model: string } };
-    expect(body.data.model).toBe("deepseek-v4-flash");
- // 写入位置：临时 HOME 下（真实用户 HOME 不受污染）
-    const onDisk = JSON.parse(readFileSync(userConfigPath(), "utf8")) as { model: string };
-    expect(onDisk.model).toBe("deepseek-v4-flash");
+    expect(put.status).toBe(400);
+    const body = (await put.json()) as { error: { code: string; message: string } };
+    expect(body.error.code).toBe("VALIDATION_ERROR");
+    expect(body.error.message).toContain("撞名");
   });
 
-  it("保存后落盘新格式（）：schema_version 写入 1；旧格式文件保存后升级为 v1", async () => {
- // 旧格式（无 schema_version）→ PUT 保存 → 落盘带 schema_version: 1
-    seedConfig({ model: "deepseek-r1", api_key: "sk-oldkey12345678" });
-    const put = await buildApp().request(
-      "/api/v1/settings/llm",
-      { method: "PUT", headers: { ...HOST_HEADERS, "content-type": "application/json" }, body: JSON.stringify({ model: "deepseek-v4-flash" }) },
-    );
-    expect(put.status).toBe(200);
-    const onDisk = JSON.parse(readFileSync(userConfigPath(), "utf8")) as { schema_version?: number; model?: string; api_key?: string };
-    expect(onDisk.schema_version).toBe(1);
-    expect(onDisk.model).toBe("deepseek-v4-flash");
-    expect(onDisk.api_key).toBe("sk-oldkey12345678"); // 未传字段保留（合并语义不变）
-  });
-
-  it("写入 api_key → GET apiKeySet=true + 掩码正确", async () => {
-    const put = await buildApp().request(
-      "/api/v1/settings/llm",
-      { method: "PUT", headers: { ...HOST_HEADERS, "content-type": "application/json" }, body: JSON.stringify({ api_key: "sk-abcdefgh1234" }) },
-    );
-    expect(put.status).toBe(200);
-
-    const get = await buildApp().request("/api/v1/settings/llm", { headers: HOST_HEADERS });
-    const body = (await get.json()) as { data: { apiKeySet: boolean; apiKeyMasked: string } };
-    expect(body.data.apiKeySet).toBe(true);
-    expect(body.data.apiKeyMasked).toBe("sk-****1234");
-  });
-
-  it("api_key 空字符串 = 清除已保存 key（config.json 中键被删除）", async () => {
-    seedConfig({ api_key: "sk-abcdefgh1234", model: "deepseek-v4-flash" });
-    const put = await buildApp().request(
-      "/api/v1/settings/llm",
-      { method: "PUT", headers: { ...HOST_HEADERS, "content-type": "application/json" }, body: JSON.stringify({ api_key: "" }) },
-    );
-    expect(put.status).toBe(200);
-
-    const get = await buildApp().request("/api/v1/settings/llm", { headers: HOST_HEADERS });
-    const body = (await get.json()) as { data: { apiKeySet: boolean; apiKeyMasked?: string } };
-    expect(body.data.apiKeySet).toBe(false);
-    expect(body.data.apiKeyMasked).toBeUndefined();
-    const onDisk = JSON.parse(readFileSync(userConfigPath(), "utf8")) as Record<string, unknown>;
-    expect("api_key" in onDisk).toBe(false);
-    expect(onDisk.model).toBe("deepseek-v4-flash"); // 其他字段保留
-  });
-
-  it("非法入参 → 400 VALIDATION_ERROR（strict：未知顶层键拒绝）", async () => {
+  it("model 不在目标 provider 目录 → 400；model 无任何归属 → 400", async () => {
     const res = await buildApp().request(
       "/api/v1/settings/llm",
-      { method: "PUT", headers: { ...HOST_HEADERS, "content-type": "application/json" }, body: JSON.stringify({ model: 42 }) },
+      { method: "PUT", headers: { ...HOST_HEADERS, "content-type": "application/json" }, body: JSON.stringify({ provider: "opencode-go", model: "gpt-9" }) },
     );
     expect(res.status).toBe(400);
-    const body = (await res.json()) as { success: boolean; error: { code: string } };
-    expect(body.success).toBe(false);
-    expect(body.error.code).toBe("VALIDATION_ERROR");
-
     const res2 = await buildApp().request(
       "/api/v1/settings/llm",
-      { method: "PUT", headers: { ...HOST_HEADERS, "content-type": "application/json" }, body: JSON.stringify({ apiKey: "sk-xxx" }) },
+      { method: "PUT", headers: { ...HOST_HEADERS, "content-type": "application/json" }, body: JSON.stringify({ model: "gpt-9" }) },
     );
     expect(res2.status).toBe(400);
   });
 
-  it("空 body（非法 JSON）→ 400 VALIDATION_ERROR", async () => {
+  it("只给 provider：当前 model 不在新目录 → 400（须显式 model）", async () => {
+    seedConfig({ schema_version: 2, provider: "deepseek", model: "qwen3.7-max" });
+    const res = await buildApp().request(
+      "/api/v1/settings/llm",
+      { method: "PUT", headers: { ...HOST_HEADERS, "content-type": "application/json" }, body: JSON.stringify({ provider: "deepseek" }) },
+    );
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: { message: string } };
+    expect(body.error.message).toContain("qwen3.7-max");
+  });
+
+  it("api_keys 写入/合并/清除（空串）；不影响其他字段", async () => {
+    seedConfig({ schema_version: 2, provider: "deepseek", model: "deepseek-v4-flash", api_keys: { deepseek: "sk-old12345678" } });
+    let put = await buildApp().request(
+      "/api/v1/settings/llm",
+      { method: "PUT", headers: { ...HOST_HEADERS, "content-type": "application/json" }, body: JSON.stringify({ api_keys: { "opencode-go": "oc-newkey12345678" } }) },
+    );
+    expect(put.status).toBe(200);
+    let onDisk = JSON.parse(readFileSync(userConfigPath(), "utf8")) as { api_keys: Record<string, string>; model?: string };
+    expect(onDisk.api_keys).toEqual({ deepseek: "sk-old12345678", "opencode-go": "oc-newkey12345678" }); // 合并不覆盖
+    expect(onDisk.model).toBe("deepseek-v4-flash");
+
+    put = await buildApp().request(
+      "/api/v1/settings/llm",
+      { method: "PUT", headers: { ...HOST_HEADERS, "content-type": "application/json" }, body: JSON.stringify({ api_keys: { "opencode-go": "" } }) },
+    );
+    expect(put.status).toBe(200);
+    onDisk = JSON.parse(readFileSync(userConfigPath(), "utf8")) as { api_keys: Record<string, string> };
+    expect(onDisk.api_keys).toEqual({ deepseek: "sk-old12345678" });
+  });
+
+  it("api_keys 清空后字段删除（不再残留空 map）", async () => {
+    seedConfig({ schema_version: 2, api_keys: { deepseek: "sk-x12345678" } });
+    const put = await buildApp().request(
+      "/api/v1/settings/llm",
+      { method: "PUT", headers: { ...HOST_HEADERS, "content-type": "application/json" }, body: JSON.stringify({ api_keys: { deepseek: "" } }) },
+    );
+    expect(put.status).toBe(200);
+    const onDisk = JSON.parse(readFileSync(userConfigPath(), "utf8")) as Record<string, unknown>;
+    expect("api_keys" in onDisk).toBe(false);
+  });
+
+  it("旧 v1 文件保存后升级 v2：api_key 字段保留不迁移，schema_version 变 2", async () => {
+    seedConfig({ api_key: "sk-oldkey12345678", model: "deepseek-r1" });
+    const put = await buildApp().request(
+      "/api/v1/settings/llm",
+      { method: "PUT", headers: { ...HOST_HEADERS, "content-type": "application/json" }, body: JSON.stringify({ provider: "deepseek", model: "deepseek-v4-flash" }) },
+    );
+    expect(put.status).toBe(200);
+    const onDisk = JSON.parse(readFileSync(userConfigPath(), "utf8")) as { schema_version: number; model: string; api_key: string };
+    expect(onDisk.schema_version).toBe(2);
+    expect(onDisk.model).toBe("deepseek-v4-flash");
+    expect(onDisk.api_key).toBe("sk-oldkey12345678"); // 未传字段保留（合并语义不变；读侧兼容覆盖 deepseek）
+  });
+
+  it("非法入参 → 400 VALIDATION_ERROR（strict：旧 api_key 顶层键拒绝；model 非字符串拒绝）", async () => {
+    const res = await buildApp().request(
+      "/api/v1/settings/llm",
+      { method: "PUT", headers: { ...HOST_HEADERS, "content-type": "application/json" }, body: JSON.stringify({ api_key: "sk-xxx" }) },
+    );
+    expect(res.status).toBe(400);
+    const res2 = await buildApp().request(
+      "/api/v1/settings/llm",
+      { method: "PUT", headers: { ...HOST_HEADERS, "content-type": "application/json" }, body: JSON.stringify({ model: 42 }) },
+    );
+    expect(res2.status).toBe(400);
+    const body = (await res2.json()) as { success: boolean; error: { code: string } };
+    expect(body.success).toBe(false);
+    expect(body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("空 body / 非法 JSON → 400 VALIDATION_ERROR", async () => {
     const res = await buildApp().request("/api/v1/settings/llm", { method: "PUT", headers: HOST_HEADERS });
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: { code: string } };
     expect(body.error.code).toBe("VALIDATION_ERROR");
-  });
-});
-
-describe("掩码格式（shared utils maskApiKey 集成）", () => {
-  it("sk-****1234 形状（前 3 后 4）", async () => {
-    process.env[DEEPSEEK_API_KEY_ENV] = "sk-abcdefgh1234";
-    const res = await buildApp().request("/api/v1/settings/llm", { headers: HOST_HEADERS });
-    const body = (await res.json()) as { data: { apiKeyMasked: string } };
-    expect(body.data.apiKeyMasked).toMatch(/^sk-\*\*\*\*1234$/);
   });
 });

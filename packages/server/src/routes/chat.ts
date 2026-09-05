@@ -48,7 +48,7 @@ import { chatMessagesResSchema, chatSendReqSchema, chatSessionsResSchema } from 
 import { HttpError, ok } from "../middleware/error.js";
 import { requireCurrentProject, type ProjectContext } from "../middleware/project.js";
 import { debugLog, isCategoryEnabled } from "../debug.js";
-import { DEFAULT_MODEL, DEFAULT_THINKING_LEVEL, effectiveApiKey, getUserConfig } from "./settings.js";
+import { DEFAULT_MODEL, DEFAULT_THINKING_LEVEL, effectiveApiKey, effectiveProvider, getUserConfig, providerDisplayName, providerEnvVar } from "./settings.js";
 
 // ============ 常量 ============
 
@@ -100,6 +100,7 @@ export function toLLMToolDefinitions(defs: readonly ToolDefinition[]): LLMToolDe
  */
 function createRealProduce(
   apiKey: string,
+  provider: string,
   model: string,
   tools: LLMToolDefinition[],
   debugStream: boolean,
@@ -108,7 +109,8 @@ function createRealProduce(
   return (messages: LLMMessage[], signal?: AbortSignalLike, onEvent?: Parameters<RunAgentDeps["produce"]>[2]) =>
  // debugStream 显式传布尔（含 false）——stream 类别关时压过 env，保证配置文件类别隔离语义
  // reasoning（思考强度）：off 不传（模型默认推理），low/medium/high 传 pi-ai 统一接口
-    chatStream({ apiKey, model, messages, tools, signal, onEvent, debugStream, reasoning: thinking });
+ // provider（批次十六）：模型只在 provider 目录内解析（llm 层兜底）
+    chatStream({ apiKey, provider, model, messages, tools, signal, onEvent, debugStream, reasoning: thinking });
 }
 
 // ============ [llm] 请求 / usage 调试日志装饰器（细粒度类别 request / usage） ============
@@ -316,13 +318,16 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
     }
     const { message, session_id, context } = parsed.data;
 
- // ---- key/模型/工具解析（环境变量 > 用户级配置；测试注入 deps 时无需真实 key） ----
-    const envKey = deps.apiKey ?? effectiveApiKey().key;
+ // ---- key/模型/工具解析（批次十六：按激活 provider 独立解析；测试注入 deps 时无需真实 key） ----
+ // provider：config.provider 未注册时缺省 deepseek（effectiveProvider 兜底）
+    const provider = effectiveProvider();
+    const envKey = deps.apiKey ?? effectiveApiKey(provider).key;
     if (envKey === null && deps.produce === undefined) {
+      const envVar = providerEnvVar(provider);
       throw new HttpError(
         400,
         "LLM_API_KEY_MISSING",
-        "未配置 DeepSeek API key：请设置环境变量 DEEPSEEK_API_KEY 或在设置页配置（）",
+        `未配置 ${providerDisplayName(provider)} API key：请设置环境变量 ${envVar ?? provider} 或在设置页配置（）`,
       );
     }
  // 守卫收窄：deps.produce 注入（测试）时不使用 apiKey；否则 envKey 已保证非 null
@@ -466,7 +471,7 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
  // debugStream 按 stream 类别显式传入（false 也传——压过 env，保证类别隔离语义）
         const produce =
           deps.produce ??
-          createLLMRequestLogger(createRealProduce(apiKey, model, tools, isCategoryEnabled("stream"), thinking), {
+          createLLMRequestLogger(createRealProduce(apiKey, provider, model, tools, isCategoryEnabled("stream"), thinking), {
             model,
             tools,
           });
