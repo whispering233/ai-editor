@@ -13,7 +13,7 @@
 | **前端构建** | Vite 7 | 快速 HMR，Tree-shaking（Vite 6 已停止常规维护） |
 | **状态管理** | Zustand 5 | 轻量、TypeScript 优秀、selector 自动优化 |
 | **样式** | Tailwind CSS 4 + shadcn/ui + Prettier（prettier-plugin-tailwindcss） | 原子化 CSS 灵活度 + 组件开箱即用（v4 CSS-first 配置，无 tailwind.config.js）；L 批次起长 className 自动折行 + 类排序，共享常量见 `client/src/lib/styles.ts`（layout.md §4.4） |
-| **AI 调用** | `@earendil-works/pi-ai`（统一多提供商 LLM 接口，默认 DeepSeek；模型名/思考强度可配置） | 传输/SSE/usage 解析由 pi-ai 接管，llm 包单向 adapter 保留对外契约 |
+| **AI 调用** | `@earendil-works/pi-ai`（统一多提供商 LLM 接口；批次十六起注册 deepseek + opencode-go 两 provider，模型名/思考强度可配置，key 按 provider 独立解析） | 传输/SSE/usage 解析由 pi-ai 接管，llm 包单向 adapter 保留对外契约；注册/解析细节见 llm 包与 security.md |
 | **Schema 验证** | Zod 4 | 运行时类型安全，API 入参校验（v4 API，注意迁移破坏项） |
 | **路由** | 轻量 hash-based（自制 `useHashRoute`） | 单页桌面应用不需要 React Router |
 
@@ -51,7 +51,7 @@ ai-editor/
 │   ├── llm/                       # @whispering233/ai-editor-llm（模型接入层）
 │   │   ├── src/
 │   │   │   ├── client.ts          # chatStream 薄封装（内部委托 pi-ai models.stream，对外契约不变）
-│   │   │   ├── adapter.ts          # pi-ai 适配层（LLMMessage→Context / 事件转发 / usage / 错误归一化 / 模型目录）
+│   │   │   ├── adapter.ts          # pi-ai 适配层（LLMMessage→Context / 事件转发 / usage / 错误归一化 / 模型目录；批次十六：多 provider 注册 + 按 provider 查模型）
 │   │   │   ├── retry.ts           # 重试/退避逻辑
 │   │   │   ├── token.ts           # Token 估算
 │   │   │   └── types.ts           # LLM 请求/响应类型

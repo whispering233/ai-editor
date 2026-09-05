@@ -11,6 +11,7 @@
 ```
 ┌──────────────────────────────────────────────┐
 │ ▸ 会话标题（下拉切换同项目会话）      [+ 新会话]   │
+│ [模型▼][思考强度▼]        ▁▁▁ 12%   （工具条）   │
 ├──────────────────────────────────────────────┤
 │ [⚠ 上次会话已取消]（断连横幅，可关闭）            │
 │ ┌──────────────────────────────────────────┐ │
@@ -32,9 +33,20 @@
 └──────────────────────────────────────────────┘
 ```
 
+## 模型/思考强度工具条（ChatModelBar）
+
+会话标题行下方的工具条（`ChatPanelBody` 第二行），改造于批次十六（多 provider 接入）：
+
+- **模型下拉**：列出**全部已注册 provider 的模型**（deepseek 2 + opencode-go 15），按 provider 分组（`optgroup`）；**未配置有效 key 的 provider 整组禁用**（置灰不可选——防请求报 LLM_API_KEY_MISSING）。
+- **跨 provider 选择语义**：选中任意模型 = 激活 `provider + model` 一对（PUT `/settings/llm` `{ provider, model }`，乐观更新、失败静默回滚）；撞名模型（deepseek-v4-flash/pro 两家都有）在分组内可区分，选中即切换 key 来源。
+- **思考强度下拉**：全局 `thinking_level`（不分 provider）；模型不支持推理（`reasoning=false`）时禁用。
+- **上下文占用条**：最近一轮 usage.total / 当前模型 contextWindow（右侧）。
+- 配置变更仅影响新请求；**进行中 SSE 不打断**，本轮仍用旧模型。
+
 ## 数据
 
 - 发送：`POST /api/v1/chat`（**fetch + ReadableStream 自写 SSE 解析**，`client/src/hooks/use-sse.ts`；EventSource 不支持 POST）
+- 模型/思考强度/各家 key 状态：`GET /api/v1/settings/llm`；切换：`PUT /api/v1/settings/llm`（见本页「模型/思考强度工具条」节 + pages/settings.md）
 - 会话列表：`GET /api/v1/chat/sessions`（按项目归属过滤）；历史：`GET /api/v1/chat/sessions/:id/messages`
 - 提案：`POST /api/v1/proposal/:proposalId/confirm` | `/reject`
 
