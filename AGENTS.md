@@ -2,7 +2,8 @@
 
 ## 项目状态
 
-- **状态（2026-09-05）：全部计划批次完成并发布，最新版 v0.0.24**——阶段 A 地基 + 切片 1-13、阶段 U 三栏工作台重构（U1-U8）、画布 S10.x + 发布 S11、阻断项（导出/导入、未来版本拒绝重建、增量迁移、OIDC 发布链路 **v0.0.1-v0.0.24 全绿**）、阶段 B 项目提示词编辑、阶段 B2 自动备份与恢复、阶段 C 时间轴、交互优化 UX1-UX4、样式工程化 L 批次、db 查询层 drizzle 化（v0.0.22）、文档体系重构（v0.0.23：详细设计四篇 + 全仓「决策 N」编号清除）、F/G/H/I/J/K/L/M/N/O 系列用户反馈与体验迭代批次（至批次十五），以及批次十六多 provider（v0.0.24：OpenCode Go 订阅接入——config v2 + 双卡 + 分组下拉）全部完成。**无待做项**；可选收尾：npm 坏版本 v0.0.1/v0.0.2 deprecate（需 2FA 凭据）。
+- **状态（2026-09-05）：全部计划批次完成并发布，最新版 v0.0.25**——阶段 A 地基 + 切片 1-13、阶段 U 三栏工作台重构（U1-U8）、画布 S10.x + 发布 S11、阻断项（导出/导入、未来版本拒绝重建、增量迁移、OIDC 发布链路 **v0.0.1-v0.0.25 全绿**）、阶段 B 项目提示词编辑、阶段 B2 自动备份与恢复、阶段 C 时间轴、交互优化 UX1-UX4、样式工程化 L 批次、db 查询层 drizzle 化（v0.0.22）、文档体系重构（v0.0.23：详细设计四篇 + 全仓「决策 N」编号清除）、F/G/H/I/J/K/L/M/N/O 系列用户反馈与体验迭代批次（至批次十五）、批次十六多 provider（v0.0.24：OpenCode Go 订阅接入——config v2 + 双卡 + 分组下拉），以及 v0.0.25 文档体系重组全部完成。**无待做项**；可选收尾：npm 坏版本 v0.0.1/v0.0.2 deprecate（需 2FA 凭据）。
+- **v0.0.25（2026-09-05）为文档/工程维护版**：`doc/` → `docs/` 按全局规则组织（详见下方「文档重组」条目），无 API/数据/前端代码变更。
 - **文档重组（2026-09）**：`doc/` → `docs/` 按全局规则组织——api 按模块拆分为 `00-api-index`/`api-public`/`error-code` + `10-api-project.md`~`90-api-settings.md` + `tool-calling.md`，design 拆出 `milestone`/`config`/`build` 并编号详细设计，删除 `doc/README`/`data-flow`/`backlog`/`hooks`/`ui/pages`/`security`；`architecture.md` 分包方案去代码文件级（包内结构归代码）、`ui/layout.md` 去 CSS 样式细节（只留总体布局与交互）。代码注释不引用文档路径的纪律不变。
 - **v0.0.21（2026-08-23）为纯工程维护版**：pnpm 11.8.0 → 11.22.0（`packageManager` 与 CI `pnpm/action-setup` 同步升级），无 API/数据/前端变更。
 - 各批次详情与演进路线见 `docs/design/milestone.md` 与 `CHANGELOG.md`；运行/构建/发布手册见 `docs/design/build.md`；**backlog 类顺手事项一律不做**（原 backlog.md 已删，清单可从 git 历史回溯）。

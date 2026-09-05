@@ -5,6 +5,16 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [v0.0.25] - 2026-09-05
+
+### Changed
+
+- **文档体系重组（按全局规则组织）**：`doc/` → `docs/`——api 拆分为 `api-public.md`/`error-code.md`/`00-api-index.md` + `10-api-project.md`~`90-api-settings.md`（原 endpoints.md 按模块拆分）+ `tool-calling.md`（原 tools.md）；design 拆出 `milestone.md`/`config.md`/`build.md`（分别承接 tasks.md 演进路线与 architecture.md 构建部署段）并编号详细设计（`00-master-design`/`10-data-model`/`20-context`/`30-agent-loop`）；删除冗余文档（doc/README、data-flow、backlog、hooks、security、ui/pages/* 各页面细案）；db 目录更名 `db/`
+- **architecture.md 分包方案去代码文件级**：删除 160 行包内文件树，只保留包级职责/依赖方向/依赖声明——包内文件结构以代码为事实源，文档不再制造耦合点；构建与部署整节移入 build.md
+- **ui/layout.md 去 CSS 样式细节**：只保留三栏总体布局、路由、各栏结构、交互红线（操作按钮不收入更多菜单/文字按钮与文本视觉区分/Base UI 菜单契约/右键菜单/行级交互模式）——样式实现归 client 代码，杜绝文档样式漂移
+- AGENTS.md / README.md / 各设计文档引用路径与阅读顺序同步；schema.md 承接 hooks.md 仍生效契约（hook data 字段指 shared schema、伏笔关系类型表已在 relation_records 节）
+- 纯文档/工程维护版：无 API/数据/前端代码变更
+
 ## [v0.0.24] - 2026-09-05
 
 ### Added
