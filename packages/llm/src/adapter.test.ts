@@ -13,6 +13,8 @@ import {
   streamChat,
   _setModels,
   _setModelLookup,
+  REGISTERED_PROVIDERS,
+  PROVIDER_FALLBACK_MODEL,
 } from "./adapter.js";
 import type { LLMMessage, LLMToolDefinition } from "./types.js";
 
@@ -134,6 +136,18 @@ describe("adapter.模型目录查询", () => {
     expect(flash).toBeDefined();
     expect(flash).toMatchObject({ provider: "deepseek" });
   });
+
+  it("批次十六：opencode-go provider 已注册（真实目录含 qwen3.7-max 与撞名 deepseek-v4-flash）", () => {
+    const models = getAvailableModels("opencode-go");
+    const qwen = models.find((m) => m.id === "qwen3.7-max");
+    expect(qwen).toBeDefined();
+    expect(qwen).toMatchObject({ provider: "opencode-go", reasoning: true });
+    // 撞名模型两目录都有——provider 维度消歧的基础
+    const flash = models.find((m) => m.id === "deepseek-v4-flash");
+    expect(flash).toMatchObject({ provider: "opencode-go" });
+    expect(REGISTERED_PROVIDERS.map((p) => p.id)).toEqual(["deepseek", "opencode-go"]);
+    expect(PROVIDER_FALLBACK_MODEL["opencode-go"]).toBe("deepseek-v4-flash");
+  });
 });
 
 describe("adapter.streamChat 事件转发（注入 fake models 模拟流事件）", () => {
@@ -203,6 +217,86 @@ describe("adapter.streamChat 事件转发（注入 fake models 模拟流事件�
     const result = await streamChat({ apiKey: "k", model: "not-exist", messages: [], tools: [] });
     expect(result.ok).toBe(false);
     expect((result.error as { code?: string }).code).toBe("ENV_UNSUPPORTED");
+  });
+
+  it("批次十六：provider 参数决定模型解析（opencode-go 模型走 opencode-go 目录）", async () => {
+    const events: unknown[] = [];
+    const calls: Array<[string, string]> = [];
+    const fakeModels = {
+      getModel: (p: string, m: string) => ({ id: m, name: m, provider: p, contextWindow: 64000, maxTokens: 8192, reasoning: false }),
+      stream: (model: { id: string; provider: string }) => {
+        events.push({ type: "stream_resolved", id: model.id, provider: model.provider });
+        return fakeStream([{ type: "done", reason: "stop", message: { usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } } }]);
+      },
+    } as never;
+    _setModels(() => fakeModels as never);
+    _setModelLookup((p: string, m: string) => {
+      calls.push([p, m]);
+      if (p === "opencode-go" && m === "qwen3.7-max") return { id: "qwen3.7-max", name: "qwen", provider: "opencode-go", api: "anthropic-messages", contextWindow: 64000, maxTokens: 8192, reasoning: true } as never;
+      return undefined;
+    });
+
+    const result = await streamChat({ apiKey: "k", provider: "opencode-go", model: "qwen3.7-max", messages: [], tools: [] });
+
+    expect(result.ok).toBe(true);
+    expect(calls.every(([p]) => p === "opencode-go")).toBe(true); // 只在目标 provider 内查
+    expect(events).toContainEqual({ type: "stream_resolved", id: "qwen3.7-max", provider: "opencode-go" });
+  });
+
+  it("批次十六：撞名模型不跨 provider 兜底（deepseek 目录没有 qwen3.7-max → 报错而非拿 opencode-go 的）", async () => {
+    const calls: Array<[string, string]> = [];
+    const fakeModels = { getModel: () => undefined, stream: () => fakeStream([]) } as never;
+    _setModels(() => fakeModels as never);
+    _setModelLookup((p: string, m: string) => {
+      calls.push([p, m]);
+      if (p === "opencode-go" && m === "qwen3.7-max") return { id: "qwen3.7-max", provider: "opencode-go", api: "anthropic-messages" } as never;
+      return undefined;
+    });
+
+    const result = await streamChat({ apiKey: "k", provider: "deepseek", model: "qwen3.7-max", messages: [], tools: [] });
+
+    expect(result.ok).toBe(false);
+    expect((result.error as { code?: string }).code).toBe("ENV_UNSUPPORTED");
+    expect((result.error as { message?: string }).message).toContain("deepseek");
+    expect(calls).toEqual([
+      ["deepseek", "qwen3.7-max"],
+      ["deepseek", "deepseek-v4-flash"], // 同 provider 兜底也试过仍无——但绝不问另一家
+    ]);
+  });
+
+  it("批次十六：配置漂移在同 provider 内兜底默认模型（不跨 provider）", async () => {
+    const calls: Array<[string, string]> = [];
+    const fakeModels = {
+      getModel: () => undefined,
+      stream: (model: { id: string; provider: string }) => fakeStream([{ type: "done", reason: "stop", message: { usage: undefined } }]),
+    } as never;
+    _setModels(() => fakeModels as never);
+    _setModelLookup((p: string, m: string) => {
+      calls.push([p, m]);
+      if (p === "opencode-go" && m === "deepseek-v4-flash") return { id: "deepseek-v4-flash", provider: "opencode-go", api: "openai-completions" } as never;
+      return undefined;
+    });
+
+    const result = await streamChat({ apiKey: "k", provider: "opencode-go", model: "已下架模型", messages: [], tools: [] });
+
+    expect(result.ok).toBe(true);
+    expect(calls).toEqual([
+      ["opencode-go", "已下架模型"],
+      ["opencode-go", "deepseek-v4-flash"],
+    ]);
+  });
+
+  it("缺省 provider = deepseek（旧调用方不带 provider 行为不变）", async () => {
+    const calls: Array<[string, string]> = [];
+    const fakeModels = { getModel: () => undefined, stream: () => fakeStream([]) } as never;
+    _setModels(() => fakeModels as never);
+    _setModelLookup((p: string, m: string) => {
+      calls.push([p, m]);
+      return { id: m, provider: p, api: "openai-completions" } as never;
+    });
+    const result = await streamChat({ apiKey: "k", model: "deepseek-v4-flash", messages: [], tools: [] });
+    expect(result.ok).toBe(true);
+    expect(calls[0][0]).toBe("deepseek");
   });
 });
 

@@ -20,6 +20,7 @@
 import { createModels, type Model, type Context, type Tool, type Usage as PiUsage, type Message } from "@earendil-works/pi-ai";
 import type { TSchema } from "@earendil-works/pi-ai"; // pi-ai 从 typebox 转发导出
 import { deepseekProvider } from "@earendil-works/pi-ai/providers/deepseek";
+import { opencodeGoProvider } from "@earendil-works/pi-ai/providers/opencode-go";
 import type {
   LLMMessage,
   LLMToolDefinition,
@@ -32,18 +33,36 @@ import type {
 } from "./types.js";
 import { LLM_TRANSPORT_ERROR_CODES } from "./client.js";
 
-// ============ models 集合（单例：只注册 deepseek provider，tree-shaking 友好） ============
+// ============ provider 注册表（单例：deepseek + opencode-go，tree-shaking 友好） ============
+
+/** 默认 provider（config 缺省值；与旧版单 provider 行为对齐） */
+export const DEFAULT_PROVIDER = "deepseek";
+
+/** 已注册 provider 目录（设置页/GET /settings/llm 遍历依据；displayName 供分组标题） */
+export const REGISTERED_PROVIDERS: ReadonlyArray<{ id: string; displayName: string }> = [
+  { id: "deepseek", displayName: "DeepSeek" },
+  { id: "opencode-go", displayName: "OpenCode Zen Go" },
+];
+
+/** 每 provider 兜底默认模型（配置漂移兜底；只在同 provider 目录内查找，绝不跨 provider） */
+export const PROVIDER_FALLBACK_MODEL: Readonly<Record<string, string>> = {
+  deepseek: "deepseek-v4-flash",
+  "opencode-go": "deepseek-v4-flash", // opencode-go 目录含该模型（订阅覆盖）
+};
 
 let modelsCache: ReturnType<typeof createModels> | null = null;
 let modelsGetter: () => ReturnType<typeof createModels> = () => {
   if (modelsCache === null) {
     modelsCache = createModels();
-    modelsCache.setProvider(deepseekProvider());
+    for (const { id } of REGISTERED_PROVIDERS) {
+      if (id === "deepseek") modelsCache.setProvider(deepseekProvider());
+      else if (id === "opencode-go") modelsCache.setProvider(opencodeGoProvider());
+    }
   }
   return modelsCache;
 };
 
-/** 获取 models 集合（懒初始化注册 deepseek provider 内置模型目录） */
+/** 获取 models 集合（懒初始化注册全部 provider 内置模型目录） */
 export function getModels(): ReturnType<typeof createModels> {
   return modelsGetter();
 }
@@ -78,7 +97,9 @@ export function toPiTools(defs: readonly LLMToolDefinition[] = []): Tool[] {
 
 // ============ 消息转换（LLMMessage[] → pi-ai Context，单向有界） ============
 
-/** 默认模型元数据（assistant 消息回填用；DeepSeek 兼容 OpenAI 格式） */
+/** 回填元数据兜底（assistant/toolResult 消息必需字段；DeepSeek 兼容 OpenAI 格式）
+ * 批次十六：多 provider 后回填跟随目标模型（resolved api/provider/id）——wire 协议族（如
+ * opencode-go 的 anthropic-messages 模型）重放历史消息时按目标模型元数据组装 */
 const FALLBACK_MODEL = "deepseek-v4-flash";
 const FALLBACK_PROVIDER = "deepseek";
 
@@ -87,10 +108,23 @@ function emptyPiUsage(): PiUsage {
   return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
 }
 
+/** 历史重放回填元数据（wire 族随目标模型） */
+export interface ReplayMeta {
+  api: string;
+  provider: string;
+  model: string;
+}
+
 /** 将 LLMMessage[] 组装为 pi-ai Context（system 提取为 systemPrompt，其余映射为 messages）
+ * replay：历史 assistant/toolResult 消息回填元数据——缺省 deepseek/OpenAI 格式（旧行为）；
+ * streamChat 按解析后的目标模型传入，保证重放消息元数据与目标 wire 协议族一致
  * 注：LLM 工具调用成对性由上层（agent/session.ts）保证——本层不做配对校验（防御性
  * 由 run.ts 前置条件约束） */
-export function buildPiContext(messages: readonly LLMMessage[], tools: readonly LLMToolDefinition[]): Context {
+export function buildPiContext(
+  messages: readonly LLMMessage[],
+  tools: readonly LLMToolDefinition[],
+  replay: ReplayMeta = { api: "openai-completions", provider: FALLBACK_PROVIDER, model: FALLBACK_MODEL },
+): Context {
   const systemPrompt = messages.find((m) => m.role === "system")?.content;
   const nonSystem = messages.filter((m) => m.role !== "system");
  // 维护 tool_call_id → toolName 映射（assistant 的 tool_calls 在 tool 消息之前到达）
@@ -120,9 +154,9 @@ export function buildPiContext(messages: readonly LLMMessage[], tools: readonly 
         return {
           role: "assistant" as const,
           content: blocks,
-          api: "openai-completions" as const,
-          provider: FALLBACK_PROVIDER,
-          model: FALLBACK_MODEL,
+          api: replay.api, // wire 协议族标记（随目标模型）
+          provider: replay.provider,
+          model: replay.model,
           usage: emptyPiUsage(),
           stopReason: "toolUse" as const, // 历史消息重放时的不精确占位（协议需要 stopReason 字段）
           timestamp: Date.now(),
@@ -239,6 +273,8 @@ export function resolveModelInfo(modelId: string, providerId = "deepseek"): Mode
 
 export interface AdapterStreamParams {
   apiKey: string;
+  /** provider 目录 id（缺省 deepseek——旧调用方不带即单 provider 行为）；模型只在 provider 目录内解析 */
+  provider?: string;
   model: string;
   messages: LLMMessage[];
   tools: LLMToolDefinition[];
@@ -253,18 +289,26 @@ export interface AdapterStreamParams {
 
 /** 核心流式调用：调 pi-ai models.stream 并转发事件；返回 ChatStreamResult */
 export async function streamChat(params: AdapterStreamParams): Promise<ChatStreamResult> {
-  const { apiKey, model, messages, tools, signal, maxTokens, temperature, reasoning, onEvent, debugStream } = params;
+  const { apiKey, model, messages, tools, signal, maxTokens, temperature, reasoning, onEvent, debugStream, provider } = params;
   const models = getModels();
 
- // 模型解析：找不到指定模型时回退默认（配置漂移防御）
-  const resolved = modelLookup("deepseek", model) ?? modelLookup("deepseek", FALLBACK_MODEL);
+ // 模型解析（批次十六多 provider）：只在目标 provider 目录内查——缺省/兜底模型同 provider 内找，
+ // 绝不跨 provider 搜索（撞名模型 deepseek-v4-flash/pro 两家都有，跨查会用错 key/baseUrl）
+  const target = provider ?? DEFAULT_PROVIDER;
+  const fallback = PROVIDER_FALLBACK_MODEL[target];
+  const resolved = modelLookup(target, model) ?? (fallback !== undefined ? modelLookup(target, fallback) : undefined);
   if (resolved === undefined) {
-    const error: LLMError = { status: 0, code: LLM_TRANSPORT_ERROR_CODES.ENV_UNSUPPORTED, message: `Model not available: ${model}` };
+    const error: LLMError = {
+      status: 0,
+      code: LLM_TRANSPORT_ERROR_CODES.ENV_UNSUPPORTED,
+      message: `Model not available: ${model} (provider: ${target})`,
+    };
     onEvent?.({ type: "error", error, aborted: false });
     return { ok: false, aborted: false, error };
   }
 
-  const context = buildPiContext(messages, tools);
+ // 历史重放回填元数据跟随目标模型（wire 协议族一致；缺省 deepseek/OpenAI 格式）
+  const context = buildPiContext(messages, tools, { api: resolved.api, provider: resolved.provider, model: resolved.id });
   let statusHint: number | undefined;
   let finalUsage: LLMUsage | null = null;
   let stopReason: string | null = null;
