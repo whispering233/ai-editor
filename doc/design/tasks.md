@@ -13,23 +13,23 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 
 ## 项目状态（2026-08-25，v0.0.23 已发布）
 
-全量交付完成并发布 **v0.0.1-v0.0.23 全链路全绿**：阶段 A 地基 + 切片 1-13 + 阶段 U 三栏工作台 + 画布 S10（批次八 O6 移除）+ 发布 S11 + 导出/导入 + schema 演进安全（未来版本拒绝 / 增量迁移）+ 阶段 B 提示词编辑 + 阶段 C 时间轴 + 阶段 B2 自动备份 + 用户反馈批次一至十五 + 样式工程化 L + db 查询层 drizzle 化 + 文档体系重构（详细设计四篇，v0.0.23）。**待做：批次十六（多 provider：opencode-go 接入，进行中，见下节）**；backlog.md 事项一律不做。
+全量交付完成并发布 **v0.0.1-v0.0.23 全链路全绿**：阶段 A 地基 + 切片 1-13 + 阶段 U 三栏工作台 + 画布 S10（批次八 O6 移除）+ 发布 S11 + 导出/导入 + schema 演进安全（未来版本拒绝 / 增量迁移）+ 阶段 B 提示词编辑 + 阶段 C 时间轴 + 阶段 B2 自动备份 + 用户反馈批次一至十五 + 样式工程化 L + db 查询层 drizzle 化 + 文档体系重构（详细设计四篇，v0.0.23）。**无待做项**（批次十六多 provider opencode-go 已完成，见下节）；backlog.md 事项一律不做。
 
-## 进行中：批次十六（2026-08-25，多 provider 接入——opencode-go 订阅）
+## 批次十六（2026-08-25 完成，多 provider 接入——opencode-go 订阅）
 
-目标：接入 OpenCode Zen Go 订阅（`OPENCODE_API_KEY` env 或 `~/.pi/agent/auth.json` 只读兜底），llm/契约/server/client 全链路多 provider 化。设计已确认（决策记录见对话）：config v2（provider + api_keys）、设置页双卡、聊天下拉 17 模型按 provider 分组 + key 缺失组禁用、跨 provider 选模型同传 provider、模型解析**绝不跨 provider**兜底。契约以 endpoints.md §系统设置 / settings.md / chat.md 为准。
+目标：接入 OpenCode Zen Go 订阅（`OPENCODE_API_KEY` env 或 `~/.pi/agent/auth.json` 只读兜底），llm/契约/server/client 全链路多 provider 化。设计已确认（决策记录见对话）：config v2（provider + api_keys）、设置页双卡、聊天下拉 17 模型按 provider 分组 + key 缺失组禁用、跨 provider 选模型同传 provider、模型解析**绝不跨 provider**兜底。契约以 endpoints.md §系统设置 / settings.md / chat.md 为准。真机联调：三级 key 链生效（本机 pi-agent auth.json 兜底命中）；opencode-go 调用报 401 欠费（账户侧问题，链路全通）；deepseek 回归正常。
 
-- [ ] 卡 1：llm 包——注册 opencode-go provider + `ChatStreamParams.provider`（缺省 deepseek）+ provider-aware lookup（同 provider 内兜底，不跨 provider）——单测注入断言
-- [ ] 卡 2：shared 契约——`userConfigFileSchema` v2（provider/api_keys，v1 api_key 读侧兼容）+ settings GET/PUT schema v2（providers[] 目录+key 状态；PUT provider/model/api_keys）——schema 测试
-- [ ] 卡 3：server——settings 路由 v2（三级 key 解析链 env > config > pi-agent auth.json 只读；model∈provider 目录校验）+ chat.ts 按 config.provider 解析——路由测试
-- [ ] 卡 4：client 设置页 AI 模型双卡（平铺、激活标记、卡内 key 保存/清除/掩码）
-- [ ] 卡 5：client ChatModelBar——optgroup 分组、key 缺失整组禁用、跨 provider 选择带 provider 提交
-- [ ] 卡 6：全仓回归（typecheck/lint/test）+ 真机联调（opencode-go key）→ 汇报 → 发布 v0.0.24
+- [x] 卡 1：llm 包——注册 opencode-go provider + `ChatStreamParams.provider`（缺省 deepseek）+ provider-aware lookup（同 provider 内兜底，不跨 provider）——单测注入断言
+- [x] 卡 2：shared 契约——`userConfigFileSchema` v2（provider/api_keys，v1 api_key 读侧兼容）+ settings GET/PUT schema v2（providers[] 目录+key 状态；PUT provider/model/api_keys）——schema 测试
+- [x] 卡 3：server——settings 路由 v2（三级 key 解析链 env > config > pi-agent auth.json 只读；model∈provider 目录校验）+ chat.ts 按 config.provider 解析——路由测试
+- [x] 卡 4：client 设置页 AI 模型双卡（平铺、激活标记、卡内 key 保存/清除/掩码）
+- [x] 卡 5：client ChatModelBar——optgroup 分组、key 缺失整组禁用、跨 provider 选择带 provider 提交
+- [x] 卡 6：全仓回归（typecheck/lint/test）+ 真机联调（opencode-go key）→ 汇报 → 发布 v0.0.24
 
 ---
 
 - **设计主轴**：详细设计见 `data-model.md`/`context.md`/`agent-loop.md`/`security.md`；架构分包见 `architecture.md`；文档即契约（`doc/api`、`doc/database`、`doc/ui`）。
-- **测试**：全仓 1692 个（shared 156 / llm 41 / db 260 / server 383 / client 516 / tools 242 / agent 94）。SCHEMA_VERSION = 5（JSON/列语义演进无 DDL 迁移）。
+- **测试**：全仓 1702 个（shared 157 / llm 46 / db 260 / server 387 / client 516 / tools 242 / agent 94）。SCHEMA_VERSION = 5（JSON/列语义演进无 DDL 迁移）。
 
 ## 执行进度（全部完成）
 
