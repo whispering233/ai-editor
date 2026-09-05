@@ -410,6 +410,3 @@ function normalizeStopReason(reason: string): string {
       return reason; // 透传（error/aborted 等异常路径已由 error 事件处理）
   }
 }
-
-/** 导出常量（与旧 client.ts 对齐入口；index.ts 应导出 adapter 全部） */
-export { FALLBACK_MODEL };
