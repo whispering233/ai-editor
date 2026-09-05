@@ -31,6 +31,7 @@ import {
   updateSettingsLlm,
   type ResolvedNames,
   type SettingsLlmConfig,
+  type ThinkingLevel,
 } from "../../lib/api";
 import {
   collectIdCandidates,
@@ -99,14 +100,13 @@ const asToolCall = (c: unknown): ToolCallShape =>
 // ============ AI 设置工具条（需求 3）：模型选择 + 思考强度 + 上下文占用 ============
 
 /** 思考强度档位（ 参考 pi ThinkingLevel：off/minimal/low/medium/high/xhigh/max；显示英文原文） */
-const THINKING_LEVEL_OPTIONS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
-type ThinkingOption = (typeof THINKING_LEVEL_OPTIONS)[number];
+const THINKING_LEVEL_OPTIONS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
 function ChatModelBar({ disabled }: { disabled: boolean }) {
   const [settings, setSettings] = useState<SettingsLlmConfig | null>(null);
   const lastUsage = useChatStore((s) => s.lastUsage);
 
- // 挂载/项目就绪后拉取 LLM 设置（模型目录 + 当前模型 + 思考强度；失败静默——工具条降级隐藏）
+ // 挂载/项目就绪后拉取 LLM 设置（激活 provider + 各家模型目录/key 状态 + 思考强度；失败静默——工具条降级隐藏）
   useEffect(() => {
     if (disabled) return;
     let cancelled = false;
@@ -120,20 +120,29 @@ function ChatModelBar({ disabled }: { disabled: boolean }) {
     };
   }, [disabled]);
 
-  const currentModel = settings?.models.find((m) => m.id === settings.model) ?? null;
+ // 当前激活 provider 及其模型（撞名模型靠 provider 消歧——value 用 `${provider}::${model}` 复合）
+  const activeProvider = settings?.providers.find((p) => p.id === settings.provider) ?? null;
+  const currentModel = activeProvider?.models.find((m) => m.id === settings?.model) ?? null;
   const contextWindow = currentModel?.contextWindow ?? 0;
+ /** 激活 provider 无有效 key → 整条工具条禁用（提示去设置页配 key） */
+  const activeKeyless = settings !== null && (activeProvider === null || !activeProvider.apiKeySet);
  // 上下文占用：最近一轮真实 usage.total / 当前模型 contextWindow（需求 3）
   const usagePct =
     lastUsage !== null && contextWindow > 0
       ? Math.min(100, Math.round((lastUsage.total_tokens / contextWindow) * 100))
       : null;
 
-  function changeModel(id: string): void {
-    setSettings((s) => (s ? { ...s, model: id } : s)); // 乐观更新（失败静默，下拉回后端实际值）
-    void updateSettingsLlm({ model: id }).catch(() => {});
+ /** 切换模型（选中即激活 provider+model 一对——跨 provider 选择时 key 来源同步切换） */
+  function changeModel(composite: string): void {
+    const sep = composite.indexOf("::");
+    if (sep <= 0) return;
+    const provider = composite.slice(0, sep);
+    const id = composite.slice(sep + 2);
+    setSettings((s) => (s ? { ...s, provider, model: id } : s)); // 乐观更新（失败静默，下拉回后端实际值）
+    void updateSettingsLlm({ provider, model: id }).catch(() => {});
   }
 
-  function changeThinking(level: ThinkingOption): void {
+  function changeThinking(level: ThinkingLevel): void {
     setSettings((s) => (s ? { ...s, thinkingLevel: level } : s));
     void updateSettingsLlm({ thinking_level: level }).catch(() => {});
   }
@@ -144,23 +153,34 @@ function ChatModelBar({ disabled }: { disabled: boolean }) {
     <div className="flex h-9 shrink-0 items-center gap-1.5 border-b border-border px-2.5">
       <select
         className="h-6 w-max max-w-28 shrink-0 rounded-md border border-input bg-transparent px-1.5 text-xs text-foreground outline-none focus-visible:border-ring"
-        value={settings.model}
+        value={settings === null ? "" : `${settings.provider}::${settings.model}`}
         disabled={disabled}
         onChange={(e) => changeModel(e.target.value)}
-        title="选择模型"
+        title={activeKeyless ? "当前 provider 未配置 API key：请切换到其他 provider 或在设置页配置" : "选择模型（按 provider 分组；未配 key 的组禁用）"}
         aria-label="选择模型"
       >
-        {settings.models.map((m) => (
-          <option key={m.id} value={m.id}>
-            {m.displayName ?? m.id}
-          </option>
-        ))}
+        {settings.providers.map((p) => {
+          // 激活 provider 的组恒可选（无 key 时也允许切走/停留——防困死）；其余无 key 组禁用
+          return (
+            <optgroup
+              key={p.id}
+              label={`${p.displayName}${p.apiKeySet ? "" : "（未配 key）"}`}
+              disabled={!p.apiKeySet && p.id !== settings.provider}
+            >
+              {p.models.map((m) => (
+                <option key={`${p.id}::${m.id}`} value={`${p.id}::${m.id}`}>
+                  {m.displayName ?? m.id}
+                </option>
+              ))}
+            </optgroup>
+          );
+        })}
       </select>
       <select
         className="h-6 w-max shrink-0 rounded-md border border-input bg-transparent px-1.5 text-xs text-foreground outline-none focus-visible:border-ring"
         value={settings.thinkingLevel}
-        disabled={disabled || !currentModel?.reasoning}
-        onChange={(e) => changeThinking(e.target.value as ThinkingOption)}
+        disabled={disabled || activeKeyless || !currentModel?.reasoning}
+        onChange={(e) => changeThinking(e.target.value as ThinkingLevel)}
         title="Thinking level"
         aria-label="思考强度"
       >
