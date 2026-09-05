@@ -923,7 +923,7 @@ export type LlmModelInfo = z.infer<typeof modelInfoSchema>;
 /** 单 provider 条目（批次十六：GET /settings/llm providers[]——目录 + 该家有效 key 状态） */
 export const settingsProviderSchema = z.object({
   id: z.string(), // provider 目录 id（deepseek / opencode-go）
-  displayName: z.string(), // 分组标题（如 "OpenCode Zen Go"）
+  displayName: z.string(), // 分组标题（如 "OpenCode Go"）
   apiKeySet: z.boolean(), // 该家解析链（env > config api_keys > pi-agent auth.json）是否有有效 key
   apiKeyMasked: z.string().optional(), // 掩码展示（utils/format.ts maskApiKey）
   models: z.array(modelInfoSchema), // 该家模型目录（ getAvailableModels(provider)）

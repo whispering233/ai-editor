@@ -38,10 +38,12 @@ import { LLM_TRANSPORT_ERROR_CODES } from "./client.js";
 /** 默认 provider（config 缺省值；与旧版单 provider 行为对齐） */
 export const DEFAULT_PROVIDER = "deepseek";
 
-/** 已注册 provider 目录（设置页/GET /settings/llm 遍历依据；displayName 供分组标题） */
+/** 已注册 provider 目录（设置页/GET /settings/llm 遍历依据；displayName 供分组标题）
+ * 注：仅接入用户订阅的 opencode-go（OpenCode Go）；OpenCode Zen（pi-ai `opencode` provider）
+ * 是另一订阅——不注册防混淆（两家在 pi-ai 共享 OPENCODE_API_KEY env，混接会串 key） */
 export const REGISTERED_PROVIDERS: ReadonlyArray<{ id: string; displayName: string }> = [
   { id: "deepseek", displayName: "DeepSeek" },
-  { id: "opencode-go", displayName: "OpenCode Zen Go" },
+  { id: "opencode-go", displayName: "OpenCode Go" },
 ];
 
 /** 每 provider 兜底默认模型（配置漂移兜底；只在同 provider 目录内查找，绝不跨 provider） */

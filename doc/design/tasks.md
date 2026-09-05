@@ -17,7 +17,7 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 
 ## 批次十六（2026-08-25 完成，多 provider 接入——opencode-go 订阅）
 
-目标：接入 OpenCode Zen Go 订阅（`OPENCODE_API_KEY` env 或 `~/.pi/agent/auth.json` 只读兜底），llm/契约/server/client 全链路多 provider 化。设计已确认（决策记录见对话）：config v2（provider + api_keys）、设置页双卡、聊天下拉 17 模型按 provider 分组 + key 缺失组禁用、跨 provider 选模型同传 provider、模型解析**绝不跨 provider**兜底。契约以 endpoints.md §系统设置 / settings.md / chat.md 为准。真机联调：三级 key 链生效（本机 pi-agent auth.json 兜底命中）；opencode-go 调用报 401 欠费（账户侧问题，链路全通）；deepseek 回归正常。
+目标：接入 **OpenCode Go 订阅**（pi-ai `opencode-go` provider；`OPENCODE_API_KEY` env 或 `~/.pi/agent/auth.json` 只读兜底）。**OpenCode Zen（`opencode` provider）是另一订阅，不接入**（两 provider 在 pi-ai 共享 env 名，混接串 key；仅用户订阅的 Go 进注册表）。llm/契约/server/client 全链路多 provider 化。设计已确认（决策记录见对话）：config v2（provider + api_keys）、设置页双卡、聊天下拉 17 模型按 provider 分组 + key 缺失组禁用、跨 provider 选模型同传 provider、模型解析**绝不跨 provider**兜底。契约以 endpoints.md §系统设置 / settings.md / chat.md 为准。真机联调：三级 key 链生效（本机 pi-agent auth.json 兜底命中）；opencode-go 调用报 401 欠费（账户侧问题，链路全通）；deepseek 回归正常。
 
 - [x] 卡 1：llm 包——注册 opencode-go provider + `ChatStreamParams.provider`（缺省 deepseek）+ provider-aware lookup（同 provider 内兜底，不跨 provider）——单测注入断言
 - [x] 卡 2：shared 契约——`userConfigFileSchema` v2（provider/api_keys，v1 api_key 读侧兼容）+ settings GET/PUT schema v2（providers[] 目录+key 状态；PUT provider/model/api_keys）——schema 测试
