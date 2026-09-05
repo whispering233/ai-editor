@@ -27,7 +27,7 @@
 - **中栏**：项目信息条 + 7 tab（概览 | 大纲 | 实体关系 | 伏笔 | 时间轴 | 参考资料 | 回收站）+ 页面内容（画布页已移除，批次八 O6；参考资料为批次九）
 - **右栏**：AI 聊天常驻（会话归属项目，`<1024px` 折叠为抽屉）
 
-样式规范见 `doc/ui/layout.md`（当前实现样式，文档即契约）。
+布局与交互约定见 `docs/ui/layout.md`（样式实现归代码，文档即契约）。
 
 ## 包结构
 
@@ -116,13 +116,13 @@ ai-editor <项目目录>   # 启动服务 + 自动打开浏览器 http://127.0.0
 
 | 目录 | 内容 |
 |------|------|
-| `doc/design/` | 产品定位、架构与分包、详细设计（数据模型/上下文/agent 循环/安全基线）、backlog、任务清单与进度 |
-| `doc/api/` | 端点契约、AI 工具目录、数据流 |
-| `doc/database/` | 表结构 / outline.json / project.json 契约、伏笔系统 |
-| `doc/ui/` | 当前 UI 布局样式设计（三栏工作台 `layout.md` + 各页面细案） |
+| `docs/design/` | 总体设计、架构与分包、详细设计（数据模型/上下文/agent 循环）、演进路线、任务清单、配置说明、构建发布 |
+| `docs/api/` | 公共约定、错误码、接口索引、各模块端点契约、AI 工具目录 |
+| `docs/db/` | 表结构 / outline.json / project.json 契约 |
+| `docs/ui/` | UI 总体布局与交互约定（三栏工作台 `layout.md`） |
 | `test-project/` | 测试项目目录（运行时数据不入库） |
 
-阅读顺序见 `doc/README.md`。实现任何功能前先读对应文档——AGENTS.md 是开发者的第一站。
+阅读顺序与文档索引见根 `AGENTS.md`（文档即契约；入口：`docs/design/00-master-design.md` → `architecture.md` → 详细设计 → `docs/api/00-api-index.md`）。实现任何功能前先读对应文档。
 
 ## 设计原则
 

@@ -1,7 +1,7 @@
 # 上下文与提示词详细设计
 
 > **本文档职责**：回答「AI 上下文怎么组织、提示词分几层、项目规则从哪来」——分层策略、三层注入、AGENTS.md 通道的约束与理由。
-> 实现契约（注入代码、端点）见 `doc/api/endpoints.md`、`doc/api/data-flow.md`；内核提示词实现见 `packages/agent/src/prompts.ts`。
+> 实现契约（注入代码、端点）见 `docs/api/10-api-project.md`（AGENTS.md 读写端点）与 `docs/api/80-api-chat.md`（chat 请求体 context 字段）；内核提示词实现见 `packages/agent/src/prompts.ts`。
 > 已过时/被修订决策的完整历史原文可由 `git log` 回溯，本文档只收录**仍生效**的契约。
 
 ## 1. 分层上下文策略

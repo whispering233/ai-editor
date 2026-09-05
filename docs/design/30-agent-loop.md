@@ -1,7 +1,7 @@
 # Agent 循环与提案详细设计
 
 > **本文档职责**：回答「AI 对话链路怎么保证安全终止、写操作怎么防脏写入、断连怎么全链路取消」——agent 循环、提案生命周期、SSE 取消/心跳、历史重建的约束与理由。
-> 端点/工具契约见 `doc/api/endpoints.md`、`doc/api/tools.md`；数据表语义见 `doc/database/schema.md`、`doc/design/data-model.md`。
+> 端点/工具契约见 `docs/api/` 各模块文档与 `docs/api/tool-calling.md`；数据表语义见 `docs/db/schema.md`、`docs/design/10-data-model.md`。
 > 已过时/被修订决策的完整历史原文可由 `git log` 回溯，本文档只收录**仍生效**的契约。
 
 ## 1. Agent 循环硬终止与失败处理
@@ -53,7 +53,7 @@ LLM 可能陷入死循环或失控调用，必须用硬性预算兜底，失败�
 - **孤儿半对整对丢弃**：中断落在 tool_call 已写、tool_result 未写（或反之）之间时，历史重建与裁剪**整对丢弃**，不喂回模型。
 - **末条约束**：喂回模型的消息序列末条**必须是 user 或 tool 消息**——assistant 结尾的序列模型直接拒绝；模型调用失败重试时**复用原请求的 messages 数组**，绝不追加失败轮的半条 assistant 产物。
 
-表语义（chat_messages 持久化）见 `data-model.md` §10。
+表语义（chat_messages 持久化）见 `10-data-model.md` §10。
 
 ## 5. SSE 心跳与断开检测
 

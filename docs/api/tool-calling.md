@@ -110,7 +110,7 @@ suggest_connections(entity_id)
 
 ### 伏笔分析工具
 
-参见 [`../database/hooks.md`](../database/hooks.md) 中的工具扩展部分。
+伏笔工具说明见工具目录本章节。
 
 ### 提案类（需确认）
 
@@ -188,7 +188,7 @@ resolve_hook(hook_id, node_id, description)  → id   // 复合写：delta 记 s
 abandon_hook(hook_id, description)          → id   // 复合写：delta 记 status=abandoned（2026-08 修订）
 ```
 
-> **复合写说明（2026-08 修订）**：`advance_hook` / `resolve_hook` 对应 hooks.md 伏笔生命周期的推进/回收动作，确认后由 Tool Executor 调用，封装「delta + relation」两步写为一次提交，失败不产生半状态。
+> **复合写说明（2026-08 修订）**：`advance_hook` / `resolve_hook` 对应伏笔生命周期的推进/回收动作，确认后由 Tool Executor 调用，封装「delta + relation」两步写为一次提交，失败不产生半状态。
 
 ## 与 InkOS 的关键差异对比
 
@@ -227,7 +227,7 @@ AI 不可以：
 
 ## agent 循环终止与失败处理
 
-对应 [`../design/agent-loop.md`](../design/agent-loop.md) §1。主循环设三重保险，任一超限即终止：
+对应 [`../design/30-agent-loop.md`](../design/30-agent-loop.md) §1。主循环设三重保险，任一超限即终止：
 
 | 保险 | 上限 | 超限行为 |
 |------|------|---------|
@@ -240,4 +240,4 @@ AI 不可以：
 - **工具执行失败**：以结构化文本（工具名 + 参数 + 错误信息）喂回 LLM 自纠，不直接终止。
 - **模型调用失败**（429/5xx/超时）：按 `llm/retry.ts` 的退避重试策略重试，最终失败以 `error` 事件呈现给用户。
 - **工具结果过大**：`get_outline` 整树或 `depth=3` 全图可能撑爆上下文窗口，工具结果序列化后先估算 token，超限即截断/拒绝。
-- SSE 断开时全链路取消见 [`endpoints.md`](./endpoints.md) chat 端点。
+- SSE 断开时全链路取消见 [80-api-chat.md](./80-api-chat.md)。
