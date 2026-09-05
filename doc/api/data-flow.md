@@ -18,8 +18,8 @@ Browser (React)                  Server (Hono)               data/graph/outline
 ## AI 对话（Agent 循环 + 工具调用）
 
 ```
-Browser                  Server                   agent               ai              DeepSeek
-  │                        │                        │                   │                 │
+Browser                  Server                   agent               ai              LLM(deepseek/
+  │                        │                        │                   │           opencode-go)
   │ POST /chat             │                        │                   │                 │
   │───────────────────────▶│───────────────────────▶│                   │                 │
   │                        │                        │ buildContext()    │                 │
@@ -33,7 +33,7 @@ Browser                  Server                   agent               ai        
   │                        │                        │ executor.run()    │                 │
   │                        │                        │ → graph/outline/data                │
   │                        │                        │ ◄── 执行结果       │                 │
-  │                        │                        │ 喂回 DeepSeek     │                 │
+  │                        │                        │ 喂回 LLM          │                 │
   │                        │         ◄──────────────│                   │                 │
   │        ◄───────────────│                        │                   │                 │
   │  SSE 流式响应           │                        │                   │                 │

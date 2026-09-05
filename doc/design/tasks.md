@@ -11,20 +11,9 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 
 ---
 
-## 项目状态（2026-08-25，v0.0.23 已发布）
+## 项目状态（2026-09-05，v0.0.24 已发布）
 
-全量交付完成并发布 **v0.0.1-v0.0.23 全链路全绿**：阶段 A 地基 + 切片 1-13 + 阶段 U 三栏工作台 + 画布 S10（批次八 O6 移除）+ 发布 S11 + 导出/导入 + schema 演进安全（未来版本拒绝 / 增量迁移）+ 阶段 B 提示词编辑 + 阶段 C 时间轴 + 阶段 B2 自动备份 + 用户反馈批次一至十五 + 样式工程化 L + db 查询层 drizzle 化 + 文档体系重构（详细设计四篇，v0.0.23）。**无待做项**（批次十六多 provider opencode-go 已完成，见下节）；backlog.md 事项一律不做。
-
-## 批次十六（2026-08-25 完成，多 provider 接入——opencode-go 订阅）
-
-目标：接入 **OpenCode Go 订阅**（pi-ai `opencode-go` provider；`OPENCODE_API_KEY` env 或 `~/.pi/agent/auth.json` 只读兜底）。**OpenCode Zen（`opencode` provider）是另一订阅，不接入**（两 provider 在 pi-ai 共享 env 名，混接串 key；仅用户订阅的 Go 进注册表）。llm/契约/server/client 全链路多 provider 化。设计已确认（决策记录见对话）：config v2（provider + api_keys）、设置页双卡、聊天下拉 17 模型按 provider 分组 + key 缺失组禁用、跨 provider 选模型同传 provider、模型解析**绝不跨 provider**兜底。契约以 endpoints.md §系统设置 / settings.md / chat.md 为准。真机联调：三级 key 链生效（本机 pi-agent auth.json 兜底命中）；opencode-go 调用报 401 欠费（账户侧问题，链路全通）；deepseek 回归正常。
-
-- [x] 卡 1：llm 包——注册 opencode-go provider + `ChatStreamParams.provider`（缺省 deepseek）+ provider-aware lookup（同 provider 内兜底，不跨 provider）——单测注入断言
-- [x] 卡 2：shared 契约——`userConfigFileSchema` v2（provider/api_keys，v1 api_key 读侧兼容）+ settings GET/PUT schema v2（providers[] 目录+key 状态；PUT provider/model/api_keys）——schema 测试
-- [x] 卡 3：server——settings 路由 v2（三级 key 解析链 env > config > pi-agent auth.json 只读；model∈provider 目录校验）+ chat.ts 按 config.provider 解析——路由测试
-- [x] 卡 4：client 设置页 AI 模型双卡（平铺、激活标记、卡内 key 保存/清除/掩码）
-- [x] 卡 5：client ChatModelBar——optgroup 分组、key 缺失整组禁用、跨 provider 选择带 provider 提交
-- [x] 卡 6：全仓回归（typecheck/lint/test）+ 真机联调（opencode-go key）→ 汇报 → 发布 v0.0.24
+全量交付完成并发布 **v0.0.1-v0.0.24 全链路全绿**：阶段 A 地基 + 切片 1-13 + 阶段 U 三栏工作台 + 画布 S10（批次八 O6 移除）+ 发布 S11 + 导出/导入 + schema 演进安全（未来版本拒绝 / 增量迁移）+ 阶段 B 提示词编辑 + 阶段 C 时间轴 + 阶段 B2 自动备份 + 用户反馈批次一至十五 + 样式工程化 L + db 查询层 drizzle 化 + 文档体系重构（详细设计四篇，v0.0.23）+ 批次十六多 provider（v0.0.24）。**无待做项**；backlog.md 事项一律不做。
 
 ---
 
@@ -56,6 +45,8 @@ MVP 开发任务卡，**垂直切片**组织：地基（一次性基础设施）
 **发布与阻断项（2026-08）**——导出/导入（fflate zip 三文件 + 导入校验）、schema 安全（未来版本拒绝打开 / 增量迁移机制）、发布链路（6 包 npm + OIDC Trusted Publisher + CI 全绿）。发布管道坑记录见文末。
 
 **批次九至十五（2026-08）**——llm 引擎换核（pi-ai 单向 adapter 防腐层）；参考资料第 7 实体类型（SCHEMA_VERSION 5）；大纲/时间轴交互优化（Enter 新建子级/双击详情/行内编辑/只留删除）；右键菜单替代行级问 AI；项目规则文件 AGENTS.md（唯一事实源 + prompt 自动迁移）；设定树形视图；参考资料两类承载（md 文件 = 真相源 + 外源链接）；分类自定义（自由文本 + datalist 聚合）；人物列表四列布局（状态列移除）；设定树手动排序（同级 sort_order + 复合 move 端点）；工具调用人类可读化（names/resolve 摘要渲染）；备份 1 分钟档；用户级配置 schema v1；db 查询层 drizzle-orm（61 处 prepare 清零，迁移/事务/JSON 防御语义不变）。
+
+**批次十六（2026-09-05，v0.0.24）——多 provider 接入（OpenCode Go 订阅）**——llm 注册 pi-ai `opencode-go` provider（15 模型）；用户配置 schema v2（provider + api_keys）；每 provider 三级 key 链（env > config > pi-agent auth.json 只读）；设置页每提供商一卡 + 聊天下拉 optgroup 分组/无 key 组禁用；**模型解析绝不跨 provider**（撞名消歧防串 key）；OpenCode Zen（`opencode` provider）不接入（共享 env 防混淆）。契约见 endpoints.md §系统设置。
 
 **文档体系重构（2026-08，v0.0.23）**——删除 `decisions.md`/`decisions-history.md`/`release-review.md`，详细设计四篇承接仍生效契约；全仓「决策 N」编号体系与注释中设计文档引用清除（代码注释只保留实现意图，文档增删不再牵连注释）；历史事实由 `git log`/CHANGELOG 回溯。
 

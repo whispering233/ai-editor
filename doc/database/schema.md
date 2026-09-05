@@ -240,7 +240,7 @@ CREATE INDEX idx_chat_session ON chat_messages(session_id, created_at);
 | `created_at` / `updated_at` | string | ISO 8601，应用层写入；首次初始化写 `created_at`，配置变更更新 `updated_at` |
 
 **约束**：
-- DeepSeek API key **绝不写入本文件**——只走环境变量 `DEEPSEEK_API_KEY` 或用户级配置 `~/.ai-editor/config.json`。
+- 模型 API key **绝不写入本文件**——每 provider 三级解析链（① 环境变量 `DEEPSEEK_API_KEY` / `OPENCODE_API_KEY` ② 用户级配置 `~/.ai-editor/config.json` `api_keys[<provider>]` ③ pi-agent `~/.pi/agent/auth.json` 只读兜底；v1 旧 `api_key` 字段读侧仅对 deepseek 生效），见 security.md。
 - 文件写入遵循原子写流程（outline.json 同款：临时文件 + fsync + rename）。
 - **自动备份目录**：项目目录内 `.backups/` 子目录存放备份 zip（时间戳命名 `<YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip` 毫秒精度，**kind 类型标记段**：`m` = 手动（无名称也带 `-m` 段，与自动可靠区分）/ `a` = 自动备份重命名后带名称；自动备份与覆盖前快照为纯时间戳 `<YYYYMMDD-HHmmssSSS>.zip`；手动带名称 `<YYYYMMDD-HHmmssSSS>-m-<名称>.zip`；**旧格式兼容解析不迁移**：旧秒级 `<YYYYMMDD-HHmmss>.zip` → auto、旧带名称无 kind 段 `<YYYYMMDD-HHmmssSSS>-<名称>.zip` → manual、纯时间戳 → auto；格式 = 导出包：project.json + outline.json + data.db）；**每项目保留最近 20 份**（超出删除最旧，含覆盖前自动快照；清理失败不阻塞备份主流程）；备份文件不入 git、不算数据文件（可随时删除）。**实现细节（2026-08 实测）**：同毫秒冲突用「时间戳 +1 毫秒循环去重」（保持文件名格式契约可解析）；「有变更才备份」的 mtime 判定加 1s 容差（备份管道内 wal_checkpoint 会把 data.db mtime 刷新到备份时刻，严格 `mtime > 上次备份时刻` 会自激误判——毫秒精度下文件名截断误差已消除，但粗粒度 mtime 文件系统（如 FAT/exFAT 2s 粒度）下容差仍是必要防御，`BACKUP_CHANGE_TOLERANCE_MS` 保留 1s）；重命名备份只改名称段（时间戳与 kind 保持，同目录 rename 原子）。
 

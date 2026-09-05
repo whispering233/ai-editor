@@ -5,6 +5,26 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [v0.0.24] - 2026-09-05
+
+### Added
+
+- **批次十六：多 provider 接入——OpenCode Go 订阅**：全链路支持第二家 LLM 提供商（pi-ai `opencode-go` provider，15 模型：qwen3.7-max / glm-5.x / kimi-k2.6+ / minimax-m3 / grok-4.5 等，含撞名 deepseek-v4-flash/pro）：
+  - `llm` 包注册 opencode-go + `ChatStreamParams.provider`（缺省 deepseek 向后兼容）+ provider-aware 模型解析——**只在同 provider 目录内查/兜底，绝不跨 provider**（撞名模型防串 key）；历史重放消息元数据跟随目标模型 wire 协议族（anthropic-messages / openai-completions / openai-responses 混用目录）
+  - 用户级配置 `~/.ai-editor/config.json` **schema v2**：新增 `provider` + `api_keys`（per-provider key）；v0/v1 旧文件读侧兼容不迁移不写回，首次保存自然落 v2
+  - 每 provider 三级 key 解析链：环境变量（`DEEPSEEK_API_KEY` / `OPENCODE_API_KEY`）> 用户配置 `api_keys[<provider>]` > **pi-agent 配置 `~/.pi/agent/auth.json` 只读兜底**（`type === "api_key"` 条目；绝不写回）；key 一律不入项目文件
+  - GET/PUT `/api/v1/settings/llm` v2：响应含全量 `providers[]`（各家模型目录 + key 状态掩码）；PUT 接受 `{ provider, model, api_keys }`，服务端校验 model ∈ provider 目录（撞名模型无 provider → 400 歧义）
+  - 设置页 AI 模型区改为**每提供商一张卡片**（竖排一行一张）：卡内模型下拉点选即激活（provider+model 成对）+ key 保存/清除/掩码 + 激活高亮
+  - 聊天工具条 ChatModelBar：模型下拉按 provider `optgroup` 分组（复合 value `provider::model`）、**未配 key 的 provider 整组禁用**（激活组恒可选防困死）、上下文占用条随激活模型 contextWindow 计算
+  - 真机联调：三级 key 链生效（pi-agent auth.json 兜底命中）；opencode-go 调用 401 欠费（账户侧问题，链路全通）；deepseek 回归正常
+
+### Changed
+
+- 品牌正名：接入的是 **OpenCode Go 订阅**（`opencode-go`）；**OpenCode Zen（pi-ai `opencode` provider）是另一订阅，不接入**——两 provider 在 pi-ai 共享 `OPENCODE_API_KEY` env，混接串 key；UI/文档全部去除「Zen Go」命名
+- 设置页 AI 模型卡片布局：两列并排 → 单列竖排（一行一张）
+- 清理发布前冗余：移除 llm 包无消费者的 `FALLBACK_MODEL` 显式导出
+- 测试：全仓 1702 全绿（shared 157 / llm 46 / db 260 / server 387 / client 516 / tools 242 / agent 94）+ typecheck/lint 通过；契约文档（endpoints.md §系统设置 / ui settings.md / chat.md / security.md / architecture.md）随批次同步
+
 ## [v0.0.23] - 2026-08-25
 
 ### Changed

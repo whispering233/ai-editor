@@ -47,7 +47,7 @@ LLM 可能陷入死循环或失控调用，必须用硬性预算兜底，失败�
 
 ## 4. 对话历史重建与裁剪
 
-续聊重建与滑动窗口裁剪必须遵守模型 API 的硬约束（DeepSeek 要求 assistant.tool_calls 与 tool_result 严格配对，缺一即拒绝请求）：
+续聊重建与滑动窗口裁剪必须遵守**目标模型 API 的硬约束**（DeepSeek 系 OpenAI-compat 要求 assistant.tool_calls 与 tool_result 严格配对，缺一即拒绝请求；OpenCode Go 混 anthropic-messages 族同样要求调用配对）：
 
 - **成对重组**：按 `assistant.tool_calls[].id` ↔ `tool.tool_call_id` 成对喂回模型；滑动窗口裁剪**必须成对**（同裁同留）。
 - **孤儿半对整对丢弃**：中断落在 tool_call 已写、tool_result 未写（或反之）之间时，历史重建与裁剪**整对丢弃**，不喂回模型。
