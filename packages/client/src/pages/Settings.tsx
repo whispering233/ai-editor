@@ -203,7 +203,7 @@ export default function Settings() {
               每提供商一卡：模型下拉点选即激活；key 独立配置。未配 key 的 provider 聊天下拉整组禁用。
             </p>
             {modelError && <p className="mb-2 text-sm text-destructive">{modelError}</p>}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="flex flex-col gap-4">
               {(settings?.providers ?? []).map((p) => {
                 const isActive = settings?.provider === p.id;
                 return (
