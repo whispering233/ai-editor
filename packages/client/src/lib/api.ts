@@ -907,7 +907,7 @@ export function renameProject(name: string): Promise<RenameProjectRes> {
   return apiFetch<RenameProjectRes>("/project/rename", { method: "POST", body: { name } });
 }
 
-// ============ 设置（S1.4；「系统设置」+ S1.3 server 路由） ============
+// ============ 设置（S1.4 + 批次十六多 provider；「系统设置」） ============
 
 /** 模型目录条目（GET /settings/llm； getAvailableModels） */
 export interface LlmModelInfo {
@@ -919,25 +919,37 @@ export interface LlmModelInfo {
   reasoning: boolean;
 }
 
-/** GET /api/v1/settings/llm 响应（key 不回传明文，仅掩码；模型目录 + 思考强度） */
-export interface SettingsLlmConfig {
-  model: string;
-  thinkingLevel: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+/** 单 provider 条目（GET /settings/llm providers[]——目录 + 该家有效 key 状态） */
+export interface SettingsProviderInfo {
+  id: string;
+  displayName: string;
   apiKeySet: boolean;
   apiKeyMasked?: string;
   models: LlmModelInfo[];
 }
 
-/** 读取 LLM 配置（默认模型 deepseek-v4-flash；key 状态与掩码） */
+/** 思考强度档位（与 shared THINKING_LEVELS 一致；参考 pi ThinkingLevel） */
+export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+
+/** GET /api/v1/settings/llm 响应（key 不回传明文，仅掩码；激活 provider+model + 各家目录/key 状态） */
+export interface SettingsLlmConfig {
+  provider: string; // 激活 provider id（缺省 "deepseek"）
+  model: string; // 当前模型名（属于 provider 目录）
+  thinkingLevel: ThinkingLevel;
+  providers: SettingsProviderInfo[];
+}
+
+/** 读取 LLM 配置（默认 provider deepseek / model deepseek-v4-flash；各家 key 状态与掩码） */
 export function getSettingsLlm(): Promise<SettingsLlmConfig> {
   return apiFetch<SettingsLlmConfig>("/settings/llm");
 }
 
-/** PUT /api/v1/settings/llm 请求体（api_key 空字符串 = 清除已保存 key；thinking_level ） */
+/** PUT /api/v1/settings/llm 请求体（provider+model 成对激活；api_keys 值空字符串 = 清除该家 key） */
 export interface UpdateSettingsLlmBody {
+  provider?: string;
   model?: string;
-  thinking_level?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-  api_key?: string;
+  thinking_level?: ThinkingLevel;
+  api_keys?: Record<string, string>;
 }
 
 /** PUT /api/v1/settings/llm 响应 */

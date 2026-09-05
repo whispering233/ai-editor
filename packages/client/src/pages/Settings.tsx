@@ -11,7 +11,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ApiError, CLIENT_NETWORK_ERROR, getSettingsLlm, updateSettingsLlm } from "../lib/api";
+import { ApiError, CLIENT_NETWORK_ERROR, getSettingsLlm, updateSettingsLlm, type SettingsLlmConfig } from "../lib/api";
 import { useProjectStore } from "../stores/project";
 import { useUiStore, type ErrorBanner } from "../stores/ui";
 import { BackupSection } from "../components/settings/backup-section";
@@ -36,14 +36,15 @@ export default function Settings() {
   const saveAgents = useProjectStore((s) => s.saveAgents);
 
   const [loading, setLoading] = useState(true);
-  const [model, setModel] = useState("");
-  const [apiKeySet, setApiKeySet] = useState(false);
-  const [apiKeyMasked, setApiKeyMasked] = useState<string | undefined>(undefined);
-  const [newKey, setNewKey] = useState("");
   const [saving, setSaving] = useState(false);
+ /** 模型激活错误（卡片区顶部内联） */
   const [modelError, setModelError] = useState<string | null>(null);
- /** key 区表单内联错误（原型 「错误态：VALIDATION_ERROR → 表单内联错误」） */
-  const [keyError, setKeyError] = useState<string | null>(null);
+ /** 当前 LLM 配置快照（激活 provider/model + 各家 key 状态 + 目录） */
+  const [settings, setSettings] = useState<SettingsLlmConfig | null>(null);
+ /** 各家 key 输入草稿（provider id → 输入值） */
+  const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({});
+ /** 卡内 key 表单内联错误（provider id → 错误文案；「错误态：VALIDATION_ERROR → 表单内联错误」） */
+  const [keyErrors, setKeyErrors] = useState<Record<string, string | null>>({});
  // —— 项目规则 ——
   const [agentsContent, setAgentsContent] = useState("");
  /** 已加载 的项目 id（null = 尚未/无项目）：id 变化（切换项目）→ 重新加载；
@@ -59,9 +60,7 @@ export default function Settings() {
   async function refresh() {
     try {
       const config = await getSettingsLlm();
-      setModel(config.model);
-      setApiKeySet(config.apiKeySet);
-      setApiKeyMasked(config.apiKeyMasked);
+      setSettings(config);
     } catch (err) {
       showError(errorCodeOf(err), "读取 LLM 配置失败");
     } finally {
@@ -129,67 +128,61 @@ export default function Settings() {
     }
   }
 
- /** 保存模型名（非空校验，原型：保存时非空校验）；表单错误内联，网络错误走全局横幅 */
-  async function handleSaveModel() {
-    if (!model.trim()) {
-      setModelError("模型名不能为空");
-      return;
-    }
+ /** 激活某 provider 的模型（卡内下拉即存：provider+model 成对——跨 provider 切换语义） */
+  async function handleActivate(providerId: string, modelId: string) {
     setModelError(null);
-    setSaving(true);
     try {
-      await updateSettingsLlm({ model: model.trim() });
-      showToast("已保存，仅影响新请求");
-      setModel(model.trim());
+      await updateSettingsLlm({ provider: providerId, model: modelId });
+      setSettings((s) => (s ? { ...s, provider: providerId, model: modelId } : s));
+      showToast("已切换模型，仅影响新请求");
     } catch (err) {
       if (errorCodeOf(err) === CLIENT_NETWORK_ERROR) {
-        showError("CLIENT_NETWORK_ERROR", "无法连接服务，模型配置未保存");
+        showError("CLIENT_NETWORK_ERROR", "无法连接服务，模型未切换");
       } else {
-        setModelError("保存失败，请重试");
+        setModelError("切换失败，请重试");
       }
-    } finally {
-      setSaving(false);
     }
   }
 
- /** 保存新 key（输入为空时内联提示；覆盖旧 key） */
-  async function handleSaveKey() {
-    if (!newKey.trim()) {
-      setKeyError("请输入新 key");
+ /** 保存该家 key（草稿非空；成功后清草稿 + 刷新 key 状态；覆盖旧 key） */
+  async function handleSaveKey(providerId: string) {
+    const draft = (keyDrafts[providerId] ?? "").trim();
+    if (!draft) {
+      setKeyErrors((m) => ({ ...m, [providerId]: "请输入新 key" }));
       return;
     }
-    setKeyError(null);
+    setKeyErrors((m) => ({ ...m, [providerId]: null }));
     setSaving(true);
     try {
-      await updateSettingsLlm({ api_key: newKey.trim() });
-      setNewKey("");
+      await updateSettingsLlm({ api_keys: { [providerId]: draft } });
+      setKeyDrafts((d) => ({ ...d, [providerId]: "" }));
       showToast("Key 已保存，仅影响新请求");
       await refresh();
     } catch (err) {
       if (errorCodeOf(err) === CLIENT_NETWORK_ERROR) {
         showError("CLIENT_NETWORK_ERROR", "无法连接服务，Key 未保存");
       } else {
-        setKeyError("保存失败，请重试");
+        setKeyErrors((m) => ({ ...m, [providerId]: "保存失败，请重试" }));
       }
     } finally {
       setSaving(false);
     }
   }
 
- /** 清除已保存 key（PUT api_key: ""， 语义） */
-  async function handleClearKey() {
-    setKeyError(null);
+ /** 清除该家已保存 key（PUT api_keys 空串， 语义） */
+  async function handleClearKey(providerId: string) {
+    setKeyErrors((m) => ({ ...m, [providerId]: null }));
     setSaving(true);
     try {
-      await updateSettingsLlm({ api_key: "" });
-      setNewKey("");
+      await updateSettingsLlm({ api_keys: { [providerId]: "" } });
+      setKeyDrafts((d) => ({ ...d, [providerId]: "" }));
       showToast("Key 已清除");
       await refresh();
     } catch (err) {
       if (errorCodeOf(err) === CLIENT_NETWORK_ERROR) {
         showError("CLIENT_NETWORK_ERROR", "无法连接服务，Key 未清除");
       } else {
-        setKeyError("清除失败，请重试");
+        setKeyErrors((m) => ({ ...m, [providerId]: "清除失败，请重试" }));
       }
     } finally {
       setSaving(false);
@@ -203,58 +196,87 @@ export default function Settings() {
         <p className="text-sm text-muted-foreground">加载中…</p>
       ) : (
         <div className="flex flex-col gap-6">
-          {/* AI 模型 */}
+          {/* AI 模型（批次十六：每 provider 一张卡片，平铺） */}
           <div>
             <h2 className="mb-1 text-sm font-semibold text-foreground">AI 模型</h2>
             <p className="mb-2 text-xs text-muted-foreground">
-              默认 deepseek-v4-flash（可在服务端设置页或环境变量覆盖）
+              每提供商一卡：模型下拉点选即激活；key 独立配置。未配 key 的 provider 聊天下拉整组禁用。
             </p>
-            <div className="flex max-w-sm gap-2">
-              <Input
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                placeholder="deepseek-v4-flash"
-              />
-              <Button onClick={() => void handleSaveModel()} disabled={saving} type="button">
-                保存设置
-              </Button>
+            {modelError && <p className="mb-2 text-sm text-destructive">{modelError}</p>}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {(settings?.providers ?? []).map((p) => {
+                const isActive = settings?.provider === p.id;
+                return (
+                  <div
+                    key={p.id}
+                    className={`flex flex-col gap-2 rounded-md border p-3 ${isActive ? "border-primary" : "border-border"}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-foreground">{p.displayName}</span>
+                      {isActive && (
+                        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">当前</span>
+                      )}
+                    </div>
+                    <label className="flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">模型（点选即激活）</span>
+                      <select
+                        className="h-8 w-full rounded-md border border-input bg-transparent px-1.5 text-xs text-foreground outline-none focus-visible:border-ring"
+                        value={isActive ? settings?.model : ""}
+                        disabled={saving}
+                        onChange={(e) => {
+                          if (e.target.value !== "") void handleActivate(p.id, e.target.value);
+                        }}
+                        aria-label={`选择 ${p.displayName} 模型`}
+                      >
+                        {!isActive && <option value="" />}
+                        {p.models.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.displayName ?? m.id}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">
+                        {p.apiKeySet ? `key: 已配置（${p.apiKeyMasked ?? ""}）` : "key: 未配置"}
+                      </span>
+                      {!p.apiKeySet && (
+                        <span className="text-[11px] text-destructive">未配 key：聊天下拉已禁用此组，聊天不可用</span>
+                      )}
+                      <div className="flex gap-1.5">
+                        <Input
+                          className="h-7 text-xs"
+                          value={keyDrafts[p.id] ?? ""}
+                          onChange={(e) => setKeyDrafts((d) => ({ ...d, [p.id]: e.target.value }))}
+                          placeholder="输入新 key（覆盖旧 key）"
+                        />
+                        <Button className="h-7 px-2 text-xs" onClick={() => void handleSaveKey(p.id)} disabled={saving} type="button">
+                          保存
+                        </Button>
+                        {p.apiKeySet && (
+                          <Button className="h-7 px-2 text-xs" variant="outline" onClick={() => void handleClearKey(p.id)} disabled={saving} type="button">
+                            清除
+                          </Button>
+                        )}
+                      </div>
+                      {keyErrors[p.id] && <span className="text-xs text-destructive">{keyErrors[p.id]}</span>}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-            {modelError && <p className="mt-1 text-sm text-destructive">{modelError}</p>}
+            {!loading && settings === null && (
+              <p className="mt-2 text-xs text-muted-foreground">模型配置读取失败，请刷新页面重试。</p>
+            )}
           </div>
 
-          {/* API Key */}
-          <div>
-            <h2 className="mb-1 text-sm font-semibold text-foreground">API Key</h2>
-            <p className="mb-2 text-xs text-muted-foreground">
-              状态：{apiKeySet ? `已配置（${apiKeyMasked ?? ""}）` : "未配置"}
-            </p>
-            <div className="flex max-w-sm gap-2">
-              <Input
-                value={newKey}
-                onChange={(e) => setNewKey(e.target.value)}
-                placeholder="输入新 key（覆盖旧 key）"
-              />
-              <Button onClick={() => void handleSaveKey()} disabled={saving} type="button">
-                保存 Key
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => void handleClearKey()}
-                disabled={saving}
-                type="button"
-              >
-                清除 Key
-              </Button>
-            </div>
-            {keyError && <p className="mt-1 text-sm text-destructive">{keyError}</p>}
-          </div>
-
-          {/* 常驻说明（原型「说明」区） */}
+          {/* 常驻说明（原型「说明」区；批次十六：每 provider 独立解析链） */}
           <div className="rounded-md border border-border bg-muted/50 p-3 text-xs leading-relaxed text-muted-foreground">
             <p>
-              · key 保存在用户目录配置文件（~/.ai-editor/config.json），不写入项目文件（）
+              · key 不进项目文件；每 provider 独立解析：环境变量（DEEPSEEK_API_KEY / OPENCODE_API_KEY）&gt; 用户配置
+              ~/.ai-editor/config.json &gt; pi-agent 配置 ~/.pi/agent/auth.json（只读兜底）
             </p>
-            <p>· 环境变量 DEEPSEEK_API_KEY 优先于此处配置；保存的 key 仅影响新请求</p>
+            <p>· 保存的 key 与模型切换仅影响新请求；进行中的对话不受扰动</p>
           </div>
 
           {/* 项目规则 ：编辑项目目录 文件内容（GET/PUT /project/agents）；
