@@ -268,7 +268,7 @@ describe("adapter.streamChat 事件转发（注入 fake models 模拟流事件�
     const calls: Array<[string, string]> = [];
     const fakeModels = {
       getModel: () => undefined,
-      stream: (model: { id: string; provider: string }) => fakeStream([{ type: "done", reason: "stop", message: { usage: undefined } }]),
+      stream: () => fakeStream([{ type: "done", reason: "stop", message: { usage: undefined } }]),
     } as never;
     _setModels(() => fakeModels as never);
     _setModelLookup((p: string, m: string) => {
