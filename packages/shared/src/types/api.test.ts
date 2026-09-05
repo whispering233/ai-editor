@@ -587,8 +587,25 @@ describe("导出/导入（）", () => {
   });
 });
 
-describe("userConfigFileSchema（，批次十四：~/.ai-editor/config.json schema v1）", () => {
-  it("v1 全字段 parse（schema_version=1 + model + thinking_level + api_key）", () => {
+describe("userConfigFileSchema（批次十四 schema v1 → 批次十六 v2 多 provider）", () => {
+  it("v2 全字段 parse（schema_version=2 + provider + api_keys + model + thinking_level）", () => {
+    const parsed = userConfigFileSchema.parse({
+      schema_version: 2,
+      provider: "opencode-go",
+      model: "qwen3.7-max",
+      thinking_level: "high",
+      api_keys: { deepseek: "sk-xxx", "opencode-go": "oc-xxx" },
+    });
+    expect(parsed).toEqual({
+      schema_version: 2,
+      provider: "opencode-go",
+      model: "qwen3.7-max",
+      thinking_level: "high",
+      api_keys: { deepseek: "sk-xxx", "opencode-go": "oc-xxx" },
+    });
+  });
+
+  it("v1 全字段 parse（schema_version=1 + model + thinking_level + api_key 旧字段保留）", () => {
     const parsed = userConfigFileSchema.parse({
       schema_version: 1,
       model: "deepseek-v4-flash",
@@ -618,10 +635,11 @@ describe("userConfigFileSchema（，批次十四：~/.ai-editor/config.json sche
     expect(parsed.future_field).toBe(42);
   });
 
-  it("非法值拒绝：thinking_level 非枚举、model 非字符串、schema_version 非 1", () => {
+  it("非法值拒绝：thinking_level 非枚举、model/api_keys 值非字符串、schema_version 非 1/2", () => {
     expect(userConfigFileSchema.safeParse({ thinking_level: "bogus" }).success).toBe(false);
     expect(userConfigFileSchema.safeParse({ model: 42 }).success).toBe(false);
-    expect(userConfigFileSchema.safeParse({ schema_version: 2 }).success).toBe(false);
+    expect(userConfigFileSchema.safeParse({ api_keys: { deepseek: 42 } }).success).toBe(false);
+    expect(userConfigFileSchema.safeParse({ schema_version: 3 }).success).toBe(false); // 未来版本：整份失效（空配置默认值）
   });
 });
 

@@ -920,21 +920,33 @@ export const modelInfoSchema = z.object({
 });
 export type LlmModelInfo = z.infer<typeof modelInfoSchema>;
 
-// GET /api/v1/settings/llm（key 不回传明文；models 为可用模型目录，当前 model 必在 list 内）
-export const settingsLlmGetResSchema = z.object({
-  model: z.string(), // 默认 "deepseek-v4-flash"
-  thinkingLevel: z.enum(THINKING_LEVELS), // 思考强度（缺省 high）
-  apiKeySet: z.boolean(),
+/** 单 provider 条目（批次十六：GET /settings/llm providers[]——目录 + 该家有效 key 状态） */
+export const settingsProviderSchema = z.object({
+  id: z.string(), // provider 目录 id（deepseek / opencode-go）
+  displayName: z.string(), // 分组标题（如 "OpenCode Zen Go"）
+  apiKeySet: z.boolean(), // 该家解析链（env > config api_keys > pi-agent auth.json）是否有有效 key
   apiKeyMasked: z.string().optional(), // 掩码展示（utils/format.ts maskApiKey）
-  models: z.array(modelInfoSchema), // 模型目录（ getAvailableModels）
+  models: z.array(modelInfoSchema), // 该家模型目录（ getAvailableModels(provider)）
+});
+export type SettingsProvider = z.infer<typeof settingsProviderSchema>;
+
+// GET /api/v1/settings/llm（批次十六：多 provider——provider/model 激活一对 + 各家目录/key 状态；key 不回传明文）
+export const settingsLlmGetResSchema = z.object({
+  provider: z.string(), // 激活 provider id（缺省 "deepseek"）
+  model: z.string(), // 当前模型名（属于 provider 目录，缺省 "deepseek-v4-flash"）
+  thinkingLevel: z.enum(THINKING_LEVELS), // 思考强度（全局，不分 provider）
+  providers: z.array(settingsProviderSchema), // 全量注册 provider（前端下拉分组/禁用依据）
 });
 
-// PUT /api/v1/settings/llm（写入 ~/.ai-editor/config.json，绝不入项目文件）
+// PUT /api/v1/settings/llm（写入 ~/.ai-editor/config.json，绝不入项目文件；批次十六 v2）
+// 语义：provider + model 成对（跨 provider 激活）；api_keys 写谁谁变、空串 = 清除该家；
+// server 校验 model ∈ provider 目录（不符 → VALIDATION_ERROR）；api_key 旧字段不再接受（前端已升 api_keys）
 export const settingsLlmPutReqSchema = z
   .object({
+    provider: z.string().optional(),
     model: z.string().optional(),
     thinking_level: z.enum(THINKING_LEVELS).optional(),
-    api_key: z.string().optional(), // 空字符串 = 清除已保存 key
+    api_keys: z.record(z.string(), z.string()).optional(), // 各 provider key；空字符串 = 清除该家
   })
   .strict();
 
@@ -942,20 +954,24 @@ export const settingsLlmPutResSchema = z.object({
   saved: z.literal(true),
 });
 
-// ============ 用户级配置文件（批次十四）：~/.ai-editor/config.json schema v1 ============
+// ============ 用户级配置文件（批次十四）：~/.ai-editor/config.json schema v2（批次十六多 provider） ============
 // 设计要点：
 // - 非 strict（宽松读取）：config.json 是用户自有文件，未来版本追加字段不应使整份配置失效
 // （zod 默认 strip 未知字段，safeParse 仍成功）
-// - schema_version 可选：缺省 = v0 旧格式，与 v1 同结构（model/thinking_level/api_key）直接兼容，
-// 不迁移不写回（读侧兼容；用户下次在设置页保存时自然落新格式）
+// - schema_version 可选：缺省 = v0 旧格式；v0/v1 与 v2 均**读侧兼容不迁移不写回**
+// （用户下次在设置页保存时自然落新格式）；schema_version 非 1/2 的版本 → 整份失效（空配置默认值）
+// - provider/api_keys 为 v2 字段：缺省 provider=deepseek（服务端解析时校验目录）；
+// 旧 api_key 字段读侧视为 api_keys["deepseek"]
 // - 校验仅在服务端执行（settings.ts 消费）；client 只消费推断类型
 
 export const userConfigFileSchema = z
   .object({
-    schema_version: z.literal(1).optional(), // 格式版本；缺省 = v0 旧格式（同结构兼容）
+    schema_version: z.union([z.literal(1), z.literal(2)]).optional(), // 格式版本；缺省 = v0 旧格式（同结构兼容）
+    provider: z.string().optional(), // 激活 provider id（缺省 deepseek；未知 id 由服务端解析兜底）
     model: z.string().optional(), // 当前模型名（缺省 deepseek-v4-flash）
     thinking_level: z.enum(THINKING_LEVELS).optional(), // 思考强度（缺省 high）
-    api_key: z.string().optional(), // DeepSeek API key（不入项目文件）
+    api_key: z.string().optional(), // v1 旧字段（读侧视为 api_keys["deepseek"]，不写回）
+    api_keys: z.record(z.string(), z.string()).optional(), // v2：各 provider API key（不入项目文件）
   })
   .passthrough(); // 未知字段保留不校验（用户自有文件，未来版本追加字段不应使整份配置失效）
 
