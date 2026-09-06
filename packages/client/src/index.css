@@ -1,6 +1,6 @@
 /* Tailwind 4 CSS-first 入口（无 tailwind.config.js，architecture.md 技术栈约定） */
-/* 主题 tokens 契约：doc/ui/layout.md §3——文学氛围风（浅色暖羊皮纸+牛血红 / 深色蓝黑曜石+琥珀烛光）；
-   变量一律 oklch；语义配对（-foreground）成对维护保证对比度 */
+/* 主题 tokens 契约（批次十七 3-0）：语义变量映射 antd cssVar tokens（ConfigProvider cssVar 模式，
+   浅/深双算法动态注入）；颜色一律经 antd token——禁硬编码色值（FOUC 兜底色为唯一例外） */
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -38,11 +38,6 @@
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -70,75 +65,45 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* 浅色：暖羊皮纸 + 牛血红（layout.md §3.2 表） */
+/* 浅色 = antd defaultAlgorithm tokens（批次十七 3-0 cssVar 映射；变量由 ConfigProvider 注入） */
 :root {
   color-scheme: light;
-  --background: oklch(0.985 0.005 80);
-  --foreground: oklch(0.13 0.02 60);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.13 0.02 60);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.13 0.02 60);
-  --primary: oklch(0.45 0.12 25);
-  --primary-foreground: oklch(0.98 0.006 76);
-  --secondary: oklch(0.94 0.01 76);
-  --secondary-foreground: oklch(0.13 0.02 60);
-  --muted: oklch(0.94 0.01 76);
-  --muted-foreground: oklch(0.45 0.01 60);
-  --accent: oklch(0.92 0.02 85);
-  --accent-foreground: oklch(0.2 0.05 60);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.84 0.01 76);
-  --input: oklch(0.84 0.01 76);
-  --ring: oklch(0.45 0.12 25);
-  --chart-1: oklch(0.55 0.12 25);
-  --chart-2: oklch(0.6 0.1 85);
-  --chart-3: oklch(0.5 0.08 60);
-  --chart-4: oklch(0.6 0.06 250);
-  --chart-5: oklch(0.65 0.09 150);
+  --background: var(--ant-color-bg-layout);
+  --foreground: var(--ant-color-text);
+  --card: var(--ant-color-bg-container);
+  --card-foreground: var(--ant-color-text);
+  --popover: var(--ant-color-bg-elevated);
+  --popover-foreground: var(--ant-color-text);
+  --primary: var(--ant-color-primary);
+  --primary-foreground: var(--ant-color-text-light-solid);
+  --secondary: var(--ant-color-fill-alter);
+  --secondary-foreground: var(--ant-color-text);
+  --muted: var(--ant-color-fill-alter);
+  --muted-foreground: var(--ant-color-text-tertiary);
+  --accent: var(--ant-color-fill-tertiary);
+  --accent-foreground: var(--ant-color-text);
+  --destructive: var(--ant-color-error);
+  --border: var(--ant-color-border);
+  --input: var(--ant-color-border);
+  --ring: var(--ant-color-primary);
   --radius: 0.6rem;
-  --sidebar: oklch(0.985 0.005 80);
-  --sidebar-foreground: oklch(0.13 0.02 60);
-  --sidebar-primary: oklch(0.45 0.12 25);
-  --sidebar-primary-foreground: oklch(0.98 0.006 76);
-  --sidebar-accent: oklch(0.92 0.02 85);
-  --sidebar-accent-foreground: oklch(0.2 0.05 60);
-  --sidebar-border: oklch(0.84 0.01 76);
-  --sidebar-ring: oklch(0.45 0.12 25);
+  --sidebar: var(--ant-color-bg-layout);
+  --sidebar-foreground: var(--ant-color-text);
+  --sidebar-primary: var(--ant-color-primary);
+  --sidebar-primary-foreground: var(--ant-color-text-light-solid);
+  --sidebar-accent: var(--ant-color-fill-tertiary);
+  --sidebar-accent-foreground: var(--ant-color-text);
+  --sidebar-border: var(--ant-color-border);
+  --sidebar-ring: var(--ant-color-primary);
 }
 
-/* 深色：蓝黑曜石 + 琥珀烛光（layout.md §3.2 表） */
+/* 深色 = antd darkAlgorithm tokens（同上动态注入；此处仅 color-scheme + FOUC 兜底）
+   注：antd cssVar 挂在 :root 上随算法切换重算，.dark class 不再持有色板 */
 .dark {
   color-scheme: dark;
-  --background: oklch(0.12 0.01 250);
-  --foreground: oklch(0.92 0.01 250);
-  --card: oklch(0.17 0.01 250);
-  --card-foreground: oklch(0.92 0.01 250);
-  --popover: oklch(0.17 0.01 250);
-  --popover-foreground: oklch(0.92 0.01 250);
-  --primary: oklch(0.78 0.14 85);
-  --primary-foreground: oklch(0.2 0.05 60);
-  --secondary: oklch(0.2 0.01 250);
-  --secondary-foreground: oklch(0.92 0.01 250);
-  --muted: oklch(0.2 0.01 250);
-  --muted-foreground: oklch(0.6 0.02 250);
-  --accent: oklch(0.25 0.03 85);
-  --accent-foreground: oklch(0.95 0.01 250);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(0.3 0.02 250);
-  --input: oklch(0.3 0.02 250);
-  --ring: oklch(0.78 0.14 85);
-  --chart-1: oklch(0.78 0.14 85);
-  --chart-2: oklch(0.65 0.12 25);
-  --chart-3: oklch(0.7 0.08 60);
-  --chart-4: oklch(0.65 0.07 250);
-  --chart-5: oklch(0.7 0.09 150);
-  --sidebar: oklch(0.12 0.01 250);
-  --sidebar-foreground: oklch(0.92 0.01 250);
-  --sidebar-primary: oklch(0.78 0.14 85);
-  --sidebar-primary-foreground: oklch(0.2 0.05 60);
-  --sidebar-accent: oklch(0.25 0.03 85);
-  --sidebar-accent-foreground: oklch(0.95 0.01 250);
-  --sidebar-border: oklch(0.3 0.02 250);
-  --sidebar-ring: oklch(0.78 0.14 85);
+}
+
+/* FOUC 首帧兜底（antd cssVar 注入前）：深色用户先见深底，防闪白 */
+html.dark body {
+  background-color: #141414;
 }

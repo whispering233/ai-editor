@@ -14,6 +14,8 @@ export function AntdProvider({ children }: { children: ReactNode }) {
     <ConfigProvider
       locale={zhCN}
       theme={{
+        // cssVar 模式：tokens 注入 :root CSS 变量（--ant-*），index.css 语义变量映射之（3-0）
+        cssVar: {},
         algorithm: mode === "dark" ? theme.darkAlgorithm : theme.defaultAlgorithm,
       }}
     >
