@@ -9,6 +9,7 @@ import { XIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface DialogContextValue {
+  open: boolean;
   close: () => void;
 }
 const DialogContext = React.createContext<DialogContextValue | null>(null);
@@ -24,8 +25,8 @@ function Dialog({
   children: React.ReactNode;
 }) {
   const value = React.useMemo<DialogContextValue>(
-    () => ({ close: () => onOpenChange(false) }),
-    [onOpenChange],
+    () => ({ open, close: () => onOpenChange(false) }),
+    [open, onOpenChange],
   );
   // 打开时锁定 body 滚动（遮罩滚动穿透防御）
   React.useEffect(() => {
@@ -61,8 +62,12 @@ function DialogClose({
   );
 }
 
-function DialogOverlay({ className, ...props }: React.ComponentProps<"div"> & { className?: string }) {
+function DialogOverlay({
+  className,
+  ...props
+}: React.ComponentProps<"div"> & { className?: string }) {
   const ctx = React.useContext(DialogContext);
+  if (ctx && !ctx.open) return null;
   return (
     <div
       data-slot="dialog-overlay"
@@ -87,7 +92,7 @@ function DialogContent({
   className?: string;
 }) {
   const ctx = React.useContext(DialogContext);
- // Esc 关闭（面板挂载期监听）
+ // Esc 关闭（面板挂载期监听；关闭态 close 为 no-op）
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") ctx?.close();
@@ -95,6 +100,8 @@ function DialogContent({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [ctx]);
+ // 关闭态不渲染（受控守卫：取消/Esc/遮罩关闭 = set open false → 卸载 portal）
+  if (ctx === null || !ctx.open) return null;
 
   return createPortal(
     <div role="dialog" aria-modal="true" data-slot="dialog-root">
