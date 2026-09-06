@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import { ENTITY_TYPES } from "@whispering233/ai-editor-shared";
 import { navigate, useHashRoute, type Route } from "./hooks/use-route";
 import { AppShell } from "./components/AppShell";
+import { AntdProvider } from "./components/AntdProvider";
 import { ErrorBoundary } from "./components/feedback/ErrorBoundary";
 import Dashboard from "./pages/Dashboard";
 import Outline from "./pages/Outline";
@@ -106,7 +107,10 @@ createRoot(rootEl).render(
   <StrictMode>
     {/* 应用级错误边界（问题 3）：渲染异常不白屏，展示可恢复错误卡（components/feedback/ErrorBoundary.tsx） */}
     <ErrorBoundary>
-      <App />
+      {/* antd 根 Provider（批次十七 0-2）：zhCN + 默认色板双算法，主题跟随 html.dark */}
+      <AntdProvider>
+        <App />
+      </AntdProvider>
     </ErrorBoundary>
   </StrictMode>,
 );

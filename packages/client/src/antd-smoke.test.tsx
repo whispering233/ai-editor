@@ -7,8 +7,19 @@ import { renderToString } from "react-dom/server";
 import { ConfigProvider, theme } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import { Bubble, Sender } from "@ant-design/x";
+import { AntdProvider } from "./components/AntdProvider";
 
 describe("antd 基座冒烟", () => {
+  it("AntdProvider（根接线：zhCN + 主题跟随）包裹可渲染", () => {
+    // node 环境无 document：useThemeMode 守卫回落 light 算法（暗色算法渲染由下方用例覆盖）
+    const html = renderToString(
+      <AntdProvider>
+        <span>根接线正常</span>
+      </AntdProvider>,
+    );
+    expect(html).toContain("根接线正常");
+  });
+
   it("ConfigProvider（zhCN + 默认色板暗色算法）包裹可渲染", () => {
     const html = renderToString(
       <ConfigProvider locale={zhCN} theme={{ algorithm: theme.darkAlgorithm }}>

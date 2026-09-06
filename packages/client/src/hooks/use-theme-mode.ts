@@ -6,10 +6,15 @@ import { useEffect, useState } from "react";
 
 export type ThemeMode = "light" | "dark";
 
-/** 跟随 html.dark class 的主题模式（编辑器等外部组件 data-color-mode 适配用） */
+/** 跟随 html.dark class 的主题模式（编辑器等外部组件 data-color-mode 适配用）
+ * document 守卫：vitest node 环境无 DOM 时回落 light（仅测试路径；真实运行恒有 document） */
 export function useThemeMode(): ThemeMode {
   const [mode, setMode] = useState<ThemeMode>(() =>
-    document.documentElement.classList.contains("dark") ? "dark" : "light",
+    typeof document === "undefined"
+      ? "light"
+      : document.documentElement.classList.contains("dark")
+        ? "dark"
+        : "light",
   );
   useEffect(() => {
     const observer = new MutationObserver(() => {
