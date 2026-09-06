@@ -14,10 +14,8 @@
 import { useEffect, useState } from "react";
 import type { EntityType } from "@whispering233/ai-editor-shared";
 import { formatRelativeTime } from "@whispering233/ai-editor-shared";
-import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/empty-state";
-import { errorBannerClass } from "@/lib/styles";
-import { cn } from "../lib/utils";
+import { Alert, Button, Empty, Skeleton, Tag, Typography } from "antd";
+import { ReloadOutlined } from "@ant-design/icons";
 import { ConfirmDialog } from "../components/outline/dialogs";
 import {
   ApiError,
@@ -56,13 +54,9 @@ const NODE_TYPE_LABEL: Record<OutlineNodeType, string> = {
   scene: "场",
 };
 
-/** 类型徽标（token 类；实体四类 / 大纲三类共用） */
+/** 类型徽标（antd Tag；实体/大纲类型共用） */
 function TypeBadge({ label }: { label: string }) {
-  return (
-    <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-      {label}
-    </span>
-  );
+  return <Tag className="!shrink-0 !mr-0">{label}</Tag>;
 }
 
 /** purge 确认目标（实体 / 节点） */
@@ -230,97 +224,82 @@ export default function Trash() {
     <section>
       {/* header：标题 + 说明 + 刷新 */}
       <div className="mb-1 flex items-center gap-3">
-        <h1 className="text-xl font-semibold">回收站</h1>
-        <Button
-          variant="outline"
-          type="button"
-          className="ml-auto"
-          onClick={() => void reload()}
-          disabled={loading}
-        >
+        <Typography.Title level={4} className="!mb-0">
+          回收站
+        </Typography.Title>
+        <Button className="ml-auto" onClick={() => void reload()} disabled={loading} icon={<ReloadOutlined />}>
           刷新
         </Button>
       </div>
-      <p className="mb-4 text-xs text-muted-foreground">
+      <Typography.Paragraph type="secondary" className="!mb-4 !text-xs">
         软删对象会保留一段时间，可在此还原，或彻底删除（不可恢复）。
-      </p>
+      </Typography.Paragraph>
 
       {/* 列表请求失败：横幅 + 重试 */}
       {error !== null && (
-        <div className={cn(errorBannerClass, "mb-3")}>
-          {error === CLIENT_NETWORK_ERROR
-            ? "无法连接服务，请确认 ai-editor 服务已启动。"
-            : "回收站加载失败，请重试。"}
-          <Button variant="outline" className="ml-3" type="button" onClick={() => void reload()}>
-            重试
-          </Button>
-        </div>
+        <Alert
+          className="mb-3"
+          type="error"
+          showIcon
+          message={
+            error === CLIENT_NETWORK_ERROR
+              ? "无法连接服务，请确认 ai-editor 服务已启动。"
+              : "回收站加载失败，请重试。"
+          }
+          action={
+            <Button size="small" onClick={() => void reload()}>
+              重试
+            </Button>
+          }
+        />
       )}
 
       {/* 加载骨架（首次加载，两栏分栏） */}
       {loading && data === null && error === null && (
         <div className="grid gap-4 md:grid-cols-2">
           {[0, 1].map((col) => (
-            <div key={col} className="overflow-hidden rounded-md border border-border">
-              <div className="h-9 animate-pulse bg-muted/60" />
-              {Array.from({ length: 3 }, (_, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-2 border-b border-border/70 px-3 py-2.5 last:border-0"
-                >
-                  <div className="h-4 w-10 animate-pulse rounded bg-muted" />
-                  <div className="h-4 flex-1 animate-pulse rounded bg-muted" />
-                  <div className="h-4 w-16 animate-pulse rounded bg-muted" />
-                </div>
-              ))}
+            <div key={col} className="rounded-md border border-border p-4">
+              <Skeleton active title paragraph={{ rows: 3 }} />
             </div>
           ))}
         </div>
       )}
 
       {/* 空态 */}
-      {!loading && isEmpty && <EmptyState>回收站是空的</EmptyState>}
+      {!loading && isEmpty && (
+        <div className="py-14">
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="回收站是空的" />
+        </div>
+      )}
 
       {/* 分栏：实体 / 大纲节点（md 双列，窄屏堆叠） */}
       {data !== null && !isEmpty && (
         <div className="grid items-start gap-4 md:grid-cols-2">
           {/* 实体栏 */}
           <div className="overflow-hidden rounded-md border border-border">
-            <div className="border-b border-border bg-muted/40 px-3 py-2 text-sm font-medium text-foreground">
-              实体 ({data.entities.length})
+            <div className="border-b border-border px-3 py-2">
+              <Typography.Text strong>实体 ({data.entities.length})</Typography.Text>
             </div>
             {data.entities.length === 0 ? (
-              <p className="px-3 py-6 text-center text-sm text-muted-foreground">暂无实体</p>
+              <Typography.Paragraph type="secondary" className="!py-6 !text-center !text-sm">
+                暂无实体
+              </Typography.Paragraph>
             ) : (
               <ul className="divide-y divide-border/70">
                 {data.entities.map((item) => (
                   <li key={item.id} className="flex items-center gap-2 px-3 py-2">
                     <TypeBadge label={ENTITY_TYPE_LABEL[item.type]} />
-                    <span
-                      className="min-w-0 flex-1 truncate text-sm text-foreground"
-                      title={item.name}
-                    >
-                      {item.name}
+                    <span className="min-w-0 flex-1 truncate text-sm" title={item.name}>
+                      <Typography.Text ellipsis>{item.name}</Typography.Text>
                     </span>
-                    <span className="shrink-0 text-xs text-muted-foreground">
+                    <Typography.Text type="secondary" className="!shrink-0 !text-xs">
                       {formatRelativeTime(item.deletedAt)}
-                    </span>
+                    </Typography.Text>
                     <div className="flex shrink-0 items-center gap-1.5">
-                      <Button
-                        variant="outline"
-                        size="xs"
-                        type="button"
-                        onClick={() => void handleRestoreEntity(item)}
-                      >
+                      <Button size="small" onClick={() => void handleRestoreEntity(item)}>
                         还原
                       </Button>
-                      <Button
-                        variant="outline"
-                        size="xs"
-                        type="button"
-                        className="text-destructive hover:bg-destructive/10"
-                        onClick={() => setPurgeTarget({ kind: "entity", item })}
-                      >
+                      <Button size="small" danger onClick={() => setPurgeTarget({ kind: "entity", item })}>
                         彻底删除
                       </Button>
                     </div>
@@ -332,42 +311,30 @@ export default function Trash() {
 
           {/* 节点栏 */}
           <div className="overflow-hidden rounded-md border border-border">
-            <div className="border-b border-border bg-muted/40 px-3 py-2 text-sm font-medium text-foreground">
-              大纲节点 ({data.nodes.length})
+            <div className="border-b border-border px-3 py-2">
+              <Typography.Text strong>大纲节点 ({data.nodes.length})</Typography.Text>
             </div>
             {data.nodes.length === 0 ? (
-              <p className="px-3 py-6 text-center text-sm text-muted-foreground">暂无节点</p>
+              <Typography.Paragraph type="secondary" className="!py-6 !text-center !text-sm">
+                暂无节点
+              </Typography.Paragraph>
             ) : (
               <ul className="divide-y divide-border/70">
                 {data.nodes.map((node) => (
                   <li key={node.id} className="px-3 py-2">
                     <div className="flex items-center gap-2">
                       <TypeBadge label={NODE_TYPE_LABEL[node.type]} />
-                      <span
-                        className="min-w-0 flex-1 truncate text-sm text-foreground"
-                        title={node.title}
-                      >
-                        {node.title}
+                      <span className="min-w-0 flex-1 truncate text-sm" title={node.title}>
+                        <Typography.Text ellipsis>{node.title}</Typography.Text>
                       </span>
-                      <span className="shrink-0 text-xs text-muted-foreground">
+                      <Typography.Text type="secondary" className="!shrink-0 !text-xs">
                         {formatRelativeTime(node.deletedAt)}
-                      </span>
+                      </Typography.Text>
                       <div className="flex shrink-0 items-center gap-1.5">
-                        <Button
-                          variant="outline"
-                          size="xs"
-                          type="button"
-                          onClick={() => void handleRestoreNode(node)}
-                        >
+                        <Button size="small" onClick={() => void handleRestoreNode(node)}>
                           还原
                         </Button>
-                        <Button
-                          variant="outline"
-                          size="xs"
-                          type="button"
-                          className="text-destructive hover:bg-destructive/10"
-                          onClick={() => setPurgeTarget({ kind: "node", item: node })}
-                        >
+                        <Button size="small" danger onClick={() => setPurgeTarget({ kind: "node", item: node })}>
                           彻底删除
                         </Button>
                       </div>
@@ -375,14 +342,12 @@ export default function Trash() {
                     {/* 409 祖先冲突：行内提示 + 还原祖先快捷按钮（还原成功自动重试当前节点） */}
                     {ancestorConflict?.node.id === node.id && (
                       <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm">
-                        <span className="text-destructive">
+                        <Typography.Text type="danger">
                           上级节点《{ancestorConflict.ancestorName}》也在回收站，请先还原上级
-                        </span>
+                        </Typography.Text>
                         <Button
-                          variant="outline"
-                          size="xs"
-                          type="button"
-                          className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                          size="small"
+                          danger
                           onClick={() => void handleRestoreAncestor()}
                         >
                           还原上级《{ancestorConflict.ancestorName}》
