@@ -9,20 +9,18 @@
 // store 驱动状态迁移：confirmed/rejected/stale 终态 + 404 移除卡片）
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentRef } from "react";
-import {
-  ChevronDown,
-  ChevronRight,
-  CircleAlert,
-  MessageSquare,
-  PanelRightClose,
-  Plus,
-  Sparkles,
-  TriangleAlert,
-  Wrench,
-  X,
-} from "lucide-react";
 import { Bubble, Sender } from "@ant-design/x";
-import { theme } from "antd";
+import { Alert, Badge, Button as AntButton, Collapse, Dropdown as AntDropdown, Tag, theme } from "antd";
+import type { MenuProps } from "antd";
+import {
+  BulbOutlined,
+  CloseOutlined,
+  DownOutlined,
+  MessageOutlined,
+  PlusOutlined,
+  ToolOutlined,
+  VerticalRightOutlined,
+} from "@ant-design/icons";
 import Markdown from "@ant-design/x-markdown";
 import { useMediaQuery } from "../../hooks/use-media-query";
 import { CHAT_MIN_WIDTH } from "../../hooks/use-panels";
@@ -45,16 +43,6 @@ import type { ChatMessage } from "@whispering233/ai-editor-shared";
 import { formatRelativeTime } from "@whispering233/ai-editor-shared";
 import { cn } from "../../lib/utils";
 import { skeletonClass } from "../../lib/styles";
-import { Button } from "../ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "../ui/dropdown-menu";
 
 // ============ 文案映射（：会话切换/提案卡/focus 小条） ============
 // 会话相对时间用 shared formatRelativeTime（Sidebar/Dashboard 同源；≥30 天回退绝对时间，非法输入原样返回）
@@ -243,7 +231,7 @@ function SessionTitleBar({
 }: {
   disabled: boolean;
   onClose?: () => void;
- /** 收起右栏回调（F7：仅桌面静态栏传入——抽屉模式无收起能力）；渲染 PanelRightClose 按钮 */
+ /** 收起右栏回调（F7：仅桌面静态栏传入——抽屉模式无收起能力）；渲染收起按钮 */
   onToggleCollapse?: () => void;
 }) {
   const sessions = useChatStore((s) => s.sessions);
@@ -253,86 +241,80 @@ function SessionTitleBar({
  // 当前会话 = 列表中 id 匹配项；未选（null）/ 列表未加载 / 不在列表 → 新会话
   const currentSession = sessions?.find((s) => s.id === currentSessionId) ?? null;
   const title = currentSession ? currentSession.lastMessage || "（空会话）" : "新会话";
+  const { token } = theme.useToken();
+
+ // 下拉项（会话选择器语义——选择器场景可用 Dropdown；操作按钮仍直显不收入菜单）
+  const menuItems: MenuProps["items"] = [
+    {
+      type: "group",
+      label: "会话（本项目）",
+      children:
+        sessions && sessions.length === 0
+          ? [{ key: "__empty__", label: "暂无历史会话", disabled: true }]
+          : sessions?.map((ss) => ({
+              key: ss.id,
+              label: (
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate text-sm">{ss.lastMessage || "（空会话）"}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {ss.messageCount} 条 · {formatRelativeTime(ss.updatedAt)}
+                  </span>
+                </span>
+              ),
+              onClick: () => setCurrentSession(ss.id),
+            })) ?? [],
+    },
+  ];
 
   return (
     <div className="flex h-12 shrink-0 items-center gap-1 border-b border-border px-2.5">
-      <MessageSquare className="size-4 shrink-0 text-muted-foreground" />
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={disabled}
-              className="max-w-44 justify-start gap-1 px-1.5"
-            >
-              <span className="truncate text-sm font-medium" title={title}>
-                {title}
-              </span>
-              <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
-            </Button>
-          }
-        />
-        <DropdownMenuContent align="start" className="w-64">
-          {/* GroupLabel 必须由 <Menu.Group> 提供上下文（Base UI ，缺失抛 error #31——
-              曾导致点击下拉整页白屏，见 chat-panel.test.tsx「Base UI Menu 」护栏用例）；
-              外层 div 的 aria-labelledby 关联也由 Group 的 role="group" 提供（无障碍） */}
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>会话（本项目）</DropdownMenuLabel>
-          </DropdownMenuGroup>
-          <DropdownMenuSeparator />
-          {sessions && sessions.length === 0 && (
-            <div className="px-2 py-2 text-xs text-muted-foreground">暂无历史会话</div>
-          )}
-          {sessions?.map((s) => (
-            <DropdownMenuItem
-              key={s.id}
-              onClick={() => setCurrentSession(s.id)}
-              className={cn(s.id === currentSessionId && "bg-accent text-accent-foreground")}
-            >
-              <span className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate text-sm">{s.lastMessage || "（空会话）"}</span>
-                <span className="text-xs text-muted-foreground">
-                  {s.messageCount} 条 · {formatRelativeTime(s.updatedAt)}
-                </span>
-              </span>
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        className="shrink-0 text-muted-foreground"
+      <MessageOutlined className="shrink-0" style={{ color: token.colorTextSecondary }} />
+      <AntDropdown
+        menu={{
+          items: menuItems,
+          selectable: true,
+          selectedKeys: currentSessionId !== null ? [currentSessionId] : [],
+        }}
+        disabled={disabled}
+        trigger={["click"]}
+      >
+        <AntButton size="small" disabled={disabled} className="max-w-44 min-w-0 px-1.5">
+          <span className="truncate text-sm font-medium" title={title}>
+            {title}
+          </span>
+          <DownOutlined className="shrink-0 text-xs" />
+        </AntButton>
+      </AntDropdown>
+      <AntButton
+        type="text"
+        size="small"
+        className="shrink-0"
         disabled={disabled}
         onClick={newSession}
         aria-label="新会话"
         title="新会话"
-      >
-        <Plus className="size-4" />
-      </Button>
+        icon={<PlusOutlined />}
+      />
       {onToggleCollapse && (
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="ml-auto shrink-0 text-muted-foreground"
+        <AntButton
+          type="text"
+          size="small"
+          className="ml-auto shrink-0"
           onClick={onToggleCollapse}
           aria-label="收起聊天面板"
           title="收起聊天面板"
-        >
-          <PanelRightClose className="size-4" />
-        </Button>
+          icon={<VerticalRightOutlined />}
+        />
       )}
       {onClose && (
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          className="ml-auto shrink-0 text-muted-foreground"
+        <AntButton
+          type="text"
+          size="small"
+          className="ml-auto shrink-0"
           onClick={onClose}
           aria-label="关闭聊天面板"
-        >
-          <X className="size-4" />
-        </Button>
+          icon={<CloseOutlined />}
+        />
       )}
     </div>
   );
@@ -346,20 +328,19 @@ function DisconnectBanner() {
   const resendLast = useChatStore((s) => s.resendLast);
   if (!disconnected) return null;
   return (
-    <div className="flex shrink-0 items-center gap-2 border-b border-destructive/30 bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
-      <TriangleAlert className="size-3.5 shrink-0" />
-      <span className="min-w-0 flex-1 truncate">上次会话已取消</span>
-      <Button size="xs" variant="outline" className="shrink-0" onClick={resendLast}>
-        重新发送
-      </Button>
-      <button
-        className="shrink-0 rounded p-0.5 hover:bg-destructive/15"
-        onClick={() => setDisconnected(false)}
-        aria-label="关闭断连提示"
-      >
-        <X className="size-3.5" />
-      </button>
-    </div>
+    <Alert
+      banner
+      type="warning"
+      showIcon
+      message="上次会话已取消"
+      action={
+        <AntButton size="small" onClick={resendLast}>
+          重新发送
+        </AntButton>
+      }
+      closable
+      onClose={() => setDisconnected(false)}
+    />
   );
 }
 
@@ -369,19 +350,7 @@ function ErrorBar() {
   const streamError = useChatStore((s) => s.streamError);
   const setStreamError = useChatStore((s) => s.setStreamError);
   if (!streamError) return null;
-  return (
-    <div className="flex shrink-0 items-center gap-2 border-b border-destructive/30 bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
-      <CircleAlert className="size-3.5 shrink-0" />
-      <span className="min-w-0 flex-1 truncate">{streamError}</span>
-      <button
-        className="shrink-0 rounded p-0.5 hover:bg-destructive/15"
-        onClick={() => setStreamError(null)}
-        aria-label="关闭错误提示"
-      >
-        <X className="size-3.5" />
-      </button>
-    </div>
-  );
+  return <Alert banner type="error" showIcon message={streamError} closable onClose={() => setStreamError(null)} />;
 }
 
 // ============ 工具调用折叠记录行（历史 assistant.toolCalls 与运行时 streamTools 共用） ============
@@ -400,12 +369,14 @@ export function ToolCallRow({
   result?: unknown;
   status?: "running" | "ok" | "error";
 }) {
+ // 展开态（受控——懒解析依赖 open；Collapse onChange 驱动）
   const [open, setOpen] = useState(false);
  /** id 批量解析结果（null = 未展开/解析中）；解析请求失败 → resolveFailed → 回退原始 JSON */
   const [names, setNames] = useState<ResolvedNames | null>(null);
   const [resolveFailed, setResolveFailed] = useState(false);
- // 结果状态图标：成功 ✓ / 失败 ✗ / 进行中无标记（ 成对：tool_result 挂到对应调用行）
+ // 结果状态：成功 ✓（result 挂载即成功）/ 失败 ✗ / 进行中（Badge processing）
   const ok = status === "ok" || result !== undefined;
+  const err = status === "error";
 
  // 展开时收集 args 中的 id 候选 → names/resolve 批量解析（历史回放/流式同路径）；
  // 无候选不发请求；折叠/参数变化 → 重置（重新展开再解析）
@@ -444,33 +415,45 @@ export function ToolCallRow({
   );
 
   return (
-    <div className="rounded-md border border-border/70 bg-muted/40 px-2 py-1">
-      <button
-        className="flex w-full items-center gap-1.5 rounded-md border border-border px-2 py-1 text-left text-xs text-muted-foreground"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-      >
-        <ChevronRight className={cn("size-3 shrink-0 transition-transform", open && "rotate-90")} />
-        <Wrench className="size-3 shrink-0" />
-        <span className="min-w-0 flex-1 truncate">调用了 {toolName}</span>
-        {status === "error" && <span className="shrink-0 text-destructive">✗</span>}
-        {ok && <span className="shrink-0 text-primary">✓</span>}
-      </button>
-      {open && (
-        <div className="mt-1 max-h-40 overflow-auto text-xs whitespace-pre-wrap text-muted-foreground">
-          {/* 摘要渲染优先；未知工具 / 解析请求失败 → 原始 JSON 兜底 */}
-          {resolveFailed || summary === null ? (
-            <pre>{typeof args === "string" ? args : JSON.stringify(args ?? {}, null, 2)}</pre>
-          ) : (
-            <ul className="space-y-0.5">
-              {summary.map((line) => (
-                <li key={line}>{line}</li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-    </div>
+    <Collapse
+      ghost
+      size="small"
+      className="!bg-transparent"
+      activeKey={open ? ["args"] : []}
+      onChange={(keys) => setOpen(keys.includes("args"))}
+      items={[
+        {
+          key: "args",
+          label: (
+            <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+              <ToolOutlined className="shrink-0" />
+              <span className="min-w-0 flex-1 truncate">调用了 {toolName}</span>
+              {err ? (
+                <Badge status="error" title="调用失败" />
+              ) : ok ? (
+                <Badge status="success" title="调用成功" />
+              ) : (
+                <Badge status="processing" title="调用中" />
+              )}
+            </span>
+          ),
+          children: (
+            <div className="max-h-40 overflow-auto text-xs whitespace-pre-wrap text-muted-foreground">
+              {/* 摘要渲染优先；未知工具 / 解析请求失败 → 原始 JSON 兜底 */}
+              {resolveFailed || summary === null ? (
+                <pre>{typeof args === "string" ? args : JSON.stringify(args ?? {}, null, 2)}</pre>
+              ) : (
+                <ul className="space-y-0.5">
+                  {summary.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ),
+        },
+      ]}
+    />
   );
 }
 
@@ -537,6 +520,7 @@ export function ProposalCardView({ proposal }: { proposal: ProposalCard }) {
   const confirmProposal = useChatStore((s) => s.confirmProposal);
   const rejectProposal = useChatStore((s) => s.rejectProposal);
   const label = PROPOSAL_TYPE_LABELS[proposal.type] ?? proposal.type;
+  const { token } = theme.useToken();
  // 终态（confirmed/rejected/stale）与处理中（processing 在途）：按钮禁用——
  // 409 PROPOSAL_STALE 由 store 标 stale（卡标文案见上）+ 按钮随之禁用；
  // 404 NOT_FOUND / 409 MISMATCH 由 store 移除卡片（组件无需处理）；notFound 不渲染
@@ -588,7 +572,7 @@ export function ProposalCardView({ proposal }: { proposal: ProposalCard }) {
   return (
     <div className="rounded-lg border border-primary/25 bg-primary/5 p-2.5">
       <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-        <Sparkles className="size-3.5 shrink-0 text-primary" />
+        <BulbOutlined className="shrink-0" style={{ color: token.colorPrimary }} />
         <span className="min-w-0 flex-1 truncate">提案：{label}</span>
         {proposal.status === "confirmed" && (
           <span className="shrink-0 text-xs text-primary">✓ 已确认</span>
@@ -616,17 +600,12 @@ export function ProposalCardView({ proposal }: { proposal: ProposalCard }) {
         </pre>
       )}
       <div className="mt-2 flex gap-1.5">
-        <Button size="xs" disabled={busy} onClick={() => void confirmProposal(proposal.proposalId)}>
+        <AntButton size="small" type="primary" disabled={busy} onClick={() => void confirmProposal(proposal.proposalId)}>
           确认
-        </Button>
-        <Button
-          size="xs"
-          variant="outline"
-          disabled={busy}
-          onClick={() => void rejectProposal(proposal.proposalId)}
-        >
+        </AntButton>
+        <AntButton size="small" disabled={busy} onClick={() => void rejectProposal(proposal.proposalId)}>
           拒绝
-        </Button>
+        </AntButton>
       </div>
     </div>
   );
@@ -639,18 +618,18 @@ function FocusBar() {
   const clearFocusContext = useChatStore((s) => s.clearFocusContext);
   if (!focusContext) return null;
   return (
-    <div className="flex shrink-0 items-center gap-1.5 border-t border-border bg-accent/40 px-3 py-1.5 text-xs">
-      <Sparkles className="size-3.5 shrink-0 text-primary" />
-      <span className="min-w-0 flex-1 truncate text-muted-foreground">
-        正在讨论：{focusLabel(focusContext)}
-      </span>
-      <button
-        className="shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted"
-        onClick={clearFocusContext}
-        aria-label="清除讨论上下文"
+    <div className="flex shrink-0 items-center gap-1.5 border-t border-border bg-accent/40 px-3 py-1.5">
+      <Tag
+        icon={<BulbOutlined />}
+        closable
+        onClose={(e) => {
+          e.preventDefault(); // 受控：不自动移除，由 store 清空驱动重渲
+          clearFocusContext();
+        }}
+        style={{ marginInlineEnd: 0 }}
       >
-        <X className="size-3.5" />
-      </button>
+        正在讨论：{focusLabel(focusContext)}
+      </Tag>
     </div>
   );
 }
@@ -717,6 +696,7 @@ function MessageList({ disabled }: { disabled: boolean }) {
   }, [tail, messages, messagesLoading, streamTools.length, proposals.length]);
 
  /** 流式思考指示：正在流 & 尾条 assistant 且尚无正文（首段 delta 前/工具等待期） */
+  const { token: msgToken } = theme.useToken();
   const showThinking =
     streaming &&
     messages.length > 0 &&
@@ -727,7 +707,7 @@ function MessageList({ disabled }: { disabled: boolean }) {
  // 无项目打开：右栏禁用（「位置与形态」：灰显 + 「打开项目后可用」）
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-4">
-        <MessageSquare className="size-8 text-muted-foreground/40" />
+        <MessageOutlined className="text-4xl" style={{ color: msgToken.colorTextTertiary }} />
         <p className="text-sm text-muted-foreground/70">打开项目后可用</p>
       </div>
     );
@@ -754,7 +734,7 @@ function MessageList({ disabled }: { disabled: boolean }) {
       {empty ? (
  // 空态引导语（「空态」）
         <div className="flex h-full flex-col items-center justify-center gap-1.5 p-4 text-center">
-          <MessageSquare className="size-7 text-muted-foreground/40" />
+          <MessageOutlined className="text-3xl" style={{ color: msgToken.colorTextTertiary }} />
           <p className="text-sm text-muted-foreground">试试问：这个设定有没有漏洞？</p>
           <p className="text-sm text-muted-foreground">第 4 章剧情往哪走合理？</p>
         </div>

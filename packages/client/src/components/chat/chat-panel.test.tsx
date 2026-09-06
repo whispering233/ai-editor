@@ -237,7 +237,7 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3：任务�
       />,
     );
     expect(ok).toContain("get_entity");
-    expect(ok).toContain("✓"); // result 存在 → 成功标记
+    expect(ok).toContain("ant-badge-status-success"); // 成功标记（antd Badge dot，替代旧 ✓ 字符）
     const error = renderToString(
       <ToolCallRow
         toolName="update_entity"
@@ -247,7 +247,11 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3：任务�
       />,
     );
     expect(error).toContain("update_entity");
-    expect(error).toContain("✗");
+    expect(error).toContain("ant-badge-status-error"); // 失败标记（替代旧 ✗ 字符）
+    const running2 = renderToString(
+      <ToolCallRow toolName="get_entity" args={{ id: "char-1" }} status="running" />,
+    );
+    expect(running2).toContain("ant-badge-status-processing"); // 进行中
   });
 
   it("ProposalCardView：pending / confirmed / stale 三态 + preview 存在/缺失渲染不抛异常", () => {
