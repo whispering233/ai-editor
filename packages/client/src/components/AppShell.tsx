@@ -14,7 +14,7 @@ import { iconButtonBaseClass, iconButtonSize } from "../lib/styles";
 import { ChatPanel } from "./chat/ChatPanel";
 import { FeedbackHost } from "./feedback/FeedbackHost";
 import { MainPanel } from "./main-panel/MainPanel";
-import { Sidebar } from "./sidebar/Sidebar";
+import { NavRail } from "./nav/NavRail";
 
 /** 拖拽手柄（桌面态、对应栏展开时渲染）：6px 垂直细条，hover 高亮 + GripVertical 提示；
  * pointer capture 实现拖拽——down 捕获指针后 move/up 持续由本手柄接收（移出窗口也不丢事件） */
@@ -98,7 +98,7 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
       {isDesktop && layout.collapsedSidebar ? (
         <CollapseStrip side="sidebar" onExpand={() => toggleCollapse("sidebar")} />
       ) : (
-        <Sidebar
+        <NavRail
           width={isDesktop ? layout.sidebarWidth : undefined}
           onToggleCollapse={isDesktop ? () => toggleCollapse("sidebar") : undefined}
         />
