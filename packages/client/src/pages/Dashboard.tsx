@@ -20,6 +20,7 @@ import { SectionCard } from "@/components/ui/section-card";
 import { skeletonClass } from "@/lib/styles";
 import { ApiError, CLIENT_NETWORK_ERROR, listEntities } from "../lib/api";
 import { validateBookName } from "../lib/book-name";
+import { entityListHost } from "../lib/entity-paths";
 import { describeOpenError } from "../lib/error-messages";
 import { cn } from "../lib/utils";
 import { buildBookPath, findOutlineNodeTitle, useProjectStore } from "../stores/project";
@@ -466,7 +467,7 @@ export default function Dashboard() {
             </div>
           </dl>
           {/* 项目提示词展示已移除：prompt 字段废弃不再返回——项目规则唯一事实源
-              改为项目目录 AGENTS.md（设置页编辑，见 #/settings） */}
+              改为项目目录 AGENTS.md（设置页编辑，见 #/preferences） */}
         </SectionCard>
 
         {/* 区块 2：创作要素（四张计数卡；GET /entity/:type limit=1 取 total，并行） */}
@@ -483,7 +484,7 @@ export default function Dashboard() {
                 {ENTITY_ORDER.map((t) => (
                   <a
                     key={t}
-                    href={`#/entities/${t}`}
+                    href={`#${entityListHost(t)}`}
                     className="group rounded-lg border border-border bg-background p-3 transition-colors hover:border-primary/40 hover:bg-muted"
                     title={`查看${TYPE_LABEL[t]}列表`}
                   >

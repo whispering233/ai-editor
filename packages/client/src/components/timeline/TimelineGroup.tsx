@@ -1,7 +1,7 @@
 // 时间轴组块（G2.3， G2 布局线框：时间点组块）
 // 职责：组标题行（大圆点 + 左侧折叠按钮 + 时间点名；右侧：事件计数 + [+ 在此时间点新建事件] +
 // [移入回收站]）+ 组内事件堆叠；**未挂载兜底区复用本组件**（timepoint = null）。
-// 组标题行对齐大纲交互模式——双击 = 时间点详情（#/entities/timepoint/:id 通用实体详情页）、
+// 组标题行对齐大纲交互模式——双击 = 时间点详情（#/timepoints/:id 通用实体详情页，批次十七一级化）、
 // 点击时间点名 = 行内编辑（Enter 提交 / Esc 取消 / 失焦保存）、**重命名按钮已移除**（只留删除；
 // AskAiButton 已移除——右键菜单替代（注入会话上下文 + 建立关联））。
 // 拖拽柄视觉已移除（批次八 O3）：draggable 仍设在组标题行根，悬停 title 提示拖拽能力，无 GripVertical 图标。
@@ -51,7 +51,7 @@ interface TimelineGroupBlockProps {
   onDeleteTimepoint: (tp: EntitySummary) => void;
  /** 标题行「+ 在此时间点新建事件」（页面打开带预挂载的新建对话框；仅时间点组） */
   onAddEventAt: (timepointId: string) => void;
- /** 组标题行双击 → 时间点详情（页面跳 #/entities/timepoint/:id；仅时间点组） */
+ /** 组标题行双击 → 时间点详情（页面跳 #/timepoints/:id；仅时间点组） */
   onDetailTimepoint: (tp: EntitySummary) => void;
  // 组标题行拖拽（时间点整组；容器装配）
   onDragStart: (e: DragEvent<HTMLDivElement>) => void;
@@ -135,7 +135,7 @@ export function TimelineGroupBlock({
     }
   }
 
- /** 组标题行双击：双击 = 时间点详情（#/entities/timepoint/:id——通用实体详情页承载，
+ /** 组标题行双击：双击 = 时间点详情（#/timepoints/:id——通用实体详情页承载，
  * 无独立时间点详情路由；不用 #/timeline/:id 是因为 TimelineDetail 会把 timepoint 当事件渲染
  * （eventFormFromDetail），而通用实体详情页可正常渲染 timepoint 纯名称表单）；
  * 冲突防护：双击标题 = 编辑（第一击已把 span 换成输入框，dblclick 的

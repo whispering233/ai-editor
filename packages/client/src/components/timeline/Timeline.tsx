@@ -53,7 +53,7 @@ interface TimelineProps {
   onDeleteTimepoint: (tp: EntitySummary) => void;
  /** 组尾「+ 在此时间点新建事件」（页面打开带预挂载的新建对话框） */
   onAddEventAt: (timepointId: string) => void;
- /** 组标题行双击 → 时间点详情（页面跳 #/entities/timepoint/:id） */
+ /** 组标题行双击 → 时间点详情（页面跳 #/timepoints/:id，批次十七一级化） */
   onDetailTimepoint: (tp: EntitySummary) => void;
  /** 事件行操作回调（页面级动作） */
   onDetail: (ev: EntitySummary) => void;

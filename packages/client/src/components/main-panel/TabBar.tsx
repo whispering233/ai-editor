@@ -29,7 +29,8 @@ interface TabItem {
 const TABS: TabItem[] = [
   { label: "概览", href: "#/", segment: null, icon: LayoutGrid },
   { label: "大纲", href: "#/outline", segment: "outline", icon: ListTree },
-  { label: "实体关系", href: "#/entities/character", segment: "entities", icon: Network },
+  // 批次十七 1-1 过渡形态：实体关系 pill 承接四个新一级段（1-2 左栏导航重构时拆为独立项移除本栏）
+  { label: "实体关系", href: "#/characters", segment: "characters", icon: Network },
   { label: "伏笔", href: "#/hooks", segment: "hooks", icon: Puzzle },
  // 时间轴（C3）：事件线性序列， 路由表
   { label: "时间轴", href: "#/timeline", segment: "timeline", icon: CalendarClock },
@@ -38,8 +39,20 @@ const TABS: TabItem[] = [
   { label: "回收站", href: "#/trash", segment: "trash", icon: Trash2 },
 ];
 
+/** 实体家族新段集合（1-1：characters/setting/locations/relations 各自独立首段，实体关系 pill 统一高亮） */
+const ENTITY_FAMILY_SEGMENTS = new Set(["characters", "setting", "locations", "relations"]);
+
+/** 路由首段 → pill 高亮段（时间点详情 #/timepoints/:id 宿主为时间轴） */
+function navSegment(route: Route): string | null {
+  const first = route.segments[0] ?? null;
+  if (first === null || first === undefined) return null;
+  if (ENTITY_FAMILY_SEGMENTS.has(first)) return "characters";
+  if (first === "timepoints") return "timeline";
+  return first;
+}
+
 export function TabBar({ route }: { route: Route }) {
-  const active = route.segments[0] ?? null;
+  const active = navSegment(route);
  // 无项目引导（S1.4）：服务端 NO_PROJECT_OPEN 时业务 tab 无数据可看，
  // 点击引导回概览页开/建项目，避免 409 错误横幅（ 体验修复，2026-08）
   const noProject = useProjectStore((s) => s.loadError === "NO_PROJECT_OPEN");

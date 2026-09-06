@@ -15,7 +15,7 @@
 // - 拖拽（双轨）：时间点整组 = PUT /entity/timepoint/:id/move（只重排组间序，内部事件不动）；
 // 事件单条 = 同组 PUT /entity/event/:id/move；跨组 POST /entity/event/:id/move_to（改挂载+重排）
 // - 行级交互：双击事件行 = 详情（#/timeline/:id）、双击组标题行 = 时间点详情
-// （#/entities/timepoint/:id 通用实体详情页）、点击事件名/时间点名 = 行内编辑
+// （#/timepoints/:id 通用实体详情页，批次十七一级化）、点击事件名/时间点名 = 行内编辑
 // （PUT /entity/event/:id { name } / PUT /entity/timepoint/:id { name }）；「详情/编辑/重命名」
 // 按钮已移除（只留删除；AskAiButton 已移除——右键菜单替代）
 // - AI 排序（F9）：注入聊天预设指令（工具名 propose_reorder_timepoints 保证出现——LLM 依赖
@@ -608,7 +608,7 @@ export default function Timeline() {
               onMoveEventTo={handleMoveEventTo}
               onRenameTimepoint={handleRenameTimepoint}
               onAddEventAt={openCreateInTimepoint}
-              onDetailTimepoint={(tp) => navigate(`/entities/timepoint/${tp.id}`)}
+              onDetailTimepoint={(tp) => navigate(`/timepoints/${tp.id}`)}
               onDetail={(ev) => navigate(`/timeline/${ev.id}`)}
               onEditName={handleEditEventName}
               onDelete={(ev) => void handleDelete({ kind: "event", entity: ev })}

@@ -3,7 +3,6 @@
 import { StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { useEffect } from "react";
-import { ENTITY_TYPES } from "@whispering233/ai-editor-shared";
 import { navigate, useHashRoute, type Route } from "./hooks/use-route";
 import { AppShell } from "./components/AppShell";
 import { AntdProvider } from "./components/AntdProvider";
@@ -22,13 +21,27 @@ import Trash from "./pages/Trash";
 import Settings from "./pages/Settings";
 import "./index.css";
 
-/** 旧路由重定向（设定树 tab 已合并移除——#/entities/setting-tree 重定向到设定 tab 树形视图） */
+/** 旧路由重定向（批次十七 1-1 路由一级化；hash 不出浏览器，服务端零感知）
+ * 实体家族旧址 → 新一级段；#/settings → #/preferences（设置页避让设定 #/setting） */
 function RedirectTo({ to }: { to: string }) {
   useEffect(() => {
     navigate(to);
   }, [to]);
   return null;
 }
+
+/** 实体类型旧段 → 新一级段（含历史别名 setting-tree；泛型详情统一丢 id 保详情） */
+const LEGACY_ENTITY_SEGMENT: Record<string, string> = {
+  character: "characters",
+  setting: "setting",
+  "setting-tree": "setting",
+  location: "locations",
+  relations: "relations",
+  hook: "hooks",
+  event: "timeline",
+  timepoint: "timepoints",
+  reference: "references",
+};
 
 /** 按路由分段渲染页面；未知 hash 已由 useHashRoute 回退 #/ */
 function renderPage(route: Route): ReactNode {
@@ -41,36 +54,53 @@ function renderPage(route: Route): ReactNode {
  // （二级路由，仿实体详情分支；key = nodeId 变化强制卸载重挂，详情页表单按节点重置）
       return second !== undefined ? <OutlineDetail key={second} nodeId={second} /> : <Outline />;
     case "entities": {
- // 关联 tab（U8，「关联 Tab」）：先于类型归一化拦截——relations 不是实体类型
-      if (second === "relations") {
-        return <EntityList type="relations" />;
-      }
- // 设定树 tab 已合并移除——旧路由 #/entities/setting-tree 重定向到设定 tab（树形视图）
-      if (second === "setting-tree") {
-        return <RedirectTo to="/entities/setting" />;
-      }
- // 批次十二 T3：参考资料已有独立中栏 tab（#/references）——实体关系页泛型表格重复入口
- // 移除，旧路由 #/entities/reference[/:id] 重定向到参考资料页（对齐 设定树先例）
-      if (second === "reference") {
-        return <RedirectTo to={third !== undefined ? `/references/${third}` : "/references"} />;
-      }
- // 按段数区分：2 段（#/entities/:type）→ 列表；3 段（#/entities/:type/:id）→ 详情（）
- // type 缺省 character（：type ∈ character|setting|location|hook）
-      const type =
-        second !== undefined && (ENTITY_TYPES as readonly string[]).includes(second)
-          ? second
-          : "character";
- // key = 实体身份：type/id 变化强制卸载重挂——详情页本地 state（deltaOpen、ComputePreview
- // result/atNodeId 等）跨实体复用会残留错位（S5.4 审核 M1：关系行跳详情 A→B 用 A 的 result 做 diff）；
- // 重挂同时让 ComputePreview 的 atNodeId 惰性初始化重新读取 currentPosition
-      return third !== undefined ? (
-        <EntityDetail key={`${type}:${third}`} type={type} id={third} />
-      ) : (
-        <EntityList type={type} />
-      );
+      // 批次十七 1-1：实体家族一级化——旧 #/entities/:type[/:id] 全量重定向到新段
+      // （泛型列表入口已移除的 hook/event/timepoint/reference：丢/带 id 落宿主详情段）
+      const seg = LEGACY_ENTITY_SEGMENT[second ?? ""] ?? "characters";
+      const carryId =
+        third !== undefined && second !== undefined && second !== "relations";
+      return <RedirectTo to={carryId ? `/${seg}/${third}` : `/${seg}`} />;
     }
+    case "characters":
+      return second !== undefined ? (
+        <EntityDetail key={`character:${second}`} type="character" id={second} />
+      ) : (
+        <EntityList type="character" />
+      );
+    case "setting":
+      // 设定段 = 树形视图列表（#/setting）+ 详情（#/setting/:id）
+      return second !== undefined ? (
+        <EntityDetail key={`setting:${second}`} type="setting" id={second} />
+      ) : (
+        <EntityList type="setting" />
+      );
+    case "locations":
+      return second !== undefined ? (
+        <EntityDetail key={`location:${second}`} type="location" id={second} />
+      ) : (
+        <EntityList type="location" />
+      );
+    case "relations":
+      // 关联总览（无详情路由；更深段归一回 /relations）
+      return second !== undefined ? (
+        <RedirectTo to="/relations" />
+      ) : (
+        <EntityList type="relations" />
+      );
     case "hooks":
-      return <HookPanel />;
+      // 富页（#/hooks）+ 详情（#/hooks/:id——承接旧泛型 hook 详情，实体关系泛型入口已移除）
+      return second !== undefined ? (
+        <EntityDetail key={`hook:${second}`} type="hook" id={second} />
+      ) : (
+        <HookPanel />
+      );
+    case "timepoints":
+      // 时间点无列表导航（管理在时间轴页）；详情段承接旧泛型时间点详情（时间轴行双击进入）
+      return second !== undefined ? (
+        <EntityDetail key={`timepoint:${second}`} type="timepoint" id={second} />
+      ) : (
+        <RedirectTo to="/timeline" />
+      );
     case "timeline":
  // 按段数区分——1 段（#/timeline）→ 列表页；2 段（#/timeline/:id）→ 事件详情页
  // （ 路由；key = id 变化强制卸载重挂——详情页表单按事件重置）
@@ -88,8 +118,11 @@ function renderPage(route: Route): ReactNode {
       );
     case "trash":
       return <Trash />;
-    case "settings":
+    case "preferences":
       return <Settings />;
+    case "settings":
+      // 旧设置页路由（批次十七：设置页避让设定 #/setting → #/preferences）
+      return <RedirectTo to="/preferences" />;
     default:
       return <Dashboard />;
   }

@@ -17,6 +17,7 @@ import { CreateRelationDialog } from "../components/entity/create-relation-dialo
 import { ParentSettingSelect } from "../components/entity/parent-setting-select";
 import { ComputePreview } from "../components/delta/compute-preview";
 import { Breadcrumb } from "../components/page-nav/Breadcrumb";
+import { entityListHost } from "../lib/entity-paths";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -48,17 +49,16 @@ import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
 
-const TYPE_LABEL: Record<EntityType, string> = {
-  character: "人物",
-  setting: "设定",
-  location: "地点",
-  hook: "伏笔",
- // C1 类型补全（ event 时间轴事件；时间轴专属 UI 由 C2 实现）
-  event: "事件",
- // G2.3 类型补全（G2 时间标签点；泛型详情页可用——仅名称可编辑，data 空）
-  timepoint: "时间点",
- // （批次九）参考资料 reference
-  reference: "参考资料",
+/** 详情页宿主面包屑（批次十七 1-1 一级化：无「实体」分组级；
+ * 宿主 = 列表页或富页，标签随宿主语义（时间点详情宿主 = 时间轴） */
+const HOST_CRUMB: Record<EntityType, { href: string; label: string }> = {
+  character: { href: "/characters", label: "人物" },
+  setting: { href: "/setting", label: "设定" },
+  location: { href: "/locations", label: "地点" },
+  hook: { href: "/hooks", label: "伏笔" },
+  event: { href: "/timeline", label: "时间轴" },
+  timepoint: { href: "/timeline", label: "时间轴" },
+  reference: { href: "/references", label: "参考资料" },
 };
 
 /** 字段值 → 表单字符串（undefined/null → 空串） */
@@ -406,7 +406,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
         .showToast(
           `已移入回收站，可随时还原${parts.length > 0 ? `（含 ${parts.join("、")}）` : ""}`,
         );
-      navigate(`/entities/${entityType}`);
+      navigate(entityListHost(entityType));
     } catch (err) {
       useUiStore
         .getState()
@@ -501,7 +501,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
               <Button
                 variant="outline"
                 type="button"
-                onClick={() => navigate(`/entities/${entityType}`)}
+                onClick={() => navigate(entityListHost(entityType))}
               >
                 返回列表
               </Button>
@@ -520,8 +520,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
       <div className="mb-1 flex items-center gap-3">
         <Breadcrumb
           items={[
-            { label: "实体", href: "/entities/character" },
-            { label: TYPE_LABEL[entityType], href: `/entities/${entityType}` },
+            { label: HOST_CRUMB[entityType].label, href: HOST_CRUMB[entityType].href },
             { label: detail?.name ?? "…" },
           ]}
         />
@@ -692,7 +691,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
                             type="button"
                             title="打开上级设定"
                             className="ml-1 rounded-md border border-border px-1.5 py-0.5 text-foreground hover:bg-muted hover:text-foreground"
-                            onClick={() => navigate(`/entities/setting/${h.parent!.parentId}`)}
+                            onClick={() => navigate(`/setting/${h.parent!.parentId}`)}
                           >
                             {h.parent.parentName ?? h.parent.parentId}
                           </button>
@@ -713,7 +712,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
                               type="button"
                               title="打开子设定"
                               className="ml-1 rounded-md border border-border px-1.5 py-0.5 text-foreground hover:bg-muted hover:text-foreground"
-                              onClick={() => navigate(`/entities/setting/${c.childId}`)}
+                              onClick={() => navigate(`/setting/${c.childId}`)}
                             >
                               {c.childName ?? c.childId}
                             </button>

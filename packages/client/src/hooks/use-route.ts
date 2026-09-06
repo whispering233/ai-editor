@@ -1,8 +1,9 @@
 // 自制 hash 路由（ 决策：轻量 hash-based useHashRoute，不引入 React Router）
-// 解析 location.hash（形如 "#/outline"、"#/entities/character/char-abc"）为结构化路由。
-// 路由表见 （10 路由）：#/、#/outline、#/outline/:nodeId、
-// #/entities/:type?、#/entities/:type/:id、#/hooks、#/timeline、#/timeline/:id、#/trash、#/settings
-// （#/chat、#/canvas 已移除；#/canvas 画布页删除见——未知 hash 回退 #/ 兜底）
+// 解析 location.hash（形如 "#/outline"、"#/characters/char-abc"）为结构化路由。
+// 路由表见 （10 路由，批次十七一级化）：#/、#/outline、#/outline/:nodeId、
+// #/characters[/:id]、#/setting[/:id]、#/locations[/:id]、#/relations、#/hooks[/:id]、
+// #/timeline、#/timeline/:id、#/timepoints/:id、#/references[/:id]、#/trash、#/preferences
+// （#/chat、#/canvas 已移除；#/entities/* 与 #/settings 仅作旧址重定向；未知 hash 回退 #/ 兜底）
 import { useEffect, useState } from "react";
 
 /** 路由结构：path 为归一化路径（如 "/entities/character"），segments 为分段数组 */
@@ -13,15 +14,23 @@ export interface Route {
   isFallback: boolean;
 }
 
-/** 已知路由首段（ 路由表；根路由 "" 由空 segments 表达；#/chat 已移除不再属已知段） */
+/** 已知路由首段（ 路由表；根路由 "" 由空 segments 表达；#/chat 已移除不再属已知段）
+ * 批次十七 1-1 一级化后：characters/setting/locations/relations/timepoints/preferences 为新段；
+ * entities/settings 仍属已知段——仅作旧址重定向（main.tsx 处理），避免老书签被误判回退 */
 export const KNOWN_ROUTE_SEGMENTS = [
   "outline",
   "entities",
+  "characters",
+  "setting",
+  "locations",
+  "relations",
   "hooks",
   "timeline",
+  "timepoints",
   "references",
   "trash",
   "settings",
+  "preferences",
 ] as const;
 
 /**

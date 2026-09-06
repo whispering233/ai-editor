@@ -1,13 +1,13 @@
 // 设定树形视图（2026-08 批次十任务卡 6）：实体关系页「设定」tab 的交互式树形视图，
-// 与原「设定树」tab（批次四 I4 只读树）合并——#/entities/setting 即树形视图，原 #/entities/setting-tree
-// 路由已移除（main.tsx 重定向到设定 tab）。
+// 与原「设定树」tab（批次四 I4 只读树）合并——#/setting 即树形视图（批次十七一级化），
+// 旧 #/entities/setting-tree、#/entities/setting 由 main.tsx 重定向到新段。
 // 「设定 Tab（树形视图）」——全量 setting（limit 200 + 名称排序）+
 // 全量 belongs_to 层级边 → buildSettingTree 组装递归树；行级交互对齐大纲（ 模式，）：
 // - 折叠/展开：父节点 ▾/▸ 切换 + 顶栏「全部展开 / 全部折叠」（全部折叠 = 仅保留根级）
 // - 行内编辑（点击标题）：Enter 确认 PUT /entity/setting/:id { name }、Esc 取消、失焦保存
 // - Enter 新建子级：选中节点按 Enter → 就地输入行出现在该节点子级末尾（POST /entity/setting +
 // POST /relation belongs_to 挂父；子级类型 = 设定）；root 级「+ 新建」输入行无父
-// - 双击详情：双击行 → #/entities/setting/:id（详情页含层级区块与全部关联）
+// - 双击详情：双击行 → #/setting/:id（详情页含层级区块与全部关联；批次十七一级化）
 // - 行级只留删除：行尾 Trash2 → 直接软删（H2 不弹确认）→ DELETE /entity/setting/:id
 // - 拖拽调整层级：HTML5 DnD **嵌套语义**（拖到行上 = 成为该行子级、拖到空白区 = 移为顶层根）——
 // belongs_to 防环沿用（canMoveSettingTo 客户端预校验 + 服务端兜底 400 VALIDATION_ERROR）；
@@ -375,11 +375,11 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     selectNode(node.id);
   }
 
- /** 行双击：双击 = 详情（#/entities/setting/:id）；按钮区/编辑态不触发（同大纲冲突防护） */
+ /** 行双击：双击 = 详情（#/setting/:id）；按钮区/编辑态不触发（同大纲冲突防护） */
   function handleRowDoubleClick(e: MouseEvent<HTMLDivElement>, node: SettingTreeNode) {
     if ((e.target as HTMLElement).closest("button, input, a")) return;
     if (editingId === node.id) return;
-    navigate(`/entities/setting/${node.id}`);
+    navigate(`/setting/${node.id}`);
   }
 
  /** 行键盘：选中节点按 Enter → 就地新建子级（子级类型 = 设定）；编辑态/新建态/拖拽中/busy 禁用；

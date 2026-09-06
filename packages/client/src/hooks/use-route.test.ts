@@ -41,6 +41,26 @@ describe("parseHashRoute", () => {
     expect(route.path).toBe("/");
     expect(route.segments).toEqual([]);
   });
+
+ // 批次十七 1-1 一级化：新段解析 + 旧址段仍属已知（main.tsx 重定向，不误判回退）
+  it.each([
+    ["#/characters", ["characters"]],
+    ["#/characters/char-abc", ["characters", "char-abc"]],
+    ["#/setting", ["setting"]],
+    ["#/locations/set-abc", ["locations", "set-abc"]],
+    ["#/relations", ["relations"]],
+    ["#/hooks/hook-abc", ["hooks", "hook-abc"]],
+    ["#/timepoints/tp-abc", ["timepoints", "tp-abc"]],
+    ["#/preferences", ["preferences"]],
+    ["#/entities/character", ["entities", "character"]], // 旧址：已知段，redirect 兜底
+    ["#/settings", ["settings"]],
+  ])("一级化新段解析 %s", (hash, segments) => {
+    expect(parseHashRoute(hash)).toEqual({
+      path: `/${(segments as string[]).join("/")}`,
+      segments,
+      isFallback: false,
+    });
+  });
 });
 
 

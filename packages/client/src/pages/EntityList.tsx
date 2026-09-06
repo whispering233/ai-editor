@@ -1,16 +1,17 @@
 // 实体列表页（S3.5；替换 T7.1 占位壳；U8 增补第 5 个「关联」tab）
-// 路由：#/entities/:type?（type ∈ character|setting|location|hook|…，缺省 character——main.tsx 归一化；
-// "relations" 由 main.tsx 先拦截传入本页，不参与归一化）；
-// 四类 tab 切换即改 hash（useHashRoute 驱动），hash 变化 → main.tsx 传新 type → 本页重置查询状态
+// 路由（批次十七 1-1 一级化）：#/characters | #/setting（树形视图）| #/locations | #/relations——
+// 各类型独立一级段，main.tsx 按段路由传入 type；hook/event/timepoint 泛型入口已去重（富页/宿主段承接），
+// 旧 #/entities/:type[/:id] 在 main.tsx 全量重定向到新段；
+// 二级 tab 切换即改 hash（useHashRoute 驱动），hash 变化 → main.tsx 传新 type → 本页重置查询状态
 // 数据：GET /api/v1/entity/:type?q=&offset=&limit=&sort=&order=（EntitySummary 摘要列表）
 // ——tab/搜索防抖 300ms/排序下拉/分页（limit 20、total 驱动）/
 // 摘要列按类型（lib/entity-list.ts SUMMARY_COLUMNS）/空态两种文案区分/行点击跳详情（S3.6）；
 // 「关联 Tab（U8 增补）」——type==="relations" 渲染 RelationsView（前端过滤全量关系），
 // 「+ 新建」变「+ 建立关联」打开共用 CreateRelationDialog（列表模式，源可选）
 // （2026-08 批次十）：设定 tab（entityType==="setting"）改为**树形视图**（SettingTreeView，
-// 与设定树 tab 合并——原「设定树」tab/路由已移除，main.tsx 重定向到设定 tab）；设定不走表格/分页，
+// 与设定树 tab 合并）；设定不走表格/分页，
 // 搜索+标签筛选在树内进行（树形视图自带工具栏），上级设定筛选被树形导航吸收（下拉移除）；
-// character/location/hook 保持表格视图（行级 AskAiButton 已移除——右键菜单替代）
+// character/location 保持表格视图（行级 AskAiButton 已移除——右键菜单替代）
 // 「+ 新建」按钮（列表头/空态两个入口）→ 列表首行内联编辑行（UX4：name + 该类型首字段——
 // hook 的 status 下拉、其余文本；字段配置复用 lib/entity-list.ts CREATE_FIRST_FIELD；
 // 提交成功留在列表（2026-08 用户反馈：不自动跳详情），失败内联错误不关行）
@@ -18,7 +19,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { ENTITY_TYPES } from "@whispering233/ai-editor-shared";
-import type { EntitySummary } from "@whispering233/ai-editor-shared";
+import type { EntitySummary, EntityType } from "@whispering233/ai-editor-shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -40,6 +41,7 @@ import {
   summaryCellText,
 } from "../lib/entity-list";
 import { cn } from "../lib/utils";
+import { entityDetailPath, entityListPath } from "../lib/entity-paths";
 import { navigate } from "../hooks/use-route";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useUiStore } from "../stores/ui";
@@ -61,6 +63,9 @@ const TYPE_LABEL: Record<ListableEntityType, string> = {
 };
 // 注：TYPE_LABEL.reference 已随批次十二 T3 移除——实体二级 tab 不再渲染参考资料
 //（独立中栏 tab #/references，旧路由重定向）。
+// 批次十七 1-1 泛型入口收敛：导航仅保留列表宿主类型（hook/event/timepoint 已由富页/宿主段承接，
+// 旧 #/entities/{hook,event,timepoint} 路由在 main.tsx 重定向）
+const TAB_TYPES: Array<"character" | "setting" | "location"> = ["character", "setting", "location"];
 
 /** 排序下拉选项（sort × order 组合；移除 updated_at 项，默认创建时间倒序） */
 const SORT_OPTIONS: Array<{
@@ -260,12 +265,13 @@ export default function EntityList({ type }: { type: string }) {
           （设定 tab 为树形视图（），自带工具栏——搜索/新建在树内，顶部不重复渲染） */}
       <div className="flex flex-wrap items-center gap-3 border-b border-border pb-3">
         <div className="flex gap-1">
-          {/* 批次十二 T3：参考资料已有独立中栏 tab（#/references），实体二级 tab 排除——入口去重 */}
-          {ENTITY_TYPES.filter((t) => t !== "reference").map((t) => (
+          {/* 批次十七 1-1：导航仅列表宿主类型（人物/设定/地点；hook/event/timepoint 入口去重——
+              由伏笔富页/时间轴/时间点宿主承接，路由层重定向） */}
+          {TAB_TYPES.map((t) => (
             <button
               key={t}
               type="button"
-              onClick={() => navigate(`/entities/${t}`)}
+              onClick={() => navigate(entityListPath(t))}
               className={cn(
                 "rounded-md border border-border px-3 py-1.5 text-sm",
                 !isRelations && entityType === t
@@ -279,7 +285,7 @@ export default function EntityList({ type }: { type: string }) {
           {/* 关联 tab（token 样式；激活态反相对比 bg-foreground/text-background，同 Breadcrumb） */}
           <button
             type="button"
-            onClick={() => navigate("/entities/relations")}
+            onClick={() => navigate("/relations")}
             className={cn(
               "rounded-md border border-border px-3 py-1.5 text-sm",
               isRelations
@@ -497,7 +503,7 @@ export default function EntityList({ type }: { type: string }) {
                       trigger={
                         <tr
                           className="cursor-pointer border-b border-border/50 transition-colors last:border-0 hover:bg-muted"
-                          onClick={() => navigate(`/entities/${entityType}/${item.id}`)}
+                          onClick={() => navigate(entityDetailPath(entityType as EntityType, item.id))}
                           title={`打开《${item.name}》`}
                         />
                       }

@@ -729,7 +729,7 @@ export function Sidebar({
       {/* 底部区：设置入口 + 主题切换（） */}
       <div className="flex shrink-0 flex-col gap-1 border-t border-border p-2">
         <a
-          href="#/settings"
+          href="#/preferences"
           className="flex h-8 items-center gap-2 rounded-lg px-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           <Settings className="size-4 shrink-0" />
