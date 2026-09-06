@@ -12,9 +12,13 @@
     "lint": "eslint ."
   },
   "dependencies": {
+    "@ant-design/icons": "^6.3.4",
+    "@ant-design/x": "^2.9.0",
+    "@ant-design/x-markdown": "^2.9.0",
     "@base-ui/react": "^1.6.0",
     "@uiw/react-md-editor": "^4.1.1",
     "@whispering233/ai-editor-shared": "workspace:*",
+    "antd": "^6.6.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.28.0",
