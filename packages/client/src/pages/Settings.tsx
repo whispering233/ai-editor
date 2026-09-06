@@ -9,8 +9,7 @@
 // 外部修改检测：GET 返回 mtime，与上次读取比对不一致提示「文件已被外部修改，请刷新/重新加载」；
 // 无项目打开灰显禁用
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Alert, Button, Card, Input, Select, Tag, theme, Typography } from "antd";
 import { ApiError, CLIENT_NETWORK_ERROR, getSettingsLlm, updateSettingsLlm, type SettingsLlmConfig } from "../lib/api";
 import { useProjectStore } from "../stores/project";
 import { useUiStore, type ErrorBanner } from "../stores/ui";
@@ -22,6 +21,7 @@ function errorCodeOf(err: unknown): ErrorBanner["code"] {
 }
 
 export default function Settings() {
+  const { token } = theme.useToken();
   const showToast = useUiStore((s) => s.showToast);
   const showError = useUiStore((s) => s.showError);
   const notifyDataChanged = useUiStore((s) => s.notifyDataChanged);
@@ -190,133 +190,174 @@ export default function Settings() {
   }
 
   return (
-    <section className="max-w-lg">
-      <h1 className="mb-4 text-xl font-semibold">设置</h1>
+    <section className="mx-auto w-full max-w-2xl px-4">
+      <Typography.Title level={4} className="!mb-4">
+        设置
+      </Typography.Title>
       {loading ? (
-        <p className="text-sm text-muted-foreground">加载中…</p>
+        <Typography.Text type="secondary">加载中…</Typography.Text>
       ) : (
         <div className="flex flex-col gap-6">
           {/* AI 模型（批次十六：每 provider 一张卡片，平铺） */}
           <div>
-            <h2 className="mb-1 text-sm font-semibold text-foreground">AI 模型</h2>
-            <p className="mb-2 text-xs text-muted-foreground">
+            <Typography.Title level={5} className="!mb-1">
+              AI 模型
+            </Typography.Title>
+            <Typography.Paragraph type="secondary" className="!mb-2 !text-xs">
               每提供商一卡：模型下拉点选即激活；key 独立配置。未配 key 的 provider 聊天下拉整组禁用。
-            </p>
-            {modelError && <p className="mb-2 text-sm text-destructive">{modelError}</p>}
+            </Typography.Paragraph>
+            {modelError && (
+              <Typography.Paragraph type="danger" className="!mb-2 !text-sm">
+                {modelError}
+              </Typography.Paragraph>
+            )}
             <div className="flex flex-col gap-4">
               {(settings?.providers ?? []).map((p) => {
                 const isActive = settings?.provider === p.id;
                 return (
-                  <div
+                  <Card
                     key={p.id}
-                    className={`flex flex-col gap-2 rounded-md border p-3 ${isActive ? "border-primary" : "border-border"}`}
+                    size="small"
+                    styles={{
+                      body: { display: "flex", flexDirection: "column", gap: 10 },
+                      ...(isActive ? { header: { borderColor: "transparent" } } : {}),
+                    }}
+                    style={isActive ? { borderColor: token.colorPrimary } : undefined}
+                    title={
+                      <span className="text-sm font-medium">
+                        {p.displayName}
+                        {isActive && <Tag color="blue" className="ml-2">当前</Tag>}
+                      </span>
+                    }
                   >
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-foreground">{p.displayName}</span>
-                      {isActive && (
-                        <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">当前</span>
-                      )}
-                    </div>
-                    <label className="flex flex-col gap-1">
-                      <span className="text-xs text-muted-foreground">模型（点选即激活）</span>
-                      <select
-                        className="h-8 w-full rounded-md border border-input bg-transparent px-1.5 text-xs text-foreground outline-none focus-visible:border-ring"
-                        value={isActive ? settings?.model : ""}
+                    <div className="flex flex-col gap-1">
+                      <Typography.Text type="secondary" className="!text-xs">
+                        模型（点选即激活）
+                      </Typography.Text>
+                      <Select
+                        size="small"
+                        className="w-full"
+                        value={isActive ? (settings?.model ?? undefined) : undefined}
+                        placeholder={isActive ? "选择模型" : ""}
                         disabled={saving}
-                        onChange={(e) => {
-                          if (e.target.value !== "") void handleActivate(p.id, e.target.value);
+                        onChange={(value) => {
+                          if (value !== undefined && value !== "") void handleActivate(p.id, String(value));
                         }}
                         aria-label={`选择 ${p.displayName} 模型`}
-                      >
-                        {!isActive && <option value="" />}
-                        {p.models.map((m) => (
-                          <option key={m.id} value={m.id}>
-                            {m.displayName ?? m.id}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                        options={p.models.map((m) => ({
+                          value: m.id,
+                          label: m.displayName ?? m.id,
+                        }))}
+                      />
+                    </div>
                     <div className="flex flex-col gap-1">
-                      <span className="text-xs text-muted-foreground">
+                      <Typography.Text type="secondary" className="!text-xs">
                         {p.apiKeySet ? `key: 已配置（${p.apiKeyMasked ?? ""}）` : "key: 未配置"}
-                      </span>
+                      </Typography.Text>
                       {!p.apiKeySet && (
-                        <span className="text-[11px] text-destructive">未配 key：聊天下拉已禁用此组，聊天不可用</span>
+                        <Typography.Text type="danger" className="!text-[11px]">
+                          未配 key：聊天下拉已禁用此组，聊天不可用
+                        </Typography.Text>
                       )}
                       <div className="flex gap-1.5">
                         <Input
-                          className="h-7 text-xs"
+                          size="small"
+                          className="min-w-0 flex-1"
                           value={keyDrafts[p.id] ?? ""}
                           onChange={(e) => setKeyDrafts((d) => ({ ...d, [p.id]: e.target.value }))}
                           placeholder="输入新 key（覆盖旧 key）"
                         />
-                        <Button className="h-7 px-2 text-xs" onClick={() => void handleSaveKey(p.id)} disabled={saving} type="button">
+                        <Button size="small" onClick={() => void handleSaveKey(p.id)} disabled={saving}>
                           保存
                         </Button>
                         {p.apiKeySet && (
-                          <Button className="h-7 px-2 text-xs" variant="outline" onClick={() => void handleClearKey(p.id)} disabled={saving} type="button">
+                          <Button size="small" onClick={() => void handleClearKey(p.id)} disabled={saving}>
                             清除
                           </Button>
                         )}
                       </div>
-                      {keyErrors[p.id] && <span className="text-xs text-destructive">{keyErrors[p.id]}</span>}
+                      {keyErrors[p.id] && (
+                        <Typography.Text type="danger" className="!text-xs">
+                          {keyErrors[p.id]}
+                        </Typography.Text>
+                      )}
                     </div>
-                  </div>
+                  </Card>
                 );
               })}
             </div>
             {!loading && settings === null && (
-              <p className="mt-2 text-xs text-muted-foreground">模型配置读取失败，请刷新页面重试。</p>
+              <Typography.Paragraph type="secondary" className="!mt-2 !text-xs">
+                模型配置读取失败，请刷新页面重试。
+              </Typography.Paragraph>
             )}
           </div>
 
-          {/* 常驻说明（原型「说明」区；批次十六：每 provider 独立解析链） */}
-          <div className="rounded-md border border-border bg-muted/50 p-3 text-xs leading-relaxed text-muted-foreground">
-            <p>
-              · key 不进项目文件；每 provider 独立解析：环境变量（DEEPSEEK_API_KEY / OPENCODE_API_KEY）&gt; 用户配置
-              ~/.ai-editor/config.json &gt; pi-agent 配置 ~/.pi/agent/auth.json（只读兜底）
-            </p>
-            <p>· 保存的 key 与模型切换仅影响新请求；进行中的对话不受扰动</p>
-          </div>
+          {/* 常驻说明（批次十六：每 provider 独立解析链） */}
+          <Alert
+            type="info"
+            showIcon
+            message={
+              <div className="text-xs leading-relaxed">
+                <p>
+                  · key 不进项目文件；每 provider 独立解析：环境变量（DEEPSEEK_API_KEY /
+                  OPENCODE_API_KEY）&gt; 用户配置 ~/.ai-editor/config.json &gt; pi-agent 配置
+                  ~/.pi/agent/auth.json（只读兜底）
+                </p>
+                <p>· 保存的 key 与模型切换仅影响新请求；进行中的对话不受扰动</p>
+              </div>
+            }
+          />
 
-          {/* 项目规则 ：编辑项目目录 文件内容（GET/PUT /project/agents）；
-              注入 AI 上下文「## 项目设定」段（每轮有效）；空 = 整段跳过；无项目打开灰显禁用 + 提示；
-              外部修改检测：GET 返回 mtime，与上次读取比对不一致提示刷新/重新加载 */}
+          {/* 项目规则：编辑项目目录 AGENTS.md（GET/PUT /project/agents）；注入 AI 上下文
+              「## 项目设定」段；外部修改检测（mtime 比对）提示刷新 */}
           <div>
-            <h2 className="mb-1 text-sm font-semibold text-foreground">项目规则</h2>
-            <p className="mb-2 text-xs text-muted-foreground">
+            <Typography.Title level={5} className="!mb-1">
+              项目规则
+            </Typography.Title>
+            <Typography.Paragraph type="secondary" className="!mb-1 !text-xs">
               编辑项目目录下 AGENTS.md 文件内容，注入 AI 上下文「## 项目设定」段（每轮有效）；空 = 整段跳过
-            </p>
-            <p className="mb-2 text-xs text-muted-foreground/70">
+            </Typography.Paragraph>
+            <Typography.Paragraph type="secondary" className="!mb-2 !text-xs">
               可直接在文件管理器中编辑 AGENTS.md（外部修改后此处会提示刷新/重新加载）
-            </p>
+            </Typography.Paragraph>
             {externalModified && (
-              <p className="mb-2 text-sm text-destructive">文件已被外部修改，请刷新/重新加载</p>
+              <Typography.Paragraph type="danger" className="!mb-2 !text-sm">
+                文件已被外部修改，请刷新/重新加载
+              </Typography.Paragraph>
             )}
-            <textarea
+            <Input.TextArea
               value={agentsContent}
               onChange={(e) => setAgentsContent(e.target.value)}
               rows={6}
  // 首填完成前不可输入（含 config 拉取中/切换项目后未加载），消除草稿被首填覆盖窗口
               disabled={config === null || config.id !== agentsLoadedFor || agentsLoading}
               placeholder="输入项目规则/行业要求…"
-              className="w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
             />
             <div className="mt-2 flex items-center gap-3">
               <Button
+                type="primary"
                 onClick={() => void handleSaveAgents()}
                 disabled={agentsSaving || config === null || config.id !== agentsLoadedFor}
-                type="button"
+                
               >
                 保存规则
               </Button>
               {config === null && !configLoading && (
-                <p className="text-xs text-muted-foreground/70">打开项目后可用</p>
+                <Typography.Text type="secondary" className="!text-xs">
+                  打开项目后可用
+                </Typography.Text>
               )}
             </div>
-            {agentsErrorLocal && <p className="mt-1 text-sm text-destructive">{agentsErrorLocal}</p>}
+            {agentsErrorLocal && (
+              <Typography.Paragraph type="danger" className="!mt-1 !text-sm">
+                {agentsErrorLocal}
+              </Typography.Paragraph>
+            )}
             {agentsError !== null && agentsError !== "NO_PROJECT_OPEN" && (
-              <p className="mt-1 text-sm text-destructive">规则文件加载失败，请重试</p>
+              <Typography.Paragraph type="danger" className="!mt-1 !text-sm">
+                规则文件加载失败，请重试
+              </Typography.Paragraph>
             )}
           </div>
 
