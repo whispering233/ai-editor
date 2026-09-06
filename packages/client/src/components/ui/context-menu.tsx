@@ -1,76 +1,137 @@
-// Base UI ContextMenu 封装（shadcn base-nova 风格；@base-ui/react/context-menu）
-// （批次十）：行级右键菜单替代行级 AskAiButton——「注入会话上下文」+「建立关联」。
-// 触发 = 行级 onContextMenu：ContextMenuTrigger 内建 preventDefault + 右键/长按打开（行级
-// onContextMenu 语义由组件承担，页面无需手写）；菜单弹出在指针位置（ContextMenuRoot 内建）。
-// 红线（同 dropdown-menu.tsx，Base UI error #31）：ContextMenuLabel（= Menu.GroupLabel）
-// **必须**由 ContextMenuGroup（= Menu.Group）包裹——GroupLabel 读取 Group 上下文，缺失即抛
-// 「MenuGroupContext is missing」。Item/Separator 无此要求。
-// 与 DropdownMenu 的差异：ContextMenu 无 Trigger 按钮——Trigger 是「弹出区域」本身（render 行元素）；
-// Popup 宽度不取锚点宽（w-(--anchor-width) 会让菜单撑满整行），改用 w-auto 自适应内容。
-import { ContextMenu as ContextMenuPrimitive } from "@base-ui/react/context-menu";
+// 行级右键菜单（批次十七 3-7 自绘换芯：Base UI ContextMenu → 原生实现，API 面不变）
+// 触发 = 行元素 onContextMenu（ContextMenuTrigger 内建 preventDefault + 打开于指针位置）；
+// 行内容经 cloneElement 注入 trigger 元素内部（render={行元素} + children）。
+// 菜单浮层 = portal fixed（指针坐标 + 视口 clamp）；Esc / 外部 pointerdown / 滚动关闭。
+// 注：旧 Base UI error #31（Label 必须 Group 包裹）契约随换芯退役——自绘无 Group 上下文依赖。
+import * as React from "react";
+import { createPortal } from "react-dom";
 
 import { cn } from "@/lib/utils";
 
-function ContextMenuRoot({ ...props }: ContextMenuPrimitive.Root.Props) {
-  return <ContextMenuPrimitive.Root data-slot="context-menu" {...props} />;
+interface MenuState {
+  open: boolean;
+  x: number;
+  y: number;
+}
+interface MenuApi {
+  state: MenuState;
+  openAt: (x: number, y: number) => void;
+  close: () => void;
+}
+const MenuContext = React.createContext<MenuApi | null>(null);
+
+/** 根：菜单开关状态（不渲染 DOM；Esc/外部 pointerdown/滚动关闭监听） */
+function ContextMenuRoot({ children }: { children: React.ReactNode }) {
+  const [state, setState] = React.useState<MenuState>({ open: false, x: 0, y: 0 });
+  const openAt = React.useCallback(
+    (x: number, y: number) => setState({ open: true, x, y }),
+    [],
+  );
+  const close = React.useCallback(() => setState((s) => (s.open ? { ...s, open: false } : s)), []);
+  const api = React.useMemo(() => ({ state, openAt, close }), [state, openAt, close]);
+
+  React.useEffect(() => {
+    if (!state.open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    const onOutside = (e: PointerEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && t.closest("[data-slot=context-menu-content]")) return;
+      close();
+    };
+    const onScroll = () => close();
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("pointerdown", onOutside, true);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("pointerdown", onOutside, true);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [state.open, close]);
+
+  return <MenuContext.Provider value={api}>{children}</MenuContext.Provider>;
 }
 
-function ContextMenuTrigger({ ...props }: ContextMenuPrimitive.Trigger.Props) {
-  return <ContextMenuPrimitive.Trigger data-slot="context-menu-trigger" {...props} />;
-}
-
-function ContextMenuPortal({ ...props }: ContextMenuPrimitive.Portal.Props) {
-  return <ContextMenuPrimitive.Portal data-slot="context-menu-portal" {...props} />;
-}
-
-function ContextMenuContent({
-  align = "start",
-  alignOffset = 4,
-  side = "bottom",
-  sideOffset = 4,
-  className,
-  ...props
-}: ContextMenuPrimitive.Popup.Props &
-  Pick<ContextMenuPrimitive.Positioner.Props, "align" | "alignOffset" | "side" | "sideOffset">) {
-  return (
-    <ContextMenuPrimitive.Portal>
-      <ContextMenuPrimitive.Positioner
-        className="isolate z-50 outline-none"
-        align={align}
-        alignOffset={alignOffset}
-        side={side}
-        sideOffset={sideOffset}
-      >
-        <ContextMenuPrimitive.Popup
-          data-slot="context-menu-content"
-          className={cn(
-            "z-50 max-h-(--available-height) w-auto min-w-40 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 outline-none data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:overflow-hidden data-closed:fade-out-0 data-closed:zoom-out-95",
-            className,
-          )}
-          {...props}
-        />
-      </ContextMenuPrimitive.Positioner>
-    </ContextMenuPrimitive.Portal>
+/** 弹出区域：render 行元素 + children 注入其内部；右键打开于指针位置 */
+function ContextMenuTrigger({
+  render,
+  children,
+}: {
+  render: React.ReactElement;
+  children?: React.ReactNode;
+}) {
+  const menu = React.useContext(MenuContext);
+  if (!menu) return render; // 无 Root 包裹（结构测试路径）：原样渲染
+ // createElement 手工合并（cloneElement 传 undefined children 会清空 render 自带 children）
+  const el = render as React.ReactElement<Record<string, unknown>>;
+  const props = {
+    ...el.props,
+    onContextMenu: (e: React.MouseEvent) => {
+      e.preventDefault();
+      menu.openAt(e.clientX, e.clientY);
+    },
+  };
+  const rowChildren = el.props.children as React.ReactNode | undefined;
+  return React.createElement(
+    el.type,
+    props,
+    children === undefined ? rowChildren : children,
   );
 }
 
-function ContextMenuGroup({ ...props }: ContextMenuPrimitive.Group.Props) {
-  return <ContextMenuPrimitive.Group data-slot="context-menu-group" {...props} />;
+/** Portal 容器（保持导出兼容；Content 自身 createPortal） */
+function ContextMenuPortal({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
+}
+
+/** 菜单浮层：打开时 portal fixed 于指针坐标（视口 clamp 保守 192×128） */
+function ContextMenuContent({
+  className,
+  children,
+  ...props
+}: React.ComponentProps<"div"> & { className?: string }) {
+  const menu = React.useContext(MenuContext);
+  if (!menu || !menu.state.open) return null;
+  const maxX = typeof window !== "undefined" ? window.innerWidth - 192 : 0;
+  const maxY = typeof window !== "undefined" ? window.innerHeight - 128 : 0;
+  const x = Math.max(0, Math.min(menu.state.x, maxX));
+  const y = Math.max(0, Math.min(menu.state.y, maxY));
+  return createPortal(
+    <div
+      data-slot="context-menu-content"
+      role="menu"
+      className={cn(
+        "fixed z-50 w-auto min-w-40 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10",
+        className,
+      )}
+      style={{ left: x, top: y }}
+      {...props}
+    >
+      {children}
+    </div>,
+    document.body,
+  );
+}
+
+function ContextMenuGroup({ ...props }: React.ComponentProps<"div">) {
+  return <div data-slot="context-menu-group" {...props} />;
 }
 
 function ContextMenuLabel({
   className,
   inset,
   ...props
-}: ContextMenuPrimitive.GroupLabel.Props & {
-  inset?: boolean;
-}) {
+}: React.ComponentProps<"div"> & { inset?: boolean }) {
   return (
-    <ContextMenuPrimitive.GroupLabel
+    <div
       data-slot="context-menu-label"
-      data-inset={inset}
       className={cn(
-        "px-1.5 py-1 text-xs font-medium text-muted-foreground data-inset:pl-7",
+        "px-1.5 py-1 text-xs font-medium text-muted-foreground",
+        inset && "pl-7",
         className,
       )}
       {...props}
@@ -82,28 +143,37 @@ function ContextMenuItem({
   className,
   inset,
   variant = "default",
+  onClick,
   ...props
-}: ContextMenuPrimitive.Item.Props & {
+}: React.ComponentProps<"button"> & {
   inset?: boolean;
   variant?: "default" | "destructive";
 }) {
+  const menu = React.useContext(MenuContext);
   return (
-    <ContextMenuPrimitive.Item
+    <button
+      type="button"
+      role="menuitem"
       data-slot="context-menu-item"
-      data-inset={inset}
-      data-variant={variant}
       className={cn(
-        "group/context-menu-item relative flex cursor-default items-center gap-1.5 rounded-md px-1.5 py-1 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-inset:pl-7 data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive dark:data-[variant=destructive]:focus:bg-destructive/20 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 data-[variant=destructive]:*:[svg]:text-destructive",
+        "flex w-full cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-sm outline-none select-none hover:bg-accent hover:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        inset && "pl-7",
+        variant === "destructive" &&
+          "text-destructive hover:bg-destructive/10 hover:text-destructive",
         className,
       )}
+      onClick={(e) => {
+        menu?.close();
+        onClick?.(e);
+      }}
       {...props}
     />
   );
 }
 
-function ContextMenuSeparator({ className, ...props }: ContextMenuPrimitive.Separator.Props) {
+function ContextMenuSeparator({ className, ...props }: React.ComponentProps<"div">) {
   return (
-    <ContextMenuPrimitive.Separator
+    <div
       data-slot="context-menu-separator"
       className={cn("-mx-1 my-1 h-px bg-border", className)}
       {...props}
