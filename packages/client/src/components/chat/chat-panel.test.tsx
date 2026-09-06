@@ -38,13 +38,19 @@ vi.mock("../../hooks/use-sse", () => ({
   fetchSSE: vi.fn(() => () => {}),
 }));
 
+// 批次十七 2-1：x-markdown 的 CJS lib 包内 require css，vitest node 直跑会 SyntaxError——
+// mock 为纯文本渲染（真实渲染路径由 vite build 管线验证，见 antd-smoke.test 注记）
+vi.mock("@ant-design/x-markdown", () => ({
+  default: ({ children }: { children?: string }) => children ?? null,
+}));
+
 import {
   getSessionMessages as apiGetSessionMessages,
   listSessions as apiListSessions,
 } from "../../lib/api";
 import { useChatStore } from "../../stores/chat";
 import { useProjectStore } from "../../stores/project";
-import { ChatPanel, MessageItem, ProposalCardView, ToolCallRow } from "./ChatPanel";
+import { asToolCall, ChatPanel, MessageItem, ProposalCardView, ToolCallRow } from "./ChatPanel";
 
 const mocked = {
   listSessions: vi.mocked(apiListSessions),
@@ -167,6 +173,42 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3：任务�
  // 注意 SSR 会在文本与表达式间插入 <!-- --> 注释节点，断言用关键词而非整句
     expect(assistantHtml).toContain("get_entity");
     expect(assistantHtml).toContain("list_entities");
+  });
+
+  it("MessageItem：历史 wire 形态 tool_calls（{function:{name,arguments}}）渲染层归一不抛异常，args 摘要可见（2-1 `{}` 修复）", () => {
+    const wireMsg: ChatMessage = {
+      id: "m3",
+      sessionId: "sess-1",
+      role: "assistant",
+      content: null,
+ // 续聊重建/落库形态（server 直存 agent 输出；渲染层归一为内部形状）
+      toolCalls: [
+        {
+          id: "call-w1",
+          type: "function",
+          function: { name: "get_entity", arguments: '{"id":"char-1"}' },
+        },
+      ],
+      createdAt: "t2",
+    };
+    const html = renderToString(<MessageItem message={wireMsg} toolResults={new Map()} />);
+    expect(html).toContain("调用了"); // 名称自 function.name（不再回退「工具」；SSR 词间含注释节点，分开断言）
+    expect(html).toContain("get_entity");
+ // args 解析由 asToolCall 单测覆盖（ToolCallRow 展开态为 client state，SSR 不可达）
+    const call = asToolCall(wireMsg.toolCalls![0]);
+    expect(call).toEqual({ id: "call-w1", tool: "get_entity", name: "get_entity", args: { id: "char-1" } });
+  });
+
+  it("asToolCall 双形态归一：wire（function.name/arguments JSON 串）与内部形态（tool/args）", () => {
+    expect(
+      asToolCall({ id: "a", type: "function", function: { name: "x", arguments: '{"k":1}' } }),
+    ).toEqual({ id: "a", tool: "x", name: "x", args: { k: 1 } });
+    expect(asToolCall({ id: "b", tool: "y", args: { v: 2 } })).toEqual({ id: "b", tool: "y", args: { v: 2 } });
+    expect(asToolCall("bad")).toEqual({});
+ // arguments 非法 JSON：保留原串（渲染兜底展示原文）
+    expect(
+      asToolCall({ id: "c", type: "function", function: { name: "z", arguments: "not-json{" } }),
+    ).toEqual({ id: "c", tool: "z", name: "z", args: "not-json{" });
   });
 
   it("MessageItem：tool 消息本身返回 null（ 成对渲染，不单独出现）", () => {

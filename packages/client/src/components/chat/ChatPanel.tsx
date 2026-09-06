@@ -8,20 +8,22 @@
 // 由 SSE 事件经 store 瞬态字段自动填充渲染；提案确认/拒绝已接 S7.5 真实 API（S8.2 解锁，
 // store 驱动状态迁移：confirmed/rejected/stale 终态 + 404 移除卡片）
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ComponentRef } from "react";
 import {
   ChevronDown,
   ChevronRight,
   CircleAlert,
-  Loader2,
   MessageSquare,
   PanelRightClose,
   Plus,
-  Send,
   Sparkles,
   TriangleAlert,
   Wrench,
   X,
 } from "lucide-react";
+import { Bubble, Sender } from "@ant-design/x";
+import { theme } from "antd";
+import Markdown from "@ant-design/x-markdown";
 import { useMediaQuery } from "../../hooks/use-media-query";
 import { CHAT_MIN_WIDTH } from "../../hooks/use-panels";
 import { useProjectStore } from "../../stores/project";
@@ -94,8 +96,29 @@ interface ToolCallShape {
   name?: string;
   args?: unknown;
 }
-const asToolCall = (c: unknown): ToolCallShape =>
-  typeof c === "object" && c !== null ? (c as ToolCallShape) : {};
+/**
+ * 渲染层双形态归一（批次十七 2-1，修历史行展开显示 `{}`）：
+ * - 落库/续聊重建形态 = LLM wire 形状 { id, type: "function", function: { name, arguments: string } }
+ *   （server chat.ts 直存 agent 输出，存储不动——续聊重建依赖该形状回喂模型）
+ * - 运行时 SSE tool_call 事件 = 内部形状 { id, tool, args }
+ * 归一输出内部形状；wire.arguments 为 JSON 串 → parse 失败保留原文（原始渲染兜底）
+ */
+export const asToolCall = (c: unknown): ToolCallShape => {
+  if (typeof c !== "object" || c === null) return {};
+  const wire = c as { id?: string; type?: string; function?: { name?: string; arguments?: unknown } };
+  if (wire.type === "function" && wire.function) {
+    let args: unknown = wire.function.arguments;
+    if (typeof args === "string") {
+      try {
+        args = JSON.parse(args);
+      } catch {
+        // parse 失败（非常规 JSON）保留原串，渲染兜底展示原文
+      }
+    }
+    return { id: wire.id, tool: wire.function.name, name: wire.function.name, args };
+  }
+  return wire as ToolCallShape;
+};
 
 // ============ AI 设置工具条（需求 3）：模型选择 + 思考强度 + 上下文占用 ============
 
@@ -461,19 +484,27 @@ export function MessageItem({
   message: ChatMessage;
   toolResults: Map<string, ChatMessage>;
 }) {
+  const { token } = theme.useToken();
   if (message.role === "user") {
- // user 气泡：右对齐 bg-secondary 圆角气泡（ 结构图）
+ // user 气泡：右对齐（Bubble placement=end；底色 token 主色浅底，随双算法切换）
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-lg bg-secondary px-3 py-2 text-sm text-secondary-foreground">
-          {message.content}
-        </div>
+        <Bubble
+          placement="end"
+          content={message.content ?? ""}
+          styles={{
+            content: { background: token.colorPrimaryBg, color: token.colorText },
+            root: { maxWidth: "85%" },
+          }}
+        />
       </div>
     );
   }
   if (message.role === "tool") return null; // tool 消息仅在所属 assistant 调用行内渲染
- // assistant：无气泡纯排版（：assistant 无气泡纯排版；正文宋体栈 17px/1.72，）
+ // assistant：x-markdown 流式正文（增量渲染内建：已完成消息 content 引用稳定，React.memo 不重渲；
+ // 流式尾部块由 x-markdown streaming 优化处理）
   const toolCalls = Array.isArray(message.toolCalls) ? message.toolCalls : [];
+  const content = message.content ?? "";
   return (
     <div className="space-y-1.5">
       {toolCalls.map((c, i) => {
@@ -490,11 +521,9 @@ export function MessageItem({
           />
         );
       })}
-      {message.content ? (
-        <p className="font-serif text-[17px] leading-[1.72] whitespace-pre-wrap text-foreground">
-          {message.content}
-        </p>
-      ) : // 空内容（流式占位 / 空消息）：不渲染占位行
+      {content.trim() !== "" ? (
+        <Bubble content={<Markdown>{content}</Markdown>} />
+      ) : // 空内容（流式占位 / 空消息）：不渲染（流式思考指示器由 MessageList 提供）
       null}
     </div>
   );
@@ -626,50 +655,37 @@ function FocusBar() {
   );
 }
 
-// ============ 输入区：textarea（Enter 发送 / Shift+Enter 换行）+ 发送按钮 ============
+// ============ 输入区：x Sender（Enter 发送 / Shift+Enter 换行，IME 安全内建） ============
+// 批次十七 2-1：textarea 自研发送逻辑退役；loading = streaming 思考态。
+// 行为修订注记：原实现 streaming 期间禁用输入框；x Sender 无 disabled 透传，改为
+// streaming 仅禁发送（loading），允许预输入下一条消息（主流聊天产品同款，无红线约束）。
 
-function InputArea({ disabled }: { disabled: boolean }) {
+function InputArea() {
   const [text, setText] = useState("");
   const streaming = useChatStore((s) => s.streaming);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const focusInputSeq = useChatStore((s) => s.focusInputSeq);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
- // InfoBar「问 AI」点击触发聚焦（详见 chat store focusInputSeq 注释）
+  const senderRef = useRef<ComponentRef<typeof Sender> | null>(null);
+ // InfoBar「问 AI」点击触发聚焦（SenderRef.inputElement = 原生 textarea）
   useEffect(() => {
-    if (focusInputSeq > 0) textareaRef.current?.focus();
+    if (focusInputSeq > 0) senderRef.current?.inputElement?.focus();
   }, [focusInputSeq]);
-  const canSend = !disabled && !streaming && text.trim().length > 0;
-
-  const handleSend = () => {
-    if (!canSend) return;
-    sendMessage(text);
-    setText(""); // 乐观追加后清空输入（失败由错误条承接，文本可重输）
-  };
 
   return (
-    <div className="shrink-0 border-t border-border p-3">
-      <div className="flex items-end gap-2">
-        <textarea
-          ref={textareaRef}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
- // Enter 发送 / Shift+Enter 换行（「关键交互·发送」）
-            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-              e.preventDefault();
-              handleSend();
-            }
-          }}
-          placeholder={streaming ? "AI 思考中…" : "输入消息…"}
-          rows={1}
-          disabled={disabled || streaming}
-          className="max-h-32 min-h-9 flex-1 resize-none rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-        />
-        <Button onClick={handleSend} disabled={!canSend} className="shrink-0">
-          {streaming ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-          {streaming ? "思考中" : "发送"}
-        </Button>
-      </div>
+    <div className="shrink-0 border-t border-border px-3 py-3">
+      <Sender
+        ref={senderRef}
+        value={text}
+        onChange={(value) => setText(value)}
+        onSubmit={(value) => {
+          const trimmed = value.trim();
+          if (trimmed === "" || streaming) return;
+          sendMessage(trimmed);
+          setText(""); // 乐观追加后清空输入（失败由错误条承接，文本可重输）
+        }}
+        placeholder={streaming ? "AI 思考中…" : "输入消息…"}
+        loading={streaming}
+      />
     </div>
   );
 }
@@ -679,6 +695,7 @@ function InputArea({ disabled }: { disabled: boolean }) {
 function MessageList({ disabled }: { disabled: boolean }) {
   const messages = useChatStore((s) => s.messages);
   const messagesLoading = useChatStore((s) => s.messagesLoading);
+  const streaming = useChatStore((s) => s.streaming);
   const streamTools = useChatStore((s) => s.streamTools);
   const proposals = useChatStore((s) => s.proposals);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -692,12 +709,19 @@ function MessageList({ disabled }: { disabled: boolean }) {
     return map;
   }, [messages]);
 
- // 新消息/加载完成自动滚动到底部（streaming 期间持续跟随）
+ // 新消息/加载完成自动滚动到底部（messages 引用每次 delta 追加都变 → 流式期间持续跟随）
   const tail = messages.length;
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [tail, messagesLoading, streamTools.length, proposals.length]);
+  }, [tail, messages, messagesLoading, streamTools.length, proposals.length]);
+
+ /** 流式思考指示：正在流 & 尾条 assistant 且尚无正文（首段 delta 前/工具等待期） */
+  const showThinking =
+    streaming &&
+    messages.length > 0 &&
+    messages[messages.length - 1].role === "assistant" &&
+    (messages[messages.length - 1].content ?? "").trim() === "";
 
   if (disabled) {
  // 无项目打开：右栏禁用（「位置与形态」：灰显 + 「打开项目后可用」）
@@ -739,6 +763,7 @@ function MessageList({ disabled }: { disabled: boolean }) {
           {messages.map((m) => (
             <MessageItem key={m.id} message={m} toolResults={toolResults} />
           ))}
+          {showThinking && <Bubble loading content="" />}
           {/* 运行时工具记录（S7 SSE tool_call/tool_result 事件填充；折叠渲染同历史） */}
           {streamTools.map((t) => (
             <ToolCallRow
@@ -785,7 +810,7 @@ function ChatPanelBody({
       {!disabled && (
         <>
           <FocusBar />
-          <InputArea disabled={disabled} />
+          <InputArea />
         </>
       )}
     </div>
