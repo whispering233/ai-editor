@@ -12,10 +12,11 @@
 | **前端框架** | React 19 | 生态成熟，组件化 |
 | **前端构建** | Vite 7 | 快速 HMR，Tree-shaking（Vite 6 已停止常规维护） |
 | **状态管理** | Zustand 5 | 轻量、TypeScript 优秀、selector 自动优化 |
-| **样式** | Tailwind CSS 4 + shadcn/ui + Prettier（prettier-plugin-tailwindcss） | 原子化 CSS 灵活度 + 组件开箱即用（v4 CSS-first 配置，无 tailwind.config.js）；主题 tokens 与共享样式常量见 client 包 `index.css`/样式常量模块，组件一律 token 类禁硬编码色类；样式细节规范不重复入文档（ui/layout.md 只承载布局） |
+| **前端组件基座** | antd v6（ConfigProvider zhCN + 默认色板双主题 algorithm）+ @ant-design/icons；会话场景 `@ant-design/x`（Bubble/Sender/Thought/Conversations）+ `@ant-design/x-markdown`（流式 Markdown） | 成熟组件红利（Layout/Menu/Table/Tree/Form/Splitter/…）统一视觉与交互；主题 = antd 默认色板浅/深双算法（批次十七起；文学氛围色板退役）；颜色一律经 antd token，禁止硬编码色值/色类（旧 Base UI/shadcn 组件随迁移批次退役清理） |
+| **样式** | Tailwind CSS 4（仅布局 utility，不含颜色）+ Prettier（prettier-plugin-tailwindcss） | v4 CSS-first 配置，无 tailwind.config.js；布局间距/flex 类可用，颜色纪律见上（禁硬编码）；样式细节规范不重复入文档（ui/layout.md 只承载布局） |
 | **AI 调用** | `@earendil-works/pi-ai`（统一多提供商 LLM 接口；批次十六起注册 deepseek + opencode-go 两 provider，模型名/思考强度可配置，key 按 provider 独立解析） | 传输/SSE/usage 解析由 pi-ai 接管，llm 包单向 adapter 保留对外契约；注册/解析细节见 llm 包与 config.md |
 | **Schema 验证** | Zod 4 | 运行时类型安全，API 入参校验（v4 API，注意迁移破坏项） |
-| **路由** | 轻量 hash-based（自制 `useHashRoute`） | 单页桌面应用不需要 React Router |
+| **路由** | 轻量 hash-based（自制 `useHashRoute`） | 单页桌面应用不需要 React Router；路由一级化（书架 `#/` + 导航页独立首段，无二级 tab，详见 ui/layout.md §2） |
 
 ## 分包方案
 
@@ -29,7 +30,7 @@ packages/
 ├── tools     # AI 工具层：工具定义/注册表/执行器（查询·分析自动权限，写操作提案权限）
 ├── agent     # AI 对话循环：会话、上下文组装、runAgent 主循环、工具调度
 ├── server    # Hono API 层：REST 路由 + SSE 流 + 静态 SPA 托管（顶层装配包）
-└── client    # React SPA（private，不发布）：页面、组件、store、hooks、lib
+└── client    # React SPA（private，不发布）：页面、组件（antd v6 + @ant-design/x）、store、hooks、lib
 ```
 
 | 包 | 职责边界 | 对外契约 |
@@ -45,6 +46,7 @@ packages/
 **约束要点**：
 
 - 依赖只许沿 `shared → llm/db → tools → agent → server`，`client → shared`（仅类型+常量）；禁止反向或旁路依赖。
+- **前端页面组织与后端 API 路由完全解耦**：API 按数据对象类型划分（entity/relation/outline/project/chat/…），页面形状/导航层级/hash 路由名变更只动 client（路由表 + 导航组件），不触碰 server/shared；泛型 UI 入口移除 ≠ API 端点可删（端点是数据能力，可为工具/未来客户端复用）。
 - **Zod 校验仅在服务端执行**——client 不打包校验函数（避免 50KB 级依赖进浏览器包）。
 - server 是**顶层装配包**：依赖任一下层方向均合规、无环。
 - shared 硬约束见 §「shared 包的内容准则」。
