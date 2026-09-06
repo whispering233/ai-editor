@@ -16,18 +16,22 @@
 
 v0.0.1-v0.0.25 发布链路全绿；v0.0.25 = 文档体系重组。**批次十七 = antd 全站迁移 + 布局重构 + 会话渲染重做**（规划已定稿：见 milestone.md + layout.md 重写版 + architecture.md 技术栈段；迁移批次按下方卡片执行，每卡提交后更新本清单与对应文档）。
 
-## 批次 0：依赖与主题骨架
+## 批次 0：依赖与主题骨架（已完成，commit 0dcc421/5c34926/41ed626）
 
-- [ ] 0-1 依赖接入与兼容验证：client 引入 `antd@6`、`@ant-design/icons`、`@ant-design/x`、`@ant-design/x-markdown`；验证 x peer 与 antd v6 兼容、Vite 构建跑通 + 最小渲染冒烟（含 React 19 组合验证）
-- [ ] 0-2 ConfigProvider 双主题接线：zhCN + lightAlgorithm/darkAlgorithm（默认色板）+ use-theme 切换联动 + FOUC 首帧防护保持；App 根包裹；样式纪律标注同步代码注释
+
+- [x] 0-1 依赖接入与兼容验证：client 引入 `antd@6`、`@ant-design/icons`、`@ant-design/x`、`@ant-design/x-markdown`；验证 x peer 与 antd v6 兼容、Vite 构建跑通 + 最小渲染冒烟（含 React 19 组合验证）
+- [x] 0-2 ConfigProvider 双主题接线：zhCN + lightAlgorithm/darkAlgorithm（默认色板）+ use-theme 切换联动 + FOUC 首帧防护保持；App 根包裹；样式纪律标注同步代码注释
 - [x] 0-3 外壳骨架评估（2026-09 决策：**本轮保留 use-panels 交互壳**）：antd Splitter v6 核对——中栏弹性吸收/min-max px/onResizeEnd 持久化均支持，但收起语义（0 宽+bar 箭头）不承载现 32px 窄条形态、头部收起钮无命令 API；且切 Splitter 需连带改 Sidebar/ChatPanel props 契约，二者将在 1-2/2-x 重建——现在切 = 双倍返工。Splitter 切换决策并入 1-2 左栏重建时重新评估
 
-## 批次 1：布局与路由重构（需求 1）
+## 批次 1：布局与路由重构（需求 1；已完成 1-1/1-3/1-3b/1-2，commit c475562/51a5aac/30912cc/f5a5887）
 
-- [ ] 1-1 路由一级化：main.tsx 新路由表（书架 `#/`、`#/overview`、`#/characters`、`#/setting`、`#/locations`、`#/relations`、`#/preferences`…）+ 旧址重定向（`#/entities/*`、`#/settings`）；client 内 navigate/href/测试引用机械替换；未知路由回退；测试更新
-- [ ] 1-2 左栏导航重构：顶部书架按钮 + 当前书名；垂直 Menu 九项（概览→大纲→人物→设定→地点→伏笔→时间轴→关联→参考资料）+ 工具区分隔（回收站）+ 底部设置/主题；中栏 TabBar 移除；无项目导航禁用引导回书架（现 TabBar 行为平移）；导航高亮前缀规则 + 测试
-- [ ] 1-3 书架主页 `#/`：Dashboard 拆分——书架形态（书卡片/行列表、当前打开高亮、行内导出/重命名直显按钮）+ 新建/导入/打开其他路径；引导形态并入；概览形态移 `#/overview`
-- [ ] 1-4 泛型入口收尾：实体泛型列表入口组件移除（hook/event/timepoint/reference 对应 UI 清理，路由已重定向）；伏笔富页若需详情能力则补入口（按查证结论）
+
+- [x] 1-1 路由一级化：main.tsx 新路由表（书架 `#/`、`#/overview`、`#/characters`、`#/setting`、`#/locations`、`#/relations`、`#/preferences`…）+ 旧址重定向（`#/entities/*`、`#/settings`）；client 内 navigate/href/测试引用机械替换；未知路由回退；测试更新
+- [x] 1-2 左栏导航重构：顶部书架按钮 + 当前书名；垂直 Menu 九项（概览→大纲→人物→设定→地点→伏笔→时间轴→关联→参考资料）+ 工具区分隔（回收站）+ 底部设置/主题；中栏 TabBar 移除；无项目导航禁用引导回书架（现 TabBar 行为平移）；导航高亮前缀规则 + 测试
+- [x] 1-3 书架主页（**执行序交换：先 1-3/1-3b 后 1-2**——导航重构删树前须先有主页承接书架能力） `#/`：Dashboard 拆分——书架形态（书卡片/行列表、当前打开高亮、行内导出/重命名直显按钮）+ 新建/导入/打开其他路径；引导形态并入；概览形态移 `#/overview`
+- [x] 1-3b 书架行能力迁入主页（1-2 前置）：导入备份 Dialog（同名二选一冲突态）、当前书
+  导出/重命名（行内输入态）、行操作直显按钮——Sidebar 删除后能力不丢
+- [ ] 1-4 富页详情入口查证收尾（1-1 已含路由/按钮收敛；余项：伏笔富页行双击进详情等，按查证结论）：实体泛型列表入口组件移除（hook/event/timepoint/reference 对应 UI 清理，路由已重定向）；伏笔富页若需详情能力则补入口（按查证结论）
 - [ ] 1-5 文档同步：layout.md/architecture.md/AGENTS.md 前端段（Base UI 红线契约退役、样式纪律换 antd token、布局/路由描述）、tasks.md 状态、CHANGELOG 批次段
 
 ## 批次 2：会话渲染重做（需求 3）
