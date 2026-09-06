@@ -3,7 +3,6 @@
    浅/深双算法动态注入）；颜色一律经 antd token——禁硬编码色值（FOUC 兜底色为唯一例外） */
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
 
