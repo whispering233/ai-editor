@@ -20,7 +20,7 @@ v0.0.1-v0.0.25 发布链路全绿；v0.0.25 = 文档体系重组。**批次十�
 
 - [ ] 0-1 依赖接入与兼容验证：client 引入 `antd@6`、`@ant-design/icons`、`@ant-design/x`、`@ant-design/x-markdown`；验证 x peer 与 antd v6 兼容、Vite 构建跑通 + 最小渲染冒烟（含 React 19 组合验证）
 - [ ] 0-2 ConfigProvider 双主题接线：zhCN + lightAlgorithm/darkAlgorithm（默认色板）+ use-theme 切换联动 + FOUC 首帧防护保持；App 根包裹；样式纪律标注同步代码注释
-- [ ] 0-3 外壳骨架替换：三栏 AppShell 基座换 antd（Layout/Splitter 优先，能力缺口保留 use-panels 仅换肤），视觉与交互不变，全站冒烟 + 现有测试绿
+- [x] 0-3 外壳骨架评估（2026-09 决策：**本轮保留 use-panels 交互壳**）：antd Splitter v6 核对——中栏弹性吸收/min-max px/onResizeEnd 持久化均支持，但收起语义（0 宽+bar 箭头）不承载现 32px 窄条形态、头部收起钮无命令 API；且切 Splitter 需连带改 Sidebar/ChatPanel props 契约，二者将在 1-2/2-x 重建——现在切 = 双倍返工。Splitter 切换决策并入 1-2 左栏重建时重新评估
 
 ## 批次 1：布局与路由重构（需求 1）
 
