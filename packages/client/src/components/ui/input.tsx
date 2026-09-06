@@ -1,11 +1,11 @@
+// 批次十七 3-7 换芯：Base UI Input → 原生 input（样式类保留，色经 antd tokens remap）
 import * as React from "react";
-import { Input as InputPrimitive } from "@base-ui/react/input";
 
 import { cn } from "@/lib/utils";
 
 function Input({ className, type, autoComplete = "off", ...props }: React.ComponentProps<"input">) {
   return (
-    <InputPrimitive
+    <input
       type={type}
  // 2026-08 用户反馈：禁浏览器表单历史建议（autoComplete="off"）——输入提示完全由
  // datalist 候选/代码控制，避免 Chrome 历史值幽灵提示（如「龙隐洞天」）；

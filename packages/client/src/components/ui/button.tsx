@@ -1,6 +1,8 @@
-import { Button as ButtonPrimitive } from "@base-ui/react/button";
+// 批次十七 3-7 换芯：Base UI Button → 原生 button（样式类保留——色经 3-0 tokens remap 随 antd 主题；
+// 无 Base 独有增强依赖，行为等价）
 import { cva, type VariantProps } from "class-variance-authority";
 
+import * as React from "react";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
@@ -45,9 +47,10 @@ function Button({
   variant = "default",
   size = "default",
   ...props
-}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+}: React.ComponentPropsWithoutRef<"button"> & VariantProps<typeof buttonVariants>) {
   return (
-    <ButtonPrimitive
+    <button
+      type="button"
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
