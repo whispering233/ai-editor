@@ -10,19 +10,23 @@
 // 分类/标签/关键词过滤在前端（列表摘要 summary.type/tags/kind/file_name/url 由 db toSummary 提供）
 import { useEffect, useMemo, useState } from "react";
 import type { MouseEvent } from "react";
-import { ExternalLink, FileText, Link2, Loader2, RefreshCw, Search, Trash2 } from "lucide-react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
+import { Alert, Button, Empty, Input, Select, Skeleton, Tag, Typography } from "antd";
+import {
+  DeleteOutlined,
+  ExportOutlined,
+  FileTextOutlined,
+  LinkOutlined,
+  ReloadOutlined,
+  SearchOutlined,
+} from "@ant-design/icons";
 import { deleteEntity, getReferenceScanStatus, listEntities, scanReferences, updateEntity } from "../lib/api";
 import { ApiError } from "../lib/api";
 import { navigate } from "../hooks/use-route";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
-import { cn } from "../lib/utils";
-import { errorBannerClass, inputClass, skeletonClass } from "../lib/styles";
-import { Button } from "../components/ui/button";
 import { RowContextMenu } from "../components/entity/row-context-menu";
-import { EmptyState } from "../components/ui/empty-state";
 
 /** 分类回显映射（**仅存量显示**——material 等旧枚举值回显中文名，非可选建议；新自定义分类无映射原样显示） */
 const TYPE_LABELS: Record<string, string> = {
@@ -187,27 +191,26 @@ export default function ReferenceList() {
     <section className="flex h-full min-h-0 flex-col">
       {/* 固定区：标题 + 操作 */}
       <div className="mb-4 flex items-center gap-3">
-        <h1 className="text-xl font-semibold">参考资料</h1>
+        <Typography.Title level={4} className="!mb-0">
+          参考资料
+        </Typography.Title>
         <span
-          className={cn("ml-auto flex items-center gap-2", disabled && "cursor-not-allowed")}
+          className="ml-auto flex items-center gap-2"
           title={disabled ? "请先打开项目" : undefined}
         >
           <Button
-            type="button"
-            variant="outline"
-            disabled={disabled || scanBusy}
+            disabled={disabled}
             onClick={handleScan}
+            loading={scanBusy}
             title="扫描项目目录 references/ 下的本地文档，同步到索引"
+            icon={<ReloadOutlined />}
           >
-            <RefreshCw className={cn("size-3.5", scanBusy && "animate-spin")} />
             扫描
           </Button>
-          <Button type="button" variant="outline" disabled={disabled} onClick={() => navigate("#/references/new/md")}>
-            <FileText className="size-3.5" />
+          <Button disabled={disabled} onClick={() => navigate("#/references/new/md")} icon={<FileTextOutlined />}>
             新建 md 文档
           </Button>
-          <Button type="button" disabled={disabled} onClick={() => navigate("#/references/new/link")}>
-            <Link2 className="size-3.5" />
+          <Button type="primary" disabled={disabled} onClick={() => navigate("#/references/new/link")} icon={<LinkOutlined />}>
             新建外源链接
           </Button>
         </span>
@@ -215,83 +218,84 @@ export default function ReferenceList() {
 
       {/* 筛选行：关键词搜索 + 分类 select + 标签 select */}
       <div className="mb-3 flex shrink-0 flex-wrap items-center gap-2">
-        <div className="relative">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <input
-            className={cn(inputClass, "w-48 pl-8")}
-            placeholder="搜索标题 / 内容摘要…"
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-          />
-        </div>
-        <select
-          className={cn(inputClass, "w-32")}
+        <Input
+          className="w-48"
+          prefix={<SearchOutlined />}
+          allowClear
+          placeholder="搜索标题 / 内容摘要…"
+          value={keyword}
+          onChange={(e) => setKeyword(e.target.value)}
+        />
+        <Select
+          className="w-32"
           value={activeType}
-          onChange={(e) => setActiveType(e.target.value === "all" ? "all" : e.target.value)}
-        >
-          <option value="all">全部分类</option>
-          {typePool.map((t) => (
-            <option key={t} value={t}>
-              {TYPE_LABELS[t] ?? t}
-            </option>
-          ))}
-        </select>
-        <select
-          className={cn(inputClass, "w-32")}
+          onChange={(value) => setActiveType(value === "all" ? "all" : String(value))}
+          options={[{ value: "all", label: "全部分类" }, ...typePool.map((t) => ({ value: t, label: TYPE_LABELS[t] ?? t }))]}
+        />
+        <Select
+          className="w-32"
           value={activeTag ?? ""}
-          onChange={(e) => setActiveTag(e.target.value === "" ? null : e.target.value)}
-        >
-          <option value="">全部标签</option>
-          {tagPool.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
+          onChange={(value) => setActiveTag(value === "" ? null : String(value))}
+          options={[{ value: "", label: "全部标签" }, ...tagPool.map((t) => ({ value: t, label: t }))]}
+        />
       </div>
 
       {/* 未同步提示条（ N6）：检测到本地新增/外部修改 → 引导扫描（只读探测无副作用） */}
       {unsynced !== null && unsynced > 0 && (
-        <div className="mb-2 flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
-          <RefreshCw className="size-3.5 shrink-0 text-primary" />
-          <span className="flex-1">
-            检测到 <b>{unsynced}</b> 个未同步的本地文档（文件管理器新增或修改）——扫描后将同步到索引
-          </span>
-          <Button variant="outline" size="xs" onClick={handleScan} disabled={scanBusy}>
-            {scanBusy && <Loader2 className="size-3.5 animate-spin" />}
-            立即扫描
-          </Button>
-        </div>
+        <Alert
+          className="mb-2"
+          type="info"
+          showIcon
+          icon={<ReloadOutlined />}
+          message={
+            <span>
+              检测到 <b>{unsynced}</b> 个未同步的本地文档（文件管理器新增或修改）——扫描后将同步到索引
+            </span>
+          }
+          action={
+            <Button size="small" onClick={handleScan} loading={scanBusy}>
+              立即扫描
+            </Button>
+          }
+        />
       )}
 
       {/* 错误条（单区块失败不阻塞其他） */}
       {error !== null && (
-        <div className={cn(errorBannerClass, "mb-2 flex items-center gap-2")}>
-          <span className="flex-1">{error}</span>
-          <Button variant="outline" size="xs" onClick={() => setReloadTick((t) => t + 1)}>
-            重试
-          </Button>
-        </div>
+        <Alert
+          className="mb-2"
+          type="error"
+          showIcon
+          message={error}
+          action={
+            <Button size="small" onClick={() => setReloadTick((t) => t + 1)}>
+              重试
+            </Button>
+          }
+        />
       )}
 
       {/* 滚动区：列表 */}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {items === null ? (
           <div className="space-y-2">
-            {/* 骨架 × 3 */}
-            {[0, 1, 2].map((i) => (
-              <div key={i} className={cn(skeletonClass, "h-16 w-full")} />
-            ))}
+            <Skeleton active title={false} paragraph={{ rows: 3 }} />
           </div>
         ) : visible === null || visible.length === 0 ? (
           /* 空态（批次十二 R2）：无条目分支去重——纯文字提示，不显示书籍图标与新建按钮
              （顶部标题行已有两个新建入口）；筛选/搜索无匹配分支保留「清空筛选」操作 */
-          <EmptyState
-            action={
-              keyword !== "" || activeType !== "all" || activeTag !== null ? (
+          <div className="py-10">
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description={
+                keyword !== "" || activeType !== "all" || activeTag !== null
+                  ? "未找到匹配的参考资料——换个关键词或清空筛选条件试试"
+                  : "还没有参考资料，先新建一条——把书籍摘抄、灵感记录、写作理论保存到这里，AI 创作顾问会参考它们给出建议"
+              }
+            />
+            {(keyword !== "" || activeType !== "all" || activeTag !== null) && (
+              <div className="mt-2 text-center">
                 <Button
-                  variant="outline"
-                  size="sm"
                   onClick={() => {
                     setKeyword("");
                     setActiveType("all");
@@ -300,13 +304,9 @@ export default function ReferenceList() {
                 >
                   清空筛选
                 </Button>
-              ) : undefined
-            }
-          >
-            {keyword !== "" || activeType !== "all" || activeTag !== null
-              ? "未找到匹配的参考资料——换个关键词或清空筛选条件试试"
-              : "还没有参考资料，先新建一条——把书籍摘抄、灵感记录、写作理论保存到这里，AI 创作顾问会参考它们给出建议"}
-          </EmptyState>
+              </div>
+            )}
+          </div>
         ) : (
           /* 表格平铺（批次十二 R3）：thead 四列 + 单行 tr，行高从两行收为一行；
              对齐 EntityList 表格样式（border + thead bg-muted/50） */
@@ -425,9 +425,10 @@ function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowP
       {/* 标题列：点击 = 行内编辑（Enter 提交 / Esc 取消 / 失焦保存） */}
       <td className="max-w-56 px-3 py-2">
         {editing ? (
-          <input
+          <Input
             autoComplete="off"
             autoFocus
+            size="small"
             value={nameValue}
             onChange={(e) => setNameValue(e.target.value)}
             onKeyDown={(e) => {
@@ -439,7 +440,6 @@ function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowP
               }
             }}
             onBlur={() => void commitEdit()}
-            className={cn(inputClass, "h-7 w-full px-1.5 text-sm font-medium")}
             disabled={saving}
           />
         ) : (
@@ -462,12 +462,9 @@ function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowP
         {tags.length > 0 && (
           <div className="flex flex-wrap items-center gap-1">
             {tags.map((t) => (
-              <span
-                key={t}
-                className="rounded bg-primary/80 px-1.5 py-0.5 text-[10px] text-primary-foreground"
-              >
+              <Tag key={t} color="blue" className="mr-1 !text-[10px]">
                 {t}
-              </span>
+              </Tag>
             ))}
           </div>
         )}
@@ -484,7 +481,7 @@ function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowP
               title={source}
             >
               <span className="truncate">{source}</span>
-              <ExternalLink className="size-3 shrink-0" />
+              <ExportOutlined className="shrink-0 !text-xs" />
             </a>
           ) : (
             <span className="block truncate text-xs text-muted-foreground" title={source}>
@@ -495,15 +492,13 @@ function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowP
       {/* 操作列：删除（H3 直接平铺不收 ⋯） */}
       <td className="w-10 px-2 py-2 text-right">
         <Button
-          variant="ghost"
-          size="icon-sm"
-          className="text-muted-foreground hover:text-destructive"
+          type="text"
+          danger
           onClick={() => onDelete(item)}
           aria-label="删除"
           title="移入回收站"
-        >
-          <Trash2 className="size-3.5" />
-        </Button>
+          icon={<DeleteOutlined />}
+        />
       </td>
     </RowContextMenu>
   );
