@@ -27,7 +27,8 @@ interface TabItem {
 }
 
 const TABS: TabItem[] = [
-  { label: "概览", href: "#/", segment: null, icon: LayoutGrid },
+  // 批次十七 1-3：#/ 已改为书架主页（左栏顶部书架按钮目标），概览项指向 #/overview
+  { label: "概览", href: "#/overview", segment: "overview", icon: LayoutGrid },
   { label: "大纲", href: "#/outline", segment: "outline", icon: ListTree },
   // 批次十七 1-1 过渡形态：实体关系 pill 承接四个新一级段（1-2 左栏导航重构时拆为独立项移除本栏）
   { label: "实体关系", href: "#/characters", segment: "characters", icon: Network },

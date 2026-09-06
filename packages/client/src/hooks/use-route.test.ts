@@ -52,6 +52,7 @@ describe("parseHashRoute", () => {
     ["#/hooks/hook-abc", ["hooks", "hook-abc"]],
     ["#/timepoints/tp-abc", ["timepoints", "tp-abc"]],
     ["#/preferences", ["preferences"]],
+    ["#/overview", ["overview"]],
     ["#/entities/character", ["entities", "character"]], // 旧址：已知段，redirect 兜底
     ["#/settings", ["settings"]],
   ])("一级化新段解析 %s", (hash, segments) => {

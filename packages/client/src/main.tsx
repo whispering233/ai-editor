@@ -48,7 +48,9 @@ function renderPage(route: Route): ReactNode {
   const [first, second, third] = route.segments;
   switch (first) {
     case undefined:
-      return <Dashboard />;
+      return <Dashboard mode="home" />;
+    case "overview":
+      return <Dashboard mode="overview" />;
     case "outline":
  // S12.2：按段数区分——1 段（#/outline）→ 大纲树；2 段（#/outline/:nodeId）→ 节点详情
  // （二级路由，仿实体详情分支；key = nodeId 变化强制卸载重挂，详情页表单按节点重置）
@@ -124,7 +126,7 @@ function renderPage(route: Route): ReactNode {
       // 旧设置页路由（批次十七：设置页避让设定 #/setting → #/preferences）
       return <RedirectTo to="/preferences" />;
     default:
-      return <Dashboard />;
+      return <Dashboard mode="home" />;
   }
 }
 

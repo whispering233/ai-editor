@@ -1,6 +1,6 @@
 // 自制 hash 路由（ 决策：轻量 hash-based useHashRoute，不引入 React Router）
 // 解析 location.hash（形如 "#/outline"、"#/characters/char-abc"）为结构化路由。
-// 路由表见 （10 路由，批次十七一级化）：#/、#/outline、#/outline/:nodeId、
+// 路由表见 （10 路由，批次十七一级化）：#/、#/overview、#/outline、#/outline/:nodeId、
 // #/characters[/:id]、#/setting[/:id]、#/locations[/:id]、#/relations、#/hooks[/:id]、
 // #/timeline、#/timeline/:id、#/timepoints/:id、#/references[/:id]、#/trash、#/preferences
 // （#/chat、#/canvas 已移除；#/entities/* 与 #/settings 仅作旧址重定向；未知 hash 回退 #/ 兜底）
@@ -19,6 +19,7 @@ export interface Route {
  * entities/settings 仍属已知段——仅作旧址重定向（main.tsx 处理），避免老书签被误判回退 */
 export const KNOWN_ROUTE_SEGMENTS = [
   "outline",
+  "overview",
   "entities",
   "characters",
   "setting",
