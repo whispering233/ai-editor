@@ -5,9 +5,9 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [v0.0.26] - 2026-09-06
 
-### Changed（批次十七：antd 全站迁移 + 布局重构 + 会话渲染重做，待发布 v0.0.26）
+### Changed（批次十七：antd 全站迁移 + 布局重构 + 会话渲染重做，）
 
 - **前端组件基座换 antd v6**：ConfigProvider（zhCN + 默认色板浅/深双算法 + cssVar）为根接线；
   `@ant-design/x` 会话组件族（Bubble/Sender）+ `@ant-design/x-markdown` 流式正文接入；

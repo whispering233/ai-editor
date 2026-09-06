@@ -13,19 +13,20 @@
 | 语言 | TypeScript strict mode |
 | API 服务端 | Hono 4 + `@hono/node-server` |
 | 数据库 | better-sqlite3 ^13（WAL，N-API 预编译）+ drizzle-orm 0.45（查询构建层） |
-| 前端 | React 19 + Vite 7 + Zustand 5 + Tailwind 4 + shadcn/ui（Base UI，oklch 主题 tokens）+ Prettier + prettier-plugin-tailwindcss（样式工程化，L 批次）+ @uiw/react-md-editor（markdown 编辑器） |
+| 前端 | React 19 + Vite 7 + Zustand 5 + **antd v6**（ConfigProvider zhCN + 默认色板双算法 + cssVar tokens）+ **@ant-design/x**（Bubble/Sender 会话组件族）+ **@ant-design/x-markdown**（流式渲染）+ Tailwind 4（仅布局 utility）+ @uiw/react-md-editor（markdown 编辑器）+ Prettier（样式工程化） |
 | 路由 | 自制 hash 路由（`useHashRoute`，无 React Router） |
 | Schema 校验 | Zod 4（仅服务端执行，client 不打包校验函数） |
 | AI 调用 | `@earendil-works/pi-ai`（统一多提供商 LLM 接口；deepseek + opencode-go 两 provider，模型/思考强度可配置，key 按 provider 三级链独立解析；llm 包单向 adapter 保留对外契约） |
 | 测试 | vitest（各包独立 `test` script） |
 
-## UI 布局（三栏工作台，2026-08 重构）
+## UI 布局（批次十七重构，antd 主题）
 
-文学氛围双主题（浅色暖羊皮纸+牛血红 / 深色蓝黑曜石+琥珀烛光），三栏可拖拽调宽 + 收起/展开（F7）：
+antd 默认色板浅/深双算法（cssVar 注入），书架主页 + 一级导航 + 常驻聊天三区结构，可拖拽调宽 + 收起/展开：
 
-- **左栏**：产品标识 + 书架（项目→会话二级树，点击打开/切换）+ 底部设置与主题切换
-- **中栏**：项目信息条 + 7 tab（概览 | 大纲 | 实体关系 | 伏笔 | 时间轴 | 参考资料 | 回收站）+ 页面内容（画布页已移除，批次八 O6；参考资料为批次九）
-- **右栏**：AI 聊天常驻（会话归属项目，`<1024px` 折叠为抽屉）
+- **`#/` 书架主页**：书籍列表（当前打开高亮、行内导出/重命名/继续创作）+ 新建/导入备份/打开其他路径——书架能力集中于此，频繁切书不必留常驻书架栏
+- **左栏 NavRail**：回到书架按钮（旁显当前书名）+ 垂直导航九项（概览 `#/overview` | 大纲 | 人物 | 设定 | 地点 | 伏笔 | 时间轴 | 关联 | 参考资料）+ 工具区（回收站）+ 底部设置 `#/preferences` / 主题切换；**无二级 tab**（实体家族一级化，旧 `#/entities/*` 路由重定向）
+- **中栏**：信息条 + 页面内容区
+- **右栏**：AI 聊天常驻（会话归属项目；`<1024px` 折叠为抽屉；消息流 = x Bubble + x-markdown 流式渲染 + 工具调用折叠行 + 提案确认卡）
 
 布局与交互约定见 `docs/ui/layout.md`（样式实现归代码，文档即契约）。
 
@@ -53,7 +54,7 @@ pnpm dev
 pnpm start:test-project
 # → 先 pnpm -r build（代码变动自动构建最新），再生产态启动
 # → 浏览器自动打开 http://127.0.0.1:3456
-# → 无项目时左栏书架 + 中栏引导创建/打开项目（落盘 test-project/books/<书名>/）
+# → 无项目时书架主页 #/ 引导创建/打开项目（落盘 test-project/books/<书名>/）
 
 # 验证
 pnpm typecheck && pnpm lint && pnpm -r test
@@ -77,10 +78,10 @@ pnpm typecheck && pnpm lint && pnpm -r test
 - **参考资料（2026-08）**：第 7 种实体类型 reference（`ref-` 前缀，SCHEMA_VERSION 5）——外部素材/灵感笔记（非本书正文边界）；**两类承载（批次十一）**——本地 md 文档（`references/` 项目目录自包含，YAML frontmatter（title/category/tags）+ markdown 正文，**文件 = 真相源、DB 索引 = 派生镜像**：应用内编辑先原子写文件再更新 DB，外部编辑/新增/删除靠扫描同步——mtime 快照比对幂等全量，索引丢失可完整重建；软删文件移 `references/.trash/`）/ 外源链接（URL 必填仅索引）；列表改**表格平铺**（thead 四列：标题/分类/标签/来源，批次十二），交互对齐大纲（点击标题行内编辑/双击详情/只留删除/右键菜单注入上下文与建立关联）；新建分流两按钮 → 草稿态详情页：md 内嵌 **@uiw/react-md-editor** 分屏编辑器（暗色联动）+ 导入 md 文档（frontmatter 解析预填）+ 建立关联面板；外源链接详情页 URL 必填 + 备注 + 关联面板；**分类自定义（批次十二）**——取消预置枚举（`data.type` 自由文本，无 DDL 迁移），详情页文本框 + datalist（建议项 = 项目内已用分类，可自由输入新分类），列表筛选聚合现有分类，存量枚举值回显中文名；**扫描同步**——列表「扫描」按钮 + 未同步提示条（只读探测）；**存档联动**——备份/导出/导入/恢复打包 references/，自动备份变更检测覆盖本地文档；LLM 集成 `search_references`（自动查询，纯 DB 读取）+ `propose_create_reference`（AI 建议保存 → 提案确认后写库，归外源链接类）；实体关系页不再提供参考资料泛型入口（独立中栏 tab，旧路由重定向，批次十二 T3）
 - **伏笔系统（S9 已就绪）**：伏笔池面板（活跃/已回收/已废弃分组、新建埋点、推进/回收/废弃复合写确认、依赖链展开、软删级联）+ 大纲节点伏笔标记（📌 埋设/⏩ 推进/✅ 回收徽标）；健康指标展示留后续迭代（backlog #13）
 - **回收站**：软删还原 / 彻底清除 + 启动一致性校验兜底
-- **AI 对话链路（S6-S8 + 批次九）**：llm 引擎换核为 `@earendil-works/pi-ai`（手写 SSE/流式累积删除，对外契约保留）；48 个工具（查询 9 / 分析 5 / 伏笔 5 / 提案 16 / 执行 13 = LLM 可见 35 + 执行 13）；agent 主循环（8 轮 / 120s / token 三重保险）；提案确认流程（卡片确认/拒绝 + 失效处理）；chat SSE 路由（心跳 / 断连检测 / 全链路取消）；**右栏增强**——模型选择下拉（批次十六：17 模型按 provider optgroup 分组、未配 key 的 provider 整组禁用、跨 provider 选模型自动切 key）+ 思考强度选择（off/minimal/low/medium/high/xhigh/max，对齐 pi）+ 上下文占用进度条（真实 usage ÷ 当前模型 contextWindow）；**多 provider（批次十六）**——设置页每提供商一张卡（模型点选即激活 + key 保存/清除/掩码 + 激活高亮），三级 key 解析链（env `DEEPSEEK_API_KEY`/`OPENCODE_API_KEY` > 用户配置 `~/.ai-editor/config.json` api_keys > pi-agent `~/.pi/agent/auth.json` 只读兜底；key 不入项目文件）；模型目录按 provider 隔离、撞名模型靠 provider 消歧，**解析绝不跨 provider**；**问 AI 入口（批次九/十）**——InfoBar 统一入口（纯进入聊天）+ 行级**右键菜单**（大纲/实体/伏笔/事件/时间点/参考资料行，右键「注入会话上下文」带对象提问 +「建立关联」新建关系；行级 AskAiButton 已移除）——配置 key 后右栏 ChatPanel 可直接对话
-- **交互体验（2026-08）**：AI 确认提案后中栏数据自动刷新 + InfoBar 全局刷新按钮；刷新页面自动恢复最近会话；渲染异常防白屏（可恢复错误卡）；**画布页移除（批次八 O6）**——中栏 tab 7→6、`#/canvas` 路由删除，`plot_edge` 数据模型与关系接口能力保留（仅无 UI 入口）
+- **AI 对话链路（S6-S8 + 批次九）**：llm 引擎换核为 `@earendil-works/pi-ai`（手写 SSE/流式累积删除，对外契约保留）；48 个工具（查询 9 / 分析 5 / 伏笔 5 / 提案 16 / 执行 13 = LLM 可见 35 + 执行 13）；agent 主循环（8 轮 / 120s / token 三重保险）；提案确认流程（卡片确认/拒绝 + 失效处理）；chat SSE 路由（心跳 / 断连检测 / 全链路取消）；**右栏增强**——模型选择下拉（批次十六：17 模型按 provider optgroup 分组、未配 key 的 provider 整组禁用、跨 provider 选模型自动切 key）+ 思考强度选择（off/minimal/low/medium/high/xhigh/max，对齐 pi）+ 上下文占用进度条（真实 usage ÷ 当前模型 contextWindow）；**消息流渲染（批次十七）**——x Bubble + x-markdown 流式增量渲染（已完成消息不重渲、流式思考指示）、Sender 输入（IME 安全）、工具调用行 Collapse + 状态点、提案卡确认/拒绝；**多 provider（批次十六）**——设置页每提供商一张卡（模型点选即激活 + key 保存/清除/掩码 + 激活高亮），三级 key 解析链（env `DEEPSEEK_API_KEY`/`OPENCODE_API_KEY` > 用户配置 `~/.ai-editor/config.json` api_keys > pi-agent `~/.pi/agent/auth.json` 只读兜底；key 不入项目文件）；模型目录按 provider 隔离、撞名模型靠 provider 消歧，**解析绝不跨 provider**；**问 AI 入口（批次九/十）**——InfoBar 统一入口（纯进入聊天）+ 行级**右键菜单**（大纲/实体/伏笔/事件/时间点/参考资料行，右键「注入会话上下文」带对象提问 +「建立关联」新建关系；行级 AskAiButton 已移除）——配置 key 后右栏 ChatPanel 可直接对话
+- **交互体验（2026-08/批次十七）**：AI 确认提案后中栏数据自动刷新 + InfoBar 全局刷新按钮；刷新页面自动恢复最近会话；渲染异常防白屏（可恢复错误卡）；画布页已移除（`plot_edge` 数据能力保留）；**布局重构（批次十七）**——书架主页/概览/设置独立路由、左栏一级导航（9 项 + 回收站工具区）、会话流 x Bubble/x-markdown 渲染、历史工具调用 wire 形态渲染层归一（修复展开 `{}`）
 - **批次十交互优化与新需求（2026-08）**：**大纲交互优化**——行级只保留删除按钮，选中节点按 Enter 新建子级、双击节点查看详情、点击标题行内编辑、拖拽排序保留；**时间轴交互参考大纲**——事件行与组标题行双击=详情、点击标题=行内编辑、移除「详情/编辑」按钮；**移除实体列表更新时间**——列表去「更新时间」列与排序，详情页元信息保留；**右键菜单**——行级右键菜单替代「带上下文问 AI」按钮（「注入会话上下文」复用 focusContext +「建立关联」新建 relation_records），InfoBar「问 AI」统一入口保留；**项目规则文件 AGENTS.md**——项目目录 AGENTS.md 为项目规则唯一事实源（取代 project.json prompt，打开时自动迁移），设置页直编 + 文件管理器直接编辑 + mtime 外部修改检测；**实体设定页树形视图**——设定列表改树形视图与设定树合并（层级天然展示、折叠/展开、行内编辑、拖拽调整层级、Enter 新建子级、双击详情、搜索+标签树内过滤、移除分页）
-- **样式工程化（L 批次，2026-08）**：client 包 Prettier + prettier-plugin-tailwindcss 强制格式（长 className 自动折行 + 类排序）；共享样式常量 `lib/styles.ts`（图标按钮/输入框/错误横幅/骨架/区块卡）+ `EmptyState`/`SectionCard` 组件；全仓硬编码色类（zinc/white/red）清零 token 化（深色主题亮色异常同步修复）；规范见 `doc/ui/layout.md` §4.4
+- **样式工程化（L 批次，2026-08）**：client 包 Prettier + prettier-plugin-tailwindcss 强制格式（长 className 自动折行 + 类排序）；共享样式常量 `lib/styles.ts`（图标按钮/输入框/错误横幅/骨架/区块卡）+ `EmptyState`/`SectionCard` 组件；全仓硬编码色类（zinc/white/red）清零 token 化（深色主题亮色异常同步修复）；规范见 `docs/ui/layout.md`
 - **数据备份（阶段 B2 已就绪）**：一键导出完整项目（zip 打包 project.json + outline.json + data.db，含 WAL 完整快照）/ 从备份导入（服务端校验 + 原子搬入）；**自动备份**——按频率（关闭/5/10/15/30/60 分钟，默认 10 分钟开启，跟随书籍）有变更才备份，每项目保留最近 20 份；**手动备份**——设置页「立即备份」可带自定义名称，列表以简单标签区分手动/自动（B2.5/B2.6）；**备份重命名**——列表行内编辑改名称（时间与类型标签保持）；**加载备份**——设置页历史备份列表（强确认 + 覆盖前自动快照后悔药）或书架导入文件（以 project_id 为 key：匹配 → 覆盖恢复 / 不匹配 → 新书，同名不再 409 可重命名或去重并存）；书架支持重命名书名——「数据主权归用户」（product.md 原则 1）
 - **调试**：创作根 `.ai-editor/config.json` 细粒度五类别（chat/request/stream/usage/http，见上文示例；无配置文件默认关闭）
 
@@ -106,7 +107,7 @@ npm install -g @whispering233/ai-editor-server
 ai-editor <项目目录>   # 启动服务 + 自动打开浏览器 http://127.0.0.1:3456
 ```
 
-> 版本说明：**当前最新版 v0.0.24**（由 CI OIDC 自动发布，发布全链路自动化已验证）；v0.0.1/v0.0.2 因发布管道缺陷（manifest 残留 `workspace:*` 协议）不可安装，已计划 deprecate 标注；安装时使用 `@whispering233/ai-editor-server@latest` 即可。
+> 版本说明：**当前最新版 v0.0.26**（由 CI OIDC 自动发布，发布全链路自动化已验证）；v0.0.1/v0.0.2 因发布管道缺陷（manifest 残留 `workspace:*` 协议）不可安装，已计划 deprecate 标注；安装时使用 `@whispering233/ai-editor-server@latest` 即可。
 
 **发布前置（一次性，npmjs 手动）**：① 开启 npm 账号 **2FA**（npmjs 要求开启两步验证才能配置包管理；开启会撤销现有 token，需重新生成 Automation token）；② 为 `@whispering233/ai-editor-shared`、`@whispering233/ai-editor-llm`、`@whispering233/ai-editor-db`、`@whispering233/ai-editor-tools`、`@whispering233/ai-editor-agent`、`@whispering233/ai-editor-server` 六包各配置 Trusted Publisher：Publisher = GitHub Actions、工作流名 = `publish.yml`；配置后 CI 无需 token（OIDC 自动换证）。
 
