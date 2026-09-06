@@ -6,16 +6,35 @@
 // 交互：当前位置/去大纲 → #/outline 并定位节点（ui store focusOutlineNodeId 跨页传参）；
 // 会话行 → chat store setCurrentSession(id)（右栏恢复会话）；[开始新对话] → setCurrentSession(null)
 // 错误/加载/空态按 ：区块级骨架、区块内「加载失败 [重试]」、空态一句说明 + 主操作
-import { useEffect, useState } from "react";
-import type { FormEvent } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { ChangeEvent, FormEvent } from "react";
 import { formatRelativeTime } from "@whispering233/ai-editor-shared";
 import type { EntityType, OutlineNode } from "@whispering233/ai-editor-shared";
-import { BookOpen } from "lucide-react";
+import { BookOpen, Download, Loader2, Pencil, Upload } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { SectionCard } from "@/components/ui/section-card";
 import { skeletonClass } from "@/lib/styles";
-import { ApiError, CLIENT_NETWORK_ERROR, listEntities } from "../lib/api";
+import {
+  ApiError,
+  CLIENT_NETWORK_ERROR,
+  exportProjectZip,
+  importProjectZip,
+  listEntities,
+  renameProject,
+} from "../lib/api";
+import {
+  describeExportError,
+  describeImportError,
+} from "../lib/error-messages";
 import { validateBookName } from "../lib/book-name";
 import { entityListHost } from "../lib/entity-paths";
 import { describeOpenError } from "../lib/error-messages";
@@ -109,6 +128,22 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
   const [path, setPath] = useState("");
   const [pathError, setPathError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+ // 导入备份（批次十七 1-3b：Sidebar 独有能力搬入书架主页——zip + 书名，同名二选一冲突态）
+  const [importOpen, setImportOpen] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importName, setImportName] = useState("");
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importConflict, setImportConflict] = useState(false);
+  const [importConflictBase, setImportConflictBase] = useState("");
+ // 导出当前项目备份进行态（防连点）
+  const [exporting, setExporting] = useState(false);
+ // 当前书行内重命名（仅当前打开书；行内输入态，Enter/失焦提交、Esc 取消）
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const [renamingSubmitting, setRenamingSubmitting] = useState(false);
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
  // 创作要素统计状态（四类型并行；任一失败 → 区块内「加载失败 [重试]」，不阻塞其他区块）
   const [entityCounts, setEntityCounts] = useState<Partial<Record<EntityType, number>> | null>(
@@ -264,6 +299,180 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     }
   }
 
+ // ============ 书架行能力（Sidebar 迁入，批次十七 1-3b） ============
+
+ /** 导出当前项目备份（GET /project/export zip → 临时 <a> 下载）；exporting 防连点 */
+  async function handleExportBook(name: string) {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const { blob, filename } = await exportProjectZip();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+ // 延迟到下一帧 revoke（ora-1：旧版 Safari 下载前 revoke 中断竞态防御）
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      useUiStore.getState().showToast(`已导出《${name}》备份`);
+    } catch (err) {
+      useUiStore
+        .getState()
+        .showToast(
+          describeExportError(
+            err instanceof ApiError ? err.code : null,
+            err instanceof ApiError ? err.message : "导出失败，请重试",
+          ),
+          "error",
+        );
+    } finally {
+      setExporting(false);
+    }
+  }
+
+ /** 导入同名冲突评估（B2：同名不再 409，前端二选一；预填 `<名> (2)` 可编辑；
+ * 粘性冲突态直到明确选择/改名；预填导致的 onChange 不退出冲突态） */
+  function evaluateImportConflict(next: string) {
+    const trimmed = next.trim();
+    const isBookName = (name: string) => bookshelf?.books.some((b) => b.name === name) ?? false;
+    if (importConflict) {
+      if (
+        trimmed === `${importConflictBase} (2)` ||
+        (trimmed === importConflictBase && isBookName(trimmed))
+      ) {
+        return; // 预填名 / 回改基础名：保持冲突态
+      }
+      if (isBookName(trimmed)) {
+        setImportConflictBase(trimmed);
+        setImportName(`${trimmed} (2)`);
+        return;
+      }
+      setImportConflict(false);
+      setImportConflictBase("");
+      return;
+    }
+    if (trimmed !== "" && isBookName(trimmed)) {
+      setImportConflictBase(trimmed);
+      setImportConflict(true);
+      setImportName(`${trimmed} (2)`);
+    }
+  }
+
+  function handleImportNameChange(e: ChangeEvent<HTMLInputElement>) {
+    const next = e.target.value;
+    setImportName(next);
+    evaluateImportConflict(next);
+  }
+
+  function handleImportFileChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] ?? null;
+    setImportFile(file);
+    setImportError(null);
+    if (file) {
+      const suggested = file.name.replace(/\.zip$/i, "");
+      setImportName(importName.trim() === "" ? suggested : importName);
+      evaluateImportConflict(importName.trim() === "" ? suggested : importName);
+    }
+  }
+
+ /** 导入提交（普通 = 当前输入名；冲突态 = 基础名「保持原样」/ 编辑名「重命名导入」）；
+ * restored/new 分流 toast；失败内联保持打开可重试 */
+  async function handleImportSubmit(name: string, e?: FormEvent) {
+    e?.preventDefault();
+    const trimmed = name.trim();
+    if (!importFile) {
+      setImportError("请选择备份文件");
+      return;
+    }
+    const err = validateBookName(trimmed);
+    if (err !== null) {
+      setImportError(err);
+      return;
+    }
+    setImporting(true);
+    setImportError(null);
+    try {
+      const res = await importProjectZip(importFile, trimmed);
+      useUiStore
+        .getState()
+        .showToast(
+          res.mode === "restored" ? `已恢复备份《${res.name}》` : `已导入为新书《${res.name}》`,
+        );
+      await loadBookshelf();
+      closeImportDialog();
+    } catch (err) {
+      const text = describeImportError(
+        err instanceof ApiError ? err.code : null,
+        err instanceof ApiError ? err.message : "导入失败，请重试",
+      );
+      setImportError(text);
+ // 兜底反馈（ora-1）：中途关闭后内联错误不可见，toast 保证失败必有反馈
+      if (text !== "") useUiStore.getState().showToast(text, "error");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  function closeImportDialog() {
+    setImportOpen(false);
+    setImportError(null);
+    setImportFile(null);
+    setImportName("");
+    setImportConflict(false);
+    setImportConflictBase("");
+  }
+
+  function cancelRename() {
+    setRenaming(false);
+    setRenameValue("");
+    setRenameError(null);
+  }
+
+ /** 行内重命名提交（Enter/失焦）：POST /project/rename → 刷新书架 + config；
+ * 409 PROJECT_ALREADY_EXISTS → 行内错误不关输入态；值未变化直接退出 */
+  async function handleRenameSubmit() {
+    if (!renaming || renamingSubmitting) return;
+    const name = renameValue.trim();
+    if (name === useProjectStore.getState().config?.name) {
+      cancelRename();
+      return;
+    }
+    const err = validateBookName(name);
+    if (err !== null) {
+      setRenameError(err);
+      return;
+    }
+    setRenamingSubmitting(true);
+    setRenameError(null);
+    try {
+      await renameProject(name);
+      useUiStore.getState().showToast(`已重命名为《${name}》`);
+      await Promise.all([loadBookshelf(), useProjectStore.getState().loadConfig()]);
+      cancelRename();
+    } catch (err) {
+      const code: string | null = err instanceof ApiError ? err.code : null;
+      if (code === "PROJECT_ALREADY_EXISTS") {
+        setRenameError("书架已有同名书籍，请换一个名字");
+      } else if (err instanceof ApiError && err.code !== CLIENT_NETWORK_ERROR) {
+        setRenameError(err.message);
+      } else {
+        setRenameError("无法连接服务，请确认 ai-editor 服务已启动");
+      }
+    } finally {
+      setRenamingSubmitting(false);
+    }
+  }
+
+  /** 开始行内重命名（当前书条输入态；autoFocus 后失焦守卫：挂载即失焦不误退） */
+  function startRename() {
+    setRenameValue(config?.name ?? "");
+    setRenameError(null);
+    setRenaming(true);
+    window.setTimeout(() => renameInputRef.current?.focus(), 0);
+  }
+
  /** 跳大纲并定位当前位置节点（当前位置未设置时仅跳转；「操作流」） */
   function goOutline() {
     if (config?.currentPosition != null) setFocusOutlineNode(config.currentPosition);
@@ -306,13 +515,26 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
 
     return (
       <section className="mx-auto w-full max-w-2xl px-4">
-        <div className="mt-8">
-          <h1 className="font-serif text-xl font-medium text-foreground">书架</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {config !== null
-              ? `当前打开《${config.name}》，切换书籍或继续创作`
-              : "选择一本书打开，或新建一本"}
-          </p>
+        <div className="mt-8 flex items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <h1 className="font-serif text-xl font-medium text-foreground">书架</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {config !== null
+                ? `当前打开《${config.name}》，切换书籍或继续创作`
+                : "选择一本书打开，或新建一本"}
+            </p>
+          </div>
+          {/* 导入备份（Sidebar 迁入，1-3b）：zip 导入/覆盖恢复，Dialog 内同名二选一 */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            onClick={() => setImportOpen(true)}
+          >
+            <Upload className="size-3.5" />
+            导入备份
+          </Button>
         </div>
 
         {bookshelfError !== null && (
@@ -335,22 +557,75 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
         )}
 
         <div className="mt-4 rounded-2xl border border-dashed border-border bg-card px-6 py-6">
-          {/* 当前打开书条：继续创作跳 #/overview（与书架行点击同目标） */}
+          {/* 当前打开书条：继续创作跳 #/overview；行内导出/重命名直显（红线） */}
           {config !== null && (
-            <div className="mb-4 flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
-              <BookOpen className="size-5 shrink-0 text-primary" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-foreground">{config.name}</p>
-                <p className="text-xs text-muted-foreground">已打开</p>
+            <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
+              <div className="flex items-center gap-3">
+                <BookOpen className="size-5 shrink-0 text-primary" />
+                {renaming ? (
+                  /* 重命名输入态：Enter/失焦提交、Esc 取消（div 而非 button——输入不可嵌交互元素） */
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <Input
+                      ref={renameInputRef}
+                      value={renameValue}
+                      onChange={(e) => setRenameValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          void handleRenameSubmit();
+                        } else if (e.key === "Escape") {
+                          cancelRename();
+                        }
+                      }}
+                      onBlur={() => void handleRenameSubmit()}
+                      maxLength={60}
+                      disabled={renamingSubmitting}
+                      aria-label="重命名书名"
+                      className="h-7"
+                    />
+                  </div>
+                ) : (
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">{config.name}</p>
+                    <p className="text-xs text-muted-foreground">已打开</p>
+                  </div>
+                )}
+                {!renaming && (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0"
+                      onClick={() => void handleExportBook(config.name)}
+                      disabled={exporting}
+                    >
+                      {exporting ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <Download className="size-3.5" />
+                      )}
+                      导出
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0"
+                      onClick={startRename}
+                    >
+                      <Pencil className="size-3.5" />
+                      重命名
+                    </Button>
+                    <Button type="button" size="sm" className="shrink-0" onClick={() => navigate("/overview")}>
+                      继续创作
+                    </Button>
+                  </>
+                )}
               </div>
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => navigate("/overview")}
-                className="shrink-0"
-              >
-                继续创作
-              </Button>
+              {renaming && renameError && (
+                <p className="mt-1 text-sm text-destructive">{renameError}</p>
+              )}
             </div>
           )}
 
@@ -460,6 +735,86 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
             )}
           </div>
         </div>
+
+        {/* 导入备份 Dialog（zip + 书名；同名二选一冲突态） */}
+        <Dialog open={importOpen} onOpenChange={(v) => (v ? setImportOpen(true) : closeImportDialog())}>
+          <DialogContent className="sm:max-w-sm">
+            <DialogHeader>
+              <DialogTitle>导入书籍</DialogTitle>
+              <DialogDescription>
+                从备份 zip 导入；与书架已有书 id
+                匹配时覆盖恢复，否则导入为新书（同名可重命名或保持原样并存）
+              </DialogDescription>
+            </DialogHeader>
+            <form
+              id="import-book-form"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void handleImportSubmit(importName);
+              }}
+              className="flex flex-col gap-3"
+            >
+              <input
+                type="file"
+                accept=".zip,application/zip"
+                onChange={handleImportFileChange}
+                disabled={importing}
+                aria-label="选择备份文件"
+                className="block w-full cursor-pointer rounded-md border border-border bg-card px-3 py-1.5 text-sm text-foreground file:mr-2 file:cursor-pointer file:rounded file:border-0 file:bg-muted file:px-2 file:py-1 file:text-xs file:text-muted-foreground disabled:opacity-50"
+              />
+              <Input
+                value={importName}
+                onChange={handleImportNameChange}
+                placeholder="书名（默认取文件名）"
+                maxLength={60}
+                disabled={importing}
+              />
+              {importConflict && (
+                <p className="text-sm text-primary">
+                  书架已有同名书籍《{importConflictBase}》——可重命名导入，或保持原样（服务端自动去重）
+                </p>
+              )}
+              {importError && <p className="text-sm text-destructive">{importError}</p>}
+            </form>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                type="button"
+                onClick={closeImportDialog}
+                disabled={importing}
+              >
+                取消
+              </Button>
+              {importConflict ? (
+                <>
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={() => void handleImportSubmit(importConflictBase)}
+                    disabled={importing || importFile === null}
+                  >
+                    {importing ? "导入中…" : "保持原样导入"}
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={() => void handleImportSubmit(importName)}
+                    disabled={importing || importFile === null}
+                  >
+                    {importing ? "导入中…" : "重命名导入"}
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  type="submit"
+                  form="import-book-form"
+                  disabled={importing || importFile === null}
+                >
+                  {importing ? "导入中…" : "导入"}
+                </Button>
+              )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </section>
     );
   }
