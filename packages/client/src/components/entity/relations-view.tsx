@@ -20,7 +20,7 @@ import { ConfirmDialog } from "../outline/dialogs";
 import { entityDetailPath } from "../../lib/entity-paths";
 import type { EntityType } from "@whispering233/ai-editor-shared";
 import { Alert, Button, Empty, Input, Select, Skeleton, Tag } from "antd";
-import { SearchOutlined } from "@ant-design/icons";
+import { DeleteOutlined, SearchOutlined } from "@ant-design/icons";
 import { navigate } from "../../hooks/use-route";
 import { useUiStore } from "../../stores/ui";
 
@@ -303,13 +303,14 @@ export function RelationsView({
                   </>
                 )}
                 <Button
+                  type="text"
                   size="small"
                   danger
-                  className="w-14 shrink-0"
+                  aria-label={`删除关系（${endpointLabel(r, "source")} → ${endpointLabel(r, "target")}）`}
+                  title="删除（物理删，可重新建立）"
+                  icon={<DeleteOutlined />}
                   onClick={() => setDeleteTarget(r)}
-                >
-                  删除
-                </Button>
+                />
               </li>
             ))}
           </ul>

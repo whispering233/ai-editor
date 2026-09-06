@@ -15,7 +15,7 @@ import { useEffect, useState } from "react";
 import type { EntityType } from "@whispering233/ai-editor-shared";
 import { formatRelativeTime } from "@whispering233/ai-editor-shared";
 import { Alert, Button, Empty, Skeleton, Tag, Typography } from "antd";
-import { ReloadOutlined } from "@ant-design/icons";
+import { DeleteOutlined, RedoOutlined, ReloadOutlined } from "@ant-design/icons";
 import { ConfirmDialog } from "../components/outline/dialogs";
 import {
   ApiError,
@@ -296,12 +296,23 @@ export default function Trash() {
                       {formatRelativeTime(item.deletedAt)}
                     </Typography.Text>
                     <div className="flex shrink-0 items-center gap-1.5">
-                      <Button size="small" onClick={() => void handleRestoreEntity(item)}>
-                        还原
-                      </Button>
-                      <Button size="small" danger onClick={() => setPurgeTarget({ kind: "entity", item })}>
-                        彻底删除
-                      </Button>
+                      <Button
+                        type="text"
+                        size="small"
+                        aria-label={`还原《${item.name}》`}
+                        title="还原"
+                        icon={<RedoOutlined />}
+                        onClick={() => void handleRestoreEntity(item)}
+                      />
+                      <Button
+                        type="text"
+                        size="small"
+                        danger
+                        aria-label={`彻底删除《${item.name}》（不可恢复）`}
+                        title="彻底删除（不可恢复）"
+                        icon={<DeleteOutlined />}
+                        onClick={() => setPurgeTarget({ kind: "entity", item })}
+                      />
                     </div>
                   </li>
                 ))}
@@ -331,12 +342,23 @@ export default function Trash() {
                         {formatRelativeTime(node.deletedAt)}
                       </Typography.Text>
                       <div className="flex shrink-0 items-center gap-1.5">
-                        <Button size="small" onClick={() => void handleRestoreNode(node)}>
-                          还原
-                        </Button>
-                        <Button size="small" danger onClick={() => setPurgeTarget({ kind: "node", item: node })}>
-                          彻底删除
-                        </Button>
+                        <Button
+                          type="text"
+                          size="small"
+                          aria-label={`还原《${node.title}》`}
+                          title="还原"
+                          icon={<RedoOutlined />}
+                          onClick={() => void handleRestoreNode(node)}
+                        />
+                        <Button
+                          type="text"
+                          size="small"
+                          danger
+                          aria-label={`彻底删除《${node.title}》（不可恢复）`}
+                          title="彻底删除（不可恢复）"
+                          icon={<DeleteOutlined />}
+                          onClick={() => setPurgeTarget({ kind: "node", item: node })}
+                        />
                       </div>
                     </div>
                     {/* 409 祖先冲突：行内提示 + 还原祖先快捷按钮（还原成功自动重试当前节点） */}
