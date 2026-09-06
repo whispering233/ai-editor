@@ -19,11 +19,8 @@ import { relationTypeLabel } from "../../lib/entity-detail";
 import { ConfirmDialog } from "../outline/dialogs";
 import { entityDetailPath } from "../../lib/entity-paths";
 import type { EntityType } from "@whispering233/ai-editor-shared";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { cn } from "../../lib/utils";
-import { skeletonClass } from "../../lib/styles";
-import { EmptyState } from "../ui/empty-state";
+import { Alert, Button, Empty, Input, Select, Skeleton, Tag } from "antd";
+import { SearchOutlined } from "@ant-design/icons";
 import { navigate } from "../../hooks/use-route";
 import { useUiStore } from "../../stores/ui";
 
@@ -82,11 +79,7 @@ export function filterRelations(
 
 /** 端点类型徽标（人物/设定/地点/伏笔/大纲节点） */
 function EndpointBadge({ type }: { type: string }) {
-  return (
-    <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-      {ENDPOINT_TYPE_LABEL[type] ?? type}
-    </span>
-  );
+  return <Tag className="!mr-0">{ENDPOINT_TYPE_LABEL[type] ?? type}</Tag>;
 }
 
 /** 端点名（含徽标）：四类实体跳实体详情；大纲节点（S12.2 起）跳节点详情 #/outline/:nodeId；未知类型灰显不可点 */
@@ -195,101 +188,81 @@ export function RelationsView({
       {/* 过滤区：端点类型 + 关系类型 + 名称搜索（前端过滤；scope 模式隐藏——列表已按端点过滤） */}
       {scope === undefined && (
         <div className="mt-3 mb-2 flex flex-wrap items-center gap-3">
-          <select
-            value={filter.endpointType}
-            onChange={(e) => setFilter((f) => ({ ...f, endpointType: e.target.value }))}
+          <Select
+            size="middle"
+            value={filter.endpointType === "" ? undefined : filter.endpointType}
+            onChange={(value) => setFilter((f) => ({ ...f, endpointType: value === undefined ? "" : String(value) }))}
             aria-label="端点类型过滤"
-            className="rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <option value="">全部端点类型</option>
-            {Object.entries(ENDPOINT_TYPE_LABEL).map(([v, label]) => (
-              <option key={v} value={v}>
-                {label}
-              </option>
-            ))}
-          </select>
-          <select
-            value={filter.relationType}
-            onChange={(e) => setFilter((f) => ({ ...f, relationType: e.target.value }))}
+            placeholder="全部端点类型"
+            allowClear
+            style={{ minWidth: 140 }}
+            options={Object.entries(ENDPOINT_TYPE_LABEL).map(([v, label]) => ({ value: v, label }))}
+          />
+          <Select
+            size="middle"
+            value={filter.relationType === "" ? undefined : filter.relationType}
+            onChange={(value) => setFilter((f) => ({ ...f, relationType: value === undefined ? "" : String(value) }))}
             aria-label="关系类型过滤"
-            className="rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <option value="">全部关系类型</option>
-            {RELATION_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {relationTypeLabel(t)}
-              </option>
-            ))}
-          </select>
+            placeholder="全部关系类型"
+            allowClear
+            style={{ minWidth: 140 }}
+            options={RELATION_TYPES.map((t) => ({ value: t, label: relationTypeLabel(t) }))}
+          />
           <Input
+            className="w-52"
+            prefix={<SearchOutlined />}
+            allowClear
             value={filter.nameQuery}
             onChange={(e) => setFilter((f) => ({ ...f, nameQuery: e.target.value }))}
             placeholder="搜索源/目标名称…"
-            className="w-52"
           />
         </div>
       )}
 
       {/* 错误态：请求失败 → 区块内重试 */}
       {error !== null && (
-        <div className="mb-3 rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
-          {error === CLIENT_NETWORK_ERROR
-            ? "无法连接服务，请确认 ai-editor 服务已启动。"
-            : "关系加载失败，请重试。"}
-          <Button
-            variant="outline"
-            className="ml-3"
-            type="button"
-            onClick={() => setTick((t) => t + 1)}
-          >
-            重试
-          </Button>
-        </div>
+        <Alert
+          className="mb-3"
+          type="error"
+          showIcon
+          message={
+            error === CLIENT_NETWORK_ERROR
+              ? "无法连接服务，请确认 ai-editor 服务已启动。"
+              : "关系加载失败，请重试。"
+          }
+          action={
+            <Button size="small" onClick={() => setTick((t) => t + 1)}>
+              重试
+            </Button>
+          }
+        />
       )}
 
       {/* 加载骨架（首次加载） */}
       {loading && relations === null && error === null && (
-        <div className="overflow-hidden rounded-md border border-border">
-          {Array.from({ length: 5 }, (_, i) => (
-            <div
-              key={i}
-              className="flex items-center gap-3 border-b border-border px-3 py-3 last:border-0"
-            >
-              <div className={cn(skeletonClass, "h-4 w-1/4")} />
-              <div className={cn(skeletonClass, "h-4 w-1/6")} />
-              <div className={cn(skeletonClass, "h-4 w-1/4")} />
-              <div className={cn(skeletonClass, "ml-auto h-4 w-12")} />
-            </div>
-          ))}
+        <div className="rounded-md border border-border p-3">
+          <Skeleton active title={false} paragraph={{ rows: 5 }} />
         </div>
       )}
 
       {/* 空态两种：无任何关系 vs 过滤无结果 */}
       {!loading && relations !== null && relations.length === 0 && (
-        <EmptyState
-          action={
-            <Button type="button" onClick={onOpenCreate}>
+        <div className="py-10">
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有关联，建立一条" />
+          <div className="mt-2 text-center">
+            <Button type="primary" onClick={onOpenCreate}>
               + 建立关联
             </Button>
-          }
-        >
-          还没有关联，建立一条
-        </EmptyState>
+          </div>
+        </div>
       )}
       {!loading && relations !== null && relations.length > 0 && filtered.length === 0 && (
-        <EmptyState
-          action={
-            <Button
-              variant="outline"
-              type="button"
-              onClick={() => setFilter(EMPTY_RELATION_FILTER)}
-            >
-              清空过滤
-            </Button>
-          }
-        >
-          没有匹配的关联
-        </EmptyState>
+        <div className="py-10">
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的关联" />
+          <div className="mt-2 text-center">
+            <Button onClick={() => setFilter(EMPTY_RELATION_FILTER)}>清空过滤</Button>
+          </div>
+        </div>
       )}
 
       {/* 关联列表：scope 模式行 = 关系类型 → 目标 + [删除]（源固定为本端点）；列表模式三列（源/关系/目标） */}
@@ -309,9 +282,9 @@ export function RelationsView({
               <li key={r.id} className="flex items-center gap-2 px-3 py-2 text-sm">
                 {scope !== undefined ? (
                   <>
-                    <span className="shrink-0 truncate rounded bg-muted px-1.5 py-0.5 text-center text-xs text-muted-foreground">
+                    <Tag className="!mr-0 !shrink-0 !truncate">
                       {relationTypeLabel(r.relationType)} →
-                    </span>
+                    </Tag>
                     <span className="min-w-0 flex-1">
                       <EndpointLink type={r.targetType} id={r.targetId} name={r.targetName} />
                     </span>
@@ -321,18 +294,18 @@ export function RelationsView({
                     <span className="w-1/4 min-w-0 shrink-0">
                       <EndpointLink type={r.sourceType} id={r.sourceId} name={r.sourceName} />
                     </span>
-                    <span className="w-1/4 shrink-0 truncate rounded bg-muted px-1.5 py-0.5 text-center text-xs text-muted-foreground">
+                    <Tag className="!mr-0 w-1/4 !shrink-0 !truncate" style={{ textAlign: "center" }}>
                       {relationTypeLabel(r.relationType)} →
-                    </span>
+                    </Tag>
                     <span className="min-w-0 flex-1">
                       <EndpointLink type={r.targetType} id={r.targetId} name={r.targetName} />
                     </span>
                   </>
                 )}
                 <Button
-                  variant="outline"
-                  type="button"
-                  className="h-7 w-14 shrink-0 px-2 text-xs text-destructive hover:bg-destructive/10"
+                  size="small"
+                  danger
+                  className="w-14 shrink-0"
                   onClick={() => setDeleteTarget(r)}
                 >
                   删除
