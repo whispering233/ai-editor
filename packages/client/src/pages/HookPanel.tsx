@@ -764,7 +764,14 @@ function HookGroupSection({
                 onCreated={onRelationCreated}
                 trigger={<li className="px-3 py-2" />}
               >
-                <div className="flex items-center gap-2">
+                {/* 双击行 = 详情（行级交互模式契约；1-4 补齐——按钮区/依赖链等交互元素不触发） */}
+                <div
+                  className="flex cursor-default items-center gap-2"
+                  onDoubleClick={(e) => {
+                    if ((e.target as HTMLElement).closest("button, a, input")) return;
+                    onDetail(hook);
+                  }}
+                >
                   <span className="min-w-0 truncate font-medium text-foreground" title={hook.name}>
                     {hook.name}
                   </span>
