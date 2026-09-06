@@ -18,7 +18,8 @@
 // - 空态：「暂无备份，自动备份将在数据变更后按频率生成」；无项目打开 → 整区禁用 + 引导文案
 // 风格约束：token 类（bg-muted/border-border/text-muted-foreground 等），禁硬编码色类（）
 import { useEffect, useRef, useState } from "react";
-import { Check, Loader2, Pencil, X } from "lucide-react";
+import { Button, Input, Select, Skeleton, Tag, Typography } from "antd";
+import { CheckOutlined, CloseOutlined, EditOutlined } from "@ant-design/icons";
 import {
   ApiError,
   CLIENT_NETWORK_ERROR,
@@ -38,9 +39,6 @@ import { MAX_BACKUP_NAME_LENGTH } from "@whispering233/ai-editor-shared";
 import { useProjectStore } from "../../stores/project";
 import { useUiStore } from "../../stores/ui";
 import { useChatStore } from "../../stores/chat";
-import { cn } from "../../lib/utils";
-import { skeletonClass } from "../../lib/styles";
-import { Button } from "../ui/button";
 import { ConfirmDialog } from "../outline/dialogs";
 
 /**
@@ -241,72 +239,78 @@ export function BackupSection() {
 
   return (
     <div>
-      <h2 className="mb-1 text-sm font-semibold text-foreground">自动备份</h2>
-      <p className="mb-2 text-xs text-muted-foreground">
+      <Typography.Title level={5} className="!mb-1">
+        自动备份
+      </Typography.Title>
+      <Typography.Paragraph type="secondary" className="!mb-2 !text-xs">
         跟随书籍：备份与频率均为本项目独立；服务运行期间按频率自动备份，有变更才生成新备份；每项目保留最近
         20 份
-      </p>
+      </Typography.Paragraph>
       <div className="flex flex-wrap items-center gap-2">
-        <select
+        <Select
+          size="small"
           value={frequencyValue}
-          onChange={(e) => void handleFrequencyChange(e.target.value)}
+          onChange={(value) => void handleFrequencyChange(String(value))}
           disabled={config === null || frequencySaving}
           aria-label="自动备份频率"
-          className="rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {BACKUP_FREQUENCY_OPTIONS.map((opt) => (
-            <option key={String(opt.value)} value={String(opt.value)}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-        <input
+          options={BACKUP_FREQUENCY_OPTIONS.map((opt) => ({
+            value: String(opt.value),
+            label: opt.label,
+          }))}
+          style={{ minWidth: 130 }}
+        />
+        <Input
           autoComplete="off"
+          size="small"
           value={backupName}
           onChange={(e) => setBackupName(e.target.value)}
           maxLength={MAX_BACKUP_NAME_LENGTH}
           placeholder="备份名称（可选）"
           aria-label="备份名称（可选）"
           disabled={config === null}
-          className="w-36 rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-sm outline-none placeholder:text-muted-foreground/60 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+          style={{ width: 144 }}
         />
         <Button
+          type="primary"
+          size="small"
           onClick={() => void handleBackupNow()}
-          disabled={config === null || backupNowRunning}
-          type="button"
+          disabled={config === null}
+          loading={backupNowRunning}
         >
-          {backupNowRunning ? <Loader2 className="size-4 animate-spin" /> : null}
           立即备份
         </Button>
       </div>
       {config === null && !configLoading && (
-        <p className="mt-1 text-xs text-muted-foreground/70">打开项目后可用</p>
+        <Typography.Text type="secondary" className="!mt-1 !block !text-xs">
+          打开项目后可用
+        </Typography.Text>
       )}
 
       {/* 历史备份列表（仅项目打开时渲染；无项目 → 引导文案已在上方） */}
       {config !== null && (
         <div className="mt-3">
-          <p className="mb-1 text-xs font-medium text-muted-foreground">历史备份</p>
+          <Typography.Text strong className="!mb-1 !block !text-xs" type="secondary">
+            历史备份
+          </Typography.Text>
           <div className="overflow-hidden rounded-lg border border-border">
             {backupsLoading && backups === null ? (
               /* 首载骨架（重载不闪骨架：条件含 backups === null，） */
-              <div className="space-y-1 p-2">
-                <div className={cn(skeletonClass, "h-7 rounded-md")} />
-                <div className={cn(skeletonClass, "h-7 rounded-md")} />
+              <div className="p-2">
+                <Skeleton active title={false} paragraph={{ rows: 2 }} />
               </div>
             ) : backupsError !== null ? (
               <div className="flex items-center justify-between px-2 py-2">
-                <p className="text-xs text-muted-foreground">
+                <Typography.Text type="secondary" className="!text-xs">
                   {backupsError === CLIENT_NETWORK_ERROR ? "无法连接服务" : "备份列表加载失败"}
-                </p>
-                <Button variant="outline" size="xs" onClick={() => void loadBackups()}>
+                </Typography.Text>
+                <Button size="small" onClick={() => void loadBackups()}>
                   重试
                 </Button>
               </div>
             ) : backups !== null && backups.length === 0 ? (
-              <p className="px-2 py-3 text-xs text-muted-foreground/70">
+              <Typography.Text type="secondary" className="!block !px-2 !py-3 !text-xs">
                 暂无备份，自动备份将在数据变更后按频率生成
-              </p>
+              </Typography.Text>
             ) : backups !== null ? (
               <ul className="divide-y divide-border">
                 {backups.map((b) => {
@@ -315,34 +319,32 @@ export function BackupSection() {
                     <li key={b.fileName} className="px-2 py-1.5">
                       <div className="flex items-center gap-2">
                         {/* 行身份区：时间 + 类型标签 + 自定义名称（完整文件名 title tooltip 保持） */}
-                        <span className="min-w-0 flex-1 text-sm" title={b.fileName}>
-                          <span className="text-muted-foreground">
+                        <span className="min-w-0 flex-1 truncate text-sm" title={b.fileName}>
+                          <Typography.Text type="secondary">
                             {formatBackupTime(b.createdAt)}
-                          </span>
-                          {/* 类型标签：自动 = 中性低调徽标，手动 = primary 强调徽标 */}
-                          <span
-                            className={
-                              b.kind === "manual"
-                                ? "ml-1.5 rounded border border-primary/40 px-1 text-[10px] leading-4 text-primary"
-                                : "ml-1.5 rounded border border-border px-1 text-[10px] leading-4 text-muted-foreground"
-                            }
+                          </Typography.Text>
+                          {/* 类型标签：自动 = 中性 Tag，手动 = 蓝色强调 Tag */}
+                          <Tag
+                            className="ml-1.5 text-[10px] leading-4"
+                            color={b.kind === "manual" ? "blue" : "default"}
                           >
                             {BACKUP_KIND_LABELS[b.kind]}
-                          </span>
+                          </Tag>
                           {!editing && b.name !== undefined ? (
-                            <span className="ml-1.5 font-medium text-foreground">{b.name}</span>
+                            <Typography.Text strong>{b.name}</Typography.Text>
                           ) : null}
                         </span>
                         {!editing ? (
-                          <span className="shrink-0 text-xs text-muted-foreground">
+                          <Typography.Text type="secondary" className="!shrink-0 !text-xs">
                             {formatBytes(b.size)}
-                          </span>
+                          </Typography.Text>
                         ) : null}
                         {editing ? (
                           /* 行内编辑态：input（预填当前名称）+ 确认/取消；Enter 提交 / Esc 或失焦取消 */
                           <>
-                            <input
+                            <Input
                               autoComplete="off"
+                              size="small"
                               value={renaming.value}
                               onChange={(e) =>
                                 setRenaming((r) =>
@@ -364,40 +366,35 @@ export function BackupSection() {
                               disabled={renaming.saving}
                               autoFocus
                               aria-label="备份新名称"
-                              className="w-36 shrink-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none placeholder:text-muted-foreground/60 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                              style={{ width: 144 }}
                             />
                             <Button
-                              size="icon-xs"
-                              variant="ghost"
+                              type="text"
+                              size="small"
                               onClick={() => void handleRenameSubmit()}
                               disabled={renaming.saving}
+                              loading={renaming.saving}
                               onMouseDown={(e) => e.preventDefault()} // 防抢焦点触发 input 失焦取消
                               aria-label="确认重命名"
                               title="确认（Enter）"
-                            >
-                              {renaming.saving ? (
-                                <Loader2 className="size-3 animate-spin" />
-                              ) : (
-                                <Check className="size-3" />
-                              )}
-                            </Button>
+                              icon={<CheckOutlined />}
+                            />
                             <Button
-                              size="icon-xs"
-                              variant="ghost"
+                              type="text"
+                              size="small"
                               onClick={() => setRenaming(null)}
                               disabled={renaming.saving}
                               onMouseDown={(e) => e.preventDefault()}
                               aria-label="取消重命名"
                               title="取消（Esc）"
-                            >
-                              <X className="size-3" />
-                            </Button>
+                              icon={<CloseOutlined />}
+                            />
                           </>
                         ) : (
                           <>
                             <Button
-                              size="icon-xs"
-                              variant="ghost"
+                              type="text"
+                              size="small"
                               onClick={() =>
                                 setRenaming({
                                   fileName: b.fileName,
@@ -408,10 +405,9 @@ export function BackupSection() {
                               }
                               aria-label={`重命名备份 ${formatBackupTime(b.createdAt)}`}
                               title="重命名"
-                            >
-                              <Pencil className="size-3" />
-                            </Button>
-                            <Button variant="outline" size="xs" onClick={() => setRestoreTarget(b)}>
+                              icon={<EditOutlined />}
+                            />
+                            <Button size="small" onClick={() => setRestoreTarget(b)}>
                               加载
                             </Button>
                           </>
@@ -419,7 +415,9 @@ export function BackupSection() {
                       </div>
                       {/* 行内错误提示（400/404 透传服务端 message / 网络失败固定文案），保持编辑态 */}
                       {editing && renaming.error !== null ? (
-                        <p className="mt-1 text-xs text-destructive">{renaming.error}</p>
+                        <Typography.Text type="danger" className="!mt-1 !block !text-xs">
+                          {renaming.error}
+                        </Typography.Text>
                       ) : null}
                     </li>
                   );
