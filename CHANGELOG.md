@@ -5,6 +5,26 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### Changed（批次十七：antd 全站迁移 + 布局重构 + 会话渲染重做，待发布 v0.0.26）
+
+- **前端组件基座换 antd v6**：ConfigProvider（zhCN + 默认色板浅/深双算法 + cssVar）为根接线；
+  `@ant-design/x` 会话组件族（Bubble/Sender）+ `@ant-design/x-markdown` 流式正文接入；
+  `@base-ui/react`/shadcn CLI 退役卸载；index.css 语义色变量映射 antd cssVar tokens（oklch
+  文学色清零；禁硬编码色值，FOUC 兜底唯一例外）；Dialog/ContextMenu/Popover 改自绘
+  （createPortal + Esc/外部关闭 + 视口 clamp），旧 Base UI #31 菜单契约随退役失效
+- **布局重构**：`#/` = 书架主页（书籍列表/当前高亮/新建/导入/导出/重命名/打开其他路径），
+  `#/overview` = 项目概览；左栏 NavRail（回到书架按钮 + 垂直导航 9 项 + 回收站工具区 +
+  设置 `#/preferences`/主题）；中栏 TabBar 移除，全站无二级 tab；路由一级化
+  （characters/setting/locations/relations/hooks/:id/timepoints/:id），旧
+  `#/entities/*`/`#/settings` 全量重定向；实体泛型入口去重（伏笔/事件/时间点由富页与宿主段承接）
+- **会话渲染重做**：消息流 x Bubble + x-markdown（流式增量渲染，滚动跟随 + 思考指示）；
+  Sender 输入（IME 安全内建）；工具调用行 Collapse + 状态 Badge、提案卡 antd 按钮、断连/错误
+  Alert、focus 小条 Tag、会话切换 antd Dropdown；历史 wire 形态 tool_calls 渲染层双形态归一
+  （修展开 `{}` 显示）
+- 存量页面逐页换壳（实体列表 Segmented/Pagination、参考资料/回收站/设置/备份区块/关联总览、
+  详情页等视觉件 antd 化）；页面组织与后端 API 解耦原则入 architecture.md
 ## [v0.0.25] - 2026-09-05
 
 ### Changed
