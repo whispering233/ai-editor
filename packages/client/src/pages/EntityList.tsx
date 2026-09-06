@@ -20,10 +20,8 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { ENTITY_TYPES } from "@whispering233/ai-editor-shared";
 import type { EntitySummary, EntityType } from "@whispering233/ai-editor-shared";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { EmptyState } from "@/components/ui/empty-state";
-import { skeletonClass } from "@/lib/styles";
+import { Alert, Button, Empty, Input, Pagination, Segmented, Select, Skeleton, Tag, Typography } from "antd";
+import { SearchOutlined } from "@ant-design/icons";
 import {
   ApiError,
   CLIENT_NETWORK_ERROR,
@@ -36,11 +34,9 @@ import {
   CREATE_FIRST_FIELD,
   ListableEntityType,
   PAGE_LIMIT,
-  pageCount,
   SUMMARY_COLUMNS,
   summaryCellText,
 } from "../lib/entity-list";
-import { cn } from "../lib/utils";
 import { entityDetailPath, entityListPath } from "../lib/entity-paths";
 import { navigate } from "../hooks/use-route";
 import { useDataRefresh } from "../hooks/use-data-refresh";
@@ -65,7 +61,6 @@ const TYPE_LABEL: Record<ListableEntityType, string> = {
 //（独立中栏 tab #/references，旧路由重定向）。
 // 批次十七 1-1 泛型入口收敛：导航仅保留列表宿主类型（hook/event/timepoint 已由富页/宿主段承接，
 // 旧 #/entities/{hook,event,timepoint} 路由在 main.tsx 重定向）
-const TAB_TYPES: Array<"character" | "setting" | "location"> = ["character", "setting", "location"];
 
 /** 排序下拉选项（sort × order 组合；移除 updated_at 项，默认创建时间倒序） */
 const SORT_OPTIONS: Array<{
@@ -114,7 +109,6 @@ export default function EntityList({ type }: { type: string }) {
 
   const col = SUMMARY_COLUMNS[entityType];
   const firstField = CREATE_FIRST_FIELD[entityType];
-  const pages = pageCount(total, PAGE_LIMIT);
   const page = Math.floor(offset / PAGE_LIMIT) + 1;
  // 新建行 datalist 候选（批次五 J2）：从当前列表聚合已有名称 / 首字段值
  // （浏览器原生自动完成——输入时弹出已有候选，如输入「势」弹出「势力」）
@@ -259,54 +253,39 @@ export default function EntityList({ type }: { type: string }) {
 
   return (
     <section>
-      <h1 className="mb-4 text-xl font-semibold">实体</h1>
+      <Typography.Title level={4} className="!mb-4">
+        实体
+      </Typography.Title>
 
-      {/* 顶部：实体类型 tab（含关联，U8）+ 搜索 + 新建/建立关联
-          （设定 tab 为树形视图（），自带工具栏——搜索/新建在树内，顶部不重复渲染） */}
+      {/* 顶部：类型切换（antd Segmented）+ 搜索 + 新建
+          （设定树自带工具栏——搜索/新建在树内，顶部不重复渲染） */}
       <div className="flex flex-wrap items-center gap-3 border-b border-border pb-3">
-        <div className="flex gap-1">
-          {/* 批次十七 1-1：导航仅列表宿主类型（人物/设定/地点；hook/event/timepoint 入口去重——
-              由伏笔富页/时间轴/时间点宿主承接，路由层重定向） */}
-          {TAB_TYPES.map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => navigate(entityListPath(t))}
-              className={cn(
-                "rounded-md border border-border px-3 py-1.5 text-sm",
-                !isRelations && entityType === t
-                  ? "bg-foreground font-medium text-background"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
-              )}
-            >
-              {TYPE_LABEL[t]}
-            </button>
-          ))}
-          {/* 关联 tab（token 样式；激活态反相对比 bg-foreground/text-background，同 Breadcrumb） */}
-          <button
-            type="button"
-            onClick={() => navigate("/relations")}
-            className={cn(
-              "rounded-md border border-border px-3 py-1.5 text-sm",
-              isRelations
-                ? "bg-foreground font-medium text-background"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground",
-            )}
-          >
-            关联
-          </button>
-        </div>
+        <Segmented
+          value={isRelations ? "relations" : entityType}
+          onChange={(value) => {
+            const v = String(value);
+            navigate(v === "relations" ? "/relations" : entityListPath(v as "character" | "setting" | "location"));
+          }}
+          options={[
+            { label: "人物", value: "character" },
+            { label: "设定", value: "setting" },
+            { label: "地点", value: "location" },
+            { label: "关联", value: "relations" },
+          ]}
+        />
         <div className="ml-auto flex items-center gap-2">
           {!isRelations && entityType !== "setting" && (
             <Input
+              className="w-52"
+              prefix={<SearchOutlined />}
+              allowClear
               value={qInput}
               onChange={(e) => setQInput(e.target.value)}
               placeholder={`搜索${TYPE_LABEL[entityType]}名称…`}
-              className="w-52"
             />
           )}
           {!isRelations && entityType !== "setting" && (
-            <Button type="button" onClick={openCreateRow}>
+            <Button type="primary" onClick={openCreateRow}>
               + 新建
             </Button>
           )}
@@ -323,21 +302,19 @@ export default function EntityList({ type }: { type: string }) {
         <>
           {/* 排序行 + 总数 */}
           <div className="mt-3 mb-2 flex items-center gap-3">
-            <label className="flex items-center gap-2 text-sm text-muted-foreground">
-              排序:
-              <select
+            <span className="flex items-center gap-2">
+              <Typography.Text type="secondary">排序:</Typography.Text>
+              <Select
+                size="small"
                 value={`${sort}:${order}`}
-                onChange={(e) => handleSortChange(e.target.value)}
-                className="rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-              >
-                {SORT_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <span className="ml-auto text-sm text-muted-foreground/70">共 {total} 个</span>
+                onChange={(value) => handleSortChange(String(value))}
+                options={SORT_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+                style={{ minWidth: 150 }}
+              />
+            </span>
+            <Typography.Text type="secondary" className="!ml-auto">
+              共 {total} 个
+            </Typography.Text>
           </div>
 
           {/* 行内新建（UX4）：列表首行内联编辑——name + 该类型首字段（hook 的 status 下拉，其余文本；
@@ -361,7 +338,7 @@ export default function EntityList({ type }: { type: string }) {
                 autoFocus
                 aria-label="名称"
                 list={`entity-create-name-${entityType}`}
-                className="w-48"
+                style={{ width: 192 }}
               />
               <SuggestionDatalist
                 id={`entity-create-name-${entityType}`}
@@ -370,20 +347,20 @@ export default function EntityList({ type }: { type: string }) {
               {/* 首字段（空 key = 无 data 首字段——timepoint 仅 name，G2.3；行内新建退化为纯名称输入） */}
               {firstField.key !== "" &&
                 (firstField.input === "select" ? (
-                  <select
-                    value={firstValue}
-                    onChange={(e) => setFirstValue(e.target.value)}
+                  <Select
+                    size="middle"
+                    value={firstValue === "" ? undefined : firstValue}
+                    onChange={(value) => setFirstValue(value === undefined ? "" : String(value))}
                     disabled={createSubmitting}
                     aria-label={firstField.label}
-                    className="rounded-md border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                  >
-                    <option value="">{firstField.label}（选填）</option>
-                    {firstField.options?.map((opt) => (
-                      <option key={opt} value={opt}>
-                        {summaryCellText(entityType, firstField.key, opt)}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder={`${firstField.label}（选填）`}
+                    allowClear
+                    style={{ minWidth: 150 }}
+                    options={firstField.options?.map((opt) => ({
+                      value: opt,
+                      label: summaryCellText(entityType, firstField.key, opt),
+                    }))}
+                  />
                 ) : (
                   <Input
                     value={firstValue}
@@ -396,7 +373,7 @@ export default function EntityList({ type }: { type: string }) {
                     disabled={createSubmitting}
                     aria-label={firstField.label}
                     list={`entity-create-first-${entityType}`}
-                    className={firstField.input === "tags" ? "w-56" : "w-40"}
+                    style={{ width: firstField.input === "tags" ? 224 : 160 }}
                   />
                 ))}
               <SuggestionDatalist
@@ -404,78 +381,68 @@ export default function EntityList({ type }: { type: string }) {
                 options={createFirstSuggestions}
               />
               <div className="ml-auto flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  type="button"
-                  size="sm"
-                  onClick={cancelCreateRow}
-                  disabled={createSubmitting}
-                >
+                <Button htmlType="button" onClick={cancelCreateRow} disabled={createSubmitting}>
                   取消
                 </Button>
-                <Button type="submit" size="sm" disabled={createSubmitting}>
-                  {createSubmitting ? "创建中…" : "创建"}
+                <Button htmlType="submit" type="primary" loading={createSubmitting}>
+                  创建
                 </Button>
               </div>
-              {createError && <p className="w-full text-sm text-destructive">{createError}</p>}
+              {createError && (
+                <Typography.Text type="danger" className="!w-full !text-sm">
+                  {createError}
+                </Typography.Text>
+              )}
             </form>
           )}
 
           {/* 错误横幅（列表请求失败） */}
           {error !== null && (
-            <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error === CLIENT_NETWORK_ERROR
-                ? "无法连接服务，请确认 ai-editor 服务已启动。"
-                : "列表加载失败，请重试。"}
-              <Button
-                variant="outline"
-                className="ml-3"
-                type="button"
-                onClick={() => setReloadTick((t) => t + 1)}
-              >
-                重试
-              </Button>
-            </div>
+            <Alert
+              className="mb-3"
+              type="error"
+              showIcon
+              message={
+                error === CLIENT_NETWORK_ERROR
+                  ? "无法连接服务，请确认 ai-editor 服务已启动。"
+                  : "列表加载失败，请重试。"
+              }
+              action={
+                <Button size="small" onClick={() => setReloadTick((t) => t + 1)}>
+                  重试
+                </Button>
+              }
+            />
           )}
 
           {/* 加载骨架（首次加载） */}
           {loading && items === null && error === null && (
-            <div className="overflow-hidden rounded-md border border-border">
-              {Array.from({ length: 6 }, (_, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-3 border-b border-border/50 px-3 py-3 last:border-0"
-                >
-                  <div className={cn(skeletonClass, "h-4 w-1/4")} />
-                  <div className={cn(skeletonClass, "h-4 w-1/6")} />
-                  {col.key2 && <div className={cn(skeletonClass, "h-4 w-1/6")} />}
-                  {col.key3 && <div className={cn(skeletonClass, "h-4 w-1/6")} />}
-                  <div className={cn(skeletonClass, "ml-auto h-4 w-16")} />
-                </div>
-              ))}
+            <div className="rounded-md border border-border p-3">
+              <Skeleton active title={false} paragraph={{ rows: 6 }} />
             </div>
           )}
 
           {/* 空态（两种文案区分：无实体 vs 搜索无结果） */}
           {!loading && items !== null && items.length === 0 && (
-            <EmptyState
-              className="mt-3"
-              action={
-                q ? (
-                  <Button variant="outline" type="button" onClick={clearSearch}>
-                    清空搜索
-                  </Button>
+            <div className="mt-3 py-10">
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={
+                  q
+                    ? `没有匹配「${q}」的${TYPE_LABEL[entityType]}`
+                    : `还没有${TYPE_LABEL[entityType]}，新建一个`
+                }
+              />
+              <div className="mt-2 text-center">
+                {q ? (
+                  <Button onClick={clearSearch}>清空搜索</Button>
                 ) : (
-                  <Button type="button" onClick={openCreateRow}>
+                  <Button type="primary" onClick={openCreateRow}>
                     + 新建{TYPE_LABEL[entityType]}
                   </Button>
-                )
-              }
-            >
-              {q
-                ? `没有匹配「${q}」的${TYPE_LABEL[entityType]}`
-                : `还没有${TYPE_LABEL[entityType]}，新建一个`}
-            </EmptyState>
+                )}
+              </div>
+            </div>
           )}
 
           {/* 列表表格 */}
@@ -551,26 +518,15 @@ export default function EntityList({ type }: { type: string }) {
 
           {/* 分页控件（total 驱动；MVP limit 固定 20） */}
           {!loading && items !== null && items.length > 0 && (
-            <div className="mt-4 flex items-center justify-center gap-3 text-sm">
-              <button
-                type="button"
-                disabled={page <= 1 || loading}
-                className="rounded-md border border-border px-3 py-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
-                onClick={() => setOffset((page - 2) * PAGE_LIMIT)}
-              >
-                ‹ 上一页
-              </button>
-              <span className="text-muted-foreground">
-                第 {page} / {pages} 页
-              </span>
-              <button
-                type="button"
-                disabled={page >= pages || loading}
-                className="rounded-md border border-border px-3 py-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
-                onClick={() => setOffset(page * PAGE_LIMIT)}
-              >
-                下一页 ›
-              </button>
+            <div className="mt-4 flex justify-center">
+              <Pagination
+                simple
+                current={page}
+                total={total}
+                pageSize={PAGE_LIMIT}
+                disabled={loading}
+                onChange={(p) => setOffset((p - 1) * PAGE_LIMIT)}
+              />
             </div>
           )}
         </>
@@ -595,12 +551,9 @@ export default function EntityList({ type }: { type: string }) {
 function CharacterRow({ item }: { item: EntitySummary }) {
   const { role, motivation, personality, abilities } = characterRowInfo(item.summary);
   const badge = (text: string) => (
-    <span
-      key={text}
-      className="shrink-0 rounded bg-primary/80 px-1.5 py-0.5 text-xs text-primary-foreground"
-    >
+    <Tag key={text} color="blue" className="!mr-0 !text-xs">
       {text}
-    </span>
+    </Tag>
   );
   return (
     <>
@@ -623,9 +576,9 @@ function CharacterRow({ item }: { item: EntitySummary }) {
       {/* 角色列 */}
       <td className="px-3 py-2">
         {role !== "" ? (
-          <span className="shrink-0 rounded bg-primary/80 px-1.5 py-0.5 text-xs text-primary-foreground">
+          <Tag color="blue" className="!text-xs">
             {role}
-          </span>
+          </Tag>
         ) : (
           <span className="text-muted-foreground">—</span>
         )}
