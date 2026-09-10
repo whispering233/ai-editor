@@ -243,9 +243,9 @@ components:
 
 ### 描边（hairline → hairline-strong）
 
-- **Hairline (#e5e3df)**：结构分栏、卡片描边。
-- **Hairline Soft (#ede9e4)**：更强的分隔（表格行、区块内分隔）。
-- **Hairline Strong (#c8c4be)**：输入框/次级按钮描边（需要比 hairline 更明确的可点性信号）。
+- **Hairline Strong (#c8c4be)**：**交互描边**——输入框静止态、次级按钮边框（antd `colorBorder`：`input/style/variants.js` 与 `button/style/token.js` 的 `defaultBorderColor` 均取此值）——可点性信号比结构描边明确。
+- **Hairline (#e5e3df)**：**结构描边**——卡片、表格外框（antd `colorBorderSecondary`）。
+- **Hairline Soft (#ede9e4)**：**行分隔**——表格内线、列表行底线（antd `colorSplit`）。
 
 ### 交互与语义
 
@@ -269,8 +269,9 @@ components:
 | `colorTextQuaternary` | `#a4a097` | `rgba(255,255,255,.34)` | `{colors.quaternary}` |
 | `colorBgContainer` / `colorBgElevated` | `#ffffff` | `#202020` / `#252525` | `{colors.canvas}` |
 | `colorBgLayout` | `#f6f5f4` | `#191919` | `{colors.surface}` |
-| `colorBorder` | `#e5e3df` | `#2f2f2f` | `{colors.hairline}` |
-| `colorBorderSecondary` | `#ede9e4` | `#373737` | `{colors.hairline-soft}` |
+| `colorBorder` | `#c8c4be` | `#4a4a4a` | `{colors.hairline-strong}`（交互描边：Input 静止态 / Button default） |
+| `colorBorderSecondary` | `#e5e3df` | `#2f2f2f` | `{colors.hairline}`（结构描边：Card / Table 外框） |
+| `colorSplit` | `#ede9e4` | `#373737` | `{colors.hairline-soft}`（行分隔：Table 内线 / data-row 底线） |
 | `colorLink` | `#0075de` | `#529cca` | `{colors.link}` |
 | `colorSuccess` / `colorWarning` / `colorError` | `#1aae39` / `#dd5b00` / `#e03131` | 同 | 语义三色 |
 | `borderRadius` / `borderRadiusSM` | `6px` / `4px` | — | `{rounded.sm}` / `{rounded.xs}` |
