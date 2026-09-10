@@ -9,7 +9,7 @@
 // title 非空且有变化（shouldCommitTitle）、summary 有变化且允许清空（提交空串真正清除——
 // 服务端 patch.summary !== undefined 即写入）、data diffData（lib/entity-detail，空值规约）；
 // 引用字段（climax_scene/inciting_scene）「未设置」→ 空串（服务端 z.string.optional 不接受 null）
-// 交互：面包屑「大纲 › … › 节点名」（父级段跳 #/outline/:parentId）；header [保存] 整表单一次提交；
+// 交互：详情页无面包屑（批次十八 B1 移除）——返回上级走左栏 NavRail / 大纲树；header [保存] 整表单一次提交；
 // VALIDATION_ERROR → 结构化信息卡底部行内错误；「+ 新建变更」（S12.3）→ 内联表单（目标/字段/op/值/
 // 描述，update 自动取旧值）→ 成功后 toast + 重拉变更记录列表
 // 样式 token 类（，oracle 红线：禁止硬编码色类）
@@ -163,8 +163,8 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
     }
   }
 
- // Ctrl/Cmd+S 保存（B2）
-  useSaveShortcut(() => void handleSave());
+ // Ctrl/Cmd+S 保存（B2）：仅节点就绪时注册（notFound/无项目/加载失败时不抢快捷键）
+  useSaveShortcut(() => void handleSave(), node !== null);
 
  // ============ 渲染 ============
 

@@ -38,11 +38,18 @@ export function triggerSaveShortcut(): boolean {
   return true;
 }
 
+function handleKeyDown(e: KeyboardEvent): void {
+  if (e.repeat) return; // 长按重复触发：一次按键只保存一次
+  if (!isSaveShortcut(e)) return;
+  if (triggerSaveShortcut()) e.preventDefault();
+}
+
 if (typeof window !== "undefined") {
-  window.addEventListener("keydown", (e) => {
-    if (!isSaveShortcut(e)) return;
-    if (triggerSaveShortcut()) e.preventDefault();
-  });
+  window.addEventListener("keydown", handleKeyDown);
+  // dev HMR：模块重新求值时注销旧监听（防同一页面挂多份 → 一次 Ctrl+S 保存多次）；
+  // client tsconfig 未引入 vite/client 类型，故局部窄化 import.meta.hot
+  const hot = (import.meta as ImportMeta & { hot?: { dispose(cb: () => void): void } }).hot;
+  hot?.dispose(() => window.removeEventListener("keydown", handleKeyDown));
 }
 
 /**

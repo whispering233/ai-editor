@@ -4,7 +4,7 @@
 // time_label）、**挂载时间点选择器（G2）**、occurs_in 关联管理（添加：大纲节点选择器 → POST /relation
 // event → outline_node；取消：确认后 DELETE /relation/:id 物理删）、软删（H2：直接执行，级联计数 toast → 跳回列表）、
 // 三态（加载骨架 / 404 / 保存失败内联）
-// 参照：EntityDetail.tsx（面包屑/保存交互/404 引导/软删直接执行）、HookPanel/Timeline OutlineNodeSelect（节点选择）
+// 参照：EntityDetail.tsx（保存交互/404 引导/软删直接执行）、HookPanel/Timeline OutlineNodeSelect（节点选择）
 // 关键决策：
 // - 404 错误码为 ENTITY_NOT_FOUND（事件走泛型实体路由，server/src/routes/entity.ts； 的
 // EVENT_NOT_FOUND 为文档示意名，ErrorCode 枚举无此码——客户端以实际码判定）
@@ -287,7 +287,7 @@ export default function TimelineDetail({ id }: { id: string }) {
   }
 
  // Ctrl/Cmd+S 保存（B2）
-  useSaveShortcut(() => void handleSave());
+  useSaveShortcut(() => void handleSave(), detail !== null && form !== null);
 
  // ============ 渲染 ============
 

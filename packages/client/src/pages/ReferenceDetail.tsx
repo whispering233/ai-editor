@@ -210,6 +210,7 @@ export default function ReferenceDetail({
 
  /** 保存（编辑态 PUT / 草稿态 POST + 跳转）；file 类由服务端落盘（先写文件后更新 DB） */
   async function handleSave() {
+    if (saving) return; // 重入门禁（B2 验证：快捷键可绕过「保存」按钮的 disabled）
     const name = form.name.trim();
     if (name === "") {
       setFormError("标题必填");
@@ -258,7 +259,7 @@ export default function ReferenceDetail({
   }
 
  // Ctrl/Cmd+S 保存（B2）：编辑态 PUT / 草稿态 POST 与「保存/创建」按钮同动作
-  useSaveShortcut(() => void handleSave());
+  useSaveShortcut(() => void handleSave(), isDraft || detail !== null);
 
   async function handleDelete() {
     if (detail === null) return;

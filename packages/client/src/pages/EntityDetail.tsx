@@ -377,7 +377,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
   }
 
  // Ctrl/Cmd+S 保存（B2）：页面级保存注册（本页无行内编辑注册者）
-  useSaveShortcut(() => void handleSave());
+  useSaveShortcut(() => void handleSave(), detail !== null && form !== null);
 
  /** 设置字段值（tags/select 等通用入口） */
   function setField(key: string, value: unknown) {
