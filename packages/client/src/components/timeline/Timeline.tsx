@@ -62,6 +62,8 @@ interface TimelineProps {
   onDelete: (ev: EntitySummary) => void;
  /** 建立关联成功后的数据刷新（页面 reloadTick+1；时间点行/事件行右键菜单用） */
   onRelationCreated: () => void;
+ /** 新建成功待聚焦的时间点 id（A2：滚动到位 + 高亮 + 键盘焦点落组标题行；null = 无） */
+  highlightedTimepointId?: string | null;
 }
 
 /** 事件拖拽落点（指示线 + drop 计算）：行级 = 锚定该行（行边缘指示线）；组级 = 组首/组尾
@@ -94,6 +96,7 @@ export function Timeline({
   onEditName,
   onDelete,
   onRelationCreated,
+  highlightedTimepointId = null,
 }: TimelineProps) {
  // 渲染模型（已筛选事件）与 order 计算模型（全量事件）——组序同源（timepoints 序）
   const renderModel = useMemo(
@@ -420,6 +423,7 @@ export function Timeline({
             onEditName={onEditName}
             onDelete={onDelete}
             onRelationCreated={onRelationCreated}
+            highlighted={g.groupId !== "" && g.groupId === highlightedTimepointId}
           />
         );
       })}

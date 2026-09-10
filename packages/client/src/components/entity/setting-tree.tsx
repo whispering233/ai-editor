@@ -48,6 +48,7 @@ import {
   type SettingTreeNode,
 } from "../../lib/setting-tree";
 import { cn } from "../../lib/utils";
+import { focusNewItem } from "../../lib/new-item-focus";
 import { navigate } from "../../hooks/use-route";
 import { useUiStore } from "../../stores/ui";
 
@@ -183,6 +184,13 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     const t = setTimeout(() => setHighlightedId(null), 3000);
     return () => clearTimeout(t);
   }, [highlightedId]);
+
+ // 新建即聚焦（A2）：高亮 id 对应的行渲染出来后（reload 完成 → roots 变化）滚动到位 + 键盘焦点落行
+  useEffect(() => {
+    if (highlightedId === null) return;
+    const t = setTimeout(() => focusNewItem(`[data-setting-id="${highlightedId}"]`), 0);
+    return () => clearTimeout(t);
+  }, [highlightedId, roots]);
 
  // 选中节点失效清理（树重拉后选中节点不存在 → 清除选中，防残留）
   useEffect(() => {
@@ -644,6 +652,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
       const canDown = sortMode === "manual" && siblingIdx >= 0 && siblingIdx < ordered.length - 1;
  // 节点行根 props（右键菜单 trigger 与普通 div 共用）
       const rowProps = {
+        "data-setting-id": node.id,
         draggable: !editing && !isDragging && !busy,
         tabIndex: -1,
         onDragStart: (e: DragEvent) => handleDragStart(e, node),

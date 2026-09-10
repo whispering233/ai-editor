@@ -68,6 +68,8 @@ interface TimelineGroupBlockProps {
   onDelete: (ev: EntitySummary) => void;
  /** 建立关联成功后的数据刷新（页面 reloadTick+1；时间点行右键菜单用） */
   onRelationCreated: () => void;
+ /** 新建成功待聚焦（A2：临时高亮组标题行 3s；未挂载区恒 false） */
+  highlighted?: boolean;
 }
 
 export function TimelineGroupBlock({
@@ -96,6 +98,7 @@ export function TimelineGroupBlock({
   onEditName,
   onDelete,
   onRelationCreated,
+  highlighted = false,
 }: TimelineGroupBlockProps) {
  // 行内编辑（点击时间点名进入，替代原「重命名」按钮；Enter 提交 / Esc 取消 / 失焦保存）
   const [editing, setEditing] = useState(false);
@@ -161,6 +164,9 @@ export function TimelineGroupBlock({
       {(() => {
  // 组标题行根 props（右键菜单 trigger 与普通 div 共用）
         const rowProps = {
+ // A2：新建即聚焦锚点（组标题行可聚焦，focusNewItem 按此属性定位）
+          "data-timepoint-id": isUngrouped ? undefined : groupId,
+          tabIndex: isUngrouped ? undefined : -1,
           draggable: !isUngrouped && !busy && !editing,
           onDragStart,
           onDragEnd,
@@ -168,7 +174,11 @@ export function TimelineGroupBlock({
           onDrop,
           onDoubleClick: handleRowDoubleClick,
           title: !isUngrouped ? "拖拽调整时间点顺序（组内事件不动）" : undefined,
-          className: cn("flex items-start", !isUngrouped && groupDragging && "opacity-50"),
+          className: cn(
+            "flex items-start",
+            !isUngrouped && groupDragging && "opacity-50",
+            highlighted && "rounded-md bg-accent ring-1 ring-ring ring-inset",
+          ),
         };
  // 组标题行内容（圆点列 + 内容列）
         const rowChildren = (

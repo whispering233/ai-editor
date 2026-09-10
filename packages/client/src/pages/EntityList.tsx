@@ -40,6 +40,8 @@ import {
   summaryCellText,
 } from "../lib/entity-list";
 import { entityDetailPath } from "../lib/entity-paths";
+import { focusNewItem } from "../lib/new-item-focus";
+import { cn } from "../lib/utils";
 import { navigate } from "../hooks/use-route";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useUiStore } from "../stores/ui";
@@ -108,6 +110,23 @@ export default function EntityList({ type }: { type: string }) {
   const [firstValue, setFirstValue] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
   const [createSubmitting, setCreateSubmitting] = useState(false);
+ /** 新建成功后的聚焦目标 id（A2：新行滚动到位 + 高亮 + 键盘焦点落行；3s 后清除） */
+  const [newItemId, setNewItemId] = useState<string | null>(null);
+
+ // 新建行聚焦（A2）：新行已进入当前页数据（items 含 id）时滚动 + 聚焦；
+ // 排序/分页导致新行不在当前视图 → focusNewItem 返回 false，静默忽略（不强行跳页）
+  useEffect(() => {
+    if (newItemId === null) return;
+    const t = setTimeout(() => focusNewItem(`[data-entity-id="${newItemId}"]`), 0);
+    return () => clearTimeout(t);
+  }, [newItemId, items]);
+
+ // 新建行高亮自动消失（3s）
+  useEffect(() => {
+    if (newItemId === null) return;
+    const t = setTimeout(() => setNewItemId(null), 3000);
+    return () => clearTimeout(t);
+  }, [newItemId]);
 
   const col = SUMMARY_COLUMNS[entityType];
   const firstField = CREATE_FIRST_FIELD[entityType];
@@ -233,11 +252,12 @@ export default function EntityList({ type }: { type: string }) {
           data[first.key] = firstValue.trim();
         }
       }
-      await createEntity(entityType, { name, data });
+      const res = await createEntity(entityType, { name, data });
       useUiStore.getState().showToast(`已创建${TYPE_LABEL[entityType]}《${name}》`);
  // 创建后留在列表（2026-08 用户反馈：不自动跳详情页——打断性行为；关行 + 刷新列表
- // 让新项按排序出现在当前视图，需要进详情可点行进入）
+ // 让新项按排序出现在当前视图，需要进详情可点行进入）；A2：新行滚动到位 + 高亮 + 聚焦
       setCreateOpen(false);
+      setNewItemId(res.id);
       setReloadTick((t) => t + 1);
     } catch (err) {
       setCreateError(err instanceof ApiError ? err.message : "创建失败，请重试");
@@ -455,7 +475,12 @@ export default function EntityList({ type }: { type: string }) {
                       onCreated={() => setReloadTick((t) => t + 1)}
                       trigger={
                         <tr
-                          className="cursor-pointer border-b border-border/50 transition-colors last:border-0 hover:bg-muted"
+                          data-entity-id={item.id}
+                          tabIndex={-1}
+                          className={cn(
+                            "cursor-pointer border-b border-border/50 transition-colors last:border-0 hover:bg-muted",
+                            item.id === newItemId && "bg-accent/40", // 新建成功临时高亮（3s，A2）
+                          )}
                           onClick={() => navigate(entityDetailPath(entityType as EntityType, item.id))}
                           title={`打开《${item.name}》`}
                         />

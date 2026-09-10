@@ -52,6 +52,7 @@ import {
   type DragTarget,
 } from "../lib/outline-tree";
 import { cn } from "../lib/utils";
+import { focusNewItem } from "../lib/new-item-focus";
 import { navigate } from "../hooks/use-route";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useProjectStore } from "../stores/project";
@@ -171,9 +172,7 @@ export default function Outline() {
  /** 折叠的节点 id 集合（空集 = 全部展开） */
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
- /** 新创建节点高亮（原型「成功后新节点高亮」；3s 自动消失） */
-  const [highlightedNodeId, setHighlightedNodeId] = useState<string | null>(null);
- /** 跨页定位节点高亮（U4：InfoBar 点击当前位置 → 跳转定位，bg-accent 临时高亮几秒） */
+ /** 新建/跨页定位的聚焦节点 id（A2：新建成功后滚动到位 + 键盘焦点落行；3s 自动消失） */
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
  /** 选中节点 id（单击行选中，选中后按 Enter 新建子级）；null = 无选中 */
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -227,12 +226,12 @@ export default function Outline() {
     };
   }, [outline]);
 
- // 新节点高亮自动消失（3s；每次设置高亮重开定时器）
+ // 聚焦高亮自动消失（3s）；聚焦动作（滚动 + 键盘焦点）由下方 effect 承担
   useEffect(() => {
-    if (highlightedNodeId === null) return;
-    const t = setTimeout(() => setHighlightedNodeId(null), 3000);
+    if (focusedNodeId === null) return;
+    const t = setTimeout(() => setFocusedNodeId(null), 3000);
     return () => clearTimeout(t);
-  }, [highlightedNodeId]);
+  }, [focusedNodeId]);
 
  // 跨页定位消费（U4 方案 A，「点击当前位置 → 跳 #/outline 并定位该节点」）：
  // 读取 ui store 的 transient 目标——展开折叠祖先使节点进入 DOM（折叠态节点不渲染无法滚动），
@@ -253,22 +252,20 @@ export default function Outline() {
       for (const id of path) next.delete(id);
       return next;
     });
- // 展开是异步状态更新：等本轮渲染完成后再查 DOM 定位（setTimeout 0 落下一帧）
+ // 展开是异步状态更新：等本轮渲染完成后再设聚焦目标（滚动 + 聚焦由下方 focusedNodeId effect 执行）
     const t = setTimeout(() => {
-      const el = document.querySelector<HTMLElement>(`[data-node-id="${targetId}"]`);
-      if (el) {
-        el.scrollIntoView({ block: "center" });
-        setFocusedNodeId(targetId);
-      }
+      setFocusedNodeId(targetId);
       clearFocusOutlineNode();
     }, 0);
     return () => clearTimeout(t);
   }, [focusOutlineNodeId, outline, clearFocusOutlineNode]);
 
- // 定位高亮自动消失（3s，同新节点高亮模式）
+ // 聚焦动作（A2：新建即聚焦 + U4 跨页定位共用）：下一帧查 DOM 滚动到视口中部 + 行聚焦
+ // （行 tabIndex=-1 可聚焦）；节点不渲染（折叠祖先未展开/已删）→ focusNewItem 静默返回 false
   useEffect(() => {
     if (focusedNodeId === null) return;
-    const t = setTimeout(() => setFocusedNodeId(null), 3000);
+    const id = focusedNodeId;
+    const t = setTimeout(() => focusNewItem(`[data-node-id="${id}"]`), 0);
     return () => clearTimeout(t);
   }, [focusedNodeId]);
 
@@ -279,11 +276,11 @@ export default function Outline() {
   }, [outline, selectedNodeId]);
 
  /** 树变更后的统一刷新：展开目标父 + 重拉整树（刷新策略注释见文件头）；
- * highlightNodeId：创建成功后高亮新节点（原型「成功后自动展开父节点、新节点高亮」） */
-  async function afterTreeChanged(expandParentId?: string, highlightNodeId?: string) {
+ * focusNodeId：创建成功后滚动到位 + 聚焦新节点（原型「成功后自动展开父节点、新节点高亮」，A2） */
+  async function afterTreeChanged(expandParentId?: string, focusNodeId?: string) {
     if (expandParentId) expand(expandParentId);
     await loadOutline();
-    if (highlightNodeId) setHighlightedNodeId(highlightNodeId);
+    if (focusNodeId) setFocusedNodeId(focusNodeId);
   }
 
   function toggleCollapsed(id: string) {
@@ -685,8 +682,7 @@ export default function Outline() {
         onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => handleRowKeyDown(e, node),
         className: cn(
           "relative cursor-grab rounded-md px-2 py-1 transition-colors hover:bg-muted/60 active:cursor-grabbing",
-          node.id === highlightedNodeId && "bg-accent/40", // 新建成功临时高亮（3s）
-          focused && "bg-accent ring-1 ring-ring ring-inset", // 跨页定位临时高亮（U4，3s 消失）
+          focused && "bg-accent ring-1 ring-ring ring-inset", // 新建/定位临时高亮（3s 消失）
           isDragging && "opacity-50",
           selected && "bg-primary/10 ring-1 ring-primary/30 ring-inset", // 选中态（primary 淡染 + 描边，区别于临时高亮）
         ),

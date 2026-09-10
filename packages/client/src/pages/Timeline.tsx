@@ -60,6 +60,7 @@ import {
 } from "../lib/timeline";
 import { buildOccursAtRelationBody } from "../lib/timeline-detail";
 import { flattenTree } from "../lib/outline-tree";
+import { focusNewItem } from "../lib/new-item-focus";
 import { cn } from "../lib/utils";
 import { Timeline as TimelineView } from "../components/timeline/Timeline";
 import { TagSuggest } from "../components/timeline/TagSuggest";
@@ -119,6 +120,23 @@ export default function Timeline() {
   const [tpName, setTpName] = useState("");
   const [tpError, setTpError] = useState<string | null>(null);
   const [tpSubmitting, setTpSubmitting] = useState(false);
+ /** 新建成功待聚焦的时间点 id（A2：滚动到位 + 高亮 + 键盘焦点落组标题行；3s 后清除） */
+  const [newTimepointId, setNewTimepointId] = useState<string | null>(null);
+
+ // 新建时间点聚焦（A2）：新组已渲染（数据重拉完成）→ 下一帧滚动 + 聚焦；
+ // 标签筛选命中不到新组 → focusNewItem 返回 false，静默忽略
+  useEffect(() => {
+    if (newTimepointId === null) return;
+    const t = setTimeout(() => focusNewItem(`[data-timepoint-id="${newTimepointId}"]`), 0);
+    return () => clearTimeout(t);
+  }, [newTimepointId, timepoints]);
+
+ // 新建时间点高亮自动消失（3s）
+  useEffect(() => {
+    if (newTimepointId === null) return;
+    const t = setTimeout(() => setNewTimepointId(null), 3000);
+    return () => clearTimeout(t);
+  }, [newTimepointId]);
 
   const config = useProjectStore((s) => s.config);
   const outline = useProjectStore((s) => s.outline);
@@ -211,10 +229,11 @@ export default function Timeline() {
     setTpSubmitting(true);
     setTpError(null);
     try {
-      await createEntity("timepoint", { name });
+      const res = await createEntity("timepoint", { name });
       useUiStore.getState().showToast(`已创建时间点《${name}》`);
       setTpCreateOpen(false);
       setTpName("");
+      setNewTimepointId(res.id); // A2：新建即聚焦（滚动 + 高亮 + 键盘焦点）
       setReloadTick((t) => t + 1);
     } catch (err) {
       setTpError(err instanceof ApiError ? err.message : "创建失败，请重试");
@@ -614,6 +633,7 @@ export default function Timeline() {
               onDelete={(ev) => void handleDelete({ kind: "event", entity: ev })}
               onDeleteTimepoint={(tp) => void handleDelete({ kind: "timepoint", entity: tp })}
               onRelationCreated={() => setReloadTick((t) => t + 1)}
+              highlightedTimepointId={newTimepointId}
             />
           )}
 
