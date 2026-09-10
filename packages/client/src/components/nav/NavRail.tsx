@@ -99,7 +99,7 @@ export function NavRail({
           className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1.5"
         >
           <span style={{ color: token.colorPrimary }}>◈</span>
-          <Typography.Text italic className="truncate font-serif text-base">
+          <Typography.Text italic className="truncate text-base">
             我的小说
           </Typography.Text>
         </a>

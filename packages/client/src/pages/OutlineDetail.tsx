@@ -21,6 +21,7 @@ import { NodeDeltaList } from "../components/delta/node-delta-list";
 import { DeltaCreateForm } from "../components/delta/delta-create-form";
 import { TYPE_LABEL } from "../components/outline/dialogs";
 import { Button } from "@/components/ui/button";
+import { PageTitle } from "@/components/ui/page-title";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionCard } from "@/components/ui/section-card";
@@ -199,7 +200,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
     <section>
       {/* header：标题 + 操作区（设为当前位置 / 保存）——面包屑已随批次十八 B1 移除 */}
       <div className="mb-1 flex items-center gap-3">
-        <h1 className="min-w-0 truncate text-xl font-semibold">{node?.title ?? "…"}</h1>
+        <PageTitle className="min-w-0 truncate">{node?.title ?? "…"}</PageTitle>
         <div className="ml-auto flex items-center gap-2">
           {/* S13.2 设为当前位置（动作入口；状态徽标在元信息行）：已是当前位置 → 禁用 + 「当前位置」标记，
               与 S13.1 前大纲页 disabled={isCurrent || busy} 语义一致 */}

@@ -23,6 +23,7 @@ import { Trash2 } from "lucide-react";
 import { CHILD_TYPE, TYPE_LABEL } from "../components/outline/dialogs";
 import { NodeHookMarkBadge } from "../components/outline/node-hook-badge";
 import { Button } from "@/components/ui/button";
+import { PageTitle } from "@/components/ui/page-title";
 import { RowContextMenu } from "@/components/entity/row-context-menu";
 import { EmptyState } from "@/components/ui/empty-state";
 import { errorBannerClass, skeletonClass } from "@/lib/styles";
@@ -865,7 +866,7 @@ export default function Outline() {
     <section>
       {/* 标题区：操作工具条 */}
       <div className="mb-4 flex items-center justify-between gap-4">
-        <h1 className="text-xl font-semibold">大纲</h1>
+        <PageTitle>大纲</PageTitle>
         <div className="flex gap-2">
           <Button
             variant="outline"

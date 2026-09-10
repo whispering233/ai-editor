@@ -11,7 +11,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { MouseEvent } from "react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
-import { Alert, Button, Empty, Input, Select, Skeleton, Tag, Typography } from "antd";
+import { Alert, Button, Empty, Input, Select, Skeleton, Tag } from "antd";
+import { PageTitle } from "@/components/ui/page-title";
 import {
   DeleteOutlined,
   ExportOutlined,
@@ -192,9 +193,7 @@ export default function ReferenceList() {
     <section className="flex h-full min-h-0 flex-col">
       {/* 固定区：标题 + 操作 */}
       <div className="mb-4 flex items-center gap-3">
-        <Typography.Title level={4} className="!mb-0">
-          参考资料
-        </Typography.Title>
+        <PageTitle>参考资料</PageTitle>
         <span
           className="ml-auto flex items-center gap-2"
           title={disabled ? "请先打开项目" : undefined}

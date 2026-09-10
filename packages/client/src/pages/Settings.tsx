@@ -10,6 +10,7 @@
 // 无项目打开灰显禁用
 import { useEffect, useState } from "react";
 import { Alert, Button, Card, Input, Select, Tag, theme, Typography } from "antd";
+import { PageTitle } from "@/components/ui/page-title";
 import { ApiError, CLIENT_NETWORK_ERROR, getSettingsLlm, updateSettingsLlm, type SettingsLlmConfig } from "../lib/api";
 import { useProjectStore } from "../stores/project";
 import { useUiStore, type ErrorBanner } from "../stores/ui";
@@ -191,13 +192,13 @@ export default function Settings() {
 
   return (
     <section className="mx-auto w-full max-w-2xl px-4">
-      <Typography.Title level={4} className="!mb-4">
-        设置
-      </Typography.Title>
+      <PageTitle>设置</PageTitle>
       {loading ? (
-        <Typography.Text type="secondary">加载中…</Typography.Text>
+        <Typography.Text type="secondary" className="mt-4 inline-block">
+          加载中…
+        </Typography.Text>
       ) : (
-        <div className="flex flex-col gap-6">
+        <div className="mt-4 flex flex-col gap-6">
           {/* AI 模型（批次十六：每 provider 一张卡片，平铺） */}
           <div>
             <Typography.Title level={5} className="!mb-1">

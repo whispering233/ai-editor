@@ -18,6 +18,7 @@ import { ParentSettingSelect } from "../components/entity/parent-setting-select"
 import { ComputePreview } from "../components/delta/compute-preview";
 import { entityListHost } from "../lib/entity-paths";
 import { Button } from "@/components/ui/button";
+import { PageTitle } from "@/components/ui/page-title";
 import { Input } from "@/components/ui/input";
 import {
   ApiError,
@@ -509,7 +510,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
     <section>
       {/* header：标题 + 操作（面包屑已随批次十八 B1 移除——详情页返回走左栏 NavRail） */}
       <div className="mb-1 flex items-center gap-3">
-        <h1 className="min-w-0 truncate text-xl font-semibold">{detail?.name ?? "…"}</h1>
+        <PageTitle className="min-w-0 truncate">{detail?.name ?? "…"}</PageTitle>
         <div className="ml-auto flex items-center gap-2">
           <Button
             variant="outline"

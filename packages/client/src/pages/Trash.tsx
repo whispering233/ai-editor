@@ -15,6 +15,7 @@ import { useEffect, useState } from "react";
 import type { EntityType } from "@whispering233/ai-editor-shared";
 import { formatRelativeTime } from "@whispering233/ai-editor-shared";
 import { Alert, Button, Empty, Skeleton, Tag, Typography } from "antd";
+import { PageTitle } from "@/components/ui/page-title";
 import { DeleteOutlined, RedoOutlined, ReloadOutlined } from "@ant-design/icons";
 import { ConfirmDialog } from "../components/outline/dialogs";
 import {
@@ -224,9 +225,7 @@ export default function Trash() {
     <section>
       {/* header：标题 + 说明 + 刷新 */}
       <div className="mb-1 flex items-center gap-3">
-        <Typography.Title level={4} className="!mb-0">
-          回收站
-        </Typography.Title>
+        <PageTitle>回收站</PageTitle>
         <Button className="ml-auto" onClick={() => void reload()} disabled={loading} icon={<ReloadOutlined />}>
           刷新
         </Button>

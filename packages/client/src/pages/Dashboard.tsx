@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { SectionCard } from "@/components/ui/section-card";
+import { PageTitle } from "@/components/ui/page-title";
 import { skeletonClass } from "@/lib/styles";
 import {
   ApiError,
@@ -517,7 +518,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
       <section className="mx-auto w-full max-w-2xl px-4">
         <div className="mt-8 flex items-start gap-3">
           <div className="min-w-0 flex-1">
-            <h1 className="font-serif text-xl font-medium text-foreground">书架</h1>
+            <PageTitle>书架</PageTitle>
             <p className="mt-1 text-sm text-muted-foreground">
               {config !== null
                 ? `当前打开《${config.name}》，切换书籍或继续创作`
@@ -697,7 +698,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
           ) : (
             /* 空书架：创建引导（「还没有书」仅此分支） */
             <>
-              <h1 className="font-serif text-lg text-foreground">还没有书，先创建一本</h1>
+              <p className="text-base font-semibold text-foreground">还没有书，先创建一本</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 每本书一个独立目录（books/书名/），写作数据互不干扰
               </p>
@@ -824,7 +825,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     return (
       <section className="mx-auto w-full max-w-xl px-4">
         <div className="mt-16 rounded-2xl border border-dashed border-border bg-card px-6 py-10 text-center">
-          <h1 className="font-serif text-lg text-foreground">还没有打开的书</h1>
+          <p className="text-base font-semibold text-foreground">还没有打开的书</p>
           <p className="mt-1 text-sm text-muted-foreground">先到书架选择或创建一本</p>
           <a
             href="#/"
@@ -840,7 +841,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
   return (
     <section>
       <div className="mb-4">
-        <h1 className="font-serif text-xl font-medium text-foreground">项目概览</h1>
+        <PageTitle>项目概览</PageTitle>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">

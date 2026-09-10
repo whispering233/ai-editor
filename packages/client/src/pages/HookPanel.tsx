@@ -19,6 +19,7 @@ import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { ArrowUp, Check, CheckCircle2, Circle, Eye, Pencil, Trash2, X } from "lucide-react";
 import { RowContextMenu } from "../components/entity/row-context-menu";
 import { Button } from "@/components/ui/button";
+import { PageTitle } from "@/components/ui/page-title";
 import { EmptyState } from "@/components/ui/empty-state";
 import { inputClass, errorBannerClass } from "@/lib/styles";
 import { Input } from "@/components/ui/input";
@@ -423,7 +424,7 @@ export default function HookPanel() {
     <section>
       {/* header：标题 + 新建入口（ 线框） */}
       <div className="mb-4 flex items-center gap-3">
-        <h1 className="text-xl font-semibold">伏笔池</h1>
+        <PageTitle>伏笔池</PageTitle>
         <Button type="button" className="ml-auto" onClick={() => setCreateOpen(true)}>
           + 新建伏笔
         </Button>

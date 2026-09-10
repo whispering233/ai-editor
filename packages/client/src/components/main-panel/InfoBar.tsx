@@ -42,7 +42,7 @@ export function InfoBar({
       {/* 项目名：点击回 #/ */}
       <a
         href="#/"
-        className="flex min-w-0 items-center gap-1.5 font-serif text-base font-medium text-foreground hover:text-primary"
+        className="flex min-w-0 items-center gap-1.5 text-base font-medium text-foreground hover:text-primary"
       >
         <span className="text-primary">◈</span>
         <span className="truncate">{projectTitle}</span>

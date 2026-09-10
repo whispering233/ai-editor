@@ -24,6 +24,7 @@ import { useEffect, useState } from "react";
 import { formatTimestamp } from "@whispering233/ai-editor-shared";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { Button } from "@/components/ui/button";
+import { PageTitle } from "@/components/ui/page-title";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -329,7 +330,7 @@ export default function TimelineDetail({ id }: { id: string }) {
     <section>
       {/* header：标题 + 操作（面包屑已随批次十八 B1 移除——返回走左栏 NavRail） */}
       <div className="mb-1 flex items-center gap-3">
-        <h1 className="min-w-0 truncate text-xl font-semibold">{detail?.name ?? "…"}</h1>
+        <PageTitle className="min-w-0 truncate">{detail?.name ?? "…"}</PageTitle>
         <div className="ml-auto flex items-center gap-2">
           <Button
             variant="outline"

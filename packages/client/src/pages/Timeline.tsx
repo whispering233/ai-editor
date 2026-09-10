@@ -27,6 +27,7 @@ import type { FormEvent } from "react";
 import { ListOrdered } from "lucide-react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { Button } from "@/components/ui/button";
+import { PageTitle } from "@/components/ui/page-title";
 import { EmptyState } from "@/components/ui/empty-state";
 import { inputClass, errorBannerClass } from "@/lib/styles";
 import { Input } from "@/components/ui/input";
@@ -495,7 +496,7 @@ export default function Timeline() {
     <section className="flex h-full min-h-0 flex-col">
       {/* 固定区：header——标题 + 操作（ G2 线框：AI 排序 + 新建事件 + 新建时间点） */}
       <div className="mb-4 flex items-center gap-3">
-        <h1 className="text-xl font-semibold">时间轴</h1>
+        <PageTitle>时间轴</PageTitle>
         {/* AI 排序：注入聊天预设指令（F9）；无项目禁用——外层 span 承载 title 提示
             （按钮 disabled 态 pointer-events-none 吞掉 hover，原生 title 不弹） */}
         <span

@@ -23,6 +23,7 @@ import { useUiStore } from "../stores/ui";
 import { cn } from "../lib/utils";
 import { errorBannerClass, inputClass, skeletonClass } from "../lib/styles";
 import { Button } from "../components/ui/button";
+import { PageTitle } from "../components/ui/page-title";
 import { TagSuggest } from "../components/timeline/TagSuggest";
 import { CreateRelationDialog, type RelationSource } from "../components/entity/create-relation-dialog";
 
@@ -362,15 +363,11 @@ export default function ReferenceDetail({
                 }
               }}
               onBlur={() => void commitTitle()}
-              className={cn(inputClass, "h-9 w-72 px-2 font-serif text-xl")}
+              className={cn(inputClass, "h-9 w-72 px-2 text-xl")}
               disabled={saving}
             />
           ) : (
-            <h1
-              className="font-serif text-xl font-medium"
-              onClick={() => setTitleEditing(true)}
-              title="点击编辑标题"
-            >
+            <PageTitle onClick={() => setTitleEditing(true)} title="点击编辑标题">
               {/* R1 修复（批次十二）：标题显示 form.name 优先——草稿态用户编辑后失焦退出编辑态不再丢失输入
                   （旧实现写死 isDraft ? "新建 md 文档" : detail!.name，编辑内容被吞）；空时回退占位文案 */}
               {form.name.trim() !== ""
@@ -380,7 +377,7 @@ export default function ReferenceDetail({
                     ? "新建 md 文档"
                     : "新建外源链接"
                   : detail!.name}
-            </h1>
+            </PageTitle>
           )}
           {/* 分类徽标（批次十二 R4）：草稿态不显示——新建时分类未定且下方已有分类输入区；编辑态保留 */}
           {!isDraft && (

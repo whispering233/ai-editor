@@ -59,10 +59,14 @@ const DARK_SEED = {
   colorError: "#e03131",
 };
 
-/** 模式无关的组件覆盖：扁平化（按钮无投影）+ Input 聚焦无阴影（聚焦环统一由 seed.controlOutlineWidth 关） */
+/** 模式无关的组件覆盖（几何/结构类）：
+ * - Button 三 shadow → 扁平（无投影）
+ * - Input.activeShadow → 聚焦无阴影（聚焦环统一由 seed.controlOutlineWidth 关）
+ * - Typography.titleMarginBottom → 标题下边距归零（页面级标题薄壳 PageTitle 依赖；间距由父容器给） */
 const COMPONENT_TOKENS_BASE = {
   Button: { primaryShadow: "none", defaultShadow: "none", dangerShadow: "none" },
   Input: { activeShadow: "none" },
+  Typography: { titleMarginBottom: 0 },
 };
 
 /** 几何类组件 token（与颜色无关，两态同一套） */

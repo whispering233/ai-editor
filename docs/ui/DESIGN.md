@@ -403,6 +403,7 @@ components:
 | Table | `headerBg` / `borderColor` | `{colors.canvas}` / `{colors.hairline}` | `#202020` / `#2f2f2f` |
 | Table | `cellPaddingBlock` | `8` | 同浅色 |
 | Input | `activeShadow` | `"none"` | `"none"` |
+| Typography | `titleMarginBottom` | `0` | `0` |
 | Select | `optionSelectedBg` | `{colors.surface-muted}` | `#373737` |
 | Tag | `defaultBg` | `{colors.surface-muted}` | `#373737` |
 

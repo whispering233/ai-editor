@@ -39,7 +39,7 @@ export class ErrorBoundary extends Component<Props, State> {
       <div className="flex h-full min-h-64 flex-col items-center justify-center gap-3 p-8">
         <div className="flex flex-col items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/10 px-8 py-6 text-center">
           <CircleAlert className="size-8 text-destructive" />
-          <p className="font-serif text-base font-medium text-foreground">界面出现异常</p>
+          <p className="text-base font-medium text-foreground">界面出现异常</p>
           <p className="max-w-md text-sm text-muted-foreground">
             数据不会丢失，请重新加载页面继续写作。
           </p>
