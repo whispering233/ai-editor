@@ -9,21 +9,6 @@
  * - 只允许 token 类（bg-card / text-muted-foreground 等），禁止硬编码色类（zinc/white 等）
  */
 
-/** 图标按钮基座（：图标按钮不受 H4 边框约束；尺寸见 iconButtonSize，禁用见 iconButtonDisabledClass） */
-export const iconButtonBaseClass =
-  "flex shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground";
-
-/** 图标按钮尺寸：bar = 侧栏行内窄按钮（h-8 w-6）；sm = 默认（size-7）；md = 大号（size-8） */
-export const iconButtonSize = {
-  bar: "h-8 w-6",
-  sm: "size-7",
-  md: "size-8",
-} as const;
-export type IconButtonSize = keyof typeof iconButtonSize;
-
-/** 图标按钮禁用态（追加在 iconButtonBaseClass 之后） */
-export const iconButtonDisabledClass = "disabled:pointer-events-none disabled:opacity-50";
-
 /** 错误横幅容器（：bg-destructive/10 border-destructive/30 text-destructive）；间距/布局（mb-3 / flex 等）由调用点追加 */
 export const errorBannerClass =
   "rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive";

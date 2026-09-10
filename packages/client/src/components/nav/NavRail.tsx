@@ -97,7 +97,7 @@ export function NavRail({
         </a>
         {onToggleCollapse && (
           <Button
-            type="text"
+            color="default" variant="text"
             size="small"
             aria-label="收起左栏"
             title="收起左栏"
@@ -111,7 +111,7 @@ export function NavRail({
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
         {/* 回到书架按钮（旁显当前书名；#/ 路由高亮为选中面——DESIGN.md menu-item-selected） */}
         <Button
-          variant={atHome ? "filled" : "text"}
+          color="default" variant={atHome ? "filled" : "text"}
           block
           className="mb-1"
           icon={<BookOutlined />}
@@ -138,7 +138,7 @@ export function NavRail({
       {/* 底部：设置 + 主题切换（导航入口，与左栏 Menu 项同级——不受 H4「文字按钮带边框」约束） */}
       <div className="flex shrink-0 flex-col gap-1 border-t border-border px-2 py-2">
         <Button
-          variant="text"
+          color="default" variant="text"
           block
           icon={<SettingOutlined />}
           onClick={() => navigate("/preferences")}
@@ -146,7 +146,7 @@ export function NavRail({
           <span className="truncate text-left">设置</span>
         </Button>
         <Button
-          variant="text"
+          color="default" variant="text"
           block
           icon={mode === "dark" ? <SunOutlined /> : <MoonOutlined />}
           onClick={toggleTheme}

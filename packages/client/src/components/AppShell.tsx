@@ -6,11 +6,11 @@
 // <1024px 小屏不渲染手柄/收起条，三栏回退默认百分比类（右栏抽屉行为不变，开关在 InfoBar 右侧，
 // 抽屉渲染在 ChatPanel；open 状态在此持有）
 import { useState, type ReactNode } from "react";
+import { Button } from "antd";
 import { BorderLeftOutlined, BorderRightOutlined, HolderOutlined } from "@ant-design/icons";
 import type { Route } from "../hooks/use-route";
 import { usePanels } from "../hooks/use-panels";
 import { cn } from "../lib/utils";
-import { iconButtonBaseClass, iconButtonSize } from "../lib/styles";
 import { ChatPanel } from "./chat/ChatPanel";
 import { FeedbackHost } from "./feedback/FeedbackHost";
 import { MainPanel } from "./main-panel/MainPanel";
@@ -70,15 +70,15 @@ function CollapseStrip({ side, onExpand }: { side: "sidebar" | "chat"; onExpand:
         isSidebar ? "border-r border-border" : "border-l border-border",
       )}
     >
-      <button
-        type="button"
+      <Button
+        color="default" variant="text"
+        size="middle"
+        className="mt-3"
         onClick={onExpand}
         aria-label={isSidebar ? "展开左栏" : "展开右栏"}
         title={isSidebar ? "展开左栏" : "展开右栏"}
-        className={cn(iconButtonBaseClass, iconButtonSize.md, "mt-3")}
-      >
-        <ExpandIcon className="text-base" />
-      </button>
+        icon={<ExpandIcon className="text-base" />}
+      />
     </div>
   );
 }

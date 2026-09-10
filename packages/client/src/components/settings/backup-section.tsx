@@ -359,7 +359,7 @@ export function BackupSection() {
                               style={{ width: 144 }}
                             />
                             <Button
-                              type="text"
+                              color="default" variant="text"
                               size="small"
                               onClick={() => void handleRenameSubmit()}
                               disabled={renaming.saving}
@@ -370,7 +370,7 @@ export function BackupSection() {
                               icon={<CheckOutlined />}
                             />
                             <Button
-                              type="text"
+                              color="default" variant="text"
                               size="small"
                               onClick={() => setRenaming(null)}
                               disabled={renaming.saving}
@@ -383,7 +383,7 @@ export function BackupSection() {
                         ) : (
                           <>
                             <Button
-                              type="text"
+                              color="default" variant="text"
                               size="small"
                               onClick={() =>
                                 setRenaming({

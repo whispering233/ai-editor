@@ -299,7 +299,7 @@ export default function Trash() {
                     </span>
                     <div className="flex shrink-0 items-center gap-1.5">
                       <Button
-                        type="text"
+                        color="default" variant="text"
                         size="small"
                         aria-label={`还原《${item.name}》`}
                         title="还原"
@@ -307,7 +307,7 @@ export default function Trash() {
                         onClick={() => void handleRestoreEntity(item)}
                       />
                       <Button
-                        type="text"
+                        color="default" variant="text"
                         size="small"
                         danger
                         aria-label={`彻底删除《${item.name}》（不可恢复）`}
@@ -343,7 +343,7 @@ export default function Trash() {
                       </span>
                       <div className="flex shrink-0 items-center gap-1.5">
                         <Button
-                          type="text"
+                          color="default" variant="text"
                           size="small"
                           aria-label={`还原《${node.title}》`}
                           title="还原"
@@ -351,7 +351,7 @@ export default function Trash() {
                           onClick={() => void handleRestoreNode(node)}
                         />
                         <Button
-                          type="text"
+                          color="default" variant="text"
                           size="small"
                           danger
                           aria-label={`彻底删除《${node.title}》（不可恢复）`}

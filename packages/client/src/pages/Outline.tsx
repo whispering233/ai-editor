@@ -20,7 +20,7 @@ import { useEffect, useState } from "react";
 import type { DragEvent, KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { Button, Input } from "antd";
 import type { OutlineNode } from "@whispering233/ai-editor-shared";
-import { DeleteOutlined } from "@ant-design/icons";
+import { DeleteOutlined, RightOutlined } from "@ant-design/icons";
 import { CHILD_TYPE, TYPE_LABEL } from "../components/outline/dialogs";
 import { NodeHookMarkBadge } from "../components/outline/node-hook-badge";
 import { TagChip } from "@/components/ui/tag-chip";
@@ -709,17 +709,23 @@ export default function Outline() {
               （O2 起：操作区 ml-auto 右端对齐，时间戳显示已移除；详情/＋新建按钮移除；
                AskAiButton 移除——右键菜单替代（注入会话上下文 + 建立关联）） */}
           <div className="flex items-center gap-2">
+            {/* 折叠箭头：与设定树同款（antd text 图标按钮 + chevron 旋转）——原先用 ▸/▾ 字形 +
+                自绘 button，两页两套观感（arrow 占位 28px = size=small 图标按钮宽度，第二行同步占位） */}
             {hasChildren ? (
-              <button
-                type="button"
-                className="w-4 shrink-0 text-muted-foreground hover:text-foreground"
+              <Button
+                color="default" variant="text"
+                size="small"
+                className="-ml-2"
                 onClick={() => toggleCollapsed(node.id)}
                 aria-label={isCollapsed ? "展开" : "折叠"}
-              >
-                {isCollapsed ? "▸" : "▾"}
-              </button>
+                icon={
+                  <RightOutlined
+                    className={cn("text-sm transition-transform", !isCollapsed && "rotate-90")}
+                  />
+                }
+              />
             ) : (
-              <span className="w-4 shrink-0" />
+              <span className="w-7 shrink-0" />
             )}
             <TagChip className="w-7 shrink-0 justify-center">{TYPE_LABEL[node.type]}</TagChip>
             {/* 标题：点击就地编辑（Enter 保存 / Esc 取消 / 失焦保存）；stopPropagation 隔离——
@@ -760,15 +766,14 @@ export default function Outline() {
             {/* 操作区：右端对齐（ml-auto）；回收站 → 当前位置徽标；
                 详情/＋ 就地新建按钮已移除——详情改双击、新建改选中后 Enter；AskAiButton 移除 */}
             <span className="ml-auto flex shrink-0 items-center gap-1">
-              <button
-                type="button"
-                className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive"
+              <Button
+                color="default" variant="text"
+                size="small"
                 title="移入回收站"
                 aria-label="移入回收站"
                 onClick={() => void handleDelete(node)}
-              >
-                <DeleteOutlined className="text-sm" />
-              </button>
+                icon={<DeleteOutlined className="text-sm" />}
+              />
               {isCurrent && (
                 <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-xs text-accent-foreground">
                   当前位置
@@ -779,7 +784,7 @@ export default function Outline() {
           {/* 第二行：摘要（缩进对齐标题下方——w-4/w-7 占位与第一行同列；默认显示、空不渲染；点击就地编辑） */}
           {editingSummary || node.summary ? (
             <div className="mt-0.5 flex items-center gap-2">
-              <span className="w-4 shrink-0" />
+              <span className="w-7 shrink-0" />
               <span className="w-7 shrink-0" />
               {editingSummary ? (
                 inlineInput(
@@ -835,10 +840,10 @@ export default function Outline() {
               className="flex items-center gap-2 rounded-md px-2 py-1"
               style={{ paddingLeft: (depth + 1) * 20 + 8 }}
             >
-              <span className="w-4 shrink-0" />
-              <span className="flex h-5 w-7 shrink-0 items-center justify-center rounded bg-muted text-xs text-muted-foreground">
+              <span className="w-7 shrink-0" />
+              <TagChip className="h-5 w-7 shrink-0 justify-center">
                 {TYPE_LABEL[creatingAt.type]}
-              </span>
+              </TagChip>
               {inlineInput(
                 createValue,
                 setCreateValue,

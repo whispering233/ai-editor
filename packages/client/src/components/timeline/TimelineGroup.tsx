@@ -205,7 +205,7 @@ export function TimelineGroupBlock({
             <div className="flex min-w-0 flex-1 items-center gap-2 px-3 py-1">
               {/* 折叠/展开按钮（批次八 O4：移至组标题左侧、标题前，同大纲页折叠箭头位序；折叠后仅标题行） */}
               <Button
-                variant="text"
+                color="default" variant="text"
                 size="small"
                 draggable={false}
                 aria-expanded={!collapsed}
@@ -272,7 +272,7 @@ export function TimelineGroupBlock({
                 {/* 在此时间点新建事件（H5：图标按钮，减少文字干扰） */}
                 {timepoint !== null && !editing && (
                   <Button
-                    variant="text"
+                    color="default" variant="text"
                     size="small"
                     draggable={false}
                     title="在此时间点新建事件"
@@ -285,7 +285,7 @@ export function TimelineGroupBlock({
                     H2：点击直接软删不弹确认；未挂载区不渲染） */}
                 {timepoint !== null && !editing && (
                   <Button
-                    variant="text"
+                    color="default" variant="text"
                     size="small"
                     draggable={false}
                     title="移入回收站"

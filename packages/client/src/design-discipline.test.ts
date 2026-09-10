@@ -76,6 +76,21 @@ function antdRootOverrides(source: string): boolean {
   return false;
 }
 
+/** antd v6 的 Button 只在 `color` 与 `variant` **同时**给出时才走 color/variant 分支
+ * （antd/es/button/Button.js：`if (color && variant) ...`），否则静默回落 `['default','outlined']`
+ * ——即 `variant="text"` 会渲染成带边框的 outlined 按钮（实测踩坑：同一角色图标按钮一半有边框
+ * 一半没有）。要么写 `color="default" variant="text"`，要么用遗留 `type="text"`。 */
+function buttonVariantWithoutColor(source: string): boolean {
+  const tag = /<Button\b/g;
+  let match = tag.exec(source);
+  while (match !== null) {
+    const opening = openingTagAt(source, match.index) ?? "";
+    if (/\svariant=/.test(opening) && !/\scolor=/.test(opening)) return true;
+    match = tag.exec(source);
+  }
+  return false;
+}
+
 const RULES: Rule[] = [
   {
     id: "lucide-import",
@@ -157,6 +172,11 @@ describe("视觉纪律守卫（源码扫描）", () => {
     const html = readFileSync(join(SRC, "..", "index.html"), "utf8");
     expect(html).toMatch(new RegExp(`<html[^>]*class="[^"]*\\b${key}\\b`));
   });
+
+  it("button-variant-color：Button 的 variant 必须与 color 同时给", () => {
+    const hits = FILES.filter((file) => buttonVariantWithoutColor(file.text)).map((f) => f.path);
+    expect(hits).toEqual([]);
+  });
 });
 
 describe("守卫规则自检（规则必须能识别违规样例，否则规则形同虚设）", () => {
@@ -176,6 +196,13 @@ describe("守卫规则自检（规则必须能识别违规样例，否则规则�
     expect(importantClasses(`className="mb-0 text-sm"`)).toEqual([]);
     expect(RULES[0].violationsIn(`import { Button } from "antd";`)).toBe(false);
     expect(RULES[3].violationsIn(`className="w-[calc(100%-2rem)]"`)).toBe(false);
+  });
+
+  it("button-variant-color 命中无 color 的 variant、放过合法写法", () => {
+    expect(buttonVariantWithoutColor(`<Button variant="text">x</Button>`)).toBe(true);
+    expect(buttonVariantWithoutColor(`<Button\n  variant="filled"\n  icon={<A />}\n/>`)).toBe(true);
+    expect(buttonVariantWithoutColor(`<Button color="default" variant="text" />`)).toBe(false);
+    expect(buttonVariantWithoutColor(`<Button type="primary" danger />`)).toBe(false);
   });
 
   it("antd-root-override 命中根元素、放过子元素", () => {

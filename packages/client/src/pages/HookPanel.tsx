@@ -776,7 +776,7 @@ function HookGroupSection({
                       AskAiButton 已移除——右键菜单替代 */}
                   <span className="ml-auto flex shrink-0 items-center gap-0.5">
                     <Button
-                      variant="text"
+                      color="default" variant="text"
                       size="small"
                       title="详情"
                       aria-label={`${hook.name} 详情`}
@@ -784,7 +784,7 @@ function HookGroupSection({
                       icon={<EyeOutlined className="text-sm" />}
                     />
                     <Button
-                      variant="text"
+                      color="default" variant="text"
                       size="small"
                       disabled={terminal}
                       title="推进"
@@ -793,7 +793,7 @@ function HookGroupSection({
                       icon={<ArrowUpOutlined className="text-sm" />}
                     />
                     <Button
-                      variant="text"
+                      color="default" variant="text"
                       size="small"
                       disabled={terminal}
                       title="回收"
@@ -802,7 +802,7 @@ function HookGroupSection({
                       icon={<CheckOutlined className="text-sm" />}
                     />
                     <Button
-                      variant="text"
+                      color="default" variant="text"
                       size="small"
                       disabled={terminal}
                       title="废弃"
@@ -811,7 +811,7 @@ function HookGroupSection({
                       icon={<CloseOutlined className="text-sm" />}
                     />
                     <Button
-                      variant="text"
+                      color="default" variant="text"
                       size="small"
                       title="编辑"
                       aria-label={`${hook.name} 编辑`}
@@ -819,7 +819,7 @@ function HookGroupSection({
                       icon={<EditOutlined className="text-sm" />}
                     />
                     <Button
-                      variant="text"
+                      color="default" variant="text"
                       size="small"
                       title="移入回收站"
                       aria-label={`${hook.name} 移入回收站`}

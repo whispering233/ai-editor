@@ -107,12 +107,13 @@ function TagsEditor({
           }}
         >
           {/* 拖拽手柄（M3：HTML5 原生 DnD，零依赖；draggable 仅手柄——输入框内文本选择不受影响） */}
-          <button
-            type="button"
+          <Button
+            color="default" variant="text"
+            size="small"
             draggable
+            className="cursor-grab active:cursor-grabbing"
             title="拖拽排序"
             aria-label="拖拽排序"
-            className="shrink-0 cursor-grab rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground active:cursor-grabbing"
             onDragStart={(e) => {
               setDragIndex(i);
               e.dataTransfer.effectAllowed = "move";
@@ -123,9 +124,8 @@ function TagsEditor({
               setDragIndex(null);
               setDragOverIndex(null);
             }}
-          >
-            <HolderOutlined className="text-base" />
-          </button>
+            icon={<HolderOutlined className="text-base" />}
+          />
           <Input
             value={v}
             onChange={(e) => {

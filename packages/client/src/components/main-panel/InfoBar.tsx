@@ -64,7 +64,7 @@ export function InfoBar({
 
       {/* 右侧：刷新 + 语言 + 小屏聊天开关（问 AI 入口已迁至中栏右下悬浮按钮——批次十八 C1） */}
       <Button
-        variant="text"
+        color="default" variant="text"
         size="small"
         className="ml-auto shrink-0"
         onClick={notifyDataChanged}
@@ -77,7 +77,7 @@ export function InfoBar({
       </span>
       {!isDesktop && (
         <Button
-          variant={chatOpen ? "filled" : "text"}
+          color="default" variant={chatOpen ? "filled" : "text"}
           size="small"
           onClick={onToggleChat}
           icon={<MessageOutlined className="text-base" />}

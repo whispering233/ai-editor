@@ -43,7 +43,7 @@ v0.0.1-v0.0.27 发布链路全绿；**v0.0.28 = 批次十九：视觉语言统�
 - [x] **T3 [BUG] 时间轴行按钮对齐**：`TimelineGroup` 组标题内容列补 `px-3`，使组标题行与事件卡右缘（含删除按钮列）垂直对齐。
 - [x] **T4 [BUG] 拖拽与临时高亮反馈可见**：抽 `components/ui/drop-indicator.tsx`（primary 3px 实线 + 端点圆点）替换三处（Outline `bg-accent` 死线 / setting-tree 自绘 / Timeline 2px 线）；「成为子级」目标行与「新建即聚焦/定位」临时高亮从 `bg-accent/40`（近白）改 `bg-primary/10 + ring-primary/30`（Outline / setting-tree / EntityList / TimelineGroup 四处）。
 - [x] **T5 [需求] tint 标签系统**：`index.css` 定义 `--tag-*` 6 色（浅实色 + 深 20% 叠色）+ `@theme inline` 暴露 `bg-tag-*`；新增 `lib/tag-tint.ts`（FNV-1a hash → tint，纯函数）+ `components/ui/tag-chip.tsx`；替换 9 处标签/类型徽标（EntityList×2 / ReferenceList / relations-view×3 / Trash / Outline / OutlineDetail / setting-tree / TimelineEvent / HookPanel）；`lib/tag-tint.test.ts` 锁稳定性与穷尽。
-- [ ] **T6 [UX] 图标按钮统一**：自绘 `<button>` 图标按钮（setting-tree 折叠箭头/↑↓/删除、AppShell 拖拽柄）→ antd `Button variant="text" size="small"`；不可恢复操作统一 `danger`；清 `lib/styles.ts` 的死常量（连同唯一消费者 AppShell）。
+- [x] **T6 [UX] 图标按钮统一**：自绘 `<button>` 图标按钮（setting-tree 折叠箭头/↑↓/删除、AppShell 拖拽柄）→ antd `Button variant="text" size="small"`；不可恢复操作统一 `danger`；清 `lib/styles.ts` 的死常量（连同唯一消费者 AppShell）。
 - [ ] **T7 [UX] 页面头部统一**：人物/设定/地点/关联四页补 `PageTitle`（标题行独立）；第二行控件行按「左：分类→标签→排序→搜索；右：操作按钮」重排（EntityList 家族 / setting-tree 工具栏 / relations-view / ReferenceList / HookPanel / Outline / Timeline）；搜索框统一 `search-input` 规格（`SearchOutlined` + `w-48` + `allowClear`，设定树补图标）；概览/回收站/详情页不动。
 - [ ] **T8 [验证] 批次验收**：oracle 独立核验全部改动（对照 DESIGN.md/layout.md 契约逐条）；五道门禁（`designmd lint` / `pnpm typecheck` / `pnpm lint` / `pnpm -r test` / `pnpm -r build`）+ headless 像素核验（浅/深/拖拽三态）。
 

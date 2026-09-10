@@ -316,7 +316,7 @@ export function RelationsView({
                   </>
                 )}
                 <Button
-                  type="text"
+                  color="default" variant="text"
                   size="small"
                   danger
                   aria-label={`删除关系（${endpointLabel(r, "source")} → ${endpointLabel(r, "target")}）`}

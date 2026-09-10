@@ -10,7 +10,7 @@
 // 确认/取消分别调 resolveConfirm(true/false) 归还 Promise（「确认对话框（confirm/resolveConfirm，
 // ConfirmDialog 实现于 components/outline/dialogs.tsx）」的渲染宿主；各页既有局部 ConfirmDialog 不受影响）。
 import { useEffect, useRef } from "react";
-import { App } from "antd";
+import { App, Button } from "antd";
 import { CloseOutlined, ExclamationCircleFilled } from "@ant-design/icons";
 import { useUiStore, TOAST_DURATION_MS, type Toast } from "../../stores/ui";
 import { ConfirmDialog } from "../outline/dialogs";
@@ -77,14 +77,13 @@ export function FeedbackHost() {
         >
           <ExclamationCircleFilled className="shrink-0 text-base" />
           <p className="min-w-0 flex-1">{error.message}</p>
-          <button
-            type="button"
+          <Button
+            color="default" variant="text"
+            size="small"
             aria-label="关闭错误提示"
             onClick={clearError}
-            className="shrink-0 rounded p-0.5 hover:bg-destructive/15"
-          >
-            <CloseOutlined className="text-base" />
-          </button>
+            icon={<CloseOutlined className="text-base" />}
+          />
         </div>
       )}
     </>

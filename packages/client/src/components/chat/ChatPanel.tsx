@@ -303,7 +303,7 @@ function SessionTitleBar({
         </Button>
       </AntDropdown>
       <Button
-        type="text"
+        color="default" variant="text"
         size="small"
         className="shrink-0"
         disabled={disabled}
@@ -314,7 +314,7 @@ function SessionTitleBar({
       />
       {onToggleCollapse && (
         <Button
-          type="text"
+          color="default" variant="text"
           size="small"
           className="ml-auto shrink-0"
           onClick={onToggleCollapse}
@@ -325,7 +325,7 @@ function SessionTitleBar({
       )}
       {onClose && (
         <Button
-          type="text"
+          color="default" variant="text"
           size="small"
           className="ml-auto shrink-0"
           onClick={onClose}

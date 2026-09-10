@@ -216,7 +216,7 @@ export function TimelineEvent({
             )}
             {/* 操作按钮全部展开（H3：禁止收进 ⋯ 二级展开；图标 + title/aria-label） */}
             <Button
-              variant="text"
+              color="default" variant="text"
               size="small"
               draggable={false}
               icon={<DeleteOutlined className="text-sm" />}

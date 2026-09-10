@@ -515,7 +515,7 @@ function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowP
       {/* 操作列：删除（H3 直接平铺不收 ⋯） */}
       <td className="w-10 px-2 py-2 text-right">
         <Button
-          type="text"
+          color="default" variant="text"
           danger
           onClick={() => onDelete(item)}
           aria-label="删除"

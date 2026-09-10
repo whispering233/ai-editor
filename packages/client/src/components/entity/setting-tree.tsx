@@ -705,21 +705,21 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
           {isDragBefore && <DropIndicator position="top" />}
           {isDragAfter && <DropIndicator position="bottom" />}
           <div className="flex min-w-0 items-center gap-1.5">
-            {/* 折叠箭头（叶子占位保缩进对齐）；点击切展开态，不选中/不跳转 */}
-            <button
-              type="button"
+            {/* 折叠箭头（叶子占位保缩进对齐）；点击切展开态，不选中/不跳转
+                （图标按钮统一走 antd text 变体——DESIGN.md §Components `icon-button`） */}
+            <Button
+              color="default" variant="text"
+              size="small"
+              className="-ml-1"
               aria-label={hasChildren ? (isCollapsed ? "展开" : "折叠") : undefined}
-              className={cn(
-                "shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground",
-                !hasChildren && "invisible",
-              )}
               onClick={() => toggleCollapse(node.id)}
               disabled={!hasChildren}
-            >
-              <RightOutlined
-                className={cn("text-sm transition-transform", isCollapsed && "-rotate-90")}
-              />
-            </button>
+              icon={
+                <RightOutlined
+                  className={cn("text-sm transition-transform", isCollapsed && "-rotate-90")}
+                />
+              }
+            />
             {/* 名称：点击行内编辑（Enter 确认 / Esc 取消 / 失焦保存）；stopPropagation 隔离——
               单击标题 = 编辑而非选中（ 冲突设计） */}
             {editing ? (
@@ -764,46 +764,43 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
                   组首/尾禁用置灰；stopPropagation 不触发行选中/编辑 */}
               {sortMode === "manual" && (
                 <span className="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100">
-                  <button
-                    type="button"
+                  <Button
+                    color="default" variant="text"
+                    size="small"
                     disabled={!canUp || busy}
                     title="上移"
                     aria-label={`上移「${node.name}」`}
-                    className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30"
                     onClick={(e) => {
                       e.stopPropagation();
                       void moveSiblingByArrow(node, -1);
                     }}
-                  >
-                    <UpOutlined className="text-sm" />
-                  </button>
-                  <button
-                    type="button"
+                    icon={<UpOutlined className="text-sm" />}
+                  />
+                  <Button
+                    color="default" variant="text"
+                    size="small"
                     disabled={!canDown || busy}
                     title="下移"
                     aria-label={`下移「${node.name}」`}
-                    className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30"
                     onClick={(e) => {
                       e.stopPropagation();
                       void moveSiblingByArrow(node, 1);
                     }}
-                  >
-                    <DownOutlined className="text-sm" />
-                  </button>
+                    icon={<DownOutlined className="text-sm" />}
+                  />
                 </span>
               )}
-              <button
-                type="button"
-                className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-destructive"
+              <Button
+                color="default" variant="text"
+                size="small"
                 title="移入回收站"
                 aria-label={`移入回收站「${node.name}」`}
                 onClick={(e) => {
                   e.stopPropagation(); // 不触发行选中（handleRowClick 的 closest 已拦截，双保险）
                   void handleDelete(node);
                 }}
-              >
-                <DeleteOutlined className="text-sm" />
-              </button>
+                icon={<DeleteOutlined className="text-sm" />}
+              />
             </span>
           </div>
           {/* 描述摘要行（ 批次十三）：弱化样式，空描述不渲染；title 查看完整摘要 */}
