@@ -94,6 +94,13 @@ const RULES: Rule[] = [
     id: "ad-hoc-font-size",
     violationsIn: (line) => /text-\[\d+(?:\.\d+)?(?:px|rem)\]/.test(line),
   },
+  {
+    // colorPrimaryBg 是「主色浅底」，但主色 seed 是深墨 #37352f：antd 对该 seed 派生的
+    // colorPrimaryBg 实测为 #787771（中灰）——压在 colorText（同为 #37352f）上当底色即不可读。
+    // 次级面/选中面一律用 colorFillTertiary（= {colors.surface-muted} = Tailwind bg-accent）。
+    id: "primary-bg-token",
+    violationsIn: (line) => /colorPrimaryBg\b/.test(line),
+  },
 ];
 
 /** 采集 src 下所有非测试源码文件（相对 src 的 posix 风格路径） */
@@ -113,6 +120,12 @@ function sourceFiles(dir: string = SRC): { path: string; text: string }[] {
 
 const FILES = sourceFiles();
 
+/** 注释行豁免：规则扫的是「真正生效的代码」。注释里写清「为什么禁某个 token / 某个色值实测是多少」
+ * 是文档职责（DESIGN.md 同款内容），不能因此把守卫变成「禁写注释里的关键词」。 */
+function isCommentLine(text: string): boolean {
+  return /^\s*(\/\/|\/\*|\*)/.test(text);
+}
+
 describe("视觉纪律守卫（源码扫描）", () => {
   for (const rule of RULES) {
     it(`${rule.id}：全仓无违规`, () => {
@@ -120,7 +133,7 @@ describe("视觉纪律守卫（源码扫描）", () => {
         file.text
           .split("\n")
           .map((line, index) => ({ file: file.path, line: index + 1, text: line }))
-          .filter((entry) => rule.violationsIn(entry.text))
+          .filter((entry) => !isCommentLine(entry.text) && rule.violationsIn(entry.text))
           .map((entry) => `${entry.file}:${entry.line}  ${entry.text.trim().slice(0, 120)}`),
       );
       expect(hits).toEqual([]);
@@ -153,6 +166,7 @@ describe("守卫规则自检（规则必须能识别违规样例，否则规则�
       "hardcoded-color": `className="text-[#1677ff]"`,
       "important-class": `className="!mb-0 text-sm"`,
       "ad-hoc-font-size": `className="text-[13px]"`,
+      "primary-bg-token": `styles={{ content: { background: token.colorPrimaryBg } }}`,
     };
     for (const rule of RULES) {
       const sample = samples[rule.id];

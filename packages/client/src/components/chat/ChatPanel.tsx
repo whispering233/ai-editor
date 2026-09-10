@@ -494,14 +494,17 @@ export function MessageItem({
 }) {
   const { token } = theme.useToken();
   if (message.role === "user") {
-    // user 气泡：右对齐（Bubble placement=end；底色 token 主色浅底，随双算法切换）
+    // user 气泡：右对齐（Bubble placement=end）；底色 = DESIGN.md `chat-bubble-user` 的
+    // {colors.surface-muted}（= colorFillTertiary）。⚠ 不用 colorPrimaryBg：主色 seed 是深墨
+    // #37352f，antd 派生的 colorPrimaryBg 实测为 #787771（中灰）——灰底压墨字对比度 ~1.9:1，不可读；
+    // design-discipline.test.ts 有 primary-bg-token 守卫拦这个坑），字色随双算法切换。
     return (
       <div className="flex justify-end">
         <Bubble
           placement="end"
           content={message.content ?? ""}
           styles={{
-            content: { background: token.colorPrimaryBg, color: token.colorText },
+            content: { background: token.colorFillTertiary, color: token.colorText },
             root: { maxWidth: "85%" },
           }}
         />
