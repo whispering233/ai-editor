@@ -53,6 +53,7 @@ import {
 } from "../lib/outline-tree";
 import { cn } from "../lib/utils";
 import { focusNewItem } from "../lib/new-item-focus";
+import { useSaveShortcut } from "../lib/save-shortcut";
 import { navigate } from "../hooks/use-route";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useProjectStore } from "../stores/project";
@@ -368,6 +369,13 @@ export default function Outline() {
       setBusy(false);
     }
   }
+
+ // Ctrl/Cmd+S（B2）：行内编辑进行中 → 提交当前编辑（Enter 同语义）；未编辑时不参与
+  useSaveShortcut(() => {
+    if (editing === null) return;
+    const node = findNode(outline?.children ?? [], editing.nodeId);
+    if (node) void commitEdit(node, editing.field);
+  }, editing !== null);
 
   function handleEditKeyDown(node: OutlineNode, field: "title" | "summary") {
     return (e: KeyboardEvent<HTMLInputElement>) => {

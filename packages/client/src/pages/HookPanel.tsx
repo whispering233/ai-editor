@@ -67,6 +67,7 @@ import { flattenTree } from "../lib/outline-tree";
 import { cn } from "../lib/utils";
 
 import { useDataRefresh } from "../hooks/use-data-refresh";
+import { useSaveShortcut } from "../lib/save-shortcut";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
 
@@ -300,6 +301,9 @@ export default function HookPanel() {
       setEditSaving(false);
     }
   }
+
+ // Ctrl/Cmd+S 保存（B2）：仅编辑对话框打开时参与（其余情况快捷键落到下层/原生）
+  useSaveShortcut(() => void handleEditSave(), editTarget !== null);
 
  // ============ 新建 ============
 

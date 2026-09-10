@@ -40,6 +40,7 @@ import {
 } from "../lib/entity-detail";
 import { flattenTree } from "../lib/outline-tree";
 import { enterBehavior, moveArrayItem } from "../lib/tags-editor";
+import { useSaveShortcut } from "../lib/save-shortcut";
 import { cn } from "../lib/utils";
 import { inputClass, skeletonClass } from "@/lib/styles";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -374,6 +375,9 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
       setSaving(false);
     }
   }
+
+ // Ctrl/Cmd+S 保存（B2）：页面级保存注册（本页无行内编辑注册者）
+  useSaveShortcut(() => void handleSave());
 
  /** 设置字段值（tags/select 等通用入口） */
   function setField(key: string, value: unknown) {

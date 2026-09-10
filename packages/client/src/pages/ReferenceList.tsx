@@ -23,6 +23,7 @@ import {
 import { deleteEntity, getReferenceScanStatus, listEntities, scanReferences, updateEntity } from "../lib/api";
 import { ApiError } from "../lib/api";
 import { navigate } from "../hooks/use-route";
+import { useSaveShortcut } from "../lib/save-shortcut";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
@@ -374,6 +375,9 @@ function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowP
   const [editing, setEditing] = useState(false);
   const [nameValue, setNameValue] = useState("");
   const [saving, setSaving] = useState(false);
+
+ // Ctrl/Cmd+S（B2）：行内编辑进行中 → 提交当前编辑（Enter 同语义）；未编辑时不参与
+  useSaveShortcut(() => void commitEdit(), editing);
 
  /** 点击标题进入行内编辑（预填当前名） */
   function startEdit() {

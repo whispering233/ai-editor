@@ -40,6 +40,7 @@ import {
 } from "../lib/outline-tree";
 import { cn } from "../lib/utils";
 import { navigate } from "../hooks/use-route";
+import { useSaveShortcut } from "../lib/save-shortcut";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
@@ -161,6 +162,9 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
       setSettingCurrent(false);
     }
   }
+
+ // Ctrl/Cmd+S 保存（B2）
+  useSaveShortcut(() => void handleSave());
 
  // ============ 渲染 ============
 

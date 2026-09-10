@@ -22,6 +22,7 @@ import { ChevronRight, Plus, Trash2 } from "lucide-react";
 import { RowContextMenu } from "../entity/row-context-menu";
 import { Button } from "@/components/ui/button";
 import { cn } from "../../lib/utils";
+import { useSaveShortcut } from "../../lib/save-shortcut";
 import { TimelineEvent, type EventDragHandlers } from "./TimelineEvent";
 
 /** 拖拽来源（G2 双轨：时间点整组 / 事件单条；容器协调用，经 dataTransfer + ref 双通道） */
@@ -137,6 +138,9 @@ export function TimelineGroupBlock({
       setSaving(false);
     }
   }
+
+ // Ctrl/Cmd+S（B2）：重命名编辑中 → 提交（Enter 同语义）；未编辑时不参与
+  useSaveShortcut(() => void commitRename(), editing);
 
  /** 组标题行双击：双击 = 时间点详情（#/timepoints/:id——通用实体详情页承载，
  * 无独立时间点详情路由；不用 #/timeline/:id 是因为 TimelineDetail 会把 timepoint 当事件渲染

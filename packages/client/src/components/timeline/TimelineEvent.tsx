@@ -21,6 +21,7 @@ import { Trash2 } from "lucide-react";
 import { RowContextMenu } from "../entity/row-context-menu";
 import { Button } from "@/components/ui/button";
 import { eventDescription, eventTagsOf } from "../../lib/timeline";
+import { useSaveShortcut } from "../../lib/save-shortcut";
 import { cn } from "../../lib/utils";
 
 /** 事件行拖拽回调（容器统一装配：dragstart/dragover/drop 需结合拖拽来源与落点行判定） */
@@ -96,6 +97,9 @@ export function TimelineEvent({
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
   }, [description, expanded]);
+
+ // Ctrl/Cmd+S（B2）：行内编辑进行中 → 提交当前编辑（Enter 同语义）；未编辑时不参与
+  useSaveShortcut(() => void commitEdit(), editing);
 
  /** 点击事件名进入行内编辑（预填当前名） */
   function startEdit() {

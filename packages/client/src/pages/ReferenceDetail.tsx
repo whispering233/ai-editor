@@ -17,6 +17,7 @@ import { createEntity, deleteEntity, getEntityDetail, listEntities, updateEntity
 import { ApiError } from "../lib/api";
 import { applyTagSuggestion, parseTagsInput, suggestTags, tagsToInput } from "../lib/timeline";
 import { navigate } from "../hooks/use-route";
+import { useSaveShortcut } from "../lib/save-shortcut";
 import { useThemeMode } from "../hooks/use-theme-mode";
 import { useUiStore } from "../stores/ui";
 import { cn } from "../lib/utils";
@@ -255,6 +256,9 @@ export default function ReferenceDetail({
       setSaving(false);
     }
   }
+
+ // Ctrl/Cmd+S 保存（B2）：编辑态 PUT / 草稿态 POST 与「保存/创建」按钮同动作
+  useSaveShortcut(() => void handleSave());
 
   async function handleDelete() {
     if (detail === null) return;

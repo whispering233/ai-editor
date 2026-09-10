@@ -59,6 +59,7 @@ import { inputClass } from "@/lib/styles";
 import { ConfirmDialog } from "../components/outline/dialogs";
 import { TagSuggest } from "../components/timeline/TagSuggest";
 import { navigate } from "../hooks/use-route";
+import { useSaveShortcut } from "../lib/save-shortcut";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
@@ -284,6 +285,9 @@ export default function TimelineDetail({ id }: { id: string }) {
         .showToast(err instanceof ApiError ? err.message : "删除失败，请重试", "error");
     }
   }
+
+ // Ctrl/Cmd+S 保存（B2）
+  useSaveShortcut(() => void handleSave());
 
  // ============ 渲染 ============
 
