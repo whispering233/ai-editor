@@ -16,12 +16,15 @@ export function MainPanel({
   route,
   chatOpen,
   onToggleChat,
+  onOpenChat,
   isDesktop,
   children,
 }: {
   route: Route;
   chatOpen: boolean;
   onToggleChat: () => void;
+ /** 打开/展开右栏聊天（悬浮问 AI 的「点击必有反应」兜底：桌面收起态展开、小屏抽屉打开） */
+  onOpenChat: () => void;
  /** 桌面态标记（F7）：中栏 flex-1 弹性吸收左右栏固定宽之外的剩余空间；小屏回退默认 50% 百分比 */
   isDesktop: boolean;
   children: ReactNode;
@@ -54,17 +57,29 @@ export function MainPanel({
       {/* 页面内容区：溢出纵向滚动（原 AppShell p-6 保留，页面不自带 padding） */}
       <div className="min-h-0 flex-1 overflow-y-auto p-6">{children}</div>
       {/* 中栏右下悬浮「问 AI」（批次十八 C1，用户反馈 #3）：绝对定位于中栏容器（不越到右栏，
-          滚动区外不随内容滚动）；点「无焦点」= 普通进入聊天，按钮必有反应（聚焦右栏输入框）；
-          无项目打开时禁用（同原信息条语义） */}
+          滚动区外不随内容滚动）；点「无焦点」= 普通进入聊天，聚焦右栏输入框。
+          「点击必有反应」（用户反馈跟进）：右栏收起/小屏抽屉关着时先展开打开（onOpenChat），
+          无项目打开时不置 disabled（会吞掉点击与 tooltip）而是轻提示引导 */}
       <FloatButton
         icon={<Sparkles className="size-5" />}
         type="primary"
-        disabled={!config}
         aria-label="问 AI"
-        tooltip={{ title: currentFocus ? "带着当前页面上下文去问 AI" : "去问 AI", placement: "left" }}
+        tooltip={{
+          title: !config
+            ? "打开项目后可用"
+            : currentFocus
+              ? "带着当前页面上下文去问 AI"
+              : "去问 AI",
+          placement: "left",
+        }}
         onClick={() => {
+          if (!config) {
+            useUiStore.getState().showToast("打开项目后可用", "error");
+            return;
+          }
           setFocusContext(currentFocus);
           requestFocusInput();
+          onOpenChat();
         }}
         style={{ position: "absolute", insetInlineEnd: 16, bottom: 16, zIndex: 30 }}
       />
