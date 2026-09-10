@@ -23,8 +23,9 @@ export function MainPanel({
   route: Route;
   chatOpen: boolean;
   onToggleChat: () => void;
- /** 打开/展开右栏聊天（悬浮问 AI 的「点击必有反应」兜底：桌面收起态展开、小屏抽屉打开） */
-  onOpenChat: () => void;
+ /** 打开/展开右栏聊天（悬浮问 AI 的「点击必有反应」兜底：桌面收起态展开、小屏抽屉打开）；
+   * 返回是否真的发生了打开/展开（false = 右栏本就可见，本次点击无可见变化） */
+  onOpenChat: () => boolean;
  /** 桌面态标记（F7）：中栏 flex-1 弹性吸收左右栏固定宽之外的剩余空间；小屏回退默认 50% 百分比 */
   isDesktop: boolean;
   children: ReactNode;
@@ -74,12 +75,16 @@ export function MainPanel({
         }}
         onClick={() => {
           if (!config) {
-            useUiStore.getState().showToast("打开项目后可用", "error");
+            useUiStore.getState().showToast("打开项目后可用", "info");
             return;
           }
           setFocusContext(currentFocus);
           requestFocusInput();
-          onOpenChat();
+          const opened = onOpenChat(); // 右栏本就可见 → false
+ // 无页面焦点（未进入任何具体条目）且右栏本就可见：聚焦输入框过于隐形，补中性提示说明本次点击
+          if (!currentFocus && !opened) {
+            useUiStore.getState().showToast("未选中具体条目，可直接在右栏提问", "info");
+          }
         }}
         style={{ position: "absolute", insetInlineEnd: 16, bottom: 16, zIndex: 30 }}
       />

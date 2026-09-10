@@ -50,12 +50,14 @@ export function FeedbackHost() {
   const clearError = useUiStore((s) => s.clearError);
   const lastHandledToastId = useRef<number | null>(null);
 
- // toast 桥接：新快照（新 id）触发 sonner 展示，kind 映射 success/error
+ // toast 桥接：新快照（新 id）触发 sonner 展示，kind 映射 success/error/info
   useEffect(() => {
     if (!toastState || !shouldNotifyToast(toastState, lastHandledToastId.current)) return;
     lastHandledToastId.current = toastState.id;
     if (toastState.kind === "error") {
       toast.error(toastState.text, { duration: TOAST_DURATION_MS });
+    } else if (toastState.kind === "info") {
+      toast.info(toastState.text, { duration: TOAST_DURATION_MS });
     } else {
       toast.success(toastState.text, { duration: TOAST_DURATION_MS });
     }

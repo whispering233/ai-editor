@@ -6,7 +6,7 @@ import type { ErrorCode } from "@whispering233/ai-editor-shared";
 import type { ClientErrorCode } from "../lib/api";
 import type { FocusContext } from "../lib/focus";
 
-export type ToastKind = "success" | "error";
+export type ToastKind = "success" | "error" | "info";
 
 export interface Toast {
   id: number;
@@ -34,7 +34,7 @@ interface UiState {
   clearError: () => void;
 
   toast: Toast | null;
- /** 轻提示（保存成功、已移入回收站等）；3s 自动消失 */
+ /** 轻提示（保存成功、已移入回收站等）；3s 自动消失；info = 中性引导提示 */
   showToast: (text: string, kind?: ToastKind) => void;
   clearToast: () => void;
 

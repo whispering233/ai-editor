@@ -120,9 +120,17 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
         chatOpen={chatOpen}
         onToggleChat={() => setChatOpen((v) => !v)}
         onOpenChat={() => {
- // 悬浮问 AI「点击必有反应」：小屏开抽屉；桌面右栏收起时展开（已展开则不动作）
-          if (!isDesktop) setChatOpen(true);
-          else if (layout.collapsedChat) toggleCollapse("chat");
+ // 悬浮问 AI「点击必有反应」：小屏开抽屉；桌面右栏收起时展开（已展开则不动作 → false）
+          if (!isDesktop) {
+            if (chatOpen) return false;
+            setChatOpen(true);
+            return true;
+          }
+          if (layout.collapsedChat) {
+            toggleCollapse("chat");
+            return true;
+          }
+          return false;
         }}
       >
         {children}
