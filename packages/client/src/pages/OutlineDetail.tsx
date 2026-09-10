@@ -20,7 +20,6 @@ import { RelationsView } from "../components/entity/relations-view";
 import { NodeDeltaList } from "../components/delta/node-delta-list";
 import { DeltaCreateForm } from "../components/delta/delta-create-form";
 import { TYPE_LABEL } from "../components/outline/dialogs";
-import { Breadcrumb, type BreadcrumbItem } from "../components/page-nav/Breadcrumb";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -36,7 +35,6 @@ import {
 } from "../lib/outline-detail";
 import {
   findNode,
-  findNodePath,
   shouldCommitSummary,
   shouldCommitTitle,
 } from "../lib/outline-tree";
@@ -193,22 +191,10 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
 
   const noProject = config === null && !configLoading;
 
- // 面包屑：大纲 › 父链…（可点跳 #/outline/:parentId）› 当前节点（高亮不可点）
-  const breadcrumbItems: BreadcrumbItem[] = [{ label: "大纲", href: "/outline" }];
-  if (node !== null) {
-    const pathIds = findNodePath(outline?.children ?? [], nodeId) ?? [];
-    for (const pid of pathIds.slice(0, -1)) {
-      const parent = findNode(outline?.children ?? [], pid);
-      if (parent) breadcrumbItems.push({ label: parent.title, href: `/outline/${pid}` });
-    }
-    breadcrumbItems.push({ label: node.title });
-  }
-
   return (
     <section>
-      {/* header：面包屑（返回上级）+ 标题 + 操作区（设为当前位置 / 保存） */}
+      {/* header：标题 + 操作区（设为当前位置 / 保存）——面包屑已随批次十八 B1 移除 */}
       <div className="mb-1 flex items-center gap-3">
-        <Breadcrumb items={breadcrumbItems} />
         <h1 className="min-w-0 truncate text-xl font-semibold">{node?.title ?? "…"}</h1>
         <div className="ml-auto flex items-center gap-2">
           {/* S13.2 设为当前位置（动作入口；状态徽标在元信息行）：已是当前位置 → 禁用 + 「当前位置」标记，

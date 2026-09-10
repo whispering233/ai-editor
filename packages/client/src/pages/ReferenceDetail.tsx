@@ -22,7 +22,6 @@ import { useUiStore } from "../stores/ui";
 import { cn } from "../lib/utils";
 import { errorBannerClass, inputClass, skeletonClass } from "../lib/styles";
 import { Button } from "../components/ui/button";
-import { Breadcrumb } from "../components/page-nav/Breadcrumb";
 import { TagSuggest } from "../components/timeline/TagSuggest";
 import { CreateRelationDialog, type RelationSource } from "../components/entity/create-relation-dialog";
 
@@ -297,25 +296,9 @@ export default function ReferenceDetail({
 
   return (
     <section className="flex h-full min-h-0 flex-col">
-      {/* 面包屑（批次十二 R5：Breadcrumb 分段 pill——参考资料 › 当前标题，对齐实体/大纲详情页）
-          + 操作区（导入 md / 建立关联 / 删除） */}
+      {/* 操作区（导入 md / 建立关联 / 删除）——面包屑已随批次十八 B1 移除
+          （原「参考资料 › 当前标题」分段 pill；返回走左栏 NavRail） */}
       <div className="mb-3 flex shrink-0 items-center gap-3">
-        <Breadcrumb
-          items={[
-            { label: "参考资料", href: "/references" },
-            {
- // 当前段：草稿态占位 / 编辑态标题（form.name 优先——R1 语义，草稿编辑后即时反映）
-              label:
-                form.name.trim() !== ""
-                  ? form.name
-                  : isDraft
-                    ? draft === "md"
-                      ? "新建 md 文档"
-                      : "新建外源链接"
-                    : detail!.name,
-            },
-          ]}
-        />
         <div className="ml-auto flex items-center gap-1.5">
           {currentKind === "file" && (
             <>

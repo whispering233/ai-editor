@@ -56,7 +56,6 @@ import {
 import { flattenTree } from "../lib/outline-tree";
 import { cn } from "../lib/utils";
 import { inputClass } from "@/lib/styles";
-import { Breadcrumb } from "../components/page-nav/Breadcrumb";
 import { ConfirmDialog } from "../components/outline/dialogs";
 import { TagSuggest } from "../components/timeline/TagSuggest";
 import { navigate } from "../hooks/use-route";
@@ -324,11 +323,8 @@ export default function TimelineDetail({ id }: { id: string }) {
 
   return (
     <section>
-      {/* header：面包屑（时间轴 › 事件名，返回列表入口）+ 操作 */}
+      {/* header：标题 + 操作（面包屑已随批次十八 B1 移除——返回走左栏 NavRail） */}
       <div className="mb-1 flex items-center gap-3">
-        <Breadcrumb
-          items={[{ label: "时间轴", href: "/timeline" }, { label: detail?.name ?? "…" }]}
-        />
         <h1 className="min-w-0 truncate text-xl font-semibold">{detail?.name ?? "…"}</h1>
         <div className="ml-auto flex items-center gap-2">
           <Button

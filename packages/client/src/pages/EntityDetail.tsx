@@ -16,7 +16,6 @@ import { SuggestionDatalist } from "../components/ui/suggestion-datalist";
 import { CreateRelationDialog } from "../components/entity/create-relation-dialog";
 import { ParentSettingSelect } from "../components/entity/parent-setting-select";
 import { ComputePreview } from "../components/delta/compute-preview";
-import { Breadcrumb } from "../components/page-nav/Breadcrumb";
 import { entityListHost } from "../lib/entity-paths";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,18 +47,6 @@ import { navigate } from "../hooks/use-route";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
-
-/** 详情页宿主面包屑（批次十七 1-1 一级化：无「实体」分组级；
- * 宿主 = 列表页或富页，标签随宿主语义（时间点详情宿主 = 时间轴） */
-const HOST_CRUMB: Record<EntityType, { href: string; label: string }> = {
-  character: { href: "/characters", label: "人物" },
-  setting: { href: "/setting", label: "设定" },
-  location: { href: "/locations", label: "地点" },
-  hook: { href: "/hooks", label: "伏笔" },
-  event: { href: "/timeline", label: "时间轴" },
-  timepoint: { href: "/timeline", label: "时间轴" },
-  reference: { href: "/references", label: "参考资料" },
-};
 
 /** 字段值 → 表单字符串（undefined/null → 空串） */
 function fieldValue(form: Record<string, unknown>, key: string): string {
@@ -516,14 +503,8 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
 
   return (
     <section>
-      {/* header：面包屑（实体 › 类型 › 名称，返回列表入口）+ 操作 */}
+      {/* header：标题 + 操作（面包屑已随批次十八 B1 移除——详情页返回走左栏 NavRail） */}
       <div className="mb-1 flex items-center gap-3">
-        <Breadcrumb
-          items={[
-            { label: HOST_CRUMB[entityType].label, href: HOST_CRUMB[entityType].href },
-            { label: detail?.name ?? "…" },
-          ]}
-        />
         <h1 className="min-w-0 truncate text-xl font-semibold">{detail?.name ?? "…"}</h1>
         <div className="ml-auto flex items-center gap-2">
           <Button
