@@ -50,7 +50,14 @@ import {
 } from "../../lib/api";
 import { useChatStore } from "../../stores/chat";
 import { useProjectStore } from "../../stores/project";
-import { asToolCall, ChatPanel, MessageItem, ProposalCardView, ToolCallRow } from "./ChatPanel";
+import {
+  asToolCall,
+  ChatPanel,
+  focusLabel,
+  MessageItem,
+  ProposalCardView,
+  ToolCallRow,
+} from "./ChatPanel";
 
 const mocked = {
   listSessions: vi.mocked(apiListSessions),
@@ -352,3 +359,21 @@ describe("ErrorBoundary 兜底（问题 3 防护：渲染异常 → 可恢复错
 // （dev 消息：MenuGroupContext is missing. Menu group parts must be used within <Menu.Group> or
 // <Menu.RadioGroup>.）。此前无 ErrorBoundary 时 = 整页白屏（原始问题 3 现象），ErrorBoundary 落地后
 // = 错误卡（用户实测确认）。修复：Label 用 DropdownMenuGroup（= Menu.Group）包裹（ChatPanel.tsx）。
+
+describe("focus 小条文案（批次十八 C2：不再直显裸 entity id）", () => {
+  it("解析命中 → 类型 + 名称；解析中只显类型；失败退 id", () => {
+    const ctx = { focus_entity_type: "character", focus_entity_id: "char-1" };
+    expect(focusLabel(ctx, "张三")).toBe("角色 张三"); // 命中
+    expect(focusLabel(ctx, undefined)).toBe("角色"); // 解析中：不闪裸 id
+    expect(focusLabel(ctx, null)).toBe("角色 char-1"); // 解析失败：退 id（信息不丢）
+  });
+
+  it("未知类型显原文；无类型时仅名称；全空退「当前内容」", () => {
+    expect(focusLabel({ focus_entity_type: "timeline_span", focus_entity_id: "x" }, "序章")).toBe(
+      "timeline_span 序章",
+    );
+    expect(focusLabel({ focus_node_id: "ch-1" }, "第一章")).toBe("大纲节点 第一章"); // 节点默认标签
+    expect(focusLabel({}, "孤立名称")).toBe("孤立名称");
+    expect(focusLabel({})).toBe("当前内容");
+  });
+});

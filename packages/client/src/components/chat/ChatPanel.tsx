@@ -64,17 +64,26 @@ const FOCUS_TYPE_LABELS: Record<string, string> = {
   setting: "设定",
   location: "地点",
   hook: "伏笔",
+  event: "事件",
+  timepoint: "时间点",
+  reference: "参考资料",
 };
 
-/** focus 小条名称（「focus 小条」：MVP 简化——不查实体名，显示 id 原文 + 类型名；S7 完善：查实体名） */
-function focusLabel(ctx: FocusContext): string {
-  const name = ctx.focus_entity_id ?? ctx.focus_node_id ?? "";
+/**
+ * focus 小条文案（批次十八 C2，用户反馈 #2：不再直显裸 entity id）。
+ * name 三态：string = names/resolve 解析出的名称；null = 解析失败（退 id，信息不丢）；
+ * undefined = 解析中（只显示类型名，不闪 id）。无类型时仅显示名称，皆空 → 「当前内容」。
+ */
+export function focusLabel(ctx: FocusContext, name?: string | null): string {
+  const raw = ctx.focus_entity_id ?? ctx.focus_node_id ?? "";
   const typeLabel = ctx.focus_entity_type
     ? (FOCUS_TYPE_LABELS[ctx.focus_entity_type] ?? ctx.focus_entity_type)
     : ctx.focus_node_id
       ? "大纲节点"
       : "";
-  return typeLabel ? `${typeLabel} ${name}` : name || "当前内容";
+  const display = name === undefined ? "" : (name ?? raw);
+  if (typeLabel && display) return `${typeLabel} ${display}`;
+  return typeLabel || display || "当前内容";
 }
 
 /** 防御性读取历史工具调用字段（tool_calls JSON 列形状见 ，未知形状容错） */
@@ -616,6 +625,27 @@ export function ProposalCardView({ proposal }: { proposal: ProposalCard }) {
 function FocusBar() {
   const focusContext = useChatStore((s) => s.focusContext);
   const clearFocusContext = useChatStore((s) => s.clearFocusContext);
+ /** 名称解析结果：undefined = 解析中（只显类型名）/ string = 命中 / null = 失败（退 id） */
+  const [resolvedName, setResolvedName] = useState<string | null | undefined>(undefined);
+  const targetId = focusContext?.focus_entity_id ?? focusContext?.focus_node_id ?? null;
+
+ // 焦点变化 → names/resolve 批量解析（单个 id；失败静默退 id 显示，不阻塞小条）
+  useEffect(() => {
+    setResolvedName(undefined);
+    if (targetId === null) return;
+    let cancelled = false;
+    void resolveNames([targetId])
+      .then((res) => {
+        if (!cancelled) setResolvedName(res.names[targetId]?.name ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setResolvedName(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [targetId]);
+
   if (!focusContext) return null;
   return (
     <div className="flex shrink-0 items-center gap-1.5 border-t border-border bg-accent/40 px-3 py-1.5">
@@ -628,7 +658,7 @@ function FocusBar() {
         }}
         style={{ marginInlineEnd: 0 }}
       >
-        正在讨论：{focusLabel(focusContext)}
+        正在讨论：{focusLabel(focusContext, resolvedName)}
       </Tag>
     </div>
   );
