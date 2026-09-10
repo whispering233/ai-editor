@@ -2,13 +2,7 @@
 // 取消/Esc 置 open=false 后 portal 仍常驻渲染）
 import { describe, expect, it } from "vitest";
 import { renderToString } from "react-dom/server";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "./dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "./dialog";
 
 describe("Dialog 自绘实现", () => {
   it("open=false：Content 不渲染（受控守卫——修复「无法关闭」根因）", () => {

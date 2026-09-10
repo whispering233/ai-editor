@@ -24,9 +24,12 @@ export type IconButtonSize = keyof typeof iconButtonSize;
 /** 图标按钮禁用态（追加在 iconButtonBaseClass 之后） */
 export const iconButtonDisabledClass = "disabled:pointer-events-none disabled:opacity-50";
 
-/** 裸输入框（列表内联编辑 / 筛选等非 shadcn Input 场景）；⚠ 不含宽度类——w-full / w-40 由调用点决定（w-40 排序在 w-full 前，常量含 w-full 会压掉它） */
-export const inputClass =
-  "rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
+/** 原生 `select` 统一样式（批次十九 T6：文本输入已收敛 antd `Input`，原生下拉保留待后续卡）；
+ * 白底 + 交互描边 + 聚焦 1px primary 描边（无彩环）——对齐 DESIGN.md §Components `input`
+ * （`bg-card` = canvas；`border-input` = hairline-strong，与相邻 antd `Input` 描边同档，见 index.css 变量映射）；
+ * ⚠ 不含宽度类——w-full / w-40 由调用点决定（w-40 排序在 w-full 前，常量含 w-full 会压掉它） */
+export const selectClass =
+  "rounded-md border border-input bg-card px-3 py-1.5 text-sm focus:outline-none focus-visible:border-ring";
 
 /** 错误横幅容器（：bg-destructive/10 border-destructive/30 text-destructive）；间距/布局（mb-3 / flex 等）由调用点追加 */
 export const errorBannerClass =

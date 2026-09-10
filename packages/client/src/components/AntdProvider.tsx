@@ -88,6 +88,12 @@ const MENU_GEOMETRY = {
 };
 const TABLE_GEOMETRY = { cellPaddingBlock: 8 };
 
+/** 输入框组件默认（T6：`components/ui/input.tsx` 删除后，其 `autoComplete="off"` 默认值上收至此）——
+ * 禁浏览器表单历史建议（输入提示完全由 datalist 候选/代码控制，避免 Chrome 历史值幽灵提示）；
+ * InputConfig / TextAreaConfig 均含 autoComplete（antd/es/config-provider/context.d.ts:206/209），
+ * 显式传 autoComplete 的调用点仍可覆盖（antd/es/input/Input.js：`autoComplete: contextAutoComplete, ...rest`） */
+const INPUT_AUTOCOMPLETE = { autoComplete: "off" };
+
 /** 浅色组件覆盖（DESIGN.md §Components 覆盖表：面值取 {colors.surface-muted} / {colors.canvas} / {colors.hairline}） */
 const COMPONENT_TOKENS_LIGHT = {
   ...COMPONENT_TOKENS_BASE,
@@ -105,7 +111,11 @@ const COMPONENT_TOKENS_LIGHT = {
 const DARK_SELECTED_SURFACE = "#373737";
 const COMPONENT_TOKENS_DARK = {
   ...COMPONENT_TOKENS_BASE,
-  Menu: { ...MENU_GEOMETRY, itemSelectedBg: DARK_SELECTED_SURFACE, itemSelectedColor: "rgba(255,255,255,0.81)" },
+  Menu: {
+    ...MENU_GEOMETRY,
+    itemSelectedBg: DARK_SELECTED_SURFACE,
+    itemSelectedColor: "rgba(255,255,255,0.81)",
+  },
   Table: { ...TABLE_GEOMETRY, headerBg: "#202020", borderColor: "#2f2f2f" },
   Select: { optionSelectedBg: DARK_SELECTED_SURFACE },
   Tag: { defaultBg: DARK_SELECTED_SURFACE },
@@ -117,6 +127,8 @@ export function AntdProvider({ children }: { children: ReactNode }) {
   return (
     <ConfigProvider
       locale={zhCN}
+      input={INPUT_AUTOCOMPLETE}
+      textArea={INPUT_AUTOCOMPLETE}
       theme={{
         // cssVar 模式：tokens 注入 :root CSS 变量（--ant-*），index.css 语义变量映射之（3-0）
         cssVar: {},

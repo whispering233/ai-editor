@@ -17,9 +17,9 @@ import { CreateRelationDialog } from "../components/entity/create-relation-dialo
 import { ParentSettingSelect } from "../components/entity/parent-setting-select";
 import { ComputePreview } from "../components/delta/compute-preview";
 import { entityListHost } from "../lib/entity-paths";
-import { Button } from "antd";
+import { Button, Input } from "antd";
+import type { InputRef } from "antd";
 import { PageTitle } from "@/components/ui/page-title";
-import { Input } from "@/components/ui/input";
 import {
   ApiError,
   CLIENT_NETWORK_ERROR,
@@ -43,7 +43,7 @@ import { flattenTree } from "../lib/outline-tree";
 import { enterBehavior, moveArrayItem } from "../lib/tags-editor";
 import { useSaveShortcut } from "../lib/save-shortcut";
 import { cn } from "../lib/utils";
-import { inputClass, skeletonClass } from "@/lib/styles";
+import { selectClass, skeletonClass } from "@/lib/styles";
 import { EmptyState } from "@/components/ui/empty-state";
 import { navigate } from "../hooks/use-route";
 import { useDataRefresh } from "../hooks/use-data-refresh";
@@ -72,9 +72,9 @@ function TagsEditor({
   suggestions?: readonly string[];
   quickTags?: readonly string[];
 }) {
- // 输入框 ref 表（M1：回车后聚焦下一行/新行；下标即行号，追加行在渲染后经 rAF 聚焦）
-  const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
- // 拖拽排序态（M3）：dragIndex = 被拖行；dragOverIndex = 当前悬停目标行（高亮提示）
+  // 输入框 ref 表（M1：回车后聚焦下一行/新行；下标即行号，追加行在渲染后经 rAF 聚焦）
+  const inputRefs = useRef<Array<InputRef | null>>([]);
+  // 拖拽排序态（M3）：dragIndex = 被拖行；dragOverIndex = 当前悬停目标行（高亮提示）
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   return (
@@ -91,8 +91,8 @@ function TagsEditor({
               "bg-muted/60 ring-1 ring-ring",
           )}
           onDragOver={(e) => {
- // 仅自身拖拽进行中响应（dragIndex 非空）——不 preventDefault 时保留浏览器默认
- // 行为（输入框内文本拖选/拖入照常），不干扰文本编辑
+            // 仅自身拖拽进行中响应（dragIndex 非空）——不 preventDefault 时保留浏览器默认
+            // 行为（输入框内文本拖选/拖入照常），不干扰文本编辑
             if (dragIndex === null) return;
             e.preventDefault();
             e.dataTransfer.dropEffect = "move";
@@ -116,7 +116,7 @@ function TagsEditor({
             onDragStart={(e) => {
               setDragIndex(i);
               e.dataTransfer.effectAllowed = "move";
- // Firefox 需 setData 才启动拖拽（types 含 text/plain 亦可作自识别标记）
+              // Firefox 需 setData 才启动拖拽（types 含 text/plain 亦可作自识别标记）
               e.dataTransfer.setData("text/plain", String(i));
             }}
             onDragEnd={() => {
@@ -137,14 +137,14 @@ function TagsEditor({
               inputRefs.current[i] = el;
             }}
             onKeyDown={(e) => {
- // M1（2026-08 用户反馈）：「输入后回车添加下一项」——回车 = 非末行聚焦下一行 /
- // 末行非空追加空行并聚焦 / 末行空无操作（决策纯函数 enterBehavior）
+              // M1（2026-08 用户反馈）：「输入后回车添加下一项」——回车 = 非末行聚焦下一行 /
+              // 末行非空追加空行并聚焦 / 末行空无操作（决策纯函数 enterBehavior）
               if (e.key !== "Enter") return;
               e.preventDefault();
               const b = enterBehavior(values, i);
               if (!b) return;
               if (b.append) onChange([...values, ""]);
- // 追加行渲染完成后聚焦（rAF 确保新输入框已挂载）
+              // 追加行渲染完成后聚焦（rAF 确保新输入框已挂载）
               requestAnimationFrame(() => inputRefs.current[b.focusIndex]?.focus());
             }}
             placeholder={placeholder}
@@ -194,7 +194,7 @@ function CustomFieldsEditor({
     Object.entries(value ?? {}).map(([k, v]) => ({ key: k, value: String(v ?? "") })),
   );
 
- // 外部值变化（重拉详情）时同步
+  // 外部值变化（重拉详情）时同步
   useEffect(() => {
     setRows(Object.entries(value ?? {}).map(([k, v]) => ({ key: k, value: String(v ?? "") })));
   }, [value]);
@@ -218,7 +218,7 @@ function CustomFieldsEditor({
               commit(rows.map((x, j) => (j === i ? { ...x, key: e.target.value } : x)))
             }
             placeholder="键"
-            className="h-8 w-28 text-sm"
+            className="w-28"
           />
           <Input
             value={r.value}
@@ -226,7 +226,7 @@ function CustomFieldsEditor({
               commit(rows.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))
             }
             placeholder="值"
-            className="h-8 flex-1 text-sm"
+            className="flex-1"
           />
           <Button onClick={() => commit(rows.filter((_, j) => j !== i))}>删除</Button>
         </div>
@@ -241,7 +241,7 @@ function CustomFieldsEditor({
 export default function EntityDetail({ type, id }: { type: string; id: string }) {
   const entityType = type as EntityType;
 
- // 挂载/切换实体时上报页面焦点（右下「问 AI」携带当前实体上下文注入右栏；路由切换时已清空）
+  // 挂载/切换实体时上报页面焦点（右下「问 AI」携带当前实体上下文注入右栏；路由切换时已清空）
   const setCurrentFocus = useUiStore((s) => s.setCurrentFocus);
   useEffect(() => {
     setCurrentFocus({ focus_entity_type: entityType, focus_entity_id: id });
@@ -251,7 +251,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
- /** 表单值（detail.data 副本；null = 未加载） */
+  /** 表单值（detail.data 副本；null = 未加载） */
   const [form, setForm] = useState<Record<string, unknown> | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -259,15 +259,15 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
   const [deleteRelationTarget, setDeleteRelationTarget] = useState<RelationSummaryItem | null>(
     null,
   );
- /** 「变更记录 N 条」展开状态（S5.4：下方渲染状态预览区块） */
+  /** 「变更记录 N 条」展开状态（S5.4：下方渲染状态预览区块） */
   const [deltaOpen, setDeltaOpen] = useState(false);
- /** 设定层级修改态（I3b：修改/清除上级——先建后删，防数据丢失） */
+  /** 设定层级修改态（I3b：修改/清除上级——先建后删，防数据丢失） */
   const [hierarchySaving, setHierarchySaving] = useState(false);
   const [hierarchyError, setHierarchyError] = useState<string | null>(null);
- /** 标签建议池（批次五 J2 + K2，setting 详情 tags 输入 datalist 候选 + 快捷选择——全量聚合既有标签；失败静默） */
+  /** 标签建议池（批次五 J2 + K2，setting 详情 tags 输入 datalist 候选 + 快捷选择——全量聚合既有标签；失败静默） */
   const [tagPool, setTagPool] = useState<string[]>([]);
 
- // 补拉全量设定标签池（setting 类型才拉；复用 Timeline 详情 loadTagPool 同款模式）
+  // 补拉全量设定标签池（setting 类型才拉；复用 Timeline 详情 loadTagPool 同款模式）
   useEffect(() => {
     if (entityType !== "setting") {
       setTagPool([]);
@@ -288,7 +288,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
         setTagPool(Array.from(tags).sort());
       })
       .catch(() => {
- // 失败静默（无建议不影响表单）
+        // 失败静默（无建议不影响表单）
       });
     return () => {
       cancelled = true;
@@ -297,7 +297,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
 
   const fields = detailFieldsForType(entityType);
 
- /** 加载详情（id/type 变化重载；成功重置表单为 data 副本） */
+  /** 加载详情（id/type 变化重载；成功重置表单为 data 副本） */
   async function loadDetail() {
     setLoading(true);
     setLoadError(null);
@@ -321,14 +321,14 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
 
   useEffect(() => {
     void loadDetail();
- // 依赖仅 [entityType, id]：loadDetail 每次渲染重建，但页面切换才需重载（项目未启用 exhaustive-deps 检查）
+    // 依赖仅 [entityType, id]：loadDetail 每次渲染重建，但页面切换才需重载（项目未启用 exhaustive-deps 检查）
   }, [entityType, id]);
 
- // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉详情——
- // 表单以服务端权威为准整体重置（AI 改动的字段随之同步，本地未保存编辑被覆盖属预期语义）
+  // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉详情——
+  // 表单以服务端权威为准整体重置（AI 改动的字段随之同步，本地未保存编辑被覆盖属预期语义）
   useDataRefresh(() => void loadDetail());
 
- /** 保存：diffData 只提交变更字段（partial 浅合并）；成功后重拉（服务端权威） */
+  /** 保存：diffData 只提交变更字段（partial 浅合并）；成功后重拉（服务端权威） */
   async function handleSave() {
     if (!detail || !form || saving) return;
     const changed = diffData(detail.data, form);
@@ -353,15 +353,15 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
     }
   }
 
- // Ctrl/Cmd+S 保存（B2）：页面级保存注册（本页无行内编辑注册者）
+  // Ctrl/Cmd+S 保存（B2）：页面级保存注册（本页无行内编辑注册者）
   useSaveShortcut(() => void handleSave(), detail !== null && form !== null);
 
- /** 设置字段值（tags/select 等通用入口） */
+  /** 设置字段值（tags/select 等通用入口） */
   function setField(key: string, value: unknown) {
     setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
   }
 
- /** 软删直接执行（H2：不再弹二次确认）：DELETE → toast（级联计数）→ 跳回列表 */
+  /** 软删直接执行（H2：不再弹二次确认）：DELETE → toast（级联计数）→ 跳回列表 */
   async function handleDelete() {
     if (!detail) return;
     try {
@@ -382,7 +382,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
     }
   }
 
- /** 删除关系（物理删，确认后执行） */
+  /** 删除关系（物理删，确认后执行） */
   async function handleDeleteRelation() {
     if (!deleteRelationTarget) return;
     try {
@@ -395,10 +395,10 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
     }
   }
 
- /**
- * 修改上级（I3b）：先建新边再删旧父边——建失败则旧父保留（防数据丢失）；
- * 新父与当前相同 → 幂等跳过（不重建关系）。服务端防环/自指兜底（400 VALIDATION_ERROR 内联提示）。
- */
+  /**
+   * 修改上级（I3b）：先建新边再删旧父边——建失败则旧父保留（防数据丢失）；
+   * 新父与当前相同 → 幂等跳过（不重建关系）。服务端防环/自指兜底（400 VALIDATION_ERROR 内联提示）。
+   */
   async function handleSetParent(newParentId: string) {
     if (!detail || hierarchySaving) return;
     const current = settingHierarchyFromRelations(detail.relations, id).parent;
@@ -423,7 +423,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
     }
   }
 
- /** 清除上级：删除旧父边（物理删，可重新设置） */
+  /** 清除上级：删除旧父边（物理删，可重新设置） */
   async function handleClearParent() {
     if (!detail || hierarchySaving) return;
     const current = settingHierarchyFromRelations(detail.relations, id).parent;
@@ -441,7 +441,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
     }
   }
 
- /** 关系行端点名称（本实体端用名称，另一端优先联表名称，缺省 id） */
+  /** 关系行端点名称（本实体端用名称，另一端优先联表名称，缺省 id） */
   function relationEndpointName(r: RelationSummaryItem, side: "source" | "target"): string {
     const isSelf = (side === "source" ? r.sourceId : r.targetId) === id;
     if (isSelf) return detail?.name ?? "本实体";
@@ -451,7 +451,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
     );
   }
 
- // ============ 渲染 ============
+  // ============ 渲染 ============
 
   if (notFound) {
     return (
@@ -537,7 +537,9 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
           {loadError === CLIENT_NETWORK_ERROR
             ? "无法连接服务，请确认 ai-editor 服务已启动。"
             : "详情加载失败，请重试。"}
-          <Button className="ml-3" onClick={() => void loadDetail()}>重试</Button>
+          <Button className="ml-3" onClick={() => void loadDetail()}>
+            重试
+          </Button>
         </div>
       )}
 
@@ -599,7 +601,11 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
                           placeholder="设置上级"
                         />
                         {h.parent && (
-                          <Button danger disabled={hierarchySaving} onClick={() => void handleClearParent()}>
+                          <Button
+                            danger
+                            disabled={hierarchySaving}
+                            onClick={() => void handleClearParent()}
+                          >
                             清除
                           </Button>
                         )}
@@ -650,7 +656,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
               })()}
 
             {(() => {
- // 关联列表：setting 类型过滤掉层级边（belongs_to setting→setting）
+              // 关联列表：setting 类型过滤掉层级边（belongs_to setting→setting）
               const list =
                 entityType === "setting"
                   ? detail.relations.filter(
@@ -679,7 +685,12 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
                           {relationTypeLabel(r.relationType)} {isSource ? "→" : "←"}
                         </span>
                         <span className="min-w-0 flex-1 truncate text-foreground">{right}</span>
-                        <Button danger size="small" className="shrink-0" onClick={() => setDeleteRelationTarget(r)}>
+                        <Button
+                          danger
+                          size="small"
+                          className="shrink-0"
+                          onClick={() => setDeleteRelationTarget(r)}
+                        >
                           删除
                         </Button>
                       </li>
@@ -726,17 +737,16 @@ function FormField({
   field: DetailFieldConfig;
   value: unknown;
   onChange: (v: unknown) => void;
- /** 规则标签建议池（批次五 J2：仅 setting.rules 使用；datalist 候选） */
+  /** 规则标签建议池（批次五 J2：仅 setting.rules 使用；datalist 候选） */
   tagPool?: readonly string[];
 }) {
   switch (field.control) {
     case "textarea":
       return (
-        <textarea
+        <Input.TextArea
           value={fieldValue({ [field.key]: value }, field.key)}
           onChange={(e) => onChange(e.target.value)}
           rows={3}
-          className={cn(inputClass, "w-full")}
         />
       );
     case "number":
@@ -745,7 +755,6 @@ function FormField({
           type="number"
           value={fieldValue({ [field.key]: value }, field.key)}
           onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))}
-          className="h-8 text-sm"
         />
       );
     case "tags":
@@ -763,7 +772,7 @@ function FormField({
         <select
           value={fieldValue({ [field.key]: value }, field.key)}
           onChange={(e) => onChange(e.target.value)}
-          className={cn(inputClass, "w-full")}
+          className={cn(selectClass, "w-full")}
         >
           {field.options?.map((opt) => (
             <option key={opt} value={opt}>
@@ -793,7 +802,6 @@ function FormField({
         <Input
           value={fieldValue({ [field.key]: value }, field.key)}
           onChange={(e) => onChange(e.target.value)}
-          className="h-8 text-sm"
         />
       );
   }
@@ -815,7 +823,7 @@ function OutlineNodeSelect({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value === "" ? null : e.target.value)}
-      className={cn(cn(inputClass, "w-full"), value === "" && "text-muted-foreground/70")}
+      className={cn(selectClass, "w-full", value === "" && "text-muted-foreground/70")}
     >
       <option value="">未设置</option>
       {options.map((o) => (

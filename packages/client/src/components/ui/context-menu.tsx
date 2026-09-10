@@ -23,10 +23,7 @@ const MenuContext = React.createContext<MenuApi | null>(null);
 /** 根：菜单开关状态（不渲染 DOM；Esc/外部 pointerdown/滚动关闭监听） */
 function ContextMenuRoot({ children }: { children: React.ReactNode }) {
   const [state, setState] = React.useState<MenuState>({ open: false, x: 0, y: 0 });
-  const openAt = React.useCallback(
-    (x: number, y: number) => setState({ open: true, x, y }),
-    [],
-  );
+  const openAt = React.useCallback((x: number, y: number) => setState({ open: true, x, y }), []);
   const close = React.useCallback(() => setState((s) => (s.open ? { ...s, open: false } : s)), []);
   const api = React.useMemo(() => ({ state, openAt, close }), [state, openAt, close]);
 
@@ -66,7 +63,7 @@ function ContextMenuTrigger({
 }) {
   const menu = React.useContext(MenuContext);
   if (!menu) return render; // 无 Root 包裹（结构测试路径）：原样渲染
- // createElement 手工合并（cloneElement 传 undefined children 会清空 render 自带 children）
+  // createElement 手工合并（cloneElement 传 undefined children 会清空 render 自带 children）
   const el = render as React.ReactElement<Record<string, unknown>>;
   const props = {
     ...el.props,
@@ -76,11 +73,7 @@ function ContextMenuTrigger({
     },
   };
   const rowChildren = el.props.children as React.ReactNode | undefined;
-  return React.createElement(
-    el.type,
-    props,
-    children === undefined ? rowChildren : children,
-  );
+  return React.createElement(el.type, props, children === undefined ? rowChildren : children);
 }
 
 /** Portal 容器（保持导出兼容；Content 自身 createPortal） */

@@ -8,11 +8,11 @@
 // 焦点保持：onMouseDown preventDefault 阻止输入框失焦（点选后输入框保持焦点、建议区随输入更新）。
 // 样式：全部 token 类（bg-card/border-border/text-muted-foreground/hover:bg-muted），禁硬编码色类。
 interface TagSuggestProps {
- /** 建议标签列表（已按 suggestTags 匹配/排除/截断；空 → 不渲染） */
+  /** 建议标签列表（已按 suggestTags 匹配/排除/截断；空 → 不渲染） */
   suggestions: string[];
- /** 显式可见开关（false = 不渲染；调用方额外条件，如输入框为空） */
+  /** 显式可见开关（false = 不渲染；调用方额外条件，如输入框为空） */
   visible: boolean;
- /** 点选回调（父组件 applyTagSuggestion 填入 + 保持表单 state） */
+  /** 点选回调（父组件 applyTagSuggestion 填入 + 保持表单 state） */
   onPick: (tag: string) => void;
 }
 

@@ -22,7 +22,13 @@ import {
   ReloadOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
-import { deleteEntity, getReferenceScanStatus, listEntities, scanReferences, updateEntity } from "../lib/api";
+import {
+  deleteEntity,
+  getReferenceScanStatus,
+  listEntities,
+  scanReferences,
+  updateEntity,
+} from "../lib/api";
 import { ApiError } from "../lib/api";
 import { navigate } from "../hooks/use-route";
 import { useSaveShortcut } from "../lib/save-shortcut";
@@ -46,17 +52,17 @@ export default function ReferenceList() {
   const [reloadTick, setReloadTick] = useState(0);
   useDataRefresh(() => setReloadTick((t) => t + 1));
 
- // 筛选状态
+  // 筛选状态
   const [keyword, setKeyword] = useState("");
   const [activeType, setActiveType] = useState<string | "all">("all");
   const [activeTag, setActiveTag] = useState<string | null>(null);
 
- // 扫描同步（ N6）：unsynced = 未同步文件数（null = 未探测/无项目）；
- // 列表加载/刷新时只读探测（无副作用），>0 显示提示条引导扫描
+  // 扫描同步（ N6）：unsynced = 未同步文件数（null = 未探测/无项目）；
+  // 列表加载/刷新时只读探测（无副作用），>0 显示提示条引导扫描
   const [scanBusy, setScanBusy] = useState(false);
   const [unsynced, setUnsynced] = useState<number | null>(null);
 
- // 探测未同步文件（数据刷新后重跑——本地新增/外部修改后列表刷新即重新提示）
+  // 探测未同步文件（数据刷新后重跑——本地新增/外部修改后列表刷新即重新提示）
   useEffect(() => {
     if (config === null) {
       setUnsynced(null);
@@ -75,7 +81,7 @@ export default function ReferenceList() {
     };
   }, [config, reloadTick]);
 
- /** 扫描重建索引（POST /scan → toast 统计 + 刷新列表 + 清提示条） */
+  /** 扫描重建索引（POST /scan → toast 统计 + 刷新列表 + 清提示条） */
   async function handleScan() {
     if (scanBusy) return;
     setScanBusy(true);
@@ -87,9 +93,9 @@ export default function ReferenceList() {
         r.restored > 0 ? `还原 ${r.restored}` : null,
         r.removed > 0 ? `移除 ${r.removed}` : null,
       ].filter((s): s is string => s !== null);
-      useUiStore.getState().showToast(
-        parts.length > 0 ? `扫描完成：${parts.join(" / ")}` : "扫描完成：已是最新",
-      );
+      useUiStore
+        .getState()
+        .showToast(parts.length > 0 ? `扫描完成：${parts.join(" / ")}` : "扫描完成：已是最新");
       setUnsynced(0);
       useUiStore.getState().notifyDataChanged();
       setReloadTick((t) => t + 1);
@@ -102,7 +108,7 @@ export default function ReferenceList() {
     }
   }
 
- // 数据加载
+  // 数据加载
   useEffect(() => {
     let cancelled = false;
     setItems(null);
@@ -119,7 +125,7 @@ export default function ReferenceList() {
     };
   }, [reloadTick]);
 
- // 聚合标签池（列表摘要 tags 前 3 个 —— 为覆盖全量已用 limit 200 拉取）
+  // 聚合标签池（列表摘要 tags 前 3 个 —— 为覆盖全量已用 limit 200 拉取）
   const tagPool = useMemo(() => {
     const set = new Set<string>();
     for (const it of items ?? []) {
@@ -130,7 +136,7 @@ export default function ReferenceList() {
     return [...set].sort((a, b) => a.localeCompare(b));
   }, [items]);
 
- // 聚合分类池（筛选下拉选项 = 项目内已用分类，无预置枚举）
+  // 聚合分类池（筛选下拉选项 = 项目内已用分类，无预置枚举）
   const typePool = useMemo(() => {
     const set = new Set<string>();
     for (const it of items ?? []) {
@@ -140,7 +146,7 @@ export default function ReferenceList() {
     return [...set].sort((a, b) => a.localeCompare(b));
   }, [items]);
 
- // 过滤后可见列表：分类 + 标签 + 关键词（前端过滤，列表量小）
+  // 过滤后可见列表：分类 + 标签 + 关键词（前端过滤，列表量小）
   const visible = useMemo(() => {
     if (items === null) return null;
     const kw = keyword.trim().toLowerCase();
@@ -162,7 +168,7 @@ export default function ReferenceList() {
       .sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
   }, [items, keyword, activeType, activeTag]);
 
- /** 行内编辑标题提交（点击标题行内编辑，PUT name；失败 toast 后 rethrow——组件保持编辑态 + 保留输入值，对齐时间轴 editFailureRecovery） */
+  /** 行内编辑标题提交（点击标题行内编辑，PUT name；失败 toast 后 rethrow——组件保持编辑态 + 保留输入值，对齐时间轴 editFailureRecovery） */
   async function handleRename(id: string, name: string) {
     try {
       await updateEntity("reference", id, { name });
@@ -208,10 +214,19 @@ export default function ReferenceList() {
           >
             扫描
           </Button>
-          <Button disabled={disabled} onClick={() => navigate("#/references/new/md")} icon={<FileTextOutlined />}>
+          <Button
+            disabled={disabled}
+            onClick={() => navigate("#/references/new/md")}
+            icon={<FileTextOutlined />}
+          >
             新建 md 文档
           </Button>
-          <Button type="primary" disabled={disabled} onClick={() => navigate("#/references/new/link")} icon={<LinkOutlined />}>
+          <Button
+            type="primary"
+            disabled={disabled}
+            onClick={() => navigate("#/references/new/link")}
+            icon={<LinkOutlined />}
+          >
             新建外源链接
           </Button>
         </span>
@@ -219,25 +234,32 @@ export default function ReferenceList() {
 
       {/* 筛选行：关键词搜索 + 分类 select + 标签 select */}
       <div className="mb-3 flex shrink-0 flex-wrap items-center gap-2">
-        <Input
-          className="w-48"
-          prefix={<SearchOutlined />}
-          allowClear
-          placeholder="搜索标题 / 内容摘要…"
-          value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
-        />
+        <div className="w-48">
+          <Input
+            prefix={<SearchOutlined />}
+            allowClear
+            placeholder="搜索标题 / 内容摘要…"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+          />
+        </div>
         <Select
           className="w-32"
           value={activeType}
           onChange={(value) => setActiveType(value === "all" ? "all" : String(value))}
-          options={[{ value: "all", label: "全部分类" }, ...typePool.map((t) => ({ value: t, label: TYPE_LABELS[t] ?? t }))]}
+          options={[
+            { value: "all", label: "全部分类" },
+            ...typePool.map((t) => ({ value: t, label: TYPE_LABELS[t] ?? t })),
+          ]}
         />
         <Select
           className="w-32"
           value={activeTag ?? ""}
           onChange={(value) => setActiveTag(value === "" ? null : String(value))}
-          options={[{ value: "", label: "全部标签" }, ...tagPool.map((t) => ({ value: t, label: t }))]}
+          options={[
+            { value: "", label: "全部标签" },
+            ...tagPool.map((t) => ({ value: t, label: t })),
+          ]}
         />
       </div>
 
@@ -250,7 +272,8 @@ export default function ReferenceList() {
           icon={<ReloadOutlined />}
           message={
             <span>
-              检测到 <b>{unsynced}</b> 个未同步的本地文档（文件管理器新增或修改）——扫描后将同步到索引
+              检测到 <b>{unsynced}</b>{" "}
+              个未同步的本地文档（文件管理器新增或修改）——扫描后将同步到索引
             </span>
           }
           action={
@@ -341,12 +364,12 @@ export default function ReferenceList() {
 
 interface RefRowProps {
   item: EntitySummary;
- /** 行内编辑标题提交（页面 PUT name + 刷新；失败 rethrow——组件保持编辑态） */
+  /** 行内编辑标题提交（页面 PUT name + 刷新；失败 rethrow——组件保持编辑态） */
   onRename: (id: string, name: string) => Promise<void>;
   onDelete: (item: EntitySummary) => void;
- /** 双击行进详情页 */
+  /** 双击行进详情页 */
   onGoto: () => void;
- /** 建立关联成功后的数据刷新（页面 reloadTick+1） */
+  /** 建立关联成功后的数据刷新（页面 reloadTick+1） */
   onRelationCreated: () => void;
 }
 
@@ -358,7 +381,7 @@ function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowP
   const tags = Array.isArray(item.summary?.tags)
     ? (item.summary?.tags as string[]).filter((t): t is string => typeof t === "string" && t !== "")
     : [];
- // 来源：file → references/<file_name> 相对路径（文本）；link → url（可点击）；存量 → source 文本兼容
+  // 来源：file → references/<file_name> 相对路径（文本）；link → url（可点击）；存量 → source 文本兼容
   const isFile = item.summary?.kind === "file";
   const source = isFile
     ? `references/${typeof item.summary?.file_name === "string" ? (item.summary.file_name as string) : ""}`
@@ -368,22 +391,22 @@ function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowP
         ? (item.summary.source as string)
         : "";
 
- // 标题行内编辑（点击标题进入，Enter 提交 / Esc 取消 / 失焦保存；对齐时间轴 TimelineEvent 模式）
+  // 标题行内编辑（点击标题进入，Enter 提交 / Esc 取消 / 失焦保存；对齐时间轴 TimelineEvent 模式）
   const [editing, setEditing] = useState(false);
   const [nameValue, setNameValue] = useState("");
   const [saving, setSaving] = useState(false);
 
- // Ctrl/Cmd+S（B2）：行内编辑进行中 → 提交当前编辑（Enter 同语义）；未编辑时不参与
+  // Ctrl/Cmd+S（B2）：行内编辑进行中 → 提交当前编辑（Enter 同语义）；未编辑时不参与
   useSaveShortcut(() => void commitEdit(), editing);
 
- /** 点击标题进入行内编辑（预填当前名） */
+  /** 点击标题进入行内编辑（预填当前名） */
   function startEdit() {
     setNameValue(item.name);
     setEditing(true);
   }
 
- /** Enter/失焦提交：trim 后空/未变 → 退出编辑不发请求；saving 守卫防 Enter+blur 双提交；
- * 失败保持编辑态 + 保留输入值（页面已 toast，此处 catch 吞掉防 unhandled rejection） */
+  /** Enter/失焦提交：trim 后空/未变 → 退出编辑不发请求；saving 守卫防 Enter+blur 双提交；
+   * 失败保持编辑态 + 保留输入值（页面已 toast，此处 catch 吞掉防 unhandled rejection） */
   async function commitEdit() {
     if (saving) return;
     const name = nameValue.trim();
@@ -396,14 +419,14 @@ function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowP
       await onRename(item.id, name);
       setEditing(false);
     } catch {
- // 失败保持编辑态（setEditing(false) 未执行）+ 输入值保留，可修正后重试
+      // 失败保持编辑态（setEditing(false) 未执行）+ 输入值保留，可修正后重试
     } finally {
       setSaving(false);
     }
   }
 
- /** 行双击：双击 = 详情；冲突防护：双击标题 = 编辑（第一击已把 span 换成输入框，
- * dblclick target 是输入框被 closest 拦截；极端时序由 editing 守卫拦截）；双击按钮区不跳详情 */
+  /** 行双击：双击 = 详情；冲突防护：双击标题 = 编辑（第一击已把 span 换成输入框，
+   * dblclick target 是输入框被 closest 拦截；极端时序由 editing 守卫拦截）；双击按钮区不跳详情 */
   function handleRowDoubleClick(e: MouseEvent<HTMLDivElement>) {
     if ((e.target as HTMLElement).closest("button, input, a")) return;
     if (editing) return;

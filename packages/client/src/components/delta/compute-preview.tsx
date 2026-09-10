@@ -13,6 +13,7 @@ import { ApiError, computeDeltaState } from "../../lib/api";
 import { diffStateFields, formatDeltaValue } from "../../lib/delta";
 import { flattenTree } from "../../lib/outline-tree";
 import { cn } from "../../lib/utils";
+import { selectClass } from "../../lib/styles";
 import { useProjectStore } from "../../stores/project";
 import { ChangeSummary } from "./change-summary";
 
@@ -22,13 +23,13 @@ export function ComputePreview({
   currentData,
   deltaCount,
 }: {
- /** 目标实体类型（target_type） */
+  /** 目标实体类型（target_type） */
   type: string;
- /** 目标实体 id（target_id） */
+  /** 目标实体 id（target_id） */
   id: string;
- /** 实体当前 data（GET /entity/:type/:id 响应；状态差异比较基准） */
+  /** 实体当前 data（GET /entity/:type/:id 响应；状态差异比较基准） */
   currentData: Record<string, unknown>;
- /** 实体 Delta 计数（0 条 → 轻量空态，不展示计算控件） */
+  /** 实体 Delta 计数（0 条 → 轻量空态，不展示计算控件） */
   deltaCount: number;
 }) {
   const outline = useProjectStore((s) => s.outline);
@@ -36,7 +37,7 @@ export function ComputePreview({
   const loadOutline = useProjectStore((s) => s.loadOutline);
 
   const [atNodeId, setAtNodeId] = useState<string>(() => {
- // 默认取当前位置：须在大纲树中存在（软删后选择无意义，回退为空要求手动选择）
+    // 默认取当前位置：须在大纲树中存在（软删后选择无意义，回退为空要求手动选择）
     const cp = useProjectStore.getState().config?.currentPosition ?? "";
     const tree = useProjectStore.getState().outline?.children ?? [];
     return cp !== "" && flattenTree(tree).some((o) => o.id === cp) ? cp : "";
@@ -45,8 +46,8 @@ export function ComputePreview({
   const [result, setResult] = useState<ComputeStateResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
- // config/outline 异步到位后的回填：惰性初始化只跑一次，若当时 currentPosition 未加载
- // （或树未就绪）会得到空——此处补上；用户已手动选择（prev 非空）不覆盖
+  // config/outline 异步到位后的回填：惰性初始化只跑一次，若当时 currentPosition 未加载
+  // （或树未就绪）会得到空——此处补上；用户已手动选择（prev 非空）不覆盖
   useEffect(() => {
     setAtNodeId((prev) => {
       if (prev !== "") return prev;
@@ -58,7 +59,7 @@ export function ComputePreview({
   const options = flattenTree(outline?.children ?? []);
   const nodeTitles = new Map(options.map((o) => [o.id, o.label]));
 
- /** [计算] → POST /delta/compute；OUTLINE_NODE_NOT_FOUND → 行内提示重新选择 */
+  /** [计算] → POST /delta/compute；OUTLINE_NODE_NOT_FOUND → 行内提示重新选择 */
   async function handleCompute() {
     if (!atNodeId || computing) return;
     setComputing(true);
@@ -106,7 +107,9 @@ export function ComputePreview({
               {outline === null ? (
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground">大纲未加载</span>
-                  <Button size="small" onClick={() => void loadOutline()}>加载大纲</Button>
+                  <Button size="small" onClick={() => void loadOutline()}>
+                    加载大纲
+                  </Button>
                 </div>
               ) : (
                 <select
@@ -114,7 +117,8 @@ export function ComputePreview({
                   onChange={(e) => setAtNodeId(e.target.value)}
                   aria-label="计算节点"
                   className={cn(
-                    "min-w-56 rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    selectClass,
+                    "min-w-56",
                     atNodeId === "" && "text-muted-foreground",
                   )}
                 >

@@ -6,7 +6,7 @@
 // 高亮：路由首段 → Menu key（timepoints 宿主时间轴）；书架按钮在 #/ 路由高亮。
 // 主题/色纪律：颜色一律取语义 token 类（bg-background / border-border / bg-accent，均为 index.css 对 antd token 的转发）；
 // 禁止内联 style 与硬编码色值（旧版 selected 态用 inline `token.colorPrimaryBg` 已改为 `bg-accent` = `{colors.surface-muted}`）。
-import { Button, Menu, Typography } from "antd";
+import { Button, Menu } from "antd";
 import {
   ApartmentOutlined,
   BookOutlined,
@@ -28,7 +28,6 @@ import type { Route } from "../../hooks/use-route";
 import { navigate, useHashRoute } from "../../hooks/use-route";
 import { useTheme } from "../../hooks/use-theme";
 import { SIDEBAR_MIN_WIDTH } from "../../hooks/use-panels";
-import { cn } from "@/lib/utils";
 import { useProjectStore } from "../../stores/project";
 
 /** Menu key = 导航目标 path（onClick 直接 navigate(key)） */
@@ -56,9 +55,9 @@ export function NavRail({
   width,
   onToggleCollapse,
 }: {
- /** 桌面态像素宽度（flex-basis 覆盖默认）；undefined = 小屏默认百分比布局 */
+  /** 桌面态像素宽度（flex-basis 覆盖默认）；undefined = 小屏默认百分比布局 */
   width?: number;
- /** 收起左栏回调（F7 桌面态由 AppShell 传入；小屏无收起能力） */
+  /** 收起左栏回调（F7 桌面态由 AppShell 传入；小屏无收起能力） */
   onToggleCollapse?: () => void;
 }) {
   const { theme: mode, toggleTheme } = useTheme();
@@ -66,7 +65,7 @@ export function NavRail({
   const loadError = useProjectStore((s) => s.loadError);
   const route = useHashRoute();
 
- /** 无项目：业务导航禁用（引导回书架主页 #/，与旧 TabBar noProject guard 行为一致） */
+  /** 无项目：业务导航禁用（引导回书架主页 #/，与旧 TabBar noProject guard 行为一致） */
   const noProject = loadError === "NO_PROJECT_OPEN";
   const selectedKey = navKey(route);
   const atHome = route.segments.length === 0;
@@ -94,9 +93,7 @@ export function NavRail({
           className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1.5"
         >
           <span className="text-primary">◈</span>
-          <Typography.Text italic className="truncate text-base">
-            我的小说
-          </Typography.Text>
+          <span className="truncate text-base italic">我的小说</span>
         </a>
         {onToggleCollapse && (
           <Button
@@ -114,9 +111,9 @@ export function NavRail({
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
         {/* 回到书架按钮（旁显当前书名；#/ 路由高亮为选中面——DESIGN.md menu-item-selected） */}
         <Button
-          type="text"
+          variant={atHome ? "filled" : "text"}
           block
-          className={cn("mb-1 h-9 justify-start rounded-md px-2", atHome && "bg-accent")}
+          className="mb-1 h-9 justify-start rounded-md px-2"
           icon={<BookOutlined />}
           onClick={() => navigate("/")}
         >
@@ -143,7 +140,7 @@ export function NavRail({
         <Button
           type="text"
           block
-          className="h-8 justify-start rounded-md px-2"
+          className="justify-start px-2"
           icon={<SettingOutlined />}
           onClick={() => navigate("/preferences")}
         >
@@ -152,7 +149,7 @@ export function NavRail({
         <Button
           type="text"
           block
-          className="h-8 justify-start rounded-md px-2"
+          className="justify-start px-2"
           icon={mode === "dark" ? <SunOutlined /> : <MoonOutlined />}
           onClick={toggleTheme}
           aria-label="切换主题"

@@ -36,8 +36,8 @@ function ConfirmDialogBridge() {
       description={confirmState.description ?? ""}
       confirmLabel="确认"
       danger={confirmState.danger}
- // 确认/取消：resolveConfirm 归还 confirm 的 Promise（resolve 后 confirmState 清空，
- // ConfirmDialog 的 onClose 二次调用 resolveConfirm 会因 state 为 null 提前返回，幂等安全）
+      // 确认/取消：resolveConfirm 归还 confirm 的 Promise（resolve 后 confirmState 清空，
+      // ConfirmDialog 的 onClose 二次调用 resolveConfirm 会因 state 为 null 提前返回，幂等安全）
       onConfirm={async () => resolveConfirm(true)}
       onClose={() => resolveConfirm(false)}
     />
@@ -50,7 +50,7 @@ export function FeedbackHost() {
   const clearError = useUiStore((s) => s.clearError);
   const lastHandledToastId = useRef<number | null>(null);
 
- // toast 桥接：新快照（新 id）触发 sonner 展示，kind 映射 success/error/info
+  // toast 桥接：新快照（新 id）触发 sonner 展示，kind 映射 success/error/info
   useEffect(() => {
     if (!toastState || !shouldNotifyToast(toastState, lastHandledToastId.current)) return;
     lastHandledToastId.current = toastState.id;

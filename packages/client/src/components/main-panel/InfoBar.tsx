@@ -28,13 +28,13 @@ export function InfoBar({
   const notifyDataChanged = useUiStore((s) => s.notifyDataChanged);
   const isDesktop = useMediaQuery("(min-width: 1024px)");
 
- // 当前位置：null → 「未设置」；有 id 时优先 outline 树映射标题，未加载 outline 则显示 id 占位
+  // 当前位置：null → 「未设置」；有 id 时优先 outline 树映射标题，未加载 outline 则显示 id 占位
   const positionTitle =
     config?.currentPosition != null
       ? (findOutlineNodeTitle(outline, config.currentPosition) ?? config.currentPosition)
       : null;
 
- // 项目名：加载中 → 「加载中…」；未打开/加载失败 → 「书架」（：无项目时所在即书架形态）
+  // 项目名：加载中 → 「加载中…」；未打开/加载失败 → 「书架」（：无项目时所在即书架形态）
   const projectTitle = configLoading ? "加载中…" : (config?.name ?? "书架");
 
   return (
@@ -49,7 +49,7 @@ export function InfoBar({
       </a>
 
       {/* 当前位置：点击跳 #/outline 并定位该节点（U4：ui store transient focusOutlineNodeId，
- * Outline 页消费后清除；未设置当前位置时仅跳转不定） */}
+       * Outline 页消费后清除；未设置当前位置时仅跳转不定） */}
       <a
         href="#/outline"
         onClick={() => {

@@ -93,14 +93,14 @@ beforeEach(() => {
   vi.stubGlobal("window", windowStub);
   mocked.listSessions.mockResolvedValue([sampleSession]);
   mocked.getSessionMessages.mockResolvedValue({ sessionId: "sess-1", messages: [] });
- // 打开项目：触发 chat store 订阅联动（clearSessions + loadSessions——问题 2 行为自动激活最近会话）
+  // 打开项目：触发 chat store 订阅联动（clearSessions + loadSessions——问题 2 行为自动激活最近会话）
   useProjectStore.setState({ config: makeConfig("proj-a"), configLoading: false });
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.clearAllMocks();
- // 关闭项目（触发订阅清空）后重置两 store，防跨用例状态残留
+  // 关闭项目（触发订阅清空）后重置两 store，防跨用例状态残留
   useProjectStore.setState({
     config: null,
     loadError: null,
@@ -131,7 +131,7 @@ describe("ChatPanel 挂载渲染冒烟（SSR 初始态：zustand v5 getServerSna
   });
 
   it("初始态（已打开项目）渲染不抛异常：空态引导 + 「新会话」标题", async () => {
- // 等订阅联动 settle（避免与下方断言竞态；SSR 渲染仍取初始态，故这里只验证不抛异常）
+    // 等订阅联动 settle（避免与下方断言竞态；SSR 渲染仍取初始态，故这里只验证不抛异常）
     await vi.waitFor(() => expect(useChatStore.getState().sessions).toEqual([sampleSession]));
     expect(() => renderToString(<ChatPanel open={false} onClose={() => {}} />)).not.toThrow();
   });
@@ -176,8 +176,8 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3：任务�
       <MessageItem message={assistantMsg} toolResults={toolResults} />,
     );
     expect(assistantHtml).toContain("好的，我来分析一下");
- // 成对渲染：有 tool result 的调用行 ✓、无 result 的孤儿调用行（tool 消息不单独渲染）；
- // 注意 SSR 会在文本与表达式间插入 <!-- --> 注释节点，断言用关键词而非整句
+    // 成对渲染：有 tool result 的调用行 ✓、无 result 的孤儿调用行（tool 消息不单独渲染）；
+    // 注意 SSR 会在文本与表达式间插入 <!-- --> 注释节点，断言用关键词而非整句
     expect(assistantHtml).toContain("get_entity");
     expect(assistantHtml).toContain("list_entities");
   });
@@ -188,7 +188,7 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3：任务�
       sessionId: "sess-1",
       role: "assistant",
       content: null,
- // 续聊重建/落库形态（server 直存 agent 输出；渲染层归一为内部形状）
+      // 续聊重建/落库形态（server 直存 agent 输出；渲染层归一为内部形状）
       toolCalls: [
         {
           id: "call-w1",
@@ -201,18 +201,27 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3：任务�
     const html = renderToString(<MessageItem message={wireMsg} toolResults={new Map()} />);
     expect(html).toContain("调用了"); // 名称自 function.name（不再回退「工具」；SSR 词间含注释节点，分开断言）
     expect(html).toContain("get_entity");
- // args 解析由 asToolCall 单测覆盖（ToolCallRow 展开态为 client state，SSR 不可达）
+    // args 解析由 asToolCall 单测覆盖（ToolCallRow 展开态为 client state，SSR 不可达）
     const call = asToolCall(wireMsg.toolCalls![0]);
-    expect(call).toEqual({ id: "call-w1", tool: "get_entity", name: "get_entity", args: { id: "char-1" } });
+    expect(call).toEqual({
+      id: "call-w1",
+      tool: "get_entity",
+      name: "get_entity",
+      args: { id: "char-1" },
+    });
   });
 
   it("asToolCall 双形态归一：wire（function.name/arguments JSON 串）与内部形态（tool/args）", () => {
     expect(
       asToolCall({ id: "a", type: "function", function: { name: "x", arguments: '{"k":1}' } }),
     ).toEqual({ id: "a", tool: "x", name: "x", args: { k: 1 } });
-    expect(asToolCall({ id: "b", tool: "y", args: { v: 2 } })).toEqual({ id: "b", tool: "y", args: { v: 2 } });
+    expect(asToolCall({ id: "b", tool: "y", args: { v: 2 } })).toEqual({
+      id: "b",
+      tool: "y",
+      args: { v: 2 },
+    });
     expect(asToolCall("bad")).toEqual({});
- // arguments 非法 JSON：保留原串（渲染兜底展示原文）
+    // arguments 非法 JSON：保留原串（渲染兜底展示原文）
     expect(
       asToolCall({ id: "c", type: "function", function: { name: "z", arguments: "not-json{" } }),
     ).toEqual({ id: "c", tool: "z", name: "z", args: "not-json{" });
@@ -301,8 +310,8 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3：任务�
     );
     expect(html).toContain("提案");
     expect(html).toContain("重排时间轴时间点"); // PROPOSAL_TYPE_LABELS 映射（G2 修订：propose_reorder_timepoints）
- // preview 摘要渲染——changes 对象项 id 未解析（SSR 不跑 useEffect）→ 兜底「调整位置」；
- // 不再 JSON dump（changes 字面量不出现）
+    // preview 摘要渲染——changes 对象项 id 未解析（SSR 不跑 useEffect）→ 兜底「调整位置」；
+    // 不再 JSON dump（changes 字面量不出现）
     expect(html).toContain("调整位置");
     expect(html).not.toContain("changes");
   });
@@ -338,9 +347,9 @@ describe("store 层「新会话」状态迁移走查（问题 3 场景：激活�
 });
 
 describe("ErrorBoundary 兜底（问题 3 防护：渲染异常 → 可恢复错误卡而非白屏）", () => {
- // 注意：React 设计上 renderToString 不会让 error boundary 捕获渲染异常（边界仅客户端渲染生效，
- // SSR 异常直接上抛调用方）——本测试只能验证「无异常时正常透传 children」；边界捕获行为
- // （getDerivedStateFromError → fallback 错误卡）需真实浏览器验证，列入交付走查清单
+  // 注意：React 设计上 renderToString 不会让 error boundary 捕获渲染异常（边界仅客户端渲染生效，
+  // SSR 异常直接上抛调用方）——本测试只能验证「无异常时正常透传 children」；边界捕获行为
+  // （getDerivedStateFromError → fallback 错误卡）需真实浏览器验证，列入交付走查清单
   it("无异常时正常渲染 children（错误卡不出现）", () => {
     const html = renderToString(
       <ErrorBoundary>

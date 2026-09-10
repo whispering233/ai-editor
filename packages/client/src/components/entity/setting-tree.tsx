@@ -19,13 +19,12 @@
 // 注入会话上下文 + 建立关联）替代行级问 AI 入口（本视图原本无 AskAiButton，右键菜单补齐）。
 import { useEffect, useRef, useState } from "react";
 import type { DragEvent, KeyboardEvent, MouseEvent, ReactNode } from "react";
-import { Button } from "antd";
+import { Button, Input } from "antd";
 import { ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { RowContextMenu } from "./row-context-menu";
-import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { errorBannerClass, skeletonClass } from "@/lib/styles";
+import { errorBannerClass, selectClass, skeletonClass } from "@/lib/styles";
 import {
   ApiError,
   createEntity,
@@ -89,47 +88,47 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
   const [hasOrphanEdges, setHasOrphanEdges] = useState(false);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
- /** 内部重载计数（操作成功后刷新 / 错误重试） */
+  /** 内部重载计数（操作成功后刷新 / 错误重试） */
   const [tick, setTick] = useState(0);
- /** 折叠节点 id 集合（缺省空 = 全展开；重拉后指向已删 id 的残留无害、不清空） */
+  /** 折叠节点 id 集合（缺省空 = 全展开；重拉后指向已删 id 的残留无害、不清空） */
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
- /** 选中节点 id（单击行选中，选中后按 Enter 新建子级）；null = 无选中 */
+  /** 选中节点 id（单击行选中，选中后按 Enter 新建子级）；null = 无选中 */
   const [selectedId, setSelectedId] = useState<string | null>(null);
- /** 行内编辑（点击标题）目标 id；null = 未编辑 */
+  /** 行内编辑（点击标题）目标 id；null = 未编辑 */
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState("");
- /** 就地新建目标（null = 未新建；{ parentId: null } = root 顶层） */
+  /** 就地新建目标（null = 未新建；{ parentId: null } = root 顶层） */
   const [creatingAt, setCreatingAt] = useState<CreatingState>(null);
   const [createValue, setCreateValue] = useState("");
- /** 新创建节点高亮（3s 自动消失） */
+  /** 新创建节点高亮（3s 自动消失） */
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
- /** 已聚焦过的新建节点 id（一次性守卫：3s 高亮窗口内重拉不重复聚焦抢焦点） */
+  /** 已聚焦过的新建节点 id（一次性守卫：3s 高亮窗口内重拉不重复聚焦抢焦点） */
   const focusedNewSettingRef = useRef<string | null>(null);
- /** 拖拽中的节点 id；null = 无 */
+  /** 拖拽中的节点 id；null = 无 */
   const [dragNodeId, setDragNodeId] = useState<string | null>(null);
- /** 拖拽目标（悬停高亮 + drop 落点）；null = 无有效目标 */
+  /** 拖拽目标（悬停高亮 + drop 落点）；null = 无有效目标 */
   const [dragTarget, setDragTarget] = useState<SettingDragTarget>(null);
- /** 提交在途（防并发；拖拽/编辑/新建共用） */
+  /** 提交在途（防并发；拖拽/编辑/新建共用） */
   const [busy, setBusy] = useState(false);
- /** 搜索框即时值（防抖输入） */
+  /** 搜索框即时值（防抖输入） */
   const [qInput, setQInput] = useState("");
- /** 防抖后的查询关键词（空 = 不过滤） */
+  /** 防抖后的查询关键词（空 = 不过滤） */
   const [q, setQ] = useState("");
- /** 标签筛选（ 树内过滤；"" = 全部） */
+  /** 标签筛选（ 树内过滤；"" = 全部） */
   const [tagFilter, setTagFilter] = useState("");
- /** 标签筛选候选（聚合既有设定 tags；失败静默——仅无下拉候选，不影响树） */
+  /** 标签筛选候选（聚合既有设定 tags；失败静默——仅无下拉候选，不影响树） */
   const [tagOptions, setTagOptions] = useState<string[]>([]);
- /** 排序方式（2026-08 批次十三）：name 默认（原行为）；created 创建时间；manual 手动（重排入口） */
+  /** 排序方式（2026-08 批次十三）：name 默认（原行为）；created 创建时间；manual 手动（重排入口） */
   const [sortMode, setSortMode] = useState<SettingSortMode>("manual");
 
- /** 操作成功后刷新（tick +1 触发加载 effect；保留旧数据渲染，避免骨架闪烁） */
+  /** 操作成功后刷新（tick +1 触发加载 effect；保留旧数据渲染，避免骨架闪烁） */
   function reload() {
     setTick((t) => t + 1);
   }
 
- // 数据加载：全量 setting + 全量 belongs_to 层级边 → buildSettingTree 组装树；
- // 同时产出关系 id 映射（删旧边用）与标签候选（筛选下拉）。重拉期间保留旧数据渲染
- // （roots 不清空——操作后刷新不闪骨架，仅首载 roots === null 显示骨架）。
+  // 数据加载：全量 setting + 全量 belongs_to 层级边 → buildSettingTree 组装树；
+  // 同时产出关系 id 映射（删旧边用）与标签候选（筛选下拉）。重拉期间保留旧数据渲染
+  // （roots 不清空——操作后刷新不闪骨架，仅首载 roots === null 显示骨架）。
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -158,7 +157,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
             summary: s.summary,
             parentId: s.parentId,
             createdAt: s.createdAt,
- // 手动排序位（稀疏——NULL 不出现，节点侧沉底按名称）
+            // 手动排序位（稀疏——NULL 不出现，节点侧沉底按名称）
             ...(s.sortOrder !== undefined ? { sortOrder: s.sortOrder } : {}),
           })),
           edges,
@@ -166,7 +165,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
         setRoots(tree.roots);
         setHasOrphanEdges(tree.hasOrphanEdges);
         setTruncated(settingRes.total > TREE_SETTING_LIMIT); // total 为准（截断提示）
- // 标签候选（ 统一字段 data.tags → summary.tags）
+        // 标签候选（ 统一字段 data.tags → summary.tags）
         const tags = new Set<string>();
         for (const item of settingRes.items) {
           if (Array.isArray(item.summary.tags)) {
@@ -176,7 +175,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
           }
         }
         setTagOptions(Array.from(tags).sort());
- // 数据重拉后旧 id 可能失效（被删/改父）：清理选中/编辑/新建态防残留
+        // 数据重拉后旧 id 可能失效（被删/改父）：清理选中/编辑/新建态防残留
         setSelectedId(null);
         setEditingId(null);
         setEditingValue("");
@@ -193,20 +192,20 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     };
   }, [reloadKey, tick]);
 
- // 搜索防抖 300ms（与列表页搜索同节奏）
+  // 搜索防抖 300ms（与列表页搜索同节奏）
   useEffect(() => {
     const t = setTimeout(() => setQ(qInput.trim()), 300);
     return () => clearTimeout(t);
   }, [qInput]);
 
- // 新节点高亮自动消失（3s；每次设置高亮重开定时器）
+  // 新节点高亮自动消失（3s；每次设置高亮重开定时器）
   useEffect(() => {
     if (highlightedId === null) return;
     const t = setTimeout(() => setHighlightedId(null), 3000);
     return () => clearTimeout(t);
   }, [highlightedId]);
 
- // 新建即聚焦（A2）：高亮 id 对应的行渲染出来后（reload 完成 → roots 变化）滚动到位 + 键盘焦点落行
+  // 新建即聚焦（A2）：高亮 id 对应的行渲染出来后（reload 完成 → roots 变化）滚动到位 + 键盘焦点落行
   useEffect(() => {
     if (highlightedId === null || focusedNewSettingRef.current === highlightedId) return;
     const t = setTimeout(() => {
@@ -216,13 +215,13 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     return () => clearTimeout(t);
   }, [highlightedId, roots]);
 
- // 选中节点失效清理（树重拉后选中节点不存在 → 清除选中，防残留）
+  // 选中节点失效清理（树重拉后选中节点不存在 → 清除选中，防残留）
   useEffect(() => {
     if (selectedId === null || roots === null) return;
     if (!findSettingNode(roots, selectedId)) setSelectedId(null);
   }, [roots, selectedId]);
 
- // ============ 折叠/展开 ============
+  // ============ 折叠/展开 ============
 
   function toggleCollapse(id: string) {
     setCollapsedIds((prev) => {
@@ -233,7 +232,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     });
   }
 
- /** 展开节点（collapsed 中移除该 id） */
+  /** 展开节点（collapsed 中移除该 id） */
   function expand(id: string) {
     setCollapsedIds((prev) => {
       if (!prev.has(id)) return prev;
@@ -243,18 +242,18 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     });
   }
 
- /** 全部折叠：收集当前可见（过滤后）树的所有非叶子 id，仅保留根级 */
+  /** 全部折叠：收集当前可见（过滤后）树的所有非叶子 id，仅保留根级 */
   function collapseAll() {
     if (roots === null) return;
     setCollapsedIds(new Set(expandableSettingNodeIds(filterSettingTree(roots, q, tagFilter))));
   }
 
- /** 全部展开：清空折叠集合 */
+  /** 全部展开：清空折叠集合 */
   function expandAll() {
     setCollapsedIds(new Set());
   }
 
- // ============ 行内编辑（点击标题：Enter 确认 / Esc 取消 / 失焦保存） ============
+  // ============ 行内编辑（点击标题：Enter 确认 / Esc 取消 / 失焦保存） ============
 
   function startEdit(node: SettingTreeNode) {
     cancelCreate();
@@ -268,10 +267,10 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     setEditingValue("");
   }
 
- /** 提交编辑（悲观提交）：trim 后空/未变 → 退出不发请求；成功退出编辑态 + 刷新；
- * 失败按错误码分流（对齐大纲 editFailureRecovery 语义）：
- * - ENTITY_NOT_FOUND（设定被并发删除/purge）→ 放弃编辑 + 重拉树同步视图（编辑态可退出）
- * - 其余错误 → 保持编辑态 + 保留输入值（输入框已失焦，点击即可修正重试） */
+  /** 提交编辑（悲观提交）：trim 后空/未变 → 退出不发请求；成功退出编辑态 + 刷新；
+   * 失败按错误码分流（对齐大纲 editFailureRecovery 语义）：
+   * - ENTITY_NOT_FOUND（设定被并发删除/purge）→ 放弃编辑 + 重拉树同步视图（编辑态可退出）
+   * - 其余错误 → 保持编辑态 + 保留输入值（输入框已失焦，点击即可修正重试） */
   async function commitEdit(node: SettingTreeNode) {
     if (busy || editingId !== node.id) return;
     const name = editingValue.trim();
@@ -287,13 +286,13 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
       reload();
     } catch (err) {
       if (err instanceof ApiError && err.code === "ENTITY_NOT_FOUND") {
- // 设定已不存在（被删除/purge）：放弃编辑 + 重拉树（对齐大纲 abandon 分支）
+        // 设定已不存在（被删除/purge）：放弃编辑 + 重拉树（对齐大纲 abandon 分支）
         cancelEdit();
         useUiStore.getState().showToast("设定已不存在，列表已刷新", "error");
         reload();
         return;
       }
- // 其余错误：保持编辑态 + 保留输入值（可修正后重试）
+      // 其余错误：保持编辑态 + 保留输入值（可修正后重试）
       useUiStore
         .getState()
         .showToast(
@@ -305,7 +304,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     }
   }
 
- // Ctrl/Cmd+S（B2）：行内编辑进行中 → 提交当前编辑（Enter 同语义）；未编辑时不参与
+  // Ctrl/Cmd+S（B2）：行内编辑进行中 → 提交当前编辑（Enter 同语义）；未编辑时不参与
   useSaveShortcut(() => {
     const node = editingId !== null ? findSettingNode(roots ?? [], editingId) : null;
     if (node) void commitEdit(node);
@@ -322,7 +321,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     };
   }
 
- // ============ 就地新建（Enter 子级 / 工具栏 root 级）：Enter 创建 / Esc 或失焦取消 ============
+  // ============ 就地新建（Enter 子级 / 工具栏 root 级）：Enter 创建 / Esc 或失焦取消 ============
 
   function startCreate(parentId: string | null) {
     cancelEdit();
@@ -337,8 +336,8 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     setCreateValue("");
   }
 
- /** 空值 = 取消（不误建）；成功 → 展开父 + 高亮新节点 + 刷新；带父补建 belongs_to 关系
- * （失败不阻塞创建，toast 提示后可在详情页重设——同 EntityList 既有语义） */
+  /** 空值 = 取消（不误建）；成功 → 展开父 + 高亮新节点 + 刷新；带父补建 belongs_to 关系
+   * （失败不阻塞创建，toast 提示后可在详情页重设——同 EntityList 既有语义） */
   async function commitCreate() {
     if (creatingAt === null) return;
     const name = createValue.trim();
@@ -387,23 +386,23 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     }
   }
 
- // ============ 选中与行级交互（单击选中 / Enter 新建子级 / 双击详情） ============
- // 交互冲突设计（对齐大纲）：
- // 标题单击 = 行内编辑（onClick stopPropagation 隔离，不触发行选中）；
- // 行区（非标题/按钮）单击 = 选中；行区双击 = 详情。
- // 双击会先触发两次单击——第一击仅设置选中高亮（无害），第二击后 dblclick 才跳转；
- // 双击标题时第一击已把 span 换成输入框，dblclick 的 e.target 是输入框（closest("input") 拦截），
- // 极端时序下 target 仍是标题 span 时由 editing 守卫拦截——双击标题 = 编辑，不误跳详情。
+  // ============ 选中与行级交互（单击选中 / Enter 新建子级 / 双击详情） ============
+  // 交互冲突设计（对齐大纲）：
+  // 标题单击 = 行内编辑（onClick stopPropagation 隔离，不触发行选中）；
+  // 行区（非标题/按钮）单击 = 选中；行区双击 = 详情。
+  // 双击会先触发两次单击——第一击仅设置选中高亮（无害），第二击后 dblclick 才跳转；
+  // 双击标题时第一击已把 span 换成输入框，dblclick 的 e.target 是输入框（closest("input") 拦截），
+  // 极端时序下 target 仍是标题 span 时由 editing 守卫拦截——双击标题 = 编辑，不误跳详情。
 
- /** 选中节点：与编辑/新建态互斥 */
+  /** 选中节点：与编辑/新建态互斥 */
   function selectNode(id: string) {
     cancelEdit();
     cancelCreate();
     setSelectedId(id);
   }
 
- /** 行单击：非标题/按钮/输入框区 → 选中该节点；交互元素 stopPropagation（oracle 修复：
- * 行内按钮/输入框点击不冒泡到容器，避免清除选中） */
+  /** 行单击：非标题/按钮/输入框区 → 选中该节点；交互元素 stopPropagation（oracle 修复：
+   * 行内按钮/输入框点击不冒泡到容器，避免清除选中） */
   function handleRowClick(e: MouseEvent<HTMLDivElement>, node: SettingTreeNode) {
     if ((e.target as HTMLElement).closest("button, input, a")) {
       e.stopPropagation();
@@ -413,15 +412,15 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     selectNode(node.id);
   }
 
- /** 行双击：双击 = 详情（#/setting/:id）；按钮区/编辑态不触发（同大纲冲突防护） */
+  /** 行双击：双击 = 详情（#/setting/:id）；按钮区/编辑态不触发（同大纲冲突防护） */
   function handleRowDoubleClick(e: MouseEvent<HTMLDivElement>, node: SettingTreeNode) {
     if ((e.target as HTMLElement).closest("button, input, a")) return;
     if (editingId === node.id) return;
     navigate(`/setting/${node.id}`);
   }
 
- /** 行键盘：选中节点按 Enter → 就地新建子级（子级类型 = 设定）；编辑态/新建态/拖拽中/busy 禁用；
- * 仅行 div 自身聚焦时响应（oracle 修复：子元素按钮/输入框聚焦时交给子元素处理） */
+  /** 行键盘：选中节点按 Enter → 就地新建子级（子级类型 = 设定）；编辑态/新建态/拖拽中/busy 禁用；
+   * 仅行 div 自身聚焦时响应（oracle 修复：子元素按钮/输入框聚焦时交给子元素处理） */
   function handleRowKeyDown(e: KeyboardEvent<HTMLDivElement>, node: SettingTreeNode) {
     if (e.key !== "Enter") return;
     if (e.target !== e.currentTarget) return;
@@ -431,9 +430,9 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     startCreate(node.id);
   }
 
- // ============ 拖拽调整层级（ 嵌套语义：拖到行 = 成为其子级；空白区 = 移为根） ============
- // belongs_to 防环沿用（canMoveSettingTo 客户端预校验 + 服务端兜底）；改父 = 先建新边
- // 后删旧边（对齐 EntityDetail.handleSetParent）；设定无 sort_order，同父拖拽为 no-op。
+  // ============ 拖拽调整层级（ 嵌套语义：拖到行 = 成为其子级；空白区 = 移为根） ============
+  // belongs_to 防环沿用（canMoveSettingTo 客户端预校验 + 服务端兜底）；改父 = 先建新边
+  // 后删旧边（对齐 EntityDetail.handleSetParent）；设定无 sort_order，同父拖拽为 no-op。
 
   function handleDragStart(e: DragEvent, node: SettingTreeNode) {
     e.dataTransfer.setData("text/plain", node.id);
@@ -447,14 +446,14 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     setDragTarget(null);
   }
 
- /** 行 dragover（ 三分区）：行上/下方 1/3 = 行间插入线（**手动模式**同级重排，目标组 =
- * 该行的同级组 → 新父 = 该行父）；中段 = 调层级（成为该行子级，canMoveSettingTo 预校验）；
- * stopPropagation 防冒泡到容器（容器空白区 = 移根语义，行内不触发） */
+  /** 行 dragover（ 三分区）：行上/下方 1/3 = 行间插入线（**手动模式**同级重排，目标组 =
+   * 该行的同级组 → 新父 = 该行父）；中段 = 调层级（成为该行子级，canMoveSettingTo 预校验）；
+   * stopPropagation 防冒泡到容器（容器空白区 = 移根语义，行内不触发） */
   function handleRowDragOver(e: DragEvent, node: SettingTreeNode) {
     e.stopPropagation();
     const dragNode = dragNodeId ? findSettingNode(roots ?? [], dragNodeId) : null;
     if (!dragNode || dragNode.id === node.id) return;
- // 三分区：pointerY 相对行高比例 < 1/3 → before；> 2/3 → after；中段 → on（调层级）
+    // 三分区：pointerY 相对行高比例 < 1/3 → before；> 2/3 → after；中段 → on（调层级）
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const ratio = (e.clientY - rect.top) / Math.max(1, rect.height);
     const placement: "before" | "on" | "after" =
@@ -463,8 +462,8 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
         : sortMode === "manual" && ratio > 2 / 3
           ? "after"
           : "on";
- // on（调层级）：目标父 = 该行（防环/自指沿用）；before/after（同级重排）：目标组 = 该行同级组
- // （新父 = 该行父——可能跨父重排，同样防环校验）
+    // on（调层级）：目标父 = 该行（防环/自指沿用）；before/after（同级重排）：目标组 = 该行同级组
+    // （新父 = 该行父——可能跨父重排，同样防环校验）
     const targetParentId = placement === "on" ? node.id : (node.parentId ?? null);
     if (!canMoveSettingTo(dragNode, targetParentId, roots ?? [])) return;
     e.preventDefault();
@@ -476,14 +475,14 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     );
   }
 
- /** 行 dragleave：仅真正离开该行才清除该行的目标高亮（子元素间移动不触发） */
+  /** 行 dragleave：仅真正离开该行才清除该行的目标高亮（子元素间移动不触发） */
   function handleRowDragLeave(e: DragEvent, node: SettingTreeNode) {
     if (!e.currentTarget.contains(e.relatedTarget as Node)) {
       setDragTarget((prev) => (prev?.kind === "row" && prev.id === node.id ? null : prev));
     }
   }
 
- /** 行 drop：按悬停分区执行（on = 改父；before/after = 同级重排） */
+  /** 行 drop：按悬停分区执行（on = 改父；before/after = 同级重排） */
   async function handleRowDrop(e: DragEvent, node: SettingTreeNode) {
     e.stopPropagation();
     e.preventDefault();
@@ -492,7 +491,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     await executeDrop(target);
   }
 
- /** 容器（空白区）dragover：移到根（无上级） */
+  /** 容器（空白区）dragover：移到根（无上级） */
   function handleRootDragOver(e: DragEvent) {
     const dragNode = dragNodeId ? findSettingNode(roots ?? [], dragNodeId) : null;
     if (!dragNode) return;
@@ -507,22 +506,22 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     }
   }
 
- /** 容器 drop：空白区 = 移为顶层根 */
+  /** 容器 drop：空白区 = 移为顶层根 */
   async function handleRootDrop(e: DragEvent) {
     e.preventDefault();
     await executeDrop({ kind: "root" });
   }
 
- /** 同级组（手动序）辅助：某节点的同级列表 = 父的子级 / 根级（ 排序后的展示序） */
+  /** 同级组（手动序）辅助：某节点的同级列表 = 父的子级 / 根级（ 排序后的展示序） */
   function siblingsOf(node: SettingTreeNode): SettingTreeNode[] {
     const parentNode =
       node.parentId !== undefined ? findSettingNode(roots ?? [], node.parentId) : null;
     return sortSettingChildren(parentNode ? parentNode.children : (roots ?? []), "manual");
   }
 
- /** 拖放执行（ 复合端点）：on = 改父（append 到新父子级末尾）；before/after = 同级重排
- * （含跨父重排——服务端事务内改父 + 组内定序一次提交）；root = 移为顶层根。
- * 目标位置无变化 → no-op（不发请求）。 */
+  /** 拖放执行（ 复合端点）：on = 改父（append 到新父子级末尾）；before/after = 同级重排
+   * （含跨父重排——服务端事务内改父 + 组内定序一次提交）；root = 移为顶层根。
+   * 目标位置无变化 → no-op（不发请求）。 */
   async function executeDrop(
     target: Extract<SettingDragTarget, { kind: "row" }> | { kind: "root" },
   ) {
@@ -532,7 +531,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     setBusy(true);
     try {
       if (target.kind === "root") {
- // 已是根 → 原地放置（no-op）
+        // 已是根 → 原地放置（no-op）
         if (dragNode.parentId === undefined) {
           clearDrag();
           return;
@@ -540,7 +539,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
         await moveSetting(dragNode.id, { parentId: null });
         useUiStore.getState().showToast("已移至顶层（无上级）");
       } else if (target.placement === "on") {
- // 已是该行子级（同父）→ no-op
+        // 已是该行子级（同父）→ no-op
         if (dragNode.parentId === target.id) {
           clearDrag();
           return;
@@ -553,12 +552,12 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
         const siblings = siblingsOf(targetNode); // 含 dragNode（同组时）
         const targetIdx = siblings.findIndex((s) => s.id === target.id);
         const dragIdx = siblings.findIndex((s) => s.id === dragNode.id);
- // 服务端 order 语义 = 移除 dragNode 后的组内位置：目标行在组内的下标需扣除
- // dragNode 自身占位（dragIdx < 0 = 跨组，目标组不含 dragNode，下标即最终位）
+        // 服务端 order 语义 = 移除 dragNode 后的组内位置：目标行在组内的下标需扣除
+        // dragNode 自身占位（dragIdx < 0 = 跨组，目标组不含 dragNode，下标即最终位）
         const targetPost =
           dragIdx < 0 ? targetIdx : targetIdx > dragIdx ? targetIdx - 1 : targetIdx;
         const order = target.placement === "before" ? targetPost : targetPost + 1;
- // 同位拖放（同组且重插位置 = 当前位置）→ no-op
+        // 同位拖放（同组且重插位置 = 当前位置）→ no-op
         if (dragIdx >= 0 && order === dragIdx) {
           clearDrag();
           return;
@@ -580,7 +579,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     }
   }
 
- /** 手动模式 ↑↓ 箭头：同级组内上移/下移一位（moveSetting order = 目标位） */
+  /** 手动模式 ↑↓ 箭头：同级组内上移/下移一位（moveSetting order = 目标位） */
   async function moveSiblingByArrow(node: SettingTreeNode, delta: -1 | 1) {
     if (busy) return;
     const siblings = siblingsOf(node);
@@ -604,7 +603,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     }
   }
 
- // ============ 软删（H2：直接执行不弹确认） ============
+  // ============ 软删（H2：直接执行不弹确认） ============
 
   async function handleDelete(node: SettingTreeNode) {
     if (selectedId === node.id) setSelectedId(null); // 删除选中节点即清除选中
@@ -626,11 +625,11 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     }
   }
 
- // ============ 渲染 ============
+  // ============ 渲染 ============
 
   const filterActive = q !== "" || tagFilter !== "";
 
- /** 就地输入框（行内编辑/新建共用样式；autoFocus 进入即聚焦） */
+  /** 就地输入框（行内编辑/新建共用；autoFocus 进入即聚焦；small 档 = 24px 对齐行高） */
   function inlineInput(
     value: string,
     onChange: (v: string) => void,
@@ -639,7 +638,9 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     placeholder: string,
   ) {
     return (
-      <input
+      <Input
+        size="small"
+        className="min-w-0 flex-1"
         autoComplete="off"
         autoFocus
         value={value}
@@ -648,16 +649,15 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
         onBlur={onBlur}
         maxLength={100}
         placeholder={placeholder}
-        className="min-w-0 flex-1 rounded border border-border bg-card px-1.5 py-0.5 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       />
     );
   }
 
- /** 整树递归渲染（闭包共享页面 state； 行级交互：单击选中 / Enter 新建子级 / 双击详情 /
- * 点击标题行内编辑 / 拖拽嵌套改层级 / 行尾只留删除；同级按排序方式重排 + 手动模式
- * ↑↓ 箭头与行间插入线重排） */
+  /** 整树递归渲染（闭包共享页面 state； 行级交互：单击选中 / Enter 新建子级 / 双击详情 /
+   * 点击标题行内编辑 / 拖拽嵌套改层级 / 行尾只留删除；同级按排序方式重排 + 手动模式
+   * ↑↓ 箭头与行间插入线重排） */
   function renderNodes(nodes: SettingTreeNode[], depth: number): ReactNode {
- // 每级同级组按当前排序方式重排（name/created/manual；不改原树）
+    // 每级同级组按当前排序方式重排（name/created/manual；不改原树）
     const ordered = sortSettingChildren(nodes, sortMode);
     return ordered.map((node) => {
       const hasChildren = node.children.length > 0;
@@ -676,11 +676,11 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
         dragTarget?.kind === "row" && dragTarget.id === node.id && dragTarget.placement === "after";
       const highlighted = highlightedId === node.id;
       const tags = nodeTags(node);
- // 手动模式箭头边界（同级组首/尾禁用）
+      // 手动模式箭头边界（同级组首/尾禁用）
       const siblingIdx = ordered.findIndex((s) => s.id === node.id);
       const canUp = sortMode === "manual" && siblingIdx > 0;
       const canDown = sortMode === "manual" && siblingIdx >= 0 && siblingIdx < ordered.length - 1;
- // 节点行根 props（右键菜单 trigger 与普通 div 共用）
+      // 节点行根 props（右键菜单 trigger 与普通 div 共用）
       const rowProps = {
         "data-setting-id": node.id,
         draggable: !editing && !isDragging && !busy,
@@ -694,8 +694,8 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
         onDoubleClick: (e: MouseEvent<HTMLDivElement>) => handleRowDoubleClick(e, node),
         onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => handleRowKeyDown(e, node),
         className: cn(
- // （批次十三）：两行式——第一行 箭头|名称|计数|行尾区，第二行描述摘要（弱化）
- // group：手动模式悬停显示 ↑↓ 箭头
+          // （批次十三）：两行式——第一行 箭头|名称|计数|行尾区，第二行描述摘要（弱化）
+          // group：手动模式悬停显示 ↑↓ 箭头
           "group relative flex flex-col rounded-md py-1 pr-1 transition-colors hover:bg-muted/60",
           highlighted && "bg-accent/40", // 新建成功临时高亮（3s）
           isDragTarget && "bg-accent/40 ring-1 ring-accent ring-inset", // 拖拽目标（将成其子级）
@@ -708,8 +708,8 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
             ? "拖到行中段 = 成为其子级；拖到行间插入线 = 同级重排；拖到空白区 = 移为顶层"
             : "拖到行上 = 成为其子级；拖到空白区 = 移为顶层",
       };
- // 节点行内容（折叠箭头 + 名称 + 标签 + 子设定数 + 行尾删除； 批次十三：
- // 行下方追加描述摘要行——summary.description 截断 100（服务端），hover title 查看完整）
+      // 节点行内容（折叠箭头 + 名称 + 标签 + 子设定数 + 行尾删除； 批次十三：
+      // 行下方追加描述摘要行——summary.description 截断 100（服务端），hover title 查看完整）
       const rowDescription =
         typeof node.summary?.description === "string" && node.summary.description !== ""
           ? node.summary.description
@@ -885,7 +885,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     });
   }
 
- // 加载失败（首载 roots 为 null）→ 整区错误态
+  // 加载失败（首载 roots 为 null）→ 整区错误态
   if (failed && roots === null) {
     return (
       <div className="mt-3 flex items-center justify-center gap-3 rounded-md border border-border px-3 py-6 text-sm text-muted-foreground">
@@ -895,7 +895,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     );
   }
 
- // 首载骨架（roots 为 null；重拉期间保留旧树渲染不闪骨架）
+  // 首载骨架（roots 为 null；重拉期间保留旧树渲染不闪骨架）
   if (loading && roots === null) {
     return (
       <div className="mt-3 flex flex-col gap-1">
@@ -910,7 +910,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     );
   }
 
- // 树未就绪（roots 仍为 null 且非加载/失败——理论不可达，防御兜底）
+  // 树未就绪（roots 仍为 null 且非加载/失败——理论不可达，防御兜底）
   if (roots === null) {
     return (
       <div className="mt-3 rounded-md border border-border p-4 text-sm text-muted-foreground">
@@ -922,7 +922,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     );
   }
 
- // 树已就绪（上方 roots === null 分支已 return）：树内过滤（命中节点及祖先链保留）
+  // 树已就绪（上方 roots === null 分支已 return）：树内过滤（命中节点及祖先链保留）
   const visibleRoots = filterSettingTree(roots, q, tagFilter);
   const canToggle = visibleRoots.length > 0;
 
@@ -964,7 +964,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
             value={sortMode}
             onChange={(e) => setSortMode(e.target.value as SettingSortMode)}
             aria-label="排序方式"
-            className="rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+            className={selectClass}
           >
             <option value="name">名称</option>
             <option value="created">创建时间</option>

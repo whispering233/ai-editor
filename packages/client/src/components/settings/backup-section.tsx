@@ -58,39 +58,39 @@ export function BackupSection() {
   const loadConfig = useProjectStore((s) => s.loadConfig);
   const loadOutline = useProjectStore((s) => s.loadOutline);
 
- /** 频率保存中（选择即保存；保存中禁用下拉防连点） */
+  /** 频率保存中（选择即保存；保存中禁用下拉防连点） */
   const [frequencySaving, setFrequencySaving] = useState(false);
- /** 备份列表；null = 未加载/加载失败 */
+  /** 备份列表；null = 未加载/加载失败 */
   const [backups, setBackups] = useState<BackupEntry[] | null>(null);
   const [backupsLoading, setBackupsLoading] = useState(false);
- /** 列表加载失败的错误码（CLIENT_NETWORK_ERROR 等；null = 无错误/未加载） */
+  /** 列表加载失败的错误码（CLIENT_NETWORK_ERROR 等；null = 无错误/未加载） */
   const [backupsError, setBackupsError] = useState<string | null>(null);
   const [backupNowRunning, setBackupNowRunning] = useState(false);
- /** 待加载的备份（非 null 时渲染强确认 Dialog） */
+  /** 待加载的备份（非 null 时渲染强确认 Dialog） */
   const [restoreTarget, setRestoreTarget] = useState<BackupEntry | null>(null);
- /** 立即备份的自定义名称（trim 后非空才随请求提交，成功后清空） */
+  /** 立即备份的自定义名称（trim 后非空才随请求提交，成功后清空） */
   const [backupName, setBackupName] = useState("");
- /**
- * 行内重命名编辑态（单行同时编辑；null = 无编辑中）：
- * fileName = 目标备份；value = 输入框当前值（预填 b.name ?? ""）；
- * saving = 提交中（禁用输入/按钮防连点）；error = 行内错误提示（400/404 透传 message，网络失败固定文案）
- */
+  /**
+   * 行内重命名编辑态（单行同时编辑；null = 无编辑中）：
+   * fileName = 目标备份；value = 输入框当前值（预填 b.name ?? ""）；
+   * saving = 提交中（禁用输入/按钮防连点）；error = 行内错误提示（400/404 透传 message，网络失败固定文案）
+   */
   const [renaming, setRenaming] = useState<{
     fileName: string;
     value: string;
     saving: boolean;
     error: string | null;
   } | null>(null);
- /**
- * renaming 最新值镜像（渲染时同步，oracle P1-2）：
- * onBlur 守卫与 catch 兜底需要读「当前」而非事件绑定时闭包快照——saving 置位后 input 被
- * disabled，浏览器对持有焦点的禁用元素自动触发 blur，此时必须能读到 saving 已为 true
- */
+  /**
+   * renaming 最新值镜像（渲染时同步，oracle P1-2）：
+   * onBlur 守卫与 catch 兜底需要读「当前」而非事件绑定时闭包快照——saving 置位后 input 被
+   * disabled，浏览器对持有焦点的禁用元素自动触发 blur，此时必须能读到 saving 已为 true
+   */
   const renamingRef = useRef(renaming);
   renamingRef.current = renaming;
 
- /** 拉取备份列表（仅项目打开时有效；无项目 → 直接返回防 409 NO_PROJECT_OPEN 误报）；
- * 代际守卫：响应落地时校验请求序号未变（关项目/切项目时在途响应丢弃，P2-1） */
+  /** 拉取备份列表（仅项目打开时有效；无项目 → 直接返回防 409 NO_PROJECT_OPEN 误报）；
+   * 代际守卫：响应落地时校验请求序号未变（关项目/切项目时在途响应丢弃，P2-1） */
   async function loadBackups() {
     if (useProjectStore.getState().config === null) return;
     const seq = ++backupListSeq;
@@ -109,8 +109,8 @@ export function BackupSection() {
     }
   }
 
- // 项目身份驱动：切项目（id 变化）→ 重拉列表；关闭项目（null）→ 清空 + 作废在途请求 + 关闭残留确认框。
- // prevProjectId 初始 null：挂载时项目已打开（store 缓存）也能触发首载
+  // 项目身份驱动：切项目（id 变化）→ 重拉列表；关闭项目（null）→ 清空 + 作废在途请求 + 关闭残留确认框。
+  // prevProjectId 初始 null：挂载时项目已打开（store 缓存）也能触发首载
   const projectId = config?.id ?? null;
   const prevProjectId = useRef<string | null>(null);
   useEffect(() => {
@@ -129,7 +129,7 @@ export function BackupSection() {
     }
   }, [projectId]);
 
- /** 频率选择即保存（null = 关闭；select 受控值回弹由 store config 重拉保证） */
+  /** 频率选择即保存（null = 关闭；select 受控值回弹由 store config 重拉保证） */
   async function handleFrequencyChange(raw: string) {
     if (config === null) return;
     const value = raw === "null" ? null : Number(raw);
@@ -149,7 +149,7 @@ export function BackupSection() {
     }
   }
 
- /** 立即备份：成功刷新列表（新条目在顶部）+ toast；失败 toast（磁盘错误透传服务端 message） */
+  /** 立即备份：成功刷新列表（新条目在顶部）+ toast；失败 toast（磁盘错误透传服务端 message） */
   async function handleBackupNow() {
     if (config === null || backupNowRunning) return;
     setBackupNowRunning(true);
@@ -171,12 +171,12 @@ export function BackupSection() {
     }
   }
 
- /**
- * 加载备份（强确认通过后）：restore → toast（含覆盖前快照文件名）→ 刷新项目数据：
- * config/outline 重拉（中栏数据页经 dataVersion 信号重拉）+ 会话重载（chat store 订阅
- * 仅响应 config.id 变化，restore 保留 id → 手动 clearSessions + loadSessions）；
- * 失败（409 SCHEMA_VERSION_MISMATCH 等）抛给 ConfirmDialog 显示并保持打开
- */
+  /**
+   * 加载备份（强确认通过后）：restore → toast（含覆盖前快照文件名）→ 刷新项目数据：
+   * config/outline 重拉（中栏数据页经 dataVersion 信号重拉）+ 会话重载（chat store 订阅
+   * 仅响应 config.id 变化，restore 保留 id → 手动 clearSessions + loadSessions）；
+   * 失败（409 SCHEMA_VERSION_MISMATCH 等）抛给 ConfirmDialog 显示并保持打开
+   */
   async function handleRestore() {
     if (restoreTarget === null) return;
     const res = await restoreProjectBackup(restoreTarget.fileName);
@@ -188,16 +188,16 @@ export function BackupSection() {
     void loadBackups(); // 顶部出现覆盖前自动快照
   }
 
- /**
- * 行内重命名提交：
- * - 幂等保护：输入 trim 后与原名称一致 → 不发请求直接退出编辑态
- * - 空输入 = 清除名称段（renameProjectBackup 收到空串/undefined → body 传 { name: "" }）
- * - 成功：退出编辑态 + toast + 刷新列表（backupListSeq 代际守卫在 loadBackups 内）；
- * 400/404：行内错误提示（透传服务端 message），保持编辑态；网络失败：行内固定文案
- * - 失败兜底（oracle P1-2）：saving 期间 input 被 disabled 触发的 blur 已被 onBlur 守卫挡住，
- * 正常流程行内错误必有挂点；但若编辑态被其他路径清掉（如提交中关项目），catch 读 ref 兜底
- * toast，保证失败必有反馈（toast 放 updater 外，避免 StrictMode 下 updater 双执行的副作用）
- */
+  /**
+   * 行内重命名提交：
+   * - 幂等保护：输入 trim 后与原名称一致 → 不发请求直接退出编辑态
+   * - 空输入 = 清除名称段（renameProjectBackup 收到空串/undefined → body 传 { name: "" }）
+   * - 成功：退出编辑态 + toast + 刷新列表（backupListSeq 代际守卫在 loadBackups 内）；
+   * 400/404：行内错误提示（透传服务端 message），保持编辑态；网络失败：行内固定文案
+   * - 失败兜底（oracle P1-2）：saving 期间 input 被 disabled 触发的 blur 已被 onBlur 守卫挡住，
+   * 正常流程行内错误必有挂点；但若编辑态被其他路径清掉（如提交中关项目），catch 读 ref 兜底
+   * toast，保证失败必有反馈（toast 放 updater 外，避免 StrictMode 下 updater 双执行的副作用）
+   */
   async function handleRenameSubmit() {
     if (renaming === null || renaming.saving) return;
     const originalName = backups?.find((b) => b.fileName === renaming.fileName)?.name ?? "";
@@ -218,7 +218,7 @@ export function BackupSection() {
           ? err.message
           : "无法连接服务，重命名失败";
       if (renamingRef.current === null) {
- // 编辑态已被清掉（行内错误无处可挂）→ 兜底 toast，避免静默失败
+        // 编辑态已被清掉（行内错误无处可挂）→ 兜底 toast，避免静默失败
         showToast(message, "error");
         return;
       }
@@ -226,8 +226,8 @@ export function BackupSection() {
     }
   }
 
- /** 频率下拉选中值：缺省 10 → 「每 10 分钟」；null → 关闭；非枚举脏值（旧数据手工写入，读侧
- * 原样透传）→ 归为关闭——与服务端定时器 resolveBackupFrequency（非枚举 = 关闭）语义一致 */
+  /** 频率下拉选中值：缺省 10 → 「每 10 分钟」；null → 关闭；非枚举脏值（旧数据手工写入，读侧
+   * 原样透传）→ 归为关闭——与服务端定时器 resolveBackupFrequency（非枚举 = 关闭）语义一致 */
   const frequencyValue =
     config === null
       ? ""
@@ -319,9 +319,7 @@ export function BackupSection() {
                           </Typography.Text>
                           {/* 类型标签：统一中性灰底（DESIGN.md tag 默认 `{colors.surface-muted}`）——
                               手动/自动的区别由标签文案传达，不用 antd preset 色（全站禁止 preset 蓝） */}
-                          <Tag className="ml-1.5">
-                            {BACKUP_KIND_LABELS[b.kind]}
-                          </Tag>
+                          <Tag className="ml-1.5">{BACKUP_KIND_LABELS[b.kind]}</Tag>
                           {!editing && b.name !== undefined ? (
                             <Typography.Text strong>{b.name}</Typography.Text>
                           ) : null}
@@ -348,10 +346,10 @@ export function BackupSection() {
                                 else if (e.key === "Escape") setRenaming(null);
                               }}
                               onBlur={() => {
- // oracle P1-2 竞态守卫：saving 置位后 input 被 disabled，浏览器对
- // 聚焦中的禁用元素自动触发 blur——此时不清编辑态，否则异步失败返回时
- // 行内错误无处可挂（静默失败）。saving 期间 Esc/取消按钮均被禁用，
- // 编辑态只能由成功路径/兜底 toast 路径收尾
+                                // oracle P1-2 竞态守卫：saving 置位后 input 被 disabled，浏览器对
+                                // 聚焦中的禁用元素自动触发 blur——此时不清编辑态，否则异步失败返回时
+                                // 行内错误无处可挂（静默失败）。saving 期间 Esc/取消按钮均被禁用，
+                                // 编辑态只能由成功路径/兜底 toast 路径收尾
                                 if (!renamingRef.current?.saving) setRenaming(null);
                               }}
                               maxLength={MAX_BACKUP_NAME_LENGTH}

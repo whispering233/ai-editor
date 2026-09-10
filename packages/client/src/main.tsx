@@ -52,15 +52,14 @@ function renderPage(route: Route): ReactNode {
     case "overview":
       return <Dashboard mode="overview" />;
     case "outline":
- // S12.2：按段数区分——1 段（#/outline）→ 大纲树；2 段（#/outline/:nodeId）→ 节点详情
- // （二级路由，仿实体详情分支；key = nodeId 变化强制卸载重挂，详情页表单按节点重置）
+      // S12.2：按段数区分——1 段（#/outline）→ 大纲树；2 段（#/outline/:nodeId）→ 节点详情
+      // （二级路由，仿实体详情分支；key = nodeId 变化强制卸载重挂，详情页表单按节点重置）
       return second !== undefined ? <OutlineDetail key={second} nodeId={second} /> : <Outline />;
     case "entities": {
       // 批次十七 1-1：实体家族一级化——旧 #/entities/:type[/:id] 全量重定向到新段
       // （泛型列表入口已移除的 hook/event/timepoint/reference：丢/带 id 落宿主详情段）
       const seg = LEGACY_ENTITY_SEGMENT[second ?? ""] ?? "characters";
-      const carryId =
-        third !== undefined && second !== undefined && second !== "relations";
+      const carryId = third !== undefined && second !== undefined && second !== "relations";
       return <RedirectTo to={carryId ? `/${seg}/${third}` : `/${seg}`} />;
     }
     case "characters":
@@ -104,13 +103,13 @@ function renderPage(route: Route): ReactNode {
         <RedirectTo to="/timeline" />
       );
     case "timeline":
- // 按段数区分——1 段（#/timeline）→ 列表页；2 段（#/timeline/:id）→ 事件详情页
- // （ 路由；key = id 变化强制卸载重挂——详情页表单按事件重置）
+      // 按段数区分——1 段（#/timeline）→ 列表页；2 段（#/timeline/:id）→ 事件详情页
+      // （ 路由；key = id 变化强制卸载重挂——详情页表单按事件重置）
       return second !== undefined ? <TimelineDetail key={second} id={second} /> : <Timeline />;
     case "references":
- // 参考资料（ 卡 11.4）：
- // #/references → 列表；#/references/:id → 详情（编辑态）；
- // #/references/new/md → 新建 md 文档草稿态；#/references/new/link → 新建外源链接草稿态
+      // 参考资料（ 卡 11.4）：
+      // #/references → 列表；#/references/:id → 详情（编辑态）；
+      // #/references/new/md → 新建 md 文档草稿态；#/references/new/link → 新建外源链接草稿态
       if (second === "new" && third === "md") return <ReferenceDetail draft="md" />;
       if (second === "new" && third === "link") return <ReferenceDetail draft="link" />;
       return second !== undefined ? (

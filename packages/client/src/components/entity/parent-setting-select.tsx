@@ -5,9 +5,8 @@
 // 不做虚拟滚动等过度设计）。
 // 样式 token 类（）；文字按钮带边框（H4）。
 import { useEffect, useState } from "react";
-import { Button } from "antd";
+import { Button, Input } from "antd";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
-import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { listEntities } from "../../lib/api";
 import { cn } from "../../lib/utils";
@@ -21,11 +20,11 @@ export function ParentSettingSelect({
   onChange,
   placeholder = "上级设定（选填）",
 }: {
- /** 当前选中父设定 id（null = 未设置） */
+  /** 当前选中父设定 id（null = 未设置） */
   value: string | null;
- /** 外部已知的选中显示名（详情页来自 relations 联表；缺省用候选匹配/id 兜底） */
+  /** 外部已知的选中显示名（详情页来自 relations 联表；缺省用候选匹配/id 兜底） */
   valueName?: string;
- /** 候选排除 id（详情页排除自身；新建场景为空） */
+  /** 候选排除 id（详情页排除自身；新建场景为空） */
   excludeIds?: string[];
   onChange: (id: string | null) => void;
   placeholder?: string;
@@ -58,7 +57,7 @@ export function ParentSettingSelect({
     }
   }
 
- // 打开时拉首屏；搜索防抖 300ms（与列表页搜索同节奏）
+  // 打开时拉首屏；搜索防抖 300ms（与列表页搜索同节奏）
   useEffect(() => {
     if (!open) return;
     void loadCandidates();
@@ -70,7 +69,7 @@ export function ParentSettingSelect({
     return () => clearTimeout(t);
   }, [q, open]);
 
- // 触发按钮显示：选中名称（外部提供 > 候选匹配 > id 兜底）；未选中渲染占位
+  // 触发按钮显示：选中名称（外部提供 > 候选匹配 > id 兜底）；未选中渲染占位
   const displayName = value
     ? (valueName ?? candidates?.find((c) => c.id === value)?.name ?? value)
     : "";
@@ -96,7 +95,6 @@ export function ParentSettingSelect({
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="搜索设定名称…"
-          className="h-8 text-sm"
           autoFocus
         />
         <div className="flex max-h-56 flex-col gap-0.5 overflow-y-auto">

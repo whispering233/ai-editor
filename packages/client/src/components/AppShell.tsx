@@ -26,7 +26,7 @@ function ResizeHandle({
   onEnd,
 }: {
   side: "sidebar" | "chat";
- /** 当前拖拽是否发生在本手柄（决定拖拽态高亮） */
+  /** 当前拖拽是否发生在本手柄（决定拖拽态高亮） */
   active: boolean;
   onStart: (side: "sidebar" | "chat", clientX: number) => void;
   onMove: (side: "sidebar" | "chat", clientX: number) => void;
@@ -39,7 +39,7 @@ function ResizeHandle({
       aria-label={side === "sidebar" ? "调整左栏宽度" : "调整右栏宽度"}
       title={side === "sidebar" ? "拖动调整左栏宽度" : "拖动调整右栏宽度"}
       onPointerDown={(e) => {
- // preventDefault 防文本选择起点；capture 保证拖出窗口后指针事件仍路由到手柄
+        // preventDefault 防文本选择起点；capture 保证拖出窗口后指针事件仍路由到手柄
         e.preventDefault();
         e.currentTarget.setPointerCapture(e.pointerId);
         onStart(side, e.clientX);
@@ -84,14 +84,14 @@ function CollapseStrip({ side, onExpand }: { side: "sidebar" | "chat"; onExpand:
 }
 
 export function AppShell({ route, children }: { route: Route; children: ReactNode }) {
- // 小屏抽屉开关状态（桌面态恒显示静态右栏，该状态不生效）
+  // 小屏抽屉开关状态（桌面态恒显示静态右栏，该状态不生效）
   const [chatOpen, setChatOpen] = useState(false);
   const { layout, isDesktop, dragSide, toggleCollapse, startResize, moveResize, endResize } =
     usePanels();
   const isDragging = dragSide !== null;
 
   return (
- // 拖拽期间根容器禁文本选中（指针已 capture 在手柄上，兜底防边缘选中）
+    // 拖拽期间根容器禁文本选中（指针已 capture 在手柄上，兜底防边缘选中）
     <div className={cn("flex h-screen overflow-hidden", isDragging && "select-none")}>
       {/* 左栏：收起 → 窄条；展开 → Sidebar（桌面传像素宽度覆盖默认 10%，小屏不传走默认百分比）；
           收起按钮（PanelLeftClose）渲染在产品标识行右侧（Sidebar 内部，仅桌面态传入回调时出现） */}
@@ -120,7 +120,7 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
         chatOpen={chatOpen}
         onToggleChat={() => setChatOpen((v) => !v)}
         onOpenChat={() => {
- // 悬浮问 AI「点击必有反应」：小屏开抽屉；桌面右栏收起时展开（已展开则不动作 → false）
+          // 悬浮问 AI「点击必有反应」：小屏开抽屉；桌面右栏收起时展开（已展开则不动作 → false）
           if (!isDesktop) {
             if (chatOpen) return false;
             setChatOpen(true);

@@ -36,11 +36,11 @@ export const ENDPOINT_TYPE_LABEL: Record<string, string> = {
 
 /** 过滤条件（"" = 全部） */
 export interface RelationFilter {
- /** 端点类型：sourceType 或 targetType 任一匹配（服务端 AND 语义无法表达，前端过滤） */
+  /** 端点类型：sourceType 或 targetType 任一匹配（服务端 AND 语义无法表达，前端过滤） */
   endpointType: string;
- /** 关系类型 */
+  /** 关系类型 */
   relationType: string;
- /** 名称关键词（源/目标名称包含；大小写不敏感；trim 后为空忽略） */
+  /** 名称关键词（源/目标名称包含；大小写不敏感；trim 后为空忽略） */
   nameQuery: string;
 }
 
@@ -126,23 +126,23 @@ export function RelationsView({
   onOpenCreate,
   scope,
 }: {
- /** 外部重载信号（建立关联成功后由宿主 +1，触发重拉） */
+  /** 外部重载信号（建立关联成功后由宿主 +1，触发重拉） */
   reloadKey: number;
- /** 打开建立关联对话框（空态按钮用；宿主持有对话框） */
+  /** 打开建立关联对话框（空态按钮用；宿主持有对话框） */
   onOpenCreate: () => void;
- /** 端点范围（S12.2 大纲节点详情页用）：仅查该端点作为 source 的 1 跳关系（服务端过滤），隐藏前端过滤区 */
+  /** 端点范围（S12.2 大纲节点详情页用）：仅查该端点作为 source 的 1 跳关系（服务端过滤），隐藏前端过滤区 */
   scope?: { type: string; id: string };
 }) {
   const [relations, setRelations] = useState<RelationSummaryItem[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
- /** 内部重载计数（错误重试 / 删除后刷新） */
+  /** 内部重载计数（错误重试 / 删除后刷新） */
   const [tick, setTick] = useState(0);
   const [filter, setFilter] = useState<RelationFilter>(EMPTY_RELATION_FILTER);
   const [deleteTarget, setDeleteTarget] = useState<RelationSummaryItem | null>(null);
 
- // 拉关系列表：scope 模式按端点过滤（source_type+source_id，depth=1）；
- // 列表模式拉全量（depth=1 双向紧邻；进入 tab 挂载即拉，外部 reloadKey / 内部 tick 变化重拉）
+  // 拉关系列表：scope 模式按端点过滤（source_type+source_id，depth=1）；
+  // 列表模式拉全量（depth=1 双向紧邻；进入 tab 挂载即拉，外部 reloadKey / 内部 tick 变化重拉）
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -169,7 +169,7 @@ export function RelationsView({
     };
   }, [reloadKey, tick, scope?.type, scope?.id]);
 
- /** 删除关系（物理删，确认后执行；成功 toast + 重拉） */
+  /** 删除关系（物理删，确认后执行；成功 toast + 重拉） */
   async function handleDelete() {
     if (!deleteTarget) return;
     try {
@@ -192,7 +192,9 @@ export function RelationsView({
           <Select
             size="medium"
             value={filter.endpointType === "" ? undefined : filter.endpointType}
-            onChange={(value) => setFilter((f) => ({ ...f, endpointType: value === undefined ? "" : String(value) }))}
+            onChange={(value) =>
+              setFilter((f) => ({ ...f, endpointType: value === undefined ? "" : String(value) }))
+            }
             aria-label="端点类型过滤"
             placeholder="全部端点类型"
             allowClear
@@ -202,21 +204,24 @@ export function RelationsView({
           <Select
             size="medium"
             value={filter.relationType === "" ? undefined : filter.relationType}
-            onChange={(value) => setFilter((f) => ({ ...f, relationType: value === undefined ? "" : String(value) }))}
+            onChange={(value) =>
+              setFilter((f) => ({ ...f, relationType: value === undefined ? "" : String(value) }))
+            }
             aria-label="关系类型过滤"
             placeholder="全部关系类型"
             allowClear
             style={{ minWidth: 140 }}
             options={RELATION_TYPES.map((t) => ({ value: t, label: relationTypeLabel(t) }))}
           />
-          <Input
-            className="w-52"
-            prefix={<SearchOutlined />}
-            allowClear
-            value={filter.nameQuery}
-            onChange={(e) => setFilter((f) => ({ ...f, nameQuery: e.target.value }))}
-            placeholder="搜索源/目标名称…"
-          />
+          <div className="w-52">
+            <Input
+              prefix={<SearchOutlined />}
+              allowClear
+              value={filter.nameQuery}
+              onChange={(e) => setFilter((f) => ({ ...f, nameQuery: e.target.value }))}
+              placeholder="搜索源/目标名称…"
+            />
+          </div>
         </div>
       )}
 
@@ -285,9 +290,7 @@ export function RelationsView({
               <li key={r.id} className="flex items-center gap-2 px-3 py-2 text-sm">
                 {scope !== undefined ? (
                   <>
-                    <Tag className="shrink-0 truncate">
-                      {relationTypeLabel(r.relationType)} →
-                    </Tag>
+                    <Tag className="shrink-0 truncate">{relationTypeLabel(r.relationType)} →</Tag>
                     <span className="min-w-0 flex-1">
                       <EndpointLink type={r.targetType} id={r.targetId} name={r.targetName} />
                     </span>
@@ -300,7 +303,9 @@ export function RelationsView({
                     {/* 关系类型列：等宽 1/4 + 居中（居中由父容器 flex 承担——Tag 自身带 text-align: start，
                         Tailwind 的 text-center 压不动它，只能用 `!` 或内联 style，两者都被样式纪律禁止） */}
                     <div className="flex w-1/4 min-w-0 shrink-0 justify-center">
-                      <Tag className="max-w-full truncate">{relationTypeLabel(r.relationType)} →</Tag>
+                      <Tag className="max-w-full truncate">
+                        {relationTypeLabel(r.relationType)} →
+                      </Tag>
                     </div>
                     <span className="min-w-0 flex-1">
                       <EndpointLink type={r.targetType} id={r.targetId} name={r.targetName} />

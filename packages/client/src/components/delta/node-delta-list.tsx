@@ -20,12 +20,12 @@ export function NodeDeltaList({
   reloadKey,
 }: {
   nodeId: string;
- /** 外部刷新信号（S12.3：新建变更成功后 +1 重拉，同 RelationsView reloadKey 模式） */ reloadKey?: number;
+  /** 外部刷新信号（S12.3：新建变更成功后 +1 重拉，同 RelationsView reloadKey 模式） */ reloadKey?: number;
 }) {
   const [deltas, setDeltas] = useState<DeltaRecord[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
- /** 重试计数（错误 [重试] 触发重拉） */
+  /** 重试计数（错误 [重试] 触发重拉） */
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
@@ -35,7 +35,7 @@ export function NodeDeltaList({
     getDeltasByNode(nodeId)
       .then((res) => {
         if (cancelled) return;
- // 服务端按 order 返回，客户端兜底排序（全局单调递增）
+        // 服务端按 order 返回，客户端兜底排序（全局单调递增）
         setDeltas([...res.deltas].sort((a, b) => a.order - b.order));
       })
       .catch((err) => {
@@ -72,7 +72,9 @@ export function NodeDeltaList({
           </span>
           {/* purge 场景重试无意义（节点已不在树中），仅网络失败可重试 */}
           {error !== "OUTLINE_NODE_NOT_FOUND" && (
-            <Button size="small" onClick={() => setTick((t) => t + 1)}>重试</Button>
+            <Button size="small" onClick={() => setTick((t) => t + 1)}>
+              重试
+            </Button>
           )}
         </div>
       )}

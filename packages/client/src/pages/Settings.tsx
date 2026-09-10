@@ -11,7 +11,13 @@
 import { useEffect, useState } from "react";
 import { Alert, Button, Card, Input, Select, Tag, theme, Typography } from "antd";
 import { PageTitle } from "@/components/ui/page-title";
-import { ApiError, CLIENT_NETWORK_ERROR, getSettingsLlm, updateSettingsLlm, type SettingsLlmConfig } from "../lib/api";
+import {
+  ApiError,
+  CLIENT_NETWORK_ERROR,
+  getSettingsLlm,
+  updateSettingsLlm,
+  type SettingsLlmConfig,
+} from "../lib/api";
 import { useProjectStore } from "../stores/project";
 import { useUiStore, type ErrorBanner } from "../stores/ui";
 import { BackupSection } from "../components/settings/backup-section";
@@ -38,26 +44,26 @@ export default function Settings() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
- /** 模型激活错误（卡片区顶部内联） */
+  /** 模型激活错误（卡片区顶部内联） */
   const [modelError, setModelError] = useState<string | null>(null);
- /** 当前 LLM 配置快照（激活 provider/model + 各家 key 状态 + 目录） */
+  /** 当前 LLM 配置快照（激活 provider/model + 各家 key 状态 + 目录） */
   const [settings, setSettings] = useState<SettingsLlmConfig | null>(null);
- /** 各家 key 输入草稿（provider id → 输入值） */
+  /** 各家 key 输入草稿（provider id → 输入值） */
   const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({});
- /** 卡内 key 表单内联错误（provider id → 错误文案；「错误态：VALIDATION_ERROR → 表单内联错误」） */
+  /** 卡内 key 表单内联错误（provider id → 错误文案；「错误态：VALIDATION_ERROR → 表单内联错误」） */
   const [keyErrors, setKeyErrors] = useState<Record<string, string | null>>({});
- // —— 项目规则 ——
+  // —— 项目规则 ——
   const [agentsContent, setAgentsContent] = useState("");
- /** 已加载 的项目 id（null = 尚未/无项目）：id 变化（切换项目）→ 重新加载；
- * 同项目内 store 重拉（loadAgents）→ 不覆盖用户草稿 */
+  /** 已加载 的项目 id（null = 尚未/无项目）：id 变化（切换项目）→ 重新加载；
+   * 同项目内 store 重拉（loadAgents）→ 不覆盖用户草稿 */
   const [agentsLoadedFor, setAgentsLoadedFor] = useState<string | null>(null);
   const [agentsSaving, setAgentsSaving] = useState(false);
- /** 规则区表单内联错误（原型「错误态：VALIDATION_ERROR → 表单内联错误」） */
+  /** 规则区表单内联错误（原型「错误态：VALIDATION_ERROR → 表单内联错误」） */
   const [agentsErrorLocal, setAgentsErrorLocal] = useState<string | null>(null);
- /** 外部修改提示：store 检测到 mtime 变化 → 展示「文件已被外部修改，请刷新/重新加载」 */
+  /** 外部修改提示：store 检测到 mtime 变化 → 展示「文件已被外部修改，请刷新/重新加载」 */
   const [externalModified, setExternalModified] = useState(false);
 
- /** 拉取当前配置（保存/清除后刷新掩码状态） */
+  /** 拉取当前配置（保存/清除后刷新掩码状态） */
   async function refresh() {
     try {
       const config = await getSettingsLlm();
@@ -73,9 +79,9 @@ export default function Settings() {
     void refresh();
   }, []);
 
- // 载入：进入设置页优先用 project store 已缓存 config（AppShell 挂载时已拉取）；
- // 无缓存（store 尚未拉取）补拉一次——仅本挂载触发一次（store 内部有并发防抖），
- // 避免「无项目/失败后 config 恒为 null」时本 effect 反复重拉
+  // 载入：进入设置页优先用 project store 已缓存 config（AppShell 挂载时已拉取）；
+  // 无缓存（store 尚未拉取）补拉一次——仅本挂载触发一次（store 内部有并发防抖），
+  // 避免「无项目/失败后 config 恒为 null」时本 effect 反复重拉
   useEffect(() => {
     const state = useProjectStore.getState();
     if (state.config === null && !state.configLoading) {
@@ -83,8 +89,8 @@ export default function Settings() {
     }
   }, []);
 
- // config 就绪后按项目身份加载 ：关闭项目（null）→ 重置；切换项目（id 变化）→
- // 重新加载（清空旧草稿，等待新项目加载完成）；同项目内 store 重拉 → 不覆盖用户正在编辑的草稿
+  // config 就绪后按项目身份加载 ：关闭项目（null）→ 重置；切换项目（id 变化）→
+  // 重新加载（清空旧草稿，等待新项目加载完成）；同项目内 store 重拉 → 不覆盖用户正在编辑的草稿
   useEffect(() => {
     if (config === null) {
       setAgentsLoadedFor(null);
@@ -100,8 +106,8 @@ export default function Settings() {
     }
   }, [config, agentsLoadedFor]);
 
- // agents 加载完成 → 填充（仅当前项目：agentsProjectId 与 config.id 一致才填充，防串项目）；
- // 外部修改检测结果同步展示
+  // agents 加载完成 → 填充（仅当前项目：agentsProjectId 与 config.id 一致才填充，防串项目）；
+  // 外部修改检测结果同步展示
   useEffect(() => {
     if (agents !== null && agentsProjectId === config?.id) {
       setAgentsContent(agents.content);
@@ -109,8 +115,8 @@ export default function Settings() {
     }
   }, [agents, agentsProjectId, config, agentsExternalModified]);
 
- /** 保存规则：整体替换 内容（空值 = 清空规则文件，保留空文件）；
- * store saveAgents 内部 PUT 成功后更新本地基线（新 mtime）；toast + dataVersion +1 触发中栏数据页刷新 */
+  /** 保存规则：整体替换 内容（空值 = 清空规则文件，保留空文件）；
+   * store saveAgents 内部 PUT 成功后更新本地基线（新 mtime）；toast + dataVersion +1 触发中栏数据页刷新 */
   async function handleSaveAgents() {
     setAgentsErrorLocal(null);
     setAgentsSaving(true);
@@ -129,7 +135,7 @@ export default function Settings() {
     }
   }
 
- /** 激活某 provider 的模型（卡内下拉即存：provider+model 成对——跨 provider 切换语义） */
+  /** 激活某 provider 的模型（卡内下拉即存：provider+model 成对——跨 provider 切换语义） */
   async function handleActivate(providerId: string, modelId: string) {
     setModelError(null);
     try {
@@ -145,7 +151,7 @@ export default function Settings() {
     }
   }
 
- /** 保存该家 key（草稿非空；成功后清草稿 + 刷新 key 状态；覆盖旧 key） */
+  /** 保存该家 key（草稿非空；成功后清草稿 + 刷新 key 状态；覆盖旧 key） */
   async function handleSaveKey(providerId: string) {
     const draft = (keyDrafts[providerId] ?? "").trim();
     if (!draft) {
@@ -170,7 +176,7 @@ export default function Settings() {
     }
   }
 
- /** 清除该家已保存 key（PUT api_keys 空串， 语义） */
+  /** 清除该家已保存 key（PUT api_keys 空串， 语义） */
   async function handleClearKey(providerId: string) {
     setKeyErrors((m) => ({ ...m, [providerId]: null }));
     setSaving(true);
@@ -201,11 +207,10 @@ export default function Settings() {
           <div>
             <Typography.Title level={5}>AI 模型</Typography.Title>
             <p className="mt-1 mb-2 text-xs text-muted-foreground">
-              每提供商一卡：模型下拉点选即激活；key 独立配置。未配 key 的 provider 聊天下拉整组禁用。
+              每提供商一卡：模型下拉点选即激活；key 独立配置。未配 key 的 provider
+              聊天下拉整组禁用。
             </p>
-            {modelError && (
-              <p className="mb-2 text-sm text-destructive">{modelError}</p>
-            )}
+            {modelError && <p className="mb-2 text-sm text-destructive">{modelError}</p>}
             <div className="flex flex-col gap-4">
               {(settings?.providers ?? []).map((p) => {
                 const isActive = settings?.provider === p.id;
@@ -234,7 +239,8 @@ export default function Settings() {
                         placeholder={isActive ? "选择模型" : ""}
                         disabled={saving}
                         onChange={(value) => {
-                          if (value !== undefined && value !== "") void handleActivate(p.id, String(value));
+                          if (value !== undefined && value !== "")
+                            void handleActivate(p.id, String(value));
                         }}
                         aria-label={`选择 ${p.displayName} 模型`}
                         options={p.models.map((m) => ({
@@ -260,11 +266,19 @@ export default function Settings() {
                           onChange={(e) => setKeyDrafts((d) => ({ ...d, [p.id]: e.target.value }))}
                           placeholder="输入新 key（覆盖旧 key）"
                         />
-                        <Button size="small" onClick={() => void handleSaveKey(p.id)} disabled={saving}>
+                        <Button
+                          size="small"
+                          onClick={() => void handleSaveKey(p.id)}
+                          disabled={saving}
+                        >
                           保存
                         </Button>
                         {p.apiKeySet && (
-                          <Button size="small" onClick={() => void handleClearKey(p.id)} disabled={saving}>
+                          <Button
+                            size="small"
+                            onClick={() => void handleClearKey(p.id)}
+                            disabled={saving}
+                          >
                             清除
                           </Button>
                         )}
@@ -305,7 +319,8 @@ export default function Settings() {
           <div>
             <Typography.Title level={5}>项目规则</Typography.Title>
             <p className="mt-1 mb-1 text-xs text-muted-foreground">
-              编辑项目目录下 AGENTS.md 文件内容，注入 AI 上下文「## 项目设定」段（每轮有效）；空 = 整段跳过
+              编辑项目目录下 AGENTS.md 文件内容，注入 AI 上下文「## 项目设定」段（每轮有效）；空 =
+              整段跳过
             </p>
             <p className="mb-2 text-xs text-muted-foreground">
               可直接在文件管理器中编辑 AGENTS.md（外部修改后此处会提示刷新/重新加载）
@@ -317,7 +332,7 @@ export default function Settings() {
               value={agentsContent}
               onChange={(e) => setAgentsContent(e.target.value)}
               rows={6}
- // 首填完成前不可输入（含 config 拉取中/切换项目后未加载），消除草稿被首填覆盖窗口
+              // 首填完成前不可输入（含 config 拉取中/切换项目后未加载），消除草稿被首填覆盖窗口
               disabled={config === null || config.id !== agentsLoadedFor || agentsLoading}
               placeholder="输入项目规则/行业要求…"
             />
@@ -326,7 +341,6 @@ export default function Settings() {
                 type="primary"
                 onClick={() => void handleSaveAgents()}
                 disabled={agentsSaving || config === null || config.id !== agentsLoadedFor}
-                
               >
                 保存规则
               </Button>

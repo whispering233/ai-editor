@@ -17,6 +17,8 @@ import { relationTypeLabel } from "../../lib/entity-detail";
 import { flattenTree } from "../../lib/outline-tree";
 import { useProjectStore } from "../../stores/project";
 import { useUiStore } from "../../stores/ui";
+import { cn } from "../../lib/utils";
+import { selectClass } from "../../lib/styles";
 import {
   Dialog,
   DialogContent,
@@ -30,11 +32,11 @@ const TYPE_LABEL: Record<EntityType, string> = {
   setting: "设定",
   location: "地点",
   hook: "伏笔",
- // C1 类型补全（ event 时间轴事件；时间轴专属 UI 由 C2 实现）
+  // C1 类型补全（ event 时间轴事件；时间轴专属 UI 由 C2 实现）
   event: "事件",
- // G2.3 类型补全（G2 时间标签点；源端下拉随 ENTITY_TYPES 出现——挂载关系不在此对话框创建）
+  // G2.3 类型补全（G2 时间标签点；源端下拉随 ENTITY_TYPES 出现——挂载关系不在此对话框创建）
   timepoint: "时间点",
- // （批次九）参考资料 reference
+  // （批次九）参考资料 reference
   reference: "参考资料",
 };
 
@@ -45,10 +47,6 @@ const TYPE_LABEL: Record<EntityType, string> = {
  * UI 层天然限制「仅 timepoint → event」方向（目标端下拉亦无 event 可选，双保险）。
  */
 const DIALOG_RELATION_TYPES = RELATION_TYPES.filter((t) => t !== "occurs_at");
-
-/** 下拉选择框样式（token 类，） */
-const SELECT_CLASS =
-  "w-full rounded-md border border-border bg-card px-3 py-1.5 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 /** 源端点（详情模式传入；null = 列表模式自由选择源）。
  * 四类实体（EntityType）+ 大纲节点（outline_node，S12.2 节点详情页作为源建立关系—— 端点类型） */
@@ -68,11 +66,11 @@ export function CreateRelationDialog({
   onClose: () => void;
 }) {
   const outline = useProjectStore((s) => s.outline);
- // 列表模式源端（详情模式不用）
+  // 列表模式源端（详情模式不用）
   const [sourceType, setSourceType] = useState<EntityType>("character");
   const [sourceEntities, setSourceEntities] = useState<EntitySummary[] | null>(null);
   const [sourceId, setSourceId] = useState("");
- // 目标端（两模式共用；"outline_node" = 大纲节点， relation_records 端点类型）
+  // 目标端（两模式共用；"outline_node" = 大纲节点， relation_records 端点类型）
   const [otherType, setOtherType] = useState<EntityType | "outline_node">("character");
   const [otherEntities, setOtherEntities] = useState<EntitySummary[] | null>(null);
   const [otherId, setOtherId] = useState("");
@@ -80,7 +78,7 @@ export function CreateRelationDialog({
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
- // 列表模式：源类型变化 → 拉实体列表
+  // 列表模式：源类型变化 → 拉实体列表
   useEffect(() => {
     if (source) return;
     setSourceId("");
@@ -90,7 +88,7 @@ export function CreateRelationDialog({
       .catch(() => setSourceEntities([]));
   }, [source, sourceType]);
 
- // 目标端类型变化 → 拉实体列表（大纲节点用 outline store 的树，无需请求）
+  // 目标端类型变化 → 拉实体列表（大纲节点用 outline store 的树，无需请求）
   useEffect(() => {
     setOtherId("");
     if (otherType === "outline_node") {
@@ -164,7 +162,7 @@ export function CreateRelationDialog({
                   <select
                     value={sourceType}
                     onChange={(e) => setSourceType(e.target.value as EntityType)}
-                    className={SELECT_CLASS}
+                    className={cn(selectClass, "w-full")}
                   >
                     {ENTITY_TYPES.map((t) => (
                       <option key={t} value={t}>
@@ -175,7 +173,7 @@ export function CreateRelationDialog({
                   <select
                     value={sourceId}
                     onChange={(e) => setSourceId(e.target.value)}
-                    className={SELECT_CLASS}
+                    className={cn(selectClass, "w-full")}
                   >
                     <option value="">选择{TYPE_LABEL[sourceType]}…</option>
                     {(sourceEntities ?? []).map((it) => (
@@ -193,7 +191,7 @@ export function CreateRelationDialog({
               <select
                 value={relationType}
                 onChange={(e) => setRelationType(e.target.value)}
-                className={SELECT_CLASS}
+                className={cn(selectClass, "w-full")}
               >
                 {DIALOG_RELATION_TYPES.map((t) => (
                   <option key={t} value={t}>
@@ -214,7 +212,7 @@ export function CreateRelationDialog({
               <select
                 value={otherType}
                 onChange={(e) => setOtherType(e.target.value as EntityType | "outline_node")}
-                className={SELECT_CLASS}
+                className={cn(selectClass, "w-full")}
               >
                 <option value="character">人物</option>
                 <option value="setting">设定</option>
@@ -226,7 +224,7 @@ export function CreateRelationDialog({
                 <select
                   value={otherId}
                   onChange={(e) => setOtherId(e.target.value)}
-                  className={SELECT_CLASS}
+                  className={cn(selectClass, "w-full")}
                 >
                   <option value="">选择大纲节点…</option>
                   {outlineOptions.map((o) => (
@@ -240,7 +238,7 @@ export function CreateRelationDialog({
                 <select
                   value={otherId}
                   onChange={(e) => setOtherId(e.target.value)}
-                  className={SELECT_CLASS}
+                  className={cn(selectClass, "w-full")}
                 >
                   <option value="">选择{TYPE_LABEL[otherType]}…</option>
                   {(otherEntities ?? []).map((it) => (
@@ -255,8 +253,15 @@ export function CreateRelationDialog({
           {error && <p className="text-sm text-destructive">{error}</p>}
         </form>
         <DialogFooter>
-          <Button onClick={onClose} disabled={submitting}>取消</Button>
-          <Button type="primary" htmlType="submit" form="create-relation-form" disabled={submitting}>
+          <Button onClick={onClose} disabled={submitting}>
+            取消
+          </Button>
+          <Button
+            type="primary"
+            htmlType="submit"
+            form="create-relation-form"
+            disabled={submitting}
+          >
             建立
           </Button>
         </DialogFooter>

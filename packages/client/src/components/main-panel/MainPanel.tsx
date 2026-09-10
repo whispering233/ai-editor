@@ -23,24 +23,24 @@ export function MainPanel({
   route: Route;
   chatOpen: boolean;
   onToggleChat: () => void;
- /** 打开/展开右栏聊天（悬浮问 AI 的「点击必有反应」兜底：桌面收起态展开、小屏抽屉打开）；
+  /** 打开/展开右栏聊天（悬浮问 AI 的「点击必有反应」兜底：桌面收起态展开、小屏抽屉打开）；
    * 返回是否真的发生了打开/展开（false = 右栏本就可见，本次点击无可见变化） */
   onOpenChat: () => boolean;
- /** 桌面态标记（F7）：中栏 flex-1 弹性吸收左右栏固定宽之外的剩余空间；小屏回退默认 50% 百分比 */
+  /** 桌面态标记（F7）：中栏 flex-1 弹性吸收左右栏固定宽之外的剩余空间；小屏回退默认 50% 百分比 */
   isDesktop: boolean;
   children: ReactNode;
 }) {
   const loadConfig = useProjectStore((s) => s.loadConfig);
   const config = useProjectStore((s) => s.config);
- /** 当前页面焦点（C1 悬浮问 AI：注入右栏 = focus 小条；null = 普通进入聊天） */
+  /** 当前页面焦点（C1 悬浮问 AI：注入右栏 = focus 小条；null = 普通进入聊天） */
   const currentFocus = useUiStore((s) => s.currentFocus);
   const setFocusContext = useChatStore((s) => s.setFocusContext);
   const requestFocusInput = useChatStore((s) => s.requestFocusInput);
- // 路由切换清空页面焦点（useLayoutEffect 父先于子——在子页面 mount 上报新焦点前
- // 清掉旧页残留，避免切页后「问 AI」注入过期上下文）
+  // 路由切换清空页面焦点（useLayoutEffect 父先于子——在子页面 mount 上报新焦点前
+  // 清掉旧页残留，避免切页后「问 AI」注入过期上下文）
   const clearCurrentFocus = useUiStore((s) => s.clearCurrentFocus);
 
- // 挂载时拉取项目配置（失败静默，信息条显示「书架」不阻塞）
+  // 挂载时拉取项目配置（失败静默，信息条显示「书架」不阻塞）
   useEffect(() => {
     void loadConfig();
   }, [loadConfig]);
@@ -81,7 +81,7 @@ export function MainPanel({
           setFocusContext(currentFocus);
           requestFocusInput();
           const opened = onOpenChat(); // 右栏本就可见 → false
- // 无页面焦点（未进入任何具体条目）且右栏本就可见：聚焦输入框过于隐形，补中性提示说明本次点击
+          // 无页面焦点（未进入任何具体条目）且右栏本就可见：聚焦输入框过于隐形，补中性提示说明本次点击
           if (!currentFocus && !opened) {
             useUiStore.getState().showToast("未选中具体条目，可直接在右栏提问", "info");
           }

@@ -13,7 +13,13 @@ import MDEditor from "@uiw/react-md-editor";
 import "@uiw/react-md-editor/markdown-editor.css"; // N3 选型：@uiw/react-md-editor 自带样式（textarea + 分屏预览）
 import { parseReferenceFrontmatter } from "@whispering233/ai-editor-shared";
 import type { EntityDetailRes } from "../lib/api";
-import { createEntity, deleteEntity, getEntityDetail, listEntities, updateEntity } from "../lib/api";
+import {
+  createEntity,
+  deleteEntity,
+  getEntityDetail,
+  listEntities,
+  updateEntity,
+} from "../lib/api";
 import { ApiError } from "../lib/api";
 import { applyTagSuggestion, parseTagsInput, suggestTags, tagsToInput } from "../lib/timeline";
 import { navigate } from "../hooks/use-route";
@@ -21,11 +27,14 @@ import { useSaveShortcut } from "../lib/save-shortcut";
 import { useThemeMode } from "../hooks/use-theme-mode";
 import { useUiStore } from "../stores/ui";
 import { cn } from "../lib/utils";
-import { errorBannerClass, inputClass, skeletonClass } from "../lib/styles";
-import { Button } from "antd";
+import { errorBannerClass, skeletonClass } from "../lib/styles";
+import { Button, Input } from "antd";
 import { PageTitle } from "../components/ui/page-title";
 import { TagSuggest } from "../components/timeline/TagSuggest";
-import { CreateRelationDialog, type RelationSource } from "../components/entity/create-relation-dialog";
+import {
+  CreateRelationDialog,
+  type RelationSource,
+} from "../components/entity/create-relation-dialog";
 
 /** 分类回显映射（**仅存量显示**——material 等旧枚举值回显中文名，非可选建议；新自定义分类无映射原样显示） */
 const TYPE_LABELS: Record<string, string> = {
@@ -47,20 +56,14 @@ interface EditForm {
 
 const EMPTY_FORM: EditForm = { name: "", type: "material", tagsInput: "", content: "", url: "" };
 
-export default function ReferenceDetail({
-  id,
-  draft,
-}: {
-  id?: string;
-  draft?: "md" | "link";
-}) {
+export default function ReferenceDetail({ id, draft }: { id?: string; draft?: "md" | "link" }) {
   const isDraft = draft !== undefined;
   const kind = draft === "md" ? "file" : "link"; // 草稿态 kind 由路由决定；编辑态从 data 读取
 
- // 卡 11.5：markdown 编辑器暗色联动（data-color-mode 跟随 html.dark，MutationObserver 即时生效）
+  // 卡 11.5：markdown 编辑器暗色联动（data-color-mode 跟随 html.dark，MutationObserver 即时生效）
   const themeMode = useThemeMode();
 
- // 挂载/切换时上报页面焦点（当前参考资料作为「问 AI」上下文；草稿态无实体不上报）
+  // 挂载/切换时上报页面焦点（当前参考资料作为「问 AI」上下文；草稿态无实体不上报）
   const setCurrentFocus = useUiStore((s) => s.setCurrentFocus);
   useEffect(() => {
     if (id !== undefined) {
@@ -72,19 +75,19 @@ export default function ReferenceDetail({
   const [error, setError] = useState<string | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
 
- // 表单（编辑态由 detail 同步填充——无异步回填竞态，B1 修复语义；草稿态空表单）
+  // 表单（编辑态由 detail 同步填充——无异步回填竞态，B1 修复语义；草稿态空表单）
   const [form, setForm] = useState<EditForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
- // 标题行内编辑（详情页标题点击编辑，Enter 确认/Esc 取消）
+  // 标题行内编辑（详情页标题点击编辑，Enter 确认/Esc 取消）
   const [titleEditing, setTitleEditing] = useState(false);
 
- // 建立关联对话框（两类详情页均含关联面板，源端点预填当前 reference）
+  // 建立关联对话框（两类详情页均含关联面板，源端点预填当前 reference）
   const [relationOpen, setRelationOpen] = useState(false);
 
- // 标签建议池（详情页独立聚合：datalist 自动补全 + TagSuggest 快捷选择，与列表页一致体验）
+  // 标签建议池（详情页独立聚合：datalist 自动补全 + TagSuggest 快捷选择，与列表页一致体验）
   const [tagPool, setTagPool] = useState<string[]>([]);
- // 分类建议池（datalist 建议 = 项目内已用分类，无预置枚举；与 tagPool 同一次拉取聚合）
+  // 分类建议池（datalist 建议 = 项目内已用分类，无预置枚举；与 tagPool 同一次拉取聚合）
   const [typePool, setTypePool] = useState<string[]>([]);
   useEffect(() => {
     let cancelled = false;
@@ -111,7 +114,7 @@ export default function ReferenceDetail({
     };
   }, []);
 
- // 编辑态：加载详情 → 同步填充表单（无竞态：表单在数据就绪后才渲染可编辑）
+  // 编辑态：加载详情 → 同步填充表单（无竞态：表单在数据就绪后才渲染可编辑）
   useEffect(() => {
     if (id === undefined) return;
     let cancelled = false;
@@ -140,8 +143,9 @@ export default function ReferenceDetail({
 
   const tagSuggestions = suggestTags(form.tagsInput, tagPool);
 
- /** 编辑态元数据（kind/url/file_name——来源列与保存分支判定） */
-  const detailKind = (detail?.data as Record<string, unknown> | undefined)?.kind === "file" ? "file" : "link";
+  /** 编辑态元数据（kind/url/file_name——来源列与保存分支判定） */
+  const detailKind =
+    (detail?.data as Record<string, unknown> | undefined)?.kind === "file" ? "file" : "link";
   const detailSource =
     detailKind === "file"
       ? `references/${(detail?.data as Record<string, unknown>)?.file_name ?? ""}`
@@ -151,7 +155,7 @@ export default function ReferenceDetail({
           ? ((detail?.data as Record<string, unknown>).source as string)
           : "";
 
- /** 标题行内编辑提交（详情页：Enter 确认，失败 toast 后保持编辑态） */
+  /** 标题行内编辑提交（详情页：Enter 确认，失败 toast 后保持编辑态） */
   async function commitTitle() {
     const name = form.name.trim();
     if (name === "" || detail === null || name === detail.name) {
@@ -172,12 +176,12 @@ export default function ReferenceDetail({
     }
   }
 
- // 导入 md 文档（ N4，卡 11.6：纯前端——FileReader 读文本 + frontmatter 解析预填，
- // 内容进编辑器，保存走既有 PUT/POST 由服务端落盘；无独立上传端点）
+  // 导入 md 文档（ N4，卡 11.6：纯前端——FileReader 读文本 + frontmatter 解析预填，
+  // 内容进编辑器，保存走既有 PUT/POST 由服务端落盘；无独立上传端点）
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
 
- /** 文件选择 → 读文本 → 解析 frontmatter 预填标题/分类/标签 + 正文进编辑器 */
+  /** 文件选择 → 读文本 → 解析 frontmatter 预填标题/分类/标签 + 正文进编辑器 */
   function handleImportFile(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = ""; // 允许重复选择同一文件
@@ -209,7 +213,7 @@ export default function ReferenceDetail({
     reader.readAsText(file);
   }
 
- /** 保存（编辑态 PUT / 草稿态 POST + 跳转）；file 类由服务端落盘（先写文件后更新 DB） */
+  /** 保存（编辑态 PUT / 草稿态 POST + 跳转）；file 类由服务端落盘（先写文件后更新 DB） */
   async function handleSave() {
     if (saving) return; // 重入门禁（B2 验证：快捷键可绕过「保存」按钮的 disabled）
     const name = form.name.trim();
@@ -232,7 +236,9 @@ export default function ReferenceDetail({
       const data: Record<string, unknown> = {
         type: form.type,
         content: form.content,
-        ...(parseTagsInput(form.tagsInput).length > 0 ? { tags: parseTagsInput(form.tagsInput) } : {}),
+        ...(parseTagsInput(form.tagsInput).length > 0
+          ? { tags: parseTagsInput(form.tagsInput) }
+          : {}),
       };
       if (isDraft) {
         data.kind = kind;
@@ -259,7 +265,7 @@ export default function ReferenceDetail({
     }
   }
 
- // Ctrl/Cmd+S 保存（B2）：编辑态 PUT / 草稿态 POST 与「保存/创建」按钮同动作
+  // Ctrl/Cmd+S 保存（B2）：编辑态 PUT / 草稿态 POST 与「保存/创建」按钮同动作
   useSaveShortcut(() => void handleSave(), isDraft || detail !== null);
 
   async function handleDelete() {
@@ -269,21 +275,19 @@ export default function ReferenceDetail({
       useUiStore.getState().showToast("已移入回收站，可随时还原");
       navigate("#/references");
     } catch (e) {
-      useUiStore.getState().showToast(e instanceof ApiError ? e.message : "删除失败，请重试", "error");
+      useUiStore
+        .getState()
+        .showToast(e instanceof ApiError ? e.message : "删除失败，请重试", "error");
     }
   }
 
- // ============ 错误 / 加载态（编辑态） ============
+  // ============ 错误 / 加载态（编辑态） ============
   if (!isDraft && error !== null) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3">
         <p className={cn(errorBannerClass)}>{error}</p>
-        <Button onClick={() => setReloadTick((t) => t + 1)}>
-          重试
-        </Button>
-        <Button onClick={() => navigate("#/references")}>
-          返回列表
-        </Button>
+        <Button onClick={() => setReloadTick((t) => t + 1)}>重试</Button>
+        <Button onClick={() => navigate("#/references")}>返回列表</Button>
       </div>
     );
   }
@@ -317,7 +321,11 @@ export default function ReferenceDetail({
                 aria-label="导入 md 文档"
               />
               <Button disabled={importing} onClick={() => fileInputRef.current?.click()}>
-                {importing ? <Loader2 className="size-3.5 animate-spin" /> : <FileUp className="size-3.5" />}
+                {importing ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <FileUp className="size-3.5" />
+                )}
                 导入 md 文档
               </Button>
             </>
@@ -353,7 +361,7 @@ export default function ReferenceDetail({
                 }
               }}
               onBlur={() => void commitTitle()}
-              className={cn(inputClass, "h-9 w-72 px-2 text-xl")}
+              className="h-9 w-72 rounded-md border border-border bg-card px-2 text-xl focus:border-primary focus:outline-none"
               disabled={saving}
             />
           ) : (
@@ -408,8 +416,8 @@ export default function ReferenceDetail({
         <div className="flex items-start gap-2">
           <label className="mt-2 w-12 shrink-0 text-sm text-muted-foreground">分类</label>
           <div className="relative min-w-0 flex-1">
-            <input
-              className={cn(inputClass, "w-full")}
+            <Input
+              className="w-full"
               value={form.type}
               onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
               list="ref-detail-types"
@@ -429,8 +437,8 @@ export default function ReferenceDetail({
         {currentKind === "link" && (
           <div className="flex items-start gap-2">
             <label className="mt-2 w-12 shrink-0 text-sm text-muted-foreground">URL</label>
-            <input
-              className={cn(inputClass, "flex-1")}
+            <Input
+              className="flex-1"
               value={form.url}
               onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
               placeholder="https://…（必填）"
@@ -442,12 +450,12 @@ export default function ReferenceDetail({
         <div className="flex items-start gap-2">
           <label className="mt-2 w-12 shrink-0 text-sm text-muted-foreground">标签</label>
           <div className="relative min-w-0 flex-1">
-            <input
-              className={cn(inputClass, "w-full")}
+            <Input
+              className="w-full"
               value={form.tagsInput}
               onChange={(e) => setForm((f) => ({ ...f, tagsInput: e.target.value }))}
               onKeyDown={(e) => {
- // Enter 追加逗号继续输入（F8 回车添加下一项 + M1 修复）
+                // Enter 追加逗号继续输入（F8 回车添加下一项 + M1 修复）
                 if (
                   e.key === "Enter" &&
                   !e.nativeEvent.isComposing &&
@@ -494,8 +502,8 @@ export default function ReferenceDetail({
         ) : (
           <div className="flex items-start gap-2">
             <label className="mt-2 w-12 shrink-0 text-sm text-muted-foreground">备注</label>
-            <textarea
-              className={cn(inputClass, "min-h-40 flex-1 resize-y leading-6")}
+            <Input.TextArea
+              className="min-h-40 flex-1 resize-y leading-6"
               value={form.content}
               onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
               placeholder="可选：外源链接备注 / 摘录…"
@@ -539,5 +547,7 @@ function formatTime(iso: string): string {
   if (Number.isNaN(d.getTime())) return iso;
   const pad = (n: number) => String(n).padStart(2, "0");
   const sameYear = d.getFullYear() === new Date().getFullYear();
-  return sameYear ? `${pad(d.getMonth() + 1)}-${pad(d.getDate())}` : `${pad(d.getFullYear() % 100)}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return sameYear
+    ? `${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+    : `${pad(d.getFullYear() % 100)}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }

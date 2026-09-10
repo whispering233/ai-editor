@@ -18,11 +18,10 @@ import { formatTimestamp, HOOK_CATEGORIES } from "@whispering233/ai-editor-share
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { ArrowUp, Check, CheckCircle2, Circle, Eye, Pencil, Trash2, X } from "lucide-react";
 import { RowContextMenu } from "../components/entity/row-context-menu";
-import { Button } from "antd";
+import { Button, Input } from "antd";
 import { PageTitle } from "@/components/ui/page-title";
 import { EmptyState } from "@/components/ui/empty-state";
-import { inputClass, errorBannerClass } from "@/lib/styles";
-import { Input } from "@/components/ui/input";
+import { selectClass, errorBannerClass } from "@/lib/styles";
 import { SuggestionDatalist } from "@/components/ui/suggestion-datalist";
 import {
   Dialog,
@@ -101,19 +100,19 @@ export default function HookPanel() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
- // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉列表 + 依赖边
- // （AI 可能新建/推进/回收伏笔；ref 守卫防首帧重复拉）
+  // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉列表 + 依赖边
+  // （AI 可能新建/推进/回收伏笔；ref 守卫防首帧重复拉）
   useDataRefresh(() => setReloadTick((t) => t + 1));
- /** 全量 depends_on 边（GET /relation 一次拉全；行内「依赖:」与依赖者计数用；失败不阻塞列表） */
+  /** 全量 depends_on 边（GET /relation 一次拉全；行内「依赖:」与依赖者计数用；失败不阻塞列表） */
   const [depEdges, setDepEdges] = useState<RelationSummaryItem[]>([]);
   const [depEdgesFailed, setDepEdgesFailed] = useState(false);
 
- // 详情对话框（relations 全览）
+  // 详情对话框（relations 全览）
   const [detailTarget, setDetailTarget] = useState<EntityDetailRes | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
- // 复合写确认面板（推进/回收/废弃）
+  // 复合写确认面板（推进/回收/废弃）
   const [lifecycleTarget, setLifecycleTarget] = useState<EntityDetailRes | null>(null);
   const [lifecycleKind, setLifecycleKind] = useState<HookLifecycleKind>("advance");
   const [lifecycleNodeId, setLifecycleNodeId] = useState("");
@@ -121,13 +120,13 @@ export default function HookPanel() {
   const [lifecycleError, setLifecycleError] = useState<string | null>(null);
   const [lifecycleSubmitting, setLifecycleSubmitting] = useState(false);
 
- // 编辑对话框（data 表单，同 EntityDetail）
+  // 编辑对话框（data 表单，同 EntityDetail）
   const [editTarget, setEditTarget] = useState<EntityDetailRes | null>(null);
   const [editForm, setEditForm] = useState<Record<string, unknown> | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
   const [editSaving, setEditSaving] = useState(false);
 
- // 新建对话框
+  // 新建对话框
   const [createOpen, setCreateOpen] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createData, setCreateData] = useState<Record<string, unknown>>({});
@@ -135,7 +134,7 @@ export default function HookPanel() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [createSubmitting, setCreateSubmitting] = useState(false);
 
- // 依赖链展开（行内「依赖: …」点击）
+  // 依赖链展开（行内「依赖: …」点击）
   const [chains, setChains] = useState<Record<string, ChainState>>({});
 
   const config = useProjectStore((s) => s.config);
@@ -143,15 +142,15 @@ export default function HookPanel() {
   const nodeOptions = flattenTree(outline?.children ?? []);
   const groups: HookGroups | null = items === null ? null : groupHooksByStatus(items);
 
- // 列表加载（reloadTick 驱动重试/刷新；卸载或重载丢弃过期响应）
+  // 列表加载（reloadTick 驱动重试/刷新；卸载或重载丢弃过期响应）
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
     setDepEdgesFailed(false);
- // 重载后旧依赖链状态失效（伏笔可能已删除/关系变化）——清空避免残留展开
+    // 重载后旧依赖链状态失效（伏笔可能已删除/关系变化）——清空避免残留展开
     setChains({});
- // 列表 + 全量依赖边并行（互不依赖；依赖边失败仅降级隐藏「依赖:」列）
+    // 列表 + 全量依赖边并行（互不依赖；依赖边失败仅降级隐藏「依赖:」列）
     void listEntities("hook", {})
       .then((res) => {
         if (!cancelled) setItems(res.items);
@@ -177,16 +176,16 @@ export default function HookPanel() {
     };
   }, [reloadTick]);
 
- // 大纲未加载时兜底拉取（新建/面板节点选择器依赖；项目打开时已加载，防御直达路由场景）
+  // 大纲未加载时兜底拉取（新建/面板节点选择器依赖；项目打开时已加载，防御直达路由场景）
   useEffect(() => {
     if (useProjectStore.getState().outline === null && useProjectStore.getState().config !== null) {
       void useProjectStore.getState().loadOutline();
     }
   }, []);
 
- // ============ 详情 ============
+  // ============ 详情 ============
 
- /** 打开详情（GET 详情；relations 全览） */
+  /** 打开详情（GET 详情；relations 全览） */
   async function openDetail(hook: EntitySummary) {
     setDetailTarget(null);
     setDetailLoading(true);
@@ -200,16 +199,16 @@ export default function HookPanel() {
     }
   }
 
- // ============ 推进/回收/废弃（复合写确认面板） ============
+  // ============ 推进/回收/废弃（复合写确认面板） ============
 
- /** 打开复合写面板：先拉详情（delta 的 from = 当前 data.status，自动取） */
+  /** 打开复合写面板：先拉详情（delta 的 from = 当前 data.status，自动取） */
   async function openLifecycle(kind: HookLifecycleKind, hook: EntitySummary) {
     setLifecycleTarget(null);
     setLifecycleError(null);
     setLifecycleDesc("");
     try {
       const detail = await getEntityDetail("hook", hook.id);
- // 默认节点：current_position（ 锚点口径；须在树中存在且未软删）
+      // 默认节点：current_position（ 锚点口径；须在树中存在且未软删）
       const cp = useProjectStore.getState().config?.currentPosition;
       const defaultNode =
         cp !== null && cp !== undefined && cp !== "" && nodeExists(outline, cp) ? cp : "";
@@ -221,7 +220,7 @@ export default function HookPanel() {
     }
   }
 
- /** 复合写确认：按动作走 runLifecycleWrite / runAbandonWrite → toast → 刷新 */
+  /** 复合写确认：按动作走 runLifecycleWrite / runAbandonWrite → toast → 刷新 */
   async function handleLifecycleConfirm() {
     const detail = lifecycleTarget;
     if (!detail || lifecycleSubmitting) return;
@@ -230,7 +229,7 @@ export default function HookPanel() {
     setLifecycleError(null);
     try {
       if (kind === "abandon") {
- // 废弃锚点：current_position 优先，退化树末节点（anchorNodeForAbandon，同 executor 语义）
+        // 废弃锚点：current_position 优先，退化树末节点（anchorNodeForAbandon，同 executor 语义）
         const anchor = anchorNodeForAbandon(config, outline);
         if (anchor === null) {
           setLifecycleError("大纲为空，无法记录废弃变更");
@@ -265,9 +264,9 @@ export default function HookPanel() {
     }
   }
 
- // ============ 编辑（data 表单） ============
+  // ============ 编辑（data 表单） ============
 
- /** 打开编辑对话框：拉详情 → 表单初始化为 data 副本 */
+  /** 打开编辑对话框：拉详情 → 表单初始化为 data 副本 */
   async function openEdit(hook: EntitySummary) {
     setEditTarget(null);
     setEditError(null);
@@ -280,7 +279,7 @@ export default function HookPanel() {
     }
   }
 
- /** 编辑保存：diffData 只提交变更字段（PUT partial 浅合并） */
+  /** 编辑保存：diffData 只提交变更字段（PUT partial 浅合并） */
   async function handleEditSave() {
     if (!editTarget || !editForm || editSaving) return;
     const changed = diffData(editTarget.data, editForm);
@@ -303,12 +302,12 @@ export default function HookPanel() {
     }
   }
 
- // Ctrl/Cmd+S 保存（B2）：仅编辑对话框打开时参与（其余情况快捷键落到下层/原生）
+  // Ctrl/Cmd+S 保存（B2）：仅编辑对话框打开时参与（其余情况快捷键落到下层/原生）
   useSaveShortcut(() => void handleEditSave(), editTarget !== null);
 
- // ============ 新建 ============
+  // ============ 新建 ============
 
- /** 新建提交：POST /entity/hook → 有埋点节点再 POST /relation（plants）→ toast + 刷新 */
+  /** 新建提交：POST /entity/hook → 有埋点节点再 POST /relation（plants）→ toast + 刷新 */
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
     const name = createName.trim();
@@ -320,8 +319,8 @@ export default function HookPanel() {
     setCreateError(null);
     try {
       const res = await createEntity("hook", { name, data: createData });
- // 有埋点节点才建 plants 关系（ 新建交互）；新伏笔 id 必不存在同三元组——
- // 失败（如节点已软删 400）不阻塞创建：提示后刷新，可后续在详情补关联
+      // 有埋点节点才建 plants 关系（ 新建交互）；新伏笔 id 必不存在同三元组——
+      // 失败（如节点已软删 400）不阻塞创建：提示后刷新，可后续在详情补关联
       if (createPlantNodeId !== "") {
         try {
           await createRelation(buildPlantRelationBody(res.id, createPlantNodeId));
@@ -350,9 +349,9 @@ export default function HookPanel() {
     }
   }
 
- // ============ 软删 ============
+  // ============ 软删 ============
 
- /** 软删直接执行（H2：不再弹二次确认）：DELETE → toast（级联计数）→ 刷新 */
+  /** 软删直接执行（H2：不再弹二次确认）：DELETE → toast（级联计数）→ 刷新 */
   async function handleDelete(hook: EntitySummary) {
     try {
       const res = await deleteEntity("hook", hook.id);
@@ -372,13 +371,13 @@ export default function HookPanel() {
     }
   }
 
- // ============ 依赖链展开 ============
+  // ============ 依赖链展开 ============
 
- /**
- * 行内「依赖: …」点击展开/收起递归链：
- * BFS 按需 fetch 各伏笔详情累积 depends_on 边（层级 ≤ 展示深度），环守卫防死循环；
- * 名称优先详情 name，未 fetch 到的层级用关系的 targetName 兜底
- */
+  /**
+   * 行内「依赖: …」点击展开/收起递归链：
+   * BFS 按需 fetch 各伏笔详情累积 depends_on 边（层级 ≤ 展示深度），环守卫防死循环；
+   * 名称优先详情 name，未 fetch 到的层级用关系的 targetName 兜底
+   */
   async function toggleChain(hook: EntitySummary) {
     if (chains[hook.id]) {
       setChains((c) => {
@@ -404,7 +403,7 @@ export default function HookPanel() {
           (r) => r.sourceId === id,
         );
         depsOf.set(id, deps);
- // 展示深度内的节点才需要取下一层边；更深层名称已由边 targetName 兜底
+        // 展示深度内的节点才需要取下一层边；更深层名称已由边 targetName 兜底
         if (depth >= 2) continue;
         for (const d of deps) {
           if (!names.has(d.targetId)) names.set(d.targetId, d.targetName ?? d.targetId);
@@ -418,7 +417,7 @@ export default function HookPanel() {
     }
   }
 
- // ============ 渲染 ============
+  // ============ 渲染 ============
 
   return (
     <section>
@@ -557,8 +556,15 @@ export default function HookPanel() {
             {createError && <p className="text-sm text-destructive">{createError}</p>}
           </form>
           <DialogFooter>
-            <Button onClick={() => setCreateOpen(false)} disabled={createSubmitting}>取消</Button>
-            <Button type="primary" htmlType="submit" form="create-hook-form" disabled={createSubmitting}>
+            <Button onClick={() => setCreateOpen(false)} disabled={createSubmitting}>
+              取消
+            </Button>
+            <Button
+              type="primary"
+              htmlType="submit"
+              form="create-hook-form"
+              disabled={createSubmitting}
+            >
               创建
             </Button>
           </DialogFooter>
@@ -578,9 +584,7 @@ export default function HookPanel() {
           {detailError && <p className="py-4 text-sm text-destructive">{detailError}</p>}
           {detailTarget && <HookDetailView detail={detailTarget} />}
           <DialogFooter>
-            <Button onClick={() => setDetailTarget(null)}>
-              关闭
-            </Button>
+            <Button onClick={() => setDetailTarget(null)}>关闭</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -610,14 +614,13 @@ export default function HookPanel() {
               )}
               <div>
                 <p className="mb-1 text-sm font-medium text-foreground">描述</p>
-                <textarea
+                <Input.TextArea
                   value={lifecycleDesc}
                   onChange={(e) => setLifecycleDesc(e.target.value)}
                   rows={2}
                   placeholder={
                     lifecycleKind === "abandon" ? "说明废弃原因" : "说明伏笔如何被推进/回收"
                   }
-                  className={cn(inputClass, "w-full")}
                 />
               </div>
               {/* 将写入预览（提案式确认：确认前展示写入内容） */}
@@ -644,7 +647,9 @@ export default function HookPanel() {
               {lifecycleError && <p className="text-sm text-destructive">{lifecycleError}</p>}
             </div>
             <DialogFooter>
-              <Button onClick={() => setLifecycleTarget(null)} disabled={lifecycleSubmitting}>取消</Button>
+              <Button onClick={() => setLifecycleTarget(null)} disabled={lifecycleSubmitting}>
+                取消
+              </Button>
               <Button
                 type="primary"
                 onClick={() => void handleLifecycleConfirm()}
@@ -674,7 +679,9 @@ export default function HookPanel() {
               {editError && <p className="text-sm text-destructive">{editError}</p>}
             </div>
             <DialogFooter>
-              <Button onClick={() => setEditTarget(null)} disabled={editSaving}>取消</Button>
+              <Button onClick={() => setEditTarget(null)} disabled={editSaving}>
+                取消
+              </Button>
               <Button type="primary" onClick={() => void handleEditSave()} disabled={editSaving}>
                 {editSaving ? "保存中…" : "保存"}
               </Button>
@@ -714,7 +721,7 @@ function HookGroupSection({
   onLifecycle: (kind: HookLifecycleKind, hook: EntitySummary) => void;
   onEdit: (hook: EntitySummary) => void;
   onDelete: (hook: EntitySummary) => void;
- /** 建立关联成功后的数据刷新（页面 reloadTick+1） */
+  /** 建立关联成功后的数据刷新（页面 reloadTick+1） */
   onRelationCreated: () => void;
 }) {
   return (
@@ -734,8 +741,8 @@ function HookGroupSection({
             const chain = chains[hook.id];
             const category = typeof hook.summary.category === "string" ? hook.summary.category : "";
             return (
- // 行级右键菜单：注入会话上下文（focus_entity_type=hook）+ 建立关联
- // （源端点按行实体类型预填）；操作按钮全部展开（H3）不受影响
+              // 行级右键菜单：注入会话上下文（focus_entity_type=hook）+ 建立关联
+              // （源端点按行实体类型预填）；操作按钮全部展开（H3）不受影响
               <RowContextMenu
                 key={hook.id}
                 focus={{ focus_entity_type: "hook", focus_entity_id: hook.id }}
@@ -993,11 +1000,10 @@ function HookDataField({
   switch (field.control) {
     case "textarea":
       return (
-        <textarea
+        <Input.TextArea
           value={fieldValue({ [field.key]: value }, field.key)}
           onChange={(e) => onValue(e.target.value)}
           rows={2}
-          className={cn(inputClass, "w-full")}
         />
       );
     case "number":
@@ -1006,7 +1012,6 @@ function HookDataField({
           type="number"
           value={fieldValue({ [field.key]: value }, field.key)}
           onChange={(e) => onValue(e.target.value === "" ? undefined : Number(e.target.value))}
-          className="h-8 text-sm"
         />
       );
     case "select":
@@ -1014,7 +1019,7 @@ function HookDataField({
         <select
           value={fieldValue({ [field.key]: value }, field.key)}
           onChange={(e) => onValue(e.target.value)}
-          className={cn(inputClass, "w-full")}
+          className={cn(selectClass, "w-full")}
         >
           <option value="">未设置</option>
           {field.options?.map((opt) => (
@@ -1051,7 +1056,6 @@ function HookDataField({
               field.key === "category" ? `如：${HOOK_CATEGORIES.join(" / ")}` : undefined
             }
             list={field.key === "category" ? "hook-category-suggestions" : undefined}
-            className="h-8 text-sm"
           />
           {field.key === "category" && (
             <SuggestionDatalist id="hook-category-suggestions" options={HOOK_CATEGORIES} />
@@ -1077,7 +1081,7 @@ function OutlineNodeSelect({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className={cn(cn(inputClass, "w-full"), value === "" && "text-muted-foreground")}
+      className={cn(selectClass, "w-full", value === "" && "text-muted-foreground")}
     >
       <option value="">{placeholder}</option>
       {nodeOptions.map((o) => (

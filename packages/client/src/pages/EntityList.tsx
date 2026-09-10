@@ -57,9 +57,9 @@ const TYPE_LABEL: Record<ListableEntityType, string> = {
   setting: "设定",
   location: "地点",
   hook: "伏笔",
- // C1 类型补全（ event 时间轴事件；时间轴专属 UI 由 C2 实现）
+  // C1 类型补全（ event 时间轴事件；时间轴专属 UI 由 C2 实现）
   event: "事件",
- // G2.3 类型补全（G2 时间标签点；tab 随 ENTITY_TYPES 自动出现，列表 = 泛型视图）
+  // G2.3 类型补全（G2 时间标签点；tab 随 ENTITY_TYPES 自动出现，列表 = 泛型视图）
   timepoint: "时间点",
 };
 // 注：TYPE_LABEL.reference 已随批次十二 T3 移除——实体二级 tab 不再渲染参考资料
@@ -81,9 +81,9 @@ const SORT_OPTIONS: Array<{
 ];
 
 export default function EntityList({ type }: { type: string }) {
- /** 关联 tab（U8）：type==="relations" 时渲染关联总览视图，不参与四类实体逻辑 */
+  /** 关联 tab（U8）：type==="relations" 时渲染关联总览视图，不参与四类实体逻辑 */
   const isRelations = type === "relations";
- // main.tsx 已把未知 type 归一化为 character；此处双保险
+  // main.tsx 已把未知 type 归一化为 character；此处双保险
   const entityType = (ENTITY_TYPES as readonly string[]).includes(type)
     ? (type as ListableEntityType)
     : ("character" as ListableEntityType);
@@ -92,33 +92,33 @@ export default function EntityList({ type }: { type: string }) {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
- /** 搜索框即时值（防抖输入） */
+  /** 搜索框即时值（防抖输入） */
   const [qInput, setQInput] = useState("");
- /** 防抖后的查询关键词（空 = 不过滤） */
+  /** 防抖后的查询关键词（空 = 不过滤） */
   const [q, setQ] = useState("");
   const [offset, setOffset] = useState(0);
   const [sort, setSort] = useState<"name" | "created_at">("created_at");
   const [order, setOrder] = useState<"asc" | "desc">("desc");
- /** 重试计数（错误后手动重新加载） */
+  /** 重试计数（错误后手动重新加载） */
   const [reloadTick, setReloadTick] = useState(0);
- // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉列表
- // （关联 tab 的 RelationsView 以 reloadKey={reloadTick} 联动刷新；设定 tab 树形视图同 key；
- // ref 守卫防首帧重复拉）
+  // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉列表
+  // （关联 tab 的 RelationsView 以 reloadKey={reloadTick} 联动刷新；设定 tab 树形视图同 key；
+  // ref 守卫防首帧重复拉）
   useDataRefresh(() => setReloadTick((t) => t + 1));
- // 行内新建（UX4）打开态与表单状态
+  // 行内新建（UX4）打开态与表单状态
   const [createOpen, setCreateOpen] = useState(false);
   const [createName, setCreateName] = useState("");
   const [firstValue, setFirstValue] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
   const [createSubmitting, setCreateSubmitting] = useState(false);
- /** 新建成功后的聚焦目标 id（A2：新行滚动到位 + 高亮 + 键盘焦点落行；3s 后清除） */
+  /** 新建成功后的聚焦目标 id（A2：新行滚动到位 + 高亮 + 键盘焦点落行；3s 后清除） */
   const [newItemId, setNewItemId] = useState<string | null>(null);
- /** 已聚焦过的新建行 id（一次性守卫：数据重拉不重复聚焦抢焦点） */
+  /** 已聚焦过的新建行 id（一次性守卫：数据重拉不重复聚焦抢焦点） */
   const focusedNewItemRef = useRef<string | null>(null);
 
- // 新建行聚焦（A2）：新行已进入当前页数据（items 含 id）时滚动 + 聚焦；
- // 排序/分页导致新行不在当前视图 → focusNewItem 返回 false，静默忽略（不强行跳页）。
- // 一次性守卫（focusedNewItemRef）：3s 高亮窗口内列表重拉（搜索/刷新）不重复抢焦点
+  // 新建行聚焦（A2）：新行已进入当前页数据（items 含 id）时滚动 + 聚焦；
+  // 排序/分页导致新行不在当前视图 → focusNewItem 返回 false，静默忽略（不强行跳页）。
+  // 一次性守卫（focusedNewItemRef）：3s 高亮窗口内列表重拉（搜索/刷新）不重复抢焦点
   useEffect(() => {
     if (newItemId === null || focusedNewItemRef.current === newItemId) return;
     const t = setTimeout(() => {
@@ -127,7 +127,7 @@ export default function EntityList({ type }: { type: string }) {
     return () => clearTimeout(t);
   }, [newItemId, items]);
 
- // 新建行高亮自动消失（3s）
+  // 新建行高亮自动消失（3s）
   useEffect(() => {
     if (newItemId === null) return;
     const t = setTimeout(() => setNewItemId(null), 3000);
@@ -137,10 +137,10 @@ export default function EntityList({ type }: { type: string }) {
   const col = SUMMARY_COLUMNS[entityType];
   const firstField = CREATE_FIRST_FIELD[entityType];
   const page = Math.floor(offset / PAGE_LIMIT) + 1;
- // 新建行 datalist 候选（批次五 J2）：从当前列表聚合已有名称 / 首字段值
- // （浏览器原生自动完成——输入时弹出已有候选，如输入「势」弹出「势力」）
+  // 新建行 datalist 候选（批次五 J2）：从当前列表聚合已有名称 / 首字段值
+  // （浏览器原生自动完成——输入时弹出已有候选，如输入「势」弹出「势力」）
   const createNameSuggestions = uniqueStrings(items?.map((i) => i.name) ?? []);
- // 首字段候选：text 单值取 summary 字段值；tags 多值（K1：setting.rules）flatMap 聚合数组元素
+  // 首字段候选：text 单值取 summary 字段值；tags 多值（K1：setting.rules）flatMap 聚合数组元素
   const createFirstSuggestions =
     firstField.key === ""
       ? []
@@ -154,7 +154,7 @@ export default function EntityList({ type }: { type: string }) {
           )
         : uniqueStrings(items?.map((i) => String(i.summary[firstField.key] ?? "")) ?? []);
 
- // tab 切换（type 变化，含进出关联 tab）：重置搜索/分页/排序（原型「MVP 切换时重置搜索与分页」）
+  // tab 切换（type 变化，含进出关联 tab）：重置搜索/分页/排序（原型「MVP 切换时重置搜索与分页」）
   useEffect(() => {
     setQInput("");
     setQ("");
@@ -166,7 +166,7 @@ export default function EntityList({ type }: { type: string }) {
     setCreateOpen(false);
   }, [type]);
 
- // 搜索防抖 300ms；关键词变化时页码重置 0（同批 setState，只发一次请求）
+  // 搜索防抖 300ms；关键词变化时页码重置 0（同批 setState，只发一次请求）
   useEffect(() => {
     const t = setTimeout(() => {
       setQ(qInput.trim());
@@ -175,8 +175,8 @@ export default function EntityList({ type }: { type: string }) {
     return () => clearTimeout(t);
   }, [qInput]);
 
- // 列表加载：type/q/offset/sort/order 变化驱动；卸载或参数变化时丢弃过期响应
- // 关联 tab / 设定 tab（树形视图自拉数据）：列表请求不发起，进出 tab 由对应分支触发兜底
+  // 列表加载：type/q/offset/sort/order 变化驱动；卸载或参数变化时丢弃过期响应
+  // 关联 tab / 设定 tab（树形视图自拉数据）：列表请求不发起，进出 tab 由对应分支触发兜底
   useEffect(() => {
     if (isRelations || entityType === "setting") return;
     let cancelled = false;
@@ -209,7 +209,7 @@ export default function EntityList({ type }: { type: string }) {
     };
   }, [entityType, q, offset, sort, order, reloadTick, isRelations]);
 
- /** 排序切换：重置页码（原型交互） */
+  /** 排序切换：重置页码（原型交互） */
   function handleSortChange(value: string) {
     const opt = SORT_OPTIONS.find((o) => o.value === value);
     if (!opt) return;
@@ -218,7 +218,7 @@ export default function EntityList({ type }: { type: string }) {
     setOffset(0);
   }
 
- /** 打开行内新建（UX4）：重置表单防上次残留；实体 tab 用（关联 tab 走 CreateRelationDialog） */
+  /** 打开行内新建（UX4）：重置表单防上次残留；实体 tab 用（关联 tab 走 CreateRelationDialog） */
   function openCreateRow() {
     setCreateName("");
     setFirstValue("");
@@ -226,16 +226,16 @@ export default function EntityList({ type }: { type: string }) {
     setCreateOpen(true);
   }
 
- /** 取消行内新建（Esc / 取消按钮共用） */
+  /** 取消行内新建（Esc / 取消按钮共用） */
   function cancelCreateRow() {
     setCreateOpen(false);
     setCreateError(null);
   }
 
- /** 行内新建提交：POST → toast → 留在列表刷新（2026-08 用户反馈：不自动跳详情页）；失败内联错误不关行 */
+  /** 行内新建提交：POST → toast → 留在列表刷新（2026-08 用户反馈：不自动跳详情页）；失败内联错误不关行 */
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
- // name 必填（服务端 1-100 校验；前端先拦空值）
+    // name 必填（服务端 1-100 校验；前端先拦空值）
     const name = createName.trim();
     if (!name) {
       setCreateError("请输入名称");
@@ -246,10 +246,10 @@ export default function EntityList({ type }: { type: string }) {
     try {
       const first = CREATE_FIRST_FIELD[entityType];
       const data: Record<string, unknown> = {};
- // 空 key = 该类型无 data 首字段（timepoint：时间标签文本即 name，G2）——跳过不写 data
+      // 空 key = 该类型无 data 首字段（timepoint：时间标签文本即 name，G2）——跳过不写 data
       if (first.key !== "" && firstValue.trim()) {
         if (first.input === "tags") {
- // K1：逗号分隔多值标签（中英文逗号均可）→ rules 数组
+          // K1：逗号分隔多值标签（中英文逗号均可）→ rules 数组
           data[first.key] = firstValue
             .split(/[,，]/)
             .map((s) => s.trim())
@@ -260,8 +260,8 @@ export default function EntityList({ type }: { type: string }) {
       }
       const res = await createEntity(entityType, { name, data });
       useUiStore.getState().showToast(`已创建${TYPE_LABEL[entityType]}《${name}》`);
- // 创建后留在列表（2026-08 用户反馈：不自动跳详情页——打断性行为；关行 + 刷新列表
- // 让新项按排序出现在当前视图，需要进详情可点行进入）；A2：新行滚动到位 + 高亮 + 聚焦
+      // 创建后留在列表（2026-08 用户反馈：不自动跳详情页——打断性行为；关行 + 刷新列表
+      // 让新项按排序出现在当前视图，需要进详情可点行进入）；A2：新行滚动到位 + 高亮 + 聚焦
       setCreateOpen(false);
       setNewItemId(res.id);
       setReloadTick((t) => t + 1);
@@ -272,7 +272,7 @@ export default function EntityList({ type }: { type: string }) {
     }
   }
 
- /** 清空搜索（搜索空态操作） */
+  /** 清空搜索（搜索空态操作） */
   function clearSearch() {
     setQInput("");
     setQ("");
@@ -287,14 +287,15 @@ export default function EntityList({ type }: { type: string }) {
       {!isRelations && entityType !== "setting" && (
         <div className="flex flex-wrap items-center gap-3 border-b border-border pb-3">
           <div className="ml-auto flex items-center gap-2">
-            <Input
-              className="w-52"
-              prefix={<SearchOutlined />}
-              allowClear
-              value={qInput}
-              onChange={(e) => setQInput(e.target.value)}
-              placeholder={`搜索${TYPE_LABEL[entityType]}名称…`}
-            />
+            <div className="w-52">
+              <Input
+                prefix={<SearchOutlined />}
+                allowClear
+                value={qInput}
+                onChange={(e) => setQInput(e.target.value)}
+                placeholder={`搜索${TYPE_LABEL[entityType]}名称…`}
+              />
+            </div>
             <Button type="primary" onClick={openCreateRow}>
               + 新建
             </Button>
@@ -396,9 +397,7 @@ export default function EntityList({ type }: { type: string }) {
                   创建
                 </Button>
               </div>
-              {createError && (
-                <p className="w-full text-sm text-destructive">{createError}</p>
-              )}
+              {createError && <p className="w-full text-sm text-destructive">{createError}</p>}
             </form>
           )}
 
@@ -463,9 +462,9 @@ export default function EntityList({ type }: { type: string }) {
                 </thead>
                 <tbody>
                   {items.map((item) => (
- // 行级右键菜单：注入会话上下文（focus_entity_type/id）+ 建立关联
- // （源端点按行实体类型预填）；行点击跳详情保持（ContextMenuTrigger 内建
- // onContextMenu 处理右键，不干扰行 onClick）
+                    // 行级右键菜单：注入会话上下文（focus_entity_type/id）+ 建立关联
+                    // （源端点按行实体类型预填）；行点击跳详情保持（ContextMenuTrigger 内建
+                    // onContextMenu 处理右键，不干扰行 onClick）
                     <RowContextMenu
                       key={item.id}
                       focus={{ focus_entity_type: entityType, focus_entity_id: item.id }}
@@ -479,7 +478,9 @@ export default function EntityList({ type }: { type: string }) {
                             "cursor-pointer border-b border-border/50 transition-colors last:border-0 hover:bg-muted",
                             item.id === newItemId && "bg-accent/40", // 新建成功临时高亮（3s，A2）
                           )}
-                          onClick={() => navigate(entityDetailPath(entityType as EntityType, item.id))}
+                          onClick={() =>
+                            navigate(entityDetailPath(entityType as EntityType, item.id))
+                          }
                           title={`打开《${item.name}》`}
                         />
                       }
@@ -506,7 +507,7 @@ export default function EntityList({ type }: { type: string }) {
                         </td>
                       )}
                       {entityType !== "character" && col.key3 && (
- // 描述列（M2，仅 setting）：行内 truncate + hover title 查看完整摘要（服务端已截断 100 字符）
+                        // 描述列（M2，仅 setting）：行内 truncate + hover title 查看完整摘要（服务端已截断 100 字符）
                         <td
                           className="max-w-40 truncate px-3 py-2 text-muted-foreground"
                           title={

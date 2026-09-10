@@ -16,7 +16,7 @@ interface Props {
 }
 
 interface State {
- /** 渲染异常信息（null = 无异常） */
+  /** 渲染异常信息（null = 无异常） */
   error: Error | null;
 }
 
@@ -28,7 +28,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
- // 异常上抛给全局（浏览器控制台可见原始堆栈，便于排查），UI 侧由本组件承接
+    // 异常上抛给全局（浏览器控制台可见原始堆栈，便于排查），UI 侧由本组件承接
     console.error("[ErrorBoundary] 渲染异常:", error, info.componentStack);
   }
 
@@ -53,7 +53,7 @@ export class ErrorBoundary extends Component<Props, State> {
             </Button>
             <Button
               onClick={() => {
- // 回到首页：重置 hash 后 reload 完整恢复（仅重置 hash 可能仍落在异常路由上）
+                // 回到首页：重置 hash 后 reload 完整恢复（仅重置 hash 可能仍落在异常路由上）
                 window.location.hash = "#/";
                 window.location.reload();
               }}

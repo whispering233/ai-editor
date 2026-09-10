@@ -6,7 +6,7 @@
 // 触发钮为 border 文字按钮（H4）。
 import { useState } from "react";
 import type { KeyboardEvent } from "react";
-import { Input } from "@/components/ui/input";
+import { Input } from "antd";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
@@ -33,16 +33,16 @@ export function SearchableSelect({
   ariaLabel,
   fallbackLabel,
 }: {
- /** 当前选中值（"" = 全部） */
+  /** 当前选中值（"" = 全部） */
   value: string;
- /** 候选（页面已聚合；按需排序） */
+  /** 候选（页面已聚合；按需排序） */
   options: readonly SearchableSelectOption[];
- /** 选中回调（"" = 清除筛选） */
+  /** 选中回调（"" = 清除筛选） */
   onChange: (value: string) => void;
- /** 空值显示（如「全部」）；同时作弹层顶部清除项文案 */
+  /** 空值显示（如「全部」）；同时作弹层顶部清除项文案 */
   placeholder: string;
   ariaLabel: string;
- /** 已选值不在候选中时的兜底显示名（如「（已删除或不可见）」）；缺省回退 value 原文 */
+  /** 已选值不在候选中时的兜底显示名（如「（已删除或不可见）」）；缺省回退 value 原文 */
   fallbackLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -50,7 +50,7 @@ export function SearchableSelect({
   const selected = options.find((o) => o.value === value);
   const displayLabel = selected?.label ?? (value !== "" ? (fallbackLabel ?? value) : "");
 
- // 打开时清空上次搜索词（防残留关键词影响新一次选择）；关闭时不动搜索词（下次打开再清）
+  // 打开时清空上次搜索词（防残留关键词影响新一次选择）；关闭时不动搜索词（下次打开再清）
   function handleOpenChange(next: boolean) {
     setOpen(next);
     if (next) setQ("");
@@ -58,7 +58,7 @@ export function SearchableSelect({
 
   const filtered = filterOptions(options, q);
 
- /** 输入内 Enter：选中首个过滤结果（清除走显式「全部」行）；Esc 关闭 */
+  /** 输入内 Enter：选中首个过滤结果（清除走显式「全部」行）；Esc 关闭 */
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter") {
       if (filtered.length === 0) return;
@@ -77,7 +77,7 @@ export function SearchableSelect({
             type="button"
             aria-label={ariaLabel}
             className={cn(
-              "flex items-center rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+              "flex items-center rounded-md border border-border bg-background px-2 py-1 text-sm focus:outline-none focus-visible:border-ring",
               displayLabel === "" && "text-muted-foreground",
             )}
           >
@@ -97,7 +97,6 @@ export function SearchableSelect({
           onKeyDown={handleKeyDown}
           placeholder="搜索…"
           aria-label={`${ariaLabel}搜索`}
-          className="h-8 text-sm"
           autoFocus
         />
         <div className="flex max-h-56 flex-col gap-0.5 overflow-y-auto">

@@ -11,8 +11,8 @@ import type { ChangeEvent, FormEvent } from "react";
 import { formatRelativeTime } from "@whispering233/ai-editor-shared";
 import type { EntityType, OutlineNode } from "@whispering233/ai-editor-shared";
 import { BookOpen, Download, Loader2, Pencil, Upload } from "lucide-react";
-import { Button } from "antd";
-import { Input } from "@/components/ui/input";
+import { Button, Input } from "antd";
+import type { InputRef } from "antd";
 import {
   Dialog,
   DialogContent,
@@ -33,10 +33,7 @@ import {
   listEntities,
   renameProject,
 } from "../lib/api";
-import {
-  describeExportError,
-  describeImportError,
-} from "../lib/error-messages";
+import { describeExportError, describeImportError } from "../lib/error-messages";
 import { validateBookName } from "../lib/book-name";
 import { entityListHost } from "../lib/entity-paths";
 import { describeOpenError } from "../lib/error-messages";
@@ -53,11 +50,11 @@ const TYPE_LABEL: Record<EntityType, string> = {
   setting: "设定",
   location: "地点",
   hook: "伏笔",
- // C1 类型补全（ event 时间轴事件；概览卡仍为四卡，时间轴专属 UI 由 C2 实现）
+  // C1 类型补全（ event 时间轴事件；概览卡仍为四卡，时间轴专属 UI 由 C2 实现）
   event: "事件",
- // G2.3 类型补全（G2 时间标签点；概览卡仍为四卡——时间点无独立统计卡）
+  // G2.3 类型补全（G2 时间标签点；概览卡仍为四卡——时间点无独立统计卡）
   timepoint: "时间点",
- // （批次九）参考资料 reference
+  // （批次九）参考资料 reference
   reference: "参考资料",
 };
 const ENTITY_ORDER: EntityType[] = ["character", "setting", "location", "hook"];
@@ -67,7 +64,7 @@ interface OutlineSummary {
   volumes: number;
   chapters: number;
   scenes: number;
- /** 树中最大 updatedAt（ISO 字符串字典序比较，时间格式统一由应用层保证）；空树 → null */
+  /** 树中最大 updatedAt（ISO 字符串字典序比较，时间格式统一由应用层保证）；空树 → null */
   updatedAt: string | null;
 }
 
@@ -101,36 +98,36 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
   const outline = useProjectStore((s) => s.outline);
   const outlineLoading = useProjectStore((s) => s.outlineLoading);
   const loadOutline = useProjectStore((s) => s.loadOutline);
- // 书架用于 rootPath（buildBookPath）+ 引导卡书籍列表（S13.4：有书时列出可打开）；
- // 左栏 Sidebar 书架树与左栏 store 同源数据
+  // 书架用于 rootPath（buildBookPath）+ 引导卡书籍列表（S13.4：有书时列出可打开）；
+  // 左栏 Sidebar 书架树与左栏 store 同源数据
   const bookshelf = useProjectStore((s) => s.bookshelf);
   const bookshelfLoading = useProjectStore((s) => s.bookshelfLoading);
   const bookshelfError = useProjectStore((s) => s.bookshelfError);
   const loadBookshelf = useProjectStore((s) => s.loadBookshelf);
   const openProjectAt = useProjectStore((s) => s.openProjectAt);
   const createProjectAt = useProjectStore((s) => s.createProjectAt);
- // 会话（chat store 已按项目联动加载：切项目自动重载，本页仅补拉与消费）
+  // 会话（chat store 已按项目联动加载：切项目自动重载，本页仅补拉与消费）
   const sessions = useChatStore((s) => s.sessions);
   const sessionsLoading = useChatStore((s) => s.sessionsLoading);
   const sessionsError = useChatStore((s) => s.sessionsError);
   const loadSessions = useChatStore((s) => s.loadSessions);
   const setCurrentSession = useChatStore((s) => s.setCurrentSession);
   const currentSessionId = useChatStore((s) => s.currentSessionId);
- // 跨页定位（方案 A）：点击当前位置/去大纲 → 设置 transient 目标后跳 #/outline，Outline 页消费
+  // 跨页定位（方案 A）：点击当前位置/去大纲 → 设置 transient 目标后跳 #/outline，Outline 页消费
   const setFocusOutlineNode = useUiStore((s) => s.setFocusOutlineNode);
 
- // 引导表单状态
+  // 引导表单状态
   const [bookName, setBookName] = useState("");
   const [bookError, setBookError] = useState<string | null>(null);
- /** 有书形态下书籍点击打开失败的行内错误（S13.4；describeOpenError 映射，同 pathError 模式） */
+  /** 有书形态下书籍点击打开失败的行内错误（S13.4；describeOpenError 映射，同 pathError 模式） */
   const [bookOpenError, setBookOpenError] = useState<string | null>(null);
- /** 有书形态「新建一本…」折叠表单展开态 */
+  /** 有书形态「新建一本…」折叠表单展开态 */
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showPathForm, setShowPathForm] = useState(false);
   const [path, setPath] = useState("");
   const [pathError, setPathError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
- // 导入备份（批次十七 1-3b：Sidebar 独有能力搬入书架主页——zip + 书名，同名二选一冲突态）
+  // 导入备份（批次十七 1-3b：Sidebar 独有能力搬入书架主页——zip + 书名，同名二选一冲突态）
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importName, setImportName] = useState("");
@@ -138,16 +135,16 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
   const [importing, setImporting] = useState(false);
   const [importConflict, setImportConflict] = useState(false);
   const [importConflictBase, setImportConflictBase] = useState("");
- // 导出当前项目备份进行态（防连点）
+  // 导出当前项目备份进行态（防连点）
   const [exporting, setExporting] = useState(false);
- // 当前书行内重命名（仅当前打开书；行内输入态，Enter/失焦提交、Esc 取消）
+  // 当前书行内重命名（仅当前打开书；行内输入态，Enter/失焦提交、Esc 取消）
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
   const [renamingSubmitting, setRenamingSubmitting] = useState(false);
-  const renameInputRef = useRef<HTMLInputElement>(null);
+  const renameInputRef = useRef<InputRef>(null);
 
- // 创作要素统计状态（四类型并行；任一失败 → 区块内「加载失败 [重试]」，不阻塞其他区块）
+  // 创作要素统计状态（四类型并行；任一失败 → 区块内「加载失败 [重试]」，不阻塞其他区块）
   const [entityCounts, setEntityCounts] = useState<Partial<Record<EntityType, number>> | null>(
     null,
   );
@@ -155,32 +152,32 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
   const [entitiesError, setEntitiesError] = useState<string | null>(null);
   const [entitiesTick, setEntitiesTick] = useState(0);
 
- // 大纲概览：outline 已在 project store（openProjectAt 会加载）；未加载则补拉，
- // 失败用本地 attempted 标记呈现「加载失败 [重试]」（store 的 loadOutline 静默吞错）
+  // 大纲概览：outline 已在 project store（openProjectAt 会加载）；未加载则补拉，
+  // 失败用本地 attempted 标记呈现「加载失败 [重试]」（store 的 loadOutline 静默吞错）
   const [outlineAttempted, setOutlineAttempted] = useState(false);
 
   const noProject = config === null && !configLoading;
   const outlineSummary = outline ? summarizeOutline(outline.children) : null;
- // 当前位置标题（id→title 映射；outline 未加载时回退 id 占位，与 InfoBar 同语义）
+  // 当前位置标题（id→title 映射；outline 未加载时回退 id 占位，与 InfoBar 同语义）
   const positionTitle =
     config?.currentPosition != null
       ? (findOutlineNodeTitle(outline, config.currentPosition) ?? config.currentPosition)
       : null;
 
- // 书架加载（home 常驻：无项目与已打开项目均需展示书架列表；失败由 bookshelfError 呈现 + 重试）
+  // 书架加载（home 常驻：无项目与已打开项目均需展示书架列表；失败由 bookshelfError 呈现 + 重试）
   useEffect(() => {
     if (mode === "home" && !bookshelfLoading && bookshelf === null && bookshelfError === null) {
       void loadBookshelf();
     }
   }, [mode, bookshelfLoading, bookshelf, bookshelfError, loadBookshelf]);
 
- // 项目切换（同页不卸载场景：Sidebar 开新项目）时重置大纲加载标记，使新项目树重新拉取（overview 专属）
+  // 项目切换（同页不卸载场景：Sidebar 开新项目）时重置大纲加载标记，使新项目树重新拉取（overview 专属）
   useEffect(() => {
     if (mode !== "overview") return;
     setOutlineAttempted(false);
   }, [mode, config?.id]);
 
- // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉各区块（overview 专属）
+  // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉各区块（overview 专属）
   useDataRefresh(() => {
     if (mode !== "overview") return;
     setEntitiesTick((t) => t + 1);
@@ -188,12 +185,12 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     void loadSessions();
   });
 
- // 项目切换同样清除书籍打开错误（防下次进入引导形态时残留上次失败文案）
+  // 项目切换同样清除书籍打开错误（防下次进入引导形态时残留上次失败文案）
   useEffect(() => {
     setBookOpenError(null);
   }, [config?.id]);
 
- // 概览态：大纲树未加载则补拉（outlineLoading 由 store 管理；attempted 防重复）
+  // 概览态：大纲树未加载则补拉（outlineLoading 由 store 管理；attempted 防重复）
   useEffect(() => {
     if (mode !== "overview" || config === null) return;
     if (outline === null && !outlineLoading && !outlineAttempted) {
@@ -202,8 +199,8 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     }
   }, [config, outline, outlineLoading, outlineAttempted, loadOutline]);
 
- // 概览态：创作要素四类型并行统计（limit=1 仅取 total，「各取 total」）；
- // entitiesTick 变化 = 区块内重试；任一失败记录 entitiesError，成功类型照常展示
+  // 概览态：创作要素四类型并行统计（limit=1 仅取 total，「各取 total」）；
+  // entitiesTick 变化 = 区块内重试；任一失败记录 entitiesError，成功类型照常展示
   useEffect(() => {
     if (mode !== "overview" || config === null) return;
     let cancelled = false;
@@ -232,7 +229,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     };
   }, [config, entitiesTick]);
 
- // 概览态：会话列表补拉（chat store 订阅项目切换已自动加载；此处兜底「未尝试过」的场景）
+  // 概览态：会话列表补拉（chat store 订阅项目切换已自动加载；此处兜底「未尝试过」的场景）
   useEffect(() => {
     if (mode !== "overview" || config === null) return;
     if (sessions === null && !sessionsLoading && sessionsError === null) {
@@ -240,11 +237,11 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     }
   }, [mode, config, sessions, sessionsLoading, sessionsError, loadSessions]);
 
- /** 新建书籍：书名 → 创作根/books/<书名>/，create（不打开）→ open 进入新书（config 就绪后本页切概览形态） */
+  /** 新建书籍：书名 → 创作根/books/<书名>/，create（不打开）→ open 进入新书（config 就绪后本页切概览形态） */
   async function handleCreateBook(e: FormEvent) {
     e.preventDefault();
     const name = bookName.trim();
- // 书名校验复用 lib/book-name（与 Sidebar 新建/导入同款规则——L3 防路径逃逸，错误文案直接用于内联提示）
+    // 书名校验复用 lib/book-name（与 Sidebar 新建/导入同款规则——L3 防路径逃逸，错误文案直接用于内联提示）
     const nameError = validateBookName(name);
     if (nameError !== null) {
       setBookError(nameError);
@@ -258,9 +255,9 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     setBookError(null);
     try {
       await createProjectAt(buildBookPath(bookshelf.rootPath, name), { name, language: "zh" });
- // 成功后刷新书架（新书出现在左栏树）；config 已由 openProjectAt 刷新 → 本页切概览形态
+      // 成功后刷新书架（新书出现在左栏树）；config 已由 openProjectAt 刷新 → 本页切概览形态
       await loadBookshelf();
- // L4（oracle U4 审核）：与 Sidebar 新建同款提示
+      // L4（oracle U4 审核）：与 Sidebar 新建同款提示
       useUiStore.getState().showToast(`已创建并打开《${name}》`);
       setBookName("");
       navigate("/overview");
@@ -271,7 +268,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     }
   }
 
- /** 打开其他路径（S1.4 保留能力；绝对路径 openProjectAt） */
+  /** 打开其他路径（S1.4 保留能力；绝对路径 openProjectAt） */
   async function handleOpenPath(e: FormEvent) {
     e.preventDefault();
     if (!path.trim()) {
@@ -290,7 +287,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     }
   }
 
- /** 打开书籍（书架行；openProjectAt → 成功跳概览；失败行内展示 describeOpenError（页内行内文案） */
+  /** 打开书籍（书架行；openProjectAt → 成功跳概览；失败行内展示 describeOpenError（页内行内文案） */
   async function handleOpenBook(path: string) {
     setBookOpenError(null);
     try {
@@ -301,9 +298,9 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     }
   }
 
- // ============ 书架行能力（Sidebar 迁入，批次十七 1-3b） ============
+  // ============ 书架行能力（Sidebar 迁入，批次十七 1-3b） ============
 
- /** 导出当前项目备份（GET /project/export zip → 临时 <a> 下载）；exporting 防连点 */
+  /** 导出当前项目备份（GET /project/export zip → 临时 <a> 下载）；exporting 防连点 */
   async function handleExportBook(name: string) {
     if (exporting) return;
     setExporting(true);
@@ -316,7 +313,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
       document.body.appendChild(a);
       a.click();
       a.remove();
- // 延迟到下一帧 revoke（ora-1：旧版 Safari 下载前 revoke 中断竞态防御）
+      // 延迟到下一帧 revoke（ora-1：旧版 Safari 下载前 revoke 中断竞态防御）
       setTimeout(() => URL.revokeObjectURL(url), 0);
       useUiStore.getState().showToast(`已导出《${name}》备份`);
     } catch (err) {
@@ -334,8 +331,8 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     }
   }
 
- /** 导入同名冲突评估（B2：同名不再 409，前端二选一；预填 `<名> (2)` 可编辑；
- * 粘性冲突态直到明确选择/改名；预填导致的 onChange 不退出冲突态） */
+  /** 导入同名冲突评估（B2：同名不再 409，前端二选一；预填 `<名> (2)` 可编辑；
+   * 粘性冲突态直到明确选择/改名；预填导致的 onChange 不退出冲突态） */
   function evaluateImportConflict(next: string) {
     const trimmed = next.trim();
     const isBookName = (name: string) => bookshelf?.books.some((b) => b.name === name) ?? false;
@@ -379,8 +376,8 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     }
   }
 
- /** 导入提交（普通 = 当前输入名；冲突态 = 基础名「保持原样」/ 编辑名「重命名导入」）；
- * restored/new 分流 toast；失败内联保持打开可重试 */
+  /** 导入提交（普通 = 当前输入名；冲突态 = 基础名「保持原样」/ 编辑名「重命名导入」）；
+   * restored/new 分流 toast；失败内联保持打开可重试 */
   async function handleImportSubmit(name: string, e?: FormEvent) {
     e?.preventDefault();
     const trimmed = name.trim();
@@ -410,7 +407,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
         err instanceof ApiError ? err.message : "导入失败，请重试",
       );
       setImportError(text);
- // 兜底反馈（ora-1）：中途关闭后内联错误不可见，toast 保证失败必有反馈
+      // 兜底反馈（ora-1）：中途关闭后内联错误不可见，toast 保证失败必有反馈
       if (text !== "") useUiStore.getState().showToast(text, "error");
     } finally {
       setImporting(false);
@@ -432,8 +429,8 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     setRenameError(null);
   }
 
- /** 行内重命名提交（Enter/失焦）：POST /project/rename → 刷新书架 + config；
- * 409 PROJECT_ALREADY_EXISTS → 行内错误不关输入态；值未变化直接退出 */
+  /** 行内重命名提交（Enter/失焦）：POST /project/rename → 刷新书架 + config；
+   * 409 PROJECT_ALREADY_EXISTS → 行内错误不关输入态；值未变化直接退出 */
   async function handleRenameSubmit() {
     if (!renaming || renamingSubmitting) return;
     const name = renameValue.trim();
@@ -475,12 +472,12 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     window.setTimeout(() => renameInputRef.current?.focus(), 0);
   }
 
- /** 跳大纲并定位当前位置节点（当前位置未设置时仅跳转；「操作流」） */
+  /** 跳大纲并定位当前位置节点（当前位置未设置时仅跳转；「操作流」） */
   function goOutline() {
     if (config?.currentPosition != null) setFocusOutlineNode(config.currentPosition);
   }
 
- // ============ 加载态（config 拉取中：未判定形态前不渲染引导/概览） ============
+  // ============ 加载态（config 拉取中：未判定形态前不渲染引导/概览） ============
   if (configLoading) {
     return (
       <section>
@@ -494,7 +491,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     const shelfLoading = bookshelf === null && bookshelfLoading;
     const shelfError = bookshelfError !== null;
     const shelfHasBooks = bookshelf !== null && bookshelf.books.length > 0;
- /** 新建表单（空书架主操作 / 有书折叠次级共用；错误与提交态由页面持有） */
+    /** 新建表单（空书架主操作 / 有书折叠次级共用；错误与提交态由页面持有） */
     function renderCreateBookForm(className: string) {
       return (
         <form onSubmit={handleCreateBook} className={className}>
@@ -571,7 +568,6 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                       maxLength={60}
                       disabled={renamingSubmitting}
                       aria-label="重命名书名"
-                      className="h-7"
                     />
                   </div>
                 ) : (
@@ -599,7 +595,12 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                       <Pencil className="size-3.5" />
                       重命名
                     </Button>
-                    <Button type="primary" size="small" className="shrink-0" onClick={() => navigate("/overview")}>
+                    <Button
+                      type="primary"
+                      size="small"
+                      className="shrink-0"
+                      onClick={() => navigate("/overview")}
+                    >
                       继续创作
                     </Button>
                   </>
@@ -708,7 +709,9 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                   disabled={submitting}
                 />
                 <div>
-                  <Button htmlType="submit" disabled={submitting}>打开</Button>
+                  <Button htmlType="submit" disabled={submitting}>
+                    打开
+                  </Button>
                 </div>
                 {pathError && <p className="text-sm text-destructive">{pathError}</p>}
               </form>
@@ -717,7 +720,10 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
         </div>
 
         {/* 导入备份 Dialog（zip + 书名；同名二选一冲突态） */}
-        <Dialog open={importOpen} onOpenChange={(v) => (v ? setImportOpen(true) : closeImportDialog())}>
+        <Dialog
+          open={importOpen}
+          onOpenChange={(v) => (v ? setImportOpen(true) : closeImportDialog())}
+        >
           <DialogContent className="sm:max-w-sm">
             <DialogHeader>
               <DialogTitle>导入书籍</DialogTitle>
@@ -751,13 +757,16 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
               />
               {importConflict && (
                 <p className="text-sm text-primary">
-                  书架已有同名书籍《{importConflictBase}》——可重命名导入，或保持原样（服务端自动去重）
+                  书架已有同名书籍《{importConflictBase}
+                  》——可重命名导入，或保持原样（服务端自动去重）
                 </p>
               )}
               {importError && <p className="text-sm text-destructive">{importError}</p>}
             </form>
             <DialogFooter>
-              <Button onClick={closeImportDialog} disabled={importing}>取消</Button>
+              <Button onClick={closeImportDialog} disabled={importing}>
+                取消
+              </Button>
               {importConflict ? (
                 <>
                   <Button

@@ -30,9 +30,7 @@ describe("antd 基座冒烟", () => {
   });
 
   it("@ant-design/x Bubble/Sender 可渲染", () => {
-    const html = renderToString(
-      <Bubble role="assistant" content={<span>**粗体**纯文本</span>} />,
-    );
+    const html = renderToString(<Bubble role="assistant" content={<span>**粗体**纯文本</span>} />);
     expect(html).toContain("纯文本");
     expect(renderToString(<Sender placeholder="输入…" />)).toContain("输入");
   });

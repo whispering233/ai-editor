@@ -20,13 +20,13 @@ import { RelationsView } from "../components/entity/relations-view";
 import { NodeDeltaList } from "../components/delta/node-delta-list";
 import { DeltaCreateForm } from "../components/delta/delta-create-form";
 import { TYPE_LABEL } from "../components/outline/dialogs";
-import { Button } from "antd";
+import { Button, Input } from "antd";
 import { PageTitle } from "@/components/ui/page-title";
-import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionCard } from "@/components/ui/section-card";
 import { ApiError, updateOutlineNode, type UpdateOutlineBody } from "../lib/api";
 import { diffData } from "../lib/entity-detail";
+import { selectClass } from "../lib/styles";
 import {
   detailFieldsForNodeType,
   sceneNodeOptions,
@@ -34,11 +34,7 @@ import {
   toggleConflictLevel,
   type NodeFieldConfig,
 } from "../lib/outline-detail";
-import {
-  findNode,
-  shouldCommitSummary,
-  shouldCommitTitle,
-} from "../lib/outline-tree";
+import { findNode, shouldCommitSummary, shouldCommitTitle } from "../lib/outline-tree";
 import { cn } from "../lib/utils";
 import { navigate } from "../hooks/use-route";
 import { useSaveShortcut } from "../lib/save-shortcut";
@@ -46,33 +42,29 @@ import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
 
-/** 表单控件通用样式（token 类：select/textarea） */
-const FIELD_CLASS =
-  "w-full rounded-md border border-border bg-card px-3 py-1.5 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
-
 export default function OutlineDetail({ nodeId }: { nodeId: string }) {
   const outline = useProjectStore((s) => s.outline);
   const outlineLoading = useProjectStore((s) => s.outlineLoading);
   const config = useProjectStore((s) => s.config);
   const configLoading = useProjectStore((s) => s.configLoading);
   const loadOutline = useProjectStore((s) => s.loadOutline);
- // S13.2：设为当前位置（写 project.json current_position；store 内部自动重拉 config，联动 InfoBar/行尾徽标/compute 默认节点）
+  // S13.2：设为当前位置（写 project.json current_position；store 内部自动重拉 config，联动 InfoBar/行尾徽标/compute 默认节点）
   const updateConfig = useProjectStore((s) => s.updateConfig);
 
- // 首次加载标记：loadOutline 在 store 内静默吞错，用 loadAttempted 呈现「加载失败 + 重试」（同大纲列表页）
+  // 首次加载标记：loadOutline 在 store 内静默吞错，用 loadAttempted 呈现「加载失败 + 重试」（同大纲列表页）
   const [loadAttempted, setLoadAttempted] = useState(false);
- // 表单（node 数据副本；树刷新后重置为服务端权威值）
+  // 表单（node 数据副本；树刷新后重置为服务端权威值）
   const [titleValue, setTitleValue] = useState("");
   const [summaryValue, setSummaryValue] = useState("");
   const [dataForm, setDataForm] = useState<Record<string, unknown> | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
- // 设为当前位置提交态（防重复提交）
+  // 设为当前位置提交态（防重复提交）
   const [settingCurrent, setSettingCurrent] = useState(false);
- // 相关实体：新建关系对话框 + 重载信号
+  // 相关实体：新建关系对话框 + 重载信号
   const [relationDialogOpen, setRelationDialogOpen] = useState(false);
   const [relKey, setRelKey] = useState(0);
- // 变更记录：新建表单展开态 + 列表重载信号（S12.3）
+  // 变更记录：新建表单展开态 + 列表重载信号（S12.3）
   const [deltaFormOpen, setDeltaFormOpen] = useState(false);
   const [deltaReloadKey, setDeltaReloadKey] = useState(0);
 
@@ -83,8 +75,8 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
     }
   }, [outline, outlineLoading, loadAttempted, loadOutline]);
 
- // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉整树（node 变化驱动
- // 表单重置）+ 相关实体与变更记录区块重载（AI 可能为本节点新增关系/变更记录）
+  // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉整树（node 变化驱动
+  // 表单重置）+ 相关实体与变更记录区块重载（AI 可能为本节点新增关系/变更记录）
   useDataRefresh(() => {
     void loadOutline();
     setRelKey((k) => k + 1);
@@ -97,7 +89,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
   const sceneOptions = sceneNodeOptions(outline?.children ?? []);
   const isCurrent = config?.currentPosition === nodeId;
 
- // 节点 → 表单（依赖 node 引用：outline 未刷新则引用稳定不重置；保存后 loadOutline 新树 → 重置）
+  // 节点 → 表单（依赖 node 引用：outline 未刷新则引用稳定不重置；保存后 loadOutline 新树 → 重置）
   useEffect(() => {
     if (node === null) return;
     setTitleValue(node.title);
@@ -105,7 +97,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
     setDataForm(JSON.parse(JSON.stringify(node.data ?? {})) as Record<string, unknown>);
   }, [node]);
 
- /** 保存：diff 只提交变更字段（title/summary/data 一次提交，服务端部分更新 + data 浅合并） */
+  /** 保存：diff 只提交变更字段（title/summary/data 一次提交，服务端部分更新 + data 浅合并） */
   async function handleSave() {
     if (node === null || saving) return;
     const title = titleValue.trim();
@@ -130,7 +122,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
       await loadOutline();
     } catch (err) {
       if (err instanceof ApiError && err.code === "OUTLINE_NODE_NOT_FOUND") {
- // 节点已被 purge：重拉树后自然进入 404 态（节点不在树中）
+        // 节点已被 purge：重拉树后自然进入 404 态（节点不在树中）
         await loadOutline();
         return;
       }
@@ -140,17 +132,17 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
     }
   }
 
- /** 设置 data 表单字段值 */
+  /** 设置 data 表单字段值 */
   function setDataField(key: string, value: unknown) {
     setDataForm((prev) => (prev ? { ...prev, [key]: value } : prev));
   }
 
- /**
- * 设为当前位置（S13.2，自大纲页迁入）：PUT /project/config { current_position: nodeId }——
- * store 内部 updateConfig 成功后自动重拉 config，联动 InfoBar「当前位置」/大纲行尾徽标/
- * compute 预览默认节点（S5.4）/S9 伏笔健康指标基准。已是当前位置 → 按钮禁用不触发。
- * 失败：泛化 error toast（与 S13.1 前大纲页语义一致；节点能渲染说明在树中，失败主要为网络/服务端拒绝）
- */
+  /**
+   * 设为当前位置（S13.2，自大纲页迁入）：PUT /project/config { current_position: nodeId }——
+   * store 内部 updateConfig 成功后自动重拉 config，联动 InfoBar「当前位置」/大纲行尾徽标/
+   * compute 预览默认节点（S5.4）/S9 伏笔健康指标基准。已是当前位置 → 按钮禁用不触发。
+   * 失败：泛化 error toast（与 S13.1 前大纲页语义一致；节点能渲染说明在树中，失败主要为网络/服务端拒绝）
+   */
   async function handleSetCurrent() {
     if (node === null || settingCurrent || isCurrent) return;
     setSettingCurrent(true);
@@ -164,10 +156,10 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
     }
   }
 
- // Ctrl/Cmd+S 保存（B2）：仅节点就绪时注册（notFound/无项目/加载失败时不抢快捷键）
+  // Ctrl/Cmd+S 保存（B2）：仅节点就绪时注册（notFound/无项目/加载失败时不抢快捷键）
   useSaveShortcut(() => void handleSave(), node !== null);
 
- // ============ 渲染 ============
+  // ============ 渲染 ============
 
   if (notFound) {
     return (
@@ -182,9 +174,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
               >
                 去回收站
               </a>
-              <Button onClick={() => navigate("/outline")}>
-                返回大纲
-              </Button>
+              <Button onClick={() => navigate("/outline")}>返回大纲</Button>
             </div>
           }
         >
@@ -215,7 +205,11 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
           >
             {isCurrent ? "当前位置" : "设为当前位置"}
           </Button>
-          <Button type="primary" onClick={() => void handleSave()} disabled={node === null || saving}>
+          <Button
+            type="primary"
+            onClick={() => void handleSave()}
+            disabled={node === null || saving}
+          >
             {saving ? "保存中…" : "保存"}
           </Button>
         </div>
@@ -263,7 +257,9 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
         /* 树加载失败（loadOutline 静默吞错后的兜底呈现，同大纲列表页） */
         <div className="rounded-md border border-border p-4 text-sm text-muted-foreground">
           大纲加载失败
-          <Button className="ml-3" onClick={() => setLoadAttempted(false)}>重试</Button>
+          <Button className="ml-3" onClick={() => setLoadAttempted(false)}>
+            重试
+          </Button>
         </div>
       ) : node === null || dataForm === null ? null : (
         /* 表单区：左栏（基础信息/结构化信息/变更记录/伏笔标记）+ 右栏（相关实体） */
@@ -284,13 +280,12 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
                 </div>
                 <div>
                   <p className="mb-1 text-sm font-medium text-foreground">摘要</p>
-                  <textarea
+                  <Input.TextArea
                     value={summaryValue}
                     onChange={(e) => setSummaryValue(e.target.value)}
                     maxLength={200}
                     rows={3}
                     placeholder="一句话概括本节点内容（可选）"
-                    className={FIELD_CLASS}
                   />
                 </div>
               </div>
@@ -380,19 +375,18 @@ function FieldControl({
 }: {
   field: NodeFieldConfig;
   value: unknown;
- /** scene-select 用：场景节点选项（树中全部 scene 叶子） */
+  /** scene-select 用：场景节点选项（树中全部 scene 叶子） */
   sceneOptions: Array<{ id: string; label: string; depth: number }>;
   onChange: (v: unknown) => void;
 }) {
   switch (field.control) {
     case "textarea":
       return (
-        <textarea
+        <Input.TextArea
           value={typeof value === "string" ? value : ""}
           onChange={(e) => onChange(e.target.value)}
           maxLength={field.maxLength}
           rows={3}
-          className={FIELD_CLASS}
         />
       );
     case "checkbox-group": {
@@ -418,13 +412,13 @@ function FieldControl({
     }
     case "scene-select": {
       const current = sceneSelectValue(value);
- // 防御分支：当前引用不在选项集（引用节点已被删/purge）→ 追加临时 option 标注，避免 select 静默空白
+      // 防御分支：当前引用不在选项集（引用节点已被删/purge）→ 追加临时 option 标注，避免 select 静默空白
       const stale = current !== "" && !sceneOptions.some((o) => o.id === current);
       return (
         <select
           value={current}
           onChange={(e) => onChange(e.target.value)}
-          className={cn(FIELD_CLASS, current === "" && "text-muted-foreground")}
+          className={cn(selectClass, current === "" && "text-muted-foreground")}
         >
           <option value="">（未设置）</option>
           {stale && <option value={current}>{current}（已删除）</option>}

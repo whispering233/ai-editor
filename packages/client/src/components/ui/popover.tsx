@@ -65,7 +65,9 @@ function PopoverTrigger({
   const base =
     render !== undefined
       ? (render as React.ReactElement<Record<string, unknown>>)
-      : (React.createElement("button", { type: "button", ...props }) as React.ReactElement<Record<string, unknown>>);
+      : (React.createElement("button", { type: "button", ...props }) as React.ReactElement<
+          Record<string, unknown>
+        >);
   if (!menu) return base;
   const el = base;
   const merged: Record<string, unknown> = {

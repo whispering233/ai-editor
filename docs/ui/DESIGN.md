@@ -369,6 +369,8 @@ components:
 **`button-text`** — 无边框纯文字，只用于行内最弱操作；**不得用于页面级操作**。
 **`icon-button`** — 28px 方区、图标色 `{colors.tertiary}`、hover 变 `{colors.primary}`；不受「必须带边框」约束。
 **`input`** — 白底 + `{colors.hairline-strong}` 描边 + `{rounded.sm}` + 32px 高；聚焦 = 1px primary 描边（**无阴影、无彩环**）。行内编辑与表单用同一个 antd `Input`。
+
+**输入框默认值上收到 Provider**：`autoComplete: "off"` 经 `ConfigProvider` 的 `input` / `textArea` 默认 props 下发（v6 `InputConfig.autoComplete`），调用点不重复声明——禁浏览器历史建议，输入提示全由 datalist 候选与业务逻辑控制。
 **`select-option-selected`** — 选中项 = `{colors.surface-muted}` 灰面，不变蓝。
 
 ### 导航与外壳
@@ -435,6 +437,7 @@ components:
 - 不用 `font-serif` / 宋体做界面标题（唯一例外：书架封面）
 - 不硬编码色值/色类（`text-blue-500`、`#1677ff`、`rgba(...)` 手写值）
 - 不用 `!` 前缀类压 antd 组件样式
+- **不要用 Tailwind 类去覆盖 antd 组件根元素上 antd 自己声明的属性**（`width` / `height` / `padding` / `margin` / `font-size` / `color` / `background` / `border` / `border-radius` / `display`）：antd 样式是运行时注入的**无层 CSS**，而 Tailwind 工具类在 `@layer utilities`——按 CSS 级联规范**无层胜出**，此类覆盖会静默失效（历史上满仓 `!` 就是这么来的）。正确做法：宽度/伸缩用**外层容器**承载；具体尺寸用组件 `size`；状态面用组件 `variant`（如 `variant="filled"` = `colorFillTertiary` = `{colors.surface-muted}`）或组件 token
 - 不用阴影、渐变、彩色 focus 环、卡片 hover 抬升
 - 不引入第二套组件系统（lucide 图标 / sonner 提示 / cva 按钮已退役）；自绘只限 antd 无对应语义的浮层与业务组件
 - 不用胶囊形按钮；不把彩色用于大面背景或正文

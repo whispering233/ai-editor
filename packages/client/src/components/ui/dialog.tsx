@@ -73,10 +73,7 @@ function DialogOverlay({
       data-slot="dialog-overlay"
       aria-hidden
       onClick={() => ctx?.close()}
-      className={cn(
-        "fixed inset-0 z-50 bg-black/10 backdrop-blur-[2px]",
-        className,
-      )}
+      className={cn("fixed inset-0 z-50 bg-black/10 backdrop-blur-[2px]", className)}
       {...props}
     />
   );
@@ -92,7 +89,7 @@ function DialogContent({
   className?: string;
 }) {
   const ctx = React.useContext(DialogContext);
- // Esc 关闭（面板挂载期监听；关闭态 close 为 no-op）
+  // Esc 关闭（面板挂载期监听；关闭态 close 为 no-op）
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") ctx?.close();
@@ -100,7 +97,7 @@ function DialogContent({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [ctx]);
- // 关闭态不渲染（受控守卫：取消/Esc/遮罩关闭 = set open false → 卸载 portal）
+  // 关闭态不渲染（受控守卫：取消/Esc/遮罩关闭 = set open false → 卸载 portal）
   if (ctx === null || !ctx.open) return null;
 
   return createPortal(
@@ -131,7 +128,11 @@ function DialogContent({
 
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
-    <div data-slot="dialog-header" className={cn("flex flex-col gap-1.5 pr-6", className)} {...props} />
+    <div
+      data-slot="dialog-header"
+      className={cn("flex flex-col gap-1.5 pr-6", className)}
+      {...props}
+    />
   );
 }
 
@@ -147,7 +148,7 @@ function DialogFooter({
     <div
       data-slot="dialog-footer"
       className={cn(
-        "-mx-4 -mb-4 mt-2 flex flex-col-reverse gap-2 rounded-b-xl border-t bg-muted/50 p-4 sm:flex-row sm:justify-end",
+        "-mx-4 mt-2 -mb-4 flex flex-col-reverse gap-2 rounded-b-xl border-t bg-muted/50 p-4 sm:flex-row sm:justify-end",
         className,
       )}
       {...props}

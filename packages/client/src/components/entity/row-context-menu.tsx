@@ -34,23 +34,23 @@ export function RowContextMenu({
   trigger,
   children,
 }: {
- /** 注入会话上下文（按行对象构造：大纲节点 focus_node_id、实体 focus_entity_type/id） */
+  /** 注入会话上下文（按行对象构造：大纲节点 focus_node_id、实体 focus_entity_type/id） */
   focus: FocusContext;
- /** 建立关联源端点（类型/端点按行实体类型预填；大纲节点 type=outline_node） */
+  /** 建立关联源端点（类型/端点按行实体类型预填；大纲节点 type=outline_node） */
   source: RelationSource;
- /** 建立关联成功后的数据刷新回调（页面级 reloadTick+1 / notifyDataChanged） */
+  /** 建立关联成功后的数据刷新回调（页面级 reloadTick+1 / notifyDataChanged） */
   onCreated?: () => void;
- /** 行根元素（成为右键菜单触发区；行级 onContextMenu 由 ContextMenuTrigger 内建处理） */
+  /** 行根元素（成为右键菜单触发区；行级 onContextMenu 由 ContextMenuTrigger 内建处理） */
   trigger: ReactElement;
- /** 行内容（渲染在 trigger 元素内部） */
+  /** 行内容（渲染在 trigger 元素内部） */
   children: ReactNode;
 }) {
   const setFocusContext = useChatStore((s) => s.setFocusContext);
   const requestFocusInput = useChatStore((s) => s.requestFocusInput);
- /** 建立关联对话框打开态（行级状态；打开后按行对象预填源端点） */
+  /** 建立关联对话框打开态（行级状态；打开后按行对象预填源端点） */
   const [relationOpen, setRelationOpen] = useState(false);
 
- /** 注入会话上下文：写入 focusContext（右栏 focus 小条出现）+ 聚焦输入框（可立即提问） */
+  /** 注入会话上下文：写入 focusContext（右栏 focus 小条出现）+ 聚焦输入框（可立即提问） */
   function handleInjectFocus() {
     setFocusContext(focus);
     requestFocusInput();

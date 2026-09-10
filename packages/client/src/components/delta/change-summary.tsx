@@ -11,7 +11,7 @@ export function ChangeSummary({
   skipped,
 }: {
   changes: DeltaChange[];
- /** 被跳过的 change 下标（compute appliedDeltas[].skipped[].index）；空 = 无跳过 */
+  /** 被跳过的 change 下标（compute appliedDeltas[].skipped[].index）；空 = 无跳过 */
   skipped?: number[];
 }) {
   const skippedSet = skipped ? new Set(skipped) : null;

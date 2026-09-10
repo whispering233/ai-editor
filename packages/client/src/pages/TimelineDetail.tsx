@@ -21,12 +21,11 @@
 // createdAt/updatedAt
 // - 未保存离开守卫：EntityDetail 无此模式，不做（避免过度设计）
 import { useEffect, useState } from "react";
-import { Button } from "antd";
+import { Button, Input } from "antd";
 import { formatTimestamp } from "@whispering233/ai-editor-shared";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { PageTitle } from "@/components/ui/page-title";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   ApiError,
@@ -56,7 +55,7 @@ import {
 } from "../lib/timeline-detail";
 import { flattenTree } from "../lib/outline-tree";
 import { cn } from "../lib/utils";
-import { inputClass } from "@/lib/styles";
+import { selectClass } from "@/lib/styles";
 import { ConfirmDialog } from "../components/outline/dialogs";
 import { TagSuggest } from "../components/timeline/TagSuggest";
 import { navigate } from "../hooks/use-route";
@@ -70,43 +69,43 @@ export default function TimelineDetail({ id }: { id: string }) {
   const [loading, setLoading] = useState(false);
   const [notFound, setNotFound] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
- /** 表单值（详情 data 副本；null = 未加载） */
+  /** 表单值（详情 data 副本；null = 未加载） */
   const [form, setForm] = useState<EventDetailForm | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
- // 关联节点选择器 Popover（UX3 轻量弹层：非模态，不打断详情页）
+  // 关联节点选择器 Popover（UX3 轻量弹层：非模态，不打断详情页）
   const [relationOpen, setRelationOpen] = useState(false);
   const [relNodeId, setRelNodeId] = useState("");
   const [relError, setRelError] = useState<string | null>(null);
   const [relSubmitting, setRelSubmitting] = useState(false);
- // 取消关联确认（物理删）
+  // 取消关联确认（物理删）
   const [deleteRelationTarget, setDeleteRelationTarget] = useState<RelationSummaryItem | null>(
     null,
   );
- // 标签建议池（F8：独立补拉全量 200 聚合已存在标签；失败静默——无建议区，不影响表单）
+  // 标签建议池（F8：独立补拉全量 200 聚合已存在标签；失败静默——无建议区，不影响表单）
   const [tagPool, setTagPool] = useState<string[]>([]);
- // 挂载选择器数据（G2）：时间点列表（选项）+ 事件列表（当前位置保位）；失败 → 选择器重试
+  // 挂载选择器数据（G2）：时间点列表（选项）+ 事件列表（当前位置保位）；失败 → 选择器重试
   const [timepoints, setTimepoints] = useState<EntitySummary[] | null>(null);
   const [events, setEvents] = useState<EntitySummary[] | null>(null);
   const [mountDataFailed, setMountDataFailed] = useState(false);
   const [mountSaving, setMountSaving] = useState(false);
   const [mountError, setMountError] = useState<string | null>(null);
 
- /** 补拉全量事件聚合标签池（F8；保存新标签后随 useDataRefresh 刷新，避免建议池陈旧——oracle P2） */
+  /** 补拉全量事件聚合标签池（F8；保存新标签后随 useDataRefresh 刷新，避免建议池陈旧——oracle P2） */
   async function loadTagPool(): Promise<void> {
     try {
       const res = await listEntities("event", { limit: 200 });
       setTagPool(collectEventTags(res.items));
     } catch {
- // 失败静默（详情页独立补拉，失败仅无建议区）
+      // 失败静默（详情页独立补拉，失败仅无建议区）
     }
   }
 
- /**
- * 挂载选择器数据（G2）：时间点列表（选项）+ 事件列表（当前位置——move_to 保位用；
- * limit 200 拉全量——全局事件线性序，避免 >50 时 findIndex 落空）。
- * 失败 → mountDataFailed（选择器显示重试，不阻塞详情主体/表单）。
- */
+  /**
+   * 挂载选择器数据（G2）：时间点列表（选项）+ 事件列表（当前位置——move_to 保位用；
+   * limit 200 拉全量——全局事件线性序，避免 >50 时 findIndex 落空）。
+   * 失败 → mountDataFailed（选择器显示重试，不阻塞详情主体/表单）。
+   */
   async function loadMountData(): Promise<void> {
     setMountDataFailed(false);
     try {
@@ -126,13 +125,13 @@ export default function TimelineDetail({ id }: { id: string }) {
   useEffect(() => {
     void loadTagPool();
     void loadMountData();
- // 依赖仅 []：挂载拉取一次；数据变更由 useDataRefresh 兜底刷新（main.tsx key=id 保证切页 remount）
+    // 依赖仅 []：挂载拉取一次；数据变更由 useDataRefresh 兜底刷新（main.tsx key=id 保证切页 remount）
   }, []);
 
   const outline = useProjectStore((s) => s.outline);
   const nodeOptions = flattenTree(outline?.children ?? []);
 
- /** 加载详情（id 变化重载；成功重置表单为 name + data 副本） */
+  /** 加载详情（id 变化重载；成功重置表单为 name + data 副本） */
   async function loadDetail() {
     setLoading(true);
     setLoadError(null);
@@ -156,24 +155,24 @@ export default function TimelineDetail({ id }: { id: string }) {
 
   useEffect(() => {
     void loadDetail();
- // 依赖仅 [id]：loadDetail 每次渲染重建，但页面切换才需重载（同 EntityDetail）
+    // 依赖仅 [id]：loadDetail 每次渲染重建，但页面切换才需重载（同 EntityDetail）
   }, [id]);
 
- // 数据变更信号：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉详情（表单以服务端权威为准重置）+ 标签池 + 挂载数据
+  // 数据变更信号：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉详情（表单以服务端权威为准重置）+ 标签池 + 挂载数据
   useDataRefresh(() => {
     void loadDetail();
     void loadTagPool();
     void loadMountData();
   });
 
- // 大纲未加载时兜底拉取（节点选择器依赖；项目打开时已加载，防御直达路由场景——同 HookPanel/Timeline）
+  // 大纲未加载时兜底拉取（节点选择器依赖；项目打开时已加载，防御直达路由场景——同 HookPanel/Timeline）
   useEffect(() => {
     if (useProjectStore.getState().outline === null && useProjectStore.getState().config !== null) {
       void useProjectStore.getState().loadOutline();
     }
   }, []);
 
- /** 保存：buildEventDetailPatch 只提交变更字段（partial 浅合并，与 C3 编辑对话框同语义）；成功后重拉 */
+  /** 保存：buildEventDetailPatch 只提交变更字段（partial 浅合并，与 C3 编辑对话框同语义）；成功后重拉 */
   async function handleSave() {
     if (!detail || !form || saving) return;
     const patch = buildEventDetailPatch({ name: detail.name, data: detail.data }, form);
@@ -198,14 +197,14 @@ export default function TimelineDetail({ id }: { id: string }) {
     }
   }
 
- /**
- * 挂载变更即保存（G2，以 move_to 语义统一）：
- * POST /entity/event/:id/move_to { timepoint_id（空 = 移出未挂载）, order }——
- * order = 事件在当前全局事件序中的 index（保位不跳位：改挂载不动位置）；
- * 列表未拉到/未找到（防御）→ 全局序末尾（length——不改动其他事件相对序）。
- * 成功 → toast + 重拉详情（relations 更新）；失败 → 内联错误 + 选择器回退原值
- * （受控 value = mountedId，未变更 state 即回退）。
- */
+  /**
+   * 挂载变更即保存（G2，以 move_to 语义统一）：
+   * POST /entity/event/:id/move_to { timepoint_id（空 = 移出未挂载）, order }——
+   * order = 事件在当前全局事件序中的 index（保位不跳位：改挂载不动位置）；
+   * 列表未拉到/未找到（防御）→ 全局序末尾（length——不改动其他事件相对序）。
+   * 成功 → toast + 重拉详情（relations 更新）；失败 → 内联错误 + 选择器回退原值
+   * （受控 value = mountedId，未变更 state 即回退）。
+   */
   async function handleMountChange(nextTimepointId: string) {
     if (!detail || mountSaving || !timepoints || !events) return;
     const current = mountedTimepointId(detail.relations, id);
@@ -232,7 +231,7 @@ export default function TimelineDetail({ id }: { id: string }) {
     }
   }
 
- /** 添加关联：POST /relation（event → outline_node，occurs_in）；409 判重内联提示，不关闭 Popover */
+  /** 添加关联：POST /relation（event → outline_node，occurs_in）；409 判重内联提示，不关闭 Popover */
   async function handleAddRelation() {
     if (relNodeId === "" || relSubmitting) return;
     setRelSubmitting(true);
@@ -253,7 +252,7 @@ export default function TimelineDetail({ id }: { id: string }) {
     }
   }
 
- /** 取消关联（物理删，确认后执行；冒泡错误给 ConfirmDialog 内联显示） */
+  /** 取消关联（物理删，确认后执行；冒泡错误给 ConfirmDialog 内联显示） */
   async function handleDeleteRelation() {
     if (!deleteRelationTarget) return;
     try {
@@ -266,7 +265,7 @@ export default function TimelineDetail({ id }: { id: string }) {
     }
   }
 
- /** 软删直接执行（H2：不再弹二次确认）：DELETE → toast（级联计数）→ 跳回列表 */
+  /** 软删直接执行（H2：不再弹二次确认）：DELETE → toast（级联计数）→ 跳回列表 */
   async function handleDelete() {
     if (!detail) return;
     try {
@@ -287,10 +286,10 @@ export default function TimelineDetail({ id }: { id: string }) {
     }
   }
 
- // Ctrl/Cmd+S 保存（B2）
+  // Ctrl/Cmd+S 保存（B2）
   useSaveShortcut(() => void handleSave(), detail !== null && form !== null);
 
- // ============ 渲染 ============
+  // ============ 渲染 ============
 
   if (notFound) {
     return (
@@ -305,9 +304,7 @@ export default function TimelineDetail({ id }: { id: string }) {
               >
                 去回收站
               </a>
-              <Button onClick={() => navigate("/timeline")}>
-                返回列表
-              </Button>
+              <Button onClick={() => navigate("/timeline")}>返回列表</Button>
             </div>
           }
         >
@@ -318,10 +315,10 @@ export default function TimelineDetail({ id }: { id: string }) {
   }
 
   const occurring = detail === null ? [] : occursInRelations(detail.relations, id);
- // 标签建议（F8：按表单当前输入匹配标签池；空段不匹配 → 无建议区）
+  // 标签建议（F8：按表单当前输入匹配标签池；空段不匹配 → 无建议区）
   const tagSuggestions = form === null ? [] : suggestTags(form.tagsInput, tagPool);
 
- /** 点选建议填入（F8）：替换最后一段 + 追加逗号；输入框焦点由 TagSuggest onMouseDown 保持 */
+  /** 点选建议填入（F8）：替换最后一段 + 追加逗号；输入框焦点由 TagSuggest onMouseDown 保持 */
   function pickTag(tag: string) {
     setForm((f) => (f ? { ...f, tagsInput: applyTagSuggestion(f.tagsInput, tag) } : f));
   }
@@ -369,7 +366,9 @@ export default function TimelineDetail({ id }: { id: string }) {
           {loadError === CLIENT_NETWORK_ERROR
             ? "无法连接服务，请确认 ai-editor 服务已启动。"
             : "详情加载失败，请重试。"}
-          <Button className="ml-3" onClick={() => void loadDetail()}>重试</Button>
+          <Button className="ml-3" onClick={() => void loadDetail()}>
+            重试
+          </Button>
         </div>
       )}
 
@@ -389,12 +388,11 @@ export default function TimelineDetail({ id }: { id: string }) {
               </div>
               <div>
                 <p className="mb-1 text-sm font-medium text-foreground">描述</p>
-                <textarea
+                <Input.TextArea
                   value={form.description}
                   onChange={(e) => setForm((f) => (f ? { ...f, description: e.target.value } : f))}
                   rows={3}
                   placeholder="事件发生了什么"
-                  className={cn(inputClass, "w-full")}
                 />
               </div>
               {/* 挂载时间点选择器（G2）：显示当前挂载 + 选择器（可清空 = 移出未挂载）；
@@ -405,7 +403,9 @@ export default function TimelineDetail({ id }: { id: string }) {
                   mountDataFailed ? (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       挂载数据加载失败
-                      <Button size="small" onClick={() => void loadMountData()}>重试</Button>
+                      <Button size="small" onClick={() => void loadMountData()}>
+                        重试
+                      </Button>
                     </div>
                   ) : (
                     <div className="h-9 animate-pulse rounded bg-muted" />
@@ -416,7 +416,8 @@ export default function TimelineDetail({ id }: { id: string }) {
                     onChange={(e) => void handleMountChange(e.target.value)}
                     disabled={mountSaving}
                     className={cn(
-                      cn(inputClass, "w-full"),
+                      selectClass,
+                      "w-full",
                       mountedTimepointId(detail.relations, id) === null && "text-muted-foreground",
                     )}
                   >
@@ -457,23 +458,17 @@ export default function TimelineDetail({ id }: { id: string }) {
                 open={relationOpen}
                 onOpenChange={(v) => {
                   if (v) {
- // 打开时重置选择态（防上次残留）
+                    // 打开时重置选择态（防上次残留）
                     setRelNodeId("");
                     setRelError(null);
                     setRelationOpen(true);
                   } else if (!relSubmitting) {
- // 提交中禁止关闭（409 内联提示需要停留；Esc/点击外部同理被守卫）
+                    // 提交中禁止关闭（409 内联提示需要停留；Esc/点击外部同理被守卫）
                     setRelationOpen(false);
                   }
                 }}
               >
-                <PopoverTrigger
-                  render={
-                    <Button>
-                      + 关联场景/章节
-                    </Button>
-                  }
-                />
+                <PopoverTrigger render={<Button>+ 关联场景/章节</Button>} />
                 <PopoverContent className="flex flex-col gap-3">
                   <div>
                     <p className="mb-1 text-sm font-medium text-foreground">大纲节点</p>
@@ -486,7 +481,9 @@ export default function TimelineDetail({ id }: { id: string }) {
                   </div>
                   {relError && <p className="text-sm text-destructive">{relError}</p>}
                   <div className="flex justify-end gap-2">
-                    <Button onClick={() => setRelationOpen(false)} disabled={relSubmitting}>取消</Button>
+                    <Button onClick={() => setRelationOpen(false)} disabled={relSubmitting}>
+                      取消
+                    </Button>
                     <Button
                       type="primary"
                       onClick={() => void handleAddRelation()}
@@ -514,7 +511,12 @@ export default function TimelineDetail({ id }: { id: string }) {
                     >
                       {r.targetName ?? r.targetId}
                     </button>
-                    <Button danger size="small" className="shrink-0" onClick={() => setDeleteRelationTarget(r)}>
+                    <Button
+                      danger
+                      size="small"
+                      className="shrink-0"
+                      onClick={() => setDeleteRelationTarget(r)}
+                    >
                       取消关联
                     </Button>
                   </li>
@@ -556,7 +558,7 @@ function OutlineNodeSelect({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className={cn(cn(inputClass, "w-full"), value === "" && "text-muted-foreground")}
+      className={cn(selectClass, "w-full", value === "" && "text-muted-foreground")}
     >
       <option value="">{placeholder}</option>
       {nodeOptions.map((o) => (
