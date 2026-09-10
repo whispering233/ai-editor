@@ -34,6 +34,3 @@ export const errorBannerClass =
 
 /** 骨架占位（：区块级 animate-pulse bg-muted）；⚠ radius 可覆盖——rounded-lg / rounded-md 排序在 rounded 之后 */
 export const skeletonClass = "animate-pulse rounded bg-muted";
-
-/** 区块卡容器（：rounded-xl border bg-card p-4；标题/内容见 SectionCard 组件） */
-export const sectionCardClass = "rounded-xl border border-border bg-card p-4";

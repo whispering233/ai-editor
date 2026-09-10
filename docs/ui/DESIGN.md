@@ -398,6 +398,7 @@ components:
 | 组件 | token | 浅色 | 深色（推断） |
 |---|---|---|---|
 | Button | `primaryShadow` / `defaultShadow` / `dangerShadow` | `"none"` | `"none"` |
+| Card | `bodyPadding` | `16` | `16` |
 | Menu | `itemSelectedBg` / `itemSelectedColor` | `{colors.surface-muted}` / `{colors.primary}` | `#373737` / 81% 白 |
 | Menu | `itemBorderRadius` / `itemHeight` / `itemMarginInline` | `6` / `32` / `4` | 同浅色 |
 | Menu | `itemBg` / `activeBarBorderWidth` | `"transparent"` / `0` | 同浅色 |

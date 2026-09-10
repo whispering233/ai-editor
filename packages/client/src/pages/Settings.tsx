@@ -221,7 +221,7 @@ export default function Settings() {
                     title={
                       <span className="text-sm font-medium">
                         {p.displayName}
-                        {isActive && <Tag color="blue" className="ml-2">当前</Tag>}
+                        {isActive && <Tag className="ml-2">当前</Tag>}
                       </span>
                     }
                   >

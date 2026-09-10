@@ -37,7 +37,7 @@ export class ErrorBoundary extends Component<Props, State> {
     if (error === null) return this.props.children;
     return (
       <div className="flex h-full min-h-64 flex-col items-center justify-center gap-3 p-8">
-        <div className="flex flex-col items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/10 px-8 py-6 text-center">
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-8 py-6 text-center">
           <CircleAlert className="size-8 text-destructive" />
           <p className="text-base font-medium text-foreground">界面出现异常</p>
           <p className="max-w-md text-sm text-muted-foreground">

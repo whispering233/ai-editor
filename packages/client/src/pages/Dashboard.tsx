@@ -22,6 +22,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { SectionCard } from "@/components/ui/section-card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PageTitle } from "@/components/ui/page-title";
 import { skeletonClass } from "@/lib/styles";
 import {
@@ -557,7 +558,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
           </div>
         )}
 
-        <div className="mt-4 rounded-2xl border border-dashed border-border bg-card px-6 py-6">
+        <div className="mt-4 rounded-lg border border-dashed border-border bg-card px-6 py-6">
           {/* 当前打开书条：继续创作跳 #/overview；行内导出/重命名直显（红线） */}
           {config !== null && (
             <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
@@ -824,16 +825,18 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
   if (noProject) {
     return (
       <section className="mx-auto w-full max-w-xl px-4">
-        <div className="mt-16 rounded-2xl border border-dashed border-border bg-card px-6 py-10 text-center">
-          <p className="text-base font-semibold text-foreground">还没有打开的书</p>
-          <p className="mt-1 text-sm text-muted-foreground">先到书架选择或创建一本</p>
-          <a
-            href="#/"
-            className={cn(buttonVariants({ variant: "outline", size: "sm" }), "mt-5")}
-          >
-            回到书架
-          </a>
-        </div>
+        <EmptyState
+          padding="sm"
+          className="mt-16"
+          action={
+            <a href="#/" className={buttonVariants({ variant: "outline", size: "sm" })}>
+              回到书架
+            </a>
+          }
+        >
+          <span className="block text-base font-semibold text-foreground">还没有打开的书</span>
+          <span className="mt-1 block">先到书架选择或创建一本</span>
+        </EmptyState>
       </section>
     );
   }

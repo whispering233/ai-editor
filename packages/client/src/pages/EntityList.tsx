@@ -22,7 +22,7 @@ import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { ENTITY_TYPES } from "@whispering233/ai-editor-shared";
 import type { EntitySummary, EntityType } from "@whispering233/ai-editor-shared";
-import { Alert, Button, Empty, Input, Pagination, Select, Skeleton, Tag, Typography } from "antd";
+import { Alert, Button, Input, Pagination, Select, Skeleton, Tag, Typography } from "antd";
 import { SearchOutlined } from "@ant-design/icons";
 import {
   ApiError,
@@ -50,6 +50,7 @@ import { RowContextMenu } from "../components/entity/row-context-menu";
 import { RelationsView } from "../components/entity/relations-view";
 import { SettingTreeView } from "../components/entity/setting-tree";
 import { SuggestionDatalist, uniqueStrings } from "../components/ui/suggestion-datalist";
+import { EmptyState } from "../components/ui/empty-state";
 
 const TYPE_LABEL: Record<ListableEntityType, string> = {
   character: "人物",
@@ -427,27 +428,25 @@ export default function EntityList({ type }: { type: string }) {
             </div>
           )}
 
-          {/* 空态（两种文案区分：无实体 vs 搜索无结果） */}
+          {/* 空态（两种文案区分：无实体 vs 搜索无结果；均走 EmptyState 虚线卡） */}
           {!loading && items !== null && items.length === 0 && (
-            <div className="mt-3 py-10">
-              <Empty
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description={
-                  q
-                    ? `没有匹配「${q}」的${TYPE_LABEL[entityType]}`
-                    : `还没有${TYPE_LABEL[entityType]}，新建一个`
-                }
-              />
-              <div className="mt-2 text-center">
-                {q ? (
+            <EmptyState
+              padding="sm"
+              className="mt-3"
+              action={
+                q ? (
                   <Button onClick={clearSearch}>清空搜索</Button>
                 ) : (
                   <Button type="primary" onClick={openCreateRow}>
                     + 新建{TYPE_LABEL[entityType]}
                   </Button>
-                )}
-              </div>
-            </div>
+                )
+              }
+            >
+              {q
+                ? `没有匹配「${q}」的${TYPE_LABEL[entityType]}`
+                : `还没有${TYPE_LABEL[entityType]}，新建一个`}
+            </EmptyState>
           )}
 
           {/* 列表表格 */}
@@ -560,11 +559,7 @@ export default function EntityList({ type }: { type: string }) {
  * 角色/性格/能力独立成列——列头即区分，修复首版合并 chips 无法分辨的反馈。 */
 function CharacterRow({ item }: { item: EntitySummary }) {
   const { role, motivation, personality, abilities } = characterRowInfo(item.summary);
-  const badge = (text: string) => (
-    <Tag key={text} color="blue">
-      {text}
-    </Tag>
-  );
+  const badge = (text: string) => <Tag key={text}>{text}</Tag>;
   return (
     <>
       {/* 名称列：名称 + 动机第二行（弱化样式，空动机不渲染） */}
@@ -585,13 +580,7 @@ function CharacterRow({ item }: { item: EntitySummary }) {
       </td>
       {/* 角色列 */}
       <td className="px-3 py-2">
-        {role !== "" ? (
-          <Tag color="blue">
-            {role}
-          </Tag>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        )}
+        {role !== "" ? <Tag>{role}</Tag> : <span className="text-muted-foreground">—</span>}
       </td>
       {/* 性格列（前 2 chips）：td 保持 table-cell（禁止直接加 flex——浏览器表格布局会把
           非 cell 盒塞进同一列槽，能力列与性格列重叠，实测踩坑），flex 只作用内层容器 */}

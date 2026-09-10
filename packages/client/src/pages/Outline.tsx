@@ -887,15 +887,16 @@ export default function Outline() {
 
       {noProject ? (
         /* 未打开项目：引导回首页（侧栏无项目可点的现状接受项，S1.6 文档已说明） */
-        <div className="rounded-md border border-dashed border-border px-6 py-10 text-center">
-          <p className="text-sm text-muted-foreground">未打开项目，无法编辑大纲</p>
-          <a
-            href="#/"
-            className="mt-2 inline-block text-sm text-muted-foreground underline hover:text-foreground"
-          >
-            回到首页打开或创建书籍
-          </a>
-        </div>
+        <EmptyState
+          padding="sm"
+          action={
+            <a href="#/" className="text-sm text-muted-foreground underline hover:text-foreground">
+              回到首页打开或创建书籍
+            </a>
+          }
+        >
+          未打开项目，无法编辑大纲
+        </EmptyState>
       ) : outlineLoading && outline === null ? (
         /* 加载骨架 */
         <div className="space-y-2 rounded-md border border-border p-3">
@@ -923,19 +924,22 @@ export default function Outline() {
       ) : outline.children.length === 0 ? (
         /* 空态：就地新建（输入行内嵌引导卡，替代原「新建第一卷」弹窗按钮） */
         creatingAt?.parentId === ROOT_NODE_ID ? (
-          <div className="rounded-lg border border-dashed border-border px-6 py-12 text-center">
-            <p className="text-sm text-muted-foreground">输入第一卷标题，Enter 创建</p>
-            <div className="mx-auto mt-4 max-w-sm">
-              <RootCreateRow
-                type={creatingAt.type}
-                onTypeChange={(t) => setCreatingAt({ parentId: ROOT_NODE_ID, type: t })}
-                value={createValue}
-                onChange={setCreateValue}
-                onKeyDown={handleCreateKeyDown}
-                onCancel={cancelCreate}
-              />
-            </div>
-          </div>
+          <EmptyState
+            action={
+              <div className="mx-auto max-w-sm">
+                <RootCreateRow
+                  type={creatingAt.type}
+                  onTypeChange={(t) => setCreatingAt({ parentId: ROOT_NODE_ID, type: t })}
+                  value={createValue}
+                  onChange={setCreateValue}
+                  onKeyDown={handleCreateKeyDown}
+                  onCancel={cancelCreate}
+                />
+              </div>
+            }
+          >
+            输入第一卷标题，Enter 创建
+          </EmptyState>
         ) : (
           <EmptyState
             action={

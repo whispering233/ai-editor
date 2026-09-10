@@ -14,8 +14,9 @@
 import { useEffect, useState } from "react";
 import type { EntityType } from "@whispering233/ai-editor-shared";
 import { formatRelativeTime } from "@whispering233/ai-editor-shared";
-import { Alert, Button, Empty, Skeleton, Tag, Typography } from "antd";
+import { Alert, Button, Skeleton, Tag, Typography } from "antd";
 import { PageTitle } from "@/components/ui/page-title";
+import { EmptyState } from "@/components/ui/empty-state";
 import { DeleteOutlined, RedoOutlined, ReloadOutlined } from "@ant-design/icons";
 import { ConfirmDialog } from "../components/outline/dialogs";
 import {
@@ -265,11 +266,7 @@ export default function Trash() {
       )}
 
       {/* 空态 */}
-      {!loading && isEmpty && (
-        <div className="py-14">
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="回收站是空的" />
-        </div>
-      )}
+      {!loading && isEmpty && <EmptyState padding="lg">回收站是空的</EmptyState>}
 
       {/* 分栏：实体 / 大纲节点（md 双列，窄屏堆叠） */}
       {data !== null && !isEmpty && (

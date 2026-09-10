@@ -317,11 +317,9 @@ export function BackupSection() {
                           <Typography.Text type="secondary">
                             {formatBackupTime(b.createdAt)}
                           </Typography.Text>
-                          {/* 类型标签：自动 = 中性 Tag，手动 = 蓝色强调 Tag */}
-                          <Tag
-                            className="ml-1.5"
-                            color={b.kind === "manual" ? "blue" : "default"}
-                          >
+                          {/* 类型标签：统一中性灰底（DESIGN.md tag 默认 `{colors.surface-muted}`）——
+                              手动/自动的区别由标签文案传达，不用 antd preset 色（全站禁止 preset 蓝） */}
+                          <Tag className="ml-1.5">
                             {BACKUP_KIND_LABELS[b.kind]}
                           </Tag>
                           {!editing && b.name !== undefined ? (

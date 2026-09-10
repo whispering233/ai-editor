@@ -17,9 +17,10 @@ import { ApiError, CLIENT_NETWORK_ERROR, deleteRelation, listRelations } from ".
 import type { RelationSummaryItem } from "../../lib/api";
 import { relationTypeLabel } from "../../lib/entity-detail";
 import { ConfirmDialog } from "../outline/dialogs";
+import { EmptyState } from "../ui/empty-state";
 import { entityDetailPath } from "../../lib/entity-paths";
 import type { EntityType } from "@whispering233/ai-editor-shared";
-import { Alert, Button, Empty, Input, Select, Skeleton, Tag } from "antd";
+import { Alert, Button, Input, Select, Skeleton, Tag } from "antd";
 import { DeleteOutlined, SearchOutlined } from "@ant-design/icons";
 import { navigate } from "../../hooks/use-route";
 import { useUiStore } from "../../stores/ui";
@@ -245,24 +246,26 @@ export function RelationsView({
         </div>
       )}
 
-      {/* 空态两种：无任何关系 vs 过滤无结果 */}
+      {/* 空态两种：无任何关系 vs 过滤无结果（均走 EmptyState 虚线卡） */}
       {!loading && relations !== null && relations.length === 0 && (
-        <div className="py-10">
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有关联，建立一条" />
-          <div className="mt-2 text-center">
+        <EmptyState
+          padding="sm"
+          action={
             <Button type="primary" onClick={onOpenCreate}>
               + 建立关联
             </Button>
-          </div>
-        </div>
+          }
+        >
+          还没有关联，建立一条
+        </EmptyState>
       )}
       {!loading && relations !== null && relations.length > 0 && filtered.length === 0 && (
-        <div className="py-10">
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="没有匹配的关联" />
-          <div className="mt-2 text-center">
-            <Button onClick={() => setFilter(EMPTY_RELATION_FILTER)}>清空过滤</Button>
-          </div>
-        </div>
+        <EmptyState
+          padding="sm"
+          action={<Button onClick={() => setFilter(EMPTY_RELATION_FILTER)}>清空过滤</Button>}
+        >
+          没有匹配的关联
+        </EmptyState>
       )}
 
       {/* 关联列表：scope 模式行 = 关系类型 → 目标 + [删除]（源固定为本端点）；列表模式三列（源/关系/目标） */}

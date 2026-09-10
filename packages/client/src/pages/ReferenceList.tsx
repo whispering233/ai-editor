@@ -11,8 +11,9 @@
 import { useEffect, useMemo, useState } from "react";
 import type { MouseEvent } from "react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
-import { Alert, Button, Empty, Input, Select, Skeleton, Tag } from "antd";
+import { Alert, Button, Input, Select, Skeleton, Tag } from "antd";
 import { PageTitle } from "@/components/ui/page-title";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   DeleteOutlined,
   ExportOutlined,
@@ -284,17 +285,10 @@ export default function ReferenceList() {
         ) : visible === null || visible.length === 0 ? (
           /* 空态（批次十二 R2）：无条目分支去重——纯文字提示，不显示书籍图标与新建按钮
              （顶部标题行已有两个新建入口）；筛选/搜索无匹配分支保留「清空筛选」操作 */
-          <div className="py-10">
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description={
-                keyword !== "" || activeType !== "all" || activeTag !== null
-                  ? "未找到匹配的参考资料——换个关键词或清空筛选条件试试"
-                  : "还没有参考资料，先新建一条——把书籍摘抄、灵感记录、写作理论保存到这里，AI 创作顾问会参考它们给出建议"
-              }
-            />
-            {(keyword !== "" || activeType !== "all" || activeTag !== null) && (
-              <div className="mt-2 text-center">
+          <EmptyState
+            padding="sm"
+            action={
+              keyword !== "" || activeType !== "all" || activeTag !== null ? (
                 <Button
                   onClick={() => {
                     setKeyword("");
@@ -304,9 +298,13 @@ export default function ReferenceList() {
                 >
                   清空筛选
                 </Button>
-              </div>
-            )}
-          </div>
+              ) : undefined
+            }
+          >
+            {keyword !== "" || activeType !== "all" || activeTag !== null
+              ? "未找到匹配的参考资料——换个关键词或清空筛选条件试试"
+              : "还没有参考资料，先新建一条——把书籍摘抄、灵感记录、写作理论保存到这里，AI 创作顾问会参考它们给出建议"}
+          </EmptyState>
         ) : (
           /* 表格平铺（批次十二 R3）：thead 四列 + 单行 tr，行高从两行收为一行；
              对齐 EntityList 表格样式（border + thead bg-muted/50） */
@@ -465,9 +463,7 @@ function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowP
         {tags.length > 0 && (
           <div className="flex flex-wrap items-center gap-1">
             {tags.map((t) => (
-              <Tag key={t} color="blue">
-                {t}
-              </Tag>
+              <Tag key={t}>{t}</Tag>
             ))}
           </div>
         )}

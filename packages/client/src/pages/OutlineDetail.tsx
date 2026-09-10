@@ -244,15 +244,16 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
 
       {noProject ? (
         /* 未打开项目：引导回首页（同大纲列表页） */
-        <div className="rounded-md border border-dashed border-border px-6 py-10 text-center">
-          <p className="text-sm text-muted-foreground">未打开项目，无法编辑大纲</p>
-          <a
-            href="#/"
-            className="mt-2 inline-block text-sm text-muted-foreground underline hover:text-foreground"
-          >
-            回到首页打开或创建书籍
-          </a>
-        </div>
+        <EmptyState
+          padding="sm"
+          action={
+            <a href="#/" className="text-sm text-muted-foreground underline hover:text-foreground">
+              回到首页打开或创建书籍
+            </a>
+          }
+        >
+          未打开项目，无法编辑大纲
+        </EmptyState>
       ) : outlineLoading && outline === null ? (
         /* 加载骨架 */
         <div className="space-y-2 rounded-md border border-border p-3">
