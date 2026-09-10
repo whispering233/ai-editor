@@ -13,15 +13,17 @@
 | 语言 | TypeScript strict mode |
 | API 服务端 | Hono 4 + `@hono/node-server` |
 | 数据库 | better-sqlite3 ^13（WAL，N-API 预编译）+ drizzle-orm 0.45（查询构建层） |
-| 前端 | React 19 + Vite 7 + Zustand 5 + **antd v6**（ConfigProvider zhCN + 默认色板双算法 + cssVar tokens）+ **@ant-design/x**（Bubble/Sender 会话组件族）+ **@ant-design/x-markdown**（流式渲染）+ Tailwind 4（仅布局 utility）+ @uiw/react-md-editor（markdown 编辑器）+ Prettier（样式工程化） |
+| 前端 | React 19 + Vite 7 + Zustand 5 + **antd v6**（ConfigProvider zhCN + 浅/深双算法 + cssVar tokens；**主题 = Notion 工作区暖灰 token 覆盖**，视觉契约见 `docs/ui/DESIGN.md`）+ **@ant-design/icons**（唯一图标集）+ **@ant-design/x**（Bubble/Sender 会话组件族）+ **@ant-design/x-markdown**（流式渲染）+ Tailwind 4（仅布局 utility）+ @uiw/react-md-editor（markdown 编辑器）+ Prettier（样式工程化） |
 | 路由 | 自制 hash 路由（`useHashRoute`，无 React Router） |
 | Schema 校验 | Zod 4（仅服务端执行，client 不打包校验函数） |
 | AI 调用 | `@earendil-works/pi-ai`（统一多提供商 LLM 接口；deepseek + opencode-go 两 provider，模型/思考强度可配置，key 按 provider 三级链独立解析；llm 包单向 adapter 保留对外契约） |
 | 测试 | vitest（各包独立 `test` script） |
 
-## UI 布局（批次十七重构，antd 主题）
+## UI（批次十九视觉统一 + 批次十七布局重构）
 
-antd 默认色板浅/深双算法（cssVar 注入），书架主页 + 一级导航 + 常驻聊天三区结构，可拖拽调宽 + 收起/展开：
+视觉语言 = **Notion 工作区**一脉：暖灰纸感中性色（`#37352f` 暖炭墨 / `#f6f5f4` 外壳底 / 三层描边）、hairline 分栏、零阴影、扁平、**彩色只服务状态与标签**；实现基座是 antd v6 的 token 派发（改色唯一入口 = `AntdProvider.tsx`），组件语言只有一套 antd（无自绘按钮/输入框/图标库第二套），排版四档 20/16/14/12，图标统一 `@ant-design/icons`（状态 Filled / 操作 Outlined）。**视觉契约（单一事实源）= `docs/ui/DESIGN.md`**，并由 `design-discipline.test.ts` 把纪律变成可执行断言。
+
+书架主页 + 一级导航 + 常驻聊天三区结构，可拖拽调宽 + 收起/展开：
 
 - **`#/` 书架主页**：书籍列表（当前打开高亮、行内导出/重命名/继续创作）+ 新建/导入备份/打开其他路径——书架能力集中于此，频繁切书不必留常驻书架栏
 - **左栏 NavRail**：回到书架按钮（旁显当前书名）+ 垂直导航九项（概览 `#/overview` | 大纲 | 人物 | 设定 | 地点 | 伏笔 | 时间轴 | 关联 | 参考资料）+ 工具区（回收站）+ 底部设置 `#/preferences` / 主题切换；**无二级 tab**（实体家族一级化，旧 `#/entities/*` 路由重定向）
@@ -71,6 +73,7 @@ pnpm typecheck && pnpm lint && pnpm -r test
 
 ## 当前能力（2026-09）
 
+- **视觉语言统一（批次十九，2026-09）**：新增 `docs/ui/DESIGN.md` 视觉契约（Google design.md 格式；antd seed 映射表 + 组件 token 覆盖表 + 四档字号/圆角/描边与阴影契约）；主题从 antd 默认蓝换为 Notion 工作区暖灰；组件语言收敛 antd（自绘按钮/输入框/提示/下拉全部退役，原生 `<select>` 22 处 → antd `Select`，sonner → antd `message`）；图标单点化 `@ant-design/icons`；排版四档制 + `PageTitle` 薄壳统一全站页头；新增纪律守卫测试（扫硬编码色 / `!` 前缀类 / 手写字号 / 被 antd 无层 CSS 压掉的类）；依赖净减 4（lucide-react / sonner / class-variance-authority / react-markdown）
 - **项目管理**：书架模式（`books/` 子目录）、创建/打开/关闭/配置、LLM 设置（模型/key）；**项目规则文件 AGENTS.md（批次十）**——项目目录 AGENTS.md 为项目规则唯一事实源（取代 project.json `prompt`，打开项目时自动迁移）；设置页直接编辑 + 文件管理器直接编辑 + mtime 外部修改检测
 - **大纲**：严格三层（卷→章→场景）增删改移（行级只留删除按钮；选中按 Enter 新建子级、双击查看详情、点击标题行内编辑、右键菜单注入上下文/建立关联；批次十/十七）、节点详情（麦基《故事》结构化字段）
 - **实体与关系**：七类实体（人物/设定/地点/伏笔/事件·时间轴/时间标签点·时间轴/参考资料）CRUD、k 跳关系遍历、Delta 变更追踪与状态计算（computeState）；**设定层级**——父子关系用 `belongs_to` 表达（防环校验），详情页「层级」区块 + 设定一级页树形视图（`#/setting`：递归树 + 折叠/行内编辑/拖拽调层级/手动排序，批次十/十三/十七）；**标签分类**——设定分类统一 `data.tags`，列表标签列 + 标签筛选（`?tag=`）+ 新建行标签输入（datalist 自动完成 + 快捷选择）；**列表与编辑增强（批次六 M1-M3，2026-08）**——设定列表行显示上级设定（chip 点击直达父详情）与描述（截断展示 + hover 查看）；标签/规则编辑器回车添加下一项 + 拖拽排序（HTML5 原生 DnD）；**上级设定筛选（批次七）**——设定列表新增「上级设定」下拉，选定后只显示其直接及**所有后代设定（递归子树）**，与标签筛选/搜索/排序组合（AND）；**批次八（O1/O5）**——「上级设定 / 标签」筛选改为**可搜索下拉**（输入关键词过滤候选 +「全部」重置），设定树视图新增**「全部展开 / 全部折叠」**工具栏按钮；**设定/标签筛选可搜索下拉（O1）**与**设定树全部展开/折叠（O5）**；**人物列表四列布局（批次十三）**——名称+动机摘要 / 角色 / 性格 / 能力独立成列（状态列已移除）；**设定树增强（批次十三）**——行显示描述摘要 + **排序方式切换器（名称/创建时间/手动）**：手动模式行悬停 ↑↓ 箭头与拖拽行间插入线同级重排（复合端点 `PUT /entity/setting/:id/move`，复用 sort_order 列无迁移），拖到行中段仍可调整层级
@@ -82,7 +85,7 @@ pnpm typecheck && pnpm lint && pnpm -r test
 - **批次十八交互优化（2026-09）**：中栏右下悬浮「问 AI」（点击必有反应）；右栏 focus 小条显示实体名称（`names/resolve`，不再裸 id）；`Ctrl/Cmd+S` 保存（4 详情页表单 + 伏笔编辑态 + 5 处行内编辑）；新建即聚焦（设定树/实体列表/大纲/时间点：滚动 + 高亮 + 键盘焦点）；实体列表页移除残留「实体」标题与类型 tab；面包屑整站移除（返回走左栏 NavRail）；设定树拖拽插入线强化
 - **交互体验（2026-08/批次十七）**：AI 确认提案后中栏数据自动刷新 + InfoBar 全局刷新按钮；刷新页面自动恢复最近会话；渲染异常防白屏（可恢复错误卡）；画布页已移除（`plot_edge` 数据能力保留）；**布局重构（批次十七）**——书架主页/概览/设置独立路由、左栏一级导航（9 项 + 回收站工具区）、会话流 x Bubble/x-markdown 渲染、历史工具调用 wire 形态渲染层归一（修复展开 `{}`）
 - **批次十交互优化与新需求（2026-08）**：**大纲交互优化**——行级只保留删除按钮，选中节点按 Enter 新建子级、双击节点查看详情、点击标题行内编辑、拖拽排序保留；**时间轴交互参考大纲**——事件行与组标题行双击=详情、点击标题=行内编辑、移除「详情/编辑」按钮；**移除实体列表更新时间**——列表去「更新时间」列与排序，详情页元信息保留；**右键菜单**——行级右键菜单替代「带上下文问 AI」按钮（「注入会话上下文」复用 focusContext +「建立关联」新建 relation_records）；**项目规则文件 AGENTS.md**——项目目录 AGENTS.md 为项目规则唯一事实源（取代 project.json prompt，打开时自动迁移），设置页直编 + 文件管理器直接编辑 + mtime 外部修改检测；**实体设定页树形视图**——设定列表改树形视图与设定树合并（层级天然展示、折叠/展开、行内编辑、拖拽调整层级、Enter 新建子级、双击详情、搜索+标签树内过滤、移除分页）
-- **样式工程化（L 批次，2026-08）**：client 包 Prettier + prettier-plugin-tailwindcss 强制格式（长 className 自动折行 + 类排序）；共享样式常量 `lib/styles.ts`（图标按钮/输入框/错误横幅/骨架/区块卡）+ `EmptyState`/`SectionCard` 组件；全仓硬编码色类（zinc/white/red）清零 token 化（深色主题亮色异常同步修复）；样式规范归 antd token 纪律（`docs/ui/layout.md` 只承载布局与交互，不含样式细节）
+- **样式工程化（L 批次 2026-08；批次十九收敛）**：client 包 Prettier + prettier-plugin-tailwindcss 强制格式；共享样式常量 `lib/styles.ts`（图标按钮/错误横幅/骨架）+ `EmptyState`/`SectionCard` 业务组件（内部已是 antd `Empty`/`Card`）；全仓硬编码色类清零 token 化；**视觉规范归 `docs/ui/DESIGN.md`**（`layout.md` 只承载布局与交互，不含样式细节）——注意 antd 样式是无层 CSS，不要在 antd 组件根元素上用 Tailwind 类覆盖其已声明属性（宽度用容器、尺寸用 `size`、状态用 `variant`/token）
 - **数据备份（阶段 B2 已就绪）**：一键导出完整项目（zip 打包 project.json + outline.json + data.db，含 WAL 完整快照）/ 从备份导入（服务端校验 + 原子搬入）；**自动备份**——按频率（关闭/5/10/15/30/60 分钟，默认 10 分钟开启，跟随书籍）有变更才备份，每项目保留最近 20 份；**手动备份**——设置页「立即备份」可带自定义名称，列表以简单标签区分手动/自动（B2.5/B2.6）；**备份重命名**——列表行内编辑改名称（时间与类型标签保持）；**加载备份**——设置页历史备份列表（强确认 + 覆盖前自动快照后悔药）或书架导入文件（以 project_id 为 key：匹配 → 覆盖恢复 / 不匹配 → 新书，同名不再 409 可重命名或去重并存）；书架支持重命名书名——「数据主权归用户」（product.md 原则 1）
 - **调试**：创作根 `.ai-editor/config.json` 细粒度五类别（chat/request/stream/usage/http，见上文示例；无配置文件默认关闭）
 

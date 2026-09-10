@@ -5,7 +5,7 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [v0.0.28] - 2026-09-11
 
 ### Changed（批次十九：视觉语言统一——Notion 工作区暖灰 × antd 单一组件语言）
 
@@ -19,8 +19,8 @@
 
 ### Removed
 
+- 依赖：`lucide-react`、`sonner`、`class-variance-authority`、`react-markdown`（均零消费者：图标/提示/按钮已收敛 antd，聊天 Markdown 走 `@ant-design/x-markdown`）
 - 死代码：`lib/book-cover.ts`（无生产引用）、`ui/button.tsx`/`ui/input.tsx`/`ui/sonner.tsx`、`index.css` 遗留圆角变量与 `--radius`
-- 依赖：`lucide-react`、`sonner`、`class-variance-authority`
 
 ## [v0.0.27] - 2026-09-10
 

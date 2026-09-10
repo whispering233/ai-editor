@@ -1,50 +1,37 @@
 # 开发任务清单（Task Cards）
 
-开发任务卡，**垂直切片**组织。依据：`docs/design/architecture.md`（分包/技术栈）、`docs/api/` 各模块文档（API 契约）、`docs/db/schema.md`（数据结构）、`docs/ui/layout.md`（布局与交互红线）。
+开发任务卡，**垂直切片**组织。依据：`docs/design/architecture.md`（分包/技术栈）、`docs/api/` 各模块文档（API 契约）、`docs/db/schema.md`（数据结构）、`docs/ui/layout.md`（布局与交互红线）、`docs/ui/DESIGN.md`（**视觉契约**：颜色/字号/圆角/组件外观 + antd token 覆盖表）。
 
 **执行纪律**：
 - 一次只做一张任务卡，验证通过（含测试）才算完成，然后独立 commit（一张卡一个 commit，回滚 = revert 该 commit）。
 - 卡内不做卡外顺手改动；无待做项时不做 backlog 式顺手实现。
 - 契约以 `docs/api`、`docs/db` 为准，发现文档矛盾先停下提问，不要自行发明。
-- 测试框架：vitest（各包独立 `test` script，`pnpm --filter <包> test`）。
+- 测试框架：vitest（各包独立 `test` script，`pnpm --filter <包> test`）；**视觉改动改完必跑** `packages/client` 的 `design-discipline.test.ts`（源码扫描硬约束）与 `designmd lint docs/ui/DESIGN.md`。
+- **视觉改动顺序**：先改 `docs/ui/DESIGN.md`（契约）→ 再改 `AntdProvider.tsx`（token）→ 最后改调用点；反了必然产生「文档与实现两套事实」。
 - 并行卡片在临时分支 + 临时 git worktree（`worktree: true`）开发，父会话验证后合回 main 清理分支。
 
 ---
 
-## 项目状态（2026-09-10，v0.0.27 已打 tag）
+## 项目状态（2026-09-11，v0.0.28 已打 tag）
 
-v0.0.1-v0.0.26 发布链路全绿；**v0.0.27 = 批次十八：用户反馈七项修复与优化**（纯前端交互层，API/数据零改动，逐批独立代理验证）——中栏右下悬浮「问 AI」（点击必有反应）、`Ctrl/Cmd+S` 保存快捷键、新建即聚焦、focus 小条显示实体名称、实体列表页去一级化残留、面包屑整站移除、设定树拖拽插入线强化、死代码 `hooks/use-api.ts` 清理；逐卡 commit 见 git log（A1/A2/A3 → B1/B2 → C1/C2 + 验证跟进修复）。v0.0.26 = 批次十七：antd 全站迁移 + 布局重构 + 会话渲染重做（antd v6 cssVar 主题基座、书架主页/概览拆分、NavRail 一级导航、路由一级化、@ant-design/x 会话渲染、@base-ui/react 退役）。
+v0.0.1-v0.0.27 发布链路全绿；**v0.0.28 = 批次十九：视觉语言统一（Notion 工作区暖灰 × antd 单一组件语言）**——11 卡 11 commit，每卡「实现 + oracle 独立核验 + 五道门禁（`designmd lint` / `pnpm typecheck` / `pnpm lint` / client test / client build）」：
 
-**无待做项**；**批次十九「视觉语言统一」已全部完成（T1-T10 + T6b，11 卡 11 commit，均经 oracle 独立核验 + 五道门禁绿）——待发布决策（建议 v0.0.28）**；迭代演进路线见 `milestone.md`；运行/构建/发布手册见 `build.md`；版本史见根 `CHANGELOG.md`（历史批次执行明细与逐卡 commit 从 `git log` 回溯）。
+| 卡 | 内容 |
+|---|---|
+| T1 | 主题 token：antd 默认蓝 → Notion 暖灰 seed（浅/深**两套**，因 `theme.token` 显式值在算法派生后覆盖）+ 组件 token 覆盖 + `controlOutlineWidth: 0`（聚焦 = 1px 描边、无环） |
+| T2 | 页头统一：`PageTitle` 薄壳（`Typography.Title level={4}` = 20px/600）；`Typography.titleMarginBottom: 0` 接管标题下边距 |
+| T3 | 字号四档（20/16/14/12）+ 清 74 处 `!` 前缀类 + 手写 10/11px 字号归零 |
+| T4 | 卡片/空态：`SectionCard`→`Card`、`EmptyState`→`Empty`（对外 props 不变、调用点零改动）；preset 色 Tag 与越档半径清零 |
+| T5 | 按钮：19 文件 → antd `Button`，删 `ui/button.tsx`；NavRail 选中态 `variant="filled"`（= `colorFillTertiary` = `surface-muted`） |
+| T6 | 输入框：`ui/input.tsx` + `inputClass` → antd `Input`/`TextArea`；`autoComplete` 上收 `ConfigProvider` |
+| T7 | 图标：`@ant-design/icons` 单点化（lucide 退役）；尺寸随 `text-*`；状态 Filled / 操作与导航 Outlined |
+| T8 | 反馈：sonner → antd `message`（`<App component={false}>` 上下文）；删 `sonner`/`lucide-react` 依赖 |
+| T9 | 纪律守卫 `design-discipline.test.ts`（5 规则 + 规则自检）——当场扫出并修 6 处被 **antd 无层 CSS** 静默压掉的类 |
+| T6b | 22 处原生 `<select>` → antd `Select`（`optgroup` → 分组 `options`，组级禁用下推到每个 option） |
+| T10 | 收尾：删死代码 `book-cover`、零消费者依赖（`class-variance-authority`/`react-markdown`）、圆角遗留变量、过期测试名；DESIGN.md 对齐 |
 
----
+**无待做项**；迭代路线见 `milestone.md`；运行/构建/发布手册见 `build.md`；版本史见 `CHANGELOG.md`（逐卡执行明细与 commit 从 `git log` 回溯）。
 
 ## 当前任务卡
 
-### 批次十九：视觉语言统一（Notion 工作区 × antd 单一组件语言）
-
-**背景**：批次十七迁 antd 后遗留四套平行体系（标题 3 种来源、图标 2 套、按钮 3 套、空态 2 套），造成「同一页面两种 focus 态/两种圆角」的观感混乱。本批次一次性收敛，**纯前端渲染层，API/数据零改动**。
-
-**已定决策（视觉契约 = `docs/ui/DESIGN.md`，实现前先读）**：
-1. 基调：antd token 轻定制，值取 Notion **工作区**（非营销站）——暖灰 + hairline + 扁平 + 灰阶；营销站的紫 CTA / navy hero / 马卡龙大面 / 胶囊按钮一律不采用
-2. `colorPrimary` = `colorText` = `#37352f` 墨黑；`colorLink` = `#0075de`（链接蓝独立）
-3. 组件语言收敛 antd：删 `ui/button`；`SectionCard`/`EmptyState` 内部换 antd `Card`/`Empty`（调用点零改动）；`inputClass` → antd `Input`；标题统一 `PageTitle` 薄壳；自绘浮层（context-menu / dialog / popover / searchable-select / suggestion-datalist）**保留不动**
-4. 图标收敛 `@ant-design/icons`；删 `lucide-react`
-5. 字号四档 20/16/14/12；删 10/11px 与 `0.8rem`；`font-serif` 只留书封
-6. 反馈层收敛 antd `message`；删 `sonner`
-
-**卡序（串行，避免同文件并行冲突）**：T1 → T2 → T3 → T4 → T5 → T6 → T7 → T8 → T9 → T10。每卡一个 commit，实现 fixer + 验证 oracle 双代理。
-
-- [x] **T1 主题 token 落地**（完成）：`AntdProvider.tsx` 写入**浅/深两套** seed（`colorPrimary/Text`、文字阶梯、`colorBgLayout/Container/Elevated`、描边三层 `colorBorder`/`colorBorderSecondary`/`colorSplit`、`colorLink`、语义三色）+ `controlOutlineWidth: 0`（关闭 selector 型组件聚焦环）+ 组件覆盖（Button 三 shadow、Menu、Table、Input `activeShadow`、Select `optionSelectedBg`、Tag `defaultBg`）；`index.css` 删 `--font-serif`/`--font-heading`、圆角钉到 4/6/8（旧 `calc(--radius*k)` 派生 9.6/7.7/5.8 与文档不符已修）。实现要点：`theme.token` 显式值由算法派生后覆盖（不被再加工），故必须分模式写 token。验证：`designmd lint` 0 error / `pnpm typecheck` / `pnpm lint` / client test 540 passed / client build 均绿。
-- [x] **T2 页头统一**（完成）：新建 `PageTitle` 薄壳（`Typography.Title level={4}` = 20px/600/1.4）并替换**全站 11 处页面级标题**（含 4 个详情页；`<h1` 手写与裸 `level={4}` 均清零）；`Typography.titleMarginBottom: 0` 组件 token 接管标题下边距（不在壳内内联绕）；连带清掉 3 处 `!mb-*` 与 `ReferenceList` 无用导入；chrome 崇线清除：`NavRail` 产品标识、`InfoBar` 项目名、`dialog.tsx` 失效 `font-heading`、`ReferenceDetail` 可编辑标题（含编辑态 input）、`ErrorBoundary` 异常标题、`Dashboard` 两处空态引导标题（`text-lg` 18px 不在四档内 → `text-base font-semibold`）。验证：designmd lint 0 error / typecheck / lint / client test 540 passed / build 均绿。**残留归卡**：`section-card.tsx` 的 `font-serif` 区块标题 → T4；`Dashboard:901` 书封崇线 → T10；`level={5}` 的 3 处 `!mb-1` → T3。
-- [x] **T3 字号档与 `!` 覆盖清理**（完成）：`!` 前缀类 **74 处 → 0**（8 文件）；手写字号 10px/11px/0.8rem **5 处 → 0**（仅剩 T5 将删的 `ui/button.tsx` 一处）。处置规则：12px caption 改用原生 `<span>/<p className="text-xs …">`（不再给 `Typography.Text` 挂 `!text-xs`）；间距（`!mb-/!mt-/!mr-/!py-/!ml-auto`）移交父容器；结构性类改父布局或删无操作类；NavRail 的 `!border-none !bg-transparent` 改 Menu 组件 token（`itemBg: transparent` / `activeBarBorderWidth: 0`，已登记 DESIGN.md 覆盖表）。**例外**：`create-relation-dialog` 的装饰箭头 `→` 用 `text-xl`（`aria-hidden`，非排版档，不计违规）。验证：designmd lint 0 error / typecheck / lint / client test 540 passed / build 均绿。
-- [x] **T4 卡片与空态收敛**（完成）：`SectionCard` → antd `Card`（标题 `Typography.Title level={5}`，删 `font-serif`；经 `Card.bodyPadding: 16` token 定内边距，不用自带表头）；`EmptyState` → 内部 antd `Empty`（`image={false}` 去插图 + 虚线卡基座保不变，对外 props 不变）；5 处直用 antd `Empty` → `EmptyState`（现全仓直用点 0）；**antd preset 色 Tag 清零**（`EntityList:564/589`、`ReferenceList:468`、`Settings:224`、`backup-section:323` 条件蓝）；半径越档归一：`rounded-2xl→rounded-lg`（Dashboard 560/827）、`rounded-xl→rounded-lg`（ErrorBoundary callout、`ui/dialog` 浮层）；删死代码 `lib/styles.ts` 的 `sectionCardClass`；新增 2 个组件测试（`section-card.test.tsx` / `empty-state.test.tsx`，锁 Card/h5/无宗线与空态无插图）。验证：designmd lint 0 error / typecheck / lint / client test **544 passed** / build 均绿。**计数修正**（卡面估算 vs 实际）：SectionCard 调用点 9 处（非 11）、EmptyState 现有调用点 8 处（非 7）、收敛后 EmptyState 调用点共 17 处。
-- [x] **T5 按钮收敛**（完成）：19 个 `ui/button` 调用点 → antd `Button`（导入统一 `from "antd"`）；删 `components/ui/button.tsx`（死代码由父会话补删）；`ChatPanel` 的 `Button as AntButton` 别名回正；`size="middle"` → `medium`（v6 已弃用别名）；自绘尺寸档清零（`xs/sm/icon-sm/icon-xs` → antd `small/medium`，按「行内→small 24 / 表单与主操作→medium 32」逐点判定，DESIGN 控件高只有 32/24/40）；`buttonVariants` 的 3 处 `<a>` 改 `<Button href>`。**H4 边界**：12 处 `variant="text"` 全为 icon-only（带 `aria-label`，豁免）+ `NavRail` 三个导航入口（与 Menu 项同级，豁免）；已写入 DESIGN.md 规则。**连带修正**：NavRail 选中态去内联 style（`token.colorPrimaryBg` 彩色底 → `bg-accent` = `surface-muted` 灰面）、左栏底色改 `bg-background`（surface）且分栏线改 `border-border`；种子新增 `colorFillTertiary`（= `surface-muted`，Tailwind `--accent` 转发）；`index.css` 的 `--border` 改映射 `colorBorderSecondary`（结构描边）而 `--input` 仍映射 `colorBorder`（交互描边）。验证：designmd lint 0 error / typecheck / lint / client test 544 passed / build 均绿。22 文件 +195/−549（净减 354 行）。**遗留至 T10**：`class-variance-authority` 依已无消费者（原唯一消费者是被删的 `ui/button`）；`ChatPanel` 若干内联 style 用 `token.color*` 给图标上色，可后续改语义类。
-- [x] **T6 输入框收敛**（完成）：19 文件文本输入 → antd `Input`/`Input.TextArea`（行内编辑 `size="small"` 24 / 表单默认 32）；删 `components/ui/input.tsx`（父会话补删）与 `inputClass`（改名 `selectClass` 供原生 select 继续使用）；`autoComplete="off"` 上收到 `ConfigProvider` 的 `input`/`textArea` 默认 props（v6 `InputConfig.autoComplete`）。**裁决 A**：34 处原生 `<select>` 保语义只去彩环（`focus-visible:ring-*` → `focus-visible:border-ring`），select→antd 另立 T6b 卡。**边界修复（oracle 发现）**：① antd 样式是运行时**无层 CSS**，会静默压掉 Tailwind 工具类（`@layer utilities`）——4 处 `<Input className="w-*">` 宽度失效改为**外层 div 承载宽度**，规则写入 DESIGN.md；② NavRail 选中态 `bg-accent` 在 `variant="text"` 上无效 → 改 `variant={atHome ? "filled" : "text"}`（`filled` 底 = `colorFillTertiary` = `surface-muted`）；③ 去掉 Button 上无效的 `h-8 rounded-md`（antd 自带 32/6）、产品标识 `Typography.Text text-base` 改原生 `<span>`（antd 字号覆盖 14px）。验证：designmd lint 0 error / typecheck / lint / client test 544 passed / build 均绿。**遗留至 T9**：纪律守卫测试增加「antd 组件根元素挂宽/高/字号类」检测。
-- [x] **T6b 原生 select → antd Select**（完成）：22 处 `<select>` / 10 文件 → antd `Select`（现全仓 `<select` 为 0）；删 `selectClass` 导出（消费者 0）与 5 处因此闲置的 `cn` 导入；`ChatPanel` 模型选择器的 `<optgroup>` → `options` 分组对象，**组级禁用下推到组内每个 option**（antd 分组对象无 `disabled`），组 label 文案保留；其余 13 处 `{value:""}` 空选项按语义保留（表单类显式空选项；筛选类用 `allowClear + placeholder`，两种写法已写入 DESIGN.md）。`name` 语义无需迁移（全仓 select 无 `name`，表单走 `onSubmit` 受控 state）。验证：typecheck / lint / client test 551 passed / build / designmd lint 均绿；12 文件 +225/−289。
-- [x] **T7 图标收敛**（完成）：18 文件 / 32 图标 → `@ant-design/icons`；尺寸 `size-3/3.5/4/5/8` → `text-xs/sm/base/xl/2xl`（图标随字号档，无 `size-*` 残留）；状态 Filled（`CheckCircleFilled`/`MinusCircleFilled`/`PushpinFilled`/`FastForwardFilled`/`ExclamationCircleFilled`/`WarningFilled`）、操作与导航 Outlined；``Loader2` → `LoadingOutlined spin`（无 `animate-spin`）。**oracle 发现的收尾项已修**：`setting-tree` 手写内联 `<svg>` 折叠箭头 → `RightOutlined`；`ui/context-menu` 的 lucide 时代规则 `[&_svg:not([class*='size-'])]:size-4` 删除（会以 svg width/height 压掉 `text-sm`）；`ChatPanel` 两处越档空态图标 `text-4xl/text-3xl` → `text-2xl`；`empty-state` 注释中的 lucide 用法示例修正。验证：designmd lint 0 error / typecheck / lint / client test 544 passed / build 均绿。**依赖删除改归 T8**（`ui/sonner.tsx` 是 lucide 最后一个消费者，T7 先摘依赖会直接 `tsc` TS2307），T8 一并删 `lucide-react` + `sonner`。
-- [x] **T8 反馈层收敛 + 删 sonner**（完成）：`AntdProvider` 在 `ConfigProvider` 内部包 `<App component={false}>`（不插包裹 div；依据 `antd/es/app/App.d.ts` 的 `component?: CustomComponent<P> | false`），`FeedbackHost` 改 `App.useApp().message`（`ToastKind` 三态映射，`TOAST_DURATION_MS/1000` 换算为之 message 的秒单位；store 3s 定时器仍为单一事实源；`shouldNotifyToast` 去重逻辑与测试未变）；删 `components/ui/sonner.tsx` 与 `sonner` + `lucide-react` 两个依赖（父会话 `pnpm install` 同步 lockfile），`index.css` 的遗留 `--radius` 也一并删除（其最后两个消费者已消失）。验证：designmd lint 0 error / typecheck / lint / client test 544 passed / build 均绿。**可见变化**：提示位置由右上变顶部居中（已确认接受）；错误横幅与确认对话框行为不变。
-- [x] **T9 视觉纪律守卫**（完成）：新增 `packages/client/src/design-discipline.test.ts`（5 规则 + 自检）：① `lucide-import`（双图标库退役）② `hardcoded-color`（白名单只留 `AntdProvider`（token 定义唯一允许处）；同时排除 HTML 实体 `&#9662;`）③ `important-class`（`!` 前缀类）④ `ad-hoc-font-size`（手写 px/rem 字号）⑤ `antd-root-override`（antd `Button`/`Input` 根元素上会被无层 CSS 压掉的 `w-/h-/px-/py-/justify-/rounded-(sm|md|lg|xl|2xl|full)/text-<档>` 类；用大括号深度扫描只取开标签并剔除 `{}` 表达式，避免把子元素/图标上的类误判）。**守卫当场抓到 6 处真问题并已修**：`setting-tree` 搜索框 `w-48`、`EntityDetail` 字段键 `w-28` 被 antd `width:100%` 压掉 → 改外层容器承载；`ChatPanel` 按钮 `px-1.5`（antd 自带 padding-inline）、`EntityDetail`/`OutlineDetail` 输入框 `h-8`/`text-sm`（与 antd 同值 no-op）→ 删；`NavRail` 三个导航入口的 `h-9/rounded-md/justify-start/px-2`（均被 antd Button 压掉）→ 删。验证：typecheck / lint / client test **551 passed**（新增 7 个守卫用例）/ build / designmd lint 均绿。
-- [x] **T10 收尾**（完成）：删死代码 `lib/book-cover.ts` + 其单测（无生产消费者，连同其中的 `hsl()` 硬编码与守卫白名单条目）；删除全仓最后一处界面衬线（`Dashboard` 计数数字 `font-serif text-2xl` → `text-xl`）；`index.css` 删无消费者的 `--radius-xl/2xl/3xl/4xl`（保留 sm/md/lg = 4/6/8）；删 `class-variance-authority` 依赖（零消费者，lockfile 已同步）；`antd-smoke.test.tsx` 测试名「默认色板暗色算法」→ 对齐现状（Notion 暖灰 token 覆盖 + `App` 上下文）；`ChatPanel` 4 处图标内联 `token.color*` → 语义色类（连带删 3 处多余 `useToken()`）；DESIGN.md 衬线段/Known Gap/圆角 tail 对齐。**oracle 判定驳回两条**（属断言与契约冲突，非缺陷）：`text-2xl` 是 DESIGN.md 登记的**空态图标专档**（3 处命中均为图标，合规）；`font-serif` 仅剩注释与 `section-card.test.tsx` 的负向守卫断言。验证：designmd lint 0 error / typecheck / lint / client test 546 passed / build 均绿。
-
-**风险与返工点**：① T5/T6 触及 25 文件，属机械替换但回归面广——建议每卡完成后按页面走查一遍（大纲/人物/设定/地点/伏笔/时间轴/关联/参考资料/回收站/设置/书架）；② antd `Empty`/`Card` 默认内边距与旧自绘不同，虚线卡视觉需微调；③ `message` 位置由右上变顶部居中（已确认接受）；④ `font-serif` 删除会让 Dashboard 书封以外的「文学感」消失——书封是刻意保留的唯一例外。
+（无）

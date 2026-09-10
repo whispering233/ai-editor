@@ -66,9 +66,6 @@ importers:
       react-dom:
         specifier: ^19.0.0
         version: 19.2.8(react@19.2.8)
-      react-markdown:
-        specifier: ^10.1.0
-        version: 10.1.0(@types/react@19.2.18)(react@19.2.8)(supports-color@7.2.0)
       tailwind-merge:
         specifier: ^3.6.0
         version: 3.6.0
