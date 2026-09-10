@@ -22,7 +22,7 @@
 // 工具名发现）→ 提案卡确认后 Executor 重排 timepoint.sort_order → notifyDataChanged → 本页
 // useDataRefresh 自动重拉（无需本页处理刷新）
 // - 数据刷新：useDataRefresh 订阅 dataVersion（AI 提案确认写库 / InfoBar 刷新按钮）
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { ListOrdered } from "lucide-react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
@@ -122,12 +122,17 @@ export default function Timeline() {
   const [tpSubmitting, setTpSubmitting] = useState(false);
  /** 新建成功待聚焦的时间点 id（A2：滚动到位 + 高亮 + 键盘焦点落组标题行；3s 后清除） */
   const [newTimepointId, setNewTimepointId] = useState<string | null>(null);
+ /** 已聚焦过的新建时间点 id（一次性守卫：数据重拉不重复聚焦抢焦点） */
+  const focusedNewTimepointRef = useRef<string | null>(null);
 
  // 新建时间点聚焦（A2）：新组已渲染（数据重拉完成）→ 下一帧滚动 + 聚焦；
  // 标签筛选命中不到新组 → focusNewItem 返回 false，静默忽略
   useEffect(() => {
-    if (newTimepointId === null) return;
-    const t = setTimeout(() => focusNewItem(`[data-timepoint-id="${newTimepointId}"]`), 0);
+    if (newTimepointId === null || focusedNewTimepointRef.current === newTimepointId) return;
+    const t = setTimeout(() => {
+      if (focusNewItem(`[data-timepoint-id="${newTimepointId}"]`))
+        focusedNewTimepointRef.current = newTimepointId;
+    }, 0);
     return () => clearTimeout(t);
   }, [newTimepointId, timepoints]);
 

@@ -18,7 +18,7 @@
 // hook 的 status 下拉、其余文本；字段配置复用 lib/entity-list.ts CREATE_FIRST_FIELD；
 // 提交成功留在列表（2026-08 用户反馈：不自动跳详情），失败内联错误不关行）
 // 软删：服务端默认过滤；回收站入口 #/trash 由 S4 卡实现，本卡不提供入口
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { ENTITY_TYPES } from "@whispering233/ai-editor-shared";
 import type { EntitySummary, EntityType } from "@whispering233/ai-editor-shared";
@@ -112,12 +112,17 @@ export default function EntityList({ type }: { type: string }) {
   const [createSubmitting, setCreateSubmitting] = useState(false);
  /** 新建成功后的聚焦目标 id（A2：新行滚动到位 + 高亮 + 键盘焦点落行；3s 后清除） */
   const [newItemId, setNewItemId] = useState<string | null>(null);
+ /** 已聚焦过的新建行 id（一次性守卫：数据重拉不重复聚焦抢焦点） */
+  const focusedNewItemRef = useRef<string | null>(null);
 
  // 新建行聚焦（A2）：新行已进入当前页数据（items 含 id）时滚动 + 聚焦；
- // 排序/分页导致新行不在当前视图 → focusNewItem 返回 false，静默忽略（不强行跳页）
+ // 排序/分页导致新行不在当前视图 → focusNewItem 返回 false，静默忽略（不强行跳页）。
+ // 一次性守卫（focusedNewItemRef）：3s 高亮窗口内列表重拉（搜索/刷新）不重复抢焦点
   useEffect(() => {
-    if (newItemId === null) return;
-    const t = setTimeout(() => focusNewItem(`[data-entity-id="${newItemId}"]`), 0);
+    if (newItemId === null || focusedNewItemRef.current === newItemId) return;
+    const t = setTimeout(() => {
+      if (focusNewItem(`[data-entity-id="${newItemId}"]`)) focusedNewItemRef.current = newItemId;
+    }, 0);
     return () => clearTimeout(t);
   }, [newItemId, items]);
 
@@ -278,9 +283,9 @@ export default function EntityList({ type }: { type: string }) {
       {/* 顶部：搜索 + 新建（设定树自带工具栏——搜索/新建在树内，顶部不重复渲染）
           批次十八 A1（#6）：类型切换 Segmented 与「实体」标题已移除——
           人物/设定/地点/关联是一级导航项（左栏 NavRail），列表页不再做二级 tab 切换 */}
-      <div className="flex flex-wrap items-center gap-3 border-b border-border pb-3">
-        <div className="ml-auto flex items-center gap-2">
-          {!isRelations && entityType !== "setting" && (
+      {!isRelations && entityType !== "setting" && (
+        <div className="flex flex-wrap items-center gap-3 border-b border-border pb-3">
+          <div className="ml-auto flex items-center gap-2">
             <Input
               className="w-52"
               prefix={<SearchOutlined />}
@@ -289,14 +294,12 @@ export default function EntityList({ type }: { type: string }) {
               onChange={(e) => setQInput(e.target.value)}
               placeholder={`搜索${TYPE_LABEL[entityType]}名称…`}
             />
-          )}
-          {!isRelations && entityType !== "setting" && (
             <Button type="primary" onClick={openCreateRow}>
               + 新建
             </Button>
-          )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* 关联 tab：关系总览视图（前端过滤全量）；设定 tab：树形视图（与设定树合并——
           搜索+标签树内过滤、无分页、上级筛选被树形导航吸收）；其余类型 tab：原表格视图 */}

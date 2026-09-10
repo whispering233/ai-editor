@@ -17,7 +17,7 @@
 // 溢出防御：设定 > 200 截断提示 + 父截断提升为根（buildSettingTree 既有语义）。
 // 样式全 token 类（）；文字按钮带边框（H4）；行级右键菜单（RowContextMenu——
 // 注入会话上下文 + 建立关联）替代行级问 AI 入口（本视图原本无 AskAiButton，右键菜单补齐）。
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { DragEvent, KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { RowContextMenu } from "./row-context-menu";
@@ -102,6 +102,8 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
   const [createValue, setCreateValue] = useState("");
  /** 新创建节点高亮（3s 自动消失） */
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
+ /** 已聚焦过的新建节点 id（一次性守卫：3s 高亮窗口内重拉不重复聚焦抢焦点） */
+  const focusedNewSettingRef = useRef<string | null>(null);
  /** 拖拽中的节点 id；null = 无 */
   const [dragNodeId, setDragNodeId] = useState<string | null>(null);
  /** 拖拽目标（悬停高亮 + drop 落点）；null = 无有效目标 */
@@ -205,8 +207,11 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
 
  // 新建即聚焦（A2）：高亮 id 对应的行渲染出来后（reload 完成 → roots 变化）滚动到位 + 键盘焦点落行
   useEffect(() => {
-    if (highlightedId === null) return;
-    const t = setTimeout(() => focusNewItem(`[data-setting-id="${highlightedId}"]`), 0);
+    if (highlightedId === null || focusedNewSettingRef.current === highlightedId) return;
+    const t = setTimeout(() => {
+      if (focusNewItem(`[data-setting-id="${highlightedId}"]`))
+        focusedNewSettingRef.current = highlightedId;
+    }, 0);
     return () => clearTimeout(t);
   }, [highlightedId, roots]);
 
