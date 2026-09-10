@@ -25,6 +25,7 @@ import type { EntitySummary, EntityType } from "@whispering233/ai-editor-shared"
 import { Alert, Button, Input, Pagination, Select, Skeleton, Typography } from "antd";
 import { SearchOutlined } from "@ant-design/icons";
 import { TagChip } from "@/components/ui/tag-chip";
+import { PageTitle } from "@/components/ui/page-title";
 import {
   ApiError,
   CLIENT_NETWORK_ERROR,
@@ -282,25 +283,36 @@ export default function EntityList({ type }: { type: string }) {
 
   return (
     <section>
-      {/* 顶部：搜索 + 新建（设定树自带工具栏——搜索/新建在树内，顶部不重复渲染）
-          批次十八 A1（#6）：类型切换 Segmented 与「实体」标题已移除——
-          人物/设定/地点/关联是一级导航项（左栏 NavRail），列表页不再做二级 tab 切换 */}
+      {/* 第一行：页面标题（layout.md §3 页面头部统一结构；批次十八误删「实体」标题后补回各类型标题） */}
+      <PageTitle className="mb-4">{isRelations ? "关联" : TYPE_LABEL[entityType]}</PageTitle>
+
+      {/* 第二行：控件行（左：搜索/排序/总数；右：操作按钮）。设定（树）与关联（关系总览）
+          的控件行在各自视图内渲染（工具栏位置随视图结构） */}
       {!isRelations && entityType !== "setting" && (
-        <div className="flex flex-wrap items-center gap-3 border-b border-border pb-3">
-          <div className="ml-auto flex items-center gap-2">
-            <div className="w-52">
-              <Input
-                prefix={<SearchOutlined />}
-                allowClear
-                value={qInput}
-                onChange={(e) => setQInput(e.target.value)}
-                placeholder={`搜索${TYPE_LABEL[entityType]}名称…`}
-              />
-            </div>
-            <Button type="primary" onClick={openCreateRow}>
-              + 新建
-            </Button>
+        <div className="mb-3 flex flex-wrap items-center gap-3">
+          <div className="w-48">
+            <Input
+              prefix={<SearchOutlined />}
+              allowClear
+              value={qInput}
+              onChange={(e) => setQInput(e.target.value)}
+              placeholder={`搜索${TYPE_LABEL[entityType]}名称…`}
+            />
           </div>
+          <span className="flex items-center gap-2">
+            <Typography.Text type="secondary">排序:</Typography.Text>
+            <Select
+              size="small"
+              value={`${sort}:${order}`}
+              onChange={(value) => handleSortChange(String(value))}
+              options={SORT_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+              style={{ minWidth: 150 }}
+            />
+          </span>
+          <span className="text-sm text-muted-foreground">共 {total} 个</span>
+          <Button type="primary" className="ml-auto" onClick={openCreateRow}>
+            + 新建
+          </Button>
         </div>
       )}
 
@@ -312,20 +324,6 @@ export default function EntityList({ type }: { type: string }) {
         <SettingTreeView reloadKey={reloadTick} />
       ) : (
         <>
-          {/* 排序行 + 总数 */}
-          <div className="mt-3 mb-2 flex items-center gap-3">
-            <span className="flex items-center gap-2">
-              <Typography.Text type="secondary">排序:</Typography.Text>
-              <Select
-                size="small"
-                value={`${sort}:${order}`}
-                onChange={(value) => handleSortChange(String(value))}
-                options={SORT_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-                style={{ minWidth: 150 }}
-              />
-            </span>
-            <span className="ml-auto text-sm text-muted-foreground">共 {total} 个</span>
-          </div>
 
           {/* 行内新建（UX4）：列表首行内联编辑——name + 该类型首字段（hook 的 status 下拉，其余文本；
           字段配置复用 lib/entity-list.ts CREATE_FIRST_FIELD）；回车/「创建」提交（成功留在列表刷新），

@@ -867,17 +867,19 @@ export default function Outline() {
 
   return (
     <section>
-      {/* 标题区：操作工具条 */}
-      <div className="mb-4 flex items-center justify-between gap-4">
-        <PageTitle>大纲</PageTitle>
-        <div className="flex gap-2">
-          <Button onClick={toggleAllCollapse} disabled={!outline || outline.children.length === 0}>
-            {collapsed.size > 0 ? "全部展开" : "全部折叠"}
-          </Button>
-          <Button type="primary" onClick={() => startCreate(ROOT_NODE_ID, "volume")}>
-            + 新建
-          </Button>
-        </div>
+      {/* 第一行：页面标题；第二行：控件行（本页无筛选控件，操作按钮靠右——layout.md §3） */}
+      <PageTitle className="mb-4">大纲</PageTitle>
+      <div className="mb-3 flex items-center gap-2">
+        <Button
+          className="ml-auto"
+          onClick={toggleAllCollapse}
+          disabled={!outline || outline.children.length === 0}
+        >
+          {collapsed.size > 0 ? "全部展开" : "全部折叠"}
+        </Button>
+        <Button type="primary" onClick={() => startCreate(ROOT_NODE_ID, "volume")}>
+          + 新建
+        </Button>
       </div>
 
       {/* 页级错误横幅（：destructive token 类） */}

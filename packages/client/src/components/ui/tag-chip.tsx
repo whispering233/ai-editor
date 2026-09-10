@@ -22,7 +22,7 @@ export function TagChip({ children, className, title }: TagChipProps) {
     <span
       title={title}
       className={cn(
-        "inline-flex items-center rounded-sm px-1 py-0.5 text-xs text-foreground",
+        "inline-flex items-center rounded-sm px-1 py-0.5 text-xs whitespace-nowrap text-foreground",
         tagTintClass(label),
         className,
       )}

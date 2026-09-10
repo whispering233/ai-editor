@@ -431,9 +431,10 @@ export default function HookPanel() {
 
   return (
     <section>
-      {/* header：标题 + 新建入口（ 线框） */}
-      <div className="mb-4 flex items-center gap-3">
-        <PageTitle>伏笔池</PageTitle>
+      {/* 第一行：页面标题；第二行：控件行（本页无筛选控件，仅操作按钮靠右——
+          保持跨页头部节奏一致，layout.md §3） */}
+      <PageTitle className="mb-4">伏笔池</PageTitle>
+      <div className="mb-3 flex items-center gap-2">
         <Button type="primary" className="ml-auto" onClick={() => setCreateOpen(true)}>
           + 新建伏笔
         </Button>

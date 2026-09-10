@@ -199,9 +199,38 @@ export default function ReferenceList() {
 
   return (
     <section className="flex h-full min-h-0 flex-col">
-      {/* 固定区：标题 + 操作 */}
-      <div className="mb-4 flex items-center gap-3">
-        <PageTitle>参考资料</PageTitle>
+      {/* 第一行：页面标题 */}
+      <PageTitle className="mb-4">参考资料</PageTitle>
+
+      {/* 第二行：控件行（左=搜索/分类/标签；右=扫描/新建 md/新建外源链接） */}
+      <div className="mb-3 flex shrink-0 flex-wrap items-center gap-2">
+        <div className="w-48">
+          <Input
+            prefix={<SearchOutlined />}
+            allowClear
+            placeholder="搜索标题 / 内容摘要…"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+          />
+        </div>
+        <Select
+          className="w-32"
+          value={activeType}
+          onChange={(value) => setActiveType(value === "all" ? "all" : String(value))}
+          options={[
+            { value: "all", label: "全部分类" },
+            ...typePool.map((t) => ({ value: t, label: TYPE_LABELS[t] ?? t })),
+          ]}
+        />
+        <Select
+          className="w-32"
+          value={activeTag ?? ""}
+          onChange={(value) => setActiveTag(value === "" ? null : String(value))}
+          options={[
+            { value: "", label: "全部标签" },
+            ...tagPool.map((t) => ({ value: t, label: t })),
+          ]}
+        />
         <span
           className="ml-auto flex items-center gap-2"
           title={disabled ? "请先打开项目" : undefined}
@@ -231,37 +260,6 @@ export default function ReferenceList() {
             新建外源链接
           </Button>
         </span>
-      </div>
-
-      {/* 筛选行：关键词搜索 + 分类 select + 标签 select */}
-      <div className="mb-3 flex shrink-0 flex-wrap items-center gap-2">
-        <div className="w-48">
-          <Input
-            prefix={<SearchOutlined />}
-            allowClear
-            placeholder="搜索标题 / 内容摘要…"
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-          />
-        </div>
-        <Select
-          className="w-32"
-          value={activeType}
-          onChange={(value) => setActiveType(value === "all" ? "all" : String(value))}
-          options={[
-            { value: "all", label: "全部分类" },
-            ...typePool.map((t) => ({ value: t, label: TYPE_LABELS[t] ?? t })),
-          ]}
-        />
-        <Select
-          className="w-32"
-          value={activeTag ?? ""}
-          onChange={(value) => setActiveTag(value === "" ? null : String(value))}
-          options={[
-            { value: "", label: "全部标签" },
-            ...tagPool.map((t) => ({ value: t, label: t })),
-          ]}
-        />
       </div>
 
       {/* 未同步提示条（ N6）：检测到本地新增/外部修改 → 引导扫描（只读探测无副作用） */}

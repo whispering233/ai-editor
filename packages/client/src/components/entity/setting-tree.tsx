@@ -20,7 +20,13 @@
 import { useEffect, useRef, useState } from "react";
 import type { DragEvent, KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { Button, Input, Select } from "antd";
-import { DeleteOutlined, DownOutlined, RightOutlined, UpOutlined } from "@ant-design/icons";
+import {
+  DeleteOutlined,
+  DownOutlined,
+  RightOutlined,
+  SearchOutlined,
+  UpOutlined,
+} from "@ant-design/icons";
 import { RowContextMenu } from "./row-context-menu";
 import { TagChip } from "@/components/ui/tag-chip";
 import { DropIndicator } from "@/components/ui/drop-indicator";
@@ -909,10 +915,12 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
         </div>
       )}
 
-      {/* 工具栏：搜索 + 标签筛选（树内过滤）+ 全部展开/折叠 + 新建（root 级） */}
-      <div className="mb-2 flex flex-wrap items-center gap-2">
+      {/* 控件行（页面头部第二行，layout.md §3）：搜索 + 标签筛选（树内过滤）+ 排序 + 全部展开/折叠 + 新建（root 级） */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         <div className="w-48">
           <Input
+            prefix={<SearchOutlined />}
+            allowClear
             value={qInput}
             onChange={(e) => setQInput(e.target.value)}
             placeholder="搜索设定名称…"

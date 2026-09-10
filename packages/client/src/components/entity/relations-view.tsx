@@ -187,9 +187,10 @@ export function RelationsView({
 
   return (
     <div>
-      {/* 过滤区：端点类型 + 关系类型 + 名称搜索（前端过滤；scope 模式隐藏——列表已按端点过滤） */}
+      {/* 控件行（页面头部第二行，layout.md §3）：左=端点类型/关系类型/搜索；右=建立关联
+          （前端过滤；scope 模式隐藏——列表已按端点过滤，操作入口由宿主详情页给） */}
       {scope === undefined && (
-        <div className="mt-3 mb-2 flex flex-wrap items-center gap-3">
+        <div className="mb-3 flex flex-wrap items-center gap-3">
           <Select
             size="medium"
             value={filter.endpointType === "" ? undefined : filter.endpointType}
@@ -214,7 +215,7 @@ export function RelationsView({
             style={{ minWidth: 140 }}
             options={RELATION_TYPES.map((t) => ({ value: t, label: relationTypeLabel(t) }))}
           />
-          <div className="w-52">
+          <div className="w-48">
             <Input
               prefix={<SearchOutlined />}
               allowClear
@@ -223,6 +224,9 @@ export function RelationsView({
               placeholder="搜索源/目标名称…"
             />
           </div>
+          <Button type="primary" className="ml-auto" onClick={onOpenCreate}>
+            + 建立关联
+          </Button>
         </div>
       )}
 
