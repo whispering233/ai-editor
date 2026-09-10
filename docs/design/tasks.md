@@ -49,7 +49,17 @@ v0.0.1-v0.0.27 发布链路全绿；**v0.0.28 = 批次十九：视觉语言统�
 
 ### 已完成（批次二十）
 
-（待填）
+| 卡 | commit | 内容 |
+|---|---|---|
+| T1 | `fix(client): 批次二十 T1 —— 语义色作用域修复` | cssVar key + `<html class>` 同值；守卫 `cssvar-scope`（实测锁定：改字面量即红） |
+| T2 | `fix(chat): 批次二十 T2 —— 用户气泡底色` | `colorFillTertiary`；守卫 `primary-bg-token`；实测浅 `#f0eeec`/墨字、深 5.5% 白/81% 白 |
+| T3 | `fix(timeline): 批次二十 T3 —— 组标题行补 px-3` | 组标题按钮列与事件卡按钮列对齐 |
+| T4 | `fix(client): 批次二十 T4 —— 拖拽插入线与临时高亮可见化` | 共享 `DropIndicator`（primary 3px + 圆点）替换三处；落点/新建/定位高亮 → `bg-primary/10` + `ring-primary/30`（5 处） |
+| T5 | `feat(client): 批次二十 T5 —— tint 标签系统` | `--tag-*` 六色 + `lib/tag-tint.ts`（FNV-1a，同名恒同色，静态类名表）+ `ui/tag-chip.tsx`；替换 9 处 chip；单测锁固定值/穷尽/边界 |
+| T6 | `fix(client): 批次二十 T6 —— 图标按钮统一` | antd v6 `variant` 需配 `color` 的静默回落修复（22 处）+ 自绘图标按钮收敛 antd（8 处）+ 守卫 `button-variant-color` + 清 `lib/styles.ts` 死常量 |
+| T7 | `feat(client): 批次二十 T7 —— 中栏页面头部统一` | 4 页补标题 + 7 页控件行重排 + 搜索框统一 `search-input` 规格 + 关联页新增建立关联入口 |
+
+**验证状态**：五道门禁全绿（`designmd lint` 0 error/3 预期 warning、`pnpm typecheck`、`pnpm lint`、`pnpm -r test` 1740 用例、`pnpm -r build`）；headless 像素核验（浅/深/拖拽三态）逐项实测通过。oracle 独立核验进行中（async）。
 
 ---
 
