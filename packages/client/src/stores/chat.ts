@@ -90,7 +90,7 @@ interface ChatState {
   lastUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null;
   setLastUsage: (u: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null) => void;
 
- /** 「问 AI」聚焦输入框信号：InfoBar 点「问 AI」后 +1，InputArea 监听后聚焦 textarea——
+ /** 「问 AI」聚焦输入框信号：中栏右下悬浮按钮点击后 +1，InputArea 监听后聚焦 textarea——
  * 无页面焦点（currentFocus=null）时用户仍可直接打字提问，按钮不「无反应」 */
   focusInputSeq: number;
   requestFocusInput: () => void;

@@ -675,7 +675,7 @@ function InputArea() {
   const sendMessage = useChatStore((s) => s.sendMessage);
   const focusInputSeq = useChatStore((s) => s.focusInputSeq);
   const senderRef = useRef<ComponentRef<typeof Sender> | null>(null);
- // InfoBar「问 AI」点击触发聚焦（SenderRef.inputElement = 原生 textarea）
+ // 中栏右下「问 AI」悬浮按钮点击触发聚焦（SenderRef.inputElement = 原生 textarea）
   useEffect(() => {
     if (focusInputSeq > 0) senderRef.current?.inputElement?.focus();
   }, [focusInputSeq]);

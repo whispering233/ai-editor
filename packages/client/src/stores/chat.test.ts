@@ -875,7 +875,7 @@ describe("项目切换联动（U5：清空消息/运行态 + 中止在途流）"
     expect(useChatStore.getState().sessionsLoading).toBe(false);
   });
 
-  it("requestFocusInput 递增聚焦信号（InfoBar 问 AI 无焦点时也聚焦输入框）", () => {
+  it("requestFocusInput 递增聚焦信号（问 AI 无焦点时也聚焦输入框）", () => {
     const before = useChatStore.getState().focusInputSeq;
     useChatStore.getState().requestFocusInput();
     useChatStore.getState().requestFocusInput();
