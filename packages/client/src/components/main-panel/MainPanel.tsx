@@ -66,7 +66,7 @@ export function MainPanel({
           setFocusContext(currentFocus);
           requestFocusInput();
         }}
-        style={{ position: "absolute", insetInlineEnd: 16, insetBlockEnd: 16 }}
+        style={{ position: "absolute", insetInlineEnd: 16, bottom: 16, zIndex: 30 }}
       />
     </main>
   );
