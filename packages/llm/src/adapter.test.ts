@@ -1,4 +1,4 @@
-// @whispering233/ai-editor-llm adapter 测试（批次九重写：不联网纯函数+注入集成测试）
+// @whispering233/ai-editor-llm adapter 测试（重写：不联网纯函数+注入集成测试）
 // 覆盖：buildPiContext 消息转换 / toPiTools 工具透传 / convertUsage 口径 / 错误归一化
 // streamChat 事件转发（注入 fake models 模拟流事件）/ 模型目录查询
 import { describe, expect, it } from "vitest";
@@ -51,7 +51,7 @@ describe("adapter.消息转换 buildPiContext", () => {
     expect(toolResult).toMatchObject({ role: "toolResult", toolCallId: "call_1", toolName: "get_entity" });
   });
 
-  it("tool 消息的 toolName 从之前的 assistant tool_calls 匹配（成对重组语义，）", () => {
+  it("tool 消息的 toolName 从之前的 assistant tool_calls 匹配（成对重组语义）", () => {
     const messages: LLMMessage[] = [
       { role: "assistant", content: null, tool_calls: [{ id: "a", type: "function", function: { name: "search_entities", arguments: "{}" } }] },
       { role: "assistant" as never, content: "中间文本" } as never as LLMMessage,
@@ -83,7 +83,7 @@ describe("adapter.工具透传 toPiTools", () => {
   });
 });
 
-describe("adapter.usage 转换 convertUsage（）", () => {
+describe("adapter.usage 转换 convertUsage", () => {
   it("input 不含缓存 → prompt_tokens = input + cacheRead + cacheWrite = totalTokens - output", () => {
     const converted = convertUsage({ input: 100, output: 20, cacheRead: 30, cacheWrite: 5, totalTokens: 155, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } });
     expect(converted).toEqual({ prompt_tokens: 135, completion_tokens: 20, total_tokens: 155 });
@@ -101,7 +101,7 @@ describe("adapter.错误归一化 toLLMError / extractStatus / extractCode", () 
     expect(extractStatusFromMessage("string without status")).toBeUndefined();
   });
 
-  it("从 errorMessage 提取配额类错误码（ 分类依赖）", () => {
+  it("从 errorMessage 提取配额类错误码（分类依赖）", () => {
     expect(extractCodeFromMessage("insufficient_quota")).toBe("insufficient_quota");
     expect(extractCodeFromMessage("rate limit exceeded")).toBe("rate_limit");
     expect(extractCodeFromMessage("ok")).toBeUndefined();
@@ -137,7 +137,7 @@ describe("adapter.模型目录查询", () => {
     expect(flash).toMatchObject({ provider: "deepseek" });
   });
 
-  it("批次十六：opencode-go provider 已注册（真实目录含 qwen3.7-max 与撞名 deepseek-v4-flash）", () => {
+  it("opencode-go provider 已注册（真实目录含 qwen3.7-max 与撞名 deepseek-v4-flash）", () => {
     const models = getAvailableModels("opencode-go");
     const qwen = models.find((m) => m.id === "qwen3.7-max");
     expect(qwen).toBeDefined();
@@ -177,7 +177,7 @@ describe("adapter.streamChat 事件转发（注入 fake models 模拟流事件�
     expect(toolEvent.toolCall).toMatchObject({ id: "c1", name: "get_entity", arguments: { id: "x" } });
   });
 
-  it("length 截断（）：缓存工具调用标记错误后发出，不执行", async () => {
+  it("length 截断：缓存工具调用标记错误后发出，不执行", async () => {
     const events: unknown[] = [];
     const fakeModels = {
       getModel: () => ({ id: "m", name: "m", provider: "deepseek", contextWindow: 64000, maxTokens: 8192, reasoning: false }),
@@ -196,7 +196,7 @@ describe("adapter.streamChat 事件转发（注入 fake models 模拟流事件�
     expect(toolEvent.toolCall.error).toContain("length");
   });
 
-  it("abort 路径：error 事件 + 结果 aborted（）", async () => {
+  it("abort 路径：error 事件 + 结果 aborted", async () => {
     const events: unknown[] = [];
     const fakeModels = {
       getModel: () => ({ id: "m", name: "m", provider: "deepseek", contextWindow: 64000, maxTokens: 8192, reasoning: false }),
@@ -219,7 +219,7 @@ describe("adapter.streamChat 事件转发（注入 fake models 模拟流事件�
     expect((result.error as { code?: string }).code).toBe("ENV_UNSUPPORTED");
   });
 
-  it("批次十六：provider 参数决定模型解析（opencode-go 模型走 opencode-go 目录）", async () => {
+  it("provider 参数决定模型解析（opencode-go 模型走 opencode-go 目录）", async () => {
     const events: unknown[] = [];
     const calls: Array<[string, string]> = [];
     const fakeModels = {
@@ -243,7 +243,7 @@ describe("adapter.streamChat 事件转发（注入 fake models 模拟流事件�
     expect(events).toContainEqual({ type: "stream_resolved", id: "qwen3.7-max", provider: "opencode-go" });
   });
 
-  it("批次十六：撞名模型不跨 provider 兜底（deepseek 目录没有 qwen3.7-max → 报错而非拿 opencode-go 的）", async () => {
+  it("撞名模型不跨 provider 兜底（deepseek 目录没有 qwen3.7-max → 报错而非拿 opencode-go 的）", async () => {
     const calls: Array<[string, string]> = [];
     const fakeModels = { getModel: () => undefined, stream: () => fakeStream([]) } as never;
     _setModels(() => fakeModels as never);
@@ -264,7 +264,7 @@ describe("adapter.streamChat 事件转发（注入 fake models 模拟流事件�
     ]);
   });
 
-  it("批次十六：配置漂移在同 provider 内兜底默认模型（不跨 provider）", async () => {
+  it("配置漂移在同 provider 内兜底默认模型（不跨 provider）", async () => {
     const calls: Array<[string, string]> = [];
     const fakeModels = {
       getModel: () => undefined,

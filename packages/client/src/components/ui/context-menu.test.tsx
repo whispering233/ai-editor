@@ -1,4 +1,4 @@
-// ContextMenu 自绘换芯走查（批次十七 3-7：Base UI → 原生；#31 契约退役）
+// ContextMenu 自绘换芯走查（Base UI → 原生；#31 契约退役）
 // SSR 语义：菜单默认关闭 → Content portal 不渲染；Trigger clone 注入 children 可在 SSR 验证；
 // 裸 Label 渲染不再依赖 Group 上下文（自绘实现无此约束）。
 import { describe, expect, it } from "vitest";

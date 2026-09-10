@@ -5,7 +5,7 @@
 
 > **软删过滤**：常规查询端点（GET 列表/详情、关系查询、Delta 查询等）**默认过滤软删对象**；回收站 API（`/api/v1/trash/*`）是访问软删对象的唯一入口。
 
-> **实体类型（2026-08；扩展）**：`type` 现支持 **7 种**——`character` / `setting` / `location` / `hook` / **`event`（事件，时间轴）** / **`timepoint`（时间标签点，时间轴）** / **`reference`（参考资料）**。前 6 种完全复用本章节泛型端点（列表/详情/创建/更新/软删），id 前缀 `ev-` / `tp-`；软删/回收站走 `/api/v1/trash/entity/:type/:id/*` 泛型路径（无需独立端点）。**reference 特例（批次十一）**：`kind='file'` 时服务端**文件联动**——create 落盘 `references/<标题>.md`（YAML frontmatter + 正文）+ 建索引；update **先原子写文件再更新 DB**（文件写失败操作报错、DB 失败 scan 自愈）；软删移文件入 `references/.trash/`、restore 移回、purge 物理删（trash 泛型端点内部分支）；`kind='link'` 纯 DB 无文件联动。
+> **实体类型（2026-08；扩展）**：`type` 现支持 **7 种**——`character` / `setting` / `location` / `hook` / **`event`（事件，时间轴）** / **`timepoint`（时间标签点，时间轴）** / **`reference`（参考资料）**。前 6 种完全复用本章节泛型端点（列表/详情/创建/更新/软删），id 前缀 `ev-` / `tp-`；软删/回收站走 `/api/v1/trash/entity/:type/:id/*` 泛型路径（无需独立端点）。**reference 特例**：`kind='file'` 时服务端**文件联动**——create 落盘 `references/<标题>.md`（YAML frontmatter + 正文）+ 建索引；update **先原子写文件再更新 DB**（文件写失败操作报错、DB 失败 scan 自愈）；软删移文件入 `references/.trash/`、restore 移回、purge 物理删（trash 泛型端点内部分支）；`kind='link'` 纯 DB 无文件联动。
 
 **event 的 data 字段（shared `eventDataSchema`）**：
 
@@ -72,10 +72,10 @@ type: "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "r
   //   reference → type, tags, source；kind（file/link）、file_name（file 类相对路径）、
   //               url（link 类）——来源列渲染依据
   summary: Record<string, unknown>;
-  // 手动排序位置（2026-08 批次十三）：**仅 setting 类型填充**——同级组内线性序
+  // 手动排序位置（2026-08）：**仅 setting 类型填充**——同级组内线性序
   // （同父/同根组内 0..n-1，NULL = 未参与手动排序）；其余类型不出现（稀疏语义）
   sortOrder?: number;
-  // M2（2026-08 批次六）：**仅 setting 类型填充**——层级 = belongs_to 关系，
+  // M2（2026-08）：**仅 setting 类型填充**——层级 = belongs_to 关系，
   // 服务端列表响应时补查设定间层级边，按 childId 映射附加；无父的设定不出现该字段（稀疏）
   parentId?: string;
   parentName?: string;
@@ -136,7 +136,7 @@ type: "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "r
 //             (hook data 字段 schema：shared `hookDataSchema`，服务端校验)
 // event:     { description?, tags?: string[] }（精校验 + passthrough，详见本章节开头字段表）
 // timepoint: {}（G2：时间标签文本 = name，data 无专属字段）
-// reference: （批次十一）两类承载：
+// reference: 两类承载：
 //   file 类：{ kind: "file", type?, tags?, content? }——服务端落盘 references/<标题 sanitize>.md
 //     （YAML frontmatter: title/category/tags + 正文；重名自动 `标题 (N).md`）+ 建索引
 //     （data.file_name 相对路径 / content 正文镜像 / file_mtime 同步快照）；kind 缺省视为 link
@@ -212,7 +212,7 @@ id: string;
 
 ### POST /api/v1/reference/scan
 
-扫描重建参考资料索引（批次十一）——幂等全量比对，**文件 = 真相源**：
+扫描重建参考资料索引——幂等全量比对，**文件 = 真相源**：
 
 ```typescript
 // Req: {}（无参数）
@@ -293,7 +293,7 @@ id: string;
 
 ### PUT /api/v1/entity/setting/:id/move
 
-设定同级重排 / 改父 + 重排（2026-08 批次十三）。**仅 `setting` 类型支持**——设定手动排序 = 同级组内线性序（同父/同根组内 0..n-1），持久化到 data.db `entities.sort_order` 列（新语义；列本身已引入，**无 DDL 迁移，SCHEMA_VERSION 保持 5**）。
+设定同级重排 / 改父 + 重排（2026-08）。**仅 `setting` 类型支持**——设定手动排序 = 同级组内线性序（同父/同根组内 0..n-1），持久化到 data.db `entities.sort_order` 列（新语义；列本身已引入，**无 DDL 迁移，SCHEMA_VERSION 保持 5**）。
 
 ```typescript
 // Path

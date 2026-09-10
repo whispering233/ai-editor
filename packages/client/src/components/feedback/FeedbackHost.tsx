@@ -1,4 +1,4 @@
-// 全局反馈宿主（ 通用交互 + §4.3 样式细节规范 + 组件表）：挂载 AppShell 根 div 末尾
+// 全局反馈宿主（通用交互 + §4.3 样式细节规范 + 组件表）：挂载 AppShell 根 div 末尾
 // 职责三件：
 // 1) ui store toast → antd message 桥接（`App.useApp().message`，顶部居中——DESIGN.md §Components「toast」）：
 // store 的 toast 是「最近一条」快照（showToast 写入、3s 后由 store 内定时器清空），提示由此处触发；
@@ -16,7 +16,7 @@ import { useUiStore, TOAST_DURATION_MS, type Toast } from "../../stores/ui";
 import { ConfirmDialog } from "../outline/dialogs";
 
 /** antd message 的 duration 单位是**秒**（antd/es/message/interface.d.ts `duration?: number`），
- * 故由 store 的单一事实源毫秒值换算；store 定时器仍负责 3s 后清空快照。 */
+ * 故由 store 的单一事实源毫秒值换算；store 定时器仍负责 3s 后清空快照。*/
 const TOAST_DURATION_SECONDS = TOAST_DURATION_MS / 1000;
 
 /**

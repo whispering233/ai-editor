@@ -11,8 +11,8 @@
 // - 重建时同步重置 outline.json（先备份为 outline.json.v{n}.bak，n=旧版本号）、清空回收站
 // - 旧 data.db 一并备份为 data.db.v{n}.bak；备份带版本号、不覆盖旧备份（多次重建各自留档）
 // - project.json 的 schema_version 仅用于 JSON 结构判断（与 user_version 不同维度），重建不修改 project.json
-// - ：删库重建策略于 v0.1.0 发布终止——增量迁移机制替代
-// 触发语义（ 第 68-70 行）：open 时检测，重建完成后向客户端提示。
+// - 删库重建策略于 v0.1.0 发布终止——增量迁移机制替代
+// 触发语义（第 68-70 行）：open 时检测，重建完成后向客户端提示。
 
 import { copyFileSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -25,7 +25,7 @@ import { MIGRATIONS, type Migration } from "../migrations/index.js";
 /** data.db 文件名（项目根目录，与 server middleware 的常量一致） */
 export const DATA_DB_FILE_NAME = "data.db";
 
-/** 删库重建的结果（供上层 open 流程提示客户端，） */
+/** 删库重建的结果（供上层 open 流程提示客户端） */
 export interface MigrationResult {
  /** 是否发生了删库重建 */
   rebuilt: boolean;
@@ -47,11 +47,11 @@ export interface RebuildOutput {
 }
 
 /**
- * data.db user_version 高于当前程序版本（ 拒绝打开专用错误）。
+ * data.db user_version 高于当前程序版本（拒绝打开专用错误）。
  *
  * 语义：用户安装新版程序后回退旧版 → 旧版程序打开高版本库，
  * 若按「不匹配即重建」处理会把用户全部数据重建清零（且备份仅配合旧版本回滚，普通用户
- * 不可自救）。 起该分支改为拒绝打开并抛出本错误——**不触发任何重建/备份/写操作**，
+ * 不可自救）。起该分支改为拒绝打开并抛出本错误——**不触发任何重建/备份/写操作**，
  * 数据文件原封不动；上层（server open 路由）捕获后转 409 + 明确提示升级程序。
  *
  * 独立于 import 侧的 SCHEMA_VERSION_MISMATCH（备份导入校验）：本错误是**打开已存在项目**
@@ -71,7 +71,7 @@ export class SchemaVersionError extends Error {
 }
 
 /**
- * schema 版本检测 + 版本对齐的高层入口（open 流程调用，）。
+ * schema 版本检测 + 版本对齐的高层入口（open 流程调用）。
  *
  * - user_version 与 SCHEMA_VERSION **匹配**：直接返回，db 为原连接，rebuilt=false。
  * - user_version **> SCHEMA_VERSION（未来版本）**：**拒绝打开**——关闭连接并抛
@@ -79,7 +79,7 @@ export class SchemaVersionError extends Error {
  * - user_version **< SCHEMA_VERSION（旧版本）**：
  * - **有迁移路径**（opts.migrations 中存在从当前版本到 SCHEMA_VERSION 的连续迁移链，
  * 默认 MIGRATIONS）→ runMigrations 前向迁移（迁移前时间戳快照，数据保全完整）
- * - **无迁移路径** → rebuildProjectStorage 删库重建兜底（ 迁移机制
+ * - **无迁移路径** → rebuildProjectStorage 删库重建兜底（迁移机制
  * 覆盖不到的历史版本保留；备份 v{n}.bak 留档）
  *
  * @param opts.migrations 迁移集注入（默认 MIGRATIONS；测试注入假迁移）
@@ -130,7 +130,7 @@ export function ensureSchemaCompatible(
 }
 
 /**
- * 判定从 fromVersion 到 targetVersion 是否存在**连续迁移链**（ 纯函数）：
+ * 判定从 fromVersion 到 targetVersion 是否存在**连续迁移链**（纯函数）：
  * (fromVersion, targetVersion] 区间内每个版本号都恰好有迁移条目 → true。
  * 连续性是硬要求——跳版本迁移意味着中间版本的数据形态未经处理，拒绝走迁移路径。
  *
@@ -225,7 +225,7 @@ export function checkpointWal(db: Db): void {
  * 复制保留原始字节，不存在时跳过备份）
  * 4. **删除旧库文件**（data.db + -wal + -shm，checkpoint 后 -wal 已截断但文件仍在，一并删除）
  * 5. **重建空库**：openDatabase（自动建表）→ setUserVersion(SCHEMA_VERSION)
- * 6. **重置 outline.json**：写最小空树（严格三层空树，；与 T2.2 readOutlineFile
+ * 6. **重置 outline.json**：写最小空树（严格三层空树；与 T2.2 readOutlineFile
  * 缺失语义的空树同形）——顶层 schema_version 同步写 SCHEMA_VERSION
  *
  * **清空回收站**：新库四张表全空，软删行（deleted_at 非 NULL）天然不存在，无需单独操作。

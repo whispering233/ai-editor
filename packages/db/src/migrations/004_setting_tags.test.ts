@@ -1,4 +1,4 @@
-// 004 迁移测试（ K2 修订：setting 旧 rules 分类值 → data.tags，移除 rules）
+// 004 迁移测试（K2 修订：setting 旧 rules 分类值 → data.tags，移除 rules）
 // 覆盖：v3 库手工建表（含 setting 行）→ runMigrations → rules 复制到 tags + rules 移除 /
 // 空 rules 不动 / 坏 JSON 跳过 / 非 setting 不动 / updated_at 刷新 / 幂等（user_version = 5）
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -84,7 +84,7 @@ function settingData(id: string): Record<string, unknown> | null {
   }
 }
 
-describe("迁移 004（setting 旧 rules → data.tags， K2 修订）", () => {
+describe("迁移 004（setting 旧 rules → data.tags，K2 修订）", () => {
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), "ai-editor-mig-004-"));
     db = createV3Db([

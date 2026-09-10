@@ -5,7 +5,7 @@
 // 两步写为**一次提交**（withTransaction），失败整体回滚、不产生半状态。
 // - advance_hook：delta_records 记 status → progressing + relation_records 插 advances
 // - resolve_hook：delta_records 记 status → resolved + relation_records 插 resolves
-// - abandon_hook：仅 delta_records 记 status → abandoned（：无 relation；args 无 node_id）
+// - abandon_hook：仅 delta_records 记 status → abandoned（无 relation；args 无 node_id）
 //
 // **幂等**：先查 (node_id, hook_id, relation_type) 是否已有未软删记录，存在即返回已有 id
 // （不重复写）——重复确认/重复提案均不重复推进；abandon 无关系可查，改查「已记
@@ -19,13 +19,13 @@
 // from: 当前状态, to: 目标状态 }]——from 取 hook.data.status（缺省 planted，
 // 状态缺失视为 planted），保证 computeState 的 update 校验正常累积；
 // description 取 proposal.args.description（delta_records.description NOT NULL）。
-// 终态守卫：resolved/abandoned 为生命周期终态（），终态伏笔不可再推进/回收/废弃。
+// 终态守卫：resolved/abandoned 为生命周期终态，终态伏笔不可再推进/回收/废弃。
 //
 // **状态同步（S6.7 修复轮必须改）**：复合写事务内插入 delta 后**同步更新
 // entities.data.status**（浅合并 + 刷新 updated_at，与 快照比对语义兼容）——
 // 终态守卫（assertNotTerminal）、delta 的 from（currentHookStatus）与 S6.5 hookStatuses
 // （analysis/hook.ts collectHooks 读 entity.data.status）均以 data.status 为唯一事实来源
-// ；不同步则 resolved/abandoned 后仍可推进、同 hook 二次推进 from 断裂
+//；不同步则 resolved/abandoned 后仍可推进、同 hook 二次推进 from 断裂
 // （computeState conflicts）、已回收伏笔仍计 active。**幂等命中路径不更新**（首次执行已同步）。
 //
 // 执行类是短同步事务，不做 signal 检查（长工具才要求执行中检查；入口检查由
@@ -37,7 +37,7 @@ import type { ToolContext } from "../context.js";
 import { requireHook, requireOutlineNode } from "../proposal/types.js";
 import { requireString, type ExecutorFn, type ExecutorResult } from "./types.js";
 
-/** 伏笔生命周期终态（：planted → progressing → resolved 或 abandoned） */
+/** 伏笔生命周期终态（planted → progressing → resolved 或 abandoned） */
 const TERMINAL_STATUSES = ["resolved", "abandoned"] as const;
 
 /** 取伏笔当前状态（data.status 缺失/空串 → planted——创建即埋设） */
@@ -46,7 +46,7 @@ function currentHookStatus(hook: { data: Record<string, unknown> }): string {
   return typeof status === "string" && status !== "" ? status : "planted";
 }
 
-/** 终态守卫：终态伏笔不可再推进/回收/废弃（生命周期语义，） */
+/** 终态守卫：终态伏笔不可再推进/回收/废弃（生命周期语义） */
 function assertNotTerminal(hook: { data: Record<string, unknown> }, actionLabel: string): void {
   const status = currentHookStatus(hook);
   if ((TERMINAL_STATUSES as readonly string[]).includes(status)) {
@@ -56,7 +56,7 @@ function assertNotTerminal(hook: { data: Record<string, unknown> }, actionLabel:
 
 /**
  * 幂等查询（advance/resolve）：同 (node_id, hook_id, relation_type) 已有**未软删**记录
- * → 返回其 id（ 复合写说明：重复确认/重复提案均不重复推进；含端点软删后还原的
+ * → 返回其 id（复合写说明：重复确认/重复提案均不重复推进；含端点软删后还原的
  * 记录——deleted_at 置 NULL 后仍命中）。
  */
 function findExistingLifecycleRelation(db: Db, nodeId: string, hookId: string, relationType: string): string | null {
@@ -143,7 +143,7 @@ function executeHookTransition(
   const args = proposal.args;
   const hookId = requireString(args, "hook_id");
   const nodeId = relationType === null ? null : requireString(args, "node_id");
-  const description = requireString(args, "description"); // delta_records.description NOT NULL（）
+  const description = requireString(args, "description"); // delta_records.description NOT NULL
   return withTransaction(ctx.db, () => {
  // 幂等（含未软删记录）：命中即返回已有 id，不重复写
     if (relationType !== null) {
@@ -158,7 +158,7 @@ function executeHookTransition(
     if (nodeId !== null) requireOutlineNode(ctx, nodeId);
  // 终态守卫（resolved/abandoned 不可再推进/回收；废弃时不可再废弃）
     assertNotTerminal(hook, actionLabel);
- // delta：记 status 变化（from=当前状态， update 语义，computeState 正常累积）
+ // delta：记 status 变化（from=当前状态，update 语义，computeState 正常累积）
     const changes: DeltaChange[] = [{ field: "status", op: "update", from: currentHookStatus(hook), to: toStatus }];
     const delta = insertDelta(ctx.db, {
       nodeId: nodeId ?? anchorNodeForAbandon(ctx),
@@ -173,7 +173,7 @@ function executeHookTransition(
  // 仍可推进（守卫失效）、同 hook 二次推进 from 断裂（computeState conflicts）、
  // 已回收伏笔仍计 active。幂等命中路径（上方 early return）不更新——首次执行已同步。
     updateEntity(ctx.db, hookId, { data: { status: toStatus } });
- // relation：advances / resolves（大纲节点 → hook； 方向约定）
+ // relation：advances / resolves（大纲节点 → hook；方向约定）
     if (relationType !== null) {
       const relation = createRelation(
         ctx.db,
@@ -186,14 +186,14 @@ function executeHookTransition(
   });
 }
 
-/** advance_hook（：advance_hook(hook_id, node_id, description) → id） */
+/** advance_hook（advance_hook(hook_id, node_id, description) → id） */
 export const executeAdvanceHook: ExecutorFn = (ctx, proposal) =>
   executeHookTransition(ctx, proposal, "advances", "progressing", "推进");
 
-/** resolve_hook（：resolve_hook(hook_id, node_id, description) → id） */
+/** resolve_hook（resolve_hook(hook_id, node_id, description) → id） */
 export const executeResolveHook: ExecutorFn = (ctx, proposal) =>
   executeHookTransition(ctx, proposal, "resolves", "resolved", "回收");
 
-/** abandon_hook（：abandon_hook(hook_id, description) → id；仅 delta 记 status=abandoned） */
+/** abandon_hook（abandon_hook(hook_id, description) → id；仅 delta 记 status=abandoned） */
 export const executeAbandonHook: ExecutorFn = (ctx, proposal) =>
   executeHookTransition(ctx, proposal, null, "abandoned", "废弃");

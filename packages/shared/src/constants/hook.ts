@@ -1,12 +1,12 @@
 // 伏笔（Hook）系统常量
 
-/** 伏笔状态枚举（：planted → progressing → resolved 或 abandoned） */
+/** 伏笔状态枚举（planted → progressing → resolved 或 abandoned） */
 export const HOOK_STATUSES = ["planted", "progressing", "resolved", "abandoned"] as const;
 
 /** 伏笔状态 */
 export type HookStatus = (typeof HOOK_STATUSES)[number];
 
-/** 回收节奏枚举（ payoff_timing） */
+/** 回收节奏枚举（payoff_timing） */
 export const PAYOFF_TIMING = [
   "immediate",
   "near_term",
@@ -32,7 +32,7 @@ export const DEFAULT_HALF_LIFE: Record<PayoffTiming, number> = {
 };
 
 /**
- * 伏笔分类建议值（：category 自由填，本常量仅为前端选择器建议值，非校验约束）
+ * 伏笔分类建议值（category 自由填，本常量仅为前端选择器建议值，非校验约束）
  */
 export const HOOK_CATEGORIES = [
   "mystery",

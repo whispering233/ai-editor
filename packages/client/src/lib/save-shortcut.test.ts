@@ -1,4 +1,4 @@
-// 保存快捷键契约测试（批次十八 B2）：谓词判定 + 注册栈后进先出 + 空栈不拦截。
+// 保存快捷键契约测试（B2）：谓词判定 + 注册栈后进先出 + 空栈不拦截。
 import { afterEach, describe, expect, it } from "vitest";
 import { isSaveShortcut, registerSaveHandler, triggerSaveShortcut } from "./save-shortcut";
 

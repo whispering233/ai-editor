@@ -41,14 +41,14 @@ function throwProposalStale(ref: ProposalReference): never {
 /**
  * 单条引用快照重校验：
  * - kind=entity：getEntity 查 entities（已过滤软删）——不存在/软删 → null → STALE；
- * 存在则比对实体自身 updated_at（软删/还原亦刷新版本戳，，语义统一）
+ * 存在则比对实体自身 updated_at（软删/还原亦刷新版本戳，语义统一）
  * - kind=relation：getRelation（自身软删 + 端点软删联动过滤）——不可见 → STALE；
  * 存在则比对关系自身 updated_at
  * - kind=delta：getDeltaRow（记录级：自身软删视为不存在）——不存在 → STALE；比对自身 updated_at
  * - kind=outline_node：findOutlineNode 查**调用方预读的树**（S2：references 含多条 outline_node
  * 时不重复读文件；校验前同步读树一次，无间隙）——节点不存在或软删→ STALE；
  * 存在则比对**节点级** updated_at
- * - default（防静默，oracle S1）：未知 kind 属上层调度/构造 bug（ 仅 4 类引用），
+ * - default（防静默，oracle S1）：未知 kind 属上层调度/构造 bug（仅 4 类引用），
  * 跳过校验直接放行会让提案绕过快照重校验，按内部错误显式拒绝
  * 三种 DB 引用不查大纲可见性联动（getRelation 例外——其 API 内置端点过滤）：
  * 提案引用的是记录本身，「存在性 + 自身 updated_at」即 字面语义。
@@ -91,7 +91,7 @@ function assertReferenceFresh(project: ProjectContext, tree: OutlineFileTree, re
  * store.get(id, projectId) 校验项目归属；返回 null 时 peek 区分两种不可见——
  * peek 可见 ⇒ 提案属于其他项目 → 409 PROPOSAL_PROJECT_MISMATCH（不误报 404）；
  * peek 不可见 ⇒ 不存在或已过期 → 404 PROPOSAL_NOT_FOUND。
- * 注意 peek 走仓内惰性过期清理（ TTL），超期条目同样归入 404。
+ * 注意 peek 走仓内惰性过期清理（TTL），超期条目同样归入 404。
  */
 function resolveProposal(proposalId: string, projectId: string): Proposal {
   const proposal = defaultProposalStore.get(proposalId, projectId);
@@ -102,7 +102,7 @@ function resolveProposal(proposalId: string, projectId: string): Proposal {
   throw new HttpError(404, "PROPOSAL_NOT_FOUND", `提案不存在或已过期: ${proposalId}`);
 }
 
-// POST /api/v1/proposal/:proposalId/confirm —— 用户确认提案（）
+// POST /api/v1/proposal/:proposalId/confirm —— 用户确认提案
 // 流程：项目归属解析（404/409）→ 快照逐条重校验（409 PROPOSAL_STALE）→
 // executeProposal({ db, outlineDir: project.root, projectId }, proposal) →
 // 200 { confirmed: true, result }（ok 包裹，result 为执行结果如新创建的 entity id）。
@@ -133,13 +133,13 @@ proposalRoutes.post("/:proposalId/confirm", (c) => {
     }
     return c.json(ok({ confirmed: true, result }));
   } finally {
- // 一次性消费（ 瞬态交互对象）：终态即移除——残留只会让重复 confirm
+ // 一次性消费（瞬态交互对象）：终态即移除——残留只会让重复 confirm
  // 对无引用提案（propose_create_entity）产生重复执行，或对过期提案反复返回 409
     defaultProposalStore.remove(proposal.proposal_id);
   }
 });
 
-// POST /api/v1/proposal/:proposalId/reject —— 用户拒绝提案（）
+// POST /api/v1/proposal/:proposalId/reject —— 用户拒绝提案
 // 项目归属校验与 confirm 同语义（原文「confirm/reject 时校验与当前项目一致」——
 // 拒绝同样是不可逆消费动作，跨项目拒绝会误伤他项目待确认提案，故 404/409 MISMATCH 同 confirm）。
 // 校验通过 → 移除（拒绝即消费）→ 200 { rejected: true }。

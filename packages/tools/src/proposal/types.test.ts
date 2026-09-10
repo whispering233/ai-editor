@@ -87,7 +87,7 @@ const sampleRefs: ProposalReference[] = [
   { kind: "outline_node", id: "ch-1", updated_at: T0 },
 ];
 
-describe("buildProposal（提案对象结构，）", () => {
+describe("buildProposal（提案对象结构）", () => {
   it("结构完整：proposal_id prop_ 前缀 + type/args/project_id/references/summary/createdAt", () => {
     const ctx = makeCtx();
     const proposal = buildProposal(ctx, "propose_update_entity", { entity_id: "char-1", patches: { status: "dead" } }, sampleRefs, "更新实体「阿强」的 1 个字段");
@@ -107,13 +107,13 @@ describe("buildProposal（提案对象结构，）", () => {
   });
 });
 
-describe("引用快照辅助（）", () => {
+describe("引用快照辅助", () => {
   it("refEntity 用实体自身 updated_at", () => {
     const row = createEntity(db, { type: "character", name: "阿强" });
     expect(refEntity(row)).toEqual({ kind: "entity", id: row.id, updated_at: row.updated_at });
   });
 
-  it("refOutlineNode 用节点级 updated_at（）", () => {
+  it("refOutlineNode 用节点级 updated_at", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const node = findOutlineNode(readOutlineFile(dir), "ch-1")!;
     expect(refOutlineNode(node)).toEqual({ kind: "outline_node", id: "ch-1", updated_at: T0 });
@@ -127,7 +127,7 @@ describe("引用快照辅助（）", () => {
   });
 });
 
-describe("resolveEndpoint（端点识别，）", () => {
+describe("resolveEndpoint（端点识别）", () => {
   it("实体 id → 实体类型 + 实体快照", () => {
     const row = createEntity(db, { type: "character", name: "阿强" });
     const resolved = resolveEndpoint(makeCtx(), row.id);
@@ -187,7 +187,7 @@ describe("requireHook（伏笔类型一致性校验）", () => {
   });
 });
 
-describe("checkProposalAborted（signal 中止，）", () => {
+describe("checkProposalAborted（signal 中止）", () => {
   it("signal 已中止 → 抛 AbortedError", () => {
     const controller = new AbortController();
     controller.abort();

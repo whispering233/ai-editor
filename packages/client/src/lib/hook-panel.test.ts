@@ -267,7 +267,7 @@ describe("anchorNodeForAbandon（废弃 Delta 锚定节点）", () => {
     expect(anchorNodeForAbandon(makeConfig("ch-2"), makeTree())).toBe("ch-2");
   });
 
-  it("current_position 指向已软删节点 → 退化树末节点（ 须非软删）", () => {
+  it("current_position 指向已软删节点 → 退化树末节点（须非软删）", () => {
     const tree = makeTree();
     (
       tree.children[0] as { children: { children: { deleted: boolean }[] }[] }
@@ -333,7 +333,7 @@ describe("复合写请求构造", () => {
     expect(buildPlantRelationBody("hook-9", "sc-5").source_id).toBe("sc-5");
   });
 
-  it("currentHookStatus：data.status 缺失/空串 → planted（）", () => {
+  it("currentHookStatus：data.status 缺失/空串 → planted", () => {
     expect(currentHookStatus({ status: "progressing" })).toBe("progressing");
     expect(currentHookStatus({})).toBe("planted");
     expect(currentHookStatus({ status: "" })).toBe("planted");

@@ -359,7 +359,7 @@ components:
 
 **行高**：正文 1.57（antd 22px/14px），标题 1.4，caption 1.67（antd 20px/12px）。
 
-**无衬线、无例外**：界面 chrome 与书封一律禁衬线——旧 `--font-serif` / `--font-heading` 与书封取色模块 `lib/book-cover.ts` 均已删除（批次十九 T10）。
+**无衬线、无例外**：界面 chrome 与书封一律禁衬线——旧 `--font-serif` / `--font-heading` 与书封取色模块 `lib/book-cover.ts` 均已删除（T10）。
 
 ## Layout
 
@@ -394,7 +394,7 @@ components:
 
 **与 Notion 原值的偏差（有意）**：Notion 卡片是 12px，我们取 8px——antd 的 `borderRadiusLG` 同时管 Modal/Drawer/Table 等大面，改成 12 会连带全站变圆。若日后要更圆，先评估 Modal/Drawer 的观感再改 seed。**按钮一律矩形，不用胶囊形**（Notion 的 sober-editorial 几何）。
 
-**Tailwind 圆角变量已钉到本表**：`index.css` 的 `--radius-sm/md/lg` = `4px/6px/8px`（与 antd `borderRadiusSM`/`borderRadius`/`borderRadiusLG` 同值），不再由 `calc(var(--radius) * k)` 派生（旧值 9.6/7.7/5.8 与文档不符）。xl 以上（12/16/24/32px）曾为**遗留 tail**（供未收敛到 antd 的自绘组件用），组件收敛后已无消费者，批次十九 T10 已删除。
+**Tailwind 圆角变量已钉到本表**：`index.css` 的 `--radius-sm/md/lg` = `4px/6px/8px`（与 antd `borderRadiusSM`/`borderRadius`/`borderRadiusLG` 同值），不再由 `calc(var(--radius) * k)` 派生（旧值 9.6/7.7/5.8 与文档不符）。xl 以上（12/16/24/32px）曾为**遗留 tail**（供未收敛到 antd 的自绘组件用），组件收敛后已无消费者，T10 已删除。
 
 ## Components
 
@@ -501,7 +501,7 @@ components:
 
 - 不用营销站那套：紫 CTA、深蓝 hero 带、马卡龙大面积功能卡、胶囊按钮、80px 展示字
 - 不用 `font-serif` / 宋体做标题（**无例外**：书封与界面一致）
-- 不硬编码色值/色类（`text-blue-500`、`#1677ff`、`rgba(...)` 手写值）
+- 不硬编码色值/色类（`text-blue-500`、`#1677ff`、`rgba(...)` 手写值）——**唯一例外**：`html.dark body` 的首帧 FOUC 兜底色（`index.html` 内联脚本，防深色模式闪白）
 - 不用 `!` 前缀类压 antd 组件样式
 - **不要用 Tailwind 类去覆盖 antd 组件根元素上 antd 自己声明的属性**（`width` / `height` / `padding` / `margin` / `font-size` / `color` / `background` / `border` / `border-radius` / `display`）：antd 样式是运行时注入的**无层 CSS**，而 Tailwind 工具类在 `@layer utilities`——按 CSS 级联规范**无层胜出**，此类覆盖会静默失效（历史上满仓 `!` 就是这么来的）。正确做法：宽度/伸缩用**外层容器**承载；具体尺寸用组件 `size`；状态面用组件 `variant`（如 `variant="filled"` = `colorFillTertiary` = `{colors.surface-muted}`）或组件 token
 - **不要让 `:root` 的语义变量失去 `--ant-*` 来源**：`cssVar.key` 与 `index.html` 的 `<html class>` 必须同值（见 §Colors 踩坑段），否则全站语义色集体失效

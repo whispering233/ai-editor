@@ -1,4 +1,4 @@
-// focusNewItem 契约测试（批次十八 A2）：命中 → 滚动 + 聚焦 + true；未命中 → false 且不抛。
+// focusNewItem 契约测试（A2）：命中 → 滚动 + 聚焦 + true；未命中 → false 且不抛。
 // client 测试环境为 node（无 jsdom）——用 vi.stubGlobal 打桩 document，只锁 DOM 动作契约。
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { focusNewItem } from "./new-item-focus";

@@ -3,14 +3,14 @@
 //
 // - add_relation：端点类型（source_type/target_type）已由 S6.6 提案层派生规范化到 args，
 // 此处直接透传 db createRelation（判重 RELATION_EXISTS / 端点存在性校验 db 层负责）；
-// 重复确认同一 add_relation 提案 → RELATION_EXISTS 抛错（幂等只保证 hook 复合写，）
+// 重复确认同一 add_relation 提案 → RELATION_EXISTS 抛错（幂等只保证 hook 复合写）
 // - remove_relation：手动删关系 = **物理删**（不置 deleted_at、不进回收站）；
 // 0 行影响（关系不存在）→ 抛错（fail-fast，S7.5 转错误响应）
 
 import { createRelation, deleteRelation } from "@whispering233/ai-editor-db";
 import { optionalRecord, requireString, type ExecutorFn } from "./types.js";
 
-/** add_relation（：add_relation(source, target, type) → id） */
+/** add_relation（add_relation(source, target, type) → id） */
 export const executeAddRelation: ExecutorFn = (ctx, proposal) => {
   const args = proposal.args;
   const row = createRelation(
@@ -28,7 +28,7 @@ export const executeAddRelation: ExecutorFn = (ctx, proposal) => {
   return { id: row.id };
 };
 
-/** remove_relation（：remove_relation(id) → void；物理删） */
+/** remove_relation（remove_relation(id) → void；物理删） */
 export const executeRemoveRelation: ExecutorFn = (ctx, proposal) => {
   const relationId = requireString(proposal.args, "relation_id");
   const changes = deleteRelation(ctx.db, relationId);

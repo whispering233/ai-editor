@@ -105,7 +105,7 @@ describe("createToolDispatcher 工具调度（S7.4）", () => {
     capturedSignals.length = 0;
   });
 
-  it("多调用按输入顺序等长回填（成功/失败混合，id 一一对应——run.ts ）", async () => {
+  it("多调用按输入顺序等长回填（成功/失败混合，id 一一对应——run.ts）", async () => {
     const dispatcher = createToolDispatcher(makeCtx());
     const calls: DispatchToolCall[] = [
       { id: "call_1", tool: "exec_test_echo", args: { type: "character", id: "char-1" } },
@@ -132,7 +132,7 @@ describe("createToolDispatcher 工具调度（S7.4）", () => {
  // 工具不存在 → isError（不中断其他）
     expect(results[2]).toMatchObject({ id: "call_3", tool: "no_such_tool", ok: false, isError: true });
     expect(results[2].content).toContain("no_such_tool");
- // 执行抛错 → isError 结构化（工具名 + 参数 + 错误信息， 喂回自纠）
+ // 执行抛错 → isError 结构化（工具名 + 参数 + 错误信息，喂回自纠）
     expect(results[3]).toMatchObject({ id: "call_4", tool: "exec_test_throw", ok: false, isError: true });
     expect(results[3].content).toContain("exec_test_throw");
     expect(results[3].content).toContain("char-2");
@@ -176,7 +176,7 @@ describe("createToolDispatcher 工具调度（S7.4）", () => {
     ).rejects.toBeInstanceOf(AbortedError);
   });
 
-  it("调度前 signal 已中止 → 抛 AbortedError，任何工具不执行（）", async () => {
+  it("调度前 signal 已中止 → 抛 AbortedError，任何工具不执行", async () => {
     const controller = new AbortController();
     controller.abort();
     const dispatcher = createToolDispatcher(makeCtx());
@@ -189,7 +189,7 @@ describe("createToolDispatcher 工具调度（S7.4）", () => {
     expect(capturedSignals).toHaveLength(0); // 一个工具都没执行
   });
 
-  it("批量执行间隙取消 → 中止后续工具并传播取消（）", async () => {
+  it("批量执行间隙取消 → 中止后续工具并传播取消", async () => {
     const controller = new AbortController();
     selfAbortState.controller = controller;
     const dispatcher = createToolDispatcher(makeCtx());

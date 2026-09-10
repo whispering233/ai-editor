@@ -1,7 +1,7 @@
 // 分析类工具：find_orphan_elements（孤立元素诊断，S6.4）
 // 语义（四维诊断，全项目扫描）：
 // 1. unused_characters：闲置角色——从未出场（无 appears_in 且无属性变更记录），或
-// 最后活跃章序号 < 当前最新章序号（「写到第30章但角色C第10章后就没出现」， 章序号现推）
+// 最后活跃章序号 < 当前最新章序号（「写到第30章但角色C第10章后就没出现」，章序号现推）
 // 2. unresolved_deltas：未解决变更——delta 自身未软删但已不可见（触发节点缺失 /
 // 目标端点软删或缺失），永不生效的「幽灵变更」
 // 3. dangling_relations：悬空关系——关系自身未软删但端点已物理删除（purge 残留）
@@ -63,7 +63,7 @@ export interface InconsistentSoftDelete {
   description: string;
 }
 
-/** 孤立元素诊断结果（ find_orphan_elements 返回结构） */
+/** 孤立元素诊断结果（find_orphan_elements 返回结构） */
 export interface OrphanElementsResult {
   unused_characters: UnusedCharacter[];
   unresolved_deltas: UnresolvedDelta[];
@@ -102,7 +102,7 @@ function activityOf(
  * 闲置角色诊断（「写到第30章但角色C第10章后就没出现」）：
  * - 从未出场：无 appears_in 关系且无 Delta 记录
  * - 掉线角色：最后活跃章 < 当前最新章（「当前最新章」= current_position 所属章，
- * ，经共享 ChapterIndex 推导——规划 40 章只写到 30 章时，活跃于第 35 章
+ *，经共享 ChapterIndex 推导——规划 40 章只写到 30 章时，活跃于第 35 章
  * （未写章节）的角色不算闲置；大纲无章或角色活跃点无章号时不下结论——不做宽松猜测）
  * 输出按 id 升序（稳定排序，跨维度可预测）。
  */
@@ -140,7 +140,7 @@ function collectUnusedCharacters(ctx: ToolContext, signal?: AbortSignal): Unused
 }
 
 /**
- * 孤立元素诊断（ find_orphan_elements，无参全项目扫描）。
+ * 孤立元素诊断（find_orphan_elements，无参全项目扫描）。
  * 软删对象（回收站）不计入任何维度（listEntities/listRelations 过滤 + listDangling* 自身
  * 未软删的前提）。signal：各维度循环中检查。
  *

@@ -1,4 +1,4 @@
-// 标签输入建议区（F8， 标签输入建议节）
+// 标签输入建议区（F8，标签输入建议节）
 // 职责：纯展示——tags 输入框下方卡片（mt-1 + bg-card border border-border rounded-md，规格）展示
 // 匹配建议，行内轻量样式（text-xs + hover 高亮 + cursor-pointer），点选回调父组件填入
 // （applyTagSuggestion：替换最后一段 + 追加逗号）。两页共用（列表页新建/编辑对话框、详情页表单）；

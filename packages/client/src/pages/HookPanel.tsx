@@ -1,12 +1,12 @@
 // 伏笔面板页（S9.1；替换 T7.1 占位壳）
-// 路由：#/hooks（KNOWN_ROUTE_SEGMENTS + TabBar「伏笔」已就绪，）
+// 路由：#/hooks（KNOWN_ROUTE_SEGMENTS + TabBar「伏笔」已就绪）
 // 数据：GET /api/v1/entity/hook（列表，EntitySummary：summary.status/summary.payoff_timing）+
 // GET /api/v1/relation?source_type=hook&relation_type=depends_on&depth=1（全量依赖边，行内「依赖:」展示）；
 // 详情 GET /api/v1/entity/hook/:id（relations：plants/advances/resolves/depends_on/involves）
 // （布局线框/信息层级/关键交互/状态）
 // MVP 简化（backlog #13）：不展示 _health 指标与章节序（埋点章/预计回收章）——位置展示为详情
 // relations 的节点 id（plants source_id / resolves / data.expected_resolve_node_id）
-// 关键交互（）：
+// 关键交互：
 // - 新建：POST /entity/hook + 有埋点节点再 POST /relation（outline_node → hook，plants）
 // - 推进/回收/废弃：复合写确认面板（提案式）——runLifecycleWrite / runAbandonWrite（lib/hook-panel），
 // 确认前展示「将写入」内容；回收面板在存在依赖者时额外提示
@@ -218,7 +218,7 @@ export default function HookPanel() {
     setLifecycleDesc("");
     try {
       const detail = await getEntityDetail("hook", hook.id);
-      // 默认节点：current_position（ 锚点口径；须在树中存在且未软删）
+      // 默认节点：current_position（锚点口径；须在树中存在且未软删）
       const cp = useProjectStore.getState().config?.currentPosition;
       const defaultNode =
         cp !== null && cp !== undefined && cp !== "" && nodeExists(outline, cp) ? cp : "";
@@ -329,7 +329,7 @@ export default function HookPanel() {
     setCreateError(null);
     try {
       const res = await createEntity("hook", { name, data: createData });
-      // 有埋点节点才建 plants 关系（ 新建交互）；新伏笔 id 必不存在同三元组——
+      // 有埋点节点才建 plants 关系（新建交互）；新伏笔 id 必不存在同三元组——
       // 失败（如节点已软删 400）不阻塞创建：提示后刷新，可后续在详情补关联
       if (createPlantNodeId !== "") {
         try {
@@ -473,7 +473,7 @@ export default function HookPanel() {
         </div>
       )}
 
-      {/* 空态（ 原文） */}
+      {/* 空态（原文） */}
       {!loading && groups !== null && items?.length === 0 && (
         <EmptyState
           action={
@@ -534,7 +534,7 @@ export default function HookPanel() {
         </div>
       )}
 
-      {/* 新建伏笔对话框：name + data 表单 + 埋点节点选择（ 新建交互） */}
+      {/* 新建伏笔对话框：name + data 表单 + 埋点节点选择（新建交互） */}
       <Dialog open={createOpen} onOpenChange={(v) => !v && setCreateOpen(false)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -946,7 +946,7 @@ function RelationBlock({ title, items }: { title: string; items: string[] }) {
 
 // ============ 表单控件 ============
 
-/** 新建对话框的 data 字段配置（不含 status——创建即埋设，；不含 expected_resolve_node_id 之外的引用） */
+/** 新建对话框的 data 字段配置（不含 status——创建即埋设；不含 expected_resolve_node_id 之外的引用） */
 const CREATE_DATA_FIELDS: DetailFieldConfig[] = [
   { key: "category", label: "类别", control: "text" },
   { key: "expected_payoff", label: "预期回收", control: "textarea" },

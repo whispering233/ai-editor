@@ -1,4 +1,4 @@
-// lib/tool-call-summary 纯函数测试（批次十四）：
+// lib/tool-call-summary 纯函数测试：
 // summarizeToolCall 摘要渲染（id 解析/未知工具回退/字段省略/对象值键名列表）+ collectIdCandidates 收集
 import { describe, expect, it } from "vitest";
 import { collectIdCandidates, formatValue, summarizeToolCall } from "./tool-call-summary";

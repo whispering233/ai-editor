@@ -1,11 +1,11 @@
-// 书架主页 + 项目概览两形态（批次十七 1-3 拆分；mode prop 路由分发，main.tsx：`#/` → home、`#/overview` → overview）
+// 书架主页 + 项目概览两形态（拆分；mode prop 路由分发，main.tsx：`#/` → home、`#/overview` → overview）
 // - home（书架主页 `#/`）：书架卡——书籍列表（行点击打开/当前书高亮；当前书「继续创作」跳概览）+
 //   新建（折叠/空书架主表单）+ 打开其他路径（折叠）+ 错误/加载/空态四态；打开/新建成功 → 跳 #/overview
 // - overview（`#/overview`）：项目概览四区块——项目信息（config）/ 创作要素（×4 并行 total）/
 //   大纲概览（递归统计卷章场 + 最近更新）/ 最近会话（chat store 前 5 条）；无项目 → 回书架引导卡
 // 交互：当前位置/去大纲 → #/outline 并定位节点（ui store focusOutlineNodeId 跨页传参）；
 // 会话行 → chat store setCurrentSession(id)（右栏恢复会话）；[开始新对话] → setCurrentSession(null)
-// 错误/加载/空态按 ：区块级骨架、区块内「加载失败 [重试]」、空态一句说明 + 主操作
+// 错误/加载/空态按：区块级骨架、区块内「加载失败 [重试]」、空态一句说明 + 主操作
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { formatRelativeTime } from "@whispering233/ai-editor-shared";
@@ -56,11 +56,11 @@ const TYPE_LABEL: Record<EntityType, string> = {
   setting: "设定",
   location: "地点",
   hook: "伏笔",
-  // C1 类型补全（ event 时间轴事件；概览卡仍为四卡，时间轴专属 UI 由 C2 实现）
+  // C1 类型补全（event 时间轴事件；概览卡仍为四卡，时间轴专属 UI 由 C2 实现）
   event: "事件",
   // G2.3 类型补全（G2 时间标签点；概览卡仍为四卡——时间点无独立统计卡）
   timepoint: "时间点",
-  // （批次九）参考资料 reference
+  // 参考资料 reference
   reference: "参考资料",
 };
 const ENTITY_ORDER: EntityType[] = ["character", "setting", "location", "hook"];
@@ -133,7 +133,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
   const [path, setPath] = useState("");
   const [pathError, setPathError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  // 导入备份（批次十七 1-3b：Sidebar 独有能力搬入书架主页——zip + 书名，同名二选一冲突态）
+  // 导入备份（Sidebar 独有能力搬入书架主页——zip + 书名，同名二选一冲突态）
   const [importOpen, setImportOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importName, setImportName] = useState("");
@@ -304,7 +304,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     }
   }
 
-  // ============ 书架行能力（Sidebar 迁入，批次十七 1-3b） ============
+  // ============ 书架行能力（Sidebar 迁入） ============
 
   /** 导出当前项目备份（GET /project/export zip → 临时 <a> 下载）；exporting 防连点 */
   async function handleExportBook(name: string) {
@@ -492,7 +492,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     );
   }
 
-  // ============ 书架主页（mode=home，路由 #/；批次十七 1-3） ============
+  // ============ 书架主页（mode=home，路由 #/） ============
   if (mode === "home") {
     const shelfLoading = bookshelf === null && bookshelfLoading;
     const shelfError = bookshelfError !== null;

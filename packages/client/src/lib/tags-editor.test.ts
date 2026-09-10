@@ -1,4 +1,4 @@
-// tags-editor 纯函数测试（批次六 M1/M3）：回车添加下一项行为决策 + 拖拽排序数组移动
+// tags-editor 纯函数测试（M1/M3）：回车添加下一项行为决策 + 拖拽排序数组移动
 import { describe, expect, it } from "vitest";
 import { enterBehavior, moveArrayItem } from "./tags-editor";
 

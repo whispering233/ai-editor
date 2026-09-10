@@ -1,4 +1,4 @@
-// 可搜索下拉过滤辅助测试（批次八 O1，2026-08）：filterOptions 客户端候选过滤
+// 可搜索下拉过滤辅助测试（O1，2026-08）：filterOptions 客户端候选过滤
 import { describe, expect, it } from "vitest";
 import { filterOptions, type SearchableSelectOption } from "./searchable-select";
 

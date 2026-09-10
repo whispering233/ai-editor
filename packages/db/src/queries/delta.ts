@@ -13,7 +13,7 @@
 // 大纲节点 target 走 outline.json
 // - name 联表同路径：实体 → entities.name、大纲节点 → outline.json title
 //
-// 批次十五（15.3 卡 2）：查询经 queryDb 走 drizzle 构建器（混合风格 4A）。
+// 查询经 queryDb 走 drizzle 构建器（混合风格 4A）。
 // 语义逐句对照旧实现（git show 52c7c13^:packages/db/src/queries/delta.ts）：
 // - order 全局单调：SELECT COALESCE(MAX("order"),0)+1 ↔ select({ next: sql<number> }) 聚合模板
 // （MAX 聚合无法用 builder 列表达，用 sql 模板；COALESCE 保证恒有行——聚合无分组恒单行）
@@ -71,7 +71,7 @@ function parseChanges(value: unknown): DeltaChange[] {
   }
 }
 
-/** 追加入参（；无 order 字段——服务端生成） */
+/** 追加入参（无 order 字段——服务端生成） */
 export interface InsertDeltaInput {
  /** 触发变更的大纲节点 ID */
   nodeId: string;
@@ -83,7 +83,7 @@ export interface InsertDeltaInput {
 }
 
 /**
- * 追加属性变更记录（POST /api/v1/delta，）：
+ * 追加属性变更记录（POST /api/v1/delta）：
  * - **order 服务端生成、全局单调递增**：SELECT COALESCE(MAX("order"), 0) + 1，包单库事务
  * （better-sqlite3 同步单连接下读-写无竞态，事务保证跨语句原子与回滚语义）
  * - **前置约定：本层不校验触发节点/目标存在性**—— POST /delta 未定义
@@ -91,7 +91,7 @@ export interface InsertDeltaInput {
  * 不可见、目标缺失仅省略 name）永久不可见。存在性校验由 S5.3 路由层负责。
  * - id = shared generateId("delta-")（与关系 generateId("rel-") 同构；mapping.test.ts
  * 的 "delta-1" 形状一致；前缀 + nanoid 全局唯一）
- * - created_at = updated_at = nowIso（应用层写时间约定，）
+ * - created_at = updated_at = nowIso（应用层写时间约定）
  * @returns 完整行（DeltaRow，changes 已解析为数组）
  */
 export function insertDelta(db: Db, input: InsertDeltaInput): DeltaRow {
@@ -226,7 +226,7 @@ export function getDeltaRow(db: Db, id: string): DeltaRow | null {
 }
 
 /**
- * 按触发节点查询 Delta（GET /api/v1/delta/node/:nodeId，）：
+ * 按触发节点查询 Delta（GET /api/v1/delta/node/:nodeId）：
  * - SQL：node_id = ? AND deleted_at IS NULL，按 "order" 递增（computeState 同节点内应用序）
  * - **可见性三态过滤（AND）**：见 filterVisibleDeltas（本函数行同属一个
  * 触发节点，仍逐行判定——与 listDeltasByTarget 共用同一实现，语义幂等）

@@ -1,4 +1,4 @@
-// @whispering233/ai-editor-llm 核心客户端（批次九重写）
+// @whispering233/ai-editor-llm 核心客户端（重写）
 // 职责：对外提供 chatStream 流式调用（不变，agent/server 依赖其签名）
 // 实现换核为 pi-ai（@earendil-works/pi-ai）：手写 SSE 解码（splitSSEFrames/parseSSEFrame）
 // 流式 tool_call 累积（applyToolCallDelta/finalizeToolCalls）错误 body 归一化（normalizeErrorResponse）
@@ -21,7 +21,7 @@ export const LLM_TRANSPORT_ERROR_CODES = {
   CONSUMER_ERROR: "CONSUMER_ERROR",
 } as const;
 
-/** abort 归一化错误（ 消息原文 "Request was aborted"；abort 永不重试；retry.ts 复用） */
+/** abort 归一化错误（消息原文 "Request was aborted"；abort 永不重试；retry.ts 复用） */
 export const ABORT_ERROR = {
   status: 0,
   code: LLM_TRANSPORT_ERROR_CODES.ABORTED,

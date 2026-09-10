@@ -99,7 +99,7 @@ describe("listEntities", () => {
     stamp("修仙界", "2026-08-04T00:00:00Z");
   });
 
-  it("type 过滤 + 摘要字段提取（character→role/status、setting→tags（）；缺失字段不出现）", () => {
+  it("type 过滤 + 摘要字段提取（character→role/status、setting→tags；缺失字段不出现）", () => {
     const chars = listEntities(db, { type: "character" });
     expect(chars.total).toBe(3);
     expect(chars.items).toHaveLength(3);
@@ -158,7 +158,7 @@ describe("listEntities", () => {
     expect(first.items[0].name).toBe("李四"); // 最后创建
   });
 
-  it("软删过滤（）：软删后列表不可见，total 减少", () => {
+  it("软删过滤：软删后列表不可见，total 减少", () => {
     const target = listEntities(db, { type: "character", q: "阿强" }).items[0];
     softDeleteEntity(db, target.id, "2026-08-02T00:00:00Z");
     const res = listEntities(db, { type: "character" });
@@ -200,7 +200,7 @@ describe("listEntities", () => {
     expect(res.items).toHaveLength(1); // 分页第二页
   });
 
-  it("filters 分支：软删实体不参与（）", () => {
+  it("filters 分支：软删实体不参与", () => {
     const target = listEntities(db, { type: "character", q: "阿强" }).items[0];
     softDeleteEntity(db, target.id, "2026-08-02T00:00:00Z");
     const res = listEntities(db, { type: "character", filters: { status: "活跃" } });
@@ -239,7 +239,7 @@ describe("getEntity / countDeltasForEntity", () => {
     expect(countDeltasForEntity(db, row.id)).toBe(1);
   });
 
-  it("不存在 → null；软删后 → null（）", () => {
+  it("不存在 → null；软删后 → null", () => {
     expect(getEntity(db, "char-999")).toBeNull();
     const row = createEntity(db, { type: "character", name: "将删" });
     softDeleteEntity(db, row.id, "2026-08-02T00:00:00Z");
@@ -276,7 +276,7 @@ describe("updateEntity", () => {
   });
 });
 
-describe("softDeleteEntity（ 级联）", () => {
+describe("softDeleteEntity（级联）", () => {
   it("级联软删关系（任一端点）+ Delta（目标实体），返回实际计数；自身 deleted_at 置位", () => {
     const row = createEntity(db, { type: "hook", name: "伏笔" });
     seedRelation(row.id);
@@ -319,7 +319,7 @@ describe("softDeleteEntity（ 级联）", () => {
 });
 
 describe("getEntitySummaryStats（S6.3 工具 get_entity_summary 下沉）", () => {
-  it("character：total/byRole/byStatus/topAbilities（软删不计入，）", () => {
+  it("character：total/byRole/byStatus/topAbilities（软删不计入）", () => {
     createEntity(db, {
       type: "character",
       name: "阿强",
@@ -348,7 +348,7 @@ describe("getEntitySummaryStats（S6.3 工具 get_entity_summary 下沉）", () 
     ]);
   });
 
-  it("hook：byStatus/byPayoffTiming；setting：byTags（）；location：byType（稀疏分布）", () => {
+  it("hook：byStatus/byPayoffTiming；setting：byTags；location：byType（稀疏分布）", () => {
     createEntity(db, { type: "hook", name: "密信", data: { status: "planted", payoff_timing: "chapter" } });
     createEntity(db, { type: "hook", name: "遗物", data: { status: "planted", payoff_timing: "book" } });
     const hook = getEntitySummaryStats(db, "hook");
@@ -406,7 +406,7 @@ describe("getEntitySummaryStats（S6.3 工具 get_entity_summary 下沉）", () 
 
 // ============ 时间轴事件：listEntities 固定排序 + moveEvent ============
 
-describe("listEntities event（时间轴事件固定排序，）", () => {
+describe("listEntities event（时间轴事件固定排序）", () => {
  /** 造 n 个 event，sort_order 按给定序列赋值（NULL 表示未设） */
   function seedEvents(names: string[], sortOrders: Array<number | null>): string[] {
     const ids: string[] = [];
@@ -480,7 +480,7 @@ describe("listEntities event（时间轴事件固定排序，）", () => {
     expect(b.summary).toEqual({});
   });
 
-  it("软删事件不参与列表（）", () => {
+  it("软删事件不参与列表", () => {
     const [a, b, c] = seedEvents(["事件A", "事件B", "事件C"], [0, 1, 2]);
     softDeleteEntity(db, b, "2026-08-02T00:00:00Z");
     const res = listEntities(db, { type: "event" });
@@ -488,7 +488,7 @@ describe("listEntities event（时间轴事件固定排序，）", () => {
   });
 });
 
-describe("moveEvent（PUT /api/v1/entity/event/:id/move，）", () => {
+describe("moveEvent（PUT /api/v1/entity/event/:id/move）", () => {
  /** 造 n 个 event，sort_order 0..n-1；返回 id 数组（按序） */
   function seedEvents(n: number): string[] {
     const ids: string[] = [];
@@ -529,7 +529,7 @@ describe("moveEvent（PUT /api/v1/entity/event/:id/move，）", () => {
     expect(orders.map((o) => o.sort_order)).toEqual([0, 1, 2, 3]);
   });
 
-  it("updated_at：仅被移动行刷新（传入新时间戳），其余行保持不变（）", () => {
+  it("updated_at：仅被移动行刷新（传入新时间戳），其余行保持不变", () => {
     const ids = seedEvents(3); // 种子 updated_at = 2026-08-01T00:00:00Z
     expect(moveEvent(db, ids[2], 0, "2026-08-02T00:00:00Z")).toEqual({ moved: true });
     const rows = db
@@ -600,7 +600,7 @@ describe("moveEvent（PUT /api/v1/entity/event/:id/move，）", () => {
 
 // ============ 时间标签点（G2）：listTimepoints + moveTimepoint + occurs_at 挂载 ============
 
-describe("listTimepoints（G2 时间标签点列表，）", () => {
+describe("listTimepoints（G2 时间标签点列表）", () => {
  /** 造 n 个 timepoint，sort_order 按给定序列赋值（NULL 表示未设） */
   function seedTimepoints(names: string[], sortOrders: Array<number | null>): string[] {
     const ids: string[] = [];
@@ -615,7 +615,7 @@ describe("listTimepoints（G2 时间标签点列表，）", () => {
     return ids;
   }
 
-  it("恒按 sort_order 升序（NULL 沉底、id 稳定次序）；软删过滤（）", () => {
+  it("恒按 sort_order 升序（NULL 沉底、id 稳定次序）；软删过滤", () => {
     seedTimepoints(["黄昏", "拂晓", "深夜", "正午"], [2, 0, null, 1]);
     expect(listTimepoints(db).map((r) => r.name)).toEqual(["拂晓", "正午", "黄昏", "深夜"]); // NULL 沉底
     const rows = listTimepoints(db);
@@ -668,7 +668,7 @@ describe("moveTimepoint（G2，同 moveEvent 语义：全局线性序 0..n-1）"
     expect(rows.map((r) => r.sort_order).sort((a, b) => a - b)).toEqual([0, 1, 2, 3]);
   });
 
-  it("clamp 边界：负数 → 0；超总数 → 末尾（同 moveEvent ）", () => {
+  it("clamp 边界：负数 → 0；超总数 → 末尾（同 moveEvent）", () => {
     const ids = seedTimepoints(3); // [0,1,2]
     expect(moveTimepoint(db, ids[2], -5, "2026-08-02T00:00:00Z")).toEqual({ moved: true });
     expect(timepointIdsInOrder()).toEqual([ids[2], ids[0], ids[1]]); // 负数 clamp 到 0
@@ -756,7 +756,7 @@ describe("reorderTimepoints（G2 批量重排：LLM 按时间点 name 语义排�
     expect(listTimepoints(db).map((r) => r.id)).toEqual(ids);
   });
 
-  it("软删时间点不参与集合（）：软删后必须从新序中剔除，否则抛错", () => {
+  it("软删时间点不参与集合：软删后必须从新序中剔除，否则抛错", () => {
     const ids = seedTimepoints(3);
     softDeleteEntity(db, ids[1], "2026-08-02T00:00:00Z");
  // 新序含已软删时间点 → 集合校验（软删 id 不在当前集合中）
@@ -833,7 +833,7 @@ describe("eventOccursAt / assertEventSingleOccursAt（G2 occurs_at 1:n 挂载）
     expect(rel.created_at).toBe("2026-08-01T00:00:00Z");
   });
 
-  it("关系软删 → null（ 可见性）；timepoint 软删 → null（级联 + EXISTS 防御双路径）", () => {
+  it("关系软删 → null（可见性）；timepoint 软删 → null（级联 + EXISTS 防御双路径）", () => {
     const ev = createEntity(db, { type: "event", name: "事件" });
     seedMount(ev.id, true); // 关系软删
     expect(eventOccursAt(db, ev.id)).toBeNull();
@@ -868,7 +868,7 @@ describe("eventOccursAt / assertEventSingleOccursAt（G2 occurs_at 1:n 挂载）
   });
 });
 
-describe("moveSetting（ 设定同级手动排序：改父 + 同级重排复合写）", () => {
+describe("moveSetting（设定同级手动排序：改父 + 同级重排复合写）", () => {
  /** 创建设定（ASCII 名：码点序可预测 A<B<C<D，NULL 名称序断言不依赖拼音） */
   function addSetting(name: string): string {
     return createEntity(db, { type: "setting", name }).id;
@@ -949,7 +949,7 @@ describe("moveSetting（ 设定同级手动排序：改父 + 同级重排复合�
     expect(childrenOf(a)).toEqual([c, d]); // 边：B 的旧边已删
     const r = rows();
     expect(r.find((x) => x.id === b)!.sort_order).toBe(0); // D 组内序：B（组首）
- // 旧父组不重排（ 只重排目标组——相对序不受影响，NULL 沉底语义保持不变）
+ // 旧父组不重排（只重排目标组——相对序不受影响，NULL 沉底语义保持不变）
     expect(r.find((x) => x.id === c)!.sort_order).toBeNull();
     expect(r.find((x) => x.id === d)!.sort_order).toBeNull();
   });
@@ -965,7 +965,7 @@ describe("moveSetting（ 设定同级手动排序：改父 + 同级重排复合�
     expect(childrenOf(null)).toContain(b);
   });
 
-  it("防环（）：目标父为自身子孙 → SETTING_CYCLE；自指 → SETTING_CYCLE", () => {
+  it("防环：目标父为自身子孙 → SETTING_CYCLE；自指 → SETTING_CYCLE", () => {
     const a = addSetting("A");
     const b = addSetting("B");
     addEdge(b, a);
@@ -999,7 +999,7 @@ describe("moveSetting（ 设定同级手动排序：改父 + 同级重排复合�
     expect(rows().find((x) => x.id === b)!.sort_order).toBe(1);
   });
 
-  it("仅被移行刷 updated_at（）", () => {
+  it("仅被移行刷 updated_at", () => {
     const a = addSetting("A");
     const b = addSetting("B");
     const c = addSetting("C");

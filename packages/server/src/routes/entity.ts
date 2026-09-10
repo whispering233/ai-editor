@@ -54,7 +54,7 @@ export function parseTypeParam(type: string): EntityType {
   return parsed.data;
 }
 
-/** 按类型精确校验 data（：各 type 的 data 字段 schema；宽松 record 之外的精校验） */
+/** 按类型精确校验 data（各 type 的 data 字段 schema；宽松 record 之外的精校验） */
 function validateDataByType(type: EntityType, data: Record<string, unknown>): void {
   const check = ENTITY_DATA_SCHEMAS[type].safeParse(data);
   if (!check.success) {
@@ -81,7 +81,7 @@ entityRoutes.get("/:type", (c) => {
  // 空串防御（oracle P2）：`?parent_id=` 空串与「不传 = 不过滤」不一致——归一化为 undefined
     parentId: type === "setting" && parent_id !== "" ? parent_id : undefined,
   });
- // M2（2026-08 批次六）：setting 列表附加上级设定（ 层级 = belongs_to）——
+ // M2（2026-08）：setting 列表附加上级设定（层级 = belongs_to）——
  // 补查全量设定间层级边（listRelations 已做软删端点可见性过滤），按 childId 映射附加
  // parentId/parentName（稀疏：无父的设定不出现该字段）；其余类型不附加（仅 setting）
   if (type === "setting") {
@@ -123,7 +123,7 @@ entityRoutes.get("/:type/:id", (c) => {
     throw new HttpError(404, "ENTITY_NOT_FOUND", `实体不存在: ${id}`);
   }
   const deltaCount = countDeltasForEntity(project.db, id);
- // relations 紧邻（S3.2：listRelations depth=1，任一端点软删即不可见，；
+ // relations 紧邻（S3.2：listRelations depth=1，任一端点软删即不可见；
  // outline.json 校验路径 = project.root）。
  // **双向邻接**（「紧邻 1 跳」未明示方向，产品语义为展示所有关联）：
  // source 方向（该实体作为起点） + target 方向（该实体作为终点）两次查询，
@@ -254,10 +254,10 @@ entityRoutes.put("/:type/:id", async (c) => {
   return c.json(ok({ id: row.id, updated: true }));
 });
 
-// PUT /api/v1/entity/event/:id/move —— 时间轴事件重排（）
+// PUT /api/v1/entity/event/:id/move —— 时间轴事件重排
 // 请求 { order }（0-based 全局事件线性序；越界 clamp：负数→0、超总数→末尾——db 层 moveEvent 语义）；
 // 响应 200 { moved: true }；事件不存在或已软删 → 404 ENTITY_NOT_FOUND。
-// 仅 event 支持（专端点路径）：其余实体类型无 sort_order 语义（）。
+// 仅 event 支持（专端点路径）：其余实体类型无 sort_order 语义。
 entityRoutes.put("/event/:id/move", async (c) => {
   const project = requireCurrentProject();
   const id = c.req.param("id");
@@ -271,10 +271,10 @@ entityRoutes.put("/event/:id/move", async (c) => {
   return c.json(ok({ moved: true }));
 });
 
-// PUT /api/v1/entity/timepoint/:id/move —— 时间轴时间点重排（G2，，「PUT /entity/timepoint/:id/move」）
+// PUT /api/v1/entity/timepoint/:id/move —— 时间轴时间点重排（G2，「PUT /entity/timepoint/:id/move」）
 // 请求 { order }（0-based 全局时间点线性序；越界 clamp、负数 400 schema 拒绝——语义同 event move）；
 // 响应 200 { moved: true }；时间点不存在或已软删 → 404 ENTITY_NOT_FOUND。
-// 注意：拖拽时间点**不改其下事件序**（双独立线性序， G2 修订）——moveTimepoint 只碰
+// 注意：拖拽时间点**不改其下事件序**（双独立线性序，G2 修订）——moveTimepoint 只碰
 // timepoint 行，event.sort_order 与 occurs_at 挂载均不动。仅 timepoint 支持（专端点路径）。
 entityRoutes.put("/timepoint/:id/move", async (c) => {
   const project = requireCurrentProject();
@@ -292,7 +292,7 @@ entityRoutes.put("/timepoint/:id/move", async (c) => {
 /** move_to 事务内哨兵：moveEvent 返回 null（事件不存在/已软删）→ 抛错回滚事务，路由映射 404 */
 class MoveToTargetNotFoundError extends Error {}
 
-// PUT /api/v1/entity/setting/:id/move —— 设定同级重排 / 改父 + 重排（2026-08 批次十三，
+// PUT /api/v1/entity/setting/:id/move —— 设定同级重排 / 改父 + 重排（2026-08，
 // 修订「设定无 sort_order 语义」约束；「PUT /entity/setting/:id/move」）
 // 请求 { parent_id: string | null, order?: number }（settingMoveReqSchema，strict）：
 // 复合写端点（对齐 G2 event move_to 先例）——改父 + 目标同级组重排一次事务提交：
@@ -328,7 +328,7 @@ entityRoutes.put("/setting/:id/move", async (c) => {
   }
 });
 
-// POST /api/v1/entity/event/:id/move_to —— 事件跨组拖拽复合端点（G2，，
+// POST /api/v1/entity/event/:id/move_to —— 事件跨组拖拽复合端点（G2，
 // 「POST /entity/event/:id/move_to」）
 // 请求 { timepoint_id: string | null, order: number }（eventMoveToReqSchema）：
 // 事务内一次完成（原子，无中间态）——

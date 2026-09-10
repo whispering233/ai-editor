@@ -1,4 +1,4 @@
-// entity-detail 纯函数与配置测试（S3.6 + 批次四 I3b）：按类型字段配置、关系类型中文映射、表单 diff、
+// entity-detail 纯函数与配置测试（S3.6 + I3b）：按类型字段配置、关系类型中文映射、表单 diff、
 // 设定层级分区（parent_id 废弃改为 belongs_to 关系表达）
 import { describe, expect, it } from "vitest";
 import {
@@ -24,7 +24,7 @@ describe("detailFieldsForType", () => {
     expect(fields.find((f) => f.key === "motivation")?.control).toBe("textarea");
   });
 
-  it("setting（ + K2）：description/tags（分类）/rules（规则条款）；location 保留 parent_id 文本", () => {
+  it("setting（K2）：description/tags（分类）/rules（规则条款）；location 保留 parent_id 文本", () => {
     expect(detailFieldsForType("setting").map((f) => f.key)).toEqual([
       "description",
       "tags",
@@ -54,7 +54,7 @@ describe("detailFieldsForType", () => {
     expect(fields.find((f) => f.key === "half_life")?.control).toBe("number");
   });
 
-  it("event（）：description/tags——G2 移除 time_label（时间标签 = 时间点挂载）", () => {
+  it("event：description/tags——G2 移除 time_label（时间标签 = 时间点挂载）", () => {
     expect(detailFieldsForType("event").map((f) => f.key)).toEqual(["description", "tags"]);
   });
 
@@ -63,7 +63,7 @@ describe("detailFieldsForType", () => {
   });
 });
 
-describe("relationTypeLabel（17 种预定义关系类型中文映射，批次四 I1：occurs_in 补齐）", () => {
+describe("relationTypeLabel（17 种预定义关系类型中文映射，I1：occurs_in 补齐）", () => {
   it("核心映射：mentor→师徒、appears_in→出现于、masters→掌握、ally→盟友", () => {
     expect(relationTypeLabel("mentor")).toBe("师徒");
     expect(relationTypeLabel("appears_in")).toBe("出现于");
@@ -73,7 +73,7 @@ describe("relationTypeLabel（17 种预定义关系类型中文映射，批次�
     expect(relationTypeLabel("plants")).toBe("埋设");
   });
 
-  it("occurs_in（ 新增，批次四 I1）→锚定于，与 occurs_at 发生于区分", () => {
+  it("occurs_in（新增，I1）→锚定于，与 occurs_at 发生于区分", () => {
     expect(relationTypeLabel("occurs_in")).toBe("锚定于");
     expect(relationTypeLabel("occurs_at")).toBe("发生于");
   });
@@ -202,7 +202,7 @@ describe("diffData（表单 partial 提交——只返回变更字段）", () =>
     });
   });
 
-  it("null 正常提交（expected_resolve_node_id 清空——「未设置」存 null 而非空串，）", () => {
+  it("null 正常提交（expected_resolve_node_id 清空——「未设置」存 null 而非空串）", () => {
  // 原值有节点 → 清空 → 提交 null（服务端 z.string.nullable 接受）
     expect(
       diffData({ expected_resolve_node_id: "sc-1" }, { expected_resolve_node_id: null }),

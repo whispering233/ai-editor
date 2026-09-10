@@ -1,13 +1,13 @@
-// 设定树形视图（2026-08 批次十任务卡 6）：实体关系页「设定」tab 的交互式树形视图，
-// 与原「设定树」tab（批次四 I4 只读树）合并——#/setting 即树形视图（批次十七一级化），
+// 设定树形视图（2026-08）：实体关系页「设定」tab 的交互式树形视图，
+// 与原「设定树」tab（I4 只读树）合并——#/setting 即树形视图（一级化），
 // 旧 #/entities/setting-tree、#/entities/setting 由 main.tsx 重定向到新段。
 // 「设定 Tab（树形视图）」——全量 setting（limit 200 + 名称排序）+
-// 全量 belongs_to 层级边 → buildSettingTree 组装递归树；行级交互对齐大纲（ 模式，）：
+// 全量 belongs_to 层级边 → buildSettingTree 组装递归树；行级交互对齐大纲（模式）：
 // - 折叠/展开：父节点 ▾/▸ 切换 + 顶栏「全部展开 / 全部折叠」（全部折叠 = 仅保留根级）
 // - 行内编辑（点击标题）：Enter 确认 PUT /entity/setting/:id { name }、Esc 取消、失焦保存
 // - Enter 新建子级：选中节点按 Enter → 就地输入行出现在该节点子级末尾（POST /entity/setting +
 // POST /relation belongs_to 挂父；子级类型 = 设定）；root 级「+ 新建」输入行无父
-// - 双击详情：双击行 → #/setting/:id（详情页含层级区块与全部关联；批次十七一级化）
+// - 双击详情：双击行 → #/setting/:id（详情页含层级区块与全部关联；一级化）
 // - 行级只留删除：行尾 Trash2 → 直接软删（H2 不弹确认）→ DELETE /entity/setting/:id
 // - 拖拽调整层级：HTML5 DnD **嵌套语义**（拖到行上 = 成为该行子级、拖到空白区 = 移为顶层根）——
 // belongs_to 防环沿用（canMoveSettingTo 客户端预校验 + 服务端兜底 400 VALIDATION_ERROR）；
@@ -15,7 +15,7 @@
 // **设定无 sort_order（API 约束，勿改数据模型）**——同级顺序 = 名称序，同父拖拽为 no-op
 // - 筛选 = 搜索 + 标签（树内过滤 filterSettingTree：命中节点及祖先链保留，非命中子树隐藏）；无分页
 // 溢出防御：设定 > 200 截断提示 + 父截断提升为根（buildSettingTree 既有语义）。
-// 样式全 token 类（）；文字按钮带边框（H4）；行级右键菜单（RowContextMenu——
+// 样式全 token 类；文字按钮带边框（H4）；行级右键菜单（RowContextMenu——
 // 注入会话上下文 + 建立关联）替代行级问 AI 入口（本视图原本无 AskAiButton，右键菜单补齐）。
 import { useEffect, useRef, useState } from "react";
 import type { DragEvent, KeyboardEvent, MouseEvent, ReactNode } from "react";
@@ -63,7 +63,7 @@ import { useUiStore } from "../../stores/ui";
 /** 设定树拉取上限（listEntities limit 最大 200；超量截断提示 + 孤儿提升防御） */
 const TREE_SETTING_LIMIT = 200;
 
-/** 拖拽目标（ 嵌套语义 + 行间插入线）：
+/** 拖拽目标（嵌套语义 + 行间插入线）：
  * row.on = 拖到行中段（成为其子级）；row.before/after = 拖到行上/下方插入线（**手动模式**同级重排）；
  * root = 拖到空白区（移为顶层根） */
 type SettingDragTarget =
@@ -104,11 +104,11 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
   const [qInput, setQInput] = useState("");
   /** 防抖后的查询关键词（空 = 不过滤） */
   const [q, setQ] = useState("");
-  /** 标签筛选（ 树内过滤；"" = 全部） */
+  /** 标签筛选（树内过滤；"" = 全部） */
   const [tagFilter, setTagFilter] = useState("");
   /** 标签筛选候选（聚合既有设定 tags；失败静默——仅无下拉候选，不影响树） */
   const [tagOptions, setTagOptions] = useState<string[]>([]);
-  /** 排序方式（2026-08 批次十三）：name 默认（原行为）；created 创建时间；manual 手动（重排入口） */
+  /** 排序方式（2026-08）：name 默认（原行为）；created 创建时间；manual 手动（重排入口） */
   const [sortMode, setSortMode] = useState<SettingSortMode>("manual");
 
   /** 操作成功后刷新（tick +1 触发加载 effect；保留旧数据渲染，避免骨架闪烁） */
@@ -155,7 +155,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
         setRoots(tree.roots);
         setHasOrphanEdges(tree.hasOrphanEdges);
         setTruncated(settingRes.total > TREE_SETTING_LIMIT); // total 为准（截断提示）
-        // 标签候选（ 统一字段 data.tags → summary.tags）
+        // 标签候选（统一字段 data.tags → summary.tags）
         const tags = new Set<string>();
         for (const item of settingRes.items) {
           if (Array.isArray(item.summary.tags)) {
@@ -427,7 +427,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     startCreate(node.id);
   }
 
-  // ============ 拖拽调整层级（ 嵌套语义：拖到行 = 成为其子级；空白区 = 移为根） ============
+  // ============ 拖拽调整层级（嵌套语义：拖到行 = 成为其子级；空白区 = 移为根） ============
   // belongs_to 防环沿用（canMoveSettingTo 客户端预校验 + 服务端兜底）；改父 = 先建新边
   // 后删旧边（对齐 EntityDetail.handleSetParent）；设定无 sort_order，同父拖拽为 no-op。
 
@@ -443,7 +443,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     setDragTarget(null);
   }
 
-  /** 行 dragover（ 三分区）：行上/下方 1/3 = 行间插入线（**手动模式**同级重排，目标组 =
+  /** 行 dragover（三分区）：行上/下方 1/3 = 行间插入线（**手动模式**同级重排，目标组 =
    * 该行的同级组 → 新父 = 该行父）；中段 = 调层级（成为该行子级，canMoveSettingTo 预校验）；
    * stopPropagation 防冒泡到容器（容器空白区 = 移根语义，行内不触发） */
   function handleRowDragOver(e: DragEvent, node: SettingTreeNode) {
@@ -509,16 +509,16 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     await executeDrop({ kind: "root" });
   }
 
-  /** 同级组（手动序）辅助：某节点的同级列表 = 父的子级 / 根级（ 排序后的展示序） */
+  /** 同级组（手动序）辅助：某节点的同级列表 = 父的子级 / 根级（排序后的展示序） */
   function siblingsOf(node: SettingTreeNode): SettingTreeNode[] {
     const parentNode =
       node.parentId !== undefined ? findSettingNode(roots ?? [], node.parentId) : null;
     return sortSettingChildren(parentNode ? parentNode.children : (roots ?? []), "manual");
   }
 
-  /** 拖放执行（ 复合端点）：on = 改父（append 到新父子级末尾）；before/after = 同级重排
+  /** 拖放执行（复合端点）：on = 改父（append 到新父子级末尾）；before/after = 同级重排
    * （含跨父重排——服务端事务内改父 + 组内定序一次提交）；root = 移为顶层根。
-   * 目标位置无变化 → no-op（不发请求）。 */
+   * 目标位置无变化 → no-op（不发请求）。*/
   async function executeDrop(
     target: Extract<SettingDragTarget, { kind: "row" }> | { kind: "root" },
   ) {
@@ -650,7 +650,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     );
   }
 
-  /** 整树递归渲染（闭包共享页面 state； 行级交互：单击选中 / Enter 新建子级 / 双击详情 /
+  /** 整树递归渲染（闭包共享页面 state；行级交互：单击选中 / Enter 新建子级 / 双击详情 /
    * 点击标题行内编辑 / 拖拽嵌套改层级 / 行尾只留删除；同级按排序方式重排 + 手动模式
    * ↑↓ 箭头与行间插入线重排） */
   function renderNodes(nodes: SettingTreeNode[], depth: number): ReactNode {
@@ -691,7 +691,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
         onDoubleClick: (e: MouseEvent<HTMLDivElement>) => handleRowDoubleClick(e, node),
         onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => handleRowKeyDown(e, node),
         className: cn(
-          // （批次十三）：两行式——第一行 箭头|名称|计数|行尾区，第二行描述摘要（弱化）
+          // 两行式——第一行 箭头|名称|计数|行尾区，第二行描述摘要（弱化）
           // group：手动模式悬停显示 ↑↓ 箭头
           "group relative flex flex-col rounded-md py-1 pr-1 transition-colors hover:bg-muted/60",
           // 临时高亮（新建成功 3s）/ 拖拽目标（将成其子级）：primary 淡染面 + 描边——
@@ -706,7 +706,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
             ? "拖到行中段 = 成为其子级；拖到行间插入线 = 同级重排；拖到空白区 = 移为顶层"
             : "拖到行上 = 成为其子级；拖到空白区 = 移为顶层",
       };
-      // 节点行内容（折叠箭头 + 名称 + 标签 + 子设定数 + 行尾删除； 批次十三：
+      // 节点行内容（折叠箭头 + 名称 + 标签 + 子设定数 + 行尾删除；
       // 行下方追加描述摘要行——summary.description 截断 100（服务端），hover title 查看完整）
       const rowDescription =
         typeof node.summary?.description === "string" && node.summary.description !== ""
@@ -734,7 +734,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
               }
             />
             {/* 名称：点击行内编辑（Enter 确认 / Esc 取消 / 失焦保存）；stopPropagation 隔离——
-              单击标题 = 编辑而非选中（ 冲突设计） */}
+              单击标题 = 编辑而非选中（冲突设计） */}
             {editing ? (
               inlineInput(
                 editingValue,
@@ -761,11 +761,11 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
                 {node.children.length} 个子设定
               </span>
             )}
-            {/* 行尾操作区（批次十二 T1：标签徽标 + 删除按钮——标签收进行尾、删除按钮左边，
+            {/* 行尾操作区（T1：标签徽标 + 删除按钮——标签收进行尾、删除按钮左边，
               不紧跟名称干扰树呈现；行级只留删除，H2 直接软删不弹确认；
               右键菜单替代行级问 AI） */}
             <span className="ml-auto flex shrink-0 items-center gap-1.5">
-              {/* 标签徽标（summary.tags 前 3， 统一字段；替代已废弃的 category 徽标） */}
+              {/* 标签徽标（summary.tags 前 3，统一字段；替代已废弃的 category 徽标） */}
               {tags.length > 0 && (
                 <span className="flex shrink-0 items-center gap-0.5">
                   {tags.map((t) => (
@@ -816,7 +816,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
               />
             </span>
           </div>
-          {/* 描述摘要行（ 批次十三）：弱化样式，空描述不渲染；title 查看完整摘要 */}
+          {/* 描述摘要行：弱化样式，空描述不渲染；title 查看完整摘要 */}
           {rowDescription !== null && (
             <span
               className="min-w-0 truncate pl-5 text-xs text-muted-foreground"
@@ -829,7 +829,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
       );
       return (
         <li key={node.id}>
-          {/* 节点行：折叠箭头 | 名称（点击行内编辑）| 子设定数 | 行尾区（标签徽标 + 删除，批次十二 T1）；
+          {/* 节点行：折叠箭头 | 名称（点击行内编辑）| 子设定数 | 行尾区（标签徽标 + 删除，T1）；
               可拖拽（编辑态/自身拖拽中/busy 禁用，防输入误拖与嵌套拖动）；
               tabIndex=-1 使行可聚焦（选中后按 Enter 触发新建子级 onKeyDown）；
               行级右键菜单（RowContextMenu）——注入会话上下文（focus_entity_type=setting）+
@@ -943,7 +943,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
             ariaLabel="标签筛选"
           />
         </span>
-        {/* 排序方式（2026-08 批次十三）：名称 / 创建时间 / 手动——同级组内排序；
+        {/* 排序方式（2026-08）：名称 / 创建时间 / 手动——同级组内排序；
             手动模式启用 ↑↓ 箭头与行间插入线重排（其余模式拖拽仅调层级） */}
         <span className="flex items-center gap-2 text-sm text-muted-foreground">
           排序:

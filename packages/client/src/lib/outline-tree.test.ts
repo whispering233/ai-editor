@@ -53,7 +53,7 @@ const tree: OutlineNode[] = [
   },
 ];
 
-describe("parentOptionsForType（父节点按类型过滤，）", () => {
+describe("parentOptionsForType（父节点按类型过滤）", () => {
   it("volume → 仅 root（严格三层：卷只能挂根）", () => {
     expect(parentOptionsForType(tree, "volume")).toEqual([ROOT_PARENT_OPTION]);
   });
@@ -82,7 +82,7 @@ describe("parentOptionsForType（父节点按类型过滤，）", () => {
     expect(parentOptionsForType([], "volume")).toEqual([ROOT_PARENT_OPTION]);
   });
 
-  it("scene 不收集挂在 root 下的 chapter（ 合法场景）", () => {
+  it("scene 不收集挂在 root 下的 chapter（合法场景）", () => {
     const flat: OutlineNode[] = [
       { id: "ch-9", type: "chapter", title: "根下章", updatedAt: "t0" },
       ...tree,
@@ -296,7 +296,7 @@ describe("findParentIdOf / findNodePosition（拖拽目标父与原地判定，S
     expect(findParentIdOf(tree, "ghost")).toBe(null);
   });
 
-  it("findParentIdOf：root 直挂章（ chapter 可挂 root）", () => {
+  it("findParentIdOf：root 直挂章（chapter 可挂 root）", () => {
     const rootChapter: OutlineNode = {
       id: "ch-9",
       type: "chapter",

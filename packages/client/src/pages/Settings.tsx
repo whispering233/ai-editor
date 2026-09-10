@@ -1,9 +1,9 @@
 // Settings 设置页（S1.4，替换占位壳）
-// 路由：#/settings；数据：GET/PUT /api/v1/settings/llm（ 原型）
+// 路由：#/settings；数据：GET/PUT /api/v1/settings/llm（原型）
 // 交互：模型名输入 + 保存；API key 状态行（掩码）+ 新 key 输入 + 保存/清除；
 // 常驻说明：key 只存本机用户配置（~/.ai-editor/config.json），不入项目文件；
 // 环境变量 DEEPSEEK_API_KEY 优先于此处配置（页面仍可保存，实际生效以环境变量为准）
-// （2026-08 批次十）：项目规则区改为编辑项目目录 文件内容——
+// （2026-08）：项目规则区改为编辑项目目录 文件内容——
 // GET/PUT /project/agents（项目规则唯一事实源，取代 project.json `prompt`）；
 // 载入优先读 project store 已缓存 agents；保存后 toast + dataVersion +1（中栏数据页刷新）；
 // 外部修改检测：GET 返回 mtime，与上次读取比对不一致提示「文件已被外部修改，请刷新/重新加载」；
@@ -89,7 +89,7 @@ export default function Settings() {
     }
   }, []);
 
-  // config 就绪后按项目身份加载 ：关闭项目（null）→ 重置；切换项目（id 变化）→
+  // config 就绪后按项目身份加载：关闭项目（null）→ 重置；切换项目（id 变化）→
   // 重新加载（清空旧草稿，等待新项目加载完成）；同项目内 store 重拉 → 不覆盖用户正在编辑的草稿
   useEffect(() => {
     if (config === null) {
@@ -176,7 +176,7 @@ export default function Settings() {
     }
   }
 
-  /** 清除该家已保存 key（PUT api_keys 空串， 语义） */
+  /** 清除该家已保存 key（PUT api_keys 空串，语义） */
   async function handleClearKey(providerId: string) {
     setKeyErrors((m) => ({ ...m, [providerId]: null }));
     setSaving(true);
@@ -203,7 +203,7 @@ export default function Settings() {
         <p className="mt-4 text-sm text-muted-foreground">加载中…</p>
       ) : (
         <div className="mt-4 flex flex-col gap-6">
-          {/* AI 模型（批次十六：每 provider 一张卡片，平铺） */}
+          {/* AI 模型（每 provider 一张卡片，平铺） */}
           <div>
             <Typography.Title level={5}>AI 模型</Typography.Title>
             <p className="mt-1 mb-2 text-xs text-muted-foreground">
@@ -298,7 +298,7 @@ export default function Settings() {
             )}
           </div>
 
-          {/* 常驻说明（批次十六：每 provider 独立解析链） */}
+          {/* 常驻说明（每 provider 独立解析链） */}
           <Alert
             type="info"
             showIcon

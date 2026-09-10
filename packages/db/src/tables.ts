@@ -1,4 +1,4 @@
-// @whispering233/ai-editor-db 表结构声明（批次十五 15.1）
+// @whispering233/ai-editor-db 表结构声明
 //
 // **双份声明**：sqliteTable 定义（查询构建/行类型推断用）+ 同文件 CREATE_TABLES_SQL 常量
 // （建表执行用，connection.openDatabase → schema.createTables 执行）——两处必须同步，
@@ -23,7 +23,7 @@ export const entities = sqliteTable(
     name: text("name").notNull(),
  // data 列保持 text 模式（坏 JSON 防御在行映射层，不用 drizzle json mode）
     data: text("data").notNull().default("{}"),
- // 时间轴线性序（ + G2 修订）：event 与 timepoint 各类型内线性（各自 0..n-1），其余类型恒为 NULL
+ // 时间轴线性序（G2 修订）：event 与 timepoint 各类型内线性（各自 0..n-1），其余类型恒为 NULL
     sort_order: integer("sort_order"),
     created_at: text("created_at").notNull(),
     updated_at: text("updated_at").notNull(),
@@ -107,10 +107,10 @@ CREATE TABLE IF NOT EXISTS entities (
   type        TEXT NOT NULL CHECK(type IN ('character', 'setting', 'location', 'hook', 'event', 'timepoint', 'reference')),
   name        TEXT NOT NULL,
   data        TEXT NOT NULL DEFAULT '{}',  -- JSON: 各类型的专属字段
-  sort_order  INTEGER,         -- 时间轴线性序（ + G2 修订）：event 与 timepoint 各类型内线性（各自 0..n-1），其余类型恒为 NULL
+  sort_order  INTEGER,         -- 时间轴线性序（G2 修订）：event 与 timepoint 各类型内线性（各自 0..n-1），其余类型恒为 NULL
   created_at  TEXT NOT NULL,               -- ISO 8601，应用层写入
-  updated_at  TEXT NOT NULL,               -- ISO 8601，应用层写入（提案快照比对，）
-  deleted_at  TEXT             -- 软删标记（），NULL 表示未删除；非 NULL 时该实体进入回收站，本体保留可还原
+  updated_at  TEXT NOT NULL,               -- ISO 8601，应用层写入（提案快照比对）
+  deleted_at  TEXT             -- 软删标记，NULL 表示未删除；非 NULL 时该实体进入回收站，本体保留可还原
 );
 
 -- relation_records：通用关系表
@@ -123,8 +123,8 @@ CREATE TABLE IF NOT EXISTS relation_records (
   relation_type TEXT NOT NULL,
   metadata      TEXT,             -- JSON 扩展元数据
   created_at    TEXT NOT NULL,               -- ISO 8601，应用层写入
-  updated_at    TEXT NOT NULL,               -- ISO 8601，应用层写入（提案快照比对，；软删/还原亦更新，）
-  deleted_at    TEXT              -- 级联软删标记（）：仅实体/节点级联删除时写入；
+  updated_at    TEXT NOT NULL,               -- ISO 8601，应用层写入（提案快照比对；软删/还原亦更新）
+  deleted_at    TEXT              -- 级联软删标记：仅实体/节点级联删除时写入；
                                   -- 手动删除关系 = 物理删（不置 deleted_at，不进入回收站）
 );
 
@@ -143,20 +143,20 @@ CREATE TABLE IF NOT EXISTS delta_records (
   description TEXT NOT NULL,       -- 人类可读描述
   "order"     INTEGER NOT NULL DEFAULT 0,  -- 同一节点内多个 Delta 的排序（全局单调递增，服务端生成）
   created_at  TEXT NOT NULL,               -- ISO 8601，应用层写入
-  updated_at  TEXT NOT NULL,               -- ISO 8601，应用层写入（提案快照比对，）
-  deleted_at  TEXT              -- 级联软删标记（）：仅实体/节点级联删除时写入。
-                                -- 可见性联动触发节点与目标实体（）：任一端软删即不可见
+  updated_at  TEXT NOT NULL,               -- ISO 8601，应用层写入（提案快照比对）
+  deleted_at  TEXT              -- 级联软删标记：仅实体/节点级联删除时写入。
+                                -- 可见性联动触发节点与目标实体：任一端软删即不可见
 );
 
--- chat_messages：对话历史表（，与 data.db 同库）
+-- chat_messages：对话历史表（与 data.db 同库）
 CREATE TABLE IF NOT EXISTS chat_messages (
   id            TEXT PRIMARY KEY,
   session_id    TEXT NOT NULL,
-  project_id    TEXT NOT NULL,          -- 会话按项目隔离（）
+  project_id    TEXT NOT NULL,          -- 会话按项目隔离
   role          TEXT NOT NULL CHECK(role IN ('user','assistant','tool')),
   content       TEXT,
   tool_calls    TEXT,                   -- JSON: 助手消息的工具调用数组
-  tool_call_id  TEXT,                   -- tool 消息关联的 assistant 工具调用 id（）
+  tool_call_id  TEXT,                   -- tool 消息关联的 assistant 工具调用 id
   created_at    TEXT NOT NULL           -- ISO 8601，应用层写入
 );
 

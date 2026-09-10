@@ -134,7 +134,7 @@ describe("POST /api/v1/names/resolve", () => {
     expect(names[volId]).toBeNull();
   });
 
-  it("未知 id / rel- 前缀 / 运行时对象前缀 → null（关系无名称语义，）", async () => {
+  it("未知 id / rel- 前缀 / 运行时对象前缀 → null（关系无名称语义）", async () => {
     openProject();
     const app = buildApp();
     const { names } = await resolveIds(app, ["rel-abc123", "prop_abc", "sess_abc", "call_abc", "proj-abc", "xxx-nope", "char-不存在的id"]);

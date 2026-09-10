@@ -45,7 +45,7 @@ export function readOutlineFile(dir: string): OutlineFileTree {
 }
 
 /**
- * 校验 outline.json 顶层结构（读时校验， ）：
+ * 校验 outline.json 顶层结构（读时校验）：
  * 顶层必须是 { id:"root", type:"root", schema_version:number, children:[] }。
  * 节点级字段（title/updated_at 等）不逐一校验——文件格式演进由 schema_version
  * 判定，此处只拦「完全不是大纲树」的脏数据。

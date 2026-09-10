@@ -133,7 +133,7 @@ describe("GET /api/v1/entity/:type 列表", () => {
     expect(lBody.data.limit).toBe(1);
   });
 
-  it("软删对象默认过滤（）", async () => {
+  it("软删对象默认过滤", async () => {
     openProject();
     const app = buildApp();
     const { id } = await createCharacter(app, "将删");
@@ -143,7 +143,7 @@ describe("GET /api/v1/entity/:type 列表", () => {
     expect(body.data.total).toBe(0);
   });
 
-  it("标签筛选 tag（ K2）：统一 data.tags 包含匹配（setting 与 event 同语义）；无匹配 → 空", async () => {
+  it("标签筛选 tag（K2）：统一 data.tags 包含匹配（setting 与 event 同语义）；无匹配 → 空", async () => {
     openProject();
     const app = buildApp();
  // setting：rules 标签
@@ -179,7 +179,7 @@ describe("GET /api/v1/entity/:type 列表", () => {
     expect(qingyun.summary.tags).toEqual(["势力", "宗门"]);
   });
 
-  it("M2（批次六）：setting 列表附加上级设定（parentId/parentName，belongs_to 映射）与描述摘要（截断 100 字符）", async () => {
+  it("M2：setting 列表附加上级设定（parentId/parentName，belongs_to 映射）与描述摘要（截断 100 字符）", async () => {
     openProject();
     const app = buildApp();
     const parentRes = await app.request(
@@ -238,7 +238,7 @@ describe("GET /api/v1/entity/:type 列表", () => {
     expect(charBody.data.items[0].parentId).toBeUndefined();
   });
 
-  it("N1（批次七，）：parent_id 上级设定筛选——递归子树（含所有后代、不含自身）、不存在空结果、与 tag 组合、软删联动、分页正确、非 setting 忽略", async () => {
+  it("N1：parent_id 上级设定筛选——递归子树（含所有后代、不含自身）、不存在空结果、与 tag 组合、软删联动、分页正确、非 setting 忽略", async () => {
     openProject();
     const app = buildApp();
  // 三级层级：世界 → 大陆 → 门派；另设无父设定「天地法则」
@@ -503,7 +503,7 @@ describe("DELETE /api/v1/entity/:type/:id 软删", () => {
 
 // ============ 时间轴事件（C2）：泛型 CRUD + move 端点 + occurs_in 关系链路 ============
 
-describe("event 时间轴（C2，）", () => {
+describe("event 时间轴（C2）", () => {
  /** 创建事件辅助（201 断言，ev- 前缀由 db 层生成） */
   async function createEvent(app: Hono, name: string, data?: Record<string, unknown>): Promise<{ id: string }> {
     const res = await app.request(`/api/v1/entity/event`, jsonRequest("POST", "", { name, ...(data ? { data } : {}) }));
@@ -533,7 +533,7 @@ describe("event 时间轴（C2，）", () => {
       jsonRequest("POST", "", { name: "坏事件", data: { tags: "主线" } }),
     );
     expect(bad.status).toBe(400);
- // 列表：summary 含两字段（C1 ，）
+ // 列表：summary 含两字段（C1）
     const listRes = await app.request("/api/v1/entity/event", { headers: HOST_HEADERS });
     const listBody = (await listRes.json()) as { data: { items: Array<Record<string, unknown>>; total: number } };
     expect(listBody.data.total).toBe(1);
@@ -582,7 +582,7 @@ describe("event 时间轴（C2，）", () => {
     expect(mv.status).toBe(200);
     expect((await mv.json()) as { data: { moved: boolean } }).toMatchObject({ data: { moved: true } });
     expect(await eventIds(app)).toEqual([e2, ...initial.filter((i) => i !== e2)]);
- // 显式传 sort=created_at&order=desc → 仍按 sort_order 升序（ ）
+ // 显式传 sort=created_at&order=desc → 仍按 sort_order 升序
     const desc = await app.request("/api/v1/entity/event?sort=created_at&order=desc", { headers: HOST_HEADERS });
     const descBody = (await desc.json()) as { data: { items: Array<{ id: string }> } };
     expect(descBody.data.items.map((i) => i.id)).toEqual([e2, ...initial.filter((i) => i !== e2)]);
@@ -597,7 +597,7 @@ describe("event 时间轴（C2，）", () => {
     const app = buildApp();
     const e0 = (await createEvent(app, "事件0")).id;
     const e2 = (await createEvent(app, "事件2")).id;
- // 超大 → clamp 末尾（ ）
+ // 超大 → clamp 末尾
     await app.request(`/api/v1/entity/event/${e2}/move`, jsonRequest("PUT", "", { order: 999 }));
     const ids = await eventIds(app);
     expect(ids[ids.length - 1]).toBe(e2);
@@ -622,14 +622,14 @@ describe("event 时间轴（C2，）", () => {
     expect(
       (await app.request(`/api/v1/entity/event/${id}/move`, jsonRequest("PUT", "", { order: 0 }))).status,
     ).toBe(404);
- // 专端点仅 event：character 无 move 路径（其余实体类型无 sort_order 语义，）
+ // 专端点仅 event：character 无 move 路径（其余实体类型无 sort_order 语义）
     const { id: charId } = await createCharacter(app, "张三");
     expect(
       (await app.request(`/api/v1/entity/character/${charId}/move`, jsonRequest("PUT", "", { order: 0 }))).status,
     ).toBe(404);
   });
 
-  it("occurs_in 关系链路：event → outline_node 建立 → 软删 event 后不可见 → 还原恢复（）", async () => {
+  it("occurs_in 关系链路：event → outline_node 建立 → 软删 event 后不可见 → 还原恢复", async () => {
     openProject();
     const app = buildApp();
     const { id: evId } = await createEvent(app, "玉佩事件");
@@ -640,7 +640,7 @@ describe("event 时间轴（C2，）", () => {
     );
     expect(nodeRes.status).toBe(201);
     const nodeId = ((await nodeRes.json()) as { data: { id: string } }).data.id;
- // 建立 occurs_in（event → 大纲节点，；relation 白名单 C1 已含 event）
+ // 建立 occurs_in（event → 大纲节点；relation 白名单 C1 已含 event）
     const relRes = await app.request("/api/v1/relation", jsonRequest("POST", "", {
       source_type: "event",
       source_id: evId,
@@ -672,7 +672,7 @@ describe("event 时间轴（C2，）", () => {
 
 // ============ 时间轴时间点（G2）：move 端点 + move_to 复合端点 ============
 
-describe("timepoint 时间轴（G2，）", () => {
+describe("timepoint 时间轴（G2）", () => {
  /** 创建事件辅助（201 断言，ev- 前缀由 db 层生成；本 describe 独立定义——G2.3 前事件与时间点并列测试） */
   async function createEvent(app: Hono, name: string): Promise<{ id: string }> {
     const res = await app.request(`/api/v1/entity/event`, jsonRequest("POST", "", { name }));
@@ -687,7 +687,7 @@ describe("timepoint 时间轴（G2，）", () => {
     return (await res.json()).data as { id: string };
   }
 
- /** 时间点列表 id 序（恒按 sort_order 升序——服务端，） */
+ /** 时间点列表 id 序（恒按 sort_order 升序——服务端） */
   async function timepointIds(app: Hono): Promise<string[]> {
     const res = await app.request("/api/v1/entity/timepoint", { headers: HOST_HEADERS });
     const body = (await res.json()) as { data: { items: Array<{ id: string }> } };
@@ -715,7 +715,7 @@ describe("timepoint 时间轴（G2，）", () => {
     expect(mv.status).toBe(200);
     expect((await mv.json()) as { data: { moved: boolean } }).toMatchObject({ data: { moved: true } });
     expect(await timepointIds(app)).toEqual([tp2, tp0]);
- // 显式传 sort=created_at&order=desc → 仍按 sort_order 升序（ ）
+ // 显式传 sort=created_at&order=desc → 仍按 sort_order 升序
     const desc = await app.request("/api/v1/entity/timepoint?sort=created_at&order=desc", { headers: HOST_HEADERS });
     const descBody = (await desc.json()) as { data: { items: Array<{ id: string }> } };
     expect(descBody.data.items.map((i) => i.id)).toEqual([tp2, tp0]);
@@ -726,7 +726,7 @@ describe("timepoint 时间轴（G2，）", () => {
     const app = buildApp();
     const tp0 = (await createTimepoint(app, "拂晓")).id;
     const tp2 = (await createTimepoint(app, "黄昏")).id;
- // 超大 → clamp 末尾（ ）
+ // 超大 → clamp 末尾
     await app.request(`/api/v1/entity/timepoint/${tp2}/move`, jsonRequest("PUT", "", { order: 999 }));
     const ids = await timepointIds(app);
     expect(ids[ids.length - 1]).toBe(tp2);
@@ -874,7 +874,7 @@ describe("timepoint 时间轴（G2，）", () => {
   });
 });
 
-// ============ 设定手动排序（2026-08 批次十三）：PUT /entity/setting/:id/move ============
+// ============ 设定手动排序（2026-08）：PUT /entity/setting/:id/move ============
 describe("设定 move（同级重排 / 改父 + 重排复合写）", () => {
  /** 创建设定，返回 id */
   async function createSetting(app: Hono, name: string): Promise<string> {
@@ -909,7 +909,7 @@ describe("设定 move（同级重排 / 改父 + 重排复合写）", () => {
     const a = await createSetting(app, "A");
     const b = await createSetting(app, "B");
     const c = await createSetting(app, "C");
- // character 摘要无 sortOrder（ 稀疏仅 setting）
+ // character 摘要无 sortOrder（稀疏仅 setting）
     const char = await createCharacter(app, "张三");
     const chars = (await (await app.request("/api/v1/entity/character", { headers: HOST_HEADERS })).json()) as {
       data: { items: Array<{ id: string; sortOrder?: number }> },

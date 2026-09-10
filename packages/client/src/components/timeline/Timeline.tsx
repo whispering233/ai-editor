@@ -1,11 +1,11 @@
-// 时间轴容器（G2.3， G2 布局线框：时间点组块 + 事件挂载 + 未挂载兜底区 + 双轨拖拽）
+// 时间轴容器（G2.3，G2 布局线框：时间点组块 + 事件挂载 + 未挂载兜底区 + 双轨拖拽）
 // 职责：垂直轴线 + 双实体模型渲染（buildTimelineModel：组 = 真实时间点实体 + occurs_at 挂载，
 // 未挂载区 = 无挂载事件平铺）+ **双轨拖拽协调**（时间点整组 / 事件单条，dragstart 来源判定互斥）。
 // 数据编排留在页面（Timeline.tsx）——本组件收「全量时间点 + 事件」与回调（纯展示/交互职责）：
 // - 渲染模型 = buildTimelineModel(timepoints, events, occursAtEdges)：events 为**已筛选**事件
 // - order 计算模型 = buildTimelineModel(timepoints, allEvents, occursAtEdges)：allEvents 为**全量**
 // 事件（order 是全局事件线性序——筛选态下以全量序为基准，避免错位）
-// 双轨拖拽（G2， 拖拽节）：
+// 双轨拖拽（G2，拖拽节）：
 // - 时间点拖拽：组标题行根 draggable（TimelineGroup 装配）；落点 = 任意组块区域（标题行/事件行
 // 均组级判定：side 按落点元素中点）→ drop → PUT /entity/timepoint/:id/move（**只重排时间点序，
 // 其下事件不动**）；未挂载区不可作为时间点目标（无时间点语义）
@@ -53,7 +53,7 @@ interface TimelineProps {
   onDeleteTimepoint: (tp: EntitySummary) => void;
   /** 组尾「+ 在此时间点新建事件」（页面打开带预挂载的新建对话框） */
   onAddEventAt: (timepointId: string) => void;
-  /** 组标题行双击 → 时间点详情（页面跳 #/timepoints/:id，批次十七一级化） */
+  /** 组标题行双击 → 时间点详情（页面跳 #/timepoints/:id，一级化） */
   onDetailTimepoint: (tp: EntitySummary) => void;
   /** 事件行操作回调（页面级动作） */
   onDetail: (ev: EntitySummary) => void;

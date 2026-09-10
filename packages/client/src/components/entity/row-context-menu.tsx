@@ -1,11 +1,11 @@
-// 行级右键菜单（批次十：替代行级 AskAiButton，）
+// 行级右键菜单（替代行级 AskAiButton）
 // 触发 = 行级 onContextMenu（ContextMenuTrigger 内建 preventDefault + 右键/长按打开，菜单弹出在指针位置）；
 // 菜单项：
 // - 「注入会话上下文」：复用 chat store focusContext 机制——写入 focusContext
 // （右栏 focus 小条出现）+ 聚焦输入框（可立即提问），继续当前会话
-// - 「建立关联」：打开共用 CreateRelationDialog（ 通用关系表；源端点按行对象预填，
+// - 「建立关联」：打开共用 CreateRelationDialog（通用关系表；源端点按行对象预填，
 // 类型/端点按行实体类型——大纲节点 outline_node / 实体 focus_entity_type）
-// 中栏右下「问 AI」悬浮按钮（批次十八 C1）为全局统一入口——右键菜单是行级快捷入口的替代形态。
+// 中栏右下「问 AI」悬浮按钮（C1）为全局统一入口——右键菜单是行级快捷入口的替代形态。
 // 不违反 H3 红线：右键菜单是「需要时出现」的上下文交互（桌面通用心智），非「操作按钮收进 ⋯ 二级展开」。
 // 用法：<RowContextMenu focus={...} source={...} onCreated={...} trigger={<tr ...行根元素... />}>
 // 行内容（渲染在 trigger 元素内部）

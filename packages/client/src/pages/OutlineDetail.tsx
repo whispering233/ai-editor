@@ -1,4 +1,4 @@
-// 大纲节点详情页（S12.2； 麦基字段集；「节点详情页」；
+// 大纲节点详情页（S12.2；麦基字段集；「节点详情页」；
 // S13.2：header 加「设为当前位置」——入口自大纲页迁入，PUT /project/config { current_position }，
 // 已是当前位置禁用；store updateConfig 自动重拉 config 联动 InfoBar/行尾徽标/compute 默认节点）
 // 路由：#/outline/:nodeId（中栏大纲 tab 二级路由，main.tsx outline 分支拦截第二段，仿实体详情）
@@ -9,10 +9,10 @@
 // title 非空且有变化（shouldCommitTitle）、summary 有变化且允许清空（提交空串真正清除——
 // 服务端 patch.summary !== undefined 即写入）、data diffData（lib/entity-detail，空值规约）；
 // 引用字段（climax_scene/inciting_scene）「未设置」→ 空串（服务端 z.string.optional 不接受 null）
-// 交互：详情页无面包屑（批次十八 B1 移除）——返回上级走左栏 NavRail / 大纲树；header [保存] 整表单一次提交；
+// 交互：详情页无面包屑（B1 移除）——返回上级走左栏 NavRail / 大纲树；header [保存] 整表单一次提交；
 // VALIDATION_ERROR → 结构化信息卡底部行内错误；「+ 新建变更」（S12.3）→ 内联表单（目标/字段/op/值/
 // 描述，update 自动取旧值）→ 成功后 toast + 重拉变更记录列表
-// 样式 token 类（，oracle 红线：禁止硬编码色类）
+// 样式 token 类（oracle 红线：禁止硬编码色类）
 import { useEffect, useState } from "react";
 import { formatTimestamp } from "@whispering233/ai-editor-shared";
 import { CreateRelationDialog } from "../components/entity/create-relation-dialog";
@@ -187,7 +187,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
 
   return (
     <section>
-      {/* header：标题 + 操作区（设为当前位置 / 保存）——面包屑已随批次十八 B1 移除 */}
+      {/* header：标题 + 操作区（设为当前位置 / 保存）——面包屑已随B1 移除 */}
       <div className="mb-1 flex items-center gap-3">
         <PageTitle className="min-w-0 truncate">{node?.title ?? "…"}</PageTitle>
         <div className="ml-auto flex items-center gap-2">

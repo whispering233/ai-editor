@@ -3,9 +3,9 @@
 // 当前位置标题由 outline 树 id→title 映射（findOutlineNodeTitle）
 // 定位实现（U4 方案 A）：点击当前位置 → ui store 设置 focusOutlineNodeId（transient）→ 跳 #/outline，
 // Outline 页消费（展开祖先+滚动+高亮）后清除；不侵入 hash 路由
-// <1024px 时右栏为抽屉：信息条右侧显示聊天开关（）
-// 刷新按钮（交互批次，问题 1）：InfoBar 是中栏统一头部（全 tab 常驻），在此放刷新 = 一个入口
-// 刷所有数据页——点击调 ui store notifyDataChanged（+1），各数据页订阅后重拉。
+// <1024px 时右栏为抽屉：信息条右侧显示聊天开关
+// 刷新按钮（问题 1）：InfoBar 是中栏统一头部（全 tab 常驻），在此放刷新 = 一个入口
+// 刷所有数据页——点击调 ui store notifyDataChanged（1），各数据页订阅后重拉。
 // 实体列表错误横幅内的「重试」按钮保留：那是错误态行内重试（错误时用户不一定会想到顶部刷新），
 // 与全局刷新不构成重复（不同状态上下文、不同语义）
 import { Button } from "antd";
@@ -34,7 +34,7 @@ export function InfoBar({
       ? (findOutlineNodeTitle(outline, config.currentPosition) ?? config.currentPosition)
       : null;
 
-  // 项目名：加载中 → 「加载中…」；未打开/加载失败 → 「书架」（：无项目时所在即书架形态）
+  // 项目名：加载中 → 「加载中…」；未打开/加载失败 → 「书架」（无项目时所在即书架形态）
   const projectTitle = configLoading ? "加载中…" : (config?.name ?? "书架");
 
   return (
@@ -62,7 +62,7 @@ export function InfoBar({
         <span className="truncate text-foreground">{positionTitle ?? "未设置"}</span>
       </a>
 
-      {/* 右侧：刷新 + 语言 + 小屏聊天开关（问 AI 入口已迁至中栏右下悬浮按钮——批次十八 C1） */}
+      {/* 右侧：刷新 + 语言 + 小屏聊天开关（问 AI 入口已迁至中栏右下悬浮按钮——C1） */}
       <Button
         color="default" variant="text"
         size="small"

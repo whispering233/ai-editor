@@ -2,7 +2,7 @@
 //
 // （可见性联动端点状态；手动删关系 = 物理删）。
 // 错误映射（db RelationError → HttpError，对照 错误码）：
-// RELATION_EXISTS → 409 RELATION_EXISTS（同三元组已存在，）
+// RELATION_EXISTS → 409 RELATION_EXISTS（同三元组已存在）
 // EVENT_ALREADY_MOUNTED → 409 EVENT_ALREADY_MOUNTED（occurs_at 1:n 重复挂载，G2）
 // ENDPOINT_NOT_FOUND → 400 VALIDATION_ERROR（端点不存在/软删是参数问题）
 // INVALID_RELATION_TYPE → 400 VALIDATION_ERROR（白名单外——schema 层 enum 已拦截，防御分支）

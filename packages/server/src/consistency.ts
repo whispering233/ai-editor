@@ -1,6 +1,6 @@
 // 启动一致性校验（S4.2）：软删联动兜底补标
 //
-// 背景（ 可见性不变式）：软删大纲节点 = 先 DB 后 JSON——
+// 背景（可见性不变式）：软删大纲节点 = 先 DB 后 JSON——
 // 1. DB 级联软删关联 relation/delta（routes/outline.ts cascadeSoftDelete）
 // 2. outline.json 原子写节点 deleted 标记（deleteOutlineNode）
 // 两步间崩溃/取消会留下「outline.json 节点已软删、DB 关联记录未软删」的幽灵形态
@@ -9,7 +9,7 @@
 // 未软删记录补标 deleted_at（nowIso，应用层时间约定）。
 //
 // 边界（任务卡 S4.2）：
-// - 只做「节点已软删 → DB 记录补标」单方向： 不变式是单向的（节点软删 ⇒
+// - 只做「节点已软删 → DB 记录补标」单方向：不变式是单向的（节点软删 ⇒
 // 关联记录必软删），按节点软删补标无误报；反向（DB 记录已软删、节点未软删）推断
 // 受实体侧级联干扰（softDeleteEntity 会级联软删节点↔实体关系而节点仍存活），
 // 不可靠，不在本卡（留 S4.3/后续）。
@@ -64,7 +64,7 @@ export function reconcileSoftDelete(project: ProjectContext): SoftDeleteReconcil
   if (deletedIds.length === 0) {
     return { deletedNodes: 0, relations: 0, deltas: 0 };
   }
-  const deletedAt = nowIso(); // ISO 8601 应用层写入（）
+  const deletedAt = nowIso(); // ISO 8601 应用层写入
   const rel = project.db
     .prepare(
       `UPDATE relation_records SET deleted_at = ? WHERE deleted_at IS NULL AND

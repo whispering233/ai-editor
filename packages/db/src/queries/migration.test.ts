@@ -74,7 +74,7 @@ describe("ensureSchemaCompatible 版本匹配", () => {
   });
 });
 
-describe("ensureSchemaCompatible 版本不匹配 → 删库重建（）", () => {
+describe("ensureSchemaCompatible 版本不匹配 → 删库重建", () => {
   it("user_version=0 的旧库：重建后版本号正确、表空、outline 重置为空树、备份存在且旧连接已关闭", () => {
  // 旧库（user_version=0，新库默认）+ 脏数据
     insertOldEntity(db, "char-1");
@@ -87,7 +87,7 @@ describe("ensureSchemaCompatible 版本不匹配 → 删库重建（）", () => 
     expect(result.rebuilt).toBe(true);
     expect(result.fromVersion).toBe(0);
     expect(result.toVersion).toBe(SCHEMA_VERSION);
- // 新库：版本号已写、表空（回收站天然为空， 无需单独清空）
+ // 新库：版本号已写、表空（回收站天然为空，无需单独清空）
     expect(getUserVersion(active)).toBe(SCHEMA_VERSION);
     expect(countEntities(active)).toBe(0);
  // outline.json 重置为最小空树（与 readOutlineFile 缺失语义同形）
@@ -125,7 +125,7 @@ describe("ensureSchemaCompatible 版本不匹配 → 删库重建（）", () => 
     expect(readFileSync(join(dir, "outline.json.v0.bak"), "utf8")).toBe(outlineRawBefore);
   });
 
-  it("未来版本（user_version=SCHEMA_VERSION+1 > SCHEMA_VERSION）→ 拒绝打开：抛 SchemaVersionError、数据文件未动、无 .bak 备份（ 堵降级数据丢失）", () => {
+  it("未来版本（user_version=SCHEMA_VERSION+1 > SCHEMA_VERSION）→ 拒绝打开：抛 SchemaVersionError、数据文件未动、无 .bak 备份（堵降级数据丢失）", () => {
  // 模拟「用户安装新版后回退旧版程序」：高版本库 + 数据 + 大纲
     setUserVersion(db, SCHEMA_VERSION + 1);
     insertOldEntity(db, "char-1");
@@ -178,9 +178,9 @@ describe("ensureSchemaCompatible 版本不匹配 → 删库重建（）", () => 
   });
 });
 
-// ============ ensureSchemaCompatible 旧版本迁移路径（ 注入） ============
+// ============ ensureSchemaCompatible 旧版本迁移路径（注入） ============
 
-describe("ensureSchemaCompatible 旧版本有迁移路径（）", () => {
+describe("ensureSchemaCompatible 旧版本有迁移路径", () => {
   it("user_version=0 + 注入迁移链（覆盖到 SCHEMA_VERSION）→ 前向迁移：数据保留、无重建备份、时间戳快照生成", () => {
     const migrations = [
       { version: 1, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN note TEXT") },
@@ -215,7 +215,7 @@ describe("ensureSchemaCompatible 旧版本有迁移路径（）", () => {
     closeDatabase(active);
   });
 
-  it("user_version=0 + 默认迁移集（0→3 断链：无 v1 条目）→ 无迁移路径 → 重建兜底（ 前行为不变）", () => {
+  it("user_version=0 + 默认迁移集（0→3 断链：无 v1 条目）→ 无迁移路径 → 重建兜底（前行为不变）", () => {
     insertOldEntity(db, "char-1");
     writeOutlineFile(dir, oldTree());
 

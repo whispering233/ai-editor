@@ -1,7 +1,7 @@
 // @whispering233/ai-editor-db schema 版本管理与建表入口（T2.1）
 //
 // 建表 DDL 常量已迁至 tables.ts（双份声明 + 对齐断言），本文件只保留版本工具。
-// 时间约定（）：所有时间列统一 ISO 8601 字符串、由应用层写入，
+// 时间约定：所有时间列统一 ISO 8601 字符串、由应用层写入，
 // 不使用 SQLite 内置 datetime('now')——回收站按 deleted_at 排序需跨 SQLite 与 outline.json 统一格式。
 
 import type Database from "better-sqlite3";
@@ -9,12 +9,12 @@ import { CREATE_TABLES_SQL } from "./tables.js";
 
 /**
  * data.db 当前 schema 版本（SCHEMA_VERSION = 2 起由增量迁移驱动）。
- * v1 → v2（ 时间轴）：entities 表 type CHECK 扩为 5 种（含 event）+ 新增
+ * v1 → v2（时间轴）：entities 表 type CHECK 扩为 5 种（含 event）+ 新增
  * sort_order 列——旧 v1 库经 migrations/002_event_timeline.ts 迁移，新库直接建 v2 结构。
  * v2 → v3（G2 时间标签点实体化）：entities 表 type CHECK 扩为 6 种
  * （含 timepoint）+ 旧 event.data.time_label 由 migrations/003_timepoint.ts 迁移为
  * timepoint 实体 + occurs_at 挂载关系（从 event.data 移除 time_label）。
- * v3 → v4（ K2 修订，2026-08）：**无 DDL**——仅 entities.data JSON 数据迁移
+ * v3 → v4（K2 修订，2026-08）：**无 DDL**——仅 entities.data JSON 数据迁移
  * （setting 的旧 rules 分类值复制到 data.tags 并移除 rules，migrations/004_setting_tags.ts）。
  */
 export const SCHEMA_VERSION = 5; // +reference（005_reference.ts 四步换表）

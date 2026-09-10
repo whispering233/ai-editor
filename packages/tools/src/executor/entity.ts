@@ -7,7 +7,7 @@
 //
 // 语义对齐：
 // - create_entity：type/name 必填 + data 可选，id 由 db 层生成（char-/set-/loc-/hook- 前缀）
-// - update_entity：patches 为 data **浅合并**字段（未传字段保留，）；
+// - update_entity：patches 为 data **浅合并**字段（未传字段保留）；
 // 软删实体不可更新（getEntity 过滤 → null → 抛错）
 // - delete_entity：软删 + 级联关系与 Delta（本体保留可回收站还原）
 // 参数形态：与 S6.6 proposal.args 对齐（propose_create_entity → { type, name, data? } 等），
@@ -17,7 +17,7 @@ import { createEntity, nowIso, softDeleteEntity, updateEntity } from "@whisperin
 import type { EntityType } from "@whispering233/ai-editor-shared";
 import { optionalRecord, requireRecord, requireString, type ExecutorFn } from "./types.js";
 
-/** create_entity（：create_entity(type, name, data) → id） */
+/** create_entity（create_entity(type, name, data) → id） */
 export const executeCreateEntity: ExecutorFn = (ctx, proposal) => {
   const args = proposal.args;
   const row = createEntity(ctx.db, {
@@ -28,19 +28,19 @@ export const executeCreateEntity: ExecutorFn = (ctx, proposal) => {
   return { id: row.id };
 };
 
-/** update_entity（：update_entity(id, patches) → updated；patches 浅合并进 data） */
+/** update_entity（update_entity(id, patches) → updated；patches 浅合并进 data） */
 export const executeUpdateEntity: ExecutorFn = (ctx, proposal) => {
   const args = proposal.args;
   const entityId = requireString(args, "entity_id");
   const patches = requireRecord(args, "patches");
-  const row = updateEntity(ctx.db, entityId, { data: patches }); // data 浅合并（ 同语义）
+  const row = updateEntity(ctx.db, entityId, { data: patches }); // data 浅合并（同语义）
   if (row === null) {
     throw new Error(`实体不存在或已软删: ${entityId}`);
   }
   return { id: row.id, updated: true };
 };
 
-/** delete_entity（：delete_entity(id) → void；软删 + 级联，可回收站还原） */
+/** delete_entity（delete_entity(id) → void；软删 + 级联，可回收站还原） */
 export const executeDeleteEntity: ExecutorFn = (ctx, proposal) => {
   const entityId = requireString(proposal.args, "entity_id");
   const result = softDeleteEntity(ctx.db, entityId, nowIso());

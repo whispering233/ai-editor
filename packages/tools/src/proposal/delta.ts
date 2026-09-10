@@ -28,7 +28,7 @@ export function buildProposeAddDelta(ctx: ToolContext, args: ProposeAddDeltaArgs
  // event（时间轴事件）不产生 Delta——AI 提案通道与 REST 创建路径一致拒绝
  //（outline_node 有 S13.3 显式豁免，event 无豁免）
   if (target.type === "event") {
-    throw new Error(`event（时间轴事件）不产生 Delta（），变更目标无效: ${args.target}`);
+    throw new Error(`event（时间轴事件）不产生 Delta，变更目标无效: ${args.target}`);
   }
   return buildProposal(
     ctx,

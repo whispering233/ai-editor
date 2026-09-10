@@ -5,7 +5,7 @@ import { nanoid } from "nanoid";
 import type { EntityType } from "../types/entity.js";
 import type { OutlineNodeType } from "../types/outline.js";
 
-/** 实体类型 → id 前缀（ id 约定；event 时间轴事件 ev-，；timepoint 时间标签点 tp-，G2） */
+/** 实体类型 → id 前缀（id 约定；event 时间轴事件 ev-；timepoint 时间标签点 tp-，G2） */
 export const ENTITY_ID_PREFIX: Record<EntityType, string> = {
   character: "char-",
   setting: "set-",
@@ -16,14 +16,14 @@ export const ENTITY_ID_PREFIX: Record<EntityType, string> = {
   reference: "ref-", // 参考资料
 };
 
-/** 大纲节点类型 → id 前缀（ id 约定；root 不生成 id） */
+/** 大纲节点类型 → id 前缀（id 约定；root 不生成 id） */
 export const OUTLINE_NODE_ID_PREFIX: Record<Exclude<OutlineNodeType, "root">, string> = {
   volume: "vol-",
   chapter: "ch-",
   scene: "sc-",
 };
 
-/** 运行时对象 id 前缀（：提案 prop_/会话 sess_/工具调用 call_，下划线分隔） */
+/** 运行时对象 id 前缀（提案 prop_/会话 sess_/工具调用 call_，下划线分隔） */
 export const RUNTIME_ID_PREFIX = {
   proposal: "prop_",
   session: "sess_",

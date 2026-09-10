@@ -31,7 +31,7 @@ describe("describeOpenError（项目开/建错误码映射）", () => {
   });
 });
 
-describe("describeImportError（ 导入错误码映射）", () => {
+describe("describeImportError（导入错误码映射）", () => {
   it("PROJECT_ALREADY_EXISTS → 换书名引导（对话框内可立即改名重试）", () => {
     expect(describeImportError("PROJECT_ALREADY_EXISTS", "书架已存在同名书: x")).toContain(
       "换一个书名",
@@ -68,7 +68,7 @@ describe("describeImportError（ 导入错误码映射）", () => {
   });
 });
 
-describe("describeExportError（ 导出错误码映射）", () => {
+describe("describeExportError（导出错误码映射）", () => {
   it("CLIENT_NETWORK_ERROR → 连接失败引导", () => {
     expect(describeExportError("CLIENT_NETWORK_ERROR", "x")).toContain("无法连接服务");
   });

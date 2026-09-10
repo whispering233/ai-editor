@@ -11,7 +11,7 @@ export interface SSEMessage {
 
 export const SSE_DONE = "[DONE]";
 
-/** 默认超时：60s 无任何事件即判定断开（ 客户端兜底） */
+/** 默认超时：60s 无任何事件即判定断开（客户端兜底） */
 export const DEFAULT_SSE_TIMEOUT_MS = 60_000;
 
 export interface SSEOptions {
@@ -46,7 +46,7 @@ export function parseSSEFrames(buffer: string): { frames: string[]; rest: string
 
 /**
  * 解析单个帧为 {event, data}（纯函数，可单测）
- * SSE 规范：注释行（ 开头）跳过、无字段行忽略；event: 行取事件名；
+ * SSE 规范：注释行（开头）跳过、无字段行忽略；event: 行取事件名；
  * data: 行合并（多行以 \n 拼接，仅剥离一个前导空格）；无 data 的帧返回 null
  */
 export function parseSSEFrame(frame: string): SSEMessage | null {
@@ -127,7 +127,7 @@ export function fetchSSE(url: string, options: SSEOptions): () => void {
  // data 非 JSON：按原文字符串透传（如 text 事件异常负载）
     }
     onEvent(msg.event, payload);
-    return msg.event !== "error"; // error 事件后流立即关闭（）
+    return msg.event !== "error"; // error 事件后流立即关闭
   };
 
   armTimer();

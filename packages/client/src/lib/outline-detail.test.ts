@@ -1,4 +1,4 @@
-// outline-detail 纯函数测试（S12.2 节点详情页）：data 字段配置（ 麦基字段集，按层级）、
+// outline-detail 纯函数测试（S12.2 节点详情页）：data 字段配置（麦基字段集，按层级）、
 // 冲突层次多选切换、场景节点选择器选项（仅 scene 叶子）、引用字段「未设置」值归一
 import { describe, expect, it } from "vitest";
 import type { OutlineNode } from "@whispering233/ai-editor-shared";
@@ -34,7 +34,7 @@ const tree: OutlineNode[] = [
   { id: "ch-3", type: "chapter", title: "第三章（根直挂）", updatedAt: "t0" },
 ];
 
-describe("detailFieldsForNodeType（data 字段按层级，）", () => {
+describe("detailFieldsForNodeType（data 字段按层级）", () => {
   it("scene：goal/conflict_levels/value_from/value_to（文本上限 1000/200）", () => {
     const fields = detailFieldsForNodeType("scene");
     expect(fields.map((f) => f.key)).toEqual(["goal", "conflict_levels", "value_from", "value_to"]);

@@ -1,4 +1,4 @@
-// @whispering233/ai-editor-db queryDb 辅助：native 连接 → drizzle 实例（批次十五 15.2）
+// @whispering233/ai-editor-db queryDb 辅助：native 连接 → drizzle 实例
 //
 // 查询模块函数签名保持 (db: Db)（native better-sqlite3 连接，调用方零改动），
 // 模块内部经本辅助获取 drizzle 查询实例（builder/模板混合风格，4A）。

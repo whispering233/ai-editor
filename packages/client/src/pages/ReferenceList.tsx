@@ -1,11 +1,11 @@
-// 参考资料列表页（ 批次十一；）
+// 参考资料列表页
 // 卡 11.1 交互重构 + 卡 11.4 新建分流：
-// - 点击标题 = 行内编辑（Enter 提交 / Esc 取消 / 失焦保存， 模式）
+// - 点击标题 = 行内编辑（Enter 提交 / Esc 取消 / 失焦保存，模式）
 // - 双击行 = 进详情页（编辑态/按钮区不触发）
 // - 移除 Pencil 编辑按钮与编辑 Dialog（B1 异步回填竞态根除——完整编辑收敛到详情页）
 // - 行信息 = [标题、分类徽标、标签、来源]（来源列 11.4 起按 kind：file → 相对路径、link → URL 可点击）
 // - 新建入口分流两按钮（11.4）：「新建 md 文档」→ #/references/new/md、「新建外源链接」→ #/references/new/link
-// - 保留删除按钮、右键菜单（ 复用）
+// - 保留删除按钮、右键菜单（复用）
 // 数据：listEntities("reference", { limit: 200 }) 一次全量拉取（参考资料量小），
 // 分类/标签/关键词过滤在前端（列表摘要 summary.type/tags/kind/file_name/url 由 db toSummary 提供）
 import { useEffect, useMemo, useState } from "react";
@@ -58,7 +58,7 @@ export default function ReferenceList() {
   const [activeType, setActiveType] = useState<string | "all">("all");
   const [activeTag, setActiveTag] = useState<string | null>(null);
 
-  // 扫描同步（ N6）：unsynced = 未同步文件数（null = 未探测/无项目）；
+  // 扫描同步（N6）：unsynced = 未同步文件数（null = 未探测/无项目）；
   // 列表加载/刷新时只读探测（无副作用），>0 显示提示条引导扫描
   const [scanBusy, setScanBusy] = useState(false);
   const [unsynced, setUnsynced] = useState<number | null>(null);
@@ -262,7 +262,7 @@ export default function ReferenceList() {
         </span>
       </div>
 
-      {/* 未同步提示条（ N6）：检测到本地新增/外部修改 → 引导扫描（只读探测无副作用） */}
+      {/* 未同步提示条（N6）：检测到本地新增/外部修改 → 引导扫描（只读探测无副作用） */}
       {unsynced !== null && unsynced > 0 && (
         <Alert
           className="mb-2"
@@ -305,7 +305,7 @@ export default function ReferenceList() {
             <Skeleton active title={false} paragraph={{ rows: 3 }} />
           </div>
         ) : visible === null || visible.length === 0 ? (
-          /* 空态（批次十二 R2）：无条目分支去重——纯文字提示，不显示书籍图标与新建按钮
+          /* 空态（R2）：无条目分支去重——纯文字提示，不显示书籍图标与新建按钮
              （顶部标题行已有两个新建入口）；筛选/搜索无匹配分支保留「清空筛选」操作 */
           <EmptyState
             padding="sm"
@@ -328,7 +328,7 @@ export default function ReferenceList() {
               : "还没有参考资料，先新建一条——把书籍摘抄、灵感记录、写作理论保存到这里，AI 创作顾问会参考它们给出建议"}
           </EmptyState>
         ) : (
-          /* 表格平铺（批次十二 R3）：thead 四列 + 单行 tr，行高从两行收为一行；
+          /* 表格平铺（R3）：thead 四列 + 单行 tr，行高从两行收为一行；
              对齐 EntityList 表格样式（border + thead bg-muted/50） */
           <div className="overflow-hidden rounded-lg border border-border">
             <table className="w-full text-left text-sm">
@@ -372,7 +372,7 @@ interface RefRowProps {
   onRelationCreated: () => void;
 }
 
-/** 列表行（ 卡 11.1 + 11.4 + 批次十二 R3 表格平铺）：单行 tr，四列 [标题（点击行内编辑）、分类、标签、来源] + 删除；
+/** 列表行（卡 11.1 + 11.4 + R3 表格平铺）：单行 tr，四列 [标题（点击行内编辑）、分类、标签、来源] + 删除；
  * 来源列按 kind 渲染（11.4）：file → 相对路径文本、link → URL 可点击（存量无 kind 条目 → source 兼容）；
  * 双击行 = 进详情页；右键菜单 [注入会话上下文、建立关联] 复用 */
 function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowProps) {
@@ -476,7 +476,7 @@ function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowP
           </button>
         )}
       </td>
-      {/* 分类列（批次十二修订）：直接显示文字，不包裹徽标——表格形态下与标签列区分，对齐 EntityList 数据列样式 */}
+      {/* 分类列（修订）：直接显示文字，不包裹徽标——表格形态下与标签列区分，对齐 EntityList 数据列样式 */}
       <td className="max-w-28 truncate px-3 py-2 text-muted-foreground">
         {TYPE_LABELS[type] ?? type}
       </td>

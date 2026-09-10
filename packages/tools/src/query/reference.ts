@@ -1,4 +1,4 @@
-// 查询类工具：参考资料（批次九）
+// 查询类工具：参考资料
 // search_references——AI 不知道书里有哪些参考资料时先搜索（标题+tags 关键词命中）再按需取全文
 //
 // 靠工具按需拉取保护 token 预算）。全文取详情走 get_entity('reference', id) 的 reference 分支。
@@ -14,7 +14,7 @@ import type { EntityListResult } from "@whispering233/ai-editor-db";
 import type { ToolContext } from "../context.js";
 import type { SearchReferencesArgs } from "@whispering233/ai-editor-shared";
 
-/** 参考资料搜索（ search_references(query, type?, tags?) → 摘要列表） */
+/** 参考资料搜索（search_references(query, type?, tags?) → 摘要列表） */
 export function runSearchReferences(ctx: ToolContext, args: SearchReferencesArgs): EntityListResult {
   const result = listEntities(ctx.db, {
     type: "reference",

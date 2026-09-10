@@ -1,9 +1,9 @@
 // @whispering233/ai-editor-llm 类型定义（S6.1）
 // DeepSeek 为 OpenAI 兼容 chat completions 格式（请求 /chat/completions，SSE 流式返回）。
-// 本包只管「怎么调模型」（ 分包）：key 注入、消息序列、工具定义均由调用方提供，
+// 本包只管「怎么调模型」（分包）：key 注入、消息序列、工具定义均由调用方提供，
 // 对话组织（历史裁剪 / 成对重组）在 agent 包，重试 / token 估算在 S6.2。
 
-// ============ 请求消息（OpenAI 兼容四角色； 消息配对约束） ============
+// ============ 请求消息（OpenAI 兼容四角色；消息配对约束） ============
 
 /** 聊天消息（wire 格式；assistant 带 tool_calls 时 content 可为 null） */
 export type LLMMessage =
@@ -82,8 +82,8 @@ export type ChatStreamResult =
 
 // ============ 最小 Web API 结构类型 ============
 // llm 包零依赖硬约束：lib 仅 ES2022、types 为空（tsconfig 不可改），
-// 不引 DOM lib / @types/node。 换核后 fetch/ReadableStream/TextDecoder 的声明
-// 已删除（pi-ai 内部接管传输），仅保留 AbortSignalLike（ 取消信号全链路穿透）。
+// 不引 DOM lib / @types/node。换核后 fetch/ReadableStream/TextDecoder 的声明
+// 已删除（pi-ai 内部接管传输），仅保留 AbortSignalLike（取消信号全链路穿透）。
 
 /** 取消信号的最小结构（逐 chunk 检查 + 监听 abort） */
 export interface AbortSignalLike {

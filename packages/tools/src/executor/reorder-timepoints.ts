@@ -8,7 +8,7 @@
 // 非空去重校验 → 读当前全部未软删时间点（listTimepoints）→ **集合相等校验**（缺/多/重复 →
 // 抛错，与提案层同款：防御纵深，兜底「S7.5 references 快照校验已拦截但确认前用户又拖拽
 // 增删」的竞态）→ 调 db reorderTimepoints 按新序事务内重写 sort_order 0..n-1（拖拽权威语义
-// 不变， G2 修订：排序结果即 timepoint.sort_order 线性序；不改其下事件序——
+// 不变，G2 修订：排序结果即 timepoint.sort_order 线性序；不改其下事件序——
 // 双独立线性序）→ 返回 { reordered: n }。
 
 import { listTimepoints, nowIso, reorderTimepoints } from "@whispering233/ai-editor-db";
@@ -16,7 +16,7 @@ import type { ToolContext } from "../context.js";
 import type { Proposal } from "../proposal/types.js";
 import { requireArray, type ExecutorResult } from "./types.js";
 
-/** reorder_timepoints（：reorder_timepoints(timepoint_ids) → { reordered }） */
+/** reorder_timepoints（reorder_timepoints(timepoint_ids) → { reordered }） */
 export function executeReorderTimepoints(ctx: ToolContext, proposal: Proposal): ExecutorResult {
   const raw = requireArray(proposal.args, "timepoint_ids");
  // 元素防御：提案层 zod 已校验为 string[]，此处防脏调用（与 requireString 同风格）

@@ -1,4 +1,4 @@
-// 实体详情「变更记录 · 状态预览」区块（S5.4； + ）
+// 实体详情「变更记录 · 状态预览」区块（S5.4；+）
 // 数据：POST /api/v1/delta/compute { target_type, target_id, at_node_id } → ComputeStateResult
 // （update from 不匹配 → 跳过 + conflicts 标注，非 409）
 // 交互：at_node 选择器（默认 project store 的 currentPosition，须在大纲树中存在；未设置 → 要求手动选择）

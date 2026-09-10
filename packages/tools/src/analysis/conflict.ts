@@ -12,7 +12,7 @@ import type { ToolContext } from "../context.js";
 import { isEntityType, throwIfAborted } from "./utils.js";
 import type { DetectConflictsArgs } from "@whispering233/ai-editor-shared";
 
-/** 单条跨实体矛盾（ detect_conflicts 返回项；entity_a/entity_b 为实体 id） */
+/** 单条跨实体矛盾（detect_conflicts 返回项；entity_a/entity_b 为实体 id） */
 export interface ConflictIssue {
   entity_a: string;
   entity_b: string;
@@ -43,7 +43,7 @@ interface DirectedPair {
 }
 
 /**
- * 关系矛盾检测（ detect_conflicts）。
+ * 关系矛盾检测（detect_conflicts）。
  * types 限定参与检测的实体类型（缺省全部）；relation_filter 限定参与检测的关系类型
  * （缺省全部——规则按交集生效：R1 只查集合内的对称类型、R2 只查互斥对均在集合内、R3 只查集合含 kills）。
  * 软删对象不可见（listEntities/listRelations 默认过滤）。

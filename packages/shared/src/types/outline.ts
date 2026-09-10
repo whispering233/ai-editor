@@ -5,7 +5,7 @@
 /** 大纲节点类型（含树根 "root"） */
 export type OutlineNodeType = "root" | "volume" | "chapter" | "scene";
 
-/** 节点 metadata 统计（仅 with_metadata=true 时返回，跨 outline.json × data.db 联查，） */
+/** 节点 metadata 统计（仅 with_metadata=true 时返回，跨 outline.json × data.db 联查） */
 export interface OutlineNodeMetadata {
  /** 关联的伏笔数 */
   hookCount?: number;
@@ -15,7 +15,7 @@ export interface OutlineNodeMetadata {
   deltaCount?: number;
 }
 
-/** 大纲节点公共字段（API 形态 camelCase，） */
+/** 大纲节点公共字段（API 形态 camelCase） */
 export interface OutlineNodeBase {
   id: string; // 如 "vol-1", "ch-3", "sc-15"（前缀 + nanoid）
   title: string;
@@ -29,7 +29,7 @@ export interface OutlineNodeBase {
   data?: Record<string, unknown>;
  /** 节点版本戳（提案快照比对） */
   updatedAt: string;
- /** 软删标记：常规查询默认过滤软删节点；字段供回收站等管理视图与映射完整性（ 未列） */
+ /** 软删标记：常规查询默认过滤软删节点；字段供回收站等管理视图与映射完整性（未列） */
   deleted?: boolean;
  /** 软删时间 */
   deletedAt?: string;
@@ -56,7 +56,7 @@ export interface OutlineScene extends OutlineNodeBase {
 /** 大纲节点（判别联合：type 区分层级，类型层面强制严格三层） */
 export type OutlineNode = OutlineVolume | OutlineChapter | OutlineScene;
 
-/** 完整大纲树（GET /api/v1/outline 响应，） */
+/** 完整大纲树（GET /api/v1/outline 响应） */
 export interface OutlineTree {
   id: "root";
   type: "root";
@@ -66,7 +66,7 @@ export interface OutlineTree {
   children: (OutlineVolume | OutlineChapter)[];
 }
 
-// ============ outline.json 存储形态（snake_case，） ============
+// ============ outline.json 存储形态（snake_case） ============
 
 /** outline.json 节点公共字段（内部 snake_case；软删字段见） */
 export interface OutlineFileNodeBase {
@@ -106,7 +106,7 @@ export interface OutlineFileScene extends OutlineFileNodeBase {
 /** outline.json 节点（存储形态判别联合） */
 export type OutlineFileNode = OutlineFileVolume | OutlineFileChapter | OutlineFileScene;
 
-/** outline.json 顶层（ ） */
+/** outline.json 顶层 */
 export interface OutlineFileTree {
   id: "root";
   type: "root";

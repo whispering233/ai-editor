@@ -1,4 +1,4 @@
-// 轻量非模态弹层（批次十七 3-7 自绘换芯：Base UI Popover → 原生，API 面不变）
+// 轻量非模态弹层（自绘换芯：Base UI Popover → 原生，API 面不变）
 // 受控模式：<Popover open onOpenChange><PopoverTrigger render={<按钮/>}/><PopoverContent>…</PopoverContent></Popover>
 // 锚定 trigger 底部（左对齐 + 视口右缘 clamp）；点击外部 / Esc 关闭。
 import * as React from "react";

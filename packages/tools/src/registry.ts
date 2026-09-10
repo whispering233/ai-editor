@@ -22,7 +22,7 @@ import type { ToolContext } from "./context.js";
  * 运行时由 argsSchema 兜底，类型层面双变无实际风险。
  */
 export interface ToolDefinition<TSchema extends z.ZodTypeAny = z.ZodTypeAny> {
- /** 工具名（ 工具目录，如 get_entity；LLM tool_call 的 tool 字段） */
+ /** 工具名（工具目录，如 get_entity；LLM tool_call 的 tool 字段） */
   name: string;
  /** 人类可读描述（注入 LLM 工具列表，说明用途与参数语义） */
   description: string;

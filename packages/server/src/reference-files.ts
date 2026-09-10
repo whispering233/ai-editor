@@ -1,4 +1,4 @@
-// 参考资料文件服务（批次十一）
+// 参考资料文件服务
 //
 // 职责：references/ 目录（项目文件夹内自包含）的读写/原子写/移动（软删 .trash/）/物理删，
 // + 扫描重建索引（文件 = 真相源，DB 索引 = 派生镜像，mtime 快照比对）。
@@ -36,10 +36,10 @@ export const REFERENCE_TRASH_DIR = ".trash";
 /** 文件 mtime 比对容差（毫秒）：**仅防御 ISO 毫秒截断 roundtrip**（mtimeMs 浮点 → toISOString
  * 毫秒截断 → getTime 可能差亚毫秒）。与备份体系 1s 容差语义相反——备份容差防「mtime 未刷新
  * 误判有变更」，scan 容差过大会**漏检真实外部修改**（1s 内的改动检测不到），故取最小值。
- * 应用内写入：writeFileAtomic 后 stat 与 scan 读取的 mtime 必然一致（同一文件），严格相等即可。 */
+ * 应用内写入：writeFileAtomic 后 stat 与 scan 读取的 mtime 必然一致（同一文件），严格相等即可。*/
 export const REFERENCE_MTIME_TOLERANCE_MS = 2;
 
-/** 原子写（ 同款：临时文件 + fsync + rename；参考资料 md 文件同样禁止直接覆盖） */
+/** 原子写（同款：临时文件 + fsync + rename；参考资料 md 文件同样禁止直接覆盖） */
 export function writeFileAtomic(filePath: string, data: string): void {
   const tmp = `${filePath}.tmp`;
   const fd = openSync(tmp, "w");
@@ -215,8 +215,8 @@ export function countUnsyncedReferenceFiles(root: string, db: Db): number {
 }
 
 /**
- * 扫描重建参考资料索引（POST /api/v1/reference/scan，）。
- * 规则（ + 2026-08 修订：软删文件归 .trash/，references/ 下缺失即视为外部删除）：
+ * 扫描重建参考资料索引（POST /api/v1/reference/scan）。
+ * 规则（2026-08 修订：软删文件归 .trash/，references/ 下缺失即视为外部删除）：
  * 1. 遍历 references/ 顶层 *.md（排除 .trash/）：
  * - 非软删索引匹配（kind='file' 且 file_name === 文件名）→ mtime 一致（容差内）跳过；
  * 不一致 → 以文件为准更新（title/category/tags/content/file_mtime/updated_at）

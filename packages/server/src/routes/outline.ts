@@ -119,11 +119,11 @@ outlineRoutes.get("/", (c) => {
 });
 
 /**
- * with_metadata 联查统计（跨 outline.json × data.db，）：
- * - hookCount：该节点出发的伏笔管理关系（plants/advances/resolves，source=outline_node → hook，）
- * - charCount：appears_in 指向该节点的关系数（ 示例：char → 大纲节点）
+ * with_metadata 联查统计（跨 outline.json × data.db）：
+ * - hookCount：该节点出发的伏笔管理关系（plants/advances/resolves，source=outline_node → hook）
+ * - charCount：appears_in 指向该节点的关系数（示例：char → 大纲节点）
  * - deltaCount：该节点触发的 Delta 数（delta_records.node_id）
- * 均为运行时计算，不写回数据（ _health 同款口径）。
+ * 均为运行时计算，不写回数据（_health 同款口径）。
  */
 function attachMetadata(tree: OutlineTree, db: Db): void {
   const hookStmt = db.prepare(
@@ -151,7 +151,7 @@ function attachMetadata(tree: OutlineTree, db: Db): void {
   for (const vol of tree.children) visit(vol);
 }
 
-// POST /api/v1/outline —— 创建节点（严格三层，parent_id 必填，；data 按层级精校验）
+// POST /api/v1/outline —— 创建节点（严格三层，parent_id 必填；data 按层级精校验）
 outlineRoutes.post("/", async (c) => {
   const project = requireCurrentProject();
   const raw = await c.req.json().catch(() => null);
@@ -242,7 +242,7 @@ outlineRoutes.delete("/:nodeId", (c) => {
   const deletedAt = nowIso();
  // 1. DB 级联软删关联关系与 Delta（节点/端点软删即不可见）
   const { relations, deltas } = cascadeSoftDelete(project.db, subtreeIds, deletedAt);
- // 2. JSON 原子写（软删节点 + 递归子树， 版本戳）
+ // 2. JSON 原子写（软删节点 + 递归子树，版本戳）
   let children: number;
   try {
     children = deleteOutlineNode(project.root, nodeId, deletedAt).children;

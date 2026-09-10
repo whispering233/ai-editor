@@ -1,4 +1,4 @@
-// 时间轴列表页（C3，；G2.3 双实体重构； 行级交互对齐大纲）
+// 时间轴列表页（C3；G2.3 双实体重构；行级交互对齐大纲）
 // 路由：#/timeline（1 段 → 列表页）；#/timeline/:id 详情页见 TimelineDetail.tsx（C4，main.tsx 2 段分支）
 // 数据（G2 双实体，「路由与数据」）：
 // GET /api/v1/entity/timepoint（时间点实体，恒按 sort_order 升序——组间顺序，拖拽为权威）
@@ -7,15 +7,15 @@
 // timepoint → event 1:n——构建 eventId → timepointId 挂载映射）
 // + GET /api/v1/relation?source_type=event&relation_type=occurs_in&depth=1（全量锚定边，
 // 行内「N 节点」计数——同 HookPanel depEdges 模式）
-// （G2 布局线框/双实体模型/双入口/双轨拖拽/信息层级/状态； 行操作）
-// 关键交互（G2 + ）：
+// （G2 布局线框/双实体模型/双入口/双轨拖拽/信息层级/状态；行操作）
+// 关键交互（G2 +）：
 // - 新建时间点：POST /entity/timepoint（name = 时间标签文本）→ 时间轴末尾追加
 // - 新建事件（双入口）：顶部「+ 新建事件」= 不挂载（入未挂载区）；组尾「+ 在此时间点新建事件」=
 // POST /entity/event + POST /relation（timepoint → event，occurs_at 挂载该时间点）
 // - 拖拽（双轨）：时间点整组 = PUT /entity/timepoint/:id/move（只重排组间序，内部事件不动）；
 // 事件单条 = 同组 PUT /entity/event/:id/move；跨组 POST /entity/event/:id/move_to（改挂载+重排）
 // - 行级交互：双击事件行 = 详情（#/timeline/:id）、双击组标题行 = 时间点详情
-// （#/timepoints/:id 通用实体详情页，批次十七一级化）、点击事件名/时间点名 = 行内编辑
+// （#/timepoints/:id 通用实体详情页，一级化）、点击事件名/时间点名 = 行内编辑
 // （PUT /entity/event/:id { name } / PUT /entity/timepoint/:id { name }）；「详情/编辑/重命名」
 // 按钮已移除（只留删除；AskAiButton 已移除——右键菜单替代）
 // - AI 排序（F9）：注入聊天预设指令（工具名 propose_reorder_timepoints 保证出现——LLM 依赖
@@ -100,7 +100,7 @@ export default function Timeline() {
   const [occursEdges, setOccursEdges] = useState<RelationSummaryItem[]>([]);
   const [occursEdgesFailed, setOccursEdgesFailed] = useState(false);
 
-  // 标签筛选（：tag 从当前列表聚合；activeTag null = 全部）
+  // 标签筛选（tag 从当前列表聚合；activeTag null = 全部）
   const [activeTag, setActiveTag] = useState<string | null>(null);
 
   // 标签建议池（F8：已存在标签全集，供表单 tags 输入建议；列表不足 50 条直接聚合已拉数据，
@@ -288,7 +288,7 @@ export default function Timeline() {
           return;
         }
       }
-      // 有锚点节点才建 occurs_in 关系（ 新建交互）
+      // 有锚点节点才建 occurs_in 关系（新建交互）
       if (createNodeId !== "") {
         try {
           await createRelation({
@@ -564,7 +564,7 @@ export default function Timeline() {
           </div>
         )}
 
-        {/* 加载骨架（行级 animate-pulse bg-muted， 状态） */}
+        {/* 加载骨架（行级 animate-pulse bg-muted，状态） */}
         {loading && (timepoints === null || items === null) && error === null && (
           <div className="space-y-2">
             {Array.from({ length: 4 }, (_, i) => (
@@ -581,7 +581,7 @@ export default function Timeline() {
           </div>
         )}
 
-        {/* 空态（G2 文案：先定义时间标签点，再挂载事件； 状态） */}
+        {/* 空态（G2 文案：先定义时间标签点，再挂载事件；状态） */}
         {!loading &&
           timepoints !== null &&
           items !== null &&
@@ -630,7 +630,7 @@ export default function Timeline() {
             />
           )}
 
-        {/* 标签筛选无匹配（ 状态：「没有匹配「{tag}」的事件」） */}
+        {/* 标签筛选无匹配（状态：「没有匹配「{tag}」的事件」） */}
         {!loading &&
           items !== null &&
           items.length > 0 &&

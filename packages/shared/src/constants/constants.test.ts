@@ -1,5 +1,5 @@
 // 常量断言测试（T1.2）：常量集与文档逐一核对
-// 文档来源： 关系类型表、 hook 字段、 half_life 映射、 工具目录
+// 文档来源：关系类型表、hook 字段、half_life 映射、工具目录
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { EntityType } from "../types/entity.js";
 import {
@@ -29,19 +29,19 @@ import {
 } from "./index.js";
 
 describe("实体 / 关系常量", () => {
-  it("ENTITY_TYPES 为 7 种实体类型（含 event 时间轴事件，；timepoint G2 时间标签点；reference 参考资料，），且与 types 的 EntityType 一致", () => {
+  it("ENTITY_TYPES 为 7 种实体类型（含 event 时间轴事件；timepoint G2 时间标签点；reference 参考资料），且与 types 的 EntityType 一致", () => {
     expect(ENTITY_TYPES).toEqual(["character", "setting", "location", "hook", "event", "timepoint", "reference"]);
     expectTypeOf<(typeof ENTITY_TYPES)[number]>().toEqualTypeOf<EntityType>();
   });
 
-  it("ENTITY_TYPE_LABELS 覆盖全部实体类型（ names/resolve 用；character 口径 = 人物）", () => {
+  it("ENTITY_TYPE_LABELS 覆盖全部实体类型（names/resolve 用；character 口径 = 人物）", () => {
     expect(Object.keys(ENTITY_TYPE_LABELS).sort()).toEqual([...ENTITY_TYPES].sort());
     expect(ENTITY_TYPE_LABELS.character).toBe("人物");
     expect(ENTITY_TYPE_LABELS.reference).toBe("参考资料");
     expect(ENTITY_TYPE_LABELS.timepoint).toBe("时间点");
   });
 
-  it("OUTLINE_NODE_TYPE_LABELS 覆盖卷/章/场景（ names/resolve 用）", () => {
+  it("OUTLINE_NODE_TYPE_LABELS 覆盖卷/章/场景（names/resolve 用）", () => {
     expect(OUTLINE_NODE_TYPE_LABELS).toEqual({ volume: "卷", chapter: "章", scene: "场景" });
   });
 
@@ -74,7 +74,7 @@ describe("实体 / 关系常量", () => {
   });
 });
 
-describe("大纲节点常量（ 麦基字段集）", () => {
+describe("大纲节点常量（麦基字段集）", () => {
   it("CONFLICT_LEVELS 为麦基冲突三层次（inner/personal/extra_personal）", () => {
     expect(CONFLICT_LEVELS).toEqual(["inner", "personal", "extra_personal"]);
     expect(CONFLICT_LEVELS).toHaveLength(3);
@@ -122,7 +122,7 @@ describe("工具常量", () => {
     expect(QUERY_TOOLS).toEqual([
       "get_entity",
       "search_entities",
-      "search_references", // （批次九）
+      "search_references", //
       "query_relationships",
       "get_outline",
       "get_outline_path",
@@ -207,7 +207,7 @@ describe("工具常量", () => {
   });
 });
 
-describe("自动备份常量（，B2.1）", () => {
+describe("自动备份常量（B2.1）", () => {
   it("BACKUP_FREQUENCIES 为 [1, 5, 10, 15, 30, 60]", () => {
     expect(BACKUP_FREQUENCIES).toEqual([1, 5, 10, 15, 30, 60]);
     expect(BACKUP_FREQUENCIES).toHaveLength(6);
@@ -222,7 +222,7 @@ describe("自动备份常量（，B2.1）", () => {
     expect(MAX_BACKUPS_PER_PROJECT).toBe(20);
   });
 
-  it("手动备份自定义名称最大长度 = 30（）", () => {
+  it("手动备份自定义名称最大长度 = 30", () => {
     expect(MAX_BACKUP_NAME_LENGTH).toBe(30);
   });
 });

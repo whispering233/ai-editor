@@ -1,8 +1,8 @@
-// 可搜索下拉（批次八 O1，2026-08）：Popover 非模态 + 关键词**客户端过滤已加载候选**。
+// 可搜索下拉（O1，2026-08）：Popover 非模态 + 关键词**客户端过滤已加载候选**。
 // 场景：设定列表「上级设定 / 标签」筛选（候选已由页面聚合：parentOptions ≤200、tagOptions），
 // 区别于 parent-setting-select.tsx（服务端防抖搜索）——本组件候选一次性传入、客户端过滤。
 // 能力：顶部恒有「全部」清除项；已选值不在候选中（软删/超截断）时用 fallbackLabel 兜底显示；
-// 输入内 Enter 选中首个过滤结果、Esc/点外部关闭（Popover 默认）；样式全 token 类（），
+// 输入内 Enter 选中首个过滤结果、Esc/点外部关闭（Popover 默认）；样式全 token 类，
 // 触发钮为 border 文字按钮（H4）。
 import { useState } from "react";
 import type { KeyboardEvent } from "react";

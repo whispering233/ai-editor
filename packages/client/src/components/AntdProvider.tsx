@@ -1,4 +1,4 @@
-// antd 根 Provider（批次十七 0-2 建立；批次十九 T1 起承载「Notion 工作区暖灰 token 覆盖」）
+// antd 根 Provider（建立；T1 起承载「Notion 工作区暖灰 token 覆盖」）
 // token 值来源 = docs/ui/DESIGN.md §Colors「antd 实现映射（seed token）」表 +
 // §Components「antd 组件 token 覆盖」表——本文件是改色的唯一入口（视觉契约事实源）。
 // 主题事实源 = html.dark class（index.html FOUC 内联脚本首帧已设；useTheme 各实例切换 class）——
@@ -14,13 +14,13 @@ import { useThemeMode } from "../hooks/use-theme-mode";
 
 /** 模式无关 seed（几何/非颜色类）。controlOutlineWidth = 聚焦环宽度：0 → 聚焦只改描边色（无彩环），
  * 与 DESIGN.md §Elevation「focred 用 1px 描边、无环」一致；Select/Cascader/DatePicker 等 selector 型组件的环
- * 由 `boxShadow: 0 0 controlOutlineWidth activeOutlineColor` 绘制（select/style/select-input.js），只能从这里关。 */
+ * 由 `boxShadow: 0 0 controlOutlineWidth activeOutlineColor` 绘制（select/style/select-input.js），只能从这里关。*/
 const BASE_SEED = { controlOutlineWidth: 0 };
 
 /** cssVar 作用域类名（= antd `theme.cssVar.key`）——必须与 index.html 的 `<html class>` 一致：
  * antd v6 把 `--ant-*` 注入到「组件级 class 作用域」，不注入 `:root`；只有把同一个 class 加在 <html> 上，
  * index.css 的 `:root { --primary: var(--ant-color-primary) }` 映射才解析得到值（否则全站语义色为空）。
- * 守卫测试 design-discipline.test.ts 断言两处字面量一致。 */
+ * 守卫测试 design-discipline.test.ts 断言两处字面量一致。*/
 export const CSS_VAR_KEY = "ai-editor-theme";
 
 /** 浅色 seed（DESIGN.md §Colors 映射表「浅色值」列逐行对应） */
@@ -147,7 +147,7 @@ export function AntdProvider({ children }: { children: ReactNode }) {
     >
       {/* antd App 上下文：反馈层经 `App.useApp().message` 拿命令式 message 实例（继承本 Provider 的主题与 locale）。
           component={false}：App 默认渲染一个 div 包裹层，会插进 AppShell 的三栏 flex 布局链，故渲染成 Fragment
-          （依据 antd/es/app/App.d.ts `component?: CustomComponent<P> | false`；app/App.js 默认值 'div'）。 */}
+          （依据 antd/es/app/App.d.ts `component?: CustomComponent<P> | false`；app/App.js 默认值 'div'）。*/}
       <App component={false}>{children}</App>
     </ConfigProvider>
   );

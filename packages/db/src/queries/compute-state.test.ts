@@ -1,4 +1,4 @@
-// S5.2 computeState 测试：沿大纲树父链累积 Delta 计算实体到达状态（ + 四段规则）
+// S5.2 computeState 测试：沿大纲树父链累积 Delta 计算实体到达状态（四段规则）
 // 覆盖：基础累积（跨节点依赖证明节点间按树路径序）/ 同节点内按 order /
 // 四 op 语义（set/update/add/remove，含 remove 首个匹配与值不存在静默忽略）/
 // update 冲突跳过 + skipped/conflicts 标注（后续 change 继续累积、跨 delta 扁平聚合）/
@@ -260,7 +260,7 @@ describe("computeState 路径与过滤", () => {
     expect(result!.appliedDeltas).toHaveLength(1);
   });
 
-  it("软删过滤：触发节点软删 → 该节点全部 delta 不参与；delta 自身软删 → 不参与（）", () => {
+  it("软删过滤：触发节点软删 → 该节点全部 delta 不参与；delta 自身软删 → 不参与", () => {
     const { charA } = seedBase({ power: "100" });
     addDelta("vol-1", charA, [{ field: "power", op: "set", to: "200" }], "卷级");
     const chDelta = insertDelta(db, {
@@ -291,7 +291,7 @@ describe("computeState 路径与过滤", () => {
     expect(result!.appliedDeltas.map((d) => d.nodeId)).toEqual(["vol-1"]);
   });
 
-  it("目标实体不存在 → null（含已软删——getEntity 默认过滤，）", () => {
+  it("目标实体不存在 → null（含已软删——getEntity 默认过滤）", () => {
     const { charA } = seedBase();
     expect(computeState(db, dir, { targetType: "character", targetId: "char-999", atNodeId: "sc-1" })).toBeNull();
     db.prepare("UPDATE entities SET deleted_at = ? WHERE id = ?").run(T0, charA);

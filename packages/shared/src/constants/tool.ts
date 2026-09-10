@@ -16,7 +16,7 @@ export type ToolPermission = (typeof TOOL_PERMISSION)[keyof typeof TOOL_PERMISSI
 export const QUERY_TOOLS = [
   "get_entity",
   "search_entities",
-  "search_references", // （批次九）：参考资料搜索（自动权限）
+  "search_references", // 参考资料搜索（自动权限）
   "query_relationships",
   "get_outline",
   "get_outline_path",
@@ -64,7 +64,7 @@ export const PROPOSAL_TOOLS = [
   "propose_resolve_hook",
   "propose_abandon_hook",
   "propose_reorder_timepoints", // G2（注记）：LLM 按时间点 name（时间标签）语义排序 → 提案确认
-  "propose_create_reference", // （批次九）：AI 建议保存参考资料（外部素材/灵感笔记）
+  "propose_create_reference", //：AI 建议保存参考资料（外部素材/灵感笔记）
 ] as const;
 
 /**

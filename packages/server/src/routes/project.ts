@@ -1,8 +1,8 @@
 // 项目路由（S1.2）：POST /create、POST /open、POST /close、GET/PUT /config、GET /export、
 // POST /import、GET /backups + POST /backup + POST /backup/rename + POST /backup/restore
-// （B2.2 + B2.6 ）
+// （B2.2 + B2.6）
 //
-// 校验失败统一 400 INVALID_PROJECT_PATH（shared ErrorCode，）。
+// 校验失败统一 400 INVALID_PROJECT_PATH（shared ErrorCode）。
 // 备份管道/校验/恢复/重命名逻辑在 backup.ts（B2.2 提取：createBackupZip/validateBackupPackage/
 // writeBackup/listBackups/restoreBackup/renameBackup——与自动定时器同模块）。
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
@@ -77,7 +77,7 @@ export const BOOKS_DIR_NAME = "books";
 /**
  * 规范化并校验项目路径（create/open 通用）：
  *
- * 1. **必须是绝对路径**： 要求绝对路径；path.resolve 对相对输入会基于
+ * 1. **必须是绝对路径**：要求绝对路径；path.resolve 对相对输入会基于
  * process.cwd 折叠，语义歧义（cwd 变化结果即变），显式拒绝
  * 2. **path.resolve 规范化**：折叠 `..` 与重复分隔符（防 `..` 逃逸——规范化后即为最终操作目录，
  * 不再拼接用户输入）
@@ -115,7 +115,7 @@ export function resolveProjectDir(rawPath: string): string {
 /** 项目路由（挂载于 /api/v1/project，index.ts） */
 export const projectRoutes = new Hono();
 
-// POST /api/v1/project/create —— 创建新项目（ 初始化三文件）
+// POST /api/v1/project/create —— 创建新项目（初始化三文件）
 projectRoutes.post("/create", async (c) => {
   const raw = await c.req.json().catch(() => null); // 空 body / 非法 JSON → 校验失败
   const parsed = projectCreateReqSchema.safeParse(raw);
@@ -167,7 +167,7 @@ projectRoutes.post("/open", async (c) => {
   }
   const dir = resolveProjectDir(parsed.data.path); // 目录不存在 / 链接跳转 → 400
 
- // open 必须包含 project.json（）
+ // open 必须包含 project.json
   const config = readProjectFile(dir);
   if (config === null) {
     throw new HttpError(400, "INVALID_PROJECT_PATH", `目标目录不含 project.json，不是项目: ${dir}`);
@@ -177,7 +177,7 @@ projectRoutes.post("/open", async (c) => {
  // 若先 closeProject(prev) 再开新项目，openDatabase/ensureSchemaCompatible 抛错时
  // currentProject 会悬挂指向连接已关闭的旧项目（后续请求 "connection not open" → 500）。
  // 失败语义：open 失败 = 操作未生效——当前项目保持原样（连接仍有效、单例不变）。
- // schema 版本检测（ + ）：data.db user_version——
+ // schema 版本检测：data.db user_version——
  // 旧版本（< 当前）→ 删库重建（备份 data.db.v{n}.bak + outline.json.v{n}.bak、重置
  // outline 空树、清空回收站）；**未来版本（> 当前）→ 拒绝打开 409
  // PROJECT_VERSION_NEWER**（提示升级程序；不触发任何重建/备份，数据原封不动——
@@ -216,7 +216,7 @@ projectRoutes.post("/open", async (c) => {
  //（先 DB 后 JSON 崩溃窗口的幽灵形态兜底，幂等；无软删节点不输出日志）
     logSoftDeleteReconcile(reconcileSoftDelete(project));
 
- // 响应：openResSchema 核心字段 + rebuilt 提示（端到端文档「向客户端提示已重建」，；
+ // 响应：openResSchema 核心字段 + rebuilt 提示（端到端文档「向客户端提示已重建」；
  // rebuilt/fromVersion 为附加字段——shared 的 projectOpenResSchema 未含（shared 冻结约束），
  // 此处不经 schema parse 直接构造，避免 zod 默认 strip 掉附加字段；建议 2 记录在案，修订时收敛）
  // 有迁移路径的旧版本经前向迁移打开时附加 migrated:true（提示客户端已自动升级数据）
@@ -307,7 +307,7 @@ projectRoutes.post("/close", (c) => {
 
 // GET /api/v1/project/export —— 导出当前项目三文件为 zip
 //
-// 响应：application/zip **二进制**（ 通用约定显式例外，见 shared
+// 响应：application/zip **二进制**（通用约定显式例外，见 shared
 // types/api.ts PROJECT_EXPORT_FILE_NAMES 注释）；Content-Disposition attachment，
 // 文件名 <书名>.zip（RFC 5987 filename* UTF-8 编码，中文书名安全）。
 // 流程：requireCurrentProject（无项目 → 409，与 /config 一致）→ 三文件存在性防御
@@ -347,7 +347,7 @@ function validateBookName(name: string): void {
     throw new HttpError(400, "VALIDATION_ERROR", "缺少书名字段 name");
   }
  // 与 client 同规则（Sidebar.tsx L3）："/"、"\"、纯点（. / ..）、控制字符一律拒绝——
- // name 直接拼 books/<name>/ 目录名，否则可逃出 books/（ 防越权精神）
+ // name 直接拼 books/<name>/ 目录名，否则可逃出 books/（防越权精神）
   if (/[\\/]|^\.+$|[\u0000-\u001f]/.test(name)) {
     throw new HttpError(400, "VALIDATION_ERROR", "书名不能包含 /、\\ 或为 . / ..");
   }
@@ -380,7 +380,7 @@ function findBookDirById(root: string, id: string): string | null {
 }
 
 /**
- * 新书目标目录去重（ import 节）：`books/<name>/` 已存在 →
+ * 新书目标目录去重（import 节）：`books/<name>/` 已存在 →
  * `books/<name> (N)/`（N 为最小正整数，从 2 起，避免与去重命名惯例冲突）；
  * 返回去重后的目录绝对路径。project.json 内部 name 由调用方同步为去重名
  * （「目录名 = 书名」不变式）。
@@ -450,7 +450,7 @@ projectRoutes.post("/import", async (c) => {
     throw new HttpError(400, "VALIDATION_ERROR", "不是有效的项目备份包（zip 解析失败）");
   }
 
- // 5. 分流（ import 节）：id 匹配书架已有项目 → 覆盖恢复；
+ // 5. 分流（import 节）：id 匹配书架已有项目 → 覆盖恢复；
  // 不匹配 → 导入为新书（同名不再 409，目录自动去重）
   const matchedDir = findBookDirById(projectRoot, projectId);
   if (matchedDir !== null) {
@@ -503,7 +503,7 @@ projectRoutes.post("/import", async (c) => {
 // GET /api/v1/project/config —— 获取当前项目配置
 projectRoutes.get("/config", (c) => {
   const project = requireCurrentProject(); // 无当前项目 → 409 NO_PROJECT_OPEN
- // 读内存 config（open 时载入、PUT 同步更新；单进程下与盘一致，）
+ // 读内存 config（open 时载入、PUT 同步更新；单进程下与盘一致）
   return c.json(ok(mapProjectFileToConfig(project.config)));
 });
 
@@ -519,7 +519,7 @@ projectRoutes.put("/config", async (c) => {
   }
   const { name, language, current_position, backup_frequency_minutes } = parsed.data;
 
- // current_position 校验：须指向存在的**非软删**大纲节点（）；
+ // current_position 校验：须指向存在的**非软删**大纲节点；
  // 400 + OUTLINE_NODE_NOT_FOUND（参数语义错误用 400，非资源访问 404）
   if (current_position !== undefined && current_position !== null) {
     const tree = readOutlineFile(project.root);
@@ -533,7 +533,7 @@ projectRoutes.put("/config", async (c) => {
     }
   }
 
- // 合并更新 + 刷新 updated_at（时间 ISO 8601 应用层写入，），写盘并同步内存
+ // 合并更新 + 刷新 updated_at（时间 ISO 8601 应用层写入），写盘并同步内存
  // backup_frequency_minutes 写侧「只写显式」：未在 patch 中出现不写盘——
  // 旧项目文件缺字段时不因无关更新被补写成缺省值（读侧兜底 10 不落盘，避免污染旧数据）；
  // 显式 null = 关闭（写入 null）；枚举值原样写入
@@ -553,9 +553,9 @@ projectRoutes.put("/config", async (c) => {
 
 // GET /api/v1/project/agents —— 读取项目规则文件 （项目规则唯一事实源）
 //
-// 语义（）：
+// 语义：
 // - 无当前项目 → 409 NO_PROJECT_OPEN（与 /config 一致）
-// - **文件不存在不报错**： 是可选文件（新项目/未迁移项目可能没有），返回
+// - **文件不存在不报错**：是可选文件（新项目/未迁移项目可能没有），返回
 // exists:false + 空串，前端据此展示空编辑区
 // - updatedAt = 文件系统 mtime（ISO 8601）——外部修改检测依据
 // - 读取为**每次实时读文件**（不缓存）——外部编辑立即可见
@@ -571,10 +571,10 @@ projectRoutes.get("/agents", (c) => {
 
 // PUT /api/v1/project/agents —— 写入项目规则文件 （设置页直接编辑文件内容）
 //
-// 语义（）：
+// 语义：
 // - 无当前项目 → 409 NO_PROJECT_OPEN
 // - **整体替换**（非追加）：content 为 完整内容；空串 = 清空规则（保留空文件不删除）
-// - 文件不存在时自动创建；写入走**原子写**（临时文件 + fsync + rename， 同款）
+// - 文件不存在时自动创建；写入走**原子写**（临时文件 + fsync + rename，同款）
 // - 写入后返回新 mtime，前端更新本地比对基线（外部修改检测用）
 // - 写入失败 → 500 INTERNAL_ERROR（errorHandler 兜底）
 projectRoutes.put("/agents", async (c) => {
@@ -632,7 +632,7 @@ projectRoutes.post("/backup/rename", async (c) => {
 
 // POST /api/v1/project/backup/restore —— 从备份恢复当前项目（覆盖恢复）
 //
-// 流程（）：
+// 流程：
 // 1. fileName 白名单校验（仅 .backups/ 下时间戳格式—— 兼容毫秒级/带 kind 段/旧带名称/旧秒级，
 // 防路径穿越）→ 非法 400
 // 2. 覆盖前自动快照（复用备份管道，参与保留策略——后悔药）→ 备份不存在 404
@@ -663,7 +663,7 @@ projectRoutes.post("/backup/restore", async (c) => {
 // POST /api/v1/project/rename —— 重命名当前书籍（同名并存场景的区分配套；
 // 修正 f4424b7：仅当前打开项目，与导出按钮一致）
 //
-// 流程（）：
+// 流程：
 // 1. 校验新名（同创建规则：禁路径分隔符/纯点/控制字符 → 400 VALIDATION_ERROR）
 // 2. 目标 books/<新名>/ 已存在且非当前书自身目录 → 409 PROJECT_ALREADY_EXISTS
 // 3. 原子移动：先更新 project.json 内 name（原目录原子写）→ renameSync 移动目录；

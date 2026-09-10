@@ -111,7 +111,7 @@ describe("compute_state", () => {
     expect(result!.atNodeId).toBe("sc-1");
   });
 
-  it("目标实体不存在/已软删 → null（）", () => {
+  it("目标实体不存在/已软删 → null", () => {
     const { charA } = seedBase();
     expect(
       runComputeState(makeCtx(), { target_type: "character", target_id: "char-999", at_node_id: "sc-1" }),
@@ -156,7 +156,7 @@ describe("get_delta_history", () => {
     expect(records[0].description).toBe("指向阿强");
   });
 
-  it("可见性三态过滤（）：delta 自身软删 / 触发节点软删均不可见", () => {
+  it("可见性三态过滤：delta 自身软删 / 触发节点软删均不可见", () => {
     const { charA } = seedBase();
     addDelta("vol-1", charA, [{ field: "power", op: "set", to: "200" }], "卷级");
     const scDelta = insertDelta(db, {

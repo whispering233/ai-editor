@@ -90,7 +90,7 @@ describe("startServer 基础路由", () => {
   });
 });
 
-describe("SPA 静态服务（ 单进程架构）", () => {
+describe("SPA 静态服务（单进程架构）", () => {
   it("非 /api GET → fallback 到 index.html", async () => {
     const handle = await startServer(makeTmpDir(), {
       port: 0,
@@ -200,7 +200,7 @@ describe("AI_EDITOR_PORT 解析（parsePortEnv）", () => {
   });
 });
 
-describe("端口策略（）", () => {
+describe("端口策略", () => {
   it("生产态端口被占自动 +1", async () => {
     const occupiedPort = await occupyPort();
     const handle = await startServer(makeTmpDir(), { port: occupiedPort, openBrowser: false });

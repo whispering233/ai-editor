@@ -137,7 +137,7 @@ const queryToolDefs: ToolDefinition[] = [
   {
     name: "search_references",
     description:
-      "参考资料搜索（）：按关键词搜索标题+标签命中的参考资料摘要列表（type 分类可选过滤：自由文本分类，" +
+      "参考资料搜索：按关键词搜索标题+标签命中的参考资料摘要列表（type 分类可选过滤：自由文本分类，" +
       "建议沿用项目内已有分类；tags 标签 AND 过滤）。" +
       "返回摘要（content 截断 120 字）——取全文请用 get_entity 的 reference 类型。用于 AI 不知道书里有哪些参考资料时先检索。",
     argsSchema: searchReferencesArgsSchema,
@@ -228,7 +228,7 @@ import {
 } from "@whispering233/ai-editor-shared/schemas/tools";
 import { runAnalyzeHookHealth, runDetectHookConflicts, runFindHookOpportunities, runSuggestHookPayoff, runTraceHookLifecycle } from "./analysis/hook.js";
 
-/** 伏笔分析工具定义（S6.5，「工具扩展」+ ；权限全为 AUTO） */
+/** 伏笔分析工具定义（S6.5，「工具扩展」+；权限全为 AUTO） */
 const hookToolDefs: ToolDefinition[] = [
   {
     name: "analyze_hook_health",
@@ -236,7 +236,7 @@ const hookToolDefs: ToolDefinition[] = [
       "伏笔健康总览（无参）：统计全部活跃伏笔（planted/progressing）——stale（休眠超过半衰期）、" +
       "overdue（埋设超过两倍半衰期）、blocked（依赖尚未回收）及人类可读 warnings。" +
       "返回 { current_chapter, active_count, stale, overdue, blocked_chains, warnings }；" +
-      "半衰期显式 half_life 优先、缺省按 payoff_timing 映射（immediate=3/near_term=8/mid_arc=15/slow_burn=25/endgame=40，）。",
+      "半衰期显式 half_life 优先、缺省按 payoff_timing 映射（immediate=3/near_term=8/mid_arc=15/slow_burn=25/endgame=40）。",
     argsSchema: analyzeHookHealthArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
     run: runAnalyzeHookHealth,
@@ -330,7 +330,7 @@ import { runProposeCreateReference } from "./proposal/reference.js";
 /** 提案类工具定义（S6.6 + F9 重排 + G2 时间点重排，「提案类」+ 「工具扩展」提案类，共 15 个；权限全为 PROPOSAL）
  * 语义：AI 不能直接修改数据——propose_* 仅产出提案（tool_result 只有 proposal_id + 一句话摘要，
  * 不含预览细节，2026-08 修订；完整预览经 SSE proposal 事件推送 GUI）；用户确认后由 S7.5 路由
- * 快照重校验并调用 S6.7 执行工具落库。 */
+ * 快照重校验并调用 S6.7 执行工具落库。*/
 const proposalToolDefs: ToolDefinition[] = [
   {
     name: "propose_create_entity",
@@ -406,7 +406,7 @@ const proposalToolDefs: ToolDefinition[] = [
     name: "propose_move_node",
     description:
       "移动大纲节点提案：node_id 移到 parent_id 下的 order 位置（0 起计数）。" +
-      "仅生成提案，需用户确认后生效；目标父层级非法（严格三层，）、" +
+      "仅生成提案，需用户确认后生效；目标父层级非法（严格三层）、" +
       "节点或父不存在/已软删返回错误。",
     argsSchema: proposeMoveNodeArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,
@@ -486,7 +486,7 @@ const proposalToolDefs: ToolDefinition[] = [
   {
     name: "propose_create_reference",
     description:
-      "创建参考资料提案（）：向用户提议把读到/总结的素材、灵感或写作要点保存为参考资料（外部素材/灵感笔记，" +
+      "创建参考资料提案：向用户提议把读到/总结的素材、灵感或写作要点保存为参考资料（外部素材/灵感笔记，" +
       "非本书正文）。name 标题必填，type 分类可选（自由文本，建议沿用项目内已有分类，缺省 material），content 全文长文本，source 来源（URL/书名/作者）可选，tags 标签数组可选。" +
       "仅生成提案（返回 proposal_id + 一句话摘要），需用户在界面确认后才写入——请勿重复提案或视为已保存。",
     argsSchema: proposeCreateReferenceArgsSchema,

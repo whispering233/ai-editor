@@ -1,13 +1,13 @@
-// 设置页「自动备份」区（B2 + B2.5 + B2.6 ；「自动备份」区）
+// 设置页「自动备份」区（B2 + B2.5 + B2.6；「自动备份」区）
 // 交互（「关键交互」+ 任务卡 B2.4/B2.5/B2.6）：
 // - 频率下拉：选择即保存 PUT /project/config { backup_frequency_minutes }（null = 关闭，
 // 仅枚举 5/10/15/30/60）；载入用 config.backupFrequencyMinutes（缺省 10 / null → 关闭选中）
 // - [备份名称（可选）输入框] + [立即备份]：POST /project/backup（带 name）→
 // 清空输入 + 刷新列表 + toast「已备份」；失败 toast（磁盘错误透传 message）
 // - 历史备份列表：GET /project/backups → 行 = 时间（当年 MM-DD HH:mm:ss / 跨年 YY-MM-DD
-// HH:mm:ss， 补秒）+ 类型标签（自动=中性徽标 / 手动=强调徽标）+ 自定义
+// HH:mm:ss，补秒）+ 类型标签（自动=中性徽标 / 手动=强调徽标）+ 自定义
 // 名称（如有）+ 大小（KB/MB 人类可读）+ [重命名] [加载]
-// - [重命名]（ 行内编辑，无 Dialog）：铅笔按钮 → 该行切编辑态（行内 input 预填当前
+// - [重命名]（行内编辑，无 Dialog）：铅笔按钮 → 该行切编辑态（行内 input 预填当前
 // 名称 + 确认/取消按钮）；Enter/确认提交 POST /project/backup/rename（空输入 = 清除名称段）、
 // Esc/失焦取消、输入未变更不发请求（幂等保护）；400/404 行内错误提示并保持编辑态，成功
 // toast「已重命名」+ 刷新列表
@@ -16,7 +16,7 @@
 // （chat store 订阅仅响应 config.id 变化，restore 保留 id → 手动 clearSessions + loadSessions）；
 // 409 SCHEMA_VERSION_MISMATCH（备份来自更高版本）→ ConfirmDialog 内阻断提示（透传服务端 message）
 // - 空态：「暂无备份，自动备份将在数据变更后按频率生成」；无项目打开 → 整区禁用 + 引导文案
-// 风格约束：token 类（bg-muted/border-border/text-muted-foreground 等），禁硬编码色类（）
+// 风格约束：token 类（bg-muted/border-border/text-muted-foreground 等），禁硬编码色类
 import { useEffect, useRef, useState } from "react";
 import { Button, Input, Select, Skeleton, Tag, Typography } from "antd";
 import { CheckOutlined, CloseOutlined, EditOutlined } from "@ant-design/icons";
@@ -288,7 +288,7 @@ export function BackupSection() {
           <p className="mb-1 text-xs font-semibold text-muted-foreground">历史备份</p>
           <div className="overflow-hidden rounded-lg border border-border">
             {backupsLoading && backups === null ? (
-              /* 首载骨架（重载不闪骨架：条件含 backups === null，） */
+              /* 首载骨架（重载不闪骨架：条件含 backups === null） */
               <div className="p-2">
                 <Skeleton active title={false} paragraph={{ rows: 2 }} />
               </div>

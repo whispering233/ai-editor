@@ -1,4 +1,4 @@
-// G2 提案类工具测试：时间轴时间点重排（propose_reorder_timepoints， G2 修订，
+// G2 提案类工具测试：时间轴时间点重排（propose_reorder_timepoints，G2 修订，
 // 取代 F9 的 propose_reorder_events——事件不再带 time_label，语义序载体变为时间点实体）
 // 覆盖：tool_result 仅 { proposal_id(prop_ 前缀), summary } 无预览细节（2026-08 修订）/
 // **不落盘**（调用后时间点序零变化——与 S6.7 reorder_timepoints 对比的核心差异）/
@@ -49,7 +49,7 @@ function makeCtx(): ToolContext {
 }
 
 describe("propose_reorder_timepoints build", () => {
-  it("完整提案结构：type/args/references 全量快照（每时间点自身 updated_at，）/summary/preview.changes", () => {
+  it("完整提案结构：type/args/references 全量快照（每时间点自身 updated_at）/summary/preview.changes", () => {
     const ids = seedTimepoints(["少年时", "玉佩来历揭开", "第二次交手", "大婚之夜"]);
     const newOrder = [ids[0], ids[2], ids[1], ids[3]]; // 少年时 → 交手 → 玉佩 → 大婚
     const proposal = buildProposeReorderTimepoints(makeCtx(), { timepoint_ids: newOrder });
@@ -110,7 +110,7 @@ describe("propose_reorder_timepoints build", () => {
     );
   });
 
-  it("软删时间点不参与集合（）：新序必须剔除软删时间点，否则抛错", () => {
+  it("软删时间点不参与集合：新序必须剔除软删时间点，否则抛错", () => {
     const ids = seedTimepoints(["拂晓", "正午", "黄昏"]);
     softDeleteEntity(db, ids[1], T0);
  // 新序仍含软删时间点 → 该 id 不在当前集合（多余），且缺一个未软删时间点（缺失）
@@ -144,7 +144,7 @@ describe("propose_reorder_timepoints run", () => {
   });
 });
 
-describe("signal aborted（）", () => {
+describe("signal aborted", () => {
   it("signal 已中止时抛 AbortedError", () => {
     const controller = new AbortController();
     controller.abort();

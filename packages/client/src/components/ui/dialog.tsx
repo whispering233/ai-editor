@@ -1,4 +1,4 @@
-// 受控模态对话框（批次十七 3-7 自绘换芯：Base UI Dialog → createPortal 原生实现）
+// 受控模态对话框（自绘换芯：Base UI Dialog → createPortal 原生实现）
 // API 面不变：<Dialog open onOpenChange> <DialogContent …> <DialogHeader/> <DialogTitle/>
 // <DialogDescription/> … <DialogFooter/> </DialogContent> </Dialog>
 // 行为：Esc 关闭 / 遮罩点击关闭 / body 滚动锁定 / aria-modal 语义；关闭按钮可选（showCloseButton）

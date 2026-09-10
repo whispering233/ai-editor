@@ -72,7 +72,7 @@ function allUpdatedAt(tree: OutlineFileTree): Record<string, string> {
 }
 
 describe("readOutlineFile", () => {
-  it("文件不存在返回最小空树（schema_version 取当前常量，）", () => {
+  it("文件不存在返回最小空树（schema_version 取当前常量）", () => {
     const tree = readOutlineFile(dir);
     expect(tree).toEqual({ id: "root", type: "root", schema_version: SCHEMA_VERSION, children: [] });
   });
@@ -139,7 +139,7 @@ describe("touchOutlineNode（版本戳统一更新）", () => {
   });
 });
 
-describe("updateOutlineNode（字段更新 + 版本戳统一更新，）", () => {
+describe("updateOutlineNode（字段更新 + 版本戳统一更新）", () => {
   it("title/summary 更新且 updated_at 统一更新，其余节点不变", () => {
     const tree = makeTree();
     const before = allUpdatedAt(tree);

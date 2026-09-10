@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 // @whispering233/ai-editor-server 入口（T6.1 服务骨架）
 //
-// 职责（ 第 307-336 行「构建与部署」）：
+// 职责（第 307-336 行「构建与部署」）：
 // - startServer(projectRoot, opts?)：检测/初始化项目→ 装配 Hono（错误中间件 +
 // 来源校验 + 项目上下文 + /api/v1/health 探活）→ 端口策略监听（dev 被占报错 / 生产 +1）→
 // 可选打开浏览器（127.0.0.1，禁 localhost）
-// - SPA 静态托管：client/dist 静态文件 + 非 /api GET fallback 到 index.html（ 单进程架构）
+// - SPA 静态托管：client/dist 静态文件 + 非 /api GET fallback 到 index.html（单进程架构）
 // - 直接执行（node packages/server/dist/index.js [projectRoot]）时自动启动；业务路由（routes/）
 // 留到切片 1 挂载（结构预留：health 旁并列注册即可）
 // - bin 入口（打包安装）：package.json "bin": {"ai-editor": "dist/index.js"}——
@@ -74,7 +74,7 @@ export interface StartServerOptions {
   port?: number;
  /**
  * dev 态：端口被占直接报错（Vite proxy 写死 3456，自动 +1 会造成 proxy 与实际监听不一致，
- * ）；默认取 NODE_ENV === "development"
+ *）；默认取 NODE_ENV === "development"
  */
   dev?: boolean;
  /** 启动后打开浏览器（默认非 dev 态开启；测试传 false） */
@@ -90,7 +90,7 @@ export interface ServerHandle {
   port: number;
  /** 启动时检测到的项目（目录含 project.json）；null = 待命（前端引导 create/open） */
   project: ProjectContext | null;
- /** 关闭服务并释放数据库连接（） */
+ /** 关闭服务并释放数据库连接 */
   close: () => Promise<void>;
 }
 
@@ -159,7 +159,7 @@ export async function startServer(projectRoot: string, options: StartServerOptio
  // NO_PROJECT_OPEN，前端引导「新建/打开项目」（client store loadConfig 已处理该错误码）
   const project = detectProject(root);
   if (project !== null) {
-    setCurrentProject(project); // 启动即打开（ 部署场景）；null 则保持待命
+    setCurrentProject(project); // 启动即打开（部署场景）；null 则保持待命
  // S4.2 启动一致性校验：以大纲节点软删为准补标 DB 关联记录
  //（先 DB 后 JSON 崩溃窗口的幽灵形态兜底，幂等；无软删节点不输出日志）
     logSoftDeleteReconcile(reconcileSoftDelete(project));
@@ -212,7 +212,7 @@ export async function startServer(projectRoot: string, options: StartServerOptio
  // Delta 路由（S5.3）：追加 / 按节点查询 / compute 状态计算
   app.route("/api/v1/delta", deltaRoutes);
 
- // 对话路由（U3）：会话列表 / 消息历史（ 按项目隔离；POST SSE 端点属后续切片）
+ // 对话路由（U3）：会话列表 / 消息历史（按项目隔离；POST SSE 端点属后续切片）
   app.route("/api/v1/chat", chatRoutes);
 
  // 提案路由（S7.5）：confirm/reject（仅内存提案 + 快照重校验 + 项目绑定）
@@ -344,7 +344,7 @@ const isDirectRun =
 if (isDirectRun) {
   const projectRoot = process.argv[2] ?? process.cwd();
   const dev = process.env.NODE_ENV === "development";
- // AI_EDITOR_PORT 环境变量可覆盖默认端口（ 端口策略；测试/多实例场景用，
+ // AI_EDITOR_PORT 环境变量可覆盖默认端口（端口策略；测试/多实例场景用，
  // 如打包安装冒烟与 dev server 并存时指定独立端口）；非法值（NaN/越界）回退默认 3456
   const port = parsePortEnv(process.env.AI_EDITOR_PORT);
   const handle = await startServer(projectRoot, { dev, ...(port !== undefined ? { port } : {}) });

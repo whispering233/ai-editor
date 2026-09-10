@@ -1,6 +1,6 @@
 // 应用外壳（§2）：三栏装配——左栏 Sidebar + 中栏 MainPanel + 右栏 ChatPanel
 // F7 修订（2026-08 用户反馈）：桌面态（≥1024px）三栏宽度可拖拽（像素）+ 左/右栏可收起/展开，
-// 宽度与收起态 localStorage 持久化（hooks/use-panels， 同哲学——纯展示层不进数据文件）；
+// 宽度与收起态 localStorage 持久化（hooks/use-panels，同哲学——纯展示层不进数据文件）；
 // 装配顺序 Sidebar（或收起窄条）→ 拖拽手柄 → MainPanel（flex-1 弹性吸收剩余空间）→ 拖拽手柄 →
 // ChatPanel（或收起窄条）；收起态下手柄隐藏/禁用（拖拽与收起互斥）。
 // <1024px 小屏不渲染手柄/收起条，三栏回退默认百分比类（右栏抽屉行为不变，开关在 InfoBar 右侧，

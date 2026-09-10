@@ -32,7 +32,7 @@ export function formatDeltaValue(v: unknown): string {
 }
 
 /**
- * 单条 change 的紧凑摘要（op/field/from→to 语义，）：
+ * 单条 change 的紧凑摘要（op/field/from→to 语义）：
  * set → `field = to`；update → `field from → to`；add → `field +value`；remove → `field -value`
  */
 export function describeChange(c: DeltaChange): string {

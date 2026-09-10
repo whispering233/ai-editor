@@ -92,7 +92,7 @@ describe("reorder_timepoints", () => {
     expect(raw.every((r) => r.updated_at === T0)).toBe(true);
   });
 
-  it("软删时间点不参与集合（）：新序含软删时间点 → 抛错；剔除后正常", () => {
+  it("软删时间点不参与集合：新序含软删时间点 → 抛错；剔除后正常", () => {
     const ids = seedTimepoints(["拂晓", "正午", "黄昏"]);
     softDeleteEntity(db, ids[1], T0);
     expect(() => executeReorderTimepoints(makeCtx(), makeProposal("propose_reorder_timepoints", { timepoint_ids: ids }))).toThrow(

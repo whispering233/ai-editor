@@ -6,7 +6,7 @@
 // **不落盘、不写任何数据**（与 S6.7 advance_hook/resolve_hook/abandon_hook 复合写对比的核心差异）。
 //
 // 生成时校验：
-// - 伏笔即 type=hook 的实体（：用户手动创建或 AI 提案创建）——requireHook 校验
+// - 伏笔即 type=hook 的实体（用户手动创建或 AI 提案创建）——requireHook 校验
 // 存在、未软删且类型一致，采集实体自身 updated_at 快照
 // - 推进/回收的节点（node_id）与埋设节点（plant_at_node_id）存在且未软删——
 // 节点级 updated_at 快照

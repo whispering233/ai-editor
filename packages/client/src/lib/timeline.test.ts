@@ -1,4 +1,4 @@
-// lib/timeline 纯函数测试（C3，；G2.3 修订）
+// lib/timeline 纯函数测试（C3；G2.3 修订）
 // 覆盖：拖拽插入位计算（eventDropOrder，双轨共用）、G2 双实体模型（buildTimelineModel——
 // 时间点组块 + 事件挂载 + 未挂载兜底区）、事件拖入组块 order（eventOrderIntoGroup）、
 // 标签收集/筛选/解析、事件表单共享函数（eventFormFromDetail / buildEventDetailPatch——

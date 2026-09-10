@@ -1,4 +1,4 @@
-// 页面标题薄壳（批次十九 T2）：全站页面级标题的唯一实现（替换手写 <h1> 与裸 Typography.Title level={4}）。
+// 页面标题薄壳（T2）：全站页面级标题的唯一实现（替换手写 <h1> 与裸 Typography.Title level={4}）。
 // 规格 = DESIGN.md §Typography `page-title`（20px / 600 / 行高 1.4）= antd `Typography.Title level={4}`
 // （antd v6 派生值：fontSizeHeading4 20px、lineHeightHeading4 28px、字重 = fontWeightStrong 600，与文档同值）。
 // ⚠ 标题下边距归零不在本壳内联处理：由 antd 组件 token `Typography.titleMarginBottom: 0` 统一生效

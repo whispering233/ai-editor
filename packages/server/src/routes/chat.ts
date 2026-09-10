@@ -8,7 +8,7 @@
 // - 未配置 DeepSeek key → 400 LLM_API_KEY_MISSING（同样在开流之前，JSON）
 // - session_id 提供 → 按项目加载历史重建 SessionState（跨项目 session_id 加载为空数组——
 // 与 GET /messages 的「不泄露存在性」语义一致，新消息按当前项目写入）
-// - session_id 缺省 → generateRuntimeId("session") 新建 sess_ 会话（ id 约定）
+// - session_id 缺省 → generateRuntimeId("session") 新建 sess_ 会话（id 约定）
 //
 // 可测试性：路由经 createChatRoutes(deps) 工厂构造——测试注入 mock produce/dispatcher/心跳/
 // 时间/提案仓，避免真实 DeepSeek 调用与全局单例污染；index.ts 挂载默认实例 chatRoutes。
@@ -109,7 +109,7 @@ function createRealProduce(
   return (messages: LLMMessage[], signal?: AbortSignalLike, onEvent?: Parameters<RunAgentDeps["produce"]>[2]) =>
  // debugStream 显式传布尔（含 false）——stream 类别关时压过 env，保证配置文件类别隔离语义
  // reasoning（思考强度）：off 不传（模型默认推理），low/medium/high 传 pi-ai 统一接口
- // provider（批次十六）：模型只在 provider 目录内解析（llm 层兜底）
+ // provider：模型只在 provider 目录内解析（llm 层兜底）
     chatStream({ apiKey, provider, model, messages, tools, signal, onEvent, debugStream, reasoning: thinking });
 }
 
@@ -173,7 +173,7 @@ export interface ChatRouteDeps {
   dispatcher?: ToolDispatcher;
  /** 提案仓（缺省 defaultProposalStore 单例——与 S7.5 confirm/reject 同仓；测试注入独立实例隔离） */
   store?: ProposalStore;
- /** 心跳间隔覆盖 ms（缺省 15-30s 随机，；测试注入毫秒级） */
+ /** 心跳间隔覆盖 ms（缺省 15-30s 随机；测试注入毫秒级） */
   heartbeat?: { minMs: number; maxMs: number };
  /** 时间注入（缺省 db nowIso——应用层写 ISO 8601 约定） */
   now?: () => string;
@@ -190,7 +190,7 @@ export interface ChatRouteDeps {
 // ============ 聚焦上下文拼装（S7.2 输入形态） ============
 
 /**
- * 聚焦上下文文本（ 聚焦层）：focus_entity_* → getEntity 查询实体、focus_node_id →
+ * 聚焦上下文文本（聚焦层）：focus_entity_* → getEntity 查询实体、focus_node_id →
  * 大纲节点查询，拼成结构化文本注入 system 聚焦消息。
  * 查询不到（已软删/不存在/跨项目）→ 跳过该项（不报错）——聚焦缺失不阻断对话，属防御性
  * 正常路径（客户端可能携带过期 focus 发送）；两项皆无 → undefined（无聚焦注入）。
@@ -318,7 +318,7 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
     }
     const { message, session_id, context } = parsed.data;
 
- // ---- key/模型/工具解析（批次十六：按激活 provider 独立解析；测试注入 deps 时无需真实 key） ----
+ // ---- key/模型/工具解析（按激活 provider 独立解析；测试注入 deps 时无需真实 key） ----
  // provider：config.provider 未注册时缺省 deepseek（effectiveProvider 兜底）
     const provider = effectiveProvider();
     const envKey = deps.apiKey ?? effectiveApiKey(provider).key;
@@ -327,7 +327,7 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
       throw new HttpError(
         400,
         "LLM_API_KEY_MISSING",
-        `未配置 ${providerDisplayName(provider)} API key：请设置环境变量 ${envVar ?? provider} 或在设置页配置（）`,
+        `未配置 ${providerDisplayName(provider)} API key：请设置环境变量 ${envVar ?? provider} 或在设置页配置`,
       );
     }
  // 守卫收窄：deps.produce 注入（测试）时不使用 apiKey；否则 envKey 已保证非 null
@@ -342,7 +342,7 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
     return streamSSE(
       c,
       async (stream) => {
- // ---- 1. 会话解析（ 续聊重建） ----
+ // ---- 1. 会话解析（续聊重建） ----
         const sessionId = session_id ?? generateRuntimeId("session");
  // 跨项目 session_id：listMessageRows 按项目过滤 → 空历史（不泄露存在性，与 GET 一致）；
  // 后续写入按当前项目——单项目 MVP 下等价于「该项目内的续聊」，注释留扩展点
@@ -367,7 +367,7 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
         });
 
  // ---- 4. 取消信号 + 三路断开检测 ----
- // controller.signal 即 runAgent 的 signal（ 全链路第 0 层——四层穿透的
+ // controller.signal 即 runAgent 的 signal（全链路第 0 层——四层穿透的
  // fetch/读循环/工具执行/重试 sleep 已由 llm/tools/agent 各层承担，本卡链路总装）
         const controller = new AbortController();
         const cancel = () => {
@@ -385,9 +385,9 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
         }
  // ③ 心跳写失败：Hono write 吞错无法从 promise 观察写失败（stream.js write try/catch）
  // ——断连时 ① 已同步置位 controller.signal，心跳每次写后复查该旗标兜底
- // （时延 ≤ 心跳间隔， 三路并用中的最后一道防线）
+ // （时延 ≤ 心跳间隔，三路并用中的最后一道防线）
 
- // ---- 5. SSE 写帧器（ 事件；断连后不再写） ----
+ // ---- 5. SSE 写帧器（事件；断连后不再写） ----
         const writeEvent = async (event: string, data: unknown): Promise<void> => {
           if (controller.signal.aborted) return; // 已断开：写也失败，跳过
           try {
@@ -430,7 +430,7 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
               void writeEvent("tool_result", { tool: event.tool, result: event.result, id: event.id });
               return;
             case "proposal":
- // ：proposal 在对应 tool_result 之后、循环继续之前（runAgent 保证）
+ //：proposal 在对应 tool_result 之后、循环继续之前（runAgent 保证）
               void writeEvent("proposal", {
                 proposal_id: event.proposal.proposal_id,
                 type: event.proposal.type,

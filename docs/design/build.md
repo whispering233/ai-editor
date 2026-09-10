@@ -1,6 +1,6 @@
 # 运行、构建、打包与部署（build）
 
-> 本地开发/构建/发布手册。正式发布纪律（版本号同步、tag、CI 触发条件、npmjs 前置）以根 `AGENTS.md`「版本发布流程」为准；配置项总览见 `config.md`。
+> 本地开发/构建/发布手册（**正式发布纪律的单一事实来源**——版本号同步、tag、CI 触发条件、npmjs 前置与脚本约束）；配置项总览见 `config.md`。
 
 ## 运行环境
 
@@ -46,18 +46,23 @@ pnpm start:test     # 启动安装态服务
 pnpm test:packed    # 一键串联（backlog #8 打包安装测试：tarball 安装态冒烟）
 ```
 
-发布脚本链：`scripts/sync-version.mjs`（`pnpm release:version X.Y.Z` 同步版本）、`scripts/publish-packages.mjs`、`scripts/verify-installed.mjs`。
+发布脚本链：`scripts/sync-version.mjs`（`pnpm release:version X.Y.Z` 同步版本，只改 version 字段）、`scripts/publish-packages.mjs`、`scripts/verify-installed.mjs`（发布后冒烟：先 `npm view` 轮询 6 包 registry 可见，再 mkdtemp 安装并断言 version/`.bin/ai-editor`/短时启动输出「服务已启动」）。
 
 ## 正式发布链路
 
+**发布形态**：6 个包（shared/llm/db/tools/agent/server）全部发布 npm；用户只装 `@whispering233/ai-editor-server`（bin `ai-editor`），其余 5 个包由 npm 自动拉取；`client` 保持 private 不发布（SPA 构建产物随 server 包分发）。发布链路是本仓唯一的 CI（`.github/workflows/`，仅 push `v*` tag 触发）。
+
 ```
-pnpm release:version X.Y.Z（--dry-run 预览）
-git add -A && git commit -m "chore(release): bump version to vX.Y.Z"
-git tag -a vX.Y.Z -m "vX.Y.Z"（手动 annotated tag，轻量 tag 不触发发布规范）
-git push origin main && git push origin vX.Y.Z
+1. 更新根 CHANGELOG.md：把 Unreleased 条目搬运为新版本段（## [vX.Y.Z] - <日期>）
+2. pnpm release:version X.Y.Z（--dry-run 预览）——同步 6 个发布包 + client + 根 package.json 版本
+3. git add -A && git commit -m "chore(release): bump version to vX.Y.Z"
+4. git tag -a vX.Y.Z -m "vX.Y.Z"（手动 annotated tag，轻量 tag 不触发发布规范）
+5. git push origin main && git push origin vX.Y.Z
 → CI（.github/workflows/）：release.yml 从 CHANGELOG.md 按 tag 建 GitHub Release；
   publish.yml 6 包 npm 发布（OIDC Trusted Publisher）+ verify-installed 安装态冒烟
 ```
+
+脚本约束（`scripts/publish-packages.mjs`）：依赖序硬编码 shared → llm → db → tools → agent → server；每包先 `npm view <name>@<version>` 判重（**仅 E404 视为未发布**，网络错误直接中止）——重跑幂等安全；`npm pack` 后 `tar -xOf` 断言包内 package.json 无 `workspace:` 残留；`GITHUB_REF=refs/tags/vX.Y.Z` 时校验 tag 与包版本一致（不一致中止，防漂移误发）。本地验证链路（pack 安装冒烟）见上节 `pnpm pack:test` / `pnpm test:packed`。
 
 前置（一次性，npmjs）：账号开 2FA；6 个发布包各配置 Trusted Publisher（GitHub Actions / whispering233/ai-editor 仓库 / publish.yml 工作流）。**token 能力边界（2026-09-11 实测修订）**：本仓 granular token **可以执行 `npm deprecate`**（实测 10 条成功、无需 OTP）；被拒的是账号/组织/设置类操作（`npm profile get` → 403，npm 2026-07-31 起限制 bypass-2FA token 的设置类操作）。`unpublish` 未实测（不可逆）——官方文档仍列为需 2FA 的敏感操作，真要 unpublish 请备好 `--otp`。2027-01 起 bypass-2FA token 将失去直接发布能力，本仓已用 OIDC Trusted Publisher 不受影响。
 

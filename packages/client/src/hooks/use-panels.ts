@@ -1,8 +1,8 @@
-// 三栏工作台宽度与收起态 hook（ F7、注记）：
+// 三栏工作台宽度与收起态 hook（F7、注记）：
 // - 桌面态（≥1024px）左/右栏宽度为**像素**（可拖拽，覆盖默认 10%/40% 百分比）；中栏不可收起，
 // 保底最小宽度 MIDDLE_MIN_WIDTH（由 MainPanel minWidth 保证，flex 自然吸收窗口收缩）
 // - 左/右栏可收起（收起后由 AppShell 渲染 32px 窄条 + 展开按钮），收起态下拖拽手柄隐藏（互斥）
-// - 宽度与收起态持久化 localStorage（key ai-editor:panels， 同哲学：纯展示层不进数据文件）；
+// - 宽度与收起态持久化 localStorage（key ai-editor:panels，同哲学：纯展示层不进数据文件）；
 // 持久化 JSON 为扁平 { sidebarWidth, chatWidth, collapsedSidebar, collapsedChat }
 // （F7 规格建议的嵌套 collapsed 形状在实现时扁平化，与 parsePanelLayout 一致）
 // - 拖拽期间（moveResize）只更新内存态，结束（endResize）时一次写入 localStorage——
@@ -13,7 +13,7 @@ import { useMediaQuery } from "./use-media-query";
 
 /** 左栏宽度下限（Sidebar 内容紧凑布局 + truncate，160px 可用；仅约束拖拽与持久化值） */
 export const SIDEBAR_MIN_WIDTH = 160;
-/** 左栏宽度上限（与右栏 720 构成 2:3 对称设计区间 160:240 = 480:720， ） */
+/** 左栏宽度上限（与右栏 720 构成 2:3 对称设计区间 160:240 = 480:720） */
 export const SIDEBAR_MAX_WIDTH = 480;
 /** 右栏宽度下限（消息气泡 + 输入区可用） */
 export const CHAT_MIN_WIDTH = 240;
@@ -176,7 +176,7 @@ export function usePanels() {
       drag.side === "sidebar"
         ? [SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH]
         : [CHAT_MIN_WIDTH, CHAT_MAX_WIDTH];
- // 左柄（sidebar）= 左栏右边界：右拖变宽（+delta）；右柄（chat）= 右栏左边界：左拖变宽（delta）。
+ // 左柄（sidebar）= 左栏右边界：右拖变宽（delta）；右柄（chat）= 右栏左边界：左拖变宽（delta）。
  // 两者语义一致——手柄即栏边界，拖到哪边界到哪（边界跟随指针）
     const width = drag.side === "sidebar" ? drag.startWidth + delta : drag.startWidth - delta;
     return clampPanelWidth(width, min, max);

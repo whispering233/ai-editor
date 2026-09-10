@@ -81,7 +81,7 @@ interface Block {
 }
 
 /**
- * 把消息序列切成「配对块」（ 成对重组算法）：
+ * 把消息序列切成「配对块」（成对重组算法）：
  * - user 消息：独立块
  * - assistant 无 tool_calls：独立块
  * - assistant 带 tool_calls：全部调用有对应结果才成块（assistant + 结果按 tool_calls 顺序）；
@@ -130,7 +130,7 @@ export function createSession(): SessionState {
 }
 
 /**
- * 加载历史：持久化行 → 运行时消息（ 成对重组）。
+ * 加载历史：持久化行 → 运行时消息（成对重组）。
  * 输入 ChatMessageRow[]（由 server 层经 db 包查询得到），纯内存重组、无 I/O。
  * - 按 created_at 升序稳定排序（同时间戳保持输入序，与 db 查询口径一致）
  * - 孤儿半对整对丢弃（tool_call 已写 tool_result 未写，或反之）
@@ -200,7 +200,7 @@ export function trimSession(session: SessionState, maxCount: number): SessionSta
 }
 
 /**
- * 输出喂回模型的 messages 数组（ 末条约束的最终防御）。
+ * 输出喂回模型的 messages 数组（末条约束的最终防御）。
  * 末条**必须**是 user 或 tool 消息——assistant 结尾 DeepSeek 直接拒绝。
  * 修正策略（最简防御）：从尾部丢弃连续的 assistant 消息。tool 消息的配对 assistant
  * 位于其**前方**，丢弃尾部 assistant 不会产生新孤儿；带 tool_calls 的 assistant 若以
@@ -217,7 +217,7 @@ export function buildPayload(session: SessionState): LLMMessage[] {
 }
 
 /**
- * 重试 payload 复用（ 末条约束补充，S7.3 主循环消费）。
+ * 重试 payload 复用（末条约束补充，S7.3 主循环消费）。
  * 模型调用失败重试时**必须复用原请求的 messages 数组**——绝不追加失败轮的半条
  * assistant 产物（失败轮未产出完整回复，其内容不入重试序列）。
  * 本函数返回原数组的浅拷贝，防御调用方原地修改；调用方直接传原 payload 亦等效。

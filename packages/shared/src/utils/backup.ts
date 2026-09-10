@@ -17,9 +17,9 @@ import { MAX_BACKUP_NAME_LENGTH, type BackupKind } from "../constants/backup.js"
  * 无 → auto）、组 9 = 名称；名称部分 [^/\\]+ 拒绝路径分隔符（防路径穿越）；写入侧
  * sanitizeBackupName 严格限制字符集。
  * 已知歧义（接受）：旧「名称恰为单字母 a/m」的备份（如 <时间戳>-m.zip）按本正则
- * 解析为 kind 标记（auto/manual 无名称），不按旧带名称格式回退。 */
+ * 解析为 kind 标记（auto/manual 无名称），不按旧带名称格式回退。*/
 const BACKUP_FILE_NAME_PATTERN_MS = /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(\d{3})(?:-(a|m)(?:-([^/\\]+?))?)?\.zip$/;
-/** 旧带名称（无 kind 段， 格式）：<YYYYMMDD-HHmmssSSS>-<名称>.zip → 兼容为 manual + 名称 */
+/** 旧带名称（无 kind 段，格式）：<YYYYMMDD-HHmmssSSS>-<名称>.zip → 兼容为 manual + 名称 */
 const BACKUP_FILE_NAME_PATTERN_LEGACY_NAMED = /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(\d{3})-([^/\\]+?)\.zip$/;
 /** 旧格式（秒精度）：仅解析兼容 → kind=auto */
 const BACKUP_FILE_NAME_PATTERN_LEGACY = /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})\.zip$/;
@@ -38,7 +38,7 @@ export interface ParsedBackupFileName {
  * 解析备份文件名 → { time, kind, name? }。
  *
  * 格式不符返回 null：非时间戳形状（含路径分隔符、`..`、空串、非数字、多后缀等）一律
- * 拒绝——白名单校验语义（ restore 流程第 1 步）。兼容三类：
+ * 拒绝——白名单校验语义（restore 流程第 1 步）。兼容三类：
  * 新格式（带/不带 kind 段）/ 旧带名称无 kind 段 / 旧秒级格式（历史备份不迁移）。
  * 数字合法但日期不存在（如 20261301、2 月 30 日）同样返回 null：Date 构造会对
  * 越界值滚动进位（20261301 → 2027-01-01），回读比对不一致即拒绝。
@@ -84,7 +84,7 @@ export function parseBackupFileName(fileName: string): ParsedBackupFileName | nu
       result.name = m[9];
     }
   } else if (m[8] !== undefined) {
-    result.kind = "manual"; // 旧带名称（ 格式）→ 兼容为 manual
+    result.kind = "manual"; // 旧带名称（格式）→ 兼容为 manual
     result.name = m[8];
   }
   return result;
@@ -114,7 +114,7 @@ export function formatBackupFileName(date: Date, opts?: { kind?: BackupKind; nam
 /**
  * 备份名称规则：
  * - trim 后非空，长度 ≤ MAX_BACKUP_NAME_LENGTH（constants/backup.ts）
- * - 禁路径分隔符（/ \）与保留字符（ * ? " < > |）与控制字符
+ * - 禁路径分隔符（/ \）与保留字符（* ? " < > |）与控制字符
  * - 禁纯点（. / ..）
  * - 自动剥离尾部 .zip（用户输入习惯，如「定稿.zip」→「定稿」；**循环剥尽**——
  * 「定稿.zip.zip」→「定稿」，避免双 .zip 文件名，oracle 审核 P2-2）

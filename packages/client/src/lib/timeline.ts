@@ -1,8 +1,8 @@
-// 时间轴列表页 + 事件表单辅助纯函数（C3，；G2.3 修订：双实体模型）
+// 时间轴列表页 + 事件表单辅助纯函数（C3；G2.3 修订：双实体模型）
 // （G2 布局线框：时间点组块 + 事件挂载 + 未挂载兜底区、标签筛选、
 // 拖拽插入位、标签输入解析、详情页字段编辑）、（event/timepoint 列表 EntitySummary、
 // occurs_at 关系挂载，G2 修订）
-// G2 模型（ G2 修订）：时间轴数据项 = 时间点实体（timepoint，name = 时间标签文本）+ 事件实体
+// G2 模型（G2 修订）：时间轴数据项 = 时间点实体（timepoint，name = 时间标签文本）+ 事件实体
 // （event，经 occurs_at 挂载到时间点，1:n）；渲染 = buildTimelineModel 按 timepoint.sort_order
 // 组块序 + 事件 sort_order 组内投影 + 未挂载兜底区。F4 的 groupEventsByTimeLabel 分组（time_label
 // 派生组）已随 G2 废弃——分组 = 真实时间点实体 + occurs_at 关系。
@@ -47,7 +47,7 @@ export interface TimepointGroup {
   events: EntitySummary[];
 }
 
-/** 时间轴渲染模型（G2， 布局线框）：组块序 + 未挂载兜底区 */
+/** 时间轴渲染模型（G2，布局线框）：组块序 + 未挂载兜底区 */
 export interface TimelineModel {
  /** 时间点组块（按 timepoints 传入序 = timepoint.sort_order 线性投影；空组保留——时间点是真实实体） */
   groups: TimepointGroup[];
@@ -159,14 +159,14 @@ export function eventTagsOf(item: EntitySummary): string[] {
   return Array.isArray(tags) ? tags.filter((t): t is string => typeof t === "string") : [];
 }
 
-/** 事件的 description 摘要字段（非字符串防御 → 空串 = 行内不渲染描述区， 信息层级）；F6 行内描述展示 */
+/** 事件的 description 摘要字段（非字符串防御 → 空串 = 行内不渲染描述区，信息层级）；F6 行内描述展示 */
 export function eventDescription(item: EntitySummary): string {
   const desc = (item.summary as Record<string, unknown>).description;
   return typeof desc === "string" ? desc : "";
 }
 
 /**
- * 标签输入建议（F8， 标签输入建议节）：
+ * 标签输入建议（F8，标签输入建议节）：
  * 按输入**最后一段**（逗号/顿号/换行分隔，trim 后）匹配已存在标签：
  * - 最后一段为空（含整串为空/以分隔符结尾）→ 无建议（[]）——只在正在输入新标签时提示
  * - 包含匹配（大小写不敏感）；排除已选标签（前面各段 trim 后已含的）；去重（防御 allTags 重复）

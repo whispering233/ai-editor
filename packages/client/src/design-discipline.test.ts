@@ -1,5 +1,5 @@
-// 视觉纪律守卫（批次十九 T9）：用源码扫描把 DESIGN.md §Do's and Don'ts 的硬约束变成可执行断言。
-// 为什么需要它：批次十九收敛掉的四类「历史遗留」（双图标库 / 硬编码色 / `!` 前缀类 / 手写字号）
+// 视觉纪律守卫（T9）：用源码扫描把 DESIGN.md §Do's and Don'ts 的硬约束变成可执行断言。
+// 为什么需要它：收敛掉的四类「历史遗留」（双图标库 / 硬编码色 / `!` 前缀类 / 手写字号）
 // 都是"改完就没人拦得住"的类别；且 antd 样式是运行时注入的**无层 CSS**，会静默压掉 Tailwind 工具类
 // ——这种失效不报错、只在浏览器里肉眼可见，必须由测试兜住。
 //
@@ -79,7 +79,7 @@ function antdRootOverrides(source: string): boolean {
 /** antd v6 的 Button 只在 `color` 与 `variant` **同时**给出时才走 color/variant 分支
  * （antd/es/button/Button.js：`if (color && variant) ...`），否则静默回落 `['default','outlined']`
  * ——即 `variant="text"` 会渲染成带边框的 outlined 按钮（实测踩坑：同一角色图标按钮一半有边框
- * 一半没有）。要么写 `color="default" variant="text"`，要么用遗留 `type="text"`。 */
+ * 一半没有）。要么写 `color="default" variant="text"`，要么用遗留 `type="text"`。*/
 function buttonVariantWithoutColor(source: string): boolean {
   const tag = /<Button\b/g;
   let match = tag.exec(source);

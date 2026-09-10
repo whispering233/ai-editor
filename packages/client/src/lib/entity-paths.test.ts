@@ -1,4 +1,4 @@
-// 实体路由一级化映射单测（批次十七 1-1）：段名唯一事实源 lib/entity-paths.ts
+// 实体路由一级化映射单测：段名唯一事实源 lib/entity-paths.ts
 import { describe, expect, it } from "vitest";
 import { entityDetailPath, entityListHost, entityListPath } from "./entity-paths";
 

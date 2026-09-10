@@ -5,7 +5,7 @@
 // 会话倒序、无当前项目 409、跨项目取消息空数组（不泄露存在性）
 // S7.6 覆盖：请求校验（400/409 开流前 JSON）、事件序列（text→tool_call→tool_result→proposal→
 // text→done）、落库配对（user/assistant/tool + tool_calls/tool_call_id）、心跳 ping、
-// 断开全链路取消（produce signal abort + 未确认提案作废， B2 取舍 b）、
+// 断开全链路取消（produce signal abort + 未确认提案作废，B2 取舍 b）、
 // 会话重建（session_id 续聊：历史喂回 + 新消息落库 + done 回显）、新建会话 sess_ 前缀、
 // 模型最终失败 error 事件、zod→JSON Schema 转换（32 工具全量 + $schema 剥离）
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -87,7 +87,7 @@ function seedMessage(
   });
 }
 
-/** 构造一条最小 Proposal（S7.6 测试预置提案仓用； 结构） */
+/** 构造一条最小 Proposal（S7.6 测试预置提案仓用；结构） */
 function seedProposal(project: ProjectContext, proposalId = "prop_seed"): Proposal {
   return {
     proposal_id: proposalId,
@@ -184,7 +184,7 @@ beforeEach(() => {
   tmpRoot = mkdtempSync(join(tmpdir(), "ai-editor-chat-"));
   setCurrentProject(null);
   defaultProposalStore.clear(); // 提案仓为模块级单例（S7.4），测试间隔离（proposal.test.ts 同款）
- // 用户级配置与 key 隔离（ key 来源；settings.test.ts 同款临时 HOME 策略）——
+ // 用户级配置与 key 隔离（key 来源；settings.test.ts 同款临时 HOME 策略）——
  // 保证 effectiveApiKey 在测试内确定（无 key），S7.6 缺 key 用例可稳定复现
   originalHome = process.env.HOME;
   originalKey = process.env.DEEPSEEK_API_KEY;
@@ -254,7 +254,7 @@ describe("GET /chat/sessions 会话列表", () => {
     expect(data.sessions[1].messageCount).toBe(1);
   });
 
-  it("项目隔离：proj-a 的会话不出现在 proj-b（）", async () => {
+  it("项目隔离：proj-a 的会话不出现在 proj-b", async () => {
     const projectA = openProject();
     seedMessage(projectA, "sess-a", { role: "user", content: "仅属于 A", createdAt: "2026-08-01T10:00:00Z" });
 
@@ -364,7 +364,7 @@ describe("POST /chat 请求校验（开流前 JSON 错误，非 SSE）", () => {
     expect(body.error.fields).toContain("message");
   });
 
-  it("未配置 DeepSeek key → 400 LLM_API_KEY_MISSING（；隔离 HOME 无 key）", async () => {
+  it("未配置 DeepSeek key → 400 LLM_API_KEY_MISSING（隔离 HOME 无 key）", async () => {
     openProject();
     const res = await buildApp(createChatRoutes({})).request("/api/v1/chat", postChat({ message: "你好" }));
     expect(res.status).toBe(400);
@@ -372,7 +372,7 @@ describe("POST /chat 请求校验（开流前 JSON 错误，非 SSE）", () => {
   });
 });
 
-describe("POST /chat SSE 事件序列与落库（）", () => {
+describe("POST /chat SSE 事件序列与落库", () => {
   it("text → tool_call → tool_result → proposal → text → done 全序列 + 帧形态", async () => {
     const project = openProject();
  // mock produce：第 1 轮流式输出文本 + 一个工具调用；第 2 轮纯文本收尾
@@ -436,14 +436,14 @@ describe("POST /chat SSE 事件序列与落库（）", () => {
     });
     expect(frames[5].data).toEqual({ delta: "完成" });
     const done = frames[6].data as { session_id: string };
-    expect(done.session_id).toMatch(/^sess_/); // 新建会话（ id 约定）
+    expect(done.session_id).toMatch(/^sess_/); // 新建会话（id 约定）
 
  // 落库：user（路由层）+ assistant/tool（onMessages 层）配对字段
     const msgs = listMessages(project.db, done.session_id, project.config.id);
     expect(msgs.map((m) => m.role)).toEqual(["user", "assistant", "tool", "assistant"]);
     expect(msgs[0].content).toBe("你好");
     expect(msgs[1].content).toBe("第一段第二段"); // 流式 delta 累积
- // assistant.tool_calls 存 wire 形态（ 配对依赖 id ↔ tool.tool_call_id）
+ // assistant.tool_calls 存 wire 形态（配对依赖 id ↔ tool.tool_call_id）
     expect(msgs[1].toolCalls).toEqual([
       {
         id: "call_1",
@@ -477,12 +477,12 @@ describe("POST /chat SSE 事件序列与落库（）", () => {
     }));
     const res = await buildApp(createChatRoutes({ produce })).request("/api/v1/chat", postChat({ message: "你好" }));
     const frames = await readSseFrames(res);
- // error 后流立即关闭（）：只此一帧
+ // error 后流立即关闭：只此一帧
     expect(frames).toEqual([{ event: "error", data: { code: "insufficient_quota", message: "余额不足" } }]);
   });
 });
 
-describe("POST /chat 心跳与断开取消（）", () => {
+describe("POST /chat 心跳与断开取消", () => {
   it("心跳：随机间隔 ping（注入毫秒级）先于 done 到达", async () => {
     openProject();
     const produce = vi.fn<RunAgentDeps["produce"]>(async () => {
@@ -501,7 +501,7 @@ describe("POST /chat 心跳与断开取消（）", () => {
     expect(pingIdx).toBeLessThan(doneIdx);
   });
 
-  it("断开 → 全链路取消（produce 收到 abort）+ 未确认提案作废（B2 取舍 b，）", async () => {
+  it("断开 → 全链路取消（produce 收到 abort）+ 未确认提案作废（B2 取舍 b）", async () => {
     const project = openProject();
     defaultProposalStore.set(seedProposal(project)); // 预置本会话产生的未确认提案
     expect(defaultProposalStore.size()).toBe(1);
@@ -528,7 +528,7 @@ describe("POST /chat 心跳与断开取消（）", () => {
       await waitFor(() => attemptSignal !== null); // 等 runAgent 开始调用 produce
       expect(attemptSignal?.aborted).toBe(false);
       await reader.cancel(); // 模拟客户端断开：响应流 cancel → stream.onAbort → controller.abort()
-      await waitFor(() => attemptSignal?.aborted === true); // 取消信号穿透到 produce（ 四层之①）
+      await waitFor(() => attemptSignal?.aborted === true); // 取消信号穿透到 produce（四层之①）
     } finally {
       await reader.cancel().catch(() => {});
     }
@@ -539,7 +539,7 @@ describe("POST /chat 心跳与断开取消（）", () => {
   });
 });
 
-describe("POST /chat 会话重建（ 续聊）", () => {
+describe("POST /chat 会话重建（续聊）", () => {
   it("session_id 提供 → 历史加载喂回 produce + 新消息落库 + done 回显 session_id", async () => {
     const project = openProject();
     seedMessage(project, "sess-old", { role: "user", content: "旧消息一", createdAt: "2026-08-01T10:00:00Z" });
@@ -653,7 +653,7 @@ describe("zod → JSON Schema 转换（S7.6 决策点：zod 4 内置 toJSONSchem
     expect(js.$schema).toBeUndefined();
   });
 
-  it("registry 35 个 AUTO+PROPOSAL 工具全部可转换（执行类不注册不暴露，S6.7； +search_references/propose_create_reference）", () => {
+  it("registry 35 个 AUTO+PROPOSAL 工具全部可转换（执行类不注册不暴露，S6.7；+search_references/propose_create_reference）", () => {
     const defs = toLLMToolDefinitions(listTools());
     expect(defs.length).toBe(35);
     for (const d of defs) {

@@ -121,7 +121,7 @@ describe("search_entities", () => {
     expect(r3.items).toEqual([]);
   });
 
-  it("软删实体不可见（）", () => {
+  it("软删实体不可见", () => {
     const { charA } = seedSearch();
     softDeleteEntity(db, charA, T0);
     const result = runSearchEntities(makeCtx(), { type: "character", query: "阿" });
@@ -189,7 +189,7 @@ describe("get_entity_summary", () => {
     expect(result.topAbilities).toBeUndefined();
   });
 
-  it("setting：byTags（ K2：data.tags）；location：byType", () => {
+  it("setting：byTags（K2：data.tags）；location：byType", () => {
     createEntity(db, { type: "setting", name: "修真界", data: { tags: ["世界观"] } });
     createEntity(db, { type: "setting", name: "江湖", data: { tags: ["世界观"] } });
     createEntity(db, { type: "setting", name: "门派", data: { tags: ["组织"] } });

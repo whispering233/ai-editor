@@ -63,7 +63,7 @@ get_delta_history(target_type, target_id)
 get_entity_summary(type)
   → 指定类型实体的统计数据（总数、角色分布、能力分布等）
 
-// === 参考资料查询（批次九） ===
+// === 参考资料查询 ===
 search_references(query, type?, tags?)
   → 匹配的参考资料列表（标题 + 类型 + 标签 + 内容摘要截断 120 字）
   用途：AI 不知道书里有哪些参考资料时先搜索（标题+tags 关键词命中）再按需取全文
@@ -160,7 +160,7 @@ propose_create_reference(name, type, content, source?, tags?)
     缺省 material 写入侧兜底）；content 为全文长文本；tags 标签数组
   预览：标题 + 内容摘要 + 标签（提案仅内存 + 快照重校验）
   确认后：Executor 校验 references 存在性 + 快照 → create_entity(type='reference') 写入
-  AI 创建的条目归 **link 类**（批次十一：data.kind='link'，source → url；
+  AI 创建的条目归 **link 类**（data.kind='link'，source → url；
     无 URL 时 url 留空、content 存摘录）——AI 不直接落盘文件（文件写入走用户编辑器保存）；
     search_references / get_entity 详情全文照常（file 类经 content 镜像纯 DB 读取）
 ```

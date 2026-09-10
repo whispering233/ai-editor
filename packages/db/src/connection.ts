@@ -1,7 +1,7 @@
 // @whispering233/ai-editor-db 连接与事务管理（T2.1）
 //
 // better-sqlite3 为同步 API（架构选型：内嵌零配置、同步简单可靠，见 第 11 行）。
-// 持久化语义（ 第 51 行）：WAL 模式 + synchronous=FULL，写入即时落盘。
+// 持久化语义（第 51 行）：WAL 模式 + synchronous=FULL，写入即时落盘。
 
 import Database from "better-sqlite3";
 import { createTables } from "./schema.js";

@@ -1,4 +1,4 @@
-// 时间轴事件行（G2.3， G2 布局线框：组内事件堆叠；F5 时间标签样式已随 G2 移除——
+// 时间轴事件行（G2.3，G2 布局线框：组内事件堆叠；F5 时间标签样式已随 G2 移除——
 // 时间标签 = 组标题（时间点实体），行内不再展示；F6 行内描述展示保留；
 // 事件行对齐大纲交互模式——双击 = 详情（#/timeline/:id）、点击事件名 = 行内编辑
 // （Enter 确认 / Esc 取消 / 失焦保存）、移除「详情/编辑」按钮（只留删除；
@@ -7,7 +7,7 @@
 // 行 = 小圆点 + 内容卡（事件名 → tags → 「N 节点」→ 直接操作按钮 + 描述区）。
 // 拖拽协调在容器（components/timeline/Timeline.tsx）——本行只负责 draggable 挂载与回调转发：
 // 行内按钮 draggable={false} 防拖（操作按钮）；opacity-50 拖拽态；插入指示线（S13 模式）。
-// 拖拽柄视觉已移除（批次八 O3）：draggable 在行根 + 悬停 title 提示，无 GripVertical 图标。
+// 拖拽柄视觉已移除（O3）：draggable 在行根 + 悬停 title 提示，无 GripVertical 图标。
 // 名称行内编辑：点击事件名进入（span → 输入框），Enter 提交 / Esc 取消 / 失焦保存；
 // saving 守卫防 Enter+blur 双提交（悲观提交：提交期间保持编辑态，成功后退出——同大纲 busy 守卫语义）。
 // 描述区（F6）：事件名行下方全宽换行，`text-sm text-muted-foreground` 次要层级（低于事件名）；
@@ -164,12 +164,12 @@ export function TimelineEvent({
           className="mx-auto mt-[16px] block size-2 rounded-full bg-primary/60"
         />
       </div>
-      {/* 内容卡（ G2 事件行：从左到右 事件名 → tags；右侧：N 节点 + 直接操作按钮；
+      {/* 内容卡（G2 事件行：从左到右 事件名 → tags；右侧：N 节点 + 直接操作按钮；
           描述区 F6 在事件名行下方全宽换行，不挤占行内元素） */}
       <div className="min-w-0 flex-1 rounded-md border border-border bg-card px-3 py-2">
         <div className="flex items-center gap-2">
           {/* 事件名：点击行内编辑（Enter 提交 / Esc 取消 / 失焦保存）；stopPropagation 隔离——
-              单击标题 = 编辑而非其他行为（ 冲突设计） */}
+              单击标题 = 编辑而非其他行为（冲突设计） */}
           {editing ? (
             <Input
               size="small"

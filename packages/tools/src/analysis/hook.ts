@@ -1,4 +1,4 @@
-// 分析类工具：伏笔分析（S6.5，「工具扩展」+ ）
+// 分析类工具：伏笔分析（S6.5，「工具扩展」+）
 // 5 个工具：analyze_hook_health / trace_hook_lifecycle / suggest_hook_payoff /
 // find_hook_opportunities / detect_hook_conflicts
 //
@@ -55,7 +55,7 @@ export interface HookRecord {
 
 /**
  * 收集全部非软删伏笔及其生命周期关系（一次 listEntities + 两次 listRelations 查询层调用）。
- * status 缺失的 hook 视为 planted（ 生命周期：创建即埋设）——hookStatuses 供 blocked 判定。
+ * status 缺失的 hook 视为 planted（生命周期：创建即埋设）——hookStatuses 供 blocked 判定。
  */
 function collectHooks(ctx: ToolContext, signal?: AbortSignal): { hooks: Map<string, HookRecord>; hookStatuses: Map<string, string> } {
   const hooks = new Map<string, HookRecord>();
@@ -162,7 +162,7 @@ export function computeHookHealth(
   const overdue = age !== null ? age > halfLife * 2 : null;
 
  // ready_to_resolve：expected_resolve_node_id 已设置 → current >= 节点章节序；否则未计算（不猜测）。
- // 指向软删/不存在的节点 → null（ 可见性：软删节点不可作为兑现依据——
+ // 指向软删/不存在的节点 → null（可见性：软删节点不可作为兑现依据——
  // 与 consistency R4「兑现节点软删报 error」同口径，指标不基于不可见节点计算）
   let readyToResolve: boolean | null = null;
   const expectedNodeId = rec.entity.data.expected_resolve_node_id;
@@ -196,9 +196,9 @@ export function computeHookHealth(
 
 // ============ analyze_hook_health（伏笔健康总览） ============
 
-/** 伏笔健康总览结果（ analyze_hook_health 返回结构，字段名逐字对齐 snake_case） */
+/** 伏笔健康总览结果（analyze_hook_health 返回结构，字段名逐字对齐 snake_case） */
 export interface HookHealthOverview {
- /** 当前章节（current_position 口径，；未设置时退化树末章） */
+ /** 当前章节（current_position 口径；未设置时退化树末章） */
   current_chapter: number | null;
  /** 活跃伏笔数（status ∈ planted/progressing） */
   active_count: number;
@@ -219,7 +219,7 @@ function isActive(hookStatuses: ReadonlyMap<string, string>, hookId: string): bo
 }
 
 /**
- * 伏笔健康总览（ analyze_hook_health，无参全项目扫描）。
+ * 伏笔健康总览（analyze_hook_health，无参全项目扫描）。
  * 仅统计活跃伏笔（planted/progressing）；_health 为运行时计算，不写回 data。
  * 输出按 hook id 升序（稳定排序）；signal：循环中检查。
  */
@@ -264,7 +264,7 @@ export function runAnalyzeHookHealth(ctx: ToolContext, _args: AnalyzeHookHealthA
 
 // ============ trace_hook_lifecycle（生命周期追踪） ============
 
-/** 生命周期节点事件（ trace_hook_lifecycle） */
+/** 生命周期节点事件（trace_hook_lifecycle） */
 export interface HookNodeEvent {
   nodeId: string;
   nodeName: string;
@@ -272,7 +272,7 @@ export interface HookNodeEvent {
   chapter: number | null;
 }
 
-/** 生命周期追踪结果（ trace_hook_lifecycle(hook_id) 返回结构，字段名逐字对齐 snake_case） */
+/** 生命周期追踪结果（trace_hook_lifecycle(hook_id) 返回结构，字段名逐字对齐 snake_case） */
 export interface HookLifecycle {
   hook: EntityRow;
   plant: HookNodeEvent | null;
@@ -291,7 +291,7 @@ function toNodeEvent(tree: ReturnType<typeof readOutlineFile>, chapterIndex: Cha
 }
 
 /**
- * 生命周期追踪（ trace_hook_lifecycle(hook_id)）。
+ * 生命周期追踪（trace_hook_lifecycle(hook_id)）。
  * hook 不存在/已软删 → null（查询无结果）；plant 取最早埋设节点、resolve 取最新回收节点；
  * dormancy 口径与 _health 一致（advances 最新，无 advances → 埋设章）。
  */
@@ -313,7 +313,7 @@ export function runTraceHookLifecycle(ctx: ToolContext, args: TraceHookLifecycle
   const resolve = resolves.length > 0 ? [...resolves].sort(byChapter).reverse()[0] : null;
   advances.sort(byChapter);
 
- // dormancy：current - 最后活跃章（advances 最新或埋设章； 公式仅计 advances——
+ // dormancy：current - 最后活跃章（advances 最新或埋设章；公式仅计 advances——
  // resolve 不参与，回收后休眠语义由 status=resolved 表达）
   const lastActive = advances.length > 0 ? advances[advances.length - 1].chapter : plant?.chapter ?? null;
   const dormancy =
@@ -331,14 +331,14 @@ export function runTraceHookLifecycle(ctx: ToolContext, args: TraceHookLifecycle
 
 // ============ suggest_hook_payoff（回收建议） ============
 
-/** 回收建议结果（ suggest_hook_payoff(hook_id) 返回结构） */
+/** 回收建议结果（suggest_hook_payoff(hook_id) 返回结构） */
 export interface HookPayoffSuggestion {
   at_node: string;
   reason: string;
 }
 
 /**
- * 回收建议（ suggest_hook_payoff(hook_id)）：
+ * 回收建议（suggest_hook_payoff(hook_id)）：
  * 候选 = 大纲中**当前章节之后**（含当前章）的场景节点（非软删），排除已回收节点；
  * 理想回收点 = 埋设章 + 半衰期（节奏匹配）；按与理想点距离升序取 top 3。
  * hook 不存在/已软删 → null；无埋设记录或大纲无候选场景 → 空建议。
@@ -393,14 +393,14 @@ export function runSuggestHookPayoff(ctx: ToolContext, args: SuggestHookPayoffAr
 
 // ============ find_hook_opportunities（埋设机会发现） ============
 
-/** 埋设机会结果（ find_hook_opportunities(outline_node_id) 返回结构） */
+/** 埋设机会结果（find_hook_opportunities(outline_node_id) 返回结构） */
 export interface HookOpportunity {
   category: string;
   reason: string;
 }
 
 /**
- * 埋设机会发现（ find_hook_opportunities(outline_node_id)）：
+ * 埋设机会发现（find_hook_opportunities(outline_node_id)）：
  * 基于节点叙事特征建议适合的伏笔类别（每类别至多一条，规则表驱动）：
  * - R1 无伏笔埋设（无 plants 关系）→ mystery（悬念/谜团）
  * - R2 角色在场 ≥ 2（appears_in 目标）→ relationship（人物关系）
@@ -446,7 +446,7 @@ export function runFindHookOpportunities(ctx: ToolContext, args: FindHookOpportu
 
 // ============ detect_hook_conflicts（伏笔矛盾检测） ============
 
-/** 伏笔矛盾结果（ detect_hook_conflicts() 返回结构） */
+/** 伏笔矛盾结果（detect_hook_conflicts() 返回结构） */
 export interface HookConflict {
   hook_a: string;
   hook_b: string;
@@ -455,7 +455,7 @@ export interface HookConflict {
 }
 
 /**
- * 伏笔矛盾检测（ detect_hook_conflicts，无参全项目扫描）：
+ * 伏笔矛盾检测（detect_hook_conflicts，无参全项目扫描）：
  * - R1 循环依赖（error）：A depends_on B 且 B depends_on A——永远无法同时回收
  * **限制（MVP）**：仅检测二元互依赖（A↔B）；三节点及以上长环零检出——依赖图按
  * depends_on 稀疏构建，长环罕见，需 DFS 找环（后续切片评估），此处明示不静默承诺

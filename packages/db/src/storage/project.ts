@@ -2,7 +2,7 @@
 //
 // id/name/language/prompt/schema_version/current_position/created_at/updated_at，
 // 文件写入走 原子写同款流程（第 186 行），DeepSeek key 绝不写入本文件。
-// （2026-08 批次十）： 项目规则文件读写也收敛于此（「」节）——
+// （2026-08）：项目规则文件读写也收敛于此——
 // 项目规则唯一事实源 = 项目目录 （取代 project.json `prompt` 字段，不再读写）。
 
 import { join } from "node:path";
@@ -58,7 +58,7 @@ function validateProjectFile(parsed: unknown): ProjectFileConfig {
 }
 
 /**
- * 原子写 project.json（ 同款流程：临时文件 + fsync + rename，）。
+ * 原子写 project.json（同款流程：临时文件 + fsync + rename）。
  * schema_version 随 config 原样写入——与 outline.json 同步写入是调用方职责。
  */
 export function writeProjectFile(dir: string, config: ProjectFileConfig): void {
@@ -82,7 +82,7 @@ export function readAgentsFile(dir: string): string | null {
 }
 
 /**
- * 原子写项目规则文件 （ 同款流程：临时文件 + fsync + rename）。
+ * 原子写项目规则文件 （同款流程：临时文件 + fsync + rename）。
  * 文件不存在时自动创建；内容**整体替换**（空串 = 清空规则，保留空文件不删除——exists 语义稳定）。
  *
  * @param dir 项目根目录

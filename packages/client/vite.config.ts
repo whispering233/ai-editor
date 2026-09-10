@@ -1,4 +1,4 @@
-// Vite 配置（：dev 态 Vite :5173，/api proxy → 127.0.0.1:3456）
+// Vite 配置（dev 态 Vite :5173，/api proxy → 127.0.0.1:3456）
 // 注意：
 // - proxy 目标用 127.0.0.1 而非 localhost（IPv6 优先系统上 localhost 可能解析为 ::1）
 // - 来源校验仅校验 host ∈ {127.0.0.1, localhost, ::1}、不校验端口，

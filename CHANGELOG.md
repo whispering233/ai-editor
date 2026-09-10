@@ -14,18 +14,18 @@
 
 ## [v0.0.29] - 2026-09-11
 
-> 批次二十（用户反馈九项 + 两条静默失效根因）+ 批次二十一（链式新建断链）。**纯前端，API/数据契约零改动**；新增 4 条源码守卫规则（累计 13 条）。
+> 用户反馈九项 + 静默失效根因 + 链式新建断链。**纯前端，API/数据契约零改动**；新增 4 条源码守卫规则（累计 13 条）。
 
 
 ### Fixed（两条静默失效根因——都是「测试全绿但像素全错」）
 
-- **语义色层整体失效（P0）**：antd v6 的 `cssVar` **从不把 `--ant-*` 注入 `:root`**，而是挂在组件级 class 作用域（`.css-var-<useId>`）；`index.css` 的 `:root { --primary: var(--ant-color-primary) }` 等映射因此全部解析为空——全站 Tailwind 语义色（`bg-card` / `border-border` / `text-muted-foreground` / `bg-primary` / hover 面 / chip 底色 / 拖拽指示线）静默透明（批次十七引入，本次才被发现）。修复 = `cssVar: { key: CSS_VAR_KEY }` 与 `index.html` 的 `<html class>` 同值，并在 `design-discipline.test.ts` 加 `cssvar-scope` 守卫锁死两处字面量
+- **语义色层整体失效（P0）**：antd v6 的 `cssVar` **从不把 `--ant-*` 注入 `:root`**，而是挂在组件级 class 作用域（`.css-var-<useId>`）；`index.css` 的 `:root { --primary: var(--ant-color-primary) }` 等映射因此全部解析为空——全站 Tailwind 语义色（`bg-card` / `border-border` / `text-muted-foreground` / `bg-primary` / hover 面 / chip 底色 / 拖拽指示线）静默透明（v0.0.26 引入，本次才被发现）。修复 = `cssVar: { key: CSS_VAR_KEY }` 与 `index.html` 的 `<html class>` 同值，并在 `design-discipline.test.ts` 加 `cssvar-scope` 守卫锁死两处字面量
 - **antd Button `variant` 静默回落**：v6 只在 `color` 与 `variant` **同时**给出时才走 color/variant 分支（`Button.js:91`），仓库 22 处 `variant="text"` 实际渲染成**带边框的 outlined 按钮**，与遗留 `type="text"` 的真 text 按钮混用（“图标按钮颜色不统一”的根因）；全仓统一为 `color="default" variant="text"` + 新增 `button-variant-color` 守卫
 - **右栏用户消息不可读**：user 气泡底色用 `colorPrimaryBg`，而主色 seed 是深墨 `#37352f`——antd 派生的 `colorPrimaryBg` 实测为 `#787771`（中灰），灰底压墨字对比度 ~1.9:1；改用 `colorFillTertiary`（= `surface-muted`，DESIGN.md 契约）+ `primary-bg-token` 守卫
 - **拖拽无落点指示**：大纲页插入线用 `bg-accent`（= `surface-muted`，白底对比度 ~1.06:1）且设定树目标行同为近白面——用户无法判断会插到哪里；统一 `DropIndicator`（primary 3px 实线 + 两端圆点）替换三处各自实现，拖拽目标/新建定位临时高亮改 `bg-primary/10` + `ring-primary/30`（覆盖 setting-tree/Outline/EntityList/TimelineGroup/Dashboard）
 - **时间轴按钮错位**：组标题行缺 `px-3`，其右侧按钮列与事件卡按钮列错开 12px
-- **页面标题缺失**：人物/设定/地点/关联四页在批次十八去二级 tab 时连标题一并删掉——补回（关联页标题原先还会错显“人物”）
-- **链式新建断链**（批次二十一）：设定树/大纲的就地新建提交后，新条目只拿到焦点与临时高亮、**没有进入选中态**，而「Enter 新建子级」的守卫要求「该行处于选中态」→ 第二次 Enter 静默无响应（用户反馈「新建→回车→再回车建子级」做不到；toast 不抢焦点，只是同时出现造成「被提示打断」的错觉）。修法：新条目进入「选中 + 聚焦」双态；设定树的选中态必须放在「新行已渲染并聚焦成功」的效应里（`reload()` 异步，提前设会被「选中失效清理」效应按旧树误判清零——实测踩坑）
+- **页面标题缺失**：人物/设定/地点/关联四页在去二级 tab 时连标题一并删掉——补回（关联页标题原先还会错显“人物”）
+- **链式新建断链**：设定树/大纲的就地新建提交后，新条目只拿到焦点与临时高亮、**没有进入选中态**，而「Enter 新建子级」的守卫要求「该行处于选中态」→ 第二次 Enter 静默无响应（用户反馈「新建→回车→再回车建子级」做不到；toast 不抢焦点，只是同时出现造成「被提示打断」的错觉）。修法：新条目进入「选中 + 聚焦」双态；设定树的选中态必须放在「新行已渲染并聚焦成功」的效应里（`reload()` 异步，提前设会被「选中失效清理」效应按旧树误判清零——实测踩坑）
 
 ### Added（标签 tint 系统 + 中栏页面头部统一）
 
@@ -36,12 +36,12 @@
 ### Changed
 
 - **视觉契约补登**：`DESIGN.md` 新增 tint 分配规则、`search-input`/`drag-indicator`/`icon-button` 统一约定与「拖拽目标行与临时高亮」prose 契约；标注 `chat-bubble-user` 禁用 `colorPrimaryBg`；§Iteration Guide 增「改完主题必看像素」闭环
-- 守卫测试新增 3 条源码规则：`cssvar-scope` / `button-variant-color` / `primary-bg-token`（均带自检样例），并给逐行规则加注释行豁免（注释里写禁用原因不应被误判）；批次二十一再加 `no-dynamic-class`（拼接类名不会被 Tailwind 生成）
-- **文档修正**：`README.md` 两处过时陈述（`lib/styles.ts` 的图标按钮常量已在 T6 删除、Prettier 配置并未接入强制流程）；`milestone.md` 补批次二十/二十一；`tasks.md` 清理已完成卡（改为「当前卡 + 历史批次摘要表」）
+- 守卫测试新增 3 条源码规则：`cssvar-scope` / `button-variant-color` / `primary-bg-token`（均带自检样例），并给逐行规则加注释行豁免（注释里写禁用原因不应被误判）；再加 `no-dynamic-class`（拼接类名不会被 Tailwind 生成）
+- **文档修正**：`README.md` 两处过时陈述（`lib/styles.ts` 的图标按钮常量已在 T6 删除、Prettier 配置并未接入强制流程）；`milestone.md` 补本版本条目；`tasks.md` 清理已完成卡（改为「当前卡 + 历史版本摘要表」）
 
 ## [v0.0.28] - 2026-09-11
 
-### Changed（批次十九：视觉语言统一——Notion 工作区暖灰 × antd 单一组件语言）
+### Changed（视觉语言统一——Notion 工作区暖灰 × antd 单一组件语言）
 
 - **视觉契约单点化**：新增 `docs/ui/DESIGN.md`（Google design.md 格式，`designmd lint` 0 error）——颜色/字体/四档字号/圆角/间距/组件外观 + antd seed 映射表 + 组件 token 覆盖表；`layout.md §7` 与 `architecture.md` 指向它，改色唯一入口 = `AntdProvider.tsx`
 - **主题 token 落地**：antd 默认蓝退役，改 Notion **工作区**暖灰（`colorPrimary`/`colorText` `#37352f` 暖炭墨、`colorBgLayout` `#f6f5f4`、描边三层 `#c8c4be`/`#e5e3df`/`#ede9e4`、`colorLink` `#0075de`）；浅/深各一套 seed（`theme.token` 显式值在算法派生后覆盖，必须分模式写）；组件 token 仅覆盖 Button/Menu/Table/Input/Select/Tag/Typography/Card 少数项；`controlOutlineWidth: 0` 关掉 selector 组件聚焦环（聚焦 = 1px 描边）
@@ -58,7 +58,7 @@
 
 ## [v0.0.27] - 2026-09-10
 
-### Added（批次十八：用户反馈七项修复与优化——中栏悬浮入口 / 快捷键 / 新建聚焦）
+### Added（用户反馈七项修复与优化——中栏悬浮入口 / 快捷键 / 新建聚焦）
 
 - **`Ctrl/Cmd + S` 保存快捷键**：`lib/save-shortcut.ts` 注册栈（后注册者优先，行内编辑优先于页面保存）——
   详情页表单（实体/大纲节点/时间轴事件/参考资料）注册页面级保存；伏笔编辑对话框与 5 处行内编辑
@@ -78,7 +78,7 @@
 - **右栏 focus 小条不再直显裸 `entity id`**：改走 `names/resolve`——解析中只显类型名、命中显
   「类型 名称」、失败才退 id；补 event/timepoint/reference 类型中文映射（右栏唯一遗漏点，工具调用行/
   提案卡此前已解析）
-- **实体列表页移除批次十七一级化残留**：「实体」标题与类型 Segmented tab（类型切换归左栏 NavRail），
+- **实体列表页移除一级化残留**：「实体」标题与类型 Segmented tab（类型切换归左栏 NavRail），
   设定/关联页因去标题产生的空分隔条一并移除
 - **设定页新建设定后焦点不落到新条目**（并入「新建即聚焦」，设定树/实体列表/大纲/时间轴同款）
 - **设定树拖拽插入线不明显**：`h-0.5` 细线 → 3px 主线 + 两端圆点（手动模式同级重排落点更醒目）
@@ -93,7 +93,7 @@
 
 ## [v0.0.26] - 2026-09-06
 
-### Changed（批次十七：antd 全站迁移 + 布局重构 + 会话渲染重做，）
+### Changed（antd 全站迁移 + 布局重构 + 会话渲染重做）
 
 - **前端组件基座换 antd v6**：ConfigProvider（zhCN + 默认色板浅/深双算法 + cssVar）为根接线；
   `@ant-design/x` 会话组件族（Bubble/Sender）+ `@ant-design/x-markdown` 流式正文接入；
@@ -125,7 +125,7 @@
 
 ### Added
 
-- **批次十六：多 provider 接入——OpenCode Go 订阅**：全链路支持第二家 LLM 提供商（pi-ai `opencode-go` provider，15 模型：qwen3.7-max / glm-5.x / kimi-k2.6+ / minimax-m3 / grok-4.5 等，含撞名 deepseek-v4-flash/pro）：
+- **多 provider 接入——OpenCode Go 订阅**：全链路支持第二家 LLM 提供商（pi-ai `opencode-go` provider，15 模型：qwen3.7-max / glm-5.x / kimi-k2.6+ / minimax-m3 / grok-4.5 等，含撞名 deepseek-v4-flash/pro）：
   - `llm` 包注册 opencode-go + `ChatStreamParams.provider`（缺省 deepseek 向后兼容）+ provider-aware 模型解析——**只在同 provider 目录内查/兜底，绝不跨 provider**（撞名模型防串 key）；历史重放消息元数据跟随目标模型 wire 协议族（anthropic-messages / openai-completions / openai-responses 混用目录）
   - 用户级配置 `~/.ai-editor/config.json` **schema v2**：新增 `provider` + `api_keys`（per-provider key）；v0/v1 旧文件读侧兼容不迁移不写回，首次保存自然落 v2
   - 每 provider 三级 key 解析链：环境变量（`DEEPSEEK_API_KEY` / `OPENCODE_API_KEY`）> 用户配置 `api_keys[<provider>]` > **pi-agent 配置 `~/.pi/agent/auth.json` 只读兜底**（`type === "api_key"` 条目；绝不写回）；key 一律不入项目文件
@@ -139,13 +139,13 @@
 - 品牌正名：接入的是 **OpenCode Go 订阅**（`opencode-go`）；**OpenCode Zen（pi-ai `opencode` provider）是另一订阅，不接入**——两 provider 在 pi-ai 共享 `OPENCODE_API_KEY` env，混接串 key；UI/文档全部去除「Zen Go」命名
 - 设置页 AI 模型卡片布局：两列并排 → 单列竖排（一行一张）
 - 清理发布前冗余：移除 llm 包无消费者的 `FALLBACK_MODEL` 显式导出
-- 测试：全仓 1702 全绿（shared 157 / llm 46 / db 260 / server 387 / client 516 / tools 242 / agent 94）+ typecheck/lint 通过；契约文档（endpoints.md §系统设置 / ui settings.md / chat.md / security.md / architecture.md）随批次同步
+- 测试：全仓 1702 全绿（shared 157 / llm 46 / db 260 / server 387 / client 516 / tools 242 / agent 94）+ typecheck/lint 通过；契约文档（endpoints.md §系统设置 / ui settings.md / chat.md / security.md / architecture.md）随版本同步
 
 ## [v0.0.23] - 2026-08-25
 
 ### Changed
 
-- **文档体系重构（2026-08 批次）**：删除 `doc/design/decisions.md` / `decisions-history.md` / `release-review.md`——历史决策档案由 `git log`/CHANGELOG 回溯；仍生效的架构契约由**详细设计四篇**承接（`data-model.md` 数据模型与存储 / `context.md` 上下文与提示词 / `agent-loop.md` agent 循环与提案 / `security.md` 安全基线，只承载「为什么 + 不变式」，字段/端点清单仍以 schema.md/endpoints.md 为准）
+- **文档体系重构（2026-08）**：删除 `doc/design/decisions.md` / `decisions-history.md` / `release-review.md`——历史决策档案由 `git log`/CHANGELOG 回溯；仍生效的架构契约由**详细设计四篇**承接（`data-model.md` 数据模型与存储 / `context.md` 上下文与提示词 / `agent-loop.md` agent 循环与提案 / `security.md` 安全基线，只承载「为什么 + 不变式」，字段/端点清单仍以 schema.md/endpoints.md 为准）
 - **全仓「决策 N」编号体系清除**：代码注释与文档中 2344 处「决策 N」引用、79 处「契约来源：doc/...」头注释段、E1-E6 里程碑代号、release-review §引用全部移除——代码注释只保留实现意图（语义无损，括号内约束/理由描述保留），文档自包含；**注释与文档彻底解耦，文档增删不再牵连注释**
 - **AGENTS.md 重构**：去除「决策 N」编号体系，保留浓缩约束清单，导航指向详细设计四篇；状态段同步更新
 - **纯文档/注释变更**：无 API/数据/前端行为变更；全仓 1692 测试全绿 + typecheck/lint 通过
@@ -154,7 +154,7 @@
 
 ### Changed
 
-- **批次十五：db 查询层引入 drizzle-orm（决策 49）**——查询构建器 + 行类型推断提升开发体验，纯工程重构（无 API/数据/前端变更）：
+- **db 查询层引入 drizzle-orm（决策 49）**——查询构建器 + 行类型推断提升开发体验，纯工程重构（无 API/数据/前端变更）：
   - 引入 `drizzle-orm` 0.45.2（stable，better-sqlite3 同步驱动）；**不引入 drizzle-kit**——迁移管线维持自建 `PRAGMA user_version` 三态分流（E4 未来版本拒绝打开 / E5 增量迁移）
   - 表结构声明收敛 `packages/db/src/tables.ts`（4 表 `sqliteTable` 定义 + 手写 DDL 常量同文件，schema.test.ts「列名/类型/notNull/主键」对齐断言锁双份同步）；`schema.ts` 瘦身为版本工具（user_version 三态）
   - 查询模块函数签名保持 `(db: Db)` 不变（调用方零改动），内部经 `queryDb` 辅助（WeakMap 缓存 drizzle 实例）混合风格渐进替换：**实现层 61 处 prepare 全部清零**——trash（13）/ delta（9：8 builder + 1 sql 模板 order 聚合）/ chat（5：listSessions 相关子查询聚合走 sql 模板参数绑定）/ relation（11：同表二次 join 用 alias）/ entity（23：动态 where、LIKE 通配符透传、排序白名单列对象、JS 过滤路径、inArray 动态占位符、批量 sort_order、级联软删，复杂排序/EXISTS 跨表 2 处 sql 模板）；compute-state/outline-ops（0 prepare 纯调用层）零改动；migration 管线保持 native
@@ -171,7 +171,7 @@
 
 ### Changed
 
-- **批次十四（2026-08 用户反馈，决策 47/48 + 决策 27 修订）**：
+- **2026-08 用户反馈（决策 47/48 + 决策 27 修订）**：
   - **工具调用展示人类可读化（决策 47）**——会话中工具调用行/提案卡不再 JSON dump 原始参数（含裸 id）：新增 `POST /api/v1/names/resolve` 批量名称解析端点（按 id 前缀分流查库：实体/大纲节点/时间点/参考资料；`rel-` 与未知/软删 → null）；右栏 ToolCallRow 展开态与 ProposalCardView preview 改摘要渲染（「查询实体：人物「张三」」级），id 字段解析失败/未知工具回退原始 JSON 兜底，历史消息回放同路径
   - **备份频率新增 1 分钟档（决策 27 修订）**——`BACKUP_FREQUENCIES` 加 1，服务端校验/前端下拉自动生效（纯增量，其他逻辑不动）
   - **用户级配置格式正式化（决策 48）**——`~/.ai-editor/config.json` schema v1：shared `userConfigFileSchema`（schema_version=1 可选、宽松读取、未知字段保留），旧格式读侧兼容不写回、设置页保存时自然升级；多供应商 v2 用户裁决放弃，记录 backlog #17
@@ -181,15 +181,15 @@
 
 ### Fixed
 
-- **批次十三卡 13.1（2026-08 用户反馈——人物页「状态是什么？」）**：character 列表「状态」列移除——`data.status` 为无定义自由文本、存量恒空、列表恒显示「—」，用户无法理解其含义（信息展示缺陷）；详情页表单字段一并移除（列表与详情均不再展示，存量数据容错保留，AI 工具 filters.status 语义不变）
-- **批次十三卡 13.6（2026-08 用户复核）**：人物行首版两行式布局两处缺陷修复——①单 `<td>` 渲染与「名称|角色」双列表头错位致**角色列空白**；②性格/能力合并 chips 无法分辨；用户裁决改为**角色/性格/能力独立成列**
-- **批次十三卡 13.6 复修（2026-08 实测）**：四列版性格/能力两个 `<td>` 直接加 `flex` 类，覆盖 `table-cell` 后被浏览器表格布局塞进同一列槽（Chromium 实测两列 left 同为 573px 完全重叠）——改为 td 保持 table-cell、flex 移入内层容器；红线补入 layout.md §4.4
+- **卡 13.1（2026-08 用户反馈——人物页「状态是什么？」）**：character 列表「状态」列移除——`data.status` 为无定义自由文本、存量恒空、列表恒显示「—」，用户无法理解其含义（信息展示缺陷）；详情页表单字段一并移除（列表与详情均不再展示，存量数据容错保留，AI 工具 filters.status 语义不变）
+- **卡 13.6（2026-08 用户复核）**：人物行首版两行式布局两处缺陷修复——①单 `<td>` 渲染与「名称|角色」双列表头错位致**角色列空白**；②性格/能力合并 chips 无法分辨；用户裁决改为**角色/性格/能力独立成列**
+- **卡 13.6 复修（2026-08 实测）**：四列版性格/能力两个 `<td>` 直接加 `flex` 类，覆盖 `table-cell` 后被浏览器表格布局塞进同一列槽（Chromium 实测两列 left 同为 573px 完全重叠）——改为 td 保持 table-cell、flex 移入内层容器；红线补入 layout.md §4.4
 
 ### Changed
 
-- **批次十三（2026-08 用户反馈——人物列表行信息修订 + 设定树体验增强，决策 45/46）**：
+- **2026-08 用户反馈（人物列表行信息修订 + 设定树体验增强，决策 45/46）**：
   - **人物行四列布局（决策 45 修订）**——名称列（名称 + 第二行动机摘要，`summary.motivation` 截断 40）/ 角色列（`summary.role` 徽标）/ 性格列（`summary.personality` 前 2 chips）/ 能力列（`summary.abilities` 前 2 chips），空值「—」占位；服务端 toSummary character 摘要扩展（motivation 截断 40 + personality/abilities 各前 2，防工具上下文膨胀决策 15 同款语义）
-  - **设定树行显示描述（批次十三）**——`summary.description`（截断 100）以弱化行显示于名称下方，hover title 查看完整，空描述不渲染
+  - **设定树行显示描述**——`summary.description`（截断 100）以弱化行显示于名称下方，hover title 查看完整，空描述不渲染
   - **设定树手动排序（决策 46，修订决策 42「设定无 sort_order」约束）**——工具栏「排序方式」切换器（名称 / 创建时间 / 手动，同级组内排序、层级不变）；手动模式行悬停 **↑↓ 箭头按钮** + 拖拽**行间插入线**重排（拖到行中段仍 = 调层级）；复用 `entities.sort_order` 列承载同级组内线性序（**无 DDL 迁移，SCHEMA_VERSION 5 不变**），`EntitySummary.sortOrder` 仅 setting 填充；**复合端点 `PUT /api/v1/entity/setting/:id/move`**（改父 + 组内重排一次事务提交，防环沿用决策 30，仅被移行刷 updated_at——决策 14 版本戳语义），前端改父流程由「建边+删边两步」收敛为复合端点
   - 全仓 1657 测试全绿 + typecheck/lint/build 通过；真实浏览器（Chromium）几何断言验证四列对齐
 
@@ -197,11 +197,11 @@
 
 ### Fixed
 
-- **批次十二 R1（2026-08 用户反馈）**：参考资料新建 md 文档草稿态标题编辑丢失——编辑标题后焦点移到正文，标题仍显示「新建 md 文档」（显示逻辑写死占位文案、不读表单值）；修复为标题显示 `form.name` 优先，草稿态编辑即时反映
+- **R1（2026-08 用户反馈）**：参考资料新建 md 文档草稿态标题编辑丢失——编辑标题后焦点移到正文，标题仍显示「新建 md 文档」（显示逻辑写死占位文案、不读表单值）；修复为标题显示 `form.name` 优先，草稿态编辑即时反映
 
 ### Changed
 
-- **批次十二（2026-08 用户反馈——参考资料页体验优化 + 决策 44 分类自定义 + 设定树/标签样式）**：
+- **2026-08 用户反馈（参考资料页体验优化 + 决策 44 分类自定义 + 设定树/标签样式）**：
   - **R2 空态去重**——参考资料空态移除书籍图标与「新建 md 文档/新建外源链接」按钮（顶部标题行已有新建入口），保留纯文字提示；筛选无匹配分支保留「清空筛选」
   - **R3 列表表格平铺**——行信息改 thead 四列（标题/分类/标签/来源）+ 单行 tr（对齐实体列表表格样式），行高减半；分类列直接显示文字不包裹徽标；保留点击标题行内编辑/双击详情/删除/右键菜单
   - **R4 草稿态去分类徽标**——新建时标题右侧不再显示分类徽标（分类未定且下方已有分类输入区）
@@ -216,7 +216,7 @@
 
 ### Added
 
-- **批次十一（决策 43，2026-08 用户反馈——参考资料两类承载：本地 md 文件 + 外源链接）**：
+- **参考资料两类承载：本地 md 文件 + 外源链接（决策 43，2026-08 用户反馈）**：
   - **参考资料两类承载**——`data.kind` = `file`（本地 md 文档）/ `link`（外源链接）；存量条目运行时兼容（无 kind 按 link 类展示），无 DDL 迁移（SCHEMA_VERSION 保持 5）
   - **文件 = 真相源，DB 索引 = 派生镜像**——md 文件 = YAML frontmatter（title/category/tags）+ markdown 正文，项目目录 `references/` 自包含；应用内编辑先原子写文件再更新 DB（正文真相在文件）；外部编辑/新增/删除靠扫描同步（mtime 快照比对，幂等全量，新增/更新/还原/软删四向）
   - **扫描重建**——`POST /api/v1/reference/scan`（added/updated/restored/removed/skipped/errors 统计）+ `GET /reference/scan/status` 只读探测（未同步计数，无副作用）；列表页「扫描」按钮 + 未同步提示条引导
@@ -231,7 +231,7 @@
 
 ### Changed
 
-- **批次十（决策 37-42，2026-08 用户反馈——交互优化与新需求）**：
+- **交互优化与新需求（决策 37-42，2026-08 用户反馈）**：
   - **决策 37：大纲交互优化**——移除行级「详情」「＋新建」按钮（只留删除）；选中节点按 Enter 新建子级（就地输入行出现在子级末尾，Enter 确认/Esc 取消）；双击节点查看详情（#/outline/:nodeId）；点击标题行内编辑（现有单击编辑保留）；拖拽排序保留（HTML5 DnD）
   - **决策 38：时间轴交互参考大纲**——事件行与组标题行采用大纲交互模式：双击=详情、点击标题=行内编辑、移除「详情/编辑」按钮（保留删除）；新建/拖拽/折叠/标签筛选等现有能力保留
   - **决策 39：移除实体二级页列表更新时间**——实体关系设定列表（EntityList 表格）移除「更新时间」列与排序选项；详情页（EntityDetail 等）创建/更新时间元信息保留
@@ -244,7 +244,7 @@
 
 ### Changed
 
-- **批次九（决策 34/35/36，2026-08）——LLM 引擎换核 + 中栏演进 + 参考资料页**：
+- **LLM 引擎换核 + 中栏演进 + 参考资料页（决策 34/35/36，2026-08）**：
   - **决策 34：引入 `@earendil-works/pi-ai` 替换自研 LLM 调用层**——llm 包保留对外契约（chatStream/LLMStreamEvent/LLMError），内部改单向声明式 adapter（LLMMessage→pi-ai Context、流事件转发、usage 口径、错误归一化 onResponse 恢复 status）；手写 SSE 解码/流式 tool_call 累积/错误 body 归一化（~300 行）删除；agent/server 上层契约零破坏；保留 retry.ts（决策 15）/token.ts（决策 6）；新增 `getAvailableModels` 模型目录接口（id/provider/contextWindow/maxTokens/reasoning）
   - **决策 35：中栏 AI 集成演进**——InfoBar 统一「问 AI」入口（无特定对象时纯进入聊天并聚焦输入框）；页面行级「带上下文问 AI」按钮（Sparkles：大纲节点/实体行/伏笔行/时间轴事件与时间点/参考资料行，注入该对象 focus + 聚焦聊天——回归 layout.md §4.2 原始设计，补齐「有焦点」显式入口）；页面焦点上报（EntityDetail/ReferenceDetail 挂载上报 currentFocus，MainPanel 路由切换 useLayoutEffect 清空）；继续当前会话语义（不自动开新会话）
   - **决策 36：参考资料页（第 7 种实体类型 reference）**：`ref-` 前缀，SCHEMA_VERSION 4→5 迁移（CHECK 扩 7 种四步换表）；data 字段 type 分类枚举（material/inspiration/theory/reference）+ content 全文长文本 + source 来源 + tags 标签；列表摘要截断 120 字 / 详情全文（防 AI 工具上下文膨胀）；TabBar 新增「参考资料」tab（时间轴后回收站前）+ 列表/详情页（分类/标签/搜索筛选 + 全文详读）；LLM 集成 `search_references`（自动查询，summary.type 过滤）+ `propose_create_reference`（提案写入，确认后落库，type 缺省 material）
@@ -256,20 +256,20 @@
 
 ### Changed
 
-- **批次八（O1-O6，2026-08 用户反馈批次——体验优化与画布重构，决策 33）**：
+- **体验优化与画布重构（O1-O6，2026-08 用户反馈，决策 33）**：
   - O1 设定/标签筛选可搜索下拉（`SearchableSelect`：Popover + 关键词客户端过滤已聚合候选 +「全部」清除 + fallbackLabel 兑底，重构原原生 `<select>`）；
   - O2 大纲页节点行操作区右端对齐 + 顺序改「详情 → 添加 → 删除」（＋ 就地新建），移除行尾修改时间显示；
   - O3 时间轴移除 GripVertical 拖拽柄视觉（draggable 与悬停拖拽提示保留在行根，参考大纲页无柄拖拽）；
   - O4 时间轴折叠/展开按钮移至时间点组标题左侧（参考大纲页折叠箭头位序）；
   - O5 设定树视图新增「全部展开 / 全部折叠」工具栏按钮（折叠态提升受控层 + `expandableSettingNodeIds` 纯函数）；
   - **O6 画布页移除（决策 33）**：删除 `#/canvas` 路由、中栏「画布」tab（7→6 tab）、`pages/Canvas.tsx` 与 `lib/canvas.ts`（及测试）；`plot_edge` 数据模型与 `POST/GET/DELETE /relation` 关系接口能力完整保留（仅无 UI 入口）；旧 localStorage 画布坐标为无害残留不清理；同步删除画布死后 CSS（`canvas-edge-flow`）。
-  - 每卡临时分支 + git worktree 并行开发（批次一 O1‖O2‖O3O4 → 批次二 O5‖O6），独立 oracle 审验全 PASS，线性合入 main；全仓测试 1562 个全绿 + typecheck/lint/build 通过。
+  - 每卡临时分支 + git worktree 并行开发（O1‖O2‖O3O4 → O5‖O6），独立 oracle 审验全 PASS，线性合入 main；全仓测试 1562 个全绿 + typecheck/lint/build 通过。
 
 ## [v0.0.13] - 2026-08-19
 
 ### Added
 
-- **设定列表上级设定筛选（批次七 N1-N2，2026-08 新需求，决策 32）**——实体关系页「设定」tab 新增「上级设定」筛选：选择某上级设定后，列表只显示其**直接及所有后代设定（递归子树，不含上级自身）**：
+- **设定列表上级设定筛选（N1-N2，2026-08 新需求，决策 32）**——实体关系页「设定」tab 新增「上级设定」筛选：选择某上级设定后，列表只显示其**直接及所有后代设定（递归子树，不含上级自身）**：
   - `GET /api/v1/entity/setting` 新增可选查询参数 `parent_id`（**仅 setting 类型生效**，其他类型传入忽略），匹配语义 = 设定在层级树（belongs_to，决策 30）中直接或间接属于该上级；**复用既有 `listSettingHierarchyEdges` 全量层级边**（关系表索引、O(N)）建 childOf 邻接表栈式 DFS 收集后代集合（防环守卫 = Set 去重），走 db `listEntities` 既有 JS 过滤路径（total = 过滤后总数、分页正确；无过滤时保持 COUNT+LIMIT SQL 路径零回归）；与搜索 / 标签筛选 / 排序 / 分页组合（AND）；指向不存在的设定（含已软删）→ 空结果（宽松，同 tag 无匹配不 404）；软删联动由边查询可见性天然保证
   - 前端「上级设定 ▾」下拉（候选 = 全部设定按名称排序 +「全部」重置项，与「标签 ▾」并列；候选聚合与标签候选合并一次请求 limit 200）；父设定已软删或超 200 截断时下拉兑底「（已删除或不可见）」防空白；空态文案三分支（搜索无结果 / 「《X》下暂无设定」+ 清除上级筛选 / 无实体）；切换 tab / 类型重置
   - 设计文档：`decisions.md` 决策 32、`endpoints.md` 实体列表契约（`parent_id`）、`entity-list.md` 关键交互与空态；oracle 独立审核无 P0/P1（P2：`parent_id` 空串防御归一化 + 空态文档补正已随卡处理）
@@ -278,11 +278,11 @@
 
 ### Fixed
 
-- **实体详情标签编辑器「输入后回车添加下一项」（M1，2026-08 用户反馈批次六）**——placeholder 承诺了回车行为但未实现（回车无任何反应）：行内回车现在 = 添加下一项——非末行聚焦下一行、末行且非空追加空行并聚焦、末行且为空无操作（防空行跑马灯）；行为决策下沉 `lib/tags-editor.ts` 纯函数（`enterBehavior`）+ vitest 覆盖
+- **实体详情标签编辑器「输入后回车添加下一项」（M1，2026-08 用户反馈）**——placeholder 承诺了回车行为但未实现（回车无任何反应）：行内回车现在 = 添加下一项——非末行聚焦下一行、末行且非空追加空行并聚焦、末行且为空无操作（防空行跑马灯）；行为决策下沉 `lib/tags-editor.ts` 纯函数（`enterBehavior`）+ vitest 覆盖
 
 ### Changed
 
-- **设定列表行显示上级设定与描述（M2，交互优化，2026-08 用户反馈批次六）**：
+- **设定列表行显示上级设定与描述（M2，交互优化，2026-08 用户反馈）**：
   - `GET /entity/:type` 列表响应：`EntitySummary` 新增 `parentId`/`parentName`（**仅 setting 填充**——服务端补查全量 belongs_to 层级边按 childId 映射，无父的设定不出现该字段，软删端点由既有可见性过滤兜底）
   - setting 摘要新增 `description`（**截断 100 字符**——列表行展示用，防 `search_entities` AI 工具上下文膨胀；完整文本在详情页）
   - 前端设定列表列：名称 | 标签 | 上级设定 | 描述 | 更新时间；上级设定渲染为可点击 chip（点击直达父设定详情，不触发行点击）；描述行 truncate + hover title 查看
@@ -290,13 +290,13 @@
 
 ### Added
 
-- **标签列表拖拽排序（M3，新需求，2026-08 用户反馈批次六）**——详情页标签编辑器（`rules`/`tags`/`personality`/`abilities` 共用组件）每行前置拖拽手柄（GripVertical + **HTML5 原生 DnD，零新依赖**）：拖动行降透明度 + 目标行 ring 高亮；仅在自身拖拽进行中响应 drop（不干扰输入框内文本拖选/拖入）；Firefox setData 兼容；排序只改本地表单数组随 `data` 提交（数组顺序即存储顺序，无独立 API）；`moveArrayItem` 纯函数 + 测试
+- **标签列表拖拽排序（M3，新需求，2026-08 用户反馈）**——详情页标签编辑器（`rules`/`tags`/`personality`/`abilities` 共用组件）每行前置拖拽手柄（GripVertical + **HTML5 原生 DnD，零新依赖**）：拖动行降透明度 + 目标行 ring 高亮；仅在自身拖拽进行中响应 drop（不干扰输入框内文本拖选/拖入）；Firefox setData 兼容；排序只改本地表单数组随 `data` 提交（数组顺序即存储顺序，无独立 API）；`moveArrayItem` 纯函数 + 测试
 
 ## [v0.0.11] - 2026-08-18
 
 ### Changed
 
-- **前端样式工程化（L 批次，2026-08）**——长 className 单行难读、重复模式无提取的工程化改造：
+- **前端样式工程化（2026-08）**——长 className 单行难读、重复模式无提取的工程化改造：
   - client 包引入 **Prettier + prettier-plugin-tailwindcss**（`packages/client/.prettierrc.json`，printWidth 100）：长 className 自动折行、Tailwind 类顺序统一（布局 → 尺寸 → 颜色 → 状态），新代码格式由工具兑底
   - 新建 **`lib/styles.ts` 共享样式常量**（提取阈值 ≥3 处）：`iconButtonBaseClass`/`iconButtonSize`（bar/sm/md 三档）/`iconButtonDisabledClass`/`inputClass`/`errorBannerClass`/`skeletonClass`/`sectionCardClass`——改一处样式全局生效，禁止复制粘贴重复类
   - 新建 **`EmptyState`**（空态容器：虚线边框居中卡 + 文案 + 可选图标 + 主操作插槽，padding sm/md/lg 三档）与 **`SectionCard`**（区块卡：容器 + font-serif 标题 + action 插槽，上提自 OutlineDetail 局部实现）组件，统一全仓空态/区块样式
@@ -312,12 +312,12 @@
 
 ### Added
 
-- **实体关系增强（用户反馈批次四 I1-I4，2026-08，决策 30）**：
+- **实体关系增强（I1-I4，2026-08 用户反馈，决策 30）**：
   - I1 关系类型 `occurs_in` 中文映射补齐（17 种预定义类型全量映射，「锚定于」与「发生于（地点）」区分）
   - I2 详情入口图标统一为 Eye（大纲节点行 / 伏笔行；书架/项目语义的书籍图标保留）
   - I3 **设定层级 = `belongs_to` 关系（决策 30）**：`data.parent_id` 废弃（不再读写，passthrough 容错旧数据）；db 全量层级边邻接表 + 防环校验（自指/祖先链成环 → 400）；详情页「层级」区块（父/子设定分区展示 + 设置/修改/清除上级，先建后删防数据丢失）；新建行「上级设定」弹层搜索选择器（创建后补建关系，失败不阻塞）；关联列表与层级分区展示不再重复
   - I4 **设定树视图**：实体关系页第 6 个 tab「设定树」（路由 `#/entities/setting-tree`）——按 belongs_to 构建递归层级树，折叠/类别徽标/直接子数/节点点击跳详情，截断孤儿提升为根防御
-- **输入提示与标签筛选（用户反馈批次五 J1-J3 + K1/K2，2026-08，决策 31）**：
+- **输入提示与标签筛选（J1-J3 + K1/K2，2026-08 用户反馈，决策 31）**：
   - J1 设定分类统一为 tags（`data.category` 废弃），列表摘要列「类别」→「标签」，AI 聚合统计 byCategory → byTags
   - J2 **浏览器原生 datalist 自动完成**（零依赖）：新建行名称/首字段按现有数据动态聚合候选，设定详情标签补拉全量聚合，伏笔类别枚举候选
   - J3 设定列表**标签筛选**：`GET /entity/:type?tag=` 单标签包含匹配（复用内部 filters.tags 管道，不改表结构），前端「标签 ▾」下拉聚合既有标签，与搜索/排序/分页组合
@@ -356,7 +356,7 @@
   - **时间轴 UI 重构**：时间点组块（组标题 + 计数 + [重命名] 行内编辑 + 折叠 + 组尾「+ 在此时间点新建事件」）+ 事件行（单条可拖）+ **未挂载兜底区**（无挂载事件平铺，可拖入任一时间点）；header「+ 新建时间点」双入口；事件表单移除 time_label，详情页新增挂载时间点选择器
   - **AI 工具替换**：移除 `propose_reorder_events`，新增 `propose_reorder_timepoints`（LLM 按时间点 name 语义排序 → 提案确认 → 重排时间点序）
 - **G1 时间轴区块独立滚动（2026-08 用户反馈）**：时间轴页 header（标题/AI 排序/新建按钮）与标签筛选器固定，仅列表区独立滚动（事件多时操作入口恒可见）
-- **用户反馈批次 F1-F9（2026-08）**：
+- **用户反馈 F1-F9（2026-08）**：
   - F1 事件字段清空语义（时间标签/描述/标签可显式清除）
   - F2 自动备份补查 `data.db-wal`（WAL 模式写只刷新伴生文件，主文件 mtime 不变导致漏检——影响全部 data.db 写）
   - F3-F6 时间轴视觉重构（垂直时间轴线 + 事件卡 / 同标签归组 / 时间标签样式强调 / 行内完整描述展开收起）
@@ -407,7 +407,7 @@
 
 - **时间轴功能（阶段 C，决策 26）**：第 5 种实体类型 `event`（事件），中栏新增「时间轴」tab（伏笔与回收站之间）——事件列表拖拽排序（`sort_order` 全局线性序，拖拽为权威、自由文本时间标签仅展示）、标签数组分类筛选、详情页字段编辑与 `occurs_in` 锚定大纲场景（多对多，倒叙/多时间线可表达）、软删回收站；schema 增量迁移 SCHEMA_VERSION 1→2（`002_event_timeline`，E5 迁移机制首个真实用例——旧库打开自动前向迁移，数据保全 + 时间戳快照）
 - **项目提示词编辑（阶段 B，决策 24/25）**：设置页可编辑跟随书籍的 `prompt`（注入 system「## 项目设定」段），规则文件机制否决（单一持久化上下文通道）
-- **画布增强批次（S10.2-S10.5，参考 inkos）**：连线语义色（目标节点层级色 + hover 路径高亮三级优先级）+ 箭头 + 选中/路径流动虚线动画；右下角小地图（归一化节点矩形 + 视口框，自研零依赖）；「重新布局」按钮（保留已拖拽坐标的幂等重排，inkos `position ?? 自动计算` 模式）；hover 节点沿 plot_edge 向前 DFS 路径高亮（非路径降透明 0.2）
+- **画布增强（S10.2-S10.5，参考 inkos）**：连线语义色（目标节点层级色 + hover 路径高亮三级优先级）+ 箭头 + 选中/路径流动虚线动画；右下角小地图（归一化节点矩形 + 视口框，自研零依赖）；「重新布局」按钮（保留已拖拽坐标的幂等重排，inkos `position ?? 自动计算` 模式）；hover 节点沿 plot_edge 向前 DFS 路径高亮（非路径降透明 0.2）
 
 ### Changed
 

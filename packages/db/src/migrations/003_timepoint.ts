@@ -63,7 +63,7 @@ export default {
  // 4. 新表更名为 entities（此后才能 prepare 针对 entities 的语句）
     db.exec("ALTER TABLE entities_v3 RENAME TO entities");
 
- // 迁移时间戳：应用层 ISO 8601 统一写入（ 时间约定，不用 SQLite datetime('now')）
+ // 迁移时间戳：应用层 ISO 8601 统一写入（时间约定，不用 SQLite datetime('now')）
     const now = nowIso();
 
  // 5. 数据迁移：time_label → timepoint + occurs_at（全部在 runMigrations 事务内）

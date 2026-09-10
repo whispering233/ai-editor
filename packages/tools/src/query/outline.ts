@@ -4,7 +4,7 @@
 // db 层能力确认与分工：
 // - get_outline：db readOutlineFile 返回存储形态 OutlineFileTree——
 // 工具层 mapOutlineFileToTree 映射为 API 形态（camelCase）；**默认不含 metadata**
-// （省 token， 明确：需统计走 API with_metadata）；软删节点整棵剔除
+// （省 token，明确：需统计走 API with_metadata）；软删节点整棵剔除
 // （查询类工具不返回回收站中的对象）
 // - get_outline_path：db getOutlinePathIds 返回根 → 目标节点路径（含 root）；
 // 节点不存在抛错——工具层转 null（查询无结果）；路径上任一节点软删 → null（不可见）
@@ -32,7 +32,7 @@ function stripDeletedNodes<T extends OutlineFileNode>(nodes: readonly T[]): T[] 
 }
 
 /**
- * 完整大纲树（ get_outline → 严格三层树）。
+ * 完整大纲树（get_outline → 严格三层树）。
  * - 默认不含 metadata 统计（省 token；需统计走 API GET /outline?with_metadata=）
  * - 软删节点过滤
  * - 返回 API 形态 OutlineTree（camelCase；data 嵌套字段原样透传）
@@ -45,7 +45,7 @@ export function runGetOutline(ctx: ToolContext): OutlineTree {
 }
 
 /**
- * 根 → 目标节点的路径 ID 列表（ get_outline_path(node_id)，含 root，
+ * 根 → 目标节点的路径 ID 列表（get_outline_path(node_id)，含 root，
  * 如 ["root", "vol-1", "ch-3", "sc-15"]；严格三层下路径唯一）。
  * - 节点不存在 → null（db getOutlinePathIds 抛错，工具层转查询无结果）
  * - 路径上任一节点软删 → null（软删对象不可见——目标节点软删时

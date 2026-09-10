@@ -1,20 +1,20 @@
-// 时间轴组块（G2.3， G2 布局线框：时间点组块）
+// 时间轴组块（G2.3，G2 布局线框：时间点组块）
 // 职责：组标题行（大圆点 + 左侧折叠按钮 + 时间点名；右侧：事件计数 + [+ 在此时间点新建事件] +
 // [移入回收站]）+ 组内事件堆叠；**未挂载兜底区复用本组件**（timepoint = null）。
-// 组标题行对齐大纲交互模式——双击 = 时间点详情（#/timepoints/:id 通用实体详情页，批次十七一级化）、
+// 组标题行对齐大纲交互模式——双击 = 时间点详情（#/timepoints/:id 通用实体详情页，一级化）、
 // 点击时间点名 = 行内编辑（Enter 提交 / Esc 取消 / 失焦保存）、**重命名按钮已移除**（只留删除；
 // AskAiButton 已移除——右键菜单替代（注入会话上下文 + 建立关联））。
-// 拖拽柄视觉已移除（批次八 O3）：draggable 仍设在组标题行根，悬停 title 提示拖拽能力，无 GripVertical 图标。
-// 折叠按钮位序（批次八 O4）：移至组标题**左侧**（标题前，同大纲页折叠箭头在标题左边），不再靠右。
+// 拖拽柄视觉已移除（O3）：draggable 仍设在组标题行根，悬停 title 提示拖拽能力，无 GripVertical 图标。
+// 折叠按钮位序（O4）：移至组标题**左侧**（标题前，同大纲页折叠箭头在标题左边），不再靠右。
 // 拖拽（G2 双轨）：
 // - 时间点整组拖拽：draggable 设在**组标题行根**（组内事件行各自 draggable——G2 恢复单条拖拽，
 // 两者是兄弟节点不嵌套，无 F4 防误拖冲突）；dragover/drop 以标题行中点判定插入位（容器协调）
-// - 未挂载区**不可拖拽**（无时间点可排， 线框）；组内事件可拖入（move_to null 移除挂载）
+// - 未挂载区**不可拖拽**（无时间点可排，线框）；组内事件可拖入（move_to null 移除挂载）
 // 行内编辑（点击时间点名进入，替代原「重命名」按钮）：Enter 提交（onRename 回调交页面
 // PUT + 刷新）、Esc 取消、失焦保存；saving 守卫防 Enter+blur 双提交（悲观提交：提交期间保持编辑态，
 // 成功后退出——同大纲 busy 守卫语义）；编辑态禁用标题行拖拽（防输入误拖）。
 // 折叠（collapsed）：折叠后仅标题行、轴线仍连续（容器级贯穿）；折叠按钮 aria-expanded。
-// 视觉全走 tokens（ 纪律）：无硬编码色类。
+// 视觉全走 tokens（纪律）：无硬编码色类。
 import { useState } from "react";
 import type { DragEvent, MouseEvent } from "react";
 import { Button, Input } from "antd";
@@ -161,7 +161,7 @@ export function TimelineGroupBlock({
       {/* 插入指示线（S13 模式：目标组块上下边缘，跨圆点列与内容；共享 DropIndicator） */}
       {showInsertBefore && <DropIndicator position="top" />}
       {showInsertAfter && <DropIndicator position="bottom" />}
-      {/* 组标题行（draggable：时间点整组拖拽，无视觉拖拽柄（批次八 O3）；未挂载区/编辑态不 draggable；
+      {/* 组标题行（draggable：时间点整组拖拽，无视觉拖拽柄（O3）；未挂载区/编辑态不 draggable；
           双击 = 时间点详情（onDoubleClick，编辑态/按钮区/未挂载区不触发）；
           行级右键菜单（RowContextMenu）——注入会话上下文（focus_entity_type=timepoint）+
           建立关联（timepoint 源端点）；未挂载区无时间点实体（无焦点/关联语义）、编辑态不干扰输入，
@@ -203,7 +203,7 @@ export function TimelineGroupBlock({
             {/* px-3：与事件卡（TimelineEvent 内容卡 px-3）同水平内边距——组标题行的右侧按钮列
                 （事件计数/加事件/移入回收站）与事件行的删除按钮列垂直对齐，不再错开 12px */}
             <div className="flex min-w-0 flex-1 items-center gap-2 px-3 py-1">
-              {/* 折叠/展开按钮（批次八 O4：移至组标题左侧、标题前，同大纲页折叠箭头位序；折叠后仅标题行） */}
+              {/* 折叠/展开按钮（O4：移至组标题左侧、标题前，同大纲页折叠箭头位序；折叠后仅标题行） */}
               <Button
                 color="default" variant="text"
                 size="small"
@@ -212,7 +212,7 @@ export function TimelineGroupBlock({
                 aria-label={`${collapsed ? "展开" : "折叠"}「${title}」组`}
                 onClick={onToggleCollapse}
                 icon={
-                  /* chevron 展开旋转惯例（）：折叠时横指，展开时向下 */
+                  /* chevron 展开旋转惯例：折叠时横指，展开时向下 */
                   <RightOutlined
                     className={cn(
                       "text-base transition-transform duration-200",
@@ -247,7 +247,7 @@ export function TimelineGroupBlock({
                 <span
                   className={cn(
                     "min-w-0 truncate text-sm font-medium",
-                    // 未挂载区占位样式（：与正常组标题区分——muted 斜体；不可编辑）
+                    // 未挂载区占位样式（与正常组标题区分——muted 斜体；不可编辑）
                     isUngrouped
                       ? "text-muted-foreground italic"
                       : "cursor-text text-foreground hover:underline",
@@ -255,7 +255,7 @@ export function TimelineGroupBlock({
                   title={title}
                   onClick={(e) => {
                     if (timepoint === null) return; // 未挂载区不可编辑
-                    e.stopPropagation(); // 标题单击 = 编辑而非其他行为（ 冲突设计）
+                    e.stopPropagation(); // 标题单击 = 编辑而非其他行为（冲突设计）
                     startRename();
                   }}
                 >
@@ -263,7 +263,7 @@ export function TimelineGroupBlock({
                 </span>
               )}
               {/* 右侧信息与操作区（H5：事件计数、在此时间点新建事件、移入回收站全部靠右；
-                  折叠按钮已移至左侧（批次八 O4）；重命名按钮已移除——点击标题行内编辑；
+                  折叠按钮已移至左侧（O4）；重命名按钮已移除——点击标题行内编辑；
                   AskAiButton 已移除——右键菜单替代） */}
               <span className="ml-auto flex shrink-0 items-center gap-1">
                 <span className="shrink-0 text-xs text-muted-foreground">

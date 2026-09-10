@@ -113,7 +113,7 @@ describe("add_relation", () => {
     expect(() => executeAddRelation(makeCtx(), makeProposal("propose_add_relation", args))).toThrow(/关系已存在/);
   });
 
-  it("端点不存在 → 抛错（db 层端点存在性校验，）", () => {
+  it("端点不存在 → 抛错（db 层端点存在性校验）", () => {
     expect(() =>
       executeAddRelation(
         makeCtx(),

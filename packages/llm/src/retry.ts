@@ -4,10 +4,10 @@
 import { ABORT_ERROR, LLM_TRANSPORT_ERROR_CODES } from "./client.js";
 import type { AbortSignalLike, ChatStreamResult } from "./types.js";
 
-/** 默认最大重试次数（不含首次尝试； 参考值） */
+/** 默认最大重试次数（不含首次尝试；参考值） */
 export const DEFAULT_MAX_RETRIES = 3;
 
-/** 默认退避基数（ms）；退避 = baseDelay * 2^(attempt-1)（ 参考值） */
+/** 默认退避基数（ms）；退避 = baseDelay * 2^(attempt-1)（参考值） */
 export const DEFAULT_BASE_DELAY_MS = 2000;
 
 /** 配额/计费类错误码关键词（不可重试快失败；大小写不敏感子串匹配） */
@@ -21,7 +21,7 @@ function isQuotaCode(code: string | undefined): boolean {
 }
 
 /**
- * 依据 S6.1 错误模型判定是否可重试（ 分类）：
+ * 依据 S6.1 错误模型判定是否可重试（分类）：
  * - 不可重试：abort（ABORTED）、消费者异常（CONSUMER_ERROR）、配额/计费类
  * （402 或 code 命中关键词——code 优先于 status，如 500 + billing_error 也不重试）、
  * 401/403 及其他 4xx、环境缺失（NO_FETCH / ENV_UNSUPPORTED）、未知形态（保守不重试防死循环）
@@ -153,7 +153,7 @@ export async function withRetry<T>(
 
 /**
  * chatStream 集成默认分类（供 S7.3 直接使用）：
- * chatStream 从不 throw（S6.1 ）——失败是 resolve 出的 { ok:false, aborted, error } 值；
+ * chatStream 从不 throw（S6.1）——失败是 resolve 出的 { ok:false, aborted, error } 值；
  * 异常路径仅防御性覆盖（未知形态 → 不可重试）
  */
 export function classifyChatStreamOutcome(outcome: RetryOutcome<ChatStreamResult>): boolean {

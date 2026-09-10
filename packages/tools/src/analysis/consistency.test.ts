@@ -149,7 +149,7 @@ describe("analyze_consistency hook 规则", () => {
 });
 
 describe("analyze_consistency 边界", () => {
-  it("R5（）location 的 parent_id 悬空引用 → warning；setting 的 parent_id 已废弃不再检查", () => {
+  it("R5location 的 parent_id 悬空引用 → warning；setting 的 parent_id 已废弃不再检查", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const parent = createEntity(db, { type: "location", name: "山门" });
     const okLocation = createEntity(db, { type: "location", name: "前殿", data: { parent_id: parent.id } });

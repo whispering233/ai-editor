@@ -1,11 +1,11 @@
 // @whispering233/ai-editor-db 对话历史数据层查询（T2.3）
 //
 // （chat/sessions 会话列表、chat/sessions/:id/messages 消息历史）。
-// 时间约定（）：created_at 统一 ISO 8601 字符串、由应用层写入，本模块不生成时间。
+// 时间约定：created_at 统一 ISO 8601 字符串、由应用层写入，本模块不生成时间。
 // 注意：本模块只处理 chat_messages 表，不涉及会话元数据——会话列表信息（createdAt/updatedAt/
 // messageCount/lastMessage）全部由消息行实时聚合得出，无独立会话表。
 //
-// 批次十五（15.4 卡 3）：**查询经 queryDb 走 drizzle 构建器**（混合风格 4A）。
+//：**查询经 queryDb 走 drizzle 构建器**（混合风格 4A）。
 // 语义逐句对照旧实现：
 // - INSERT 命名参数 ↔ insert(chatMessages).values({...})（tool_calls JSON.stringify 落库不变）
 // - UPDATE ... SET project_id ↔ update.set({ project_id }).where(eq(...))
@@ -24,13 +24,13 @@ import type { Db } from "../connection.js";
 import { queryDb } from "../query-db.js";
 import { chatMessages } from "../tables.js";
 
-/** 会话列表 lastMessage 截断长度（ 仅要求「截断」，长度为本实现约定，未入文档） */
+/** 会话列表 lastMessage 截断长度（仅要求「截断」，长度为本实现约定，未入文档） */
 export const SESSION_LAST_MESSAGE_MAX_LEN = 50;
 
 /**
  * 插入一条对话消息。
  *
- * id 生成约定：chat_messages 表 id 无文档前缀（ id 约定仅覆盖
+ * id 生成约定：chat_messages 表 id 无文档前缀（id 约定仅覆盖
  * char-/set-/loc-/hook-、sc-/ch-/vol-、proj- 与运行时 prop_/sess_/call_），
  * 省略 id 时直接用 nanoid 生成（与消息 id 前缀空缺保持一致）。
  *
@@ -186,7 +186,7 @@ export function listMessages(db: Db, sessionId: string, projectId: string): Chat
  * 消息历史原始行（S7.6 续聊重建专用）：
  * - listMessages 输出 API 形态（camelCase，供 GET /messages）；本函数输出**存储形态**
  * （snake_case ChatMessageRow，tool_calls 已解析为数组）——直供 agent 包
- * loadHistory/restoreSession（ 成对重组），避免 server 层做 API→存储形态反映射。
+ * loadHistory/restoreSession（成对重组），避免 server 层做 API→存储形态反映射。
  * - 查询语义与 listMessages 一致：按 project_id 隔离、created_at 升序 + rowid 稳定序。
  */
 export function listMessageRows(db: Db, sessionId: string, projectId: string): ChatMessageRow[] {

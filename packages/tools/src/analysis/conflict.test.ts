@@ -150,7 +150,7 @@ describe("detect_conflicts 过滤与边界", () => {
     expect(allyOnly.conflicts[0].description).toContain("单向 ally");
   });
 
-  it("软删实体不可见：其关系不参与检测（）", () => {
+  it("软删实体不可见：其关系不参与检测", () => {
     const { a, b } = seedBase();
     rel(a, b, "ally");
     softDeleteEntity(db, b, T0); // 端点软删 → 关系不可见 → 无检出

@@ -1,4 +1,4 @@
-// 标签列表编辑器（TagsEditor）纯函数（批次六 M1，2026-08 用户反馈）
+// 标签列表编辑器（TagsEditor）纯函数（M1，2026-08 用户反馈）
 // 「标签列表编辑器」——行内输入框回车 = 添加下一项：
 // 非末行 → 聚焦下一行；末行且非空 → 追加空行并聚焦新行；末行且为空 → 无操作（防空行跑马灯）。
 // 纯函数化便于 vitest 覆盖（client 包无 jsdom，交互逻辑下沉 lib 测试，组件仅薄封装）。
@@ -24,7 +24,7 @@ export function enterBehavior(values: readonly string[], index: number): TagEnte
 }
 
 /**
- * 数组元素移动（M3，2026-08 批次六）：from 位移到 to 位（其余元素顺移），返回新数组。
+ * 数组元素移动（M3，2026-08）：from 位移到 to 位（其余元素顺移），返回新数组。
  * 拖拽排序用——from === to（原地放下）或下标越界 → 原样返回副本（防御，不抛错）。
  */
 export function moveArrayItem(values: readonly string[], from: number, to: number): string[] {

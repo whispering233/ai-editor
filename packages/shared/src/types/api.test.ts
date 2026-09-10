@@ -99,7 +99,7 @@ describe("project 端点", () => {
     expect(config.currentPosition).toBe("sc-42");
   });
 
-  it("projectConfigUpdateReqSchema：prompt 已废弃（）strict 拒绝", () => {
+  it("projectConfigUpdateReqSchema：prompt 已废弃strict 拒绝", () => {
     expect(projectConfigUpdateReqSchema.safeParse({ prompt: "力量体系" }).success).toBe(false);
     expect(projectConfigUpdateReqSchema.safeParse({ name: "x", prompt: "力量体系" }).success).toBe(false);
   });
@@ -142,7 +142,7 @@ describe("project 端点", () => {
     expect(projectConfigSchema.parse({ ...validConfig(), backupFrequencyMinutes: null }).backupFrequencyMinutes).toBeNull();
   });
 
-  it("projectConfigUpdateReqSchema：backup_frequency_minutes 接受枚举值/null/省略，拒绝其他（ + 批次十四修订加 1 分钟档）", () => {
+  it("projectConfigUpdateReqSchema：backup_frequency_minutes 接受枚举值/null/省略，拒绝其他（修订加 1 分钟档）", () => {
  // 枚举值全接受
     for (const v of [1, 5, 10, 15, 30, 60]) {
       expect(projectConfigUpdateReqSchema.safeParse({ backup_frequency_minutes: v }).success).toBe(true);
@@ -158,7 +158,7 @@ describe("project 端点", () => {
     expect(projectConfigUpdateReqSchema.safeParse({ backup_frequency_minutes: true }).success).toBe(false);
   });
 
-  it("projectBackupReqSchema：仅形状校验（ + oracle P2-1——名称规则权威判定在 sanitizeBackupName，schema 不重复判长）", () => {
+  it("projectBackupReqSchema：仅形状校验（oracle P2-1——名称规则权威判定在 sanitizeBackupName，schema 不重复判长）", () => {
  // 缺省/空对象 → 通过（无自定义名称）
     expect(projectBackupReqSchema.safeParse({}).success).toBe(true);
     expect(projectBackupReqSchema.parse({}).name).toBeUndefined();
@@ -297,7 +297,7 @@ describe("entity 端点", () => {
   });
 });
 
-describe("event 时间轴（）", () => {
+describe("event 时间轴", () => {
   it("eventDataSchema：description/tags 全字段通过（字段名 snake_case）", () => {
     const parsed = eventDataSchema.parse({
       description: "张三在藏经阁发现玉佩",
@@ -330,7 +330,7 @@ describe("event 时间轴（）", () => {
 
   });
 
-  it("settingMoveReqSchema（）：parent_id 必填 nullable；order 可选非负整数；strict 拒绝未知键", () => {
+  it("settingMoveReqSchema：parent_id 必填 nullable；order 可选非负整数；strict 拒绝未知键", () => {
     expect(settingMoveReqSchema.parse({ parent_id: null }).parent_id).toBeNull();
     expect(settingMoveReqSchema.parse({ parent_id: "set-1", order: 3 }).order).toBe(3);
     expect(settingMoveReqSchema.safeParse({ parent_id: 1 }).success).toBe(false); // 非字符串
@@ -396,7 +396,7 @@ describe("delta 端点", () => {
 });
 
 describe("outline 端点", () => {
-  it("创建：parent_id 必填（ 无默认值）", () => {
+  it("创建：parent_id 必填（无默认值）", () => {
     expect(outlineCreateReqSchema.safeParse({ type: "scene", title: "灵根测试" }).success).toBe(false);
   });
 
@@ -416,7 +416,7 @@ describe("outline 端点", () => {
     expect(outlineGetQuerySchema.safeParse({ with_metadata: "yes" }).success).toBe(false);
   });
 
-  it("创建/更新：data 为宽松 record 可选字段（，精校验在服务端路由层）", () => {
+  it("创建/更新：data 为宽松 record 可选字段（精校验在服务端路由层）", () => {
     const req = outlineCreateReqSchema.parse({
       type: "scene",
       title: "灵根测试",
@@ -511,7 +511,7 @@ describe("OUTLINE_NODE_DATA_SCHEMAS", () => {
     expect(OUTLINE_NODE_DATA_SCHEMAS.scene.parse({ value_to: "a".repeat(200) }).value_to).toHaveLength(200);
   });
 
-  it("chapter：reversal/climax_scene 通过；reversal 超 1000 拒绝；引用字段仅类型校验（宽松，）", () => {
+  it("chapter：reversal/climax_scene 通过；reversal 超 1000 拒绝；引用字段仅类型校验（宽松）", () => {
     expect(
       OUTLINE_NODE_DATA_SCHEMAS.chapter.parse({ reversal: "张三决定叛出师门", climax_scene: "sc-5" }),
     ).toEqual({ reversal: "张三决定叛出师门", climax_scene: "sc-5" });
@@ -558,7 +558,7 @@ describe("SSE 事件", () => {
   });
 });
 
-describe("导出/导入（）", () => {
+describe("导出/导入", () => {
   it("导出 zip 三文件名常量与数据文件原名一致（import 侧按此固定名校验）", () => {
     expect(PROJECT_EXPORT_FILE_NAMES).toEqual(["project.json", "outline.json", "data.db"]);
   });
@@ -568,7 +568,7 @@ describe("导出/导入（）", () => {
     expect(errorCodeSchema.safeParse("SCHEMA_VERSION_MISMATCH").success).toBe(true);
   });
 
-  it("ErrorCode 含 PROJECT_VERSION_NEWER（409：open 时项目版本高于程序版本， 拒绝打开堵降级数据丢失）", () => {
+  it("ErrorCode 含 PROJECT_VERSION_NEWER（409：open 时项目版本高于程序版本，拒绝打开堵降级数据丢失）", () => {
     expect(ERROR_CODES).toContain("PROJECT_VERSION_NEWER");
     expect(errorCodeSchema.safeParse("PROJECT_VERSION_NEWER").success).toBe(true);
   });
@@ -577,7 +577,7 @@ describe("导出/导入（）", () => {
     expect(
       projectImportResSchema.parse({ imported: true, id: "proj-1", path: "/books/我的小说", name: "我的小说", mode: "new" }),
     ).toEqual({ imported: true, id: "proj-1", path: "/books/我的小说", name: "我的小说", mode: "new" });
- // mode 枚举：restored/new 通过（ 分流），其他值拒绝
+ // mode 枚举：restored/new 通过（分流），其他值拒绝
     expect(projectImportResSchema.parse({ imported: true, id: "proj-1", path: "/books/我的小说", name: "我的小说", mode: "restored" }).mode).toBe("restored");
     expect(projectImportResSchema.safeParse({ imported: true, id: "proj-1", path: "/x", name: "x", mode: "overwrite" }).success).toBe(false);
  // 收紧：imported 字面量 true、mode 必填、其余字段必填
@@ -587,7 +587,7 @@ describe("导出/导入（）", () => {
   });
 });
 
-describe("userConfigFileSchema（批次十四 schema v1 → 批次十六 v2 多 provider）", () => {
+describe("userConfigFileSchema（schema v1 → v2 多 provider）", () => {
   it("v2 全字段 parse（schema_version=2 + provider + api_keys + model + thinking_level）", () => {
     const parsed = userConfigFileSchema.parse({
       schema_version: 2,

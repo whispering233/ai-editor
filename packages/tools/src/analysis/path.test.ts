@@ -76,7 +76,7 @@ function makeCtx(): ToolContext {
   return { db, outlineDir: dir, projectId: "proj-test" };
 }
 
-/** 大纲节点间 plot_edge 连线（ 画布连线） */
+/** 大纲节点间 plot_edge 连线（画布连线） */
 function addEdge(source: string, target: string): void {
   createRelation(
     db,

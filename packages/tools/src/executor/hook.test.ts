@@ -120,7 +120,7 @@ describe("advance_hook（复合写：delta + advances 一次提交）", () => {
     const hookId = makeHook("身世之谜", { status: "planted" });
     const result = executeAdvanceHook(makeCtx(), advanceProposal(hookId, "sc-1", "第 12 章发现玉佩"));
     expect(result.id).toMatch(/^rel-/);
- // delta：from=planted → to=progressing（ 示例形态），description = args.description
+ // delta：from=planted → to=progressing（示例形态），description = args.description
     const deltas = hookDeltas(hookId);
     expect(deltas).toHaveLength(1);
     expect(deltas[0]).toMatchObject({
@@ -247,7 +247,7 @@ describe("resolve_hook（复合写：delta + resolves 一次提交）", () => {
 });
 
 describe("abandon_hook（复合写：仅 delta 记 status=abandoned；无 node_id → 锚定 current_position）", () => {
-  it("写路径：delta 锚定 current_position 节点（），无 relation 插入", () => {
+  it("写路径：delta 锚定 current_position 节点，无 relation 插入", () => {
     writeOutlineFile(dir, seedOutlineTree());
     writeProjectFile(dir, { id: "proj-test", name: "测试", language: "zh", prompt: "", schema_version: 1, current_position: "sc-1", created_at: T0, updated_at: T0 });
     const hookId = makeHook("身世之谜", { status: "progressing" });
@@ -327,7 +327,7 @@ describe("复合写原子性", () => {
   });
 });
 
-describe("signal（）", () => {
+describe("signal", () => {
   it("执行类是短同步事务，无 signal 参数（中止检查由 S7.5 确认路由承担——见 executor/hook.ts 注释）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const hookId = makeHook("身世之谜");

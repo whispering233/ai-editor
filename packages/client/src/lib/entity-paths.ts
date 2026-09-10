@@ -1,4 +1,4 @@
-// 实体路由一级化映射（批次十七 1-1）：实体类型 → 一级 hash 路由段，唯一事实源。
+// 实体路由一级化映射：实体类型 → 一级 hash 路由段，唯一事实源。
 // 泛型列表宿主仅 character/setting/location 存在（relations 为关联总览，不属实体类型）；
 // hook/event/timepoint/reference 的详情由各自宿主段承载（hooks/:id、timeline/:id、
 // timepoints/:id、references/:id）——「无导航列表 ≠ 无详情路由」（详情不经列表）。

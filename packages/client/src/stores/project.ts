@@ -101,7 +101,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   updateConfig: async (patch) => {
     await apiUpdateConfig(patch);
- // 服务端仅返回 {updated:true}，重新拉取保证本地一致（currentPosition 变更后同步刷新，）
+ // 服务端仅返回 {updated:true}，重新拉取保证本地一致（currentPosition 变更后同步刷新）
     await get().loadConfig();
   },
 
@@ -142,7 +142,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
  // L3（oracle U4 审核）：切项目后清除未消费的大纲定位目标（旧 id 对新树无意义，防残留）
     useUiStore.getState().clearFocusOutlineNode();
     if (res.rebuilt) {
- // 删库重建提示（ + 「向客户端提示已重建」）
+ // 删库重建提示（「向客户端提示已重建」）
       useUiStore
         .getState()
         .showToast(
@@ -229,7 +229,7 @@ function findNodeInTree(node: OutlineNode, id: string): OutlineNode | null {
   return null;
 }
 
-/** 按 id 查找节点标题（顶栏「当前位置」展示用，：从本地 outline 树映射 id→title） */
+/** 按 id 查找节点标题（顶栏「当前位置」展示用：从本地 outline 树映射 id→title） */
 export function findOutlineNodeTitle(tree: OutlineTree | null, id: string | null): string | null {
   if (!tree || !id) return null;
   for (const child of tree.children) {

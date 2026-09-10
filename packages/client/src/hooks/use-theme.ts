@@ -1,4 +1,4 @@
-// 主题切换 hook（：双主题浅/深 + 手动切换，localStorage 持久化，无自动时间段切换）
+// 主题切换 hook（双主题浅/深 + 手动切换，localStorage 持久化，无自动时间段切换）
 // 实现：document.documentElement.classList.toggle("dark", ...)（无 ThemeProvider 需求，轻量 hook）
 // key `ai-editor:theme`，值 "light" | "dark"，默认 light
 import { useEffect, useState } from "react";

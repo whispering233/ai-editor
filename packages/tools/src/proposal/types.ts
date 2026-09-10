@@ -5,7 +5,7 @@
 // 属 S7.4 范围，本模块只负责**产出提案对象结构**。
 //
 // 提案对象结构：
-// - proposal_id：prop_ 前缀（generateRuntimeId， id 约定）
+// - proposal_id：prop_ 前缀（generateRuntimeId，id 约定）
 // - type：工具名（PROPOSAL_TOOLS 一员，S7.4 executor 按名调度）
 // - args：**执行信息**——确认后调用 S6.7 执行工具所需的全部参数（端点类工具已把
 // id 解析为 {source_type, source_id} 等规范化形态，执行时可直接透传）
@@ -34,7 +34,7 @@ import { throwIfAborted } from "../analysis/utils.js";
 /** 被引用对象种类（确认时按 kind 走对应存在性 + updated_at 重校验路径） */
 export type ProposalReferenceKind = "entity" | "relation" | "delta" | "outline_node";
 
-/** 单个引用快照：被引用对象 id + updated_at（ 快照比对） */
+/** 单个引用快照：被引用对象 id + updated_at（快照比对） */
 export interface ProposalReference {
   kind: ProposalReferenceKind;
   id: string;
@@ -44,7 +44,7 @@ export interface ProposalReference {
 
 /** 提案对象（仅内存；S7.4 提案仓存储，S7.5 confirm/reject 消费） */
 export interface Proposal {
- /** 运行时 id（prop_ 前缀， id 约定） */
+ /** 运行时 id（prop_ 前缀，id 约定） */
   proposal_id: string;
  /** 工具名（propose_*，PROPOSAL_TOOLS 一员） */
   type: string;
@@ -66,7 +66,7 @@ export interface Proposal {
   createdAt: string;
 }
 
-/** propose_* tool_result（ 2026-08 修订：仅「提案已发出」提示，不含预览细节） */
+/** propose_* tool_result（2026-08 修订：仅「提案已发出」提示，不含预览细节） */
 export interface ToolProposalResult {
   proposal_id: string;
   summary: string;
@@ -154,7 +154,7 @@ export function requireOutlineNode(ctx: ToolContext, nodeId: string): OutlineFil
 
 /**
  * 按 id 取伏笔实体（type === "hook" 且未软删，类型一致性校验）；否则抛错。
- * 伏笔即 type=hook 的实体（：用户手动创建或 AI 提案创建），快照用实体自身 updated_at。
+ * 伏笔即 type=hook 的实体（用户手动创建或 AI 提案创建），快照用实体自身 updated_at。
  */
 export function requireHook(ctx: ToolContext, hookId: string): EntityRow {
   const entity = getEntity(ctx.db, hookId);

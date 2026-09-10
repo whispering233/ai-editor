@@ -1,4 +1,4 @@
-// 设置路由（S1.3 + 批次十六多 provider）：GET/PUT /api/v1/settings/llm
+// 设置路由（S1.3 + 多 provider）：GET/PUT /api/v1/settings/llm
 // 关键约束：各 provider key 只走三级解析链（不入项目文件）：
 //   ① 环境变量（deepseek → DEEPSEEK_API_KEY；opencode-go → OPENCODE_API_KEY）
 //   ② 用户级配置 ~/.ai-editor/config.json api_keys[<provider>]（HOME 可覆盖——测试隔离依赖；
@@ -23,7 +23,7 @@ import {
 import { DEFAULT_PROVIDER, getAvailableModels, REGISTERED_PROVIDERS } from "@whispering233/ai-editor-llm";
 import { HttpError, ok } from "../middleware/error.js";
 
-/** 默认模型名（ settings 端点；两 provider 目录均含该模型——兜底/初始态稳定） */
+/** 默认模型名（settings 端点；两 provider 目录均含该模型——兜底/初始态稳定） */
 export const DEFAULT_MODEL = "deepseek-v4-flash";
 
 /** 环境变量（各 provider 解析链第 ① 级；测试经 process.env 注入） */

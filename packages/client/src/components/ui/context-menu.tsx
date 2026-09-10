@@ -1,4 +1,4 @@
-// 行级右键菜单（批次十七 3-7 自绘换芯：Base UI ContextMenu → 原生实现，API 面不变）
+// 行级右键菜单（自绘换芯：Base UI ContextMenu → 原生实现，API 面不变）
 // 触发 = 行元素 onContextMenu（ContextMenuTrigger 内建 preventDefault + 打开于指针位置）；
 // 行内容经 cloneElement 注入 trigger 元素内部（render={行元素} + children）。
 // 菜单浮层 = portal fixed（指针坐标 + 视口 clamp）；Esc / 外部 pointerdown / 滚动关闭。

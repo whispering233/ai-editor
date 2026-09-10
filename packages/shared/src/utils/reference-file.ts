@@ -1,8 +1,8 @@
-// 参考资料文件工具纯函数（批次十一）
+// 参考资料文件工具纯函数
 // 职责：md 文件（YAML frontmatter + markdown 正文）的解析/序列化 + 文件名 sanitize。
 // 约束（shared 硬约束）：纯 TS 无 Node 内置模块——仅字符串处理，client 可打包。
 //
-// frontmatter 格式（ Q1=方案 A）：
+// frontmatter 格式（Q1=方案 A）：
 // ---
 // title: 五行相生相克 摘抄
 // category: material
@@ -40,7 +40,7 @@ function splitFrontmatter(text: string): { rawLines: string[]; body: string } | 
   for (let i = 0; i < lines.length; i++) {
     if (lines[i].trim() === FRONTMATTER_DELIMITER) {
       const body = lines.slice(i + 1).join("\n");
- // 去掉 body 开头单个换行（ 闭合行后紧跟空行是惯例，保留语义不吞内容）
+ // 去掉 body 开头单个换行（闭合行后紧跟空行是惯例，保留语义不吞内容）
  // 与末尾恰一个换行（POSIX 文件末尾换行惯例；roundtrip 稳定：serialize 输出 \n → parse 去掉）
       return { rawLines: lines.slice(0, i), body: body.replace(/^\n/, "").replace(/\n$/, "") };
     }
@@ -98,7 +98,7 @@ export function parseReferenceFrontmatter(text: string): ReferenceFrontmatter {
   return { title, category, tags, extraLines: unknown, body: block.body };
 }
 
-/** 序列化参考文件全文（frontmatter + 正文； 格式） */
+/** 序列化参考文件全文（frontmatter + 正文；格式） */
 export function serializeReferenceFile(input: {
   title: string;
   category: string;

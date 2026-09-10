@@ -1,4 +1,4 @@
-// 保存快捷键（批次十八 B2，用户反馈 #5：Ctrl/Cmd + S 保存当前修改的内容）
+// 保存快捷键（B2，用户反馈 #5：Ctrl/Cmd + S 保存当前修改的内容）
 // 结构：
 // - isSaveShortcut：纯谓词（Ctrl/Cmd + S，不带 Shift/Alt；大小写不敏感）
 // - 注册栈 registerSaveHandler：后注册者优先——行内编辑组件晚于页面级保存按钮挂载，

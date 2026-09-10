@@ -1,5 +1,5 @@
 // API Zod schema（@whispering233/ai-editor-shared/types/api.ts，单一事实来源）
-// 命名约定（）：请求体/查询参数 snake_case，响应体 camelCase；
+// 命名约定：请求体/查询参数 snake_case，响应体 camelCase；
 // 嵌套 data 对象内部字段原样透传（snake_case，如 expected_payoff）。
 // **校验执行边界（2026-08 修订）**：schema 定义于此，但**校验仅在服务端执行**——
 // client 只消费推断出的类型与常量，不打包校验函数（避免 50KB 级依赖进浏览器包）。
@@ -14,17 +14,17 @@ import type { ComputeStateResult, DeltaRecord, EntitySummary, ProjectAgents, Pro
 
 // ============ 基础 schema ============
 
-/** 实体类型（ entities 表 CHECK 约束；与 ENTITY_TYPES 常量对齐） */
+/** 实体类型（entities 表 CHECK 约束；与 ENTITY_TYPES 常量对齐） */
 export const entityTypeSchema = z.enum(ENTITY_TYPES);
 
-/** 项目语言（ project.json ） */
+/** 项目语言（project.json） */
 export const projectLanguageSchema = z.enum(["zh", "en"]);
 
 // ============ ErrorCode（单一来源：REST / SSE / 工具共用，「错误码」） ============
 
 /**
  * 错误码全量枚举
- * 文档出处： 各端点错误响应；DELTA_CONFLICT 为 2026-08 修订废弃码
+ * 文档出处：各端点错误响应；DELTA_CONFLICT 为 2026-08 修订废弃码
  * （computeState 改为 skipped/conflicts 字段呈现，不再返回 409——保留枚举兼容历史引用）；
  * 末尾四个为 命名（文档未给具体码名，按语义命名，供 SSE error 事件使用）
  */
@@ -85,17 +85,17 @@ export const apiErrorSchema = z.object({
 /** 错误响应类型 */
 export type ApiError = z.infer<typeof apiErrorSchema>;
 
-// ============ 实体 data 字段 schema（ 创建接口 + + ） ============
+// ============ 实体 data 字段 schema（创建接口 + +） ============
 
 /**
- * character 专属字段（：role/gender/age/personality[]/motivation/abilities[]/status/custom_fields）
+ * character 专属字段（role/gender/age/personality[]/motivation/abilities[]/status/custom_fields）
  * 注意：data 嵌套对象内部字段原样透传（snake_case，如 custom_fields），顶层字段才是 camelCase
  */
 export const characterDataSchema = z
   .object({
     role: z.string().optional(),
     gender: z.string().optional(),
-    age: z.union([z.string(), z.number()]).optional(), // 年龄文本或数字皆可（ 未定死类型）
+    age: z.union([z.string(), z.number()]).optional(), // 年龄文本或数字皆可（未定死类型）
     personality: z.array(z.string()).optional(),
     motivation: z.string().optional(),
     abilities: z.array(z.string()).optional(),
@@ -104,10 +104,10 @@ export const characterDataSchema = z
   })
   .passthrough(); // 允许未知字段（创作工具，用户自定义字段自由）
 
-/** setting 专属字段（：description/tags/rules/custom_fields；
- * `tags` = 分类标签（ K2，2026-08：分类统一字段，前后端同名）；
+/** setting 专属字段（description/tags/rules/custom_fields；
+ * `tags` = 分类标签（K2，2026-08：分类统一字段，前后端同名）；
  * `rules` = 规则条款（恢复原始语义，仅设定详情页编辑）；
- * `parent_id`（ 层级 belongs_to）与 `category`（ 废弃）不参与新字段，旧残留 passthrough 容错） */
+ * `parent_id`（层级 belongs_to）与 `category`（废弃）不参与新字段，旧残留 passthrough 容错） */
 export const settingDataSchema = z
   .object({
     description: z.string().optional(),
@@ -117,7 +117,7 @@ export const settingDataSchema = z
   })
   .passthrough();
 
-/** location 专属字段（：type/parent_id/description/custom_fields） */
+/** location 专属字段（type/parent_id/description/custom_fields） */
 export const locationDataSchema = z
   .object({
     type: z.string().optional(),
@@ -127,7 +127,7 @@ export const locationDataSchema = z
   })
   .passthrough();
 
-/** hook 专属字段（：status/category/expected_payoff/payoff_timing/half_life/is_core/notes/expected_resolve_node_id） */
+/** hook 专属字段（status/category/expected_payoff/payoff_timing/half_life/is_core/notes/expected_resolve_node_id） */
 export const hookDataSchema = z
   .object({
     status: z.enum(HOOK_STATUSES).optional(),
@@ -141,7 +141,7 @@ export const hookDataSchema = z
   })
   .passthrough();
 
-/** event 专属字段（ 时间轴事件：description/tags[]；字段名 snake_case） */
+/** event 专属字段（时间轴事件：description/tags[]；字段名 snake_case） */
 export const eventDataSchema = z
   .object({
     description: z.string().optional(),
@@ -152,7 +152,7 @@ export const eventDataSchema = z
 /** timepoint 专属字段（G2 时间标签点）：data 空——时间标签文本 = name，可重命名，YAGNI 不加 data 字段 */
 export const timepointDataSchema = z.object({}).passthrough();
 
-/** reference 专属字段（ 参考资料：type 分类 / content 全文长文本 / source 来源 / tags 标签数组；
+/** reference 专属字段（参考资料：type 分类 / content 全文长文本 / source 来源 / tags 标签数组；
  * type 为自由文本分类（不再预置枚举，缺省 material 写入侧兜底）；
  * 两类承载——kind = file（本地 md 文档：file_name 相对路径 + content 正文镜像 + file_mtime
  * 上次同步快照）/ link（外源链接：url 必填 + content 可选备注）；kind 缺省视为 link（存量条目运行时兼容）；
@@ -188,12 +188,12 @@ export const ENTITY_DATA_SCHEMAS = {
 // ============ project 端点（「项目管理」） ============
 
 /** ProjectConfig 响应（GET /api/v1/project/config；与 types/project.ts 的 ProjectConfig 对齐；
- * `prompt` 已废弃不再返回——项目规则唯一事实源改为项目目录 ） */
+ * `prompt` 已废弃不再返回——项目规则唯一事实源改为项目目录） */
 export const projectConfigSchema: z.ZodType<ProjectConfig> = z.object({
   id: z.string(),
   name: z.string(),
   language: projectLanguageSchema,
-  schemaVersion: z.number().int(), // 
+  schemaVersion: z.number().int(), //
   currentPosition: z.string().nullable(), // 「当前位置」节点 id；null = 未设置
   backupFrequencyMinutes: z.number().int().nullable(), // 自动备份频率；null = 关闭；缺省 10 由读侧兜底
   createdAt: z.string(),
@@ -203,7 +203,7 @@ export const projectConfigSchema: z.ZodType<ProjectConfig> = z.object({
 // POST /api/v1/project/create
 export const projectCreateReqSchema = z
   .object({
-    path: z.string(), // 项目目录绝对路径（ 校验）
+    path: z.string(), // 项目目录绝对路径（校验）
     config: z
       .object({
         name: z.string().optional(),
@@ -271,7 +271,7 @@ export const projectConfigUpdateReqSchema = z
  // 项目规则改由 PUT /api/v1/project/agents 写入 
     current_position: z.string().nullable().optional(), // 须指向存在的非软删大纲节点（服务端校验）
  /**
- * 自动备份频率（ + 批次十四修订）：仅接受枚举 1/5/10/15/30/60（BACKUP_FREQUENCIES），其他（含 0）→ 400
+ * 自动备份频率（修订）：仅接受枚举 1/5/10/15/30/60（BACKUP_FREQUENCIES），其他（含 0）→ 400
  * VALIDATION_ERROR；null = 关闭（写入 null）——0 仅读侧兼容旧数据语义，写侧一律用 null 表示关闭
  */
     backup_frequency_minutes: z.union(BACKUP_FREQUENCIES.map((v) => z.literal(v))).nullable().optional(),
@@ -293,7 +293,7 @@ export const projectAgentsGetResSchema: z.ZodType<ProjectAgents> = z.object({
 
 // PUT /api/v1/project/agents（设置页直接编辑 文件内容）
 // 语义：整体替换（非追加）；空串 = 清空规则（保留空文件不删除）；文件不存在自动创建；
-// 写入走原子写（ 同款）；写入后返回新 mtime（前端更新本地比对基线）
+// 写入走原子写（同款）；写入后返回新 mtime（前端更新本地比对基线）
 export const projectAgentsPutReqSchema = z
   .object({
     content: z.string(), // 完整内容（整体替换；空串 = 清空规则文件，保留空文件不删除）
@@ -305,7 +305,7 @@ export const projectAgentsPutResSchema = z.object({
   updatedAt: z.string(), // 写入后的文件 mtime（ISO 8601）——前端更新本地比对基线
 });
 
-// POST /api/v1/project/backup（ 新增：手动备份可携带自定义名称）
+// POST /api/v1/project/backup（新增：手动备份可携带自定义名称）
 // - 请求体可选 `name`（string）；空串/缺省 → 无自定义名称（纯时间戳文件名）。
 // - **形状校验仅限类型**（oracle 审核 P2-1：zod 与 sanitize 的「.zip 剥离 + 长度」判定
 // 顺序曾在 schema 内重复实现导致误拒——如 29 字符 + ".zip" schema 判超长而 sanitize 判合法）；
@@ -342,13 +342,13 @@ export const PROJECT_EXPORT_FILE_NAMES = ["project.json", "outline.json", "data.
  * {success,data}」通用约定的显式例外；Content-Disposition: attachment;
  * filename*=UTF-8''<书名>.zip（RFC 5987）
  * - zip 内三文件：project.json + outline.json + data.db（导出前 wal_checkpoint(TRUNCATE)
- * 保证 data.db 主文件完整快照； key 存用户级配置，天然不入包）
+ * 保证 data.db 主文件完整快照；key 存用户级配置，天然不入包）
  * - 错误：无当前项目 → 409 NO_PROJECT_OPEN（服务端补充码，与 /config 一致）；
  * 三文件缺失任一 → 500 INTERNAL_ERROR（打开的项目三文件必然齐全，缺失即损坏）
  * - 二进制响应不走 Zod parse——以本注释 + PROJECT_EXPORT_FILE_NAMES 常量表达
  */
 
-// POST /api/v1/project/import（ 已落）
+// POST /api/v1/project/import（已落）
 // - 请求：multipart/form-data 文件上传——field "file"（zip 备份包）+ field "name"（书名，
 // 必填；禁路径分隔符/纯点/控制字符，与 client 新建项目同规则）——目标目录为
 // 服务端决定的 创作根/books/<name>/（客户端不可指定路径，防越权）
@@ -394,10 +394,10 @@ export const entitySummarySchema: z.ZodType<EntitySummary> = z.object({
   type: entityTypeSchema,
   name: z.string(),
   summary: z.record(z.string(), z.unknown()), // 从 data 提取的关键摘要字段
- // M2（2026-08 批次六）：仅 setting 列表填充（ 层级 = belongs_to）
+ // M2（2026-08）：仅 setting 列表填充（层级 = belongs_to）
   parentId: z.string().optional(),
   parentName: z.string().optional(),
- // 手动排序位（2026-08 批次十三）：仅 setting 类型填充（entities.sort_order 列）
+ // 手动排序位（2026-08）：仅 setting 类型填充（entities.sort_order 列）
   sortOrder: z.number().int().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -432,7 +432,7 @@ export const entityDetailResSchema = z.object({
   type: entityTypeSchema,
   name: z.string(),
   data: z.record(z.string(), z.unknown()), // 完整字段（嵌套 snake_case 原样透传）
-  relations: z.array(relationRecordSchema), // RelationSummary（形状同 RelationRecord，）
+  relations: z.array(relationRecordSchema), // RelationSummary（形状同 RelationRecord）
   deltaCount: z.number().int(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -480,7 +480,7 @@ export const entityDeleteResSchema = z.object({
 
 // relationRecordSchema 定义于 entity 区（entity 详情 relations 与 relation 查询共用，避免重复定义）
 
-/** 路径结构（depth>=2，） */
+/** 路径结构（depth>=2） */
 export const relationPathSchema = z.object({
   nodes: z.array(z.object({ type: z.string(), id: z.string(), name: z.string() })),
   edges: z.array(z.object({ from: z.string(), to: z.string(), relationType: z.string() })),
@@ -538,7 +538,7 @@ export const relationDeleteResSchema = z.object({
 
 // ============ delta 端点（「Delta 变更追踪」） ============
 
-/** 变更操作类型（2026-08 修订语义：set/update/add/remove，见 ） */
+/** 变更操作类型（2026-08 修订语义：set/update/add/remove，见） */
 export const deltaOpSchema = z.enum(["set", "update", "add", "remove"]);
 
 /** 单条属性变更 */
@@ -629,7 +629,7 @@ export const deltaComputeResSchema: z.ZodType<ComputeStateResult> = z.object({
 // ============ outline 端点（「大纲操作」，严格三层） ============
 
 /**
- * 大纲节点 data 字段 schema（麦基《故事》字段集， outline.json「节点结构化信息」节）：
+ * 大纲节点 data 字段 schema（麦基《故事》字段集，outline.json「节点结构化信息」节）：
  * scene——goal/conflict_levels/value_from/value_to；chapter——reversal/climax_scene；
  * volume——climax_scene/inciting_scene。
  * 宽松语义与 ENTITY_DATA_SCHEMAS 一致：
@@ -759,10 +759,10 @@ export const outlineMoveResSchema = z.object({
   newParentId: z.string(),
 });
 
-// PUT /api/v1/entity/event/:id/move（时间轴事件重排，；命名风格同 outlineMoveReqSchema）
+// PUT /api/v1/entity/event/:id/move（时间轴事件重排；命名风格同 outlineMoveReqSchema）
 export const entityMoveReqSchema = z
   .object({
- // 0-based 全局事件线性序（）：超过当前事件总数 → clamp 到末尾（不返回 4xx）；
+ // 0-based 全局事件线性序：超过当前事件总数 → clamp 到末尾（不返回 4xx）；
  // 负数由本 schema 拒绝（400 VALIDATION_ERROR）——db 层 moveEvent 对负数 clamp 至 0
  // 仅为内部防御语义（HTTP 路径不可达）
     order: z.number().int().min(0),
@@ -773,7 +773,7 @@ export const entityMoveResSchema = z.object({
   moved: z.literal(true),
 });
 
-// PUT /api/v1/entity/setting/:id/move（设定同级重排 / 改父 + 重排，，2026-08 批次十三；
+// PUT /api/v1/entity/setting/:id/move（设定同级重排 / 改父 + 重排，2026-08；
 // 修订「设定无 sort_order 语义」约束——复用 entities.sort_order 列，无 DDL 迁移）
 export const settingMoveReqSchema = z
   .object({
@@ -845,7 +845,7 @@ export const trashPurgeResSchema = z.object({
   purged: z.literal(true),
 });
 
-// ============ chat 端点（「AI 对话」， 持久化） ============
+// ============ chat 端点（「AI 对话」，持久化） ============
 
 // POST /api/v1/chat（POST + SSE；消息落 chat_messages 表）
 export const chatSendReqSchema = z
@@ -920,17 +920,17 @@ export const modelInfoSchema = z.object({
 });
 export type LlmModelInfo = z.infer<typeof modelInfoSchema>;
 
-/** 单 provider 条目（批次十六：GET /settings/llm providers[]——目录 + 该家有效 key 状态） */
+/** 单 provider 条目（GET /settings/llm providers[]——目录 + 该家有效 key 状态） */
 export const settingsProviderSchema = z.object({
   id: z.string(), // provider 目录 id（deepseek / opencode-go）
   displayName: z.string(), // 分组标题（如 "OpenCode Go"）
   apiKeySet: z.boolean(), // 该家解析链（env > config api_keys > pi-agent auth.json）是否有有效 key
   apiKeyMasked: z.string().optional(), // 掩码展示（utils/format.ts maskApiKey）
-  models: z.array(modelInfoSchema), // 该家模型目录（ getAvailableModels(provider)）
+  models: z.array(modelInfoSchema), // 该家模型目录（getAvailableModels(provider)）
 });
 export type SettingsProvider = z.infer<typeof settingsProviderSchema>;
 
-// GET /api/v1/settings/llm（批次十六：多 provider——provider/model 激活一对 + 各家目录/key 状态；key 不回传明文）
+// GET /api/v1/settings/llm（多 provider——provider/model 激活一对 + 各家目录/key 状态；key 不回传明文）
 export const settingsLlmGetResSchema = z.object({
   provider: z.string(), // 激活 provider id（缺省 "deepseek"）
   model: z.string(), // 当前模型名（属于 provider 目录，缺省 "deepseek-v4-flash"）
@@ -938,7 +938,7 @@ export const settingsLlmGetResSchema = z.object({
   providers: z.array(settingsProviderSchema), // 全量注册 provider（前端下拉分组/禁用依据）
 });
 
-// PUT /api/v1/settings/llm（写入 ~/.ai-editor/config.json，绝不入项目文件；批次十六 v2）
+// PUT /api/v1/settings/llm（写入 ~/.ai-editor/config.json，绝不入项目文件；v2）
 // 语义：provider + model 成对（跨 provider 激活）；api_keys 写谁谁变、空串 = 清除该家；
 // server 校验 model ∈ provider 目录（不符 → VALIDATION_ERROR）；api_key 旧字段不再接受（前端已升 api_keys）
 export const settingsLlmPutReqSchema = z
@@ -954,7 +954,7 @@ export const settingsLlmPutResSchema = z.object({
   saved: z.literal(true),
 });
 
-// ============ 用户级配置文件（批次十四）：~/.ai-editor/config.json schema v2（批次十六多 provider） ============
+// ============ 用户级配置文件：~/.ai-editor/config.json schema v2（多 provider） ============
 // 设计要点：
 // - 非 strict（宽松读取）：config.json 是用户自有文件，未来版本追加字段不应使整份配置失效
 // （zod 默认 strip 未知字段，safeParse 仍成功）
@@ -977,7 +977,7 @@ export const userConfigFileSchema = z
 
 export type UserConfigFile = z.infer<typeof userConfigFileSchema>;
 
-// ============ names 端点（「POST /api/v1/names/resolve」， 工具调用人类可读化） ============
+// ============ names 端点（「POST /api/v1/names/resolve」，工具调用人类可读化） ============
 
 // 批量名称解析：把工具参数中的 id 解析为人类可读名称（label = 类型中文，name = 实体名/节点标题）
 // 前缀分流（char-/set-/loc-/hook-/ev-/tp-/ref- → 实体；vol-/ch-/sc- → 大纲节点；rel- → null；其余 → null）
@@ -993,7 +993,7 @@ export const namesResolveResSchema = z.object({
 
 export type NamesResolveResult = z.infer<typeof namesResolveResSchema>;
 
-// ============ SSE 事件（ chat 端点事件流，第 738-765 行） ============
+// ============ SSE 事件（chat 端点事件流，第 738-765 行） ============
 
 /** 心跳 ping（每 15-30s）：空 payload */
 export const ssePingEventSchema = z.object({});
@@ -1002,7 +1002,7 @@ export const ssePingEventSchema = z.object({});
 export const sseToolCallEventSchema = z.object({
   tool: z.string(),
   args: z.record(z.string(), z.unknown()),
-  id: z.string(), // call_ 前缀（ 成对重组依据）
+  id: z.string(), // call_ 前缀（成对重组依据）
 });
 
 /** tool_result：工具执行结果 */

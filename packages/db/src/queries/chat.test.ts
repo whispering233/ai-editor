@@ -81,7 +81,7 @@ describe("chat.ts insertChatMessage", () => {
   });
 });
 
-describe("chat.ts 项目隔离（）", () => {
+describe("chat.ts 项目隔离", () => {
   it("两个项目的数据互不可见：会话列表与消息历史均按 project_id 过滤", () => {
     insertChatMessage(db, msg({ session_id: "sess-1", project_id: "proj-a", role: "user", content: "A 项目消息", created_at: "2026-08-01T10:00:00Z" }));
     insertChatMessage(db, msg({ session_id: "sess-2", project_id: "proj-b", role: "user", content: "B 项目消息", created_at: "2026-08-01T11:00:00Z" }));
@@ -101,7 +101,7 @@ describe("chat.ts 项目隔离（）", () => {
 });
 
 describe("chat.ts migrateChatMessagesProject（B2.2 审核 P1-1：跨项目恢复会话归属迁移）", () => {
-  it("旧 id 行全部迁移为新 id，其他 id 行不动；迁移后按新 id 可查（ 隔离语义）", () => {
+  it("旧 id 行全部迁移为新 id，其他 id 行不动；迁移后按新 id 可查（隔离语义）", () => {
     insertChatMessage(db, msg({ session_id: "sess-old", project_id: "proj-old", role: "user", content: "旧项目消息 1", created_at: "2026-08-01T10:00:00Z" }));
     insertChatMessage(db, msg({ session_id: "sess-old", project_id: "proj-old", role: "assistant", content: "旧项目消息 2", created_at: "2026-08-01T10:00:01Z" }));
     insertChatMessage(db, msg({ session_id: "sess-other", project_id: "proj-other", role: "user", content: "无关项目消息", created_at: "2026-08-01T11:00:00Z" }));
@@ -207,7 +207,7 @@ describe("chat.ts listMessages", () => {
   });
 });
 
-describe("chat.ts reassembleMessages 成对重组（）", () => {
+describe("chat.ts reassembleMessages 成对重组", () => {
   it("正常成对：assistant tool_call → tool 结果保留，工具结果按 tool_calls 顺序紧随其后", () => {
     const rows = [
       msg({ session_id: "sess-1", project_id: "proj-a", role: "user", content: "查两个人", created_at: "t1" }),

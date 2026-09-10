@@ -4,7 +4,7 @@
 export type ProjectLanguage = "zh" | "en";
 
 /**
- * 项目配置（API 响应形态，GET /api/v1/project/config，）
+ * 项目配置（API 响应形态，GET /api/v1/project/config）
  * 注：`prompt` 字段已废弃——不再返回；项目规则唯一事实源改为项目目录 
  * （见 GET /api/v1/project/agents）
  */
@@ -23,7 +23,7 @@ export interface ProjectConfig {
 }
 
 /**
- * project.json 存储形态（ ，内部 snake_case）
+ * project.json 存储形态（内部 snake_case）
  * 硬约束：DeepSeek API key 绝不写入本文件
  */
 export interface ProjectFileConfig {
@@ -49,7 +49,7 @@ export interface ProjectFileConfig {
 
 /**
  * 项目规则文件 （项目规则唯一事实源，取代 project.json `prompt` 字段）
- * GET /api/v1/project/agents 响应形态（）
+ * GET /api/v1/project/agents 响应形态
  */
 export interface ProjectAgents {
  /** 文件内容（文件不存在 → 空串） */

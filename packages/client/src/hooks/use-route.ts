@@ -1,6 +1,6 @@
-// 自制 hash 路由（ 决策：轻量 hash-based useHashRoute，不引入 React Router）
+// 自制 hash 路由（决策：轻量 hash-based useHashRoute，不引入 React Router）
 // 解析 location.hash（形如 "#/outline"、"#/characters/char-abc"）为结构化路由。
-// 路由表见 （10 路由，批次十七一级化）：#/、#/overview、#/outline、#/outline/:nodeId、
+// 路由表见 （10 路由，一级化）：#/、#/overview、#/outline、#/outline/:nodeId、
 // #/characters[/:id]、#/setting[/:id]、#/locations[/:id]、#/relations、#/hooks[/:id]、
 // #/timeline、#/timeline/:id、#/timepoints/:id、#/references[/:id]、#/trash、#/preferences
 // （#/chat、#/canvas 已移除；#/entities/* 与 #/settings 仅作旧址重定向；未知 hash 回退 #/ 兜底）
@@ -14,8 +14,8 @@ export interface Route {
   isFallback: boolean;
 }
 
-/** 已知路由首段（ 路由表；根路由 "" 由空 segments 表达；#/chat 已移除不再属已知段）
- * 批次十七 1-1 一级化后：characters/setting/locations/relations/timepoints/preferences 为新段；
+/** 已知路由首段（路由表；根路由 "" 由空 segments 表达；#/chat 已移除不再属已知段）
+ * 一级化后：characters/setting/locations/relations/timepoints/preferences 为新段；
  * entities/settings 仍属已知段——仅作旧址重定向（main.tsx 处理），避免老书签被误判回退 */
 export const KNOWN_ROUTE_SEGMENTS = [
   "outline",
@@ -37,7 +37,7 @@ export const KNOWN_ROUTE_SEGMENTS = [
 /**
  * 解析 hash 为 Route（纯函数，可单测）：
  * - 空 hash / "#/" → 根路由（Dashboard）
- * - 未知首段 → 回退根路由（：「未知 hash 回退 #/」）
+ * - 未知首段 → 回退根路由（「未知 hash 回退 #/」）
  */
 export function parseHashRoute(hash: string): Route {
   const raw = hash.replace(/^#/, "").replace(/^\/+/, "");
@@ -72,7 +72,7 @@ export function useHashRoute(): Route {
   return route;
 }
 
-/** 导航辅助（：导航统一走 <a href="#/..."> 或 navigate(path)） */
+/** 导航辅助（导航统一走 <a href="#/..."> 或 navigate(path)） */
 export function navigate(path: string): void {
   const target = path.startsWith("#") ? path : `#${path.startsWith("/") ? path : `/${path}`}`;
   if (window.location.hash !== target) {

@@ -1,8 +1,8 @@
 // 实体列表页（S3.5；替换 T7.1 占位壳；U8 增补「关联」段）
-// 路由（批次十七 1-1 一级化）：#/characters | #/setting（树形视图）| #/locations | #/relations——
+// 路由（一级化）：#/characters | #/setting（树形视图）| #/locations | #/relations——
 // 各类型独立一级段，main.tsx 按段路由传入 type；hook/event/timepoint 泛型入口已去重（富页/宿主段承接），
 // 旧 #/entities/:type[/:id] 在 main.tsx 全量重定向到新段；
-// 批次十八 A1（用户反馈）：页首残留的「实体」标题与类型切换 Segmented 已移除——
+// A1（用户反馈）：页首残留的「实体」标题与类型切换 Segmented 已移除——
 // 类型切换 = 左栏 NavRail（一级导航），列表页只保留搜索/排序/新建等内容级控件；
 // type 变化（直接改 hash / 切导航）仍触发本页查询状态重置
 // 数据：GET /api/v1/entity/:type?q=&offset=&limit=&sort=&order=（EntitySummary 摘要列表）
@@ -10,7 +10,7 @@
 // 摘要列按类型（lib/entity-list.ts SUMMARY_COLUMNS）/空态两种文案区分/行点击跳详情（S3.6）；
 // 「关联（U8）」——type==="relations" 渲染 RelationsView（前端过滤全量关系），
 // 「+ 新建」变「+ 建立关联」打开共用 CreateRelationDialog（列表模式，源可选）
-// （2026-08 批次十）：设定 tab（entityType==="setting"）改为**树形视图**（SettingTreeView，
+// （2026-08）：设定 tab（entityType==="setting"）改为**树形视图**（SettingTreeView，
 // 与设定树 tab 合并）；设定不走表格/分页，
 // 搜索+标签筛选在树内进行（树形视图自带工具栏），上级设定筛选被树形导航吸收（下拉移除）；
 // character/location 保持表格视图（行级 AskAiButton 已移除——右键菜单替代）
@@ -59,14 +59,14 @@ const TYPE_LABEL: Record<ListableEntityType, string> = {
   setting: "设定",
   location: "地点",
   hook: "伏笔",
-  // C1 类型补全（ event 时间轴事件；时间轴专属 UI 由 C2 实现）
+  // C1 类型补全（event 时间轴事件；时间轴专属 UI 由 C2 实现）
   event: "事件",
   // G2.3 类型补全（G2 时间标签点；tab 随 ENTITY_TYPES 自动出现，列表 = 泛型视图）
   timepoint: "时间点",
 };
-// 注：TYPE_LABEL.reference 已随批次十二 T3 移除——实体二级 tab 不再渲染参考资料
+// 注：TYPE_LABEL.reference 已随T3 移除——实体二级 tab 不再渲染参考资料
 //（独立中栏 tab #/references，旧路由重定向）。
-// 批次十七 1-1 泛型入口收敛：导航仅保留列表宿主类型（hook/event/timepoint 已由富页/宿主段承接，
+// 泛型入口收敛：导航仅保留列表宿主类型（hook/event/timepoint 已由富页/宿主段承接，
 // 旧 #/entities/{hook,event,timepoint} 路由在 main.tsx 重定向）
 
 /** 排序下拉选项（sort × order 组合；移除 updated_at 项，默认创建时间倒序） */
@@ -139,7 +139,7 @@ export default function EntityList({ type }: { type: string }) {
   const col = SUMMARY_COLUMNS[entityType];
   const firstField = CREATE_FIRST_FIELD[entityType];
   const page = Math.floor(offset / PAGE_LIMIT) + 1;
-  // 新建行 datalist 候选（批次五 J2）：从当前列表聚合已有名称 / 首字段值
+  // 新建行 datalist 候选（J2）：从当前列表聚合已有名称 / 首字段值
   // （浏览器原生自动完成——输入时弹出已有候选，如输入「势」弹出「势力」）
   const createNameSuggestions = uniqueStrings(items?.map((i) => i.name) ?? []);
   // 首字段候选：text 单值取 summary 字段值；tags 多值（K1：setting.rules）flatMap 聚合数组元素
@@ -283,7 +283,7 @@ export default function EntityList({ type }: { type: string }) {
 
   return (
     <section>
-      {/* 第一行：页面标题（layout.md §3 页面头部统一结构；批次十八误删「实体」标题后补回各类型标题） */}
+      {/* 第一行：页面标题（layout.md §3 页面头部统一结构；误删「实体」标题后补回各类型标题） */}
       <PageTitle className="mb-4">{isRelations ? "关联" : TYPE_LABEL[entityType]}</PageTitle>
 
       {/* 第二行：控件行（左：搜索/排序/总数；右：操作按钮）。设定（树）与关联（关系总览）
@@ -552,10 +552,10 @@ export default function EntityList({ type }: { type: string }) {
   );
 }
 
-/** 人物行四列布局（ + 用户修订，2026-08 批次十三）：名称列（第一行名称 + 第二行动机
+/** 人物行四列布局（用户修订，2026-08）：名称列（第一行名称 + 第二行动机
  * 摘要，hover title 查看完整）+ 角色列（summary.role，T2 标签徽标样式）+ 性格列 + 能力列
  * （各前 2 个 chips，T2 徽标样式；空数组显示「—」占位与其余类型缺失语义一致）。
- * 角色/性格/能力独立成列——列头即区分，修复首版合并 chips 无法分辨的反馈。 */
+ * 角色/性格/能力独立成列——列头即区分，修复首版合并 chips 无法分辨的反馈。*/
 function CharacterRow({ item }: { item: EntitySummary }) {
   const { role, motivation, personality, abilities } = characterRowInfo(item.summary);
   const badge = (text: string) => <TagChip key={text}>{text}</TagChip>;

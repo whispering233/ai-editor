@@ -1,15 +1,15 @@
 // 回收站页（S4.4；替换 T7.1 占位壳）
-// 路由：#/trash（跨实体/大纲的全局入口，）
+// 路由：#/trash（跨实体/大纲的全局入口）
 // 数据：GET /api/v1/trash → { entities, nodes }；还原 POST /trash/entity|outline/:id/restore、
-// 彻底删除 DELETE /trash/...（ 软删 + 回收站； + ）
-// 关键交互（）：
+// 彻底删除 DELETE /trash/...（软删 + 回收站；+）
+// 关键交互：
 // - 分栏：实体 (N) / 大纲节点 (M)，每行类型徽标 + 名称 + 相对时间（formatRelativeTime）+ [还原] [彻底删除]
 // - 还原实体：toast 连带恢复计数（lib/trash restoreEntityToast，计数 0 省略）；404 残留 → 刷新 + toast「该对象已不存在」
 // - 还原节点：409 OUTLINE_ANCESTOR_DELETED → 行内「上级节点也在回收站」+ 祖先名 + [还原上级] 快捷按钮——
 // 祖先 id 从 409 message 解析（lib/trash parseAncestorId），名字从当前列表 nodes 匹配（软删祖先必在列表）；
 // 还原祖先成功自动重试当前节点，更上级仍软删会再次 409 更新提示（服务端路径自顶向下首遇即抛——报
 // **最顶层**软删祖先，级联还原一次解整条链，重试必收敛）；解析失败降级为纯提示无按钮
-// - purge：ConfirmDialog danger + 「确认彻底删除」文案（ 44-49 行 MVP 语义：单次确认 + 明确文案）
+// - purge：ConfirmDialog danger + 「确认彻底删除」文案（44-49 行 MVP 语义：单次确认 + 明确文案）
 // → 行移除 + toast「已彻底删除」；404 残留同还原（刷新 + toast）；其他错误冒泡 ConfirmDialog 内联显示
 import { useEffect, useState } from "react";
 import type { EntityType } from "@whispering233/ai-editor-shared";
@@ -43,11 +43,11 @@ const ENTITY_TYPE_LABEL: Record<EntityType, string> = {
   setting: "设定",
   location: "地点",
   hook: "伏笔",
-  // C1 类型补全（ event 时间轴事件；时间轴专属 UI 由 C2 实现）
+  // C1 类型补全（event 时间轴事件；时间轴专属 UI 由 C2 实现）
   event: "事件",
   // G2.3 类型补全（G2 时间标签点；软删/还原走 /trash/entity/:type/:id 泛型路径）
   timepoint: "时间点",
-  // （批次九）参考资料 reference
+  // 参考资料 reference
   reference: "参考资料",
 };
 
@@ -380,7 +380,7 @@ export default function Trash() {
         </div>
       )}
 
-      {/* purge 二次确认（danger + 「确认彻底删除」文案；影响范围说明， 44-49 行 MVP 语义） */}
+      {/* purge 二次确认（danger + 「确认彻底删除」文案；影响范围说明，44-49 行 MVP 语义） */}
       {purgeTarget && (
         <ConfirmDialog
           title="彻底删除"

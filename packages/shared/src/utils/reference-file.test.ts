@@ -1,4 +1,4 @@
-// 参考资料文件工具纯函数测试（批次十一）
+// 参考资料文件工具纯函数测试
 // （frontmatter 自包含 / 文件名 sanitize 规则）
 import { describe, expect, it } from "vitest";
 import {

@@ -159,7 +159,7 @@ beforeEach(() => {
   defaultProposalStore.clear(); // 提案仓为模块级单例，测试间隔离（get_outline 不产提案，防御性清空）
   originalHome = process.env.HOME;
   originalKey = process.env.DEEPSEEK_API_KEY;
-  process.env.HOME = tmpRoot; // 用户级配置隔离（ key 来源；mock produce 注入时不读 key，防御性）
+  process.env.HOME = tmpRoot; // 用户级配置隔离（key 来源；mock produce 注入时不读 key，防御性）
   delete process.env.DEEPSEEK_API_KEY;
   initDebugConfig(undefined); // 调试默认全关（无配置文件）
 });
@@ -384,7 +384,7 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(compute.body.data.appliedDeltas).toHaveLength(1);
     expect(compute.body.data.conflicts).toEqual([]);
 
- // 到达 scene2（兄弟分支）：scene1 的 Delta 不在路径上 → 状态不累积（ 树路径语义）
+ // 到达 scene2（兄弟分支）：scene1 的 Delta 不在路径上 → 状态不累积（树路径语义）
     const computeSc2 = await api(app, "POST", "/api/v1/delta/compute", {
       target_type: "character",
       target_id: charId,
@@ -442,7 +442,7 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(compute2.status).toBe(200);
     expect(compute2.body.data.state.status).toBe("wounded");
 
- // ============ 步骤 7：伏笔（plants/advances 关系，outline_node → hook， 方向） ============
+ // ============ 步骤 7：伏笔（plants/advances 关系，outline_node → hook，方向） ============
     const plant = await api(app, "POST", "/api/v1/relation", {
       source_type: "outline_node",
       source_id: sc1Id,
@@ -483,7 +483,7 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(chatRes.headers.get("content-type")).toContain("text/event-stream");
 
     const frames = await readSseFrames(chatRes);
- // 事件序列：text → tool_call → tool_result → text → done（ 六类事件子集）
+ // 事件序列：text → tool_call → tool_result → text → done（六类事件子集）
     expect(frames.map((f) => f.event)).toEqual(["text", "tool_call", "tool_result", "text", "done"]);
     expect(frames[0].data).toEqual({ delta: "让我看看大纲。" });
     expect(frames[1].data).toEqual({ tool: "get_outline", args: {}, id: "call_1" });
@@ -496,7 +496,7 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(outlineJson.children[0].title).toBe("第一卷");
     expect(frames[3].data).toEqual({ delta: "大纲共一卷、一章、两场，结构完整。" });
     const done = frames[4].data as { session_id: string };
-    expect(done.session_id).toMatch(/^sess_/); // 新建会话（ id 约定）
+    expect(done.session_id).toMatch(/^sess_/); // 新建会话（id 约定）
     const sessionId = done.session_id;
 
  // 会话落库：列表 + 消息配对（user/assistant/tool + tool_calls/tool_call_id）
@@ -562,12 +562,12 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(chars.status).toBe(200);
     expect(chars.body.data.items.map((e: { name: string }) => e.name)).toContain("AI 提案角色");
 
- // 一次性消费：重复 confirm → 404 PROPOSAL_NOT_FOUND（ 终态守卫）
+ // 一次性消费：重复 confirm → 404 PROPOSAL_NOT_FOUND（终态守卫）
     const dupConfirm = await api(proposeApp, "POST", `/api/v1/proposal/${proposal.proposal_id}/confirm`);
     expect(dupConfirm.status).toBe(404);
     expect(dupConfirm.body.error.code).toBe("PROPOSAL_NOT_FOUND");
 
- // 会话落库（步骤 8 + 步骤 9 共 2 个会话， 按项目隔离）
+ // 会话落库（步骤 8 + 步骤 9 共 2 个会话，按项目隔离）
     const sessions2 = await api(proposeApp, "GET", "/api/v1/chat/sessions");
     expect(sessions2.status).toBe(200);
     expect(sessions2.body.data.sessions).toHaveLength(2);

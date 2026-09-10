@@ -56,13 +56,13 @@ export function assertCanHold(parentType: "root" | OutlineNodeType, childType: O
   if (!ok) {
     throw new OutlineError(
       "INVALID_HIERARCHY",
-      `层级非法（ 严格三层）: ${childType} 不能挂在 ${parentType} 下`,
+      `层级非法（严格三层）: ${childType} 不能挂在 ${parentType} 下`,
     );
   }
 }
 
 /**
- * 创建大纲节点（POST /api/v1/outline，）：
+ * 创建大纲节点（POST /api/v1/outline）：
  * 读树 → 校验父存在 + 三层约束 → 生成 id（shared generateOutlineNodeId：vol-/ch-/sc- 前缀）
  * → 插入父 children 尾部 → **父节点 updated_at 统一更新**→ 原子写回。
  *
@@ -106,7 +106,7 @@ export function createOutlineNode(
   }
   kids.push(node);
  // 父节点版本戳（children 变更由服务端原子写时统一更新）。
- // root 是树根非节点（ 顶层仅 id/type/schema_version/children），
+ // root 是树根非节点（顶层仅 id/type/schema_version/children），
  // 不写 updated_at——版本戳只适用于节点（oracle 审核修复）
   if (parent !== tree) {
     (parent as OutlineFileNode).updated_at = input.updatedAt;
@@ -116,7 +116,7 @@ export function createOutlineNode(
 }
 
 /**
- * 更新大纲节点信息（PUT /api/v1/outline/:nodeId，）：
+ * 更新大纲节点信息（PUT /api/v1/outline/:nodeId）：
  * title/summary 更新 + 节点 updated_at 统一更新，原子写回；
  * data **浅合并**（未传字段保留，与实体 updateEntity 的 data 浅合并同语义）。
  * @throws OutlineError NODE_NOT_FOUND
@@ -165,12 +165,12 @@ function findParentRecursive(
 }
 
 /**
- * 移动大纲节点（PUT /api/v1/outline/:nodeId/move，）：
+ * 移动大纲节点（PUT /api/v1/outline/:nodeId/move）：
  * 从原父移除 → 插入新父指定 order（0-based；同父重排 = 移除后插入）→
  * 三层约束校验（同 create）→ 新旧父 updated_at 统一更新→ 原子写回。
  * order 越界时 clamp 到有效范围（拖拽场景边界值，宽松处理）。
  *
- * @returns { previousParentId, newParentId }（ 语义；root 用 "root"）
+ * @returns { previousParentId, newParentId }（语义；root 用 "root"）
  * @throws OutlineError NODE_NOT_FOUND / PARENT_NOT_FOUND / INVALID_HIERARCHY
  */
 export function moveOutlineNode(
@@ -211,7 +211,7 @@ export function moveOutlineNode(
   newKids.splice(order, 0, node);
 
  // 新旧父版本戳；同父时只更新一次。
- // root 是树根非节点，不写 updated_at（ 顶层，oracle 审核修复）
+ // root 是树根非节点，不写 updated_at（顶层，oracle 审核修复）
   if (prevParent !== tree) {
     (prevParent as OutlineFileNode).updated_at = updatedAt;
   }
@@ -225,7 +225,7 @@ export function moveOutlineNode(
   };
 }
 
-/** 递归软删子树（ 级联）：标记 deleted + deleted_at + updated_at，返回子节点数 */
+/** 递归软删子树（级联）：标记 deleted + deleted_at + updated_at，返回子节点数 */
 function softDeleteSubtree(node: OutlineFileNode, deletedAt: string): number {
   let count = 0;
   for (const child of childrenOf(node) ?? []) {
@@ -238,7 +238,7 @@ function softDeleteSubtree(node: OutlineFileNode, deletedAt: string): number {
 }
 
 /**
- * 软删大纲节点（DELETE /api/v1/outline/:nodeId，）：
+ * 软删大纲节点（DELETE /api/v1/outline/:nodeId）：
  * 标记 deleted + deleted_at，**递归软删整棵子树**（本体保留可还原）。
  * 已软删节点再次软删：幂等重标（不报错）。
  *
@@ -273,9 +273,9 @@ function restoreSubtree(node: OutlineFileNode, updatedAt: string): number {
 }
 
 /**
- * 还原软删大纲节点（POST /api/v1/trash/outline/:nodeId/restore，）：
+ * 还原软删大纲节点（POST /api/v1/trash/outline/:nodeId/restore）：
  * 清除 deleted/deleted_at → **递归还原子树**（仍软删的子孙一并还原）→
- * **祖先链校验**：存在软删祖先 → 抛 OUTLINE_ANCESTOR_DELETED（409 语义，，
+ * **祖先链校验**：存在软删祖先 → 抛 OUTLINE_ANCESTOR_DELETED（409 语义，
  * 杜绝「可见节点挂在不可见父」的畸形树——校验在还原前执行，祖先必须已还原）。
  *
  * @returns { children } 级联还原的子节点数
@@ -307,7 +307,7 @@ export function restoreOutlineNode(dir: string, nodeId: string, updatedAt: strin
 }
 
 /**
- * 物理删除大纲节点（DELETE /api/v1/trash/outline/:nodeId，）：
+ * 物理删除大纲节点（DELETE /api/v1/trash/outline/:nodeId）：
  * 从树中移除整棵子树（递归，文件内物理清除，不可恢复）。
  * 边界：不涉及 data.db（relations/deltas 的物理清除由上层组合）；
  * 不更新父节点 updated_at——purge 属回收站清理，节点已消失，
@@ -329,7 +329,7 @@ export function purgeOutlineNode(dir: string, nodeId: string): void {
   writeOutlineFile(dir, tree);
 }
 
-/** 回收站节点条目（GET /api/v1/trash nodes 项，） */
+/** 回收站节点条目（GET /api/v1/trash nodes 项） */
 export interface DeletedOutlineNodeInfo {
   id: string;
   type: Exclude<OutlineNodeType, "root">;
@@ -339,7 +339,7 @@ export interface DeletedOutlineNodeInfo {
 
 /**
  * 回收站列表（大纲侧）：收集整棵树中 deleted 标记的节点（含子树中的软删节点），
- * 按 deleted_at 倒序（回收站排序约定，：跨 SQLite 与 outline.json 统一 ISO 格式）。
+ * 按 deleted_at 倒序（回收站排序约定：跨 SQLite 与 outline.json 统一 ISO 格式）。
  */
 export function listDeletedNodes(dir: string): DeletedOutlineNodeInfo[] {
   const tree = readOutlineFile(dir);
@@ -363,14 +363,14 @@ export interface ChapterOrderInfo {
 
 /**
  * 章节序推导：按大纲树先序遍历编号——root → 卷 → 章；
- * 全局章序号**跨卷连续**；直接挂 root 的 chapter 按兄弟顺序编号（ 允许）；
+ * 全局章序号**跨卷连续**；直接挂 root 的 chapter 按兄弟顺序编号（允许）；
  * scene 归入所属章，不单独编号（见 getChapterNumber）。
  */
 export function deriveChapterOrder(dir: string): ChapterOrderInfo[] {
   const tree = readOutlineFile(dir);
   const result: ChapterOrderInfo[] = [];
   let number = 0;
- // root.children 类型已放宽为 (volume|chapter) 联合（ 允许 chapter 直挂 root，
+ // root.children 类型已放宽为 (volume|chapter) 联合（允许 chapter 直挂 root，
  // oracle 回修 shared 类型后此处无需断言），按 type 分支：volume → 卷内章；chapter → 直挂章
   for (const child of tree.children) {
     if (child.type === "chapter") {

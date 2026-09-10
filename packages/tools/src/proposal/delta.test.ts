@@ -85,7 +85,7 @@ describe("propose_add_delta", () => {
     expect(result.summary).toContain("追加 1 项属性变更");
   });
 
-  it("完整提案结构：args 规范化执行形态 + 触发节点/目标两端点引用快照（）", () => {
+  it("完整提案结构：args 规范化执行形态 + 触发节点/目标两端点引用快照", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const char = createEntity(db, { type: "character", name: "阿强" });
     const changes: DeltaChange[] = [
@@ -140,7 +140,7 @@ describe("propose_add_delta", () => {
   });
 });
 
-describe("signal aborted（）", () => {
+describe("signal aborted", () => {
   it("signal 已中止 → 抛 AbortedError", () => {
     const controller = new AbortController();
     controller.abort();

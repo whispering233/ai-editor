@@ -62,7 +62,7 @@ CREATE TABLE entities (
 | `hook` | 伏笔（关系生命周期见下方 `plants`/`advances`/`resolves` 等）；data 字段集见 shared `hookDataSchema`（status/category/expected_payoff/payoff_timing/half_life/is_core/notes），服务端按 schema 校验 |
 | `event` | `description`（文本）, `tags[]`（字符串数组，分类筛选用）——**G2 修订：`time_label` 已移除**（迁移至 timepoint 实体 + occurs_at 关系，见下） |
 | `timepoint` | `{}`（无专属字段——**G2：时间标签文本 = name**，可重命名；YAGNI 不加 data） |
-| `reference` | `type`（**自由文本分类，修订：不再预置枚举**——缺省 `material` 写入侧兜底，存量枚举值原样保留）、`content` 内容全文（长文本无上限，列表接口摘要截断 120 字、详情接口返回全文）、`source` 来源（URL/书名/作者，可选）、`tags[]`（标签数组，统一字段）——**批次九**：参考资料是外部素材/灵感笔记（非本书正文），AI 可读取参考、提案写入；**批次十一（2026-08 修订）**：参考资料两类承载——`kind` = `file`（本地 md 文档，`file_name` 相对路径 + `content` 正文镜像 + `file_mtime` 上次同步快照）/ `link`（外源链接，`url` **必填** + `content` 可选备注）；缺省视为 link（存量无 kind 条目运行时兼容）；`source` 字段仅存量旧条目使用（link 类展示兼容），新建条目不再写入；**批次十二**：`type` schema 放宽为 `z.string().optional()`，无 DDL 迁移（JSON 层演进，SCHEMA_VERSION 保持 5） |
+| `reference` | `type`（**自由文本分类，修订：不再预置枚举**——缺省 `material` 写入侧兜底，存量枚举值原样保留）、`content` 内容全文（长文本无上限，列表接口摘要截断 120 字、详情接口返回全文）、`source` 来源（URL/书名/作者，可选）、`tags[]`（标签数组，统一字段）——参考资料是外部素材/灵感笔记（非本书正文），AI 可读取参考、提案写入；**2026-08 修订**：两类承载——`kind` = `file`（本地 md 文档，`file_name` 相对路径 + `content` 正文镜像 + `file_mtime` 上次同步快照）/ `link`（外源链接，`url` **必填** + `content` 可选备注）；缺省视为 link（存量无 kind 条目运行时兼容）；`source` 字段仅存量旧条目使用（link 类展示兼容），新建条目不再写入；其后 `type` 放宽为 `z.string().optional()`，无 DDL 迁移（JSON 层演进，SCHEMA_VERSION 保持 5） |
 
 ### 时间轴（时间标签点实体化）
 
@@ -226,7 +226,7 @@ CREATE INDEX idx_chat_session ON chat_messages(session_id, created_at);
 }
 ```
 
-> **`prompt` 字段已废弃（2026-08 批次十）**：项目规则唯一事实源改为项目目录 `AGENTS.md` 文件（见下节），`prompt` **不再读写**——新写入不再产生该字段；旧文件中的残留字段宽松读取（不参与 schema_version 判定）。打开项目时若 `prompt` 存在且无 AGENTS.md → 自动迁移写入 AGENTS.md（内容原样，一次性）。
+> **`prompt` 字段已废弃（2026-08）**：项目规则唯一事实源改为项目目录 `AGENTS.md` 文件（见下节），`prompt` **不再读写**——新写入不再产生该字段；旧文件中的残留字段宽松读取（不参与 schema_version 判定）。打开项目时若 `prompt` 存在且无 AGENTS.md → 自动迁移写入 AGENTS.md（内容原样，一次性）。
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -244,7 +244,7 @@ CREATE INDEX idx_chat_session ON chat_messages(session_id, created_at);
 - 文件写入遵循原子写流程（outline.json 同款：临时文件 + fsync + rename）。
 - **自动备份目录**：项目目录内 `.backups/` 子目录存放备份 zip（时间戳命名 `<YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip` 毫秒精度，**kind 类型标记段**：`m` = 手动（无名称也带 `-m` 段，与自动可靠区分）/ `a` = 自动备份重命名后带名称；自动备份与覆盖前快照为纯时间戳 `<YYYYMMDD-HHmmssSSS>.zip`；手动带名称 `<YYYYMMDD-HHmmssSSS>-m-<名称>.zip`；**旧格式兼容解析不迁移**：旧秒级 `<YYYYMMDD-HHmmss>.zip` → auto、旧带名称无 kind 段 `<YYYYMMDD-HHmmssSSS>-<名称>.zip` → manual、纯时间戳 → auto；格式 = 导出包：project.json + outline.json + data.db）；**每项目保留最近 20 份**（超出删除最旧，含覆盖前自动快照；清理失败不阻塞备份主流程）；备份文件不入 git、不算数据文件（可随时删除）。**实现细节（2026-08 实测）**：同毫秒冲突用「时间戳 +1 毫秒循环去重」（保持文件名格式契约可解析）；「有变更才备份」的 mtime 判定加 1s 容差（备份管道内 wal_checkpoint 会把 data.db mtime 刷新到备份时刻，严格 `mtime > 上次备份时刻` 会自激误判——毫秒精度下文件名截断误差已消除，但粗粒度 mtime 文件系统（如 FAT/exFAT 2s 粒度）下容差仍是必要防御，`BACKUP_CHANGE_TOLERANCE_MS` 保留 1s）；重命名备份只改名称段（时间戳与 kind 保持，同目录 rename 原子）。
 
-## AGENTS.md — 项目规则文件（2026-08 批次十）
+## AGENTS.md — 项目规则文件（2026-08）
 
 项目目录下的 `AGENTS.md` 是**项目规则唯一事实源**（取代 project.json `prompt` 字段；此前曾否决「另立 rules.md 与 prompt 并存」的双通道方案，规则文件定义为唯一事实源，不存在双通道漂移）。**不是 project.json 内字段**，是项目目录下的独立文件（与代码仓库 AGENTS.md 惯例一致，用户可在文件管理器中直接编辑、可纳入版本管理）。
 

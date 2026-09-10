@@ -1,7 +1,7 @@
 // 分析类工具：trace_plot_paths（剧情路径推演，S6.4）
 // 语义：从 from_node_id 到 to_node_id 推演可能的剧情路径——两类来源：
-// 1. **树路径**：两节点在大纲树同一分支（祖先后裔关系）→ 沿树的直接推进链（ 严格三层下唯一）
-// 2. **连线路径**：沿 plot_edge 剧情连线（ 画布连线）从 from 出发的 k 跳路径（depth=3）
+// 1. **树路径**：两节点在大纲树同一分支（祖先后裔关系）→ 沿树的直接推进链（严格三层下唯一）
+// 2. **连线路径**：沿 plot_edge 剧情连线（画布连线）从 from 出发的 k 跳路径（depth=3）
 // 风险因素（risk_factors，从节点属性推导）：路径过长（≥5 节点）、途经 scene 缺 goal、
 // 途经 chapter 缺 reversal、路径经过软删节点（手改树的不一致形态）。
 // 数据访问：db 查询层（listRelations plot_edge）+ outline.json 读取（树路径），无原生 SQL。
@@ -12,14 +12,14 @@ import type { ToolContext } from "../context.js";
 import { throwIfAborted } from "./utils.js";
 import type { TracePlotPathsArgs } from "@whispering233/ai-editor-shared";
 
-/** 路径节点（ trace_plot_paths paths[].nodes 项；type/id/name 与 relation 路径同构） */
+/** 路径节点（trace_plot_paths paths[].nodes 项；type/id/name 与 relation 路径同构） */
 export interface PlotPathNode {
   type: string;
   id: string;
   name: string;
 }
 
-/** 一条剧情路径（ trace_plot_paths paths[] 项） */
+/** 一条剧情路径（trace_plot_paths paths[] 项） */
 export interface PlotPath {
   nodes: PlotPathNode[];
   description: string;
@@ -95,7 +95,7 @@ function collectRiskFactors(tree: OutlineFileTree, nodes: readonly PlotPathNode[
 }
 
 /**
- * 剧情路径推演（ trace_plot_paths(from_node_id, to_node_id)）。
+ * 剧情路径推演（trace_plot_paths(from_node_id, to_node_id)）。
  * 输出 paths（树路径优先，随后连线路径）；两节点不存在/已软删 → null（查询无结果）。
  * signal：连线路径遍历为长任务候选，循环中检查。
  */
@@ -120,7 +120,7 @@ export function runTracePlotPaths(ctx: ToolContext, args: TracePlotPathsArgs, si
     });
   }
 
- // 2. plot_edge 连线路径（ 画布连线；有向 BFS 沿 source→target，depth=3 上限）
+ // 2. plot_edge 连线路径（画布连线；有向 BFS 沿 source→target，depth=3 上限）
   const edgeResult = listRelations(
     ctx.db,
     { relationType: "plot_edge", sourceId: args.from_node_id },

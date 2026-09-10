@@ -19,7 +19,7 @@ import type { GetEntityArgs, GetEntitySummaryArgs, SearchEntitiesArgs } from "@w
 // ============ get_entity ============
 
 /**
- * 实体详情（ get_entity(type, id) → 实体详情，含 data JSON 解析后的字段）。
+ * 实体详情（get_entity(type, id) → 实体详情，含 data JSON 解析后的字段）。
  * - db 层 getEntity 默认过滤软删（回收站对象不可见）
  * - type 与行内实际类型不一致 → null（参数错误，id 前缀体系下正常调用不会出现；
  * LLM 传错类型时得到「不存在」而非脏数据）
@@ -37,7 +37,7 @@ export function runGetEntity(ctx: ToolContext, args: GetEntityArgs): Entity | nu
 export type SearchEntitiesResult = EntityListResult;
 
 /**
- * 实体搜索（ search_entities(type, query, filters?) → 匹配实体列表）。
+ * 实体搜索（search_entities(type, query, filters?) → 匹配实体列表）。
  * 透传 db listEntities：type + name LIKE 模糊匹配 + **软删过滤**
  * + filters（tags AND / status 精确匹配，data 字段 JS 过滤）+ 摘要提取（db 单一实现）。
  * limit 传 200（db clamp 上限）：搜索结果尽量全（token 截断由上层按 处理）。
@@ -54,7 +54,7 @@ export function runSearchEntities(ctx: ToolContext, args: SearchEntitiesArgs): S
 // ============ get_entity_summary ============
 
 /**
- * 实体聚合统计（ get_entity_summary(type) → 总数、角色分布、能力分布等）。
+ * 实体聚合统计（get_entity_summary(type) → 总数、角色分布、能力分布等）。
  * 透传 db getEntitySummaryStats：仅统计非软删实体；分布字段按类型
  * 稀疏出现（character→byRole/byStatus/topAbilities、setting→byTags（分类由
  * rules 标签承接）、location→byType、hook→byStatus/byPayoffTiming），缺字段不报错。

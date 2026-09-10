@@ -13,7 +13,7 @@
 // 级联软删：S3.1 的 softDeleteEntity 已内联 relation_records 级联 UPDATE（source_id/target_id
 // 命中即标 deleted_at）——本卡不重复实现，注释确认。
 //
-// 批次十五（15.5 卡 4）：**全部查询经 queryDb 走 drizzle 构建器**（混合风格 4A）。
+//：**全部查询经 queryDb 走 drizzle 构建器**（混合风格 4A）。
 // 语义逐句对照旧实现（git show 52c7c13^:packages/db/src/queries/relation.ts）:
 // - deleted_at IS NULL ↔ isNull；deleted_at IS NOT NULL ↔ isNotNull；IN 占位符 ↔ inArray；
 // 动态 where 拼接 ↔ and(...)(SQL[])；ORDER BY r.created_at ↔ orderBy(relationRecords.created_at)
@@ -43,7 +43,7 @@ export type RelationErrorCode =
   | "ENDPOINT_NOT_FOUND"
   | "INVALID_RELATION_TYPE"
   | "EVENT_ALREADY_MOUNTED"
- // （2026-08 批次十三）：设定手动排序自指/成环（moveSetting 抛出，路由层映射 400）
+ // （2026-08）：设定手动排序自指/成环（moveSetting 抛出，路由层映射 400）
   | "SETTING_CYCLE";
 
 /** 关系操作错误（带 code，与 OutlineError 同风格；路由层 catch 映射） */
@@ -56,7 +56,7 @@ export class RelationError extends Error {
   }
 }
 
-/** 关系查询过滤条件（；全部可选，组合过滤） */
+/** 关系查询过滤条件（全部可选，组合过滤） */
 export interface RelationQuery {
   sourceType?: string;
   sourceId?: string;
@@ -65,7 +65,7 @@ export interface RelationQuery {
   relationType?: string;
 }
 
-/** 大纲端点 id（relation_records 端点类型约定，） */
+/** 大纲端点 id（relation_records 端点类型约定） */
 export const OUTLINE_ENDPOINT_TYPE = "outline_node";
 
 /** 设定层级边：childId → parentId（belongs_to 且两端均为 setting，两端点未软删） */
@@ -74,7 +74,7 @@ export interface SettingHierarchyEdge {
   parentId: string;
 }
 
-/** 实体端点类型集合（entities 表 type 列；含 event 时间轴事件——occurs_in 端点校验，；
+/** 实体端点类型集合（entities 表 type 列；含 event 时间轴事件——occurs_in 端点校验；
  * 含 timepoint 时间标签点——occurs_at 端点校验，G2） */
 const ENTITY_ENDPOINT_TYPES = ["character", "setting", "location", "hook", "event", "timepoint"] as const;
 
@@ -150,7 +150,7 @@ function parseMetadata(value: unknown): Record<string, unknown> | null {
 }
 
 /**
- * 关系列表 + k 跳路径（GET /api/v1/relation，）：
+ * 关系列表 + k 跳路径（GET /api/v1/relation）：
  * 过滤条件组合（全部可选）+ 可见性过滤（关系自身未软删 + 两端点均未软删）。
  * depth=1：直接关系（relations，联表填充 sourceName/targetName）。
  * depth=2/3：追加 k 跳路径（paths：nodes/edges 结构）——**BFS 图不受 source_id/target_id
@@ -228,7 +228,7 @@ function queryRelationRows(db: Db, query: RelationQuery, includeSourceTarget: bo
 }
 
 /**
- * k 跳路径收集（depth=2/3，）：
+ * k 跳路径收集（depth=2/3）：
  * 有向 BFS（沿 source→target 出边）——关系有方向，遍历沿建立方向；
  * 起点 = query.sourceId（缺省时多起点：所有满足 sourceType 过滤的节点）。
  * 防环：路径级 visited（同一条路径不重复经过节点；不同路径可共享节点）。
@@ -318,9 +318,9 @@ export function getRelation(db: Db, id: string, outlineDir: string): RelationRow
 }
 
 /**
- * 创建关系（POST /api/v1/relation，）：
+ * 创建关系（POST /api/v1/relation）：
  * - **判重**：同 (source_id, target_id, relation_type) 且未软删已存在 → RELATION_EXISTS（409 语义）
- * - relation_type 白名单（ 16 个预定义类型，含 plot_edge 剧情连线——同规则）
+ * - relation_type 白名单（16 个预定义类型，含 plot_edge 剧情连线——同规则）
  * - **端点存在性**：实体端点查 entities（非软删）、大纲端点读 outline.json（存在且非软删）
  * - 时间戳应用层 ISO
  *
@@ -355,7 +355,7 @@ export function createRelation(
     throw new RelationError("RELATION_EXISTS", `关系已存在: ${input.sourceId} → ${input.targetId} (${input.relationType})`);
   }
   const now = nowIso();
- // 关系 id： id 约定未列 rel- 前缀（运行时对象为 prop_/sess_/call_），
+ // 关系 id：id 约定未列 rel- 前缀（运行时对象为 prop_/sess_/call_），
  // 用 generateId("rel-") 保证唯一（前缀 + nanoid，与实体/节点同构）
   const row: RelationRow = {
     id: generateId("rel-"),
@@ -457,7 +457,7 @@ export function wouldCreateSettingCycle(db: Db, childId: string, newParentId: st
 }
 
 /**
- * 物理删除关系（DELETE /api/v1/relation/:id，，
+ * 物理删除关系（DELETE /api/v1/relation/:id，
  * 手动删关系 = 物理删，不进回收站）。
  * @returns 影响行数（0 = 不存在，路由层映射 404 RELATION_NOT_FOUND）
  */

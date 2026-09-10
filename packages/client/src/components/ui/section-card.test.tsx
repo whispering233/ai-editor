@@ -1,4 +1,4 @@
-// SectionCard 走查（批次十九 T4）：内部换 antd Card 后的 SSR 静态断言——1px 描边卡 + level={5} 标题，
+// SectionCard 走查（T4）：内部换 antd Card 后的 SSR 静态断言——1px 描边卡 + level={5} 标题，
 // 不再手写 `rounded-xl border bg-card p-4` / `font-serif` 标题。
 // 渲染手法同 antd-smoke.test / chat-panel.test（仓库无 jsdom/@testing-library 纪律，用 renderToString）。
 import { describe, expect, it } from "vitest";

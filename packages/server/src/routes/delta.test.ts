@@ -3,7 +3,7 @@
 // 四 op 全表驱动）、触发节点前置校验（404 OUTLINE_NODE_NOT_FOUND，防死记录，含软删）、
 // S13.3 target_type 白名单（outline_node/未知类型 → 400 VALIDATION_ERROR；character → 201 回归）、
 // GET 可见性（软删触发节点 → 空数组）与 order 升序、
-// compute 树路径累积（ 双层排序）+ 回显（targetType/targetId/atNodeId）、
+// compute 树路径累积（双层排序）+ 回显（targetType/targetId/atNodeId）、
 // update 冲突（conflicts + 保持手动值）、compute 404 映射（OUTLINE_NODE_NOT_FOUND /
 // ENTITY_NOT_FOUND，含 at_node 软删）
 import { mkdtempSync, rmSync } from "node:fs";
@@ -80,7 +80,7 @@ function standardOutline(): OutlineFileTree {
   };
 }
 
-/** 大纲树变体：sc-1 已软删（ 软删语义；路由前置校验应 404） */
+/** 大纲树变体：sc-1 已软删（软删语义；路由前置校验应 404） */
 function softDeletedSceneOutline(): OutlineFileTree {
   return {
     id: "root",
@@ -351,7 +351,7 @@ describe("POST /api/v1/delta 追加", () => {
 
   it("node_id 指向软删节点 → 404 OUTLINE_NODE_NOT_FOUND（防死记录）", async () => {
     const { app, charId } = await seed();
- // 重写大纲树：sc-1 标 deleted（ 软删语义）
+ // 重写大纲树：sc-1 标 deleted（软删语义）
     const project = getCurrentProject()!;
     writeOutlineFile(project.root, softDeletedSceneOutline());
     const { status, body } = await postDelta(app, {
@@ -409,7 +409,7 @@ describe("GET /api/v1/delta/node/:nodeId", () => {
     expect((await res.json()) as { data: unknown }).toEqual({ success: true, data: { nodeId: "sc-999", deltas: [] } });
   });
 
-  it("触发节点已软删 → 200 空数组（ 可见性联动：先挂 Delta 再软删，记录被过滤）", async () => {
+  it("触发节点已软删 → 200 空数组（可见性联动：先挂 Delta 再软删，记录被过滤）", async () => {
     const { app, charId } = await seed();
  // 先挂一条正常可见的 Delta（触发节点 sc-1 未删）
     await postDelta(app, {
@@ -431,7 +431,7 @@ describe("GET /api/v1/delta/node/:nodeId", () => {
 // ============ POST /api/v1/delta/compute ============
 
 describe("POST /api/v1/delta/compute 状态计算", () => {
-  it("树路径累积：ch-1 与 sc-1 的 Delta 按路径序应用（ 双层排序）", async () => {
+  it("树路径累积：ch-1 与 sc-1 的 Delta 按路径序应用（双层排序）", async () => {
     const { app, charId } = await seed();
  // 章上的 Delta（先应用）：set status=alive
     await postDelta(app, {
@@ -528,7 +528,7 @@ describe("POST /api/v1/delta/compute 状态计算", () => {
 
   it("at_node_id 指向软删节点 → 404 OUTLINE_NODE_NOT_FOUND（路由层前置校验）", async () => {
     const { app, charId } = await seed();
- // 重写大纲树：sc-1 标 deleted（ 软删语义；assertOutlineNode 同 POST 前置校验）
+ // 重写大纲树：sc-1 标 deleted（软删语义；assertOutlineNode 同 POST 前置校验）
     const project = getCurrentProject()!;
     writeOutlineFile(project.root, softDeletedSceneOutline());
     const res = await app.request(

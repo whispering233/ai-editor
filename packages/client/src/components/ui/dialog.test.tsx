@@ -1,4 +1,4 @@
-// Dialog 自绘实现走查（批次十七修复：Content 缺 open 守卫导致关闭失效——
+// Dialog 自绘实现走查（修复：Content 缺 open 守卫导致关闭失效——
 // 取消/Esc 置 open=false 后 portal 仍常驻渲染）
 import { describe, expect, it } from "vitest";
 import { renderToString } from "react-dom/server";

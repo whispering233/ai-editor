@@ -7,7 +7,7 @@
 // 标量 set/update——update 的 from 自动取目标当前 data 值并标注「旧值：xxx」，作者无需手填；
 // data 后续被改 → compute 时跳过 + conflicts 标注，机制兜底）；值/描述必填校验；
 // 成功 → onCreated（父刷新列表 + 收起）；VALIDATION_ERROR → 行内提示；OUTLINE_NODE_NOT_FOUND → toast + 收起
-// 样式 token 类（，oracle 红线：禁止硬编码色类）
+// 样式 token 类（oracle 红线：禁止硬编码色类）
 import { useEffect, useState } from "react";
 import { Button, Input, Select } from "antd";
 import type { DeltaOp, EntitySummary, EntityType } from "@whispering233/ai-editor-shared";
@@ -298,7 +298,7 @@ export function DeltaCreateForm({
             <>
               目标数据获取失败，无法自动取旧值（
               {dataError === "ENTITY_NOT_FOUND" ? "目标已不存在" : "请稍后重试"}
-              ）——可将操作改为「设为」
+）——可将操作改为「设为」
             </>
           ) : (
             <>旧值：{formatDeltaValue(currentValue)}（自动取自目标当前数据，无需手填）</>

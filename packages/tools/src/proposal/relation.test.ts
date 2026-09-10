@@ -1,7 +1,7 @@
 // S6.6 提案类工具测试：关系（propose_add/remove_relation）
 // 覆盖：tool_result 仅 { proposal_id, summary } 无预览 / args 规范化执行形态
 // （端点类型生成时自动识别，S6.7 直接消费）/ 引用快照（实体自身 / 节点级 updated_at，
-// ）/ **不落盘**（关系表零变化）/ 端点不存在/软删、关系不可见抛错/
+//）/ **不落盘**（关系表零变化）/ 端点不存在/软删、关系不可见抛错/
 // signal aborted
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -87,7 +87,7 @@ describe("propose_add_relation", () => {
     ]);
   });
 
-  it("大纲节点端点：自动识别为 outline_node，引用为节点级 updated_at（）", () => {
+  it("大纲节点端点：自动识别为 outline_node，引用为节点级 updated_at", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const char = createEntity(db, { type: "character", name: "阿强" });
     const result = runProposeAddRelation(makeCtx(), { source: char.id, target: "sc-1", type: "appears_in" });
@@ -122,7 +122,7 @@ describe("propose_add_relation", () => {
 });
 
 describe("propose_remove_relation", () => {
-  it("返回 { proposal_id, summary }；完整提案引用快照为关系自身 updated_at（）", () => {
+  it("返回 { proposal_id, summary }；完整提案引用快照为关系自身 updated_at", () => {
     const a = createEntity(db, { type: "character", name: "甲" });
     const b = createEntity(db, { type: "character", name: "乙" });
     const rel = createRelation(db, { sourceType: "character", sourceId: a.id, targetType: "character", targetId: b.id, relationType: "ally" }, dir);
@@ -142,7 +142,7 @@ describe("propose_remove_relation", () => {
     expect(getRelation(db, rel.id, dir)).not.toBeNull();
   });
 
-  it("关系不存在 / 端点软删不可见 → 抛错（）", () => {
+  it("关系不存在 / 端点软删不可见 → 抛错", () => {
     expect(() => runProposeRemoveRelation(makeCtx(), { relation_id: "rel-999" })).toThrow(/关系不存在或不可见/);
     const a = createEntity(db, { type: "character", name: "甲" });
     const b = createEntity(db, { type: "character", name: "乙" });
@@ -152,7 +152,7 @@ describe("propose_remove_relation", () => {
   });
 });
 
-describe("signal aborted（）", () => {
+describe("signal aborted", () => {
   it("关系提案工具在 signal 已中止时抛 AbortedError", () => {
     const controller = new AbortController();
     controller.abort();

@@ -4,7 +4,7 @@
 
 // ============ 实体 ============
 
-/** 实体类型（entities 表 type 列，；event 为时间轴事件，；timepoint 为 G2 时间标签点，name=时间标签文本；reference 为参考资料） */
+/** 实体类型（entities 表 type 列；event 为时间轴事件；timepoint 为 G2 时间标签点，name=时间标签文本；reference 为参考资料） */
 export type EntityType = "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "reference";
 
 /**
@@ -23,7 +23,7 @@ export interface Entity {
 }
 
 /**
- * 实体列表摘要（GET /api/v1/entity/:type 列表项，）
+ * 实体列表摘要（GET /api/v1/entity/:type 列表项）
  * summary 为从 data 提取的关键摘要字段（如 character → role/status、hook → status/payoff_timing）
  */
 export interface EntitySummary {
@@ -31,25 +31,25 @@ export interface EntitySummary {
   type: EntityType;
   name: string;
   summary: Record<string, unknown>;
- /** 上级设定（M2，2026-08 批次六）：**仅 setting 类型填充**——层级 = belongs_to 关系，
+ /** 上级设定（M2，2026-08）：**仅 setting 类型填充**——层级 = belongs_to 关系，
  * 服务端列表响应时补查设定间层级边按 childId 映射附加；无父的设定不出现（稀疏语义） */
   parentId?: string;
   parentName?: string;
- /** 手动排序位（2026-08 批次十三）：**仅 setting 类型填充**——同级组内线性序
+ /** 手动排序位（2026-08）：**仅 setting 类型填充**——同级组内线性序
  * （同父/同根组内 0..n-1，entities.sort_order 列）；NULL = 未参与手动排序（不出现） */
   sortOrder?: number;
   createdAt: string;
   updatedAt: string;
 }
 
-/** entities 表行（存储形态 snake_case，） */
+/** entities 表行（存储形态 snake_case） */
 export interface EntityRow {
   id: string;
   type: EntityType;
   name: string;
  /** JSON 列解析后的对象 */
   data: Record<string, unknown>;
- /** 线性序（ + G2）：event/timepoint 类型内线性；setting 为同级组内线性序；
+ /** 线性序（G2）：event/timepoint 类型内线性；setting 为同级组内线性序；
  * NULL = 未参与排序 */
   sort_order: number | null;
   created_at: string; // ISO 8601，应用层写入
@@ -59,12 +59,12 @@ export interface EntityRow {
 
 // ============ 关系 ============
 
-/** 关系（API 响应形态，GET /api/v1/relation depth=1，） */
+/** 关系（API 响应形态，GET /api/v1/relation depth=1） */
 export interface RelationRecord {
   id: string;
   sourceType: string;
   sourceId: string;
- /** 联表查询填充（） */
+ /** 联表查询填充 */
   sourceName?: string;
   targetType: string;
   targetId: string;
@@ -74,34 +74,34 @@ export interface RelationRecord {
   createdAt: string;
 }
 
-/** 路径节点（depth>=2 时的 paths 结构，） */
+/** 路径节点（depth>=2 时的 paths 结构） */
 export interface RelationPathNode {
   type: string;
   id: string;
   name: string;
 }
 
-/** 路径边（depth>=2 时的 paths 结构，） */
+/** 路径边（depth>=2 时的 paths 结构） */
 export interface RelationPathEdge {
   from: string;
   to: string;
   relationType: string;
 }
 
-/** 一条 k 跳路径（depth>=2 时的 paths 结构，） */
+/** 一条 k 跳路径（depth>=2 时的 paths 结构） */
 export interface RelationPath {
   nodes: RelationPathNode[];
   edges: RelationPathEdge[];
 }
 
-/** 关系查询响应（GET /api/v1/relation，） */
+/** 关系查询响应（GET /api/v1/relation） */
 export interface RelationQueryResult {
   relations: RelationRecord[];
  /** depth>=2 时追加路径信息 */
   paths?: RelationPath[];
 }
 
-/** relation_records 表行（存储形态 snake_case，） */
+/** relation_records 表行（存储形态 snake_case） */
 export interface RelationRow {
   id: string;
  /** 端点类型：实体 'character'|'setting'|'location'|'hook'，大纲节点 'outline_node' */
@@ -120,11 +120,11 @@ export interface RelationRow {
 
 // ============ Delta ============
 
-/** 变更操作类型（POST /api/v1/delta changes[].op，） */
+/** 变更操作类型（POST /api/v1/delta changes[].op） */
 export type DeltaOp = "set" | "update" | "add" | "remove";
 
 /**
- * 单条属性变更（POST /api/v1/delta Req changes 项，）
+ * 单条属性变更（POST /api/v1/delta Req changes 项）
  * op 语义（2026-08 修订）：set=直接替换；update=旧值→新值（写入端不校验 from，
  * 冲突在 computeState 时以跳过+conflicts 呈现）；add=按 value 向数组追加；
  * remove=按值匹配从数组移除（不存在的值静默忽略）
@@ -140,7 +140,7 @@ export interface DeltaChange {
   value?: string | number;
 }
 
-/** Delta 记录（API 响应形态，） */
+/** Delta 记录（API 响应形态） */
 export interface DeltaRecord {
   id: string;
  /** 触发变更的大纲节点 id */
@@ -156,7 +156,7 @@ export interface DeltaRecord {
   createdAt: string;
 }
 
-/** delta_records 表行（存储形态 snake_case，） */
+/** delta_records 表行（存储形态 snake_case） */
 export interface DeltaRow {
   id: string;
   node_id: string;
@@ -186,7 +186,7 @@ export interface AppliedDeltaSkippedChange {
   actual: unknown;
 }
 
-/** 参与状态计算的一个 Delta（computeState 响应项，） */
+/** 参与状态计算的一个 Delta（computeState 响应项） */
 export interface AppliedDelta {
   nodeId: string;
   description: string;
@@ -205,7 +205,7 @@ export interface DeltaConflict {
   actual: unknown;
 }
 
-/** 状态计算结果（POST /api/v1/delta/compute 响应，） */
+/** 状态计算结果（POST /api/v1/delta/compute 响应） */
 export interface ComputeStateResult {
   targetType: string;
   targetId: string;

@@ -1,4 +1,4 @@
-// 右栏 ChatPanel（ + U5 ）：
+// 右栏 ChatPanel（U5）：
 // 常驻右栏（40% 栏宽，1:5:4 三栏布局），<1024px 折叠为抽屉（fixed + 遮罩，开关在信息条右侧）
 // 结构（自上而下）：会话标题行（下拉切换同项目会话 + 新会话）→ 断连横幅 → 错误条 →
 // 消息流（user 气泡 / assistant 无气泡宋体排版 / 历史工具折叠记录 / 运行时工具行 / 提案卡）→
@@ -44,7 +44,7 @@ import { formatRelativeTime } from "@whispering233/ai-editor-shared";
 import { cn } from "../../lib/utils";
 import { skeletonClass } from "../../lib/styles";
 
-// ============ 文案映射（：会话切换/提案卡/focus 小条） ============
+// ============ 文案映射（会话切换/提案卡/focus 小条） ============
 // 会话相对时间用 shared formatRelativeTime（Sidebar/Dashboard 同源；≥30 天回退绝对时间，非法输入原样返回）
 
 /** 提案 type → 中文标题（「提案卡片」；未知 type 显示原始名） */
@@ -70,7 +70,7 @@ const FOCUS_TYPE_LABELS: Record<string, string> = {
 };
 
 /**
- * focus 小条文案（批次十八 C2，用户反馈 #2：不再直显裸 entity id）。
+ * focus 小条文案（C2，用户反馈 #2：不再直显裸 entity id）。
  * name 三态：string = names/resolve 解析出的名称；null = 解析失败（退 id，信息不丢）；
  * undefined = 解析中（只显示类型名，不闪 id）。无类型时仅显示名称，皆空 → 「当前内容」。
  */
@@ -86,7 +86,7 @@ export function focusLabel(ctx: FocusContext, name?: string | null): string {
   return typeLabel || display || "当前内容";
 }
 
-/** 防御性读取历史工具调用字段（tool_calls JSON 列形状见 ，未知形状容错） */
+/** 防御性读取历史工具调用字段（tool_calls JSON 列形状见，未知形状容错） */
 interface ToolCallShape {
   id?: string;
   tool?: string;
@@ -94,7 +94,7 @@ interface ToolCallShape {
   args?: unknown;
 }
 /**
- * 渲染层双形态归一（批次十七 2-1，修历史行展开显示 `{}`）：
+ * 渲染层双形态归一（修历史行展开显示 `{}`）：
  * - 落库/续聊重建形态 = LLM wire 形状 { id, type: "function", function: { name, arguments: string } }
  *   （server chat.ts 直存 agent 输出，存储不动——续聊重建依赖该形状回喂模型）
  * - 运行时 SSE tool_call 事件 = 内部形状 { id, tool, args }
@@ -123,7 +123,7 @@ export const asToolCall = (c: unknown): ToolCallShape => {
 
 // ============ AI 设置工具条（需求 3）：模型选择 + 思考强度 + 上下文占用 ============
 
-/** 思考强度档位（ 参考 pi ThinkingLevel：off/minimal/low/medium/high/xhigh/max；显示英文原文） */
+/** 思考强度档位（参考 pi ThinkingLevel：off/minimal/low/medium/high/xhigh/max；显示英文原文） */
 const THINKING_LEVEL_OPTIONS: ThinkingLevel[] = [
   "off",
   "minimal",
@@ -484,7 +484,7 @@ export function ToolCallRow({
 
 // ============ 消息条目：user 气泡 / assistant 无气泡宋体排版 + 历史工具折叠记录 ============
 
-/** 历史 tool 消息按 toolCallId 挂到 assistant.toolCalls 行（ 成对；孤儿半对不渲染；导出供渲染走查测试） */
+/** 历史 tool 消息按 toolCallId 挂到 assistant.toolCalls 行（成对；孤儿半对不渲染；导出供渲染走查测试） */
 export function MessageItem({
   message,
   toolResults,
@@ -647,7 +647,7 @@ export function ProposalCardView({ proposal }: { proposal: ProposalCard }) {
   );
 }
 
-// ============ focus 小条：输入区上方「正在讨论：…」（，可关闭） ============
+// ============ focus 小条：输入区上方「正在讨论：…」（可关闭） ============
 
 function FocusBar() {
   const focusContext = useChatStore((s) => s.focusContext);
@@ -692,7 +692,7 @@ function FocusBar() {
 }
 
 // ============ 输入区：x Sender（Enter 发送 / Shift+Enter 换行，IME 安全内建） ============
-// 批次十七 2-1：textarea 自研发送逻辑退役；loading = streaming 思考态。
+// textarea 自研发送逻辑退役；loading = streaming 思考态。
 // 行为修订注记：原实现 streaming 期间禁用输入框；x Sender 无 disabled 透传，改为
 // streaming 仅禁发送（loading），允许预输入下一条消息（主流聊天产品同款，无红线约束）。
 
@@ -736,7 +736,7 @@ function MessageList({ disabled }: { disabled: boolean }) {
   const proposals = useChatStore((s) => s.proposals);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // 历史 tool 消息按 toolCallId 索引（ 成对：assistant.toolCalls ↔ tool.tool_call_id）
+  // 历史 tool 消息按 toolCallId 索引（成对：assistant.toolCalls ↔ tool.tool_call_id）
   const toolResults = useMemo(() => {
     const map = new Map<string, ChatMessage>();
     for (const m of messages) {
@@ -810,7 +810,7 @@ function MessageList({ disabled }: { disabled: boolean }) {
               status={t.status}
             />
           ))}
-          {/* 提案卡片（S7 SSE proposal 事件填充； 瞬态，流断开即清空） */}
+          {/* 提案卡片（S7 SSE proposal 事件填充；瞬态，流断开即清空） */}
           {proposals.map((p) => (
             <ProposalCardView key={p.proposalId} proposal={p} />
           ))}

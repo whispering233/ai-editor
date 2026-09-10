@@ -44,7 +44,7 @@ export type SearchEntitiesArgs = z.infer<typeof searchEntitiesArgsSchema>;
 
 /**
  * query_relationships 入参：source_type/target_type 为自由字符串（实体类型或 outline_node）；
- * relation_type 用 z.enum(RELATION_TYPES) **白名单校验**（ 预定义 16 种，
+ * relation_type 用 z.enum(RELATION_TYPES) **白名单校验**（预定义 16 种，
  * 与 REST relationQuerySchema 的宽松 string 不同——工具参数由 LLM 生成，枚举提前拦非法值）；
  * depth 1=紧邻 / 2=k跳 / 3=全量（必填，与 API 层一致）
  */
@@ -177,7 +177,7 @@ export const suggestConnectionsArgsSchema = z
 
 export type SuggestConnectionsArgs = z.infer<typeof suggestConnectionsArgsSchema>;
 
-// ============ 伏笔分析工具（「工具扩展」+ ，S6.5） ============
+// ============ 伏笔分析工具（「工具扩展」+，S6.5） ============
 
 // === analyze_hook_health（伏笔健康总览） ===
 
@@ -386,7 +386,7 @@ export type ProposeUpdateHookArgs = z.infer<typeof proposeUpdateHookArgsSchema>;
 
 // === propose_advance_hook（推进伏笔提案） ===
 
-/** 入参：hook_id + node_id（推进发生的节点）+ description（推进内容描述；确认后复合写 delta+relations，） */
+/** 入参：hook_id + node_id（推进发生的节点）+ description（推进内容描述；确认后复合写 delta+relations） */
 export const proposeAdvanceHookArgsSchema = z
   .object({
     hook_id: z.string(),
@@ -399,7 +399,7 @@ export type ProposeAdvanceHookArgs = z.infer<typeof proposeAdvanceHookArgsSchema
 
 // === propose_resolve_hook（回收伏笔提案） ===
 
-/** 入参：hook_id + node_id（回收节点）+ description（回收内容描述；确认后复合写 delta+relations，） */
+/** 入参：hook_id + node_id（回收节点）+ description（回收内容描述；确认后复合写 delta+relations） */
 export const proposeResolveHookArgsSchema = z
   .object({
     hook_id: z.string(),
@@ -412,7 +412,7 @@ export type ProposeResolveHookArgs = z.infer<typeof proposeResolveHookArgsSchema
 
 // === propose_abandon_hook（废弃伏笔提案） ===
 
-/** 入参：hook_id + description（废弃原因；确认后复合写 delta 记 status=abandoned，） */
+/** 入参：hook_id + description（废弃原因；确认后复合写 delta 记 status=abandoned） */
 export const proposeAbandonHookArgsSchema = z
   .object({
     hook_id: z.string(),
@@ -427,7 +427,7 @@ export type ProposeAbandonHookArgs = z.infer<typeof proposeAbandonHookArgsSchema
 /**
  * 入参：timepoint_ids——LLM 按时间点 name（时间标签文本）语义识别先后后产出的
  * **有序时间点 id 全量序列**（顺序 = 建议新序，须覆盖当前全部未软删时间点，缺/多/重复
- * 由生成时校验拒绝）；200 = 时间点量上限，与列表 limit 对齐（ ）。
+ * 由生成时校验拒绝）；200 = 时间点量上限，与列表 limit 对齐。
  * G2 取代 F9 的 propose_reorder_events：事件不再带 time_label，语义序的载体变为时间点实体
  */
 export const proposeReorderTimepointsArgsSchema = z
@@ -438,7 +438,7 @@ export const proposeReorderTimepointsArgsSchema = z
 
 export type ProposeReorderTimepointsArgs = z.infer<typeof proposeReorderTimepointsArgsSchema>;
 
-// ============ search_references（参考资料搜索，，批次九） ============
+// ============ search_references（参考资料搜索） ============
 
 /**
  * search_references 入参：query 关键词（标题+tags 命中）+ 可选 type 分类过滤（自由文本，

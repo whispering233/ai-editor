@@ -1,4 +1,4 @@
-// 参考资料详情页（ 批次十一；）
+// 参考资料详情页
 // 卡 11.4：三类形态——草稿 md（#/references/new/md）、草稿 link（#/references/new/link）、编辑态（#/references/:id）
 // - 编辑态 = 详情页即编辑器（无「阅读/编辑」切换；列表页编辑入口已收敛于此，B1 修复）
 // - file 类：标题（点击行内编辑）+ 分类 + 标签（datalist + TagSuggest）+ 内容编辑器
@@ -182,7 +182,7 @@ export default function ReferenceDetail({ id, draft }: { id?: string; draft?: "m
     }
   }
 
-  // 导入 md 文档（ N4，卡 11.6：纯前端——FileReader 读文本 + frontmatter 解析预填，
+  // 导入 md 文档（N4，卡 11.6：纯前端——FileReader 读文本 + frontmatter 解析预填，
   // 内容进编辑器，保存走既有 PUT/POST 由服务端落盘；无独立上传端点）
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
@@ -312,7 +312,7 @@ export default function ReferenceDetail({ id, draft }: { id?: string; draft?: "m
 
   return (
     <section className="flex h-full min-h-0 flex-col">
-      {/* 操作区（导入 md / 建立关联 / 删除）——面包屑已随批次十八 B1 移除
+      {/* 操作区（导入 md / 建立关联 / 删除）——面包屑已随B1 移除
           （原「参考资料 › 当前标题」分段 pill；返回走左栏 NavRail） */}
       <div className="mb-3 flex shrink-0 items-center gap-3">
         <div className="ml-auto flex items-center gap-1.5">
@@ -372,7 +372,7 @@ export default function ReferenceDetail({ id, draft }: { id?: string; draft?: "m
             />
           ) : (
             <PageTitle onClick={() => setTitleEditing(true)} title="点击编辑标题">
-              {/* R1 修复（批次十二）：标题显示 form.name 优先——草稿态用户编辑后失焦退出编辑态不再丢失输入
+              {/* R1 修复：标题显示 form.name 优先——草稿态用户编辑后失焦退出编辑态不再丢失输入
                   （旧实现写死 isDraft ? "新建 md 文档" : detail!.name，编辑内容被吞）；空时回退占位文案 */}
               {form.name.trim() !== ""
                 ? form.name
@@ -383,7 +383,7 @@ export default function ReferenceDetail({ id, draft }: { id?: string; draft?: "m
                   : detail!.name}
             </PageTitle>
           )}
-          {/* 分类徽标（批次十二 R4）：草稿态不显示——新建时分类未定且下方已有分类输入区；编辑态保留 */}
+          {/* 分类徽标（R4）：草稿态不显示——新建时分类未定且下方已有分类输入区；编辑态保留 */}
           {!isDraft && (
             <span className="rounded-md border border-border bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
               {TYPE_LABELS[form.type] ?? form.type}

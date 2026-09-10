@@ -208,7 +208,7 @@ describe("POST /relation 创建", () => {
     expect(body.data.relation.sourceType).toBe("outline_node");
   });
 
-  it("occurs_at 1:n（G2，）：重复挂载 → 409 EVENT_ALREADY_MOUNTED；换时间点挂载需先删旧关系", async () => {
+  it("occurs_at 1:n（G2）：重复挂载 → 409 EVENT_ALREADY_MOUNTED；换时间点挂载需先删旧关系", async () => {
     const { app } = await seed();
     const project = getCurrentProject()!;
  // 造两个 timepoint + 一个 event（直接 db 层建，快）
@@ -258,7 +258,7 @@ describe("POST /relation 创建", () => {
     expect(ok.status).toBe(201);
   });
 
-  it("设定层级 belongs_to（）：自指/成环 → 400 VALIDATION_ERROR；正常与级联挂载 201", async () => {
+  it("设定层级 belongs_to：自指/成环 → 400 VALIDATION_ERROR；正常与级联挂载 201", async () => {
     const { app } = await seed();
     const project = getCurrentProject()!;
     const world = createEntity(project.db, { type: "setting", name: "世界" });
@@ -357,7 +357,7 @@ describe("GET /relation 查询", () => {
     expect((await d3.json()).data.paths).toHaveLength(2);
   });
 
-  it("可见性（）：source 软删后关系不可见", async () => {
+  it("可见性：source 软删后关系不可见", async () => {
     const { app, charA, charB } = await seed();
     await createRel(app, { source_type: "character", source_id: charA, target_type: "character", target_id: charB, relation_type: "ally" });
     const project = getCurrentProject()!;
@@ -510,7 +510,7 @@ describe("PUT /relation/:id 更新元数据", () => {
 
 // ============ occurs_at 挂载（G2）：timepoint → event 1:n ============
 
-describe("occurs_at 1:n 挂载（G2，）", () => {
+describe("occurs_at 1:n 挂载（G2）", () => {
  /** 种子：open 项目 + timepoint ×2 + event ×1（db 层直插，复用 createEntity），返回 { app, tp0, tp1, ev } */
   function seedTimepointEvent(): { app: Hono; tp0: string; tp1: string; ev: string } {
     setCurrentProject(initProject(makeTmpDir()));
@@ -572,7 +572,7 @@ describe("occurs_at 1:n 挂载（G2，）", () => {
     expect(dup.body.error!.code).toBe("RELATION_EXISTS"); // 1:n 校验只拦「换时间点」场景（见 POST /relation 创建测试）
   });
 
-  it("事件软删后其 occurs_at 级联软删（）→ 挂载不可见，且不参与 1:n 校验（新建关系被端点软删拦截，400 而非 409）", async () => {
+  it("事件软删后其 occurs_at 级联软删→ 挂载不可见，且不参与 1:n 校验（新建关系被端点软删拦截，400 而非 409）", async () => {
     const { app, tp0, tp1, ev } = seedTimepointEvent();
     await createRel(app, {
       source_type: "timepoint", source_id: tp0, target_type: "event", target_id: ev, relation_type: "occurs_at",

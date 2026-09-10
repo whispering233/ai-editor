@@ -138,7 +138,7 @@ describe("find_orphan_elements unused_characters", () => {
     expect(byName.has("幽灵角色")).toBe(false); // 软删不参与
   });
 
-  it("「当前最新章」口径 = current_position（）：规划未写章节的活跃角色不误报", () => {
+  it("「当前最新章」口径 = current_position：规划未写章节的活跃角色不误报", () => {
  // 三章树：ch-1[sc-1]（第 1 章）/ ch-2[sc-2]（第 2 章）/ ch-3[sc-3]（第 3 章）
     writeOutlineFile(dir, {
       id: "root",

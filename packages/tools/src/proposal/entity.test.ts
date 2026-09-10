@@ -53,7 +53,7 @@ describe("propose_create_entity", () => {
 });
 
 describe("propose_update_entity", () => {
-  it("完整提案结构：type/args/project_id/引用快照（实体自身 updated_at，）/summary", () => {
+  it("完整提案结构：type/args/project_id/引用快照（实体自身 updated_at）/summary", () => {
     const row = createEntity(db, { type: "character", name: "阿强", data: { status: "alive" } });
     const proposal = buildProposeUpdateEntity(makeCtx(), { entity_id: row.id, patches: { status: "dead" } });
     expect(proposal.type).toBe("propose_update_entity");
@@ -63,7 +63,7 @@ describe("propose_update_entity", () => {
     expect(proposal.summary).toContain("更新实体「阿强」的 1 个字段");
   });
 
-  it("返回 { proposal_id, summary }，引用快照取实体自身 updated_at（）", () => {
+  it("返回 { proposal_id, summary }，引用快照取实体自身 updated_at", () => {
     const row = createEntity(db, { type: "character", name: "阿强", data: { status: "alive" } });
     const result = runProposeUpdateEntity(makeCtx(), { entity_id: row.id, patches: { status: "dead" } });
     expect(Object.keys(result).sort()).toEqual(["proposal_id", "summary"]);
@@ -81,7 +81,7 @@ describe("propose_update_entity", () => {
     expect(fresh.updated_at).toBe(row.updated_at);
   });
 
-  it("引用不存在 / 已软删 → 抛错（）", () => {
+  it("引用不存在 / 已软删 → 抛错", () => {
     expect(() => runProposeUpdateEntity(makeCtx(), { entity_id: "char-999", patches: { status: "dead" } })).toThrow(
       /实体不存在或已软删: char-999/,
     );
@@ -121,7 +121,7 @@ describe("propose_delete_entity", () => {
   });
 });
 
-describe("signal aborted（）", () => {
+describe("signal aborted", () => {
   it("三个实体提案工具在 signal 已中止时抛 AbortedError", () => {
     const controller = new AbortController();
     controller.abort();

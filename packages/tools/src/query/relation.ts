@@ -15,7 +15,7 @@ import type { ToolContext } from "../context.js";
 import type { QueryRelationshipsArgs } from "@whispering233/ai-editor-shared";
 
 /**
- * 关系图子图（ query_relationships → [{source,target,type,metadata}] 简写；
+ * 关系图子图（query_relationships → [{source,target,type,metadata}] 简写；
  * 实际透传 db 的 RelationQueryResult 完整形态：relations: RelationRecord[]（含
  * sourceName/targetName 联表名）+ depth>=2 时 paths: RelationPath[]）。
  * 参数映射：snake_case 工具参数 → db 层 camelCase RelationQuery（字段一一对应）；

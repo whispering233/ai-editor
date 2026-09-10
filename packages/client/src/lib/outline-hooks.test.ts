@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { RelationSummaryItem } from "./api";
 import { buildNodeHookMarks, HOOK_MARK_TYPE_ORDER, HOOK_MARK_TYPES } from "./outline-hooks";
 
-/** 关系 fixture（默认 outline_node → hook 的 plants； 标记关系方向） */
+/** 关系 fixture（默认 outline_node → hook 的 plants；标记关系方向） */
 function rel(
   sourceId: string,
   targetId: string,

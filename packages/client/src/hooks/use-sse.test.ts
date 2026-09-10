@@ -66,7 +66,7 @@ describe("parseSSEFrame（单帧解析）", () => {
     expect(parseSSEFrame("data: {}")).toEqual({ event: "message", data: "{}" });
   });
 
-  it("注释行（: 开头）跳过", () => {
+  it("注释行（开头）跳过", () => {
     expect(parseSSEFrame(": keep-alive\nevent: ping\ndata: {}")).toEqual({
       event: "ping",
       data: "{}",
@@ -162,7 +162,7 @@ describe("fetchSSE（流式分发）", () => {
     expect(events).toEqual([["error", { code: "VALIDATION_ERROR", message: "参数错误" }]]);
   });
 
-  it("60s 无任何事件触发 onTimeout 并中止（ 半开连接兜底）", async () => {
+  it("60s 无任何事件触发 onTimeout 并中止（半开连接兜底）", async () => {
     vi.useFakeTimers();
     vi.stubGlobal(
       "fetch",

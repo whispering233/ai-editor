@@ -198,7 +198,7 @@ describe("loadSessions", () => {
 });
 
 describe("loadMessages（U5：会话历史恢复）", () => {
-  it("成功 → messages 设置（响应条目补全 sessionId，shared ChatMessage ）", async () => {
+  it("成功 → messages 设置（响应条目补全 sessionId，shared ChatMessage）", async () => {
     mocked.getSessionMessages.mockResolvedValue({
       sessionId: "sess-1",
       messages: [
@@ -542,7 +542,7 @@ describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
         args: { type: "character", name: "张三" },
       },
     });
- // 收尾文本 + done（新会话 sess_ 前缀， id 约定）
+ // 收尾文本 + done（新会话 sess_ 前缀，id 约定）
     onEvent("text", { delta: "完成" });
     onEvent("done", { session_id: "sess_1" });
 
@@ -605,7 +605,7 @@ describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
     expect(useChatStore.getState().streamError).toBe("聊天服务暂不可用");
   });
 
-  it("onTimeout（60s 无事件）→ disconnected=true + streaming=false + 清空提案（）", () => {
+  it("onTimeout（60s 无事件）→ disconnected=true + streaming=false + 清空提案", () => {
     useChatStore.getState().sendMessage("你好");
     const { onEvent, onTimeout } = sseOptions();
     onEvent("proposal", { proposal_id: "prop-1", type: "propose_create_entity", preview: {} });

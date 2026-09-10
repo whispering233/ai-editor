@@ -252,7 +252,7 @@ describe("POST /project/create", () => {
     });
   });
 
-  it("符号链接指向项目目录之外 → 400 INVALID_PROJECT_PATH（ 防越权）", async () => {
+  it("符号链接指向项目目录之外 → 400 INVALID_PROJECT_PATH（防越权）", async () => {
     const outside = makeTmpDir();
     const linkDir = join(makeTmpDir(), "link-out");
     symlinkSync(outside, linkDir); // 链接指向外部目录
@@ -324,7 +324,7 @@ describe("POST /project/open", () => {
     });
     expect(res.status).toBe(200);
     const body = await res.json();
- // 向客户端提示已重建（；附加字段，shared openResSchema 未含）
+ // 向客户端提示已重建（附加字段，shared openResSchema 未含）
     expect(body.data.rebuilt).toBe(true);
     expect(body.data.fromVersion).toBe(0);
  // 备份文件存在（data.db.v0.bak + outline.json.v0.bak）
@@ -339,7 +339,7 @@ describe("POST /project/open", () => {
     expect(readOutlineFile(dir)).toEqual({ id: "root", type: "root", schema_version: SCHEMA_VERSION, children: [] });
   });
 
-  it("v1 旧库（有迁移路径 002）→ open 前向迁移：migrated 提示 + 数据保全 + v2 结构生效（event 可用，C2 ）", async () => {
+  it("v1 旧库（有迁移路径 002）→ open 前向迁移：migrated 提示 + 数据保全 + v2 结构生效（event 可用，C2）", async () => {
     const dir = makeTmpDir();
     mkdirSync(dir, { recursive: true });
     writeProjectFile(dir, makeConfig("proj-v1", "v1项目"));
@@ -435,7 +435,7 @@ describe("POST /project/open", () => {
     expect(second?.root).toBe(dirB);
   });
 
-  it("未来版本（user_version > SCHEMA_VERSION）→ 409 PROJECT_VERSION_NEWER：拒绝打开、数据未动、无备份生成（ 堵降级数据丢失）", async () => {
+  it("未来版本（user_version > SCHEMA_VERSION）→ 409 PROJECT_VERSION_NEWER：拒绝打开、数据未动、无备份生成（堵降级数据丢失）", async () => {
     const dir = makeTmpDir();
     initProjectDir(dir, makeConfig("proj-future", "未来项目"));
  // 模拟更高版本程序创建的库：user_version = SCHEMA_VERSION + 1
@@ -708,7 +708,7 @@ describe("GET/PUT /project/config", () => {
     expect(readProjectFile(dir)?.backup_frequency_minutes).toBe(30);
   });
 
-  it("PUT backup_frequency_minutes 1（批次十四新增档位）→ updated:true，GET 读回 1", async () => {
+  it("PUT backup_frequency_minutes 1（新增档位）→ updated:true，GET 读回 1", async () => {
     const dir = makeTmpDir();
     const app = await openProject(dir);
     const res = await app.request("/api/v1/project/config", {
@@ -769,7 +769,7 @@ describe("GET/PUT /project/config", () => {
     }
   });
 
-  it("旧项目文件缺字段：GET 兜底 10；PUT 无关字段不把 10 写盘（写只写显式，）", async () => {
+  it("旧项目文件缺字段：GET 兜底 10；PUT 无关字段不把 10 写盘（写只写显式）", async () => {
     const dir = makeTmpDir();
     const app = await openProject(dir); // makeConfig 缺 backup_frequency_minutes
  // 读侧兜底 10
@@ -797,7 +797,7 @@ describe("GET/PUT /project/config", () => {
   });
 });
 
-// ============ GET/PUT /api/v1/project/agents（项目规则文件 ） ============
+// ============ GET/PUT /api/v1/project/agents（项目规则文件） ============
 
 describe("GET/PUT /project/agents", () => {
  /** 打开新项目并返回 app（makeConfig 无 prompt → 不触发迁移，agents 为空态） */
@@ -925,7 +925,7 @@ describe(" 自动迁移", () => {
   });
 
   it("已有 AGENTS.md → 不覆盖（一次性语义）；prompt 为空 → 不迁移", async () => {
- // 已有 ：prompt 存在但文件已存在 → 保留文件内容
+ // 已有：prompt 存在但文件已存在 → 保留文件内容
     const dir = makeTmpDir();
     initProjectDir(dir, { ...makeConfig("proj-mig2", "迁移书2"), prompt: "旧提示词" });
     writeAgentsFile(dir, "用户手写规则");
@@ -1084,7 +1084,7 @@ describe("GET /project/list（书架：创作根 books/ 扫描）", () => {
 // ============ GET /api/v1/project/export（导出 zip 三文件） ============
 
 /**
- * 构造含实体数据的项目并 open（ export / import roundtrip 共用）：
+ * 构造含实体数据的项目并 open（export / import roundtrip 共用）：
  * initProjectDir + 插入实体 + open 路由切换 currentProject
  */
 async function openSeededProject(
@@ -1225,7 +1225,7 @@ describe("POST /project/import（zip 导入新书）", () => {
     return form;
   }
 
- /** 从真实项目导出 zip（ 路由），供 roundtrip / 冲突等用例复用 */
+ /** 从真实项目导出 zip（路由），供 roundtrip / 冲突等用例复用 */
   async function exportZip(app: Hono): Promise<Uint8Array> {
     const res = await app.request("/api/v1/project/export", { headers: HOST_HEADERS });
     expect(res.status).toBe(200);
@@ -1241,7 +1241,7 @@ describe("POST /project/import（zip 导入新书）", () => {
     });
   }
 
-  it("roundtrip： 导出 → import 新书名 → 200 + 三文件生成 + 打开新书数据完整（与源一致）", async () => {
+  it("roundtrip：导出 → import 新书名 → 200 + 三文件生成 + 打开新书数据完整（与源一致）", async () => {
     const root = makeTmpDir();
     setProjectRoot(root);
  // 源项目：含实体数据 + open（export 需要 currentProject）
@@ -1436,7 +1436,7 @@ describe("POST /project/import（zip 导入新书）", () => {
     expect((await res.json()).error.message).toContain("空文件");
   });
 
-  it("同名不再 409（）：id 不匹配 → 新书目录自动去重 books/<name> (2)/，project.json name 同步", async () => {
+  it("同名不再 409：id 不匹配 → 新书目录自动去重 books/<name> (2)/，project.json name 同步", async () => {
     const root = makeTmpDir();
     setProjectRoot(root);
  // 三本不同 id 的源书（同名去重只发生在「id 不匹配」的新书导入分支；bookZip 直接打包，
@@ -1488,7 +1488,7 @@ describe("POST /project/import（zip 导入新书）", () => {
     expect(readProjectFile(join(root, "books", "同名书 (3)"))?.name).toBe("同名书 (3)");
   });
 
-  it("书名含路径分隔符（../escape）→ 400 VALIDATION_ERROR（防 books/ 逃逸，）", async () => {
+  it("书名含路径分隔符（../escape）→ 400 VALIDATION_ERROR（防 books/ 逃逸）", async () => {
     const root = makeTmpDir();
     setProjectRoot(root);
     const dir = makeTmpDir();
@@ -1643,7 +1643,7 @@ describe("POST /project/import（zip 导入新书）", () => {
 
 // ============ POST /api/v1/project/rename（重命名当前书籍） ============
 
-describe("POST /project/rename（重命名当前书籍，）", () => {
+describe("POST /project/rename（重命名当前书籍）", () => {
  /** 在创作根 books/ 下造书并 open（rename 只对 books/ 下的书开放） */
   async function openBookInRoot(root: string, name: string, id = "proj-rn"): Promise<Hono> {
     const dir = join(root, "books", name);
@@ -1803,7 +1803,7 @@ describe("POST /project/backup/rename", () => {
     expect(existsSync(join(dir, ".backups", oldName))).toBe(false); // 旧文件已改名
     expect(existsSync(join(dir, ".backups", backup.fileName))).toBe(true);
 
- // GET /backups 反映新名 + kind（ 列表项带 kind）
+ // GET /backups 反映新名 + kind（列表项带 kind）
     const listRes = await app.request("/api/v1/project/backups", { headers: HOST_HEADERS });
     const backups = (await listRes.json()).data.backups;
     expect(backups).toHaveLength(1);
@@ -1922,7 +1922,7 @@ describe("POST /project/backup/rename", () => {
  // 造可达冲突：旧秒级源文件 + 已存在的毫秒为 0 自动备份（改名目标）
     const backupsDir = join(dir, ".backups");
     mkdirSync(backupsDir, { recursive: true });
-    writeFileSync(join(backupsDir, "20260813-101500.zip"), "legacy"); // 旧秒级（ 遗留）
+    writeFileSync(join(backupsDir, "20260813-101500.zip"), "legacy"); // 旧秒级（遗留）
     writeFileSync(join(backupsDir, "20260813-101500000-a-自动.zip"), "auto"); // 已存在目标
 
     const res = await app.request("/api/v1/project/backup/rename", {

@@ -1,4 +1,4 @@
-// @whispering233/ai-editor-client 入口（：main.tsx 挂载 + App 路由分发）
+// @whispering233/ai-editor-client 入口（main.tsx 挂载 + App 路由分发）
 // 路由表见 （8 路由，#/chat 已移除——聊天常驻右栏 ChatPanel，U2 起不再作为独立页渲染）
 import { StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
@@ -21,7 +21,7 @@ import Trash from "./pages/Trash";
 import Settings from "./pages/Settings";
 import "./index.css";
 
-/** 旧路由重定向（批次十七 1-1 路由一级化；hash 不出浏览器，服务端零感知）
+/** 旧路由重定向（路由一级化；hash 不出浏览器，服务端零感知）
  * 实体家族旧址 → 新一级段；#/settings → #/preferences（设置页避让设定 #/setting） */
 function RedirectTo({ to }: { to: string }) {
   useEffect(() => {
@@ -56,7 +56,7 @@ function renderPage(route: Route): ReactNode {
       // （二级路由，仿实体详情分支；key = nodeId 变化强制卸载重挂，详情页表单按节点重置）
       return second !== undefined ? <OutlineDetail key={second} nodeId={second} /> : <Outline />;
     case "entities": {
-      // 批次十七 1-1：实体家族一级化——旧 #/entities/:type[/:id] 全量重定向到新段
+      // 实体家族一级化——旧 #/entities/:type[/:id] 全量重定向到新段
       // （泛型列表入口已移除的 hook/event/timepoint/reference：丢/带 id 落宿主详情段）
       const seg = LEGACY_ENTITY_SEGMENT[second ?? ""] ?? "characters";
       const carryId = third !== undefined && second !== undefined && second !== "relations";
@@ -104,10 +104,10 @@ function renderPage(route: Route): ReactNode {
       );
     case "timeline":
       // 按段数区分——1 段（#/timeline）→ 列表页；2 段（#/timeline/:id）→ 事件详情页
-      // （ 路由；key = id 变化强制卸载重挂——详情页表单按事件重置）
+      // （路由；key = id 变化强制卸载重挂——详情页表单按事件重置）
       return second !== undefined ? <TimelineDetail key={second} id={second} /> : <Timeline />;
     case "references":
-      // 参考资料（ 卡 11.4）：
+      // 参考资料（卡 11.4）：
       // #/references → 列表；#/references/:id → 详情（编辑态）；
       // #/references/new/md → 新建 md 文档草稿态；#/references/new/link → 新建外源链接草稿态
       if (second === "new" && third === "md") return <ReferenceDetail draft="md" />;
@@ -122,7 +122,7 @@ function renderPage(route: Route): ReactNode {
     case "preferences":
       return <Settings />;
     case "settings":
-      // 旧设置页路由（批次十七：设置页避让设定 #/setting → #/preferences）
+      // 旧设置页路由（设置页避让设定 #/setting → #/preferences）
       return <RedirectTo to="/preferences" />;
     default:
       return <Dashboard mode="home" />;
@@ -141,7 +141,7 @@ createRoot(rootEl).render(
   <StrictMode>
     {/* 应用级错误边界（问题 3）：渲染异常不白屏，展示可恢复错误卡（components/feedback/ErrorBoundary.tsx） */}
     <ErrorBoundary>
-      {/* antd 根 Provider（批次十七 0-2）：zhCN + 默认色板双算法，主题跟随 html.dark */}
+      {/* antd 根 Provider：zhCN + 默认色板双算法，主题跟随 html.dark */}
       <AntdProvider>
         <App />
       </AntdProvider>

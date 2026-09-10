@@ -1,5 +1,5 @@
 /* Tailwind 4 CSS-first 入口（无 tailwind.config.js，architecture.md 技术栈约定） */
-/* 主题 tokens 契约（批次十七 3-0）：语义变量映射 antd cssVar tokens（ConfigProvider cssVar 模式，
+/* 主题 tokens 契约：语义变量映射 antd cssVar tokens（ConfigProvider cssVar 模式，
    浅/深双算法动态注入）；颜色一律经 antd token——禁硬编码色值（FOUC 兜底色为唯一例外） */
 @import "tailwindcss";
 @import "tw-animate-css";
@@ -25,7 +25,7 @@
 
 @theme inline {
   /* 系统字体栈（DESIGN.md §Typography：不下载 web 字体，本地优先离线可用）——
-     全站单一无衬线栈，无例外（衬线已退役：批次十九 T1 删 --font-serif / --font-heading，
+     全站单一无衬线栈，无例外（衬线已退役：T1 删 --font-serif / --font-heading，
      T10 删除无消费者的书封取色模块） */
   --font-sans: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
@@ -72,7 +72,7 @@
 
 /* 标签 tint 色值（浅色：DESIGN.md §Colors 登记的马卡龙实底；深色：同色相 20% 不透明度叠在
    深色面板上——保留色相又不刺眼，字色随 --foreground 变 81% 白，对比度均 ≥ 8:1）。
-   分配规则见 lib/tag-tint.ts（名称 hash 取模 6，同名恒同色）。 */
+   分配规则见 lib/tag-tint.ts（名称 hash 取模 6，同名恒同色）。*/
 :root {
   --tag-peach: #ffe8d4;
   --tag-rose: #fde0ec;

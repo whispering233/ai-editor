@@ -1,30 +1,30 @@
-// 设定树构建纯函数（批次四 I4， 交互树扩展）：由全量 setting 摘要 + 全量
+// 设定树构建纯函数（I4，交互树扩展）：由全量 setting 摘要 + 全量
 // belongs_to 层级边组装递归树。「设定 Tab（树形视图）」。
 // - 层级边方向：childId → parentId（child belongs_to parent）
 // - 根节点 = 不在任何边 target 端的设定（无父）；软删端点已由服务端可见性过滤，
 // 悬空引用（父已不存在）的边在 edges 中不出现
 // - 溢出防御：父实体的 id 未出现在 settings 中（命中 limit 截断）时，该子节点提升为根，
 // 避免子树整体丢失
-// - （2026-08 批次十）：交互树需要完整摘要（标签过滤/描述展示）与直接父 id（拖拽
+// - （2026-08）：交互树需要完整摘要（标签过滤/描述展示）与直接父 id（拖拽
 // no-op 判定）与 belongs_to 关系 id（拖拽改父删旧边）——SettingTreeInput/Node 增补可选字段，
 // SettingTreeEdge 增补可选 relationId；旧只读树调用（不传这些字段）行为不变
 export interface SettingTreeEdge {
   childId: string;
   parentId: string;
- /** belongs_to 关系 id（ 交互树：拖拽改父时删旧边用；旧只读树可省略） */
+ /** belongs_to 关系 id（交互树：拖拽改父时删旧边用；旧只读树可省略） */
   relationId?: string;
 }
 
 export interface SettingTreeInput {
   id: string;
   name: string;
- /** 列表摘要 category（EntitySummary.summary.category，字符串或缺失； 已废弃，防御容错） */
+ /** 列表摘要 category（EntitySummary.summary.category，字符串或缺失；已废弃，防御容错） */
   category?: unknown;
- /** 完整列表摘要（ 交互树：标签过滤/描述展示用；EntitySummary.summary） */
+ /** 完整列表摘要（交互树：标签过滤/描述展示用；EntitySummary.summary） */
   summary?: Record<string, unknown>;
- /** 直接父设定 id（ 交互树：拖拽 no-op 判定；根节点无此字段） */
+ /** 直接父设定 id（交互树：拖拽 no-op 判定；根节点无此字段） */
   parentId?: string;
- /** 创建时间（ 排序模式「创建时间」用；EntitySummary.createdAt） */
+ /** 创建时间（排序模式「创建时间」用；EntitySummary.createdAt） */
   createdAt?: string;
  /** 同级手动排序位（EntitySummary.sortOrder，NULL = 未参与 → 不出现） */
   sortOrder?: number;
@@ -34,11 +34,11 @@ export interface SettingTreeNode {
   id: string;
   name: string;
   category?: string;
- /** 完整列表摘要（ 交互树：标签过滤/描述展示用） */
+ /** 完整列表摘要（交互树：标签过滤/描述展示用） */
   summary?: Record<string, unknown>;
- /** 直接父设定 id（ 交互树：拖拽 no-op 判定；根节点无此字段） */
+ /** 直接父设定 id（交互树：拖拽 no-op 判定；根节点无此字段） */
   parentId?: string;
- /** 创建时间（ 排序模式「创建时间」用） */
+ /** 创建时间（排序模式「创建时间」用） */
   createdAt?: string;
  /** 同级手动排序位（NULL = 未参与 → 不出现，手动模式沉底按名称） */
   sortOrder?: number;
@@ -109,7 +109,7 @@ export function buildSettingTree(
 }
 
 /**
- * 收集所有非叶子（有子节点）设定节点 id ——「全部折叠」用（批次八 O5，2026-08）。
+ * 收集所有非叶子（有子节点）设定节点 id ——「全部折叠」用（O5，2026-08）。
  * 叶子无折叠箭头不参与；返回序为树先根序（折叠态集合无序，序无关紧要，保持确定性便于测试）。
  */
 export function expandableSettingNodeIds(roots: readonly SettingTreeNode[]): string[] {
@@ -124,7 +124,7 @@ export function expandableSettingNodeIds(roots: readonly SettingTreeNode[]): str
   return out;
 }
 
-// ============ 交互树辅助（拖拽层级调整 / 树内过滤，2026-08 批次十） ============
+// ============ 交互树辅助（拖拽层级调整 / 树内过滤，2026-08） ============
 
 /** 在树中查找节点（按 id，先根序）；找不到 → null */
 export function findSettingNode(
@@ -171,7 +171,7 @@ export function canMoveSettingTo(
   return !isSettingDescendant(roots, dragNode.id, targetParentId);
 }
 
-/** 节点标签（summary.tags 数组，防御非数组/缺失； 统一字段） */
+/** 节点标签（summary.tags 数组，防御非数组/缺失；统一字段） */
 export function nodeTags(node: SettingTreeNode): string[] {
   const tags = node.summary?.tags;
   return Array.isArray(tags)
@@ -213,11 +213,11 @@ export function filterSettingTree(
   return roots.map(filterNode).filter((n): n is SettingTreeNode => n !== null);
 }
 
-// ============ （2026-08 批次十三）：同级排序模式 ============
+// ============ （2026-08）：同级排序模式 ============
 
 /** 设定树排序方式：name = 名称（原默认）；created = 创建时间（新→旧）；
  * manual = 手动排序（sortOrder 升序，NULL 沉底按名称——未参与手动排序的渐进生效）。
- * 排序粒度 = 同级兄弟（每个父/根级的子列表），层级结构不变。 */
+ * 排序粒度 = 同级兄弟（每个父/根级的子列表），层级结构不变。*/
 export type SettingSortMode = "name" | "created" | "manual";
 
 /** 排序键辅助：字符串比较（与 SQLite 默认字节序一致，名称排序可预期） */

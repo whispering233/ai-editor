@@ -79,7 +79,7 @@ describe("listDeletedEntities（GET /api/v1/trash entities 侧）", () => {
   });
 });
 
-describe("restoreEntity（）", () => {
+describe("restoreEntity", () => {
   it("级联还原关系（任一端点）+ Delta（target_id），计数正确；自身 deleted_at 置 NULL + updated_at 刷新", () => {
     const row = createEntity(db, { type: "hook", name: "伏笔" });
     seedRelation(row.id);

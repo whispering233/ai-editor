@@ -16,7 +16,7 @@ import {
   type RelationSummaryItem,
 } from "./api";
 
-// ============ 状态分组（ 信息层级） ============
+// ============ 状态分组（信息层级） ============
 
 export type HookGroupKey = "active" | "resolved" | "abandoned";
 
@@ -56,7 +56,7 @@ export function relationsOfType(
 
 /**
  * 本伏笔「依赖的伏笔」名字（depends_on 中 sourceId === hookId → target 名；targetName 缺省用 id）。
- * 行内「依赖: xxx」展示（ 行主信息）
+ * 行内「依赖: xxx」展示（行主信息）
  */
 export function dependencyNames(
   relations: readonly RelationSummaryItem[],
@@ -102,8 +102,8 @@ export interface DepChainNode {
 export const MAX_CHAIN_DEPTH = 3;
 
 /**
- * 递归展开「依赖链」（ 关键交互：行内「依赖: 玉佩来历」可点击展开递归链）：
- * - 边语义：source 依赖 target（）；从起点沿 depends_on 的 target 逐层下行
+ * 递归展开「依赖链」（关键交互：行内「依赖: 玉佩来历」可点击展开递归链）：
+ * - 边语义：source 依赖 target；从起点沿 depends_on 的 target 逐层下行
  * - 深度限制 maxDepth（默认 3 层含起点）——更深层级以截断呈现
  * - 环守卫：visited 跳过已访问伏笔（A↔B 互依赖等环状脏数据不陷入死循环）
  * - 名称兜底：names 映射缺失 → 显示 id（关系 targetName 可能缺省）
@@ -180,11 +180,11 @@ export function anchorNodeForAbandon(
   return lastOutlineNode(tree);
 }
 
-// ============ 复合写请求构造（推进/回收/废弃； 状态变化 + 复合写） ============
+// ============ 复合写请求构造（推进/回收/废弃；状态变化 + 复合写） ============
 
 export type HookLifecycleKind = "advance" | "resolve" | "abandon";
 
-/** 生命周期动作 → 目标状态（：planted → progressing → resolved 或 abandoned） */
+/** 生命周期动作 → 目标状态（planted → progressing → resolved 或 abandoned） */
 export const LIFECYCLE_STATUS: Record<HookLifecycleKind, string> = {
   advance: "progressing",
   resolve: "resolved",
@@ -203,7 +203,7 @@ export function currentHookStatus(data: Record<string, unknown>): string {
   return typeof status === "string" && status !== "" ? status : "planted";
 }
 
-/** 状态变更 change（ 状态变化形态：op=update + from 当前状态； from 由客户端自动取） */
+/** 状态变更 change（状态变化形态：op=update + from 当前状态；from 由客户端自动取） */
 export function buildStatusDeltaChange(from: string, to: string): DeltaChange {
   return { field: "status", op: "update", from, to };
 }
@@ -223,7 +223,7 @@ export function buildLifecycleRelationBody(
   };
 }
 
-/** 新建伏笔的埋点关系请求体（outline_node → hook，plants； 新建交互） */
+/** 新建伏笔的埋点关系请求体（outline_node → hook，plants；新建交互） */
 export function buildPlantRelationBody(hookId: string, plantNodeId: string): CreateRelationBody {
   return {
     source_type: "outline_node",
@@ -252,9 +252,9 @@ export interface LifecycleWriteInput {
 }
 
 /**
- * 推进/回收复合写（：「POST /delta + POST /relation 一次提交」）。
- * REST 无事务，逐请求逼近 executor 的 withTransaction 复合写（），顺序 3 步：
- * 1. POST /delta —— 记状态变化（ 状态变化形态）
+ * 推进/回收复合写（「POST /delta + POST /relation 一次提交」）。
+ * REST 无事务，逐请求逼近 executor 的 withTransaction 复合写，顺序 3 步：
+ * 1. POST /delta —— 记状态变化（状态变化形态）
  * 2. POST /relation —— 插 advances/resolves 关系；
  * 409 RELATION_EXISTS（同三元组已存在，——上次已推进过/并发重复确认）
  * = 幂等命中，放行不视为失败（executor 幂等判重同语义：不重复写）

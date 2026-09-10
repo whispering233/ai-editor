@@ -1,11 +1,11 @@
 // 提案类工具：时间轴时间点批量重排（G2，「提案类」propose_reorder_timepoints）
 //
-// 语义（ G2 修订注记 + 权限分级）：AI 按时间点 name（时间标签文本，如
+// 语义（G2 修订注记 + 权限分级）：AI 按时间点 name（时间标签文本，如
 // 「第二天黄昏」「少年时」）语义识别先后 → 产出**有序时间点 id 全量序列**（args.timepoint_ids，
 // 顺序 = 建议新序）→ 本工具只产出提案对象（buildProposal，prop_ 运行时 id），**不落盘、
 // 不写任何数据**——排序由用户确认后 S6.7 reorder_timepoints 执行器落库（与 moveTimepoint
 // 拖拽权威语义不变：排序结果即 timepoint.sort_order 线性序；重排时间点**不改其下事件序**——
-// 双独立线性序， G2 修订）。
+// 双独立线性序，G2 修订）。
 //
 // 生成时校验（延伸）：
 // - args.timepoint_ids 与当前**全部未软删时间点** id 集合**完全相等**（缺/多/重复 → 抛错——
@@ -16,7 +16,7 @@
 // 时间点（对比当前序与新序，1-based 位置，人类可读；name 缺失/空串用 id 兜底）——
 // 完整预览经 SSE proposal 事件推送 GUI 展示提案卡
 //
-// tool_result 语义（ 2026-08 修订）：run 只返回 { proposal_id, summary }，不含预览细节。
+// tool_result 语义（2026-08 修订）：run 只返回 { proposal_id, summary }，不含预览细节。
 
 import { listTimepoints } from "@whispering233/ai-editor-db";
 import type { ProposeReorderTimepointsArgs } from "@whispering233/ai-editor-shared";
@@ -84,7 +84,7 @@ export function buildProposeReorderTimepoints(ctx: ToolContext, args: ProposeReo
   );
 }
 
-/** propose_reorder_timepoints run：中止检查 + 产出裁剪结果（tool_result 不含预览， 2026-08 修订） */
+/** propose_reorder_timepoints run：中止检查 + 产出裁剪结果（tool_result 不含预览，2026-08 修订） */
 export function runProposeReorderTimepoints(
   ctx: ToolContext,
   args: ProposeReorderTimepointsArgs,

@@ -4,7 +4,7 @@
 import { CheckCircleFilled, FastForwardFilled, PushpinFilled } from "@ant-design/icons";
 import type { NodeHookMark } from "../../lib/outline-hooks";
 
-/** 标记类型 → 文案（title tooltip 前缀； 生命周期动作：埋下 → 推进 → 回收） */
+/** 标记类型 → 文案（title tooltip 前缀；生命周期动作：埋下 → 推进 → 回收） */
 export const HOOK_MARK_LABEL: Record<NodeHookMark["relationType"], string> = {
   plants: "埋设",
   advances: "推进",

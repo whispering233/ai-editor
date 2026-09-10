@@ -1,4 +1,4 @@
-// @whispering233/ai-editor-llm pi-ai 适配层（批次九）
+// @whispering233/ai-editor-llm pi-ai 适配层
 // 职责：把 ai-editor 的 LLMMessage[]（OpenAI wire 格式）转换为 pi-ai 的 Context 消息，
 // 调用 pi-ai 的 models.stream 并把其事件转发为 ai-editor 的 LLMStreamEvent 事件流，
 // 完成 usage/错误/工具 schema 的转换——这是把手写 SSE 解码/流式 tool_call 累积/
@@ -11,7 +11,7 @@
 // - 错误归一化：openai-completions 用官方 openai SDK，normalizeProviderError 会把
 // HTTP status + body JSON 折入 errorMessage（格式 "429: {..}" / "(429): {..}"）；
 // 适配层在流开始时经 onResponse 记录真实 status + 解析 errorMessage 中的 code 关键词
-// 恢复 LLMError.status/code——classifyLLMError（ 分类语义）原逻辑不变
+// 恢复 LLMError.status/code——classifyLLMError（分类语义）原逻辑不变
 // - 工具 schema：LLMToolDefinition.parameters 是 JSON Schema 对象，pi-ai 的 Tool.parameters
 // 是 TypeBox TSchema 但发送层直接透传（parameters as any）；原样映射 + 类型断言；
 // validateToolCall 不调用（ai-editor 的 executor 自己用 zod 校验，不变）
@@ -100,7 +100,7 @@ export function toPiTools(defs: readonly LLMToolDefinition[] = []): Tool[] {
 // ============ 消息转换（LLMMessage[] → pi-ai Context，单向有界） ============
 
 /** 回填元数据兜底（assistant/toolResult 消息必需字段；DeepSeek 兼容 OpenAI 格式）
- * 批次十六：多 provider 后回填跟随目标模型（resolved api/provider/id）——wire 协议族（如
+ * 多 provider 后回填跟随目标模型（resolved api/provider/id）——wire 协议族（如
  * opencode-go 的 anthropic-messages 模型）重放历史消息时按目标模型元数据组装 */
 const FALLBACK_MODEL = "deepseek-v4-flash";
 const FALLBACK_PROVIDER = "deepseek";
@@ -203,7 +203,7 @@ export function extractStatusFromMessage(message: string): number | undefined {
   return Number.isInteger(status) && status >= 100 && status <= 599 ? status : undefined;
 }
 
-/** 从 errorMessage 中提取服务端错误码关键词（insufficient_quota 等， 分类依赖） */
+/** 从 errorMessage 中提取服务端错误码关键词（insufficient_quota 等，分类依赖） */
 export function extractCodeFromMessage(message: string): string | undefined {
   const QUOTA_KEYWORDS = ["insufficient_quota", "billing", "quota", "rate limit", "rate_limit", "invalid_api_key", "authentication"];
   const lower = message.toLowerCase();
@@ -294,7 +294,7 @@ export async function streamChat(params: AdapterStreamParams): Promise<ChatStrea
   const { apiKey, model, messages, tools, signal, maxTokens, temperature, reasoning, onEvent, debugStream, provider } = params;
   const models = getModels();
 
- // 模型解析（批次十六多 provider）：只在目标 provider 目录内查——缺省/兜底模型同 provider 内找，
+ // 模型解析（多 provider）：只在目标 provider 目录内查——缺省/兜底模型同 provider 内找，
  // 绝不跨 provider 搜索（撞名模型 deepseek-v4-flash/pro 两家都有，跨查会用错 key/baseUrl）
   const target = provider ?? DEFAULT_PROVIDER;
   const fallback = PROVIDER_FALLBACK_MODEL[target];
@@ -314,7 +314,7 @@ export async function streamChat(params: AdapterStreamParams): Promise<ChatStrea
   let statusHint: number | undefined;
   let finalUsage: LLMUsage | null = null;
   let stopReason: string | null = null;
-  const pendingToolCalls: LLMToolCallResult[] = []; // 缓存 tool_call 事件直到 done（ 收尾统一判 length）
+  const pendingToolCalls: LLMToolCallResult[] = []; // 缓存 tool_call 事件直到 done（收尾统一判 length）
 
   try {
     const stream = models.stream(resolved, context, {
@@ -360,7 +360,7 @@ export async function streamChat(params: AdapterStreamParams): Promise<ChatStrea
             for (const call of pendingToolCalls) {
               onEvent?.({
                 type: "tool_call",
-                toolCall: { ...call, error: "finish_reason=length：参数可能不完整，不执行（）" },
+                toolCall: { ...call, error: "finish_reason=length：参数可能不完整，不执行" },
               });
             }
           } else {

@@ -1,5 +1,5 @@
-// 区块卡（：antd Card 1px hairline 描边 + 8px 圆角 + 16px 内边距；action = 标题行右侧操作区）
-// 上提自 OutlineDetail 局部 Card（L 批次）：跨页复用，替换 Dashboard 等区块式页面手写 section
+// 区块卡（antd Card 1px hairline 描边 + 8px 圆角 + 16px 内边距；action = 标题行右侧操作区）
+// 上提自 OutlineDetail 局部 Card：跨页复用，替换 Dashboard 等区块式页面手写 section
 // 用法：
 // <SectionCard title="项目信息" action={<Button ...>编辑</Button>}>...</SectionCard>
 // <SectionCard>无标题区块</SectionCard>

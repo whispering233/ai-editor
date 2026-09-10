@@ -6,7 +6,7 @@
 // 组件抽至 components/entity/create-relation-dialog.tsx，详情模式 source 固定本实体）、
 // 删关系物理删确认（轻量可重建）、软删直接执行（H2：不弹确认）+ 级联计数、404 引导
 // 边界：custom_fields 仅在响应 data 已有该键时显示（MVP 无法新增键）；「问 AI」入口待 chat store
-// 就绪后补（ 带上下文进聊天）
+// 就绪后补（带上下文进聊天）
 import { useEffect, useRef, useState } from "react";
 import { HolderOutlined } from "@ant-design/icons";
 import { formatTimestamp } from "@whispering233/ai-editor-shared";
@@ -57,7 +57,7 @@ function fieldValue(form: Record<string, unknown>, key: string): string {
 }
 
 /** 标签列表编辑器（character.personality/abilities、setting.tags/rules）。
- * suggestions 提供时绑定 datalist（批次五 J2：浏览器原生自动完成——输入时弹出已有标签候选）；
+ * suggestions 提供时绑定 datalist（J2：浏览器原生自动完成——输入时弹出已有标签候选）；
  * quickTags 提供时渲染「已有标签」快捷选择 chips（K2：点击追加到列表，已选的隐藏） */
 function TagsEditor({
   values,
@@ -266,7 +266,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
   /** 设定层级修改态（I3b：修改/清除上级——先建后删，防数据丢失） */
   const [hierarchySaving, setHierarchySaving] = useState(false);
   const [hierarchyError, setHierarchyError] = useState<string | null>(null);
-  /** 标签建议池（批次五 J2 + K2，setting 详情 tags 输入 datalist 候选 + 快捷选择——全量聚合既有标签；失败静默） */
+  /** 标签建议池（J2 + K2，setting 详情 tags 输入 datalist 候选 + 快捷选择——全量聚合既有标签；失败静默） */
   const [tagPool, setTagPool] = useState<string[]>([]);
 
   // 补拉全量设定标签池（setting 类型才拉；复用 Timeline 详情 loadTagPool 同款模式）
@@ -480,7 +480,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
 
   return (
     <section>
-      {/* header：标题 + 操作（面包屑已随批次十八 B1 移除——详情页返回走左栏 NavRail） */}
+      {/* header：标题 + 操作（面包屑已随B1 移除——详情页返回走左栏 NavRail） */}
       <div className="mb-1 flex items-center gap-3">
         <PageTitle className="min-w-0 truncate">{detail?.name ?? "…"}</PageTitle>
         <div className="ml-auto flex items-center gap-2">
@@ -739,7 +739,7 @@ function FormField({
   field: DetailFieldConfig;
   value: unknown;
   onChange: (v: unknown) => void;
-  /** 规则标签建议池（批次五 J2：仅 setting.rules 使用；datalist 候选） */
+  /** 规则标签建议池（J2：仅 setting.rules 使用；datalist 候选） */
   tagPool?: readonly string[];
 }) {
   switch (field.control) {
@@ -809,7 +809,7 @@ function FormField({
 
 /** 大纲节点选择器（hook.expected_resolve_node_id；选项来自 outline store 的树）。
  * 清空（「未设置」）→ onChange(null)：服务端 schema 为 z.string.nullable，「未设置」应存 null
- * 而非空串（ 健康指标按 null 判定），见 lib/entity-detail.ts diffData 的 null 透传语义 */
+ * 而非空串（健康指标按 null 判定），见 lib/entity-detail.ts diffData 的 null 透传语义 */
 function OutlineNodeSelect({
   value,
   onChange,

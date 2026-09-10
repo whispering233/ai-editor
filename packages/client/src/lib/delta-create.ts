@@ -170,7 +170,7 @@ export interface BuildDeltaChangeArgs {
 
 export type BuildDeltaChangeResult = { change: DeltaChange } | { error: string };
 
-/** 构造单条 change（per-op 必填语义对齐 ；update 自动填 from——不可解析则报错引导改「设为」） */
+/** 构造单条 change（per-op 必填语义对齐；update 自动填 from——不可解析则报错引导改「设为」） */
 export function buildDeltaChange(args: BuildDeltaChangeArgs): BuildDeltaChangeResult {
   const v = args.rawValue.trim();
   if (v === "") return { error: "请填写值" };

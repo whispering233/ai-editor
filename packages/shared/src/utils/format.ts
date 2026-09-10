@@ -1,7 +1,7 @@
 // 文本格式化工具（纯函数，零 Node 依赖——client 浏览器打包安全）
 
 /**
- * ISO 8601 时间戳 → 本地化 `YYYY-MM-DD HH:mm`（ 时间约定：统一 ISO 8601 字符串）
+ * ISO 8601 时间戳 → 本地化 `YYYY-MM-DD HH:mm`（时间约定：统一 ISO 8601 字符串）
  * 非法输入（含空串）原样返回，防御性处理
  */
 export function formatTimestamp(iso: string): string {
@@ -13,7 +13,7 @@ export function formatTimestamp(iso: string): string {
 
 /**
  * 截断文本：返回总长（含省略号）不超过 maxLen 的字符串；未超长原样返回
- * 用途：会话列表 lastMessage、长文本展示（）
+ * 用途：会话列表 lastMessage、长文本展示
  * 边界：maxLen <= 0 返回空串；maxLen = 1 时返回单个省略号
  */
 export function truncate(text: string, maxLen: number): string {
@@ -23,7 +23,7 @@ export function truncate(text: string, maxLen: number): string {
 }
 
 /**
- * API key 掩码展示（ settings apiKeyMasked 示例 `sk-****1234`：保留前 3 后 4）
+ * API key 掩码展示（settings apiKeyMasked 示例 `sk-****1234`：保留前 3 后 4）
  * 过短 key（<= 7 字符，前后缀重叠）整体掩码为 "****"；空串返回 "****"
  */
 export function maskApiKey(key: string): string {

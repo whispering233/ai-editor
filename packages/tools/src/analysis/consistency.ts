@@ -14,7 +14,7 @@ import type { AnalyzeConsistencyArgs } from "@whispering233/ai-editor-shared";
 /** 一致性问题的严重级别（error = 确定矛盾；warning = 可疑/待确认） */
 export type IssueSeverity = "error" | "warning";
 
-/** 单条一致性问题（ analyze_consistency 返回项） */
+/** 单条一致性问题（analyze_consistency 返回项） */
 export interface ConsistencyIssue {
   severity: IssueSeverity;
  /** 矛盾的 data 字段名（如 "personality" / "expected_resolve_node_id"） */
@@ -100,7 +100,7 @@ function checkParentReference(data: Record<string, unknown>, db: Db): Consistenc
 }
 
 /**
- * 实体档案一致性检查（ analyze_consistency(entity_id)）。
+ * 实体档案一致性检查（analyze_consistency(entity_id)）。
  * 规则表（按类型分发，均纯函数判定）：
  * - character：R1 负年龄（error）、R2 性格反义词对（warning）
  * - hook：R3 已兑现未标注节点（warning）、R4 兑现节点悬空引用（error）
@@ -120,14 +120,14 @@ export function analyzeEntityConsistency(row: EntityRow, tree: OutlineFileTree, 
       return [];
     case "location":
       return checkParentReference(data, db);
- // C1 类型补全（ event 时间轴事件：暂无一致性规则，返回空集；后续卡按需增补）
+ // C1 类型补全（event 时间轴事件：暂无一致性规则，返回空集；后续卡按需增补）
     case "event":
       return [];
- // G2 类型补全（ G2 修订 timepoint 时间标签点：data 恒空（{}）、name 即时间标签文本，
+ // G2 类型补全（G2 修订 timepoint 时间标签点：data 恒空（{}）、name 即时间标签文本，
  // 无可分析字段——返回空集；后续卡按需增补）
     case "timepoint":
       return [];
- // （批次九）参考资料 reference：素材库无一致性规则（与 event 同哲学），返回空集
+ // 参考资料 reference：素材库无一致性规则（与 event 同哲学），返回空集
     case "reference":
       return [];
   }

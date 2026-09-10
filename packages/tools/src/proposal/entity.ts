@@ -2,7 +2,7 @@
 // propose_create_entity / propose_update_entity / propose_delete_entity
 //
 // 语义：AI 不能直接修改数据——build 函数只**产出提案对象**（buildProposal，prop_ 运行时 id），
-// run 返回 { proposal_id, summary }（ 2026-08 修订：tool_result 不含预览细节，
+// run 返回 { proposal_id, summary }（2026-08 修订：tool_result 不含预览细节，
 // 防 LLM 误以为提案已生效而重复提案）；**不落盘、不写任何数据**（与 S6.7 执行工具的核心差异——
 // 本模块零写操作）。
 // 生成时校验：引用实体存在且未软删（getEntity 已过滤软删），

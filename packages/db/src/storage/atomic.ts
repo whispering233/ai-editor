@@ -1,8 +1,8 @@
 // @whispering233/ai-editor-db JSON 原子写核心（T2.2）
 //
 // 「写临时文件 → fsync → rename 覆盖」，禁止直接 writeFileSync 覆盖原文件；
-// ：project.json 同款流程。
-// 时间约定（）：所有时间由应用层写入（ISO 8601），模块内不生成时间。
+//：project.json 同款流程。
+// 时间约定：所有时间由应用层写入（ISO 8601），模块内不生成时间。
 
 import { closeSync, fsyncSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
@@ -96,7 +96,7 @@ function fsyncDir(dir: string): void {
 }
 
 /**
- * 文本文件原子写（ 同款流程：临时文件 + fsync + rename，）。
+ * 文本文件原子写（同款流程：临时文件 + fsync + rename）。
  * 与 writeJsonAtomic 的区别：内容为**原始文本**（不 JSON 序列化）—— 等
  * 非 JSON 数据文件用（项目规则文件写入走原子写，防崩溃/断电损坏）。
  *

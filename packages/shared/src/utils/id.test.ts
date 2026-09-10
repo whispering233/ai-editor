@@ -1,4 +1,4 @@
-// ID 生成测试（T1.3）：前缀映射（ id 约定）+ 唯一性
+// ID 生成测试（T1.3）：前缀映射（id 约定）+ 唯一性
 import { describe, expect, it } from "vitest";
 import {
   ENTITY_ID_PREFIX,

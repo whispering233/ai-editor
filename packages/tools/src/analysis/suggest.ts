@@ -12,7 +12,7 @@ import type { ToolContext } from "../context.js";
 import { buildEntityGraph, intersectSets, isEntityType, throwIfAborted } from "./utils.js";
 import type { SuggestConnectionsArgs } from "@whispering233/ai-editor-shared";
 
-/** 潜在关联建议（ suggest_connections 返回项） */
+/** 潜在关联建议（suggest_connections 返回项） */
 export interface ConnectionSuggestion {
   target_id: string;
  /** 建议的关系类型（预定义枚举；用户确认后可建立） */
@@ -29,7 +29,7 @@ function sceneTitleOf(relations: ReadonlyArray<{ targetId: string; targetName?: 
 }
 
 /**
- * 潜在关系发现（ suggest_connections(entity_id)）。
+ * 潜在关系发现（suggest_connections(entity_id)）。
  * 实体不存在/已软删 → null（查询无结果）；同类型无其他实体 → 空建议。
  * 信号优先级：共享场景（S1）> 共同邻居（S2），每候选最多一条建议（取最强信号）；
  * 软删对象不可见（查询层默认过滤）；已有直接关系的候选跳过。

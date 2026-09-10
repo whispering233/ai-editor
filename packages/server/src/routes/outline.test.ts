@@ -68,7 +68,7 @@ afterEach(() => {
 
 // ============ POST /api/v1/outline ============
 
-describe("POST /outline 创建（严格三层，）", () => {
+describe("POST /outline 创建（严格三层）", () => {
   it("三层合法创建：volume 挂 root → chapter 挂 volume → scene 挂 chapter，201 + 字段正确", async () => {
     const app = buildApp();
     await openProject();
@@ -173,7 +173,7 @@ describe("GET /outline 整树", () => {
     expect(vol.children[0].children[0].type).toBe("scene");
   });
 
-  it("软删节点默认过滤（）：卷软删后整棵子树不出现在常规查询", async () => {
+  it("软删节点默认过滤：卷软删后整棵子树不出现在常规查询", async () => {
     const app = buildApp();
     const { vol } = await seedTree(app);
     const delRes = await app.request(`/api/v1/outline/${vol}`, { method: "DELETE", headers: HOST_HEADERS });
@@ -183,7 +183,7 @@ describe("GET /outline 整树", () => {
     expect((await res.json()).data.children).toEqual([]);
   });
 
-  it("chapter 直挂 root 时整树 type 正确（；server 侧映射规避 shared 硬编码，冒烟发现）", async () => {
+  it("chapter 直挂 root 时整树 type 正确（server 侧映射规避 shared 硬编码，冒烟发现）", async () => {
     const app = buildApp();
     await openProject();
     const ch = (await (await app.request("/api/v1/outline", {
@@ -304,7 +304,7 @@ describe("更新/移动/路径", () => {
 
 // ============ DELETE 软删 + 回收站 ============
 
-describe("软删与回收站（）", () => {
+describe("软删与回收站", () => {
   it("DELETE 软删：cascaded.children 计数；节点本体保留（回收站列表可见）", async () => {
     const app = buildApp();
     await openProject();
@@ -415,7 +415,7 @@ describe("软删与回收站（）", () => {
 
 // ============ 节点 data（麦基字段集） ============
 
-describe("节点 data（）", () => {
+describe("节点 data", () => {
  /** 建 卷[章[场景]] 结构并给 scene 挂全字段 data，返回各节点 id */
   async function seedWithSceneData(
     app: Hono,
@@ -439,7 +439,7 @@ describe("节点 data（）", () => {
     return { vol: vol.id, ch: ch.id, sc: sc.id };
   }
 
-  it("POST 带 data 成功 201；GET 整树原样返回 data（ 透传）", async () => {
+  it("POST 带 data 成功 201；GET 整树原样返回 data（透传）", async () => {
     const app = buildApp();
     const { vol, ch, sc } = await seedWithSceneData(app);
     expect(vol).toMatch(/^vol-/);
@@ -516,7 +516,7 @@ describe("节点 data（）", () => {
     expect(res.status).toBe(200);
     expect((await res.json()).data).toEqual({ updated: true });
 
- // 原无 data 节点：浅合并展开落盘 data: {}，GET 显式返回空对象（ 透传）
+ // 原无 data 节点：浅合并展开落盘 data: {}，GET 显式返回空对象（透传）
     const ch = (await (await app.request("/api/v1/outline", {
       method: "POST", headers: HOST_HEADERS,
       body: JSON.stringify({ type: "chapter", title: "新章", parent_id: vol }),
@@ -578,7 +578,7 @@ describe("节点 data（）", () => {
 // 若顺序正确（先 DB 级联后 JSON 写），JSON 失败时 DB 已先行变更——断言 DB 状态证明顺序；
 // 反序（JSON 先行）时 JSON 失败则 DB 未动，断言失败即暴露顺序问题。
 
-describe("跨存储写序（）", () => {
+describe("跨存储写序", () => {
  /** 使 outline.json 原子写必然失败（预建临时文件路径为目录） */
   function blockOutlineWrite(dir: string): void {
     mkdirSync(join(dir, ".outline.json.tmp"));

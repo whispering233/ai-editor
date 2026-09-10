@@ -1,13 +1,13 @@
 // 实体 / 关系常量
 // 常量命名 UPPER_SNAKE_CASE，as const 保持字面量类型
 
-/** 实体类型（entities 表 type 列 CHECK 约束，）——event 为时间轴事件；timepoint 为 G2 时间标签点（name=时间标签文本，data 空， G2 修订）；reference 为参考资料 */
+/** 实体类型（entities 表 type 列 CHECK 约束）——event 为时间轴事件；timepoint 为 G2 时间标签点（name=时间标签文本，data 空，G2 修订）；reference 为参考资料 */
 export const ENTITY_TYPES = ["character", "setting", "location", "hook", "event", "timepoint", "reference"] as const;
 
 /** 实体类型（单数，从常量派生；与 types/entity.ts 的 EntityType 一致，测试断言保证） */
 export type EntityTypeValue = (typeof ENTITY_TYPES)[number];
 
-/** 实体类型 → 中文标签（ names/resolve 与前端徽标共用；口径对齐 client 主流页面——character 用「人物」） */
+/** 实体类型 → 中文标签（names/resolve 与前端徽标共用；口径对齐 client 主流页面——character 用「人物」） */
 export const ENTITY_TYPE_LABELS: Record<EntityTypeValue, string> = {
   character: "人物",
   setting: "设定",
@@ -19,7 +19,7 @@ export const ENTITY_TYPE_LABELS: Record<EntityTypeValue, string> = {
 };
 
 /**
- * 预定义关系类型（ 关系类型表，共 17 个）
+ * 预定义关系类型（关系类型表，共 17 个）
  * belongs_to 所属 / owns 拥有 / masters 掌握 / ally·rival·mentor·family 人物间 /
  * kills 击杀 / appears_in 出现于大纲节点 / occurs_at 发生在地点（大纲节点→地点）＋
  * timepoint→event 1:n 挂载（G2 时间标签点，——同一关系类型双语义，端点类型区分） /
@@ -53,7 +53,7 @@ export type RelationType = (typeof RELATION_TYPES)[number];
 /** 剧情连线关系类型（画布连线用 plot_edge，metadata 存连线标签） */
 export const PLOT_EDGE_TYPE = "plot_edge" as const;
 
-/** 伏笔管理关系（ 伏笔关系约定：大纲节点 → hook） */
+/** 伏笔管理关系（伏笔关系约定：大纲节点 → hook） */
 export const HOOK_RELATION_TYPES = ["plants", "advances", "resolves"] as const;
 
 /** 伏笔管理关系类型 */

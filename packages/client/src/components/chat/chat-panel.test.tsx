@@ -1,4 +1,4 @@
-// ChatPanel「新会话」路径渲染走查（交互批次，问题 3）：
+// ChatPanel「新会话」路径渲染走查（问题 3）：
 // 用户实测「点击新会话后整页白屏」。仓库无 jsdom/@testing-library（FeedbackHost.test.tsx 注释：
 // 避免引入新依赖），本测试用 react-dom/server renderToString（react-dom 既有依赖）走查。
 // SSR 限制（重要）：zustand v5 useStore 的 getServerSnapshot = 创建时初始态（hydration 一致性设计），
@@ -38,7 +38,7 @@ vi.mock("../../hooks/use-sse", () => ({
   fetchSSE: vi.fn(() => () => {}),
 }));
 
-// 批次十七 2-1：x-markdown 的 CJS lib 包内 require css，vitest node 直跑会 SyntaxError——
+// x-markdown 的 CJS lib 包内 require css，vitest node 直跑会 SyntaxError——
 // mock 为纯文本渲染（真实渲染路径由 vite build 管线验证，见 antd-smoke.test 注记）
 vi.mock("@ant-design/x-markdown", () => ({
   default: ({ children }: { children?: string }) => children ?? null,
@@ -227,7 +227,7 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3：任务�
     ).toEqual({ id: "c", tool: "z", name: "z", args: "not-json{" });
   });
 
-  it("MessageItem：tool 消息本身返回 null（ 成对渲染，不单独出现）", () => {
+  it("MessageItem：tool 消息本身返回 null（成对渲染，不单独出现）", () => {
     const toolMsg: ChatMessage = {
       id: "t1",
       sessionId: "sess-1",
@@ -297,7 +297,7 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3：任务�
     expect(stale).toContain("此提案已失效");
   });
 
-  it("ProposalCardView：propose_reorder_timepoints（F9 + G2 修订）标题映射「重排时间轴时间点」+ preview 摘要渲染（，不再 JSON dump）", () => {
+  it("ProposalCardView：propose_reorder_timepoints（F9 + G2 修订）标题映射「重排时间轴时间点」+ preview 摘要渲染（不再 JSON dump）", () => {
     const html = renderToString(
       <ProposalCardView
         proposal={{
@@ -369,7 +369,7 @@ describe("ErrorBoundary 兜底（问题 3 防护：渲染异常 → 可恢复错
 // <Menu.RadioGroup>.）。此前无 ErrorBoundary 时 = 整页白屏（原始问题 3 现象），ErrorBoundary 落地后
 // = 错误卡（用户实测确认）。修复：Label 用 DropdownMenuGroup（= Menu.Group）包裹（ChatPanel.tsx）。
 
-describe("focus 小条文案（批次十八 C2：不再直显裸 entity id）", () => {
+describe("focus 小条文案（C2：不再直显裸 entity id）", () => {
   it("解析命中 → 类型 + 名称；解析中只显类型；失败退 id", () => {
     const ctx = { focus_entity_type: "character", focus_entity_id: "char-1" };
     expect(focusLabel(ctx, "张三")).toBe("角色 张三"); // 命中

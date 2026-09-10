@@ -1,5 +1,5 @@
-// 文件字段 ↔ API 字段映射（ 通用约定指定位置：@whispering233/ai-editor-shared/utils）
-// 约定（）：请求体/查询参数 snake_case，响应体 camelCase，
+// 文件字段 ↔ API 字段映射（通用约定指定位置：@whispering233/ai-editor-shared/utils）
+// 约定：请求体/查询参数 snake_case，响应体 camelCase，
 // outline.json / project.json / data.db 行内部 snake_case；
 // **嵌套 data 对象内部字段原样透传**（如 expected_payoff 保持 snake_case，2026-08 修订），
 // camelCase 映射仅应用于 API 顶层字段。
@@ -65,7 +65,7 @@ export function mapEntityToRow(entity: Entity): EntityRow {
 
 /**
  * RelationRow → RelationRecord（字段映射；metadata NULL → undefined）
- * 注意：存储的 updated_at / deleted_at 在 API 形态中不暴露（ RelationRecord 仅 createdAt）；
+ * 注意：存储的 updated_at / deleted_at 在 API 形态中不暴露（RelationRecord 仅 createdAt）；
  * sourceName/targetName 为服务端联表填充，Row 本身不含
  */
 export function mapRowToRelation(row: RelationRow): RelationRecord {
@@ -161,7 +161,7 @@ export function mapOutlineFileToTree(file: OutlineFileTree): OutlineTree {
     id: file.id,
     type: "root",
     schemaVersion: file.schema_version,
- // root.children 为 (volume|chapter) 联合（ 允许直挂章），按 type 分派映射
+ // root.children 为 (volume|chapter) 联合（允许直挂章），按 type 分派映射
     children: file.children.map(mapFileNodeToNode) as OutlineTree["children"],
   };
 }
@@ -235,7 +235,7 @@ export function mapTreeToOutlineFile(tree: OutlineTree): OutlineFileTree {
 // ============ 项目（project.json ↔ API） ============
 
 /**
- * 备份频率读侧语义（ / project.json ，宽松读取）：
+ * 备份频率读侧语义（/ project.json，宽松读取）：
  * 字段缺失 → 缺省 10（新项目默认开启）；显式 null / 0 → null（关闭）；
  * 其余数值原样透传（枚举校验只在写侧执行，旧数据脏值不在此拦截）
  */
@@ -246,7 +246,7 @@ function resolveBackupFrequencyMinutes(value: number | null | undefined): number
 }
 
 /** ProjectFileConfig → ProjectConfig（schema_version → schemaVersion、current_position → currentPosition、backup 频率读侧兜底；
- * `prompt` 已废弃不再映射——项目规则唯一事实源改为项目目录 ） */
+ * `prompt` 已废弃不再映射——项目规则唯一事实源改为项目目录） */
 export function mapProjectFileToConfig(file: ProjectFileConfig): ProjectConfig {
   return {
     id: file.id,

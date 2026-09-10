@@ -78,7 +78,7 @@ function deletedAtOf(db: Db, table: "relation_records" | "delta_records", id: st
   return (db.prepare(`SELECT deleted_at FROM ${table} WHERE id = ?`).get(id) as { deleted_at: string | null }).deleted_at;
 }
 
-describe("reconcileSoftDelete（S4.2，）", () => {
+describe("reconcileSoftDelete（S4.2）", () => {
   it("不一致：节点已软删、DB 关系/Delta 未软删 → 补标并返回计数", () => {
     const { project, nodeId } = makeProjectWithDeletedNode();
     try {
@@ -88,7 +88,7 @@ describe("reconcileSoftDelete（S4.2，）", () => {
       const result = reconcileSoftDelete(project);
       expect(result).toEqual({ deletedNodes: 1, relations: 1, deltas: 1 });
 
- // 补标值符合应用层 ISO 8601 约定（）
+ // 补标值符合应用层 ISO 8601 约定
       expect(deletedAtOf(project.db, "relation_records", "rel-1")).toMatch(/^\d{4}-\d{2}-\d{2}T/);
       expect(deletedAtOf(project.db, "delta_records", "delta-1")).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     } finally {

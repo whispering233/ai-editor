@@ -92,7 +92,7 @@ function standardOutline(): OutlineFileTree {
   };
 }
 
-/** 大纲树变体：sc-1 已软删（ 软删语义；outline_node 引用快照应 409 STALE） */
+/** 大纲树变体：sc-1 已软删（软删语义；outline_node 引用快照应 409 STALE） */
 function softDeletedSceneOutline(): OutlineFileTree {
   return {
     id: "root",
@@ -253,7 +253,7 @@ describe("POST /api/v1/proposal/:proposalId/confirm 成功", () => {
     expect(after.updated_at).not.toBe(before.updated_at);
   });
 
-  it("关系引用提案（propose_remove_relation）→ 200 + 关系物理删除（）", async () => {
+  it("关系引用提案（propose_remove_relation）→ 200 + 关系物理删除", async () => {
     const { app, relId } = await seed();
     const rel = getRelation(getCurrentProject()!.db, relId, getCurrentProject()!.root)!;
     const proposal = buildProposal(
@@ -351,7 +351,7 @@ describe("confirm 快照重校验 → 409 PROPOSAL_STALE", () => {
     expect(body.error?.code).toBe("PROPOSAL_STALE");
   });
 
-  it("大纲节点 updated_at 变化（节点级快照，）→ 409 PROPOSAL_STALE", async () => {
+  it("大纲节点 updated_at 变化（节点级快照）→ 409 PROPOSAL_STALE", async () => {
     const { app, charId } = await seed();
     const proposal = buildProposal(
       toolCtx(),

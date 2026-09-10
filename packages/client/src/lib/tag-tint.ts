@@ -19,7 +19,7 @@ function fnv1a(text: string): number {
 
 /** 色调名 → Tailwind 底色类（**静态字面量表**）：Tailwind 只在源码里扫字面量类名，
  * `bg-tag-${x}` 这种拼接出来的类不会被生成（实测：类名在 DOM 上但样式不存在 → 底色透明）。
- * 因此这里是「色调 → 类名」的唯一映射表，新增色调必须同时在本表与 index.css 登记。 */
+ * 因此这里是「色调 → 类名」的唯一映射表，新增色调必须同时在本表与 index.css 登记。*/
 const TINT_CLASS: Record<TagTint, string> = {
   peach: "bg-tag-peach",
   rose: "bg-tag-rose",

@@ -1,4 +1,4 @@
-// 自动备份与恢复（B2.2 + B2.5 + B2.6 ）
+// 自动备份与恢复（B2.2 + B2.5 + B2.6）
 //
 // 职责：
 // - 备份管道：三文件 + wal_checkpoint → .backups/<YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip
@@ -77,18 +77,18 @@ const MAX_UNZIP_BUDGET = 200 * 1024 * 1024;
 
 /**
  * mtime 变更判定容差（毫秒）：备份管道内 wal_checkpoint 会把 WAL 合并回 data.db 主文件，
- * 其 mtime 刷新到「备份时刻」（毫秒精度）。 起文件名时间戳为毫秒精度，
+ * 其 mtime 刷新到「备份时刻」（毫秒精度）。起文件名时间戳为毫秒精度，
  * 文件名截断误差已消除——但容差**保留 1s**：粗粒度 mtime 文件系统（如 FAT/exFAT 2s 粒度）
  * 下，严格 `mtime > lastBackupAt` 仍可能误判，1s 容差是必要防御；最小 tick 5 分钟，
  * 用户变更必然超出容差窗口。
  */
 const BACKUP_CHANGE_TOLERANCE_MS = 1000;
 
-/** 备份文件信息（GET /backups 列表项与 POST /backup 响应，） */
+/** 备份文件信息（GET /backups 列表项与 POST /backup 响应） */
 export interface BackupFileInfo {
   fileName: string;
   size: number;
-  createdAt: string; // ISO 8601，由文件名时间戳解析（ 无状态语义）
+  createdAt: string; // ISO 8601，由文件名时间戳解析（无状态语义）
  /** 备份类型（由文件名 kind 段解析：auto = 自动/manual = 手动） */
   kind: BackupKind;
  /** 手动备份自定义名称（由文件名解析，自动备份/快照/旧备份无此字段） */
@@ -118,7 +118,7 @@ function assertBackupFileNameFormat(fileName: string): NonNullable<ReturnType<ty
 // ============ 备份管道（复用 打包，避免复制） ============
 
 /**
- * 打包当前项目为 zip（ export 同款管道）：
+ * 打包当前项目为 zip（export 同款管道）：
  * wal_checkpoint(TRUNCATE) 把 WAL 合并回主文件（zip 内 data.db 为完整快照，
  * 无需附带 -wal/-shm）→ zipSync 打包（键序稳定：project.json → outline.json → data.db
  * → references/**（参考资料目录含 .trash/ 随包——项目自包含））。
@@ -140,7 +140,7 @@ export function createBackupZip(project: ProjectContext): Uint8Array<ArrayBuffer
 }
 
 /**
- * 生成不冲突的备份文件名：`<YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip`（ 毫秒精度 +
+ * 生成不冲突的备份文件名：`<YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip`（毫秒精度 +
  * kind 段；shared formatBackupFileName；kind 缺省 auto——纯时间戳；带自定义名称 →
  * `-a-<名称>`（auto）/ `-m-<名称>`（manual））。
  *
@@ -170,7 +170,7 @@ function uniqueBackupFileName(
  * 立即备份当前项目（手动触发 / 自动定时器 / restore 覆盖前快照共用）：
  * 打包 → 写入 .backups/<时间戳>[-<kind>][-<名称>].zip（毫秒精度；同毫秒 +1ms 去重）→
  * 触发保留策略清理（失败不阻塞）。
- * 写盘失败向上抛（errorHandler → 500 INTERNAL_ERROR， POST /backup 语义）。
+ * 写盘失败向上抛（errorHandler → 500 INTERNAL_ERROR，POST /backup 语义）。
  *
  * @param opts.kind 备份类型（缺省 "auto"）：手动触发传 "manual"（文件名落 -m 段）；
  * 自动备份/覆盖前快照不传（auto，纯时间戳）
@@ -202,7 +202,7 @@ export function writeBackup(project: ProjectContext, opts?: { name?: string; kin
   return {
     fileName,
     size: zip.length,
-    createdAt: toIso(date), // date = 最终去重后的时间戳，与 fileName 时间戳段一致（ 无状态语义）
+    createdAt: toIso(date), // date = 最终去重后的时间戳，与 fileName 时间戳段一致（无状态语义）
     kind,
     ...(name !== undefined ? { name } : {}),
   };
@@ -400,7 +400,7 @@ function unzipWithBudget(zipData: Uint8Array, budget: number): { entries: Record
     };
     file.start();
   });
- // 关键（fflate API ）：Unzip 默认仅注册 stored(0) 解码器——deflate(8) 压缩的
+ // 关键（fflate API）：Unzip 默认仅注册 stored(0) 解码器——deflate(8) 压缩的
  // zip（zipSync 默认）必须显式 register(UnzipInflate)，否则 start 报 unknown
  // compression type（fflate README 明确要求）
   unzipper.register(UnzipInflate);
@@ -499,7 +499,7 @@ export function validateBackupPackage(zipData: Uint8Array): { entries: Record<st
  // data.db 校验顺序（ora-4）：**文件大小 > 0 → 打开成功 → user_version**——
  // 0 字节文件 SQLite 会当新库打开（user_version=0），必须先按坏包拒绝（400 而非 409）；
  // 非 SQLite 内容打开失败 → 400 坏包。
- // user_version 判定（ 卡规格追加句）：
+ // user_version 判定（卡规格追加句）：
  // v === SCHEMA_VERSION → 接受（现状）
  // v < SCHEMA_VERSION → **有迁移路径**（MIGRATIONS 存在连续链，替换后 open 时自动前向
  // 迁移，数据保全完整）→ 接受；**无迁移路径** → 409（文案标注版本过旧无路径）
@@ -726,7 +726,7 @@ export function writeProjectFilesFromBackup(
 
 /**
  * 自动迁移：project.json 存在非空 `prompt` 且项目目录无 →
- * 将 prompt 内容**原样**写入 （原子写， 同款），一次性——
+ * 将 prompt 内容**原样**写入 （原子写，同款），一次性——
  * 迁移后 存在，条件不再满足，prompt 不再使用（字段可保留为遗留数据，宽松读取）。
  *
  * 触发点：打开项目时（detectProject 启动即打开 + open 路由）+ restore/import 覆盖路径
@@ -847,7 +847,7 @@ export function snapshotBookDir(dir: string): BackupFileInfo {
 }
 
 /**
- * 原子写任意字节（ 同款流程：写同目录临时文件 → fsync → rename 覆盖；
+ * 原子写任意字节（同款流程：写同目录临时文件 → fsync → rename 覆盖；
  * 供 restore/import 替换三文件用——JSON 版见 db 包 writeJsonAtomic，此处为通用 bytes 版）。
  * 失败保留临时文件供排查，原文件未被触碰。
  */
@@ -882,7 +882,7 @@ function writeFileAtomic(filePath: string, data: Uint8Array): void {
 /**
  * 从备份恢复当前项目（POST /project/backup/restore）：
  *
- * 1. fileName 白名单校验：仅允许 `.backups/` 下时间戳格式（ 兼容四类：
+ * 1. fileName 白名单校验：仅允许 `.backups/` 下时间戳格式（兼容四类：
  * `<YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip` 毫秒级（含 kind 段）/ `<YYYYMMDD-HHmmssSSS>-<名称>.zip`
  * 旧带名称 / 旧秒级 `<YYYYMMDD-HHmmss>.zip`——shared parseBackupFileName，^$ 锚定 + 名称部分
  * 拒绝 /\\，天然防路径分隔符与 `..` 穿越）；格式合法但文件不存在 → 404
@@ -929,6 +929,6 @@ export function restoreBackup(project: ProjectContext, fileName: string): { snap
     migrateChatMessagesProject(project.db, zipProjectId, project.config.id);
   }
 
- // （）：snapshot 仅含 fileName/createdAt（size 属内部信息不暴露）
+ //：snapshot 仅含 fileName/createdAt（size 属内部信息不暴露）
   return { snapshot: { fileName: snapshot.fileName, createdAt: snapshot.createdAt } };
 }

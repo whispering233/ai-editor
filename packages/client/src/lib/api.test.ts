@@ -366,7 +366,7 @@ describe("大纲端点（S2.3，严格三层）", () => {
   });
 });
 
-describe("回收站端点（S2.3，）", () => {
+describe("回收站端点（S2.3）", () => {
   it("getTrashList：GET /trash；nodes（大纲节点）解析", async () => {
     const calls = mockFetchOnce({
       body: {
@@ -941,7 +941,7 @@ describe("importProjectZip（POST /project/import：FormData multipart 上传）
     });
     expect(calls[0].url).toBe("/api/v1/project/import");
     expect(calls[0].init?.method).toBe("POST");
- // FormData 原样透传（ apiFetch 扩展：不 JSON.stringify、不设 Content-Type）
+ // FormData 原样透传（apiFetch 扩展：不 JSON.stringify、不设 Content-Type）
     expect(calls[0].init?.body).toBeInstanceOf(FormData);
     const form = calls[0].init?.body as FormData;
     expect(form.get("name")).toBe("新书");
@@ -949,7 +949,7 @@ describe("importProjectZip（POST /project/import：FormData multipart 上传）
     expect(calls[0].init?.headers).toBeUndefined();
   });
 
-  it('mode: "restored"（id 匹配覆盖恢复，）→ 字段透传', async () => {
+  it('mode: "restored"（id 匹配覆盖恢复）→ 字段透传', async () => {
     mockFetchOnce({
       body: {
         success: true,
@@ -1066,7 +1066,7 @@ describe("备份管理", () => {
     expect(res.backup.kind).toBe("manual");
   });
 
-  it("createProjectBackup(name)：带自定义名称 → 请求体含 { name }（）；响应 kind manual", async () => {
+  it("createProjectBackup(name)：带自定义名称 → 请求体含 { name }；响应 kind manual", async () => {
     const calls = mockFetchOnce({
       body: {
         success: true,
@@ -1089,7 +1089,7 @@ describe("备份管理", () => {
     expect(res.backup.kind).toBe("manual");
   });
 
-  it("createProjectBackup()：不传名称 → 无请求体（undefined body， 缺省纯时间戳）", async () => {
+  it("createProjectBackup()：不传名称 → 无请求体（undefined body，缺省纯时间戳）", async () => {
     const calls = mockFetchOnce({
       body: {
         success: true,

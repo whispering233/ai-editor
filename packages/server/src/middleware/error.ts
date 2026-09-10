@@ -23,12 +23,12 @@ export type ServerErrorCode = (typeof SERVER_ERROR_CODES)[number];
 
 export type ApiErrorCode = ErrorCode | ServerErrorCode;
 
-/** 成功响应包裹（） */
+/** 成功响应包裹 */
 export function ok<T>(data: T): { success: true; data: T } {
   return { success: true, data };
 }
 
-/** 错误响应包裹（）；fields 仅 VALIDATION_ERROR 附带（校验失败字段路径） */
+/** 错误响应包裹；fields 仅 VALIDATION_ERROR 附带（校验失败字段路径） */
 export function fail(
   code: ApiErrorCode,
   message: string,

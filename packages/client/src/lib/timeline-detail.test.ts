@@ -1,4 +1,4 @@
-// lib/timeline-detail 纯函数测试（C4，；G2.3 修订：occurs_at 挂载提取/请求体构造）
+// lib/timeline-detail 纯函数测试（C4；G2.3 修订：occurs_at 挂载提取/请求体构造）
 // 覆盖：occurs_in 关系提取（详情页关联节点列表）、occurs_at 挂载提取（详情页挂载选择器）、
 // 关联/挂载请求体构造
 // （事件表单共享函数 eventFormFromDetail / buildEventDetailPatch 已随函数迁入 timeline.test.ts）
@@ -26,7 +26,7 @@ function relOf(over: Partial<RelationSummaryItem>): RelationSummaryItem {
 }
 
 describe("occursInRelations", () => {
-  it("仅提取 occurs_in 且 sourceId === 本事件（事件为 source 端， 方向约定）", () => {
+  it("仅提取 occurs_in 且 sourceId === 本事件（事件为 source 端，方向约定）", () => {
     const relations = [
       relOf({ id: "r1", sourceId: "ev-a", targetId: "sc-1", targetName: "第3章·灵根测试" }),
       relOf({ id: "r2", sourceId: "ev-a", targetId: "sc-9", targetName: "第5章·宗门大比" }),

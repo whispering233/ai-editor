@@ -291,7 +291,7 @@ describe("listDeltasByTarget（S6.3 工具 get_delta_history 下沉）", () => {
     expect(records[0].description).toBe("指向阿强");
   });
 
-  it("可见性三态（）：delta 自身软删 / 触发节点软删均过滤（与 listDeltasByNode 同语义）", () => {
+  it("可见性三态：delta 自身软删 / 触发节点软删均过滤（与 listDeltasByNode 同语义）", () => {
     const { charA } = seedBase();
     insertDelta(db, { nodeId: "vol-1", targetType: "character", targetId: charA, changes: change("a", "1", "2"), description: "卷级" });
     const scDelta = insertDelta(db, { nodeId: "sc-1", targetType: "character", targetId: charA, changes: change("b", "1", "2"), description: "场景级" });
@@ -341,7 +341,7 @@ describe("listDeltasByTarget（S6.3 工具 get_delta_history 下沉）", () => {
   });
 });
 
-describe("getDeltaRow（S7.5 提案快照重校验，）", () => {
+describe("getDeltaRow（S7.5 提案快照重校验）", () => {
   it("正常行取回：与 insertDelta 返回行一致（changes 已解析、updated_at 原样）", () => {
     const { charA } = seedBase();
     const row = insertDelta(db, { nodeId: "sc-1", targetType: "character", targetId: charA, changes: change("a", "1", "2"), description: "快照引用" });

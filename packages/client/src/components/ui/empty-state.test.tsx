@@ -1,4 +1,4 @@
-// EmptyState 走查（批次十九 T4）：内部换 antd Empty 后的 SSR 静态断言。
+// EmptyState 走查（T4）：内部换 antd Empty 后的 SSR 静态断言。
 // 重点锁 `Empty` 的 image 假值行为：antd v6 用 `image ?? contextImage ?? 默认插图` 合并，
 // 传 null 会被当作缺省而回落默认插图（100px 占位），故必须传 false——本用例是这条不变式的护栏。
 // 渲染手法同 antd-smoke.test / chat-panel.test（仓库无 jsdom/@testing-library 纪律，用 renderToString）。

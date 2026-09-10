@@ -33,7 +33,7 @@ export function detailFieldsForType(type: EntityType): DetailFieldConfig[] {
  // （存量 data.status 由 .passthrough 容错保留，AI 工具 filters.status 语义不变）
       ];
  /**
- * 设定基础信息（ + K2 修订，2026-08）：parent_id（层级 belongs_to）与 category
+ * 设定基础信息（K2 修订，2026-08）：parent_id（层级 belongs_to）与 category
  * （废弃）不参与；`tags` = 分类标签（统一字段，快捷选择既有标签）、`rules` = 规则条款
  * （仅详情页编辑），见 
  */
@@ -72,7 +72,7 @@ export function detailFieldsForType(type: EntityType): DetailFieldConfig[] {
         { key: "notes", label: "备注", control: "textarea" },
         { key: "expected_resolve_node_id", label: "预计回收节点", control: "outline-node" },
       ];
- // C1 类型补全（ event 时间轴事件：data 字段 description/tags[]——time_label
+ // C1 类型补全（event 时间轴事件：data 字段 description/tags[]——time_label
  // 已随 G2 移除（时间标签 = 时间点挂载）；时间轴专属 UI 由 C2 实现，本分支为数据驱动表单的字段配置）
     case "event":
       return [
@@ -84,14 +84,14 @@ export function detailFieldsForType(type: EntityType): DetailFieldConfig[] {
     case "timepoint":
       return [];
   }
- // 注：reference 字段配置已随批次十二 T3 移除——参考资料已有独立详情页（#/references/:id，
+ // 注：reference 字段配置已随T3 移除——参考资料已有独立详情页（#/references/:id，
  // 编辑器形态），实体详情路由 #/entities/reference/:id 已重定向，此处无 reference 分支
  // （含 过时枚举）。
   return [];
 }
 
-/** 关系类型 → 中文（17 种预定义，；未收录原样显示）
- * 2026-08 批次四 I1：补入 occurs_in「锚定于」（ 新增遗漏——与 occurs_at「发生于」
+/** 关系类型 → 中文（17 种预定义；未收录原样显示）
+ * 2026-08 I1：补入 occurs_in「锚定于」（新增遗漏——与 occurs_at「发生于」
  * 地点语义区分，避免关联列表两行同文案歧义）；映射表同步 */
 const RELATION_TYPE_LABEL: Record<string, string> = {
   belongs_to: "所属",

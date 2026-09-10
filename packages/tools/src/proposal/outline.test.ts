@@ -89,7 +89,7 @@ describe("propose_outline_node", () => {
     expect(result.summary).toBe("新增大纲节点「第二章」（chapter，挂 vol-1）");
   });
 
-  it("完整提案结构：parent_id 缺省挂根（无引用）；指定父 → 父节点级 updated_at 快照（）", () => {
+  it("完整提案结构：parent_id 缺省挂根（无引用）；指定父 → 父节点级 updated_at 快照", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const noParent = buildProposeOutlineNode(makeCtx(), { type: "volume", title: "第二卷" });
     expect(noParent.args).toEqual({ type: "volume", title: "第二卷" }); // 不含 parent_id
@@ -109,7 +109,7 @@ describe("propose_outline_node", () => {
     expect(findOutlineNode(tree, "ch-2")).toBeUndefined();
   });
 
-  it("严格三层（）：scene 无 parent 拒绝；scene 挂卷拒绝；章挂章拒绝", () => {
+  it("严格三层：scene 无 parent 拒绝；scene 挂卷拒绝；章挂章拒绝", () => {
     writeOutlineFile(dir, seedOutlineTree());
     expect(() => runProposeOutlineNode(makeCtx(), { type: "scene", title: "孤儿场景" })).toThrow(/层级非法/);
     expect(() => runProposeOutlineNode(makeCtx(), { type: "scene", title: "场景", parent_id: "vol-1" })).toThrow(/层级非法/);
@@ -128,7 +128,7 @@ describe("propose_outline_node", () => {
 });
 
 describe("propose_move_node", () => {
-  it("完整提案结构：节点 + 目标父两端点引用快照（）", () => {
+  it("完整提案结构：节点 + 目标父两端点引用快照", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const proposal = buildProposeMoveNode(makeCtx(), { node_id: "sc-1", parent_id: "ch-1", order: 2 });
     expect(proposal.args).toEqual({ node_id: "sc-1", parent_id: "ch-1", order: 2 });
@@ -161,7 +161,7 @@ describe("propose_move_node", () => {
     expect(() => runProposeMoveNode(makeCtx(), { node_id: "sc-1", parent_id: "root", order: 0 })).toThrow(/层级非法/);
   });
 
-  it("目标父层级非法（）→ 抛错；节点/父不存在 → 抛错", () => {
+  it("目标父层级非法→ 抛错；节点/父不存在 → 抛错", () => {
     writeOutlineFile(dir, seedOutlineTree());
     expect(() => runProposeMoveNode(makeCtx(), { node_id: "sc-1", parent_id: "vol-1", order: 0 })).toThrow(/层级非法/);
     expect(() => runProposeMoveNode(makeCtx(), { node_id: "sc-999", parent_id: "ch-1", order: 0 })).toThrow(/大纲节点不存在或已软删/);
@@ -172,7 +172,7 @@ describe("propose_move_node", () => {
 });
 
 describe("propose_delete_node", () => {
-  it("完整提案结构：引用为节点级 updated_at（）；tool_result 无预览", () => {
+  it("完整提案结构：引用为节点级 updated_at；tool_result 无预览", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const proposal = buildProposeDeleteNode(makeCtx(), { node_id: "ch-1" });
     expect(proposal.references).toEqual([{ kind: "outline_node", id: "ch-1", updated_at: T0 }]);
@@ -197,7 +197,7 @@ describe("propose_delete_node", () => {
   });
 });
 
-describe("signal aborted（）", () => {
+describe("signal aborted", () => {
   it("三个大纲提案工具在 signal 已中止时抛 AbortedError", () => {
     const controller = new AbortController();
     controller.abort();

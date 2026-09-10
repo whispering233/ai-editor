@@ -1,4 +1,4 @@
-// 自动备份与恢复测试（B2.2 + B2.5 ）：
+// 自动备份与恢复测试（B2.2 + B2.5）：
 // 备份管道（有变更才备份/同毫秒去重/保留策略）、备份管理端点（列表/立即备份/restore）、
 // 定时器生命周期（open 启/close 停/无变更跳过）；自定义名称/旧格式兼容
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, utimesSync, writeFileSync } from "node:fs";
@@ -194,7 +194,7 @@ describe("maybeAutoBackup（有变更才备份）", () => {
     expect(backupFileNames(dir)).toHaveLength(2);
   });
 
-  it("频率关闭（null / 0 / 非枚举值）→ 不备份（ + B2.1 疑问裁决 2：读侧非枚举按关闭）", async () => {
+  it("频率关闭（null / 0 / 非枚举值）→ 不备份（B2.1 疑问裁决 2：读侧非枚举按关闭）", async () => {
     for (const freq of [null, 0, 7]) {
       const dir = makeTmpDir();
       initProjectDir(dir, { ...makeConfig("proj-off", "关闭备份"), backup_frequency_minutes: freq });
@@ -295,7 +295,7 @@ describe("writeBackup 与保留策略", () => {
     }
   });
 
-  it("manual kind：无名称 → <时间戳>-m.zip；带名称 → <时间戳>-m-<名称>.zip（）", () => {
+  it("manual kind：无名称 → <时间戳>-m.zip；带名称 → <时间戳>-m-<名称>.zip", () => {
     const dir = makeTmpDir();
     initProjectDir(dir, makeConfig("proj-kind", "kind 段"));
     const project = {
@@ -406,12 +406,12 @@ describe("GET /project/backups 与 POST /project/backup", () => {
     expect(backup.kind).toBe("manual");
     expect(typeof backup.size).toBe("number");
     expect(backup.size).toBeGreaterThan(0);
- // createdAt 由文件名时间戳解析（ 无状态语义）
+ // createdAt 由文件名时间戳解析（无状态语义）
     expect(backup.createdAt).toBe(parseBackupFileName(backup.fileName)?.time.toISOString());
     expect(existsSync(join(dir, BACKUPS_DIR_NAME, backup.fileName))).toBe(true);
   });
 
-  it("POST /backup 带自定义名称：文件名 <时间戳>-m-<名称>.zip + 响应 name 字段（）", async () => {
+  it("POST /backup 带自定义名称：文件名 <时间戳>-m-<名称>.zip + 响应 name 字段", async () => {
     const dir = makeTmpDir();
     initProjectDir(dir, makeConfig("proj-named-ep", "端点自定义名"));
     const app = await openProject(dir);
@@ -452,7 +452,7 @@ describe("GET /project/backups 与 POST /project/backup", () => {
     expect((await listRes.json()).data.backups).toEqual([]);
   });
 
-  it("GET /backups：旧秒级格式 kind auto 无 name；旧带名称（无 kind 段）kind manual 含 name；时间倒序（ 兼容）", async () => {
+  it("GET /backups：旧秒级格式 kind auto 无 name；旧带名称（无 kind 段）kind manual 含 name；时间倒序（兼容）", async () => {
     const dir = makeTmpDir();
     initProjectDir(dir, makeConfig("proj-legacy", "旧格式"));
     const app = await openProject(dir);
@@ -598,14 +598,14 @@ describe("renameBackup", () => {
     const project = await openProjectCtx(dir);
     const backupsDir = join(dir, BACKUPS_DIR_NAME);
     mkdirSync(backupsDir, { recursive: true });
- // 旧秒级（ 遗留）→ 解析 kind auto（毫秒 = 0）→ 改名后 -a- 段（format 统一毫秒精度）
+ // 旧秒级（遗留）→ 解析 kind auto（毫秒 = 0）→ 改名后 -a- 段（format 统一毫秒精度）
     writeFileSync(join(backupsDir, "20260813-101500.zip"), "legacy");
     const legacyRes = renameBackup(project, "20260813-101500.zip", "升级整理");
     expect(legacyRes.fileName).toBe("20260813-101500000-a-升级整理.zip");
     expect(legacyRes.kind).toBe("auto");
     expect(existsSync(join(backupsDir, "20260813-101500.zip"))).toBe(false);
     expect(existsSync(join(backupsDir, legacyRes.fileName))).toBe(true);
- // 旧带名称（ 遗留）→ 解析 kind manual → 改名保持 -m- 段
+ // 旧带名称（遗留）→ 解析 kind manual → 改名保持 -m- 段
     writeFileSync(join(backupsDir, "20260813-101500999-初稿.zip"), "named");
     const namedRes = renameBackup(project, "20260813-101500999-初稿.zip", "定稿");
     expect(namedRes.fileName).toBe("20260813-101500999-m-定稿.zip");
@@ -748,7 +748,7 @@ describe("POST /project/backup/restore", () => {
     expect(readProjectFile(dirA)?.prompt).toBe("B 的提示词");
   });
 
-  it("restore 含遗留 prompt 的旧备份 → 覆盖路径触发 AGENTS.md 迁移（ oracle 评审修复）", async () => {
+  it("restore 含遗留 prompt 的旧备份 → 覆盖路径触发 AGENTS.md 迁移（oracle 评审修复）", async () => {
     const dirA = makeTmpDir();
     initProjectDir(dirA, makeConfig("proj-mig-restore", "书A")); // 无 prompt、无 
     await openProject(dirA);
@@ -776,7 +776,7 @@ describe("POST /project/backup/restore", () => {
       body: JSON.stringify({ fileName: bkpB.fileName }),
     });
     expect(res.status).toBe(200);
- // 覆盖路径同步迁移： 已创建（内容 = 备份内遗留 prompt，原样）
+ // 覆盖路径同步迁移：已创建（内容 = 备份内遗留 prompt，原样）
     expect(existsSync(join(dirA, AGENTS_FILE_NAME))).toBe(true);
     expect(readAgentsFile(dirA)).toBe("B 的遗留提示词");
   });
@@ -934,7 +934,7 @@ describe("POST /project/backup/restore", () => {
     expect(readFileSync(join(dir, PROJECT_FILE_NAME), "utf8")).toBe(configBefore);
   });
 
-  it("高版本备份（user_version > 当前，）→ 409 SCHEMA_VERSION_MISMATCH，零触碰", async () => {
+  it("高版本备份（user_version > 当前）→ 409 SCHEMA_VERSION_MISMATCH，零触碰", async () => {
     const dir = makeTmpDir();
     initProjectDir(dir, makeConfig("proj-high", "高版本"));
     const app = await openProject(dir);
@@ -1097,7 +1097,7 @@ describe("自动定时器（open 启 / close 停 / 切换重启）", () => {
 
 // ============ 卡 11.3：references/ 随备份 ============
 
-describe("备份含 references/ 目录（）", () => {
+describe("备份含 references/ 目录", () => {
   it("createBackupZip 打包 references/**（含 .trash/）；无目录 → 无条目", async () => {
     const dir = makeTmpDir();
     initProjectDir(dir, makeConfig("proj-ref1", "参考资料备份"));
@@ -1131,7 +1131,7 @@ describe("备份含 references/ 目录（）", () => {
     const zip = createBackupZip(getCurrentProject() as NonNullable<ReturnType<typeof getCurrentProject>>);
     const entries = unzipSync(zip);
 
- // 目标项目：已有 references/ 本地残留（备份里没有的 与 ）
+ // 目标项目：已有 references/ 本地残留（备份里没有的 与）
     const dst = makeTmpDir();
     initProjectDir(dst, makeConfig("proj-ref3", "目标项目"));
     mkdirSync(join(dst, "references", ".trash"), { recursive: true });

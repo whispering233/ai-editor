@@ -139,7 +139,7 @@ function makeRecord(entity: EntityRow, relations: { plants?: string[]; advances?
   };
 }
 
-describe("computeHookHealth（）", () => {
+describe("computeHookHealth", () => {
   it("age/dormancy/stale/overdue：显式 half_life + advances 跨章推进（dormancy 重置）", () => {
     seedBase("sc-5"); // 当前第 3 章
     const hook = getEntity(db, makeHook("身世之谜", { status: "progressing", half_life: 2 }))!;
@@ -236,7 +236,7 @@ describe("computeHookHealth（）", () => {
  // 指向不存在的节点 → null（无法推导章节序，不猜测）
     const dangling = getEntity(db, makeHook("悬空", { status: "progressing", expected_resolve_node_id: "sc-999" }))!;
     expect(computeHookHealth(chapterIndex, makeRecord(dangling), statuses).ready_to_resolve).toBeNull();
- // 指向软删节点 → null（ 可见性：软删节点不可作为兑现依据，与 consistency R4 同口径）
+ // 指向软删节点 → null（可见性：软删节点不可作为兑现依据，与 consistency R4 同口径）
     const tree = readOutlineFile(dir);
     const sc4 = findOutlineNode(tree, "sc-4")!;
     sc4.deleted = true;
@@ -381,7 +381,7 @@ describe("trace_hook_lifecycle", () => {
     expect(result.advances.map((e) => e.nodeId)).toEqual(["sc-1", "sc-3"]); // 章节序升序
     expect(result.resolve!.nodeId).toBe("sc-5");
     expect(result.resolve!.nodeName).toBe("场景五");
- // dormancy = current - advances 最新（ 公式；resolve 不参与——回收后休眠语义由 status=resolved 表达）
+ // dormancy = current - advances 最新（公式；resolve 不参与——回收后休眠语义由 status=resolved 表达）
     expect(result.dormancy).toBe(1); // 最后推进 sc-3（第 2 章），当前第 3 章
  // timelineGraph：plant/advance/resolve 按章节序合并
     expect(result.timeline_graph.events.map((e) => `${e.kind}:${e.nodeId}`)).toEqual([

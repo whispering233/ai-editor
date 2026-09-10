@@ -1,4 +1,4 @@
-// ui store 焦点状态测试（批次九：跨页「问 AI」入口的 currentFocus 数据源）
+// ui store 焦点状态测试（跨页「问 AI」入口的 currentFocus 数据源）
 // 覆盖：setCurrentFocus 上报 / clearCurrentFocus 清空（路由切换语义）/ 初始为 null
 import { beforeEach, describe, expect, it } from "vitest";
 import { useUiStore } from "./ui";
@@ -7,7 +7,7 @@ beforeEach(() => {
   useUiStore.setState({ currentFocus: null });
 });
 
-describe("ui store currentFocus（）", () => {
+describe("ui store currentFocus", () => {
   it("初始为 null（无焦点语义）", () => {
     expect(useUiStore.getState().currentFocus).toBeNull();
   });

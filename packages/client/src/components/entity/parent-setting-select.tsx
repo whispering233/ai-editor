@@ -1,9 +1,9 @@
-// 上级设定选择器（批次四 I3b）：设定层级 = belongs_to 关系（子 → 父），
+// 上级设定选择器（I3b）：设定层级 = belongs_to 关系（子 → 父），
 // data.parent_id 已废弃——选择器候选 = 现有 setting 列表（listEntities 防抖搜索）。
 // 复用 UX3 轻量弹层模式（Popover 非模态：不打断页面，点外部/Esc 关闭）；
-// 候选 limit 100 + 名称排序，「设定数量超 100 时用搜索补位」（ 性能方案，
+// 候选 limit 100 + 名称排序，「设定数量超 100 时用搜索补位」（性能方案，
 // 不做虚拟滚动等过度设计）。
-// 样式 token 类（）；文字按钮带边框（H4）。
+// 样式 token 类；文字按钮带边框（H4）。
 import { useEffect, useState } from "react";
 import { Button, Input } from "antd";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";

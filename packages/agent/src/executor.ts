@@ -170,7 +170,7 @@ export function createProposalStore(options: ProposalStoreOptions = {}): Proposa
 /** 默认提案仓单例（S7.5 confirm/reject 与 S7.6 切换项目 clear 直接引用；测试用 createProposalStore 独立实例） */
 export const defaultProposalStore: ProposalStore = createProposalStore();
 
-// ============ 工具调度器（ToolDispatcher 真实现，run.ts ） ============
+// ============ 工具调度器（ToolDispatcher 真实现，run.ts） ============
 
 /**
  * 提案 build 层入口签名（args 已过 argsSchema 校验——执行前 safeParse 的 parsed.data）。
@@ -201,7 +201,7 @@ export const PROPOSAL_BUILDERS: Record<string, ProposalBuilder> = {
   propose_resolve_hook: (ctx, args) => buildProposeResolveHook(ctx, args as ProposeResolveHookArgs),
   propose_abandon_hook: (ctx, args) => buildProposeAbandonHook(ctx, args as ProposeAbandonHookArgs),
   propose_reorder_timepoints: (ctx, args) => buildProposeReorderTimepoints(ctx, args as ProposeReorderTimepointsArgs), // G2（取代 F9 的 propose_reorder_events）
-  propose_create_reference: (ctx, args) => buildProposeCreateReference(ctx, args as ProposeCreateReferenceArgs), // 
+  propose_create_reference: (ctx, args) => buildProposeCreateReference(ctx, args as ProposeCreateReferenceArgs), //
 };
 
 /** createToolDispatcher 选项 */
@@ -245,7 +245,7 @@ export function createToolDispatcher(ctx: ToolContext, options: CreateToolDispat
       return { call, def, parsed: parsed.data };
     });
 
- // ---- 2. 逐个执行（结果按输入顺序一一回填，同序等长——run.ts ） ----
+ // ---- 2. 逐个执行（结果按输入顺序一一回填，同序等长——run.ts） ----
     const results: DispatchResult[] = [];
     for (const plan of plans) {
  // 批量执行间隙被取消：立即中止后续工具并传播取消
@@ -276,7 +276,7 @@ export function createToolDispatcher(ctx: ToolContext, options: CreateToolDispat
           });
           continue;
         }
- // ---- 提案路径（propose_*， + 「提案类」） ----
+ // ---- 提案路径（propose_*，「提案类」） ----
  // run 层裁剪只返回 { proposal_id, summary }；完整 Proposal 经 build 层重建入仓——
  // proposal_id 以 run 返回为准覆盖（build 每次生成新 id），保证
  // tool_result / proposal 事件 / 仓 key 三处同一 id（S7.5 confirm 按事件 id 取仓）

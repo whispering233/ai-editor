@@ -1,4 +1,4 @@
-// 设置路由测试（S1.3 + 批次十六多 provider）：GET/PUT /api/v1/settings/llm
+// 设置路由测试（S1.3 + 多 provider）：GET/PUT /api/v1/settings/llm
 // 隔离策略：临时 HOME（os.tmpdir + mkdtemp）——用户级配置 + pi-agent auth 读写不出测试沙箱；
 // 各 provider 环境变量在每个用例前后设置/恢复
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -72,7 +72,7 @@ interface ProviderEntry {
   models: Array<{ id: string; provider: string; contextWindow: number }>;
 }
 
-describe("GET /api/v1/settings/llm（批次十六多 provider）", () => {
+describe("GET /api/v1/settings/llm（多 provider）", () => {
   it("无任何配置 → 激活 deepseek + 默认模型；providers 两卡（deepseek 2 模型 / opencode-go 17 模型）均 apiKeySet=false", async () => {
     const { data } = await getData();
     expect(data.provider).toBe("deepseek");
@@ -174,7 +174,7 @@ describe("GET /api/v1/settings/llm（批次十六多 provider）", () => {
   });
 });
 
-describe("PUT /api/v1/settings/llm（批次十六）", () => {
+describe("PUT /api/v1/settings/llm", () => {
   it("跨 provider 激活：provider+model 成对写入 → GET 读回；落盘 schema_version=2", async () => {
     const put = await buildApp().request(
       "/api/v1/settings/llm",

@@ -1,4 +1,4 @@
-// 参考资料文件服务与路由测试（批次十一）
+// 参考资料文件服务与路由测试
 // 覆盖：
 // 模块级（reference-files.ts）：写/读 roundtrip、文件名唯一化、软删移动/还原/物理删、
 // scan（新增/幂等跳过/外部修改更新/外部删除软删/软删索引还原/容错）
@@ -191,7 +191,7 @@ describe("scanReferences", () => {
     expect(byName.get("五行相生相克")?.tags).toEqual(["五行", "设定"]);
     expect(byName.get("五行相生相克")?.content).toBe("五行正文");
     expect(byName.get("五行相生相克")?.type).toBe("material"); // category 缺省
- // 无 frontmatter → title 兜底 = 文件名去扩展名（ 容错语义）
+ // 无 frontmatter → title 兜底 = 文件名去扩展名（容错语义）
     expect(byName.get("纯笔记")?.content).toBe("没有 frontmatter 的笔记");
     expect(byName.get("纯笔记")?.file_name).toBe("纯笔记.md");
   });
@@ -258,7 +258,7 @@ describe("scanReferences", () => {
 
 // ============ 路由级：entity CRUD 文件联动 ============
 
-describe("entity/reference 文件联动（）", () => {
+describe("entity/reference 文件联动", () => {
   it("创建 file 类：落盘 + 索引（kind/file_name/file_mtime/content 镜像）", async () => {
     openProject();
     const app = buildApp();

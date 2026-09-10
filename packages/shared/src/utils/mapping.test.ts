@@ -194,7 +194,7 @@ describe("项目映射", () => {
     updated_at: "2026-08-01T10:00:00Z",
   };
 
-  it("mapProjectFileToConfig：schema_version/current_position → camelCase；backup 频率读侧兜底（）", () => {
+  it("mapProjectFileToConfig：schema_version/current_position → camelCase；backup 频率读侧兜底", () => {
     const config = mapProjectFileToConfig(file);
     expect(config.schemaVersion).toBe(1);
     expect(config.currentPosition).toBe("sc-42");

@@ -113,7 +113,7 @@ describe("query_relationships depth=1", () => {
     expect(runQueryRelationships(makeCtx(), { depth: 1, relation_type: "appears_in" }).relations).toHaveLength(1);
   });
 
-  it("实体端点软删 → 关系不可见（）", () => {
+  it("实体端点软删 → 关系不可见", () => {
     const { charB } = seedBase();
     softDeleteEntity(db, charB, T0);
     const result = runQueryRelationships(makeCtx(), { depth: 1 });
@@ -159,7 +159,7 @@ describe("query_relationships depth=2/3", () => {
     expect(twoHop.nodes.map((n) => n.name)).toEqual(["阿强", "阿珍", "阿刚"]);
   });
 
-  it("k 跳路径同样过滤软删端点（BFS 图可见性，）", () => {
+  it("k 跳路径同样过滤软删端点（BFS 图可见性）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const a = createEntity(db, { type: "character", name: "阿强" }).id;
     const b = createEntity(db, { type: "character", name: "阿珍" }).id;

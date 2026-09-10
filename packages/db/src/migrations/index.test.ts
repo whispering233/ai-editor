@@ -50,7 +50,7 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-describe("runMigrations（ 前向迁移）", () => {
+describe("runMigrations（前向迁移）", () => {
   it("连续迁移链顺序执行：每步 setUserVersion、全部完成后版本对齐、副作用逐级可见", () => {
     seedEntity(db);
     setUserVersion(db, 0); // 显式旧版本（新库默认 0，此处冗余但语义清晰）
@@ -100,7 +100,7 @@ describe("runMigrations（ 前向迁移）", () => {
   });
 });
 
-describe("runMigrations 失败回滚（ 原子性）", () => {
+describe("runMigrations 失败回滚（原子性）", () => {
   it("某迁移抛错 → 该迁移事务整体回滚（副作用与版本号均不落）、后续不执行、快照保留", () => {
     seedEntity(db);
     const failing: Migration[] = [
@@ -161,7 +161,7 @@ describe("runMigrations 失败回滚（ 原子性）", () => {
   });
 });
 
-describe("hasMigrationPath（ 纯函数）", () => {
+describe("hasMigrationPath（纯函数）", () => {
   it("连续链 true / 断链 false / 空迁移 false / 目标已达成 true", () => {
     expect(hasMigrationPath(0, 3, fakeMigrations)).toBe(true); // v1,v2,v3 连续
     expect(hasMigrationPath(1, 3, fakeMigrations)).toBe(true); // v2,v3
@@ -177,7 +177,7 @@ describe("hasMigrationPath（ 纯函数）", () => {
   });
 });
 
-describe("snapshotDbFile（ 时间戳快照）", () => {
+describe("snapshotDbFile（时间戳快照）", () => {
   it("命名含版本号与毫秒时间戳；快照文件保留", () => {
     seedEntity(db);
     const snap1 = snapshotDbFile(dbPath, 0);

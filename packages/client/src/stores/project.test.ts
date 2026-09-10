@@ -1,6 +1,6 @@
 // project store 测试（S1.4：openProjectAt 的 rebuilt toast、loadConfig 的 loadError 区分）
 // + S1.5：书架 loadBookshelf 成功/失败、buildBookPath 路径拼接
-// + loadAgents/saveAgents（ 加载/保存 + 外部修改检测）
+// + loadAgents/saveAgents（加载/保存 + 外部修改检测）
 // mock lib/api 模块（保留 ApiError 类真实实现）
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ProjectConfig } from "@whispering233/ai-editor-shared";
@@ -233,7 +233,7 @@ describe("书架 loadBookshelf（S1.5）", () => {
   });
 });
 
-describe("AGENTS.md loadAgents/saveAgents（）", () => {
+describe("AGENTS.md loadAgents/saveAgents", () => {
   it("loadAgents 成功 → agents 设置 + agentsProjectId 绑定当前项目 + 无外部修改标记", async () => {
     useProjectStore.setState({ config: sampleConfig });
     mocked.getProjectAgents.mockResolvedValue({
@@ -258,7 +258,7 @@ describe("AGENTS.md loadAgents/saveAgents（）", () => {
     expect(s.agentsError).toBeNull();
   });
 
-  it("loadAgents 外部修改检测：上次读取后 mtime 变化 → agentsExternalModified=true（）", async () => {
+  it("loadAgents 外部修改检测：上次读取后 mtime 变化 → agentsExternalModified=true", async () => {
     useProjectStore.setState({ config: sampleConfig });
  // 首次加载（基线 mtime A）
     mocked.getProjectAgents.mockResolvedValueOnce({

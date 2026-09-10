@@ -57,7 +57,7 @@ function seedTree(): void {
   createOutlineNode(dir, { type: "chapter", title: "第二章", parentId: t3.children[1].id, updatedAt: T0 });
 }
 
-describe("createOutlineNode（严格三层，）", () => {
+describe("createOutlineNode（严格三层）", () => {
   it("合法各层级创建：volume 挂 root、chapter 挂 volume、scene 挂 chapter，id 前缀正确", () => {
     const vol = createOutlineNode(dir, { type: "volume", title: "第一卷", parentId: "root", updatedAt: T0 });
     expect(vol.id).toMatch(/^vol-/);
@@ -102,7 +102,7 @@ describe("createOutlineNode（严格三层，）", () => {
     );
   });
 
-  it("父节点 updated_at 统一更新（），其余节点不变", () => {
+  it("父节点 updated_at 统一更新，其余节点不变", () => {
     const vol = createOutlineNode(dir, { type: "volume", title: "卷", parentId: "root", updatedAt: T0 });
     createOutlineNode(dir, { type: "chapter", title: "章", parentId: vol.id, updatedAt: T1 });
     const tree = readOutlineFile(dir);
@@ -142,7 +142,7 @@ describe("updateOutlineNodeInfo（PUT /outline/:nodeId）", () => {
   });
 });
 
-describe("节点 data（，麦基字段集）", () => {
+describe("节点 data（麦基字段集）", () => {
   it("创建带 data：scene 全字段 + volume/chapter 引用字段，落盘可读（读写透传）", () => {
     const vol = createOutlineNode(dir, {
       type: "volume",
@@ -220,7 +220,7 @@ describe("节点 data（，麦基字段集）", () => {
     expect(findOutlineNode(readOutlineFile(dir), ch.id)?.data).toEqual({});
   });
 
-  it("data 变更 touch updated_at（ 版本戳）", () => {
+  it("data 变更 touch updated_at（版本戳）", () => {
     const vol = createOutlineNode(dir, { type: "volume", title: "卷", parentId: "root", updatedAt: T0 });
     updateOutlineNodeInfo(dir, vol.id, { data: { climax_scene: "sc-1" } }, T1);
     const node = readOutlineFile(dir).children[0];
@@ -301,7 +301,7 @@ describe("moveOutlineNode（PUT /outline/:nodeId/move）", () => {
   });
 });
 
-describe("deleteOutlineNode（软删，）", () => {
+describe("deleteOutlineNode（软删）", () => {
   it("单节点软删：标记 deleted/deleted_at，本体保留（find 仍可见），计数 0", () => {
     seedTree();
     const tree0 = readOutlineFile(dir);
@@ -343,7 +343,7 @@ describe("deleteOutlineNode（软删，）", () => {
   });
 });
 
-describe("restoreOutlineNode（）", () => {
+describe("restoreOutlineNode", () => {
   it("正常还原：清除标记 + 级联还原子树（仍软删的子孙一并还原）", () => {
     seedTree();
     const tree0 = readOutlineFile(dir);
@@ -360,7 +360,7 @@ describe("restoreOutlineNode（）", () => {
     expect(vol.updated_at).toBe(T0);
   });
 
-  it("祖先软删 → OUTLINE_ANCESTOR_DELETED（409 语义，）", () => {
+  it("祖先软删 → OUTLINE_ANCESTOR_DELETED（409 语义）", () => {
     seedTree();
     const tree0 = readOutlineFile(dir);
     const v1 = tree0.children[0];
@@ -415,7 +415,7 @@ describe("listDeletedNodes（回收站列表）", () => {
   });
 });
 
-describe("章节序推导（）", () => {
+describe("章节序推导", () => {
   it("多卷多章跨卷连续编号：卷1[章1,章2] + 卷2[章3]", () => {
     seedTree();
  // 补充：卷1 再建一章（章2）
@@ -446,7 +446,7 @@ describe("章节序推导（）", () => {
     expect(getChapterNumber(dir, "sc-999")).toBeNull();
   });
 
-  it("直接挂 root 的 chapter 按兄弟顺序编号（）", () => {
+  it("直接挂 root 的 chapter 按兄弟顺序编号", () => {
     createOutlineNode(dir, { type: "volume", title: "卷", parentId: "root", updatedAt: T0 });
     createOutlineNode(dir, { type: "chapter", title: "直挂章", parentId: "root", updatedAt: T0 });
     const t3 = readOutlineFile(dir);

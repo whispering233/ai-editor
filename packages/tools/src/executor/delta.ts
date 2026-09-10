@@ -10,7 +10,7 @@ import { insertDelta } from "@whispering233/ai-editor-db";
 import type { DeltaChange } from "@whispering233/ai-editor-shared";
 import { requireArray, requireString, type ExecutorFn } from "./types.js";
 
-/** add_delta（：add_delta(node_id, target, changes) → id） */
+/** add_delta（add_delta(node_id, target, changes) → id） */
 export const executeAddDelta: ExecutorFn = (ctx, proposal) => {
   const args = proposal.args;
   const row = insertDelta(ctx.db, {

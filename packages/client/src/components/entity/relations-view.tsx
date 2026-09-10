@@ -4,13 +4,13 @@
 // 过滤（filterRelations 纯函数，可单测）：端点类型（sourceType/targetType 任一匹配）/ 关系类型 /
 // 名称（sourceName/targetName 包含、大小写不敏感；名称可能 undefined——回退 id）。
 // 行：源名（端点类型徽标）→ 关系类型标签（relationTypeLabel + 方向箭头 →）→ 目标名（徽标）→ [删除]；
-// 端点点击跳各自宿主段详情（批次十七 1-1：人物/设定/地点/伏笔/事件/时间点/参考资料 →
+// 端点点击跳各自宿主段详情（人物/设定/地点/伏笔/事件/时间点/参考资料 →
 // characters|setting|locations|hooks|timeline|timepoints|references）；大纲节点（S12.2 起）跳 #/outline/:nodeId。
 // 删除：ConfirmDialog 物理删确认（不可恢复，可重新建立）→ DELETE → toast「已删除关系」→ 重拉。
 // 空态两种：无任何关系「还没有关联，建立一条」+ [建立关联]；过滤无结果「没有匹配的关联」+ [清空过滤]。
 // scope 模式（S12.2 大纲节点详情页）：传入端点范围 → 服务端过滤该端点作为 source 的关系
 // （source_type+source_id，depth=1），隐藏前端过滤区（列表短，无过滤必要）。
-// 样式 token 类（，禁止硬编码色类）。
+// 样式 token 类（禁止硬编码色类）。
 import { useEffect, useState } from "react";
 import { ENTITY_TYPES, RELATION_TYPES } from "@whispering233/ai-editor-shared";
 import { ApiError, CLIENT_NETWORK_ERROR, deleteRelation, listRelations } from "../../lib/api";
@@ -26,7 +26,7 @@ import { DeleteOutlined, SearchOutlined } from "@ant-design/icons";
 import { navigate } from "../../hooks/use-route";
 import { useUiStore } from "../../stores/ui";
 
-/** 端点类型 → 中文徽标（relation_records 端点类型，；未知原样显示） */
+/** 端点类型 → 中文徽标（relation_records 端点类型；未知原样显示） */
 export const ENDPOINT_TYPE_LABEL: Record<string, string> = {
   character: "人物",
   setting: "设定",

@@ -1,4 +1,4 @@
-// 应用级错误边界（交互批次，问题 3）：防止渲染异常导致整页白屏
+// 应用级错误边界（问题 3）：防止渲染异常导致整页白屏
 // 背景：用户实测「点击新会话后整个页面变空白」——无 ErrorBoundary 时 React 渲染异常会
 // 卸载整棵组件树（#root 清空 = 白屏）。代码走查 ChatPanel 新会话路径（setCurrentSession(null)
 // → 清空 messages/proposals/streamTools → 空态渲染）未发现静态可见的崩溃点（各渲染分支均有
@@ -6,7 +6,7 @@
 // （Base UI 菜单等），本地工具应用加轻量 ErrorBoundary 兜底是低成本高价值的：异常时展示
 // 可恢复的错误卡（错误信息 + 重新加载 / 回到首页），而不是无提示白屏。
 // 实现约束：错误边界必须是 class 组件（React 对函数组件无 componentDidCatch）；
-// 样式用 token 类（，oracle 红线：禁止硬编码色类）
+// 样式用 token 类（oracle 红线：禁止硬编码色类）
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { Button } from "antd";
 import { ExclamationCircleFilled, UndoOutlined } from "@ant-design/icons";

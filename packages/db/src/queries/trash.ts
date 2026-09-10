@@ -12,7 +12,7 @@
 // 级联 helper（cascadeRestore/cascadePurge）自 server/routes/outline.ts 下沉（trash.ts 注释
 // 留痕的「S3 建模块后可下沉」项，S4.1 兑现）：参数与 SQL 语义不变，仅补充单库事务包裹。
 //
-// 批次十五（15.2 试点）：**全部查询经 queryDb 走 drizzle 构建器**（本卡为试点模块，
+// （15.2 试点）：**全部查询经 queryDb 走 drizzle 构建器**（本卡为试点模块，
 // 混合风格 4A：本模块均为单一表条件更新/删除/查询，builder 表达清晰，无 sql 模板需求）。
 // 语义逐句对照旧实现（git show d510f25^:packages/db/src/queries/trash.ts）：
 // - deleted_at IS NOT NULL ↔ isNotNull；排序 desc(deleted_at) ↔ ORDER BY deleted_at DESC
@@ -29,7 +29,7 @@ import { nowIso } from "../storage/atomic.js";
 import { withTransaction, type Db } from "../connection.js";
 import { queryDb } from "../query-db.js";
 
-/** 回收站实体条目（GET /api/v1/trash entities 项，） */
+/** 回收站实体条目（GET /api/v1/trash entities 项） */
 export interface DeletedEntityInfo {
   id: string;
   type: EntityType;
@@ -55,7 +55,7 @@ export function listDeletedEntities(db: Db): DeletedEntityInfo[] {
 }
 
 /**
- * 还原软删实体（POST /api/v1/trash/entity/:type/:id/restore，）：
+ * 还原软删实体（POST /api/v1/trash/entity/:type/:id/restore）：
  * - 自身：deleted_at 置 NULL + **updated_at 刷新**（与常规编辑一致，
  * 保证 提案快照比对语义统一——还原后基于旧快照的提案必然 PROPOSAL_STALE）
  * - 关联关系：relation_records（source_id = id **或** target_id = id）deleted_at 置 NULL——
@@ -101,7 +101,7 @@ export function restoreEntity(
 }
 
 /**
- * 物理清除软删实体（DELETE /api/v1/trash/entity/:type/:id，）：
+ * 物理清除软删实体（DELETE /api/v1/trash/entity/:type/:id）：
  * 不可恢复——DELETE 实体本体 + 关联 relations（source_id = id 或 target_id = id）+
  * deltas（target_id = id）。单库事务。
  * 幂等：实体不存在或类型不匹配 → 返回 null 且无副作用。

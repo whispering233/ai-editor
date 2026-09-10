@@ -73,7 +73,7 @@ function errorCode(err: unknown): string | null {
   return err instanceof ApiError ? err.code : null;
 }
 
-/** 错误码 → 页级横幅文案（：各页定义映射） */
+/** 错误码 → 页级横幅文案（各页定义映射） */
 function describeOutlineError(code: string | null): string {
   switch (code) {
     case "OUTLINE_NODE_NOT_FOUND":
@@ -110,7 +110,7 @@ function inlineInput(
   );
 }
 
-/** root 顶层就地新建行：卷/章切换（ chapter 可挂 root）+ 输入行。
+/** root 顶层就地新建行：卷/章切换（chapter 可挂 root）+ 输入行。
  * 树容器（renderRootCreateRow）与空态引导卡共用，避免两处重复（S2.4 oracle 补丁） */
 function RootCreateRow({
   type,
@@ -440,7 +440,7 @@ export default function Outline() {
   }
 
   // ============ 选中与行级交互（单击选中 / Enter 新建子级 / 双击详情） ============
-  // 交互冲突设计（ 要求）：
+  // 交互冲突设计（要求）：
   // 标题/摘要单击 = 行内编辑（onClick stopPropagation 隔离，不触发行选中）；
   // 行区（非标题/摘要/按钮）单击 = 选中；行区双击 = 详情。
   // 双击会先触发两次单击——第一击仅设置选中高亮（无害），第二击后 dblclick 才跳转，无需延迟判定；
@@ -491,7 +491,7 @@ export default function Outline() {
 
   // ============ 拖拽移动（S13.1：原生 HTML5 DnD，上下半判定 + 插入指示线，同级排序可用） ============
   // 语义：拖到目标行上半 = 插到该节点前（该行上边缘指示线）、下半 = 插到该节点后（下边缘指示线）；
-  // 目标父 = 目标行的父（canMoveTo 过滤： 层级约束 + 不自挂/子树）；顶层空白区 = 排 root 末尾（保留原语义）
+  // 目标父 = 目标行的父（canMoveTo 过滤：层级约束 + 不自挂/子树）；顶层空白区 = 排 root 末尾（保留原语义）
 
   function handleDragStart(e: DragEvent, node: OutlineNode) {
     e.dataTransfer.setData("text/plain", node.id);
@@ -732,7 +732,7 @@ export default function Outline() {
             )}
             <TagChip className="w-7 shrink-0 justify-center">{TYPE_LABEL[node.type]}</TagChip>
             {/* 标题：点击就地编辑（Enter 保存 / Esc 取消 / 失焦保存）；stopPropagation 隔离——
-                单击标题 = 编辑而非选中（ 冲突设计） */}
+                单击标题 = 编辑而非选中（冲突设计） */}
             {editingTitle ? (
               inlineInput(
                 editingValue,
@@ -802,7 +802,7 @@ export default function Outline() {
                   className="min-w-0 cursor-text truncate text-xs text-muted-foreground hover:underline"
                   title="点击编辑摘要"
                   onClick={(e) => {
-                    e.stopPropagation(); // 摘要单击 = 编辑而非选中（ 冲突设计，同标题）
+                    e.stopPropagation(); // 摘要单击 = 编辑而非选中（冲突设计，同标题）
                     startEdit(node, "summary");
                   }}
                 >
@@ -885,7 +885,7 @@ export default function Outline() {
         </Button>
       </div>
 
-      {/* 页级错误横幅（：destructive token 类） */}
+      {/* 页级错误横幅（destructive token 类） */}
       {error && <div className={cn(errorBannerClass, "mb-3")}>{error}</div>}
 
       {noProject ? (

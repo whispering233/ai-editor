@@ -4,7 +4,7 @@
 // 历史 outline_node 目标数据保留展示，创建路径拒绝）。
 // 错误映射（对照 错误码）：
 // 参数校验失败 → 400 VALIDATION_ERROR（zod 抛错由 errorHandler 统一映射，含 fields；
-// per-op 必填字段（）因 op 而异、zod 无法表达，路由层补校验
+// per-op 必填字段因 op 而异、zod 无法表达，路由层补校验
 // → HttpError 400 VALIDATION_ERROR，与 entity.ts validateDataByType 同思路；
 // S13.3 target_type 白名单校验同此 400——schema 层 target_type 为宽松 z.string，
 // 收紧在路由层（shared schema 不动，同 S12.1 节点 data 校验模式））
@@ -39,7 +39,7 @@ function assertOutlineNode(project: ProjectContext, nodeId: string): void {
 }
 
 /**
- * per-op 必填字段校验（）：
+ * per-op 必填字段校验：
  * op=set → to 必填；op=update → from+to 必填；op=add → value 必填；op=remove → value 必填。
  * deltaChangeSchema 的字段均 optional——必填语义因 op 而异，schema 层无法表达，
  * 由路由层按 op 分派校验（与 entity.ts validateDataByType「schema 之外按类型精校验」同思路）。
@@ -88,7 +88,7 @@ function assertDeltaTargetType(targetType: string): void {
     throw new HttpError(
       400,
       "VALIDATION_ERROR",
-      `非法变更目标类型: ${targetType}（变更目标仅限实体类型: ${allowed.join("/")}；event 不产生 Delta，）`,
+      `非法变更目标类型: ${targetType}（变更目标仅限实体类型: ${allowed.join("/")}；event 不产生 Delta）`,
     );
   }
 }
@@ -106,7 +106,7 @@ deltaRoutes.post("/", async (c) => {
   const { node_id, target_type, target_id, changes, description } = parsed.data;
   assertDeltaTargetType(target_type); // S13.3：变更目标仅实体类型（shared schema 不动，路由层收紧）
   assertOutlineNode(project, node_id); // 触发节点必须存在且未软删（防死记录）
-  validateChangesByOp(changes); // per-op 必填字段（）
+  validateChangesByOp(changes); // per-op 必填字段
   const row = insertDelta(project.db, {
     nodeId: node_id,
     targetType: target_type,
@@ -118,7 +118,7 @@ deltaRoutes.post("/", async (c) => {
 });
 
 // GET /api/v1/delta/node/:nodeId —— 按触发节点查询（200）
-// 未定义该端点 404（）：节点缺失/软删 → 空数组（listDeltasByNode
+// 未定义该端点 404：节点缺失/软删 → 空数组（listDeltasByNode
 // 内置可见性三态过滤，触发节点缺失视同不可见），不 404。
 deltaRoutes.get("/node/:nodeId", (c) => {
   const project = requireCurrentProject();
@@ -127,7 +127,7 @@ deltaRoutes.get("/node/:nodeId", (c) => {
   return c.json(ok({ nodeId, deltas }));
 });
 
-// POST /api/v1/delta/compute —— 累积状态计算（）
+// POST /api/v1/delta/compute —— 累积状态计算
 // 校验顺序（任务规格）：schema → at_node_id 存在性（404 OUTLINE_NODE_NOT_FOUND，
 // computeState 的 getOutlinePathIds 对缺失节点抛错——路由层先拦截）→ 目标实体存在性
 // （404 ENTITY_NOT_FOUND；computeState 对缺失/软删实体返回 null）→ computeState → 200

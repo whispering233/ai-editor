@@ -18,7 +18,7 @@ import { buildProposal, checkProposalAborted, refOutlineNode, requireOutlineNode
 
 /** 产出新增大纲节点提案（parent_id 缺省挂根；scene 无 parent 直接拒绝） */
 export function buildProposeOutlineNode(ctx: ToolContext, args: ProposeOutlineNodeArgs): Proposal {
- // 层级约束（ 严格三层）：root 可挂 volume/chapter；scene 必须挂 chapter（缺省 root 即拒绝）
+ // 层级约束（严格三层）：root 可挂 volume/chapter；scene 必须挂 chapter（缺省 root 即拒绝）
   const references: ProposalReference[] = [];
   if (args.parent_id === undefined) {
     assertCanHold("root", args.type);
@@ -62,7 +62,7 @@ export function buildProposeMoveNode(ctx: ToolContext, args: ProposeMoveNodeArgs
  // 目标父展示名（root 恒存在、非节点，无 title）
   let parentLabel = "树根";
   if (args.parent_id === "root") {
- // root 恒存在、非引用对象：仅校验层级（scene 不能挂 root， 严格三层）
+ // root 恒存在、非引用对象：仅校验层级（scene 不能挂 root，严格三层）
     assertCanHold("root", node.type);
   } else {
     const parent = requireOutlineNode(ctx, args.parent_id);

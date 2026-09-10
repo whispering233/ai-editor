@@ -1,4 +1,4 @@
-// 设定树构建纯函数测试（批次四 I4， 交互树扩展）：
+// 设定树构建纯函数测试（I4，交互树扩展）：
 // 根判定 / 父子组装 / 截断孤儿提升防御 / 交互树辅助（findSettingNode / canMoveSettingTo / 树内过滤）
 import { describe, expect, it } from "vitest";
 import {
@@ -84,7 +84,7 @@ describe("buildSettingTree（belongs_to 子→父，childId → parentId）", ()
   });
 });
 
-describe("expandableSettingNodeIds（批次八 O5：全部折叠用，仅收非叶子）", () => {
+describe("expandableSettingNodeIds（O5：全部折叠用，仅收非叶子）", () => {
   it("空树 → 空数组", () => {
     expect(expandableSettingNodeIds([])).toEqual([]);
   });

@@ -26,7 +26,7 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-/** 合法 project.json 配置（ 字段全量） */
+/** 合法 project.json 配置（字段全量） */
 function makeConfig(): ProjectFileConfig {
   return {
     id: "proj-abc123",
@@ -41,7 +41,7 @@ function makeConfig(): ProjectFileConfig {
 }
 
 describe("readProjectFile", () => {
-  it("文件不存在返回 null（未初始化语义， 由上层创建）", () => {
+  it("文件不存在返回 null（未初始化语义，由上层创建）", () => {
     expect(readProjectFile(dir)).toBeNull();
   });
 

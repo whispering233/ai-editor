@@ -1,9 +1,9 @@
-// 会话状态（ chat store：会话归属项目——currentSessionId + 会话列表）
-// U3 雏形：列表加载 + 当前会话选择；U5 扩展（ ）：
+// 会话状态（chat store：会话归属项目——currentSessionId + 会话列表）
+// U3 雏形：列表加载 + 当前会话选择；U5 扩展：
 // - 消息流：messages（当前会话历史）/ messagesLoading / loadMessages（切会话清空重载）
 // - SSE 运行态：streaming / streamError；sendMessage（fetchSSE 发送，事件映射见 「SSE 事件 → UI 映射」表）
-// - focus context（）：跨页「问 AI」注入；请求体 context 字段
-// - 断连横幅：disconnected（60s 无事件， 客户端兜底）+ resendLast（[重新发送]）
+// - focus context：跨页「问 AI」注入；请求体 context 字段
+// - 断连横幅：disconnected（60s 无事件，客户端兜底）+ resendLast（[重新发送]）
 // - 瞬态渲染数据：proposals（提案卡）/ streamTools（运行时工具折叠行）——S7 服务端数据接入后填充
 // 项目切换联动（布局 §2.4「切项目重置会话」）：订阅 project store 的 config.id——
 // 从任何入口打开/关闭/切换项目都清空会话 + 消息 + SSE 运行态（并中止在途流），
@@ -23,13 +23,13 @@ import type { FocusContext } from "../lib/focus";
 import { useProjectStore } from "./project";
 import { useUiStore } from "./ui";
 
-/** focus context（：跨页注入「问 AI」；POST /chat 请求体 context 字段）
+/** focus context（跨页注入「问 AI」；POST /chat 请求体 context 字段）
  * 定义提移至 lib/focus.ts（ui store currentFocus 共用，避免 store 循环依赖） */
 export type { FocusContext } from "../lib/focus";
 
 /** 运行时工具调用记录（SSE tool_call / tool_result 事件，瞬态；历史消息走 messages 的 toolCalls/toolCallId 成对渲染） */
 export interface StreamToolRecord {
-  id: string; // call_ 前缀（ 成对重组依据）
+  id: string; // call_ 前缀（成对重组依据）
   tool: string; // 工具名（get_entity 等）
   args?: unknown;
   result?: unknown;
@@ -204,7 +204,7 @@ export const useChatStore = create<ChatState>((set, get) => {
           p.proposalId === proposalId ? { ...p, status: successStatus, processing: false } : p,
         ),
       }));
- // 数据变更信号（交互批次，问题 1）：确认 = executeProposal 写库成功，通知中栏页面重拉；
+ // 数据变更信号（问题 1）：确认 = executeProposal 写库成功，通知中栏页面重拉；
  // 拒绝不改数据不触发；hook-panel 复合写是页面本地操作（S9.1 自带 reloadTick），不走全局信号
       if (successStatus === "confirmed") useUiStore.getState().notifyDataChanged();
     } catch (err) {
@@ -253,7 +253,7 @@ export const useChatStore = create<ChatState>((set, get) => {
         const sessions = await listSessions();
         if (seq !== loadSeq) return; // 请求期间项目已切换，旧列表作废
         set({ sessions, sessionsError: null });
- // 自动激活最近会话（交互批次，问题 2）：刷新页面/切项目后 currentSessionId 为 null，
+ // 自动激活最近会话（问题 2）：刷新页面/切项目后 currentSessionId 为 null，
  // 若列表非空则激活 sessions[0]——服务端按最后活动倒序返回，[0] 即最近会话，
  // 符合「一项目一会话」心智（刷新后右栏应恢复最近对话而非空会话）。
  // 守卫：空列表不激活（保持新会话空态）；已有 currentSessionId 不覆盖
@@ -393,11 +393,11 @@ export const useChatStore = create<ChatState>((set, get) => {
         streaming: true,
         streamError: null,
         disconnected: false,
-        proposals: [], // 新一轮生成：清空上一轮遗留提案（ 瞬态）
+        proposals: [], // 新一轮生成：清空上一轮遗留提案（瞬态）
         streamTools: [],
       }));
 
- // 请求体（ POST /chat）：新会话不带 session_id；focus 小条存在时携带 context
+ // 请求体（POST /chat）：新会话不带 session_id；focus 小条存在时携带 context
       const body: SendChatMessageBody = { message: trimmed };
       if (currentSessionId) body.session_id = currentSessionId;
       if (focusContext) body.context = focusContext;
@@ -411,7 +411,7 @@ export const useChatStore = create<ChatState>((set, get) => {
             case "ping":
               break; // 心跳：忽略（维持超时重置由 fetchSSE 内部处理）
             case "text": {
- // 追加 delta 到当前流式 AI 消息（流式打字效果不做，直接追加，）
+ // 追加 delta 到当前流式 AI 消息（流式打字效果不做，直接追加）
               const delta = (data as { delta?: string })?.delta ?? "";
               if (currentStreamMsgId) {
                 set((s) => ({
@@ -433,10 +433,10 @@ export const useChatStore = create<ChatState>((set, get) => {
             }
             case "tool_result": {
  // 确认（S8.1）：AgentEvent tool_result 仅 { tool, result, id }，无 ok/isError 字段——
- // 工具失败编码进 result 字符串内容（如「错误：实体 char-9 不存在」， 结构化喂回自纠），
+ // 工具失败编码进 result 字符串内容（如「错误：实体 char-9 不存在」，结构化喂回自纠），
  // SSE 帧与 AgentEvent 同构（chat.ts onEvent 直通 writeEvent）。故无条件置 ok，
  // status: "error" 为历史预留（UI 渲染已支持），当前下不可达；result 按字符串原文挂载。
- // S8.2 评估（ora S8.1 建议 isError 透传）：不做——失败已编码进 result 字符串（ 消费方
+ // S8.2 评估（ora S8.1 建议 isError 透传）：不做——失败已编码进 result 字符串（消费方
  // 是 LLM 自纠而非展示层），isError 透传需改 agent run.ts + server 帧 + shared schema + client
  // 四层，YAGNI；未来需要时改动点已明确（run.ts emit 透传 DispatchResult.isError）
               const { id } = data as { id?: string };
@@ -451,7 +451,7 @@ export const useChatStore = create<ChatState>((set, get) => {
               break;
             }
             case "proposal": {
- // 提案卡片（ 瞬态；S7 数据接入后渲染）
+ // 提案卡片（瞬态；S7 数据接入后渲染）
               const {
                 proposal_id: proposalId,
                 type,
@@ -493,7 +493,7 @@ export const useChatStore = create<ChatState>((set, get) => {
           }
         },
         onTimeout: () => {
- // 60s 无任何事件（ 半开连接兜底）：横幅「上次会话已取消」+ 清空未确认提案
+ // 60s 无任何事件（半开连接兜底）：横幅「上次会话已取消」+ 清空未确认提案
  // 身份守卫：done 后微窗口内新发一轮时旧流已过期，其超时回调不得污染新流
           if (currentStreamMsgId !== streamMsgId) return;
           currentStreamMsgId = null;

@@ -42,7 +42,7 @@ describe("parseHashRoute", () => {
     expect(route.segments).toEqual([]);
   });
 
- // 批次十七 1-1 一级化：新段解析 + 旧址段仍属已知（main.tsx 重定向，不误判回退）
+ // 一级化：新段解析 + 旧址段仍属已知（main.tsx 重定向，不误判回退）
   it.each([
     ["#/characters", ["characters"]],
     ["#/characters/char-abc", ["characters", "char-abc"]],
@@ -65,7 +65,7 @@ describe("parseHashRoute", () => {
 });
 
 
-  it("references 参考资料段解析（1 段列表 / 2 段详情，）", () => {
+  it("references 参考资料段解析（1 段列表 / 2 段详情）", () => {
     expect(parseHashRoute("#/references")).toEqual({ path: "/references", segments: ["references"], isFallback: false });
     expect(parseHashRoute("#/references/ref-abc")).toEqual({ path: "/references/ref-abc", segments: ["references", "ref-abc"], isFallback: false });
   });

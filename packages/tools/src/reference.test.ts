@@ -1,4 +1,4 @@
-// 参考资料工具测试（批次九）
+// 参考资料工具测试
 // 覆盖：search_references（标题/摘要返回 + type 分类过滤 + 软删不可见）/ propose_create_reference（提案产出/不落库）
 // / executor executeCreateReference（确认后写入 + type 缺省 material）
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -77,7 +77,7 @@ describe("propose_create_reference", () => {
   });
 });
 
-describe("executeCreateReference（ 确认后写入）", () => {
+describe("executeCreateReference（确认后写入）", () => {
   it("写入 reference 实体（type 缺省 material 补默认），返回新 id", () => {
     const ctx = makeCtx();
     const proposal = buildProposeCreateReference(ctx, { name: "素材库第一条", type: undefined });

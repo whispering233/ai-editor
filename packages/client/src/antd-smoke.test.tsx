@@ -1,4 +1,4 @@
-// antd 基座接入冒烟（批次十七 0-1）：antd v6 + @ant-design/x 与 React 19 / 构建链兼容性走查。
+// antd 基座接入冒烟：antd v6 + @ant-design/x 与 React 19 / 构建链兼容性走查。
 // 仓库无 jsdom/@testing-library 纪律（chat-panel.test 注释），用 react-dom/server renderToString（既有依赖）。
 // 注：@ant-design/x-markdown 的 CJS lib 内 require("./*.css")，node 直跑/渲染路径会抛语法错——
 // 其兼容性由 vite build 管线验证（浏览器真实路径走 ESM），不做 node 侧导入。

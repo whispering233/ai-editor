@@ -209,7 +209,7 @@ describe("listRelations depth=1（紧邻 + 可见性）", () => {
     expect(listRelations(db, { relationType: "rival" }, 1, dir).relations).toHaveLength(0);
   });
 
-  it("可见性过滤（）：source 实体软删后关系不可见", () => {
+  it("可见性过滤：source 实体软删后关系不可见", () => {
     const { charA, charB } = seedBase();
     createRelation(
       db,
@@ -329,7 +329,7 @@ describe("listRelations depth=2/3（k 跳路径）", () => {
   });
 });
 
-describe("deleteRelation（物理删，）", () => {
+describe("deleteRelation（物理删）", () => {
   it("物理删除：行消失；再次删除 → 0（404 语义）", () => {
     const { charA, charB } = seedBase();
     const rel = createRelation(
@@ -393,7 +393,7 @@ describe("updateRelationMetadata", () => {
     expect(updateRelationMetadata(db, "rel-999", { label: "x" }, "2026-08-12T10:00:00Z")).toBeNull();
   });
 
-  it("已软删 → null，且行未被触碰（软删关系不可编辑，）", () => {
+  it("已软删 → null，且行未被触碰（软删关系不可编辑）", () => {
     const { charA, charB } = seedBase();
     const rel = createRelation(
       db,

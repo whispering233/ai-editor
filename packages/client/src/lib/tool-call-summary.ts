@@ -1,6 +1,6 @@
-// 工具调用摘要渲染纯函数（批次十四）：
+// 工具调用摘要渲染纯函数：
 // 把工具参数 args 渲染为人类可读摘要行——id 字段经 names/resolve 解析为名称（不暴露裸 id），
-// 其余字段显示 label: value。 、
+// 其余字段显示 label: value。、
 // 「工具调用记录行」、packages/shared/src/types/tool.ts 工具参数 schema。
 // 设计要点：
 // - 按工具名定义「行首动词短语 + 有序字段显示定义」（TOOL_DISPLAY_SPECS）——未知工具返回 null，

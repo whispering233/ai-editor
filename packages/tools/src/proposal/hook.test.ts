@@ -99,7 +99,7 @@ describe("propose_create_hook", () => {
     expect(proposal.project_id).toBe("proj-test");
   });
 
-  it("指定埋设节点：引用为节点级 updated_at 快照（）", () => {
+  it("指定埋设节点：引用为节点级 updated_at 快照", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const proposal = buildProposeCreateHook(makeCtx(), { name: "玉佩来历", plant_at_node_id: "sc-1" });
     expect(proposal.references).toEqual([{ kind: "outline_node", id: "sc-1", updated_at: T0 }]);
@@ -116,7 +116,7 @@ describe("propose_create_hook", () => {
 });
 
 describe("propose_update_hook", () => {
-  it("完整提案结构：引用为伏笔实体自身 updated_at（）", () => {
+  it("完整提案结构：引用为伏笔实体自身 updated_at", () => {
     const hook = seedHook();
     const proposal = buildProposeUpdateHook(makeCtx(), { hook_id: hook.id, patches: { payoff_timing: "slow_burn" } });
     expect(proposal.args).toEqual({ hook_id: hook.id, patches: { payoff_timing: "slow_burn" } });
@@ -139,7 +139,7 @@ describe("propose_update_hook", () => {
 });
 
 describe("propose_advance_hook / propose_resolve_hook", () => {
-  it("完整提案结构：伏笔实体 + 推进/回收节点双引用快照（）", () => {
+  it("完整提案结构：伏笔实体 + 推进/回收节点双引用快照", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const hook = seedHook();
     const advance = buildProposeAdvanceHook(makeCtx(), { hook_id: hook.id, node_id: "sc-1", description: "玉佩现身" });
@@ -192,7 +192,7 @@ describe("propose_abandon_hook", () => {
   });
 });
 
-describe("signal aborted（）", () => {
+describe("signal aborted", () => {
   it("五个伏笔提案工具在 signal 已中止时抛 AbortedError", () => {
     const controller = new AbortController();
     controller.abort();

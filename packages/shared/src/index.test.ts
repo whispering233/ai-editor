@@ -33,7 +33,7 @@ describe("@whispering233/ai-editor-shared 入口冒烟", () => {
   });
 });
 
-// T1.1 类型断言：字段形态与文档（ / ）一致
+// T1.1 类型断言：字段形态与文档（/）一致
 describe("@whispering233/ai-editor-shared 类型（T1.1）", () => {
   it("Entity / EntitySummary 字段为 API 形态（camelCase）", () => {
     expectTypeOf<Entity>().toMatchTypeOf<{
@@ -64,7 +64,7 @@ describe("@whispering233/ai-editor-shared 类型（T1.1）", () => {
     >();
   });
 
-  it("OutlineTree 严格三层（）：根下卷、卷下章、章下场景、场景无 children", () => {
+  it("OutlineTree 严格三层：根下卷、卷下章、章下场景、场景无 children", () => {
     expectTypeOf<OutlineTree["id"]>().toEqualTypeOf<"root">();
     expectTypeOf<OutlineTree["children"][number]["type"]>().toEqualTypeOf<"volume">();
     expectTypeOf<ProjectConfig["language"]>().toEqualTypeOf<"zh" | "en">();

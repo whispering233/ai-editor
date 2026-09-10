@@ -49,7 +49,7 @@ function expectConstraintError(fn: () => unknown, code: string): void {
   }
 }
 
-describe("tables.ts 双份声明对齐（）", () => {
+describe("tables.ts 双份声明对齐", () => {
  // drizzle 侧声明（键 = 表名）
   const drizzleTables: Record<string, SQLiteTable> = {
     entities,
@@ -92,7 +92,7 @@ describe("tables.ts 双份声明对齐（）", () => {
  * 从 DDL 常量解析每张表的列声明（顶层两空格缩进行）：
  * ` <列名> <类型> <其余约束...>`，列名可能带双引号（"order" 关键字列）。
  * 返回 表名 → 列名 → { type: 'text'|'integer', notNull, primaryKey }。
- * 注释行（ 开头）与空行忽略。
+ * 注释行（开头）与空行忽略。
  */
 function parseDdlColumns(
   ddl: string,
@@ -129,7 +129,7 @@ describe("schema.ts 建表", () => {
     );
   });
 
-  it("relation_records 有 3 个部分索引（WHERE deleted_at IS NULL，）", () => {
+  it("relation_records 有 3 个部分索引（WHERE deleted_at IS NULL）", () => {
     const indexes = listIndexes(db, "relation_records");
     const names = indexes.map((i) => i.name).sort();
     expect(names).toEqual(["idx_relation_source", "idx_relation_target", "idx_relation_type"].sort());
@@ -151,7 +151,7 @@ describe("schema.ts 建表", () => {
     expect(listTables(db)).toHaveLength(4);
   });
 
-  it("entities.type CHECK 约束生效：非法 type 插入报错，合法 type 可插入（含 event 、timepoint G2）", () => {
+  it("entities.type CHECK 约束生效：非法 type 插入报错，合法 type 可插入（含 event、timepoint G2）", () => {
     const insert = db.prepare(
       "INSERT INTO entities (id, type, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
     );
@@ -187,7 +187,7 @@ describe("schema.ts 建表", () => {
     expect(SCHEMA_VERSION).toBe(5);
   });
 
-  it("entities 有 sort_order 列（时间轴事件全局线性序，仅 event 使用，其余类型 NULL，）", () => {
+  it("entities 有 sort_order 列（时间轴事件全局线性序，仅 event 使用，其余类型 NULL）", () => {
     const cols = db.prepare("PRAGMA table_info(entities)").all() as Array<{ name: string; dflt_value: string | null }>;
     expect(cols.some((c) => c.name === "sort_order")).toBe(true);
  // 非 event 类型插入后 sort_order 为 NULL（未显式指定走默认）

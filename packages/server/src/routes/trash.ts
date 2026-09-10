@@ -23,7 +23,7 @@ import {
 /** 回收站路由（挂载于 /api/v1/trash，index.ts） */
 export const trashRoutes = new Hono();
 
-// GET /api/v1/trash —— 回收站列表（大纲侧 + 实体侧，）
+// GET /api/v1/trash —— 回收站列表（大纲侧 + 实体侧）
 trashRoutes.get("/", (c) => {
   const project = requireCurrentProject();
   const nodes = listDeletedNodes(project.root).map((n) => ({
@@ -86,10 +86,10 @@ trashRoutes.delete("/outline/:nodeId", (c) => {
   return c.json(ok({ purged: true as const }));
 });
 
-// POST /api/v1/trash/entity/:type/:id/restore —— 还原软删实体（）
+// POST /api/v1/trash/entity/:type/:id/restore —— 还原软删实体
 // 纯 DB 操作：自身 deleted_at 置 NULL + updated_at 刷新（S4.1 db 层），级联还原关联关系与 Delta
 // （全部还原，不因另一端仍软删而跳过——可见性由查询层兜底，端点还原后自动可见）。
-// db 层幂等：实体不存在、类型不匹配或未软删 → null → 404（）。
+// db 层幂等：实体不存在、类型不匹配或未软删 → null → 404。
 trashRoutes.post("/entity/:type/:id/restore", (c) => {
   const project = requireCurrentProject();
   const type = parseTypeParam(c.req.param("type"));
@@ -117,7 +117,7 @@ trashRoutes.post("/entity/:type/:id/restore", (c) => {
   );
 });
 
-// DELETE /api/v1/trash/entity/:type/:id —— 物理清除（purge，；不可恢复，
+// DELETE /api/v1/trash/entity/:type/:id —— 物理清除（purge；不可恢复，
 // 仅用于回收站清理）。拦截顺序与 outline purge 同构：先 404（不存在）后 400（未软删）——
 // 未软删对象拒绝，防误调把未进回收站的数据物理清掉（oracle 审核建议）。
 trashRoutes.delete("/entity/:type/:id", (c) => {

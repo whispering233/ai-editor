@@ -14,13 +14,13 @@ export interface Toast {
   text: string;
 }
 
-/** 错误横幅内容（：code + message） */
+/** 错误横幅内容（code + message） */
 export interface ErrorBanner {
   code: ErrorCode | ClientErrorCode;
   message: string;
 }
 
-/** 确认对话框配置（：不可恢复操作二次确认，说明影响范围） */
+/** 确认对话框配置（不可恢复操作二次确认，说明影响范围） */
 export interface ConfirmOptions {
   title: string;
   description?: string;
@@ -64,7 +64,7 @@ interface UiState {
   clearCurrentFocus: () => void;
 
  /**
- * 数据版本信号（交互批次，问题 1）：AI 提案确认写库后 / InfoBar 刷新按钮点击时 +1，
+ * 数据版本信号（问题 1）：AI 提案确认写库后 / InfoBar 刷新按钮点击时 +1，
  * 中栏数据页面（EntityList/EntityDetail/Outline/OutlineDetail/HookPanel/Trash/Dashboard）
  * 订阅本字段变化后重拉各自数据，实现「AI 改完数据中栏同步刷新」。
  * 触发点约定（避免滥用）：

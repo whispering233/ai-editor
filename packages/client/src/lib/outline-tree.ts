@@ -1,4 +1,4 @@
-// 大纲树辅助纯函数（S2.3）：父节点按类型过滤（ 严格三层）+ 子节点查找（move order 计算）
+// 大纲树辅助纯函数（S2.3）：父节点按类型过滤（严格三层）+ 子节点查找（move order 计算）
 import type { OutlineNode } from "@whispering233/ai-editor-shared";
 import type { OutlineNodeType } from "./api";
 
@@ -205,7 +205,7 @@ export function sameDragTarget(a: DragTarget, b: DragTarget): boolean {
 }
 
 /** 节点在树中的直接父 id（root 下的节点 → ROOT_NODE_ID）；找不到 → null。
- * 拖拽插入锚点的目标父计算用：插到某行前/后 = 目标父 = 该行的父。 */
+ * 拖拽插入锚点的目标父计算用：插到某行前/后 = 目标父 = 该行的父。*/
 export function findParentIdOf(nodes: OutlineNode[], nodeId: string): string | null {
   const search = (children: TreeNode[], parentId: string): string | null => {
     for (const node of children) {
@@ -221,7 +221,7 @@ export function findParentIdOf(nodes: OutlineNode[], nodeId: string): string | n
 }
 
 /** 节点当前位置（父 id + 兄弟序号 index）；找不到 → null。
- * 拖拽 drop 前的「原地放置」判定：父不变且移动后位置不变 → 不发请求（避免无意义移动与误导 toast）。 */
+ * 拖拽 drop 前的「原地放置」判定：父不变且移动后位置不变 → 不发请求（避免无意义移动与误导 toast）。*/
 export function findNodePosition(
   nodes: OutlineNode[],
   nodeId: string,

@@ -25,7 +25,7 @@ import { getEntity } from "./entity.js";
 import { getOutlinePathIds, readOutlineFile } from "../storage/outline.js";
 
 /**
- * 应用单条 change 到 state（四段规则 + ）：
+ * 应用单条 change 到 state（四段规则 +）：
  * - `set`：state[field] = to（直接替换）
  * - `update`：state[field] === from → state[field] = to；否则**跳过该 change**——
  * 在 skipped 追加 { index, field, expected: from, actual } 且 conflicts 追加
@@ -35,7 +35,7 @@ import { getOutlinePathIds, readOutlineFile } from "../storage/outline.js";
  * 仅定义 update 冲突）
  * - `remove`：state[field] 为数组 → 按值匹配移除**首个**匹配；值不存在静默忽略；
  * 非数组静默跳过
- * 字段约定（）：add/remove 用 value，set/update 用 to。
+ * 字段约定：add/remove 用 value，set/update 用 to。
  * 防御：非对象 change 静默忽略（changes 列来自 JSON 解析，坏项不打挂整条计算）。
  */
 function applyChange(
@@ -77,14 +77,14 @@ function applyChange(
 }
 
 /**
- * 计算实体到达指定大纲节点时的累积状态（POST /api/v1/delta/compute，）。
+ * 计算实体到达指定大纲节点时的累积状态（POST /api/v1/delta/compute）。
  *
  * **前置约定**：
  * - atNodeId 必须存在——路由层先校验节点存在性并映射 404 OUTLINE_NODE_NOT_FOUND 后调用；
  * getOutlinePathIds 对缺失节点抛错，视为调用方 bug，本模块不捕获。
  * - 目标实体不存在（或已软删，getEntity 过滤）→ 返回 **null**，路由层映射 404 ENTITY_NOT_FOUND。
  *
- * 累积流程（ + ）：
+ * 累积流程：
  * 1. state 基座 = 实体初始 data 深拷贝（structuredClone，不污染 getEntity 返回行）
  * 2. 树路径 = getOutlinePathIds(tree, atNodeId)（根 → at_node，含 root 哨兵——无 delta 挂它，
  * 无害）；路径上每节点调 listDeltasByNode（内置可见性三态过滤与 order ASC），
@@ -95,7 +95,7 @@ function applyChange(
  * 有跳过时出现）}；conflicts 为跨全部 delta 的扁平数组
  *
  * target_type 不参与过滤（仅回显）：id 前缀体系（char-/set-/loc-/hook-/sc-/ch-/vol- 等）保证
- * target_id 全局唯一，targetId 即足以定位目标； Req 携带 target_type 用于响应回显。
+ * target_id 全局唯一，targetId 即足以定位目标；Req 携带 target_type 用于响应回显。
  *
  * @param outlineDir 项目根目录（outline.json 读取：树路径 + 节点软删校验）
  * @returns ComputeStateResult；目标实体不存在/已软删返回 null

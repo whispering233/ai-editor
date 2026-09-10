@@ -1,10 +1,10 @@
 // 建立关联对话框（U8 抽共用；「新增关联」+ 「关联 Tab」）
 // 两模式：
 // - 详情模式（source 非 null）：源固定为本端点——实体详情页「本实体：{name}」、大纲节点详情页（S12.2）
-// 「本节点：{name}」（source.type 支持 outline_node， 端点类型），方向「本端点 → 关联对象」
+// 「本节点：{name}」（source.type 支持 outline_node，端点类型），方向「本端点 → 关联对象」
 // - 列表模式（source 为 null）：暴露源实体选择（类型下拉默认 character + 实体下拉 listEntities limit 100），方向「源 → 目标」
 // 目标端类型支持四类实体 + 大纲节点（outline store 树，无需请求）；409 RELATION_EXISTS → 内联「这条关系已经存在」；
-// 成功 → toast「已建立关系」→ onCreated → onClose。样式 token 类（）。
+// 成功 → toast「已建立关系」→ onCreated → onClose。样式 token 类。
 // 布局：左右三段式「源 -关系-> 目标」——grid-cols-[1fr_auto_1fr]（sm 起），窄屏垂直堆叠；
 // 中列关系类型下拉 + 「→」箭头（mt-auto 沉底对齐两端实体下拉），三列各有小标题（源实体/关系类型/目标实体）。
 import { useEffect, useState } from "react";
@@ -30,11 +30,11 @@ const TYPE_LABEL: Record<EntityType, string> = {
   setting: "设定",
   location: "地点",
   hook: "伏笔",
-  // C1 类型补全（ event 时间轴事件；时间轴专属 UI 由 C2 实现）
+  // C1 类型补全（event 时间轴事件；时间轴专属 UI 由 C2 实现）
   event: "事件",
   // G2.3 类型补全（G2 时间标签点；源端下拉随 ENTITY_TYPES 出现——挂载关系不在此对话框创建）
   timepoint: "时间点",
-  // （批次九）参考资料 reference
+  // 参考资料 reference
   reference: "参考资料",
 };
 
@@ -68,7 +68,7 @@ export function CreateRelationDialog({
   const [sourceType, setSourceType] = useState<EntityType>("character");
   const [sourceEntities, setSourceEntities] = useState<EntitySummary[] | null>(null);
   const [sourceId, setSourceId] = useState("");
-  // 目标端（两模式共用；"outline_node" = 大纲节点， relation_records 端点类型）
+  // 目标端（两模式共用；"outline_node" = 大纲节点，relation_records 端点类型）
   const [otherType, setOtherType] = useState<EntityType | "outline_node">("character");
   const [otherEntities, setOtherEntities] = useState<EntitySummary[] | null>(null);
   const [otherId, setOtherId] = useState("");

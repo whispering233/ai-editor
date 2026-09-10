@@ -25,20 +25,20 @@ describe("pageCount（分页页数计算）", () => {
 });
 
 describe("SUMMARY_COLUMNS（摘要列配置——原型信息层级表）", () => {
-  it("四类型都有列 1（character→role、setting→tags（）、location→type、hook→status）", () => {
+  it("四类型都有列 1（character→role、setting→tags、location→type、hook→status）", () => {
     expect(SUMMARY_COLUMNS.character.key1).toBe("role");
     expect(SUMMARY_COLUMNS.setting.key1).toBe("tags");
     expect(SUMMARY_COLUMNS.location.key1).toBe("type");
     expect(SUMMARY_COLUMNS.hook.key1).toBe("status");
   });
 
-  it("character 角色/性格/能力独立成列（ 用户修订）；hook 有列 2（payoff_timing）；setting 有列 3 描述；location 无列 2", () => {
+  it("character 角色/性格/能力独立成列（用户修订）；hook 有列 2（payoff_timing）；setting 有列 3 描述；location 无列 2", () => {
     expect(SUMMARY_COLUMNS.character.key2).toBe("personality");
     expect(SUMMARY_COLUMNS.character.label2).toBe("性格");
     expect(SUMMARY_COLUMNS.character.key3).toBe("abilities");
     expect(SUMMARY_COLUMNS.character.label3).toBe("能力");
     expect(SUMMARY_COLUMNS.hook.key2).toBe("payoff_timing");
- // （2026-08 批次十）：设定 tab 改为树形视图（不走表格），「上级设定」特殊列
+ // （2026-08）：设定 tab 改为树形视图（不走表格），「上级设定」特殊列
  // （key2="parent"，M2）随表格移除；「描述」列配置保留
     expect(SUMMARY_COLUMNS.setting.key2).toBeUndefined();
     expect(SUMMARY_COLUMNS.setting.key3).toBe("description");
@@ -76,7 +76,7 @@ describe("summaryCellText（摘要单元格文案）", () => {
   });
 });
 
-describe("characterRowInfo（ 人物行数据提取：角色/性格/能力独立列 + 动机摘要）", () => {
+describe("characterRowInfo（人物行数据提取：角色/性格/能力独立列 + 动机摘要）", () => {
   it("提取角色/动机/性格/能力（各自独立，防御性截断）", () => {
     const info = characterRowInfo({
       role: "主角",
@@ -123,7 +123,7 @@ describe("CREATE_FIRST_FIELD（创建对话框首字段配置——原型「name
     expect(CREATE_FIRST_FIELD.hook.key).toBe("status");
   });
 
-  it("hook 用枚举下拉（status 受控枚举，）；其余自由文本", () => {
+  it("hook 用枚举下拉（status 受控枚举）；其余自由文本", () => {
     expect(CREATE_FIRST_FIELD.hook.input).toBe("select");
     expect(CREATE_FIRST_FIELD.hook.options).toEqual([
       "planted",

@@ -1,4 +1,4 @@
-// 002 迁移测试（ 时间轴：entities CHECK 扩为 5 种 + sort_order 列；v1 库经全量迁移链
+// 002 迁移测试（时间轴：entities CHECK 扩为 5 种 + sort_order 列；v1 库经全量迁移链
 // 002→003 升到 v3——002 负责换表加 event/列，003 无事件可迁，只做同款换表加 timepoint）
 // 覆盖：手工建 v1 结构库（旧 entities DDL）→ runMigrations(MIGRATIONS) →
 // 数据保留（行数/列值）、CHECK 现含 event（且含 timepoint）、sort_order 列存在且旧行为 NULL
@@ -70,7 +70,7 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-describe("002_event_timeline 迁移（v1 → v2 → v3 全链路， + G2）", () => {
+describe("002_event_timeline 迁移（v1 → v2 → v3 全链路，G2）", () => {
   it("v1 库升级：数据保留（行数/列值）、CHECK 含 event 与 timepoint、sort_order 列存在且旧行为 NULL", () => {
     db = createV1Db();
 

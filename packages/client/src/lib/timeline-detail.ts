@@ -1,6 +1,6 @@
-// 时间轴详情页辅助纯函数（C4，；G2.3 修订：occurs_at 挂载关系）
+// 时间轴详情页辅助纯函数（C4；G2.3 修订：occurs_at 挂载关系）
 // 「详情页（#/timeline/:id）」（occurs_in 关联管理 + G2 挂载时间点选择器）、
-// 「关系管理」（POST /relation event → outline_node，occurs_in，；
+// 「关系管理」（POST /relation event → outline_node，occurs_in；
 // occurs_at：timepoint → event 1:n 挂载，G2）
 // 风格：与 lib/hook-panel.ts 同构——buildXxxRelationBody 请求体构造 + 关系过滤。
 // 事件表单共享函数（EventDetailForm / eventFormFromDetail / buildEventDetailPatch）已迁入
@@ -26,7 +26,7 @@ export function occursInRelations(
   return relations.filter((r) => r.relationType === OCCURS_IN && r.sourceId === eventId);
 }
 
-/** occurs_in 关系请求体（event → outline_node， 关系管理节；与 buildPlantRelationBody 同构） */
+/** occurs_in 关系请求体（event → outline_node，关系管理节；与 buildPlantRelationBody 同构） */
 export function buildOccursRelationBody(eventId: string, nodeId: string): CreateRelationBody {
   return {
     source_type: "event",

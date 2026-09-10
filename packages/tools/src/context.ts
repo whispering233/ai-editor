@@ -6,14 +6,14 @@
 // 注入方职责（S7.4 executor 组装）：
 // - db：当前项目的 data.db 连接（better-sqlite3 同步连接，查询层 API 直接使用）
 // - outlineDir：项目根目录（outline.json 所在目录）
-// - projectId：当前打开项目的 id（ 会话归属项目；提案绑定 project_id）
+// - projectId：当前打开项目的 id（会话归属项目；提案绑定 project_id）
 
 import type { Db } from "@whispering233/ai-editor-db";
 
 export interface ToolContext {
  /** 当前项目的 data.db 连接（@whispering233/ai-editor-db openDatabase 返回值） */
   db: Db;
- /** 项目根目录（outline.json 所在目录，；关系/Delta 端点软删校验读树用） */
+ /** 项目根目录（outline.json 所在目录；关系/Delta 端点软删校验读树用） */
   outlineDir: string;
  /** 当前项目 id（proj- 前缀；提案归属绑定，S6.6 使用） */
   projectId: string;

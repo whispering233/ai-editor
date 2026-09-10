@@ -3,7 +3,7 @@
 // 本模块 buildNodeHookMarks 聚合为「节点 id → 标记列表」→ 节点行 title 尾紧凑徽标渲染
 import type { RelationSummaryItem } from "./api";
 
-/** 伏笔标记关系类型（：plants 埋下 / advances 推进 / resolves 回收；source = outline_node） */
+/** 伏笔标记关系类型（plants 埋下 / advances 推进 / resolves 回收；source = outline_node） */
 export const HOOK_MARK_TYPES = ["plants", "advances", "resolves"] as const;
 
 /** 单个标记类型（运行时值 = HOOK_MARK_TYPES 元素） */
@@ -18,7 +18,7 @@ export interface NodeHookMark {
   hookName: string;
 }
 
-/** 标记类型展示序（ 生命周期序：埋下 → 推进 → 回收；同节点多标记排列确定化） */
+/** 标记类型展示序（生命周期序：埋下 → 推进 → 回收；同节点多标记排列确定化） */
 export const HOOK_MARK_TYPE_ORDER: readonly HookMarkType[] = ["plants", "advances", "resolves"];
 
 /** 类型 → 排序位（类型序 + 稳定排序用；未知类型置尾） */
@@ -29,7 +29,7 @@ function typeRank(relationType: string): number {
 
 /**
  * 关系行 → 节点标记映射（S9.2 数据流第二步：API 响应 → 按 source_id 分组）。
- * - 过滤（ 语义防御——查询端已按 source_type/relation_type 过滤，纯函数内再做形状校验防脏数据）：
+ * - 过滤（语义防御——查询端已按 source_type/relation_type 过滤，纯函数内再做形状校验防脏数据）：
  * relation_type ∈ plants/advances/resolves 且 source_type = outline_node 且 target_type = hook；
  * 其余关系（depends_on/involves/plot_edge、hook 作 source 的 plants 等）不构成节点标记
  * - 名称：targetName（联表）优先，缺省 targetId（伏笔在 target 侧—— 关系约定）

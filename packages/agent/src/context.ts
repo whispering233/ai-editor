@@ -31,11 +31,11 @@ import { buildPayload, trimSession, type SessionMessage } from "./session.js";
  * 分层合计约 11.5K，远低于 DeepSeek 64K 窗口——各层独立校验、不设总预算校验（YAGNI：
  * 分层裁剪已保证各层在其预算内，窗口余量充足） */
 export interface ContextBudgets {
- /** 基础 system 层：内核 + 项目提示词 + 临时指令（ ~500；超限仅记录不裁剪——用户内容不可裁） */
+ /** 基础 system 层：内核 + 项目提示词 + 临时指令（~500；超限仅记录不裁剪——用户内容不可裁） */
   system: number;
- /** 聚焦上下文层（ ~3000；超限截断并显式告知） */
+ /** 聚焦上下文层（~3000；超限截断并显式告知） */
   focus: number;
- /** 对话历史层（ ~6000；超限走 session 成对裁剪——同裁同留不拆对） */
+ /** 对话历史层（~6000；超限走 session 成对裁剪——同裁同留不拆对） */
   history: number;
 }
 
@@ -54,18 +54,18 @@ export type ToolListEntry = Pick<ToolDefinition, "name" | "description">;
 export interface BuildContextInput {
  /**
  * 会话历史（session 状态；本层负责超预算成对裁剪 + 末条约束收尾）。
- * **前置条件**：必须含至少一条 user/tool 消息（ 末条约束）；空历史属调用方错误——
+ * **前置条件**：必须含至少一条 user/tool 消息（末条约束）；空历史属调用方错误——
  * S7.3 应在 history 为空时走引导分支（不发请求），勿传入空数组（buildPayload 空数组
  * 语义同源：空历史 = 无有效上下文，两者互相印证）
  */
   history: SessionMessage[];
  /** 内核提示词（默认 KERNEL_PROMPT；测试可覆盖） */
   kernelPrompt?: string;
- /** 项目提示词（ 项目层； 起数据源 = 项目目录 文件内容，调用方读取后传入；可空） */
+ /** 项目提示词（项目层；起数据源 = 项目目录 文件内容，调用方读取后传入；可空） */
   projectPrompt?: string;
- /** 临时指令（ 临时层，即时输入不持久化；可空） */
+ /** 临时指令（临时层，即时输入不持久化；可空） */
   instruction?: string;
- /** 聚焦上下文文本（ 聚焦层，调用方查询实体/大纲节点后拼好传入；空/缺省 = 无聚焦） */
+ /** 聚焦上下文文本（聚焦层，调用方查询实体/大纲节点后拼好传入；空/缺省 = 无聚焦） */
   focus?: string;
  /** 工具清单（默认内部 listTools()；测试可注入 mock） */
   tools?: ToolListEntry[];
@@ -122,7 +122,7 @@ export interface AssembledContext {
 
 // ============ 内部组装辅助（纯函数） ============
 
-/** 基础 system 文本：内核 + 项目提示词 + 临时指令（ 三层注入，空层跳过） */
+/** 基础 system 文本：内核 + 项目提示词 + 临时指令（三层注入，空层跳过） */
 function buildSystemBase(kernel: string, project?: string, instruction?: string): string {
   const parts = [kernel];
   if (project !== undefined && project.trim() !== "") {

@@ -1,4 +1,4 @@
-// 时间轴事件详情页（C4，；G2.3 修订：time_label 移除 + 挂载时间点选择器）
+// 时间轴事件详情页（C4；G2.3 修订：time_label 移除 + 挂载时间点选择器）
 // 路由：#/timeline/:id（2 段）；数据：GET /api/v1/entity/event/:id（EntityDetailRes：完整 data + relations）
 // 「详情页（#/timeline/:id）」——字段编辑（name/description/tags，G2 无
 // time_label）、**挂载时间点选择器（G2）**、occurs_in 关联管理（添加：大纲节点选择器 → POST /relation
@@ -6,9 +6,9 @@
 // 三态（加载骨架 / 404 / 保存失败内联）
 // 参照：EntityDetail.tsx（保存交互/404 引导/软删直接执行）、HookPanel/Timeline OutlineNodeSelect（节点选择）
 // 关键决策：
-// - 404 错误码为 ENTITY_NOT_FOUND（事件走泛型实体路由，server/src/routes/entity.ts； 的
+// - 404 错误码为 ENTITY_NOT_FOUND（事件走泛型实体路由，server/src/routes/entity.ts；的
 // EVENT_NOT_FOUND 为文档示意名，ErrorCode 枚举无此码——客户端以实际码判定）
-// - 已关联节点标题取关系 targetName（服务端联表填充大纲节点标题，），点击跳
+// - 已关联节点标题取关系 targetName（服务端联表填充大纲节点标题），点击跳
 // #/outline/:nodeId 定位；节点选择器允许重复选择——服务端 409 RELATION_EXISTS 判重（选实现最简，
 // 提示沿用 「这条关系已经存在」）
 // - 关联节点选择器（UX3）：全屏模态 Dialog → Base UI Popover 轻量非模态弹层（components/ui/popover.tsx）——
@@ -17,7 +17,7 @@
 // 的 sourceId；变更即保存——POST /entity/event/:id/move_to { timepoint_id, order }（以 move_to 语义
 // 统一，事务原子），order = 事件在当前全局序中的位置（列表 index，保位不跳位）；空 = 移出未挂载。
 // 时间点/事件列表预拉（选择器选项 + 当前位置）；拉取失败 → 选择器重试（不阻塞详情主体）
-// - 元信息行不展示「变更记录 N 条」入口：事件不产生 Delta， 信息层级仅
+// - 元信息行不展示「变更记录 N 条」入口：事件不产生 Delta，信息层级仅
 // createdAt/updatedAt
 // - 未保存离开守卫：EntityDetail 无此模式，不做（避免过度设计）
 import { useEffect, useState } from "react";
@@ -323,7 +323,7 @@ export default function TimelineDetail({ id }: { id: string }) {
 
   return (
     <section>
-      {/* header：标题 + 操作（面包屑已随批次十八 B1 移除——返回走左栏 NavRail） */}
+      {/* header：标题 + 操作（面包屑已随B1 移除——返回走左栏 NavRail） */}
       <div className="mb-1 flex items-center gap-3">
         <PageTitle className="min-w-0 truncate">{detail?.name ?? "…"}</PageTitle>
         <div className="ml-auto flex items-center gap-2">
@@ -335,7 +335,7 @@ export default function TimelineDetail({ id }: { id: string }) {
           </Button>
         </div>
       </div>
-      {/* 元信息行（事件不产生 Delta——，仅展示时间， 信息层级） */}
+      {/* 元信息行（事件不产生 Delta——，仅展示时间，信息层级） */}
       {detail && (
         <p className="mb-4 text-xs text-muted-foreground">
           创建于 {formatTimestamp(detail.createdAt)} · 更新于 {formatTimestamp(detail.updatedAt)}
@@ -441,7 +441,7 @@ export default function TimelineDetail({ id }: { id: string }) {
             </div>
           </div>
 
-          {/* 右栏：occurs_in 关联节点管理（ 详情页核心交互；UX3：选择器为 Popover 轻量弹层） */}
+          {/* 右栏：occurs_in 关联节点管理（详情页核心交互；UX3：选择器为 Popover 轻量弹层） */}
           <div className="rounded-md border border-border p-4">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-foreground">关联节点（occurs_in）</h2>

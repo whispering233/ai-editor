@@ -1,4 +1,4 @@
-// 空态容器（ 空态规范 + §4.4 L 批次组件）：虚线卡 + 说明文案 + 可选图标/主操作
+// 空态容器（空态规范 + §4.4 组件）：虚线卡 + 说明文案 + 可选图标/主操作
 // 用法：
 // <EmptyState>还没有书，先创建一本</EmptyState>
 // <EmptyState icon={<BookOutlined className="text-2xl text-muted-foreground/40" />}
@@ -17,7 +17,7 @@ const PADDING_CLASS = {
 export interface EmptyStateProps {
   /** 说明文案（一行文字） */
   children: ReactNode;
-  /** 可选图标（约定 `text-2xl text-muted-foreground/40`——图标尺寸随字号档，） */
+  /** 可选图标（约定 `text-2xl text-muted-foreground/40`——图标尺寸随字号档） */
   icon?: ReactNode;
   /** 主操作按钮区（渲染于文案下方，自带 mt-4） */
   action?: ReactNode;

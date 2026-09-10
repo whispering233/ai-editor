@@ -1,10 +1,10 @@
 // 项目上下文中间件（T6.1 + S1.2）
 //
-// 职责（ 第 121-122 行 middleware/project.ts「项目路径注入」）：
+// 职责（第 121-122 行 middleware/project.ts「项目路径注入」）：
 // 1. detectProject：检测 project.json——存在则打开（部署场景「启动即用」）；不存在返回
 // null 待命（不初始化、不建文件，由前端 Dashboard 引导 create/open；S1.4 开/建页依赖）
 // initProject：显式初始化三文件（S1.2 create 路由专用，含建目录 + user_version）
-// 2. currentProject 内存单例（S1.2，）：create/open 切换、close 清空，
+// 2. currentProject 内存单例（S1.2）：create/open 切换、close 清空，
 // 模块级可变状态由路由（routes/project.ts）读写，projectMiddleware 从状态注入 Hono 上下文
 // 3. 来源校验：全部请求校验 Origin（缺失时退化为 Host）的 host
 // ∈ {127.0.0.1, localhost, ::1}，不匹配拒绝 403；**不校验端口**
@@ -28,7 +28,7 @@ export const DATA_DB_FILE_NAME = "data.db";
 /** 来源白名单 host（仅允许本机访问；IPv6 ::1 去括号后比对） */
 const ALLOWED_HOSTS = ["127.0.0.1", "localhost", "::1"];
 
-/** 项目上下文：内存中单一 currentProject（，所有 API 共享） */
+/** 项目上下文：内存中单一 currentProject（所有 API 共享） */
 export interface ProjectContext {
   root: string;
   config: ProjectFileConfig;
@@ -47,7 +47,7 @@ export function getProject(c: Context<{ Variables: ProjectVariables }>): Project
 
 // ============ currentProject 内存单例（S1.2） ============
 //
-// 语义（）：单进程内存中只有一个 currentProject，所有 API 调用共享；
+// 语义：单进程内存中只有一个 currentProject，所有 API 调用共享；
 // create/open 切换它、close 清空它。多项目并发打开不在 MVP 范围（backlog）。
 // 模块级可变状态 + 显式读写函数：路由层可读可写，中间件只读注入。
 
@@ -86,7 +86,7 @@ export function requireCurrentProject(): ProjectContext {
 }
 
 /**
- * 检测并打开项目（ 启动流程 ④ 修订——设计缺陷修复）：
+ * 检测并打开项目（启动流程 ④ 修订——设计缺陷修复）：
  * project.json 存在 → openDatabase 打开，返回项目上下文（打开语义，部署场景「启动即用」）；
  * project.json 不存在 → **返回 null（待命）**——不初始化、不建任何文件（含目录），
  * 由前端 Dashboard 引导走 POST /project/create 或 /project/open（S1.4 开/建页；
@@ -127,7 +127,7 @@ export function initProject(
   mkdirSync(root, { recursive: true });
   const now = nowIso();
   const config: ProjectFileConfig = {
-    id: generateProjectId(), // proj- 前缀（ id 约定）
+    id: generateProjectId(), // proj- 前缀（id 约定）
     name: basename(root),
     language: "zh",
     schema_version: SCHEMA_VERSION,
@@ -145,7 +145,7 @@ export function initProject(
   return { root, config, db };
 }
 
-/** 关闭项目：释放数据库连接（；WAL + synchronous=FULL 已即时落盘） */
+/** 关闭项目：释放数据库连接（WAL + synchronous=FULL 已即时落盘） */
 export function closeProject(project: ProjectContext): void {
   closeDatabase(project.db);
 }

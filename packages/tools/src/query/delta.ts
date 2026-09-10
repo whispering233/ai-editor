@@ -7,7 +7,7 @@
 // 工具层参数映射透传；at_node_id 不存在时 db 抛错（视为调用方 bug，路由层前置校验
 // 的约定），工具层不捕获——executor 统一转结构化错误喂回 LLM 自纠
 // - get_delta_history：db listDeltasByTarget（S6.3 下沉）已实现按目标端点查询 +
-// 可见性三态过滤（delta 自身/触发节点/目标端点软删，，与 listDeltasByNode
+// 可见性三态过滤（delta 自身/触发节点/目标端点软删，与 listDeltasByNode
 // 共享 filterVisibleDeltas 实现）——工具层一行透传
 
 import { computeState as dbComputeState, listDeltasByTarget } from "@whispering233/ai-editor-db";
@@ -18,7 +18,7 @@ import type { ComputeStateArgs, GetDeltaHistoryArgs } from "@whispering233/ai-ed
 // ============ compute_state ============
 
 /**
- * 实体到达指定节点时的累积状态（ compute_state(target_type, target_id, at_node_id)）。
+ * 实体到达指定节点时的累积状态（compute_state(target_type, target_id, at_node_id)）。
  * 透传 db computeState：只沿大纲树父链（根 → at_node_id）累积已确认 Delta，
  * 节点间按树路径序、节点内按 order 双层排序；plot_edge 不参与；op=update from 校验失败
  * **跳过该 change 并继续累积**，结果在 conflicts 中标注 { field, expected, actual }
@@ -36,7 +36,7 @@ export function runComputeState(ctx: ToolContext, args: ComputeStateArgs): Compu
 // ============ get_delta_history ============
 
 /**
- * 目标实体的全部属性变更记录（ get_delta_history(target_type, target_id)）。
+ * 目标实体的全部属性变更记录（get_delta_history(target_type, target_id)）。
  * 透传 db listDeltasByTarget：按 target_id 查询 + 全局 order ASC（时间序）排序 +
  * 可见性三态过滤（delta 自身 / 触发节点 / 目标端点任一软删即不可见）+
  * targetName 联表填充。target_type 仅由 db 侧用于判定目标端点类型（实体/大纲节点）。
