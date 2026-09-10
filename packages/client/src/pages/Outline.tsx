@@ -18,11 +18,11 @@
 // project store（跨页共用：顶栏当前位置标题映射、节点 id → title 映射），本页只持有 UI 态
 import { useEffect, useState } from "react";
 import type { DragEvent, KeyboardEvent, MouseEvent, ReactNode } from "react";
+import { Button } from "antd";
 import type { OutlineNode } from "@whispering233/ai-editor-shared";
 import { Trash2 } from "lucide-react";
 import { CHILD_TYPE, TYPE_LABEL } from "../components/outline/dialogs";
 import { NodeHookMarkBadge } from "../components/outline/node-hook-badge";
-import { Button } from "@/components/ui/button";
 import { PageTitle } from "@/components/ui/page-title";
 import { RowContextMenu } from "@/components/entity/row-context-menu";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -869,14 +869,12 @@ export default function Outline() {
         <PageTitle>大纲</PageTitle>
         <div className="flex gap-2">
           <Button
-            variant="outline"
-            type="button"
             onClick={toggleAllCollapse}
             disabled={!outline || outline.children.length === 0}
           >
             {collapsed.size > 0 ? "全部展开" : "全部折叠"}
           </Button>
-          <Button type="button" onClick={() => startCreate(ROOT_NODE_ID, "volume")}>
+          <Button type="primary" onClick={() => startCreate(ROOT_NODE_ID, "volume")}>
             + 新建
           </Button>
         </div>
@@ -912,14 +910,7 @@ export default function Outline() {
         /* 加载失败（loadOutline 静默吞错后的兜底呈现） */
         <div className="rounded-md border border-border p-4 text-sm text-muted-foreground">
           大纲加载失败
-          <Button
-            variant="outline"
-            className="ml-3"
-            type="button"
-            onClick={() => setLoadAttempted(false)}
-          >
-            重试
-          </Button>
+          <Button className="ml-3" onClick={() => setLoadAttempted(false)}>重试</Button>
         </div>
       ) : outline.children.length === 0 ? (
         /* 空态：就地新建（输入行内嵌引导卡，替代原「新建第一卷」弹窗按钮） */
@@ -943,7 +934,7 @@ export default function Outline() {
         ) : (
           <EmptyState
             action={
-              <Button type="button" onClick={() => startCreate(ROOT_NODE_ID, "volume")}>
+              <Button type="primary" onClick={() => startCreate(ROOT_NODE_ID, "volume")}>
                 新建第一卷
               </Button>
             }

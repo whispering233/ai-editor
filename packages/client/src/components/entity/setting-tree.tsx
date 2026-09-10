@@ -19,9 +19,9 @@
 // 注入会话上下文 + 建立关联）替代行级问 AI 入口（本视图原本无 AskAiButton，右键菜单补齐）。
 import { useEffect, useRef, useState } from "react";
 import type { DragEvent, KeyboardEvent, MouseEvent, ReactNode } from "react";
+import { Button } from "antd";
 import { ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { RowContextMenu } from "./row-context-menu";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -890,9 +890,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     return (
       <div className="mt-3 flex items-center justify-center gap-3 rounded-md border border-border px-3 py-6 text-sm text-muted-foreground">
         设定加载失败
-        <Button variant="outline" type="button" size="sm" onClick={() => setTick((t) => t + 1)}>
-          重试
-        </Button>
+        <Button onClick={() => setTick((t) => t + 1)}>重试</Button>
       </div>
     );
   }
@@ -917,12 +915,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     return (
       <div className="mt-3 rounded-md border border-border p-4 text-sm text-muted-foreground">
         设定加载失败
-        <Button
-          variant="outline"
-          className="ml-3"
-          type="button"
-          onClick={() => setTick((t) => t + 1)}
-        >
+        <Button className="ml-3" onClick={() => setTick((t) => t + 1)}>
           重试
         </Button>
       </div>
@@ -939,12 +932,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
       {failed && (
         <div className={cn(errorBannerClass, "mb-3 flex items-center gap-2")}>
           设定刷新失败，当前显示的是上次数据
-          <Button
-            variant="outline"
-            className="ml-auto h-7 px-2 text-xs"
-            type="button"
-            onClick={() => setTick((t) => t + 1)}
-          >
+          <Button size="small" className="ml-auto" onClick={() => setTick((t) => t + 1)}>
             重试
           </Button>
         </div>
@@ -984,25 +972,13 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
           </select>
         </span>
         <span className="ml-auto flex items-center gap-2">
-          <Button
-            variant="outline"
-            type="button"
-            size="sm"
-            disabled={!canToggle}
-            onClick={expandAll}
-          >
+          <Button disabled={!canToggle} onClick={expandAll}>
             全部展开
           </Button>
-          <Button
-            variant="outline"
-            type="button"
-            size="sm"
-            disabled={!canToggle}
-            onClick={collapseAll}
-          >
+          <Button disabled={!canToggle} onClick={collapseAll}>
             全部折叠
           </Button>
-          <Button type="button" size="sm" onClick={() => startCreate(null)}>
+          <Button type="primary" onClick={() => startCreate(null)}>
             + 新建
           </Button>
         </span>
@@ -1029,8 +1005,6 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
           action={
             filterActive ? (
               <Button
-                variant="outline"
-                type="button"
                 onClick={() => {
                   setQInput("");
                   setQ("");
@@ -1040,7 +1014,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
                 清空筛选
               </Button>
             ) : (
-              <Button type="button" onClick={() => startCreate(null)}>
+              <Button type="primary" onClick={() => startCreate(null)}>
                 + 新建设定
               </Button>
             )

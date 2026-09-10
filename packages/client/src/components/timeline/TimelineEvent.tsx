@@ -16,10 +16,10 @@
 // 保留上次 clamped 测量值）；展开后 line-clamp-none 显示「收起」；空描述不渲染。
 import { useLayoutEffect, useRef, useState } from "react";
 import type { DragEvent, MouseEvent } from "react";
+import { Button } from "antd";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { Trash2 } from "lucide-react";
 import { RowContextMenu } from "../entity/row-context-menu";
-import { Button } from "@/components/ui/button";
 import { eventDescription, eventTagsOf } from "../../lib/timeline";
 import { useSaveShortcut } from "../../lib/save-shortcut";
 import { cn } from "../../lib/utils";
@@ -216,16 +216,14 @@ export function TimelineEvent({
             )}
             {/* 操作按钮全部展开（H3：禁止收进 ⋯ 二级展开；图标 + title/aria-label） */}
             <Button
-              variant="ghost"
-              size="icon-sm"
+              variant="text"
+              size="small"
               draggable={false}
-              className="text-muted-foreground hover:text-destructive"
+              icon={<Trash2 className="size-3.5" />}
               title="移入回收站"
               aria-label={`${ev.name} 移入回收站`}
               onClick={() => onDelete(ev)}
-            >
-              <Trash2 className="size-3.5" />
-            </Button>
+            />
           </span>
         </div>
         {/* 描述区（F6）：text-sm text-muted-foreground 次要层级；两行截断 + 展开/收起；

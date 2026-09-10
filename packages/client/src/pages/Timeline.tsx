@@ -24,9 +24,9 @@
 // - 数据刷新：useDataRefresh 订阅 dataVersion（AI 提案确认写库 / InfoBar 刷新按钮）
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import { Button } from "antd";
 import { ListOrdered } from "lucide-react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
-import { Button } from "@/components/ui/button";
 import { PageTitle } from "@/components/ui/page-title";
 import { EmptyState } from "@/components/ui/empty-state";
 import { inputClass, errorBannerClass } from "@/lib/styles";
@@ -503,22 +503,15 @@ export default function Timeline() {
           className={cn("ml-auto", !config && "cursor-not-allowed")}
           title={config ? undefined : "请先打开项目"}
         >
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={!config}
-            onClick={handleAiSort}
-            aria-label="AI 排序"
-          >
+          <Button disabled={!config} onClick={handleAiSort} aria-label="AI 排序">
             <ListOrdered className="size-3.5" />
             AI 排序
           </Button>
         </span>
-        <Button type="button" variant="outline" onClick={openCreateEvent}>
+        <Button onClick={openCreateEvent}>
           + 新建事件
         </Button>
-        <Button type="button" onClick={() => setTpCreateOpen(true)}>
+        <Button type="primary" onClick={() => setTpCreateOpen(true)}>
           + 新建时间点
         </Button>
       </div>
@@ -566,12 +559,7 @@ export default function Timeline() {
             {error === CLIENT_NETWORK_ERROR
               ? "无法连接服务，请确认 ai-editor 服务已启动。"
               : "时间轴加载失败，请重试。"}
-            <Button
-              variant="outline"
-              className="ml-auto h-7 px-2 text-xs"
-              type="button"
-              onClick={() => setReloadTick((t) => t + 1)}
-            >
+            <Button size="small" className="ml-auto" onClick={() => setReloadTick((t) => t + 1)}>
               重试
             </Button>
           </div>
@@ -602,7 +590,7 @@ export default function Timeline() {
           items.length === 0 && (
             <EmptyState
               action={
-                <Button type="button" onClick={() => setTpCreateOpen(true)}>
+                <Button type="primary" onClick={() => setTpCreateOpen(true)}>
                   + 新建时间点
                 </Button>
               }
@@ -677,15 +665,8 @@ export default function Timeline() {
             {tpError && <p className="text-sm text-destructive">{tpError}</p>}
           </form>
           <DialogFooter>
-            <Button
-              variant="outline"
-              type="button"
-              onClick={() => setTpCreateOpen(false)}
-              disabled={tpSubmitting}
-            >
-              取消
-            </Button>
-            <Button type="submit" form="create-timepoint-form" disabled={tpSubmitting}>
+            <Button onClick={() => setTpCreateOpen(false)} disabled={tpSubmitting}>取消</Button>
+            <Button type="primary" htmlType="submit" form="create-timepoint-form" disabled={tpSubmitting}>
               创建
             </Button>
           </DialogFooter>
@@ -748,15 +729,8 @@ export default function Timeline() {
             {createError && <p className="text-sm text-destructive">{createError}</p>}
           </form>
           <DialogFooter>
-            <Button
-              variant="outline"
-              type="button"
-              onClick={() => setCreateOpen(false)}
-              disabled={createSubmitting}
-            >
-              取消
-            </Button>
-            <Button type="submit" form="create-event-form" disabled={createSubmitting}>
+            <Button onClick={() => setCreateOpen(false)} disabled={createSubmitting}>取消</Button>
+            <Button type="primary" htmlType="submit" form="create-event-form" disabled={createSubmitting}>
               创建
             </Button>
           </DialogFooter>

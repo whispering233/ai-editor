@@ -8,8 +8,8 @@
 // 实现约束：错误边界必须是 class 组件（React 对函数组件无 componentDidCatch）；
 // 样式用 token 类（，oracle 红线：禁止硬编码色类）
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { Button } from "antd";
 import { CircleAlert, RotateCcw } from "lucide-react";
-import { Button } from "../ui/button";
 
 interface Props {
   children: ReactNode;
@@ -47,13 +47,11 @@ export class ErrorBoundary extends Component<Props, State> {
             {error.message || String(error)}
           </p>
           <div className="mt-2 flex gap-2">
-            <Button type="button" onClick={() => window.location.reload()}>
+            <Button type="primary" onClick={() => window.location.reload()}>
               <RotateCcw className="size-4" />
               重新加载
             </Button>
             <Button
-              variant="outline"
-              type="button"
               onClick={() => {
  // 回到首页：重置 hash 后 reload 完整恢复（仅重置 hash 可能仍落在异常路由上）
                 window.location.hash = "#/";

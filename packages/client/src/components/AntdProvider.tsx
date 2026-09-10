@@ -33,6 +33,8 @@ const LIGHT_SEED = {
   colorBorder: "#c8c4be",
   colorBorderSecondary: "#e5e3df",
   colorSplit: "#ede9e4",
+  // surface-muted（选中面/次级面）——Menu/Select/Tag 的选中底与 Tailwind `bg-accent` 都取它
+  colorFillTertiary: "#f0eeec",
   colorLink: "#0075de",
   colorSuccess: "#1aae39",
   colorWarning: "#dd5b00",
@@ -53,6 +55,7 @@ const DARK_SEED = {
   colorBorder: "#4a4a4a",
   colorBorderSecondary: "#2f2f2f",
   colorSplit: "#373737",
+  colorFillTertiary: "rgba(255,255,255,0.055)",
   colorLink: "#529cca",
   colorSuccess: "#1aae39",
   colorWarning: "#dd5b00",

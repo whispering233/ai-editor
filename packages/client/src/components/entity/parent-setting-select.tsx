@@ -5,9 +5,9 @@
 // 不做虚拟滚动等过度设计）。
 // 样式 token 类（）；文字按钮带边框（H4）。
 import { useEffect, useState } from "react";
+import { Button } from "antd";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { listEntities } from "../../lib/api";
 import { cn } from "../../lib/utils";
@@ -79,14 +79,13 @@ export function ParentSettingSelect({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         render={
-          <Button
-            variant="outline"
-            type="button"
-            className={cn("h-8 px-2 text-xs font-normal", !value && "text-muted-foreground")}
-            title={value ? `上级设定：${displayName}` : placeholder}
-          >
-            {value ? `上级：${displayName}` : placeholder}
-            <span aria-hidden="true" className="ml-1 text-muted-foreground">
+          <Button title={value ? `上级设定：${displayName}` : placeholder}>
+            {value ? (
+              `上级：${displayName}`
+            ) : (
+              <span className="text-muted-foreground">{placeholder}</span>
+            )}
+            <span aria-hidden="true" className="text-muted-foreground">
               &#9662;
             </span>
           </Button>
@@ -106,13 +105,7 @@ export function ParentSettingSelect({
           ) : failed ? (
             <div className="flex items-center justify-between gap-2 px-2 py-3">
               <span className="text-xs text-destructive">列表加载失败</span>
-              <Button
-                variant="outline"
-                type="button"
-                size="sm"
-                className="h-7 px-2 text-xs"
-                onClick={() => void loadCandidates()}
-              >
+              <Button size="small" onClick={() => void loadCandidates()}>
                 重试
               </Button>
             </div>

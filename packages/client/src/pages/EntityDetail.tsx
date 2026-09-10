@@ -17,7 +17,7 @@ import { CreateRelationDialog } from "../components/entity/create-relation-dialo
 import { ParentSettingSelect } from "../components/entity/parent-setting-select";
 import { ComputePreview } from "../components/delta/compute-preview";
 import { entityListHost } from "../lib/entity-paths";
-import { Button } from "@/components/ui/button";
+import { Button } from "antd";
 import { PageTitle } from "@/components/ui/page-title";
 import { Input } from "@/components/ui/input";
 import {
@@ -151,22 +151,10 @@ function TagsEditor({
             list={suggestions && suggestions.length > 0 ? "entity-tags-suggestions" : undefined}
             className="h-8 flex-1 text-sm"
           />
-          <Button
-            variant="outline"
-            type="button"
-            className="h-8 px-2 text-xs"
-            onClick={() => onChange(values.filter((_, j) => j !== i))}
-          >
-            删除
-          </Button>
+          <Button onClick={() => onChange(values.filter((_, j) => j !== i))}>删除</Button>
         </div>
       ))}
-      <Button
-        variant="outline"
-        type="button"
-        className="h-8 self-start px-2 text-xs"
-        onClick={() => onChange([...values, ""])}
-      >
+      <Button className="self-start" onClick={() => onChange([...values, ""])}>
         + 添加
       </Button>
       {/* 快捷选择既有标签（K2：点击追加，去重——已选的不再展示） */}
@@ -240,22 +228,10 @@ function CustomFieldsEditor({
             placeholder="值"
             className="h-8 flex-1 text-sm"
           />
-          <Button
-            variant="outline"
-            type="button"
-            className="h-8 px-2 text-xs"
-            onClick={() => commit(rows.filter((_, j) => j !== i))}
-          >
-            删除
-          </Button>
+          <Button onClick={() => commit(rows.filter((_, j) => j !== i))}>删除</Button>
         </div>
       ))}
-      <Button
-        variant="outline"
-        type="button"
-        className="h-8 self-start px-2 text-xs"
-        onClick={() => commit([...rows, { key: "", value: "" }])}
-      >
+      <Button className="self-start" onClick={() => commit([...rows, { key: "", value: "" }])}>
         + 添加字段
       </Button>
     </div>
@@ -490,13 +466,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
               >
                 去回收站
               </a>
-              <Button
-                variant="outline"
-                type="button"
-                onClick={() => navigate(entityListHost(entityType))}
-              >
-                返回列表
-              </Button>
+              <Button onClick={() => navigate(entityListHost(entityType))}>返回列表</Button>
             </div>
           }
         >
@@ -512,21 +482,10 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
       <div className="mb-1 flex items-center gap-3">
         <PageTitle className="min-w-0 truncate">{detail?.name ?? "…"}</PageTitle>
         <div className="ml-auto flex items-center gap-2">
-          <Button
-            variant="outline"
-            type="button"
-            onClick={() => void handleSave()}
-            disabled={!detail || saving}
-          >
+          <Button onClick={() => void handleSave()} disabled={!detail || saving}>
             {saving ? "保存中…" : "保存"}
           </Button>
-          <Button
-            variant="outline"
-            type="button"
-            disabled={!detail}
-            className="text-destructive hover:bg-destructive/10"
-            onClick={() => void handleDelete()}
-          >
+          <Button danger disabled={!detail} onClick={() => void handleDelete()}>
             移入回收站
           </Button>
         </div>
@@ -578,14 +537,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
           {loadError === CLIENT_NETWORK_ERROR
             ? "无法连接服务，请确认 ai-editor 服务已启动。"
             : "详情加载失败，请重试。"}
-          <Button
-            variant="outline"
-            className="ml-3"
-            type="button"
-            onClick={() => void loadDetail()}
-          >
-            重试
-          </Button>
+          <Button className="ml-3" onClick={() => void loadDetail()}>重试</Button>
         </div>
       )}
 
@@ -625,14 +577,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
           <div className="rounded-md border border-border p-4">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-semibold text-foreground">关联</h2>
-              <Button
-                variant="outline"
-                type="button"
-                className="h-8 px-2 text-xs"
-                onClick={() => setRelationDialogOpen(true)}
-              >
-                + 新增关联
-              </Button>
+              <Button onClick={() => setRelationDialogOpen(true)}>+ 新增关联</Button>
             </div>
 
             {/* 层级区块（仅 setting）：父/子分区展示 + 设置/修改/清除上级 */}
@@ -654,13 +599,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
                           placeholder="设置上级"
                         />
                         {h.parent && (
-                          <Button
-                            variant="outline"
-                            type="button"
-                            className="h-8 px-2 text-xs text-destructive hover:bg-destructive/10"
-                            disabled={hierarchySaving}
-                            onClick={() => void handleClearParent()}
-                          >
+                          <Button danger disabled={hierarchySaving} onClick={() => void handleClearParent()}>
                             清除
                           </Button>
                         )}
@@ -740,12 +679,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
                           {relationTypeLabel(r.relationType)} {isSource ? "→" : "←"}
                         </span>
                         <span className="min-w-0 flex-1 truncate text-foreground">{right}</span>
-                        <Button
-                          variant="outline"
-                          type="button"
-                          className="h-7 shrink-0 px-2 text-xs text-destructive hover:bg-destructive/10"
-                          onClick={() => setDeleteRelationTarget(r)}
-                        >
+                        <Button danger size="small" className="shrink-0" onClick={() => setDeleteRelationTarget(r)}>
                           删除
                         </Button>
                       </li>

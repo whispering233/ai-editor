@@ -4,9 +4,9 @@
 // 会话切换由右栏会话下拉承担——本组件不再持有任何书架数据。
 // 无项目打开：业务导航项禁用（引导回书架主页，行为平移自旧 TabBar noProject guard）。
 // 高亮：路由首段 → Menu key（timepoints 宿主时间轴）；书架按钮在 #/ 路由高亮。
-// 主题/色纪律：底色与分隔线取 antd token（useToken）——随 ConfigProvider 双算法切换，
-// 过渡期不与旧 Tailwind token 类混用（颜色一律 antd token；布局 Tailwind utility 不含色）。
-import { theme, Button, Menu, Typography } from "antd";
+// 主题/色纪律：颜色一律取语义 token 类（bg-background / border-border / bg-accent，均为 index.css 对 antd token 的转发）；
+// 禁止内联 style 与硬编码色值（旧版 selected 态用 inline `token.colorPrimaryBg` 已改为 `bg-accent` = `{colors.surface-muted}`）。
+import { Button, Menu, Typography } from "antd";
 import {
   ApartmentOutlined,
   BookOutlined,
@@ -28,6 +28,7 @@ import type { Route } from "../../hooks/use-route";
 import { navigate, useHashRoute } from "../../hooks/use-route";
 import { useTheme } from "../../hooks/use-theme";
 import { SIDEBAR_MIN_WIDTH } from "../../hooks/use-panels";
+import { cn } from "@/lib/utils";
 import { useProjectStore } from "../../stores/project";
 
 /** Menu key = 导航目标 path（onClick 直接 navigate(key)） */
@@ -60,7 +61,6 @@ export function NavRail({
  /** 收起左栏回调（F7 桌面态由 AppShell 传入；小屏无收起能力） */
   onToggleCollapse?: () => void;
 }) {
-  const { token } = theme.useToken();
   const { theme: mode, toggleTheme } = useTheme();
   const config = useProjectStore((s) => s.config);
   const loadError = useProjectStore((s) => s.loadError);
@@ -79,26 +79,21 @@ export function NavRail({
 
   return (
     <aside
-      className="flex min-w-0 flex-col"
-      style={{
-        background: token.colorBgContainer,
-        borderRight: `1px solid ${token.colorSplit}`,
-        ...(width !== undefined
+      className="flex min-w-0 flex-col border-r border-border bg-background"
+      style={
+        width !== undefined
           ? { flex: `0 1 ${width}px`, minWidth: SIDEBAR_MIN_WIDTH }
-          : { flex: "1 1 10%" }),
-      }}
+          : { flex: "1 1 10%" }
+      }
     >
       {/* 顶行：产品标识（点击回书架主页）+ 收起按钮（桌面态） */}
-      <div
-        className="flex h-12 shrink-0 items-center gap-1 px-2"
-        style={{ borderBottom: `1px solid ${token.colorSplit}` }}
-      >
+      <div className="flex h-12 shrink-0 items-center gap-1 border-b border-border px-2">
         <a
           href="#/"
           title="回到书架主页"
           className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1.5"
         >
-          <span style={{ color: token.colorPrimary }}>◈</span>
+          <span className="text-primary">◈</span>
           <Typography.Text italic className="truncate text-base">
             我的小说
           </Typography.Text>
@@ -117,18 +112,13 @@ export function NavRail({
 
       {/* 导航区 */}
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
-        {/* 回到书架按钮（旁显当前书名；#/ 路由高亮） */}
+        {/* 回到书架按钮（旁显当前书名；#/ 路由高亮为选中面——DESIGN.md menu-item-selected） */}
         <Button
           type="text"
           block
-          className="mb-1 h-9 justify-start rounded-md px-2"
+          className={cn("mb-1 h-9 justify-start rounded-md px-2", atHome && "bg-accent")}
           icon={<BookOutlined />}
           onClick={() => navigate("/")}
-          style={
-            atHome
-              ? { background: token.colorPrimaryBg, color: token.colorPrimary }
-              : undefined
-          }
         >
           <span className="min-w-0 flex-1 truncate text-left text-sm" title="回到书架主页">
             {config?.name ?? "书架"}
@@ -148,11 +138,8 @@ export function NavRail({
         />
       </div>
 
-      {/* 底部：设置 + 主题切换 */}
-      <div
-        className="flex shrink-0 flex-col gap-1 px-2 py-2"
-        style={{ borderTop: `1px solid ${token.colorSplit}` }}
-      >
+      {/* 底部：设置 + 主题切换（导航入口，与左栏 Menu 项同级——不受 H4「文字按钮带边框」约束） */}
+      <div className="flex shrink-0 flex-col gap-1 border-t border-border px-2 py-2">
         <Button
           type="text"
           block

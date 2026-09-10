@@ -8,11 +8,11 @@
 // 刷所有数据页——点击调 ui store notifyDataChanged（+1），各数据页订阅后重拉。
 // 实体列表错误横幅内的「重试」按钮保留：那是错误态行内重试（错误时用户不一定会想到顶部刷新），
 // 与全局刷新不构成重复（不同状态上下文、不同语义）
+import { Button } from "antd";
 import { MessageSquare, RefreshCw } from "lucide-react";
 import { useMediaQuery } from "../../hooks/use-media-query";
 import { findOutlineNodeTitle, useProjectStore } from "../../stores/project";
 import { useUiStore } from "../../stores/ui";
-import { Button } from "../ui/button";
 
 export function InfoBar({
   chatOpen,
@@ -64,28 +64,25 @@ export function InfoBar({
 
       {/* 右侧：刷新 + 语言 + 小屏聊天开关（问 AI 入口已迁至中栏右下悬浮按钮——批次十八 C1） */}
       <Button
-        variant="ghost"
-        size="icon-sm"
-        className="ml-auto shrink-0 text-muted-foreground"
+        variant="text"
+        size="small"
+        className="ml-auto shrink-0"
         onClick={notifyDataChanged}
+        icon={<RefreshCw className="size-4" />}
         aria-label="刷新数据"
         title="刷新数据"
-      >
-        <RefreshCw className="size-4" />
-      </Button>
+      />
       <span className="shrink-0 text-sm text-muted-foreground">
         语言: {config?.language ?? "—"}
       </span>
       {!isDesktop && (
         <Button
-          variant="ghost"
-          size="icon-sm"
-          className={chatOpen ? "bg-secondary text-foreground" : "text-muted-foreground"}
+          variant={chatOpen ? "filled" : "text"}
+          size="small"
           onClick={onToggleChat}
+          icon={<MessageSquare className="size-4" />}
           aria-label={chatOpen ? "关闭聊天面板" : "打开聊天面板"}
-        >
-          <MessageSquare className="size-4" />
-        </Button>
+        />
       )}
     </div>
   );

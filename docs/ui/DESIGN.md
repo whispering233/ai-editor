@@ -270,7 +270,8 @@ components:
 | `colorBgContainer` / `colorBgElevated` | `#ffffff` | `#202020` / `#252525` | `{colors.canvas}` |
 | `colorBgLayout` | `#f6f5f4` | `#191919` | `{colors.surface}` |
 | `colorBorder` | `#c8c4be` | `#4a4a4a` | `{colors.hairline-strong}`（交互描边：Input 静止态 / Button default） |
-| `colorBorderSecondary` | `#e5e3df` | `#2f2f2f` | `{colors.hairline}`（结构描边：Card / Table 外框） |
+| `colorBorderSecondary` | `#e5e3df` | `#2f2f2f` | `{colors.hairline}`（结构描边：Card / Table 外框；Tailwind `--border` 转发的就是它） |
+| `colorFillTertiary` | `#f0eeec` | `rgba(255,255,255,.055)` | `{colors.surface-muted}`（选中面/次级面；Menu 选中底、Tailwind `--accent` 均取它） |
 | `colorSplit` | `#ede9e4` | `#373737` | `{colors.hairline-soft}`（行分隔：Table 内线 / data-row 底线） |
 | `colorLink` | `#0075de` | `#529cca` | `{colors.link}` |
 | `colorSuccess` / `colorWarning` / `colorError` | `#1aae39` / `#dd5b00` / `#e03131` | 同 | 语义三色 |
@@ -373,8 +374,7 @@ components:
 ### 导航与外壳
 
 **`sidebar`** — 左栏底 `{colors.surface}`（比内容面板暗一档），右侧 1px `{colors.hairline}`；产品标识、回到书架、九项一级导航、工具区（回收站）、底部设置与主题。
-**`menu-item`** / **`menu-item-selected`** — 菜单项 32px 高、`{rounded.sm}`；**选中 = `{colors.surface-muted}` 灰面 + 文字不变色**（antd 默认的彩色选中项要显式覆盖：`itemSelectedBg` / `itemSelectedColor`）。
-**`info-bar`** — 中栏顶部 1px 底线；项目名 + 当前位置 + 语言 + 小屏聊天开关。字号 `{typography.caption}`。
+**导航入口不受「文字按钮必须带边框」约束**：左栏导航项（Menu 九项 + 回到书架 / 设置 / 主题三个入口）与 Menu 项同级——无边框、选中态用 `{colors.surface-muted}` 灰面（Tailwind `bg-accent` = `colorFillTertiary`）、文字不变色，禁用 H4 只约束操作按钮（新建/重命名/重试/删除等）。**`menu-item`** / **`menu-item-selected`** — 菜单项 32px 高、`{rounded.sm}`；**选中 = `{colors.surface-muted}` 灰面 + 文字不变色**（antd 默认的彩色选中项要显式覆盖：`itemSelectedBg` / `itemSelectedColor`）。**`info-bar`** — 中栏顶部 1px 底线；项目名 + 当前位置 + 语言 + 小屏聊天开关。字号 `{typography.caption}`。
 
 ### 数据展示
 
@@ -426,7 +426,7 @@ components:
 - 选中态用 `{colors.surface-muted}` 灰面，不用彩色底
 - 字号只用四档（20 / 16 / 14 / 12）；标题一律 `Typography.Title level={4|5}`
 - 图标一律 `@ant-design/icons`；尺寸随字号类（14 `text-sm` / 16 `text-base` / 20 `text-xl` / 空态 24 `text-2xl`）；状态用 Filled、操作与导航用 Outlined
-- 文字型操作按钮带边框（H4 红线）；操作按钮一律直接展示，不收进 `⋯` 菜单
+- 文字型**操作**按钮带边框（H4 红线）；操作按钮一律直接展示，不收进 `⋯` 菜单。导航入口（左栏 Navigation/Menu 项）不属此列
 - 中文排版靠系统字体栈；不引入 web 字体
 
 ### Don't

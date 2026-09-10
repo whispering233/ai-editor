@@ -18,7 +18,7 @@ import { formatTimestamp, HOOK_CATEGORIES } from "@whispering233/ai-editor-share
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { ArrowUp, Check, CheckCircle2, Circle, Eye, Pencil, Trash2, X } from "lucide-react";
 import { RowContextMenu } from "../components/entity/row-context-menu";
-import { Button } from "@/components/ui/button";
+import { Button } from "antd";
 import { PageTitle } from "@/components/ui/page-title";
 import { EmptyState } from "@/components/ui/empty-state";
 import { inputClass, errorBannerClass } from "@/lib/styles";
@@ -425,7 +425,7 @@ export default function HookPanel() {
       {/* header：标题 + 新建入口（ 线框） */}
       <div className="mb-4 flex items-center gap-3">
         <PageTitle>伏笔池</PageTitle>
-        <Button type="button" className="ml-auto" onClick={() => setCreateOpen(true)}>
+        <Button type="primary" className="ml-auto" onClick={() => setCreateOpen(true)}>
           + 新建伏笔
         </Button>
       </div>
@@ -436,12 +436,7 @@ export default function HookPanel() {
           {error === CLIENT_NETWORK_ERROR
             ? "无法连接服务，请确认 ai-editor 服务已启动。"
             : "伏笔池加载失败，请重试。"}
-          <Button
-            variant="outline"
-            className="ml-auto h-7 px-2 text-xs"
-            type="button"
-            onClick={() => setReloadTick((t) => t + 1)}
-          >
+          <Button size="small" className="ml-auto" onClick={() => setReloadTick((t) => t + 1)}>
             重试
           </Button>
         </div>
@@ -472,7 +467,7 @@ export default function HookPanel() {
       {!loading && groups !== null && items?.length === 0 && (
         <EmptyState
           action={
-            <Button type="button" onClick={() => setCreateOpen(true)}>
+            <Button type="primary" onClick={() => setCreateOpen(true)}>
               + 新建伏笔
             </Button>
           }
@@ -562,15 +557,8 @@ export default function HookPanel() {
             {createError && <p className="text-sm text-destructive">{createError}</p>}
           </form>
           <DialogFooter>
-            <Button
-              variant="outline"
-              type="button"
-              onClick={() => setCreateOpen(false)}
-              disabled={createSubmitting}
-            >
-              取消
-            </Button>
-            <Button type="submit" form="create-hook-form" disabled={createSubmitting}>
+            <Button onClick={() => setCreateOpen(false)} disabled={createSubmitting}>取消</Button>
+            <Button type="primary" htmlType="submit" form="create-hook-form" disabled={createSubmitting}>
               创建
             </Button>
           </DialogFooter>
@@ -590,7 +578,7 @@ export default function HookPanel() {
           {detailError && <p className="py-4 text-sm text-destructive">{detailError}</p>}
           {detailTarget && <HookDetailView detail={detailTarget} />}
           <DialogFooter>
-            <Button variant="outline" type="button" onClick={() => setDetailTarget(null)}>
+            <Button onClick={() => setDetailTarget(null)}>
               关闭
             </Button>
           </DialogFooter>
@@ -656,16 +644,9 @@ export default function HookPanel() {
               {lifecycleError && <p className="text-sm text-destructive">{lifecycleError}</p>}
             </div>
             <DialogFooter>
+              <Button onClick={() => setLifecycleTarget(null)} disabled={lifecycleSubmitting}>取消</Button>
               <Button
-                variant="outline"
-                type="button"
-                onClick={() => setLifecycleTarget(null)}
-                disabled={lifecycleSubmitting}
-              >
-                取消
-              </Button>
-              <Button
-                type="button"
+                type="primary"
                 onClick={() => void handleLifecycleConfirm()}
                 disabled={lifecycleSubmitting}
               >
@@ -693,15 +674,8 @@ export default function HookPanel() {
               {editError && <p className="text-sm text-destructive">{editError}</p>}
             </div>
             <DialogFooter>
-              <Button
-                variant="outline"
-                type="button"
-                onClick={() => setEditTarget(null)}
-                disabled={editSaving}
-              >
-                取消
-              </Button>
-              <Button type="button" onClick={() => void handleEditSave()} disabled={editSaving}>
+              <Button onClick={() => setEditTarget(null)} disabled={editSaving}>取消</Button>
+              <Button type="primary" onClick={() => void handleEditSave()} disabled={editSaving}>
                 {editSaving ? "保存中…" : "保存"}
               </Button>
             </DialogFooter>
@@ -789,68 +763,56 @@ function HookGroupSection({
                       AskAiButton 已移除——右键菜单替代 */}
                   <span className="ml-auto flex shrink-0 items-center gap-0.5">
                     <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      className="text-muted-foreground"
+                      variant="text"
+                      size="small"
                       title="详情"
                       aria-label={`${hook.name} 详情`}
                       onClick={() => onDetail(hook)}
-                    >
-                      <Eye className="size-3.5" />
-                    </Button>
+                      icon={<Eye className="size-3.5" />}
+                    />
                     <Button
-                      variant="ghost"
-                      size="icon-sm"
+                      variant="text"
+                      size="small"
                       disabled={terminal}
-                      className="text-muted-foreground"
                       title="推进"
                       aria-label={`${hook.name} 推进`}
                       onClick={() => onLifecycle("advance", hook)}
-                    >
-                      <ArrowUp className="size-3.5" />
-                    </Button>
+                      icon={<ArrowUp className="size-3.5" />}
+                    />
                     <Button
-                      variant="ghost"
-                      size="icon-sm"
+                      variant="text"
+                      size="small"
                       disabled={terminal}
-                      className="text-muted-foreground"
                       title="回收"
                       aria-label={`${hook.name} 回收`}
                       onClick={() => onLifecycle("resolve", hook)}
-                    >
-                      <Check className="size-3.5" />
-                    </Button>
+                      icon={<Check className="size-3.5" />}
+                    />
                     <Button
-                      variant="ghost"
-                      size="icon-sm"
+                      variant="text"
+                      size="small"
                       disabled={terminal}
-                      className="text-muted-foreground"
                       title="废弃"
                       aria-label={`${hook.name} 废弃`}
                       onClick={() => onLifecycle("abandon", hook)}
-                    >
-                      <X className="size-3.5" />
-                    </Button>
+                      icon={<X className="size-3.5" />}
+                    />
                     <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      className="text-muted-foreground"
+                      variant="text"
+                      size="small"
                       title="编辑"
                       aria-label={`${hook.name} 编辑`}
                       onClick={() => onEdit(hook)}
-                    >
-                      <Pencil className="size-3.5" />
-                    </Button>
+                      icon={<Pencil className="size-3.5" />}
+                    />
                     <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      className="text-muted-foreground hover:text-destructive"
+                      variant="text"
+                      size="small"
                       title="移入回收站"
                       aria-label={`${hook.name} 移入回收站`}
                       onClick={() => onDelete(hook)}
-                    >
-                      <Trash2 className="size-3.5" />
-                    </Button>
+                      icon={<Trash2 className="size-3.5" />}
+                    />
                   </span>
                 </div>
                 {/* 依赖链行（行内「依赖: …」可点击展开递归链） */}

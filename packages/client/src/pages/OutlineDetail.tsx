@@ -20,7 +20,7 @@ import { RelationsView } from "../components/entity/relations-view";
 import { NodeDeltaList } from "../components/delta/node-delta-list";
 import { DeltaCreateForm } from "../components/delta/delta-create-form";
 import { TYPE_LABEL } from "../components/outline/dialogs";
-import { Button } from "@/components/ui/button";
+import { Button } from "antd";
 import { PageTitle } from "@/components/ui/page-title";
 import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -182,7 +182,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
               >
                 去回收站
               </a>
-              <Button variant="outline" type="button" onClick={() => navigate("/outline")}>
+              <Button onClick={() => navigate("/outline")}>
                 返回大纲
               </Button>
             </div>
@@ -205,8 +205,6 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
           {/* S13.2 设为当前位置（动作入口；状态徽标在元信息行）：已是当前位置 → 禁用 + 「当前位置」标记，
               与 S13.1 前大纲页 disabled={isCurrent || busy} 语义一致 */}
           <Button
-            variant="outline"
-            type="button"
             disabled={node === null || isCurrent || settingCurrent}
             title={
               isCurrent
@@ -217,11 +215,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
           >
             {isCurrent ? "当前位置" : "设为当前位置"}
           </Button>
-          <Button
-            type="button"
-            onClick={() => void handleSave()}
-            disabled={node === null || saving}
-          >
+          <Button type="primary" onClick={() => void handleSave()} disabled={node === null || saving}>
             {saving ? "保存中…" : "保存"}
           </Button>
         </div>
@@ -269,14 +263,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
         /* 树加载失败（loadOutline 静默吞错后的兜底呈现，同大纲列表页） */
         <div className="rounded-md border border-border p-4 text-sm text-muted-foreground">
           大纲加载失败
-          <Button
-            variant="outline"
-            className="ml-3"
-            type="button"
-            onClick={() => setLoadAttempted(false)}
-          >
-            重试
-          </Button>
+          <Button className="ml-3" onClick={() => setLoadAttempted(false)}>重试</Button>
         </div>
       ) : node === null || dataForm === null ? null : (
         /* 表单区：左栏（基础信息/结构化信息/变更记录/伏笔标记）+ 右栏（相关实体） */
@@ -331,12 +318,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
             <SectionCard
               title="变更记录"
               action={
-                <Button
-                  variant="outline"
-                  size="sm"
-                  type="button"
-                  onClick={() => setDeltaFormOpen((v) => !v)}
-                >
+                <Button size="small" onClick={() => setDeltaFormOpen((v) => !v)}>
                   {deltaFormOpen ? "收起" : "+ 新建变更"}
                 </Button>
               }
@@ -365,14 +347,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
             <SectionCard title="相关实体">
               <div className="mb-3 flex items-center justify-between">
                 <p className="text-xs text-muted-foreground">本节点作为源的关系（1 跳）</p>
-                <Button
-                  variant="outline"
-                  type="button"
-                  className="h-8 px-2 text-xs"
-                  onClick={() => setRelationDialogOpen(true)}
-                >
-                  + 新增关联
-                </Button>
+                <Button onClick={() => setRelationDialogOpen(true)}>+ 新增关联</Button>
               </div>
               <RelationsView
                 scope={{ type: "outline_node", id: nodeId }}

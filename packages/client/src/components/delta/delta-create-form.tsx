@@ -9,6 +9,7 @@
 // 成功 → onCreated（父刷新列表 + 收起）；VALIDATION_ERROR → 行内提示；OUTLINE_NODE_NOT_FOUND → toast + 收起
 // 样式 token 类（，oracle 红线：禁止硬编码色类）
 import { useEffect, useState } from "react";
+import { Button } from "antd";
 import type { DeltaOp, EntitySummary, EntityType } from "@whispering233/ai-editor-shared";
 import {
   ApiError,
@@ -28,7 +29,6 @@ import {
 import { formatDeltaValue, targetTypeLabel } from "../../lib/delta";
 import { cn } from "../../lib/utils";
 import { useUiStore } from "../../stores/ui";
-import { Button } from "@/components/ui/button";
 
 /** 表单控件通用样式（仿 OutlineDetail FIELD_CLASS：token 类 select/textarea/Input） */
 const FIELD_CLASS =
@@ -236,12 +236,7 @@ export function DeltaCreateForm({
                   ? "无法连接服务，请确认 ai-editor 服务已启动"
                   : "实体列表加载失败"}
               </span>
-              <Button
-                variant="outline"
-                size="xs"
-                type="button"
-                onClick={() => setEntityListTick((t) => t + 1)}
-              >
+              <Button size="small" onClick={() => setEntityListTick((t) => t + 1)}>
                 重试
               </Button>
             </div>
@@ -347,10 +342,10 @@ export function DeltaCreateForm({
       {/* ⑤ 提交区 */}
       {submitError !== null && <p className="text-sm text-destructive">{submitError}</p>}
       <div className="flex items-center justify-end gap-2">
-        <Button variant="outline" size="sm" type="button" onClick={onClose} disabled={submitting}>
+        <Button onClick={onClose} disabled={submitting}>
           取消
         </Button>
-        <Button size="sm" type="button" onClick={() => void handleSubmit()} disabled={submitting}>
+        <Button type="primary" onClick={() => void handleSubmit()} disabled={submitting}>
           {submitting ? "提交中…" : "创建变更"}
         </Button>
       </div>

@@ -17,10 +17,10 @@
 // 视觉全走 tokens（ 纪律）：无硬编码色类。
 import { useState } from "react";
 import type { DragEvent, MouseEvent } from "react";
+import { Button } from "antd";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { ChevronRight, Plus, Trash2 } from "lucide-react";
 import { RowContextMenu } from "../entity/row-context-menu";
-import { Button } from "@/components/ui/button";
 import { cn } from "../../lib/utils";
 import { useSaveShortcut } from "../../lib/save-shortcut";
 import { TimelineEvent, type EventDragHandlers } from "./TimelineEvent";
@@ -202,23 +202,22 @@ export function TimelineGroupBlock({
             <div className="flex min-w-0 flex-1 items-center gap-2 py-1">
               {/* 折叠/展开按钮（批次八 O4：移至组标题左侧、标题前，同大纲页折叠箭头位序；折叠后仅标题行） */}
               <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
+                variant="text"
+                size="small"
                 draggable={false}
-                className="text-muted-foreground"
                 aria-expanded={!collapsed}
                 aria-label={`${collapsed ? "展开" : "折叠"}「${title}」组`}
                 onClick={onToggleCollapse}
-              >
-                {/* chevron 展开旋转惯例（）：折叠时横指，展开时向下 */}
-                <ChevronRight
-                  className={cn(
-                    "size-4 transition-transform duration-200",
-                    !collapsed && "rotate-90",
-                  )}
-                />
-              </Button>
+                icon={
+                  /* chevron 展开旋转惯例（）：折叠时横指，展开时向下 */
+                  <ChevronRight
+                    className={cn(
+                      "size-4 transition-transform duration-200",
+                      !collapsed && "rotate-90",
+                    )}
+                  />
+                }
+              />
               {editing ? (
                 <input
                   autoComplete="off"
@@ -267,33 +266,27 @@ export function TimelineGroupBlock({
                 {/* 在此时间点新建事件（H5：图标按钮，减少文字干扰） */}
                 {timepoint !== null && !editing && (
                   <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
+                    variant="text"
+                    size="small"
                     draggable={false}
-                    className="text-muted-foreground"
                     title="在此时间点新建事件"
                     aria-label={`在此时间点新建事件`}
                     onClick={() => onAddEventAt(groupId)}
-                  >
-                    <Plus className="size-3.5" />
-                  </Button>
+                    icon={<Plus className="size-3.5" />}
+                  />
                 )}
                 {/* 移入回收站（H1：时间点组标题直接显示删除图标——用户反馈缺失删除入口；
                     H2：点击直接软删不弹确认；未挂载区不渲染） */}
                 {timepoint !== null && !editing && (
                   <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
+                    variant="text"
+                    size="small"
                     draggable={false}
-                    className="text-muted-foreground hover:text-destructive"
                     title="移入回收站"
                     aria-label={`移入回收站「${timepoint.name}」`}
                     onClick={() => onDeleteTimepoint(timepoint)}
-                  >
-                    <Trash2 className="size-3.5" />
-                  </Button>
+                    icon={<Trash2 className="size-3.5" />}
+                  />
                 )}
               </span>
             </div>

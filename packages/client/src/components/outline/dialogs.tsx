@@ -5,9 +5,9 @@
 // MoveNodeDialog（S13.1：拖拽上下半判定 + 指示线已覆盖精确插入位置）
 // 「关键交互」——父节点按类型过滤
 import { useState } from "react";
+import { Button } from "antd";
 import type { OutlineNodeType } from "../../lib/api";
 import { ApiError } from "../../lib/api";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -70,12 +70,12 @@ export function ConfirmDialog({
         <p className="text-sm text-muted-foreground">{description}</p>
         {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
         <DialogFooter>
-          <Button variant="outline" type="button" onClick={onClose} disabled={submitting}>
+          <Button onClick={onClose} disabled={submitting}>
             取消
           </Button>
           <Button
-            variant={danger ? "destructive" : "default"}
-            type="button"
+            type="primary"
+            danger={danger}
             onClick={() => void handleConfirm()}
             disabled={submitting}
           >

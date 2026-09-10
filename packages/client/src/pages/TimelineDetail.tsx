@@ -21,9 +21,9 @@
 // createdAt/updatedAt
 // - 未保存离开守卫：EntityDetail 无此模式，不做（避免过度设计）
 import { useEffect, useState } from "react";
+import { Button } from "antd";
 import { formatTimestamp } from "@whispering233/ai-editor-shared";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
-import { Button } from "@/components/ui/button";
 import { PageTitle } from "@/components/ui/page-title";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
@@ -305,7 +305,7 @@ export default function TimelineDetail({ id }: { id: string }) {
               >
                 去回收站
               </a>
-              <Button variant="outline" type="button" onClick={() => navigate("/timeline")}>
+              <Button onClick={() => navigate("/timeline")}>
                 返回列表
               </Button>
             </div>
@@ -332,21 +332,10 @@ export default function TimelineDetail({ id }: { id: string }) {
       <div className="mb-1 flex items-center gap-3">
         <PageTitle className="min-w-0 truncate">{detail?.name ?? "…"}</PageTitle>
         <div className="ml-auto flex items-center gap-2">
-          <Button
-            variant="outline"
-            type="button"
-            onClick={() => void handleSave()}
-            disabled={!detail || saving}
-          >
+          <Button onClick={() => void handleSave()} disabled={!detail || saving}>
             {saving ? "保存中…" : "保存"}
           </Button>
-          <Button
-            variant="outline"
-            type="button"
-            disabled={!detail}
-            className="text-destructive hover:bg-destructive/10"
-            onClick={() => void handleDelete()}
-          >
+          <Button danger disabled={!detail} onClick={() => void handleDelete()}>
             移入回收站
           </Button>
         </div>
@@ -380,14 +369,7 @@ export default function TimelineDetail({ id }: { id: string }) {
           {loadError === CLIENT_NETWORK_ERROR
             ? "无法连接服务，请确认 ai-editor 服务已启动。"
             : "详情加载失败，请重试。"}
-          <Button
-            variant="outline"
-            className="ml-3"
-            type="button"
-            onClick={() => void loadDetail()}
-          >
-            重试
-          </Button>
+          <Button className="ml-3" onClick={() => void loadDetail()}>重试</Button>
         </div>
       )}
 
@@ -423,15 +405,7 @@ export default function TimelineDetail({ id }: { id: string }) {
                   mountDataFailed ? (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       挂载数据加载失败
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        type="button"
-                        className="h-6 px-2 text-xs"
-                        onClick={() => void loadMountData()}
-                      >
-                        重试
-                      </Button>
+                      <Button size="small" onClick={() => void loadMountData()}>重试</Button>
                     </div>
                   ) : (
                     <div className="h-9 animate-pulse rounded bg-muted" />
@@ -495,7 +469,7 @@ export default function TimelineDetail({ id }: { id: string }) {
               >
                 <PopoverTrigger
                   render={
-                    <Button variant="outline" type="button" className="h-8 px-2 text-xs">
+                    <Button>
                       + 关联场景/章节
                     </Button>
                   }
@@ -512,18 +486,9 @@ export default function TimelineDetail({ id }: { id: string }) {
                   </div>
                   {relError && <p className="text-sm text-destructive">{relError}</p>}
                   <div className="flex justify-end gap-2">
+                    <Button onClick={() => setRelationOpen(false)} disabled={relSubmitting}>取消</Button>
                     <Button
-                      variant="outline"
-                      type="button"
-                      size="sm"
-                      onClick={() => setRelationOpen(false)}
-                      disabled={relSubmitting}
-                    >
-                      取消
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
+                      type="primary"
                       onClick={() => void handleAddRelation()}
                       disabled={relSubmitting || relNodeId === ""}
                     >
@@ -549,12 +514,7 @@ export default function TimelineDetail({ id }: { id: string }) {
                     >
                       {r.targetName ?? r.targetId}
                     </button>
-                    <Button
-                      variant="outline"
-                      type="button"
-                      className="h-7 shrink-0 px-2 text-xs text-destructive hover:bg-destructive/10"
-                      onClick={() => setDeleteRelationTarget(r)}
-                    >
+                    <Button danger size="small" className="shrink-0" onClick={() => setDeleteRelationTarget(r)}>
                       取消关联
                     </Button>
                   </li>

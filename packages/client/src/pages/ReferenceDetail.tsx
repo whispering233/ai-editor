@@ -22,7 +22,7 @@ import { useThemeMode } from "../hooks/use-theme-mode";
 import { useUiStore } from "../stores/ui";
 import { cn } from "../lib/utils";
 import { errorBannerClass, inputClass, skeletonClass } from "../lib/styles";
-import { Button } from "../components/ui/button";
+import { Button } from "antd";
 import { PageTitle } from "../components/ui/page-title";
 import { TagSuggest } from "../components/timeline/TagSuggest";
 import { CreateRelationDialog, type RelationSource } from "../components/entity/create-relation-dialog";
@@ -278,10 +278,10 @@ export default function ReferenceDetail({
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3">
         <p className={cn(errorBannerClass)}>{error}</p>
-        <Button variant="outline" size="sm" onClick={() => setReloadTick((t) => t + 1)}>
+        <Button onClick={() => setReloadTick((t) => t + 1)}>
           重试
         </Button>
-        <Button variant="ghost" size="sm" onClick={() => navigate("#/references")}>
+        <Button onClick={() => navigate("#/references")}>
           返回列表
         </Button>
       </div>
@@ -316,28 +316,18 @@ export default function ReferenceDetail({
                 onChange={handleImportFile}
                 aria-label="导入 md 文档"
               />
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={importing}
-                onClick={() => fileInputRef.current?.click()}
-              >
+              <Button disabled={importing} onClick={() => fileInputRef.current?.click()}>
                 {importing ? <Loader2 className="size-3.5 animate-spin" /> : <FileUp className="size-3.5" />}
                 导入 md 文档
               </Button>
             </>
           )}
-          <Button variant="outline" size="sm" onClick={() => setRelationOpen(true)} disabled={isDraft}>
+          <Button onClick={() => setRelationOpen(true)} disabled={isDraft}>
             <Link2 className="size-3.5" />
             建立关联
           </Button>
           {!isDraft && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-destructive hover:text-destructive"
-              onClick={handleDelete}
-            >
+            <Button danger onClick={handleDelete}>
               <Trash2 className="size-3.5" />
               删除
             </Button>
@@ -517,11 +507,11 @@ export default function ReferenceDetail({
         {/* 操作 */}
         <div className="flex justify-end gap-1.5 pt-1">
           {isDraft && (
-            <Button variant="outline" onClick={() => navigate("#/references")} disabled={saving}>
+            <Button onClick={() => navigate("#/references")} disabled={saving}>
               取消
             </Button>
           )}
-          <Button onClick={handleSave} disabled={saving}>
+          <Button type="primary" onClick={handleSave} disabled={saving}>
             {saving && <Loader2 className="size-3.5 animate-spin" />}
             {isDraft ? "创建" : "保存"}
           </Button>

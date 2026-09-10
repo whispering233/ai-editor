@@ -6,6 +6,7 @@
 // conflicts 警示块（border-destructive/30 bg-destructive/10 text-destructive + TriangleAlert）
 // 空态：deltaCount === 0 → 轻量文案（当前状态即初始状态），不展示计算控件
 import { useEffect, useState } from "react";
+import { Button } from "antd";
 import { TriangleAlert } from "lucide-react";
 import type { ComputeStateResult, DeltaChange } from "@whispering233/ai-editor-shared";
 import { ApiError, computeDeltaState } from "../../lib/api";
@@ -13,7 +14,6 @@ import { diffStateFields, formatDeltaValue } from "../../lib/delta";
 import { flattenTree } from "../../lib/outline-tree";
 import { cn } from "../../lib/utils";
 import { useProjectStore } from "../../stores/project";
-import { Button } from "@/components/ui/button";
 import { ChangeSummary } from "./change-summary";
 
 export function ComputePreview({
@@ -106,14 +106,7 @@ export function ComputePreview({
               {outline === null ? (
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground">大纲未加载</span>
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    type="button"
-                    onClick={() => void loadOutline()}
-                  >
-                    加载大纲
-                  </Button>
+                  <Button size="small" onClick={() => void loadOutline()}>加载大纲</Button>
                 </div>
               ) : (
                 <select
@@ -135,13 +128,7 @@ export function ComputePreview({
                 </select>
               )}
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              type="button"
-              disabled={!atNodeId || computing}
-              onClick={() => void handleCompute()}
-            >
+            <Button disabled={!atNodeId || computing} onClick={() => void handleCompute()}>
               {computing ? "计算中…" : "计算"}
             </Button>
           </div>

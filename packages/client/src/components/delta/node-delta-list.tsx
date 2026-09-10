@@ -6,11 +6,11 @@
 // 防御分支：OUTLINE_NODE_NOT_FOUND 分支当前**不可达**——（）未定义该端点
 // 404，节点缺失/软删 → 200 空数组（server delta.ts 三态过滤），缺失即空态；分支保留以防未来变化
 import { useEffect, useState } from "react";
+import { Button } from "antd";
 import { formatTimestamp } from "@whispering233/ai-editor-shared";
 import type { DeltaRecord } from "@whispering233/ai-editor-shared";
 import { ApiError, CLIENT_NETWORK_ERROR, getDeltasByNode } from "../../lib/api";
 import { targetTypeLabel } from "../../lib/delta";
-import { Button } from "@/components/ui/button";
 import { ChangeSummary } from "./change-summary";
 import { cn } from "../../lib/utils";
 import { skeletonClass } from "../../lib/styles";
@@ -72,9 +72,7 @@ export function NodeDeltaList({
           </span>
           {/* purge 场景重试无意义（节点已不在树中），仅网络失败可重试 */}
           {error !== "OUTLINE_NODE_NOT_FOUND" && (
-            <Button variant="outline" size="xs" type="button" onClick={() => setTick((t) => t + 1)}>
-              重试
-            </Button>
+            <Button size="small" onClick={() => setTick((t) => t + 1)}>重试</Button>
           )}
         </div>
       )}

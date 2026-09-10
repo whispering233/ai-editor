@@ -190,7 +190,7 @@ export function RelationsView({
       {scope === undefined && (
         <div className="mt-3 mb-2 flex flex-wrap items-center gap-3">
           <Select
-            size="middle"
+            size="medium"
             value={filter.endpointType === "" ? undefined : filter.endpointType}
             onChange={(value) => setFilter((f) => ({ ...f, endpointType: value === undefined ? "" : String(value) }))}
             aria-label="端点类型过滤"
@@ -200,7 +200,7 @@ export function RelationsView({
             options={Object.entries(ENDPOINT_TYPE_LABEL).map(([v, label]) => ({ value: v, label }))}
           />
           <Select
-            size="middle"
+            size="medium"
             value={filter.relationType === "" ? undefined : filter.relationType}
             onChange={(value) => setFilter((f) => ({ ...f, relationType: value === undefined ? "" : String(value) }))}
             aria-label="关系类型过滤"

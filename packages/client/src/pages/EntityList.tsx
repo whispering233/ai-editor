@@ -356,7 +356,7 @@ export default function EntityList({ type }: { type: string }) {
               {firstField.key !== "" &&
                 (firstField.input === "select" ? (
                   <Select
-                    size="middle"
+                    size="medium"
                     value={firstValue === "" ? undefined : firstValue}
                     onChange={(value) => setFirstValue(value === undefined ? "" : String(value))}
                     disabled={createSubmitting}

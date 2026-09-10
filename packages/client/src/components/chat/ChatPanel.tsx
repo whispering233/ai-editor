@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentRef } from "react";
 import { Bubble, Sender } from "@ant-design/x";
-import { Alert, Badge, Button as AntButton, Collapse, Dropdown as AntDropdown, Tag, theme } from "antd";
+import { Alert, Badge, Button, Collapse, Dropdown as AntDropdown, Tag, theme } from "antd";
 import type { MenuProps } from "antd";
 import {
   BulbOutlined,
@@ -287,14 +287,14 @@ function SessionTitleBar({
         disabled={disabled}
         trigger={["click"]}
       >
-        <AntButton size="small" disabled={disabled} className="max-w-44 min-w-0 px-1.5">
+        <Button size="small" disabled={disabled} className="max-w-44 min-w-0 px-1.5">
           <span className="truncate text-sm font-medium" title={title}>
             {title}
           </span>
           <DownOutlined className="shrink-0 text-xs" />
-        </AntButton>
+        </Button>
       </AntDropdown>
-      <AntButton
+      <Button
         type="text"
         size="small"
         className="shrink-0"
@@ -305,7 +305,7 @@ function SessionTitleBar({
         icon={<PlusOutlined />}
       />
       {onToggleCollapse && (
-        <AntButton
+        <Button
           type="text"
           size="small"
           className="ml-auto shrink-0"
@@ -316,7 +316,7 @@ function SessionTitleBar({
         />
       )}
       {onClose && (
-        <AntButton
+        <Button
           type="text"
           size="small"
           className="ml-auto shrink-0"
@@ -343,9 +343,9 @@ function DisconnectBanner() {
       showIcon
       message="上次会话已取消"
       action={
-        <AntButton size="small" onClick={resendLast}>
+        <Button size="small" onClick={resendLast}>
           重新发送
-        </AntButton>
+        </Button>
       }
       closable
       onClose={() => setDisconnected(false)}
@@ -608,12 +608,12 @@ export function ProposalCardView({ proposal }: { proposal: ProposalCard }) {
         </pre>
       )}
       <div className="mt-2 flex gap-1.5">
-        <AntButton size="small" type="primary" disabled={busy} onClick={() => void confirmProposal(proposal.proposalId)}>
+        <Button size="small" type="primary" disabled={busy} onClick={() => void confirmProposal(proposal.proposalId)}>
           确认
-        </AntButton>
-        <AntButton size="small" disabled={busy} onClick={() => void rejectProposal(proposal.proposalId)}>
+        </Button>
+        <Button size="small" disabled={busy} onClick={() => void rejectProposal(proposal.proposalId)}>
           拒绝
-        </AntButton>
+        </Button>
       </div>
     </div>
   );

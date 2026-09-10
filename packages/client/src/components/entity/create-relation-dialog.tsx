@@ -9,6 +9,7 @@
 // 中列关系类型下拉 + 「→」箭头（mt-auto 沉底对齐两端实体下拉），三列各有小标题（源实体/关系类型/目标实体）。
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
+import { Button } from "antd";
 import { ENTITY_TYPES, RELATION_TYPES } from "@whispering233/ai-editor-shared";
 import type { EntitySummary, EntityType } from "@whispering233/ai-editor-shared";
 import { ApiError, createRelation, listEntities, type CreateRelationBody } from "../../lib/api";
@@ -16,7 +17,6 @@ import { relationTypeLabel } from "../../lib/entity-detail";
 import { flattenTree } from "../../lib/outline-tree";
 import { useProjectStore } from "../../stores/project";
 import { useUiStore } from "../../stores/ui";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -255,10 +255,8 @@ export function CreateRelationDialog({
           {error && <p className="text-sm text-destructive">{error}</p>}
         </form>
         <DialogFooter>
-          <Button variant="outline" type="button" onClick={onClose} disabled={submitting}>
-            取消
-          </Button>
-          <Button type="submit" form="create-relation-form" disabled={submitting}>
+          <Button onClick={onClose} disabled={submitting}>取消</Button>
+          <Button type="primary" htmlType="submit" form="create-relation-form" disabled={submitting}>
             建立
           </Button>
         </DialogFooter>

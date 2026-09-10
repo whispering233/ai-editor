@@ -11,7 +11,7 @@ import type { ChangeEvent, FormEvent } from "react";
 import { formatRelativeTime } from "@whispering233/ai-editor-shared";
 import type { EntityType, OutlineNode } from "@whispering233/ai-editor-shared";
 import { BookOpen, Download, Loader2, Pencil, Upload } from "lucide-react";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "antd";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -506,7 +506,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
               maxLength={60}
               disabled={submitting}
             />
-            <Button type="submit" disabled={submitting || bookshelf === null}>
+            <Button type="primary" htmlType="submit" disabled={submitting || bookshelf === null}>
               新建
             </Button>
           </div>
@@ -527,13 +527,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
             </p>
           </div>
           {/* 导入备份（Sidebar 迁入，1-3b）：zip 导入/覆盖恢复，Dialog 内同名二选一 */}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="shrink-0"
-            onClick={() => setImportOpen(true)}
-          >
+          <Button className="shrink-0" onClick={() => setImportOpen(true)}>
             <Upload className="size-3.5" />
             导入备份
           </Button>
@@ -546,13 +540,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                 ? "无法连接服务，请确认 ai-editor 服务已启动后重试。"
                 : "书架加载失败，请重试。"}
             </p>
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-2"
-              onClick={() => void loadBookshelf()}
-              type="button"
-            >
+            <Button className="mt-2" onClick={() => void loadBookshelf()}>
               重试
             </Button>
           </div>
@@ -595,9 +583,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                 {!renaming && (
                   <>
                     <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
+                      size="small"
                       className="shrink-0"
                       onClick={() => void handleExportBook(config.name)}
                       disabled={exporting}
@@ -609,17 +595,11 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                       )}
                       导出
                     </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="shrink-0"
-                      onClick={startRename}
-                    >
+                    <Button size="small" className="shrink-0" onClick={startRename}>
                       <Pencil className="size-3.5" />
                       重命名
                     </Button>
-                    <Button type="button" size="sm" className="shrink-0" onClick={() => navigate("/overview")}>
+                    <Button type="primary" size="small" className="shrink-0" onClick={() => navigate("/overview")}>
                       继续创作
                     </Button>
                   </>
@@ -728,9 +708,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                   disabled={submitting}
                 />
                 <div>
-                  <Button type="submit" variant="outline" disabled={submitting}>
-                    打开
-                  </Button>
+                  <Button htmlType="submit" disabled={submitting}>打开</Button>
                 </div>
                 {pathError && <p className="text-sm text-destructive">{pathError}</p>}
               </form>
@@ -779,26 +757,17 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
               {importError && <p className="text-sm text-destructive">{importError}</p>}
             </form>
             <DialogFooter>
-              <Button
-                variant="outline"
-                type="button"
-                onClick={closeImportDialog}
-                disabled={importing}
-              >
-                取消
-              </Button>
+              <Button onClick={closeImportDialog} disabled={importing}>取消</Button>
               {importConflict ? (
                 <>
                   <Button
-                    variant="outline"
-                    type="button"
                     onClick={() => void handleImportSubmit(importConflictBase)}
                     disabled={importing || importFile === null}
                   >
                     {importing ? "导入中…" : "保持原样导入"}
                   </Button>
                   <Button
-                    type="button"
+                    type="primary"
                     onClick={() => void handleImportSubmit(importName)}
                     disabled={importing || importFile === null}
                   >
@@ -807,7 +776,8 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                 </>
               ) : (
                 <Button
-                  type="submit"
+                  type="primary"
+                  htmlType="submit"
                   form="import-book-form"
                   disabled={importing || importFile === null}
                 >
@@ -829,9 +799,9 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
           padding="sm"
           className="mt-16"
           action={
-            <a href="#/" className={buttonVariants({ variant: "outline", size: "sm" })}>
+            <Button href="#/" size="small">
               回到书架
-            </a>
+            </Button>
           }
         >
           <span className="block text-base font-semibold text-foreground">还没有打开的书</span>
@@ -870,13 +840,9 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                   <span className="text-muted-foreground">未设置</span>
                 )}
               </dd>
-              <a
-                href="#/outline"
-                onClick={goOutline}
-                className={buttonVariants({ variant: "outline", size: "xs" })}
-              >
+              <Button href="#/outline" onClick={goOutline} size="small">
                 去大纲
-              </a>
+              </Button>
             </div>
           </dl>
           {/* 项目提示词展示已移除：prompt 字段废弃不再返回——项目规则唯一事实源
@@ -914,12 +880,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
               {entitiesError !== null && (
                 <div className="mt-2 flex items-center gap-2 text-xs text-destructive">
                   {entitiesError}
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    type="button"
-                    onClick={() => setEntitiesTick((t) => t + 1)}
-                  >
+                  <Button size="small" onClick={() => setEntitiesTick((t) => t + 1)}>
                     重试
                   </Button>
                 </div>
@@ -940,12 +901,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
             /* 加载失败（loadOutline 静默吞错，attempted 标记兜底呈现） */
             <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
               大纲加载失败
-              <Button
-                variant="outline"
-                size="xs"
-                type="button"
-                onClick={() => setOutlineAttempted(false)}
-              >
+              <Button size="small" onClick={() => setOutlineAttempted(false)}>
                 重试
               </Button>
             </div>
@@ -964,24 +920,15 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                   <p className="text-xs text-muted-foreground">大纲还是空的</p>
                   {/* M1（oracle U4 审核）：新项目空态（「空态」）——[先搭大纲] 主操作 +
                       [和 AI 聊聊设定] 次操作（setCurrentSession(null) 注入右栏新会话） */}
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    type="button"
-                    onClick={() => setCurrentSession(null)}
-                  >
+                  <Button size="small" onClick={() => setCurrentSession(null)}>
                     和 AI 聊聊设定
                   </Button>
                 </div>
               )}
               <div className="mt-3">
-                <a
-                  href="#/outline"
-                  onClick={goOutline}
-                  className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
-                >
+                <Button href="#/outline" onClick={goOutline} size="small">
                   去大纲编辑
-                </a>
+                </Button>
               </div>
             </>
           )}
@@ -994,12 +941,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
               /* 加载失败：区块内重试（NO_PROJECT_OPEN 在概览形态不会出现，兜底走通用文案） */
               <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
                 会话加载失败
-                <Button
-                  variant="outline"
-                  size="xs"
-                  type="button"
-                  onClick={() => void loadSessions()}
-                >
+                <Button size="small" onClick={() => void loadSessions()}>
                   重试
                 </Button>
               </div>
@@ -1014,13 +956,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
             /* 空态：一句说明 + 主操作 */
             <div className="mt-3">
               <p className="text-sm text-muted-foreground">还没有会话，和 AI 聊聊设定吧</p>
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-3"
-                type="button"
-                onClick={() => setCurrentSession(null)}
-              >
+              <Button className="mt-3" onClick={() => setCurrentSession(null)}>
                 开始新对话
               </Button>
             </div>
@@ -1052,14 +988,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                 ))}
               </ul>
               <div className="mt-3">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  type="button"
-                  onClick={() => setCurrentSession(null)}
-                >
-                  开始新对话
-                </Button>
+                <Button onClick={() => setCurrentSession(null)}>开始新对话</Button>
               </div>
             </>
           )}

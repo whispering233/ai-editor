@@ -83,8 +83,8 @@
   --accent: var(--ant-color-fill-tertiary);
   --accent-foreground: var(--ant-color-text);
   --destructive: var(--ant-color-error);
-  --border: var(--ant-color-border);
-  --input: var(--ant-color-border);
+  --border: var(--ant-color-border-secondary); /* 结构描边（card/表格/分栏）= hairline；交互描边用 --input */
+  --input: var(--ant-color-border); /* 交互描边 = hairline-strong（输入框/次级按钮） */
   --ring: var(--ant-color-primary);
   --radius: 8px; /* 遗留 var(--radius) 消费点（ui/sonner、ui/button）；T5/T8 收敛后删 */
   --sidebar: var(--ant-color-bg-layout);
