@@ -3,6 +3,7 @@
 ## 项目状态
 
 - **状态（2026-09-06）：全部计划批次完成并发布，最新版 v0.0.26**——批次十七 = antd 全站迁移 + 布局重构 + 会话渲染重做（antd v6 cssVar 主题基座、书架主页 `#/` 与概览 `#/overview` 拆分、左栏 NavRail 一级导航、路由一级化与旧址重定向、@ant-design/x 会话渲染与 `{}` 渲染层归一修复、@base-ui/react 退役自绘浮层），v0.0.1-v0.0.26 发布链路全绿。**无待做项**；可选收尾：npm 坏版本 v0.0.1/v0.0.2 deprecate（需 2FA 凭据）。
+- **批次十八（2026-09-06，未发布）为用户反馈七项（纯前端交互层，API/数据零改动）**：实体列表页去一级化残留（「实体」标题 + 类型 tab，切换归左栏 NavRail）；面包屑整站移除（`page-nav/Breadcrumb.tsx` 已删，详情页返回走 NavRail）；「问 AI」迁中栏右下悬浮按钮（antd `FloatButton`，InfoBar 移除该入口）；右栏 focus 小条经 `names/resolve` 显名称（不再裸 id）；「新建即聚焦」泛化（设定树/实体列表/大纲/时间点：滚动 + 高亮 + 键盘焦点，`lib/new-item-focus.ts`）；`Ctrl/Cmd+S` 保存快捷键（`lib/save-shortcut.ts` 注册栈：4 详情页表单 + 伏笔编辑态 + 5 处行内编辑）；设定树拖拽插入线强化；`docs/ui/layout.md` §3/§6/§7 同步。
 - **v0.0.25（2026-09-05）为文档/工程维护版**：`doc/` → `docs/` 按全局规则组织（详见下方「文档重组」条目），无 API/数据/前端代码变更。
 - **文档重组（2026-09）**：`doc/` → `docs/` 按全局规则组织——api 按模块拆分为 `00-api-index`/`api-public`/`error-code` + `10-api-project.md`~`90-api-settings.md` + `tool-calling.md`，design 拆出 `milestone`/`config`/`build` 并编号详细设计，删除 `doc/README`/`data-flow`/`backlog`/`hooks`/`ui/pages`/`security`；`architecture.md` 分包方案去代码文件级（包内结构归代码）、`ui/layout.md` 去 CSS 样式细节（只留总体布局与交互）。代码注释不引用文档路径的纪律不变。
 - **v0.0.21（2026-08-23）为纯工程维护版**：pnpm 11.8.0 → 11.22.0（`packageManager` 与 CI `pnpm/action-setup` 同步升级），无 API/数据/前端变更。
