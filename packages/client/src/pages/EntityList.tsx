@@ -1,12 +1,14 @@
-// 实体列表页（S3.5；替换 T7.1 占位壳；U8 增补第 5 个「关联」tab）
+// 实体列表页（S3.5；替换 T7.1 占位壳；U8 增补「关联」段）
 // 路由（批次十七 1-1 一级化）：#/characters | #/setting（树形视图）| #/locations | #/relations——
 // 各类型独立一级段，main.tsx 按段路由传入 type；hook/event/timepoint 泛型入口已去重（富页/宿主段承接），
 // 旧 #/entities/:type[/:id] 在 main.tsx 全量重定向到新段；
-// 二级 tab 切换即改 hash（useHashRoute 驱动），hash 变化 → main.tsx 传新 type → 本页重置查询状态
+// 批次十八 A1（用户反馈）：页首残留的「实体」标题与类型切换 Segmented 已移除——
+// 类型切换 = 左栏 NavRail（一级导航），列表页只保留搜索/排序/新建等内容级控件；
+// type 变化（直接改 hash / 切导航）仍触发本页查询状态重置
 // 数据：GET /api/v1/entity/:type?q=&offset=&limit=&sort=&order=（EntitySummary 摘要列表）
-// ——tab/搜索防抖 300ms/排序下拉/分页（limit 20、total 驱动）/
+// ——搜索防抖 300ms/排序下拉/分页（limit 20、total 驱动）/
 // 摘要列按类型（lib/entity-list.ts SUMMARY_COLUMNS）/空态两种文案区分/行点击跳详情（S3.6）；
-// 「关联 Tab（U8 增补）」——type==="relations" 渲染 RelationsView（前端过滤全量关系），
+// 「关联（U8）」——type==="relations" 渲染 RelationsView（前端过滤全量关系），
 // 「+ 新建」变「+ 建立关联」打开共用 CreateRelationDialog（列表模式，源可选）
 // （2026-08 批次十）：设定 tab（entityType==="setting"）改为**树形视图**（SettingTreeView，
 // 与设定树 tab 合并）；设定不走表格/分页，
@@ -20,7 +22,7 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { ENTITY_TYPES } from "@whispering233/ai-editor-shared";
 import type { EntitySummary, EntityType } from "@whispering233/ai-editor-shared";
-import { Alert, Button, Empty, Input, Pagination, Segmented, Select, Skeleton, Tag, Typography } from "antd";
+import { Alert, Button, Empty, Input, Pagination, Select, Skeleton, Tag, Typography } from "antd";
 import { SearchOutlined } from "@ant-design/icons";
 import {
   ApiError,
@@ -37,7 +39,7 @@ import {
   SUMMARY_COLUMNS,
   summaryCellText,
 } from "../lib/entity-list";
-import { entityDetailPath, entityListPath } from "../lib/entity-paths";
+import { entityDetailPath } from "../lib/entity-paths";
 import { navigate } from "../hooks/use-route";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useUiStore } from "../stores/ui";
@@ -253,26 +255,10 @@ export default function EntityList({ type }: { type: string }) {
 
   return (
     <section>
-      <Typography.Title level={4} className="!mb-4">
-        实体
-      </Typography.Title>
-
-      {/* 顶部：类型切换（antd Segmented）+ 搜索 + 新建
-          （设定树自带工具栏——搜索/新建在树内，顶部不重复渲染） */}
+      {/* 顶部：搜索 + 新建（设定树自带工具栏——搜索/新建在树内，顶部不重复渲染）
+          批次十八 A1（#6）：类型切换 Segmented 与「实体」标题已移除——
+          人物/设定/地点/关联是一级导航项（左栏 NavRail），列表页不再做二级 tab 切换 */}
       <div className="flex flex-wrap items-center gap-3 border-b border-border pb-3">
-        <Segmented
-          value={isRelations ? "relations" : entityType}
-          onChange={(value) => {
-            const v = String(value);
-            navigate(v === "relations" ? "/relations" : entityListPath(v as "character" | "setting" | "location"));
-          }}
-          options={[
-            { label: "人物", value: "character" },
-            { label: "设定", value: "setting" },
-            { label: "地点", value: "location" },
-            { label: "关联", value: "relations" },
-          ]}
-        />
         <div className="ml-auto flex items-center gap-2">
           {!isRelations && entityType !== "setting" && (
             <Input
