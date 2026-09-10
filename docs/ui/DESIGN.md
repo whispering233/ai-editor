@@ -1,0 +1,442 @@
+---
+version: alpha
+name: ai-editor 设计语言（Notion 工作区 × antd v6）
+description: 本地优先的写作助手工作台。视觉取自 Notion 工作区（非其营销站）：暖灰纸感中性色、hairline 描边分栏、无阴影、彩色只用于状态与标签；实现基座是 antd v6 的 token 派发（AntdProvider 只覆盖少量 seed 与组件 token），故视觉规则与 antd 语义一一对应、不并存第二套组件系统。
+colors:
+  primary: "#37352f"
+  on-primary: "#ffffff"
+  secondary: "#5d5b54"
+  tertiary: "#787671"
+  quaternary: "#a4a097"
+  canvas: "#ffffff"
+  surface: "#f6f5f4"
+  surface-soft: "#fafaf9"
+  surface-muted: "#f0eeec"
+  hairline: "#e5e3df"
+  hairline-soft: "#ede9e4"
+  hairline-strong: "#c8c4be"
+  link: "#0075de"
+  success: "#1aae39"
+  warning: "#dd5b00"
+  error: "#e03131"
+  tint-peach: "#ffe8d4"
+  tint-rose: "#fde0ec"
+  tint-mint: "#d9f3e1"
+  tint-lavender: "#e6e0f5"
+  tint-sky: "#dcecfa"
+  tint-yellow: "#fef7d6"
+typography:
+  page-title:
+    fontFamily: "system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif"
+    fontSize: 20px
+    fontWeight: 600
+    lineHeight: 1.4
+  section-title:
+    fontFamily: "system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif"
+    fontSize: 16px
+    fontWeight: 600
+    lineHeight: 1.5
+  body:
+    fontFamily: "system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif"
+    fontSize: 14px
+    fontWeight: 400
+    lineHeight: 1.57
+  body-medium:
+    fontFamily: "system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif"
+    fontSize: 14px
+    fontWeight: 500
+    lineHeight: 1.57
+  caption:
+    fontFamily: "system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif"
+    fontSize: 12px
+    fontWeight: 400
+    lineHeight: 1.67
+rounded:
+  xs: 4px
+  sm: 6px
+  md: 8px
+  full: 9999px
+spacing:
+  xxs: 4px
+  xs: 8px
+  sm: 12px
+  md: 16px
+  lg: 24px
+  xl: 32px
+# ⚠ 组件子 token 白名单（规范硬约束，lint 会校验）：
+# backgroundColor / textColor / typography / rounded / padding / size / height / width。
+# 描边与阴影（border / shadow）不在白名单内——它们只能写在 §Components 的 prose 里，
+# 因此 {colors.hairline*} 与 tint 色会稳定产生 orphaned-tokens 警告：属预期，见 §Iteration Guide。
+components:
+  page-title:
+    textColor: "{colors.primary}"
+    typography: "{typography.page-title}"
+  section-title:
+    textColor: "{colors.primary}"
+    typography: "{typography.section-title}"
+  body-text:
+    textColor: "{colors.primary}"
+    typography: "{typography.body}"
+  caption-text:
+    textColor: "{colors.tertiary}"
+    typography: "{typography.caption}"
+  placeholder-text:
+    textColor: "{colors.quaternary}"
+    typography: "{typography.body}"
+  link-text:
+    textColor: "{colors.link}"
+    typography: "{typography.body}"
+  success-text:
+    textColor: "{colors.success}"
+    typography: "{typography.body}"
+  warning-text:
+    textColor: "{colors.warning}"
+    typography: "{typography.body}"
+  error-text:
+    textColor: "{colors.error}"
+    typography: "{typography.body}"
+  button-primary:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.on-primary}"
+    typography: "{typography.body-medium}"
+    rounded: "{rounded.sm}"
+    padding: "{spacing.xs} {spacing.sm}"
+    height: 32px
+  button-default:
+    backgroundColor: "{colors.canvas}"
+    textColor: "{colors.primary}"
+    typography: "{typography.body-medium}"
+    rounded: "{rounded.sm}"
+    padding: "{spacing.xs} {spacing.sm}"
+    height: 32px
+  button-text:
+    backgroundColor: "{colors.canvas}"
+    textColor: "{colors.primary}"
+    typography: "{typography.body-medium}"
+    rounded: "{rounded.sm}"
+    padding: "{spacing.xs} {spacing.sm}"
+  icon-button:
+    backgroundColor: "{colors.canvas}"
+    textColor: "{colors.tertiary}"
+    rounded: "{rounded.sm}"
+    size: 28px
+  input:
+    backgroundColor: "{colors.canvas}"
+    textColor: "{colors.primary}"
+    rounded: "{rounded.sm}"
+    height: 32px
+  select-option-selected:
+    backgroundColor: "{colors.surface-muted}"
+    textColor: "{colors.primary}"
+  menu-item:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.primary}"
+    typography: "{typography.body}"
+    rounded: "{rounded.sm}"
+    height: 32px
+  menu-item-selected:
+    backgroundColor: "{colors.surface-muted}"
+    textColor: "{colors.primary}"
+  sidebar:
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.primary}"
+    width: 220px
+  info-bar:
+    backgroundColor: "{colors.canvas}"
+    textColor: "{colors.secondary}"
+    typography: "{typography.caption}"
+    height: 44px
+  card:
+    backgroundColor: "{colors.canvas}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.md}"
+  empty-state:
+    backgroundColor: "{colors.canvas}"
+    textColor: "{colors.tertiary}"
+    rounded: "{rounded.md}"
+    typography: "{typography.body}"
+  data-row:
+    backgroundColor: "{colors.canvas}"
+    textColor: "{colors.primary}"
+    typography: "{typography.body}"
+    padding: "{spacing.xs} {spacing.sm}"
+  data-row-hover:
+    backgroundColor: "{colors.surface-soft}"
+  table-header:
+    backgroundColor: "{colors.canvas}"
+    textColor: "{colors.secondary}"
+    typography: "{typography.caption}"
+  tag:
+    backgroundColor: "{colors.surface-muted}"
+    textColor: "{colors.secondary}"
+    typography: "{typography.caption}"
+    rounded: "{rounded.xs}"
+    padding: "0 {spacing.xxs}"
+  status-badge:
+    backgroundColor: "{colors.surface-muted}"
+    textColor: "{colors.secondary}"
+    typography: "{typography.caption}"
+    rounded: "{rounded.full}"
+    padding: "{spacing.xxs} {spacing.xs}"
+  chat-bubble-user:
+    backgroundColor: "{colors.surface-muted}"
+    textColor: "{colors.primary}"
+    typography: "{typography.body}"
+    rounded: "{rounded.md}"
+  chat-bubble-assistant:
+    backgroundColor: "{colors.canvas}"
+    textColor: "{colors.primary}"
+    typography: "{typography.body}"
+  focus-strip:
+    backgroundColor: "{colors.surface-soft}"
+    textColor: "{colors.secondary}"
+    rounded: "{rounded.sm}"
+    typography: "{typography.caption}"
+  proposal-card:
+    backgroundColor: "{colors.canvas}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.md}"
+  dropdown-panel:
+    backgroundColor: "{colors.canvas}"
+    rounded: "{rounded.md}"
+  toast:
+    backgroundColor: "{colors.canvas}"
+    textColor: "{colors.primary}"
+    rounded: "{rounded.md}"
+    typography: "{typography.body}"
+---
+
+# ai-editor 设计语言
+
+> 事实源：本文件是**视觉唯一契约**（颜色/字体/圆角/间距/组件外观）。布局与交互结构见 `layout.md`；实现层 token 覆盖见本文 §Colors 的 antd 映射表与 §Components 的组件 token 覆盖表。改样式先改本文件，再改代码；改完跑 `designmd lint docs/ui/DESIGN.md`。
+
+## Overview
+
+**定位**：本地优先的写作助手工作台——三栏密集布局，长时间盯屏，结构化数据（大纲/人物/设定/地点/伏笔/时间轴/关联/参考资料）+ 常驻 AI 会话栏。**产品不编辑正文**，所以视觉不是「编辑器」，而是「创作资料台」。
+
+**风格来源**：Notion **工作区**（不是 notion.com 营销站）。工作区与营销站是两套语言——营销站的紫色 CTA、深蓝 hero 带、马卡龙功能卡、80px 标题一律不采用；采用其工作区那一半：
+
+- **暖灰纸感**：底色/描边/文字都带一丝暖（`#f6f5f4` / `#e5e3df` / `#37352f`），不是冷灰也不纯黑，长时间阅读更静
+- **hairline 分栏**：结构靠 1px 描边，不靠阴影与色块
+- **扁平**：零阴影（浮层除外），无渐变
+- **安静**：彩色只服务状态与标签；界面本体是灰阶
+- **密集**：正文 14px、行高 1.57、控件高 32px——信息密度优先于展示性留白
+- **全站无衬线**：中文靠系统字体栈（`PingFang SC` / `Microsoft YaHei`），不下载 web 字体（离线可用）；唯一衬线例外是书架封面（见 §Typography）
+
+**情绪目标**：像一张干净的纸和一支安静的笔——不是仪表盘，也不是玩具。
+
+## Colors
+
+### 文字阶梯（primary → quaternary）
+
+- **Primary (#37352f)**：Notion 的招牌暖炭墨。主文本、主按钮底色、选中态文字——**同时是品牌色与文本色**（antd `colorPrimary` 与 `colorText` 同值）。它不是纯黑，暖度来自 #37 的红分量。
+- **Secondary (#5d5b54)**：次要说明、表头、徽标文字、次级按钮文字。
+- **Tertiary (#787671)**：metadata、占位说明、图标默认色。
+- **Quaternary (#a4a097)**：placeholder、禁用态、最弱的装饰文字。
+
+### 表面（canvas → surface-muted）
+
+- **Canvas (#ffffff)**：内容面板底色（中栏内容、卡片、浮层、下拉面板）。
+- **Surface (#f6f5f4)**：外壳底色（左栏、窗口留白区）——比 canvas 暗一档，让面板「浮」出来，但不用阴影。
+- **Surface Soft (#fafaf9)**：行 hover、focus 小条等最弱反馈面。
+- **Surface Muted (#f0eeec)**：选中态/次级面（菜单选中项、user 气泡、Tag 底色）——**选中靠灰面而不是彩色**。
+
+### 描边（hairline → hairline-strong）
+
+- **Hairline (#e5e3df)**：结构分栏、卡片描边。
+- **Hairline Soft (#ede9e4)**：更强的分隔（表格行、区块内分隔）。
+- **Hairline Strong (#c8c4be)**：输入框/次级按钮描边（需要比 hairline 更明确的可点性信号）。
+
+### 交互与语义
+
+- **Link (#0075de)**：正文链接专用，与 primary 分工明确——**链接是蓝的，按钮是墨的**，不混用。
+- **Success (#1aae39) / Warning (#dd5b00) / Error (#e03131)**：语义三色，只用于状态（成功提示、校验失败、危险操作确认）。
+
+### 标签色（tint 系，Notion database property 的回声）
+
+- **tint-peach / tint-rose / tint-mint / tint-lavender / tint-sky / tint-yellow**：6 个马卡龙实底，专供标签/分类 chip（`data.tags`）、书封等信息色块。**只做小面积底色，不做大面积背景**。
+- 营销站那套 bold 黄（`#f9e79f`）与深蓝 hero 带**不纳入**。
+
+### antd 实现映射（seed token，唯一改色入口）
+
+改色只改 `packages/client/src/components/AntdProvider.tsx` 的 theme 对象；其余色阶由 light/dark 算法派生。
+
+| antd seed | 浅色值 | 深色值（推断） | 本文件 token |
+|---|---|---|---|
+| `colorPrimary` / `colorText` | `#37352f` | `rgba(255,255,255,.81)` | `{colors.primary}` |
+| `colorTextSecondary` | `#5d5b54` | `rgba(255,255,255,.65)` | `{colors.secondary}` |
+| `colorTextTertiary` | `#787671` | `rgba(255,255,255,.51)` | `{colors.tertiary}` |
+| `colorTextQuaternary` | `#a4a097` | `rgba(255,255,255,.34)` | `{colors.quaternary}` |
+| `colorBgContainer` / `colorBgElevated` | `#ffffff` | `#202020` / `#252525` | `{colors.canvas}` |
+| `colorBgLayout` | `#f6f5f4` | `#191919` | `{colors.surface}` |
+| `colorBorder` | `#e5e3df` | `#2f2f2f` | `{colors.hairline}` |
+| `colorBorderSecondary` | `#ede9e4` | `#373737` | `{colors.hairline-soft}` |
+| `colorLink` | `#0075de` | `#529cca` | `{colors.link}` |
+| `colorSuccess` / `colorWarning` / `colorError` | `#1aae39` / `#dd5b00` / `#e03131` | 同 | 语义三色 |
+| `borderRadius` / `borderRadiusSM` | `6px` / `4px` | — | `{rounded.sm}` / `{rounded.xs}` |
+
+**不登记派生色**：hover/active/禁用底、`colorFill*` 系列、深浅算法派生的色阶一律不写进本文件——登记了就必然与 antd 实际派发值漂移。本文件只登记「人为设定的值」。
+
+**深色值来源**：Notion 未公开深色 token（源分析文档 `Known Gaps` 明示）——上表深色列是**推断值**：中性面按 Notion 深色工作区观感（`#191919` / `#202020`），文字按 81%/65%/51%/34% 白的阶梯，其余交给 antd `darkAlgorithm`。若日后与实机对不上，只按观感调 `AntdProvider` 一处。
+
+## Typography
+
+**族**：全站单一无衬线系统栈（`system-ui` → `PingFang SC` → `Microsoft YaHei`）。**不下载 web 字体**（本地优先、离线可用、首帧零 FOIT）。
+
+**四档制（唯一字号集合）**：
+
+| 档 | 字号 / 字重 | 用途 | antd 实现 |
+|---|---|---|---|
+| `{typography.page-title}` | 20px / 600 | 页面标题（每页一个） | `Typography.Title level={4}` |
+| `{typography.section-title}` | 16px / 600 | 区块/卡片标题 | `Typography.Title level={5}` |
+| `{typography.body}` | 14px / 400 | 正文、表单、列表行 | `--ant-font-size`（14） |
+| `{typography.body-medium}` | 14px / 500 | 按钮文字、强调 | 按钮/`strong` |
+| `{typography.caption}` | 12px / 400 | metadata、徽标、表头、提示 | `--ant-font-size-sm`（12） |
+
+**删掉的档**：10px、11px、13px、`0.8rem`、18px 不作为独立档存在（旧手写 `text-[10px]`/`text-[11px]`/`text-[0.8rem]` 全部并入 12px）。需要「更小」时是信息层级没设计好，不是字号不够用。
+
+**行高**：正文 1.57（antd 22px/14px），标题 1.4，caption 1.67（antd 20px/12px）。
+
+**衬线例外（仅一处）**：书架封面（`lib/book-cover.ts` 渲染的书名）可用衬线栈 `"Noto Serif SC", "Songti SC", serif`——书是唯一的「文学物件」。若该栈在该机器上落到 `SimSun`，观感劣化明显，则退化为无衬线。**界面 chrome 一律禁衬线**（旧 `--font-serif` / `--font-heading` 已退役）。
+
+## Layout
+
+- **三栏**：左栏 NavRail（160-480px，默认 220）、中栏内容（保底 320px）、右栏 ChatPanel（240-720px，默认 380）；**无 TabBar**，页面组织只有一级导航。
+- **间距基**：4px；实用档 `{spacing.xxs}`(4) / `{spacing.xs}`(8) / `{spacing.sm}`(12) / `{spacing.md}`(16) / `{spacing.lg}`(24) / `{spacing.xl}`(32)。沿用 antd `sizeUnit` 与 Tailwind 4px 网格，**无自定义间距值**。
+- **页面内侧**：内容区 padding 16px；区块之间 12-16px；行内元素 8px；图标与文字间距 8px。
+- **控件高**：常规 32px（`--ant-control-height`），小号 24px，大号 40px；行高 32-36px 保证密集列表节奏一致。
+- **响应式**：`<1024px` 折叠右栏为抽屉、隐藏拖拽手柄（见 `layout.md`）；本设计语言不对移动端另立规则。
+- **滚动**：各栏独立纵向滚动；分栏之间靠 1px hairline，不靠阴影或沟槽分隔线（旧 6px 灰分隔条已废）。
+
+## Elevation & Depth
+
+**默认零阴影。** 层级关系由「底色档 + 1px 描边」表达：`surface`（外壳）→ `canvas`（面板）→ `surface-muted`（选中/次级面）。
+
+唯一例外是**浮层**（下拉、Popover、右键菜单、Tooltip）：
+
+| 层级 | 处理 | 用途 |
+|---|---|---|
+| 0 平面 | 无阴影，1px `{colors.hairline}` | 卡片、行、面板——默认 |
+| 1 浮层 | `0 8px 24px rgba(15, 15, 15, 0.10)` | 下拉/菜单/Popover/右键菜单/Toast |
+
+**明令禁止**：antd 默认的按钮投影（`primaryShadow`/`defaultShadow`/`dangerShadow` 全部置 `none`）、彩色 focus 环（`Input`/`Select` 的 `activeShadow` 置 `none`，聚焦改为 1px 描边 + primary 色边框）、卡片 hover 抬升。
+
+## Shapes
+
+| token | 值 | 用途 | antd token |
+|---|---|---|---|
+| `{rounded.xs}` | 4px | Tag、状态徽标内衬、小内衬块 | `borderRadiusSM` |
+| `{rounded.sm}` | 6px | 按钮、输入框、菜单项、focus 小条 | `borderRadius` |
+| `{rounded.md}` | 8px | 卡片、浮层、气泡 | `borderRadiusLG` |
+| `{rounded.full}` | 9999px | 状态圆点/胶囊徽标（**不用于普通按钮**） | — |
+
+**与 Notion 原值的偏差（有意）**：Notion 卡片是 12px，我们取 8px——antd 的 `borderRadiusLG` 同时管 Modal/Drawer/Table 等大面，改成 12 会连带全站变圆。若日后要更圆，先评估 Modal/Drawer 的观感再改 seed。**按钮一律矩形，不用胶囊形**（Notion 的 sober-editorial 几何）。
+
+## Components
+
+分层原则：**能用 antd 组件的地方不造第二套**（按钮/输入框/卡片/空态/提示全部用 antd），自绘只保留 antd 语义不匹配的浮层（右键菜单/受控 Dialog/轻量 Popover）与业务组件。
+
+**描边与阴影的契约（prose 承载）**：DESIGN.md 规范的组件子 token 白名单只有 `backgroundColor/textColor/typography/rounded/padding/size/height/width`，`border`/`shadow` 写进 frontmatter 会被 lint 判为非法键——因此描边与阴影在这一节用文字定稿，也是实现时的唯一依据：
+
+| 元素 | 描边 | 阴影 |
+|---|---|---|
+| sidebar（左栏） | 右侧 1px `{colors.hairline}` | 无 |
+| info-bar（信息条） | 底部 1px `{colors.hairline}` | 无 |
+| card / proposal-card / dropdown-panel / toast | 1px `{colors.hairline}` | 仅浮层（dropdown-panel / toast）：`0 8px 24px rgba(15, 15, 15, 0.10)`；card 无 |
+| input / button-default | 1px `{colors.hairline-strong}` | 无 |
+| empty-state | 1px 虚线 `{colors.hairline}` | 无 |
+| data-row / table-header | 底部 1px `{colors.hairline-soft}` / `{colors.hairline}` | 无 |
+| focus-strip | 1px `{colors.hairline}` | 无 |
+
+聚焦态（input/select）统一：1px `{colors.primary}` 描边，**无阴影、无彩环**。
+
+### 排版与容器
+
+**`page-title`** — 每个页面一个主标题，`Typography.Title level={4}`（20px/600，`{colors.primary}`）。页面标题不再手写 `<h1 className="text-xl font-semibold">`。
+**`section-title`** — 区块标题，`level={5}`（16px/600）。区块容器用 `card`：1px `{colors.hairline}` + `{rounded.md}` + `{spacing.md}` 内边距，**不带表头底色**（antd Card 默认行为，不用 `headerBg`）。
+**`caption-text`** — metadata/表头/说明，`Typography.Text type="secondary"`（12px `{colors.tertiary}`）。
+**`empty-state`** — 空态：虚线 `{colors.hairline}` 描边 + `{rounded.md}` + 居中 `{colors.tertiary}` 说明 + 可选主操作。antd `Empty` 的插图与外层组件统一（不再各页自画虚线框）。
+
+### 按钮与表单
+
+**`button-primary`** — 墨底白字、矩形、无投影。用于页面主操作（新建/保存）。
+**`button-default`** — 白底 + `{colors.hairline-strong}` 描边（**文字型操作按钮必须带边框**，这是仓库既有红线 H4）。
+**`button-text`** — 无边框纯文字，只用于行内最弱操作；**不得用于页面级操作**。
+**`icon-button`** — 28px 方区、图标色 `{colors.tertiary}`、hover 变 `{colors.primary}`；不受「必须带边框」约束。
+**`input`** — 白底 + `{colors.hairline-strong}` 描边 + `{rounded.sm}` + 32px 高；聚焦 = 1px primary 描边（**无阴影、无彩环**）。行内编辑与表单用同一个 antd `Input`。
+**`select-option-selected`** — 选中项 = `{colors.surface-muted}` 灰面，不变蓝。
+
+### 导航与外壳
+
+**`sidebar`** — 左栏底 `{colors.surface}`（比内容面板暗一档），右侧 1px `{colors.hairline}`；产品标识、回到书架、九项一级导航、工具区（回收站）、底部设置与主题。
+**`menu-item`** / **`menu-item-selected`** — 菜单项 32px 高、`{rounded.sm}`；**选中 = `{colors.surface-muted}` 灰面 + 文字不变色**（antd 默认的彩色选中项要显式覆盖：`itemSelectedBg` / `itemSelectedColor`）。
+**`info-bar`** — 中栏顶部 1px 底线；项目名 + 当前位置 + 语言 + 小屏聊天开关。字号 `{typography.caption}`。
+
+### 数据展示
+
+**`data-row`** / **`data-row-hover`** — 列表/树/大纲行：无底色 + 底部 1px `{colors.hairline-soft}`；hover = `{colors.surface-soft}`。双击进详情、单击标题行内编辑（交互规则见 `layout.md` §7）。
+**`table-header`** — 表头**白底**（不是 antd 默认灰底）+ 1px `{colors.hairline}` 底线 + caption 字色 `{colors.secondary}`。
+**`tag`** — 分类/标签 chip：`{rounded.xs}` + `{colors.surface-muted}` 默认底，彩色用 tint 系（`tint-peach`…）小面积实底。**标签不做按钮形态**。
+**`status-badge`** — 状态胶囊（进行中/已确认/已失效等）：`{rounded.full}` + caption 字号 + 语义色或 tint 底色；状态图标用 antd **Filled** 变体（`CheckCircleFilled`/`CloseCircleFilled`/`ExclamationCircleFilled`）。
+
+### 会话（右栏）
+
+**`chat-bubble-user`** — user 消息：`{colors.surface-muted}` 灰底 + `{rounded.md}`。
+**`chat-bubble-assistant`** — assistant 消息：无底透明 + 正文排版（长文本可读性优先，不用气泡包）。
+**`focus-strip`** — 「正在讨论：{类型} {名称}」小条：`{colors.surface-soft}` 底 + 1px 描边 + caption。
+**`proposal-card`** — 提案卡：1px 描边卡片 + 确认/拒绝按钮（确认按钮用 `button-primary`，禁用态由 antd 派发）。
+**`toast`** — 全局提示走 antd `message`（`App.useApp()`），顶部居中；`success/error/info` 对应 store 的 `ToastKind`，时长由 store 的 3s 定时器决定（`duration: 3` 对齐）。
+
+### antd 组件 token 覆盖（全部覆盖项就这些）
+
+| 组件 | token | 值 |
+|---|---|---|
+| Button | `primaryShadow` / `defaultShadow` / `dangerShadow` | `"none"` |
+| Menu | `itemSelectedBg` / `itemSelectedColor` / `itemBorderRadius` / `itemHeight` / `itemMarginInline` | `{colors.surface-muted}` / `{colors.primary}` / `6` / `32` / `4` |
+| Table | `headerBg` / `borderColor` / `cellPaddingBlock` | `{colors.canvas}` / `{colors.hairline}` / `8` |
+| Input | `activeShadow` | `"none"` |
+| Select | `activeShadow` / `optionSelectedBg` | `"none"` / `{colors.surface-muted}` |
+| Tag | `defaultBg` | `{colors.surface-muted}` |
+
+**新增覆盖需先写进本表**（禁止在调用点用 `!` 前缀类硬压 antd 样式——旧代码里 43 处 `!mb-`/`!mt-`/`!text-*` 随组件收敛一并清除）。
+
+## Do's and Don'ts
+
+### Do
+
+- 颜色只经 antd token / 本文件登记的值；改色只改 `AntdProvider` 一处
+- 用 1px 描边和底色档表达层级；浮层才允许唯一那一条阴影
+- 选中态用 `{colors.surface-muted}` 灰面，不用彩色底
+- 字号只用四档（20 / 16 / 14 / 12）；标题一律 `Typography.Title level={4|5}`
+- 图标一律 `@ant-design/icons`；尺寸随字号类（14 `text-sm` / 16 `text-base` / 20 `text-xl` / 空态 24 `text-2xl`）；状态用 Filled、操作与导航用 Outlined
+- 文字型操作按钮带边框（H4 红线）；操作按钮一律直接展示，不收进 `⋯` 菜单
+- 中文排版靠系统字体栈；不引入 web 字体
+
+### Don't
+
+- 不用营销站那套：紫 CTA、深蓝 hero 带、马卡龙大面积功能卡、胶囊按钮、80px 展示字
+- 不用 `font-serif` / 宋体做界面标题（唯一例外：书架封面）
+- 不硬编码色值/色类（`text-blue-500`、`#1677ff`、`rgba(...)` 手写值）
+- 不用 `!` 前缀类压 antd 组件样式
+- 不用阴影、渐变、彩色 focus 环、卡片 hover 抬升
+- 不引入第二套组件系统（lucide 图标 / sonner 提示 / cva 按钮已退役）；自绘只限 antd 无对应语义的浮层与业务组件
+- 不用胶囊形按钮；不把彩色用于大面背景或正文
+
+## Known Gaps
+
+- **深色 token 未公开**：源分析文档明示未提取 Notion 深色值，上表深色列是推断值，只保证 antd 派生一致，未与实机逐项比对。
+- **标签 tint 分配规则未实现**：6 个 tint 已登记，但「哪个标签用哪个色」尚未定义（当前 antd `Tag` 默认灰底可用）。需要时再定映射（如按标签名 hash 稳定取色），不要在调用点随手挑色。
+- **antd 派生色未登记**：hover/active/禁用底、`colorFill*`、浅色色阶由算法派生，本文件不复制（避免漂移）。
+- **MD 编辑器是独立表皮**：参考资料页的 `@uiw/react-md-editor` 自带一套排版与配色，未纳入本设计系统（编辑器内部不套 chrome token）；若观感冲突，再单独收。
+- **书封色是硬编码**：`lib/book-cover.ts` 用 `hsl(hue 45% 90%)` 生成渐变，深色模式下偏亮；未纳入 token 体系。
+- **插件/第三方浮层未覆盖**：x-markdown 渲染出的表格/引用块样式由库自带，未做 token 映射。
+- **响应式未细化**：只定义 `<1024px` 的抽屉回退，触屏尺寸与最小点击区未定义。
+
+## Iteration Guide
+
+1. 改视觉 → 先改本文件，再改 `AntdProvider.tsx`，最后改调用点；顺序反了必然产生「文档与实现两套事实」
+2. 每次改完跑 `designmd lint docs/ui/DESIGN.md`（error 必须清零）。**两类稳定存在的 warning 属预期**：① `orphaned-tokens`——`{colors.hairline*}`、6 个 tint 只出现在 prose（规范无 border 子 token）；② 深浅算法的派生值不登记（避免与实现漂移）
+3. 新组件先加 `components:` 条目 + §Components 一行说明，再写代码
+4. 需要新色/新字号 = 先问「现有档位为什么不够」，能复用就复用（四档字号、四档圆角是刻意收紧的）
+5. 覆盖 antd 组件 token 必须登记进覆盖表；调用点 `!` 前缀类是禁止项
+6. 深色模式任何改动都要在浅/深两态下各看一遍（算法派生值随 seed 变化）

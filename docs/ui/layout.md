@@ -112,5 +112,5 @@
 - **保存快捷键**：`Ctrl/Cmd + S` 触发当前页面保存——表单页 = 保存按钮同动作；行内编辑进行中 = 提交当前编辑（Enter 同语义）；拦截浏览器默认保存对话框；无保存语义时按下不响应。
 - **行级交互模式**（树/组 + 行结构页面统一心智，行级操作按钮收敛为只保留删除）：双击行 = 跳详情；单击标题 = 行内编辑（Enter 确认、Esc 取消、失焦保存）；选中节点 Enter = 就地新建子级；行级只保留删除按钮；拖拽排序/移动保留（层级约束与防环校验沿用各页语义）。
 - **右键菜单**（大纲节点/实体/伏笔/参考资料/时间点/事件行）：菜单项 = 「注入会话上下文」+「建立关联」（新建 relation_records 关联，端点按行实体类型预填）。
-- **主题切换**：左栏底部按钮，浅/深双主题 = antd ConfigProvider 默认色板双算法（lightAlgorithm/darkAlgorithm）；切换态持久化 localStorage，首帧 FOUC 防护保留（深色模式首帧不闪白）。
-- **样式纪律**：颜色一律经 antd token（组件 props/token 或 cssinjs 变量），**禁止硬编码色值/色类**；布局结构允许 Tailwind utility（不含颜色）。
+- **主题切换**：左栏底部按钮，浅/深双主题 = antd ConfigProvider 双算法（lightAlgorithm/darkAlgorithm）；色值不取 antd 默认色板，而是 Notion 工作区的暖灰 token 覆盖（值见 `DESIGN.md` §Colors，改色唯一入口 = `AntdProvider.tsx`）；切换态持久化 localStorage，首帧 FOUC 防护保留（深色模式首帧不闪白）。
+- **样式纪律**：颜色一律经 antd token（组件 props/token 或 cssinjs 变量），**禁止硬编码色值/色类**；布局结构允许 Tailwind utility（不含颜色）。**视觉契约的单一事实源 = `docs/ui/DESIGN.md`**（颜色/字体/四档字号/圆角/间距/组件外观 + antd seed 与组件 token 覆盖表）——本文档不重复样式细节，改样式先改 DESIGN.md 再改代码。
