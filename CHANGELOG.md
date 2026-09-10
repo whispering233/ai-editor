@@ -5,7 +5,10 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]（批次二十：用户反馈九项 + 两条静默失效根因）
+## [v0.0.29] - 2026-09-11
+
+> 批次二十（用户反馈九项 + 两条静默失效根因）+ 批次二十一（链式新建断链）。**纯前端，API/数据契约零改动**；新增 4 条源码守卫规则（累计 13 条）。
+
 
 ### Fixed（两条静默失效根因——都是「测试全绿但像素全错」）
 
@@ -26,7 +29,8 @@
 ### Changed
 
 - **视觉契约补登**：`DESIGN.md` 新增 tint 分配规则、`search-input`/`drag-indicator`/`icon-button` 统一约定与「拖拽目标行与临时高亮」prose 契约；标注 `chat-bubble-user` 禁用 `colorPrimaryBg`；§Iteration Guide 增「改完主题必看像素」闭环
-- 守卫测试新增 3 条源码规则：`cssvar-scope` / `button-variant-color` / `primary-bg-token`（均带自检样例），并给逐行规则加注释行豁免（注释里写禁用原因不应被误判）
+- 守卫测试新增 3 条源码规则：`cssvar-scope` / `button-variant-color` / `primary-bg-token`（均带自检样例），并给逐行规则加注释行豁免（注释里写禁用原因不应被误判）；批次二十一再加 `no-dynamic-class`（拼接类名不会被 Tailwind 生成）
+- **文档修正**：`README.md` 两处过时陈述（`lib/styles.ts` 的图标按钮常量已在 T6 删除、Prettier 配置并未接入强制流程）；`milestone.md` 补批次二十/二十一；`tasks.md` 清理已完成卡（改为「当前卡 + 历史批次摘要表」）
 
 ## [v0.0.28] - 2026-09-11
 
