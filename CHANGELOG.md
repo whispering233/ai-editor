@@ -5,6 +5,28 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]（批次二十：用户反馈九项 + 两条静默失效根因）
+
+### Fixed（两条静默失效根因——都是「测试全绿但像素全错」）
+
+- **语义色层整体失效（P0）**：antd v6 的 `cssVar` **从不把 `--ant-*` 注入 `:root`**，而是挂在组件级 class 作用域（`.css-var-<useId>`）；`index.css` 的 `:root { --primary: var(--ant-color-primary) }` 等映射因此全部解析为空——全站 Tailwind 语义色（`bg-card` / `border-border` / `text-muted-foreground` / `bg-primary` / hover 面 / chip 底色 / 拖拽指示线）静默透明（批次十七引入，本次才被发现）。修复 = `cssVar: { key: CSS_VAR_KEY }` 与 `index.html` 的 `<html class>` 同值，并在 `design-discipline.test.ts` 加 `cssvar-scope` 守卫锁死两处字面量
+- **antd Button `variant` 静默回落**：v6 只在 `color` 与 `variant` **同时**给出时才走 color/variant 分支（`Button.js:91`），仓库 22 处 `variant="text"` 实际渲染成**带边框的 outlined 按钮**，与遗留 `type="text"` 的真 text 按钮混用（“图标按钮颜色不统一”的根因）；全仓统一为 `color="default" variant="text"` + 新增 `button-variant-color` 守卫
+- **右栏用户消息不可读**：user 气泡底色用 `colorPrimaryBg`，而主色 seed 是深墨 `#37352f`——antd 派生的 `colorPrimaryBg` 实测为 `#787771`（中灰），灰底压墨字对比度 ~1.9:1；改用 `colorFillTertiary`（= `surface-muted`，DESIGN.md 契约）+ `primary-bg-token` 守卫
+- **拖拽无落点指示**：大纲页插入线用 `bg-accent`（= `surface-muted`，白底对比度 ~1.06:1）且设定树目标行同为近白面——用户无法判断会插到哪里；统一 `DropIndicator`（primary 3px 实线 + 两端圆点）替换三处各自实现，拖拽目标/新建定位临时高亮改 `bg-primary/10` + `ring-primary/30`（覆盖 setting-tree/Outline/EntityList/TimelineGroup/Dashboard）
+- **时间轴按钮错位**：组标题行缺 `px-3`，其右侧按钮列与事件卡按钮列错开 12px
+- **页面标题缺失**：人物/设定/地点/关联四页在批次十八去二级 tab 时连标题一并删掉——补回（关联页标题原先还会错显“人物”）
+
+### Added（标签 tint 系统 + 中栏页面头部统一）
+
+- **标签 tint 系统**（兑现 DESIGN.md 已登记但未实现的 tint 契约）：`index.css` 定义 `--tag-*` 六色（浅实色 + 深 20% 叠色，唯一色值定义处）→ `lib/tag-tint.ts`（FNV-1a hash → 色档，**同名恒同色**；类名走静态查表，因为 Tailwind 不生成拼接类名）→ `components/ui/tag-chip.tsx`（全站唯一标签 chip 实现）；替换 9 处标签/类型徽标（人物/地点/设定/关联/伏笔/时间轴/参考资料/大纲/回收站）
+- **中栏页面头部统一结构**（`layout.md §3`）：第一行 = 页面标题单独一行；第二行 = 控件行（左：分类→标签→排序→搜索框，右：操作按钮）；搜索框全站统一规格（`SearchOutlined` 前缀 + 192px 宽 + `allowClear`）；重排 7 个页面（人物/设定/地点/关联/大纲/伏笔/时间轴/参考资料；概览/回收站/详情页不变）；关联页新增右上「+ 建立关联」入口
+- **图标按钮唯一实现**：自绘 `<button>` 图标按钮收敛到 antd `Button`（设定树折叠箭头/↑↓/删除、大纲折叠箭头与行尾删除、实体详情拖拽手柄、错误横幅关闭、左栏收起窄条展开）；不可恢复操作（purge/物理删关系）统一 `danger`，软删保持常规色；清 `lib/styles.ts` 死常量
+
+### Changed
+
+- **视觉契约补登**：`DESIGN.md` 新增 tint 分配规则、`search-input`/`drag-indicator`/`icon-button` 统一约定与「拖拽目标行与临时高亮」prose 契约；标注 `chat-bubble-user` 禁用 `colorPrimaryBg`；§Iteration Guide 增「改完主题必看像素」闭环
+- 守卫测试新增 3 条源码规则：`cssvar-scope` / `button-variant-color` / `primary-bg-token`（均带自检样例），并给逐行规则加注释行豁免（注释里写禁用原因不应被误判）
+
 ## [v0.0.28] - 2026-09-11
 
 ### Changed（批次十九：视觉语言统一——Notion 工作区暖灰 × antd 单一组件语言）
