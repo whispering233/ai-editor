@@ -20,6 +20,7 @@ import { Button, Input } from "antd";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { DeleteOutlined } from "@ant-design/icons";
 import { RowContextMenu } from "../entity/row-context-menu";
+import { TagChip } from "../ui/tag-chip";
 import { DropIndicator } from "../ui/drop-indicator";
 import { eventDescription, eventTagsOf } from "../../lib/timeline";
 import { useSaveShortcut } from "../../lib/save-shortcut";
@@ -202,12 +203,9 @@ export function TimelineEvent({
             </span>
           )}
           {tags.map((tag) => (
-            <span
-              key={tag}
-              className="shrink-0 rounded bg-primary/80 px-1.5 py-0.5 text-xs text-primary-foreground"
-            >
+            <TagChip key={tag} className="shrink-0">
               {tag}
-            </span>
+            </TagChip>
           ))}
           {/* 右侧信息与操作区（H6：N 节点计数靠右，与操作按钮一起，减少左侧干扰；
               详情/编辑按钮已移除——双击 = 详情、点击标题 = 行内编辑，只留删除；

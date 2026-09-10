@@ -20,7 +20,8 @@ import { ConfirmDialog } from "../outline/dialogs";
 import { EmptyState } from "../ui/empty-state";
 import { entityDetailPath } from "../../lib/entity-paths";
 import type { EntityType } from "@whispering233/ai-editor-shared";
-import { Alert, Button, Input, Select, Skeleton, Tag } from "antd";
+import { Alert, Button, Input, Select, Skeleton } from "antd";
+import { TagChip } from "@/components/ui/tag-chip";
 import { DeleteOutlined, SearchOutlined } from "@ant-design/icons";
 import { navigate } from "../../hooks/use-route";
 import { useUiStore } from "../../stores/ui";
@@ -80,7 +81,7 @@ export function filterRelations(
 
 /** 端点类型徽标（人物/设定/地点/伏笔/大纲节点） */
 function EndpointBadge({ type }: { type: string }) {
-  return <Tag>{ENDPOINT_TYPE_LABEL[type] ?? type}</Tag>;
+  return <TagChip>{ENDPOINT_TYPE_LABEL[type] ?? type}</TagChip>;
 }
 
 /** 端点名（含徽标）：四类实体跳实体详情；大纲节点（S12.2 起）跳节点详情 #/outline/:nodeId；未知类型灰显不可点 */
@@ -290,7 +291,9 @@ export function RelationsView({
               <li key={r.id} className="flex items-center gap-2 px-3 py-2 text-sm">
                 {scope !== undefined ? (
                   <>
-                    <Tag className="shrink-0 truncate">{relationTypeLabel(r.relationType)} →</Tag>
+                    <TagChip className="shrink-0 truncate">
+                      {relationTypeLabel(r.relationType)} →
+                    </TagChip>
                     <span className="min-w-0 flex-1">
                       <EndpointLink type={r.targetType} id={r.targetId} name={r.targetName} />
                     </span>
@@ -303,9 +306,9 @@ export function RelationsView({
                     {/* 关系类型列：等宽 1/4 + 居中（居中由父容器 flex 承担——Tag 自身带 text-align: start，
                         Tailwind 的 text-center 压不动它，只能用 `!` 或内联 style，两者都被样式纪律禁止） */}
                     <div className="flex w-1/4 min-w-0 shrink-0 justify-center">
-                      <Tag className="max-w-full truncate">
+                      <TagChip className="max-w-full truncate">
                         {relationTypeLabel(r.relationType)} →
-                      </Tag>
+                      </TagChip>
                     </div>
                     <span className="min-w-0 flex-1">
                       <EndpointLink type={r.targetType} id={r.targetId} name={r.targetName} />

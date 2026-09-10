@@ -22,6 +22,7 @@ import type { DragEvent, KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { Button, Input, Select } from "antd";
 import { DeleteOutlined, DownOutlined, RightOutlined, UpOutlined } from "@ant-design/icons";
 import { RowContextMenu } from "./row-context-menu";
+import { TagChip } from "@/components/ui/tag-chip";
 import { DropIndicator } from "@/components/ui/drop-indicator";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -755,12 +756,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
               {tags.length > 0 && (
                 <span className="flex shrink-0 items-center gap-0.5">
                   {tags.map((t) => (
-                    <span
-                      key={t}
-                      className="rounded bg-primary/80 px-1.5 py-0.5 text-xs text-primary-foreground"
-                    >
-                      {t}
-                    </span>
+                    <TagChip key={t}>{t}</TagChip>
                   ))}
                 </span>
               )}

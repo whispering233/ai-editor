@@ -28,6 +28,7 @@ import {
 } from "@ant-design/icons";
 import { RowContextMenu } from "../components/entity/row-context-menu";
 import { Button, Input, Select } from "antd";
+import { TagChip } from "@/components/ui/tag-chip";
 import { PageTitle } from "@/components/ui/page-title";
 import { EmptyState } from "@/components/ui/empty-state";
 import { errorBannerClass } from "@/lib/styles";
@@ -770,11 +771,7 @@ function HookGroupSection({
                   <span className="min-w-0 truncate font-medium text-foreground" title={hook.name}>
                     {hook.name}
                   </span>
-                  {category && (
-                    <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-                      {category}
-                    </span>
-                  )}
+                  {category && <TagChip className="shrink-0">{category}</TagChip>}
                   {/* 操作按钮全部展开（H3：禁止收进 ⋯ 二级展开；图标 + title/aria-label）；
                       AskAiButton 已移除——右键菜单替代 */}
                   <span className="ml-auto flex shrink-0 items-center gap-0.5">

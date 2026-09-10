@@ -11,8 +11,9 @@
 import { useEffect, useMemo, useState } from "react";
 import type { MouseEvent } from "react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
-import { Alert, Button, Input, Select, Skeleton, Tag } from "antd";
+import { Alert, Button, Input, Select, Skeleton } from "antd";
 import { PageTitle } from "@/components/ui/page-title";
+import { TagChip } from "@/components/ui/tag-chip";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
   DeleteOutlined,
@@ -486,7 +487,7 @@ function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowP
         {tags.length > 0 && (
           <div className="flex flex-wrap items-center gap-1">
             {tags.map((t) => (
-              <Tag key={t}>{t}</Tag>
+              <TagChip key={t}>{t}</TagChip>
             ))}
           </div>
         )}

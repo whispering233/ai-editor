@@ -14,8 +14,9 @@
 import { useEffect, useState } from "react";
 import type { EntityType } from "@whispering233/ai-editor-shared";
 import { formatRelativeTime } from "@whispering233/ai-editor-shared";
-import { Alert, Button, Skeleton, Tag, Typography } from "antd";
+import { Alert, Button, Skeleton, Typography } from "antd";
 import { PageTitle } from "@/components/ui/page-title";
+import { TagChip } from "@/components/ui/tag-chip";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DeleteOutlined, RedoOutlined, ReloadOutlined } from "@ant-design/icons";
 import { ConfirmDialog } from "../components/outline/dialogs";
@@ -58,7 +59,9 @@ const NODE_TYPE_LABEL: Record<OutlineNodeType, string> = {
 
 /** 类型徽标（antd Tag；实体/大纲类型共用） */
 function TypeBadge({ label }: { label: string }) {
-  return <Tag className="shrink-0">{label}</Tag>;
+  return (
+    <TagChip className="shrink-0">{label}</TagChip>
+  );
 }
 
 /** purge 确认目标（实体 / 节点） */

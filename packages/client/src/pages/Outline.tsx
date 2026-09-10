@@ -23,6 +23,7 @@ import type { OutlineNode } from "@whispering233/ai-editor-shared";
 import { DeleteOutlined } from "@ant-design/icons";
 import { CHILD_TYPE, TYPE_LABEL } from "../components/outline/dialogs";
 import { NodeHookMarkBadge } from "../components/outline/node-hook-badge";
+import { TagChip } from "@/components/ui/tag-chip";
 import { DropIndicator } from "@/components/ui/drop-indicator";
 import { PageTitle } from "@/components/ui/page-title";
 import { RowContextMenu } from "@/components/entity/row-context-menu";
@@ -720,9 +721,7 @@ export default function Outline() {
             ) : (
               <span className="w-4 shrink-0" />
             )}
-            <span className="flex h-5 w-7 shrink-0 items-center justify-center rounded bg-muted text-xs text-muted-foreground">
-              {TYPE_LABEL[node.type]}
-            </span>
+            <TagChip className="w-7 shrink-0 justify-center">{TYPE_LABEL[node.type]}</TagChip>
             {/* 标题：点击就地编辑（Enter 保存 / Esc 取消 / 失焦保存）；stopPropagation 隔离——
                 单击标题 = 编辑而非选中（ 冲突设计） */}
             {editingTitle ? (

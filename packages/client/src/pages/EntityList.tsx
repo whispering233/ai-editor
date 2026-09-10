@@ -22,8 +22,9 @@ import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { ENTITY_TYPES } from "@whispering233/ai-editor-shared";
 import type { EntitySummary, EntityType } from "@whispering233/ai-editor-shared";
-import { Alert, Button, Input, Pagination, Select, Skeleton, Tag, Typography } from "antd";
+import { Alert, Button, Input, Pagination, Select, Skeleton, Typography } from "antd";
 import { SearchOutlined } from "@ant-design/icons";
+import { TagChip } from "@/components/ui/tag-chip";
 import {
   ApiError,
   CLIENT_NETWORK_ERROR,
@@ -560,7 +561,7 @@ export default function EntityList({ type }: { type: string }) {
  * 角色/性格/能力独立成列——列头即区分，修复首版合并 chips 无法分辨的反馈。 */
 function CharacterRow({ item }: { item: EntitySummary }) {
   const { role, motivation, personality, abilities } = characterRowInfo(item.summary);
-  const badge = (text: string) => <Tag key={text}>{text}</Tag>;
+  const badge = (text: string) => <TagChip key={text}>{text}</TagChip>;
   return (
     <>
       {/* 名称列：名称 + 动机第二行（弱化样式，空动机不渲染） */}
@@ -581,7 +582,7 @@ function CharacterRow({ item }: { item: EntitySummary }) {
       </td>
       {/* 角色列 */}
       <td className="px-3 py-2">
-        {role !== "" ? <Tag>{role}</Tag> : <span className="text-muted-foreground">—</span>}
+        {role !== "" ? <TagChip>{role}</TagChip> : <span className="text-muted-foreground">—</span>}
       </td>
       {/* 性格列（前 2 chips）：td 保持 table-cell（禁止直接加 flex——浏览器表格布局会把
           非 cell 盒塞进同一列槽，能力列与性格列重叠，实测踩坑），flex 只作用内层容器 */}
