@@ -25,7 +25,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { Button, Input } from "antd";
-import { ListOrdered } from "lucide-react";
+import { OrderedListOutlined } from "@ant-design/icons";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { PageTitle } from "@/components/ui/page-title";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -503,7 +503,7 @@ export default function Timeline() {
           title={config ? undefined : "请先打开项目"}
         >
           <Button disabled={!config} onClick={handleAiSort} aria-label="AI 排序">
-            <ListOrdered className="size-3.5" />
+            <OrderedListOutlined className="text-sm" />
             AI 排序
           </Button>
         </span>

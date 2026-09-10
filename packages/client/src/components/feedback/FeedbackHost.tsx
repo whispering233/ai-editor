@@ -11,7 +11,7 @@
 // ConfirmDialog 实现于 components/outline/dialogs.tsx）」的渲染宿主；各页既有局部 ConfirmDialog 不受影响）。
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
-import { CircleAlert, X } from "lucide-react";
+import { CloseOutlined, ExclamationCircleFilled } from "@ant-design/icons";
 import { useUiStore, TOAST_DURATION_MS, type Toast } from "../../stores/ui";
 import { ConfirmDialog } from "../outline/dialogs";
 import { Toaster } from "../ui/sonner";
@@ -72,7 +72,7 @@ export function FeedbackHost() {
           role="alert"
           className="fixed top-4 left-1/2 z-50 flex w-[min(92vw,32rem)] -translate-x-1/2 items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive shadow-lg"
         >
-          <CircleAlert className="size-4 shrink-0" />
+          <ExclamationCircleFilled className="shrink-0 text-base" />
           <p className="min-w-0 flex-1">{error.message}</p>
           <button
             type="button"
@@ -80,7 +80,7 @@ export function FeedbackHost() {
             onClick={clearError}
             className="shrink-0 rounded p-0.5 hover:bg-destructive/15"
           >
-            <X className="size-4" />
+            <CloseOutlined className="text-base" />
           </button>
         </div>
       )}

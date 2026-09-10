@@ -9,7 +9,7 @@
 // 实体列表错误横幅内的「重试」按钮保留：那是错误态行内重试（错误时用户不一定会想到顶部刷新），
 // 与全局刷新不构成重复（不同状态上下文、不同语义）
 import { Button } from "antd";
-import { MessageSquare, RefreshCw } from "lucide-react";
+import { MessageOutlined, ReloadOutlined } from "@ant-design/icons";
 import { useMediaQuery } from "../../hooks/use-media-query";
 import { findOutlineNodeTitle, useProjectStore } from "../../stores/project";
 import { useUiStore } from "../../stores/ui";
@@ -68,7 +68,7 @@ export function InfoBar({
         size="small"
         className="ml-auto shrink-0"
         onClick={notifyDataChanged}
-        icon={<RefreshCw className="size-4" />}
+        icon={<ReloadOutlined className="text-base" />}
         aria-label="刷新数据"
         title="刷新数据"
       />
@@ -80,7 +80,7 @@ export function InfoBar({
           variant={chatOpen ? "filled" : "text"}
           size="small"
           onClick={onToggleChat}
-          icon={<MessageSquare className="size-4" />}
+          icon={<MessageOutlined className="text-base" />}
           aria-label={chatOpen ? "关闭聊天面板" : "打开聊天面板"}
         />
       )}

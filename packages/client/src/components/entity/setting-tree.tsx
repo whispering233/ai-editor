@@ -20,7 +20,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { DragEvent, KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { Button, Input } from "antd";
-import { ChevronDown, ChevronUp, Trash2 } from "lucide-react";
+import { DeleteOutlined, DownOutlined, RightOutlined, UpOutlined } from "@ant-design/icons";
 import { RowContextMenu } from "./row-context-menu";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -731,15 +731,9 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
               onClick={() => toggleCollapse(node.id)}
               disabled={!hasChildren}
             >
-              <svg
-                viewBox="0 0 16 16"
-                className={cn("size-3.5 transition-transform", isCollapsed && "-rotate-90")}
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-              >
-                <path d="m6 4 4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
+              <RightOutlined
+                className={cn("text-sm transition-transform", isCollapsed && "-rotate-90")}
+              />
             </button>
             {/* 名称：点击行内编辑（Enter 确认 / Esc 取消 / 失焦保存）；stopPropagation 隔离——
               单击标题 = 编辑而非选中（ 冲突设计） */}
@@ -801,7 +795,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
                       void moveSiblingByArrow(node, -1);
                     }}
                   >
-                    <ChevronUp className="size-3.5" />
+                    <UpOutlined className="text-sm" />
                   </button>
                   <button
                     type="button"
@@ -814,7 +808,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
                       void moveSiblingByArrow(node, 1);
                     }}
                   >
-                    <ChevronDown className="size-3.5" />
+                    <DownOutlined className="text-sm" />
                   </button>
                 </span>
               )}
@@ -828,7 +822,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
                   void handleDelete(node);
                 }}
               >
-                <Trash2 className="size-3.5" />
+                <DeleteOutlined className="text-sm" />
               </button>
             </span>
           </div>

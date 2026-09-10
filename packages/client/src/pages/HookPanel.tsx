@@ -16,7 +16,16 @@ import { useEffect, useState } from "react";
 import type { FormEvent, ReactNode } from "react";
 import { formatTimestamp, HOOK_CATEGORIES } from "@whispering233/ai-editor-shared";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
-import { ArrowUp, Check, CheckCircle2, Circle, Eye, Pencil, Trash2, X } from "lucide-react";
+import {
+  ArrowUpOutlined,
+  CheckCircleFilled,
+  CheckOutlined,
+  CloseOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  EyeOutlined,
+  MinusCircleFilled,
+} from "@ant-design/icons";
 import { RowContextMenu } from "../components/entity/row-context-menu";
 import { Button, Input } from "antd";
 import { PageTitle } from "@/components/ui/page-title";
@@ -494,7 +503,7 @@ export default function HookPanel() {
           />
           <HookGroupSection
             title="已回收"
-            icon={<CheckCircle2 className="size-3.5 shrink-0 text-primary" />}
+            icon={<CheckCircleFilled className="shrink-0 text-sm text-primary" />}
             hooks={groups.resolved}
             depEdges={depEdges}
             depEdgesFailed={depEdgesFailed}
@@ -508,7 +517,7 @@ export default function HookPanel() {
           />
           <HookGroupSection
             title="已废弃"
-            icon={<Circle className="size-3.5 shrink-0 text-muted-foreground" />}
+            icon={<MinusCircleFilled className="shrink-0 text-sm text-muted-foreground" />}
             hooks={groups.abandoned}
             depEdges={depEdges}
             depEdgesFailed={depEdgesFailed}
@@ -775,7 +784,7 @@ function HookGroupSection({
                       title="详情"
                       aria-label={`${hook.name} 详情`}
                       onClick={() => onDetail(hook)}
-                      icon={<Eye className="size-3.5" />}
+                      icon={<EyeOutlined className="text-sm" />}
                     />
                     <Button
                       variant="text"
@@ -784,7 +793,7 @@ function HookGroupSection({
                       title="推进"
                       aria-label={`${hook.name} 推进`}
                       onClick={() => onLifecycle("advance", hook)}
-                      icon={<ArrowUp className="size-3.5" />}
+                      icon={<ArrowUpOutlined className="text-sm" />}
                     />
                     <Button
                       variant="text"
@@ -793,7 +802,7 @@ function HookGroupSection({
                       title="回收"
                       aria-label={`${hook.name} 回收`}
                       onClick={() => onLifecycle("resolve", hook)}
-                      icon={<Check className="size-3.5" />}
+                      icon={<CheckOutlined className="text-sm" />}
                     />
                     <Button
                       variant="text"
@@ -802,7 +811,7 @@ function HookGroupSection({
                       title="废弃"
                       aria-label={`${hook.name} 废弃`}
                       onClick={() => onLifecycle("abandon", hook)}
-                      icon={<X className="size-3.5" />}
+                      icon={<CloseOutlined className="text-sm" />}
                     />
                     <Button
                       variant="text"
@@ -810,7 +819,7 @@ function HookGroupSection({
                       title="编辑"
                       aria-label={`${hook.name} 编辑`}
                       onClick={() => onEdit(hook)}
-                      icon={<Pencil className="size-3.5" />}
+                      icon={<EditOutlined className="text-sm" />}
                     />
                     <Button
                       variant="text"
@@ -818,7 +827,7 @@ function HookGroupSection({
                       title="移入回收站"
                       aria-label={`${hook.name} 移入回收站`}
                       onClick={() => onDelete(hook)}
-                      icon={<Trash2 className="size-3.5" />}
+                      icon={<DeleteOutlined className="text-sm" />}
                     />
                   </span>
                 </div>

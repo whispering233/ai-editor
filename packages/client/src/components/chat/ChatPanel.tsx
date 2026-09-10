@@ -770,7 +770,7 @@ function MessageList({ disabled }: { disabled: boolean }) {
     // 无项目打开：右栏禁用（「位置与形态」：灰显 + 「打开项目后可用」）
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-4">
-        <MessageOutlined className="text-4xl" style={{ color: msgToken.colorTextTertiary }} />
+        <MessageOutlined className="text-2xl" style={{ color: msgToken.colorTextTertiary }} />
         <p className="text-sm text-muted-foreground/70">打开项目后可用</p>
       </div>
     );
@@ -797,7 +797,7 @@ function MessageList({ disabled }: { disabled: boolean }) {
       {empty ? (
         // 空态引导语（「空态」）
         <div className="flex h-full flex-col items-center justify-center gap-1.5 p-4 text-center">
-          <MessageOutlined className="text-3xl" style={{ color: msgToken.colorTextTertiary }} />
+          <MessageOutlined className="text-2xl" style={{ color: msgToken.colorTextTertiary }} />
           <p className="text-sm text-muted-foreground">试试问：这个设定有没有漏洞？</p>
           <p className="text-sm text-muted-foreground">第 4 章剧情往哪走合理？</p>
         </div>

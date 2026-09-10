@@ -8,7 +8,13 @@
 // 焦点上报：编辑态上报 focus_entity_type/id；草稿态无实体不上报
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
-import { ExternalLink, FileUp, Loader2, Link2, Trash2 } from "lucide-react";
+import {
+  DeleteOutlined,
+  ExportOutlined,
+  ImportOutlined,
+  LinkOutlined,
+  LoadingOutlined,
+} from "@ant-design/icons";
 import MDEditor from "@uiw/react-md-editor";
 import "@uiw/react-md-editor/markdown-editor.css"; // N3 选型：@uiw/react-md-editor 自带样式（textarea + 分屏预览）
 import { parseReferenceFrontmatter } from "@whispering233/ai-editor-shared";
@@ -322,21 +328,21 @@ export default function ReferenceDetail({ id, draft }: { id?: string; draft?: "m
               />
               <Button disabled={importing} onClick={() => fileInputRef.current?.click()}>
                 {importing ? (
-                  <Loader2 className="size-3.5 animate-spin" />
+                  <LoadingOutlined className="text-sm" spin />
                 ) : (
-                  <FileUp className="size-3.5" />
+                  <ImportOutlined className="text-sm" />
                 )}
                 导入 md 文档
               </Button>
             </>
           )}
           <Button onClick={() => setRelationOpen(true)} disabled={isDraft}>
-            <Link2 className="size-3.5" />
+            <LinkOutlined className="text-sm" />
             建立关联
           </Button>
           {!isDraft && (
             <Button danger onClick={handleDelete}>
-              <Trash2 className="size-3.5" />
+              <DeleteOutlined className="text-sm" />
               删除
             </Button>
           )}
@@ -394,7 +400,7 @@ export default function ReferenceDetail({ id, draft }: { id?: string; draft?: "m
               className="inline-flex items-center gap-1 text-primary hover:underline"
             >
               {source}
-              {/^https?:\/\//.test(source) && <ExternalLink className="size-3" />}
+              {/^https?:\/\//.test(source) && <ExportOutlined className="text-xs" />}
             </a>
           )}
           {currentKind === "file" && !isDraft && source !== "" && (
@@ -520,7 +526,7 @@ export default function ReferenceDetail({ id, draft }: { id?: string; draft?: "m
             </Button>
           )}
           <Button type="primary" onClick={handleSave} disabled={saving}>
-            {saving && <Loader2 className="size-3.5 animate-spin" />}
+            {saving && <LoadingOutlined className="text-sm" spin />}
             {isDraft ? "创建" : "保存"}
           </Button>
         </div>

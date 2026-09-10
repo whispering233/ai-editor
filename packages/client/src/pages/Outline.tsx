@@ -20,7 +20,7 @@ import { useEffect, useState } from "react";
 import type { DragEvent, KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { Button, Input } from "antd";
 import type { OutlineNode } from "@whispering233/ai-editor-shared";
-import { Trash2 } from "lucide-react";
+import { DeleteOutlined } from "@ant-design/icons";
 import { CHILD_TYPE, TYPE_LABEL } from "../components/outline/dialogs";
 import { NodeHookMarkBadge } from "../components/outline/node-hook-badge";
 import { PageTitle } from "@/components/ui/page-title";
@@ -767,7 +767,7 @@ export default function Outline() {
                 aria-label="移入回收站"
                 onClick={() => void handleDelete(node)}
               >
-                <Trash2 className="size-3.5" />
+                <DeleteOutlined className="text-sm" />
               </button>
               {isCurrent && (
                 <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-xs text-accent-foreground">

@@ -6,7 +6,7 @@
 // <1024px 小屏不渲染手柄/收起条，三栏回退默认百分比类（右栏抽屉行为不变，开关在 InfoBar 右侧，
 // 抽屉渲染在 ChatPanel；open 状态在此持有）
 import { useState, type ReactNode } from "react";
-import { GripVertical, PanelLeftOpen, PanelRightOpen } from "lucide-react";
+import { BorderLeftOutlined, BorderRightOutlined, HolderOutlined } from "@ant-design/icons";
 import type { Route } from "../hooks/use-route";
 import { usePanels } from "../hooks/use-panels";
 import { cn } from "../lib/utils";
@@ -54,7 +54,7 @@ function ResizeHandle({
     >
       {/* 常显细线延续栏间分隔视觉；hover/拖拽中高亮为主色提示 */}
       <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border/60 transition-colors group-hover:bg-primary/70" />
-      <GripVertical className="absolute inset-y-0 left-1/2 size-4 -translate-x-1/2 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+      <HolderOutlined className="absolute inset-y-0 left-1/2 text-base -translate-x-1/2 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
     </div>
   );
 }
@@ -62,7 +62,7 @@ function ResizeHandle({
 /** 收起窄条（栏收起后替代主体渲染）：32px 窄条 + 展开按钮（点击恢复原宽） */
 function CollapseStrip({ side, onExpand }: { side: "sidebar" | "chat"; onExpand: () => void }) {
   const isSidebar = side === "sidebar";
-  const ExpandIcon = isSidebar ? PanelLeftOpen : PanelRightOpen;
+  const ExpandIcon = isSidebar ? BorderLeftOutlined : BorderRightOutlined;
   return (
     <div
       className={cn(
@@ -77,7 +77,7 @@ function CollapseStrip({ side, onExpand }: { side: "sidebar" | "chat"; onExpand:
         title={isSidebar ? "展开左栏" : "展开右栏"}
         className={cn(iconButtonBaseClass, iconButtonSize.md, "mt-3")}
       >
-        <ExpandIcon className="size-4" />
+        <ExpandIcon className="text-base" />
       </button>
     </div>
   );

@@ -19,7 +19,7 @@ import { useState } from "react";
 import type { DragEvent, MouseEvent } from "react";
 import { Button, Input } from "antd";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
-import { ChevronRight, Plus, Trash2 } from "lucide-react";
+import { DeleteOutlined, PlusOutlined, RightOutlined } from "@ant-design/icons";
 import { RowContextMenu } from "../entity/row-context-menu";
 import { cn } from "../../lib/utils";
 import { useSaveShortcut } from "../../lib/save-shortcut";
@@ -210,9 +210,9 @@ export function TimelineGroupBlock({
                 onClick={onToggleCollapse}
                 icon={
                   /* chevron 展开旋转惯例（）：折叠时横指，展开时向下 */
-                  <ChevronRight
+                  <RightOutlined
                     className={cn(
-                      "size-4 transition-transform duration-200",
+                      "text-base transition-transform duration-200",
                       !collapsed && "rotate-90",
                     )}
                   />
@@ -275,7 +275,7 @@ export function TimelineGroupBlock({
                     title="在此时间点新建事件"
                     aria-label={`在此时间点新建事件`}
                     onClick={() => onAddEventAt(groupId)}
-                    icon={<Plus className="size-3.5" />}
+                    icon={<PlusOutlined className="text-sm" />}
                   />
                 )}
                 {/* 移入回收站（H1：时间点组标题直接显示删除图标——用户反馈缺失删除入口；
@@ -288,7 +288,7 @@ export function TimelineGroupBlock({
                     title="移入回收站"
                     aria-label={`移入回收站「${timepoint.name}」`}
                     onClick={() => onDeleteTimepoint(timepoint)}
-                    icon={<Trash2 className="size-3.5" />}
+                    icon={<DeleteOutlined className="text-sm" />}
                   />
                 )}
               </span>

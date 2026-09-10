@@ -8,7 +8,7 @@
 // 边界：custom_fields 仅在响应 data 已有该键时显示（MVP 无法新增键）；「问 AI」入口待 chat store
 // 就绪后补（ 带上下文进聊天）
 import { useEffect, useRef, useState } from "react";
-import { GripVertical } from "lucide-react";
+import { HolderOutlined } from "@ant-design/icons";
 import { formatTimestamp } from "@whispering233/ai-editor-shared";
 import type { EntityType } from "@whispering233/ai-editor-shared";
 import { ConfirmDialog } from "../components/outline/dialogs";
@@ -124,7 +124,7 @@ function TagsEditor({
               setDragOverIndex(null);
             }}
           >
-            <GripVertical className="size-4" />
+            <HolderOutlined className="text-base" />
           </button>
           <Input
             value={v}

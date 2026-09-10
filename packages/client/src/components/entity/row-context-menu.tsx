@@ -12,7 +12,7 @@
 // </RowContextMenu>
 import { useState } from "react";
 import type { ReactElement, ReactNode } from "react";
-import { Link2, Sparkles } from "lucide-react";
+import { CommentOutlined, LinkOutlined } from "@ant-design/icons";
 import type { FocusContext } from "../../lib/focus";
 import { useChatStore } from "../../stores/chat";
 import { CreateRelationDialog, type RelationSource } from "./create-relation-dialog";
@@ -66,11 +66,11 @@ export function RowContextMenu({
           </ContextMenuGroup>
           <ContextMenuSeparator />
           <ContextMenuItem onClick={handleInjectFocus}>
-            <Sparkles className="size-3.5" />
+            <CommentOutlined className="text-sm" />
             注入会话上下文
           </ContextMenuItem>
           <ContextMenuItem onClick={() => setRelationOpen(true)}>
-            <Link2 className="size-3.5" />
+            <LinkOutlined className="text-sm" />
             建立关联
           </ContextMenuItem>
         </ContextMenuContent>

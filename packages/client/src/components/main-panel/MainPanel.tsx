@@ -4,7 +4,7 @@
 // 失败静默——信息条显示「书架」，书架主页引导创建/打开项目
 import { useEffect, useLayoutEffect, type ReactNode } from "react";
 import { FloatButton } from "antd";
-import { Sparkles } from "lucide-react";
+import { CommentOutlined } from "@ant-design/icons";
 import type { Route } from "../../hooks/use-route";
 import { MIDDLE_MIN_WIDTH } from "../../hooks/use-panels";
 import { useProjectStore } from "../../stores/project";
@@ -62,7 +62,7 @@ export function MainPanel({
           「点击必有反应」（用户反馈跟进）：右栏收起/小屏抽屉关着时先展开打开（onOpenChat），
           无项目打开时不置 disabled（会吞掉点击与 tooltip）而是轻提示引导 */}
       <FloatButton
-        icon={<Sparkles className="size-5" />}
+        icon={<CommentOutlined className="text-xl" />}
         type="primary"
         aria-label="问 AI"
         tooltip={{

@@ -3,11 +3,11 @@
 // （update from 不匹配 → 跳过 + conflicts 标注，非 409）
 // 交互：at_node 选择器（默认 project store 的 currentPosition，须在大纲树中存在；未设置 → 要求手动选择）
 // + [计算] → 结果区三段：状态差异（diffStateFields，相对当前 data）/ 应用的变更记录（含 skipped 内联标注）/
-// conflicts 警示块（border-destructive/30 bg-destructive/10 text-destructive + TriangleAlert）
+// conflicts 警示块（border-destructive/30 bg-destructive/10 text-destructive + WarningFilled）
 // 空态：deltaCount === 0 → 轻量文案（当前状态即初始状态），不展示计算控件
 import { useEffect, useState } from "react";
 import { Button } from "antd";
-import { TriangleAlert } from "lucide-react";
+import { WarningFilled } from "@ant-design/icons";
 import type { ComputeStateResult, DeltaChange } from "@whispering233/ai-editor-shared";
 import { ApiError, computeDeltaState } from "../../lib/api";
 import { diffStateFields, formatDeltaValue } from "../../lib/delta";
@@ -185,7 +185,7 @@ function ComputeResult({
       {result.conflicts.length > 0 && (
         <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2">
           <div className="flex items-center gap-1.5 text-sm font-medium text-destructive">
-            <TriangleAlert className="size-3.5 shrink-0" />
+            <WarningFilled className="shrink-0 text-sm" />
             发现 {result.conflicts.length} 处状态冲突
           </div>
           <p className="mt-0.5 text-xs text-destructive/90">

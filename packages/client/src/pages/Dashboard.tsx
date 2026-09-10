@@ -10,7 +10,13 @@ import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { formatRelativeTime } from "@whispering233/ai-editor-shared";
 import type { EntityType, OutlineNode } from "@whispering233/ai-editor-shared";
-import { BookOpen, Download, Loader2, Pencil, Upload } from "lucide-react";
+import {
+  BookOutlined,
+  DownloadOutlined,
+  EditOutlined,
+  LoadingOutlined,
+  UploadOutlined,
+} from "@ant-design/icons";
 import { Button, Input } from "antd";
 import type { InputRef } from "antd";
 import {
@@ -525,7 +531,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
           </div>
           {/* 导入备份（Sidebar 迁入，1-3b）：zip 导入/覆盖恢复，Dialog 内同名二选一 */}
           <Button className="shrink-0" onClick={() => setImportOpen(true)}>
-            <Upload className="size-3.5" />
+            <UploadOutlined className="text-sm" />
             导入备份
           </Button>
         </div>
@@ -548,7 +554,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
           {config !== null && (
             <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
               <div className="flex items-center gap-3">
-                <BookOpen className="size-5 shrink-0 text-primary" />
+                <BookOutlined className="shrink-0 text-xl text-primary" />
                 {renaming ? (
                   /* 重命名输入态：Enter/失焦提交、Esc 取消（div 而非 button——输入不可嵌交互元素） */
                   <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -585,14 +591,14 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                       disabled={exporting}
                     >
                       {exporting ? (
-                        <Loader2 className="size-3.5 animate-spin" />
+                        <LoadingOutlined className="text-sm" spin />
                       ) : (
-                        <Download className="size-3.5" />
+                        <DownloadOutlined className="text-sm" />
                       )}
                       导出
                     </Button>
                     <Button size="small" className="shrink-0" onClick={startRename}>
-                      <Pencil className="size-3.5" />
+                      <EditOutlined className="text-sm" />
                       重命名
                     </Button>
                     <Button
@@ -641,7 +647,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                           isCurrent && "bg-accent/40 hover:bg-accent/40",
                         )}
                       >
-                        <BookOpen className="size-4 shrink-0 text-muted-foreground/60" />
+                        <BookOutlined className="shrink-0 text-base text-muted-foreground/60" />
                         <span className="min-w-0 flex-1 truncate text-sm text-foreground">
                           {book.name}
                         </span>

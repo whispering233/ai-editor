@@ -18,7 +18,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import type { DragEvent, MouseEvent } from "react";
 import { Button, Input } from "antd";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
-import { Trash2 } from "lucide-react";
+import { DeleteOutlined } from "@ant-design/icons";
 import { RowContextMenu } from "../entity/row-context-menu";
 import { eventDescription, eventTagsOf } from "../../lib/timeline";
 import { useSaveShortcut } from "../../lib/save-shortcut";
@@ -220,7 +220,7 @@ export function TimelineEvent({
               variant="text"
               size="small"
               draggable={false}
-              icon={<Trash2 className="size-3.5" />}
+              icon={<DeleteOutlined className="text-sm" />}
               title="移入回收站"
               aria-label={`${ev.name} 移入回收站`}
               onClick={() => onDelete(ev)}

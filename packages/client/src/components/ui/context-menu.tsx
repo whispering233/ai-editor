@@ -149,7 +149,7 @@ function ContextMenuItem({
       role="menuitem"
       data-slot="context-menu-item"
       className={cn(
-        "flex w-full cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-sm outline-none select-none hover:bg-accent hover:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "flex w-full cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-sm outline-none select-none hover:bg-accent hover:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0",
         inset && "pl-7",
         variant === "destructive" &&
           "text-destructive hover:bg-destructive/10 hover:text-destructive",

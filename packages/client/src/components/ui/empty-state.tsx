@@ -1,7 +1,7 @@
 // 空态容器（ 空态规范 + §4.4 L 批次组件）：虚线卡 + 说明文案 + 可选图标/主操作
 // 用法：
 // <EmptyState>还没有书，先创建一本</EmptyState>
-// <EmptyState icon={<BookOpen className="size-7 text-muted-foreground/40" />}
+// <EmptyState icon={<BookOutlined className="text-2xl text-muted-foreground/40" />}
 // action={<Button onClick={...}>去大纲</Button>}>大纲还是空的</EmptyState>
 import type { ReactNode } from "react";
 import { Empty } from "antd";
@@ -17,7 +17,7 @@ const PADDING_CLASS = {
 export interface EmptyStateProps {
   /** 说明文案（一行文字） */
   children: ReactNode;
-  /** 可选图标（约定 size-7/8 text-muted-foreground/40，） */
+  /** 可选图标（约定 `text-2xl text-muted-foreground/40`——图标尺寸随字号档，） */
   icon?: ReactNode;
   /** 主操作按钮区（渲染于文案下方，自带 mt-4） */
   action?: ReactNode;

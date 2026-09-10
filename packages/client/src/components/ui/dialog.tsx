@@ -4,7 +4,7 @@
 // 行为：Esc 关闭 / 遮罩点击关闭 / body 滚动锁定 / aria-modal 语义；关闭按钮可选（showCloseButton）
 import * as React from "react";
 import { createPortal } from "react-dom";
-import { XIcon } from "lucide-react";
+import { CloseOutlined } from "@ant-design/icons";
 
 import { cn } from "@/lib/utils";
 
@@ -117,7 +117,7 @@ function DialogContent({
             className="absolute top-2 right-2 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
             aria-label="关闭"
           >
-            <XIcon className="size-4" />
+            <CloseOutlined className="text-base" />
           </DialogClose>
         )}
       </div>
