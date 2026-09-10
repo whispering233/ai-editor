@@ -131,6 +131,19 @@ describe("视觉纪律守卫（源码扫描）", () => {
     const hits = FILES.filter((file) => antdRootOverrides(file.text)).map((file) => file.path);
     expect(hits).toEqual([]);
   });
+
+  it("cssvar-scope：index.html 的 <html class> 与 AntdProvider 的 CSS_VAR_KEY 同值", () => {
+    // 为什么需要它：antd 的 cssVar 变量注入在「组件级 class 作用域」，不注入 :root；
+    // index.css 的 `:root { --primary: var(--ant-color-primary) }` 映射只有在 <html> 也带上
+    // 同一个 key class 时才解析得到值——一旦两处字面量脱钩，全站语义色（bg-card/border-border/
+    // text-muted-foreground/bg-primary…）会静默变透明，且类型检查与既有测试全绿（2026-09 实际发生）。
+    const provider = FILES.find((f) => f.path === "components/AntdProvider.tsx");
+    const key = provider?.text.match(/export const CSS_VAR_KEY = "([^"]+)";/)?.[1];
+    expect(key, "AntdProvider 必须导出 CSS_VAR_KEY 常量").toBeTruthy();
+    expect(provider?.text).toContain("cssVar: { key: CSS_VAR_KEY }");
+    const html = readFileSync(join(SRC, "..", "index.html"), "utf8");
+    expect(html).toMatch(new RegExp(`<html[^>]*class="[^"]*\\b${key}\\b`));
+  });
 });
 
 describe("守卫规则自检（规则必须能识别违规样例，否则规则形同虚设）", () => {

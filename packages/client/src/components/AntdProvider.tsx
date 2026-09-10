@@ -16,6 +16,12 @@ import { useThemeMode } from "../hooks/use-theme-mode";
  * 由 `boxShadow: 0 0 controlOutlineWidth activeOutlineColor` 绘制（select/style/select-input.js），只能从这里关。 */
 const BASE_SEED = { controlOutlineWidth: 0 };
 
+/** cssVar 作用域类名（= antd `theme.cssVar.key`）——必须与 index.html 的 `<html class>` 一致：
+ * antd v6 把 `--ant-*` 注入到「组件级 class 作用域」，不注入 `:root`；只有把同一个 class 加在 <html> 上，
+ * index.css 的 `:root { --primary: var(--ant-color-primary) }` 映射才解析得到值（否则全站语义色为空）。
+ * 守卫测试 design-discipline.test.ts 断言两处字面量一致。 */
+export const CSS_VAR_KEY = "ai-editor-theme";
+
 /** 浅色 seed（DESIGN.md §Colors 映射表「浅色值」列逐行对应） */
 const LIGHT_SEED = {
   ...BASE_SEED,
@@ -131,7 +137,7 @@ export function AntdProvider({ children }: { children: ReactNode }) {
       textArea={INPUT_AUTOCOMPLETE}
       theme={{
         // cssVar 模式：tokens 注入 :root CSS 变量（--ant-*），index.css 语义变量映射之（3-0）
-        cssVar: {},
+        cssVar: { key: CSS_VAR_KEY },
         algorithm: dark ? theme.darkAlgorithm : theme.defaultAlgorithm,
         token: dark ? DARK_SEED : LIGHT_SEED,
         components: dark ? COMPONENT_TOKENS_DARK : COMPONENT_TOKENS_LIGHT,
