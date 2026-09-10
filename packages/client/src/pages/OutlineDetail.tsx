@@ -275,7 +275,6 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
                     onChange={(e) => setTitleValue(e.target.value)}
                     maxLength={200}
                     placeholder={`${TYPE_LABEL[node.type]}标题`}
-                    className="h-8 text-sm"
                   />
                 </div>
                 <div>
@@ -437,7 +436,6 @@ function FieldControl({
           value={typeof value === "string" ? value : ""}
           onChange={(e) => onChange(e.target.value)}
           maxLength={field.maxLength}
-          className="h-8 text-sm"
         />
       );
   }

@@ -149,7 +149,7 @@ function TagsEditor({
             }}
             placeholder={placeholder}
             list={suggestions && suggestions.length > 0 ? "entity-tags-suggestions" : undefined}
-            className="h-8 flex-1 text-sm"
+            className="flex-1"
           />
           <Button onClick={() => onChange(values.filter((_, j) => j !== i))}>删除</Button>
         </div>
@@ -212,14 +212,15 @@ function CustomFieldsEditor({
     <div className="flex flex-col gap-1.5">
       {rows.map((r, i) => (
         <div key={i} className="flex items-center gap-1.5">
-          <Input
-            value={r.key}
-            onChange={(e) =>
-              commit(rows.map((x, j) => (j === i ? { ...x, key: e.target.value } : x)))
-            }
-            placeholder="键"
-            className="w-28"
-          />
+          <div className="w-28">
+            <Input
+              value={r.key}
+              onChange={(e) =>
+                commit(rows.map((x, j) => (j === i ? { ...x, key: e.target.value } : x)))
+              }
+              placeholder="键"
+            />
+          </div>
           <Input
             value={r.value}
             onChange={(e) =>

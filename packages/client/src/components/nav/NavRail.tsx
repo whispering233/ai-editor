@@ -113,7 +113,7 @@ export function NavRail({
         <Button
           variant={atHome ? "filled" : "text"}
           block
-          className="mb-1 h-9 justify-start rounded-md px-2"
+          className="mb-1"
           icon={<BookOutlined />}
           onClick={() => navigate("/")}
         >
@@ -138,18 +138,16 @@ export function NavRail({
       {/* 底部：设置 + 主题切换（导航入口，与左栏 Menu 项同级——不受 H4「文字按钮带边框」约束） */}
       <div className="flex shrink-0 flex-col gap-1 border-t border-border px-2 py-2">
         <Button
-          type="text"
+          variant="text"
           block
-          className="justify-start px-2"
           icon={<SettingOutlined />}
           onClick={() => navigate("/preferences")}
         >
           <span className="truncate text-left">设置</span>
         </Button>
         <Button
-          type="text"
+          variant="text"
           block
-          className="justify-start px-2"
           icon={mode === "dark" ? <SunOutlined /> : <MoonOutlined />}
           onClick={toggleTheme}
           aria-label="切换主题"

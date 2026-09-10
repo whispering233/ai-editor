@@ -934,12 +934,13 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
 
       {/* 工具栏：搜索 + 标签筛选（树内过滤）+ 全部展开/折叠 + 新建（root 级） */}
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <Input
-          value={qInput}
-          onChange={(e) => setQInput(e.target.value)}
-          placeholder="搜索设定名称…"
-          className="w-48"
-        />
+        <div className="w-48">
+          <Input
+            value={qInput}
+            onChange={(e) => setQInput(e.target.value)}
+            placeholder="搜索设定名称…"
+          />
+        </div>
         <span className="flex items-center gap-2 text-sm text-muted-foreground">
           标签:
           <SearchableSelect

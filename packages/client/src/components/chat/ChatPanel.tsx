@@ -303,7 +303,7 @@ function SessionTitleBar({
         disabled={disabled}
         trigger={["click"]}
       >
-        <Button size="small" disabled={disabled} className="max-w-44 min-w-0 px-1.5">
+        <Button size="small" disabled={disabled} className="max-w-44 min-w-0">
           <span className="truncate text-sm font-medium" title={title}>
             {title}
           </span>
