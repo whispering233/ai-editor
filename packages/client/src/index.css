@@ -91,7 +91,9 @@
   --tag-yellow: rgb(254 247 214 / 0.2);
 }
 
-/* 浅色 = antd defaultAlgorithm tokens（批次十七 3-0 cssVar 映射；变量由 ConfigProvider 注入） */
+/* 浅色 = antd defaultAlgorithm tokens（cssVar 映射）：--ant-* 由 ConfigProvider 注入到「组件级 class
+   作用域」，靠 <html class="ai-editor-theme">（= AntdProvider 的 CSS_VAR_KEY）把同一份变量带到 :root
+   ——脱钩即全站语义色集体变透明（守卫 cssvar-scope 锁两处字面量；见 DESIGN.md §Colors 踩坑段） */
 :root {
   color-scheme: light;
   --background: var(--ant-color-bg-layout);
@@ -122,8 +124,8 @@
   --sidebar-ring: var(--ant-color-primary);
 }
 
-/* 深色 = antd darkAlgorithm tokens（同上动态注入；此处仅 color-scheme + FOUC 兜底）
-   注：antd cssVar 挂在 :root 上随算法切换重算，.dark class 不再持有色板 */
+/* 深色 = antd darkAlgorithm tokens（切算法后由 antd 重新注入到同一 class 作用域；此处只放
+   color-scheme 与 tint 深色值——tint 不是 antd token，必须自己给深色态） */
 .dark {
   color-scheme: dark;
 }

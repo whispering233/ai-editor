@@ -954,7 +954,7 @@ export default function Outline() {
         <div
           className={cn(
             "rounded-md border border-border p-2",
-            dragTarget?.kind === "root-end" && "ring-1 ring-accent ring-inset",
+            dragTarget?.kind === "root-end" && "ring-1 ring-primary/30 ring-inset",
           )}
           onClick={() => setSelectedNodeId(null)} // 点击空白区清除选中（行点击已 stopPropagation 隔离）
           onDragOver={handleRootDragOver}

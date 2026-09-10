@@ -675,7 +675,7 @@ function FocusBar() {
 
   if (!focusContext) return null;
   return (
-    <div className="flex shrink-0 items-center gap-1.5 border-t border-border bg-accent/40 px-3 py-1.5">
+    <div className="flex shrink-0 items-center gap-1.5 border-t border-border bg-muted px-3 py-1.5">
       <Tag
         icon={<BulbOutlined />}
         closable

@@ -191,6 +191,16 @@ export function RelationsView({
           （前端过滤；scope 模式隐藏——列表已按端点过滤，操作入口由宿主详情页给） */}
       {scope === undefined && (
         <div className="mb-3 flex flex-wrap items-center gap-3">
+          {/* 搜索固定在最左（layout.md §3） */}
+          <div className="w-48">
+            <Input
+              prefix={<SearchOutlined />}
+              allowClear
+              value={filter.nameQuery}
+              onChange={(e) => setFilter((f) => ({ ...f, nameQuery: e.target.value }))}
+              placeholder="搜索源/目标名称…"
+            />
+          </div>
           <Select
             size="medium"
             value={filter.endpointType === "" ? undefined : filter.endpointType}
@@ -215,15 +225,6 @@ export function RelationsView({
             style={{ minWidth: 140 }}
             options={RELATION_TYPES.map((t) => ({ value: t, label: relationTypeLabel(t) }))}
           />
-          <div className="w-48">
-            <Input
-              prefix={<SearchOutlined />}
-              allowClear
-              value={filter.nameQuery}
-              onChange={(e) => setFilter((f) => ({ ...f, nameQuery: e.target.value }))}
-              placeholder="搜索源/目标名称…"
-            />
-          </div>
           <Button type="primary" className="ml-auto" onClick={onOpenCreate}>
             + 建立关联
           </Button>
@@ -295,7 +296,7 @@ export function RelationsView({
               <li key={r.id} className="flex items-center gap-2 px-3 py-2 text-sm">
                 {scope !== undefined ? (
                   <>
-                    <TagChip className="shrink-0 truncate">
+                    <TagChip className="shrink-0 truncate" label={relationTypeLabel(r.relationType)}>
                       {relationTypeLabel(r.relationType)} →
                     </TagChip>
                     <span className="min-w-0 flex-1">
@@ -310,7 +311,10 @@ export function RelationsView({
                     {/* 关系类型列：等宽 1/4 + 居中（居中由父容器 flex 承担——Tag 自身带 text-align: start，
                         Tailwind 的 text-center 压不动它，只能用 `!` 或内联 style，两者都被样式纪律禁止） */}
                     <div className="flex w-1/4 min-w-0 shrink-0 justify-center">
-                      <TagChip className="max-w-full truncate">
+                      <TagChip
+                        className="max-w-full truncate"
+                        label={relationTypeLabel(r.relationType)}
+                      >
                         {relationTypeLabel(r.relationType)} →
                       </TagChip>
                     </div>

@@ -9,15 +9,18 @@ import { cn } from "../../lib/utils";
 
 export interface TagChipProps {
   children: ReactNode;
+  /** 取色 key（可选）：children 非单个字符串时（数组/富内容，如「关系类型 →」）必须显式给，
+   * 否则会退化为首色——同一类 chip 全一个色，等于没上色（实测：关系类型列恒 peach） */
+  label?: string;
   /** 上下文附加类（截断 `max-w-full truncate` / 伸缩 `shrink-0` / 外边距由调用点给） */
   className?: string;
   /** hover 提示（截断场景给完整文案） */
   title?: string;
 }
 
-export function TagChip({ children, className, title }: TagChipProps) {
-  // 文案即取色 key：children 非字符串（富内容 chip）时回落到空串 → 首色，不报错
-  const label = typeof children === "string" ? children : "";
+export function TagChip({ children, label: labelProp, className, title }: TagChipProps) {
+  // 取色 key：显式 label 优先，其次单个字符串 children；都没有 → 空串（回落首色，不抛错）
+  const label = labelProp ?? (typeof children === "string" ? children : "");
   return (
     <span
       title={title}

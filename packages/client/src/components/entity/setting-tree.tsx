@@ -941,7 +941,6 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
         <span className="flex items-center gap-2 text-sm text-muted-foreground">
           排序:
           <Select
-            size="small"
             value={sortMode}
             onChange={(value) => setSortMode(value as SettingSortMode)}
             aria-label="排序方式"

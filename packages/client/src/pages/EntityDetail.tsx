@@ -107,25 +107,26 @@ function TagsEditor({
           }}
         >
           {/* 拖拽手柄（M3：HTML5 原生 DnD，零依赖；draggable 仅手柄——输入框内文本选择不受影响） */}
-          <Button
-            color="default" variant="text"
-            size="small"
-            draggable
-            className="cursor-grab active:cursor-grabbing"
-            title="拖拽排序"
-            aria-label="拖拽排序"
-            onDragStart={(e) => {
-              setDragIndex(i);
-              e.dataTransfer.effectAllowed = "move";
-              // Firefox 需 setData 才启动拖拽（types 含 text/plain 亦可作自识别标记）
-              e.dataTransfer.setData("text/plain", String(i));
-            }}
-            onDragEnd={() => {
-              setDragIndex(null);
-              setDragOverIndex(null);
-            }}
-            icon={<HolderOutlined className="text-base" />}
-          />
+          <span className="flex shrink-0 cursor-grab active:cursor-grabbing">
+            <Button
+              color="default" variant="text"
+              size="small"
+              draggable
+              title="拖拽排序"
+              aria-label="拖拽排序"
+              onDragStart={(e) => {
+                setDragIndex(i);
+                e.dataTransfer.effectAllowed = "move";
+                // Firefox 需 setData 才启动拖拽（types 含 text/plain 亦可作自识别标记）
+                e.dataTransfer.setData("text/plain", String(i));
+              }}
+              onDragEnd={() => {
+                setDragIndex(null);
+                setDragOverIndex(null);
+              }}
+              icon={<HolderOutlined className="text-base" />}
+            />
+          </span>
           <Input
             value={v}
             onChange={(e) => {

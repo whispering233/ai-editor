@@ -302,7 +302,6 @@ export default function EntityList({ type }: { type: string }) {
           <span className="flex items-center gap-2">
             <Typography.Text type="secondary">排序:</Typography.Text>
             <Select
-              size="small"
               value={`${sort}:${order}`}
               onChange={(value) => handleSortChange(String(value))}
               options={SORT_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}

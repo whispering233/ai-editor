@@ -6,6 +6,7 @@
 //
 // ⚠ 分模式写 token 的原因：theme.token 的显式值由 antd 在算法派生之后覆盖（不是被算法再加工），
 // 所以同一个浅色值写死会在深色态生效——两态各自给 seed 才正确（值取自 DESIGN.md 映射表的浅/深两列）。
+// ⚠ cssVar 的 `--ant-*` 由 antd 注入在**组件级 class 作用域**，从不在 :root——见下方 CSS_VAR_KEY 段。
 import type { ReactNode } from "react";
 import { App, ConfigProvider, theme } from "antd";
 import zhCN from "antd/locale/zh_CN";
@@ -136,7 +137,8 @@ export function AntdProvider({ children }: { children: ReactNode }) {
       input={INPUT_AUTOCOMPLETE}
       textArea={INPUT_AUTOCOMPLETE}
       theme={{
-        // cssVar 模式：tokens 注入 :root CSS 变量（--ant-*），index.css 语义变量映射之（3-0）
+        // cssVar 模式：--ant-* 注入「组件级 class 作用域」（不是 :root）——靠 key 类同时挂在 <html>
+        // 上，index.css 的 :root 语义变量映射才解析得到值（见文件头 CSS_VAR_KEY 说明）
         cssVar: { key: CSS_VAR_KEY },
         algorithm: dark ? theme.darkAlgorithm : theme.defaultAlgorithm,
         token: dark ? DARK_SEED : LIGHT_SEED,

@@ -36,7 +36,7 @@ function importantClasses(line: string): string[] {
 
 /** antd 自身会声明的属性 —— 挂在组件根元素上会被无层 CSS 压掉（Tailwind 在 @layer utilities） */
 const ANTD_OVERRIDDEN_PROPS =
-  /(?:^|\s)(?:w-\d|h-\d|px-|py-|ps-|pe-|pt-|pb-|pl-|pr-|justify-|rounded-(?:sm|md|lg|xl|2xl|full)|text-(?:xs|sm|base|lg|xl|2xl|3xl|4xl|\[\d))/;
+  /(?:^|\s)(?:w-\d|h-\d|px-|py-|ps-|pe-|pt-|pb-|pl-|pr-|justify-|cursor-|rounded-(?:sm|md|lg|xl|2xl|full)|text-(?:xs|sm|base|lg|xl|2xl|3xl|4xl|\[\d))/;
 const ANTD_GUARDED_COMPONENTS = ["Button", "Input"];
 
 /** 取出 JSX 开标签（大括号深度归零后的第一个 `>`），避免把子元素/图标上的类误判为根元素类 */
@@ -118,6 +118,16 @@ const RULES: Rule[] = [
   },
 ];
 
+/** 动态拼接的 Tailwind 类名（`className={`bg-tag-${tint}`}`）：Tailwind 只在源码里扫**字面量**类名，
+ * 拼接出来的类不会被生成——DOM 上有类、CSS 里没有样式，表现是「背景透明/字号失效」而不报错
+ * （实测踩坑：标签 tint 静态查表前，chip 类名在 DOM 却无色）。含 `-${` 的 className 模板串即拦。 */
+function dynamicClassConcat(source: string): boolean {
+  for (const m of source.matchAll(/className=\{`([^`]*)`\}/g)) {
+    if (/-\$\{/.test(m[1] ?? "")) return true;
+  }
+  return false;
+}
+
 /** 采集 src 下所有非测试源码文件（相对 src 的 posix 风格路径） */
 function sourceFiles(dir: string = SRC): { path: string; text: string }[] {
   const out: { path: string; text: string }[] = [];
@@ -173,6 +183,11 @@ describe("视觉纪律守卫（源码扫描）", () => {
     expect(html).toMatch(new RegExp(`<html[^>]*class="[^"]*\\b${key}\\b`));
   });
 
+  it("no-dynamic-class：Tailwind 类名不得拼接（拼接类不会被生成）", () => {
+    const hits = FILES.filter((file) => dynamicClassConcat(file.text)).map((f) => f.path);
+    expect(hits).toEqual([]);
+  });
+
   it("button-variant-color：Button 的 variant 必须与 color 同时给", () => {
     const hits = FILES.filter((file) => buttonVariantWithoutColor(file.text)).map((f) => f.path);
     expect(hits).toEqual([]);
@@ -196,6 +211,12 @@ describe("守卫规则自检（规则必须能识别违规样例，否则规则�
     expect(importantClasses(`className="mb-0 text-sm"`)).toEqual([]);
     expect(RULES[0].violationsIn(`import { Button } from "antd";`)).toBe(false);
     expect(RULES[3].violationsIn(`className="w-[calc(100%-2rem)]"`)).toBe(false);
+  });
+
+  it("no-dynamic-class 命中拼接、放过字面量", () => {
+    expect(dynamicClassConcat("className={`bg-tag-${tint}`}")).toBe(true);
+    expect(dynamicClassConcat("className={`${base} bg-tag-sky`}")).toBe(false);
+    expect(dynamicClassConcat('className={cn("bg-tag-sky", active && "ring-1")}')).toBe(false);
   });
 
   it("button-variant-color 命中无 color 的 variant、放过合法写法", () => {
