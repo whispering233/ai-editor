@@ -177,6 +177,52 @@ components:
     typography: "{typography.caption}"
     rounded: "{rounded.xs}"
     padding: "0 {spacing.xxs}"
+  # 标签 tint 六色（按名称 hash 稳定分配，见 §Components `tag`）：分类/标签 chip 与类型徽标的唯一底色来源
+  tag-peach:
+    backgroundColor: "{colors.tint-peach}"
+    textColor: "{colors.primary}"
+    typography: "{typography.caption}"
+    rounded: "{rounded.xs}"
+    padding: "0 {spacing.xxs}"
+  tag-rose:
+    backgroundColor: "{colors.tint-rose}"
+    textColor: "{colors.primary}"
+    typography: "{typography.caption}"
+    rounded: "{rounded.xs}"
+    padding: "0 {spacing.xxs}"
+  tag-mint:
+    backgroundColor: "{colors.tint-mint}"
+    textColor: "{colors.primary}"
+    typography: "{typography.caption}"
+    rounded: "{rounded.xs}"
+    padding: "0 {spacing.xxs}"
+  tag-lavender:
+    backgroundColor: "{colors.tint-lavender}"
+    textColor: "{colors.primary}"
+    typography: "{typography.caption}"
+    rounded: "{rounded.xs}"
+    padding: "0 {spacing.xxs}"
+  tag-sky:
+    backgroundColor: "{colors.tint-sky}"
+    textColor: "{colors.primary}"
+    typography: "{typography.caption}"
+    rounded: "{rounded.xs}"
+    padding: "0 {spacing.xxs}"
+  tag-yellow:
+    backgroundColor: "{colors.tint-yellow}"
+    textColor: "{colors.primary}"
+    typography: "{typography.caption}"
+    rounded: "{rounded.xs}"
+    padding: "0 {spacing.xxs}"
+  drag-indicator:
+    backgroundColor: "{colors.primary}"
+    size: 3px
+  search-input:
+    backgroundColor: "{colors.canvas}"
+    textColor: "{colors.primary}"
+    rounded: "{rounded.sm}"
+    height: 32px
+    width: 192px
   status-badge:
     backgroundColor: "{colors.surface-muted}"
     textColor: "{colors.secondary}"
@@ -259,12 +305,20 @@ components:
 
 ### 标签色（tint 系，Notion database property 的回声）
 
-- **tint-peach / tint-rose / tint-mint / tint-lavender / tint-sky / tint-yellow**：6 个马卡龙实底，专供标签/分类 chip（`data.tags`）等信息色块。**只做小面积底色，不做大面积背景**。
+- **tint-peach / tint-rose / tint-mint / tint-lavender / tint-sky / tint-yellow**：6 个马卡龙实底，专供标签/分类 chip（`data.tags`）与类型徽标（人物/设定/地点/伏笔/事件/时间点/参考资料/关系类型/回收站类型）等信息色块。**只做小面积底色，不做大面积背景**。
 - 营销站那套 bold 黄（`#f9e79f`）与深蓝 hero 带**不纳入**。
+- **分配规则（唯一，不维护语义色表）**：按 chip 文案（标签名 / 类型中文名 / 分类名）做 FNV-1a 哈希后取模 6，选中 tint；**同名恒同色**（跨页一致，无随机、无按状态变色）。字色固定 `{colors.primary}`（6 个 pastel 底上对比度均 ≥ 10:1，不需为每个 tint 配前景色）。
+- **深色态**：6 色同色相以 20% 不透明度叠在深色面板上（保留色相、不刺眼），字色随 `{colors.primary}` 变 81% 白。**浅/深两套色调只定义在 `index.css` 的 `--tag-*` 段**（与 `AntdProvider` 的 antd 色阶并列——tint 不是 antd token，无法从 seed 派生，也不写成硬编码色值散落各处）。
+
+### 交互与语义
 
 ### antd 实现映射（seed token，唯一改色入口）
 
 改色只改 `packages/client/src/components/AntdProvider.tsx` 的 theme 对象；其余色阶由 light/dark 算法派生。
+
+**⚠ cssVar 作用域（踩坑记录，改主题必读）**：antd v6 的 `cssVar` **从不把 `--ant-*` 注入 `:root`**——变量挂在**组件级 class 作用域**上（key 默认由 `useId` 生成，形如 `.css-var-_r_0_`，每个 antd 组件元素带该类；见 `antd/es/config-provider/hooks/useTheme.js` 的 cssVarKey 与 `useToken.js` 的 key 归属）。所以 `index.css` 里 `:root { --primary: var(--ant-color-primary) }` 这类映射会**整体解析为空**——全站 Tailwind 语义色（`bg-card` / `border-border` / `text-muted-foreground` / `bg-primary` / hover 面 / chip 底色 / 拖拽指示线）静默失效：不报错、只有看像素才发现。
+
+**约定（不许改回去）**：`AntdProvider` 的 `cssVar: { key: CSS_VAR_KEY }`（`CSS_VAR_KEY = "ai-editor-theme"`）**必须**与 `packages/client/index.html` 的 `<html class="ai-editor-theme">` 一致——该 class 的定义体只含自定义属性（无视觉声明），把它同时加在 `<html>` 上即等价于 `:root` 作用域，映射才成立。`design-discipline.test.ts` 有守卫断言两处字面量一致。
 
 | antd seed | 浅色值 | 深色值（推断） | 本文件 token |
 |---|---|---|---|
@@ -353,7 +407,8 @@ components:
 | sidebar（左栏） | 右侧 1px `{colors.hairline}` | 无 |
 | info-bar（信息条） | 底部 1px `{colors.hairline}` | 无 |
 | card / proposal-card / dropdown-panel / toast | 1px `{colors.hairline}` | 仅浮层（dropdown-panel / toast）：`0 8px 24px rgba(15, 15, 15, 0.10)`；card 无 |
-| input / select / button-default | 1px `{colors.hairline-strong}` | 无 |
+| input / select / button-default / search-input | 1px `{colors.hairline-strong}` | 无 |
+| 拖拽插入线（drag-indicator） | 无 | 无（实线 `{colors.primary}` 3px + 两端 8px 圆点） |
 | empty-state | 1px 虚线 `{colors.hairline}` | 无 |
 | data-row / table-header | 底部 1px `{colors.hairline-soft}` / `{colors.hairline}` | 无 |
 | focus-strip | 1px `{colors.hairline}` | 无 |
@@ -372,8 +427,11 @@ components:
 **`button-primary`** — 墨底白字、矩形、无投影。用于页面主操作（新建/保存）。
 **`button-default`** — 白底 + `{colors.hairline-strong}` 描边（**文字型操作按钮必须带边框**，这是仓库既有红线 H4）。
 **`button-text`** — 无边框纯文字，只用于行内最弱操作；**不得用于页面级操作**。
-**`icon-button`** — 28px 方区、图标色 `{colors.tertiary}`、hover 变 `{colors.primary}`；不受「必须带边框」约束。
+**`icon-button`（统一约定）** — 全站图标型操作按钮**只有一种实现**：antd `Button variant="text" size="small"` + 图标（图标尺寸随字号类：行内 14px = `text-sm`、工具条 16px = `text-base`），颜色继承 antd 的 text 变体（`{colors.primary}`），hover/disabled/loading 由 antd 派发；**不再并存自绘 `<button>` 图标按钮**（历史上两者混用导致灰色/墨色/红色三套并存）。**不可恢复操作**（彻底删除 purge、物理删关系）用 `danger`（`{colors.error}`）；**软删**（移入回收站）保持常规色——危险色的语义是「不可撤销」，不是「删除」。图标一律 `@ant-design/icons`；状态用 Filled、操作与导航用 Outlined。
 **`input`** — 白底 + `{colors.hairline-strong}` 描边 + `{rounded.sm}` + 32px 高；聚焦 = 1px primary 描边（**无阴影、无彩环**）。行内编辑与表单用同一个 antd `Input`。
+**`search-input`** — 列表/富页筛选栏的搜索框（全站**统一形态**）：antd `Input` + `prefix={<SearchOutlined />}` + 固定宽 `192px`（`w-48`）+ `allowClear`（筛选类，清空即回到未筛）；placeholder 统一「搜索{对象}…」。位置固定在页面控件行的**最左**（见 `layout.md` §3）。
+**`drag-indicator`** — 拖拽插入线：**实线** `{colors.primary}` 3px + 两端 8px 圆点（`h-[3px]` + `size-2 rounded-full`），横跨被拖行所在层级的内容宽度；`pointer-events-none` 不拦拖拽事件。
+**拖拽目标行与临时高亮（prose 承载，色值不登记）** — 「拖到行中段 = 成为其子级」的拖拽目标行、以及「新建即聚焦 / 定位到节点」的临时高亮，统一用 **primary 10% 淡染面 + 1px primary 30% 描边**（`bg-primary/10 ring-1 ring-primary/30 ring-inset`，与选中态同一语言，**不用** `{colors.surface-muted}`：近白面在白底上不可见）。被拖行本体用 `opacity-50`。**非法落点**（防环/跨层级非法）：不显插入线、不显高亮（无反馈即「不可放」）。
 **`select`** — 与 `input` 同一语言：白底 + 1px `{colors.hairline-strong}` 描边 + `{rounded.sm}` + 32px 高（密集行 24px = antd `size="small"`）；聚焦同样 1px primary 描边、无彩环。下拉浮层走 `dropdown-panel`（1px `{colors.hairline}` + `{rounded.md}` + 浮层阴影），选中项 `{colors.surface-muted}` 灰面。全站下拉统一 antd `Select`（原生 `<select>` 已清零）。
 
 **选择器空态两种写法（都有据）**：**筛选类**（“全部/不限”，可清除）用 `allowClear` + `placeholder`（并为空值时传 `undefined`）；**表单类**（必选项的“请选择…”）保留 `{ value: "", label: 原文案 }` 作为首项，不做 placeholder 改造。组选（`optgroup`）用 `options` 分组对象 `{ label, options }`，组级禁用下推到组内每个 option（antd 分组对象无 `disabled`），组 label 文案保留。
@@ -390,12 +448,12 @@ components:
 
 **`data-row`** / **`data-row-hover`** — 列表/树/大纲行：无底色 + 底部 1px `{colors.hairline-soft}`；hover = `{colors.surface-soft}`。双击进详情、单击标题行内编辑（交互规则见 `layout.md` §7）。
 **`table-header`** — 表头**白底**（不是 antd 默认灰底）+ 1px `{colors.hairline}` 底线 + caption 字色 `{colors.secondary}`。
-**`tag`** — 分类/标签 chip：`{rounded.xs}` + `{colors.surface-muted}` 默认底，彩色用 tint 系（`tint-peach`…）小面积实底。**标签不做按钮形态**。
+**`tag`** — 分类/标签 chip（`data.tags`）与类型徽标：`{rounded.xs}` + **tint 六色底** + caption 字号 + `{colors.primary}` 字色（按名称 hash 稳定分配，见 §Colors 分配规则）。实现 = `components/ui/tag-chip.tsx`（自绘 span + `bg-tag-*` token 类）——**不用** antd `Tag` 的预设色：`Tag` 的默认底色由组件 token 派发、自定义 tint 只能走 `Tag` 的 preset/内联色，与「禁硬编码色值」冲突。antd `Tag` 仅保留给**带交互的元信息 chip**（如 focus 小条的 closable 标签）。**标签不做按钮形态**；灰色 `{colors.surface-muted}` 底仅用于无标签语义的占位 chip。
 **`status-badge`** — 状态胶囊（进行中/已确认/已失效等）：`{rounded.full}` + caption 字号 + 语义色或 tint 底色；状态图标用 antd **Filled** 变体（`CheckCircleFilled`/`CloseCircleFilled`/`ExclamationCircleFilled`）。
 
 ### 会话（右栏）
 
-**`chat-bubble-user`** — user 消息：`{colors.surface-muted}` 灰底 + `{rounded.md}`。
+**`chat-bubble-user`** — user 消息：`{colors.surface-muted}` 灰底（`colorFillTertiary`）+ `{rounded.md}` + `{colors.primary}` 字色。**禁止用 `colorPrimaryBg`**：主色 seed 是深墨（`#37352f`），antd 派生的 `colorPrimaryBg` 实测为 `#787771`（中灰）——灰底上压墨字，对比度 ~1.9:1，不可读（历史 bug）。
 **`chat-bubble-assistant`** — assistant 消息：无底透明 + 正文排版（长文本可读性优先，不用气泡包）。
 **`focus-strip`** — 「正在讨论：{类型} {名称}」小条：`{colors.surface-soft}` 底 + 1px 描边 + caption。
 **`proposal-card`** — 提案卡：1px 描边卡片 + 确认/拒绝按钮（确认按钮用 `button-primary`，禁用态由 antd 派发）。
@@ -446,6 +504,7 @@ components:
 - 不硬编码色值/色类（`text-blue-500`、`#1677ff`、`rgba(...)` 手写值）
 - 不用 `!` 前缀类压 antd 组件样式
 - **不要用 Tailwind 类去覆盖 antd 组件根元素上 antd 自己声明的属性**（`width` / `height` / `padding` / `margin` / `font-size` / `color` / `background` / `border` / `border-radius` / `display`）：antd 样式是运行时注入的**无层 CSS**，而 Tailwind 工具类在 `@layer utilities`——按 CSS 级联规范**无层胜出**，此类覆盖会静默失效（历史上满仓 `!` 就是这么来的）。正确做法：宽度/伸缩用**外层容器**承载；具体尺寸用组件 `size`；状态面用组件 `variant`（如 `variant="filled"` = `colorFillTertiary` = `{colors.surface-muted}`）或组件 token
+- **不要让 `:root` 的语义变量失去 `--ant-*` 来源**：`cssVar.key` 与 `index.html` 的 `<html class>` 必须同值（见 §Colors 踩坑段），否则全站语义色集体失效
 - 不用阴影、渐变、彩色 focus 环、卡片 hover 抬升
 - 不引入第二套组件系统（lucide 图标 / sonner 提示 / cva 按钮已退役）；自绘只限 antd 无对应语义的浮层与业务组件
 - 不用胶囊形按钮；不把彩色用于大面背景或正文
@@ -453,7 +512,8 @@ components:
 ## Known Gaps
 
 - **深色 token 未公开**：源分析文档明示未提取 Notion 深色值，上表深色列是推断值，只保证 antd 派生一致，未与实机逐项比对。
-- **标签 tint 分配规则未实现**：6 个 tint 已登记，但「哪个标签用哪个色」尚未定义（当前 antd `Tag` 默认灰底可用）。需要时再定映射（如按标签名 hash 稳定取色），不要在调用点随手挑色。
+- **标签 tint 分配规则**：已实现（§Colors 标签色 —— 名称 hash 取模 6，同名恒同色）；新增标签体系时先看现有档位为什么不狗，不要另起色表。
+- **tint 深色值未与实机比对**：深色态用「同色相 20% 叠色」推断（Notion 未公开深色 token），若日后观感不对，只改 `index.css` 的 `--tag-*` 深色段。
 - **antd 派生色未登记**：hover/active/禁用底、`colorFill*`、浅色色阶由算法派生，本文件不复制（避免漂移）。
 - **MD 编辑器是独立表皮**：参考资料页的 `@uiw/react-md-editor` 自带一套排版与配色，未纳入本设计系统（编辑器内部不套 chrome token）；若观感冲突，再单独收。
 - **插件/第三方浮层未覆盖**：x-markdown 渲染出的表格/引用块样式由库自带，未做 token 映射。
@@ -467,3 +527,4 @@ components:
 4. 需要新色/新字号 = 先问「现有档位为什么不够」，能复用就复用（四档字号、四档圆角是刻意收紧的）
 5. 覆盖 antd 组件 token 必须登记进覆盖表；调用点 `!` 前缀类是禁止项
 6. 深色模式任何改动都要在浅/深两态下各看一遍（算法派生值随 seed 变化）
+7. **改完主题必看像素**：本次 P0 事故（`:root` 映射失效）就是「文档/类型/测试全绿但像素全错」——改 `AntdProvider` / `index.css` / `index.html` 后，至少跑一次浏览器实测（`pnpm start:test-project` 或 `packages/client` 的 headless 探针），确认 `--ant-color-primary` 在 `:root` 有值
