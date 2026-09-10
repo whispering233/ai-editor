@@ -59,7 +59,7 @@ git push origin main && git push origin vX.Y.Z
   publish.yml 6 包 npm 发布（OIDC Trusted Publisher）+ verify-installed 安装态冒烟
 ```
 
-前置（一次性，npmjs）：账号开 2FA；6 个发布包各配置 Trusted Publisher（GitHub Actions / whispering233/ai-editor 仓库 / publish.yml 工作流）。**automation token（绕过 2FA）不能执行 unpublish/deprecate**（npm 安全策略 403）——坏版本处理需 2FA 凭据或 npmjs 网页操作。
+前置（一次性，npmjs）：账号开 2FA；6 个发布包各配置 Trusted Publisher（GitHub Actions / whispering233/ai-editor 仓库 / publish.yml 工作流）。**token 能力边界（2026-09-11 实测修订）**：本仓 granular token **可以执行 `npm deprecate`**（实测 10 条成功、无需 OTP）；被拒的是账号/组织/设置类操作（`npm profile get` → 403，npm 2026-07-31 起限制 bypass-2FA token 的设置类操作）。`unpublish` 未实测（不可逆）——官方文档仍列为需 2FA 的敏感操作，真要 unpublish 请备好 `--otp`。2027-01 起 bypass-2FA token 将失去直接发布能力，本仓已用 OIDC Trusted Publisher 不受影响。
 
 ## 发布管道坑记录（供后续发布参考）
 

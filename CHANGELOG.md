@@ -5,6 +5,13 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### Changed
+
+- **npm 坏版本已标注 deprecate**（v0.0.1/v0.0.2）：`llm`/`db`/`tools`/`agent`/`server` 五个含 `workspace:*` 残留依赖的包 × 2 版本已在 npm 标注（registry 复验通过；`shared` 无依赖可正常安装故未标注）
+- **文档修正（实测推翻旧结论）**：`AGENTS.md` / `docs/design/build.md` 原写「绕过 2FA 的 granular token 不能执行 unpublish/deprecate（403）」——2026-09-11 实测**可以 deprecate**（10 条成功、无 OTP）；被拒的只是账号/组织/设置类操作（`npm profile get` → 403）；`unpublish` 未实测（不可逆）。另注：2027-01 起 bypass-2FA token 将失去直接发布能力，本仓发布走 OIDC Trusted Publisher 不受影响
+
 ## [v0.0.29] - 2026-09-11
 
 > 批次二十（用户反馈九项 + 两条静默失效根因）+ 批次二十一（链式新建断链）。**纯前端，API/数据契约零改动**；新增 4 条源码守卫规则（累计 13 条）。
