@@ -10,7 +10,7 @@ import { Bubble, Sender } from "@ant-design/x";
 import { AntdProvider } from "./components/AntdProvider";
 
 describe("antd 基座冒烟", () => {
-  it("AntdProvider（根接线：zhCN + 主题跟随）包裹可渲染", () => {
+  it("AntdProvider（根接线：zhCN + Notion 暖灰 token 覆盖 + App 上下文 + 主题跟随）包裹可渲染", () => {
     // node 环境无 document：useThemeMode 守卫回落 light 算法（暗色算法渲染由下方用例覆盖）
     const html = renderToString(
       <AntdProvider>
@@ -20,7 +20,8 @@ describe("antd 基座冒烟", () => {
     expect(html).toContain("根接线正常");
   });
 
-  it("ConfigProvider（zhCN + 默认色板暗色算法）包裹可渲染", () => {
+  it("ConfigProvider（zhCN + antd 暗色算法）包裹可渲染", () => {
+    // 保留用例：验证「一次性传入 locale + algorithm」也能正常渲染（不依赖 AntdProvider 的 token 覆盖）。
     const html = renderToString(
       <ConfigProvider locale={zhCN} theme={{ algorithm: theme.darkAlgorithm }}>
         <span>基座正常</span>

@@ -882,7 +882,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                     className="group rounded-lg border border-border bg-background p-3 transition-colors hover:border-primary/40 hover:bg-muted"
                     title={`查看${TYPE_LABEL[t]}列表`}
                   >
-                    <p className="font-serif text-2xl font-semibold text-foreground">
+                    <p className="text-xl font-semibold text-foreground">
                       {entityCounts?.[t] ?? "–"}
                     </p>
                     <p className="mt-0.5 text-xs text-muted-foreground transition-colors group-hover:text-foreground">

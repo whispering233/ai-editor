@@ -259,7 +259,6 @@ function SessionTitleBar({
   // 当前会话 = 列表中 id 匹配项；未选（null）/ 列表未加载 / 不在列表 → 新会话
   const currentSession = sessions?.find((s) => s.id === currentSessionId) ?? null;
   const title = currentSession ? currentSession.lastMessage || "（空会话）" : "新会话";
-  const { token } = theme.useToken();
 
   // 下拉项（会话选择器语义——选择器场景可用 Dropdown；操作按钮仍直显不收入菜单）
   const menuItems: MenuProps["items"] = [
@@ -286,7 +285,7 @@ function SessionTitleBar({
 
   return (
     <div className="flex h-12 shrink-0 items-center gap-1 border-b border-border px-2.5">
-      <MessageOutlined className="shrink-0" style={{ color: token.colorTextSecondary }} />
+      <MessageOutlined className="shrink-0 text-muted-foreground" />
       <AntDropdown
         menu={{
           items: menuItems,
@@ -546,7 +545,6 @@ export function ProposalCardView({ proposal }: { proposal: ProposalCard }) {
   const confirmProposal = useChatStore((s) => s.confirmProposal);
   const rejectProposal = useChatStore((s) => s.rejectProposal);
   const label = PROPOSAL_TYPE_LABELS[proposal.type] ?? proposal.type;
-  const { token } = theme.useToken();
   // 终态（confirmed/rejected/stale）与处理中（processing 在途）：按钮禁用——
   // 409 PROPOSAL_STALE 由 store 标 stale（卡标文案见上）+ 按钮随之禁用；
   // 404 NOT_FOUND / 409 MISMATCH 由 store 移除卡片（组件无需处理）；notFound 不渲染
@@ -598,7 +596,7 @@ export function ProposalCardView({ proposal }: { proposal: ProposalCard }) {
   return (
     <div className="rounded-lg border border-primary/25 bg-primary/5 p-2.5">
       <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-        <BulbOutlined className="shrink-0" style={{ color: token.colorPrimary }} />
+        <BulbOutlined className="shrink-0 text-primary" />
         <span className="min-w-0 flex-1 truncate">提案：{label}</span>
         {proposal.status === "confirmed" && (
           <span className="shrink-0 text-xs text-primary">✓ 已确认</span>
@@ -752,7 +750,6 @@ function MessageList({ disabled }: { disabled: boolean }) {
   }, [tail, messages, messagesLoading, streamTools.length, proposals.length]);
 
   /** 流式思考指示：正在流 & 尾条 assistant 且尚无正文（首段 delta 前/工具等待期） */
-  const { token: msgToken } = theme.useToken();
   const showThinking =
     streaming &&
     messages.length > 0 &&
@@ -763,7 +760,7 @@ function MessageList({ disabled }: { disabled: boolean }) {
     // 无项目打开：右栏禁用（「位置与形态」：灰显 + 「打开项目后可用」）
     return (
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 p-4">
-        <MessageOutlined className="text-2xl" style={{ color: msgToken.colorTextTertiary }} />
+        <MessageOutlined className="text-2xl text-muted-foreground/70" />
         <p className="text-sm text-muted-foreground/70">打开项目后可用</p>
       </div>
     );
@@ -790,7 +787,7 @@ function MessageList({ disabled }: { disabled: boolean }) {
       {empty ? (
         // 空态引导语（「空态」）
         <div className="flex h-full flex-col items-center justify-center gap-1.5 p-4 text-center">
-          <MessageOutlined className="text-2xl" style={{ color: msgToken.colorTextTertiary }} />
+          <MessageOutlined className="text-2xl text-muted-foreground/70" />
           <p className="text-sm text-muted-foreground">试试问：这个设定有没有漏洞？</p>
           <p className="text-sm text-muted-foreground">第 4 章剧情往哪走合理？</p>
         </div>

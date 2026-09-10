@@ -5,6 +5,23 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### Changed（批次十九：视觉语言统一——Notion 工作区暖灰 × antd 单一组件语言）
+
+- **视觉契约单点化**：新增 `docs/ui/DESIGN.md`（Google design.md 格式，`designmd lint` 0 error）——颜色/字体/四档字号/圆角/间距/组件外观 + antd seed 映射表 + 组件 token 覆盖表；`layout.md §7` 与 `architecture.md` 指向它，改色唯一入口 = `AntdProvider.tsx`
+- **主题 token 落地**：antd 默认蓝退役，改 Notion **工作区**暖灰（`colorPrimary`/`colorText` `#37352f` 暖炭墨、`colorBgLayout` `#f6f5f4`、描边三层 `#c8c4be`/`#e5e3df`/`#ede9e4`、`colorLink` `#0075de`）；浅/深各一套 seed（`theme.token` 显式值在算法派生后覆盖，必须分模式写）；组件 token 仅覆盖 Button/Menu/Table/Input/Select/Tag/Typography/Card 少数项；`controlOutlineWidth: 0` 关掉 selector 组件聚焦环（聚焦 = 1px 描边）
+- **组件语言收敛 antd（删第二套系统）**：自绘 `ui/button`、`ui/input`、`ui/sonner` 退役；`SectionCard` → antd `Card`、`EmptyState` → antd `Empty`（对外 props 不变、调用点零改动）；22 处原生 `<select>` → antd `Select`；反馈层 sonner → antd `message`（`<App component={false}>` 上下文）；依赖删 `lucide-react` / `sonner` / `class-variance-authority`
+- **图标单点化**：`@ant-design/icons` 为全站唯一图标集（`lucide-react` 退役），尺寸改随字号档（`text-xs/sm/base/xl/2xl`），状态用 Filled、操作与导航用 Outlined
+- **排版四档制**：页面标题 20 / 区块标题 16 / 正文 14 / caption 12——`PageTitle` 薄壳（`Typography.Title level={4}`）统一全站页头，`Typography.titleMarginBottom: 0` 接管标题下边距；删手写 10/11px/0.8rem 字号；界面衬线全退（`--font-serif`/`--font-heading` 删除，书封模块 `lib/book-cover.ts` 因无消费者一并删除）
+- **纪律守卫可执行化**：新增 `design-discipline.test.ts`（扫描源码：lucide 导入 / 硬编码色 / `!` 前缀类 / 手写字号 / antd 根元素上被无层 CSS 压掉的类）+ 规则自检；连带清除 74 处 `!` 前缀类与 6 处被 antd 压掉/无效的类
+- **修的一类隐形 bug**：antd 样式是运行时注入的**无层 CSS**，会静默压掉 Tailwind 工具类（`@layer utilities`）——宽度改用外层容器承载；该规则写入 DESIGN.md 并由守卫测试兵底（历史满仓 `!` 的根因）
+
+### Removed
+
+- 死代码：`lib/book-cover.ts`（无生产引用）、`ui/button.tsx`/`ui/input.tsx`/`ui/sonner.tsx`、`index.css` 遗留圆角变量与 `--radius`
+- 依赖：`lucide-react`、`sonner`、`class-variance-authority`
+
 ## [v0.0.27] - 2026-09-10
 
 ### Added（批次十八：用户反馈七项修复与优化——中栏悬浮入口 / 快捷键 / 新建聚焦）

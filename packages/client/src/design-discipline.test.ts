@@ -5,8 +5,7 @@
 //
 // 规则与白名单（改白名单必须先改 DESIGN.md 并说明理由）：
 // 1. lucide-import      图标一律 @ant-design/icons（lucide 已退役）
-// 2. hardcoded-color    颜色只经 antd token / 语义变量；白名单：AntdProvider（token 定义唯一允许处）、
-//                       lib/book-cover.ts（书封取色，DESIGN.md Known Gaps 已登记的待办）
+// 2. hardcoded-color    颜色只经 antd token / 语义变量；白名单：AntdProvider（token 定义唯一允许处）
 // 3. important-class    `!` 前缀类会掩盖「antd 无层 CSS 覆盖 Tailwind」这一事实，禁
 // 4. ad-hoc-font-size   字号只有四档（20/16/14/12），手写 px/rem 字号禁
 // 5. antd-root-override antd 组件根元素上不得挂会被 antd 自身声明压掉的布局/排版类
@@ -25,8 +24,8 @@ interface Rule {
   allow?: (file: string) => boolean;
 }
 
-/** 颜色白名单：token 定义处 + 已登记的书封取色 */
-const COLOR_ALLOW = ["components/AntdProvider.tsx", "lib/book-cover.ts"];
+/** 颜色白名单：token 定义处（唯一允许硬编码色值的地方） */
+const COLOR_ALLOW = ["components/AntdProvider.tsx"];
 
 /** 拦截 className 里以 `!` 开头的 Tailwind token（`!` 还有 `!==` 等用途，故先取 className 串） */
 function importantClasses(line: string): string[] {

@@ -226,7 +226,7 @@ components:
 - **扁平**：零阴影（浮层除外），无渐变
 - **安静**：彩色只服务状态与标签；界面本体是灰阶
 - **密集**：正文 14px、行高 1.57、控件高 32px——信息密度优先于展示性留白
-- **全站无衬线**：中文靠系统字体栈（`PingFang SC` / `Microsoft YaHei`），不下载 web 字体（离线可用）；唯一衬线例外是书架封面（见 §Typography）
+- **全站无衬线**：中文靠系统字体栈（`PingFang SC` / `Microsoft YaHei`），不下载 web 字体（离线可用）；**无例外（含书封）**——`font-serif` 与书封取色模块已删除（见 §Typography）
 
 **情绪目标**：像一张干净的纸和一支安静的笔——不是仪表盘，也不是玩具。
 
@@ -259,7 +259,7 @@ components:
 
 ### 标签色（tint 系，Notion database property 的回声）
 
-- **tint-peach / tint-rose / tint-mint / tint-lavender / tint-sky / tint-yellow**：6 个马卡龙实底，专供标签/分类 chip（`data.tags`）、书封等信息色块。**只做小面积底色，不做大面积背景**。
+- **tint-peach / tint-rose / tint-mint / tint-lavender / tint-sky / tint-yellow**：6 个马卡龙实底，专供标签/分类 chip（`data.tags`）等信息色块。**只做小面积底色，不做大面积背景**。
 - 营销站那套 bold 黄（`#f9e79f`）与深蓝 hero 带**不纳入**。
 
 ### antd 实现映射（seed token，唯一改色入口）
@@ -305,7 +305,7 @@ components:
 
 **行高**：正文 1.57（antd 22px/14px），标题 1.4，caption 1.67（antd 20px/12px）。
 
-**衬线例外（仅一处）**：书架封面（`lib/book-cover.ts` 渲染的书名）可用衬线栈 `"Noto Serif SC", "Songti SC", serif`——书是唯一的「文学物件」。若该栈在该机器上落到 `SimSun`，观感劣化明显，则退化为无衬线。**界面 chrome 一律禁衬线**（旧 `--font-serif` / `--font-heading` 已退役）。
+**无衬线、无例外**：界面 chrome 与书封一律禁衬线——旧 `--font-serif` / `--font-heading` 与书封取色模块 `lib/book-cover.ts` 均已删除（批次十九 T10）。
 
 ## Layout
 
@@ -340,7 +340,7 @@ components:
 
 **与 Notion 原值的偏差（有意）**：Notion 卡片是 12px，我们取 8px——antd 的 `borderRadiusLG` 同时管 Modal/Drawer/Table 等大面，改成 12 会连带全站变圆。若日后要更圆，先评估 Modal/Drawer 的观感再改 seed。**按钮一律矩形，不用胶囊形**（Notion 的 sober-editorial 几何）。
 
-**Tailwind 圆角变量已钉到本表**：`index.css` 的 `--radius-sm/md/lg` = `4px/6px/8px`（与 antd `borderRadiusSM`/`borderRadius`/`borderRadiusLG` 同值），不再由 `calc(var(--radius) * k)` 派生（旧值 9.6/7.7/5.8 与文档不符）。xl 以上（12/16/24/32px）是**遗留 tail**：仅供尚未收敛到 antd 的自绘组件使用，随 T4-T6 一并删除。
+**Tailwind 圆角变量已钉到本表**：`index.css` 的 `--radius-sm/md/lg` = `4px/6px/8px`（与 antd `borderRadiusSM`/`borderRadius`/`borderRadiusLG` 同值），不再由 `calc(var(--radius) * k)` 派生（旧值 9.6/7.7/5.8 与文档不符）。xl 以上（12/16/24/32px）曾为**遗留 tail**（供未收敛到 antd 的自绘组件用），组件收敛后已无消费者，批次十九 T10 已删除。
 
 ## Components
 
@@ -442,7 +442,7 @@ components:
 ### Don't
 
 - 不用营销站那套：紫 CTA、深蓝 hero 带、马卡龙大面积功能卡、胶囊按钮、80px 展示字
-- 不用 `font-serif` / 宋体做界面标题（唯一例外：书架封面）
+- 不用 `font-serif` / 宋体做标题（**无例外**：书封与界面一致）
 - 不硬编码色值/色类（`text-blue-500`、`#1677ff`、`rgba(...)` 手写值）
 - 不用 `!` 前缀类压 antd 组件样式
 - **不要用 Tailwind 类去覆盖 antd 组件根元素上 antd 自己声明的属性**（`width` / `height` / `padding` / `margin` / `font-size` / `color` / `background` / `border` / `border-radius` / `display`）：antd 样式是运行时注入的**无层 CSS**，而 Tailwind 工具类在 `@layer utilities`——按 CSS 级联规范**无层胜出**，此类覆盖会静默失效（历史上满仓 `!` 就是这么来的）。正确做法：宽度/伸缩用**外层容器**承载；具体尺寸用组件 `size`；状态面用组件 `variant`（如 `variant="filled"` = `colorFillTertiary` = `{colors.surface-muted}`）或组件 token
@@ -456,7 +456,6 @@ components:
 - **标签 tint 分配规则未实现**：6 个 tint 已登记，但「哪个标签用哪个色」尚未定义（当前 antd `Tag` 默认灰底可用）。需要时再定映射（如按标签名 hash 稳定取色），不要在调用点随手挑色。
 - **antd 派生色未登记**：hover/active/禁用底、`colorFill*`、浅色色阶由算法派生，本文件不复制（避免漂移）。
 - **MD 编辑器是独立表皮**：参考资料页的 `@uiw/react-md-editor` 自带一套排版与配色，未纳入本设计系统（编辑器内部不套 chrome token）；若观感冲突，再单独收。
-- **书封色是硬编码**：`lib/book-cover.ts` 用 `hsl(hue 45% 90%)` 生成渐变，深色模式下偏亮；未纳入 token 体系。
 - **插件/第三方浮层未覆盖**：x-markdown 渲染出的表格/引用块样式由库自带，未做 token 映射。
 - **响应式未细化**：只定义 `<1024px` 的抽屉回退，触屏尺寸与最小点击区未定义。
 
