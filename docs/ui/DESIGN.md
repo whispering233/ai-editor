@@ -274,7 +274,8 @@ components:
 | `colorSplit` | `#ede9e4` | `#373737` | `{colors.hairline-soft}`（行分隔：Table 内线 / data-row 底线） |
 | `colorLink` | `#0075de` | `#529cca` | `{colors.link}` |
 | `colorSuccess` / `colorWarning` / `colorError` | `#1aae39` / `#dd5b00` / `#e03131` | 同 | 语义三色 |
-| `borderRadius` / `borderRadiusSM` | `6px` / `4px` | — | `{rounded.sm}` / `{rounded.xs}` |
+| `borderRadius` / `borderRadiusSM` / `borderRadiusLG` | `6px` / `4px` / `8px` | — | `{rounded.sm}` / `{rounded.xs}` / `{rounded.md}` |
+| `controlOutlineWidth` | `0` | `0` | 聚焦环宽度 = 0（焦点只靠 1px 描边色变化，见 §Elevation；selector 型组件的环唯一开关） |
 
 **不登记派生色**：hover/active/禁用底、`colorFill*` 系列、深浅算法派生的色阶一律不写进本文件——登记了就必然与 antd 实际派发值漂移。本文件只登记「人为设定的值」。
 
@@ -333,6 +334,8 @@ components:
 
 **与 Notion 原值的偏差（有意）**：Notion 卡片是 12px，我们取 8px——antd 的 `borderRadiusLG` 同时管 Modal/Drawer/Table 等大面，改成 12 会连带全站变圆。若日后要更圆，先评估 Modal/Drawer 的观感再改 seed。**按钮一律矩形，不用胶囊形**（Notion 的 sober-editorial 几何）。
 
+**Tailwind 圆角变量已钉到本表**：`index.css` 的 `--radius-sm/md/lg` = `4px/6px/8px`（与 antd `borderRadiusSM`/`borderRadius`/`borderRadiusLG` 同值），不再由 `calc(var(--radius) * k)` 派生（旧值 9.6/7.7/5.8 与文档不符）。xl 以上（12/16/24/32px）是**遗留 tail**：仅供尚未收敛到 antd 的自绘组件使用，随 T4-T6 一并删除。
+
 ## Components
 
 分层原则：**能用 antd 组件的地方不造第二套**（按钮/输入框/卡片/空态/提示全部用 antd），自绘只保留 antd 语义不匹配的浮层（右键菜单/受控 Dialog/轻量 Popover）与业务组件。
@@ -390,14 +393,22 @@ components:
 
 ### antd 组件 token 覆盖（全部覆盖项就这些）
 
-| 组件 | token | 值 |
-|---|---|---|
-| Button | `primaryShadow` / `defaultShadow` / `dangerShadow` | `"none"` |
-| Menu | `itemSelectedBg` / `itemSelectedColor` / `itemBorderRadius` / `itemHeight` / `itemMarginInline` | `{colors.surface-muted}` / `{colors.primary}` / `6` / `32` / `4` |
-| Table | `headerBg` / `borderColor` / `cellPaddingBlock` | `{colors.canvas}` / `{colors.hairline}` / `8` |
-| Input | `activeShadow` | `"none"` |
-| Select | `activeShadow` / `optionSelectedBg` | `"none"` / `{colors.surface-muted}` |
-| Tag | `defaultBg` | `{colors.surface-muted}` |
+**浅/深两态各自给值**：`theme.token` 的显式值在算法派生之后覆盖（不被算法再加工），同一个浅色值写死会在深色态生效——因此 `AntdProvider` 按模式分写 `LIGHT_SEED`/`DARK_SEED` 与两套组件覆盖（下表「深色」列）。
+
+| 组件 | token | 浅色 | 深色（推断） |
+|---|---|---|---|
+| Button | `primaryShadow` / `defaultShadow` / `dangerShadow` | `"none"` | `"none"` |
+| Menu | `itemSelectedBg` / `itemSelectedColor` | `{colors.surface-muted}` / `{colors.primary}` | `#373737` / 81% 白 |
+| Menu | `itemBorderRadius` / `itemHeight` / `itemMarginInline` | `6` / `32` / `4` | 同浅色 |
+| Table | `headerBg` / `borderColor` | `{colors.canvas}` / `{colors.hairline}` | `#202020` / `#2f2f2f` |
+| Table | `cellPaddingBlock` | `8` | 同浅色 |
+| Input | `activeShadow` | `"none"` | `"none"` |
+| Select | `optionSelectedBg` | `{colors.surface-muted}` | `#373737` |
+| Tag | `defaultBg` | `{colors.surface-muted}` | `#373737` |
+
+**聚焦环走 seed 而不是组件 token**：selector 型组件（Select/Cascader/DatePicker/Table 筛选）的聚焦环由 `boxShadow: 0 0 0 {controlOutlineWidth} {activeOutlineColor}` 绘制（`antd/es/select/style/select-input.js`），Select **没有** `activeShadow` 组件 token——统一用 seed `controlOutlineWidth: 0` 关闭（见 §Colors 映射表）。Input 的 `activeShadow: "none"` 是各自独立的阴影，二者都要。
+
+**深色面值说明**：深色列的面值（`#373737` / `#202020` / `#2f2f2f`）复用 §Colors 映射表深色列已登记的中性值（行分隔档/面板档/结构描边档），**未发明新色**；它们语义上是「暗色下的选中/表头面」。若日后要独立调深色选中面，先在本表登记新值再改代码。
 
 **新增覆盖需先写进本表**（禁止在调用点用 `!` 前缀类硬压 antd 样式——旧代码里 43 处 `!mb-`/`!mt-`/`!text-*` 随组件收敛一并清除）。
 

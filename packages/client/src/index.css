@@ -24,11 +24,10 @@
 }
 
 @theme inline {
-  /* 系统字体栈（layout.md §3.3：不下载 web 字体，本地优先离线可用）；
-     正文无衬线栈；标题/聊天用衬线栈（--font-serif） */
+  /* 系统字体栈（DESIGN.md §Typography：不下载 web 字体，本地优先离线可用）——
+     全站单一无衬线栈；界面衬线已退役（批次十九 T1 删除 --font-serif / --font-heading）。
+     唯一例外的书架封面衬线不进本主题，由 T10 在封面渲染处单独定义（DESIGN.md §Typography 衬线例外） */
   --font-sans: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-  --font-serif: "Songti SC", "SimSun", "Noto Serif CJK SC", serif;
-  --font-heading: var(--font-serif);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -55,13 +54,15 @@
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  /* 圆角档 = DESIGN.md §Shapes（4/6/8 与 antd borderRadiusSM/base/LG 一致；xl 以上为遗留 tail，
+     随 T4-T6 组件收敛到 antd 后删除）——不再用 calc(--radius * k) 派生（旧值 9.6/7.7/5.8 与文档不符） */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-3xl: 24px;
+  --radius-4xl: 32px;
 }
 
 /* 浅色 = antd defaultAlgorithm tokens（批次十七 3-0 cssVar 映射；变量由 ConfigProvider 注入） */
@@ -85,7 +86,7 @@
   --border: var(--ant-color-border);
   --input: var(--ant-color-border);
   --ring: var(--ant-color-primary);
-  --radius: 0.6rem;
+  --radius: 8px; /* 遗留 var(--radius) 消费点（ui/sonner、ui/button）；T5/T8 收敛后删 */
   --sidebar: var(--ant-color-bg-layout);
   --sidebar-foreground: var(--ant-color-text);
   --sidebar-primary: var(--ant-color-primary);
