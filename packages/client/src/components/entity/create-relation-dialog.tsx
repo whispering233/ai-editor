@@ -9,7 +9,7 @@
 // 中列关系类型下拉 + 「→」箭头（mt-auto 沉底对齐两端实体下拉），三列各有小标题（源实体/关系类型/目标实体）。
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { Button } from "antd";
+import { Button, Select } from "antd";
 import { ENTITY_TYPES, RELATION_TYPES } from "@whispering233/ai-editor-shared";
 import type { EntitySummary, EntityType } from "@whispering233/ai-editor-shared";
 import { ApiError, createRelation, listEntities, type CreateRelationBody } from "../../lib/api";
@@ -17,8 +17,6 @@ import { relationTypeLabel } from "../../lib/entity-detail";
 import { flattenTree } from "../../lib/outline-tree";
 import { useProjectStore } from "../../stores/project";
 import { useUiStore } from "../../stores/ui";
-import { cn } from "../../lib/utils";
-import { selectClass } from "../../lib/styles";
 import {
   Dialog,
   DialogContent,
@@ -159,46 +157,36 @@ export function CreateRelationDialog({
                 </div>
               ) : (
                 <>
-                  <select
+                  <Select
+                    className="w-full"
                     value={sourceType}
-                    onChange={(e) => setSourceType(e.target.value as EntityType)}
-                    className={cn(selectClass, "w-full")}
-                  >
-                    {ENTITY_TYPES.map((t) => (
-                      <option key={t} value={t}>
-                        {TYPE_LABEL[t]}
-                      </option>
-                    ))}
-                  </select>
-                  <select
+                    onChange={(value) => setSourceType(value as EntityType)}
+                    options={ENTITY_TYPES.map((t) => ({ value: t, label: TYPE_LABEL[t] }))}
+                  />
+                  <Select
+                    className="w-full"
                     value={sourceId}
-                    onChange={(e) => setSourceId(e.target.value)}
-                    className={cn(selectClass, "w-full")}
-                  >
-                    <option value="">选择{TYPE_LABEL[sourceType]}…</option>
-                    {(sourceEntities ?? []).map((it) => (
-                      <option key={it.id} value={it.id}>
-                        {it.name}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(value) => setSourceId(value)}
+                    options={[
+                      { value: "", label: `选择${TYPE_LABEL[sourceType]}…` },
+                      ...(sourceEntities ?? []).map((it) => ({ value: it.id, label: it.name })),
+                    ]}
+                  />
                 </>
               )}
             </div>
             {/* 中列：关系类型 + 方向箭头（mt-auto 沉底与两端实体下拉对齐，表达「源 关系→ 目标」） */}
             <div className="flex flex-col gap-2 sm:w-44">
               <p className="text-sm font-medium text-foreground">关系类型</p>
-              <select
+              <Select
+                className="w-full"
                 value={relationType}
-                onChange={(e) => setRelationType(e.target.value)}
-                className={cn(selectClass, "w-full")}
-              >
-                {DIALOG_RELATION_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {relationTypeLabel(t)}
-                  </option>
-                ))}
-              </select>
+                onChange={(value) => setRelationType(value)}
+                options={DIALOG_RELATION_TYPES.map((t) => ({
+                  value: t,
+                  label: relationTypeLabel(t),
+                }))}
+              />
               <span
                 aria-hidden="true"
                 className="mt-auto pb-1 text-center text-xl leading-none text-muted-foreground select-none"
@@ -209,44 +197,41 @@ export function CreateRelationDialog({
             {/* 右列：目标实体（大纲节点用 outline store 树） */}
             <div className="flex flex-col gap-2">
               <p className="text-sm font-medium text-foreground">目标实体</p>
-              <select
+              <Select
+                className="w-full"
                 value={otherType}
-                onChange={(e) => setOtherType(e.target.value as EntityType | "outline_node")}
-                className={cn(selectClass, "w-full")}
-              >
-                <option value="character">人物</option>
-                <option value="setting">设定</option>
-                <option value="location">地点</option>
-                <option value="hook">伏笔</option>
-                <option value="outline_node">大纲节点</option>
-              </select>
+                onChange={(value) => setOtherType(value as EntityType | "outline_node")}
+                options={[
+                  { value: "character", label: "人物" },
+                  { value: "setting", label: "设定" },
+                  { value: "location", label: "地点" },
+                  { value: "hook", label: "伏笔" },
+                  { value: "outline_node", label: "大纲节点" },
+                ]}
+              />
               {otherType === "outline_node" ? (
-                <select
+                <Select
+                  className="w-full"
                   value={otherId}
-                  onChange={(e) => setOtherId(e.target.value)}
-                  className={cn(selectClass, "w-full")}
-                >
-                  <option value="">选择大纲节点…</option>
-                  {outlineOptions.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {"　".repeat(o.depth)}
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(value) => setOtherId(value)}
+                  options={[
+                    { value: "", label: "选择大纲节点…" },
+                    ...outlineOptions.map((o) => ({
+                      value: o.id,
+                      label: `${`　`.repeat(o.depth)}${o.label}`,
+                    })),
+                  ]}
+                />
               ) : (
-                <select
+                <Select
+                  className="w-full"
                   value={otherId}
-                  onChange={(e) => setOtherId(e.target.value)}
-                  className={cn(selectClass, "w-full")}
-                >
-                  <option value="">选择{TYPE_LABEL[otherType]}…</option>
-                  {(otherEntities ?? []).map((it) => (
-                    <option key={it.id} value={it.id}>
-                      {it.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(value) => setOtherId(value)}
+                  options={[
+                    { value: "", label: `选择${TYPE_LABEL[otherType]}…` },
+                    ...(otherEntities ?? []).map((it) => ({ value: it.id, label: it.name })),
+                  ]}
+                />
               )}
             </div>
           </div>

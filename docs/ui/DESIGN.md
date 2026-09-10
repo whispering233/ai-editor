@@ -125,6 +125,11 @@ components:
     textColor: "{colors.primary}"
     rounded: "{rounded.sm}"
     height: 32px
+  select:
+    backgroundColor: "{colors.canvas}"
+    textColor: "{colors.primary}"
+    rounded: "{rounded.sm}"
+    height: 32px
   select-option-selected:
     backgroundColor: "{colors.surface-muted}"
     textColor: "{colors.primary}"
@@ -348,7 +353,7 @@ components:
 | sidebar（左栏） | 右侧 1px `{colors.hairline}` | 无 |
 | info-bar（信息条） | 底部 1px `{colors.hairline}` | 无 |
 | card / proposal-card / dropdown-panel / toast | 1px `{colors.hairline}` | 仅浮层（dropdown-panel / toast）：`0 8px 24px rgba(15, 15, 15, 0.10)`；card 无 |
-| input / button-default | 1px `{colors.hairline-strong}` | 无 |
+| input / select / button-default | 1px `{colors.hairline-strong}` | 无 |
 | empty-state | 1px 虚线 `{colors.hairline}` | 无 |
 | data-row / table-header | 底部 1px `{colors.hairline-soft}` / `{colors.hairline}` | 无 |
 | focus-strip | 1px `{colors.hairline}` | 无 |
@@ -369,6 +374,9 @@ components:
 **`button-text`** — 无边框纯文字，只用于行内最弱操作；**不得用于页面级操作**。
 **`icon-button`** — 28px 方区、图标色 `{colors.tertiary}`、hover 变 `{colors.primary}`；不受「必须带边框」约束。
 **`input`** — 白底 + `{colors.hairline-strong}` 描边 + `{rounded.sm}` + 32px 高；聚焦 = 1px primary 描边（**无阴影、无彩环**）。行内编辑与表单用同一个 antd `Input`。
+**`select`** — 与 `input` 同一语言：白底 + 1px `{colors.hairline-strong}` 描边 + `{rounded.sm}` + 32px 高（密集行 24px = antd `size="small"`）；聚焦同样 1px primary 描边、无彩环。下拉浮层走 `dropdown-panel`（1px `{colors.hairline}` + `{rounded.md}` + 浮层阴影），选中项 `{colors.surface-muted}` 灰面。全站下拉统一 antd `Select`（原生 `<select>` 已清零）。
+
+**选择器空态两种写法（都有据）**：**筛选类**（“全部/不限”，可清除）用 `allowClear` + `placeholder`（并为空值时传 `undefined`）；**表单类**（必选项的“请选择…”）保留 `{ value: "", label: 原文案 }` 作为首项，不做 placeholder 改造。组选（`optgroup`）用 `options` 分组对象 `{ label, options }`，组级禁用下推到组内每个 option（antd 分组对象无 `disabled`），组 label 文案保留。
 
 **输入框默认值上收到 Provider**：`autoComplete: "off"` 经 `ConfigProvider` 的 `input` / `textArea` 默认 props 下发（v6 `InputConfig.autoComplete`），调用点不重复声明——禁浏览器历史建议，输入提示全由 datalist 候选与业务逻辑控制。
 **`select-option-selected`** — 选中项 = `{colors.surface-muted}` 灰面，不变蓝。

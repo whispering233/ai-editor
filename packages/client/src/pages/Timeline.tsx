@@ -24,12 +24,12 @@
 // - 数据刷新：useDataRefresh 订阅 dataVersion（AI 提案确认写库 / InfoBar 刷新按钮）
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { Button, Input } from "antd";
+import { Button, Input, Select } from "antd";
 import { OrderedListOutlined } from "@ant-design/icons";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { PageTitle } from "@/components/ui/page-title";
 import { EmptyState } from "@/components/ui/empty-state";
-import { selectClass, errorBannerClass } from "@/lib/styles";
+import { errorBannerClass } from "@/lib/styles";
 import {
   Dialog,
   DialogContent,
@@ -763,18 +763,17 @@ function OutlineNodeSelect({
   placeholder?: string;
 }) {
   return (
-    <select
+    <Select
+      className="w-full"
       value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className={cn(selectClass, "w-full", value === "" && "text-muted-foreground")}
-    >
-      <option value="">{placeholder}</option>
-      {nodeOptions.map((o) => (
-        <option key={o.id} value={o.id}>
-          {"　".repeat(o.depth)}
-          {o.label}
-        </option>
-      ))}
-    </select>
+      onChange={(v) => onChange(v)}
+      options={[
+        { value: "", label: placeholder },
+        ...nodeOptions.map((o) => ({
+          value: o.id,
+          label: `${`　`.repeat(o.depth)}${o.label}`,
+        })),
+      ]}
+    />
   );
 }

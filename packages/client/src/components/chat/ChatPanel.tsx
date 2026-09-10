@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentRef } from "react";
 import { Bubble, Sender } from "@ant-design/x";
-import { Alert, Badge, Button, Collapse, Dropdown as AntDropdown, Tag, theme } from "antd";
+import { Alert, Badge, Button, Collapse, Dropdown as AntDropdown, Select, Tag, theme } from "antd";
 import type { MenuProps } from "antd";
 import {
   BulbOutlined,
@@ -183,49 +183,42 @@ function ChatModelBar({ disabled }: { disabled: boolean }) {
 
   return (
     <div className="flex h-9 shrink-0 items-center gap-1.5 border-b border-border px-2.5">
-      <select
-        className="h-6 w-max max-w-28 shrink-0 rounded-md border border-input bg-transparent px-1.5 text-xs text-foreground outline-none focus-visible:border-ring"
+      <Select
+        size="small"
+        className="w-max max-w-28 shrink-0"
         value={settings === null ? "" : `${settings.provider}::${settings.model}`}
         disabled={disabled}
-        onChange={(e) => changeModel(e.target.value)}
+        onChange={(value) => changeModel(value)}
         title={
           activeKeyless
             ? "当前 provider 未配置 API key：请切换到其他 provider 或在设置页配置"
             : "选择模型（按 provider 分组；未配 key 的组禁用）"
         }
         aria-label="选择模型"
-      >
-        {settings.providers.map((p) => {
+        options={settings.providers.map((p) => {
           // 激活 provider 的组恒可选（无 key 时也允许切走/停留——防困死）；其余无 key 组禁用
-          return (
-            <optgroup
-              key={p.id}
-              label={`${p.displayName}${p.apiKeySet ? "" : "（未配 key）"}`}
-              disabled={!p.apiKeySet && p.id !== settings.provider}
-            >
-              {p.models.map((m) => (
-                <option key={`${p.id}::${m.id}`} value={`${p.id}::${m.id}`}>
-                  {m.displayName ?? m.id}
-                </option>
-              ))}
-            </optgroup>
-          );
+          // （antd 分组对象无 disabled——组级禁用下推到组内每个 option）
+          const groupDisabled = !p.apiKeySet && p.id !== settings.provider;
+          return {
+            label: `${p.displayName}${p.apiKeySet ? "" : "（未配 key）"}`,
+            options: p.models.map((m) => ({
+              value: `${p.id}::${m.id}`,
+              label: m.displayName ?? m.id,
+              disabled: groupDisabled,
+            })),
+          };
         })}
-      </select>
-      <select
-        className="h-6 w-max shrink-0 rounded-md border border-input bg-transparent px-1.5 text-xs text-foreground outline-none focus-visible:border-ring"
+      />
+      <Select
+        size="small"
+        className="w-max shrink-0"
         value={settings.thinkingLevel}
         disabled={disabled || activeKeyless || !currentModel?.reasoning}
-        onChange={(e) => changeThinking(e.target.value as ThinkingLevel)}
+        onChange={(value) => changeThinking(value as ThinkingLevel)}
         title="Thinking level"
         aria-label="思考强度"
-      >
-        {THINKING_LEVEL_OPTIONS.map((l) => (
-          <option key={l} value={l}>
-            {l}
-          </option>
-        ))}
-      </select>
+        options={THINKING_LEVEL_OPTIONS.map((l) => ({ value: l, label: l }))}
+      />
       {usagePct !== null && (
         <div
           className="ml-auto flex shrink-0 items-center gap-1"

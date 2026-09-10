@@ -6,14 +6,12 @@
 // conflicts 警示块（border-destructive/30 bg-destructive/10 text-destructive + WarningFilled）
 // 空态：deltaCount === 0 → 轻量文案（当前状态即初始状态），不展示计算控件
 import { useEffect, useState } from "react";
-import { Button } from "antd";
+import { Button, Select } from "antd";
 import { WarningFilled } from "@ant-design/icons";
 import type { ComputeStateResult, DeltaChange } from "@whispering233/ai-editor-shared";
 import { ApiError, computeDeltaState } from "../../lib/api";
 import { diffStateFields, formatDeltaValue } from "../../lib/delta";
 import { flattenTree } from "../../lib/outline-tree";
-import { cn } from "../../lib/utils";
-import { selectClass } from "../../lib/styles";
 import { useProjectStore } from "../../stores/project";
 import { ChangeSummary } from "./change-summary";
 
@@ -112,24 +110,19 @@ export function ComputePreview({
                   </Button>
                 </div>
               ) : (
-                <select
+                <Select
+                  className="min-w-56"
                   value={atNodeId}
-                  onChange={(e) => setAtNodeId(e.target.value)}
+                  onChange={(value) => setAtNodeId(value)}
                   aria-label="计算节点"
-                  className={cn(
-                    selectClass,
-                    "min-w-56",
-                    atNodeId === "" && "text-muted-foreground",
-                  )}
-                >
-                  <option value="">请选择大纲节点</option>
-                  {options.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {"　".repeat(o.depth)}
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
+                  options={[
+                    { value: "", label: "请选择大纲节点" },
+                    ...options.map((o) => ({
+                      value: o.id,
+                      label: `${`　`.repeat(o.depth)}${o.label}`,
+                    })),
+                  ]}
+                />
               )}
             </div>
             <Button disabled={!atNodeId || computing} onClick={() => void handleCompute()}>

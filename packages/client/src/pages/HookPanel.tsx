@@ -27,10 +27,10 @@ import {
   MinusCircleFilled,
 } from "@ant-design/icons";
 import { RowContextMenu } from "../components/entity/row-context-menu";
-import { Button, Input } from "antd";
+import { Button, Input, Select } from "antd";
 import { PageTitle } from "@/components/ui/page-title";
 import { EmptyState } from "@/components/ui/empty-state";
-import { selectClass, errorBannerClass } from "@/lib/styles";
+import { errorBannerClass } from "@/lib/styles";
 import { SuggestionDatalist } from "@/components/ui/suggestion-datalist";
 import {
   Dialog,
@@ -1025,18 +1025,18 @@ function HookDataField({
       );
     case "select":
       return (
-        <select
+        <Select
+          className="w-full"
           value={fieldValue({ [field.key]: value }, field.key)}
-          onChange={(e) => onValue(e.target.value)}
-          className={cn(selectClass, "w-full")}
-        >
-          <option value="">未设置</option>
-          {field.options?.map((opt) => (
-            <option key={opt} value={opt}>
-              {field.optionsLabels?.[opt] ?? opt}
-            </option>
-          ))}
-        </select>
+          onChange={(v) => onValue(v)}
+          options={[
+            { value: "", label: "未设置" },
+            ...(field.options ?? []).map((opt) => ({
+              value: opt,
+              label: field.optionsLabels?.[opt] ?? opt,
+            })),
+          ]}
+        />
       );
     case "toggle":
       return (
@@ -1087,18 +1087,17 @@ function OutlineNodeSelect({
   placeholder?: string;
 }) {
   return (
-    <select
+    <Select
+      className="w-full"
       value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className={cn(selectClass, "w-full", value === "" && "text-muted-foreground")}
-    >
-      <option value="">{placeholder}</option>
-      {nodeOptions.map((o) => (
-        <option key={o.id} value={o.id}>
-          {"　".repeat(o.depth)}
-          {o.label}
-        </option>
-      ))}
-    </select>
+      onChange={(v) => onChange(v)}
+      options={[
+        { value: "", label: placeholder },
+        ...nodeOptions.map((o) => ({
+          value: o.id,
+          label: `${`　`.repeat(o.depth)}${o.label}`,
+        })),
+      ]}
+    />
   );
 }

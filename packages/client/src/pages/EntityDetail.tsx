@@ -17,7 +17,7 @@ import { CreateRelationDialog } from "../components/entity/create-relation-dialo
 import { ParentSettingSelect } from "../components/entity/parent-setting-select";
 import { ComputePreview } from "../components/delta/compute-preview";
 import { entityListHost } from "../lib/entity-paths";
-import { Button, Input } from "antd";
+import { Button, Input, Select } from "antd";
 import type { InputRef } from "antd";
 import { PageTitle } from "@/components/ui/page-title";
 import {
@@ -43,7 +43,7 @@ import { flattenTree } from "../lib/outline-tree";
 import { enterBehavior, moveArrayItem } from "../lib/tags-editor";
 import { useSaveShortcut } from "../lib/save-shortcut";
 import { cn } from "../lib/utils";
-import { selectClass, skeletonClass } from "@/lib/styles";
+import { skeletonClass } from "@/lib/styles";
 import { EmptyState } from "@/components/ui/empty-state";
 import { navigate } from "../hooks/use-route";
 import { useDataRefresh } from "../hooks/use-data-refresh";
@@ -770,17 +770,15 @@ function FormField({
       );
     case "select":
       return (
-        <select
+        <Select
+          className="w-full"
           value={fieldValue({ [field.key]: value }, field.key)}
-          onChange={(e) => onChange(e.target.value)}
-          className={cn(selectClass, "w-full")}
-        >
-          {field.options?.map((opt) => (
-            <option key={opt} value={opt}>
-              {field.optionsLabels?.[opt] ?? opt}
-            </option>
-          ))}
-        </select>
+          onChange={(v) => onChange(v)}
+          options={(field.options ?? []).map((opt) => ({
+            value: opt,
+            label: field.optionsLabels?.[opt] ?? opt,
+          }))}
+        />
       );
     case "toggle":
       return (
@@ -821,18 +819,17 @@ function OutlineNodeSelect({
   const outline = useProjectStore((s) => s.outline);
   const options = flattenTree(outline?.children ?? []);
   return (
-    <select
+    <Select
+      className="w-full"
       value={value}
-      onChange={(e) => onChange(e.target.value === "" ? null : e.target.value)}
-      className={cn(selectClass, "w-full", value === "" && "text-muted-foreground/70")}
-    >
-      <option value="">未设置</option>
-      {options.map((o) => (
-        <option key={o.id} value={o.id}>
-          {"　".repeat(o.depth)}
-          {o.label}
-        </option>
-      ))}
-    </select>
+      onChange={(v) => onChange(v === "" ? null : v)}
+      options={[
+        { value: "", label: "未设置" },
+        ...options.map((o) => ({
+          value: o.id,
+          label: `${`　`.repeat(o.depth)}${o.label}`,
+        })),
+      ]}
+    />
   );
 }

@@ -9,7 +9,7 @@
 // 成功 → onCreated（父刷新列表 + 收起）；VALIDATION_ERROR → 行内提示；OUTLINE_NODE_NOT_FOUND → toast + 收起
 // 样式 token 类（，oracle 红线：禁止硬编码色类）
 import { useEffect, useState } from "react";
-import { Button, Input } from "antd";
+import { Button, Input, Select } from "antd";
 import type { DeltaOp, EntitySummary, EntityType } from "@whispering233/ai-editor-shared";
 import {
   ApiError,
@@ -27,8 +27,6 @@ import {
   isNumericField,
 } from "../../lib/delta-create";
 import { formatDeltaValue, targetTypeLabel } from "../../lib/delta";
-import { cn } from "../../lib/utils";
-import { selectClass } from "../../lib/styles";
 import { useUiStore } from "../../stores/ui";
 
 /** op → 中文标签（操作选择器；与 lib/delta DELTA_OP_LABEL 语义一致，此处仅表单选项用） */
@@ -208,19 +206,16 @@ export function DeltaCreateForm({
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <p className="mb-1 text-xs font-medium text-foreground">目标类型</p>
-          <select
+          <Select
+            className="w-full"
             value={targetType}
-            onChange={(e) => setTargetType(e.target.value)}
-            className={cn(selectClass, "w-full", targetType === "" && "text-muted-foreground")}
+            onChange={(value) => setTargetType(value)}
             aria-label="目标类型"
-          >
-            <option value="">请选择目标类型</option>
-            {DELTA_TARGET_TYPE_OPTIONS.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
-              </option>
-            ))}
-          </select>
+            options={[
+              { value: "", label: "请选择目标类型" },
+              ...DELTA_TARGET_TYPE_OPTIONS.map((t) => ({ value: t.value, label: t.label })),
+            ]}
+          />
         </div>
         <div>
           <p className="mb-1 text-xs font-medium text-foreground">目标</p>
@@ -244,19 +239,16 @@ export function DeltaCreateForm({
               暂无{targetTypeLabelOf(entityType)}
             </p>
           ) : (
-            <select
+            <Select
+              className="w-full"
               value={targetId}
-              onChange={(e) => setTargetId(e.target.value)}
-              className={cn(selectClass, "w-full", targetId === "" && "text-muted-foreground")}
+              onChange={(value) => setTargetId(value)}
               aria-label="目标实体"
-            >
-              <option value="">请选择{targetTypeLabelOf(entityType)}</option>
-              {entityList.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.name}
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: "", label: `请选择${targetTypeLabelOf(entityType)}` },
+                ...entityList.map((e) => ({ value: e.id, label: e.name })),
+              ]}
+            />
           )}
         </div>
       </div>
@@ -265,34 +257,26 @@ export function DeltaCreateForm({
       <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr]">
         <div>
           <p className="mb-1 text-xs font-medium text-foreground">字段</p>
-          <select
+          <Select
+            className="w-full"
             value={field}
-            onChange={(e) => handleFieldChange(e.target.value)}
-            className={cn(selectClass, "w-full", field === "" && "text-muted-foreground")}
+            onChange={(value) => handleFieldChange(value)}
             aria-label="变更字段"
-          >
-            <option value="">请选择字段</option>
-            {fieldOptions.map((f) => (
-              <option key={f.key} value={f.key}>
-                {f.label}
-              </option>
-            ))}
-          </select>
+            options={[
+              { value: "", label: "请选择字段" },
+              ...fieldOptions.map((f) => ({ value: f.key, label: f.label })),
+            ]}
+          />
         </div>
         <div>
           <p className="mb-1 text-xs font-medium text-foreground">操作</p>
-          <select
+          <Select
+            className="w-full min-w-20"
             value={op}
-            onChange={(e) => setOp(e.target.value as DeltaOp)}
-            className={cn(selectClass, "w-full", "min-w-20")}
+            onChange={(value) => setOp(value as DeltaOp)}
             aria-label="操作"
-          >
-            {opInfo.options.map((o) => (
-              <option key={o} value={o}>
-                {OP_OPTION_LABEL[o]}
-              </option>
-            ))}
-          </select>
+            options={opInfo.options.map((o) => ({ value: o, label: OP_OPTION_LABEL[o] }))}
+          />
         </div>
         <div>
           <p className="mb-1 text-xs font-medium text-foreground">

@@ -19,12 +19,12 @@
 // 注入会话上下文 + 建立关联）替代行级问 AI 入口（本视图原本无 AskAiButton，右键菜单补齐）。
 import { useEffect, useRef, useState } from "react";
 import type { DragEvent, KeyboardEvent, MouseEvent, ReactNode } from "react";
-import { Button, Input } from "antd";
+import { Button, Input, Select } from "antd";
 import { DeleteOutlined, DownOutlined, RightOutlined, UpOutlined } from "@ant-design/icons";
 import { RowContextMenu } from "./row-context-menu";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { errorBannerClass, selectClass, skeletonClass } from "@/lib/styles";
+import { errorBannerClass, skeletonClass } from "@/lib/styles";
 import {
   ApiError,
   createEntity,
@@ -955,16 +955,17 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
             手动模式启用 ↑↓ 箭头与行间插入线重排（其余模式拖拽仅调层级） */}
         <span className="flex items-center gap-2 text-sm text-muted-foreground">
           排序:
-          <select
+          <Select
+            size="small"
             value={sortMode}
-            onChange={(e) => setSortMode(e.target.value as SettingSortMode)}
+            onChange={(value) => setSortMode(value as SettingSortMode)}
             aria-label="排序方式"
-            className={selectClass}
-          >
-            <option value="name">名称</option>
-            <option value="created">创建时间</option>
-            <option value="manual">手动排序</option>
-          </select>
+            options={[
+              { value: "name", label: "名称" },
+              { value: "created", label: "创建时间" },
+              { value: "manual", label: "手动排序" },
+            ]}
+          />
         </span>
         <span className="ml-auto flex items-center gap-2">
           <Button disabled={!canToggle} onClick={expandAll}>

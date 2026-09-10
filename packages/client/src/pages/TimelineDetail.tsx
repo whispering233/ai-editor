@@ -21,7 +21,7 @@
 // createdAt/updatedAt
 // - 未保存离开守卫：EntityDetail 无此模式，不做（避免过度设计）
 import { useEffect, useState } from "react";
-import { Button, Input } from "antd";
+import { Button, Input, Select } from "antd";
 import { formatTimestamp } from "@whispering233/ai-editor-shared";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { PageTitle } from "@/components/ui/page-title";
@@ -54,8 +54,6 @@ import {
   mountedTimepointId,
 } from "../lib/timeline-detail";
 import { flattenTree } from "../lib/outline-tree";
-import { cn } from "../lib/utils";
-import { selectClass } from "@/lib/styles";
 import { ConfirmDialog } from "../components/outline/dialogs";
 import { TagSuggest } from "../components/timeline/TagSuggest";
 import { navigate } from "../hooks/use-route";
@@ -411,23 +409,16 @@ export default function TimelineDetail({ id }: { id: string }) {
                     <div className="h-9 animate-pulse rounded bg-muted" />
                   )
                 ) : (
-                  <select
+                  <Select
+                    className="w-full"
                     value={mountedTimepointId(detail.relations, id) ?? ""}
-                    onChange={(e) => void handleMountChange(e.target.value)}
+                    onChange={(value) => void handleMountChange(value)}
                     disabled={mountSaving}
-                    className={cn(
-                      selectClass,
-                      "w-full",
-                      mountedTimepointId(detail.relations, id) === null && "text-muted-foreground",
-                    )}
-                  >
-                    <option value="">未挂载</option>
-                    {timepoints.map((tp) => (
-                      <option key={tp.id} value={tp.id}>
-                        {tp.name}
-                      </option>
-                    ))}
-                  </select>
+                    options={[
+                      { value: "", label: "未挂载" },
+                      ...timepoints.map((tp) => ({ value: tp.id, label: tp.name })),
+                    ]}
+                  />
                 )}
                 {mountSaving && <p className="mt-1 text-xs text-muted-foreground">保存中…</p>}
                 {mountError && <p className="mt-1 text-sm text-destructive">{mountError}</p>}
@@ -555,18 +546,17 @@ function OutlineNodeSelect({
   placeholder?: string;
 }) {
   return (
-    <select
+    <Select
+      className="w-full"
       value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className={cn(selectClass, "w-full", value === "" && "text-muted-foreground")}
-    >
-      <option value="">{placeholder}</option>
-      {nodeOptions.map((o) => (
-        <option key={o.id} value={o.id}>
-          {"　".repeat(o.depth)}
-          {o.label}
-        </option>
-      ))}
-    </select>
+      onChange={(v) => onChange(v)}
+      options={[
+        { value: "", label: placeholder },
+        ...nodeOptions.map((o) => ({
+          value: o.id,
+          label: `${`　`.repeat(o.depth)}${o.label}`,
+        })),
+      ]}
+    />
   );
 }

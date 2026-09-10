@@ -20,13 +20,12 @@ import { RelationsView } from "../components/entity/relations-view";
 import { NodeDeltaList } from "../components/delta/node-delta-list";
 import { DeltaCreateForm } from "../components/delta/delta-create-form";
 import { TYPE_LABEL } from "../components/outline/dialogs";
-import { Button, Input } from "antd";
+import { Button, Input, Select } from "antd";
 import { PageTitle } from "@/components/ui/page-title";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionCard } from "@/components/ui/section-card";
 import { ApiError, updateOutlineNode, type UpdateOutlineBody } from "../lib/api";
 import { diffData } from "../lib/entity-detail";
-import { selectClass } from "../lib/styles";
 import {
   detailFieldsForNodeType,
   sceneNodeOptions,
@@ -35,7 +34,6 @@ import {
   type NodeFieldConfig,
 } from "../lib/outline-detail";
 import { findNode, shouldCommitSummary, shouldCommitTitle } from "../lib/outline-tree";
-import { cn } from "../lib/utils";
 import { navigate } from "../hooks/use-route";
 import { useSaveShortcut } from "../lib/save-shortcut";
 import { useDataRefresh } from "../hooks/use-data-refresh";
@@ -414,20 +412,18 @@ function FieldControl({
       // 防御分支：当前引用不在选项集（引用节点已被删/purge）→ 追加临时 option 标注，避免 select 静默空白
       const stale = current !== "" && !sceneOptions.some((o) => o.id === current);
       return (
-        <select
+        <Select
           value={current}
-          onChange={(e) => onChange(e.target.value)}
-          className={cn(selectClass, current === "" && "text-muted-foreground")}
-        >
-          <option value="">（未设置）</option>
-          {stale && <option value={current}>{current}（已删除）</option>}
-          {sceneOptions.map((o) => (
-            <option key={o.id} value={o.id}>
-              {"　".repeat(o.depth)}
-              {o.label}
-            </option>
-          ))}
-        </select>
+          onChange={(value) => onChange(value)}
+          options={[
+            { value: "", label: "（未设置）" },
+            ...(stale ? [{ value: current, label: `${current}（已删除）` }] : []),
+            ...sceneOptions.map((o) => ({
+              value: o.id,
+              label: `${`　`.repeat(o.depth)}${o.label}`,
+            })),
+          ]}
+        />
       );
     }
     default:
