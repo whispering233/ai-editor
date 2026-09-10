@@ -64,6 +64,24 @@ type SettingDragTarget =
 /** 就地新建目标：parentId null = root 顶层（无父）；非 null = 该节点子级末尾 */
 type CreatingState = { parentId: string | null } | null;
 
+/** 行间插入线（手动模式拖拽排序的落点提示；A3 用户反馈 #4：加粗细线 + 两端圆点，
+ * 比 h-0.5 单线醒目；pointer-events-none 不拦截行级 dragover/drop） */
+function DropIndicator({ position }: { position: "top" | "bottom" }) {
+  return (
+    <div
+      aria-hidden="true"
+      className={cn(
+        "pointer-events-none absolute inset-x-0 z-10 flex items-center",
+        position === "top" ? "-top-[3px]" : "-bottom-[3px]",
+      )}
+    >
+      <span className="size-2 shrink-0 rounded-full bg-primary" />
+      <span className="h-[3px] flex-1 rounded-full bg-primary" />
+      <span className="size-2 shrink-0 rounded-full bg-primary" />
+    </div>
+  );
+}
+
 export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
   const [roots, setRoots] = useState<SettingTreeNode[] | null>(null);
   const [truncated, setTruncated] = useState(false);
@@ -686,9 +704,9 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
           : null;
       const rowChildren = (
         <>
-          {/* 行间插入线（手动模式拖拽：before/after 目标高亮） */}
-          {isDragBefore && <div className="absolute inset-x-1 top-0 h-0.5 rounded bg-primary" />}
-          {isDragAfter && <div className="absolute inset-x-1 bottom-0 h-0.5 rounded bg-primary" />}
+          {/* 行间插入线（手动模式拖拽：before/after 目标高亮；A3 加粗 + 端点圆点） */}
+          {isDragBefore && <DropIndicator position="top" />}
+          {isDragAfter && <DropIndicator position="bottom" />}
           <div className="flex min-w-0 items-center gap-1.5">
             {/* 折叠箭头（叶子占位保缩进对齐）；点击切展开态，不选中/不跳转 */}
             <button
