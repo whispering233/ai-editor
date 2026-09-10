@@ -476,7 +476,7 @@ export default function EntityList({ type }: { type: string }) {
                           tabIndex={-1}
                           className={cn(
                             "cursor-pointer border-b border-border/50 transition-colors last:border-0 hover:bg-muted",
-                            item.id === newItemId && "bg-accent/40", // 新建成功临时高亮（3s，A2）
+                            item.id === newItemId && "bg-primary/10 ring-1 ring-primary/30 ring-inset", // 新建成功临时高亮（3s，A2）
                           )}
                           onClick={() =>
                             navigate(entityDetailPath(entityType as EntityType, item.id))

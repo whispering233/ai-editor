@@ -21,6 +21,7 @@ import { Button, Input } from "antd";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { DeleteOutlined, PlusOutlined, RightOutlined } from "@ant-design/icons";
 import { RowContextMenu } from "../entity/row-context-menu";
+import { DropIndicator } from "../ui/drop-indicator";
 import { cn } from "../../lib/utils";
 import { useSaveShortcut } from "../../lib/save-shortcut";
 import { TimelineEvent, type EventDragHandlers } from "./TimelineEvent";
@@ -157,9 +158,9 @@ export function TimelineGroupBlock({
 
   return (
     <div className="relative flex flex-col gap-2">
-      {/* 插入指示线（S13 模式：目标组块上下边缘，跨圆点列与内容） */}
-      {showInsertBefore && <div className="absolute inset-x-0 -top-px h-0.5 bg-primary" />}
-      {showInsertAfter && <div className="absolute inset-x-0 -bottom-px h-0.5 bg-primary" />}
+      {/* 插入指示线（S13 模式：目标组块上下边缘，跨圆点列与内容；共享 DropIndicator） */}
+      {showInsertBefore && <DropIndicator position="top" />}
+      {showInsertAfter && <DropIndicator position="bottom" />}
       {/* 组标题行（draggable：时间点整组拖拽，无视觉拖拽柄（批次八 O3）；未挂载区/编辑态不 draggable；
           双击 = 时间点详情（onDoubleClick，编辑态/按钮区/未挂载区不触发）；
           行级右键菜单（RowContextMenu）——注入会话上下文（focus_entity_type=timepoint）+
@@ -181,7 +182,7 @@ export function TimelineGroupBlock({
           className: cn(
             "flex items-start",
             !isUngrouped && groupDragging && "opacity-50",
-            highlighted && "rounded-md bg-accent ring-1 ring-ring ring-inset",
+            highlighted && "rounded-md bg-primary/10 ring-1 ring-primary/30 ring-inset",
           ),
         };
         // 组标题行内容（圆点列 + 内容列）

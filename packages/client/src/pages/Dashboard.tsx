@@ -644,7 +644,8 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                         }}
                         className={cn(
                           "flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted",
-                          isCurrent && "bg-accent/40 hover:bg-accent/40",
+                          // 当前打开的书：primary 淡染面（近白的 surface-muted 面在卡片白底上不可见）
+                          isCurrent && "bg-primary/10 ring-1 ring-primary/30 ring-inset",
                         )}
                       >
                         <BookOutlined className="shrink-0 text-base text-muted-foreground/60" />
@@ -986,7 +987,8 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                       onClick={() => setCurrentSession(s.id)}
                       className={cn(
                         "flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-muted",
-                        currentSessionId === s.id && "bg-accent/40 hover:bg-accent/40",
+                        // 当前会话：primary 淡染面（同上）
+                        currentSessionId === s.id && "bg-primary/10 ring-1 ring-primary/30 ring-inset",
                       )}
                     >
                       <span className="min-w-0 flex-1 truncate text-sm text-foreground">

@@ -23,6 +23,7 @@ import type { OutlineNode } from "@whispering233/ai-editor-shared";
 import { DeleteOutlined } from "@ant-design/icons";
 import { CHILD_TYPE, TYPE_LABEL } from "../components/outline/dialogs";
 import { NodeHookMarkBadge } from "../components/outline/node-hook-badge";
+import { DropIndicator } from "@/components/ui/drop-indicator";
 import { PageTitle } from "@/components/ui/page-title";
 import { RowContextMenu } from "@/components/entity/row-context-menu";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -693,7 +694,7 @@ export default function Outline() {
         onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => handleRowKeyDown(e, node),
         className: cn(
           "relative cursor-grab rounded-md px-2 py-1 transition-colors hover:bg-muted/60 active:cursor-grabbing",
-          focused && "bg-accent ring-1 ring-ring ring-inset", // 新建/定位临时高亮（3s 消失）
+          focused && "bg-primary/10 ring-1 ring-primary/30 ring-inset", // 新建/定位临时高亮（3s 消失）
           isDragging && "opacity-50",
           selected && "bg-primary/10 ring-1 ring-primary/30 ring-inset", // 选中态（primary 淡染 + 描边，区别于临时高亮）
         ),
@@ -736,7 +737,7 @@ export default function Outline() {
               <span
                 className={cn(
                   "min-w-0 cursor-text truncate text-sm hover:underline",
-                  focused ? "text-accent-foreground" : "text-foreground", // 定位高亮时切换前景色保对比度（深色主题 bg-accent 是暗底）
+                  "text-foreground",
                 )}
                 title="点击编辑标题"
                 onClick={(e) => {
@@ -803,13 +804,9 @@ export default function Outline() {
               )}
             </div>
           ) : null}
-          {/* 插入指示线（S13.1）：目标行上边缘（插前）/下边缘（插后），accent 2px；绝对定位层不遮挡内容 */}
-          {insertBefore && (
-            <span className="pointer-events-none absolute inset-x-0 -top-px h-0.5 rounded bg-accent" />
-          )}
-          {insertAfter && (
-            <span className="pointer-events-none absolute inset-x-0 -bottom-px h-0.5 rounded bg-accent" />
-          )}
+          {/* 插入指示线（S13.1）：目标行上边缘（插前）/下边缘（插后）；共享 DropIndicator（primary 3px + 圆点） */}
+          {insertBefore && <DropIndicator position="top" />}
+          {insertAfter && <DropIndicator position="bottom" />}
         </>
       );
       return (

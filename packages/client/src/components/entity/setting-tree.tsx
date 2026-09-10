@@ -22,6 +22,7 @@ import type { DragEvent, KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { Button, Input, Select } from "antd";
 import { DeleteOutlined, DownOutlined, RightOutlined, UpOutlined } from "@ant-design/icons";
 import { RowContextMenu } from "./row-context-menu";
+import { DropIndicator } from "@/components/ui/drop-indicator";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { errorBannerClass, skeletonClass } from "@/lib/styles";
@@ -63,24 +64,6 @@ type SettingDragTarget =
 
 /** 就地新建目标：parentId null = root 顶层（无父）；非 null = 该节点子级末尾 */
 type CreatingState = { parentId: string | null } | null;
-
-/** 行间插入线（手动模式拖拽排序的落点提示；A3 用户反馈 #4：加粗细线 + 两端圆点，
- * 比 h-0.5 单线醒目；pointer-events-none 不拦截行级 dragover/drop） */
-function DropIndicator({ position }: { position: "top" | "bottom" }) {
-  return (
-    <div
-      aria-hidden="true"
-      className={cn(
-        "pointer-events-none absolute inset-x-0 z-10 flex items-center",
-        position === "top" ? "-top-[3px]" : "-bottom-[3px]",
-      )}
-    >
-      <span className="size-2 shrink-0 rounded-full bg-primary" />
-      <span className="h-[3px] flex-1 rounded-full bg-primary" />
-      <span className="size-2 shrink-0 rounded-full bg-primary" />
-    </div>
-  );
-}
 
 export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
   const [roots, setRoots] = useState<SettingTreeNode[] | null>(null);
@@ -697,8 +680,9 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
           // （批次十三）：两行式——第一行 箭头|名称|计数|行尾区，第二行描述摘要（弱化）
           // group：手动模式悬停显示 ↑↓ 箭头
           "group relative flex flex-col rounded-md py-1 pr-1 transition-colors hover:bg-muted/60",
-          highlighted && "bg-accent/40", // 新建成功临时高亮（3s）
-          isDragTarget && "bg-accent/40 ring-1 ring-accent ring-inset", // 拖拽目标（将成其子级）
+          // 临时高亮（新建成功 3s）/ 拖拽目标（将成其子级）：primary 淡染面 + 描边——
+          // 两者与选中态同一语言，且在白底上可见（近白的 surface-muted 面在白底不可见，见 DESIGN.md）
+          (highlighted || isDragTarget) && "bg-primary/10 ring-1 ring-primary/30 ring-inset",
           isDragging && "opacity-50",
           selected && "bg-primary/10 ring-1 ring-primary/30 ring-inset", // 选中态
         ),
@@ -1027,7 +1011,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
         <div
           className={cn(
             "rounded-md border border-border p-2",
-            dragTarget?.kind === "root" && "ring-1 ring-accent ring-inset",
+            dragTarget?.kind === "root" && "ring-1 ring-primary/30 ring-inset",
           )}
           onClick={() => setSelectedId(null)} // 点击空白区清除选中（行点击已 stopPropagation 隔离）
           onDragOver={handleRootDragOver}

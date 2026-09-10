@@ -20,6 +20,7 @@ import { Button, Input } from "antd";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { DeleteOutlined } from "@ant-design/icons";
 import { RowContextMenu } from "../entity/row-context-menu";
+import { DropIndicator } from "../ui/drop-indicator";
 import { eventDescription, eventTagsOf } from "../../lib/timeline";
 import { useSaveShortcut } from "../../lib/save-shortcut";
 import { cn } from "../../lib/utils";
@@ -151,9 +152,9 @@ export function TimelineEvent({
   // 事件行内容（插入指示线 + 圆点列 + 内容卡）
   const rowChildren = (
     <>
-      {/* 插入指示线（S13 模式：行上下边缘，跨圆点列与内容） */}
-      {showInsertBefore && <div className="absolute inset-x-0 -top-px h-0.5 bg-primary" />}
-      {showInsertAfter && <div className="absolute inset-x-0 -bottom-px h-0.5 bg-primary" />}
+      {/* 插入指示线（S13 模式：行上下边缘，跨圆点列与内容；共享 DropIndicator） */}
+      {showInsertBefore && <DropIndicator position="top" />}
+      {showInsertAfter && <DropIndicator position="bottom" />}
       {/* 组内小圆点（F4 保留：组内事件堆叠，小圆点 size-2 bg-primary/60 居中于轴线列——
           不再画大圆点盖线，轴线容器级贯穿；mt-[16px] = 内容中心 20px - 小圆点高 8px 中心 offset 4px） */}
       <div className="w-[22px] shrink-0">
