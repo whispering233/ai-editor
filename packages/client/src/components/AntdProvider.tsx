@@ -69,8 +69,18 @@ const COMPONENT_TOKENS_BASE = {
   Typography: { titleMarginBottom: 0 },
 };
 
-/** 几何类组件 token（与颜色无关，两态同一套） */
-const MENU_GEOMETRY = { itemBorderRadius: 6, itemHeight: 32, itemMarginInline: 4 };
+/** 几何/背景类组件 token（与颜色无关，两态同一套）：
+ * - itemBg: transparent —— 菜单根背景默认 colorBgContainer（白色），会把左栏灰底切出一块白
+ *   （antd `menu/style/theme.js` 把 `background: itemBg` 打在菜单根上）
+ * - activeBarBorderWidth: 0 —— inline 模式的右侧分界线宽度（`menu/style/theme.js`）
+ * —— 这两项取代了 NavRail 原先的 `!border-none !bg-transparent` 类覆盖 */
+const MENU_GEOMETRY = {
+  itemBorderRadius: 6,
+  itemHeight: 32,
+  itemMarginInline: 4,
+  itemBg: "transparent",
+  activeBarBorderWidth: 0,
+};
 const TABLE_GEOMETRY = { cellPaddingBlock: 8 };
 
 /** 浅色组件覆盖（DESIGN.md §Components 覆盖表：面值取 {colors.surface-muted} / {colors.canvas} / {colors.hairline}） */

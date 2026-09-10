@@ -400,6 +400,7 @@ components:
 | Button | `primaryShadow` / `defaultShadow` / `dangerShadow` | `"none"` | `"none"` |
 | Menu | `itemSelectedBg` / `itemSelectedColor` | `{colors.surface-muted}` / `{colors.primary}` | `#373737` / 81% 白 |
 | Menu | `itemBorderRadius` / `itemHeight` / `itemMarginInline` | `6` / `32` / `4` | 同浅色 |
+| Menu | `itemBg` / `activeBarBorderWidth` | `"transparent"` / `0` | 同浅色 |
 | Table | `headerBg` / `borderColor` | `{colors.canvas}` / `{colors.hairline}` | `#202020` / `#2f2f2f` |
 | Table | `cellPaddingBlock` | `8` | 同浅色 |
 | Input | `activeShadow` | `"none"` | `"none"` |
@@ -408,6 +409,8 @@ components:
 | Tag | `defaultBg` | `{colors.surface-muted}` | `#373737` |
 
 **聚焦环走 seed 而不是组件 token**：selector 型组件（Select/Cascader/DatePicker/Table 筛选）的聚焦环由 `boxShadow: 0 0 0 {controlOutlineWidth} {activeOutlineColor}` 绘制（`antd/es/select/style/select-input.js`），Select **没有** `activeShadow` 组件 token——统一用 seed `controlOutlineWidth: 0` 关闭（见 §Colors 映射表）。Input 的 `activeShadow: "none"` 是各自独立的阴影，二者都要。
+
+**菜单透明底**：antd Menu 默认把 `itemBg`（= `colorBgContainer` 白）打在菜单根元素上，会在左栏 `{colors.surface}` 灰底里切出一块白——故 `itemBg: "transparent"` 让菜单继承左栏底色；`activeBarBorderWidth: 0` 去掉 inline 模式的右侧分界线（分栏由 sidebar 的 1px `{colors.hairline}` 表达）。这两项取代了旧代码里 `!border-none !bg-transparent` 的类覆盖。
 
 **深色面值说明**：深色列的面值（`#373737` / `#202020` / `#2f2f2f`）复用 §Colors 映射表深色列已登记的中性值（行分隔档/面板档/结构描边档），**未发明新色**；它们语义上是「暗色下的选中/表头面」。若日后要独立调深色选中面，先在本表登记新值再改代码。
 

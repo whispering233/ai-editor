@@ -224,7 +224,7 @@ function ChatModelBar({ disabled }: { disabled: boolean }) {
               style={{ width: `${usagePct}%` }}
             />
           </div>
-          <span className="text-[10px] text-muted-foreground">{usagePct}%</span>
+          <span className="text-xs text-muted-foreground">{usagePct}%</span>
         </div>
       )}
     </div>
@@ -427,7 +427,6 @@ export function ToolCallRow({
     <Collapse
       ghost
       size="small"
-      className="!bg-transparent"
       activeKey={open ? ["args"] : []}
       onChange={(keys) => setOpen(keys.includes("args"))}
       items={[

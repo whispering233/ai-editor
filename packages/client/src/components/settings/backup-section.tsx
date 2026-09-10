@@ -239,13 +239,11 @@ export function BackupSection() {
 
   return (
     <div>
-      <Typography.Title level={5} className="!mb-1">
-        自动备份
-      </Typography.Title>
-      <Typography.Paragraph type="secondary" className="!mb-2 !text-xs">
+      <Typography.Title level={5}>自动备份</Typography.Title>
+      <p className="mt-1 mb-2 text-xs text-muted-foreground">
         跟随书籍：备份与频率均为本项目独立；服务运行期间按频率自动备份，有变更才生成新备份；每项目保留最近
         20 份
-      </Typography.Paragraph>
+      </p>
       <div className="flex flex-wrap items-center gap-2">
         <Select
           size="small"
@@ -281,17 +279,13 @@ export function BackupSection() {
         </Button>
       </div>
       {config === null && !configLoading && (
-        <Typography.Text type="secondary" className="!mt-1 !block !text-xs">
-          打开项目后可用
-        </Typography.Text>
+        <p className="mt-1 text-xs text-muted-foreground">打开项目后可用</p>
       )}
 
       {/* 历史备份列表（仅项目打开时渲染；无项目 → 引导文案已在上方） */}
       {config !== null && (
         <div className="mt-3">
-          <Typography.Text strong className="!mb-1 !block !text-xs" type="secondary">
-            历史备份
-          </Typography.Text>
+          <p className="mb-1 text-xs font-semibold text-muted-foreground">历史备份</p>
           <div className="overflow-hidden rounded-lg border border-border">
             {backupsLoading && backups === null ? (
               /* 首载骨架（重载不闪骨架：条件含 backups === null，） */
@@ -300,17 +294,17 @@ export function BackupSection() {
               </div>
             ) : backupsError !== null ? (
               <div className="flex items-center justify-between px-2 py-2">
-                <Typography.Text type="secondary" className="!text-xs">
+                <span className="text-xs text-muted-foreground">
                   {backupsError === CLIENT_NETWORK_ERROR ? "无法连接服务" : "备份列表加载失败"}
-                </Typography.Text>
+                </span>
                 <Button size="small" onClick={() => void loadBackups()}>
                   重试
                 </Button>
               </div>
             ) : backups !== null && backups.length === 0 ? (
-              <Typography.Text type="secondary" className="!block !px-2 !py-3 !text-xs">
+              <p className="px-2 py-3 text-xs text-muted-foreground">
                 暂无备份，自动备份将在数据变更后按频率生成
-              </Typography.Text>
+              </p>
             ) : backups !== null ? (
               <ul className="divide-y divide-border">
                 {backups.map((b) => {
@@ -325,7 +319,7 @@ export function BackupSection() {
                           </Typography.Text>
                           {/* 类型标签：自动 = 中性 Tag，手动 = 蓝色强调 Tag */}
                           <Tag
-                            className="ml-1.5 text-[10px] leading-4"
+                            className="ml-1.5"
                             color={b.kind === "manual" ? "blue" : "default"}
                           >
                             {BACKUP_KIND_LABELS[b.kind]}
@@ -335,9 +329,9 @@ export function BackupSection() {
                           ) : null}
                         </span>
                         {!editing ? (
-                          <Typography.Text type="secondary" className="!shrink-0 !text-xs">
+                          <span className="shrink-0 text-xs text-muted-foreground">
                             {formatBytes(b.size)}
-                          </Typography.Text>
+                          </span>
                         ) : null}
                         {editing ? (
                           /* 行内编辑态：input（预填当前名称）+ 确认/取消；Enter 提交 / Esc 或失焦取消 */
@@ -415,9 +409,7 @@ export function BackupSection() {
                       </div>
                       {/* 行内错误提示（400/404 透传服务端 message / 网络失败固定文案），保持编辑态 */}
                       {editing && renaming.error !== null ? (
-                        <Typography.Text type="danger" className="!mt-1 !block !text-xs">
-                          {renaming.error}
-                        </Typography.Text>
+                        <p className="mt-1 text-xs text-destructive">{renaming.error}</p>
                       ) : null}
                     </li>
                   );

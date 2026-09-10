@@ -465,7 +465,7 @@ function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowP
         {tags.length > 0 && (
           <div className="flex flex-wrap items-center gap-1">
             {tags.map((t) => (
-              <Tag key={t} color="blue" className="mr-1 !text-[10px]">
+              <Tag key={t} color="blue">
                 {t}
               </Tag>
             ))}
@@ -484,7 +484,7 @@ function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowP
               title={source}
             >
               <span className="truncate">{source}</span>
-              <ExportOutlined className="shrink-0 !text-xs" />
+              <ExportOutlined className="shrink-0" />
             </a>
           ) : (
             <span className="block truncate text-xs text-muted-foreground" title={source}>

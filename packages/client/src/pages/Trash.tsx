@@ -57,7 +57,7 @@ const NODE_TYPE_LABEL: Record<OutlineNodeType, string> = {
 
 /** 类型徽标（antd Tag；实体/大纲类型共用） */
 function TypeBadge({ label }: { label: string }) {
-  return <Tag className="!shrink-0 !mr-0">{label}</Tag>;
+  return <Tag className="shrink-0">{label}</Tag>;
 }
 
 /** purge 确认目标（实体 / 节点） */
@@ -230,9 +230,9 @@ export default function Trash() {
           刷新
         </Button>
       </div>
-      <Typography.Paragraph type="secondary" className="!mb-4 !text-xs">
+      <p className="mb-4 text-xs text-muted-foreground">
         软删对象会保留一段时间，可在此还原，或彻底删除（不可恢复）。
-      </Typography.Paragraph>
+      </p>
 
       {/* 列表请求失败：横幅 + 重试 */}
       {error !== null && (
@@ -280,9 +280,7 @@ export default function Trash() {
               <Typography.Text strong>实体 ({data.entities.length})</Typography.Text>
             </div>
             {data.entities.length === 0 ? (
-              <Typography.Paragraph type="secondary" className="!py-6 !text-center !text-sm">
-                暂无实体
-              </Typography.Paragraph>
+              <p className="py-6 text-center text-sm text-muted-foreground">暂无实体</p>
             ) : (
               <ul className="divide-y divide-border/70">
                 {data.entities.map((item) => (
@@ -291,9 +289,9 @@ export default function Trash() {
                     <span className="min-w-0 flex-1 truncate text-sm" title={item.name}>
                       <Typography.Text ellipsis>{item.name}</Typography.Text>
                     </span>
-                    <Typography.Text type="secondary" className="!shrink-0 !text-xs">
+                    <span className="shrink-0 text-xs text-muted-foreground">
                       {formatRelativeTime(item.deletedAt)}
-                    </Typography.Text>
+                    </span>
                     <div className="flex shrink-0 items-center gap-1.5">
                       <Button
                         type="text"
@@ -325,9 +323,7 @@ export default function Trash() {
               <Typography.Text strong>大纲节点 ({data.nodes.length})</Typography.Text>
             </div>
             {data.nodes.length === 0 ? (
-              <Typography.Paragraph type="secondary" className="!py-6 !text-center !text-sm">
-                暂无节点
-              </Typography.Paragraph>
+              <p className="py-6 text-center text-sm text-muted-foreground">暂无节点</p>
             ) : (
               <ul className="divide-y divide-border/70">
                 {data.nodes.map((node) => (
@@ -337,9 +333,9 @@ export default function Trash() {
                       <span className="min-w-0 flex-1 truncate text-sm" title={node.title}>
                         <Typography.Text ellipsis>{node.title}</Typography.Text>
                       </span>
-                      <Typography.Text type="secondary" className="!shrink-0 !text-xs">
+                      <span className="shrink-0 text-xs text-muted-foreground">
                         {formatRelativeTime(node.deletedAt)}
-                      </Typography.Text>
+                      </span>
                       <div className="flex shrink-0 items-center gap-1.5">
                         <Button
                           type="text"

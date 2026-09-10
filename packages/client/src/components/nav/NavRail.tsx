@@ -137,7 +137,6 @@ export function NavRail({
 
         <Menu
           mode="inline"
-          className="!border-none !bg-transparent"
           selectedKeys={selectedKey !== null ? [selectedKey] : []}
           items={[
             ...items,

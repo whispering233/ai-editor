@@ -321,9 +321,7 @@ export default function EntityList({ type }: { type: string }) {
                 style={{ minWidth: 150 }}
               />
             </span>
-            <Typography.Text type="secondary" className="!ml-auto">
-              共 {total} 个
-            </Typography.Text>
+            <span className="ml-auto text-sm text-muted-foreground">共 {total} 个</span>
           </div>
 
           {/* 行内新建（UX4）：列表首行内联编辑——name + 该类型首字段（hook 的 status 下拉，其余文本；
@@ -398,9 +396,7 @@ export default function EntityList({ type }: { type: string }) {
                 </Button>
               </div>
               {createError && (
-                <Typography.Text type="danger" className="!w-full !text-sm">
-                  {createError}
-                </Typography.Text>
+                <p className="w-full text-sm text-destructive">{createError}</p>
               )}
             </form>
           )}
@@ -565,7 +561,7 @@ export default function EntityList({ type }: { type: string }) {
 function CharacterRow({ item }: { item: EntitySummary }) {
   const { role, motivation, personality, abilities } = characterRowInfo(item.summary);
   const badge = (text: string) => (
-    <Tag key={text} color="blue" className="!mr-0 !text-xs">
+    <Tag key={text} color="blue">
       {text}
     </Tag>
   );
@@ -590,7 +586,7 @@ function CharacterRow({ item }: { item: EntitySummary }) {
       {/* 角色列 */}
       <td className="px-3 py-2">
         {role !== "" ? (
-          <Tag color="blue" className="!text-xs">
+          <Tag color="blue">
             {role}
           </Tag>
         ) : (

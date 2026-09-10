@@ -194,23 +194,17 @@ export default function Settings() {
     <section className="mx-auto w-full max-w-2xl px-4">
       <PageTitle>设置</PageTitle>
       {loading ? (
-        <Typography.Text type="secondary" className="mt-4 inline-block">
-          加载中…
-        </Typography.Text>
+        <p className="mt-4 text-sm text-muted-foreground">加载中…</p>
       ) : (
         <div className="mt-4 flex flex-col gap-6">
           {/* AI 模型（批次十六：每 provider 一张卡片，平铺） */}
           <div>
-            <Typography.Title level={5} className="!mb-1">
-              AI 模型
-            </Typography.Title>
-            <Typography.Paragraph type="secondary" className="!mb-2 !text-xs">
+            <Typography.Title level={5}>AI 模型</Typography.Title>
+            <p className="mt-1 mb-2 text-xs text-muted-foreground">
               每提供商一卡：模型下拉点选即激活；key 独立配置。未配 key 的 provider 聊天下拉整组禁用。
-            </Typography.Paragraph>
+            </p>
             {modelError && (
-              <Typography.Paragraph type="danger" className="!mb-2 !text-sm">
-                {modelError}
-              </Typography.Paragraph>
+              <p className="mb-2 text-sm text-destructive">{modelError}</p>
             )}
             <div className="flex flex-col gap-4">
               {(settings?.providers ?? []).map((p) => {
@@ -232,9 +226,7 @@ export default function Settings() {
                     }
                   >
                     <div className="flex flex-col gap-1">
-                      <Typography.Text type="secondary" className="!text-xs">
-                        模型（点选即激活）
-                      </Typography.Text>
+                      <span className="text-xs text-muted-foreground">模型（点选即激活）</span>
                       <Select
                         size="small"
                         className="w-full"
@@ -252,13 +244,13 @@ export default function Settings() {
                       />
                     </div>
                     <div className="flex flex-col gap-1">
-                      <Typography.Text type="secondary" className="!text-xs">
+                      <span className="text-xs text-muted-foreground">
                         {p.apiKeySet ? `key: 已配置（${p.apiKeyMasked ?? ""}）` : "key: 未配置"}
-                      </Typography.Text>
+                      </span>
                       {!p.apiKeySet && (
-                        <Typography.Text type="danger" className="!text-[11px]">
+                        <span className="text-xs text-destructive">
                           未配 key：聊天下拉已禁用此组，聊天不可用
-                        </Typography.Text>
+                        </span>
                       )}
                       <div className="flex gap-1.5">
                         <Input
@@ -278,9 +270,7 @@ export default function Settings() {
                         )}
                       </div>
                       {keyErrors[p.id] && (
-                        <Typography.Text type="danger" className="!text-xs">
-                          {keyErrors[p.id]}
-                        </Typography.Text>
+                        <span className="text-xs text-destructive">{keyErrors[p.id]}</span>
                       )}
                     </div>
                   </Card>
@@ -288,9 +278,9 @@ export default function Settings() {
               })}
             </div>
             {!loading && settings === null && (
-              <Typography.Paragraph type="secondary" className="!mt-2 !text-xs">
+              <p className="mt-2 text-xs text-muted-foreground">
                 模型配置读取失败，请刷新页面重试。
-              </Typography.Paragraph>
+              </p>
             )}
           </div>
 
@@ -313,19 +303,15 @@ export default function Settings() {
           {/* 项目规则：编辑项目目录 AGENTS.md（GET/PUT /project/agents）；注入 AI 上下文
               「## 项目设定」段；外部修改检测（mtime 比对）提示刷新 */}
           <div>
-            <Typography.Title level={5} className="!mb-1">
-              项目规则
-            </Typography.Title>
-            <Typography.Paragraph type="secondary" className="!mb-1 !text-xs">
+            <Typography.Title level={5}>项目规则</Typography.Title>
+            <p className="mt-1 mb-1 text-xs text-muted-foreground">
               编辑项目目录下 AGENTS.md 文件内容，注入 AI 上下文「## 项目设定」段（每轮有效）；空 = 整段跳过
-            </Typography.Paragraph>
-            <Typography.Paragraph type="secondary" className="!mb-2 !text-xs">
+            </p>
+            <p className="mb-2 text-xs text-muted-foreground">
               可直接在文件管理器中编辑 AGENTS.md（外部修改后此处会提示刷新/重新加载）
-            </Typography.Paragraph>
+            </p>
             {externalModified && (
-              <Typography.Paragraph type="danger" className="!mb-2 !text-sm">
-                文件已被外部修改，请刷新/重新加载
-              </Typography.Paragraph>
+              <p className="mb-2 text-sm text-destructive">文件已被外部修改，请刷新/重新加载</p>
             )}
             <Input.TextArea
               value={agentsContent}
@@ -345,20 +331,14 @@ export default function Settings() {
                 保存规则
               </Button>
               {config === null && !configLoading && (
-                <Typography.Text type="secondary" className="!text-xs">
-                  打开项目后可用
-                </Typography.Text>
+                <span className="text-xs text-muted-foreground">打开项目后可用</span>
               )}
             </div>
             {agentsErrorLocal && (
-              <Typography.Paragraph type="danger" className="!mt-1 !text-sm">
-                {agentsErrorLocal}
-              </Typography.Paragraph>
+              <p className="mt-1 text-sm text-destructive">{agentsErrorLocal}</p>
             )}
             {agentsError !== null && agentsError !== "NO_PROJECT_OPEN" && (
-              <Typography.Paragraph type="danger" className="!mt-1 !text-sm">
-                规则文件加载失败，请重试
-              </Typography.Paragraph>
+              <p className="mt-1 text-sm text-destructive">规则文件加载失败，请重试</p>
             )}
           </div>
 

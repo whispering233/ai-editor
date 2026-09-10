@@ -381,7 +381,7 @@ export default function ReferenceDetail({
           )}
           {/* 分类徽标（批次十二 R4）：草稿态不显示——新建时分类未定且下方已有分类输入区；编辑态保留 */}
           {!isDraft && (
-            <span className="rounded-md border border-border bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+            <span className="rounded-md border border-border bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
               {TYPE_LABELS[form.type] ?? form.type}
             </span>
           )}
