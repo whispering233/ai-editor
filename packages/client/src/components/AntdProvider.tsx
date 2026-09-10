@@ -7,7 +7,7 @@
 // ⚠ 分模式写 token 的原因：theme.token 的显式值由 antd 在算法派生之后覆盖（不是被算法再加工），
 // 所以同一个浅色值写死会在深色态生效——两态各自给 seed 才正确（值取自 DESIGN.md 映射表的浅/深两列）。
 import type { ReactNode } from "react";
-import { ConfigProvider, theme } from "antd";
+import { App, ConfigProvider, theme } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import { useThemeMode } from "../hooks/use-theme-mode";
 
@@ -137,7 +137,10 @@ export function AntdProvider({ children }: { children: ReactNode }) {
         components: dark ? COMPONENT_TOKENS_DARK : COMPONENT_TOKENS_LIGHT,
       }}
     >
-      {children}
+      {/* antd App 上下文：反馈层经 `App.useApp().message` 拿命令式 message 实例（继承本 Provider 的主题与 locale）。
+          component={false}：App 默认渲染一个 div 包裹层，会插进 AppShell 的三栏 flex 布局链，故渲染成 Fragment
+          （依据 antd/es/app/App.d.ts `component?: CustomComponent<P> | false`；app/App.js 默认值 'div'）。 */}
+      <App component={false}>{children}</App>
     </ConfigProvider>
   );
 }

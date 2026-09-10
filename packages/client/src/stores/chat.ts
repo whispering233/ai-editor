@@ -224,7 +224,7 @@ export const useChatStore = create<ChatState>((set, get) => {
           set((s) => ({ proposals: s.proposals.filter((p) => p.proposalId !== proposalId) }));
           return;
         default:
- // 保持 pending（可重试）+ 全局反馈 toast（U6，FeedbackHost 桥接 sonner）
+ // 保持 pending（可重试）+ 全局反馈 toast（U6，FeedbackHost 桥接 antd message）
           useUiStore.getState().showToast(describeProposalActionError(code, message), "error");
           set((s) => ({
             proposals: s.proposals.map((p) =>

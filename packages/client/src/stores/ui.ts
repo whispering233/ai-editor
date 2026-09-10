@@ -78,7 +78,7 @@ interface UiState {
   notifyDataChanged: () => void;
 }
 
-/** toast 快照保留时长（FeedbackHost 桥接 sonner 时同步作为视觉时长，见 ） */
+/** toast 快照保留时长（store 定时器 3s 后自动清空；FeedbackHost 桥接 antd message 时换算为秒作视觉时长） */
 export const TOAST_DURATION_MS = 3_000;
 let toastSeq = 0;
 

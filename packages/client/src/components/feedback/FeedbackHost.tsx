@@ -1,23 +1,26 @@
 // 全局反馈宿主（ 通用交互 + §4.3 样式细节规范 + 组件表）：挂载 AppShell 根 div 末尾
-// 职责四件套：
-// 1) 挂载 sonner <Toaster />（components/ui/sonner.tsx，主题随 useTheme 适配，见 ）
-// 2) ui store toast → sonner 桥接：store 的 toast 是「最近一条」快照（showToast 写入、3s 后由 store 内定时器清空），
-// sonner 通知由此处触发；useRef 记录上次已处理 id——同一 toast 快照在重渲染 / StrictMode 双执行下只触发一次。
-// toast 的自动消失由 store 定时器负责，这里不做任何定时逻辑。
-// 3) ErrorBanner 错误横幅：store error 非空时渲染红色横幅（bg-destructive/10 border-destructive/30 text-destructive，
+// 职责三件：
+// 1) ui store toast → antd message 桥接（`App.useApp().message`，顶部居中——DESIGN.md §Components「toast」）：
+// store 的 toast 是「最近一条」快照（showToast 写入、3s 后由 store 内定时器清空），提示由此处触发；
+// useRef 记录上次已处理 id——同一 toast 快照在重渲染 / StrictMode 双执行下只触发一次。
+// toast 的自动消失由 store 定时器负责，这里不做任何定时逻辑（message 只给同等时长，避免 store 清空后提示残留）。
+// 2) ErrorBanner 错误横幅：store error 非空时渲染红色横幅（bg-destructive/10 border-destructive/30 text-destructive，
 // §4.3 全局/流错误样式），fixed 顶部居中，关闭按钮调 clearError。
-// 4) ConfirmDialog 桥（删关系/删节点等破坏性操作用 ui store confirm：confirmState 非空时渲染全局确认对话框，
+// 3) ConfirmDialog 桥（删关系/删节点等破坏性操作用 ui store confirm：confirmState 非空时渲染全局确认对话框，
 // 确认/取消分别调 resolveConfirm(true/false) 归还 Promise（「确认对话框（confirm/resolveConfirm，
 // ConfirmDialog 实现于 components/outline/dialogs.tsx）」的渲染宿主；各页既有局部 ConfirmDialog 不受影响）。
 import { useEffect, useRef } from "react";
-import { toast } from "sonner";
+import { App } from "antd";
 import { CloseOutlined, ExclamationCircleFilled } from "@ant-design/icons";
 import { useUiStore, TOAST_DURATION_MS, type Toast } from "../../stores/ui";
 import { ConfirmDialog } from "../outline/dialogs";
-import { Toaster } from "../ui/sonner";
+
+/** antd message 的 duration 单位是**秒**（antd/es/message/interface.d.ts `duration?: number`），
+ * 故由 store 的单一事实源毫秒值换算；store 定时器仍负责 3s 后清空快照。 */
+const TOAST_DURATION_SECONDS = TOAST_DURATION_MS / 1000;
 
 /**
- * toast → sonner 触发判定（纯函数，可单测）：
+ * toast → antd message 触发判定（纯函数，可单测）：
  * toast 为 null（无新 toast）或 id 与上次已处理相同（同一快照的重渲染 / StrictMode 双执行）时不触发。
  * 注意 store 的 toast id 严格递增（toastSeq），新 toast 必然携带新 id，因此无需在 toast 清空后重置上次 id。
  */
@@ -48,24 +51,24 @@ export function FeedbackHost() {
   const toastState = useUiStore((s) => s.toast);
   const error = useUiStore((s) => s.error);
   const clearError = useUiStore((s) => s.clearError);
+  const { message } = App.useApp();
   const lastHandledToastId = useRef<number | null>(null);
 
-  // toast 桥接：新快照（新 id）触发 sonner 展示，kind 映射 success/error/info
+  // toast 桥接：新快照（新 id）触发 antd message（顶部居中），kind 映射 success/error/info
   useEffect(() => {
     if (!toastState || !shouldNotifyToast(toastState, lastHandledToastId.current)) return;
     lastHandledToastId.current = toastState.id;
     if (toastState.kind === "error") {
-      toast.error(toastState.text, { duration: TOAST_DURATION_MS });
+      message.error(toastState.text, TOAST_DURATION_SECONDS);
     } else if (toastState.kind === "info") {
-      toast.info(toastState.text, { duration: TOAST_DURATION_MS });
+      message.info(toastState.text, TOAST_DURATION_SECONDS);
     } else {
-      toast.success(toastState.text, { duration: TOAST_DURATION_MS });
+      message.success(toastState.text, TOAST_DURATION_SECONDS);
     }
-  }, [toastState]);
+  }, [toastState, message]);
 
   return (
     <>
-      <Toaster />
       <ConfirmDialogBridge />
       {error && (
         <div

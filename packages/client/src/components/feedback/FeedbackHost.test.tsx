@@ -1,6 +1,6 @@
 // FeedbackHost 纯逻辑测试（U6 全局反馈组件）：仓库无 jsdom / @testing-library 环境，
 // 组件渲染测试不可行（避免引入新依赖），故只测桥接判定函数 shouldNotifyToast 的去重规则。
-// 该函数是 toast→sonner 桥接的核心同一 toast 快照（同 id）在重渲染 / StrictMode 双执行下只触发一次。
+// 该函数是 toast→antd message 桥接的核心：同一 toast 快照（同 id）在重渲染 / StrictMode 双执行下只触发一次。
 import { describe, expect, it } from "vitest";
 import type { Toast } from "../../stores/ui";
 import { shouldNotifyToast } from "./FeedbackHost";
@@ -11,7 +11,7 @@ const makeToast = (id: number, kind: Toast["kind"] = "success"): Toast => ({
   text: "已保存",
 });
 
-describe("shouldNotifyToast（toast→sonner 桥接触发判定）", () => {
+describe("shouldNotifyToast（toast→antd message 桥接触发判定）", () => {
   it("无 toast（null）时不触发", () => {
     expect(shouldNotifyToast(null, null)).toBe(false);
   });

@@ -391,7 +391,7 @@ components:
 **`chat-bubble-assistant`** — assistant 消息：无底透明 + 正文排版（长文本可读性优先，不用气泡包）。
 **`focus-strip`** — 「正在讨论：{类型} {名称}」小条：`{colors.surface-soft}` 底 + 1px 描边 + caption。
 **`proposal-card`** — 提案卡：1px 描边卡片 + 确认/拒绝按钮（确认按钮用 `button-primary`，禁用态由 antd 派发）。
-**`toast`** — 全局提示走 antd `message`（`App.useApp()`），顶部居中；`success/error/info` 对应 store 的 `ToastKind`，时长由 store 的 3s 定时器决定（`duration: 3` 对齐）。
+**`toast`** — 全局提示走 antd `message`（`App.useApp()`），顶部居中；`success/error/info` 对应 store 的 `ToastKind`，时长由 store 的 3s 定时器决定（`duration: 3` 对齐）。**命令式反馈的上下文入口**：`AntdProvider` 在 `ConfigProvider` 内部包 `<App component={false}>`（`component={false}` 不渲染包裹 div，不插进三栏 flex 链）——`message`/`notification`/`modal` 需经 `App.useApp()` 取实例才能继承本 Provider 的主题与 locale，不要用静态方法。
 
 ### antd 组件 token 覆盖（全部覆盖项就这些）
 
