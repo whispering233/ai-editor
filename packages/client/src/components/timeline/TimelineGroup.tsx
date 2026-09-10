@@ -199,7 +199,9 @@ export function TimelineGroupBlock({
                 )}
               />
             </div>
-            <div className="flex min-w-0 flex-1 items-center gap-2 py-1">
+            {/* px-3：与事件卡（TimelineEvent 内容卡 px-3）同水平内边距——组标题行的右侧按钮列
+                （事件计数/加事件/移入回收站）与事件行的删除按钮列垂直对齐，不再错开 12px */}
+            <div className="flex min-w-0 flex-1 items-center gap-2 px-3 py-1">
               {/* 折叠/展开按钮（批次八 O4：移至组标题左侧、标题前，同大纲页折叠箭头位序；折叠后仅标题行） */}
               <Button
                 variant="text"
