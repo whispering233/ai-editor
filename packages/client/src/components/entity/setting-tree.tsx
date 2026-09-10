@@ -199,8 +199,12 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
   useEffect(() => {
     if (highlightedId === null || focusedNewSettingRef.current === highlightedId) return;
     const t = setTimeout(() => {
-      if (focusNewItem(`[data-setting-id="${highlightedId}"]`))
+      if (focusNewItem(`[data-setting-id="${highlightedId}"]`)) {
         focusedNewSettingRef.current = highlightedId;
+        // 链式新建（layout.md §7）：新条目 = 选中 + 聚焦——「Enter 新建子级」的守卫是
+        // selectedId === node.id，只聚焦不选中会让下一次 Enter 静默无响应
+        setSelectedId(highlightedId);
+      }
     }, 0);
     return () => clearTimeout(t);
   }, [highlightedId, roots]);
@@ -358,6 +362,9 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
       }
       useUiStore.getState().showToast(`已创建设定《${name}》`);
       if (parentId !== null) expand(parentId);
+      // 高亮 → 聚焦效应里补选中（layout.md §7「链式新建」）：不能在此直接 setSelectedId——
+      // reload 是异步的（tick + 加载效应），此刻 roots 还是旧树，清理效应会把这个「树里还没有的 id」
+      // 当成已删除节点立刻清掉（实测踩坑：只聚焦不选中 → 再按 Enter 建子级静默无响应）
       setHighlightedId(res.id);
       reload();
     } catch (err) {

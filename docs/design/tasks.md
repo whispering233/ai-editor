@@ -47,7 +47,15 @@ v0.0.1-v0.0.27 发布链路全绿；**v0.0.28 = 批次十九：视觉语言统�
 - [x] **T7 [UX] 页面头部统一**：人物/设定/地点/关联四页补 `PageTitle`（标题行独立）；第二行控件行按「左：搜索→分类→标签→排序；右：操作按钮」重排（EntityList 家族 / setting-tree 工具栏 / relations-view / ReferenceList / HookPanel / Outline / Timeline）；搜索框统一 `search-input` 规格（`SearchOutlined` + `w-48` + `allowClear`，设定树补图标）；概览/回收站/详情页不动。
 - [ ] **T8 [验证] 批次验收**：oracle 独立核验全部改动（对照 DESIGN.md/layout.md 契约逐条）；五道门禁（`designmd lint` / `pnpm typecheck` / `pnpm lint` / `pnpm -r test` / `pnpm -r build`）+ headless 像素核验（浅/深/拖拽三态）。
 
-### 已完成（批次二十）
+### 当前任务卡（批次二十一：链式新建断链）
+
+**背景**（用户反馈）：设定页「新建→回车确定→再回车新建子设定」做不到——实测根因：就地新建提交后，新条目只拿到**键盘焦点 + 临时高亮**，但**没有进入选中态**；而「选中节点 Enter = 就新建子级」的守卫要求 `selectedId === node.id`，于是第二次 Enter 被静默吞掉（toast 不抢焦点，只是同时出现，造成「被提示打断」的错觉）。设定树与大纲树同一根因（同一契约下的两个调用点）。
+
+- [x] **T1 [BUG] 链式新建：新条目选中 + 聚焦**：`setting-tree.tsx` 的 `commitCreate` / `Outline.tsx` 的 `commitCreate` 成功后补设选中态（保留原高亮 + 聚焦）；契约写进 `layout.md` §7「链式新建」。验收：headless 键盘全链路（新建→Enter→Enter→输入→Enter）能连续建出子级，且焦点始终在最新行上。
+
+---
+
+## 已完成（批次二十）
 
 | 卡 | commit | 内容 |
 |---|---|---|

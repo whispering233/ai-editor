@@ -422,6 +422,9 @@ export default function Outline() {
       const res = await createOutlineNode({ type, title, parent_id: parentId });
       useUiStore.getState().showToast(`已创建${TYPE_LABEL[type]}《${title}》`);
       await afterTreeChanged(parentId, res.id);
+      // 选中 + 聚焦（layout.md §7「链式新建」）：afterTreeChanged 只负责滚动/聚焦/高亮，
+      // 不设选中 → 「再按 Enter 建子级」会被 selectedNodeId 守卫吞掉；此处补上选中态
+      setSelectedNodeId(res.id);
     } catch (err) {
       setError(describeOutlineError(errorCode(err)));
     }
