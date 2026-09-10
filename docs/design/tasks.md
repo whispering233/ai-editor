@@ -59,7 +59,14 @@ v0.0.1-v0.0.27 发布链路全绿；**v0.0.28 = 批次十九：视觉语言统�
 | T6 | `fix(client): 批次二十 T6 —— 图标按钮统一` | antd v6 `variant` 需配 `color` 的静默回落修复（22 处）+ 自绘图标按钮收敛 antd（8 处）+ 守卫 `button-variant-color` + 清 `lib/styles.ts` 死常量 |
 | T7 | `feat(client): 批次二十 T7 —— 中栏页面头部统一` | 4 页补标题 + 7 页控件行重排 + 搜索框统一 `search-input` 规格 + 关联页新增建立关联入口 |
 
-**验证状态**：五道门禁全绿（`designmd lint` 0 error/3 预期 warning、`pnpm typecheck`、`pnpm lint`、`pnpm -r test` 1740 用例、`pnpm -r build`）；headless 像素核验（浅/深/拖拽三态）逐项实测通过。oracle 独立核验进行中（async）。
+| T8 | `fix(client): 批次二十 T8 —— oracle 核验发现修复` | oracle 5 项必修 + 3 项风险全部处置（见下） |
+
+**验证状态（T8 收口）**：五道门禁全绿（`designmd lint` 0 error/3 预期 warning、`pnpm typecheck`、`pnpm lint`、`pnpm -r test` 全仓用例、`pnpm -r build`）；headless 像素核验（浅/深/拖拽/落点四态）逐项实测通过。
+
+**oracle 独立核验结论（read-only，逐卡核验 + 反例挖掘）**：
+- T1/T2/T3 通过（T3 残留 1px 边框差，视觉不可感知）；T4 通过但漏 1 处（大纲 root-end）→ 已修；T6 通过但新增 1 处死类（`cursor-grab` 挂 antd Button 根）→ 已修 + 守卫纳入 `cursor-`；T7 基本通过但「搜索框最左」与控件行左序自相矛盾 → 契约定稿「搜索 → 分类 → 标签 → 排序」并把关联页搜索移到最左。
+- T5 **不通过**：`TagChip` 取色 key 只看单个字符串 children，关系类型 chip（children 为 `[文案, " →"]` 数组）恒取首色 peach → 加显式 `label` prop 修复（像素复核已多色）。
+- 风险项处置：`focus-strip` 色对齐契约（`bg-accent/40` → `bg-muted`）；控件行 Select 尺寸统一 32px；新增守卫 `no-dynamic-class`（拼接类名不生成）；修正 AntdProvider/index.css 里「注入 `:root`」的错误前提注释。
 
 ---
 
