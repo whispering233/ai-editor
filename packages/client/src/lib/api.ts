@@ -1020,6 +1020,22 @@ export function getSessionMessages(sessionId: string): Promise<ChatSessionMessag
   return apiFetch<ChatSessionMessagesRes>(`/chat/sessions/${sessionId}/messages`);
 }
 
+/** DELETE /api/v1/chat/sessions/:id 响应（物理删除，不可恢复） */
+export interface DeleteChatSessionRes {
+  deleted: true;
+}
+
+/**
+ * 物理删除会话（无回收站；调用方负责二次确认）。
+ * 错误：400 VALIDATION_ERROR（id 形态非法）/ 404 SESSION_NOT_FOUND / 409 SESSION_BUSY（该会话有在途流）
+ * —— id 经 encodeURIComponent（含分隔符的异常 id 不被路由层拆段，直达处理器得到明确的 400）
+ */
+export function deleteChatSession(sessionId: string): Promise<DeleteChatSessionRes> {
+  return apiFetch<DeleteChatSessionRes>(`/chat/sessions/${encodeURIComponent(sessionId)}`, {
+    method: "DELETE",
+  });
+}
+
 // ============ 发送消息（U5；chatSendReqSchema，「POST /api/v1/chat」L742-793） ============
 
 /**

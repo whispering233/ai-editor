@@ -58,6 +58,8 @@ import {
   MessageItem,
   ProposalCardView,
   ToolCallRow,
+  MENU_KEY_DELETE_SESSION,
+  sessionItemMenu,
   sessionItems,
   usageBarView,
 } from "./ChatPanel";
@@ -182,6 +184,31 @@ describe("ChatPanel 挂载渲染冒烟（SSR 初始态：zustand v5 getServerSna
     // 空摘要会话不得渲染出空白项（退「（空会话）」）
     const blank = sessionItems([{ ...sampleSession, lastMessage: "" }]);
     expect(textOf((blank[0] as { label: ReactNode }).label)).toContain("（空会话）");
+  });
+});
+
+describe("会话项操作菜单（chat-session-item-menu 契约：唯一项「删除会话」+ streaming 禁用）", () => {
+  it("菜单唯一项 = 删除会话（danger），点击回调带该项会话 id 且阻止冒泡", () => {
+    const onDelete = vi.fn();
+    const menu = sessionItemMenu(false, onDelete)({ key: "sess-7" });
+    expect(menu.items).toHaveLength(1);
+    // items 为联合类型（含 MenuDividerType），按 toMatchObject 断言而非属性访问
+    expect(menu.items?.[0]).toMatchObject({ key: MENU_KEY_DELETE_SESSION, danger: true });
+    expect(menu.items?.[0]).not.toMatchObject({ disabled: true });
+
+    const stopPropagation = vi.fn();
+    menu.onClick?.({ key: MENU_KEY_DELETE_SESSION, domEvent: { stopPropagation } } as never);
+    expect(stopPropagation).toHaveBeenCalledTimes(1); // 不得触发会话项选中
+    expect(onDelete).toHaveBeenCalledWith("sess-7");
+  });
+
+  it("streaming 中禁用该项（在途生成不得删；服务端 409 兜底）；其它 key 不触发删除", () => {
+    const onDelete = vi.fn();
+    const menu = sessionItemMenu(true, onDelete)({ key: "sess-7" });
+    expect(menu.items?.[0]).toMatchObject({ key: MENU_KEY_DELETE_SESSION, disabled: true });
+
+    menu.onClick?.({ key: "other", domEvent: { stopPropagation: vi.fn() } } as never);
+    expect(onDelete).not.toHaveBeenCalled();
   });
 });
 

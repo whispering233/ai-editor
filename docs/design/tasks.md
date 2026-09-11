@@ -15,11 +15,7 @@
 
 ## 当前任务卡
 
-批次 B：对话历史从 `chat_messages` 表迁到项目目录 `sessions/*.jsonl`（B1/B2/B3/B4 已完成并验证：会话 JSONL 存储模块 / 存储切换 / 删除会话端点 / 备份管道接 sessions/）（契约已改：`docs/db/schema.md`、`docs/design/10-data-model.md` §1/§10/§11、`docs/api/80-api-chat.md`、`docs/api/error-code.md`、`docs/api/20-api-backup.md`、`docs/design/30-agent-loop.md` §4、`docs/design/architecture.md`、`docs/ui/DESIGN.md`）。**API 响应结构不变（除新增 DELETE）**。
-
-### B5 client 会话删除入口
-
-`Conversations` 的 `menu` → 「删除会话」→ `ConfirmDialog`（danger、「删除后无法恢复」）→ `DELETE` 接口 → 列表移除；删的是当前会话 → 回「新会话」；`streaming` 期间禁用。契约：`docs/ui/DESIGN.md` `chat-session-item-menu`。验证含 headless 像素走查。
+（本轮任务卡已全部完成并清理：B1 `db` 包会话 JSONL 存储模块 / B2 存储切换（迁移 006 + server 接线）/ B3 删除会话端点 / B4 备份管道接 `sessions/` / B5 client 会话删除入口——见 `CHANGELOG.md` Unreleased 与本文件 git 历史。）
 
 ---
 

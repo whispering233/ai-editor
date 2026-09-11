@@ -12,7 +12,9 @@ import { create } from "zustand";
 import type { ChatMessage, ChatSessionSummary } from "@whispering233/ai-editor-shared";
 import {
   ApiError,
+  CLIENT_NETWORK_ERROR,
   confirmProposal as confirmProposalApi,
+  deleteChatSession,
   getSessionMessages,
   listSessions,
   rejectProposal as rejectProposalApi,
@@ -67,6 +69,12 @@ interface ChatState {
   newSession: () => void;
  /** 清空会话状态（关闭项目/切项目；订阅已自动调用，保留为显式入口） */
   clearSessions: () => void;
+ /**
+ * 物理删除会话（DELETE /chat/sessions/:id，需二次确认由调用方承担）：
+ * 成功 → 列表移除 + （删的是当前会话则回「新会话」）+ toast；
+ * 失败 → 不改本地列表（404 例外：目标已不存在 → 刷新列表），并**抛出**让确认框保持打开展示错误
+ */
+  deleteSession: (sessionId: string) => Promise<void>;
 
  // ---- U5：消息流 ----
  /** 当前会话消息历史（本地临时 id 的流式消息在 S7 落库后由历史重载替换为真实 id） */
@@ -353,6 +361,35 @@ export const useChatStore = create<ChatState>((set, get) => {
         lastUsage: null,
         contextBudget: null,
       });
+    },
+
+    deleteSession: async (sessionId) => {
+      try {
+        await deleteChatSession(sessionId);
+      } catch (err) {
+ // apiFetch 只抛 ApiError（code 透传服务端 ErrorCode）；非 ApiError 属理论不可达，按网络错误兜底
+        const code = err instanceof ApiError ? err.code : CLIENT_NETWORK_ERROR;
+        const message = err instanceof Error ? err.message : "网络请求失败";
+        if (code === "SESSION_NOT_FOUND") {
+          // 目标已不存在（他处已删/文件被外部删除）：刷新列表对齐 UI，不抛（对话框可关）
+          useUiStore.getState().showToast("会话不存在，已刷新列表", "error");
+          await get().loadSessions();
+          return;
+        }
+        if (code === "SESSION_BUSY") {
+          // 在途生成中：列表不变、保留条目（服务端 409 兜底；UI 侧菜单项已按 streaming 禁用）
+          useUiStore.getState().showToast("该会话正在生成中，请稍后再删", "error");
+        } else {
+          useUiStore.getState().showError(code, message);
+        }
+        throw err instanceof Error ? err : new Error(message); // 抛回：确认框保持打开并显示错误
+      }
+ // 成功：列表移除；当前会话被删 → 回「新会话」（清空消息区与瞬态，但不影响列表）
+      set((s) => ({
+        sessions: s.sessions === null ? null : s.sessions.filter((x) => x.id !== sessionId),
+      }));
+      if (get().currentSessionId === sessionId) get().newSession();
+      useUiStore.getState().showToast("会话已删除");
     },
 
     loadMessages: async (sessionId) => {

@@ -13,6 +13,7 @@ import type { ComponentRef } from "react";
 import { Bubble, Conversations, Sender } from "@ant-design/x";
 import type { ConversationItemType } from "@ant-design/x";
 import { Alert, Badge, Button, Collapse, Dropdown as AntDropdown, Select, Tag, theme } from "antd";
+import type { MenuProps } from "antd";
 import {
   BulbOutlined,
   CloseOutlined,
@@ -44,6 +45,7 @@ import type { ChatMessage, ChatSessionSummary } from "@whispering233/ai-editor-s
 import { formatRelativeTime } from "@whispering233/ai-editor-shared";
 import { cn } from "../../lib/utils";
 import { skeletonClass } from "../../lib/styles";
+import { ConfirmDialog } from "../outline/dialogs";
 
 // ============ 文案映射（会话切换/提案卡/focus 小条） ============
 // 会话相对时间用 shared formatRelativeTime（Sidebar/Dashboard 同源；≥30 天回退绝对时间，非法输入原样返回）
@@ -293,6 +295,28 @@ export function sessionItems(sessions: ChatSessionSummary[] | null): Conversatio
   }));
 }
 
+/** 会话项菜单唯一项 key（导出供测试断言） */
+export const MENU_KEY_DELETE_SESSION = "delete-session";
+
+/**
+ * 会话项操作菜单（DESIGN.md `chat-session-item-menu`；导出供渲染走查测试）：
+ * 仅一项「删除会话」（antd danger 样式由 token 派发）；`streaming`（在途生成）时禁用——
+ * 服务端以 409 `SESSION_BUSY` 兼底。浮层面由 x 的内部 Dropdown 承担（canvas 面 = `colorBgElevated`）。
+ */
+export function sessionItemMenu(
+  streaming: boolean,
+  onDelete: (sessionId: string) => void,
+): (item: ConversationItemType) => MenuProps {
+  return (item) => ({
+    items: [{ key: MENU_KEY_DELETE_SESSION, label: "删除会话", danger: true, disabled: streaming }],
+    onClick: ({ key, domEvent }) => {
+ // 阻止冒泡：菜单点击不得触发会话项选中
+      domEvent.stopPropagation();
+      if (key === MENU_KEY_DELETE_SESSION) onDelete(item.key);
+    },
+  });
+}
+
 function SessionTitleBar({
   disabled,
   onClose,
@@ -307,13 +331,26 @@ function SessionTitleBar({
   const currentSessionId = useChatStore((s) => s.currentSessionId);
   const setCurrentSession = useChatStore((s) => s.setCurrentSession);
   const newSession = useChatStore((s) => s.newSession);
+  const deleteSession = useChatStore((s) => s.deleteSession);
+  const streaming = useChatStore((s) => s.streaming);
   // 当前会话 = 列表中 id 匹配项；未选（null）/ 列表未加载 / 不在列表 → 新会话
   const currentSession = sessions?.find((s) => s.id === currentSessionId) ?? null;
   const title = currentSession ? currentSession.lastMessage || "（空会话）" : "新会话";
   /** 弹层开关（自定义弹层不经 Menu 上报点击，不会自动关——选中项后手动关） */
   const [open, setOpen] = useState(false);
+  /** 待删除会话（非 null 时渲染二次确认对话框） */
+  const [deleteTarget, setDeleteTarget] = useState<ChatSessionSummary | null>(null);
 
   const conversationItems = useMemo(() => sessionItems(sessions), [sessions]);
+  // 菜单由每项自行渲染（键由项回调透传）；菜单项按 streaming 禁用（服务端 409 兼底）
+  const itemMenu = useMemo(
+    () =>
+      sessionItemMenu(streaming, (sessionId) => {
+        const target = sessions?.find((s) => s.id === sessionId) ?? null;
+        if (target !== null) setDeleteTarget(target);
+      }),
+    [streaming, sessions],
+  );
 
   return (
     <div className="flex h-12 shrink-0 items-center gap-1 border-b border-border px-2.5">
@@ -335,6 +372,7 @@ function SessionTitleBar({
               setCurrentSession(key);
               setOpen(false);
             }}
+            menu={itemMenu}
             classNames={{ root: "rounded-lg bg-popover shadow-md ring-1 ring-foreground/10" }}
             styles={{
               root: { width: 320, maxHeight: 320 },
@@ -380,6 +418,18 @@ function SessionTitleBar({
           onClick={onClose}
           aria-label="关闭聊天面板"
           icon={<CloseOutlined />}
+        />
+      )}
+      {/* 删除会话二次确认（DESIGN.md `chat-session-item-menu`：danger + 「删除后无法恢复」）；
+          onConfirm 抛错时对话框保持打开并显示错误，仅成功才关闭 */}
+      {deleteTarget !== null && (
+        <ConfirmDialog
+          title="删除会话"
+          description={`将删除会话「${deleteTarget.lastMessage || "（空会话）"}」及其 ${deleteTarget.messageCount} 条消息，删除后无法恢复。`}
+          confirmLabel="确认删除"
+          danger
+          onConfirm={() => deleteSession(deleteTarget.id)}
+          onClose={() => setDeleteTarget(null)}
         />
       )}
     </div>

@@ -16,6 +16,7 @@ vi.mock("../lib/api", async (importOriginal) => {
     ...actual,
     listSessions: vi.fn(),
     getSessionMessages: vi.fn(),
+    deleteChatSession: vi.fn(),
     confirmProposal: vi.fn(),
     rejectProposal: vi.fn(),
   };
@@ -27,6 +28,7 @@ vi.mock("../hooks/use-sse", () => ({
 
 import {
   confirmProposal as apiConfirmProposal,
+  deleteChatSession as apiDeleteChatSession,
   getSessionMessages as apiGetSessionMessages,
   listSessions as apiListSessions,
   rejectProposal as apiRejectProposal,
@@ -45,6 +47,7 @@ import { useUiStore } from "./ui";
 const mocked = {
   listSessions: vi.mocked(apiListSessions),
   getSessionMessages: vi.mocked(apiGetSessionMessages),
+  deleteChatSession: vi.mocked(apiDeleteChatSession),
   confirmProposal: vi.mocked(apiConfirmProposal),
   rejectProposal: vi.mocked(apiRejectProposal),
   fetchSSE: vi.mocked(fetchSSE),
@@ -330,6 +333,79 @@ describe("setCurrentSession / newSession / clearSessions（U5：选择即恢复�
     expect(mocked.getSessionMessages).not.toHaveBeenCalled();
     expect(useChatStore.getState().focusContext).toEqual({ focus_entity_id: "char-1" });
     expect(useChatStore.getState().messagesLoading).toBe(false);
+  });
+
+  it("deleteSession 成功：列表移除；删的是当前会话 → 回新会话（清空消息区与瞬时读数）", async () => {
+    mocked.deleteChatSession.mockResolvedValue({ deleted: true });
+    mocked.getSessionMessages.mockResolvedValue({ sessionId: "sess-1", messages: [] });
+    useChatStore.setState({
+      sessions: [sampleSession, { ...sampleSession, id: "sess-2" }],
+      currentSessionId: "sess-1",
+      messages: [makeMsg({ id: "m1" })],
+      lastUsage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
+      contextBudget: { history: 100, total: 200 },
+    });
+
+    await useChatStore.getState().deleteSession("sess-1");
+
+    const s = useChatStore.getState();
+    expect(mocked.deleteChatSession).toHaveBeenCalledWith("sess-1");
+    expect(s.sessions?.map((x) => x.id)).toEqual(["sess-2"]);
+    expect(s.currentSessionId).toBeNull(); // 当前会话被删 → 新会话
+    expect(s.messages).toEqual([]);
+    expect(s.lastUsage).toBeNull();
+    expect(s.contextBudget).toBeNull();
+    expect(useUiStore.getState().toast?.text).toBe("会话已删除");
+  });
+
+  it("deleteSession 删非当前会话：列表移除但当前会话与消息不变", async () => {
+    mocked.deleteChatSession.mockResolvedValue({ deleted: true });
+    useChatStore.setState({
+      sessions: [sampleSession, { ...sampleSession, id: "sess-2" }],
+      currentSessionId: "sess-2",
+      messages: [makeMsg({ id: "m1" })],
+    });
+
+    await useChatStore.getState().deleteSession("sess-1");
+
+    const s = useChatStore.getState();
+    expect(s.sessions?.map((x) => x.id)).toEqual(["sess-2"]);
+    expect(s.currentSessionId).toBe("sess-2");
+    expect(s.messages).toHaveLength(1);
+  });
+
+  it("deleteSession 409 SESSION_BUSY：列表不变 + 错误 toast + 抛出（确认框保持打开）", async () => {
+    mocked.deleteChatSession.mockRejectedValue(new ApiError("SESSION_BUSY", "该会话有在途流"));
+    useChatStore.setState({ sessions: [sampleSession], currentSessionId: "sess-1" });
+
+    await expect(useChatStore.getState().deleteSession("sess-1")).rejects.toThrow("该会话有在途流");
+
+    const s = useChatStore.getState();
+    expect(s.sessions?.map((x) => x.id)).toEqual(["sess-1"]); // 不移除
+    expect(s.currentSessionId).toBe("sess-1");
+    expect(useUiStore.getState().toast?.text).toBe("该会话正在生成中，请稍后再删");
+  });
+
+  it("deleteSession 404 SESSION_NOT_FOUND：刷新列表 + 不抛出（对话框可关）", async () => {
+    mocked.deleteChatSession.mockRejectedValue(new ApiError("SESSION_NOT_FOUND", "会话不存在"));
+    mocked.listSessions.mockResolvedValue([]);
+    useChatStore.setState({ sessions: [sampleSession], currentSessionId: null });
+
+    await expect(useChatStore.getState().deleteSession("sess-1")).resolves.toBeUndefined();
+
+    expect(mocked.listSessions).toHaveBeenCalledTimes(1);
+    expect(useChatStore.getState().sessions).toEqual([]);
+    expect(useUiStore.getState().toast?.text).toBe("会话不存在，已刷新列表");
+  });
+
+  it("deleteSession 网络失败：列表不变 + 全局错误条 + 抛出", async () => {
+    mocked.deleteChatSession.mockRejectedValue(new ApiError("CLIENT_NETWORK_ERROR", "网络请求失败"));
+    useChatStore.setState({ sessions: [sampleSession], currentSessionId: "sess-1" });
+
+    await expect(useChatStore.getState().deleteSession("sess-1")).rejects.toThrow("网络请求失败");
+
+    expect(useChatStore.getState().sessions?.map((x) => x.id)).toEqual(["sess-1"]);
+    expect(useUiStore.getState().error?.code).toBe("CLIENT_NETWORK_ERROR");
   });
 
   it("clearSessions 清空列表/当前会话/消息/运行态（含中止在途流）", () => {

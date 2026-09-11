@@ -11,6 +11,13 @@
 
 ### Added
 
+- **对话历史改为项目目录 JSONL 存储**（`books/<书名>/sessions/<session_id>.jsonl`，一 session 一文件）：行 = header（`type/version/id/created_at`）+ 消息行；读取容忍规则（未知 `type` / 坏行 / 缺 `created_at` 跳过，header 缺失或版本超前整文件跳过）；`session_id` 硬校验 `^sess_[A-Za-z0-9_-]{1,64}$`（同时是文件名校验，防路径穿越）。**收益**：会话随书目录走（备份/导入/改名/移动天然携带，不再依赖 `project_id` 归属迁移）、追加写人类可读可 diff、会话名/每轮模型/思维链等扩展都是纯追加（不做文件级迁移）
+- **迁移 006（SCHEMA_VERSION 5→6）**：`chat_messages` 全量导出为 JSONL 后 `DROP TABLE`；`Migration.up` 扩为 `(db, ctx: { projectRoot })` 以写入项目目录；迁移失败整体回滚（表保留、版本不前移、可重试）；**id 非法的旧会话以 `sess_legacy_<sha256 前 16 位>` 改名导出**（数据不丢、映射确定性幂等）
+- **`DELETE /api/v1/chat/sessions/:id`**：400 形态非法 / 404 `SESSION_NOT_FOUND` / 409 `SESSION_BUSY`（会话有在途 SSE 流，防 append 把文件原地重建）/ 200 `{ deleted: true }`；右栏会话项 ellipsis → 「删除会话」→ danger 二次确认（「删除后无法恢复」），生成中禁用
+- **备份管道接 `sessions/`**：白名单/打包/变更判定（mtime）/恢复整体覆盖与 `references/` 同款；旧备份包（无 `sessions/`）仍可导入，恢复时该目录按整体还原清空
+
+### Added
+
 - **上下文预算配置化**：用户级 `~/.ai-editor/config.json` 新增 `context_budget` 段（`history_ratio` 缺省 `0.15`、`tool_result_max_tokens` 缺省 `8000`，缺失/非法只回落该段、不牵连 provider/model/api_keys）；历史层预算 = **激活模型 `contextWindow` × ratio**（经总闸 clamp：总闸 = `window × 0.5`，替换原硬编码 60K）；`docs/design/config.md` 新增「可配 / 不可配边界」判据（轮次上限 / 单轮超时 / 总闸 / 重试策略刻意不可配）
 - **`done` SSE 帧新增 `context_budget`**（`{ history, total }` = 生效历史预算 / 四层预算之和）：前端占用条分母由模型 `contextWindow` 改为该值（1M 窗口下旧分母让占用条恒显 0-1%，是假指标）
 - **token 估算改分级密度**（`llm/src/token.ts`）：ASCII 4 字符/token、非 ASCII 1.7 字符/token（≈ 1 汉字 0.6 token）——原单一 `chars/4` 对中文低估约 2.4 倍，是唯一能让裁剪阈值与总闸静默失效的路径；新增 `charsPerToken()` 供 `truncateToolResult` / `trimFocus` 按文本自身密度反推字符数
