@@ -1,5 +1,6 @@
 // 对话路由（U3 切片 1 + S7.6）：GET /api/v1/chat/sessions、GET /api/v1/chat/sessions/:id/messages、
-// POST /api/v1/chat（POST + SSE 对话端点，切片 7 最后一张卡）
+// POST /api/v1/chat（POST + SSE 对话端点，切片 7 最后一张卡）、
+// DELETE /api/v1/chat/sessions/:id（物理删会话文件，B3）
 //
 //
 // 语义约定：
@@ -34,6 +35,7 @@ import type { AbortSignalLike, LLMMessage, LLMStreamEvent, LLMToolDefinition } f
 import { listTools, type ToolDefinition } from "@whispering233/ai-editor-tools";
 import {
   appendSessionMessage,
+  deleteSessionFile,
   findOutlineNode,
   getEntity,
   isValidSessionId,
@@ -46,7 +48,7 @@ import {
 } from "@whispering233/ai-editor-db";
 import type { ChatMessage, ChatSessionSummary } from "@whispering233/ai-editor-shared";
 import { TOOL_PERMISSION, generateRuntimeId } from "@whispering233/ai-editor-shared";
-import { chatMessagesResSchema, chatSendReqSchema, chatSessionsResSchema } from "@whispering233/ai-editor-shared/schemas";
+import { chatMessagesResSchema, chatSendReqSchema, chatSessionDeleteResSchema, chatSessionsResSchema } from "@whispering233/ai-editor-shared/schemas";
 import { HttpError, ok } from "../middleware/error.js";
 import { requireCurrentProject, type ProjectContext } from "../middleware/project.js";
 import { debugLog, isCategoryEnabled } from "../debug.js";
@@ -60,6 +62,33 @@ export const DEFAULT_HEARTBEAT_MS = { minMs: 15_000, maxMs: 30_000 } as const;
 /** 续聊历史重建的条数上限（超限按尾部保留—— 的 token 裁剪由 S7.2 buildContext
  * 按预算二次兜底，此处仅防御病态超长会话的加载开销） */
 export const SESSION_HISTORY_MAX_MESSAGES = 2000;
+
+// ============ 在途会话登记（删除会话的并发防线） ============
+
+/**
+ * 在途 SSE 会话计数（session_id → 进行中的流数）。
+ * 用途：DELETE /sessions/:id 拒绝删除在途会话（409 SESSION_BUSY）——删除后流的后续
+ * onMessages 追加会把文件**原地重建**成「僵尸会话」（删了又长出来），比报错更糟。
+ * 生命周期：SSE 回调内登记，finally 注销（与流同生共死）。
+ */
+const inFlightSessions = new Map<string, number>();
+
+/** 登记在途会话（计数 +1；同一会话的并发流多次登记） */
+function enterInFlightSession(sessionId: string): void {
+  inFlightSessions.set(sessionId, (inFlightSessions.get(sessionId) ?? 0) + 1);
+}
+
+/** 注销在途会话（计数 -1，归零即删条目） */
+function leaveInFlightSession(sessionId: string): void {
+  const next = (inFlightSessions.get(sessionId) ?? 1) - 1;
+  if (next <= 0) inFlightSessions.delete(sessionId);
+  else inFlightSessions.set(sessionId, next);
+}
+
+/** 该会话是否有在途流（删除端点用） */
+function isSessionInFlight(sessionId: string): boolean {
+  return (inFlightSessions.get(sessionId) ?? 0) > 0;
+}
 
 // ============ zod → JSON Schema（OpenAI function calling 格式） ============
 
@@ -362,193 +391,205 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
         const requestedSessionId = session_id !== undefined && isValidSessionId(session_id) ? session_id : undefined;
         const sessionId = requestedSessionId ?? generateRuntimeId("session");
  // 会话归属由项目目录表达：直接读当前项目的 `sessions/<id>.jsonl`（无此文件 = 空历史）
-        const session: SessionState =
-          requestedSessionId === undefined
-            ? []
-            : restoreSession(
-                readSessionRows(project.root, requestedSessionId),
-                deps.sessionHistoryMaxCount ?? SESSION_HISTORY_MAX_MESSAGES,
-              );
+ // 在途登记（删除会话的并发防线）：进入时计数 +1，finally 保证任何退出路径（正常/异常/取消）注销
+        enterInFlightSession(sessionId);
+        let registered = true; // 提前注销后置 false，finally 兜底只对未注销的路径生效
+        try {
+          const session: SessionState =
+            requestedSessionId === undefined
+              ? []
+              : restoreSession(
+                  readSessionRows(project.root, requestedSessionId),
+                  deps.sessionHistoryMaxCount ?? SESSION_HISTORY_MAX_MESSAGES,
+                );
 
- // ---- 2. 聚焦上下文（查不到跳过，不阻断） ----
-        const focus = buildFocusText(project, context);
+   // ---- 2. 聚焦上下文（查不到跳过，不阻断） ----
+          const focus = buildFocusText(project, context);
 
- // ---- 3. 用户消息落库（assistant/tool 消息由 onMessages 落库） ----
-        appendSessionMessage(project.root, sessionId, {
-          role: "user",
-          content: message,
-          created_at: now(),
-        });
-
- // ---- 4. 取消信号 + 三路断开检测 ----
- // controller.signal 即 runAgent 的 signal（全链路第 0 层——四层穿透的
- // fetch/读循环/工具执行/重试 sleep 已由 llm/tools/agent 各层承担，本卡链路总装）
-        const controller = new AbortController();
-        const cancel = () => {
-          if (!controller.signal.aborted) controller.abort();
-        };
- // ① stream.onAbort：客户端断开 → 响应流 cancel → Hono StreamingApi.abort → 本回调
-        stream.onAbort(cancel);
- // ② c.req.raw 的 close/error 监听：@hono/node-server v2 的 c.req.raw 是标准 Request
- // （无 close 事件，signal 随请求中止触发）——两种形态按能力探测都挂上，双保险
-        c.req.raw.signal.addEventListener("abort", cancel, { once: true });
-        const rawReq = c.req.raw as unknown as { on?: (ev: string, fn: () => void) => unknown };
-        if (typeof rawReq.on === "function") {
-          rawReq.on("close", cancel);
-          rawReq.on("error", cancel);
-        }
- // ③ 心跳写失败：Hono write 吞错无法从 promise 观察写失败（stream.js write try/catch）
- // ——断连时 ① 已同步置位 controller.signal，心跳每次写后复查该旗标兜底
- // （时延 ≤ 心跳间隔，三路并用中的最后一道防线）
-
- // ---- 5. SSE 写帧器（事件；断连后不再写） ----
-        const writeEvent = async (event: string, data: unknown): Promise<void> => {
-          if (controller.signal.aborted) return; // 已断开：写也失败，跳过
-          try {
-            await stream.writeSSE({ event, data: JSON.stringify(data) });
-          } catch {
-            cancel(); // 写抛错（writeSSE 理论上吞错，防御路径）
-          }
-        };
-
- // ---- 6. 心跳协程（15-30s 随机 ping；停止/断连即时唤醒退出） ----
-        const heartbeatStop = new AbortController();
-        const heartbeat = (async () => {
-          const { minMs, maxMs } = deps.heartbeat ?? DEFAULT_HEARTBEAT_MS;
-          while (!heartbeatStop.signal.aborted) {
-            const ms = minMs + Math.floor(Math.random() * (maxMs - minMs + 1));
-            await sleepAbortable(ms, [heartbeatStop.signal, controller.signal]);
-            if (heartbeatStop.signal.aborted || controller.signal.aborted) return;
-            await stream.writeSSE({ event: "ping", data: "{}" });
- // ③ 写后复查：客户端断开时 onAbort 已置位 controller（见第 4 步注释）
-            if (controller.signal.aborted) return;
-          }
-        })();
-
- // ---- 7. onEvent → SSE 帧（AgentEvent 六类 + turn_start；proposal 顺序由 runAgent 保证） ----
- // 帧写入经 void 异步排入 writer（WritableStream FIFO 保证顺序，await 仅背压）——
- // 事件回调恒同步返回，不阻塞 runAgent 循环
-        const logChatEvent = createChatEventLogger(); // [chat] 调试日志（chat 类别；关闭时零开销）
-        const onEvent = (event: AgentEvent): void => {
-          logChatEvent(event); // 对话链路调试：工具调用/提案/文本增量长度等打到服务端终端
-          switch (event.type) {
-            case "turn_start":
-              return; // 循环内部事件：不映射 SSE 帧（日志/调试用）
-            case "text":
-              void writeEvent("text", { delta: event.delta });
-              return;
-            case "tool_call":
-              void writeEvent("tool_call", { tool: event.tool, args: event.args, id: event.id });
-              return;
-            case "tool_result":
-              void writeEvent("tool_result", { tool: event.tool, result: event.result, id: event.id });
-              return;
-            case "proposal":
- //：proposal 在对应 tool_result 之后、循环继续之前（runAgent 保证）
-              void writeEvent("proposal", {
-                proposal_id: event.proposal.proposal_id,
-                type: event.proposal.type,
-                preview: event.proposal.preview,
-              });
-              return;
-            case "done":
- // 需求 3：附带本轮真实 usage + 生效预算（占用条分母，见 docs/design/20-context.md §1）
-              void writeEvent("done", {
-                session_id: event.sessionId,
-                ...(lastUsage !== null ? { usage: lastUsage } : {}),
-                ...(event.contextBudget !== undefined ? { context_budget: event.contextBudget } : {}),
-              });
-              return;
-            case "error":
- // 用户取消/断开（aborted=true）：客户端已不可达，不写 error 帧（写了也失败）
-              if (!event.aborted) void writeEvent("error", { code: event.code, message: event.message });
-              return;
-          }
-        };
-
- // ---- 8. onMessages → 落库（assistant + tool 消息，含 tool_calls/tool_call_id 配对） ----
- // 硬（run.ts 注释）：onMessages 抛错不逃逸（runAgent 兜底吞掉）——落库失败
- // 不中断 agent 循环，此处由 db 抛错自然触发该（本路由不额外 try/catch）
-        const onMessages = (messages: SessionMessage[]): void => {
-          const ts = now();
-          for (const m of messages) {
-            appendSessionMessage(project.root, sessionId, {
-              role: m.role,
-              content: m.content ?? null,
-              ...(m.role === "assistant" && m.tool_calls !== undefined ? { tool_calls: m.tool_calls } : {}),
-              ...(m.role === "tool" ? { tool_call_id: m.tool_call_id } : {}),
-              created_at: ts,
-            });
-          }
-        };
-
- // ---- 9. runAgent 接线（S7.3：produce/dispatcher 由本路由组装注入） ----
- // 真实 produce 外包 [llm] 请求/usage 调试日志装饰器（细粒度类别 request/usage，关闭零开销直通）；
- // debugStream 按 stream 类别显式传入（false 也传——压过 env，保证类别隔离语义）
-        const produce =
-          deps.produce ??
-          createLLMRequestLogger(createRealProduce(apiKey, provider, model, tools, isCategoryEnabled("stream"), thinking), {
-            model,
-            tools,
+   // ---- 3. 用户消息落库（assistant/tool 消息由 onMessages 落库） ----
+          appendSessionMessage(project.root, sessionId, {
+            role: "user",
+            content: message,
+            created_at: now(),
           });
- // S7.4 真实现：ToolContext { db, outlineDir, projectId } + 同仓提案（S7.5 消费）
-        const dispatcher =
-          deps.dispatcher ?? createToolDispatcher({ db: project.db, outlineDir: project.root, projectId: project.config.id }, { store });
 
- // ---- 9.5 上下文占用数据（需求 3）：包裹 produce 捕获流内 finish 事件的真实 usage，
- // 在 done SSE 帧附带——前端据此计算上下文占用（usage.total / 模型 contextWindow） ----
-        let lastUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null = null;
-        const produceWithUsage: RunAgentDeps["produce"] = async (messages, signal, onEvent) => {
-          const tee: typeof onEvent = (e) => {
-            if (e?.type === "finish") lastUsage = e.usage as typeof lastUsage;
-            onEvent?.(e);
+   // ---- 4. 取消信号 + 三路断开检测 ----
+   // controller.signal 即 runAgent 的 signal（全链路第 0 层——四层穿透的
+   // fetch/读循环/工具执行/重试 sleep 已由 llm/tools/agent 各层承担，本卡链路总装）
+          const controller = new AbortController();
+          const cancel = () => {
+            if (!controller.signal.aborted) controller.abort();
           };
-          return produce(messages, signal, tee);
-        };
+   // ① stream.onAbort：客户端断开 → 响应流 cancel → Hono StreamingApi.abort → 本回调
+          stream.onAbort(cancel);
+   // ② c.req.raw 的 close/error 监听：@hono/node-server v2 的 c.req.raw 是标准 Request
+   // （无 close 事件，signal 随请求中止触发）——两种形态按能力探测都挂上，双保险
+          c.req.raw.signal.addEventListener("abort", cancel, { once: true });
+          const rawReq = c.req.raw as unknown as { on?: (ev: string, fn: () => void) => unknown };
+          if (typeof rawReq.on === "function") {
+            rawReq.on("close", cancel);
+            rawReq.on("error", cancel);
+          }
+   // ③ 心跳写失败：Hono write 吞错无法从 promise 观察写失败（stream.js write try/catch）
+   // ——断连时 ① 已同步置位 controller.signal，心跳每次写后复查该旗标兜底
+   // （时延 ≤ 心跳间隔，三路并用中的最后一道防线）
 
-        const result = await runAgent({
-          sessionId,
-          userMessage: message, // runAgent 追加进会话（传入 session 不应已含本轮消息）
-          session,
-          focus,
- // 项目规则唯一事实源 = 项目目录 （取代 project.config.prompt）——
- // 每次对话实时读文件（外部编辑立即可见）；文件不存在 → undefined（「## 项目设定」段跳过）
-          projectPrompt: readAgentsFile(project.root) ?? undefined,
-          deps: { produce: produceWithUsage, dispatcher, onEvent, onMessages },
- // 生效预算（不可配的总闸 + 可配的历史比例，均由 config + 模型目录解析得出）
-          ...(budget !== null ? { budgets: { history: budget.historyBudget }, tokenBudget: budget.totalGate } : {}),
- // 单条工具结果上限（用户配置；截断仅降级不终止——见 run.ts DEFAULT_TOOL_RESULT_MAX_TOKENS）
-          toolResultMaxTokens,
-          signal: controller.signal, // 断开即取消（abort 永不重试）
-        });
+   // ---- 5. SSE 写帧器（事件；断连后不再写） ----
+          const writeEvent = async (event: string, data: unknown): Promise<void> => {
+            if (controller.signal.aborted) return; // 已断开：写也失败，跳过
+            try {
+              await stream.writeSSE({ event, data: JSON.stringify(data) });
+            } catch {
+              cancel(); // 写抛错（writeSSE 理论上吞错，防御路径）
+            }
+          };
 
- // 工具结果截断可观测性（TOOL_RESULT_TOO_LARGE 落地）：只记调试日志，不发 error 帧
-        // （截断是降级不是错误——模型已收到「数据不完整」提示，对话继续）
-        if (result.truncatedToolResults > 0) {
-          debugLog(
-            "usage",
-            "agent",
-            `TOOL_RESULT_TOO_LARGE 工具结果截断 ${result.truncatedToolResults} 条（上限 ${toolResultMaxTokens} tokens/条）`,
-          );
+   // ---- 6. 心跳协程（15-30s 随机 ping；停止/断连即时唤醒退出） ----
+          const heartbeatStop = new AbortController();
+          const heartbeat = (async () => {
+            const { minMs, maxMs } = deps.heartbeat ?? DEFAULT_HEARTBEAT_MS;
+            while (!heartbeatStop.signal.aborted) {
+              const ms = minMs + Math.floor(Math.random() * (maxMs - minMs + 1));
+              await sleepAbortable(ms, [heartbeatStop.signal, controller.signal]);
+              if (heartbeatStop.signal.aborted || controller.signal.aborted) return;
+              await stream.writeSSE({ event: "ping", data: "{}" });
+   // ③ 写后复查：客户端断开时 onAbort 已置位 controller（见第 4 步注释）
+              if (controller.signal.aborted) return;
+            }
+          })();
+
+   // ---- 7. onEvent → SSE 帧（AgentEvent 六类 + turn_start；proposal 顺序由 runAgent 保证） ----
+   // 帧写入经 void 异步排入 writer（WritableStream FIFO 保证顺序，await 仅背压）——
+   // 事件回调恒同步返回，不阻塞 runAgent 循环
+          const logChatEvent = createChatEventLogger(); // [chat] 调试日志（chat 类别；关闭时零开销）
+          const onEvent = (event: AgentEvent): void => {
+            logChatEvent(event); // 对话链路调试：工具调用/提案/文本增量长度等打到服务端终端
+            switch (event.type) {
+              case "turn_start":
+                return; // 循环内部事件：不映射 SSE 帧（日志/调试用）
+              case "text":
+                void writeEvent("text", { delta: event.delta });
+                return;
+              case "tool_call":
+                void writeEvent("tool_call", { tool: event.tool, args: event.args, id: event.id });
+                return;
+              case "tool_result":
+                void writeEvent("tool_result", { tool: event.tool, result: event.result, id: event.id });
+                return;
+              case "proposal":
+   //：proposal 在对应 tool_result 之后、循环继续之前（runAgent 保证）
+                void writeEvent("proposal", {
+                  proposal_id: event.proposal.proposal_id,
+                  type: event.proposal.type,
+                  preview: event.proposal.preview,
+                });
+                return;
+              case "done":
+   // 需求 3：附带本轮真实 usage + 生效预算（占用条分母，见 docs/design/20-context.md §1）
+                void writeEvent("done", {
+                  session_id: event.sessionId,
+                  ...(lastUsage !== null ? { usage: lastUsage } : {}),
+                  ...(event.contextBudget !== undefined ? { context_budget: event.contextBudget } : {}),
+                });
+                return;
+              case "error":
+   // 用户取消/断开（aborted=true）：客户端已不可达，不写 error 帧（写了也失败）
+                if (!event.aborted) void writeEvent("error", { code: event.code, message: event.message });
+                return;
+            }
+          };
+
+   // ---- 8. onMessages → 落库（assistant + tool 消息，含 tool_calls/tool_call_id 配对） ----
+   // 硬（run.ts 注释）：onMessages 抛错不逃逸（runAgent 兜底吞掉）——落库失败
+   // 不中断 agent 循环，此处由 db 抛错自然触发该（本路由不额外 try/catch）
+          const onMessages = (messages: SessionMessage[]): void => {
+            const ts = now();
+            for (const m of messages) {
+              appendSessionMessage(project.root, sessionId, {
+                role: m.role,
+                content: m.content ?? null,
+                ...(m.role === "assistant" && m.tool_calls !== undefined ? { tool_calls: m.tool_calls } : {}),
+                ...(m.role === "tool" ? { tool_call_id: m.tool_call_id } : {}),
+                created_at: ts,
+              });
+            }
+          };
+
+   // ---- 9. runAgent 接线（S7.3：produce/dispatcher 由本路由组装注入） ----
+   // 真实 produce 外包 [llm] 请求/usage 调试日志装饰器（细粒度类别 request/usage，关闭零开销直通）；
+   // debugStream 按 stream 类别显式传入（false 也传——压过 env，保证类别隔离语义）
+          const produce =
+            deps.produce ??
+            createLLMRequestLogger(createRealProduce(apiKey, provider, model, tools, isCategoryEnabled("stream"), thinking), {
+              model,
+              tools,
+            });
+   // S7.4 真实现：ToolContext { db, outlineDir, projectId } + 同仓提案（S7.5 消费）
+          const dispatcher =
+            deps.dispatcher ?? createToolDispatcher({ db: project.db, outlineDir: project.root, projectId: project.config.id }, { store });
+
+   // ---- 9.5 上下文占用数据（需求 3）：包裹 produce 捕获流内 finish 事件的真实 usage，
+   // 在 done SSE 帧附带——前端据此计算上下文占用（usage.total / 模型 contextWindow） ----
+          let lastUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null = null;
+          const produceWithUsage: RunAgentDeps["produce"] = async (messages, signal, onEvent) => {
+            const tee: typeof onEvent = (e) => {
+              if (e?.type === "finish") lastUsage = e.usage as typeof lastUsage;
+              onEvent?.(e);
+            };
+            return produce(messages, signal, tee);
+          };
+
+          const result = await runAgent({
+            sessionId,
+            userMessage: message, // runAgent 追加进会话（传入 session 不应已含本轮消息）
+            session,
+            focus,
+   // 项目规则唯一事实源 = 项目目录 （取代 project.config.prompt）——
+   // 每次对话实时读文件（外部编辑立即可见）；文件不存在 → undefined（「## 项目设定」段跳过）
+            projectPrompt: readAgentsFile(project.root) ?? undefined,
+            deps: { produce: produceWithUsage, dispatcher, onEvent, onMessages },
+   // 生效预算（不可配的总闸 + 可配的历史比例，均由 config + 模型目录解析得出）
+            ...(budget !== null ? { budgets: { history: budget.historyBudget }, tokenBudget: budget.totalGate } : {}),
+   // 单条工具结果上限（用户配置；截断仅降级不终止——见 run.ts DEFAULT_TOOL_RESULT_MAX_TOKENS）
+            toolResultMaxTokens,
+            signal: controller.signal, // 断开即取消（abort 永不重试）
+          });
+
+   // 工具结果截断可观测性（TOOL_RESULT_TOO_LARGE 落地）：只记调试日志，不发 error 帧
+          // （截断是降级不是错误——模型已收到「数据不完整」提示，对话继续）
+          if (result.truncatedToolResults > 0) {
+            debugLog(
+              "usage",
+              "agent",
+              `TOOL_RESULT_TOO_LARGE 工具结果截断 ${result.truncatedToolResults} 条（上限 ${toolResultMaxTokens} tokens/条）`,
+            );
+          }
+
+   // ---- 10. B2 取舍落地（「未确认提案按产生它的会话作废」） ----
+   // 三选项评估：a) Proposal 加 sessionId + 仓按会话清除（跨包改动 S6.6/S7.4，成本中）；
+   // b) SSE 取消时 clear 全量；c) 依赖 TTL（10 分钟）。
+   // 选择 **b**：最小改动、单项目单会话 MVP 下与「按会话作废」语义等价——取消只发生在
+   // 客户端断连（同会话）或项目切换（提案本就按项目绑定，切换时全清）场景，clear 不会
+   // 误伤其他会话的待确认提案。与 原文的偏差（提案记录来源 session_id、按会话粒度
+   // 作废）记录为扩展点：多会话并发（backlog 多标签页）时按选项 a 演进——Proposal 增
+   // session_id 字段、ProposalStore 增 clearBySession(sessionId)，调度时由 S7.6 透传会话。
+          if (result.aborted) {
+            store.clear();
+          }
+
+   // ---- 11. 停心跳 + 关流（error 后流立即关闭；done 自然结束——streamSSE run 的
+   // finally 亦兜底 close，此处显式确保顺序：帧排入 writer 后 close，FIFO 保证送达） ----
+          heartbeatStop.abort(); // sleep 即时唤醒（sleepAbortable 监听该 signal）
+          await heartbeat;
+   // 注销在途登记**先于** close()：agent 循环已结束（本会话不再有写入者），
+   // 若放在 close 之后，`await` 的微任务窗口里 DELETE 会误报 409 SESSION_BUSY
+   // （客户端刚收到 done 立刻删会话的理论路径）
+          leaveInFlightSession(sessionId);
+          registered = false;
+          await stream.close();
+        } finally {
+          if (registered) leaveInFlightSession(sessionId);
         }
-
- // ---- 10. B2 取舍落地（「未确认提案按产生它的会话作废」） ----
- // 三选项评估：a) Proposal 加 sessionId + 仓按会话清除（跨包改动 S6.6/S7.4，成本中）；
- // b) SSE 取消时 clear 全量；c) 依赖 TTL（10 分钟）。
- // 选择 **b**：最小改动、单项目单会话 MVP 下与「按会话作废」语义等价——取消只发生在
- // 客户端断连（同会话）或项目切换（提案本就按项目绑定，切换时全清）场景，clear 不会
- // 误伤其他会话的待确认提案。与 原文的偏差（提案记录来源 session_id、按会话粒度
- // 作废）记录为扩展点：多会话并发（backlog 多标签页）时按选项 a 演进——Proposal 增
- // session_id 字段、ProposalStore 增 clearBySession(sessionId)，调度时由 S7.6 透传会话。
-        if (result.aborted) {
-          store.clear();
-        }
-
- // ---- 11. 停心跳 + 关流（error 后流立即关闭；done 自然结束——streamSSE run 的
- // finally 亦兜底 close，此处显式确保顺序：帧排入 writer 后 close，FIFO 保证送达） ----
-        heartbeatStop.abort(); // sleep 即时唤醒（sleepAbortable 监听该 signal）
-        await heartbeat;
-        await stream.close();
       },
  // 防御路径 onError：cb 内部异常（正常流程 error 事件已由 runAgent 发出，理论不可达）——
  // 转形态 JSON error 帧（客户端 use-sse 收到 error 即终止解析）
@@ -591,6 +632,26 @@ export function createChatRoutes(deps: ChatRouteDeps = {}): Hono {
       : [];
     return messagesResponse(c, sessionId, messages);
   });
+ // DELETE /api/v1/chat/sessions/:id —— 物理删除会话（无回收站；前端二次确认）
+ // 校验顺序：id 形态（作文件名的硬校验，防路径穿越）→ 在途流（防僵尸会话）→ 文件存在性
+  routes.delete("/sessions/:id", (c) => {
+    const project = requireCurrentProject();
+    const sessionId = c.req.param("id");
+    if (!isValidSessionId(sessionId)) {
+      throw new HttpError(
+        400,
+        "VALIDATION_ERROR",
+        `session_id 形态非法（需匹配 ^sess_[A-Za-z0-9_-]{1,64}$，该值将作文件名）: ${sessionId}`,
+      );
+    }
+    if (isSessionInFlight(sessionId)) {
+      throw new HttpError(409, "SESSION_BUSY", `会话有在途对话流，请先停止生成再删除: ${sessionId}`);
+    }
+    if (!deleteSessionFile(project.root, sessionId)) {
+      throw new HttpError(404, "SESSION_NOT_FOUND", `会话不存在: ${sessionId}`);
+    }
+    return sessionDeleteResponse(c);
+  });
  // POST /api/v1/chat —— POST + SSE 对话端点（S7.6；U3 起为后续切片预留）
   routes.post("/", chatSendHandler(deps));
   return routes;
@@ -625,6 +686,19 @@ function messagesResponse(c: Context, sessionId: string, messages: ChatMessage[]
       500,
       "INTERNAL_ERROR",
       `messages 响应不符合${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+/** 删除会话响应自检出口（同上） */
+function sessionDeleteResponse(c: Context): Response {
+  try {
+    return c.json(ok(chatSessionDeleteResSchema.parse({ deleted: true })));
+  } catch (err) {
+    throw new HttpError(
+      500,
+      "INTERNAL_ERROR",
+      `删除会话响应不符合${err instanceof Error ? err.message : String(err)}`,
     );
   }
 }

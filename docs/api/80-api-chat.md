@@ -115,6 +115,7 @@ id: string;                  // session_id（硬校验 ^sess_[A-Za-z0-9_-]{1,64}
 { deleted: true }
 
 // Res: 400 VALIDATION_ERROR —— id 形态非法（同时是文件名校验：防路径穿越）
+//   注：含 `/` 的 id 由 Hono 路由层直接 404（不达处理器，无文件系统触点）
 // Res: 404 SESSION_NOT_FOUND —— 该会话文件不存在
 // Res: 409 SESSION_BUSY —— 该会话有在途 SSE 流（防止 append 把文件原地重建出「僵尸会话」）
 ```

@@ -15,11 +15,7 @@
 
 ## 当前任务卡
 
-批次 B：对话历史从 `chat_messages` 表迁到项目目录 `sessions/*.jsonl`（B1/B2 已完成并验证：会话 JSONL 存储模块 + 存储切换）（契约已改：`docs/db/schema.md`、`docs/design/10-data-model.md` §1/§10/§11、`docs/api/80-api-chat.md`、`docs/api/error-code.md`、`docs/api/20-api-backup.md`、`docs/design/30-agent-loop.md` §4、`docs/design/architecture.md`、`docs/ui/DESIGN.md`）。**API 响应结构不变（除新增 DELETE）**。
-
-### B3 删除会话端点
-
-`DELETE /api/v1/chat/sessions/:id`：400 `VALIDATION_ERROR`（id 形态非法）/ 404 `SESSION_NOT_FOUND` / 409 `SESSION_BUSY`（会话有在途 SSE 流）/ 200 `{ deleted: true }`；在途集合与 SSE 生命周期同生共死。`shared`：`ERROR_CODES` 补两码 + 删除响应 schema。
+批次 B：对话历史从 `chat_messages` 表迁到项目目录 `sessions/*.jsonl`（B1/B2/B3 已完成并验证：会话 JSONL 存储模块 + 存储切换 + 删除会话端点）（契约已改：`docs/db/schema.md`、`docs/design/10-data-model.md` §1/§10/§11、`docs/api/80-api-chat.md`、`docs/api/error-code.md`、`docs/api/20-api-backup.md`、`docs/design/30-agent-loop.md` §4、`docs/design/architecture.md`、`docs/ui/DESIGN.md`）。**API 响应结构不变（除新增 DELETE）**。
 
 ### B4 备份管道接 `sessions/`
 

@@ -8,7 +8,7 @@
 // 断开全链路取消（produce signal abort + 未确认提案作废，B2 取舍 b）、
 // 会话重建（session_id 续聊：历史喂回 + 新消息落库 + done 回显）、新建会话 sess_ 前缀、
 // 模型最终失败 error 事件、zod→JSON Schema 转换（32 工具全量 + $schema 剥离）
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -355,6 +355,108 @@ describe("GET /chat/sessions/:id/messages 消息历史", () => {
  // 合法会话不受影响
     const ok = await buildApp().request("/api/v1/chat/sessions/sess_ok/messages", { headers: HOST_HEADERS });
     expect((await ok.json()).data.messages).toHaveLength(1);
+  });
+});
+
+// ============ DELETE /api/v1/chat/sessions/:id（B3：物理删除会话） ============
+// 校验顺序硬约定：id 形态（作文件名，防穿越）→ 在途流（防僵尸会话）→ 文件存在性
+
+describe("DELETE /chat/sessions/:id", () => {
+  it("无当前项目 → 409 NO_PROJECT_OPEN", async () => {
+    const res = await buildApp().request("/api/v1/chat/sessions/sess_x", {
+      method: "DELETE",
+      headers: HOST_HEADERS,
+    });
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.code).toBe("NO_PROJECT_OPEN");
+  });
+
+  it("session_id 形态非法 → 400 VALIDATION_ERROR（绝不清洗后拼路径）", async () => {
+    openProject();
+    for (const bad of ["bad-id", "sess-a", "sess_", `sess_${"a".repeat(65)}`, "sess_ok/x", "sess_ok!x"]) {
+      const res = await buildApp().request(`/api/v1/chat/sessions/${encodeURIComponent(bad)}`, {
+        method: "DELETE",
+        headers: HOST_HEADERS,
+      });
+      expect(res.status, `id=${bad}`).toBe(400);
+      expect((await res.json()).error.code, `id=${bad}`).toBe("VALIDATION_ERROR");
+    }
+  });
+
+  it("会话不存在 → 404 SESSION_NOT_FOUND", async () => {
+    openProject();
+    const res = await buildApp().request("/api/v1/chat/sessions/sess_ghost", {
+      method: "DELETE",
+      headers: HOST_HEADERS,
+    });
+    expect(res.status).toBe(404);
+    expect((await res.json()).error.code).toBe("SESSION_NOT_FOUND");
+  });
+
+  it("存在 → 200 { deleted: true }：文件消失 + 列表不再收录 + 重复删除 404", async () => {
+    const project = openProject();
+    seedMessage(project, "sess_del", { role: "user", content: "待删除", createdAt: "2026-08-01T10:00:00Z" });
+    const file = join(project.root, "sessions", "sess_del.jsonl");
+    expect(existsSync(file)).toBe(true);
+
+    const res = await buildApp().request("/api/v1/chat/sessions/sess_del", {
+      method: "DELETE",
+      headers: HOST_HEADERS,
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toEqual({ deleted: true });
+    expect(existsSync(file)).toBe(false); // 物理删（无软删/回收站）
+
+    const list = await buildApp().request("/api/v1/chat/sessions", { headers: HOST_HEADERS });
+    expect((await list.json()).data.sessions).toEqual([]);
+
+    const again = await buildApp().request("/api/v1/chat/sessions/sess_del", {
+      method: "DELETE",
+      headers: HOST_HEADERS,
+    });
+    expect(again.status).toBe(404);
+  });
+
+  it("在途流 → 409 SESSION_BUSY；流结束后同一会话可删（200）", async () => {
+    const project = openProject();
+    seedMessage(project, "sess_busy", { role: "user", content: "历史", createdAt: "2026-08-01T10:00:00Z" });
+
+ // mock produce：挂起直到测试放行（模拟流仍在生成中）
+    let release: (() => void) | null = null;
+    let started = false;
+    const produce = vi.fn<RunAgentDeps["produce"]>(async () => {
+      started = true;
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return { ok: true, stopReason: "stop", usage: null };
+    });
+
+    const res = await buildApp(createChatRoutes({ produce })).request(
+      "/api/v1/chat",
+      postChat({ message: "你好", session_id: "sess_busy" }),
+    );
+    await waitFor(() => started); // 流已进入 produce（在途登记已生效）
+
+    const busy = await buildApp().request("/api/v1/chat/sessions/sess_busy", {
+      method: "DELETE",
+      headers: HOST_HEADERS,
+    });
+    expect(busy.status).toBe(409);
+    expect((await busy.json()).error.code).toBe("SESSION_BUSY");
+    expect(existsSync(join(project.root, "sessions", "sess_busy.jsonl"))).toBe(true); // 未被删
+
+ // 放行并读到流结束：客户端见到 EOF ⇒ 服务端回调已退出 ⇒ finally 已注销登记（确定性，无需轮询）
+    release?.();
+    await readSseFrames(res);
+
+    const afterDone = await buildApp().request("/api/v1/chat/sessions/sess_busy", {
+      method: "DELETE",
+      headers: HOST_HEADERS,
+    });
+    expect(afterDone.status).toBe(200);
+    expect((await afterDone.json()).data).toEqual({ deleted: true });
+    expect(existsSync(join(project.root, "sessions", "sess_busy.jsonl"))).toBe(false);
   });
 });
 

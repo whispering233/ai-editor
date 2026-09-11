@@ -45,6 +45,8 @@ export const ERROR_CODES = [
   "PROJECT_VERSION_NEWER", // 409 open 时项目 data.db user_version 高于当前程序版本（拒绝打开并提示升级程序，堵降级数据丢失）
   "BACKUP_TARGET_EXISTS", // 409 重命名备份目标文件名已存在（B2.6：renameSync 目标存在会静默覆盖——显式拒绝防数据丢失）
   "REFERENCE_FILE_MISSING", // 409 参考资料 file 类文件缺失（PUT 更新时读原文件失败——外部删除，提示先扫描同步）
+  "SESSION_NOT_FOUND", // 404 删除会话时目标 sessions/<id>.jsonl 不存在
+  "SESSION_BUSY", // 409 删除会话时该会话有在途 SSE 流（拒删——append 会把文件原地重建出僵尸会话）
  // ---- 废弃（保留兼容）----
   "DELTA_CONFLICT", // 已废弃（2026-08 修订：computeState 以 conflicts 字段替代 409）
  // ---- 命名（SSE error 事件用）----
@@ -888,6 +890,11 @@ export const chatMessagesResSchema = z.object({
       createdAt: z.string(),
     }),
   ),
+});
+
+// DELETE /api/v1/chat/sessions/:id（物理删会话文件；400 VALIDATION_ERROR / 404 SESSION_NOT_FOUND / 409 SESSION_BUSY）
+export const chatSessionDeleteResSchema = z.object({
+  deleted: z.literal(true),
 });
 
 // ============ proposal 端点（「提案确认」） ============
