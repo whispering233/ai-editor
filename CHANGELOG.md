@@ -19,6 +19,7 @@
 
 ### Changed
 
+- **设置页「AI 模型」去重**：删除 provider 面板的「模型（点选即激活）」下拉（与聊天栏模型下拉重复，且「浏览 provider 目录」时点模型会顺手改全局激活模型），改为只读「当前激活：<模型名>」；非激活 provider 面板提示「打开项目后，在聊天栏切换激活模型」。模型激活唯一入口 = 聊天栏 `ComposerConfigRow`（右栏，项目内）。**书架态（未打开项目）无模型切换入口**——模型只影响聊天，聊天只在项目内存在。`updateSettingsLlm` 的 `provider`/`model` 分支保留（API/数据契约零改动）
 - **契约（`DESIGN.md`）**：§Layout 新增「中栏页头结构」（有 tab 用 tab 条自带底线、无 tab 用显式 1px `{colors.hairline}`；宽度与内容同宽不穿透页内边距）；§Components 新增 `tabs` / `sub-nav`（三级导航 = 竖向 `Menu` inline，宽 160px = `sidebar` 宽度档，契约复用 `menu-item` / `menu-item-selected`，不新增设计语言），覆盖表新增 `Tabs` 行；`sidebar` 底部入口清单补「立即备份」并登记底部区三入口统一无边框形态（「立即备份」是动作而非导航，H4 例外仅此一处）；`data-row` 段补**链式新建 = 选中 + 聚焦**的行级交互登记（只聚焦不选中会让下一次 Enter 被守卫吞掉）
 - **文档收口**：`docs/ui/layout.md` 已并入本文件，全仓 19 处悬空引用（`AGENTS.md` / `docs/design/{tasks,architecture,config}.md` / `DESIGN.md` 自身 / `README.md` / 6 处代码注释）改指 `docs/ui/DESIGN.md` 并**写节名不写节号**；`CHANGELOG.md` 历史条目不动（逐版本事实）
 
