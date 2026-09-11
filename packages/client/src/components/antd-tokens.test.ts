@@ -13,25 +13,29 @@ import { describe, expect, it } from "vitest";
 import { theme } from "antd";
 import { DARK_TOKEN, LIGHT_TOKEN } from "./AntdProvider";
 
-/** 解析 antd 派生出的颜色（`#rrggbb` / `#rgb` / `rgb(...)` / `rgba(...)`）→ [r,g,b]（半透明视为已叠在白底上） */
-function rgb(value: string): [number, number, number] {
+/** 解析颜色（`#rrggbb` / `#rgb` / `rgb(...)` / `rgba(...)`）→ [r,g,b,a] */
+function parseColor(value: string): [number, number, number, number] {
   const hex = value.trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
   if (hex) {
     const h = hex[1]!;
     const full = h.length === 3 ? h.replace(/./g, (c) => c + c) : h;
-    return [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16)) as [number, number, number];
+    const [r, g, b] = [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16));
+    return [r!, g!, b!, 1];
   }
   const parts = value.match(/[\d.]+/g)?.map(Number) ?? [];
   if (parts.length < 3) throw new Error(`无法解析颜色：${value}`);
-  let [r, g, b] = parts as [number, number, number];
-  if (parts.length >= 4) {
-    // 半透明面按「叠在 canvas 上」还原（antd 的深色面多是 rgba 白）
-    const a = parts[3] ?? 1;
-    r = Math.round(r * a + 255 * (1 - a));
-    g = Math.round(g * a + 255 * (1 - a));
-    b = Math.round(b * a + 255 * (1 - a));
-  }
-  return [r, g, b];
+  return [parts[0]!, parts[1]!, parts[2]!, parts[3] ?? 1];
+}
+
+/** 半透明色叠在给定底上（antd 的面/字大量是 rgba——不合成就算不出真实对比度：
+ * 深色态的 rgba(255,255,255,.055) 面 + 81% 白字必须叠在深色面板上，叠白会得出 1:1 的假值） */
+function over(color: string, base: [number, number, number]): [number, number, number] {
+  const [r, g, b, a] = parseColor(color);
+  return [0, 1, 2].map((i) => Math.round([r, g, b][i]! * a + base[i]! * (1 - a))) as [
+    number,
+    number,
+    number,
+  ];
 }
 
 function luminance([r, g, b]: [number, number, number]): number {
@@ -42,10 +46,12 @@ function luminance([r, g, b]: [number, number, number]): number {
   return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
 }
 
-/** WCAG 对比度（bg 已按不透明处理） */
-function contrast(fg: string, bg: string): number {
-  const a = luminance(rgb(fg));
-  const b = luminance(rgb(bg));
+/** WCAG 对比度：bg 叠在 canvas 上、fg 叠在 bg 上（`base` = 该模式的面板底色） */
+function contrast(fg: string, bg: string, base: [number, number, number]): number {
+  const surface = over(bg, base);
+  const text = over(fg, surface);
+  const a = luminance(text);
+  const b = luminance(surface);
   const [hi, lo] = a > b ? [a, b] : [b, a];
   return (hi + 0.05) / (lo + 0.05);
 }
@@ -59,13 +65,23 @@ describe("选中面 token（全局派生 alias 覆盖）", () => {
   for (const { name, config } of cases) {
     it(`${name}：选中/选中+hover 面与字色对比度 ≥ 4.5:1（WCAG AA）`, () => {
       const token = theme.getDesignToken(config);
-      for (const [key, surface] of Object.entries({
+      const base = over(token.colorBgContainer, [255, 255, 255]); // 该模式的面板底色
+      // **选中面家族**：只断言全局源的三个 token——组件级选中面全部由它们派生（源码为证）：
+      // `select/style/token.js`：`optionSelectedBg: controlItemBgActive` / `optionActiveBg: controlItemBgHover`；
+      // `menu/style/index.js`：`itemSelectedBg` / `itemActiveBg` = `controlItemBgActive`；
+      // `tree`：`nodeSelectedBg`；`table`：`rowSelectedBg` = `controlItemBgActive`、`rowSelectedHoverBg` = `controlItemBgActiveHover`。
+      // 断言全局源即传递覆盖整个家族（Tree/Table/Cascader/Pagination 现在没用、以后可能用——断言成本为零）。
+      const faces: Record<string, string> = {
         controlItemBgActive: token.controlItemBgActive,
         controlItemBgActiveHover: token.controlItemBgActiveHover,
-      })) {
-        const ratio = contrast(token.colorText, surface);
+        controlItemBgHover: token.controlItemBgHover,
+      };
+      for (const [key, surface] of Object.entries(faces)) {
+        const ratio = contrast(token.colorText, surface, base);
         expect(ratio, `${name} ${key}=${surface} 压 colorText=${token.colorText}`).toBeGreaterThanOrEqual(4.5);
       }
+      // 选中项字重：antd 默认 fontWeightStrong（600）——面同档时靠字重区分选中与悬浮，被改掉则选中态失去标记
+      expect(token.fontWeightStrong).toBeGreaterThanOrEqual(600);
     });
 
     it(`${name}：选中面不等于派生 colorPrimaryBg（深墨主色的中灰陷阱）`, () => {
@@ -81,7 +97,8 @@ describe("选中面 token（全局派生 alias 覆盖）", () => {
       algorithm: theme.defaultAlgorithm,
       token: { colorPrimary: "#37352f", colorText: "#37352f" },
     });
-    expect(contrast(raw.colorText, raw.controlItemBgActive)).toBeLessThan(4.5);
-    expect(contrast(raw.colorText, raw.controlItemBgActiveHover)).toBeLessThan(4.5);
+    const white: [number, number, number] = [255, 255, 255];
+    expect(contrast(raw.colorText, raw.controlItemBgActive, white)).toBeLessThan(4.5);
+    expect(contrast(raw.colorText, raw.controlItemBgActiveHover, white)).toBeLessThan(4.5);
   });
 });
