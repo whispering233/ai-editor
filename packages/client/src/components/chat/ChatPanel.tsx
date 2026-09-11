@@ -235,6 +235,8 @@ function ComposerConfigRow() {
         <Select
           size="small"
           className="w-max shrink-0"
+          // 同模型选择：浮层不跟随触发器宽度（跟随即截断——62.75px 触发器把 `minimal`/`medium`/`xhigh` 截成 `m…`/`xh…`）
+          popupMatchSelectWidth={false}
           value={settings.thinkingLevel}
           disabled={activeKeyless || !currentModel?.reasoning}
           onChange={(value) => changeThinking(value as ThinkingLevel)}
