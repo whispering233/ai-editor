@@ -26,6 +26,7 @@
 
 - `db` 查询层统一经 `queryDb` 取 drizzle 实例，**禁止绕过直接 `prepare`**（迁移管线除外）；JSON 列（data/changes/metadata/tool_calls）一律 text 模式 + 行映射防御解析，**禁用 drizzle `mode:'json'`**（坏 JSON 会打挂整表查询）。
 - `client` 聊天链路：POST `/chat` 的 SSE 解析唯一实现是 `hooks/use-sse.ts`（勿另起炉灶）；chat store 的 loadSeq/msgSeq 竞态与「中止在途 SSE」约定改动时必须保持。
+- `client` 视觉：**颜色/选中面 token 只能改 `AntdProvider.tsx`**（唯一改色入口，并同步 `docs/ui/DESIGN.md` 登记表）；守卫 `design-discipline.test.ts`（14 条，含 `primary-bg-token` / `dropdown-menu-selectable` / `cssvar-scope` / `button-variant-color`）与 `components/antd-tokens.test.ts`（5 条派生 token 对比度）。**不变式：深墨主色（`#37352f`）下任何由 `colorPrimary` 派生的「浅底」token 都不可信**（antd 派生的是中深灰，2.26:1 不可读）——选中面已显式覆盖，新增 antd 组件（Tree/Table 行选、Cascader、DatePicker…）时先扩 token 守卫。antd Select 浮层默认跟随触发器宽度 ⇒ 窄触发器必须 `popupMatchSelectWidth={false}`。
 - 仓库路径：`docs/`、`scripts/`、`test-project/` 在仓库根；包内路径相对 `packages/`。
 - 测试：各包 `test` script = `vitest run`；各包 tsconfig 已 `exclude: ["src/**/*.test.ts"]`，不要改回。
 - 延期项（MVP 不做，勿顺手实现）：多标签页并发、undo、token 统计、跨书参考资料导入。

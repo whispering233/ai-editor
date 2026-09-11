@@ -19,7 +19,7 @@
 | AI 调用 | `@earendil-works/pi-ai`（统一多提供商 LLM 接口；deepseek + opencode-go 两 provider，模型/思考强度可配置，key 按 provider 三级链独立解析；llm 包单向 adapter 保留对外契约） |
 | 测试 | vitest（各包独立 `test` script） |
 
-## UI（v0.0.29 修复与统一 + v0.0.28 视觉契约 + v0.0.26 布局重构）
+## UI（v0.0.30 右栏与选中面 + v0.0.28 视觉契约 + v0.0.26 布局重构）
 
 视觉语言 = **Notion 工作区**一脉：暖灰纸感中性色（`#37352f` 暖炭墨 / `#f6f5f4` 外壳底 / 三层描边）、hairline 分栏、零阴影、扁平、**彩色只服务状态与标签**；实现基座是 antd v6 的 token 派发（改色唯一入口 = `AntdProvider.tsx`），组件语言只有一套 antd（无自绘按钮/输入框/图标库第二套），排版四档 20/16/14/12，图标统一 `@ant-design/icons`（状态 Filled / 操作 Outlined）。**视觉契约（单一事实源）= `docs/ui/DESIGN.md`**，并由 `design-discipline.test.ts` 把纪律变成可执行断言。
 
@@ -28,7 +28,8 @@
 - **`#/` 书架主页**：书籍列表（当前打开高亮、行内导出/重命名/继续创作）+ 新建/导入备份/打开其他路径——书架能力集中于此，频繁切书不必留常驻书架栏
 - **左栏 NavRail**：回到书架按钮（旁显当前书名）+ 垂直导航九项（概览 `#/overview` | 大纲 | 人物 | 设定 | 地点 | 伏笔 | 时间轴 | 关联 | 参考资料）+ 工具区（回收站）+ 底部设置 `#/preferences` / 主题切换；**无二级 tab**（实体家族一级化，旧 `#/entities/*` 路由重定向）
 - **中栏**：信息条 + 页面内容区（内容区右下角悬浮「问 AI」按钮——点击必有反应：带当前页面上下文注入右栏；右栏收起/小屏抽屉自动打开）
-- **右栏**：AI 聊天常驻（会话归属项目；`<1024px` 折叠为抽屉；消息流 = x Bubble + x-markdown 流式渲染 + 工具调用折叠行 + 提案确认卡）
+- **右栏**：AI 聊天常驻（会话归属项目；`<1024px` 折叠为抽屉；会话列表 = x `Conversations`，消息流 = x Bubble + x-markdown 流式渲染 + 工具调用折叠行 + 提案确认卡；输入框下方一行 = 模型选择 ／ 上下文占用 + 思考强度）
+- **三栏默认宽度**：左 10% / 右 40% / 中栏吸收剩余（两侧各有可读区间：左 160-480、右 240-960）——**1:5:4 在 1600–2400 视口精确成立**，更窄时左栏取下限、更宽时右栏封顶由中栏吸收；可拖拽调宽 + 收起/展开，宽度与收起态持久化 localStorage
 
 布局与交互约定见 `docs/ui/layout.md`（样式实现归代码，文档即契约）。
 
@@ -74,7 +75,8 @@ pnpm typecheck && pnpm lint && pnpm -r test
 ## 当前能力（2026-09）
 
 - **视觉语言统一（v0.0.28，2026-09）**：新增 `docs/ui/DESIGN.md` 视觉契约（Google design.md 格式；antd seed 映射表 + 组件 token 覆盖表 + 四档字号/圆角/描边与阴影契约）；主题从 antd 默认蓝换为 Notion 工作区暖灰；组件语言收敛 antd（自绘按钮/输入框/提示/下拉全部退役，原生 `<select>` 22 处 → antd `Select`，sonner → antd `message`）；图标单点化 `@ant-design/icons`；排版四档制 + `PageTitle` 薄壳统一全站页头；新增纪律守卫测试（扫硬编码色 / `!` 前缀类 / 手写字号 / 被 antd 无层 CSS 压掉的类）；依赖净减 4（lucide-react / sonner / class-variance-authority / react-markdown）
-- **视觉与交互修复（2026-09，v0.0.29）**：修掉三条 **antd v6 静默失效**（「测试全绿但像素全错」）——① cssVar 的 `--ant-*` 从不注入 `:root`（挂在组件级 class 作用域），`index.css` 的语义变量映射整体为空 → 全站 Tailwind 语义色（卡片底/描边/次要文字/hover 面/拖拽线）透明；修法 = `cssVar.key` 与 `index.html` 的 `<html class>` 同值；② `Button` 的 `variant` 必须与 `color` 同时给（单独 `variant="text"` 静默回落带边框 outlined）；③ 用户气泡底色 `colorPrimaryBg`（深墨 seed 派生为 `#787771` 中灰，对比度 1.9:1）→ `surface-muted`。新增 **标签 tint 系统**（6 色按名称 hash 稳定分配，同名恒同色，`ui/tag-chip.tsx` 唯一实现）、**中栏页面头部统一结构**（标题单独一行 + 控件行「搜索→分类→标签→排序 ／ 操作按钮」，搜索框统一图标/192px/可清除）、**统一拖拽插入线**（primary 实线 + 端点圆点 + 落点淡染高亮）、**链式新建**（就地新建后新条目「选中 + 聚焦」，可连续 Enter 逐级建子设定/子节点）。三条规则 + 拼接类名一并变成源码守卫（`design-discipline.test.ts` 13 条，含自检样例）
+- **视觉与交互修复（2026-09，v0.0.29）**：修掉三条 **antd v6 静默失效**（「测试全绿但像素全错」）——① cssVar 的 `--ant-*` 从不注入 `:root`（挂在组件级 class 作用域），`index.css` 的语义变量映射整体为空 → 全站 Tailwind 语义色（卡片底/描边/次要文字/hover 面/拖拽线）透明；修法 = `cssVar.key` 与 `index.html` 的 `<html class>` 同值；② `Button` 的 `variant` 必须与 `color` 同时给（单独 `variant="text"` 静默回落带边框 outlined）；③ 用户气泡底色 `colorPrimaryBg`（深墨 seed 派生为 `#787771` 中灰，对比度 1.9:1）→ `surface-muted`。新增 **标签 tint 系统**（6 色按名称 hash 稳定分配，同名恒同色，`ui/tag-chip.tsx` 唯一实现）、**中栏页面头部统一结构**（标题单独一行 + 控件行「搜索→分类→标签→排序 ／ 操作按钮」，搜索框统一图标/192px/可清除）、**统一拖拽插入线**（primary 实线 + 端点圆点 + 落点淡染高亮）、**链式新建**（就地新建后新条目「选中 + 聚焦」，可连续 Enter 逐级建子设定/子节点）。三条规则 + 拼接类名一并变成源码守卫（`design-discipline.test.ts` 14 条，含自检样例）
+- **右栏交互与选中面修复（v0.0.30，2026-09）**：① **全站下拉选中项不可读**（用户报「所有下拉选中条目因背景色看不清」）——根因两层：antd 选中面取全局 alias `controlItemBgActive` / `…ActiveHover`（由 `colorPrimary` 派生，深墨主色下派生成中深灰 `#787771` / `#6b6a65`，对比度 2.26:1），且弹层打开时已选中项被自动置为 active（命中 `&-selected&-active`）⇒ 组件级 `Select.optionSelectedBg` 在真实路径上无效；修法 = `AntdProvider` 覆盖这两个全局 alias（= 已登记的选中面），Select/Dropdown/Menu/Pagination/Tree/Table 一次到位，实测 9 处 2.26:1 → 10.59:1；新增 **派生 token 守卫**（`antd-tokens.test.ts` 5 条，用 antd `getDesignToken` 断言对比度 ≥ 4.5:1 + 自检）。② **右栏输入区**：模型选择/思考强度移到输入框下方 + 两端对齐，两个下拉浮层 `popupMatchSelectWidth={false}`（旧触发器宽度把 `DeepSeek V4 Flash`、`minimal`/`medium`/`xhigh` 截断）。③ **会话列表换 x `Conversations`**（两行项、灰面选中态）。④ **三栏默认比例**：右栏上限 720 → 960（= 2400 的 40%），**1:5:4 在 1600–2400 视口精确成立**。⑤ 面板收起/展开图标统一 `«`/`»` 镜像对。**纯前端，API/数据契约零改动**
 - **项目管理**：书架模式（`books/` 子目录）、创建/打开/关闭/配置、LLM 设置（模型/key）；**项目规则文件 AGENTS.md**——项目目录 AGENTS.md 为项目规则唯一事实源（取代 project.json `prompt`，打开项目时自动迁移）；设置页直接编辑 + 文件管理器直接编辑 + mtime 外部修改检测
 - **大纲**：严格三层（卷→章→场景）增删改移（行级只留删除按钮；选中按 Enter 新建子级、双击查看详情、点击标题行内编辑、右键菜单注入上下文/建立关联）、节点详情（麦基《故事》结构化字段）
 - **实体与关系**：七类实体（人物/设定/地点/伏笔/事件·时间轴/时间标签点·时间轴/参考资料）CRUD、k 跳关系遍历、Delta 变更追踪与状态计算（computeState）；**设定层级**——父子关系用 `belongs_to` 表达（防环校验），详情页「层级」区块 + 设定一级页树形视图（`#/setting`：递归树 + 折叠/行内编辑/拖拽调层级/手动排序）；**标签分类**——设定分类统一 `data.tags`，列表标签列 + 标签筛选（`?tag=`）+ 新建行标签输入（datalist 自动完成 + 快捷选择）；**列表与编辑增强（M1-M3，2026-08）**——设定列表行显示上级设定（chip 点击直达父详情）与描述（截断展示 + hover 查看）；标签/规则编辑器回车添加下一项 + 拖拽排序（HTML5 原生 DnD）；**上级设定筛选（N1-N2）**——设定列表新增「上级设定」下拉，选定后只显示其直接及**所有后代设定（递归子树）**，与标签筛选/搜索/排序组合（AND）；**可搜索下拉（O1/O5）**——「上级设定 / 标签」筛选改为**可搜索下拉**（输入关键词过滤候选 +「全部」重置），设定树视图新增**「全部展开 / 全部折叠」**工具栏按钮；**设定/标签筛选可搜索下拉（O1）**与**设定树全部展开/折叠（O5）**；**人物列表四列布局**——名称+动机摘要 / 角色 / 性格 / 能力独立成列（状态列已移除）；**设定树增强**——行显示描述摘要 + **排序方式切换器（名称/创建时间/手动）**：手动模式行悬停 ↑↓ 箭头与拖拽行间插入线同级重排（复合端点 `PUT /entity/setting/:id/move`，复用 sort_order 列无迁移），拖到行中段仍可调整层级
@@ -112,7 +114,7 @@ npm install -g @whispering233/ai-editor-server
 ai-editor <项目目录>   # 启动服务 + 自动打开浏览器 http://127.0.0.1:3456
 ```
 
-> 版本说明：**当前最新版 v0.0.29**（v0.0.1-v0.0.29 由 CI OIDC 自动发布，发布全链路自动化已验证；v0.0.29 = 三条 antd v6 静默失效修复 + 标签 tint + 页面头部统一 + 链式新建，纯前端）；**v0.0.1/v0.0.2 不可安装**——其 npm manifest 残留 `workspace:*` 协议（npm `EUNSUPPORTEDPROTOCOL`，已用 `npm view` 复验），**已于 2026-09-11 在 npm 上标注 deprecate**（llm/db/tools/agent/server 五个包 × 2 版本，registry 复验通过；`shared` 无依赖可正常安装，未标注）；安装时使用 `@whispering233/ai-editor-server@latest` 即可。
+> 版本说明：**当前最新版 v0.0.30**（v0.0.1-v0.0.30 由 CI OIDC 自动发布，发布全链路自动化已验证；v0.0.30 = 右栏交互优化（会话列表 / 输入区配置行 / 折叠图标）+ antd 选中面 token 全局修复 + 三栏 1:5:4，纯前端）；**v0.0.1/v0.0.2 不可安装**——其 npm manifest 残留 `workspace:*` 协议（npm `EUNSUPPORTEDPROTOCOL`，已用 `npm view` 复验），**已于 2026-09-11 在 npm 上标注 deprecate**（llm/db/tools/agent/server 五个包 × 2 版本，registry 复验通过；`shared` 无依赖可正常安装，未标注）；安装时使用 `@whispering233/ai-editor-server@latest` 即可。
 
 **发布前置（一次性，npmjs 手动）**：① 开启 npm 账号 **2FA**（npmjs 要求开启两步验证才能配置包管理；开启会撤销现有 token，需重新生成 Automation token）；② 为 `@whispering233/ai-editor-shared`、`@whispering233/ai-editor-llm`、`@whispering233/ai-editor-db`、`@whispering233/ai-editor-tools`、`@whispering233/ai-editor-agent`、`@whispering233/ai-editor-server` 六包各配置 Trusted Publisher：Publisher = GitHub Actions、工作流名 = `publish.yml`；配置后 CI 无需 token（OIDC 自动换证）。
 
@@ -125,7 +127,7 @@ ai-editor <项目目录>   # 启动服务 + 自动打开浏览器 http://127.0.0
 | `docs/design/` | 总体设计、架构与分包、详细设计（数据模型/上下文/agent 循环）、演进路线、任务清单、配置说明、构建发布 |
 | `docs/api/` | 公共约定、错误码、接口索引、各模块端点契约、AI 工具目录 |
 | `docs/db/` | 表结构 / outline.json / project.json 契约 |
-| `docs/ui/` | UI 总体布局与交互约定（三栏工作台 `layout.md`） |
+| `docs/ui/` | UI 总体布局与交互约定（三栏工作台 `layout.md`）+ **视觉契约**（`DESIGN.md`：色/字号/圆角/组件外观 + antd token 登记表与守卫） |
 | `test-project/` | 测试项目目录（运行时数据不入库） |
 
 阅读顺序与文档索引见根 `AGENTS.md`（文档即契约；入口：`docs/design/00-master-design.md` → `architecture.md` → 详细设计 → `docs/api/00-api-index.md`）。实现任何功能前先读对应文档。

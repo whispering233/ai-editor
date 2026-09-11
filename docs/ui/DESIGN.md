@@ -435,7 +435,7 @@ components:
 **`button-primary`** — 墨底白字、矩形、无投影。用于页面主操作（新建/保存）。
 **`button-default`** — 白底 + `{colors.hairline-strong}` 描边（**文字型操作按钮必须带边框**，这是仓库既有红线 H4）。
 **`button-text`** — 无边框纯文字，只用于行内最弱操作；**不得用于页面级操作**。**antd v6 `Button` 的 `variant` 必须与 `color` 同时给**（`antd/es/button/Button.js`：`if (color && variant)`”——否则静默回落到 `['default','outlined']`，`variant="text"` 会变成**带边框**按钮（右侧图标按钮一半有边框一半没有的根因）；合法写法：`color="default" variant="text"`，或遗留 `type="text"`；`design-discipline.test.ts` 有 `button-variant-color` 守卫。
-**`icon-button`（统一约定）** — 全站图标型操作按钮**只有一种实现**：antd `Button color="default" variant="text" size="small"` + 图标（⚠ `variant` 必须与 `color` 同时给，见下行 `button-text` 的坑）（图标尺寸随字号类：行内 14px = `text-sm`、工具条 16px = `text-base`），颜色继承 antd 的 text 变体（`{colors.primary}`），hover/disabled/loading 由 antd 派发；**不再并存自绘 `<button>` 图标按钮**（历史上两者混用导致灰色/墨色/红色三套并存）。**不可恢复操作**（彻底删除 purge、物理删关系）用 `danger`（`{colors.error}`）；**软删**（移入回收站）保持常规色——危险色的语义是「不可撤销」，不是「删除」。图标一律 `@ant-design/icons`；状态用 Filled、操作与导航用 Outlined。**面板收起/展开图标 = 同一族镜像对 `DoubleLeftOutlined`（`«`）/ `DoubleRightOutlined`（`»`）**：方向 = 面板往哪边收——收起 = 朝本侧边缘（左栏 `«`、右栏 `»`），展开 = 反向（左栏 `»`、右栏 `«`），两栏四钮完全对称。**禁用**：`BorderLeft/RightOutlined`（表格边框图标，与面板折叠无关）、`MenuFold/UnfoldOutlined`（仅面向左侧，右栏无同族镜像）、`VerticalLeft/RightOutlined`（名字与朝向不一致——`VerticalLeft` = `▶|`、`VerticalRight` = `|◀`，二者区别在竖条在哪侧而非箭头指向，左右两栏用不出对称；历史混用即「左右收起图标不一致」的根因）。
+**`icon-button`（统一约定）** — 全站图标型操作按钮**只有一种实现**：antd `Button color="default" variant="text" size="small"` + 图标（⚠ `variant` 必须与 `color` 同时给，见下行 `button-text` 的坑）（图标尺寸随字号类：行内 14px = `text-sm`、工具条 16px = `text-base`），颜色继承 antd 的 text 变体（`{colors.primary}`），hover/disabled/loading 由 antd 派发；**不再并存自绘 `<button>` 图标按钮**（两套并存会让同一角色出现灰/墨/红三种观感）。**不可恢复操作**（彻底删除 purge、物理删关系）用 `danger`（`{colors.error}`）；**软删**（移入回收站）保持常规色——危险色的语义是「不可撤销」，不是「删除」。图标一律 `@ant-design/icons`；状态用 Filled、操作与导航用 Outlined。**面板收起/展开图标 = 同一族镜像对 `DoubleLeftOutlined`（`«`）/ `DoubleRightOutlined`（`»`）**：方向 = 面板往哪边收——收起 = 朝本侧边缘（左栏 `«`、右栏 `»`），展开 = 反向（左栏 `»`、右栏 `«`），两栏四钮完全对称。**禁用**：`BorderLeft/RightOutlined`（表格边框图标，与面板折叠无关）、`MenuFold/UnfoldOutlined`（仅面向左侧，右栏无同族镜像）、`VerticalLeft/RightOutlined`（名字与朝向不一致——`VerticalLeft` = `▶|`、`VerticalRight` = `|◀`，二者区别在竖条在哪侧而非箭头指向，左右两栏配不出对称）。
 **`input`** — 白底 + `{colors.hairline-strong}` 描边 + `{rounded.sm}` + 32px 高；聚焦 = 1px primary 描边（**无阴影、无彩环**）。行内编辑与表单用同一个 antd `Input`。
 **`search-input`** — 列表/富页筛选栏的搜索框（全站**统一形态**）：antd `Input` + `prefix={<SearchOutlined />}` + 固定宽 `192px`（`w-48`）+ `allowClear`（筛选类，清空即回到未筛）；placeholder 统一「搜索{对象}…」。位置固定在页面控件行的**最左**（见 `layout.md` §3）。
 **`drag-indicator`** — 拖拽插入线：**实线** `{colors.primary}` 3px + 两端 8px 圆点（`h-[3px]` + `size-2 rounded-full`），横跨被拖行所在层级的内容宽度；`pointer-events-none` 不拦拖拽事件。
@@ -487,11 +487,11 @@ components:
 
 **聚焦环走 seed 而不是组件 token**：selector 型组件（Select/Cascader/DatePicker/Table 筛选）的聚焦环由 `boxShadow: 0 0 0 {controlOutlineWidth} {activeOutlineColor}` 绘制（`antd/es/select/style/select-input.js`），Select **没有** `activeShadow` 组件 token——统一用 seed `controlOutlineWidth: 0` 关闭（见 §Colors 映射表）。Input 的 `activeShadow: "none"` 是各自独立的阴影，二者都要。
 
-**菜单透明底**：antd Menu 默认把 `itemBg`（= `colorBgContainer` 白）打在菜单根元素上，会在左栏 `{colors.surface}` 灰底里切出一块白——故 `itemBg: "transparent"` 让菜单继承左栏底色；`activeBarBorderWidth: 0` 去掉 inline 模式的右侧分界线（分栏由 sidebar 的 1px `{colors.hairline}` 表达）。这两项取代了旧代码里 `!border-none !bg-transparent` 的类覆盖。
+**菜单透明底**：antd Menu 默认把 `itemBg`（= `colorBgContainer` 白）打在菜单根元素上，会在左栏 `{colors.surface}` 灰底里切出一块白——故 `itemBg: "transparent"` 让菜单继承左栏底色；`activeBarBorderWidth: 0` 去掉 inline 模式的右侧分界线（分栏由 sidebar 的 1px `{colors.hairline}` 表达）。（不要改用 `!border-none !bg-transparent` 类覆盖：antd 样式是无层 CSS，Tailwind 类压不住。）
 
 **深色面值说明**：深色列的面值（`#373737` / `#202020` / `#2f2f2f`）复用 §Colors 映射表深色列已登记的中性值（行分隔档/面板档/结构描边档），**未发明新色**；它们语义上是「暗色下的选中/表头面」。若日后要独立调深色选中面，先在本表登记新值再改代码。
 
-**新增覆盖需先写进本表**（禁止在调用点用 `!` 前缀类硬压 antd 样式——旧代码里 43 处 `!mb-`/`!mt-`/`!text-*` 随组件收敛一并清除）。
+**新增覆盖需先写进本表**（禁止在调用点用 `!` 前缀类硬压 antd 样式——antd 注入的是无层 CSS，`!` 类只会掩盖「压不住」的事实）。
 
 ## Do's and Don'ts
 
@@ -514,7 +514,7 @@ components:
 - **不要用 Tailwind 类去覆盖 antd 组件根元素上 antd 自己声明的属性**（`width` / `height` / `padding` / `margin` / `font-size` / `color` / `background` / `border` / `border-radius` / `display`）：antd 样式是运行时注入的**无层 CSS**，而 Tailwind 工具类在 `@layer utilities`——按 CSS 级联规范**无层胜出**，此类覆盖会静默失效（历史上满仓 `!` 就是这么来的）。正确做法：宽度/伸缩用**外层容器**承载；具体尺寸用组件 `size`；状态面用组件 `variant`（如 `variant="filled"` = `colorFillTertiary` = `{colors.surface-muted}`）或组件 token
 - **不要让 `:root` 的语义变量失去 `--ant-*` 来源**：`cssVar.key` 与 `index.html` 的 `<html class>` 必须同值（见 §Colors 踩坑段），否则全站语义色集体失效
 - 不用阴影、渐变、彩色 focus 环、卡片 hover 抬升
-- 不引入第二套组件系统（lucide 图标 / sonner 提示 / cva 按钮已退役）；自绘只限 antd 无对应语义的浮层与业务组件
+- 不引入第二套组件系统（图标只有 `@ant-design/icons`、提示只有 antd `message`、按钮/输入只有 antd）；自绘只限 antd 无对应语义的浮层与业务组件
 - 不用胶囊形按钮；不把彩色用于大面背景或正文
 
 ## Known Gaps

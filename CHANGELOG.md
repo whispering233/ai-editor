@@ -5,16 +5,30 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [v0.0.30] - 2026-09-11
+
+> 右栏交互优化（用户反馈八项）+ 两条 **antd 选中面静默失效**根因（「所有下拉选中条目因背景色看不清」）。**纯前端，API/数据契约零改动**；`design-discipline` 守卫 14 条不变，新增 antd **派生 token** 守卫 5 条（`antd-tokens.test.ts`）。
+
+### Fixed
+
+- **全站下拉选中项文字不可读（用户复验：「所有下拉选择列表的选中条目」）**：根因两层——① antd 选中面取**全局 alias** `controlItemBgActive` / `controlItemBgActiveHover`，由 `colorPrimary` 派生（`theme/util/alias.js`）；本仓主色 seed 是深墨 `#37352f`，派生的不是「浅主色底」而是中深灰（实测 `#787771` / `#6b6a65`），压在 `colorText`（同为深墨）上 **2.26:1**。② 弹层打开时 antd 把已选中项**自动置为 active**，命中 `select/style/dropdown.js` 的 `&-selected&-active { backgroundColor: controlItemBgActiveHover }` ⇒ **组件级 `Select.optionSelectedBg` 在真实交互路径上完全无效**（文档登记灰面、像素是深灰）。修法 = 在 `AntdProvider` 覆盖这两个全局 alias（浅 `#f0eeec` / 深 `#373737` = 已登记的选中面）——Select / Dropdown / Menu / Pagination / Tree / Table 一次到位；`controlItemBgActiveHover` 取同一面（已选中项不随 hover 变色，选中与悬浮靠字重区分：antd `optionSelectedFontWeight` 默认 = `fontWeightStrong` 600）；删除因此冗余的组件级覆盖（Menu `itemSelectedBg` / `itemSelectedColor`、Select `optionSelectedBg`）。实测全站 9 处下拉选中项 **2.26:1 → 10.59:1**（深色 11.9:1）
+- **思考强度下拉选项截断**：与模型选择同一根因（antd `popupMatchSelectWidth` 默认跟随触发器宽度）——62.75px 触发器把 `minimal` / `medium` / `xhigh` 截成 `m…` / `xh…`；补 `popupMatchSelectWidth={false}` 后浮层 86.7px，7 档全名可见
+- **三栏默认比例不是 1:5:4**：旧默认 = `左 clamp(视口×10%,160,480)` / `右 clamp(视口×40%,240,720)` / 中栏吸收剩余 ⇒ 1:5:4 只在视口≈1680 成立（实测 1440 → 11.1/48.1/40.0、1920 → 10.0/51.9/37.5、3440 → 10.0/68.7/20.9）。**右栏上限 720 → 960（= 2400 的 40%，上限与比例挂钩）**：1600–2400 视口精确 1:5:4（仅两根 6px 拖拽手柄从 50% 里扣 12px），<1600 左栏取下限 160、>2400 右栏封顶由中栏吸收剩余；`DESIGN.md` / `layout.md` 同步（旧文写「默认 220 / 右栏 240-720」与实现两套事实）
+- **右栏会话列表选中项不可读**：`AntDropdown + Menu` 的选中项**不吃 `Menu` 组件 token**（Dropdown 自带一套 menu 样式，直接取全局 `controlItemBgActive`），实测选中面 `rgb(120,119,113)` 压 `rgb(55,53,47)` ≈ 1.9:1 ⇒ 会话列表换 antd x `Conversations`（灰面 + `colorText`），新增守卫 `dropdown-menu-selectable`
+- **npm 坏版本已标注 deprecate**（v0.0.1/v0.0.2）：`llm`/`db`/`tools`/`agent`/`server` 五个含 `workspace:*` 残留依赖的包 × 2 版本已在 npm 标注（registry 复验通过；`shared` 无依赖可正常安装故未标注）
+- **文档修正（实测推翻旧结论）**：`AGENTS.md` / `docs/design/build.md` 原写「绕过 2FA 的 granular token 不能执行 unpublish/deprecate（403）」——2026-09-11 实测**可以 deprecate**（10 条成功、无 OTP）；被拒的只是账号/组织/设置类操作（`npm profile get` → 403）；`unpublish` 未实测（不可逆）。另注：2027-01 起 bypass-2FA token 将失去直接发布能力，本仓发布走 OIDC Trusted Publisher 不受影响
 
 ### Changed
 
-- **右栏交互优化（用户反馈六项）**：模型选择/思考强度从标题行下方**移到输入框下方**（腾出消息流高度）+ 两端对齐 + 下拉浮层按内容宽展开（旧 `max-w-28` 把模型名掐成 `DeepSe…`）；会话列表换 antd x `Conversations`（两行项 + 灰面选中态，**修「选中会话看不清字」**——根因是 antd `Dropdown` 自带 menu 样式不吃 `Menu` 组件 token，选中面取派生 `colorPrimaryBg`，实测 1.9:1 不可读，新增守卫 `dropdown-menu-selectable`，累计 14 条）；面板收起/展开图标统一为 `«`/`»` 镜像对（旧为三套图标语言，含错用的表格边框图标）。**纯前端，API/数据契约零改动**
-- **右栏交互优化补两项（用户复验）**：① 思考强度下拉与模型选择同一根因（antd `popupMatchSelectWidth` 默认跟随触发器宽度）导致 `minimal`/`medium`/`xhigh` 截断 → 补 `false`（浮层 62.75 → 86.7px）；② 三栏默认宽度改为**上限与比例挂钩**（右栏上限 720 → 960 = 2400 的 40%）——旧值在 vp>1800 就开始吃比例（1920 实测右栏 37.5%），现 **1:5:4 在 1600–2400 视口精确成立**、1600 以下左栏取下限 160、2400 以上右栏封顶由中栏吸收剩余；`DESIGN.md` / `layout.md` 同步（旧文写「默认 220 / 右栏 240-720」与实现两套事实）
-- **全站下拉选中项文字不可读（用户复验 #2 报「所有下拉选中条目」）→ 全局 token 层修复**：antd 的 `controlItemBgActive` / `controlItemBgActiveHover` 由 `colorPrimary` 派生，主色 seed 是深墨 `#37352f` 时派生的是中深灰（实测 `#787771` / `#6b6a65`），压 `colorText`（同为深墨）**对比度 2.26:1**；且弹层打开时 antd 会把已选中项自动置为 active（命中 `select/style/dropdown.js` 的 `&-selected&-active`），**组件级 `Select.optionSelectedBg` 在真实交互路径上完全无效**——即文档登记灰面、像素是深灰。修法 = `AntdProvider` 覆盖这两个全局 alias（浅 `#f0eeec` / 深 `#373737` = 已登记的选中面），Select/Dropdown/Menu/Pagination/Tree/Table 一次到位，组件级重复覆盖删除；新增守卫 `antd-tokens.test.ts`（用 antd 自己的 `theme.getDesignToken` 断言选中面与字色对比度 ≥ 4.5:1，含「裸 seed 时确实不可读」自检）。实测全站 9 处下拉选中项 2.26:1 → **10.59:1**（深色 11.9:1）
-- **参考资料页两个筛选下拉**（`w-32`）：补 `popupMatchSelectWidth={false}`——浮层跟随触发器宽度会把长分类名/长标签截成省略号（标签是用户自定义文本）
-- **npm 坏版本已标注 deprecate**（v0.0.1/v0.0.2）：`llm`/`db`/`tools`/`agent`/`server` 五个含 `workspace:*` 残留依赖的包 × 2 版本已在 npm 标注（registry 复验通过；`shared` 无依赖可正常安装故未标注）
-- **文档修正（实测推翻旧结论）**：`AGENTS.md` / `docs/design/build.md` 原写「绕过 2FA 的 granular token 不能执行 unpublish/deprecate（403）」——2026-09-11 实测**可以 deprecate**（10 条成功、无 OTP）；被拒的只是账号/组织/设置类操作（`npm profile get` → 403）；`unpublish` 未实测（不可逆）。另注：2027-01 起 bypass-2FA token 将失去直接发布能力，本仓发布走 OIDC Trusted Publisher 不受影响
+- **右栏输入区**：模型选择 / 思考强度从「标题行下方」移到**输入框下方**（腾出 36px 消息流高度）+ **两端对齐**（左 = 模型，右 = 上下文占用 + 思考强度）+ 两个下拉浮层**按内容宽展开**（旧 `max-w-28` = 112px 把 `DeepSeek V4 Flash`（文本自然宽 135px）掐成 `DeepSe…`）；占用条色值改经 antd token（清掉写死的 `bg-amber-500` 调色板类）；`ChatModelBar` → `ComposerConfigRow`（无项目时父层不渲染，删 `disabled` 透传）
+- **右栏会话列表换 antd x `Conversations`**：项两行（摘要 + 「条数 · 相对时间」）、无历史 → 单条禁用提示「暂无历史会话」；自定义弹层不经 Menu 上报点击 ⇒ `open` 受控、选中即关；弹层根只剩定位（旧浮层面由 `.ant-dropdown-menu` 提供）⇒ 面板按 `ui/context-menu.tsx` 同一套自绘浮层类补（`bg-popover` + `ring-1` + `shadow-md`）
+- **面板收起 / 展开图标统一**：左栏 `MenuFoldOutlined`、右栏 `VerticalRightOutlined`、展开用 `BorderLeft/RightOutlined`（表格边框图标）= 三套图标语言 ⇒ 统一为同一族镜像对 `«` / `»`（方向 = 面板往哪边收：收起朝本侧边缘）；不用 `Vertical*`（实测 `VerticalLeftOutlined` = `▶|`、`VerticalRightOutlined` = `|◀`，二者区别在「竖条在哪侧」而非箭头指向，配不出左右对称）
+- **参考资料页两个筛选下拉**（`w-32`）补 `popupMatchSelectWidth={false}`：分类是固定 4 字标签，但**标签是用户自定义文本**，浮层跟随触发器宽度必然截断
+- **契约同步**：`DESIGN.md` §Colors 新增「显式覆盖的派生 alias」登记表（含为什么必须覆盖）、组件覆盖表标注「选中面回归全局 token」、`select-option-selected` 段改写（面上的可读性属全局坑、调用点只负责浮层宽度与选中语言）、面板折叠图标族契约；`layout.md` §1「默认三栏宽度规则」+ §6 右栏结构（配置行位置、会话列表形态）；`AGENTS.md` 补视觉 token 硬约束
+
+### Added
+
+- **antd 派生 token 守卫**（`components/antd-tokens.test.ts`，5 条）：用 antd 自己的 `theme.getDesignToken` 算出**派生后**的 token，断言选中面家族（`controlItemBgActive` / `…ActiveHover` / `controlItemBgHover`——组件级选中面全由其派生：`select` 的 `optionSelectedBg`、`menu` 的 `itemSelectedBg`、`tree` 的 `nodeSelectedBg`、`table` 的 `rowSelectedBg` / `rowSelectedHoverBg`）与 `colorText` 的对比度 ≥ 4.5:1（浅 / 深各一条；半透明面按该模式面板底色合成，否则深色态必得 1:1 假值）、选中面 ≠ 派生 `colorPrimaryBg`、`fontWeightStrong ≥ 600`，外加「裸深墨 seed 时确实 < 4.5」的自检。守卫有效性实测：临时去掉覆盖后浅色报 `controlItemBgActive=#787771 → 2.73:1`、深色同样变红（4 条失败），还原即绿
 
 ## [v0.0.29] - 2026-09-11
 
