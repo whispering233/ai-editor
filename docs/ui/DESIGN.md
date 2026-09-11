@@ -142,6 +142,12 @@ components:
   menu-item-selected:
     backgroundColor: "{colors.surface-muted}"
     textColor: "{colors.primary}"
+  tabs:
+    textColor: "{colors.secondary}"
+    typography: "{typography.body-medium}"
+  tabs-selected:
+    textColor: "{colors.primary}"
+    typography: "{typography.body-medium}"
   sidebar:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.primary}"
@@ -370,13 +376,23 @@ components:
 
 ## Layout
 
-- **三栏**：左栏 NavRail（可读区间 160-480px）、中栏内容（保底 320px、**吸收剩余宽度**）、右栏 ChatPanel（240-960px）；**无 TabBar**，页面组织只有一级导航。
+- **三栏**：左栏 NavRail（可读区间 160-480px）、中栏内容（保底 320px、**吸收剩余宽度**）、右栏 ChatPanel（240-960px）；**无路由级 TabBar**——页面组织只有一级导航（左栏），页面内可有分区 tab（如设置页二级 tab），**不进 URL、不参与导航高亮**。
   - **默认宽度 = 按视口算 1:5:4**：左 = `clamp(视口×10%, 160, 480)`、右 = `clamp(视口×40%, 240, 960)`、中 = 剩余；两根 6px 拖拽手柄也从剩余里扣。**区间外由中栏吸收偏移**：`视口<1600` 左栏取下限 160（比 10% 宽 16-32px，中栏略窄于 50%）；`1600≤视口≤2400` 严格 1:5:4（右栏上限 960 = 2400 的 40%，故不漏进来咬比例）；`视口>2400` 右栏封顶 960、剩余给中栏——聊天列再宽无阅读收益，中栏变宽才是想要的。（拖拽/持久化值同样收敛到这两个区间。）
 - **间距基**：4px；实用档 `{spacing.xxs}`(4) / `{spacing.xs}`(8) / `{spacing.sm}`(12) / `{spacing.md}`(16) / `{spacing.lg}`(24) / `{spacing.xl}`(32)。沿用 antd `sizeUnit` 与 Tailwind 4px 网格，**无自定义间距值**。
 - **页面内侧**：内容区 padding 16px；区块之间 12-16px；行内元素 8px；图标与文字间距 8px。
 - **控件高**：常规 32px（`--ant-control-height`），小号 24px，大号 40px；行高 32-36px 保证密集列表节奏一致。
 - **响应式**：`<1024px` 折叠右栏为抽屉、隐藏拖拽手柄（见 `layout.md`）；本设计语言不对移动端另立规则。
 - **滚动**：各栏独立纵向滚动；分栏之间靠 1px hairline，不靠阴影或沟槽分隔线（旧 6px 灰分隔条已废）。
+
+### 中栏页头结构
+
+自上而下：**标题行**（`page-title`，每页一个）→ **二级 tab 行**（可选，当前仅设置页）→ **控件行**（可选：左侧搜索框恒最左 192px（`search-input`）、操作按钮靠右）→ **分割线** → **内容区块**。
+
+- **分割线**：1px `{colors.hairline}`（结构描边档，与 `info-bar` 底线同档；不是 `hairline-soft` 的行分隔档），宽度与内容区块同宽——不穿透中栏内容区的内边距。
+- **有 tab 时不再另画分割线**：antd line 型 `Tabs` 的横向导航条**自带** 1px `{colors.hairline}` 底线（`antd/es/tabs/style/index.js` 的 `&-nav-list::before { borderBottom }`），该底线即分割线；配套 `horizontalMargin: 0`（antd 默认 `0 0 16px 0` 会在 tab 与内容间留 16px 空档，压在分割线上就是双线）。
+- **间距**：页头与内容区块之间 `{spacing.md}`（16px）；页头内部三段之间 `{spacing.sm}`（12px）。
+- **覆盖范围 = 全部中栏页面**：列表/富页、概览、书架、回收站、设置，以及各详情页——详情页的页头 = 标题行 + 操作按钮 + 元信息行，分割线落在元信息行**之下**。加载态/空态/错误态同样保留（分割线属于页头，不随数据变）。
+- **实现唯一入口 = `components/ui/page-header.tsx`**（标题行 / tab 行 / 控件行 / 分割线一次给全）：页面不自画页头分割线（表格行、分组头等区块内部的 `border-b border-border` 不属此列）。
 
 ## Elevation & Depth
 
@@ -414,6 +430,8 @@ components:
 |---|---|---|
 | sidebar（左栏） | 右侧 1px `{colors.hairline}` | 无 |
 | info-bar（信息条） | 底部 1px `{colors.hairline}` | 无 |
+| tabs（二级 tab 导航条） | 底部 1px `{colors.hairline}`（即页头分割线）+ 选中项 2px `{colors.primary}` 指示条 | 无 |
+| page-header（页头分割线，无 tab 时） | 底部 1px `{colors.hairline}` | 无 |
 | card / proposal-card / dropdown-panel / toast | 1px `{colors.hairline}` | 仅浮层（dropdown-panel / toast）：`0 8px 24px rgba(15, 15, 15, 0.10)`；card 无 |
 | input / select / button-default / search-input | 1px `{colors.hairline-strong}` | 无 |
 | 拖拽插入线（drag-indicator） | 无 | 无（实线 `{colors.primary}` 3px + 两端 8px 圆点） |
@@ -452,6 +470,11 @@ components:
 **`sidebar`** — 左栏底 `{colors.surface}`（比内容面板暗一档），右侧 1px `{colors.hairline}`；产品标识、回到书架、九项一级导航、工具区（回收站）、底部设置与主题。
 **导航入口不受「文字按钮必须带边框」约束**：左栏导航项（Menu 九项 + 回到书架 / 设置 / 主题三个入口）与 Menu 项同级——无边框、选中态用 `{colors.surface-muted}` 灰面（Tailwind `bg-accent` = `colorFillTertiary`）、文字不变色，禁用 H4 只约束操作按钮（新建/重命名/重试/删除等）。**`menu-item`** / **`menu-item-selected`** — 菜单项 32px 高、`{rounded.sm}`；**选中 = `{colors.surface-muted}` 灰面 + 文字不变色**（antd 默认的彩色选中项要显式覆盖：`itemSelectedBg` / `itemSelectedColor`）。**`info-bar`** — 中栏顶部 1px 底线；项目名 + 当前位置 + 语言 + 小屏聊天开关。字号 `{typography.caption}`。
 
+**`tabs`（二级 tab）** — 页面内分区导航（目前仅设置页）：antd `Tabs` line 型（`items` 数组，`activeKey` 受控）。未选中 `{colors.secondary}`，选中与悬浮 `{colors.primary}`（`itemSelectedColor` / `itemHoverColor` / `inkBarColor` 的 antd 默认值就是 `colorPrimary`，**不重复覆盖**），选中指示条 2px `{colors.primary}`，底线 1px `{colors.hairline}` = 页头分割线（见 §Layout「中栏页头结构」）。**页内 tab 不进 URL、不参与左栏导航高亮**，选中态是页面 state（刷新回落默认 tab）。
+
+**`sub-nav`（三级导航）** — 带子内容区块的页内分区导航（目前仅设置页「AI 模型」）：竖向 antd `Menu` inline，宽 160px（= `sidebar` 登记的宽度档），**契约完全复用 `menu-item` / `menu-item-selected`**（32px 行高、`{rounded.sm}`、选中 = `{colors.surface-muted}` 灰面 + 文字不变色），不新增设计语言；项文案超宽截断（`title` 给全文）。
+
+
 ### 数据展示
 
 **`data-row`** / **`data-row-hover`** — 列表/树/大纲行：无底色 + 底部 1px `{colors.hairline-soft}`；hover = `{colors.surface-soft}`。双击进详情、单击标题行内编辑（交互规则见 `layout.md` §7）。
@@ -481,6 +504,7 @@ components:
 | Table | `cellPaddingBlock` | `8` | 同浅色 |
 | Input | `activeShadow` | `"none"` | `"none"` |
 | Typography | `titleMarginBottom` | `0` | `0` |
+| Tabs | `horizontalMargin` / `itemColor` | `0` / `{colors.secondary}` | `0` / `rgba(255,255,255,.65)` |
 | Tag | `defaultBg` | `{colors.surface-muted}` | `#373737` |
 
 **选中面回归全局 token（本表不列）**：Menu 选中项（`itemSelectedBg` / `itemSelectedColor`）与 Select 选中项（`optionSelectedBg`）的默认值就分别是 `controlItemBgActive` / `colorPrimary` / `controlItemBgActive`——§Colors 覆盖全局 token 后三者自动到位，**组件级不再重复覆盖**（重复覆盖正是历史上「登记了灰面、像素却是深灰」的来源：Dropdown 那条交互路径根本不吃组件 token）。

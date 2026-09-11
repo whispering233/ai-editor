@@ -101,6 +101,14 @@ const TABLE_GEOMETRY = { cellPaddingBlock: 8 };
  * 显式传 autoComplete 的调用点仍可覆盖（antd/es/input/Input.js：`autoComplete: contextAutoComplete, ...rest`） */
 const INPUT_AUTOCOMPLETE = { autoComplete: "off" };
 
+/** Tabs（二级 tab，DESIGN.md §Components `tabs` / §Layout「中栏页头结构」）：
+ * - `horizontalMargin: "0"` —— antd 默认 `0 0 ${margin}px 0`（= 下外 16px）会在 tab 条底线与内容之间多出空档，
+ *   把「tab 条自带底线即页头分割线」挤成悬空的双线；页头与内容的间距统一由 PageHeader 给（`{spacing.md}`）。
+ * - `itemColor` 取次级文字档：未选中 tab 弱于正文（选中项由 `itemSelectedColor` / `inkBarColor` 拉回，
+ *   二者的 antd 默认值就是 `colorPrimary`，故**不在组件级重复覆盖**）。*/
+const TABS_LIGHT = { horizontalMargin: "0", itemColor: LIGHT_SEED.colorTextSecondary };
+const TABS_DARK = { horizontalMargin: "0", itemColor: DARK_SEED.colorTextSecondary };
+
 /**
  * 选中面（**全局派生 alias 覆盖**，不是 seed）：antd 的 `controlItemBgActive` / `controlItemBgActiveHover`
  * 由 `colorPrimary` 派生（`theme/util/alias.js`：`controlItemBgActive: colorPrimaryBg`、
@@ -126,11 +134,12 @@ export const DARK_TOKEN = { ...DARK_SEED, ...SELECTION_FACE_DARK };
 
 /** 浅色组件覆盖（DESIGN.md §Components 覆盖表：面值取 {colors.surface-muted} / {colors.canvas} / {colors.hairline}）
  * 注：Menu 选中面与 Select 选中项**不在此处覆盖**——它们默认就取 `controlItemBgActive`，已由上面的全局选中面统一。*/
-const COMPONENT_TOKENS_LIGHT = {
+export const COMPONENT_TOKENS_LIGHT = {
   ...COMPONENT_TOKENS_BASE,
   Menu: MENU_GEOMETRY,
   Table: { ...TABLE_GEOMETRY, headerBg: "#ffffff", borderColor: "#e5e3df" },
   Tag: { defaultBg: "#f0eeec" },
+  Tabs: TABS_LIGHT,
 };
 
 /**
@@ -139,11 +148,12 @@ const COMPONENT_TOKENS_LIGHT = {
  * 语义上等同「暗色下的选中/表头面」。若后续 DESIGN.md 补登记深色 surface-muted，改指向登记值即可。
  */
 const DARK_SELECTED_SURFACE = "#373737";
-const COMPONENT_TOKENS_DARK = {
+export const COMPONENT_TOKENS_DARK = {
   ...COMPONENT_TOKENS_BASE,
   Menu: MENU_GEOMETRY,
   Table: { ...TABLE_GEOMETRY, headerBg: "#202020", borderColor: "#2f2f2f" },
   Tag: { defaultBg: DARK_SELECTED_SURFACE },
+  Tabs: TABS_DARK,
 };
 
 export function AntdProvider({ children }: { children: ReactNode }) {

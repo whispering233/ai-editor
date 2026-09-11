@@ -11,7 +11,7 @@
 // 必须在 token 层（而非元素层）拦——故断言派生后的**对比度**而不是某个具体色值。
 import { describe, expect, it } from "vitest";
 import { theme } from "antd";
-import { DARK_TOKEN, LIGHT_TOKEN } from "./AntdProvider";
+import { COMPONENT_TOKENS_DARK, COMPONENT_TOKENS_LIGHT, DARK_TOKEN, LIGHT_TOKEN } from "./AntdProvider";
 
 /** 解析颜色（`#rrggbb` / `#rgb` / `rgb(...)` / `rgba(...)`）→ [r,g,b,a] */
 function parseColor(value: string): [number, number, number, number] {
@@ -100,5 +100,20 @@ describe("选中面 token（全局派生 alias 覆盖）", () => {
     const white: [number, number, number] = [255, 255, 255];
     expect(contrast(raw.colorText, raw.controlItemBgActive, white)).toBeLessThan(4.5);
     expect(contrast(raw.colorText, raw.controlItemBgActiveHover, white)).toBeLessThan(4.5);
+  });
+});
+
+describe("Tabs 组件 token（中栏页头分割线契约）", () => {
+  // 为什么需要它：line 型 Tabs 的导航条**自带** 1px `colorBorderSecondary` 底线（= `{colors.hairline}`），
+  // 它兼任页头分割线（DESIGN.md §Layout「中栏页头结构」）。antd 默认 `horizontalMargin: 0 0 margin(16)px 0`
+  // 会在该底线与内容之间多出 16px，分割线于是悬空、与下方的显式分割线变成双线——契约值就是 `"0"`。
+  it("浅/深两态 horizontalMargin 归零（否则 tab 底线与内容之间空 16px）", () => {
+    expect(COMPONENT_TOKENS_LIGHT.Tabs?.horizontalMargin).toBe("0");
+    expect(COMPONENT_TOKENS_DARK.Tabs?.horizontalMargin).toBe("0");
+  });
+
+  it("未选中 tab 字色 = 该模式次级文字档（选中/指示条由 antd 默认 colorPrimary 承担，不重复覆盖）", () => {
+    expect(COMPONENT_TOKENS_LIGHT.Tabs?.itemColor).toBe(LIGHT_TOKEN.colorTextSecondary);
+    expect(COMPONENT_TOKENS_DARK.Tabs?.itemColor).toBe(DARK_TOKEN.colorTextSecondary);
   });
 });
