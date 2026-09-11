@@ -1,21 +1,30 @@
 # 配置说明（config）
 
-> 各配置载体一览（索引式：字段/格式契约指向对应文档，不重复）。铁律：**模型 API key 绝不写入项目文件**（project.json/outline.json/data.db/备份 zip 天然不含 key）——代码与数据物理隔离。
+> 各配置载体一览（索引式：字段/格式契约指向对应文档，不重复）。铁律：**模型 API key 绝不写入项目文件**（project.json/outline.json/data.db/sessions/备份 zip 天然不含 key）——代码与数据物理隔离。
 
 | 载体 | 内容 | 契约位置 |
 | :--- | :--- | :--- |
 | 启动参数 `projectRoot` + 环境变量 `AI_EDITOR_PORT` | 创作根目录 / 服务端口覆盖（仅 bin 直接执行入口读取） | `build.md` |
-| 用户级 `~/.ai-editor/config.json`（schema v2） | LLM 配置：`schema_version`/`provider`/`model`/`thinking_level`/`api_keys`/`context_budget`；key 三级解析链（env > 用户配置 > pi-agent `~/.pi/agent/auth.json` 只读兜底）；模型解析绝不跨 provider | `docs/api/90-api-settings.md`（字段表 + 解析链） |
+| pi agent dir `~/.pi/agent/auth.json` | 各 provider 凭据（API key / OAuth）；env 变量优先级高于此文件（`DEEPSEEK_API_KEY`、`OPENCODE_API_KEY` 等由 pi 自身解析） | pi 凭据存储；本仓经 `ModelRuntime` 读写；设置页写入 = 唯一写入口 |
+| pi agent dir `~/.pi/agent/models.json` | 自定义 provider / 模型覆盖（baseUrl、api 形态、模型元数据、`$ENV` 取值） | pi `models.json` 语义；本仓不解析，交由 `ModelRuntime` |
+| pi agent dir `~/.pi/agent/settings.json` | 模型与运行参数：`defaultModel` / `enabledModels`（可见模型作用域）/ 重试（`retry`）/ 压缩（`compaction`）/ 思考预算（`thinkingBudgets`） | pi settings；本仓经 `SettingsManager` 读写 |
 | 项目 `project.json` | id/name/language/schema_version/current_position/backup_frequency_minutes（自动备份频率枚举 1/5/10/15/30/60，null/0 关闭，缺省 10） | `docs/db/schema.md` |
-| 项目目录 `AGENTS.md` | 项目规则唯一事实源（取代废弃的 project.json `prompt`）：设置页直编 + 文件管理器直接编辑（mtime 检测外部修改）；注入 system「## 项目设定」 | `docs/design/20-context.md` §3；端点 `docs/api/10-api-project.md`（GET/PUT /project/agents） |
-| 创作根 `.ai-editor/config.json` 的 `debug` 段 | 调试日志开关：`{ "debug": { "enabled": true, "categories": [...] } }`，五类别 chat/request/stream/usage/http；categories 缺失 = 全部、enabled 缺失/false = 全关；文件不存在/非法 JSON/结构不符 = 全关（无配置文件默认关闭防刷屏）；stream 类别经 chatStream `debugStream` 选项显式传入 llm 包（显式 true 才开，无 env 回退） | server 包 `src/debug.ts` |
-| 浏览器 localStorage | 展示层偏好，不进数据文件：主题 `ai-editor:theme`（use-theme）、三栏面板 `ai-editor:panels`、画布坐标/缩放 | `docs/ui/DESIGN.md`（布局与交互）；代码 client/src |
+| 项目目录 `AGENTS.md` | 项目规则唯一事实源（取代废弃的 `project.json` `prompt`）：设置页直编 + 文件管理器直接编辑（mtime 检测外部修改） | `docs/design/20-context.md` §4；端点 `docs/api/10-api-project.md` |
+| 项目目录 `sessions/` | 对话历史（一 session 一 JSONL，格式 = pi session v3） | `docs/db/schema.md` |
+| 创作根 `.ai-editor/config.json` 的 `debug` 段 | 调试日志开关：`{ "debug": { "enabled": true, "categories": [...] } }`，五类别 chat/request/stream/usage/http；categories 缺失 = 全部、enabled 缺失/false = 全关；文件不存在/非法 JSON/结构不符 = 全关 | server 包 `src/debug.ts` |
+| 浏览器 localStorage | 展示层偏好，不进数据文件：主题 `ai-editor:theme`、三栏面板 `ai-editor:panels`、画布坐标/缩放 | `docs/ui/DESIGN.md` |
 
-**读写边界**：用户级/创作根配置由服务端读写（设置页）；项目文件（project.json/outline.json/AGENTS.md）走原子写；`~/.pi/agent/auth.json` 只读兜底（绝不写回）。schema v1 旧 `api_key` 字段读侧仅对 deepseek 生效，未知字段保留不校验。
+**读写边界**：
+
+- pi agent dir 的唯一读写在服务端（设置页 key 写入经 pi credential store；模型/压缩参数经 pi settings）。
+- 项目目录内的 `.pi/`（项目级 settings/extensions/skills）**一律不参与配置**：资源加载显式关闭扩展/技能/提示词模板，且项目信任为 false——项目目录可能来自他人（备份包/共享目录），不接受其中携带的可执行资源或配置。
+- 用户级旧文件 `~/.ai-editor/config.json` **已废弃**（key/模型/预算全部迁往 pi agent dir）：代码不再读取，文件保留在磁盘不影响行为。
+- 项目文件（project.json/outline.json/AGENTS.md）走原子写；`sessions/` 由 pi `SessionManager` 追加写（整文件重写仅限迁移）。
 
 ## 可配 / 不可配边界（判据）
 
 **判据：配错会导致「无界成本」或「静默失控」的数值不给用户配。**
 
-- **可配**（用户级 `config.json`）：`context_budget` 段（`history_ratio` / `tool_result_max_tokens`）——影响**体验与成本曲线**的日常参数，用户应能按自己的模型与预算调；设置页不做 UI，直接编辑文件（与创作根 `debug` 段同风格）。
-- **刻意不可配**（代码常量，仅测试可注入）：agent 轮次上限（8）、单轮超时（120s）、单次请求超时（60s）、上下文总闸（`contextWindow × 0.5`）、重试次数（3）与退避基数（2s）。这些是**失控保护的安全网**——能配就等于让用户拆保险丝；真需要放宽长任务时，做法是「按任务类型」给预算，而不是开全局旋钮。
+- **可配**（pi settings）：模型与可见模型作用域、重试次数与退避、压缩阈值（`reserveTokens`/`keepRecentTokens`）、思考预算。这些是「体验与成本曲线」参数，且载体是用户自己的 pi 配置——本仓不设 UI 门槛，也不复制一份。
+- **刻意不可配**（代码常量，仅测试可注入）：单条工具结果上限（8000 tokens）、SSE 心跳间隔（15-30s）、提案 TTL（10 分钟）与条数上限。这些是**失控保护与协议常量**——能配就等于让用户拆保险丝。
+- 本仓不设「上下文总闸」：上下文压缩由 pi 的 compaction 承担（参数在上一行）。

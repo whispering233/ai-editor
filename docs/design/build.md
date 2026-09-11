@@ -4,7 +4,7 @@
 
 ## 运行环境
 
-Node ≥ 22.12（engines 声明；CI 用 22）、**全仓 ESM**、pnpm 由根 package.json `packageManager: "pnpm@11.22.0"` 钉版本（CI `pnpm/action-setup` 同版本——两侧必须一致，不一致 publish.yml 报 Multiple versions）。pnpm-workspace.yaml `allowBuilds` 需含 4 键：`better-sqlite3`/`esbuild`/`'@google/genai'`/`protobufjs`。
+Node ≥ 22.12（engines 声明；CI 用 22）、**全仓 ESM**、pnpm 由根 package.json `packageManager: "pnpm@11.22.0"` 钉版本（CI `pnpm/action-setup` 同版本——两侧必须一致，不一致 publish.yml 报 Multiple versions）。pnpm-workspace.yaml `allowBuilds` 至少含 `better-sqlite3`/`esbuild`/`@google/genai`/`protobufjs`；引入新的原生/含 postinstall 的依赖时按 pnpm 安装提示补充批准项。
 
 ⚠ **fresh clone 后先 `pnpm -r build` 再 `pnpm typecheck`**——`dist/` 不入库（gitignore），`@whispering233/ai-editor-*` 的 `types`/`exports` 指向 `./dist/index.d.ts`，不先构建则 tsc 报 TS2307。
 
@@ -14,7 +14,7 @@ Node ≥ 22.12（engines 声明；CI 用 22）、**全仓 ESM**、pnpm 由根 pa
 pnpm dev            # pnpm -r --parallel run dev
   packages/client:  Vite dev server (port 5173) → proxy /api → :3456
   packages/server:  NODE_ENV=development tsx watch src/index.ts（默认 :3456）
-  shared/llm/db/tools/agent: tsc --watch
+  shared/db/tools/agent: tsc --watch
 ```
 
 - dev 态端口被占**直接报错**（不自动 +1）——Vite proxy 写死 3456，自动 +1 会造成 proxy 与实际监听不一致（与生产态行为不同）。
@@ -40,21 +40,21 @@ node packages/server/dist/index.js [projectRoot]   # 或安装态 npx ai-editor 
 ## 构建与打包
 
 ```
-pnpm -r build       # 按依赖序：shared → llm → db → tools → agent → server → client（vite build，独立）
-pnpm pack:test      # 构建 + 6 包 pack + npm 安装到 /tmp 测试目录（AI_EDITOR_PACKS_DIR / AI_EDITOR_TEST_DIR 可覆盖）
+pnpm -r build       # 按依赖序：shared → db → tools → agent → server → client（vite build，独立）
+pnpm pack:test      # 构建 + 5 包 pack + npm 安装到 /tmp 测试目录（AI_EDITOR_PACKS_DIR / AI_EDITOR_TEST_DIR 可覆盖）
 pnpm start:test     # 启动安装态服务
 pnpm test:packed    # 一键串联（backlog #8 打包安装测试：tarball 安装态冒烟）
 ```
 
-发布脚本链：`scripts/sync-version.mjs`（`pnpm release:version X.Y.Z` 同步版本，只改 version 字段）、`scripts/publish-packages.mjs`、`scripts/verify-installed.mjs`（发布后冒烟：先 `npm view` 轮询 6 包 registry 可见，再 mkdtemp 安装并断言 version/`.bin/ai-editor`/短时启动输出「服务已启动」）。
+发布脚本链：`scripts/sync-version.mjs`（`pnpm release:version X.Y.Z` 同步版本，只改 version 字段）、`scripts/publish-packages.mjs`、`scripts/verify-installed.mjs`（发布后冒烟：先 `npm view` 轮询 5 包 registry 可见，再 mkdtemp 安装并断言 version/`.bin/ai-editor`/短时启动输出「服务已启动」）。
 
 ## 正式发布链路
 
-**发布形态**：6 个包（shared/llm/db/tools/agent/server）全部发布 npm；用户只装 `@whispering233/ai-editor-server`（bin `ai-editor`），其余 5 个包由 npm 自动拉取；`client` 保持 private 不发布（SPA 构建产物随 server 包分发）。发布链路是本仓唯一的 CI（`.github/workflows/`，仅 push `v*` tag 触发）。
+**发布形态**：5 个包（shared/db/tools/agent/server）全部发布 npm；用户只装 `@whispering233/ai-editor-server`（bin `ai-editor`），其余 4 个包由 npm 自动拉取；`client` 保持 private 不发布（SPA 构建产物随 server 包分发）。发布链路是本仓唯一的 CI（`.github/workflows/`，仅 push `v*` tag 触发）。
 
 ```
 1. 更新根 CHANGELOG.md：把 Unreleased 条目搬运为新版本段（## [vX.Y.Z] - <日期>）
-2. pnpm release:version X.Y.Z（--dry-run 预览）——同步 6 个发布包 + client + 根 package.json 版本
+2. pnpm release:version X.Y.Z（--dry-run 预览）——同步 5 个发布包 + client + 根 package.json 版本
 3. git add -A && git commit -m "chore(release): bump version to vX.Y.Z"
 4. git tag -a vX.Y.Z -m "vX.Y.Z"（手动 annotated tag，轻量 tag 不触发发布规范）
 5. git push origin main && git push origin vX.Y.Z
@@ -62,9 +62,9 @@ pnpm test:packed    # 一键串联（backlog #8 打包安装测试：tarball 安
   publish.yml 6 包 npm 发布（OIDC Trusted Publisher）+ verify-installed 安装态冒烟
 ```
 
-脚本约束（`scripts/publish-packages.mjs`）：依赖序硬编码 shared → llm → db → tools → agent → server；每包先 `npm view <name>@<version>` 判重（**仅 E404 视为未发布**，网络错误直接中止）——重跑幂等安全；`npm pack` 后 `tar -xOf` 断言包内 package.json 无 `workspace:` 残留；`GITHUB_REF=refs/tags/vX.Y.Z` 时校验 tag 与包版本一致（不一致中止，防漂移误发）。本地验证链路（pack 安装冒烟）见上节 `pnpm pack:test` / `pnpm test:packed`。
+脚本约束（`scripts/publish-packages.mjs`）：依赖序硬编码 shared → db → tools → agent → server；每包先 `npm view <name>@<version>` 判重（**仅 E404 视为未发布**，网络错误直接中止）——重跑幂等安全；`npm pack` 后 `tar -xOf` 断言包内 package.json 无 `workspace:` 残留；`GITHUB_REF=refs/tags/vX.Y.Z` 时校验 tag 与包版本一致（不一致中止，防漂移误发）。本地验证链路（pack 安装冒烟）见上节 `pnpm pack:test` / `pnpm test:packed`。
 
-前置（一次性，npmjs）：账号开 2FA；6 个发布包各配置 Trusted Publisher（GitHub Actions / whispering233/ai-editor 仓库 / publish.yml 工作流）。**token 能力边界（2026-09-11 实测修订）**：本仓 granular token **可以执行 `npm deprecate`**（实测 10 条成功、无需 OTP）；被拒的是账号/组织/设置类操作（`npm profile get` → 403，npm 2026-07-31 起限制 bypass-2FA token 的设置类操作）。`unpublish` 未实测（不可逆）——官方文档仍列为需 2FA 的敏感操作，真要 unpublish 请备好 `--otp`。2027-01 起 bypass-2FA token 将失去直接发布能力，本仓已用 OIDC Trusted Publisher 不受影响。
+前置（一次性，npmjs）：账号开 2FA；5 个发布包各配置 Trusted Publisher（GitHub Actions / whispering233/ai-editor 仓库 / publish.yml 工作流）。**token 能力边界（2026-09-11 实测修订）**：本仓 granular token **可以执行 `npm deprecate`**（实测 10 条成功、无需 OTP）；被拒的是账号/组织/设置类操作（`npm profile get` → 403，npm 2026-07-31 起限制 bypass-2FA token 的设置类操作）。`unpublish` 未实测（不可逆）——官方文档仍列为需 2FA 的敏感操作，真要 unpublish 请备好 `--otp`。2027-01 起 bypass-2FA token 将失去直接发布能力，本仓已用 OIDC Trusted Publisher 不受影响。
 
 ## 发布管道坑记录（供后续发布参考）
 
@@ -72,5 +72,5 @@ pnpm test:packed    # 一键串联（backlog #8 打包安装测试：tarball 安
 - CI node 22 自带 npm 10.9.8 **不支持 OIDC 发布认证** → CI `npm install -g npm@latest`
 - npm 12 发布自动生成 sigstore provenance，npmjs 校验 manifest `repository.url` 一致（E422）→ 各包补 `repository` 字段
 - setup-node 注入占位 `NODE_AUTH_TOKEN` 优先于 OIDC → 发布前 `delete process.env.NODE_AUTH_TOKEN`
-- registry 文档缓存传播延迟（dist-tags 即时、`npm view`/install 短暂 404/ETARGET）→ verify-installed 先 `npm view` 轮询 6 包可见（20×30s = 10 分钟窗口）再 install
+- registry 文档缓存传播延迟（dist-tags 即时、`npm view`/install 短暂 404/ETARGET）→ verify-installed 先 `npm view` 轮询 5 包可见（20×30s = 10 分钟窗口）再 install
 - 发布方式细节：发布前主动执行 copy-client-dist（server 的 SPA 随包）+ prepare 替换 workspace:*，然后 `npm publish --access public --ignore-scripts`（跳过 prepack/postpack 钩子），发布后 finally 主动 restore 恢复

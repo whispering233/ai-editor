@@ -488,7 +488,8 @@ components:
 **`chat-bubble-assistant`** — assistant 消息：无底透明 + 正文排版（长文本可读性优先，不用气泡包）。
 **`focus-strip`** — 「正在讨论：{类型} {名称}」小条：`{colors.surface-soft}` 底 + 1px 描边 + caption。
 **`chat-session-item-menu`** — 会话列表项操作菜单（antd x `Conversations` 的 `menu`）：仅一项「删除会话」——**危险操作走 danger 样式 + `ConfirmDialog` 二次确认**（文案含「删除后无法恢复」），与回收站 purge 同款交互；流式生成中该项禁用（服务端以 409 `SESSION_BUSY` 兜底）。菜单浮层面复用 `dropdown-panel` 契约（canvas 面 + 1px hairline + 阴影）。**已知边界**：操作入口（ellipsis）由 x `Conversations` 内部渲染且**恒显不随 hover**——改它需覆盖 x 内部样式，代价大于收益（窄右栏多占 ~20px，已接受）。
-**`usage-bar`** — 上下文占用条（输入框下方工具条右侧）：2px 高圆角条 + caption 百分比。**分母 = 本轮生效预算**（`done` 帧 `context_budget.total`，见 `docs/design/20-context.md` §1），**不是模型 `contextWindow`**——1M 窗口下用窗口做分母会让该条永远停在 0-1%，是个假指标。填充色按占比经 antd token 取色（≥90% `colorError`、≥70% `colorWarning`、其余 `colorPrimary`），**禁硬编码色值**；`title` 显示 `本轮 tokens / 生效预算 tokens`。**切会话 / 新会话 / 切项目时清零**（`lastUsage` 与 `contextBudget` 同步重置——瞬时运行态，旧会话/旧项目的数值不得残留到新视图）。
+**`usage-bar`** — 上下文占用条（输入框下方工具条右侧）：2px 高圆角条 + caption 百分比。**口径 = pi `getContextUsage()`**（`percent` = tokens / 模型 `contextWindow`，随 `turn_end` / `agent_end` 帧下发，见 `docs/design/20-context.md` §2）——旧「历史预算分母」口径随自建裁剪逻辑一并废弃（那时历史预算远小于窗口，用窗口做分母才是假指标；现在整窗由 pi 的压缩管理，占比是真实信号，压缩后回落）。填充色按占比经 antd token 取色（≥90% `colorError`、≥70% `colorWarning`、其余 `colorPrimary`），**禁硬编码色值**；`title` 显示 `tokens / contextWindow`。**切会话 / 新会话 / 切项目时清零**。
+**`thinking-block`** — 思维链（assistant 消息内的 thinking 内容）：**默认折叠为一行摘要**（`思考过程 · N 字` + 左侧 chevron，`{colors.tertiary}` 字色、无底色、无描边）；展开后 `{colors.surface-soft}` 底 + 左侧 2px `{colors.hairline-strong}` 竖线 + caption 字号 + `{colors.secondary}` 字色 + `pre-wrap`（长文可滚动，限高约 200px）。**流式生成期间自动展开、本轮结束后自动折叠为摘要行**。历史回看：消息接口只回 240 字预览（`docs/api/80-api-chat.md`），点「展开全文」按需拉取全文（带 loading 态）。实现优先用 `@ant-design/x` 的 `Thought` 组件；其外观不满足本契约时自绘，但**不得引入新色或新字号**。
 **`proposal-card`** — 提案卡：1px 描边卡片 + 确认/拒绝按钮（确认按钮用 `button-primary`，禁用态由 antd 派发）。
 **`toast`** — 全局提示走 antd `message`（`App.useApp()`），顶部居中；`success/error/info` 对应 store 的 `ToastKind`，时长由 store 的 3s 定时器决定（`duration: 3` 对齐）。**命令式反馈的上下文入口**：`AntdProvider` 在 `ConfigProvider` 内部包 `<App component={false}>`（`component={false}` 不渲染包裹 div，不插进三栏 flex 链）——`message`/`notification`/`modal` 需经 `App.useApp()` 取实例才能继承本 Provider 的主题与 locale，不要用静态方法。
 
@@ -529,6 +530,7 @@ components:
 - 字号只用四档（20 / 16 / 14 / 12）；标题一律 `Typography.Title level={4|5}`
 - 图标一律 `@ant-design/icons`；尺寸随字号类（14 `text-sm` / 16 `text-base` / 20 `text-xl` / 空态 24 `text-2xl`）；状态用 Filled、操作与导航用 Outlined；面板收起/展开 = `DoubleLeft/RightOutlined` 镜像对（禁 `Border*` / `MenuFold*` / `Vertical*`）
 - 文字型**操作**按钮带边框（H4 红线）；操作按钮一律直接展示，不收进 `⋯` 菜单。导航入口（左栏 Navigation/Menu 项）不属此列
+- 思维链默认折叠（流式期间临时展开），不占正文视线
 - 中文排版靠系统字体栈；不引入 web 字体
 
 ### Don't

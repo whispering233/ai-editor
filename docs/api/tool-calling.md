@@ -1,5 +1,16 @@
 # Tool Calling 设计
 
+> 工具 schema 的写法、执行契约、提案载荷的传递方式。循环/重试/压缩语义见 [`../design/30-agent-loop.md`](../design/30-agent-loop.md)。
+
+## 工具定义（TypeBox）
+
+工具参数 schema 用 **TypeBox** 定义（`packages/tools` 内），经 `@earendil-works/pi-ai` 重导出使用（`import { Type, type Static } from "@earendil-works/pi-ai"`，不单独装 typebox）：
+
+- **一份定义三用**：运行时对象即 JSON Schema（直接作为模型 tool parameters）、`Static<typeof schema>` 给 TS 类型、pi 的 `validateToolArguments` 用它做执行前校验。不需要 zod→JSON Schema 转换。
+- **schema 不放在 `shared`**：client 不打包工具 schema（与 Zod API 校验同理）。
+- **严格性**：拒绝多余字段需显式 `Type.Object({...}, { additionalProperties: false })`；pi 校验前会做原始类型 coerce（`"3"` → `3`、`"true"` → `true`），比 zod `.strict()` 宽松——对模型输出是好事。
+- **工具结果**：`execute(toolCallId, params, signal)` 返回 `{ content, details }`；`details` 是结构化载荷（前端展示 / 提案卡数据），不进模型上下文。
+
 ## 工具分级
 
 InkOS 按 sessionKind 切换工具集（chat/play/write 各有不同工具），而 AI Editor 是**单一交互场景**——始终是"创作者对话创作顾问"。所以不切换工具集，而是按操作风险分为两级权限：
@@ -116,7 +127,7 @@ suggest_connections(entity_id)
 
 AI **不能直接修改数据**，而是通过 `propose_*` 工具向用户提案，用户在 GUI 中审阅后确认。
 
-> **返回语义（2026-08 修订）**：`propose_*` 的 tool_result 仅返回「提案已发出」提示（proposal_id + 一句话摘要），**不含预览细节**——避免 LLM 误以为提案已生效而重复提案；完整预览只通过 SSE `proposal` 事件推送给 GUI 展示。
+> **返回语义**：`propose_*` 的 tool result `content` 仅返回「提案已发出」提示（proposal_id + 一句话摘要），**不含预览细节**——避免 LLM 误以为提案已生效而重复提案；完整预览放在同一次调用的 `result.details`（`{ proposal_id, type, preview }`），随 SSE `tool_execution_end` 帧推给 GUI（见 [80-api-chat.md](./80-api-chat.md)）。
 
 ```typescript
 propose_create_entity(type, name, data)
@@ -219,25 +230,13 @@ AI 不可以：
 用户始终是最终决策者。
 ```
 
-## 工具执行契约（2026-08 补充，借鉴 pi）
+## 工具执行契约（由 pi 强制）
 
-- **抛错即失败，不抛穿循环**：executor 对每个工具统一 try/catch——工具执行抛错 = 失败，错误统一转换为结构化 tool_result（`isError: true` + 工具名 + 参数 + 错误信息）喂回 LLM 自纠；工具自身**不得把失败编码进正常 content**（pi：execute 抛错即失败，不要编码进 content）。
-- **批量 tool_call 先校验后执行**：一条 assistant 消息含多个 tool_call 时，executor **先全部参数校验（fail fast）再逐个执行**，结果按 `tool_call_id` 一一回填（pi：preflight 全部通过才执行，结果按源顺序回填）。
-- **截断必须显式告知**：工具结果超 token 预算截断时，返回内容注明「已截断 + 提示缩小范围」——静默截断会让 LLM 基于残缺数据继续推理（如 get_outline 整树、query_relationships depth=3）。
+- **抛错即失败**：工具执行抛错 = 失败，pi 统一转换为结构化错误 tool result（`isError: true` + 错误信息）喂回 LLM 自纠；工具自身**不得把失败编码进正常 content**。
+- **批量先校验后执行**：一条 assistant 消息含多个 tool_call 时，pi **先全部参数校验（fail fast）再执行**，结果按源顺序回填。
+- **截断不执行**：`stopReason === "length"` 时该消息内全部 tool call 一律不执行，以错误喂回并要求重发（pi 原生）。
+- **截断必须显式告知**：工具结果超 token 上限截断时，返回内容注明「已截断 + 提示缩小范围」——静默截断会让 LLM 基于残缺数据继续推理（如 `get_outline` 整树、`query_relationships` depth=3）。
 
-## agent 循环终止与失败处理
+## 循环终止与失败处理
 
-对应 [`../design/30-agent-loop.md`](../design/30-agent-loop.md) §1。主循环设三重保险，任一超限即终止：
-
-| 保险 | 上限 | 超限行为 |
-|------|------|---------|
-| max iterations | 8 轮 | 发 `error` 事件终止循环 |
-| 单轮超时 | 120s | 同上 |
-| token 预算 | 上下文窗口内预算上限 | 同上 |
-| 工具结果 token 预算 | 工具返回值序列化后估算 token 上限 | 截断/拒绝该工具结果并提示 LLM 缩小范围 |
-
-失败处理：
-- **工具执行失败**：以结构化文本（工具名 + 参数 + 错误信息）喂回 LLM 自纠，不直接终止。
-- **模型调用失败**（429/5xx/超时）：按 `llm/retry.ts` 的退避重试策略重试，最终失败以 `error` 事件呈现给用户。
-- **工具结果过大**：`get_outline` 整树或 `depth=3` 全图可能撑爆上下文窗口，工具结果序列化后先估算 token，超限即截断/拒绝。
-- SSE 断开时全链路取消见 [80-api-chat.md](./80-api-chat.md)。
+见 [`../design/30-agent-loop.md`](../design/30-agent-loop.md) §1（无轮次上限；重试/压缩/取消均由 pi 承担）。工具侧只需保证：失败抛错、超限截断并告知、提案走 `details`。
