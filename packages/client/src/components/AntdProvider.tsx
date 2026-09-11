@@ -101,12 +101,35 @@ const TABLE_GEOMETRY = { cellPaddingBlock: 8 };
  * 显式传 autoComplete 的调用点仍可覆盖（antd/es/input/Input.js：`autoComplete: contextAutoComplete, ...rest`） */
 const INPUT_AUTOCOMPLETE = { autoComplete: "off" };
 
-/** 浅色组件覆盖（DESIGN.md §Components 覆盖表：面值取 {colors.surface-muted} / {colors.canvas} / {colors.hairline}） */
+/**
+ * 选中面（**全局派生 alias 覆盖**，不是 seed）：antd 的 `controlItemBgActive` / `controlItemBgActiveHover`
+ * 由 `colorPrimary` 派生（`theme/util/alias.js`：`controlItemBgActive: colorPrimaryBg`、
+ * `controlItemBgActiveHover: colorPrimaryBgHover`）——本仓主色 seed 是深墨 `#37352f`，派生出来的不是「浅主色」
+ * 而是中深灰（实测 `controlItemBgActive` = `#787771`、`controlItemBgActiveHover` = `#6b6a65`），压在 `colorText`
+ * （同为 `#37352f`）上 **对比度 2.26:1，不可读**。
+ *
+ * 为什么必须在**全局 token** 上修、而不是逐组件：弹层打开时 antd 会把「已选中项」自动置为 active，
+ * 命中 `select/style/dropdown.js` 的 `&-selected&-active { backgroundColor: controlItemBgActiveHover }`
+ * ——于是 `Select.optionSelectedBg` 这类组件覆盖**在真实交互路径上根本不生效**（文档登记了灰面、像素却是深灰）。
+ * 同一个 token 还被 `select` / `dropdown` / `menu` / `pagination` 选中态与 `tree` / `table` / `cascader` 行选中共用，
+ * 故就在这一处把它对齐到已登记的选中面 `{colors.surface-muted}`（浅 `#f0eeec`；深用已登记的暗色选中面 `#373737`）。
+ * `controlItemBgActiveHover` 取**同一个面**：已选中项的面不随 hover 变化（选中信息比 hover 反馈优先）；
+ * 选中与悬浮仍可区分——antd 的 `optionSelectedFontWeight` 默认 = `fontWeightStrong`（600），选中项**加粗**。
+ */
+const SELECTION_FACE_LIGHT = { controlItemBgActive: "#f0eeec", controlItemBgActiveHover: "#f0eeec" };
+const SELECTION_FACE_DARK = { controlItemBgActive: "#373737", controlItemBgActiveHover: "#373737" };
+
+/** 浅色 token（DESIGN.md §Colors 映射表「浅色值」列逐行对应；已含选中面覆盖） */
+export const LIGHT_TOKEN = { ...LIGHT_SEED, ...SELECTION_FACE_LIGHT };
+/** 深色 token（同上，深色列 + 选中面覆盖） */
+export const DARK_TOKEN = { ...DARK_SEED, ...SELECTION_FACE_DARK };
+
+/** 浅色组件覆盖（DESIGN.md §Components 覆盖表：面值取 {colors.surface-muted} / {colors.canvas} / {colors.hairline}）
+ * 注：Menu 选中面与 Select 选中项**不在此处覆盖**——它们默认就取 `controlItemBgActive`，已由上面的全局选中面统一。*/
 const COMPONENT_TOKENS_LIGHT = {
   ...COMPONENT_TOKENS_BASE,
-  Menu: { ...MENU_GEOMETRY, itemSelectedBg: "#f0eeec", itemSelectedColor: "#37352f" },
+  Menu: MENU_GEOMETRY,
   Table: { ...TABLE_GEOMETRY, headerBg: "#ffffff", borderColor: "#e5e3df" },
-  Select: { optionSelectedBg: "#f0eeec" },
   Tag: { defaultBg: "#f0eeec" },
 };
 
@@ -118,13 +141,8 @@ const COMPONENT_TOKENS_LIGHT = {
 const DARK_SELECTED_SURFACE = "#373737";
 const COMPONENT_TOKENS_DARK = {
   ...COMPONENT_TOKENS_BASE,
-  Menu: {
-    ...MENU_GEOMETRY,
-    itemSelectedBg: DARK_SELECTED_SURFACE,
-    itemSelectedColor: "rgba(255,255,255,0.81)",
-  },
+  Menu: MENU_GEOMETRY,
   Table: { ...TABLE_GEOMETRY, headerBg: "#202020", borderColor: "#2f2f2f" },
-  Select: { optionSelectedBg: DARK_SELECTED_SURFACE },
   Tag: { defaultBg: DARK_SELECTED_SURFACE },
 };
 
@@ -141,7 +159,7 @@ export function AntdProvider({ children }: { children: ReactNode }) {
         // 上，index.css 的 :root 语义变量映射才解析得到值（见文件头 CSS_VAR_KEY 说明）
         cssVar: { key: CSS_VAR_KEY },
         algorithm: dark ? theme.darkAlgorithm : theme.defaultAlgorithm,
-        token: dark ? DARK_SEED : LIGHT_SEED,
+        token: dark ? DARK_TOKEN : LIGHT_TOKEN,
         components: dark ? COMPONENT_TOKENS_DARK : COMPONENT_TOKENS_LIGHT,
       }}
     >

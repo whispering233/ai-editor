@@ -118,10 +118,11 @@ const RULES: Rule[] = [
   },
   {
     // 会话列表选中态（用户反馈 #4）：antd `Dropdown` 自带一套 menu 样式，**不吃 `Menu` 组件 token**
-    // （`antd/es/dropdown/style/index.js` 的 `&-selected { color: colorPrimary; backgroundColor: controlItemBgActive }`，
-    // 而 `Dropdown.prepareComponentToken` 里没有任何选中色 token）——`controlItemBgActive` = 派生
-    // `colorPrimaryBg`，本仓主色 seed 是深墨 #37352f，实测选中面 #787771 压 #37352f 字 ≈ 1.9:1 不可读。
-    // 需要选中态的下拉用 x `Conversations`（灰面 + colorText）或 `bg-accent` 自绘，禁 `selectable` 菜单。
+    // （`antd/es/dropdown/style/index.js` 的 `&-selected` 直接取全局 `controlItemBgActive`）——历史上这里
+    // 就是选中项不可读的现场（主色 seed 是深墨，该 token 派生中深灰，实测 2.26:1）。
+    // 可读性现由全局选中面 token（`AntdProvider` 的 `controlItemBgActive*` + `antd-tokens.test.ts` 对比度守卫）
+    // 兜住，但会话/列表的选中态语言仍统一走 x `Conversations`（两行项语义 + 灰面 + colorText），
+    // 禁止在调用点另起一套（否则又会出现「文档登记灰面、像素另一套」）。
     id: "dropdown-menu-selectable",
     violationsIn: (line) => /\bselectable\b/.test(line),
   },

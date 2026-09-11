@@ -337,7 +337,14 @@ components:
 | `borderRadius` / `borderRadiusSM` / `borderRadiusLG` | `6px` / `4px` / `8px` | — | `{rounded.sm}` / `{rounded.xs}` / `{rounded.md}` |
 | `controlOutlineWidth` | `0` | `0` | 聚焦环宽度 = 0（焦点只靠 1px 描边色变化，见 §Elevation；selector 型组件的环唯一开关） |
 
-**不登记派生色**：hover/active/禁用底、`colorFill*` 系列、深浅算法派生的色阶一律不写进本文件——登记了就必然与 antd 实际派发值漂移。本文件只登记「人为设定的值」。
+**显式覆盖的派生 alias（不是 seed，但同属「人为设定的值」，故登记）**：
+
+| antd alias token | 浅色值 | 深色值 | 为什么必须覆盖 |
+|---|---|---|---|
+| `controlItemBgActive` | `#f0eeec` = `{colors.surface-muted}` | `#373737` | **选中面**。它由 `colorPrimary` 派生（`theme/util/alias.js`：`= colorPrimaryBg`）——主色 seed 是深墨 `#37352f`，派生的不是浅主色底而是中深灰 `#787771`，压 `colorText`（同为深墨）**对比度 2.26:1 不可读**。同一 token 被 `select` / `dropdown` / `menu` / `pagination` 的选中态与 `tree` / `table` / `cascader` 的行选中共用，故在全局一处对齐到已登记的选中面 |
+| `controlItemBgActiveHover` | `#f0eeec` | `#373737` | **选中 + hover 面**。`= colorPrimaryBgHover`（实测 `#6b6a65`）——弹层打开时 antd 会把已选中项自动置为 active，命中 `select/style/dropdown.js` 的 `&-selected&-active { backgroundColor: controlItemBgActiveHover }`，于是 `Select.optionSelectedBg` 这类**组件级覆盖在真实交互路径上完全无效**（2026-09 用户实测「所有下拉选中条目看不清」）。取与选中面同一值：已选中项的面不随 hover 变化，选中信息优先；选中与悬浮仍可区分——antd `optionSelectedFontWeight` 默认 = `fontWeightStrong`（600），**选中项加粗** |
+
+**不登记派生色**：hover/active/禁用底、`colorFill*` 系列、深浅算法派生的色阶一律不写进本文件——登记了就必然与 antd 实际派发值漂移。本文件只登记「人为设定的值」。（守卫：`src/components/antd-tokens.test.ts` 用 antd 自己的 `theme.getDesignToken` 算出派生值并断言选中面与 `colorText` 的对比度 ≥ 4.5:1——两个模式各一条，另含「裸 seed 时确实不可读」的自检。）
 
 **深色值来源**：Notion 未公开深色 token（源分析文档 `Known Gaps` 明示）——上表深色列是**推断值**：中性面按 Notion 深色工作区观感（`#191919` / `#202020`），文字按 81%/65%/51%/34% 白的阶梯，其余交给 antd `darkAlgorithm`。若日后与实机对不上，只按观感调 `AntdProvider` 一处。
 
@@ -438,7 +445,7 @@ components:
 **选择器空态两种写法（都有据）**：**筛选类**（“全部/不限”，可清除）用 `allowClear` + `placeholder`（并为空值时传 `undefined`）；**表单类**（必选项的“请选择…”）保留 `{ value: "", label: 原文案 }` 作为首项，不做 placeholder 改造。组选（`optgroup`）用 `options` 分组对象 `{ label, options }`，组级禁用下推到组内每个 option（antd 分组对象无 `disabled`），组 label 文案保留。
 
 **输入框默认值上收到 Provider**：`autoComplete: "off"` 经 `ConfigProvider` 的 `input` / `textArea` 默认 props 下发（v6 `InputConfig.autoComplete`），调用点不重复声明——禁浏览器历史建议，输入提示全由 datalist 候选与业务逻辑控制。
-**`select-option-selected`** — 选中项 = `{colors.surface-muted}` 灰面，不变蓝。**antd `Dropdown` 的菜单选中态不可用**（`selectable`）：Dropdown 自带一套 menu 样式、不吃 `Menu` 组件 token（`antd/es/dropdown/style/index.js` 的 `&-selected` 取全局 `controlItemBgActive` = 派生 `colorPrimaryBg`）——本仓主色 seed 是深墨，实测选中面 `#787771` 压 `#37352f` 字 ≈ 1.9:1 不可读（2026-09 用户报的「选中会话看不清字」）。需要选中态的下拉（会话列表）用 x `Conversations`（灰面 + `colorText`），守卫 `dropdown-menu-selectable` 兜底；`Menu` 本体（左栏导航）不受影响。
+**`select-option-selected`** — 选中项 = `{colors.surface-muted}` 灰面 + **加粗**（`optionSelectedFontWeight` 默认 600）+ 字色不变（`colorText`）；选中与悬浮靠「面同档、字重不同」区分。**面上不可读是全局坑，不能在调用点修**：antd 的选中面取全局 `controlItemBgActive` / `controlItemBgActiveHover`（由 `colorPrimary` 派生 → 深墨 seed 下派生中深灰 `#787771` / `#6b6a65`，压深墨字 ≈ 2.26:1），且**弹层打开时已选中项会被自动置为 active**——所以组件级 `optionSelectedBg` 在真实交互路径上无效。修法 = `AntdProvider` 覆盖这两个全局 token（见 §Colors），Select / Dropdown / Menu / Pagination / Tree / Table 的选中面一次到位。调用点只需保证两件事：**浮层宽度按内容**（`popupMatchSelectWidth={false}`——跟随触发器宽度会截断选项文案）；**会话列表用 x `Conversations`**（两行项语义），守卫 `dropdown-menu-selectable` 禁止在调用点另起一套选中语言。
 
 ### 导航与外壳
 
@@ -468,15 +475,15 @@ components:
 |---|---|---|---|
 | Button | `primaryShadow` / `defaultShadow` / `dangerShadow` | `"none"` | `"none"` |
 | Card | `bodyPadding` | `16` | `16` |
-| Menu | `itemSelectedBg` / `itemSelectedColor` | `{colors.surface-muted}` / `{colors.primary}` | `#373737` / 81% 白 |
 | Menu | `itemBorderRadius` / `itemHeight` / `itemMarginInline` | `6` / `32` / `4` | 同浅色 |
 | Menu | `itemBg` / `activeBarBorderWidth` | `"transparent"` / `0` | 同浅色 |
 | Table | `headerBg` / `borderColor` | `{colors.canvas}` / `{colors.hairline}` | `#202020` / `#2f2f2f` |
 | Table | `cellPaddingBlock` | `8` | 同浅色 |
 | Input | `activeShadow` | `"none"` | `"none"` |
 | Typography | `titleMarginBottom` | `0` | `0` |
-| Select | `optionSelectedBg` | `{colors.surface-muted}` | `#373737` |
 | Tag | `defaultBg` | `{colors.surface-muted}` | `#373737` |
+
+**选中面回归全局 token（本表不列）**：Menu 选中项（`itemSelectedBg` / `itemSelectedColor`）与 Select 选中项（`optionSelectedBg`）的默认值就分别是 `controlItemBgActive` / `colorPrimary` / `controlItemBgActive`——§Colors 覆盖全局 token 后三者自动到位，**组件级不再重复覆盖**（重复覆盖正是历史上「登记了灰面、像素却是深灰」的来源：Dropdown 那条交互路径根本不吃组件 token）。
 
 **聚焦环走 seed 而不是组件 token**：selector 型组件（Select/Cascader/DatePicker/Table 筛选）的聚焦环由 `boxShadow: 0 0 0 {controlOutlineWidth} {activeOutlineColor}` 绘制（`antd/es/select/style/select-input.js`），Select **没有** `activeShadow` 组件 token——统一用 seed `controlOutlineWidth: 0` 关闭（见 §Colors 映射表）。Input 的 `activeShadow: "none"` 是各自独立的阴影，二者都要。
 

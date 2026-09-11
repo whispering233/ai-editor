@@ -215,6 +215,8 @@ export default function ReferenceList() {
         </div>
         <Select
           className="w-32"
+          // 浮层按内容宽展开：跟随触发器宽度（128px）会把长分类名/长标签截成省略号
+          popupMatchSelectWidth={false}
           value={activeType}
           onChange={(value) => setActiveType(value === "all" ? "all" : String(value))}
           options={[
@@ -224,6 +226,8 @@ export default function ReferenceList() {
         />
         <Select
           className="w-32"
+          // 同上：标签是用户自定义文本，跟随触发器宽度必然截断
+          popupMatchSelectWidth={false}
           value={activeTag ?? ""}
           onChange={(value) => setActiveTag(value === "" ? null : String(value))}
           options={[
