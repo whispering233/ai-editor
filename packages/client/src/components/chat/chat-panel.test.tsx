@@ -59,6 +59,7 @@ import {
   ProposalCardView,
   ToolCallRow,
   sessionItems,
+  usageBarView,
 } from "./ChatPanel";
 
 const mocked = {
@@ -123,6 +124,27 @@ afterEach(() => {
     disconnected: false,
     proposals: [],
     streamTools: [],
+  });
+});
+
+describe("占用条分母（usage-bar 契约：本轮的生效预算，不是模型 contextWindow）", () => {
+  it("分母 = context_budget.total：8192 / 16384 → 50%，tooltip 含「本轮」「生效预算」与两个数值", () => {
+    const bar = usageBarView({ total_tokens: 8192 }, { history: 15000, total: 16384 });
+    expect(bar?.percent).toBe(50);
+    expect(bar?.title).toContain("本轮");
+    expect(bar?.title).toContain("生效预算");
+    expect(bar?.title).toContain("8192");
+    expect(bar?.title).toContain("16384");
+  });
+
+  it(">100% clamp 到 100（预算护栏允许略超预算，不渲染 >100% 的条）", () => {
+    expect(usageBarView({ total_tokens: 40000 }, { history: 15000, total: 16384 })?.percent).toBe(100);
+  });
+
+  it("无预算 / 无 usage / 预算非正 → null（整条隐藏，不回退模型窗口分母）", () => {
+    expect(usageBarView({ total_tokens: 8192 }, null)).toBeNull();
+    expect(usageBarView(null, { history: 15000, total: 16384 })).toBeNull();
+    expect(usageBarView({ total_tokens: 8192 }, { history: 0, total: 0 })).toBeNull();
   });
 });
 

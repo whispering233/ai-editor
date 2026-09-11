@@ -7,10 +7,13 @@
 
 ## [Unreleased]
 
-> 设置页信息架构重构（二级 tab + AI 模型三级导航）+ 中栏页头统一壳（标题/tab/控件行 + 分割线）+ 左栏「立即备份」快捷入口。**纯前端，API/数据契约零改动**。
+> 设置页信息架构重构（二级 tab + AI 模型三级导航）+ 中栏页头统一壳（标题/tab/控件行 + 分割线）+ 左栏「立即备份」快捷入口；上下文预算配置化 + 工具结果上限落地 + 占用条换口径。
 
 ### Added
 
+- **上下文预算配置化**：用户级 `~/.ai-editor/config.json` 新增 `context_budget` 段（`history_ratio` 缺省 `0.15`、`tool_result_max_tokens` 缺省 `8000`，缺失/非法只回落该段、不牵连 provider/model/api_keys）；历史层预算 = **激活模型 `contextWindow` × ratio**（经总闸 clamp：总闸 = `window × 0.5`，替换原硬编码 60K）；`docs/design/config.md` 新增「可配 / 不可配边界」判据（轮次上限 / 单轮超时 / 总闸 / 重试策略刻意不可配）
+- **`done` SSE 帧新增 `context_budget`**（`{ history, total }` = 生效历史预算 / 四层预算之和）：前端占用条分母由模型 `contextWindow` 改为该值（1M 窗口下旧分母让占用条恒显 0-1%，是假指标）
+- **单条工具结果上限接线**：`truncateToolResult`（`llm/src/token.ts` 早已实现、全仓无消费者）接入 `runAgent` 工具结果回填的唯一扼点（含合成失败结果与 `finish_reason=length` 标记），事件 / 落库 / 下一轮喂回共用同一份截断文本；超限**截断 + 结构化提示**，不终止对话（`TOOL_RESULT_TOO_LARGE` 记 usage 类调试日志）
 - **中栏页头统一壳 `components/ui/page-header.tsx`**：标题行 → 二级 tab 行（可选）→ 控件行（可选）→ 分割线，一次给全；**14 页迁移**——列表/富页 10 页（概览 / 书架 / 大纲 / 人物 / 设定 / 地点 / 关联 / 伏笔 / 时间轴 / 参考资料 / 回收站）+ 详情页 4 页（EntityDetail / OutlineDetail / TimelineDetail / ReferenceDetail，分割线落在元信息行之下）；`ReferenceDetail` 标题可编辑走 `titleNode`（自绘标题元素，不把 `input` 嵌进 `h4`）；Timeline / ReferenceList 的内滚动布局由 `shrink-0` 页头承担（实测滚动 500px 页头与分割线不动）
 - **设置页二级 tab**：三块下沉为 `settings/{llm,project-rules,backup}-section.tsx`，`Tabs` line 型 3 项（AI 模型 → 项目规则 → 备份），选中态为页内 state（不进 URL、不进左栏高亮；刷新回落默认 tab）；懒渲染（未访问分区不拉 `/project/agents` 与 `/project/backups`）+ 草稿跨 tab 保留；去掉 `max-w-2xl mx-auto` 容器（页头与其它中栏页对齐）
 - **AI 模型三级导航**（`sub-nav`）：左侧 160px 竖向 `Menu` 列 provider，右侧为该家面板（裸区块：标题行 + 「当前」徽标 + 模型 `Select` + key 状态/输入/保存/清除），常驻说明 Alert 跨整宽置底；provider 名超宽截断 + `title` 全文提示

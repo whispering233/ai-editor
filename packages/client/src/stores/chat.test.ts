@@ -35,6 +35,7 @@ import { fetchSSE } from "../hooks/use-sse";
 import {
   describeProposalActionError,
   describeStreamError,
+  parseContextBudget,
   useChatStore,
   type ProposalCard,
 } from "./chat";
@@ -118,6 +119,7 @@ afterEach(() => {
     streaming: false,
     streamError: null,
     focusContext: null,
+    contextBudget: null,
     disconnected: false,
     proposals: [],
     streamTools: [],
@@ -499,6 +501,41 @@ describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
     const { onEvent: onEvent2 } = sseOptions();
     onEvent2("done", { session_id: "sess-1" });
     expect(useChatStore.getState().lastUsage).toEqual({ prompt_tokens: 1200, completion_tokens: 300, total_tokens: 1500 });
+  });
+
+  it("done 事件带 context_budget → 记录本轮生效预算（占用条分母）", () => {
+    useChatStore.getState().sendMessage("你好");
+    const { onEvent } = sseOptions();
+    onEvent("done", { session_id: "sess-1", context_budget: { history: 150000, total: 155000 } });
+    expect(useChatStore.getState().contextBudget).toEqual({ history: 150000, total: 155000 });
+  });
+
+  it("done 事件无/非法 context_budget → null（占用条隐藏，不回退模型窗口分母）", () => {
+    useChatStore.getState().sendMessage("你好");
+    const { onEvent } = sseOptions();
+    onEvent("done", { session_id: "sess-1", context_budget: { history: 150000, total: 155000 } });
+ // 缺失：清回 null（本轮无预算信息 → 不继续展示上一轮的条）
+    useChatStore.getState().sendMessage("再问");
+    const { onEvent: onEvent2 } = sseOptions();
+    onEvent2("done", { session_id: "sess-1" });
+    expect(useChatStore.getState().contextBudget).toBeNull();
+ // 非法（total 非正）：同样置 null——绝不写入 0/NaN（否则渲染 Infinity% 或永远 0%）
+    useChatStore.getState().sendMessage("三问");
+    const { onEvent: onEvent3 } = sseOptions();
+    onEvent3("done", { session_id: "sess-1", context_budget: { history: 1, total: 0 } });
+    expect(useChatStore.getState().contextBudget).toBeNull();
+  });
+
+  it("parseContextBudget：非对象 / 字段非有限数 / total ≤ 0 → null", () => {
+    expect(parseContextBudget(undefined)).toBeNull();
+    expect(parseContextBudget(null)).toBeNull();
+    expect(parseContextBudget("155000")).toBeNull();
+    expect(parseContextBudget({ history: 1 })).toBeNull();
+    expect(parseContextBudget({ history: "1", total: 10 })).toBeNull();
+    expect(parseContextBudget({ history: 1, total: 0 })).toBeNull();
+    expect(parseContextBudget({ history: Number.NaN, total: 10 })).toBeNull();
+    expect(parseContextBudget({ history: 1, total: Number.POSITIVE_INFINITY })).toBeNull();
+    expect(parseContextBudget({ history: 1, total: 10 })).toEqual({ history: 1, total: 10 });
   });
 
   it("done 事件 → streaming=false + currentSessionId 更新（续聊）+ 刷新会话列表", async () => {

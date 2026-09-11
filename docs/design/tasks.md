@@ -15,16 +15,4 @@
 
 ## 当前任务卡
 
-（A1/A2 已完成并验证：上下文预算配置化 + 生效预算随 done 帧下发；工具结果上限接线 + 裁剪护栏。）
-
-### A3 前端占用条改「生效预算」口径
-
-**契约**（已改文档）：`docs/ui/DESIGN.md` `usage-bar` 条目。
-
-**改动面**：`client/src/stores/chat.ts`（`contextBudget` 状态 + done 帧读取）、`client/src/components/chat/ChatPanel.tsx`（占用条分母改 `contextBudget.total`；`title` 改 `本轮 tokens / 生效预算 tokens`；**未收到 `context_budget` 时隐藏占用条**，不回退窗口分母）。
-
-**验证**：单测 + headless 像素走查（subAgent）。
-
----
-
-（上一轮任务卡已全部完成并清理：见 `CHANGELOG.md` Unreleased 与本文件 git 历史。）
+（本轮任务卡已全部完成并清理：A1 上下文预算配置化 / A2 工具结果上限 + 裁剪护栏 / A3 占用条改生效预算——见 `CHANGELOG.md` Unreleased 与本文件 git 历史。）

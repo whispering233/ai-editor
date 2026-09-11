@@ -39,7 +39,7 @@ import {
   summarizePreview,
   summarizeToolCall,
 } from "../../lib/tool-call-summary";
-import { useChatStore, type FocusContext, type ProposalCard } from "../../stores/chat";
+import { useChatStore, type ChatContextBudget, type FocusContext, type ProposalCard } from "../../stores/chat";
 import type { ChatMessage, ChatSessionSummary } from "@whispering233/ai-editor-shared";
 import { formatRelativeTime } from "@whispering233/ai-editor-shared";
 import { cn } from "../../lib/utils";
@@ -136,9 +136,26 @@ const THINKING_LEVEL_OPTIONS: ThinkingLevel[] = [
   "max",
 ];
 
+/**
+ * 占用条视图数据（导出供渲染走查测试）：分母 = **本轮生效预算**（done 帧 `context_budget.total`），
+ * 不是模型 `contextWindow`（1M 窗口下用窗口做分母永远是 0-1%，是假指标——见 `docs/ui/DESIGN.md` `usage-bar`）。
+ * - 缺 usage 或缺预算 → null（调用方据此整条隐藏）
+ * - 占比 clamp 到 0..100：预算护栏允许「略超预算」，不该渲染 >100% 的条
+ */
+export function usageBarView(
+  lastUsage: { total_tokens: number } | null,
+  contextBudget: ChatContextBudget | null,
+): { percent: number; title: string } | null {
+  if (lastUsage === null || contextBudget === null || contextBudget.total <= 0) return null;
+  const used = lastUsage.total_tokens;
+  const percent = Math.min(100, Math.max(0, Math.round((used / contextBudget.total) * 100)));
+  return { percent, title: `上下文占用：${used} / ${contextBudget.total} tokens（本轮 / 生效预算）` };
+}
+
 function ComposerConfigRow() {
   const [settings, setSettings] = useState<SettingsLlmConfig | null>(null);
   const lastUsage = useChatStore((s) => s.lastUsage);
+  const contextBudget = useChatStore((s) => s.contextBudget);
   const { token } = theme.useToken();
 
   // 挂载后拉取 LLM 设置（激活 provider + 各家模型目录/key 状态 + 思考强度；失败静默——配置行降级隐藏）；
@@ -158,14 +175,11 @@ function ComposerConfigRow() {
   // 当前激活 provider 及其模型（撞名模型靠 provider 消歧——value 用 `${provider}::${model}` 复合）
   const activeProvider = settings?.providers.find((p) => p.id === settings.provider) ?? null;
   const currentModel = activeProvider?.models.find((m) => m.id === settings?.model) ?? null;
-  const contextWindow = currentModel?.contextWindow ?? 0;
   /** 激活 provider 无有效 key → 整条工具条禁用（提示去设置页配 key） */
   const activeKeyless = settings !== null && (activeProvider === null || !activeProvider.apiKeySet);
-  // 上下文占用：最近一轮真实 usage.total / 当前模型 contextWindow（需求 3）
-  const usagePct =
-    lastUsage !== null && contextWindow > 0
-      ? Math.min(100, Math.round((lastUsage.total_tokens / contextWindow) * 100))
-      : null;
+  // 上下文占用：最近一轮真实 usage.total / **本轮生效预算**（done 帧 context_budget——不是模型窗口，
+  // 见 docs/ui/DESIGN.md `usage-bar`）；无预算 → bar=null → 整条隐藏
+  const bar = usageBarView(lastUsage, contextBudget);
 
   /** 切换模型（选中即激活 provider+model 一对——跨 provider 选择时 key 来源同步切换） */
   function changeModel(composite: string): void {
@@ -186,7 +200,11 @@ function ComposerConfigRow() {
 
   // 占用条填充色：≥90% error、≥70% warning、其余 primary（色值只经 antd token——旧实现写死 bg-amber-500）
   const usageColor =
-    usagePct === null ? token.colorPrimary : usagePct >= 90 ? token.colorError : usagePct >= 70 ? token.colorWarning : token.colorPrimary;
+    bar === null || bar.percent < 70
+      ? token.colorPrimary
+      : bar.percent >= 90
+        ? token.colorError
+        : token.colorWarning;
 
   return (
     <div className="mt-2 flex items-center justify-between gap-2">
@@ -219,18 +237,15 @@ function ComposerConfigRow() {
         })}
       />
       <div className="flex shrink-0 items-center gap-1.5">
-        {usagePct !== null && (
-          <div
-            className="flex shrink-0 items-center gap-1"
-            title={`上下文占用：${lastUsage?.total_tokens ?? 0} / ${contextWindow} tokens`}
-          >
+        {bar !== null && (
+          <div className="flex shrink-0 items-center gap-1" title={bar.title}>
             <div className="h-1.5 w-16 overflow-hidden rounded-full bg-accent">
               <div
                 className="h-full rounded-full"
-                style={{ width: `${usagePct}%`, background: usageColor }}
+                style={{ width: `${bar.percent}%`, background: usageColor }}
               />
             </div>
-            <span className="text-xs text-muted-foreground">{usagePct}%</span>
+            <span className="text-xs text-muted-foreground">{bar.percent}%</span>
           </div>
         )}
         <Select

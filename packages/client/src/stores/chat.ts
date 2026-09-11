@@ -90,6 +90,11 @@ interface ChatState {
   lastUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null;
   setLastUsage: (u: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null) => void;
 
+ /** 本轮**生效预算**（done 帧 context_budget；占用条分母——不是模型 contextWindow，见 docs/ui/DESIGN.md `usage-bar`）；
+ * null = 未收到/非法 → 占用条整体隐藏 */
+  contextBudget: ChatContextBudget | null;
+  setContextBudget: (b: ChatContextBudget | null) => void;
+
  /** 「问 AI」聚焦输入框信号：中栏右下悬浮按钮点击后 +1，InputArea 监听后聚焦 textarea——
  * 无页面焦点（currentFocus=null）时用户仍可直接打字提问，按钮不「无反应」 */
   focusInputSeq: number;
@@ -119,6 +124,27 @@ interface ChatState {
   confirmProposal: (proposalId: string) => Promise<void>;
  /** 拒绝提案：语义同 confirm，成功 → status=rejected */
   rejectProposal: (proposalId: string) => Promise<void>;
+}
+
+/** 本轮生效预算（done 帧 `context_budget`；服务端上下文组装后算出） */
+export interface ChatContextBudget {
+ /** 本轮生效历史预算（激活模型 contextWindow × history_ratio，经总闸 clamp） */
+  history: number;
+ /** history + system + 工具清单 + focus 四层之和（= 占用条分母） */
+  total: number;
+}
+
+/**
+ * 解析 done 帧的 `context_budget`：**只接受结构完整且数值可用**的负载，其余（缺失 /
+ * 非对象 / 字段非有限数 / total ≤ 0）一律 null——调用方据此隐藏占用条；
+ * 绝不把 0 / NaN 写进 store（那会渲染出 Infinity% 或一条永远 0% 的假指标）。
+ */
+export function parseContextBudget(raw: unknown): ChatContextBudget | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const { history, total } = raw as { history?: unknown; total?: unknown };
+  if (typeof history !== "number" || typeof total !== "number") return null;
+  if (!Number.isFinite(history) || !Number.isFinite(total) || total <= 0) return null;
+  return { history, total };
 }
 
 /**
@@ -353,6 +379,8 @@ export const useChatStore = create<ChatState>((set, get) => {
     clearFocusContext: () => set({ focusContext: null }),
     lastUsage: null,
     setLastUsage: (u) => set({ lastUsage: u }),
+    contextBudget: null,
+    setContextBudget: (b) => set({ contextBudget: b }),
     focusInputSeq: 0,
     requestFocusInput: () => set((s) => ({ focusInputSeq: s.focusInputSeq + 1 })),
 
@@ -478,6 +506,8 @@ export const useChatStore = create<ChatState>((set, get) => {
               const usage = (data as { usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } })?.usage;
               set({ streaming: false, currentSessionId: sid ?? get().currentSessionId });
               if (usage !== undefined) get().setLastUsage({ prompt_tokens: usage.prompt_tokens ?? 0, completion_tokens: usage.completion_tokens ?? 0, total_tokens: usage.total_tokens ?? 0 });
+ // 占用条分母：本轮生效预算（缺失/非法 → null → 占用条隐藏，绝不回退模型 contextWindow）
+              get().setContextBudget(parseContextBudget((data as { context_budget?: unknown })?.context_budget));
               if (sid) void get().loadSessions(); // 新会话已落库：刷新列表（下拉可切回）
               break;
             }
