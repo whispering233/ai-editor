@@ -14,6 +14,7 @@
 // ErrorBoundary（main.tsx 包裹，components/feedback/ErrorBoundary.tsx）——任何渲染异常
 // 展示可恢复错误卡（错误信息 + 重新加载/回到首页）而非无提示白屏（下方有兜底行为验证用例）。
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
 import { renderToString } from "react-dom/server";
 import type {
   ChatMessage,
@@ -57,6 +58,7 @@ import {
   MessageItem,
   ProposalCardView,
   ToolCallRow,
+  sessionItems,
 } from "./ChatPanel";
 
 const mocked = {
@@ -134,6 +136,30 @@ describe("ChatPanel 挂载渲染冒烟（SSR 初始态：zustand v5 getServerSna
     // 等订阅联动 settle（避免与下方断言竞态；SSR 渲染仍取初始态，故这里只验证不抛异常）
     await vi.waitFor(() => expect(useChatStore.getState().sessions).toEqual([sampleSession]));
     expect(() => renderToString(<ChatPanel open={false} onClose={() => {}} />)).not.toThrow();
+  });
+
+  // 会话列表项（用户反馈 #3#4）：结构层纯函数走查——弹层内容在 Dropdown 弹层里，SSR 渲染不到
+  // （rc-trigger 不开就不渲染浮层），故把项构造抽成 sessionItems 直测。
+  it("sessionItems：无历史/null → 单条禁用提示项", () => {
+    for (const input of [null, []]) {
+      const items = sessionItems(input);
+      expect(items).toHaveLength(1);
+      expect(items[0]).toMatchObject({ key: "__empty__", disabled: true, label: "暂无历史会话" });
+    }
+  });
+
+  it("sessionItems：每会话一项（key = 会话 id），label 两行（摘要 + 条数 · 相对时间）", () => {
+    // SSR 会在相邻文本节点间插 `<!-- -->`（messageCount 与「 条 · 」是两个节点）——归一后再断言
+    const textOf = (node: ReactNode) =>
+      renderToString(<div>{node}</div>).replace(/<!--[^>]*-->/g, "");
+    const items = sessionItems([sampleSession]);
+    expect(items.map((i) => i.key)).toEqual(["sess-1"]);
+    const html = textOf((items[0] as { label: ReactNode }).label);
+    expect(html).toContain("帮我梳理第三章的冲突"); // 摘要行（截断靠 CSS）
+    expect(html).toContain("3 条"); // 元信息行
+    // 空摘要会话不得渲染出空白项（退「（空会话）」）
+    const blank = sessionItems([{ ...sampleSession, lastMessage: "" }]);
+    expect(textOf((blank[0] as { label: ReactNode }).label)).toContain("（空会话）");
   });
 });
 

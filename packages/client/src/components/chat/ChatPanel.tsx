@@ -9,9 +9,9 @@
 // store 驱动状态迁移：confirmed/rejected/stale 终态 + 404 移除卡片）
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentRef } from "react";
-import { Bubble, Sender } from "@ant-design/x";
+import { Bubble, Conversations, Sender } from "@ant-design/x";
+import type { ConversationItemType } from "@ant-design/x";
 import { Alert, Badge, Button, Collapse, Dropdown as AntDropdown, Select, Tag, theme } from "antd";
-import type { MenuProps } from "antd";
 import {
   BulbOutlined,
   CloseOutlined,
@@ -39,7 +39,7 @@ import {
   summarizeToolCall,
 } from "../../lib/tool-call-summary";
 import { useChatStore, type FocusContext, type ProposalCard } from "../../stores/chat";
-import type { ChatMessage } from "@whispering233/ai-editor-shared";
+import type { ChatMessage, ChatSessionSummary } from "@whispering233/ai-editor-shared";
 import { formatRelativeTime } from "@whispering233/ai-editor-shared";
 import { cn } from "../../lib/utils";
 import { skeletonClass } from "../../lib/styles";
@@ -248,6 +248,32 @@ function ComposerConfigRow() {
 }
 
 // ============ 会话标题行：下拉切换同项目会话 + [新会话] ============
+// - 为什么不用 `AntDropdown + Menu`：**Dropdown 自带一套 menu 样式，不吃 `Menu` 组件 token**
+//   （`antd/es/dropdown/style/index.js` 的 `&-selected { backgroundColor: controlItemBgActive }`），
+//   而 `controlItemBgActive` = 派生 `colorPrimaryBg`——本仓主色 seed 是深墨 #37352f，实测选中面
+//   `rgb(120,119,113)` 压 `rgb(55,53,47)` 字 = 对比度 ~1.9:1 不可读（即用户报的「选中会话看不清字」）。
+// - x `Conversations` 的选中/悬浮面走全局 `colorBgTextHover`（6% 黑灰面）+ `colorText` 字色，可读。
+
+/**
+ * 会话列表项（导出供渲染走查测试）：两行 = 摘要 + 「条数 · 相对时间」；
+ * sessions 为 null（未加载）/ 空数组（无历史）→ 单条禁用提示项（x Conversations 无空态样式）。
+ */
+export function sessionItems(sessions: ChatSessionSummary[] | null): ConversationItemType[] {
+  if (sessions === null || sessions.length === 0) {
+    return [{ key: "__empty__", label: "暂无历史会话", disabled: true }];
+  }
+  return sessions.map((ss) => ({
+    key: ss.id,
+    label: (
+      <span className="flex min-w-0 flex-col">
+        <span className="truncate text-sm">{ss.lastMessage || "（空会话）"}</span>
+        <span className="truncate text-xs text-muted-foreground">
+          {ss.messageCount} 条 · {formatRelativeTime(ss.updatedAt)}
+        </span>
+      </span>
+    ),
+  }));
+}
 
 function SessionTitleBar({
   disabled,
@@ -266,41 +292,38 @@ function SessionTitleBar({
   // 当前会话 = 列表中 id 匹配项；未选（null）/ 列表未加载 / 不在列表 → 新会话
   const currentSession = sessions?.find((s) => s.id === currentSessionId) ?? null;
   const title = currentSession ? currentSession.lastMessage || "（空会话）" : "新会话";
+  /** 弹层开关（自定义弹层不经 Menu 上报点击，不会自动关——选中项后手动关） */
+  const [open, setOpen] = useState(false);
 
-  // 下拉项（会话选择器语义——选择器场景可用 Dropdown；操作按钮仍直显不收入菜单）
-  const menuItems: MenuProps["items"] = [
-    {
-      type: "group",
-      label: "会话（本项目）",
-      children:
-        sessions && sessions.length === 0
-          ? [{ key: "__empty__", label: "暂无历史会话", disabled: true }]
-          : (sessions?.map((ss) => ({
-              key: ss.id,
-              label: (
-                <span className="flex min-w-0 flex-col">
-                  <span className="truncate text-sm">{ss.lastMessage || "（空会话）"}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {ss.messageCount} 条 · {formatRelativeTime(ss.updatedAt)}
-                  </span>
-                </span>
-              ),
-              onClick: () => setCurrentSession(ss.id),
-            })) ?? []),
-    },
-  ];
+  const conversationItems = useMemo(() => sessionItems(sessions), [sessions]);
 
   return (
     <div className="flex h-12 shrink-0 items-center gap-1 border-b border-border px-2.5">
       <MessageOutlined className="shrink-0 text-muted-foreground" />
       <AntDropdown
-        menu={{
-          items: menuItems,
-          selectable: true,
-          selectedKeys: currentSessionId !== null ? [currentSessionId] : [],
-        }}
         disabled={disabled}
         trigger={["click"]}
+        open={open}
+        onOpenChange={setOpen}
+        // 弹层 = x Conversations（项高 40px 是 x 默认值，本项目两行内容用 styles.item 抬到 auto）
+        // 浮层面自补：旧的路由是 `AntDropdown + Menu`，那层面由 `.ant-dropdown-menu` 提供——换成 Conversations
+        // 后弹层根只剩定位（背景透明、padding 0），故按 `ui/context-menu.tsx` 的同一套自绘浮层类补上
+        // （bg-popover / shadow-md / ring-1 = DESIGN.md `dropdown-panel`：canvas 面 + 1px hairline + 仅浮层才有的阴影）
+        popupRender={() => (
+          <Conversations
+            items={conversationItems}
+            activeKey={currentSessionId ?? undefined}
+            onActiveChange={(key) => {
+              setCurrentSession(key);
+              setOpen(false);
+            }}
+            classNames={{ root: "rounded-lg bg-popover shadow-md ring-1 ring-foreground/10" }}
+            styles={{
+              root: { width: 320, maxHeight: 320 },
+              item: { height: "auto", minHeight: 40, paddingBlock: 6 },
+            }}
+          />
+        )}
       >
         <Button size="small" disabled={disabled} className="max-w-44 min-w-0">
           <span className="truncate text-sm font-medium" title={title}>

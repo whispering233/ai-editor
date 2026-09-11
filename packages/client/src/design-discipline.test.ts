@@ -116,6 +116,15 @@ const RULES: Rule[] = [
     id: "primary-bg-token",
     violationsIn: (line) => /colorPrimaryBg\b/.test(line),
   },
+  {
+    // 会话列表选中态（用户反馈 #4）：antd `Dropdown` 自带一套 menu 样式，**不吃 `Menu` 组件 token**
+    // （`antd/es/dropdown/style/index.js` 的 `&-selected { color: colorPrimary; backgroundColor: controlItemBgActive }`，
+    // 而 `Dropdown.prepareComponentToken` 里没有任何选中色 token）——`controlItemBgActive` = 派生
+    // `colorPrimaryBg`，本仓主色 seed 是深墨 #37352f，实测选中面 #787771 压 #37352f 字 ≈ 1.9:1 不可读。
+    // 需要选中态的下拉用 x `Conversations`（灰面 + colorText）或 `bg-accent` 自绘，禁 `selectable` 菜单。
+    id: "dropdown-menu-selectable",
+    violationsIn: (line) => /\bselectable\b/.test(line),
+  },
 ];
 
 /** 动态拼接的 Tailwind 类名（`className={`bg-tag-${tint}`}`）：Tailwind 只在源码里扫**字面量**类名，
@@ -202,6 +211,7 @@ describe("守卫规则自检（规则必须能识别违规样例，否则规则�
       "important-class": `className="!mb-0 text-sm"`,
       "ad-hoc-font-size": `className="text-[13px]"`,
       "primary-bg-token": `styles={{ content: { background: token.colorPrimaryBg } }}`,
+      "dropdown-menu-selectable": `menu={{ items, selectable: true, selectedKeys: [id] }}`,
     };
     for (const rule of RULES) {
       const sample = samples[rule.id];

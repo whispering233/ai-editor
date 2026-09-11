@@ -437,7 +437,7 @@ components:
 **选择器空态两种写法（都有据）**：**筛选类**（“全部/不限”，可清除）用 `allowClear` + `placeholder`（并为空值时传 `undefined`）；**表单类**（必选项的“请选择…”）保留 `{ value: "", label: 原文案 }` 作为首项，不做 placeholder 改造。组选（`optgroup`）用 `options` 分组对象 `{ label, options }`，组级禁用下推到组内每个 option（antd 分组对象无 `disabled`），组 label 文案保留。
 
 **输入框默认值上收到 Provider**：`autoComplete: "off"` 经 `ConfigProvider` 的 `input` / `textArea` 默认 props 下发（v6 `InputConfig.autoComplete`），调用点不重复声明——禁浏览器历史建议，输入提示全由 datalist 候选与业务逻辑控制。
-**`select-option-selected`** — 选中项 = `{colors.surface-muted}` 灰面，不变蓝。
+**`select-option-selected`** — 选中项 = `{colors.surface-muted}` 灰面，不变蓝。**antd `Dropdown` 的菜单选中态不可用**（`selectable`）：Dropdown 自带一套 menu 样式、不吃 `Menu` 组件 token（`antd/es/dropdown/style/index.js` 的 `&-selected` 取全局 `controlItemBgActive` = 派生 `colorPrimaryBg`）——本仓主色 seed 是深墨，实测选中面 `#787771` 压 `#37352f` 字 ≈ 1.9:1 不可读（2026-09 用户报的「选中会话看不清字」）。需要选中态的下拉（会话列表）用 x `Conversations`（灰面 + `colorText`），守卫 `dropdown-menu-selectable` 兜底；`Menu` 本体（左栏导航）不受影响。
 
 ### 导航与外壳
 
