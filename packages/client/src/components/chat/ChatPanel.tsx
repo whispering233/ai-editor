@@ -121,7 +121,8 @@ export const asToolCall = (c: unknown): ToolCallShape => {
   return wire as ToolCallShape;
 };
 
-// ============ AI 设置工具条（需求 3）：模型选择 + 思考强度 + 上下文占用 ============
+// ============ 输入区配置行（需求 3）：模型选择 + 上下文占用 + 思考强度 ============
+// 位置：输入框正下方（用户反馈 #1——原先占着标题行下方，白占消息流高度）；两端对齐（反馈 #2）
 
 /** 思考强度档位（参考 pi ThinkingLevel：off/minimal/low/medium/high/xhigh/max；显示英文原文） */
 const THINKING_LEVEL_OPTIONS: ThinkingLevel[] = [
@@ -134,13 +135,14 @@ const THINKING_LEVEL_OPTIONS: ThinkingLevel[] = [
   "max",
 ];
 
-function ChatModelBar({ disabled }: { disabled: boolean }) {
+function ComposerConfigRow() {
   const [settings, setSettings] = useState<SettingsLlmConfig | null>(null);
   const lastUsage = useChatStore((s) => s.lastUsage);
+  const { token } = theme.useToken();
 
-  // 挂载/项目就绪后拉取 LLM 设置（激活 provider + 各家模型目录/key 状态 + 思考强度；失败静默——工具条降级隐藏）
+  // 挂载后拉取 LLM 设置（激活 provider + 各家模型目录/key 状态 + 思考强度；失败静默——配置行降级隐藏）；
+  // 无项目时本组件不渲染（父层 `!disabled`），故不需要 disabled 透传
   useEffect(() => {
-    if (disabled) return;
     let cancelled = false;
     void getSettingsLlm()
       .then((res) => {
@@ -150,7 +152,7 @@ function ChatModelBar({ disabled }: { disabled: boolean }) {
     return () => {
       cancelled = true;
     };
-  }, [disabled]);
+  }, []);
 
   // 当前激活 provider 及其模型（撞名模型靠 provider 消歧——value 用 `${provider}::${model}` 复合）
   const activeProvider = settings?.providers.find((p) => p.id === settings.provider) ?? null;
@@ -181,13 +183,19 @@ function ChatModelBar({ disabled }: { disabled: boolean }) {
 
   if (settings === null) return null; // 设置未拉取：不阻塞聊天
 
+  // 占用条填充色：≥90% error、≥70% warning、其余 primary（色值只经 antd token——旧实现写死 bg-amber-500）
+  const usageColor =
+    usagePct === null ? token.colorPrimary : usagePct >= 90 ? token.colorError : usagePct >= 70 ? token.colorWarning : token.colorPrimary;
+
   return (
-    <div className="flex h-9 shrink-0 items-center gap-1.5 border-b border-border px-2.5">
+    <div className="mt-2 flex items-center justify-between gap-2">
       <Select
         size="small"
-        className="w-max max-w-28 shrink-0"
-        value={settings === null ? "" : `${settings.provider}::${settings.model}`}
-        disabled={disabled}
+        // 宽度：按内容自适应（模型名自然宽实测 135px），上限 192px；窄栏由 min-w-0 允许收缩
+        className="min-w-0 max-w-48"
+        // 浮层不跟随触发器宽度——跟随即截断（旧实现 112px 触发器把 DeepSeek V4 Flash 掐成 DeepSe…）
+        popupMatchSelectWidth={false}
+        value={`${settings.provider}::${settings.model}`}
         onChange={(value) => changeModel(value)}
         title={
           activeKeyless
@@ -209,33 +217,32 @@ function ChatModelBar({ disabled }: { disabled: boolean }) {
           };
         })}
       />
-      <Select
-        size="small"
-        className="w-max shrink-0"
-        value={settings.thinkingLevel}
-        disabled={disabled || activeKeyless || !currentModel?.reasoning}
-        onChange={(value) => changeThinking(value as ThinkingLevel)}
-        title="Thinking level"
-        aria-label="思考强度"
-        options={THINKING_LEVEL_OPTIONS.map((l) => ({ value: l, label: l }))}
-      />
-      {usagePct !== null && (
-        <div
-          className="ml-auto flex shrink-0 items-center gap-1"
-          title={`上下文占用：${lastUsage?.total_tokens ?? 0} / ${contextWindow} tokens`}
-        >
-          <div className="h-1.5 w-16 overflow-hidden rounded-full bg-secondary">
-            <div
-              className={cn(
-                "h-full rounded-full",
-                usagePct >= 90 ? "bg-destructive" : usagePct >= 70 ? "bg-amber-500" : "bg-primary",
-              )}
-              style={{ width: `${usagePct}%` }}
-            />
+      <div className="flex shrink-0 items-center gap-1.5">
+        {usagePct !== null && (
+          <div
+            className="flex shrink-0 items-center gap-1"
+            title={`上下文占用：${lastUsage?.total_tokens ?? 0} / ${contextWindow} tokens`}
+          >
+            <div className="h-1.5 w-16 overflow-hidden rounded-full bg-accent">
+              <div
+                className="h-full rounded-full"
+                style={{ width: `${usagePct}%`, background: usageColor }}
+              />
+            </div>
+            <span className="text-xs text-muted-foreground">{usagePct}%</span>
           </div>
-          <span className="text-xs text-muted-foreground">{usagePct}%</span>
-        </div>
-      )}
+        )}
+        <Select
+          size="small"
+          className="w-max shrink-0"
+          value={settings.thinkingLevel}
+          disabled={activeKeyless || !currentModel?.reasoning}
+          onChange={(value) => changeThinking(value as ThinkingLevel)}
+          title="Thinking level"
+          aria-label="思考强度"
+          options={THINKING_LEVEL_OPTIONS.map((l) => ({ value: l, label: l }))}
+        />
+      </div>
     </div>
   );
 }
@@ -722,6 +729,8 @@ function InputArea() {
         placeholder={streaming ? "AI 思考中…" : "输入消息…"}
         loading={streaming}
       />
+      {/* 配置行：输入框下方（模型在左端、占用与思考强度在右端） */}
+      <ComposerConfigRow />
     </div>
   );
 }
@@ -835,7 +844,6 @@ function ChatPanelBody({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <SessionTitleBar disabled={disabled} onClose={onClose} onToggleCollapse={onToggleCollapse} />
-      <ChatModelBar disabled={disabled} />
       {!disabled && (
         <>
           <DisconnectBanner />

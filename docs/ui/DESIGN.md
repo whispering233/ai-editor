@@ -427,7 +427,7 @@ components:
 **`button-primary`** — 墨底白字、矩形、无投影。用于页面主操作（新建/保存）。
 **`button-default`** — 白底 + `{colors.hairline-strong}` 描边（**文字型操作按钮必须带边框**，这是仓库既有红线 H4）。
 **`button-text`** — 无边框纯文字，只用于行内最弱操作；**不得用于页面级操作**。**antd v6 `Button` 的 `variant` 必须与 `color` 同时给**（`antd/es/button/Button.js`：`if (color && variant)`”——否则静默回落到 `['default','outlined']`，`variant="text"` 会变成**带边框**按钮（右侧图标按钮一半有边框一半没有的根因）；合法写法：`color="default" variant="text"`，或遗留 `type="text"`；`design-discipline.test.ts` 有 `button-variant-color` 守卫。
-**`icon-button`（统一约定）** — 全站图标型操作按钮**只有一种实现**：antd `Button color="default" variant="text" size="small"` + 图标（⚠ `variant` 必须与 `color` 同时给，见下行 `button-text` 的坑）（图标尺寸随字号类：行内 14px = `text-sm`、工具条 16px = `text-base`），颜色继承 antd 的 text 变体（`{colors.primary}`），hover/disabled/loading 由 antd 派发；**不再并存自绘 `<button>` 图标按钮**（历史上两者混用导致灰色/墨色/红色三套并存）。**不可恢复操作**（彻底删除 purge、物理删关系）用 `danger`（`{colors.error}`）；**软删**（移入回收站）保持常规色——危险色的语义是「不可撤销」，不是「删除」。图标一律 `@ant-design/icons`；状态用 Filled、操作与导航用 Outlined。
+**`icon-button`（统一约定）** — 全站图标型操作按钮**只有一种实现**：antd `Button color="default" variant="text" size="small"` + 图标（⚠ `variant` 必须与 `color` 同时给，见下行 `button-text` 的坑）（图标尺寸随字号类：行内 14px = `text-sm`、工具条 16px = `text-base`），颜色继承 antd 的 text 变体（`{colors.primary}`），hover/disabled/loading 由 antd 派发；**不再并存自绘 `<button>` 图标按钮**（历史上两者混用导致灰色/墨色/红色三套并存）。**不可恢复操作**（彻底删除 purge、物理删关系）用 `danger`（`{colors.error}`）；**软删**（移入回收站）保持常规色——危险色的语义是「不可撤销」，不是「删除」。图标一律 `@ant-design/icons`；状态用 Filled、操作与导航用 Outlined。**面板收起/展开图标 = 同一族镜像对**：`VerticalLeftOutlined`（`|◀`）/ `VerticalRightOutlined`（`▶|`）——收起 = 朝本侧边缘（左栏 `|◀`、右栏 `▶|`），展开 = 反向（左栏 `▶|`、右栏 `◀|`），两栏视觉完全对称。**禁用**：`BorderLeft/RightOutlined`（表格边框图标，与面板折叠无关）、`MenuFold/UnfoldOutlined`（仅面向左侧、与右栏不同族——历史混用即「左右收起图标不一致」的根因）。
 **`input`** — 白底 + `{colors.hairline-strong}` 描边 + `{rounded.sm}` + 32px 高；聚焦 = 1px primary 描边（**无阴影、无彩环**）。行内编辑与表单用同一个 antd `Input`。
 **`search-input`** — 列表/富页筛选栏的搜索框（全站**统一形态**）：antd `Input` + `prefix={<SearchOutlined />}` + 固定宽 `192px`（`w-48`）+ `allowClear`（筛选类，清空即回到未筛）；placeholder 统一「搜索{对象}…」。位置固定在页面控件行的**最左**（见 `layout.md` §3）。
 **`drag-indicator`** — 拖拽插入线：**实线** `{colors.primary}` 3px + 两端 8px 圆点（`h-[3px]` + `size-2 rounded-full`），横跨被拖行所在层级的内容宽度；`pointer-events-none` 不拦拖拽事件。
@@ -493,7 +493,7 @@ components:
 - 用 1px 描边和底色档表达层级；浮层才允许唯一那一条阴影
 - 选中态用 `{colors.surface-muted}` 灰面，不用彩色底
 - 字号只用四档（20 / 16 / 14 / 12）；标题一律 `Typography.Title level={4|5}`
-- 图标一律 `@ant-design/icons`；尺寸随字号类（14 `text-sm` / 16 `text-base` / 20 `text-xl` / 空态 24 `text-2xl`）；状态用 Filled、操作与导航用 Outlined
+- 图标一律 `@ant-design/icons`；尺寸随字号类（14 `text-sm` / 16 `text-base` / 20 `text-xl` / 空态 24 `text-2xl`）；状态用 Filled、操作与导航用 Outlined；面板收起/展开 = `VerticalLeft/RightOutlined` 镜像对（禁 `Border*Outlined`）
 - 文字型**操作**按钮带边框（H4 红线）；操作按钮一律直接展示，不收进 `⋯` 菜单。导航入口（左栏 Navigation/Menu 项）不属此列
 - 中文排版靠系统字体栈；不引入 web 字体
 
@@ -517,6 +517,7 @@ components:
 - **antd 派生色未登记**：hover/active/禁用底、`colorFill*`、浅色色阶由算法派生，本文件不复制（避免漂移）。
 - **MD 编辑器是独立表皮**：参考资料页的 `@uiw/react-md-editor` 自带一套排版与配色，未纳入本设计系统（编辑器内部不套 chrome token）；若观感冲突，再单独收。
 - **插件/第三方浮层未覆盖**：x-markdown 渲染出的表格/引用块样式由库自带，未做 token 映射。
+- **x 组件的内部面不可 token 化（已知边界）**：`Conversations` 的会话项选中/悬浮面取 antd 全局 `colorBgTextHover`（浅色 `rgba(0,0,0,0.06)`），该组件只开放 `creation*` 四个 token，无选中面 token——要把它换成精确的 `{colors.surface-muted}` 只能改全局 `colorBgTextHover`（连带 Menu 悬浮面、text 按钮悬浮面），代价大于收益（两值在白底上目测无差）。其他 x 组件（`Sender`/`Bubble`/`ThoughtChain`）同理：内部色由 x 自己派发。
 - **响应式未细化**：只定义 `<1024px` 的抽屉回退，触屏尺寸与最小点击区未定义。
 
 ## Iteration Guide
