@@ -15,32 +15,7 @@
 
 ## 当前任务卡
 
-### T1 输入区配置行（模型 + 思考强度）下移 + 两端对齐 + 弹层不截断（用户反馈 #1#2）
-
-- [ ] `ChatPanel.tsx`：`ChatModelBar` 移入 `InputArea` 内（`Sender` 下方），删掉 `disabled` 透传（输入区只在已打开项目时渲染）
-- [ ] 配置行两端对齐：左 = 模型 Select，右 = 上下文占用 + 思考 Select；模型 Select 自然宽上限放宽（`max-w-28` → `max-w-48`，自然宽实测 135px）
-- [ ] 模型 Select `popupMatchSelectWidth={false}`（浮层按内容宽，修「模型名选不全」）
-- [ ] 文档：`layout.md §6.6`、`DESIGN.md` `composer-row` 条目（已改）
-- [ ] 验证：`pnpm --filter @whispering233/ai-editor-client test` + `designmd lint` + playwright 像素（浅/深两态，浮层开合）
-
-### T2 会话列表换 antd x `Conversations`（用户反馈 #3#4）
-
-- [ ] `ChatPanel.tsx` `SessionTitleBar`：`AntDropdown + Menu` → `AntDropdown popupRender` + x `Conversations`（受控 `open`，选中即关）
-- [ ] 弹层根只剩定位（背景透明、padding 0）——浮层面（`bg-popover` 面 + `ring-1` 描边 + `shadow-md`）按 `ui/context-menu.tsx` 同一套自绘浮层类自补
-- [ ] 会话项两行（摘要 + 「条数 · 相对时间」）；空历史 → 单条「暂无历史会话」禁用项；项高用 `styles.item` 抬到 auto
-- [ ] 弹层宽度固定（不随摘要文本被撑爆）；`styles.root` 限高可滚
-- [ ] 守卫：不再依赖 `Menu.itemSelectedBg`（Dropdown 自带 menu 样式不吃 Menu token——选中面实测 `rgb(120,119,113)` 不可读）→ 新增守卫 `dropdown-menu-selectable`
-- [ ] 会话项构造抽成纯函数 `sessionItems` + 走查测试（null/空 → 禁用提示项；每会话一项，label 两行）
-- [ ] 文档：`layout.md §6.1`、`DESIGN.md` `session-item` 条目（已改）
-- [ ] 验证：同上 + 选中项/普通项计算样式探针（bg/字色对比）
-
-### T3 面板收起/展开图标统一（用户反馈 #5）
-
-- [ ] `NavRail.tsx` 收起：`MenuFoldOutlined` → `VerticalLeftOutlined`
-- [ ] `ChatPanel.tsx` 收起：保持 `VerticalRightOutlined`（已是该族）
-- [ ] `AppShell.tsx` `CollapseStrip` 展开：`BorderLeft/RightOutlined` → `VerticalRightOutlined` / `VerticalLeftOutlined`
-- [ ] 文档：`DESIGN.md` `icon-button` 条目 + Do 清单（已改）
-- [ ] 验证：playwright 像素（左右四钮 2×2 对照）
+（无）
 
 ## 历史版本摘要（详情见 `CHANGELOG.md` / `milestone.md`，逐卡 commit 从 `git log` 回溯）
 

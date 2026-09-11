@@ -9,6 +9,7 @@
 
 ### Changed
 
+- **右栏交互优化（用户反馈六项）**：模型选择/思考强度从标题行下方**移到输入框下方**（腾出消息流高度）+ 两端对齐 + 下拉浮层按内容宽展开（旧 `max-w-28` 把模型名掐成 `DeepSe…`）；会话列表换 antd x `Conversations`（两行项 + 灰面选中态，**修「选中会话看不清字」**——根因是 antd `Dropdown` 自带 menu 样式不吃 `Menu` 组件 token，选中面取派生 `colorPrimaryBg`，实测 1.9:1 不可读，新增守卫 `dropdown-menu-selectable`，累计 14 条）；面板收起/展开图标统一为 `«`/`»` 镜像对（旧为三套图标语言，含错用的表格边框图标）。**纯前端，API/数据契约零改动**
 - **npm 坏版本已标注 deprecate**（v0.0.1/v0.0.2）：`llm`/`db`/`tools`/`agent`/`server` 五个含 `workspace:*` 残留依赖的包 × 2 版本已在 npm 标注（registry 复验通过；`shared` 无依赖可正常安装故未标注）
 - **文档修正（实测推翻旧结论）**：`AGENTS.md` / `docs/design/build.md` 原写「绕过 2FA 的 granular token 不能执行 unpublish/deprecate（403）」——2026-09-11 实测**可以 deprecate**（10 条成功、无 OTP）；被拒的只是账号/组织/设置类操作（`npm profile get` → 403）；`unpublish` 未实测（不可逆）。另注：2027-01 起 bypass-2FA token 将失去直接发布能力，本仓发布走 OIDC Trusted Publisher 不受影响
 
