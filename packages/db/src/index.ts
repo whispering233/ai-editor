@@ -3,6 +3,7 @@
 export * from "./schema.js";
 export * from "./connection.js";
 export * from "./storage/atomic.js";
+export * from "./sessions.js";
 export * from "./storage/outline.js";
 export * from "./storage/project.js";
 export * from "./queries/chat.js";

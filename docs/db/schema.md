@@ -181,7 +181,7 @@ CREATE TABLE delta_records (
 
 ### 会话列表与顺序
 
-`GET /api/v1/chat/sessions` 由**扫目录 + 逐文件解析**聚合得到（不建索引文件——避免第二事实源）；排序键仍为末条消息 `created_at`（`updatedAt`），`lastMessage` = 末条消息 content 截断，`messageCount` = 消息行数。消息顺序 = 文件行序（写入即时间序）。
+`GET /api/v1/chat/sessions` 由**扫目录 + 逐文件解析**聚合得到（不建索引文件——避免第二事实源）；**顺序以文件行序为准**（写入即时间序）：`lastMessage` = 末条消息 content 截断，`messageCount` = 消息行数，`updatedAt` = 末条消息 `created_at`，`createdAt` = header 的 `created_at`（缺省回落首条消息）。会话列表按 `updatedAt` 倒序、同值按 id 升序。
 
 > 会话级滑动窗口裁剪与摘要压缩仍在 agent 运行时完成（不落盘）。**历史重建规则**：按 `assistant.tool_calls[].id` ↔ `tool.tool_call_id` 成对重组喂回模型；裁剪必须成对（同裁同留）。服务重启后凭 `session_id` 重建「继续上次对话」。
 
