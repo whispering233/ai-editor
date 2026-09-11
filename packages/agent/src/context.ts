@@ -23,7 +23,7 @@ import {
   PROJECT_PROMPT_TITLE,
   TOOL_LIST_TITLE,
 } from "./prompts.js";
-import { buildPayload, trimSession, type SessionMessage } from "./session.js";
+import { buildPayload, toBlocks, trimSession, type SessionMessage } from "./session.js";
 
 // ============ 分层预算常量 ============
 
@@ -112,6 +112,8 @@ export interface AssembledContext {
     focusTruncated: boolean;
  /** 历史被成对裁剪（同裁同留不拆对） */
     historyTrimmed: boolean;
+ /** 裁剪护栏命中（预算放不下任何配对块，已保住最后一块——宁可略超预算不发无历史请求） */
+    historyTrimGuardTriggered: boolean;
  /** 裁剪后历史条数 */
     historyMessageCount: number;
  /** 基线被重置（触发裁剪/重排后旧 usage 不再可信—— 防预算漂移） */
@@ -164,14 +166,16 @@ function trimFocus(focus: string, maxTokens: number): { text: string; truncated:
  * 历史按 token 预算成对裁剪：
  * 用 trimSession 以「配对块」为单位裁剪（同裁同留不拆对），二分找预算内尽量多保留的
  * 最大条数。裁剪后的估算**一律不带 usage 基线**——旧基线描述裁剪前前缀，沿用即预算漂移。
- * 返回 { messages, trimmed }：trimmed=true 表示至少裁掉一条消息。
+ * 返回 { messages, trimmed, guardTriggered }：trimmed=true 表示至少裁掉一条消息；
+ * guardTriggered=true 表示护栏命中（预算放不下任何块，已保住最后一个配对块——
+ * 宁可略超预算，不得发无历史的请求，见 `docs/design/20-context.md` §1 不变式）。
  */
 function trimHistoryToBudget(
   history: SessionMessage[],
   maxTokens: number,
-): { messages: SessionMessage[]; trimmed: boolean } {
+): { messages: SessionMessage[]; trimmed: boolean; guardTriggered: boolean } {
   if (estimateMessagesTokens(history) <= maxTokens) {
-    return { messages: history, trimmed: false };
+    return { messages: history, trimmed: false, guardTriggered: false };
   }
  // 二分最大可行条数 n：f(n) = estimate(trimSession(history, n))，f(0)=0 ≤ 预算。
  // 单调性论证：n 增大时原放不下的块可能变得可放（swap）——新纳入块的条数严格大于
@@ -189,7 +193,26 @@ function trimHistoryToBudget(
       hi = mid - 1;
     }
   }
-  return { messages: trimSession(history, lo), trimmed: lo < history.length };
+  const kept = trimSession(history, lo);
+ // 护栏判定按**裁剪结果**而非 lo：lo > 0 也可能为空（最后一个配对块条数大于 lo，
+ // f(lo)=0 ≤ 预算仍成立）——只看 lo 会漏掉「块大于窗口」这条路径。
+  if (kept.length > 0 && buildPayload(kept).length > 0) {
+    return { messages: kept, trimmed: lo < history.length, guardTriggered: false };
+  }
+ // 兵垒：从尾部逐块累积，直到**喂回 payload** 非空。不能只保最后一块：历史以普通
+ // assistant 块收尾时 buildPayload 会把它剥掉（末条约束），payload 仍为空。
+ // 最坏累积两块（普通 assistant + 它的前一块 user）。
+  const blocks = toBlocks(history);
+  const acc: SessionMessage[] = [];
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    acc.unshift(...blocks[i].messages);
+    if (buildPayload(acc).length > 0) break;
+  }
+  return {
+    messages: acc,
+    trimmed: acc.length < history.length,
+    guardTriggered: acc.length > 0,
+  };
 }
 
 // ============ 主组装 ============
@@ -235,7 +258,7 @@ export function buildContext(input: BuildContextInput): AssembledContext {
   const lastUsageReset = withBaseline > budgets.history;
   const trimmedHistory = lastUsageReset
     ? trimHistoryToBudget(input.history, budgets.history)
-    : { messages: input.history, trimmed: false };
+    : { messages: input.history, trimmed: false, guardTriggered: false };
   const historyPayload = buildPayload(trimmedHistory.messages);
   const historyTokens = estimateMessagesTokens(historyPayload);
 
@@ -263,6 +286,7 @@ export function buildContext(input: BuildContextInput): AssembledContext {
       systemOverBudget,
       focusTruncated,
       historyTrimmed: trimmedHistory.trimmed,
+      historyTrimGuardTriggered: trimmedHistory.guardTriggered,
       historyMessageCount: historyPayload.length,
       lastUsageReset,
       effectiveLastUsage: lastUsageReset ? null : (input.lastUsage ?? null),

@@ -13,6 +13,7 @@ import {
   DEFAULT_BASE_DELAY_MS,
   DEFAULT_MAX_RETRIES,
   LLM_TRANSPORT_ERROR_CODES,
+  truncateToolResult,
   withRetry,
   type AbortSignalLike,
   type ChatStreamResult,
@@ -49,6 +50,12 @@ export const DEFAULT_ATTEMPT_TIMEOUT_MS = 60_000;
 
 /** 上下文 token 预算（60K——DeepSeek 64K 窗口留余量；测试可覆盖） */
 export const DEFAULT_TOKEN_BUDGET = 60_000;
+
+/**
+ * 单条工具结果 token 上限（缺省；S7.6 按用户配置 `context_budget.tool_result_max_tokens` 传入）。
+ * 超限→截断 + 结构化提示（模型必须感知数据不完整），**不终止对话**。
+ */
+export const DEFAULT_TOOL_RESULT_MAX_TOKENS = 8000;
 
 // ============ 事件类型（六类事件 + 循环内部事件，S7.6 转 SSE 帧） ============
 
@@ -183,6 +190,8 @@ export interface RunAgentInput {
   attemptTimeoutMs?: number;
  /** 上下文 token 预算（默认 60K；测试可覆盖） */
   tokenBudget?: number;
+ /** 单条工具结果 token 上限（默认 8000；S7.6 按用户配置传入） */
+  toolResultMaxTokens?: number;
  /** 每次模型调用最大重试次数（默认 3；测试可覆盖） */
   maxRetries?: number;
  /** 重试退避基数 ms（默认 2000；测试可覆盖） */
@@ -204,6 +213,11 @@ export interface RunAgentResult {
  * 语义由 withRetry maxRetries 独立限制 + roundDeadline 兜底承担，无跨轮累计消耗问题）
  */
   retries: number;
+ /**
+ * 本轮被截断的工具结果条数（0 = 无）。截断仅降级不终止（见
+ * `DEFAULT_TOOL_RESULT_MAX_TOKENS`）；S7.6 据此写调试日志（TOOL_RESULT_TOO_LARGE）。
+ */
+  truncatedToolResults: number;
 }
 
 // ============ 内部辅助 ============
@@ -375,6 +389,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
     roundTimeoutMs = DEFAULT_ROUND_TIMEOUT_MS,
     attemptTimeoutMs = DEFAULT_ATTEMPT_TIMEOUT_MS,
     tokenBudget = DEFAULT_TOKEN_BUDGET,
+    toolResultMaxTokens = DEFAULT_TOOL_RESULT_MAX_TOKENS,
     maxRetries = DEFAULT_MAX_RETRIES,
     retryBaseDelayMs = DEFAULT_BASE_DELAY_MS,
   } = input;
@@ -400,6 +415,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
   let rounds = 0;
   let retries = 0; // 重试累计（重试与轮次分开计量、不互相消耗；报告值不清零——见下方说明）
   let lastUsage: LLMUsage | null = null; // 历史段基线（S7.2 回写换算）
+  let truncatedToolResults = 0; // 被截断的工具结果条数（仅降级，不终止——报告给 S7.6 记日志）
 
   while (rounds < maxRounds) {
     rounds += 1;
@@ -419,14 +435,14 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
  // ---- 2. 取消检查（优先于预算：已取消且并发超限时先 aborted 终止，不发 token error） ----
     if (signal?.aborted) {
       emit({ type: "error", code: ABORT_ERROR.code ?? "ABORTED", message: ABORT_ERROR.message, aborted: true });
-      return { ok: false, aborted: true, error: ABORT_ERROR, rounds, retries };
+      return { ok: false, aborted: true, error: ABORT_ERROR, rounds, retries, truncatedToolResults };
     }
 
  // ---- 3. token 预算（三重保险之三；超限发 error 终止） ----
     if (ctx.tokens.total > tokenBudget) {
       const message = `上下文 token 估算 ${ctx.tokens.total} 超出预算 ${tokenBudget}`;
       emit({ type: "error", code: CODE_TOKEN_BUDGET, message, aborted: false });
-      return { ok: false, aborted: false, error: { status: 0, code: CODE_TOKEN_BUDGET, message }, rounds, retries };
+      return { ok: false, aborted: false, error: { status: 0, code: CODE_TOKEN_BUDGET, message }, rounds, retries, truncatedToolResults };
     }
 
  // ---- 4. 单轮 deadline（三重保险之二：120s 含重试退避与工具执行） ----
@@ -493,12 +509,12 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
  // withRetry 抛出的 ABORT_ERROR（尝试前检查 / 退避 sleep 中断）：用户取消，归一为 aborted 结果
       if (isAbortError(err)) {
         emit({ type: "error", code: ABORT_ERROR.code ?? "ABORTED", message: ABORT_ERROR.message, aborted: true });
-        return { ok: false, aborted: true, error: ABORT_ERROR, rounds, retries };
+        return { ok: false, aborted: true, error: ABORT_ERROR, rounds, retries, truncatedToolResults };
       }
  // 防御路径：未知异常（chatStream 不 throw，理论不可达）
       const error: LLMError = { status: 0, code: CODE_INTERNAL, message: err instanceof Error ? err.message : String(err) };
       emit({ type: "error", code: CODE_INTERNAL, message: error.message, aborted: false });
-      return { ok: false, aborted: false, error, rounds, retries };
+      return { ok: false, aborted: false, error, rounds, retries, truncatedToolResults };
     }
 
  // ---- 5. 模型调用最终失败 → error 事件终止（最终失败以 error 呈现，不静默） ----
@@ -507,7 +523,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
       const code = isAttemptTimeoutError(result.error) ? CODE_TIMEOUT : (result.error.code ?? "MODEL_ERROR");
       const error: LLMError = { ...result.error, code };
       emit({ type: "error", code, message: error.message, aborted: result.aborted });
-      return { ok: false, aborted: result.aborted, error, rounds, retries };
+      return { ok: false, aborted: result.aborted, error, rounds, retries, truncatedToolResults };
     }
 
  // ---- 6. 成功：历史段基线换算（S7.2 回写）。
@@ -533,7 +549,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
         sessionId: sessionId ?? "",
         contextBudget: { history: ctx.budgets.history, total: ctx.budgets.total },
       });
-      return { ok: true, aborted: false, error: null, rounds, retries };
+      return { ok: true, aborted: false, error: null, rounds, retries, truncatedToolResults };
     }
 
  // ---- 8. 工具调用事件（produce 成功后才发出——失败轮的缓冲调用丢弃，不产生脏事件） ----
@@ -546,7 +562,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
     if (roundDeadline - Date.now() <= 0) {
       const message = `单轮预算耗尽（${roundTimeoutMs}ms 含工具执行）`;
       emit({ type: "error", code: CODE_TIMEOUT, message, aborted: false });
-      return { ok: false, aborted: false, error: { status: 0, code: CODE_TIMEOUT, message }, rounds, retries };
+      return { ok: false, aborted: false, error: { status: 0, code: CODE_TIMEOUT, message }, rounds, retries, truncatedToolResults };
     }
 
  // ---- 10. 调度：length 截断与参数解析失败/缺 id 的调用一律不执行、标错喂回 ----
@@ -582,7 +598,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
         const cancelled = signal?.aborted === true || err instanceof AbortedError;
         if (cancelled) {
           emit({ type: "error", code: ABORT_ERROR.code ?? "ABORTED", message: ABORT_ERROR.message, aborted: true });
-          return { ok: false, aborted: true, error: ABORT_ERROR, rounds, retries };
+          return { ok: false, aborted: true, error: ABORT_ERROR, rounds, retries, truncatedToolResults };
         }
  // 其余抛错视为调度器缺陷：终止（不喂回——避免把内部错误当工具结果循环重试）
         const message = `工具调度器抛错：${err instanceof Error ? err.message : String(err)}`;
@@ -593,6 +609,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
           error: { status: 0, code: CODE_DISPATCH, message },
           rounds,
           retries,
+          truncatedToolResults,
         };
       }
  // 同序等长（防御——错位回填破坏 tool_call ↔ tool_result 配对）
@@ -605,6 +622,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
           error: { status: 0, code: CODE_DISPATCH, message },
           rounds,
           retries,
+          truncatedToolResults,
         };
       }
  // id 交叉校验（ora S7.3 审核 S5——条数虽等但结果 id 与输入错位同样破坏配对）
@@ -618,6 +636,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
             error: { status: 0, code: CODE_DISPATCH, message },
             rounds,
             retries,
+            truncatedToolResults,
           };
         }
       }
@@ -631,20 +650,26 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
     if (roundDeadline - Date.now() <= 0) {
       const message = `单轮预算耗尽（${roundTimeoutMs}ms 含工具执行）`;
       emit({ type: "error", code: CODE_TIMEOUT, message, aborted: false });
-      return { ok: false, aborted: false, error: { status: 0, code: CODE_TIMEOUT, message }, rounds, retries };
+      return { ok: false, aborted: false, error: { status: 0, code: CODE_TIMEOUT, message }, rounds, retries, truncatedToolResults };
     }
 
  // 调度后检查取消（工具执行期间可能被取消——S7.4 执行中检查外的最后兜底）
     if (signal?.aborted) {
       emit({ type: "error", code: ABORT_ERROR.code ?? "ABORTED", message: ABORT_ERROR.message, aborted: true });
-      return { ok: false, aborted: true, error: ABORT_ERROR, rounds, retries };
+      return { ok: false, aborted: true, error: ABORT_ERROR, rounds, retries, truncatedToolResults };
     }
 
  // ---- 11. 结构化回填会话 + 事件（tool_result → proposal，proposal 在循环继续前） ----
+ // 单条工具结果超 token 上限 → 截断 + 结构化提示（不终止对话）。
+ // **唯一回填点**：所有工具结果（含参数解析失败/ length 截断合成的失败结果）均经此，
+ // 且事件、落库、下一轮喂回三处用**同一份**截断后文本（否则前端展示与模型所见不一致）。
     const toolMsgs: SessionMessage[] = [];
     for (const r of results) {
-      toolMsgs.push({ role: "tool", content: r.content, tool_call_id: r.id });
-      emit({ type: "tool_result", tool: r.tool, result: r.content, id: r.id });
+      const truncatedResult = truncateToolResult(r.content, toolResultMaxTokens);
+      if (truncatedResult.truncated) truncatedToolResults += 1;
+      const content = truncatedResult.content;
+      toolMsgs.push({ role: "tool", content, tool_call_id: r.id });
+      emit({ type: "tool_result", tool: r.tool, result: content, id: r.id });
       if (r.proposal !== undefined) {
         emit({ type: "proposal", proposal: r.proposal }); //：proposal 在 tool_result 后、循环继续前
       }
@@ -659,5 +684,5 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
  // ---- 11. 8 轮上限（三重保险之一；持续 tool_call 死循环兜底） ----
   const message = `达到最大轮数上限 ${maxRounds}`;
   emit({ type: "error", code: CODE_MAX_ITERATIONS, message, aborted: false });
-  return { ok: false, aborted: false, error: { status: 0, code: CODE_MAX_ITERATIONS, message }, rounds, retries };
+  return { ok: false, aborted: false, error: { status: 0, code: CODE_MAX_ITERATIONS, message }, rounds, retries, truncatedToolResults };
 }

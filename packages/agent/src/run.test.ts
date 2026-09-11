@@ -500,6 +500,95 @@ describe("工具失败结构化喂回", () => {
   });
 });
 
+// ============ 单条工具结果 token 上限（TOOL_RESULT_TOO_LARGE 接线） ============
+
+describe("工具结果 token 上限（截断不终止）", () => {
+  it("未超限：事件/落库/下一轮喂回三处一致且原样", async () => {
+    const { produce, calls } = createMockProduce([
+      { result: okResult("tool_calls"), events: [toolCallEvent("call_1", "get_entity")] },
+      { result: okResult(), events: [textEvent("收到")] },
+    ]);
+    const { dispatcher } = createMockDispatcher([
+      { id: "call_1", tool: "get_entity", ok: true, isError: false, content: "实体张三（char-1）" },
+    ]);
+    const events: AgentEvent[] = [];
+    const persisted: SessionMessage[][] = [];
+    const result = await runBasic(
+      { produce, dispatcher, onEvent: (e) => events.push(e), onMessages: (m) => persisted.push(m) },
+      { toolResultMaxTokens: 1000 },
+    );
+    expect(result.truncatedToolResults).toBe(0);
+    const toolEvent = events.find((e) => e.type === "tool_result");
+    expect(toolEvent?.type === "tool_result" ? toolEvent.result : "").toBe("实体张三（char-1）");
+ // 下一轮喂回内容与事件一致（三处同源）
+    const round2Tool = calls[1].messages.find((m) => m.role === "tool");
+    expect(round2Tool?.content).toBe("实体张三（char-1）");
+    expect(persisted.flat().find((m) => m.role === "tool")?.content).toBe("实体张三（char-1）");
+  });
+
+  it("超限：截断 + 结构化提示，事件/落库/喂回同一份文本，对话不终止", async () => {
+    const huge = "x".repeat(40_000); // 10k tokens > 上限 1000
+    const { produce, calls } = createMockProduce([
+      { result: okResult("tool_calls"), events: [toolCallEvent("call_1", "list_entities")] },
+      { result: okResult(), events: [textEvent("数据不全，我换个查询")] },
+    ]);
+    const { dispatcher } = createMockDispatcher([
+      { id: "call_1", tool: "list_entities", ok: true, isError: false, content: huge },
+    ]);
+    const events: AgentEvent[] = [];
+    const persisted: SessionMessage[][] = [];
+    const result = await runBasic(
+      { produce, dispatcher, onEvent: (e) => events.push(e), onMessages: (m) => persisted.push(m) },
+      { toolResultMaxTokens: 1000 },
+    );
+    expect(result.ok).toBe(true); // 截断是降级，不是错误
+    expect(result.truncatedToolResults).toBe(1);
+    const toolEvent = events.find((e) => e.type === "tool_result");
+    const eventContent = toolEvent?.type === "tool_result" ? toolEvent.result : "";
+    expect(eventContent).toContain("[结果已截断：超出 token 预算，数据不完整");
+    expect(eventContent.length).toBeLessThan(huge.length);
+ // 事件 = 落库 = 下一轮喂回（同一份截断后文本，避免前端所见与模型所见不一致）
+    expect(calls[1].messages.find((m) => m.role === "tool")?.content).toBe(eventContent);
+    expect(persisted.flat().find((m) => m.role === "tool")?.content).toBe(eventContent);
+  });
+
+  it("合成失败结果（参数解析失败/ length 截断标记）也走同一截断点", async () => {
+    const hugeError = "e".repeat(40_000);
+    const failedCall: LLMStreamEvent = {
+      type: "tool_call",
+      toolCall: { id: "call_bad", name: "get_entity", arguments: {}, rawArguments: "{}", error: hugeError },
+    };
+    const { produce } = createMockProduce([
+      { result: okResult("tool_calls"), events: [failedCall] },
+      { result: okResult(), events: [textEvent("换参数重试")] },
+    ]);
+    const { dispatcher, calls: dispatched } = createMockDispatcher();
+    const events: AgentEvent[] = [];
+    const result = await runBasic({ produce, dispatcher, onEvent: (e) => events.push(e) }, { toolResultMaxTokens: 1000 });
+    expect(dispatched).toHaveLength(0); // 解析失败的调用不执行
+    expect(result.truncatedToolResults).toBe(1);
+    const toolEvent = events.find((e) => e.type === "tool_result");
+    expect(toolEvent?.type === "tool_result" ? toolEvent.result : "").toContain("[结果已截断");
+  });
+
+  it("多条超限分别计数（上限缺省为 DEFAULT_TOOL_RESULT_MAX_TOKENS）", async () => {
+    const { produce } = createMockProduce([
+      {
+        result: okResult("tool_calls"),
+        events: [toolCallEvent("call_1"), toolCallEvent("call_2")],
+      },
+      { result: okResult(), events: [textEvent("好")] },
+    ]);
+    const big = "y".repeat(40_000); // > 缺省 8000 tokens
+    const { dispatcher } = createMockDispatcher([
+      { id: "call_1", tool: "get_entity", ok: true, isError: false, content: big },
+      { id: "call_2", tool: "get_entity", ok: true, isError: false, content: big },
+    ]);
+    const result = await runBasic({ produce, dispatcher });
+    expect(result.truncatedToolResults).toBe(2);
+  });
+});
+
 // ============ dispatcher 取消传播（S7.4 AbortedError → 用户取消语义） ============
 
 describe("dispatcher 取消传播（S7.4 executor 抛 AbortedError）", () => {

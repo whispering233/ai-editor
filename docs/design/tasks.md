@@ -15,18 +15,7 @@
 
 ## 当前任务卡
 
-（A1 已完成并验证：上下文预算配置化 + 生效预算随 done 帧下发。）
-
-### A2 工具结果上限接线 + 裁剪护栏
-
-**契约**（已改文档）：`docs/api/error-code.md` `TOOL_RESULT_TOO_LARGE` 行、`docs/design/30-agent-loop.md` §1、`docs/design/20-context.md` §1 不变式。
-
-**改动面**：
-
-1. `agent/run.ts`：工具结果回填前调 `truncateToolResult(content, toolResultMaxTokens)`（**已实现**于 `llm/src/token.ts:60-95`，全仓无消费者——本次接线）；阈值经 `RunAgentInput` 传入（默认 8000）；截断时写调试日志（usage 类别）；**不得**因截断终止对话。
-2. `agent/context.ts` + `agent/session.ts`：裁剪护栏——`trimHistoryToBudget` 二分结果为 0 时**保住最后一个配对块**（宁可略超预算，不得发无历史的请求）；`meta` 增护栏命中标记。
-
-**验证**：单测（超限截断含提示文案、未超限原样、护栏命中、单块超预算不裁空）+ 三命令。
+（A1/A2 已完成并验证：上下文预算配置化 + 生效预算随 done 帧下发；工具结果上限接线 + 裁剪护栏。）
 
 ### A3 前端占用条改「生效预算」口径
 

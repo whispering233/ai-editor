@@ -48,7 +48,7 @@ import { chatMessagesResSchema, chatSendReqSchema, chatSessionsResSchema } from 
 import { HttpError, ok } from "../middleware/error.js";
 import { requireCurrentProject, type ProjectContext } from "../middleware/project.js";
 import { debugLog, isCategoryEnabled } from "../debug.js";
-import { DEFAULT_MODEL, DEFAULT_THINKING_LEVEL, effectiveApiKey, effectiveProvider, getUserConfig, providerDisplayName, providerEnvVar, resolveContextBudgets } from "./settings.js";
+import { DEFAULT_MODEL, DEFAULT_THINKING_LEVEL, effectiveApiKey, effectiveProvider, getContextBudget, getUserConfig, providerDisplayName, providerEnvVar, resolveContextBudgets } from "./settings.js";
 
 // ============ 常量 ============
 
@@ -348,6 +348,8 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
     }
     const tools = deps.tools ?? toLLMToolDefinitions(listTools());
     const store = deps.store ?? defaultProposalStore;
+ // 单条工具结果 token 上限（用户配置；读一次——runAgent 入参与截断日志共用）
+    const toolResultMaxTokens = getContextBudget().toolResultMaxTokens;
     const now = deps.now ?? nowIso;
 
     return streamSSE(
@@ -516,8 +518,20 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
           deps: { produce: produceWithUsage, dispatcher, onEvent, onMessages },
  // 生效预算（不可配的总闸 + 可配的历史比例，均由 config + 模型目录解析得出）
           ...(budget !== null ? { budgets: { history: budget.historyBudget }, tokenBudget: budget.totalGate } : {}),
+ // 单条工具结果上限（用户配置；截断仅降级不终止——见 run.ts DEFAULT_TOOL_RESULT_MAX_TOKENS）
+          toolResultMaxTokens,
           signal: controller.signal, // 断开即取消（abort 永不重试）
         });
+
+ // 工具结果截断可观测性（TOOL_RESULT_TOO_LARGE 落地）：只记调试日志，不发 error 帧
+        // （截断是降级不是错误——模型已收到「数据不完整」提示，对话继续）
+        if (result.truncatedToolResults > 0) {
+          debugLog(
+            "usage",
+            "agent",
+            `TOOL_RESULT_TOO_LARGE 工具结果截断 ${result.truncatedToolResults} 条（上限 ${toolResultMaxTokens} tokens/条）`,
+          );
+        }
 
  // ---- 10. B2 取舍落地（「未确认提案按产生它的会话作废」） ----
  // 三选项评估：a) Proposal 加 sessionId + 仓按会话清除（跨包改动 S6.6/S7.4，成本中）；

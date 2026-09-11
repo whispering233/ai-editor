@@ -76,7 +76,7 @@ function collectToolResults(messages: readonly SessionMessage[]): Map<string, st
 }
 
 /** 完整配对块：可独立喂回模型的单元（user 单条 / 普通 assistant 单条 / assistant + 其全部 tool 结果） */
-interface Block {
+export interface Block {
   messages: SessionMessage[];
 }
 
@@ -88,8 +88,9 @@ interface Block {
  * 任一调用缺结果 / 形态不合法 → 孤儿半对，**整块丢弃**
  * - tool 消息：仅作为其 assistant 块的组成部分；未被任何 assistant 引用的孤儿在此自然丢弃
  * 输出天然无孤儿，是成对裁剪与重建喂回的共同基础。
+ * 导出供 context.ts 的裁剪护栏使用（按块从尾部累积，保证喂回 payload 非空）。
  */
-function toBlocks(messages: readonly SessionMessage[]): Block[] {
+export function toBlocks(messages: readonly SessionMessage[]): Block[] {
   const toolResults = collectToolResults(messages);
   const blocks: Block[] = [];
   for (const m of messages) {
@@ -184,13 +185,14 @@ export function appendMessage(session: SessionState, message: SessionMessage): S
  * - 窗口边界恰在 tool 消息处时**不拆对**——放不下的块整块丢弃（宁可窗口略小，不拆散配对）
  * - 裁剪前先经 toBlocks 清理孤儿（孤儿半对整对丢弃，不进入窗口）
  * - 输出不含孤儿；末条约束（末条必须 user/tool）由 buildPayload 统一兜底修正
+ * - 本函数可返回空数组（预算过小）——「不得裁空」由 context.ts 的裁剪护栏负责（按块累积，
+ *   保证喂回 payload 非空，见 `docs/design/20-context.md` §1 不变式）
  */
 export function trimSession(session: SessionState, maxCount: number): SessionState {
-  if (maxCount <= 0) return [];
   const blocks = toBlocks(session);
   const kept: SessionMessage[] = [];
  // 从尾部向前累计；放不下的块整块跳过（同裁同留，不拆对）
-  for (let i = blocks.length - 1; i >= 0; i--) {
+  for (let i = blocks.length - 1; maxCount > 0 && i >= 0; i--) {
     const block = blocks[i];
     if (block.messages.length + kept.length > maxCount) continue;
     kept.unshift(...block.messages);

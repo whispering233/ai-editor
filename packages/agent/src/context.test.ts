@@ -173,11 +173,32 @@ describe("buildContext 历史预算裁剪", () => {
     expect(ctx.tokens.history).toBeLessThanOrEqual(5);
   });
 
-  it("预算 0：历史全部裁空，仍保留 system 消息（无孤儿）", () => {
+  it("预算 0：护栏生效——历史保住最后一块（不得裁空），仍保留 system 消息（无孤儿）", () => {
     const ctx = buildContext({ history: [user("Q1")], budgets: { history: 0 } });
-    expect(ctx.messages).toHaveLength(1);
-    expect(ctx.messages[0].role).toBe("system");
-    expect(ctx.meta.historyMessageCount).toBe(0);
+    expect(ctx.messages).toEqual([{ role: "system", content: expect.any(String) }, user("Q1")]);
+    expect(ctx.meta.historyMessageCount).toBe(1);
+    expect(ctx.meta.historyTrimGuardTriggered).toBe(true);
+  });
+
+  it("护栏：尾部单个配对块超预算时不裁空（保住整块，宁可略超）", () => {
+    const history: SessionMessage[] = [
+      user("Q1"),
+      toolCallingAssistant(["tc-a"]),
+      toolResult("tc-a"),
+    ];
+    const ctx = buildContext({ history, budgets: { history: 0 } });
+    expect(ctx.messages.slice(1)).toEqual([toolCallingAssistant(["tc-a"]), toolResult("tc-a")]);
+    expect(ctx.meta.historyTrimGuardTriggered).toBe(true);
+    expect(ctx.meta.historyTrimmed).toBe(true);
+  });
+
+  it("未触发护栏时不置标记（正常裁剪与不裁剪两路径）", () => {
+    const noTrim = buildContext({ history: [user("Q1")], budgets: { history: 100 } });
+    expect(noTrim.meta.historyTrimGuardTriggered).toBe(false);
+    const history = [user("a".repeat(200)), toolCallingAssistant(["tc-a", "tc-b"]), toolResult("tc-a"), toolResult("tc-b")];
+    const trimmed = buildContext({ history, budgets: { history: 60 } });
+    expect(trimmed.meta.historyTrimmed).toBe(true);
+    expect(trimmed.meta.historyTrimGuardTriggered).toBe(false);
   });
 
   it("未超预算不裁剪：历史原样保留（末条为 user，buildPayload 不干预）", () => {

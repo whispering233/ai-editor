@@ -146,11 +146,12 @@ describe("trimSession 成对裁剪", () => {
     ]);
   });
 
-  it("maxCount 非法值防御：0 或负数返回空数组", () => {
+  it("maxCount 非法值防御：0 或负数返回空数组（「不得裁空」由 context.ts 裁剪护栏负责）", () => {
     const session: SessionMessage[] = [user("Q1")];
     expect(trimSession(session, 0)).toEqual([]);
     expect(trimSession(session, -1)).toEqual([]);
   });
+
 });
 
 // ============ 孤儿半对丢弃（重建时整对不喂回） ============

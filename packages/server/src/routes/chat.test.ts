@@ -480,6 +480,37 @@ describe("POST /chat SSE 事件序列与落库", () => {
  // error 后流立即关闭：只此一帧
     expect(frames).toEqual([{ event: "error", data: { code: "insufficient_quota", message: "余额不足" } }]);
   });
+
+  it("单条工具结果超上限：tool_result 帧为截断内容 + 含提示，对话继续到 done（不发 error）", async () => {
+    openProject();
+    const huge = "x".repeat(40_000); // 10k tokens > 缺省上限 8000
+    const produce = vi.fn<RunAgentDeps["produce"]>(async (_m, _s, onEvent) => {
+      if (produce.mock.calls.length === 1) {
+        onEvent?.({
+          type: "tool_call",
+          toolCall: { id: "call_big", name: "list_entities", rawArguments: "{}", arguments: {} },
+        });
+        return { ok: true, stopReason: "tool_calls", usage: null };
+      }
+      onEvent?.({ type: "text", delta: "数据不全，我缩小范围" });
+      return { ok: true, stopReason: "stop", usage: null };
+    });
+    const dispatcher = vi.fn<ToolDispatcher>(async (calls) =>
+      calls.map((call) => ({ id: call.id, tool: call.tool, ok: true, isError: false, content: huge })),
+    );
+    const res = await buildApp(createChatRoutes({ produce, dispatcher })).request(
+      "/api/v1/chat",
+      postChat({ message: "列一下所有实体" }),
+    );
+    const frames = await readSseFrames(res);
+    const toolFrame = frames.find((f) => f.event === "tool_result");
+    const result = (toolFrame?.data as { result?: string } | undefined)?.result ?? "";
+    expect(result).toContain("[结果已截断：超出 token 预算，数据不完整");
+    expect(result.length).toBeLessThan(huge.length);
+ // 截断是降级：无 error 帧，正常收尾
+    expect(frames.some((f) => f.event === "error")).toBe(false);
+    expect(frames[frames.length - 1].event).toBe("done");
+  });
 });
 
 describe("POST /chat 心跳与断开取消", () => {
@@ -713,6 +744,30 @@ describe("[chat] 调试日志（配置文件 chat 类别）", () => {
     expect(lines.some((l) => l.includes("[chat] tool_result tool=propose_create_entity id=call_1 result="))).toBe(true);
     expect(lines.some((l) => l.includes("[chat] proposal id=prop_1 type=propose_create_entity"))).toBe(true);
     expect(lines.some((l) => l.includes("[chat] done session=") && l.includes("round=2"))).toBe(true); // done 附带轮次
+  });
+
+  it("工具结果超上限：写 [usage] TOOL_RESULT_TOO_LARGE 日志（不发 error 帧）", async () => {
+    enableDebug();
+    const spy = vi.spyOn(console, "debug").mockImplementation(() => {});
+    openProject();
+    const huge = "x".repeat(40_000); // 10k tokens > 缺省上限 8000
+    const produce = vi.fn<RunAgentDeps["produce"]>(async (_m, _s, onEvent) => {
+      if (produce.mock.calls.length === 1) {
+        onEvent?.({ type: "tool_call", toolCall: { id: "call_big", name: "list_entities", rawArguments: "{}", arguments: {} } });
+        return { ok: true, stopReason: "tool_calls", usage: null };
+      }
+      return { ok: true, stopReason: "stop", usage: null };
+    });
+    const dispatcher = vi.fn<ToolDispatcher>(async (calls) =>
+      calls.map((call) => ({ id: call.id, tool: call.tool, ok: true, isError: false, content: huge })),
+    );
+    const res = await buildApp(createChatRoutes({ produce, dispatcher })).request(
+      "/api/v1/chat",
+      postChat({ message: "列一下" }),
+    );
+    await readSseFrames(res);
+    const lines = spy.mock.calls.map((c) => c.map(String).join(" "));
+    expect(lines.some((l) => l.includes("[agent]") && l.includes("TOOL_RESULT_TOO_LARGE") && l.includes("截断 1 条"))).toBe(true);
   });
 
   it("关闭（无配置文件）时 onEvent 不调用 console.debug（零开销早退）", async () => {
