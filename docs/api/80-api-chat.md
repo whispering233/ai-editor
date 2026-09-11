@@ -41,7 +41,7 @@
 | `message_update` | `{ assistantMessageEvent: {...} }` | assistant 流式增量：`text_delta` / `thinking_delta` / `toolcall_delta` 等（**已剥离 `partial` 全文对象**；`toolcall_*` 附带 `id` / `toolName` 便于前端提前渲染） |
 | `tool_execution_start` | `{ toolCallId, toolName, args }` | 工具开始执行 |
 | `tool_execution_update` | `{ toolCallId, toolName, partialResult }` | 工具流式进度（可选） |
-| `tool_execution_end` | `{ toolCallId, toolName, result: { content, details }, isError }` | 工具结束；`result.details` 携带提案载荷（见 §提案确认） |
+| `tool_execution_end` | `{ toolCallId, toolName, result: { content, details? }, isError }` | 工具结束；**AUTO 工具的 `details` 不下发**（与 `content` 重复且可能极大）；**PROPOSAL 工具的 `details` 携带提案载荷**（见 §提案确认） |
 | `turn_end` | `{ toolResults: [...], contextUsage?: { percent, tokens, contextWindow } }` | 轮次结束；`contextUsage` 供占用条（见 `../design/20-context.md` §2） |
 | `compaction_start` / `compaction_end` | `{ reason }` / `{ reason, result?, aborted, willRetry, errorMessage? }` | 上下文自动压缩状态（可展示提示） |
 | `auto_retry_start` / `auto_retry_end` | `{ attempt, maxAttempts, delayMs, errorMessage }` / `{ success, attempt, finalError? }` | 自动重试状态（可展示提示） |
@@ -51,6 +51,7 @@
 
 - 所有 `partial` 字段剥离（含完整消息大对象），只转发增量与元数据——否则单帧可达数百 KB。
 - 不转发 `entry_appended` / `queue_update` / `session_info_changed` / `thinking_level_changed`（内部状态，UI 无消费方）。
+- AUTO 工具的 `result.details` 不下发（内容与 `content` 重复、可能达数百 KB）；仅 PROPOSAL 工具的 `details`（提案载荷）随帧下发。
 
 **客户端解析约束**：本端点返回 POST + SSE，浏览器原生 `EventSource` 只支持 GET，客户端必须用 `fetch` + `ReadableStream` 自写 SSE 解析（client），并处理：跨 chunk 的 `data:` 行拼接、注释行（`:` 开头）跳过、多行 data 合并。
 

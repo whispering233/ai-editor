@@ -802,7 +802,7 @@ describe("工具定义 → LLM function calling（TypeBox schema 直接透传，
     expect(defs[0].parameters).toEqual({
       type: "object",
       properties: {
-        type: { enum: ["character", "setting", "location", "hook", "event", "timepoint", "reference"] },
+        type: { type: "string", enum: ["character", "setting", "location", "hook", "event", "timepoint", "reference"] },
         id: { type: "string" },
       },
       required: ["type", "id"],
