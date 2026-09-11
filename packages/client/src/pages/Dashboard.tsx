@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { SectionCard } from "@/components/ui/section-card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { PageTitle } from "@/components/ui/page-title";
+import { PageHeader } from "@/components/ui/page-header";
 import { skeletonClass } from "@/lib/styles";
 import {
   ApiError,
@@ -520,21 +520,24 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
 
     return (
       <section className="mx-auto w-full max-w-2xl px-4">
-        <div className="mt-8 flex items-start gap-3">
-          <div className="min-w-0 flex-1">
-            <PageTitle>书架</PageTitle>
-            <p className="mt-1 text-sm text-muted-foreground">
+        <PageHeader
+          className="mt-8"
+          title="书架"
+          description={
+            <p className="text-sm text-muted-foreground">
               {config !== null
                 ? `当前打开《${config.name}》，切换书籍或继续创作`
                 : "选择一本书打开，或新建一本"}
             </p>
-          </div>
-          {/* 导入备份（Sidebar 迁入，1-3b）：zip 导入/覆盖恢复，Dialog 内同名二选一 */}
-          <Button className="shrink-0" onClick={() => setImportOpen(true)}>
-            <UploadOutlined className="text-sm" />
-            导入备份
-          </Button>
-        </div>
+          }
+          action={
+            /* 导入备份（Sidebar 迁入，1-3b）：zip 导入/覆盖恢复，Dialog 内同名二选一 */
+            <Button className="shrink-0" onClick={() => setImportOpen(true)}>
+              <UploadOutlined className="text-sm" />
+              导入备份
+            </Button>
+          }
+        />
 
         {bookshelfError !== null && (
           <div className="mt-4 rounded-md border border-border bg-card p-3">
@@ -829,9 +832,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
 
   return (
     <section>
-      <div className="mb-4">
-        <PageTitle>项目概览</PageTitle>
-      </div>
+      <PageHeader title="项目概览" />
 
       <div className="grid gap-4 lg:grid-cols-2">
         {/* 区块 1：项目信息（数据 config，无失败态——项目已打开） */}

@@ -25,7 +25,7 @@ import type { EntitySummary, EntityType } from "@whispering233/ai-editor-shared"
 import { Alert, Button, Input, Pagination, Select, Skeleton, Typography } from "antd";
 import { SearchOutlined } from "@ant-design/icons";
 import { TagChip } from "@/components/ui/tag-chip";
-import { PageTitle } from "@/components/ui/page-title";
+import { PageHeader } from "@/components/ui/page-header";
 import {
   ApiError,
   CLIENT_NETWORK_ERROR,
@@ -89,6 +89,9 @@ export default function EntityList({ type }: { type: string }) {
   const entityType = (ENTITY_TYPES as readonly string[]).includes(type)
     ? (type as ListableEntityType)
     : ("character" as ListableEntityType);
+  /** 页头控件行是否由子视图渲染（设定树 / 关联总览：工具栏随各自视图结构与状态）——
+   * 这两页的 `PageHeader` 不画分割线，由视图在工具栏之后放 `PageDivider` */
+  const viewOwnsToolbar = isRelations || entityType === "setting";
 
   const [items, setItems] = useState<EntitySummary[] | null>(null);
   const [total, setTotal] = useState(0);
@@ -281,39 +284,45 @@ export default function EntityList({ type }: { type: string }) {
     setOffset(0);
   }
 
+  /** 页头控件行（左：搜索/排序/总数；右：新建）；由子视图渲染工具栏的两页不渲染 */
+  const headerControls = viewOwnsToolbar ? undefined : (
+    <>
+      <div className="w-48">
+        <Input
+          prefix={<SearchOutlined />}
+          allowClear
+          value={qInput}
+          onChange={(e) => setQInput(e.target.value)}
+          placeholder={`搜索${TYPE_LABEL[entityType]}名称…`}
+        />
+      </div>
+      <span className="flex items-center gap-2">
+        <Typography.Text type="secondary">排序:</Typography.Text>
+        <Select
+          value={`${sort}:${order}`}
+          onChange={(value) => handleSortChange(String(value))}
+          options={SORT_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+          style={{ minWidth: 150 }}
+        />
+      </span>
+      <span className="text-sm text-muted-foreground">共 {total} 个</span>
+      <Button type="primary" className="ml-auto" onClick={openCreateRow}>
+        + 新建
+      </Button>
+    </>
+  );
+
   return (
     <section>
-      {/* 第一行：页面标题（layout.md §3 页面头部统一结构；误删「实体」标题后补回各类型标题） */}
-      <PageTitle className="mb-4">{isRelations ? "关联" : TYPE_LABEL[entityType]}</PageTitle>
-
-      {/* 第二行：控件行（左：搜索/排序/总数；右：操作按钮）。设定（树）与关联（关系总览）
-          的控件行在各自视图内渲染（工具栏位置随视图结构） */}
-      {!isRelations && entityType !== "setting" && (
-        <div className="mb-3 flex flex-wrap items-center gap-3">
-          <div className="w-48">
-            <Input
-              prefix={<SearchOutlined />}
-              allowClear
-              value={qInput}
-              onChange={(e) => setQInput(e.target.value)}
-              placeholder={`搜索${TYPE_LABEL[entityType]}名称…`}
-            />
-          </div>
-          <span className="flex items-center gap-2">
-            <Typography.Text type="secondary">排序:</Typography.Text>
-            <Select
-              value={`${sort}:${order}`}
-              onChange={(value) => handleSortChange(String(value))}
-              options={SORT_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
-              style={{ minWidth: 150 }}
-            />
-          </span>
-          <span className="text-sm text-muted-foreground">共 {total} 个</span>
-          <Button type="primary" className="ml-auto" onClick={openCreateRow}>
-            + 新建
-          </Button>
-        </div>
-      )}
+      {/* 页头（统一壳）：标题 + 控件行（左：搜索/排序/总数；右：操作按钮）+ 分割线。
+          设定（树）与关联（关系总览）的控件行在各自视图内渲染（工具栏随视图结构）——
+          那两页的页头不带分割线（`className` 给标题到工具栏的 12px 间距），由视图在工具栏之后放 `PageDivider` */}
+      <PageHeader
+        title={isRelations ? "关联" : TYPE_LABEL[entityType]}
+        className={viewOwnsToolbar ? "mb-3" : undefined}
+        divider={!viewOwnsToolbar}
+        controls={headerControls}
+      />
 
       {/* 关联 tab：关系总览视图（前端过滤全量）；设定 tab：树形视图（与设定树合并——
           搜索+标签树内过滤、无分页、上级筛选被树形导航吸收）；其余类型 tab：原表格视图 */}

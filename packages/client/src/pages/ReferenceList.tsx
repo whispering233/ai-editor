@@ -12,7 +12,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { MouseEvent } from "react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { Alert, Button, Input, Select, Skeleton } from "antd";
-import { PageTitle } from "@/components/ui/page-title";
+import { PageHeader } from "@/components/ui/page-header";
 import { TagChip } from "@/components/ui/tag-chip";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
@@ -197,74 +197,76 @@ export default function ReferenceList() {
 
   const disabled = config === null;
 
+  /** 页头控件行（左=搜索/分类/标签；右=扫描/新建 md/新建外源链接） */
+  const headerControls = (
+    <>
+      <div className="w-48">
+        <Input
+          prefix={<SearchOutlined />}
+          allowClear
+          placeholder="搜索标题 / 内容摘要…"
+          value={keyword}
+          onChange={(e) => setKeyword(e.target.value)}
+        />
+      </div>
+      <Select
+        className="w-32"
+        // 浮层按内容宽展开：跟随触发器宽度（128px）会把长分类名/长标签截成省略号
+        popupMatchSelectWidth={false}
+        value={activeType}
+        onChange={(value) => setActiveType(value === "all" ? "all" : String(value))}
+        options={[
+          { value: "all", label: "全部分类" },
+          ...typePool.map((t) => ({ value: t, label: TYPE_LABELS[t] ?? t })),
+        ]}
+      />
+      <Select
+        className="w-32"
+        // 同上：标签是用户自定义文本，跟随触发器宽度必然截断
+        popupMatchSelectWidth={false}
+        value={activeTag ?? ""}
+        onChange={(value) => setActiveTag(value === "" ? null : String(value))}
+        options={[
+          { value: "", label: "全部标签" },
+          ...tagPool.map((t) => ({ value: t, label: t })),
+        ]}
+      />
+      <span
+        className="ml-auto flex items-center gap-2"
+        title={disabled ? "请先打开项目" : undefined}
+      >
+        <Button
+          disabled={disabled}
+          onClick={handleScan}
+          loading={scanBusy}
+          title="扫描项目目录 references/ 下的本地文档，同步到索引"
+          icon={<ReloadOutlined />}
+        >
+          扫描
+        </Button>
+        <Button
+          disabled={disabled}
+          onClick={() => navigate("#/references/new/md")}
+          icon={<FileTextOutlined />}
+        >
+          新建 md 文档
+        </Button>
+        <Button
+          type="primary"
+          disabled={disabled}
+          onClick={() => navigate("#/references/new/link")}
+          icon={<LinkOutlined />}
+        >
+          新建外源链接
+        </Button>
+      </span>
+    </>
+  );
+
   return (
     <section className="flex h-full min-h-0 flex-col">
-      {/* 第一行：页面标题 */}
-      <PageTitle className="mb-4">参考资料</PageTitle>
-
-      {/* 第二行：控件行（左=搜索/分类/标签；右=扫描/新建 md/新建外源链接） */}
-      <div className="mb-3 flex shrink-0 flex-wrap items-center gap-2">
-        <div className="w-48">
-          <Input
-            prefix={<SearchOutlined />}
-            allowClear
-            placeholder="搜索标题 / 内容摘要…"
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-          />
-        </div>
-        <Select
-          className="w-32"
-          // 浮层按内容宽展开：跟随触发器宽度（128px）会把长分类名/长标签截成省略号
-          popupMatchSelectWidth={false}
-          value={activeType}
-          onChange={(value) => setActiveType(value === "all" ? "all" : String(value))}
-          options={[
-            { value: "all", label: "全部分类" },
-            ...typePool.map((t) => ({ value: t, label: TYPE_LABELS[t] ?? t })),
-          ]}
-        />
-        <Select
-          className="w-32"
-          // 同上：标签是用户自定义文本，跟随触发器宽度必然截断
-          popupMatchSelectWidth={false}
-          value={activeTag ?? ""}
-          onChange={(value) => setActiveTag(value === "" ? null : String(value))}
-          options={[
-            { value: "", label: "全部标签" },
-            ...tagPool.map((t) => ({ value: t, label: t })),
-          ]}
-        />
-        <span
-          className="ml-auto flex items-center gap-2"
-          title={disabled ? "请先打开项目" : undefined}
-        >
-          <Button
-            disabled={disabled}
-            onClick={handleScan}
-            loading={scanBusy}
-            title="扫描项目目录 references/ 下的本地文档，同步到索引"
-            icon={<ReloadOutlined />}
-          >
-            扫描
-          </Button>
-          <Button
-            disabled={disabled}
-            onClick={() => navigate("#/references/new/md")}
-            icon={<FileTextOutlined />}
-          >
-            新建 md 文档
-          </Button>
-          <Button
-            type="primary"
-            disabled={disabled}
-            onClick={() => navigate("#/references/new/link")}
-            icon={<LinkOutlined />}
-          >
-            新建外源链接
-          </Button>
-        </span>
-      </div>
+      {/* 页头（统一壳）：标题 + 控件行（左=搜索/分类/标签；右=扫描/新建 md/新建外源链接）+ 分割线 */}
+      <PageHeader title="参考资料" controls={headerControls} />
 
       {/* 未同步提示条（N6）：检测到本地新增/外部修改 → 引导扫描（只读探测无副作用） */}
       {unsynced !== null && unsynced > 0 && (

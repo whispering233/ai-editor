@@ -29,7 +29,7 @@ import {
 import { RowContextMenu } from "../components/entity/row-context-menu";
 import { Button, Input, Select } from "antd";
 import { TagChip } from "@/components/ui/tag-chip";
-import { PageTitle } from "@/components/ui/page-title";
+import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { errorBannerClass } from "@/lib/styles";
 import { SuggestionDatalist } from "@/components/ui/suggestion-datalist";
@@ -431,14 +431,15 @@ export default function HookPanel() {
 
   return (
     <section>
-      {/* 第一行：页面标题；第二行：控件行（本页无筛选控件，仅操作按钮靠右——
-          保持跨页头部节奏一致，layout.md §3） */}
-      <PageTitle className="mb-4">伏笔池</PageTitle>
-      <div className="mb-3 flex items-center gap-2">
-        <Button type="primary" className="ml-auto" onClick={() => setCreateOpen(true)}>
-          + 新建伏笔
-        </Button>
-      </div>
+      {/* 页头（统一壳）：标题 + 控件行（本页无筛选控件，仅操作按钮靠右）+ 分割线 */}
+      <PageHeader
+        title="伏笔池"
+        controls={
+          <Button type="primary" className="ml-auto" onClick={() => setCreateOpen(true)}>
+            + 新建伏笔
+          </Button>
+        }
+      />
 
       {/* 错误横幅（列表请求失败 → 重试） */}
       {error !== null && (

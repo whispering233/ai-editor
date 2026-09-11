@@ -15,7 +15,7 @@ import { useEffect, useState } from "react";
 import type { EntityType } from "@whispering233/ai-editor-shared";
 import { formatRelativeTime } from "@whispering233/ai-editor-shared";
 import { Alert, Button, Skeleton, Typography } from "antd";
-import { PageTitle } from "@/components/ui/page-title";
+import { PageHeader } from "@/components/ui/page-header";
 import { TagChip } from "@/components/ui/tag-chip";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DeleteOutlined, RedoOutlined, ReloadOutlined } from "@ant-design/icons";
@@ -227,21 +227,20 @@ export default function Trash() {
 
   return (
     <section>
-      {/* header：标题 + 说明 + 刷新 */}
-      <div className="mb-1 flex items-center gap-3">
-        <PageTitle>回收站</PageTitle>
-        <Button
-          className="ml-auto"
-          onClick={() => void reload()}
-          disabled={loading}
-          icon={<ReloadOutlined />}
-        >
-          刷新
-        </Button>
-      </div>
-      <p className="mb-4 text-xs text-muted-foreground">
-        软删对象会保留一段时间，可在此还原，或彻底删除（不可恢复）。
-      </p>
+      {/* 页头（统一壳）：标题 + 刷新（标题行右侧）+ 说明行 + 分割线 */}
+      <PageHeader
+        title="回收站"
+        description={
+          <p className="text-xs text-muted-foreground">
+            软删对象会保留一段时间，可在此还原，或彻底删除（不可恢复）。
+          </p>
+        }
+        action={
+          <Button onClick={() => void reload()} disabled={loading} icon={<ReloadOutlined />}>
+            刷新
+          </Button>
+        }
+      />
 
       {/* 列表请求失败：横幅 + 重试 */}
       {error !== null && (

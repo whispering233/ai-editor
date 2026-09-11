@@ -27,7 +27,7 @@ import type { FormEvent } from "react";
 import { Button, Input, Select } from "antd";
 import { OrderedListOutlined } from "@ant-design/icons";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
-import { PageTitle } from "@/components/ui/page-title";
+import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { errorBannerClass } from "@/lib/styles";
 import {
@@ -493,61 +493,63 @@ export default function Timeline() {
   // 错误横幅/骨架/空态/列表归滚动区（替代列表位置语义）
   return (
     <section className="flex h-full min-h-0 flex-col">
-      {/* 第一行：页面标题 */}
-      <PageTitle className="mb-4">时间轴</PageTitle>
-
-      {/* 第二行：控件行（左=标签筛选；右=AI 排序/新建事件/新建时间点）——layout.md §3；
+      {/* 页头（统一壳）：标题 + 控件行（左=标签筛选；右=AI 排序/新建事件/新建时间点）+ 分割线；
           恒在滚动区外（列表滚动时筛选与操作均可见） */}
-      <div className="mb-3 flex flex-wrap items-center gap-1.5">
-        {items !== null && items.length > 0 && (
+      <PageHeader
+        title="时间轴"
+        controls={
           <>
-            <button
-              type="button"
-              onClick={() => setActiveTag(null)}
-              className={cn(
-                "rounded-full border px-2.5 py-0.5 text-xs transition-colors",
-                activeTag === null
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-muted text-muted-foreground hover:text-foreground",
-              )}
-            >
-              全部
-            </button>
-            {tagOptions.map((tag) => (
-              <button
-                key={tag}
-                type="button"
-                onClick={() => setActiveTag((cur) => (cur === tag ? null : tag))}
-                className={cn(
-                  "rounded-full border px-2.5 py-0.5 text-xs transition-colors",
-                  activeTag === tag
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border bg-muted text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {tag}
-              </button>
-            ))}
-          </>
-        )}
-        <span className="ml-auto flex items-center gap-2">
-          {/* AI 排序：注入聊天预设指令（F9）；无项目禁用——外层 span 承载 title 提示
+            {items !== null && items.length > 0 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setActiveTag(null)}
+                  className={cn(
+                    "rounded-full border px-2.5 py-0.5 text-xs transition-colors",
+                    activeTag === null
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-muted text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  全部
+                </button>
+                {tagOptions.map((tag) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => setActiveTag((cur) => (cur === tag ? null : tag))}
+                    className={cn(
+                      "rounded-full border px-2.5 py-0.5 text-xs transition-colors",
+                      activeTag === tag
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-muted text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </>
+            )}
+            <span className="ml-auto flex items-center gap-2">
+              {/* AI 排序：注入聊天预设指令（F9）；无项目禁用——外层 span 承载 title 提示
               （按钮 disabled 态 pointer-events-none 吞掉 hover，原生 title 不弹） */}
-          <span
-            className={cn(!config && "cursor-not-allowed")}
-            title={config ? undefined : "请先打开项目"}
-          >
-            <Button disabled={!config} onClick={handleAiSort} aria-label="AI 排序">
-              <OrderedListOutlined className="text-sm" />
-              AI 排序
-            </Button>
-          </span>
-          <Button onClick={openCreateEvent}>+ 新建事件</Button>
-          <Button type="primary" onClick={() => setTpCreateOpen(true)}>
-            + 新建时间点
-          </Button>
-        </span>
-      </div>
+              <span
+                className={cn(!config && "cursor-not-allowed")}
+                title={config ? undefined : "请先打开项目"}
+              >
+                <Button disabled={!config} onClick={handleAiSort} aria-label="AI 排序">
+                  <OrderedListOutlined className="text-sm" />
+                  AI 排序
+                </Button>
+              </span>
+              <Button onClick={openCreateEvent}>+ 新建事件</Button>
+              <Button type="primary" onClick={() => setTpCreateOpen(true)}>
+                + 新建时间点
+              </Button>
+            </span>
+          </>
+        }
+      />
 
       {/* 滚动区：状态/列表（G1：flex-1 min-h-0 overflow-y-auto 独立滚动——错误横幅/骨架/空态/
            列表/无匹配均替代列表位置，归滚动区；header 与筛选器在滚动区外保持固定） */}

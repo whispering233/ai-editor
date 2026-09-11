@@ -25,7 +25,7 @@ import { CHILD_TYPE, TYPE_LABEL } from "../components/outline/dialogs";
 import { NodeHookMarkBadge } from "../components/outline/node-hook-badge";
 import { TagChip } from "@/components/ui/tag-chip";
 import { DropIndicator } from "@/components/ui/drop-indicator";
-import { PageTitle } from "@/components/ui/page-title";
+import { PageHeader } from "@/components/ui/page-header";
 import { RowContextMenu } from "@/components/entity/row-context-menu";
 import { EmptyState } from "@/components/ui/empty-state";
 import { errorBannerClass, skeletonClass } from "@/lib/styles";
@@ -870,20 +870,24 @@ export default function Outline() {
 
   return (
     <section>
-      {/* 第一行：页面标题；第二行：控件行（本页无筛选控件，操作按钮靠右——layout.md §3） */}
-      <PageTitle className="mb-4">大纲</PageTitle>
-      <div className="mb-3 flex items-center gap-2">
-        <Button
-          className="ml-auto"
-          onClick={toggleAllCollapse}
-          disabled={!outline || outline.children.length === 0}
-        >
-          {collapsed.size > 0 ? "全部展开" : "全部折叠"}
-        </Button>
-        <Button type="primary" onClick={() => startCreate(ROOT_NODE_ID, "volume")}>
-          + 新建
-        </Button>
-      </div>
+      {/* 页头（统一壳）：标题 + 控件行 + 分割线——契约见 DESIGN.md §Layout「中栏页头结构」 */}
+      <PageHeader
+        title="大纲"
+        controls={
+          <>
+            <Button
+              className="ml-auto"
+              onClick={toggleAllCollapse}
+              disabled={!outline || outline.children.length === 0}
+            >
+              {collapsed.size > 0 ? "全部展开" : "全部折叠"}
+            </Button>
+            <Button type="primary" onClick={() => startCreate(ROOT_NODE_ID, "volume")}>
+              + 新建
+            </Button>
+          </>
+        }
+      />
 
       {/* 页级错误横幅（destructive token 类） */}
       {error && <div className={cn(errorBannerClass, "mb-3")}>{error}</div>}

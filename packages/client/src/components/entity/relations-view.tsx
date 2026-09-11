@@ -22,6 +22,7 @@ import { entityDetailPath } from "../../lib/entity-paths";
 import type { EntityType } from "@whispering233/ai-editor-shared";
 import { Alert, Button, Input, Select, Skeleton } from "antd";
 import { TagChip } from "@/components/ui/tag-chip";
+import { PageDivider } from "@/components/ui/page-header";
 import { DeleteOutlined, SearchOutlined } from "@ant-design/icons";
 import { navigate } from "../../hooks/use-route";
 import { useUiStore } from "../../stores/ui";
@@ -187,7 +188,7 @@ export function RelationsView({
 
   return (
     <div>
-      {/* 控件行（页面头部第二行，layout.md §3）：左=端点类型/关系类型/搜索；右=建立关联
+      {/* 页头控件行（由本视图渲染，工具栏随视图结构）：左=端点类型/关系类型/搜索；右=建立关联
           （前端过滤；scope 模式隐藏——列表已按端点过滤，操作入口由宿主详情页给） */}
       {scope === undefined && (
         <div className="mb-3 flex flex-wrap items-center gap-3">
@@ -230,6 +231,10 @@ export function RelationsView({
           </Button>
         </div>
       )}
+
+      {/* 页头分割线（本视图渲染控件行 → 分割线同由此处放，与 `PageHeader` 同一实现；
+          scope 模式无控件行也无分割线） */}
+      {scope === undefined && <PageDivider className="mb-4" />}
 
       {/* 错误态：请求失败 → 区块内重试 */}
       {error !== null && (

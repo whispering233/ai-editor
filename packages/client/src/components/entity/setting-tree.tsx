@@ -27,6 +27,7 @@ import {
   SearchOutlined,
   UpOutlined,
 } from "@ant-design/icons";
+import { PageDivider } from "@/components/ui/page-header";
 import { RowContextMenu } from "./row-context-menu";
 import { TagChip } from "@/components/ui/tag-chip";
 import { DropIndicator } from "@/components/ui/drop-indicator";
@@ -970,6 +971,9 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
           </Button>
         </span>
       </div>
+
+      {/* 页头分割线（本页控件行由本视图渲染，故分割线也在此处放；DESIGN.md §Layout「中栏页头结构」） */}
+      <PageDivider className="mb-4" />
 
       {/* root 级就地新建输入行（工具栏「+ 新建」触发；无父设定） */}
       {creatingAt?.parentId === null && (
