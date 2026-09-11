@@ -6,7 +6,10 @@
 // 高亮：路由首段 → Menu key（timepoints 宿主时间轴）；书架按钮在 #/ 路由高亮。
 // 主题/色纪律：颜色一律取语义 token 类（bg-background / border-border / bg-accent，均为 index.css 对 antd token 的转发）；
 // 禁止内联 style 与硬编码色值（旧版 selected 态用 inline `token.colorPrimaryBg` 已改为 `bg-accent` = `{colors.surface-muted}`）。
+// - 底部区「立即备份」/ 设置 / 主题三入口同为无边框文字按钮（DESIGN.md §导航与外壳 `sidebar`：
+//   立即备份是动作、形态随底部区，H4 登记例外）；备份在途 `loading` 防连点，无项目禁用。
 import { Button, Menu } from "antd";
+import { useState } from "react";
 import {
   ApartmentOutlined,
   BookOutlined,
@@ -18,17 +21,20 @@ import {
   MoonOutlined,
   PushpinOutlined,
   ReadOutlined,
+  SaveOutlined,
   SettingOutlined,
   ShareAltOutlined,
   SunOutlined,
   TeamOutlined,
   TagsOutlined,
 } from "@ant-design/icons";
+import { ApiError, CLIENT_NETWORK_ERROR, createProjectBackup } from "../../lib/api";
 import type { Route } from "../../hooks/use-route";
 import { navigate, useHashRoute } from "../../hooks/use-route";
 import { useTheme } from "../../hooks/use-theme";
 import { SIDEBAR_MIN_WIDTH } from "../../hooks/use-panels";
 import { useProjectStore } from "../../stores/project";
+import { useUiStore } from "../../stores/ui";
 
 /** Menu key = 导航目标 path（onClick 直接 navigate(key)） */
 const NAV_ITEMS = [
@@ -63,7 +69,29 @@ export function NavRail({
   const { theme: mode, toggleTheme } = useTheme();
   const config = useProjectStore((s) => s.config);
   const loadError = useProjectStore((s) => s.loadError);
+  const showToast = useUiStore((s) => s.showToast);
   const route = useHashRoute();
+  /** 立即备份在途（防连点；antd loading 同时拦点击） */
+  const [backingUp, setBackingUp] = useState(false);
+
+  /** 立即备份（无名称 = 纯时间戳文件名 `-m` 段；文案与设置页 BackupSection 对齐） */
+  async function handleBackupNow() {
+    if (config === null || backingUp) return;
+    setBackingUp(true);
+    try {
+      await createProjectBackup();
+      showToast("已备份");
+    } catch (err) {
+      showToast(
+        err instanceof ApiError && err.code !== CLIENT_NETWORK_ERROR
+          ? err.message
+          : "无法连接服务，备份失败",
+        "error",
+      );
+    } finally {
+      setBackingUp(false);
+    }
+  }
 
   /** 无项目：业务导航禁用（引导回书架主页 #/，与旧 TabBar noProject guard 行为一致） */
   const noProject = loadError === "NO_PROJECT_OPEN";
@@ -136,8 +164,18 @@ export function NavRail({
         />
       </div>
 
-      {/* 底部：设置 + 主题切换（导航入口，与左栏 Menu 项同级——不受 H4「文字按钮带边框」约束） */}
+      {/* 底部：立即备份 + 设置 + 主题切换（三入口与左栏 Menu 项同级——不受 H4「文字按钮带边框」约束） */}
       <div className="flex shrink-0 flex-col gap-1 border-t border-border px-2 py-2">
+        <Button
+          color="default" variant="text"
+          block
+          icon={<SaveOutlined />}
+          disabled={config === null}
+          loading={backingUp}
+          onClick={() => void handleBackupNow()}
+        >
+          <span className="truncate text-left">立即备份</span>
+        </Button>
         <Button
           color="default" variant="text"
           block
