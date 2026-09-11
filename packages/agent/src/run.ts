@@ -48,7 +48,9 @@ export const DEFAULT_ROUND_TIMEOUT_MS = 120_000;
  */
 export const DEFAULT_ATTEMPT_TIMEOUT_MS = 60_000;
 
-/** 上下文 token 预算（60K——DeepSeek 64K 窗口留余量；测试可覆盖） */
+/** 上下文 token 总闸兜底缺省（60K）：生产由 server 按 `激活模型 contextWindow × 0.5` 传入
+ * （见 `docs/design/config.md`「可配 / 不可配边界」）；常量仅在调用方未传时生效
+ * （测试 / 直接调用）。触发即发 error 终止本轮——安全网，不是调优旋钮 */
 export const DEFAULT_TOKEN_BUDGET = 60_000;
 
 /**
