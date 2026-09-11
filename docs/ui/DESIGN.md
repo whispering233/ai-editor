@@ -265,7 +265,7 @@ components:
 
 # ai-editor 设计语言
 
-> 事实源：本文件是**视觉唯一契约**（颜色/字体/圆角/间距/组件外观）。布局与交互结构见 `layout.md`；实现层 token 覆盖见本文 §Colors 的 antd 映射表与 §Components 的组件 token 覆盖表。改样式先改本文件，再改代码；改完跑 `designmd lint docs/ui/DESIGN.md`。
+> 事实源：本文件是**视觉与布局唯一契约**（颜色/字体/圆角/间距/三栏布局与中栏页头结构/组件外观）。实现层 token 覆盖见本文 §Colors 的 antd 映射表与 §Components 的组件 token 覆盖表。改样式先改本文件，再改代码；改完跑 `designmd lint docs/ui/DESIGN.md`。
 
 ## Overview
 
@@ -381,7 +381,7 @@ components:
 - **间距基**：4px；实用档 `{spacing.xxs}`(4) / `{spacing.xs}`(8) / `{spacing.sm}`(12) / `{spacing.md}`(16) / `{spacing.lg}`(24) / `{spacing.xl}`(32)。沿用 antd `sizeUnit` 与 Tailwind 4px 网格，**无自定义间距值**。
 - **页面内侧**：内容区 padding 16px；区块之间 12-16px；行内元素 8px；图标与文字间距 8px。
 - **控件高**：常规 32px（`--ant-control-height`），小号 24px，大号 40px；行高 32-36px 保证密集列表节奏一致。
-- **响应式**：`<1024px` 折叠右栏为抽屉、隐藏拖拽手柄（见 `layout.md`）；本设计语言不对移动端另立规则。
+- **响应式**：`<1024px` 折叠右栏为抽屉、隐藏拖拽手柄（见「布局」三栏段）；本设计语言不对移动端另立规则。
 - **滚动**：各栏独立纵向滚动；分栏之间靠 1px hairline，不靠阴影或沟槽分隔线（旧 6px 灰分隔条已废）。
 
 ### 中栏页头结构
@@ -455,7 +455,7 @@ components:
 **`button-text`** — 无边框纯文字，只用于行内最弱操作；**不得用于页面级操作**。**antd v6 `Button` 的 `variant` 必须与 `color` 同时给**（`antd/es/button/Button.js`：`if (color && variant)`”——否则静默回落到 `['default','outlined']`，`variant="text"` 会变成**带边框**按钮（右侧图标按钮一半有边框一半没有的根因）；合法写法：`color="default" variant="text"`，或遗留 `type="text"`；`design-discipline.test.ts` 有 `button-variant-color` 守卫。
 **`icon-button`（统一约定）** — 全站图标型操作按钮**只有一种实现**：antd `Button color="default" variant="text" size="small"` + 图标（⚠ `variant` 必须与 `color` 同时给，见下行 `button-text` 的坑）（图标尺寸随字号类：行内 14px = `text-sm`、工具条 16px = `text-base`），颜色继承 antd 的 text 变体（`{colors.primary}`），hover/disabled/loading 由 antd 派发；**不再并存自绘 `<button>` 图标按钮**（两套并存会让同一角色出现灰/墨/红三种观感）。**不可恢复操作**（彻底删除 purge、物理删关系）用 `danger`（`{colors.error}`）；**软删**（移入回收站）保持常规色——危险色的语义是「不可撤销」，不是「删除」。图标一律 `@ant-design/icons`；状态用 Filled、操作与导航用 Outlined。**面板收起/展开图标 = 同一族镜像对 `DoubleLeftOutlined`（`«`）/ `DoubleRightOutlined`（`»`）**：方向 = 面板往哪边收——收起 = 朝本侧边缘（左栏 `«`、右栏 `»`），展开 = 反向（左栏 `»`、右栏 `«`），两栏四钮完全对称。**禁用**：`BorderLeft/RightOutlined`（表格边框图标，与面板折叠无关）、`MenuFold/UnfoldOutlined`（仅面向左侧，右栏无同族镜像）、`VerticalLeft/RightOutlined`（名字与朝向不一致——`VerticalLeft` = `▶|`、`VerticalRight` = `|◀`，二者区别在竖条在哪侧而非箭头指向，左右两栏配不出对称）。
 **`input`** — 白底 + `{colors.hairline-strong}` 描边 + `{rounded.sm}` + 32px 高；聚焦 = 1px primary 描边（**无阴影、无彩环**）。行内编辑与表单用同一个 antd `Input`。
-**`search-input`** — 列表/富页筛选栏的搜索框（全站**统一形态**）：antd `Input` + `prefix={<SearchOutlined />}` + 固定宽 `192px`（`w-48`）+ `allowClear`（筛选类，清空即回到未筛）；placeholder 统一「搜索{对象}…」。位置固定在页面控件行的**最左**（见 `layout.md` §3）。
+**`search-input`** — 列表/富页筛选栏的搜索框（全站**统一形态**）：antd `Input` + `prefix={<SearchOutlined />}` + 固定宽 `192px`（`w-48`）+ `allowClear`（筛选类，清空即回到未筛）；placeholder 统一「搜索{对象}…」。位置固定在页面控件行的**最左**（见「中栏页头结构」）。
 **`drag-indicator`** — 拖拽插入线：**实线** `{colors.primary}` 3px + 两端 8px 圆点（`h-[3px]` + `size-2 rounded-full`），横跨被拖行所在层级的内容宽度；`pointer-events-none` 不拦拖拽事件。
 **拖拽目标行与临时高亮（prose 承载，色值不登记）** — 「拖到行中段 = 成为其子级」的拖拽目标行、以及「新建即聚焦 / 定位到节点」的临时高亮，统一用 **primary 10% 淡染面 + 1px primary 30% 描边**（`bg-primary/10 ring-1 ring-primary/30 ring-inset`，与选中态同一语言，**不用** `{colors.surface-muted}`：近白面在白底上不可见）。被拖行本体用 `opacity-50`。**非法落点**（防环/跨层级非法）：不显插入线、不显高亮（无反馈即「不可放」）。
 **`select`** — 与 `input` 同一语言：白底 + 1px `{colors.hairline-strong}` 描边 + `{rounded.sm}` + 32px 高（密集行 24px = antd `size="small"`）；聚焦同样 1px primary 描边、无彩环。下拉浮层走 `dropdown-panel`（1px `{colors.hairline}` + `{rounded.md}` + 浮层阴影），选中项 `{colors.surface-muted}` 灰面。全站下拉统一 antd `Select`（原生 `<select>` 已清零）。
@@ -477,7 +477,7 @@ components:
 
 ### 数据展示
 
-**`data-row`** / **`data-row-hover`** — 列表/树/大纲行：无底色 + 底部 1px `{colors.hairline-soft}`；hover = `{colors.surface-soft}`。双击进详情、单击标题行内编辑（交互规则见 `layout.md` §7）。
+**`data-row`** / **`data-row-hover`** — 列表/树/大纲行：无底色 + 底部 1px `{colors.hairline-soft}`；hover = `{colors.surface-soft}`。行级交互：双击进详情、单击标题行内编辑；**链式新建（Enter 建同级/子级）后新条目 = 选中 + 聚焦**（只聚焦不选中会让下一次 Enter 被「无选中」守卫静默吞掉；新建按钮同理）。
 **`table-header`** — 表头**白底**（不是 antd 默认灰底）+ 1px `{colors.hairline}` 底线 + caption 字色 `{colors.secondary}`。
 **`tag`** — 分类/标签 chip（`data.tags`）与类型徽标：`{rounded.xs}` + **tint 六色底** + caption 字号 + `{colors.primary}` 字色（按名称 hash 稳定分配，见 §Colors 分配规则）。实现 = `components/ui/tag-chip.tsx`（自绘 span + `bg-tag-*` token 类）——**不用** antd `Tag` 的预设色：`Tag` 的默认底色由组件 token 派发、自定义 tint 只能走 `Tag` 的 preset/内联色，与「禁硬编码色值」冲突。antd `Tag` 仅保留给**带交互的元信息 chip**（如 focus 小条的 closable 标签）。**标签不做按钮形态**；灰色 `{colors.surface-muted}` 底仅用于无标签语义的占位 chip。
 **`status-badge`** — 状态胶囊（进行中/已确认/已失效等）：`{rounded.full}` + caption 字号 + 语义色或 tint 底色；状态图标用 antd **Filled** 变体（`CheckCircleFilled`/`CloseCircleFilled`/`ExclamationCircleFilled`）。

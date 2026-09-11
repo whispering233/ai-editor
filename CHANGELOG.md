@@ -5,6 +5,23 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+> 设置页信息架构重构（二级 tab + AI 模型三级导航）+ 中栏页头统一壳（标题/tab/控件行 + 分割线）+ 左栏「立即备份」快捷入口。**纯前端，API/数据契约零改动**。
+
+### Added
+
+- **中栏页头统一壳 `components/ui/page-header.tsx`**：标题行 → 二级 tab 行（可选）→ 控件行（可选）→ 分割线，一次给全；**14 页迁移**——列表/富页 10 页（概览 / 书架 / 大纲 / 人物 / 设定 / 地点 / 关联 / 伏笔 / 时间轴 / 参考资料 / 回收站）+ 详情页 4 页（EntityDetail / OutlineDetail / TimelineDetail / ReferenceDetail，分割线落在元信息行之下）；`ReferenceDetail` 标题可编辑走 `titleNode`（自绘标题元素，不把 `input` 嵌进 `h4`）；Timeline / ReferenceList 的内滚动布局由 `shrink-0` 页头承担（实测滚动 500px 页头与分割线不动）
+- **设置页二级 tab**：三块下沉为 `settings/{llm,project-rules,backup}-section.tsx`，`Tabs` line 型 3 项（AI 模型 → 项目规则 → 备份），选中态为页内 state（不进 URL、不进左栏高亮；刷新回落默认 tab）；懒渲染（未访问分区不拉 `/project/agents` 与 `/project/backups`）+ 草稿跨 tab 保留；去掉 `max-w-2xl mx-auto` 容器（页头与其它中栏页对齐）
+- **AI 模型三级导航**（`sub-nav`）：左侧 160px 竖向 `Menu` 列 provider，右侧为该家面板（裸区块：标题行 + 「当前」徽标 + 模型 `Select` + key 状态/输入/保存/清除），常驻说明 Alert 跨整宽置底；provider 名超宽截断 + `title` 全文提示
+- **左栏「立即备份」快捷入口**：`NavRail` 底部区最上（设置之上）`block` + `color="default" variant="text"` + `SaveOutlined`，`POST /project/backup` 不带 name，toast 文案与设置页一致；无项目禁用、在途 `loading` 防连点
+- **守卫 +2**：`antd-tokens.test.ts` 新增 Tabs 契约（两态 `horizontalMargin` 归零、`itemColor` = 次级文字档）——tab 条自带底线即页头分割线，antd 默认 `0 0 16px 0` 会让底线悬空成双线
+
+### Changed
+
+- **契约（`DESIGN.md`）**：§Layout 新增「中栏页头结构」（有 tab 用 tab 条自带底线、无 tab 用显式 1px `{colors.hairline}`；宽度与内容同宽不穿透页内边距）；§Components 新增 `tabs` / `sub-nav`（三级导航 = 竖向 `Menu` inline，宽 160px = `sidebar` 宽度档，契约复用 `menu-item` / `menu-item-selected`，不新增设计语言），覆盖表新增 `Tabs` 行；`sidebar` 底部入口清单补「立即备份」并登记底部区三入口统一无边框形态（「立即备份」是动作而非导航，H4 例外仅此一处）；`data-row` 段补**链式新建 = 选中 + 聚焦**的行级交互登记（只聚焦不选中会让下一次 Enter 被守卫吞掉）
+- **文档收口**：`docs/ui/layout.md` 已并入本文件，全仓 19 处悬空引用（`AGENTS.md` / `docs/design/{tasks,architecture,config}.md` / `DESIGN.md` 自身 / `README.md` / 6 处代码注释）改指 `docs/ui/DESIGN.md` 并**写节名不写节号**；`CHANGELOG.md` 历史条目不动（逐版本事实）
+
 ## [v0.0.30] - 2026-09-11
 
 > 右栏交互优化（用户反馈八项）+ 两条 **antd 选中面静默失效**根因（「所有下拉选中条目因背景色看不清」）。**纯前端，API/数据契约零改动**；`design-discipline` 守卫 14 条不变，新增 antd **派生 token** 守卫 5 条（`antd-tokens.test.ts`）。

@@ -192,7 +192,7 @@ export function RelationsView({
           （前端过滤；scope 模式隐藏——列表已按端点过滤，操作入口由宿主详情页给） */}
       {scope === undefined && (
         <div className="mb-3 flex flex-wrap items-center gap-3">
-          {/* 搜索固定在最左（layout.md §3） */}
+          {/* 搜索固定在最左（DESIGN.md「中栏页头结构」） */}
           <div className="w-48">
             <Input
               prefix={<SearchOutlined />}

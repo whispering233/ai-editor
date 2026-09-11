@@ -202,7 +202,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
     const t = setTimeout(() => {
       if (focusNewItem(`[data-setting-id="${highlightedId}"]`)) {
         focusedNewSettingRef.current = highlightedId;
-        // 链式新建（layout.md §7）：新条目 = 选中 + 聚焦——「Enter 新建子级」的守卫是
+        // 链式新建（DESIGN.md「数据展示」`data-row` 行级交互）：新条目 = 选中 + 聚焦——「Enter 新建子级」的守卫是
         // selectedId === node.id，只聚焦不选中会让下一次 Enter 静默无响应
         setSelectedId(highlightedId);
       }
@@ -363,7 +363,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
       }
       useUiStore.getState().showToast(`已创建设定《${name}》`);
       if (parentId !== null) expand(parentId);
-      // 高亮 → 聚焦效应里补选中（layout.md §7「链式新建」）：不能在此直接 setSelectedId——
+      // 高亮 → 聚焦效应里补选中（DESIGN.md「数据展示」链式新建）：不能在此直接 setSelectedId——
       // reload 是异步的（tick + 加载效应），此刻 roots 还是旧树，清理效应会把这个「树里还没有的 id」
       // 当成已删除节点立刻清掉（实测踩坑：只聚焦不选中 → 再按 Enter 建子级静默无响应）
       setHighlightedId(res.id);
@@ -923,7 +923,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
         </div>
       )}
 
-      {/* 控件行（页面头部第二行，layout.md §3）：搜索 + 标签筛选（树内过滤）+ 排序 + 全部展开/折叠 + 新建（root 级） */}
+      {/* 控件行（中栏页头结构，DESIGN.md「中栏页头结构」）：搜索 + 标签筛选（树内过滤）+ 排序 + 全部展开/折叠 + 新建（root 级） */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <div className="w-48">
           <Input

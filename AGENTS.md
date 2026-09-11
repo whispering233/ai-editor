@@ -4,7 +4,7 @@
 
 ## 文档即契约（阅读顺序）
 
-`docs/design/00-master-design.md`（产品定位与设计原则）→ `architecture.md`（技术栈 + 分包与依赖方向）→ 详细设计（`10-data-model.md` → `20-context.md` → `30-agent-loop.md`，只讲「为什么 + 不变式」）→ 按职责读 `docs/api/`（先 `00-api-index.md` + `api-public.md`）与 `docs/db/schema.md`（字段/端点契约的「是什么」）→ 前端改动必读 `docs/ui/layout.md`（布局与交互）与 `docs/ui/DESIGN.md`（**视觉契约**；改样式先改它）。
+`docs/design/00-master-design.md`（产品定位与设计原则）→ `architecture.md`（技术栈 + 分包与依赖方向）→ 详细设计（`10-data-model.md` → `20-context.md` → `30-agent-loop.md`，只讲「为什么 + 不变式」）→ 按职责读 `docs/api/`（先 `00-api-index.md` + `api-public.md`）与 `docs/db/schema.md`（字段/端点契约的「是什么」）→ 前端改动必读 `docs/ui/DESIGN.md`（**视觉与布局唯一契约**：颜色/字号/圆角/间距/三栏布局与中栏页头结构/组件外观；改样式先改它）。
 
 - 任何改动前先读对应文档；发现文档之间或文档与代码矛盾，先停下提问，不要自行发明。
 - 状态与演进：`milestone.md`（路线）+ 根 `CHANGELOG.md`（逐版本事实）+ `tasks.md`（当前任务卡）。
