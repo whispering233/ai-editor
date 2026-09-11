@@ -24,7 +24,7 @@ import { useEffect, useState } from "react";
 import { Button, Input, Select } from "antd";
 import { formatTimestamp } from "@whispering233/ai-editor-shared";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
-import { PageTitle } from "@/components/ui/page-title";
+import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -323,24 +323,29 @@ export default function TimelineDetail({ id }: { id: string }) {
 
   return (
     <section>
-      {/* header：标题 + 操作（面包屑已随B1 移除——返回走左栏 NavRail） */}
-      <div className="mb-1 flex items-center gap-3">
-        <PageTitle className="min-w-0 truncate">{detail?.name ?? "…"}</PageTitle>
-        <div className="ml-auto flex items-center gap-2">
-          <Button onClick={() => void handleSave()} disabled={!detail || saving}>
-            {saving ? "保存中…" : "保存"}
-          </Button>
-          <Button danger disabled={!detail} onClick={() => void handleDelete()}>
-            移入回收站
-          </Button>
-        </div>
-      </div>
-      {/* 元信息行（事件不产生 Delta——，仅展示时间，信息层级） */}
-      {detail && (
-        <p className="mb-4 text-xs text-muted-foreground">
-          创建于 {formatTimestamp(detail.createdAt)} · 更新于 {formatTimestamp(detail.updatedAt)}
-        </p>
-      )}
+      {/* 页头（统一壳）：标题 + 操作 + 元信息行 + 分割线 */}
+      <PageHeader
+        title={detail?.name ?? "…"}
+        truncateTitle
+        action={
+          <>
+            <Button onClick={() => void handleSave()} disabled={!detail || saving}>
+              {saving ? "保存中…" : "保存"}
+            </Button>
+            <Button danger disabled={!detail} onClick={() => void handleDelete()}>
+              移入回收站
+            </Button>
+          </>
+        }
+        description={
+          /* 元信息行（事件不产生 Delta，仅展示时间，信息层级） */
+          detail ? (
+            <p className="text-xs text-muted-foreground">
+              创建于 {formatTimestamp(detail.createdAt)} · 更新于 {formatTimestamp(detail.updatedAt)}
+            </p>
+          ) : undefined
+        }
+      />
 
       {/* 加载骨架 */}
       {loading && !detail && (

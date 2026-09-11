@@ -19,7 +19,7 @@ import { ComputePreview } from "../components/delta/compute-preview";
 import { entityListHost } from "../lib/entity-paths";
 import { Button, Input, Select } from "antd";
 import type { InputRef } from "antd";
-import { PageTitle } from "@/components/ui/page-title";
+import { PageHeader } from "@/components/ui/page-header";
 import {
   ApiError,
   CLIENT_NETWORK_ERROR,
@@ -480,32 +480,37 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
 
   return (
     <section>
-      {/* header：标题 + 操作（面包屑已随B1 移除——详情页返回走左栏 NavRail） */}
-      <div className="mb-1 flex items-center gap-3">
-        <PageTitle className="min-w-0 truncate">{detail?.name ?? "…"}</PageTitle>
-        <div className="ml-auto flex items-center gap-2">
-          <Button onClick={() => void handleSave()} disabled={!detail || saving}>
-            {saving ? "保存中…" : "保存"}
-          </Button>
-          <Button danger disabled={!detail} onClick={() => void handleDelete()}>
-            移入回收站
-          </Button>
-        </div>
-      </div>
-      {/* 元信息行（文字与「变更记录 N 条」入口同用 muted-foreground，双主题一致） */}
-      {detail && (
-        <p className="mb-4 text-xs text-muted-foreground">
-          创建于 {formatTimestamp(detail.createdAt)} · 更新于 {formatTimestamp(detail.updatedAt)} ·{" "}
-          <button
-            type="button"
-            onClick={() => setDeltaOpen((v) => !v)}
-            title="展开状态预览：计算该实体在任意大纲节点处的累积状态"
-            className="rounded-md border border-border px-1.5 py-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            变更记录 {detail.deltaCount} 条
-          </button>
-        </p>
-      )}
+      {/* 页头（统一壳）：标题 + 操作 + 元信息行 + 分割线 */}
+      <PageHeader
+        title={detail?.name ?? "…"}
+        truncateTitle
+        action={
+          <>
+            <Button onClick={() => void handleSave()} disabled={!detail || saving}>
+              {saving ? "保存中…" : "保存"}
+            </Button>
+            <Button danger disabled={!detail} onClick={() => void handleDelete()}>
+              移入回收站
+            </Button>
+          </>
+        }
+        description={
+          /* 元信息行（文字与「变更记录 N 条」入口同用 muted-foreground，双主题一致） */
+          detail ? (
+            <p className="text-xs text-muted-foreground">
+              创建于 {formatTimestamp(detail.createdAt)} · 更新于 {formatTimestamp(detail.updatedAt)} ·{" "}
+              <button
+                type="button"
+                onClick={() => setDeltaOpen((v) => !v)}
+                title="展开状态预览：计算该实体在任意大纲节点处的累积状态"
+                className="rounded-md border border-border px-1.5 py-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                变更记录 {detail.deltaCount} 条
+              </button>
+            </p>
+          ) : undefined
+        }
+      />
 
       {/* 状态预览区块（S5.4：元信息行入口展开；位于表单上方） */}
       {detail && deltaOpen && (

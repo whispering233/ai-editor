@@ -19,8 +19,11 @@ export function PageDivider({ className }: { className?: string }) {
 }
 
 export interface PageHeaderProps {
-  /** 页面标题（每页一个） */
-  title: ReactNode;
+  /** 页面标题（每页一个；内部套 `PageTitle` 薄壳） */
+  title?: ReactNode;
+  /** 自绘标题元素（替代 `PageTitle` 薄壳，与 `title` 二选一）——
+   * 仅供「标题本身可编辑」的页（参考资料详情：点击进输入框），避免把 `input` 嵌进 `h4` */
+  titleNode?: ReactNode;
   /** 标题行右侧操作区（刷新/保存/删除/新建等，靠右对齐） */
   action?: ReactNode;
   /** 说明行（标题行下方；字号/颜色由调用方给，如 `text-sm text-muted-foreground`） */
@@ -39,6 +42,7 @@ export interface PageHeaderProps {
 
 export function PageHeader({
   title,
+  titleNode,
   action,
   description,
   tabs,
@@ -50,7 +54,9 @@ export function PageHeader({
   return (
     <header className={cn("mb-4 flex shrink-0 flex-col", className)}>
       <div className="flex items-center gap-3">
-        <PageTitle className={cn("min-w-0", truncateTitle && "truncate")}>{title}</PageTitle>
+        {titleNode ?? (
+          <PageTitle className={cn("min-w-0", truncateTitle && "truncate")}>{title}</PageTitle>
+        )}
         {action !== undefined && (
           <div className="ml-auto flex shrink-0 items-center gap-2">{action}</div>
         )}

@@ -22,7 +22,7 @@ import { DeltaCreateForm } from "../components/delta/delta-create-form";
 import { TYPE_LABEL } from "../components/outline/dialogs";
 import { Button, Input, Select } from "antd";
 import { TagChip } from "@/components/ui/tag-chip";
-import { PageTitle } from "@/components/ui/page-title";
+import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionCard } from "@/components/ui/section-card";
 import { ApiError, updateOutlineNode, type UpdateOutlineBody } from "../lib/api";
@@ -187,45 +187,49 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
 
   return (
     <section>
-      {/* header：标题 + 操作区（设为当前位置 / 保存）——面包屑已随B1 移除 */}
-      <div className="mb-1 flex items-center gap-3">
-        <PageTitle className="min-w-0 truncate">{node?.title ?? "…"}</PageTitle>
-        <div className="ml-auto flex items-center gap-2">
-          {/* S13.2 设为当前位置（动作入口；状态徽标在元信息行）：已是当前位置 → 禁用 + 「当前位置」标记，
-              与 S13.1 前大纲页 disabled={isCurrent || busy} 语义一致 */}
-          <Button
-            disabled={node === null || isCurrent || settingCurrent}
-            title={
-              isCurrent
-                ? "当前节点已是创作进度位置"
-                : "标记为创作进度位置（InfoBar 展示 + 定位跳转基准）"
-            }
-            onClick={() => void handleSetCurrent()}
-          >
-            {isCurrent ? "当前位置" : "设为当前位置"}
-          </Button>
-          <Button
-            type="primary"
-            onClick={() => void handleSave()}
-            disabled={node === null || saving}
-          >
-            {saving ? "保存中…" : "保存"}
-          </Button>
-        </div>
-      </div>
-
-      {/* 元信息行：类型徽标 + 更新时间 + 当前位置（文字与大纲列表页徽标语义一致） */}
-      {node && (
-        <div className="mb-4 flex items-center gap-2 text-xs text-muted-foreground">
-          <TagChip>{TYPE_LABEL[node.type]}</TagChip>
-          <span>更新于 {formatTimestamp(node.updatedAt)}</span>
-          {isCurrent && (
-            <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-xs text-accent-foreground">
-              当前位置
-            </span>
-          )}
-        </div>
-      )}
+      {/* 页头（统一壳）：标题 + 操作区（设为当前位置 / 保存）+ 元信息行 + 分割线 */}
+      <PageHeader
+        title={node?.title ?? "…"}
+        truncateTitle
+        action={
+          <>
+            {/* S13.2 设为当前位置（动作入口；状态徽标在元信息行）：已是当前位置 → 禁用 + 「当前位置」标记，
+                与 S13.1 前大纲页 disabled={isCurrent || busy} 语义一致 */}
+            <Button
+              disabled={node === null || isCurrent || settingCurrent}
+              title={
+                isCurrent
+                  ? "当前节点已是创作进度位置"
+                  : "标记为创作进度位置（InfoBar 展示 + 定位跳转基准）"
+              }
+              onClick={() => void handleSetCurrent()}
+            >
+              {isCurrent ? "当前位置" : "设为当前位置"}
+            </Button>
+            <Button
+              type="primary"
+              onClick={() => void handleSave()}
+              disabled={node === null || saving}
+            >
+              {saving ? "保存中…" : "保存"}
+            </Button>
+          </>
+        }
+        description={
+          /* 元信息行：类型徽标 + 更新时间 + 当前位置（文字与大纲列表页徽标语义一致） */
+          node ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <TagChip>{TYPE_LABEL[node.type]}</TagChip>
+              <span>更新于 {formatTimestamp(node.updatedAt)}</span>
+              {isCurrent && (
+                <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-xs text-accent-foreground">
+                  当前位置
+                </span>
+              )}
+            </div>
+          ) : undefined
+        }
+      />
 
       {noProject ? (
         /* 未打开项目：引导回首页（同大纲列表页） */

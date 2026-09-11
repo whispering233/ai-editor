@@ -36,6 +36,7 @@ import { cn } from "../lib/utils";
 import { errorBannerClass, skeletonClass } from "../lib/styles";
 import { Button, Input } from "antd";
 import { PageTitle } from "../components/ui/page-title";
+import { PageHeader } from "../components/ui/page-header";
 import { TagSuggest } from "../components/timeline/TagSuggest";
 import {
   CreateRelationDialog,
@@ -312,108 +313,110 @@ export default function ReferenceDetail({ id, draft }: { id?: string; draft?: "m
 
   return (
     <section className="flex h-full min-h-0 flex-col">
-      {/* 操作区（导入 md / 建立关联 / 删除）——面包屑已随B1 移除
-          （原「参考资料 › 当前标题」分段 pill；返回走左栏 NavRail） */}
-      <div className="mb-3 flex shrink-0 items-center gap-3">
-        <div className="ml-auto flex items-center gap-1.5">
-          {currentKind === "file" && (
-            <>
+      {/* 页头（统一壳）：标题（可编辑）/ 分类徽标 + 操作区（导入 md / 建立关联 / 删除）+ 元信息行 + 分割线；
+          面包屑已随B1 移除（返回走左栏 NavRail） */}
+      <PageHeader
+        titleNode={
+          <div className="flex min-w-0 items-center gap-2">
+            {titleEditing ? (
               <input
-                ref={fileInputRef}
-                type="file"
-                accept=".md,.markdown,text/markdown"
-                className="hidden"
-                onChange={handleImportFile}
-                aria-label="导入 md 文档"
+                autoComplete="off"
+                autoFocus
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void commitTitle();
+                  } else if (e.key === "Escape") {
+                    setTitleEditing(false);
+                  }
+                }}
+                onBlur={() => void commitTitle()}
+                className="h-9 min-w-0 flex-1 rounded-md border border-border bg-card px-2 text-xl focus:border-primary focus:outline-none"
+                disabled={saving}
               />
-              <Button disabled={importing} onClick={() => fileInputRef.current?.click()}>
-                {importing ? (
-                  <LoadingOutlined className="text-sm" spin />
-                ) : (
-                  <ImportOutlined className="text-sm" />
-                )}
-                导入 md 文档
-              </Button>
-            </>
-          )}
-          <Button onClick={() => setRelationOpen(true)} disabled={isDraft}>
-            <LinkOutlined className="text-sm" />
-            建立关联
-          </Button>
-          {!isDraft && (
-            <Button danger onClick={handleDelete}>
-              <DeleteOutlined className="text-sm" />
-              删除
+            ) : (
+              <PageTitle onClick={() => setTitleEditing(true)} title="点击编辑标题">
+                {/* R1 修复：标题显示 form.name 优先——草稿态用户编辑后失焦退出编辑态不再丢失输入
+                    （旧实现写死 isDraft ? "新建 md 文档" : detail!.name，编辑内容被吞）；空时回退占位文案 */}
+                {form.name.trim() !== ""
+                  ? form.name
+                  : isDraft
+                    ? draft === "md"
+                      ? "新建 md 文档"
+                      : "新建外源链接"
+                    : detail!.name}
+              </PageTitle>
+            )}
+            {/* 分类徽标（R4）：草稿态不显示——新建时分类未定且下方已有分类输入区；编辑态保留 */}
+            {!isDraft && (
+              <span className="shrink-0 whitespace-nowrap rounded-md border border-border bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                {TYPE_LABELS[form.type] ?? form.type}
+              </span>
+            )}
+          </div>
+        }
+        action={
+          <>
+            {currentKind === "file" && (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".md,.markdown,text/markdown"
+                  className="hidden"
+                  onChange={handleImportFile}
+                  aria-label="导入 md 文档"
+                />
+                <Button disabled={importing} onClick={() => fileInputRef.current?.click()}>
+                  {importing ? (
+                    <LoadingOutlined className="text-sm" spin />
+                  ) : (
+                    <ImportOutlined className="text-sm" />
+                  )}
+                  导入 md 文档
+                </Button>
+              </>
+            )}
+            <Button onClick={() => setRelationOpen(true)} disabled={isDraft}>
+              <LinkOutlined className="text-sm" />
+              建立关联
             </Button>
-          )}
-        </div>
-      </div>
-
-      {/* 标题 + 元信息 */}
-      <div className="mb-4 shrink-0">
-        <div className="flex items-center gap-2">
-          {titleEditing ? (
-            <input
-              autoComplete="off"
-              autoFocus
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  void commitTitle();
-                } else if (e.key === "Escape") {
-                  setTitleEditing(false);
-                }
-              }}
-              onBlur={() => void commitTitle()}
-              className="h-9 w-72 rounded-md border border-border bg-card px-2 text-xl focus:border-primary focus:outline-none"
-              disabled={saving}
-            />
-          ) : (
-            <PageTitle onClick={() => setTitleEditing(true)} title="点击编辑标题">
-              {/* R1 修复：标题显示 form.name 优先——草稿态用户编辑后失焦退出编辑态不再丢失输入
-                  （旧实现写死 isDraft ? "新建 md 文档" : detail!.name，编辑内容被吞）；空时回退占位文案 */}
-              {form.name.trim() !== ""
-                ? form.name
-                : isDraft
-                  ? draft === "md"
-                    ? "新建 md 文档"
-                    : "新建外源链接"
-                  : detail!.name}
-            </PageTitle>
-          )}
-          {/* 分类徽标（R4）：草稿态不显示——新建时分类未定且下方已有分类输入区；编辑态保留 */}
-          {!isDraft && (
-            <span className="rounded-md border border-border bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-              {TYPE_LABELS[form.type] ?? form.type}
-            </span>
-          )}
-        </div>
-        {/* 元信息：来源 + 创建/更新时间（详情页保留） */}
-        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          {currentKind === "link" && !isDraft && source !== "" && (
-            <a
-              href={/^https?:\/\//.test(source) ? source : undefined}
-              target={/^https?:\/\//.test(source) ? "_blank" : undefined}
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-primary hover:underline"
-            >
-              {source}
-              {/^https?:\/\//.test(source) && <ExportOutlined className="text-xs" />}
-            </a>
-          )}
-          {currentKind === "file" && !isDraft && source !== "" && (
-            <span title={source}>{source}</span>
-          )}
-          {!isDraft && detail !== null && (
-            <>
-              <span>创建 {formatTime(detail.createdAt)}</span>
-              <span>更新 {formatTime(detail.updatedAt)}</span>
-            </>
-          )}
-        </div>
-      </div>
+            {!isDraft && (
+              <Button danger onClick={handleDelete}>
+                <DeleteOutlined className="text-sm" />
+                删除
+              </Button>
+            )}
+          </>
+        }
+        description={
+          /* 元信息：来源 + 创建/更新时间（详情页保留） */
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            {currentKind === "link" && !isDraft && source !== "" && (
+              <a
+                href={/^https?:\/\//.test(source) ? source : undefined}
+                target={/^https?:\/\//.test(source) ? "_blank" : undefined}
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-primary hover:underline"
+              >
+                {source}
+                {/^https?:\/\//.test(source) && <ExportOutlined className="text-xs" />}
+              </a>
+            )}
+            {currentKind === "file" && !isDraft && source !== "" && (
+              <span title={source}>{source}</span>
+            )}
+            {!isDraft && detail !== null && (
+              <>
+                <span>创建 {formatTime(detail.createdAt)}</span>
+                <span>更新 {formatTime(detail.updatedAt)}</span>
+              </>
+            )}
+          </div>
+        }
+      />
 
       {/* 表单区（编辑态 = 详情页即编辑器；分类/标签/内容编辑） */}
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
