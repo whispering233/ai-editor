@@ -3,11 +3,12 @@
 // 二级 tab 行（可选）→ 控件行（可选）→ 分割线 → （调用方的内容区块）。
 //
 // ⚠ 分割线规则（契约红线，不要各页自画）：
-// - 有 `tabs`：**不画**分割线——antd line 型 `Tabs` 的导航条自带 1px `{colors.hairline}` 底线即分割线
-//   （配套 `AntdProvider` 的 `Tabs.horizontalMargin: 0`，否则底线与内容之间留 16px 空档）。
-// - 无 `tabs`：画 1px `{colors.hairline}`（= Tailwind `bg-border`，与 `info-bar` 底线同档）。
+// - 页头末尾画 1px `{colors.hairline}`（= Tailwind `bg-border`，与 `info-bar` 底线同档）。
 // - 控件行由子视图渲染的页（设定树 / 关联总览：工具栏随各自视图结构）传 `divider={false}`，
 //   由那两处在控件行之后自放 `<PageDivider />`——仍复用本模块的唯一实现，不另起分割线写法。
+// - 设置页（二级 tab）：`divider={false}` + 紧接 `<Tabs>`——antd line 型 Tabs 的导航条自带
+//   1px `{colors.hairline}` 底线即分割线（本模块无法承载 Tabs：它把导航条与内容一起渲染，
+//   放进页头会把内容推到分割线之上）。
 // - 宽度：与内容区块同宽（不穿透中栏内容区内边距）；间距：页头到内容 16px、页头内部 12px。
 import type { ReactNode } from "react";
 import { cn } from "../../lib/utils";
@@ -28,11 +29,9 @@ export interface PageHeaderProps {
   action?: ReactNode;
   /** 说明行（标题行下方；字号/颜色由调用方给，如 `text-sm text-muted-foreground`） */
   description?: ReactNode;
-  /** 二级 tab 行（当前仅设置页）：给出时分割线由 tab 条底线承担 */
-  tabs?: ReactNode;
   /** 控件行：左 = 搜索框（恒最左，192px）/筛选，右 = 操作按钮（`ml-auto`） */
   controls?: ReactNode;
-  /** 是否画显式分割线（默认画；有 `tabs` 时忽略） */
+  /** 是否画显式分割线（默认画；二级 tab 页传 `false`——tab 条自带底线即分割线） */
   divider?: boolean;
   /** 标题超长截断（详情页/长标题页用） */
   truncateTitle?: boolean;
@@ -45,7 +44,6 @@ export function PageHeader({
   titleNode,
   action,
   description,
-  tabs,
   controls,
   divider = true,
   truncateTitle,
@@ -62,11 +60,10 @@ export function PageHeader({
         )}
       </div>
       {description !== undefined && <div className="mt-1">{description}</div>}
-      {tabs !== undefined && <div className="mt-3">{tabs}</div>}
       {controls !== undefined && (
         <div className="mt-3 flex flex-wrap items-center gap-3">{controls}</div>
       )}
-      {tabs === undefined && divider && (
+      {divider && (
         <div className="mt-3">
           <PageDivider />
         </div>
