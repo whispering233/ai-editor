@@ -7,7 +7,7 @@
 // ToolContext.db 用 never 占位（registry.test.ts 同款模式），executor 只透传不触达。
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PROPOSAL_TOOLS, TOOL_PERMISSION } from "@whispering233/ai-editor-shared";
-import { getEntityArgsSchema } from "@whispering233/ai-editor-shared/schemas/tools";
+import { getEntityArgsSchema } from "@whispering233/ai-editor-tools";
 import { AbortedError, registerTool, type Proposal, type ToolContext } from "@whispering233/ai-editor-tools";
 import {
   PROPOSAL_BUILDERS,
@@ -50,7 +50,7 @@ const selfAbortState: { controller: AbortController | null } = { controller: nul
 registerTool({
   name: "exec_test_echo",
   description: "executor 测试：正常返回",
-  argsSchema: getEntityArgsSchema,
+  parameters: getEntityArgsSchema,
   permission: TOOL_PERMISSION.AUTO,
   run: (_ctx, _args, signal) => {
     capturedSignals.push(signal);
@@ -60,7 +60,7 @@ registerTool({
 registerTool({
   name: "exec_test_throw",
   description: "executor 测试：执行抛错",
-  argsSchema: getEntityArgsSchema,
+  parameters: getEntityArgsSchema,
   permission: TOOL_PERMISSION.AUTO,
   run: () => {
     throw new Error("boom");
@@ -69,7 +69,7 @@ registerTool({
 registerTool({
   name: "exec_test_abort",
   description: "executor 测试：run 抛 AbortedError",
-  argsSchema: getEntityArgsSchema,
+  parameters: getEntityArgsSchema,
   permission: TOOL_PERMISSION.AUTO,
   run: () => {
     throw new AbortedError();
@@ -78,7 +78,7 @@ registerTool({
 registerTool({
   name: "exec_test_self_abort",
   description: "executor 测试：run 执行中中止外部 controller（模拟执行中途取消）",
-  argsSchema: getEntityArgsSchema,
+  parameters: getEntityArgsSchema,
   permission: TOOL_PERMISSION.AUTO,
   run: (_ctx, _args, signal) => {
     capturedSignals.push(signal); // 记录执行过的工具（断言后续工具未执行）
@@ -89,7 +89,7 @@ registerTool({
 registerTool({
   name: "exec_test_abort_then_throw",
   description: "executor 测试：执行中中止 signal 后抛普通 Error（B1 兜底场景——工具未检查 signal）",
-  argsSchema: getEntityArgsSchema,
+  parameters: getEntityArgsSchema,
   permission: TOOL_PERMISSION.AUTO,
   run: (_ctx, _args, signal) => {
     capturedSignals.push(signal);

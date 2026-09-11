@@ -13,7 +13,7 @@
 import { computeState as dbComputeState, listDeltasByTarget } from "@whispering233/ai-editor-db";
 import type { ComputeStateResult, DeltaRecord } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
-import type { ComputeStateArgs, GetDeltaHistoryArgs } from "@whispering233/ai-editor-shared";
+import type { ComputeStateArgs, GetDeltaHistoryArgs } from "../schemas/index.js";
 
 // ============ compute_state ============
 

@@ -8,7 +8,8 @@
 
 - **一份定义三用**：运行时对象即 JSON Schema（直接作为模型 tool parameters）、`Static<typeof schema>` 给 TS 类型、pi 的 `validateToolArguments` 用它做执行前校验。不需要 zod→JSON Schema 转换。
 - **schema 不放在 `shared`**：client 不打包工具 schema（与 Zod API 校验同理）。
-- **严格性**：拒绝多余字段需显式 `Type.Object({...}, { additionalProperties: false })`；pi 校验前会做原始类型 coerce（`"3"` → `3`、`"true"` → `true`），比 zod `.strict()` 宽松——对模型输出是好事。
+- **严格性**：拒绝多余字段需显式 `Type.Object({...}, { additionalProperties: false })`（嵌套对象同理）。
+- **校验前原始类型 coerce**（与 pi 循环同一实现）：`"3"` → `3`、`"true"` → `true`、`null` → `""`/`0`/`false`、标量 → 单项数组、小数按 integer 截断（`2.5` → `2`）。即「类型写错」很少直接报错，而是被 coerce 后进入工具——**因此工具实现必须自己校验业务不变量**（如重排提案仍校验「覆盖全量时间点」，见 `propose_reorder_timepoints`）。
 - **工具结果**：`execute(toolCallId, params, signal)` 返回 `{ content, details }`；`details` 是结构化载荷（前端展示 / 提案卡数据），不进模型上下文。
 
 ## 工具分级

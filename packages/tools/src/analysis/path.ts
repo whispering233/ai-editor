@@ -10,7 +10,7 @@ import { findOutlineNode, getOutlinePathIds, listRelations, readOutlineFile } fr
 import type { OutlineFileNode, OutlineFileTree } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
 import { throwIfAborted } from "./utils.js";
-import type { TracePlotPathsArgs } from "@whispering233/ai-editor-shared";
+import type { TracePlotPathsArgs } from "../schemas/index.js";
 
 /** 路径节点（trace_plot_paths paths[].nodes 项；type/id/name 与 relation 路径同构） */
 export interface PlotPathNode {

@@ -9,7 +9,7 @@ import type { Db } from "@whispering233/ai-editor-db";
 import type { OutlineFileTree } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
 import { throwIfAborted } from "./utils.js";
-import type { AnalyzeConsistencyArgs } from "@whispering233/ai-editor-shared";
+import type { AnalyzeConsistencyArgs } from "../schemas/index.js";
 
 /** 一致性问题的严重级别（error = 确定矛盾；warning = 可疑/待确认） */
 export type IssueSeverity = "error" | "warning";

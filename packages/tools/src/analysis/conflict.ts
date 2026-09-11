@@ -10,7 +10,7 @@ import { listEntities, listRelations } from "@whispering233/ai-editor-db";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
 import { isEntityType, throwIfAborted } from "./utils.js";
-import type { DetectConflictsArgs } from "@whispering233/ai-editor-shared";
+import type { DetectConflictsArgs } from "../schemas/index.js";
 
 /** 单条跨实体矛盾（detect_conflicts 返回项；entity_a/entity_b 为实体 id） */
 export interface ConflictIssue {

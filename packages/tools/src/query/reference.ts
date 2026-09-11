@@ -12,7 +12,7 @@
 import { listEntities } from "@whispering233/ai-editor-db";
 import type { EntityListResult } from "@whispering233/ai-editor-db";
 import type { ToolContext } from "../context.js";
-import type { SearchReferencesArgs } from "@whispering233/ai-editor-shared";
+import type { SearchReferencesArgs } from "../schemas/index.js";
 
 /** 参考资料搜索（search_references(query, type?, tags?) → 摘要列表） */
 export function runSearchReferences(ctx: ToolContext, args: SearchReferencesArgs): EntityListResult {

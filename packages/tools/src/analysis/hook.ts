@@ -34,7 +34,7 @@ import type {
   FindHookOpportunitiesArgs,
   SuggestHookPayoffArgs,
   TraceHookLifecycleArgs,
-} from "@whispering233/ai-editor-shared";
+} from "../schemas/index.js";
 
 // ============ 数据收集（一次查询层调用支撑全量分析） ============
 

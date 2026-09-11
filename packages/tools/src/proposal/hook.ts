@@ -19,7 +19,7 @@ import type {
   ProposeCreateHookArgs,
   ProposeResolveHookArgs,
   ProposeUpdateHookArgs,
-} from "@whispering233/ai-editor-shared";
+} from "../schemas/index.js";
 import type { ToolContext } from "../context.js";
 import { buildProposal, checkProposalAborted, refEntity, refOutlineNode, requireHook, requireOutlineNode, type Proposal, type ProposalReference, type ToolProposalResult } from "./types.js";
 

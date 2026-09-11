@@ -21,7 +21,7 @@ import type {
   ProposeResolveHookArgs,
   ProposeUpdateEntityArgs,
   ProposeUpdateHookArgs,
-} from "@whispering233/ai-editor-shared";
+} from "@whispering233/ai-editor-tools";
 import {
   AbortedError,
   buildProposeAbandonHook,
@@ -42,6 +42,7 @@ import {
   buildProposeUpdateHook,
   getTool,
   throwIfAborted,
+  validateToolArgs,
   type Proposal,
   type ToolContext,
   type ToolDefinition,
@@ -173,7 +174,7 @@ export const defaultProposalStore: ProposalStore = createProposalStore();
 // ============ 工具调度器（ToolDispatcher 真实现，run.ts） ============
 
 /**
- * 提案 build 层入口签名（args 已过 argsSchema 校验——执行前 safeParse 的 parsed.data）。
+ * 提案 build 层入口签名（args 已过 validateToolArgs 校验——preflight 返回的校验形态）。
  * run 层裁剪只返回 { proposal_id, summary }（「提案类」2026-08 修订），
  * 完整 Proposal 对象须经 build 层重建（与 run 内部产出同源确定：同 ctx + 同 args 结果一致）。
  */
@@ -212,8 +213,8 @@ export interface CreateToolDispatcherOptions {
 
 /**
  * 创建工具调度器（run.ts ToolDispatcher 真实现）：
- * 1. **批量校验 fail fast**（「工具执行」）：先全部 getTool(name).argsSchema
- * safeParse——工具不存在 / 参数非法 → 该调用合成 isError 结果（**不中断其他调用**，
+ * 1. **批量校验 fail fast**（「工具执行」）：先全部 validateToolArgs（TypeBox schema）
+ * ——工具不存在 / 参数非法 → 该调用合成 isError 结果（**不中断其他调用**，
  * 「fail fast」指校验先于执行，错误编码进 isError 喂回 LLM 自纠）；全部校验完再逐个执行
  * 2. **执行中检查 signal**：调度前 + 每个工具执行前 throwIfAborted，run 调用
  * 透传 signal（长分析工具内部周期检查）；命中取消抛 AbortedError **按取消语义传播**
@@ -238,11 +239,12 @@ export function createToolDispatcher(ctx: ToolContext, options: CreateToolDispat
           error: `工具不存在或不可调用：${call.tool}（AI 只能调用已注册的查询/分析/提案工具，执行类工具不暴露）`,
         };
       }
-      const parsed = def.argsSchema.safeParse(call.args);
-      if (!parsed.success) {
-        return { call, error: formatValidationError(call, parsed.error) };
+      try {
+        return { call, def, parsed: validateToolArgs(def, call.args) };
+      } catch (err) {
+        // 校验失败：不执行（喂回 LLM 自纠）；错误消息由 pi-ai 校验器给出（工具名 + 字段路径 + 原始参数）
+        return { call, error: formatValidationError(call, err) };
       }
-      return { call, def, parsed: parsed.data };
     });
 
  // ---- 2. 逐个执行（结果按输入顺序一一回填，同序等长——run.ts） ----
@@ -334,16 +336,10 @@ export function createToolDispatcher(ctx: ToolContext, options: CreateToolDispat
 interface Plan {
   call: DispatchToolCall;
   def?: ToolDefinition;
- /** safeParse 通过后的参数（zod ZodTypeAny 输出形态，run/build 各自按 schema 约束使用） */
+ /** 校验通过后的参数（TypeBox 校验并原始类型 coerce 后的形态，run/build 各自按 schema 约束使用） */
   parsed?: unknown;
  /** 校验失败的结构化错误（isError content） */
   error?: string;
-}
-
-/** zod 校验错误的最小结构（避免 agent 直接依赖 zod——类型经 tools → shared 依赖链传递解析） */
-interface ValidationIssueLike {
-  path?: (string | number | symbol)[];
-  message?: string;
 }
 
 /**
@@ -354,11 +350,9 @@ function toAbortSignal(signal?: AbortSignalLike): AbortSignal | undefined {
   return signal as AbortSignal | undefined;
 }
 
-/** 参数校验失败结构化回填（工具名 + 校验问题明细 + 参数，喂回 LLM 修正后重试） */
-function formatValidationError(call: DispatchToolCall, error: { issues?: readonly ValidationIssueLike[] }): string {
-  const detail = (error.issues ?? [])
-    .map((issue) => `${(issue.path ?? []).map(String).join(".") || "(根)"}：${issue.message ?? "未知错误"}`)
-    .join("；");
+/** 参数校验失败结构化回填（工具名 + 校验器给出的字段明细 + 参数，喂回 LLM 修正后重试） */
+function formatValidationError(call: DispatchToolCall, error: unknown): string {
+  const detail = error instanceof Error ? error.message : String(error);
   return `工具 ${call.tool} 参数校验失败（未执行，请修正参数后重试）：${detail}；参数：${JSON.stringify(call.args)}`;
 }
 

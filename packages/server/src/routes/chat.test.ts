@@ -7,18 +7,17 @@
 // text→done）、落库配对（user/assistant/tool + tool_calls/tool_call_id）、心跳 ping、
 // 断开全链路取消（produce signal abort + 未确认提案作废，B2 取舍 b）、
 // 会话重建（session_id 续聊：历史喂回 + 新消息落库 + done 回显）、新建会话 sess_ 前缀、
-// 模型最终失败 error 事件、zod→JSON Schema 转换（32 工具全量 + $schema 剥离）
+// 模型最终失败 error 事件、工具定义 → LLM function calling（TypeBox schema 直接透传，35 工具全量）
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
-import { z } from "zod";
 import { appendSessionMessage, readSessionMessages, writeAgentsFile } from "@whispering233/ai-editor-db";
 import { defaultProposalStore, type RunAgentDeps, type ToolDispatcher } from "@whispering233/ai-editor-agent";
 import { ABORT_ERROR } from "@whispering233/ai-editor-llm";
 import type { AbortSignalLike, LLMMessage } from "@whispering233/ai-editor-llm";
-import { listTools } from "@whispering233/ai-editor-tools";
+import { getTool, listTools } from "@whispering233/ai-editor-tools";
 import type { Proposal } from "@whispering233/ai-editor-tools";
 import { errorHandler } from "../middleware/error.js";
 import {
@@ -30,7 +29,7 @@ import {
   setCurrentProject,
   type ProjectContext,
 } from "../middleware/project.js";
-import { chatRoutes, createChatRoutes, createLLMRequestLogger, toLLMToolDefinitions, zodArgsToJsonSchema } from "./chat.js";
+import { chatRoutes, createChatRoutes, createLLMRequestLogger, toLLMToolDefinitions } from "./chat.js";
 import { initDebugConfig, isCategoryEnabled } from "../debug.js";
 
 const HOST_HEADERS = { host: "127.0.0.1:3456" };
@@ -796,35 +795,30 @@ describe("POST /chat 项目规则注入", () => {
   });
 });
 
-describe("zod → JSON Schema 转换（S7.6 决策点：zod 4 内置 toJSONSchema，无新依赖）", () => {
-  it("对象 schema → OpenAI 兼容 parameters（$schema 剥离、enum/required/additionalProperties 保留）", () => {
-    const js = zodArgsToJsonSchema(
-      z
-        .object({
-          type: z.enum(["character", "setting", "location", "hook"]),
-          id: z.string(),
-        })
-        .strict(),
-    );
-    expect(js).toEqual({
+describe("工具定义 → LLM function calling（TypeBox schema 直接透传，见 docs/api/tool-calling.md）", () => {
+  it("get_entity 的 parameters 即 OpenAI 兼容 JSON Schema（enum/required/additionalProperties 保留）", () => {
+    const defs = toLLMToolDefinitions([getTool("get_entity")!]);
+    expect(defs).toHaveLength(1);
+    expect(defs[0].parameters).toEqual({
       type: "object",
       properties: {
-        type: { type: "string", enum: ["character", "setting", "location", "hook"] },
+        type: { enum: ["character", "setting", "location", "hook", "event", "timepoint", "reference"] },
         id: { type: "string" },
       },
       required: ["type", "id"],
       additionalProperties: false,
     });
-    expect(js.$schema).toBeUndefined();
+    expect((defs[0].parameters as { $schema?: unknown }).$schema).toBeUndefined();
   });
 
-  it("registry 35 个 AUTO+PROPOSAL 工具全部可转换（执行类不注册不暴露，S6.7；+search_references/propose_create_reference）", () => {
+  it("registry 35 个 AUTO+PROPOSAL 工具全部暴露且参数为工具定义本体（零转换）", () => {
     const defs = toLLMToolDefinitions(listTools());
     expect(defs.length).toBe(35);
+    const byName = new Map(listTools().map((d) => [d.name, d]));
     for (const d of defs) {
       expect(typeof d.name).toBe("string");
       expect(typeof d.description).toBe("string");
-      expect(d.parameters).toEqual(expect.any(Object));
+      expect(d.parameters).toBe(byName.get(d.name)!.parameters);
     }
   });
 });

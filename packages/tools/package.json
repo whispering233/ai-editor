@@ -26,12 +26,12 @@
     "postpack": "node ../../scripts/restore-package-json.mjs"
   },
   "dependencies": {
+    "@earendil-works/pi-ai": "0.85.1",
     "@whispering233/ai-editor-db": "workspace:*",
     "@whispering233/ai-editor-shared": "workspace:*"
   },
   "devDependencies": {
-    "typescript": "^5.8.0",
-    "zod": "^4.0.0"
+    "typescript": "^5.8.0"
   },
   "repository": {
     "type": "git",

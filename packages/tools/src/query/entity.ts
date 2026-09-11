@@ -14,7 +14,7 @@ import { mapRowToEntity } from "@whispering233/ai-editor-shared";
 import type { Entity } from "@whispering233/ai-editor-shared";
 import type { EntityListResult, EntitySummaryStats } from "@whispering233/ai-editor-db";
 import type { ToolContext } from "../context.js";
-import type { GetEntityArgs, GetEntitySummaryArgs, SearchEntitiesArgs } from "@whispering233/ai-editor-shared";
+import type { GetEntityArgs, GetEntitySummaryArgs, SearchEntitiesArgs } from "../schemas/index.js";
 
 // ============ get_entity ============
 

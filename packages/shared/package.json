@@ -14,10 +14,6 @@
     "./schemas": {
       "types": "./dist/types/api.d.ts",
       "import": "./dist/types/api.js"
-    },
-    "./schemas/tools": {
-      "types": "./dist/types/tool.d.ts",
-      "import": "./dist/types/tool.js"
     }
   },
   "files": [

@@ -12,7 +12,7 @@
 // 采集关系自身 updated_at 快照
 
 import { getRelation } from "@whispering233/ai-editor-db";
-import type { ProposeAddRelationArgs, ProposeRemoveRelationArgs } from "@whispering233/ai-editor-shared";
+import type { ProposeAddRelationArgs, ProposeRemoveRelationArgs } from "../schemas/index.js";
 import type { ToolContext } from "../context.js";
 import { buildProposal, checkProposalAborted, refRelation, resolveEndpoint, type Proposal, type ToolProposalResult } from "./types.js";
 

@@ -12,7 +12,7 @@
 import { listRelations } from "@whispering233/ai-editor-db";
 import type { RelationQueryResult } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
-import type { QueryRelationshipsArgs } from "@whispering233/ai-editor-shared";
+import type { QueryRelationshipsArgs } from "../schemas/index.js";
 
 /**
  * 关系图子图（query_relationships → [{source,target,type,metadata}] 简写；

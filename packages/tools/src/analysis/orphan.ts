@@ -21,7 +21,7 @@ import {
 } from "@whispering233/ai-editor-db";
 import type { ToolContext } from "../context.js";
 import { buildChapterIndex, throwIfAborted } from "./utils.js";
-import type { FindOrphanElementsArgs } from "@whispering233/ai-editor-shared";
+import type { FindOrphanElementsArgs } from "../schemas/index.js";
 
 /** 闲置角色条目 */
 export interface UnusedCharacter {

@@ -19,7 +19,7 @@
 // tool_result 语义（2026-08 修订）：run 只返回 { proposal_id, summary }，不含预览细节。
 
 import { listTimepoints } from "@whispering233/ai-editor-db";
-import type { ProposeReorderTimepointsArgs } from "@whispering233/ai-editor-shared";
+import type { ProposeReorderTimepointsArgs } from "../schemas/index.js";
 import type { ToolContext } from "../context.js";
 import { buildProposal, checkProposalAborted, refEntity, type Proposal, type ToolProposalResult } from "./types.js";
 

@@ -10,7 +10,7 @@
 import { getEntity, listEntities, listRelations } from "@whispering233/ai-editor-db";
 import type { ToolContext } from "../context.js";
 import { buildEntityGraph, intersectSets, isEntityType, throwIfAborted } from "./utils.js";
-import type { SuggestConnectionsArgs } from "@whispering233/ai-editor-shared";
+import type { SuggestConnectionsArgs } from "../schemas/index.js";
 
 /** 潜在关联建议（suggest_connections 返回项） */
 export interface ConnectionSuggestion {

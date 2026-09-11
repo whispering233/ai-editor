@@ -6,7 +6,7 @@
 // 参数shared types/tool.ts ProposeCreateReferenceArgs（name 必填 + type/content/source/tags 可选）
 // 执行：确认后 executeCreateReference 经 executeProposal 调度（executor/reference.ts）。
 
-import type { ProposeCreateReferenceArgs } from "@whispering233/ai-editor-shared";
+import type { ProposeCreateReferenceArgs } from "../schemas/index.js";
 import type { ToolContext } from "../context.js";
 import { buildProposal, checkProposalAborted, type ToolProposalResult } from "./types.js";
 

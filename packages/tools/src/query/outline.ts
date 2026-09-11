@@ -13,7 +13,7 @@ import { findOutlineNode, getOutlinePathIds, readOutlineFile } from "@whispering
 import { mapOutlineFileToTree } from "@whispering233/ai-editor-shared";
 import type { OutlineFileNode, OutlineTree } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
-import type { GetOutlinePathArgs } from "@whispering233/ai-editor-shared";
+import type { GetOutlinePathArgs } from "../schemas/index.js";
 
 /**
  * 递归剔除软删节点：deleted === true 的节点整棵不可见——
