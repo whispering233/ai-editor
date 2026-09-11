@@ -78,7 +78,8 @@ export type AgentEvent =
   | { type: "tool_call"; tool: string; args: Record<string, unknown> | null; id: string }
   | { type: "tool_result"; tool: string; result: string; id: string }
   | { type: "proposal"; proposal: ProposalPayload }
-  | { type: "done"; sessionId: string }
+ /** 本轮结束；contextBudget = 本轮生效预算（占用条分母口径，见 docs/design/20-context.md §1） */
+  | { type: "done"; sessionId: string; contextBudget?: { history: number; total: number } }
   | { type: "error"; code: string; message: string; aborted: boolean };
 
 // ============ 工具调度接口（S7.4 真实现；本文件只定义与消费） ============
@@ -527,7 +528,11 @@ export async function runAgent(input: RunAgentInput): Promise<RunAgentResult> {
     if (calls.length === 0) {
       session = appendMessage(session, assistantMsg);
       emitMessages([assistantMsg]);
-      emit({ type: "done", sessionId: sessionId ?? "" });
+      emit({
+        type: "done",
+        sessionId: sessionId ?? "",
+        contextBudget: { history: ctx.budgets.history, total: ctx.budgets.total },
+      });
       return { ok: true, aborted: false, error: null, rounds, retries };
     }
 

@@ -917,3 +917,38 @@ describe("调试类别隔离（配置文件模式）", () => {
     expect(isCategoryEnabled("stream")).toBe(false);
   });
 });
+
+describe("POST /chat done 帧携带生效预算（A1）", () => {
+  it("done 帧带 context_budget：history = 窗口 × history_ratio，total = 四层之和（占用条分母）", async () => {
+    openProject();
+    const produce = vi.fn<RunAgentDeps["produce"]>(async (_messages, _signal, onEvent) => {
+      onEvent?.({ type: "text", delta: "答" });
+      return { ok: true, stopReason: "stop", usage: null };
+    });
+    const res = await buildApp(createChatRoutes({ produce })).request("/api/v1/chat", postChat({ message: "你好" }));
+    const frames = await readSseFrames(res);
+    const done = frames.find((f) => f.event === "done");
+    expect(done).toBeDefined();
+    const budget = (done?.data as { context_budget?: { history: number; total: number } }).context_budget;
+    expect(budget).toBeDefined();
+ // 缺省配置：deepseek-v4-flash 目录 contextWindow = 1_000_000 × 0.15
+    expect(budget?.history).toBe(150_000);
+    expect(budget?.total).toBeGreaterThanOrEqual(150_000);
+    expect(Number.isInteger(budget?.total)).toBe(true);
+  });
+
+  it("模型不在目录（配置漂移）→ 不传预算，done 帧无 context_budget（不阻断对话）", async () => {
+    openProject();
+    const produce = vi.fn<RunAgentDeps["produce"]>(async () => ({ ok: true, stopReason: "stop", usage: null }));
+    const res = await buildApp(createChatRoutes({ produce, model: "no-such-model" })).request(
+      "/api/v1/chat",
+      postChat({ message: "你好" }),
+    );
+    const frames = await readSseFrames(res);
+    const done = frames.find((f) => f.event === "done");
+    expect(done).toBeDefined();
+ // 兜底：agent 侧常量预算（不因预算解析失败改变行为）；done 帧仍带 runAgent 的 contextBudget
+    const budget = (done?.data as { context_budget?: { history: number; total: number } }).context_budget;
+    expect(budget?.history).toBe(6000); // DEFAULT_CONTEXT_BUDGETS.history
+  });
+});

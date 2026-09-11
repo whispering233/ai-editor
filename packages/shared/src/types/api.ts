@@ -964,6 +964,20 @@ export const settingsLlmPutResSchema = z.object({
 // 旧 api_key 字段读侧视为 api_keys["deepseek"]
 // - 校验仅在服务端执行（settings.ts 消费）；client 只消费推断类型
 
+/**
+ * 上下文预算（用户级 config.json 的 `context_budget` 段；口径见 docs/design/config.md「可配 / 不可配边界」、
+ * docs/design/20-context.md §1）。两字段均可选——缺省由服务端回落默认值。
+ * - history_ratio：历史层预算 = 激活模型 contextWindow × ratio（0 < ratio ≤ 1）
+ * - tool_result_max_tokens：单条工具结果 token 上限（超限截断 + 提示，不终止对话）
+ * 设置页不做 UI，用户直接编辑配置文件。
+ */
+export const contextBudgetSchema = z.object({
+  history_ratio: z.number().gt(0).lte(1).optional(),
+  tool_result_max_tokens: z.number().int().positive().optional(),
+});
+
+export type ContextBudgetConfig = z.infer<typeof contextBudgetSchema>;
+
 export const userConfigFileSchema = z
   .object({
     schema_version: z.union([z.literal(1), z.literal(2)]).optional(), // 格式版本；缺省 = v0 旧格式（同结构兼容）
@@ -972,6 +986,10 @@ export const userConfigFileSchema = z
     thinking_level: z.enum(THINKING_LEVELS).optional(), // 思考强度（缺省 high）
     api_key: z.string().optional(), // v1 旧字段（读侧视为 api_keys["deepseek"]，不写回）
     api_keys: z.record(z.string(), z.string()).optional(), // v2：各 provider API key（不入项目文件）
+ // 上下文预算：**整段宽松读取**（.catch({})）——getUserConfig() 是整份 safeParse，
+ // 本段非法若使整份失败，用户的 provider/model/api_keys 会静默丢成空配置；
+ // 非法/类型不符/越界 ⇒ 该段回落 {}，由服务端回落默认值
+    context_budget: contextBudgetSchema.optional().catch({}),
   })
   .passthrough(); // 未知字段保留不校验（用户自有文件，未来版本追加字段不应使整份配置失效）
 
@@ -1024,9 +1042,18 @@ export const sseProposalEventSchema = z.object({
   preview: z.unknown(),
 });
 
+/** done 帧携带的生效预算（占用条分母口径；服务端在上下文组装后算出） */
+export const sseContextBudgetSchema = z.object({
+  history: z.number(), // 本轮生效历史预算（contextWindow × history_ratio，经总闸 clamp）
+  total: z.number(), // history + system + 工具清单 + focus 四层之和（= 占用条分母）
+});
+
+export type SSEChatContextBudget = z.infer<typeof sseContextBudgetSchema>;
+
 /** done：对话轮次结束 */
 export const sseDoneEventSchema = z.object({
   session_id: z.string(), // sess_ 前缀
+  context_budget: sseContextBudgetSchema.optional(), // 生效预算（缺失 = 未计算，前端隐藏占用条）
 });
 
 /** error：流终止（客户端收到即停止解析） */

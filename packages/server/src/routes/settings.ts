@@ -45,6 +45,18 @@ export const PI_AGENT_AUTH_RELATIVE_PATH = join(".pi", "agent", "auth.json");
 /** 缺省思考强度（与 SharedConfig 缺省一致，读侧兜底） */
 export const DEFAULT_THINKING_LEVEL: ThinkingLevel = "high";
 
+/** 缺省历史预算比例（历史层 = 激活模型 contextWindow × 该值；config.json 缺失/非法时回落） */
+export const DEFAULT_HISTORY_RATIO = 0.15;
+
+/** 缺省单条工具结果 token 上限（超限截断 + 提示，不终止对话） */
+export const DEFAULT_TOOL_RESULT_MAX_TOKENS = 8000;
+
+/** 上下文总闸占窗口的比例（不可配——失控保护安全网，见 docs/design/config.md「可配 / 不可配边界」） */
+export const CONTEXT_GATE_RATIO = 0.5;
+
+/** 总闸与历史预算之间的余量（历史预算 clamp 到「总闸 − 该余量」，防历史预算把总闸撞成 terminate） */
+export const CONTEXT_GATE_RESERVE_TOKENS = 8000;
+
 /** 用户级配置文件绝对路径（os.homedir() 读 $HOME，测试设 HOME 即可隔离） */
 export function userConfigPath(): string {
   return join(homedir(), USER_CONFIG_RELATIVE_PATH);
@@ -69,6 +81,38 @@ export function getUserConfig(): UserConfigFile {
   } catch {
     return {};
   }
+}
+
+/**
+ * 上下文预算配置（用户级 config.json `context_budget` 段）。
+ * 字段缺失/越界/整段非法 → 回落缺省（宽容读取：配置错不应使聊天不可用）。
+ */
+export function getContextBudget(): { historyRatio: number; toolResultMaxTokens: number } {
+  const cfg = getUserConfig().context_budget;
+  return {
+    historyRatio: cfg?.history_ratio ?? DEFAULT_HISTORY_RATIO,
+    toolResultMaxTokens: cfg?.tool_result_max_tokens ?? DEFAULT_TOOL_RESULT_MAX_TOKENS,
+  };
+}
+
+/**
+ * 由激活模型的 contextWindow 解析本轮生效预算：
+ * - 总闸 = `window × CONTEXT_GATE_RATIO`（不可配；agent 超限即 error 终止，见 run.ts tokenBudget）
+ * - 历史预算 = `min(window × historyRatio, 总闸 − 余量)`：用户把 ratio 配得过大时**只降级不打断对话**
+ * - 窗口过小（总闸 ≤ 余量）时历史预算为 0——由 agent 侧「裁剪不得裁空」护栏兜底（A2）
+ * 纯函数（不记日志）；clamped=true 时由调用方记日志。
+ */
+export function resolveContextBudgets(contextWindow: number): {
+  historyBudget: number;
+  totalGate: number;
+  clamped: boolean;
+} {
+  const { historyRatio } = getContextBudget();
+  const totalGate = Math.floor(contextWindow * CONTEXT_GATE_RATIO);
+  const desired = Math.floor(contextWindow * historyRatio);
+  const limit = Math.max(0, totalGate - CONTEXT_GATE_RESERVE_TOKENS);
+  const historyBudget = Math.min(desired, limit);
+  return { historyBudget, totalGate, clamped: historyBudget < desired };
 }
 
 /** 激活 provider：config.provider 已注册才采用；否则缺省 deepseek（配置漂移兜底） */

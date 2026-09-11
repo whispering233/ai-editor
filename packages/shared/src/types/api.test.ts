@@ -556,6 +556,15 @@ describe("SSE 事件", () => {
     ).toBe("prop_1");
     expect(sseDoneEventSchema.parse({ session_id: "sess_1" }).session_id).toBe("sess_1");
   });
+
+  it("done 帧可携带生效预算 context_budget（占用条分母，A1；旧帧无该字段仍可解析）", () => {
+    const parsed = sseDoneEventSchema.parse({
+      session_id: "sess_1",
+      context_budget: { history: 15000, total: 18600 },
+    });
+    expect(parsed.context_budget).toEqual({ history: 15000, total: 18600 });
+    expect(sseDoneEventSchema.parse({ session_id: "sess_1" }).context_budget).toBeUndefined();
+  });
 });
 
 describe("导出/导入", () => {
@@ -640,6 +649,51 @@ describe("userConfigFileSchema（schema v1 → v2 多 provider）", () => {
     expect(userConfigFileSchema.safeParse({ model: 42 }).success).toBe(false);
     expect(userConfigFileSchema.safeParse({ api_keys: { deepseek: 42 } }).success).toBe(false);
     expect(userConfigFileSchema.safeParse({ schema_version: 3 }).success).toBe(false); // 未来版本：整份失效（空配置默认值）
+  });
+});
+
+describe("context_budget（上下文预算段，A1）", () => {
+  it("合法值被读出（history_ratio ∈ (0,1] + tool_result_max_tokens 正整数）", () => {
+    const parsed = userConfigFileSchema.parse({
+      context_budget: { history_ratio: 0.3, tool_result_max_tokens: 12000 },
+    });
+    expect(parsed.context_budget).toEqual({ history_ratio: 0.3, tool_result_max_tokens: 12000 });
+  });
+
+  it("部分字段缺省：只给一项时另一项为 undefined（由服务端回落默认）", () => {
+    expect(userConfigFileSchema.parse({ context_budget: { history_ratio: 0.2 } }).context_budget).toEqual({ history_ratio: 0.2 });
+    expect(userConfigFileSchema.parse({ context_budget: {} }).context_budget).toEqual({});
+  });
+
+  it("整段缺失 = undefined（不是 {}——服务端按缺省默认值处理）", () => {
+    expect(userConfigFileSchema.parse({ model: "deepseek-v4-flash" }).context_budget).toBeUndefined();
+  });
+
+  it("整段非法 → 该段回落 {}，**且不牵连其余字段**（整份 safeParse 仍成功）", () => {
+    const bads: unknown[] = [
+      { history_ratio: 5 }, // 越界上
+      { history_ratio: 0 }, // 越界下
+      { history_ratio: "x" }, // 类型错
+      { tool_result_max_tokens: 0 }, // 非正
+      { tool_result_max_tokens: 1.5 }, // 非整数
+      { history_ratio: 0.2, tool_result_max_tokens: -1 }, // 一错全段错（不半保留）
+      [],
+      "x",
+    ];
+    for (const bad of bads) {
+      const parsed = userConfigFileSchema.safeParse({
+        provider: "deepseek",
+        model: "deepseek-v4-flash",
+        api_keys: { deepseek: "sk-xxx" },
+        context_budget: bad,
+      });
+      expect(parsed.success).toBe(true); // 本段非法不得使整份配置失效（否则用户 provider/model/key 静默丢失）
+      if (!parsed.success) continue;
+      expect(parsed.data.context_budget).toEqual({});
+      expect(parsed.data.provider).toBe("deepseek");
+      expect(parsed.data.model).toBe("deepseek-v4-flash");
+      expect(parsed.data.api_keys).toEqual({ deepseek: "sk-xxx" });
+    }
   });
 });
 

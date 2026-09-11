@@ -201,6 +201,37 @@ describe("buildContext 历史预算裁剪", () => {
 
 // ============ usage 基线：裁剪后重置，防预算漂移（2026-08 补充） ============
 
+describe("buildContext 生效预算（占用条分母口径）", () => {
+  it("缺省：history = 默认历史预算，total = history + system + 工具清单 + focus 四层之和", () => {
+    const ctx = buildContext({ history: [user("你好")], tools: MOCK_TOOLS });
+    expect(ctx.budgets.history).toBe(DEFAULT_CONTEXT_BUDGETS.history);
+    expect(ctx.budgets.total).toBe(
+      DEFAULT_CONTEXT_BUDGETS.history + ctx.tokens.system + ctx.tokens.toolList + ctx.tokens.focus,
+    );
+  });
+
+  it("外部预算覆盖：budgets.history 取传入值，total 随之变化", () => {
+    const base = buildContext({ history: [user("你好")], tools: MOCK_TOOLS });
+    const custom = buildContext({ history: [user("你好")], tools: MOCK_TOOLS, budgets: { history: 20_000 } });
+    expect(custom.budgets.history).toBe(20_000);
+    expect(custom.budgets.total - base.budgets.total).toBe(20_000 - DEFAULT_CONTEXT_BUDGETS.history);
+  });
+
+  it("focus 计入 total（分母含聚焦层估算）", () => {
+    const withFocus = buildContext({ history: [user("你好")], tools: MOCK_TOOLS, focus: "聚焦内容" });
+    const without = buildContext({ history: [user("你好")], tools: MOCK_TOOLS });
+    expect(withFocus.budgets.total - without.budgets.total).toBe(withFocus.tokens.focus);
+  });
+
+  it("budgets.history 是**预算**不是裁剪后估算（超预算时两者不同）", () => {
+    const longHistory = Array.from({ length: 40 }, (_, i) => user(`第 ${i} 段` + "字".repeat(800)));
+    const ctx = buildContext({ history: longHistory, tools: MOCK_TOOLS, budgets: { history: 2000 } });
+    expect(ctx.meta.historyTrimmed).toBe(true);
+    expect(ctx.budgets.history).toBe(2000); // 可用额度
+    expect(ctx.tokens.history).toBeLessThanOrEqual(2000); // 裁剪后实测估算（两者语义不同）
+  });
+});
+
 describe("buildContext usage 基线", () => {
   const smallUsage: LLMUsage = { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 };
 

@@ -99,6 +99,12 @@ export interface AssembledContext {
  /** 四层合计 */
     total: number;
   };
+ /** 本轮生效预算（占用条分母口径，见 docs/design/20-context.md §1）：
+ * history = 生效历史预算；total = history 预算 + system + 工具清单 + focus 四层之和 */
+  budgets: {
+    history: number;
+    total: number;
+  };
   meta: {
  /** 基础 system 超限（仅记录不裁剪——用户内容不可裁） */
     systemOverBudget: boolean;
@@ -246,6 +252,12 @@ export function buildContext(input: BuildContextInput): AssembledContext {
       focus: focusTokens,
       history: historyTokens,
       total: systemTokens + toolListTokens + focusTokens + historyTokens,
+    },
+ // 生效预算（分母）：history 为**预算**（不是裁剪后估算）——两者语义不同，
+ // 占用条要的是「可用额度」而非「已用多少」
+    budgets: {
+      history: budgets.history,
+      total: budgets.history + systemTokens + toolListTokens + focusTokens,
     },
     meta: {
       systemOverBudget,

@@ -28,7 +28,7 @@ import {
   type SessionState,
   type ToolDispatcher,
 } from "@whispering233/ai-editor-agent";
-import { chatStream } from "@whispering233/ai-editor-llm";
+import { chatStream, resolveModelInfo } from "@whispering233/ai-editor-llm";
 import type { AbortSignalLike, LLMMessage, LLMStreamEvent, LLMToolDefinition } from "@whispering233/ai-editor-llm";
 import { listTools, type ToolDefinition } from "@whispering233/ai-editor-tools";
 import {
@@ -48,7 +48,7 @@ import { chatMessagesResSchema, chatSendReqSchema, chatSessionsResSchema } from 
 import { HttpError, ok } from "../middleware/error.js";
 import { requireCurrentProject, type ProjectContext } from "../middleware/project.js";
 import { debugLog, isCategoryEnabled } from "../debug.js";
-import { DEFAULT_MODEL, DEFAULT_THINKING_LEVEL, effectiveApiKey, effectiveProvider, getUserConfig, providerDisplayName, providerEnvVar } from "./settings.js";
+import { DEFAULT_MODEL, DEFAULT_THINKING_LEVEL, effectiveApiKey, effectiveProvider, getUserConfig, providerDisplayName, providerEnvVar, resolveContextBudgets } from "./settings.js";
 
 // ============ 常量 ============
 
@@ -335,6 +335,17 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
     const model = deps.model ?? getUserConfig().model ?? DEFAULT_MODEL;
  // 思考强度：用户级配置持久化，POST /chat 读取后传 llm（chatStream reasoning）
     const thinking = getUserConfig().thinking_level ?? DEFAULT_THINKING_LEVEL;
+ // 上下文生效预算（docs/design/20-context.md §1）：历史层 = 窗口 × history_ratio，总闸 = 窗口 × 0.5；
+ // 模型不在目录（配置漂移）→ 不传，由 agent 侧常量兜底（不因预算解析失败阻断对话）
+    const modelInfo = resolveModelInfo(model, provider);
+    const budget = modelInfo === null ? null : resolveContextBudgets(modelInfo.contextWindow);
+    if (budget !== null && budget.clamped) {
+      debugLog(
+        "usage",
+        "chat",
+        `历史预算被总闸 clamp：window=${modelInfo?.contextWindow ?? 0} → historyBudget=${budget.historyBudget}（总闸 ${budget.totalGate}）`,
+      );
+    }
     const tools = deps.tools ?? toLLMToolDefinitions(listTools());
     const store = deps.store ?? defaultProposalStore;
     const now = deps.now ?? nowIso;
@@ -438,8 +449,12 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
               });
               return;
             case "done":
- // 需求 3：附带本轮真实 usage，前端计算上下文占用
-              void writeEvent("done", { session_id: event.sessionId, ...(lastUsage !== null ? { usage: lastUsage } : {}) });
+ // 需求 3：附带本轮真实 usage + 生效预算（占用条分母，见 docs/design/20-context.md §1）
+              void writeEvent("done", {
+                session_id: event.sessionId,
+                ...(lastUsage !== null ? { usage: lastUsage } : {}),
+                ...(event.contextBudget !== undefined ? { context_budget: event.contextBudget } : {}),
+              });
               return;
             case "error":
  // 用户取消/断开（aborted=true）：客户端已不可达，不写 error 帧（写了也失败）
@@ -499,6 +514,8 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
  // 每次对话实时读文件（外部编辑立即可见）；文件不存在 → undefined（「## 项目设定」段跳过）
           projectPrompt: readAgentsFile(project.root) ?? undefined,
           deps: { produce: produceWithUsage, dispatcher, onEvent, onMessages },
+ // 生效预算（不可配的总闸 + 可配的历史比例，均由 config + 模型目录解析得出）
+          ...(budget !== null ? { budgets: { history: budget.historyBudget }, tokenBudget: budget.totalGate } : {}),
           signal: controller.signal, // 断开即取消（abort 永不重试）
         });
 

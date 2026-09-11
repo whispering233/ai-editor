@@ -15,18 +15,7 @@
 
 ## 当前任务卡
 
-### A1 上下文预算配置化（`context_budget`）+ 生效预算随 done 帧下发
-
-**契约**（已改文档）：`docs/design/config.md`「可配 / 不可配边界」、`docs/api/90-api-settings.md` 字段表、`docs/api/80-api-chat.md` done 帧、`docs/design/20-context.md` §1 预算口径表。
-
-**改动面**：
-
-1. `shared/types/api.ts`：新增 `contextBudgetSchema`（`history_ratio` ∈ (0,1]、`tool_result_max_tokens` 正整数，均可选）；`userConfigFileSchema` 加 `context_budget` 字段——**必须是宽松读取**（`.catch({})` 之类）：`context_budget` 非法不得让整份用户配置回落空（否则用户 provider/model/api_keys 会静默丢失）；`sseDoneEventSchema` 加可选 `context_budget: { history: number; total: number }`。
-2. `server/routes/settings.ts`：导出 `getContextBudget()`（默认 `history_ratio 0.15` / `tool_result_max_tokens 8000`，非法/缺失回落默认）与 `resolveContextBudgets(contextWindow)`：总闸 `gate = window × 0.5`，历史预算 = `min(window × ratio, gate − 8000)`，被 clamp 时记日志。
-3. `server/routes/chat.ts`：用激活的 provider/model 取 `contextWindow`（`resolveModelInfo`）→ 算 budgets 与 `tokenBudget` 传 `runAgent`；`done` SSE 帧转发 `context_budget`。
-4. `agent/context.ts`：`AssembledContext` 新增生效预算字段（`{ history, total }`，`total` = history 预算 + system + toolList + focus 四层之和）；`agent/run.ts` 在 `done` 事件携带（新轮到才计算，无需额外请求）。
-
-**验证**：单测（配置回落、clamp、done 事件字段、SSE 帧字段）+ `pnpm typecheck` / `pnpm lint` / `pnpm -r test`。
+（A1 已完成并验证：上下文预算配置化 + 生效预算随 done 帧下发。）
 
 ### A2 工具结果上限接线 + 裁剪护栏
 

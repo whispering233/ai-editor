@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AbortSignalLike, ChatStreamResult, LLMMessage, LLMStreamEvent, LLMUsage } from "@whispering233/ai-editor-llm";
 import { ABORT_ERROR } from "@whispering233/ai-editor-llm";
 import { AbortedError } from "@whispering233/ai-editor-tools";
+import { DEFAULT_CONTEXT_BUDGETS } from "./context";
 import {
   DEFAULT_MAX_ROUNDS,
   runAgent,
@@ -105,6 +106,20 @@ function runBasic(
 
 // ============ 终止条件 ============
 
+describe("runAgent 生效预算（done 事件 contextBudget）", () => {
+  it("外部 budgets 覆盖生效：done.contextBudget.history 取 runAgent 入参值", async () => {
+    const { produce } = createMockProduce([{ result: okResult(), events: [textEvent("好")] }]);
+    const events: AgentEvent[] = [];
+    await runBasic(
+      { produce, dispatcher: createMockDispatcher().dispatcher, onEvent: (e) => events.push(e) },
+      { sessionId: "sess_budget", budgets: { history: 30_000 } },
+    );
+    const done = events.find((e) => e.type === "done");
+    expect(done?.type === "done" ? done.contextBudget?.history : undefined).toBe(30_000);
+    expect(done?.type === "done" ? (done.contextBudget?.total ?? 0) : 0).toBeGreaterThan(30_000);
+  });
+});
+
 describe("runAgent 终止条件", () => {
   it("无 tool_call：text 流式转发 + done 终止（done 携带 session_id）", async () => {
     const { produce, calls } = createMockProduce([
@@ -122,6 +137,10 @@ describe("runAgent 终止条件", () => {
     expect(result.rounds).toBe(1);
     expect(events.map((e) => e.type)).toEqual(["turn_start", "text", "text", "done"]);
     expect(events[events.length - 1]).toMatchObject({ type: "done", sessionId: "sess_1" });
+ // done 携带生效预算（占用条分母口径）：history = 默认历史预算，total = history + system + 工具清单 + focus
+    const done = events[events.length - 1];
+    expect(done.type === "done" ? done.contextBudget?.history : undefined).toBe(DEFAULT_CONTEXT_BUDGETS.history);
+    expect(done.type === "done" ? (done.contextBudget?.total ?? 0) : 0).toBeGreaterThan(DEFAULT_CONTEXT_BUDGETS.history);
  // 持久化回调：本轮新消息 = [assistant]；用户消息不入 onMessages（S7.6 自行持久化）
     expect(messages).toEqual([[{ role: "assistant", content: "你好，顾问" }]]);
  // 用户消息已入喂回 payload

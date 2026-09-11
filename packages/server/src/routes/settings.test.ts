@@ -7,7 +7,15 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { errorHandler } from "../middleware/error.js";
-import { DEEPSEEK_API_KEY_ENV, OPENCODE_API_KEY_ENV, piAgentAuthPath, settingsRoutes, userConfigPath } from "./settings.js";
+import {
+  DEEPSEEK_API_KEY_ENV,
+  OPENCODE_API_KEY_ENV,
+  getContextBudget,
+  piAgentAuthPath,
+  resolveContextBudgets,
+  settingsRoutes,
+  userConfigPath,
+} from "./settings.js";
 
 const HOST_HEADERS = { host: "127.0.0.1:3456" }; // 来源校验 host 白名单
 
@@ -296,5 +304,40 @@ describe("PUT /api/v1/settings/llm", () => {
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: { code: string } };
     expect(body.error.code).toBe("VALIDATION_ERROR");
+  });
+});
+
+describe("context_budget（上下文预算配置，A1）", () => {
+  it("getContextBudget：缺省回落 0.15 / 8000；配置文件该段缺失/非法同样回落", () => {
+    expect(getContextBudget()).toEqual({ historyRatio: 0.15, toolResultMaxTokens: 8000 });
+    seedConfig({ provider: "deepseek", context_budget: { history_ratio: 5 } }); // 越界 → 整段回落
+    expect(getContextBudget()).toEqual({ historyRatio: 0.15, toolResultMaxTokens: 8000 });
+  });
+
+  it("getContextBudget：合法配置生效（且不受同文件其余字段影响）", () => {
+    seedConfig({ model: "deepseek-v4-flash", context_budget: { history_ratio: 0.3, tool_result_max_tokens: 12000 } });
+    expect(getContextBudget()).toEqual({ historyRatio: 0.3, toolResultMaxTokens: 12000 });
+  });
+
+  it("resolveContextBudgets：常规窗口 15% 不触发 clamp（总闸 = 窗口 × 0.5）", () => {
+    const r = resolveContextBudgets(1_000_000);
+    expect(r.totalGate).toBe(500_000);
+    expect(r.historyBudget).toBe(150_000);
+    expect(r.clamped).toBe(false);
+  });
+
+  it("resolveContextBudgets：ratio 配得过大 → clamp 到「总闸 − 余量」并标记 clamped（只降级，不打断对话）", () => {
+    seedConfig({ context_budget: { history_ratio: 0.9 } });
+    const r = resolveContextBudgets(100_000);
+    expect(r.totalGate).toBe(50_000);
+    expect(r.historyBudget).toBe(42_000); // 50_000 − 8_000（余量）
+    expect(r.clamped).toBe(true);
+  });
+
+  it("resolveContextBudgets：窗口过小（总闸 ≤ 余量）→ 历史预算 0 且不为负（裁空由 agent 护栏兜底）", () => {
+    const r = resolveContextBudgets(10_000);
+    expect(r.totalGate).toBe(5_000);
+    expect(r.historyBudget).toBe(0);
+    expect(r.clamped).toBe(true);
   });
 });
