@@ -145,7 +145,7 @@ components:
   sidebar:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.primary}"
-    width: 220px
+    width: 160px
   info-bar:
     backgroundColor: "{colors.canvas}"
     textColor: "{colors.secondary}"
@@ -363,7 +363,8 @@ components:
 
 ## Layout
 
-- **三栏**：左栏 NavRail（160-480px，默认 220）、中栏内容（保底 320px）、右栏 ChatPanel（240-720px，默认 380）；**无 TabBar**，页面组织只有一级导航。
+- **三栏**：左栏 NavRail（可读区间 160-480px）、中栏内容（保底 320px、**吸收剩余宽度**）、右栏 ChatPanel（240-960px）；**无 TabBar**，页面组织只有一级导航。
+  - **默认宽度 = 按视口算 1:5:4**：左 = `clamp(视口×10%, 160, 480)`、右 = `clamp(视口×40%, 240, 960)`、中 = 剩余；两根 6px 拖拽手柄也从剩余里扣。**区间外由中栏吸收偏移**：`视口<1600` 左栏取下限 160（比 10% 宽 16-32px，中栏略窄于 50%）；`1600≤视口≤2400` 严格 1:5:4（右栏上限 960 = 2400 的 40%，故不漏进来咬比例）；`视口>2400` 右栏封顶 960、剩余给中栏——聊天列再宽无阅读收益，中栏变宽才是想要的。（拖拽/持久化值同样收敛到这两个区间。）
 - **间距基**：4px；实用档 `{spacing.xxs}`(4) / `{spacing.xs}`(8) / `{spacing.sm}`(12) / `{spacing.md}`(16) / `{spacing.lg}`(24) / `{spacing.xl}`(32)。沿用 antd `sizeUnit` 与 Tailwind 4px 网格，**无自定义间距值**。
 - **页面内侧**：内容区 padding 16px；区块之间 12-16px；行内元素 8px；图标与文字间距 8px。
 - **控件高**：常规 32px（`--ant-control-height`），小号 24px，大号 40px；行高 32-36px 保证密集列表节奏一致。

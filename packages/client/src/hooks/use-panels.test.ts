@@ -36,6 +36,24 @@ describe("defaultPanelLayout", () => {
     expect(layout.collapsedChat).toBe(false);
   });
 
+  it("1:5:4 成立区间 [1600, 2400]：右栏上限 960 不在该区间内咬到比例", () => {
+    // 旧上限 720 在 vp>1800 就被咬（1920 实测右栏 37.5%）——960 = 40%×2400，故 1920/2400 精确 40%
+    for (const vp of [1600, 1680, 1920, 2400]) {
+      const { sidebarWidth, chatWidth } = defaultPanelLayout(vp);
+      expect(sidebarWidth, `vp=${vp}`).toBe(vp * 0.1);
+      expect(chatWidth, `vp=${vp}`).toBe(vp * 0.4);
+    }
+    // 超宽视口：右栏封顶，剩余给中栏（不为比例牺牲聊天列可读性）
+    expect(defaultPanelLayout(2560).chatWidth).toBe(960);
+    expect(defaultPanelLayout(3440).chatWidth).toBe(960);
+  });
+
+  it("区间外由中栏吸收：vp<1600 左栏取下限 160（中栏略窄于 50%）", () => {
+    const { sidebarWidth, chatWidth } = defaultPanelLayout(1440);
+    expect(sidebarWidth).toBe(SIDEBAR_MIN_WIDTH); // 10% = 144 < 160 下限
+    expect(chatWidth).toBe(576); // 40% 不受影响
+  });
+
   it("极端视口收敛到可读区间（min/max）", () => {
     const narrow = defaultPanelLayout(800);
     expect(narrow.sidebarWidth).toBe(SIDEBAR_MIN_WIDTH);

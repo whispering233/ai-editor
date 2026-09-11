@@ -17,8 +17,10 @@ export const SIDEBAR_MIN_WIDTH = 160;
 export const SIDEBAR_MAX_WIDTH = 480;
 /** 右栏宽度下限（消息气泡 + 输入区可用） */
 export const CHAT_MIN_WIDTH = 240;
-/** 右栏宽度上限 */
-export const CHAT_MAX_WIDTH = 720;
+/** 右栏宽度上限（**与比例挂钩**）：960 = 40% × 2400——默认按 40% 算，上限只要不在此区间就咬不到，
+ * 于是 1600-2400 视口下默认严格 1:5:4（左 10% / 中 50% / 右 40%）；超过 2400 后由中栏吸收剩余
+ * （聊天列再宽无阅读收益，中栏变宽是想要的）。旧值 720 在 vp>1800 就开始吃比例（1920 实测右栏 37.5%）。*/
+export const CHAT_MAX_WIDTH = 960;
 /** 中栏保底宽度（内容页信息密度高，不可完全收起） */
 export const MIDDLE_MIN_WIDTH = 320;
 /** localStorage key */
@@ -44,12 +46,15 @@ export function clampPanelWidth(width: number, min: number, max: number): number
 }
 
 /**
- * 默认布局（无持久化 / 解析失败时）：按视口换算旧版 1:5:4 的 10%/40% 像素——
- * 首载视觉与旧版比例一致（固定像素如 240/400 会在不同视口改变比例，故不用）；
- * 换算值收敛到 [min, max] 可读区间（存储值即渲染值——渲染层 minWidth 会兜底，
- * 直接 clamp 使两者一致，避免存储 144 渲染 160 的注释/行为偏差）；
+ * 默认布局（无持久化 / 解析失败时）：按视口把 1:5:4 换算成像素——左 10%、右 40%，中栏吸收剩余。
+ * 两侧各有可读区间（左 [160,480]、右 [240,960]），**区间外由中栏吸收偏移**：
+ * - vp < 1600：左栏取下限 160（比 10% 宽 16-32px，中栏略窄），右栏仍 40%，中栏占 ~48%
+ * - 1600 ≤ vp ≤ 2400：1:5:4 严格成立（仅两根 6px 拖拽手柄从 50% 里扣掉 12px）
+ * - vp > 2400：右栏封顶 960，剩余给中栏
+ * 固定像素（如 240/400）会在不同视口改变比例，故不用；换算值先收敛到 [min,max] 可读区间
+ * （存储值即渲染值——渲染层 minWidth 会兜底，直接 clamp 使两者一致，避免存储 144 渲染 160 的偏差）；
  * 窄视口（< 桌面断点）宽度不参与布局（三栏回退百分比、右栏抽屉），直接给最小可读宽度，
- * 避免持久化无意义的小值
+ * 避免持久化无意义的小值。
  */
 export function defaultPanelLayout(viewport: number): PanelLayout {
   const vp = Number.isFinite(viewport) && viewport > 0 ? viewport : FALLBACK_VIEWPORT;

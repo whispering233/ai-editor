@@ -10,6 +10,7 @@
 ### Changed
 
 - **右栏交互优化（用户反馈六项）**：模型选择/思考强度从标题行下方**移到输入框下方**（腾出消息流高度）+ 两端对齐 + 下拉浮层按内容宽展开（旧 `max-w-28` 把模型名掐成 `DeepSe…`）；会话列表换 antd x `Conversations`（两行项 + 灰面选中态，**修「选中会话看不清字」**——根因是 antd `Dropdown` 自带 menu 样式不吃 `Menu` 组件 token，选中面取派生 `colorPrimaryBg`，实测 1.9:1 不可读，新增守卫 `dropdown-menu-selectable`，累计 14 条）；面板收起/展开图标统一为 `«`/`»` 镜像对（旧为三套图标语言，含错用的表格边框图标）。**纯前端，API/数据契约零改动**
+- **右栏交互优化补两项（用户复验）**：① 思考强度下拉与模型选择同一根因（antd `popupMatchSelectWidth` 默认跟随触发器宽度）导致 `minimal`/`medium`/`xhigh` 截断 → 补 `false`（浮层 62.75 → 86.7px）；② 三栏默认宽度改为**上限与比例挂钩**（右栏上限 720 → 960 = 2400 的 40%）——旧值在 vp>1800 就开始吃比例（1920 实测右栏 37.5%），现 **1:5:4 在 1600–2400 视口精确成立**、1600 以下左栏取下限 160、2400 以上右栏封顶由中栏吸收剩余；`DESIGN.md` / `layout.md` 同步（旧文写「默认 220 / 右栏 240-720」与实现两套事实）
 - **npm 坏版本已标注 deprecate**（v0.0.1/v0.0.2）：`llm`/`db`/`tools`/`agent`/`server` 五个含 `workspace:*` 残留依赖的包 × 2 版本已在 npm 标注（registry 复验通过；`shared` 无依赖可正常安装故未标注）
 - **文档修正（实测推翻旧结论）**：`AGENTS.md` / `docs/design/build.md` 原写「绕过 2FA 的 granular token 不能执行 unpublish/deprecate（403）」——2026-09-11 实测**可以 deprecate**（10 条成功、无 OTP）；被拒的只是账号/组织/设置类操作（`npm profile get` → 403）；`unpublish` 未实测（不可逆）。另注：2027-01 起 bypass-2FA token 将失去直接发布能力，本仓发布走 OIDC Trusted Publisher 不受影响
 
