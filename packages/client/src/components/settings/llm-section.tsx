@@ -1,10 +1,13 @@
 // 设置页「AI 模型」分区（自 Settings.tsx 下沉；二级 tab 的一个 pane）
+// 布局：左侧三级导航（provider 列表，160px，选中面 = `menu-item-selected`）+ 右侧该 provider 的面板
+// （裸区块：标题行 + 「当前」徽标 + 模型下拉 + key 行）；常驻说明 Alert 跨整宽置底。
+// 三级导航选中态是**节点 state**（不进 URL）：缺省跟随当前激活 provider，用户点选后保持选择（切二级 tab 回来仍保留）。
 // 数据：GET/PUT /api/v1/settings/llm——模型下拉点选即激活（provider+model 成对）、
 // 各家 key 独立配置（掩码状态行 + 新 key 输入 + 保存/清除）
 // 常驻说明：key 只存本机用户配置（~/.ai-editor/config.json），不入项目文件；
 // 环境变量 DEEPSEEK_API_KEY 优先于此处配置（页面仍可保存，实际生效以环境变量为准）
 import { useEffect, useState } from "react";
-import { Alert, Button, Card, Input, Select, Tag, theme } from "antd";
+import { Alert, Button, Input, Menu, Select, Tag, Typography } from "antd";
 import {
   ApiError,
   CLIENT_NETWORK_ERROR,
@@ -20,7 +23,6 @@ function errorCodeOf(err: unknown): ErrorBanner["code"] {
 }
 
 export function LlmSection() {
-  const { token } = theme.useToken();
   const showToast = useUiStore((s) => s.showToast);
   const showError = useUiStore((s) => s.showError);
 
@@ -30,6 +32,8 @@ export function LlmSection() {
   const [modelError, setModelError] = useState<string | null>(null);
   /** 当前 LLM 配置快照（激活 provider/model + 各家 key 状态 + 目录） */
   const [settings, setSettings] = useState<SettingsLlmConfig | null>(null);
+  /** 三级导航选中的 provider（null = 跟随激活 provider） */
+  const [pickedProviderId, setPickedProviderId] = useState<string | null>(null);
   /** 各家 key 输入草稿（provider id → 输入值） */
   const [keyDrafts, setKeyDrafts] = useState<Record<string, string>>({});
   /** 卡内 key 表单内联错误（provider id → 错误文案） */
@@ -114,88 +118,117 @@ export function LlmSection() {
 
   if (loading) return <p className="text-sm text-muted-foreground">加载中…</p>;
 
+  const providers = settings?.providers ?? [];
+  // 选中的 provider：用户点选优先，否则跟随当前激活 provider（缺省第一家）——纯派生，无需同步 effect
+  const activeProvider =
+    providers.find((p) => p.id === (pickedProviderId ?? settings?.provider)) ??
+    providers[0] ??
+    null;
+  const activeIsCurrent = activeProvider !== null && settings?.provider === activeProvider.id;
+
   return (
     <div className="flex flex-col gap-4">
       {modelError && <p className="text-sm text-destructive">{modelError}</p>}
 
-      {(settings?.providers ?? []).map((p) => {
-        const isActive = settings?.provider === p.id;
-        return (
-          <Card
-            key={p.id}
-            size="small"
-            styles={{
-              body: { display: "flex", flexDirection: "column", gap: 10 },
-              ...(isActive ? { header: { borderColor: "transparent" } } : {}),
-            }}
-            style={isActive ? { borderColor: token.colorPrimary } : undefined}
-            title={
-              <span className="text-sm font-medium">
-                {p.displayName}
-                {isActive && <Tag className="ml-2">当前</Tag>}
-              </span>
-            }
-          >
-            <div className="flex flex-col gap-1">
-              <span className="text-xs text-muted-foreground">模型（点选即激活）</span>
-              <Select
-                size="small"
-                className="w-full"
-                value={isActive ? (settings?.model ?? undefined) : undefined}
-                placeholder={isActive ? "选择模型" : ""}
-                disabled={saving}
-                onChange={(value) => {
-                  if (value !== undefined && value !== "")
-                    void handleActivate(p.id, String(value));
-                }}
-                aria-label={`选择 ${p.displayName} 模型`}
-                options={p.models.map((m) => ({
-                  value: m.id,
-                  label: m.displayName ?? m.id,
-                }))}
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-xs text-muted-foreground">
-                {p.apiKeySet ? `key: 已配置（${p.apiKeyMasked ?? ""}）` : "key: 未配置"}
-              </span>
-              {!p.apiKeySet && (
-                <span className="text-xs text-destructive">
-                  未配 key：聊天下拉已禁用此组，聊天不可用
-                </span>
-              )}
-              <div className="flex gap-1.5">
-                <Input
-                  size="small"
-                  className="min-w-0 flex-1"
-                  value={keyDrafts[p.id] ?? ""}
-                  onChange={(e) => setKeyDrafts((d) => ({ ...d, [p.id]: e.target.value }))}
-                  placeholder="输入新 key（覆盖旧 key）"
-                />
-                <Button size="small" onClick={() => void handleSaveKey(p.id)} disabled={saving}>
-                  保存
-                </Button>
-                {p.apiKeySet && (
-                  <Button
-                    size="small"
-                    onClick={() => void handleClearKey(p.id)}
-                    disabled={saving}
-                  >
-                    清除
-                  </Button>
-                )}
-              </div>
-              {keyErrors[p.id] && <span className="text-xs text-destructive">{keyErrors[p.id]}</span>}
-            </div>
-          </Card>
-        );
-      })}
-
-      {settings === null && (
+      {settings === null ? (
         <p className="text-xs text-muted-foreground">模型配置读取失败，请刷新页面重试。</p>
+      ) : (
+        <div className="flex gap-4">
+          {/* 三级导航（sub-nav，DESIGN.md §Components）：provider 列表 160px；
+              选中面 = `menu-item-selected` 灰面——不新增设计语言。宽度由外层容器承载（antd 根元素不挂布局类） */}
+          <div className="w-40 shrink-0">
+            <Menu
+              mode="inline"
+              selectedKeys={activeProvider === null ? [] : [activeProvider.id]}
+              onClick={({ key }) => setPickedProviderId(key)}
+              items={providers.map((p) => ({
+                key: p.id,
+                // 窄栏（160px）超宽截断；title = 全文提示
+                label: <span className="block truncate">{p.displayName}</span>,
+                title: p.displayName,
+              }))}
+            />
+          </div>
+
+          {/* provider 面板（裸区块：标题行 + 模型 + key） */}
+          <div className="min-w-0 flex-1">
+            {activeProvider !== null && (
+              <>
+                <div className="mb-3 flex items-center gap-2">
+                  <Typography.Title level={5}>{activeProvider.displayName}</Typography.Title>
+                  {activeIsCurrent && <Tag>当前</Tag>}
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs text-muted-foreground">模型（点选即激活）</span>
+                  {/* 浮层宽度独立于触发器：触发器随面板拉伸，但长模型名不该被触发器宽度截断（窄触发器同理） */}
+                  <Select
+                    size="small"
+                    popupMatchSelectWidth={false}
+                    value={activeIsCurrent ? (settings.model ?? undefined) : undefined}
+                    placeholder={activeIsCurrent ? "选择模型" : "点选即切换为该 provider 的此模型"}
+                    disabled={saving}
+                    onChange={(value) => {
+                      if (value !== undefined && value !== "")
+                        void handleActivate(activeProvider.id, String(value));
+                    }}
+                    aria-label={`选择 ${activeProvider.displayName} 模型`}
+                    options={activeProvider.models.map((m) => ({
+                      value: m.id,
+                      label: m.displayName ?? m.id,
+                    }))}
+                  />
+                </div>
+                <div className="mt-3 flex flex-col gap-1">
+                  <span className="text-xs text-muted-foreground">
+                    {activeProvider.apiKeySet
+                      ? `key: 已配置（${activeProvider.apiKeyMasked ?? ""}）`
+                      : "key: 未配置"}
+                  </span>
+                  {!activeProvider.apiKeySet && (
+                    <span className="text-xs text-destructive">
+                      未配 key：聊天下拉已禁用此组，聊天不可用
+                    </span>
+                  )}
+                  <div className="flex gap-1.5">
+                    <Input
+                      size="small"
+                      className="min-w-0 flex-1"
+                      value={keyDrafts[activeProvider.id] ?? ""}
+                      onChange={(e) =>
+                        setKeyDrafts((d) => ({ ...d, [activeProvider.id]: e.target.value }))
+                      }
+                      placeholder="输入新 key（覆盖旧 key）"
+                    />
+                    <Button
+                      size="small"
+                      onClick={() => void handleSaveKey(activeProvider.id)}
+                      disabled={saving}
+                    >
+                      保存
+                    </Button>
+                    {activeProvider.apiKeySet && (
+                      <Button
+                        size="small"
+                        onClick={() => void handleClearKey(activeProvider.id)}
+                        disabled={saving}
+                      >
+                        清除
+                      </Button>
+                    )}
+                  </div>
+                  {keyErrors[activeProvider.id] && (
+                    <span className="text-xs text-destructive">
+                      {keyErrors[activeProvider.id]}
+                    </span>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
 
-      {/* 常驻说明（每 provider 独立解析链） */}
+      {/* 常驻说明（每 provider 独立解析链；跨整宽） */}
       <Alert
         type="info"
         showIcon
