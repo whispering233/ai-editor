@@ -20,7 +20,7 @@
 | `BACKUP_TARGET_EXISTS` | 409 | 409 重命名备份目标文件名已存在（B2.6：renameSync 目标存在会静默覆盖——显式拒绝防数据丢失） |
 | `REFERENCE_FILE_MISSING` | 409 | 409 参考资料 file 类文件缺失（PUT 更新时读原文件失败——外部删除，提示先扫描同步） |
 | `DELTA_CONFLICT` | —（已废弃） | 已废弃（2026-08 修订：computeState 以 conflicts 字段替代 409） |
-| `TOOL_RESULT_TOO_LARGE` | — | 工具结果 token 预算超限：截断/拒绝该工具结果 |
+| `TOOL_RESULT_TOO_LARGE` | — | 单条工具结果超 token 预算：**截断 + 结构化提示**（不终止对话；同时写调试日志使用量类别） |
 | `AGENT_DISPATCH_ERROR` | — | 工具调度器缺陷（S7.3 防御：结果条数不符 / id 错位 / 调度器抛错），终止循环 |
 | `AGENT_INTERNAL_ERROR` | — | agent 循环内部未知异常（S7.3 防御路径——chatStream 不 throw，理论不可达） |
 | `AGENT_MAX_ITERATIONS` | — | agent 循环超 8 轮上限，发 error 事件终止 |

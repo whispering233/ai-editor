@@ -27,6 +27,7 @@
 | `model` | string（可选） | 当前模型名，**属于 `provider` 目录**（缺省 `deepseek-v4-flash`；多 provider 模型名可撞名，靠 provider 消歧） |
 | `thinking_level` | enum（可选） | 思考强度 `off/minimal/low/medium/high/xhigh/max`，缺省 `high`（全局，不分 provider） |
 | `api_keys` | map（可选） | 各 provider 的 API key（不入项目文件）；v1 旧 `api_key` 字段读侧视为 `api_keys["deepseek"]` |
+| `context_budget` | object（可选） | 上下文预算：`history_ratio`（历史层 = 激活模型 `contextWindow` × ratio，缺省 `0.15`）、`tool_result_max_tokens`（单条工具结果上限，缺省 `8000`）；字段缺失/类型不符/整段非法 → 全部回落缺省（宽松读取，不报错、不写回）。设置页不做 UI，直接编辑文件 |
 
 **每 provider key 解析链**（读侧，不入项目文件）：
 

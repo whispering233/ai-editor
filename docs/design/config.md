@@ -5,10 +5,17 @@
 | 载体 | 内容 | 契约位置 |
 | :--- | :--- | :--- |
 | 启动参数 `projectRoot` + 环境变量 `AI_EDITOR_PORT` | 创作根目录 / 服务端口覆盖（仅 bin 直接执行入口读取） | `build.md` |
-| 用户级 `~/.ai-editor/config.json`（schema v2） | LLM 配置：`schema_version`/`provider`/`model`/`thinking_level`/`api_keys`；key 三级解析链（env > 用户配置 > pi-agent `~/.pi/agent/auth.json` 只读兜底）；模型解析绝不跨 provider | `docs/api/90-api-settings.md`（字段表 + 解析链） |
+| 用户级 `~/.ai-editor/config.json`（schema v2） | LLM 配置：`schema_version`/`provider`/`model`/`thinking_level`/`api_keys`/`context_budget`；key 三级解析链（env > 用户配置 > pi-agent `~/.pi/agent/auth.json` 只读兜底）；模型解析绝不跨 provider | `docs/api/90-api-settings.md`（字段表 + 解析链） |
 | 项目 `project.json` | id/name/language/schema_version/current_position/backup_frequency_minutes（自动备份频率枚举 1/5/10/15/30/60，null/0 关闭，缺省 10） | `docs/db/schema.md` |
 | 项目目录 `AGENTS.md` | 项目规则唯一事实源（取代废弃的 project.json `prompt`）：设置页直编 + 文件管理器直接编辑（mtime 检测外部修改）；注入 system「## 项目设定」 | `docs/design/20-context.md` §3；端点 `docs/api/10-api-project.md`（GET/PUT /project/agents） |
 | 创作根 `.ai-editor/config.json` 的 `debug` 段 | 调试日志开关：`{ "debug": { "enabled": true, "categories": [...] } }`，五类别 chat/request/stream/usage/http；categories 缺失 = 全部、enabled 缺失/false = 全关；文件不存在/非法 JSON/结构不符 = 全关（无配置文件默认关闭防刷屏）；stream 类别经 chatStream `debugStream` 选项显式传入 llm 包（显式 true 才开，无 env 回退） | server 包 `src/debug.ts` |
 | 浏览器 localStorage | 展示层偏好，不进数据文件：主题 `ai-editor:theme`（use-theme）、三栏面板 `ai-editor:panels`、画布坐标/缩放 | `docs/ui/DESIGN.md`（布局与交互）；代码 client/src |
 
 **读写边界**：用户级/创作根配置由服务端读写（设置页）；项目文件（project.json/outline.json/AGENTS.md）走原子写；`~/.pi/agent/auth.json` 只读兜底（绝不写回）。schema v1 旧 `api_key` 字段读侧仅对 deepseek 生效，未知字段保留不校验。
+
+## 可配 / 不可配边界（判据）
+
+**判据：配错会导致「无界成本」或「静默失控」的数值不给用户配。**
+
+- **可配**（用户级 `config.json`）：`context_budget` 段（`history_ratio` / `tool_result_max_tokens`）——影响**体验与成本曲线**的日常参数，用户应能按自己的模型与预算调；设置页不做 UI，直接编辑文件（与创作根 `debug` 段同风格）。
+- **刻意不可配**（代码常量，仅测试可注入）：agent 轮次上限（8）、单轮超时（120s）、单次请求超时（60s）、上下文总闸（`contextWindow × 0.5`）、重试次数（3）与退避基数（2s）。这些是**失控保护的安全网**——能配就等于让用户拆保险丝；真需要放宽长任务时，做法是「按任务类型」给预算，而不是开全局旋钮。

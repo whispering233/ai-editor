@@ -43,7 +43,11 @@
 // data: { "proposal_id": "prop_xxx", "type": "propose_create_entity", "preview": {...} }
 //
 // event: done              // 对话轮次结束
-// data: { "session_id": "sess_xxx" }
+// data: { "session_id": "sess_xxx", "usage": {...}, "context_budget": { "history": 150000, "total": 155000 } }
+//   usage：本轮真实 token 用量（prompt/completion/total，可缺省）
+//   context_budget：本轮**生效预算**（服务端在上下文组装后算出；分母口径，供前端占用条）——
+//     history = 生效历史预算（激活模型 contextWindow × context_budget.history_ratio，经总闸 clamp）
+//     total   = history + system + 工具清单 + focus 四层之和（= 占用条分母）
 //
 // event: error
 // data: { "code": "...", "message": "..." }
