@@ -15,11 +15,11 @@ import { Alert, Badge, Button, Collapse, Dropdown as AntDropdown, Select, Tag, t
 import {
   BulbOutlined,
   CloseOutlined,
+  DoubleRightOutlined,
   DownOutlined,
   MessageOutlined,
   PlusOutlined,
   ToolOutlined,
-  VerticalRightOutlined,
 } from "@ant-design/icons";
 import Markdown from "@ant-design/x-markdown";
 import { useMediaQuery } from "../../hooks/use-media-query";
@@ -350,7 +350,8 @@ function SessionTitleBar({
           onClick={onToggleCollapse}
           aria-label="收起聊天面板"
           title="收起聊天面板"
-          icon={<VerticalRightOutlined />}
+          // 图标 = 面板折叠同一族镜像对（DESIGN.md `icon-button`）：收起 = `»`（朝本侧边缘）
+          icon={<DoubleRightOutlined />}
         />
       )}
       {onClose && (

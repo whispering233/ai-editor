@@ -12,9 +12,9 @@ import {
   BookOutlined,
   DashboardOutlined,
   DeleteOutlined,
+  DoubleLeftOutlined,
   EnvironmentOutlined,
   FieldTimeOutlined,
-  MenuFoldOutlined,
   MoonOutlined,
   PushpinOutlined,
   ReadOutlined,
@@ -101,7 +101,8 @@ export function NavRail({
             size="small"
             aria-label="收起左栏"
             title="收起左栏"
-            icon={<MenuFoldOutlined />}
+            // 图标 = 面板折叠同一族镜像对（DESIGN.md `icon-button`）：收起 = `«`（朝本侧边缘）
+            icon={<DoubleLeftOutlined />}
             onClick={onToggleCollapse}
           />
         )}

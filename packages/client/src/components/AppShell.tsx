@@ -7,7 +7,11 @@
 // 抽屉渲染在 ChatPanel；open 状态在此持有）
 import { useState, type ReactNode } from "react";
 import { Button } from "antd";
-import { BorderLeftOutlined, BorderRightOutlined, HolderOutlined } from "@ant-design/icons";
+import {
+  DoubleLeftOutlined,
+  DoubleRightOutlined,
+  HolderOutlined,
+} from "@ant-design/icons";
 import type { Route } from "../hooks/use-route";
 import { usePanels } from "../hooks/use-panels";
 import { cn } from "../lib/utils";
@@ -59,10 +63,11 @@ function ResizeHandle({
   );
 }
 
-/** 收起窄条（栏收起后替代主体渲染）：32px 窄条 + 展开按钮（点击恢复原宽） */
+/** 收起窄条（栏收起后替代主体渲染）：32px 窄条 + 展开按钮（点击恢复原宽）；
+ * 图标 = 与对应栏收起按钮同一族镜像对（DESIGN.md `icon-button`）：左栏展开 = `»`、右栏展开 = `«` */
 function CollapseStrip({ side, onExpand }: { side: "sidebar" | "chat"; onExpand: () => void }) {
   const isSidebar = side === "sidebar";
-  const ExpandIcon = isSidebar ? BorderLeftOutlined : BorderRightOutlined;
+  const ExpandIcon = isSidebar ? DoubleRightOutlined : DoubleLeftOutlined;
   return (
     <div
       className={cn(
