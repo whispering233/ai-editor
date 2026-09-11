@@ -14,7 +14,7 @@
 | **状态管理** | Zustand 5 | 轻量、TypeScript 优秀、selector 自动优化 |
 | **前端组件基座** | antd v6（ConfigProvider zhCN + 双主题 algorithm + **Notion 工作区暖灰 token 覆盖**）+ `@ant-design/icons`（**全站唯一图标集**）；会话场景 `@ant-design/x`（Bubble/Sender/Thought/Conversations）+ `@ant-design/x-markdown`（流式 Markdown） | 成熟组件红利统一视觉与交互；主题 = antd token 派发，只覆盖少量 seed 与组件 token（**视觉契约见 `docs/ui/DESIGN.md`**）；颜色一律经 antd token，禁止硬编码色值/色类；**不并存第二套组件系统**（图标 = `@ant-design/icons`、提示 = antd `message`、按钮/输入/下拉 = antd 本体，见 `DESIGN.md` §Components） |
 | **样式** | Tailwind CSS 4（**仅布局 utility，不含颜色**）+ **`docs/ui/DESIGN.md` 视觉契约**（颜色/字号/圆角/间距/组件外观 + antd token 覆盖表）+ Prettier（prettier-plugin-tailwindcss）+ `design-discipline.test.ts`（源码扫描硬约束：硬编码色 / `!` 前缀类 / 手写字号 / 被 antd 无层 CSS 压掉的类） | v4 CSS-first 配置（无 tailwind.config.js）；**antd 样式是运行时无层 CSS，会静默压掉 Tailwind 工具类**——antd 组件根元素上不挂 `w-/h-/px-/py-/justify-/rounded-/text-*`（宽度用容器承载、尺寸用 `size`、状态用 `variant`/token）；视觉与布局规范统一归 `ui/DESIGN.md`，样式细节规范不重复入文档） |
-| **AI 调用** | `@earendil-works/pi-ai`（统一多提供商 LLM 接口；注册 deepseek + opencode-go 两 provider，模型名/思考强度可配置，key 按 provider 独立解析） | 传输/SSE/usage 解析由 pi-ai 接管，llm 包单向 adapter 保留对外契约；注册/解析细节见 llm 包与 config.md |
+| **AI 调用** | `@earendil-works/pi-ai`（统一多提供商 LLM 接口；注册 deepseek + opencode-go 两 provider，模型名/思考强度/**上下文预算**可配置，key 按 provider 独立解析） | 传输/SSE/usage 解析由 pi-ai 接管，llm 包单向 adapter 保留对外契约；注册/解析/可配边界见 llm 包与 `config.md` |
 | **Schema 验证** | Zod 4 | 运行时类型安全，API 入参校验（v4 API，注意迁移破坏项） |
 | **路由** | 轻量 hash-based（自制 `useHashRoute`） | 单页桌面应用不需要 React Router；路由一级化（书架 `#/` + 导航页独立首段，无路由级 tab，详见 `ui/DESIGN.md`「布局」） |
 

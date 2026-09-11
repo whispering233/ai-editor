@@ -10,7 +10,7 @@ export type ChatRole = "user" | "assistant" | "tool";
 export interface ChatMessage {
   id: string;
   sessionId: string;
- /** 会话按项目隔离 */
+ /** 会话归属 = 项目目录（sessions/*.jsonl）；该字段仅用于 API 响应回填，不参与存储 */
   projectId?: string;
   role: ChatRole;
   content?: string | null;

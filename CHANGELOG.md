@@ -5,9 +5,9 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [v0.0.31] - 2026-09-12
 
-> 设置页信息架构重构（二级 tab + AI 模型三级导航）+ 中栏页头统一壳（标题/tab/控件行 + 分割线）+ 左栏「立即备份」快捷入口；上下文预算配置化 + 工具结果上限落地 + 占用条换口径。
+> **对话历史迁出数据库**（`chat_messages` → 项目目录 `sessions/*.jsonl`，SCHEMA_VERSION 5→6）+ 会话删除端点；**上下文预算配置化**（按激活模型窗口派生）与工具结果上限落地；token 估算改分级密度（修中文低估 2.4 倍）；设置页信息架构重构（二级 tab + AI 模型三级导航）与中栏页头统一壳。
 
 ### Added
 
@@ -15,25 +15,29 @@
 - **迁移 006（SCHEMA_VERSION 5→6）**：`chat_messages` 全量导出为 JSONL 后 `DROP TABLE`；`Migration.up` 扩为 `(db, ctx: { projectRoot })` 以写入项目目录；迁移失败整体回滚（表保留、版本不前移、可重试）；**id 非法的旧会话以 `sess_legacy_<sha256 前 16 位>` 改名导出**（数据不丢、映射确定性幂等）
 - **`DELETE /api/v1/chat/sessions/:id`**：400 形态非法 / 404 `SESSION_NOT_FOUND` / 409 `SESSION_BUSY`（会话有在途 SSE 流，防 append 把文件原地重建）/ 200 `{ deleted: true }`；右栏会话项 ellipsis → 「删除会话」→ danger 二次确认（「删除后无法恢复」），生成中禁用
 - **备份管道接 `sessions/`**：白名单/打包/变更判定（mtime）/恢复整体覆盖与 `references/` 同款；旧备份包（无 `sessions/`）仍可导入，恢复时该目录按整体还原清空
-
-### Added
-
 - **上下文预算配置化**：用户级 `~/.ai-editor/config.json` 新增 `context_budget` 段（`history_ratio` 缺省 `0.15`、`tool_result_max_tokens` 缺省 `8000`，缺失/非法只回落该段、不牵连 provider/model/api_keys）；历史层预算 = **激活模型 `contextWindow` × ratio**（经总闸 clamp：总闸 = `window × 0.5`，替换原硬编码 60K）；`docs/design/config.md` 新增「可配 / 不可配边界」判据（轮次上限 / 单轮超时 / 总闸 / 重试策略刻意不可配）
-- **`done` SSE 帧新增 `context_budget`**（`{ history, total }` = 生效历史预算 / 四层预算之和）：前端占用条分母由模型 `contextWindow` 改为该值（1M 窗口下旧分母让占用条恒显 0-1%，是假指标）
-- **token 估算改分级密度**（`llm/src/token.ts`）：ASCII 4 字符/token、非 ASCII 1.7 字符/token（≈ 1 汉字 0.6 token）——原单一 `chars/4` 对中文低估约 2.4 倍，是唯一能让裁剪阈值与总闸静默失效的路径；新增 `charsPerToken()` 供 `truncateToolResult` / `trimFocus` 按文本自身密度反推字符数
-- **切会话/切项目清零瞬时读数**：`lastUsage` / `contextBudget` 随 `setCurrentSession` / `newSession` / `clearSessions` 重置（原先切视图后占用条会残留上一会话数值）
-- **单条工具结果上限接线**：`truncateToolResult`（`llm/src/token.ts` 早已实现、全仓无消费者）接入 `runAgent` 工具结果回填的唯一扼点（含合成失败结果与 `finish_reason=length` 标记），事件 / 落库 / 下一轮喂回共用同一份截断文本；超限**截断 + 结构化提示**，不终止对话（`TOOL_RESULT_TOO_LARGE` 记 usage 类调试日志）
-- **中栏页头统一壳 `components/ui/page-header.tsx`**：标题行 → 二级 tab 行（可选）→ 控件行（可选）→ 分割线，一次给全；**14 页迁移**——列表/富页 10 页（概览 / 书架 / 大纲 / 人物 / 设定 / 地点 / 关联 / 伏笔 / 时间轴 / 参考资料 / 回收站）+ 详情页 4 页（EntityDetail / OutlineDetail / TimelineDetail / ReferenceDetail，分割线落在元信息行之下）；`ReferenceDetail` 标题可编辑走 `titleNode`（自绘标题元素，不把 `input` 嵌进 `h4`）；Timeline / ReferenceList 的内滚动布局由 `shrink-0` 页头承担（实测滚动 500px 页头与分割线不动）
-- **设置页二级 tab**：三块下沉为 `settings/{llm,project-rules,backup}-section.tsx`，`Tabs` line 型 3 项（AI 模型 → 项目规则 → 备份），选中态为页内 state（不进 URL、不进左栏高亮；刷新回落默认 tab）；懒渲染（未访问分区不拉 `/project/agents` 与 `/project/backups`）+ 草稿跨 tab 保留；去掉 `max-w-2xl mx-auto` 容器（页头与其它中栏页对齐）
-- **AI 模型三级导航**（`sub-nav`）：左侧 160px 竖向 `Menu` 列 provider，右侧为该家面板（裸区块：标题行 + 「当前」徽标 + 模型 `Select` + key 状态/输入/保存/清除），常驻说明 Alert 跨整宽置底；provider 名超宽截断 + `title` 全文提示
-- **左栏「立即备份」快捷入口**：`NavRail` 底部区最上（设置之上）`block` + `color="default" variant="text"` + `SaveOutlined`，`POST /project/backup` 不带 name，toast 文案与设置页一致；无项目禁用、在途 `loading` 防连点
-- **守卫 +2**：`antd-tokens.test.ts` 新增 Tabs 契约（两态 `horizontalMargin` 归零、`itemColor` = 次级文字档）——tab 条自带底线即页头分割线，antd 默认 `0 0 16px 0` 会让底线悬空成双线
+- **`done` SSE 帧新增 `context_budget`**（`{ history, total }` = 生效历史预算 / 四层预算之和）
+- **单条工具结果上限接线 + 裁剪护栏**：`truncateToolResult`（`llm/src/token.ts` 早已实现、全仓无消费者）接入 `runAgent` 工具结果回填的唯一扼点（含合成失败结果与 `finish_reason=length` 标记），事件 / 落库 / 下一轮喂回共用同一份截断文本；超限**截断 + 结构化提示**不终止对话；裁剪**不得裁空**（放不下任何块时按配对块从尾部累积到喂回 payload 非空，不拆 `assistant ↔ tool` 配对）
+- **中栏页头统一壳 `components/ui/page-header.tsx`**：标题行 → 二级 tab 行（可选）→ 控件行（可选）→ 分割线，一次给全；**14 页迁移**——列表/富页 10 页 + 详情页 4 页（`ReferenceDetail` 标题可编辑走 `titleNode`）；Timeline / ReferenceList 的内滚动布局由 `shrink-0` 页头承担（实测滚动 500px 页头与分割线不动）
+- **设置页二级 tab**：三块下沉为 `settings/{llm,project-rules,backup}-section.tsx`，`Tabs` line 型 3 项（选中态为页内 state，不进 URL；懒渲染 + 草稿跨 tab 保留）
+- **AI 模型三级导航**（`sub-nav`）：左侧 160px 竖向 `Menu` 列 provider，右侧为该家面板（标题行 + 「当前」徽标 + 模型只读行 + key 状态/输入/保存/清除）
+- **左栏「立即备份」快捷入口**（无项目禁用、在途 `loading` 防连点）
+- **守卫 +2**：`antd-tokens.test.ts` 新增 Tabs 契约（两态 `horizontalMargin` 归零、`itemColor` = 次级文字档）
 
 ### Changed
 
-- **设置页「AI 模型」去重**：删除 provider 面板的「模型（点选即激活）」下拉（与聊天栏模型下拉重复，且「浏览 provider 目录」时点模型会顺手改全局激活模型），改为只读「当前激活：<模型名>」；非激活 provider 面板提示「打开项目后，在聊天栏切换激活模型」。模型激活唯一入口 = 聊天栏 `ComposerConfigRow`（右栏，项目内）。**书架态（未打开项目）无模型切换入口**——模型只影响聊天，聊天只在项目内存在。`updateSettingsLlm` 的 `provider`/`model` 分支保留（API/数据契约零改动）
-- **契约（`DESIGN.md`）**：§Layout 新增「中栏页头结构」（有 tab 用 tab 条自带底线、无 tab 用显式 1px `{colors.hairline}`；宽度与内容同宽不穿透页内边距）；§Components 新增 `tabs` / `sub-nav`（三级导航 = 竖向 `Menu` inline，宽 160px = `sidebar` 宽度档，契约复用 `menu-item` / `menu-item-selected`，不新增设计语言），覆盖表新增 `Tabs` 行；`sidebar` 底部入口清单补「立即备份」并登记底部区三入口统一无边框形态（「立即备份」是动作而非导航，H4 例外仅此一处）；`data-row` 段补**链式新建 = 选中 + 聚焦**的行级交互登记（只聚焦不选中会让下一次 Enter 被守卫吞掉）
-- **文档收口**：`docs/ui/layout.md` 已并入本文件，全仓 19 处悬空引用（`AGENTS.md` / `docs/design/{tasks,architecture,config}.md` / `DESIGN.md` 自身 / `README.md` / 6 处代码注释）改指 `docs/ui/DESIGN.md` 并**写节名不写节号**；`CHANGELOG.md` 历史条目不动（逐版本事实）
+- **设置页「AI 模型」去重**：删除 provider 面板的「模型（点选即激活）」下拉（与聊天栏模型下拉重复，且「浏览 provider 目录」时点模型会顺手改全局激活模型），改为只读「当前激活：<模型名>」；模型激活唯一入口 = 聊天栏 `ComposerConfigRow`。**书架态（未打开项目）无模型切换入口**（模型只影响聊天，聊天只在项目内存在）
+- **token 估算改分级密度**：ASCII 4 字符/token、非 ASCII 1.7 字符/token（≈ 1 汉字 0.6 token）；新增 `charsPerToken()` 供 `truncateToolResult` / `trimFocus` 按文本自身密度反推字符数（旧口径下中文大文本会被多保留一倍以上字符，真实超预算）
+- **占用条分母改生效预算**：由模型 `contextWindow` 改为 `done` 帧的 `context_budget.total`（1M 窗口下旧分母让占用条恒显 0-1%，是假指标）；`title` 改为「本轮 tokens / 生效预算 tokens」
+- **契约（`docs/ui/DESIGN.md`）**：新增 `usage-bar` / `chat-session-item-menu` 条目，§Layout 页头结构登记；`docs/db/schema.md` 新增 sessions/*.jsonl 节并移除 chat_messages 表；`docs/design/10-data-model.md` §1 存储表/§10/§11 改写；`docs/api/{00-index,80-chat,20-backup,90-settings,error-code}.md` 同步；`docs/design/{config,20-context,30-agent-loop,architecture}.md` 同步
+
+### Fixed
+
+- **中文 token 低估 2.4 倍**（唯一能击穿裁剪阈值与总闸的静默失效路径）——`chars/4` 只对英文成立，改为分级密度
+- **占用条 / 用量切视图残留**：`lastUsage` / `contextBudget` 随切会话 / 新会话 / 切项目清零（原先残留上一会话数值）
+- **迁移对非法 id 旧会话的静默丢弃**：改为 `sess_legacy_<hash>` 改名导出（原实现跳过 + DROP = 永久丢数据）
+- **删除会话的微任务窗口**：在途登记注销提前到 `runAgent` 返回后（此前「客户端读到 `done` 立刻删」会偶发 409 `SESSION_BUSY`）
+- **构建产物残留**：清理 `dist` 中被删模块的陈旧编译产物（`db/queries/{atomic,outline,project}`、`tools/{executor,proposal}/reorder-events`）——`files: ["dist"]` 会随包发布
 
 ## [v0.0.30] - 2026-09-11
 

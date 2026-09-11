@@ -89,6 +89,7 @@
 | POST | `/api/v1/chat` | AI 对话与提案确认 |
 | GET | `/api/v1/chat/sessions` | AI 对话与提案确认 |
 | GET | `/api/v1/chat/sessions/:id/messages` | AI 对话与提案确认 |
+| DELETE | `/api/v1/chat/sessions/:id` | 删除会话（物理删文件；400/404/409） |
 | POST | `/api/v1/names/resolve` | AI 对话与提案确认 |
 | POST | `/api/v1/proposal/:proposalId/confirm` | AI 对话与提案确认 |
 | POST | `/api/v1/proposal/:proposalId/reject` | AI 对话与提案确认 |

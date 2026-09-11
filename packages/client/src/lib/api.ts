@@ -863,7 +863,7 @@ export interface RestoreBackupRes {
 
 /**
  * 从备份列表恢复当前项目（覆盖恢复）：
- * - 覆盖前服务端自动快照当前状态 → 原子替换三文件 → 会话归属迁移（跨项目恢复，保护）
+ * - 覆盖前服务端自动快照当前状态 → 原子替换三文件 + references/ + sessions/（整体覆盖，本地残留不混入）
  * - 错误：404 VALIDATION_ERROR（备份不存在）、409 SCHEMA_VERSION_MISMATCH（备份来自更高版本，
  * 前端阻断提示——message 已按相对版本分流，透传展示）
  */
