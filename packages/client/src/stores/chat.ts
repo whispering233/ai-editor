@@ -316,6 +316,9 @@ export const useChatStore = create<ChatState>((set, get) => {
         focusContext: null,
         proposals: [],
         streamTools: [],
+ // 瞬时运行态：旧会话/旧项目的用量与预算不得残留到新视图（占用条与 usage 同步清零）
+        lastUsage: null,
+        contextBudget: null,
       });
       if (id !== null) void get().loadMessages(id); // 恢复历史（fire-and-forget，失败静默 → 空态）
     },
@@ -347,6 +350,8 @@ export const useChatStore = create<ChatState>((set, get) => {
         focusContext: null,
         proposals: [],
         streamTools: [],
+        lastUsage: null,
+        contextBudget: null,
       });
     },
 

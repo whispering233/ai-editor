@@ -487,7 +487,7 @@ components:
 **`chat-bubble-user`** — user 消息：`{colors.surface-muted}` 灰底（`colorFillTertiary`）+ `{rounded.md}` + `{colors.primary}` 字色。**禁止用 `colorPrimaryBg`**：主色 seed 是深墨（`#37352f`），antd 派生的 `colorPrimaryBg` 实测为 `#787771`（中灰）——灰底上压墨字，对比度 ~1.9:1，不可读（历史 bug）。
 **`chat-bubble-assistant`** — assistant 消息：无底透明 + 正文排版（长文本可读性优先，不用气泡包）。
 **`focus-strip`** — 「正在讨论：{类型} {名称}」小条：`{colors.surface-soft}` 底 + 1px 描边 + caption。
-**`usage-bar`** — 上下文占用条（输入框下方工具条右侧）：2px 高圆角条 + caption 百分比。**分母 = 本轮生效预算**（`done` 帧 `context_budget.total`，见 `docs/design/20-context.md` §1），**不是模型 `contextWindow`**——1M 窗口下用窗口做分母会让该条永远停在 0-1%，是个假指标。填充色按占比经 antd token 取色（≥90% `colorError`、≥70% `colorWarning`、其余 `colorPrimary`），**禁硬编码色值**；`title` 显示 `本轮 tokens / 生效预算 tokens`。
+**`usage-bar`** — 上下文占用条（输入框下方工具条右侧）：2px 高圆角条 + caption 百分比。**分母 = 本轮生效预算**（`done` 帧 `context_budget.total`，见 `docs/design/20-context.md` §1），**不是模型 `contextWindow`**——1M 窗口下用窗口做分母会让该条永远停在 0-1%，是个假指标。填充色按占比经 antd token 取色（≥90% `colorError`、≥70% `colorWarning`、其余 `colorPrimary`），**禁硬编码色值**；`title` 显示 `本轮 tokens / 生效预算 tokens`。**切会话 / 新会话 / 切项目时清零**（`lastUsage` 与 `contextBudget` 同步重置——瞬时运行态，旧会话/旧项目的数值不得残留到新视图）。
 **`proposal-card`** — 提案卡：1px 描边卡片 + 确认/拒绝按钮（确认按钮用 `button-primary`，禁用态由 antd 派发）。
 **`toast`** — 全局提示走 antd `message`（`App.useApp()`），顶部居中；`success/error/info` 对应 store 的 `ToastKind`，时长由 store 的 3s 定时器决定（`duration: 3` 对齐）。**命令式反馈的上下文入口**：`AntdProvider` 在 `ConfigProvider` 内部包 `<App component={false}>`（`component={false}` 不渲染包裹 div，不插进三栏 flex 链）——`message`/`notification`/`modal` 需经 `App.useApp()` 取实例才能继承本 Provider 的主题与 locale，不要用静态方法。
 

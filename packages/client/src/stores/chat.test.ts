@@ -280,6 +280,9 @@ describe("setCurrentSession / newSession / clearSessions（U5：选择即恢复�
       disconnected: true,
       focusContext: { focus_entity_type: "character", focus_entity_id: "char-1" },
       proposals: [{ proposalId: "prop-1", type: "propose_create_entity", status: "pending" }],
+ // 瞬时用量/预算也属「旧会话视图」，必须一并清零（占用条不得显示上一会话的数值）
+      lastUsage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
+      contextBudget: { history: 150000, total: 151643 },
     });
     useChatStore.getState().newSession();
     const s = useChatStore.getState();
@@ -289,6 +292,20 @@ describe("setCurrentSession / newSession / clearSessions（U5：选择即恢复�
     expect(s.disconnected).toBe(false);
     expect(s.focusContext).toBeNull();
     expect(s.proposals).toEqual([]);
+    expect(s.lastUsage).toBeNull();
+    expect(s.contextBudget).toBeNull();
+  });
+
+  it("切换会话清零瞬时用量/预算（旧会话数值不得残留到新视图）", () => {
+    mocked.getSessionMessages.mockResolvedValue({ sessionId: "sess-2", messages: [] });
+    useChatStore.setState({
+      currentSessionId: "sess-1",
+      lastUsage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
+      contextBudget: { history: 150000, total: 151643 },
+    });
+    useChatStore.getState().setCurrentSession("sess-2");
+    expect(useChatStore.getState().lastUsage).toBeNull();
+    expect(useChatStore.getState().contextBudget).toBeNull();
   });
 
   it("切换会话中止在途 SSE 流（旧流事件不得污染新会话视图）", () => {
@@ -319,9 +336,16 @@ describe("setCurrentSession / newSession / clearSessions（U5：选择即恢复�
     const abortFn = vi.fn();
     mocked.fetchSSE.mockReturnValue(abortFn);
     useChatStore.getState().sendMessage("你好");
-    useChatStore.setState({ currentSessionId: "sess-1", disconnected: true });
+    useChatStore.setState({
+      currentSessionId: "sess-1",
+      disconnected: true,
+      lastUsage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
+      contextBudget: { history: 150000, total: 151643 },
+    });
     useChatStore.getState().clearSessions();
     const s = useChatStore.getState();
+    expect(s.lastUsage).toBeNull();
+    expect(s.contextBudget).toBeNull();
     expect(s.sessions).toBeNull();
     expect(s.currentSessionId).toBeNull();
     expect(s.sessionsError).toBeNull();
