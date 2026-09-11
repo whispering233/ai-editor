@@ -15,6 +15,8 @@
 | `PROPOSAL_STALE` | 409 | 409 确认时引用快照不一致 |
 | `PROPOSAL_NOT_FOUND` | 404 | 404 proposal_id 不存在 |
 | `PROPOSAL_PROJECT_MISMATCH` | 409 | 409 提案所属项目 ≠ 当前项目 |
+| `SESSION_NOT_FOUND` | 404 | 404 删除会话时目标 JSONL 文件不存在 |
+| `SESSION_BUSY` | 409 | 409 删除会话时该会话有在途 SSE 流（拒绝删除，防 append 重建僵尸会话） |
 | `SCHEMA_VERSION_MISMATCH` | 409 | 409 导入 zip 的 data.db user_version 与当前程序版本不匹配（拒绝导入，不静默重建） |
 | `PROJECT_VERSION_NEWER` | 409 | 409 open 时项目 data.db user_version 高于当前程序版本（拒绝打开并提示升级程序，堵降级数据丢失） |
 | `BACKUP_TARGET_EXISTS` | 409 | 409 重命名备份目标文件名已存在（B2.6：renameSync 目标存在会静默覆盖——显式拒绝防数据丢失） |

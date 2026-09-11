@@ -21,7 +21,7 @@
   };
 }
 
-// 对话历史持久化：本会话的消息写入 data.db 的 chat_messages 表；
+// 对话历史持久化：本会话的消息写入项目目录 `sessions/<session_id>.jsonl`（行格式/容忍规则见 docs/db/schema.md）；
 // 服务重启后携带同一 session_id 即可继续上次对话。
 
 // Res: SSE stream
@@ -101,6 +101,22 @@ id: string;                  // session_id
   }[];
 }
 // 按 created_at 升序；仅返回当前项目的会话
+```
+
+### DELETE /api/v1/chat/sessions/:id
+
+物理删除一个会话（无回收站、不可恢复；前端需二次确认）。
+
+```typescript
+// Path
+id: string;                  // session_id（硬校验 ^sess_[A-Za-z0-9_-]{1,64}$）
+
+// Res: 200
+{ deleted: true }
+
+// Res: 400 VALIDATION_ERROR —— id 形态非法（同时是文件名校验：防路径穿越）
+// Res: 404 SESSION_NOT_FOUND —— 该会话文件不存在
+// Res: 409 SESSION_BUSY —— 该会话有在途 SSE 流（防止 append 把文件原地重建出「僵尸会话」）
 ```
 
 ### POST /api/v1/names/resolve

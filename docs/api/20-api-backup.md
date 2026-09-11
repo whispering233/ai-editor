@@ -111,7 +111,7 @@
 2. **覆盖前自动快照**：将当前三文件打包为快照存入 `.backups/`（复用备份管道）
 3. 备份包校验（同 import 校验顺序 3-7：zip 解析/白名单/三文件齐全/顶层契约/data.db user_version 三态分流——绝不静默重建）
 4. **原子替换**：临时目录解压校验通过后，三文件覆盖写入项目目录（原子写）；**project.json 内 `name` 归一为当前目录名**（与 import 覆盖一致，维持「目录名 = 书名」不变式；`id` 保留当前项目 id）
-5. **data.db 会话归属迁移（B2.2 审核 P1-1）**：备份包内 `project_id` ≠ 当前项目 id 时（跨项目恢复），替换后执行 `UPDATE chat_messages SET project_id = ? WHERE project_id = ?`（旧 id → 当前 id）——「保留 id 保会话」的理由在跨项目场景同样成立，聊天历史不静默消失
+5. **无会话归属迁移**（对话历史改造后删除此步）：会话已随项目目录内 `sessions/*.jsonl` 走，不再依赖 data.db 的 `project_id`；恢复时 `sessions/` 目录**整体覆盖**（与 `references/` 同语义：清空本地残留后写回备份条目）
 6. 服务端当前项目引用不变（id 保留）；前端刷新 config/outline/会话数据
 
 **错误码**：400 `VALIDATION_ERROR`（坏包/文件名非法）、404（备份不存在）、409 `SCHEMA_VERSION_MISMATCH`（同上）。

@@ -88,13 +88,17 @@
 - **双独立线性序**：`timepoint.sort_order` = 组间顺序（整组移动不动内部）；`event.sort_order` = 组内排序键（跨组拖拽即改挂载）。两组序完全正交，**拖拽 `sort_order` 为权威**，时间标签不解析不排序。
 - 事件/时间点 data 不产生 Delta（同 §8 语义）。
 
-## 10. 对话历史持久化
+## 10. 对话历史持久化（JSONL 文件）
 
-`chat_messages` 表入 data.db（结构见 schema.md）：`session_id`、`project_id`（**会话按项目隔离**）、`role`（user/assistant/tool）、`content`、`tool_calls`（JSON）、`tool_call_id`（tool 消息关联其 assistant 工具调用的 id）、`created_at`。
+对话历史**不入库**：一 session 一个 JSONL 文件，落在**项目目录内** `books/<书名>/sessions/<session_id>.jsonl`（行格式/容忍规则/列表口径见 `docs/db/schema.md`）。
 
-- MVP **只存原始消息，不做摘要持久化**——会话级滑动窗口裁剪与摘要压缩仍在 agent 运行时完成（见 `30-agent-loop.md` §4）。
-- 服务重启后通过 session_id 重建「继续上次对话」。
-- 兑现「对话历史在本地保存」的产品承诺。
+- **随书走**：备份 zip、导入、改名、移动目录天然携带会话（旧方案靠 data.db 的 `project_id` 归属迁移，新方案由目录归属直接表达）。
+- **追加写**：每行一条消息；崩溃可能留半行 → 读取侧容错跳过（不猜、不修），读到的前缀即有效历史。
+- **前向兼容靠 `type` 位**：加会话名、每轮 model/thinking_level、思维链字段、压缩检查点都是**纯追加**，老读侧跳过未知条目——不用做文件级迁移。
+- **不建索引文件**：会话列表扫目录聚合（避开「索引与文件两套事实」）；代价是会话多时开销线性增长，属本地单用户可接受量级。
+- 会话级滑动窗口裁剪与摘要压缩仍在 agent 运行时完成（见 `30-agent-loop.md` §4），**不落盘**。
+
+**不变式**：`session_id` 同时是文件名，必须匹配 `^sess_[A-Za-z0-9_-]{1,64}$`（客户端传入值不得含路径分隔符）；删除会话 = 物理删文件（无回收站、无软删）。
 
 ## 11. 自动备份与恢复
 

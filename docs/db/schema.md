@@ -11,11 +11,12 @@
 │       ├── project.json       # 项目配置（id/schema_version/current_position 等，见下文契约）
 │       ├── outline.json       # 大纲树（卷 → 章 → 场景，严格三层，无游离节点）
 │       ├── AGENTS.md          # 项目规则文件（项目规则唯一事实源，可选文件，见下文）
+│       ├── sessions/          # 对话历史（一 session 一 JSONL；文件名 = session_id）
+│       │   └── <sess_id>.jsonl
 │       └── data.db            # SQLite
 │           ├── entities       # 人物 / 设定 / 地点 / 伏笔 / 事件
 │           ├── relation_records  # 通用关系表
-│           ├── delta_records    # 属性变更记录
-│           └── chat_messages    # 对话历史
+│           └── delta_records    # 属性变更记录
 
 # 兼容：启动目录本身含 project.json 时按旧语义打开；
 # 无 project.json 时进入书架模式——Dashboard 引导创建（自动建 books/<书名>/）或打开
@@ -33,8 +34,8 @@
   - `user_version > SCHEMA_VERSION`（未来版本）→ **拒绝打开** 409 `PROJECT_VERSION_NEWER`（数据原封不动，提示升级程序）；
   - `user_version < SCHEMA_VERSION`（旧版本）→ **有迁移路径**（`packages/db/src/migrations/` 存在从当前版本到目标版本的连续迁移链）→ `runMigrations` 前向迁移；**无迁移路径** → 删库重建兜底（备份 `data.db.v{n}.bak` + `outline.json.v{n}.bak`）。
 - **迁移机制**：`migrations/` 目录每个文件导出一个 `Migration = { version, up }`（`001_xxx.ts` → version 1），`index.ts` 按 version 升序聚合导出 `MIGRATIONS`（tsc 编译进 dist 随包分发，无运行时目录读取）。`runMigrations` 对缺失版本逐个执行：**每个迁移一个事务（`up(db)` + `setUserVersion(version)` 原子提交——成功 ⇒ 版本已写入；失败 ⇒ 版本未变）**；**整批迁移前自动快照** data.db → `data.db.v{n}.{YYYYMMDDHHmmssSSSZ}.bak`（checkpoint 后复制主文件，时间戳命名不覆盖旧备份，失败重试现场保留）。迁移失败 → 该迁移回滚 + 版本停在前一迁移后，下次 open 重试。
-- 当前 `SCHEMA_VERSION = 5`；迁移链：`002_event_timeline.ts`（version 2：entities 表 CHECK 扩入 `'event'` + 新增 `sort_order` 列）、`003_timepoint.ts`（version 3，G2 修订：entities 表 CHECK 扩入 `'timepoint'` + `event.data.time_label` 迁移为 timepoint 实体 + occurs_at 关系，同名 time_label 合并为同一 timepoint）、`004_setting_tags.ts`（version 4，K2 修订：**无 DDL**——setting 旧 `data.rules` 分类值复制到 `data.tags` 并移除 rules，仅 data JSON 数据迁移）、`005_reference.ts`（version 5：entities 表 CHECK 扩入 `'reference'`，无数据搬移仅 DDL）。**SQLite 无法直接修改 CHECK 约束**，迁移走「建新表（新 CHECK）→ 拷贝数据 → drop 旧表 → rename」四步（`relation_records`/`delta_records` 无外键指向 entities，迁移只动 entities 表）；v1 → v5 迁移链存在 ⇒ 旧库 open 时自动前向迁移，不再走删库重建兜底。
-- **import 侧联动**：导入备份时 `user_version < SCHEMA_VERSION` 且**有迁移路径** → 接受（搬入后 open 自动迁移，v1/v2/v3 备份经增量迁移升到 v4）；无路径 → 409 `SCHEMA_VERSION_MISMATCH`；`>` 当前 → 409（未来版本语义）。
+- 当前 `SCHEMA_VERSION = 6`；迁移链：`002_event_timeline.ts`（version 2：entities 表 CHECK 扩入 `'event'` + 新增 `sort_order` 列）、`003_timepoint.ts`（version 3，G2 修订：entities 表 CHECK 扩入 `'timepoint'` + `event.data.time_label` 迁移为 timepoint 实体 + occurs_at 关系，同名 time_label 合并为同一 timepoint）、`004_setting_tags.ts`（version 4，K2 修订：**无 DDL**——setting 旧 `data.rules` 分类值复制到 `data.tags` 并移除 rules，仅 data JSON 数据迁移）、`005_reference.ts`（version 5：entities 表 CHECK 扩入 `'reference'`，无数据搬移仅 DDL）、`006_sessions_jsonl.ts`（version 6：**对话历史出库**——`chat_messages` 全量导出为 `sessions/<session_id>.jsonl` 后 `DROP TABLE`，迁移函数经 `up(db, ctx)` 取项目目录写文件）。**SQLite 无法直接修改 CHECK 约束**，迁移走「建新表（新 CHECK）→ 拷贝数据 → drop 旧表 → rename」四步（`relation_records`/`delta_records` 无外键指向 entities，迁移只动 entities 表）；v1 → v6 迁移链存在 ⇒ 旧库 open 时自动前向迁移，不再走删库重建兜底。
+- **import 侧联动**：导入备份时 `user_version < SCHEMA_VERSION` 且**有迁移路径** → 接受（搬入后 open 自动迁移，v5 及更早备份经增量迁移升到 v6，含对话历史出库）；无路径 → 409 `SCHEMA_VERSION_MISMATCH`；`>` 当前 → 409（未来版本语义）。
 
 ## entities — 实体表
 
@@ -138,26 +139,51 @@ CREATE TABLE delta_records (
 
 > 状态计算只沿大纲树父链累积已确认 Delta：`computeState` 从根到目标节点收集路径上所有 Delta，**节点间按树路径顺序、同一节点内按 `order` 应用**（双层排序）；`plot_edge` 连线不参与。大纲严格三层、无游离节点。
 
-## chat_messages — 对话历史表
+## sessions/*.jsonl — 对话历史（文件存储）
 
-对话消息持久化，与 data.db 同库存储。
+对话消息**不存 data.db**，一 session 一个 JSONL 文件：`sessions/<session_id>.jsonl`（追加写；文件名 = session_id）。会话随书目录移动/备份/恢复自然携带，不依赖 db、可读可 diff。
 
-```sql
-CREATE TABLE chat_messages (
-  id            TEXT PRIMARY KEY,
-  session_id    TEXT NOT NULL,
-  project_id    TEXT NOT NULL,          -- 会话按项目隔离
-  role          TEXT NOT NULL CHECK(role IN ('user','assistant','tool')),
-  content       TEXT,
-  tool_calls    TEXT,                   -- JSON: 助手消息的工具调用数组
-  tool_call_id  TEXT,                   -- tool 消息关联的 assistant 工具调用 id
-  created_at    TEXT NOT NULL           -- ISO 8601，应用层写入
-);
+**session_id 硬约束**：`^sess_[A-Za-z0-9_-]{1,64}$`（同时是文件名校验——客户端传入的 id 不得含路径分隔符/`..`；不匹配一律 400 `VALIDATION_ERROR`，**不做「清洗后拼接」**）。
 
-CREATE INDEX idx_chat_session ON chat_messages(session_id, created_at);
-```
+### 行格式
 
-> MVP 只存原始消息，不做摘要持久化；会话级滑动窗口裁剪与摘要压缩在 agent/session.ts 运行时完成。**历史重建规则**：按 `assistant.tool_calls[].id` ↔ `tool.tool_call_id` 成对重组喂回模型；滑动窗口裁剪必须成对（tool_call 与对应 tool_result 同裁同留）。服务重启后凭 `session_id` 重建「继续上次对话」，会话列表走 `GET /api/v1/chat/sessions`。
+第 1 行 header（创建会话时写入）：
+
+| 字段 | 是否必选 | 数据类型 | 取值范围 | 备注 |
+| :--- | :------- | :------- | :------- | :--- |
+| `type` | 是 | string | `"session"` | 条目类型判别位（前向兼容基座） |
+| `version` | 是 | number | `1` | 行格式版本；大于当前值 → 整个文件跳过（不猜） |
+| `id` | 是 | string | `sess_*` | = session_id = 文件名（不含扩展名） |
+| `created_at` | 是 | string | ISO 8601 | 会话创建时间（= 首条消息时间） |
+
+其后每行一条消息：
+
+| 字段 | 是否必选 | 数据类型 | 取值范围 | 备注 |
+| :--- | :------- | :------- | :------- | :--- |
+| `type` | 是 | string | `"message"` | |
+| `id` | 是 | string | nanoid | 消息 id（API 返回的 `messages[].id`） |
+| `role` | 是 | string | `user` / `assistant` / `tool` | |
+| `content` | 否 | string \| null | | 缺省 = null |
+| `tool_calls` | 否 | array | | assistant 消息的工具调用数组 |
+| `tool_call_id` | 否 | string | | tool 消息关联的 assistant 工具调用 id |
+| `created_at` | 是 | string | ISO 8601 | 缺该行 → 跳过（排序依赖它） |
+
+（思维链存储为后续扩展：assistant 行追加可选 `thinking` / `thinking_signature` 字段——**纯追加，不做迁移**。）
+
+### 读取容忍规则（硬约定）
+
+| 情况 | 处理 |
+| :--- | :--- |
+| 未知 `type` 行 | 跳过（前向兼容：将来加 `session_info` / `model_change` 条目，老读侧无感） |
+| 非法 JSON 行 | 跳过 + 记日志（append 崩溃留的半行） |
+| header 缺失 / `version` > 1 | **整个文件跳过**，不猜 |
+| 行内缺 `created_at` | 跳过该行 |
+
+### 会话列表与顺序
+
+`GET /api/v1/chat/sessions` 由**扫目录 + 逐文件解析**聚合得到（不建索引文件——避免第二事实源）；排序键仍为末条消息 `created_at`（`updatedAt`），`lastMessage` = 末条消息 content 截断，`messageCount` = 消息行数。消息顺序 = 文件行序（写入即时间序）。
+
+> 会话级滑动窗口裁剪与摘要压缩仍在 agent 运行时完成（不落盘）。**历史重建规则**：按 `assistant.tool_calls[].id` ↔ `tool.tool_call_id` 成对重组喂回模型；裁剪必须成对（同裁同留）。服务重启后凭 `session_id` 重建「继续上次对话」。
 
 ## outline.json — 大纲树
 

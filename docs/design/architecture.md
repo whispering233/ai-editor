@@ -37,7 +37,7 @@ packages/
 |----|---------|---------|
 | `shared` | 数据结构/类型/常量/纯工具（无 Node API）；**不持有业务逻辑** | `types/api.ts` Zod schema = 全部 API 请求/响应契约单一来源；`types`/`constants`/`utils` 导出 |
 | `llm` | 怎么调模型：协议/流式/usage/错误归一化；多 provider 注册与模型目录；**不知道工具与业务** | `chatStream` / `LLMStreamEvent` / `LLMError` / `getAvailableModels` / provider 常量 |
-| `db` | 存储语义：表/查询/迁移/软删级联/状态计算 | `(db: Db)` 签名查询函数；`SCHEMA_VERSION` 与迁移目录；事务辅助 |
+| `db` | 存储语义：表/查询/迁移/软删级联/状态计算 + 项目目录内的文件存储（会话 JSONL、原子写、参考文件） | `(db: Db)` 签名查询函数；会话 JSONL 读写（`sessions.ts`）；`SCHEMA_VERSION` 与迁移目录；事务辅助 |
 | `tools` | 把模型意图映射到写操作：查询/分析工具（自动执行）+ 提案工具（确认后执行）；读写经 db | 工具名/参数 schema/权限级别常量（shared）；registry 导出 |
 | `agent` | 怎么组织对话：分层上下文、滑动窗口裁剪、成对重组、提案生命周期、断连取消 | `runAgent` 主循环入口与事件流；写操作一律走工具提案 |
 | `server` | HTTP/路由/请求校验/项目生命周期（书架）/自动备份/静态托管 | `/api/v1` REST + `POST /chat` SSE（契约见 shared schema + api 文档） |
