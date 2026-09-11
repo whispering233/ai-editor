@@ -1,4 +1,4 @@
-// @whispering233/ai-editor-db 入口：导出建表（schema）、连接（connection）、对话历史查询（queries/chat）与
+// @whispering233/ai-editor-db 入口：导出建表（schema）、连接（connection）、会话 JSONL 文件存储（sessions）与
 // JSON 存储（storage/：outline.json / project.json 原子读写，T2.2）、增量迁移（migrations/）
 export * from "./schema.js";
 export * from "./connection.js";
@@ -6,7 +6,6 @@ export * from "./storage/atomic.js";
 export * from "./sessions.js";
 export * from "./storage/outline.js";
 export * from "./storage/project.js";
-export * from "./queries/chat.js";
 export * from "./queries/migration.js";
 export * from "./migrations/index.js";
 export * from "./queries/outline-ops.js";

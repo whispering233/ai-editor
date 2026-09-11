@@ -14,7 +14,13 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { nanoid } from "nanoid";
-import { truncate, type ChatMessageRow, type ChatRole, type ChatSessionSummary } from "@whispering233/ai-editor-shared";
+import {
+  truncate,
+  type ChatMessage,
+  type ChatMessageRow,
+  type ChatRole,
+  type ChatSessionSummary,
+} from "@whispering233/ai-editor-shared";
 import { writeTextAtomic } from "./storage/atomic.js";
 
 /** 会话目录名（项目目录内） */
@@ -66,7 +72,7 @@ function assertSessionId(sessionId: string): void {
 
 /** 追加一行消息的入参（storage 形态；tool_calls 为「解析后的数组」，与旧 chat_messages 语义一致） */
 export interface SessionAppendInput {
-  /** 消息 id；缺省 nanoid（与旧 insertChatMessage 一致） */
+  /** 消息 id；缺省 nanoid（与旧表插入行为一致） */
   id?: string;
   role: ChatRole;
   content?: string | null;
@@ -316,11 +322,32 @@ export function readSessionRows(projectRoot: string, sessionId: string): ChatMes
 }
 
 /**
+ * 读取会话消息（API 形态，供 `GET /api/v1/chat/sessions/:id/messages`）：
+ * 存储行 → camelCase（`tool_calls` → `toolCalls`、`tool_call_id` → `toolCallId`）。
+ * `sessionId` 回显请求传入的 id（存储行不含归属字段——归属由项目目录表达）；`projectId` 由调用方填当前项目 id。
+ * 响应侧 schema（`chatMessagesResSchema`）会剔除这两个附加字段，响应结构与表存储时期一致。
+ *
+ * @throws InvalidSessionIdError session_id 非法
+ */
+export function readSessionMessages(projectRoot: string, sessionId: string, projectId: string): ChatMessage[] {
+  return readSessionRows(projectRoot, sessionId).map((r) => ({
+    id: r.id,
+    sessionId,
+    projectId,
+    role: r.role,
+    content: r.content,
+    toolCalls: r.tool_calls ?? undefined,
+    toolCallId: r.tool_call_id,
+    createdAt: r.created_at,
+  }));
+}
+
+/**
  * 会话列表（`GET /api/v1/chat/sessions`）：扫目录 + 逐文件解析聚合（不建索引文件）。
  * - 仅含消息的会话（无消息的文件不出现）
  * - `lastMessage` = 末条消息 content 截断；`messageCount` = 消息行数
  * - `createdAt` = header 创建时间；`updatedAt` = 末条消息时间
- * - 排序：`updatedAt` 倒序、同值按 id 升序（稳定序；与迁移前 listSessions 口径一致）
+ * - 排序：`updatedAt` 倒序、同值按 id 升序（稳定序；与出库前的会话列表口径一致）
  * - 目录不存在 → 空数组；坏文件跳过（不因单个文件阻断列表）
  */
 export function listSessionSummaries(projectRoot: string): ChatSessionSummary[] {

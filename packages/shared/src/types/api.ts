@@ -847,7 +847,7 @@ export const trashPurgeResSchema = z.object({
 
 // ============ chat 端点（「AI 对话」，持久化） ============
 
-// POST /api/v1/chat（POST + SSE；消息落 chat_messages 表）
+// POST /api/v1/chat（POST + SSE；消息落项目目录 sessions/<session_id>.jsonl）
 export const chatSendReqSchema = z
   .object({
     message: z.string(),

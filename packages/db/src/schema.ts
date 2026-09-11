@@ -16,8 +16,10 @@ import { CREATE_TABLES_SQL } from "./tables.js";
  * timepoint 实体 + occurs_at 挂载关系（从 event.data 移除 time_label）。
  * v3 → v4（K2 修订，2026-08）：**无 DDL**——仅 entities.data JSON 数据迁移
  * （setting 的旧 rules 分类值复制到 data.tags 并移除 rules，migrations/004_setting_tags.ts）。
+ * v5 → v6（对话历史出库）：chat_messages 导出为 `sessions/<id>.jsonl` 后 DROP 表
+ * （migrations/006_sessions_jsonl.ts；会话从此不入库）。
  */
-export const SCHEMA_VERSION = 5; // +reference（005_reference.ts 四步换表）
+export const SCHEMA_VERSION = 6; // +会话 JSONL（006_sessions_jsonl.ts 导出后 DROP 表）
 
 /**
  * 建表：执行全部 DDL（CREATE TABLE/INDEX IF NOT EXISTS，定义于 tables.ts），幂等，可重复调用。

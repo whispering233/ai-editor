@@ -129,7 +129,7 @@ describe("appendSessionMessage / readSessionRows 往返", () => {
     expect(readSessionRows(nested, "sess_new")).toHaveLength(1);
   });
 
-  it("省略消息 id 时生成非空 id（与旧 insertChatMessage 一致）", () => {
+  it("省略消息 id 时生成非空 id（与旧表插入行为一致）", () => {
     appendSessionMessage(root, "sess_auto", { role: "user", content: "x", created_at: "T1" });
     const rows = readSessionRows(root, "sess_auto");
     expect(rows).toHaveLength(1);

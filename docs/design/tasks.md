@@ -15,18 +15,7 @@
 
 ## 当前任务卡
 
-批次 B：对话历史从 `chat_messages` 表迁到项目目录 `sessions/*.jsonl`（B1 已完成并验证：`db` 包会话 JSONL 存储模块）（契约已改：`docs/db/schema.md`、`docs/design/10-data-model.md` §1/§10/§11、`docs/api/80-api-chat.md`、`docs/api/error-code.md`、`docs/api/20-api-backup.md`、`docs/design/30-agent-loop.md` §4、`docs/design/architecture.md`、`docs/ui/DESIGN.md`）。**API 响应结构不变（除新增 DELETE）**。
-
-### B2 存储切换（原子：迁移 006 + 框架透传 + server 接线）
-
-**必须一次落地**（拆开会中途红：DROP 表后旧查询仍在用）。
-
-- `Migration.up` 签名扩为 `(db, ctx: { projectRoot })`（现有迁移少参可赋值，不改它们）；`runMigrations` / `ensureSchemaCompatible` 把项目目录传下去。
-- `006_sessions_jsonl.ts`：读 `chat_messages`（`ORDER BY session_id, created_at, rowid`）→ 按 session 分组 → `writeSessionFile`（B1）→ `DROP TABLE chat_messages`；按表整文件重写 ⇒ 幂等；**id 不合法（不匹配 `sess_` 白名单）的旧会话跳过并计数**，不阻断迁移。
-- `SCHEMA_VERSION` 5 → 6；`tables.ts` 移除 `chat_messages` 定义与 DDL（`schema.test.ts` 对齐断言同步）；删除 `queries/chat.ts`（`parseToolCalls`/`reassembleMessages` 若无消费者一并删）。
-- `server/routes/chat.ts`：`insertChatMessage` → `appendSessionMessage`；`listMessageRows` → `readSessionRows`（**去掉 `project_id` 过滤**——会话归属由目录表达，该过滤会把历史静默过滤成空）；`listSessions` → `listSessionSummaries`；`listMessages` → 由 rows 构造 `ChatMessage`（`sessionId` 填当前传入 id、`projectId` 填当前项目 id）。
-- `server/backup.ts`：删除 `migrateChatMessagesProject` 调用点（会话不再依赖 project_id 归属；其余备份改造在 B4）。
-- 测试：v5 库带旧表 → 迁后文件在、表没了、内容顺序与旧查询一致；旧会话 id 非法时跳过；server chat 路由全链路（落库 → 列表 → 历史）走文件。
+批次 B：对话历史从 `chat_messages` 表迁到项目目录 `sessions/*.jsonl`（B1/B2 已完成并验证：会话 JSONL 存储模块 + 存储切换）（契约已改：`docs/db/schema.md`、`docs/design/10-data-model.md` §1/§10/§11、`docs/api/80-api-chat.md`、`docs/api/error-code.md`、`docs/api/20-api-backup.md`、`docs/design/30-agent-loop.md` §4、`docs/design/architecture.md`、`docs/ui/DESIGN.md`）。**API 响应结构不变（除新增 DELETE）**。
 
 ### B3 删除会话端点
 

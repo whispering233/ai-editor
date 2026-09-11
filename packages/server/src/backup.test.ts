@@ -13,7 +13,8 @@ import {
   AGENTS_FILE_NAME,
   closeDatabase,
   DATA_DB_FILE_NAME,
-  listSessions,
+  appendSessionMessage,
+  readSessionRows,
   openDatabase,
   OUTLINE_FILE_NAME,
   PROJECT_FILE_NAME,
@@ -715,7 +716,7 @@ describe("POST /project/backup/restore", () => {
     expect(again.status).toBe(200);
   });
 
-  it("覆盖时保留当前项目 id（换 id 即断连 chat_messages 会话历史）；name 归一为目录名、prompt 随备份替换", async () => {
+  it("覆盖时保留当前项目 id（id 是书的身份）；name 归一为目录名、prompt 随备份替换", async () => {
     const dirA = makeTmpDir();
     initProjectDir(dirA, makeConfig("proj-A", "书A"));
     await openProject(dirA);
@@ -781,22 +782,16 @@ describe("POST /project/backup/restore", () => {
     expect(readAgentsFile(dirA)).toBe("B 的遗留提示词");
   });
 
-  it("跨项目恢复（P1-1）：chat_messages 会话归属迁移为当前项目 id，会话列表按当前 id 可查", async () => {
+  it("跨项目恢复：无会话归属迁移（会话随目录走，不再依赖 project_id）", async () => {
     const dirA = makeTmpDir();
     initProjectDir(dirA, makeConfig("proj-mig-a", "迁移书A"));
     await openProject(dirA);
 
- // 异项目备份 B：data.db 内含 B 的会话行（project_id = proj-mig-b）
+ // 异项目备份 B（含 B 自己的会话文件——B4 起 sessions/ 入包，此处只验证恢复不因会话改造而失败）
     const dirB = makeTmpDir();
     initProjectDir(dirB, makeConfig("proj-mig-b", "迁移书B"));
-    const dbB = openDatabase(join(dirB, DATA_DB_FILE_NAME));
-    dbB.prepare("INSERT INTO chat_messages (id, session_id, project_id, role, content, created_at) VALUES (?, ?, ?, ?, ?, ?)").run(
-      "m-b1", "sess-b", "proj-mig-b", "user", "B 的消息 1", T0,
-    );
-    dbB.prepare("INSERT INTO chat_messages (id, session_id, project_id, role, content, created_at) VALUES (?, ?, ?, ?, ?, ?)").run(
-      "m-b2", "sess-b", "proj-mig-b", "assistant", "B 的消息 2", T0,
-    );
-    closeDatabase(dbB);
+    appendSessionMessage(dirB, "sess_b", { id: "m-b1", role: "user", content: "B 的消息 1", created_at: T0 });
+    appendSessionMessage(dirB, "sess_b", { id: "m-b2", role: "assistant", content: "B 的消息 2", created_at: T0 });
     const ctxB = {
       root: dirB,
       config: readProjectFile(dirB) as ProjectFileConfig,
@@ -808,7 +803,6 @@ describe("POST /project/backup/restore", () => {
     mkdirSync(backupsDirA, { recursive: true });
     copyFileSync(join(dirB, BACKUPS_DIR_NAME, bkpB.fileName), join(backupsDirA, bkpB.fileName));
 
- // restore 异项目备份 → 会话归属迁移（旧 id → 当前 id；覆盖恢复语义：A 原数据被备份覆盖）
     const res = await buildApp().request("/api/v1/project/backup/restore", {
       method: "POST",
       headers: HOST_HEADERS,
@@ -816,30 +810,22 @@ describe("POST /project/backup/restore", () => {
     });
     expect(res.status).toBe(200);
 
- // chat_messages 全部 project_id = 当前项目 id（B 的 2 行迁移；A 原数据已被覆盖）
+ // 库内无 chat_messages 表（对话历史已出库）；恢复不因该表缺失而失败
     const dbA = openDatabase(join(dirA, DATA_DB_FILE_NAME));
     try {
-      const rows = dbA.prepare("SELECT project_id FROM chat_messages ORDER BY id").all() as Array<{ project_id: string }>;
-      expect(rows).toEqual([{ project_id: "proj-mig-a" }, { project_id: "proj-mig-a" }]);
- // 会话列表按当前 id 可查（按 project_id 隔离——不迁移则 B 的会话静默消失）
-      const sessions = listSessions(dbA, "proj-mig-a");
-      expect(sessions.map((s) => s.id)).toEqual(["sess-b"]);
-      expect(sessions[0]?.messageCount).toBe(2);
+      const tables = dbA.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{ name: string }>;
+      expect(tables.map((t) => t.name)).not.toContain("chat_messages");
     } finally {
       closeDatabase(dbA);
     }
   });
 
-  it("同项目恢复：不执行多余迁移（chat_messages 行保持原 project_id，行为不变）", async () => {
+  it("同项目恢复：会话文件不参与三文件替换（当前实现保留本地 sessions/，B4 起改为整体覆盖语义）", async () => {
     const dir = makeTmpDir();
     initProjectDir(dir, makeConfig("proj-same", "同项目"));
     const app = await openProject(dir);
- // 插入当前项目会话行后备份（zip id = 当前 id）
-    const db = openDatabase(join(dir, DATA_DB_FILE_NAME));
-    db.prepare("INSERT INTO chat_messages (id, session_id, project_id, role, content, created_at) VALUES (?, ?, ?, ?, ?, ?)").run(
-      "m-1", "sess-1", "proj-same", "user", "消息", T0,
-    );
-    closeDatabase(db);
+ // 当前项目写一条会话消息后备份（zip id = 当前 id）
+    appendSessionMessage(dir, "sess_1", { id: "m-1", role: "user", content: "消息", created_at: T0 });
     const project = getCurrentProject() as NonNullable<ReturnType<typeof getCurrentProject>>;
     const bkp = writeBackup(project);
 
@@ -849,14 +835,8 @@ describe("POST /project/backup/restore", () => {
       body: JSON.stringify({ fileName: bkp.fileName }),
     });
     expect(res.status).toBe(200);
- // 行仍在且 project_id 不变（同 id 恢复跳过迁移）
-    const dbAfter = openDatabase(join(dir, DATA_DB_FILE_NAME));
-    try {
-      const rows = dbAfter.prepare("SELECT project_id FROM chat_messages").all() as Array<{ project_id: string }>;
-      expect(rows).toEqual([{ project_id: "proj-same" }]);
-    } finally {
-      closeDatabase(dbAfter);
-    }
+ // 会话文件仍在（三文件替换不触碰 sessions/）
+    expect(readSessionRows(dir, "sess_1").map((r) => r.id)).toEqual(["m-1"]);
   });
 
   it("P1-2：文件替换失败日志输出已替换/未替换清单与覆盖前快照名", () => {

@@ -75,9 +75,9 @@ describe("002_event_timeline 迁移（v1 → v2 → v3 全链路，G2）", () =>
     db = createV1Db();
 
     const { applied } = runMigrations(db, { migrations: MIGRATIONS });
-    expect(applied.map((m) => m.version)).toEqual([2, 3, 4, 5]); // v1→v5 全链路（002→003→004→005）
+    expect(applied.map((m) => m.version)).toEqual([2, 3, 4, 5, 6]); // v1→v6 全链路（002→003→004→005→006）
     expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
-    expect(SCHEMA_VERSION).toBe(5);
+    expect(SCHEMA_VERSION).toBe(6);
 
  // 数据保留：3 行实体 + 1 行关系（行数与列值原样；v1 库无事件 → 003 无 time_label 可迁）
     const entities = db
@@ -118,7 +118,7 @@ describe("002_event_timeline 迁移（v1 → v2 → v3 全链路，G2）", () =>
     runMigrations(db, { migrations: MIGRATIONS });
     const { applied } = runMigrations(db, { migrations: MIGRATIONS });
     expect(applied).toEqual([]);
-    expect(getUserVersion(db)).toBe(5);
+    expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
   });
 
   it("v1 库经 ensureSchemaCompatible 完整链路迁移（含 outline.json 不动）", () => {
@@ -131,8 +131,8 @@ describe("002_event_timeline 迁移（v1 → v2 → v3 全链路，G2）", () =>
     expect(result.rebuilt).toBe(false);
     expect(result.migrated).toBe(true);
     expect(result.fromVersion).toBe(1);
-    expect(result.toVersion).toBe(5);
-    expect(getUserVersion(active)).toBe(5);
+    expect(result.toVersion).toBe(SCHEMA_VERSION);
+    expect(getUserVersion(active)).toBe(SCHEMA_VERSION);
     expect(
       (active.prepare("SELECT COUNT(*) AS c FROM entities").get() as { c: number }).c,
     ).toBe(3); // 数据保全

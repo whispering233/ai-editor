@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { Db } from "../connection.js";
-import { getUserVersion, setUserVersion } from "../schema.js";
+import { getUserVersion, SCHEMA_VERSION, setUserVersion } from "../schema.js";
 import { runMigrations } from "../queries/migration.js";
 import { MIGRATIONS } from "./index.js";
 
@@ -104,7 +104,7 @@ describe("迁移 004（setting 旧 rules → data.tags，K2 修订）", () => {
 
   it("旧 rules 分类值 → data.tags（复制 + 移除 rules）+ updated_at 刷新 + user_version = 5", () => {
     runMigrations(db, MIGRATIONS);
-    expect(getUserVersion(db as unknown as Database.Database)).toBe(5);
+    expect(getUserVersion(db as unknown as Database.Database)).toBe(SCHEMA_VERSION);
     expect(settingData("set-a")).toEqual({
       description: "修真界",
       tags: ["势力", "宗门"],

@@ -158,7 +158,7 @@ export interface RunAgentDeps {
  */
   onEvent?: (event: AgentEvent) => void;
  /**
- * 每轮新消息序列（S7.6 持久化到 chat_messages；本层不落库）。
+ * 每轮新消息序列（S7.6 持久化到 `sessions/*.jsonl`；本层不落库）。
  * **硬同上**：抛错不逃逸（落库失败由 S7.6 自行处理，不中断 agent 循环）。
  */
   onMessages?: (messages: SessionMessage[]) => void;

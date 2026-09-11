@@ -6,8 +6,9 @@
 // - 无当前项目 → 409 NO_PROJECT_OPEN（requireCurrentProject，与其他业务路由一致）
 // - 请求体校验失败 → 400 VALIDATION_ERROR（JSON，非 SSE——校验在开流之前）
 // - 未配置 DeepSeek key → 400 LLM_API_KEY_MISSING（同样在开流之前，JSON）
-// - session_id 提供 → 按项目加载历史重建 SessionState（跨项目 session_id 加载为空数组——
-// 与 GET /messages 的「不泄露存在性」语义一致，新消息按当前项目写入）
+// - session_id 提供 → 按项目目录（`sessions/<id>.jsonl`）加载历史重建 SessionState；
+//   **非法 session_id（不匹配 `sess_` 白名单）一律当作未提供**（防御：该值会作文件名，绝不做清洗拼接）；
+//   会话归属由项目目录表达（不再有 project_id 过滤）
 // - session_id 缺省 → generateRuntimeId("session") 新建 sess_ 会话（id 约定）
 //
 // 可测试性：路由经 createChatRoutes(deps) 工厂构造——测试注入 mock produce/dispatcher/心跳/
@@ -32,15 +33,16 @@ import { chatStream, resolveModelInfo } from "@whispering233/ai-editor-llm";
 import type { AbortSignalLike, LLMMessage, LLMStreamEvent, LLMToolDefinition } from "@whispering233/ai-editor-llm";
 import { listTools, type ToolDefinition } from "@whispering233/ai-editor-tools";
 import {
+  appendSessionMessage,
   findOutlineNode,
   getEntity,
-  insertChatMessage,
-  listMessageRows,
-  listMessages,
-  listSessions,
+  isValidSessionId,
+  listSessionSummaries,
   nowIso,
   readAgentsFile,
   readOutlineFile,
+  readSessionMessages,
+  readSessionRows,
 } from "@whispering233/ai-editor-db";
 import type { ChatMessage, ChatSessionSummary } from "@whispering233/ai-editor-shared";
 import { TOOL_PERMISSION, generateRuntimeId } from "@whispering233/ai-editor-shared";
@@ -356,14 +358,15 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
       c,
       async (stream) => {
  // ---- 1. 会话解析（续聊重建） ----
-        const sessionId = session_id ?? generateRuntimeId("session");
- // 跨项目 session_id：listMessageRows 按项目过滤 → 空历史（不泄露存在性，与 GET 一致）；
- // 后续写入按当前项目——单项目 MVP 下等价于「该项目内的续聊」，注释留扩展点
+ // 非法 session_id（不匹配 sess_ 白名单）→ 视为未提供（不交给文件层，防止越权路径拼接）
+        const requestedSessionId = session_id !== undefined && isValidSessionId(session_id) ? session_id : undefined;
+        const sessionId = requestedSessionId ?? generateRuntimeId("session");
+ // 会话归属由项目目录表达：直接读当前项目的 `sessions/<id>.jsonl`（无此文件 = 空历史）
         const session: SessionState =
-          session_id === undefined
+          requestedSessionId === undefined
             ? []
             : restoreSession(
-                listMessageRows(project.db, sessionId, project.config.id),
+                readSessionRows(project.root, requestedSessionId),
                 deps.sessionHistoryMaxCount ?? SESSION_HISTORY_MAX_MESSAGES,
               );
 
@@ -371,9 +374,7 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
         const focus = buildFocusText(project, context);
 
  // ---- 3. 用户消息落库（assistant/tool 消息由 onMessages 落库） ----
-        insertChatMessage(project.db, {
-          session_id: sessionId,
-          project_id: project.config.id,
+        appendSessionMessage(project.root, sessionId, {
           role: "user",
           content: message,
           created_at: now(),
@@ -471,9 +472,7 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
         const onMessages = (messages: SessionMessage[]): void => {
           const ts = now();
           for (const m of messages) {
-            insertChatMessage(project.db, {
-              session_id: sessionId,
-              project_id: project.config.id,
+            appendSessionMessage(project.root, sessionId, {
               role: m.role,
               content: m.content ?? null,
               ...(m.role === "assistant" && m.tool_calls !== undefined ? { tool_calls: m.tool_calls } : {}),
@@ -581,12 +580,16 @@ export function createChatRoutes(deps: ChatRouteDeps = {}): Hono {
   const routes = new Hono();
   routes.get("/sessions", (c) => {
     const project = requireCurrentProject();
-    return sessionsResponse(c, listSessions(project.db, project.config.id));
+    return sessionsResponse(c, listSessionSummaries(project.root));
   });
   routes.get("/sessions/:id/messages", (c) => {
     const project = requireCurrentProject();
     const sessionId = c.req.param("id");
-    return messagesResponse(c, sessionId, listMessages(project.db, sessionId, project.config.id));
+ // 非法 id（不匹配 sess_ 白名单，无法作文件名）→ 空历史（与「会话不存在」同语义，不泄露也不报 500）
+    const messages = isValidSessionId(sessionId)
+      ? readSessionMessages(project.root, sessionId, project.config.id)
+      : [];
+    return messagesResponse(c, sessionId, messages);
   });
  // POST /api/v1/chat —— POST + SSE 对话端点（S7.6；U3 起为后续切片预留）
   routes.post("/", chatSendHandler(deps));

@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { z } from "zod";
-import { insertChatMessage, listMessages, writeAgentsFile } from "@whispering233/ai-editor-db";
+import { appendSessionMessage, readSessionMessages, writeAgentsFile } from "@whispering233/ai-editor-db";
 import { defaultProposalStore, type RunAgentDeps, type ToolDispatcher } from "@whispering233/ai-editor-agent";
 import { ABORT_ERROR } from "@whispering233/ai-editor-llm";
 import type { AbortSignalLike, LLMMessage } from "@whispering233/ai-editor-llm";
@@ -64,7 +64,7 @@ function openProject(): ProjectContext {
   return project;
 }
 
-/** 便捷插入一条消息（时间由调用方给定 ISO 字符串，应用层写入约定） */
+/** 便捷写入一条会话消息（时间由调用方给定 ISO 字符串，应用层写入约定） */
 function seedMessage(
   project: ProjectContext,
   sessionId: string,
@@ -76,15 +76,18 @@ function seedMessage(
     createdAt: string;
   },
 ): void {
-  insertChatMessage(project.db, {
-    session_id: sessionId,
-    project_id: project.config.id,
+  appendSessionMessage(project.root, sessionId, {
     role: opts.role,
     content: opts.content ?? null,
     ...(opts.toolCalls !== undefined ? { tool_calls: opts.toolCalls } : {}),
     ...(opts.toolCallId !== undefined ? { tool_call_id: opts.toolCallId } : {}),
     created_at: opts.createdAt,
   });
+}
+
+/** 读回会话消息（API 形态；与 GET /messages 同源映射） */
+function readMessages(project: ProjectContext, sessionId: string) {
+  return readSessionMessages(project.root, sessionId, project.config.id);
 }
 
 /** 构造一条最小 Proposal（S7.6 测试预置提案仓用；结构） */
@@ -230,19 +233,19 @@ describe("GET /chat/sessions 会话列表", () => {
 
   it("camelCase 全字段 + 按最后活动倒序 + lastMessage 截断（50 字符）", async () => {
     const project = openProject();
- // sess-a：1 条消息（10:00），lastMessage 超长触发截断
+ // sess_a：1 条消息（10:00），lastMessage 超长触发截断
     const longText = "甲".repeat(60);
-    seedMessage(project, "sess-a", { role: "user", content: longText, createdAt: "2026-08-01T10:00:00Z" });
- // sess-b：2 条消息（10:02 / 10:05，最后活动更晚 → 排在前）
-    seedMessage(project, "sess-b", { role: "user", content: "b-1", createdAt: "2026-08-01T10:02:00Z" });
-    seedMessage(project, "sess-b", { role: "assistant", content: "b-2", createdAt: "2026-08-01T10:05:00Z" });
+    seedMessage(project, "sess_a", { role: "user", content: longText, createdAt: "2026-08-01T10:00:00Z" });
+ // sess_b：2 条消息（10:02 / 10:05，最后活动更晚 → 排在前）
+    seedMessage(project, "sess_b", { role: "user", content: "b-1", createdAt: "2026-08-01T10:02:00Z" });
+    seedMessage(project, "sess_b", { role: "assistant", content: "b-2", createdAt: "2026-08-01T10:05:00Z" });
 
     const res = await buildApp().request("/api/v1/chat/sessions", { headers: HOST_HEADERS });
     expect(res.status).toBe(200);
     const { data } = await res.json();
-    expect(data.sessions.map((s: { id: string }) => s.id)).toEqual(["sess-b", "sess-a"]);
+    expect(data.sessions.map((s: { id: string }) => s.id)).toEqual(["sess_b", "sess_a"]);
     expect(data.sessions[0]).toEqual({
-      id: "sess-b",
+      id: "sess_b",
       lastMessage: "b-2",
       messageCount: 2,
       createdAt: "2026-08-01T10:02:00Z",
@@ -256,7 +259,7 @@ describe("GET /chat/sessions 会话列表", () => {
 
   it("项目隔离：proj-a 的会话不出现在 proj-b", async () => {
     const projectA = openProject();
-    seedMessage(projectA, "sess-a", { role: "user", content: "仅属于 A", createdAt: "2026-08-01T10:00:00Z" });
+    seedMessage(projectA, "sess_a", { role: "user", content: "仅属于 A", createdAt: "2026-08-01T10:00:00Z" });
 
  // 切换到项目 B（新 initProject → 新 project_id）
     openProject();
@@ -270,31 +273,31 @@ describe("GET /chat/sessions 会话列表", () => {
 
 describe("GET /chat/sessions/:id/messages 消息历史", () => {
   it("无当前项目 → 409 NO_PROJECT_OPEN", async () => {
-    const res = await buildApp().request("/api/v1/chat/sessions/sess-x/messages", { headers: HOST_HEADERS });
+    const res = await buildApp().request("/api/v1/chat/sessions/sess_x/messages", { headers: HOST_HEADERS });
     expect(res.status).toBe(409);
     expect((await res.json()).error.code).toBe("NO_PROJECT_OPEN");
   });
 
   it("created_at 升序 + camelCase 全字段（toolCallId / toolCalls 配对语义）", async () => {
     const project = openProject();
-    seedMessage(project, "sess-1", { role: "user", content: "你好", createdAt: "2026-08-01T10:00:00Z" });
-    seedMessage(project, "sess-1", {
+    seedMessage(project, "sess_1", { role: "user", content: "你好", createdAt: "2026-08-01T10:00:00Z" });
+    seedMessage(project, "sess_1", {
       role: "assistant",
       content: "正在查询",
       toolCalls: [{ id: "call_1", name: "list_entities", arguments: "{}" }],
       createdAt: "2026-08-01T10:01:00Z",
     });
-    seedMessage(project, "sess-1", {
+    seedMessage(project, "sess_1", {
       role: "tool",
       content: "查询结果",
       toolCallId: "call_1",
       createdAt: "2026-08-01T10:02:00Z",
     });
 
-    const res = await buildApp().request("/api/v1/chat/sessions/sess-1/messages", { headers: HOST_HEADERS });
+    const res = await buildApp().request("/api/v1/chat/sessions/sess_1/messages", { headers: HOST_HEADERS });
     expect(res.status).toBe(200);
     const { data } = await res.json();
-    expect(data.sessionId).toBe("sess-1");
+    expect(data.sessionId).toBe("sess_1");
     expect(data.messages.map((m: { role: string }) => m.role)).toEqual(["user", "assistant", "tool"]);
  // parse 剥离 db 附加字段（sessionId/projectId）；null 保留（toolCallId 列缺省）
     expect(data.messages[0]).toEqual({
@@ -323,20 +326,35 @@ describe("GET /chat/sessions/:id/messages 消息历史", () => {
 
   it("跨项目取消息 → 200 空数组（sessionId 回显，不泄露存在性）", async () => {
     const projectA = openProject();
-    seedMessage(projectA, "sess-a", { role: "user", content: "仅属于 A", createdAt: "2026-08-01T10:00:00Z" });
+    seedMessage(projectA, "sess_a", { role: "user", content: "仅属于 A", createdAt: "2026-08-01T10:00:00Z" });
 
  // 切到项目 B 后按 A 的 session_id 取消息
     openProject();
-    const res = await buildApp().request("/api/v1/chat/sessions/sess-a/messages", { headers: HOST_HEADERS });
+    const res = await buildApp().request("/api/v1/chat/sessions/sess_a/messages", { headers: HOST_HEADERS });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ success: true, data: { sessionId: "sess-a", messages: [] } });
+    expect(await res.json()).toEqual({ success: true, data: { sessionId: "sess_a", messages: [] } });
   });
 
   it("会话不存在 → 200 空数组", async () => {
     openProject();
-    const res = await buildApp().request("/api/v1/chat/sessions/sess-ghost/messages", { headers: HOST_HEADERS });
+    const res = await buildApp().request("/api/v1/chat/sessions/sess_ghost/messages", { headers: HOST_HEADERS });
     expect(res.status).toBe(200);
-    expect((await res.json()).data).toEqual({ sessionId: "sess-ghost", messages: [] });
+    expect((await res.json()).data).toEqual({ sessionId: "sess_ghost", messages: [] });
+  });
+
+  it("非法 session_id（不匹配 sess_ 白名单）→ 200 空数组（不泄露、不 500、不碰文件系统）", async () => {
+    const project = openProject();
+ // 该 id 会作文件名：含 `sess_` 前缀的硬校验拦下（绝不清洗后拼接，防路径穿越）
+    seedMessage(project, "sess_ok", { role: "user", content: "正常会话", createdAt: "2026-08-01T10:00:00Z" });
+ // 注：`%2e%2e` 形态在路由层就被规范化成 `..`（不匹配本路由 → 404），到不了处理器
+    for (const bad of ["bad-id", "sess-a", "sess_"]) {
+      const res = await buildApp().request(`/api/v1/chat/sessions/${bad}/messages`, { headers: HOST_HEADERS });
+      expect(res.status, `id=${bad}`).toBe(200);
+      expect((await res.json()).data.messages, `id=${bad}`).toEqual([]);
+    }
+ // 合法会话不受影响
+    const ok = await buildApp().request("/api/v1/chat/sessions/sess_ok/messages", { headers: HOST_HEADERS });
+    expect((await ok.json()).data.messages).toHaveLength(1);
   });
 });
 
@@ -439,7 +457,7 @@ describe("POST /chat SSE 事件序列与落库", () => {
     expect(done.session_id).toMatch(/^sess_/); // 新建会话（id 约定）
 
  // 落库：user（路由层）+ assistant/tool（onMessages 层）配对字段
-    const msgs = listMessages(project.db, done.session_id, project.config.id);
+    const msgs = readMessages(project, done.session_id);
     expect(msgs.map((m) => m.role)).toEqual(["user", "assistant", "tool", "assistant"]);
     expect(msgs[0].content).toBe("你好");
     expect(msgs[1].content).toBe("第一段第二段"); // 流式 delta 累积
@@ -463,9 +481,23 @@ describe("POST /chat SSE 事件序列与落库", () => {
     const frames = await readSseFrames(res);
     const sessionId = (frames[0].data as { session_id: string }).session_id;
     expect(sessionId).toMatch(/^sess_/);
-    const msgs = listMessages(project.db, sessionId, project.config.id);
+    const msgs = readMessages(project, sessionId);
     expect(msgs.map((m) => m.role)).toEqual(["user", "assistant"]);
     expect(msgs[0].content).toBe("你好");
+  });
+
+  it("非法 session_id → 视为未提供（新建会话落库，不按该值拼路径）", async () => {
+    const project = openProject();
+    const produce = vi.fn<RunAgentDeps["produce"]>(async () => ({ ok: true, stopReason: "stop", usage: null }));
+    const res = await buildApp(createChatRoutes({ produce })).request(
+      "/api/v1/chat",
+      postChat({ message: "你好", session_id: "../../etc/passwd" }),
+    );
+    const frames = await readSseFrames(res);
+    const sessionId = (frames[0].data as { session_id: string }).session_id;
+    expect(sessionId).toMatch(/^sess_/); // 新建，而非回显非法值
+    expect(sessionId).not.toContain("..");
+    expect(readMessages(project, sessionId).map((m) => m.role)).toEqual(["user", "assistant"]);
   });
 
   it("模型最终失败（配额类，不可重试）→ error 事件后流关闭（无 done）", async () => {
@@ -573,8 +605,8 @@ describe("POST /chat 心跳与断开取消", () => {
 describe("POST /chat 会话重建（续聊）", () => {
   it("session_id 提供 → 历史加载喂回 produce + 新消息落库 + done 回显 session_id", async () => {
     const project = openProject();
-    seedMessage(project, "sess-old", { role: "user", content: "旧消息一", createdAt: "2026-08-01T10:00:00Z" });
-    seedMessage(project, "sess-old", { role: "assistant", content: "旧回复", createdAt: "2026-08-01T10:01:00Z" });
+    seedMessage(project, "sess_old", { role: "user", content: "旧消息一", createdAt: "2026-08-01T10:00:00Z" });
+    seedMessage(project, "sess_old", { role: "assistant", content: "旧回复", createdAt: "2026-08-01T10:01:00Z" });
 
  // `null as LLMMessage[] | null`：同 attemptSignal 的 TS 5.9 收紧问题（闭包赋值不参与窄化）
     let captured: LLMMessage[] | null = null as LLMMessage[] | null;
@@ -584,25 +616,25 @@ describe("POST /chat 会话重建（续聊）", () => {
     });
     const res = await buildApp(createChatRoutes({ produce })).request(
       "/api/v1/chat",
-      postChat({ message: "新消息", session_id: "sess-old" }),
+      postChat({ message: "新消息", session_id: "sess_old" }),
     );
     const frames = await readSseFrames(res);
     expect(frames.map((f) => f.event)).toEqual(["done"]);
-    expect((frames[0].data as { session_id: string }).session_id).toBe("sess-old");
+    expect((frames[0].data as { session_id: string }).session_id).toBe("sess_old");
  // 喂回形态（S7.2）：system + 旧历史（loadHistory 重组）+ 本轮新消息（runAgent 追加）
     expect(captured?.map((m) => m.role)).toEqual(["system", "user", "assistant", "user"]);
     expect((captured?.[1] as { content: string }).content).toBe("旧消息一");
     expect((captured?.[2] as { content: string }).content).toBe("旧回复");
     expect((captured?.[3] as { content: string }).content).toBe("新消息");
  // 落库：原 2 条 + 用户消息 + assistant 回复
-    const msgs = listMessages(project.db, "sess-old", project.config.id);
+    const msgs = readMessages(project, "sess_old");
     expect(msgs.map((m) => m.role)).toEqual(["user", "assistant", "user", "assistant"]);
     expect(msgs[2].content).toBe("新消息");
   });
 
   it("跨项目 session_id → 空历史续聊（不泄露存在性，与 GET /messages 同语义）", async () => {
     const projectA = openProject();
-    seedMessage(projectA, "sess-a", { role: "user", content: "仅属于 A", createdAt: "2026-08-01T10:00:00Z" });
+    seedMessage(projectA, "sess_a", { role: "user", content: "仅属于 A", createdAt: "2026-08-01T10:00:00Z" });
     openProject(); // 切到项目 B
 
     let captured: LLMMessage[] | null = null as LLMMessage[] | null;
@@ -612,10 +644,10 @@ describe("POST /chat 会话重建（续聊）", () => {
     });
     const res = await buildApp(createChatRoutes({ produce })).request(
       "/api/v1/chat",
-      postChat({ message: "B 的新消息", session_id: "sess-a" }),
+      postChat({ message: "B 的新消息", session_id: "sess_a" }),
     );
     const frames = await readSseFrames(res);
-    expect((frames[0].data as { session_id: string }).session_id).toBe("sess-a");
+    expect((frames[0].data as { session_id: string }).session_id).toBe("sess_a");
  // 历史为空：只有 system + 本轮新消息（A 的历史不可见）
     expect(captured?.map((m) => m.role)).toEqual(["system", "user"]);
     expect((captured?.[1] as { content: string }).content).toBe("B 的新消息");

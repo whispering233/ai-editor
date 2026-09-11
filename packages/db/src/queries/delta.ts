@@ -59,7 +59,7 @@ function rowToDeltaRow(row: Record<string, unknown>): DeltaRow {
 
 /**
  * changes 列解析防御：非法 JSON / 非数组 → []（单条坏行不打挂整表查询；
- * 与 entity.ts parseDataColumn / chat.ts parseToolCalls 防御风格一致）
+ * 与 entity.ts parseDataColumn 防御风格一致）
  */
 function parseChanges(value: unknown): DeltaChange[] {
   if (typeof value !== "string") return [];

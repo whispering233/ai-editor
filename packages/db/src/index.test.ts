@@ -16,7 +16,7 @@ describe("@whispering233/ai-editor-db 入口冒烟", () => {
     expect(typeof m.SCHEMA_VERSION).toBe("number");
   });
 
-  it("导出 JSON 存储（T2.2）与对话历史查询（T2.3）的真实 API", () => {
+  it("导出 JSON 存储（T2.2）、会话文件存储（B1）与迁移（B2）的真实 API", () => {
  // storage/atomic.ts
     expect(typeof m.writeJsonAtomic).toBe("function");
     expect(typeof m.nowIso).toBe("function");
@@ -30,7 +30,13 @@ describe("@whispering233/ai-editor-db 入口冒烟", () => {
  // storage/project.ts
     expect(typeof m.readProjectFile).toBe("function");
     expect(typeof m.writeProjectFile).toBe("function");
- // queries/chat.ts（T2.3 并行工作）
-    expect(typeof m.insertChatMessage).toBe("function");
+ // sessions.ts（对话历史 JSONL 文件存储）
+    expect(typeof m.appendSessionMessage).toBe("function");
+    expect(typeof m.readSessionRows).toBe("function");
+    expect(typeof m.readSessionMessages).toBe("function");
+    expect(typeof m.listSessionSummaries).toBe("function");
+    expect(typeof m.deleteSessionFile).toBe("function");
+    expect(typeof m.writeSessionFile).toBe("function");
+    expect(typeof m.isValidSessionId).toBe("function");
   });
 });

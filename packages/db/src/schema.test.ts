@@ -8,7 +8,7 @@ import { getTableConfig, type SQLiteTable } from "drizzle-orm/sqlite-core";
 
 import { openDatabase, closeDatabase, type Db } from "./connection.js";
 import { createTables, getUserVersion, SCHEMA_VERSION, setUserVersion } from "./schema.js";
-import { chatMessages, CREATE_TABLES_SQL, deltaRecords, entities, relationRecords } from "./tables.js";
+import { CREATE_TABLES_SQL, deltaRecords, entities, relationRecords } from "./tables.js";
 
 let dir: string;
 let dbPath: string;
@@ -55,7 +55,6 @@ describe("tables.ts 双份声明对齐", () => {
     entities,
     relation_records: relationRecords,
     delta_records: deltaRecords,
-    chat_messages: chatMessages,
   };
 
   it("DDL 常量与 sqliteTable 定义列级对齐（列名/类型/notNull/主键）", () => {
@@ -123,10 +122,8 @@ function parseDdlColumns(
 }
 
 describe("schema.ts 建表", () => {
-  it("打开后自动创建 4 张业务表", () => {
-    expect(listTables(db).sort()).toEqual(
-      ["chat_messages", "delta_records", "entities", "relation_records"].sort(),
-    );
+  it("打开后自动创建 3 张业务表（对话历史已出库为 sessions/*.jsonl）", () => {
+    expect(listTables(db).sort()).toEqual(["delta_records", "entities", "relation_records"].sort());
   });
 
   it("relation_records 有 3 个部分索引（WHERE deleted_at IS NULL）", () => {
@@ -139,16 +136,9 @@ describe("schema.ts 建表", () => {
     }
   });
 
-  it("chat_messages 有会话索引 (session_id, created_at)，且非部分索引", () => {
-    const indexes = listIndexes(db, "chat_messages");
-    const sessionIdx = indexes.find((i) => i.name === "idx_chat_session");
-    expect(sessionIdx).toBeDefined();
-    expect(sessionIdx?.partial).toBe(0);
-  });
-
   it("createTables 幂等：重复执行不报错、不重复建表", () => {
     expect(() => createTables(db)).not.toThrow();
-    expect(listTables(db)).toHaveLength(4);
+    expect(listTables(db)).toHaveLength(3);
   });
 
   it("entities.type CHECK 约束生效：非法 type 插入报错，合法 type 可插入（含 event、timepoint G2）", () => {
@@ -166,25 +156,12 @@ describe("schema.ts 建表", () => {
     }
   });
 
-  it("chat_messages.role CHECK 约束生效：非法 role 插入报错", () => {
-    const insert = db.prepare(
-      "INSERT INTO chat_messages (id, session_id, project_id, role, created_at) VALUES (?, ?, ?, ?, ?)",
-    );
-    expectConstraintError(
-      () => insert.run("m-1", "sess-1", "proj-1", "system", "2026-08-01T10:00:00Z"),
-      "SQLITE_CONSTRAINT_CHECK",
-    );
-    for (const role of ["user", "assistant", "tool"]) {
-      expect(() => insert.run(`m-${role}`, "sess-1", "proj-1", role, "2026-08-01T10:00:00Z")).not.toThrow();
-    }
-  });
-
-  it("user_version 读写往返（/SCHEMA_VERSION = 5，v1→v5 走增量迁移 002→003→004→005）", () => {
+  it("user_version 读写往返（SCHEMA_VERSION = 6，v1→v6 走增量迁移 002→003→004→005→006）", () => {
  // 新库默认 0
     expect(getUserVersion(db)).toBe(0);
     setUserVersion(db, SCHEMA_VERSION);
     expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
-    expect(SCHEMA_VERSION).toBe(5);
+    expect(SCHEMA_VERSION).toBe(6);
   });
 
   it("entities 有 sort_order 列（时间轴事件全局线性序，仅 event 使用，其余类型 NULL）", () => {

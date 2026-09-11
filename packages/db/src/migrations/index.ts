@@ -16,9 +16,10 @@
 // - 失败 → 该迁移回滚 + 版本停在前一迁移后，下次 open 重试
 // - 无迁移路径的旧版本（如 v0 且无 0→1 条目）保持删库重建兜底
 //
-// **当前状态**：SCHEMA_VERSION = 5；真实迁移 002（v1→v2：entities 表 CHECK 扩为 5 种 +
+// **当前状态**：SCHEMA_VERSION = 6；真实迁移 002（v1→v2：entities 表 CHECK 扩为 5 种 +
 // sort_order 列，时间轴）、003（v2→v3：entities CHECK 扩 6 种含 timepoint +
-// event.data.time_label 迁移为 timepoint 实体 + occurs_at 挂载关系，G2）。
+// event.data.time_label 迁移为 timepoint 实体 + occurs_at 挂载关系，G2）、
+// 006（v5→v6：对话历史出库——chat_messages 导出为 sessions/<id>.jsonl 后 DROP 表）。
 // v0 库无 0→1 迁移条目，仍走删库重建兜底。
 
 import type { Db } from "../connection.js";
@@ -26,14 +27,27 @@ import migration002 from "./002_event_timeline.js";
 import migration003 from "./003_timepoint.js";
 import migration004 from "./004_setting_tags.js";
 import migration005 from "./005_reference.js";
+import migration006 from "./006_sessions_jsonl.js";
+
+/** 迁移运行上下文（写文件类迁移需要项目目录：006 的会话 JSONL 导出） */
+export interface MigrationContext {
+ /** 项目根目录（books/<书名>/；会话文件写在 `<projectRoot>/sessions/`） */
+  projectRoot: string;
+}
 
 /** 单条增量迁移（version = 迁移完成后 data.db 的 user_version） */
 export interface Migration {
   version: number;
- /** 迁移逻辑（DDL/数据变更）；抛错 → 该迁移事务整体回滚，版本号不变 */
-  up: (db: Db) => void;
+ /** 迁移逻辑（DDL/数据变更/文件导出）；抛错 → 该迁移事务整体回滚，版本号不变 */
+  up: (db: Db, ctx: MigrationContext) => void;
 }
 
 /** 全量迁移集（按 version 升序：002 时间轴事件、003 时间标签点实体化（G2）、
- * 004 设定分类字段 tags（K2 修订）、005 参考资料 reference） */
-export const MIGRATIONS: readonly Migration[] = [migration002, migration003, migration004, migration005];
+ * 004 设定分类字段 tags（K2 修订）、005 参考资料 reference、006 对话历史出库） */
+export const MIGRATIONS: readonly Migration[] = [
+  migration002,
+  migration003,
+  migration004,
+  migration005,
+  migration006,
+];

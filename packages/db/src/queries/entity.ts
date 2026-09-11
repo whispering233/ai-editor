@@ -174,7 +174,7 @@ export function rowToEntityRow(row: Record<string, unknown>): EntityRow {
 /**
  * 解析 data 列（oracle 审核建议 1：JSON.parse 防御）：
  * 非法 JSON（手改库/异常写入）时返回 {} 而非抛错——否则 listEntities 整表查询
- * 会被单条坏行打挂；与 chat.ts 的 parseToolCalls 防御风格一致。坏行以空 data 呈现，
+ * 会被单条坏行打挂；与 sessions.ts 的 JSON 列防御风格一致。坏行以空 data 呈现，
  * 其余行正常返回；修复入口为回收站清理/手动修正（不在本层静默写回）。
  */
 function parseDataColumn(value: unknown): Record<string, unknown> {

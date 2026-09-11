@@ -1,10 +1,10 @@
 // 对话消息 / 会话类型
 
-/** 对话角色（chat_messages 表 role 列） */
+/** 对话角色（会话 JSONL 消息行的 role 字段） */
 export type ChatRole = "user" | "assistant" | "tool";
 
 /**
- * 对话消息（chat 消息条目 + chat_messages 表）
+ * 对话消息（chat 端点响应条目 + sessions/*.jsonl 消息行）
  * 续聊重建规则：assistant.tool_calls[].id ↔ tool.tool_call_id 成对重组喂回模型
  */
 export interface ChatMessage {
@@ -21,7 +21,7 @@ export interface ChatMessage {
   createdAt: string; // ISO 8601
 }
 
-/** chat_messages 表行（存储形态 snake_case） */
+/** 会话消息的存储形态行（snake_case；由 db 包 sessions.ts 读写） */
 export interface ChatMessageRow {
   id: string;
   session_id: string;

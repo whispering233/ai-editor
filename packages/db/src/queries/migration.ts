@@ -20,7 +20,7 @@ import type { OutlineFileTree } from "@whispering233/ai-editor-shared";
 import { closeDatabase, openDatabase, type Db } from "../connection.js";
 import { getUserVersion, SCHEMA_VERSION, setUserVersion } from "../schema.js";
 import { OUTLINE_FILE_NAME, writeOutlineFile } from "../storage/outline.js";
-import { MIGRATIONS, type Migration } from "../migrations/index.js";
+import { MIGRATIONS, type Migration, type MigrationContext } from "../migrations/index.js";
 
 /** data.db 文件名（项目根目录，与 server middleware 的常量一致） */
 export const DATA_DB_FILE_NAME = "data.db";
@@ -108,6 +108,7 @@ export function ensureSchemaCompatible(
         migrations: opts.migrations ?? MIGRATIONS,
         targetVersion: SCHEMA_VERSION,
         dbPath,
+        projectRoot: dir, // 写文件类迁移（006 会话导出）需要项目目录
       });
       return {
         db,
@@ -156,16 +157,24 @@ export function hasMigrationPath(
  * `data.db.v{from}.{YYYYMMDDHHmmssZ}.bak`（时间戳命名，不覆盖旧备份）——
  * 失败重试时现场保留（每次调用生成新时间戳快照，旧快照不删）
  * 2. **逐个执行** (fromVersion, targetVersion] 区间内按 version 升序的迁移：
- * 每个迁移一个事务（`db.transaction`）：`up(db)` + `setUserVersion(m.version)`
+ * 每个迁移一个事务（`db.transaction`）：`up(db, ctx)` + `setUserVersion(m.version)`
  * **原子提交**——「迁移成功 ⇒ 版本已写入；失败 ⇒ 版本未变」；失败时该迁移整体
- * 回滚（含 DDL 与已写数据）、后续迁移不执行、异常向上传播（快照保留供重试）
+ * 回滚（含 DDL 与已写数据）、后续迁移不执行、异常向上传播（快照保留供重试）。
+ * ※ 写文件类迁移（006 会话导出）的文件写入**不在事务回滚范围内**——靠幂等收敛
+ * （按表内容重写），详见迁移文件注释。
  *
  * @param opts.dbPath data.db 绝对路径（提供则迁移前快照；缺省跳过快照——纯逻辑调用）
+ * @param opts.projectRoot 项目根目录（写文件类迁移用；缺省空串 → 该类迁移自行报错）
  * @returns 实际执行的迁移（升序）与快照路径（未快照为 null）
  */
 export function runMigrations(
   db: Db,
-  opts: { migrations?: readonly Migration[]; targetVersion?: number; dbPath?: string } = {},
+  opts: {
+    migrations?: readonly Migration[];
+    targetVersion?: number;
+    dbPath?: string;
+    projectRoot?: string;
+  } = {},
 ): { applied: Migration[]; snapshot: string | null } {
   const migrations = (opts.migrations ?? MIGRATIONS).slice().sort((a, b) => a.version - b.version);
   const targetVersion = opts.targetVersion ?? SCHEMA_VERSION;
@@ -182,10 +191,11 @@ export function runMigrations(
   }
 
  // 2. 逐个执行（每迁移一个事务，up + setUserVersion 原子）
+  const ctx: MigrationContext = { projectRoot: opts.projectRoot ?? "" };
   const applied: Migration[] = [];
   for (const m of pending) {
     db.transaction(() => {
-      m.up(db);
+      m.up(db, ctx);
       setUserVersion(db, m.version);
     })();
     applied.push(m);

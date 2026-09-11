@@ -5,9 +5,10 @@
 // 由 schema.test.ts「DDL 与定义对齐」断言锁住（列名/类型/notNull/主键机械比对）。
 //
 // 边界：
-// - JSON 列（data/changes/metadata/tool_calls）一律 **text 模式**，不用 drizzle `mode:'json'`——
+// - JSON 列（data/changes/metadata）一律 **text 模式**，不用 drizzle `mode:'json'`——
 // drizzle 的 json mode 对坏 JSON 直接 JSON.parse 抛错，会打挂整表查询；
 // 防御在 queries 的 parseDataColumn 行映射层（坏行返回 {}）。
+// - 对话历史**不在库内**（项目目录 `sessions/*.jsonl`，见 sessions.ts / docs/db/schema.md）。
 // - 标识符由 drizzle escapeName 双引号包裹输出（`"order"` 关键字列安全，无需特殊转义）。
 // - CHECK 约束与部分索引两处都声明（drizzle 侧供对齐核对；真实建表以 DDL 常量为准）。
 
@@ -77,27 +78,10 @@ export const deltaRecords = sqliteTable(
   },
 );
 
-/** chat_messages：对话历史表（与 data.db 同库） */
-export const chatMessages = sqliteTable(
-  "chat_messages",
-  {
-    id: text("id").primaryKey(),
-    session_id: text("session_id").notNull(),
-    project_id: text("project_id").notNull(), // 会话按项目隔离
-    role: text("role").notNull(),
-    content: text("content"),
-    tool_calls: text("tool_calls"), // JSON（text 模式）
-    tool_call_id: text("tool_call_id"),
-    created_at: text("created_at").notNull(),
-  },
-  (t) => [
-    check("chat_messages_role_check", sql`${t.role} IN ('user', 'assistant', 'tool')`),
-    index("idx_chat_session").on(t.session_id, t.created_at),
-  ],
-);
+/** chat_messages：已删除（迁移 006：对话历史出库为 `sessions/*.jsonl`，表已 DROP） */
 
 /**
- * 四张业务表 + 索引的建表 SQL（幂等：CREATE TABLE/INDEX IF NOT EXISTS）——建表执行的事实来源。
+ * 三张业务表 + 索引的建表 SQL（幂等：CREATE TABLE/INDEX IF NOT EXISTS）——建表执行的事实来源。
  * 与上方 sqliteTable 定义必须同步（schema.test.ts 对齐断言覆盖）。
  */
 export const CREATE_TABLES_SQL = `
@@ -147,18 +131,4 @@ CREATE TABLE IF NOT EXISTS delta_records (
   deleted_at  TEXT              -- 级联软删标记：仅实体/节点级联删除时写入。
                                 -- 可见性联动触发节点与目标实体：任一端软删即不可见
 );
-
--- chat_messages：对话历史表（与 data.db 同库）
-CREATE TABLE IF NOT EXISTS chat_messages (
-  id            TEXT PRIMARY KEY,
-  session_id    TEXT NOT NULL,
-  project_id    TEXT NOT NULL,          -- 会话按项目隔离
-  role          TEXT NOT NULL CHECK(role IN ('user','assistant','tool')),
-  content       TEXT,
-  tool_calls    TEXT,                   -- JSON: 助手消息的工具调用数组
-  tool_call_id  TEXT,                   -- tool 消息关联的 assistant 工具调用 id
-  created_at    TEXT NOT NULL           -- ISO 8601，应用层写入
-);
-
-CREATE INDEX IF NOT EXISTS idx_chat_session ON chat_messages(session_id, created_at);
 `;

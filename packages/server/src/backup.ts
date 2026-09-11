@@ -30,7 +30,6 @@ import {
   ensureSchemaCompatible,
   getUserVersion,
   hasMigrationPath,
-  migrateChatMessagesProject,
   openDatabase,
   OUTLINE_FILE_NAME,
   PROJECT_FILE_NAME,
@@ -668,9 +667,9 @@ function scheduleNext(project: ProjectContext): void {
 /**
  * 用备份包内容替换目录三文件（restore 与 import 分流共用，B2.3 提取）：
  *
- * - project.json：JSON 解析后按 opts 覆盖——`keepId`（覆盖恢复以 project_id 为
- * 唯一 key，换 id 即断连 chat_messages 会话历史——；备份包可能来自异项目，
- * 防御性强制保留）与 `name`（「目录名 = 书名」不变式：import 覆盖归一为目录名、
+ * - project.json：JSON 解析后按 opts 覆盖——`keepId`（id 是书的身份，覆盖恢复以它为
+ * 唯一 key；备份包可能来自异项目，防御性强制保留）与 `name`（「目录名 = 书名」
+ * 不变式：import 覆盖归一为目录名、
  * 新书导入同步为去重名）；其余字段随备份替换。序列化走 2 空格缩进 + 尾换行
  * （与 db 包 writeJsonAtomic 同款格式惯例）
  * - outline.json / data.db：原样字节原子写
@@ -910,9 +909,9 @@ export function restoreBackup(project: ProjectContext, fileName: string): { snap
  // 2. 覆盖前自动快照（复用备份管道；误操作/选错备份永远有后悔药）
   const snapshot = writeBackup(project);
 
- // 3. 备份包校验（零触碰：通过前不写任何数据文件）；projectId = zip 内 project.json 的 id
+ // 3. 备份包校验（零触碰：通过前不写任何数据文件）
   const zip = readFileSync(backupPath);
-  const { entries, projectId: zipProjectId } = validateBackupPackage(zip);
+  const { entries } = validateBackupPackage(zip);
 
  // 4. 覆盖管道（B2.3 提取，import 覆盖复用）：原子替换三文件（保留当前 id）+
  // 重连 data.db + 同步 config + 重启定时器。
@@ -920,14 +919,9 @@ export function restoreBackup(project: ProjectContext, fileName: string): { snap
  // 不变式——id 是身份、name 是展示名；改名需求走 /project/rename）
   overwriteProjectFiles(project, entries, { name: basename(project.root), snapshotFileName: snapshot.fileName });
 
- // 5. 会话归属迁移（B2.2 审核 P1-1）：备份包内 project_id ≠ 当前项目 id
- // （跨项目恢复，如手工放入 .backups/ 的异项目备份）→ chat_messages 旧 id 行迁移为
- // 当前 id——「保留 id 保会话」的理由在跨项目场景同样成立：不迁移则恢复后聊天面板
- // 静默为空、旧会话行成孤儿数据。同项目恢复（id 相等）跳过，不执行多余迁移。
- // （import 覆盖无需迁移：id 匹配才走覆盖分支，zip id = 书架 id）
-  if (zipProjectId !== project.config.id) {
-    migrateChatMessagesProject(project.db, zipProjectId, project.config.id);
-  }
+ // 5. 会话无归属迁移：对话历史已出库为项目目录内 `sessions/*.jsonl`（迁移 006），归属由
+ // 目录表达，不再依赖 data.db 的 project_id——恢复只需覆盖三文件 + references/
+ // （`sessions/` 的入包与覆盖语义由备份管道承担，见 createBackupZip / writeProjectFilesFromBackup）。
 
  //：snapshot 仅含 fileName/createdAt（size 属内部信息不暴露）
   return { snapshot: { fileName: snapshot.fileName, createdAt: snapshot.createdAt } };

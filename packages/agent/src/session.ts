@@ -29,7 +29,7 @@ export type SessionState = SessionMessage[];
 // ============ 内部辅助 ============
 
 /**
- * 行内 tool_calls（unknown[]，来自 chat_messages.tool_calls JSON 列）→ wire 形态。
+ * 行内 tool_calls（unknown[]，来自会话 JSONL 消息行的 tool_calls 字段）→ wire 形态。
  * 任一调用形态不合法（缺 id / type 非 function / function 字段缺失）即返回 null——
  * 缺 id 即孤儿半对，该 assistant 消息与其工具结果**整组丢弃**（由调用方判定）。
  */
@@ -63,7 +63,7 @@ function toToolCallRequests(raw: unknown[]): LLMToolCallRequest[] | null {
 
 /**
  * 收集全部 tool 结果：tool_call_id → content（同一 id 多条结果取最先到达者）。
- * 与 db 包 reassembleMessages 的收集口径一致（本包不依赖 db，按文档独立实现）。
+ * 与 db 包会话读取口径一致（本包不依赖 db，按文档独立实现）。
  */
 function collectToolResults(messages: readonly SessionMessage[]): Map<string, string | null> {
   const toolResults = new Map<string, string | null>();
