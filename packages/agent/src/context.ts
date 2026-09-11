@@ -13,7 +13,7 @@
 // 输出 LLMMessage[]（system + 可选聚焦 system + 历史）直接喂给模型。
 
 import type { LLMMessage, LLMUsage } from "@whispering233/ai-editor-llm";
-import { estimateMessagesTokens, estimateTokens } from "@whispering233/ai-editor-llm";
+import { charsPerToken, estimateMessagesTokens, estimateTokens } from "@whispering233/ai-editor-llm";
 import { listTools, type ToolDefinition } from "@whispering233/ai-editor-tools";
 import {
   FOCUS_TITLE,
@@ -151,14 +151,15 @@ function buildToolListText(tools: readonly ToolListEntry[]): string {
 
 /**
  * 聚焦文本按预算截断（显式告知，不静默丢数据）：
- * 按 chars/4 反推可保留字符数（预留截断提示空间），保留前缀 + 截断提示。
+ * 按文本自身字符/token 比反推可保留字符数（截断提示先占预算），保留前缀 + 截断提示。
  */
 function trimFocus(focus: string, maxTokens: number): { text: string; truncated: boolean } {
   if (estimateTokens(focus) <= maxTokens) {
     return { text: focus, truncated: false };
   }
-  const maxChars = Math.max(0, Math.floor(maxTokens * 4));
-  const keptChars = Math.max(0, maxChars - FOCUS_TRUNCATION_NOTICE.length);
+  const noticeTokens = estimateTokens(FOCUS_TRUNCATION_NOTICE);
+  const keptTokens = Math.max(0, maxTokens - noticeTokens);
+  const keptChars = Math.max(0, Math.floor(keptTokens * charsPerToken(focus)));
   return { text: focus.slice(0, keptChars) + FOCUS_TRUNCATION_NOTICE, truncated: true };
 }
 

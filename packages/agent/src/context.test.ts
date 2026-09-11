@@ -284,7 +284,7 @@ describe("buildContext usage 基线", () => {
     expect(ctx.meta.historyTrimmed).toBe(true);
     expect(ctx.meta.lastUsageReset).toBe(true);
     expect(ctx.meta.effectiveLastUsage).toBeNull();
- // 重置后按 chars/4 估算（≈50 tokens，不含陈旧基线 12）
+ // 重置后按分级密度估算（≈50 tokens，不含陈旧基线 12）
     expect(ctx.tokens.history).toBeLessThanOrEqual(60);
   });
 
