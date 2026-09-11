@@ -38,9 +38,12 @@ export interface CreateCustomToolsOptions {
   proposalSink?: ProposalSink;
 }
 
-/** 提案已发出提示（content 不含预览细节——避免模型误以为提案已生效） */
-function proposalAckText(proposalId: string): string {
-  return `提案已发出（proposal_id=${proposalId}）：需用户确认后才会生效；确认前不要假设任何修改已发生。`;
+/** 提案已发出提示（content 不含预览细节——避免模型误以为提案已生效）
+ * 一句话摘要取自 preview.summary（结构化 preview 的提案没有该字段，则只给 id） */
+function proposalAckText(payload: ProposalPayload): string {
+  const summary = payload.preview.summary;
+  const summaryText = typeof summary === "string" && summary !== "" ? `${summary}；` : "";
+  return `提案已发出（proposal_id=${payload.proposal_id}）：${summaryText}需用户确认后才会生效；确认前不要假设任何修改已发生。`;
 }
 
 /** 单个领域工具 → pi 工具定义 */
@@ -63,7 +66,7 @@ function toPiTool(tool: EditorToolDefinition, options: CreateCustomToolsOptions)
         });
         if (proposal !== undefined) {
           return {
-            content: [{ type: "text" as const, text: proposalAckText(proposal.proposal_id) }],
+            content: [{ type: "text" as const, text: proposalAckText(proposal) }],
             details: proposal,
           };
         }

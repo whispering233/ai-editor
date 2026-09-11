@@ -49,16 +49,16 @@
 
 ## K3 — agent 包：事件映射 + 提案仓移植
 
-**目标**：会话事件 → SSE 帧（pi 事件投影：剥离 `partial`、丢弃内部状态事件、`session` 合成帧、`contextUsage` 附加）；提案仓从 `executor.ts` 移植为独立模块。
+**目标**：会话事件 → SSE 帧（pi 事件投影：剥离 `partial`、丢弃内部状态事件、`session` 合成帧、`contextUsage` 附加、`message_end` 的 thinking 降为预览、AUTO 工具 `details` 不下发）；提案仓与 `PROPOSAL_BUILDERS` 从 `executor.ts` 移入 `runtime/proposals.ts`（旧文件改为再导出，避免双份实现）。
 
 **范围**：
-- 事件投影模块（契约见 `docs/api/80-api-chat.md` 事件表与过滤约定）：`session` / `ping` / `agent_start` / `turn_start` / `message_*` / `tool_execution_*` / `turn_end` / `compaction_*` / `auto_retry_*` / `agent_end`；`turn_end`/`agent_end` 附 `getContextUsage()`。
-- 提案仓：TTL 10 分钟 + 条数上限 + 快照校验 + 绑定项目 + 按会话作废（从 `executor.ts` 抽出，行为不变）。
-- 删除旧 `run.ts` / `context.ts` / `session.ts` / `executor.ts` 派发部分与对应测试。
+- 事件投影模块（契约见 `docs/api/80-api-chat.md` 事件表与过滤约定）。
+- 提案仓：TTL 10 分钟 + 条数上限 + 快照校验 + 绑定项目（行为不变）；`proposalSink` 接线：PROPOSAL 工具执行成功 → build 层重建完整 Proposal 入仓 + `details = { proposal_id, type, preview }`（preview 缺省回落 `{type, summary, args}`）。
+- 旧 `run.ts` / `context.ts` / `session.ts` / `prompts.ts` / `executor.ts` 的**派发部分保留**（旧 chat 路由仍引用，K4 切换后随 K7 删除）。
 
 **不在范围**：HTTP 路由（K4）；client 渲染（K6）。
 
-**验证**：事件序列单测（给定 pi 事件输入断言帧输出，含 `partial` 剥离与丢弃表）；提案仓单测（TTL/上限/过期/项目不匹配）；`pnpm --filter agent test`。
+**验证**：事件序列单测（给定 pi 事件输入断言帧输出，含 `partial` 剥离与丢弃表、thinking 降预览、AUTO/PROPOSAL 的 details 差异）；提案仓单测（TTL/上限/过期/项目不匹配/预览回落）；`pnpm --filter agent test`。
 
 ## K4 — server：chat 路由切换到 pi 运行时
 
@@ -67,7 +67,9 @@
 **范围**：
 - `routes/chat.ts` 重写：SSE 帧转发、心跳、三路断开检测 → `AgentSession.abort()`、`CHAT_BUSY`、`session` 首帧、focus 注入。
 - 会话端点：列表/消息投影（含 thinking 预览 + `deferred`）/思维链全文端点/删除（`SESSION_BUSY`）；**id → 路径只经磁盘发现映射，禁止拼接**（删除 `sess_` 正则与校验）。
+- 续聊 helper：按 session_id 打开既有会话（`SessionManager.open` + 磁盘发现 id→path 映射）。
 - 项目中间件：切换/关闭项目时中止在途流、清空提案、释放运行时。
+- 删除旧内核文件（`run.ts` / `context.ts` / `session.ts` / `prompts.ts` / `executor.ts`）及对应测试；`packages/llm` 仍留到 K7（`server` 的旧引用一并清）。
 
 **不在范围**：settings 路由（K5）；client（K6）。
 

@@ -1,209 +1,43 @@
-// @whispering233/ai-editor-agent 工具调度器 + 提案内存仓（S7.4）
+// @whispering233/ai-editor-agent 旧内核工具调度器（过渡期保留）
 //
-// 架构边界：本包**不依赖 db**——ToolContext（db/outlineDir/projectId）由 S7.6 server 层注入
+// 提案仓与 PROPOSAL_BUILDERS 的唯一实现已移入 runtime/proposals.ts，本文件只再导出；
+// 旧 chat 路由仍用 createToolDispatcher，K4 切换后随 K7 删除本文件。
+//
+// 架构边界：本包**不依赖 db**——ToolContext（db/outlineDir/projectId）由 server 层注入
 // （createToolDispatcher 闭包捕获），这里只透传给工具 run/build；agent 侧不触碰 db 类型。
 
 import type { AbortSignalLike } from "@whispering233/ai-editor-llm";
-import type {
-  ProposeAbandonHookArgs,
-  ProposeAddDeltaArgs,
-  ProposeAddRelationArgs,
-  ProposeAdvanceHookArgs,
-  ProposeCreateEntityArgs,
-  ProposeCreateHookArgs,
-  ProposeDeleteEntityArgs,
-  ProposeDeleteNodeArgs,
-  ProposeMoveNodeArgs,
-  ProposeOutlineNodeArgs,
-  ProposeRemoveRelationArgs,
-  ProposeCreateReferenceArgs,
-  ProposeReorderTimepointsArgs,
-  ProposeResolveHookArgs,
-  ProposeUpdateEntityArgs,
-  ProposeUpdateHookArgs,
-} from "@whispering233/ai-editor-tools";
 import {
   AbortedError,
-  buildProposeAbandonHook,
-  buildProposeAddDelta,
-  buildProposeAddRelation,
-  buildProposeAdvanceHook,
-  buildProposeCreateEntity,
-  buildProposeCreateHook,
-  buildProposeCreateReference,
-  buildProposeDeleteEntity,
-  buildProposeDeleteNode,
-  buildProposeMoveNode,
-  buildProposeOutlineNode,
-  buildProposeRemoveRelation,
-  buildProposeReorderTimepoints,
-  buildProposeResolveHook,
-  buildProposeUpdateEntity,
-  buildProposeUpdateHook,
   getTool,
   throwIfAborted,
   validateToolArgs,
-  type Proposal,
   type ToolContext,
   type ToolDefinition,
 } from "@whispering233/ai-editor-tools";
+import {
+  PROPOSAL_BUILDERS,
+  defaultProposalStore,
+  type Proposal,
+  type ProposalStore,
+} from "./runtime/proposals.js";
 import type { DispatchResult, DispatchToolCall, ToolDispatcher } from "./run.js";
 
-// ============ 提案内存仓（仅内存、不落盘） ============
+// ============ 提案仓与 build 层（唯一实现已移入 runtime/proposals.ts） ============
+//
+// 旧内核过渡期保留：旧 chat 路由仍引用 createToolDispatcher（K4 切换后随 K7 删除）。
+// 提案仓与 PROPOSAL_BUILDERS 只再导出、不在本文件重复实现——两份实现必然漂移。
 
-/** 提案 TTL（10 分钟；S7.5 confirm/reject 引用——超期按不存在处理） */
-export const PROPOSAL_TTL_MS = 10 * 60_000;
-
-/**
- * 提案条数上限（超限淘汰 createdAt 最旧）。
- * 决策原文未定数——取 200 为数量级防御：正常会话一轮最多 15 个提案、挂卡不确认的
- * 残留按 TTL 自动过期，200 足以覆盖极端多轮场景且内存占用可忽略（防无限增长）。
- */
-export const PROPOSAL_MAX_COUNT = 200;
-
-/** 提案仓接口（S7.5 路由消费：confirm/reject 经 get/peek；S7.6 切换项目调 clear） */
-export interface ProposalStore {
- /** 存入提案（TTL 从 createdAt 起算；先清过期、超限淘汰最旧） */
-  set(proposal: Proposal): void;
- /**
- * 按 id + 项目取：不存在 / 过期 / **跨项目** → null。
- * 跨项目返回 null 即防御 PROPOSAL_PROJECT_MISMATCH 语义（
- * 提案绑定 project_id，确认时校验与当前项目一致）。
- */
-  get(proposalId: string, projectId: string): Proposal | null;
- /**
- * 仅按 id 取（不校验项目）：S7.5 区分「404 PROPOSAL_NOT_FOUND」与
- * 「409 PROPOSAL_PROJECT_MISMATCH」用——get 返回 null 后 peek 仍可见 ⇒ 跨项目误操作。
- * 过期条目同样视为不存在（惰性清理）。
- */
-  peek(proposalId: string): Proposal | null;
- /**
- * 按 id 移除单条（S7.5 一次性消费：confirm/reject 终态后移除—— 瞬态交互对象，
- * 确认/拒绝动作即消费，残留只会让重复 confirm 产生重复执行或反复 409）。
- * 与 clear 的区别：clear 清空全部（S7.6 切换项目用），remove 只移除指定提案。
- */
-  remove(proposalId: string): void;
- /** 清空全部项目提案（create/open/close 切换项目时由 S7.6 调用） */
-  clear(): void;
- /** 当前仓内提案数（测试/诊断） */
-  size(): number;
-}
-
-/** createProposalStore 选项（测试覆盖 TTL/上限用；缺省取导出的常量） */
-export interface ProposalStoreOptions {
- /** TTL 覆盖 ms（缺省 PROPOSAL_TTL_MS） */
-  ttlMs?: number;
- /** 条数上限覆盖（缺省 PROPOSAL_MAX_COUNT） */
-  maxCount?: number;
-}
-
-/**
- * 创建提案仓实例。
- * 过期策略：**惰性过期 + 按需清理**（「超期自动清除」落地）——get/peek 只清理命中的
- * 单条，set 前扫全仓清理；无定时器（定时器引入时钟耦合且小仓无必要，测试用假时钟直接断言）。
- * 淘汰策略：条数超限时淘汰 createdAt **最旧**的提案（sweep 过期后仍满则循环淘汰最旧）。
- */
-export function createProposalStore(options: ProposalStoreOptions = {}): ProposalStore {
-  const ttlMs = options.ttlMs ?? PROPOSAL_TTL_MS;
-  const maxCount = options.maxCount ?? PROPOSAL_MAX_COUNT;
- /** 仓内条目：proposal + 过期时刻（set 时按 createdAt 预计算；createdAt 不可解析按立即过期防御） */
-  const entries = new Map<string, { proposal: Proposal; expiresAt: number }>();
-  const isExpired = (entry: { proposal: Proposal; expiresAt: number }): boolean => Date.now() >= entry.expiresAt;
-  const sweepExpired = (): void => {
-    for (const [id, entry] of entries) {
-      if (isExpired(entry)) entries.delete(id);
-    }
-  };
-  return {
-    set(proposal) {
-      sweepExpired();
-      const createdAtMs = Date.parse(proposal.createdAt);
-      entries.set(proposal.proposal_id, {
-        proposal,
-        expiresAt: Number.isNaN(createdAtMs) ? 0 : createdAtMs + ttlMs,
-      });
- // 条数上限：循环淘汰最旧直到回到上限内（createdAt 同值取先插入者——迭代序即插入序）
-      while (entries.size > maxCount) {
-        let oldestId: string | null = null;
-        let oldestTime = Number.POSITIVE_INFINITY;
-        for (const [id, entry] of entries) {
-          const t = Date.parse(entry.proposal.createdAt);
-          if (t < oldestTime) {
-            oldestTime = t;
-            oldestId = id;
-          }
-        }
-        if (oldestId === null) break; // 防御：理论不可达（size > 0 必有最旧）
-        entries.delete(oldestId);
-      }
-    },
-    get(proposalId, projectId) {
-      const entry = entries.get(proposalId);
-      if (entry === undefined) return null;
-      if (isExpired(entry)) {
-        entries.delete(proposalId); // 惰性过期清理
-        return null;
-      }
-      if (entry.proposal.project_id !== projectId) return null; // 项目绑定
-      return entry.proposal;
-    },
-    peek(proposalId) {
-      const entry = entries.get(proposalId);
-      if (entry === undefined) return null;
-      if (isExpired(entry)) {
-        entries.delete(proposalId);
-        return null;
-      }
-      return entry.proposal;
-    },
-    remove(proposalId) {
-      entries.delete(proposalId);
-    },
-    clear() {
-      entries.clear();
-    },
-    size() {
-      return entries.size;
-    },
-  };
-}
-
-/** 默认提案仓单例（S7.5 confirm/reject 与 S7.6 切换项目 clear 直接引用；测试用 createProposalStore 独立实例） */
-export const defaultProposalStore: ProposalStore = createProposalStore();
+export {
+  PROPOSAL_BUILDERS,
+  PROPOSAL_MAX_COUNT,
+  PROPOSAL_TTL_MS,
+  createProposalStore,
+  defaultProposalStore,
+} from "./runtime/proposals.js";
+export type { ProposalStore, ProposalStoreOptions } from "./runtime/proposals.js";
 
 // ============ 工具调度器（ToolDispatcher 真实现，run.ts） ============
-
-/**
- * 提案 build 层入口签名（args 已过 validateToolArgs 校验——preflight 返回的校验形态）。
- * run 层裁剪只返回 { proposal_id, summary }（「提案类」2026-08 修订），
- * 完整 Proposal 对象须经 build 层重建（与 run 内部产出同源确定：同 ctx + 同 args 结果一致）。
- */
-type ProposalBuilder = (ctx: ToolContext, args: unknown) => Proposal;
-
-/**
- * 15 个 propose_* 工具名 → build 层函数。
- * 运行时查表缺失（非 propose 工具）走普通结果路径；完整性由测试断言覆盖
- * （Object.keys(PROPOSAL_BUILDERS) === PROPOSAL_TOOLS）——S6.6 后续新增提案工具须同步登记。
- * 导出仅为完整性测试断言；业务侧经 createToolDispatcher 间接使用。
- */
-export const PROPOSAL_BUILDERS: Record<string, ProposalBuilder> = {
-  propose_create_entity: (ctx, args) => buildProposeCreateEntity(ctx, args as ProposeCreateEntityArgs),
-  propose_update_entity: (ctx, args) => buildProposeUpdateEntity(ctx, args as ProposeUpdateEntityArgs),
-  propose_delete_entity: (ctx, args) => buildProposeDeleteEntity(ctx, args as ProposeDeleteEntityArgs),
-  propose_add_relation: (ctx, args) => buildProposeAddRelation(ctx, args as ProposeAddRelationArgs),
-  propose_remove_relation: (ctx, args) => buildProposeRemoveRelation(ctx, args as ProposeRemoveRelationArgs),
-  propose_add_delta: (ctx, args) => buildProposeAddDelta(ctx, args as ProposeAddDeltaArgs),
-  propose_outline_node: (ctx, args) => buildProposeOutlineNode(ctx, args as ProposeOutlineNodeArgs),
-  propose_move_node: (ctx, args) => buildProposeMoveNode(ctx, args as ProposeMoveNodeArgs),
-  propose_delete_node: (ctx, args) => buildProposeDeleteNode(ctx, args as ProposeDeleteNodeArgs),
-  propose_create_hook: (ctx, args) => buildProposeCreateHook(ctx, args as ProposeCreateHookArgs),
-  propose_update_hook: (ctx, args) => buildProposeUpdateHook(ctx, args as ProposeUpdateHookArgs),
-  propose_advance_hook: (ctx, args) => buildProposeAdvanceHook(ctx, args as ProposeAdvanceHookArgs),
-  propose_resolve_hook: (ctx, args) => buildProposeResolveHook(ctx, args as ProposeResolveHookArgs),
-  propose_abandon_hook: (ctx, args) => buildProposeAbandonHook(ctx, args as ProposeAbandonHookArgs),
-  propose_reorder_timepoints: (ctx, args) => buildProposeReorderTimepoints(ctx, args as ProposeReorderTimepointsArgs), // G2（取代 F9 的 propose_reorder_events）
-  propose_create_reference: (ctx, args) => buildProposeCreateReference(ctx, args as ProposeCreateReferenceArgs), //
-};
 
 /** createToolDispatcher 选项 */
 export interface CreateToolDispatcherOptions {

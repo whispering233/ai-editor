@@ -19,6 +19,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { ToolContext } from "@whispering233/ai-editor-tools";
 import { projectSessionsDir, resolveAgentDir } from "./paths.js";
+import { createProposalSink, defaultProposalStore, type ProposalStore } from "./proposals.js";
 import { buildResourceLoaderOptions } from "./resources.js";
 import { createCustomTools, type ProposalSink } from "./tools.js";
 
@@ -50,7 +51,9 @@ export interface ProjectRuntimeInput {
   model?: Model<Api>;
   /** 初始思考强度；缺省按 pi settings 与模型能力解析 */
   thinkingLevel?: ThinkingLevel;
-  /** 提案登记回调（K3 接提案仓） */
+  /** 提案仓（缺省 defaultProposalStore 单例——与 confirm/reject 路由同仓消费） */
+  proposalStore?: ProposalStore;
+  /** 覆写提案登记回调（缺省 = createProposalSink(proposalStore)；测试/特殊装配用） */
   proposalSink?: ProposalSink;
 }
 
@@ -111,6 +114,9 @@ export async function createProjectRuntime(input: ProjectRuntimeInput): Promise<
 
   const model = input.model ?? (await resolveDefaultModel(services.modelRuntime, settingsManager));
 
+  // 提案接线：PROPOSAL 工具执行成功 → 重建完整 Proposal 入仓 + details 携带前端载荷
+  const proposalSink = input.proposalSink ?? createProposalSink({ store: input.proposalStore ?? defaultProposalStore });
+
   const { session } = await createAgentSessionFromServices({
     services,
     sessionManager,
@@ -118,10 +124,7 @@ export async function createProjectRuntime(input: ProjectRuntimeInput): Promise<
     ...(input.thinkingLevel === undefined ? {} : { thinkingLevel: input.thinkingLevel }),
     // builtin（read/bash/edit/write…）全关：本项目不是编码 agent；领域工具是自定义工具，不受此开关影响
     noTools: "builtin",
-    customTools: createCustomTools({
-      toolContext: input.toolContext,
-      ...(input.proposalSink === undefined ? {} : { proposalSink: input.proposalSink }),
-    }),
+    customTools: createCustomTools({ toolContext: input.toolContext, proposalSink }),
   });
 
   return {

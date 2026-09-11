@@ -38,7 +38,7 @@
 | `agent_start` | `{}` | 本轮开始 |
 | `turn_start` | `{}` | 一次模型请求（含其触发的整批工具执行）开始 |
 | `message_start` / `message_end` | `{ message: {...} }` | 消息生命周期（user / assistant / tool 三类均发） |
-| `message_update` | `{ assistantMessageEvent: {...} }` | assistant 流式增量：`text_delta` / `thinking_delta` / `toolcall_delta` 等（**已剥离 `partial` 全文对象**；`toolcall_*` 附带 `id` / `toolName` 便于前端提前渲染） |
+| `message_update` | `{ assistantMessageEvent: {...} }` | assistant 流式增量：`text_delta` / `thinking_delta` / `toolcall_delta` 等（**已剥离 `partial` 全文对象**；`toolcall_*` 附带 `id` / `toolName` 便于前端提前渲染）。`thinking_end` 的 `content` 降为 240 字预览并附 `contentLength`（全文走按需端点，客户端已从 `thinking_delta` 拿到增量） |
 | `tool_execution_start` | `{ toolCallId, toolName, args }` | 工具开始执行 |
 | `tool_execution_update` | `{ toolCallId, toolName, partialResult }` | 工具流式进度（可选） |
 | `tool_execution_end` | `{ toolCallId, toolName, result: { content, details? }, isError }` | 工具结束；**AUTO 工具的 `details` 不下发**（与 `content` 重复且可能极大）；**PROPOSAL 工具的 `details` 携带提案载荷**（见 §提案确认） |
@@ -50,7 +50,7 @@
 **过滤约定**（服务端唯一实现点）：
 
 - 所有 `partial` 字段剥离（含完整消息大对象），只转发增量与元数据——否则单帧可达数百 KB。
-- 不转发 `entry_appended` / `queue_update` / `session_info_changed` / `thinking_level_changed`（内部状态，UI 无消费方）。
+- 不转发事件表之外的内部状态事件：`entry_appended` / `queue_update` / `session_info_changed` / `thinking_level_changed` / `agent_settled` / `summarization_retry_*` / `bash_execution_update`（UI 无消费方）。
 - AUTO 工具的 `result.details` 不下发（内容与 `content` 重复、可能达数百 KB）；仅 PROPOSAL 工具的 `details`（提案载荷）随帧下发。
 
 **客户端解析约束**：本端点返回 POST + SSE，浏览器原生 `EventSource` 只支持 GET，客户端必须用 `fetch` + `ReadableStream` 自写 SSE 解析（client），并处理：跨 chunk 的 `data:` 行拼接、注释行（`:` 开头）跳过、多行 data 合并。
@@ -157,7 +157,7 @@ id: string;                  // 会话 ID
 
 ## 提案确认
 
-提案**仅存服务端内存**（TTL 10 分钟 + 条数上限），随 `tool_execution_end` 帧的 `result.details` 到达前端：`details = { proposal_id, type, preview }`（`propose_*` 工具产出）。生命周期与校验规则见 [`../design/30-agent-loop.md`](../design/30-agent-loop.md) §2。
+提案**仅存服务端内存**（TTL 10 分钟 + 条数上限），随 `tool_execution_end` 帧的 `result.details` 到达前端：`details = { proposal_id, type, preview }`（`propose_*` 工具产出）；`preview` **恒含 `summary`**（一句话摘要），结构化预览字段平铺其上。生命周期与校验规则见 [`../design/30-agent-loop.md`](../design/30-agent-loop.md) §2。
 
 ### POST /api/v1/proposal/:proposalId/confirm
 
