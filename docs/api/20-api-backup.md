@@ -3,9 +3,9 @@
 > 自动/手动备份、重命名、恢复、书名重命名。公共约定/命名/响应结构见 [api-public.md](./api-public.md)，错误码见 [error-code.md](./error-code.md)；
 > 请求/响应 schema 单一来源：`@whispering233/ai-editor-shared` `types/api.ts`；接口索引见 [00-api-index.md](./00-api-index.md)。
 
-> 自动备份由服务端定时器驱动（服务运行期间生效，频率 = project.json `backup_frequency_minutes`，缺省 10 分钟）。备份文件存项目目录内 `.backups/`，时间戳命名（毫秒精度 + **类型标记段**：`<YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip`——kind 为 `m`（手动）/ `a`（自动带名称），自动备份/快照为纯时间戳；手动备份无名称也带 `-m` 段，与自动备份可靠区分；**旧格式兼容解析不迁移**：旧秒级 `<YYYYMMDD-HHmmss>.zip` → auto、旧带名称无 kind 段 `<YYYYMMDD-HHmmssSSS>-<名称>.zip` → manual、纯时间戳 → auto——历史备份仍可列出/恢复/参与保留策略），格式与导出 zip 完全一致（三文件 + wal_checkpoint；含 `references/**` 目录条目），**每项目保留最近 20 份**（超出删除最旧，含覆盖前自动快照）。全部端点要求当前项目已打开（无项目 → 409 `NO_PROJECT_OPEN`，与 `/config` 一致）。
+> 自动备份由服务端定时器驱动（服务运行期间生效，频率 = project.json `backup_frequency_minutes`，缺省 10 分钟）。备份文件存项目目录内 `.backups/`，时间戳命名（毫秒精度 + **类型标记段**：`<YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip`——kind 为 `m`（手动）/ `a`（自动带名称），自动备份/快照为纯时间戳；手动备份无名称也带 `-m` 段，与自动备份可靠区分；**旧格式兼容解析不迁移**：旧秒级 `<YYYYMMDD-HHmmss>.zip` → auto、旧带名称无 kind 段 `<YYYYMMDD-HHmmssSSS>-<名称>.zip` → manual、纯时间戳 → auto——历史备份仍可列出/恢复/参与保留策略），格式与导出 zip 完全一致（三文件 + wal_checkpoint；含 `references/**` 与 `sessions/**` 目录条目），**每项目保留最近 20 份**（超出删除最旧，含覆盖前自动快照）。全部端点要求当前项目已打开（无项目 → 409 `NO_PROJECT_OPEN`，与 `/config` 一致）。
 
-> **变更检测**：自动备份「有变更才备份」判定在三文件 mtime 基础上增加 **references/ 目录内全部文件（含 .trash/）最大 mtime**——本地新增/外部编辑 md 文档同样触发自动备份。
+> **变更检测**：自动备份「有变更才备份」判定在三文件 mtime 基础上增加 **`references/`（含 .trash/）与 `sessions/` 目录内全部文件的最大 mtime**——本地新增/外部编辑 md 文档、新的对话消息同样触发自动备份。
 
 ### GET /api/v1/project/backups
 
@@ -54,7 +54,7 @@
 }
 ```
 
-**语义**：与自动备份同款管道（三文件 + wal_checkpoint → `.backups/<时间戳>-m...>.zip` → 触发保留策略清理）。文件写入失败 → 500 `INTERNAL_ERROR`。
+**语义**：与自动备份同款管道（三文件 + wal_checkpoint + `references/**` + `sessions/**` → `.backups/<时间戳>-m...>.zip` → 触发保留策略清理）。文件写入失败 → 500 `INTERNAL_ERROR`。
 
 ### POST /api/v1/project/backup/rename
 

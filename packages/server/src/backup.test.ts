@@ -1166,3 +1166,141 @@ describe("备份含 references/ 目录", () => {
     expect(new TextDecoder().decode(entries["references/外部新增.md"])).toBe("内容");
   });
 });
+
+// ============ B4：sessions/ 随备份（与 references/ 同款语义） ============
+
+describe("备份含 sessions/ 目录", () => {
+  it("createBackupZip 打包 sessions/*.jsonl；无目录 → 无条目", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-sess1", "会话备份"));
+    await openProject(dir);
+    const project = getCurrentProject() as NonNullable<ReturnType<typeof getCurrentProject>>;
+    appendSessionMessage(dir, "sess_a", { id: "m1", role: "user", content: "问题一", created_at: T0 });
+    appendSessionMessage(dir, "sess_b", { id: "m2", role: "user", content: "问题二", created_at: T0 });
+    const entries = unzipSync(createBackupZip(project));
+    expect(Object.keys(entries).sort()).toEqual([
+      "data.db",
+      "outline.json",
+      "project.json",
+      "sessions/sess_a.jsonl",
+      "sessions/sess_b.jsonl",
+    ]);
+    expect(new TextDecoder().decode(entries["sessions/sess_a.jsonl"])).toContain("问题一");
+
+ // 无 sessions/ 目录 → zip 无 sessions 条目
+    const dir2 = makeTmpDir();
+    initProjectDir(dir2, makeConfig("proj-sess2", "无会话"));
+    await openProject(dir2);
+    const entries2 = unzipSync(createBackupZip(getCurrentProject() as NonNullable<ReturnType<typeof getCurrentProject>>));
+    expect(Object.keys(entries2)).not.toContain(expect.stringMatching(/^sessions\//));
+  });
+
+  it("writeProjectFilesFromBackup 恢复 sessions/（整体覆盖：清本地残留 + 写回备份条目）", async () => {
+    const src = makeTmpDir();
+    initProjectDir(src, makeConfig("proj-sess3", "源项目"));
+    await openProject(src);
+    appendSessionMessage(src, "sess_keep", { id: "m1", role: "user", content: "备份内消息", created_at: T0 });
+    const entries = unzipSync(createBackupZip(getCurrentProject() as NonNullable<ReturnType<typeof getCurrentProject>>));
+
+ // 目标项目：已有本地残留会话（备份里没有的 sess_local）
+    const dst = makeTmpDir();
+    initProjectDir(dst, makeConfig("proj-sess3", "目标项目"));
+    appendSessionMessage(dst, "sess_local", { id: "m9", role: "user", content: "本地残留", created_at: T0 });
+    writeProjectFilesFromBackup(dst, entries as unknown as Record<string, Uint8Array>);
+
+    expect(readSessionRows(dst, "sess_keep").map((r) => r.content)).toEqual(["备份内消息"]);
+    expect(readSessionRows(dst, "sess_local")).toEqual([]); // 本地残留被清（整体还原语义）
+  });
+
+  it("旧备份包（无 sessions/ 条目）→ 覆盖后目标 sessions/ 清空（整体还原），导入不报错", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-sess4", "旧包"));
+    const legacyEntries = {
+      [PROJECT_FILE_NAME]: readFileSync(join(dir, PROJECT_FILE_NAME)),
+      [OUTLINE_FILE_NAME]: readFileSync(join(dir, OUTLINE_FILE_NAME)),
+      [DATA_DB_FILE_NAME]: readFileSync(join(dir, DATA_DB_FILE_NAME)),
+    };
+    expect(Object.keys(legacyEntries).some((k) => k.startsWith("sessions/"))).toBe(false);
+
+ // 旧包能被校验通过（sessions/ 非必需）
+    const legacyZip = zipSync(legacyEntries);
+    expect(() => validateBackupPackage(legacyZip)).not.toThrow();
+
+ // 覆盖到含会话的目标项目 → sessions/ 清空
+    const dst = makeTmpDir();
+    initProjectDir(dst, makeConfig("proj-sess4", "目标"));
+    appendSessionMessage(dst, "sess_gone", { id: "m1", role: "user", content: "旧记录", created_at: T0 });
+    writeProjectFilesFromBackup(dst, legacyEntries);
+    expect(readSessionRows(dst, "sess_gone")).toEqual([]);
+    expect(existsSync(join(dst, "sessions"))).toBe(false); // 目录不存在即视为空
+  });
+
+  it("白名单：sessions/ 前缀接受；sessions/../ 与裸 sessions 拒绝", () => {
+    expect(isAllowedBackupEntry("sessions/sess_a.jsonl")).toBe(true);
+    expect(isAllowedBackupEntry("sessions/会话.jsonl")).toBe(true);
+    expect(isAllowedBackupEntry("sessions")).toBe(false); // 目录条目本身不接受
+    expect(isAllowedBackupEntry("sessions/../evil.jsonl")).toBe(false); // 路径穿越
+    expect(isAllowedBackupEntry("sessions/a/../../evil.jsonl")).toBe(false);
+  });
+
+  it("validateBackupPackage：sessions/../ 穿越条目 → 400 未知条目拒绝", () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-sess5", "坏包"));
+    const zip = zipSync({
+      project: readFileSync(join(dir, PROJECT_FILE_NAME)),
+      outline: readFileSync(join(dir, OUTLINE_FILE_NAME)),
+      "data.db": readFileSync(join(dir, DATA_DB_FILE_NAME)),
+      "sessions/../evil.jsonl": new TextEncoder().encode("x"),
+    });
+    expect(() => validateBackupPackage(zip)).toThrowError(/未知条目/);
+  });
+
+  it("maybeAutoBackup：sessions/ 文件变更（新增会话）触发自动备份，且新备份含之", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, { ...makeConfig("proj-sess6", "会话变更检测"), backup_frequency_minutes: 5 });
+    await openProject(dir);
+    const project = getCurrentProject() as NonNullable<ReturnType<typeof getCurrentProject>>;
+    expect(maybeAutoBackup(project)).toBe(true); // 首备
+    expect(backupFileNames(dir)).toHaveLength(1);
+
+ // 新增会话（前一轮未产生 sessions/）→ mtime 置为「上次备份 + 2s」→ 判定有变更
+    appendSessionMessage(dir, "sess_new", { id: "m1", role: "user", content: "新会话", created_at: T0 });
+    const later = new Date(latestBackupTime(dir).getTime() + 2000);
+    utimesSync(join(dir, "sessions", "sess_new.jsonl"), later, later);
+    expect(maybeAutoBackup(project)).toBe(true);
+    expect(backupFileNames(dir)).toHaveLength(2);
+
+ // 已有会话再追加一条消息（mtime 前移）→ 仍判定有变更
+    appendSessionMessage(dir, "sess_new", { id: "m2", role: "assistant", content: "回复", created_at: T0 });
+    const later2 = new Date(latestBackupTime(dir).getTime() + 2000);
+    utimesSync(join(dir, "sessions", "sess_new.jsonl"), later2, later2);
+    expect(maybeAutoBackup(project)).toBe(true);
+
+ // 无变更（sessions/ 与三文件均未动）→ 跳过。注：上一步 utimes 把 mtime 置为「备份时刻 + 2s」
+ // （未来时间），需先归位到过去时刻，否则变更判定会持续命中（容差窗口内始终被视为新变更）
+    const past = new Date(latestBackupTime(dir).getTime() - 10_000);
+    utimesSync(join(dir, "sessions", "sess_new.jsonl"), past, past);
+    expect(maybeAutoBackup(project)).toBe(false);
+  });
+
+  it("往返：备份 → 恢复到另一目录 → 再备份，会话内容一致（含 header/行序）", async () => {
+    const src = makeTmpDir();
+    initProjectDir(src, makeConfig("proj-sess7", "往返源"));
+    await openProject(src);
+    appendSessionMessage(src, "sess_rt", { id: "m1", role: "user", content: "第一问", created_at: T0 });
+    appendSessionMessage(src, "sess_rt", { id: "m2", role: "assistant", content: "第一答", created_at: T0 });
+    const entries = unzipSync(createBackupZip(getCurrentProject() as NonNullable<ReturnType<typeof getCurrentProject>>));
+
+    const dst = makeTmpDir();
+    initProjectDir(dst, makeConfig("proj-sess7", "往返目标"));
+    writeProjectFilesFromBackup(dst, entries as unknown as Record<string, Uint8Array>);
+    expect(readSessionRows(dst, "sess_rt").map((r) => r.content)).toEqual(["第一问", "第一答"]);
+
+ // 再备份：会话条目字节与首次备份一致（写入→打包→恢复→打包 全链无损耗）
+    await openProject(dst);
+    const entries2 = unzipSync(createBackupZip(getCurrentProject() as NonNullable<ReturnType<typeof getCurrentProject>>));
+    expect(new TextDecoder().decode(entries2["sessions/sess_rt.jsonl"])).toBe(
+      new TextDecoder().decode(entries["sessions/sess_rt.jsonl"]),
+    );
+  });
+});

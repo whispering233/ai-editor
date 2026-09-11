@@ -15,11 +15,7 @@
 
 ## 当前任务卡
 
-批次 B：对话历史从 `chat_messages` 表迁到项目目录 `sessions/*.jsonl`（B1/B2/B3 已完成并验证：会话 JSONL 存储模块 + 存储切换 + 删除会话端点）（契约已改：`docs/db/schema.md`、`docs/design/10-data-model.md` §1/§10/§11、`docs/api/80-api-chat.md`、`docs/api/error-code.md`、`docs/api/20-api-backup.md`、`docs/design/30-agent-loop.md` §4、`docs/design/architecture.md`、`docs/ui/DESIGN.md`）。**API 响应结构不变（除新增 DELETE）**。
-
-### B4 备份管道接 `sessions/`
-
-白名单（`sessions/` 前缀且拒 `..`）、打包（递归）、变更判定（`sessions/` 文件 mtime 参与「有变更才备份」）、恢复/导入整体覆盖（清本地残留——与 `references/` 同语义）。
+批次 B：对话历史从 `chat_messages` 表迁到项目目录 `sessions/*.jsonl`（B1/B2/B3/B4 已完成并验证：会话 JSONL 存储模块 / 存储切换 / 删除会话端点 / 备份管道接 sessions/）（契约已改：`docs/db/schema.md`、`docs/design/10-data-model.md` §1/§10/§11、`docs/api/80-api-chat.md`、`docs/api/error-code.md`、`docs/api/20-api-backup.md`、`docs/design/30-agent-loop.md` §4、`docs/design/architecture.md`、`docs/ui/DESIGN.md`）。**API 响应结构不变（除新增 DELETE）**。
 
 ### B5 client 会话删除入口
 

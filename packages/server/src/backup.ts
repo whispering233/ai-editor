@@ -36,6 +36,7 @@ import {
   readAgentsFile,
   readProjectFile,
   SCHEMA_VERSION,
+  SESSIONS_DIR_NAME,
   writeAgentsFile,
 } from "@whispering233/ai-editor-db";
 import { HttpError } from "./middleware/error.js";
@@ -47,16 +48,24 @@ export const BACKUPS_DIR_NAME = ".backups";
 /** 参考资料目录名（项目目录内 references/，随备份 zip 打包） */
 const REFERENCE_DIR_NAME = "references";
 
-/** 备份包条目白名单判定（三文件 + references/ 前缀——逐名比对天然防 zip 路径穿越；
- * references/ 子路径拒绝含 `..` 的条目防相对路径逃逸） */
+/**
+ * 随备份 zip 整体打包的目录（目录名已登记在 `docs/api/20-api-backup.md`）：
+ * `references/`（参考资料含 .trash/）与 `sessions/`（会话 JSONL）——两者语义一致：
+ * 白名单前缀 + 递归打包 + 参与变更判定 + 恢复时整体覆盖。
+ * `SESSIONS_DIR_NAME` 取自 db 包（与 sessions.ts 同源）。
+ */
+const PACKED_DIR_NAMES: readonly string[] = [REFERENCE_DIR_NAME, SESSIONS_DIR_NAME];
+
+/** 备份包条目白名单判定（三文件 + 打包目录前缀——逐名比对天然防 zip 路径穿越；
+ * 目录子路径拒绝含 `..` 的条目防相对路径逃逸） */
 export function isAllowedBackupEntry(name: string): boolean {
   if ((PROJECT_EXPORT_FILE_NAMES as readonly string[]).includes(name)) return true;
-  return name.startsWith(`${REFERENCE_DIR_NAME}/`) && !name.split("/").includes("..");
+  return PACKED_DIR_NAMES.some((d) => name.startsWith(`${d}/`)) && !name.split("/").includes("..");
 }
 
-/** references/ 目录内全部文件（递归，含 .trash/）相对路径（`/` 分隔）；目录缺失 → [] */
-function listReferenceDirFiles(root: string): string[] {
-  const base = join(root, REFERENCE_DIR_NAME);
+/** 项目目录内某子目录的全部文件（递归，含 .trash/）相对路径（`/` 分隔）；目录缺失 → [] */
+function listDirFiles(root: string, dirName: string): string[] {
+  const base = join(root, dirName);
   if (!existsSync(base)) return [];
   const out: string[] = [];
   const walk = (dir: string, prefix: string): void => {
@@ -69,6 +78,23 @@ function listReferenceDirFiles(root: string): string[] {
   };
   walk(base, "");
   return out;
+}
+
+/**
+ * 用备份条目**整体覆盖**项目目录内的打包目录（恢复/导入语义：目录以备份内容为准，
+ * 本地残留不混入）。目录不存在则创建；`..` 条目跳过（白名单已校验，双保险）。
+ */
+function overwriteDirFromEntries(dir: string, dirName: string, entries: Record<string, Uint8Array>): void {
+  const baseDir = join(dir, dirName);
+  if (existsSync(baseDir)) rmSync(baseDir, { recursive: true, force: true });
+  for (const key of Object.keys(entries)) {
+    if (!key.startsWith(`${dirName}/`)) continue;
+    const rel = key.slice(dirName.length + 1);
+    if (rel === "" || rel.split("/").includes("..")) continue;
+    const target = join(baseDir, ...rel.split("/"));
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileAtomic(target, entries[key]);
+  }
 }
 
 /** 解压总字节预算（200MB，zip 炸弹防御——与 import 同款，restore 复用） */
@@ -120,7 +146,7 @@ function assertBackupFileNameFormat(fileName: string): NonNullable<ReturnType<ty
  * 打包当前项目为 zip（export 同款管道）：
  * wal_checkpoint(TRUNCATE) 把 WAL 合并回主文件（zip 内 data.db 为完整快照，
  * 无需附带 -wal/-shm）→ zipSync 打包（键序稳定：project.json → outline.json → data.db
- * → references/**（参考资料目录含 .trash/ 随包——项目自包含））。
+ * → references/** → sessions/**（打包目录含 .trash/ 随包——项目自包含））。
  * 三文件缺失任一 → 抛错（打开的项目三文件必然齐全，缺失即损坏，不导出半成品包）。
  */
 export function createBackupZip(project: ProjectContext): Uint8Array<ArrayBuffer> {
@@ -131,9 +157,11 @@ export function createBackupZip(project: ProjectContext): Uint8Array<ArrayBuffer
     [OUTLINE_FILE_NAME]: readFileSync(join(dir, OUTLINE_FILE_NAME)),
     [DATA_DB_FILE_NAME]: readFileSync(join(dir, DATA_DB_FILE_NAME)),
   };
- // references/ 目录随包（存在则递归打包；不存在跳过——旧项目无目录不报错）
-  for (const rel of listReferenceDirFiles(dir)) {
-    zipEntries[`${REFERENCE_DIR_NAME}/${rel}`] = readFileSync(join(dir, REFERENCE_DIR_NAME, rel));
+ // 打包目录随包（存在则递归打包；不存在跳过——旧项目无目录不报错）
+  for (const dirName of PACKED_DIR_NAMES) {
+    for (const rel of listDirFiles(dir, dirName)) {
+      zipEntries[`${dirName}/${rel}`] = readFileSync(join(dir, dirName, rel));
+    }
   }
   return zipSync(zipEntries, { level: 6 });
 }
@@ -430,7 +458,8 @@ function isValidOutlineFile(parsed: unknown): boolean {
  * 备份包完整校验（自 import 校验顺序 3-7 提取，restore 与 import 共用）：
  *
  * 1. zip 解析（流式 + 解压总字节预算 200MB，zip 炸弹防御；失败 400「不是有效的项目备份包」）
- * 2. 条目白名单（只接受 PROJECT_EXPORT_FILE_NAMES 三文件名，逐名比对天然防 zip 路径穿越）
+ * 2. 条目白名单（只接受 PROJECT_EXPORT_FILE_NAMES 三文件名 + references/ 与 sessions/ 目录条目；
+ * 逐名比对天然防 zip 路径穿越；**目录条目为非必需**——旧备份包无 sessions/ 仍可导入）
  * 3. 三文件齐全
  * 4. 临时目录写入 → project.json / outline.json 顶层（JSON 损坏 / 不符 → 400）
  * 5. data.db 校验（**大小 > 0 → 打开成功 → user_version**）：
@@ -459,7 +488,11 @@ export function validateBackupPackage(zipData: Uint8Array): { entries: Record<st
   }
   const unknown = entryNames.filter((k) => !isAllowedBackupEntry(k));
   if (unknown.length > 0) {
-    throw new HttpError(400, "VALIDATION_ERROR", `备份包含未知条目: ${unknown.join(", ")}（只接受 ${PROJECT_EXPORT_FILE_NAMES.join("/")} 与 references/）`);
+    throw new HttpError(
+      400,
+      "VALIDATION_ERROR",
+      `备份包含未知条目: ${unknown.join(", ")}（只接受 ${PROJECT_EXPORT_FILE_NAMES.join("/")} 与 ${PACKED_DIR_NAMES.map((d) => `${d}/`).join("/")}）`,
+    );
   }
   const missing = PROJECT_EXPORT_FILE_NAMES.filter((f) => !(f in entries));
   if (missing.length > 0) {
@@ -585,12 +618,14 @@ function hasFileChangesSince(project: ProjectContext, since: Date): boolean {
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") return true;
   }
- // references/ 目录：内文件（含 .trash/）任一 mtime 晚于 limit → 有变更——
- // 本地新增/外部编辑 md 文档同样触发自动备份；目录缺失 = 无文件跳过；
+ // 打包目录（references/ 与 sessions/）：内文件任一 mtime 晚于 limit → 有变更——
+ // 本地新增/外部编辑 md 文档、新增聊天会话同样触发自动备份；目录缺失 = 无文件跳过；
  // 遍历竞态（读取中删除）→ 防御视为无变更（下一 tick 重检）
   try {
-    for (const rel of listReferenceDirFiles(project.root)) {
-      if (statSync(join(project.root, REFERENCE_DIR_NAME, rel)).mtimeMs > limit) return true;
+    for (const dirName of PACKED_DIR_NAMES) {
+      for (const rel of listDirFiles(project.root, dirName)) {
+        if (statSync(join(project.root, dirName, rel)).mtimeMs > limit) return true;
+      }
     }
   } catch {
  // 忽略（下一 tick 重检）
@@ -698,18 +733,9 @@ export function writeProjectFilesFromBackup(
     replaced.push(OUTLINE_FILE_NAME);
     writeFileAtomic(join(dir, DATA_DB_FILE_NAME), entries[DATA_DB_FILE_NAME]);
     replaced.push(DATA_DB_FILE_NAME);
- // references/ 目录整体覆盖（清空现有 → 写回备份条目；含 .trash/）——
+ // 打包目录整体覆盖（references/ 含 .trash/、sessions/ 会话 JSONL）——
  // 恢复/导入是「整体还原」语义，目录以备份内容为准，本地残留不混入
-    const refDir = join(dir, REFERENCE_DIR_NAME);
-    if (existsSync(refDir)) rmSync(refDir, { recursive: true, force: true });
-    for (const key of Object.keys(entries)) {
-      if (!key.startsWith(`${REFERENCE_DIR_NAME}/`)) continue;
-      const rel = key.slice(REFERENCE_DIR_NAME.length + 1);
-      if (rel === "" || rel.split("/").includes("..")) continue; // 白名单已校验，双保险
-      const target = join(refDir, ...rel.split("/"));
-      mkdirSync(dirname(target), { recursive: true });
-      writeFileAtomic(target, entries[key]);
-    }
+    for (const dirName of PACKED_DIR_NAMES) overwriteDirFromEntries(dir, dirName, entries);
   } catch (err) {
  // P1-2：失败路径日志（对齐「记日志暴露部分替换」承诺）——已替换/未替换文件清单 + 覆盖前快照名
     const notReplaced = targetNames.filter((n) => !replaced.includes(n));

@@ -579,13 +579,13 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
 
    // ---- 11. 停心跳 + 关流（error 后流立即关闭；done 自然结束——streamSSE run 的
    // finally 亦兜底 close，此处显式确保顺序：帧排入 writer 后 close，FIFO 保证送达） ----
-          heartbeatStop.abort(); // sleep 即时唤醒（sleepAbortable 监听该 signal）
-          await heartbeat;
-   // 注销在途登记**先于** close()：agent 循环已结束（本会话不再有写入者），
-   // 若放在 close 之后，`await` 的微任务窗口里 DELETE 会误报 409 SESSION_BUSY
-   // （客户端刚收到 done 立刻删会话的理论路径）
+   // 注销在途登记**紧跟 runAgent 返回**（此刻已无任何写入者）：其后还有
+   // `await heartbeat` / `await stream.close()` 两个 await——注销放后面会让
+   // 「客户端读到 done 帧立刻删会话」落进 409 SESSION_BUSY 的窗口
           leaveInFlightSession(sessionId);
           registered = false;
+          heartbeatStop.abort(); // sleep 即时唤醒（sleepAbortable 监听该 signal）
+          await heartbeat;
           await stream.close();
         } finally {
           if (registered) leaveInFlightSession(sessionId);

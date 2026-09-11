@@ -208,13 +208,14 @@
 //   outline.json
 //   data.db        // 导出前服务端 wal_checkpoint(TRUNCATE)——主文件为完整快照，无需附带 -wal/-shm
 //   references/**  // 参考资料目录（含 .trash/ 回收站文件）随包导出——项目自包含
+//   sessions/**    // 对话历史（一 session 一 JSONL）随包导出——聊天记录不丢
 ```
 
 **语义**：
 - 导出**当前打开项目**（无项目 → 409 `NO_PROJECT_OPEN`，与 `/config` 一致）。
 - zip 天然不含 DeepSeek key（key 存用户级配置 `~/.ai-editor/config.json`，不入项目文件）。
 - 三文件缺失任一 → 500 `INTERNAL_ERROR`（打开的项目三文件必然齐全，缺失即损坏，不导出半成品包）。
-- **references/ 目录**：存在则递归打包（条目名 `references/<相对路径>`，含 `.trash/`）；不存在则跳过（旧项目无目录不报错）。
+- **references/ 与 sessions/ 目录**：存在则递归打包（条目名 `<目录>/<相对路径>`，含 `.trash/`）；不存在则跳过（旧项目无目录不报错；旧备份包无 `sessions/` 仍可导入，恢复时该目录按「整体还原」清空）。
 
 ### POST /api/v1/project/import
 
@@ -245,7 +246,7 @@
 1. `content-length` 预检（> 50MB 快速拒绝，防超大请求先缓冲）+ `file.size` 复核
 2. 书名校验（防路径逃逸）
 3. zip 解压（fflate Unzip 流式 + **解压总字节预算 200MB**——zip 炸弹防御；解析失败/零条目 → 400 `VALIDATION_ERROR`「不是有效的项目备份包」）
-4. **条目白名单**：接受 `PROJECT_EXPORT_FILE_NAMES` 三文件名 + `references/` 前缀条目（`references/` 开头且不含 `..` 路径段才接受；未知条目严格拒绝——逐名比对天然防 zip 路径穿越）
+4. **条目白名单**：接受 `PROJECT_EXPORT_FILE_NAMES` 三文件名 + `references/` / `sessions/` 前缀条目（前缀开头且不含 `..` 路径段才接受；未知条目严格拒绝——逐名比对天然防 zip 路径穿越）
 5. 三文件齐全（缺任一 → 400）
 6. `project.json`/`outline.json` 顶层契约（JSON 可解析 + id/name/schema_version；`{id:"root",type:"root",schema_version,children[]}`）
 7. `data.db`：**文件大小 > 0 → 打开成功（非 SQLite/空文件 → 400 坏包）→ `user_version` === 当前版本，或 < 当前版本且有迁移路径**（搬入后首次 open 自动前向迁移）
