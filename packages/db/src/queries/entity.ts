@@ -763,7 +763,8 @@ export interface EntitySummaryStats {
   total: number;
  /** character：data.role 分布 */
   byRole?: Record<string, number>;
- /** character / hook：data.status 分布 */
+ /** **仅 hook**：data.status 分布（伏笔生命周期）——character 的 status 字段已移除（卡片 2.2），
+ * 该类型不再输出本键 */
   byStatus?: Record<string, number>;
  /** setting：data.rules 标签分布（分类由 tags 承接，数组展平计数） */
   byTags?: Record<string, number>;
@@ -771,7 +772,8 @@ export interface EntitySummaryStats {
   byType?: Record<string, number>;
  /** hook：data.payoff_timing 分布 */
   byPayoffTiming?: Record<string, number>;
- /** character：data.abilities 频率（取前 10，防 token 爆炸） */
+ /** character：**能力面板顶层分组名**频率（取前 10，防 token 爆炸）——叶子名多为「等级/熟练度」
+ * 类重复词，按叶子计数无意义（卡片 2.2）；条目形状沿用旧契约（`ability` = 分组名）保持输出稳定 */
   topAbilities?: { ability: string; count: number }[];
 }
 
@@ -801,16 +803,23 @@ function countBy(values: unknown[]): Record<string, number> {
   return out;
 }
 
-/** abilities 频率统计（数组元素展平计数，取前 limit 名；按频率降序、同频名称序） */
-function topAbilityCounts(rows: Array<Record<string, unknown>>, limit: number): { ability: string; count: number }[] {
+/**
+ * 能力面板**顶层分组名**频率统计（取前 limit 名；按频率降序、同频名称序——排序口径与
+ * 旧 abilities 版一致，输出形状不变）。
+ *
+ * 读端口径：面板结构宽校验（可能脏）→ `panelTopLevelNames` 内部自动过 `parseAbilityPanel`
+ *（非数组 → 空面板、坏元素跳过），脏数据不抛错、不阻断统计；缺 `ability_panel` 的角色不计入。
+ * 计数口径：每个顶层节点出现一次计 1（与旧「数组元素逐个计数」同形；同层重名会重复计入，
+ * 属面板路径的已知歧义，不在此处去重）。
+ */
+function topAbilityPanelCounts(
+  rows: Array<Record<string, unknown>>,
+  limit: number,
+): { ability: string; count: number }[] {
   const freq = new Map<string, number>();
   for (const row of rows) {
-    const abilities = parseDataColumn(row.data).abilities;
-    if (!Array.isArray(abilities)) continue;
-    for (const ability of abilities) {
-      if (typeof ability === "string" && ability !== "") {
-        freq.set(ability, (freq.get(ability) ?? 0) + 1);
-      }
+    for (const group of panelTopLevelNames(parseDataColumn(row.data).ability_panel)) {
+      freq.set(group, (freq.get(group) ?? 0) + 1);
     }
   }
   return [...freq.entries()]
@@ -822,8 +831,8 @@ function topAbilityCounts(rows: Array<Record<string, unknown>>, limit: number): 
 /**
  * 实体聚合统计（S6.3 工具 get_entity_summary 下沉，「聚合分析」）：
  * 指定类型实体的总数 + 类型专属分布。仅统计非软删实体；
- * 分布字段按类型稀疏出现：character→byRole/byStatus/topAbilities、setting→byTags、
- * location→byType、hook→byStatus/byPayoffTiming；缺字段（data 未填）不报错、不计入。
+ * 分布字段按类型稀疏出现：character→byRole/topAbilities（能力面板顶层分组名）、
+ * setting→byTags、location→byType、hook→byStatus/byPayoffTiming；缺字段（data 未填）不报错、不计入。
  */
 export function getEntitySummaryStats(db: Db, type: EntityType): EntitySummaryStats {
   const rows = queryDb(db)
@@ -837,8 +846,9 @@ export function getEntitySummaryStats(db: Db, type: EntityType): EntitySummarySt
   switch (type) {
     case "character":
       result.byRole = countBy(rows.map((r) => dataOf(r).role));
-      result.byStatus = countBy(rows.map((r) => dataOf(r).status));
-      result.topAbilities = topAbilityCounts(rows, 10);
+ // 卡片 2.2：character 的 status 字段已移除 → 不再输出 byStatus（hook 侧 byStatus 不受影响）；
+ // 能力分布改读面板顶层分组名（卡片 2.1 起 abilities 已迁为 ability_panel）
+      result.topAbilities = topAbilityPanelCounts(rows, 10);
       break;
     case "setting":
  // K2（2026-08）：分类由 data.tags 承接——分布统计标签（数组展平计数）

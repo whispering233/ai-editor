@@ -150,32 +150,37 @@ describe("search_entities", () => {
 });
 
 describe("get_entity_summary", () => {
-  it("character：total/byRole/byStatus/topAbilities（软删不计入）", () => {
+  it("character：total/byRole/topAbilities（面板顶层分组名；软删不计入）", () => {
     createEntity(db, {
       type: "character",
       name: "阿强",
-      data: { role: "主角", status: "alive", abilities: ["剑术", "轻功"] },
+      data: {
+        role: "主角",
+        ability_panel: [{ name: "火系", children: [{ name: "等级", value: 3 }] }, { name: "剑术" }],
+      },
     });
     createEntity(db, {
       type: "character",
       name: "阿珍",
-      data: { role: "配角", status: "alive", abilities: ["剑术"] },
+      data: { role: "配角", ability_panel: [{ name: "火系" }, { name: "水系" }] },
     });
     const dead = createEntity(db, {
       type: "character",
       name: "阿灭",
-      data: { role: "反派", status: "dead", abilities: ["毒术"] },
+      data: { role: "反派", ability_panel: [{ name: "毒术" }] },
     });
     softDeleteEntity(db, dead.id, T0); // 软删不计入统计
 
     const result = runGetEntitySummary(makeCtx(), { type: "character" });
     expect(result.total).toBe(2);
     expect(result.byRole).toEqual({ 主角: 1, 配角: 1 });
-    expect(result.byStatus).toEqual({ alive: 2 });
- // 能力分布按频率降序（同频按名称序）
+ // 卡片 2.2：character 不再输出 byStatus（status 字段已移除）
+    expect(result.byStatus).toBeUndefined();
+ // 顶层分组名跨角色累加；同频按名称序
     expect(result.topAbilities).toEqual([
-      { ability: "剑术", count: 2 },
-      { ability: "轻功", count: 1 },
+      { ability: "火系", count: 2 },
+      { ability: "剑术", count: 1 },
+      { ability: "水系", count: 1 },
     ]);
   });
 
@@ -211,6 +216,6 @@ describe("get_entity_summary", () => {
 
   it("空类型：total 0，分布字段为空对象", () => {
     const result = runGetEntitySummary(makeCtx(), { type: "character" });
-    expect(result).toEqual({ type: "character", total: 0, byRole: {}, byStatus: {}, topAbilities: [] });
+    expect(result).toEqual({ type: "character", total: 0, byRole: {}, topAbilities: [] });
   });
 });

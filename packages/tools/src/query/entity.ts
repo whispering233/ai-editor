@@ -56,8 +56,8 @@ export function runSearchEntities(ctx: ToolContext, args: SearchEntitiesArgs): S
 /**
  * 实体聚合统计（get_entity_summary(type) → 总数、角色分布、能力分布等）。
  * 透传 db getEntitySummaryStats：仅统计非软删实体；分布字段按类型
- * 稀疏出现（character→byRole/byStatus/topAbilities、setting→byTags（分类由
- * rules 标签承接）、location→byType、hook→byStatus/byPayoffTiming），缺字段不报错。
+ * 稀疏出现（character→byRole/topAbilities（**能力面板顶层分组名**；status 分布已随字段移除）、
+ * setting→byTags（分类由 tags 承接）、location→byType、hook→byStatus/byPayoffTiming），缺字段不报错。
  */
 export function runGetEntitySummary(ctx: ToolContext, args: GetEntitySummaryArgs): EntitySummaryStats {
   return getEntitySummaryStats(ctx.db, args.type);

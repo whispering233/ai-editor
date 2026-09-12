@@ -131,7 +131,7 @@ const queryToolDefs: ToolDefinition[] = [
   {
     name: "get_entity_summary",
     description:
-      "实体聚合统计：指定类型实体的总数与分布（character→角色/状态/能力分布、hook→状态/兑现时机分布、" +
+      "实体聚合统计：指定类型实体的总数与分布（character→角色分布/能力面板分组分布、hook→状态/兑现时机分布、" +
       "setting→分类分布、location→类型分布）。用于全局概览。",
     parameters: getEntitySummaryArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
