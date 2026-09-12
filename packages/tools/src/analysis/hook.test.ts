@@ -713,6 +713,27 @@ describe("hook 工具边界（data 未写回 / signal / current_position 口径�
     expect(fallback.current_chapter).toBe(3);
   });
 
+  it("末章软删 → 当前章基准取最后一个未软删章（不再虚报进度一章，卡片 2.7）", () => {
+    seedBase(null); // 无 current_position → 走退化分支
+    const hookId = makeHook("身世之谜", { status: "progressing", half_life: 1 });
+    plant(hookId, "ch-1"); // 埋设于第 1 章
+    advance(hookId, "ch-1"); // 最后推进于第 1 章
+
+    // 修复前：currentChapter = 3（含软删章的章号）→ dormancy = 2 > half_life=1 → stale 虚报
+    // 修复后：currentChapter = 2（最后一个可见章）→ dormancy = 1（严格大于才 stale）→ 不误报
+    const tree = readOutlineFile(dir);
+    findOutlineNode(tree, "ch-3")!.deleted = true;
+    findOutlineNode(tree, "sc-5")!.deleted = true; // 级联软删（服务端软删语义）
+    findOutlineNode(tree, "sc-6")!.deleted = true;
+    writeOutlineFile(dir, tree);
+
+    const overview = runAnalyzeHookHealth(makeCtx(), {});
+    expect(overview.current_chapter).toBe(2);
+    expect(overview.stale).toEqual([]); // 修复前会因 current=3 而进 stale
+    const lifecycle = runTraceHookLifecycle(makeCtx(), { hook_id: hookId })!;
+    expect(lifecycle.dormancy).toBe(1); // 2 - 1：基准 = 最后一个可见章
+  });
+
   it("signal 已中止 → AbortedError（name=AbortError）", () => {
     seedBase();
     const hookId = makeHook("身世之谜", { status: "planted" });

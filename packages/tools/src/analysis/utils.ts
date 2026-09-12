@@ -83,7 +83,8 @@ export interface ChapterIndex {
  * 当前章节（「当前章节」= project.json 的 current_position 所属章——
  * 写作进度而非规划终点，与伏笔/孤儿工具口径一致）：
  * 1. current_position 已设置且可推导章号 → 该章序号
- * 2. 未设置/节点不存在/无章号 → 退化树末章（合理默认）
+ * 2. 未设置/节点不存在/无章号 → 退化**最后一个未软删章**（合理默认；软删章不可作
+ *    写作进度基准——章号是位置序含软删章，可见性由本退化分支处理，卡片 2.7）
  */
   currentChapter: number | null;
 }
@@ -127,14 +128,20 @@ export function buildChapterIndex(ctx: ToolContext): ChapterIndex {
     return null;
   };
 
- // 当前章节：current_position 优先，退化树末章
+ // 当前章节：current_position 优先，退化**最后一个未软删章**（卡片 2.7：章号是位置序（含
+// 软删章、不重排），可见性必须由退化分支自己处理——否则末章软删后 currentChapter 仍指被
+// 删章的章号，虚报写作进度一章，连带 Hook age/dormancy 与孤儿诊断基准偏移）
   let currentChapter: number | null = null;
   const config = readProjectFile(ctx.outlineDir);
   if (config !== null && config.current_position !== null && config.current_position !== "") {
     currentChapter = chapterOf(config.current_position);
   }
   if (currentChapter === null) {
-    currentChapter = order.length > 0 ? order[order.length - 1].chapterNumber : null;
+    for (let i = order.length - 1; i >= 0; i--) {
+      if (deletedNodeIds.has(order[i].chapterId)) continue; // 软删章不可作写作进度基准
+      currentChapter = order[i].chapterNumber;
+      break;
+    }
   }
 
   return { chapterOf, currentChapter };
