@@ -495,12 +495,13 @@ components:
 
 **`character-workbench`（人物工作台，2026-09）** — 人物页（`#/characters` / `#/characters/:id`）是中栏内的 **master-detail**（无导航级变动，路由已是一级段）：
 
-- **左栏**（固定 240px，右侧 1px `{colors.hairline}`）= 人物列表，**它就是列表本身**（不再有独立人物列表页）：行 = 姓名（`{colors.primary}`）+ 角色定位（`{typography.caption}` + `{colors.tertiary}`）、32px 行高、`{rounded.sm}`、选中 = `{colors.surface-muted}` 灰面 + 文字不变色（**完全复用 `menu-item` / `menu-item-selected` 语言**）；行头控件行 = `search-input`（192px）+ 排序 `select` + `+ 新建`（`button-primary` → 弹窗）。排序默认 `updated_at` 降序（后端列表默认），可切 `name` / `created_at`。
+- **左栏**（固定 240px，右侧 1px `{colors.hairline}`）= 人物列表，**它就是列表本身**（不再有独立人物列表页）：行 = 姓名（`{colors.primary}`）+ 角色定位（`{typography.caption}` + `{colors.tertiary}`）、32px 行高、`{rounded.sm}`、选中 = `{colors.surface-muted}` 灰面 + 文字不变色（**完全复用 `menu-item` / `menu-item-selected` 语言**）；**行头两行**（240px 内物理上塞不下 192px 搜索框 + 下拉 + 按钮）：第一行 `search-input`（192px，独占一行）、第二行排序 `select`（内容宽 + `popupMatchSelectWidth={false}`）+ 主操作（「+ 新建」`button-primary`，卡 3.5 接入）。排序默认 `updated_at` 降序（后端列表默认），可切 `name` / `created_at`。
 - **右栏** = 详情，内容区自上而下：**页头**（`page-header` 壳不变）→ **双视图 tab**（「初始化数据」/「当前位置数据」，走 `tabs` 契约）→ **不可变区**（姓名 / 角色定位 / 描述）→ **可变区**（假名 / 性别 / 年龄 / 种族 / 动机 / 性格 + `panel-tree`）→ **`character-relations`（人物关系网，默认展开）** → **其他关联（默认折叠，标题带条数）**。
 - **层级语义**：**tab 只包「不可变区 + 可变区」**；关系网/其他关联在 tab **之下**，两个 tab 共享（关系不参与 `computeState`，与状态视图正交——放进 tab 会让用户以为"关系也会变"）。不可变字段不参与 Delta，两个 tab 显示值必然相同。
 - **只读语义**：tab 2（当前位置数据）的输入控件全部 `disabled`（**不隐藏**——字段位置稳定才好对比），并在区首给一行 `caption-text`「由变更记录累积，只读」。
 - **窄屏（<1024px）**：退化为两级——左栏列表全宽 → 点进详情全宽（详情页头左侧给返回入口）；与「本设计语言不对移动端另立规则」一致。
-- **空列表**：右栏 `empty-state` + 主操作「新建第一个角色」；`#/characters` 无 id 时自动选中第一个角色（有角色则重定向到 `#/characters/<id>`），避免"左栏有内容、右栏悬空"。
+- **全高双滚动布局（实现约定）**：工作台自带「左栏/右栏各自纵向滚动」的全高布局，**需抵消中栏内容区的 `p-6`（24px）内边距**（实现为 `-m-6 h-[calc(100%+3rem)]`）——改中栏内边距时必须同步此处（否则错位）。
+- **空列表**：右栏 `empty-state` + 主操作「新建第一个角色」；`#/characters` 无 id 时自动选中第一个角色（有角色则重定向到 `#/characters/<id>`），避免"左栏有内容、右栏悬空"。**自动选首个只在桌面态生效**（窄屏两级下会自动弹回详情、使「返回列表」失效）；窄屏两级：列表全宽 ↔ 详情全宽 + 返回入口。
 
 **`character-relations`（人物关系网）** — 行语言 = `data-row`（底部 1px `{colors.hairline-soft}`、hover `{colors.surface-soft}`）：按 `relationType` **分组**（组头 = `section-title` 字号档中的 caption 行 + 条数），行 = 对方姓名（可点击切选中该角色）+ 方向箭头（`→` / `←`，双向边标「双向」徽标）+ `metadata` 备注副行（`caption-text`）+ `icon-button` 删除；区头右侧 `button-default`「+ 添加人物关系」（目标端类型锁定 `character`）。**对称关系显示去重**（`ally`/`rival`/`family` 同时存在两条边时合并一行 + 「双向」），但**不自动建反边**（显示层去重，不做双写）。仅展示以本角色为一端的关系（后者 = 其他关联，见下）。
 
