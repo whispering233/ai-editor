@@ -6,58 +6,13 @@
 
 ---
 
-## 批次 2 · 人物数据模型（进行中）
-
-> **执行顺序**：2.5（面板纯函数，2.1/2.2 的前置）→ 2.1 → 2.2 → 2.3 → 2.4 → 2.6 → 2.7。
-
-- [ ] **2.1 character 字段改造（+`description`/`alias`（单值假名）/`race`、−`status`、`personality` 保留）+ 摘要口径**
-  - 契约：`docs/db/schema.md`「人物 data 分层」、`docs/api/30-api-entity.md`（character 字段清单与摘要口径）、`docs/design/10-data-model.md` §14（不可变字段不进变更记录字段下拉）。
-  - `shared/src/types/api.ts`：`characterDataSchema` +`description`/`alias`/`race`；**− `status`**；`personality` 保留；`ability_panel` 声明为 **`z.unknown().optional()`**（宽校验：绝不因面板结构拒绝写入，在报告里说明选择）。
-  - `db/src/queries/entity.ts` 的 `toSummary` character 分支：移除 `summary.status`；新增 `description`（截断 100，同 setting 口径）；能力摘要改**面板顶层分组名前 2**（用卡 2.5 的 `parseAbilityPanel` + `panelTopLevelNames`）。
-  - `client/src/lib/delta-create.ts`（**编译强制同步**）：`ENTITY_DATA_KEYS.character` 对齐新 schema keys；`entityDeltaFieldOptions` **排除不可变字段（`role`/`description`）**；`ARRAY_FIELDS.character` 去掉 `abilities`（仅留 `personality`）。
-  - `client/src/lib/entity-detail.ts` 的 `detailFieldsForType("character")`：改为 `role` / `description` / `alias` / `gender` / `age` / `race` / `personality` / `motivation`（**移除 `abilities`**——标签式能力已被面板取代；面板 UI 留批次 3.4）。
-  - `client/src/lib/entity-list.ts` / `EntityList.tsx`：若有行摘要/chips 引用 `abilities`/`status`，同步到新口径（能力 chips = 面板顶层分组名）。
-  - 不改：`filters.status` / `matchDataFilters` / hook 侧 `byStatus`（hook 生命周期依赖）；`getEntitySummary` 的 character 分支留卡 2.2。
-  - 测试：shared schema 用例（新字段通过、`status` 不再写出、脏面板不被拒）；db `toSummary` 用例（无 `status`、`description` 截断、面板顶层名前 2）；client `delta-create` 用例（不可变字段不在下拉、数组字段不含 `abilities`）。
-
-- [ ] **2.2 `get_entity_summary` 口径（character 移除 `byStatus`；`topAbilities` 改顶层分组名）**
-  - 契约：`docs/api/tool-calling.md`（`get_entity_summary` character 口径段）。
-  - 改：`db/src/queries/entity.ts` 的 `getEntitySummary` character 分支 + `topAbilityCounts`（改读面板顶层分组名）+ `packages/tools` 相关描述。
-  - 保留：hook 的 `byStatus` / `byPayoffTiming`；`filters.status`。
-  - 依赖：2.5（面板解析纯函数）。
-
-- [ ] **2.3 `007_character_ability_panel` 迁移（幂等、不覆盖已有面板）+ `SCHEMA_VERSION 6 → 7`**
-  - 契约：`docs/db/schema.md`（`status` 移除与 `abilities` 迁移段）。
-  - 改：新增 `db/src/migrations/007_character_ability_panel.ts`（无 DDL，仅 data JSON 变换：`abilities[]` → 顶层分组「能力」下每个标签一个叶子；幂等；已含 `ability_panel` 的行不动）+ `db/src/schema.ts` 的 `SCHEMA_VERSION` + `migrations/index.ts` 聚合 + 迁移用例。
-  - 验收：旧库 open 自动迁移；重复执行不产生重复叶子；有面板的角色不被动过。
-
-- [ ] **2.4 `computeState` 点分嵌套路径解析（仅标量 `set`/`update`）+ 防御**
-  - 契约：`docs/design/10-data-model.md` §4（字段路径）、`docs/db/schema.md`（delta 节）、`docs/api/50-api-delta.md`。
-  - 改：`db/src/queries/compute-state.ts` 的 `applyChange` 支持 `a.b.c` 逐层下钻（仅标量 `set`/`update`；`add`/`remove` 仍仅顶层）；非法结构/中间节点不存在 → 不抛错（按防御跳过或安全创建，口径写进报告）。
-  - 不得改变：四 op 语义、`from` 校验与 `skipped`/`conflicts`、软删可见性。
-  - 测试：面板叶子 Delta 累积用例（跨章）+ 结构非法防御用例。
-
-- [ ] **2.5 能力面板纯函数库（结构解析 / 顶层分组名 / 叶子路径枚举 / 模板深拷贝派生）+ 单测**
-  - 契约：`docs/db/schema.md`「人物 data 分层」（结构不变式：有 children = 分支不可赋值；无 children = 叶子可赋值；叶子 `value: string | number`；顺序 = 数组顺序）。
-  - 改：新增 shared 或 db 侧纯函数模块（位置由依赖方向决定，禁止 client 打包 schema）——含防御解析（非法结构 → 空面板）、顶层分组名提取（2.1/2.2 消费）、叶子路径枚举、结构深拷贝派生（模板/从角色复制，值作为默认值）。
-  - 测试：结构不变式、防御、派生快照独立性。
-
-- [ ] **2.6 delta 查询批量化（性能）**
-  - 契约：`docs/design/10-data-model.md` §4 代价登记；卡 1.4 oracle 实测：300 章 / 300 条 delta → `computeState` **219ms**（每章一次 `readOutlineFile`）。
-  - 改：`db/src/queries/compute-state.ts` 的收集改为一次性查询（`node_id IN 前缀章集合`）或内部传已读 tree 的变体；目标个位数毫秒。
-  - 测试：既有用例全绿 + 一条「不再逐章读文件」的可观测断言（如读文件次数 spy 或耗时下限放宽的批量化用例）。
-
-- [ ] **2.7 章序可见性口径（卡 1.8 oracle 发现的既存缺口）**
-  - 现状：`deriveChapterOrder`（`db/src/queries/outline-ops.ts:369`）**不过滤软删章**，章号是"文件位置序"；`ChapterIndex.currentChapter` 的退化分支因此可能返回**已软删末章**的章号——实测：末章软删后 `currentChapter = 2`（被删章）而 `chapterOf(sc-1) = 1`。该值直接喂给 `analyze_hook_health.current_chapter`、伏笔 `age`/`dormancy`、孤儿诊断的"当前最新章"基准 → **删尾部章节会虚报写作进度一章**，指标随之偏移。
-  - 改：`ChapterIndex` 的当前章退化分支取**最后一个未软删章**（或与 `chapterOf` 语义对齐）；`deriveChapterOrder` 是否计入软删章需在 `docs/db/schema.md` / `docs/design/10-data-model.md` 明确口径（当前是隐式"位置序"，全链自洽但与"可见"不同义）。
-  - 测试：末章软删 → 退化到最后一个可见章；伏笔/孤儿指标随之为基准的用例。
-
 ## 批次 3 · 人物页 UI（未开工）
 
 - [ ] 3.1 master-detail 宿主 + 左栏列表（搜索 / 排序 / 选中 / 空态 / 自动选首个 / 窄屏两级）
 - [ ] 3.2 双视图 tab（初始化数据 / 当前位置数据；tab 2 只读；`ComputePreview` 归并入 tab 2，保留手动选节点；`conflicts` 标注照搬）
 - [ ] 3.3 字段三分渲染（不可变 / 可变分区；`description` 必填校验；详情页表单）
 - [ ] 3.4 `panel-tree` 控件（结构编辑 + 叶子值 + 拖拽 + 只读态 + 模板/复制入口）
+  - **含**：把面板**叶子路径**接入「+ 新建变更」字段下拉（`lib/delta-create.ts` 现以 `NON_DELTA_FIELDS` 排除整树，需按当前实体的面板结构动态展开叶子路径，用 shared `abilityPanelFieldPath` 拼前缀）；结构编辑需内联提示「名字含 `.` 不可寻址 / 同层重名」（口径见 `docs/db/schema.md`）。
 - [ ] 3.5 新建人物弹窗（必填 姓名 / 角色定位 / 描述；重名软提示；面板「空白 / 内置模板 / 从角色复制」；提交后自动选中）
 - [ ] 3.6 关系网 + 其他关联分区（分组 + 对称去重 + 建边入口收窄 + 折叠区）
 
@@ -73,4 +28,6 @@
 - `packages/client/src/lib/hook-panel.ts` 中「软删场景上的 plants/appears_in 不参与 R1/R2」用例属**口径锁**（当前分支不可观测，防未来绕过 `listRelations` 端点过滤），可在下次路过时在用例名/注释里标注。
 - **`currentHookStatus` 在 client 侧已无生产消费者**（卡 1.9 删了 `fromStatus` 后仅其单测在用）——要么后续删掉（含单测），要么明确保留理由。
 - **通用「+ 新建变更」表单仍可为 hook 的 `status` 造 `op=update`**（`lib/delta-create.ts`）：手动路径会产生 CAS 假冲突，属「手动编辑 data 不产生 Delta 属正常」的对偶情形；如需彻底闭环则收窄字段白名单，暂接受。
+- `listDeltasByNodes` 的 JSDoc 可补一句「调用方负责传章 id（层级收窄不在本函数）」——它是通用原语，传场景 id 也会照实返回（当前唯一调用点正确）。
+- `search_entities` 工具描述仍泛写「status 精确匹配 data.status」；character 已无该字段（文档已注明仅 hook 有意义），下次路过时补一句。
 - `packages/tools/src/executor/hook.test.ts` 有一条用例标题仍写「delta 记 status → progressing（**from=当前状态**）」，与 `op=set` 形态不符（断言本身正确）——下次路过时改标题。
