@@ -66,8 +66,11 @@ get_outline_path(node_id)
 compute_state(target_type, target_id, at_node_id)
   → 实体到达指定节点时的累积状态
   用途：AI 说"张三在第30章时的战力是多少"
-  语义：只沿大纲树父链（根 → at_node_id）累积已确认 Delta：
-        节点间按树路径顺序、同一节点内按 order 双层排序；plot_edge 连线不参与；
+  语义（2026-09 修订：章序前缀累积）：状态 = 实体初始 data + 「章序 ≤ 目标进度章」的全部已确认 Delta
+        （跨卷/跨章累积）——目标节点 → 进度章：章→自身、场景→所属章、
+        卷→该卷最后一个未软删章、root→初始值；
+        排序：先按章序（全局先序，树序即阅读序）→ 同一章内按 order 递增；plot_edge 不参与；
+        注意：appliedDeltas 随进度增长（含前面所有章的 Delta，依赖截断机制）；
         **at_node_id 不限层级**（章/场景均可——「第3章第2场时他什么状态」是合法查询）；
         op=update 校验当前值等于 from，不匹配**跳过该 change 并继续累积**，结果在
         conflicts 中标注 { field, expected, actual }（不再返回 409——手动编辑 data 是

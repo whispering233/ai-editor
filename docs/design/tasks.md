@@ -26,6 +26,13 @@
   - 验收：场景节点建 `plants` → 400；HookPanel 下拉无场景/卷；大纲页伏笔徽标只出现在章行；弃用伏笔在无 `current_position` 时锚到树末章；推进/回收/废弃三条路径均不产生非章锚点 Delta（含无当前位置、无埋点节点的退化分支）。
   - 测试：`packages/server/src/routes/relation.test.ts`、`packages/tools/src/analysis/hook.test.ts`、`packages/client/src/lib/hook-panel.test.ts` 补用例。
 
+- [ ] **1.4 computeState 章序前缀累积（语义修订 A，批次 2/3 前置）**
+  - 背景：锚点仅章后父链至多含一章 → 跨章累积失效（`compute-state.ts:114/123`），双视图会退化为"初始值 + 当前章"。契约已改为章序前缀（`docs/design/10-data-model.md` §4、`docs/api/50-api-delta.md`、`docs/db/schema.md`）。
+  - 后端：`packages/db/src/queries/compute-state.ts` 收集口径由「父链」改为「**章序前缀**」——复用 `deriveChapterOrder`（`packages/db/src/queries/outline-ops.ts:369`）求全局章序；目标节点 → 进度章映射（章→自身 / 场景→所属章 / 卷→该卷最后一个未软删章 / root→初始值）；应用序 = （章序, `order`）。
+  - **不得改变**：四 op 语义、`update` 的 `from` 校验 + `skipped`/`conflicts` 标注、软删可见性规则、`plot_edge` 不参与。
+  - 测试（验收硬项）：`compute-state.test.ts` 既有「卷锚点累积」用例改写为新口径 + 新增跨章累积用例（`ch-10` 与 `ch-20` 的 Delta 在 `ch-30` 查询**可见**）+ 场景/卷/root 映射用例；`packages/server/src/routes/delta.test.ts:577` 的「父链唯一：兄弟章的 Delta 不参与计算」用例**必须语义反转**。
+  - 风险登记：`appliedDeltas` 随进度增长（前面所有章的 Delta 均在列表），依赖现有截断机制。
+
 ## 批次 2 · 人物数据模型（未开工）
 
 - [ ] 2.1 character 字段改造（+`description`/`alias`（单值假名）/`race`、−`status`、`personality` 保留）+ 摘要口径（`description` 截断 100、能力面板顶层分组名前 2）

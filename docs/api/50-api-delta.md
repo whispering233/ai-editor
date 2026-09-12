@@ -88,7 +88,8 @@ nodeId: string;
 {
   target_type: string;          // 目标实体类型
   target_id: string;            // 目标实体 ID
-  at_node_id: string;           // 到达的大纲节点 ID（**不限层级**——章/场景均可，服务端自动计算根 → at_node 的树路径）
+  at_node_id: string;           // 目标节点（**不限层级**）——映射为「进度章」：章→自身；场景→所属章；
+                                //   卷→该卷最后一个未软删章；root→初始值（0 章）
 }
 
 // Res: 200
@@ -97,7 +98,7 @@ nodeId: string;
   targetId: string;
   atNodeId: string;
   state: Record<string, unknown>;   // 初始 data + 路径上所有 Delta 累积后的结果
-  appliedDeltas: {                   // 参与计算的 Delta 列表
+  appliedDeltas: {                   // 参与计算的 Delta 列表（**章序 ≤ 进度章的全部章**，随进度增长）
     nodeId: string;
     description: string;
     changes: unknown[];
@@ -115,11 +116,13 @@ nodeId: string;
 // Res: 404
 { error: { code: "OUTLINE_NODE_NOT_FOUND" } }  // at_node_id 不存在（已 purge）
 
-// Delta 累积规则：
-//   到达目标节点的状态 = 实体初始 data + 树路径上所有 Delta 累积
-//   双层排序：节点间按树路径顺序（根 → at_node）；同一节点内按 order 递增
+// Delta 累积规则（2026-09 修订：章序前缀累积，取代原「只沿树父链」）：
+//   到达目标节点的状态 = 实体初始 data + 「章序 ≤ 目标进度章」的**全部**已确认 Delta
+//     （跨卷/跨章累积；目标节点 → 进度章的映射见 at_node_id）
+//   双层排序：先按章序（全局先序遍历序，树序即阅读序）→ 同一章内按 order 递增
 //   字段定位：field 为点分嵌套路径时逐层下钻（如 ability_panel.火系.等级）；
 //            嵌套路径仅支持标量 set/update——add/remove 仅顶层字段
+//   已知代价：appliedDeltas 随写作进度增长（含前面所有章的 Delta）
 //   set:     直接替换值
 //   update:  旧值→新值（校验当前值等于 from；不匹配**跳过该 change 并继续累积**，
 //            在 skipped / conflicts 中标注——手动编辑 data 不产生 Delta 属正常用户
