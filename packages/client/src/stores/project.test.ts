@@ -105,6 +105,32 @@ describe("loadConfig 的错误区分（无项目 vs 网络失败）", () => {
   });
 });
 
+describe("loadConfig 在途复用（多调用点并发 → 只发一次请求，且都等到真实结果）", () => {
+  it("两个并发调用共享同一 Promise（「加载中」不再被误报为「已完成」）", async () => {
+    let resolveConfig!: (c: ProjectConfig) => void;
+    mocked.getProjectConfig.mockImplementation(
+      () =>
+        new Promise<ProjectConfig>((resolve) => {
+          resolveConfig = resolve;
+        }),
+    );
+
+    const first = useProjectStore.getState().loadConfig();
+    const second = useProjectStore.getState().loadConfig();
+    expect(mocked.getProjectConfig).toHaveBeenCalledTimes(1);
+
+    resolveConfig(sampleConfig);
+    await Promise.all([first, second]);
+ // 两个调用都拿到真实结果（而非 null）
+    expect(useProjectStore.getState().config).toEqual(sampleConfig);
+    expect(useProjectStore.getState().configLoading).toBe(false);
+ // 请求落地后再调 → 重新发（复用只在在途期间）
+    mocked.getProjectConfig.mockResolvedValue(sampleConfig);
+    await useProjectStore.getState().loadConfig();
+    expect(mocked.getProjectConfig).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("openProjectAt（打开项目 + rebuilt 提示）", () => {
   it("成功 → config 更新 + loadOutline 拉取", async () => {
     mocked.openProject.mockResolvedValue({

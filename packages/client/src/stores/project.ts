@@ -68,6 +68,11 @@ interface ProjectState {
   saveAgents: (content: string) => Promise<void>;
 }
 
+/** 配置加载在途 Promise（loadConfig 的并发语义：共享同一在途请求）——
+ * 不能只靠 `configLoading` 早退：早退会把「加载中」误报为「已完成」，await 的调用方拿到 null 当作
+ * 「无项目」（开机直达上次书籍的首帧判定就要等真实结果）。*/ 
+let configPromise: Promise<void> | null = null;
+
 export const useProjectStore = create<ProjectState>((set, get) => ({
   config: null,
   configLoading: false,
@@ -83,20 +88,27 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   agentsError: null,
   agentsExternalModified: false,
 
-  loadConfig: async () => {
- // 并发防抖：已在加载中则跳过
-    if (get().configLoading) return;
-    set({ configLoading: true });
-    try {
-      const config = await getProjectConfig();
-      set({ config, loadError: null });
-    } catch (err) {
+  loadConfig: () => {
+ // 在途复用：同一请求共用一个 Promise（多调用点并发时只发一次，且都等到真实结果）
+    if (configPromise !== null) return configPromise;
+    const promise = (async () => {
+      set({ configLoading: true });
+      try {
+        const config = await getProjectConfig();
+        set({ config, loadError: null });
+      } catch (err) {
  // 区分「未打开项目」（NO_PROJECT_OPEN，页面显示开/建引导）与网络/其他失败
-      const code = err instanceof ApiError ? err.code : "CLIENT_NETWORK_ERROR";
-      set({ config: null, loadError: code });
-    } finally {
-      set({ configLoading: false });
-    }
+        const code = err instanceof ApiError ? err.code : "CLIENT_NETWORK_ERROR";
+        set({ config: null, loadError: code });
+      } finally {
+        set({ configLoading: false });
+      }
+    })();
+    configPromise = promise;
+    void promise.finally(() => {
+      if (configPromise === promise) configPromise = null;
+    });
+    return promise;
   },
 
   updateConfig: async (patch) => {

@@ -4,6 +4,7 @@ import { StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { useEffect } from "react";
 import { navigate, useHashRoute, type Route } from "./hooks/use-route";
+import { useEnterLastBook } from "./hooks/use-enter-last-book";
 import { AppShell } from "./components/AppShell";
 import { AntdProvider } from "./components/AntdProvider";
 import { ErrorBoundary } from "./components/feedback/ErrorBoundary";
@@ -131,6 +132,8 @@ function renderPage(route: Route): ReactNode {
 
 function App() {
   const route = useHashRoute();
+  // 首帧直达上次书籍：服务端启动已按创作根 lastProject 打开上次那本书 → 书架路由直接进概览
+  useEnterLastBook();
   return <AppShell route={route}>{renderPage(route)}</AppShell>;
 }
 
