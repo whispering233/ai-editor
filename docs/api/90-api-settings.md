@@ -17,7 +17,7 @@
   provider: string;          // 当前激活 provider（来自 pi，缺省由 pi 解析）
   model: string;             // 当前模型 id
   thinkingLevel: string;     // "off"|"minimal"|"low"|"medium"|"high"|"xhigh"|"max"（缺省由 pi 决定）
-  providers: [               // 全量 provider（含未配置认证的：设置页需要展示并引导录入 key）
+  providers: [               // 全量 provider（含未配置认证的：设置页三级导航只列已配置 + 当前激活 + 刚点选的家，「添加」列表用未配置的家）
     {
       id: string;            // pi provider id（deepseek / opencode-go / anthropic / …）
       displayName: string;   // pi provider 名称
@@ -29,7 +29,8 @@
     }
   ]
 }
-// 聊天模型下拉按 authConfigured 过滤：未配置认证的 provider 整组不可选
+// 聊天模型下拉按 authConfigured 过滤：未配置认证的 provider 整组不可选（当前激活组除外，防困死）
+// 设置页三级导航同理：authConfigured ∪ 当前激活 ∪ 刚点选的家（provider-icon 取品牌 logo）
 ```
 
 ### PUT /api/v1/settings/llm

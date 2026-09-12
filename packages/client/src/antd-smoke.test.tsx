@@ -8,6 +8,7 @@ import { ConfigProvider, theme } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import { Bubble, Sender } from "@ant-design/x";
 import { AntdProvider } from "./components/AntdProvider";
+import { ProviderIcon } from "./components/settings/provider-icon";
 
 describe("antd 基座冒烟", () => {
   it("AntdProvider（根接线：zhCN + Notion 暖灰 token 覆盖 + App 上下文 + 主题跟随）包裹可渲染", () => {
@@ -34,5 +35,14 @@ describe("antd 基座冒烟", () => {
     const html = renderToString(<Bubble role="assistant" content={<span>**粗体**纯文本</span>} />);
     expect(html).toContain("纯文本");
     expect(renderToString(<Sender placeholder="输入…" />)).toContain("输入");
+  });
+
+  it("provider-icon：命中品牌 logo 走 svg 精灵 <use>，自定义 provider 回退 antd 图标", () => {
+    expect(renderToString(<ProviderIcon id="deepseek" />)).toContain(
+      "/provider-icons.svg#deepseek",
+    );
+    const fallback = renderToString(<ProviderIcon id="my-gateway" />);
+    expect(fallback).not.toContain("provider-icons.svg");
+    expect(fallback).toContain("anticon"); // antd ApiOutlined
   });
 });
