@@ -37,7 +37,7 @@ import { fetchSSE } from "../hooks/use-sse";
 import {
   describeProposalActionError,
   describeStreamError,
-  parseContextBudget,
+  parseContextUsage,
   useChatStore,
   type ProposalCard,
 } from "./chat";
@@ -122,7 +122,8 @@ afterEach(() => {
     streaming: false,
     streamError: null,
     focusContext: null,
-    contextBudget: null,
+    contextUsage: null,
+    statusNote: null,
     disconnected: false,
     proposals: [],
     streamTools: [],
@@ -283,9 +284,8 @@ describe("setCurrentSession / newSession / clearSessions（U5：选择即恢复�
       disconnected: true,
       focusContext: { focus_entity_type: "character", focus_entity_id: "char-1" },
       proposals: [{ proposalId: "prop-1", type: "propose_create_entity", status: "pending" }],
- // 瞬时用量/预算也属「旧会话视图」，必须一并清零（占用条不得显示上一会话的数值）
-      lastUsage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
-      contextBudget: { history: 150000, total: 151643 },
+ // 瞬时占用也属「旧会话视图」，必须一并清零（占用条不得显示上一会话的数值）
+      contextUsage: { percent: 12, tokens: 1200, contextWindow: 10000 },
     });
     useChatStore.getState().newSession();
     const s = useChatStore.getState();
@@ -295,20 +295,19 @@ describe("setCurrentSession / newSession / clearSessions（U5：选择即恢复�
     expect(s.disconnected).toBe(false);
     expect(s.focusContext).toBeNull();
     expect(s.proposals).toEqual([]);
-    expect(s.lastUsage).toBeNull();
-    expect(s.contextBudget).toBeNull();
+    expect(s.contextUsage).toBeNull();
   });
 
-  it("切换会话清零瞬时用量/预算（旧会话数值不得残留到新视图）", () => {
+  it("切换会话清零瞬时占用（旧会话数值不得残留到新视图）", () => {
     mocked.getSessionMessages.mockResolvedValue({ sessionId: "sess-2", messages: [] });
     useChatStore.setState({
       currentSessionId: "sess-1",
-      lastUsage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
-      contextBudget: { history: 150000, total: 151643 },
+      contextUsage: { percent: 12, tokens: 1200, contextWindow: 10000 },
+      statusNote: "上下文已压缩",
     });
     useChatStore.getState().setCurrentSession("sess-2");
-    expect(useChatStore.getState().lastUsage).toBeNull();
-    expect(useChatStore.getState().contextBudget).toBeNull();
+    expect(useChatStore.getState().contextUsage).toBeNull();
+    expect(useChatStore.getState().statusNote).toBeNull();
   });
 
   it("切换会话中止在途 SSE 流（旧流事件不得污染新会话视图）", () => {
@@ -342,8 +341,7 @@ describe("setCurrentSession / newSession / clearSessions（U5：选择即恢复�
       sessions: [sampleSession, { ...sampleSession, id: "sess-2" }],
       currentSessionId: "sess-1",
       messages: [makeMsg({ id: "m1" })],
-      lastUsage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
-      contextBudget: { history: 100, total: 200 },
+      contextUsage: { percent: 6, tokens: 12, contextWindow: 200 },
     });
 
     await useChatStore.getState().deleteSession("sess-1");
@@ -353,8 +351,7 @@ describe("setCurrentSession / newSession / clearSessions（U5：选择即恢复�
     expect(s.sessions?.map((x) => x.id)).toEqual(["sess-2"]);
     expect(s.currentSessionId).toBeNull(); // 当前会话被删 → 新会话
     expect(s.messages).toEqual([]);
-    expect(s.lastUsage).toBeNull();
-    expect(s.contextBudget).toBeNull();
+    expect(s.contextUsage).toBeNull();
     expect(useUiStore.getState().toast?.text).toBe("会话已删除");
   });
 
@@ -415,13 +412,11 @@ describe("setCurrentSession / newSession / clearSessions（U5：选择即恢复�
     useChatStore.setState({
       currentSessionId: "sess-1",
       disconnected: true,
-      lastUsage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
-      contextBudget: { history: 150000, total: 151643 },
+      contextUsage: { percent: 12, tokens: 1200, contextWindow: 10000 },
     });
     useChatStore.getState().clearSessions();
     const s = useChatStore.getState();
-    expect(s.lastUsage).toBeNull();
-    expect(s.contextBudget).toBeNull();
+    expect(s.contextUsage).toBeNull();
     expect(s.sessions).toBeNull();
     expect(s.currentSessionId).toBeNull();
     expect(s.sessionsError).toBeNull();
@@ -454,8 +449,8 @@ describe("focus context 与断连标记（U5）", () => {
   });
 });
 
-describe("describeStreamError（U5：错误文案映射）", () => {
-  it("HTTP 404 → 通用防御文案「聊天服务暂不可用」（S8.1：S7 已实现，分支仅防旧构建/服务未起）", () => {
+describe("describeStreamError（错误文案映射）", () => {
+  it("HTTP 404 → 通用防御文案「聊天服务暂不可用」（旧构建/服务未起）", () => {
     expect(describeStreamError("CLIENT_NETWORK_ERROR", "SSE 请求失败（HTTP 404）")).toBe(
       "聊天服务暂不可用",
     );
@@ -467,17 +462,24 @@ describe("describeStreamError（U5：错误文案映射）", () => {
     );
   });
 
-  it("非 2xx 无 REST 包裹（proxy 500）→ 透传 HTTP 状态文案，不误判「连接失败」（S8.1 oracle S2）", () => {
+  it("非 2xx 无 REST 包裹（proxy 500）→ 透传 HTTP 状态文案，不误判「连接失败」", () => {
     expect(describeStreamError("CLIENT_NETWORK_ERROR", "SSE 请求失败（HTTP 500）")).toBe(
       "SSE 请求失败（HTTP 500）",
     );
   });
 
-  it("服务端 error 事件 → 透传 message", () => {
-    expect(describeStreamError("AGENT_TIMEOUT", "单轮超时")).toBe("单轮超时");
+  it("服务端错误码 → 可执行文案（CHAT_BUSY / SESSION_BUSY / LLM_API_KEY_MISSING / SESSION_NOT_FOUND / NO_PROJECT_OPEN）", () => {
+    expect(describeStreamError("CHAT_BUSY", "busy")).toContain("正在生成的对话");
+    expect(describeStreamError("SESSION_BUSY", "busy")).toContain("正在生成中");
+    expect(describeStreamError("LLM_API_KEY_MISSING", "no key")).toContain("设置页");
+    expect(describeStreamError("SESSION_NOT_FOUND", "gone")).toContain("新建会话");
+    expect(describeStreamError("NO_PROJECT_OPEN", "none")).toContain("未打开项目");
+  });
+
+  it("未知码 → 透传 message（agent_end 的 stopReason=error 走此分支）", () => {
+    expect(describeStreamError("AGENT_ERROR", "模型调用失败：429")).toBe("模型调用失败：429");
   });
 });
-
 describe("describeProposalActionError（S8.2：提案动作非错误文案）", () => {
   it("INTERNAL_ERROR（500 执行失败）→ 引导重新生成提案", () => {
     expect(describeProposalActionError("INTERNAL_ERROR", "提案执行失败")).toBe(
@@ -496,7 +498,7 @@ describe("describeProposalActionError（S8.2：提案动作非错误文案）", 
   });
 });
 
-describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
+describe("sendMessage（POST /chat + SSE 事件映射，契约 = docs/api/80-api-chat.md）", () => {
   it("发送 → streaming=true + 乐观追加 user 消息与 AI 占位；body 仅 message（新会话）", () => {
     useChatStore.getState().sendMessage("你好");
     const s = useChatStore.getState();
@@ -541,198 +543,219 @@ describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
     expect(useChatStore.getState().messages).toEqual([]);
   });
 
-  it("text 事件 → delta 追加到流式 AI 消息（直接追加，无打字效果）", () => {
+  it("session 首帧 → 记录 currentSessionId（新会话续聊身份）", () => {
     useChatStore.getState().sendMessage("你好");
     const { onEvent } = sseOptions();
-    onEvent("text", { delta: "我" });
-    onEvent("text", { delta: "好" });
-    onEvent("ping", {});
-    expect(useChatStore.getState().messages[1]).toMatchObject({
-      role: "assistant",
-      content: "我好",
-    });
+    onEvent("session", { session_id: "sess-new-1" });
+    expect(useChatStore.getState().currentSessionId).toBe("sess-new-1");
+    // 非法负载忽略（不写入空串）
+    onEvent("session", { session_id: "" });
+    expect(useChatStore.getState().currentSessionId).toBe("sess-new-1");
   });
 
-  it("tool_call / tool_result 事件 → 运行时工具记录（成对更新；result 为字符串——S8.1 对齐 S7.6 帧）", () => {
+  it("message_update 的 text_delta → 正文累积；ping/未知事件不改变状态", () => {
     useChatStore.getState().sendMessage("你好");
     const { onEvent } = sseOptions();
-    onEvent("tool_call", { tool: "get_entity", args: { id: "char-1" }, id: "call-1" });
+    onEvent("message_update", { assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "我" } });
+    onEvent("ping", {});
+    onEvent("turn_start", {});
+    onEvent("message_update", { assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "好" } });
+    expect(useChatStore.getState().messages[1]).toMatchObject({ role: "assistant", content: "我好" });
+  });
+
+  it("message_update 的 thinking 事件 → 全量累积 + 流式标记（thinking_end 收尾）", () => {
+    useChatStore.getState().sendMessage("你好");
+    const { onEvent } = sseOptions();
+    onEvent("message_update", { assistantMessageEvent: { type: "thinking_start", contentIndex: 0 } });
+    expect(useChatStore.getState().messages[1].thinkingStreaming).toBe(true);
+    onEvent("message_update", { assistantMessageEvent: { type: "thinking_delta", contentIndex: 0, delta: "先看" } });
+    onEvent("message_update", { assistantMessageEvent: { type: "thinking_delta", contentIndex: 0, delta: "大纲" } });
+    expect(useChatStore.getState().messages[1].thinkingText).toBe("先看大纲");
+    // thinking_end：帧里只有 240 字预览，客户端保留已累积的全量并收尾折叠
+    onEvent("message_update", {
+      assistantMessageEvent: { type: "thinking_end", contentIndex: 0, content: "先看大纲", contentLength: 4 },
+    });
+    const m = useChatStore.getState().messages[1];
+    expect(m.thinkingText).toBe("先看大纲");
+    expect(m.thinkingStreaming).toBe(false);
+  });
+
+  it("message_end（assistant）→ 终态投影为权威（正文/工具调用/思维链预览）+ 保留全量思维链", () => {
+    useChatStore.getState().sendMessage("你好");
+    const { onEvent } = sseOptions();
+    onEvent("message_update", { assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "草稿" } });
+    onEvent("message_update", { assistantMessageEvent: { type: "thinking_delta", contentIndex: 0, delta: "推理全文" } });
+    onEvent("message_end", {
+      message: {
+        role: "assistant",
+        content: "终态正文",
+        thinking: [{ preview: "推理全文", deferred: true, blockIndex: 0, length: 4 }],
+        toolCalls: [{ id: "call-1", name: "get_entity", arguments: { id: "char-1" } }],
+        createdAt: "2026-08-01T10:00:00Z",
+      },
+    });
+    const m = useChatStore.getState().messages[1];
+    expect(m.content).toBe("终态正文"); // 权威覆盖流式累积
+    expect(m.thinkingText).toBe("推理全文");
+    expect(m.thinking).toEqual([{ preview: "推理全文", deferred: true, blockIndex: 0, length: 4 }]);
+    expect(m.toolCalls).toEqual([{ id: "call-1", name: "get_entity", arguments: { id: "char-1" } }]);
+  });
+
+  it("tool_execution_start/end（AUTO 工具）→ 工具卡 running→ok；无 details 不入提案", () => {
+    useChatStore.getState().sendMessage("你好");
+    const { onEvent } = sseOptions();
+    onEvent("tool_execution_start", { toolCallId: "call-1", toolName: "get_entity", args: { id: "char-1" } });
     expect(useChatStore.getState().streamTools).toEqual([
       { id: "call-1", tool: "get_entity", args: { id: "char-1" }, status: "running" },
     ]);
- // S7.6 帧事实（chat.test.ts）：result 为字符串——JSON.stringify 结果或错误文案，非对象
-    onEvent("tool_result", {
-      tool: "get_entity",
-      result: JSON.stringify({ name: "张三" }),
-      id: "call-1",
+    onEvent("tool_execution_end", {
+      toolCallId: "call-1",
+      toolName: "get_entity",
+      result: { content: [{ type: "text", text: '{"name":"张三"}' }] },
+      isError: false,
     });
     expect(useChatStore.getState().streamTools[0]).toMatchObject({
       status: "ok",
-      result: JSON.stringify({ name: "张三" }),
+      result: '{"name":"张三"}',
+      isError: false,
+    });
+    expect(useChatStore.getState().proposals).toEqual([]);
+  });
+
+  it("tool_execution_end 失败 → 工具卡 error（isError 透传）", () => {
+    useChatStore.getState().sendMessage("你好");
+    const { onEvent } = sseOptions();
+    onEvent("tool_execution_start", { toolCallId: "call-2", toolName: "detect_conflicts", args: {} });
+    onEvent("tool_execution_end", {
+      toolCallId: "call-2",
+      toolName: "detect_conflicts",
+      result: { content: [{ type: "text", text: "工具执行失败：boom" }] },
+      isError: true,
+    });
+    expect(useChatStore.getState().streamTools[0]).toMatchObject({
+      status: "error",
+      isError: true,
+      result: "工具执行失败：boom",
     });
   });
 
-  it("proposal 事件 → 提案卡累积（pending）", () => {
+  it("tool_execution_end（PROPOSAL 工具）→ details 载荷生成提案卡", () => {
     useChatStore.getState().sendMessage("你好");
     const { onEvent } = sseOptions();
-    onEvent("proposal", {
-      proposal_id: "prop-1",
-      type: "propose_update_entity",
-      preview: { from: 1, to: 2 },
+    onEvent("tool_execution_start", {
+      toolCallId: "call-3",
+      toolName: "propose_create_entity",
+      args: { type: "character", name: "张三" },
+    });
+    onEvent("tool_execution_end", {
+      toolCallId: "call-3",
+      toolName: "propose_create_entity",
+      result: {
+        content: [{ type: "text", text: "提案已发出" }],
+        details: {
+          proposal_id: "prop_1",
+          type: "propose_create_entity",
+          preview: { summary: "创建角色张三" },
+        },
+      },
+      isError: false,
     });
     expect(useChatStore.getState().proposals).toEqual([
       {
-        proposalId: "prop-1",
-        type: "propose_update_entity",
-        preview: { from: 1, to: 2 },
-        status: "pending",
-      },
-    ]);
-  });
-
-  it("done 事件带 usage → 记录 lastUsage（需求 3：上下文占用显示的数据源）", async () => {
-    mocked.listSessions.mockResolvedValue([sampleSession]);
-    useChatStore.getState().sendMessage("你好");
-    const { onEvent } = sseOptions();
-    onEvent("done", { session_id: "sess-1", usage: { prompt_tokens: 1200, completion_tokens: 300, total_tokens: 1500 } });
-    expect(useChatStore.getState().lastUsage).toEqual({ prompt_tokens: 1200, completion_tokens: 300, total_tokens: 1500 });
- // 无 usage 的 done 不覆盖上次值（保持最近一次有值）
-    useChatStore.getState().sendMessage("再问");
-    const { onEvent: onEvent2 } = sseOptions();
-    onEvent2("done", { session_id: "sess-1" });
-    expect(useChatStore.getState().lastUsage).toEqual({ prompt_tokens: 1200, completion_tokens: 300, total_tokens: 1500 });
-  });
-
-  it("done 事件带 context_budget → 记录本轮生效预算（占用条分母）", () => {
-    useChatStore.getState().sendMessage("你好");
-    const { onEvent } = sseOptions();
-    onEvent("done", { session_id: "sess-1", context_budget: { history: 150000, total: 155000 } });
-    expect(useChatStore.getState().contextBudget).toEqual({ history: 150000, total: 155000 });
-  });
-
-  it("done 事件无/非法 context_budget → null（占用条隐藏，不回退模型窗口分母）", () => {
-    useChatStore.getState().sendMessage("你好");
-    const { onEvent } = sseOptions();
-    onEvent("done", { session_id: "sess-1", context_budget: { history: 150000, total: 155000 } });
- // 缺失：清回 null（本轮无预算信息 → 不继续展示上一轮的条）
-    useChatStore.getState().sendMessage("再问");
-    const { onEvent: onEvent2 } = sseOptions();
-    onEvent2("done", { session_id: "sess-1" });
-    expect(useChatStore.getState().contextBudget).toBeNull();
- // 非法（total 非正）：同样置 null——绝不写入 0/NaN（否则渲染 Infinity% 或永远 0%）
-    useChatStore.getState().sendMessage("三问");
-    const { onEvent: onEvent3 } = sseOptions();
-    onEvent3("done", { session_id: "sess-1", context_budget: { history: 1, total: 0 } });
-    expect(useChatStore.getState().contextBudget).toBeNull();
-  });
-
-  it("parseContextBudget：非对象 / 字段非有限数 / total ≤ 0 → null", () => {
-    expect(parseContextBudget(undefined)).toBeNull();
-    expect(parseContextBudget(null)).toBeNull();
-    expect(parseContextBudget("155000")).toBeNull();
-    expect(parseContextBudget({ history: 1 })).toBeNull();
-    expect(parseContextBudget({ history: "1", total: 10 })).toBeNull();
-    expect(parseContextBudget({ history: 1, total: 0 })).toBeNull();
-    expect(parseContextBudget({ history: Number.NaN, total: 10 })).toBeNull();
-    expect(parseContextBudget({ history: 1, total: Number.POSITIVE_INFINITY })).toBeNull();
-    expect(parseContextBudget({ history: 1, total: 10 })).toEqual({ history: 1, total: 10 });
-  });
-
-  it("done 事件 → streaming=false + currentSessionId 更新（续聊）+ 刷新会话列表", async () => {
-    mocked.listSessions.mockResolvedValue([sampleSession]);
-    useChatStore.getState().sendMessage("你好");
-    const { onEvent } = sseOptions();
-    onEvent("done", { session_id: "sess-new" });
-    const s = useChatStore.getState();
-    expect(s.streaming).toBe(false);
-    expect(s.currentSessionId).toBe("sess-new");
-    await vi.waitFor(() => expect(mocked.listSessions).toHaveBeenCalled());
-  });
-
-  it("S8.1 联调：ping+text×n+tool_call+tool_result+proposal+done 全序列（对齐 chat.test.ts 帧断言）", async () => {
-    mocked.listSessions.mockResolvedValue([sampleSession]);
-    useChatStore.getState().sendMessage("你好");
-    const { onEvent } = sseOptions();
- // 心跳（空 payload）：不产生任何状态变化
-    onEvent("ping", {});
- // text 流式追加（多段；与 tool 轮次交错）
-    onEvent("text", { delta: "第一段" });
-    onEvent("text", { delta: "第二段" });
- // tool_call → 工具行 running
-    onEvent("tool_call", {
-      tool: "propose_create_entity",
-      args: { type: "character", name: "张三" },
-      id: "call_1",
-    });
- // tool_result（S7.6 帧result 为字符串；proposal 在对应 tool_result 之后）
-    onEvent("tool_result", {
-      tool: "propose_create_entity",
-      result: JSON.stringify({ proposal_id: "prop_1", summary: "创建角色张三" }),
-      id: "call_1",
-    });
-    onEvent("proposal", {
-      proposal_id: "prop_1",
-      type: "propose_create_entity",
-      preview: {
-        type: "propose_create_entity",
-        summary: "创建角色张三",
-        args: { type: "character", name: "张三" },
-      },
-    });
- // 收尾文本 + done（新会话 sess_ 前缀，id 约定）
-    onEvent("text", { delta: "完成" });
-    onEvent("done", { session_id: "sess_1" });
-
-    const s = useChatStore.getState();
- // 文本流式追加累积（含工具轮之间的段落）
-    expect(s.messages[1]).toMatchObject({ role: "assistant", content: "第一段第二段完成" });
- // 工具行状态迁移 running → ok，result 按字符串原文挂载
-    expect(s.streamTools).toEqual([
-      {
-        id: "call_1",
-        tool: "propose_create_entity",
-        args: { type: "character", name: "张三" },
-        result: JSON.stringify({ proposal_id: "prop_1", summary: "创建角色张三" }),
-        status: "ok",
-      },
-    ]);
- // 提案卡填充（pending）
-    expect(s.proposals).toEqual([
-      {
         proposalId: "prop_1",
         type: "propose_create_entity",
-        preview: {
-          type: "propose_create_entity",
-          summary: "创建角色张三",
-          args: { type: "character", name: "张三" },
-        },
+        preview: { summary: "创建角色张三" },
         status: "pending",
       },
     ]);
- // done：流结束 + currentSessionId 更新 + 会话列表刷新
+  });
+
+  it("turn_end / agent_end 的 contextUsage → 占用条数据（agent_end 同时收尾 + 刷新列表）", async () => {
+    mocked.listSessions.mockResolvedValue([sampleSession]);
+    useChatStore.getState().sendMessage("你好");
+    const { onEvent } = sseOptions();
+    onEvent("turn_end", { toolResults: [], contextUsage: { percent: 12, tokens: 1200, contextWindow: 10000 } });
+    expect(useChatStore.getState().contextUsage).toEqual({ percent: 12, tokens: 1200, contextWindow: 10000 });
+    onEvent("agent_end", { contextUsage: { percent: 15, tokens: 1500, contextWindow: 10000 } });
+    const s = useChatStore.getState();
     expect(s.streaming).toBe(false);
-    expect(s.currentSessionId).toBe("sess_1");
+    expect(s.contextUsage).toEqual({ percent: 15, tokens: 1500, contextWindow: 10000 });
     await vi.waitFor(() => expect(mocked.listSessions).toHaveBeenCalled());
   });
 
-  it("error 事件 → streamError 文案（透传 message）+ streaming=false + 输入恢复", () => {
+  it("agent_end 无/非法 contextUsage → 不覆盖上一轮数值（parseContextUsage 拦截）", () => {
     useChatStore.getState().sendMessage("你好");
     const { onEvent } = sseOptions();
-    onEvent("error", { code: "AGENT_TIMEOUT", message: "单轮超时" });
-    const s = useChatStore.getState();
-    expect(s.streaming).toBe(false);
-    expect(s.streamError).toBe("单轮超时");
+    onEvent("turn_end", { contextUsage: { percent: 12, tokens: 1200, contextWindow: 10000 } });
+    onEvent("agent_end", { contextUsage: { percent: "12", tokens: 1200, contextWindow: 10000 } });
+    expect(useChatStore.getState().contextUsage).toEqual({ percent: 12, tokens: 1200, contextWindow: 10000 });
   });
 
-  it("S8.1 联调：服务端真实错误码（LLM 层非 ErrorCode 枚举）→ 文案透传 message（帧chat.test.ts）", () => {
+  it("parseContextUsage：非对象 / 字段非有限数 / 窗口非正 → null", () => {
+    expect(parseContextUsage(undefined)).toBeNull();
+    expect(parseContextUsage(null)).toBeNull();
+    expect(parseContextUsage("12")).toBeNull();
+    expect(parseContextUsage({ percent: 12 })).toBeNull();
+    expect(parseContextUsage({ percent: "12", tokens: 1, contextWindow: 10 })).toBeNull();
+    expect(parseContextUsage({ percent: 12, tokens: 1, contextWindow: 0 })).toBeNull();
+    expect(parseContextUsage({ percent: 12, tokens: -1, contextWindow: 10 })).toBeNull();
+    expect(parseContextUsage({ percent: Number.NaN, tokens: 1, contextWindow: 10 })).toBeNull();
+    expect(parseContextUsage({ percent: 12, tokens: 1, contextWindow: 10 })).toEqual({
+      percent: 12,
+      tokens: 1,
+      contextWindow: 10,
+    });
+  });
+
+  it("agent_end stopReason=error → 错误条（透传 errorMessage）+ streaming 收尾", () => {
     useChatStore.getState().sendMessage("你好");
     const { onEvent } = sseOptions();
- // S7.6 帧事实配额类错误帧 { code: "insufficient_quota", message: "余额不足" }——
- // code 不经 ErrorCode 枚举，文案映射只认 message（describeStreamError 透传分支）
-    onEvent("error", { code: "insufficient_quota", message: "余额不足" });
+    onEvent("agent_end", { stopReason: "error", errorMessage: "模型调用失败：429" });
     const s = useChatStore.getState();
     expect(s.streaming).toBe(false);
-    expect(s.streamError).toBe("余额不足");
+    expect(s.streamError).toBe("模型调用失败：429");
+  });
+
+  it("agent_end stopReason=aborted → 不报错（断连横幅/主动停止表达取消）", () => {
+    useChatStore.getState().sendMessage("你好");
+    const { onEvent } = sseOptions();
+    onEvent("agent_end", { stopReason: "aborted" });
+    expect(useChatStore.getState().streamError).toBeNull();
+  });
+
+  it("compaction / auto_retry 事件 → statusNote 轻量提示（agent_end 清空）", () => {
+    useChatStore.getState().sendMessage("你好");
+    const { onEvent } = sseOptions();
+    onEvent("compaction_start", { reason: "threshold" });
+    expect(useChatStore.getState().statusNote).toContain("压缩");
+    onEvent("compaction_end", { reason: "threshold", aborted: false, willRetry: false });
+    expect(useChatStore.getState().statusNote).toContain("已压缩");
+    onEvent("auto_retry_start", { attempt: 1, maxAttempts: 3, delayMs: 2000, errorMessage: "429" });
+    expect(useChatStore.getState().statusNote).toContain("1/3");
+    onEvent("auto_retry_end", { success: true, attempt: 1 });
+    expect(useChatStore.getState().statusNote).toBeNull();
+    onEvent("compaction_start", { reason: "overflow" });
+    onEvent("agent_end", {});
+    expect(useChatStore.getState().statusNote).toBeNull();
+  });
+
+  it("error 事件（HTTP 级）→ 文案映射 + streaming=false + 输入恢复", () => {
+    useChatStore.getState().sendMessage("你好");
+    const { onEvent } = sseOptions();
+    onEvent("error", { code: "CHAT_BUSY", message: "busy" });
+    const s = useChatStore.getState();
+    expect(s.streaming).toBe(false);
+    expect(s.streamError).toBe("当前项目已有正在生成的对话，请稍后再试");
+  });
+
+  it("error SESSION_NOT_FOUND → 丢弃会话身份（下一条消息新建会话）", () => {
+    useChatStore.setState({ currentSessionId: "sess-gone" });
+    useChatStore.getState().sendMessage("你好");
+    const { onEvent } = sseOptions();
+    onEvent("error", { code: "SESSION_NOT_FOUND", message: "会话不存在" });
+    const s = useChatStore.getState();
+    expect(s.currentSessionId).toBeNull();
+    expect(s.streamError).toContain("新建会话");
   });
 
   it("旧构建/服务未起（HTTP 404）→ 错误条通用防御文案「聊天服务暂不可用」", () => {
@@ -742,10 +765,54 @@ describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
     expect(useChatStore.getState().streamError).toBe("聊天服务暂不可用");
   });
 
-  it("onTimeout（60s 无事件）→ disconnected=true + streaming=false + 清空提案", () => {
+  it("全序列（session→text/thinking→tool→agent_end）：正文/思维链/工具卡/占用条一致", async () => {
+    mocked.listSessions.mockResolvedValue([sampleSession]);
+    useChatStore.getState().sendMessage("你好");
+    const { onEvent } = sseOptions();
+    onEvent("session", { session_id: "sess_pi_1" });
+    onEvent("ping", {});
+    onEvent("agent_start", {});
+    onEvent("turn_start", {});
+    onEvent("message_start", { message: { role: "assistant", content: "", createdAt: "t" } });
+    onEvent("message_update", { assistantMessageEvent: { type: "thinking_delta", contentIndex: 0, delta: "先查大纲" } });
+    onEvent("message_update", { assistantMessageEvent: { type: "text_delta", contentIndex: 1, delta: "第一段" } });
+    onEvent("tool_execution_start", { toolCallId: "call_1", toolName: "get_outline", args: {} });
+    onEvent("tool_execution_end", {
+      toolCallId: "call_1",
+      toolName: "get_outline",
+      result: { content: [{ type: "text", text: "{}" }] },
+      isError: false,
+    });
+    onEvent("turn_end", { toolResults: [], contextUsage: { percent: 8, tokens: 800, contextWindow: 10000 } });
+    onEvent("message_update", { assistantMessageEvent: { type: "text_delta", contentIndex: 1, delta: "完成" } });
+    onEvent("agent_end", { contextUsage: { percent: 9, tokens: 900, contextWindow: 10000 } });
+
+    const s = useChatStore.getState();
+    expect(s.currentSessionId).toBe("sess_pi_1");
+    expect(s.messages[1]).toMatchObject({
+      role: "assistant",
+      content: "第一段完成",
+      thinkingText: "先查大纲",
+      thinkingStreaming: false,
+    });
+    expect(s.streamTools).toEqual([
+      { id: "call_1", tool: "get_outline", args: {}, result: "{}", isError: false, status: "ok" },
+    ]);
+    expect(s.contextUsage).toEqual({ percent: 9, tokens: 900, contextWindow: 10000 });
+    expect(s.streaming).toBe(false);
+    await vi.waitFor(() => expect(mocked.listSessions).toHaveBeenCalled());
+  });
+
+  it("onTimeout（60s 无事件）→ disconnected=true + streaming=false + 清空提案/工具卡", () => {
     useChatStore.getState().sendMessage("你好");
     const { onEvent, onTimeout } = sseOptions();
-    onEvent("proposal", { proposal_id: "prop-1", type: "propose_create_entity", preview: {} });
+    onEvent("tool_execution_start", { toolCallId: "call-1", toolName: "get_entity", args: {} });
+    onEvent("tool_execution_end", {
+      toolCallId: "call-1",
+      toolName: "propose_create_entity",
+      result: { content: [], details: { proposal_id: "prop_1", type: "propose_create_entity", preview: {} } },
+      isError: false,
+    });
     expect(useChatStore.getState().proposals).toHaveLength(1);
     onTimeout();
     const s = useChatStore.getState();
@@ -772,7 +839,6 @@ describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
     expect(mocked.fetchSSE).toHaveBeenCalledTimes(1);
     const s = useChatStore.getState();
     expect(s.disconnected).toBe(false);
- // 残留的 user 消息与空 AI 占位被移除，重发后仅 1 条 user + 新占位
     expect(s.messages.filter((m) => m.role === "user")).toHaveLength(1);
     expect(s.messages[0].content).toBe("你好");
   });
@@ -780,14 +846,13 @@ describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
   it("resendLast：部分产出后断连 → 半截 AI 回答一并移除（断连语义 = 整轮取消）", () => {
     useChatStore.getState().sendMessage("你好");
     const { onEvent, onTimeout } = sseOptions();
-    onEvent("text", { delta: "我" });
-    onEvent("text", { delta: "好" }); // 已收到部分文本后断连（常见场景）
+    onEvent("message_update", { assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "我" } });
+    onEvent("message_update", { assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "好" } });
     onTimeout();
     mocked.fetchSSE.mockClear();
     useChatStore.getState().resendLast();
     expect(mocked.fetchSSE).toHaveBeenCalledTimes(1);
     const s = useChatStore.getState();
- // 半截 assistant（"我好"）被无条件移除，重发后仅 1 条空占位 assistant + 1 条 user（无重复气泡）
     const assistants = s.messages.filter((m) => m.role === "assistant");
     expect(assistants).toHaveLength(1);
     expect(assistants[0].content).toBe("");
@@ -795,25 +860,61 @@ describe("sendMessage（U5：POST /chat + SSE 事件映射）", () => {
     expect(s.messages[0].content).toBe("你好");
   });
 
-  it("流身份守卫：done 后微窗口内新发一轮，旧流 onEnd/onTimeout 不得污染新流", () => {
+  it("流身份守卫：agent_end 后微窗口内新发一轮，旧流 onEnd/onTimeout 不得污染新流", () => {
     useChatStore.getState().sendMessage("第一轮");
     const first = sseOptions();
-    first.onEvent("done", { session_id: "sess-1" }); // 本轮结束（onEnd 尚未触发）
- // 微窗口内新发一轮：streaming 重新为 true，流身份已指向新流
+    first.onEvent("agent_end", {});
     useChatStore.getState().sendMessage("第二轮");
     expect(useChatStore.getState().streaming).toBe(true);
- // 旧流收尾回调此刻才到 → 身份守卫拦截：不得复位新流 streaming / 置断连
     first.onEnd();
     first.onTimeout();
     const s = useChatStore.getState();
     expect(s.streaming).toBe(true);
     expect(s.disconnected).toBe(false);
- // 新流自身 onEnd 仍正常收尾
     sseOptions().onEnd();
     expect(useChatStore.getState().streaming).toBe(false);
   });
-});
 
+  it("流身份守卫：旧流的迟到事件帧（session / tool_execution_start / compaction）不得污染新视图（K6 oracle D2 回归）", () => {
+    useChatStore.getState().sendMessage("第一轮");
+    const first = sseOptions();
+    first.onEvent("session", { session_id: "sess-first" });
+    // 切会话（abort 在途）后开新流
+    useChatStore.getState().newSession();
+    useChatStore.getState().sendMessage("第二轮");
+    sseOptions().onEvent("session", { session_id: "sess-second" });
+    const before = useChatStore.getState();
+
+    // 旧流迟到帧：会话身份 / 工具卡 / 状态提示均不得被改写
+    first.onEvent("session", { session_id: "sess-stale" });
+    first.onEvent("tool_execution_start", { toolCallId: "stale-1", toolName: "get_outline", args: {} });
+    first.onEvent("compaction_start", { reason: "threshold" });
+    first.onEvent("auto_retry_start", { attempt: 1, maxAttempts: 3, delayMs: 10, errorMessage: "x" });
+
+    const after = useChatStore.getState();
+    expect(after.currentSessionId).toBe("sess-second");
+    expect(after.streamTools).toEqual(before.streamTools);
+    expect(after.statusNote).toBe(before.statusNote);
+  });
+
+  it("思维链四条终止路径都收尾折叠（agent_end / error / 超时 / EOF）", () => {
+    const cases = [
+      (o: ReturnType<typeof sseOptions>) => o.onEvent("agent_end", {}),
+      (o: ReturnType<typeof sseOptions>) => o.onEvent("error", { code: "NETWORK_ERROR", message: "x" }),
+      (o: ReturnType<typeof sseOptions>) => o.onTimeout(),
+      (o: ReturnType<typeof sseOptions>) => o.onEnd(),
+    ];
+    for (const terminate of cases) {
+      useChatStore.getState().newSession();
+      useChatStore.getState().sendMessage("问");
+      const opts = sseOptions();
+      opts.onEvent("message_update", { assistantMessageEvent: { type: "thinking_delta", contentIndex: 0, delta: "推理" } });
+      expect(useChatStore.getState().messages.some((m) => m.thinkingStreaming === true)).toBe(true);
+      terminate(opts);
+      expect(useChatStore.getState().messages.some((m) => m.thinkingStreaming === true)).toBe(false);
+    }
+  });
+});
 describe("confirmProposal / rejectProposal（S8.2：提案卡接入 S7.5 confirm/reject 真实调用）", () => {
   it("confirm 成功 → status=confirmed + processing 复位（终态，按钮禁用由 status 驱动）", async () => {
     mocked.confirmProposal.mockResolvedValue({ confirmed: true, result: "char-9" });

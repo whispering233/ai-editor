@@ -1,13 +1,24 @@
 // 会话状态（chat store：会话归属项目——currentSessionId + 会话列表）
-// U3 雏形：列表加载 + 当前会话选择；U5 扩展：
-// - 消息流：messages（当前会话历史）/ messagesLoading / loadMessages（切会话清空重载）
-// - SSE 运行态：streaming / streamError；sendMessage（fetchSSE 发送，事件映射见 「SSE 事件 → UI 映射」表）
-// - focus context：跨页「问 AI」注入；请求体 context 字段
-// - 断连横幅：disconnected（60s 无事件，客户端兜底）+ resendLast（[重新发送]）
-// - 瞬态渲染数据：proposals（提案卡）/ streamTools（运行时工具折叠行）——S7 服务端数据接入后填充
-// 项目切换联动（布局 §2.4「切项目重置会话」）：订阅 project store 的 config.id——
-// 从任何入口打开/关闭/切换项目都清空会话 + 消息 + SSE 运行态（并中止在途流），
-// 打开时自动重载新项目会话列表，避免跨项目残留
+//
+// 事件契约 = docs/api/80-api-chat.md「SSE 事件集」：本 store 是**唯一**的事件消费者，
+// 服务端推的是 pi AgentSessionEvent 的轻量投影（无 `partial`），事件名与字段不得自行发明。
+// 映射（帧 → 状态）：
+//   session            → currentSessionId（首帧；新会话续聊身份）
+//   ping               → 忽略（fetchSSE 内部据其重置 60s 超时）
+//   message_start/end  → message_end 的 assistant 投影为**权威终态**（正文/工具调用/思维链预览）
+//   message_update     → text_delta 累积正文；thinking_delta 累积思维链（流式展开）；
+//                        toolcall_* 只服务工具卡片元数据（执行卡片由 tool_execution_start 建）
+//   tool_execution_*   → 运行时工具卡（start 建行 / end 定终态 + 提案载荷）
+//   turn_end/agent_end → contextUsage（占用条口径 = getContextUsage，不是「预算分母」）
+//   compaction_*/auto_retry_* → statusNote（轻量提示，不引入新视觉）
+//   agent_end          → 终止（stopReason=error/aborted → 错误条；成功 → 刷新会话列表）
+//   error              → HTTP 级错误（非 2xx REST 包裹 / 网络失败）：按 code 映射文案
+//
+// 竞态不变式（改动必须保持）：
+// 1. loadSeq / msgSeq 守卫：切项目/切会话使在途请求作废（旧响应不得覆盖新状态）
+// 2. 「中止在途 SSE」：重发/切会话/切项目前调 abortCurrentStream（旧流事件不得污染新视图）
+// 3. 流身份守卫（streamMsgId）：旧流的 onTimeout/onEnd 不得复位新流的 streaming
+// 4. 发送中禁止并发发送（streaming / messagesLoading 期间 sendMessage 直接返回）
 import { create } from "zustand";
 import type { ChatMessage, ChatSessionSummary } from "@whispering233/ai-editor-shared";
 import {
@@ -29,28 +40,78 @@ import { useUiStore } from "./ui";
  * 定义提移至 lib/focus.ts（ui store currentFocus 共用，避免 store 循环依赖） */
 export type { FocusContext } from "../lib/focus";
 
-/** 运行时工具调用记录（SSE tool_call / tool_result 事件，瞬态；历史消息走 messages 的 toolCalls/toolCallId 成对渲染） */
+/** 思维链投影（历史接口/终态消息：只给预览 + 定位参数；全文走按需端点） */
+export interface ThinkingPreview {
+  preview: string;
+  deferred: true;
+  blockIndex: number;
+  length: number;
+}
+
+/**
+ * 消息视图模型（client 侧扩展，不改 shared 的 API 契约类型）：
+ * - thinking：历史回看的思维链预览（全文按需拉）
+ * - thinkingText/thinkingStreaming：**当前流式轮次**的思维链全量 + 是否仍在流式
+ *   （流式期间服务端只推 delta，终态帧里只有 240 字预览，故全量在客户端侧累积）
+ * - isError：tool 消息是否失败（服务端投影字段）
+ */
+export interface ChatMessageView extends ChatMessage {
+  thinking?: ThinkingPreview[];
+  isError?: boolean;
+  thinkingText?: string;
+  thinkingStreaming?: boolean;
+}
+
+/** 运行时工具调用记录（SSE tool_execution_* 事件，瞬态；历史消息走 messages 的 toolCalls/toolCallId 成对渲染） */
 export interface StreamToolRecord {
-  id: string; // call_ 前缀（成对重组依据）
+  id: string; // toolCallId（成对重组依据）
   tool: string; // 工具名（get_entity 等）
   args?: unknown;
-  result?: unknown;
+  result?: unknown; // 工具结果文本（服务端 result.content 的文本拼接）
+  isError?: boolean;
  /** running = 已调用未返回；ok = 成功返回；error = 返回错误 */
   status: "running" | "ok" | "error";
 }
 
-/** 运行时提案卡片（SSE proposal 事件，瞬态对象——历史消息中不保留，恢复会话不展开为卡片） */
+/** 运行时提案卡片（SSE tool_execution_end 的 result.details，瞬态；历史消息中不保留） */
 export interface ProposalCard {
   proposalId: string; // prop_ 前缀
   type: string; // 提案工具名（propose_create_entity 等）
   preview?: unknown;
  /**
  * 处理态：pending 未处理 / confirmed / rejected / stale（409 PROPOSAL_STALE 快照失效）/
- * notFound（404——S8.2 起由 store 直接移除卡片、不再落此态，保留仅为类型防御）
+ * notFound（404——由 store 直接移除卡片、不落此态，保留仅为类型防御）
  */
   status: "pending" | "confirmed" | "rejected" | "stale" | "notFound";
- /** 处理中（S8.2：confirm/reject 请求在途，防重复点击；UI 层 pending + 非处理中才可点） */
+ /** 处理中（confirm/reject 请求在途，防重复点击；UI 层 pending + 非处理中才可点） */
   processing?: boolean;
+}
+
+/** 上下文占用（占用条口径 = pi `getContextUsage()`，随 turn_end / agent_end 帧下发） */
+export interface ContextUsage {
+  /** tokens / contextWindow（服务端算好的百分比；越界 clamp 见 usageBarView） */
+  percent: number;
+  tokens: number;
+  contextWindow: number;
+}
+
+/**
+ * 解析帧里的 `contextUsage`：**只接受结构完整且数值可用**的负载，其余一律 null——
+ * 调用方据此隐藏占用条；绝不把 0 / NaN / 负窗口写进 store（那会渲染出 Infinity% 或假指标）。
+ */
+export function parseContextUsage(raw: unknown): ContextUsage | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const { percent, tokens, contextWindow } = raw as {
+    percent?: unknown;
+    tokens?: unknown;
+    contextWindow?: unknown;
+  };
+  if (typeof percent !== "number" || typeof tokens !== "number" || typeof contextWindow !== "number") {
+    return null;
+  }
+  if (!Number.isFinite(percent) || !Number.isFinite(tokens) || !Number.isFinite(contextWindow)) return null;
+  if (contextWindow <= 0 || tokens < 0) return null;
+  return { percent, tokens, contextWindow };
 }
 
 interface ChatState {
@@ -76,32 +137,28 @@ interface ChatState {
  */
   deleteSession: (sessionId: string) => Promise<void>;
 
- // ---- U5：消息流 ----
- /** 当前会话消息历史（本地临时 id 的流式消息在 S7 落库后由历史重载替换为真实 id） */
-  messages: ChatMessage[];
+ // ---- 消息流 ----
+ /** 当前会话消息历史（流式轮的临时 id 消息在结束前保留，切会话重载后替换为真实 id） */
+  messages: ChatMessageView[];
   messagesLoading: boolean;
  /** 加载会话历史（GET /chat/sessions/:id/messages → messages；调用前清空重载，含竞态保护） */
   loadMessages: (sessionId: string) => Promise<void>;
 
- // ---- U5：SSE 运行态 ----
+ // ---- SSE 运行态 ----
  /** 是否正在流式生成（发送中；输入框禁用 + 「AI 思考中…」） */
   streaming: boolean;
- /** 流错误文案（error 事件 / 服务未就绪 / 网络失败；null = 无） */
+ /** 流错误文案（agent_end 失败 / HTTP 错误 / 网络失败；null = 无） */
   streamError: string | null;
   setStreamError: (err: string | null) => void;
+ /** 轻量状态提示（上下文压缩 / 自动重试；null = 无）——文案固定，不引入新视觉样式 */
+  statusNote: string | null;
 
- // ---- U5：focus context（跨页注入） ----
+ // ---- focus context（跨页注入） ----
   focusContext: FocusContext | null;
   setFocusContext: (ctx: FocusContext | null) => void;
 
- /** 上下文占用（需求 3）：最近一轮的 token usage（done SSE 帧附带）；前端据此计算占用比例 */
-  lastUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null;
-  setLastUsage: (u: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null) => void;
-
- /** 本轮**生效预算**（done 帧 context_budget；占用条分母——不是模型 contextWindow，见 docs/ui/DESIGN.md `usage-bar`）；
- * null = 未收到/非法 → 占用条整体隐藏 */
-  contextBudget: ChatContextBudget | null;
-  setContextBudget: (b: ChatContextBudget | null) => void;
+ /** 上下文占用（turn_end / agent_end 帧的 contextUsage；null = 未收到/非法 → 占用条隐藏） */
+  contextUsage: ContextUsage | null;
 
  /** 「问 AI」聚焦输入框信号：中栏右下悬浮按钮点击后 +1，InputArea 监听后聚焦 textarea——
  * 无页面焦点（currentFocus=null）时用户仍可直接打字提问，按钮不「无反应」 */
@@ -109,12 +166,12 @@ interface ChatState {
   requestFocusInput: () => void;
   clearFocusContext: () => void;
 
- // ---- U5：断连横幅 ----
+ // ---- 断连横幅 ----
  /** 流中断（60s 无事件）：顶部横幅「上次会话已取消」+ [重新发送] */
   disconnected: boolean;
   setDisconnected: (v: boolean) => void;
 
- // ---- U5：瞬态渲染数据（S7 服务端实现后由 SSE 事件填充） ----
+ // ---- 瞬态渲染数据（SSE 事件填充） ----
   proposals: ProposalCard[];
   streamTools: StreamToolRecord[];
 
@@ -123,7 +180,7 @@ interface ChatState {
  /** 断连横幅 [重新发送]：移除断连残留的重复消息后重发上一条用户消息 */
   resendLast: () => void;
 
- // ---- S8.2：提案确认/拒绝（S7.5 confirm/reject 真实调用） ----
+ // ---- 提案确认/拒绝（真实调用 confirm/reject 端点） ----
  /**
  * 确认提案：成功 → status=confirmed（按钮禁用由 status 驱动）；
  * 409 PROPOSAL_STALE → stale（卡标「数据已变化」）；404 NOT_FOUND / 409 MISMATCH → 移除卡片；
@@ -134,37 +191,32 @@ interface ChatState {
   rejectProposal: (proposalId: string) => Promise<void>;
 }
 
-/** 本轮生效预算（done 帧 `context_budget`；服务端上下文组装后算出） */
-export interface ChatContextBudget {
- /** 本轮生效历史预算（激活模型 contextWindow × history_ratio，经总闸 clamp） */
-  history: number;
- /** history + system + 工具清单 + focus 四层之和（= 占用条分母） */
-  total: number;
-}
-
 /**
- * 解析 done 帧的 `context_budget`：**只接受结构完整且数值可用**的负载，其余（缺失 /
- * 非对象 / 字段非有限数 / total ≤ 0）一律 null——调用方据此隐藏占用条；
- * 绝不把 0 / NaN 写进 store（那会渲染出 Infinity% 或一条永远 0% 的假指标）。
- */
-export function parseContextBudget(raw: unknown): ChatContextBudget | null {
-  if (typeof raw !== "object" || raw === null) return null;
-  const { history, total } = raw as { history?: unknown; total?: unknown };
-  if (typeof history !== "number" || typeof total !== "number") return null;
-  if (!Number.isFinite(history) || !Number.isFinite(total) || total <= 0) return null;
-  return { history, total };
-}
-
-/**
- * 流错误文案映射（「错误态」）
- * - HTTP 404 → 通用防御文案「聊天服务暂不可用」（S8.1 更新：S7 已实现 POST /chat，
- * 该分支仅作防御——旧构建/服务未起时 fetchSSE 透传 code=CLIENT_NETWORK_ERROR + "SSE 请求失败（HTTP 404）"）
+ * 流错误文案映射（「错误态」）：
+ * - 服务端错误码（HTTP 级，开流前/流内 REST 包裹）：按 code 给可执行文案
+ * - HTTP 404（旧构建/服务未起）：通用防御文案「聊天服务暂不可用」
  * - 网络层失败（服务未启动/断网）→ 「连接失败，请确认服务已启动」
  * - 服务端/中间层错误（非 2xx 且无 REST 包裹，如 proxy 500，message 含 "HTTP "）→ 透传 message，
- * 不落入「连接失败」误判（S8.1 oracle S2：CLIENT_NETWORK_ERROR 仅纯网络错误才映射连接失败文案）
- * - 服务端 error 事件（模型失败/超限）→ 透传服务端 message（真实链路错误一律走此分支）
+ *   不落入「连接失败」误判（CLIENT_NETWORK_ERROR 仅纯网络错误才映射连接失败文案）
+ * - agent_end 的 stopReason=error → 透传 errorMessage（真实链路错误走此分支）
  */
 export function describeStreamError(code: string, message: string): string {
+  switch (code) {
+    case "CHAT_BUSY":
+      return "当前项目已有正在生成的对话，请稍后再试";
+    case "SESSION_BUSY":
+      return "该会话正在生成中，请稍后再试";
+    case "LLM_API_KEY_MISSING":
+      return "未配置模型 API key，请到设置页配置后再试";
+    case "SESSION_NOT_FOUND":
+      return "会话不存在（可能已被删除），下一条消息将新建会话";
+    case "NO_PROJECT_OPEN":
+      return "未打开项目，请先打开一本书";
+    case "PROJECT_VERSION_NEWER":
+      return "项目数据版本高于当前程序，请升级后再打开";
+    default:
+      break;
+  }
   if (message.includes("HTTP 404")) return "聊天服务暂不可用";
   if (code === "CLIENT_NETWORK_ERROR" && !message.includes("HTTP "))
     return "连接失败，请确认服务已启动";
@@ -172,10 +224,9 @@ export function describeStreamError(code: string, message: string): string {
 }
 
 /**
- * 提案动作非错误的 toast 文案映射（S8.2；S7.5 三错误码 STALE/NOT_FOUND/MISMATCH
+ * 提案动作非错误的 toast 文案映射（S7.5 三错误码 STALE/NOT_FOUND/MISMATCH
  * 由 store 分支处理、不经此函数）：
- * - INTERNAL_ERROR（500 执行失败，proposal.ts「执行失败按 500 呈现」）→ 引导重新生成提案
- * （重试仍会失败，不保留重试价值）
+ * - INTERNAL_ERROR（500 执行失败）→ 引导重新生成提案（重试仍会失败，不保留重试价值）
  * - CLIENT_NETWORK_ERROR（网络层）→ 重试引导（不透传原始 fetch 错误文本）
  * - 其他（未知码防御兜底）→ 透传服务端 message
  */
@@ -190,6 +241,46 @@ export function describeProposalActionError(code: string, message: string): stri
   }
 }
 
+// ============ 帧负载读取（结构性窄化；非法负载一律忽略，不抛错） ============
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
+}
+
+/** assistant 消息的增量事件（message_update.assistantMessageEvent） */
+interface AssistantDelta {
+  type?: unknown;
+  contentIndex?: unknown;
+  delta?: unknown;
+  content?: unknown;
+  contentLength?: unknown;
+}
+
+/** pi 工具结果 content（块数组）→ 展示文本（仅取 text 块；非文本块忽略） */
+export function toolResultText(result: unknown): string | undefined {
+  const record = asRecord(result);
+  if (record === null) return undefined;
+  const content = record.content;
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return undefined;
+  return content
+    .map((block) => {
+      const b = asRecord(block);
+      return b !== null && b.type === "text" && typeof b.text === "string" ? b.text : "";
+    })
+    .join("");
+}
+
+/** 工具结束帧里的提案载荷（仅 PROPOSAL 工具携带 details；AUTO 工具不下发） */
+function proposalFromToolResult(result: unknown): { proposalId: string; type: string; preview?: unknown } | null {
+  const details = asRecord(asRecord(result)?.details);
+  if (details === null) return null;
+  const proposalId = typeof details.proposal_id === "string" ? details.proposal_id : null;
+  const type = typeof details.type === "string" ? details.type : null;
+  if (proposalId === null || type === null) return null;
+  return { proposalId, type, preview: details.preview };
+}
+
 /** 会话列表请求序号：项目切换时递增使在途列表请求作废（旧响应不得覆盖新项目状态） */
 let loadSeq = 0;
 /** 消息历史请求序号：切会话/切项目时递增作废在途请求（同 loadSeq 竞态保护） */
@@ -199,22 +290,17 @@ let clientMsgSeq = 0;
 
 /** 在途 SSE 流的 abort 函数（切会话/切项目/重发前终止旧流，防止旧流事件污染新状态） */
 let abortCurrentStream: (() => void) | null = null;
-/** 当前流式 AI 消息的临时 id（text 事件按此追加 delta；流作废/结束时置 null） */
+/** 当前流式 AI 消息的临时 id（增量按此追加；流作废/结束时置 null） */
 let currentStreamMsgId: string | null = null;
 /** 上一条发送的用户文本（断连横幅 [重新发送] 用；切会话/项目时清空） */
 let lastSentText: string | null = null;
 
 export const useChatStore = create<ChatState>((set, get) => {
  /**
- * 提案动作统一处理（confirm/reject 共用，S8.2）：
+ * 提案动作统一处理（confirm/reject 共用）：
  * 1. 防重复：卡片不存在（已移除）/ 非 pending（已确认/拒绝/失效）/ 处理中（processing）→ 忽略
- * （按钮层同时禁用，此处为状态层防御）
- * 2. 在途：置 processing=true（按钮禁用防连点）→ 调 S7.5 API
- * 3. 成功 → status 终态（confirmed/rejected）；错误分支见 switch——
- * - 409 PROPOSAL_STALE：快照重校验失败（引用已变化/删除）→ stale（卡标「数据已变化，此提案已失效」+ 按钮禁用）
- * - 404 PROPOSAL_NOT_FOUND：proposal_id 不存在（已过期清除/SSE 断开作废）→ 移除卡片
- * - 409 PROPOSAL_PROJECT_MISMATCH：提案属他项目（防御——切换项目已清空提案，理论不可达）→ 移除卡片
- * - 其他（500 INTERNAL_ERROR 执行失败 / 网络失败）：保持 pending 可重试 + 全局 toast 提示
+ * 2. 在途：置 processing=true（按钮禁用防连点）→ 调 API
+ * 3. 成功 → status 终态；错误分支见 switch（404/409 MISMATCH → 移除卡片）
  * 注意：请求在途时切会话/切项目会清空 proposals——响应后按 proposalId 在**当前**列表内
  * map/filter 是空操作，天然无跨会话污染
  */
@@ -232,14 +318,12 @@ export const useChatStore = create<ChatState>((set, get) => {
     }));
     try {
       await apiCall(proposalId);
- // 成功（200 { confirmed:true } / { rejected:true }，shared proposal*ResSchema）：终态，按钮随之禁用
       set((s) => ({
         proposals: s.proposals.map((p) =>
           p.proposalId === proposalId ? { ...p, status: successStatus, processing: false } : p,
         ),
       }));
- // 数据变更信号（问题 1）：确认 = executeProposal 写库成功，通知中栏页面重拉；
- // 拒绝不改数据不触发；hook-panel 复合写是页面本地操作（S9.1 自带 reloadTick），不走全局信号
+ // 数据变更信号：确认 = 服务端写库成功，通知中栏页面重拉；拒绝不改数据不触发
       if (successStatus === "confirmed") useUiStore.getState().notifyDataChanged();
     } catch (err) {
  // apiFetch 只抛 ApiError（code 透传服务端 ErrorCode）；非 ApiError 属理论不可达，按网络错误兜底
@@ -258,7 +342,6 @@ export const useChatStore = create<ChatState>((set, get) => {
           set((s) => ({ proposals: s.proposals.filter((p) => p.proposalId !== proposalId) }));
           return;
         default:
- // 保持 pending（可重试）+ 全局反馈 toast（U6，FeedbackHost 桥接 antd message）
           useUiStore.getState().showToast(describeProposalActionError(code, message), "error");
           set((s) => ({
             proposals: s.proposals.map((p) =>
@@ -268,6 +351,17 @@ export const useChatStore = create<ChatState>((set, get) => {
           return;
       }
     }
+  };
+
+ /** 更新流式 AI 占位消息（身份守卫：流已作废则不动） */
+  const patchStreamMessage = (
+    streamMsgId: string,
+    patch: (m: ChatMessageView) => ChatMessageView,
+  ): void => {
+    if (currentStreamMsgId !== streamMsgId) return;
+    set((s) => ({
+      messages: s.messages.map((m) => (m.id === streamMsgId ? patch(m) : m)),
+    }));
   };
 
   return {
@@ -287,12 +381,8 @@ export const useChatStore = create<ChatState>((set, get) => {
         const sessions = await listSessions();
         if (seq !== loadSeq) return; // 请求期间项目已切换，旧列表作废
         set({ sessions, sessionsError: null });
- // 自动激活最近会话（问题 2）：刷新页面/切项目后 currentSessionId 为 null，
- // 若列表非空则激活 sessions[0]——服务端按最后活动倒序返回，[0] 即最近会话，
- // 符合「一项目一会话」心智（刷新后右栏应恢复最近对话而非空会话）。
- // 守卫：空列表不激活（保持新会话空态）；已有 currentSessionId 不覆盖
- // （done 事件刷新列表、用户已手动选会话等场景）。不用 localStorage 记忆上次会话：
- // 服务端列表已倒序，最近会话即用户预期，持久化映射是 YAGNI
+ // 自动激活最近会话：刷新页面/切项目后 currentSessionId 为 null，若列表非空则激活 sessions[0]
+ // （服务端按最后活动倒序返回）。守卫：空列表不激活；已有 currentSessionId 不覆盖
         if (get().currentSessionId === null && sessions.length > 0) {
           get().setCurrentSession(sessions[0].id);
         }
@@ -320,20 +410,19 @@ export const useChatStore = create<ChatState>((set, get) => {
         messagesLoading: false,
         streaming: false,
         streamError: null,
+        statusNote: null,
         disconnected: false,
         focusContext: null,
         proposals: [],
         streamTools: [],
- // 瞬时运行态：旧会话/旧项目的用量与预算不得残留到新视图（占用条与 usage 同步清零）
-        lastUsage: null,
-        contextBudget: null,
+ // 瞬时运行态：旧会话的占用数据不得残留到新视图
+        contextUsage: null,
       });
       if (id !== null) void get().loadMessages(id); // 恢复历史（fire-and-forget，失败静默 → 空态）
     },
 
     newSession: () => {
- // 作废在途会话列表请求（ora S1）：点「新会话」时若 loadSessions 在途，其响应不得
- // 触发自动激活最近会话把用户的开新会话意图拉回（与 clearSessions 的 loadSeq++ 同款）
+ // 作废在途会话列表请求：点「新会话」时若 loadSessions 在途，其响应不得触发自动激活
       loadSeq++;
       get().setCurrentSession(null);
     },
@@ -354,12 +443,12 @@ export const useChatStore = create<ChatState>((set, get) => {
         messagesLoading: false,
         streaming: false,
         streamError: null,
+        statusNote: null,
         disconnected: false,
         focusContext: null,
         proposals: [],
         streamTools: [],
-        lastUsage: null,
-        contextBudget: null,
+        contextUsage: null,
       });
     },
 
@@ -398,8 +487,8 @@ export const useChatStore = create<ChatState>((set, get) => {
       try {
         const res = await getSessionMessages(sessionId);
         if (seq !== msgSeq) return; // 请求期间已切会话/项目，旧响应作废
- // 响应条目不含 sessionId：补全为 shared ChatMessage（组件渲染与续聊重组用）
-        const messages: ChatMessage[] = res.messages.map((m) => ({
+ // 响应条目不含 sessionId：补全为 ChatMessageView（组件渲染与思维链按需拉取用）
+        const messages: ChatMessageView[] = res.messages.map((m) => ({
           ...m,
           sessionId: res.sessionId,
         }));
@@ -415,14 +504,12 @@ export const useChatStore = create<ChatState>((set, get) => {
     streaming: false,
     streamError: null,
     setStreamError: (err) => set({ streamError: err }),
+    statusNote: null,
 
     focusContext: null,
     setFocusContext: (ctx) => set({ focusContext: ctx }),
     clearFocusContext: () => set({ focusContext: null }),
-    lastUsage: null,
-    setLastUsage: (u) => set({ lastUsage: u }),
-    contextBudget: null,
-    setContextBudget: (b) => set({ contextBudget: b }),
+    contextUsage: null,
     focusInputSeq: 0,
     requestFocusInput: () => set((s) => ({ focusInputSeq: s.focusInputSeq + 1 })),
 
@@ -442,7 +529,7 @@ export const useChatStore = create<ChatState>((set, get) => {
       abortCurrentStream?.();
       abortCurrentStream = null;
 
- // 乐观追加 user 消息 + AI 流式占位（临时 id；S7 落库后切会话重载历史得到真实 id）
+ // 乐观追加 user 消息 + AI 流式占位（临时 id；切换会话重载历史后得到真实 id）
       const now = new Date().toISOString();
       const sessionId = currentSessionId ?? "";
       const streamMsgId = `local-${++clientMsgSeq}`;
@@ -462,6 +549,7 @@ export const useChatStore = create<ChatState>((set, get) => {
         ],
         streaming: true,
         streamError: null,
+        statusNote: null,
         disconnected: false,
         proposals: [], // 新一轮生成：清空上一轮遗留提案（瞬态）
         streamTools: [],
@@ -472,93 +560,192 @@ export const useChatStore = create<ChatState>((set, get) => {
       if (currentSessionId) body.session_id = currentSessionId;
       if (focusContext) body.context = focusContext;
 
- // SSE 事件映射（「SSE 事件 → UI 映射」表）：事件处理内联于此，
- // 便于测试捕获 fetchSSE options 后手动驱动 onEvent/onTimeout/onEnd
       abortCurrentStream = fetchSSE("/api/v1/chat", {
         body,
         onEvent: (event, data) => {
+          // 流身份守卫（不变式 3 的事件级落点）：旧流的迟到帧不得污染新视图
+          // （重发/切会话/切项目只置位 abort，同 chunk 内已排队的帧仍会派发到此处）
+          if (currentStreamMsgId !== streamMsgId) return;
           switch (event) {
             case "ping":
-              break; // 心跳：忽略（维持超时重置由 fetchSSE 内部处理）
-            case "text": {
- // 追加 delta 到当前流式 AI 消息（流式打字效果不做，直接追加）
-              const delta = (data as { delta?: string })?.delta ?? "";
-              if (currentStreamMsgId) {
-                set((s) => ({
-                  messages: s.messages.map((m) =>
-                    m.id === currentStreamMsgId ? { ...m, content: (m.content ?? "") + delta } : m,
-                  ),
+              break; // 心跳：忽略（超时重置由 fetchSSE 内部处理）
+
+            case "session": {
+ // 首帧：本流所属会话（新建或续聊）——客户端持久化「当前会话」身份
+              const sid = asRecord(data)?.session_id;
+              if (typeof sid === "string" && sid !== "") set({ currentSessionId: sid });
+              break;
+            }
+
+            case "agent_start":
+            case "turn_start":
+              break; // 轮次边界：状态无变化（工具/文本事件自带信息）
+
+            case "message_update": {
+ // assistant 增量（服务端已剥离 partial）：text/thinking 累积；toolcall_* 仅元数据（卡片由 execution 事件建）
+              const deltaEvent = asRecord(asRecord(data)?.assistantMessageEvent) as AssistantDelta | null;
+              if (deltaEvent === null) break;
+              if (deltaEvent.type === "thinking_start") {
+                patchStreamMessage(streamMsgId, (m) => ({ ...m, thinkingStreaming: true }));
+                break;
+              }
+              if (deltaEvent.type === "thinking_delta") {
+                const delta = typeof deltaEvent.delta === "string" ? deltaEvent.delta : "";
+                patchStreamMessage(streamMsgId, (m) => ({
+                  ...m,
+                  thinkingText: (m.thinkingText ?? "") + delta,
+                  thinkingStreaming: true,
+                }));
+                break;
+              }
+              if (deltaEvent.type === "thinking_end") {
+                // 终态帧的 content 已是 240 字预览（全文由本轮 thinking_delta 累积），只需收尾折叠
+                patchStreamMessage(streamMsgId, (m) => ({ ...m, thinkingStreaming: false }));
+                break;
+              }
+              if (deltaEvent.type === "text_delta") {
+                const delta = typeof deltaEvent.delta === "string" ? deltaEvent.delta : "";
+                patchStreamMessage(streamMsgId, (m) => ({
+                  ...m,
+                  content: (m.content ?? "") + delta,
                 }));
               }
               break;
             }
-            case "tool_call": {
- // 运行时工具记录行（S7 后出现；折叠态「调用了 {tool}」）
-              const { tool, args, id } = data as { tool?: string; args?: unknown; id?: string };
-              if (!id || !tool) break;
-              set((s) => ({
-                streamTools: [...s.streamTools, { id, tool, args, status: "running" }],
+
+            case "message_start":
+              break; // 占位消息已由 sendMessage 建立/或为 user/tool 消息（后者由工具卡与历史渲染覆盖）
+
+            case "message_end": {
+ // assistant 终态投影为权威（正文拼接、工具调用、思维链预览）；保留本轮累积的 thinkingText
+              const message = asRecord(asRecord(data)?.message);
+              if (message === null || message.role !== "assistant") break;
+              const content = typeof message.content === "string" ? message.content : "";
+              const thinking = Array.isArray(message.thinking)
+                ? (message.thinking as ThinkingPreview[])
+                : undefined;
+              const toolCalls = Array.isArray(message.toolCalls) ? message.toolCalls : undefined;
+              patchStreamMessage(streamMsgId, (m) => ({
+                ...m,
+                content,
+                ...(thinking === undefined ? {} : { thinking }),
+                ...(toolCalls === undefined ? {} : { toolCalls }),
+                thinkingStreaming: false,
               }));
               break;
             }
-            case "tool_result": {
- // 确认（S8.1）：AgentEvent tool_result 仅 { tool, result, id }，无 ok/isError 字段——
- // 工具失败编码进 result 字符串内容（如「错误：实体 char-9 不存在」，结构化喂回自纠），
- // SSE 帧与 AgentEvent 同构（chat.ts onEvent 直通 writeEvent）。故无条件置 ok，
- // status: "error" 为历史预留（UI 渲染已支持），当前下不可达；result 按字符串原文挂载。
- // S8.2 评估（ora S8.1 建议 isError 透传）：不做——失败已编码进 result 字符串（消费方
- // 是 LLM 自纠而非展示层），isError 透传需改 agent run.ts + server 帧 + shared schema + client
- // 四层，YAGNI；未来需要时改动点已明确（run.ts emit 透传 DispatchResult.isError）
-              const { id } = data as { id?: string };
-              if (!id) break;
+
+            case "tool_execution_start": {
+ // 运行时工具卡（折叠行「调用了 {tool}」）
+              const frame = asRecord(data);
+              const id = frame?.toolCallId;
+              const tool = frame?.toolName;
+              if (typeof id !== "string" || typeof tool !== "string") break;
+              set((s) => ({
+                streamTools: [...s.streamTools, { id, tool, args: frame?.args, status: "running" }],
+              }));
+              break;
+            }
+
+            case "tool_execution_update":
+              break; // 进度帧：卡片无展示位（结果由 end 定终态）
+
+            case "tool_execution_end": {
+              const frame = asRecord(data);
+              const id = frame?.toolCallId;
+              if (typeof id !== "string") break;
+              const isError = frame?.isError === true;
+              const result = toolResultText(frame?.result);
               set((s) => ({
                 streamTools: s.streamTools.map((t) =>
-                  t.id === id
-                    ? { ...t, result: (data as { result?: unknown }).result, status: "ok" }
-                    : t,
+                  t.id === id ? { ...t, result, isError, status: isError ? "error" : "ok" } : t,
                 ),
               }));
+ // 提案载荷（仅 PROPOSAL 工具下发 details）
+              const proposal = proposalFromToolResult(frame?.result);
+              if (proposal !== null) {
+                set((s) => ({
+                  proposals: [
+                    ...s.proposals,
+                    { proposalId: proposal.proposalId, type: proposal.type, preview: proposal.preview, status: "pending" as const },
+                  ],
+                }));
+              }
               break;
             }
-            case "proposal": {
- // 提案卡片（瞬态；S7 数据接入后渲染）
-              const {
-                proposal_id: proposalId,
-                type,
-                preview,
-              } = data as {
-                proposal_id?: string;
-                type?: string;
-                preview?: unknown;
-              };
-              if (!proposalId || !type) break;
-              set((s) => ({
-                proposals: [
-                  ...s.proposals,
-                  { proposalId, type, preview, status: "pending" as const },
-                ],
-              }));
+
+            case "turn_end": {
+ // 轮次结束：占用条数据（口径 = getContextUsage）
+              const usage = parseContextUsage(asRecord(data)?.contextUsage);
+              if (usage !== null) set({ contextUsage: usage });
               break;
             }
-            case "done": {
- // 本轮结束：记录 session_id 供续聊（新会话场景下拉列表随之刷新）
-              if (currentStreamMsgId === null) break; // 流已被切会话/项目作废，忽略
-              const sid = (data as { session_id?: string })?.session_id;
- // 需求 3：上下文占用显示——记录本轮真实 usage（done SSE 帧附带）
-              const usage = (data as { usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } })?.usage;
-              set({ streaming: false, currentSessionId: sid ?? get().currentSessionId });
-              if (usage !== undefined) get().setLastUsage({ prompt_tokens: usage.prompt_tokens ?? 0, completion_tokens: usage.completion_tokens ?? 0, total_tokens: usage.total_tokens ?? 0 });
- // 占用条分母：本轮生效预算（缺失/非法 → null → 占用条隐藏，绝不回退模型 contextWindow）
-              get().setContextBudget(parseContextBudget((data as { context_budget?: unknown })?.context_budget));
-              if (sid) void get().loadSessions(); // 新会话已落库：刷新列表（下拉可切回）
+
+            case "compaction_start":
+              set({ statusNote: "正在压缩上下文…" });
+              break;
+
+            case "compaction_end": {
+              const aborted = asRecord(data)?.aborted === true;
+              set({ statusNote: aborted ? "上下文压缩已取消" : "上下文已压缩" });
               break;
             }
-            case "error": {
- // error 事件后流立即关闭（fetchSSE 已终止解析）：错误条 + 输入恢复
-              const { code, message } = data as { code?: string; message?: string };
+
+            case "auto_retry_start": {
+              const frame = asRecord(data);
+              const attempt = typeof frame?.attempt === "number" ? frame.attempt : 0;
+              const maxAttempts = typeof frame?.maxAttempts === "number" ? frame.maxAttempts : 0;
+              set({ statusNote: `请求失败，正在重试（${attempt}/${maxAttempts}）…` });
+              break;
+            }
+
+            case "auto_retry_end": {
+              const frame = asRecord(data);
+              set({
+                statusNote: frame?.success === true ? null : (typeof frame?.finalError === "string" ? frame.finalError : "重试失败"),
+              });
+              break;
+            }
+
+            case "agent_end": {
+              if (currentStreamMsgId !== streamMsgId) break; // 流已作废：不污染新流状态
+              const frame = asRecord(data);
+              const usage = parseContextUsage(frame?.contextUsage);
+              const stopReason = frame?.stopReason;
+              const errorMessage = typeof frame?.errorMessage === "string" ? frame.errorMessage : "";
+              // 思维链未收到 thinking_end 就结束（模型/传输边界）：同样收尾折叠
+              patchStreamMessage(streamMsgId, (m) =>
+                m.thinkingStreaming === true ? { ...m, thinkingStreaming: false } : m,
+              );
+              currentStreamMsgId = null;
               set({
                 streaming: false,
-                streamError: describeStreamError(code ?? "", message ?? ""),
+                statusNote: null,
+                ...(usage === null ? {} : { contextUsage: usage }),
+                // 失败/中止：错误条提示（aborted 由断连横幅/主动停止表达，不重复报错）
+                ...(stopReason === "error"
+                  ? { streamError: describeStreamError("AGENT_ERROR", errorMessage || "模型调用失败") }
+                  : {}),
+              });
+              void get().loadSessions(); // 本轮已落库：刷新列表（摘要/条数/最近活动）
+              break;
+            }
+
+            case "error": {
+ // HTTP 级错误（fetchSSE 在非 2xx / 网络失败时补发）：错误条 + 输入恢复
+              const frame = asRecord(data);
+              const code = typeof frame?.code === "string" ? frame.code : "";
+              const message = typeof frame?.message === "string" ? frame.message : "";
+              patchStreamMessage(streamMsgId, (m) =>
+                m.thinkingStreaming === true ? { ...m, thinkingStreaming: false } : m,
+              );
+              currentStreamMsgId = null;
+              set({
+                streaming: false,
+                statusNote: null,
+                streamError: describeStreamError(code, message),
+                // 会话已不存在（他处删除/文件被外部删除）：丢掉会话身份，下一条消息新建会话
+                ...(code === "SESSION_NOT_FOUND" ? { currentSessionId: null } : {}),
               });
               break;
             }
@@ -568,15 +755,21 @@ export const useChatStore = create<ChatState>((set, get) => {
  // 60s 无任何事件（半开连接兜底）：横幅「上次会话已取消」+ 清空未确认提案
  // 身份守卫：done 后微窗口内新发一轮时旧流已过期，其超时回调不得污染新流
           if (currentStreamMsgId !== streamMsgId) return;
+          patchStreamMessage(streamMsgId, (m) =>
+            m.thinkingStreaming === true ? { ...m, thinkingStreaming: false } : m,
+          );
           currentStreamMsgId = null;
-          set({ streaming: false, disconnected: true, proposals: [], streamTools: [] });
+          set({ streaming: false, disconnected: true, proposals: [], streamTools: [], statusNote: null });
         },
         onEnd: () => {
- // 流正常关闭（done 哨兵 / 服务端 EOF / error 事件终止）：幂等收尾（done/error 已复位 streaming）
+ // 流正常关闭（服务端 EOF / error 事件终止）：幂等收尾（agent_end/error 已复位 streaming）
  // 身份守卫：同上——旧流的 onEnd 不得复位新流的 streaming / 清空新流身份
           if (currentStreamMsgId !== streamMsgId) return;
+          patchStreamMessage(streamMsgId, (m) =>
+            m.thinkingStreaming === true ? { ...m, thinkingStreaming: false } : m,
+          );
           currentStreamMsgId = null;
-          set((s) => (s.streaming ? { streaming: false } : {}));
+          set((s) => (s.streaming ? { streaming: false, statusNote: null } : {}));
         },
       });
     },
@@ -584,8 +777,7 @@ export const useChatStore = create<ChatState>((set, get) => {
     resendLast: () => {
       const { messages, streaming } = get();
       if (streaming || !lastSentText) return;
- // 断连残留清理：无条件移除尾部 assistant（断连语义 = 整轮取消，半截回答一并丢弃——
- // 部分产出后断连的常见场景：带内容的半截 assistant 若不移除，重发后残留 + user 重复），
+ // 断连残留清理：无条件移除尾部 assistant（断连语义 = 整轮取消，半截回答一并丢弃），
  // 再移除与重发文本相同的最后一条 user 消息（避免重复气泡）
       let next = messages;
       const last = next[next.length - 1];

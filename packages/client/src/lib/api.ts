@@ -996,17 +996,30 @@ export function listSessions(): Promise<ChatSessionSummary[]> {
 
 /**
  * GET /api/v1/chat/sessions/:id/messages 消息条目（chatMessagesResSchema.messages 元素，
- * ——响应不含 sessionId；shared 未导出该元素类型，本地组合，参照 ProjectList 先例）
+ * ——响应不含 sessionId；shared 未导出该元素类型，本地组合）
+ * `thinking` = 思维链预览（全文走 `getSessionThinking` 按需拉取，见 docs/api/80-api-chat.md）；
+ * `isError` = tool 消息是否失败
  */
 export interface ChatSessionMessage {
   id: string;
   role: ChatRole;
   content?: string | null;
+  thinking?: ChatThinkingPreview[];
  /** assistant 消息的工具调用数组 */
   toolCalls?: unknown[];
  /** tool 消息关联的 assistant 工具调用 id */
   toolCallId?: string | null;
+ /** tool 消息是否失败 */
+  isError?: boolean;
   createdAt: string;
+}
+
+/** 思维链预览（`deferred: true` 表示全文需按需拉取） */
+export interface ChatThinkingPreview {
+  preview: string;
+  deferred: true;
+  blockIndex: number;
+  length: number;
 }
 
 /** GET /api/v1/chat/sessions/:id/messages 响应（U5 恢复聊天记录用） */
@@ -1018,6 +1031,26 @@ export interface ChatSessionMessagesRes {
 /** 获取会话消息历史（按 created_at 升序；仅当前项目会话） */
 export function getSessionMessages(sessionId: string): Promise<ChatSessionMessagesRes> {
   return apiFetch<ChatSessionMessagesRes>(`/chat/sessions/${sessionId}/messages`);
+}
+
+/** GET /api/v1/chat/sessions/:id/messages/:messageId/thinking 响应 */
+export interface GetSessionThinkingRes {
+  thinking: string;
+}
+
+/**
+ * 按需读取某条 assistant 消息的思维链全文（历史接口只回 240 字预览，避免整包下发大 JSON）。
+ * 错误：400 VALIDATION_ERROR（blockIndex 缺失/非法）/ 404 THINKING_NOT_FOUND（越界或非 thinking 块）
+ * / 404 SESSION_NOT_FOUND（会话或消息条目不存在）
+ */
+export function getSessionThinking(
+  sessionId: string,
+  messageId: string,
+  blockIndex: number,
+): Promise<GetSessionThinkingRes> {
+  return apiFetch<GetSessionThinkingRes>(
+    `/chat/sessions/${encodeURIComponent(sessionId)}/messages/${encodeURIComponent(messageId)}/thinking?blockIndex=${blockIndex}`,
+  );
 }
 
 /** DELETE /api/v1/chat/sessions/:id 响应（物理删除，不可恢复） */

@@ -1,5 +1,9 @@
 // 自写 SSE 客户端（T7.2 核心；chat 端点 POST + SSE，浏览器原生 EventSource 只支持 GET）
 // 帧解析抽为纯函数（parseSSEFrames / parseSSEFrame）便于单测
+// 与事件契约（docs/api/80-api-chat.md）的分工：本模块**只管传输**——帧原样交给 onEvent；
+// 唯一「合成事件」是 `error`：非 2xx 的 REST 错误包裹与网络层失败由本模块补发
+// `error { code, message }`（流内业务错误没有 error 帧——它们经 agent_end 的
+// stopReason/errorMessage 表达）。[DONE] 哨兵与 error 均终止解析。
 import type { ErrorCode } from "@whispering233/ai-editor-shared";
 import { CLIENT_NETWORK_ERROR } from "../lib/api";
 

@@ -155,12 +155,12 @@ export function LlmSection() {
                 <div className="mt-3 flex flex-col gap-1">
                   <span className="text-xs text-muted-foreground">
                     {activeProvider.authConfigured
-                      ? `key: 已配置${activeProvider.authSource === undefined ? "" : `（来源：${activeProvider.authSource}）`}`
-                      : "key: 未配置"}
+                      ? `凭证：已配置${activeProvider.authSource === undefined ? "" : `（来源：${activeProvider.authSource}）`}`
+                      : "凭证：未配置"}
                   </span>
                   {!activeProvider.authConfigured && (
                     <span className="text-xs text-destructive">
-                      未配 key：聊天下拉已禁用此组，聊天不可用
+                      未配置凭证：聊天下拉已禁用此组，聊天不可用
                     </span>
                   )}
                   <div className="flex gap-1.5">

@@ -22,6 +22,8 @@ import {
   getEntityDetail,
   getOutlinePath,
   getProjectBackups,
+  getSessionMessages,
+  getSessionThinking,
   getSettingsLlm,
   getTrashList,
   importProjectZip,
@@ -43,6 +45,47 @@ import {
 } from "./api";
 
 const originalFetch = globalThis.fetch;
+
+/** 会话端点（GET 消息历史 / GET 思维链全文）：路径、查询参数与响应解析 */
+describe("chat 会话端点（docs/api/80-api-chat.md）", () => {
+  it("getSessionMessages：GET /chat/sessions/:id/messages（id 经 encodeURIComponent）", async () => {
+    const calls = mockFetchOnce({
+      body: {
+        success: true,
+        data: {
+          sessionId: "0192-sess",
+          messages: [
+            {
+              id: "e1",
+              role: "assistant",
+              content: "回答",
+              thinking: [{ preview: "推理", deferred: true, blockIndex: 0, length: 2 }],
+              createdAt: "2026-08-01T10:00:00Z",
+            },
+          ],
+        },
+      },
+    });
+    const res = await getSessionMessages("0192-sess");
+    expect(calls[0].url).toBe("/api/v1/chat/sessions/0192-sess/messages");
+    expect(res.messages[0].thinking?.[0]).toEqual({
+      preview: "推理",
+      deferred: true,
+      blockIndex: 0,
+      length: 2,
+    });
+  });
+
+  it("getSessionThinking：GET .../messages/:messageId/thinking?blockIndex=N", async () => {
+    const calls = mockFetchOnce({ body: { success: true, data: { thinking: "思维链全文" } } });
+    const res = await getSessionThinking("sess-1", "entry-2", 1);
+    expect(res.thinking).toBe("思维链全文");
+    expect(calls[0].url).toBe(
+      "/api/v1/chat/sessions/sess-1/messages/entry-2/thinking?blockIndex=1",
+    );
+    expect(calls[0].init?.method).toBe("GET");
+  });
+});
 
 /** mock fetch：记录请求参数，返回给定响应 */
 function mockFetchOnce(response: { status?: number; body: unknown }) {

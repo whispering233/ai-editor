@@ -57,6 +57,7 @@ import {
   focusLabel,
   MessageItem,
   ProposalCardView,
+  ThinkingBlock,
   ToolCallRow,
   MENU_KEY_DELETE_SESSION,
   sessionItemMenu,
@@ -129,24 +130,102 @@ afterEach(() => {
   });
 });
 
-describe("占用条分母（usage-bar 契约：本轮的生效预算，不是模型 contextWindow）", () => {
-  it("分母 = context_budget.total：8192 / 16384 → 50%，tooltip 含「本轮」「生效预算」与两个数值", () => {
-    const bar = usageBarView({ total_tokens: 8192 }, { history: 15000, total: 16384 });
-    expect(bar?.percent).toBe(50);
-    expect(bar?.title).toContain("本轮");
-    expect(bar?.title).toContain("生效预算");
-    expect(bar?.title).toContain("8192");
-    expect(bar?.title).toContain("16384");
+describe("占用条（usage-bar 契约：口径 = pi getContextUsage 的 percent）", () => {
+  it("percent 直接用服务端值；tooltip 给 tokens / contextWindow 两个数值", () => {
+    const bar = usageBarView({ percent: 12, tokens: 1200, contextWindow: 10000 });
+    expect(bar?.percent).toBe(12);
+    expect(bar?.title).toContain("1200");
+    expect(bar?.title).toContain("10000");
   });
 
-  it(">100% clamp 到 100（预算护栏允许略超预算，不渲染 >100% 的条）", () => {
-    expect(usageBarView({ total_tokens: 40000 }, { history: 15000, total: 16384 })?.percent).toBe(100);
+  it("percent 越界 clamp 到 0..100（四舍五入可能略微越界）", () => {
+    expect(usageBarView({ percent: 100.4, tokens: 1, contextWindow: 1 })?.percent).toBe(100);
+    expect(usageBarView({ percent: -0.2, tokens: 0, contextWindow: 10 })?.percent).toBe(0);
   });
 
-  it("无预算 / 无 usage / 预算非正 → null（整条隐藏，不回退模型窗口分母）", () => {
-    expect(usageBarView({ total_tokens: 8192 }, null)).toBeNull();
-    expect(usageBarView(null, { history: 15000, total: 16384 })).toBeNull();
-    expect(usageBarView({ total_tokens: 8192 }, { history: 0, total: 0 })).toBeNull();
+  it("无数据 → null（整条隐藏）", () => {
+    expect(usageBarView(null)).toBeNull();
+  });
+});
+
+describe("thinking-block 契约（默认折叠摘要 / 展开正文 / 流式自动展开-结束自动折叠 / 按需拉全文）", () => {
+  // SSR 会在相邻文本节点间插 `<!-- -->`（计数与「 字」是两个节点）——归一后再断言
+  const html = (node: ReactNode) => renderToString(<div>{node}</div>).replace(/<!--[^>]*-->/g, "");
+
+  it("默认折叠：只渲染一行摘要「思考过程 · N 字」，不渲染正文", () => {
+    const out = html(<ThinkingBlock text="先看大纲再回答" length={7} />);
+    expect(out).toContain("思考过程 · 7 字");
+    expect(out).not.toContain("先看大纲再回答");
+  });
+
+  it("live（流式进行中）→ 初始展开渲染全文（SSR 初始态即 useState(live)）", () => {
+    const out = html(<ThinkingBlock text="流式中的思维链全文" length={9} live />);
+    expect(out).toContain("流式中的思维链全文");
+    expect(out).toContain('aria-expanded="true"');
+  });
+
+  it("历史预览未展开 → 摘要行用原文字数（length），不暴露截断后的预览文本", () => {
+    const out = html(<ThinkingBlock text="前 240 字预览…" length={5000} deferred />);
+    expect(out).toContain("思考过程 · 5000 字");
+    expect(out).not.toContain("前 240 字预览");
+  });
+
+  it("视觉契约：折叠态无底色/无描边；展开态 = surface-soft 底 + 左侧 2px 竖线 + 限高", () => {
+    const collapsed = html(<ThinkingBlock text="推理" length={2} />);
+    expect(collapsed).not.toContain("bg-muted");
+    const expanded = html(<ThinkingBlock text="推理" length={2} live />);
+    expect(expanded).toContain("bg-muted");
+    expect(expanded).toContain("border-l-2");
+    expect(expanded).toContain("border-input");
+    expect(expanded).toContain("max-h-48");
+  });
+
+  it("MessageItem（历史 assistant）：思维链摘要行在正文之前渲染，正文不含思维链文本", () => {
+    const message = {
+      id: "m1",
+      sessionId: "sess-1",
+      role: "assistant" as const,
+      content: "正式回答",
+      thinking: [{ preview: "内部推理预览", deferred: true as const, blockIndex: 0, length: 6 }],
+      createdAt: "2026-08-01T10:00:00Z",
+    };
+    const out = html(<MessageItem message={message} toolResults={new Map()} />);
+    expect(out).toContain("思考过程 · 6 字");
+    expect(out).toContain("正式回答");
+    expect(out.indexOf("思考过程")).toBeLessThan(out.indexOf("正式回答"));
+  });
+
+  it("MessageItem（流式 assistant）：thinkingText 累积渲染 + 流式标记（已展开）", () => {
+    const message = {
+      id: "local-1",
+      sessionId: "",
+      role: "assistant" as const,
+      content: "回复中",
+      thinkingText: "流式思维链",
+      thinkingStreaming: true,
+      createdAt: "2026-08-01T10:00:00Z",
+    };
+    const out = html(<MessageItem message={message} toolResults={new Map()} />);
+    expect(out).toContain("流式思维链");
+    expect(out).toContain("思考过程 · 5 字");
+  });
+
+  it("message_end 后（thinkingText 与 thinking 并存）只渲染一个思维链块（K6 oracle D1 回归）", () => {
+    const message = {
+      id: "local-2",
+      sessionId: "sess-1",
+      role: "assistant" as const,
+      content: "正式回答",
+      thinkingText: "本轮累积的全量思维链",
+      thinkingStreaming: false,
+      thinking: [{ preview: "本轮累积的全量思维链", deferred: true as const, blockIndex: 0, length: 10 }],
+      createdAt: "2026-08-01T10:00:00Z",
+    };
+    const out = html(<MessageItem message={message} toolResults={new Map()} />);
+    expect(out.match(/思考过程/g) ?? []).toHaveLength(1);
+    expect(out).toContain("思考过程 · 10 字");
+    // 折叠态不渲染正文（全量文本仍保留在 message.thinkingText，展开后才可见）
+    expect(out).not.toContain("本轮累积的全量思维链");
   });
 });
 

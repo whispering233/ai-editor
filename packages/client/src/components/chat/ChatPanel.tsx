@@ -21,6 +21,7 @@ import {
   DownOutlined,
   MessageOutlined,
   PlusOutlined,
+  RightOutlined,
   ToolOutlined,
 } from "@ant-design/icons";
 import Markdown from "@ant-design/x-markdown";
@@ -28,6 +29,7 @@ import { useMediaQuery } from "../../hooks/use-media-query";
 import { CHAT_MIN_WIDTH } from "../../hooks/use-panels";
 import { useProjectStore } from "../../stores/project";
 import {
+  getSessionThinking,
   getSettingsLlm,
   resolveNames,
   updateSettingsLlm,
@@ -40,8 +42,15 @@ import {
   summarizePreview,
   summarizeToolCall,
 } from "../../lib/tool-call-summary";
-import { useChatStore, type ChatContextBudget, type FocusContext, type ProposalCard } from "../../stores/chat";
-import type { ChatMessage, ChatSessionSummary } from "@whispering233/ai-editor-shared";
+import {
+  useChatStore,
+  type ChatMessageView,
+  type ContextUsage,
+  type FocusContext,
+  type ProposalCard,
+} from "../../stores/chat";
+import type { ChatSessionSummary } from "@whispering233/ai-editor-shared";
+
 import { formatRelativeTime } from "@whispering233/ai-editor-shared";
 import { cn } from "../../lib/utils";
 import { skeletonClass } from "../../lib/styles";
@@ -139,25 +148,25 @@ const THINKING_LEVEL_OPTIONS: ThinkingLevel[] = [
 ];
 
 /**
- * 占用条视图数据（导出供渲染走查测试）：分母 = **本轮生效预算**（done 帧 `context_budget.total`），
- * 不是模型 `contextWindow`（1M 窗口下用窗口做分母永远是 0-1%，是假指标——见 `docs/ui/DESIGN.md` `usage-bar`）。
- * - 缺 usage 或缺预算 → null（调用方据此整条隐藏）
- * - 占比 clamp 到 0..100：预算护栏允许「略超预算」，不该渲染 >100% 的条
+ * 占用条视图数据（导出供渲染走查测试）：口径 = pi `getContextUsage()`（`contextUsage` 随
+ * turn_end / agent_end 帧下发，percent = tokens / 模型 contextWindow，见 `docs/ui/DESIGN.md` `usage-bar`）。
+ * - 无数据 / 非法负载（parseContextUsage 已拦）→ null（调用方据此整条隐藏）
+ * - 占比 clamp 到 0..100（服务端四舍五入可能略微越界）
  */
 export function usageBarView(
-  lastUsage: { total_tokens: number } | null,
-  contextBudget: ChatContextBudget | null,
+  usage: ContextUsage | null,
 ): { percent: number; title: string } | null {
-  if (lastUsage === null || contextBudget === null || contextBudget.total <= 0) return null;
-  const used = lastUsage.total_tokens;
-  const percent = Math.min(100, Math.max(0, Math.round((used / contextBudget.total) * 100)));
-  return { percent, title: `上下文占用：${used} / ${contextBudget.total} tokens（本轮 / 生效预算）` };
+  if (usage === null) return null;
+  const percent = Math.min(100, Math.max(0, Math.round(usage.percent)));
+  return {
+    percent,
+    title: `上下文占用：${usage.tokens} / ${usage.contextWindow} tokens`,
+  };
 }
 
 function ComposerConfigRow() {
   const [settings, setSettings] = useState<SettingsLlmConfig | null>(null);
-  const lastUsage = useChatStore((s) => s.lastUsage);
-  const contextBudget = useChatStore((s) => s.contextBudget);
+  const contextUsage = useChatStore((s) => s.contextUsage);
   const { token } = theme.useToken();
 
   // 挂载后拉取 LLM 设置（激活 provider + 各家模型目录/key 状态 + 思考强度；失败静默——配置行降级隐藏）；
@@ -179,9 +188,9 @@ function ComposerConfigRow() {
   const currentModel = activeProvider?.models.find((m) => m.id === settings?.model) ?? null;
   /** 激活 provider 无有效 key → 整条工具条禁用（提示去设置页配 key） */
   const activeKeyless = settings !== null && (activeProvider === null || !activeProvider.authConfigured);
-  // 上下文占用：最近一轮真实 usage.total / **本轮生效预算**（done 帧 context_budget——不是模型窗口，
-  // 见 docs/ui/DESIGN.md `usage-bar`）；无预算 → bar=null → 整条隐藏
-  const bar = usageBarView(lastUsage, contextBudget);
+  // 上下文占用：最近一轮的真实占用（`contextUsage`——tokens / 模型 contextWindow，
+  // 见 docs/ui/DESIGN.md `usage-bar`）；无数据 → bar=null → 整条隐藏
+  const bar = usageBarView(contextUsage);
 
   /** 切换模型（选中即激活 provider+model 一对——跨 provider 选择时 key 来源同步切换） */
   function changeModel(composite: string): void {
@@ -221,7 +230,7 @@ function ComposerConfigRow() {
         title={
           activeKeyless
             ? "当前 provider 未配置 API key：请切换到其他 provider 或在设置页配置"
-            : "选择模型（按 provider 分组；未配 key 的组禁用）"
+            : "选择模型（按 provider 分组；未配置凭证的组禁用）"
         }
         aria-label="选择模型"
         options={settings.providers
@@ -233,7 +242,7 @@ function ComposerConfigRow() {
             // （antd 分组对象无 disabled——组级禁用下推到组内每个 option）
             const groupDisabled = !p.authConfigured && p.id !== settings.provider;
             return {
-              label: `${p.displayName}${p.authConfigured ? "" : "（未配 key）"}`,
+              label: `${p.displayName}${p.authConfigured ? "" : "（未配置）"}`,
               options: p.models.map((m) => ({
                 value: `${p.id}::${m.id}`,
                 label: m.displayName ?? m.id,
@@ -585,15 +594,92 @@ export function ToolCallRow({
   );
 }
 
-// ============ 消息条目：user 气泡 / assistant 无气泡宋体排版 + 历史工具折叠记录 ============
+// ============ 思维链（DESIGN.md `thinking-block`：默认折叠为一行摘要，流式期间自动展开） ============
+
+/**
+ * 思维链块（导出供渲染走查测试）。两种数据形态共用一套渲染：
+ * - **流式轮**（`live`）：文本由 `thinking_delta` 在客户端累积（全量），流式期间自动展开、结束后自动折叠；
+ * - **历史回看**（`deferred`）：只有 240 字预览（`docs/api/80-api-chat.md` 按需端点契约），
+ *   点展开才拉全文（带加载/失败态）。
+ * 视觉：折叠 = 一行 caption + chevron（tertiary 字色，无底色无描边）；
+ * 展开 = surface-soft 底 + 左侧 2px hairline-strong 竖线 + 限高 200px。
+ */
+export function ThinkingBlock({
+  text,
+  length,
+  live = false,
+  deferred = false,
+  onRequestFull,
+}: {
+  /** 当前可见文本（live = 全量累积；历史 = 预览） */
+  text: string;
+  /** 原文总字数（摘要行展示；缺省回落当前文本长度） */
+  length: number;
+  /** 流式进行中（自动展开；结束后自动折叠） */
+  live?: boolean;
+  /** 全文未拉取（展开时调 onRequestFull） */
+  deferred?: boolean;
+  /** 拉全文（返回全文文本；抛错 → 失败态） */
+  onRequestFull?: () => Promise<string>;
+}) {
+  const [open, setOpen] = useState(live);
+  const [full, setFull] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  // 折叠时序：开始流式 → 自动展开；本轮结束（live 变 false）→ 自动折叠为摘要行
+  useEffect(() => {
+    setOpen(live);
+  }, [live]);
+
+  const count = length > 0 ? length : text.length;
+  const display = full ?? text;
+
+  const toggle = (): void => {
+    const next = !open;
+    setOpen(next);
+    if (!next || !deferred || full !== null || onRequestFull === undefined) return;
+    setLoading(true);
+    setFailed(false);
+    void onRequestFull()
+      .then((value) => setFull(value))
+      .catch(() => setFailed(true))
+      .finally(() => setLoading(false));
+  };
+
+  return (
+    <div className="text-xs">
+      <button
+        type="button"
+        onClick={toggle}
+        aria-expanded={open}
+        className="flex w-full items-center gap-1 text-left text-muted-foreground"
+      >
+        {open ? (
+          <DownOutlined className="shrink-0 text-xs" />
+        ) : (
+          <RightOutlined className="shrink-0 text-xs" />
+        )}
+        <span className="min-w-0 truncate">思考过程 · {count} 字</span>
+      </button>
+      {open && (
+        <div className="mt-1 max-h-48 overflow-auto border-l-2 border-input bg-muted px-2 py-1.5 text-xs whitespace-pre-wrap text-foreground/80">
+          {loading ? "思维链加载中…" : failed ? "思维链加载失败" : display}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============ 消息条目：user 气泡 / assistant 无气泡排版 + 思维链 + 历史工具折叠记录 ============
 
 /** 历史 tool 消息按 toolCallId 挂到 assistant.toolCalls 行（成对；孤儿半对不渲染；导出供渲染走查测试） */
 export function MessageItem({
   message,
   toolResults,
 }: {
-  message: ChatMessage;
-  toolResults: Map<string, ChatMessage>;
+  message: ChatMessageView;
+  toolResults: Map<string, ChatMessageView>;
 }) {
   const { token } = theme.useToken();
   if (message.role === "user") {
@@ -619,8 +705,28 @@ export function MessageItem({
   // 流式尾部块由 x-markdown streaming 优化处理）
   const toolCalls = Array.isArray(message.toolCalls) ? message.toolCalls : [];
   const content = message.content ?? "";
+  const liveThinking = message.thinkingText;
+  const historyThinking = message.thinking ?? [];
   return (
     <div className="space-y-1.5">
+      {/* 思维链：流式轮全量（自动展开/折叠）；历史轮 240 字预览 + 按需拉全文。
+          二选一渲染：message_end 后同一消息同时带 thinkingText（本轮累积）与 thinking（服务端预览）——
+          两者都渲会出两个「思考过程」块（K6 oracle D1）。 */}
+      {liveThinking !== undefined && liveThinking !== "" ? (
+        <ThinkingBlock text={liveThinking} length={liveThinking.length} live={message.thinkingStreaming === true} />
+      ) : (
+        historyThinking.map((t) => (
+          <ThinkingBlock
+            key={`thinking-${t.blockIndex}`}
+            text={t.preview}
+            length={t.length}
+            deferred={t.deferred}
+            onRequestFull={() =>
+              getSessionThinking(message.sessionId, message.id, t.blockIndex).then((res) => res.thinking)
+            }
+          />
+        ))
+      )}
       {toolCalls.map((c, i) => {
         const call = asToolCall(c);
         const callId = call.id ?? `hist-${i}`;
@@ -631,7 +737,7 @@ export function MessageItem({
             toolName={call.tool ?? call.name ?? "工具"}
             args={call.args}
             result={resultMsg?.content}
-            status={resultMsg ? "ok" : undefined}
+            status={resultMsg?.isError === true ? "error" : resultMsg ? "ok" : undefined}
           />
         );
       })}
@@ -837,13 +943,14 @@ function MessageList({ disabled }: { disabled: boolean }) {
   const messages = useChatStore((s) => s.messages);
   const messagesLoading = useChatStore((s) => s.messagesLoading);
   const streaming = useChatStore((s) => s.streaming);
+  const statusNote = useChatStore((s) => s.statusNote);
   const streamTools = useChatStore((s) => s.streamTools);
   const proposals = useChatStore((s) => s.proposals);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // 历史 tool 消息按 toolCallId 索引（成对：assistant.toolCalls ↔ tool.tool_call_id）
   const toolResults = useMemo(() => {
-    const map = new Map<string, ChatMessage>();
+    const map = new Map<string, ChatMessageView>();
     for (const m of messages) {
       if (m.role === "tool" && m.toolCallId) map.set(m.toolCallId, m);
     }
@@ -855,7 +962,7 @@ function MessageList({ disabled }: { disabled: boolean }) {
   useEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [tail, messages, messagesLoading, streamTools.length, proposals.length]);
+  }, [tail, messages, messagesLoading, streamTools.length, proposals.length, statusNote]);
 
   /** 流式思考指示：正在流 & 尾条 assistant 且尚无正文（首段 delta 前/工具等待期） */
   const showThinking =
@@ -905,7 +1012,11 @@ function MessageList({ disabled }: { disabled: boolean }) {
             <MessageItem key={m.id} message={m} toolResults={toolResults} />
           ))}
           {showThinking && <Bubble loading content="" />}
-          {/* 运行时工具记录（S7 SSE tool_call/tool_result 事件填充；折叠渲染同历史） */}
+          {/* 状态提示（上下文压缩 / 自动重试）：caption 字色，不占视觉重心 */}
+          {statusNote !== null && streaming && (
+            <p className="text-xs text-muted-foreground">{statusNote}</p>
+          )}
+          {/* 运行时工具记录（tool_execution_* 事件填充；折叠渲染同历史） */}
           {streamTools.map((t) => (
             <ToolCallRow
               key={t.id}
@@ -915,7 +1026,7 @@ function MessageList({ disabled }: { disabled: boolean }) {
               status={t.status}
             />
           ))}
-          {/* 提案卡片（S7 SSE proposal 事件填充；瞬态，流断开即清空） */}
+          {/* 提案卡片（tool_execution_end 的 result.details 填充；瞬态，流断开即清空） */}
           {proposals.map((p) => (
             <ProposalCardView key={p.proposalId} proposal={p} />
           ))}
