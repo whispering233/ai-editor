@@ -919,37 +919,37 @@ export interface LlmModelInfo {
   reasoning: boolean;
 }
 
-/** 单 provider 条目（GET /settings/llm providers[]——目录 + 该家有效 key 状态） */
+/** 单 provider 条目（GET /settings/llm providers[]——pi provider 目录 + 认证状态） */
 export interface SettingsProviderInfo {
   id: string;
   displayName: string;
-  apiKeySet: boolean;
-  apiKeyMasked?: string;
+  authConfigured: boolean;
+  authSource?: string;
   models: LlmModelInfo[];
 }
 
 /** 思考强度档位（与 shared THINKING_LEVELS 一致；参考 pi ThinkingLevel） */
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 
-/** GET /api/v1/settings/llm 响应（key 不回传明文，仅掩码；激活 provider+model + 各家目录/key 状态） */
+/** GET /api/v1/settings/llm 响应（凭据明文永不回传；provider/model 空串 = 未配置任何可用模型） */
 export interface SettingsLlmConfig {
-  provider: string; // 激活 provider id（缺省 "deepseek"）
-  model: string; // 当前模型名（属于 provider 目录）
+  provider: string;
+  model: string;
   thinkingLevel: ThinkingLevel;
   providers: SettingsProviderInfo[];
 }
 
-/** 读取 LLM 配置（默认 provider deepseek / model deepseek-v4-flash；各家 key 状态与掩码） */
+/** 读取 LLM 配置（pi provider 目录 + 认证状态 + 激活模型） */
 export function getSettingsLlm(): Promise<SettingsLlmConfig> {
   return apiFetch<SettingsLlmConfig>("/settings/llm");
 }
 
-/** PUT /api/v1/settings/llm 请求体（provider+model 成对激活；api_keys 值空字符串 = 清除该家 key） */
+/** PUT /api/v1/settings/llm 请求体（provider+model 成对激活；api_key.key 空串 = 清除该家凭据） */
 export interface UpdateSettingsLlmBody {
   provider?: string;
   model?: string;
   thinking_level?: ThinkingLevel;
-  api_keys?: Record<string, string>;
+  api_key?: { provider: string; key: string };
 }
 
 /** PUT /api/v1/settings/llm 响应 */
@@ -957,7 +957,7 @@ export interface UpdateSettingsLlmRes {
   saved: true;
 }
 
-/** 更新 LLM 配置（写入 ~/.ai-editor/config.json，绝不入项目文件） */
+/** 更新 LLM 配置（写 pi settings / credential store，绝不入项目文件） */
 export function updateSettingsLlm(patch: UpdateSettingsLlmBody): Promise<UpdateSettingsLlmRes> {
   return apiFetch<UpdateSettingsLlmRes>("/settings/llm", { method: "PUT", body: patch });
 }

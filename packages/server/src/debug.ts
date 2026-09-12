@@ -17,12 +17,12 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-/** 配置文件相对创作根的路径（项目级调试配置；与 settings.ts 的用户级 ~/.ai-editor/config.json
- * 同文件名不同 base——settings 管 DeepSeek key，此处管调试开关，互不干扰） */
+/** 配置文件相对创作根的路径（项目级调试配置——debug 开关的唯一载体；
+ * 模型/凭据/运行参数自 K5 起全部在 pi agent dir，与本文件无关） */
 const DEBUG_CONFIG_RELATIVE_PATH = join(".ai-editor", "config.json");
 
 /** 五类别清单（isCategoryEnabled 判定依据；新增类别在此扩展） */
-export const DEBUG_CATEGORIES = ["chat", "request", "stream", "usage", "http"] as const;
+export const DEBUG_CATEGORIES = ["chat", "request", "usage", "http"] as const;
 
 /** 调试类别（细粒度开关；debugLog 第一参） */
 export type DebugCategory = (typeof DEBUG_CATEGORIES)[number];

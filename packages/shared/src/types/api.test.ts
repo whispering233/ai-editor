@@ -38,7 +38,8 @@ import {
   relationCreateReqSchema,
   relationQuerySchema,
   relationUpdateMetaReqSchema,
-  userConfigFileSchema,
+  settingsLlmGetResSchema,
+  settingsLlmPutReqSchema,
 } from "./api.js";
 
 describe("ErrorCode 完整性", () => {
@@ -573,104 +574,53 @@ describe("导出/导入", () => {
   });
 });
 
-describe("userConfigFileSchema（schema v1 → v2 多 provider）", () => {
-  it("v2 全字段 parse（schema_version=2 + provider + api_keys + model + thinking_level）", () => {
-    const parsed = userConfigFileSchema.parse({
-      schema_version: 2,
+describe("settings/llm 端点 schema（pi provider 目录契约）", () => {
+  it("GET：provider/model 可为空串（未配置任何可用模型）+ provider 认证状态字段", () => {
+    const parsed = settingsLlmGetResSchema.parse({
+      provider: "",
+      model: "",
+      thinkingLevel: "medium",
+      providers: [
+        {
+          id: "deepseek",
+          displayName: "DeepSeek",
+          authConfigured: false,
+          models: [{ id: "deepseek-v4-flash", provider: "deepseek", displayName: "DeepSeek V4 Flash", contextWindow: 64000, maxTokens: 8192, reasoning: false }],
+        },
+      ],
+    });
+    expect(parsed.provider).toBe("");
+    expect(parsed.providers[0].authConfigured).toBe(false);
+    expect(parsed.providers[0].authSource).toBeUndefined();
+  });
+
+  it("GET：authSource 可选（有凭据时透传 pi 的来源标识）", () => {
+    const parsed = settingsLlmGetResSchema.parse({
       provider: "opencode-go",
       model: "qwen3.7-max",
-      thinking_level: "high",
-      api_keys: { deepseek: "sk-xxx", "opencode-go": "oc-xxx" },
+      thinkingLevel: "high",
+      providers: [{ id: "opencode-go", displayName: "OpenCode Go", authConfigured: true, authSource: "stored", models: [] }],
     });
-    expect(parsed).toEqual({
-      schema_version: 2,
-      provider: "opencode-go",
-      model: "qwen3.7-max",
-      thinking_level: "high",
-      api_keys: { deepseek: "sk-xxx", "opencode-go": "oc-xxx" },
-    });
+    expect(parsed.providers[0].authSource).toBe("stored");
   });
 
-  it("v1 全字段 parse（schema_version=1 + model + thinking_level + api_key 旧字段保留）", () => {
-    const parsed = userConfigFileSchema.parse({
-      schema_version: 1,
+  it("PUT：provider+model+thinking_level 可选；api_key 单家凭据形状", () => {
+    expect(settingsLlmPutReqSchema.parse({ provider: "deepseek", model: "deepseek-v4-flash" })).toEqual({
+      provider: "deepseek",
       model: "deepseek-v4-flash",
-      thinking_level: "high",
-      api_key: "sk-xxx",
     });
-    expect(parsed).toEqual({
-      schema_version: 1,
-      model: "deepseek-v4-flash",
-      thinking_level: "high",
-      api_key: "sk-xxx",
+    expect(settingsLlmPutReqSchema.parse({ api_key: { provider: "deepseek", key: "" } })).toEqual({
+      api_key: { provider: "deepseek", key: "" },
     });
+    expect(settingsLlmPutReqSchema.parse({})).toEqual({});
   });
 
-  it("v0 旧格式（无 schema_version）直接兼容：与 v1 同结构读取，不迁移不写回", () => {
-    const parsed = userConfigFileSchema.parse({ model: "deepseek-v4-flash", api_key: "sk-xxx" });
-    expect(parsed.schema_version).toBeUndefined();
-    expect(parsed.model).toBe("deepseek-v4-flash");
-  });
-
-  it("空对象 parse 成功（所有字段可选）", () => {
-    expect(userConfigFileSchema.parse({})).toEqual({});
-  });
-
-  it("宽松读取：未知字段保留不拒绝（用户自有文件，未来版本追加字段不应使整份配置失效）", () => {
-    const parsed = userConfigFileSchema.parse({ model: "x", future_field: 42 });
-    expect(parsed.future_field).toBe(42);
-  });
-
-  it("非法值拒绝：thinking_level 非枚举、model/api_keys 值非字符串、schema_version 非 1/2", () => {
-    expect(userConfigFileSchema.safeParse({ thinking_level: "bogus" }).success).toBe(false);
-    expect(userConfigFileSchema.safeParse({ model: 42 }).success).toBe(false);
-    expect(userConfigFileSchema.safeParse({ api_keys: { deepseek: 42 } }).success).toBe(false);
-    expect(userConfigFileSchema.safeParse({ schema_version: 3 }).success).toBe(false); // 未来版本：整份失效（空配置默认值）
-  });
-});
-
-describe("context_budget（上下文预算段，A1）", () => {
-  it("合法值被读出（history_ratio ∈ (0,1] + tool_result_max_tokens 正整数）", () => {
-    const parsed = userConfigFileSchema.parse({
-      context_budget: { history_ratio: 0.3, tool_result_max_tokens: 12000 },
-    });
-    expect(parsed.context_budget).toEqual({ history_ratio: 0.3, tool_result_max_tokens: 12000 });
-  });
-
-  it("部分字段缺省：只给一项时另一项为 undefined（由服务端回落默认）", () => {
-    expect(userConfigFileSchema.parse({ context_budget: { history_ratio: 0.2 } }).context_budget).toEqual({ history_ratio: 0.2 });
-    expect(userConfigFileSchema.parse({ context_budget: {} }).context_budget).toEqual({});
-  });
-
-  it("整段缺失 = undefined（不是 {}——服务端按缺省默认值处理）", () => {
-    expect(userConfigFileSchema.parse({ model: "deepseek-v4-flash" }).context_budget).toBeUndefined();
-  });
-
-  it("整段非法 → 该段回落 {}，**且不牵连其余字段**（整份 safeParse 仍成功）", () => {
-    const bads: unknown[] = [
-      { history_ratio: 5 }, // 越界上
-      { history_ratio: 0 }, // 越界下
-      { history_ratio: "x" }, // 类型错
-      { tool_result_max_tokens: 0 }, // 非正
-      { tool_result_max_tokens: 1.5 }, // 非整数
-      { history_ratio: 0.2, tool_result_max_tokens: -1 }, // 一错全段错（不半保留）
-      [],
-      "x",
-    ];
-    for (const bad of bads) {
-      const parsed = userConfigFileSchema.safeParse({
-        provider: "deepseek",
-        model: "deepseek-v4-flash",
-        api_keys: { deepseek: "sk-xxx" },
-        context_budget: bad,
-      });
-      expect(parsed.success).toBe(true); // 本段非法不得使整份配置失效（否则用户 provider/model/key 静默丢失）
-      if (!parsed.success) continue;
-      expect(parsed.data.context_budget).toEqual({});
-      expect(parsed.data.provider).toBe("deepseek");
-      expect(parsed.data.model).toBe("deepseek-v4-flash");
-      expect(parsed.data.api_keys).toEqual({ deepseek: "sk-xxx" });
-    }
+  it("PUT：strict——旧的 api_keys 映射 / 裸 api_key 字符串都被拒绝", () => {
+    expect(settingsLlmPutReqSchema.safeParse({ api_keys: { deepseek: "sk-x" } }).success).toBe(false);
+    expect(settingsLlmPutReqSchema.safeParse({ api_key: "sk-x" }).success).toBe(false);
+    expect(settingsLlmPutReqSchema.safeParse({ api_key: { provider: "deepseek" } }).success).toBe(false);
+    expect(settingsLlmPutReqSchema.safeParse({ thinking_level: "bogus" }).success).toBe(false);
+    expect(settingsLlmPutReqSchema.safeParse({ model: 42 }).success).toBe(false);
   });
 });
 

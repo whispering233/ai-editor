@@ -10,6 +10,8 @@
 读取 LLM 配置（provider 目录 + 认证状态 + 激活状态；凭据不回传明文）。
 
 ```typescript
+// 激活模型解析：pi settings 的 defaultModel（provider+model 成对）；未配置 → 首个有凭据的可用模型；
+// 一个可用模型都没有 → provider/model 均为空串（前端展示「未配置」引导）
 // Res: 200
 {
   provider: string;          // 当前激活 provider（来自 pi，缺省由 pi 解析）
@@ -20,7 +22,7 @@
       id: string;            // pi provider id（deepseek / opencode-go / anthropic / …）
       displayName: string;   // pi provider 名称
       authConfigured: boolean; // 该 provider 是否已有可用凭据（env / auth.json / runtime）
-      authSource?: string;   // "environment" | "stored" | "runtime" | "configured"
+      authSource?: string;   // pi `AuthStatus.source`："stored" | "runtime" | "environment" | "fallback" | "models_json_key" | "models_json_command"（无凭据时不带该字段）
       models: [              // 该 provider 的模型目录（pi 静态目录 + 远端 overlay 结果）
         { id, provider, displayName, contextWindow, maxTokens, reasoning }
       ]
@@ -47,8 +49,10 @@
 { saved: true }
 
 // api_key 语义：
-//   key 非空 → 写入该 provider 的 API key 凭据（覆盖同名条目）
+//   key 非空 → 写入该 provider 的 API key 凭据（覆盖同名 api_key 条目）
 //   key 为空字符串 → 删除该 provider 的存量凭据（回到 env 解析）
+//   存量是 OAuth（订阅登录）时，**写入与删除都拒绝**（400 VALIDATION_ERROR）——用 pi CLI 管理订阅登录
+//   凭据已落盘但模型状态同步失败 → 500 INTERNAL_ERROR
 //   写入发生在服务端进程内（pi credential store 文件锁保证并发安全）
 // 配置变更仅影响新请求；运行中的 agent 循环不受扰动
 // 聊天模型解析：POST /api/v1/chat 使用当前激活模型（provider + model 成对校验，绝不跨 provider 串用）

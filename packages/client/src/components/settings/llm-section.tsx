@@ -2,10 +2,10 @@
 // 布局：左侧三级导航（provider 列表，160px，选中面 = `menu-item-selected`）+ 右侧该 provider 的面板
 // （裸区块：标题行 + 「当前」徽标 + 模型只读行 + key 行）；常驻说明 Alert 跨整宽置底。
 // 三级导航选中态是**节点 state**（不进 URL）：缺省跟随当前激活 provider，用户点选后保持选择（切二级 tab 回来仍保留）。
-// 数据：GET/PUT /api/v1/settings/llm——本分区只写 api_keys（各家独立：掩码状态行 + 新 key 输入 + 保存/清除）；
+// 数据：GET/PUT /api/v1/settings/llm——本分区只写 api_key（单家：认证状态行 + 新 key 输入 + 保存/清除）；
 // 模型只读展示（模型激活唯一入口在聊天栏 ComposerConfigRow——「浏览 provider 目录」与「切换全局激活模型」是两种意图，
 // 同处一个入口会误改）
-// 常驻说明：key 只存本机用户配置（~/.ai-editor/config.json），不入项目文件；
+// 常驻说明：key 存 pi 凭据库 ~/.pi/agent/auth.json，不入项目文件；
 // 环境变量 DEEPSEEK_API_KEY 优先于此处配置（页面仍可保存，实际生效以环境变量为准）
 import { useEffect, useState } from "react";
 import { Alert, Button, Input, Menu, Tag, Typography } from "antd";
@@ -64,7 +64,7 @@ export function LlmSection() {
     setKeyErrors((m) => ({ ...m, [providerId]: null }));
     setSaving(true);
     try {
-      await updateSettingsLlm({ api_keys: { [providerId]: draft } });
+      await updateSettingsLlm({ api_key: { provider: providerId, key: draft } });
       setKeyDrafts((d) => ({ ...d, [providerId]: "" }));
       showToast("Key 已保存，仅影响新请求");
       await refresh();
@@ -79,12 +79,12 @@ export function LlmSection() {
     }
   }
 
-  /** 清除该家已保存 key（PUT api_keys 空串，清除语义） */
+  /** 清除该家已保存凭据（PUT api_key.key 空串，清除语义） */
   async function handleClearKey(providerId: string) {
     setKeyErrors((m) => ({ ...m, [providerId]: null }));
     setSaving(true);
     try {
-      await updateSettingsLlm({ api_keys: { [providerId]: "" } });
+      await updateSettingsLlm({ api_key: { provider: providerId, key: "" } });
       setKeyDrafts((d) => ({ ...d, [providerId]: "" }));
       showToast("Key 已清除");
       await refresh();
@@ -154,11 +154,11 @@ export function LlmSection() {
                 </div>
                 <div className="mt-3 flex flex-col gap-1">
                   <span className="text-xs text-muted-foreground">
-                    {activeProvider.apiKeySet
-                      ? `key: 已配置（${activeProvider.apiKeyMasked ?? ""}）`
+                    {activeProvider.authConfigured
+                      ? `key: 已配置${activeProvider.authSource === undefined ? "" : `（来源：${activeProvider.authSource}）`}`
                       : "key: 未配置"}
                   </span>
-                  {!activeProvider.apiKeySet && (
+                  {!activeProvider.authConfigured && (
                     <span className="text-xs text-destructive">
                       未配 key：聊天下拉已禁用此组，聊天不可用
                     </span>
@@ -180,7 +180,8 @@ export function LlmSection() {
                     >
                       保存
                     </Button>
-                    {activeProvider.apiKeySet && (
+                    {/* 环境变量来源的凭据不可清除（清掉存量凭据也回落到 env，只会给出误导性的「已清除」提示） */}
+                    {activeProvider.authConfigured && activeProvider.authSource !== "environment" && (
                       <Button
                         size="small"
                         onClick={() => void handleClearKey(activeProvider.id)}
@@ -209,9 +210,8 @@ export function LlmSection() {
         message={
           <div className="text-xs leading-relaxed">
             <p>
-              · key 不进项目文件；每 provider 独立解析：环境变量（DEEPSEEK_API_KEY /
-              OPENCODE_API_KEY）&gt; 用户配置 ~/.ai-editor/config.json &gt; pi-agent 配置
-              ~/.pi/agent/auth.json（只读兜底）
+              · key 不进项目文件；存于 pi 凭据库 ~/.pi/agent/auth.json，环境变量
+              （如 DEEPSEEK_API_KEY）优先于此处的配置
             </p>
             <p>· 保存的 key 与模型切换仅影响新请求；进行中的对话不受扰动</p>
           </div>

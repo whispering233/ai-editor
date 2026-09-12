@@ -178,7 +178,7 @@ function ComposerConfigRow() {
   const activeProvider = settings?.providers.find((p) => p.id === settings.provider) ?? null;
   const currentModel = activeProvider?.models.find((m) => m.id === settings?.model) ?? null;
   /** 激活 provider 无有效 key → 整条工具条禁用（提示去设置页配 key） */
-  const activeKeyless = settings !== null && (activeProvider === null || !activeProvider.apiKeySet);
+  const activeKeyless = settings !== null && (activeProvider === null || !activeProvider.authConfigured);
   // 上下文占用：最近一轮真实 usage.total / **本轮生效预算**（done 帧 context_budget——不是模型窗口，
   // 见 docs/ui/DESIGN.md `usage-bar`）；无预算 → bar=null → 整条隐藏
   const bar = usageBarView(lastUsage, contextBudget);
@@ -224,19 +224,23 @@ function ComposerConfigRow() {
             : "选择模型（按 provider 分组；未配 key 的组禁用）"
         }
         aria-label="选择模型"
-        options={settings.providers.map((p) => {
-          // 激活 provider 的组恒可选（无 key 时也允许切走/停留——防困死）；其余无 key 组禁用
-          // （antd 分组对象无 disabled——组级禁用下推到组内每个 option）
-          const groupDisabled = !p.apiKeySet && p.id !== settings.provider;
-          return {
-            label: `${p.displayName}${p.apiKeySet ? "" : "（未配 key）"}`,
-            options: p.models.map((m) => ({
-              value: `${p.id}::${m.id}`,
-              label: m.displayName ?? m.id,
-              disabled: groupDisabled,
-            })),
-          };
-        })}
+        options={settings.providers
+          // pi 全量 provider（40 家、近千个模型）：下拉只列**已配置认证**的组 + 当前激活组
+          // （未配置的组整组不可选，列出来只会把下拉撑成不可用；设置页负责引导录入 key）
+          .filter((p) => p.authConfigured || p.id === settings.provider)
+          .map((p) => {
+            // 激活 provider 的组恒可选（无 key 时也允许切走/停留——防困死）；其余无 key 组禁用
+            // （antd 分组对象无 disabled——组级禁用下推到组内每个 option）
+            const groupDisabled = !p.authConfigured && p.id !== settings.provider;
+            return {
+              label: `${p.displayName}${p.authConfigured ? "" : "（未配 key）"}`,
+              options: p.models.map((m) => ({
+                value: `${p.id}::${m.id}`,
+                label: m.displayName ?? m.id,
+                disabled: groupDisabled,
+              })),
+            };
+          })}
       />
       <div className="flex shrink-0 items-center gap-1.5">
         {bar !== null && (

@@ -23,15 +23,6 @@ export function truncate(text: string, maxLen: number): string {
 }
 
 /**
- * API key 掩码展示（settings apiKeyMasked 示例 `sk-****1234`：保留前 3 后 4）
- * 过短 key（<= 7 字符，前后缀重叠）整体掩码为 "****"；空串返回 "****"
- */
-export function maskApiKey(key: string): string {
-  if (key.length <= 7) return "****";
-  return `${key.slice(0, 3)}****${key.slice(-4)}`;
-}
-
-/**
  * 相对时间（会话行/概览最近更新展示）：刚刚 / n 分钟前 / n 小时前 / n 天前；
  * ≥30 天回退绝对时间（formatTimestamp）；非法输入（含空串）原样返回
  * 说明：从 client Dashboard/Sidebar 抽离（U4 oracle L1：两处重复实现 → shared 共享可单测）

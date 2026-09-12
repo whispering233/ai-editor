@@ -1,6 +1,6 @@
 // 文本格式化测试（T1.3）：时间戳 / 截断 / key 掩码的边界行为
 import { describe, expect, it } from "vitest";
-import { formatRelativeTime, formatTimestamp, maskApiKey, truncate } from "./format.js";
+import { formatRelativeTime, formatTimestamp, truncate } from "./format.js";
 
 describe("formatTimestamp", () => {
   it("合法 ISO 8601 → YYYY-MM-DD HH:mm 格式（本地时区）", () => {
@@ -35,19 +35,6 @@ describe("truncate", () => {
     expect(truncate("abc", 1)).toBe("…");
     expect(truncate("abc", 0)).toBe("");
     expect(truncate("abc", -1)).toBe("");
-  });
-});
-
-describe("maskApiKey", () => {
-  it("长 key：保留前 3 后 4，中间掩码", () => {
-    expect(maskApiKey("sk-abcdefgh1234")).toBe("sk-****1234");
-    expect(maskApiKey("sk-1234567890abcdef")).toBe("sk-****cdef");
-  });
-
-  it("边界：短 key（前后缀重叠）整体掩码；空串同", () => {
-    expect(maskApiKey("abc123")).toBe("****");
-    expect(maskApiKey("sk-1234")).toBe("****");
-    expect(maskApiKey("")).toBe("****");
   });
 });
 

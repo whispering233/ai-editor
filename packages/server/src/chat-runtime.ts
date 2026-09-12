@@ -16,6 +16,7 @@ import {
   type ProjectRuntimeInput,
 } from "@whispering233/ai-editor-agent";
 import type { Db } from "@whispering233/ai-editor-db";
+import { applyActiveSettings, getModelRuntime, getSettingsManager } from "./model-runtime.js";
 
 /** 对话链路需要的最小项目上下文（不依赖 middleware，避免与 project.ts 形成运行时环） */
 export interface ChatProjectTarget {
@@ -28,12 +29,15 @@ export interface ChatProjectTarget {
 
 export type RuntimeFactory = (request: { target: ChatProjectTarget; sessionFile?: string }) => Promise<ProjectRuntime>;
 
-/** 缺省工厂：项目 sessions/ 目录 + 项目根 AGENTS.md 的 pi 运行时（装配细节见 agent 包 runtime/） */
-export const defaultRuntimeFactory: RuntimeFactory = ({ target, sessionFile }) => {
+/** 缺省工厂：项目 sessions/ 目录 + 项目根 AGENTS.md 的 pi 运行时（装配细节见 agent 包 runtime/）
+ * 模型目录/凭据/settings 用 server 层单例：设置端点与对话链路看到同一份配置（docs/design/config.md）。 */
+export const defaultRuntimeFactory: RuntimeFactory = async ({ target, sessionFile }) => {
   const input: ProjectRuntimeInput = {
     projectRoot: target.root,
     toolContext: { db: target.db, outlineDir: target.root, projectId: target.projectId },
     sessionManager: openProjectSessionManager(target.root, sessionFile),
+    modelRuntime: await getModelRuntime(),
+    settingsManager: getSettingsManager(),
   };
   return createProjectRuntime(input);
 };
@@ -58,7 +62,12 @@ export async function acquireProjectRuntime(
   if (active !== null) {
     const sameProject = active.projectRoot === target.root;
     const sameSession = sessionFile !== undefined && active.sessionFile === sessionFile;
-    if (sameProject && sameSession) return active.runtime;
+    if (sameProject && sameSession) {
+      // 复用前同步一次激活模型/思考强度：设置页的变更只影响新请求，但必须对**下一个**请求生效
+      // （否则 ChatPanel 已乐观显示新模型、对话仍用旧模型）
+      await applyActiveSettings(active.runtime);
+      return active.runtime;
+    }
     disposeProjectRuntime(); // 换项目/换会话：旧运行时连同其在途流一起退休
   }
   const runtime = await factory({ target, sessionFile });

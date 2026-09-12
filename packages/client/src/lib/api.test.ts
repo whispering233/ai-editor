@@ -221,29 +221,35 @@ describe("listProjects（GET /api/v1/project/list，S1.5 书架）", () => {
 });
 
 describe("settings/llm（S1.3 端点）", () => {
-  it("getSettingsLlm：GET /settings/llm 返回 model/apiKeySet/apiKeyMasked", async () => {
+  it("getSettingsLlm：GET /settings/llm 返回激活模型 + provider 认证状态", async () => {
     const calls = mockFetchOnce({
       body: {
         success: true,
-        data: { model: "deepseek-v4-flash", apiKeySet: true, apiKeyMasked: "sk-****1234" },
+        data: {
+          provider: "deepseek",
+          model: "deepseek-v4-flash",
+          thinkingLevel: "medium",
+          providers: [{ id: "deepseek", displayName: "DeepSeek", authConfigured: true, authSource: "environment", models: [] }],
+        },
       },
     });
     const res = await getSettingsLlm();
     expect(res).toEqual({
+      provider: "deepseek",
       model: "deepseek-v4-flash",
-      apiKeySet: true,
-      apiKeyMasked: "sk-****1234",
+      thinkingLevel: "medium",
+      providers: [{ id: "deepseek", displayName: "DeepSeek", authConfigured: true, authSource: "environment", models: [] }],
     });
     expect(calls[0].url).toBe("/api/v1/settings/llm");
     expect(calls[0].init?.method).toBe("GET");
   });
 
-  it("updateSettingsLlm：PUT body snake_case；api_key 空串透传（清除语义）", async () => {
+  it("updateSettingsLlm：PUT body snake_case + api_key 单家凭据（空串 = 清除语义）", async () => {
     const calls = mockFetchOnce({ body: { success: true, data: { saved: true } } });
-    await updateSettingsLlm({ api_key: "" });
+    await updateSettingsLlm({ api_key: { provider: "deepseek", key: "" } });
     expect(calls[0].url).toBe("/api/v1/settings/llm");
     expect(calls[0].init?.method).toBe("PUT");
-    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ api_key: "" });
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ api_key: { provider: "deepseek", key: "" } });
   });
 
   it("网络失败 → 抛 CLIENT_NETWORK_ERROR", async () => {
