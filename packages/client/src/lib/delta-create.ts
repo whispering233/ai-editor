@@ -40,12 +40,14 @@ type EntityDataKey<T extends keyof typeof ENTITY_DATA_SCHEMAS> =
 const ENTITY_DATA_KEYS = {
   character: [
     "role",
+    "description",
+    "alias",
     "gender",
     "age",
+    "race",
     "personality",
     "motivation",
-    "abilities",
-    "status",
+    "ability_panel",
     "custom_fields",
   ] as const satisfies readonly EntityDataKey<"character">[],
  // + K2（2026-08）：setting 字段 = description/tags（分类标签）/rules（规则条款）/custom_fields
@@ -89,7 +91,7 @@ function labelsOf(t: EntityType): Record<string, string> {
 
 /** 数组字段（op 推断：默认 add/remove；余下标量默认 set/update）——字段名须在对应清单内（单测断言） */
 const ARRAY_FIELDS: Record<string, readonly string[]> = {
-  character: ["personality", "abilities"],
+  character: ["personality"], // 2026-09：abilities 已迁为 ability_panel（面板叶子走嵌套路径，非数组 op）
   setting: ["tags", "rules"], // K2：分类标签与规则条款均为数组
 };
 
@@ -119,11 +121,24 @@ export interface DeltaFieldOption {
   array: boolean;
 }
 
-/** 实体目标字段选项：ENTITY_DATA_KEYS 全量（除 custom_fields——record 无法用标量值表达）→ label + array 标记 */
+/** 不可变字段（不参与 Delta——`docs/db/schema.md`「人物 data 分层」/`10-data-model.md` §14 不变式 1）：
+ * 不出现在变更记录字段下拉（人工经 PUT 直接编辑）。`role`/`description` 同时是列表摘要与 AI 检索的依据，
+ * 允许 Delta 改会与 `entities.name`/摘要其它读取面产生“同一人物两个值”的语义裂缝。*/
+const IMMUTABLE_FIELDS: Record<string, readonly string[]> = {
+  character: ["role", "description"],
+};
+
+/** 整字段不进下拉的额外排除：`custom_fields`（record 无法用标量值表达）+ `ability_panel`
+ *（面板是用户自定义树，**只有已存在的叶子**可被 Delta 改——走点分路径，整树不进下拉；
+ * 叶子路径下拉由批次 3 的面板 UI 提供）*/
+const NON_DELTA_FIELDS: readonly string[] = ["custom_fields", "ability_panel"];
+
+/** 实体目标字段选项：ENTITY_DATA_KEYS 除去不可变字段、custom_fields 与 ability_panel → label + array 标记 */
 export function entityDeltaFieldOptions(type: string): DeltaFieldOption[] {
   const keys = (ENTITY_DATA_KEYS as Record<string, readonly string[]>)[type] ?? [];
+  const immutable = IMMUTABLE_FIELDS[type] ?? [];
   return keys
-    .filter((k) => k !== "custom_fields")
+    .filter((k) => !NON_DELTA_FIELDS.includes(k) && !immutable.includes(k))
     .map((k) => ({
       key: k,
       label: ENTITY_FIELD_LABELS[type]?.[k] ?? k,

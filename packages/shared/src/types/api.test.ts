@@ -6,6 +6,7 @@ import {
   OUTLINE_NODE_DATA_SCHEMAS,
   PROJECT_EXPORT_FILE_NAMES,
   apiErrorSchema,
+  characterDataSchema,
   chatSendReqSchema,
   deltaChangeSchema,
   deltaComputeReqSchema,
@@ -317,6 +318,45 @@ describe("event 时间轴", () => {
 
   it("ENTITY_DATA_SCHEMAS 注册 event → eventDataSchema（服务端按 type 选用精校验）", () => {
     expect(ENTITY_DATA_SCHEMAS.event).toBe(eventDataSchema);
+  });
+
+  it("characterDataSchema：新字段（description/alias/race/ability_panel）通过，personality 仍为字符串数组", () => {
+    const parsed = characterDataSchema.parse({
+      role: "主角",
+      description: "青云门最小弟子，灵根被夺",
+      alias: "阿九",
+      gender: "男",
+      age: 17,
+      race: "人族",
+      personality: ["坚韧", "孤僻"],
+      motivation: "查明灵根被夺真相",
+      ability_panel: [{ name: "火系", children: [{ name: "等级", value: 3 }, { name: "熟练度" }] }],
+    });
+    expect(parsed.alias).toBe("阿九");
+    expect(parsed.race).toBe("人族");
+    expect(parsed.ability_panel).toEqual([
+      { name: "火系", children: [{ name: "等级", value: 3 }, { name: "熟练度" }] },
+    ]);
+    expect(characterDataSchema.safeParse({ personality: "坚韧" }).success).toBe(false); // 须数组
+  });
+
+  it("characterDataSchema：ability_panel 宽校验——任意结构（对象/字符串/坏元素）都不拒绝写入", () => {
+ // 面板是用户自定义字段树，结构防御在读取端（shared parseAbilityPanel），服务端绝不因此 400
+    expect(characterDataSchema.safeParse({ ability_panel: { nope: 1 } }).success).toBe(true);
+    expect(characterDataSchema.safeParse({ ability_panel: "脏" }).success).toBe(true);
+    expect(characterDataSchema.safeParse({ ability_panel: [{ name: 1 }, null, 3] }).success).toBe(true);
+    expect(characterDataSchema.parse({ ability_panel: {} }).ability_panel).toEqual({});
+  });
+
+  it("characterDataSchema：status 不再声明（旧残留由 .passthrough 容错，不参与新字段集）", () => {
+    expect(Object.keys(characterDataSchema.shape)).not.toContain("status");
+    expect(Object.keys(characterDataSchema.shape)).not.toContain("abilities");
+    expect(Object.keys(characterDataSchema.shape)).toContain("ability_panel"); // 客户端字段清单编译期断言依赖
+ // 旧数据/旧客户端带 status 仍能写入（passthrough 兜底），但不被解析/展示
+    expect(characterDataSchema.parse({ role: "主角", status: "活跃" })).toEqual({
+      role: "主角",
+      status: "活跃",
+    });
   });
 
   it("entityMoveReqSchema：order 必填非负整数；负数/小数/缺字段拒绝；strict 拒绝未知键", () => {

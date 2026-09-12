@@ -9,19 +9,24 @@ import {
 } from "./entity-detail";
 
 describe("detailFieldsForType", () => {
-  it("character：role/gender/age/personality/motivation/abilities（status 从详情页表单移除）", () => {
+  it("character：role/description/alias/gender/age/race/personality/motivation（2026-09：abilities 与 status 均已移除）", () => {
     const fields = detailFieldsForType("character");
     expect(fields.map((f) => f.key)).toEqual([
       "role",
+      "description",
+      "alias",
       "gender",
       "age",
+      "race",
       "personality",
       "motivation",
-      "abilities",
     ]);
     expect(fields.find((f) => f.key === "age")?.control).toBe("number");
     expect(fields.find((f) => f.key === "personality")?.control).toBe("tags");
     expect(fields.find((f) => f.key === "motivation")?.control).toBe("textarea");
+    expect(fields.find((f) => f.key === "description")?.control).toBe("textarea");
+ // 能力面板（ability_panel）不走标签编辑器——面板编辑 UI 属批次 3.4
+    expect(fields.some((f) => f.key === "abilities" || f.key === "ability_panel")).toBe(false);
   });
 
   it("setting（K2）：description/tags（分类）/rules（规则条款）；location 保留 parent_id 文本", () => {
@@ -160,28 +165,29 @@ describe("settingHierarchyFromRelations（层级边分区——belongs_to 且两
 });
 
 describe("diffData（表单 partial 提交——只返回变更字段）", () => {
-  const original = { role: "主角", age: 16, abilities: ["火球术"], status: "活跃" };
+ // 2026-09（卡片 2.1）：样例改用现行 character 字段（abilities/status 均已移除；diffData 本身与字段名无关）
+  const original = { role: "主角", age: 16, personality: ["坚韧"], alias: "阿九" };
 
   it("无变更 → null（不发请求）", () => {
     expect(diffData(original, { ...original })).toBeNull();
   });
 
   it("单字段变更 → 只含该字段", () => {
-    expect(diffData(original, { ...original, status: "退场" })).toEqual({ status: "退场" });
+    expect(diffData(original, { ...original, alias: "九哥" })).toEqual({ alias: "九哥" });
   });
 
   it("数组字段比较（JSON 深度比较）：增删元素识别为变更", () => {
-    expect(diffData(original, { ...original, abilities: ["火球术", "御剑"] })).toEqual({
-      abilities: ["火球术", "御剑"],
+    expect(diffData(original, { ...original, personality: ["坚韧", "孤僻"] })).toEqual({
+      personality: ["坚韧", "孤僻"],
     });
-    expect(diffData(original, { ...original, abilities: [] })).toEqual({ abilities: [] });
+    expect(diffData(original, { ...original, personality: [] })).toEqual({ personality: [] });
   });
 
   it("空值规约：空串/空数组与缺失等价（清空字段不产生无意义提交）", () => {
     expect(diffData(original, { ...original, role: "" })).toEqual({ role: "" });
  // 原值已是空串时，清空不提交
     expect(diffData({ role: "" }, { role: "" })).toBeNull();
-    expect(diffData({ abilities: [] }, { abilities: [] })).toBeNull();
+    expect(diffData({ personality: [] }, { personality: [] })).toBeNull();
   });
 
   it("新增字段识别（form 含 original 没有的键）", () => {

@@ -5,7 +5,8 @@
 // 时间约定：ISO 8601 应用层写入（nowIso），模块内不生成时间。
 //
 // 摘要字段提取：**行内解析**（SELECT 整行 → JSON.parse → JS 提取）——
-// character → role/status、setting → tags/description（M2）、location → type、hook → status/payoff_timing、
+// character → role/description/motivation/personality/ability_panel（2026-09：面板顶层分组名前 2）、
+// setting → tags/description（M2）、location → type、hook → status/payoff_timing、
 // event → description/tags；
 // 取舍：json_extract 免全量 parse 但需按类型动态列，SQL 复杂化；MVP 数据量小，行内解析
 // 与 better-sqlite3 字符串列一致（chat.ts 同款风格），数据量大后再优化。
@@ -27,7 +28,7 @@
 // 事务沿用 withTransaction（native db.transaction），连接级共享已验证（15.2 验证记录①）。
 
 import type { EntityRow, EntitySummary, EntityType, RelationRow } from "@whispering233/ai-editor-shared";
-import { ENTITY_TYPES, generateEntityId } from "@whispering233/ai-editor-shared";
+import { ENTITY_TYPES, generateEntityId, panelTopLevelNames } from "@whispering233/ai-editor-shared";
 import { and, asc, count, desc, eq, inArray, isNull, like, or, sql, type SQLWrapper } from "drizzle-orm";
 import { nowIso } from "../storage/atomic.js";
 import { withTransaction, type Db } from "../connection.js";
@@ -83,9 +84,13 @@ function toSummary(row: EntityRow): EntitySummary {
   switch (row.type) {
     case "character":
       if (data.role !== undefined) summary.role = data.role;
-      if (data.status !== undefined) summary.status = data.status;
- // （2026-08）：两行式行布局字段——动机摘要截断 40 字符（防
- // search_entities 工具上下文膨胀，同款语义）+ 性格/能力标签各前 2 个（行 chips）
+ // 2026-09（卡片 2.1）：description 摘要（截断 100，同 setting 口径）；status 已移除。
+ // 两行式行布局字段：动机摘要截断 40 字符（防 search_entities 工具上下文膨胀）
+ // + 性格前 2 个 + 能力 = **面板顶层分组名**前 2 个（如「火系」「水系」——
+ // 叶子名多是「等级/熟练度」这类重复词，按叶子计数无意义）
+      if (typeof data.description === "string" && data.description !== "") {
+        summary.description = data.description.slice(0, 100);
+      }
       if (typeof data.motivation === "string" && data.motivation !== "") {
         summary.motivation = data.motivation.slice(0, 40);
       }
@@ -94,11 +99,9 @@ function toSummary(row: EntityRow): EntitySummary {
           .filter((t): t is string => typeof t === "string" && t !== "")
           .slice(0, 2);
       }
-      if (Array.isArray(data.abilities)) {
-        summary.abilities = (data.abilities as unknown[])
-          .filter((t): t is string => typeof t === "string" && t !== "")
-          .slice(0, 2);
-      }
+ // 读端口径：面板结构宽校验（可能脏）→ 必过 parse（panelTopLevelNames 内部自动规范化）
+      const panelGroups = panelTopLevelNames(data.ability_panel);
+      if (panelGroups.length > 0) summary.ability_panel = panelGroups.slice(0, 2);
       break;
     case "setting":
  // K2（2026-08）：分类由 data.tags 承接（与 event 同字段语义）——摘要暴露 tags（前 3 个）

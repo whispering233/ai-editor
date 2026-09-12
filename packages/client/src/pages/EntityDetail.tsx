@@ -56,7 +56,7 @@ function fieldValue(form: Record<string, unknown>, key: string): string {
   return v === undefined || v === null ? "" : String(v);
 }
 
-/** 标签列表编辑器（character.personality/abilities、setting.tags/rules）。
+/** 标签列表编辑器（character.personality、setting.tags/rules）。
  * suggestions 提供时绑定 datalist（J2：浏览器原生自动完成——输入时弹出已有标签候选）；
  * quickTags 提供时渲染「已有标签」快捷选择 chips（K2：点击追加到列表，已选的隐藏） */
 function TagsEditor({

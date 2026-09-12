@@ -564,9 +564,11 @@ export default function EntityList({ type }: { type: string }) {
 /** 人物行四列布局（用户修订，2026-08）：名称列（第一行名称 + 第二行动机
  * 摘要，hover title 查看完整）+ 角色列（summary.role，T2 标签徽标样式）+ 性格列 + 能力列
  * （各前 2 个 chips，T2 徽标样式；空数组显示「—」占位与其余类型缺失语义一致）。
- * 角色/性格/能力独立成列——列头即区分，修复首版合并 chips 无法分辨的反馈。*/
+ * 角色/性格/能力独立成列——列头即区分，修复首版合并 chips 无法分辨的反馈。
+ * **2026-09（卡片 2.1）**：能力列改读 `summary.ability_panel`（面板**顶层分组名**前 2 个，如「火系」——
+ * 旧标签数组 abilities 已由 007 迁为面板）。*/
 function CharacterRow({ item }: { item: EntitySummary }) {
-  const { role, motivation, personality, abilities } = characterRowInfo(item.summary);
+  const { role, motivation, personality, abilityPanel } = characterRowInfo(item.summary);
   const badge = (text: string) => <TagChip key={text}>{text}</TagChip>;
   return (
     <>
@@ -601,11 +603,11 @@ function CharacterRow({ item }: { item: EntitySummary }) {
           )}
         </div>
       </td>
-      {/* 能力列（前 2 chips）：同上 */}
+      {/* 能力列（面板顶层分组名前 2 chips）：同上 */}
       <td className="px-3 py-2">
         <div className="flex flex-wrap items-center gap-1">
-          {abilities.length > 0 ? (
-            abilities.map(badge)
+          {abilityPanel.length > 0 ? (
+            abilityPanel.map(badge)
           ) : (
             <span className="text-muted-foreground">—</span>
           )}

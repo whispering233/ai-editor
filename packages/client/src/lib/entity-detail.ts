@@ -24,13 +24,15 @@ export function detailFieldsForType(type: EntityType): DetailFieldConfig[] {
     case "character":
       return [
         { key: "role", label: "角色定位", control: "text" },
+        { key: "description", label: "描述", control: "textarea" },
+        { key: "alias", label: "假名", control: "text" },
         { key: "gender", label: "性别", control: "text" },
         { key: "age", label: "年龄", control: "number" },
+        { key: "race", label: "种族", control: "text" },
         { key: "personality", label: "性格", control: "tags" },
         { key: "motivation", label: "动机", control: "textarea" },
-        { key: "abilities", label: "能力", control: "tags" },
- // （2026-08 用户反馈）：状态字段详情页表单一并移除——列表与详情均不再展示
- // （存量 data.status 由 .passthrough 容错保留，AI 工具 filters.status 语义不变）
+ // 2026-09（卡片 2.1）：`abilities`（标签式能力）已由 `ability_panel`（能力面板）取代——
+ // 标签编辑器不再渲染；面板编辑 UI 属批次 3.4。`status` 已字段级删除（非仅隐藏）
       ];
  /**
  * 设定基础信息（K2 修订，2026-08）：parent_id（层级 belongs_to）与 category

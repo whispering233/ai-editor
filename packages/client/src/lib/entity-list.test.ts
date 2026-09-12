@@ -35,7 +35,7 @@ describe("SUMMARY_COLUMNS（摘要列配置——原型信息层级表）", () =
   it("character 角色/性格/能力独立成列（用户修订）；hook 有列 2（payoff_timing）；setting 有列 3 描述；location 无列 2", () => {
     expect(SUMMARY_COLUMNS.character.key2).toBe("personality");
     expect(SUMMARY_COLUMNS.character.label2).toBe("性格");
-    expect(SUMMARY_COLUMNS.character.key3).toBe("abilities");
+    expect(SUMMARY_COLUMNS.character.key3).toBe("ability_panel");
     expect(SUMMARY_COLUMNS.character.label3).toBe("能力");
     expect(SUMMARY_COLUMNS.hook.key2).toBe("payoff_timing");
  // （2026-08）：设定 tab 改为树形视图（不走表格），「上级设定」特殊列
@@ -82,12 +82,12 @@ describe("characterRowInfo（人物行数据提取：角色/性格/能力独立�
       role: "主角",
       motivation: "复仇".repeat(30),
       personality: ["坚韧", "孤僻", "善良"],
-      abilities: ["剑术", "阵法"],
+      ability_panel: ["火系", "水系"], // 2026-09：能力摘要 = 面板顶层分组名
     });
     expect(info.role).toBe("主角");
     expect(info.motivation).toBe("复仇".repeat(20)); // 40 字符截断
     expect(info.personality).toEqual(["坚韧", "孤僻"]); // 前 2
-    expect(info.abilities).toEqual(["剑术", "阵法"]); // 前 2
+    expect(info.abilityPanel).toEqual(["火系", "水系"]); // 前 2
   });
 
   it("空值归一为空串/空数组（行内不渲染空段）", () => {
@@ -95,20 +95,20 @@ describe("characterRowInfo（人物行数据提取：角色/性格/能力独立�
       role: "",
       motivation: "",
       personality: [],
-      abilities: [],
+      abilityPanel: [],
     });
     expect(
       characterRowInfo({
         role: undefined,
         motivation: 123,
         personality: "非数组",
-        abilities: ["", "剑术"],
+        ability_panel: ["", "火系"],
       }),
     ).toEqual({
       role: "",
       motivation: "",
       personality: [],
-      abilities: ["剑术"],
+      abilityPanel: ["火系"],
     });
   });
 });

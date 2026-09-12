@@ -85,13 +85,14 @@ describe("search_entities", () => {
     return { charA: a.id, charB: b.id, charC: c.id };
   }
 
-  it("名称模糊匹配 + 摘要结构（character → role/status）", () => {
+  it("名称模糊匹配 + 摘要结构（character → role；2026-09 卡片 2.1：status 不再进摘要）", () => {
     const { charA, charB, charC } = seedSearch();
     const result = runSearchEntities(makeCtx(), { type: "character", query: "阿强" });
     expect(result.items.map((i) => i.id).sort()).toEqual([charA, charC].sort());
     expect(result.total).toBe(2);
     const byId = new Map(result.items.map((i) => [i.id, i]));
-    expect(byId.get(charA)!.summary).toEqual({ role: "主角", status: "alive" });
+ // 种子里的 status 只是旧数据残留（.passthrough 容错）——摘要不再提取它
+    expect(byId.get(charA)!.summary).toEqual({ role: "主角" });
     expect(byId.get(charB)).toBeUndefined();
   });
 

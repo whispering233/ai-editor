@@ -30,7 +30,8 @@ export const SUMMARY_COLUMNS: Record<ListableEntityType, SummaryColumnConfig> = 
     label1: "角色",
     key2: "personality",
     label2: "性格",
-    key3: "abilities",
+ // 2026-09（卡片 2.1）：能力列改读**面板顶层分组名**（summary.ability_panel；旧标签数组 abilities 已迁为面板）
+    key3: "ability_panel",
     label3: "能力",
   },
  // （2026-08）：设定分类由 rules 标签承接，摘要列从「类别」改为「标签」
@@ -55,13 +56,13 @@ export const SUMMARY_COLUMNS: Record<ListableEntityType, SummaryColumnConfig> = 
 
 /** 人物行两行式行布局数据提取（2026-08）：
  * 第一行 = 名称 + 角色徽标（summary.role）；第二行 = 动机摘要 + 性格/能力标签 chips。
- * 服务端摘要已截断（motivation 40 / personality·abilities 各前 2），此处防御性再截断；
- * 空值一律归一为空串/空数组（行内不渲染空段）。*/
+ * 服务端摘要已截断（motivation 40 / personality 前 2 / ability_panel 面板顶层分组名前 2），
+ * 此处防御性再截断；空值一律归一为空串/空数组（行内不渲染空段）。*/
 export function characterRowInfo(summary: Record<string, unknown>): {
   role: string;
   motivation: string;
   personality: string[];
-  abilities: string[];
+  abilityPanel: string[];
 } {
   const str = (v: unknown): string => (typeof v === "string" ? v : "");
   const tagList = (v: unknown, cap: number): string[] =>
@@ -72,7 +73,8 @@ export function characterRowInfo(summary: Record<string, unknown>): {
     role: str(summary.role),
     motivation: str(summary.motivation).slice(0, 40),
     personality: tagList(summary.personality, 2),
-    abilities: tagList(summary.abilities, 2),
+ // 能力 chips = 面板顶层分组名（2026-09；summary 键名即 ability_panel）
+    abilityPanel: tagList(summary.ability_panel, 2),
   };
 }
 

@@ -99,30 +99,53 @@ describe("listEntities", () => {
     stamp("修仙界", "2026-08-04T00:00:00Z");
   });
 
-  it("type 过滤 + 摘要字段提取（character→role/status、setting→tags；缺失字段不出现）", () => {
+  it("type 过滤 + 摘要字段提取（character→role、setting→tags；缺失字段不出现）", () => {
     const chars = listEntities(db, { type: "character" });
     expect(chars.total).toBe(3);
     expect(chars.items).toHaveLength(3);
     const aqiang = chars.items.find((i) => i.name === "阿强")!;
-    expect(aqiang.summary).toEqual({ role: "主角", status: "活跃" });
+ // 2026-09（卡片 2.1）：character 摘要不再含 status（字段已移除，残留键不解析不展示）
+    expect(aqiang.summary).toEqual({ role: "主角" });
     const azhen = chars.items.find((i) => i.name === "阿珍")!;
-    expect(azhen.summary).toEqual({ role: "配角" }); // status 缺失不出现
+    expect(azhen.summary).toEqual({ role: "配角" });
+    const lisi = chars.items.find((i) => i.name === "李四")!;
+    expect(lisi.summary).toEqual({}); // 仅旧 status 残留 → 不产生任何摘要字段
     const settings = listEntities(db, { type: "setting" });
     expect(settings.total).toBe(1);
     expect(settings.items[0].summary).toEqual({ tags: ["世界"] });
   });
 
-  it("character 摘要含两行式行布局字段（motivation 截断 40 / personality / abilities 各前 2；缺失不出现）", () => {
+  it("character 摘要：description 截断 100 / motivation 截断 40 / personality 前 2 / ability_panel 顶层分组名前 2（缺失不出现）", () => {
     const longMotivation = "他".repeat(60);
-    createEntity(db, { type: "character", name: "行布局测试", data: { motivation: longMotivation, personality: ["坚韧", "孤僻", "善良"], abilities: ["剑术", "阵法", "医术"] } });
+    const longDescription = "身".repeat(140);
+    createEntity(db, {
+      type: "character",
+      name: "行布局测试",
+      data: {
+        description: longDescription,
+        motivation: longMotivation,
+        personality: ["坚韧", "孤僻", "善良"],
+ // 面板顶层分组 3 个 → 摘要只取前 2；叶子名（等级）不参与摘要
+        ability_panel: [
+          { name: "火系", children: [{ name: "等级", value: 3 }] },
+          { name: "水系", children: [{ name: "等级" }] },
+          { name: "风系" },
+        ],
+      },
+    });
     createEntity(db, { type: "character", name: "行布局空", data: { role: "配角" } });
+ // 脏面板（非数组结构）→ 宽校验：不抛错、不产生能力摘要
+    createEntity(db, { type: "character", name: "行布局脏面板", data: { ability_panel: { nope: 1 } } });
     const items = listEntities(db, { type: "character" }).items;
     const rich = items.find((i) => i.name === "行布局测试")!;
+    expect(rich.summary.description).toBe("身".repeat(100)); // 截断 100（同 setting 口径）
     expect(rich.summary.motivation).toBe("他".repeat(40)); // 截断 40
     expect(rich.summary.personality).toEqual(["坚韧", "孤僻"]); // 前 2
-    expect(rich.summary.abilities).toEqual(["剑术", "阵法"]); // 前 2
+    expect(rich.summary.ability_panel).toEqual(["火系", "水系"]); // 顶层分组名前 2
     const empty = items.find((i) => i.name === "行布局空")!;
     expect(empty.summary).toEqual({ role: "配角" }); // 新字段缺失不出现
+    const dirty = items.find((i) => i.name === "行布局脏面板")!;
+    expect(dirty.summary).toEqual({}); // 脏面板 → 无能力摘要（不抛错）
   });
 
   it("q 模糊匹配 name（LIKE），total 同步过滤", () => {

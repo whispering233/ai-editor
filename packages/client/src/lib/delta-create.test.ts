@@ -29,17 +29,20 @@ describe("DELTA_TARGET_TYPE_OPTIONS（S13.3 收紧：仅实体类型）", () => 
 });
 
 describe("entityDeltaFieldOptions（字段名 = shared ENTITY_DATA_SCHEMAS keys，编译期断言）", () => {
-  it("character：全量字段（除 custom_fields）+ label + 数组标记", () => {
+  it("character：仅可变字段（不可变 role/description 与面板 ability_panel/ custom_fields 不进下拉）+ label + 数组标记", () => {
     const opts = entityDeltaFieldOptions("character");
     expect(opts.map((o) => o.key)).toEqual([
-      "role",
+      "alias",
       "gender",
       "age",
+      "race",
       "personality",
       "motivation",
-      "abilities",
-      "status",
     ]);
+ // 2026-09（卡片 2.1）：不可变字段不参与 Delta（docs/db/schema.md「人物 data 分层」）
+    expect(opts.some((o) => o.key === "role" || o.key === "description")).toBe(false);
+    expect(opts.some((o) => o.key === "ability_panel")).toBe(false); // 面板叶子走嵌套路径，整树不进下拉
+    expect(opts.some((o) => o.key === "status" || o.key === "abilities")).toBe(false); // 已移除
     const personality = opts.find((o) => o.key === "personality");
     expect(personality).toMatchObject({ label: "性格", array: true });
     const age = opts.find((o) => o.key === "age");
@@ -58,9 +61,10 @@ describe("entityDeltaFieldOptions（字段名 = shared ENTITY_DATA_SCHEMAS keys�
 });
 
 describe("isArrayField / isNumericField", () => {
-  it("数组字段：character.personality/abilities、setting.tags/rules（K2：分类与规则条款均为数组）", () => {
+  it("数组字段：character.personality、setting.tags/rules（K2：分类与规则条款均为数组）", () => {
     expect(isArrayField("character", "personality")).toBe(true);
-    expect(isArrayField("character", "abilities")).toBe(true);
+ // 2026-09：abilities 已迁为 ability_panel（面板叶子走嵌套路径，非数组 op）
+    expect(isArrayField("character", "ability_panel")).toBe(false);
     expect(isArrayField("setting", "tags")).toBe(true);
     expect(isArrayField("setting", "rules")).toBe(true);
     expect(isArrayField("scene", "conflict_levels")).toBe(false);
@@ -121,28 +125,28 @@ describe("buildDeltaChange（per-op 必填语义 + update 自动 from）", () =>
   it("add：value 必填", () => {
     expect(
       buildDeltaChange({
-        field: "abilities",
+        field: "personality",
         op: "add",
-        rawValue: "御剑",
+        rawValue: "孤僻",
         numeric: false,
         currentValue: undefined,
       }),
     ).toEqual({
-      change: { field: "abilities", op: "add", value: "御剑" },
+      change: { field: "personality", op: "add", value: "孤僻" },
     });
   });
 
   it("remove：value 必填（按值匹配删除）", () => {
     expect(
       buildDeltaChange({
-        field: "abilities",
+        field: "personality",
         op: "remove",
-        rawValue: "御剑",
+        rawValue: "孤僻",
         numeric: false,
         currentValue: undefined,
       }),
     ).toEqual({
-      change: { field: "abilities", op: "remove", value: "御剑" },
+      change: { field: "personality", op: "remove", value: "孤僻" },
     });
   });
 

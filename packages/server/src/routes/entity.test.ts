@@ -95,8 +95,10 @@ describe("GET /api/v1/entity/:type 列表", () => {
     expect(body.data.total).toBe(1);
     const item = body.data.items[0];
     expect(item).toMatchObject({ type: "character", name: "张三", createdAt: expect.any(String), updatedAt: expect.any(String) });
-    expect((item.summary as Record<string, unknown>).role).toBe("主角"); // character → role/status 摘要
-    expect((item.summary as Record<string, unknown>).status).toBe("alive");
+ // 2026-09（卡片 2.1）：character 摘要 = role/description/motivation/personality/ability_panel——
+ // 旧 status 残留不再提取（下方 createCharacter 仍带 status，验证 passthrough 不报错即可）
+    expect((item.summary as Record<string, unknown>).role).toBe("主角");
+    expect((item.summary as Record<string, unknown>).status).toBeUndefined();
   });
 
   it("type 过滤：不同 type 互不串扰", async () => {

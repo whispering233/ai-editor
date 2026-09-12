@@ -87,18 +87,27 @@ export type ApiError = z.infer<typeof apiErrorSchema>;
 // ============ 实体 data 字段 schema（创建接口 + +） ============
 
 /**
- * character 专属字段（role/gender/age/personality[]/motivation/abilities[]/status/custom_fields）
+ * character 专属字段（**不可变**：role/description；**可变**：alias/gender/age/race/motivation/personality[]/ability_panel；
+ * custom_fields）——分层与不变式见 `docs/db/schema.md`「人物 data 分层」。
  * 注意：data 嵌套对象内部字段原样透传（snake_case，如 custom_fields），顶层字段才是 camelCase
+ *
+ * **2026-09 修订**：`status` 彻底移除（旧残留由 `.passthrough()` 容错，不再解析/展示）；
+ * `abilities[]` → `ability_panel`（007 迁移）；`description` 为必填（**仅前端校验**——服务端不硬校验，
+ * 保护 AI 提案/旧数据/备份导入三条路径）。
+ * `ability_panel` 为**宽校验**声明（`z.unknown()`，不约束结构）：面板是用户自定义字段树，
+ * 结构防御在读取端（shared `parseAbilityPanel`）——服务端绝不因面板结构问题拒绝写入。
  */
 export const characterDataSchema = z
   .object({
     role: z.string().optional(),
+    description: z.string().optional(),
+    alias: z.string().optional(), // 假名/化名（单值：当前位置时这个人的化名）
     gender: z.string().optional(),
     age: z.union([z.string(), z.number()]).optional(), // 年龄文本或数字皆可（未定死类型）
+    race: z.string().optional(),
     personality: z.array(z.string()).optional(),
     motivation: z.string().optional(),
-    abilities: z.array(z.string()).optional(),
-    status: z.string().optional(),
+    ability_panel: z.unknown().optional(), // 能力面板树（宽校验；解析见 shared parseAbilityPanel）
     custom_fields: z.record(z.string(), z.unknown()).optional(),
   })
   .passthrough(); // 允许未知字段（创作工具，用户自定义字段自由）
