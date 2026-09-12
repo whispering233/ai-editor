@@ -4,7 +4,7 @@
 // **触发节点仅章（400 VALIDATION_ERROR，卷/场景；卡片 1.2）**、
 // S13.3 target_type 白名单（outline_node/未知类型 → 400 VALIDATION_ERROR；character → 201 回归）、
 // GET 可见性（软删触发节点 → 空数组）与 order 升序、
-// compute 树路径累积（同节点内按 order；父链唯一：兄弟章不参与）+ 回显（targetType/targetId/atNodeId）、
+// compute 章序前缀累积（跨章累积 + 前缀截断；同章内按 order）+ 回显（targetType/targetId/atNodeId）、
 // update 冲突（conflicts + 保持手动值）、compute 404 映射（OUTLINE_NODE_NOT_FOUND /
 // ENTITY_NOT_FOUND，含 at_node 软删）
 import { mkdtempSync, rmSync } from "node:fs";
@@ -521,10 +521,10 @@ describe("GET /api/v1/delta/node/:nodeId", () => {
 // ============ POST /api/v1/delta/compute ============
 
 describe("POST /api/v1/delta/compute 状态计算", () => {
-  it("树路径累积：章上的 Delta 在 at_node=其下场景时生效（同节点内按 order 序）", async () => {
+  it("章序前缀累积：章上的 Delta 在 at_node=其下场景时生效（同章内按 order 序）", async () => {
     const { app, charId } = await seed();
- // 章上的两条 Delta（卡片 1.2 后锚点仅章——树路径至多含一章，
- // 「节点间按树路径序」在此树形下不可表达；兄弟章不参与见下一条用例）：
+ // 章上的两条 Delta（卡片 1.2 后锚点仅章——场景/卷上的存量 Delta 不参与；
+ // 跨章累积与截断见下一条用例）：
  // 第一条 set status=alive，第二条 set combat_power=150 + add tags
     await postDelta(app, {
       node_id: "ch-1",
@@ -568,15 +568,15 @@ describe("POST /api/v1/delta/compute 状态计算", () => {
     expect(body.data.appliedDeltas).toHaveLength(2);
     expect(body.data.appliedDeltas[0].nodeId).toBe("ch-1");
     expect(body.data.appliedDeltas[1].nodeId).toBe("ch-1");
- // 同节点内按 order 升序（全局单调递增的服务端 order）
+ // 同章内按 order 升序（全局单调递增的服务端 order）
     expect(body.data.appliedDeltas[0].description).toBe("章内变更一");
     expect(body.data.appliedDeltas[1].description).toBe("章内变更二");
     expect(body.data.conflicts).toEqual([]);
   });
 
-  it("父链唯一：兄弟章的 Delta 不参与计算（10-data-model §4 只沿父链累积）", async () => {
+  it("章序前缀：更早章的 Delta 参与累积，之后的章不参与（10-data-model §4 章序前缀累积）", async () => {
     const { app, charId } = await seed();
- // 换成双章树（ch-1 / ch-2 同级），Delta 挂在 ch-1
+ // 换成双章树（ch-1 / ch-2 同级），两章各挂一条 Delta（第二条 update 依赖第一条，证明按章序应用）
     const project = getCurrentProject()!;
     writeOutlineFile(project.root, twoChapterOutline());
     await postDelta(app, {
@@ -586,17 +586,40 @@ describe("POST /api/v1/delta/compute 状态计算", () => {
       changes: [{ field: "combat_power", op: "set", to: 150 }],
       description: "第一章变更",
     });
- // 查询点在 ch-2 下：ch-1 不是 sc-2 的祖先 → 该 Delta 不参与（返回初始值）
-    const res = await app.request(
+    await postDelta(app, {
+      node_id: "ch-2",
+      target_type: "character",
+      target_id: charId,
+      changes: [{ field: "combat_power", op: "update", from: 150, to: 200 }],
+      description: "第二章变更",
+    });
+ // 查询点在 ch-2 下（sc-2）：章序前缀 = [ch-1, ch-2] → 两条都参与（跨章累积）
+    const atCh2 = await app.request(
       "/api/v1/delta/compute",
       jsonRequest("POST", { target_type: "character", target_id: charId, at_node_id: "sc-2" }),
     );
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as {
-      data: { state: Record<string, unknown>; appliedDeltas: unknown[] };
+    expect(atCh2.status).toBe(200);
+    const body = (await atCh2.json()) as {
+      data: {
+        state: Record<string, unknown>;
+        appliedDeltas: Array<{ nodeId: string }>;
+        conflicts: unknown[];
+      };
     };
-    expect(body.data.state).toEqual({ combat_power: 100, tags: ["剑"] });
-    expect(body.data.appliedDeltas).toEqual([]);
+    expect(body.data.state.combat_power).toBe(200);
+    expect(body.data.appliedDeltas.map((d) => d.nodeId)).toEqual(["ch-1", "ch-2"]);
+    expect(body.data.conflicts).toEqual([]);
+ // 查询点在 ch-1 下（sc-1）：前缀 = [ch-1] → 第二章的 Delta 不参与（前缀截断）
+    const atCh1 = await app.request(
+      "/api/v1/delta/compute",
+      jsonRequest("POST", { target_type: "character", target_id: charId, at_node_id: "sc-1" }),
+    );
+    expect(atCh1.status).toBe(200);
+    const body1 = (await atCh1.json()) as {
+      data: { state: Record<string, unknown>; appliedDeltas: Array<{ nodeId: string }> };
+    };
+    expect(body1.data.state.combat_power).toBe(150);
+    expect(body1.data.appliedDeltas.map((d) => d.nodeId)).toEqual(["ch-1"]);
   });
 
   it("update 冲突：手动改值后 from 断裂 → conflicts 非空 + state 保持手动值", async () => {

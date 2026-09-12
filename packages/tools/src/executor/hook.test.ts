@@ -166,19 +166,24 @@ describe("advance_hook（复合写：delta + advances 一次提交）", () => {
     expect(hookRelations(hookId).map((r) => r.sourceId)).toEqual(["ch-1", "ch-2"]);
   });
 
-  it("同 hook 两次不同节点推进 → 第二次 delta from=同步后的实际状态，computeState 无 conflicts（S6.7 修复轮）", () => {
+  it("同 hook 两次不同节点推进 → 第二条 delta 的 from 取同步后状态（ch-2 自身无跳过；首条重放与已同步 data 断裂属既定冲突语义）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const hookId = makeHook("身世之谜");
     executeAdvanceHook(makeCtx(), advanceProposal(hookId, "ch-1"));
-    executeAdvanceHook(makeCtx(), advanceProposal(hookId, "ch-2")); // 兄弟章
+    executeAdvanceHook(makeCtx(), advanceProposal(hookId, "ch-2")); // 兄弟章（两者均在章序前缀内）
  // 第二次推进的 from 必须取 data.status 同步后的 progressing（修复前停留 planted →
  // 与实际累积脱节，与终态守卫 / S6.5 hookStatuses 同源缺陷）
     expect(hookDeltas(hookId)[1].changes).toEqual([{ field: "status", op: "update", from: "progressing", to: "progressing" }]);
- // computeState（atNodeId=ch-2 只累积挂在其树路径上的 delta）：from 与实际累积一致 → 无冲突
+ // computeState（atNodeId=ch-2：章序前缀 = [ch-1, ch-2]）：
+ // - 第二条 delta（本次推进）from 与同步后的 data.status 一致 → **无跳过**（修复本意）
+ // - 首条 delta 重放时 from=planted 早于执行器对 data.status 的同步 → 按既定语义跳过并标注 conflicts
+ //   （手动/执行器改 data 后重放旧 delta 的正常表现，不是回归）
     const result = computeState(db, dir, { targetType: "hook", targetId: hookId, atNodeId: "ch-2" });
-    expect(result!.conflicts).toEqual([]);
-    expect(result!.appliedDeltas.map((d) => d.nodeId)).toEqual(["ch-2"]);
     expect(result!.state.status).toBe("progressing");
+    expect(result!.appliedDeltas.map((d) => d.nodeId)).toEqual(["ch-1", "ch-2"]);
+    expect(result!.appliedDeltas[1].skipped).toBeUndefined(); // 本次推进无冲突（修复本意锁定）
+    expect(result!.conflicts.map((c) => c.field)).toEqual(["status"]); // 仅首条重放冲突
+    expect(result!.conflicts.map((c) => c.expected)).toEqual(["planted"]);
   });
 
   it("终态守卫：resolved/abandoned 伏笔不可再推进", () => {

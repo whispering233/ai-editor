@@ -153,7 +153,7 @@ export function updateOutlineNode(
 
 /**
  * 根 → 目标节点的路径 id 列表（含 root 与目标节点自身）。
- * 供后续卡使用：章节序现推、computeState 树路径排序（
+ * 供后续卡使用：章节序现推、computeState 的 at_node → 进度章映射（章序前缀累积，
  * getNodePathIds）。
  *
  * @throws 节点不存在时抛错（路径唯一是严格三层的推论，找不到即调用方 bug）

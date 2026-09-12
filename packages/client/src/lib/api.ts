@@ -617,7 +617,7 @@ export function getDeltasByNode(nodeId: string): Promise<DeltaByNodeRes> {
   return apiFetch<DeltaByNodeRes>(`/delta/node/${nodeId}`);
 }
 
-/** POST /api/v1/delta/compute 请求体（snake_case；服务端自动计算根 → at_node 的树路径） */
+/** POST /api/v1/delta/compute 请求体（snake_case；服务端按章序前缀累积：at_node → 进度章映射） */
 export interface ComputeDeltaBody {
   target_type: string;
   target_id: string;

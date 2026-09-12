@@ -86,16 +86,16 @@ function softDeleteNode(nodeId: string): void {
 }
 
 describe("compute_state", () => {
-  it("透传 db 累积语义：父链累积 + conflicts 标注（op=update from 不匹配跳过，不抛 409）", () => {
+  it("透传 db 累积语义：章序前缀累积 + conflicts 标注（op=update from 不匹配跳过，不抛 409）", () => {
     const { charA } = seedBase({ power: "500" });
     const conflict = insertDelta(db, {
-      nodeId: "sc-1",
+      nodeId: "ch-1",
       targetType: "character",
       targetId: charA,
       changes: [{ field: "power", op: "update", from: "100", to: "200" }], // 冲突：当前 500 ≠ 100
       description: "冲突变更",
     });
-    addDelta("sc-1", charA, [{ field: "power", op: "update", from: "500", to: "600" }], "正常变更");
+    addDelta("ch-1", charA, [{ field: "power", op: "update", from: "500", to: "600" }], "正常变更");
 
     const result = runComputeState(makeCtx(), {
       target_type: "character",
