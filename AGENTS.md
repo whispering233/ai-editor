@@ -35,6 +35,9 @@
 - **SSE 契约**：`POST /chat` 的帧集与字段以 `docs/api/80-api-chat.md` 为准（pi 事件投影，唯一实现点 = `agent/src/runtime/events.ts`）；不得回退旧事件名。
 - `client` 聊天链路：SSE 解析唯一实现是 `hooks/use-sse.ts`（勿另起炉灶）；store 的 loadSeq/msgSeq 竞态、**事件级流身份守卫**（旧流迟到帧不得污染新会话/工具卡/状态提示）与「中止在途 SSE」约定改动时必须保持。
 - `client` 视觉：**颜色/选中面 token 只能改 `AntdProvider.tsx`**（唯一改色入口，并同步 `docs/ui/DESIGN.md` 登记表）；守卫 `design-discipline.test.ts`（源码扫描：`lucide-import` / `hardcoded-color` / `important-class` / `ad-hoc-font-size` / `primary-bg-token` / `dropdown-menu-selectable` / `antd-root-override` / `cssvar-scope` / `no-dynamic-class` / `button-variant-color`）与 `components/antd-tokens.test.ts`（派生 token 对比度）。**不变式：深墨主色（`#37352f`）下任何由 `colorPrimary` 派生的「浅底」token 都不可信**（antd 派生的是中深灰，2.26:1 不可读）——选中面已显式覆盖，新增 antd 组件（Tree/Table 行选、Cascader、DatePicker…）时先扩 token 守卫。antd Select 浮层默认跟随触发器宽度 ⇒ 窄触发器必须 `popupMatchSelectWidth={false}`。
-- 仓库路径：`docs/`、`scripts/`、`test-project/` 在仓库根；包内路径相对 `packages/`。
+- 仓库路径：`docs/`、`scripts/`、`test-project/` 在仓库根；包内路径相对 `packages/`。`test-project/` 整体不入库（含运行时生成的 `.ai-editor/config.json`：`debug` 开关 + `lastProject`）；创作根 `.ai-editor/config.json` 只属服务端（`debug` 用户手编、`lastProject` 服务端在 open 成功后合并写入，见 `config.md`）。
+- **第三方图标资产只有一个**：`packages/client/public/provider-icons.svg`（供应商品牌 logo，@lobehub/icons 派生、MIT 许可头内嵌于文件）。**不要为此引入 `@lobehub/icons` 包**（9MB + peer `@lobehub/ui` 树）。
+- 左栏导航入口语义（**书架 = 顶部标识、概览 = 书名按钮、一级导航无「概览」**）与 `provider-icon` 品牌图标例外见 `docs/ui/DESIGN.md`；开机直达书籍只在 `hooks/use-enter-last-book.ts` 做**首帧一次**（勿在 Dashboard / AppShell 加常驻重定向——会把「回书架」弹回去）。
+- 左栏导航入口语义（**书架 = 顶部标识、概览 = 书名按钮、一级导航无「概览」**）与 `provider-icon` 品牌图标例外见 `docs/ui/DESIGN.md`；开机直达书籍只在 `hooks/use-enter-last-book.ts` 做**首帧一次**（勿在 Dashboard / AppShell 加常驻重定向——会把「回书架」弹回去）。
 - 测试：各包 `test` script = `vitest run`；各包 tsconfig 已 `exclude: ["src/**/*.test.ts"]`，不要改回。
 - 延期项（MVP 不做，勿顺手实现）：多标签页并发、undo、token 统计、跨书参考资料导入。

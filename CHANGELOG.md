@@ -5,6 +5,27 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [v0.0.33] - 2026-09-12
+
+> **导航与上手体验**：导航入口名实归位（书架入口 / 书名 = 概览）、开机直达上次那本书、设置页「AI 模型」只列已配置的 provider 并改为弹窗添加（带供应商品牌图标）；同时修正了 K5 换核后遗留的凭据优先级文案。**API 无破坏性变更**。
+
+### Added
+
+- **打开即回到上次那本书**：创作根 `.ai-editor/config.json` 新增 `lastProject`（`POST /project/open` 成功后合并写入，保留手编的 `debug` 段），`startServer` 在创作根自身不是项目时按它恢复上次的书；路径已删除/移动或 `project.json` 损坏 → 静默回书架（不阻断启动）。客户端首帧若落在书架路由则直接进该书概览（`hooks/use-enter-last-book.ts`，只判定一次）——`loadConfig` 同期改为「并发共享同一在途 Promise」（旧实现按 `configLoading` 早退，`await` 的调用方会把「加载中」当成「无项目」）
+- **设置页「AI 模型」按已配置显示 + 弹窗添加**：三级导航只列**已配置**的 provider（`authConfigured` ∪ 当前激活 ∪ 刚配置成功的家）——pi 目录 40 家全列等于不可用；「添加」改为受控弹窗（选择步：搜索框 + 品牌图标列表；配置步：凭证状态 + key + `[取消]`/`[保存]`，X/Esc/遮罩均可关，**关窗不落任何状态**，保存成功才进导航）。同时消除了「列了却用不了」的空转项
+- **provider 品牌图标**：新增自持精灵 `packages/client/public/provider-icons.svg`（30 symbol，派生自 @lobehub/icons，MIT 许可头内嵌文件内）——**不引入 `@lobehub/icons` 包**（9.08MB / 4802 文件 + peer `@lobehub/ui` 一整棵树）；自定义 provider 回退 `@ant-design/icons` 的 `ApiOutlined`
+
+### Changed
+
+- **导航入口名实归位**：左栏顶部标识 `◈ 我的小说` → **`◈ 书架`**（书架主页入口）；导航区首项由「回到书架（显示书名）」改为**书名按钮 → `#/overview`**（概览入口收敛到这里）；一级导航移除「概览」项（九项 → 八项 + 回收站）；`InfoBar` 项目名点击 `#/` → `#/overview`（与左栏书名同一目标）
+- **左栏底部三入口左对齐**：修掉 `Button` 标签 span 缺 `flex-1` 导致「图标 + 文字」整组居中（实测图标 x=24 / 按钮盒 8–182）
+- **设置页凭据来源标签中文化**：`stored` → 「auth.json 已保存」、`environment` → 「环境变量」等（不再把内部词直接显示给用户）
+- **gitignore**：`test-project/` 整体不入库（含运行时生成的 `.ai-editor/config.json`：`debug` 开关 + `lastProject`）——调试开关写法改为在 README 里给示例
+
+### Fixed
+
+- **凭据优先级文案错误（K5 换核后遗留）**：旧文案「环境变量优先于此处的配置」已过期。按 pi 0.85.1 实际语义修正（`pi-ai` `dist/auth/resolve.js`：*stored credential owns the provider, ambient/env is consulted only when nothing is stored*；`auth/helpers.js` 先取 `credential.key`；`coding-agent` `auth-storage.js` 的 `key` 值过 `resolveConfigValue`）——**auth.json 存量凭据优先，环境变量只在该家无条目时兜底**；需要引环境变量就写在 auth.json 的值里（`$VAR` / `!命令`）。同一处过期表述同时修正 `docs/design/config.md`、`docs/api/90-api-settings.md`、`docs/db/schema.md` 与 `routes/settings.ts` 注释
+
 ## [v0.0.32] - 2026-09-12
 
 > **AI 内核换成 pi**（嵌入 `@earendil-works/pi-coding-agent` 0.85.1）：模型目录/凭据/会话文件/重试/上下文压缩/工具派发全部交给 pi，本仓只保留领域工具、内核提示词与 HTTP/SSE 契约；会话文件格式变为 pi session v3（旧 v1 会话不再读取）；发布面 6→5 包（`packages/llm` 删除）；配置载体迁到 pi agent dir。

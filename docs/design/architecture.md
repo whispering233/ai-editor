@@ -130,7 +130,11 @@ shared（纯类型/常量/工具，零 Node 依赖，可被 client 安全 tree-s
     "@whispering233/ai-editor-db": "workspace:*",
     "@whispering233/ai-editor-tools": "workspace:*",
     "@whispering233/ai-editor-agent": "workspace:*",
-    "hono": "^4.7.0"
+    "@hono/node-server": "^2.0.12",
+    "hono": "^4.7.0",
+    "fflate": "^0.8.3",          // 备份导出/导入的 zip 打包（无 Node 原生依赖）
+    "undici": "8.5.0",           // 出站 HTTP dispatcher（与 pi CLI 同款，见 http-dispatcher.ts）
+    "zod": "^4.4.3"              // 仅服务端执行校验（client 不打包）
   }
 }
 
@@ -140,8 +144,15 @@ shared（纯类型/常量/工具，零 Node 依赖，可被 client 安全 tree-s
   "dependencies": {
     "@whispering233/ai-editor-shared": "workspace:*",
     "react": "^19.0.0",
-    "antd": "^6.6.2",
-    "@ant-design/x": "^2.9.0",
+    "react-dom": "^19.0.0",
+    "antd": "^6.6.2",                          // 组件基座（token 派发 + cssVar 双算法）
+    "@ant-design/icons": "^6.3.4",             // 全站唯一图标集
+    "@ant-design/x": "^2.9.0",                 // 会话组件族（Bubble/Sender/Conversations…）
+    "@ant-design/x-markdown": "^2.9.0",        // 流式 markdown 渲染
+    "@uiw/react-md-editor": "^4.1.1",          // 参考资料页 md 编辑器
+    "clsx": "^2.1.1",                          // 类名拼接（cn = clsx + tailwind-merge）
+    "tailwind-merge": "^3.6.0",
+    "tw-animate-css": "^1.4.0",                // Tailwind 4 动画工具类（index.css 引入）
     "zustand": "^5.0.0"
   }
 }
