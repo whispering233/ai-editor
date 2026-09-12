@@ -409,6 +409,9 @@ export interface HookOpportunity {
  * - R2 角色在场 ≥ 2（appears_in 目标为章或其场景，按角色去重）→ relationship（人物关系）
  * - R3 任一场景冲突含外部层面（extra_personal）→ world_building（世界观）
  * - R4 任一场景价值转向（value_from ≠ value_to 且均非空）→ character_growth（角色成长）
+ * R3/R4 的 reason 带「命中计数 / 本章场景总数 + 最典型场景名」——章级聚合后单点信息会丢，
+ * 而麦基口径下 R4 在成熟大纲里近乎恒真（「没有不转折的场景」），计数是判别信息的兜底（卡片 1.7）。
+ * **「最典型」判据 = 子树先序遍历第一个命中场景**（确定性；不做「冲突层最多」这类启发式猜测）。
  */
 export function runFindHookOpportunities(ctx: ToolContext, args: FindHookOpportunitiesArgs, signal?: AbortSignal): { opportunities: HookOpportunity[] } | null {
   const tree = readOutlineFile(ctx.outlineDir);
@@ -451,25 +454,35 @@ export function runFindHookOpportunities(ctx: ToolContext, args: FindHookOpportu
     opportunities.push({ category: "relationship", reason: `本章有 ${cast.size} 个角色在场，适合人物关系类伏笔（relationship）` });
   }
 
- // R3：任一场景冲突含外部层面
-  const hasExtraPersonal = scenes.some((scene) => {
+ // R3：任一场景冲突含外部层面（命中集 + 最典型 = 先序第一个命中）
+  const extraPersonalHits = scenes.filter((scene) => {
     const levels = scene.data?.conflict_levels;
     return Array.isArray(levels) && levels.includes("extra_personal");
   });
-  if (hasExtraPersonal) {
-    opportunities.push({ category: "world_building", reason: "场景冲突含外部层面（extra_personal），适合世界观类伏笔（world_building）" });
+  const typicalExtraPersonal = extraPersonalHits[0];
+  if (typicalExtraPersonal !== undefined) {
+    opportunities.push({
+      category: "world_building",
+      reason:
+        `本章 ${extraPersonalHits.length}/${scenes.length} 个场景冲突含外部层面（extra_personal），` +
+        `最典型：${typicalExtraPersonal.title}——适合世界观类伏笔（world_building）`,
+    });
   }
 
- // R4：任一场景价值转向
-  const shifted = scenes.find((scene) => {
+ // R4：任一场景价值转向（命中集 + 最典型 = 先序第一个命中）
+  const shiftedHits = scenes.filter((scene) => {
     const from = scene.data?.value_from;
     const to = scene.data?.value_to;
     return typeof from === "string" && from !== "" && typeof to === "string" && to !== "" && from !== to;
   });
-  if (shifted !== undefined) {
+  const typicalShifted = shiftedHits[0];
+  if (typicalShifted !== undefined) {
     opportunities.push({
       category: "character_growth",
-      reason: `场景价值转向（${String(shifted.data?.value_from)} → ${String(shifted.data?.value_to)}），适合角色成长类伏笔（character_growth）`,
+      reason:
+        `本章 ${shiftedHits.length}/${scenes.length} 个场景价值转向，最典型：${typicalShifted.title}` +
+        `（${String(typicalShifted.data?.value_from)} → ${String(typicalShifted.data?.value_to)}），` +
+        `适合角色成长类伏笔（character_growth）`,
     });
   }
 

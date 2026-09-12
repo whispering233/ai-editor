@@ -463,14 +463,61 @@ describe("find_hook_opportunities", () => {
     const byCategory = new Map(result.opportunities.map((o) => [o.category, o.reason]));
     expect(byCategory.has("world_building")).toBe(true);
     expect(byCategory.get("world_building")).toContain("extra_personal");
+ // 卡片 1.7：命中计数 / 本章场景总数（ch-1 下共 2 个场景，仅 sc-2 命中）+ 最典型场景名
+    expect(byCategory.get("world_building")).toContain("1/2");
+    expect(byCategory.get("world_building")).toContain("场景二");
     expect(byCategory.get("character_growth")).toContain("平静");
     expect(byCategory.get("character_growth")).toContain("绝望");
+    expect(byCategory.get("character_growth")).toContain("1/2");
+    expect(byCategory.get("character_growth")).toContain("场景二");
 
  // 已有 plants 关系（章或其场景）→ R1（mystery）不触发
     const hookId = makeHook("已有伏笔", { status: "planted" });
     plant(hookId, "sc-2");
     const withPlant = runFindHookOpportunities(makeCtx(), { outline_node_id: "ch-1" })!;
     expect(withPlant.opportunities.map((o) => o.category)).not.toContain("mystery");
+  });
+
+  it("R3/R4 多场景命中 → 2/2 且最典型 = 子树先序第一个（场景一）", () => {
+    seedBase();
+    const tree = readOutlineFile(dir);
+    const sc1 = findOutlineNode(tree, "sc-1")!;
+    sc1.data = { conflict_levels: ["extra_personal", "personal"], value_from: "希望", value_to: "绝望" };
+    const sc2 = findOutlineNode(tree, "sc-2")!;
+    sc2.data = { conflict_levels: ["extra_personal"], value_from: "平静", value_to: "失落" };
+    writeOutlineFile(dir, tree);
+
+    const result = runFindHookOpportunities(makeCtx(), { outline_node_id: "ch-1" })!;
+    const byCategory = new Map(result.opportunities.map((o) => [o.category, o.reason]));
+    expect(byCategory.get("world_building")).toContain("2/2");
+    expect(byCategory.get("world_building")).toContain("场景一");
+    expect(byCategory.get("character_growth")).toContain("2/2");
+    expect(byCategory.get("character_growth")).toContain("场景一");
+ // 值取最典型场景（场景一）的转向
+    expect(byCategory.get("character_growth")).toContain("希望 → 绝望");
+  });
+
+  it("R3/R4 单场景章 → 1/1（计数含总数）", () => {
+    seedBase();
+    const tree = readOutlineFile(dir);
+    const ch1 = findOutlineNode(tree, "ch-1")!;
+    if (ch1.type !== "chapter") throw new Error("fixture 缺失 chapter");
+    ch1.children = [
+      {
+        id: "sc-1",
+        type: "scene",
+        title: "场景一",
+        updated_at: T0,
+        data: { conflict_levels: ["extra_personal"], value_from: "平静", value_to: "绝望" },
+      },
+    ];
+    writeOutlineFile(dir, tree);
+
+    const result = runFindHookOpportunities(makeCtx(), { outline_node_id: "ch-1" })!;
+    const byCategory = new Map(result.opportunities.map((o) => [o.category, o.reason]));
+    expect(byCategory.get("world_building")).toContain("1/1");
+    expect(byCategory.get("character_growth")).toContain("1/1");
+    expect(byCategory.get("character_growth")).toContain("场景一");
   });
 
   it("输入非章（卷/场景）→ 抛错；章不存在/已软删 → null", () => {
