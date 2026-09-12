@@ -111,7 +111,9 @@ const queryToolDefs: ToolDefinition[] = [
     name: "compute_state",
     description:
       "状态计算：实体（target_id）到达指定大纲节点（at_node_id）时的累积状态——" +
-      "只沿大纲树父链累积已确认 Delta。若存在 update 冲突（from 不匹配）该 change 被跳过，" +
+      "按**章序前缀**累积已确认 Delta（状态 = 初始 data + 章序 ≤ 目标进度章的全部章，跨卷/跨章；" +
+      "at_node_id 不限层级：章→自身、场景→所属章、卷→该卷最后一个未软删章）。" +
+      "若存在 update 冲突（from 不匹配）该 change 被跳过，" +
       "结果在 conflicts 字段标注 { field, expected, actual }，请据此向用户提示修复。",
     parameters: computeStateArgsSchema,
     permission: TOOL_PERMISSION.AUTO,

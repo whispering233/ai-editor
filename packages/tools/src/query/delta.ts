@@ -2,7 +2,7 @@
 // compute_state / get_delta_history（「状态查询（Delta 相关）」）
 //
 // db 层能力确认与分工（S6.3 修复轮：数据访问一律走 db 查询层，工具层无原生 SQL）：
-// - compute_state：db computeState 已封装全部语义（父链双层排序累积、op=update from
+// - compute_state：db computeState 已封装全部语义（章序前缀双层排序累积、op=update from
 // 校验失败跳过 + conflicts 标注不返回 409、软删过滤、目标实体缺失返回 null）——
 // 工具层参数映射透传；at_node_id 不存在时 db 抛错（视为调用方 bug，路由层前置校验
 // 的约定），工具层不捕获——executor 统一转结构化错误喂回 LLM 自纠
@@ -19,8 +19,9 @@ import type { ComputeStateArgs, GetDeltaHistoryArgs } from "../schemas/index.js"
 
 /**
  * 实体到达指定节点时的累积状态（compute_state(target_type, target_id, at_node_id)）。
- * 透传 db computeState：只沿大纲树父链（根 → at_node_id）累积已确认 Delta，
- * 节点间按树路径序、节点内按 order 双层排序；plot_edge 不参与；op=update from 校验失败
+ * 透传 db computeState：按**章序前缀**累积已确认 Delta（状态 = 初始 data + 章序 ≤ 目标进度章的
+ * 全部章；目标节点 → 进度章：章→自身、场景→所属章、卷→该卷最后一个未软删章），
+ * 先按章序、同章内按 order 双层排序；plot_edge 不参与；op=update from 校验失败
  * **跳过该 change 并继续累积**，结果在 conflicts 中标注 { field, expected, actual }
  * （不返回 409——手动编辑 data 属正常用户行为）。
  * 目标实体不存在/已软删 → null；at_node_id 不存在 → db 抛错（上层按工具失败处理）。

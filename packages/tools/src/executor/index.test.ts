@@ -126,7 +126,7 @@ describe("executeProposal（proposal.type → 执行函数映射）", () => {
   it("propose_add_delta → add_delta：description 取 proposal.summary", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const char = createEntity(db, { type: "character", name: "阿强" });
-    const proposal = makeProposal("propose_add_delta", { node_id: "sc-1", target_type: "character", target_id: char.id, changes: [{ field: "hp", op: "set", to: 50 }] }, "张三获得断剑认可");
+    const proposal = makeProposal("propose_add_delta", { node_id: "ch-1", target_type: "character", target_id: char.id, changes: [{ field: "hp", op: "set", to: 50 }] }, "张三获得断剑认可");
     const result = executeProposal(makeCtx(), proposal);
     expect(result.id).toMatch(/^delta-/);
     expect(listDeltasByTarget(db, char.id, dir)[0].description).toBe("张三获得断剑认可");

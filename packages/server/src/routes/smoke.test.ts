@@ -388,8 +388,8 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(edgeRow.targetId).toBe(sc2Id);
     expect(edgeRow.metadata).toEqual({ label: "路径A" });
 
- // ============ 步骤 5：Delta（卡 1.2：锚点仅章 + 树路径累积） ============
- // 触发节点 = 章（卷/场景锚点被拒绝，见下方拒绝分支）；变更挂章后，其下场景均在路径上
+ // ============ 步骤 5：Delta（卡 1.2：锚点仅章；卡 1.4：章序前缀累积） ============
+ // 触发节点 = 章（卷/场景锚点被拒绝，见下方拒绝分支）；变更挂章后，该章及其后章节的计算均包含它在内
     const delta = await api(app, "POST", "/api/v1/delta", {
       node_id: chId,
       target_type: "character",
@@ -412,7 +412,7 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(sceneAnchor.status).toBe(400);
     expect(sceneAnchor.body.error.code).toBe("VALIDATION_ERROR");
 
- // 到达 scene1：树路径上累积章 Delta → status = wounded
+ // 到达 scene1：章序前缀（章序 ≤ scene1 所属章）累积章 Delta → status = wounded
     const compute = await api(app, "POST", "/api/v1/delta/compute", {
       target_type: "character",
       target_id: charId,

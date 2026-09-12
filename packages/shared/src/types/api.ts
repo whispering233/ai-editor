@@ -584,12 +584,12 @@ export const deltaByNodeResSchema = z.object({
   deltas: z.array(deltaRecordSchema),
 });
 
-// POST /api/v1/delta/compute（只沿大纲树父链累积）
+// POST /api/v1/delta/compute（章序前缀累积：章序 ≤ 目标进度章的全部章）
 export const deltaComputeReqSchema = z
   .object({
     target_type: z.string(),
     target_id: z.string(),
-    at_node_id: z.string(), // 服务端自动计算根 → at_node 的树路径
+    at_node_id: z.string(), // 目标节点（不限层级）——映射为进度章：章→自身 / 场景→所属章 / 卷→该卷最后一个未软删章
   })
   .strict();
 
@@ -597,7 +597,7 @@ export const deltaComputeResSchema: z.ZodType<ComputeStateResult> = z.object({
   targetType: z.string(),
   targetId: z.string(),
   atNodeId: z.string(),
-  state: z.record(z.string(), z.unknown()), // 初始 data + 路径上所有 Delta 累积
+  state: z.record(z.string(), z.unknown()), // 初始 data + 章序前缀（章序 ≤ 进度章）的全部 Delta 累积
   appliedDeltas: z.array(
     z.object({
       nodeId: z.string(),

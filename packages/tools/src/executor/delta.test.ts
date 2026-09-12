@@ -65,28 +65,47 @@ describe("add_delta", () => {
     const proposal = buildProposal(
       makeCtx(),
       "propose_add_delta",
-      { node_id: "sc-1", target_type: "character", target_id: char.id, changes: [{ field: "hp", op: "update", from: 100, to: 80 }] },
+      { node_id: "ch-1", target_type: "character", target_id: char.id, changes: [{ field: "hp", op: "update", from: 100, to: 80 }] },
       [],
-      "为节点「场景一」追加 1 项属性变更",
+      "为节点「第一章」追加 1 项属性变更",
     );
     const result = executeAddDelta(makeCtx(), proposal);
     expect(result.id).toMatch(/^delta-/);
     const deltas = listDeltasByTarget(db, char.id, dir);
     expect(deltas).toHaveLength(1);
     expect(deltas[0]).toMatchObject({
-      nodeId: "sc-1",
+      nodeId: "ch-1",
       targetType: "character",
       targetId: char.id,
       changes: [{ field: "hp", op: "update", from: 100, to: 80 }],
-      description: "为节点「场景一」追加 1 项属性变更", // proposal.summary
+      description: "为节点「第一章」追加 1 项属性变更", // proposal.summary
     });
+  });
+
+  it("章级兜底：非章锚点（卷/场景）→ 抛错，不落库（卡片 1.5）", () => {
+    writeOutlineFile(dir, seedOutlineTree());
+    const char = createEntity(db, { type: "character", name: "阿强" });
+    const changes = [{ field: "hp", op: "set", to: 1 }];
+ // 场景锚点：executor 直写 db 绕过 REST，本层必须自行拒绝（否则产生静默不参与累积的死数据）
+    expect(() =>
+      executeAddDelta(makeCtx(), buildProposal(makeCtx(), "propose_add_delta", { node_id: "sc-1", target_type: "character", target_id: char.id, changes }, [], "s")),
+    ).toThrow(/变更记录锚点须为章/);
+ // 卷锚点同样拒绝
+    expect(() =>
+      executeAddDelta(makeCtx(), buildProposal(makeCtx(), "propose_add_delta", { node_id: "vol-1", target_type: "character", target_id: char.id, changes }, [], "s")),
+    ).toThrow(/变更记录锚点须为章/);
+ // 节点不存在也拒绝（requireOutlineNode 前置）
+    expect(() =>
+      executeAddDelta(makeCtx(), buildProposal(makeCtx(), "propose_add_delta", { node_id: "ch-404", target_type: "character", target_id: char.id, changes }, [], "s")),
+    ).toThrow(/大纲节点不存在或已软删/);
+    expect(listDeltasByTarget(db, char.id, dir)).toHaveLength(0);
   });
 
   it("order 服务端全局单调生成（两次插入 order 递增）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const char = createEntity(db, { type: "character", name: "阿强" });
-    executeAddDelta(makeCtx(), buildProposal(makeCtx(), "propose_add_delta", { node_id: "sc-1", target_type: "character", target_id: char.id, changes: [{ field: "a", op: "set", to: 1 }] }, [], "第一条"));
-    executeAddDelta(makeCtx(), buildProposal(makeCtx(), "propose_add_delta", { node_id: "sc-1", target_type: "character", target_id: char.id, changes: [{ field: "b", op: "set", to: 2 }] }, [], "第二条"));
+    executeAddDelta(makeCtx(), buildProposal(makeCtx(), "propose_add_delta", { node_id: "ch-1", target_type: "character", target_id: char.id, changes: [{ field: "a", op: "set", to: 1 }] }, [], "第一条"));
+    executeAddDelta(makeCtx(), buildProposal(makeCtx(), "propose_add_delta", { node_id: "ch-1", target_type: "character", target_id: char.id, changes: [{ field: "b", op: "set", to: 2 }] }, [], "第二条"));
     const orders = listDeltasByTarget(db, char.id, dir).map((d) => d.order);
     expect(orders).toEqual([1, 2]);
   });
@@ -95,7 +114,7 @@ describe("add_delta", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const char = createEntity(db, { type: "character", name: "阿强" });
     expect(() =>
-      executeAddDelta(makeCtx(), buildProposal(makeCtx(), "propose_add_delta", { node_id: "sc-1", target_type: "character", target_id: char.id }, [], "s")),
+      executeAddDelta(makeCtx(), buildProposal(makeCtx(), "propose_add_delta", { node_id: "ch-1", target_type: "character", target_id: char.id }, [], "s")),
     ).toThrow(/执行参数缺失或非法: changes/);
   });
 });

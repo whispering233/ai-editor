@@ -144,7 +144,7 @@ function softDeletedChapterOutline(): OutlineFileTree {
   };
 }
 
-/** 大纲树变体：双章（ch-1/ch-2 同级，各带一场景）——父链唯一性测试用（兄弟章不参与累积） */
+/** 大纲树变体：双章（ch-1/ch-2 同级，各带一场景）——章序前缀测试用（更早章参与累积、之后的章不参与） */
 function twoChapterOutline(): OutlineFileTree {
   return {
     id: "root",

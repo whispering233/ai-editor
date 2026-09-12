@@ -28,7 +28,8 @@ export const deltaChangeSchema = Type.Object(
 
 /**
  * compute_state 入参（与 POST /api/v1/delta/compute 同构，api.ts deltaComputeReqSchema）：
- * 目标实体到达 at_node_id 时的累积状态（只沿大纲树父链累积已确认 Delta）
+ * 目标实体到达 at_node_id 时的累积状态（**章序前缀**累积：《章序 ≤ 目标进度章》的全部章，
+ * 跨卷/跨章；目标节点 → 进度章：章→自身、场景→所属章、卷→该卷最后一个未软删章）
  */
 export const computeStateArgsSchema = Type.Object(
   {

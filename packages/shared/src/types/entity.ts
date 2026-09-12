@@ -210,7 +210,7 @@ export interface ComputeStateResult {
   targetType: string;
   targetId: string;
   atNodeId: string;
- /** 初始 data + 树路径上所有 Delta 累积后的结果（只沿大纲树父链累积） */
+ /** 初始 data + 章序前缀累积后的结果（章序 ≤ 目标进度章的全部 Delta；见 docs/design/10-data-model.md §4） */
   state: Record<string, unknown>;
   appliedDeltas: AppliedDelta[];
   conflicts: DeltaConflict[];
