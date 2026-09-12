@@ -88,7 +88,7 @@ CREATE TABLE entities (
 - **结构不变式**：有 `children` = 分支（**不可赋值**）；无 `children` = 叶子（**可赋值**）。删除分支的最后一个子节点 → 该节点降级为叶子。叶子 `value` 允许缺省（空值）。嵌套层数不限；顺序 = 数组顺序（**无 `sort_order` 列、无迁移**）。
 - **叶子值类型**：`string | number`（与 `DeltaChange` 的 `from`/`to`/`value` 同域）；UI 自动判定（纯数字 → number）。
 - **结构与值分工**：增删/改名/排序节点 = 人工编辑（`PUT /entity/character/:id` partial，**不产生 Delta**）；**只有已存在的叶子**可被 Delta 修改，字段路径 = 点分拼接（如 `ability_panel.火系.等级`）。
-- **宽校验**：`characterDataSchema` 对 `ability_panel` 不做结构精校验（沿用 `custom_fields` 的宽松先例）——UI 输入受控 + 读取端防御（结构非法按空面板处理，不抛错打挂 `computeState`）。
+- **宽校验**：`characterDataSchema` 对 `ability_panel` 不做结构精校验（沿用 `custom_fields` 的宽松先例）——UI 输入受控 + 读取端防御（结构非法按空面板处理，不抛错打挂 `computeState`）。**因此所有读端（摘要/统计/叶子路径枚举/副本派生）都必须先过 `parseAbilityPanel` 规范化**，消费方不得假定 `data.ability_panel` 是规范形状。
 
 **`status` 移除与 `abilities` 迁移（007 迁移，SCHEMA_VERSION 7）**：
 
@@ -173,6 +173,8 @@ CREATE TABLE delta_records (
 > **锚点仅章（2026-09）**：Delta 的触发节点只能是 `chapter`——卷太粗、场景太碎，一章一个状态变化点才是叙事粒度；**收窄仅限写入**（`POST /delta` 400 + AI `propose_add_delta` 拒绝），`POST /delta/compute` 的 `at_node_id` 不限层级（「第 3 章第 2 场时他什么状态」是合法查询）。**与章序前缀累积配套**：正因为锚点只在章，累积才必须按章序前缀（父链至多含一章，无法跨章累积）。
 >
 > **字段路径（2026-09）**：`field` 支持点分嵌套路径（`ability_panel.火系.等级`）——`computeState` 逐层下钻定位；**嵌套路径仅支持标量 `set` / `update`**，`add` / `remove`（数组语义）只在顶层字段使用。
+>
+> **面板路径解析口径（2026-09）**：面板是 `{name}[]` 数组而非对象 → **数组段按同层 `name` 匹配，取先序第一个**；**名字含分隔符 `.` 或同层重名 → 同样按先序第一个参与**（已知歧义，不静默改写用户数据，由 UI 结构编辑给出内联提示）；路径前缀（`ability_panel.`）由 shared 的统一 helper 拼接，**禁止消费方手拼**。
 >
 > **已知边界（开发阶段决策）**：卡 1.2 之前写入的非章锚点（卷/场景）Delta **既不被累积、也无 UI 入口**（读侧宽松但不展示）——手改文件或导入旧备份时这些记录会静默 inert；开发阶段无存量数据，不做兼容。
 >
