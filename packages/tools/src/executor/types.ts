@@ -29,13 +29,6 @@ export function requireString(args: Record<string, unknown>, key: string): strin
   return v;
 }
 
-/** 可选字符串参数（缺失返回 undefined；存在但非字符串 → 抛错） */
-export function optionalString(args: Record<string, unknown>, key: string): string | undefined {
-  const v = args[key];
-  if (v === undefined) return undefined;
-  return requireString(args, key);
-}
-
 /** 必填对象参数（patches/metadata 等） */
 export function requireRecord(args: Record<string, unknown>, key: string): Record<string, unknown> {
   const v = args[key];

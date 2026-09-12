@@ -5,7 +5,7 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [v0.0.32] - 2026-09-12
 
 > **AI 内核换成 pi**（嵌入 `@earendil-works/pi-coding-agent` 0.85.1）：模型目录/凭据/会话文件/重试/上下文压缩/工具派发全部交给 pi，本仓只保留领域工具、内核提示词与 HTTP/SSE 契约；会话文件格式变为 pi session v3（旧 v1 会话不再读取）；发布面 6→5 包（`packages/llm` 删除）；配置载体迁到 pi agent dir。
 

@@ -330,7 +330,7 @@ import { runProposeCreateReference } from "./proposal/reference.js";
 
 /** 提案类工具定义（S6.6 + F9 重排 + G2 时间点重排，「提案类」+ 「工具扩展」提案类，共 15 个；权限全为 PROPOSAL）
  * 语义：AI 不能直接修改数据——propose_* 仅产出提案（tool_result 只有 proposal_id + 一句话摘要，
- * 不含预览细节，2026-08 修订；完整预览经 SSE proposal 事件推送 GUI）；用户确认后由 S7.5 路由
+ * 不含预览细节，2026-08 修订；完整预览随 tool_execution_end 帧的 result.details 推送 GUI）；用户确认后由 S7.5 路由
  * 快照重校验并调用 S6.7 执行工具落库。*/
 const proposalToolDefs: ToolDefinition[] = [
   {

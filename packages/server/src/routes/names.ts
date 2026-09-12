@@ -5,7 +5,7 @@
 // char-/set-/loc-/hook-/ev-/tp-/ref- → entities 表（getEntity 已过滤软删）
 // vol-/ch-/sc- → outline.json 节点（findOutlineNode 读侧不过滤软删——deleted: true 返回 null）
 // rel- → null（关系无名称语义）
-// 其余前缀（proj-/prop_/sess_/call_/未知）→ null
+// 其余前缀（proj-/prop_/call_/会话 id/未知）→ null
 // 响应 names 键集 = 请求 ids 去重后全集（每个 id 必有条目，未命中 = null）
 import { Hono } from "hono";
 import { getEntity, findOutlineNode, readOutlineFile } from "@whispering233/ai-editor-db";
@@ -42,7 +42,7 @@ function resolveOne(id: string, project: ProjectContext): { label: string; name:
       return { label: OUTLINE_NODE_TYPE_LABELS[node.type], name: node.title };
     }
   }
- // rel- 与其他前缀（proj-/prop_/sess_/call_/未知）：无名称语义 → null
+ // rel- 与其他前缀（proj-/prop_/call_/会话 id/未知）：无名称语义 → null
   return null;
 }
 

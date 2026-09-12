@@ -6,7 +6,6 @@
 // 契约见 docs/api/tool-calling.md：抛错即失败（不把失败编码进 content）；提案 content 只给
 // 「提案已发出」提示，预览细节在 details 里随 SSE 推给 GUI。
 
-import type { TSchema } from "@earendil-works/pi-ai";
 import type { ToolDefinition as PiToolDefinition } from "@earendil-works/pi-coding-agent";
 import { TOOL_PERMISSION } from "@whispering233/ai-editor-shared";
 import { listTools, type ToolContext, type ToolDefinition as EditorToolDefinition } from "@whispering233/ai-editor-tools";
@@ -86,4 +85,3 @@ export function createCustomTools(options: CreateCustomToolsOptions): PiToolDefi
 }
 
 /** 工具参数 schema 类型（测试/调用方按需引用） */
-export type ToolParametersSchema = TSchema;

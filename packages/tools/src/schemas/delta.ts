@@ -25,7 +25,6 @@ export const deltaChangeSchema = Type.Object(
   { additionalProperties: false },
 );
 
-export type DeltaChangeArg = Static<typeof deltaChangeSchema>;
 
 /**
  * compute_state 入参（与 POST /api/v1/delta/compute 同构，api.ts deltaComputeReqSchema）：

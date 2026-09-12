@@ -9,7 +9,6 @@ export const outlineNodeTypeSchema = stringEnum(["volume", "chapter", "scene"] a
 /** get_outline 入参：无参；默认不含 metadata 统计（省 token，需统计走 API with_metadata） */
 export const getOutlineArgsSchema = Type.Object({}, { additionalProperties: false });
 
-export type GetOutlineArgs = Static<typeof getOutlineArgsSchema>;
 
 /** get_outline_path 入参：node_id（根 → 该节点的路径 ID 列表，含 root） */
 export const getOutlinePathArgsSchema = Type.Object(

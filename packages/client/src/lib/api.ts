@@ -910,7 +910,7 @@ export function renameProject(name: string): Promise<RenameProjectRes> {
 
 // ============ 设置（S1.4，多 provider；「系统设置」） ============
 
-/** 模型目录条目（GET /settings/llm；getAvailableModels） */
+/** 模型目录条目（GET /settings/llm；来自 pi 的 provider 模型目录） */
 export interface LlmModelInfo {
   id: string;
   provider: string;

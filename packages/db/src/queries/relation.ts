@@ -355,7 +355,7 @@ export function createRelation(
     throw new RelationError("RELATION_EXISTS", `关系已存在: ${input.sourceId} → ${input.targetId} (${input.relationType})`);
   }
   const now = nowIso();
- // 关系 id：id 约定未列 rel- 前缀（运行时对象为 prop_/sess_/call_），
+ // 关系 id：id 约定未列 rel- 前缀（运行时对象为 prop_/call_/会话 id），
  // 用 generateId("rel-") 保证唯一（前缀 + nanoid，与实体/节点同构）
   const row: RelationRow = {
     id: generateId("rel-"),

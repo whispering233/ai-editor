@@ -8,7 +8,7 @@
 // - 对话链路用 mock produce 注入（createChatRoutes({ produce })，不经真实 DeepSeek）：
 // mock 模仿真实 LLM——第 1 轮输出文本 + get_outline 工具调用（**不注入 dispatcher**，
 // 走真实 createToolDispatcher 在真实项目上执行真实工具），第 2 轮纯文本收尾；
-// 步骤 9 独立 mock 走 propose_create_entity → proposal 事件 → confirm → 真实落库。
+// 步骤 9 独立 mock 走 propose_create_entity → tool 帧 details 提案载荷 → confirm → 真实落库。
 // - 自包含：不修改任何现有文件；SSE 解析/装配 helper 参照 chat.test.ts 同款写法复制。
 //
 // 断言风格：单条长 it 按 9 步顺序执行（步骤间强依赖 id 流转，连贯性优先，可读性靠

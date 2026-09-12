@@ -34,9 +34,6 @@ import { optionalRecord, requireString, type ExecutorFn, type ExecutorResult } f
 /** 提案类型字面量联合（15 个，PROPOSAL_TOOLS 常量派生——注册表/门面共用） */
 export type ProposalType = (typeof PROPOSAL_TOOLS)[number];
 
-/** 执行工具名字面量联合（13 个，EXECUTOR_TOOLS 常量派生） */
-export type ExecutorToolName = (typeof EXECUTOR_TOOLS)[number];
-
 /** 适配 propose_create_hook → 复合建 hook：create_entity(type=hook) + plants 关系一次提交 */
 const executeCreateHook: ExecutorFn = (ctx, proposal) => {
   const args = proposal.args;

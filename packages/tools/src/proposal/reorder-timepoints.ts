@@ -14,7 +14,7 @@
 // 存在性 + updated_at（用户拖拽改序后 AI 提案自动失效，409 PROPOSAL_STALE）
 // - preview = { changes: [...] }（Proposal.preview，F9 起可选字段）：仅列**位置变化**的
 // 时间点（对比当前序与新序，1-based 位置，人类可读；name 缺失/空串用 id 兜底）——
-// 完整预览经 SSE proposal 事件推送 GUI 展示提案卡
+// 完整预览随 tool_execution_end 帧的 result.details 推送 GUI 展示提案卡
 //
 // tool_result 语义（2026-08 修订）：run 只返回 { proposal_id, summary }，不含预览细节。
 
@@ -80,7 +80,7 @@ export function buildProposeReorderTimepoints(ctx: ToolContext, args: ProposeReo
     { timepoint_ids: args.timepoint_ids },
     references, // 全部时间点 updated_at 快照
     `按时间标签语义排序 ${timepoints.length} 个时间点`,
-    { changes }, // preview：顺序变化说明（SSE proposal 事件推送 GUI 提案卡）
+    { changes }, // preview：顺序变化说明（随 tool_execution_end 帧的 result.details 推送 GUI）
   );
 }
 

@@ -46,7 +46,7 @@ export const HOOK_ANALYSIS_TOOLS = [
 /**
  * 提案类工具（需确认，「提案类」+ 「工具扩展」提案类，共 16 个）
  * AI 不能直接修改数据，propose_* 仅发出提案（proposal_id + 一句话摘要），
- * tool_result 不含预览细节（2026-08 修订）；完整预览经 SSE proposal 事件推送 GUI
+ * tool_result 不含预览细节；完整预览随 tool_execution_end 帧的 result.details 推送 GUI
  */
 export const PROPOSAL_TOOLS = [
   "propose_create_entity",

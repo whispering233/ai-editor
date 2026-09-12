@@ -13,7 +13,6 @@ import type {
   AssistantMessage,
   TextContent,
   ThinkingContent,
-  ToolCall,
   ToolResultMessage,
   UserMessage,
 } from "@earendil-works/pi-ai";
@@ -139,4 +138,3 @@ export function projectMessageForWire(message: unknown): WireMessage | null {
 }
 
 /** tool 块的类型引用（toolCalls 投影用；导出供调用方类型标注） */
-export type WireToolCallBlock = ToolCall;

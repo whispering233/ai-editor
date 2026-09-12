@@ -16,12 +16,12 @@
 // - summary：一句话摘要（tool_result + GUI 展示）
 // - createdAt：ISO 8601（应用层写入约定；TTL 计算基准）
 // - preview（F9 起可选）：结构化预览细节（如 propose_reorder_timepoints 的 { changes: [...] }）——
-// 经 SSE proposal 事件推送 GUI 展示提案卡；未设置时 S7.4 executor 回退为
+// 随 tool_execution_end 帧的 result.details 推送 GUI 展示提案卡；未设置时回退为
 // { type, summary, args }（既有提案工具的默认预览形态）。
 //
 // tool_result 语义（「返回语义」2026-08 修订）：propose_* 的 run 只返回
 // { proposal_id, summary }，**不含预览细节**——避免 LLM 误以为提案已生效而重复提案；
-// 完整预览经 SSE proposal 事件推送 GUI（S7 实现）。
+// 完整预览随 tool_execution_end 帧的 result.details 推送 GUI。
 
 import { getEntity } from "@whispering233/ai-editor-db";
 import { nowIso } from "@whispering233/ai-editor-db";
@@ -58,7 +58,7 @@ export interface Proposal {
   summary: string;
  /**
  * 结构化预览细节（F9 起可选）：如 propose_reorder_timepoints 的 { changes: string[] }（顺序变化
- * 说明，供前端提案卡 JSON 展示）；经 SSE proposal 事件推送 GUI。未设置时 S7.4 executor
+ * 说明，供前端提案卡 JSON 展示）；随 tool_execution_end 帧的 result.details 推送 GUI。未设置时
  * 回退为 { type, summary, args }（既有提案工具默认预览形态，行为不变）。
  */
   preview?: Record<string, unknown>;
