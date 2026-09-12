@@ -6,15 +6,6 @@
 
 ---
 
-## 批次 1 补 · 语义修订（进行中）
-
-- [ ] **1.9 hook 状态 Delta 改 `op=set`（语义修订 B，用户裁决 a）**
-  - 契约：`docs/design/10-data-model.md` §4「物化事实字段不用 CAS」、`docs/db/schema.md`（状态机字段用 `set`）、`docs/api/tool-calling.md`（advance_hook 复合写注释）。
-  - 改：`packages/tools/src/executor/hook.ts` 的 `executeHookTransition` —— changes 改 `{ field:"status", op:"set", to: toStatus }`（去掉 `from`）；`packages/client/src/lib/hook-panel.ts` 的 `buildStatusDeltaChange` 同步改（含 `LifecycleWriteInput.fromStatus` / `AbandonWriteInput.fromStatus` 的清理）+ `HookPanel.tsx` 调用点。
-  - 不改：`data.status` 同步（终态守卫/列表/AI 依然读它）、幂等判重（`findExistingStatusDeltaId` 仍是 `field=status && to=...`）、四 op 的通用语义（`update` 对其他字段照旧）。
-  - 测试：`tools/src/executor/hook.test.ts`（去掉「首条重放冲突」类断言，改为**重放无冲突**）、`hook-panel.test.ts`（payload 形状）、必要时 server 侧 smoke。
-  - 验收：推进/回收/废弃后，`compute_state(hook, 任意章 ≥ 首次转移)` 无 `conflicts` 且 status 正确；面板分组、终态守卫、AI `hookStatuses` 行为不变。
-
 ## 批次 2 · 人物数据模型（进行中）
 
 > **执行顺序**：2.5（面板纯函数，2.1/2.2 的前置）→ 2.1 → 2.2 → 2.3 → 2.4 → 2.6 → 2.7。
