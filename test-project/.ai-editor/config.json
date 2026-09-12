@@ -1,6 +1,11 @@
 {
   "debug": {
     "enabled": true,
-    "categories": ["request", "usage", "http"]
-  }
+    "categories": [
+      "request",
+      "usage",
+      "http"
+    ]
+  },
+  "lastProject": "/home/whispering2333/projects/ai-editor/test-project/books/末世灾星：我能提取词条"
 }
