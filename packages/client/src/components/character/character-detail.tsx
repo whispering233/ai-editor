@@ -1,19 +1,23 @@
 // 人物详情（卡 3.2）：双视图 tab（初始化数据 / 当前位置数据）——替换工作台右栏原来的泛型 `EntityDetail`。
-// 契约：`docs/ui/DESIGN.md` §数据展示 `character-workbench`（页头壳保持 + tab 行 + 只读语义）与 `tabs`
+// 卡 3.3：字段三分渲染（「基础信息」不可变 + 姓名入力 / 「可变数据」可变 + 能力面板宿主位）、`description` 必填
+//   （仅前端）+ `current_position` 失效回落与「配置未加载不误判」三态判据。
+// 契约：`docs/ui/DESIGN.md` §数据展示 `character-workbench`（页头壳保持 + tab 行 + 只读语义 + 两分区）与 `tabs`
 //   （antd line 型；页内 tab **不进 URL**，刷新回落默认 tab；有 tab 的页面页头传 `divider={false}`——
 //   tab 条自带 1px hairline 底线即分割线，与设置页同款）；
-//   `docs/design/10-data-model.md` §14 不变式 2/3：不可变字段不参与 Delta（两视图必然相同）、
-//   **只有「初始化数据」可编辑**、「当前位置数据」= `computeState(at_node = current_position)` 的计算结果、**只读**。
+//   `docs/design/10-data-model.md` §14：不变式 1（不可变字段不参与 Delta、人工可编辑）、
+//   不变式 2（不可变字段两视图必然相同）、不变式 3（**只有「初始化数据」可编辑**、
+//   「当前位置数据」= `computeState(at_node = current_position)`、**只读**）；
+//   `docs/db/schema.md`「人物 data 分层」（字段归属 + `description` 必填仅前端校验）。
 // 页头：复用 `PageHeader` 壳（标题 + 保存/移入回收站 + 元信息行）；**取消**元信息行「变更记录 N 条」按钮
 //   （入口被 tab 2 吸收——状态预览不再需要手动展开）。
 // 只读语义：tab 2 的输入控件全部 `disabled`（**不隐藏**——字段位置稳定才好对比）+ 区首 caption「由变更记录累积，只读」。
 // 关系区块：本卡保持既有能力（1 跳双向列表 + 新建关联 + 物理删），形态暂为通用卡片；
 //   卡 3.6 重构为「人物关系网（人↔人）+ 其他关联（折叠区）」——届时本区块被替换。
-// 数据：GET /entity/character/:id（含 relations + deltaCount）、PUT partial（diffData 只提交变更字段）、
+// 数据：GET /entity/character/:id（含 relations + deltaCount）、PUT partial（diffData 只提交变更字段 + 姓名）、
 //   DELETE（软删 + 级联计数 → 跳 `#/characters`）、POST /delta/compute（tab 2 自动计算）、POST/DELETE /relation。
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HolderOutlined } from "@ant-design/icons";
-import { formatTimestamp } from "@whispering233/ai-editor-shared";
+import { formatTimestamp, panelLeafPaths } from "@whispering233/ai-editor-shared";
 import type { ComputeStateResult } from "@whispering233/ai-editor-shared";
 import { Button, Input, Select, Tabs } from "antd";
 import type { InputRef } from "antd";
@@ -22,6 +26,7 @@ import { CreateRelationDialog } from "../entity/create-relation-dialog";
 import { ConfirmDialog } from "../outline/dialogs";
 import { EmptyState } from "../ui/empty-state";
 import { PageHeader } from "../ui/page-header";
+import { SectionCard } from "../ui/section-card";
 import { navigate } from "../../hooks/use-route";
 import { useDataRefresh } from "../../hooks/use-data-refresh";
 import {
@@ -36,12 +41,17 @@ import {
   type RelationSummaryItem,
 } from "../../lib/api";
 import {
+  characterFieldGroups,
+  hasCharacterBasicsErrors,
   resolveCurrentAtNode,
-  resolveDefaultTab,
+  resolveTabState,
   readOnlyFieldValue,
+  validateCharacterBasics,
+  type CharacterBasicsErrors,
+  type CharacterPositionState,
   type CharacterViewTab,
 } from "../../lib/character-detail";
-import { diffData, detailFieldsForType, relationTypeLabel, type DetailFieldConfig } from "../../lib/entity-detail";
+import { diffData, relationTypeLabel, type DetailFieldConfig } from "../../lib/entity-detail";
 import { entityListPath } from "../../lib/entity-paths";
 import { flattenTree, type FlatNodeOption } from "../../lib/outline-tree";
 import { useSaveShortcut } from "../../lib/save-shortcut";
@@ -302,25 +312,148 @@ export function CharacterFieldsForm({
   values,
   onChange,
   disabled,
+  fieldErrors,
 }: {
   fields: readonly DetailFieldConfig[];
   values: Record<string, unknown>;
   onChange: (key: string, value: unknown) => void;
   disabled?: boolean;
+ /** 字段级内联错误（键 → 文案；仅基础信息必填判据用，缺省无错误） */
+  fieldErrors?: Partial<Record<string, string | null>>;
 }) {
   return (
     <div className="flex flex-col gap-3">
-      {fields.map((f) => (
-        <div key={f.key}>
-          <p className="mb-1 text-sm font-medium text-foreground">{f.label}</p>
-          <FieldControl
-            field={f}
-            value={values[f.key]}
+      {fields.map((f) => {
+        const error = fieldErrors?.[f.key] ?? null;
+        return (
+          <div key={f.key}>
+            <p className="mb-1 text-sm font-medium text-foreground">{f.label}</p>
+            <FieldControl
+              field={f}
+              value={values[f.key]}
+              disabled={disabled}
+              onChange={(v) => onChange(f.key, v)}
+            />
+            {error !== null && <p className="mt-1 text-xs text-destructive">{error}</p>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * 能力面板宿主区块（卡片 3.3 预留挂载位；结构编辑控件属卡片 3.4）。
+ * 本卡只做只读呈现（叶子点分路径 + 值）——面板是可变数据，两个 tab 都会显示，
+ * tab 2 展示的是 `computeState` 累积后的叶子值（叶子路径口径见 shared `abilityPanelFieldPath`）。
+ */
+function CharacterPanelHost({ panel }: { panel: unknown }) {
+  const leaves = panelLeafPaths(panel);
+  return (
+    <section className="mt-4 border-t border-border pt-3">
+      <p className="mb-1 text-sm font-medium text-foreground">能力面板</p>
+      {leaves.length === 0 ? (
+        <p className="text-xs text-muted-foreground">暂无面板字段</p>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {leaves.map((leaf) => (
+            <li key={leaf.path} className="flex items-baseline gap-2 text-sm">
+              <span className="shrink-0 text-muted-foreground">{leaf.path}</span>
+              <span className="min-w-0 flex-1 truncate text-foreground">
+                {readOnlyFieldValue(leaf.value)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/**
+ * 人物字段两分区（**两个 tab 共用同一分区结构**——只读态靠 `disabled` 而非另一套渲染，字段位置才稳定）：
+ * 「基础信息」（姓名 / 角色定位 / 描述，不可变）+「可变数据」（假名 / 性别 / 年龄 / 种族 / 动机 / 性格
+ * + 能力面板宿主 + 已有 `custom_fields`）。
+ */
+function CharacterSections({
+  name,
+  onNameChange,
+  values,
+  onFieldChange,
+  disabled,
+  basicsErrors,
+  showCustomFields,
+}: {
+ /** 姓名（`entities.name` 列，不是 data 字段；不可变但人工可编辑） */
+  name: string;
+  onNameChange: (v: string) => void;
+  values: Record<string, unknown>;
+  onFieldChange: (key: string, value: unknown) => void;
+  disabled?: boolean;
+ /** 基础信息必填判据（仅 tab 1 传入；tab 2 只读不校验） */
+  basicsErrors?: CharacterBasicsErrors;
+ /** `custom_fields` 仅在响应 data 已有该键时显示（MVP 边界：无键不可新增，同泛型详情页） */
+  showCustomFields: boolean;
+}) {
+  const [basics, mutable] = characterFieldGroups();
+  return (
+    <div className="flex flex-col gap-4">
+      <SectionCard title={basics.title}>
+        <div className="flex flex-col gap-3">
+          <div>
+            <p className="mb-1 text-sm font-medium text-foreground">姓名</p>
+            <Input
+              value={name}
+              disabled={disabled}
+              onChange={(e) => onNameChange(e.target.value)}
+            />
+            {basicsErrors?.name != null && (
+              <p className="mt-1 text-xs text-destructive">{basicsErrors.name}</p>
+            )}
+          </div>
+          <CharacterFieldsForm
+            fields={basics.fields}
+            values={values}
+            onChange={onFieldChange}
             disabled={disabled}
-            onChange={(v) => onChange(f.key, v)}
+            fieldErrors={{ description: basicsErrors?.description ?? null }}
           />
         </div>
-      ))}
+      </SectionCard>
+
+      <SectionCard title={mutable.title}>
+        <CharacterFieldsForm
+          fields={mutable.fields}
+          values={values}
+          onChange={onFieldChange}
+          disabled={disabled}
+        />
+        <CharacterPanelHost panel={values.ability_panel} />
+        {showCustomFields && (
+          <div className="mt-4 border-t border-border pt-3">
+            <p className="mb-1 text-sm font-medium text-foreground">自定义字段</p>
+            {disabled ? (
+              <div className="flex flex-col gap-1 text-sm">
+                {Object.entries((values.custom_fields ?? {}) as Record<string, unknown>).map(
+                  ([k, v]) => (
+                    <div key={k} className="flex items-baseline gap-2">
+                      <span className="shrink-0 text-muted-foreground">{k}</span>
+                      <span className="min-w-0 flex-1 truncate text-foreground">
+                        {readOnlyFieldValue(v)}
+                      </span>
+                    </div>
+                  ),
+                )}
+              </div>
+            ) : (
+              <CustomFieldsEditor
+                value={values.custom_fields as Record<string, unknown> | undefined}
+                onChange={(v) => onFieldChange("custom_fields", v)}
+              />
+            )}
+          </div>
+        )}
+      </SectionCard>
     </div>
   );
 }
@@ -339,6 +472,7 @@ export function CharacterFieldsForm({
 function CharacterCurrentTab({
   detail,
   currentPosition,
+  positionState,
   outlineNodes,
   outlineLoaded,
   outlineLoading,
@@ -347,6 +481,8 @@ function CharacterCurrentTab({
   detail: EntityDetailRes;
  /** 项目当前位置（null = 未设置）——tab 2 计算节点默认值来源 */
   currentPosition: string | null;
+ /** 当前位置四态（`pending` 尚未知 / `unset` 未设置 / `invalid` 已失效 / `ok`）——提示文案判据 */
+  positionState: CharacterPositionState;
  /** 大纲节点选项（扁平树；深度用于缩进展示） */
   outlineNodes: readonly FlatNodeOption[];
  /** 大纲是否已加载（false → 给「加载大纲」入口，不静默失败） */
@@ -410,8 +546,10 @@ function CharacterCurrentTab({
     };
   }, [detail.id, detail.deltaCount, atNodeId]);
 
-  const fields = detailFieldsForType(ENTITY_TYPE);
   const stateValues = result?.state ?? detail.data;
+  // 未设置位置的说明只在**已确认**未设置时展示（`pending`/`invalid` 另有文案，不得混淆）
+  const showUnsetHint = positionState === "unset";
+  const showInvalidHint = positionState === "invalid";
 
   return (
     <div className="flex flex-col gap-4">
@@ -452,11 +590,20 @@ function CharacterCurrentTab({
       {/* 只读说明（只读语义：控件 disabled 而非隐藏；见文件头注释） */}
       <p className="text-xs text-muted-foreground">由变更记录累积，只读</p>
 
-      {currentPosition == null && (
+      {showUnsetHint && (
         <p className="text-xs text-muted-foreground">
           未设置当前位置，显示初始数据——
           <a href="#/outline" className="text-primary hover:underline">
             去大纲设位置
+          </a>
+        </p>
+      )}
+
+      {showInvalidHint && (
+        <p className="text-xs text-muted-foreground">
+          当前位置已失效（节点已删除），显示初始数据——
+          <a href="#/outline" className="text-primary hover:underline">
+            去大纲重设
           </a>
         </p>
       )}
@@ -478,33 +625,15 @@ function CharacterCurrentTab({
         </div>
       )}
 
-      {/* 字段视图（只读）：值 = 计算结果 */}
-      <div className="rounded-md border border-border p-4">
-        <h2 className="mb-3 text-sm font-semibold text-foreground">当前位置数据（只读）</h2>
-        <CharacterFieldsForm
-          fields={fields}
-          values={stateValues}
-          disabled
-          onChange={() => {}}
-        />
-        {"custom_fields" in detail.data && (
-          <div className="mt-3">
-            <p className="mb-1 text-sm font-medium text-foreground">自定义字段</p>
-            <div className="flex flex-col gap-1 text-sm">
-              {Object.entries((stateValues.custom_fields ?? {}) as Record<string, unknown>).map(
-                ([k, v]) => (
-                  <div key={k} className="flex items-baseline gap-2">
-                    <span className="shrink-0 text-muted-foreground">{k}</span>
-                    <span className="min-w-0 flex-1 truncate text-foreground">
-                      {readOnlyFieldValue(v)}
-                    </span>
-                  </div>
-                ),
-              )}
-            </div>
-          </div>
-        )}
-      </div>
+      {/* 字段视图（只读）：同一分区结构（基础信息 / 可变数据）+ 只读态全 `disabled`；值 = 计算结果 */}
+      <CharacterSections
+        name={detail.name}
+        onNameChange={() => {}}
+        values={stateValues}
+        onFieldChange={() => {}}
+        disabled
+        showCustomFields={"custom_fields" in detail.data}
+      />
 
       {/* 计算明细（conflicts 警示 / 状态差异 / 应用的变更记录——与 ComputePreview 同实现） */}
       {!computing && result !== null && (
@@ -598,19 +727,26 @@ function CharacterRelations({
 
 export interface CharacterDetailViewProps {
   detail: EntityDetailRes;
+  /** 姓名（`entities.name`；与 `form`（data）分开——`diffData` 只比 data） */
+  name: string;
+  onNameChange: (v: string) => void;
   form: Record<string, unknown>;
   onFieldChange: (key: string, value: unknown) => void;
-  /** 当前 tab（受控；由容器以 `userTab ?? resolveDefaultTab(...)` 合并） */
+  /** 当前 tab（受控；由容器以 `userTab ?? resolveTabState(...).tab` 合并） */
   tab: CharacterViewTab;
   onTabChange: (tab: CharacterViewTab) => void;
+  /** 基础信息必填判据（仅 tab 1 内联展示；tab 2 只读不校验） */
+  basicsErrors: CharacterBasicsErrors;
   saving: boolean;
   saveError: string | null;
   onSave: () => void;
   onDelete: () => void;
   /** 关系变更（建/删）后重拉详情 */
   onReload: () => void;
-  /** 项目当前位置（tab 2 计算节点默认值 + 「未设置」提示判据） */
+  /** 项目当前位置（tab 2 计算节点默认值） */
   currentPosition: string | null;
+  /** 当前位置四态（`pending` 尚未知 / `unset` 未设置 / `invalid` 已失效 / `ok`）——提示文案判据 */
+  positionState: CharacterPositionState;
   /** 大纲节点选项（扁平树；容器从 project store 传入） */
   outlineNodes: readonly FlatNodeOption[];
   /** 大纲是否已加载 */
@@ -626,23 +762,25 @@ export interface CharacterDetailViewProps {
  */
 export function CharacterDetailView({
   detail,
+  name,
+  onNameChange,
   form,
   onFieldChange,
   tab,
   onTabChange,
+  basicsErrors,
   saving,
   saveError,
   onSave,
   onDelete,
   onReload,
   currentPosition,
+  positionState,
   outlineNodes,
   outlineLoaded,
   outlineLoading,
   onLoadOutline,
 }: CharacterDetailViewProps) {
-  const fields = detailFieldsForType(ENTITY_TYPE);
-
   return (
     <section>
       {/* 页头（统一壳）：标题 + 操作 + 元信息行；有 tab 的页面传 divider={false}
@@ -670,6 +808,16 @@ export function CharacterDetailView({
         }
       />
 
+      {/* 当前位置已失效（已软删/被删）：回落 tab 1 + 提示重设（在 tab 行之上，两个 tab 都可见） */}
+      {positionState === "invalid" && (
+        <p className="mb-3 text-xs text-muted-foreground">
+          当前位置已失效（节点已删除）——
+          <a href="#/outline" className="text-primary hover:underline">
+            去大纲重设
+          </a>
+        </p>
+      )}
+
       <Tabs
         activeKey={tab}
         onChange={(key) => onTabChange(key as CharacterViewTab)}
@@ -678,20 +826,16 @@ export function CharacterDetailView({
             key: "initial",
             label: "初始化数据",
             children: (
-              <div className="rounded-md border border-border p-4">
-                <h2 className="mb-3 text-sm font-semibold text-foreground">基础信息</h2>
-                <CharacterFieldsForm fields={fields} values={form} onChange={onFieldChange} />
-                {/* custom_fields：响应 data 已有该键时显示（MVP 边界：无键时不可新增——同泛型详情页） */}
-                {"custom_fields" in detail.data && (
-                  <div className="mt-3">
-                    <p className="mb-1 text-sm font-medium text-foreground">自定义字段</p>
-                    <CustomFieldsEditor
-                      value={form.custom_fields as Record<string, unknown> | undefined}
-                      onChange={(v) => onFieldChange("custom_fields", v)}
-                    />
-                  </div>
-                )}
-                {saveError !== null && <p className="mt-3 text-sm text-destructive">{saveError}</p>}
+              <div className="flex flex-col gap-4">
+                <CharacterSections
+                  name={name}
+                  onNameChange={onNameChange}
+                  values={form}
+                  onFieldChange={onFieldChange}
+                  basicsErrors={basicsErrors}
+                  showCustomFields={"custom_fields" in detail.data}
+                />
+                {saveError !== null && <p className="text-sm text-destructive">{saveError}</p>}
               </div>
             ),
           },
@@ -702,6 +846,7 @@ export function CharacterDetailView({
               <CharacterCurrentTab
                 detail={detail}
                 currentPosition={currentPosition}
+                positionState={positionState}
                 outlineNodes={outlineNodes}
                 outlineLoaded={outlineLoaded}
                 outlineLoading={outlineLoading}
@@ -734,6 +879,13 @@ export function CharacterDetail({ id, onSaved }: { id: string; onSaved?: () => v
   const [notFound, setNotFound] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [form, setForm] = useState<Record<string, unknown> | null>(null);
+  /** 姓名（`entities.name`；与 `form`（data）分开——`diffData` 只比 data） */
+  const [formName, setFormName] = useState<string>("");
+ /** 基础信息必填判据（仅前端；服务端不硬校验）——提交时算、成功/重拉时清 */
+  const [basicsErrors, setBasicsErrors] = useState<CharacterBasicsErrors>({
+    name: null,
+    description: null,
+  });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   /** 用户手动切换的 tab（null = 尚未切换 → 用默认判据） */
@@ -752,9 +904,12 @@ export function CharacterDetail({ id, onSaved }: { id: string; onSaved?: () => v
       const res = await getEntityDetail(ENTITY_TYPE, id);
       setDetail(res);
       setForm(JSON.parse(JSON.stringify(res.data)) as Record<string, unknown>);
+      setFormName(res.name);
+      setBasicsErrors({ name: null, description: null });
     } catch (err) {
       setDetail(null);
       setForm(null);
+      setFormName("");
       if (err instanceof ApiError && err.code === "ENTITY_NOT_FOUND") {
         setNotFound(true);
       } else {
@@ -784,15 +939,24 @@ export function CharacterDetail({ id, onSaved }: { id: string; onSaved?: () => v
 
   async function handleSave() {
     if (!detail || !form || saving) return;
+    // 基础信息必填（**仅前端**）：先拦下空姓名/空描述，避免无谓的服务端往返
+    const errors = validateCharacterBasics({ name: formName, description: form.description });
+    setBasicsErrors(errors);
+    if (hasCharacterBasicsErrors(errors)) return;
     const changed = diffData(detail.data, form);
-    if (!changed) {
+    const nextName = formName.trim();
+    const nameChanged = nextName !== detail.name;
+    if (!changed && !nameChanged) {
       useUiStore.getState().showToast("没有变更");
       return;
     }
     setSaving(true);
     setSaveError(null);
     try {
-      await updateEntity(ENTITY_TYPE, id, { data: changed });
+      await updateEntity(ENTITY_TYPE, id, {
+        ...(nameChanged ? { name: nextName } : {}),
+        ...(changed ? { data: changed } : {}),
+      });
       useUiStore.getState().showToast("已保存");
       await loadDetail();
       onSaved?.();
@@ -882,13 +1046,25 @@ export function CharacterDetail({ id, onSaved }: { id: string; onSaved?: () => v
     );
   }
 
+  /** 当前位置四态 + 默认 tab（单一判据：`config` 未加载 → `pending`，不得瞬时误判为「未设置」；已失效 → 回落 tab 1） */
+  const tabState = resolveTabState({
+    configLoaded: config !== null,
+    currentPosition: config?.currentPosition ?? null,
+    outlineLoaded: outline !== null,
+    nodeIds: outlineNodes.map((o) => o.id),
+  });
+
   return (
     <CharacterDetailView
       detail={detail}
+      name={formName}
+      onNameChange={setFormName}
       form={form}
       onFieldChange={(key, value) => setForm((prev) => (prev ? { ...prev, [key]: value } : prev))}
-      tab={userTab ?? resolveDefaultTab(config?.currentPosition)}
+      tab={userTab ?? tabState.tab}
       onTabChange={setUserTab}
+      basicsErrors={basicsErrors}
+      positionState={tabState.positionState}
       saving={saving}
       saveError={saveError}
       onSave={() => void handleSave()}

@@ -496,7 +496,7 @@ components:
 **`character-workbench`（人物工作台，2026-09）** — 人物页（`#/characters` / `#/characters/:id`）是中栏内的 **master-detail**（无导航级变动，路由已是一级段）：
 
 - **左栏**（固定 240px，右侧 1px `{colors.hairline}`）= 人物列表，**它就是列表本身**（不再有独立人物列表页）：行 = 姓名（`{colors.primary}`）+ 角色定位（`{typography.caption}` + `{colors.tertiary}`）、32px 行高、`{rounded.sm}`、选中 = `{colors.surface-muted}` 灰面 + 文字不变色（**完全复用 `menu-item` / `menu-item-selected` 语言**）；**行头两行**（240px 内物理上塞不下 192px 搜索框 + 下拉 + 按钮）：第一行 `search-input`（192px，独占一行）、第二行排序 `select`（内容宽 + `popupMatchSelectWidth={false}`）+ 主操作（「+ 新建」`button-primary`，卡 3.5 接入）。排序默认 `updated_at` 降序（后端列表默认），可切 `name` / `created_at`。
-- **右栏** = 详情，内容区自上而下：**页头**（`page-header` 壳不变）→ **双视图 tab**（「初始化数据」/「当前位置数据」，走 `tabs` 契约）→ **不可变区**（姓名 / 角色定位 / 描述）→ **可变区**（假名 / 性别 / 年龄 / 种族 / 动机 / 性格 + `panel-tree`）→ **`character-relations`（人物关系网，默认展开）** → **其他关联（默认折叠，标题带条数）**。
+- **右栏** = 详情，内容区自上而下：**页头**（`page-header` 壳不变）→ **双视图 tab**（「初始化数据」/「当前位置数据」，走 `tabs` 契约）→ **不可变区**（区标题「基础信息」：姓名 / 角色定位 / 描述）→ **可变区**（区标题「可变数据」：假名 / 性别 / 年龄 / 种族 / 动机 / 性格 + `panel-tree`）→ **`character-relations`（人物关系网，默认展开）** → **其他关联（默认折叠，标题带条数）**。两个区的区标题均走 `card` 容器 + `section-title`（`SectionCard`）；**两个 tab 共用同一分区结构**（只读态靠 `disabled` 而非另一套渲染，字段位置才稳定）。
 - **层级语义**：**tab 只包「不可变区 + 可变区」**；关系网/其他关联在 tab **之下**，两个 tab 共享（关系不参与 `computeState`，与状态视图正交——放进 tab 会让用户以为"关系也会变"）。不可变字段不参与 Delta，两个 tab 显示值必然相同。
 - **只读语义**：tab 2（当前位置数据）的输入控件全部 `disabled`（**不隐藏**——字段位置稳定才好对比），并在区首给一行 `caption-text`「由变更记录累积，只读」。
 - **窄屏（<1024px）**：退化为两级——左栏列表全宽 → 点进详情全宽（详情页头左侧给返回入口）；与「本设计语言不对移动端另立规则」一致。
