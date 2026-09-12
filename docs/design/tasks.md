@@ -6,7 +6,15 @@
 
 ---
 
-## 批次 3 · 人物页 UI（未开工）
+## 批次 2 补 · 启动路径修复（待开工）
+
+- [ ] **2.8 开机自动打开的书必须走版本检测/迁移（卡 3.2 发现，既存缺口）**
+  - 现状：`detectProject`（`packages/server/src/middleware/project.ts:95` 附近）直接 `openDatabase`，而 `ensureSchemaCompatible` 只在 `POST /project/open`（`routes/project.ts`）跑 → **开机直达上次打开的书时跳过迁移**。实测：test-project 启动后 `user_version` 仍为 6、`abilities` 未迁；显式 open 后才 6→7。
+  - 危害：任何 **DDL 迁移**在开机路径会被跳过（读不存在的列 → 运行时错误）；卡 2.3 的「旧库 open 自动迁移」验收只在显式 open 路径成立。
+  - 修法：把开机路径的 db 打开收敛到与 `POST /project/open` 同一条管道（复用同一个 open/migrate 函数），**不要**在 `detectProject` 里另起一套；补测试（开机路径跑迁移 + 版本不匹配时的三态分流）。
+  - 验收：开机直达的书与显式 open 的书的 `user_version`/迁移产物一致；`PROJECT_VERSION_NEWER` 拒绝路径在开机态同样生效（不得静默重建）。
+
+## 批次 3 · 人物页 UI（进行中）
 
 - [ ] 3.1 master-detail 宿主 + 左栏列表（搜索 / 排序 / 选中 / 空态 / 自动选首个 / 窄屏两级）
 - [ ] 3.2 双视图 tab（初始化数据 / 当前位置数据；tab 2 只读；`ComputePreview` 归并入 tab 2，保留手动选节点；`conflicts` 标注照搬）
