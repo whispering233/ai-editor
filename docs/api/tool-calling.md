@@ -141,7 +141,8 @@ suggest_connections(entity_id)
 
 - `plants` / `advances` / `resolves` 关系的源节点必须是 `chapter`（`POST /relation` + 提案层校验）；
 - `suggest_hook_payoff` 的候选由「场景」改为**章**（按与理想回收章的距离升序取 top 3）；
-- `find_hook_opportunities(outline_node_id)` 的输入只接受章节点；
+- `find_hook_opportunities(outline_node_id)` 的输入只接受章节点（**非章 → 报错**，与 `propose_add_delta` 非章拒绝同口径；不存在/已软删仍返回 null）；
+- **章级存在性提示口径（2026-09）**：章级聚合后，埋设机会规则 R3/R4 改为「本章（含其下场景）存在即提示」——**不追求场景级精度**（麦基口径下"没有不转折的场景"→ R4 在成熟大纲里近乎恒真）；reason 带命中计数与最典型场景以保留判别信息。R2 按角色去重（修掉跨场景重复计数）；
 - `data.expected_resolve_node_id` 为宽松 data 字段（服务端不硬校验），UI 选择器只列章；
 - 「当前章节」= `project.json` 的 `current_position` 所属章（未设置/失效 → 退化树末章），伏笔健康指标与孤儿诊断同口径。
 

@@ -30,8 +30,22 @@
   - 背景：锚点仅章后父链至多含一章 → 跨章累积失效（`compute-state.ts:114/123`），双视图会退化为"初始值 + 当前章"。契约已改为章序前缀（`docs/design/10-data-model.md` §4、`docs/api/50-api-delta.md`、`docs/db/schema.md`）。
   - 后端：`packages/db/src/queries/compute-state.ts` 收集口径由「父链」改为「**章序前缀**」——复用 `deriveChapterOrder`（`packages/db/src/queries/outline-ops.ts:369`）求全局章序；目标节点 → 进度章映射（章→自身 / 场景→所属章 / 卷→该卷最后一个未软删章 / root→初始值）；应用序 = （章序, `order`）。
   - **不得改变**：四 op 语义、`update` 的 `from` 校验 + `skipped`/`conflicts` 标注、软删可见性规则、`plot_edge` 不参与。
-  - 测试（验收硬项）：`compute-state.test.ts` 既有「卷锚点累积」用例改写为新口径 + 新增跨章累积用例（`ch-10` 与 `ch-20` 的 Delta 在 `ch-30` 查询**可见**）+ 场景/卷/root 映射用例；`packages/server/src/routes/delta.test.ts:577` 的「父链唯一：兄弟章的 Delta 不参与计算」用例**必须语义反转**。
+  - 测试（验收硬项）：`compute-state.test.ts` 既有「卷锚点累积」用例改写为新口径 + 新增跨章累积用例（`ch-10` 与 `ch-20` 的 Delta 在 `ch-30` 查询**可见**）+ 场景/卷/root 映射用例；`packages/server/src/routes/delta.test.ts:577` 的「父链唯一：兄弟章的 Delta 不参与计算」用例**必须语义反转**；`packages/tools/src/executor/hook.test.ts` 的注释与 `appliedDeltas` 断言（现写「只累积挂在其树路径上的 delta」、`atNodeId=ch-2`）**一并改为新口径**。
   - 风险登记：`appliedDeltas` 随进度增长（前面所有章的 Delta 均在列表），依赖现有截断机制。
+
+- [ ] **1.5 delta executor 兜底校验（契约对齐，卡 1.2/1.3 同族缺口）**
+  - `packages/tools/src/executor/delta.ts` 的 `executeAddDelta` 改走 `requireChapterNode`（存在 + 未软删 + `chapter`）——executor **直写 db 绕过 REST**，手工构造的 proposal 仍可写入非章锚点（`executor/index.test.ts:129` 与 `executor/delta.test.ts:88-89` 现在用 `sc-1` 并通过）。
+  - 测试：既有用例改章锚点 + 新增非章拒绝用例（oracle 已确认可达性低但违反三层同口径）。
+  - 验收：executor 层非章锚点 → 抛错。
+
+- [ ] **1.6 建立关联对话框按源端类型过滤伏笔关系（卡 1.3 新发现的死胡同）**
+  - `packages/client/src/components/entity/create-relation-dialog.tsx` 的 `DIALOG_RELATION_TYPES` 现无条件含 `plants/advances/resolves`，而 `pages/Outline.tsx` 的右键菜单对所有层级行挂对话框、`OutlineDetail.tsx` 节点详情也走同一对话框 → **卷/场景行可选必定 400 的组合**（收窄前是 201）。
+  - 修法：源端为大纲节点且非章 → 关系类型下拉排除伏笔三类（源端类型可从 project store 的 outline 树或调用点传入的节点类型获得）；列表模式（自由选源）保持现状。
+  - 验收：场景/卷节点行「建立关联」的下拉无伏笔三类；章节点行仍可选；其他关系类型不受影响。
+
+- [ ] **1.7 埋设机会 R3/R4 章级 reason 补计数（卡 1.3 oracle 建议）**
+  - `packages/tools/src/analysis/hook.ts` 的 R3/R4（章级聚合后）reason 补「命中计数 + 最典型场景名」，避免「本章 3/6 个场景含外部冲突，最典型：场景二」这类信息全丢；不引入阈值魔数（口径已登记在 `docs/api/tool-calling.md`）。
+  - 测试：`analysis/hook.test.ts` 断言 reason 含计数与场景名。
 
 ## 批次 2 · 人物数据模型（未开工）
 
