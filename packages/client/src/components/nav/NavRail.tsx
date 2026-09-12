@@ -8,6 +8,8 @@
 // 禁止内联 style 与硬编码色值（旧版 selected 态用 inline `token.colorPrimaryBg` 已改为 `bg-accent` = `{colors.surface-muted}`）。
 // - 底部区「立即备份」/ 设置 / 主题三入口同为无边框文字按钮（DESIGN.md §导航与外壳 `sidebar`：
 //   立即备份是动作、形态随底部区，H4 登记例外）；备份在途 `loading` 防连点，无项目禁用。
+//   三入口标签一律 `min-w-0 flex-1 truncate text-left`——antd Button 根是 `inline-flex +
+//   justify-content: center`，标签不 grow 时「图标 + 文字」会整组居中（用户反馈：底部区要左对齐）。
 import { Button, Menu } from "antd";
 import { useState } from "react";
 import {
@@ -174,7 +176,7 @@ export function NavRail({
           loading={backingUp}
           onClick={() => void handleBackupNow()}
         >
-          <span className="truncate text-left">立即备份</span>
+          <span className="min-w-0 flex-1 truncate text-left">立即备份</span>
         </Button>
         <Button
           color="default" variant="text"
@@ -182,7 +184,7 @@ export function NavRail({
           icon={<SettingOutlined />}
           onClick={() => navigate("/preferences")}
         >
-          <span className="truncate text-left">设置</span>
+          <span className="min-w-0 flex-1 truncate text-left">设置</span>
         </Button>
         <Button
           color="default" variant="text"
@@ -191,7 +193,10 @@ export function NavRail({
           onClick={toggleTheme}
           aria-label="切换主题"
         >
-          <span className="truncate text-left">{mode === "dark" ? "浅色模式" : "深色模式"}</span>
+          {/* 标签 flex-1：antd Button 根为 inline-flex + justify-center，标签不 grow 则「图标+文字」整组居中 */}
+          <span className="min-w-0 flex-1 truncate text-left">
+            {mode === "dark" ? "浅色模式" : "深色模式"}
+          </span>
         </Button>
       </div>
     </aside>
