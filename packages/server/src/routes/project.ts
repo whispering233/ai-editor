@@ -55,6 +55,7 @@ import {
   type ProjectContext,
 } from "../middleware/project.js";
 import { logSoftDeleteReconcile, reconcileSoftDelete } from "../consistency.js";
+import { writeLastProject } from "../last-project.js";
 
 // ============ 创作根（书架模式 S1.5） ============
 //
@@ -209,6 +210,11 @@ projectRoutes.post("/open", async (c) => {
     }
     const project: ProjectContext = { root: dir, config, db: activeDb };
     setCurrentProject(project);
+ // 记住本次打开（创作根 .ai-editor/config.json 的 lastProject）：下次启动自动打开这本书
+ //（服务端启动恢复，见 index.ts startServer；写入失败静默——偏好丢失不影响 open）
+    if (projectRoot !== null) {
+      writeLastProject(projectRoot, dir);
+    }
  // 自动迁移：project.json 有非空 prompt 且无 → 迁移写入（原样，一次性；
  // 失败不阻塞打开，记录日志下次 open 重试——「迁移在 open 流程内完成」）
     migratePromptToAgents(project);

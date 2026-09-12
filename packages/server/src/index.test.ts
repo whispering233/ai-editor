@@ -6,7 +6,13 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { SCHEMA_VERSION } from "@whispering233/ai-editor-db";
 import { parsePortEnv, resolveClientDist, startServer } from "./index.js";
+import { closeProject, getCurrentProject, setCurrentProject } from "./middleware/project.js";
+import { setProjectRoot } from "./routes/project.js";
+
+/** 测试用时间戳（seedBook 构造 project.json） */
+const T0 = "2026-08-01T10:00:00Z";
 
 const tmpDirs: string[] = [];
 const occupiedServers: Server[] = [];
@@ -219,5 +225,120 @@ describe("端口策略", () => {
     await expect(
       startServer(makeTmpDir(), { port: occupiedPort, openBrowser: false, dev: true }),
     ).rejects.toThrow(/已被占用/);
+  });
+});
+
+// ============ 启动恢复上次书籍（lastProject，2026-09） ============
+//
+// 语义见 docs/design/build.md §启动流程：创作根自身不是项目时，按 <创作根>/.ai-editor/config.json
+// 的 lastProject（POST /project/open 成功时写入）恢复上次那本书；路径失效/坏数据一律静默待命。
+
+describe("启动恢复上次书籍（lastProject）", () => {
+  /** 造一本「书架上的书」：books/<书名>/project.json（detectProject 只认这个文件） */
+  function seedBook(root: string, name: string): string {
+    const dir = join(root, "books", name);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, "project.json"),
+      JSON.stringify({
+        id: `proj-${name}`,
+        name,
+        language: "zh",
+        schema_version: SCHEMA_VERSION,
+        current_position: null,
+        created_at: T0,
+        updated_at: T0,
+      }),
+      "utf8",
+    );
+    return dir;
+  }
+
+  function writeLastProject(root: string, value: string): void {
+    mkdirSync(join(root, ".ai-editor"), { recursive: true });
+    writeFileSync(join(root, ".ai-editor", "config.json"), JSON.stringify({ lastProject: value }), "utf8");
+  }
+
+  afterEach(() => {
+    const cur = getCurrentProject();
+    if (cur !== null) {
+      closeProject(cur);
+      setCurrentProject(null);
+    }
+    setProjectRoot(null);
+  });
+
+  it("lastProject 指向的书存在 → 启动即打开（config 端点直接可用）", async () => {
+    const root = makeTmpDir();
+    const book = seedBook(root, "上次那本");
+    writeLastProject(root, book);
+
+    const handle = await startServer(root, { port: 0, openBrowser: false });
+    try {
+      expect(handle.project?.root).toBe(book);
+      const res = await handle.app.request("http://127.0.0.1/api/v1/project/config", {
+        headers: { host: "127.0.0.1" },
+      });
+      expect(res.status).toBe(200);
+    } finally {
+      await handle.close();
+    }
+  });
+
+  it("lastProject 指向已删除的目录 → 待命（书架），不阻断启动", async () => {
+    const root = makeTmpDir();
+    writeLastProject(root, join(root, "books", "已删除"));
+
+    const handle = await startServer(root, { port: 0, openBrowser: false });
+    try {
+      expect(handle.project).toBeNull();
+      const res = await handle.app.request("http://127.0.0.1/api/v1/project/config", {
+        headers: { host: "127.0.0.1" },
+      });
+      expect(res.status).toBe(409); // NO_PROJECT_OPEN：前端回书架引导
+    } finally {
+      await handle.close();
+    }
+  });
+
+  it("lastProject 指向的目录 project.json 损坏 → 待命（不抛错、不重建）", async () => {
+    const root = makeTmpDir();
+    const dir = join(root, "books", "坏书");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "project.json"), "{ 坏 json", "utf8");
+    writeLastProject(root, dir);
+
+    const handle = await startServer(root, { port: 0, openBrowser: false });
+    try {
+      expect(handle.project).toBeNull();
+    } finally {
+      await handle.close();
+    }
+  });
+
+  it("创作根自身有 project.json → 优先于 lastProject（旧部署模式兼容）", async () => {
+    const root = makeTmpDir();
+    const book = seedBook(root, "书架上的书");
+    writeLastProject(root, book);
+    writeFileSync(
+      join(root, "project.json"),
+      JSON.stringify({
+        id: "proj-root",
+        name: "根项目",
+        language: "zh",
+        schema_version: SCHEMA_VERSION,
+        current_position: null,
+        created_at: T0,
+        updated_at: T0,
+      }),
+      "utf8",
+    );
+
+    const handle = await startServer(root, { port: 0, openBrowser: false });
+    try {
+      expect(handle.project?.root).toBe(root);
+    } finally {
+      await handle.close();
+    }
   });
 });

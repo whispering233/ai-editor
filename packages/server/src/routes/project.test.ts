@@ -313,6 +313,29 @@ describe("POST /project/open", () => {
     expect(getCurrentProject()?.root).toBe(dir);
   });
 
+  it("成功后把目标目录记入创作根 config.json 的 lastProject（合并写，保留手编 debug 段）", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    mkdirSync(join(root, ".ai-editor"), { recursive: true });
+    writeFileSync(
+      join(root, ".ai-editor", "config.json"),
+      JSON.stringify({ debug: { enabled: true } }),
+      "utf8",
+    );
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-last", "上次的书"));
+
+    const res = await buildApp().request("/api/v1/project/open", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: dir }),
+    });
+    expect(res.status).toBe(200);
+    const raw = JSON.parse(readFileSync(join(root, ".ai-editor", "config.json"), "utf8"));
+    expect(raw.lastProject).toBe(dir);
+    expect(raw.debug).toEqual({ enabled: true }); // 合并写：不 clobber 用户配置
+  });
+
   it("版本不匹配（user_version=0 旧库）→ 删库重建：rebuilt 提示 + 备份文件 + 数据清空 + outline 重置", async () => {
     const dir = makeTmpDir();
     seedOldProject(dir); // data.db user_version=0 + 1 行实体 + 非空大纲

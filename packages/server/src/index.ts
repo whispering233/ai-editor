@@ -39,6 +39,7 @@ import {
   type ProjectVariables,
 } from "./middleware/project.js";
 import { projectRoutes, setProjectRoot } from "./routes/project.js";
+import { readLastProject } from "./last-project.js";
 import { outlineRoutes } from "./routes/outline.js";
 import { namesRoutes } from "./routes/names.js"; // 批量名称解析（工具调用人类可读化）
 import { proposalRoutes } from "./routes/proposal.js";
@@ -117,6 +118,22 @@ function defaultClientDist(): string {
   return resolveClientDist(dirname(fileURLToPath(import.meta.url)));
 }
 
+/**
+ * 按创作根偏好恢复上次打开的项目（lastProject）：
+ * - 无记录 / 目录已不存在（readProjectFile → null）→ null（待命）
+ * - project.json 损坏或打开失败（readProjectFile/openDatabase 抛错）→ null（**不阻断启动**：
+ * 宁回书架也不让一次坏数据把服务起不起来）
+ */
+function detectLastProject(root: string): ProjectContext | null {
+  const last = readLastProject(root);
+  if (last === null) return null;
+  try {
+    return detectProject(last);
+  } catch {
+    return null;
+  }
+}
+
 function contentTypeFor(file: string): string {
   return CONTENT_TYPES[extname(file).toLowerCase()] ?? "application/octet-stream";
 }
@@ -166,7 +183,10 @@ export async function startServer(projectRoot: string, options: StartServerOptio
 
  // 检测语义（设计缺陷修复）：不再无条件初始化——待命态下 GET /project/config → 409
  // NO_PROJECT_OPEN，前端引导「新建/打开项目」（client store loadConfig 已处理该错误码）
-  const project = detectProject(root);
+// 上次书籍恢复（2026-09 用户需求「打开时直接进入上一次选择的书籍」）：创作根自身不是项目时，
+// 按 <创作根>/.ai-editor/config.json 的 lastProject（上次 open 成功的目录）尝试打开——路径已
+// 删除/移动（无 project.json）或 project.json 损坏（readProjectFile 抛错）都静默回待命（书架页）
+  const project = detectProject(root) ?? detectLastProject(root);
   if (project !== null) {
     setCurrentProject(project); // 启动即打开（部署场景）；null 则保持待命
  // S4.2 启动一致性校验：以大纲节点软删为准补标 DB 关联记录

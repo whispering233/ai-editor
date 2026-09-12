@@ -29,13 +29,14 @@ node packages/server/dist/index.js [projectRoot]   # 或安装态 npx ai-editor 
 ```
 
 - `projectRoot` = 创作根（缺省 process.cwd()）。
-- `detectProject`：根自身有 `project.json` → 打开（旧单项目部署兼容）；**无 → 待命**（不初始化、不建任何文件，前端引导 create/open）。
+- `detectProject`：根自身有 `project.json` → 打开（旧单项目部署兼容）；**无 → 读 `<创作根>/.ai-editor/config.json` 的 `lastProject`**（上次 open 成功的目录绝对路径）→ 该目录仍含 `project.json` 则直接打开（「开机回到上次那本书」）；路径已被删除/移动、`project.json` 损坏不可读 → **静默回待命**（书架页）。两者皆空 → 待命（不初始化、不建任何文件，前端引导 create/open）。
 - 书架模式：创建书 = `创作根/books/<书名>/` 子目录（三数据文件）；`GET /api/v1/project/list` 扫描列书（待命态可用）。
 - 端口：默认 **3456**，占用时生产态自动 +1 递增（上限 20 次，3456→3475）并打开实际端口；可用环境变量 `AI_EDITOR_PORT` 覆盖（仅 bin 直接执行入口读取，测试/多实例场景用）。
 - **绑定与访问**：默认绑定 `127.0.0.1`（不对外网开放）；提示 URL / 打开浏览器一律用 `127.0.0.1` 而非 `localhost`（IPv6 优先系统上 localhost 可能解析为 `::1` 导致连接被拒）。
 - SPA：`defaultClientDist` 双路径（monorepo 开发态 `../../client/dist` / 打包安装态包内 `client-dist`）挂载为 fallback；单进程 Hono 同时服务 `/api/v1` 与静态文件。
 - 本地看界面：`pnpm start:test-project`（= `pnpm -r build` + 生产态启动 test-project，自动打开浏览器）。
 - 调试日志：创作根 `.ai-editor/config.json` 的 `debug` 段（chat/request/stream/usage/http 五类别；纯配置文件无 env 开关），见 config.md。
+- 客户端首帧：服务端已代为先打开了上次的书 → 前端首帧若落在书架路由（`#/`）则直接进该书概览（`#/overview`）；点「回到书架」本身不弹回（仅首帧判定一次）。
 
 ## 构建与打包
 
