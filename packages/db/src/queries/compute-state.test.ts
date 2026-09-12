@@ -16,9 +16,10 @@ import { join } from "node:path";
 import type { DeltaChange, OutlineFileTree } from "@whispering233/ai-editor-shared";
 import { closeDatabase, openDatabase, type Db } from "../connection.js";
 import { createEntity } from "./entity.js";
-import { insertDelta } from "./delta.js";
+import { insertDelta, listDeltasByNode } from "./delta.js";
 import { computeState } from "./compute-state.js";
 import { readFieldPath, writeFieldPath } from "./field-path.js";
+import { deriveChapterOrder } from "./outline-ops.js";
 import { findOutlineNode, readOutlineFile, writeOutlineFile } from "../storage/outline.js";
 
 let dir: string;
@@ -123,6 +124,134 @@ describe("computeState 章序前缀累积", () => {
     const result = computeState(db, dir, { targetType: "character", targetId: charA, atNodeId: "sc-1" });
     expect(result!.state.power).toBe("30");
     expect(result!.conflicts).toEqual([]);
+  });
+});
+
+/**
+ * 计数一次调用内提交给 SQLite 的**语句数**（包裹 db.prepare——drizzle 每查询 prepare 一次）：
+ * 卡 2.6 批量化护栏用，不依赖实现细节的语句内容，只看“语句数是否随章数增长”。
+ */
+function countPreparedStatements(db: Db, fn: () => void): number {
+  const original = db.prepare;
+  let count = 0;
+  (db as unknown as { prepare: (...args: unknown[]) => unknown }).prepare = (...args: unknown[]) => {
+    count++;
+    return (original as unknown as (...a: unknown[]) => unknown).apply(db, args);
+  };
+  try {
+    fn();
+  } finally {
+    (db as unknown as { prepare: typeof original }).prepare = original;
+  }
+  return count;
+}
+
+/** N 章单卷树（每章一场景；章 id ch-1..ch-N）——批量化护栏用 */
+function treeWithChapters(count: number): OutlineFileTree {
+  return {
+    id: "root",
+    type: "root",
+    schema_version: 1,
+    children: [
+      {
+        id: "vol-1",
+        type: "volume",
+        title: "第一卷",
+        updated_at: T0,
+        children: Array.from({ length: count }, (_, i) => ({
+          id: `ch-${i + 1}`,
+          type: "chapter" as const,
+          title: `第${i + 1}章`,
+          updated_at: T0,
+          children: [{ id: `sc-x${i + 1}`, type: "scene" as const, title: `场景${i + 1}`, updated_at: T0 }],
+        })),
+      },
+    ],
+  };
+}
+
+/** 独立临时项目（自管 dir/db，调用方负责 cleanup）——同一用例内对比不同章数用 */
+function openScratchProject(chapters: number, deltasPerChapter: number): {
+  dir: string;
+  db: Db;
+  charId: string;
+  cleanup: () => void;
+} {
+  const scratchDir = mkdtempSync(join(tmpdir(), "ai-editor-db-compute-batch-"));
+  const scratchDb = openDatabase(join(scratchDir, "data.db"));
+  writeOutlineFile(scratchDir, treeWithChapters(chapters));
+  const char = createEntity(scratchDb, { type: "character", name: "阿强", data: { combat_power: 0 } });
+  for (let ch = 1; ch <= deltasPerChapter; ch++) {
+    insertDelta(scratchDb, {
+      nodeId: `ch-${ch}`,
+      targetType: "character",
+      targetId: char.id,
+      changes: [{ field: "combat_power", op: "set", to: ch }],
+      description: `第${ch}章变化`,
+    });
+  }
+  return {
+    dir: scratchDir,
+    db: scratchDb,
+    charId: char.id,
+    cleanup: () => {
+      closeDatabase(scratchDb);
+      rmSync(scratchDir, { recursive: true, force: true });
+    },
+  };
+}
+
+describe("computeState 批量化（卡 2.6：一次批量取数取代逐章查询）", () => {
+  it("SQL 语句数不随章数增长：2 章与 6 章项目语句数相同（护栏——逐章口径会随章数线性增长）", () => {
+    const small = openScratchProject(2, 1);
+    const large = openScratchProject(6, 1);
+    try {
+ // warmup（drizzle 内部首次查询无额外语句，此处仅为消除首调用抖动）
+      computeState(small.db, small.dir, { targetType: "character", targetId: small.charId, atNodeId: "ch-2" });
+      computeState(large.db, large.dir, { targetType: "character", targetId: large.charId, atNodeId: "ch-6" });
+
+      const smallCount = countPreparedStatements(small.db, () => {
+        computeState(small.db, small.dir, { targetType: "character", targetId: small.charId, atNodeId: "ch-2" });
+      });
+      const largeCount = countPreparedStatements(large.db, () => {
+        computeState(large.db, large.dir, { targetType: "character", targetId: large.charId, atNodeId: "ch-6" });
+      });
+
+      expect(largeCount).toBe(smallCount); // 常数（与章数无关）
+      expect(smallCount).toBeLessThanOrEqual(8); // 实体 get + delta IN + 实体软删 IN + 名称 IN
+    } finally {
+      small.cleanup();
+      large.cleanup();
+    }
+  });
+
+  it("收集层差分等价：appliedDeltas 序列 = 逐章 listDeltasByNode（旧口径）过滤 targetId 后的序列", () => {
+    const { charA } = seedBase({ motivation: "初始" });
+    const charB = createEntity(db, { type: "character", name: "阿珍" });
+ // ch-1：两条指向 charA（同章 order 序）；ch-2：一条；sc-1（场景锚点存量）：一条（不得参与）
+    addDelta("ch-1", charA, [{ field: "combat_power", op: "set", to: 1 }], "ch1-a");
+    addDelta("ch-1", charA, [{ field: "combat_power", op: "update", from: 1, to: 2 }], "ch1-b");
+    addDelta("ch-2", charA, [{ field: "combat_power", op: "update", from: 2, to: 3 }], "ch2-a");
+    addDelta("sc-1", charA, [{ field: "combat_power", op: "set", to: 99 }], "sc1-存量");
+    addDelta("ch-2", charB.id, [{ field: "combat_power", op: "set", to: 7 }], "ch2-另实体");
+
+    for (const atNodeId of ["ch-1", "ch-2"]) {
+      const result = computeState(db, dir, { targetType: "character", targetId: charA, atNodeId });
+      if (result === null) throw new Error("computeState 不应为 null");
+ // 旧口径参照：章序前缀内逐章 listDeltasByNode（升序）→ 过滤目标实体 → 序列
+      const order = deriveChapterOrder(dir);
+      const progressNumber = order.find((c) => c.chapterId === atNodeId)!.chapterNumber;
+      const expected = order
+        .filter((c) => c.chapterNumber <= progressNumber)
+        .flatMap((c) => listDeltasByNode(db, c.chapterId, dir))
+        .filter((d) => d.targetId === charA);
+      expect(result.appliedDeltas.map((a) => a.nodeId)).toEqual(expected.map((d) => d.nodeId));
+      expect(result.appliedDeltas.map((a) => a.description)).toEqual(expected.map((d) => d.description));
+    }
+ // 语义断言（不只看序列）：前两章累积出 3；场景存量不参与
+    const atCh2 = computeState(db, dir, { targetType: "character", targetId: charA, atNodeId: "ch-2" });
+    expect(atCh2?.state.combat_power).toBe(3);
+    expect(atCh2?.conflicts).toEqual([]);
   });
 });
 

@@ -14,6 +14,7 @@
 // - name 联表同路径：实体 → entities.name、大纲节点 → outline.json title
 //
 // 查询经 queryDb 走 drizzle 构建器（混合风格 4A）。
+// 批量查询（卡 2.6）：listDeltasByNodes —— 一次 IN + 一次 readOutlineFile，供 computeState 章序前缀收集。
 // 语义逐句对照旧实现（git show 52c7c13^:packages/db/src/queries/delta.ts）：
 // - order 全局单调：SELECT COALESCE(MAX("order"),0)+1 ↔ select({ next: sql<number> }) 聚合模板
 // （MAX 聚合无法用 builder 列表达，用 sql 模板；COALESCE 保证恒有行——聚合无分组恒单行）
@@ -146,7 +147,7 @@ export function insertDelta(db: Db, input: InsertDeltaInput): DeltaRow {
  * - targetName 联表（参照 relation.ts buildEndpointContext）：实体 → entities.name
  * （一次 IN 查询）；大纲节点 → outline.json title；解析失败/缺失 → 省略字段
  *
- * 供 listDeltasByNode / listDeltasByTarget 共用（S6.3 工具下沉：按目标查询复用同一语义）。
+ * 供 listDeltasByNode / listDeltasByNodes / listDeltasByTarget 共用（S6.3 工具下沉：按目标查询复用同一语义）。
  * @param tree 已读取的 outline.json 树（调用方读取一次，避免重复 I/O）
  */
 function filterVisibleDeltas(db: Db, rows: Array<Record<string, unknown>>, tree: OutlineFileTree): DeltaRecord[] {
@@ -249,6 +250,40 @@ export function listDeltasByNode(db: Db, nodeId: string, outlineDir: string): De
   if (trigger === undefined || trigger.deleted === true) return [];
 
   return filterVisibleDeltas(db, rows, tree);
+}
+
+/**
+ * 按触发节点**批量**查询 Delta（卡 2.6）：computeState 的章序前缀收集专用——
+ * 逐章调 listDeltasByNode 会 O(章数) 次 `readOutlineFile` + JSON parse（300 章 / 300 条 delta
+ * 实测：逐章口径 132.9ms → 批量 2.9ms），本函数一次 `node_id IN (...)` + **一次** readOutlineFile
+ * 支撑全部可见性过滤。
+ * - SQL：node_id IN (...) AND deleted_at IS NULL，按 "order" 递增（全局单调 = 创建顺序）
+ * - 可见性三态与 targetName 联表与 listDeltasByNode **完全一致**（filterVisibleDeltas 共享）
+ * - 触发节点缺失/软删的行按行丢弃（与 listDeltasByNode 的整节点短路语义等价），
+ *   且在实体 IN 查询前先过滤（不为不可见行做无谓查询）
+ * @param nodeIds 触发节点 id 集合；**空数组 → 空结果**（不查库、不读文件）
+ * @param outlineDir 项目根（触发节点与大纲 target 的软删/标题校验读 outline.json）
+ */
+export function listDeltasByNodes(db: Db, nodeIds: readonly string[], outlineDir: string): DeltaRecord[] {
+  if (nodeIds.length === 0) return [];
+  const q = queryDb(db);
+  const rows = q
+    .select()
+    .from(deltaRecords)
+    .where(and(inArray(deltaRecords.node_id, [...nodeIds]), isNull(deltaRecords.deleted_at)))
+    .orderBy(asc(deltaRecords.order))
+    .all();
+  if (rows.length === 0) return [];
+
+  const tree = readOutlineFile(outlineDir);
+ // 触发节点缺失/软删 → 该行不可见（与 listDeltasByNode 的整节点短路同结果，此处按行表达）
+  const visibleRows = rows.filter((r) => {
+    const trigger = findOutlineNode(tree, r.node_id as string);
+    return trigger !== undefined && trigger.deleted !== true;
+  });
+  if (visibleRows.length === 0) return [];
+
+  return filterVisibleDeltas(db, visibleRows, tree);
 }
 
 /**

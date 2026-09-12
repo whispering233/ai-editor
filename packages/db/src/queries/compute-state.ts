@@ -6,9 +6,9 @@
 // （卡片 1.2）后失效——严格三层下父链至多含一个章，兄弟章的 Delta 不可见。
 //
 // 复用边界（不重复实现）：
-// - listDeltasByNode（delta.ts）：按节点查询 + 可见性三态过滤（delta 自身 /
-// 触发节点 / 目标实体任一软删即不可见）+ 节点内按 order 升序——computeState 的软删过滤
-// 与「章节内 order 序」由此获得
+// - listDeltasByNodes（delta.ts）：按触发节点**批量**查询 + 可见性三态过滤（delta 自身 /
+// 触发节点 / 目标实体任一软删即不可见）+ 全局 order 升序——computeState 的软删过滤
+// 与「章节内 order 序」由此获得（卡 2.6：取代逐章 listDeltasByNode 的 O(章数) 次文件读）
 // - deriveChapterOrder（outline-ops.ts）：全局章序（先序遍历、跨卷连续累计）——前缀边界与
 // 应用序由此获得
 // - getOutlinePathIds（storage/outline.ts）：根 → at_node 树路径（场景 → 所属章的映射 +
@@ -34,10 +34,11 @@ import type {
   ComputeStateResult,
   DeltaChange,
   DeltaConflict,
+  DeltaRecord,
   OutlineFileTree,
 } from "@whispering233/ai-editor-shared";
 import type { Db } from "../connection.js";
-import { listDeltasByNode } from "./delta.js";
+import { listDeltasByNodes } from "./delta.js";
 import { getEntity } from "./entity.js";
 import { readFieldPath, writeFieldPath } from "./field-path.js";
 import { deriveChapterOrder, type ChapterOrderInfo } from "./outline-ops.js";
@@ -136,6 +137,20 @@ function resolveProgressChapterNumber(
 }
 
 /**
+ * 批量 Delta 结果 → 按触发节点分组（组内保持全局 order ASC——listDeltasByNodes 已按 order 升序，
+ * 同节点内的相对序因此天然正确）。
+ */
+function groupDeltasByNode(deltas: readonly DeltaRecord[]): Map<string, DeltaRecord[]> {
+  const byNode = new Map<string, DeltaRecord[]>();
+  for (const delta of deltas) {
+    const list = byNode.get(delta.nodeId);
+    if (list === undefined) byNode.set(delta.nodeId, [delta]);
+    else list.push(delta);
+  }
+  return byNode;
+}
+
+/**
  * 计算实体到达指定大纲节点时的累积状态（POST /api/v1/delta/compute）。
  *
  * **前置约定**：
@@ -148,7 +163,8 @@ function resolveProgressChapterNumber(
  * 2. 树路径 = getOutlinePathIds(tree, atNodeId)——用于目标节点 → 进度章的映射
  * （同时保留「节点不存在抛错」语义）；全局章序 = deriveChapterOrder(outlineDir)
  * 3. 收集范围 = **章序 ≤ 进度章序**的全部章（跨卷/跨章），按（章序 ASC, 章内 order ASC）
- * 逐章调 listDeltasByNode（内置可见性三态过滤与 order ASC），过滤 target_id === targetId
+ * 应用——**一次批量取数**（listDeltasByNodes：一次 `node_id IN (...)` + 一次 readOutlineFile，
+ * 内置可见性三态过滤与全局 order ASC），再按触发节点分组回放；过滤 target_id === targetId
  * ——天然满足双层排序与软删过滤；场景/卷/root 上的存量 Delta 不参与（锚点仅章）
  * 4. 逐 change 应用（applyChange，四段语义）；update 冲突跳过不打断后续累积
  * 5. 响应：appliedDeltas 每项 { nodeId, description, changes（原样数组）, skipped?（仅该 delta
@@ -179,12 +195,16 @@ export function computeState(
   const appliedDeltas: AppliedDelta[] = [];
   const conflicts: DeltaConflict[] = [];
 
- // 4. 章序前缀（deriveChapterOrder 已是先序升序，filter 保持升序）→ 逐章按 order ASC 累积
+ // 4. 章序前缀（deriveChapterOrder 已是先序升序，filter 保持升序）→ 一次批量取数，
+ // 再按（章序 ASC, 章内 order ASC）累积（分组回放，同节点内相对序保持）
   const chapterOrder = deriveChapterOrder(outlineDir);
   const progressChapter = resolveProgressChapterNumber(tree, path, chapterOrder, input.atNodeId);
-  for (const chapter of chapterOrder) {
-    if (chapter.chapterNumber > progressChapter) break; // 升序 → 首个越界即结束
-    for (const delta of listDeltasByNode(db, chapter.chapterId, outlineDir)) {
+  const prefixChapters = chapterOrder.filter((c) => c.chapterNumber <= progressChapter);
+  const deltasByNode = groupDeltasByNode(
+    listDeltasByNodes(db, prefixChapters.map((c) => c.chapterId), outlineDir),
+  );
+  for (const chapter of prefixChapters) {
+    for (const delta of deltasByNode.get(chapter.chapterId) ?? []) {
       if (delta.targetId !== input.targetId) continue; // 只取目标实体的 Delta
       const skipped: AppliedDeltaSkippedChange[] = [];
       const changes = delta.changes;

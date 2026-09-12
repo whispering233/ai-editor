@@ -1,6 +1,7 @@
 // S5.1 Delta 增删查测试：insertDelta（order 全局单调 + 返回行完整）/ listDeltasByNode
 // （按节点 + order 升序、targetName 联表两路径、目标缺失省略 name、
 // 可见性三态：自身软删 / 触发节点软删 / 目标实体或大纲节点软删）
+// + 卡 2.6 listDeltasByNodes（批量：空数组不读文件、**与逐节点查询差分等价**、三态按行生效）
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -9,7 +10,7 @@ import { join } from "node:path";
 import type { DeltaChange, OutlineFileTree } from "@whispering233/ai-editor-shared";
 import { closeDatabase, openDatabase, type Db } from "../connection.js";
 import { createEntity } from "./entity.js";
-import { insertDelta, getDeltaRow, listDanglingDeltas, listDeltasByNode, listDeltasByTarget } from "./delta.js";
+import { insertDelta, getDeltaRow, listDanglingDeltas, listDeltasByNode, listDeltasByNodes, listDeltasByTarget } from "./delta.js";
 import { findOutlineNode, readOutlineFile, writeOutlineFile } from "../storage/outline.js";
 
 let dir: string;
@@ -262,6 +263,68 @@ describe("listDeltasByNode 可见性三态（任一命中即过滤）", () => {
 
     expect(listDeltasByNode(db, "sc-1", dir)).toEqual([]); // 触发节点缺失视同不可见（兜底）
     expect(listDeltasByNode(db, "sc-2", dir).map((r) => r.id)).toEqual([other.id]); // 其他节点不受影响
+  });
+});
+
+describe("listDeltasByNodes（卡 2.6 批量：computeState 章序前缀收集专用）", () => {
+  it("空 nodeIds → 空结果且**不读文件**（传不存在的目录也不抛错）", () => {
+    const { charA } = seedBase();
+    insertDelta(db, { nodeId: "ch-1", targetType: "character", targetId: charA, changes: change("a", "1", "2"), description: "一" });
+    expect(listDeltasByNodes(db, [], join(dir, "no-such-dir"))).toEqual([]);
+  });
+
+  it("差分等价：批量结果 = 逐节点 listDeltasByNode 并集（全局 order 升序），含 targetName 两路径", () => {
+    const { charA } = seedBase();
+    const hook = createEntity(db, { type: "hook", name: "伏笔甲" });
+ // ch-1：两条（实体 target + hook target）；sc-1（场景锚点存量）：一条；sc-2：无 delta
+    insertDelta(db, { nodeId: "ch-1", targetType: "character", targetId: charA, changes: change("motivation", "a", "b"), description: "ch1-char" });
+    insertDelta(db, { nodeId: "ch-1", targetType: "hook", targetId: hook.id, changes: change("status", "planted", "progressing"), description: "ch1-hook" });
+    insertDelta(db, { nodeId: "sc-1", targetType: "character", targetId: charA, changes: change("race", "人", "仙"), description: "sc1-char" });
+
+    const nodeIds = ["ch-1", "sc-1", "sc-2", "missing-node"];
+    const batch = listDeltasByNodes(db, nodeIds, dir);
+    const perNode = nodeIds
+      .flatMap((id) => listDeltasByNode(db, id, dir))
+      .sort((a, b) => a.order - b.order);
+
+    expect(batch).toEqual(perNode); // 逐字节等价（含 targetName / 字段全集）
+    expect(batch.map((d) => d.description)).toEqual(["ch1-char", "ch1-hook", "sc1-char"]);
+    expect(batch[1].targetName).toBe("伏笔甲");
+    expect(batch[2].targetName).toBe("阿强");
+  });
+
+  it("可见性三态按行生效：触发节点软删 / 触发节点缺失 / 目标实体软删 → 行被丢，其他节点不受影响", () => {
+    const { charA } = seedBase();
+    const charB = createEntity(db, { type: "character", name: "阿珍" });
+    const keep = insertDelta(db, { nodeId: "ch-1", targetType: "character", targetId: charB.id, changes: change("a", "1", "2"), description: "保留" });
+ // sc-1：触发节点软删 → 行丢
+    insertDelta(db, { nodeId: "sc-1", targetType: "character", targetId: charA, changes: change("b", "1", "2"), description: "触发节点软删" });
+ // sc-2：目标实体软删（直接 UPDATE entities，不级联标 delta）→ 行丢
+    insertDelta(db, { nodeId: "sc-2", targetType: "character", targetId: charA, changes: change("c", "1", "2"), description: "目标实体软删" });
+ // ch-1：触发节点缺失（物理删 sc-1 后其 delta 残留属另一形态；此处用 ch-1 上的行验证正常路径）
+    db.prepare("UPDATE entities SET deleted_at = ? WHERE id = ?").run(T0, charA);
+    softDeleteScene("sc-1");
+
+    const batch = listDeltasByNodes(db, ["ch-1", "sc-1", "sc-2"], dir);
+    expect(batch.map((d) => d.id)).toEqual([keep.id]);
+ // 与逐节点口径一致（同一 fixtures 下重算）
+    const perNode = ["ch-1", "sc-1", "sc-2"]
+      .flatMap((id) => listDeltasByNode(db, id, dir))
+      .sort((a, b) => a.order - b.order);
+    expect(batch).toEqual(perNode);
+  });
+
+  it("节点全部不可见（触发节点缺失）→ 空数组，不抛错", () => {
+    const { charA } = seedBase();
+    insertDelta(db, { nodeId: "sc-1", targetType: "character", targetId: charA, changes: change("a", "1", "2"), description: "一" });
+ // 物理删除 sc-1（构造不含该节点的树）
+    const tree = readOutlineFile(dir);
+    const chapter = findOutlineNode(tree, "ch-1");
+    if (chapter?.type !== "chapter") throw new Error("fixture 缺失 ch-1");
+    chapter.children = chapter.children!.filter((c) => c.id !== "sc-1");
+    writeOutlineFile(dir, tree);
+
+    expect(listDeltasByNodes(db, ["sc-1"], dir)).toEqual([]);
   });
 });
 
