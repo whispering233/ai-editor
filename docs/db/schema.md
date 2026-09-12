@@ -71,7 +71,7 @@ CREATE TABLE entities (
 | 分层 | 字段 | 是否参与 Delta |
 |------|------|----------------|
 | **不可变** | `entities.name`（姓名，**列**不是 data 字段）、`data.role`（角色定位）、`data.description`（描述，必填） | **否**——不出现在变更记录的字段下拉；人工经 `PUT` 直接编辑 |
-| **可变** | `data.alias` / `gender` / `age` / `race` / `motivation` / `personality[]` / `ability_panel` 叶子值 | **是**——沿大纲树父链累积，构成「当前位置数据」视图 |
+| **可变** | `data.alias` / `gender` / `age` / `race` / `motivation` / `personality[]` / `ability_panel` 叶子值 / **`custom_fields`**（可被点分路径 Delta 命中，故与不可变区语义互诉；MVP 只在已有该键时渲染、不可新增键） | **是**——沿大纲树父链（章序前缀）累积，构成「当前位置数据」视图 |
 | **关系网** | `relation_records`（人↔人 5 类 + `appears_in` / `belongs_to` / `owns` / `masters`） | 否——关系不参与 `computeState` |
 
 **`ability_panel` 能力面板结构**（用户自定义字段树，递归）：
