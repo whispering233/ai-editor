@@ -537,6 +537,15 @@ projectRoutes.put("/config", async (c) => {
         `current_position 指向的大纲节点不存在或已软删: ${current_position}`,
       );
     }
+ // 章级收窄（卡片 1.1）：「当前位置」表达写作进度，只承载在章上——卷太粗、
+ // 场景太碎；非章 → 400 VALIDATION_ERROR（收窄仅限写入侧，读侧不校验存量值）
+    if (node.type !== "chapter") {
+      throw new HttpError(
+        400,
+        "VALIDATION_ERROR",
+        `current_position 须指向章节点（卷/场景不承载写作进度）: ${current_position}`,
+      );
+    }
   }
 
  // 合并更新 + 刷新 updated_at（时间 ISO 8601 应用层写入），写盘并同步内存

@@ -7,7 +7,8 @@
 // 数据 = GET /relation（source_type=outline_node）三类并行拉取聚合（lib/outline-hooks）
 // 交互收敛：行级「详情」「＋ 新建」按钮移除（只留删除 + 当前位置徽标）——单击行选中、
 // 选中后 Enter 新建子级（类型由父层级推导）、双击行跳详情、单击标题/摘要行内编辑、拖拽排序保留；
-// 行级 AskAiButton 已移除——右键菜单替代（RowContextMenu：注入会话上下文 + 建立关联）
+// 行级 AskAiButton 已移除——右键菜单替代（RowContextMenu：注入会话上下文 + 建立关联
+// + 「设为当前位置」——卡片 1.1：仅章节点行传入，卷/场景行不出现；已是当前位置则禁用）
 // 路由：#/outline；数据：GET /api/v1/outline（整树）+ GET /api/v1/relation（伏笔标记，S9.2）；操作：POST/PUT/DELETE /outline、PUT /project/config（设当前位置）
 // （S2.4 + S13.1 + 版）——行内编辑标题/摘要（Enter 保存/Esc 取消/失焦保存）、
 // 选中节点按 Enter 就地插入子节点（类型由父决定，root 可切卷/章）、拖拽移动（原生 HTML5 DnD，上下半判定：
@@ -20,13 +21,14 @@ import { useEffect, useState } from "react";
 import type { DragEvent, KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { Button, Input } from "antd";
 import type { OutlineNode } from "@whispering233/ai-editor-shared";
-import { DeleteOutlined, RightOutlined } from "@ant-design/icons";
+import { DeleteOutlined, RightOutlined, AimOutlined } from "@ant-design/icons";
 import { CHILD_TYPE, TYPE_LABEL } from "../components/outline/dialogs";
 import { NodeHookMarkBadge } from "../components/outline/node-hook-badge";
 import { TagChip } from "@/components/ui/tag-chip";
 import { DropIndicator } from "@/components/ui/drop-indicator";
 import { PageHeader } from "@/components/ui/page-header";
 import { RowContextMenu } from "@/components/entity/row-context-menu";
+import { ContextMenuItem } from "@/components/ui/context-menu";
 import { EmptyState } from "@/components/ui/empty-state";
 import { errorBannerClass, skeletonClass } from "@/lib/styles";
 import {
@@ -39,6 +41,7 @@ import {
   type OutlineNodeType,
 } from "../lib/api";
 import { buildNodeHookMarks, HOOK_MARK_TYPES, type NodeHookMark } from "../lib/outline-hooks";
+import { isCurrentPositionHost, setCurrentPosition } from "../lib/current-position";
 import {
   canMoveTo,
   dropInsertOrder,
@@ -623,6 +626,17 @@ export default function Outline() {
     }
   }
 
+  /**
+   * 行级「设为当前位置」（卡片 1.1）：仅章节点行提供入口（卷/场景行不传菜单项）——
+   * 提交实现与详情页共用（lib/current-position.ts），成功后 store 重拉 config 联动
+   * InfoBar「当前位置」/ 行尾徽标 / 概览页 / compute 预览默认节点。
+   * 已是当前位置 → 菜单项禁用（与行尾「当前位置」徽标同判据）。
+   */
+  async function handleSetCurrentPosition(node: OutlineNode) {
+    if (config?.currentPosition === node.id) return; // 禁用态双保险（菜单已关但状态可能刚变）
+    await setCurrentPosition(node.id);
+  }
+
   /** 软删直接执行（H2：不再弹二次确认）；OUTLINE_NODE_NOT_FOUND（已被 purge）→ 横幅 + 刷新树；其余错误 toast */
   async function handleDelete(node: OutlineNode) {
     if (selectedNodeId === node.id) setSelectedNodeId(null); // 删除选中节点即清除选中
@@ -822,7 +836,7 @@ export default function Outline() {
               data-node-id 为跨页定位锚点（U4：InfoBar 点击当前位置 → scrollIntoView 定位）；
               tabIndex=-1 使行可聚焦（单击选中后按 Enter 触发新建子级 onKeyDown）；
               行级右键菜单（RowContextMenu）——注入会话上下文（focus_node_id）+ 建立关联
-              （outline_node 源端点）；编辑态不挂右键菜单（行内输入框保留原生文本菜单：复制/粘贴） */}
+              （outline_node 源端点）+ 设为当前位置（仅章节点行，卡片 1.1）；编辑态不挂右键菜单（行内输入框保留原生文本菜单：复制/粘贴） */}
           {editingTitle || editingSummary ? (
             <div {...rowProps}>{rowChildren}</div>
           ) : (
@@ -830,6 +844,17 @@ export default function Outline() {
               focus={{ focus_node_id: node.id }}
               source={{ type: "outline_node", id: node.id, name: node.title }}
               onCreated={() => useUiStore.getState().notifyDataChanged()}
+              extraItems={
+                isCurrentPositionHost(node.type) ? (
+                  <ContextMenuItem
+                    disabled={isCurrent}
+                    onClick={() => void handleSetCurrentPosition(node)}
+                  >
+                    <AimOutlined className="text-sm" />
+                    设为当前位置
+                  </ContextMenuItem>
+                ) : undefined
+              }
               trigger={<div {...rowProps} />}
             >
               {rowChildren}

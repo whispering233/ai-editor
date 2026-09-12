@@ -1,6 +1,6 @@
 // 项目路由测试（S1.2）：create / open（含 schema 删库重建）/ close / config GET/PUT
 // 覆盖：三文件初始化与版本号写入、路径校验（相对路径/符号链接）、版本不匹配重建 + 备份、
-// currentProject 单例切换与清空、current_position 非软删节点校验
+// currentProject 单例切换与清空、current_position 章节点校验 + 非章（卷/场景）拒绝
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -95,7 +95,7 @@ function seedOldProject(dir: string): void {
   closeDatabase(db);
 }
 
-/** 含非软删/软删节点的正常大纲（供 current_position 校验） */
+/** 含非软删/软删节点的正常大纲（供 current_position 校验；卷 vol-1 / 章 ch-1 / 场景 sc-1 / 已软删章 ch-2） */
 function makeOutlineTree(): OutlineFileTree {
   return {
     id: "root",
@@ -653,7 +653,20 @@ describe("GET/PUT /project/config", () => {
     expect((await res.json()).error.code).toBe("VALIDATION_ERROR");
   });
 
-  it("PUT current_position 指向存在的非软删节点 → 更新成功", async () => {
+  it("PUT current_position 指向存在的非软删**章**节点 → 更新成功", async () => {
+    const dir = makeTmpDir();
+    const app = await openProject(dir);
+    const res = await app.request("/api/v1/project/config", {
+      method: "PUT",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ current_position: "ch-1" }),
+    });
+    expect(res.status).toBe(200);
+    const getRes = await app.request("/api/v1/project/config", { headers: HOST_HEADERS });
+    expect((await getRes.json()).data.currentPosition).toBe("ch-1");
+  });
+
+  it("PUT current_position 指向场景节点 → 400 VALIDATION_ERROR（章级收窄，卡片 1.1）", async () => {
     const dir = makeTmpDir();
     const app = await openProject(dir);
     const res = await app.request("/api/v1/project/config", {
@@ -661,9 +674,23 @@ describe("GET/PUT /project/config", () => {
       headers: HOST_HEADERS,
       body: JSON.stringify({ current_position: "sc-1" }),
     });
-    expect(res.status).toBe(200);
-    const getRes = await app.request("/api/v1/project/config", { headers: HOST_HEADERS });
-    expect((await getRes.json()).data.currentPosition).toBe("sc-1");
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      success: false,
+      error: { code: "VALIDATION_ERROR", message: expect.stringContaining("须指向章节点") },
+    });
+  });
+
+  it("PUT current_position 指向卷节点 → 400 VALIDATION_ERROR（章级收窄，卡片 1.1）", async () => {
+    const dir = makeTmpDir();
+    const app = await openProject(dir);
+    const res = await app.request("/api/v1/project/config", {
+      method: "PUT",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ current_position: "vol-1" }),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("VALIDATION_ERROR");
   });
 
   it("PUT current_position 指向不存在的节点 → 400 OUTLINE_NODE_NOT_FOUND", async () => {
@@ -699,11 +726,11 @@ describe("GET/PUT /project/config", () => {
   it("PUT current_position: null 允许（清除当前位置）", async () => {
     const dir = makeTmpDir();
     const app = await openProject(dir);
- // 先设一个合法值，再清空
+ // 先设一个合法值（章节点），再清空
     await app.request("/api/v1/project/config", {
       method: "PUT",
       headers: HOST_HEADERS,
-      body: JSON.stringify({ current_position: "sc-1" }),
+      body: JSON.stringify({ current_position: "ch-1" }),
     });
     const res = await app.request("/api/v1/project/config", {
       method: "PUT",

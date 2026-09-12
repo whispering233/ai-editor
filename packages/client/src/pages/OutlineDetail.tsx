@@ -38,6 +38,7 @@ import { findNode, shouldCommitSummary, shouldCommitTitle } from "../lib/outline
 import { navigate } from "../hooks/use-route";
 import { useSaveShortcut } from "../lib/save-shortcut";
 import { useDataRefresh } from "../hooks/use-data-refresh";
+import { isCurrentPositionHost, setCurrentPosition } from "../lib/current-position";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
 
@@ -47,8 +48,6 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
   const config = useProjectStore((s) => s.config);
   const configLoading = useProjectStore((s) => s.configLoading);
   const loadOutline = useProjectStore((s) => s.loadOutline);
-  // S13.2：设为当前位置（写 project.json current_position；store 内部自动重拉 config，联动 InfoBar/行尾徽标/compute 默认节点）
-  const updateConfig = useProjectStore((s) => s.updateConfig);
 
   // 首次加载标记：loadOutline 在 store 内静默吞错，用 loadAttempted 呈现「加载失败 + 重试」（同大纲列表页）
   const [loadAttempted, setLoadAttempted] = useState(false);
@@ -87,6 +86,8 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
   const fields = node ? detailFieldsForNodeType(node.type) : [];
   const sceneOptions = sceneNodeOptions(outline?.children ?? []);
   const isCurrent = config?.currentPosition === nodeId;
+  /** 本页节点是否可承载「当前位置」（卡片 1.1 章级收窄：仅章；节点未加载时不置灰按钮由 node===null 分支承担） */
+  const currentPositionHost = node !== null && isCurrentPositionHost(node.type);
 
   // 节点 → 表单（依赖 node 引用：outline 未刷新则引用稳定不重置；保存后 loadOutline 新树 → 重置）
   useEffect(() => {
@@ -137,19 +138,18 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
   }
 
   /**
-   * 设为当前位置（S13.2，自大纲页迁入）：PUT /project/config { current_position: nodeId }——
-   * store 内部 updateConfig 成功后自动重拉 config，联动 InfoBar「当前位置」/大纲行尾徽标/
-   * compute 预览默认节点（S5.4）/S9 伏笔健康指标基准。已是当前位置 → 按钮禁用不触发。
-   * 失败：泛化 error toast（与 S13.1 前大纲页语义一致；节点能渲染说明在树中，失败主要为网络/服务端拒绝）
+   * 设为当前位置（S13.2，自大纲页迁入）：提交实现 = lib/current-position.ts 唯一入口
+   * （大纲行右键菜单共用）——PUT /project/config { current_position }，store 内部 updateConfig
+   * 成功后自动重拉 config，联动 InfoBar「当前位置」/大纲行尾徽标/compute 预览默认节点（S5.4）/
+   * S9 伏笔健康指标基准。已是当前位置 → 按钮禁用不触发；在途防重入由 settingCurrent 承担。
+   * 服务端只接受章节点（卷/场景 → 400）——本页对非章节点禁用按钮（currentPositionHost），
+   * 入口可见性与右键菜单同口径（卡片 1.1）。
    */
   async function handleSetCurrent() {
-    if (node === null || settingCurrent || isCurrent) return;
+    if (node === null || settingCurrent || isCurrent || !currentPositionHost) return;
     setSettingCurrent(true);
     try {
-      await updateConfig({ current_position: node.id });
-      useUiStore.getState().showToast("已设为当前位置");
-    } catch {
-      useUiStore.getState().showToast("设置失败：该节点可能已删除，无法设为当前位置", "error");
+      await setCurrentPosition(node.id);
     } finally {
       setSettingCurrent(false);
     }
@@ -194,13 +194,17 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
         action={
           <>
             {/* S13.2 设为当前位置（动作入口；状态徽标在元信息行）：已是当前位置 → 禁用 + 「当前位置」标记，
-                与 S13.1 前大纲页 disabled={isCurrent || busy} 语义一致 */}
+                与 S13.1 前大纲页 disabled={isCurrent || busy} 语义一致；
+                卡片 1.1 章级收窄：非章节点（卷/场景）禁用并说明原因——服务端接受非章会 400，
+                留一个必定失败的按钮只会报出误导性错误（同上） */}
             <Button
-              disabled={node === null || isCurrent || settingCurrent}
+              disabled={node === null || isCurrent || settingCurrent || !currentPositionHost}
               title={
-                isCurrent
-                  ? "当前节点已是创作进度位置"
-                  : "标记为创作进度位置（InfoBar 展示 + 定位跳转基准）"
+                !currentPositionHost
+                  ? "仅章节点可设为当前位置（卷/场景不承载写作进度）"
+                  : isCurrent
+                    ? "当前节点已是创作进度位置"
+                    : "标记为创作进度位置（InfoBar 展示 + 定位跳转基准）"
               }
               onClick={() => void handleSetCurrent()}
             >
