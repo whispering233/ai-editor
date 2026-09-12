@@ -11,6 +11,8 @@
 // 页头：复用 `PageHeader` 壳（标题 + 保存/移入回收站 + 元信息行）；**取消**元信息行「变更记录 N 条」按钮
 //   （入口被 tab 2 吸收——状态预览不再需要手动展开）。
 // 只读语义：tab 2 的输入控件全部 `disabled`（**不隐藏**——字段位置稳定才好对比）+ 区首 caption「由变更记录累积，只读」。
+// 卡 3.3 修复轮（oracle 三条打磨）：对象值只读渲染不再 `[object Object]`（`readOnlyFieldValue` 走紧凑 JSON + 截断）；
+//   「描述为空」提示（硬必填的前置提示，仅可编辑态）；大纲在途加载时 tab 2 在位置提示位补同一句加载文案。
 // 关系区块：本卡保持既有能力（1 跳双向列表 + 新建关联 + 物理删），形态暂为通用卡片；
 //   卡 3.6 重构为「人物关系网（人↔人）+ 其他关联（折叠区）」——届时本区块被替换。
 // 数据：GET /entity/character/:id（含 relations + deltaCount）、PUT partial（diffData 只提交变更字段 + 姓名）、
@@ -43,10 +45,13 @@ import {
 import {
   characterFieldGroups,
   hasCharacterBasicsErrors,
+  isEmptyTextField,
   resolveCurrentAtNode,
   resolveTabState,
   readOnlyFieldValue,
   validateCharacterBasics,
+  DESCRIPTION_EMPTY_HINT,
+  OUTLINE_LOADING_TEXT,
   type CharacterBasicsErrors,
   type CharacterPositionState,
   type CharacterViewTab,
@@ -313,6 +318,7 @@ export function CharacterFieldsForm({
   onChange,
   disabled,
   fieldErrors,
+  fieldHints,
 }: {
   fields: readonly DetailFieldConfig[];
   values: Record<string, unknown>;
@@ -320,11 +326,14 @@ export function CharacterFieldsForm({
   disabled?: boolean;
  /** 字段级内联错误（键 → 文案；仅基础信息必填判据用，缺省无错误） */
   fieldErrors?: Partial<Record<string, string | null>>;
+ /** 字段级提示（键 → 文案；与错误同位、但用次级字色——如「描述为空，保存前需填写」） */
+  fieldHints?: Partial<Record<string, string | null>>;
 }) {
   return (
     <div className="flex flex-col gap-3">
       {fields.map((f) => {
         const error = fieldErrors?.[f.key] ?? null;
+        const hint = fieldHints?.[f.key] ?? null;
         return (
           <div key={f.key}>
             <p className="mb-1 text-sm font-medium text-foreground">{f.label}</p>
@@ -335,6 +344,9 @@ export function CharacterFieldsForm({
               onChange={(v) => onChange(f.key, v)}
             />
             {error !== null && <p className="mt-1 text-xs text-destructive">{error}</p>}
+            {error === null && hint !== null && (
+              <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
+            )}
           </div>
         );
       })}
@@ -396,6 +408,9 @@ function CharacterSections({
   showCustomFields: boolean;
 }) {
   const [basics, mutable] = characterFieldGroups();
+  // 「描述为空」提示：仅**可编辑态**且值为空时给（tab 2 只读不保存，提示无意义）
+  const descriptionHint =
+    disabled !== true && isEmptyTextField(values.description) ? DESCRIPTION_EMPTY_HINT : null;
   return (
     <div className="flex flex-col gap-4">
       <SectionCard title={basics.title}>
@@ -417,6 +432,7 @@ function CharacterSections({
             onChange={onFieldChange}
             disabled={disabled}
             fieldErrors={{ description: basicsErrors?.description ?? null }}
+            fieldHints={{ description: descriptionHint }}
           />
         </div>
       </SectionCard>
@@ -550,6 +566,9 @@ function CharacterCurrentTab({
   // 未设置位置的说明只在**已确认**未设置时展示（`pending`/`invalid` 另有文案，不得混淆）
   const showUnsetHint = positionState === "unset";
   const showInvalidHint = positionState === "invalid";
+  // 大纲未到位时（位置有效但树还没加载）展示的是初始 data，不是位置累积结果 →
+  // 必须在位置提示位给同一句加载文案（单一来源常量），否则会“看似已算完”
+  const showOutlineLoadingHint = positionState === "ok" && !outlineLoaded && outlineLoading;
 
   return (
     <div className="flex flex-col gap-4">
@@ -560,7 +579,7 @@ function CharacterCurrentTab({
           {!outlineLoaded ? (
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">
-                {outlineLoading ? "大纲加载中…" : "大纲未加载"}
+                {outlineLoading ? OUTLINE_LOADING_TEXT : "大纲未加载"}
               </span>
               {!outlineLoading && (
                 <Button size="small" onClick={onLoadOutline}>
@@ -589,6 +608,10 @@ function CharacterCurrentTab({
 
       {/* 只读说明（只读语义：控件 disabled 而非隐藏；见文件头注释） */}
       <p className="text-xs text-muted-foreground">由变更记录累积，只读</p>
+
+      {showOutlineLoadingHint && (
+        <p className="text-xs text-muted-foreground">{OUTLINE_LOADING_TEXT}</p>
+      )}
 
       {showUnsetHint && (
         <p className="text-xs text-muted-foreground">

@@ -266,3 +266,125 @@ describe("CharacterDetailView（当前位置已失效）", () => {
     expect(html).not.toContain("未设置当前位置");
   });
 });
+
+// ============ 卡 3.3 修复轮（oracle 三条打磨） ============
+
+/** 修复轮断言用：可覆盖 form / tab 的直渲染（harness `render` 用模块级 FORM 常量） */
+function renderWith(opts: {
+  tab?: "initial" | "current";
+  form?: Record<string, unknown>;
+  detail?: EntityDetailRes;
+  outlineLoaded?: boolean;
+  outlineLoading?: boolean;
+}): string {
+  return renderToString(
+    <CharacterDetailView
+      detail={opts.detail ?? DETAIL}
+      name={DETAIL.name}
+      onNameChange={() => {}}
+      form={opts.form ?? FORM}
+      onFieldChange={() => {}}
+      tab={opts.tab ?? "initial"}
+      onTabChange={() => {}}
+      basicsErrors={NO_ERRORS}
+      saving={false}
+      saveError={null}
+      onSave={() => {}}
+      onDelete={() => {}}
+      onReload={() => {}}
+      currentPosition="ch-1"
+      positionState="ok"
+      outlineNodes={NODES}
+      outlineLoaded={opts.outlineLoaded ?? true}
+      outlineLoading={opts.outlineLoading ?? false}
+      onLoadOutline={() => {}}
+    />,
+  );
+}
+
+describe("CharacterDetailView（修复轮①：描述为空提示）", () => {
+  it("描述为空 + 可编辑态 → 基础信息区给「保存前需填写」提示（解释为何保存被拒）", () => {
+    const html = renderWith({ form: { ...FORM, description: "" } });
+    const basics = html.slice(html.indexOf("基础信息"), html.indexOf("可变数据"));
+    expect(basics).toContain("描述为空，保存前需填写");
+  });
+
+  it("描述有值 → 不渲染提示", () => {
+    const html = renderWith({});
+    expect(html).not.toContain("描述为空，保存前需填写");
+  });
+
+  it("纯空白描述同样算空（trim 口径）", () => {
+    const html = renderWith({ form: { ...FORM, description: "   " } });
+    expect(html).toContain("描述为空，保存前需填写");
+  });
+
+  it("tab 2 只读态 → 不给提示（无保存动作，提示无意义）", () => {
+    const html = renderWith({ tab: "current", form: { ...FORM, description: "" } });
+    expect(html).not.toContain("描述为空，保存前需填写");
+  });
+});
+
+describe("CharacterDetailView（修复轮②：大纲在途加载时 tab 2 的位置提示）", () => {
+  it("位置有效 + 大纲在途加载 → 位置提示位复用同一句加载文案（不只是选择器里那句）", () => {
+    const html = renderWith({ tab: "current", outlineLoaded: false, outlineLoading: true });
+    const afterCaption = html.slice(html.indexOf("由变更记录累积，只读"));
+    expect(afterCaption).toContain("大纲加载中…");
+  });
+
+  it("大纲已加载 → 位置提示位不出现加载文案", () => {
+    const html = renderWith({ tab: "current" });
+    const afterCaption = html.slice(html.indexOf("由变更记录累积，只读"));
+    expect(afterCaption).not.toContain("大纲加载中…");
+  });
+
+  it("位置未设置（unset）→ 仍是「未设置」文案，不混入加载文案", () => {
+    const html = renderToString(
+      <CharacterDetailView
+        detail={DETAIL}
+        name={DETAIL.name}
+        onNameChange={() => {}}
+        form={FORM}
+        onFieldChange={() => {}}
+        tab="current"
+        onTabChange={() => {}}
+        basicsErrors={NO_ERRORS}
+        saving={false}
+        saveError={null}
+        onSave={() => {}}
+        onDelete={() => {}}
+        onReload={() => {}}
+        currentPosition={null}
+        positionState="unset"
+        outlineNodes={NODES}
+        outlineLoaded={false}
+        outlineLoading
+        onLoadOutline={() => {}}
+      />,
+    );
+    expect(html).toContain("未设置当前位置，显示初始数据");
+  });
+});
+
+describe("CharacterDetailView（修复轮③：对象值只读渲染）", () => {
+  it("tab 2 的 custom_fields 嵌套对象 → 紧凑 JSON 展示（不再 [object Object]）", () => {
+    const detail: EntityDetailRes = {
+      ...DETAIL,
+      data: { ...DETAIL.data, custom_fields: { 门派: { name: "青云门", rank: 1 } } },
+    };
+    const html = renderWith({ tab: "current", detail });
+    expect(html).not.toContain("[object Object]");
+    // 键与值都在（React 会把 JSON 里的引号转义，故按内容片段断言）
+    expect(html).toMatch(/门派[\s\S]{0,120}青云门/);
+    expect(html).toMatch(/rank/);
+  });
+
+  it("tab 1 的 custom_fields 编辑器仍走可编辑控件（提示改动不波及编辑态）", () => {
+    const detail: EntityDetailRes = {
+      ...DETAIL,
+      data: { ...DETAIL.data, custom_fields: { 门派: "青云门" } },
+    };
+    const html = renderWith({ tab: "initial", detail, form: { ...FORM, custom_fields: { 门派: "青云门" } } });
+    expect(countDisabled(html)).toBe(0);
+  });
+});

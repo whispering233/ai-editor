@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   characterFieldGroups,
   hasCharacterBasicsErrors,
+  isEmptyTextField,
   readOnlyFieldValue,
   resolveCurrentAtNode,
   resolveDefaultTab,
@@ -14,6 +15,10 @@ import {
   validateCharacterBasics,
   CHARACTER_SECTION_BASICS,
   CHARACTER_SECTION_MUTABLE,
+  DESCRIPTION_EMPTY_HINT,
+  OUTLINE_LOADING_TEXT,
+  READONLY_FALLBACK_TEXT,
+  READONLY_JSON_MAX_LENGTH,
 } from "./character-detail";
 
 describe("resolveDefaultTab", () => {
@@ -167,8 +172,57 @@ describe("readOnlyFieldValue", () => {
     expect(readOnlyFieldValue("主角")).toBe("主角");
   });
 
-  it("数组 → 「、」连接（与列表摘要同款展示口径）", () => {
+  it("全标量数组 → 「、」连接（与列表摘要同款展示口径）", () => {
     expect(readOnlyFieldValue(["坚韧", "多疑"])).toBe("坚韧、多疑");
     expect(readOnlyFieldValue([])).toBe("");
+  });
+
+  it("对象 → 紧凑 JSON（不再 [object Object]）", () => {
+    expect(readOnlyFieldValue({ 门派: "青云门", 境界: "筑基" })).toBe(
+      '{"门派":"青云门","境界":"筑基"}',
+    );
+    expect(readOnlyFieldValue({ nested: { level: 2 } })).toBe('{"nested":{"level":2}}');
+  });
+
+  it("含对象的数组 → 同样走 JSON（不产出 [object Object]）", () => {
+    const out = readOnlyFieldValue([{ a: 1 }, "x"]);
+    expect(out).toBe('[{"a":1},"x"]');
+    expect(out).not.toContain("[object Object]");
+  });
+
+  it("超长对象值 → 截断到上限 + 省略号（有界串不撐破行布局）", () => {
+    const long = { key: "值".repeat(400) };
+    const out = readOnlyFieldValue(long);
+    expect(out.length).toBe(READONLY_JSON_MAX_LENGTH + 1); // 截断段 + 「…」
+    expect(out.endsWith("…")).toBe(true);
+    expect(out.startsWith('{"key":"值值')).toBe(true);
+  });
+
+  it("无法序列化（循环引用）→ 兑底文案，不抛错", () => {
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    expect(readOnlyFieldValue(cyclic)).toBe(READONLY_FALLBACK_TEXT);
+  });
+});
+
+describe("isEmptyTextField / DESCRIPTION_EMPTY_HINT（卡 3.3 修复轮）", () => {
+  it("非字符串（undefined/null/数字）与纯空白均判空", () => {
+    expect(isEmptyTextField(undefined)).toBe(true);
+    expect(isEmptyTextField(null)).toBe(true);
+    expect(isEmptyTextField("")).toBe(true);
+    expect(isEmptyTextField("   ")).toBe(true);
+    expect(isEmptyTextField(12)).toBe(true);
+    expect(isEmptyTextField("青云门弟子")).toBe(false);
+  });
+
+  it("提示文案与必填错误文案是两件事（提示解释原因，错误在提交后出现）", () => {
+    expect(DESCRIPTION_EMPTY_HINT).toBe("描述为空，保存前需填写");
+    expect(DESCRIPTION_EMPTY_HINT).not.toBe("描述不能为空");
+  });
+});
+
+describe("OUTLINE_LOADING_TEXT（文案单一来源）", () => {
+  it("选择器与 tab 2 位置提示共用同一常量", () => {
+    expect(OUTLINE_LOADING_TEXT).toBe("大纲加载中…");
   });
 });

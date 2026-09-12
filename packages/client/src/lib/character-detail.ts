@@ -1,4 +1,5 @@
-// 人物详情双视图纯函数与判据（卡 3.2；卡 3.3 补：字段三分分组、必填判据、tab 判据三态）
+// 人物详情双视图纯函数与判据（卡 3.2；卡 3.3 补：字段三分分组、必填判据、tab 判据三态；
+// 卡 3.3 修复轮：对象值只读渲染 / 描述为空提示 / 大纲加载文案单一来源）
 // 契约：`docs/ui/DESIGN.md` §数据展示 `character-workbench`（层级语义/只读语义）与 `tabs`（页内 tab、不进 URL）；
 //   `docs/design/10-data-model.md` §14：不变式 1（不可变字段不参与 Delta，人工可编辑）、
 //   不变式 2（两视图里不可变字段必然相同）、不变式 3（**只有「初始化数据」可编辑**）；
@@ -76,6 +77,28 @@ export function hasCharacterBasicsErrors(errors: CharacterBasicsErrors): boolean
   return errors.name !== null || errors.description !== null;
 }
 
+/**
+ * 字段值判空（`trim` 口径，与 `validateCharacterBasics` 同源）：非字符串（undefined/null/数字）一律视为空。
+ * 供「描述为空」提示与调用方自建提示复用，避免两处各自写判据。
+ */
+export function isEmptyTextField(raw: unknown): boolean {
+  return typeof raw !== "string" || raw.trim() === "";
+}
+
+/**
+ * 「描述为空」提示文案（基础信息区「描述」字段下方，**仅可编辑态且值为空**时展示）。
+ * 存在意义：`description` 是硬必填 ⇒ 历史空值角色在补齐前**保存不了任何修改**，
+ * 不给提示时会表现为「保存按钮无效」，用户无从得知原因。
+ */
+export const DESCRIPTION_EMPTY_HINT = "描述为空，保存前需填写";
+
+/**
+ * 大纲在途加载文案（**单一来源**）：计算节点选择器与 tab 2 的位置提示共用同一常量，
+ * 避免出现「新旧两套」加载文案；大纲未到位时 tab 2 展示的是初始 `data` 而非位置累积结果，
+ * 提示必须随之出现（否则暂时"看似已算完"）。
+ */
+export const OUTLINE_LOADING_TEXT = "大纲加载中…";
+
 /** tab 判据结果（默认 tab + 当前位置四态；两者同源，不得各自推导） */
 export interface CharacterTabState {
   /** 默认 tab（用户在未手动切换时采用） */
@@ -143,12 +166,40 @@ export function resolveCurrentAtNode(
   return nodeIds.includes(currentPosition) ? currentPosition : "";
 }
 
+/** 只读 JSON 序列化的截断上限（超长对象值给有界展示串） */
+export const READONLY_JSON_MAX_LENGTH = 120;
+
+/** 只读展示兑底文案（无法 JSON 序列化的值） */
+export const READONLY_FALLBACK_TEXT = "—";
+
+/** 标量判据（“、”连接分支的准入——对象/函数/Symbol 不参与字符串拼接，转走 JSON 分支） */
+function isScalarForReadOnly(raw: unknown): boolean {
+  return typeof raw !== "object" && typeof raw !== "function" && typeof raw !== "symbol";
+}
+
 /**
- * 只读取值 → 展示串（tab 2 只读字段视图）：undefined/null → 空串；数组 → 「、」连接
- * （与列表摘要同款展示口径）；其余 `String()` 化。
+ * 只读取值 → 展示串（tab 2 只读字段视图 / 面板叶子 / 已有 `custom_fields` 值）：
+ * undefined/null → 空串；标量 → `String()`；**全标量数组 → 「、」连接**（与列表摘要同款展示口径）；
+ * **对象 / 含对象的数组 → 紧凑 JSON 序列化**（截断到 `READONLY_JSON_MAX_LENGTH`，序列化失败 → `READONLY_FALLBACK_TEXT`）。
+ *
+ * 为何选 JSON 而非统一 `—`：`custom_fields` 的嵌套值在 tab 2 是作者对照「当前位置时的值」的唯一展示位，
+ * 一律打成 `—` 会丢掉全部信息；截断则避免超长串擑破行布局（外层 `truncate` 只截显示宽度，数据侧给有界串更稳）。
  */
 export function readOnlyFieldValue(raw: unknown): string {
   if (raw === undefined || raw === null) return "";
-  if (Array.isArray(raw)) return raw.map((x) => String(x)).join("、");
-  return String(raw);
+  if (Array.isArray(raw)) {
+    if (raw.length === 0) return "";
+    if (raw.every(isScalarForReadOnly)) return raw.map((x) => String(x)).join("、");
+  } else if (typeof raw !== "object") {
+    return String(raw);
+  }
+  try {
+    const json = JSON.stringify(raw);
+    if (json === undefined) return READONLY_FALLBACK_TEXT; // 防御：不可序列化值
+    return json.length > READONLY_JSON_MAX_LENGTH
+      ? `${json.slice(0, READONLY_JSON_MAX_LENGTH)}…`
+      : json;
+  } catch {
+    return READONLY_FALLBACK_TEXT; // 循环引用等
+  }
 }
