@@ -73,4 +73,6 @@
 - 自定义关系类型（`RELATION_TYPES` 为共享常量 + `z.enum` 校验）；跨书能力面板模板库；面板相关 AI 一致性规则；人物页 Delta 时间线；关系星形图（纯展示 SVG）；`status` 字段的服务端彻底清理（字段已删，`filters.status` 保留给 hook）。
 - **反向伏笔关系**（源=实体、目标=大纲节点、类型 `plants`/`advances`/`resolves`）：服务端守卫只在 `source_type === "outline_node"` 时生效，该组合可 201 落库但无任何消费者（分析层只认 outline_node→hook）——属数据卫生问题（不产生 400），先登记；要收口就是「无条件要求源端为章」。
 - `packages/client/src/pages/Outline.tsx` 的 prettier 漂移（改动前即存在，非某张卡引入）；如要修，单独一次格式化提交，避免污染卡片 diff。
-- `packages/tools/src/analysis/hook.test.ts` 中「软删场景上的 plants/appears_in 不参与 R1/R2」用例属**口径锁**（当前分支不可观测，防未来绕过 `listRelations` 端点过滤），可在下次路过时在用例名/注释里标注。
+- `packages/client/src/lib/hook-panel.ts` 中「软删场景上的 plants/appears_in 不参与 R1/R2」用例属**口径锁**（当前分支不可观测，防未来绕过 `listRelations` 端点过滤），可在下次路过时在用例名/注释里标注。
+- **`currentHookStatus` 在 client 侧已无生产消费者**（卡 1.9 删了 `fromStatus` 后仅其单测在用）——要么后续删掉（含单测），要么明确保留理由。
+- **通用「+ 新建变更」表单仍可为 hook 的 `status` 造 `op=update`**（`lib/delta-create.ts`）：手动路径会产生 CAS 假冲突，属「手动编辑 data 不产生 Delta 属正常」的对偶情形；如需彻底闭环则收窄字段白名单，暂接受。
