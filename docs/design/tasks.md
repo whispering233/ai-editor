@@ -11,10 +11,14 @@
 > **执行顺序**：2.5（面板纯函数，2.1/2.2 的前置）→ 2.1 → 2.2 → 2.3 → 2.4 → 2.6 → 2.7。
 
 - [ ] **2.1 character 字段改造（+`description`/`alias`（单值假名）/`race`、−`status`、`personality` 保留）+ 摘要口径**
-  - 契约：`docs/db/schema.md`「人物 data 分层」、`docs/api/30-api-entity.md`（character 字段清单与摘要口径）。
-  - 改：`shared/src/types/api.ts` 的 `characterDataSchema`（+`description`/`alias`/`race`；−`status`；`personality` 保留）；`db/src/queries/entity.ts` 的 `toSummary` character 分支（移除 `summary.status`；新增 `description` 截断 100；能力摘要取面板**顶层分组名前 2**，此点依赖 2.5 的面板解析纯函数——若 2.5 未落地，可先留 TODO 并在报告中说明顺序调整）；`client/src/lib/entity-detail.ts` 的 `detailFieldsForType("character")`（未变字段保持不变，新增字段先登记后由批次 3 接 UI）。
-  - 不改：`filters.status` / `matchDataFilters` / hook 侧 `byStatus`（hook 生命周期依赖）。
-  - 测试：schema 用例（新字段通过、`status` 不再写出）、`toSummary` 用例（character 摘要不再含 `status`，含 `description` 截断）。
+  - 契约：`docs/db/schema.md`「人物 data 分层」、`docs/api/30-api-entity.md`（character 字段清单与摘要口径）、`docs/design/10-data-model.md` §14（不可变字段不进变更记录字段下拉）。
+  - `shared/src/types/api.ts`：`characterDataSchema` +`description`/`alias`/`race`；**− `status`**；`personality` 保留；`ability_panel` 声明为 **`z.unknown().optional()`**（宽校验：绝不因面板结构拒绝写入，在报告里说明选择）。
+  - `db/src/queries/entity.ts` 的 `toSummary` character 分支：移除 `summary.status`；新增 `description`（截断 100，同 setting 口径）；能力摘要改**面板顶层分组名前 2**（用卡 2.5 的 `parseAbilityPanel` + `panelTopLevelNames`）。
+  - `client/src/lib/delta-create.ts`（**编译强制同步**）：`ENTITY_DATA_KEYS.character` 对齐新 schema keys；`entityDeltaFieldOptions` **排除不可变字段（`role`/`description`）**；`ARRAY_FIELDS.character` 去掉 `abilities`（仅留 `personality`）。
+  - `client/src/lib/entity-detail.ts` 的 `detailFieldsForType("character")`：改为 `role` / `description` / `alias` / `gender` / `age` / `race` / `personality` / `motivation`（**移除 `abilities`**——标签式能力已被面板取代；面板 UI 留批次 3.4）。
+  - `client/src/lib/entity-list.ts` / `EntityList.tsx`：若有行摘要/chips 引用 `abilities`/`status`，同步到新口径（能力 chips = 面板顶层分组名）。
+  - 不改：`filters.status` / `matchDataFilters` / hook 侧 `byStatus`（hook 生命周期依赖）；`getEntitySummary` 的 character 分支留卡 2.2。
+  - 测试：shared schema 用例（新字段通过、`status` 不再写出、脏面板不被拒）；db `toSummary` 用例（无 `status`、`description` 截断、面板顶层名前 2）；client `delta-create` 用例（不可变字段不在下拉、数组字段不含 `abilities`）。
 
 - [ ] **2.2 `get_entity_summary` 口径（character 移除 `byStatus`；`topAbilities` 改顶层分组名）**
   - 契约：`docs/api/tool-calling.md`（`get_entity_summary` character 口径段）。
