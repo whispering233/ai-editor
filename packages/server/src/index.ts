@@ -23,6 +23,8 @@ import type { AddressInfo } from "node:net";
 import { errorHandler, fail, ok } from "./middleware/error.js";
 import { stopAutoBackup } from "./backup.js";
 import { initDebugConfig, isCategoryEnabled } from "./debug.js";
+import { applyHttpProxySettings, configureHttpDispatcher } from "./http-dispatcher.js";
+import { getSettingsManager } from "./model-runtime.js";
 import { chatRoutes } from "./routes/chat.js";
 import { deltaRoutes } from "./routes/delta.js";
 import { entityRoutes } from "./routes/entity.js";
@@ -154,6 +156,13 @@ export async function startServer(projectRoot: string, options: StartServerOptio
  // 五类别 chat/request/stream/usage/http；文件不存在/非法 JSON/结构不符 → 全关；
  // 不阻断启动。运行中改配置文件不生效——热加载 YAGNI）
   initDebugConfig(root);
+
+  // 出站 HTTP dispatcher（嵌入 pi 运行时的必需环节，见 http-dispatcher.ts 文件头）：
+  // 装 undici dispatcher 以拿到 pi CLI 同款行为（IPv6 黑洞链路的 autoSelectFamily 退避 +
+  // 环境代理支持 + 可配 HTTP 空闲超时）；不装 → 部分网络下 provider 请求稳定 ETIMEDOUT。
+  const settings = getSettingsManager();
+  applyHttpProxySettings(settings.getGlobalSettings().httpProxy);
+  configureHttpDispatcher(settings.getHttpIdleTimeoutMs());
 
  // 检测语义（设计缺陷修复）：不再无条件初始化——待命态下 GET /project/config → 409
  // NO_PROJECT_OPEN，前端引导「新建/打开项目」（client store loadConfig 已处理该错误码）

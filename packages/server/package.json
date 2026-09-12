@@ -31,13 +31,14 @@
     "postpack": "node ../../scripts/restore-package-json.mjs"
   },
   "dependencies": {
+    "@hono/node-server": "^2.0.12",
     "@whispering233/ai-editor-agent": "workspace:*",
     "@whispering233/ai-editor-db": "workspace:*",
     "@whispering233/ai-editor-shared": "workspace:*",
     "@whispering233/ai-editor-tools": "workspace:*",
-    "@hono/node-server": "^2.0.12",
     "fflate": "^0.8.3",
     "hono": "^4.7.0",
+    "undici": "8.5.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

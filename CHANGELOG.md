@@ -29,6 +29,7 @@
 ### Changed
 
 - **轮次上限（8 轮）与单轮超时（120s）删除**：失控保护改由 pi 的自动重试与自动压缩承担，失控时用户可直接停止生成（steering/follow-up 亦由 pi 提供）
+- **出站 HTTP 连接行为与 pi CLI 对齐**（真实 provider 联调发现）：服务启动时安装 undici dispatcher（`connect.autoSelectFamilyAttemptTimeout=2000` + 环境代理支持 + 可配 HTTP 空闲超时）——缺少这一步时，Node 连接策略会跳过 pi CLI 的正常路径，在 IPv6 可达性受限的链路上对部分 provider 稳定连接超时（同一链路 pi CLI 可正常请求）；新增依赖 `undici` exact pin（与服务内 pi 同版本）
 - **工具参数 schema 改 TypeBox**（`Type`/`Static` 经 `pi-ai` 重导出）：一份定义同时给模型（JSON Schema）、给 TS 类型、给校验；参数校验交给 pi（类型写错会被 coerce 后进入工具，业务不变量由工具自校）
 - **工具结果截断**上限改为代码常量（8000 tokens；不再可配），超限截断 + 结构化提示不终止对话
 - **上下文占用条**口径改为模型窗口占比（`getContextUsage()`，随 `turn_end`/`agent_end` 帧下发）
