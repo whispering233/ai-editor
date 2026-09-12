@@ -159,8 +159,9 @@ export function ComputePreview({
   );
 }
 
-/** 计算结果展示（三段：conflicts 警示 / 状态差异 / 应用的变更记录） */
-function ComputeResult({
+/** 计算结果展示（三段：conflicts 警示 / 状态差异 / 应用的变更记录）。
+ * 导出供人物页「当前位置数据」tab 复用（卡 3.2）——conflicts/skipped 标注照搬，本组件行为不变。 */
+export function ComputeResult({
   result,
   currentData,
   nodeTitles,

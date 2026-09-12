@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeftOutlined } from "@ant-design/icons";
 import { Button } from "antd";
 import { CharacterRail } from "../components/character/character-rail";
+import { CharacterDetail } from "../components/character/character-detail";
 import { EmptyState } from "../components/ui/empty-state";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useMediaQuery } from "../hooks/use-media-query";
@@ -24,7 +25,6 @@ import {
   type CharacterRailItem,
 } from "../lib/character-workbench";
 import { entityDetailPath, entityListPath } from "../lib/entity-paths";
-import EntityDetail from "./EntityDetail";
 
 const LIST_ROUTE = entityListPath("character");
 
@@ -161,10 +161,10 @@ export default function CharacterWorkbench({ id }: { id?: string }) {
           )}
           <div className="min-h-0 flex-1 overflow-y-auto p-6">
             {id !== undefined ? (
-              // key = id：切角色强制卸载重挂（详情页表单按角色重置，既有纪律）
-              <EntityDetail
+              // key = id：切角色强制卸载重挂（详情表单按角色重置，既有纪律）；
+              // 卡 3.2：右栏改为人物专用详情（双视图 tab）——泛型 EntityDetail 仍服务 setting/location/hook/timepoint
+              <CharacterDetail
                 key={`character:${id}`}
-                type="character"
                 id={id}
                 onSaved={() => setReloadTick((t) => t + 1)}
               />
