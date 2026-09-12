@@ -33,10 +33,11 @@
   - 测试（验收硬项）：`compute-state.test.ts` 既有「卷锚点累积」用例改写为新口径 + 新增跨章累积用例（`ch-10` 与 `ch-20` 的 Delta 在 `ch-30` 查询**可见**）+ 场景/卷/root 映射用例；`packages/server/src/routes/delta.test.ts:577` 的「父链唯一：兄弟章的 Delta 不参与计算」用例**必须语义反转**；`packages/tools/src/executor/hook.test.ts` 的注释与 `appliedDeltas` 断言（现写「只累积挂在其树路径上的 delta」、`atNodeId=ch-2`）**一并改为新口径**。
   - 风险登记：`appliedDeltas` 随进度增长（前面所有章的 Delta 均在列表），依赖现有截断机制。
 
-- [ ] **1.5 delta executor 兜底校验（契约对齐，卡 1.2/1.3 同族缺口）**
-  - `packages/tools/src/executor/delta.ts` 的 `executeAddDelta` 改走 `requireChapterNode`（存在 + 未软删 + `chapter`）——executor **直写 db 绕过 REST**，手工构造的 proposal 仍可写入非章锚点（`executor/index.test.ts:129` 与 `executor/delta.test.ts:88-89` 现在用 `sc-1` 并通过）。
-  - 测试：既有用例改章锚点 + 新增非章拒绝用例（oracle 已确认可达性低但违反三层同口径）。
-  - 验收：executor 层非章锚点 → 抛错。
+- [ ] **1.5 tools 口径对齐 + delta executor 兜底校验（卡 1.2/1.3 同族缺口 + 卡 1.4 oracle 建议）**
+  - `packages/tools/src/executor/delta.ts` 的 `executeAddDelta` 改走 `requireChapterNode`（存在 + 未软删 + `chapter`）——executor **直写 db 绕过 REST**，手工构造的 proposal 仍可写非章锚点；且卡 1.4 后这些锚点**静默不参与累积**（「写了但永远不算」，比报错更难排查）。
+  - **LLM 提示词/注释口径同步**（卡 1.4 后仍写旧口径，会塑造模型推断）：`packages/tools/src/index.ts:113-115`（`compute_state` 描述写「只沿大纲树父链累积」）、`packages/tools/src/schemas/delta.ts:31`、`packages/tools/src/query/delta.ts:5/22-23`、`packages/shared/src/types/entity.ts:213`、`packages/shared/src/types/api.ts:587`（后两处仅注释）→ 全部改为「章序前缀累积」。
+  - 测试：`executor/index.test.ts:129` 与 `executor/delta.test.ts:88-89` 的 `sc-1` 锚点改 `ch-1` + 新增非章拒绝用例。
+  - 验收：executor 层非章锚点 → 抛错；全仓无「父链累积」旧口径残留（`rg "父链"` 只剩设计文档里的历史说明）。
 
 - [ ] **1.6 建立关联对话框按源端类型过滤伏笔关系（卡 1.3 新发现的死胡同）**
   - `packages/client/src/components/entity/create-relation-dialog.tsx` 的 `DIALOG_RELATION_TYPES` 现无条件含 `plants/advances/resolves`，而 `pages/Outline.tsx` 的右键菜单对所有层级行挂对话框、`OutlineDetail.tsx` 节点详情也走同一对话框 → **卷/场景行可选必定 400 的组合**（收窄前是 201）。
@@ -54,6 +55,7 @@
 - [ ] 2.3 `007_character_ability_panel` 迁移（幂等、不覆盖已有面板）+ `SCHEMA_VERSION 6 → 7`
 - [ ] 2.4 `computeState` 点分嵌套路径解析（仅标量 `set`/`update`）+ 防御（非法结构不抛错）
 - [ ] 2.5 能力面板纯函数库（结构解析 / 顶层分组名 / 叶子路径枚举 / 模板深拷贝派生）+ 单测
+- [ ] 2.6 delta 查询批量化（卡 1.4 oracle 实测：300 章 / 300 条 delta → `computeState` **219ms**，因每章一次 `readOutlineFile`；批次 3 人物页 tab 2 每次切换都会调）——改一次性查询（`node_id IN 前缀章集合` 或内部传已读 tree），目标回到个位数毫秒
 
 ## 批次 3 · 人物页 UI（未开工）
 
