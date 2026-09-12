@@ -75,9 +75,9 @@ describe("002_event_timeline 迁移（v1 → v2 → v3 全链路，G2）", () =>
     db = createV1Db();
 
     const { applied } = runMigrations(db, { migrations: MIGRATIONS });
-    expect(applied.map((m) => m.version)).toEqual([2, 3, 4, 5, 6]); // v1→v6 全链路（002→003→004→005→006）
+    expect(applied.map((m) => m.version)).toEqual([2, 3, 4, 5, 6, 7]); // v1→v7 全链路（002→007）
     expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
-    expect(SCHEMA_VERSION).toBe(6);
+    expect(SCHEMA_VERSION).toBe(7);
 
  // 数据保留：3 行实体 + 1 行关系（行数与列值原样；v1 库无事件 → 003 无 time_label 可迁）
     const entities = db

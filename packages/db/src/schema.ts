@@ -18,8 +18,10 @@ import { CREATE_TABLES_SQL } from "./tables.js";
  * （setting 的旧 rules 分类值复制到 data.tags 并移除 rules，migrations/004_setting_tags.ts）。
  * v5 → v6（对话历史出库）：chat_messages 导出为 `sessions/<id>.jsonl` 后 DROP 表
  * （migrations/006_sessions_jsonl.ts；会话从此不入库）。
+ * v6 → v7（角色能力面板，2026-09）：**无 DDL**——character 旧 `abilities[]` 标签
+ * 迁为 `ability_panel` 顶层分组「能力」下的叶子（migrations/007_character_ability_panel.ts）。
  */
-export const SCHEMA_VERSION = 6; // +会话 JSONL（006_sessions_jsonl.ts 导出后 DROP 表）
+export const SCHEMA_VERSION = 7; // +角色能力面板（007_character_ability_panel.ts 仅 data JSON 迁移）
 
 /**
  * 建表：执行全部 DDL（CREATE TABLE/INDEX IF NOT EXISTS，定义于 tables.ts），幂等，可重复调用。

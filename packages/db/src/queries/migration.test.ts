@@ -189,6 +189,7 @@ describe("ensureSchemaCompatible 旧版本有迁移路径", () => {
       { version: 4, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN fourth TEXT") },
       { version: 5, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN fifth TEXT") },
       { version: 6, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN sixth TEXT") },
+      { version: 7, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN seventh TEXT") },
     ];
     insertOldEntity(db, "char-1");
     writeOutlineFile(dir, oldTree());
@@ -243,6 +244,7 @@ describe("ensureSchemaCompatible 旧版本有迁移路径", () => {
       { version: 4, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN fourth TEXT") },
       { version: 5, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN fifth TEXT") },
       { version: 6, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN sixth TEXT") },
+      { version: 7, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN seventh TEXT") },
     ];
     insertOldEntity(db, "char-1");
 
