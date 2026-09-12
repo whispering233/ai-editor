@@ -56,7 +56,7 @@ CREATE TABLE entities (
 
 | type | data 关键字段 |
 |------|-------------|
-| `character` | **不可变**：`role`, `description`（**必填**，人物概述——这个人物是谁）；**可变**：`alias`（假名/化名——**单值**：当前位置时这个人的化名是什么；Delta `set`/`update` 标量而非数组）, `gender`, `age`, `race`, `motivation`, `personality[]`, `ability_panel`（能力面板树）；`custom_fields`。（**2026-09 修订**：`status` 彻底移除——详情表单/列表/AI 摘要三处早已无展示，旧残留由 `.passthrough()` 容错；`abilities[]` 经 007 迁移为 `ability_panel`，见下方「人物 data 分层」） |
+| `character` | **不可变**：`role`, `description`（**必填**——人物概述：这个人物是谁；**校验落地 = 卡 3.3 前端表单 + AI 工具约定，服务端不硬校验**，见下）,；**可变**：`alias`（假名/化名——**单值**：当前位置时这个人的化名是什么；Delta `set`/`update` 标量而非数组）, `gender`, `age`, `race`, `motivation`, `personality[]`, `ability_panel`（能力面板树）；`custom_fields`。（**2026-09 修订**：`status` 彻底移除——详情表单/列表/AI 摘要三处早已无展示，旧残留由 `.passthrough()` 容错；`abilities[]` 经 007 迁移为 `ability_panel`，见下方「人物 data 分层」） |
 | `setting` | `description`, `tags[]`（**分类标签，统一字段**）, `rules[]`（**规则条款，仅详情页编辑**）, `custom_fields` —— **`parent_id` 与 `category` 均已废弃**：层级由 belongs_to 关系表达、分类由 tags 承接；旧字段残留由 `.passthrough()` 容错；旧 rules 分类值经 004 迁移（SCHEMA_VERSION 4）复制到 tags |
 | `location` | `type`, `parent_id`, `description`, `custom_fields` |
 | `hook` | 伏笔（关系生命周期见下方 `plants`/`advances`/`resolves` 等）；data 字段集见 shared `hookDataSchema`（status/category/expected_payoff/payoff_timing/half_life/is_core/notes），服务端按 schema 校验 |
@@ -88,7 +88,7 @@ CREATE TABLE entities (
 - **结构不变式**：有 `children` = 分支（**不可赋值**）；无 `children` = 叶子（**可赋值**）。删除分支的最后一个子节点 → 该节点降级为叶子。叶子 `value` 允许缺省（空值）。嵌套层数不限；顺序 = 数组顺序（**无 `sort_order` 列、无迁移**）。
 - **叶子值类型**：`string | number`（与 `DeltaChange` 的 `from`/`to`/`value` 同域）；UI 自动判定（纯数字 → number）。
 - **结构与值分工**：增删/改名/排序节点 = 人工编辑（`PUT /entity/character/:id` partial，**不产生 Delta**）；**只有已存在的叶子**可被 Delta 修改，字段路径 = 点分拼接（如 `ability_panel.火系.等级`）。
-- **宽校验**：`characterDataSchema` 对 `ability_panel` 不做结构精校验（沿用 `custom_fields` 的宽松先例）——UI 输入受控 + 读取端防御（结构非法按空面板处理，不抛错打挂 `computeState`）。**因此所有读端（摘要/统计/叶子路径枚举/副本派生）都必须先过 `parseAbilityPanel` 规范化**，消费方不得假定 `data.ability_panel` 是规范形状。
+- **宽校验**：`characterDataSchema` 对 `ability_panel` 不做结构精校验（`z.unknown().optional()`，沿用 `custom_fields` 的宽松先例）——UI 输入受控 + 读取端防御（**口径：缺失/顶层非数组 → 空面板；数组内坏元素跳过、合法元素保留**，绝不抛错打挂 `computeState`/列表接口）。**因此所有读端（摘要/统计/叶子路径枚举/副本派生）都必须先过 `parseAbilityPanel` 规范化**，消费方不得假定 `data.ability_panel` 是规范形状。
 
 **`status` 移除与 `abilities` 迁移（007 迁移，SCHEMA_VERSION 7）**：
 

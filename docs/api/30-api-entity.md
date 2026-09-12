@@ -133,8 +133,8 @@ type: "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "r
 
 // 各 type 的 data 字段说明：
 // character: { role?, description?, alias?, gender?, age?, race?, personality?: string[], motivation?, ability_panel?, custom_fields? }
-//            （2026-09：description 必填（**仅前端校验** + AI 工具约定；服务端不硬校验，保护提案/
-//             旧数据/备份导入三条路径）；status 已移除；abilities 经 007 迁为 ability_panel；
+//            （2026-09：description 必填（**仅前端校验** + AI 工具约定；**校验落地 = 卡 3.3 前端表单**，
+//             服务端不硬校验，保护提案/旧数据/备份导入三条路径）；status 已移除；abilities 经 007 迁为 ability_panel；
 //             分层与面板结构见 ../db/schema.md「人物 data 分层」）
 // setting:   { category?, parent_id?, description?, rules?: string[], custom_fields? }
 // location:  { type?, parent_id?, description?, custom_fields? }
