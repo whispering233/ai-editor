@@ -22,7 +22,8 @@
   - 后端：`POST /relation` 对 `relation_type ∈ {plants, advances, resolves}` 且 `source_type=outline_node` 校验节点为 `chapter`（非章 → 400）。提案层 `propose_add_relation` 同步拒绝。
   - 前端：`HookPanel` 四处节点选择器（埋点 / 推进回收 / `expected_resolve_node_id` / 选择器通用件）只列章节点；`lib/hook-panel.ts` 的 `anchorNodeForAbandon` 退化分支由「树末节点」改为「**树末章**」。
   - 工具：`suggest_hook_payoff` 候选由 scene 改为 **chapter**（注释与描述同步）；`find_hook_opportunities` 输入只接受章；工具描述补「仅章」。
-  - 验收：场景节点建 `plants` → 400；HookPanel 下拉无场景/卷；大纲页伏笔徽标只出现在章行；弃用伏笔在无 `current_position` 时锚到树末章。
+  - **提案层补齐（卡片 1.2 过渡态遗留，oracle 复核为阻塞级）**：`client/src/lib/hook-panel.ts` 的 `runLifecycleWrite` 直连 `POST /delta`、node_id 来自全层级选择器 → 选场景/卷现在直接 400（用户可见回归）；`runAbandonWrite` 在未设 `current_position` 时退回树末节点（多为场景）→ 同样 400。`propose_advance_hook` / `propose_resolve_hook`（`tools/src/proposal/hook.ts`）与 executor（`executor/hook.ts`）锚点同样需保证为章——executor 直写 db **绕过 REST 校验**，必须在提案层拒绝非章。
+  - 验收：场景节点建 `plants` → 400；HookPanel 下拉无场景/卷；大纲页伏笔徽标只出现在章行；弃用伏笔在无 `current_position` 时锚到树末章；推进/回收/废弃三条路径均不产生非章锚点 Delta（含无当前位置、无埋点节点的退化分支）。
   - 测试：`packages/server/src/routes/relation.test.ts`、`packages/tools/src/analysis/hook.test.ts`、`packages/client/src/lib/hook-panel.test.ts` 补用例。
 
 ## 批次 2 · 人物数据模型（未开工）
