@@ -17,9 +17,18 @@
 import { mkdtempSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
-import { defaultProposalStore, type RunAgentDeps } from "@whispering233/ai-editor-agent";
+import {
+  fauxAssistantMessage,
+  fauxProvider,
+  fauxText,
+  fauxToolCall,
+  InMemoryCredentialStore,
+} from "@earendil-works/pi-ai";
+import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { createProjectRuntime, defaultProposalStore, openProjectSessionManager } from "@whispering233/ai-editor-agent";
+import type { RuntimeFactory } from "../chat-runtime.js";
 import { errorHandler, ok } from "../middleware/error.js";
 import {
   closeProject,
@@ -70,6 +79,33 @@ function buildApp(chat: Hono): Hono {
   app.route("/api/v1/chat", chat);
   app.route("/api/v1/proposal", proposalRoutes);
   return app;
+}
+
+// ============ 对话链路（离线 faux provider，不碰真实 DeepSeek） ============
+
+/**
+ * 冒烟用对话运行时工厂：faux provider（离线的脚本化模型）+ 真实项目 sessions/ 落盘。
+ * 与生产 defaultRuntimeFactory 同构，只把模型换成脚本——链路其余部分（工具、会话、SSE）全真。
+ */
+async function createFauxChat(): Promise<{ factory: RuntimeFactory; faux: ReturnType<typeof fauxProvider> }> {
+  const faux = fauxProvider({
+    models: [{ id: "faux-1", name: "Faux 1", contextWindow: 128_000, maxTokens: 8192 }],
+  });
+  const credentials = new InMemoryCredentialStore();
+  await credentials.modify(faux.provider.id, async () => ({ type: "api_key", key: "faux-key" }));
+  const modelRuntime = await ModelRuntime.create({ credentials, modelsPath: null, refreshOnCreate: false });
+  modelRuntime.registerNativeProvider(faux.provider);
+  await modelRuntime.refresh({ allowNetwork: false });
+  const model = modelRuntime.getModel(faux.provider.id, "faux-1")!;
+  const factory: RuntimeFactory = ({ target, sessionFile }) =>
+    createProjectRuntime({
+      projectRoot: target.root,
+      toolContext: { db: target.db, outlineDir: target.root, projectId: target.projectId },
+      modelRuntime,
+      model,
+      sessionManager: openProjectSessionManager(target.root, sessionFile),
+    });
+  return { factory, faux };
 }
 
 // ============ HTTP 请求辅助 ============
@@ -185,26 +221,18 @@ afterEach(() => {
 
 // ============ S11.2 端到端冒烟链路（8 步） ============
 
-describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta→回收站→伏笔→对话（真实 HTTP + tmp 项目 + mock LLM）", () => {
+describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta→回收站→伏笔→对话（真实 HTTP + tmp 项目 + 离线 faux LLM）", () => {
   it("完整链路 8 步走查全绿", async () => {
     const projectDir = makeTmpDir();
 
- // mock LLM（决策：对话链路注入 mock produce，不经真实 DeepSeek）：
- // 第 1 轮：文本 + get_outline 工具调用（真实 dispatcher 在真实项目上执行真实工具）；
- // 第 2 轮：纯文本收尾（stop）。显式泛型保持 ok:true 字面类型（ChatStreamResult 判别联合）。
-    const produce = vi.fn<RunAgentDeps["produce"]>(async (_messages, _signal, onEvent) => {
-      if (produce.mock.calls.length === 1) {
-        onEvent?.({ type: "text", delta: "让我看看大纲。" });
-        onEvent?.({
-          type: "tool_call",
-          toolCall: { id: "call_1", name: "get_outline", rawArguments: "{}", arguments: {} },
-        });
-        return { ok: true, stopReason: "tool_calls", usage: null };
-      }
-      onEvent?.({ type: "text", delta: "大纲共一卷、一章、两场，结构完整。" });
-      return { ok: true, stopReason: "stop", usage: null };
-    });
-    const app = buildApp(createChatRoutes({ produce }));
+ // 离线 LLM（决策：对话链路注入 faux 运行时工厂，不经真实 DeepSeek）：
+ // 第 1 轮：文本 + get_outline 工具调用（真实工具在真实项目上执行）；第 2 轮：纯文本收尾。
+    const { factory, faux } = await createFauxChat();
+    faux.setResponses([
+      fauxAssistantMessage([fauxText("让我看看大纲。"), fauxToolCall("get_outline", {})]),
+      fauxAssistantMessage("大纲共一卷、一章、两场，结构完整。"),
+    ]);
+    const app = buildApp(createChatRoutes({ runtimeFactory: factory }));
 
  // ============ 步骤 1：建项目（create + open + config，三文件落地） ============
     const created = await api(app, "POST", "/api/v1/project/create", {
@@ -473,7 +501,7 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(advances.status).toBe(200);
     expect(advances.body.data.relations.map((r: { sourceId: string }) => r.sourceId)).toEqual([sc2Id]);
 
- // ============ 步骤 8：对话（mock LLM 两轮：tool_call 轮 + 文本收尾轮；SSE 六类事件子集） ============
+ // ============ 步骤 8：对话（离线 faux LLM 两轮：工具调用轮 + 文本收尾轮；pi 事件投影） ============
     const chatRes = await app.request("/api/v1/chat", {
       method: "POST",
       headers: { ...HOST_HEADERS, "Content-Type": "application/json" },
@@ -483,23 +511,29 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(chatRes.headers.get("content-type")).toContain("text/event-stream");
 
     const frames = await readSseFrames(chatRes);
- // 事件序列：text → tool_call → tool_result → text → done（六类事件子集）
-    expect(frames.map((f) => f.event)).toEqual(["text", "tool_call", "tool_result", "text", "done"]);
-    expect(frames[0].data).toEqual({ delta: "让我看看大纲。" });
-    expect(frames[1].data).toEqual({ tool: "get_outline", args: {}, id: "call_1" });
- // tool_result 为真实工具执行结果（真实 dispatcher + 真实项目）：大纲树 JSON
-    const toolResult = frames[2].data as { tool: string; result: string; id: string };
-    expect(toolResult.tool).toBe("get_outline");
-    expect(toolResult.id).toBe("call_1");
-    const outlineJson = JSON.parse(toolResult.result) as { id: string; children: Array<{ title: string }> };
-    expect(outlineJson.id).toBe("root");
-    expect(outlineJson.children[0].title).toBe("第一卷");
-    expect(frames[3].data).toEqual({ delta: "大纲共一卷、一章、两场，结构完整。" });
-    const done = frames[4].data as { session_id: string };
-    expect(done.session_id).toMatch(/^sess_/); // 新建会话（id 约定）
-    const sessionId = done.session_id;
+    const frameNames = frames.map((f) => f.event);
+ // 事件集（docs/api/80-api-chat.md）：首帧 session + 消息生命周期 + 工具执行 + 末帧 agent_end；无 partial
+    expect(frameNames[0]).toBe("session");
+    expect(frameNames[frameNames.length - 1]).toBe("agent_end");
+    expect(frameNames).toContain("message_update");
+    expect(frameNames).toContain("tool_execution_start");
+    expect(frameNames).toContain("tool_execution_end");
+    const sessionId = (frames[0].data as { session_id: string }).session_id;
+    expect(sessionId.length).toBeGreaterThan(0);
 
- // 会话落库：列表 + 消息配对（user/assistant/tool + tool_calls/tool_call_id）
+ // 工具结果为真实工具执行结果（真实项目上的 get_outline）：大纲树 JSON
+    const toolEnd = frames.find((f) => f.event === "tool_execution_end")!.data as {
+      toolName: string;
+      isError: boolean;
+      result: { content: Array<{ type: string; text: string }> };
+    };
+    expect(toolEnd.toolName).toBe("get_outline");
+    expect(toolEnd.isError).toBe(false);
+    const outlineJson = JSON.parse(toolEnd.result.content[0]!.text) as { id: string; children: Array<{ title: string }> };
+    expect(outlineJson.id).toBe("root");
+    expect(outlineJson.children[0]!.title).toBe("第一卷");
+
+ // 会话落盘：列表 + 消息投影（user/assistant/tool/assistant，工具调用 id 成对）
     const sessions = await api(app, "GET", "/api/v1/chat/sessions");
     expect(sessions.status).toBe(200);
     expect(sessions.body.data.sessions).toHaveLength(1);
@@ -511,32 +545,18 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(msgs.body.data.messages.map((m: { role: string }) => m.role)).toEqual(["user", "assistant", "tool", "assistant"]);
     expect(msgs.body.data.messages[0].content).toBe("帮我看看大纲");
     expect(msgs.body.data.messages[1].toolCalls).toHaveLength(1);
-    expect(msgs.body.data.messages[1].toolCalls[0].function.name).toBe("get_outline");
-    expect(msgs.body.data.messages[2].toolCallId).toBe("call_1");
+    expect(msgs.body.data.messages[1].toolCalls[0].name).toBe("get_outline");
+    expect(msgs.body.data.messages[2].toolCallId).toBe(msgs.body.data.messages[1].toolCalls[0].id);
     expect(msgs.body.data.messages[3].content).toBe("大纲共一卷、一章、两场，结构完整。");
 
- // ============ 步骤 9：提案链路（oracle 审核建议——AI 写操作端到端：propose → proposal 事件 → confirm → 真实落库） ============
- // 独立 mock produce：第 1 轮 = propose_create_entity 工具调用（真实 dispatcher 在真实项目执行 →
- // 提案入仓 + proposal 事件），第 2 轮纯文本收尾；与步骤 8 共用同一 open 项目（defaultProposalStore
- // 是模块级单例，跨 app 实例共享——proposal 事件与 confirm 路由同仓，符合生产单进程语义）
-    const proposeProduce = vi.fn<RunAgentDeps["produce"]>(async (_messages, _signal, onEvent) => {
-      if (proposeProduce.mock.calls.length === 1) {
-        onEvent?.({
-          type: "tool_call",
-          toolCall: {
-            id: "call_2",
-            name: "propose_create_entity",
-            rawArguments: JSON.stringify({ type: "character", name: "AI 提案角色" }),
-            arguments: { type: "character", name: "AI 提案角色" },
-          },
-        });
-        return { ok: true, stopReason: "tool_calls", usage: null };
-      }
-      onEvent?.({ type: "text", delta: "已提交角色创建提案，请确认。" });
-      return { ok: true, stopReason: "stop", usage: null };
-    });
-    const proposeApp = buildApp(createChatRoutes({ produce: proposeProduce }));
-    const proposeRes = await proposeApp.request("/api/v1/chat", {
+ // ============ 步骤 9：提案链路（AI 写操作端到端：propose 工具 → tool_execution_end.details → confirm → 真实落库） ============
+ // 同一 open 项目、同一 faux 工厂：第 1 轮 = propose_create_entity 工具调用（真实工具入仓），
+ // 第 2 轮纯文本收尾；defaultProposalStore 是模块级单例，提案与 confirm 路由同仓（生产单进程语义）
+    faux.setResponses([
+      fauxAssistantMessage([fauxToolCall("propose_create_entity", { type: "character", name: "AI 提案角色" })]),
+      fauxAssistantMessage("已提交角色创建提案，请确认。"),
+    ]);
+    const proposeRes = await app.request("/api/v1/chat", {
       method: "POST",
       headers: { ...HOST_HEADERS, "Content-Type": "application/json" },
       body: JSON.stringify({ message: "新建一个角色" }),
@@ -544,31 +564,35 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(proposeRes.status).toBe(200);
 
     const proposeFrames = await readSseFrames(proposeRes);
- // 事件序列：tool_call(propose) → tool_result → proposal → text → done（proposal 在对应 tool_result 后、循环继续前）
-    expect(proposeFrames.map((f) => f.event)).toEqual(["tool_call", "tool_result", "proposal", "text", "done"]);
-    expect((proposeFrames[0].data as { tool: string }).tool).toBe("propose_create_entity");
-    const proposal = proposeFrames[2].data as { proposal_id: string; type: string };
+ // 提案载荷随 tool_execution_end 帧到达（不再有独立 proposal 事件，见 docs/api/80-api-chat.md）
+    const proposeToolEnd = proposeFrames.find((f) => f.event === "tool_execution_end")!.data as {
+      toolName: string;
+      result: { details?: { proposal_id: string; type: string; preview: Record<string, unknown> } };
+    };
+    expect(proposeToolEnd.toolName).toBe("propose_create_entity");
+    const proposal = proposeToolEnd.result.details!;
     expect(proposal.proposal_id).toMatch(/^prop_/);
     expect(proposal.type).toBe("propose_create_entity");
+    expect(typeof proposal.preview.summary).toBe("string");
 
  // confirm → executor 真实落库（快照重校验 + 一次性消费；result = 新建实体 { id }）
-    const confirmed = await api(proposeApp, "POST", `/api/v1/proposal/${proposal.proposal_id}/confirm`);
+    const confirmed = await api(app, "POST", `/api/v1/proposal/${proposal.proposal_id}/confirm`);
     expect(confirmed.status).toBe(200);
     expect(confirmed.body.data.confirmed).toBe(true);
     expect(confirmed.body.data.result.id).toMatch(/^char-/);
 
  // 实体真实落库可见（GET /entity/character 列表含新角色）
-    const chars = await api(proposeApp, "GET", "/api/v1/entity/character");
+    const chars = await api(app, "GET", "/api/v1/entity/character");
     expect(chars.status).toBe(200);
     expect(chars.body.data.items.map((e: { name: string }) => e.name)).toContain("AI 提案角色");
 
  // 一次性消费：重复 confirm → 404 PROPOSAL_NOT_FOUND（终态守卫）
-    const dupConfirm = await api(proposeApp, "POST", `/api/v1/proposal/${proposal.proposal_id}/confirm`);
+    const dupConfirm = await api(app, "POST", `/api/v1/proposal/${proposal.proposal_id}/confirm`);
     expect(dupConfirm.status).toBe(404);
     expect(dupConfirm.body.error.code).toBe("PROPOSAL_NOT_FOUND");
 
  // 会话落库（步骤 8 + 步骤 9 共 2 个会话，按项目隔离）
-    const sessions2 = await api(proposeApp, "GET", "/api/v1/chat/sessions");
+    const sessions2 = await api(app, "GET", "/api/v1/chat/sessions");
     expect(sessions2.status).toBe(200);
     expect(sessions2.body.data.sessions).toHaveLength(2);
   });

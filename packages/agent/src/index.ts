@@ -1,9 +1,8 @@
 // @whispering233/ai-editor-agent 入口
 //
-// 旧内核（自建循环/上下文/会话/调度）：session.ts / prompts.ts / context.ts / run.ts / executor.ts
-// —— K3 删除；此前保持导出以兼容 server 层的过渡期调用。
-// pi 运行时（换内核后的事实来源）：runtime/ —— 模型/凭据/会话/循环都由 pi 承担，
-// 本包负责装配（ModelRuntime + SessionManager + AgentSession）、内核提示词、工具适配与事件映射。
+// 本包 = pi 运行时装配层：模型/凭据/会话/循环都由 pi 承担（见 docs/design/architecture.md「AI 运行时」），
+// 本包只负责装配（ModelRuntime + SessionManager + AgentSession）、内核提示词、领域工具适配、
+// 事件投影（→ SSE 帧）与提案仓。
 
 import { TOOLS_PKG_NAME } from "@whispering233/ai-editor-tools";
 
@@ -11,30 +10,36 @@ export const AGENT_PKG_NAME = "@whispering233/ai-editor-agent";
 export const AGENT_PKG_VERSION = "0.1.0";
 export const TOOLS_DEP = TOOLS_PKG_NAME;
 
-export * from "./session.js";
-export * from "./context.js";
-export * from "./run.js";
-export * from "./executor.js";
-
-// pi 运行时（显式列举：旧 prompts.ts 的 KERNEL_PROMPT 已废弃，不再从包根转发）
 export {
   AGENTS_FILE_NAME,
   createCustomTools,
   createPingFrame,
   createProposalSink,
+  createProposalStore,
   createProjectRuntime,
   createSessionFrame,
+  defaultProposalStore,
   buildResourceLoaderOptions,
   estimateTokens,
   extractText,
   FOCUS_TITLE,
+  findProjectSession,
   getThinkingPreview,
   KERNEL_PROMPT,
+  lastVisibleSessionText,
+  listProjectSessions,
   NoModelConfiguredError,
+  openProjectSessionManager,
   projectAgentsFilePath,
   projectMessageForWire,
+  projectSessionMessages,
   projectSessionsDir,
+  PROPOSAL_BUILDERS,
+  PROPOSAL_MAX_COUNT,
+  PROPOSAL_TTL_MS,
   readProjectAgentsFile,
+  readProjectSession,
+  readSessionThinking,
   resolveAgentDir,
   resolveDefaultModel,
   SESSIONS_DIR_NAME,
@@ -51,14 +56,20 @@ export type {
   CreateProposalSinkOptions,
   ProjectRuntime,
   ProjectRuntimeInput,
+  Proposal,
+  ProposalStore,
+  ProposalStoreOptions,
   ProposalPayload,
   ProposalSink,
   ProposalSinkInput,
   ResourceLoaderOptions,
+  SessionEntry,
+  SessionInfo,
   SseFrame,
   SseProjectionOptions,
   ThinkingLevel,
   ThinkingPreviewProjection,
   WireMessage,
+  WireSessionMessage,
   WireToolCall,
 } from "./runtime/index.js";

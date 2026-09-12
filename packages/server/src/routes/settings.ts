@@ -21,7 +21,7 @@ import {
   type ThinkingLevel,
 } from "@whispering233/ai-editor-shared/schemas";
 import { DEFAULT_PROVIDER, getAvailableModels, REGISTERED_PROVIDERS } from "@whispering233/ai-editor-llm";
-import { DEFAULT_TOOL_RESULT_MAX_TOKENS } from "@whispering233/ai-editor-agent";
+import { TOOL_RESULT_MAX_TOKENS } from "@whispering233/ai-editor-agent";
 import { HttpError, ok } from "../middleware/error.js";
 
 /** 默认模型名（settings 端点；两 provider 目录均含该模型——兜底/初始态稳定） */
@@ -49,8 +49,8 @@ export const DEFAULT_THINKING_LEVEL: ThinkingLevel = "high";
 /** 缺省历史预算比例（历史层 = 激活模型 contextWindow × 该值；config.json 缺失/非法时回落） */
 export const DEFAULT_HISTORY_RATIO = 0.15;
 
-/** 缺省单条工具结果 token 上限（单一事实源 = agent 常量；此处仅再导出供本包消费） */
-export { DEFAULT_TOOL_RESULT_MAX_TOKENS };
+/** 缺省单条工具结果 token 上限（单一事实源 = agent 运行时常量；此处仅再导出供本包消费） */
+export const DEFAULT_TOOL_RESULT_MAX_TOKENS = TOOL_RESULT_MAX_TOKENS;
 
 /** 上下文总闸占窗口的比例（不可配——失控保护安全网，见 docs/design/config.md「可配 / 不可配边界」） */
 export const CONTEXT_GATE_RATIO = 0.5;

@@ -2,6 +2,7 @@
 
 export * from "./paths.js";
 export * from "./resources.js";
+export * from "./sessions.js";
 export * from "./system-prompt.js";
 export * from "./tool-result.js";
 export * from "./tools.js";

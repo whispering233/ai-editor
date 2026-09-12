@@ -38,10 +38,6 @@ import {
   relationCreateReqSchema,
   relationQuerySchema,
   relationUpdateMetaReqSchema,
-  sseDoneEventSchema,
-  sseProposalEventSchema,
-  sseToolCallEventSchema,
-  sseToolResultEventSchema,
   userConfigFileSchema,
 } from "./api.js";
 
@@ -68,11 +64,12 @@ describe("ErrorCode 完整性", () => {
     expect(ERROR_CODES).toContain("DELTA_CONFLICT");
   });
 
-  it("补充码：工具结果截断 + agent 终止", () => {
+  it("补充码：工具结果截断 + 会话/对话流冲突", () => {
     expect(ERROR_CODES).toContain("TOOL_RESULT_TOO_LARGE");
-    expect(ERROR_CODES).toContain("AGENT_MAX_ITERATIONS");
-    expect(ERROR_CODES).toContain("AGENT_TIMEOUT");
-    expect(ERROR_CODES).toContain("AGENT_TOKEN_BUDGET");
+    expect(ERROR_CODES).toContain("SESSION_NOT_FOUND");
+    expect(ERROR_CODES).toContain("SESSION_BUSY");
+    expect(ERROR_CODES).toContain("CHAT_BUSY");
+    expect(ERROR_CODES).toContain("THINKING_NOT_FOUND");
   });
 
   it("errorCodeSchema 拒绝未知错误码；apiErrorSchema 形状正确", () => {
@@ -544,26 +541,6 @@ describe("chat 端点", () => {
         context: { focus_entity_type: "character", focus_entity_id: "char-1", focus_node_id: "sc-30" },
       }).message,
     ).toBe("张三在第30章战力如何");
-  });
-});
-
-describe("SSE 事件", () => {
-  it("tool_call / tool_result / proposal / done 事件 data parse", () => {
-    expect(sseToolCallEventSchema.parse({ tool: "get_entity", args: { type: "character", id: "char-1" }, id: "call_1" }).id).toBe("call_1");
-    expect(sseToolResultEventSchema.parse({ tool: "get_entity", result: { id: "char-1" }, id: "call_1" }).tool).toBe("get_entity");
-    expect(
-      sseProposalEventSchema.parse({ proposal_id: "prop_1", type: "propose_create_entity", preview: { name: "李四" } }).proposal_id,
-    ).toBe("prop_1");
-    expect(sseDoneEventSchema.parse({ session_id: "sess_1" }).session_id).toBe("sess_1");
-  });
-
-  it("done 帧可携带生效预算 context_budget（占用条分母，A1；旧帧无该字段仍可解析）", () => {
-    const parsed = sseDoneEventSchema.parse({
-      session_id: "sess_1",
-      context_budget: { history: 15000, total: 18600 },
-    });
-    expect(parsed.context_budget).toEqual({ history: 15000, total: 18600 });
-    expect(sseDoneEventSchema.parse({ session_id: "sess_1" }).context_budget).toBeUndefined();
   });
 });
 

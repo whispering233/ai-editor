@@ -24,6 +24,11 @@
 // 对话历史持久化：本会话的消息写入项目目录 sessions/（格式 = pi session v3，见 docs/db/schema.md）；
 // 服务重启后携带同一 session_id 即可继续上次对话。
 
+// Res: 404 SESSION_NOT_FOUND —— session_id 已给出但磁盘上不存在（客户端应改为新会话重试）
+// Res: 409 CHAT_BUSY —— 当前项目已有在途 chat 流
+// Res: 400 LLM_API_KEY_MISSING —— 当前模型所属 provider 未配置凭据
+// Res: 409 NO_PROJECT_OPEN —— 无当前项目
+
 // Res: SSE stream（text/event-stream）
 // 帧格式统一为 `event: <type>` + `data: <json>`。事件集 = pi AgentSessionEvent 的**轻量投影**
 // （服务端剥离 `partial` 大对象并丢弃内部状态事件；具体见下表）。
@@ -112,7 +117,7 @@ id: string;                  // 会话 ID（不透明值；服务端经磁盘发
 
 ```typescript
 // Query
-blockIndex: number;           // 必填，非负整数；越界/非 thinking 块 → 404 THINKING_NOT_FOUND
+blockIndex: number;           // 必填，非负整数；缺失/非法 → 400 VALIDATION_ERROR；越界/非 thinking 块 → 404 THINKING_NOT_FOUND
 
 // Res: 200
 { thinking: string }

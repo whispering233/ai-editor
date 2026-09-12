@@ -11,7 +11,7 @@
 | 项目 `project.json` | id/name/language/schema_version/current_position/backup_frequency_minutes（自动备份频率枚举 1/5/10/15/30/60，null/0 关闭，缺省 10） | `docs/db/schema.md` |
 | 项目目录 `AGENTS.md` | 项目规则唯一事实源（取代废弃的 `project.json` `prompt`）：设置页直编 + 文件管理器直接编辑（mtime 检测外部修改） | `docs/design/20-context.md` §4；端点 `docs/api/10-api-project.md` |
 | 项目目录 `sessions/` | 对话历史（一 session 一 JSONL，格式 = pi session v3） | `docs/db/schema.md` |
-| 创作根 `.ai-editor/config.json` 的 `debug` 段 | 调试日志开关：`{ "debug": { "enabled": true, "categories": [...] } }`，五类别 chat/request/stream/usage/http；categories 缺失 = 全部、enabled 缺失/false = 全关；文件不存在/非法 JSON/结构不符 = 全关 | server 包 `src/debug.ts` |
+| 创作根 `.ai-editor/config.json` 的 `debug` 段 | 调试日志开关：`{ "debug": { "enabled": true, "categories": [...] } }`，四类别 chat/request/usage/http；categories 缺失 = 全部、enabled 缺失/false = 全关；文件不存在/非法 JSON/结构不符 = 全关 | server 包 `src/debug.ts` |
 | 浏览器 localStorage | 展示层偏好，不进数据文件：主题 `ai-editor:theme`、三栏面板 `ai-editor:panels`、画布坐标/缩放 | `docs/ui/DESIGN.md` |
 
 **读写边界**：

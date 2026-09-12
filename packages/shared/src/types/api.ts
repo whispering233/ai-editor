@@ -45,17 +45,14 @@ export const ERROR_CODES = [
   "PROJECT_VERSION_NEWER", // 409 open 时项目 data.db user_version 高于当前程序版本（拒绝打开并提示升级程序，堵降级数据丢失）
   "BACKUP_TARGET_EXISTS", // 409 重命名备份目标文件名已存在（B2.6：renameSync 目标存在会静默覆盖——显式拒绝防数据丢失）
   "REFERENCE_FILE_MISSING", // 409 参考资料 file 类文件缺失（PUT 更新时读原文件失败——外部删除，提示先扫描同步）
-  "SESSION_NOT_FOUND", // 404 删除会话时目标 sessions/<id>.jsonl 不存在
-  "SESSION_BUSY", // 409 删除会话时该会话有在途 SSE 流（拒删——append 会把文件原地重建出僵尸会话）
+  "SESSION_NOT_FOUND", // 404 会话不存在（消息/思维链/删除端点：id 经磁盘发现未命中）
+  "SESSION_BUSY", // 409 删除会话时该会话有在途 SSE 流（拒删）
+  "CHAT_BUSY", // 409 当前项目已有在途 chat 流（单项目单流约束，docs/api/80-api-chat.md）
+  "THINKING_NOT_FOUND", // 404 思维链全文端点：blockIndex 越界或该块非 thinking
  // ---- 废弃（保留兼容）----
   "DELTA_CONFLICT", // 已废弃（2026-08 修订：computeState 以 conflicts 字段替代 409）
- // ---- 命名（SSE error 事件用）----
-  "TOOL_RESULT_TOO_LARGE", // 工具结果 token 预算超限：截断/拒绝该工具结果
-  "AGENT_DISPATCH_ERROR", // 工具调度器缺陷（S7.3 防御：结果条数不符 / id 错位 / 调度器抛错），终止循环
-  "AGENT_INTERNAL_ERROR", // agent 循环内部未知异常（S7.3 防御路径——chatStream 不 throw，理论不可达）
-  "AGENT_MAX_ITERATIONS", // agent 循环超 8 轮上限，发 error 事件终止
-  "AGENT_TIMEOUT", // 单轮 120s 超时终止
-  "AGENT_TOKEN_BUDGET", // 上下文 token 预算超限终止
+ // ---- 命名（调试日志用）----
+  "TOOL_RESULT_TOO_LARGE", // 单条工具结果超 token 上限：截断 + 结构化提示（不终止对话；同时写 usage 类别调试日志）
 ] as const;
 
 /** ErrorCode 枚举 schema */
@@ -877,7 +874,16 @@ export const chatSessionsResSchema = z.object({
   sessions: z.array(chatSessionSummarySchema),
 });
 
-// GET /api/v1/chat/sessions/:id/messages（按 created_at 升序；tool 消息经 toolCallId 关联 assistant.tool_calls[].id）
+// GET /api/v1/chat/sessions/:id/messages（按时间升序；tool 消息经 toolCallId 关联 assistant 消息的 toolCalls[].id）
+
+/** 思维链投影（列表/历史只给预览 + 定位参数；全文走按需端点，见 docs/api/80-api-chat.md） */
+export const chatThinkingPreviewSchema = z.object({
+  preview: z.string(), // 前 240 字符预览
+  deferred: z.literal(true), // 全文需按需拉取
+  blockIndex: z.number().int(), // 取全文时的块下标
+  length: z.number().int(), // 原文字符数
+});
+
 export const chatMessagesResSchema = z.object({
   sessionId: z.string(),
   messages: z.array(
@@ -885,11 +891,19 @@ export const chatMessagesResSchema = z.object({
       id: z.string(),
       role: z.enum(["user", "assistant", "tool"]),
       content: z.string().nullable().optional(),
+      thinking: z.array(chatThinkingPreviewSchema).optional(), // assistant 消息的思维链预览
       toolCalls: z.array(z.unknown()).optional(), // assistant 消息的工具调用数组
       toolCallId: z.string().nullable().optional(), // tool 消息关联的调用 id
+      isError: z.boolean().optional(), // tool 消息是否失败
       createdAt: z.string(),
     }),
   ),
+});
+
+// GET /api/v1/chat/sessions/:id/messages/:messageId/thinking
+// 按需读取某条 assistant 消息的思维链全文（列表接口只回预览）
+export const chatThinkingResSchema = z.object({
+  thinking: z.string(),
 });
 
 // DELETE /api/v1/chat/sessions/:id（物理删会话文件；400 VALIDATION_ERROR / 404 SESSION_NOT_FOUND / 409 SESSION_BUSY）
@@ -1018,53 +1032,8 @@ export const namesResolveResSchema = z.object({
 
 export type NamesResolveResult = z.infer<typeof namesResolveResSchema>;
 
-// ============ SSE 事件（chat 端点事件流，第 738-765 行） ============
-
-/** 心跳 ping（每 15-30s）：空 payload */
-export const ssePingEventSchema = z.object({});
-
-/** tool_call：AI 调用了工具 */
-export const sseToolCallEventSchema = z.object({
-  tool: z.string(),
-  args: z.record(z.string(), z.unknown()),
-  id: z.string(), // call_ 前缀（成对重组依据）
-});
-
-/** tool_result：工具执行结果 */
-export const sseToolResultEventSchema = z.object({
-  tool: z.string(),
-  result: z.unknown(),
-  id: z.string(), // 与 tool_call 的 id 成对
-});
-
-/** text：AI 文本回复片段 */
-export const sseTextEventSchema = z.object({
-  delta: z.string(),
-});
-
-/** proposal：AI 发出提案（完整预览仅经此事件推送 GUI，tool_result 不含预览，2026-08 修订） */
-export const sseProposalEventSchema = z.object({
-  proposal_id: z.string(), // prop_ 前缀
-  type: z.string(), // 提案对应工具名（如 "propose_create_entity"）
-  preview: z.unknown(),
-});
-
-/** done 帧携带的生效预算（占用条分母口径；服务端在上下文组装后算出） */
-export const sseContextBudgetSchema = z.object({
-  history: z.number(), // 本轮生效历史预算（contextWindow × history_ratio，经总闸 clamp）
-  total: z.number(), // history + system + 工具清单 + focus 四层之和（= 占用条分母）
-});
-
-export type SSEChatContextBudget = z.infer<typeof sseContextBudgetSchema>;
-
-/** done：对话轮次结束 */
-export const sseDoneEventSchema = z.object({
-  session_id: z.string(), // sess_ 前缀
-  context_budget: sseContextBudgetSchema.optional(), // 生效预算（缺失 = 未计算，前端隐藏占用条）
-});
-
-/** error：流终止（客户端收到即停止解析） */
-export const sseErrorEventSchema = z.object({
-  code: errorCodeSchema,
-  message: z.string(),
-});
+// ============ chat SSE 事件 ============
+//
+// 事件集（服务端→客户端的 pi 事件投影）以 docs/api/80-api-chat.md 为契约。本文件**不再镜像**
+// 一份可能漂移的帧 schema：旧的 text/tool_call/tool_result/proposal/done/error 事件集已随内核更换退场，
+// 客户端在自有 SSE 解析层（fetch + ReadableStream，非 EventSource）按文档帧表消费。

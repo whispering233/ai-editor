@@ -21,6 +21,7 @@ import { SCHEMA_VERSION } from "@whispering233/ai-editor-db";
 import { nowIso } from "@whispering233/ai-editor-db";
 import { HttpError, fail, type ApiErrorCode } from "./error.js";
 import { migratePromptToAgents, startAutoBackup, stopAutoBackup } from "../backup.js";
+import { disposeProjectRuntime } from "../chat-runtime.js";
 
 /** data.db 文件名（项目根目录） */
 export const DATA_DB_FILE_NAME = "data.db";
@@ -61,6 +62,9 @@ let currentProject: ProjectContext | null = null;
  * 调度器 tick 内重读 config 自行跟随。
  */
 export function setCurrentProject(project: ProjectContext | null): void {
+  // 旧项目的对话运行时在此释放：中止在途流 → dispose 会话订阅 → 清空提案仓
+  //（单点覆盖 create/open/close/restore 全部切换路径，见 chat-runtime.ts）
+  disposeProjectRuntime();
   currentProject = project;
   if (project !== null) {
     startAutoBackup(project);

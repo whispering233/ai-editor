@@ -1,219 +1,94 @@
-// 对话路由（U3 切片 1 + S7.6）：GET /api/v1/chat/sessions、GET /api/v1/chat/sessions/:id/messages、
-// POST /api/v1/chat（POST + SSE 对话端点，切片 7 最后一张卡）、
-// DELETE /api/v1/chat/sessions/:id（物理删会话文件，B3）
+// 对话路由（K4）：POST /api/v1/chat（POST + SSE）、会话列表 / 消息历史 / 思维链全文 / 删除会话
 //
+// **本文件是 docs/api/80-api-chat.md 那份契约的服务端实现**——SSE 事件集与过滤约定见该文档，
+// 事件投影的唯一实现在 agent 包 `runtime/events.ts`（本文件只做「取帧 → 写帧」与日志）。
 //
-// 语义约定：
-// - 无当前项目 → 409 NO_PROJECT_OPEN（requireCurrentProject，与其他业务路由一致）
+// 语义要点：
+// - 无当前项目 → 409 NO_PROJECT_OPEN（与其他业务路由一致）
 // - 请求体校验失败 → 400 VALIDATION_ERROR（JSON，非 SSE——校验在开流之前）
-// - 未配置 DeepSeek key → 400 LLM_API_KEY_MISSING（同样在开流之前，JSON）
-// - session_id 提供 → 按项目目录（`sessions/<id>.jsonl`）加载历史重建 SessionState；
-//   **非法 session_id（不匹配 `sess_` 白名单）一律当作未提供**（防御：该值会作文件名，绝不做清洗拼接）；
-//   会话归属由项目目录表达（不再有 project_id 过滤）
-// - session_id 缺省 → generateRuntimeId("session") 新建 sess_ 会话（id 约定）
+// - 单项目单在途流 → 409 CHAT_BUSY；重复会话删除 → 404 SESSION_NOT_FOUND；在途会话 → 409 SESSION_BUSY
+// - 模型/凭据缺失 → 400 LLM_API_KEY_MISSING（同样在开流之前，JSON）
+// - 会话归属由项目目录表达：`session_id` 只经磁盘发现映射到文件（**不做路径拼接**），
+//   缺省则新建会话（pi 生成 id，首帧 `session` 回给客户端）
+// - 断开（刷新/断网）→ 三路检测 → `AgentSession.abort()`；未确认提案随取消作废
 //
-// 可测试性：路由经 createChatRoutes(deps) 工厂构造——测试注入 mock produce/dispatcher/心跳/
-// 时间/提案仓，避免真实 DeepSeek 调用与全局单例污染；index.ts 挂载默认实例 chatRoutes。
+// 可测试性：`createChatRoutes(deps)` 注入运行时工厂 / 提案仓 / 心跳间隔，测试用 faux provider
+// 离线跑通全链路（不触碰真实 provider 与全局单例）。
 
+import { unlinkSync } from "node:fs";
 import { Hono, type Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import {
-  createToolDispatcher,
+  createPingFrame,
+  createSessionFrame,
   defaultProposalStore,
-  restoreSession,
-  runAgent,
-  type AgentEvent,
+  findProjectSession,
+  FOCUS_TITLE,
+  lastVisibleSessionText,
+  listProjectSessions,
+  NoModelConfiguredError,
+  projectSessionMessages,
+  readProjectSession,
+  readSessionThinking,
+  toSseFrame,
   type ProposalStore,
-  type RunAgentDeps,
-  type SessionMessage,
-  type SessionState,
-  type ToolDispatcher,
+  type ProjectRuntime,
+  type SseFrame,
 } from "@whispering233/ai-editor-agent";
-import { chatStream, resolveModelInfo } from "@whispering233/ai-editor-llm";
-import type { AbortSignalLike, LLMMessage, LLMStreamEvent, LLMToolDefinition } from "@whispering233/ai-editor-llm";
-import { listTools, type ToolDefinition } from "@whispering233/ai-editor-tools";
+import { findOutlineNode, getEntity, readOutlineFile } from "@whispering233/ai-editor-db";
+import { truncate } from "@whispering233/ai-editor-shared";
 import {
-  appendSessionMessage,
-  deleteSessionFile,
-  findOutlineNode,
-  getEntity,
-  isValidSessionId,
-  listSessionSummaries,
-  nowIso,
-  readAgentsFile,
-  readOutlineFile,
-  readSessionMessages,
-  readSessionRows,
-} from "@whispering233/ai-editor-db";
-import type { ChatMessage, ChatSessionSummary } from "@whispering233/ai-editor-shared";
-import { TOOL_PERMISSION, generateRuntimeId } from "@whispering233/ai-editor-shared";
-import { chatMessagesResSchema, chatSendReqSchema, chatSessionDeleteResSchema, chatSessionsResSchema } from "@whispering233/ai-editor-shared/schemas";
+  chatMessagesResSchema,
+  chatSendReqSchema,
+  chatSessionDeleteResSchema,
+  chatSessionsResSchema,
+  chatThinkingResSchema,
+} from "@whispering233/ai-editor-shared/schemas";
 import { HttpError, ok } from "../middleware/error.js";
 import { requireCurrentProject, type ProjectContext } from "../middleware/project.js";
 import { debugLog, isCategoryEnabled } from "../debug.js";
-import { DEFAULT_MODEL, DEFAULT_THINKING_LEVEL, effectiveApiKey, effectiveProvider, getContextBudget, getUserConfig, providerDisplayName, providerEnvVar, resolveContextBudgets } from "./settings.js";
+import {
+  acquireProjectRuntime,
+  beginActiveChat,
+  enterInFlightSession,
+  hasActiveChat,
+  isSessionInFlight,
+  leaveInFlightSession,
+  type ChatProjectTarget,
+  type RuntimeFactory,
+} from "../chat-runtime.js";
 
 // ============ 常量 ============
 
 /** 心跳间隔（15-30s 随机；测试经 deps.heartbeat 覆盖为毫秒级） */
 export const DEFAULT_HEARTBEAT_MS = { minMs: 15_000, maxMs: 30_000 } as const;
 
-/** 续聊历史重建的条数上限（超限按尾部保留—— 的 token 裁剪由 S7.2 buildContext
- * 按预算二次兜底，此处仅防御病态超长会话的加载开销） */
-export const SESSION_HISTORY_MAX_MESSAGES = 2000;
+/** 会话列表 lastMessage 截断长度（与历史口径一致，见 docs/db/schema.md） */
+export const SESSION_LAST_MESSAGE_MAX_LEN = 50;
 
-// ============ 在途会话登记（删除会话的并发防线） ============
-
-/**
- * 在途 SSE 会话计数（session_id → 进行中的流数）。
- * 用途：DELETE /sessions/:id 拒绝删除在途会话（409 SESSION_BUSY）——删除后流的后续
- * onMessages 追加会把文件**原地重建**成「僵尸会话」（删了又长出来），比报错更糟。
- * 生命周期：SSE 回调内登记，finally 注销（与流同生共死）。
- */
-const inFlightSessions = new Map<string, number>();
-
-/** 登记在途会话（计数 +1；同一会话的并发流多次登记） */
-function enterInFlightSession(sessionId: string): void {
-  inFlightSessions.set(sessionId, (inFlightSessions.get(sessionId) ?? 0) + 1);
-}
-
-/** 注销在途会话（计数 -1，归零即删条目） */
-function leaveInFlightSession(sessionId: string): void {
-  const next = (inFlightSessions.get(sessionId) ?? 1) - 1;
-  if (next <= 0) inFlightSessions.delete(sessionId);
-  else inFlightSessions.set(sessionId, next);
-}
-
-/** 该会话是否有在途流（删除端点用） */
-function isSessionInFlight(sessionId: string): boolean {
-  return (inFlightSessions.get(sessionId) ?? 0) > 0;
-}
-
-// ============ 工具定义 → LLM function calling 格式 ============
-
-/**
- * registry 工具定义 → LLM function calling 工具定义（决策点：只转换 AUTO + PROPOSAL 权限的
- * 工具——listTools 已不注册执行类（核心设计原则「AI 只能提案不能直接写」），
- * 此处权限过滤为双保险：未来误注册执行类工具也不会暴露给模型）。
- * parameters 直接透传工具定义里的 TypeBox schema——运行时即 JSON Schema，无需转换
- * （契约见 docs/api/tool-calling.md「工具定义（TypeBox）」）。
- */
-export function toLLMToolDefinitions(defs: readonly ToolDefinition[]): LLMToolDefinition[] {
-  return defs
-    .filter((d) => d.permission === TOOL_PERMISSION.AUTO || d.permission === TOOL_PERMISSION.PROPOSAL)
-    .map((d) => ({
-      name: d.name,
-      description: d.description,
-      // TypeBox schema 运行时即 JSON Schema；TSchema 无索引签名，故显式收敛为 JSON Schema 形态
-      parameters: d.parameters as Record<string, unknown>,
-    }));
-}
-
-// ============ 真实 produce / dispatcher 构造 ============
-
-/**
- * 真实 produce 闭包（S7.3 把 onEvent 转发给 chatStream 的 onEvent——runAgent 依赖它
- * 累积文本与收集工具调用；失败按 chatStream resolve 出 { ok:false, ... } 不 throw；
- * signal 由 runAgent 注入 attempt 级独立控制器——超时 abort 与用户取消分离）。
- */
-function createRealProduce(
-  apiKey: string,
-  provider: string,
-  model: string,
-  tools: LLMToolDefinition[],
-  debugStream: boolean,
-  thinking: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" = DEFAULT_THINKING_LEVEL,
-): RunAgentDeps["produce"] {
-  return (messages: LLMMessage[], signal?: AbortSignalLike, onEvent?: Parameters<RunAgentDeps["produce"]>[2]) =>
- // debugStream 显式传布尔（含 false）——stream 类别关时压过 env，保证配置文件类别隔离语义
- // reasoning（思考强度）：off 不传（模型默认推理），low/medium/high 传 pi-ai 统一接口
- // provider：模型只在 provider 目录内解析（llm 层兜底）
-    chatStream({ apiKey, provider, model, messages, tools, signal, onEvent, debugStream, reasoning: thinking });
-}
-
-// ============ [llm] 请求 / usage 调试日志装饰器（细粒度类别 request / usage） ============
-
-/**
- * [llm] 请求调试日志装饰器：给 produce 包一层（真实路径经
- * `createLLMRequestLogger(createRealProduce(...), { model, tools })` 组装），对应类别开启时：
- * - **request 日志**（类别 request）：模型名 + 请求参数 + **完整 messages JSON（不截断——
- * 用户核心诉求「最终组装的 prompt」）** + 工具名列表；每轮每次 attempt 各打一次（含重试）
- * - **usage 日志**（类别 usage）：onEvent 转发处捕获 finish 事件，打真实 token 数
- * （需求 3，流内真实 usage）——与 request **分开判定**（categories: ["request","usage"]
- * 时只显示请求与 tokens 统计）
- * - **敏感红线**：只打印请求体（messages 本身无 key——key 走 fetch header），
- * 绝不打印 apiKey / headers
- * - 两类别全关（request + usage 均未开启）时**零开销直通**：不包装 onEvent、不拼接字符串
- * 独立成装饰器而非塞进 createRealProduce：测试可用 mock produce 直测日志层，
- * 不经真实 DeepSeek 网络调用（与 createChatEventLogger 的「工厂 + 组合」同款模式）。
- * 注：produce （run.ts）不含 maxTokens/temperature（当前无对应配置），如实标注 <未设置>。
- */
-export function createLLMRequestLogger(
-  produce: RunAgentDeps["produce"],
-  ctx: { model: string; tools: LLMToolDefinition[] },
-): RunAgentDeps["produce"] {
-  const toolNames = ctx.tools.map((t) => t.name).join(", ");
-  return (messages, signal, onEvent) => {
- // 两类别全关：零开销直通（不包装 onEvent、不拼接字符串）
-    if (!isCategoryEnabled("request") && !isCategoryEnabled("usage")) {
-      return produce(messages, signal, onEvent);
-    }
-    if (isCategoryEnabled("request")) {
-      debugLog("request", "llm", `request model=${ctx.model} max_tokens=<未设置> temperature=<未设置> tools=[${toolNames}]`);
-      debugLog("request", "llm", `request messages=${JSON.stringify(messages, null, 2)}`); // 完整打印不截断
-    }
- // usage 类别开启时才需要包装 onEvent（捕获 finish 事件）
-    const loggedOnEvent: ((event: LLMStreamEvent) => void) | undefined =
-      isCategoryEnabled("usage") && onEvent
-        ? (event) => {
-            if (event.type === "finish") {
-              const u = event.usage;
-              debugLog(
-                "usage",
-                "llm",
-                `usage prompt_tokens=${u?.prompt_tokens ?? "?"} completion_tokens=${u?.completion_tokens ?? "?"} total=${u?.total_tokens ?? "?"} stop=${event.stopReason}`,
-              );
-            }
-            onEvent(event); // 原样转发（日志先于事件）
-          }
-        : onEvent;
-    return produce(messages, signal, loggedOnEvent);
-  };
-}
+/** 工具结果截断标记（agent 包 runtime/tool-result.ts 的同款文案；用于 TOOL_RESULT_TOO_LARGE 日志） */
+const TOOL_RESULT_TRUNCATION_MARKER = "[工具结果已截断";
 
 // ============ 路由依赖注入（测试覆盖用） ============
 
-/** POST /chat 可注入依赖（全部可选；缺省走真实实现。测试注入 mock 避免真实 DeepSeek 调用） */
+/** chat 路由可注入依赖（全部可选；缺省走真实实现） */
 export interface ChatRouteDeps {
- /** 测试注入：produce 覆盖（缺省构造真实 chatStream 闭包；提供时无需真实 apiKey） */
-  produce?: RunAgentDeps["produce"];
- /** 测试注入：工具调度器覆盖（缺省 createToolDispatcher({db, outlineDir, projectId}, {store})） */
-  dispatcher?: ToolDispatcher;
- /** 提案仓（缺省 defaultProposalStore 单例——与 S7.5 confirm/reject 同仓；测试注入独立实例隔离） */
+  /** 运行时工厂（缺省 = 项目 sessions/ + pi 装配；测试注入 faux provider 运行时） */
+  runtimeFactory?: RuntimeFactory;
+  /** 提案仓（缺省 defaultProposalStore 单例——与 confirm/reject 同仓；测试注入独立实例隔离） */
   store?: ProposalStore;
- /** 心跳间隔覆盖 ms（缺省 15-30s 随机；测试注入毫秒级） */
+  /** 心跳间隔覆盖 ms（缺省 15-30s 随机；测试注入毫秒级） */
   heartbeat?: { minMs: number; maxMs: number };
- /** 时间注入（缺省 db nowIso——应用层写 ISO 8601 约定） */
-  now?: () => string;
- /** 模型名覆盖（缺省设置页模型或 DEFAULT_MODEL） */
-  model?: string;
- /** apiKey 覆盖（缺省 effectiveApiKey() 环境变量 > 用户级配置） */
-  apiKey?: string;
- /** 已转换工具定义覆盖（缺省 listTools → toLLMToolDefinitions） */
-  tools?: LLMToolDefinition[];
- /** 续聊历史条数上限覆盖（缺省 SESSION_HISTORY_MAX_MESSAGES；测试可收紧） */
-  sessionHistoryMaxCount?: number;
 }
 
-// ============ 聚焦上下文拼装（S7.2 输入形态） ============
+// ============ 聚焦上下文（本轮消息的一部分，见 docs/design/20-context.md §2） ============
 
 /**
- * 聚焦上下文文本（聚焦层）：focus_entity_* → getEntity 查询实体、focus_node_id →
- * 大纲节点查询，拼成结构化文本注入 system 聚焦消息。
- * 查询不到（已软删/不存在/跨项目）→ 跳过该项（不报错）——聚焦缺失不阻断对话，属防御性
- * 正常路径（客户端可能携带过期 focus 发送）；两项皆无 → undefined（无聚焦注入）。
+ * 聚焦上下文文本：focus_entity_id → 实体、focus_node_id → 大纲节点，拼成结构化文本。
+ * 查询不到（已软删/不存在/跨项目）→ 跳过该项（不报错）：客户端可能携带过期 focus。
+ * 两项皆无 → undefined（不注入，消息原文保持干净）。
  */
-function buildFocusText(
+export function buildFocusText(
   project: ProjectContext,
   context: { focus_entity_type?: string; focus_entity_id?: string; focus_node_id?: string } | undefined,
 ): string | undefined {
@@ -233,6 +108,162 @@ function buildFocusText(
     }
   }
   return parts.length > 0 ? parts.join("\n\n") : undefined;
+}
+
+// ============ 调试日志（配置文件 debug 段；关闭时零开销） ============
+
+/** 调试日志字段摘要长度上限（工具参数/结果长文本截断，防刷屏） */
+const DEBUG_FIELD_MAX = 200;
+
+/** 调试日志字段摘要：字符串原样、对象 JSON，超长截断并标注原长 */
+function debugSummary(value: unknown, max = DEBUG_FIELD_MAX): string {
+  let text: string;
+  try {
+    text = typeof value === "string" ? value : (JSON.stringify(value) ?? "undefined");
+  } catch {
+    text = String(value);
+  }
+  return text.length > max ? `${text.slice(0, max)}…(${text.length} 字符)` : text;
+}
+
+/** pi 会话事件的最小结构形态（结构性类型：server 包不直接依赖 pi 的类型） */
+interface MinimalAgentEvent {
+  type: string;
+  [key: string]: unknown;
+}
+
+/**
+ * 会话事件调试日志器（配置文件 debug 段；类别全关时零开销早退）：
+ * - chat：turn_start / 文本与思考增量（只打长度）/ 工具执行起止（参数与结果摘要）/ 压缩 / 重试 / 本轮结束
+ * - request：**每次模型请求前一次**（即 user / toolResult 消息落定之时——这两种消息之后紧跟一次模型请求）
+ *   打印模型名 + 工具名 + **完整 messages JSON（不截断——用户核心诉求「最终组装的 prompt」）**
+ * - usage：assistant 消息的真实 usage；工具结果被截断时的 TOOL_RESULT_TOO_LARGE 记录
+ * 注：旧 `stream` 类别（chatStream debugStream）随自研 LLM 层退场，见报告。
+ */
+export function createChatDebugLogger(runtime: ProjectRuntime): (event: MinimalAgentEvent) => void {
+  return (event) => {
+    const chatOn = isCategoryEnabled("chat");
+    const requestOn = isCategoryEnabled("request");
+    const usageOn = isCategoryEnabled("usage");
+    if (!chatOn && !requestOn && !usageOn) return;
+
+    switch (event.type) {
+      case "turn_start": {
+        if (chatOn) debugLog("chat", "chat", "turn_start");
+        return;
+      }
+      case "message_update": {
+        if (!chatOn) return;
+        const assistantEvent = event.assistantMessageEvent as { type?: string; delta?: unknown } | undefined;
+        if (assistantEvent?.type === "text_delta" && typeof assistantEvent.delta === "string") {
+          debugLog("chat", "chat", `text delta=+${assistantEvent.delta.length} 字符`);
+        } else if (assistantEvent?.type === "thinking_delta" && typeof assistantEvent.delta === "string") {
+          debugLog("chat", "chat", `thinking delta=+${assistantEvent.delta.length} 字符`);
+        }
+        return;
+      }
+      case "message_end": {
+        const message = event.message as
+          | {
+              role?: string;
+              usage?: { input?: number; output?: number; totalTokens?: number };
+              stopReason?: string;
+            }
+          | undefined;
+        // 模型请求前的最后一个可观测点：user / toolResult 消息落定后紧跟一次请求
+        if (requestOn && (message?.role === "user" || message?.role === "toolResult")) {
+          const model = runtime.session.model;
+          debugLog(
+            "request",
+            "llm",
+            `request model=${model?.id ?? "?"} tools=[${runtime.session.getActiveToolNames().join(", ")}]`,
+          );
+          // 完整 messages（不截断）：模型实际看到的历史 + 即将发出的那一轮输入
+          debugLog("request", "llm", `request messages=${JSON.stringify(runtime.session.messages, null, 2)}`);
+        }
+        if (!usageOn || message?.role !== "assistant" || message.usage === undefined) return;
+        debugLog(
+          "usage",
+          "llm",
+          `usage input_tokens=${message.usage.input ?? "?"} output_tokens=${message.usage.output ?? "?"} total=${message.usage.totalTokens ?? "?"} stop=${message.stopReason ?? "?"}`,
+        );
+        return;
+      }
+      case "tool_execution_start": {
+        if (!chatOn) return;
+        debugLog(
+          "chat",
+          "chat",
+          `tool_call tool=${String(event.toolName)} id=${String(event.toolCallId)} args=${debugSummary(event.args)}`,
+        );
+        return;
+      }
+      case "tool_execution_end": {
+        const result = event.result as { content?: unknown } | undefined;
+        // 全量序列化（截断标记在尾部，不能拿截断后的摘要去做判定）
+        let fullText: string;
+        try {
+          fullText = JSON.stringify(result?.content ?? result ?? "") ?? "";
+        } catch {
+          fullText = String(result?.content ?? "");
+        }
+        if (chatOn) {
+          debugLog(
+            "chat",
+            "chat",
+            `tool_result tool=${String(event.toolName)} id=${String(event.toolCallId)} isError=${String(event.isError)} result=${debugSummary(fullText)}`,
+          );
+        }
+        if (usageOn && fullText.includes(TOOL_RESULT_TRUNCATION_MARKER)) {
+          debugLog(
+            "usage",
+            "agent",
+            `TOOL_RESULT_TOO_LARGE 工具结果截断 tool=${String(event.toolName)}（数据不完整，模型已收到提示）`,
+          );
+        }
+        return;
+      }
+      case "compaction_start":
+        if (chatOn) debugLog("chat", "chat", `compaction_start reason=${String(event.reason)}`);
+        return;
+      case "compaction_end":
+        if (chatOn) {
+          debugLog(
+            "chat",
+            "chat",
+            `compaction_end reason=${String(event.reason)} aborted=${String(event.aborted)} willRetry=${String(event.willRetry)}`,
+          );
+        }
+        return;
+      case "auto_retry_start":
+        if (chatOn) {
+          debugLog(
+            "chat",
+            "chat",
+            `auto_retry_start attempt=${String(event.attempt)}/${String(event.maxAttempts)} delayMs=${String(event.delayMs)}`,
+          );
+        }
+        return;
+      case "auto_retry_end":
+        if (chatOn) debugLog("chat", "chat", `auto_retry_end success=${String(event.success)}`);
+        return;
+      case "agent_end": {
+        if (!chatOn) return;
+        const messages = Array.isArray(event.messages) ? event.messages : [];
+        const last = [...messages].reverse().find((m) => (m as { role?: string }).role === "assistant") as
+          | { stopReason?: string; errorMessage?: string }
+          | undefined;
+        if (last?.stopReason === "error" || last?.stopReason === "aborted") {
+          debugLog("chat", "chat", `error stopReason=${last.stopReason} message=${last.errorMessage ?? ""}`);
+        } else {
+          debugLog("chat", "chat", "done");
+        }
+        return;
+      }
+      default:
+        return;
+    }
+  };
 }
 
 // ============ 内部辅助 ============
@@ -256,182 +287,119 @@ function sleepAbortable(ms: number, signals: readonly AbortSignal[]): Promise<vo
   });
 }
 
-// ============ [chat] 事件调试日志（配置文件 chat 类别） ============
-
-/** 调试日志字段摘要长度上限（tool_call args / tool_result 长文本截断，防刷屏） */
-const DEBUG_FIELD_MAX = 200;
-
-/**
- * 调试日志字段摘要：字符串原样、对象 JSON 序列化，超长截断并标注原长。
- * 仅在调试开启时被调用（createChatEventLogger 内部早退），关闭时零开销。
- */
-function debugSummary(value: unknown, max = DEBUG_FIELD_MAX): string {
-  let text: string;
-  try {
-    text = typeof value === "string" ? value : JSON.stringify(value) ?? "undefined";
-  } catch {
-    text = String(value);
-  }
-  return text.length > max ? `${text.slice(0, max)}…(${text.length} 字符)` : text;
+/** 占用条字段（与事件投影同口径：`AgentSession.getContextUsage()`） */
+function contextUsageField(runtime: ProjectRuntime): Record<string, unknown> {
+  const usage = runtime.session.getContextUsage();
+  if (usage === undefined) return {};
+  return { contextUsage: { percent: usage.percent, tokens: usage.tokens, contextWindow: usage.contextWindow } };
 }
 
-/**
- * 创建 [chat] 事件调试日志器（对话链路调试，打到服务端终端 stdout/stderr；类别 chat）：
- * - 类别未开启（配置文件未列 chat 且 env 关）时零开销早退——不做任何字符串拼接
- * （onEvent 高频路径无条件调用）
- * - turn_start → 轮次；tool_call → 工具名 + 参数 JSON 摘要（截断）；tool_result → 工具名 + 结果
- * 摘要（截断）；proposal → proposal_id + type；text → **只打 delta 长度**（流式高频防刷屏）；
- * done → sessionId + 轮次；error → code + message
- * - 注：AgentEvent.tool_result （run.ts）不含 ok/isError 字段——工具成败已编码进 result
- * 文本（失败为错误说明），日志只摘要该文本
- */
-export function createChatEventLogger(): (event: AgentEvent) => void {
-  let round = 0; // 轮次计数器（turn_start 刷新；done 事件附带——AgentEvent.done 无轮次字段）
-  return (event: AgentEvent): void => {
-    if (!isCategoryEnabled("chat")) return; // 短路由早退：类别未开时不产生任何字符串拼接
-    switch (event.type) {
-      case "turn_start":
-        round = event.round;
-        debugLog("chat", "chat", `turn_start round=${event.round}`);
-        return;
-      case "text":
-        debugLog("chat", "chat", `text delta=+${event.delta.length} 字符`); // 只打长度不打内容
-        return;
-      case "tool_call":
-        debugLog("chat", "chat", `tool_call tool=${event.tool} id=${event.id} args=${debugSummary(event.args)}`);
-        return;
-      case "tool_result":
-        debugLog("chat", "chat", `tool_result tool=${event.tool} id=${event.id} result=${debugSummary(event.result)}`);
-        return;
-      case "proposal":
-        debugLog("chat", "chat", `proposal id=${event.proposal.proposal_id} type=${event.proposal.type}`);
-        return;
-      case "done":
-        debugLog("chat", "chat", `done session=${event.sessionId} round=${round}`);
-        return;
-      case "error":
-        debugLog("chat", "chat", `error code=${event.code} message=${event.message} aborted=${event.aborted}`);
-        return;
-    }
-  };
-}
-
-// ============ POST /api/v1/chat（S7.6：POST + SSE 对话端点） ============
+// ============ POST /api/v1/chat（POST + SSE） ============
 
 /**
  * POST /chat 处理器工厂（测试经 createChatRoutes 注入 deps）。
- * 流程：项目/请求校验（JSON 错误，不开流）→ 会话解析（历史重建或新建 sess_）→ 用户消息落库
- * → 三路断开检测挂接 → SSE 流内：心跳协程 + runAgent（produce/dispatcher 组装、
- * onEvent 转 SSE 帧、onMessages 落库）→ 取消作废提案（B2 取舍见下）→ 关流。
+ * 流程：项目/请求校验（JSON 错误，不开流）→ 会话解析（磁盘发现或新建）→ 运行时装配 + 凭据预检
+ * → 开流：首帧 session + 事件投影帧 + 心跳 → `session.prompt()` → 收尾（取消则作废提案）。
  */
 export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promise<Response> {
   return async (c) => {
     const project = requireCurrentProject();
 
- // ---- 请求校验（开流之前：失败走统一 JSON 错误，非 SSE） ----
+    // ---- 请求校验（开流之前：失败走统一 JSON 错误，非 SSE） ----
     const raw = await c.req.json().catch(() => null); // 空 body / 非法 JSON → 校验失败
     const parsed = chatSendReqSchema.safeParse(raw);
-    if (!parsed.success) {
-      throw parsed.error; // → app.onError → 400 VALIDATION_ERROR（含 fields）
-    }
+    if (!parsed.success) throw parsed.error; // → app.onError → 400 VALIDATION_ERROR（含 fields）
     const { message, session_id, context } = parsed.data;
 
- // ---- key/模型/工具解析（按激活 provider 独立解析；测试注入 deps 时无需真实 key） ----
- // provider：config.provider 未注册时缺省 deepseek（effectiveProvider 兜底）
-    const provider = effectiveProvider();
-    const envKey = deps.apiKey ?? effectiveApiKey(provider).key;
-    if (envKey === null && deps.produce === undefined) {
-      const envVar = providerEnvVar(provider);
-      throw new HttpError(
-        400,
-        "LLM_API_KEY_MISSING",
-        `未配置 ${providerDisplayName(provider)} API key：请设置环境变量 ${envVar ?? provider} 或在设置页配置`,
-      );
+    // ---- 单项目单在途流：判定与占位相邻且中间无 await（不留竞态窗口） ----
+    if (hasActiveChat(project.root)) {
+      throw new HttpError(409, "CHAT_BUSY", "当前项目已有在途对话流，请等待本轮结束或停止生成后再发送");
     }
- // 守卫收窄：deps.produce 注入（测试）时不使用 apiKey；否则 envKey 已保证非 null
-    const apiKey = envKey ?? "";
-    const model = deps.model ?? getUserConfig().model ?? DEFAULT_MODEL;
- // 思考强度：用户级配置持久化，POST /chat 读取后传 llm（chatStream reasoning）
-    const thinking = getUserConfig().thinking_level ?? DEFAULT_THINKING_LEVEL;
- // 上下文生效预算（docs/design/20-context.md §1）：历史层 = 窗口 × history_ratio，总闸 = 窗口 × 0.5；
- // 模型不在目录（配置漂移）→ 不传，由 agent 侧常量兜底（不因预算解析失败阻断对话）
-    const modelInfo = resolveModelInfo(model, provider);
-    const budget = modelInfo === null ? null : resolveContextBudgets(modelInfo.contextWindow);
-    if (budget !== null && budget.clamped) {
-      debugLog(
-        "usage",
-        "chat",
-        `历史预算被总闸 clamp：window=${modelInfo?.contextWindow ?? 0} → historyBudget=${budget.historyBudget}（总闸 ${budget.totalGate}）`,
-      );
-    }
-    const tools = deps.tools ?? toLLMToolDefinitions(listTools());
-    const store = deps.store ?? defaultProposalStore;
- // 单条工具结果 token 上限（用户配置；读一次——runAgent 入参与截断日志共用）
-    const toolResultMaxTokens = getContextBudget().toolResultMaxTokens;
-    const now = deps.now ?? nowIso;
+    const chat = beginActiveChat(project.root);
+    let released = false;
+    const release = (): void => {
+      if (released) return;
+      released = true;
+      chat.release();
+    };
 
-    return streamSSE(
-      c,
-      async (stream) => {
- // ---- 1. 会话解析（续聊重建） ----
- // 非法 session_id（不匹配 sess_ 白名单）→ 视为未提供（不交给文件层，防止越权路径拼接）
-        const requestedSessionId = session_id !== undefined && isValidSessionId(session_id) ? session_id : undefined;
-        const sessionId = requestedSessionId ?? generateRuntimeId("session");
- // 会话归属由项目目录表达：直接读当前项目的 `sessions/<id>.jsonl`（无此文件 = 空历史）
- // 在途登记（删除会话的并发防线）：进入时计数 +1，finally 保证任何退出路径（正常/异常/取消）注销
-        enterInFlightSession(sessionId);
-        let registered = true; // 提前注销后置 false，finally 兜底只对未注销的路径生效
-        try {
-          const session: SessionState =
-            requestedSessionId === undefined
-              ? []
-              : restoreSession(
-                  readSessionRows(project.root, requestedSessionId),
-                  deps.sessionHistoryMaxCount ?? SESSION_HISTORY_MAX_MESSAGES,
-                );
+    try {
+      const target: ChatProjectTarget = { root: project.root, projectId: project.config.id, db: project.db };
 
-   // ---- 2. 聚焦上下文（查不到跳过，不阻断） ----
-          const focus = buildFocusText(project, context);
+      // ---- 目标会话：session_id 只经磁盘发现映射（未命中 → 404） ----
+      let sessionFile: string | undefined;
+      if (session_id !== undefined) {
+        const info = await findProjectSession(target.root, session_id);
+        if (info === null) {
+          throw new HttpError(404, "SESSION_NOT_FOUND", `会话不存在: ${session_id}（客户端应改为新会话重试）`);
+        }
+        sessionFile = info.path;
+      }
 
-   // ---- 3. 用户消息落库（assistant/tool 消息由 onMessages 落库） ----
-          appendSessionMessage(project.root, sessionId, {
-            role: "user",
-            content: message,
-            created_at: now(),
-          });
+      // ---- 运行时装配（模型/凭据/会话/工具都由 pi 提供） + 凭据预检（开流前 JSON 错误） ----
+      let runtime: ProjectRuntime;
+      try {
+        runtime = await acquireProjectRuntime(target, sessionFile, deps.runtimeFactory);
+      } catch (err) {
+        if (err instanceof NoModelConfiguredError) {
+          throw new HttpError(400, "LLM_API_KEY_MISSING", err.message);
+        }
+        throw err;
+      }
+      const model = runtime.session.model;
+      if (model === undefined) {
+        throw new HttpError(400, "LLM_API_KEY_MISSING", "未配置可用模型：请先在设置页选择模型");
+      }
+      if (!runtime.modelRuntime.hasConfiguredAuth(model.provider)) {
+        throw new HttpError(
+          400,
+          "LLM_API_KEY_MISSING",
+          `未配置 ${model.provider} 的凭据：请在设置页填写 API key，或设置对应环境变量`,
+        );
+      }
 
-   // ---- 4. 取消信号 + 三路断开检测 ----
-   // controller.signal 即 runAgent 的 signal（全链路第 0 层——四层穿透的
-   // fetch/读循环/工具执行/重试 sleep 已由 llm/tools/agent 各层承担，本卡链路总装）
+      const sessionId = runtime.session.sessionId;
+      const store = deps.store ?? defaultProposalStore;
+      // 聚焦上下文注入为本轮用户消息的一部分（system 提示词只有内核提示词 + 项目 AGENTS.md 两层）
+      const focusText = buildFocusText(project, context);
+      const promptText = focusText === undefined ? message : `${FOCUS_TITLE}\n${focusText}\n\n${message}`;
+      const logEvent = createChatDebugLogger(runtime);
+
+      // 项目切换/关闭时由 chat-runtime 触发中止（占位已在，中止回调就绪即可被叫停）
+      chat.setAbort(() => {
+        void runtime.session.abort();
+      });
+
+      return streamSSE(
+        c,
+        async (stream) => {
+          // ---- 取消信号 + 三路断开检测 ----
           const controller = new AbortController();
-          const cancel = () => {
+          const cancel = (): void => {
             if (!controller.signal.aborted) controller.abort();
+            void runtime.session.abort(); // pi 侧中止：模型请求 / 工具执行 / 重试退避
           };
-   // ① stream.onAbort：客户端断开 → 响应流 cancel → Hono StreamingApi.abort → 本回调
+          // ① stream.onAbort：客户端断开 → 响应流 cancel → Hono StreamingApi.abort
           stream.onAbort(cancel);
-   // ② c.req.raw 的 close/error 监听：@hono/node-server v2 的 c.req.raw 是标准 Request
-   // （无 close 事件，signal 随请求中止触发）——两种形态按能力探测都挂上，双保险
+          // ② 请求 signal（@hono/node-server v2 的 c.req.raw 是标准 Request）；老形态的 close/error 也挂
           c.req.raw.signal.addEventListener("abort", cancel, { once: true });
           const rawReq = c.req.raw as unknown as { on?: (ev: string, fn: () => void) => unknown };
           if (typeof rawReq.on === "function") {
             rawReq.on("close", cancel);
             rawReq.on("error", cancel);
           }
-   // ③ 心跳写失败：Hono write 吞错无法从 promise 观察写失败（stream.js write try/catch）
-   // ——断连时 ① 已同步置位 controller.signal，心跳每次写后复查该旗标兜底
-   // （时延 ≤ 心跳间隔，三路并用中的最后一道防线）
 
-   // ---- 5. SSE 写帧器（事件；断连后不再写） ----
-          const writeEvent = async (event: string, data: unknown): Promise<void> => {
-            if (controller.signal.aborted) return; // 已断开：写也失败，跳过
+          // ---- 帧写入器（断连后不再写；写失败即视为断开） ----
+          const writeFrame = async (frame: SseFrame): Promise<void> => {
+            if (controller.signal.aborted) return;
             try {
-              await stream.writeSSE({ event, data: JSON.stringify(data) });
+              await stream.writeSSE({ event: frame.event, data: JSON.stringify(frame.data) });
             } catch {
-              cancel(); // 写抛错（writeSSE 理论上吞错，防御路径）
+              cancel(); // writeSSE 理论上吞错，防御路径
             }
           };
 
-   // ---- 6. 心跳协程（15-30s 随机 ping；停止/断连即时唤醒退出） ----
+          // ---- 心跳协程（15-30s 随机 ping；停止/断连即时唤醒退出）----
           const heartbeatStop = new AbortController();
           const heartbeat = (async () => {
             const { minMs, maxMs } = deps.heartbeat ?? DEFAULT_HEARTBEAT_MS;
@@ -439,208 +407,165 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
               const ms = minMs + Math.floor(Math.random() * (maxMs - minMs + 1));
               await sleepAbortable(ms, [heartbeatStop.signal, controller.signal]);
               if (heartbeatStop.signal.aborted || controller.signal.aborted) return;
-              await stream.writeSSE({ event: "ping", data: "{}" });
-   // ③ 写后复查：客户端断开时 onAbort 已置位 controller（见第 4 步注释）
+              await writeFrame(createPingFrame());
+              // ③ 心跳写后复查：onAbort 已置位 controller（写失败检测的最后一道防线）
               if (controller.signal.aborted) return;
             }
           })();
 
-   // ---- 7. onEvent → SSE 帧（AgentEvent 六类 + turn_start；proposal 顺序由 runAgent 保证） ----
-   // 帧写入经 void 异步排入 writer（WritableStream FIFO 保证顺序，await 仅背压）——
-   // 事件回调恒同步返回，不阻塞 runAgent 循环
-          const logChatEvent = createChatEventLogger(); // [chat] 调试日志（chat 类别；关闭时零开销）
-          const onEvent = (event: AgentEvent): void => {
-            logChatEvent(event); // 对话链路调试：工具调用/提案/文本增量长度等打到服务端终端
-            switch (event.type) {
-              case "turn_start":
-                return; // 循环内部事件：不映射 SSE 帧（日志/调试用）
-              case "text":
-                void writeEvent("text", { delta: event.delta });
-                return;
-              case "tool_call":
-                void writeEvent("tool_call", { tool: event.tool, args: event.args, id: event.id });
-                return;
-              case "tool_result":
-                void writeEvent("tool_result", { tool: event.tool, result: event.result, id: event.id });
-                return;
-              case "proposal":
-   //：proposal 在对应 tool_result 之后、循环继续之前（runAgent 保证）
-                void writeEvent("proposal", {
-                  proposal_id: event.proposal.proposal_id,
-                  type: event.proposal.type,
-                  preview: event.proposal.preview,
-                });
-                return;
-              case "done":
-   // 需求 3：附带本轮真实 usage + 生效预算（占用条分母，见 docs/design/20-context.md §1）
-                void writeEvent("done", {
-                  session_id: event.sessionId,
-                  ...(lastUsage !== null ? { usage: lastUsage } : {}),
-                  ...(event.contextBudget !== undefined ? { context_budget: event.contextBudget } : {}),
-                });
-                return;
-              case "error":
-   // 用户取消/断开（aborted=true）：客户端已不可达，不写 error 帧（写了也失败）
-                if (!event.aborted) void writeEvent("error", { code: event.code, message: event.message });
-                return;
-            }
-          };
+          let entered = false;
+          let unsubscribe: (() => void) | undefined;
+          try {
+            // ---- 首帧：会话（客户端据此持久化「当前会话」）----
+            await writeFrame(createSessionFrame(sessionId));
 
-   // ---- 8. onMessages → 落库（assistant + tool 消息，含 tool_calls/tool_call_id 配对） ----
-   // 硬（run.ts 注释）：onMessages 抛错不逃逸（runAgent 兜底吞掉）——落库失败
-   // 不中断 agent 循环，此处由 db 抛错自然触发该（本路由不额外 try/catch）
-          const onMessages = (messages: SessionMessage[]): void => {
-            const ts = now();
-            for (const m of messages) {
-              appendSessionMessage(project.root, sessionId, {
-                role: m.role,
-                content: m.content ?? null,
-                ...(m.role === "assistant" && m.tool_calls !== undefined ? { tool_calls: m.tool_calls } : {}),
-                ...(m.role === "tool" ? { tool_call_id: m.tool_call_id } : {}),
-                created_at: ts,
-              });
-            }
-          };
-
-   // ---- 9. runAgent 接线（S7.3：produce/dispatcher 由本路由组装注入） ----
-   // 真实 produce 外包 [llm] 请求/usage 调试日志装饰器（细粒度类别 request/usage，关闭零开销直通）；
-   // debugStream 按 stream 类别显式传入（false 也传——压过 env，保证类别隔离语义）
-          const produce =
-            deps.produce ??
-            createLLMRequestLogger(createRealProduce(apiKey, provider, model, tools, isCategoryEnabled("stream"), thinking), {
-              model,
-              tools,
+            // ---- 事件订阅：pi 会话事件 → SSE 帧（投影唯一实现在 agent 包）----
+            enterInFlightSession(sessionId);
+            entered = true;
+            unsubscribe = runtime.session.subscribe((event) => {
+              logEvent(event as unknown as MinimalAgentEvent);
+              const frame = toSseFrame(event, { getContextUsage: () => runtime.session.getContextUsage() });
+              if (frame === null) return;
+              void writeFrame(frame); // 排入 writer（FIFO 保证顺序），不阻塞循环
             });
-   // S7.4 真实现：ToolContext { db, outlineDir, projectId } + 同仓提案（S7.5 消费）
-          const dispatcher =
-            deps.dispatcher ?? createToolDispatcher({ db: project.db, outlineDir: project.root, projectId: project.config.id }, { store });
 
-   // ---- 9.5 上下文占用数据（需求 3）：包裹 produce 捕获流内 finish 事件的真实 usage，
-   // 在 done SSE 帧附带——前端据此计算上下文占用（usage.total / 模型 contextWindow） ----
-          let lastUsage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | null = null;
-          const produceWithUsage: RunAgentDeps["produce"] = async (messages, signal, onEvent) => {
-            const tee: typeof onEvent = (e) => {
-              if (e?.type === "finish") lastUsage = e.usage as typeof lastUsage;
-              onEvent?.(e);
-            };
-            return produce(messages, signal, tee);
-          };
-
-          const result = await runAgent({
-            sessionId,
-            userMessage: message, // runAgent 追加进会话（传入 session 不应已含本轮消息）
-            session,
-            focus,
-   // 项目规则唯一事实源 = 项目目录 （取代 project.config.prompt）——
-   // 每次对话实时读文件（外部编辑立即可见）；文件不存在 → undefined（「## 项目设定」段跳过）
-            projectPrompt: readAgentsFile(project.root) ?? undefined,
-            deps: { produce: produceWithUsage, dispatcher, onEvent, onMessages },
-   // 生效预算（不可配的总闸 + 可配的历史比例，均由 config + 模型目录解析得出）
-            ...(budget !== null ? { budgets: { history: budget.historyBudget }, tokenBudget: budget.totalGate } : {}),
-   // 单条工具结果上限（用户配置；截断仅降级不终止——见 run.ts DEFAULT_TOOL_RESULT_MAX_TOKENS）
-            toolResultMaxTokens,
-            signal: controller.signal, // 断开即取消（abort 永不重试）
-          });
-
-   // 工具结果截断可观测性（TOOL_RESULT_TOO_LARGE 落地）：只记调试日志，不发 error 帧
-          // （截断是降级不是错误——模型已收到「数据不完整」提示，对话继续）
-          if (result.truncatedToolResults > 0) {
-            debugLog(
-              "usage",
-              "agent",
-              `TOOL_RESULT_TOO_LARGE 工具结果截断 ${result.truncatedToolResults} 条（上限 ${toolResultMaxTokens} tokens/条）`,
-            );
+            await runtime.session.prompt(promptText);
+            await runtime.session.waitForIdle();
+          } catch (err) {
+            // 开流后的失败（如 prompt 前置校验）：事件表没有独立 error 帧——以 agent_end 表达终止
+            const message = err instanceof Error ? err.message : String(err);
+            debugLog("chat", "chat", `prompt 失败：${message}`);
+            await writeFrame({
+              event: "agent_end",
+              data: { stopReason: "error", errorMessage: message, ...contextUsageField(runtime) },
+            });
+          } finally {
+            unsubscribe?.();
+            // 注销在途登记紧跟本轮结束（其后还有 heartbeat/close 两个 await）：
+            // 客户端读到 agent_end 立刻删会话不能落进 SESSION_BUSY 窗口
+            if (entered) leaveInFlightSession(sessionId);
+            release();
+            heartbeatStop.abort(); // sleep 即时唤醒
+            await heartbeat;
+            if (controller.signal.aborted) store.clear(); // 未确认提案随取消作废
+            await stream.close();
           }
-
-   // ---- 10. B2 取舍落地（「未确认提案按产生它的会话作废」） ----
-   // 三选项评估：a) Proposal 加 sessionId + 仓按会话清除（跨包改动 S6.6/S7.4，成本中）；
-   // b) SSE 取消时 clear 全量；c) 依赖 TTL（10 分钟）。
-   // 选择 **b**：最小改动、单项目单会话 MVP 下与「按会话作废」语义等价——取消只发生在
-   // 客户端断连（同会话）或项目切换（提案本就按项目绑定，切换时全清）场景，clear 不会
-   // 误伤其他会话的待确认提案。与 原文的偏差（提案记录来源 session_id、按会话粒度
-   // 作废）记录为扩展点：多会话并发（backlog 多标签页）时按选项 a 演进——Proposal 增
-   // session_id 字段、ProposalStore 增 clearBySession(sessionId)，调度时由 S7.6 透传会话。
-          if (result.aborted) {
-            store.clear();
+        },
+        // 防御路径 onError：cb 内部异常（agent 层错误已由事件表达）——记日志 + 尽力通知
+        async (err, stream) => {
+          console.error("[server] chat SSE 流异常:", err);
+          try {
+            await stream.writeSSE({
+              event: "agent_end",
+              data: JSON.stringify({
+                stopReason: "error",
+                errorMessage: err instanceof Error ? err.message : "SSE 流内部错误",
+              }),
+            });
+          } catch {
+            // 客户端已断开：放弃通知
           }
-
-   // ---- 11. 停心跳 + 关流（error 后流立即关闭；done 自然结束——streamSSE run 的
-   // finally 亦兜底 close，此处显式确保顺序：帧排入 writer 后 close，FIFO 保证送达） ----
-   // 注销在途登记**紧跟 runAgent 返回**（此刻已无任何写入者）：其后还有
-   // `await heartbeat` / `await stream.close()` 两个 await——注销放后面会让
-   // 「客户端读到 done 帧立刻删会话」落进 409 SESSION_BUSY 的窗口
-          leaveInFlightSession(sessionId);
-          registered = false;
-          heartbeatStop.abort(); // sleep 即时唤醒（sleepAbortable 监听该 signal）
-          await heartbeat;
-          await stream.close();
-        } finally {
-          if (registered) leaveInFlightSession(sessionId);
-        }
-      },
- // 防御路径 onError：cb 内部异常（正常流程 error 事件已由 runAgent 发出，理论不可达）——
- // 转形态 JSON error 帧（客户端 use-sse 收到 error 即终止解析）
-      async (err, stream) => {
-        console.error("[server] chat SSE 流异常:", err);
-        try {
-          await stream.writeSSE({
-            event: "error",
-            data: JSON.stringify({
-              code: "INTERNAL_ERROR",
-              message: err instanceof Error ? err.message : "SSE 流内部错误",
-            }),
-          });
-        } catch {
- // 客户端已断开：放弃通知
-        }
-      },
-    );
+        },
+      );
+    } catch (err) {
+      // 开流前的任何失败（校验/会话解析/装配）都要把在途占位还回去
+      release();
+      throw err;
+    }
   };
+}
+
+// ============ 会话端点辅助 ============
+
+/** 会话末条可见文本（列表摘要用）+ 50 字截断 */
+async function lastVisibleText(target: ChatProjectTarget, sessionId: string): Promise<string> {
+  const opened = await readProjectSession(target.root, sessionId);
+  return opened === null ? "" : lastVisibleSessionText(opened.entries);
 }
 
 // ============ 路由装配 ============
 
 /**
- * 创建对话路由（S7.6 起支持 deps 注入：测试经 createChatRoutes({ produce: mock, ... }) 构造
- * 独立实例挂载测试 app，避免真实 DeepSeek 调用；index.ts 挂载默认实例）。
+ * 创建对话路由（index.ts 挂载默认实例；测试注入 deps 构造独立实例）。
  */
 export function createChatRoutes(deps: ChatRouteDeps = {}): Hono {
   const routes = new Hono();
-  routes.get("/sessions", (c) => {
+
+  // GET /api/v1/chat/sessions —— 会话列表（按最后活动倒序）
+  routes.get("/sessions", async (c) => {
     const project = requireCurrentProject();
-    return sessionsResponse(c, listSessionSummaries(project.root));
+    const target: ChatProjectTarget = { root: project.root, projectId: project.config.id, db: project.db };
+    const sessions = await listProjectSessions(target.root);
+    const items = await Promise.all(
+      sessions.map(async (info) => ({
+        id: info.id,
+        lastMessage: truncate(await lastVisibleText(target, info.id), SESSION_LAST_MESSAGE_MAX_LEN),
+        messageCount: info.messageCount,
+        createdAt: info.created.toISOString(),
+        updatedAt: info.modified.toISOString(),
+      })),
+    );
+    return sessionsResponse(c, items);
   });
-  routes.get("/sessions/:id/messages", (c) => {
+
+  // GET /api/v1/chat/sessions/:id/messages —— 消息历史（含思维链预览）
+  routes.get("/sessions/:id/messages", async (c) => {
     const project = requireCurrentProject();
     const sessionId = c.req.param("id");
- // 非法 id（不匹配 sess_ 白名单，无法作文件名）→ 空历史（与「会话不存在」同语义，不泄露也不报 500）
-    const messages = isValidSessionId(sessionId)
-      ? readSessionMessages(project.root, sessionId, project.config.id)
-      : [];
-    return messagesResponse(c, sessionId, messages);
-  });
- // DELETE /api/v1/chat/sessions/:id —— 物理删除会话（无回收站；前端二次确认）
- // 校验顺序：id 形态（作文件名的硬校验，防路径穿越）→ 在途流（防僵尸会话）→ 文件存在性
-  routes.delete("/sessions/:id", (c) => {
-    const project = requireCurrentProject();
-    const sessionId = c.req.param("id");
-    if (!isValidSessionId(sessionId)) {
-      throw new HttpError(
-        400,
-        "VALIDATION_ERROR",
-        `session_id 形态非法（需匹配 ^sess_[A-Za-z0-9_-]{1,64}$，该值将作文件名）: ${sessionId}`,
-      );
+    const opened = await readProjectSession(project.root, sessionId);
+    if (opened === null) {
+      throw new HttpError(404, "SESSION_NOT_FOUND", `会话不存在: ${sessionId}`);
     }
+    return messagesResponse(c, sessionId, projectSessionMessages(opened.entries));
+  });
+
+  // GET /api/v1/chat/sessions/:id/messages/:messageId/thinking —— 思维链全文（按块按需拉取）
+  routes.get("/sessions/:id/messages/:messageId/thinking", async (c) => {
+    const project = requireCurrentProject();
+    const sessionId = c.req.param("id");
+    const messageId = c.req.param("messageId");
+
+    const blockIndexParam = c.req.query("blockIndex");
+    const blockIndex = blockIndexParam === undefined ? Number.NaN : Number(blockIndexParam);
+    if (!Number.isSafeInteger(blockIndex) || blockIndex < 0) {
+      throw new HttpError(400, "VALIDATION_ERROR", "blockIndex 必填且为非负整数");
+    }
+
+    const opened = await readProjectSession(project.root, sessionId);
+    if (opened === null) {
+      throw new HttpError(404, "SESSION_NOT_FOUND", `会话不存在: ${sessionId}`);
+    }
+    const thinking = readSessionThinking(opened.entries, messageId, blockIndex);
+    if (thinking === null) {
+      throw new HttpError(404, "THINKING_NOT_FOUND", `该消息没有下标为 ${blockIndex} 的思维链块`);
+    }
+    return thinkingResponse(c, thinking);
+  });
+
+  // DELETE /api/v1/chat/sessions/:id —— 物理删除会话（无回收站；前端二次确认）
+  // 校验顺序：在途流（防流把文件原地重建）→ 文件存在性（磁盘发现未命中即 404）
+  routes.delete("/sessions/:id", async (c) => {
+    const project = requireCurrentProject();
+    const sessionId = c.req.param("id");
     if (isSessionInFlight(sessionId)) {
       throw new HttpError(409, "SESSION_BUSY", `会话有在途对话流，请先停止生成再删除: ${sessionId}`);
     }
-    if (!deleteSessionFile(project.root, sessionId)) {
+    const info = await findProjectSession(project.root, sessionId);
+    if (info === null) {
+      throw new HttpError(404, "SESSION_NOT_FOUND", `会话不存在: ${sessionId}`);
+    }
+    try {
+      unlinkSync(info.path);
+    } catch {
+      // 发现与删除之间被外部删除：同样是「不存在」
       throw new HttpError(404, "SESSION_NOT_FOUND", `会话不存在: ${sessionId}`);
     }
     return sessionDeleteResponse(c);
   });
- // POST /api/v1/chat —— POST + SSE 对话端点（S7.6；U3 起为后续切片预留）
+
+  // POST /api/v1/chat —— POST + SSE 对话端点
   routes.post("/", chatSendHandler(deps));
+
   return routes;
 }
 
@@ -648,44 +573,37 @@ export function createChatRoutes(deps: ChatRouteDeps = {}): Hono {
 export const chatRoutes = createChatRoutes();
 
 /**
- * sessions 响应自检出口（参照 project.ts listResponse）：
- * parse 失败 = 服务端构造的响应不符合 shared （服务端 bug），转 500 INTERNAL_ERROR；
- * 不让 ZodError 冒泡——否则 errorHandler 会按入参语义误报 400 VALIDATION_ERROR。
+ * 响应自检出口（参照 project.ts listResponse）：parse 失败 = 服务端构造的响应不符合 shared 契约，
+ * 转 500 INTERNAL_ERROR——不让 ZodError 冒泡（否则 errorHandler 按入参语义误报 400）。
  */
-function sessionsResponse(c: Context, sessions: ChatSessionSummary[]): Response {
+function sessionsResponse(c: Context, sessions: unknown[]): Response {
   try {
     return c.json(ok(chatSessionsResSchema.parse({ sessions })));
   } catch (err) {
-    throw new HttpError(
-      500,
-      "INTERNAL_ERROR",
-      `sessions 响应不符合${err instanceof Error ? err.message : String(err)}`,
-    );
+    throw new HttpError(500, "INTERNAL_ERROR", `sessions 响应不符合契约: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
-/** messages 响应自检出口（同上；db 消息含 sessionId/projectId 附加字段，parse 按剥离） */
-function messagesResponse(c: Context, sessionId: string, messages: ChatMessage[]): Response {
+function messagesResponse(c: Context, sessionId: string, messages: unknown[]): Response {
   try {
     return c.json(ok(chatMessagesResSchema.parse({ sessionId, messages })));
   } catch (err) {
-    throw new HttpError(
-      500,
-      "INTERNAL_ERROR",
-      `messages 响应不符合${err instanceof Error ? err.message : String(err)}`,
-    );
+    throw new HttpError(500, "INTERNAL_ERROR", `messages 响应不符合契约: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
-/** 删除会话响应自检出口（同上） */
+function thinkingResponse(c: Context, thinking: string): Response {
+  try {
+    return c.json(ok(chatThinkingResSchema.parse({ thinking })));
+  } catch (err) {
+    throw new HttpError(500, "INTERNAL_ERROR", `thinking 响应不符合契约: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 function sessionDeleteResponse(c: Context): Response {
   try {
     return c.json(ok(chatSessionDeleteResSchema.parse({ deleted: true })));
   } catch (err) {
-    throw new HttpError(
-      500,
-      "INTERNAL_ERROR",
-      `删除会话响应不符合${err instanceof Error ? err.message : String(err)}`,
-    );
+    throw new HttpError(500, "INTERNAL_ERROR", `删除会话响应不符合契约: ${err instanceof Error ? err.message : String(err)}`);
   }
 }

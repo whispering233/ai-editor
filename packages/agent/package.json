@@ -28,7 +28,6 @@
   "dependencies": {
     "@earendil-works/pi-ai": "0.85.1",
     "@earendil-works/pi-coding-agent": "0.85.1",
-    "@whispering233/ai-editor-llm": "workspace:*",
     "@whispering233/ai-editor-shared": "workspace:*",
     "@whispering233/ai-editor-tools": "workspace:*"
   },
