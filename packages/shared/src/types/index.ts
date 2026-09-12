@@ -4,6 +4,7 @@
 // 若从 barrel 运行时导出会把 zod 校验函数拉进 client 浏览器包（50KB 级）。
 // 服务端需要运行时 schema 时从 @whispering233/ai-editor-shared/schemas 子路径导入（见 package.json exports）
 export type * from "./entity.js";
+export type * from "./ability-panel.js";
 export type * from "./outline.js";
 export type * from "./project.js";
 export type * from "./api.js";
