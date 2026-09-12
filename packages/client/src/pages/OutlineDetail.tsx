@@ -365,7 +365,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
       {/* 新增关联对话框（详情模式：源固定为本大纲节点，S12.2 扩展） */}
       {relationDialogOpen && node !== null && (
         <CreateRelationDialog
-          source={{ type: "outline_node", id: node.id, name: node.title }}
+          source={{ type: "outline_node", id: node.id, name: node.title, nodeType: node.type }}
           onCreated={() => setRelKey((k) => k + 1)}
           onClose={() => setRelationDialogOpen(false)}
         />

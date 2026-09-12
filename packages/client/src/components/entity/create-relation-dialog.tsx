@@ -5,16 +5,25 @@
 // - 列表模式（source 为 null）：暴露源实体选择（类型下拉默认 character + 实体下拉 listEntities limit 100），方向「源 → 目标」
 // 目标端类型支持四类实体 + 大纲节点（outline store 树，无需请求）；409 RELATION_EXISTS → 内联「这条关系已经存在」；
 // 成功 → toast「已建立关系」→ onCreated → onClose。样式 token 类。
+// 关系类型下拉口径（含伏笔锚点仅章的源端过滤）见 lib/relation-types.ts（卡片 1.6）——
+// 源端点层级由调用点显式传入（nodeType），不靠 store 反查。
 // 布局：左右三段式「源 -关系-> 目标」——grid-cols-[1fr_auto_1fr]（sm 起），窄屏垂直堆叠；
 // 中列关系类型下拉 + 「→」箭头（mt-auto 沉底对齐两端实体下拉），三列各有小标题（源实体/关系类型/目标实体）。
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Button, Select } from "antd";
-import { ENTITY_TYPES, RELATION_TYPES } from "@whispering233/ai-editor-shared";
+import { ENTITY_TYPES } from "@whispering233/ai-editor-shared";
 import type { EntitySummary, EntityType } from "@whispering233/ai-editor-shared";
-import { ApiError, createRelation, listEntities, type CreateRelationBody } from "../../lib/api";
+import {
+  ApiError,
+  createRelation,
+  listEntities,
+  type CreateRelationBody,
+  type OutlineNodeType,
+} from "../../lib/api";
 import { relationTypeLabel } from "../../lib/entity-detail";
 import { flattenTree } from "../../lib/outline-tree";
+import { dialogRelationTypeOptions } from "../../lib/relation-types";
 import { useProjectStore } from "../../stores/project";
 import { useUiStore } from "../../stores/ui";
 import {
@@ -39,20 +48,14 @@ const TYPE_LABEL: Record<EntityType, string> = {
 };
 
 /**
- * 对话框关系类型下拉选项（oracle P2-2：occurs_at 方向白名单）：
- * **排除 occurs_at**——挂载（timepoint → event 1:n，G2）由时间轴 UI 专管（组尾新建
- * POST /relation 固定方向、跨组拖拽 move_to 复合端点），对话框不暴露自定义 occurs_at 创建，
- * UI 层天然限制「仅 timepoint → event」方向（目标端下拉亦无 event 可选，双保险）。
+ * 源端点（详情模式传入；null = 列表模式自由选择源）。
+ * 判别联合：实体源（EntityType）与大纲节点源（outline_node，S12.2 节点详情页作为源）——
+ * **大纲节点源强制携带 `nodeType`**（卡片 1.6：关系类型下拉按层级过滤，伏笔三类仅章可见；
+ * 编译期即拒绝"忘传层级"，运行期兜底见 lib/relation-types.ts 的 fail-closed 口径）。
  */
-const DIALOG_RELATION_TYPES = RELATION_TYPES.filter((t) => t !== "occurs_at");
-
-/** 源端点（详情模式传入；null = 列表模式自由选择源）。
- * 四类实体（EntityType）+ 大纲节点（outline_node，S12.2 节点详情页作为源建立关系—— 端点类型） */
-export interface RelationSource {
-  type: EntityType | "outline_node";
-  id: string;
-  name: string;
-}
+export type RelationSource =
+  | { type: EntityType; id: string; name: string }
+  | { type: "outline_node"; id: string; name: string; nodeType: OutlineNodeType };
 
 export function CreateRelationDialog({
   source,
@@ -72,7 +75,10 @@ export function CreateRelationDialog({
   const [otherType, setOtherType] = useState<EntityType | "outline_node">("character");
   const [otherEntities, setOtherEntities] = useState<EntitySummary[] | null>(null);
   const [otherId, setOtherId] = useState("");
-  const [relationType, setRelationType] = useState<string>(RELATION_TYPES[0]);
+  // 默认关系类型 = 当前源端可选集的首项（保证默认值 ⊆ 选项集，源端过滤后仍成立）
+  const [relationType, setRelationType] = useState<string>(
+    () => dialogRelationTypeOptions(source)[0],
+  );
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -182,7 +188,7 @@ export function CreateRelationDialog({
                 className="w-full"
                 value={relationType}
                 onChange={(value) => setRelationType(value)}
-                options={DIALOG_RELATION_TYPES.map((t) => ({
+                options={dialogRelationTypeOptions(source).map((t) => ({
                   value: t,
                   label: relationTypeLabel(t),
                 }))}

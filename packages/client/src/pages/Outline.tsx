@@ -842,7 +842,7 @@ export default function Outline() {
           ) : (
             <RowContextMenu
               focus={{ focus_node_id: node.id }}
-              source={{ type: "outline_node", id: node.id, name: node.title }}
+              source={{ type: "outline_node", id: node.id, name: node.title, nodeType: node.type }}
               onCreated={() => useUiStore.getState().notifyDataChanged()}
               extraItems={
                 isCurrentPositionHost(node.type) ? (
