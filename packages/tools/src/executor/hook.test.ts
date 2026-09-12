@@ -1,7 +1,7 @@
 // S6.7 执行类工具测试：伏笔生命周期复合写（advance_hook / resolve_hook / abandon_hook）
 // 覆盖：
-// - 复合写正确性：delta_records 记 status 变化（from=当前状态、description=args.description）
-// + relation_records 插 advances/resolves（大纲节点 → hook），一次提交
+// - 复合写正确性：delta_records 记 status 变化（**op=set**，卡 1.9：物化事实字段不声明 from，
+// description=args.description）+ relation_records 插 advances/resolves（大纲节点 → hook），一次提交
 // - **幂等**：同 (node_id, hook_id, relation_type) 重复调用不重复写（delta/relation 均不重复，
 // 返回已有 id + duplicated）；不同节点推进正常新增；abandon 按「已记 to=abandoned 的 delta」判重
 // - **原子性**：delta 插入后 relation 插入抛错（mock createRelation）→ 整体回滚无半状态
@@ -122,29 +122,30 @@ describe("advance_hook（复合写：delta + advances 一次提交）", () => {
     const hookId = makeHook("身世之谜", { status: "planted" });
     const result = executeAdvanceHook(makeCtx(), advanceProposal(hookId, "ch-1", "第 12 章发现玉佩"));
     expect(result.id).toMatch(/^rel-/);
- // delta：from=planted → to=progressing（示例形态），description = args.description
+ // delta：op=set 单点状态（卡 1.9：物化事实字段不声明 from），description = args.description
     const deltas = hookDeltas(hookId);
     expect(deltas).toHaveLength(1);
     expect(deltas[0]).toMatchObject({
       nodeId: "ch-1",
       targetType: "hook",
       targetId: hookId,
-      changes: [{ field: "status", op: "update", from: "planted", to: "progressing" }],
+      changes: [{ field: "status", op: "set", to: "progressing" }],
       description: "第 12 章发现玉佩",
     });
  // relation：大纲节点 → hook，advances
     const relations = hookRelations(hookId);
     expect(relations).toHaveLength(1);
     expect(relations[0]).toMatchObject({ sourceType: "outline_node", sourceId: "ch-1", targetId: hookId, relationType: "advances" });
- // 状态同步（S6.7 修复轮）：复合写事务内 data.status 同步为 progressing（终态守卫/delta from 读它）
+ // 状态同步（S6.7 修复轮）：复合写事务内 data.status 同步为 progressing（终态守卫/列表分组读它）
     expect(getEntity(db, hookId)!.data.status).toBe("progressing");
   });
 
-  it("data.status 缺失 → from 取 planted（创建即埋设）", () => {
+  it("data.status 缺失 → 推进正常且 delta 为 op=set（创建即埋设，终态守卫不拦截）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const hookId = makeHook("无状态伏笔"); // data 无 status
     executeAdvanceHook(makeCtx(), advanceProposal(hookId, "ch-1"));
-    expect(hookDeltas(hookId)[0].changes).toEqual([{ field: "status", op: "update", from: "planted", to: "progressing" }]);
+    expect(hookDeltas(hookId)[0].changes).toEqual([{ field: "status", op: "set", to: "progressing" }]);
+    expect(getEntity(db, hookId)!.data.status).toBe("progressing");
   });
 
   it("幂等：同 (node_id, hook_id, advances) 重复调用 → 返回已有 id + duplicated，delta/relation 均不重复写", () => {
@@ -166,24 +167,50 @@ describe("advance_hook（复合写：delta + advances 一次提交）", () => {
     expect(hookRelations(hookId).map((r) => r.sourceId)).toEqual(["ch-1", "ch-2"]);
   });
 
-  it("同 hook 两次不同节点推进 → 第二条 delta 的 from 取同步后状态（ch-2 自身无跳过；首条重放与已同步 data 断裂属既定冲突语义）", () => {
+  it("同 hook 两次不同节点推进 → 两条 delta 均 op=set，重放无 conflicts（卡 1.9 验收）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const hookId = makeHook("身世之谜");
     executeAdvanceHook(makeCtx(), advanceProposal(hookId, "ch-1"));
     executeAdvanceHook(makeCtx(), advanceProposal(hookId, "ch-2")); // 兄弟章（两者均在章序前缀内）
- // 第二次推进的 from 必须取 data.status 同步后的 progressing（修复前停留 planted →
- // 与实际累积脱节，与终态守卫 / S6.5 hookStatuses 同源缺陷）
-    expect(hookDeltas(hookId)[1].changes).toEqual([{ field: "status", op: "update", from: "progressing", to: "progressing" }]);
- // computeState（atNodeId=ch-2：章序前缀 = [ch-1, ch-2]）：
- // - 第二条 delta（本次推进）from 与同步后的 data.status 一致 → **无跳过**（修复本意）
- // - 首条 delta 重放时 from=planted 早于执行器对 data.status 的同步 → 按既定语义跳过并标注 conflicts
- //   （手动/执行器改 data 后重放旧 delta 的正常表现，不是回归）
+ // 每条 delta 都是 set 单点状态（不声明 from）——重放无需与基座比对
+    expect(hookDeltas(hookId).map((d) => d.changes)).toEqual([
+      [{ field: "status", op: "set", to: "progressing" }],
+      [{ field: "status", op: "set", to: "progressing" }],
+    ]);
+ // computeState（atNodeId=ch-2：章序前缀 = [ch-1, ch-2]）：data.status 是物化事实（基座即最新值），
+ // set 重放不再产生假 conflicts（卡 1.9 修订前：首条 delta 的 update-from 必然对不上）
     const result = computeState(db, dir, { targetType: "hook", targetId: hookId, atNodeId: "ch-2" });
     expect(result!.state.status).toBe("progressing");
     expect(result!.appliedDeltas.map((d) => d.nodeId)).toEqual(["ch-1", "ch-2"]);
-    expect(result!.appliedDeltas[1].skipped).toBeUndefined(); // 本次推进无冲突（修复本意锁定）
-    expect(result!.conflicts.map((c) => c.field)).toEqual(["status"]); // 仅首条重放冲突
-    expect(result!.conflicts.map((c) => c.expected)).toEqual(["planted"]);
+    expect(result!.appliedDeltas.every((d) => d.skipped === undefined)).toBe(true);
+    expect(result!.conflicts).toEqual([]);
+  });
+
+  it("多次转移（推进 → 回收）后重放无 conflicts，且中间章回看为当时状态（卡 1.9 验收）", () => {
+    writeOutlineFile(dir, seedOutlineTree());
+    const hookId = makeHook("身世之谜");
+    executeAdvanceHook(makeCtx(), advanceProposal(hookId, "ch-1"));
+    executeResolveHook(makeCtx(), resolveProposal(hookId, "ch-2"));
+ // 到达末章：两条 delta 均重放 → 终态 resolved，无冲突
+    const atEnd = computeState(db, dir, { targetType: "hook", targetId: hookId, atNodeId: "ch-3" });
+    expect(atEnd!.state.status).toBe("resolved");
+    expect(atEnd!.appliedDeltas.map((d) => d.nodeId)).toEqual(["ch-1", "ch-2"]);
+    expect(atEnd!.conflicts).toEqual([]);
+ // 中间章回看：章序前缀只含 ch-1 → set 重放覆写基座为当时状态（≠ 最新值）
+    const midway = computeState(db, dir, { targetType: "hook", targetId: hookId, atNodeId: "ch-1" });
+    expect(midway!.state.status).toBe("progressing");
+    expect(midway!.conflicts).toEqual([]);
+  });
+
+  it("已知边界：at_node 落在首次转移之前 → 返回最新值（基座即 data，卡 1.9 登记的近似）", () => {
+    writeOutlineFile(dir, seedOutlineTree());
+    const hookId = makeHook("身世之谜");
+    executeAdvanceHook(makeCtx(), advanceProposal(hookId, "ch-2")); // 首次转移在 ch-2
+ // ch-1 早于首次转移：章序前缀不含任何 status delta → 基座（最新值）原样返回
+    const before = computeState(db, dir, { targetType: "hook", targetId: hookId, atNodeId: "ch-1" });
+    expect(before!.state.status).toBe("progressing"); // 严格历史应为 planted——已登记并接受该近似
+    expect(before!.appliedDeltas).toEqual([]);
+    expect(before!.conflicts).toEqual([]);
   });
 
   it("终态守卫：resolved/abandoned 伏笔不可再推进", () => {
@@ -232,7 +259,7 @@ describe("resolve_hook（复合写：delta + resolves 一次提交）", () => {
     expect(result.id).toMatch(/^rel-/);
     expect(hookDeltas(hookId)[0]).toMatchObject({
       nodeId: "ch-2",
-      changes: [{ field: "status", op: "update", from: "progressing", to: "resolved" }],
+      changes: [{ field: "status", op: "set", to: "resolved" }],
       description: "揭示主角是转世仙尊",
     });
     expect(hookRelations(hookId)[0]).toMatchObject({ sourceId: "ch-2", relationType: "resolves" });
@@ -265,7 +292,7 @@ describe("abandon_hook（复合写：仅 delta 记 status=abandoned；无 node_i
     expect(result.id).toMatch(/^delta-/);
     expect(hookDeltas(hookId)[0]).toMatchObject({
       nodeId: "ch-1", // current_position 锚点
-      changes: [{ field: "status", op: "update", from: "progressing", to: "abandoned" }],
+      changes: [{ field: "status", op: "set", to: "abandoned" }],
       description: "设定变更，放弃",
     });
     expect(hookRelations(hookId)).toHaveLength(0); // 无关系写入
@@ -322,7 +349,7 @@ describe("abandon_hook（复合写：仅 delta 记 status=abandoned；无 node_i
     expect(result.id).toMatch(/^delta-/);
     expect(result.duplicated).toBeUndefined(); // 未判重 → 正常执行废弃
     expect(hookDeltas(hookId)).toHaveLength(2);
-    expect(hookDeltas(hookId)[1].changes).toEqual([{ field: "status", op: "update", from: "planted", to: "abandoned" }]);
+    expect(hookDeltas(hookId)[1].changes).toEqual([{ field: "status", op: "set", to: "abandoned" }]);
  // 再次执行 → 命中真正的 status=abandoned delta，判重
     const again = executeAbandonHook(makeCtx(), abandonProposal(hookId));
     expect(again.duplicated).toBe(true);

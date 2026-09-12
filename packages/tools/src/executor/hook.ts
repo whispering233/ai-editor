@@ -13,20 +13,23 @@
 // findExistingStatusDeltaId——避免 LIKE 误命中其他字段的 to=abandoned）。
 // **边界**：advance/resolve 幂等只查关系记录，不查 delta——关系被**手动物理删**（
 // 手动删关系不走回收站、物理删）后重复确认会再写一条 delta + relation（幂等失效但语义
-// 自洽：关系已不存在，重写即恢复；delta 的 from 取当前 data.status，链条不破）。
+// 自洽：关系已不存在，重写即恢复；delta 记 op=set 的单点状态，重复写不引入陈旧 from）。
 //
-// 变更形态（「伏笔状态变化」）：changes = [{ field: "status", op: "update",
-// from: 当前状态, to: 目标状态 }]——from 取 hook.data.status（缺省 planted，
-// 状态缺失视为 planted），保证 computeState 的 update 校验正常累积；
-// description 取 proposal.args.description（delta_records.description NOT NULL）。
+// 变更形态（「伏笔状态变化」，2026-09 卡 1.9 语义修订 B）：changes = [{ field: "status",
+// op: "set", to: 目标状态 }]——**不含 from**：data.status 是物化事实字段（写路径同步最新值），
+// 与 `update` 的「data = 初始值」前提互斥（CAS 的 from 重放时必然对不上 → 每次查询假 conflicts）；
+// set 语义与落地方式自洽，from→to 的叙事留在 description（proposal.args.description，
+// delta_records.description NOT NULL）。契约：docs/design/10-data-model.md §4
+// 「物化事实字段不用 CAS」、docs/db/schema.md（状态机字段用 set）。
+// **已知边界**：at_node 落在首次转移之前时返回最新值（基座即 data，接受该近似）。
 // 终态守卫：resolved/abandoned 为生命周期终态，终态伏笔不可再推进/回收/废弃。
 //
 // **状态同步（S6.7 修复轮必须改）**：复合写事务内插入 delta 后**同步更新
 // entities.data.status**（浅合并 + 刷新 updated_at，与 快照比对语义兼容）——
-// 终态守卫（assertNotTerminal）、delta 的 from（currentHookStatus）与 S6.5 hookStatuses
-// （analysis/hook.ts collectHooks 读 entity.data.status）均以 data.status 为唯一事实来源
-//；不同步则 resolved/abandoned 后仍可推进、同 hook 二次推进 from 断裂
-// （computeState conflicts）、已回收伏笔仍计 active。**幂等命中路径不更新**（首次执行已同步）。
+// 终态守卫（assertNotTerminal）、列表摘要/面板分组与 S6.5 hookStatuses
+// （analysis/hook.ts collectHooks 读 entity.data.status）均以 data.status 为唯一事实来源；
+// 不同步则 resolved/abandoned 后仍可推进（守卫失效）、已回收伏笔仍计 active。
+// **幂等命中路径不更新**（首次执行已同步）。
 //
 // 执行类是短同步事务，不做 signal 检查（长工具才要求执行中检查；入口检查由
 // S7.5 确认路由承担）。
@@ -167,8 +170,8 @@ function executeHookTransition(
     if (nodeId !== null) requireChapterNode(ctx, nodeId);
  // 终态守卫（resolved/abandoned 不可再推进/回收；废弃时不可再废弃）
     assertNotTerminal(hook, actionLabel);
- // delta：记 status 变化（from=当前状态，update 语义，computeState 正常累积）
-    const changes: DeltaChange[] = [{ field: "status", op: "update", from: currentHookStatus(hook), to: toStatus }];
+ // delta：记 status 变化（op=set——物化事实字段不声明 from，卡 1.9 裁决 a；见文件头注）
+    const changes: DeltaChange[] = [{ field: "status", op: "set", to: toStatus }];
     const delta = insertDelta(ctx.db, {
       nodeId: nodeId ?? anchorNodeForAbandon(ctx),
       targetType: "hook",
@@ -178,9 +181,9 @@ function executeHookTransition(
     });
  // **状态同步（S6.7 修复轮必须改）**：同一事务内浅合并更新 entities.data.status
  // （updateEntity 内部 withTransaction → 嵌套自动升级 SAVEPOINT，整体仍一次提交）：
- // 终态守卫 / delta 的 from / S6.5 hookStatuses 均读 data.status——不落地则 resolved 后
- // 仍可推进（守卫失效）、同 hook 二次推进 from 断裂（computeState conflicts）、
- // 已回收伏笔仍计 active。幂等命中路径（上方 early return）不更新——首次执行已同步。
+ // 终态守卫 / 列表摘要与面板分组 / S6.5 hookStatuses 均读 data.status——不落地则
+ // resolved 后仍可推进（守卫失效）、已回收伏笔仍计 active。
+ // 幂等命中路径（上方 early return）不更新——首次执行已同步。
     updateEntity(ctx.db, hookId, { data: { status: toStatus } });
  // relation：advances / resolves（大纲节点 → hook；方向约定）
     if (relationType !== null) {

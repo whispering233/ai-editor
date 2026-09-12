@@ -346,11 +346,10 @@ describe("chapterNodeOptions / chapterNodeExists / lastChapterNode", () => {
 // ============ 请求构造 ============
 
 describe("复合写请求构造", () => {
-  it("buildStatusDeltaChange：op=update + from 当前状态 + to 目标状态", () => {
-    expect(buildStatusDeltaChange("planted", "progressing")).toEqual({
+  it("buildStatusDeltaChange：op=set + to 目标状态（不声明 from——物化事实字段，卡 1.9）", () => {
+    expect(buildStatusDeltaChange("progressing")).toEqual({
       field: "status",
-      op: "update",
-      from: "planted",
+      op: "set",
       to: "progressing",
     });
   });
@@ -402,7 +401,6 @@ describe("runLifecycleWrite（推进/回收复合写序列）", () => {
     await runLifecycleWrite({
       kind: "advance",
       hookId: "hook-1",
-      fromStatus: "planted",
       nodeId: "sc-12",
       description: "主角发现玉佩秘密",
     });
@@ -413,7 +411,7 @@ describe("runLifecycleWrite（推进/回收复合写序列）", () => {
       node_id: "sc-12",
       target_type: "hook",
       target_id: "hook-1",
-      changes: [{ field: "status", op: "update", from: "planted", to: "progressing" }],
+      changes: [{ field: "status", op: "set", to: "progressing" }],
       description: "主角发现玉佩秘密",
     });
  // relation 请求体（advances）
@@ -446,13 +444,12 @@ describe("runLifecycleWrite（推进/回收复合写序列）", () => {
     await runLifecycleWrite({
       kind: "resolve",
       hookId: "hook-1",
-      fromStatus: "progressing",
       nodeId: "sc-45",
       description: "揭示身世",
     });
     expect(mocked.createDelta).toHaveBeenCalledWith(
       expect.objectContaining({
-        changes: [{ field: "status", op: "update", from: "progressing", to: "resolved" }],
+        changes: [{ field: "status", op: "set", to: "resolved" }],
       }),
     );
     expect(mocked.createRelation).toHaveBeenCalledWith(
@@ -471,7 +468,6 @@ describe("runLifecycleWrite（推进/回收复合写序列）", () => {
       runLifecycleWrite({
         kind: "advance",
         hookId: "hook-1",
-        fromStatus: "planted",
         nodeId: "sc-12",
         description: "d",
       }),
@@ -486,7 +482,6 @@ describe("runLifecycleWrite（推进/回收复合写序列）", () => {
       runLifecycleWrite({
         kind: "advance",
         hookId: "hook-1",
-        fromStatus: "planted",
         nodeId: "sc-x",
         description: "d",
       }),
@@ -500,7 +495,6 @@ describe("runLifecycleWrite（推进/回收复合写序列）", () => {
       runLifecycleWrite({
         kind: "advance",
         hookId: "hook-1",
-        fromStatus: "planted",
         nodeId: "sc-x",
         description: "d",
       }),
@@ -518,14 +512,13 @@ describe("runLifecycleWrite（推进/回收复合写序列）", () => {
       runLifecycleWrite({
         kind: "advance",
         hookId: "hook-1",
-        fromStatus: "planted",
         nodeId: "sc-12",
         description: "d",
       }),
     ).rejects.toMatchObject({ code: "CLIENT_NETWORK_ERROR" });
 
- // 重试：delta 重复写（from 仍与陈旧值 planted 匹配，computeState 可正常累积）+
- // relation 409 幂等放行 + status 同步成功 → 整体成功
+ // 重试：delta 重复写（op=set 的单点状态，重复写可安全覆盖）+ relation 409 幂等放行 +
+ // status 同步成功 → 整体成功
     mocked.createDelta.mockResolvedValueOnce({ id: "delta-2", applied: {} as never });
     mocked.createRelation.mockRejectedValueOnce(
       new ApiError("RELATION_EXISTS", "这条关系已经存在"),
@@ -535,7 +528,6 @@ describe("runLifecycleWrite（推进/回收复合写序列）", () => {
       runLifecycleWrite({
         kind: "advance",
         hookId: "hook-1",
-        fromStatus: "planted",
         nodeId: "sc-12",
         description: "d",
       }),
@@ -557,7 +549,6 @@ describe("runAbandonWrite（废弃复合写序列）", () => {
     mocked.updateEntity.mockResolvedValue({ id: "hook-1", updated: true });
     await runAbandonWrite({
       hookId: "hook-1",
-      fromStatus: "progressing",
       nodeId: "ch-2",
       description: "设定变更，放弃",
     });
@@ -565,7 +556,7 @@ describe("runAbandonWrite（废弃复合写序列）", () => {
       node_id: "ch-2",
       target_type: "hook",
       target_id: "hook-1",
-      changes: [{ field: "status", op: "update", from: "progressing", to: "abandoned" }],
+      changes: [{ field: "status", op: "set", to: "abandoned" }],
       description: "设定变更，放弃",
     });
     expect(mocked.updateEntity).toHaveBeenCalledWith("hook", "hook-1", {

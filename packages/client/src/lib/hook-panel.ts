@@ -201,15 +201,16 @@ export const LIFECYCLE_RELATION_TYPE: Record<Exclude<HookLifecycleKind, "abandon
   resolve: "resolves",
 };
 
-/** 伏笔当前状态（data.status 缺失/空串 → planted——，delta 的 from 依据） */
+/** 伏笔当前状态（data.status 缺失/空串 → planted——创建即埋设；展示/文案用，卡 1.9 起 delta 不再取 from） */
 export function currentHookStatus(data: Record<string, unknown>): string {
   const status = data.status;
   return typeof status === "string" && status !== "" ? status : "planted";
 }
 
-/** 状态变更 change（状态变化形态：op=update + from 当前状态；from 由客户端自动取） */
-export function buildStatusDeltaChange(from: string, to: string): DeltaChange {
-  return { field: "status", op: "update", from, to };
+/** 状态变更 change（**op=set**：data.status 是物化事实字段，不声明 from——
+ * 契约见 docs/design/10-data-model.md §4「物化事实字段不用 CAS」（卡 1.9 裁决 a） */
+export function buildStatusDeltaChange(to: string): DeltaChange {
+  return { field: "status", op: "set", to };
 }
 
 /** 生命周期关系请求体（outline_node → hook，advances/resolves—— 关系约定；请求snake_case） */
@@ -248,8 +249,6 @@ export function buildStatusSyncData(to: string): Record<string, unknown> {
 export interface LifecycleWriteInput {
   kind: "advance" | "resolve";
   hookId: string;
- /** delta 的 from（当前 data.status——currentHookStatus 计算） */
-  fromStatus: string;
  /** 触发节点（大纲选择器；须存在且未软删，服务端校验） */
   nodeId: string;
   description: string;
@@ -258,14 +257,14 @@ export interface LifecycleWriteInput {
 /**
  * 推进/回收复合写（「POST /delta + POST /relation 一次提交」）。
  * REST 无事务，逐请求逼近 executor 的 withTransaction 复合写，顺序 3 步：
- * 1. POST /delta —— 记状态变化（状态变化形态）
+ * 1. POST /delta —— 记状态变化（**op=set**，卡 1.9：物化事实字段不声明 from）
  * 2. POST /relation —— 插 advances/resolves 关系；
  * 409 RELATION_EXISTS（同三元组已存在，——上次已推进过/并发重复确认）
  * = 幂等命中，放行不视为失败（executor 幂等判重同语义：不重复写）
  * 3. PUT /entity —— 同步 data.status（executor「状态同步（S6.7 修复轮必须改）」同款：
- * 复合写后 data.status 必须跟进，否则列表分组与后续 delta 的 from 校验均以陈旧值为准）
+ * 复合写后 data.status 必须跟进，否则列表分组与终态守卫均以陈旧值为准）
  * 失败边界：任一步失败 → 抛出（面板内联错误）；已写部分不回滚，重试经幂等收敛
- * （relation 重复 409 放行、delta 重复写记录但 from 与仍陈旧的值匹配、status 同步幂等）
+ * （relation 重复 409 放行、delta 为 set 单点状态重复写可安全覆盖、status 同步幂等）
  */
 export async function runLifecycleWrite(input: LifecycleWriteInput): Promise<void> {
   const to = LIFECYCLE_STATUS[input.kind];
@@ -273,7 +272,7 @@ export async function runLifecycleWrite(input: LifecycleWriteInput): Promise<voi
     node_id: input.nodeId,
     target_type: "hook",
     target_id: input.hookId,
-    changes: [buildStatusDeltaChange(input.fromStatus, to)],
+    changes: [buildStatusDeltaChange(to)],
     description: input.description,
   });
   try {
@@ -286,7 +285,6 @@ export async function runLifecycleWrite(input: LifecycleWriteInput): Promise<voi
 
 export interface AbandonWriteInput {
   hookId: string;
-  fromStatus: string;
  /** 锚定节点（anchorNodeForAbandon 计算；null 时调用方应禁止提交） */
   nodeId: string;
   description: string;
@@ -298,7 +296,7 @@ export async function runAbandonWrite(input: AbandonWriteInput): Promise<void> {
     node_id: input.nodeId,
     target_type: "hook",
     target_id: input.hookId,
-    changes: [buildStatusDeltaChange(input.fromStatus, "abandoned")],
+    changes: [buildStatusDeltaChange("abandoned")],
     description: input.description,
   });
   await updateEntity("hook", input.hookId, { data: buildStatusSyncData("abandoned") });

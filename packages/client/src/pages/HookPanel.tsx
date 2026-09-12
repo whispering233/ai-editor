@@ -60,7 +60,6 @@ import {
   buildPlantRelationBody,
   chapterNodeExists,
   chapterNodeOptions,
-  currentHookStatus,
   dependentsCount,
   dependencyNames,
   expandDependencyChain,
@@ -248,7 +247,6 @@ export default function HookPanel() {
         }
         await runAbandonWrite({
           hookId: detail.id,
-          fromStatus: currentHookStatus(detail.data),
           nodeId: anchor,
           description: lifecycleDesc.trim(),
         });
@@ -260,7 +258,6 @@ export default function HookPanel() {
         await runLifecycleWrite({
           kind,
           hookId: detail.id,
-          fromStatus: currentHookStatus(detail.data),
           nodeId: lifecycleNodeId,
           description: lifecycleDesc.trim(),
         });

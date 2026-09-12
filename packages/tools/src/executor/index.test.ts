@@ -218,7 +218,7 @@ describe("executeProposal（proposal.type → 执行函数映射）", () => {
     const hook = createEntity(db, { type: "hook", name: "身世之谜" });
     const result = executeProposal(makeCtx(), makeProposal("propose_abandon_hook", { hook_id: hook.id, description: "放弃这条线" }));
     expect(result.id).toMatch(/^delta-/);
-    expect(listDeltasByTarget(db, hook.id, dir)[0].changes).toEqual([{ field: "status", op: "update", from: "planted", to: "abandoned" }]);
+    expect(listDeltasByTarget(db, hook.id, dir)[0].changes).toEqual([{ field: "status", op: "set", to: "abandoned" }]);
   });
 
   it("propose_reorder_timepoints → reorder_timepoints：批量重排 sort_order（G2，取代 F9 的 reorder_events）", () => {
