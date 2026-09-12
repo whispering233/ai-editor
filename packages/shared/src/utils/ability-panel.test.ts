@@ -1,9 +1,12 @@
-// 能力面板纯函数库测试（卡片 2.5）
+// 能力面板纯函数库测试（卡片 2.5；修复轮补：读端 raw 自动规范化 + 前缀 helper）
 // 覆盖：结构不变式（分支/叶子、children:[] 归一）、防御解析（坏 JSON 不抛错）、
-// 叶子路径（先序 + 点分 + 含 `.` 边界）、模板派生深拷贝独立性、值类型判定。
+// 读端 raw 输入不抛错且等于「先 parse 再调用」、叶子路径（先序 + 点分 + 含 `.` 边界）、
+// Delta 字段路径前缀拼接、模板派生深拷贝独立性、值类型判定。
 import { describe, expect, it } from "vitest";
 import type { AbilityPanelNode } from "../types/ability-panel.js";
 import {
+  ABILITY_PANEL_DATA_KEY,
+  abilityPanelFieldPath,
   cloneAbilityPanel,
   coerceAbilityValue,
   isAbilityBranch,
@@ -128,6 +131,12 @@ describe("isAbilityBranch", () => {
     expect(isAbilityBranch({ name: "a", children: [] })).toBe(false);
     expect(isAbilityBranch({ name: "a", value: 1 })).toBe(false);
   });
+
+  it("非数组 children（宽校验脏数据）→ false（不做 length > 0 的误判）", () => {
+    expect(isAbilityBranch({ name: "a", children: "s" } as never)).toBe(false);
+    expect(isAbilityBranch({ name: "a", children: {} } as never)).toBe(false);
+    expect(isAbilityBranch({ name: "a", children: null } as never)).toBe(false);
+  });
 });
 
 describe("panelTopLevelNames", () => {
@@ -217,5 +226,64 @@ describe("coerceAbilityValue —— UI 输入 → 存储值", () => {
     expect(coerceAbilityValue("007")).toBe(7);
     const huge = "9".repeat(400);
     expect(coerceAbilityValue(huge)).toBe(huge); // Number(huge) = Infinity → 不写入 Infinity
+  });
+});
+
+describe("读端自动规范化（raw 输入不抛错，结果 === 先 parse 再调用）", () => {
+ /** 宽校验 JSON 可直接喂给读端（oracle 探针场景：顶层/嵌套坏元素、字符串 children、无 name） */
+  const RAW_CASES: Array<[string, unknown]> = [
+    ["顶层 [null]", [null]],
+    ["嵌套 children:[null]", [{ name: "a", children: [null] }]],
+    ["children 为字符串", [{ name: "a", children: "str" }]],
+    ["顶层字符串元素", ["x"]],
+    ["顶层无 name 对象", [{}]],
+    ["顶层非数组（对象）", { name: "a" }],
+    ["顶层 null", null],
+    ["混合：坏元素 + 合法子树", [null, { name: "火系", children: [null, { name: "等级", value: 3 }] }]],
+  ];
+
+  it.each(RAW_CASES)("%s：panelLeafPaths 不抛错且与 parse 后调用一致", (_label, raw) => {
+    const direct = panelLeafPaths(raw);
+    expect(direct).toEqual(panelLeafPaths(parseAbilityPanel(raw)));
+  });
+
+  it.each(RAW_CASES)("%s：panelTopLevelNames 不抛错且与 parse 后调用一致", (_label, raw) => {
+    const direct = panelTopLevelNames(raw);
+    expect(direct).toEqual(panelTopLevelNames(parseAbilityPanel(raw)));
+  });
+
+  it.each(RAW_CASES)("%s：cloneAbilityPanel 不抛错且与 parse 后调用一致", (_label, raw) => {
+    const direct = cloneAbilityPanel(raw);
+    expect(direct).toEqual(cloneAbilityPanel(parseAbilityPanel(raw)));
+  });
+
+  it("探针场景的规范化结果（分支空 children 归一叶子、坏元素跳过、无 name 节点丢弃）", () => {
+    expect(panelLeafPaths([null])).toEqual([]);
+    expect(panelTopLevelNames([null])).toEqual([]);
+    expect(cloneAbilityPanel([null])).toEqual([]);
+    expect(panelLeafPaths([{ name: "a", children: [null] }])).toEqual([{ path: "a", name: "a" }]);
+    expect(panelLeafPaths([{ name: "a", children: "str" }])).toEqual([{ path: "a", name: "a" }]);
+    expect(panelTopLevelNames(["x"])).toEqual([]);
+    expect(panelTopLevelNames([{}])).toEqual([]);
+    expect(cloneAbilityPanel(["x"])).toEqual([]);
+  });
+});
+
+describe("abilityPanelFieldPath —— Delta 字段路径前缀", () => {
+  it("常量 = character.data 的面板键名", () => {
+    expect(ABILITY_PANEL_DATA_KEY).toBe("ability_panel");
+  });
+
+  it("接受 panelLeafPaths 产物（叶子对象）与裸 path 字符串，前缀一致", () => {
+    const leaves = panelLeafPaths(PANEL);
+    expect(abilityPanelFieldPath(leaves[0])).toBe("ability_panel.火系.等级");
+    expect(abilityPanelFieldPath("火系.等级")).toBe("ability_panel.火系.等级");
+ // 串联消费：枚举 → 路径（消费方不得手拼前缀）
+    expect(leaves.map((leaf) => abilityPanelFieldPath(leaf))).toEqual([
+      "ability_panel.火系.等级",
+      "ability_panel.火系.熟练度",
+      "ability_panel.火系.奥义.焚天",
+      "ability_panel.境界",
+    ]);
   });
 });

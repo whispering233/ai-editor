@@ -9,21 +9,45 @@
 //
 // 宽校验契约：**任何非法结构都不得抛错**——读取端按「空面板 / 跳过坏元素」处理，
 // 坏 JSON 不能打挂 computeState 或列表接口（同 custom_fields 的宽松先例）。
+// **读端自动规范化（幂等）**：`panelLeafPaths` / `panelTopLevelNames` / `cloneAbilityPanel`
+// 接受 `unknown`（raw JSON 可直接传入）并在内部先过 `parseAbilityPanel`——消费方不得假定
+// `data.ability_panel` 是规范形状（见 docs/db/schema.md「人物 data 分层」宽校验段）。
+//
+// 路径解析口径（docs/db/schema.md「面板路径解析口径」）：点分路径的**数组段按同层 `name` 匹配、
+// 取先序第一个**；名字含 `.` 或同层重名属**已知歧义**（解析侧不拒绝，UI 结构编辑给防呆提示）；
+// 路径前缀由 `abilityPanelFieldPath` 统一拼接，消费方禁止手拼。
 
 import type { AbilityPanelLeaf, AbilityPanelNode } from "../types/ability-panel.js";
 
 /** 叶子值域（与 DeltaChange 的 from/to/value 同域） */
 type AbilityPanelValue = string | number;
 
+/** 面板在 character.data 中的键名（**唯一拼写**；字段路径拼接必须走 `abilityPanelFieldPath`） */
+export const ABILITY_PANEL_DATA_KEY = "ability_panel";
+
+/**
+ * Delta 字段路径拼接：`ability_panel.<叶子点分路径>`（如 `ability_panel.火系.等级`）。
+ *
+ * 接受 `panelLeafPaths` 的产物（叶子对象）或其 `path` 字符串——**消费方不得手拼 `ability_panel.` 前缀**
+ * （前缀拼写漂移会让 Delta 路径静默失效，见 docs/db/schema.md「面板路径解析口径」）。
+ */
+export function abilityPanelFieldPath(pathOrLeaf: string | AbilityPanelLeaf): string {
+  const path = typeof pathOrLeaf === "string" ? pathOrLeaf : pathOrLeaf.path;
+  return `${ABILITY_PANEL_DATA_KEY}.${path}`;
+}
+
 /** 数值字面量：整数/小数 + 可选负号（不支持指数、千分位、前导 +） */
 const ABILITY_NUMBER_PATTERN = /^-?\d+(?:\.\d+)?$/;
 
 /**
- * 判定分支节点（`children` 为非空数组）——**分支/叶子的唯一拼写**，
+ * 判定分支节点（`children` 为**非空数组**）——**分支/叶子的唯一拼写**，
  * UI 与工具不得各自内联 `node.children?.length` 判断（不变式：分支 ⇔ 非空 children 数组）。
+ *
+ * 防御：先做 `Array.isArray`——宽校验 JSON 里 `children` 可能是字符串/对象
+ *（`{ children:"s" }` 在只比 `length > 0` 时会误判为分支）。
  */
 export function isAbilityBranch(node: AbilityPanelNode): boolean {
-  return node.children !== undefined && node.children.length > 0;
+  return Array.isArray(node.children) && node.children.length > 0;
 }
 
 /**
@@ -48,16 +72,21 @@ export function parseAbilityPanel(value: unknown): AbilityPanelNode[] {
  * `path` = 祖先名与自身名逐字以 `.` 拼接（如 `火系.等级`）、**不做转义**——
  * 名字本身含 `.` 时路径有歧义（`a.b` 既可能是 `a` → `b`，也可能是单节点名 `a.b`）；
  * 已知边界：面板 UI 侧对含 `.` 的名字给防呆提示，解析侧不拒绝（宽校验）。
+ *
+ * **输入可 raw**（自动过 `parseAbilityPanel`）——直接传 `entity.data.ability_panel` 安全。
  */
-export function panelLeafPaths(panel: readonly AbilityPanelNode[]): AbilityPanelLeaf[] {
+export function panelLeafPaths(panel: unknown): AbilityPanelLeaf[] {
   const out: AbilityPanelLeaf[] = [];
-  collectLeaves(panel, "", out);
+  collectLeaves(parseAbilityPanel(panel), "", out);
   return out;
 }
 
-/** 顶层分组名（顺序 = 数组顺序；**不去重**——消费者按需去重/计数，见 2.2 统计口径） */
-export function panelTopLevelNames(panel: readonly AbilityPanelNode[]): string[] {
-  return panel.map((node) => node.name);
+/**
+ * 顶层分组名（顺序 = 数组顺序；**不去重**——消费者按需去重/计数，见 2.2 统计口径）。
+ * **输入可 raw**（自动过 `parseAbilityPanel`）。
+ */
+export function panelTopLevelNames(panel: unknown): string[] {
+  return parseAbilityPanel(panel).map((node) => node.name);
 }
 
 /**
@@ -66,11 +95,10 @@ export function panelTopLevelNames(panel: readonly AbilityPanelNode[]): string[]
  * 返回**规范形状副本**：不共享任何引用（数组与嵌套对象全部新建）、丢弃分支上的 `value`、
  * 空 `children` 数组归一为叶子（与 `parseAbilityPanel` 同口径）；叶子 `value` 原样保留
  * （模板里的值 = 派生后的默认值，见 `10-data-model.md` §14 不变式 6）。
- *
- * 输入约定：规范形状节点（非规范输入先过 `parseAbilityPanel`）。
+ * **输入可 raw**（自动过 `parseAbilityPanel`）——非规范输入先规范化再拷贝。
  */
-export function cloneAbilityPanel(panel: readonly AbilityPanelNode[]): AbilityPanelNode[] {
-  return panel.map(cloneAbilityNode);
+export function cloneAbilityPanel(panel: unknown): AbilityPanelNode[] {
+  return parseAbilityPanel(panel).map(cloneAbilityNode);
 }
 
 /**
@@ -108,7 +136,7 @@ function collectLeaves(
 /** 单节点深拷贝（分支丢弃 value、空 children 归一为叶子——规范形状） */
 function cloneAbilityNode(node: AbilityPanelNode): AbilityPanelNode {
   const children = node.children;
-  if (children !== undefined && children.length > 0) {
+  if (Array.isArray(children) && children.length > 0) {
     return { name: node.name, children: cloneAbilityPanel(children) };
   }
   return node.value === undefined ? { name: node.name } : { name: node.name, value: node.value };
