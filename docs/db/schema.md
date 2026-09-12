@@ -33,7 +33,7 @@
   - `user_version === SCHEMA_VERSION` → 正常打开；
   - `user_version > SCHEMA_VERSION`（未来版本）→ **拒绝打开** 409 `PROJECT_VERSION_NEWER`（数据原封不动，提示升级程序）；
   - `user_version < SCHEMA_VERSION`（旧版本）→ **有迁移路径**（`packages/db/src/migrations/` 存在从当前版本到目标版本的连续迁移链）→ `runMigrations` 前向迁移；**无迁移路径** → 删库重建兜底（备份 `data.db.v{n}.bak` + `outline.json.v{n}.bak`）。
-- **迁移机制**：`migrations/` 目录每个文件导出一个 `Migration = { version, up }`（`001_xxx.ts` → version 1），`index.ts` 按 version 升序聚合导出 `MIGRATIONS`（tsc 编译进 dist 随包分发，无运行时目录读取）。`runMigrations` 对缺失版本逐个执行：**每个迁移一个事务（`up(db)` + `setUserVersion(version)` 原子提交——成功 ⇒ 版本已写入；失败 ⇒ 版本未变）**；**整批迁移前自动快照** data.db → `data.db.v{n}.{YYYYMMDDHHmmssSSSZ}.bak`（checkpoint 后复制主文件，时间戳命名不覆盖旧备份，失败重试现场保留）。迁移失败 → 该迁移回滚 + 版本停在前一迁移后，下次 open 重试。
+- **迁移机制**：`migrations/` 目录每个文件导出一个 `Migration = { version, up }`（`001_xxx.ts` → version 1），`index.ts` 按 version 升序聚合导出 `MIGRATIONS`（tsc 编译进 dist 随包分发，无运行时目录读取）。`runMigrations` 对缺失版本逐个执行：**每个迁移一个事务（`up(db)` + `setUserVersion(version)` 原子提交——成功 ⇒ 版本已写入；失败 ⇒ 版本未变）**；**整批迁移前自动快照** data.db → `data.db.v{n}.{YYYYMMDDHHmmssSSSZ}.bak`（checkpoint 后复制主文件，时间戳命名，失败重试现场保留）。迁移失败 → 该迁移回滚 + 版本停在前一迁移后，下次 open 重试。（**粒度注**：迁移侧快照为毫秒时间戳且**无去重循环**——同一毫秒的两次批量迁移会后者覆盖前者；真实升级路径不可达，与备份侧 backup 的 +1ms 去重口径不同但已接受。）
 - 当前 `SCHEMA_VERSION = 7`；迁移链：`002_event_timeline.ts`（version 2：entities 表 CHECK 扩入 `'event'` + 新增 `sort_order` 列）、`003_timepoint.ts`（version 3，G2 修订：entities 表 CHECK 扩入 `'timepoint'` + `event.data.time_label` 迁移为 timepoint 实体 + occurs_at 关系，同名 time_label 合并为同一 timepoint）、`004_setting_tags.ts`（version 4，K2 修订：**无 DDL**——setting 旧 `data.rules` 分类值复制到 `data.tags` 并移除 rules，仅 data JSON 数据迁移）、`005_reference.ts`（version 5：entities 表 CHECK 扩入 `'reference'`，无数据搬移仅 DDL）、`006_sessions_jsonl.ts`（version 6：**对话历史出库**——`chat_messages` 全量导出为旧格式 `sessions/<session_id>.jsonl` 后 `DROP TABLE`；产物为旧 v1 格式，现已被 pi session 格式取代、不再被读取（数据保留在磁盘）；**id 不合法的旧会话以 `sess_legacy_<sha256 前 16 位>` 文件名导出**）、`007_character_ability_panel.ts`（version 7，2026-09：**无 DDL**——`character.data.abilities[]` 迁为 `ability_panel` 叶子并移除旧字段，幂等且不覆盖已有 `ability_panel`，仅 data JSON 数据迁移，同 004 先例）。**SQLite 无法直接修改 CHECK 约束**，迁移走「建新表（新 CHECK）→ 拷贝数据 → drop 旧表 → rename」四步（`relation_records`/`delta_records` 无外键指向 entities，迁移只动 entities 表）；v1 → v7 迁移链存在 ⇒ 旧库 open 时自动前向迁移，不再走删库重建兜底。
 - **import 侧联动**：导入备份时 `user_version < SCHEMA_VERSION` 且**有迁移路径** → 接受（搬入后 open 自动迁移，v5 及更早备份经增量迁移升到 v6，含对话历史出库）；无路径 → 409 `SCHEMA_VERSION_MISMATCH`；`>` 当前 → 409（未来版本语义）。
 
@@ -85,7 +85,7 @@ CREATE TABLE entities (
 ]
 ```
 
-- **结构不变式**：有 `children` = 分支（**不可赋值**）；无 `children` = 叶子（**可赋值**）。删除分支的最后一个子节点 → 该节点降级为叶子。叶子 `value` 允许缺省（空值）。嵌套层数不限；顺序 = 数组顺序（**无 `sort_order` 列、无迁移**）。
+- **结构不变式**：有 `children` = 分支（**不可赋值**）；无 `children` = 叶子（**可赋值**）；**空数组 `children: []` 视为叶子**（归一化时删除该键——与「删掉最后一个子节点即降级为叶子」一致）。删除分支的最后一个子节点 → 该节点降级为叶子。叶子 `value` 允许缺省（空值）。嵌套层数不限；顺序 = 数组顺序（**无 `sort_order` 列、无迁移**）。
 - **叶子值类型**：`string | number`（与 `DeltaChange` 的 `from`/`to`/`value` 同域）；UI 自动判定（纯数字 → number）。
 - **结构与值分工**：增删/改名/排序节点 = 人工编辑（`PUT /entity/character/:id` partial，**不产生 Delta**）；**只有已存在的叶子**可被 Delta 修改，字段路径 = 点分拼接（如 `ability_panel.火系.等级`）。
 - **宽校验**：`characterDataSchema` 对 `ability_panel` 不做结构精校验（`z.unknown().optional()`，沿用 `custom_fields` 的宽松先例）——UI 输入受控 + 读取端防御（**口径：缺失/顶层非数组 → 空面板；数组内坏元素跳过、合法元素保留**，绝不抛错打挂 `computeState`/列表接口）。**因此所有读端（摘要/统计/叶子路径枚举/副本派生）都必须先过 `parseAbilityPanel` 规范化**，消费方不得假定 `data.ability_panel` 是规范形状。
@@ -93,7 +93,7 @@ CREATE TABLE entities (
 **`status` 移除与 `abilities` 迁移（007 迁移，SCHEMA_VERSION 7）**：
 
 - `status`（旧「人物当前处境」自由文本）：**彻底移除**（`characterDataSchema` + `toSummary` character 分支 + `getEntitySummary(character).byStatus` + 文档）。**`data.status` 机制本身保留**——伏笔 `hook.data.status` 生命周期（`planted → progressing → resolved / abandoned`）与 `matchDataFilters.status` / `filters.status` 通用过滤不受影响。**无数据迁移**（旧残留 passthrough 兜底，不解析不展示）。
-- `abilities[]`（旧标签数组）→ `ability_panel`：007 迁移把每个标签迁成**顶层分组「能力」下的一个叶子**（`value` 留空），并移除旧字段。**幂等 + 不覆盖**：仅处理「含 `abilities` 且无 `ability_panel`」的角色行，已手建面板的角色不动。
+- `abilities[]`（旧标签数组）→ `ability_panel`：007 迁移把每个标签迁成**顶层分组「能力」下的一个叶子**（`value` 留空），并移除旧字段。**幂等 + 不覆盖**：仅处理「含 `abilities` 且无 `ability_panel`」的角色行，已手建面板的角色不动。**软删角色行同样被迁移**（还原后即带面板）；非 character 类型不动；坏 JSON / 非对象 data 行跳过不抛错。
 - **统计口径连带**：`get_entity_summary(character).topAbilities` 与 `toSummary` 的能力摘要改读**面板顶层分组名**（如「火系」「水系」）——叶子名多是「等级/熟练度」这类重复词，按叶子计数无意义。
 
 ### 时间轴（时间标签点实体化）
