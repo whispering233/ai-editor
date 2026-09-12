@@ -48,6 +48,12 @@
   - `packages/tools/src/analysis/hook.ts` 的 R3/R4（章级聚合后）reason 补「命中计数 + 最典型场景名」，避免「本章 3/6 个场景含外部冲突，最典型：场景二」这类信息全丢；不引入阈值魔数（口径已登记在 `docs/api/tool-calling.md`）。
   - 测试：`analysis/hook.test.ts` 断言 reason 含计数与场景名。
 
+- [ ] **1.8 埋设机会扫描过滤软删场景（卡 1.7 oracle 发现）**
+  - `packages/tools/src/analysis/hook.ts` 的 `collect()`（子树收集，`:432-441` 附近）未过滤 `deleted === true` → 软删场景既被计入 R3/R4 分母、又能当选「最典型」；同函数的 `suggest_hook_payoff`（`:375`）是过滤的——**同函数内口径矛盾**，且违反 `docs/api/tool-calling.md`「查询类工具默认过滤软删对象」。
+  - 修法：`collect()` 里跳过软删子树（同时修正 R1/R2 的 `subtreeIds` 语义），或至少对 `scenes` 过滤并在报告中说明 R1/R2 是否仍存同类隐患。
+  - 测试：补「软删场景不计入分母/不当选最典型」用例（既有 R1–R4 用例需保持通过）。
+  - 验收：含软删场景的章，R3/R4 的分母与典型场景均只算未软删场景。
+
 ## 批次 2 · 人物数据模型（未开工）
 
 - [ ] 2.1 character 字段改造（+`description`/`alias`（单值假名）/`race`、−`status`、`personality` 保留）+ 摘要口径（`description` 截断 100、能力面板顶层分组名前 2）
