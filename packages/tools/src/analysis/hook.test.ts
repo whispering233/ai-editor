@@ -520,6 +520,67 @@ describe("find_hook_opportunities", () => {
     expect(byCategory.get("character_growth")).toContain("场景一");
   });
 
+  it("软删场景不计入分母、不当选最典型（卡片 1.8）", () => {
+    seedBase();
+    const tree = readOutlineFile(dir);
+ // sc-1 先序在前且带命中字段，但已软删 → 不可见；sc-2 存活（带同样命中字段）
+    const sc1 = findOutlineNode(tree, "sc-1")!;
+    sc1.deleted = true;
+    sc1.data = { conflict_levels: ["extra_personal"], value_from: "希望", value_to: "绝望" };
+    const sc2 = findOutlineNode(tree, "sc-2")!;
+    sc2.data = { conflict_levels: ["extra_personal"], value_from: "平静", value_to: "失落" };
+    writeOutlineFile(dir, tree);
+
+    const result = runFindHookOpportunities(makeCtx(), { outline_node_id: "ch-1" })!;
+    const byCategory = new Map(result.opportunities.map((o) => [o.category, o.reason]));
+ // 分母只算未软删场景（1/1 而非 2/2），最典型取存活的 sc-2
+    expect(byCategory.get("world_building")).toBe(
+      "本章 1/1 个场景冲突含外部层面（extra_personal），最典型：场景二——适合世界观类伏笔（world_building）",
+    );
+    expect(byCategory.get("character_growth")).toBe(
+      "本章 1/1 个场景价值转向，最典型：场景二（平静 → 失落），适合角色成长类伏笔（character_growth）",
+    );
+  });
+
+  it("全章场景均软删 → R3/R4 不触发（分母为空，卡片 1.8）", () => {
+    seedBase();
+    const tree = readOutlineFile(dir);
+    const sc1 = findOutlineNode(tree, "sc-1")!;
+    sc1.deleted = true;
+    sc1.data = { conflict_levels: ["extra_personal"], value_from: "希望", value_to: "绝望" };
+    findOutlineNode(tree, "sc-2")!.deleted = true;
+    writeOutlineFile(dir, tree);
+
+    const categories = runFindHookOpportunities(makeCtx(), { outline_node_id: "ch-1" })!.opportunities.map(
+      (o) => o.category,
+    );
+    expect(categories).not.toContain("world_building");
+    expect(categories).not.toContain("character_growth");
+  });
+
+  it("软删场景上的 plants/appears_in 不参与 R1/R2（subtreeIds 可见性口径锁，卡片 1.8）", () => {
+    seedBase();
+ // 先建关系（createRelation 拒软删端点，所以顺序不能反），再软删落点节点
+    const c1 = createEntity(db, { type: "character", name: "甲" }).id;
+    const c2 = createEntity(db, { type: "character", name: "乙" }).id;
+    createRelation(db, { sourceType: "character", sourceId: c1, targetType: "outline_node", targetId: "sc-1", relationType: "appears_in" }, dir);
+    createRelation(db, { sourceType: "character", sourceId: c2, targetType: "outline_node", targetId: "sc-1", relationType: "appears_in" }, dir);
+    plant(makeHook("软删场景上的伏笔", { status: "planted" }), "sc-2");
+
+    const tree = readOutlineFile(dir);
+    findOutlineNode(tree, "sc-1")!.deleted = true; // appears_in 落点
+    findOutlineNode(tree, "sc-2")!.deleted = true; // plants 落点
+    writeOutlineFile(dir, tree);
+
+    const categories = runFindHookOpportunities(makeCtx(), { outline_node_id: "ch-1" })!.opportunities.map(
+      (o) => o.category,
+    );
+ // plants 只落在软删场景 → 视为本章无埋设（R1 触发）
+    expect(categories).toContain("mystery");
+ // appears_in 只落在软删场景 → 在场角色数为 0，R2 不触发
+    expect(categories).not.toContain("relationship");
+  });
+
   it("输入非章（卷/场景）→ 抛错；章不存在/已软删 → null", () => {
     seedBase();
     expect(runFindHookOpportunities(makeCtx(), { outline_node_id: "ch-999" })).toBeNull();

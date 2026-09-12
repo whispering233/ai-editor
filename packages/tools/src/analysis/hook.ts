@@ -412,6 +412,9 @@ export interface HookOpportunity {
  * R3/R4 的 reason 带「命中计数 / 本章场景总数 + 最典型场景名」——章级聚合后单点信息会丢，
  * 而麦基口径下 R4 在成熟大纲里近乎恒真（「没有不转折的场景」），计数是判别信息的兜底（卡片 1.7）。
  * **「最典型」判据 = 子树先序遍历第一个命中场景**（确定性；不做「冲突层最多」这类启发式猜测）。
+ * **可见性（卡片 1.8）**：软删节点**及其整棵子树**不参与任何规则（R1/R2 的 `subtreeIds`、
+ * R3/R4 的命中集/分母/最典型均只算未软删节点）——同 `suggest_hook_payoff` 的 `node.deleted` 过滤
+ * 与「查询类工具默认过滤软删对象」契约。
  */
 export function runFindHookOpportunities(ctx: ToolContext, args: FindHookOpportunitiesArgs, signal?: AbortSignal): { opportunities: HookOpportunity[] } | null {
   const tree = readOutlineFile(ctx.outlineDir);
@@ -423,11 +426,14 @@ export function runFindHookOpportunities(ctx: ToolContext, args: FindHookOpportu
   }
 
  // 子树节点集合（本章 + 其下场景）；场景节点单独收集供 R3/R4 读麦基字段
+ // **软删子树整体跳过**（卡片 1.8）：软删节点与其后代均不可见（大纲/实体可见性同款口径）——
+ // 否则软删场景会被计入 R3/R4 分母、并能当选「最典型」，subtreeIds 也会混入不可见节点
   const subtreeIds = new Set<string>([node.id]);
   const scenes: OutlineFileNode[] = [];
   const collect = (children: readonly OutlineFileNode[] | undefined): void => {
     if (children === undefined) return;
     for (const child of children) {
+      if (child.deleted === true) continue; // 软删节点不可见，其整棵子树一并不可见
       subtreeIds.add(child.id);
       if (child.type === "scene") scenes.push(child);
       collect((child as { children?: readonly OutlineFileNode[] }).children);
