@@ -1,6 +1,9 @@
 // S5.2 computeState 测试：按**章序前缀**累积 Delta 计算实体到达状态（四段规则）
 // 覆盖：跨章累积（章序前缀，含跨章 update 依赖证明应用序）/ 同章内按 order /
 // 四 op 语义（set/update/add/remove，含 remove 首个匹配与值不存在静默忽略）/
+// 字段路径（点分嵌套：顶层精确键优先 / 对象段按键 / 数组段按 name 取先序第一个 /
+// 任意层数 / 空值叶子赋值 / 中途缺失与末段分支 → skipped+conflicts 不抛错 /
+// add/remove 仅顶层字面键）+ field-path 纯函数直接单测 /
 // update 冲突跳过 + skipped/conflicts 标注（后续 change 继续累积、跨 delta 扁平聚合）/
 // 目标节点 → 进度章映射（章/场景/卷/root 不可作 at_node）/ 前缀截断（后续章不参与）+
 // 场景锚点的存量 Delta 不参与（锚点仅章）/ 软删过滤（触发节点、delta 自身）/
@@ -15,6 +18,7 @@ import { closeDatabase, openDatabase, type Db } from "../connection.js";
 import { createEntity } from "./entity.js";
 import { insertDelta } from "./delta.js";
 import { computeState } from "./compute-state.js";
+import { readFieldPath, writeFieldPath } from "./field-path.js";
 import { findOutlineNode, readOutlineFile, writeOutlineFile } from "../storage/outline.js";
 
 let dir: string;
@@ -363,5 +367,247 @@ describe("computeState 目标节点 → 进度章映射", () => {
     expect(() =>
       computeState(db, dir, { targetType: "character", targetId: charA, atNodeId: "root" }),
     ).toThrow(/大纲节点不存在/);
+  });
+});
+
+// ============ 字段路径（点分嵌套，卡片 2.4） ============
+
+/** 便捷：读 state 里面板某叶子的值（测试断言用；state 为计算产物，形状由用例自定） */
+function panelLeafValue(state: Record<string, unknown>, group: string, leaf: string): unknown {
+  const panel = state.ability_panel as Array<{ name: string; children?: Array<{ name: string; value?: unknown }> }>;
+  return panel.find((n) => n.name === group)?.children?.find((n) => n.name === leaf)?.value;
+}
+
+describe("computeState 字段路径（点分嵌套）", () => {
+  it("set 嵌套叶子：ability_panel.火系.等级 累积正确（顶层键与嵌套路径并存互不影响）", () => {
+    const { charA } = seedBase({
+      alias: "小强",
+      ability_panel: [{ name: "火系", children: [{ name: "等级", value: 3 }, { name: "熟练度" }] }],
+    });
+    addDelta(
+      "ch-1",
+      charA,
+      [
+        { field: "ability_panel.火系.等级", op: "set", to: 5 },
+        { field: "alias", op: "set", to: "强哥" }, // 顶层字段照旧
+      ],
+      "第一章：火系升级",
+    );
+
+    const result = computeState(db, dir, { targetType: "character", targetId: charA, atNodeId: "ch-1" });
+    expect(result!.conflicts).toEqual([]);
+    expect(panelLeafValue(result!.state, "火系", "等级")).toBe(5);
+    expect(result!.state.alias).toBe("强哥");
+  });
+
+  it("嵌套 update 链跨章累积：ch-1 3→5、ch-2 5→7（按章序应用，at=ch-1 得 5、at=ch-2 得 7）", () => {
+    const { charA } = seedBase({
+      ability_panel: [{ name: "火系", children: [{ name: "等级", value: 3 }] }],
+    });
+    addDelta("ch-1", charA, [{ field: "ability_panel.火系.等级", op: "update", from: 3, to: 5 }], "第一章：3→5");
+    addDelta("ch-2", charA, [{ field: "ability_panel.火系.等级", op: "update", from: 5, to: 7 }], "第二章：5→7");
+
+    const atCh1 = computeState(db, dir, { targetType: "character", targetId: charA, atNodeId: "ch-1" });
+    expect(atCh1!.conflicts).toEqual([]);
+    expect(panelLeafValue(atCh1!.state, "火系", "等级")).toBe(5);
+
+    const atCh2 = computeState(db, dir, { targetType: "character", targetId: charA, atNodeId: "ch-2" });
+    expect(atCh2!.conflicts).toEqual([]);
+    expect(panelLeafValue(atCh2!.state, "火系", "等级")).toBe(7);
+    expect(atCh2!.appliedDeltas.map((d) => d.nodeId)).toEqual(["ch-1", "ch-2"]);
+  });
+
+  it("任意层数：ability_panel.火系.攻击.火球术 三级下钻；空值叶子（无 value 键）可被 set 赋值", () => {
+    const { charA } = seedBase({
+      ability_panel: [
+        { name: "火系", children: [{ name: "攻击", children: [{ name: "火球术", value: 1 }] }] },
+        { name: "水系", children: [{ name: "控水" }] }, // 空值叶子（无 value 键）
+      ],
+    });
+    addDelta(
+      "ch-1",
+      charA,
+      [
+        { field: "ability_panel.火系.攻击.火球术", op: "update", from: 1, to: 3 },
+        { field: "ability_panel.水系.控水", op: "set", to: 2 },
+      ],
+      "三级下钻 + 空值叶子赋值",
+    );
+
+    const result = computeState(db, dir, { targetType: "character", targetId: charA, atNodeId: "ch-1" });
+    expect(result!.conflicts).toEqual([]);
+    const panel = result!.state.ability_panel as Array<Record<string, unknown>>;
+    const fire = panel.find((n) => n.name === "火系") as { children: Array<Record<string, unknown>> };
+    const attack = fire.children.find((n) => n.name === "攻击") as { children: Array<{ value?: unknown }> };
+    expect(attack.children[0].value).toBe(3);
+    expect(panelLeafValue(result!.state, "水系", "控水")).toBe(2);
+  });
+
+  it("数组段按同层 name 匹配取**先序第一个**（同层重名 → 只改第一个）", () => {
+    const { charA } = seedBase({
+      ability_panel: [
+        { name: "火系", children: [{ name: "等级", value: 1 }, { name: "等级", value: 2 }] },
+      ],
+    });
+    addDelta("ch-1", charA, [{ field: "ability_panel.火系.等级", op: "update", from: 1, to: 9 }], "重名取先序第一");
+
+    const result = computeState(db, dir, { targetType: "character", targetId: charA, atNodeId: "ch-1" });
+    expect(result!.conflicts).toEqual([]);
+    const panel = result!.state.ability_panel as Array<{ children: Array<{ value?: unknown }> }>;
+    expect(panel[0].children.map((n) => n.value)).toEqual([9, 2]);
+  });
+
+  it("顶层精确键优先：字面含 `.` 的顶层键不被当作路径（自定义字段名兼容）", () => {
+    const { charA } = seedBase({ "a.b": "字面键", nested: { a: { b: "对象里" } } });
+    addDelta("ch-1", charA, [{ field: "a.b", op: "set", to: "改写字面键" }], "字面点键");
+
+    const result = computeState(db, dir, { targetType: "character", targetId: charA, atNodeId: "ch-1" });
+    expect(result!.conflicts).toEqual([]);
+    expect(result!.state["a.b"]).toBe("改写字面键");
+    expect(result!.state.nested).toEqual({ a: { b: "对象里" } });
+  });
+
+  it("对象段按键下钻：custom_fields.门派 可写（泛型嵌套对象，非面板专用）", () => {
+    const { charA } = seedBase({ custom_fields: { 门派: "青云", 境界: "练气" } });
+    addDelta("ch-1", charA, [{ field: "custom_fields.门派", op: "update", from: "青云", to: "魔教" }], "改门派");
+
+    const result = computeState(db, dir, { targetType: "character", targetId: charA, atNodeId: "ch-1" });
+    expect(result!.conflicts).toEqual([]);
+    expect(result!.state.custom_fields).toEqual({ 门派: "魔教", 境界: "练气" });
+  });
+
+  it("中途缺失三例（面板不存在 / 分组不存在 / 叶子不存在）→ state 不变 + skipped(actual=undefined) + conflicts，且不抛错", () => {
+    const { charA } = seedBase({
+      alias: "小强", // 未涉及字段（断言不被路径解析波及）
+      ability_panel: [{ name: "水系", children: [{ name: "控水", value: 1 }] }],
+    });
+    addDelta(
+      "ch-1",
+      charA,
+      [
+        { field: "ability_panel.火系.等级", op: "set", to: 5 }, // 分组不存在
+        { field: "ability_panel.水系.火球术", op: "set", to: 5 }, // 叶子不存在
+        { field: "missing_panel.火系.等级", op: "set", to: 5 }, // 顶层容器不存在
+        { field: "ability_panel.水系.控水", op: "update", from: 1, to: 2 }, // 正常（对照：仍应生效）
+      ],
+      "路径缺失演练",
+    );
+
+    const result = computeState(db, dir, { targetType: "character", targetId: charA, atNodeId: "ch-1" });
+ // 三条缺失被标注、第四条正常生效 → 证明缺失不打断后续 change
+    expect(result!.conflicts).toEqual([
+      { deltaId: expect.any(String), field: "ability_panel.火系.等级", expected: undefined, actual: undefined },
+      { deltaId: expect.any(String), field: "ability_panel.水系.火球术", expected: undefined, actual: undefined },
+      { deltaId: expect.any(String), field: "missing_panel.火系.等级", expected: undefined, actual: undefined },
+    ]);
+    expect(result!.appliedDeltas[0].skipped).toEqual([
+      { index: 0, field: "ability_panel.火系.等级", expected: undefined, actual: undefined },
+      { index: 1, field: "ability_panel.水系.火球术", expected: undefined, actual: undefined },
+      { index: 2, field: "missing_panel.火系.等级", expected: undefined, actual: undefined },
+    ]);
+    expect(panelLeafValue(result!.state, "水系", "控水")).toBe(2); // 正常 change 生效
+    expect(result!.state.alias).toBe("小强"); // 未涉及字段不动
+  });
+
+  it("面板字段整体缺失（data 无 ability_panel）→ 嵌套 set 标冲突，不新建结构、不抛错", () => {
+    const { charA } = seedBase({ alias: "小强" });
+    addDelta("ch-1", charA, [{ field: "ability_panel.火系.等级", op: "set", to: 5 }], "面板缺失");
+
+    const result = computeState(db, dir, { targetType: "character", targetId: charA, atNodeId: "ch-1" });
+    expect(result!.state).toEqual({ alias: "小强" }); // 未新建 ability_panel
+    expect(result!.conflicts).toEqual([
+      { deltaId: expect.any(String), field: "ability_panel.火系.等级", expected: undefined, actual: undefined },
+    ]);
+  });
+
+  it("末段落在**分支**节点上 → 不可赋值（标冲突，不写坏结构）", () => {
+    const { charA } = seedBase({
+      ability_panel: [{ name: "火系", children: [{ name: "等级", value: 3 }] }],
+    });
+    addDelta("ch-1", charA, [{ field: "ability_panel.火系", op: "set", to: 99 }], "写分支");
+
+    const result = computeState(db, dir, { targetType: "character", targetId: charA, atNodeId: "ch-1" });
+    const panel = result!.state.ability_panel as Array<Record<string, unknown>>;
+    expect(panel[0].value).toBeUndefined(); // 分支未被塞入 value
+    expect(result!.conflicts).toEqual([
+      { deltaId: expect.any(String), field: "ability_panel.火系", expected: undefined, actual: undefined },
+    ]);
+  });
+
+  it("嵌套 update 的 from 与实际不符 → conflicts.actual = 叶子当前值（非 undefined）", () => {
+    const { charA } = seedBase({
+      ability_panel: [{ name: "火系", children: [{ name: "等级", value: 3 }] }],
+    });
+    addDelta("ch-1", charA, [{ field: "ability_panel.火系.等级", op: "update", from: 8, to: 9 }], "from 不符");
+
+    const result = computeState(db, dir, { targetType: "character", targetId: charA, atNodeId: "ch-1" });
+    expect(panelLeafValue(result!.state, "火系", "等级")).toBe(3); // 未被改写
+    expect(result!.conflicts).toEqual([
+      { deltaId: expect.any(String), field: "ability_panel.火系.等级", expected: 8, actual: 3 },
+    ]);
+  });
+
+  it("add/remove 不走点分路径（仅顶层字面键）：字面点键数组可追加，面板路径不做数组语义", () => {
+    const { charA } = seedBase({
+      "list.a": ["x"],
+      ability_panel: [{ name: "火系", children: [{ name: "等级", value: 3 }] }],
+    });
+    addDelta(
+      "ch-1",
+      charA,
+      [
+        { field: "list.a", op: "add", value: "y" }, // 字面顶层键（含点）→ 按顶层数组追加
+        { field: "ability_panel.火系", op: "add", value: "z" }, // 点分字段 → 不做路径解析，字面键非数组 → 静默跳过
+        { field: "ability_panel.火系", op: "remove", value: "z" }, // 同上，静默跳过
+      ],
+      "add/remove 仅顶层",
+    );
+
+    const result = computeState(db, dir, { targetType: "character", targetId: charA, atNodeId: "ch-1" });
+    expect(result!.conflicts).toEqual([]); // add/remove 静默跳过不标冲突（既有语义）
+    expect(result!.state["list.a"]).toEqual(["x", "y"]);
+    expect(panelLeafValue(result!.state, "火系", "等级")).toBe(3);
+    const panel = result!.state.ability_panel as Array<Record<string, unknown>>;
+    expect(panel[0].children).toHaveLength(1); // 未被数组语义污染
+  });
+});
+
+describe("字段路径解析（field-path 纯函数直接单测）", () => {
+  it("顶层键优先于点分解析；无点字段不要求键存在（set 可新建语义保留）", () => {
+    const state: Record<string, unknown> = { "a.b": "字面", a: { b: "再嵌套也不影响" } };
+    expect(readFieldPath(state, "a.b")).toEqual({ found: true, value: "字面" });
+    expect(writeFieldPath(state, "a.b", "改")).toBe(true);
+    expect(state["a.b"]).toBe("改");
+    expect(state.a).toEqual({ b: "再嵌套也不影响" });
+
+ // 无点且键不存在：locate 仍给出顶层键位置（与历史 `state[field] = to` 语义一致）
+    expect(readFieldPath(state, "新字段")).toEqual({ found: true, value: undefined });
+    expect(writeFieldPath(state, "新字段", 1)).toBe(true);
+    expect(state["新字段"]).toBe(1);
+  });
+
+  it("数组段按 name 匹配；中途缺失/末段分支/标量中途 → 未命中且写入返回 false（state 不变）", () => {
+    const leaf = { name: "等级", value: 3 };
+    const branch = { name: "火系", children: [leaf] };
+    const state: Record<string, unknown> = {
+      ability_panel: [branch],
+      scalar: "文本",
+      bad: [{ name: 123 }, null, { noName: true }, { name: "正常", value: 1 }],
+    };
+
+    expect(readFieldPath(state, "ability_panel.火系.等级")).toEqual({ found: true, value: 3 });
+    expect(writeFieldPath(state, "ability_panel.火系.等级", 5)).toBe(true);
+    expect(leaf.value).toBe(5);
+
+ // 中途段缺失
+    expect(readFieldPath(state, "ability_panel.水系.等级")).toEqual({ found: false, value: undefined });
+    expect(writeFieldPath(state, "ability_panel.水系.等级", 1)).toBe(false);
+ // 末段落到分支（分支不可赋值）
+    expect(writeFieldPath(state, "ability_panel.火系", 1)).toBe(false);
+    expect(branch).not.toHaveProperty("value");
+ // 中途落在标量上
+    expect(writeFieldPath(state, "scalar.任意", 1)).toBe(false);
+ // 数组内坏元素跳过，正常元素仍可匹配
+    expect(readFieldPath(state, "bad.正常")).toEqual({ found: true, value: 1 });
   });
 });

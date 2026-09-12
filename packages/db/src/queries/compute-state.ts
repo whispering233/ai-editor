@@ -14,6 +14,13 @@
 // - getOutlinePathIds（storage/outline.ts）：根 → at_node 树路径（场景 → 所属章的映射 +
 // 节点缺失时抛错——视为调用方 bug 不捕获）
 // - getEntity（entity.ts）：目标实体行（data 已解析为对象）；不存在/已软删返回 null
+// - readFieldPath / writeFieldPath（field-path.ts）：字段路径解析（卡片 2.4）——顶层精确键优先 /
+// 点分下钻（数组段按 name 匹配）/ 中途缺失 → 未命中（交本模块标注 skipped+conflicts）
+//
+// 字段路径（2026-09，契约：docs/db/schema.md「字段路径」+「面板路径解析口径」+「解析步骤」）：
+// `set`/`update` 支持点分嵌套路径（如 `ability_panel.火系.等级`）；`add`/`remove` 仅顶层字段。
+// 无分隔符的字段保持历史语义（顶层键、`set` 可新建）；含 `.` 的字段逐段必须已存在，
+// 缺失或末段落在分支上 → **不抛错**，按「跳过 + skipped/conflicts 标注」处理（不静默 inert）。
 //
 // plot_edge 不参与：本实现只读 delta_records，relation_records 的剧情连线
 // 天然不进入累积，无需额外过滤。
@@ -32,20 +39,21 @@ import type {
 import type { Db } from "../connection.js";
 import { listDeltasByNode } from "./delta.js";
 import { getEntity } from "./entity.js";
+import { readFieldPath, writeFieldPath } from "./field-path.js";
 import { deriveChapterOrder, type ChapterOrderInfo } from "./outline-ops.js";
 import { findOutlineNode, getOutlinePathIds, readOutlineFile } from "../storage/outline.js";
 
 /**
  * 应用单条 change 到 state（四段规则 +）：
- * - `set`：state[field] = to（直接替换）
- * - `update`：state[field] === from → state[field] = to；否则**跳过该 change**——
+ * - `set`：按字段路径写入（顶层直接替换；嵌套路径需逐段命中，未命中 → **跳过 + 冲突标注**）
+ * - `update`：字段路径处当前值 === from → 写入 to；否则（不相等 **或路径未命中**）**跳过该 change**——
  * 在 skipped 追加 { index, field, expected: from, actual } 且 conflicts 追加
  * { deltaId, field, expected: from, actual }（继续累积后续 change/delta，不抛 409——
- * 手动编辑 data 不产生 Delta 属正常用户行为）
+ * 手动编辑 data 不产生 Delta 属正常用户行为；面板结构改名/删叶子使旧路径失效，产生同款冲突）
  * - `add`：state[field] 为数组 → 按 value 追加；非数组**静默跳过**（防御，不标 conflicts——
- * 仅定义 update 冲突）
+ * 仅定义 update/set 路径冲突）；**不走点分路径**（数组语义仅顶层字段）
  * - `remove`：state[field] 为数组 → 按值匹配移除**首个**匹配；值不存在静默忽略；
- * 非数组静默跳过
+ * 非数组静默跳过；**不走点分路径**
  * 字段约定：add/remove 用 value，set/update 用 to。
  * 防御：非对象 change 静默忽略（changes 列来自 JSON 解析，坏项不打挂整条计算）。
  */
@@ -60,19 +68,21 @@ function applyChange(
   if (change === null || typeof change !== "object") return;
   const { field, op } = change;
   switch (op) {
-    case "set": // set：直接替换（to）
-      state[field] = change.to;
-      break;
-    case "update": // update：旧值 → 新值，校验当前值 === from
-      if (state[field] === change.from) {
-        state[field] = change.to;
-      } else {
-        const actual = state[field];
-        skipped.push({ index, field, expected: change.from, actual });
-        conflicts.push({ deltaId, field, expected: change.from, actual });
+    case "set": // set：按字段路径写入（嵌套路径未命中 → 跳过 + 冲突标注）
+      if (!writeFieldPath(state, field, change.to)) {
+        skipped.push({ index, field, expected: change.from, actual: undefined });
+        conflicts.push({ deltaId, field, expected: change.from, actual: undefined });
       }
       break;
-    case "add": // add：按 value 向数组追加（非数组静默跳过）
+    case "update": { // update：旧值 → 新值，校验当前值 === from（路径未命中同不走写入 → 冲突）
+      const { found, value } = readFieldPath(state, field);
+      if (found && value === change.from && writeFieldPath(state, field, change.to)) break;
+      const actual = found ? value : undefined;
+      skipped.push({ index, field, expected: change.from, actual });
+      conflicts.push({ deltaId, field, expected: change.from, actual });
+      break;
+    }
+    case "add": // add：按 value 向数组追加（非数组静默跳过；不走点分路径）
       if (Array.isArray(state[field])) {
         (state[field] as unknown[]).push(change.value);
       }
