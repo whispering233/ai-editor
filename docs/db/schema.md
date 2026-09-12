@@ -175,6 +175,8 @@ CREATE TABLE delta_records (
 > **字段路径（2026-09）**：`field` 支持点分嵌套路径（`ability_panel.火系.等级`）——`computeState` 逐层下钻定位；**嵌套路径仅支持标量 `set` / `update`**，`add` / `remove`（数组语义）只在顶层字段使用。
 >
 > **已知边界（开发阶段决策）**：卡 1.2 之前写入的非章锚点（卷/场景）Delta **既不被累积、也无 UI 入口**（读侧宽松但不展示）——手改文件或导入旧备份时这些记录会静默 inert；开发阶段无存量数据，不做兼容。
+>
+> **状态机字段用 `set`（2026-09）**：伏笔 `status`（`planted → progressing → resolved / abandoned`）的 Delta 一律 `op=set`——该字段由写路径同步为**最新值**（终态守卫/列表分组/AI 统计直接读 `data.status`，见 `../design/10-data-model.md` §4、《钩子状态同步》），与 `update` 的「`data` = 初始值」前提互斥；用 `set` 后重放恒得正确终态、不再产生假 `conflicts`（from→to 叙事保留在 `description`）。**已知边界**：`at_node` 在首次转移之前时返回最新值（近似）。
 
 ## sessions/*.jsonl — 对话历史（文件存储）
 

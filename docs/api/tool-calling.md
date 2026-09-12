@@ -217,7 +217,9 @@ create_outline_node(type, title, parent) → id
 move_node(node_id, parent, order)     → void
 delete_node(node_id)                  → void
 advance_hook(hook_id, node_id, description)  → id   // 复合写（2026-08 修订，🟠-7）：
-                                                     // delta_records 记 status 变化 + relation_records 插 advances
+                                                     // delta_records 记 status 变化（**op=set**，2026-09 裁决 a：
+                                                     //   状态机字段为物化事实，不声明 from；from→to 叙事写在 description）
+                                                     //   + relation_records 插 advances
                                                      // 一次提交，幂等（按 (node_id, hook_id, relation_type)
                                                      // 判重：重复确认或重复提案均不重复推进）
                                                      // node_id **仅章**（2026-09）：伏笔锚点限 chapter
