@@ -19,6 +19,9 @@
 - [ ] 3.1 master-detail 宿主 + 左栏列表（搜索 / 排序 / 选中 / 空态 / 自动选首个 / 窄屏两级）
 - [ ] 3.2 双视图 tab（初始化数据 / 当前位置数据；tab 2 只读；`ComputePreview` 归并入 tab 2，保留手动选节点；`conflicts` 标注照搬）
 - [ ] 3.3 字段三分渲染（不可变 / 可变分区；`description` 必填校验；详情页表单）
+  - 分区标题：**「基础信息」（不可变：姓名 / 角色定位 / 描述）/「可变数据」（可变：假名 / 性别 / 年龄 / 种族 / 动机 / 性格 + 能力面板宿主）**——各自 `card` 容器 + `section-title`；关系网 / 其他关联在 tab **之下**（不在 tab 内），由 3.6 重构。
+  - **`description` 必填校验**（仅前端：保存时非空 + 内联错误；服务端不硬校验——见 `docs/db/schema.md`）；tab 2 只读态同样呈现两个分区。
+  - **卡 3.2 oracle 追加两条**：① `current_position` 指向已软删/不存在节点（`resolveCurrentAtNode` 返回空）→ **回落 tab 1** 或给「当前位置已失效，请重设」提示；② `config` 尚未加载时不得瞬时误判为「未设置当前位置」（到位后再判）。
 - [ ] 3.4 `panel-tree` 控件（结构编辑 + 叶子值 + 拖拽 + 只读态 + 模板/复制入口）
   - **含**：把面板**叶子路径**接入「+ 新建变更」字段下拉（`lib/delta-create.ts` 现以 `NON_DELTA_FIELDS` 排除整树，需按当前实体的面板结构动态展开叶子路径，用 shared `abilityPanelFieldPath` 拼前缀）；结构编辑需内联提示「名字含 `.` 不可寻址 / 同层重名」（口径见 `docs/db/schema.md`）。
 - [ ] 3.5 新建人物弹窗（必填 姓名 / 角色定位 / 描述；重名软提示；面板「空白 / 内置模板 / 从角色复制」；提交后自动选中）
@@ -38,4 +41,5 @@
 - **通用「+ 新建变更」表单仍可为 hook 的 `status` 造 `op=update`**（`lib/delta-create.ts`）：手动路径会产生 CAS 假冲突，属「手动编辑 data 不产生 Delta 属正常」的对偶情形；如需彻底闭环则收窄字段白名单，暂接受。
 - `listDeltasByNodes` 的 JSDoc 可补一句「调用方负责传章 id（层级收窄不在本函数）」——它是通用原语，传场景 id 也会照实返回（当前唯一调用点正确）。
 - `search_entities` 工具描述仍泛写「status 精确匹配 data.status」；character 已无该字段（文档已注明仅 hook 有意义），下次路过时补一句。
+- **人物页与泛型详情页的分化口径（卡 3.2 oracle 提出）**：`CharacterDetail`（904 行）自带一份字段渲染/关系列表实现（`TagsEditor`/`CustomFieldsEditor` 等），与泛型 `EntityDetail` 的私有实现是两份。**登记口径：泛型详情页冻结（只服务 setting/location/hook/timepoint，不再承载新能力），人物页独立演化**；若将来要修泛型页的字段渲染 bug，需评估是否同步人物页；批次 4 再评估是否抽 `components/entity/entity-fields.tsx` 公共层。
 - `packages/tools/src/executor/hook.test.ts` 有一条用例标题仍写「delta 记 status → progressing（**from=当前状态**）」，与 `op=set` 形态不符（断言本身正确）——下次路过时改标题。
