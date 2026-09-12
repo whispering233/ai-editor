@@ -76,6 +76,7 @@
 ```
 
 > **层级校验（2026-08）**：`relation_type=belongs_to` 且两端均为 `setting` 时（设定层级：子设定 → 父设定）——禁自指（target ≠ source）、**防环**（新父的祖先链不得含该子设定，沿 belongs_to 边向上遍历，db 层全量边邻接表构建）——违规 → 400 `VALIDATION_ERROR` + 中文信息。其余 belongs_to（如人物→设定）与其它关系类型不受影响。
+> **伏笔锚点仅章（2026-09）**：`relation_type ∈ {plants, advances, resolves}` 且 `source_type=outline_node` 时，源节点必须为 `chapter`——卷/场景 → 400 `VALIDATION_ERROR`（伏笔是章级叙事事件，与 Delta 锚点同口径；AI 提案通道 `propose_add_relation` 在 tools 层同步拒绝）。
 > **父子查询约定**：查「X 的父」= `GET /relation?target_type=setting&target_id=X&relation_type=belongs_to&depth=1`（来源端）；查「X 的子」= `GET /relation?source_type=setting&source_id=X&relation_type=belongs_to&depth=1`（目标端）。
 
 ### PUT /api/v1/relation/:id

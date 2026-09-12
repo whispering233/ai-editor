@@ -34,7 +34,7 @@
   - `user_version > SCHEMA_VERSION`（未来版本）→ **拒绝打开** 409 `PROJECT_VERSION_NEWER`（数据原封不动，提示升级程序）；
   - `user_version < SCHEMA_VERSION`（旧版本）→ **有迁移路径**（`packages/db/src/migrations/` 存在从当前版本到目标版本的连续迁移链）→ `runMigrations` 前向迁移；**无迁移路径** → 删库重建兜底（备份 `data.db.v{n}.bak` + `outline.json.v{n}.bak`）。
 - **迁移机制**：`migrations/` 目录每个文件导出一个 `Migration = { version, up }`（`001_xxx.ts` → version 1），`index.ts` 按 version 升序聚合导出 `MIGRATIONS`（tsc 编译进 dist 随包分发，无运行时目录读取）。`runMigrations` 对缺失版本逐个执行：**每个迁移一个事务（`up(db)` + `setUserVersion(version)` 原子提交——成功 ⇒ 版本已写入；失败 ⇒ 版本未变）**；**整批迁移前自动快照** data.db → `data.db.v{n}.{YYYYMMDDHHmmssSSSZ}.bak`（checkpoint 后复制主文件，时间戳命名不覆盖旧备份，失败重试现场保留）。迁移失败 → 该迁移回滚 + 版本停在前一迁移后，下次 open 重试。
-- 当前 `SCHEMA_VERSION = 6`；迁移链：`002_event_timeline.ts`（version 2：entities 表 CHECK 扩入 `'event'` + 新增 `sort_order` 列）、`003_timepoint.ts`（version 3，G2 修订：entities 表 CHECK 扩入 `'timepoint'` + `event.data.time_label` 迁移为 timepoint 实体 + occurs_at 关系，同名 time_label 合并为同一 timepoint）、`004_setting_tags.ts`（version 4，K2 修订：**无 DDL**——setting 旧 `data.rules` 分类值复制到 `data.tags` 并移除 rules，仅 data JSON 数据迁移）、`005_reference.ts`（version 5：entities 表 CHECK 扩入 `'reference'`，无数据搬移仅 DDL）、`006_sessions_jsonl.ts`（version 6：**对话历史出库**——`chat_messages` 全量导出为旧格式 `sessions/<session_id>.jsonl` 后 `DROP TABLE`；产物为旧 v1 格式，现已被 pi session 格式取代、不再被读取（数据保留在磁盘）；**id 不合法的旧会话以 `sess_legacy_<sha256 前 16 位>` 文件名导出**）。**SQLite 无法直接修改 CHECK 约束**，迁移走「建新表（新 CHECK）→ 拷贝数据 → drop 旧表 → rename」四步（`relation_records`/`delta_records` 无外键指向 entities，迁移只动 entities 表）；v1 → v6 迁移链存在 ⇒ 旧库 open 时自动前向迁移，不再走删库重建兜底。
+- 当前 `SCHEMA_VERSION = 7`；迁移链：`002_event_timeline.ts`（version 2：entities 表 CHECK 扩入 `'event'` + 新增 `sort_order` 列）、`003_timepoint.ts`（version 3，G2 修订：entities 表 CHECK 扩入 `'timepoint'` + `event.data.time_label` 迁移为 timepoint 实体 + occurs_at 关系，同名 time_label 合并为同一 timepoint）、`004_setting_tags.ts`（version 4，K2 修订：**无 DDL**——setting 旧 `data.rules` 分类值复制到 `data.tags` 并移除 rules，仅 data JSON 数据迁移）、`005_reference.ts`（version 5：entities 表 CHECK 扩入 `'reference'`，无数据搬移仅 DDL）、`006_sessions_jsonl.ts`（version 6：**对话历史出库**——`chat_messages` 全量导出为旧格式 `sessions/<session_id>.jsonl` 后 `DROP TABLE`；产物为旧 v1 格式，现已被 pi session 格式取代、不再被读取（数据保留在磁盘）；**id 不合法的旧会话以 `sess_legacy_<sha256 前 16 位>` 文件名导出**）、`007_character_ability_panel.ts`（version 7，2026-09：**无 DDL**——`character.data.abilities[]` 迁为 `ability_panel` 叶子并移除旧字段，幂等且不覆盖已有 `ability_panel`，仅 data JSON 数据迁移，同 004 先例）。**SQLite 无法直接修改 CHECK 约束**，迁移走「建新表（新 CHECK）→ 拷贝数据 → drop 旧表 → rename」四步（`relation_records`/`delta_records` 无外键指向 entities，迁移只动 entities 表）；v1 → v7 迁移链存在 ⇒ 旧库 open 时自动前向迁移，不再走删库重建兜底。
 - **import 侧联动**：导入备份时 `user_version < SCHEMA_VERSION` 且**有迁移路径** → 接受（搬入后 open 自动迁移，v5 及更早备份经增量迁移升到 v6，含对话历史出库）；无路径 → 409 `SCHEMA_VERSION_MISMATCH`；`>` 当前 → 409（未来版本语义）。
 
 ## entities — 实体表
@@ -56,14 +56,45 @@ CREATE TABLE entities (
 
 | type | data 关键字段 |
 |------|-------------|
-| `character` | `role`, `gender`, `age`, `personality[]`, `motivation`, `abilities[]`, `status`（**自由文本：人物当前处境状态，如「活跃、退场、已故」——列表与详情页表单均不再展示，存量数据 .passthrough() 容错保留，AI 工具 filters.status 语义不变**）, `custom_fields` |
+| `character` | **不可变**：`role`, `description`（**必填**，人物概述——这个人物是谁）；**可变**：`alias`（假名/化名——**单值**：当前位置时这个人的化名是什么；Delta `set`/`update` 标量而非数组）, `gender`, `age`, `race`, `motivation`, `personality[]`, `ability_panel`（能力面板树）；`custom_fields`。（**2026-09 修订**：`status` 彻底移除——详情表单/列表/AI 摘要三处早已无展示，旧残留由 `.passthrough()` 容错；`abilities[]` 经 007 迁移为 `ability_panel`，见下方「人物 data 分层」） |
 | `setting` | `description`, `tags[]`（**分类标签，统一字段**）, `rules[]`（**规则条款，仅详情页编辑**）, `custom_fields` —— **`parent_id` 与 `category` 均已废弃**：层级由 belongs_to 关系表达、分类由 tags 承接；旧字段残留由 `.passthrough()` 容错；旧 rules 分类值经 004 迁移（SCHEMA_VERSION 4）复制到 tags |
-| `location` | `type`, `parent_id`, `description`, `custom_fields` |
 | `location` | `type`, `parent_id`, `description`, `custom_fields` |
 | `hook` | 伏笔（关系生命周期见下方 `plants`/`advances`/`resolves` 等）；data 字段集见 shared `hookDataSchema`（status/category/expected_payoff/payoff_timing/half_life/is_core/notes），服务端按 schema 校验 |
 | `event` | `description`（文本）, `tags[]`（字符串数组，分类筛选用）——**G2 修订：`time_label` 已移除**（迁移至 timepoint 实体 + occurs_at 关系，见下） |
 | `timepoint` | `{}`（无专属字段——**G2：时间标签文本 = name**，可重命名；YAGNI 不加 data） |
 | `reference` | `type`（**自由文本分类，修订：不再预置枚举**——缺省 `material` 写入侧兜底，存量枚举值原样保留）、`content` 内容全文（长文本无上限，列表接口摘要截断 120 字、详情接口返回全文）、`source` 来源（URL/书名/作者，可选）、`tags[]`（标签数组，统一字段）——参考资料是外部素材/灵感笔记（非本书正文），AI 可读取参考、提案写入；**2026-08 修订**：两类承载——`kind` = `file`（本地 md 文档，`file_name` 相对路径 + `content` 正文镜像 + `file_mtime` 上次同步快照）/ `link`（外源链接，`url` **必填** + `content` 可选备注）；缺省视为 link（存量无 kind 条目运行时兼容）；`source` 字段仅存量旧条目使用（link 类展示兼容），新建条目不再写入；其后 `type` 放宽为 `z.string().optional()`，无 DDL 迁移（JSON 层演进，SCHEMA_VERSION 保持 5） |
+
+### 人物 data 分层（2026-09）
+
+人物 data 按**可变性三分**建模——它同时是「双视图」（初始化数据 / 当前位置数据）、「变更记录字段白名单」与「AI 变更提案边界」的共同依据：
+
+| 分层 | 字段 | 是否参与 Delta |
+|------|------|----------------|
+| **不可变** | `entities.name`（姓名，**列**不是 data 字段）、`data.role`（角色定位）、`data.description`（描述，必填） | **否**——不出现在变更记录的字段下拉；人工经 `PUT` 直接编辑 |
+| **可变** | `data.alias` / `gender` / `age` / `race` / `motivation` / `personality[]` / `ability_panel` 叶子值 | **是**——沿大纲树父链累积，构成「当前位置数据」视图 |
+| **关系网** | `relation_records`（人↔人 5 类 + `appears_in` / `belongs_to` / `owns` / `masters`） | 否——关系不参与 `computeState` |
+
+**`ability_panel` 能力面板结构**（用户自定义字段树，递归）：
+
+```json
+[
+  { "name": "火系", "children": [
+      { "name": "等级", "value": 3 },
+      { "name": "熟练度" }
+  ]}
+]
+```
+
+- **结构不变式**：有 `children` = 分支（**不可赋值**）；无 `children` = 叶子（**可赋值**）。删除分支的最后一个子节点 → 该节点降级为叶子。叶子 `value` 允许缺省（空值）。嵌套层数不限；顺序 = 数组顺序（**无 `sort_order` 列、无迁移**）。
+- **叶子值类型**：`string | number`（与 `DeltaChange` 的 `from`/`to`/`value` 同域）；UI 自动判定（纯数字 → number）。
+- **结构与值分工**：增删/改名/排序节点 = 人工编辑（`PUT /entity/character/:id` partial，**不产生 Delta**）；**只有已存在的叶子**可被 Delta 修改，字段路径 = 点分拼接（如 `ability_panel.火系.等级`）。
+- **宽校验**：`characterDataSchema` 对 `ability_panel` 不做结构精校验（沿用 `custom_fields` 的宽松先例）——UI 输入受控 + 读取端防御（结构非法按空面板处理，不抛错打挂 `computeState`）。
+
+**`status` 移除与 `abilities` 迁移（007 迁移，SCHEMA_VERSION 7）**：
+
+- `status`（旧「人物当前处境」自由文本）：**彻底移除**（`characterDataSchema` + `toSummary` character 分支 + `getEntitySummary(character).byStatus` + 文档）。**`data.status` 机制本身保留**——伏笔 `hook.data.status` 生命周期（`planted → progressing → resolved / abandoned`）与 `matchDataFilters.status` / `filters.status` 通用过滤不受影响。**无数据迁移**（旧残留 passthrough 兜底，不解析不展示）。
+- `abilities[]`（旧标签数组）→ `ability_panel`：007 迁移把每个标签迁成**顶层分组「能力」下的一个叶子**（`value` 留空），并移除旧字段。**幂等 + 不覆盖**：仅处理「含 `abilities` 且无 `ability_panel`」的角色行，已手建面板的角色不动。
+- **统计口径连带**：`get_entity_summary(character).topAbilities` 与 `toSummary` 的能力摘要改读**面板顶层分组名**（如「火系」「水系」）——叶子名多是「等级/熟练度」这类重复词，按叶子计数无意义。
 
 ### 时间轴（时间标签点实体化）
 
@@ -115,7 +146,7 @@ CREATE INDEX idx_relation_type   ON relation_records(relation_type) WHERE delete
 | `occurs_in` | 发生于大纲节点（事件锚定） | event→大纲节点（多对多：一个事件可关联多个场景/章节，一个场景可被多个事件引用；**锚定 = 关系，无独立 chapter_anchor 字段**） |
 | `occurs_at` | 发生在地点 | 大纲节点→地点 |
 | `plot_edge` | 剧情连线（画布推演） | 大纲节点→大纲节点，`metadata` 存连线标签 |
-| `plants` / `advances` / `resolves` | 伏笔管理 | 大纲节点→hook |
+| `plants` / `advances` / `resolves` | 伏笔管理（**源端仅章**：仅有 `chapter` 节点可作为伏笔锚点，`POST /relation` 校验 400——伏笔是章级叙事事件） | 章节点→hook |
 | `depends_on` | 伏笔依赖 | hook→hook |
 | `involves` | 涉及 | hook→实体 |
 
@@ -124,7 +155,7 @@ CREATE INDEX idx_relation_type   ON relation_records(relation_type) WHERE delete
 ```sql
 CREATE TABLE delta_records (
   id          TEXT PRIMARY KEY,
-  node_id     TEXT NOT NULL,       -- 触发变更的大纲节点
+  node_id     TEXT NOT NULL,       -- 触发变更的大纲节点（**仅章**：POST /delta 校验节点 type='chapter'，非章 400）
   target_type TEXT NOT NULL,
   target_id   TEXT NOT NULL,
   changes     TEXT NOT NULL,       -- JSON: [{field, op, from?, to?, value?}]
@@ -138,6 +169,10 @@ CREATE TABLE delta_records (
 ```
 
 > 状态计算只沿大纲树父链累积已确认 Delta：`computeState` 从根到目标节点收集路径上所有 Delta，**节点间按树路径顺序、同一节点内按 `order` 应用**（双层排序）；`plot_edge` 连线不参与。大纲严格三层、无游离节点。
+>
+> **锚点仅章（2026-09）**：Delta 的触发节点只能是 `chapter`——卷太粗、场景太碎，一章一个状态变化点才是叙事粒度；**收窄仅限写入**（`POST /delta` 400 + AI `propose_add_delta` 拒绝），`POST /delta/compute` 的 `at_node_id` 不限层级（「第 3 章第 2 场时他什么状态」是合法查询）。
+>
+> **字段路径（2026-09）**：`field` 支持点分嵌套路径（`ability_panel.火系.等级`）——`computeState` 逐层下钻定位；**嵌套路径仅支持标量 `set` / `update`**，`add` / `remove`（数组语义）只在顶层字段使用。
 
 ## sessions/*.jsonl — 对话历史（文件存储）
 
@@ -219,7 +254,7 @@ CREATE TABLE delta_records (
   "name": "我的小说",
   "language": "zh",
   "schema_version": 1,
-  "current_position": "sc-42",
+  "current_position": "ch-12",
   "backup_frequency_minutes": 10,
   "created_at": "2026-08-01T10:00:00Z",
   "updated_at": "2026-08-01T10:00:00Z"
@@ -235,7 +270,7 @@ CREATE TABLE delta_records (
 | `language` | `"zh"` \| `"en"` | 语言 |
 | `prompt` | string | **已废弃**：项目级提示词——不再读写；项目规则改由项目目录 `AGENTS.md` 承载（见下节）。旧文件中的残留字段宽松读取（不参与 schema_version 判定），新写入不再产生该字段 |
 | `schema_version` | number | JSON 结构版本（与 outline.json 顶层同步写入） |
-| `current_position` | string \| null | 大纲「当前位置」节点 id（伏笔健康指标依赖；null = 未设置；须指向存在的非软删节点） |
+| `current_position` | string \| null | 大纲「当前位置」节点 id（伏笔健康指标/双视图依赖；null = 未设置；**须指向存在的非软删 `chapter` 节点**——卷/场景不承载写作进度，非章 → `PUT /project/config` 400）。**读侧宽松**：存量指向非章节点的值由 `ChapterIndex.chapterOf` 沿父链推导兜底，不报错 |
 | `backup_frequency_minutes` | number \| null | **自动备份频率（可选字段）**：分钟数，仅接受枚举 1/5/10/15/30/60；`null` / `0` = 关闭；**缺省 = 10**（新项目默认开启）；随书籍（每项目独立）；不参与 schema_version 判定（宽松读取，缺省兜底） |
 | `created_at` / `updated_at` | string | ISO 8601，应用层写入；首次初始化写 `created_at`，配置变更更新 `updated_at` |
 

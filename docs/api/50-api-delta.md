@@ -10,7 +10,8 @@
 ```typescript
 // Req
 {
-  node_id: string;                // 触发变更的大纲节点 ID
+  node_id: string;                // 触发变更的大纲节点 ID——**仅章**（node.type='chapter'；卷/场景 → 400
+                                  //   VALIDATION_ERROR，2026-09 收紧：一章一个状态变化点才是叙事粒度）
   target_type: string;            // 变更目标类型——**仅实体类型**（白名单由 ENTITY_TYPES 派生：
                                   //   character/setting/location/hook/event，event 自动扩入）
                                   //   （2026-08 收紧：大纲节点不可作为变更目标——节点代表的故事导致实体
@@ -18,7 +19,8 @@
                                   //   数据保留展示，仅创建路径拒绝；校验在路由层，shared schema 不动）
   target_id: string;              // 变更目标 ID
   changes: {
-    field: string;                // 字段名
+    field: string;                // 字段名；**支持点分嵌套路径**（如 `ability_panel.火系.等级`，2026-09）——
+                                  //   嵌套路径仅支持标量 set/update，add/remove（数组）仅顶层字段
     op: "set" | "update" | "add" | "remove";
     from?: string | number | null;  // 旧值（op=update 时必填）
     to?: string | number | null;    // 新值（op=set/update 时必填；add/remove 用 value）
@@ -40,10 +42,11 @@
 // Res: 400
 // { error: { code: "VALIDATION_ERROR" } }
 // 触发条件：schema 校验失败（含 fields）；per-op 必填缺失（set→to、update→from+to、add/remove→value）；
-//   target_type 非实体类型（2026-08 收紧：仅实体类型，白名单由 ENTITY_TYPES 派生——含 event；路由层白名单校验）
+//   target_type 非实体类型（2026-08 收紧：仅实体类型，白名单由 ENTITY_TYPES 派生——含 event；路由层白名单校验）；
+//   node_id 指向的节点非章（2026-09 收紧：仅 chapter 可挂变更记录；/delta/compute 的 at_node_id 不受限）
 
 // 示例
-// Req: { node_id: "sc-37", target_type: "character", target_id: "char-3",
+// Req: { node_id: "ch-12", target_type: "character", target_id: "char-3",
 //        changes: [{ field: "combat_power", op: "update", from: "100", to: "150" }],
 //        description: "张三获得断剑认可" }
 ```
@@ -85,7 +88,7 @@ nodeId: string;
 {
   target_type: string;          // 目标实体类型
   target_id: string;            // 目标实体 ID
-  at_node_id: string;           // 到达的大纲节点 ID（服务端自动计算根 → at_node 的树路径）
+  at_node_id: string;           // 到达的大纲节点 ID（**不限层级**——章/场景均可，服务端自动计算根 → at_node 的树路径）
 }
 
 // Res: 200
@@ -115,6 +118,8 @@ nodeId: string;
 // Delta 累积规则：
 //   到达目标节点的状态 = 实体初始 data + 树路径上所有 Delta 累积
 //   双层排序：节点间按树路径顺序（根 → at_node）；同一节点内按 order 递增
+//   字段定位：field 为点分嵌套路径时逐层下钻（如 ability_panel.火系.等级）；
+//            嵌套路径仅支持标量 set/update——add/remove 仅顶层字段
 //   set:     直接替换值
 //   update:  旧值→新值（校验当前值等于 from；不匹配**跳过该 change 并继续累积**，
 //            在 skipped / conflicts 中标注——手动编辑 data 不产生 Delta 属正常用户

@@ -59,9 +59,12 @@ type: "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "r
   type: "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "reference";
   name: string;
   // 各类型的关键摘要字段：
-  //   character → role, status（列表不再展示状态列，摘要提取保留供 AI 工具/详情使用）,
+  //   character → role, description (2026-09：data.description 截断 100 字符，同 setting 口径),
   //               motivation (data.motivation 截断 40 字符——两行式行布局第二行动机摘要),
-  //               personality / abilities (各前 2 个——行布局标签 chips)
+  //               personality (前 2 个——行布局标签 chips),
+  //               ability_panel (2026-09：面板**顶层分组名**前 2 个——如「火系」「水系」；
+  //               完整面板不进摘要防 token 膨胀，只走 GET 详情)
+  //               注：旧 abilities[]/status 不再提取（status 已 2026-09 移除，abilities 经 007 迁为 ability_panel）
   //   setting   → tags (data.tags 前 3 个：分类统一字段，与 event 同语义),
   //               description (M2，2026-08：data.description 截断 100 字符——列表行展示；
   //               截断防 search_entities 工具上下文膨胀，完整文本在详情页)
@@ -129,7 +132,10 @@ type: "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "r
 }
 
 // 各 type 的 data 字段说明：
-// character: { role?, gender?, age?, personality?: string[], motivation?, abilities?: string[], status?, custom_fields? }
+// character: { role?, description?, alias?, gender?, age?, race?, personality?: string[], motivation?, ability_panel?, custom_fields? }
+//            （2026-09：description 必填（**仅前端校验** + AI 工具约定；服务端不硬校验，保护提案/
+//             旧数据/备份导入三条路径）；status 已移除；abilities 经 007 迁为 ability_panel；
+//             分层与面板结构见 ../db/schema.md「人物 data 分层」）
 // setting:   { category?, parent_id?, description?, rules?: string[], custom_fields? }
 // location:  { type?, parent_id?, description?, custom_fields? }
 // hook:      { status?, category?, expected_payoff?, payoff_timing?, half_life?, is_core?, notes? }

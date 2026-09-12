@@ -119,7 +119,8 @@
   // prompt 字段已废弃：不再返回——项目规则唯一事实源改为项目目录 AGENTS.md
   // （见 GET /api/v1/project/agents）；旧 project.json 中的 prompt 残留字段不再读取
   schemaVersion: number;     // schema 版本（对应 project.json 的 schema_version）
-  currentPosition: string | null;  // 大纲「当前位置」节点 id（project.json，伏笔健康指标依赖）
+  currentPosition: string | null;  // 大纲「当前位置」节点 id（project.json，伏笔健康指标/双视图依赖）——**仅章**：
+                                   //   必须指向存在的非软删 chapter 节点（卷/场景不承载写作进度）
   backupFrequencyMinutes: number | null;  // 自动备份频率（分钟；null = 关闭；缺省 10）
   createdAt: string;         // ISO datetime
   updatedAt: string;
@@ -137,7 +138,8 @@
   language?: "zh" | "en";
   // prompt 已废弃：不再接受（strict schema 传入 → 400 VALIDATION_ERROR）；
   // 项目规则改由 PUT /api/v1/project/agents 写入 AGENTS.md
-  current_position?: string | null;  // 更新「当前位置」（须指向存在的非软删大纲节点）
+  current_position?: string | null;  // 更新「当前位置」：须指向存在的非软删 **chapter** 节点——
+                                    //   非章（volume/scene）或不存在/已软删 → 400 VALIDATION_ERROR；null = 清除
   backup_frequency_minutes?: number | null;  // 自动备份频率；null = 关闭；仅接受枚举值 5/10/15/30/60，其他（含 0）→ 400 VALIDATION_ERROR——0 仅读侧兼容旧数据，写侧不接受
 }
 

@@ -39,6 +39,10 @@ get_entity(type, id)
 search_entities(type, query, filters?)
   → 匹配的实体列表（名称 + 类型 + 关键字段摘要）
   filters: { tags?: string[], status?: string }
+  status 口径（2026-09）：匹配 `data.status`——**实际只在伏笔（hook）上有意义**
+    （生命周期 planted/progressing/resolved/abandoned）；character 的 status 字段已移除
+  character 摘要字段：role / description（截断 100）/ motivation（截断 40）/
+    personality 前 2 / **ability_panel 顶层分组名前 2**（完整面板走 get_entity 详情）
 
 // === 关系查询 ===
 query_relationships(opts: {
@@ -64,9 +68,11 @@ compute_state(target_type, target_id, at_node_id)
   用途：AI 说"张三在第30章时的战力是多少"
   语义：只沿大纲树父链（根 → at_node_id）累积已确认 Delta：
         节点间按树路径顺序、同一节点内按 order 双层排序；plot_edge 连线不参与；
+        **at_node_id 不限层级**（章/场景均可——「第3章第2场时他什么状态」是合法查询）；
         op=update 校验当前值等于 from，不匹配**跳过该 change 并继续累积**，结果在
         conflicts 中标注 { field, expected, actual }（不再返回 409——手动编辑 data 是
-        正常用户行为，AI 应感知 conflicts 并向用户提示修复）
+        正常用户行为，AI 应感知 conflicts 并向用户提示修复）；
+        field 支持点分嵌套路径（2026-09，如 `ability_panel.火系.等级`）——逐层下钻定位
 
 get_delta_history(target_type, target_id)
   → 该实体的所有属性变更记录（按时间/节点排序）
@@ -74,6 +80,10 @@ get_delta_history(target_type, target_id)
 // === 聚合分析 ===
 get_entity_summary(type)
   → 指定类型实体的统计数据（总数、角色分布、能力分布等）
+  character 口径（2026-09）：`byRole` = data.role 分布；`byStatus` **已移除**（status 字段连带删除）；
+    `topAbilities` 改读**能力面板顶层分组名**（如「火系」「水系」——叶子名多为「等级/熟练度」
+    这类重复词，按叶子计数无意义）
+  hook 口径不变：`byStatus`（生命周期）+ `byPayoffTiming`
 
 // === 参考资料查询 ===
 search_references(query, type?, tags?)
@@ -122,7 +132,15 @@ suggest_connections(entity_id)
 
 ### 伏笔分析工具
 
-伏笔工具说明见工具目录本章节。
+伏笔工具（`analyze_hook_health` / `trace_hook_lifecycle` / `suggest_hook_payoff` / `find_hook_opportunities` / `detect_hook_conflicts`）的参数与返回结构以 `packages/tools/src/index.ts` 的工具描述为单一来源。
+
+**章级锚点口径（2026-09）**：伏笔的埋设/推进/回收锚点一律为**章**节点——
+
+- `plants` / `advances` / `resolves` 关系的源节点必须是 `chapter`（`POST /relation` + 提案层校验）；
+- `suggest_hook_payoff` 的候选由「场景」改为**章**（按与理想回收章的距离升序取 top 3）；
+- `find_hook_opportunities(outline_node_id)` 的输入只接受章节点；
+- `data.expected_resolve_node_id` 为宽松 data 字段（服务端不硬校验），UI 选择器只列章；
+- 「当前章节」= `project.json` 的 `current_position` 所属章（未设置/失效 → 退化树末章），伏笔健康指标与孤儿诊断同口径。
 
 ### 提案类（需确认）
 
@@ -146,6 +164,8 @@ propose_remove_relation(relation_id)
 
 propose_add_delta(node_id, target, changes)
   → { proposal_id, preview }
+  node_id **仅章**（2026-09）：卷/场景 → 工具层拒绝（与 POST /delta 同口径）；
+  changes 的 field 支持点分嵌套路径（`ability_panel.火系.等级`），嵌套路径仅标量 set/update
 
 propose_outline_node(type, title, parent_id?)
 propose_move_node(node_id, parent_id, order)
@@ -196,6 +216,7 @@ advance_hook(hook_id, node_id, description)  → id   // 复合写（2026-08 修
                                                      // delta_records 记 status 变化 + relation_records 插 advances
                                                      // 一次提交，幂等（按 (node_id, hook_id, relation_type)
                                                      // 判重：重复确认或重复提案均不重复推进）
+                                                     // node_id **仅章**（2026-09）：伏笔锚点限 chapter
 resolve_hook(hook_id, node_id, description)  → id   // 复合写：delta 记 status=resolved + relation 插 resolves
 abandon_hook(hook_id, description)          → id   // 复合写：delta 记 status=abandoned（2026-08 修订）
 ```
