@@ -17,6 +17,8 @@
 
 ## 批次 2 · 人物数据模型（进行中）
 
+> **执行顺序**：2.5（面板纯函数，2.1/2.2 的前置）→ 2.1 → 2.2 → 2.3 → 2.4 → 2.6 → 2.7。
+
 - [ ] **2.1 character 字段改造（+`description`/`alias`（单值假名）/`race`、−`status`、`personality` 保留）+ 摘要口径**
   - 契约：`docs/db/schema.md`「人物 data 分层」、`docs/api/30-api-entity.md`（character 字段清单与摘要口径）。
   - 改：`shared/src/types/api.ts` 的 `characterDataSchema`（+`description`/`alias`/`race`；−`status`；`personality` 保留）；`db/src/queries/entity.ts` 的 `toSummary` character 分支（移除 `summary.status`；新增 `description` 截断 100；能力摘要取面板**顶层分组名前 2**，此点依赖 2.5 的面板解析纯函数——若 2.5 未落地，可先留 TODO 并在报告中说明顺序调整）；`client/src/lib/entity-detail.ts` 的 `detailFieldsForType("character")`（未变字段保持不变，新增字段先登记后由批次 3 接 UI）。
