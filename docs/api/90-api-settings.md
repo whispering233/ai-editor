@@ -3,7 +3,7 @@
 > LLM 配置读写（provider 目录 / 凭据状态 / 激活模型 / 思考强度）。公共约定/命名/响应结构见 [api-public.md](./api-public.md)，错误码见 [error-code.md](./error-code.md)；
 > 请求/响应 schema 单一来源：`@whispering233/ai-editor-shared` `types/api.ts`；配置载体与读写边界见 [`../design/config.md`](../design/config.md)。
 
-**配置所有权在本仓之外**：模型目录、凭据、运行参数全部落 pi agent dir（`~/.pi/agent/` 的 `auth.json` / `models.json` / `settings.json`），本仓只提供设置页的读写端点，**不维护第二份配置**。环境变量（如 `DEEPSEEK_API_KEY`）由 pi 的解析链优先消费。
+**配置所有权在本仓之外**：模型目录、凭据、运行参数全部落 pi agent dir（`~/.pi/agent/` 的 `auth.json` / `models.json` / `settings.json`），本仓只提供设置页的读写端点，**不维护第二份配置**。凭据解析顺序（pi 0.85.1，`pi-ai` `auth/resolve.js` + `auth/helpers.js`）：**auth.json 存量凭据优先**（一家一条；值支持字面 key / `$ENV_VAR` 引用 / `!命令`）→ 无条目时才回落到 provider 内置环境变量（如 `DEEPSEEK_API_KEY`，状态记为 `source: "environment"`）——因此不存在「两套来源竞争」，环境变量只是兜底。
 
 ### GET /api/v1/settings/llm
 

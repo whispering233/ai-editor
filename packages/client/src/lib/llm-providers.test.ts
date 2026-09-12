@@ -6,6 +6,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { SettingsProviderInfo } from "./api";
 import {
+  authSourceLabel,
+  credentialLabel,
   navProviderIds,
   PROVIDER_ICON_SYMBOLS,
   providerIcon,
@@ -79,5 +81,33 @@ describe("providerIcon", () => {
     const svg = readFileSync(new URL("../../public/provider-icons.svg", import.meta.url), "utf8");
     const symbols = new Set([...svg.matchAll(/<symbol id="([^"]+)"/g)].map((match) => match[1]));
     expect(PROVIDER_ICON_SYMBOLS.filter((symbol) => !symbols.has(symbol))).toEqual([]);
+  });
+});
+
+describe("authSourceLabel", () => {
+  it("pi 的来源码译成中文（避免设置页直接显示 stored/environment 这类内部词）", () => {
+    expect(authSourceLabel("stored")).toBe("auth.json 已保存");
+    expect(authSourceLabel("environment")).toBe("环境变量");
+    expect(authSourceLabel("models_json_key")).toBe("models.json 配置");
+    expect(authSourceLabel("fallback")).toBe("内置回退");
+  });
+
+  it("未登记的来源原样透传；无来源 → null", () => {
+    expect(authSourceLabel("未来新来源")).toBe("未来新来源");
+    expect(authSourceLabel(undefined)).toBeNull();
+    expect(authSourceLabel("")).toBeNull();
+  });
+});
+
+describe("credentialLabel", () => {
+  it("未配置 / 已配置带来源 / 来源缺失（runtime）", () => {
+    expect(credentialLabel({ authConfigured: false })).toBe("凭证：未配置");
+    expect(credentialLabel({ authConfigured: true, authSource: "stored" })).toBe(
+      "凭证：已配置（来源：auth.json 已保存）",
+    );
+    expect(credentialLabel({ authConfigured: true, authSource: "environment" })).toBe(
+      "凭证：已配置（来源：环境变量）",
+    );
+    expect(credentialLabel({ authConfigured: true })).toBe("凭证：已配置");
   });
 });

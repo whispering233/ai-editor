@@ -70,6 +70,32 @@ export const PROVIDER_ICON_SYMBOLS: readonly string[] = [
   ...new Set(Object.values(PROVIDER_ICONS).map((entry) => entry.symbol)),
 ];
 
+/** pi `AuthStatus.source` → 界面中文标签（环境变量不是「第二个来源」，是该家无凭据时的兜底） */
+const AUTH_SOURCE_LABELS: Record<string, string> = {
+  stored: "auth.json 已保存",
+  environment: "环境变量",
+  runtime: "运行时注入",
+  models_json_key: "models.json 配置",
+  models_json_command: "models.json 命令",
+  fallback: "内置回退",
+};
+
+/** 认证来源标签（未知来源原样显示；无来源 → null） */
+export function authSourceLabel(source: string | undefined): string | null {
+  if (source === undefined || source === "") return null;
+  return AUTH_SOURCE_LABELS[source] ?? source;
+}
+
+/** 「凭证：…」一行文案（已配置时带来源中文标签；来源缺失（runtime）不显示括号） */
+export function credentialLabel(provider: {
+  authConfigured: boolean;
+  authSource?: string;
+}): string {
+  if (!provider.authConfigured) return "凭证：未配置";
+  const source = authSourceLabel(provider.authSource);
+  return source === null ? "凭证：已配置" : `凭证：已配置（来源：${source}）`;
+}
+
 /**
  * 三级导航列出的 provider id（顺序 = pi 目录顺序）：
  * **已配置** ∪ 当前激活家（凭据可能刚被清掉，但仍是激活模型所属家——列出来才切得走）

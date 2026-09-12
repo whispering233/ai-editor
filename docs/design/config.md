@@ -5,7 +5,7 @@
 | 载体 | 内容 | 契约位置 |
 | :--- | :--- | :--- |
 | 启动参数 `projectRoot` + 环境变量 `AI_EDITOR_PORT` | 创作根目录 / 服务端口覆盖（仅 bin 直接执行入口读取） | `build.md` |
-| pi agent dir `~/.pi/agent/auth.json` | 各 provider 凭据（API key / OAuth）；env 变量优先级高于此文件（`DEEPSEEK_API_KEY`、`OPENCODE_API_KEY` 等由 pi 自身解析） | pi 凭据存储；本仓经 `ModelRuntime` 读写；设置页写入 = 唯一写入口 |
+| pi agent dir `~/.pi/agent/auth.json` | 各 provider 凭据（API key / OAuth）；**一家一条**，值可以是字面 key、`$ENV_VAR` 引用或 `!命令`（pi `resolveConfigValue` 语义）。**存量凭据优先**：仅当该家在 auth.json 无条目时才回落到 provider 内置环境变量（`DEEPSEEK_API_KEY` 等）——环境变量是兜底，不是与凭据并存的第二个来源 | pi 凭据存储；本仓经 `ModelRuntime` 读写；设置页写入 = 唯一写入口 |
 | pi agent dir `~/.pi/agent/models.json` | 自定义 provider / 模型覆盖（baseUrl、api 形态、模型元数据、`$ENV` 取值） | pi `models.json` 语义；本仓不解析，交由 `ModelRuntime` |
 | pi agent dir `~/.pi/agent/settings.json` | 模型与运行参数：`defaultModel` / `enabledModels`（可见模型作用域）/ 重试（`retry`）/ 压缩（`compaction`）/ 思考预算（`thinkingBudgets`） | pi settings；本仓经 `SettingsManager` 读写 |
 | 项目 `project.json` | id/name/language/schema_version/current_position/backup_frequency_minutes（自动备份频率枚举 1/5/10/15/30/60，null/0 关闭，缺省 10） | `docs/db/schema.md` |

@@ -477,7 +477,11 @@ components:
 
 **`sub-nav`（三级导航）** — 带子内容区块的页内分区导航（目前仅设置页「AI 模型」）：竖向 antd `Menu` inline，宽 160px（= `sidebar` 登记的宽度档），**契约完全复用 `menu-item` / `menu-item-selected`**（32px 行高、`{rounded.sm}`、选中 = `{colors.surface-muted}` 灰面 + 文字不变色），不新增设计语言；项文案超宽截断（`title` 给全文），项前置 `provider-icon`。
 
-**`sub-nav` 的「添加」态（设置页 AI 模型，2026-09）** — 三级导航**只列已配置的家**（`authConfigured`：env / OAuth / auth.json 任一来源）+ 当前激活家 + 刚点选的家（**「配置了多少显示多少」**，40 家全列会让导航不可用）；导航下方 `button-default`（`size="small"` + `block`）「添加」→ 就地展开**未配置** provider 的选择区：顶部搜索框（antd `Input size="small"` + `SearchOutlined` + `allowClear`，宽度随 160px 列自适应——**不套列表页 `search-input` 的 192px 固定档**，该档是给中栏筛选栏的），下方为可滚动紧凑行列表（`provider-icon` + 名称，行高 28px、hover = `bg-muted`（`colorFillAlter` 档，与书架行同款）、整行可点），行点击 → 右侧切到该家配置面板并收起选择区；该家**保存 key 成功后**才进入三级导航（未保存不落导航，不出现「列了却用不了」的项）。搜索无命中 / 已全部配置各给一行 `caption-text` 说明；当前无任何已配置家时，右栏给「点下方 [添加] 选择要接入的 provider」空态。
+**`sub-nav` 的「添加」弹窗（设置页 AI 模型，2026-09）** — 三级导航**只列已配置的家**（`authConfigured`：env / OAuth / auth.json 任一来源）+ 当前激活家 + 刚配置成功的家（**「配置了多少显示多少」**，40 家全列会让导航不可用）；导航下方 `button-default`（`size="small"` + `block`）「添加」→ **打开受控 `Dialog`**（复用 `components/ui/dialog.tsx`，不新造浮层）：
+- **选择步**（标题「添加 provider」+ 一句说明）：搜索框（antd `Input` + `SearchOutlined` + `allowClear` + `autoFocus`，宽度随弹窗而非列表页 `search-input` 的 192px 档）+ 可滚动紧凑行列表（`provider-icon` + 名称，行高 28px、hover = `bg-muted`（`colorFillAlter` 档，与书架行同款）、整行可点）。
+- **配置步**（选中一家后同窗切步）：标题行 = `provider-icon` + 家名；凭证状态行（`credential-label` 同款 caption）+ key `Input`（`autoFocus`）+ 内联错误；Footer = `[取消]` + 主操作 `[保存]`（`button-primary`，`loading` 防连点）。
+- **关闭语义（四条路径等价）**：右上角 X（`DialogContent` 默认 `showCloseButton`）/ `Esc` / 遮罩点击 / `[取消]`——**关窗即不落任何状态**；该家只有**保存 key 成功后**才进入三级导航并被选中（失败留在窗内显示错误，不关窗）。
+- 搜索无命中 / 已全部配置各给一行 `caption-text` 说明；当前无任何已配置家时，右栏给「点左侧 [添加] 选择要接入的 provider」空态。
 
 **`provider-icon`** — 供应商品牌 logo（三级导航项 + 添加列表 + 聊天模型下拉的分组标签）：`public/provider-icons.svg` 精灵（`<symbol>` + `<use href="/provider-icons.svg#id">`，派生自 @lobehub/icons，MIT 许可头内嵌于该文件、不引包）按 pi provider id 取图，尺寸 16px；无对应 symbol 的自定义 provider 回退 `@ant-design/icons` 的 `ApiOutlined`。品牌 logo **自带品牌色**（DeepSeek 蓝、Google 四色等）——**这是「颜色只经 antd token」的登记例外**：第三方品牌资产，只在图标内部出现，不参与界面取色；无品牌色的 logo 用 `currentColor`（`{colors.tertiary}` 档 = `text-muted-foreground`）。
 
