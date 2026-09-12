@@ -1,9 +1,10 @@
 // 左栏 NavRail（重构，替代原书架树 Sidebar）：
-// 顶部标识（收起按钮）+ 回到书架按钮（旁显当前书名，#/）+ 一级导航（antd Menu 九项）+
-// 工具区（回收站）+ 底部设置/主题。书架树/新建/导入/导出/重命名已由书架主页 #/ 承接（1-3/1-3b），
+// 顶部标识「书架」（书架主页入口 #/）+ 收起按钮 + 书名按钮（项目概览入口 #/overview）+ 一级导航
+// （antd Menu 八项）+ 工具区（回收站）+ 底部设置/主题。书架树/新建/导入/导出/重命名已由书架主页 #/ 承接（1-3/1-3b），
 // 会话切换由右栏会话下拉承担——本组件不再持有任何书架数据。
-// 无项目打开：业务导航项禁用（引导回书架主页，行为平移自旧 TabBar noProject guard）。
-// 高亮：路由首段 → Menu key（timepoints 宿主时间轴）；书架按钮在 #/ 路由高亮。
+// 无项目打开：书名按钮与业务导航项禁用（引导回顶部「书架」进书架主页，行为平移自旧 TabBar noProject guard）。
+// 高亮：路由首段 → Menu key（timepoints 宿主时间轴；**overview 无 Menu 项**——它由书名按钮用选中面表达）；
+// 书架路由 #/ 下左栏无选中面（书架自身就是当前页）。
 // 主题/色纪律：颜色一律取语义 token 类（bg-background / border-border / bg-accent，均为 index.css 对 antd token 的转发）；
 // 禁止内联 style 与硬编码色值（旧版 selected 态用 inline `token.colorPrimaryBg` 已改为 `bg-accent` = `{colors.surface-muted}`）。
 // - 底部区「立即备份」/ 设置 / 主题三入口同为无边框文字按钮（DESIGN.md §导航与外壳 `sidebar`：
@@ -15,7 +16,6 @@ import { useState } from "react";
 import {
   ApartmentOutlined,
   BookOutlined,
-  DashboardOutlined,
   DeleteOutlined,
   DoubleLeftOutlined,
   EnvironmentOutlined,
@@ -38,9 +38,8 @@ import { SIDEBAR_MIN_WIDTH } from "../../hooks/use-panels";
 import { useProjectStore } from "../../stores/project";
 import { useUiStore } from "../../stores/ui";
 
-/** Menu key = 导航目标 path（onClick 直接 navigate(key)） */
+/** Menu key = 导航目标 path（onClick 直接 navigate(key)）；**「概览」不在列**（入口 = 书名按钮，#/overview） */
 const NAV_ITEMS = [
-  { key: "/overview", icon: <DashboardOutlined />, label: "概览" },
   { key: "/outline", icon: <ApartmentOutlined />, label: "大纲" },
   { key: "/characters", icon: <TeamOutlined />, label: "人物" },
   { key: "/setting", icon: <TagsOutlined />, label: "设定" },
@@ -51,10 +50,10 @@ const NAV_ITEMS = [
   { key: "/references", icon: <ReadOutlined />, label: "参考资料" },
 ] as const;
 
-/** 路由 → 导航高亮 key（详情路由同宿主高亮；timepoints 宿主时间轴；#/ 无 Menu 项） */
+/** 路由 → 导航高亮 key（详情路由同宿主高亮；timepoints 宿主时间轴；#/ 与 #/overview 均无 Menu 项） */
 function navKey(route: Route): string | null {
   const first = route.segments[0];
-  if (first === undefined) return null;
+  if (first === undefined || first === "overview") return null;
   if (first === "timepoints") return "/timeline";
   return `/${first}`;
 }
@@ -95,10 +94,11 @@ export function NavRail({
     }
   }
 
-  /** 无项目：业务导航禁用（引导回书架主页 #/，与旧 TabBar noProject guard 行为一致） */
+  /** 无项目：书名按钮 + 业务导航禁用（引导进顶部「书架」，与旧 TabBar noProject guard 行为一致） */
   const noProject = loadError === "NO_PROJECT_OPEN";
   const selectedKey = navKey(route);
-  const atHome = route.segments.length === 0;
+  /** 当前在项目概览页（书名按钮用选中面——概览不再占一级导航位） */
+  const atOverview = route.segments[0] === "overview";
 
   const items = NAV_ITEMS.map((item) => ({
     ...item,
@@ -115,7 +115,7 @@ export function NavRail({
           : { flex: "1 1 10%" }
       }
     >
-      {/* 顶行：产品标识（点击回书架主页）+ 收起按钮（桌面态） */}
+      {/* 顶行：书架入口（点击回书架主页）+ 收起按钮（桌面态） */}
       <div className="flex h-12 shrink-0 items-center gap-1 border-b border-border px-2">
         <a
           href="#/"
@@ -123,7 +123,7 @@ export function NavRail({
           className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1.5"
         >
           <span className="text-primary">◈</span>
-          <span className="truncate text-base italic">我的小说</span>
+          <span className="truncate text-base italic">书架</span>
         </a>
         {onToggleCollapse && (
           <Button
@@ -140,16 +140,18 @@ export function NavRail({
 
       {/* 导航区 */}
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
-        {/* 回到书架按钮（旁显当前书名；#/ 路由高亮为选中面——DESIGN.md menu-item-selected） */}
+        {/* 书名按钮（项目概览入口，旁显当前书名；#/overview 路由高亮为选中面——DESIGN.md menu-item-selected） */}
         <Button
-          color="default" variant={atHome ? "filled" : "text"}
+          color="default" variant={atOverview ? "filled" : "text"}
           block
           className="mb-1"
           icon={<BookOutlined />}
-          onClick={() => navigate("/")}
+          disabled={noProject}
+          title={noProject ? "先在书架打开一本书" : `打开《${config?.name ?? ""}》概览`}
+          onClick={() => navigate("/overview")}
         >
-          <span className="min-w-0 flex-1 truncate text-left text-sm" title="回到书架主页">
-            {config?.name ?? "书架"}
+          <span className="min-w-0 flex-1 truncate text-left text-sm">
+            {config?.name ?? "概览"}
           </span>
         </Button>
 
@@ -158,8 +160,8 @@ export function NavRail({
           selectedKeys={selectedKey !== null ? [selectedKey] : []}
           items={[
             ...items,
-            // 工具区分隔：回收站与创作导航分开（视觉分组，仍为一级项）
             { type: "divider", key: "divider" },
+            // 回收站与创作导航分开（视觉分组，仍为一级项）——两者均需项目，统一禁用
             { key: "/trash", icon: <DeleteOutlined />, label: "回收站", disabled: noProject },
           ]}
           onClick={({ key }) => navigate(key)}

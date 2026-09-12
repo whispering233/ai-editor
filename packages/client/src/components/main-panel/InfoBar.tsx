@@ -1,4 +1,4 @@
-// 中栏信息条：项目名（点击回 #/）+ 当前位置（outline 树映射，点击跳 #/outline 并定位）+ 语言
+// 中栏信息条：项目名（点击进 #/overview 项目概览）+ 当前位置（outline 树映射，点击跳 #/outline 并定位）+ 语言
 // 数据源 stores/project.ts（GET /api/v1/project/config）；加载失败保持 null 显示「书架」不阻塞；
 // 当前位置标题由 outline 树 id→title 映射（findOutlineNodeTitle）
 // 定位实现（U4 方案 A）：点击当前位置 → ui store 设置 focusOutlineNodeId（transient）→ 跳 #/outline，
@@ -39,9 +39,10 @@ export function InfoBar({
 
   return (
     <div className="flex h-12 shrink-0 items-center gap-3 border-b border-border px-4">
-      {/* 项目名：点击回 #/ */}
+      {/* 项目名：点击进项目概览（与左栏书名按钮同一目标；书架入口在左栏顶部「书架」） */}
       <a
-        href="#/"
+        href="#/overview"
+        title="打开项目概览"
         className="flex min-w-0 items-center gap-1.5 text-base font-medium text-foreground hover:text-primary"
       >
         <span className="text-primary">◈</span>

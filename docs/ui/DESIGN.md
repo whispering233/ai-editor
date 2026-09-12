@@ -470,8 +470,8 @@ components:
 
 ### 导航与外壳
 
-**`sidebar`** — 左栏底 `{colors.surface}`（比内容面板暗一档），右侧 1px `{colors.hairline}`；产品标识、回到书架、九项一级导航、工具区（回收站）、底部「立即备份」快捷入口 + 设置与主题。
-**导航入口不受「文字按钮必须带边框」约束**：左栏导航项（Menu 九项 + 回到书架 / 设置 / 主题三个入口）与 Menu 项同级——无边框、选中态用 `{colors.surface-muted}` 灰面（Tailwind `bg-accent` = `colorFillTertiary`）、文字不变色，禁用 H4 只约束操作按钮（新建/重命名/重试/删除等）。**左栏底部区形态单一**：立即备份 / 设置 / 主题三入口同为 `block` + `color="default" variant="text"` 的无边框文字按钮——「立即备份」是动作而非导航，形态随底部区（**H4 登记例外，仅此一处**）；禁用/加载态由 antd Button 派发（无项目 → 禁用；在途 → `loading` 防连点），失败经 `message` 提示。**`menu-item`** / **`menu-item-selected`** — 菜单项 32px 高、`{rounded.sm}`；**选中 = `{colors.surface-muted}` 灰面 + 文字不变色**（antd 默认的彩色选中项要显式覆盖：`itemSelectedBg` / `itemSelectedColor`）。**`info-bar`** — 中栏顶部 1px 底线；项目名 + 当前位置 + 语言 + 小屏聊天开关。字号 `{typography.caption}`。
+**`sidebar`** — 左栏底 `{colors.surface}`（比内容面板暗一档），右侧 1px `{colors.hairline}`；**顶部标识 = 「◈ 书架」（书架主页入口，`#/`）**、其下**书名按钮**（`#/overview` 项目概览入口）、八项一级导航、工具区（回收站）、底部「立即备份」快捷入口 + 设置与主题。**「概览」不再占一级导航位**（入口收敛到书名按钮，`#/overview` 时书名按钮用选中面；书架路由 `#/` 下左栏无选中面——书架自身就是当前页）。
+**导航入口不受「文字按钮必须带边框」约束**：左栏导航项（Menu 八项 + 书名 / 设置 / 主题三个入口）与 Menu 项同级——无边框、选中态用 `{colors.surface-muted}` 灰面（Tailwind `bg-accent` = `colorFillTertiary`）、文字不变色，禁用 H4 只约束操作按钮（新建/重命名/重试/删除等）。**左栏底部区形态单一**：立即备份 / 设置 / 主题三入口同为 `block` + `color="default" variant="text"` 的无边框文字按钮——「立即备份」是动作而非导航，形态随底部区（**H4 登记例外，仅此一处**）；禁用/加载态由 antd Button 派发（无项目 → 禁用；在途 → `loading` 防连点），失败经 `message` 提示。**`menu-item`** / **`menu-item-selected`** — 菜单项 32px 高、`{rounded.sm}`；**选中 = `{colors.surface-muted}` 灰面 + 文字不变色**（antd 默认的彩色选中项要显式覆盖：`itemSelectedBg` / `itemSelectedColor`）。**`info-bar`** — 中栏顶部 1px 底线；项目名（点击进 `#/overview` 项目概览）+ 当前位置 + 语言 + 小屏聊天开关。字号 `{typography.caption}`。
 
 **`tabs`（二级 tab）** — 页面内分区导航（目前仅设置页）：antd `Tabs` line 型（`items` 数组，`activeKey` 受控）。未选中 `{colors.secondary}`，选中与悬浮 `{colors.primary}`（`itemSelectedColor` / `itemHoverColor` / `inkBarColor` 的 antd 默认值就是 `colorPrimary`，**不重复覆盖**），选中指示条 2px `{colors.primary}`，底线 1px `{colors.hairline}` = 页头分割线（见 §Layout「中栏页头结构」）。**页内 tab 不进 URL、不参与左栏导航高亮**，选中态是页面 state（刷新回落默认 tab）。
 
