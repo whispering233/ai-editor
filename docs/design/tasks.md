@@ -76,3 +76,4 @@
 - `packages/client/src/lib/hook-panel.ts` 中「软删场景上的 plants/appears_in 不参与 R1/R2」用例属**口径锁**（当前分支不可观测，防未来绕过 `listRelations` 端点过滤），可在下次路过时在用例名/注释里标注。
 - **`currentHookStatus` 在 client 侧已无生产消费者**（卡 1.9 删了 `fromStatus` 后仅其单测在用）——要么后续删掉（含单测），要么明确保留理由。
 - **通用「+ 新建变更」表单仍可为 hook 的 `status` 造 `op=update`**（`lib/delta-create.ts`）：手动路径会产生 CAS 假冲突，属「手动编辑 data 不产生 Delta 属正常」的对偶情形；如需彻底闭环则收窄字段白名单，暂接受。
+- `packages/tools/src/executor/hook.test.ts` 有一条用例标题仍写「delta 记 status → progressing（**from=当前状态**）」，与 `op=set` 形态不符（断言本身正确）——下次路过时改标题。
