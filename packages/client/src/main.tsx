@@ -13,6 +13,7 @@ import Outline from "./pages/Outline";
 import OutlineDetail from "./pages/OutlineDetail";
 import EntityList from "./pages/EntityList";
 import EntityDetail from "./pages/EntityDetail";
+import CharacterWorkbench from "./pages/CharacterWorkbench";
 import HookPanel from "./pages/HookPanel";
 import Timeline from "./pages/Timeline";
 import TimelineDetail from "./pages/TimelineDetail";
@@ -64,11 +65,9 @@ function renderPage(route: Route): ReactNode {
       return <RedirectTo to={carryId ? `/${seg}/${third}` : `/${seg}`} />;
     }
     case "characters":
-      return second !== undefined ? (
-        <EntityDetail key={`character:${second}`} type="character" id={second} />
-      ) : (
-        <EntityList type="character" />
-      );
+      // 人物工作台（卡 3.1）：master-detail——左栏 = 人物列表本身（不再有独立列表页），
+      // 两个子路由都走同一宿主（只传 id；工作台在 #/characters 无 id 时推导选中后重定向）
+      return <CharacterWorkbench id={second} />;
     case "setting":
       // 设定段 = 树形视图列表（#/setting）+ 详情（#/setting/:id）
       return second !== undefined ? (

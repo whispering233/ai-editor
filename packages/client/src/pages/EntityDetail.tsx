@@ -240,7 +240,17 @@ function CustomFieldsEditor({
   );
 }
 
-export default function EntityDetail({ type, id }: { type: string; id: string }) {
+export default function EntityDetail({
+  type,
+  id,
+  onSaved,
+}: {
+  type: string;
+  id: string;
+  /** 保存成功回调（可选，附加）：人物工作台用它刷新左栏列表的姓名/角色定位——
+   * 不传则行为与本卡前完全一致（其他宿主无感） */
+  onSaved?: () => void;
+}) {
   const entityType = type as EntityType;
 
   // 挂载/切换实体时上报页面焦点（右下「问 AI」携带当前实体上下文注入右栏；路由切换时已清空）
@@ -344,6 +354,7 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
       await updateEntity(entityType, id, { data: changed });
       useUiStore.getState().showToast("已保存");
       await loadDetail();
+      onSaved?.();
     } catch (err) {
       if (err instanceof ApiError && err.code === "ENTITY_NOT_FOUND") {
         setNotFound(true);
@@ -498,7 +509,8 @@ export default function EntityDetail({ type, id }: { type: string; id: string })
           /* 元信息行（文字与「变更记录 N 条」入口同用 muted-foreground，双主题一致） */
           detail ? (
             <p className="text-xs text-muted-foreground">
-              创建于 {formatTimestamp(detail.createdAt)} · 更新于 {formatTimestamp(detail.updatedAt)} ·{" "}
+              创建于 {formatTimestamp(detail.createdAt)} · 更新于{" "}
+              {formatTimestamp(detail.updatedAt)} ·{" "}
               <button
                 type="button"
                 onClick={() => setDeltaOpen((v) => !v)}
