@@ -89,7 +89,7 @@ nodeId: string;
   target_type: string;          // 目标实体类型
   target_id: string;            // 目标实体 ID
   at_node_id: string;           // 目标节点（**不限层级**）——映射为「进度章」：章→自身；场景→所属章；
-                                //   卷→该卷最后一个未软删章；root→初始值（0 章）
+                                //   卷→该卷最后一个未软删章；root 不可作 at_node（404）
 }
 
 // Res: 200
