@@ -8,8 +8,8 @@
 // 生成时校验：
 // - 伏笔即 type=hook 的实体（用户手动创建或 AI 提案创建）——requireHook 校验
 // 存在、未软删且类型一致，采集实体自身 updated_at 快照
-// - 推进/回收的节点（node_id）与埋设节点（plant_at_node_id）存在且未软删——
-// 节点级 updated_at 快照
+// - 推进/回收的节点（node_id）与埋设节点（plant_at_node_id）为**章**（存在且未软删——
+//   requireChapterNode，卡片 1.3：伏笔锚点仅章，卷/场景拒绝）——节点级 updated_at 快照
 // - 确认后的复合写（delta_records 记 status + relation_records 插 advances/resolves，
 // 一次提交、幂等）由 S6.7 执行工具承担，本模块只产出提案
 
@@ -21,13 +21,13 @@ import type {
   ProposeUpdateHookArgs,
 } from "../schemas/index.js";
 import type { ToolContext } from "../context.js";
-import { buildProposal, checkProposalAborted, refEntity, refOutlineNode, requireHook, requireOutlineNode, type Proposal, type ProposalReference, type ToolProposalResult } from "./types.js";
+import { buildProposal, checkProposalAborted, refEntity, refOutlineNode, requireChapterNode, requireHook, type Proposal, type ProposalReference, type ToolProposalResult } from "./types.js";
 
-/** 产出创建伏笔提案（plant_at_node_id 可选指定埋设节点） */
+/** 产出创建伏笔提案（plant_at_node_id 可选指定埋设章节点） */
 export function buildProposeCreateHook(ctx: ToolContext, args: ProposeCreateHookArgs): Proposal {
   const references: ProposalReference[] = [];
   if (args.plant_at_node_id !== undefined) {
-    references.push(refOutlineNode(requireOutlineNode(ctx, args.plant_at_node_id)));
+    references.push(refOutlineNode(requireChapterNode(ctx, args.plant_at_node_id)));
   }
   return buildProposal(
     ctx,
@@ -77,10 +77,10 @@ export function runProposeUpdateHook(
   return { proposal_id: proposal.proposal_id, summary: proposal.summary };
 }
 
-/** 产出推进伏笔提案（确认后复合写：delta 记 status=progressing + advances 关系） */
+/** 产出推进伏笔提案（确认后复合写：delta 记 status=progressing + advances 关系；node_id 仅章） */
 export function buildProposeAdvanceHook(ctx: ToolContext, args: ProposeAdvanceHookArgs): Proposal {
   const hook = requireHook(ctx, args.hook_id);
-  const node = requireOutlineNode(ctx, args.node_id);
+  const node = requireChapterNode(ctx, args.node_id);
   return buildProposal(
     ctx,
     "propose_advance_hook",
@@ -101,10 +101,10 @@ export function runProposeAdvanceHook(
   return { proposal_id: proposal.proposal_id, summary: proposal.summary };
 }
 
-/** 产出回收伏笔提案（确认后复合写：delta 记 status=resolved + resolves 关系） */
+/** 产出回收伏笔提案（确认后复合写：delta 记 status=resolved + resolves 关系；node_id 仅章） */
 export function buildProposeResolveHook(ctx: ToolContext, args: ProposeResolveHookArgs): Proposal {
   const hook = requireHook(ctx, args.hook_id);
-  const node = requireOutlineNode(ctx, args.node_id);
+  const node = requireChapterNode(ctx, args.node_id);
   return buildProposal(
     ctx,
     "propose_resolve_hook",

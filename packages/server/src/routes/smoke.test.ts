@@ -482,19 +482,30 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(compute2.status).toBe(200);
     expect(compute2.body.data.state.status).toBe("wounded");
 
- // ============ 步骤 7：伏笔（plants/advances 关系，outline_node → hook，方向） ============
+ // ============ 步骤 7：伏笔（plants/advances 关系，**章**节点 → hook，方向；锚点仅章） ============
     const plant = await api(app, "POST", "/api/v1/relation", {
       source_type: "outline_node",
-      source_id: sc1Id,
+      source_id: chId,
       target_type: "hook",
       target_id: hookId,
       relation_type: "plants",
     });
     expect(plant.status).toBe(201);
 
-    const advance = await api(app, "POST", "/api/v1/relation", {
+ // 场景锚点 → 400 VALIDATION_ERROR（卡片 1.3：伏笔锚点仅章）
+    const sceneHookAnchor = await api(app, "POST", "/api/v1/relation", {
       source_type: "outline_node",
       source_id: sc2Id,
+      target_type: "hook",
+      target_id: hookId,
+      relation_type: "advances",
+    });
+    expect(sceneHookAnchor.status).toBe(400);
+    expect(sceneHookAnchor.body.error.code).toBe("VALIDATION_ERROR");
+
+    const advance = await api(app, "POST", "/api/v1/relation", {
+      source_type: "outline_node",
+      source_id: chId,
       target_type: "hook",
       target_id: hookId,
       relation_type: "advances",
@@ -505,13 +516,13 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     const plants = await api(app, "GET", "/api/v1/relation?depth=1&source_type=outline_node&relation_type=plants");
     expect(plants.status).toBe(200);
     expect(plants.body.data.relations).toHaveLength(1);
-    expect(plants.body.data.relations[0].sourceId).toBe(sc1Id);
+    expect(plants.body.data.relations[0].sourceId).toBe(chId);
     expect(plants.body.data.relations[0].targetId).toBe(hookId);
     expect(plants.body.data.relations[0].targetName).toBe("身世之谜");
 
     const advances = await api(app, "GET", "/api/v1/relation?depth=1&source_type=outline_node&relation_type=advances");
     expect(advances.status).toBe(200);
-    expect(advances.body.data.relations.map((r: { sourceId: string }) => r.sourceId)).toEqual([sc2Id]);
+    expect(advances.body.data.relations.map((r: { sourceId: string }) => r.sourceId)).toEqual([chId]);
 
  // ============ 步骤 8：对话（离线 faux LLM 两轮：工具调用轮 + 文本收尾轮；pi 事件投影） ============
     const chatRes = await app.request("/api/v1/chat", {

@@ -96,6 +96,18 @@ describe("propose_add_relation", () => {
     expect(refOutlineNode(node)).toEqual({ kind: "outline_node", id: "sc-1", updated_at: T0 });
   });
 
+  it("伏笔锚点仅章（卡片 1.3）：plants 源端章 → 通过；场景/卷 → 抛错；非伏笔关系不受限", () => {
+    writeOutlineFile(dir, seedOutlineTree());
+    const hook = createEntity(db, { type: "hook", name: "身世之谜" });
+    const ok = runProposeAddRelation(makeCtx(), { source: "ch-1", target: hook.id, type: "plants" });
+    expect(ok.summary).toBe(`新增关系: ch-1 —plants→ ${hook.id}`);
+    expect(() => runProposeAddRelation(makeCtx(), { source: "sc-1", target: hook.id, type: "plants" })).toThrow(/伏笔锚点须为章/);
+    expect(() => runProposeAddRelation(makeCtx(), { source: "vol-1", target: hook.id, type: "advances" })).toThrow(/伏笔锚点须为章/);
+ // 非伏笔关系类型的节点端点不受限（appears_in 仍可指向场景）
+    const char = createEntity(db, { type: "character", name: "阿强" });
+    expect(runProposeAddRelation(makeCtx(), { source: char.id, target: "sc-1", type: "appears_in" }).proposal_id).toMatch(/^prop_/);
+  });
+
   it("metadata 透传进执行参数", () => {
     const a = createEntity(db, { type: "character", name: "甲" });
     const b = createEntity(db, { type: "character", name: "乙" });

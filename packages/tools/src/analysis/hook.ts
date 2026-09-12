@@ -339,9 +339,10 @@ export interface HookPayoffSuggestion {
 
 /**
  * 回收建议（suggest_hook_payoff(hook_id)）：
- * 候选 = 大纲中**当前章节之后**（含当前章）的场景节点（非软删），排除已回收节点；
+ * 候选 = 大纲中**当前章节之后**（含当前章）的**章**节点（非软删），排除已回收节点
+ * （卡片 1.3：锚点仅章——候选从场景改为章，与 REST/提案层 plants·advances·resolves 口径一致）；
  * 理想回收点 = 埋设章 + 半衰期（节奏匹配）；按与理想点距离升序取 top 3。
- * hook 不存在/已软删 → null；无埋设记录或大纲无候选场景 → 空建议。
+ * hook 不存在/已软删 → null；无埋设记录或大纲无候选章 → 空建议。
  */
 export function runSuggestHookPayoff(ctx: ToolContext, args: SuggestHookPayoffArgs, signal?: AbortSignal): { suggestions: HookPayoffSuggestion[] } | null {
   const entity = getEntity(ctx.db, args.hook_id);
@@ -362,16 +363,16 @@ export function runSuggestHookPayoff(ctx: ToolContext, args: SuggestHookPayoffAr
     listRelations(ctx.db, { targetType: "hook", targetId: args.hook_id, relationType: "resolves" }, 1, ctx.outlineDir).relations.map((r) => r.sourceId),
   );
 
- // 候选场景：章节序 >= 当前章（current 未定 → 全部）
-  interface SceneCandidate {
+ // 候选章：章节序 >= 当前章（current 未定 → 全部）
+  interface ChapterCandidate {
     nodeId: string;
     nodeName: string;
-    chapter: number | null;
+    chapter: number;
   }
-  const candidates: SceneCandidate[] = [];
+  const candidates: ChapterCandidate[] = [];
   const visit = (nodes: readonly OutlineFileNode[]): void => {
     for (const node of nodes) {
-      if (node.type === "scene" && node.deleted !== true && !resolvedNodes.has(node.id)) {
+      if (node.type === "chapter" && node.deleted !== true && !resolvedNodes.has(node.id)) {
         const chapter = chapterIndex.chapterOf(node.id);
         if (chapter !== null && (chapterIndex.currentChapter === null || chapter >= chapterIndex.currentChapter)) {
           candidates.push({ nodeId: node.id, nodeName: node.title, chapter });
@@ -383,7 +384,7 @@ export function runSuggestHookPayoff(ctx: ToolContext, args: SuggestHookPayoffAr
   };
   visit(tree.children);
 
-  candidates.sort((a, b) => Math.abs(a.chapter! - idealChapter) - Math.abs(b.chapter! - idealChapter));
+  candidates.sort((a, b) => Math.abs(a.chapter - idealChapter) - Math.abs(b.chapter - idealChapter));
   const suggestions: HookPayoffSuggestion[] = candidates.slice(0, 3).map((c) => ({
     at_node: c.nodeId,
     reason: `伏笔埋设于第 ${plantChapter} 章（半衰期 ${halfLife}），理想回收点约第 ${idealChapter} 章——「${c.nodeName}」（第 ${c.chapter} 章）节奏匹配，建议在此回收`,
@@ -401,44 +402,75 @@ export interface HookOpportunity {
 
 /**
  * 埋设机会发现（find_hook_opportunities(outline_node_id)）：
- * 基于节点叙事特征建议适合的伏笔类别（每类别至多一条，规则表驱动）：
- * - R1 无伏笔埋设（无 plants 关系）→ mystery（悬念/谜团）
- * - R2 角色在场 ≥ 2（appears_in 目标）→ relationship（人物关系）
- * - R3 scene 冲突含外部层面（extra_personal）→ world_building（世界观）
- * - R4 scene 价值转向（value_from ≠ value_to 且均非空）→ character_growth（角色成长）
- * 节点不存在/已软删 → null。
+ * **输入为章节点（卡片 1.3）**——卷/场景 → 抛错（输入类型错误，与 propose_add_delta 非章拒绝同口径）；
+ * 章不存在/已软删 → null。章级叙事特征 = 本章自身与其下场景**聚合**（锚点仅章后，
+ * 埋设/在场/麦基字段可能落在章或其场景上，各规则按子树口径判定）：
+ * - R1 无伏笔埋设（章或其场景无 plants 关系）→ mystery（悬念/谜团）
+ * - R2 角色在场 ≥ 2（appears_in 目标为章或其场景，按角色去重）→ relationship（人物关系）
+ * - R3 任一场景冲突含外部层面（extra_personal）→ world_building（世界观）
+ * - R4 任一场景价值转向（value_from ≠ value_to 且均非空）→ character_growth（角色成长）
  */
 export function runFindHookOpportunities(ctx: ToolContext, args: FindHookOpportunitiesArgs, signal?: AbortSignal): { opportunities: HookOpportunity[] } | null {
   const tree = readOutlineFile(ctx.outlineDir);
   const node = findOutlineNode(tree, args.outline_node_id);
   if (node === undefined || node.deleted === true) return null;
   throwIfAborted(signal);
+  if (node.type !== "chapter") {
+    throw new Error(`埋设机会分析仅支持章节点（卷/场景无章级叙事特征）: ${args.outline_node_id}`);
+  }
+
+ // 子树节点集合（本章 + 其下场景）；场景节点单独收集供 R3/R4 读麦基字段
+  const subtreeIds = new Set<string>([node.id]);
+  const scenes: OutlineFileNode[] = [];
+  const collect = (children: readonly OutlineFileNode[] | undefined): void => {
+    if (children === undefined) return;
+    for (const child of children) {
+      subtreeIds.add(child.id);
+      if (child.type === "scene") scenes.push(child);
+      collect((child as { children?: readonly OutlineFileNode[] }).children);
+    }
+  };
+  collect((node as { children?: readonly OutlineFileNode[] }).children);
 
   const opportunities: HookOpportunity[] = [];
 
- // R1：节点尚无伏笔埋设（plants 关系 source = 本节点）
-  const plantsCount = listRelations(ctx.db, { sourceType: "outline_node", sourceId: args.outline_node_id, relationType: "plants" }, 1, ctx.outlineDir).relations.length;
+ // R1：本章（或其场景）尚无伏笔埋设
+  const plantsCount = listRelations(ctx.db, { sourceType: "outline_node", relationType: "plants" }, 1, ctx.outlineDir)
+    .relations.filter((r) => subtreeIds.has(r.sourceId)).length;
   if (plantsCount === 0) {
-    opportunities.push({ category: "mystery", reason: "该节点尚无伏笔埋设，适合设置悬念/谜团类伏笔（mystery）" });
+    opportunities.push({ category: "mystery", reason: "本章尚无伏笔埋设，适合设置悬念/谜团类伏笔（mystery）" });
   }
 
- // R2：在场角色数（appears_in 目标 = 本节点）
-  const castCount = listRelations(ctx.db, { targetType: "outline_node", targetId: args.outline_node_id, relationType: "appears_in" }, 1, ctx.outlineDir).relations.length;
-  if (castCount >= 2) {
-    opportunities.push({ category: "relationship", reason: `节点有 ${castCount} 个角色在场，适合人物关系类伏笔（relationship）` });
+ // R2：在场角色数（appears_in 目标 = 本章或其场景；按角色去重）
+  const cast = new Set(
+    listRelations(ctx.db, { targetType: "outline_node", relationType: "appears_in" }, 1, ctx.outlineDir)
+      .relations.filter((r) => subtreeIds.has(r.targetId))
+      .map((r) => r.sourceId),
+  );
+  if (cast.size >= 2) {
+    opportunities.push({ category: "relationship", reason: `本章有 ${cast.size} 个角色在场，适合人物关系类伏笔（relationship）` });
   }
 
- // R3/R4：scene 叙事特征（麦基字段集）
-  if (node.type === "scene") {
-    const conflictLevels = node.data?.conflict_levels;
-    if (Array.isArray(conflictLevels) && conflictLevels.includes("extra_personal")) {
-      opportunities.push({ category: "world_building", reason: "场景冲突含外部层面（extra_personal），适合世界观类伏笔（world_building）" });
-    }
-    const valueFrom = node.data?.value_from;
-    const valueTo = node.data?.value_to;
-    if (typeof valueFrom === "string" && valueFrom !== "" && typeof valueTo === "string" && valueTo !== "" && valueFrom !== valueTo) {
-      opportunities.push({ category: "character_growth", reason: `场景价值转向（${valueFrom} → ${valueTo}），适合角色成长类伏笔（character_growth）` });
-    }
+ // R3：任一场景冲突含外部层面
+  const hasExtraPersonal = scenes.some((scene) => {
+    const levels = scene.data?.conflict_levels;
+    return Array.isArray(levels) && levels.includes("extra_personal");
+  });
+  if (hasExtraPersonal) {
+    opportunities.push({ category: "world_building", reason: "场景冲突含外部层面（extra_personal），适合世界观类伏笔（world_building）" });
+  }
+
+ // R4：任一场景价值转向
+  const shifted = scenes.find((scene) => {
+    const from = scene.data?.value_from;
+    const to = scene.data?.value_to;
+    return typeof from === "string" && from !== "" && typeof to === "string" && to !== "" && from !== to;
+  });
+  if (shifted !== undefined) {
+    opportunities.push({
+      category: "character_growth",
+      reason: `场景价值转向（${String(shifted.data?.value_from)} → ${String(shifted.data?.value_to)}），适合角色成长类伏笔（character_growth）`,
+    });
   }
 
   return { opportunities };

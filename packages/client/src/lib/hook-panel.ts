@@ -15,6 +15,7 @@ import {
   type CreateRelationBody,
   type RelationSummaryItem,
 } from "./api";
+import type { FlatNodeOption } from "./outline-tree";
 
 // ============ 状态分组（信息层级） ============
 
@@ -135,49 +136,52 @@ export function expandDependencyChain(args: {
   return result;
 }
 
-// ============ 废弃锚点节点（executor anchorNodeForAbandon 同款语义，tools/executor/hook.ts） ============
-
-/** 节点是否存在于大纲树且未软删（current_position 有效性校验，须指向非软删节点） */
-export function nodeExists(tree: OutlineTree | null, nodeId: string): boolean {
-  if (!tree) return false;
-  const stack: OutlineNode[] = [...tree.children];
-  while (stack.length > 0) {
-    const node = stack.pop()!;
-    if (node.id === nodeId) return node.deleted !== true;
-    if (node.type !== "scene" && node.children) stack.push(...node.children);
-  }
-  return false;
-}
+// ============ 章节点选项与废弃锚点（锚点仅章：executor anchorNodeForAbandon 同款语义，tools/executor/hook.ts） ============
 
 /**
- * 树末节点（先序遍历最后访问的非软删节点——executor 同款「当前写作进度末端」；
- * 注意是「先序最后」而非「最深叶子」：卷在无子节点时同样可作锚点）。空树 → null
+ * 章节点选项（扁平化 + 缩进 depth，保留原层级深度）：埋点 / 推进回收 / 预计回收节点选择器只列**章**——
+ * 卷/场景不承载伏笔标记（服务端 plants/advances/resolves 源端校验 400，卡片 1.3）。
+ * 软删节点及其子树跳过（服务端同样拒绝）。
  */
-export function lastOutlineNode(tree: OutlineTree | null): string | null {
-  if (!tree) return null;
-  let last: string | null = null;
-  const visit = (node: OutlineNode): void => {
-    if (node.deleted === true) return;
-    last = node.id;
-    if (node.type !== "scene" && node.children) {
-      for (const child of node.children) visit(child);
+export function chapterNodeOptions(tree: OutlineTree | null): FlatNodeOption[] {
+  const out: FlatNodeOption[] = [];
+  const visit = (nodes: readonly OutlineNode[], depth: number): void => {
+    for (const node of nodes) {
+      if (node.deleted === true) continue;
+      if (node.type === "chapter") out.push({ id: node.id, label: node.title, depth });
+      if (node.type !== "scene" && node.children) visit(node.children, depth + 1);
     }
   };
-  for (const child of tree.children) visit(child);
-  return last;
+  visit(tree?.children ?? [], 0);
+  return out;
+}
+
+/** 章节点是否存在且未软删（current_position 的章级有效性判定——锚点仅章） */
+export function chapterNodeExists(tree: OutlineTree | null, nodeId: string): boolean {
+  return chapterNodeOptions(tree).some((o) => o.id === nodeId);
 }
 
 /**
- * 废弃 Delta 锚定节点：current_position 有效（存在且未软删）优先，否则退化树末节点；
- * 大纲空树 → null（面板禁用提交并内联提示——无锚点不可记录，同 executor 抛错语义）
+ * 树末章：先序遍历最后一个未软删 `chapter`（「当前写作进度末端」，与 executor lastChapterNodeId 同语义）；
+ * 无章 → null（面板禁用提交并内联提示）。
+ */
+export function lastChapterNode(tree: OutlineTree | null): string | null {
+  const options = chapterNodeOptions(tree);
+  return options.length === 0 ? null : options[options.length - 1].id;
+}
+
+/**
+ * 废弃 Delta 锚定节点：current_position **有效（存在且未软删且为章）**优先，否则退化树末章；
+ * 大纲无章 → null（面板禁用提交并内联提示——无锚点不可记录，同 executor 抛错语义）。
+ * 卡片 1.3：锚点仅章——current_position 为存量场景/卷值时不再直接用作锚点（否则写入必 400）。
  */
 export function anchorNodeForAbandon(
   config: ProjectConfig | null,
   tree: OutlineTree | null,
 ): string | null {
   const cp = config?.currentPosition;
-  if (cp !== null && cp !== undefined && cp !== "" && nodeExists(tree, cp)) return cp;
-  return lastOutlineNode(tree);
+  if (cp !== null && cp !== undefined && cp !== "" && chapterNodeExists(tree, cp)) return cp;
+  return lastChapterNode(tree);
 }
 
 // ============ 复合写请求构造（推进/回收/废弃；状态变化 + 复合写） ============
@@ -191,7 +195,7 @@ export const LIFECYCLE_STATUS: Record<HookLifecycleKind, string> = {
   abandon: "abandoned",
 };
 
-/** 推进/回收的关系类型（abandon 无关系—— abandon_hook 仅 delta） */
+/** 推进/回收的关系类型（abandon 无关系—— abandon_hook 仅 delta）；锚点节点为章（卡片 1.3） */
 export const LIFECYCLE_RELATION_TYPE: Record<Exclude<HookLifecycleKind, "abandon">, string> = {
   advance: "advances",
   resolve: "resolves",

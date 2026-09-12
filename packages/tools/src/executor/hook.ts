@@ -32,9 +32,9 @@
 // S7.5 确认路由承担）。
 
 import { createRelation, findOutlineNode, insertDelta, readOutlineFile, readProjectFile, updateEntity, withTransaction, type Db } from "@whispering233/ai-editor-db";
-import type { DeltaChange } from "@whispering233/ai-editor-shared";
+import type { DeltaChange, OutlineFileTree } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
-import { requireHook, requireOutlineNode } from "../proposal/types.js";
+import { requireChapterNode, requireHook } from "../proposal/types.js";
 import { requireString, type ExecutorFn, type ExecutorResult } from "./types.js";
 
 /** 伏笔生命周期终态（planted → progressing → resolved 或 abandoned） */
@@ -98,32 +98,41 @@ function findExistingStatusDeltaId(db: Db, hookId: string, toStatus: string): st
 }
 
 /**
- * abandon 的 delta 锚定节点：废弃是主动放弃（无指定节点，propose_abandon_hook 仅 hook_id +
- * description）——取 project.json current_position（「当前章节」锚点，存在且未软删）；
- * 未设置/失效则退化取树末节点（当前写作进度末端）；大纲空树 → 抛错（无锚点不可记录）。
+ * 树末章：先序遍历最后一个未软删 `chapter`（当前写作进度末端——`project.json current_position` 未设时的退化锚点）；
+ * 无章 → null（调用方抛错：无锚点不可记录）。卡片 1.3：锚点仅章，故不再取「树末节点」（可能为卷/场景）。
  */
-function anchorNodeForAbandon(ctx: ToolContext): string {
-  const config = readProjectFile(ctx.outlineDir);
-  if (config !== null && config.current_position !== null && config.current_position !== "") {
-    const node = findOutlineNode(readOutlineFile(ctx.outlineDir), config.current_position);
-    if (node !== undefined && node.deleted !== true) return config.current_position;
-  }
-  const tree = readOutlineFile(ctx.outlineDir);
- // 树末节点：先序遍历最后一个叶子（卷→章→场景的最深最后节点）
+function lastChapterNodeId(tree: OutlineFileTree): string | null {
   let last: string | null = null;
-  const visit = (node: { id: string; deleted?: boolean; children?: unknown[] }): void => {
+  const visit = (node: { id: string; type?: string; deleted?: boolean; children?: unknown[] }): void => {
     if (node.deleted === true) return;
-    last = node.id;
+    if (node.type === "chapter") last = node.id;
     const kids = node.children;
     if (kids !== undefined) {
-      for (const kid of kids) visit(kid as { id: string; deleted?: boolean; children?: unknown[] });
+      for (const kid of kids) visit(kid as { id: string; type?: string; deleted?: boolean; children?: unknown[] });
     }
   };
   for (const child of tree.children) visit(child);
-  if (last === null) {
-    throw new Error("大纲无可用节点，无法记录伏笔废弃位置");
-  }
   return last;
+}
+
+/**
+ * abandon 的 delta 锚定节点：废弃是主动放弃（无指定节点，propose_abandon_hook 仅 hook_id +
+ * description）——取 project.json current_position（「当前章节」锚点，**须为章**且未软删）；
+ * 未设置/失效（含存量指向场景/卷）则退化取**树末章**（当前写作进度末端）；大纲无章 → 抛错。
+ */
+function anchorNodeForAbandon(ctx: ToolContext): string {
+  const tree = readOutlineFile(ctx.outlineDir);
+  const config = readProjectFile(ctx.outlineDir);
+  const currentPosition = config?.current_position ?? null;
+  if (currentPosition !== null && currentPosition !== "") {
+    const node = findOutlineNode(tree, currentPosition);
+    if (node !== undefined && node.deleted !== true && node.type === "chapter") return currentPosition;
+  }
+  const lastChapter = lastChapterNodeId(tree);
+  if (lastChapter === null) {
+    throw new Error("大纲无可用章节，无法记录伏笔废弃位置");
+  }
+  return lastChapter;
 }
 
 /**
@@ -153,9 +162,9 @@ function executeHookTransition(
       const existing = findExistingStatusDeltaId(ctx.db, hookId, toStatus);
       if (existing !== null) return { id: existing, duplicated: true };
     }
- // 校验：伏笔存在且 type=hook；推进/回收节点存在且未软删
+ // 校验：伏笔存在且 type=hook；推进/回收节点存在且未软删且**为章**（卡片 1.3：锚点仅章）
     const hook = requireHook(ctx, hookId);
-    if (nodeId !== null) requireOutlineNode(ctx, nodeId);
+    if (nodeId !== null) requireChapterNode(ctx, nodeId);
  // 终态守卫（resolved/abandoned 不可再推进/回收；废弃时不可再废弃）
     assertNotTerminal(hook, actionLabel);
  // delta：记 status 变化（from=当前状态，update 语义，computeState 正常累积）

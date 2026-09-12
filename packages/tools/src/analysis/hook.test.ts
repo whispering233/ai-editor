@@ -404,22 +404,27 @@ describe("trace_hook_lifecycle", () => {
 });
 
 describe("suggest_hook_payoff", () => {
-  it("理想回收点（埋设章 + 半衰期）附近场景 top 3；排除已回收节点", () => {
-    seedBase("sc-1"); // 当前第 1 章
+  it("理想回收点（埋设章 + 半衰期）附近章 top 3；排除已回收章", () => {
+    seedBase("ch-1"); // 当前第 1 章
     const hookId = makeHook("身世之谜", { status: "progressing", payoff_timing: "near_term" }); // half_life=8
-    plant(hookId, "sc-1"); // 理想回收点 = 1 + 8 = 9（超过树末章 3——取最近场景）
+    plant(hookId, "ch-1"); // 理想回收点 = 1 + 8 = 9（超过树末章 3——取最近章）
     const result = runSuggestHookPayoff(makeCtx(), { hook_id: hookId })!;
     expect(result.suggestions).toHaveLength(3);
- // 全部候选章节 >= 当前第 1 章；与理想点 9 距离升序：第 3 章(距离6) < 第 2 章(7) < 第 1 章(8)
-    expect(result.suggestions[0].at_node).toMatch(/^sc-[56]$/); // 第 3 章场景
+ // 候选为章（卡片 1.3）；与理想点 9 距离升序：第 3 章(6) < 第 2 章(7) < 第 1 章(8)
+    expect(result.suggestions.map((s) => s.at_node)).toEqual(["ch-3", "ch-2", "ch-1"]);
     expect(result.suggestions[0].reason).toContain("半衰期 8");
     expect(result.suggestions[0].reason).toContain("理想回收点约第 9 章");
 
- // 已回收节点排除：resolve sc-5 → 不再建议 sc-5
-    resolve(hookId, "sc-5");
+ // 已回收章排除：resolve ch-3 → 不再建议 ch-3（仅剩 ch-2/ch-1）
+    resolve(hookId, "ch-3");
     const after = runSuggestHookPayoff(makeCtx(), { hook_id: hookId })!;
-    expect(after.suggestions.every((s) => s.at_node !== "sc-5")).toBe(true);
-    expect(after.suggestions).toHaveLength(3); // sc-6（第 3 章）+ sc-3/sc-4（第 2 章）
+    expect(after.suggestions.map((s) => s.at_node)).toEqual(["ch-2", "ch-1"]);
+ // 当前章之前（已写章节）不进候选：新伏笔埋于第 1 章、当前位置第 2 章 → 仅剩 ch-3/ch-2
+    seedBase("ch-2");
+    const fresh = makeHook("新伏笔", { status: "planted", payoff_timing: "near_term" });
+    plant(fresh, "ch-1");
+    const fromCh2 = runSuggestHookPayoff(makeCtx(), { hook_id: fresh })!;
+    expect(fromCh2.suggestions.map((s) => s.at_node)).toEqual(["ch-3", "ch-2"]);
   });
 
   it("无埋设记录 → 空建议；hook 不存在 → null", () => {
@@ -438,7 +443,7 @@ describe("find_hook_opportunities", () => {
     createRelation(db, { sourceType: "character", sourceId: c1, targetType: "outline_node", targetId: "sc-1", relationType: "appears_in" }, dir);
     createRelation(db, { sourceType: "character", sourceId: c2, targetType: "outline_node", targetId: "sc-1", relationType: "appears_in" }, dir);
 
-    const result = runFindHookOpportunities(makeCtx(), { outline_node_id: "sc-1" })!;
+    const result = runFindHookOpportunities(makeCtx(), { outline_node_id: "ch-1" })!;
     const categories = result.opportunities.map((o) => o.category);
     expect(categories).toContain("mystery"); // R1
     expect(categories).toContain("relationship"); // R2（2 角色在场）
@@ -446,35 +451,38 @@ describe("find_hook_opportunities", () => {
     expect(rel.reason).toContain("2 个角色");
   });
 
-  it("R3 冲突外部层面 → world_building；R4 价值转向 → character_growth；已有伏笔 → R1 不触发", () => {
+  it("R3 冲突外部层面 → world_building；R4 价值转向 → character_growth；已有伏笔 → R1 不触发（章级聚合场景数据）", () => {
     seedBase();
- // sc-2 带麦基字段
+ // sc-2（第 1 章下场景）带麦基字段——章级分析聚合其下场景
     const tree = readOutlineFile(dir);
     const sc2 = findOutlineNode(tree, "sc-2")!;
     sc2.data = { conflict_levels: ["inner", "extra_personal"], value_from: "平静", value_to: "绝望" };
     writeOutlineFile(dir, tree);
 
-    const result = runFindHookOpportunities(makeCtx(), { outline_node_id: "sc-2" })!;
+    const result = runFindHookOpportunities(makeCtx(), { outline_node_id: "ch-1" })!;
     const byCategory = new Map(result.opportunities.map((o) => [o.category, o.reason]));
     expect(byCategory.has("world_building")).toBe(true);
     expect(byCategory.get("world_building")).toContain("extra_personal");
     expect(byCategory.get("character_growth")).toContain("平静");
     expect(byCategory.get("character_growth")).toContain("绝望");
 
- // 已有 plants 关系 → R1（mystery）不触发
+ // 已有 plants 关系（章或其场景）→ R1（mystery）不触发
     const hookId = makeHook("已有伏笔", { status: "planted" });
     plant(hookId, "sc-2");
-    const withPlant = runFindHookOpportunities(makeCtx(), { outline_node_id: "sc-2" })!;
+    const withPlant = runFindHookOpportunities(makeCtx(), { outline_node_id: "ch-1" })!;
     expect(withPlant.opportunities.map((o) => o.category)).not.toContain("mystery");
   });
 
-  it("节点不存在/已软删 → null", () => {
+  it("输入非章（卷/场景）→ 抛错；章不存在/已软删 → null", () => {
     seedBase();
-    expect(runFindHookOpportunities(makeCtx(), { outline_node_id: "sc-999" })).toBeNull();
+    expect(runFindHookOpportunities(makeCtx(), { outline_node_id: "ch-999" })).toBeNull();
     const tree = readOutlineFile(dir);
-    findOutlineNode(tree, "sc-1")!.deleted = true;
+    findOutlineNode(tree, "ch-1")!.deleted = true;
     writeOutlineFile(dir, tree);
-    expect(runFindHookOpportunities(makeCtx(), { outline_node_id: "sc-1" })).toBeNull();
+    expect(runFindHookOpportunities(makeCtx(), { outline_node_id: "ch-1" })).toBeNull();
+ // 锚点/分析口径仅章（卡片 1.3）：卷与场景为输入类型错误（报错而非静默 null）
+    expect(() => runFindHookOpportunities(makeCtx(), { outline_node_id: "vol-1" })).toThrow(/仅支持章节点/);
+    expect(() => runFindHookOpportunities(makeCtx(), { outline_node_id: "sc-1" })).toThrow(/仅支持章节点/);
   });
 });
 
@@ -543,7 +551,7 @@ describe("hook 工具边界（data 未写回 / signal / current_position 口径�
  // 非本 hook 的实体也不受影响
     const charId = createEntity(db, { type: "character", name: "阿强", data: { role: "主角" } }).id;
     const charBefore = getEntity(db, charId)!.data;
-    runFindHookOpportunities(makeCtx(), { outline_node_id: "sc-1" });
+    runFindHookOpportunities(makeCtx(), { outline_node_id: "ch-1" });
     expectDataUnchanged(charId, charBefore);
   });
 

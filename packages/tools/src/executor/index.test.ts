@@ -154,16 +154,24 @@ describe("executeProposal（proposal.type → 执行函数映射）", () => {
 
   it("propose_create_hook → 适配器：create_entity(type=hook) + plant_at_node_id 同事务补插 plants 关系", () => {
     writeOutlineFile(dir, seedOutlineTree());
-    const result = executeProposal(makeCtx(), makeProposal("propose_create_hook", { name: "身世之谜", plant_at_node_id: "sc-1", data: { payoff_timing: "near_term" } }));
+    const result = executeProposal(makeCtx(), makeProposal("propose_create_hook", { name: "身世之谜", plant_at_node_id: "ch-1", data: { payoff_timing: "near_term" } }));
     expect(result.id).toMatch(/^hook-/);
     const hook = getEntity(db, result.id as string)!;
     expect(hook.type).toBe("hook");
     expect(hook.data).toEqual({ payoff_timing: "near_term" });
- // plants 关系（大纲节点 → hook）
-    const relations = listRelations(db, { sourceId: "sc-1" }, 1, dir).relations;
+ // plants 关系（章节点 → hook；伏笔锚点仅章）
+    const relations = listRelations(db, { sourceId: "ch-1" }, 1, dir).relations;
     expect(relations).toEqual([
-      expect.objectContaining({ sourceType: "outline_node", sourceId: "sc-1", targetId: result.id, relationType: "plants" }),
+      expect.objectContaining({ sourceType: "outline_node", sourceId: "ch-1", targetId: result.id, relationType: "plants" }),
     ]);
+  });
+
+  it("propose_create_hook 非章埋设节点 → 抛错（executor 直写 db 绕过 REST，须在执行层拒绝）", () => {
+    writeOutlineFile(dir, seedOutlineTree());
+    expect(() =>
+      executeProposal(makeCtx(), makeProposal("propose_create_hook", { name: "身世之谜", plant_at_node_id: "sc-1" })),
+    ).toThrow(/伏笔锚点须为章/);
+    expect(listRelations(db, { relationType: "plants" }, 1, dir).relations).toHaveLength(0); // 未建实体/关系
   });
 
   it("propose_create_hook 无 plant_at_node_id → 仅建实体", () => {
@@ -190,7 +198,7 @@ describe("executeProposal（proposal.type → 执行函数映射）", () => {
   it("propose_advance_hook → advance_hook：复合写（delta + advances）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const hook = createEntity(db, { type: "hook", name: "身世之谜" });
-    const proposal = makeProposal("propose_advance_hook", { hook_id: hook.id, node_id: "sc-1", description: "第 12 章发现玉佩" });
+    const proposal = makeProposal("propose_advance_hook", { hook_id: hook.id, node_id: "ch-1", description: "第 12 章发现玉佩" });
     const result = executeProposal(makeCtx(), proposal);
     expect(result.id).toMatch(/^rel-/);
     expect(listDeltasByTarget(db, hook.id, dir)[0].description).toBe("第 12 章发现玉佩");
@@ -200,7 +208,7 @@ describe("executeProposal（proposal.type → 执行函数映射）", () => {
   it("propose_resolve_hook → resolve_hook：复合写（delta + resolves）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const hook = createEntity(db, { type: "hook", name: "身世之谜" });
-    const result = executeProposal(makeCtx(), makeProposal("propose_resolve_hook", { hook_id: hook.id, node_id: "sc-2", description: "揭示真相" }));
+    const result = executeProposal(makeCtx(), makeProposal("propose_resolve_hook", { hook_id: hook.id, node_id: "ch-1", description: "揭示真相" }));
     expect(result.id).toMatch(/^rel-/);
     expect(listRelations(db, { targetId: hook.id, relationType: "resolves" }, 1, dir).relations).toHaveLength(1);
   });

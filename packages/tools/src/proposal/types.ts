@@ -153,6 +153,21 @@ export function requireOutlineNode(ctx: ToolContext, nodeId: string): OutlineFil
 }
 
 /**
+ * 按 id 取**章**节点（存在且未软删 + `type === "chapter"`）；否则抛错。
+ * **伏笔锚点仅章（卡片 1.3）**：埋设 / 推进 / 回收节点一律为章——卷太粗、场景太碎，
+ * 伏笔是章级叙事事件（见 `docs/db/schema.md` 关系类型表、`docs/design/10-data-model.md` §14.7）。
+ * 与 REST 创建路径（`server/src/routes/relation.ts` 校验）同口径；**executor 直写 db
+ * 绕过 REST 校验**，故提案层与 executor 层都调本函数（双管）。
+ */
+export function requireChapterNode(ctx: ToolContext, nodeId: string): OutlineFileNode {
+  const node = requireOutlineNode(ctx, nodeId);
+  if (node.type !== "chapter") {
+    throw new Error(`伏笔锚点须为章（卷/场景不承载伏笔标记）: ${nodeId}`);
+  }
+  return node;
+}
+
+/**
  * 按 id 取伏笔实体（type === "hook" 且未软删，类型一致性校验）；否则抛错。
  * 伏笔即 type=hook 的实体（用户手动创建或 AI 提案创建），快照用实体自身 updated_at。
  */

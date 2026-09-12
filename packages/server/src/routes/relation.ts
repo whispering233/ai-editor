@@ -1,6 +1,8 @@
 // 关系路由（S3.4）：GET / 查询（k 跳遍历）、POST / 创建（判重）、DELETE /:id 物理删
 //
 // （可见性联动端点状态；手动删关系 = 物理删）。
+// **伏笔锚点仅章（卡片 1.3）**：plants/advances/resolves 且源端为大纲节点时，源节点必须是章
+// （assertHookAnchorChapter → 400 VALIDATION_ERROR）。
 // 错误映射（db RelationError → HttpError，对照 错误码）：
 // RELATION_EXISTS → 409 RELATION_EXISTS（同三元组已存在）
 // EVENT_ALREADY_MOUNTED → 409 EVENT_ALREADY_MOUNTED（occurs_at 1:n 重复挂载，G2）
@@ -13,22 +15,42 @@ import {
   createRelation,
   deleteRelation,
   eventOccursAt,
+  findOutlineNode,
   listRelations,
   nowIso,
+  readOutlineFile,
   RelationError,
   updateRelationMetadata,
   wouldCreateSettingCycle,
 } from "@whispering233/ai-editor-db";
+import { HOOK_RELATION_TYPES } from "@whispering233/ai-editor-shared";
 import {
   relationCreateReqSchema,
   relationQuerySchema,
   relationUpdateMetaReqSchema,
 } from "@whispering233/ai-editor-shared/schemas";
 import { HttpError, ok } from "../middleware/error.js";
-import { requireCurrentProject } from "../middleware/project.js";
+import { requireCurrentProject, type ProjectContext } from "../middleware/project.js";
 
 /** 关系路由（挂载于 /api/v1/relation，index.ts） */
 export const relationRoutes = new Hono();
+
+/**
+ * 伏笔锚点层级校验（卡片 1.3）：`plants`/`advances`/`resolves` 且源端为大纲节点时，
+ * 源节点必须是**章**——卷/场景不承载伏笔标记（见 `docs/db/schema.md` 关系类型表、
+ * `docs/design/10-data-model.md` §14.7；伏笔是章级叙事事件，与 Delta 锚点同口径）。
+ * **存在性/软删不在此报错**：交由 createRelation 的 ENDPOINT_NOT_FOUND → 400
+ * VALIDATION_ERROR 统一处理（避免两处端点错误文案漂移）——仅当节点存在且未软删时校验层级。
+ * 与 S13.3 target_type 白名单同模式：shared schema 不动、路由层 400；AI 提案通道
+ * （propose_add_relation）在 tools 层独立拒绝。
+ */
+function assertHookAnchorChapter(project: ProjectContext, nodeId: string): void {
+  const node = findOutlineNode(readOutlineFile(project.root), nodeId);
+  if (node === undefined || node.deleted === true) return;
+  if (node.type !== "chapter") {
+    throw new HttpError(400, "VALIDATION_ERROR", `伏笔锚点须为章（卷/场景不承载伏笔标记）: ${nodeId}`);
+  }
+}
 
 // GET /api/v1/relation —— 查询（depth 必填 1|2|3；过滤条件组合；响应 camelCase）
 relationRoutes.get("/", (c) => {
@@ -58,6 +80,10 @@ relationRoutes.post("/", async (c) => {
     throw parsed.error; // → 400 VALIDATION_ERROR（含 relation_type enum 白名单、字段校验）
   }
   const { source_type, source_id, target_type, target_id, relation_type, metadata } = parsed.data;
+ // 伏笔锚点仅章（卡片 1.3）：plants/advances/resolves 的源端为大纲节点时，源节点必须是**章**
+  if (source_type === "outline_node" && (HOOK_RELATION_TYPES as readonly string[]).includes(relation_type)) {
+    assertHookAnchorChapter(project, source_id);
+  }
   let row;
   try {
  // occurs_at 1:n 挂载校验（G2，一个事件至多挂一个时间点）。

@@ -58,13 +58,14 @@ import { HOOK_STATUS_LABEL, HOOK_TIMING_LABEL } from "../lib/entity-list";
 import {
   anchorNodeForAbandon,
   buildPlantRelationBody,
+  chapterNodeExists,
+  chapterNodeOptions,
   currentHookStatus,
   dependentsCount,
   dependencyNames,
   expandDependencyChain,
   groupHooksByStatus,
   involvesNames,
-  nodeExists,
   relationsOfType,
   runAbandonWrite,
   runLifecycleWrite,
@@ -73,7 +74,6 @@ import {
   type HookLifecycleKind,
 } from "../lib/hook-panel";
 import { LIFECYCLE_STATUS } from "../lib/hook-panel";
-import { flattenTree } from "../lib/outline-tree";
 import { cn } from "../lib/utils";
 
 import { useDataRefresh } from "../hooks/use-data-refresh";
@@ -149,7 +149,8 @@ export default function HookPanel() {
 
   const config = useProjectStore((s) => s.config);
   const outline = useProjectStore((s) => s.outline);
-  const nodeOptions = flattenTree(outline?.children ?? []);
+ // 节点选择器只列章（卡片 1.3：伏笔锚点仅章——卷/场景写入必 400，不入选项）
+  const nodeOptions = chapterNodeOptions(outline);
   const groups: HookGroups | null = items === null ? null : groupHooksByStatus(items);
 
   // 列表加载（reloadTick 驱动重试/刷新；卸载或重载丢弃过期响应）
@@ -218,10 +219,10 @@ export default function HookPanel() {
     setLifecycleDesc("");
     try {
       const detail = await getEntityDetail("hook", hook.id);
-      // 默认节点：current_position（锚点口径；须在树中存在且未软删）
+      // 默认节点：current_position（锚点口径；须在树中存在且未软删且为章）
       const cp = useProjectStore.getState().config?.currentPosition;
       const defaultNode =
-        cp !== null && cp !== undefined && cp !== "" && nodeExists(outline, cp) ? cp : "";
+        cp !== null && cp !== undefined && cp !== "" && chapterNodeExists(outline, cp) ? cp : "";
       setLifecycleNodeId(defaultNode);
       setLifecycleKind(kind);
       setLifecycleTarget(detail);
@@ -239,10 +240,10 @@ export default function HookPanel() {
     setLifecycleError(null);
     try {
       if (kind === "abandon") {
-        // 废弃锚点：current_position 优先，退化树末节点（anchorNodeForAbandon，同 executor 语义）
+        // 废弃锚点：current_position（须为章）优先，退化树末章（anchorNodeForAbandon，同 executor 语义）
         const anchor = anchorNodeForAbandon(config, outline);
         if (anchor === null) {
-          setLifecycleError("大纲为空，无法记录废弃变更");
+          setLifecycleError("大纲无章节，无法记录废弃变更");
           return;
         }
         await runAbandonWrite({
@@ -253,7 +254,7 @@ export default function HookPanel() {
         });
       } else {
         if (lifecycleNodeId === "") {
-          setLifecycleError("请选择大纲节点");
+          setLifecycleError("请选择章节点");
           return;
         }
         await runLifecycleWrite({
@@ -558,7 +559,7 @@ export default function HookPanel() {
               nodeOptions={nodeOptions}
             />
             <div>
-              <p className="mb-1 text-sm font-medium text-foreground">埋点节点（选填，可空）</p>
+              <p className="mb-1 text-sm font-medium text-foreground">埋点章节点（选填，可空）</p>
               <OutlineNodeSelect
                 value={createPlantNodeId}
                 onChange={setCreatePlantNodeId}
@@ -614,13 +615,13 @@ export default function HookPanel() {
               {lifecycleKind !== "abandon" && (
                 <div>
                   <p className="mb-1 text-sm font-medium text-foreground">
-                    大纲节点（默认当前位置）
+                    章节点（默认当前位置）
                   </p>
                   <OutlineNodeSelect
                     value={lifecycleNodeId}
                     onChange={setLifecycleNodeId}
                     nodeOptions={nodeOptions}
-                    placeholder="请选择节点"
+                    placeholder="请选择章节点"
                   />
                 </div>
               )}

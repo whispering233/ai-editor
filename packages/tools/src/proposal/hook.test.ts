@@ -101,17 +101,23 @@ describe("propose_create_hook", () => {
 
   it("指定埋设节点：引用为节点级 updated_at 快照", () => {
     writeOutlineFile(dir, seedOutlineTree());
-    const proposal = buildProposeCreateHook(makeCtx(), { name: "玉佩来历", plant_at_node_id: "sc-1" });
-    expect(proposal.references).toEqual([{ kind: "outline_node", id: "sc-1", updated_at: T0 }]);
+    const proposal = buildProposeCreateHook(makeCtx(), { name: "玉佩来历", plant_at_node_id: "ch-1" });
+    expect(proposal.references).toEqual([{ kind: "outline_node", id: "ch-1", updated_at: T0 }]);
   });
 
   it("不落盘：实体表零新增（S6.7 对比核心差异）；埋设节点不存在/软删 → 抛错", () => {
     writeOutlineFile(dir, seedOutlineTree());
-    runProposeCreateHook(makeCtx(), { name: "玉佩来历", plant_at_node_id: "sc-1" });
+    runProposeCreateHook(makeCtx(), { name: "玉佩来历", plant_at_node_id: "ch-1" });
     expect(listEntities(db, { type: "hook", limit: 200 }).items).toHaveLength(0);
-    expect(() => runProposeCreateHook(makeCtx(), { name: "x", plant_at_node_id: "sc-999" })).toThrow(/大纲节点不存在或已软删/);
-    softDeleteNode("sc-1");
-    expect(() => runProposeCreateHook(makeCtx(), { name: "x", plant_at_node_id: "sc-1" })).toThrow(/大纲节点不存在或已软删/);
+    expect(() => runProposeCreateHook(makeCtx(), { name: "x", plant_at_node_id: "ch-999" })).toThrow(/大纲节点不存在或已软删/);
+    softDeleteNode("ch-1");
+    expect(() => runProposeCreateHook(makeCtx(), { name: "x", plant_at_node_id: "ch-1" })).toThrow(/大纲节点不存在或已软删/);
+  });
+
+  it("伏笔锚点仅章（卡片 1.3）：场景/卷埋设节点 → 抛错", () => {
+    writeOutlineFile(dir, seedOutlineTree());
+    expect(() => runProposeCreateHook(makeCtx(), { name: "x", plant_at_node_id: "sc-1" })).toThrow(/伏笔锚点须为章/);
+    expect(() => runProposeCreateHook(makeCtx(), { name: "x", plant_at_node_id: "vol-1" })).toThrow(/伏笔锚点须为章/);
   });
 });
 
@@ -139,17 +145,17 @@ describe("propose_update_hook", () => {
 });
 
 describe("propose_advance_hook / propose_resolve_hook", () => {
-  it("完整提案结构：伏笔实体 + 推进/回收节点双引用快照", () => {
+  it("完整提案结构：伏笔实体 + 推进/回收章节点双引用快照", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const hook = seedHook();
-    const advance = buildProposeAdvanceHook(makeCtx(), { hook_id: hook.id, node_id: "sc-1", description: "玉佩现身" });
+    const advance = buildProposeAdvanceHook(makeCtx(), { hook_id: hook.id, node_id: "ch-1", description: "玉佩现身" });
     expect(advance.type).toBe("propose_advance_hook");
-    expect(advance.args).toEqual({ hook_id: hook.id, node_id: "sc-1", description: "玉佩现身" });
+    expect(advance.args).toEqual({ hook_id: hook.id, node_id: "ch-1", description: "玉佩现身" });
     expect(advance.references).toEqual([
       { kind: "entity", id: hook.id, updated_at: hook.updated_at },
-      { kind: "outline_node", id: "sc-1", updated_at: T0 },
+      { kind: "outline_node", id: "ch-1", updated_at: T0 },
     ]);
-    const resolve = buildProposeResolveHook(makeCtx(), { hook_id: hook.id, node_id: "sc-1", description: "身世揭晓" });
+    const resolve = buildProposeResolveHook(makeCtx(), { hook_id: hook.id, node_id: "ch-1", description: "身世揭晓" });
     expect(resolve.type).toBe("propose_resolve_hook");
     expect(resolve.references).toEqual(advance.references);
   });
@@ -157,20 +163,23 @@ describe("propose_advance_hook / propose_resolve_hook", () => {
   it("不落盘：实体与关系表零变化（确认后的复合写 delta+relations 属 S6.7）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const hook = seedHook();
-    runProposeAdvanceHook(makeCtx(), { hook_id: hook.id, node_id: "sc-1", description: "玉佩现身" });
+    runProposeAdvanceHook(makeCtx(), { hook_id: hook.id, node_id: "ch-1", description: "玉佩现身" });
     expect(listRelations(db, { relationType: "advances" }, 3, dir).relations).toHaveLength(0); // 无 advances 关系
     expect(getEntity(db, hook.id)!.data.status).toBe("planted"); // status 未变
-    runProposeResolveHook(makeCtx(), { hook_id: hook.id, node_id: "sc-1", description: "身世揭晓" });
+    runProposeResolveHook(makeCtx(), { hook_id: hook.id, node_id: "ch-1", description: "身世揭晓" });
     expect(listRelations(db, { relationType: "resolves" }, 3, dir).relations).toHaveLength(0);
   });
 
-  it("伏笔不存在/已软删、节点不存在/已软删 → 抛错", () => {
+  it("伏笔不存在/已软删、节点不存在/已软删、节点非章 → 抛错", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const hook = seedHook();
-    expect(() => runProposeAdvanceHook(makeCtx(), { hook_id: "hook-999", node_id: "sc-1", description: "x" })).toThrow(/伏笔不存在或已软删/);
-    expect(() => runProposeAdvanceHook(makeCtx(), { hook_id: hook.id, node_id: "sc-999", description: "x" })).toThrow(/大纲节点不存在或已软删/);
-    softDeleteNode("sc-1");
-    expect(() => runProposeResolveHook(makeCtx(), { hook_id: hook.id, node_id: "sc-1", description: "x" })).toThrow(/大纲节点不存在或已软删/);
+    expect(() => runProposeAdvanceHook(makeCtx(), { hook_id: "hook-999", node_id: "ch-1", description: "x" })).toThrow(/伏笔不存在或已软删/);
+    expect(() => runProposeAdvanceHook(makeCtx(), { hook_id: hook.id, node_id: "ch-999", description: "x" })).toThrow(/大纲节点不存在或已软删/);
+ // 锚点仅章（卡片 1.3）：推进/回收同样拒绍卷/场景
+    expect(() => runProposeAdvanceHook(makeCtx(), { hook_id: hook.id, node_id: "sc-1", description: "x" })).toThrow(/伏笔锚点须为章/);
+    expect(() => runProposeResolveHook(makeCtx(), { hook_id: hook.id, node_id: "vol-1", description: "x" })).toThrow(/伏笔锚点须为章/);
+    softDeleteNode("ch-1");
+    expect(() => runProposeResolveHook(makeCtx(), { hook_id: hook.id, node_id: "ch-1", description: "x" })).toThrow(/大纲节点不存在或已软删/);
   });
 });
 
@@ -199,8 +208,8 @@ describe("signal aborted", () => {
     const ctx = makeCtx();
     expect(() => runProposeCreateHook(ctx, { name: "x" }, controller.signal)).toThrow(AbortedError);
     expect(() => runProposeUpdateHook(ctx, { hook_id: "hook-1", patches: { status: "x" } }, controller.signal)).toThrow(AbortedError);
-    expect(() => runProposeAdvanceHook(ctx, { hook_id: "hook-1", node_id: "sc-1", description: "x" }, controller.signal)).toThrow(AbortedError);
-    expect(() => runProposeResolveHook(ctx, { hook_id: "hook-1", node_id: "sc-1", description: "x" }, controller.signal)).toThrow(AbortedError);
+    expect(() => runProposeAdvanceHook(ctx, { hook_id: "hook-1", node_id: "ch-1", description: "x" }, controller.signal)).toThrow(AbortedError);
+    expect(() => runProposeResolveHook(ctx, { hook_id: "hook-1", node_id: "ch-1", description: "x" }, controller.signal)).toThrow(AbortedError);
     expect(() => runProposeAbandonHook(ctx, { hook_id: "hook-1", description: "x" }, controller.signal)).toThrow(AbortedError);
   });
 });

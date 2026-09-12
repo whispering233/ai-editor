@@ -20,7 +20,7 @@
 import { createEntity, createRelation, withTransaction } from "@whispering233/ai-editor-db";
 import { EXECUTOR_TOOLS, PROPOSAL_TOOLS } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
-import { requireHook, requireOutlineNode } from "../proposal/types.js";
+import { requireChapterNode, requireHook } from "../proposal/types.js";
 import type { Proposal } from "../proposal/types.js";
 import { executeAddDelta } from "./delta.js";
 import { executeCreateEntity, executeDeleteEntity, executeUpdateEntity } from "./entity.js";
@@ -43,7 +43,7 @@ const executeCreateHook: ExecutorFn = (ctx, proposal) => {
   return withTransaction(ctx.db, () => {
     const row = createEntity(ctx.db, { type: "hook", name, data });
     if (plantAtNodeId !== undefined) {
-      requireOutlineNode(ctx, plantAtNodeId); // 埋设节点存在且未软删（createRelation 亦校验）
+      requireChapterNode(ctx, plantAtNodeId); // 埋设章节点存在且未软删（伏笔锚点仅章）；createRelation 亦校验存在性
       createRelation(
         ctx.db,
         { sourceType: "outline_node", sourceId: plantAtNodeId, targetType: "hook", targetId: row.id, relationType: "plants" },

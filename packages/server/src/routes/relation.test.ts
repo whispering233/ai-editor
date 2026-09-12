@@ -208,6 +208,68 @@ describe("POST /relation 创建", () => {
     expect(body.data.relation.sourceType).toBe("outline_node");
   });
 
+  it("伏笔锚点仅章（卡片 1.3）：章源端 → 201；场景/卷源端 → 400 VALIDATION_ERROR", async () => {
+    const { app, sc1 } = await seed();
+    const project = getCurrentProject()!;
+    const hook = createEntity(project.db, { type: "hook", name: "身世之谜" });
+ // 章源端 → 201（plants/advances/resolves 三类均适用）
+    for (const relationType of ["plants", "advances", "resolves"] as const) {
+      const ok = await createRel(app, {
+        source_type: "outline_node",
+        source_id: "ch-1",
+        target_type: "hook",
+        target_id: hook.id,
+        relation_type: relationType,
+      });
+      expect(ok.status).toBe(201);
+    }
+ // 场景/卷源端 → 400（同一 hook 换关系类型避开判重 409）
+    const sceneErr = await createRel(app, {
+      source_type: "outline_node",
+      source_id: sc1,
+      target_type: "hook",
+      target_id: hook.id,
+      relation_type: "plants",
+    });
+    expect(sceneErr.status).toBe(400);
+    expect(sceneErr.body.error.code).toBe("VALIDATION_ERROR");
+    expect(sceneErr.body.error.message).toContain("伏笔锚点须为章");
+    const volErr = await createRel(app, {
+      source_type: "outline_node",
+      source_id: "vol-1",
+      target_type: "hook",
+      target_id: hook.id,
+      relation_type: "advances",
+    });
+    expect(volErr.status).toBe(400);
+ // 非伏笔关系不受限：节点端点（场景）仍可建 appears_in
+    const char = createEntity(project.db, { type: "character", name: "阿强" });
+    const appearsIn = await createRel(app, {
+      source_type: "character",
+      source_id: char.id,
+      target_type: "outline_node",
+      target_id: sc1,
+      relation_type: "appears_in",
+    });
+    expect(appearsIn.status).toBe(201);
+  });
+
+  it("伏笔锚点仅章：源节点不存在/已软删仍为既有 400（ENDPOINT_NOT_FOUND 映射，校验不抢先）", async () => {
+    const { app } = await seed();
+    const project = getCurrentProject()!;
+    const hook = createEntity(project.db, { type: "hook", name: "身世之谜" });
+    const missing = await createRel(app, {
+      source_type: "outline_node",
+      source_id: "sc-999",
+      target_type: "hook",
+      target_id: hook.id,
+      relation_type: "plants",
+    });
+    expect(missing.status).toBe(400);
+    expect(missing.body.error.code).toBe("VALIDATION_ERROR");
+    expect(missing.body.error.message).toContain("sc-999");
+  });
+
   it("occurs_at 1:n（G2）：重复挂载 → 409 EVENT_ALREADY_MOUNTED；换时间点挂载需先删旧关系", async () => {
     const { app } = await seed();
     const project = getCurrentProject()!;

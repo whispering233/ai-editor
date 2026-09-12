@@ -21,6 +21,8 @@ import {
   buildPlantRelationBody,
   buildStatusDeltaChange,
   buildStatusSyncData,
+  chapterNodeExists,
+  chapterNodeOptions,
   currentHookStatus,
   dependentsCount,
   dependencyNames,
@@ -28,8 +30,7 @@ import {
   groupHooksByStatus,
   hookGroupOf,
   involvesNames,
-  lastOutlineNode,
-  nodeExists,
+  lastChapterNode,
   runAbandonWrite,
   runLifecycleWrite,
 } from "./hook-panel";
@@ -261,27 +262,40 @@ describe("expandDependencyChain（递归依赖链，点击行内「依赖: …�
 
 // ============ 废弃锚点节点 ============
 
-describe("anchorNodeForAbandon（废弃 Delta 锚定节点）", () => {
-  it("current_position 有效（存在且未软删）优先", () => {
-    expect(anchorNodeForAbandon(makeConfig("sc-1"), makeTree())).toBe("sc-1");
+describe("anchorNodeForAbandon（废弃 Delta 锚定节点——锚点仅章）", () => {
+  it("current_position 有效（存在、未软删且为章）→ 优先", () => {
     expect(anchorNodeForAbandon(makeConfig("ch-2"), makeTree())).toBe("ch-2");
+    expect(anchorNodeForAbandon(makeConfig("ch-1"), makeTree())).toBe("ch-1");
   });
 
-  it("current_position 指向已软删节点 → 退化树末节点（须非软删）", () => {
+  it("current_position 指向存量场景值 → 不采用，退化树末章", () => {
+    expect(anchorNodeForAbandon(makeConfig("sc-1"), makeTree())).toBe("ch-2");
+  });
+
+  it("current_position 指向已软删章 → 退化树末章（须非软删）", () => {
     const tree = makeTree();
-    (
-      tree.children[0] as { children: { children: { deleted: boolean }[] }[] }
-    ).children[0].children[1].deleted = true;
-    expect(anchorNodeForAbandon(makeConfig("sc-2"), tree)).toBe("ch-2");
+    (tree.children[1] as { children: { deleted: boolean }[] }).children[0].deleted = true;
+    expect(anchorNodeForAbandon(makeConfig("ch-2"), tree)).toBe("ch-1");
   });
 
-  it("current_position 未设置 → 树末节点（先序最后：第二卷）", () => {
+  it("current_position 未设置 → 树末章（先序最后章：第二卷）", () => {
     expect(anchorNodeForAbandon(makeConfig(null), makeTree())).toBe("ch-2");
   });
 
-  it("大纲空树 → null（面板禁用提交并提示）", () => {
+  it("大纲无章 → null（面板禁用提交并提示）", () => {
     expect(
       anchorNodeForAbandon(makeConfig("sc-1"), {
+        id: "root",
+        type: "root",
+        schemaVersion: 1,
+        children: [{ id: "vol-1", type: "volume", title: "v", updatedAt: "t" }],
+      }),
+    ).toBeNull();
+  });
+
+  it("空树 → null", () => {
+    expect(
+      anchorNodeForAbandon(makeConfig(null), {
         id: "root",
         type: "root",
         schemaVersion: 1,
@@ -291,17 +305,41 @@ describe("anchorNodeForAbandon（废弃 Delta 锚定节点）", () => {
   });
 });
 
-describe("lastOutlineNode / nodeExists", () => {
-  it("先序最后访问的非软删节点（卷无子时自身可作锚点，同 executor）", () => {
+describe("chapterNodeOptions / chapterNodeExists / lastChapterNode", () => {
+  it("只列章（卷/场景不入选项），depth 保留层级缩进", () => {
+    expect(chapterNodeOptions(makeTree())).toEqual([
+      { id: "ch-1", label: "第一章", depth: 1 },
+      { id: "ch-2", label: "第二章", depth: 1 },
+    ]);
+  });
+
+  it("软删章及其子树跳过；空树/未加载 → 空数组", () => {
+    const tree = makeTree();
+    (tree.children[0] as { children: { deleted: boolean }[] }).children[0].deleted = true;
+    expect(chapterNodeOptions(tree).map((o) => o.id)).toEqual(["ch-2"]);
+    expect(chapterNodeOptions(null)).toEqual([]);
+  });
+
+  it("chapterNodeExists：章 → true；场景/卷/软删章/未知 id → false", () => {
+    const tree = makeTree();
+    expect(chapterNodeExists(tree, "ch-1")).toBe(true);
+    expect(chapterNodeExists(tree, "sc-1")).toBe(false);
+    expect(chapterNodeExists(tree, "vol-1")).toBe(false);
+    expect(chapterNodeExists(tree, "ch-999")).toBe(false);
+    expect(chapterNodeExists(null, "ch-1")).toBe(false);
+    (tree.children[0] as { children: { deleted: boolean }[] }).children[0].deleted = true;
+    expect(chapterNodeExists(tree, "ch-1")).toBe(false);
+  });
+
+  it("lastChapterNode：先序最后章（卷无章时跳过）；无章 → null", () => {
+    expect(lastChapterNode(makeTree())).toBe("ch-2");
     const tree: OutlineTree = {
       id: "root",
       type: "root",
       schemaVersion: 1,
-      children: [{ id: "vol-1", type: "volume", title: "v", updatedAt: "t" }],
+      children: [{ id: "sc-1", type: "scene", title: "游离场景", updatedAt: "t" }],
     };
-    expect(lastOutlineNode(tree)).toBe("vol-1");
-    expect(nodeExists(tree, "vol-1")).toBe(true);
-    expect(nodeExists(tree, "sc-x")).toBe(false);
+    expect(lastChapterNode(tree)).toBeNull();
   });
 });
 

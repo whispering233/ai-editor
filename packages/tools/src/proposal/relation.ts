@@ -8,18 +8,25 @@
 // - propose_add_relation：source/target 端点存在且未软删（resolveEndpoint：实体表优先、
 // 其次大纲树），采集各端点 updated_at 快照；args 规范化为执行形态
 // （source_type/source_id/target_type/target_id/relation_type/metadata——S6.7 执行时可直接透传）
+// - **伏笔锚点仅章（卡片 1.3）**：`plants`/`advances`/`resolves` 的源端为大纲节点时必须是
+// **章**（requireChapterNode，与 REST 创建路径 server relation.ts 同口径）——卷/场景拒绝
 // - propose_remove_relation：关系存在且可见（getRelation 已含端点软删联动过滤），
 // 采集关系自身 updated_at 快照
 
 import { getRelation } from "@whispering233/ai-editor-db";
+import { HOOK_RELATION_TYPES } from "@whispering233/ai-editor-shared";
 import type { ProposeAddRelationArgs, ProposeRemoveRelationArgs } from "../schemas/index.js";
 import type { ToolContext } from "../context.js";
-import { buildProposal, checkProposalAborted, refRelation, resolveEndpoint, type Proposal, type ToolProposalResult } from "./types.js";
+import { buildProposal, checkProposalAborted, refRelation, requireChapterNode, resolveEndpoint, type Proposal, type ToolProposalResult } from "./types.js";
 
 /** 产出新增关系提案（端点类型生成时自动识别，执行形态规范化到 args） */
 export function buildProposeAddRelation(ctx: ToolContext, args: ProposeAddRelationArgs): Proposal {
   const source = resolveEndpoint(ctx, args.source);
   const target = resolveEndpoint(ctx, args.target);
+ // 伏笔锚点仅章（卡片 1.3）：伏笔三类关系的源端为大纲节点时必须为章
+  if (source.type === "outline_node" && (HOOK_RELATION_TYPES as readonly string[]).includes(args.type)) {
+    requireChapterNode(ctx, args.source);
+  }
  // 执行信息：派生端点类型 + 原样透传 relation_type/metadata（S6.7 add_relation 直接消费）
   const executeArgs: Record<string, unknown> = {
     source_type: source.type,

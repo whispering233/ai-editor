@@ -57,7 +57,7 @@ afterEach(() => {
 
 const T0 = "2026-08-01T10:00:00Z";
 
-/** 一棵 卷[章[场景一,场景二]] 的大纲树 */
+/** 一棵 卷[章一[场景一,场景二], 章二, 章三] 的大纲树（伏笔锚点仅章：节点参数一律用 ch-*） */
 function seedOutlineTree(): OutlineFileTree {
   return {
     id: "root",
@@ -80,6 +80,8 @@ function seedOutlineTree(): OutlineFileTree {
               { id: "sc-2", type: "scene", title: "场景二", updated_at: T0 },
             ],
           },
+          { id: "ch-2", type: "chapter", title: "第二章", updated_at: T0 },
+          { id: "ch-3", type: "chapter", title: "第三章", updated_at: T0 },
         ],
       },
     ],
@@ -118,13 +120,13 @@ describe("advance_hook（复合写：delta + advances 一次提交）", () => {
   it("写路径：delta 记 status → progressing（from=当前状态）+ advances 关系，description 取 args.description", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const hookId = makeHook("身世之谜", { status: "planted" });
-    const result = executeAdvanceHook(makeCtx(), advanceProposal(hookId, "sc-1", "第 12 章发现玉佩"));
+    const result = executeAdvanceHook(makeCtx(), advanceProposal(hookId, "ch-1", "第 12 章发现玉佩"));
     expect(result.id).toMatch(/^rel-/);
  // delta：from=planted → to=progressing（示例形态），description = args.description
     const deltas = hookDeltas(hookId);
     expect(deltas).toHaveLength(1);
     expect(deltas[0]).toMatchObject({
-      nodeId: "sc-1",
+      nodeId: "ch-1",
       targetType: "hook",
       targetId: hookId,
       changes: [{ field: "status", op: "update", from: "planted", to: "progressing" }],
@@ -133,7 +135,7 @@ describe("advance_hook（复合写：delta + advances 一次提交）", () => {
  // relation：大纲节点 → hook，advances
     const relations = hookRelations(hookId);
     expect(relations).toHaveLength(1);
-    expect(relations[0]).toMatchObject({ sourceType: "outline_node", sourceId: "sc-1", targetId: hookId, relationType: "advances" });
+    expect(relations[0]).toMatchObject({ sourceType: "outline_node", sourceId: "ch-1", targetId: hookId, relationType: "advances" });
  // 状态同步（S6.7 修复轮）：复合写事务内 data.status 同步为 progressing（终态守卫/delta from 读它）
     expect(getEntity(db, hookId)!.data.status).toBe("progressing");
   });
@@ -141,15 +143,15 @@ describe("advance_hook（复合写：delta + advances 一次提交）", () => {
   it("data.status 缺失 → from 取 planted（创建即埋设）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const hookId = makeHook("无状态伏笔"); // data 无 status
-    executeAdvanceHook(makeCtx(), advanceProposal(hookId, "sc-1"));
+    executeAdvanceHook(makeCtx(), advanceProposal(hookId, "ch-1"));
     expect(hookDeltas(hookId)[0].changes).toEqual([{ field: "status", op: "update", from: "planted", to: "progressing" }]);
   });
 
   it("幂等：同 (node_id, hook_id, advances) 重复调用 → 返回已有 id + duplicated，delta/relation 均不重复写", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const hookId = makeHook("身世之谜");
-    const first = executeAdvanceHook(makeCtx(), advanceProposal(hookId, "sc-1"));
-    const second = executeAdvanceHook(makeCtx(), advanceProposal(hookId, "sc-1")); // 重复确认/重复提案
+    const first = executeAdvanceHook(makeCtx(), advanceProposal(hookId, "ch-1"));
+    const second = executeAdvanceHook(makeCtx(), advanceProposal(hookId, "ch-1")); // 重复确认/重复提案
     expect(second).toEqual({ id: first.id, duplicated: true });
     expect(hookDeltas(hookId)).toHaveLength(1);
     expect(hookRelations(hookId)).toHaveLength(1);
@@ -158,24 +160,24 @@ describe("advance_hook（复合写：delta + advances 一次提交）", () => {
   it("不同节点推进 → 正常新增（每次推进各记一条 delta + advances）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const hookId = makeHook("身世之谜");
-    executeAdvanceHook(makeCtx(), advanceProposal(hookId, "sc-1"));
-    executeAdvanceHook(makeCtx(), advanceProposal(hookId, "sc-2"));
+    executeAdvanceHook(makeCtx(), advanceProposal(hookId, "ch-1"));
+    executeAdvanceHook(makeCtx(), advanceProposal(hookId, "ch-2"));
     expect(hookDeltas(hookId)).toHaveLength(2);
-    expect(hookRelations(hookId).map((r) => r.sourceId)).toEqual(["sc-1", "sc-2"]);
+    expect(hookRelations(hookId).map((r) => r.sourceId)).toEqual(["ch-1", "ch-2"]);
   });
 
   it("同 hook 两次不同节点推进 → 第二次 delta from=同步后的实际状态，computeState 无 conflicts（S6.7 修复轮）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const hookId = makeHook("身世之谜");
-    executeAdvanceHook(makeCtx(), advanceProposal(hookId, "sc-1"));
-    executeAdvanceHook(makeCtx(), advanceProposal(hookId, "sc-2")); // 兄弟节点
+    executeAdvanceHook(makeCtx(), advanceProposal(hookId, "ch-1"));
+    executeAdvanceHook(makeCtx(), advanceProposal(hookId, "ch-2")); // 兄弟章
  // 第二次推进的 from 必须取 data.status 同步后的 progressing（修复前停留 planted →
  // 与实际累积脱节，与终态守卫 / S6.5 hookStatuses 同源缺陷）
     expect(hookDeltas(hookId)[1].changes).toEqual([{ field: "status", op: "update", from: "progressing", to: "progressing" }]);
- // computeState（atNodeId=sc-2 只累积挂在其树路径上的 delta）：from 与实际累积一致 → 无冲突
-    const result = computeState(db, dir, { targetType: "hook", targetId: hookId, atNodeId: "sc-2" });
+ // computeState（atNodeId=ch-2 只累积挂在其树路径上的 delta）：from 与实际累积一致 → 无冲突
+    const result = computeState(db, dir, { targetType: "hook", targetId: hookId, atNodeId: "ch-2" });
     expect(result!.conflicts).toEqual([]);
-    expect(result!.appliedDeltas.map((d) => d.nodeId)).toEqual(["sc-2"]);
+    expect(result!.appliedDeltas.map((d) => d.nodeId)).toEqual(["ch-2"]);
     expect(result!.state.status).toBe("progressing");
   });
 
@@ -183,34 +185,37 @@ describe("advance_hook（复合写：delta + advances 一次提交）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const resolved = makeHook("已回收", { status: "resolved" });
     const abandoned = makeHook("已废弃", { status: "abandoned" });
-    expect(() => executeAdvanceHook(makeCtx(), advanceProposal(resolved, "sc-1"))).toThrow(/已处于终态 resolved/);
-    expect(() => executeAdvanceHook(makeCtx(), advanceProposal(abandoned, "sc-1"))).toThrow(/已处于终态 abandoned/);
+    expect(() => executeAdvanceHook(makeCtx(), advanceProposal(resolved, "ch-1"))).toThrow(/已处于终态 resolved/);
+    expect(() => executeAdvanceHook(makeCtx(), advanceProposal(abandoned, "ch-1"))).toThrow(/已处于终态 abandoned/);
   });
 
   it("生命周期链：advance → resolve 后 data.status 已同步为 resolved → 再 advance 抛终态错误（S6.7 修复轮必须改）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const hookId = makeHook("身世之谜");
-    executeAdvanceHook(makeCtx(), advanceProposal(hookId, "sc-1"));
+    executeAdvanceHook(makeCtx(), advanceProposal(hookId, "ch-1"));
     expect(getEntity(db, hookId)!.data.status).toBe("progressing"); // 首次执行已同步
-    executeResolveHook(makeCtx(), resolveProposal(hookId, "sc-2"));
+    executeResolveHook(makeCtx(), resolveProposal(hookId, "ch-2"));
     expect(getEntity(db, hookId)!.data.status).toBe("resolved");
  // 修复前：data.status 停留在 planted/progressing → 守卫放行，resolved 后仍可推进
  // （第三次推进换节点避开幂等命中路径，验证守卫本体）
-    expect(() => executeAdvanceHook(makeCtx(), advanceProposal(hookId, "ch-1"))).toThrow(/已处于终态 resolved/);
+    expect(() => executeAdvanceHook(makeCtx(), advanceProposal(hookId, "ch-3"))).toThrow(/已处于终态 resolved/);
  // 幂等命中路径不更新：同节点重复确认返回 duplicated，状态不被改写
-    const again = executeAdvanceHook(makeCtx(), advanceProposal(hookId, "sc-1"));
+    const again = executeAdvanceHook(makeCtx(), advanceProposal(hookId, "ch-1"));
     expect(again.duplicated).toBe(true);
     expect(getEntity(db, hookId)!.data.status).toBe("resolved");
   });
 
-  it("伏笔不存在/非 hook/节点不存在 → 抛错", () => {
+  it("伏笔不存在/非 hook/节点不存在/节点非章 → 抛错", () => {
     writeOutlineFile(dir, seedOutlineTree());
-    expect(() => executeAdvanceHook(makeCtx(), advanceProposal("hook-999", "sc-1"))).toThrow(/伏笔不存在或已软删/);
+    expect(() => executeAdvanceHook(makeCtx(), advanceProposal("hook-999", "ch-1"))).toThrow(/伏笔不存在或已软删/);
     const char = makeHook("我是人物", { role: "主角" });
     db.prepare("UPDATE entities SET type = 'character' WHERE id = ?").run(char);
-    expect(() => executeAdvanceHook(makeCtx(), advanceProposal(char, "sc-1"))).toThrow(/伏笔不存在或已软删/);
+    expect(() => executeAdvanceHook(makeCtx(), advanceProposal(char, "ch-1"))).toThrow(/伏笔不存在或已软删/);
     const hookId = makeHook("正常伏笔");
-    expect(() => executeAdvanceHook(makeCtx(), advanceProposal(hookId, "sc-999"))).toThrow(/大纲节点不存在或已软删/);
+    expect(() => executeAdvanceHook(makeCtx(), advanceProposal(hookId, "ch-999"))).toThrow(/大纲节点不存在或已软删/);
+ // 锚点仅章（卡片 1.3）：executor 直写 db 绕过 REST，必须在执行层拒绝卷/场景
+    expect(() => executeAdvanceHook(makeCtx(), advanceProposal(hookId, "sc-1"))).toThrow(/伏笔锚点须为章/);
+    expect(() => executeResolveHook(makeCtx(), resolveProposal(hookId, "vol-1"))).toThrow(/伏笔锚点须为章/);
   });
 });
 
@@ -218,22 +223,22 @@ describe("resolve_hook（复合写：delta + resolves 一次提交）", () => {
   it("写路径：delta 记 status → resolved + resolves 关系", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const hookId = makeHook("身世之谜", { status: "progressing" });
-    const result = executeResolveHook(makeCtx(), resolveProposal(hookId, "sc-2", "揭示主角是转世仙尊"));
+    const result = executeResolveHook(makeCtx(), resolveProposal(hookId, "ch-2", "揭示主角是转世仙尊"));
     expect(result.id).toMatch(/^rel-/);
     expect(hookDeltas(hookId)[0]).toMatchObject({
-      nodeId: "sc-2",
+      nodeId: "ch-2",
       changes: [{ field: "status", op: "update", from: "progressing", to: "resolved" }],
       description: "揭示主角是转世仙尊",
     });
-    expect(hookRelations(hookId)[0]).toMatchObject({ sourceId: "sc-2", relationType: "resolves" });
+    expect(hookRelations(hookId)[0]).toMatchObject({ sourceId: "ch-2", relationType: "resolves" });
     expect(getEntity(db, hookId)!.data.status).toBe("resolved"); // 状态同步：data.status 落地为 resolved
   });
 
   it("幂等：同 (node_id, hook_id, resolves) 重复调用 → 返回已有 id，不重复写", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const hookId = makeHook("身世之谜");
-    const first = executeResolveHook(makeCtx(), resolveProposal(hookId, "sc-2"));
-    const second = executeResolveHook(makeCtx(), resolveProposal(hookId, "sc-2"));
+    const first = executeResolveHook(makeCtx(), resolveProposal(hookId, "ch-2"));
+    const second = executeResolveHook(makeCtx(), resolveProposal(hookId, "ch-2"));
     expect(second).toEqual({ id: first.id, duplicated: true });
     expect(hookDeltas(hookId)).toHaveLength(1);
     expect(hookRelations(hookId)).toHaveLength(1);
@@ -242,19 +247,19 @@ describe("resolve_hook（复合写：delta + resolves 一次提交）", () => {
   it("终态守卫：abandoned 伏笔不可回收", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const hookId = makeHook("已废弃", { status: "abandoned" });
-    expect(() => executeResolveHook(makeCtx(), resolveProposal(hookId, "sc-2"))).toThrow(/已处于终态 abandoned/);
+    expect(() => executeResolveHook(makeCtx(), resolveProposal(hookId, "ch-2"))).toThrow(/已处于终态 abandoned/);
   });
 });
 
-describe("abandon_hook（复合写：仅 delta 记 status=abandoned；无 node_id → 锚定 current_position）", () => {
-  it("写路径：delta 锚定 current_position 节点，无 relation 插入", () => {
+describe("abandon_hook（复合写：仅 delta 记 status=abandoned；无 node_id → 锚定 current_position/树末章）", () => {
+  it("写路径：delta 锚定 current_position 章节点，无 relation 插入", () => {
     writeOutlineFile(dir, seedOutlineTree());
-    writeProjectFile(dir, { id: "proj-test", name: "测试", language: "zh", prompt: "", schema_version: 1, current_position: "sc-1", created_at: T0, updated_at: T0 });
+    writeProjectFile(dir, { id: "proj-test", name: "测试", language: "zh", prompt: "", schema_version: 1, current_position: "ch-1", created_at: T0, updated_at: T0 });
     const hookId = makeHook("身世之谜", { status: "progressing" });
     const result = executeAbandonHook(makeCtx(), abandonProposal(hookId, "设定变更，放弃"));
     expect(result.id).toMatch(/^delta-/);
     expect(hookDeltas(hookId)[0]).toMatchObject({
-      nodeId: "sc-1", // current_position 锚点
+      nodeId: "ch-1", // current_position 锚点
       changes: [{ field: "status", op: "update", from: "progressing", to: "abandoned" }],
       description: "设定变更，放弃",
     });
@@ -262,11 +267,30 @@ describe("abandon_hook（复合写：仅 delta 记 status=abandoned；无 node_i
     expect(getEntity(db, hookId)!.data.status).toBe("abandoned"); // 状态同步：data.status 落地为 abandoned
   });
 
-  it("current_position 未设置 → 退化锚定树末节点", () => {
+  it("current_position 未设置 → 退化锚定树末章", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const hookId = makeHook("身世之谜");
     executeAbandonHook(makeCtx(), abandonProposal(hookId));
-    expect(hookDeltas(hookId)[0].nodeId).toBe("sc-2"); // 树末场景
+    expect(hookDeltas(hookId)[0].nodeId).toBe("ch-3"); // 先序最后章
+  });
+
+  it("current_position 为存量场景值（锚点仅章前数据）→ 不采用，退化锚定树末章", () => {
+    writeOutlineFile(dir, seedOutlineTree());
+    writeProjectFile(dir, { id: "proj-test", name: "测试", language: "zh", prompt: "", schema_version: 1, current_position: "sc-2", created_at: T0, updated_at: T0 });
+    const hookId = makeHook("身世之谜");
+    executeAbandonHook(makeCtx(), abandonProposal(hookId));
+    expect(hookDeltas(hookId)[0].nodeId).toBe("ch-3");
+  });
+
+  it("大纲无章 → 抛错（无锚点不可记录）", () => {
+    writeOutlineFile(dir, {
+      id: "root",
+      type: "root",
+      schema_version: 1,
+      children: [{ id: "vol-1", type: "volume", title: "空卷", updated_at: T0 }],
+    });
+    const hookId = makeHook("身世之谜");
+    expect(() => executeAbandonHook(makeCtx(), abandonProposal(hookId))).toThrow(/大纲无可用章节/);
   });
 
   it("幂等：已存在 to=abandoned 的 delta → 返回已有 id，不重复写", () => {
@@ -283,7 +307,7 @@ describe("abandon_hook（复合写：仅 delta 记 status=abandoned；无 node_i
     const hookId = makeHook("身世之谜");
  // 先写入一条 {field:"category", to:"abandoned"} 的 delta——修复前 LIKE 形态会误判为已废弃
     insertDelta(db, {
-      nodeId: "sc-1",
+      nodeId: "ch-1",
       targetType: "hook",
       targetId: hookId,
       changes: [{ field: "category", op: "update", from: "main", to: "abandoned" }],
@@ -315,13 +339,13 @@ describe("复合写原子性", () => {
     vi.mocked(createRelation).mockImplementationOnce(() => {
       throw new Error("模拟 relation 写入失败");
     });
-    expect(() => executeAdvanceHook(makeCtx(), advanceProposal(hookId, "sc-1"))).toThrow(/模拟 relation 写入失败/);
+    expect(() => executeAdvanceHook(makeCtx(), advanceProposal(hookId, "ch-1"))).toThrow(/模拟 relation 写入失败/);
  // 回滚断言：无半状态——delta 未插入、relation 未插入、data.status 未被改写（状态同步随事务回滚）
     expect(hookDeltas(hookId)).toHaveLength(0);
     expect(hookRelations(hookId)).toHaveLength(0);
     expect(getEntity(db, hookId)!.data.status).toBeUndefined();
  // 实体本身不受影响（仍可正常推进——mock 已消费，后续走真实实现）
-    const result = executeAdvanceHook(makeCtx(), advanceProposal(hookId, "sc-1"));
+    const result = executeAdvanceHook(makeCtx(), advanceProposal(hookId, "ch-1"));
     expect(hookDeltas(hookId)).toHaveLength(1);
     expect(result.id).toMatch(/^rel-/);
   });
@@ -331,7 +355,7 @@ describe("signal", () => {
   it("执行类是短同步事务，无 signal 参数（中止检查由 S7.5 确认路由承担——见 executor/hook.ts 注释）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const hookId = makeHook("身世之谜");
-    const result = executeAdvanceHook(makeCtx(), advanceProposal(hookId, "sc-1"));
+    const result = executeAdvanceHook(makeCtx(), advanceProposal(hookId, "ch-1"));
     expect(hookDeltas(hookId)).toHaveLength(1);
     expect(result.id).toBeDefined();
   });

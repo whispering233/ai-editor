@@ -255,9 +255,9 @@ const hookToolDefs: ToolDefinition[] = [
   {
     name: "suggest_hook_payoff",
     description:
-      "伏笔回收建议：基于埋设章节与半衰期（显式优先、缺省按 payoff_timing 映射）推荐理想回收场景" +
-      "（节奏匹配 top 3，候选为当前章节之后的未回收场景）。返回 { suggestions: [{ at_node, reason }] }；" +
-      "hook 不存在/已软删返回 null，无埋设记录或大纲无候选场景返回空建议。",
+      "伏笔回收建议：基于埋设章与半衰期（显式优先、缺省按 payoff_timing 映射）推荐理想回收**章**" +
+      "（节奏匹配 top 3，候选为当前章节之后的未回收章；伏笔锚点仅章）。返回 { suggestions: [{ at_node, reason }] }；" +
+      "hook 不存在/已软删返回 null，无埋设记录或大纲无候选章返回空建议。",
     parameters: suggestHookPayoffArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
     run: runSuggestHookPayoff,
@@ -265,9 +265,9 @@ const hookToolDefs: ToolDefinition[] = [
   {
     name: "find_hook_opportunities",
     description:
-      "伏笔埋设机会发现：分析指定大纲节点的叙事特征（尚无伏笔埋设、角色在场数、场景冲突层次、价值转向）" +
-      "建议适合的伏笔类别（mystery/relationship/world_building/character_growth）。" +
-      "返回 { opportunities: [{ category, reason }] }；节点不存在或已软删返回 null。",
+      "伏笔埋设机会发现：分析指定**章**节点的叙事特征（**本章及其场景**聚合：尚无伏笔埋设、角色在场数、" +
+      "场景冲突层次、价值转向）建议适合的伏笔类别（mystery/relationship/world_building/character_growth）。" +
+      "返回 { opportunities: [{ category, reason }] }；输入为卷/场景报错（仅章），章不存在或已软删返回 null。",
     parameters: findHookOpportunitiesArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
     run: runFindHookOpportunities,
@@ -368,7 +368,8 @@ const proposalToolDefs: ToolDefinition[] = [
       "新增关系提案：source/target 为端点 id（实体 id 如 char-xxx，或大纲节点 id 如 ch-xxx，" +
       "类型自动识别），type 为预定义关系类型（belongs_to/owns/masters/ally/rival/mentor/family/" +
       "kills/appears_in/occurs_at/plot_edge/plants/advances/resolves/depends_on/involves），" +
-      "metadata 可选。仅生成提案，需用户确认后生效；端点不存在或已软删返回错误。",
+      "metadata 可选。**伏笔三类关系（plants/advances/resolves）的源端必须为章节点**（卷/场景报错）。" +
+      "仅生成提案，需用户确认后生效；端点不存在或已软删返回错误。",
     parameters: proposeAddRelationArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,
     run: runProposeAddRelation,
@@ -426,8 +427,8 @@ const proposalToolDefs: ToolDefinition[] = [
     name: "propose_create_hook",
     description:
       "创建伏笔提案：name 必填，data 可选（伏笔字段：payoff_timing、half_life、expected_resolve_node_id、category 等），" +
-      "plant_at_node_id 可选指定埋设节点（确认后建立 plants 关系）。" +
-      "仅生成提案，需用户确认后生效；埋设节点不存在/已软删返回错误。",
+      "plant_at_node_id 可选指定埋设**章**节点（确认后建立 plants 关系）。" +
+      "仅生成提案，需用户确认后生效；埋设节点非章/不存在/已软删返回错误。",
     parameters: proposeCreateHookArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,
     run: runProposeCreateHook,
@@ -445,9 +446,9 @@ const proposalToolDefs: ToolDefinition[] = [
   {
     name: "propose_advance_hook",
     description:
-      "推进伏笔提案：hook_id 指定伏笔，node_id 为推进发生的节点，description 描述推进内容。" +
+      "推进伏笔提案：hook_id 指定伏笔，node_id 为推进发生的**章**节点，description 描述推进内容。" +
       "确认后复合写一次提交（Delta 记 status=progressing + advances 关系，幂等）。" +
-      "仅生成提案，需用户确认后生效；伏笔或节点不存在/已软删返回错误。",
+      "仅生成提案，需用户确认后生效；伏笔或节点不存在/已软删/非章返回错误。",
     parameters: proposeAdvanceHookArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,
     run: runProposeAdvanceHook,
@@ -455,9 +456,9 @@ const proposalToolDefs: ToolDefinition[] = [
   {
     name: "propose_resolve_hook",
     description:
-      "回收伏笔提案：hook_id 指定伏笔，node_id 为回收节点，description 描述回收内容。" +
+      "回收伏笔提案：hook_id 指定伏笔，node_id 为回收**章**节点，description 描述回收内容。" +
       "确认后复合写一次提交（Delta 记 status=resolved + resolves 关系，幂等）。" +
-      "仅生成提案，需用户确认后生效；伏笔或节点不存在/已软删返回错误。",
+      "仅生成提案，需用户确认后生效；伏笔或节点不存在/已软删/非章返回错误。",
     parameters: proposeResolveHookArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,
     run: runProposeResolveHook,
