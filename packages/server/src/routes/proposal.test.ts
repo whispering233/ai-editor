@@ -92,8 +92,8 @@ function standardOutline(): OutlineFileTree {
   };
 }
 
-/** 大纲树变体：sc-1 已软删（软删语义；outline_node 引用快照应 409 STALE） */
-function softDeletedSceneOutline(): OutlineFileTree {
+/** 大纲树变体：ch-1 已软删（软删语义；outline_node 引用快照应 409 STALE；Delta 锚点仅章） */
+function softDeletedChapterOutline(): OutlineFileTree {
   return {
     id: "root",
     type: "root",
@@ -110,14 +110,14 @@ function softDeletedSceneOutline(): OutlineFileTree {
             type: "chapter",
             title: "第一章",
             updated_at: "2026-08-01T10:00:00Z",
+            deleted: true,
+            deleted_at: "2026-08-01T12:00:00Z",
             children: [
               {
                 id: "sc-1",
                 type: "scene",
                 title: "场景一",
                 updated_at: "2026-08-01T10:00:00Z",
-                deleted: true,
-                deleted_at: "2026-08-01T12:00:00Z",
               },
             ],
           },
@@ -157,6 +157,11 @@ function toolCtx() {
 /** sc-1 节点（findOutlineNode 查树取引用快照；避开 OutlineFileNode 联合类型的 children 索引） */
 function sceneNode() {
   return findOutlineNode(readOutlineFile(getCurrentProject()!.root), "sc-1")!;
+}
+
+/** ch-1 节点（Delta 锚点仅章——卡片 1.2/1.5；引用快照口径同 sceneNode） */
+function chapterNode() {
+  return findOutlineNode(readOutlineFile(getCurrentProject()!.root), "ch-1")!;
 }
 
 /** 等待 ≥1ms：nowIso 为毫秒精度（atomic.ts），连续操作同毫秒时间戳相等会让快照比对误判通过 */
@@ -277,9 +282,9 @@ describe("POST /api/v1/proposal/:proposalId/confirm 成功", () => {
     const proposal = buildProposal(
       toolCtx(),
       "propose_add_delta",
-      { node_id: "sc-1", target_type: "character", target_id: charId, changes: [{ field: "status", op: "set", to: "dead" }] },
-      [refOutlineNode(sceneNode()), refEntity(getEntity(project.db, charId)!)],
-      "为节点「场景一」追加 1 项属性变更",
+      { node_id: "ch-1", target_type: "character", target_id: charId, changes: [{ field: "status", op: "set", to: "dead" }] },
+      [refOutlineNode(chapterNode()), refEntity(getEntity(project.db, charId)!)],
+      "为节点「第一章」追加 1 项属性变更",
     );
     defaultProposalStore.set(proposal);
 
@@ -356,13 +361,13 @@ describe("confirm 快照重校验 → 409 PROPOSAL_STALE", () => {
     const proposal = buildProposal(
       toolCtx(),
       "propose_add_delta",
-      { node_id: "sc-1", target_type: "character", target_id: charId, changes: [{ field: "status", op: "set", to: "dead" }] },
-      [refOutlineNode(sceneNode()), refEntity(getEntity(getCurrentProject()!.db, charId)!)],
+      { node_id: "ch-1", target_type: "character", target_id: charId, changes: [{ field: "status", op: "set", to: "dead" }] },
+      [refOutlineNode(chapterNode()), refEntity(getEntity(getCurrentProject()!.db, charId)!)],
       "为节点追加变更",
     );
     defaultProposalStore.set(proposal);
  // 入仓后节点信息被编辑：节点级 updated_at 刷新
-    updateOutlineNodeInfo(getCurrentProject()!.root, "sc-1", { title: "场景一（改）" }, "2026-08-02T10:00:00Z");
+    updateOutlineNodeInfo(getCurrentProject()!.root, "ch-1", { title: "第一章（改）" }, "2026-08-02T10:00:00Z");
 
     const { status, body } = await confirmProposal(app, proposal.proposal_id);
     expect(status).toBe(409);
@@ -374,12 +379,12 @@ describe("confirm 快照重校验 → 409 PROPOSAL_STALE", () => {
     const proposal = buildProposal(
       toolCtx(),
       "propose_add_delta",
-      { node_id: "sc-1", target_type: "character", target_id: charId, changes: [{ field: "status", op: "set", to: "dead" }] },
-      [refOutlineNode(sceneNode()), refEntity(getEntity(getCurrentProject()!.db, charId)!)],
+      { node_id: "ch-1", target_type: "character", target_id: charId, changes: [{ field: "status", op: "set", to: "dead" }] },
+      [refOutlineNode(chapterNode()), refEntity(getEntity(getCurrentProject()!.db, charId)!)],
       "为节点追加变更",
     );
     defaultProposalStore.set(proposal);
-    writeOutlineFile(getCurrentProject()!.root, softDeletedSceneOutline()); // sc-1 标 deleted
+    writeOutlineFile(getCurrentProject()!.root, softDeletedChapterOutline()); // ch-1 标 deleted
 
     const { status, body } = await confirmProposal(app, proposal.proposal_id);
     expect(status).toBe(409);
@@ -393,8 +398,8 @@ describe("confirm 快照重校验 → 409 PROPOSAL_STALE", () => {
     const refsProposal = buildProposal(
       toolCtx(),
       "propose_add_delta",
-      { node_id: "sc-1", target_type: "character", target_id: charId, changes: [{ field: "status", op: "set", to: "dead" }] },
-      [refOutlineNode(sceneNode()), refEntity(getEntity(project.db, charId)!)],
+      { node_id: "ch-1", target_type: "character", target_id: charId, changes: [{ field: "status", op: "set", to: "dead" }] },
+      [refOutlineNode(chapterNode()), refEntity(getEntity(project.db, charId)!)],
       "先执行一次",
     );
     defaultProposalStore.set(refsProposal);
@@ -407,7 +412,7 @@ describe("confirm 快照重校验 → 409 PROPOSAL_STALE", () => {
       ...buildProposal(
         toolCtx(),
         "propose_add_delta",
-        { node_id: "sc-1", target_type: "character", target_id: charId, changes: [{ field: "status", op: "set", to: "dead" }] },
+        { node_id: "ch-1", target_type: "character", target_id: charId, changes: [{ field: "status", op: "set", to: "dead" }] },
         [],
         "带 delta 引用",
       ),
