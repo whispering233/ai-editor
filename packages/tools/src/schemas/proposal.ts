@@ -80,7 +80,7 @@ export type ProposeRemoveRelationArgs = Static<typeof proposeRemoveRelationArgsS
 
 // ============ Delta（proposal/delta.ts） ============
 
-/** propose_add_delta 入参：node_id（触发节点）+ target（变更目标）+ changes（至少一项） */
+/** propose_add_delta 入参：node_id（触发节点，**仅章**）+ target（变更目标）+ changes（至少一项） */
 export const proposeAddDeltaArgsSchema = Type.Object(
   {
     node_id: Type.String(),

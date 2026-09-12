@@ -3,7 +3,8 @@
 // 已是当前位置禁用；store updateConfig 自动重拉 config 联动 InfoBar/行尾徽标/compute 默认节点）
 // 路由：#/outline/:nodeId（中栏大纲 tab 二级路由，main.tsx outline 分支拦截第二段，仿实体详情）
 // 数据：节点本体来自 project store 的 outline 树（GET /outline 已含 data）——findNode 按 id 查找，
-// 软删/缺失 → 404 态；变更记录 GET /delta/node/:nodeId（NodeDeltaList 区块）；
+// 软删/缺失 → 404 态；**变更记录仅章**（卡片 1.2：卷/场景不渲染该区块，也不留必定 400 的入口）——
+// GET /delta/node/:nodeId（NodeDeltaList 区块）；
 // 相关实体 GET /relation?source_type=outline_node&source_id=:nodeId&depth=1（RelationsView scope 模式）
 // 编辑：PUT /outline/:nodeId——title/summary/data 部分更新（data 浅合并）；diff 只提交变更字段：
 // title 非空且有变化（shouldCommitTitle）、summary 有变化且允许清空（提交空串真正清除——
@@ -313,27 +314,30 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
               {saveError && <p className="mt-3 text-sm text-destructive">{saveError}</p>}
             </SectionCard>
 
-            {/* 变更记录（S5.4 行内面板逻辑迁入；「+ 新建变更」S12.3：内联表单 + 成功后重拉列表） */}
-            <SectionCard
-              title="变更记录"
-              action={
-                <Button size="small" onClick={() => setDeltaFormOpen((v) => !v)}>
-                  {deltaFormOpen ? "收起" : "+ 新建变更"}
-                </Button>
-              }
-            >
-              {deltaFormOpen && (
-                <DeltaCreateForm
-                  nodeId={nodeId}
-                  onCreated={() => {
-                    setDeltaFormOpen(false);
-                    setDeltaReloadKey((k) => k + 1);
-                  }}
-                  onClose={() => setDeltaFormOpen(false)}
-                />
-              )}
-              <NodeDeltaList nodeId={nodeId} reloadKey={deltaReloadKey} />
-            </SectionCard>
+            {/* 变更记录（S5.4 行内面板逻辑迁入；「+ 新建变更」S12.3：内联表单 + 成功后重拉列表）
+             * 卡片 1.2：锚点仅章——卷/场景节点整块不渲染（不落一个点下去必定 400 的入口） */}
+            {node.type === "chapter" && (
+              <SectionCard
+                title="变更记录"
+                action={
+                  <Button size="small" onClick={() => setDeltaFormOpen((v) => !v)}>
+                    {deltaFormOpen ? "收起" : "+ 新建变更"}
+                  </Button>
+                }
+              >
+                {deltaFormOpen && (
+                  <DeltaCreateForm
+                    nodeId={nodeId}
+                    onCreated={() => {
+                      setDeltaFormOpen(false);
+                      setDeltaReloadKey((k) => k + 1);
+                    }}
+                    onClose={() => setDeltaFormOpen(false)}
+                  />
+                )}
+                <NodeDeltaList nodeId={nodeId} reloadKey={deltaReloadKey} />
+              </SectionCard>
+            )}
 
             {/* 伏笔标记占位（S9 伏笔面板落地后接入 plants/advances/resolves 标记） */}
             <SectionCard title="伏笔标记" className="border-dashed">

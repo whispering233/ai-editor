@@ -388,9 +388,10 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(edgeRow.targetId).toBe(sc2Id);
     expect(edgeRow.metadata).toEqual({ label: "路径A" });
 
- // ============ 步骤 5：Delta（父链累积 + 兄弟分支不累积） ============
+ // ============ 步骤 5：Delta（卡 1.2：锚点仅章 + 树路径累积） ============
+ // 触发节点 = 章（卷/场景锚点被拒绝，见下方拒绝分支）；变更挂章后，其下场景均在路径上
     const delta = await api(app, "POST", "/api/v1/delta", {
-      node_id: sc1Id,
+      node_id: chId,
       target_type: "character",
       target_id: charId,
       changes: [{ field: "status", op: "update", from: "active", to: "wounded" }],
@@ -400,7 +401,18 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(delta.body.data.id).toMatch(/^delta-/);
     expect(delta.body.data.applied.changes[0]).toEqual({ field: "status", op: "update", from: "active", to: "wounded" });
 
- // 到达 scene1：树路径上累积 Delta → status = wounded
+ // 非章锚点（场景）→ 400 VALIDATION_ERROR（卡 1.2 收紧）
+    const sceneAnchor = await api(app, "POST", "/api/v1/delta", {
+      node_id: sc1Id,
+      target_type: "character",
+      target_id: charId,
+      changes: [{ field: "status", op: "set", to: "active" }],
+      description: "场景锚点应被拒",
+    });
+    expect(sceneAnchor.status).toBe(400);
+    expect(sceneAnchor.body.error.code).toBe("VALIDATION_ERROR");
+
+ // 到达 scene1：树路径上累积章 Delta → status = wounded
     const compute = await api(app, "POST", "/api/v1/delta/compute", {
       target_type: "character",
       target_id: charId,
@@ -412,14 +424,14 @@ describe("S11.2 端到端冒烟：建项目→大纲→实体→关系→Delta�
     expect(compute.body.data.appliedDeltas).toHaveLength(1);
     expect(compute.body.data.conflicts).toEqual([]);
 
- // 到达 scene2（兄弟分支）：scene1 的 Delta 不在路径上 → 状态不累积（树路径语义）
+ // 到达 scene2（同一章下的兄弟场景）：章在两者路径上都 → 同样累积（兄弟**章**不参与见 delta.test.ts）
     const computeSc2 = await api(app, "POST", "/api/v1/delta/compute", {
       target_type: "character",
       target_id: charId,
       at_node_id: sc2Id,
     });
     expect(computeSc2.status).toBe(200);
-    expect(computeSc2.body.data.state.status).toBe("active");
+    expect(computeSc2.body.data.state.status).toBe("wounded");
 
  // ============ 步骤 6：回收站（软删 → 列表 → 级联还原 → 常规查询恢复） ============
     const del = await api(app, "DELETE", `/api/v1/entity/character/${charId}`);

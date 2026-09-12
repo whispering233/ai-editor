@@ -11,10 +11,12 @@
 // 触发节点不存在或已软删 → 404 OUTLINE_NODE_NOT_FOUND（POST /delta 与 /delta/compute 路由层前置校验；
 // POST /delta 虽未定义该错误码，但 db 层 insertDelta 不校验节点（delta.ts 注释：缺失节点记录
 // 因可见性规则永久不可见），路由层拦截防死记录——oracle 建议）
+// POST /delta 触发节点非章 → 400 VALIDATION_ERROR（锚点仅章，卷/场景拒绝；
+// /delta/compute 的 at_node_id 不限层级——收窄仅写入侧）
 // 目标实体不存在或已软删 → 404 ENTITY_NOT_FOUND（POST /delta/compute）
 import { Hono } from "hono";
 import { computeState, findOutlineNode, getEntity, insertDelta, listDeltasByNode, readOutlineFile } from "@whispering233/ai-editor-db";
-import type { DeltaChange } from "@whispering233/ai-editor-shared";
+import type { DeltaChange, OutlineFileNode } from "@whispering233/ai-editor-shared";
 import { ENTITY_TYPES, mapRowToDelta } from "@whispering233/ai-editor-shared";
 import { deltaComputeReqSchema, deltaCreateReqSchema } from "@whispering233/ai-editor-shared/schemas";
 import { HttpError, ok } from "../middleware/error.js";
@@ -29,12 +31,32 @@ export const deltaRoutes = new Hono();
  * 缺失节点记录会因可见性规则（触发节点缺失视同不可见）永久不可见，
  * 故路由层拦截并映射 404 OUTLINE_NODE_NOT_FOUND；computeState 的 getOutlinePathIds
  * 对缺失节点抛错（视为调用方 bug），同样由本校验先行兜底。
+ * **返回节点**：存在性与层级是两档校验，调用方（POST / 仅章）需拿到节点继续收紧。
  */
-function assertOutlineNode(project: ProjectContext, nodeId: string): void {
+function assertOutlineNode(project: ProjectContext, nodeId: string): OutlineFileNode {
   const tree = readOutlineFile(project.root);
   const node = findOutlineNode(tree, nodeId);
   if (node === undefined || node.deleted === true) {
     throw new HttpError(404, "OUTLINE_NODE_NOT_FOUND", `大纲节点不存在: ${nodeId}`);
+  }
+  return node;
+}
+
+/**
+ * 变更记录锚点层级校验（卡片 1.2 收紧）：触发节点只能是**章**——卷太粗、场景太碎，
+ * 一章一个状态变化点才是叙事粒度（见 `docs/db/schema.md` delta_records 节「锚点仅章」
+ * 与 `docs/design/10-data-model.md` §14.7）。
+ * **只限写入侧**：`/delta/compute` 的 `at_node_id` 不限层级（「第 3 章第 2 场时他什么状态」
+ * 是合法查询）。与 S13.3 target_type 白名单同模式：shared schema 不动、路由层 400；
+ * AI 提案通道（propose_add_delta）在 tools 层独立拒绝。
+ */
+function assertDeltaAnchorChapter(node: OutlineFileNode, nodeId: string): void {
+  if (node.type !== "chapter") {
+    throw new HttpError(
+      400,
+      "VALIDATION_ERROR",
+      `变更记录的触发节点须为章（卷/场景不承载变更记录）: ${nodeId}`,
+    );
   }
 }
 
@@ -95,7 +117,7 @@ function assertDeltaTargetType(targetType: string): void {
 
 // POST /api/v1/delta —— 追加属性变更（201；order 服务端全局单调生成）
 // 校验顺序（oracle 建议）：schema → target_type 白名单（400，S13.3 请求形状校验，无 DB 读）→
-// 触发节点存在性（404）→ per-op 必填（400）→ insert
+// 触发节点存在性（404）→ 触发节点层级仅章（400，卡片 1.2）→ per-op 必填（400）→ insert
 deltaRoutes.post("/", async (c) => {
   const project = requireCurrentProject();
   const raw = await c.req.json().catch(() => null);
@@ -105,7 +127,8 @@ deltaRoutes.post("/", async (c) => {
   }
   const { node_id, target_type, target_id, changes, description } = parsed.data;
   assertDeltaTargetType(target_type); // S13.3：变更目标仅实体类型（shared schema 不动，路由层收紧）
-  assertOutlineNode(project, node_id); // 触发节点必须存在且未软删（防死记录）
+  const node = assertOutlineNode(project, node_id); // 触发节点必须存在且未软删（防死记录）
+  assertDeltaAnchorChapter(node, node_id); // 卡片 1.2：触发节点仅章（卷/场景拒绝）
   validateChangesByOp(changes); // per-op 必填字段
   const row = insertDelta(project.db, {
     nodeId: node_id,

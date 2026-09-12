@@ -1,9 +1,10 @@
 // Delta 路由测试（S5.3）：POST 追加 / GET /node/:nodeId / POST /compute
 // 覆盖：201 ok 包裹与 applied 全字段、order 全局单调递增、空 changes/非法 op/per-op 缺必填（400，
 // 四 op 全表驱动）、触发节点前置校验（404 OUTLINE_NODE_NOT_FOUND，防死记录，含软删）、
+// **触发节点仅章（400 VALIDATION_ERROR，卷/场景；卡片 1.2）**、
 // S13.3 target_type 白名单（outline_node/未知类型 → 400 VALIDATION_ERROR；character → 201 回归）、
 // GET 可见性（软删触发节点 → 空数组）与 order 升序、
-// compute 树路径累积（双层排序）+ 回显（targetType/targetId/atNodeId）、
+// compute 树路径累积（同节点内按 order；父链唯一：兄弟章不参与）+ 回显（targetType/targetId/atNodeId）、
 // update 冲突（conflicts + 保持手动值）、compute 404 映射（OUTLINE_NODE_NOT_FOUND /
 // ENTITY_NOT_FOUND，含 at_node 软删）
 import { mkdtempSync, rmSync } from "node:fs";
@@ -115,6 +116,67 @@ function softDeletedSceneOutline(): OutlineFileTree {
   };
 }
 
+/** 大纲树变体：ch-1 已软删（章节锚点可见性联动测试用：Delta 挂章 → 软删章 → 过滤） */
+function softDeletedChapterOutline(): OutlineFileTree {
+  return {
+    id: "root",
+    type: "root",
+    schema_version: SCHEMA_VERSION,
+    children: [
+      {
+        id: "vol-1",
+        type: "volume",
+        title: "第一卷",
+        updated_at: "2026-08-01T10:00:00Z",
+        children: [
+          {
+            id: "ch-1",
+            type: "chapter",
+            title: "第一章",
+            updated_at: "2026-08-01T10:00:00Z",
+            deleted: true,
+            deleted_at: "2026-08-01T12:00:00Z",
+            children: [{ id: "sc-1", type: "scene", title: "场景一", updated_at: "2026-08-01T10:00:00Z" }],
+          },
+        ],
+      },
+    ],
+  };
+}
+
+/** 大纲树变体：双章（ch-1/ch-2 同级，各带一场景）——父链唯一性测试用（兄弟章不参与累积） */
+function twoChapterOutline(): OutlineFileTree {
+  return {
+    id: "root",
+    type: "root",
+    schema_version: SCHEMA_VERSION,
+    children: [
+      {
+        id: "vol-1",
+        type: "volume",
+        title: "第一卷",
+        updated_at: "2026-08-01T10:00:00Z",
+        children: [
+          {
+            id: "ch-1",
+            type: "chapter",
+            title: "第一章",
+            updated_at: "2026-08-01T10:00:00Z",
+            children: [{ id: "sc-1", type: "scene", title: "场景一", updated_at: "2026-08-01T10:00:00Z" }],
+          },
+          {
+            id: "ch-2",
+            type: "chapter",
+            title: "第二章",
+            updated_at: "2026-08-01T10:00:00Z",
+            children: [{ id: "sc-2", type: "scene", title: "场景二", updated_at: "2026-08-01T10:00:00Z" }],
+          },
+        ],
+      },
+    ],
+  };
+}
+
 /** open 项目 + 标准大纲树 + 角色实体（data 初始 combat_power=100、tags=["剑"]），返回 { app, charId } */
 function seed(): { app: Hono; charId: string } {
   const dir = makeTmpDir();
@@ -161,7 +223,7 @@ describe("POST /api/v1/delta 追加", () => {
   it("201 + ok 包裹 + applied 全字段（id 前缀 delta-、changes 原样、order 服务端生成）", async () => {
     const { app, charId } = await seed();
     const { status, body } = await postDelta(app, {
-      node_id: "sc-1",
+      node_id: "ch-1",
       target_type: "character",
       target_id: charId,
       changes: [{ field: "combat_power", op: "set", to: 150 }],
@@ -172,7 +234,7 @@ describe("POST /api/v1/delta 追加", () => {
     expect(String(body.data?.id)).toMatch(/^delta-/);
     expect(body.data?.applied).toEqual({
       id: expect.stringMatching(/^delta-/),
-      nodeId: "sc-1",
+      nodeId: "ch-1",
       targetType: "character",
       targetId: charId,
       changes: [{ field: "combat_power", op: "set", to: 150 }],
@@ -185,7 +247,7 @@ describe("POST /api/v1/delta 追加", () => {
   it("两次 POST order 全局单调递增", async () => {
     const { app, charId } = await seed();
     const base = {
-      node_id: "sc-1",
+      node_id: "ch-1",
       target_type: "character",
       target_id: charId,
       changes: [{ field: "a", op: "set", to: 1 }],
@@ -200,7 +262,7 @@ describe("POST /api/v1/delta 追加", () => {
   it("空 changes → 400 VALIDATION_ERROR（含 fields）", async () => {
     const { app, charId } = await seed();
     const { status, body } = await postDelta(app, {
-      node_id: "sc-1",
+      node_id: "ch-1",
       target_type: "character",
       target_id: charId,
       changes: [],
@@ -214,7 +276,7 @@ describe("POST /api/v1/delta 追加", () => {
   it("非法 op → 400 VALIDATION_ERROR（schema enum 拦截）", async () => {
     const { app, charId } = await seed();
     const { status, body } = await postDelta(app, {
-      node_id: "sc-1",
+      node_id: "ch-1",
       target_type: "character",
       target_id: charId,
       changes: [{ field: "a", op: "replace", to: 1 }],
@@ -227,7 +289,7 @@ describe("POST /api/v1/delta 追加", () => {
   it("per-op 必填：update 缺 from → 400；add 缺 value → 400", async () => {
     const { app, charId } = await seed();
     const updateMissingFrom = await postDelta(app, {
-      node_id: "sc-1",
+      node_id: "ch-1",
       target_type: "character",
       target_id: charId,
       changes: [{ field: "combat_power", op: "update", to: 200 }],
@@ -238,7 +300,7 @@ describe("POST /api/v1/delta 追加", () => {
     expect(updateMissingFrom.body.error?.message).toContain("from");
 
     const addMissingValue = await postDelta(app, {
-      node_id: "sc-1",
+      node_id: "ch-1",
       target_type: "character",
       target_id: charId,
       changes: [{ field: "tags", op: "add" }],
@@ -257,7 +319,7 @@ describe("POST /api/v1/delta 追加", () => {
     ];
     for (const c of cases) {
       const { status, body } = await postDelta(app, {
-        node_id: "sc-1",
+        node_id: "ch-1",
         target_type: "character",
         target_id: charId,
         changes: [c.change],
@@ -285,7 +347,7 @@ describe("POST /api/v1/delta 追加", () => {
   it("target_type=outline_node → 400 VALIDATION_ERROR（S13.3 收紧：变更目标仅实体类型）", async () => {
     const { app } = await seed();
     const { status, body } = await postDelta(app, {
-      node_id: "sc-1",
+      node_id: "ch-1",
       target_type: "outline_node",
       target_id: "sc-1",
       changes: [{ field: "status", op: "set", to: "active" }],
@@ -301,7 +363,7 @@ describe("POST /api/v1/delta 追加", () => {
   it("target_type=event → 400 VALIDATION_ERROR（event 不产生 Delta，C2 收紧）", async () => {
     const { app, charId } = await seed();
     const { status, body } = await postDelta(app, {
-      node_id: "sc-1",
+      node_id: "ch-1",
       target_type: "event",
       target_id: charId,
       changes: [{ field: "a", op: "set", to: 1 }],
@@ -328,7 +390,7 @@ describe("POST /api/v1/delta 追加", () => {
   it("target_type=未知类型 → 400 VALIDATION_ERROR；character → 201（白名单回归）", async () => {
     const { app, charId } = await seed();
     const unknown = await postDelta(app, {
-      node_id: "sc-1",
+      node_id: "ch-1",
       target_type: "weird_type",
       target_id: charId,
       changes: [{ field: "a", op: "set", to: 1 }],
@@ -339,7 +401,7 @@ describe("POST /api/v1/delta 追加", () => {
     expect(unknown.body.error?.message).toContain("weird_type");
 
     const character = await postDelta(app, {
-      node_id: "sc-1",
+      node_id: "ch-1",
       target_type: "character",
       target_id: charId,
       changes: [{ field: "a", op: "set", to: 1 }],
@@ -349,9 +411,37 @@ describe("POST /api/v1/delta 追加", () => {
     expect(character.body.data?.applied).toMatchObject({ targetType: "character", targetId: charId });
   });
 
+  it("node_id 指向非软删的**场景**节点 → 400 VALIDATION_ERROR（卡片 1.2：锚点仅章）", async () => {
+    const { app, charId } = await seed();
+    const { status, body } = await postDelta(app, {
+      node_id: "sc-1",
+      target_type: "character",
+      target_id: charId,
+      changes: [{ field: "a", op: "set", to: 1 }],
+      description: "x",
+    });
+    expect(status).toBe(400);
+    expect(body.error?.code).toBe("VALIDATION_ERROR");
+    expect(body.error?.message).toContain("须为章");
+  });
+
+  it("node_id 指向**卷**节点 → 400 VALIDATION_ERROR（卡片 1.2：锚点仅章）", async () => {
+    const { app, charId } = await seed();
+    const { status, body } = await postDelta(app, {
+      node_id: "vol-1",
+      target_type: "character",
+      target_id: charId,
+      changes: [{ field: "a", op: "set", to: 1 }],
+      description: "x",
+    });
+    expect(status).toBe(400);
+    expect(body.error?.code).toBe("VALIDATION_ERROR");
+    expect(body.error?.message).toContain("须为章");
+  });
+
   it("node_id 指向软删节点 → 404 OUTLINE_NODE_NOT_FOUND（防死记录）", async () => {
     const { app, charId } = await seed();
- // 重写大纲树：sc-1 标 deleted（软删语义）
+ // 重写大纲树：sc-1 标 deleted（软删语义；存在性校验先于层级校验 → 404 而非 400）
     const project = getCurrentProject()!;
     writeOutlineFile(project.root, softDeletedSceneOutline());
     const { status, body } = await postDelta(app, {
@@ -372,24 +462,24 @@ describe("GET /api/v1/delta/node/:nodeId", () => {
   it("有 Delta → 200 列表含 targetName + 按 order 升序", async () => {
     const { app, charId } = await seed();
     await postDelta(app, {
-      node_id: "sc-1",
+      node_id: "ch-1",
       target_type: "character",
       target_id: charId,
       changes: [{ field: "a", op: "set", to: 1 }],
       description: "d1",
     });
     await postDelta(app, {
-      node_id: "sc-1",
+      node_id: "ch-1",
       target_type: "character",
       target_id: charId,
       changes: [{ field: "b", op: "set", to: 2 }],
       description: "d2",
     });
-    const res = await app.request("/api/v1/delta/node/sc-1", { headers: HOST_HEADERS });
+    const res = await app.request("/api/v1/delta/node/ch-1", { headers: HOST_HEADERS });
     expect(res.status).toBe(200);
     const body = (await res.json()) as { success: boolean; data: { nodeId: string; deltas: Array<Record<string, unknown>> } };
     expect(body.success).toBe(true);
-    expect(body.data.nodeId).toBe("sc-1");
+    expect(body.data.nodeId).toBe("ch-1");
     expect(body.data.deltas).toHaveLength(2);
     expect(body.data.deltas[0]).toMatchObject({ description: "d1", order: 1, targetName: "阿强", targetId: charId });
     expect(body.data.deltas[1]).toMatchObject({ description: "d2", order: 2, targetName: "阿强", targetId: charId });
@@ -411,46 +501,47 @@ describe("GET /api/v1/delta/node/:nodeId", () => {
 
   it("触发节点已软删 → 200 空数组（可见性联动：先挂 Delta 再软删，记录被过滤）", async () => {
     const { app, charId } = await seed();
- // 先挂一条正常可见的 Delta（触发节点 sc-1 未删）
+ // 先挂一条正常可见的 Delta（触发节点 ch-1 未删）
     await postDelta(app, {
-      node_id: "sc-1",
+      node_id: "ch-1",
       target_type: "character",
       target_id: charId,
       changes: [{ field: "a", op: "set", to: 1 }],
       description: "d1",
     });
- // 软删触发节点：其全部 Delta 视同不可见（listDeltasByNode 三态过滤）
+ // 软删触发节点（章）：其余」全部 Delta 视同不可见（listDeltasByNode 三态过滤）
     const project = getCurrentProject()!;
-    writeOutlineFile(project.root, softDeletedSceneOutline());
-    const res = await app.request("/api/v1/delta/node/sc-1", { headers: HOST_HEADERS });
+    writeOutlineFile(project.root, softDeletedChapterOutline());
+    const res = await app.request("/api/v1/delta/node/ch-1", { headers: HOST_HEADERS });
     expect(res.status).toBe(200);
-    expect((await res.json()) as { data: unknown }).toEqual({ success: true, data: { nodeId: "sc-1", deltas: [] } });
+    expect((await res.json()) as { data: unknown }).toEqual({ success: true, data: { nodeId: "ch-1", deltas: [] } });
   });
 });
 
 // ============ POST /api/v1/delta/compute ============
 
 describe("POST /api/v1/delta/compute 状态计算", () => {
-  it("树路径累积：ch-1 与 sc-1 的 Delta 按路径序应用（双层排序）", async () => {
+  it("树路径累积：章上的 Delta 在 at_node=其下场景时生效（同节点内按 order 序）", async () => {
     const { app, charId } = await seed();
- // 章上的 Delta（先应用）：set status=alive
+ // 章上的两条 Delta（卡片 1.2 后锚点仅章——树路径至多含一章，
+ // 「节点间按树路径序」在此树形下不可表达；兄弟章不参与见下一条用例）：
+ // 第一条 set status=alive，第二条 set combat_power=150 + add tags
     await postDelta(app, {
       node_id: "ch-1",
       target_type: "character",
       target_id: charId,
       changes: [{ field: "status", op: "set", to: "alive" }],
-      description: "章内变更",
+      description: "章内变更一",
     });
- // 场景上的 Delta（后应用）：set combat_power=150 + add tags
     await postDelta(app, {
-      node_id: "sc-1",
+      node_id: "ch-1",
       target_type: "character",
       target_id: charId,
       changes: [
         { field: "combat_power", op: "set", to: 150 },
         { field: "tags", op: "add", value: "断剑" },
       ],
-      description: "场景内变更",
+      description: "章内变更二",
     });
     const res = await app.request(
       "/api/v1/delta/compute",
@@ -476,8 +567,36 @@ describe("POST /api/v1/delta/compute 状态计算", () => {
     expect(body.data.state).toEqual({ combat_power: 150, tags: ["剑", "断剑"], status: "alive" });
     expect(body.data.appliedDeltas).toHaveLength(2);
     expect(body.data.appliedDeltas[0].nodeId).toBe("ch-1");
-    expect(body.data.appliedDeltas[1].nodeId).toBe("sc-1");
+    expect(body.data.appliedDeltas[1].nodeId).toBe("ch-1");
+ // 同节点内按 order 升序（全局单调递增的服务端 order）
+    expect(body.data.appliedDeltas[0].description).toBe("章内变更一");
+    expect(body.data.appliedDeltas[1].description).toBe("章内变更二");
     expect(body.data.conflicts).toEqual([]);
+  });
+
+  it("父链唯一：兄弟章的 Delta 不参与计算（10-data-model §4 只沿父链累积）", async () => {
+    const { app, charId } = await seed();
+ // 换成双章树（ch-1 / ch-2 同级），Delta 挂在 ch-1
+    const project = getCurrentProject()!;
+    writeOutlineFile(project.root, twoChapterOutline());
+    await postDelta(app, {
+      node_id: "ch-1",
+      target_type: "character",
+      target_id: charId,
+      changes: [{ field: "combat_power", op: "set", to: 150 }],
+      description: "第一章变更",
+    });
+ // 查询点在 ch-2 下：ch-1 不是 sc-2 的祖先 → 该 Delta 不参与（返回初始值）
+    const res = await app.request(
+      "/api/v1/delta/compute",
+      jsonRequest("POST", { target_type: "character", target_id: charId, at_node_id: "sc-2" }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      data: { state: Record<string, unknown>; appliedDeltas: unknown[] };
+    };
+    expect(body.data.state).toEqual({ combat_power: 100, tags: ["剑"] });
+    expect(body.data.appliedDeltas).toEqual([]);
   });
 
   it("update 冲突：手动改值后 from 断裂 → conflicts 非空 + state 保持手动值", async () => {
@@ -487,7 +606,7 @@ describe("POST /api/v1/delta/compute 状态计算", () => {
     updateEntity(project.db, charId, { data: { combat_power: 250 } });
  // 挂 update Delta（from=100 已与当前值断裂）
     await postDelta(app, {
-      node_id: "sc-1",
+      node_id: "ch-1",
       target_type: "character",
       target_id: charId,
       changes: [{ field: "combat_power", op: "update", from: 100, to: 200 }],

@@ -385,7 +385,7 @@ const proposalToolDefs: ToolDefinition[] = [
   {
     name: "propose_add_delta",
     description:
-      "追加属性变更提案：node_id 为触发变更的大纲节点，target 为变更目标（实体 id 或大纲节点 id，" +
+      "追加属性变更提案：node_id 为触发变更的大纲节点（**仅章**——卷/场景拒绝），target 为变更目标（实体 id 或大纲节点 id，" +
       "类型自动识别），changes 为变更列表（op 取值 set/update/add/remove，至少一项；" +
       "update 需 from 旧值，add/remove 用 value）。仅生成提案，需用户确认后生效；" +
       "触发节点或目标不存在/已软删返回错误。",

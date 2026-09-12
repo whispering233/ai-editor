@@ -1,7 +1,7 @@
 // S6.6 提案类工具测试：Delta（propose_add_delta）
 // 覆盖：tool_result 仅 { proposal_id, summary } 无预览 / 完整提案结构（args 规范化执行形态 +
 // 触发节点/目标两端点引用快照）/ **不落盘**（Delta 表零新增——S6.7 对比核心差异）/
-// 节点不存在/软删、目标不存在抛错 / signal aborted
+// 触发节点非章拒绝（卡片 1.2：锚点仅章）/ 节点不存在/软删、目标不存在抛错 / signal aborted
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -76,7 +76,7 @@ describe("propose_add_delta", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const char = createEntity(db, { type: "character", name: "阿强", data: { status: "alive" } });
     const result = runProposeAddDelta(makeCtx(), {
-      node_id: "sc-1",
+      node_id: "ch-1",
       target: char.id,
       changes: [{ field: "status", op: "update", from: "alive", to: "dead" }],
     });
@@ -92,11 +92,11 @@ describe("propose_add_delta", () => {
       { field: "status", op: "update", from: "alive", to: "dead" },
       { field: "titles", op: "add", value: "剑圣" },
     ];
-    const proposal = buildProposeAddDelta(makeCtx(), { node_id: "sc-1", target: char.id, changes });
+    const proposal = buildProposeAddDelta(makeCtx(), { node_id: "ch-1", target: char.id, changes });
     expect(proposal.type).toBe("propose_add_delta");
-    expect(proposal.args).toEqual({ node_id: "sc-1", target_type: "character", target_id: char.id, changes });
+    expect(proposal.args).toEqual({ node_id: "ch-1", target_type: "character", target_id: char.id, changes });
     expect(proposal.references).toEqual([
-      { kind: "outline_node", id: "sc-1", updated_at: T0 }, // 节点级 updated_at
+      { kind: "outline_node", id: "ch-1", updated_at: T0 }, // 节点级 updated_at
       { kind: "entity", id: char.id, updated_at: char.updated_at }, // 实体自身 updated_at
     ]);
     expect(proposal.project_id).toBe("proj-test");
@@ -117,11 +117,22 @@ describe("propose_add_delta", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const char = createEntity(db, { type: "character", name: "阿强" });
     runProposeAddDelta(makeCtx(), {
-      node_id: "sc-1",
+      node_id: "ch-1",
       target: char.id,
       changes: [{ field: "status", op: "update", from: "alive", to: "dead" }],
     });
-    expect(listDeltasByNode(db, "sc-1", dir)).toHaveLength(0);
+    expect(listDeltasByNode(db, "ch-1", dir)).toHaveLength(0);
+  });
+
+  it("触发节点非章（场景/卷）→ 抛错（卡片 1.2：锚点仅章）", () => {
+    writeOutlineFile(dir, seedOutlineTree());
+    const char = createEntity(db, { type: "character", name: "阿强" });
+    expect(() =>
+      runProposeAddDelta(makeCtx(), { node_id: "sc-1", target: char.id, changes: [{ field: "status", op: "set", to: "dead" }] }),
+    ).toThrow(/须为章/);
+    expect(() =>
+      runProposeAddDelta(makeCtx(), { node_id: "vol-1", target: char.id, changes: [{ field: "status", op: "set", to: "dead" }] }),
+    ).toThrow(/须为章/);
   });
 
   it("触发节点不存在 / 已软删 / 目标不存在 → 抛错", () => {
@@ -131,11 +142,11 @@ describe("propose_add_delta", () => {
       runProposeAddDelta(makeCtx(), { node_id: "sc-999", target: char.id, changes: [{ field: "status", op: "set", to: "dead" }] }),
     ).toThrow(/大纲节点不存在或已软删: sc-999/);
     expect(() =>
-      runProposeAddDelta(makeCtx(), { node_id: "sc-1", target: "char-999", changes: [{ field: "status", op: "set", to: "dead" }] }),
+      runProposeAddDelta(makeCtx(), { node_id: "ch-1", target: "char-999", changes: [{ field: "status", op: "set", to: "dead" }] }),
     ).toThrow(/端点不存在或已软删/);
-    softDeleteNode("sc-1");
+    softDeleteNode("ch-1");
     expect(() =>
-      runProposeAddDelta(makeCtx(), { node_id: "sc-1", target: char.id, changes: [{ field: "status", op: "set", to: "dead" }] }),
+      runProposeAddDelta(makeCtx(), { node_id: "ch-1", target: char.id, changes: [{ field: "status", op: "set", to: "dead" }] }),
     ).toThrow(/大纲节点不存在或已软删/);
   });
 });

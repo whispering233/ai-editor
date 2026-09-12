@@ -6,6 +6,9 @@
 //
 // 生成时校验：
 // - 触发节点（node_id）存在且未软删（requireOutlineNode）——节点级 updated_at 快照
+// - **触发节点仅章（卡片 1.2）**：卷/场景拒绝（与 REST 创建路径 server delta.ts
+//   assertDeltaAnchorChapter 一致）——一章一个状态变化点才是叙事粒度；
+//   **只限写入侧**：compute_state 的 at_node_id 不限层级
 // - 变更目标（target）存在且未软删（resolveEndpoint：实体或大纲节点）——端点 updated_at 快照
 // **target 可为大纲节点**：S13.3 收紧的是 UI 创建入口（仅实体）；AI 提案通道保持大纲
 // target 是 「提案类」/get_delta_history（target_type 含 outline_node）的既有
@@ -24,6 +27,10 @@ import { buildProposal, checkProposalAborted, refOutlineNode, requireOutlineNode
 /** 产出追加 Delta 提案 */
 export function buildProposeAddDelta(ctx: ToolContext, args: ProposeAddDeltaArgs): Proposal {
   const node = requireOutlineNode(ctx, args.node_id);
+ // 锚点仅章（卡片 1.2）：卷/场景拒绝——与 REST 路径 assertDeltaAnchorChapter 同口径
+  if (node.type !== "chapter") {
+    throw new Error(`变更记录的触发节点须为章（卷/场景不承载变更记录）: ${args.node_id}`);
+  }
   const target = resolveEndpoint(ctx, args.target);
  // event（时间轴事件）不产生 Delta——AI 提案通道与 REST 创建路径一致拒绝
  //（outline_node 有 S13.3 显式豁免，event 无豁免）
