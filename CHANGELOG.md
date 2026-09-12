@@ -5,6 +5,42 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+> **AI 内核换成 pi**（嵌入 `@earendil-works/pi-coding-agent` 0.85.1）：模型目录/凭据/会话文件/重试/上下文压缩/工具派发全部交给 pi，本仓只保留领域工具、内核提示词与 HTTP/SSE 契约；会话文件格式变为 pi session v3（旧 v1 会话不再读取）；发布面 6→5 包（`packages/llm` 删除）；配置载体迁到 pi agent dir。
+
+### Breaking
+
+- **AI 内核换核**：自建 LLM 适配层与 agent 主循环全部删除，改为嵌入 `@earendil-works/pi-coding-agent` 0.85.1（exact pin，含 `pi-ai` 模型层与 `pi-agent-core` 循环）。变更面：模型调用/流式/usage、重试、上下文压缩、工具派发、会话读写都由 pi 承担
+- **会话文件格式改为 pi session v3**：仍是项目目录 `sessions/`（随书走、备份/恢复整目录覆盖），但文件名与行结构由 pi 定义（树状 entry：消息/压缩摘要/模型变更/思考强度变更）；**旧 v1 扁平格式文件保留在磁盘但不再被读取**（不出现在会话列表、不可续聊）
+- **`packages/llm` 删除**：发布面 6 包 → 5 包（`shared`/`db`/`tools`/`agent`/`server`）；`agent` 包承接 pi 运行时装配、模型/凭据桥与事件投影
+- **配置载体迁移**：用户级 `~/.ai-editor/config.json` **废弃**（读都不读，文件残留无影响）。模型/思考强度/重试/压缩参数归 pi settings（`~/.pi/agent/settings.json`）；API key 归 pi credential store（`~/.pi/agent/auth.json`，环境变量优先）；自定义 provider/模型走 `~/.pi/agent/models.json`。key 仍绝不入项目文件
+- **SSE 事件集改为 pi 事件投影**：`POST /chat` 不再发旧事件（`text` / `tool_call` / `tool_result` / `proposal` / `done` / `error`），改为 `session`（首帧）/ `ping` / `agent_start` / `turn_start` / `message_start|update|end` / `tool_execution_start|update|end` / `turn_end` / `compaction_start|end` / `auto_retry_start|end` / `agent_end`（`partial` 全文对象剥离）；客户端须同步升级（事件表见 `docs/api/80-api-chat.md`）
+- **`settings/llm` 契约改**：provider 目录与认证状态全量来自 pi（不再有 provider 白名单与自建 key 解析链）；`PUT` 的 `api_key` 为单条 `{ provider, key }`（空串 = 清除凭据）；**存量 OAuth（订阅登录）凭据的写入与删除都拒绝**（400，需用 pi CLI 管理订阅登录）
+- **思考强度缺省由 pi 决定**（`medium`；旧的 `high` 缺省不再沿用），可在设置页或 pi settings 调整
+
+### Added
+
+- **思维链**：随消息落盘（含签名，保障多轮工具调用回放），前端默认折叠（流式期间自动展开、结束后折叠），历史回看走按需端点拉全文（列表只回 240 字预览）
+- **会话错误码**：`CHAT_BUSY`（同一项目已有在途对话流）、`THINKING_NOT_FOUND`（思维链块下标越界/非 thinking 块）
+- **单项目单在途对话流**约束（服务端 `409 CHAT_BUSY`，前端在途时禁用发送）
+- **设置变更即时生效**：模型/思考强度写入 pi settings 后，下一个请求即采用（无需重启）
+
+### Changed
+
+- **轮次上限（8 轮）与单轮超时（120s）删除**：失控保护改由 pi 的自动重试与自动压缩承担，失控时用户可直接停止生成（steering/follow-up 亦由 pi 提供）
+- **工具参数 schema 改 TypeBox**（`Type`/`Static` 经 `pi-ai` 重导出）：一份定义同时给模型（JSON Schema）、给 TS 类型、给校验；参数校验交给 pi（类型写错会被 coerce 后进入工具，业务不变量由工具自校）
+- **工具结果截断**上限改为代码常量（8000 tokens；不再可配），超限截断 + 结构化提示不终止对话
+- **上下文占用条**口径改为模型窗口占比（`getContextUsage()`，随 `turn_end`/`agent_end` 帧下发）
+- **调试日志类别**去掉已无生产者的 `stream`（现为 chat/request/usage/http）
+
+### Removed
+
+- `packages/llm` 包与 `~/.ai-editor/config.json` 读取链（三级 key 解析、`api_keys`、`context_budget`）
+- 自建循环/上下文裁剪/会话文件读写/工具调度模块（`agent` 包的旧 `run`/`context`/`session`/`executor`/`prompts`）与 `db` 的会话文件模块（仅迁移 006 保留旧格式导出辅助）
+- 错误码 `AGENT_MAX_ITERATIONS` / `AGENT_TIMEOUT` / `AGENT_TOKEN_BUDGET` / `AGENT_DISPATCH_ERROR` / `AGENT_INTERNAL_ERROR`（内核对失控的兜底随自建循环一并退场）
+- `ChatMessage` / `ChatMessageRow` 共享类型与 `RUNTIME_ID_PREFIX.session`（会话 id 由 pi 生成）
+
 ## [v0.0.31] - 2026-09-12
 
 > **对话历史迁出数据库**（`chat_messages` → 项目目录 `sessions/*.jsonl`，SCHEMA_VERSION 5→6）+ 会话删除端点；**上下文预算配置化**（按激活模型窗口派生）与工具结果上限落地；token 估算改分级密度（修中文低估 2.4 倍）；设置页信息架构重构（二级 tab + AI 模型三级导航）与中栏页头统一壳。

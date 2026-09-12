@@ -8,7 +8,7 @@
 //
 // 流程：
 //   1. mkdtemp 临时安装目录 + 临时空项目目录
-//   2. 【发布可见性轮询】`npm view <6 包>@<version>` 循环确认全部可见（registry manifest CDN
+//   2. 【发布可见性轮询】`npm view <5 包>@<version>` 循环确认全部可见（registry manifest CDN
 //      传播延迟，实测最慢可超 5 分钟——2026-08 v0.0.6 曾 10×30s=5 分钟窗口仍 ETARGET 超窗；
 //      窗口 20×30s = 10 分钟；npm view 与 install 同源，可见后再装基本一次成功）
 //   3. `npm install --prefix <安装目录> @whispering233/ai-editor-server@<version>`（真实 registry 拉包与依赖）
@@ -33,8 +33,8 @@ const READY_MARKER = "服务已启动";
 /** 冒烟等待超时（毫秒）；启动含 better-sqlite3 原生加载，给足余量 */
 const SMOKE_TIMEOUT_MS = 20_000;
 
-/** 发布包名后缀（server 依赖其余 5 包，install 需全部可见；与 publish-packages.mjs 同序） */
-const PUBLISHED_PACKAGES = ["shared", "llm", "db", "tools", "agent", "server"];
+/** 发布包名后缀（server 依赖其余 4 包，install 需全部可见；与 publish-packages.mjs 同序） */
+const PUBLISHED_PACKAGES = ["shared", "db", "tools", "agent", "server"];
 /** 可见性轮询：最多 20 次 × 30s = 10 分钟窗口（v0.0.6 实录：传播最慢超 5 分钟） */
 const VISIBILITY_POLLS = 20;
 const VISIBILITY_POLL_INTERVAL_MS = 30_000;
@@ -82,7 +82,7 @@ try {
     if (!visible) {
       if (attempt < VISIBILITY_POLLS) {
         console.warn(
-          `[verify] registry 可见性轮询（第 ${attempt}/${VISIBILITY_POLLS} 次：6 包未全部可见 @${version}，${VISIBILITY_POLL_INTERVAL_MS / 1000}s 后重试）`,
+          `[verify] registry 可见性轮询（第 ${attempt}/${VISIBILITY_POLLS} 次：5 包未全部可见 @${version}，${VISIBILITY_POLL_INTERVAL_MS / 1000}s 后重试）`,
         );
         await new Promise((r) => setTimeout(r, VISIBILITY_POLL_INTERVAL_MS));
       }
@@ -94,7 +94,7 @@ try {
     );
     process.exit(1);
   }
-  console.log(`[verify] OK: 6 包 @${version} 已在 registry 可见`);
+  console.log(`[verify] OK: 5 包 @${version} 已在 registry 可见`);
 
   // 3. 真实安装（registry 拉包；--no-fund/--no-audit 减噪；失败时打印输出）
   //    兜底重试：轮询已确认可见，install 失败只可能是网络抖动（最多 10 次 × 30s）。

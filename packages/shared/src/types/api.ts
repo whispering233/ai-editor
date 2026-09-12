@@ -884,6 +884,13 @@ export const chatThinkingPreviewSchema = z.object({
   length: z.number().int(), // 原文字符数
 });
 
+/** 消息条目命名类型（schema 派生，服务端与 client 共用——client 不再重复声明） */
+export type ChatSessionMessage = z.infer<typeof chatMessagesResSchema>["messages"][number];
+/** 思维链预览命名类型（schema 派生） */
+export type ChatThinkingPreview = z.infer<typeof chatThinkingPreviewSchema>;
+/** 会话列表项命名类型（schema 派生） */
+export type ChatSessionSummary = z.infer<typeof chatSessionSummarySchema>;
+
 export const chatMessagesResSchema = z.object({
   sessionId: z.string(),
   messages: z.array(

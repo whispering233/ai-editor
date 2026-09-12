@@ -23,14 +23,13 @@ export const OUTLINE_NODE_ID_PREFIX: Record<Exclude<OutlineNodeType, "root">, st
   scene: "sc-",
 };
 
-/** 运行时对象 id 前缀（提案 prop_/会话 sess_/工具调用 call_，下划线分隔） */
+/** 运行时对象 id 前缀（提案 prop_/工具调用 call_，下划线分隔；会话 id 由 pi 生成，不在此列） */
 export const RUNTIME_ID_PREFIX = {
   proposal: "prop_",
-  session: "sess_",
   toolCall: "call_",
 } as const;
 
-/** 运行时对象种类（prop_/sess_/call_） */
+/** 运行时对象种类（prop_/call_） */
 export type RuntimeIdKind = keyof typeof RUNTIME_ID_PREFIX;
 
 /**
@@ -56,7 +55,7 @@ export function generateProjectId(): string {
   return generateId("proj-");
 }
 
-/** 生成运行时对象 id（提案 prop_ / 会话 sess_ / 工具调用 call_，不落盘或仅内存） */
+/** 生成运行时对象 id（提案 prop_ / 工具调用 call_，不落盘或仅内存） */
 export function generateRuntimeId(kind: RuntimeIdKind): string {
   return generateId(RUNTIME_ID_PREFIX[kind]);
 }

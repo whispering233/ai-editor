@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// 发布 6 包脚本（E6，借鉴 static-web-data 的判重幂等 + inkos 的 tarball workspace: 防线）。
+// 发布 5 包脚本（E6，借鉴 static-web-data 的判重幂等 + inkos 的 tarball workspace: 防线）。
 //
 // 用法：
-//   node scripts/publish-packages.mjs            # 发布 6 包（依赖序；已存在版本跳过）
+//   node scripts/publish-packages.mjs            # 发布 5 包（依赖序；已存在版本跳过）
 //   node scripts/publish-packages.mjs --tag v0.2.0  # 校验 tag 与各包版本一致（不一致退出）
 //   node scripts/publish-packages.mjs --dry-run  # 只跑检查（判重/防线/tag），不真 publish
 //
@@ -22,7 +22,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 /** 依赖发布顺序（内部依赖先发；映射 @whispering233/ai-editor-<name>，与 pnpm-workspace 一致） */
-const PUBLISH_ORDER = ["shared", "llm", "db", "tools", "agent", "server"];
+const PUBLISH_ORDER = ["shared", "db", "tools", "agent", "server"];
 
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");

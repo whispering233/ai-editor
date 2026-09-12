@@ -3,7 +3,7 @@
 // 提案（AI 写操作的确认对象）**仅存服务端内存**：TTL 10 分钟 + 条数上限 + 项目绑定 +
 // 引用快照（确认时由 proposal 端点重校验，见 docs/design/30-agent-loop.md §2）。
 //
-// 本模块是提案仓与 `PROPOSAL_BUILDERS` 的**唯一实现**（旧 executor.ts 只再导出，不重复实现）：
+// 本模块是提案仓与 `PROPOSAL_BUILDERS` 的**唯一实现**（提案端点与对话链路同仓消费）：
 // - 仓：set/get/peek/remove/clear/size
 // - build：15 个 propose_* 工具名 → 产出完整 Proposal 的构造函数
 //   （工具的 run 只返回 `{ proposal_id, summary }`，完整对象必须重建——工具的返回值要省 token）

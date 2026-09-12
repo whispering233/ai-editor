@@ -1,4 +1,4 @@
-// 对话路由测试（K4）：POST /api/v1/chat（POST + SSE）、会话列表 / 消息历史 / 思维链全文 / 删除会话
+// 对话路由测试：POST /api/v1/chat（POST + SSE）、会话列表 / 消息历史 / 思维链全文 / 删除会话
 //
 // 契约 = docs/api/80-api-chat.md。测试全部**离线**：faux provider（pi-ai）+ 临时项目目录 +
 // 真实 SessionManager 落盘，不触碰真实 provider、不读写 ~/.pi/agent（HOME 隔离）。

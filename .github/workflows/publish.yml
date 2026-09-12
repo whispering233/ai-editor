@@ -1,7 +1,7 @@
-# npm 发布工作流（E6）：push 版本 tag（v*）时按依赖序发布 6 包到 npm registry。
+# npm 发布工作流（E6）：push 版本 tag（v*）时按依赖序发布 5 包到 npm registry。
 #
 # 认证：Trusted Publishing（OIDC）——permissions.id-token: write 换取 npmjs 短期凭证，
-# **无 NODE_AUTH_TOKEN**（前置：npmjs 为 6 包各配置 Trusted Publisher，
+# **无 NODE_AUTH_TOKEN**（前置：npmjs 为 5 包各配置 Trusted Publisher，
 # Publisher = GitHub Actions，工作流名 = publish.yml，见 README「发布与安装」）。
 #
 # 三重防线（inkos 模式）：
@@ -41,7 +41,7 @@ jobs:
       # 全量验证：build 先行——fresh checkout 无 dist（gitignore 不入库），而 @whispering233/ai-editor-*
       # 的 types/exports 指向 ./dist/index.d.ts，必须先拓扑序 build 生成 dist 才能 typecheck
       - run: pnpm -r build && pnpm typecheck && pnpm lint && pnpm -r test
-      # 发布 6 包（GITHUB_REF=refs/tags/vX.Y.Z 时自动校验 tag 与包版本一致）
+      # 发布 5 包（GITHUB_REF=refs/tags/vX.Y.Z 时自动校验 tag 与包版本一致）
       - run: node scripts/publish-packages.mjs
       # 安装态验证：临时目录真实安装 @whispering233/ai-editor-server@<版本> 并启动冒烟
       - run: node scripts/verify-installed.mjs

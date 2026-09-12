@@ -124,24 +124,25 @@ describe("fetchSSE（流式分发）", () => {
   });
 
   it("error 事件透传并终止解析", async () => {
+ // error 事件用于 HTTP 级失败（非 2xx REST 包裹 / 网络失败）；流内错误由 agent_end 帧表达
     mockSseResponse(
       streamOf([
-        'event: error\ndata: {"code":"AGENT_TIMEOUT","message":"单轮超时"}\n\n',
-        'event: text\ndata: {"delta":"x"}\n\n',
+        'event: error\ndata: {"code":"CHAT_BUSY","message":"当前项目已有在途对话流"}\n\n',
+        'event: message_update\ndata: {"assistantMessageEvent":{"type":"text_delta","contentIndex":0,"delta":"x"}}\n\n',
       ]),
     );
     const events: Array<[string, unknown]> = [];
     fetchSSE("/api/v1/chat", { onEvent: (e, d) => events.push([e, d]) });
     await flush();
-    expect(events).toEqual([["error", { code: "AGENT_TIMEOUT", message: "单轮超时" }]]);
+    expect(events).toEqual([["error", { code: "CHAT_BUSY", message: "当前项目已有在途对话流" }]]);
   });
 
   it("EOF 无结尾空行时 flush 残余帧", async () => {
-    mockSseResponse(streamOf(['event: done\ndata: {"session_id":"sess_1"}'])); // 无 \n\n 结尾
+    mockSseResponse(streamOf(['event: session\ndata: {"session_id":"s1"}'])); // 无 \n\n 结尾
     const events: Array<[string, unknown]> = [];
     fetchSSE("/api/v1/chat", { onEvent: (e, d) => events.push([e, d]) });
     await flush();
-    expect(events).toEqual([["done", { session_id: "sess_1" }]]);
+    expect(events).toEqual([["session", { session_id: "s1" }]]);
   });
 
   it("非 2xx 响应透传 REST 错误包裹为 error 事件", async () => {

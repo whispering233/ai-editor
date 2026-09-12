@@ -16,11 +16,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import { renderToString } from "react-dom/server";
-import type {
-  ChatMessage,
-  ChatSessionSummary,
-  ProjectConfig,
-} from "@whispering233/ai-editor-shared";
+import type { ChatSessionSummary, ProjectConfig } from "@whispering233/ai-editor-shared";
 import { ErrorBoundary } from "../feedback/ErrorBoundary";
 
 vi.mock("../../lib/api", async (importOriginal) => {
@@ -64,6 +60,7 @@ import {
   sessionItems,
   usageBarView,
 } from "./ChatPanel";
+import type { ChatMessageView } from "../../stores/chat";
 
 const mocked = {
   listSessions: vi.mocked(apiListSessions),
@@ -293,14 +290,14 @@ describe("会话项操作菜单（chat-session-item-menu 契约：唯一项「�
 
 describe("新会话路径叶子组件富数据渲染走查（问题 3：任务侦察标注的 ToolCallRow/MessageItem 未读路径）", () => {
   it("MessageItem：user 气泡 / assistant 正文 + 历史工具调用行（含 tool result 成对挂载）不抛异常", () => {
-    const userMsg: ChatMessage = {
+    const userMsg: ChatMessageView = {
       id: "m1",
       sessionId: "sess-1",
       role: "user",
       content: "帮我看看这个设定有没有漏洞",
       createdAt: "t0",
     };
-    const assistantMsg: ChatMessage = {
+    const assistantMsg: ChatMessageView = {
       id: "m2",
       sessionId: "sess-1",
       role: "assistant",
@@ -311,7 +308,7 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3：任务�
       ],
       createdAt: "t1",
     };
-    const toolResults = new Map<string, ChatMessage>([
+    const toolResults = new Map<string, ChatMessageView>([
       [
         "call-1",
         {
@@ -337,7 +334,7 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3：任务�
   });
 
   it("MessageItem：历史 wire 形态 tool_calls（{function:{name,arguments}}）渲染层归一不抛异常，args 摘要可见（2-1 `{}` 修复）", () => {
-    const wireMsg: ChatMessage = {
+    const wireMsg: ChatMessageView = {
       id: "m3",
       sessionId: "sess-1",
       role: "assistant",
@@ -382,7 +379,7 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3：任务�
   });
 
   it("MessageItem：tool 消息本身返回 null（成对渲染，不单独出现）", () => {
-    const toolMsg: ChatMessage = {
+    const toolMsg: ChatMessageView = {
       id: "t1",
       sessionId: "sess-1",
       role: "tool",

@@ -59,7 +59,7 @@ pnpm test:packed    # 一键串联（backlog #8 打包安装测试：tarball 安
 4. git tag -a vX.Y.Z -m "vX.Y.Z"（手动 annotated tag，轻量 tag 不触发发布规范）
 5. git push origin main && git push origin vX.Y.Z
 → CI（.github/workflows/）：release.yml 从 CHANGELOG.md 按 tag 建 GitHub Release；
-  publish.yml 6 包 npm 发布（OIDC Trusted Publisher）+ verify-installed 安装态冒烟
+  publish.yml 5 包 npm 发布（OIDC Trusted Publisher）+ verify-installed 安装态冒烟
 ```
 
 脚本约束（`scripts/publish-packages.mjs`）：依赖序硬编码 shared → db → tools → agent → server；每包先 `npm view <name>@<version>` 判重（**仅 E404 视为未发布**，网络错误直接中止）——重跑幂等安全；`npm pack` 后 `tar -xOf` 断言包内 package.json 无 `workspace:` 残留；`GITHUB_REF=refs/tags/vX.Y.Z` 时校验 tag 与包版本一致（不一致中止，防漂移误发）。本地验证链路（pack 安装冒烟）见上节 `pnpm pack:test` / `pnpm test:packed`。

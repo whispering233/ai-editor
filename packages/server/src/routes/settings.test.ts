@@ -1,4 +1,4 @@
-// 设置路由测试（K5）：GET/PUT /api/v1/settings/llm —— 数据源全部来自 pi
+// 设置路由测试：GET/PUT /api/v1/settings/llm —— 数据源全部来自 pi
 //
 // 契约 = docs/api/90-api-settings.md、docs/design/config.md（配置所有权在 pi agent dir）。
 // 隔离策略：

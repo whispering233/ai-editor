@@ -3,12 +3,12 @@
 // mock lib/api 模块（保留 ApiError 类真实实现）与 use-sse（fetchSSE 捕获 options 后手动驱动事件回调）
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
-  ChatMessage,
   ChatSessionSummary,
   ErrorCode,
   ProjectConfig,
 } from "@whispering233/ai-editor-shared";
 import { ApiError } from "../lib/api";
+import type { ChatMessageView } from "./chat";
 
 vi.mock("../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/api")>();
@@ -78,7 +78,7 @@ const makeConfig = (id: string): ProjectConfig => ({
   updatedAt: "2026-08-01T10:00:00Z",
 });
 
-const makeMsg = (over: Partial<ChatMessage> & { id: string }): ChatMessage => ({
+const makeMsg = (over: Partial<ChatMessageView> & { id: string }): ChatMessageView => ({
   sessionId: "sess-1",
   role: "user",
   content: "内容",
@@ -204,7 +204,7 @@ describe("loadSessions", () => {
 });
 
 describe("loadMessages（U5：会话历史恢复）", () => {
-  it("成功 → messages 设置（响应条目补全 sessionId，shared ChatMessage）", async () => {
+  it("成功 → messages 设置（响应条目补全 sessionId，shared ChatSessionMessage）", async () => {
     mocked.getSessionMessages.mockResolvedValue({
       sessionId: "sess-1",
       messages: [

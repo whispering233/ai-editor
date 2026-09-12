@@ -1,4 +1,4 @@
-// 对话路由（K4）：POST /api/v1/chat（POST + SSE）、会话列表 / 消息历史 / 思维链全文 / 删除会话
+// 对话路由：POST /api/v1/chat（POST + SSE）、会话列表 / 消息历史 / 思维链全文 / 删除会话
 //
 // **本文件是 docs/api/80-api-chat.md 那份契约的服务端实现**——SSE 事件集与过滤约定见该文档，
 // 事件投影的唯一实现在 agent 包 `runtime/events.ts`（本文件只做「取帧 → 写帧」与日志）。

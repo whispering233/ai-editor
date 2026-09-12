@@ -36,9 +36,9 @@ import {
   readAgentsFile,
   readProjectFile,
   SCHEMA_VERSION,
-  SESSIONS_DIR_NAME,
   writeAgentsFile,
 } from "@whispering233/ai-editor-db";
+import { SESSIONS_DIR_NAME } from "@whispering233/ai-editor-agent";
 import { HttpError } from "./middleware/error.js";
 import type { ProjectContext } from "./middleware/project.js";
 
@@ -52,7 +52,7 @@ const REFERENCE_DIR_NAME = "references";
  * 随备份 zip 整体打包的目录（目录名已登记在 `docs/api/20-api-backup.md`）：
  * `references/`（参考资料含 .trash/）与 `sessions/`（会话 JSONL）——两者语义一致：
  * 白名单前缀 + 递归打包 + 参与变更判定 + 恢复时整体覆盖。
- * `SESSIONS_DIR_NAME` 取自 db 包（与 sessions.ts 同源）。
+ * `SESSIONS_DIR_NAME` 取自 agent 包的 pi 运行时（会话目录的唯一事实来源；pi 的 session 文件落在此目录）。
  */
 const PACKED_DIR_NAMES: readonly string[] = [REFERENCE_DIR_NAME, SESSIONS_DIR_NAME];
 

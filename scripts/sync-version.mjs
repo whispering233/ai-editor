@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// 版本同步脚本（E6）：一键同步 6 个发布包 + 根 + client 的 version 字段。
+// 版本同步脚本（E6）：一键同步 5 个发布包 + 根 + client 的 version 字段。
 //
 // 用法：
 //   node scripts/sync-version.mjs 0.2.0          # 同步全部包版本为 0.2.0
 //   node scripts/sync-version.mjs 0.2.0 --dry-run # 只输出将改动的文件，不写盘
 //
-// 同步范围：packages/{shared,llm,db,tools,agent,server,client} + 根 package.json。
+// 同步范围：packages/{shared,db,tools,agent,server,client} + 根 package.json。
 // client 虽 private 不发布，但保持仓库内版本一致（发布流程只发 6 包）。
 // 校验：semver 格式 /^\d+\.\d+\.\d+(-[\w.]+)?$/（含预发布后缀如 0.2.0-beta.1）。
 // 输出：改动的文件清单（dry-run 时标注「将改动」）。
@@ -29,7 +29,7 @@ if (!/^\d+\.\d+\.\d+(-[\w.]+)?$/.test(version)) {
   process.exit(1);
 }
 
-const PACKAGES = ["shared", "llm", "db", "tools", "agent", "server", "client"];
+const PACKAGES = ["shared", "db", "tools", "agent", "server", "client"];
 const rootPkgPath = join(workspaceRoot, "package.json");
 
 /** 读取并返回 JSON 对象 */
@@ -73,7 +73,7 @@ if (changed.length === 0) {
   for (const line of changed) console.log(`  ${line}`);
 }
 
-// 一致性提示：确认 6 个发布包版本一致（发布脚本依赖此不变式）
+// 一致性提示：确认 5 个发布包版本一致（发布脚本依赖此不变式）
 const publishVersions = new Set();
 for (const name of PACKAGES) {
   const pkg = await readJson(join(workspaceRoot, "packages", name, "package.json"));

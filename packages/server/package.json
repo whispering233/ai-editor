@@ -33,7 +33,6 @@
   "dependencies": {
     "@whispering233/ai-editor-agent": "workspace:*",
     "@whispering233/ai-editor-db": "workspace:*",
-    "@whispering233/ai-editor-llm": "workspace:*",
     "@whispering233/ai-editor-shared": "workspace:*",
     "@whispering233/ai-editor-tools": "workspace:*",
     "@hono/node-server": "^2.0.12",

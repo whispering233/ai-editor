@@ -28,8 +28,7 @@
   "dependencies": {
     "@whispering233/ai-editor-shared": "workspace:*",
     "better-sqlite3": "^13.0.0",
-    "drizzle-orm": "0.45.2",
-    "nanoid": "^5.1.0"
+    "drizzle-orm": "0.45.2"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

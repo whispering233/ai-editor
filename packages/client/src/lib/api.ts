@@ -3,8 +3,9 @@
 // 本文件不 import zod 运行时（校验执行边界：zod 校验仅在服务端执行，避免 50KB 级依赖进浏览器包）
 import type {
   BackupKind,
-  ChatRole,
+  ChatSessionMessage,
   ChatSessionSummary,
+  ChatThinkingPreview,
   ComputeStateResult,
   DeltaChange,
   DeltaRecord,
@@ -1000,27 +1001,7 @@ export function listSessions(): Promise<ChatSessionSummary[]> {
  * `thinking` = 思维链预览（全文走 `getSessionThinking` 按需拉取，见 docs/api/80-api-chat.md）；
  * `isError` = tool 消息是否失败
  */
-export interface ChatSessionMessage {
-  id: string;
-  role: ChatRole;
-  content?: string | null;
-  thinking?: ChatThinkingPreview[];
- /** assistant 消息的工具调用数组 */
-  toolCalls?: unknown[];
- /** tool 消息关联的 assistant 工具调用 id */
-  toolCallId?: string | null;
- /** tool 消息是否失败 */
-  isError?: boolean;
-  createdAt: string;
-}
-
-/** 思维链预览（`deferred: true` 表示全文需按需拉取） */
-export interface ChatThinkingPreview {
-  preview: string;
-  deferred: true;
-  blockIndex: number;
-  length: number;
-}
+export type { ChatSessionMessage, ChatThinkingPreview };
 
 /** GET /api/v1/chat/sessions/:id/messages 响应（U5 恢复聊天记录用） */
 export interface ChatSessionMessagesRes {

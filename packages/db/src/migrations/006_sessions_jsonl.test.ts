@@ -1,19 +1,36 @@
-// 迁移 006 测试（B2）：chat_messages 全量导出为 sessions/<id>.jsonl 后 DROP 表
+// 迁移 006 测试（B2）：chat_messages 全量导出为 sessions/<id>.jsonl（旧 v1 格式）后 DROP 表
 // 覆盖：内容/顺序保真（含 tool_calls / tool_call_id）· 表消失 + 版本推进 · 非法 session_id 确定性改名导出 ·
 // 无旧表时 no-op · 幂等（重跑不重复导出）
+//
+// 读断言自行用 node:fs + JSON.parse 完成：旧格式的生产读接口已随新会话格式（pi session v3）退场
+// （见 packages/db/src/migrations/legacy-sessions.ts 头注释）。
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { closeDatabase, openDatabase, type Db } from "../connection.js";
 import { getUserVersion, SCHEMA_VERSION, setUserVersion } from "../schema.js";
-import { readSessionRows, sessionsDirPath } from "../sessions.js";
 import { DATA_DB_FILE_NAME, ensureSchemaCompatible } from "../queries/migration.js";
 
 let dir: string;
 let dbPath: string;
 let db: Db;
+
+/** 旧会话目录（与 legacy-sessions.ts 的目录名一致） */
+function legacySessionsDir(root: string): string {
+  return join(root, "sessions");
+}
+
+/** 读旧格式会话文件的消息行（跳过 header 行与空行） */
+function readLegacyMessageLines(root: string, sessionId: string): Array<Record<string, unknown>> {
+  const raw = readFileSync(join(legacySessionsDir(root), `${sessionId}.jsonl`), "utf8");
+  return raw
+    .split("\n")
+    .slice(1) // 首行 = header
+    .filter((line) => line.trim() !== "")
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+}
 
 /** v5 时期的 chat_messages DDL（迁移读取的旧表；新库建表已不含） */
 const LEGACY_CHAT_DDL = `
@@ -115,7 +132,7 @@ describe("迁移 006：对话历史出库", () => {
     expect(getUserVersion(active)).toBe(SCHEMA_VERSION);
 
  // 会话文件导出（内容与顺序保真）
-    const a = readSessionRows(dir, "sess_a");
+    const a = readLegacyMessageLines(dir, "sess_a");
     expect(a.map((r) => r.id)).toEqual(["m1", "m2", "m3"]);
     expect(a.map((r) => r.role)).toEqual(["user", "assistant", "tool"]);
     expect(a[1]?.tool_calls).toEqual([
@@ -123,7 +140,11 @@ describe("迁移 006：对话历史出库", () => {
     ]);
     expect(a[2]?.tool_call_id).toBe("call_1");
     expect(a[0]?.content).toBe("问题一");
-    expect(readSessionRows(dir, "sess_b").map((r) => r.id)).toEqual(["m4"]);
+    expect(readLegacyMessageLines(dir, "sess_b").map((r) => r.id)).toEqual(["m4"]);
+ // header 行形态（旧格式契约）
+    const header = JSON.parse(readFileSync(join(legacySessionsDir(dir), "sess_a.jsonl"), "utf8").split("\n")[0]!) as
+      Record<string, unknown>;
+    expect(header).toMatchObject({ type: "session", version: 1, id: "sess_a" });
   });
 
   it("非法 session_id 的旧会话不丢：以 sess_legacy_<hash> 文件名导出（确定性、无穿越产物）", () => {
@@ -137,14 +158,14 @@ describe("迁移 006：对话历史出库", () => {
 
     ensureSchemaCompatible(db, dir, dbPath);
 
-    expect(readSessionRows(dir, "sess_ok").map((r) => r.id)).toEqual(["m1"]);
+    expect(readLegacyMessageLines(dir, "sess_ok").map((r) => r.id)).toEqual(["m1"]);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("2 个 session_id 非法的旧会话"));
  // 数据未丢：两个非法 id 会话都落盘（内容保真），文件名 = 确定性映射
-    const files = readdirSync(sessionsDirPath(dir)).sort();
+    const files = readdirSync(legacySessionsDir(dir)).sort();
     expect(files).toHaveLength(3);
     const legacyFiles = files.filter((f) => f.startsWith("sess_legacy_"));
     expect(legacyFiles).toHaveLength(2);
-    const contents = legacyFiles.map((f) => readSessionRows(dir, f.replace(/\.jsonl$/, ""))[0]?.content);
+    const contents = legacyFiles.map((f) => readLegacyMessageLines(dir, f.replace(/\.jsonl$/, ""))[0]?.content);
     expect(contents.sort()).toEqual(["旧命名", "穿越企图"].sort());
  // 无目录穿越产物（未在项目目录外/上级写文件）
     expect(existsSync(join(dir, "evil.jsonl"))).toBe(false);
@@ -155,19 +176,19 @@ describe("迁移 006：对话历史出库", () => {
     setUserVersion(db, 5); // 无旧表的 v5 库（新建库形态）
     const { db: active } = ensureSchemaCompatible(db, dir, dbPath);
     expect(getUserVersion(active)).toBe(SCHEMA_VERSION);
-    expect(existsSync(sessionsDirPath(dir))).toBe(false); // 无导出即不建目录
+    expect(existsSync(legacySessionsDir(dir))).toBe(false); // 无导出即不建目录
   });
 
   it("幂等：迁移后重跑无 pending，已导出文件不被改写", () => {
     seedLegacyV5([{ id: "m1", session_id: "sess_a", role: "user", content: "内容", created_at: "T1" }]);
     const first = ensureSchemaCompatible(db, dir, dbPath);
-    const before = readSessionRows(dir, "sess_a");
+    const before = readLegacyMessageLines(dir, "sess_a");
 
     // 重跑（版本已到 6 → 无 pending；重建分支不触发）
     const second = ensureSchemaCompatible(first.db, dir, dbPath);
     expect(second.result.rebuilt).toBe(false);
     expect(second.result.migrated).toBeUndefined();
-    expect(readSessionRows(dir, "sess_a")).toEqual(before);
+    expect(readLegacyMessageLines(dir, "sess_a")).toEqual(before);
   });
 
   it("空表（0 行）也推进版本并 DROP 表", () => {

@@ -53,10 +53,9 @@ describe("前缀映射", () => {
     expect(generateProjectId()).toMatch(/^proj-/);
   });
 
-  it("运行时前缀：prop_/sess_/call_（下划线分隔，区别于连字符前缀）", () => {
-    expect(RUNTIME_ID_PREFIX).toEqual({ proposal: "prop_", session: "sess_", toolCall: "call_" });
+  it("运行时前缀：prop_/call_（下划线分隔，区别于连字符前缀；会话 id 由 pi 生成）", () => {
+    expect(RUNTIME_ID_PREFIX).toEqual({ proposal: "prop_", toolCall: "call_" });
     expect(generateRuntimeId("proposal")).toMatch(/^prop_/);
-    expect(generateRuntimeId("session")).toMatch(/^sess_/);
     expect(generateRuntimeId("toolCall")).toMatch(/^call_/);
   });
 });

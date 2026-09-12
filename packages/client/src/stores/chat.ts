@@ -20,7 +20,7 @@
 // 3. 流身份守卫（streamMsgId）：旧流的 onTimeout/onEnd 不得复位新流的 streaming
 // 4. 发送中禁止并发发送（streaming / messagesLoading 期间 sendMessage 直接返回）
 import { create } from "zustand";
-import type { ChatMessage, ChatSessionSummary } from "@whispering233/ai-editor-shared";
+import type { ChatSessionMessage, ChatSessionSummary, ChatThinkingPreview } from "@whispering233/ai-editor-shared";
 import {
   ApiError,
   CLIENT_NETWORK_ERROR,
@@ -40,13 +40,8 @@ import { useUiStore } from "./ui";
  * 定义提移至 lib/focus.ts（ui store currentFocus 共用，避免 store 循环依赖） */
 export type { FocusContext } from "../lib/focus";
 
-/** 思维链投影（历史接口/终态消息：只给预览 + 定位参数；全文走按需端点） */
-export interface ThinkingPreview {
-  preview: string;
-  deferred: true;
-  blockIndex: number;
-  length: number;
-}
+/** 思维链投影（历史接口/终态消息：只给预览 + 定位参数；全文走按需端点）——定义归 shared（schema 派生） */
+export type ThinkingPreview = ChatThinkingPreview;
 
 /**
  * 消息视图模型（client 侧扩展，不改 shared 的 API 契约类型）：
@@ -55,10 +50,12 @@ export interface ThinkingPreview {
  *   （流式期间服务端只推 delta，终态帧里只有 240 字预览，故全量在客户端侧累积）
  * - isError：tool 消息是否失败（服务端投影字段）
  */
-export interface ChatMessageView extends ChatMessage {
-  thinking?: ThinkingPreview[];
-  isError?: boolean;
+export interface ChatMessageView extends ChatSessionMessage {
+ /** 会话归属（历史接口响应只有顶层 sessionId；store 载入时补全到每条消息） */
+  sessionId: string;
+ /** 运行态：本轮流式累积的思维链全量（服务端只推 delta；终态帧只带 240 字预览） */
   thinkingText?: string;
+  /** 运行态：本轮思维链是否仍在流式生成 */
   thinkingStreaming?: boolean;
 }
 
