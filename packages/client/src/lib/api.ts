@@ -124,7 +124,7 @@ export function getProjectConfig(): Promise<ProjectConfig> {
 export interface UpdateProjectConfigBody {
   name?: string;
   language?: ProjectLanguage;
-  current_position?: string | null; // 须指向存在的非软删大纲节点（服务端校验）
+  current_position?: string | null; // 须指向存在的非软删 **chapter** 节点（服务端校验；非章 → 400）
  /** 自动备份频率（修订）：null = 关闭；仅枚举 1/5/10/15/30/60（BACKUP_FREQUENCIES），其他 → 400 */
   backup_frequency_minutes?: number | null;
 }

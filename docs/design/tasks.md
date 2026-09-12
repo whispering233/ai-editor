@@ -10,18 +10,12 @@
 
 > 契约来源：`docs/design/10-data-model.md` §14.7、`docs/db/schema.md`（delta / relation / project.json 三节）、`docs/api/50-api-delta.md`、`docs/api/40-api-relation.md`、`docs/api/10-api-project.md`。三张卡互相独立，可并行（不同文件面）。
 
-- [ ] **1.1 当前位置仅章 + 大纲右键「设为当前位置」**
-  - 后端：`PUT /project/config` 校验 `current_position` 指向的节点必须 `type === "chapter"`（非章/不存在/已软删 → 400 `VALIDATION_ERROR` 中文信息）；读侧保持宽松（不校验存量值）。
-  - 前端：`components/outline/row-context-menu.tsx` 加「设为当前位置」（仅章节点行可见；已是当前位置 → 禁用）；复用 `OutlineDetail` 的提交实现（抽公共函数或保留两处调用同一 API）。
-  - 验收：卷/场景行右键无该菜单项；章行设置成功后 InfoBar / 概览页「当前位置」联动刷新；`PUT` 传 `sc-*` → 400。
-  - 测试：`packages/server/src/routes/project.test.ts` 补非章 400 用例（章级通过 + 卷/场景拒绝 + null 清除）。
-
 - [ ] **1.2 变更记录仅章（REST + 提案层 + 大纲页入口）**
   - 后端：`POST /delta` 增加节点层级校验（非 `chapter` → 400 `VALIDATION_ERROR`）；`assertOutlineNode` 旁新增层级断言（照抄 S13.3 的「REST + 工具层双管、shared schema 不动」模式）。
   - 提案层：`packages/tools` 的 `propose_add_delta`（`proposal/delta.ts`）对 `node_id` 做同样拒绝 + 工具描述补「仅章」。
-  - 前端：大纲节点详情页的「变更记录」区块（`NodeDeltaList` + `DeltaCreateForm`）仅在 `chapter` 节点渲染；卷/场景页不显示（不做只读兼容）。
+  - 前端：大纲节点详情页的「变更记录」区块（`NodeDeltaList` + `DeltaCreateForm`）仅在 `chapter` 节点渲染；卷/场景页**不显示也不留可点击的「+ 新建变更」入口**（不做只读兼容——不留"必定 400"的入口，同卡片 1.1 的收窄口径）。
   - 不改：`POST /delta/compute` 的 `at_node_id`（查询不限层级）。
-  - 验收：场景/卷节点页无变更记录区；`POST /delta` 传 `sc-*` → 400；AI 传场景 id → 工具报错。
+  - 验收：场景/卷节点页无变更记录区且无新建按钮；`POST /delta` 传 `sc-*`/`vol-*` → 400；AI 传场景 id → 工具报错。
   - 测试：`packages/server/src/routes/delta*.test.ts` + `packages/tools/src/proposal/*.test.ts` 补非章拒绝用例。
 
 - [ ] **1.3 伏笔锚点仅章（REST + 提案层 + 面板选择器 + 工具口径）**

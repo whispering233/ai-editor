@@ -138,8 +138,10 @@
   language?: "zh" | "en";
   // prompt 已废弃：不再接受（strict schema 传入 → 400 VALIDATION_ERROR）；
   // 项目规则改由 PUT /api/v1/project/agents 写入 AGENTS.md
-  current_position?: string | null;  // 更新「当前位置」：须指向存在的非软删 **chapter** 节点——
-                                    //   非章（volume/scene）或不存在/已软删 → 400 VALIDATION_ERROR；null = 清除
+  current_position?: string | null;  // 更新「当前位置」：须指向存在的非软删 **chapter** 节点；null = 清除
+                                    // 错误码分两类：不存在/已软删 → 400 OUTLINE_NODE_NOT_FOUND（既有语义，
+                                    //   project 路由用 400 而非 404——参数语义错误）；
+                                    //   非章（volume/scene）→ 400 VALIDATION_ERROR
   backup_frequency_minutes?: number | null;  // 自动备份频率；null = 关闭；仅接受枚举值 5/10/15/30/60，其他（含 0）→ 400 VALIDATION_ERROR——0 仅读侧兼容旧数据，写侧不接受
 }
 

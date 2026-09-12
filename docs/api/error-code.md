@@ -9,7 +9,7 @@
 | `RELATION_EXISTS` | 409 | 409 关系已存在 |
 | `EVENT_ALREADY_MOUNTED` | 409 | 409 事件已挂载时间点，occurs_at 1:n 重复挂载拒绝（G2） |
 | `RELATION_NOT_FOUND` | 404 | 404 关系不存在 |
-| `OUTLINE_NODE_NOT_FOUND` | 404 | 404 大纲节点不存在（compute / path / restore / purge） |
+| `OUTLINE_NODE_NOT_FOUND` | 404 | 404 大纲节点不存在（compute / path / restore / purge）；**例外**：`PUT /project/config` 写侧同码用 **400**（参数语义错误而非资源访问，见 `10-api-project.md`） |
 | `OUTLINE_ANCESTOR_DELETED` | 409 | 409 restore 时存在软删祖先 |
 | `INVALID_PROJECT_PATH` | 400 | 400 create/open 路径校验失败 |
 | `PROPOSAL_STALE` | 409 | 409 确认时引用快照不一致 |
