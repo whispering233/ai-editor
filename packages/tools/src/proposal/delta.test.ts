@@ -74,11 +74,11 @@ function softDeleteNode(nodeId: string): void {
 describe("propose_add_delta", () => {
   it("tool_result 仅 { proposal_id, summary }，无预览细节（2026-08 修订）", () => {
     writeOutlineFile(dir, seedOutlineTree());
-    const char = createEntity(db, { type: "character", name: "阿强", data: { status: "alive" } });
+    const char = createEntity(db, { type: "character", name: "阿强", data: { combat_power: 100 } });
     const result = runProposeAddDelta(makeCtx(), {
       node_id: "ch-1",
       target: char.id,
-      changes: [{ field: "status", op: "update", from: "alive", to: "dead" }],
+      changes: [{ field: "combat_power", op: "update", from: 100, to: 80 }],
     });
     expect(Object.keys(result).sort()).toEqual(["proposal_id", "summary"]);
     expect(result.proposal_id.startsWith("prop_")).toBe(true);
@@ -89,7 +89,7 @@ describe("propose_add_delta", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const char = createEntity(db, { type: "character", name: "阿强" });
     const changes: DeltaChange[] = [
-      { field: "status", op: "update", from: "alive", to: "dead" },
+      { field: "combat_power", op: "update", from: 100, to: 80 },
       { field: "titles", op: "add", value: "剑圣" },
     ];
     const proposal = buildProposeAddDelta(makeCtx(), { node_id: "ch-1", target: char.id, changes });
@@ -119,7 +119,7 @@ describe("propose_add_delta", () => {
     runProposeAddDelta(makeCtx(), {
       node_id: "ch-1",
       target: char.id,
-      changes: [{ field: "status", op: "update", from: "alive", to: "dead" }],
+      changes: [{ field: "combat_power", op: "update", from: 100, to: 80 }],
     });
     expect(listDeltasByNode(db, "ch-1", dir)).toHaveLength(0);
   });
@@ -128,10 +128,10 @@ describe("propose_add_delta", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const char = createEntity(db, { type: "character", name: "阿强" });
     expect(() =>
-      runProposeAddDelta(makeCtx(), { node_id: "sc-1", target: char.id, changes: [{ field: "status", op: "set", to: "dead" }] }),
+      runProposeAddDelta(makeCtx(), { node_id: "sc-1", target: char.id, changes: [{ field: "combat_power", op: "set", to: 1 }] }),
     ).toThrow(/须为章/);
     expect(() =>
-      runProposeAddDelta(makeCtx(), { node_id: "vol-1", target: char.id, changes: [{ field: "status", op: "set", to: "dead" }] }),
+      runProposeAddDelta(makeCtx(), { node_id: "vol-1", target: char.id, changes: [{ field: "combat_power", op: "set", to: 1 }] }),
     ).toThrow(/须为章/);
   });
 
@@ -221,18 +221,51 @@ describe("propose_add_delta", () => {
     }
   });
 
+  it("character 已移除字段（卡片 5.4）：status/abilities 拒绝；自定义字段/别名/面板叶子不受影响", () => {
+    writeOutlineFile(dir, seedOutlineTree());
+    const char = createEntity(db, { type: "character", name: "阿强", data: { alias: "影" } });
+ // 卡 2.1 已把两者从 schema 移除（status 无展示面、abilities 经 007 迁为 ability_panel）
+    for (const field of ["status", "abilities"] as const) {
+      expect(() =>
+        runProposeAddDelta(makeCtx(), { node_id: "ch-1", target: char.id, changes: [{ field, op: "set", to: "x" }] }),
+      ).toThrow(/已移除/);
+    }
+ // 自定义字段（schema 外，如战力）仍可写——**不得收窄成整字段白名单**（AI 的既有能力）
+    expect(
+      runProposeAddDelta(makeCtx(), {
+        node_id: "ch-1",
+        target: char.id,
+        changes: [{ field: "combat_power", op: "update", from: 100, to: 150 }],
+      }).proposal_id,
+    ).toMatch(/^prop_/);
+ // 可变字段不受影响
+    expect(
+      runProposeAddDelta(makeCtx(), { node_id: "ch-1", target: char.id, changes: [{ field: "alias", op: "set", to: "影武者" }] })
+        .proposal_id,
+    ).toMatch(/^prop_/);
+ // 其他类型的同名字段不受影响（hook.status 是事实字段，set 可用）
+    const hook = createEntity(db, { type: "hook", name: "身世之谜", data: { status: "planted" } });
+    expect(
+      runProposeAddDelta(makeCtx(), {
+        node_id: "ch-1",
+        target: hook.id,
+        changes: [{ field: "status", op: "set", to: "progressing" }],
+      }).proposal_id,
+    ).toMatch(/^prop_/);
+  });
+
   it("触发节点不存在 / 已软删 / 目标不存在 → 抛错", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const char = createEntity(db, { type: "character", name: "阿强" });
     expect(() =>
-      runProposeAddDelta(makeCtx(), { node_id: "sc-999", target: char.id, changes: [{ field: "status", op: "set", to: "dead" }] }),
+      runProposeAddDelta(makeCtx(), { node_id: "sc-999", target: char.id, changes: [{ field: "combat_power", op: "set", to: 1 }] }),
     ).toThrow(/大纲节点不存在或已软删: sc-999/);
     expect(() =>
-      runProposeAddDelta(makeCtx(), { node_id: "ch-1", target: "char-999", changes: [{ field: "status", op: "set", to: "dead" }] }),
+      runProposeAddDelta(makeCtx(), { node_id: "ch-1", target: "char-999", changes: [{ field: "combat_power", op: "set", to: 1 }] }),
     ).toThrow(/端点不存在或已软删/);
     softDeleteNode("ch-1");
     expect(() =>
-      runProposeAddDelta(makeCtx(), { node_id: "ch-1", target: char.id, changes: [{ field: "status", op: "set", to: "dead" }] }),
+      runProposeAddDelta(makeCtx(), { node_id: "ch-1", target: char.id, changes: [{ field: "combat_power", op: "set", to: 1 }] }),
     ).toThrow(/大纲节点不存在或已软删/);
   });
 });
@@ -242,7 +275,7 @@ describe("signal aborted", () => {
     const controller = new AbortController();
     controller.abort();
     expect(() =>
-      runProposeAddDelta(makeCtx(), { node_id: "sc-1", target: "char-1", changes: [{ field: "status", op: "set", to: "dead" }] }, controller.signal),
+      runProposeAddDelta(makeCtx(), { node_id: "sc-1", target: "char-1", changes: [{ field: "combat_power", op: "set", to: 1 }] }, controller.signal),
     ).toThrow(AbortedError);
   });
 });

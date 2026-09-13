@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { OutlineFileTree } from "@whispering233/ai-editor-shared";
+import type { DeltaChange, OutlineFileTree } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
 import { closeDatabase, createEntity, listDeltasByTarget, openDatabase, type Db } from "@whispering233/ai-editor-db";
 import { writeOutlineFile } from "@whispering233/ai-editor-db";
@@ -99,6 +99,43 @@ describe("add_delta", () => {
       executeAddDelta(makeCtx(), buildProposal(makeCtx(), "propose_add_delta", { node_id: "ch-404", target_type: "character", target_id: char.id, changes }, [], "s")),
     ).toThrow(/大纲节点不存在或已软删/);
     expect(listDeltasByTarget(db, char.id, dir)).toHaveLength(0);
+  });
+
+  it("事实字段兜底：hook + status 非 set → 抛错且不落库（卡片 5.4）", () => {
+    writeOutlineFile(dir, seedOutlineTree());
+    const hook = createEntity(db, { type: "hook", name: "身世之谜", data: { status: "planted" } });
+ // hook.status 是写路径同步的事实字段（重放基座即最新值 → update+from 必然假冲突）：
+ // executor 直写 db 绕过提案层守卫，本层必须自行拒绍（与卡片 1.5 的锚点兜底同模式）
+    const rejected: DeltaChange[] = [
+      { field: "status", op: "update", from: "planted", to: "progressing" },
+      { field: "status", op: "add", value: "x" },
+      { field: "status", op: "remove", value: "x" },
+    ];
+    for (const change of rejected) {
+      expect(() =>
+        executeAddDelta(
+          makeCtx(),
+          buildProposal(
+            makeCtx(),
+            "propose_add_delta",
+            { node_id: "ch-1", target_type: "hook", target_id: hook.id, changes: [change] },
+            [],
+            "s",
+          ),
+        ),
+      ).toThrow(/只能用 op=set/);
+    }
+    expect(listDeltasByTarget(db, hook.id, dir)).toHaveLength(0); // 抛错路径不落库
+ // set → 正常落库；hook 其他字段（非事实字段）的 update 不受影响
+    executeAddDelta(
+      makeCtx(),
+      buildProposal(makeCtx(), "propose_add_delta", { node_id: "ch-1", target_type: "hook", target_id: hook.id, changes: [{ field: "status", op: "set", to: "progressing" }] }, [], "s1"),
+    );
+    executeAddDelta(
+      makeCtx(),
+      buildProposal(makeCtx(), "propose_add_delta", { node_id: "ch-1", target_type: "hook", target_id: hook.id, changes: [{ field: "category", op: "update", from: "旧", to: "新" }] }, [], "s2"),
+    );
+    expect(listDeltasByTarget(db, hook.id, dir)).toHaveLength(2);
   });
 
   it("order 服务端全局单调生成（两次插入 order 递增）", () => {
