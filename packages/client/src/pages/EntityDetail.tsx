@@ -15,6 +15,7 @@ import { ConfirmDialog } from "../components/outline/dialogs";
 import { SuggestionDatalist } from "../components/ui/suggestion-datalist";
 import { CreateRelationDialog } from "../components/entity/create-relation-dialog";
 import { ParentSettingSelect } from "../components/entity/parent-setting-select";
+import { TypeChip } from "../components/ui/tag-chip";
 import { ComputePreview } from "../components/delta/compute-preview";
 import { entityListHost } from "../lib/entity-paths";
 import { Button, Input, Select } from "antd";
@@ -700,9 +701,11 @@ export default function EntityDetail({
                     return (
                       <li key={r.id} className="flex items-center gap-2 py-2 text-sm">
                         <span className="max-w-28 min-w-0 truncate text-foreground">{left}</span>
-                        <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                        {/* 关系类型 = 枚举，走中性 type-badge（与关联页 / 人物页关系区同实现；
+                            曾用 bg-muted 内联 span ⇒ 同语义两种灰） */}
+                        <TypeChip className="shrink-0">
                           {relationTypeLabel(r.relationType)} {isSource ? "→" : "←"}
-                        </span>
+                        </TypeChip>
                         <span className="min-w-0 flex-1 truncate text-foreground">{right}</span>
                         <Button
                           danger
