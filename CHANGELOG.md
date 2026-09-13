@@ -5,6 +5,42 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+> **章级锚点收窄 + 人物页工作台**：大纲/变更记录/伏笔三类锚点一律收到「章」；`computeState` 改章序前缀累积；character 数据重构（新增 `description`/`alias`/`race`，移除 `status`，标签式 `abilities` 升级为**能力面板树**，`SCHEMA_VERSION 6 → 7`）；人物页改为 master-detail 工作台（左栏列表 + 双视图 tab + 关系网/其他关联 + `panel-tree`）。**API 破坏性变更见 Breaking**。
+
+### Breaking
+
+- **锚点仅章**：`current_position`（`PUT /project/config`）、变更记录的触发节点（`POST /delta` 的 `node_id`）、伏笔锚点（`plants`/`advances`/`resolves` 的源节点）一律**只支持 `chapter`**——卷/场景 → 400 `VALIDATION_ERROR`；AI 提案层与 executor 同口径拒绝（executor 直写 db 也拦）。卷/场景详情页不再提供变更记录区与「设为当前位置」入口。
+- **状态累积改章序前缀**：`computeState` 由「沿树父链」改为「**章序 ≤ 目标进度章的全部已确认 Delta**」（跨卷/跨章累积）；目标节点 → 进度章：章→自身、场景→所属章、卷→该卷最后一个未软删章、`root` 不可作 `at_node`（404）。**卡 1.2 之前写入的非章锚点 Delta 不再参与累积**（无 UI 入口，静默 inert）。
+- **character 字段调整**：移除 `status`（无 UI 展示、无写入路径）；`abilities[]` 经 `007` 迁移为 `ability_panel`（顶层分组「能力」+ 每个标签一叶子，幂等且不覆盖已有面板）；新增 `description`（**新建/详情前端必填**，服务端不硬校验）、`alias`（单值假名）、`race`。`SCHEMA_VERSION 6 → 7`。
+- **人物页不再是列表页**：`#/characters` 现为 master-detail 工作台（左栏人物列表 + 右栏详情）；`#/characters/:id` 语义不变。
+
+### Added
+
+- **能力面板（`ability_panel`）**：用户自定义字段树（有非空 `children` = 分支不可赋值、无 = 叶子可赋值；空数组视为叶子）；增/删/改名/同级拖拽/拖成子级；模板（3 套内置）与「从角色复制」派生（结构快照深拷贝）；名字含 `.` 或同层重名给内联提示（不静默改写数据）。
+- **面板叶子可作 Delta 字段**：点分路径（如 `ability_panel.火系.等级`）逐层下钻累积（顶层精确键优先、数组段按同层 `name` 匹配取先序第一个、中途缺失记 `conflicts` 不静默）；`+ 新建变更` 字段下拉按目标角色面板动态展开叶子。
+- **人物页双视图 tab**：「初始化数据」（可编辑）/「当前位置数据」（`computeState(at_node = current_position)`，只读，含手动选节点与 `conflicts` 标注）。
+- **新建人物弹窗**：必填 姓名/角色定位/描述；重名软提示不阻断；面板三选（空白/内置模板/从角色复制）；提交后自动选中。
+- **人物关系网 + 其他关联分区**：分区判据 = 另一端端点类型；对称关系（`ally`/`rival`/`family`）双向合并 + 「双向」徽标（显示层去重、不建反边）；「其他关联 · N 条」默认折叠但**条数常显**。
+- **大纲行右键「设为当前位置」**（仅章行；已是当前位置禁用）。
+- **启动路径与显式 open 共用同一条开放管道**：开机直达的书同样走迁移前快照、无路径重建兜底、未来版本拒绝（不再静默跳过迁移）。
+
+### Changed
+
+- `get_entity_summary(character)`：移除 `byStatus`；`topAbilities` 改读**面板顶层分组名**（旧 `abilities` 标签口径废弃）。`filters.status` 与 hook 的 `byStatus` 保留不变。
+- **伏笔状态 Delta 改 `op=set`**：`data.status` 是物化事实（写路径同步、守卫/列表/AI 直接读），`update` 的 CAS 与其互斥 → 每次 `compute_state` 产生假 `conflicts`；改 `set` 后假冲突归零、中后期历史回看更准（首次转移之前的窗口仍返回最新值，属登记边界）。
+- **`computeState` 查询批量化**：300 章 / 300 条 Delta 由 ~146ms 降到 ~3ms（SQL 语句从 O(章数) 降到 4 条）。
+- 埋设机会扫描过滤软删场景（与 `suggest_hook_payoff` 同口径）；「当前章」退化取**最后一个未软删章**（此前删掉尾部章节会虚报写作进度一章）。
+- 缺 `data.db` 的书不再触发「删库重建 + 重置 `outline.json`」（全新空库直接写 `SCHEMA_VERSION`；结构陈旧或有数据的旧库仍走既有重建兜底）。
+- 变更记录字段下拉排除 character 的不可变字段（`role`/`description`）；面板叶子两条写入路径的**值类型判定同源**（`coerceAbilityValue`）。
+
+### Fixed
+
+- **启动自动打开跳过版本检测/迁移**（既存缺口）：`detectProject` 直接 `openDatabase` → 任何 DDL 迁移在开机路径被跳过（用户视角"开机就崩"）；现收敛到同一管道。
+- 关系行端点链接缺 `#` 导致点击触发整页导航丢路由。
+- 面板拖拽的误报 toast（被拒时仍提示"值已清除"）与非法落点仍有高亮/插入线。
+
 ## [v0.0.33] - 2026-09-12
 
 > **导航与上手体验**：导航入口名实归位（书架入口 / 书名 = 概览）、开机直达上次那本书、设置页「AI 模型」只列已配置的 provider 并改为弹窗添加（带供应商品牌图标）；同时修正了 K5 换核后遗留的凭据优先级文案。**API 无破坏性变更**。

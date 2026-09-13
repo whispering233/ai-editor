@@ -6,17 +6,9 @@
 
 ---
 
-## 批次 2 补 · 数据安全修复（待开工）
+## 当前任务卡
 
-- [ ] **2.9 无 `data.db` 的书不得被「删库重建 + 重置 outline.json」（卡 2.8 oracle 发现，既存语义）**
-  - 现象：书目录有 `project.json` + `outline.json` 但**缺 `data.db`** 时，新建的空库 `user_version=0` 且 `MIGRATIONS` 无 `0→1` 条目 → 走「无迁移路径 → 删库重建兜底」，**同步把 `outline.json` 重置为空树**（原件进 `.bak`）。实测开机直达也会触发（此前需用户显式 open，故暴露面变小但未被注意）。
-  - 危害：用户视角"开机后大纲空了"（数据虽在 `.bak`，但属**不必要的数据损失面**）。
-  - 修法（择一，报告说明）：`ensureSchemaCompatible` 对**全新建的空库**（`user_version===0` 且无用户表数据）直接 `setUserVersion(SCHEMA_VERSION)` 而非重建；或在文档明确登记该语义与恢复方式。
-  - 验收：缺 `data.db` 的书被打开后 **`outline.json` 原样保留**、`data.db` 以当前版本新建；真正的 v0 旧库（表结构不符）仍走既有重建兜底；补测试。
-
-## 批次 4 · 收尾（未开工）
-
-- [ ] 4.1 全量验证（`pnpm typecheck` / `pnpm lint` / `pnpm -r test` / 浏览器核像素）+ `CHANGELOG.md` 版本段
+（无进行中任务卡——批次 1–4 已全部完成；批次 1：1.1–1.9，批次 2：2.1–2.9，批次 3：3.1–3.6 及两轮修复，批次 4：全量验证 + `CHANGELOG`。）
 
 ## 延期项（本批不做）
 
