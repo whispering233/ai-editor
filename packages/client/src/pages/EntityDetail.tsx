@@ -39,7 +39,7 @@ import {
   settingHierarchyFromRelations,
   type DetailFieldConfig,
 } from "../lib/entity-detail";
-import { flattenTree } from "../lib/outline-tree";
+import { chapterNodeOptions } from "../lib/outline-tree";
 import { enterBehavior, moveArrayItem } from "../lib/tags-editor";
 import { useSaveShortcut } from "../lib/save-shortcut";
 import { cn } from "../lib/utils";
@@ -835,7 +835,9 @@ function OutlineNodeSelect({
   onChange: (v: string | null) => void;
 }) {
   const outline = useProjectStore((s) => s.outline);
-  const options = flattenTree(outline?.children ?? []);
+  // 只列章：预计回收节点是「伏笔在哪一章兑现」的预测，与 HookPanel 同字段选择器同口径（锚点仅章）；
+  // 服务端只校验悬空引用，故这是 UI 收窄、API/tools 契约不动（卡 7.2）
+  const options = chapterNodeOptions(outline);
   return (
     <Select
       className="w-full"

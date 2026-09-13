@@ -10,15 +10,8 @@
 
 ## 当前任务卡
 
-### 卡 7.1 进度节点选择器收窄为仅章（人物页 + 通用 compute 探针）
-
-- [ ] `chapterNodeOptions` / `chapterNodeExists` 从 `lib/hook-panel.ts` 挪到 `lib/outline-tree.ts`（通用大纲 helper 归位），用例随之进 `outline-tree.test.ts`
-- [ ] 人物页「阅读进度」tab：选项 = `chapterNodeOptions(outline)`（props 由 `outlineNodes` 改名 `chapterNodes`）；失效判据 / 默认进度节点同源收窄到章
-- [ ] `compute-preview.tsx`（设定/地点/人物详情页通用的 compute 探针）：选项与默认值同样收窄为章
-- [ ] 契约不变：`POST /delta/compute` 与工具 `compute_state` 的 `at_node_id` **仍不限层级**（非章入口只存 API/工具层）——`schema.md` / `10-data-model.md` 补这句分层
-- [ ] 测试：`outline-tree.test.ts` 断言「卷/场景/软删不入选项」；`character-detail.test.ts` 补「存量指向场景 → 判 invalid（提示去大纲重设）」
-- [ ] 验证 oracle：浏览器核一次下拉选项不含卷/场景 + 全量回归
+（无进行中任务卡。）
 
 ---
 
-最近完成：批次 1 章级锚点收窄（1.1–1.9）→ 批次 2 人物数据模型与能力面板（2.1–2.9）→ 批次 3 人物页工作台（3.1–3.6 + 两轮修复）→ 批次 4 全量验证与发布（`CHANGELOG v0.0.34`）→ 批次 5 延期项速清（5.1–5.6）→ 批次 6 人物页信息架构与文案（6.1–6.3）。
+最近完成：批次 1 章级锚点收窄（1.1–1.9）→ 批次 2 人物数据模型与能力面板（2.1–2.9）→ 批次 3 人物页工作台（3.1–3.6 + 两轮修复）→ 批次 4 全量验证与发布（`CHANGELOG v0.0.34`）→ 批次 5 延期项速清（5.1–5.6）→ 批次 6 人物页信息架构与文案（6.1–6.3）→ 卡 7.1 进度节点选择器收窄为仅章（人物页 + 通用 compute 探针）→ 卡 7.2 伏笔「预计回收节点」选择器口径统一。

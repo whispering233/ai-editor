@@ -61,6 +61,8 @@ CREATE TABLE entities (
 | `setting` | `description`, `tags[]`（**分类标签，统一字段**）, `rules[]`（**规则条款，仅详情页编辑**）, `custom_fields` —— **`parent_id` 与 `category` 均已废弃**：层级由 belongs_to 关系表达、分类由 tags 承接；旧字段残留由 `.passthrough()` 容错；旧 rules 分类值经 004 迁移（SCHEMA_VERSION 4）复制到 tags |
 | `location` | `type`, `parent_id`, `description`, `custom_fields` |
 | `hook` | 伏笔（关系生命周期见下方 `plants`/`advances`/`resolves` 等）；data 字段集见 shared `hookDataSchema`（status/category/expected_payoff/payoff_timing/half_life/is_core/notes），服务端按 schema 校验 |
+
+> **`hook.data.expected_resolve_node_id`（预计回收节点）三层口径（卡 7.2 登记）**：**UI 只列章**（`HookPanel` 与 `#/hooks/:id` 两处渲染器都用 `chapterNodeOptions`）；**数据层接受任意节点**（`hookDataSchema` 无章约束）；**分析层容忍非章**（`packages/tools/src/analysis/hook.ts` 的 `ready_to_resolve`：节点无章号 → `null`，不猜测——场景值按其所属章序参与判定）。注意与**伏笔关系**源端（`plants`/`advances`/`resolves`）区分：那一层是**硬校验章**（服务端 400），与本 data 字段不是同一层。
 | `event` | `description`（文本）, `tags[]`（字符串数组，分类筛选用）——**G2 修订：`time_label` 已移除**（迁移至 timepoint 实体 + occurs_at 关系，见下） |
 | `timepoint` | `{}`（无专属字段——**G2：时间标签文本 = name**，可重命名；YAGNI 不加 data） |
 | `reference` | `type`（**自由文本分类，修订：不再预置枚举**——缺省 `material` 写入侧兜底，存量枚举值原样保留）、`content` 内容全文（长文本无上限，列表接口摘要截断 120 字、详情接口返回全文）、`source` 来源（URL/书名/作者，可选）、`tags[]`（标签数组，统一字段）——参考资料是外部素材/灵感笔记（非本书正文），AI 可读取参考、提案写入；**2026-08 修订**：两类承载——`kind` = `file`（本地 md 文档，`file_name` 相对路径 + `content` 正文镜像 + `file_mtime` 上次同步快照）/ `link`（外源链接，`url` **必填** + `content` 可选备注）；缺省视为 link（存量无 kind 条目运行时兼容）；`source` 字段仅存量旧条目使用（link 类展示兼容），新建条目不再写入；其后 `type` 放宽为 `z.string().optional()`，无 DDL 迁移（JSON 层演进，SCHEMA_VERSION 保持 5） |
