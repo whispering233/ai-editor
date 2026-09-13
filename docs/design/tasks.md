@@ -8,10 +8,10 @@
 
 ## 当前任务卡
 
-- [ ] **5.5 最后两条建议（卡 5.4 oracle）**
-  - (a) **executor 层对 character 已移除字段兜底**：`packages/tools/src/executor/delta.ts` 的手工构造路径同样拒绝 character 的 `status`/`abilities`（与提案层同源），补齐"两层同口径"。
-  - (b) **白名单去重**：`SET_ONLY_FIELDS`（hook.status 仅 set）与 `REMOVED_CHARACTER_FIELDS`（character 已移除字段）现为 **client 与 tools 两份手抄**（client 不能 import tools）→ 移到 `packages/shared`（纯常量，无 schema/TypeBox）作为**单一定义**，client 与 tools 各自消费；容器类型统一为数组（tools 内部再转 Set 或用 `includes`）。
-  - 测试：(a) 补边界用例；(b) 既有用例全绿 + 可选加一条"shared 常量被两侧引用"的守卫断言。
+- [ ] **5.6 不可变字段白名单同源（同类漂移的最后一处，卡 5.5 收尾）**
+  - `role`/`description`（character 不可变字段）仍是两份手抄：client `lib/character-detail.ts` 的 `IMMUTABLE_FIELDS`（或 `CHARACTER_BASICS_DATA_KEYS`）与 tools `proposal/delta.ts` 的 `IMMUTABLE_CHARACTER_FIELDS` → 搬进 `packages/shared/src/constants/delta.ts`（与卡 5.5 的 `SET_ONLY_FIELDS`/`REMOVED_CHARACTER_FIELDS` 并列），两侧改为消费 shared 定义；行为与错误文案逐字不变。
+  - 测试：既有用例全绿 + 断言两侧同源（如常量形状测试）。
+  - **本卡为延期项速清的收尾**：之后新发现的小项一律进「远期」登记，不再即时插入执行队列。
 
 ## 延期项（远期，未排期）
 
