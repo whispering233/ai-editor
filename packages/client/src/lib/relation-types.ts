@@ -5,16 +5,18 @@
 // 组合的入口（Outline 行右键菜单对所有层级行挂载、OutlineDetail 节点详情亦同；列表模式源端下拉
 // 只有实体类型，不产生该组合）——本模块在下拉层排除，与调用方传入的节点层级同向收窄，
 // 不留「必定 400」的死胡同（与 lib/current-position.ts 的 isCurrentPositionHost 同一思路）。
-import { HOOK_RELATION_TYPES, RELATION_TYPES } from "@whispering233/ai-editor-shared";
+import { HOOK_RELATION_TYPES, RELATION_TYPES, RELATION_TYPE_META } from "@whispering233/ai-editor-shared";
 import type { OutlineNodeType } from "./api";
 
 /**
  * 对话框关系类型下拉基集（oracle P2-2：occurs_at 方向白名单）：
- * **排除 occurs_at**——挂载（timepoint → event 1:n，G2）由时间轴 UI 专管（组尾新建
- * POST /relation 固定方向、跨组拖拽 move_to 复合端点），对话框不暴露自定义 occurs_at 创建，
+ * **排除 `group === "mount"`**（现仅 `occurs_at`）——挂载（timepoint → event 1:n，G2）由时间轴 UI 专管
+ * （组尾新建 POST /relation 固定方向、跨组拖拽 move_to 复合端点），对话框不暴露自定义 occurs_at 创建，
  * UI 层天然限制「仅 timepoint → event」方向（目标端下拉亦无 event 可选，双保险）。
  */
-const DIALOG_RELATION_TYPES: readonly string[] = RELATION_TYPES.filter((t) => t !== "occurs_at");
+const DIALOG_RELATION_TYPES: readonly string[] = RELATION_TYPES.filter(
+  (t) => RELATION_TYPE_META[t].group !== "mount",
+);
 
 /** 源端入参形状（结构类型：RelationSource 的可见子集；此处声明避免 lib → components 反向依赖） */
 export interface RelationTypeSource {

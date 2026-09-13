@@ -180,7 +180,7 @@ const analysisToolDefs: ToolDefinition[] = [
   {
     name: "detect_conflicts",
     description:
-      "跨实体设定矛盾检测：扫描关系图发现不一致——对称关系（ally/family）单向缺失、" +
+      "跨实体设定矛盾检测：扫描关系图发现不一致——对称关系（ally/rival/family）单向缺失、" +
       "同一对实体互斥关系并存（ally+rival）、互相击杀（双向 kills）。" +
       "types 限定实体类型、relation_filter 限定参与检测的关系类型（缺省全量）。" +
       "返回 conflicts: [{ entity_a, entity_b, field, description }]。",
