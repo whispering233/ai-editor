@@ -15,6 +15,7 @@
 
 - 任务以 `docs/design/tasks.md` 为清单：按卡开发，垂直切片、一次一张、一卡一 commit、独立验证、卡内不做卡外顺手改动；完成后清理卡片并向用户汇报。
 - 每卡「实现 fixer + 独立验证 oracle」双代理；并行卡片用临时分支 + git worktree，验证后合回 main 并清理。
+- 并行派工的硬要求（2026-09 实测）：子代理必须显式 `context: "fresh"`——`worker` 默认 fork 会把父会话的**编排叙事**当成自己的进度（实测三道 fixer 全部零改动回 PASS）；每份任务需带**硬完成判据**（`git log` 必须含新 commit + `git status` 干净，无 commit 不许报 PASS）与「汇报必附 commit hash / 命令输出」条款。
 - 验证：`pnpm typecheck` / `pnpm lint` / `pnpm -r test`（单包 `pnpm --filter <包> test`）；⚠ fresh clone 先 `pnpm -r build` 再 typecheck；UI 改动额外用浏览器核一次像素。
 - 提交信息用中文，遵循 conventional commits（如 `feat(doc): ...`）。
 - 日常不 push、不建 PR、不新增 CI；远端与 CI 仅服务发布链路（push `v*` tag 触发 `.github/workflows/`）。
@@ -45,5 +46,5 @@
 - **关系类型属性单一来源** = shared `RELATION_TYPE_META`（`Record<RelationType, { label, group, symmetric }>`，group ∈ character/structure/anchor/hook/mount/canvas）：client 标签、人物页人↔人子集、对话框排除集、tools 冲突检测的对称口径**一律派生**，禁止再手抄清单。自定义类型语法校验（`trim` 非空 / ≤32 / 禁控制字符）的单一来源 = shared 纯函数（REST schema、db `createRelation` 守卫、client 预校验共用）；AI 工具 `relation_type` 仍是预定义 `z.enum`（有意分层）。
 - **db 打开只有一条管道** = `packages/server/src/middleware/project.ts` 的 `openProjectDatabase`（开机 `detectProject` 与 `POST /project/open` 共用）：迁移前快照、未来版本拒绝（不重建）、无迁移路径才重建兜底；**缺 `data.db` 的「全新空库」直接写 `SCHEMA_VERSION`**（不重置 `outline.json`）。
 - **变异/探针验证**：禁止用硬链接副本 + 就地截断写（会写穿 inode 污染源仓库，真实发生过）；只能 `cp -r` 真副本或 `git worktree`，恢复后必须复跑全量回归（见 `build.md`）。
-- 测试：各包 `test` script = `vitest run`；各包 tsconfig 已 `exclude: ["src/**/*.test.ts"]`，不要改回——**测试文件不进 `pnpm typecheck`**，编译期断言（`satisfies` / 穷尽性检查）必须写在 src 模块里。
+- 测试：各包 `test` script = `vitest run`；各包 tsconfig 已 `exclude: ["src/**/*.test.ts"]`，不要改回——**测试文件不进 `pnpm typecheck`**，编译期断言（`satisfies` / 穷尽性检查）必须写在 src 模块里。**改 shared/db/tools 的 `src` 后先 `pnpm -r build` 再 typecheck/下游测试**：client 的编译期断言与 server/tools 测试读的是上游 **dist**，不重建会给假绿（卡 8.3 oracle 实证）。
 - 延期项：多标签页并发、undo、token 统计、跨书参考资料导入（MVP 不做，勿顺手实现）；其余遗留项与有意口径见 `docs/design/backlog.md`。

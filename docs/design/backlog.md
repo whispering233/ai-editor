@@ -10,6 +10,25 @@
 
 ## 数据与契约
 
+- **关系类型 R2 互斥对仍是字面量**（tools `analysis/conflict.ts`；卡 8.1 oracle 登记）
+  - 现状：不对称性（`symmetric`）已收进 shared 注册表，但「互斥对」`MUTUALLY_EXCLUSIVE_PAIRS = [["ally","rival"]]` 仍是本文件字面量——互斥是**类型对**语义，不是单类型属性，未纳入注册表。
+  - 触发条件：出现第二对互斥关系（或想在前端表达互斥提示）时。
+  - 升级路径：注册表加一个 `mutuallyExclusiveWith?: string[]` 字段（或单独的 pair 常量表）；目前一对，不值得。
+- **AI 侧关系类型文案陈旧**（tools；卡 8.1/8.2 oracle 登记）
+  - 现状：`propose_add_relation` 的工具描述仍写「预定义 16 类」且漏 `occurs_in`（现为 17）+ 未说明「自定义类型 AI 不能创建」（枚举本身已锁，仅描述失真）。
+  - 影响：LLM 对可用关系类型的先验偏差（不会造错，但会漏用 `occurs_in`）。
+  - 最小修法：改 `packages/tools/src/index.ts` 的描述文案（从注册表派生数量或只写「预定义类型」）。
+- **`db.createRelation` 只校验不归一**（卡 8.2 oracle 登记）
+  - 现状：`relation_type` 的 `trim` 归一只发生在 REST schema 层；db 守卫仅校验语法。现有直接 db 写入路径全部传字面量或 AI 枚举 ⇒ 无实际脏值路径。
+  - 触发条件：出现「直接调 db 层自由输入」的新调用方。
+  - 最小修法：db 守卫内改用 shared 的归一函数（一行）。
+- **非字符串 `relation_type` 的报错文案是英文**（卡 8.2 oracle 登记，低）
+  - 现状：`z.string()` 先失败 → zod 默认英文消息；UI/AI 两条路径都不可达（UI 传字符串，AI 枚举）。
+  - 触发条件：REST 直接被外部调用方以非字符串调用时。
+- **执行/构建产物新鲜度**（卡 8.3 oracle 登记）
+  - 现状：client 的编译期断言（人物字段清单、`delta-create` 字段名）绑定 shared 的 **dist** 类型；改了 `shared/src` 不重建 ⇒ `pnpm typecheck` 静默通过（假绿窗口）。
+  - 已采取：AGENTS.md 测试条写明「改上游 src 后先 `pnpm -r build`」；**不加**前置构建（会拖慢每一次 typecheck）。
+
 - **executor 未接不可变字段白名单**（`role` / `description`；卡 5.6 oracle 实测）
   - 现状：不可变字段拦截落在**前端字段下拉** + **AI 提案层**（`propose_add_delta` 对 character 拒绝 `role`/`description`）；`executeAddDelta`（确认落库侧）未复检。
   - 影响：理论可写出「同一人物两个值」（`computeState` 算出另一个角色定位）。可达性低——提案仓为进程内 TTL Map，仅手工构造 proposal 可触达，且确认路由不重跑语义校验。
@@ -26,10 +45,14 @@
 
 ## 前端 / UI
 
-- **人物字段清单缺 schema 一致性断言**（client）
-  - 现状：`CHARACTER_DETAIL_FIELD_KEYS`（+ 新建弹窗的两段键集）手写；`delta-create` 侧有编译期强制，这个列表没有。
-  - 影响：schema 新增可变字段时可能**漏渲染**，且无测试报警。
-  - 最小修法：加一条断言「字段清单 + 能力面板 + `custom_fields` = schema 键集」。
+- **关联对话框其余下拉的浮层宽度**（卡 8.2 oracle 登记，既有）
+  - 现状：`select-free-input`（关系类型）已加 `popupMatchSelectWidth={false}`；同弹窗另 4 个 `Select` 与通用关联页两个过滤 `Select` 仍跟触发器宽度（长实体名会截断）。
+  - 触发条件：再次触碰这两个文件时。
+  - 最小修法：逐个补 `popupMatchSelectWidth={false}`（与人物页排序下拉同口径）。
+- **关联对话框每次打开拉一次全量关系**（卡 8.2；性能边界）
+  - 现状：为派生「已用自定义类型」，`CreateRelationDialog` 挂载时拉一次 `GET /relation?depth=1`（全量）。
+  - 触发条件：大项目（数千条关系）下对话框打开变慢时。
+  - 升级路径：给端点加一个 `distinct relation_type` 轻量接口，或把已用类型提升到 store 缓存（失效策略需设计）。
 - **`EntityList` 的配置表死键**
   - 现状：`SUMMARY_COLUMNS` / `CREATE_FIRST_FIELD` / `TYPE_LABEL` 仍含 `character`（兜底键，已注明）与 `hook` / `event` / `timepoint`（这些类型已由 `HookPanel` / `Timeline` 承接，键已死）。
   - 触发条件：再次触碰泛型列表页时。
@@ -37,10 +60,6 @@
 - **合并行删除提示**（卡 3.6 打磨残留）
   - 现状：对称关系（`ally`/`rival`/`family`）合并行删除只删方向边（out）那一条，确认文案已声明"只删其中一条"。
   - 最小修法：删除成功后的 toast 补一句「另一方向的关系仍在」。
-- **关系星形图**（纯展示）
-  - 现状：关系只用列表呈现。
-  - 触发条件：作者真的需要"一眼看关系网"时。
-  - 升级路径：手写 SVG（零依赖），**不引入**布局库。
 - **`OutlineNodeSelect` 有三份实现**（`HookPanel` / `EntityDetail` / `Timeline`）
   - 现状：新建/编辑弹窗、详情页表单、时间轴各自实现同款"选大纲节点"下拉；卡 7.1/7.2 的口径漂移（进度节点与预计回收节点一度全层级可选的根因）正是这种重复。
   - 触发条件：第四次需要同款控件，或再次出现口径漂移。
@@ -75,3 +94,4 @@
 - **`filters.status`**：保留给 hook 生命周期查询，character 侧不再消费。
 - **数据/接口字段名 `current_position` 不改**：前端显示为「阅读进度」（UI 文案与字段名分离，见 `../ui/DESIGN.md` `character-workbench` 与 `../api/10-api-project.md`）。
 - **延期项≠技术债记录**：真正"必须做但没做"的项请写进本文件的相应小节，并在触发条件写清"何时必须做"。
+- **星形图叶子 `· N` = 列表行数**：对称双写仍算 2 行，但显示层已合并为 1 行 ⇒ 记 1（与列表组头「条数 = 去重后行数」同口径）。若将来要「诚实标注 = 原始边数」，两处需一起改（口径变更点，非 bug）。
