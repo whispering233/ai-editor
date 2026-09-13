@@ -19,6 +19,7 @@ import {
   validateCharacterBasics,
   CHARACTER_BASICS_DATA_KEYS,
   CHARACTER_DETAIL_FIELD_KEYS,
+  CHARACTER_MUTABLE_DATA_KEYS,
   DESCRIPTION_EMPTY_HINT,
   OUTLINE_LOADING_TEXT,
   READONLY_FALLBACK_TEXT,
@@ -95,6 +96,16 @@ describe("characterDetailFields（详情页字段：单一顺序清单）", () =
   it("不可变字段键 = shared 白名单（卡片 5.6：单一定义，禁止手抄）", () => {
  // 值相等 + 顺序一致；tools 提案层守卫消费同一常量
     expect(CHARACTER_BASICS_DATA_KEYS).toEqual(IMMUTABLE_FIELDS.character);
+  });
+
+  it("基础 ∪ 可变 === 详情页字段清单（集合相等，卡 8.3：两清单不漂移）", () => {
+    const split = [...CHARACTER_BASICS_DATA_KEYS, ...CHARACTER_MUTABLE_DATA_KEYS];
+    const detail = [...CHARACTER_DETAIL_FIELD_KEYS];
+    const union = new Set(split);
+    // 既无遗漏（详情字段都在拆分清单里）、也无重复登记（拆分歧义的先兆）
+    expect(split.length).toBe(union.size);
+    expect(union).toEqual(new Set(detail));
+    expect(detail.length).toBe(union.size);
   });
 
   it("字段配置缺失 → 抛错（配置漂移不静默丢字段）", () => {
