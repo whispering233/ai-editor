@@ -158,7 +158,7 @@ CREATE INDEX idx_relation_type   ON relation_records(relation_type) WHERE delete
 **关系类型 = 预定义词表 ∪ 自定义**：`relation_type` 无 CHECK（裸 `TEXT`），写入白名单严格性只在写入路径（REST schema / db 守卫 / AI 工具 schema），**新增或自定义类型不需要迁移**。
 
 - 预定义 17 类 = 推荐词表（AI 契约与 UI 分组依据）；其属性（label / group / symmetric）**单一来源 = shared `RELATION_TYPE_META`**（`Record<RelationType, …>`，加类型即编译报错直到补属性），消费方（client 标签与子集、tools 冲突检测）一律派生，禁止手抄。
-- 自定义类型（2026-09）：`trim` 后非空、长度 ≤ 32、禁控制字符；**无中心记录**（类型只活在 `relation_records.relation_type` 里，下拉从「预定义 ∪ 本项目已用类型」派生）⇒ 无改名/合并入口（见 `../design/backlog.md`）。视觉/字段名区分：自定义类型显示原文（`relationTypeLabel` 回退），不参与伏笔锚点、`belongs_to` 防环等预定义专属校验。
+- 自定义类型（2026-09）：`trim` 后非空、长度 ≤ 32、禁控制字符；**无中心记录**（类型只活在 `relation_records.relation_type` 里，下拉从「预定义 ∪ 本项目已用的**自定义**类型」派生）⇒ 无改名/合并入口（见 `../design/backlog.md`）。视觉/字段名区分：自定义类型显示原文（`relationTypeLabel` 回退），不参与伏笔锚点、`belongs_to` 防环等预定义专属校验。
 
 ## delta_records — 属性变更表
 
