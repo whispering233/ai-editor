@@ -12,20 +12,31 @@
 // - 旧 data.db 一并备份为 data.db.v{n}.bak；备份带版本号、不覆盖旧备份（多次重建各自留档）
 // - project.json 的 schema_version 仅用于 JSON 结构判断（与 user_version 不同维度），重建不修改 project.json
 // - 删库重建策略于 v0.1.0 发布终止——增量迁移机制替代
+// - **全新空库不进重建分支（卡 2.9）**：书目录缺 data.db 时 openDatabase 会就地建出
+// 空库（user_version=0），且 MIGRATIONS 无 0→1 条目——旧逻辑会走「无迁移路径→
+// 删库重建」并把**有内容的 outline.json 重置为空树**。现以「表结构 = 当前 DDL
+// 且无任何数据行」判据识别全新空库：只对齐版本号，不备份、不碰 outline.json；
+// 表结构不符的旧库（含空库）仍走既有重建兜底。
 // 触发语义（第 68-70 行）：open 时检测，重建完成后向客户端提示。
 
+import Database from "better-sqlite3";
 import { copyFileSync, existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { OutlineFileTree } from "@whispering233/ai-editor-shared";
 import { closeDatabase, openDatabase, type Db } from "../connection.js";
-import { getUserVersion, SCHEMA_VERSION, setUserVersion } from "../schema.js";
+import { createTables, getUserVersion, SCHEMA_VERSION, setUserVersion } from "../schema.js";
 import { OUTLINE_FILE_NAME, writeOutlineFile } from "../storage/outline.js";
 import { MIGRATIONS, type Migration, type MigrationContext } from "../migrations/index.js";
 
 /** data.db 文件名（项目根目录，与 server middleware 的常量一致） */
 export const DATA_DB_FILE_NAME = "data.db";
 
-/** 删库重建的结果（供上层 open 流程提示客户端） */
+/** 删库重建的结果（供上层 open 流程提示客户端）
+ *
+ * 三种 `rebuilt: false` 形态：版本匹配（`migrated` 缺省）、前向迁移（`migrated: true`）、
+ * **全新空库对齐版本号**（卡 2.9：`migrated` 缺省、`fromVersion` 缺省、`backups` 空）——
+ * 上层只在 `rebuilt`/`migrated` 为真时附提示字段，无需区分第三种。
+ */
 export interface MigrationResult {
  /** 是否发生了删库重建 */
   rebuilt: boolean;
@@ -70,6 +81,69 @@ export class SchemaVersionError extends Error {
   }
 }
 
+// ============ 全新空库判据（卡 2.9） ============
+
+/**
+ * 库内 schema 快照（比对用）。
+ * - `objects`：规范化后的 `type:name:sql` 清单——与「当前 DDL 现建的内存库」逐项相等
+ * 即表结构为当前版本（SQLite 把 CREATE 语句原文存入 sqlite_master，含注释与缩进，
+ * 但会去掉 IF NOT EXISTS；规范化只折叠空白 + 小写，两侧同规则）
+ * - `tables`：表名清单（空库判据的检查对象，来源于当前 DDL，不硬编码表名）
+ */
+interface SchemaSnapshot {
+  objects: string[];
+  tables: string[];
+}
+
+/** schema 文本规范化（比对用：空白折叠 + 小写） */
+function normalizeSqlText(sql: string): string {
+  return sql.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+/** 读取库内 schema 快照（排除 sqlite_* 内部对象；ORDER BY 保证两侧顺序一致） */
+function readSchemaSnapshot(db: Db): SchemaSnapshot {
+  const rows = db
+    .prepare("SELECT type, name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name")
+    .all() as Array<{ type: string; name: string; sql: string | null }>;
+  return {
+    objects: rows.map((r) => `${r.type}:${r.name}:${normalizeSqlText(r.sql ?? "")}`),
+    tables: rows.filter((r) => r.type === "table").map((r) => r.name),
+  };
+}
+
+/** 当前 DDL 的 schema 快照：内存库现建一份（与 openDatabase 建出的空库同源） */
+function currentSchemaSnapshot(): SchemaSnapshot {
+  const reference = new Database(":memory:");
+  try {
+    createTables(reference);
+    return readSchemaSnapshot(reference);
+  } finally {
+    reference.close();
+  }
+}
+
+/**
+ * 「全新空库」判据：**表结构 = 当前 DDL** 且 **所有业务表无行**。
+ *
+ * 用途：`user_version===0` 且满足本判据时只需对齐版本号——缺 `data.db` 的书被
+ * 就地建出空库是主场景（此时走「无迁移路径 → 删库重建」会连带把有内容的
+ * `outline.json` 重置为空树）。
+ *
+ * **有意的保守边界**：
+ * - 表结构不符（旧 CHECK / 缺列 / 多余遗留表如 `chat_messages`）→ 不判为全新空库，
+ * 仍走重建兜底（否则会把旧结构当新库写版本号，后续写入撞 CHECK 失败）；
+ * - 有数据行 → 不判为全新空库，保留既有「有数据但版本过低无路径 → 重建」语义。
+ */
+function isEmptyFreshLibrary(db: Db): boolean {
+  const current = currentSchemaSnapshot();
+  const actual = readSchemaSnapshot(db);
+  if (actual.objects.join("\n") !== current.objects.join("\n")) return false;
+  return current.tables.every((table) => {
+    const row = db.prepare(`SELECT COUNT(*) AS c FROM "${table}"`).get() as { c: number };
+    return row.c === 0;
+  });
+}
+
 /**
  * schema 版本检测 + 版本对齐的高层入口（open 流程调用）。
  *
@@ -77,6 +151,8 @@ export class SchemaVersionError extends Error {
  * - user_version **> SCHEMA_VERSION（未来版本）**：**拒绝打开**——关闭连接并抛
  * `SchemaVersionError`（提示升级程序），不触发任何重建/备份/写操作，数据原封不动。
  * - user_version **< SCHEMA_VERSION（旧版本）**：
+ * - **全新空库**（`user_version===0` 且表结构 = 当前 DDL 且无数据行，卡 2.9）→
+ * 直接对齐版本号（不重建/不备份/**不碰 outline.json**）
  * - **有迁移路径**（opts.migrations 中存在从当前版本到 SCHEMA_VERSION 的连续迁移链，
  * 默认 MIGRATIONS）→ runMigrations 前向迁移（迁移前时间戳快照，数据保全完整）
  * - **无迁移路径** → rebuildProjectStorage 删库重建兜底（迁移机制
@@ -101,7 +177,13 @@ export function ensureSchemaCompatible(
     closeDatabase(db);
     throw new SchemaVersionError(current, SCHEMA_VERSION);
   }
- // 旧版本——有迁移路径 → 前向迁移（数据保全）；无迁移路径 → 重建兜底
+ // 旧版本——全新空库先短路（卡 2.9），否则有迁移路径 → 前向迁移，无路径 → 重建兜底
+  if (current === 0 && isEmptyFreshLibrary(db)) {
+ /* 缺 data.db 的书由 openDatabase 就地建出空库：无数据可迁、无数据可备——
+ * 只写版本号；**不重建、不备份、不碰 outline.json**（旧逻辑会把有内容的大纲重置为空树）*/
+    setUserVersion(db, SCHEMA_VERSION);
+    return { db, result: { rebuilt: false, toVersion: SCHEMA_VERSION, backups: [] } };
+  }
   if (hasMigrationPath(current, SCHEMA_VERSION, opts.migrations ?? MIGRATIONS)) {
     try {
       const { snapshot } = runMigrations(db, {
@@ -131,8 +213,7 @@ export function ensureSchemaCompatible(
 }
 
 /**
- * 判定从 fromVersion 到 targetVersion 是否存在**连续迁移链**（纯函数）：
- * (fromVersion, targetVersion] 区间内每个版本号都恰好有迁移条目 → true。
+ * 判定从 fromVersion 到 targetVersion 是否存在**连续迁移链**（纯函数）： * (fromVersion, targetVersion] 区间内每个版本号都恰好有迁移条目 → true。
  * 连续性是硬要求——跳版本迁移意味着中间版本的数据形态未经处理，拒绝走迁移路径。
  *
  * @param migrations 迁移集（默认 MIGRATIONS；测试注入）

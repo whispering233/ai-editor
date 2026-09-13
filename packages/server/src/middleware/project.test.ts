@@ -247,3 +247,46 @@ describe("启动路径的版本对齐（卡 2.8）", () => {
     expect(files).toContain("outline.json.v0.bak");
   });
 });
+
+// ============ 全新空库（卡 2.9：缺 data.db 的书不得被重建 + 重置大纲） ============
+
+/** 造「缺 data.db 的书」：project.json + 有内容的 outline.json，不建 data.db */
+function seedBookWithoutDb(dir: string): void {
+  mkdirSync(dir, { recursive: true });
+  const config: ProjectFileConfig = {
+    id: "proj-nodb",
+    name: "无库书",
+    language: "zh",
+    schema_version: SCHEMA_VERSION,
+    current_position: null,
+    created_at: T0,
+    updated_at: T0,
+  };
+  writeProjectFile(dir, config);
+  writeOutlineFile(dir, {
+    id: "root",
+    type: "root",
+    schema_version: SCHEMA_VERSION,
+    children: [{ id: "vol-1", type: "volume", title: "第一卷", updated_at: T0, children: [] }],
+  });
+}
+
+describe("全新空库（卡 2.9：缺 data.db 的书）", () => {
+  it("开机直达缺 data.db 的书：就地建库写版本号——大纲不被重置、无 .bak 产物", () => {
+    const dir = makeTmpDir();
+    seedBookWithoutDb(dir);
+    const outlineRawBefore = readFileSync(join(dir, "outline.json"), "utf8");
+
+    const project = detectProject(dir);
+    try {
+      expect(project).not.toBeNull();
+      expect(getUserVersion(project!.db)).toBe(SCHEMA_VERSION);
+ // 大纲原样（修复前：无迁移路径 → 删库重建 → 重置为空树）
+      expect(readFileSync(join(dir, "outline.json"), "utf8")).toBe(outlineRawBefore);
+ // 无 .bak 产物（无数据可备）
+      expect(readdirSync(dir).filter((f) => f.endsWith(".bak"))).toEqual([]);
+    } finally {
+      closeProject(project!);
+    }
+  });
+});

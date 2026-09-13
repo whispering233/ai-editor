@@ -178,6 +178,93 @@ describe("ensureSchemaCompatible 版本不匹配 → 删库重建", () => {
   });
 });
 
+// ============ ensureSchemaCompatible 全新空库（卡 2.9：缺 data.db 的书） ============
+
+describe("ensureSchemaCompatible 全新空库（缺 data.db）", () => {
+  it("空库 + 表结构为当前 DDL → 只对齐版本号：outline.json 原样、无 .bak、连接原样", () => {
+ // 缺 data.db 的书：openDatabase 就地建出空库（user_version=0），大纲有内容
+    writeOutlineFile(dir, oldTree());
+    const outlineRawBefore = readFileSync(join(dir, OUTLINE_FILE_NAME), "utf8");
+
+    const { db: active, result } = ensureSchemaCompatible(db, dir, dbPath);
+
+    expect(result.rebuilt).toBe(false);
+    expect(result.migrated).toBeUndefined();
+    expect(result.backups).toEqual([]);
+    expect(active).toBe(db); // 连接原样（未关闭、未重建）
+    expect(getUserVersion(active)).toBe(SCHEMA_VERSION);
+ // 大纲**未被重置**（旧逻辑会写成空树——卡 2.9 的修复点）
+    expect(readFileSync(join(dir, OUTLINE_FILE_NAME), "utf8")).toBe(outlineRawBefore);
+    expect(readOutlineFile(dir)).toEqual(oldTree());
+ // 无任何 .bak 产物（无数据可备）
+    expect(readdirSync(dir).filter((f) => f.endsWith(".bak"))).toEqual([]);
+  });
+
+  it("当前 DDL 的空库但 version=0（结构对、无数据）→ 同样走对齐分支", () => {
+    setUserVersion(db, 0);
+    writeOutlineFile(dir, oldTree());
+
+    const { db: active, result } = ensureSchemaCompatible(db, dir, dbPath);
+
+    expect(result.rebuilt).toBe(false);
+    expect(getUserVersion(active)).toBe(SCHEMA_VERSION);
+    expect(readOutlineFile(dir)).toEqual(oldTree());
+  });
+
+  it("空库但表结构不符（遗留 chat_messages 表）→ 仍走重建兜底：备份 + outline 重置", () => {
+ // 模拟旧版库：当前 DDL 之外多一张遗留表（006 已 DROP），且无用户数据
+    db.exec(
+      "CREATE TABLE chat_messages (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, role TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL)",
+    );
+    writeOutlineFile(dir, oldTree());
+
+    const { db: active, result } = ensureSchemaCompatible(db, dir, dbPath);
+
+    expect(result.rebuilt).toBe(true);
+    expect(result.fromVersion).toBe(0);
+    expect(result.backups).toEqual([join(dir, "data.db.v0.bak"), join(dir, "outline.json.v0.bak")]);
+    expect(getUserVersion(active)).toBe(SCHEMA_VERSION);
+ // 新库无遗留表
+    const legacy = active.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='chat_messages'").get();
+    expect(legacy).toBeUndefined();
+ // outline 重置为空树（与既有重建语义一致）
+    expect(readOutlineFile(dir)).toEqual({
+      id: "root",
+      type: "root",
+      schema_version: SCHEMA_VERSION,
+      children: [],
+    });
+    closeDatabase(active);
+  });
+
+  it("空库但 entities 表为旧 CHECK（4 类型）→ 仍走重建兜底", () => {
+    db.exec("DROP TABLE entities");
+    db.exec(
+      `CREATE TABLE entities (
+        id          TEXT PRIMARY KEY,
+        type        TEXT NOT NULL CHECK(type IN ('character', 'setting', 'location', 'hook')),
+        name        TEXT NOT NULL,
+        data        TEXT NOT NULL DEFAULT '{}',
+        created_at  TEXT NOT NULL,
+        updated_at  TEXT NOT NULL,
+        deleted_at  TEXT
+      )`,
+    );
+    writeOutlineFile(dir, oldTree());
+
+    const { db: active, result } = ensureSchemaCompatible(db, dir, dbPath);
+
+    expect(result.rebuilt).toBe(true);
+ // 新库 CHECK 已回到当前 7 类型（写入 reference 类型成功）
+    expect(() =>
+      active
+        .prepare("INSERT INTO entities (id, type, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
+        .run("ref-1", "reference", "资料", "2026-08-01T00:00:00Z", "2026-08-01T00:00:00Z"),
+    ).not.toThrow();
+    closeDatabase(active);
+  });
+});
+
 // ============ ensureSchemaCompatible 旧版本迁移路径（注入） ============
 
 describe("ensureSchemaCompatible 旧版本有迁移路径", () => {
