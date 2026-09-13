@@ -730,7 +730,8 @@ export default function Outline() {
                 自绘 button，两页两套观感（arrow 占位 28px = size=small 图标按钮宽度，第二行同步占位） */}
             {hasChildren ? (
               <Button
-                color="default" variant="text"
+                color="default"
+                variant="text"
                 size="small"
                 className="-ml-2"
                 onClick={() => toggleCollapsed(node.id)}
@@ -784,7 +785,8 @@ export default function Outline() {
                 详情/＋ 就地新建按钮已移除——详情改双击、新建改选中后 Enter；AskAiButton 移除 */}
             <span className="ml-auto flex shrink-0 items-center gap-1">
               <Button
-                color="default" variant="text"
+                color="default"
+                variant="text"
                 size="small"
                 title="移入回收站"
                 aria-label="移入回收站"

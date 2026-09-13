@@ -261,6 +261,8 @@ export function listDeltasByNode(db: Db, nodeId: string, outlineDir: string): De
  * - 可见性三态与 targetName 联表与 listDeltasByNode **完全一致**（filterVisibleDeltas 共享）
  * - 触发节点缺失/软删的行按行丢弃（与 listDeltasByNode 的整节点短路语义等价），
  *   且在实体 IN 查询前先过滤（不为不可见行做无谓查询）
+ * - **调用方负责传章 id**（层级收窄不在本函数：传场景 id 会照实返回其 Delta；
+ *   锚点仅章的写入侧约束见 `docs/db/schema.md`）
  * @param nodeIds 触发节点 id 集合；**空数组 → 空结果**（不查库、不读文件）
  * @param outlineDir 项目根（触发节点与大纲 target 的软删/标题校验读 outline.json）
  */

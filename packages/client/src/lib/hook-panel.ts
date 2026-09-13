@@ -201,12 +201,6 @@ export const LIFECYCLE_RELATION_TYPE: Record<Exclude<HookLifecycleKind, "abandon
   resolve: "resolves",
 };
 
-/** 伏笔当前状态（data.status 缺失/空串 → planted——创建即埋设；展示/文案用，卡 1.9 起 delta 不再取 from） */
-export function currentHookStatus(data: Record<string, unknown>): string {
-  const status = data.status;
-  return typeof status === "string" && status !== "" ? status : "planted";
-}
-
 /** 状态变更 change（**op=set**：data.status 是物化事实字段，不声明 from——
  * 契约见 docs/design/10-data-model.md §4「物化事实字段不用 CAS」（卡 1.9 裁决 a） */
 export function buildStatusDeltaChange(to: string): DeltaChange {

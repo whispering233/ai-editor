@@ -117,7 +117,7 @@ function abandonProposal(hookId: string, description = "设定变更，放弃这
 }
 
 describe("advance_hook（复合写：delta + advances 一次提交）", () => {
-  it("写路径：delta 记 status → progressing（from=当前状态）+ advances 关系，description 取 args.description", () => {
+  it("写路径：delta 记 status（op=set，to=progressing）+ advances 关系，description 取 args.description", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const hookId = makeHook("身世之谜", { status: "planted" });
     const result = executeAdvanceHook(makeCtx(), advanceProposal(hookId, "ch-1", "第 12 章发现玉佩"));

@@ -151,12 +151,12 @@ function isEmptyFreshLibrary(db: Db): boolean {
  * - user_version **> SCHEMA_VERSION（未来版本）**：**拒绝打开**——关闭连接并抛
  * `SchemaVersionError`（提示升级程序），不触发任何重建/备份/写操作，数据原封不动。
  * - user_version **< SCHEMA_VERSION（旧版本）**：
- * - **全新空库**（`user_version===0` 且表结构 = 当前 DDL 且无数据行，卡 2.9）→
- * 直接对齐版本号（不重建/不备份/**不碰 outline.json**）
- * - **有迁移路径**（opts.migrations 中存在从当前版本到 SCHEMA_VERSION 的连续迁移链，
- * 默认 MIGRATIONS）→ runMigrations 前向迁移（迁移前时间戳快照，数据保全完整）
- * - **无迁移路径** → rebuildProjectStorage 删库重建兜底（迁移机制
- * 覆盖不到的历史版本保留；备份 v{n}.bak 留档）
+ *   - **全新空库**（`user_version===0` 且表结构 = 当前 DDL 且无数据行，卡 2.9）→
+ *     直接对齐版本号（不重建/不备份/**不碰 outline.json**）
+ *   - **有迁移路径**（opts.migrations 中存在从当前版本到 SCHEMA_VERSION 的连续迁移链，
+ *     默认 MIGRATIONS）→ runMigrations 前向迁移（迁移前时间戳快照，数据保全完整）
+ *   - **无迁移路径** → rebuildProjectStorage 删库重建兜底（迁移机制
+ *     覆盖不到的历史版本保留；备份 v{n}.bak 留档）
  *
  * @param opts.migrations 迁移集注入（默认 MIGRATIONS；测试注入假迁移）
  * @throws SchemaVersionError 未来版本拒绝打开（连接已由本函数关闭，无句柄泄漏）
@@ -213,7 +213,8 @@ export function ensureSchemaCompatible(
 }
 
 /**
- * 判定从 fromVersion 到 targetVersion 是否存在**连续迁移链**（纯函数）： * (fromVersion, targetVersion] 区间内每个版本号都恰好有迁移条目 → true。
+ * 判定从 fromVersion 到 targetVersion 是否存在**连续迁移链**（纯函数）：
+ * (fromVersion, targetVersion] 区间内每个版本号都恰好有迁移条目 → true。
  * 连续性是硬要求——跳版本迁移意味着中间版本的数据形态未经处理，拒绝走迁移路径。
  *
  * @param migrations 迁移集（默认 MIGRATIONS；测试注入）

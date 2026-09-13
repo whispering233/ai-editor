@@ -2,6 +2,7 @@
 // 覆盖：必填三项判据（含空白串）→ 载荷裁剪（空值不写键、数字 0 保留、数组过滤）→
 //       重名软提示判据（trim/大小写）→ 面板三选（模板深拷贝独立性 / 从角色复制 / 计数）。
 import { describe, expect, it } from "vitest";
+import { ApiError } from "./api";
 import {
   CHARACTER_CANDIDATE_LIMIT,
   DEFAULT_PANEL_CHOICE,
@@ -14,6 +15,7 @@ import {
   panelFromTemplate,
   panelNodeCount,
   pruneCharacterFormValues,
+  submitCharacterCreate,
   validateCharacterCreate,
 } from "./character-create";
 import { PANEL_TEMPLATES } from "./panel-tree";
@@ -163,5 +165,96 @@ describe("面板三选（空白 / 内置模板 / 从已有角色复制）", () =
 
   it("候选上限与左栏同档（200）", () => {
     expect(CHARACTER_CANDIDATE_LIMIT).toBe(200);
+  });
+});
+
+describe("submitCharacterCreate（提交编排：校验失败不发请求）", () => {
+  const VALID_FORM = {
+    name: "张三",
+    values: { role: "主角", description: "青云门弟子" },
+    panel: [],
+  };
+
+  it("校验失败 → 不调用 createEntity、不进入提交态（卡片 5.1 (h)）", async () => {
+    let calls = 0;
+    let startCalls = 0;
+    let endCalls = 0;
+    const result = await submitCharacterCreate(
+      { name: "  ", values: { role: "", description: "" }, panel: [] },
+      {
+        createEntity: async () => {
+          calls += 1;
+          return { id: "char-1" };
+        },
+        onSubmittingStart: () => {
+          startCalls += 1;
+        },
+        onSubmittingEnd: () => {
+          endCalls += 1;
+        },
+      },
+    );
+    expect(result.kind).toBe("invalid");
+    if (result.kind === "invalid") {
+      expect(hasCharacterCreateErrors(result.errors)).toBe(true);
+    }
+    expect(calls).toBe(0);
+    expect(startCalls).toBe(0);
+    expect(endCalls).toBe(0);
+  });
+
+  it("校验通过 → 先 onSubmittingStart、再发一次请求、结束于 onSubmittingEnd", async () => {
+    const order: string[] = [];
+    const result = await submitCharacterCreate(VALID_FORM, {
+      createEntity: async (type, payload) => {
+        order.push(`create:${type}`);
+        expect(payload.name).toBe("张三");
+        expect(payload.data).toEqual({ role: "主角", description: "青云门弟子" });
+        return { id: "char-7" };
+      },
+      onSubmittingStart: () => order.push("start"),
+      onSubmittingEnd: () => order.push("end"),
+    });
+    expect(result).toEqual({ kind: "created", id: "char-7" });
+    expect(order).toEqual(["start", "create:character", "end"]);
+  });
+
+  it("请求失败 → 文案映射（网络错误 / 其他 ApiError / 非 ApiError 兜底）且仍收尾", async () => {
+    const endCalls: number[] = [];
+    const deps = (err: unknown) => ({
+      createEntity: async () => {
+        throw err;
+      },
+      onSubmittingEnd: () => endCalls.push(1),
+    });
+    expect(await submitCharacterCreate(VALID_FORM, deps(new ApiError("CLIENT_NETWORK_ERROR", "x")))).toEqual({
+      kind: "failed",
+      message: "无法连接服务，请重试",
+    });
+    expect(await submitCharacterCreate(VALID_FORM, deps(new ApiError("VALIDATION_ERROR", "字段非法")))).toEqual({
+      kind: "failed",
+      message: "字段非法",
+    });
+    expect(await submitCharacterCreate(VALID_FORM, deps(new Error("boom")))).toEqual({
+      kind: "failed",
+      message: "创建失败，请重试",
+    });
+    expect(endCalls).toHaveLength(3);
+  });
+
+  it("面板非空 → 载荷走深拷贝面板；空面板不写该键", async () => {
+    const payloads: Array<{ name: string; data: Record<string, unknown> }> = [];
+    const panel = [{ name: "火系", children: [{ name: "等级", value: 3 }] }];
+    await submitCharacterCreate(
+      { ...VALID_FORM, panel },
+      {
+        createEntity: async (_type, payload) => {
+          payloads.push(payload);
+          return { id: "char-9" };
+        },
+      },
+    );
+    expect(payloads[0].data.ability_panel).toEqual(panel);
+    expect(payloads[0].data.ability_panel).not.toBe(panel);
   });
 });

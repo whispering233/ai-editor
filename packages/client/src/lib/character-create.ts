@@ -9,6 +9,7 @@
 // 本模块只做判据与载荷整形——不碰 DOM、不发请求（仓内无 jsdom，纯函数便于单测）。
 
 import { cloneAbilityPanel, type AbilityPanelNode } from "@whispering233/ai-editor-shared";
+import { ApiError, CLIENT_NETWORK_ERROR } from "./api";
 import {
   CHARACTER_BASICS_DATA_KEYS,
   CHARACTER_MUTABLE_DATA_KEYS,
@@ -168,4 +169,64 @@ export function panelNodeCount(panel: readonly AbilityPanelNode[]): number {
   };
   walk(panel);
   return count;
+}
+
+// ============ 提交编排（卡片 3.5 (h)：把「校验失败不发请求」从结构保证升级为测试保证） ============
+
+/** 提交依赖（注入式，便于单测用替身断言「未发请求」）——`createEntity` 与仓内 `lib/api` 同型 */
+export interface CharacterCreateSubmitDeps {
+  createEntity: (
+    type: "character",
+    payload: { name: string; data: Record<string, unknown> },
+  ) => Promise<{ id: string }>;
+ /** 校验通过、即将发请求（调用方在此清上轮错误 + 置 loading） */
+  onSubmittingStart?: () => void;
+ /** 请求结束（成功/失败均触发；**校验未通过不触发**） */
+  onSubmittingEnd?: () => void;
+}
+
+/** 提交结果（判别式：调用方只负责状态与提示） */
+export type CharacterCreateSubmitResult =
+  | { kind: "invalid"; errors: CharacterCreateErrors }
+  | { kind: "created"; id: string }
+  | { kind: "failed"; message: string };
+
+/**
+ * 提交编排（弹窗容器唯一提交路径）：
+ * 1. 先跑必填判据——**未通过 → 只返回 `{ kind: "invalid" }`，不发请求、不触发任何回调**
+ * 2. 通过 → `onSubmittingStart`（调用方清错误 + 置 loading）→ 载荷整形 → `createEntity`
+ * 3. 失败文案与容器原口径一致（网络错误 → 「无法连接服务，请重试」；其余 `ApiError.message`；非 `ApiError` → 兜底）
+ * 4. `onSubmittingEnd` 在 `finally` 触发（与容器原 `setSubmitting(false)` 同位置）。
+ */
+export async function submitCharacterCreate(
+  form: { name: string; values: Record<string, unknown>; panel: readonly AbilityPanelNode[] },
+  deps: CharacterCreateSubmitDeps,
+): Promise<CharacterCreateSubmitResult> {
+  const errors = validateCharacterCreate({
+    name: form.name,
+    role: form.values.role,
+    description: form.values.description,
+  });
+  if (hasCharacterCreateErrors(errors)) return { kind: "invalid", errors };
+  deps.onSubmittingStart?.();
+  try {
+    const payload = buildCharacterCreatePayload({
+      name: form.name,
+      basics: { role: form.values.role, description: form.values.description },
+      mutable: form.values,
+      panel: form.panel,
+    });
+    const res = await deps.createEntity("character", payload);
+    return { kind: "created", id: res.id };
+  } catch (err) {
+    if (err instanceof ApiError) {
+      return {
+        kind: "failed",
+        message: err.code === CLIENT_NETWORK_ERROR ? "无法连接服务，请重试" : err.message,
+      };
+    }
+    return { kind: "failed", message: "创建失败，请重试" };
+  } finally {
+    deps.onSubmittingEnd?.();
+  }
 }

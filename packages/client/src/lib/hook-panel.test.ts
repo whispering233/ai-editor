@@ -23,7 +23,6 @@ import {
   buildStatusSyncData,
   chapterNodeExists,
   chapterNodeOptions,
-  currentHookStatus,
   dependentsCount,
   dependencyNames,
   expandDependencyChain,
@@ -368,12 +367,6 @@ describe("复合写请求构造", () => {
   it("buildPlantRelationBody：新建埋点关系（plants）", () => {
     expect(buildPlantRelationBody("hook-9", "sc-5").relation_type).toBe("plants");
     expect(buildPlantRelationBody("hook-9", "sc-5").source_id).toBe("sc-5");
-  });
-
-  it("currentHookStatus：data.status 缺失/空串 → planted", () => {
-    expect(currentHookStatus({ status: "progressing" })).toBe("progressing");
-    expect(currentHookStatus({})).toBe("planted");
-    expect(currentHookStatus({ status: "" })).toBe("planted");
   });
 
   it("buildStatusSyncData：浅合并单键", () => {

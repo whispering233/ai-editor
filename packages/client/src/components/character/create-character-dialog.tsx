@@ -8,25 +8,17 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Button, Input, Select } from "antd";
 import type { AbilityPanelNode, EntitySummary } from "@whispering233/ai-editor-shared";
-import {
-  ApiError,
-  CLIENT_NETWORK_ERROR,
-  createEntity,
-  getEntityDetail,
-  listEntities,
-} from "../../lib/api";
+import { createEntity, getEntityDetail, listEntities } from "../../lib/api";
 import { characterFieldGroups } from "../../lib/character-detail";
 import {
   CHARACTER_CANDIDATE_LIMIT,
   DEFAULT_PANEL_CHOICE,
   PANEL_MODE_OPTIONS,
-  buildCharacterCreatePayload,
   findDuplicateCharacterName,
-  hasCharacterCreateErrors,
   panelFromCharacterData,
   panelFromTemplate,
   panelNodeCount,
-  validateCharacterCreate,
+  submitCharacterCreate,
   type CharacterCreateErrors,
   type PanelChoice,
 } from "../../lib/character-create";
@@ -332,35 +324,28 @@ export function CreateCharacterDialog({
 
   async function handleSubmit(e: FormEvent): Promise<void> {
     e.preventDefault();
-    const nextErrors = validateCharacterCreate({
-      name,
-      role: values.role,
-      description: values.description,
-    });
-    setErrors(nextErrors);
-    if (hasCharacterCreateErrors(nextErrors)) return;
-    setSubmitting(true);
-    setSubmitError(null);
-    try {
-      const payload = buildCharacterCreatePayload({
-        name,
-        basics: { role: values.role, description: values.description },
-        mutable: values,
-        panel,
-      });
-      const res = await createEntity("character", payload);
+    const result = await submitCharacterCreate(
+      { name, values, panel },
+      {
+        createEntity,
+        onSubmittingStart: () => {
+          setSubmitting(true);
+          setSubmitError(null);
+        },
+        onSubmittingEnd: () => setSubmitting(false),
+      },
+    );
+    if (result.kind === "invalid") {
+      setErrors(result.errors);
+      return;
+    }
+    if (result.kind === "created") {
       useUiStore.getState().showToast("已创建人物");
       onOpenChange(false);
-      onCreated(res.id);
-    } catch (err) {
-      if (err instanceof ApiError) {
-        setSubmitError(err.code === CLIENT_NETWORK_ERROR ? "无法连接服务，请重试" : err.message);
-      } else {
-        setSubmitError("创建失败，请重试");
-      }
-    } finally {
-      setSubmitting(false);
+      onCreated(result.id);
+      return;
     }
+    setSubmitError(result.message);
   }
 
   if (!open) return null;
