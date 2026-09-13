@@ -503,7 +503,7 @@ components:
 - **全高双滚动布局（实现约定）**：工作台自带「左栏/右栏各自纵向滚动」的全高布局，**需抵消中栏内容区的 `p-6`（24px）内边距**（实现为 `-m-6 h-[calc(100%+3rem)]`）——改中栏内边距时必须同步此处（否则错位）。
 - **空列表**：右栏 `empty-state` + 主操作「新建第一个角色」；`#/characters` 无 id 时自动选中第一个角色（有角色则重定向到 `#/characters/<id>`），避免"左栏有内容、右栏悬空"。**自动选首个只在桌面态生效**（窄屏两级下会自动弹回详情、使「返回列表」失效）；窄屏两级：列表全宽 ↔ 详情全宽 + 返回入口。
 
-**`character-relations`（人物关系网）** — 行语言 = `data-row`（底部 1px `{colors.hairline-soft}`、hover `{colors.surface-soft}`）：按 `relationType` **分组**（组头 = `section-title` 字号档中的 caption 行 + 条数），行 = 对方姓名（可点击切选中该角色）+ 方向箭头（`→` / `←`，双向边标「双向」徽标）+ `metadata` 备注副行（`caption-text`）+ `icon-button` 删除；区头右侧 `button-default`「+ 添加人物关系」（目标端类型锁定 `character`）。**对称关系显示去重**（`ally`/`rival`/`family` 同时存在两条边时合并一行 + 「双向」），但**不自动建反边**（显示层去重，不做双写）。仅展示以本角色为一端的关系（后者 = 其他关联，见下）。
+**`character-relations`（人物关系网）** — 行语言 = `data-row`（底部 1px `{colors.hairline-soft}`、hover `{colors.surface-soft}`）：按 `relationType` **分组**（组头 = `section-title` 字号档中的 caption 行 + 条数，**条数 = 去重后行数**），行 = 对方姓名（可点击切选中该角色）+ 方向箭头（`→` / `←`，双向边标「双向」徽标）+ `metadata` 备注副行（`caption-text`）+ `icon-button` 删除；区头右侧 `button-default`「+ 添加人物关系」（**关系类型下拉 = 人↔人 5 类**（`ally`/`rival`/`mentor`/`family`/`kills`），**目标端类型锁定 `character`**（只读卡片，无下拉））。**对称关系显示去重**（`ally`/`rival`/`family` 同时存在两条边时合并一行 + 「双向」），但**不自动建反边**（显示层去重，不做双写）；**合并行删除只删方向边（out）那一条**，确认文案需声明只删其中一条。仅展示以本角色为一端的关系（其余 = 其他关联）。
 
 **其他关联（折叠区）** — 标题行 = 「其他关联 · N 条」+ chevron（`icon-button`）+ 展开后 `button-default`「+ 添加关联」（通用对话框）；默认**收起**。行语言同 `character-relations`（不分类型组，按类型序）；涵盖 `appears_in` / `belongs_to` / `owns` / `masters` 等——它们是 AI 分析的数据源（如孤儿诊断依赖 `appears_in`），因此**收起但不可藏**。
 
