@@ -24,6 +24,29 @@
 **验证**：`pnpm typecheck` / `pnpm lint` / `pnpm --filter @whispering233/ai-editor-client test`；视觉改动额外浏览器核像素（大纲页、关联页、回收站页、人物页关系网、伏笔页）
 **硬完成判据**：每张卡 `git log` 含新 commit 且 `git status` 干净；汇报必附 commit hash + 命令输出
 
+### 卡 10.4 — oracle 发现的两处遗漏收口（10.1–10.3 的独立验证结果）
+
+**问题**：① `pages/EntityDetail.tsx:703`（设定/地点/伏笔详情页「其他关联」区）关系类型徽标仍是内联 `bg-muted` 灰 span——与 10.3 已收口的 `relations-view` / `character-relations` 同语义不同灰（卡 10.3 的「不动」清单未涵盖此文件，属漏卡）；② `DESIGN.md` `status-badge` 仍写「语义色或 tint 底色」，与已收口的「枚举值不用 tint」互斥。
+
+**任务卡**：
+- [x] 10.4 `pages/EntityDetail.tsx` 那处换 `TypeChip`（文本不变）；`DESIGN.md` `status-badge` 改为「语义色；中性状态用 surface-muted 灰面——不用 tint」
+- [x] 10.5 浏览器核像素（大纲 / 关联 / 回收站 / 人物关系网 / 伏笔 / 设定标签）+ 构建产物 CSS 断言
+
+**有意保留**（不入本卡，记 `backlog.md`）：`pages/ReferenceDetail.tsx:354` 参考资料「分类徽标」——已是中性，但形态为描边徽标（`border + rounded-md`），统一形态需改资料页头部设计；`components/delta/node-delta-list.tsx` / `change-summary.tsx`（变更记录字段 chip）与 `HookPanel.tsx` `status` / 详情页 `font-mono` 值 chip 不属类型语义
+
+
+**契约**：`docs/ui/DESIGN.md` §Colors「标签色」+ §Components `tag` / `type-badge`。
+
+**背景（问题）**：着色实现 = `tagTint(文案)` 哈希取模 6，且 `TagChip` **任何文案都给色**（无准入规则）——于是同一类「枚举类型」在不同页面各行其是：大纲页卷/章/场有色、关联页源/目标类型与关系类型有色、回收站类型有色，而人物页 `role` 无色（字段非 chip）、阅读进度无色（状态另走灰徽标）。用户口径（本卡前提）：**tint 只给用户标签（`data.tags` 元素），枚举类型/分类徽标一律中性**。
+
+**任务卡**（垂直切片，一卡一 commit）：
+- [x] 10.1 `components/ui/tag-chip.tsx` 新增 `TypeChip`（`bg-accent` + `text-muted-foreground`，尺寸/字号与 `TagChip` 一致）+ 头注释写准准入规则；新增 `components/ui/tag-chip.test.tsx`（`TagChip` 带 `bg-tag-*`；`TypeChip` 带 `bg-accent` 且不含 `bg-tag-*`）
+- [x] 10.2 类型徽标转 `TypeChip`：`pages/Outline.tsx`（列表行 + 就地新建行）、`pages/OutlineDetail.tsx`（元信息行）、`pages/Trash.tsx`（`TypeBadge`）、`components/entity/relations-view.tsx`（`EndpointBadge` 源/目标 + 关系类型两分支，同时去掉已无用的 `label={...}` 取色传参）
+- [x] 10.3 同语义既有灰 chip 统一到 `TypeChip`（消除「同语义两种灰」）：`pages/HookPanel.tsx` 列表行 `category` + 详情 `category`、`components/character/character-relations.tsx`（关系类型 / 双向）。**不动**：`HookPanel.tsx` 详情 `status`（状态非类型）、`components/delta/node-delta-list.tsx` 与 `components/delta/change-summary.tsx`（变更记录字段 chip）、大纲/详情页「阅读进度」徽标
+
+**验证**：`pnpm typecheck` / `pnpm lint` / `pnpm --filter @whispering233/ai-editor-client test`；视觉改动额外浏览器核像素（大纲页、关联页、回收站页、人物页关系网、伏笔页）
+**硬完成判据**：每张卡 `git log` 含新 commit 且 `git status` 干净；汇报必附 commit hash + 命令输出
+
 ---
 
 ## 批次记录（已完成）
