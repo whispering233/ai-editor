@@ -34,6 +34,8 @@
 - 埋设机会扫描过滤软删场景（与 `suggest_hook_payoff` 同口径）；「当前章」退化取**最后一个未软删章**（此前删掉尾部章节会虚报写作进度一章）。
 - 缺 `data.db` 的书不再触发「删库重建 + 重置 `outline.json`」（全新空库直接写 `SCHEMA_VERSION`；结构陈旧或有数据的旧库仍走既有重建兜底）。
 - 变更记录字段下拉排除 character 的不可变字段（`role`/`description`）；面板叶子两条写入路径的**值类型判定同源**（`coerceAbilityValue`）。
+- **写入面白名单收敛为 `shared` 单一定义**（client/tools 双份手抄归零）：`SET_ONLY_FIELDS`（hook 状态仅 `set`）、`REMOVED_CHARACTER_FIELDS`（character 已移除字段）、`IMMUTABLE_FIELDS`（character 不可变字段）——AI 提案层与 executor 层同口径拒绝；**REST `/delta` 保持泛型**（有意分层，登记在 `10-data-model.md` §14）。
+- 延期项速清：删除死代码（client `currentHookStatus` 等）、`Outline` 页 prettier 归一、新建弹窗「校验失败不请求」升为测试保证、`db/migration.ts` 注释整理。
 
 ### Fixed
 
