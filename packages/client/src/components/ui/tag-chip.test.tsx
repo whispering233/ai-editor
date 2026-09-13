@@ -24,13 +24,13 @@ describe("TagChip（用户标签：tint 底）", () => {
 });
 
 describe("TypeChip（类型/分类徽标：中性底，不参与 tint）", () => {
-  it("固定橙底 + 恒定墨字（两态不翻转），且**不含**任何 tint 底色类", () => {
+  it("描边式：浅底 + 1px 彩色边框 + 随主题翻转的字色，且**不含**任何 tint 底色类", () => {
     const html = renderToString(<TypeChip>章</TypeChip>);
-    expect(html).toContain("bg-type-badge");
-    // 不能用 text-foreground：它在深色态翻成 81% 白，压橙底仅 2.61:1（卡 11.3）
-    expect(html).toContain("text-type-badge-fg");
-    expect(html).not.toContain("text-foreground");
+    expect(html).toContain("bg-accent");
+    expect(html).toContain("border-type-badge-border");
+    expect(html).toContain("text-foreground");
     expect(html).not.toContain("bg-tag-");
+    expect(html).not.toContain("bg-type-badge");
   });
 
   it("形状类与 TagChip 一致（并排时基线/圆角/字号不漂移）", () => {

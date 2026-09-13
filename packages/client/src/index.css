@@ -67,9 +67,8 @@
   --color-tag-mint: var(--tag-mint);
   --color-tag-sage: var(--tag-sage);
   --color-tag-yellow: var(--tag-yellow);
-  /* 类型徽标（固定橙底 + 恒定墨字，两态不翻转，见 §Components type-badge）；人物页「角色定位」字色（两态不同值）*/
-  --color-type-badge: var(--type-badge-bg);
-  --color-type-badge-fg: var(--type-badge-fg);
+  /* 类型徽标边框色（描边式 chip，两态同值；底/字随主题翻转）；人物页「角色定位」字色（两态不同值）*/
+  --color-type-badge-border: var(--type-badge-border);
   --color-character-role: var(--character-role);
 }
 
@@ -82,10 +81,9 @@
   --tag-mint: #6fb98f;
   --tag-sage: #d1e2c4;
   --tag-yellow: #ffd800;
-  /* 类型徽标：底与字都两态恒定（不随主题翻转）——底不变才能当「类型识别色」；
-     字必须是恒定墨字（--foreground 在深色态翻成 81% 白，压橙底只有 2.61:1）*/
-  --type-badge-bg: #ef8354;
-  --type-badge-fg: #37352f;
+  /* 类型徽标边框（描边式 chip）：两态同一值——1px 线在灰底上需 ≥3:1 才可见（浅底 3.61 / 深底 3.34）。
+     底与字不在这里定义：底 = --accent（surface-muted）、字 = --foreground，两者都随主题翻转 */
+  --type-badge-border: #d94a4a;
   /* 人物页左栏「角色定位」字色（浅色态加深到 4.93:1；深色态换回原橙 6.24:1）*/
   --character-role: #b4551f;
 }

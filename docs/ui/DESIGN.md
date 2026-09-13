@@ -24,8 +24,7 @@ colors:
   tint-mint: "#6fb98f"
   tint-sage: "#d1e2c4"
   tint-yellow: "#ffd800"
-  type-badge-bg: "#ef8354"
-  type-badge-ink: "#37352f"
+  type-badge-border: "#d94a4a"
   character-role: "#b4551f"
 typography:
   page-title:
@@ -182,14 +181,17 @@ components:
     backgroundColor: "{colors.canvas}"
     textColor: "{colors.secondary}"
     typography: "{typography.caption}"
+  # 类型/分类徽标（描边式 chip；枚举值的唯一形态，见 §Components `type-badge`）：浅底 + 1px 红褐边框
+  # 边框 #d94a4a 两态同值（vs 浅底 3.61:1 / vs 深底 3.34:1）；底与字随主题翻转（浅 10.59:1 / 深 8.96:1）
   type-badge:
-    backgroundColor: "{colors.type-badge-bg}"
-    textColor: "{colors.type-badge-ink}"
+    backgroundColor: "{colors.surface-muted}"
+    borderColor: "{colors.type-badge-border}"
+    textColor: "{colors.primary}"
     typography: "{typography.caption}"
     rounded: "{rounded.xs}"
     padding: "0 {spacing.xxs}"
   # 标签 tint 五色（按名称 hash 稳定分配，见 §Components `tag`）：**只给用户标签 chip**（`data.tags` 元素），
-  # 类型徽标不用 tint（走上面的固定橙 `type-badge`）；五色均为浅色底 + 墨字（最低 5.26:1）
+  # 类型徽标不用 tint（走上面的描边式 `type-badge`）；五色均为浅色底 + 墨字（最低 5.26:1）
   tag-sky:
     backgroundColor: "{colors.tint-sky}"
     textColor: "{colors.primary}"
@@ -314,7 +316,9 @@ components:
 
 - **tint-sky / tint-ice / tint-mint / tint-sage / tint-yellow**（`#93c5fd` / `#dbeafe` / `#6fb98f` / `#d1e2c4` / `#ffd800`）：5 个浅色底，**只给用户标签 chip**（`data.tags` 元素：设定标签、事件标签、参考资料标签）。**枚举值（类型/分类/状态）一律不用 tint**——卷/章/场、实体类型、端点类型、关系类型、伏笔 `category`、回收站类型全部走固定橙 `type-badge`（§Components）。理由：类型是**枚举**不是用户数据，逐个发彩色只是给每列都上了装饰，读者反而失去「彩色 = 这是标签」的信号；且 hash 取模本来就会撞色，着色并不承载语义。**只做小面积底色，不做大面积背景**。
 - **色相分布（要注意的观感事实）**：`sky`(H212) 与 `ice`(H214) **同色相、只差明度**，`mint`(H146) / `sage`(H94) / `yellow`(H51) 在暖侧相邻——一屏里实际观感是「蓝×2 + 绿阶 + 黄」，**不等于 5 个一眼能分的色**。选色板时知道这一点，别期望它像 6 档马卡龙那样分得开。
-- **`type-badge-bg`（`#ef8354`）+ `type-badge-ink`（`#37352f`）**：类型/分类徽标的固定橙底 + **恒定墨字**。两个值**不随主题翻转**（这是刻意的：`{colors.primary}` 在深色态会变成 81% 白，那样在橙底上只有 2.61:1；而橙底 + 墨字两态均 4.70:1）。与语义色 `warning`（`#dd5b00`）同色相——**已知代价**：橙色既表示「类型」也表示「警告」；拆分的依据是位置（徽标在类型列/行首）与形态（无图标、无描边），若日后出现混淆，改的是 `type-badge-bg` 而不是 warning。
+- **`type-badge`（`{colors.surface-muted}` 底 + 1px `type-badge-border` `#d94a4a` 边框 + `{colors.primary}` 字）**：类型/分类徽标的**描边式**强调。底与字**随主题翻转**（浅：`#f0eeec` 底 + 墨字 10.59:1；深：叠色底 `#2c2c2c` + 81% 白字 8.96:1）——不像上一版那样两态恒定，是因为**底色不再自己带色相**（带色相的不透明块才需要锁死字色）。边框色**两态同一值** `#d94a4a`（vs 浅底 3.61:1 / vs 深底 3.34:1，均不低于 3:1 非文本对比阈值）。
+  - **为什么橙/浅红不能做边框**：实测彩色边框压在**灰底**上看不见——橙 `#ef8354` 对 `#f0eeec` 仅 1.43:1、浅红 `#ffb3b3` 仅 1.07:1（1px 线宽下等于没有）。浅色系只能做**面积**（tint 底），做**线**必须中深档。
+  - **已知代价**：边框色与语义 `error`（`#e03131`）同色相。描边比实底轻，且徽标位置固定在行首/类型列；若日后混淆，改 `type-badge-border`。
 - 营销站那套 bold 黄（`#f9e79f`）与深蓝 hero 带**不纳入**。
 - **分配规则（唯一，不维护语义色表）**：按 chip 文案（标签名）做 FNV-1a 哈希后取模 6，选中 tint；**同名恒同色**（跨页一致，无随机、无按状态变色）。字色固定 `{colors.primary}`（6 个 pastel 底上对比度均 ≥ 10:1，不需为每个 tint 配前景色）。
 - **深色态**：5 色同色相以 20% 不透明度叠在深色面板上（保留色相、不刺眼），字色随 `{colors.primary}` 变 81% 白——**实测这套 5 色在深色态均达标**（叠 `#202020` 后的合成底与 81% 白字对比 5.90–7.13）。**浅/深两套色调只定义在 `index.css` 的 `--tag-*` 段**（与 `AntdProvider` 的 antd 色阶并列——tint 不是 antd token，无法从 seed 派生，也不写成硬编码色值散落各处）。
@@ -495,7 +499,7 @@ components:
 **`relations-view`（关联总览列表）** — 源 / 关系 / 目标三列**表头与单元格同宽同对齐**：一律**左对齐**（关系列也不居中——居中会让类型 chip 相对表头位移，看起来像列错位）。
 **`tag`** — **用户标签 chip**（`data.tags` 数组元素：设定标签 / 事件标签 / 参考资料标签）：`{rounded.xs}` + **tint 六色底** + caption 字号 + `{colors.primary}` 字色（按名称 hash 稳定分配，见 §Colors 分配规则）。实现 = `components/ui/tag-chip.tsx` 的 `TagChip`（自绘 span + `bg-tag-*` token 类）——**不用** antd `Tag` 的预设色：`Tag` 的默认底色由组件 token 派发、自定义 tint 只能走 `Tag` 的 preset/内联色，与「禁硬编码色值」冲突。antd `Tag` 仅保留给**带交互的元信息 chip**（如 focus 小条的 closable 标签）。**标签不做按钮形态**。
 **准入规则（收口，2026-09）**：**只有 `data.tags` 元素走 tint**。枚举值（卷/章/场、实体类型、端点类型、关系类型、伏笔 `category`、回收站类型）→ `type-badge`；字段值（人物 `role` 等）→ 纯文本 / 表单控件（不是 chip）；状态 → `status-badge` / 中性命中 span。判据的代码形式 = 两个组件名：`TagChip`（tint）vs `TypeChip`（中性）——不许再给 `TagChip` 传枚举文案。
-**`type-badge`** — **类型/分类徽标**（枚举值的唯一形态：大纲节点卷/章/场、实体类型、关联端点类型（源/目标）、关系类型、伏笔 `category`、回收站类型）：`{rounded.xs}` + **固定橙底 `#ef8354`** + caption 字号 + **恒定墨字 `#37352f`**（与 `tag` 同尺寸同字号，只差底色）。实现 = `components/ui/tag-chip.tsx` 的 `TypeChip`。**为什么字色不能用 `{colors.primary}`**：那个 token 在深色态会翻成 81% 白，而**橙底是两态恒定的**（不随主题变），白字压橙底只有 2.61:1；因此 type-badge 的底与字都是「不随主题翻转」的独立值（`--type-badge-bg` / `--type-badge-fg`，只在 `index.css` 定义）。**为什么不用 tint**：① 类型是枚举不是用户数据，逐个发彩色等于给每列都上装饰，反而让「彩色 = 这是标签」的信号失效；② hash 取模只保证「同名恒同色」，不承载语义，同一概念的文案变了就变色；③ 类型与「标签」视觉同形时，用户无法区分「这行是分类」还是「这行是标签」——所以两形态用**两套底色语言**（橙底 = 类型，蓝/绿/黄底 = 标签）。
+**`type-badge`** — **类型/分类徽标**（枚举值的唯一形态：大纲节点卷/章/场、实体类型、关联端点类型（源/目标）、关系类型、伏笔 `category`、回收站类型）：`{rounded.xs}` + `{colors.surface-muted}` 底 + **1px `type-badge-border` `#d94a4a` 边框** + caption 字号 + `{colors.primary}` 字色。实现 = `components/ui/tag-chip.tsx` 的 `TypeChip`。**为什么是描边而不是实底**：实底彩色要么压不住读（`#ef8354` 上墨字仅 4.70:1、白字 2.61:1），要么让每行都摆出一块告警色；描边把一个色相拆成「轮廓」而不是「面积」——既与 tint 标签（面积式）在形态上彻底分开，又不会霸占背景。**为什么边框不能用浅色系**：1px 线在灰底上需 ≥3:1 才看得见（实测橙 1.43、浅红 1.07 = 等于没有）；`#d94a4a` 是少数两态都过线的红系（浅 3.61 / 深 3.34）。**为什么不用 tint**：① 类型是枚举不是用户数据，逐个发彩色等于给每列都上装饰，反而让「彩色 = 这是标签」的信号失效；② hash 取模只保证「同名恒同色」，不承载语义，同一概念的文案变了就变色；③ 类型与「标签」视觉同形时，用户无法区分「这行是分类」还是「这行是标签」——所以两形态用**两套形态语言**（描边 = 类型，实底 = 标签）。
 **`status-badge`** — 状态胶囊（进行中/已确认/已失效等）：`{rounded.full}` + caption 字号 + **语义色**（success / warning / error；中性状态用 `{colors.surface-muted}` 灰面）——**不用 tint**（tint 只给用户标签，见上「准入规则」）；状态图标用 antd **Filled** 变体（`CheckCircleFilled`/`CloseCircleFilled`/`ExclamationCircleFilled`）。
 
 **`character-workbench`（人物工作台，2026-09）** — 人物页（`#/characters` / `#/characters/:id`）是中栏内的 **master-detail**（无导航级变动，路由已是一级段）：
