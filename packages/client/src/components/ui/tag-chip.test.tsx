@@ -24,10 +24,12 @@ describe("TagChip（用户标签：tint 底）", () => {
 });
 
 describe("TypeChip（类型/分类徽标：中性底，不参与 tint）", () => {
-  it("带中性底 + tertiary 字色，且**不含**任何 tint 底色类", () => {
+  it("带中性底 + 墨字（与 TagChip 同字色），且**不含**任何 tint 底色类", () => {
     const html = renderToString(<TypeChip>章</TypeChip>);
     expect(html).toContain("bg-accent");
-    expect(html).toContain("text-muted-foreground");
+    // 字色与 tint chip 同档（primary）：底几乎与白同量级，靠字色提供可读性（卡 10.6）
+    expect(html).toContain("text-foreground");
+    expect(html).not.toContain("text-muted-foreground");
     expect(html).not.toContain("bg-tag-");
   });
 

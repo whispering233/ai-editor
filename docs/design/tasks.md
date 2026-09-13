@@ -10,7 +10,14 @@
 
 ## 当前任务卡
 
-（无进行中任务卡。）
+### 卡 10.6 — 中性徽标可读性：`TypeChip` 字色提到 primary（用户实测「不够明显」）
+
+**问题**：实测底 `#f0eeec` 与白画布仅 **1.16:1**（tint peach 也只有 1.18——tint 靠色相、中性底无色相），可读性全靠字色；10.1 选的 tertiary `#787671` 只有 **3.92:1** ⇒ 灰底淡斑。
+
+**任务卡**：
+- [x] 10.6 `TypeChip` 字色 `text-muted-foreground` → `text-foreground`（primary，10.59:1，与 `TagChip` 同档；两形态只差底色有无色相）；`DESIGN.md` `type-badge.textColor` 改 `{colors.primary}` 并登记对比度事实；`tag-chip.test.tsx` 断言同步
+
+**验证**：`pnpm typecheck` / `pnpm lint` / 测试；构建后浏览器实测 computed style
 
 ---
 

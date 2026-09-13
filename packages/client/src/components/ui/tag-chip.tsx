@@ -1,7 +1,8 @@
 // 徽标 chip 的两个形态（DESIGN.md §Components `tag` / `type-badge`，全站各自唯一实现）：
 // - `TagChip`  = **用户标签**（`data.tags` 数组元素）：tint 六色底 + 墨字
 // - `TypeChip` = **类型/分类徽标**（卷/章/场、实体类型、端点类型、关系类型、伏笔 category、回收站类型）：
-//               中性底（`{colors.surface-muted}`）+ tertiary 字——**枚举值不上色**
+//               中性底（`{colors.surface-muted}`）+ **墨字（`{colors.primary}`，与 `TagChip` 同字色）**
+//               ——**枚举值不上色**（底色无色相，但不做「灰字淡斑」）
 // 准入规则（2026-09 收口，别再扩散）：tint 只给用户标签。枚举类型是「结构」不是用户数据，逐个发彩色
 // 只会让「彩色 = 这是标签」的信号失效（历史上同一类「类型」在大纲页/关联页/回收站页有色、人物页无色，
 // 每页各自发挥）。判据的代码形式 = 两个组件名，调用点必须显式选一个。
@@ -45,7 +46,8 @@ export interface TypeChipProps {
   className?: string;
 }
 
-/** 类型/分类徽标（中性底 + tertiary 字）：卷/章/场、实体类型、端点类型、关系类型、回收站类型 */
+/** 类型/分类徽标（中性底 + 墨字，尺寸/字色与 `TagChip` 一致——两形态只差底色有无色相）：
+ * 卷/章/场、实体类型、端点类型、关系类型、回收站类型 */
 export function TypeChip({ children, className }: TypeChipProps) {
-  return <span className={cn(CHIP_BASE, "bg-accent text-muted-foreground", className)}>{children}</span>;
+  return <span className={cn(CHIP_BASE, "bg-accent text-foreground", className)}>{children}</span>;
 }

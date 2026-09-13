@@ -181,9 +181,10 @@ components:
     textColor: "{colors.secondary}"
     typography: "{typography.caption}"
   # 类型/分类徽标（中性 chip；枚举值的唯一形态，见 §Components `type-badge`）
+  # textColor 与 `tag-*` 同档（primary）：底与画布只有 1.16:1，可读性全由字色提供（实测 10.59:1）
   type-badge:
     backgroundColor: "{colors.surface-muted}"
-    textColor: "{colors.tertiary}"
+    textColor: "{colors.primary}"
     typography: "{typography.caption}"
     rounded: "{rounded.xs}"
     padding: "0 {spacing.xxs}"
@@ -497,7 +498,7 @@ components:
 **`relations-view`（关联总览列表）** — 源 / 关系 / 目标三列**表头与单元格同宽同对齐**：一律**左对齐**（关系列也不居中——居中会让类型 chip 相对表头位移，看起来像列错位）。
 **`tag`** — **用户标签 chip**（`data.tags` 数组元素：设定标签 / 事件标签 / 参考资料标签）：`{rounded.xs}` + **tint 六色底** + caption 字号 + `{colors.primary}` 字色（按名称 hash 稳定分配，见 §Colors 分配规则）。实现 = `components/ui/tag-chip.tsx` 的 `TagChip`（自绘 span + `bg-tag-*` token 类）——**不用** antd `Tag` 的预设色：`Tag` 的默认底色由组件 token 派发、自定义 tint 只能走 `Tag` 的 preset/内联色，与「禁硬编码色值」冲突。antd `Tag` 仅保留给**带交互的元信息 chip**（如 focus 小条的 closable 标签）。**标签不做按钮形态**。
 **准入规则（收口，2026-09）**：**只有 `data.tags` 元素走 tint**。枚举值（卷/章/场、实体类型、端点类型、关系类型、伏笔 `category`、回收站类型）→ `type-badge`；字段值（人物 `role` 等）→ 纯文本 / 表单控件（不是 chip）；状态 → `status-badge` / 中性命中 span。判据的代码形式 = 两个组件名：`TagChip`（tint）vs `TypeChip`（中性）——不许再给 `TagChip` 传枚举文案。
-**`type-badge`** — **类型/分类徽标**（枚举值的唯一形态：大纲节点卷/章/场、实体类型、关联端点类型（源/目标）、关系类型、伏笔 `category`、回收站类型）：`{rounded.xs}` + `{colors.surface-muted}` 底 + caption 字号 + `{colors.tertiary}` 字色（与 `tag` 同尺寸同字号，只换底色与字色）。实现 = `components/ui/tag-chip.tsx` 的 `TypeChip`。**为什么不用 tint**：① 类型是枚举不是用户数据，逐个发彩色等于给每列都上装饰，反而让「彩色 = 这是标签」的信号失效；② 6 档 hash 只保证「同名恒同色」，不承载语义（实测「设定/场/参考资料」同色、「事件/时间点」同色），同一概念的文案变了就变色；③ 类型与「标签」视觉同形时，用户无法区分「这行是分类」还是「这行是标签」。
+**`type-badge`** — **类型/分类徽标**（枚举值的唯一形态：大纲节点卷/章/场、实体类型、关联端点类型（源/目标）、关系类型、伏笔 `category`、回收站类型）：`{rounded.xs}` + `{colors.surface-muted}` 底 + caption 字号 + **`{colors.primary}` 字色**（字色与尺寸与 `tag` **完全同档**，两形态只差底色有无色相）。实现 = `components/ui/tag-chip.tsx` 的 `TypeChip`。**字色为什么不能用更淡的档**：底 `#f0eeec` 与白画布只有 **1.16:1**（与 tint peach 的 1.18 同量级——tint 靠色相辨识，中性底没有色相），可读性完全由字色提供：tertiary `#787671` 只有 **3.92:1**（实测「灰底淡斑、看不清」），primary `#37352f` 为 **10.59:1**。**为什么不用 tint**：① 类型是枚举不是用户数据，逐个发彩色等于给每列都上装饰，反而让「彩色 = 这是标签」的信号失效；② 6 档 hash 只保证「同名恒同色」，不承载语义（实测「设定/场/参考资料」同色、「事件/时间点」同色），同一概念的文案变了就变色；③ 类型与「标签」视觉同形时，用户无法区分「这行是分类」还是「这行是标签」。
 **`status-badge`** — 状态胶囊（进行中/已确认/已失效等）：`{rounded.full}` + caption 字号 + **语义色**（success / warning / error；中性状态用 `{colors.surface-muted}` 灰面）——**不用 tint**（tint 只给用户标签，见上「准入规则」）；状态图标用 antd **Filled** 变体（`CheckCircleFilled`/`CloseCircleFilled`/`ExclamationCircleFilled`）。
 
 **`character-workbench`（人物工作台，2026-09）** — 人物页（`#/characters` / `#/characters/:id`）是中栏内的 **master-detail**（无导航级变动，路由已是一级段）：
