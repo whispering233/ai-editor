@@ -171,6 +171,56 @@ describe("propose_add_delta", () => {
     ).toMatch(/^prop_/);
   });
 
+  it("hook 的事实字段 status（卡片 5.3）：非 set 的 op 拒绝；set 与其他字段的 update 不受影响", () => {
+    writeOutlineFile(dir, seedOutlineTree());
+    const hook = createEntity(db, { type: "hook", name: "身世之谜", data: { status: "planted" } });
+ // status 是写路径同步的事实字段 → 只能用 set（update/add/remove 均拒绝，update 会重放出假冲突）
+    expect(() =>
+      runProposeAddDelta(makeCtx(), {
+        node_id: "ch-1",
+        target: hook.id,
+        changes: [{ field: "status", op: "update", from: "planted", to: "progressing" }],
+      }),
+    ).toThrow(/事实字段.*只能用 op=set/);
+    expect(() =>
+      runProposeAddDelta(makeCtx(), {
+        node_id: "ch-1",
+        target: hook.id,
+        changes: [{ field: "status", op: "add", value: "x" }],
+      }),
+    ).toThrow(/只能用 op=set/);
+ // set → 通过
+    expect(
+      runProposeAddDelta(makeCtx(), {
+        node_id: "ch-1",
+        target: hook.id,
+        changes: [{ field: "status", op: "set", to: "progressing" }],
+      }).proposal_id,
+    ).toMatch(/^prop_/);
+ // hook 其他字段的 update 不受影响（只有 status 是事实字段）
+    expect(
+      runProposeAddDelta(makeCtx(), {
+        node_id: "ch-1",
+        target: hook.id,
+        changes: [{ field: "category", op: "update", from: "旧", to: "新" }],
+      }).proposal_id,
+    ).toMatch(/^prop_/);
+ // 其他实体类型的 update 不受影响（尤其不能误伤 update 的正常用法）
+    for (const seeded of [
+      createEntity(db, { type: "character", name: "阿强", data: { alias: "影" } }),
+      createEntity(db, { type: "setting", name: "灵脉", data: { description: "旧" } }),
+      createEntity(db, { type: "location", name: "青城", data: { description: "旧" } }),
+    ]) {
+      expect(
+        runProposeAddDelta(makeCtx(), {
+          node_id: "ch-1",
+          target: seeded.id,
+          changes: [{ field: seeded.type === "character" ? "alias" : "description", op: "update", from: "旧", to: "新" }],
+        }).proposal_id,
+      ).toMatch(/^prop_/);
+    }
+  });
+
   it("触发节点不存在 / 已软删 / 目标不存在 → 抛错", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const char = createEntity(db, { type: "character", name: "阿强" });

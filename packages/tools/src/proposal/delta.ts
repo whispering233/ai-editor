@@ -20,6 +20,9 @@
 // `role`/`description`（与前端字段下拉白名单同源）——二者是列表摘要与 AI 检索的依据，
 // 允许 Delta 改会与 `entities.name`/摘要读取面产生“同一人物两个值”（见
 // `docs/db/schema.md`「人物 data 分层」/`docs/design/10-data-model.md` §14 不变式 1）
+// - **事实字段只能用 set（卡片 5.3）**：hook 的 `status` 是物化事实字段（写路径同步当前值、
+// 终态守卫/列表分组/AI 统计直接读它）——用 `op=update`+`from` 重放必然假冲突
+// （重放基座即最新值）；与前端 `lib/delta-create` 的 `SET_ONLY_FIELDS.hook=["status"]` 同源
 // - changes 由 schema 校验（复用 deltaChangeSchema，至少一项）
 // args 规范化为执行形态 { node_id, target_type, target_id, changes }（S6.7 add_delta 直接消费）；
 // delta_records.description（NOT NULL）在确认后由 S6.7 执行器取 proposal.summary 作为人类可读描述。
@@ -31,6 +34,12 @@ import { buildProposal, checkProposalAborted, refOutlineNode, requireOutlineNode
 /** character 不可变字段（不参与 Delta——与前端 `lib/delta-create` 的 `IMMUTABLE_FIELDS` 同源）：
  * 人工经 `PUT` 直接编辑；它们同时是列表摘要与 AI 检索的依据，允许 Delta 改会产生“同一人物两个值” */
 const IMMUTABLE_CHARACTER_FIELDS = new Set(["role", "description"]);
+
+/** 事实字段（写路径已把当前值同步进 `data`）→ 变更记录**只能用 `op=set`**：
+ * 详见 `docs/design/10-data-model.md` §4「物化事实字段不用 CAS」；与前端 `SET_ONLY_FIELDS` 同源 */
+const SET_ONLY_FIELDS: Record<string, ReadonlySet<string>> = {
+  hook: new Set(["status"]),
+};
 
 /** 产出追加 Delta 提案 */
 export function buildProposeAddDelta(ctx: ToolContext, args: ProposeAddDeltaArgs): Proposal {
@@ -51,6 +60,19 @@ export function buildProposeAddDelta(ctx: ToolContext, args: ProposeAddDeltaArgs
       const field = (change as { field?: unknown } | null)?.field;
       if (typeof field === "string" && IMMUTABLE_CHARACTER_FIELDS.has(field)) {
         throw new Error(`character 的不可变字段不参与变更记录（请直接编辑）: ${field}`);
+      }
+    }
+  }
+ // 事实字段只能用 set（卡片 5.3）：hook.status 用 update/from 重放必然假冲突（写路径同步了最新值）
+  const setOnlyFields = SET_ONLY_FIELDS[target.type];
+  if (setOnlyFields !== undefined) {
+    for (const change of args.changes) {
+      const c = change as { field?: unknown; op?: unknown } | null;
+      const field = c?.field;
+      if (typeof field === "string" && setOnlyFields.has(field) && c?.op !== "set") {
+        throw new Error(
+          `${target.type} 的 ${field} 是写路径同步的事实字段，变更记录只能用 op=set（当前 op=${String(c?.op ?? "(缺失)")}）`,
+        );
       }
     }
   }
