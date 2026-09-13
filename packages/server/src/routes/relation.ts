@@ -9,7 +9,7 @@
 // RELATION_EXISTS → 409 RELATION_EXISTS（同三元组已存在）
 // EVENT_ALREADY_MOUNTED → 409 EVENT_ALREADY_MOUNTED（occurs_at 1:n 重复挂载，G2）
 // ENDPOINT_NOT_FOUND → 400 VALIDATION_ERROR（端点不存在/软删是参数问题）
-// INVALID_RELATION_TYPE → 400 VALIDATION_ERROR（白名单外——schema 层 enum 已拦截，防御分支）
+// INVALID_RELATION_TYPE → 400 VALIDATION_ERROR（语法非法——schema 层已按 shared 语法函数拦截，防御分支）
 // DELETE 0 影响行 → 404 RELATION_NOT_FOUND
 import { Hono } from "hono";
 import {
@@ -87,7 +87,7 @@ relationRoutes.post("/", async (c) => {
   const raw = await c.req.json().catch(() => null);
   const parsed = relationCreateReqSchema.safeParse(raw);
   if (!parsed.success) {
-    throw parsed.error; // → 400 VALIDATION_ERROR（含 relation_type enum 白名单、字段校验）
+    throw parsed.error; // → 400 VALIDATION_ERROR（含 relation_type 语法校验（trim 非空/≤32/禁控制字符，卡片 8.2）、字段校验）
   }
   const { source_type, source_id, target_type, target_id, relation_type, metadata } = parsed.data;
  // 伏笔关系源端仅章（卡片 1.3 + 5.2）：plants/advances/resolves 无条件要求源端为章大纲节点

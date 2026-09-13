@@ -1,12 +1,13 @@
 // 分析类工具：detect_conflicts（跨实体设定矛盾检测，S6.4）
 // 语义：从关系图自动发现设定矛盾（「A↔B 关系缺失导致的不一致」）：
-// - R1 对称缺失（error）：ally/family 为对称关系，单向存在即矛盾（A ally B 但 B 未 ally A）
+// - R1 对称缺失（error）：对称关系（注册表 `RELATION_TYPE_META[*].symmetric` = ally/rival/family）单向存在即矛盾
 // - R2 互斥并存（warning）：同一对实体同时互为盟友与对手（ally + rival 并存）
 // - R3 互杀（error）：A kills B 且 B kills A（双方互相击杀）
 // 数据访问：db 查询层（listEntities 全量非软删实体 + listRelations 全量可见关系）+ 纯函数图分析，无原生 SQL。
 // signal：全量关系遍历为长任务候选，循环中检查。
 
 import { listEntities, listRelations } from "@whispering233/ai-editor-db";
+import { RELATION_TYPES, RELATION_TYPE_META } from "@whispering233/ai-editor-shared";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
 import { isEntityType, throwIfAborted } from "./utils.js";
@@ -20,8 +21,10 @@ export interface ConflictIssue {
   description: string;
 }
 
-/** 对称关系类型（R1：单向存在即矛盾） */
-const SYMMETRIC_RELATION_TYPES = ["ally", "family"] as const;
+/** 对称关系类型（R1：单向存在即矛盾）= 注册表 `symmetric` 派生（ally/rival/family），禁止手抄 */
+const SYMMETRIC_RELATION_TYPES: readonly string[] = RELATION_TYPES.filter(
+  (t) => RELATION_TYPE_META[t].symmetric === true,
+);
 
 /** 互斥关系对（R2：同一对实体并存即矛盾） */
 const MUTUALLY_EXCLUSIVE_PAIRS: ReadonlyArray<readonly [string, string]> = [["ally", "rival"]] as const;

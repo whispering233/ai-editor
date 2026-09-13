@@ -1,5 +1,5 @@
 // S6.4 分析工具测试：detect_conflicts
-// 覆盖：R1 对称关系单向缺失（ally/family，error）/ R2 互斥关系并存（ally+rival，warning）/
+// 覆盖：R1 对称关系单向缺失（ally/rival/family，error）/ R2 互斥关系并存（ally+rival，warning）/
 // R3 互杀（双向 kills，error）/ 双向对称正常无检出 / types 过滤 / relation_filter 过滤 /
 // 软删实体不可见/ signal aborted
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -87,11 +87,25 @@ describe("detect_conflicts 规则检出", () => {
     expect(conflicts[0].description).toContain("单向 ally");
   });
 
-  it("R2 互斥关系并存（ally + rival）→ warning（ally 双向时 R1 不触发，只报互斥）", () => {
+ // 卡 8.1：对称集改由 shared RELATION_TYPE_META.symmetric 派生 → rival 由「有向」变「对称」
+  it("R1 覆盖 rival（卡 8.1 起对称）→ 单向 rival 报矛盾；双向 rival 无检出", () => {
+    const { a, b, c, d } = seedBase();
+    rel(a, b, "rival"); // 单向 rival → 矛盾
+    rel(c, d, "rival");
+    rel(d, c, "rival"); // 双向 rival → 正常
+
+    const { conflicts } = runDetectConflicts(makeCtx(), {});
+    expect(conflicts).toHaveLength(1);
+    expect(new Set([conflicts[0].entity_a, conflicts[0].entity_b])).toEqual(new Set([a, b]));
+    expect(conflicts[0].description).toContain("单向 rival");
+  });
+
+  it("R2 互斥关系并存（ally + rival）→ warning（两类均双向时 R1 不触发，只报互斥）", () => {
     const { a, b } = seedBase();
     rel(a, b, "ally");
     rel(b, a, "ally"); // 对称完整 → R1 不报
     rel(b, a, "rival"); // 同对并存 ally 与 rival
+    rel(a, b, "rival"); // rival 亦对称（卡 8.1）——双向后 R1 不报，只留 R2
 
     const { conflicts } = runDetectConflicts(makeCtx(), {});
     expect(conflicts).toHaveLength(1);

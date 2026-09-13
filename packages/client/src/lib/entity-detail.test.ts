@@ -1,6 +1,7 @@
 // entity-detail 纯函数与配置测试（S3.6 + I3b）：按类型字段配置、关系类型中文映射、表单 diff、
 // 设定层级分区（parent_id 废弃改为 belongs_to 关系表达）
 import { describe, expect, it } from "vitest";
+import { RELATION_TYPES } from "@whispering233/ai-editor-shared";
 import {
   detailFieldsForType,
   diffData,
@@ -68,8 +69,8 @@ describe("detailFieldsForType", () => {
   });
 });
 
-describe("relationTypeLabel（17 种预定义关系类型中文映射，I1：occurs_in 补齐）", () => {
-  it("核心映射：mentor→师徒、appears_in→出现于、masters→掌握、ally→盟友", () => {
+describe("relationTypeLabel（注册表驱动：预定义取 RELATION_TYPE_META，未知值回退原文）", () => {
+  it("已知映射抽样：mentor→师徒、appears_in→出现于、masters→掌握、ally→盟友、plot_edge→剧情连线、plants→埋设", () => {
     expect(relationTypeLabel("mentor")).toBe("师徒");
     expect(relationTypeLabel("appears_in")).toBe("出现于");
     expect(relationTypeLabel("masters")).toBe("掌握");
@@ -78,9 +79,16 @@ describe("relationTypeLabel（17 种预定义关系类型中文映射，I1：occ
     expect(relationTypeLabel("plants")).toBe("埋设");
   });
 
-  it("occurs_in（新增，I1）→锚定于，与 occurs_at 发生于区分", () => {
+  it("occurs_in（I1）→锚定于，与 occurs_at 发生于区分", () => {
     expect(relationTypeLabel("occurs_in")).toBe("锚定于");
     expect(relationTypeLabel("occurs_at")).toBe("发生于");
+  });
+
+  it("每个预定义类型都有标签（不落回原文）——清单完整性由 shared 注册表测试锁定", () => {
+    for (const t of RELATION_TYPES) {
+      expect(relationTypeLabel(t)).not.toBe(t);
+      expect(relationTypeLabel(t).trim().length).toBeGreaterThan(0);
+    }
   });
 
   it("未知类型原样显示（不崩溃）", () => {

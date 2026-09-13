@@ -6,30 +6,29 @@
 // 分区判据 = **另一端端点类型**（另一端是 `character` → 关系网；否则 → 其他关联）——
 // 不维护白名单，将来新增人↔人关系类型自动落对分区。
 // 本模块只做数据整形（分区/分组/去重/排序/文案），不碰 DOM、不发请求，便于单测（仓内无 jsdom）。
-import { ENTITY_TYPES, RELATION_TYPES } from "@whispering233/ai-editor-shared";
+import { ENTITY_TYPES, RELATION_TYPES, RELATION_TYPE_META } from "@whispering233/ai-editor-shared";
 import type { EntityType } from "@whispering233/ai-editor-shared";
 import type { RelationSummaryItem } from "./api";
 import { entityDetailPath } from "./entity-paths";
 import { relationTypeLabel } from "./entity-detail";
 
 /**
- * 人↔人关系类型（关系网区「+ 添加人物关系」下拉集）。
- * 与 `RELATION_TYPES` 的既有对齐：`ally`/`rival`/`mentor`/`family` 为人物间关系、`kills` 为击杀。
+ * 人↔人关系类型（关系网区「+ 添加人物关系」下拉集）= 注册表 `group === "character"` 派生
+ * （`ally`/`rival`/`mentor`/`family`/`kills`）；序 = `RELATION_TYPES` 序。
  */
-export const INTER_CHARACTER_RELATION_TYPES: readonly string[] = [
-  "ally",
-  "rival",
-  "mentor",
-  "family",
-  "kills",
-];
+export const INTER_CHARACTER_RELATION_TYPES: readonly string[] = RELATION_TYPES.filter(
+  (t) => RELATION_TYPE_META[t].group === "character",
+);
 
 /**
- * 对称关系类型（语义对称，不区分方向）：同时存在 A→B 与 B→A 两条边时**合并显示一行 + 「双向」徽标**。
+ * 对称关系类型（语义对称，不区分方向）= 注册表 `symmetric` 派生（`ally`/`rival`/`family`）：
+ * 同时存在 A→B 与 B→A 两条边时**合并显示一行 + 「双向」徽标**。
  * **仅显示层去重**——不自动建反边（不做双写）；删行只删其中一条（见 `characterRelationDeleteDescription`）。
- * `mentor`（师徒）有向，不去重。
+ * `mentor`（师徒）/ `kills` 有向，不去重。
  */
-export const SYMMETRIC_CHARACTER_RELATION_TYPES: readonly string[] = ["ally", "rival", "family"];
+export const SYMMETRIC_CHARACTER_RELATION_TYPES: readonly string[] = RELATION_TYPES.filter(
+  (t) => RELATION_TYPE_META[t].symmetric === true,
+);
 
 /** 关系端点（另一端） */
 export interface CharacterRelationEndpoint {

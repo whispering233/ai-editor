@@ -50,6 +50,42 @@ export const RELATION_TYPES = [
 /** 关系类型（从 RELATION_TYPES 派生） */
 export type RelationType = (typeof RELATION_TYPES)[number];
 
+/**
+ * 关系类型分组（UI 语义分区）：character 人↔人 / structure 层级与归属 / anchor 大纲节点锚定 /
+ * hook 伏笔链路 / mount 时间轴挂载（由时间轴 UI 专管，通用对话框不暴露）/ canvas 画布推演。
+ */
+export type RelationTypeGroup = "character" | "structure" | "anchor" | "hook" | "mount" | "canvas";
+
+/**
+ * 关系类型属性注册表（**单一来源**）：client 中文标签、人物页人↔人子集、对话框排除集、
+ * tools 冲突检测的对称口径一律由此派生，禁止手抄清单。`Record<RelationType, …>` ⇒
+ * 新增预定义类型必须补属性，否则编译失败。
+ * `symmetric` 仅对称类型（语义对等，展示层合并 + 冲突检测把单向存在报为缺口）标注——
+ * 未标注即有向；自定义类型一律有向。
+ */
+export const RELATION_TYPE_META: Record<
+  RelationType,
+  { label: string; group: RelationTypeGroup; symmetric?: true }
+> = {
+  belongs_to: { label: "所属", group: "structure" },
+  owns: { label: "拥有", group: "structure" },
+  masters: { label: "掌握", group: "structure" },
+  ally: { label: "盟友", group: "character", symmetric: true },
+  rival: { label: "对手", group: "character", symmetric: true },
+  mentor: { label: "师徒", group: "character" },
+  family: { label: "家族", group: "character", symmetric: true },
+  kills: { label: "击杀", group: "character" },
+  appears_in: { label: "出现于", group: "anchor" },
+  occurs_at: { label: "发生于", group: "mount" },
+  plot_edge: { label: "剧情连线", group: "canvas" },
+  plants: { label: "埋设", group: "hook" },
+  advances: { label: "推进", group: "hook" },
+  resolves: { label: "回收", group: "hook" },
+  depends_on: { label: "依赖", group: "hook" },
+  involves: { label: "涉及", group: "hook" },
+  occurs_in: { label: "锚定于", group: "anchor" },
+};
+
 /** 剧情连线关系类型（画布连线用 plot_edge，metadata 存连线标签） */
 export const PLOT_EDGE_TYPE = "plot_edge" as const;
 

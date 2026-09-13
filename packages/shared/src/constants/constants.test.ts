@@ -24,6 +24,7 @@ import {
   PROPOSAL_TOOLS,
   QUERY_TOOLS,
   RELATION_TYPES,
+  RELATION_TYPE_META,
   REMOVED_CHARACTER_FIELDS,
   SET_ONLY_FIELDS,
   IMMUTABLE_FIELDS,
@@ -74,6 +75,25 @@ describe("实体 / 关系常量", () => {
   it("分类常量：plot_edge 与伏笔三关系", () => {
     expect(PLOT_EDGE_TYPE).toBe("plot_edge");
     expect(HOOK_RELATION_TYPES).toEqual(["plants", "advances", "resolves"]);
+  });
+
+  it("RELATION_TYPE_META 覆盖全部预定义类型：label 非空、group 合法、对称集合恰为 ally/rival/family", () => {
+    const groups = new Set(["character", "structure", "anchor", "hook", "mount", "canvas"]);
+    expect(Object.keys(RELATION_TYPE_META).sort()).toEqual([...RELATION_TYPES].sort());
+    for (const t of RELATION_TYPES) {
+      expect(RELATION_TYPE_META[t].label.trim().length).toBeGreaterThan(0);
+      expect(groups.has(RELATION_TYPE_META[t].group)).toBe(true);
+    }
+ // 抽样核对实际口径（避免只断言结构）
+    expect(RELATION_TYPE_META.ally.label).toBe("盟友");
+    expect(RELATION_TYPE_META.occurs_at).toEqual({ label: "发生于", group: "mount" });
+    expect(RELATION_TYPE_META.plot_edge).toEqual({ label: "剧情连线", group: "canvas" });
+ // 对称集合 = symmetric 派生（单一来源；tools/client 消费方同此口径）
+    expect(RELATION_TYPES.filter((t) => RELATION_TYPE_META[t].symmetric === true)).toEqual([
+      "ally",
+      "rival",
+      "family",
+    ]);
   });
 });
 

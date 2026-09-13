@@ -1,5 +1,6 @@
 // 实体详情页辅助纯函数与配置（S3.6）
-import type { EntityType } from "@whispering233/ai-editor-shared";
+import { RELATION_TYPE_META } from "@whispering233/ai-editor-shared";
+import type { EntityType, RelationType } from "@whispering233/ai-editor-shared";
 import { HOOK_STATUS_LABEL, HOOK_TIMING_LABEL } from "./entity-list";
 
 /** 字段控件类型：text 单行 / textarea 多行 / number 数字 / tags 标签列表 / select 枚举下拉 /
@@ -92,31 +93,9 @@ export function detailFieldsForType(type: EntityType): DetailFieldConfig[] {
   return [];
 }
 
-/** 关系类型 → 中文（17 种预定义；未收录原样显示）
- * 2026-08 I1：补入 occurs_in「锚定于」（新增遗漏——与 occurs_at「发生于」
- * 地点语义区分，避免关联列表两行同文案歧义）；映射表同步 */
-const RELATION_TYPE_LABEL: Record<string, string> = {
-  belongs_to: "所属",
-  owns: "拥有",
-  masters: "掌握",
-  ally: "盟友",
-  rival: "对手",
-  mentor: "师徒",
-  family: "家族",
-  kills: "击杀",
-  appears_in: "出现于",
-  occurs_in: "锚定于",
-  occurs_at: "发生于",
-  plot_edge: "剧情连线",
-  plants: "埋设",
-  advances: "推进",
-  resolves: "回收",
-  depends_on: "依赖",
-  involves: "涉及",
-};
-
+/** 关系类型 → 中文（预定义取 shared `RELATION_TYPE_META`；自定义/未知类型原样显示） */
 export function relationTypeLabel(t: string): string {
-  return RELATION_TYPE_LABEL[t] ?? t;
+  return RELATION_TYPE_META[t as RelationType]?.label ?? t;
 }
 
 /** 设定层级边：从紧邻 relations 中提取 belongs_to 且两端均为 setting 的行 */
