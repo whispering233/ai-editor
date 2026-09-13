@@ -319,9 +319,8 @@ export function RelationsView({
                     <span className="w-1/4 min-w-0 shrink-0">
                       <EndpointLink type={r.sourceType} id={r.sourceId} name={r.sourceName} />
                     </span>
-                    {/* 关系类型列：等宽 1/4 + 居中（居中由父容器 flex 承担——Tag 自身带 text-align: start，
-                        Tailwind 的 text-center 压不动它，只能用 `!` 或内联 style，两者都被样式纪律禁止） */}
-                    <div className="flex w-1/4 min-w-0 shrink-0 justify-center">
+                    {/* 关系类型列：等宽 1/4 + 左对齐（与源/目标列、表头同列同对齐——居中会让 chip 相对表头位移） */}
+                    <div className="w-1/4 min-w-0 shrink-0">
                       <TagChip
                         className="max-w-full truncate"
                         label={relationTypeLabel(r.relationType)}
