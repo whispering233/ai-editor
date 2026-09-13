@@ -197,13 +197,15 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
   }, [config?.id]);
 
   // 概览态：大纲树未加载则补拉（outlineLoading 由 store 管理；attempted 防重复）
+  // mode 必须在依赖里：`#/` → `#/overview` 是同实例改 prop（useEnterLastBook 自动进书），
+  // 漏了它本 effect 就不再跑，概览进度节点只剩原始 id、大纲概览永远骨架
   useEffect(() => {
     if (mode !== "overview" || config === null) return;
     if (outline === null && !outlineLoading && !outlineAttempted) {
       setOutlineAttempted(true);
       void loadOutline();
     }
-  }, [config, outline, outlineLoading, outlineAttempted, loadOutline]);
+  }, [mode, config, outline, outlineLoading, outlineAttempted, loadOutline]);
 
   // 概览态：创作要素四类型并行统计（limit=1 仅取 total，「各取 total」）；
   // entitiesTick 变化 = 区块内重试；任一失败记录 entitiesError，成功类型照常展示
@@ -233,7 +235,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     return () => {
       cancelled = true;
     };
-  }, [config, entitiesTick]);
+  }, [mode, config, entitiesTick]);
 
   // 概览态：会话列表补拉（chat store 订阅项目切换已自动加载；此处兜底「未尝试过」的场景）
   useEffect(() => {

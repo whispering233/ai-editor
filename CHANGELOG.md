@@ -29,6 +29,10 @@
 
 - **人物关系星形图（`relation-star-graph` 组件 + `lib/relation-star` 几何/判据模块及其单测）整体删除**：关系网 tab 只保留按 `relationType` 分组的关系列表；`CharacterRelationsView` 的 `selfName` prop 随之移除。
 
+### Fixed
+
+- **概览页「阅读进度」长期停在原始 entity id**（连带「大纲概览」永远骨架、「创作要素」永远 `–`）：`Dashboard` 的两个概览态 effect（大纲补拉 / 要素统计）依赖数组**漏了 `mode`**，而 `#/` → `#/overview`（`useEnterLastBook` 自动进书）是**同实例改 prop、不重挂载** ⇒ 依赖值全没变，effect 不再执行，`loadOutline()` 永不调用；进度节点只剩 `findOutlineNodeTitle` 回退的 id 原文，要等用户点「刷新数据」或进大纲/人物/时间轴等别处加载 outline 才恢复可读标题。修法：两处依赖补 `mode`（`:206` / `:236`；会话 effect `:246` 本就带 `mode`，故只有这两个区块卡住）。
+
 ### Docs
 
 - `docs/ui/DESIGN.md`：§Colors 重写「标签色」（tint 三色 + 色相分布事实 + 深色叠色策略与实测对比度 + `type-badge-border` 两态同值 + `Character Role` 两态值）；§Components 把 `tag` / `type-badge` 拆成两个规格并登记**准入规则**（tint 只给 `data.tags`），`type-badge` 定稿为**描边式**并记录「彩色边框压在灰底上要 ≥3:1、浅色系只能做面积不能做线、边框色与 error 同色相的已知代价」；`status-badge` 去掉「或 tint 底色」授权（状态属枚举）；`character-rail` 行描述同步；Do's 增「不给枚举类型上彩色」。
