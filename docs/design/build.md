@@ -30,7 +30,7 @@ node packages/server/dist/index.js [projectRoot]   # 或安装态 npx ai-editor 
 ```
 
 - `projectRoot` = 创作根（缺省 process.cwd()）。
-- `detectProject`：根自身有 `project.json` → 打开（旧单项目部署兼容）；**无 → 读 `<创作根>/.ai-editor/config.json` 的 `lastProject`**（上次 open 成功的目录绝对路径）→ 该目录仍含 `project.json` 则直接打开（「开机回到上次那本书」）；路径已被删除/移动、`project.json` 损坏不可读 → **静默回待命**（书架页）。两者皆空 → 待命（不初始化、不建任何文件，前端引导 create/open）。
+- `detectProject`：根自身有 `project.json` → 打开（旧单项目部署兼容）；**无 → 读 `<创作根>/.ai-editor/config.json` 的 `lastProject`**（上次 open 成功的目录绝对路径）→ 该目录仍含 `project.json` 则直接打开（「开机回到上次那本书」）；路径已被删除/移动、`project.json` 损坏不可读 → **静默回待命**（书架页）。**打开/迁移失败（含未来版本库、data.db 损坏）→ 记日志 + 回待命**（与「宁回书架也不让坏数据把服务起不起来」语义一致；未来版本另有明确文案）——**绝不静默重建/删库**。开始/显式 open 均走**同一条开放管道**（迁移前快照、无路径删库重建、未来版本拒绝三态一致）。两者皆空 → 待命（不初始化、不建任何文件，前端引导 create/open）。
 - 书架模式：创建书 = `创作根/books/<书名>/` 子目录（三数据文件）；`GET /api/v1/project/list` 扫描列书（待命态可用）。
 - 端口：默认 **3456**，占用时生产态自动 +1 递增（上限 20 次，3456→3475）并打开实际端口；可用环境变量 `AI_EDITOR_PORT` 覆盖（仅 bin 直接执行入口读取，测试/多实例场景用）。
 - **绑定与访问**：默认绑定 `127.0.0.1`（不对外网开放）；提示 URL / 打开浏览器一律用 `127.0.0.1` 而非 `localhost`（IPv6 优先系统上 localhost 可能解析为 `::1` 导致连接被拒）。

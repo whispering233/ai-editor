@@ -56,7 +56,7 @@ CREATE TABLE entities (
 
 | type | data 关键字段 |
 |------|-------------|
-| `character` | **不可变**：`role`, `description`（**必填**——人物概述：这个人物是谁；**校验落地 = 卡 3.3 前端表单 + AI 工具约定，服务端不硬校验**，见下）,；**可变**：`alias`（假名/化名——**单值**：当前位置时这个人的化名是什么；Delta `set`/`update` 标量而非数组）, `gender`, `age`, `race`, `motivation`, `personality[]`, `ability_panel`（能力面板树）；`custom_fields`。（**2026-09 修订**：`status` 彻底移除——详情表单/列表/AI 摘要三处早已无展示，旧残留由 `.passthrough()` 容错；`abilities[]` 经 007 迁移为 `ability_panel`，见下方「人物 data 分层」） |
+| `character` | **不可变**：`role`（角色定位——**新建弹窗必填；详情页允许为空**，两者口径有意不同）, `description`（**必填**——人物概述：这个人物是谁；**校验落地 = 卡 3.3 前端表单 + AI 工具约定，服务端不硬校验**）；**可变**：`alias`（假名/化名——**单值**：当前位置时这个人的化名是什么；Delta `set`/`update` 标量而非数组）, `gender`, `age`, `race`, `motivation`, `personality[]`, `ability_panel`（能力面板树）；`custom_fields`。（**2026-09 修订**：`status` 彻底移除——详情表单/列表/AI 摘要三处早已无展示，旧残留由 `.passthrough()` 容错；`abilities[]` 经 007 迁移为 `ability_panel`，见下方「人物 data 分层」） |
 | `setting` | `description`, `tags[]`（**分类标签，统一字段**）, `rules[]`（**规则条款，仅详情页编辑**）, `custom_fields` —— **`parent_id` 与 `category` 均已废弃**：层级由 belongs_to 关系表达、分类由 tags 承接；旧字段残留由 `.passthrough()` 容错；旧 rules 分类值经 004 迁移（SCHEMA_VERSION 4）复制到 tags |
 | `location` | `type`, `parent_id`, `description`, `custom_fields` |
 | `hook` | 伏笔（关系生命周期见下方 `plants`/`advances`/`resolves` 等）；data 字段集见 shared `hookDataSchema`（status/category/expected_payoff/payoff_timing/half_life/is_core/notes），服务端按 schema 校验 |

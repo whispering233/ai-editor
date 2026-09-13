@@ -6,39 +6,13 @@
 
 ---
 
-## 批次 2 补 · 启动路径修复（待开工）
+## 批次 2 补 · 数据安全修复（待开工）
 
-- [ ] **2.8 开机自动打开的书必须走版本检测/迁移（卡 3.2 发现，既存缺口）**
-  - 现状：`detectProject`（`packages/server/src/middleware/project.ts:95` 附近）直接 `openDatabase`，而 `ensureSchemaCompatible` 只在 `POST /project/open`（`routes/project.ts`）跑 → **开机直达上次打开的书时跳过迁移**。实测：test-project 启动后 `user_version` 仍为 6、`abilities` 未迁；显式 open 后才 6→7。
-  - 危害：任何 **DDL 迁移**在开机路径会被跳过（读不存在的列 → 运行时错误）；卡 2.3 的「旧库 open 自动迁移」验收只在显式 open 路径成立。
-  - 修法：把开机路径的 db 打开收敛到与 `POST /project/open` 同一条管道（复用同一个 open/migrate 函数），**不要**在 `detectProject` 里另起一套；补测试（开机路径跑迁移 + 版本不匹配时的三态分流）。
-  - 验收：开机直达的书与显式 open 的书的 `user_version`/迁移产物一致；`PROJECT_VERSION_NEWER` 拒绝路径在开机态同样生效（不得静默重建）。
-
-## 批次 3 · 人物页 UI（进行中）
-
-- [ ] 3.1 master-detail 宿主 + 左栏列表（搜索 / 排序 / 选中 / 空态 / 自动选首个 / 窄屏两级）
-- [ ] 3.2 双视图 tab（初始化数据 / 当前位置数据；tab 2 只读；`ComputePreview` 归并入 tab 2，保留手动选节点；`conflicts` 标注照搬）
-- [ ] 3.3 字段三分渲染（不可变 / 可变分区；`description` 必填校验；详情页表单）
-  - 分区标题：**「基础信息」（不可变：姓名 / 角色定位 / 描述）/「可变数据」（可变：假名 / 性别 / 年龄 / 种族 / 动机 / 性格 + 能力面板宿主）**——各自 `card` 容器 + `section-title`；关系网 / 其他关联在 tab **之下**（不在 tab 内），由 3.6 重构。
-  - **`description` 必填校验**（仅前端：保存时非空 + 内联错误；服务端不硬校验——见 `docs/db/schema.md`）；tab 2 只读态同样呈现两个分区。
-  - **卡 3.2 oracle 追加两条**：① `current_position` 指向已软删/不存在节点（`resolveCurrentAtNode` 返回空）→ **回落 tab 1** 或给「当前位置已失效，请重设」提示；② `config` 尚未加载时不得瞬时误判为「未设置当前位置」（到位后再判）。
-- [ ] **3.3 修复轮（oracle 发现的三条 UI 打磨）**
-  - 「描述」为空的历史角色在补齐前**保存不了任何修改**（硬必填的必然结果）→ 基础信息区给「描述」旁一行 caption（如「描述为空，保存前需填写」），避免用户以为保存坏了。
-  - tab 2 在 `outlineLoaded=false` 且位置有效时短暂展示初始值而无位置提示 → 并入既有「大纲加载中…」文案。
-  - `readOnlyFieldValue` 对对象值输出 `[object Object]`（`custom_fields` 嵌套值会在 tab 2 可读列表出现）→ 改 JSON 序列化或统一显示 `—`。
-  - 验收：三条各有 SSR/单测断言 + 一次像素核验（截图）。
-
-- [ ] **3.4 修复轮（oracle 三条交互缺陷 + 一条改法）**
-  - ① **误报 toast**：`panel-tree.tsx` 拖拽处理先取 `movePanelNode(...)` 结果，`null`（防环/非法）→ **直接 return 且不弹任何 toast**；只有真正 commit 成功后才提示「原字段值已清除」。
-  - ② **非法落点不得有反馈**：拖到**自身子树**行时不得显示 `before/on/after` 高亮与插入线（`DESIGN.md` 口径：非法落点无反馈即「不可放」）——hover 时判断目标是否在 `from` 子树内，非法则不设 `dropTarget`。
-  - ③ **「带值叶子」策略统一**：现「新增子级」拒绝（提示先清值）而「拖成子级」允许并丢值 → **统一为拒绝 + 提示**（不丢用户数据，最保守）。
-  - ④ 若 `buildDeltaChange` 的 numeric 路径能安全复用 `coerceAbilityValue`（非数字不报错），则把面板叶子两条写入路径的**类型判定对齐**；不能则保持 `docs/db/schema.md` 的已知边界登记（在报告说明）。
-  - 测试：三条各补单测/SSR 断言；既有 client 测试全绿（728 基线）。
-
-- [ ] 3.4 `panel-tree` 控件（结构编辑 + 叶子值 + 拖拽 + 只读态 + 模板/复制入口）
-  - **含**：把面板**叶子路径**接入「+ 新建变更」字段下拉（`lib/delta-create.ts` 现以 `NON_DELTA_FIELDS` 排除整树，需按当前实体的面板结构动态展开叶子路径，用 shared `abilityPanelFieldPath` 拼前缀）；结构编辑需内联提示「名字含 `.` 不可寻址 / 同层重名」（口径见 `docs/db/schema.md`）。
-- [ ] 3.5 新建人物弹窗（必填 姓名 / 角色定位 / 描述；重名软提示；面板「空白 / 内置模板 / 从角色复制」；提交后自动选中）
-- [ ] 3.6 关系网 + 其他关联分区（分组 + 对称去重 + 建边入口收窄 + 折叠区）
+- [ ] **2.9 无 `data.db` 的书不得被「删库重建 + 重置 outline.json」（卡 2.8 oracle 发现，既存语义）**
+  - 现象：书目录有 `project.json` + `outline.json` 但**缺 `data.db`** 时，新建的空库 `user_version=0` 且 `MIGRATIONS` 无 `0→1` 条目 → 走「无迁移路径 → 删库重建兜底」，**同步把 `outline.json` 重置为空树**（原件进 `.bak`）。实测开机直达也会触发（此前需用户显式 open，故暴露面变小但未被注意）。
+  - 危害：用户视角"开机后大纲空了"（数据虽在 `.bak`，但属**不必要的数据损失面**）。
+  - 修法（择一，报告说明）：`ensureSchemaCompatible` 对**全新建的空库**（`user_version===0` 且无用户表数据）直接 `setUserVersion(SCHEMA_VERSION)` 而非重建；或在文档明确登记该语义与恢复方式。
+  - 验收：缺 `data.db` 的书被打开后 **`outline.json` 原样保留**、`data.db` 以当前版本新建；真正的 v0 旧库（表结构不符）仍走既有重建兜底；补测试。
 
 ## 批次 4 · 收尾（未开工）
 
