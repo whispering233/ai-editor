@@ -20,7 +20,8 @@
 - [ ] client `lib/relation-types.ts`：对话框排除集（现排 `occurs_at`）改 = `group === "mount"` 派生；伏笔仅章过滤保持
 - [ ] tools `analysis/conflict.ts`：对称类型改注册表派生 ⇒ **rival 纳入**（行为变化：单向 rival 从此报矛盾）
 - [ ] 测试：shared 注册表完整性（`RELATION_TYPES` 每项都有属性 + label 非空）；`entity-detail.test.ts` 改注册表驱动（不再手抄 17 项中文）；conflict 测试补「单向 rival → 报矛盾」
-- [ ] 文档：`docs/db/schema.md` 对称说明 + `CHANGELOG.md` 工具行为变化条目
+- [ ] 文档：`docs/db/schema.md` 对称说明已在父提交落地；**行为变化写进 commit message**（`CHANGELOG.md` 发布时统一写）
+- [ ] 禁止：改 `CHANGELOG.md` / `docs/design/tasks.md` / `docs/ui/DESIGN.md`
 - [ ] 验证 oracle：`pnpm typecheck` / `pnpm -r test`；确认仓库内已无第二处手写关系类型中文清单
 
 ### 卡 8.2 自定义关系类型（轻：自由输入 + 已用类型派生；依赖 8.1）
@@ -28,8 +29,8 @@
 - [ ] shared `utils/relation-type.ts`（新）：语法校验 + 归一纯函数（`trim` 后非空 / ≤ 32 / 禁控制字符），**不引 zod 依赖**
 - [ ] shared `types/api.ts`：`relationCreateReqSchema.relation_type` 由 `z.enum(RELATION_TYPES)` 改 `z.string()` + 语法校验（复用上条）；tools 工具 schema 仍 enum（**不动**）
 - [ ] db `queries/relation.ts` 守卫：`RELATION_TYPES.includes` → 语法函数（同一来源）
-- [ ] client `components/entity/create-relation-dialog.tsx`：关系类型控件改 `select-free-input`（antd `AutoComplete`，**显式传 `filterOption`**、`onChange` 的 `undefined` 兜底为 `""`）；选项 = 调用方子集 ∪「本项目已用类型（带条数）」；无匹配给「将新建『X』」提示
-- [ ] client 已用类型派生 helper（`GET /relation?depth=1` distinct + 计数）——对话框打开时拉一次；`relations-view.tsx` 过滤下拉复用同一 helper
+- [ ] client `components/entity/create-relation-dialog.tsx`：关系类型控件改 `select-free-input`（antd `AutoComplete`，**显式传 `filterOption`**、`onChange` 的 `undefined` 兜底为 `""`）；选项 = 调用方传入的预定义子集 ∪「本项目已用的**自定义**类型（不在预定义表里的，带条数）」——**不把子集之外的预定义类型带回来**（保持入口收窄）；无匹配给「将新建『X』」提示
+- [ ] client 已用自定义类型派生 helper 放 `lib/relation-types.ts`（与 `dialogRelationTypeOptions` 同处）：输入 = 关系行列表，输出 = 不在 `RELATION_TYPES` 里的类型 + 条数（稳定序）；数据源 = 对话框打开时拉一次的 `GET /relation?depth=1`；`relations-view.tsx` 过滤下拉复用同一 helper（它本就拉了全量，零额外请求）
 - [ ] client 提交前预校验（复用 shared 函数）：非法值内联报错且不发请求
 - [ ] 测试：语法函数边界（空/空白/33 字/控制字符/中文/合法）；派生 helper（distinct + 计数 + 稳定序）
 - [ ] 验证 oracle：浏览器建一条自定义类型（如「宿敌」）→ 下拉出现「宿敌 · 1」、列表与过滤可见；AI 提案通道仍拒自定义类型；全量回归
