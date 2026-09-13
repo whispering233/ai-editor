@@ -37,6 +37,9 @@ export const RELATION_STAR_ARC_PER_LEAF = 56;
 /** 标签与叶子点的间距 */
 export const RELATION_STAR_LABEL_GAP = 8;
 
+/** 标签字符预估宽度（12px 字号；中文/全角近似 1:1）——只用于判断横向余量是否够放，不参与排版度量 */
+export const RELATION_STAR_LABEL_CHAR_WIDTH = 12;
+
 /** 箭头端内缩量（箭尖不压在端点圆上） */
 export const RELATION_STAR_ARROW_GAP = 8;
 
@@ -112,13 +115,37 @@ export function relationStarRadius(
   );
 }
 
-/** 标签锚点：左右两侧（|cos| ≥ 0.5）贴圆点外侧、竖排居中；上/下半区在圆点正上/正下居中 */
-function starLabel(point: RelationStarPoint, cos: number, sin: number): RelationStarLeaf["label"] {
+/**
+ * 标签锚点：左右两侧（|cos| ≥ 0.5）默认贴圆点外侧、竖排居中；上/下半区在圆点正上/正下居中。
+ * **横向余量不足时翻向内**（叶子多 + 长名字时，outside 锚点会被 SVG 视口裁掉字尾；
+ * 半径公式只管纵向，横向余量 = 画布宽度 − 极值叶位置）。
+ */
+function starLabel(
+  point: RelationStarPoint,
+  cos: number,
+  sin: number,
+  options: { width: number; labelChars: number },
+): RelationStarLeaf["label"] {
+  const textWidth = options.labelChars * RELATION_STAR_LABEL_CHAR_WIDTH;
   if (cos >= 0.5) {
-    return { point: { x: point.x + RELATION_STAR_LABEL_GAP, y: point.y + 4 }, anchor: "start" };
+    const inside = point.x + RELATION_STAR_LABEL_GAP + textWidth <= options.width;
+    return {
+      point: {
+        x: inside ? point.x + RELATION_STAR_LABEL_GAP : point.x - RELATION_STAR_LABEL_GAP,
+        y: point.y + 4,
+      },
+      anchor: inside ? "start" : "end",
+    };
   }
   if (cos <= -0.5) {
-    return { point: { x: point.x - RELATION_STAR_LABEL_GAP, y: point.y + 4 }, anchor: "end" };
+    const inside = point.x - RELATION_STAR_LABEL_GAP - textWidth >= 0;
+    return {
+      point: {
+        x: inside ? point.x - RELATION_STAR_LABEL_GAP : point.x + RELATION_STAR_LABEL_GAP,
+        y: point.y + 4,
+      },
+      anchor: inside ? "end" : "start",
+    };
   }
   return { point: { x: point.x, y: point.y + (sin > 0 ? 16 : -8) }, anchor: "middle" };
 }
@@ -187,12 +214,13 @@ export function buildRelationStarLayout(
         y: center.y + sin * RELATION_STAR_ARROW_GAP,
       };
       const arrow = direction === "both" ? null : direction;
+      const labelText = relationStarLeafLabel(leaf.other.name, leaf.rows.length);
       return {
         key: `star:${leaf.other.id}`,
         other: leaf.other,
         direction,
         count: leaf.rows.length,
-        labelText: relationStarLeafLabel(leaf.other.name, leaf.rows.length),
+        labelText,
         arrow,
         point,
         // in：对方 → 我，端点顺序反过来（箭头端 = 中心侧）；both/无箭头：整条中心 → 叶子点
@@ -200,7 +228,10 @@ export function buildRelationStarLayout(
           arrow === "in"
             ? { from: point, to: inner }
             : { from: center, to: arrow === "out" ? arrowEnd : point },
-        label: starLabel(point, cos, sin),
+        label: starLabel(point, cos, sin, {
+          width,
+          labelChars: Array.from(labelText).length,
+        }),
       };
     }),
   };

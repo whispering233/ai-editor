@@ -7,6 +7,7 @@ import type { CharacterRelationRow } from "./character-relations";
 import {
   buildRelationStarLayout,
   RELATION_STAR_HEIGHT,
+  RELATION_STAR_LABEL_CHAR_WIDTH,
   RELATION_STAR_LABEL_MAX_CHARS,
   RELATION_STAR_LABEL_MAX_LEAVES,
   RELATION_STAR_MAX_HEIGHT,
@@ -83,7 +84,7 @@ describe("判据 1：去重后叶子数 < 4 不渲染", () => {
 });
 
 describe("按对方人物去重（同一人多类型合并一叶）", () => {
-  it("3 条到 char-2（含双向）+ 1 条到 char-3 → 2 叶，方向合并为 both，条数 = 3", () => {
+  it("3 条到 char-2（含双向）+ 3 人各 1 条 → 4 叶，方向合并为 both，条数 = 3", () => {
     const input = [
       row(2, { relationType: "ally" }),
       row(2, { relationType: "rival", direction: "in" }),
@@ -197,6 +198,33 @@ describe("极坐标：角度均匀 + 半径自适应", () => {
     expect(top.label.point.y).toBeLessThan(top.point.y);
     expect(bottom.label.anchor).toBe("middle");
     expect(bottom.label.point.y).toBeGreaterThan(bottom.point.y);
+  });
+
+  it("横向余量不足时标签翻向内（叶子多 + 长名字不被视口裁切）", () => {
+    const longNames = Array.from({ length: 16 }, (_, index) =>
+      row(index + 1, { other: { type: "character", id: `char-${index + 1}`, name: "一二三四五六七八" } }),
+    );
+    const layout = buildRelationStarLayout(longNames, SIZE);
+    if (layout === null) throw new Error("16 人应当出图");
+    // 16 叶时 index 4 = 正右侧、index 12 = 正左侧（极值）
+    const right = layout.leaves[4];
+    const left = layout.leaves[12];
+    expect(right.label.anchor).toBe("end");
+    expect(right.label.point.x).toBeLessThan(right.point.x);
+    expect(left.label.anchor).toBe("start");
+    expect(left.label.point.x).toBeGreaterThan(left.point.x);
+    // 每个标签都在画布横向范围内（不足则翻向内侧，不靠视口裁切）
+    for (const leaf of layout.leaves) {
+      const textWidth = Array.from(leaf.labelText).length * RELATION_STAR_LABEL_CHAR_WIDTH;
+      const [from, to] =
+        leaf.label.anchor === "start"
+          ? [leaf.label.point.x, leaf.label.point.x + textWidth]
+          : leaf.label.anchor === "end"
+            ? [leaf.label.point.x - textWidth, leaf.label.point.x]
+            : [leaf.label.point.x - textWidth / 2, leaf.label.point.x + textWidth / 2];
+      expect(from).toBeGreaterThanOrEqual(0);
+      expect(to).toBeLessThanOrEqual(layout.width);
+    }
   });
 });
 
