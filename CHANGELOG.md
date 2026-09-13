@@ -5,7 +5,7 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [v0.0.34] - 2026-09-13
 
 > **章级锚点收窄 + 人物页工作台**：大纲/变更记录/伏笔三类锚点一律收到「章」；`computeState` 改章序前缀累积；character 数据重构（新增 `description`/`alias`/`race`，移除 `status`，标签式 `abilities` 升级为**能力面板树**，`SCHEMA_VERSION 6 → 7`）；人物页改为 master-detail 工作台（左栏列表 + 双视图 tab + 关系网/其他关联 + `panel-tree`）。**API 破坏性变更见 Breaking**。
 
