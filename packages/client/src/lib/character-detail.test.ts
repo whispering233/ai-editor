@@ -26,11 +26,11 @@ import {
 } from "./character-detail";
 
 describe("resolveDefaultTab", () => {
-  it("设置了当前位置 → 「当前位置数据」", () => {
+  it("设置了阅读进度 → 「阅读进度」(current)", () => {
     expect(resolveDefaultTab("ch-1")).toBe("current");
   });
 
-  it("未设置（null/undefined/空串/纯空白）→ 「初始化数据」", () => {
+  it("未设置（null/undefined/空串/纯空白）→ 「人物档案」(initial)", () => {
     expect(resolveDefaultTab(null)).toBe("initial");
     expect(resolveDefaultTab(undefined)).toBe("initial");
     expect(resolveDefaultTab("")).toBe("initial");
@@ -153,6 +153,29 @@ describe("resolvePositionState（当前位置四态）", () => {
 });
 
 describe("resolveTabState（默认 tab 与四态同源）", () => {
+  it("默认 tab 值域 ∈ {initial, current}（关系两块是平级 tab，但默认落位只会是字段 tab）", () => {
+    const cases = [
+      { configLoaded: true, currentPosition: "ch-1", outlineLoaded: true, nodeIds: ["ch-1"] },
+      { configLoaded: true, currentPosition: "ch-9", outlineLoaded: true, nodeIds: ["ch-1"] },
+      { configLoaded: false, currentPosition: null, outlineLoaded: false, nodeIds: [] },
+      { configLoaded: true, currentPosition: null, outlineLoaded: true, nodeIds: [] },
+    ];
+    for (const input of cases) {
+      const tab = resolveTabState(input).tab;
+      expect(["initial", "current"]).toContain(tab);
+    }
+  });
+
+  it("已确认未设置（unset）→ 人物档案 tab + unset（不误判为 current）", () => {
+    const s = resolveTabState({
+      configLoaded: true,
+      currentPosition: null,
+      outlineLoaded: true,
+      nodeIds: ["ch-1"],
+    });
+    expect(s).toEqual({ tab: "initial", positionState: "unset" });
+  });
+
   it("有效当前位置 → tab 2", () => {
     const s = resolveTabState({
       configLoaded: true,

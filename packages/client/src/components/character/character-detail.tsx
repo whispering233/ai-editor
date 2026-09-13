@@ -1,5 +1,4 @@
-// 人物详情（卡 3.2）：四 tab（人物档案 / 阅读进度 / 人物关系网 / 其他关联）——替换工作台右栏原来的泛型 `EntityDetail`。
-// 卡 3.3：`description` 必填（**仅前端**）+ `current_position` 失效回落与「配置未加载不误判」三态判据。
+// 人物详情（卡 3.2）：四 tab（人物档案 / 阅读进度 / 人物关系网 / 其他关联）——替换工作台右栏原来的泛型 `EntityDetail`。// 卡 3.3：`description` 必填（**仅前端**）+ `current_position` 失效回落与「配置未加载不误判」三态判据。
 // 卡 6.2：**删「基础信息 / 可变数据」分区**（数据层可变性分层不进 UI）——一个 card 内档案式字段网格
 //   （label 左置、单行字段两列、长文本/标签列表整行）；阅读进度 tab **同一网格、值画纯文本**（非 disabled 输入框）。
 // 契约：`docs/ui/DESIGN.md` §数据展示 `character-workbench`（页头壳保持 + tab 行 + 只读语义 + 档案网格）与 `tabs`
@@ -15,7 +14,8 @@
 //   两 tab 的字段 label 与网格位置逐一致（对比无位移），比一排灰底 disabled 输入框干净。
 // 卡 3.3 修复轮（oracle 三条打磨）：对象值只读渲染不再 `[object Object]`（`readOnlyFieldValue` 走紧凑 JSON + 截断）；
 //   「描述为空」提示（硬必填的前置提示，仅可编辑态）；大纲在途加载时 tab 2 在位置提示位补同一句加载文案。
-// 关系区块：卡 3.6 建（人↔人关系网 + 其他关联）；卡 6.3 改为彼此独立的 tab（见下）。
+// 关系区块：卡 3.6 建（人↔人关系网 + 其他关联）；卡 6.3 改为**彼此独立的 tab**（与两个字段 tab 平级——
+//   关系不参与 `computeState`，但不放在字段 tab 之下、也不共享折叠壳：四个 tab = 四个数据集）。
 // 数据：GET /entity/character/:id（含 relations + deltaCount）、PUT partial（diffData 只提交变更字段 + 姓名）、
 //   DELETE（软删 + 级联计数 → 跳 `#/characters`）、POST /delta/compute（tab 2 自动计算）、POST/DELETE /relation。
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -27,6 +27,7 @@ import type { InputRef } from "antd";
 import { ComputeResult } from "../delta/compute-preview";
 import { PanelTree } from "./panel-tree";
 import { CharacterRelations } from "./character-relations";
+import { partitionCharacterRelations } from "../../lib/character-relations";
 import { EmptyState } from "../ui/empty-state";
 import { PageHeader } from "../ui/page-header";
 import { SectionCard } from "../ui/section-card";
@@ -483,15 +484,15 @@ function CharacterProfile({
 }
 
 /**
- * tab 2「当前位置数据」：只读渲染 `computeState(at_node = current_position)`。
- * - 计算节点默认取 `current_position`（须存在于大纲树）；**保留手动选节点下拉**（「第 N 章时他什么状态」）
+ * 阅读进度 tab：只读渲染 `computeState(at_node = current_position)`。
+ * - 进度节点默认取 `current_position`（须存在于大纲树）；**保留手动选节点下拉**（「第 N 章时他什么状态」）
  * - 结果自动计算（切换节点即重算；`deltaCount === 0` 时轻量空态、不发请求）
  * - conflicts / 状态差异 / 应用的变更记录 = 复用 `ComputeResult`（与 `ComputePreview` 同一实现，标注照搬）
  * - 字段视图的值 = 计算结果（尚未算出 → 初始 `data`），**画纯文本**（同一档案网格）
  *
  * 依赖注入：`currentPosition` / `outlineNodes` 由容器从 project store 传入（本层不读 store）——
  * 既让展示层可在 `react-dom/server` 下直接走查（SSR 读不到 client store 的 setState 播种），
- * 也让「有/无当前位置」两种状态各有一份可断言渲染。
+ * 也让「有/无阅读进度」两种状态各有一份可断言渲染。
  */
 function CharacterCurrentTab({
   detail,
@@ -503,9 +504,9 @@ function CharacterCurrentTab({
   onLoadOutline,
 }: {
   detail: EntityDetailRes;
- /** 项目当前位置（null = 未设置）——tab 2 计算节点默认值来源 */
+ /** 项目阅读进度（null = 未设置）——阅读进度 tab 的进度节点默认值来源 */
   currentPosition: string | null;
- /** 当前位置四态（`pending` 尚未知 / `unset` 未设置 / `invalid` 已失效 / `ok`）——提示文案判据 */
+ /** 阅读进度四态（`pending` 尚未知 / `unset` 未设置 / `invalid` 已失效 / `ok`）——提示文案判据 */
   positionState: CharacterPositionState;
  /** 大纲节点选项（扁平树；深度用于缩进展示） */
   outlineNodes: readonly FlatNodeOption[];
@@ -527,7 +528,7 @@ function CharacterCurrentTab({
   const [computing, setComputing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 当前位置/大纲异步到位后的回填（惰性初始化只跑一次；用户已手动选择时不覆盖）——同 ComputePreview 语义
+  // 阅读进度/大纲异步到位后的回填（惰性初始化只跑一次；用户已手动选择时不覆盖）——同 ComputePreview 语义
   useEffect(() => {
     setAtNodeId((prev) => {
       if (prev !== "") return prev;
@@ -555,7 +556,7 @@ function CharacterCurrentTab({
         if (cancelled) return;
         setResult(null);
         if (err instanceof ApiError && err.code === "OUTLINE_NODE_NOT_FOUND") {
-          setError("该节点已不存在，请重新选择计算节点");
+          setError("该节点已不存在，请重新选择进度节点");
         } else {
           setError(
             err instanceof ApiError ? err.message : "无法连接服务，请确认 ai-editor 服务已启动",
@@ -580,10 +581,10 @@ function CharacterCurrentTab({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* 计算节点（默认当前位置；可手选——「第 N 章时他什么状态」） */}
+      {/* 进度节点（默认阅读进度；可手选——「第 N 章时他什么状态」） */}
       <div className="flex flex-wrap items-end gap-2">
         <div className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">计算节点（到达该节点时的累积状态）</span>
+          <span className="text-xs text-muted-foreground">进度节点（到达该节点时的累积状态）</span>
           {!outlineLoaded ? (
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">
@@ -600,7 +601,7 @@ function CharacterCurrentTab({
               className="min-w-56"
               value={atNodeId}
               onChange={(value) => setAtNodeId(value)}
-              aria-label="计算节点"
+              aria-label="进度节点"
               popupMatchSelectWidth={false}
               options={[
                 { value: "", label: "请选择大纲节点" },
@@ -623,16 +624,16 @@ function CharacterCurrentTab({
 
       {showUnsetHint && (
         <p className="text-xs text-muted-foreground">
-          未设置当前位置，显示初始数据——
+          未设置阅读进度，显示人物档案初始值——
           <a href="#/outline" className="text-primary hover:underline">
-            去大纲设位置
+            去大纲设进度
           </a>
         </p>
       )}
 
       {showInvalidHint && (
         <p className="text-xs text-muted-foreground">
-          当前位置已失效（节点已删除），显示初始数据——
+          阅读进度已失效（节点已删除），显示人物档案初始值——
           <a href="#/outline" className="text-primary hover:underline">
             去大纲重设
           </a>
@@ -640,7 +641,7 @@ function CharacterCurrentTab({
       )}
 
       {detail.deltaCount === 0 && (
-        <p className="text-sm text-muted-foreground">暂无变更记录——当前状态即初始状态</p>
+        <p className="text-sm text-muted-foreground">暂无变更记录——当前状态即人物档案初始值</p>
       )}
 
       {error !== null && (
@@ -693,9 +694,9 @@ export interface CharacterDetailViewProps {
   onDelete: () => void;
   /** 关系变更（建/删）后重拉详情 */
   onReload: () => void;
-  /** 项目当前位置（tab 2 计算节点默认值） */
+  /** 项目阅读进度（阅读进度 tab 的进度节点默认值） */
   currentPosition: string | null;
-  /** 当前位置四态（`pending` 尚未知 / `unset` 未设置 / `invalid` 已失效 / `ok`）——提示文案判据 */
+  /** 阅读进度四态（`pending` 尚未知 / `unset` 未设置 / `invalid` 已失效 / `ok`）——提示文案判据 */
   positionState: CharacterPositionState;
   /** 大纲节点选项（扁平树；容器从 project store 传入） */
   outlineNodes: readonly FlatNodeOption[];
@@ -731,6 +732,16 @@ export function CharacterDetailView({
   outlineLoading,
   onLoadOutline,
 }: CharacterDetailViewProps) {
+  // 「其他关联 · N」标签条数：与关系区容器同一分区函数（纯函数单一来源，不另写一份判据）
+  const otherCount = useMemo(
+    () =>
+      partitionCharacterRelations(detail.relations, {
+        selfId: detail.id,
+        selfName: detail.name,
+      }).other.length,
+    [detail.relations, detail.id, detail.name],
+  );
+
   return (
     <section>
       {/* 页头（统一壳）：标题 + 操作 + 元信息行；有 tab 的页面传 divider={false}
@@ -758,10 +769,10 @@ export function CharacterDetailView({
         }
       />
 
-      {/* 当前位置已失效（已软删/被删）：回落 tab 1 + 提示重设（在 tab 行之上，两个 tab 都可见） */}
+      {/* 阅读进度已失效（已软删/被删）：回落人物档案 tab + 提示重设（在 tab 行之上，四个 tab 都可见） */}
       {positionState === "invalid" && (
         <p className="mb-3 text-xs text-muted-foreground">
-          当前位置已失效（节点已删除）——
+          阅读进度已失效（节点已删除）——
           <a href="#/outline" className="text-primary hover:underline">
             去大纲重设
           </a>
@@ -774,7 +785,7 @@ export function CharacterDetailView({
         items={[
           {
             key: "initial",
-            label: "初始化数据",
+            label: "人物档案",
             children: (
               <div className="flex flex-col gap-4">
                 <CharacterProfile
@@ -792,7 +803,7 @@ export function CharacterDetailView({
           },
           {
             key: "current",
-            label: "当前位置数据",
+            label: "阅读进度",
             children: (
               <CharacterCurrentTab
                 detail={detail}
@@ -805,11 +816,21 @@ export function CharacterDetailView({
               />
             ),
           },
+          {
+            key: "relations",
+            label: "人物关系网",
+            children: (
+              <CharacterRelations detail={detail} onChanged={onReload} pane="network" />
+            ),
+          },
+          {
+            key: "other",
+            // 条数常显于标签 = 「不可藏」（涵盖 appears_in / belongs_to 等 AI 分析数据源）
+            label: `其他关联 · ${otherCount}`,
+            children: <CharacterRelations detail={detail} onChanged={onReload} pane="other" />,
+          },
         ]}
       />
-
-      {/* 关系（tab 之外：关系不参与 computeState，与状态视图正交——见 DESIGN.md `character-workbench`） */}
-      <CharacterRelations detail={detail} onChanged={onReload} />
     </section>
   );
 }
@@ -879,7 +900,7 @@ export function CharacterDetail({ id, onSaved }: { id: string; onSaved?: () => v
   // 数据变更信号（InfoBar 刷新 / AI 提案确认写库）→ 重拉（表单以服务端权威为准整体重置）
   useDataRefresh(() => void loadDetail());
 
-  // tab 2 需要大纲（计算节点选项）：直达人物页时 store 里可能还没拉——**自动兜底拉取**
+  // 阅读进度 tab 需要大纲（进度节点选项）：直达人物页时 store 里可能还没拉——**自动兜底拉取**
   // （同 HookPanel「大纲未加载时兜底拉取」先例：项目打开时通常已加载，此处防直达路由场景）
   useEffect(() => {
     if (config !== null && outline === null && !outlineLoading) void loadOutline();
@@ -997,7 +1018,7 @@ export function CharacterDetail({ id, onSaved }: { id: string; onSaved?: () => v
     );
   }
 
-  /** 当前位置四态 + 默认 tab（单一判据：`config` 未加载 → `pending`，不得瞬时误判为「未设置」；已失效 → 回落 tab 1） */
+  /** 阅读进度四态 + 默认 tab（单一判据：`config` 未加载 → `pending`，不得瞬时误判为「未设置」；已失效 → 回落人物档案 tab） */
   const tabState = resolveTabState({
     configLoaded: config !== null,
     currentPosition: config?.currentPosition ?? null,

@@ -2,15 +2,15 @@
 // 仓内无 jsdom/@testing-library（既有纪律：不引新依赖），用 react-dom/server renderToString 直渲染展示层
 // （`CharacterDetailView`——数据/副作用在容器，SSR 不跑 effect；且 SSR 读的是 store 的 server snapshot，
 // 故阅读进度/大纲一律由 props 注入，不依赖 setState 播种）。
-// 覆盖：页头壳（元信息行无「变更记录」入口）/ tab 行两 tab / 档案字段网格与顺序（**无分区标题**）/
+// 覆盖：页头壳（元信息行无「变更记录」入口）/ tab 行四 tab / 档案字段网格与顺序（**无分区标题**）/
 //       `description` 必填内联错误 / 人物档案 tab 可编辑 / 阅读进度 tab 纯文本值（无输入控件）/
-//       未设置与已失效两种提示 / 关系区（卡 3.6：关系网 + 其他关联折叠区，容器渲染）。
+//       未设置与已失效两种提示 / 关系两个 tab（卡 6.3：人物关系网 + 其他关联 · N，各自独立内容）。
 import { describe, expect, it } from "vitest";
 import { renderToString } from "react-dom/server";
 import { CharacterDetailView } from "./character-detail";
 import type { FlatNodeOption } from "../../lib/outline-tree";
 import type { CharacterBasicsErrors, CharacterPositionState } from "../../lib/character-detail";
-import type { EntityDetailRes } from "../../lib/api";
+import type { EntityDetailRes, RelationSummaryItem } from "../../lib/api";
 
 const DETAIL: EntityDetailRes = {
   id: "char-1",
@@ -107,20 +107,70 @@ describe("CharacterDetailView（页头 + tab 行）", () => {
     expect(html).not.toContain("展开状态预览");
   });
 
-  it("tab 行渲染两个 tab（初始化数据 / 当前位置数据）", () => {
+  it("tab 行渲染四个 tab（人物档案 / 阅读进度 / 人物关系网 / 其他关联 · N）", () => {
     const html = render("initial");
-    expect(html).toContain("初始化数据");
-    expect(html).toContain("当前位置数据");
+    expect(html).toContain("人物档案");
+    expect(html).toContain("阅读进度");
+    expect(html).toContain("人物关系网");
+    expect(html).toContain("其他关联 · 0"); // DETAIL.relations 为空
+  });
+});
+
+/** 关系 tab 断言用：1 条人↔人（ally）+ 1 条其他关联（appears_in） */
+const RELATIONS: RelationSummaryItem[] = [
+  {
+    id: "r1",
+    sourceType: "character",
+    sourceId: "char-1",
+    sourceName: "张三",
+    targetType: "character",
+    targetId: "char-2",
+    targetName: "李四",
+    relationType: "ally",
+    metadata: { label: "自幼相识" },
+    createdAt: "2026-08-01T10:00:00Z",
+  },
+  {
+    id: "r9",
+    sourceType: "character",
+    sourceId: "char-1",
+    sourceName: "张三",
+    targetType: "outline_node",
+    targetId: "n-1",
+    targetName: "第一章",
+    relationType: "appears_in",
+    createdAt: "2026-08-01T10:00:00Z",
+  },
+];
+
+describe("CharacterDetailView（关系两个 tab：人物关系网 / 其他关联 · N）", () => {
+  it("tab 标签常显其他关联条数（= other 分区行数，不可藏）", () => {
+    const html = renderWith({ detail: { ...DETAIL, relations: RELATIONS } });
+    expect(html).toContain("其他关联 · 1");
   });
 
-  it("关系区块（卡 3.6 分区）：关系网空态 + 其他关联折叠标题常显条数", () => {
-    const html = render("initial");
-    expect(html).toContain("人物关系网");
+  it("人物关系网 tab：关系行（对方姓名 + 方向 + 备注）+ 添加入口；不混入其他关联", () => {
+    const html = renderWith({ tab: "relations", detail: { ...DETAIL, relations: RELATIONS } });
     expect(html).toContain("+ 添加人物关系");
-    expect(html).toContain("还没有人物关系，添加一条");
-    // 折叠区默认收起但条数常显（收起但不可藏）
-    expect(html).toContain("其他关联 · 0 条");
+    expect(html).toContain("盟友 · 1");
+    expect(html).toContain("李四");
+    expect(html).toContain("自幼相识");
+    expect(html).not.toContain("第一章");
     expect(html).not.toContain("+ 添加关联");
+  });
+
+  it("其他关联 tab：行（类型 chip + 对方名）+ 添加入口；关系网内容不在本 tab 渲染", () => {
+    const html = renderWith({ tab: "other", detail: { ...DETAIL, relations: RELATIONS } });
+    expect(html).toContain("+ 添加关联");
+    expect(html).toContain("第一章");
+    expect(html).toContain("出现于");
+    expect(html).not.toContain("李四");
+  });
+
+  it("关系 tab 不渲染字段网格（各自一个数据集）", () => {
+    const html = renderWith({ tab: "relations", detail: { ...DETAIL, relations: RELATIONS } });
+    expect(html).not.toContain("md:grid-cols-2");
+    expect(html).not.toContain("角色定位");
   });
 });
 
@@ -276,7 +326,7 @@ describe("CharacterDetailView（阅读进度 tab 只读：纯文本值）", () =
     // 只读画的是文本值（不再是灰底 disabled 输入框）：字段区无禁用控件
     expect(countDisabled(html)).toBe(0);
     // 计算节点选择器保留（可手选任意节点）
-    expect(html).toContain("计算节点");
+    expect(html).toContain("进度节点");
   });
 
   it("只读值 = 文本（字符串原样 / 数组「、」连接 / 空值给 —）", () => {
@@ -301,15 +351,15 @@ describe("CharacterDetailView（阅读进度 tab 只读：纯文本值）", () =
     expect(panel).toContain(">3<"); // 叶子值（文本）
   });
 
-  it("未设置当前位置（已确认）→ 提示 + 「去大纲设位置」入口（#/outline）", () => {
+  it("未设置当前位置（已确认）→ 提示 + 「去大纲设进度」入口（#/outline）", () => {
     const html = render("current", { currentPosition: null, positionState: "unset" });
-    expect(html).toContain("未设置当前位置，显示初始数据");
+    expect(html).toContain("未设置阅读进度，显示人物档案初始值");
     expect(html).toContain("#/outline");
   });
 
   it("已设置当前位置 → 不渲染「未设置」提示", () => {
     const html = render("current", { currentPosition: "ch-1", positionState: "ok" });
-    expect(html).not.toContain("未设置当前位置");
+    expect(html).not.toContain("未设置阅读进度");
   });
 
   it("配置尚未加载（pending）→ 不渲染「未设置」提示（不得瞬时误判）", () => {
@@ -318,13 +368,13 @@ describe("CharacterDetailView（阅读进度 tab 只读：纯文本值）", () =
       positionState: "pending",
       outlineLoaded: false,
     });
-    expect(html).not.toContain("未设置当前位置");
-    expect(html).not.toContain("当前位置已失效");
+    expect(html).not.toContain("未设置阅读进度");
+    expect(html).not.toContain("阅读进度已失效");
   });
 
-  it("无变更记录 → 轻量空态文案（当前状态即初始状态）", () => {
+  it("无变更记录 → 轻量空态文案（当前状态即人物档案初始值）", () => {
     const html = render("current", { currentPosition: "ch-1" });
-    expect(html).toContain("暂无变更记录——当前状态即初始状态");
+    expect(html).toContain("暂无变更记录——当前状态即人物档案初始值");
   });
 
   it("大纲未加载 → 给「加载大纲」入口（不静默失败）", () => {
@@ -344,18 +394,18 @@ describe("CharacterDetailView（阅读进度 tab 只读：纯文本值）", () =
   });
 });
 
-describe("CharacterDetailView（当前位置已失效）", () => {
-  it("失效 → tab 行之上给提示 + 「去大纲重设」入口（两个 tab 都可见）", () => {
+describe("CharacterDetailView（阅读进度已失效）", () => {
+  it("失效 → tab 行之上给提示 + 「去大纲重设」入口（四个 tab 都可见）", () => {
     const html = render("initial", { currentPosition: "ch-9", positionState: "invalid" });
-    expect(html).toContain("当前位置已失效");
+    expect(html).toContain("阅读进度已失效");
     expect(html).toContain("去大纲重设");
     expect(html).toContain("#/outline");
   });
 
-  it("失效态下的 tab 2 也给失效文案（不是「未设置」）", () => {
+  it("失效态下的 阅读进度 tab 也给失效文案（不是「未设置」）", () => {
     const html = render("current", { currentPosition: "ch-9", positionState: "invalid" });
-    expect(html).toContain("当前位置已失效（节点已删除），显示初始数据");
-    expect(html).not.toContain("未设置当前位置");
+    expect(html).toContain("阅读进度已失效（节点已删除），显示人物档案初始值");
+    expect(html).not.toContain("未设置阅读进度");
   });
 });
 
@@ -363,7 +413,7 @@ describe("CharacterDetailView（当前位置已失效）", () => {
 
 /** 修复轮断言用：可覆盖 form / tab 的直渲染（harness `render` 用模块级 FORM 常量） */
 function renderWith(opts: {
-  tab?: "initial" | "current";
+  tab?: "initial" | "current" | "relations" | "other";
   form?: Record<string, unknown>;
   detail?: EntityDetailRes;
   outlineLoaded?: boolean;
@@ -411,13 +461,13 @@ describe("CharacterDetailView（修复轮①：描述为空提示）", () => {
     expect(html).toContain("描述为空，保存前需填写");
   });
 
-  it("tab 2 只读态 → 不给提示（无保存动作，提示无意义）", () => {
+  it("阅读进度 tab 只读态 → 不给提示（无保存动作，提示无意义）", () => {
     const html = renderWith({ tab: "current", form: { ...FORM, description: "" } });
     expect(html).not.toContain("描述为空，保存前需填写");
   });
 });
 
-describe("CharacterDetailView（修复轮②：大纲在途加载时 tab 2 的位置提示）", () => {
+describe("CharacterDetailView（修复轮②：大纲在途加载时 阅读进度 tab 的位置提示）", () => {
   it("位置有效 + 大纲在途加载 → 位置提示位复用同一句加载文案（不只是选择器里那句）", () => {
     const html = renderWith({ tab: "current", outlineLoaded: false, outlineLoading: true });
     const afterCaption = html.slice(html.indexOf("由变更记录累积，只读"));
@@ -454,7 +504,7 @@ describe("CharacterDetailView（修复轮②：大纲在途加载时 tab 2 的�
         onLoadOutline={() => {}}
       />,
     );
-    expect(html).toContain("未设置当前位置，显示初始数据");
+    expect(html).toContain("未设置阅读进度，显示人物档案初始值");
   });
 });
 

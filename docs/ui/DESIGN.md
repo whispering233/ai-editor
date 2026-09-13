@@ -496,18 +496,18 @@ components:
 **`character-workbench`（人物工作台，2026-09）** — 人物页（`#/characters` / `#/characters/:id`）是中栏内的 **master-detail**（无导航级变动，路由已是一级段）：
 
 - **左栏**（固定 240px，右侧 1px `{colors.hairline}`）= 人物列表，**它就是列表本身**（不再有独立人物列表页）：行 = 姓名（`{colors.primary}`）+ 角色定位（`{typography.caption}` + `{colors.tertiary}`）、32px 行高、`{rounded.sm}`、选中 = `{colors.surface-muted}` 灰面 + 文字不变色（**完全复用 `menu-item` / `menu-item-selected` 语言**）；**行头两行**（240px 内物理上塞不下 192px 搜索框 + 下拉 + 按钮）：第一行 `search-input`（192px，独占一行）、第二行排序 `select`（内容宽 + `popupMatchSelectWidth={false}`）+ 主操作（「+ 新建」`button-primary`，卡 3.5 接入）。排序默认 `updated_at` 降序（后端列表默认），可切 `name` / `created_at`。
-- **右栏** = 详情，内容区自上而下：**页头**（`page-header` 壳不变）→ **四 tab**（「人物档案」/「阅读进度」/「人物关系网」/「其他关联」，走 `tabs` 契约）→ 各 tab 内容。**tab 文案 = 用户语言，不出数据分层词**：数据层的不可变性分层只服务变更记录白名单与 AI 提案边界，UI 不再分「基础信息 / 可变数据」两块（见 `10-data-model.md` §14）。
+- **右栏** = 详情，内容区自上而下：**页头**（`page-header` 壳不变）→ **四 tab**（「人物档案」/「阅读进度」/「人物关系网」/「其他关联 · N」，走 `tabs` 契约）→ 各 tab 内容。**tab 文案 = 用户语言，不出数据分层词**：数据层的不可变性分层只服务变更记录白名单与 AI 提案边界，UI 不再分「基础信息 / 可变数据」两块（见 `10-data-model.md` §14）。
 - **`人物档案` tab** = 一张 `card` 内的**档案式字段网格**（无区标题、不分块）：**单行字段**（姓名 / 角色定位 / 假名 / 性别 / 年龄 / 种族）走「label 左置（固定宽 64px、`{colors.secondary}`）+ 值」的两列网格（≥`md` 两列，行距 12px / 列距 16px），**长文本与列表字段**（描述 / 性格 / 动机）整行占满；网格之下依次是 `panel-tree`（自带标题行 + 1px hairline 上边线）与「自定义字段」（仅响应 `data` 已有该键时渲染）。
-- **层级语义**：四个 tab 平级，各自承载一个数据集——初始值字段（`人物档案`）、按阅读进度累积的值（`阅读进度`）、人↔人关系、其他关联。**关系不参与 `computeState`**，与两个字段 tab 正交：拆成平级 tab 是因为它们本就是不同的数据集，而不是「关系会随进度变」。**`其他关联` tab 标签常显条数**（`其他关联 · N`）——它涵盖 `appears_in` / `belongs_to` 等 AI 分析数据源，条数可见即「不可藏」。
+- **层级语义**：四个 tab 平级，各自承载一个数据集——初始值字段（`人物档案`）、按阅读进度累积的值（`阅读进度`）、人↔人关系（`人物关系网`）、其他关联（`其他关联 · N`）。**关系不参与 `computeState`**，与两个字段 tab 正交：拆成平级 tab 是因为它们本就是不同的数据集，而不是「关系会随进度变」。**`其他关联` tab 标签常显条数**——它涵盖 `appears_in` / `belongs_to` 等 AI 分析数据源，条数可见即「不可藏」。
 - **只读语义**：`阅读进度` tab 的字段值 = `computeState(at_node = current_position)` 的累积结果，**画纯文本值列**（空值 `—`、`{colors.quaternary}`），label 与网格位与 `人物档案` 逐一致（对比无位移）；`panel-tree` 在同 tab 走只读形态，tab 首行给 `caption-text`「由变更记录累积，只读」。**编辑只发生在 `人物档案` 视图**——要改当前状态就必须建变更记录（`10-data-model.md` §14 不变式 3）。
 - **默认 tab**：有有效阅读进度 → `阅读进度`；未设置 / 已失效 → `人物档案`（失效时在 tab 行上方给提示 + 「去大纲重设」入口）；四个 tab 的选中态是页面 state、**不进 URL**（刷新回落默认 tab）。
 - **窄屏（<1024px）**：退化为两级——左栏列表全宽 → 点进详情全宽（详情页头左侧给返回入口）；与「本设计语言不对移动端另立规则」一致。
 - **全高双滚动布局（实现约定）**：工作台自带「左栏/右栏各自纵向滚动」的全高布局，**需抵消中栏内容区的 `p-6`（24px）内边距**（实现为 `-m-6 h-[calc(100%+3rem)]`）——改中栏内边距时必须同步此处（否则错位）。
 - **空列表**：右栏 `empty-state` + 主操作「新建第一个角色」；`#/characters` 无 id 时自动选中第一个角色（有角色则重定向到 `#/characters/<id>`），避免"左栏有内容、右栏悬空"。**自动选首个只在桌面态生效**（窄屏两级下会自动弹回详情、使「返回列表」失效）；窄屏两级：列表全宽 ↔ 详情全宽 + 返回入口。
 
-**`character-relations`（人物关系网）** — 行语言 = `data-row`（底部 1px `{colors.hairline-soft}`、hover `{colors.surface-soft}`）：按 `relationType` **分组**（组头 = `section-title` 字号档中的 caption 行 + 条数，**条数 = 去重后行数**），行 = 对方姓名（可点击切选中该角色）+ 方向箭头（`→` / `←`，双向边标「双向」徽标）+ `metadata` 备注副行（`caption-text`）+ `icon-button` 删除；区头右侧 `button-default`「+ 添加人物关系」（**关系类型下拉 = 人↔人 5 类**（`ally`/`rival`/`mentor`/`family`/`kills`），**目标端类型锁定 `character`**（只读卡片，无下拉））。**对称关系显示去重**（`ally`/`rival`/`family` 同时存在两条边时合并一行 + 「双向」），但**不自动建反边**（显示层去重，不做双写）；**合并行删除只删方向边（out）那一条**，确认文案需声明只删其中一条。仅展示以本角色为一端的关系（其余 = 其他关联）。
+**`character-relations`（人物关系网 tab）** — tab 内容 = 一张 `card`：**一行操作区**（右对齐 `button-default`「+ 添加人物关系」）+ 分组行列表；**不另画区标题/不放折叠壳**（tab 标签已是区名）。行语言 = `data-row`（底部 1px `{colors.hairline-soft}`、hover `{colors.surface-soft}`）：按 `relationType` **分组**（组头 = `section-title` 字号档中的 caption 行 + 条数，**条数 = 去重后行数**），行 = 对方姓名（可点击切选中该角色）+ 方向箭头（`→` / `←`，双向边标「双向」徽标）+ `metadata` 备注副行（`caption-text`）+ `icon-button` 删除；添加入口的关系类型下拉 = **人↔人 5 类**（`ally`/`rival`/`mentor`/`family`/`kills`），**目标端类型锁定 `character`**（只读卡片，无下拉）。**对称关系显示去重**（`ally`/`rival`/`family` 同时存在两条边时合并一行 + 「双向」），但**不自动建反边**（显示层去重，不做双写）；**合并行删除只删方向边（out）那一条**，确认文案需声明只删其中一条。仅展示以本角色为一端的关系（其余 = 其他关联）。
 
-**其他关联（tab）** — tab 标签 = 「其他关联 · N」（N = 行数）；tab 内容 = 标题行右侧 `button-default`「+ 添加关联」（通用对话框）+ 行列表。行语言同 `character-relations`（不分类型组，按类型序）；涵盖 `appears_in` / `belongs_to` / `owns` / `masters` 等——它们是 AI 分析的数据源（如孤儿诊断依赖 `appears_in`），因此**条数常显于 tab 标签、不可藏**。空态给一行 `empty-state` 引导。
+**其他关联（tab）** — tab 标签 = 「其他关联 · N」（N = 行数）；tab 内容 = 一行操作区（右对齐 `button-default`「+ 添加关联」，通用对话框）+ 行列表（**同样不画区标题**）。行语言同 `character-relations`（不分类型组，按类型序）；涵盖 `appears_in` / `belongs_to` / `owns` / `masters` 等——它们是 AI 分析的数据源（如孤儿诊断依赖 `appears_in`），因此**条数常显于 tab 标签、不可藏**。空态给一行居中 `caption-text`（不带 `empty-state` 虚线框——两个关系 tab 的空态都只是一句引导）。
 
 **`character-create-dialog`（新建人物弹窗，2026-09）** — 复用 `components/ui/dialog.tsx`（受控，**不新造浮层**）：**单窗两段，不做多步向导**。
 

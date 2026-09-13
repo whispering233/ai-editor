@@ -41,7 +41,7 @@
 - **章级锚点三件套（2026-09）**：`current_position`、变更记录触发节点（`POST /delta` 的 `node_id`）、伏笔锚点（`plants`/`advances`/`resolves` 的源端）**一律只支持 `chapter`**；写入侧三层同口径（REST 路由 / AI 提案层 / executor 兜底），`compute_state` 的 `at_node_id` 不限层级。**REST 保持泛型**是登记过的分层（不与前端/AI 同宽），别顺手收紧。
 - **`computeState` = 章序前缀累积**（不是树父链）：状态 = 初始 `data` + 「章序 ≤ 目标进度章」的全部已确认 Delta；目标节点→进度章：章→自身、场景→所属章、卷→该卷最后一个未软删章。章序 = **文件位置序（含软删章，编号不重排）**，「当前章」退化必须取**最后一个未软删章**。
 - **character 数据分层**（`docs/db/schema.md`「人物 data 分层」）：不可变（`role`/`description`）**不参与 Delta**；可变字段 + 能力面板**叶子**走点分路径（`ability_panel.火系.等级`，仅标量 `set`/`update`）。字段白名单的**单一定义 = `shared/src/constants/delta.ts`**（`SET_ONLY_FIELDS` / `REMOVED_CHARACTER_FIELDS` / `IMMUTABLE_FIELDS`），client/tools **禁止手抄**。
-- **人物页是工作台**（`#/characters` master-detail，无独立列表页）：右栏 = `components/character/character-detail.tsx`（双视图 tab：初始化数据可编辑 / 当前位置数据只读）；泛型 `EntityList`/`EntityDetail` 只服务 setting/location（**已冻结，不再承载新能力**）；关系网/其他关联在 tab 之下。新增 antd 组件/样式前先扩 `DESIGN.md` 与 token 守卫。
+- **人物页是工作台**（`#/characters` master-detail，无独立列表页）：右栏 = `components/character/character-detail.tsx`（**四 tab**：人物档案可编辑 / 阅读进度只读 / 人物关系网 / 其他关联 · N——关系两块是**平级 tab**，不在字段 tab 之下）；泛型 `EntityList`/`EntityDetail` 只服务 setting/location（**已冻结，不再承载新能力**）。新增 antd 组件/样式前先扩 `DESIGN.md` 与 token 守卫。
 - **db 打开只有一条管道** = `packages/server/src/middleware/project.ts` 的 `openProjectDatabase`（开机 `detectProject` 与 `POST /project/open` 共用）：迁移前快照、未来版本拒绝（不重建）、无迁移路径才重建兜底；**缺 `data.db` 的「全新空库」直接写 `SCHEMA_VERSION`**（不重置 `outline.json`）。
 - **变异/探针验证**：禁止用硬链接副本 + 就地截断写（会写穿 inode 污染源仓库，真实发生过）；只能 `cp -r` 真副本或 `git worktree`，恢复后必须复跑全量回归（见 `build.md`）。
 - 测试：各包 `test` script = `vitest run`；各包 tsconfig 已 `exclude: ["src/**/*.test.ts"]`，不要改回。

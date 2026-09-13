@@ -1,16 +1,17 @@
-// 人物详情双视图纯函数与判据（卡 3.2；卡 3.3 补：字段三分分组、必填判据、tab 判据三态；
-// 卡 3.3 修复轮：对象值只读渲染 / 描述为空提示 / 大纲加载文案单一来源）
-// 契约：`docs/ui/DESIGN.md` §数据展示 `character-workbench`（层级语义/只读语义）与 `tabs`（页内 tab、不进 URL）；
+// 人物详情纯函数与判据（卡 3.2；卡 3.3 补：必填判据、tab 判据三态；卡 3.3 修复轮：对象值只读渲染 /
+// 描述为空提示 / 大纲加载文案单一来源；卡 6.2 改：删可变性分区标题、立详情页字段顺序单一清单）
+// 契约：`docs/ui/DESIGN.md` §数据展示 `character-workbench`（四 tab / 档案式字段网格 / 只读纯文本值）与
+//   `tabs`（页内 tab、不进 URL）；
 //   `docs/design/10-data-model.md` §14：不变式 1（不可变字段不参与 Delta，人工可编辑）、
-//   不变式 2（两视图里不可变字段必然相同）、不变式 3（**只有「初始化数据」可编辑**）；
+//   不变式 2（两视图里不可变字段必然相同）、不变式 3（**只有「人物档案」可编辑**）；
 //   `docs/db/schema.md`「人物 data 分层」（字段归属）与 `description` 必填（**仅前端校验**）。
 // 本模块只做判据与取值整形——不碰 DOM、不发请求（仓内无 jsdom，纯函数便于单测）。
 
 import { IMMUTABLE_FIELDS } from "@whispering233/ai-editor-shared";
 import { detailFieldsForType, type DetailFieldConfig } from "./entity-detail";
 
-/** 双视图 tab 键（页内 state；刷新回落默认 tab——DESIGN.md `tabs` 契约） */
-export type CharacterViewTab = "initial" | "current";
+/** 页内 tab 键（四 tab：人物档案 / 阅读进度 / 人物关系网 / 其他关联；刷新回落默认 tab——DESIGN.md `tabs` 契约） */
+export type CharacterViewTab = "initial" | "current" | "relations" | "other";
 
 /** 分区标题已删（卡 6.2）：UI 不再按可变性分块——分层只服务变更记录白名单与 AI 提案边界 */
 
@@ -115,22 +116,22 @@ export function isEmptyTextField(raw: unknown): boolean {
 export const DESCRIPTION_EMPTY_HINT = "描述为空，保存前需填写";
 
 /**
- * 大纲在途加载文案（**单一来源**）：计算节点选择器与 tab 2 的位置提示共用同一常量，
- * 避免出现「新旧两套」加载文案；大纲未到位时 tab 2 展示的是初始 `data` 而非位置累积结果，
+ * 大纲在途加载文案（**单一来源**）：进度节点选择器与阅读进度 tab 的位置提示共用同一常量，
+ * 避免出现「新旧两套」加载文案；大纲未到位时阅读进度 tab 展示的是初始 `data` 而非位置累积结果，
  * 提示必须随之出现（否则暂时"看似已算完"）。
  */
 export const OUTLINE_LOADING_TEXT = "大纲加载中…";
 
-/** tab 判据结果（默认 tab + 当前位置四态；两者同源，不得各自推导） */
+/** tab 判据结果（默认 tab + 阅读进度四态；两者同源，不得各自推导） */
 export interface CharacterTabState {
-  /** 默认 tab（用户在未手动切换时采用） */
+  /** 默认 tab（用户在未手动切换时采用；只会是 `initial` / `current`） */
   tab: CharacterViewTab;
-  /** 当前位置四态（提示文案与「是否回落 tab 1」共用同一判据） */
+  /** 阅读进度四态（提示文案与「是否回落人物档案」共用同一判据） */
   positionState: CharacterPositionState;
 }
 
 /**
- * 默认 tab 判据（卡片 3.2 原口径，保留为组合件）：设置了 `current_position` → 「当前位置数据」；未设置 → 「初始化数据」。
+ * 默认 tab 判据（卡片 3.2 原口径，保留为组合件）：设置了 `current_position` → 「阅读进度」；未设置 → 「人物档案」。
  */
 export function resolveDefaultTab(currentPosition: string | null | undefined): CharacterViewTab {
   return typeof currentPosition === "string" && currentPosition.trim() !== ""
@@ -138,11 +139,11 @@ export function resolveDefaultTab(currentPosition: string | null | undefined): C
     : "initial";
 }
 
-/** 当前位置状态（四态；供 tab 判据与提示文案共用——`unset` 与 `invalid` 文案不同，不得合并） */
+/** 阅读进度状态（四态；供 tab 判据与提示文案共用——`unset` 与 `invalid` 文案不同，不得合并） */
 export type CharacterPositionState = "pending" | "unset" | "invalid" | "ok";
 
 /**
- * 当前位置状态判据（四态）：
+ * 阅读进度状态判据（四态）：
  * - `pending`：`config` 未加载——无法区分「未设置」与「未加载」，**不得瞬时误判**；
  * - `unset`：已确认未设置（`current_position` 为 null/空串）；
  * - `invalid`：已设置但指向的节点不在当前大纲树里（已软删/被删）；
@@ -163,7 +164,7 @@ export function resolvePositionState(input: {
 /**
  * tab 判据（卡片 3.3；取代裸 `resolveDefaultTab` 作为容器入口）——两处避免错判：
  * 1. **`config` 未加载** → `initial` + `pending`（不得瞬时误判为「未设置」）；
- * 2. **已设置但节点已失效** → `initial` + `positionInvalid`（tab 2 算不出有意义结果）。
+ * 2. **已设置但节点已失效** → `initial` + `invalid`（阅读进度 tab 算不出有意义结果）。
  * 判据单一来源 = `resolvePositionState`（提示文案与默认 tab 不会漂移）。
  */
 export function resolveTabState(input: {
@@ -177,7 +178,7 @@ export function resolveTabState(input: {
 }
 
 /**
- * tab 2 计算节点默认值：`current_position` 必须**在大纲树里存在**（失效/软删 → 空串 = 要求手动选择）。
+ * 阅读进度 tab 的进度节点默认值：`current_position` 必须**在大纲树里存在**（失效/软删 → 空串 = 要求手动选择）。
  * 与 `ComputePreview` 同口径——软删节点的计算结果无意义。
  */
 export function resolveCurrentAtNode(
@@ -204,7 +205,7 @@ function isScalarForReadOnly(raw: unknown): boolean {
  * undefined/null → 空串；标量 → `String()`；**全标量数组 → 「、」连接**（与列表摘要同款展示口径）；
  * **对象 / 含对象的数组 → 紧凑 JSON 序列化**（截断到 `READONLY_JSON_MAX_LENGTH`，序列化失败 → `READONLY_FALLBACK_TEXT`）。
  *
- * 为何选 JSON 而非统一 `—`：`custom_fields` 的嵌套值在 tab 2 是作者对照「当前位置时的值」的唯一展示位，
+ * 为何选 JSON 而非统一 `—`：`custom_fields` 的嵌套值在阅读进度 tab 是作者对照「当前进度时的值」的唯一展示位，
  * 一律打成 `—` 会丢掉全部信息；截断则避免超长串擑破行布局（外层 `truncate` 只截显示宽度，数据侧给有界串更稳）。
  */
 export function readOnlyFieldValue(raw: unknown): string {
