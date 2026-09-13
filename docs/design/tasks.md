@@ -53,6 +53,7 @@
 - **`currentHookStatus` 在 client 侧已无生产消费者**（卡 1.9 删了 `fromStatus` 后仅其单测在用）——要么后续删掉（含单测），要么明确保留理由。
 - **通用「+ 新建变更」表单仍可为 hook 的 `status` 造 `op=update`**（`lib/delta-create.ts`）：手动路径会产生 CAS 假冲突，属「手动编辑 data 不产生 Delta 属正常」的对偶情形；如需彻底闭环则收窄字段白名单，暂接受。
 - **AI 通道未收窄不可变字段**：`propose_add_delta`（`tools/src/proposal/delta.ts`）无字段白名单 → 理论上 AI 可对 character 的 `role`/`description` 立 Delta，使 tab 2 与 tab 1 不一致（违反 §14 不变式 2 的展示预期）。收口方式 = 对 character 目标拒绝这两个 field（与前端白名单同源）；暂登记（无实际危害前先不做）。
+- `lib/panel-tree.ts` 的 `siblingDropIndex` 已无生产调用者（仅单测引用）——保留为导出 API 或下次清理；卡 3.4 oracle 已确认不影响行为。
 - `listDeltasByNodes` 的 JSDoc 可补一句「调用方负责传章 id（层级收窄不在本函数）」——它是通用原语，传场景 id 也会照实返回（当前唯一调用点正确）。
 - `search_entities` 工具描述仍泛写「status 精确匹配 data.status」；character 已无该字段（文档已注明仅 hook 有意义），下次路过时补一句。
 - **人物页与泛型详情页的分化口径（卡 3.2 oracle 提出）**：`CharacterDetail`（904 行）自带一份字段渲染/关系列表实现（`TagsEditor`/`CustomFieldsEditor` 等），与泛型 `EntityDetail` 的私有实现是两份。**登记口径：泛型详情页冻结（只服务 setting/location/hook/timepoint，不再承载新能力），人物页独立演化**；若将来要修泛型页的字段渲染 bug，需评估是否同步人物页；批次 4 再评估是否抽 `components/entity/entity-fields.tsx` 公共层。
