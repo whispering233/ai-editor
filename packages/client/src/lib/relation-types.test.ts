@@ -2,7 +2,12 @@
 // 服务端契约（非章 → 400）由 packages/server/src/routes/relation.test.ts 覆盖，
 // 本测试锁 UI 侧同向收窄：不留必定 400 的死胡同。
 import { describe, expect, it } from "vitest";
-import { dialogRelationTypeOptions } from "./relation-types";
+import { RELATION_TYPE_META } from "@whispering233/ai-editor-shared";
+import {
+  customRelationTypeUsages,
+  dialogRelationTypeOptions,
+  relationTypeSelectOptions,
+} from "./relation-types";
 
 const HOOK_TYPES = ["plants", "advances", "resolves"];
 
@@ -45,5 +50,52 @@ describe("dialogRelationTypeOptions（源端层级过滤）", () => {
     ];
     for (const source of sources)
       expect(dialogRelationTypeOptions(source)).not.toContain("occurs_at");
+  });
+});
+
+describe("customRelationTypeUsages（已用自定义类型派生，卡片 8.2）", () => {
+  const rows = (types: string[]) => types.map((relationType) => ({ relationType }));
+
+  it("distinct + 计数；预定义类型不计入", () => {
+    const usages = customRelationTypeUsages(
+      rows(["宿敌", "ally", "宿敌", "appears_in", "宿敌", "恩人"]),
+    );
+    expect(usages).toEqual([
+      { type: "宿敌", count: 3 },
+      { type: "恩人", count: 1 },
+    ]);
+  });
+
+  it("稳定序：条数降序，同条数按类型名码点序", () => {
+    const usages = customRelationTypeUsages(rows(["beta", "gamma", "alpha", "beta"]));
+    expect(usages).toEqual([
+      { type: "beta", count: 2 },
+      { type: "alpha", count: 1 },
+      { type: "gamma", count: 1 },
+    ]);
+  });
+
+  it("全预定义 / 空输入 → 空数组", () => {
+    expect(customRelationTypeUsages(rows(["ally", "occurs_at", "belongs_to"]))).toEqual([]);
+    expect(customRelationTypeUsages([])).toEqual([]);
+  });
+});
+
+describe("relationTypeSelectOptions（预定义子集 + 自定义类型拼接）", () => {
+  it("子集在前（中文标签），自定义在后（原名 · 条数）", () => {
+    const options = relationTypeSelectOptions(["ally", "rival"], [
+      { type: "宿敌", count: 2 },
+    ]);
+    expect(options).toEqual([
+      { value: "ally", label: RELATION_TYPE_META.ally.label },
+      { value: "rival", label: RELATION_TYPE_META.rival.label },
+      { value: "宿敌", label: "宿敌 · 2" },
+    ]);
+  });
+
+  it("不把子集之外的预定义类型带回来（入口收窄）；无自定义时 = 子集", () => {
+    const options = relationTypeSelectOptions(["ally", "kills"], []);
+    expect(options.map((o) => o.value)).toEqual(["ally", "kills"]);
+    expect(options.map((o) => o.value)).not.toContain("occurs_at");
   });
 });

@@ -7,23 +7,31 @@
 // 成功 → toast「已建立关系」→ onCreated → onClose。样式 token 类。
 // 关系类型下拉口径（含伏笔锚点仅章的源端过滤）见 lib/relation-types.ts（卡片 1.6）——
 // 源端点层级由调用点显式传入（nodeType），不靠 store 反查。
+// 关系类型下拉 = `select-free-input`（DESIGN.md）：选项 = 调用方预定义子集 ∪ 本项目已用**自定义**类型
+// （挂载时一次 `GET /relation?depth=1` 派生，失败静默降级为只有预定义子集），无匹配给「将新建『X』」；
+// 提交前用 shared 语法函数预校验（非法值内联报错且不发请求）。
 // 布局：左右三段式「源 -关系-> 目标」——grid-cols-[1fr_auto_1fr]（sm 起），窄屏垂直堆叠；
 // 中列关系类型下拉 + 「→」箭头（mt-auto 沉底对齐两端实体下拉），三列各有小标题（源实体/关系类型/目标实体）。
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { Button, Select } from "antd";
-import { ENTITY_TYPES } from "@whispering233/ai-editor-shared";
+import { AutoComplete, Button, Select } from "antd";
+import { ENTITY_TYPES, relationTypeSyntaxError } from "@whispering233/ai-editor-shared";
 import type { EntitySummary, EntityType } from "@whispering233/ai-editor-shared";
 import {
   ApiError,
   createRelation,
   listEntities,
+  listRelations,
   type CreateRelationBody,
   type OutlineNodeType,
 } from "../../lib/api";
-import { relationTypeLabel } from "../../lib/entity-detail";
 import { flattenTree } from "../../lib/outline-tree";
-import { dialogRelationTypeOptions } from "../../lib/relation-types";
+import {
+  customRelationTypeUsages,
+  dialogRelationTypeOptions,
+  relationTypeSelectOptions,
+} from "../../lib/relation-types";
+import type { RelationTypeUsage } from "../../lib/relation-types";
 import { useProjectStore } from "../../stores/project";
 import { useUiStore } from "../../stores/ui";
 import {
@@ -46,6 +54,15 @@ const TYPE_LABEL: Record<EntityType, string> = {
   // 参考资料 reference
   reference: "参考资料",
 };
+
+/**
+ * `select-free-input` 的 `filterOption`：antd 6.6.2 combobox 模式该项默认 `false`
+ * （`@rc-component/select` 源码：`filterOption === undefined && mode === 'combobox'` → false），
+ * **必须显式传**，否则打字不筛。匹配口径 = label 大小写不敏感包含。
+ */
+function filterByLabel(input: string, option?: { label?: unknown }): boolean {
+  return String(option?.label ?? "").toLowerCase().includes(input.toLowerCase());
+}
 
 /**
  * 源端点（详情模式传入；null = 列表模式自由选择源）。
@@ -82,6 +99,8 @@ export function CreateRelationDialog({
   const outline = useProjectStore((s) => s.outline);
   // 关系类型选项（本组件内只读：挂载后不变，对话框开/关即重挂）
   const typeOptions = relationTypes ?? dialogRelationTypeOptions(source);
+  // 本项目已用自定义类型（挂载时拉一次全量关系派生；失败静默降级为只有预定义子集，不阻断建关系）
+  const [customUsages, setCustomUsages] = useState<RelationTypeUsage[]>([]);
   // 列表模式源端（详情模式不用）
   const [sourceType, setSourceType] = useState<EntityType>("character");
   const [sourceEntities, setSourceEntities] = useState<EntitySummary[] | null>(null);
@@ -96,6 +115,21 @@ export function CreateRelationDialog({
   const [relationType, setRelationType] = useState<string>(() => typeOptions[0]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // 挂载时拉一次全量关系 → 派生已用自定义类型（失败静默降级，不阻断建关系）
+  useEffect(() => {
+    let cancelled = false;
+    listRelations({ depth: 1 })
+      .then((res) => {
+        if (!cancelled) setCustomUsages(customRelationTypeUsages(res.relations));
+      })
+      .catch(() => {
+        if (!cancelled) setCustomUsages([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // 列表模式：源类型变化 → 拉实体列表
   useEffect(() => {
@@ -121,6 +155,8 @@ export function CreateRelationDialog({
   }, [otherType]);
 
   const outlineOptions = flattenTree(outline?.children ?? []);
+  // 关系类型选项：调用方预定义子集 + 已用自定义类型（带条数，自定义在后）
+  const relationTypeOptions = relationTypeSelectOptions(typeOptions, customUsages);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -130,6 +166,12 @@ export function CreateRelationDialog({
     }
     if (!otherId) {
       setError("请选择关联对象");
+      return;
+    }
+    // 语法预校验（shared 纯函数，与 REST schema / db 守卫同源）：非法值内联报错且不发请求
+    const relationTypeError = relationTypeSyntaxError(relationType);
+    if (relationTypeError !== null) {
+      setError(relationTypeError);
       return;
     }
     setSubmitting(true);
@@ -199,11 +241,16 @@ export function CreateRelationDialog({
             {/* 中列：关系类型 + 方向箭头（mt-auto 沉底与两端实体下拉对齐，表达「源 关系→ 目标」） */}
             <div className="flex flex-col gap-2 sm:w-44">
               <p className="text-sm font-medium text-foreground">关系类型</p>
-              <Select
+              {/* 自由输入下拉（`select-free-input`）：filterOption 必须显式传（combobox 模式默认不筛）；
+                  `onChange` 在无值时可能给 undefined → 兜底空串；无匹配给「将新建『X』」提示 */}
+              <AutoComplete
                 className="w-full"
+                aria-label="关系类型"
                 value={relationType}
-                onChange={(value) => setRelationType(value)}
-                options={typeOptions.map((t) => ({ value: t, label: relationTypeLabel(t) }))}
+                onChange={(value) => setRelationType(value ?? "")}
+                options={relationTypeOptions}
+                filterOption={filterByLabel}
+                notFoundContent={`将新建『${relationType}』`}
               />
               <span
                 aria-hidden="true"

@@ -6,7 +6,8 @@
 // zod 版本：^4（注意 v4 API：z.record 必须两参、z.enum 接受 readonly 数组）
 
 import { z } from "zod";
-import { ENTITY_TYPES, RELATION_TYPES } from "../constants/entity.js";
+import { ENTITY_TYPES } from "../constants/entity.js";
+import { normalizeRelationType, relationTypeSyntaxError } from "../utils/relation-type.js";
 import { HOOK_STATUSES, PAYOFF_TIMING } from "../constants/hook.js";
 import { CONFLICT_LEVELS } from "../constants/outline.js";
 import { BACKUP_FREQUENCIES } from "../constants/backup.js";
@@ -509,14 +510,21 @@ export const relationQueryResSchema = z.object({
   paths: z.array(relationPathSchema).optional(), // depth>=2 时返回
 });
 
-// POST /api/v1/relation（relation_type 限定 预定义 16 种）
+// POST /api/v1/relation（relation_type 自由字符串：预定义 17 类 ∪ 自定义类型，语法校验单一来源 =
+// shared `utils/relation-type.ts`；收窄为枚举的只剩 AI 工具层，见 packages/tools/src/schemas/relation.ts）
 export const relationCreateReqSchema = z
   .object({
     source_type: z.string(),
     source_id: z.string(),
     target_type: z.string(),
     target_id: z.string(),
-    relation_type: z.enum(RELATION_TYPES),
+    relation_type: z
+      .string()
+      .transform(normalizeRelationType)
+      .superRefine((value, ctx) => {
+        const message = relationTypeSyntaxError(value);
+        if (message !== null) ctx.addIssue({ code: "custom", message });
+      }),
     metadata: z.record(z.string(), z.unknown()).optional(),
   })
   .strict();

@@ -26,7 +26,7 @@ import { findOutlineNode, readOutlineFile } from "../storage/outline.js";
 import { getEntity } from "./entity.js";
 import type { Db } from "../connection.js";
 import type { OutlineFileNode, OutlineFileTree, RelationQueryResult, RelationRecord, RelationRow } from "@whispering233/ai-editor-shared";
-import { RELATION_TYPES, generateId } from "@whispering233/ai-editor-shared";
+import { generateId, relationTypeSyntaxError } from "@whispering233/ai-editor-shared";
 import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { entities, relationRecords } from "../tables.js";
@@ -320,7 +320,8 @@ export function getRelation(db: Db, id: string, outlineDir: string): RelationRow
 /**
  * 创建关系（POST /api/v1/relation）：
  * - **判重**：同 (source_id, target_id, relation_type) 且未软删已存在 → RELATION_EXISTS（409 语义）
- * - relation_type 白名单（16 个预定义类型，含 plot_edge 剧情连线——同规则）
+ * - relation_type **语法校验**（卡片 8.2：自由字符串 = 预定义 17 类 ∪ 自定义类型；
+ *   `trim` 非空 / ≤ 32 / 禁控制字符 —— 与 REST schema、client 预校验同一 shared 纯函数）
  * - **端点存在性**：实体端点查 entities（非软删）、大纲端点读 outline.json（存在且非软删）
  * - 时间戳应用层 ISO
  *
@@ -339,8 +340,12 @@ export function createRelation(
   },
   outlineDir: string,
 ): RelationRow {
-  if (!(RELATION_TYPES as readonly string[]).includes(input.relationType)) {
-    throw new RelationError("INVALID_RELATION_TYPE", `非法关系类型: ${input.relationType}`);
+  const relationTypeError = relationTypeSyntaxError(input.relationType);
+  if (relationTypeError !== null) {
+    throw new RelationError(
+      "INVALID_RELATION_TYPE",
+      `非法关系类型（${relationTypeError}）: ${input.relationType}`,
+    );
   }
  // 端点存在性（软删端点不可建立新关系）
   assertEndpointExists(db, outlineDir, input.sourceType, input.sourceId);

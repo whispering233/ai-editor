@@ -128,17 +128,26 @@ describe("createRelation", () => {
     ).not.toThrow();
   });
 
-  it("relation_type 白名单拒绝→ INVALID_RELATION_TYPE", () => {
+  it("relation_type 语法非法拒绝 → INVALID_RELATION_TYPE（自定义类型通过，卡片 8.2）", () => {
     const { charA, charB } = seedBase();
+    // 空（trim 后为空）→ 拒
     expectRelationError(
       () =>
         createRelation(
           db,
-          { sourceType: "character", sourceId: charA, targetType: "character", targetId: charB, relationType: "friend" },
+          { sourceType: "character", sourceId: charA, targetType: "character", targetId: charB, relationType: "   " },
           dir,
         ),
       "INVALID_RELATION_TYPE",
     );
+ // 自定义类型（非预定义但语法合法）→ 放行
+    expect(() =>
+      createRelation(
+        db,
+        { sourceType: "character", sourceId: charA, targetType: "character", targetId: charB, relationType: "宿敌" },
+        dir,
+      ),
+    ).not.toThrow();
   });
 
   it("端点不存在/软删拒绝 → ENDPOINT_NOT_FOUND（实体与大纲节点两路径）", () => {

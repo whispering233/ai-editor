@@ -154,17 +154,33 @@ describe("POST /relation 创建", () => {
     expect(dup.body.error.code).toBe("RELATION_EXISTS");
   });
 
-  it("非法 relation_type → 400 VALIDATION_ERROR（schema enum 拦截）", async () => {
+  it("relation_type 语法非法 → 400 VALIDATION_ERROR（空 / 超长 / 控制字符）", async () => {
+    const { app, charA, charB } = await seed();
+    const base = {
+      source_type: "character",
+      source_id: charA,
+      target_type: "character",
+      target_id: charB,
+    };
+    for (const relationType of ["   ", "宿".repeat(33), "宿\u0000敌"]) {
+      const { status, body } = await createRel(app, { ...base, relation_type: relationType });
+      expect(status, relationType).toBe(400);
+      expect(body.error.code).toBe("VALIDATION_ERROR");
+    }
+  });
+
+  it("自定义类型（非预定义但语法合法）→ 201 原样落库（卡片 8.2）", async () => {
     const { app, charA, charB } = await seed();
     const { status, body } = await createRel(app, {
       source_type: "character",
       source_id: charA,
       target_type: "character",
       target_id: charB,
-      relation_type: "friend",
+      relation_type: " 宿敌 ",
     });
-    expect(status).toBe(400);
-    expect(body.error.code).toBe("VALIDATION_ERROR");
+    expect(status).toBe(201);
+ // 端到端归一：首尾空白不入库（shared schema transform）
+    expect(body.data.relation.relationType).toBe("宿敌");
   });
 
   it("端点不存在/已软删 → 400 VALIDATION_ERROR（ENDPOINT_NOT_FOUND 映射）", async () => {

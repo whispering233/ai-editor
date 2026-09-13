@@ -390,7 +390,7 @@ describe("relation 端点", () => {
     expect(relationQuerySchema.safeParse({}).success).toBe(false); // depth 必填
   });
 
-  it("创建：relation_type 限定预定义 16 种——非预定义拒绝", () => {
+  it("创建：relation_type 自由字符串（自定义类型通过；语法非法拒绝——共享纯函数同源校验）", () => {
     const valid = {
       source_type: "character",
       source_id: "char-1",
@@ -399,7 +399,20 @@ describe("relation 端点", () => {
       relation_type: "appears_in",
     };
     expect(relationCreateReqSchema.parse(valid).relation_type).toBe("appears_in");
-    expect(relationCreateReqSchema.safeParse({ ...valid, relation_type: "teleports_to" }).success).toBe(false);
+ // 自定义类型（不在 RELATION_TYPES 里的中文类型名）→ 接受，且去首尾空白
+    expect(
+      relationCreateReqSchema.parse({ ...valid, relation_type: " 宿敌 " }).relation_type,
+    ).toBe("宿敌");
+ // 语法非法：空 / 超 32 字 / 控制字符 → 拒绝（中文错误消息）
+    const empty = relationCreateReqSchema.safeParse({ ...valid, relation_type: "  " });
+    expect(empty.success).toBe(false);
+    expect(empty.error?.issues[0]?.message).toBe("关系类型不能为空");
+    const tooLong = relationCreateReqSchema.safeParse({ ...valid, relation_type: "宿".repeat(33) });
+    expect(tooLong.success).toBe(false);
+    expect(tooLong.error?.issues[0]?.message).toBe("关系类型不能超过 32 个字符");
+    const control = relationCreateReqSchema.safeParse({ ...valid, relation_type: "宿\u0000敌" });
+    expect(control.success).toBe(false);
+    expect(control.error?.issues[0]?.message).toBe("关系类型不能包含控制字符");
   });
 
   it("更新元数据：metadata 必填整体替换；{} 清空通过；未知键拒绝（strict）", () => {

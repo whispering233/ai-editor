@@ -16,6 +16,7 @@ import { ENTITY_TYPES, RELATION_TYPES } from "@whispering233/ai-editor-shared";
 import { ApiError, CLIENT_NETWORK_ERROR, deleteRelation, listRelations } from "../../lib/api";
 import type { RelationSummaryItem } from "../../lib/api";
 import { relationTypeLabel } from "../../lib/entity-detail";
+import { customRelationTypeUsages, relationTypeSelectOptions } from "../../lib/relation-types";
 import { ConfirmDialog } from "../outline/dialogs";
 import { EmptyState } from "../ui/empty-state";
 import { entityDetailPath } from "../../lib/entity-paths";
@@ -185,6 +186,11 @@ export function RelationsView({
   }
 
   const filtered = relations === null ? [] : filterRelations(relations, filter);
+  // 关系类型过滤选项 = 预定义全量 ∪ 本页已拉到的自定义类型（本视图本就拉全量，零额外请求）
+  const relationTypeFilterOptions = relationTypeSelectOptions(
+    RELATION_TYPES,
+    relations === null ? [] : customRelationTypeUsages(relations),
+  );
 
   return (
     <div>
@@ -224,7 +230,7 @@ export function RelationsView({
             placeholder="全部关系类型"
             allowClear
             style={{ minWidth: 140 }}
-            options={RELATION_TYPES.map((t) => ({ value: t, label: relationTypeLabel(t) }))}
+            options={relationTypeFilterOptions}
           />
           <Button type="primary" className="ml-auto" onClick={onOpenCreate}>
             + 建立关联
