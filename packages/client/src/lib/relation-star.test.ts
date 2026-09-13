@@ -1,7 +1,7 @@
-// 星形图布局纯函数单测（卡 8.4）
-// 覆盖：判据 1（去重后行数 < 4 不渲染）/ 判据 2（叶子 > 24 只画点不画名字）/ 判据 3（自环剔除）/
-//       角度均匀（正上方起顺时针）、半径随叶子数自适应（下限 + 画布上限）/ 方向 → 箭头（both 不画，out 朝外、in 朝内）/
-//       标签锚点与 8 字截断。
+// 星形图布局纯函数单测（卡 8.4；follow-up：叶子按对方人物去重 + 半径/画布自适应）
+// 覆盖：判据 1（去重后叶子数 < 4 不渲染）/ 判据 2（叶子 > 24 只画点不画名字）/ 判据 3（自环剔除）/ 按人去重（多类型合并一叶、
+// 方向合并、条数后缀）/ 角度均匀（正上方起顺时针）、半径随叶子数自适应（下限 + 宽度/高度预算上限 + 画布随半径长高）/
+// 方向 → 箭头（both 不画，out 朝外、in 朝内）/ 标签锚点与 8 字截断。
 import { describe, expect, it } from "vitest";
 import type { CharacterRelationRow } from "./character-relations";
 import {
@@ -9,9 +9,11 @@ import {
   RELATION_STAR_HEIGHT,
   RELATION_STAR_LABEL_MAX_CHARS,
   RELATION_STAR_LABEL_MAX_LEAVES,
-  RELATION_STAR_MIN_ROWS,
+  RELATION_STAR_MAX_HEIGHT,
+  RELATION_STAR_MIN_LEAVES,
   RELATION_STAR_PADDING,
   RELATION_STAR_WIDTH,
+  relationStarLeafLabel,
   relationStarRadius,
   truncateRelationStarName,
 } from "./relation-star";
@@ -51,14 +53,24 @@ function angleOf(
   return (Math.atan2(y - layout.center.y, x - layout.center.x) * 180) / Math.PI;
 }
 
-describe("判据 1：去重后行数 < 4 不渲染", () => {
-  it("3 行 → null；4 行 → 出图", () => {
+describe("判据 1：去重后叶子数 < 4 不渲染", () => {
+  it("3 人 → null；4 人 → 出图", () => {
     expect(buildRelationStarLayout(rows(3), SIZE)).toBeNull();
     expect(buildRelationStarLayout(rows(4), SIZE)).not.toBeNull();
-    expect(RELATION_STAR_MIN_ROWS).toBe(4);
+    expect(RELATION_STAR_MIN_LEAVES).toBe(4);
   });
 
-  it("判据按行数计（自环行也计入），但剔除自环后无叶子 → 仍不出图（只剩中心点无信息量）", () => {
+  it("threshold 按**去重后的叶子数**：4 行全指向同一人 → 仍 null", () => {
+    const sameTarget = [
+      row(1, { relationType: "ally" }),
+      row(1, { relationType: "rival" }),
+      row(1, { relationType: "mentor", direction: "in" }),
+      row(1, { relationType: "kills", direction: "out" }),
+    ];
+    expect(buildRelationStarLayout(sameTarget, SIZE)).toBeNull();
+  });
+
+  it("自环行剔除后无叶子 → 仍不出图（只剩中心点无信息量）", () => {
     const selfLoops = Array.from({ length: 4 }, (_, index) =>
       row(index + 1, { direction: "self" }),
     );
@@ -67,6 +79,57 @@ describe("判据 1：去重后行数 < 4 不渲染", () => {
 
   it("无行（空关系网）→ null", () => {
     expect(buildRelationStarLayout([], SIZE)).toBeNull();
+  });
+});
+
+describe("按对方人物去重（同一人多类型合并一叶）", () => {
+  it("3 条到 char-2（含双向）+ 1 条到 char-3 → 2 叶，方向合并为 both，条数 = 3", () => {
+    const input = [
+      row(2, { relationType: "ally" }),
+      row(2, { relationType: "rival", direction: "in" }),
+      row(2, { relationType: "mentor", direction: "in" }),
+      row(3),
+      row(4),
+      row(5),
+    ];
+    const layout = buildRelationStarLayout(input, SIZE);
+    if (layout === null) throw new Error("4 人应当出图");
+    expect(layout.leaves.map((leaf) => leaf.other.id)).toEqual(["char-2", "char-3", "char-4", "char-5"]);
+    const merged = layout.leaves[0];
+    expect(merged.count).toBe(3); // out + in 并存 → both
+    expect(merged.direction).toBe("both");
+    expect(merged.arrow).toBeNull();
+    expect(merged.labelText).toBe("人物2 · 3");
+    expect(layout.leaves[1].count).toBe(1);
+    expect(layout.leaves[1].labelText).toBe("人物3");
+  });
+
+  it("全是 out → out；全是 in → in；含一行 both → both", () => {
+    const only = (direction: CharacterRelationRow["direction"]) =>
+      buildRelationStarLayout([row(1, { direction }), row(2), row(3), row(4)], SIZE);
+    const outLayout = only("out");
+    const inLayout = only("in");
+    const bothLayout = only("both");
+    if (outLayout === null || inLayout === null || bothLayout === null) {
+      throw new Error("4 行应当出图");
+    }
+    expect(outLayout.leaves[0].direction).toBe("out");
+    expect(outLayout.leaves[0].arrow).toBe("out");
+    expect(inLayout.leaves[0].direction).toBe("in");
+    expect(inLayout.leaves[0].arrow).toBe("in");
+    expect(bothLayout.leaves[0].direction).toBe("both");
+    expect(bothLayout.leaves[0].arrow).toBeNull();
+  });
+
+  it("叶子 key 按人物稳定（不随行序变），且去掉行 key 后仍不重复", () => {
+    const layout = layoutOf(4);
+    expect(layout.leaves.map((leaf) => leaf.key)).toEqual([
+      "star:char-1",
+      "star:char-2",
+      "star:char-3",
+      "star:char-4",
+    ]);
+    expect(new Set(layout.leaves.map((leaf) => leaf.key)).size).toBe(layout.leaves.length);
   });
 });
 
@@ -86,7 +149,7 @@ describe("极坐标：角度均匀 + 半径自适应", () => {
     }
   });
 
-  it("每片叶子到中心的距离 = 半径；叶子越多半径越大（到画布上限为止）", () => {
+  it("每片叶子到中心的距离 = 半径；叶子越多半径越大（到预算上限为止），画布随之长高", () => {
     const layout = layoutOf(8);
     for (const leaf of layout.leaves) {
       const distance = Math.hypot(leaf.point.x - layout.center.x, leaf.point.y - layout.center.y);
@@ -94,10 +157,19 @@ describe("极坐标：角度均匀 + 半径自适应", () => {
     }
     expect(layoutOf(4).radius).toBeGreaterThan(0);
     expect(layoutOf(8).radius).toBeGreaterThan(layoutOf(4).radius);
-    // 上限 = 画布可用半径（叶子再多也不越界）
-    const maxRadius = Math.min(SIZE.width, SIZE.height) / 2 - RELATION_STAR_PADDING;
+    expect(layoutOf(16).radius).toBeGreaterThan(layoutOf(8).radius);
+    // 上限 = min(宽度预算, 画布高度上限预算)——叶子再多也不越界
+    const maxRadius = Math.min(
+      SIZE.width / 2 - RELATION_STAR_PADDING,
+      RELATION_STAR_MAX_HEIGHT / 2 - RELATION_STAR_PADDING,
+    );
     expect(layoutOf(24).radius).toBeLessThanOrEqual(maxRadius);
     expect(relationStarRadius(200, SIZE)).toBeLessThanOrEqual(maxRadius);
+    // 画布随半径长高（下限 = 传入高度，上限 = RELATION_STAR_MAX_HEIGHT）
+    const tall = layoutOf(24);
+    expect(tall.height).toBeGreaterThan(RELATION_STAR_HEIGHT);
+    expect(tall.height).toBeLessThanOrEqual(RELATION_STAR_MAX_HEIGHT);
+    expect(tall.center.y).toBeCloseTo(tall.height / 2, 6);
     // 画布过小时保下限（不塌成一点）
     expect(relationStarRadius(20, { width: 40, height: 40 })).toBe(
       relationStarRadius(4, { width: 40, height: 40 }),
@@ -108,9 +180,9 @@ describe("极坐标：角度均匀 + 半径自适应", () => {
     const layout = layoutOf(12);
     for (const leaf of layout.leaves) {
       expect(leaf.point.x).toBeGreaterThanOrEqual(0);
-      expect(leaf.point.x).toBeLessThanOrEqual(SIZE.width);
+      expect(leaf.point.x).toBeLessThanOrEqual(layout.width);
       expect(leaf.point.y).toBeGreaterThanOrEqual(0);
-      expect(leaf.point.y).toBeLessThanOrEqual(SIZE.height);
+      expect(leaf.point.y).toBeLessThanOrEqual(layout.height);
     }
   });
 
@@ -200,11 +272,17 @@ describe("方向 → 箭头（out 朝外 / in 朝内 / both 不画）", () => {
   });
 });
 
-describe("叶子名截断（8 字 + …）", () => {
+describe("叶子名截断（8 字 + …）与条数后缀", () => {
   it("≤ 8 字原名；> 8 字截到 8 字 + …", () => {
     expect(RELATION_STAR_LABEL_MAX_CHARS).toBe(8);
     expect(truncateRelationStarName("李四")).toBe("李四");
     expect(truncateRelationStarName("一二三四五六七八")).toBe("一二三四五六七八");
     expect(truncateRelationStarName("一二三四五六七八九十")).toBe("一二三四五六七八…");
+  });
+
+  it("条数 > 1 加 ` · N` 后缀（截断在先，后缀在后）", () => {
+    expect(relationStarLeafLabel("李四", 1)).toBe("李四");
+    expect(relationStarLeafLabel("李四", 3)).toBe("李四 · 3");
+    expect(relationStarLeafLabel("一二三四五六七八九十", 2)).toBe("一二三四五六七八… · 2");
   });
 });

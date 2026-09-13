@@ -12,7 +12,6 @@ import {
   buildRelationStarLayout,
   RELATION_STAR_HEIGHT,
   RELATION_STAR_WIDTH,
-  truncateRelationStarName,
 } from "../../lib/relation-star";
 
 /** 中心圆点半径（当前角色） */
@@ -26,7 +25,7 @@ const ARROW_SIZE = 8;
 
 /**
  * 星形图（纯展示）。`rows` = 关系网**去重后**的行（`buildCharacterRelationGroups` 的展平结果）；
- * 行数不足阈值（或剔除自环后无叶子）时布局为 null → 不渲染任何东西。
+ * 自环剔除 + **按对方人物合并**后叶子数不足阈值时布局为 null → 不渲染任何东西。
  */
 export function RelationStarGraph({
   rows,
@@ -94,7 +93,8 @@ export function RelationStarGraph({
         </text>
       </g>
 
-      {/* 叶子 = 去重后的对方节点：可点 = 切到该角色（未知类型不可点，渲染纯文本）；叶子 > 24 只画点 */}
+      {/* 叶子 = **按对方人物去重**后的叶子（同一人多类型合并一叶）：可点 = 切到该角色（未知类型不可点，渲染纯文本）；
+          叶子 > 24 只画点；名字已带可选条数后缀（`· N`） */}
       {layout.leaves.map((leaf) => {
         const href = relationEndpointHref(leaf.other.type, leaf.other.id);
         const content = (
@@ -108,7 +108,7 @@ export function RelationStarGraph({
                 fill="currentColor"
                 className="text-xs"
               >
-                {truncateRelationStarName(leaf.other.name)}
+                {leaf.labelText}
               </text>
             )}
           </>
