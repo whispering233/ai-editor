@@ -31,6 +31,8 @@ export interface CharacterRailProps {
   onRetry: () => void;
   /** 行尾操作区（卡 3.5 的新建入口挂在控件行；此处留给后续卡的更多动作） */
   headerExtra?: ReactNode;
+  /** 空列表主操作（卡 3.5：「新建人物」——**仅在无搜索词的真空态**渲染；搜索无结果的空态不给新建入口） */
+  emptyAction?: ReactNode;
   /** 覆盖类（窄屏两级导航时全宽：`w-full border-r-0`——`cn` 用 twMerge，同属性后者胜） */
   className?: string;
 }
@@ -48,6 +50,7 @@ export function CharacterRail({
   onSelect,
   onRetry,
   headerExtra,
+  emptyAction,
   className,
 }: CharacterRailProps) {
   return (
@@ -100,9 +103,14 @@ export function CharacterRail({
         )}
 
         {error === null && !loading && items.length === 0 && (
-          <p className="px-2 py-6 text-center text-xs text-muted-foreground">
-            {qInput.trim() === "" ? "还没有人物" : "没有匹配的人物"}
-          </p>
+          <div className="px-2 py-6 text-center">
+            <p className="text-xs text-muted-foreground">
+              {qInput.trim() === "" ? "还没有人物" : "没有匹配的人物"}
+            </p>
+            {qInput.trim() === "" && emptyAction !== undefined && (
+              <div className="mt-3">{emptyAction}</div>
+            )}
+          </div>
         )}
 
         {error === null && items.length > 0 && (

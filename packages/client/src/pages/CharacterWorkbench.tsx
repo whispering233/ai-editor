@@ -1,15 +1,18 @@
 // 人物工作台（卡 3.1）：master-detail 宿主——左栏 = 人物列表本身（人物不再有独立列表页），右栏 = 角色详情。
 // 契约：docs/ui/DESIGN.md §数据展示 `character-workbench`（左栏 240px + 行样式 + 窄屏两级 + 自动选首个 + 空列表）；
 // 路由：`#/characters`（无 id → 推导选中后重定向到 `#/characters/<id>`）/ `#/characters/:id`（选中该角色）。
-// 数据：GET /api/v1/entity/character（摘要列表：name/role）+ 右栏复用既有 EntityDetail（受控 {type,id}，本卡不改其内部）。
+// 数据：GET /api/v1/entity/character（摘要列表：name/role）+ 右栏复用人物详情 `CharacterDetail`（受控 {id}）。
 // 响应式：<1024px 退化为两级——列表全宽 → 点进详情全宽（详情顶部给返回入口）；与「不另立移动端规则」一致。
-// 边界：软删当前选中 → EntityDetail 跳回 `#/characters`，本页在「详情 → 列表」跃迁时强制重拉列表并按
+// 边界：软删当前选中 → 详情页跳回 `#/characters`，本页在「详情 → 列表」跃迁时强制重拉列表并按
 //       resolveListRouteSelection 推导「下一个」选中（旧列表快照 + 丢失的 id 都取自 ref，绕开过期列表）。
+// 卡 3.5：新建入口三处共用同一弹窗——左栏行头第二行「+ 新建」（`button-primary`，DESIGN 登记）、
+//       左栏真空态「新建人物」（`button-default`——同时存在两个主操作会抢焦点）、右栏空态「新建第一个角色」。
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeftOutlined } from "@ant-design/icons";
 import { Button } from "antd";
 import { CharacterRail } from "../components/character/character-rail";
 import { CharacterDetail } from "../components/character/character-detail";
+import { CreateCharacterDialog } from "../components/character/create-character-dialog";
 import { EmptyState } from "../components/ui/empty-state";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useMediaQuery } from "../hooks/use-media-query";
@@ -44,6 +47,8 @@ export default function CharacterWorkbench({ id }: { id?: string }) {
   const [q, setQ] = useState("");
   const [sortValue, setSortValue] = useState<string>(RAIL_DEFAULT_SORT);
   const [reloadTick, setReloadTick] = useState(0);
+  /** 新建人物弹窗开合（卡 3.5：三处入口共用） */
+  const [createOpen, setCreateOpen] = useState(false);
 
   /** 上一次选中（详情路由时更新；回到列表路由后仍保留——软删推导「下一个」的依据） */
   const previousIdRef = useRef<string | null>(null);
@@ -132,6 +137,12 @@ export default function CharacterWorkbench({ id }: { id?: string }) {
       overflowHint={railOverflowHint(total, railItems.length)}
       onSelect={(nextId) => navigate(entityDetailPath("character", nextId))}
       onRetry={() => setReloadTick((t) => t + 1)}
+      headerExtra={
+        <Button type="primary" size="small" onClick={() => setCreateOpen(true)}>
+          + 新建
+        </Button>
+      }
+      emptyAction={<Button onClick={() => setCreateOpen(true)}>新建人物</Button>}
     />
   );
 
@@ -169,13 +180,33 @@ export default function CharacterWorkbench({ id }: { id?: string }) {
                 onSaved={() => setReloadTick((t) => t + 1)}
               />
             ) : items !== null && items.length === 0 && error === null ? (
-              <EmptyState>
-                {q.trim() === "" ? "还没有人物" : "没有匹配的人物——换个关键词试试"}
-              </EmptyState>
+              q.trim() === "" ? (
+                <EmptyState
+                  action={
+                    <Button type="primary" onClick={() => setCreateOpen(true)}>
+                      新建第一个角色
+                    </Button>
+                  }
+                >
+                  还没有人物
+                </EmptyState>
+              ) : (
+                <EmptyState>没有匹配的人物——换个关键词试试</EmptyState>
+              )
             ) : null}
           </div>
         </div>
       )}
+
+      {/* 新建人物弹窗（三处入口共用；成功后左栏重拉 + 右栏切到新角色） */}
+      <CreateCharacterDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={(newId) => {
+          setReloadTick((t) => t + 1);
+          navigate(entityDetailPath("character", newId));
+        }}
+      />
     </section>
   );
 }

@@ -20,10 +20,17 @@ export const CHARACTER_SECTION_MUTABLE = "可变数据";
  * 由基础信息区单独渲染，故不在此列表）。顺序 = 渲染顺序；字段配置（label/control）仍取自
  * `detailFieldsForType("character")`（单一来源，不得在本模块另写一份 label）。
  */
-const IMMUTABLE_KEYS = ["role", "description"] as const;
+export const CHARACTER_BASICS_DATA_KEYS = ["role", "description"] as const;
 
 /** 可变字段（参与 Delta；能力面板 `ability_panel` 结构特殊，由 `panel-tree` 单独渲染，不在此列表） */
-const MUTABLE_KEYS = ["alias", "gender", "age", "race", "motivation", "personality"] as const;
+export const CHARACTER_MUTABLE_DATA_KEYS = [
+  "alias",
+  "gender",
+  "age",
+  "race",
+  "motivation",
+  "personality",
+] as const;
 
 /** 字段分区（两 tab 共用同一分区结构；4.4 前的关系区块不在分区内） */
 export interface CharacterFieldGroup {
@@ -44,8 +51,8 @@ export function characterFieldGroups(): CharacterFieldGroup[] {
       return field;
     });
   return [
-    { title: CHARACTER_SECTION_BASICS, fields: pick(IMMUTABLE_KEYS) },
-    { title: CHARACTER_SECTION_MUTABLE, fields: pick(MUTABLE_KEYS) },
+    { title: CHARACTER_SECTION_BASICS, fields: pick(CHARACTER_BASICS_DATA_KEYS) },
+    { title: CHARACTER_SECTION_MUTABLE, fields: pick(CHARACTER_MUTABLE_DATA_KEYS) },
   ];
 }
 
