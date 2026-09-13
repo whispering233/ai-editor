@@ -16,7 +16,7 @@
 ### Changed
 
 - **标签 tint 准入收口（视觉变更）**：tint 六色底**只给用户标签 chip**（`data.tags` 元素：设定/事件/参考资料标签）；**枚举类型/分类不再上色**——卷/章/场（大纲列表、就地新建行、大纲详情元信息行）、实体类型与节点类型（回收站）、关联端点类型（源/目标列）与关系类型、伏笔 `category` 全部改走中性徽标（`{colors.surface-muted}` 底 + `{colors.tertiary}` 字）。改因：着色实现是「文案 hash 取模 6」且无准入规则，同一类「类型」在不同页面各行其是（人物页 `role` 无色、阅读进度有色与否看页面），6 档 hash 本身撞色（实测「设定/场/参考资料」同色、「事件/时间点」同色）⇒ 彩色不承载语义，反而让「彩色 = 这是标签」的信号失效。**准入规则的代码形式 = 两个组件名**：`TagChip`（tint，用户标签）/ `TypeChip`（中性，类型徽标）。
-- 同语义的既有灰 chip 一并统一到 `TypeChip`：伏笔列表行 `category`（原 tint）+ 伏笔详情 `category` + 人物页关系类型 / 「双向」徽标（原内联灰 span，底色由未 seed 的 `colorFillAlter`（浅色 2% 黑，≈`#fafafa`）改为已登记的 `surface-muted` `#f0eeec`）。
+- 同语义的既有灰 chip 一并统一到 `TypeChip`：伏笔列表行 `category`（原 tint）+ 伏笔详情 `category` + 人物页关系类型 / 「双向」徽标 + 实体详情页（设定/地点/时间点等）「其他关联」的关系类型（原内联灰 span，底色由未 seed 的 `colorFillAlter`（浅色 2% 黑，≈`#fafafa`）改为已登记的 `surface-muted` `#f0eeec`）。
 - 关联总览列表（`relations-view`）：关系类型列由**居中改左对齐**——与源/目标列、表头同口径（居中会让类型 chip 相对表头位移，看起来像列错位）。
 - 大纲行尾「阅读进度」徽标改排在删除按钮**左侧**：删除按钮恒贴行尾，不再被徽标往左推（跨行操作列对齐）。
 
@@ -26,10 +26,11 @@
 
 ### Docs
 
-- `docs/ui/DESIGN.md`：`tag` / `type-badge` 拆为两个组件规格（原 `tag` 即中性规格，字色由 `{colors.secondary}` 改 `{colors.tertiary}`）并登记**准入规则**（tint 只给 `data.tags`）；§Colors「标签色」重写适用范围（枚举不上色，并记录现状不一致与撞色事实）；Do's 增「不给枚举类型上彩色」。
+- `docs/ui/DESIGN.md`：`tag` / `type-badge` 拆为两个组件规格（原 `tag` 即中性规格，字色由 `{colors.secondary}` 改 `{colors.tertiary}`）并登记**准入规则**（tint 只给 `data.tags`）；§Colors「标签色」重写适用范围（枚举不上色，并记录现状不一致与撞色事实）；`status-badge` 去掉「或 tint 底色」授权（状态属枚举，不用 tint）；Do's 增「不给枚举类型上彩色」。
 - `docs/ui/DESIGN.md`：新增 `relations-view` 列对齐口径；`data-row` 登记「行尾状态徽标排在操作按钮左侧」；`character-workbench` 进度节点选择器登记搜索口径；删 `relation-star-graph` 整段并同步 `character-relations` 段。
 - `docs/design/backlog.md`：删「星形图叶子 `· N` = 列表行数」登记项（星形图已不存在）。
 - `AGENTS.md`：人物页条目去掉星形图描述。
+- `docs/design/backlog.md`：新登「参考资料分类徽标形态不统一」与「关联页端点类型徽标缺 `timepoint`/`event` 中文标签」（后者 = 关联总览显示原始英文类型串）。
 
 ## [v0.0.36] - 2026-09-13
 

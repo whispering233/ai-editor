@@ -41,6 +41,15 @@
 
 ## 前端 / UI
 
+- **参考资料页「分类徽标」形态与类型徽标不一致**（卡 10.4 登记）
+  - 现状：`pages/ReferenceDetail.tsx:354` 的分类徽标已是中性色，但形态是**描边徽标**（`border border-border rounded-md`），与 `TypeChip`（无描边 + `surface-muted` 底 + `rounded-sm`）不同——它同时也是页头右侧的元信息位（不是行内徽标）。
+  - 触发条件：再次调整参考资料页头部布局时。
+  - 最小修法：换 `TypeChip`（一行），代价是页头那一块视觉微变（去描边、底色由近白 `bg-muted` 变 `#f0eeec`）。
+- **关联页端点类型徽标缺 `timepoint`/`event` 中文标签**（卡 10.5 浏览器实测发现）
+  - 现状：`components/entity/relations-view.tsx:32` `ENDPOINT_TYPE_LABEL` 只有 `character`/`setting`/`location`/`hook`/`outline_node`；时间点↔事件关系（`occurs_at`）在关联总览的源/目标列直接显示原始类型串 `timepoint` / `event`（fallback `?? type`）。
+  - 影响：用户看到程序设计语义的英文标识（正是本仓多次收敛过的那类问题）。
+  - 触发条件：下次触碰关联页或统一「类型→中文名」映射时。
+  - 升级路径：把该表与 `Trash.tsx` 的 `ENTITY_TYPE_LABEL`、`lib/entity-list.ts` 的类型标签合并为一份（另一端点在人物页/大纲页都已有中文名）。
 - **关联对话框其余下拉的浮层宽度**（卡 8.2 oracle 登记，既有）
   - 现状：`select-free-input`（关系类型）已加 `popupMatchSelectWidth={false}`；同弹窗另 4 个 `Select` 与通用关联页两个过滤 `Select` 仍跟触发器宽度（长实体名会截断）。
   - 触发条件：再次触碰这两个文件时。
