@@ -42,4 +42,8 @@ test-project/*
 
 packages/server/books
 
+# 创作根运行时状态（服务器以某目录为创作根时会写 .ai-editor/config.json；packages/server 下
+# 启动 dev 服务即会在包目录建一份 —— 任何位置的 .ai-editor/ 都不入库）
+.ai-editor/
+
 test
