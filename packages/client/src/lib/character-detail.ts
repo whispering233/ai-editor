@@ -6,6 +6,7 @@
 //   `docs/db/schema.md`「人物 data 分层」（字段归属）与 `description` 必填（**仅前端校验**）。
 // 本模块只做判据与取值整形——不碰 DOM、不发请求（仓内无 jsdom，纯函数便于单测）。
 
+import { IMMUTABLE_FIELDS } from "@whispering233/ai-editor-shared";
 import { detailFieldsForType, type DetailFieldConfig } from "./entity-detail";
 
 /** 双视图 tab 键（页内 state；刷新回落默认 tab——DESIGN.md `tabs` 契约） */
@@ -19,8 +20,10 @@ export const CHARACTER_SECTION_MUTABLE = "可变数据";
  * 不可变字段（不参与 Delta；人工**仍可编辑**——`name` 是 `entities.name` 列、不在 data 字段清单里，
  * 由基础信息区单独渲染，故不在此列表）。顺序 = 渲染顺序；字段配置（label/control）仍取自
  * `detailFieldsForType("character")`（单一来源，不得在本模块另写一份 label）。
+ * **白名单单一事实源 = shared `IMMUTABLE_FIELDS.character`**（卡片 5.6：tools 提案层守卫与
+ * `lib/delta-create` 字段下拉排除消费同一常量）。
  */
-export const CHARACTER_BASICS_DATA_KEYS = ["role", "description"] as const;
+export const CHARACTER_BASICS_DATA_KEYS: readonly string[] = IMMUTABLE_FIELDS.character;
 
 /** 可变字段（参与 Delta；能力面板 `ability_panel` 结构特殊，由 `panel-tree` 单独渲染，不在此列表） */
 export const CHARACTER_MUTABLE_DATA_KEYS = [

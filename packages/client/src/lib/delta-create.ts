@@ -8,6 +8,7 @@
 import type { DeltaChange, DeltaOp, EntityType } from "@whispering233/ai-editor-shared";
 import {
   ENTITY_TYPES,
+  IMMUTABLE_FIELDS,
   SET_ONLY_FIELDS,
   abilityPanelFieldPath,
   coerceAbilityValue,
@@ -144,13 +145,6 @@ export interface DeltaFieldOption {
   panelLeaf?: boolean;
 }
 
-/** 不可变字段（不参与 Delta——`docs/db/schema.md`「人物 data 分层」/`10-data-model.md` §14 不变式 1）：
- * 不出现在变更记录字段下拉（人工经 PUT 直接编辑）。`role`/`description` 同时是列表摘要与 AI 检索的依据，
- * 允许 Delta 改会与 `entities.name`/摘要其它读取面产生“同一人物两个值”的语义裂缝。*/
-const IMMUTABLE_FIELDS: Record<string, readonly string[]> = {
-  character: ["role", "description"],
-};
-
 /** 整字段不进下拉的额外排除：`custom_fields`（record 无法用标量值表达）+ `ability_panel`
  *（面板是用户自定义树，**只有已存在的叶子**可被 Delta 改——整树不进下拉，
  * 叶子按**点分路径**动态展开，见 `entityDeltaFieldOptions` 的 `panel` 入参）*/
@@ -166,6 +160,8 @@ const NON_DELTA_FIELDS: readonly string[] = ["custom_fields", "ability_panel"];
  */
 export function entityDeltaFieldOptions(type: string, panel?: unknown): DeltaFieldOption[] {
   const keys = (ENTITY_DATA_KEYS as Record<string, readonly string[]>)[type] ?? [];
+ // 不可变字段（`role`/`description`，`docs/design/10-data-model.md` §14 不变式 1）不进下拉：
+ // 白名单**单一事实源 = shared `IMMUTABLE_FIELDS`**（tools 提案层消费同一常量，禁止手抄）
   const immutable = IMMUTABLE_FIELDS[type] ?? [];
   const base = keys
     .filter((k) => !NON_DELTA_FIELDS.includes(k) && !immutable.includes(k))

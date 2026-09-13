@@ -32,13 +32,9 @@
 
 import type { ProposeAddDeltaArgs } from "../schemas/index.js";
 import type { ToolContext } from "../context.js";
-// 白名单单一事实源（卡片 5.5）：client 与 tools 共消费 shared 常量，禁止各自手抄
-import { REMOVED_CHARACTER_FIELDS, SET_ONLY_FIELDS } from "@whispering233/ai-editor-shared";
+// 白名单单一事实源（卡片 5.5 / 5.6）：client 与 tools 共消费 shared 常量，禁止各自手抄
+import { IMMUTABLE_FIELDS, REMOVED_CHARACTER_FIELDS, SET_ONLY_FIELDS } from "@whispering233/ai-editor-shared";
 import { buildProposal, checkProposalAborted, refOutlineNode, requireOutlineNode, resolveEndpoint, type Proposal, type ToolProposalResult } from "./types.js";
-
-/** character 不可变字段（不参与 Delta——与前端 `lib/delta-create` 的 `IMMUTABLE_FIELDS` 同源）：
- * 人工经 `PUT` 直接编辑；它们同时是列表摘要与 AI 检索的依据，允许 Delta 改会产生“同一人物两个值” */
-const IMMUTABLE_CHARACTER_FIELDS = new Set(["role", "description"]);
 
 /**
  * 事实字段守卫：`targetType` 的事实字段（shared `SET_ONLY_FIELDS`）出现非 `set` 的 op → 抛错。
@@ -88,12 +84,13 @@ export function buildProposeAddDelta(ctx: ToolContext, args: ProposeAddDeltaArgs
   if (target.type === "event") {
     throw new Error(`event（时间轴事件）不产生 Delta，变更目标无效: ${args.target}`);
   }
- // character 不可变字段（卡片 5.2）：role/description 不参与变更记录（与前端字段下拉白名单同源）
- // character 已移除字段（卡片 5.4）：status/abilities 已从 schema 移除——写入只是脏键残留
+ // character 不可变字段（卡片 5.2 / 5.6）：role/description 不参与变更记录（请直接编辑）
+ // 白名单单一事实源 = shared `IMMUTABLE_FIELDS`（与前端字段下拉同源，禁止手抄）
   if (target.type === "character") {
+    const immutable = IMMUTABLE_FIELDS.character ?? [];
     for (const change of args.changes) {
       const field = (change as { field?: unknown } | null)?.field;
-      if (typeof field === "string" && IMMUTABLE_CHARACTER_FIELDS.has(field)) {
+      if (typeof field === "string" && immutable.includes(field)) {
         throw new Error(`character 的不可变字段不参与变更记录（请直接编辑）: ${field}`);
       }
     }

@@ -18,6 +18,20 @@ export const SET_ONLY_FIELDS: Record<string, readonly string[]> = {
 };
 
 /**
+ * character 不可变字段（**不参与 Delta**——人工经 `PUT` 直接编辑）：按实体类型。
+ *
+ * `role`/`description` 同时是列表摘要与 AI 检索的依据，允许 Delta 改会与 `entities.name`/
+ * 摘要其它读取面产生“同一人物两个值”的语义裂缝（见 `docs/db/schema.md`「人物 data 分层」/
+ * `docs/design/10-data-model.md` §14 不变式 1）。
+ *
+ * 消费方：client（`lib/delta-create` 字段下拉排除、`lib/character-detail` 基础信息区字段集）
+ * 与 tools（`proposal/delta` 提案层守卫）。
+ */
+export const IMMUTABLE_FIELDS: Record<string, readonly string[]> = {
+  character: ["role", "description"],
+};
+
+/**
  * character 已移除字段（schema 已删——`status` 无展示面、`abilities` 经 007 迁移为 `ability_panel`）：
  * 写入只会留下脏键（不参与展示与状态累积），故提案层与 executor 均拒绝；
  * 旧项目的存量脏值由 `.passthrough()` 容错，不迁移。

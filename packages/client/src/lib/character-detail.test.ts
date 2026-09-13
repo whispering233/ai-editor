@@ -3,6 +3,7 @@
 // 契约：docs/ui/DESIGN.md `character-workbench`（两分区、有当前位置 → tab 2、未设置 → tab 1 + 提示）；
 // docs/design/10-data-model.md §14（不可变字段不参与 Delta ⇒ 两视图一致；tab 2 只读）。
 import { describe, expect, it } from "vitest";
+import { IMMUTABLE_FIELDS } from "@whispering233/ai-editor-shared";
 import {
   characterFieldGroups,
   hasCharacterBasicsErrors,
@@ -13,6 +14,7 @@ import {
   resolvePositionState,
   resolveTabState,
   validateCharacterBasics,
+  CHARACTER_BASICS_DATA_KEYS,
   CHARACTER_SECTION_BASICS,
   CHARACTER_SECTION_MUTABLE,
   DESCRIPTION_EMPTY_HINT,
@@ -56,6 +58,11 @@ describe("characterFieldGroups（字段三分）", () => {
 
   it("不可变区 = 角色定位 / 描述（姓名是 entities.name，由视图单独渲染）", () => {
     expect(basics.fields.map((f) => f.key)).toEqual(["role", "description"]);
+  });
+
+  it("基础信息字段集 = shared 不可变字段白名单（卡片 5.6：单一定义，禁止手抄）", () => {
+ // 值相等 + 顺序一致 = 渲染顺序与 `IMMUTABLE_FIELDS.character` 同源；tools 提案层守卫消费同一常量
+    expect(CHARACTER_BASICS_DATA_KEYS).toEqual(IMMUTABLE_FIELDS.character);
   });
 
   it("可变区 = 假名 / 性别 / 年龄 / 种族 / 动机 / 性格（能力面板由宿主区块渲染，不在字段清单）", () => {

@@ -26,6 +26,7 @@ import {
   RELATION_TYPES,
   REMOVED_CHARACTER_FIELDS,
   SET_ONLY_FIELDS,
+  IMMUTABLE_FIELDS,
   TOOL_NAMES,
   TOOL_PERMISSION,
 } from "./index.js";
@@ -99,6 +100,14 @@ describe("伏笔常量", () => {
     expect(SET_ONLY_FIELDS).toEqual({ hook: ["status"] });
  // character 已移除字段（schema 已删，写入只会留脏键）：`docs/db/schema.md`「人物 data 分层」
     expect(REMOVED_CHARACTER_FIELDS).toEqual(["status", "abilities"]);
+  });
+
+  it("不可变字段白名单（卡片 5.6）：character 仅 role/description——单一定义供 client 与 tools 消费", () => {
+ // `docs/db/schema.md`「人物 data 分层」/`docs/design/10-data-model.md` §14 不变式 1
+ //（client：字段下拉排除 + 基础信息区字段集；tools：`proposal/delta` 提案层守卫）
+    expect(IMMUTABLE_FIELDS).toEqual({ character: ["role", "description"] });
+ // 与「已移除字段」互斥：同一字段不得同时是不可变与已移除（否则消费方语义互诉）
+    expect(IMMUTABLE_FIELDS.character.filter((f) => REMOVED_CHARACTER_FIELDS.includes(f))).toEqual([]);
   });
 
   it("DEFAULT_HALF_LIFE 缺省映射与 一致（单位：章）", () => {
