@@ -1,9 +1,9 @@
-// 人物详情双视图渲染走查（卡 3.2；卡 3.3 补：分区结构 / 必填内联错误 / 位置失效提示）。
+// 人物详情双视图渲染走查（卡 3.2；卡 3.3 补：必填内联错误 / 位置失效提示；卡 6.2 改：档案网格 + 只读纯文本）。
 // 仓内无 jsdom/@testing-library（既有纪律：不引新依赖），用 react-dom/server renderToString 直渲染展示层
 // （`CharacterDetailView`——数据/副作用在容器，SSR 不跑 effect；且 SSR 读的是 store 的 server snapshot，
-// 故当前位置/大纲一律由 props 注入，不依赖 setState 播种）。
-// 覆盖：页头壳（元信息行无「变更记录」入口）/ tab 行两 tab / 字段分区与归属 / 能力面板宿主 /
-//       `description` 必填内联错误 / tab 1 可编辑 / tab 2 只读（全部 disabled + caption）/
+// 故阅读进度/大纲一律由 props 注入，不依赖 setState 播种）。
+// 覆盖：页头壳（元信息行无「变更记录」入口）/ tab 行两 tab / 档案字段网格与顺序（**无分区标题**）/
+//       `description` 必填内联错误 / 人物档案 tab 可编辑 / 阅读进度 tab 纯文本值（无输入控件）/
 //       未设置与已失效两种提示 / 关系区（卡 3.6：关系网 + 其他关联折叠区，容器渲染）。
 import { describe, expect, it } from "vitest";
 import { renderToString } from "react-dom/server";
@@ -81,6 +81,19 @@ function countDisabled(html: string): number {
   return html.split('disabled=""').length - 1;
 }
 
+/** 字段顺序断言用：字符串首次出现位置（不存在 → -1） */
+function orderOf(html: string, needles: readonly string[]): number[] {
+  return needles.map((n) => html.indexOf(n));
+}
+
+/** 空值只读断言用：race 置空串（DETAIL 各字段均有值，借 detail.data 覆写；deltaCount=0 时只读值 = detail.data） */
+function renderWithEmptyRace(): string {
+  return renderWith({
+    tab: "current",
+    detail: { ...DETAIL, data: { ...DETAIL.data, race: "" } },
+  });
+}
+
 describe("CharacterDetailView（页头 + tab 行）", () => {
   it("页头保持：标题 + 保存/移入回收站 + 元信息行；元信息行的「变更记录 N 条」按钮已取消", () => {
     const html = render("initial");
@@ -111,34 +124,36 @@ describe("CharacterDetailView（页头 + tab 行）", () => {
   });
 });
 
-describe("CharacterDetailView（字段三分：两分区与归属）", () => {
-  it("tab 1 渲染两个分区标题（card + section-title）", () => {
+describe("CharacterDetailView（档案字段网格：单一 card、无分区标题）", () => {
+  it("不再渲染「基础信息 / 可变数据」分区标题（数据层分层不进 UI）", () => {
     const html = render("initial");
-    expect(html).toContain("基础信息");
-    expect(html).toContain("可变数据");
+    expect(html).not.toContain("基础信息");
+    expect(html).not.toContain("可变数据");
   });
 
-  it("基础信息区 = 姓名 / 角色定位 / 描述", () => {
+  it("两列网格 + 全部字段按单一清单顺序出现", () => {
     const html = render("initial");
-    const basics = html.slice(html.indexOf("基础信息"), html.indexOf("可变数据"));
-    expect(basics).toContain("姓名");
-    expect(basics).toContain("角色定位");
-    expect(basics).toContain("描述");
-    // 姓名 input 带当前值（entities.name）
-    expect(basics).toContain('value="张三"');
-  });
-
-  it("可变数据区 = 假名 / 性别 / 年龄 / 种族 / 动机 / 性格（且不含基础信息区字段）", () => {
-    const html = render("initial");
-    const mutable = html.slice(html.indexOf("可变数据"));
-    for (const label of ["假名", "性别", "年龄", "种族", "动机", "性格"]) {
-      expect(mutable).toContain(label);
+    expect(html).toContain("md:grid-cols-2");
+    const [name, role, alias, gender, age, race, description, personality, motivation] = orderOf(
+      html,
+      ["姓名", "角色定位", "假名", "性别", "年龄", "种族", "描述", "性格", "动机"],
+    );
+    for (const pos of [name, role, alias, gender, age, race, description, personality, motivation]) {
+      expect(pos).toBeGreaterThan(-1);
     }
-    expect(mutable).not.toContain("角色定位");
-    expect(mutable).not.toContain("已废弃的旧能力标签");
+    expect(name).toBeLessThan(role);
+    expect(role).toBeLessThan(alias);
+    expect(alias).toBeLessThan(gender);
+    expect(gender).toBeLessThan(age);
+    expect(age).toBeLessThan(race);
+    expect(race).toBeLessThan(description);
+    expect(description).toBeLessThan(personality);
+    expect(personality).toBeLessThan(motivation);
+    // 姓名 input 带当前值（entities.name）
+    expect(html).toContain('value="张三"');
   });
 
-  it("能力面板控件在可变数据区（树行：分组 + 叶子值输入 + 工具条）", () => {
+  it("能力面板与自定义字段在网格之下仍各自成块（网格下出标题行）", () => {
     const html = render("initial");
     expect(html).toContain("能力面板");
     // 分支行与叶子行分别渲染（不再是只读的点分路径文本）
@@ -240,36 +255,50 @@ describe("CharacterDetailView（description 必填内联错误）", () => {
   });
 });
 
-describe("CharacterDetailView（tab 1 可编辑）", () => {
-  it("初始化数据 tab：字段可编辑（无 disabled 控件）", () => {
+describe("CharacterDetailView（人物档案 tab 可编辑）", () => {
+  it("人物档案 tab：字段可编辑（无 disabled 控件），字段 label 全部出现", () => {
     const html = render("initial");
-    expect(html).toContain("基础信息");
-    expect(html).toContain("角色定位");
-    expect(html).toContain("假名");
+    for (const label of ["角色定位", "假名", "性别", "年龄", "种族", "描述", "性格", "动机"]) {
+      expect(html).toContain(label);
+    }
     expect(countDisabled(html)).toBe(0);
   });
 });
 
-describe("CharacterDetailView（tab 2 只读）", () => {
-  it("输入控件全部 disabled（不隐藏）+ 区首「由变更记录累积，只读」caption + 两分区仍在", () => {
+describe("CharacterDetailView（阅读进度 tab 只读：纯文本值）", () => {
+  it("caption 在 + 字段 label/网格位与档案 tab 一致（只读不靠 disabled）", () => {
     const html = render("current", { currentPosition: "ch-1" });
     expect(html).toContain("由变更记录累积，只读");
-    // 分区结构不变（基础信息 + 可变数据），只是禁用
-    expect(html).toContain("基础信息");
-    expect(html).toContain("可变数据");
-    expect(html).toContain("角色定位");
-    expect(countDisabled(html)).toBeGreaterThan(0);
+    expect(html).toContain("md:grid-cols-2");
+    for (const label of ["姓名", "角色定位", "假名", "性别", "年龄", "种族", "描述", "性格", "动机"]) {
+      expect(html).toContain(label);
+    }
+    // 只读画的是文本值（不再是灰底 disabled 输入框）：字段区无禁用控件
+    expect(countDisabled(html)).toBe(0);
     // 计算节点选择器保留（可手选任意节点）
     expect(html).toContain("计算节点");
   });
 
-  it("tab 2：面板树只读（行不可拖拽 + 工具条/值输入禁用，不隐藏）", () => {
+  it("只读值 = 文本（字符串原样 / 数组「、」连接 / 空值给 —）", () => {
+    const html = render("current", { currentPosition: "ch-1" });
+    expect(html).toContain("青云门弟子"); // 描述
+    expect(html).toContain("坚韧、多疑"); // personality[] 连接展示
+    expect(html).toContain(">18<"); // 数字字段
+    const empty = renderWithEmptyRace();
+    expect(empty).toContain(">—<");
+  });
+
+  it("阅读进度 tab：面板树只读（无输入框/工具条/行操作/拖拽，但名称与值文本仍在）", () => {
     const html = render("current", { currentPosition: "ch-1" });
     const panel = html.slice(html.indexOf("能力面板"));
-    expect(panel).not.toContain('draggable="true"'); // 禁拖拽
-    expect(panel).toContain("+ 新增分组"); // 工具条仍在（位置稳定），但被禁用
-    expect(panel).toContain('disabled=""');
-    expect(panel).toContain(">等级</button>"); // 字段行位置不变
+    expect(panel).not.toContain('draggable="true"');
+    expect(panel).not.toContain("+ 新增分组");
+    expect(panel).not.toContain("应用模板");
+    expect(panel).not.toContain("从角色复制");
+    expect(panel).not.toContain('aria-label="字段值"');
+    expect(panel).toContain("火系"); // 分组名
+    expect(panel).toContain("等级"); // 叶子名
+    expect(panel).toContain(">3<"); // 叶子值（文本）
   });
 
   it("未设置当前位置（已确认）→ 提示 + 「去大纲设位置」入口（#/outline）", () => {
@@ -366,10 +395,10 @@ function renderWith(opts: {
 }
 
 describe("CharacterDetailView（修复轮①：描述为空提示）", () => {
-  it("描述为空 + 可编辑态 → 基础信息区给「保存前需填写」提示（解释为何保存被拒）", () => {
+  it("描述为空 + 可编辑态 → 档案网格里给「保存前需填写」提示（解释为何保存被拒）", () => {
     const html = renderWith({ form: { ...FORM, description: "" } });
-    const basics = html.slice(html.indexOf("基础信息"), html.indexOf("可变数据"));
-    expect(basics).toContain("描述为空，保存前需填写");
+    const description = html.slice(html.indexOf("描述"), html.indexOf("性格"));
+    expect(description).toContain("描述为空，保存前需填写");
   });
 
   it("描述有值 → 不渲染提示", () => {

@@ -9,7 +9,11 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Button, Input, Select } from "antd";
 import type { AbilityPanelNode, EntitySummary } from "@whispering233/ai-editor-shared";
 import { createEntity, getEntityDetail, listEntities } from "../../lib/api";
-import { characterFieldGroups } from "../../lib/character-detail";
+import {
+  characterFieldsByKeys,
+  CHARACTER_BASICS_DATA_KEYS,
+  CHARACTER_MUTABLE_DATA_KEYS,
+} from "../../lib/character-detail";
 import {
   CHARACTER_CANDIDATE_LIMIT,
   DEFAULT_PANEL_CHOICE,
@@ -100,7 +104,9 @@ export function CreateCharacterFormBody({
   onSubmit,
   onCancel,
 }: CreateCharacterFormViewProps) {
-  const [basics, mutable] = characterFieldGroups();
+  // 弹窗自持两段标题（必填段 / 可选段）：分段仅服务“留空不写 data”的边界，不是数据层可变性分区
+  const basicsFields = characterFieldsByKeys(CHARACTER_BASICS_DATA_KEYS);
+  const mutableFields = characterFieldsByKeys(CHARACTER_MUTABLE_DATA_KEYS);
   const panelCount = panelNodeCount(panel);
   const countLabel =
     panel.length === 0 ? "空白面板：不创建任何字段" : `将创建 ${panelCount} 个字段`;
@@ -116,7 +122,7 @@ export function CreateCharacterFormBody({
           {errors.name !== null && <p className="mt-1 text-xs text-destructive">{errors.name}</p>}
         </div>
         <CharacterFieldsForm
-          fields={basics.fields}
+          fields={basicsFields}
           values={values}
           onChange={onFieldChange}
           fieldErrors={{ role: errors.role, description: errors.description }}
@@ -126,7 +132,7 @@ export function CreateCharacterFormBody({
       {/* 段 2：可选字段（留空即不写入 data） */}
       <div className="flex flex-col gap-3 border-t border-border pt-3">
         <p className={SECTION_LABEL_CLASS}>可选字段</p>
-        <CharacterFieldsForm fields={mutable.fields} values={values} onChange={onFieldChange} />
+        <CharacterFieldsForm fields={mutableFields} values={values} onChange={onFieldChange} />
       </div>
 
       {/* 段 3：能力面板（三选；结构快照深拷贝，见卡 3.5 契约） */}

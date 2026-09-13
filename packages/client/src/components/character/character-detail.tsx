@@ -1,23 +1,24 @@
-// 人物详情（卡 3.2）：双视图 tab（初始化数据 / 当前位置数据）——替换工作台右栏原来的泛型 `EntityDetail`。
-// 卡 3.3：字段三分渲染（「基础信息」不可变 + 姓名入力 / 「可变数据」可变 + 能力面板宿主位）、`description` 必填
-//   （仅前端）+ `current_position` 失效回落与「配置未加载不误判」三态判据。
-// 契约：`docs/ui/DESIGN.md` §数据展示 `character-workbench`（页头壳保持 + tab 行 + 只读语义 + 两分区）与 `tabs`
+// 人物详情（卡 3.2）：四 tab（人物档案 / 阅读进度 / 人物关系网 / 其他关联）——替换工作台右栏原来的泛型 `EntityDetail`。
+// 卡 3.3：`description` 必填（**仅前端**）+ `current_position` 失效回落与「配置未加载不误判」三态判据。
+// 卡 6.2：**删「基础信息 / 可变数据」分区**（数据层可变性分层不进 UI）——一个 card 内档案式字段网格
+//   （label 左置、单行字段两列、长文本/标签列表整行）；阅读进度 tab **同一网格、值画纯文本**（非 disabled 输入框）。
+// 契约：`docs/ui/DESIGN.md` §数据展示 `character-workbench`（页头壳保持 + tab 行 + 只读语义 + 档案网格）与 `tabs`
 //   （antd line 型；页内 tab **不进 URL**，刷新回落默认 tab；有 tab 的页面页头传 `divider={false}`——
 //   tab 条自带 1px hairline 底线即分割线，与设置页同款）；
 //   `docs/design/10-data-model.md` §14：不变式 1（不可变字段不参与 Delta、人工可编辑）、
-//   不变式 2（不可变字段两视图必然相同）、不变式 3（**只有「初始化数据」可编辑**、
-//   「当前位置数据」= `computeState(at_node = current_position)`、**只读**）；
+//   不变式 2（不可变字段两视图必然相同）、不变式 3（**只有「人物档案」可编辑**、
+//   「阅读进度」= `computeState(at_node = current_position)`、**只读**）；
 //   `docs/db/schema.md`「人物 data 分层」（字段归属 + `description` 必填仅前端校验）。
 // 页头：复用 `PageHeader` 壳（标题 + 保存/移入回收站 + 元信息行）；**取消**元信息行「变更记录 N 条」按钮
 //   （入口被 tab 2 吸收——状态预览不再需要手动展开）。
-// 只读语义：tab 2 的输入控件全部 `disabled`（**不隐藏**——字段位置稳定才好对比）+ 区首 caption「由变更记录累积，只读」。
+// 只读语义：阅读进度 tab **不渲染输入控件与面板工具条**（字段值 = 纯文本、面板 = 名称+值行）——
+//   两 tab 的字段 label 与网格位置逐一致（对比无位移），比一排灰底 disabled 输入框干净。
 // 卡 3.3 修复轮（oracle 三条打磨）：对象值只读渲染不再 `[object Object]`（`readOnlyFieldValue` 走紧凑 JSON + 截断）；
 //   「描述为空」提示（硬必填的前置提示，仅可编辑态）；大纲在途加载时 tab 2 在位置提示位补同一句加载文案。
-// 关系区块：本卡保持既有能力（1 跳双向列表 + 新建关联 + 物理删），形态暂为通用卡片；
-//   卡 3.6 重构为「人物关系网（人↔人）+ 其他关联（折叠区）」——届时本区块被替换。
+// 关系区块：卡 3.6 建（人↔人关系网 + 其他关联）；卡 6.3 改为彼此独立的 tab（见下）。
 // 数据：GET /entity/character/:id（含 relations + deltaCount）、PUT partial（diffData 只提交变更字段 + 姓名）、
 //   DELETE（软删 + 级联计数 → 跳 `#/characters`）、POST /delta/compute（tab 2 自动计算）、POST/DELETE /relation。
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { HolderOutlined } from "@ant-design/icons";
 import { formatTimestamp } from "@whispering233/ai-editor-shared";
 import type { ComputeStateResult } from "@whispering233/ai-editor-shared";
@@ -41,9 +42,10 @@ import {
   type EntityDetailRes,
 } from "../../lib/api";
 import {
-  characterFieldGroups,
+  characterDetailFields,
   hasCharacterBasicsErrors,
   isEmptyTextField,
+  isSingleLineField,
   resolveCurrentAtNode,
   resolveTabState,
   readOnlyFieldValue,
@@ -75,17 +77,15 @@ function fieldValue(raw: unknown): string {
 /**
  * 标签列表编辑器（人物 `personality`）：拖拽排序 + 回车续行，交互语义与 `EntityDetail` 的私有实现一致
  * （本卡不复用泛型详情页的私有组件，见文件头注释——人物页与其持续分化）。
- * `disabled` = tab 2 只读态：输入与增删全部禁用（结构不变，位置稳定）。
+ * 仅可编辑态使用（阅读进度 tab 走只读文本单元，不渲染本编辑器）。
  */
 function TagsEditor({
   values,
   onChange,
-  disabled,
   placeholder,
 }: {
   values: string[];
   onChange: (v: string[]) => void;
-  disabled?: boolean;
   placeholder?: string;
 }) {
   const inputRefs = useRef<Array<InputRef | null>>([]);
@@ -123,12 +123,10 @@ function TagsEditor({
               color="default"
               variant="text"
               size="small"
-              draggable={!disabled}
-              disabled={disabled}
+              draggable
               title="拖拽排序"
               aria-label="拖拽排序"
               onDragStart={(e) => {
-                if (disabled) return;
                 setDragIndex(i);
                 e.dataTransfer.effectAllowed = "move";
                 e.dataTransfer.setData("text/plain", String(i));
@@ -142,7 +140,6 @@ function TagsEditor({
           </span>
           <Input
             value={v}
-            disabled={disabled}
             onChange={(e) => {
               const next = [...values];
               next[i] = e.target.value;
@@ -162,27 +159,25 @@ function TagsEditor({
             placeholder={placeholder}
             className="flex-1"
           />
-          <Button disabled={disabled} onClick={() => onChange(values.filter((_, j) => j !== i))}>
+          <Button onClick={() => onChange(values.filter((_, j) => j !== i))}>
             删除
           </Button>
         </div>
       ))}
-      <Button className="self-start" disabled={disabled} onClick={() => onChange([...values, ""])}>
+      <Button className="self-start" onClick={() => onChange([...values, ""])}>
         + 添加
       </Button>
     </div>
   );
 }
 
-/** custom_fields 键值组编辑器（**仅有值时显示**——MVP 无法新增键，见 `EntityDetail` 同款边界） */
+/** custom_fields 键值组编辑器（**仅有值时显示**——MVP 无法新增键，见 `EntityDetail` 同款边界；仅可编辑态使用） */
 function CustomFieldsEditor({
   value,
   onChange,
-  disabled,
 }: {
   value: Record<string, unknown> | undefined;
   onChange: (v: Record<string, unknown>) => void;
-  disabled?: boolean;
 }) {
   const [rows, setRows] = useState<Array<{ key: string; value: string }>>(() =>
     Object.entries(value ?? {}).map(([k, v]) => ({ key: k, value: String(v ?? "") })),
@@ -208,7 +203,6 @@ function CustomFieldsEditor({
           <div className="w-28">
             <Input
               value={r.key}
-              disabled={disabled}
               onChange={(e) =>
                 commit(rows.map((x, j) => (j === i ? { ...x, key: e.target.value } : x)))
               }
@@ -217,21 +211,17 @@ function CustomFieldsEditor({
           </div>
           <Input
             value={r.value}
-            disabled={disabled}
             onChange={(e) =>
               commit(rows.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))
             }
             placeholder="值"
             className="flex-1"
           />
-          <Button disabled={disabled} onClick={() => commit(rows.filter((_, j) => j !== i))}>
-            删除
-          </Button>
+          <Button onClick={() => commit(rows.filter((_, j) => j !== i))}>删除</Button>
         </div>
       ))}
       <Button
         className="self-start"
-        disabled={disabled}
         onClick={() => commit([...rows, { key: "", value: "" }])}
       >
         + 添加字段
@@ -240,24 +230,21 @@ function CustomFieldsEditor({
   );
 }
 
-/** 单个字段控件（人物字段集：text/textarea/number/tags；`disabled` = tab 2 只读态） */
+/** 单个字段控件（档案网格单元：text / number / textarea / tags） */
 function FieldControl({
   field,
   value,
   onChange,
-  disabled,
 }: {
   field: DetailFieldConfig;
   value: unknown;
   onChange: (v: unknown) => void;
-  disabled?: boolean;
 }) {
   switch (field.control) {
     case "textarea":
       return (
         <Input.TextArea
           value={fieldValue(value)}
-          disabled={disabled}
           onChange={(e) => onChange(e.target.value)}
           rows={3}
         />
@@ -267,7 +254,6 @@ function FieldControl({
         <Input
           type="number"
           value={fieldValue(value)}
-          disabled={disabled}
           onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))}
         />
       );
@@ -275,42 +261,104 @@ function FieldControl({
       return (
         <TagsEditor
           values={Array.isArray(value) ? (value as string[]) : []}
-          disabled={disabled}
           onChange={onChange}
           placeholder="输入后回车添加下一项"
         />
       );
     default:
-      return (
-        <Input
-          value={fieldValue(value)}
-          disabled={disabled}
-          onChange={(e) => onChange(e.target.value)}
-        />
-      );
+      return <Input value={fieldValue(value)} onChange={(e) => onChange(e.target.value)} />;
   }
 }
 
+/** 档案字段行：label 左置固定 64px（`leading-8` 与 32px 控件同高对齐）+ 值区；整行字段跨两列 */
+function ProfileRow({
+  label,
+  fullWidth,
+  children,
+}: {
+  label: string;
+  fullWidth?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div className={cn("flex items-start gap-2", fullWidth === true && "md:col-span-2")}>
+      <span className="h-8 w-16 shrink-0 text-sm leading-8 text-muted-foreground">{label}</span>
+      <div className="min-w-0 flex-1">{children}</div>
+    </div>
+  );
+}
+
+/** 只读值（阅读进度 tab）：空值 `—`（quaternary）；长文本换行不截断，单行字段截断 */
+function ReadOnlyValue({ value, multiline }: { value: unknown; multiline: boolean }) {
+  const text = readOnlyFieldValue(value);
+  if (text === "") return <span className="text-muted-foreground/70">—</span>;
+  return (
+    <span
+      className={cn("text-foreground", multiline ? "whitespace-pre-wrap break-words" : "truncate")}
+    >
+      {text}
+    </span>
+  );
+}
+
+/** 只读值单元（盒高与可编辑控件一致：单行 32px 居中；长文本给 6px 上下内边距） */
+function ReadOnlyCell({ value, multiline }: { value: unknown; multiline: boolean }) {
+  return (
+    <div className={cn("text-sm leading-5", multiline ? "py-1.5" : "flex h-8 items-center")}>
+      <ReadOnlyValue value={value} multiline={multiline} />
+    </div>
+  );
+}
+
+/** 档案字段（单行字段 label/值同一行；长文本与标签列表整行） */
+function ProfileField({
+  field,
+  value,
+  onChange,
+  readOnly,
+  error,
+  hint,
+}: {
+  field: DetailFieldConfig;
+  value: unknown;
+  onChange: (v: unknown) => void;
+  readOnly: boolean;
+  error: string | null;
+  hint: string | null;
+}) {
+  const fullWidth = !isSingleLineField(field);
+  return (
+    <ProfileRow label={field.label} fullWidth={fullWidth}>
+      {readOnly ? (
+        <ReadOnlyCell value={value} multiline={fullWidth} />
+      ) : (
+        <FieldControl field={field} value={value} onChange={onChange} />
+      )}
+      {error !== null && <p className="mt-1 text-xs text-destructive">{error}</p>}
+      {error === null && hint !== null && (
+        <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
+      )}
+    </ProfileRow>
+  );
+}
+
 /**
- * 人物字段表单（两个 tab 共用同一字段集与控件形态——只读态靠 `disabled` 而非换渲染，字段位置才稳定）。
- * 字段集 = `detailFieldsForType("character")`（三分分区属卡 3.3）；能力面板 = `panel-tree` 控件（卡 3.4，
- * 结构编辑为人工编辑、不产生 Delta——见 `docs/design/10-data-model.md` §14 不变式 4）。
+ * 人物字段表单（**纵向 label 在上**——新建弹窗专用；人物详情页走 `CharacterProfile` 的档案网格）。
+ * 字段集由调用方切分（弹窗按「必填段 / 可选段」），控件形态与档案网格同源（`FieldControl`）。
  */
 export function CharacterFieldsForm({
   fields,
   values,
   onChange,
-  disabled,
   fieldErrors,
   fieldHints,
 }: {
   fields: readonly DetailFieldConfig[];
   values: Record<string, unknown>;
   onChange: (key: string, value: unknown) => void;
-  disabled?: boolean;
- /** 字段级内联错误（键 → 文案；仅基础信息必填判据用，缺省无错误） */
+  /** 字段级内联错误（键 → 文案；仅基础信息必填判据用，缺省无错误） */
   fieldErrors?: Partial<Record<string, string | null>>;
- /** 字段级提示（键 → 文案；与错误同位、但用次级字色——如「描述为空，保存前需填写」） */
+  /** 字段级提示（键 → 文案；与错误同位、但用次级字色——如「描述为空，保存前需填写」） */
   fieldHints?: Partial<Record<string, string | null>>;
 }) {
   return (
@@ -324,7 +372,6 @@ export function CharacterFieldsForm({
             <FieldControl
               field={f}
               value={values[f.key]}
-              disabled={disabled}
               onChange={(v) => onChange(f.key, v)}
             />
             {error !== null && <p className="mt-1 text-xs text-destructive">{error}</p>}
@@ -339,102 +386,99 @@ export function CharacterFieldsForm({
 }
 
 /**
- * 人物字段两分区（**两个 tab 共用同一分区结构**——只读态靠 `disabled` 而非另一套渲染，字段位置才稳定）：
- * 「基础信息」（姓名 / 角色定位 / 描述，不可变）+「可变数据」（假名 / 性别 / 年龄 / 种族 / 动机 / 性格
- * + 能力面板宿主 + 已有 `custom_fields`）。
+ * 人物档案 tab（**一个 card 内的档案式字段网格**）：
+ * - **不再按可变性分区**（「基础信息 / 可变数据」是数据层概念，只服务变更记录白名单与 AI 提案边界，
+ *   不在 UI 表达——见 `docs/design/10-data-model.md` §14）
+ * - 顺序 = `characterDetailFields()`（单一清单）；单行字段 ≥md 两列，长文本/标签列表整行
+ * - `readOnly`（阅读进度 tab）：**同一网格、label 逐一致**，值画纯文本（`ReadOnlyCell`）——不是 disabled 输入框
+ * - 能力面板（`panel-tree`）与「自定义字段」在网格之下各自成块：树 / 键值对形态塞不进字段网格，与可变性无关
  */
-function CharacterSections({
+function CharacterProfile({
   name,
   onNameChange,
   values,
   onFieldChange,
-  disabled,
+  readOnly,
   basicsErrors,
   showCustomFields,
   selfId,
 }: {
- /** 姓名（`entities.name` 列，不是 data 字段；不可变但人工可编辑） */
+  /** 姓名（`entities.name` 列，不是 data 字段；不可变但人工可编辑） */
   name: string;
   onNameChange: (v: string) => void;
   values: Record<string, unknown>;
   onFieldChange: (key: string, value: unknown) => void;
-  disabled?: boolean;
- /** 基础信息必填判据（仅 tab 1 传入；tab 2 只读不校验） */
+  /** 只读态（阅读进度 tab）：值画文本，不渲染输入控件 */
+  readOnly?: boolean;
+  /** 基础信息必填判据（仅档案 tab 传入；阅读进度视图不校验） */
   basicsErrors?: CharacterBasicsErrors;
- /** `custom_fields` 仅在响应 data 已有该键时显示（MVP 边界：无键不可新增，同泛型详情页） */
+  /** `custom_fields` 仅在响应 data 已有该键时显示（MVP 边界：无键不可新增，同泛型详情页） */
   showCustomFields: boolean;
   /** 本角色 id（面板「从角色复制」候选里排除自己） */
   selfId?: string;
 }) {
-  const [basics, mutable] = characterFieldGroups();
-  // 「描述为空」提示：仅**可编辑态**且值为空时给（tab 2 只读不保存，提示无意义）
+  const fields = characterDetailFields();
+  // 「描述为空」提示：仅**可编辑态**且值为空时给（阅读进度视图不保存，提示无意义）
   const descriptionHint =
-    disabled !== true && isEmptyTextField(values.description) ? DESCRIPTION_EMPTY_HINT : null;
+    readOnly !== true && isEmptyTextField(values.description) ? DESCRIPTION_EMPTY_HINT : null;
   return (
-    <div className="flex flex-col gap-4">
-      <SectionCard title={basics.title}>
-        <div className="flex flex-col gap-3">
-          <div>
-            <p className="mb-1 text-sm font-medium text-foreground">姓名</p>
-            <Input
-              value={name}
-              disabled={disabled}
-              onChange={(e) => onNameChange(e.target.value)}
-            />
-            {basicsErrors?.name != null && (
-              <p className="mt-1 text-xs text-destructive">{basicsErrors.name}</p>
-            )}
-          </div>
-          <CharacterFieldsForm
-            fields={basics.fields}
-            values={values}
-            onChange={onFieldChange}
-            disabled={disabled}
-            fieldErrors={{ description: basicsErrors?.description ?? null }}
-            fieldHints={{ description: descriptionHint }}
+    <SectionCard>
+      <div className="grid gap-x-4 gap-y-3 md:grid-cols-2">
+        <ProfileRow label="姓名">
+          {readOnly === true ? (
+            <div className="flex h-8 items-center text-sm leading-5 text-foreground">{name}</div>
+          ) : (
+            <Input value={name} onChange={(e) => onNameChange(e.target.value)} />
+          )}
+          {basicsErrors?.name != null && (
+            <p className="mt-1 text-xs text-destructive">{basicsErrors.name}</p>
+          )}
+        </ProfileRow>
+        {fields.map((f) => (
+          <ProfileField
+            key={f.key}
+            field={f}
+            value={values[f.key]}
+            onChange={(v) => onFieldChange(f.key, v)}
+            readOnly={readOnly === true}
+            error={f.key === "description" ? (basicsErrors?.description ?? null) : null}
+            hint={f.key === "description" ? descriptionHint : null}
           />
-        </div>
-      </SectionCard>
+        ))}
+      </div>
 
-      <SectionCard title={mutable.title}>
-        <CharacterFieldsForm
-          fields={mutable.fields}
-          values={values}
-          onChange={onFieldChange}
-          disabled={disabled}
-        />
-        <PanelTree
-          panel={values.ability_panel}
-          onChange={(next) => onFieldChange("ability_panel", next)}
-          disabled={disabled}
-          selfId={selfId}
-        />
-        {showCustomFields && (
-          <div className="mt-4 border-t border-border pt-3">
-            <p className="mb-1 text-sm font-medium text-foreground">自定义字段</p>
-            {disabled ? (
-              <div className="flex flex-col gap-1 text-sm">
-                {Object.entries((values.custom_fields ?? {}) as Record<string, unknown>).map(
-                  ([k, v]) => (
-                    <div key={k} className="flex items-baseline gap-2">
-                      <span className="shrink-0 text-muted-foreground">{k}</span>
-                      <span className="min-w-0 flex-1 truncate text-foreground">
-                        {readOnlyFieldValue(v)}
-                      </span>
-                    </div>
-                  ),
-                )}
-              </div>
-            ) : (
-              <CustomFieldsEditor
-                value={values.custom_fields as Record<string, unknown> | undefined}
-                onChange={(v) => onFieldChange("custom_fields", v)}
-              />
-            )}
-          </div>
-        )}
-      </SectionCard>
-    </div>
+      <PanelTree
+        panel={values.ability_panel}
+        onChange={(next) => onFieldChange("ability_panel", next)}
+        readOnly={readOnly === true}
+        selfId={selfId}
+      />
+
+      {showCustomFields && (
+        <div className="mt-4 border-t border-border pt-3">
+          <p className="mb-1 text-sm font-medium text-foreground">自定义字段</p>
+          {readOnly === true ? (
+            <div className="flex flex-col gap-1 text-sm">
+              {Object.entries((values.custom_fields ?? {}) as Record<string, unknown>).map(
+                ([k, v]) => (
+                  <div key={k} className="flex items-baseline gap-2">
+                    <span className="shrink-0 text-muted-foreground">{k}</span>
+                    <span className="min-w-0 flex-1 truncate text-foreground">
+                      {readOnlyFieldValue(v)}
+                    </span>
+                  </div>
+                ),
+              )}
+            </div>
+          ) : (
+            <CustomFieldsEditor
+              value={values.custom_fields as Record<string, unknown> | undefined}
+              onChange={(v) => onFieldChange("custom_fields", v)}
+            />
+          )}
+        </div>
+      )}
+    </SectionCard>
   );
 }
 
@@ -443,7 +487,7 @@ function CharacterSections({
  * - 计算节点默认取 `current_position`（须存在于大纲树）；**保留手动选节点下拉**（「第 N 章时他什么状态」）
  * - 结果自动计算（切换节点即重算；`deltaCount === 0` 时轻量空态、不发请求）
  * - conflicts / 状态差异 / 应用的变更记录 = 复用 `ComputeResult`（与 `ComputePreview` 同一实现，标注照搬）
- * - 字段视图的值 = 计算结果（尚未算出 → 初始 `data`），控件全部 `disabled`
+ * - 字段视图的值 = 计算结果（尚未算出 → 初始 `data`），**画纯文本**（同一档案网格）
  *
  * 依赖注入：`currentPosition` / `outlineNodes` 由容器从 project store 传入（本层不读 store）——
  * 既让展示层可在 `react-dom/server` 下直接走查（SSR 读不到 client store 的 setState 播种），
@@ -570,7 +614,7 @@ function CharacterCurrentTab({
         </div>
       </div>
 
-      {/* 只读说明（只读语义：控件 disabled 而非隐藏；见文件头注释） */}
+      {/* 只读说明（阅读进度 = 变更记录累积，只读；值以文本画在与档案 tab 完全相同的网格里） */}
       <p className="text-xs text-muted-foreground">由变更记录累积，只读</p>
 
       {showOutlineLoadingHint && (
@@ -612,13 +656,13 @@ function CharacterCurrentTab({
         </div>
       )}
 
-      {/* 字段视图（只读）：同一分区结构（基础信息 / 可变数据）+ 只读态全 `disabled`；值 = 计算结果 */}
-      <CharacterSections
+      {/* 字段视图（只读）：**同一档案网格**（label 与人物档案 tab 逐一致）+ 值画纯文本；值 = 计算结果 */}
+      <CharacterProfile
         name={detail.name}
         onNameChange={() => {}}
         values={stateValues}
         onFieldChange={() => {}}
-        disabled
+        readOnly
         showCustomFields={"custom_fields" in detail.data}
         selfId={detail.id}
       />
@@ -733,7 +777,7 @@ export function CharacterDetailView({
             label: "初始化数据",
             children: (
               <div className="flex flex-col gap-4">
-                <CharacterSections
+                <CharacterProfile
                   name={name}
                   onNameChange={onNameChange}
                   values={form}

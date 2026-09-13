@@ -12,20 +12,18 @@ import { detailFieldsForType, type DetailFieldConfig } from "./entity-detail";
 /** 双视图 tab 键（页内 state；刷新回落默认 tab——DESIGN.md `tabs` 契约） */
 export type CharacterViewTab = "initial" | "current";
 
-/** 分区标题（卡片 3.3：与 DESIGN.md `character-workbench` 的「不可变区 / 可变区」逐字对应） */
-export const CHARACTER_SECTION_BASICS = "基础信息";
-export const CHARACTER_SECTION_MUTABLE = "可变数据";
+/** 分区标题已删（卡 6.2）：UI 不再按可变性分块——分层只服务变更记录白名单与 AI 提案边界 */
 
 /**
  * 不可变字段（不参与 Delta；人工**仍可编辑**——`name` 是 `entities.name` 列、不在 data 字段清单里，
- * 由基础信息区单独渲染，故不在此列表）。顺序 = 渲染顺序；字段配置（label/control）仍取自
- * `detailFieldsForType("character")`（单一来源，不得在本模块另写一份 label）。
+ * 由档案网格单独渲染，故不在此列表）。
  * **白名单单一事实源 = shared `IMMUTABLE_FIELDS.character`**（卡片 5.6：tools 提案层守卫与
  * `lib/delta-create` 字段下拉排除消费同一常量）。
+ * **用途收窄（卡 6.2）**：仅服务新建弹窗分段与创建载荷 prune；详情页按 `CHARACTER_DETAIL_FIELD_KEYS` 渲染。
  */
 export const CHARACTER_BASICS_DATA_KEYS: readonly string[] = IMMUTABLE_FIELDS.character;
 
-/** 可变字段（参与 Delta；能力面板 `ability_panel` 结构特殊，由 `panel-tree` 单独渲染，不在此列表） */
+/** 可变字段键（参与 Delta；能力面板 `ability_panel` 结构特殊，由 `panel-tree` 单独渲染）——用途同上 */
 export const CHARACTER_MUTABLE_DATA_KEYS = [
   "alias",
   "gender",
@@ -35,39 +33,53 @@ export const CHARACTER_MUTABLE_DATA_KEYS = [
   "personality",
 ] as const;
 
-/** 字段分区（两 tab 共用同一分区结构；4.4 前的关系区块不在分区内） */
-export interface CharacterFieldGroup {
-  title: string;
-  fields: DetailFieldConfig[];
-}
+/**
+ * 详情页字段渲染顺序（**单一清单**）：档案式阅读顺序 = 身份（角色定位）→ 短字段（假名/性别/年龄/种族）
+ * → 长篇（描述/性格/动机）。可变性分层**不进 UI**（两 tab 共用本顺序，label 逐一致才好对比）。
+ */
+export const CHARACTER_DETAIL_FIELD_KEYS: readonly string[] = [
+  "role",
+  "alias",
+  "gender",
+  "age",
+  "race",
+  "description",
+  "personality",
+  "motivation",
+];
 
 /**
- * 人物字段三分分组（不可变 / 可变）——供两个 tab 共用渲染。
- * 字段配置缺失 → 抛错（配置漂移应在测试里立刻暴露，不静默丢字段）。
+ * 按 key 取字段配置（缺失 → 抛错：配置漂移应在测试里立刻暴露，不静默丢字段）。
+ * label/control 单一来源仍 = `detailFieldsForType("character")`。
  */
-export function characterFieldGroups(): CharacterFieldGroup[] {
+export function characterFieldsByKeys(keys: readonly string[]): DetailFieldConfig[] {
   const all = detailFieldsForType("character");
-  const pick = (keys: readonly string[]): DetailFieldConfig[] =>
-    keys.map((key) => {
-      const field = all.find((f) => f.key === key);
-      if (field === undefined) throw new Error(`人物字段配置缺失: ${key}`);
-      return field;
-    });
-  return [
-    { title: CHARACTER_SECTION_BASICS, fields: pick(CHARACTER_BASICS_DATA_KEYS) },
-    { title: CHARACTER_SECTION_MUTABLE, fields: pick(CHARACTER_MUTABLE_DATA_KEYS) },
-  ];
+  return keys.map((key) => {
+    const field = all.find((f) => f.key === key);
+    if (field === undefined) throw new Error(`人物字段配置缺失: ${key}`);
+    return field;
+  });
 }
 
-/** 基础信息区必填判据结果（两个错误位各自独立；`null` = 无错） */
+/** 详情页字段（顺序 = `CHARACTER_DETAIL_FIELD_KEYS`） */
+export function characterDetailFields(): DetailFieldConfig[] {
+  return characterFieldsByKeys(CHARACTER_DETAIL_FIELD_KEYS);
+}
+
+/** 单行字段判据（`text`/`number` → 档案网格单元；`textarea`/`tags` → 整行铺满） */
+export function isSingleLineField(field: DetailFieldConfig): boolean {
+  return field.control === "text" || field.control === "number";
+}
+
+/** 必填判据结果（`name` / `description` 两个错误位各自独立；`null` = 无错） */
 export interface CharacterBasicsErrors {
   name: string | null;
   description: string | null;
 }
 
 /**
- * 基础信息必填判据（**仅前端**，服务端不硬校验——见 `docs/db/schema.md`）：`trim` 后非空即通过。
- * `name` 一并校验：卡片 3.3 把姓名入力引入本页（`entities.name`），空名会被服务端 400 拦下，
+ * 必填判据（**仅前端**，服务端不硬校验——见 `docs/db/schema.md`）：`trim` 后非空即通过。
+ * `name` 一并校验：姓名入力在档案网格首位（`entities.name`），空名会被服务端 400 拦下，
  * 这里提前拦截以避免无效往返。
  */
 export function validateCharacterBasics(input: {
@@ -96,7 +108,7 @@ export function isEmptyTextField(raw: unknown): boolean {
 }
 
 /**
- * 「描述为空」提示文案（基础信息区「描述」字段下方，**仅可编辑态且值为空**时展示）。
+ * 「描述为空」提示文案（档案网格「描述」字段下方，**仅可编辑态且值为空**时展示）。
  * 存在意义：`description` 是硬必填 ⇒ 历史空值角色在补齐前**保存不了任何修改**，
  * 不给提示时会表现为「保存按钮无效」，用户无从得知原因。
  */

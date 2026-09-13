@@ -1,13 +1,16 @@
-// 人物详情双视图判据单测（卡 3.2）：默认 tab / 计算节点默认值 / 只读取值展示。
-// 卡 3.3 补：字段三分分组（不可变 / 可变）、基础信息必填判据、位置四态与默认 tab 的同源判据。
-// 契约：docs/ui/DESIGN.md `character-workbench`（两分区、有当前位置 → tab 2、未设置 → tab 1 + 提示）；
-// docs/design/10-data-model.md §14（不可变字段不参与 Delta ⇒ 两视图一致；tab 2 只读）。
+// 人物详情双视图判据单测（卡 3.2）：默认 tab / 进度节点默认值 / 只读取值展示。
+// 卡 3.3 补：基础信息必填判据、位置四态与默认 tab 的同源判据。
+// 卡 6.2 改：字段分区标题已删 → 改为「详情页字段顺序单一清单 + 单行字段判据」。
+// 契约：docs/ui/DESIGN.md `character-workbench`（档案网格、有阅读进度 → 阅读进度 tab、未设置 → 人物档案 tab + 提示）；
+// docs/design/10-data-model.md §14（不可变字段不参与 Delta ⇒ 两视图一致；阅读进度 tab 只读）。
 import { describe, expect, it } from "vitest";
 import { IMMUTABLE_FIELDS } from "@whispering233/ai-editor-shared";
 import {
-  characterFieldGroups,
+  characterDetailFields,
+  characterFieldsByKeys,
   hasCharacterBasicsErrors,
   isEmptyTextField,
+  isSingleLineField,
   readOnlyFieldValue,
   resolveCurrentAtNode,
   resolveDefaultTab,
@@ -15,8 +18,7 @@ import {
   resolveTabState,
   validateCharacterBasics,
   CHARACTER_BASICS_DATA_KEYS,
-  CHARACTER_SECTION_BASICS,
-  CHARACTER_SECTION_MUTABLE,
+  CHARACTER_DETAIL_FIELD_KEYS,
   DESCRIPTION_EMPTY_HINT,
   OUTLINE_LOADING_TEXT,
   READONLY_FALLBACK_TEXT,
@@ -48,39 +50,50 @@ describe("resolveCurrentAtNode", () => {
   });
 });
 
-describe("characterFieldGroups（字段三分）", () => {
-  const [basics, mutable] = characterFieldGroups();
+describe("characterDetailFields（详情页字段：单一顺序清单）", () => {
+  const fields = characterDetailFields();
+  const byKey = new Map(fields.map((f) => [f.key, f]));
 
-  it("分区标题 = 「基础信息」/「可变数据」（与 DESIGN.md 逐字一致）", () => {
-    expect(basics.title).toBe(CHARACTER_SECTION_BASICS);
-    expect(mutable.title).toBe(CHARACTER_SECTION_MUTABLE);
-  });
-
-  it("不可变区 = 角色定位 / 描述（姓名是 entities.name，由视图单独渲染）", () => {
-    expect(basics.fields.map((f) => f.key)).toEqual(["role", "description"]);
-  });
-
-  it("基础信息字段集 = shared 不可变字段白名单（卡片 5.6：单一定义，禁止手抄）", () => {
- // 值相等 + 顺序一致 = 渲染顺序与 `IMMUTABLE_FIELDS.character` 同源；tools 提案层守卫消费同一常量
-    expect(CHARACTER_BASICS_DATA_KEYS).toEqual(IMMUTABLE_FIELDS.character);
-  });
-
-  it("可变区 = 假名 / 性别 / 年龄 / 种族 / 动机 / 性格（能力面板由宿主区块渲染，不在字段清单）", () => {
-    expect(mutable.fields.map((f) => f.key)).toEqual([
+  it("顺序 = 角色定位 / 假名 / 性别 / 年龄 / 种族 / 描述 / 性格 / 动机（档案式阅读顺序）", () => {
+    expect(fields.map((f) => f.key)).toEqual([
+      "role",
       "alias",
       "gender",
       "age",
       "race",
-      "motivation",
+      "description",
       "personality",
+      "motivation",
     ]);
   });
 
-  it("两区不重叠、不遗漏（并集 = 人物字段清单去掉已废弃的 abilities）", () => {
-    const keys = [...basics.fields, ...mutable.fields].map((f) => f.key);
-    expect(new Set(keys).size).toBe(keys.length);
-    expect(keys).not.toContain("abilities");
-    expect(keys).not.toContain("status");
+  it("顺序 = `CHARACTER_DETAIL_FIELD_KEYS`（单一来源，无第二份手写顺序）", () => {
+    expect(fields.map((f) => f.key)).toEqual([...CHARACTER_DETAIL_FIELD_KEYS]);
+  });
+
+  it("不含已废弃字段（abilities / status）与实体列（name）", () => {
+    const keys = fields.map((f) => f.key);
+    for (const dead of ["abilities", "status", "name", "ability_panel", "custom_fields"]) {
+      expect(keys).not.toContain(dead);
+    }
+  });
+
+  it("单行字段判据：text/number → 网格单元；textarea/tags → 整行", () => {
+    for (const key of ["role", "alias", "gender", "age", "race"]) {
+      expect(isSingleLineField(byKey.get(key)!)).toBe(true);
+    }
+    for (const key of ["description", "personality", "motivation"]) {
+      expect(isSingleLineField(byKey.get(key)!)).toBe(false);
+    }
+  });
+
+  it("不可变字段键 = shared 白名单（卡片 5.6：单一定义，禁止手抄）", () => {
+ // 值相等 + 顺序一致；tools 提案层守卫消费同一常量
+    expect(CHARACTER_BASICS_DATA_KEYS).toEqual(IMMUTABLE_FIELDS.character);
+  });
+
+  it("字段配置缺失 → 抛错（配置漂移不静默丢字段）", () => {
+    expect(() => characterFieldsByKeys(["不存在的字段"])).toThrow("人物字段配置缺失");
   });
 });
 

@@ -4,7 +4,8 @@
 // - **结构编辑是人工编辑**：产物走 `onChange` 进表单 state，由既有保存路径 `PUT partial` 落库，
 //   **不产生 Delta**（只有已存在叶子可被 Delta 改——`docs/design/10-data-model.md` §14 不变式 4）
 // - 树变换全部走 `lib/panel-tree.ts` 纯函数（索引路径寻址；点分**名**路径留给 Delta 解析）
-// - 只读态（tab 2）：工具条与行操作**禁用而非隐藏**（字段位置稳定，同字段区约定）
+// - 只读形态（`readOnly` = 阅读进度 tab）：不渲染可编辑树（无输入框/工具条/行操作/拖拽），
+//   只给同缩进的「名称 + 值文本」行——见 `docs/ui/DESIGN.md` `panel-tree`
 import { useEffect, useMemo, useState } from "react";
 import type { DragEvent, KeyboardEvent } from "react";
 import { Button, Input, Select } from "antd";
@@ -35,8 +36,7 @@ import { ConfirmDialog } from "../outline/dialogs";
 import { DropIndicator } from "../ui/drop-indicator";
 import { cn } from "../../lib/utils";
 import { useUiStore } from "../../stores/ui";
-
-/** 叶子值 → 输入框文本（空值 → 空串，由 placeholder 呈现 `—`） */
+/** 叶子值 → 输入框文本（空值 → 空串 = 空输入框；不给 `—` 占位符——占位符会被误读为已有值） */
 function valueText(value: string | number | undefined): string {
   return value === undefined ? "" : String(value);
 }
@@ -64,14 +64,15 @@ interface PendingReplace {
 export function PanelTree({
   panel,
   onChange,
-  disabled = false,
+  readOnly = false,
   selfId,
 }: {
   /** 面板原始值（可 raw——内部先过 `parseAbilityPanel` 规范化） */
   panel: unknown;
-  onChange: (next: AbilityPanelNode[]) => void;
-  /** 只读态（tab 2）：输入与操作图标禁用，拖拽关闭 */
-  disabled?: boolean;
+  /** 结构变更出口（只读形态不触发；新建弹窗/阅读进度 tab 可不传） */
+  onChange?: (next: AbilityPanelNode[]) => void;
+  /** 只读形态（阅读进度 tab）：只渲染「名称 + 值文本」行，不渲染可编辑树 */
+  readOnly?: boolean;
   /** 本角色 id（「从角色复制」候选里排除自己） */
   selfId?: string;
 }) {
@@ -96,10 +97,24 @@ export function PanelTree({
     setDropTarget(null);
   }, [selfId]);
 
+  // 只读形态：hooks 已全部声明（不得条件调用），这里只换渲染分支
+  if (readOnly) {
+    return (
+      <div className="mt-4 border-t border-border pt-3">
+        <p className="mb-2 text-sm font-medium text-foreground">能力面板</p>
+        {nodes.length === 0 ? (
+          <p className="text-xs text-muted-foreground">暂无面板字段</p>
+        ) : (
+          <PanelReadOnlyRows nodes={nodes} depth={0} />
+        )}
+      </div>
+    );
+  }
+
   function commit(next: AbilityPanelNode[] | null): void {
     if (next === null) return; // 非法操作（空名/路径失效）→ 不改数据
     if (next === nodes) return; // 值未变化
-    onChange(next);
+    onChange?.(next);
   }
 
   function toggleCollapsed(key: string): void {
@@ -256,14 +271,13 @@ export function PanelTree({
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <p className="text-sm font-medium text-foreground">能力面板</p>
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <Button size="small" disabled={disabled} onClick={() => addNode([], nodes.length, "新分组")}>
+          <Button size="small" onClick={() => addNode([], nodes.length, "新分组")}>
             + 新增分组
           </Button>
           <Select
             size="small"
             className="w-40"
             value=""
-            disabled={disabled}
             placeholder="应用模板"
             aria-label="应用面板模板"
             popupMatchSelectWidth={false}
@@ -280,7 +294,6 @@ export function PanelTree({
             size="small"
             className="w-40"
             value=""
-            disabled={disabled}
             placeholder={copyLoading ? "读取中…" : "从角色复制"}
             aria-label="从角色复制面板结构"
             popupMatchSelectWidth={false}
@@ -313,7 +326,6 @@ export function PanelTree({
             nodes={nodes}
             parentPath={[]}
             depth={0}
-            disabled={disabled}
             collapsed={collapsed}
             warnings={warnings}
             editing={editing}
@@ -377,7 +389,6 @@ function PanelRows({
   nodes,
   parentPath,
   depth,
-  disabled,
   collapsed,
   warnings,
   editing,
@@ -400,7 +411,6 @@ function PanelRows({
   nodes: readonly AbilityPanelNode[];
   parentPath: PanelIndexPath;
   depth: number;
-  disabled: boolean;
   collapsed: readonly string[];
   warnings: Map<string, string>;
   editing: { path: string; draft: string } | null;
@@ -435,7 +445,7 @@ function PanelRows({
         return (
           <div key={key}>
             <div
-              draggable={!disabled}
+              draggable
               onDragStart={(e) => onDragStart(e, key)}
               onDragOver={(e) => onRowDragOver(e, key)}
               onDragEnd={onDragEnd}
@@ -456,7 +466,6 @@ function PanelRows({
                   color="default"
                   variant="text"
                   size="small"
-                  disabled={disabled}
                   aria-label={isCollapsed ? `展开「${node.name}」` : `收起「${node.name}」`}
                   onClick={() => onToggleCollapsed(key)}
                   icon={
@@ -492,12 +501,11 @@ function PanelRows({
               ) : (
                 <button
                   type="button"
-                  disabled={disabled}
                   title="点击改名"
                   onClick={() => onStartRename(path, node.name)}
                   className={cn(
                     "min-w-0 truncate text-left text-sm text-foreground",
-                    !disabled && "hover:underline",
+                    "hover:underline",
                     branch && "font-medium",
                   )}
                 >
@@ -505,11 +513,10 @@ function PanelRows({
                 </button>
               )}
 
-              {/* 叶子值（空值显示 `—`；失焦/回车提交，类型自动判定） */}
+              {/* 叶子值（失焦/回车提交，类型自动判定） */}
               {!branch && (
                 <LeafValueInput
                   value={node.value}
-                  disabled={disabled}
                   onCommit={(raw) => onLeafValueCommit(path, raw)}
                 />
               )}
@@ -520,7 +527,6 @@ function PanelRows({
                   color="default"
                   variant="text"
                   size="small"
-                  disabled={disabled}
                   title="新增同级"
                   aria-label={`在「${node.name}」后新增同级字段`}
                   onClick={() => onAddSibling(path)}
@@ -530,7 +536,6 @@ function PanelRows({
                   color="default"
                   variant="text"
                   size="small"
-                  disabled={disabled}
                   title="新增子级"
                   aria-label={`在「${node.name}」下新增子字段`}
                   onClick={() => onAddChild(path, node)}
@@ -540,7 +545,6 @@ function PanelRows({
                   color="default"
                   variant="text"
                   size="small"
-                  disabled={disabled}
                   title="改名"
                   aria-label={`改名「${node.name}」`}
                   onClick={() => onStartRename(path, node.name)}
@@ -550,7 +554,6 @@ function PanelRows({
                   color="default"
                   variant="text"
                   size="small"
-                  disabled={disabled}
                   title="删除"
                   aria-label={`删除「${node.name}」`}
                   onClick={() => onDelete(path, node)}
@@ -575,7 +578,6 @@ function PanelRows({
                 nodes={node.children ?? []}
                 parentPath={path}
                 depth={depth + 1}
-                disabled={disabled}
                 collapsed={collapsed}
                 warnings={warnings}
                 editing={editing}
@@ -603,14 +605,60 @@ function PanelRows({
   );
 }
 
+/**
+ * 只读形态行（阅读进度 tab）：同缩进的「名称 + 值文本」——分支名为分组标题（foreground + medium），
+ * 叶子名走 muted（与字段网格的 label 同档）、值走 foreground、空值 `—`（quaternary）。
+ * 不渲染输入框/工具条/行操作/拖拽：可编辑树只在人物档案 tab 出现。
+ */
+function PanelReadOnlyRows({
+  nodes,
+  depth,
+}: {
+  nodes: readonly AbilityPanelNode[];
+  depth: number;
+}) {
+  return (
+    <div className="flex flex-col">
+      {nodes.map((node, index) => {
+        const branch = isAbilityBranch(node);
+        return (
+          <div key={`${depth}.${index}.${node.name}`}>
+            <div
+              className="flex items-baseline gap-2 py-0.5 text-sm"
+              style={{ paddingLeft: depth * 16 + 4 }}
+            >
+              <span
+                className={cn(
+                  "min-w-0 truncate",
+                  branch ? "font-medium text-foreground" : "shrink-0 text-muted-foreground",
+                )}
+              >
+                {node.name}
+              </span>
+              {!branch && (
+                <span className="min-w-0 flex-1 truncate text-foreground">
+                  {node.value === undefined ? (
+                    <span className="text-muted-foreground/70">—</span>
+                  ) : (
+                    valueText(node.value)
+                  )}
+                </span>
+              )}
+            </div>
+            {branch && <PanelReadOnlyRows nodes={node.children ?? []} depth={depth + 1} />}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /** 叶子值输入：本地草稿 + 失焦/回车提交（外部值变化时同步——重载/位置视图切换） */
 function LeafValueInput({
   value,
-  disabled,
   onCommit,
 }: {
   value: string | number | undefined;
-  disabled: boolean;
   onCommit: (raw: string) => void;
 }) {
   const external = valueText(value);
@@ -630,8 +678,6 @@ function LeafValueInput({
       size="small"
       className="max-w-40"
       value={draft}
-      disabled={disabled}
-      placeholder="—"
       aria-label="字段值"
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
