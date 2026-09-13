@@ -60,11 +60,10 @@ type: "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "r
   name: string;
   // 各类型的关键摘要字段：
   //   character → role, description (2026-09：data.description 截断 100 字符，同 setting 口径),
-  //               motivation (data.motivation 截断 40 字符——两行式行布局第二行动机摘要),
-  //               personality (前 2 个——行布局标签 chips),
-  //               ability_panel (2026-09：面板**顶层分组名**前 2 个——如「火系」「水系」；
-  //               完整面板不进摘要防 token 膨胀，只走 GET 详情)
-  //               注：旧 abilities[]/status 不再提取（status 已 2026-09 移除，abilities 经 007 迁为 ability_panel）
+  //               motivation（截断 40）、personality（前 2）、ability_panel（面板**顶层分组名**前 2）
+  //               —— 2026-09 人物页改为工作台后，这些摘要只供 **AI 工具（search_entities）** 消费
+  //               （工作台左栏只显示 姓名 + 角色定位；完整数据走 GET 详情）
+  //               注：旧 abilities[]/status 不再提取（status 已移除，abilities 经 007 迁为 ability_panel）
   //   setting   → tags (data.tags 前 3 个：分类统一字段，与 event 同语义),
   //               description (M2，2026-08：data.description 截断 100 字符——列表行展示；
   //               截断防 search_entities 工具上下文膨胀，完整文本在详情页)

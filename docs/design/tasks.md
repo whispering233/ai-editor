@@ -8,11 +8,12 @@
 
 ## 当前任务卡
 
-（无进行中任务卡——批次 1–5 已完成：批次 1：1.1–1.9；批次 2：2.1–2.9；批次 3：3.1–3.6 + 两轮修复；批次 4：全量验证 + 浏览器终检 + `CHANGELOG` 版本段；批次 5：5.1–5.6 延期项速清。新发现的小项一律按下表进「远期」，不再即时插入执行队列。）
+（无进行中任务卡。最近完成：批次 1 章级锚点收窄（1.1–1.9）→ 批次 2 人物数据模型与能力面板（2.1–2.9）→ 批次 3 人物页工作台（3.1–3.6 + 两轮修复）→ 批次 4 全量验证与发布（`CHANGELOG v0.0.34`）→ 批次 5 延期项速清（5.1–5.6）。**新发现的小项一律进下方远期清单，不即时插队。**）
 
 ## 延期项（远期，未排期）
 
 - **executor 未接不可变字段白名单**（`role`/`description`，卡 5.6 oracle 实测）：可达性低（提案仓为进程内 TTL Map + 提案层已拦 + 确认路由不重跑语义校验；仅手工构造 proposal 可触达）；影响 = 理论上可写出「同一人物两个值」；修法 3–5 行（复用 shared `IMMUTABLE_FIELDS`，在 `executeAddDelta` 加一次调用）。
+- **`EntityList` 的配置表死键**：`SUMMARY_COLUMNS`/`CREATE_FIRST_FIELD`/`TYPE_LABEL` 仍含 `character`（兜底键，已注明）与 `hook`/`event`/`timepoint`（这些类型已由 HookPanel/Timeline 承接，键已死）——收窄 `ListableEntityType` 为 `setting | location` 可一并清掉，但会波及查表与空态文案，属独立小重构。
 - **`CHARACTER_MUTABLE_DATA_KEYS` 缺 schema 一致性断言**（client）——schema 新增可变字段时可能漏渲染（`delta-create` 侧有编译期强制，这个列表没有）；最小修法 = 加「两区 + 面板 + custom_fields = schema 键集」断言。
 - **能力面板模板库**（跨书复用/命名管理）：现只有「内置 3 套 + 从角色复制结构」；升级路径 = 把派生函数的"源"从角色记录换成模板记录（零返工）。
 - **自定义关系类型**：`RELATION_TYPES` 是共享常量 + `z.enum` 校验，加类型要动存储校验与工具契约；需要额外语义先用 `metadata`。
