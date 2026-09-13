@@ -99,6 +99,50 @@ describe("add_relation", () => {
     expect(getRelation(db, result.id as string, dir)!.metadata).toEqual({ chapter: 1 });
   });
 
+  it("伏笔关系源端仅章（卡片 1.3 + 5.2）：executor 直写 db 也拦——非章节点/实体源端均拒", () => {
+    writeOutlineFile(dir, seedOutlineTree());
+    const hook = createEntity(db, { type: "hook", name: "身世之谜" });
+    const char = createEntity(db, { type: "character", name: "阿强" });
+ // 章源端 → 落库
+    const ok = executeAddRelation(
+      makeCtx(),
+      makeProposal("propose_add_relation", {
+        source_type: "outline_node",
+        source_id: "ch-1",
+        target_type: "hook",
+        target_id: hook.id,
+        relation_type: "plants",
+      }),
+    );
+    expect(ok.id).toMatch(/^rel-/);
+ // 场景源端 → 拒（绕过 REST 的手工提案也不得落库）
+    expect(() =>
+      executeAddRelation(
+        makeCtx(),
+        makeProposal("propose_add_relation", {
+          source_type: "outline_node",
+          source_id: "sc-1",
+          target_type: "hook",
+          target_id: hook.id,
+          relation_type: "advances",
+        }),
+      ),
+    ).toThrow(/伏笔锚点须为章/);
+ // 实体源端（反向组合）→ 拒
+    expect(() =>
+      executeAddRelation(
+        makeCtx(),
+        makeProposal("propose_add_relation", {
+          source_type: "character",
+          source_id: char.id,
+          target_type: "outline_node",
+          target_id: "sc-1",
+          relation_type: "resolves",
+        }),
+      ),
+    ).toThrow(/源端须为章大纲节点/);
+  });
+
   it("重复三元组 → 抛错（RELATION_EXISTS，db 层判重；幂等只保证 hook 复合写）", () => {
     const a = createEntity(db, { type: "character", name: "甲" });
     const b = createEntity(db, { type: "character", name: "乙" });

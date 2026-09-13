@@ -8,8 +8,9 @@
 // - propose_add_relation：source/target 端点存在且未软删（resolveEndpoint：实体表优先、
 // 其次大纲树），采集各端点 updated_at 快照；args 规范化为执行形态
 // （source_type/source_id/target_type/target_id/relation_type/metadata——S6.7 执行时可直接透传）
-// - **伏笔锚点仅章（卡片 1.3）**：`plants`/`advances`/`resolves` 的源端为大纲节点时必须是
-// **章**（requireChapterNode，与 REST 创建路径 server relation.ts 同口径）——卷/场景拒绝
+// - **伏笔锚点仅章（卡片 1.3 + 5.2）**：`plants`/`advances`/`resolves` **无条件**要求源端为
+// **章**大纲节点（requireChapterNode，与 REST 创建路径 server relation.ts 同口径）——
+// 卷/场景拒绝；「源端为实体」的反向组合（无消费者，数据卫生）同样拒绝。
 // - propose_remove_relation：关系存在且可见（getRelation 已含端点软删联动过滤），
 // 采集关系自身 updated_at 快照
 
@@ -23,8 +24,12 @@ import { buildProposal, checkProposalAborted, refRelation, requireChapterNode, r
 export function buildProposeAddRelation(ctx: ToolContext, args: ProposeAddRelationArgs): Proposal {
   const source = resolveEndpoint(ctx, args.source);
   const target = resolveEndpoint(ctx, args.target);
- // 伏笔锚点仅章（卡片 1.3）：伏笔三类关系的源端为大纲节点时必须为章
-  if (source.type === "outline_node" && (HOOK_RELATION_TYPES as readonly string[]).includes(args.type)) {
+ // 伏笔关系源端仅章（卡片 1.3 + 5.2）：先拒非大纲节点源端（反向组合无消费者），
+ // 再校验大纲节点为章——两步文案分开，避免「实体源端」报成「大纲节点不存在」误导
+  if ((HOOK_RELATION_TYPES as readonly string[]).includes(args.type)) {
+    if (source.type !== "outline_node") {
+      throw new Error(`伏笔关系（${args.type}）的源端须为章大纲节点，当前为 ${source.type}: ${args.source}`);
+    }
     requireChapterNode(ctx, args.source);
   }
  // 执行信息：派生端点类型 + 原样透传 relation_type/metadata（S6.7 add_relation 直接消费）

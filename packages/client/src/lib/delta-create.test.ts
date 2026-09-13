@@ -10,6 +10,7 @@ import {
   inferOpOptions,
   isArrayField,
   isNumericField,
+  isSetOnlyField,
   resolvableFromValue,
 } from "./delta-create";
 
@@ -161,6 +162,21 @@ describe("inferOpOptions（op 推断）", () => {
       options: ["set"],
       default: "set",
     });
+  });
+
+  it("事实字段（setOnly）→ 仅 [set] 默认 set（卡片 5.2：写路径已同步当前值，update 恒假冲突）", () => {
+ // 即便当前值可作 from（如 hook.status="planted"），也只能「设为」
+    expect(inferOpOptions({ array: false, currentValue: "planted", setOnly: true })).toEqual({
+      options: ["set"],
+      default: "set",
+    });
+  });
+
+  it("isSetOnlyField：hook.status 为事实字段；其余字段不是", () => {
+    expect(isSetOnlyField("hook", "status")).toBe(true);
+    expect(isSetOnlyField("hook", "half_life")).toBe(false);
+    expect(isSetOnlyField("character", "status")).toBe(false);
+    expect(isSetOnlyField("character", "alias")).toBe(false);
   });
 });
 

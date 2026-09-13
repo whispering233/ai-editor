@@ -371,7 +371,8 @@ const proposalToolDefs: ToolDefinition[] = [
       "新增关系提案：source/target 为端点 id（实体 id 如 char-xxx，或大纲节点 id 如 ch-xxx，" +
       "类型自动识别），type 为预定义关系类型（belongs_to/owns/masters/ally/rival/mentor/family/" +
       "kills/appears_in/occurs_at/plot_edge/plants/advances/resolves/depends_on/involves），" +
-      "metadata 可选。**伏笔三类关系（plants/advances/resolves）的源端必须为章节点**（卷/场景报错）。" +
+      "metadata 可选。**伏笔三类关系（plants/advances/resolves）的源端必须是章大纲节点**" +
+      "（卷/场景报错；源端为实体等反向组合同样拒绝——无消费者属数据卫生）。" +
       "仅生成提案，需用户确认后生效；端点不存在或已软删返回错误。",
     parameters: proposeAddRelationArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,
@@ -391,7 +392,8 @@ const proposalToolDefs: ToolDefinition[] = [
     description:
       "追加属性变更提案：node_id 为触发变更的大纲节点（**仅章**——卷/场景拒绝），target 为变更目标（实体 id 或大纲节点 id，" +
       "类型自动识别），changes 为变更列表（op 取值 set/update/add/remove，至少一项；" +
-      "update 需 from 旧值，add/remove 用 value）。仅生成提案，需用户确认后生效；" +
+      "update 需 from 旧值，add/remove 用 value）。**character 的不可变字段（role/description）不可作为变更字段**" +
+      "（与前端字段下拉同源；请直接编辑实体）。仅生成提案，需用户确认后生效；" +
       "触发节点或目标不存在/已软删返回错误。",
     parameters: proposeAddDeltaArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,

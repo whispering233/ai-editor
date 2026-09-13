@@ -135,6 +135,42 @@ describe("propose_add_delta", () => {
     ).toThrow(/须为章/);
   });
 
+  it("character 不可变字段白名单（卡片 5.2）：role/description 拒绝；可变字段与面板叶子、hook.status 不受影响", () => {
+    writeOutlineFile(dir, seedOutlineTree());
+    const char = createEntity(db, {
+      type: "character",
+      name: "阿强",
+      data: { role: "主角", alias: "影", ability_panel: [{ name: "火系", children: [{ name: "等级", value: 3 }] }] },
+    });
+ // 不可变字段 → 拒绝（与前端字段下拉白名单同源：二者是列表摘要/AI 检索依据）
+    for (const field of ["role", "description"] as const) {
+      expect(() =>
+        runProposeAddDelta(makeCtx(), { node_id: "ch-1", target: char.id, changes: [{ field, op: "set", to: "x" }] }),
+      ).toThrow(/不可变字段不参与变更记录/);
+    }
+ // 可变字段（假名）与面板叶子路径不受影响
+    expect(
+      runProposeAddDelta(makeCtx(), { node_id: "ch-1", target: char.id, changes: [{ field: "alias", op: "set", to: "影武者" }] })
+        .proposal_id,
+    ).toMatch(/^prop_/);
+    expect(
+      runProposeAddDelta(makeCtx(), {
+        node_id: "ch-1",
+        target: char.id,
+        changes: [{ field: "ability_panel.火系.等级", op: "set", to: 5 }],
+      }).proposal_id,
+    ).toMatch(/^prop_/);
+ // 非 character 目标不受影响（hook 的 status 仍可记——它是可变的事实字段）
+    const hook = createEntity(db, { type: "hook", name: "身世之谜", data: { status: "planted" } });
+    expect(
+      runProposeAddDelta(makeCtx(), {
+        node_id: "ch-1",
+        target: hook.id,
+        changes: [{ field: "status", op: "set", to: "progressing" }],
+      }).proposal_id,
+    ).toMatch(/^prop_/);
+  });
+
   it("触发节点不存在 / 已软删 / 目标不存在 → 抛错", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const char = createEntity(db, { type: "character", name: "阿强" });

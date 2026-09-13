@@ -16,6 +16,10 @@
 // - **target 不可为 event（event 不产生 Delta，oracle 审查口径）**：与 REST 创建
 // 路径（server delta.ts assertDeltaTargetType）一致拒绝；outline_node 有 S13.3 显式豁免
 // （UI 收紧、AI 通道保持），event 无豁免——resolveEndpoint 解析出 event 即抛错
+// - **character 不可变字段（卡片 5.2）**：目标为 character 时，changes 不得包含
+// `role`/`description`（与前端字段下拉白名单同源）——二者是列表摘要与 AI 检索的依据，
+// 允许 Delta 改会与 `entities.name`/摘要读取面产生“同一人物两个值”（见
+// `docs/db/schema.md`「人物 data 分层」/`docs/design/10-data-model.md` §14 不变式 1）
 // - changes 由 schema 校验（复用 deltaChangeSchema，至少一项）
 // args 规范化为执行形态 { node_id, target_type, target_id, changes }（S6.7 add_delta 直接消费）；
 // delta_records.description（NOT NULL）在确认后由 S6.7 执行器取 proposal.summary 作为人类可读描述。
@@ -23,6 +27,10 @@
 import type { ProposeAddDeltaArgs } from "../schemas/index.js";
 import type { ToolContext } from "../context.js";
 import { buildProposal, checkProposalAborted, refOutlineNode, requireOutlineNode, resolveEndpoint, type Proposal, type ToolProposalResult } from "./types.js";
+
+/** character 不可变字段（不参与 Delta——与前端 `lib/delta-create` 的 `IMMUTABLE_FIELDS` 同源）：
+ * 人工经 `PUT` 直接编辑；它们同时是列表摘要与 AI 检索的依据，允许 Delta 改会产生“同一人物两个值” */
+const IMMUTABLE_CHARACTER_FIELDS = new Set(["role", "description"]);
 
 /** 产出追加 Delta 提案 */
 export function buildProposeAddDelta(ctx: ToolContext, args: ProposeAddDeltaArgs): Proposal {
@@ -36,6 +44,15 @@ export function buildProposeAddDelta(ctx: ToolContext, args: ProposeAddDeltaArgs
  //（outline_node 有 S13.3 显式豁免，event 无豁免）
   if (target.type === "event") {
     throw new Error(`event（时间轴事件）不产生 Delta，变更目标无效: ${args.target}`);
+  }
+ // character 不可变字段（卡片 5.2）：role/description 不参与变更记录（与前端字段下拉白名单同源）
+  if (target.type === "character") {
+    for (const change of args.changes) {
+      const field = (change as { field?: unknown } | null)?.field;
+      if (typeof field === "string" && IMMUTABLE_CHARACTER_FIELDS.has(field)) {
+        throw new Error(`character 的不可变字段不参与变更记录（请直接编辑）: ${field}`);
+      }
+    }
   }
   return buildProposal(
     ctx,

@@ -26,6 +26,7 @@ import {
   inferOpOptions,
   isArrayField,
   isNumericField,
+  isSetOnlyField,
 } from "../../lib/delta-create";
 import { formatDeltaValue, targetTypeLabel } from "../../lib/delta";
 import { useUiStore } from "../../stores/ui";
@@ -133,8 +134,9 @@ export function DeltaCreateForm({
   const currentValue = deltaFieldCurrentValue(targetType, field, targetData);
   /** 值解析是否按数字（面板叶子按 `DeltaFieldOption.numeric` 覆盖静态清单） */
   const numericField = selectedOption?.numeric ?? isNumericField(targetType, field);
-  /** 当前字段的 op 可用集（数组 add/remove、标量 update/set 或仅 set） */
-  const opInfo = inferOpOptions({ array: isArrayField(targetType, field), currentValue });
+  /** 当前字段的 op 可用集（事实字段仅 set；数组 add/remove；标量 update/set 或仅 set） */
+  const setOnlyField = isSetOnlyField(targetType, field);
+  const opInfo = inferOpOptions({ array: isArrayField(targetType, field), currentValue, setOnly: setOnlyField });
 
   /** 字段切换 → 按推断重置 op（作者随后可手动切换）；currentValue 须取新字段的目标当前值（闭包内是旧字段） */
   function handleFieldChange(next: string) {
@@ -143,6 +145,7 @@ export function DeltaCreateForm({
       inferOpOptions({
         array: isArrayField(targetType, next),
         currentValue: deltaFieldCurrentValue(targetType, next, targetData),
+        setOnly: isSetOnlyField(targetType, next),
       }).default,
     );
   }
@@ -278,13 +281,19 @@ export function DeltaCreateForm({
         </div>
         <div>
           <p className="mb-1 text-xs font-medium text-foreground">操作</p>
-          <Select
-            className="w-full min-w-20"
-            value={op}
-            onChange={(value) => setOp(value as DeltaOp)}
-            aria-label="操作"
-            options={opInfo.options.map((o) => ({ value: o, label: OP_OPTION_LABEL[o] }))}
-          />
+          {/* 事实字段（hook.status）说明：写路径已同步当前值，变更记录只能「设为」 */}
+          <span
+            className="block"
+            title={setOnlyField ? "该字段为事实字段（写路径同步当前值），只能「设为」" : undefined}
+          >
+            <Select
+              className="w-full min-w-20"
+              value={op}
+              onChange={(value) => setOp(value as DeltaOp)}
+              aria-label="操作"
+              options={opInfo.options.map((o) => ({ value: o, label: OP_OPTION_LABEL[o] }))}
+            />
+          </span>
         </div>
         <div>
           <p className="mb-1 text-xs font-medium text-foreground">

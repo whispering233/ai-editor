@@ -108,6 +108,20 @@ describe("propose_add_relation", () => {
     expect(runProposeAddRelation(makeCtx(), { source: char.id, target: "sc-1", type: "appears_in" }).proposal_id).toMatch(/^prop_/);
   });
 
+  it("反向伏笔关系收口（卡片 5.2）：源端为实体（→ 节点 / → hook）一律拒绝", () => {
+    writeOutlineFile(dir, seedOutlineTree());
+    const hook = createEntity(db, { type: "hook", name: "身世之谜" });
+    const char = createEntity(db, { type: "character", name: "阿强" });
+ // 反向组合（旧行为可提案，但落库后无任何消费者——数据卫生）
+    for (const type of ["plants", "advances", "resolves"] as const) {
+      expect(() => runProposeAddRelation(makeCtx(), { source: char.id, target: "sc-1", type })).toThrow(/源端须为章大纲节点/);
+    }
+    expect(() => runProposeAddRelation(makeCtx(), { source: char.id, target: hook.id, type: "plants" })).toThrow(/源端须为章大纲节点/);
+ // 非伏笔关系不受影响（人物 → 人物）
+    const other = createEntity(db, { type: "character", name: "乙" });
+    expect(runProposeAddRelation(makeCtx(), { source: char.id, target: other.id, type: "ally" }).proposal_id).toMatch(/^prop_/);
+  });
+
   it("metadata 透传进执行参数", () => {
     const a = createEntity(db, { type: "character", name: "甲" });
     const b = createEntity(db, { type: "character", name: "乙" });

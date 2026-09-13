@@ -208,6 +208,46 @@ describe("POST /relation 创建", () => {
     expect(body.data.relation.sourceType).toBe("outline_node");
   });
 
+  it("反向伏笔关系收口（卡片 5.2）：源端非章大纲节点（实体 → 节点 / 实体 → hook）一律 400", async () => {
+    const { app, sc1 } = await seed();
+    const project = getCurrentProject()!;
+    const hook = createEntity(project.db, { type: "hook", name: "身世之谜" });
+    const charA = createEntity(project.db, { type: "character", name: "阿强" });
+ // 反向组合（旧行为 201 落库，但分析层只认 outline_node → hook，无消费者）
+    for (const relationType of ["plants", "advances", "resolves"] as const) {
+      const reverse = await createRel(app, {
+        source_type: "character",
+        source_id: charA.id,
+        target_type: "outline_node",
+        target_id: sc1,
+        relation_type: relationType,
+      });
+      expect(reverse.status).toBe(400);
+      expect(reverse.body.error.code).toBe("VALIDATION_ERROR");
+      expect(reverse.body.error.message).toContain("源端须为章大纲节点");
+    }
+ // 实体 → hook 的伏笔关系同样拒（源端既不是大纲节点也谈不上章）
+    const entityToHook = await createRel(app, {
+      source_type: "character",
+      source_id: charA.id,
+      target_type: "hook",
+      target_id: hook.id,
+      relation_type: "plants",
+    });
+    expect(entityToHook.status).toBe(400);
+    expect(entityToHook.body.error.message).toContain("源端须为章大纲节点");
+ // 非伏笔关系不受影响：实体 → 实体仍 201
+    const charB = createEntity(project.db, { type: "character", name: "阿乙" });
+    const ally = await createRel(app, {
+      source_type: "character",
+      source_id: charA.id,
+      target_type: "character",
+      target_id: charB.id,
+      relation_type: "ally",
+    });
+    expect(ally.status).toBe(201);
+  });
+
   it("伏笔锚点仅章（卡片 1.3）：章源端 → 201；场景/卷源端 → 400 VALIDATION_ERROR", async () => {
     const { app, sc1 } = await seed();
     const project = getCurrentProject()!;

@@ -106,6 +106,21 @@ const NUMERIC_FIELDS: Record<string, readonly string[]> = {
   hook: ["half_life"],
 };
 
+/**
+ * 「事实字段」（只能「设为」）：**写路径已把当前值同步进 `data`** 的字段——
+ * hook 的 `status`（复合写同步 `data.status`；终态守卫/列表分组/AI 统计直接读它）。
+ * 对它用 `op=update` 必然假冲突（重放基座即最新值，`from` 永远对不上）；`set` 与写路径自洽。
+ * 依据：`docs/design/10-data-model.md` §4「物化事实字段不用 CAS」。
+ */
+const SET_ONLY_FIELDS: Record<string, readonly string[]> = {
+  hook: ["status"],
+};
+
+/** 字段是否事实字段（写路径同步当前值——变更记录只能「设为」，见 `SET_ONLY_FIELDS`） */
+export function isSetOnlyField(scope: string, key: string): boolean {
+  return (SET_ONLY_FIELDS[scope] ?? []).includes(key);
+}
+
 /** 字段是否数组（决定 op 选项）；scope = 实体类型 */
 export function isArrayField(scope: string, key: string): boolean {
   return (ARRAY_FIELDS[scope] ?? []).includes(key);
@@ -203,12 +218,14 @@ export function resolvableFromValue(v: unknown): string | number | null | undefi
   return undefined;
 }
 
-/** op 选项与默认值：数组 → [add, remove] 默认 add；标量 → 当前值可作 from 时 [update, set] 默认 update，
+/** op 选项与默认值：事实字段 → 仅 [set]（写路径已同步当前值，update 恒假冲突）；
+ * 数组 → [add, remove] 默认 add；标量 → 当前值可作 from 时 [update, set] 默认 update，
  * 否则仅 [set]（update 无旧值可写，避免提交被 400 拒绝） */
-export function inferOpOptions(args: { array: boolean; currentValue: unknown }): {
+export function inferOpOptions(args: { array: boolean; currentValue: unknown; setOnly?: boolean }): {
   options: DeltaOp[];
   default: DeltaOp;
 } {
+  if (args.setOnly === true) return { options: ["set"], default: "set" };
   if (args.array) return { options: ["add", "remove"], default: "add" };
   return resolvableFromValue(args.currentValue) !== undefined
     ? { options: ["update", "set"], default: "update" }
