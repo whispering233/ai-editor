@@ -44,7 +44,7 @@ function render(
   opts: {
     currentPosition?: string | null;
     positionState?: CharacterPositionState;
-    outlineNodes?: FlatNodeOption[];
+    chapterNodes?: FlatNodeOption[];
     outlineLoaded?: boolean;
     outlineLoading?: boolean;
     name?: string;
@@ -68,7 +68,7 @@ function render(
       onReload={() => {}}
       currentPosition={opts.currentPosition ?? null}
       positionState={opts.positionState ?? (opts.currentPosition ? "ok" : "unset")}
-      outlineNodes={opts.outlineNodes ?? NODES}
+      chapterNodes={opts.chapterNodes ?? NODES}
       outlineLoaded={opts.outlineLoaded ?? true}
       outlineLoading={opts.outlineLoading ?? false}
       onLoadOutline={() => {}}
@@ -251,7 +251,7 @@ describe("CharacterDetailView（档案字段网格：单一 card、无分区标�
         onReload={() => {}}
         currentPosition={null}
         positionState="unset"
-        outlineNodes={NODES}
+        chapterNodes={NODES}
         outlineLoaded
         outlineLoading={false}
         onLoadOutline={() => {}}
@@ -279,7 +279,7 @@ describe("CharacterDetailView（档案字段网格：单一 card、无分区标�
         onReload={() => {}}
         currentPosition={null}
         positionState="unset"
-        outlineNodes={NODES}
+        chapterNodes={NODES}
         outlineLoaded
         outlineLoading={false}
         onLoadOutline={() => {}}
@@ -436,7 +436,7 @@ function renderWith(opts: {
       onReload={() => {}}
       currentPosition="ch-1"
       positionState="ok"
-      outlineNodes={NODES}
+      chapterNodes={NODES}
       outlineLoaded={opts.outlineLoaded ?? true}
       outlineLoading={opts.outlineLoading ?? false}
       onLoadOutline={() => {}}
@@ -498,7 +498,7 @@ describe("CharacterDetailView（修复轮②：大纲在途加载时 阅读进�
         onReload={() => {}}
         currentPosition={null}
         positionState="unset"
-        outlineNodes={NODES}
+        chapterNodes={NODES}
         outlineLoaded={false}
         outlineLoading
         onLoadOutline={() => {}}

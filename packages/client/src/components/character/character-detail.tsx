@@ -59,7 +59,7 @@ import {
 } from "../../lib/character-detail";
 import { diffData, type DetailFieldConfig } from "../../lib/entity-detail";
 import { entityListPath } from "../../lib/entity-paths";
-import { flattenTree, type FlatNodeOption } from "../../lib/outline-tree";
+import { chapterNodeOptions, type FlatNodeOption } from "../../lib/outline-tree";
 import { useSaveShortcut } from "../../lib/save-shortcut";
 import { enterBehavior, moveArrayItem } from "../../lib/tags-editor";
 import { useProjectStore } from "../../stores/project";
@@ -490,7 +490,7 @@ function CharacterProfile({
  * - conflicts / 状态差异 / 应用的变更记录 = 复用 `ComputeResult`（与 `ComputePreview` 同一实现，标注照搬）
  * - 字段视图的值 = 计算结果（尚未算出 → 初始 `data`），**画纯文本**（同一档案网格）
  *
- * 依赖注入：`currentPosition` / `outlineNodes` 由容器从 project store 传入（本层不读 store）——
+ * 依赖注入：`currentPosition` / `chapterNodes` 由容器从 project store 传入（本层不读 store）——
  * 既让展示层可在 `react-dom/server` 下直接走查（SSR 读不到 client store 的 setState 播种），
  * 也让「有/无阅读进度」两种状态各有一份可断言渲染。
  */
@@ -498,7 +498,7 @@ function CharacterCurrentTab({
   detail,
   currentPosition,
   positionState,
-  outlineNodes,
+  chapterNodes,
   outlineLoaded,
   outlineLoading,
   onLoadOutline,
@@ -508,20 +508,20 @@ function CharacterCurrentTab({
   currentPosition: string | null;
  /** 阅读进度四态（`pending` 尚未知 / `unset` 未设置 / `invalid` 已失效 / `ok`）——提示文案判据 */
   positionState: CharacterPositionState;
- /** 大纲节点选项（扁平树；深度用于缩进展示） */
-  outlineNodes: readonly FlatNodeOption[];
+ /** 章节点选项（只列章；容器用 `chapterNodeOptions` 派生；depth 用于缩进展示） */
+  chapterNodes: readonly FlatNodeOption[];
  /** 大纲是否已加载（false → 给「加载大纲」入口，不静默失败） */
   outlineLoaded: boolean;
  /** 大纲在途加载（容器已自动拉取；在途时不给重复按钮，显加载文案） */
   outlineLoading: boolean;
   onLoadOutline: () => void;
 }) {
-  const nodeTitles = new Map(outlineNodes.map((o) => [o.id, o.label]));
+  const nodeTitles = new Map(chapterNodes.map((o) => [o.id, o.label]));
 
   const [atNodeId, setAtNodeId] = useState<string>(() =>
     resolveCurrentAtNode(
       currentPosition,
-      outlineNodes.map((o) => o.id),
+      chapterNodes.map((o) => o.id),
     ),
   );
   const [result, setResult] = useState<ComputeStateResult | null>(null);
@@ -534,10 +534,10 @@ function CharacterCurrentTab({
       if (prev !== "") return prev;
       return resolveCurrentAtNode(
         currentPosition,
-        outlineNodes.map((o) => o.id),
+        chapterNodes.map((o) => o.id),
       );
     });
-  }, [currentPosition, outlineNodes]);
+  }, [currentPosition, chapterNodes]);
 
   // 自动计算：节点已知且该角色有变更记录时拉取（切换节点即重算；过期响应丢弃）
   useEffect(() => {
@@ -605,7 +605,7 @@ function CharacterCurrentTab({
               popupMatchSelectWidth={false}
               options={[
                 { value: "", label: "请选择大纲节点" },
-                ...outlineNodes.map((o) => ({
+                ...chapterNodes.map((o) => ({
                   value: o.id,
                   label: `${"　".repeat(o.depth)}${o.label}`,
                 })),
@@ -698,8 +698,8 @@ export interface CharacterDetailViewProps {
   currentPosition: string | null;
   /** 阅读进度四态（`pending` 尚未知 / `unset` 未设置 / `invalid` 已失效 / `ok`）——提示文案判据 */
   positionState: CharacterPositionState;
-  /** 大纲节点选项（扁平树；容器从 project store 传入） */
-  outlineNodes: readonly FlatNodeOption[];
+  /** 章节点选项（只列章；容器用 `chapterNodeOptions` 从 project store 派生） */
+  chapterNodes: readonly FlatNodeOption[];
   /** 大纲是否已加载 */
   outlineLoaded: boolean;
   /** 大纲在途加载（容器自动拉取时给加载文案，不给重复按钮） */
@@ -727,7 +727,7 @@ export function CharacterDetailView({
   onReload,
   currentPosition,
   positionState,
-  outlineNodes,
+  chapterNodes,
   outlineLoaded,
   outlineLoading,
   onLoadOutline,
@@ -809,7 +809,7 @@ export function CharacterDetailView({
                 detail={detail}
                 currentPosition={currentPosition}
                 positionState={positionState}
-                outlineNodes={outlineNodes}
+                chapterNodes={chapterNodes}
                 outlineLoaded={outlineLoaded}
                 outlineLoading={outlineLoading}
                 onLoadOutline={onLoadOutline}
@@ -907,7 +907,8 @@ export function CharacterDetail({ id, onSaved }: { id: string; onSaved?: () => v
   }, [config, outline, outlineLoading, loadOutline]);
 
   /** 扁平大纲节点（memo：避免每次渲染新数组把子层的回填 effect 变成每渲染必跑） */
-  const outlineNodes = useMemo(() => flattenTree(outline?.children ?? []), [outline]);
+  // 进度节点只列章（状态按章序前缀累积，场景/卷只是某章的别名——见 DESIGN.md `character-workbench`）
+  const chapterNodes = useMemo(() => chapterNodeOptions(outline), [outline]);
 
   async function handleSave() {
     if (!detail || !form || saving) return;
@@ -1023,7 +1024,7 @@ export function CharacterDetail({ id, onSaved }: { id: string; onSaved?: () => v
     configLoaded: config !== null,
     currentPosition: config?.currentPosition ?? null,
     outlineLoaded: outline !== null,
-    nodeIds: outlineNodes.map((o) => o.id),
+    nodeIds: chapterNodes.map((o) => o.id),
   });
 
   return (
@@ -1043,7 +1044,7 @@ export function CharacterDetail({ id, onSaved }: { id: string; onSaved?: () => v
       onDelete={() => void handleDelete()}
       onReload={() => void loadDetail()}
       currentPosition={config?.currentPosition ?? null}
-      outlineNodes={outlineNodes}
+      chapterNodes={chapterNodes}
       outlineLoaded={outline !== null}
       outlineLoading={outlineLoading}
       onLoadOutline={() => void loadOutline()}

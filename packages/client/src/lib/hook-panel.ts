@@ -3,7 +3,6 @@
 import type {
   DeltaChange,
   EntitySummary,
-  OutlineNode,
   OutlineTree,
   ProjectConfig,
 } from "@whispering233/ai-editor-shared";
@@ -15,7 +14,7 @@ import {
   type CreateRelationBody,
   type RelationSummaryItem,
 } from "./api";
-import type { FlatNodeOption } from "./outline-tree";
+import { chapterNodeExists, chapterNodeOptions } from "./outline-tree";
 
 // ============ 状态分组（信息层级） ============
 
@@ -137,29 +136,6 @@ export function expandDependencyChain(args: {
 }
 
 // ============ 章节点选项与废弃锚点（锚点仅章：executor anchorNodeForAbandon 同款语义，tools/executor/hook.ts） ============
-
-/**
- * 章节点选项（扁平化 + 缩进 depth，保留原层级深度）：埋点 / 推进回收 / 预计回收节点选择器只列**章**——
- * 卷/场景不承载伏笔标记（服务端 plants/advances/resolves 源端校验 400，卡片 1.3）。
- * 软删节点及其子树跳过（服务端同样拒绝）。
- */
-export function chapterNodeOptions(tree: OutlineTree | null): FlatNodeOption[] {
-  const out: FlatNodeOption[] = [];
-  const visit = (nodes: readonly OutlineNode[], depth: number): void => {
-    for (const node of nodes) {
-      if (node.deleted === true) continue;
-      if (node.type === "chapter") out.push({ id: node.id, label: node.title, depth });
-      if (node.type !== "scene" && node.children) visit(node.children, depth + 1);
-    }
-  };
-  visit(tree?.children ?? [], 0);
-  return out;
-}
-
-/** 章节点是否存在且未软删（current_position 的章级有效性判定——锚点仅章） */
-export function chapterNodeExists(tree: OutlineTree | null, nodeId: string): boolean {
-  return chapterNodeOptions(tree).some((o) => o.id === nodeId);
-}
 
 /**
  * 树末章：先序遍历最后一个未软删 `chapter`（「当前写作进度末端」，与 executor lastChapterNodeId 同语义）；

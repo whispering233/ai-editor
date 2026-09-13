@@ -11,7 +11,7 @@ import { WarningFilled } from "@ant-design/icons";
 import type { ComputeStateResult, DeltaChange } from "@whispering233/ai-editor-shared";
 import { ApiError, computeDeltaState } from "../../lib/api";
 import { diffStateFields, formatDeltaValue } from "../../lib/delta";
-import { flattenTree } from "../../lib/outline-tree";
+import { chapterNodeOptions } from "../../lib/outline-tree";
 import { useProjectStore } from "../../stores/project";
 import { ChangeSummary } from "./change-summary";
 
@@ -37,8 +37,8 @@ export function ComputePreview({
   const [atNodeId, setAtNodeId] = useState<string>(() => {
     // 默认取阅读进度：须在大纲树中存在（软删后选择无意义，回退为空要求手动选择）
     const cp = useProjectStore.getState().config?.currentPosition ?? "";
-    const tree = useProjectStore.getState().outline?.children ?? [];
-    return cp !== "" && flattenTree(tree).some((o) => o.id === cp) ? cp : "";
+    const tree = useProjectStore.getState().outline;
+    return cp !== "" && chapterNodeOptions(tree).some((o) => o.id === cp) ? cp : "";
   });
   const [computing, setComputing] = useState(false);
   const [result, setResult] = useState<ComputeStateResult | null>(null);
@@ -50,11 +50,12 @@ export function ComputePreview({
     setAtNodeId((prev) => {
       if (prev !== "") return prev;
       const cp = config?.currentPosition ?? "";
-      return cp !== "" && flattenTree(outline?.children ?? []).some((o) => o.id === cp) ? cp : "";
+      return cp !== "" && chapterNodeOptions(outline).some((o) => o.id === cp) ? cp : "";
     });
   }, [config?.currentPosition, outline]);
 
-  const options = flattenTree(outline?.children ?? []);
+  // 进度节点只列章（状态按章序前缀累积；场景/卷只是某章的别名——见 DESIGN.md `character-workbench`）
+  const options = chapterNodeOptions(outline);
   const nodeTitles = new Map(options.map((o) => [o.id, o.label]));
 
   /** [计算] → POST /delta/compute；OUTLINE_NODE_NOT_FOUND → 行内提示重新选择 */

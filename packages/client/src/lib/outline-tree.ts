@@ -1,5 +1,5 @@
 // 大纲树辅助纯函数（S2.3）：父节点按类型过滤（严格三层）+ 子节点查找（move order 计算）
-import type { OutlineNode } from "@whispering233/ai-editor-shared";
+import type { OutlineNode, OutlineTree } from "@whispering233/ai-editor-shared";
 import type { OutlineNodeType } from "./api";
 
 /** 大纲根（虚拟）id——volume/chapter 挂 root 时使用的 parent_id */
@@ -248,4 +248,29 @@ export function isNoopDrop(
   const pos = findNodePosition(nodes, dragNodeId);
   if (pos === null || pos.parentId !== targetParentId) return false;
   return order === pos.index;
+}
+
+// ============ 章节点选项（锚点仅章：Delta / current_position / 伏笔锚点都只挂在章上） ============
+
+/**
+ * 章节点选项（扁平化 + 缩进 `depth`，保留原层级深度）：所有"选章"的下拉共用（伏笔埋点/推进回收、
+ * 人物页「阅读进度」的进度节点、通用 compute 探针）——卷/场景不承载锚点，服务端写入侧同样 400。
+ * 软删节点及其子树跳过。
+ */
+export function chapterNodeOptions(tree: OutlineTree | null): FlatNodeOption[] {
+  const out: FlatNodeOption[] = [];
+  const visit = (nodes: readonly OutlineNode[], depth: number): void => {
+    for (const node of nodes) {
+      if (node.deleted === true) continue;
+      if (node.type === "chapter") out.push({ id: node.id, label: node.title, depth });
+      if (node.type !== "scene" && node.children) visit(node.children, depth + 1);
+    }
+  };
+  visit(tree?.children ?? [], 0);
+  return out;
+}
+
+/** 章节点是否存在且未软删（`current_position` 的章级有效性判定——锚点仅章） */
+export function chapterNodeExists(tree: OutlineTree | null, nodeId: string): boolean {
+  return chapterNodeOptions(tree).some((o) => o.id === nodeId);
 }

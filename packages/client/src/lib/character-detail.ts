@@ -178,8 +178,8 @@ export function resolveTabState(input: {
 }
 
 /**
- * 阅读进度 tab 的进度节点默认值：`current_position` 必须**在大纲树里存在**（失效/软删 → 空串 = 要求手动选择）。
- * 与 `ComputePreview` 同口径——软删节点的计算结果无意义。
+ * 阅读进度 tab 的进度节点默认值：`current_position` 必须在**章节点选项**里（软删/非章 → 空串 = 要求手动选择）。
+ * 与 `ComputePreview` 同口径——选项只列章（状态按章序前缀累积，场景/卷只是某章的别名，卡 7.1）。
  */
 export function resolveCurrentAtNode(
   currentPosition: string | null | undefined,

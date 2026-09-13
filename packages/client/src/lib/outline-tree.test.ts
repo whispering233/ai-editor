@@ -1,9 +1,11 @@
 // outline-tree 纯函数测试（S2.3 + 就地编辑 S2.4）：父节点过滤、子节点查找、
 // 拖拽移动合法性（canMoveTo/isDescendant）、行内编辑提交判定
 import { describe, expect, it } from "vitest";
-import type { OutlineNode } from "@whispering233/ai-editor-shared";
+import type { OutlineNode, OutlineTree } from "@whispering233/ai-editor-shared";
 import {
   canMoveTo,
+  chapterNodeExists,
+  chapterNodeOptions,
   dropInsertOrder,
   editFailureRecovery,
   findNode,
@@ -391,5 +393,70 @@ describe("同父重排端到端模拟（oracle S1：dropInsertOrder → isNoopDr
     expect(simulateDrop("b", { kind: "after", nodeId: "b" })).toEqual(["a", "b", "c", "d"]);
     expect(simulateDrop("a", { kind: "after", nodeId: "a" })).toEqual(["a", "b", "c", "d"]);
     expect(simulateDrop("d", { kind: "before", nodeId: "d" })).toEqual(["a", "b", "c", "d"]);
+  });
+});
+
+// ============ 章节点选项（锚点仅章：所有"选章"下拉共用） ============
+
+/** 造树：卷1（章1（场1、软删场）、章2）、卷2（软删章3）、游离场（root 直挂） */
+const chapterTree = (): OutlineTree => ({
+  id: "root",
+  type: "root",
+  schemaVersion: 1,
+  children: [
+    {
+      id: "vol-1",
+      type: "volume",
+      title: "第一卷",
+      updatedAt: "t",
+      children: [
+        {
+          id: "ch-1",
+          type: "chapter",
+          title: "第一章",
+          updatedAt: "t",
+          children: [
+            { id: "sc-1", type: "scene", title: "场景一", updatedAt: "t" },
+            { id: "sc-2", type: "scene", title: "软删场", updatedAt: "t", deleted: true },
+          ],
+        },
+        { id: "ch-2", type: "chapter", title: "第二章", updatedAt: "t" },
+      ],
+    },
+    {
+      id: "vol-2",
+      type: "volume",
+      title: "第二卷",
+      updatedAt: "t",
+      children: [{ id: "ch-3", type: "chapter", title: "第三章", updatedAt: "t", deleted: true }],
+    },
+    { id: "sc-9", type: "scene", title: "游离场景", updatedAt: "t" },
+  ],
+});
+
+describe("chapterNodeOptions / chapterNodeExists（卷/场景不承载锚点）", () => {
+  it("只列章（卷/场景一律不入选项），depth 保留层级缩进", () => {
+    expect(chapterNodeOptions(chapterTree())).toEqual([
+      { id: "ch-1", label: "第一章", depth: 1 },
+      { id: "ch-2", label: "第二章", depth: 1 },
+    ]);
+  });
+
+  it("软删章跳过；空树 / 未加载 → 空数组", () => {
+    expect(chapterNodeOptions(null)).toEqual([]);
+    expect(
+      chapterNodeOptions({ id: "root", type: "root", schemaVersion: 1, children: [] }),
+    ).toEqual([]);
+  });
+
+  it("chapterNodeExists：章 → true；场景 / 卷 / 软删章 / 未知 id / 未加载 → false", () => {
+    expect(chapterNodeExists(chapterTree(), "ch-1")).toBe(true);
+    expect(chapterNodeExists(chapterTree(), "sc-1")).toBe(false);
+    expect(chapterNodeExists(chapterTree(), "sc-9")).toBe(false);
+    expect(chapterNodeExists(chapterTree(), "vol-1")).toBe(false);
+    expect(chapterNodeExists(chapterTree(), "ch-3")).toBe(false);
+    expect(chapterNodeExists(chapterTree(), "root")).toBe(false);
+    expect(chapterNodeExists(chapterTree(), "ch-999")).toBe(false);
+    expect(chapterNodeExists(null, "ch-1")).toBe(false);
   });
 });

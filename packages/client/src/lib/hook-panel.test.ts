@@ -21,8 +21,6 @@ import {
   buildPlantRelationBody,
   buildStatusDeltaChange,
   buildStatusSyncData,
-  chapterNodeExists,
-  chapterNodeOptions,
   dependentsCount,
   dependencyNames,
   expandDependencyChain,
@@ -304,32 +302,7 @@ describe("anchorNodeForAbandon（废弃 Delta 锚定节点——锚点仅章）"
   });
 });
 
-describe("chapterNodeOptions / chapterNodeExists / lastChapterNode", () => {
-  it("只列章（卷/场景不入选项），depth 保留层级缩进", () => {
-    expect(chapterNodeOptions(makeTree())).toEqual([
-      { id: "ch-1", label: "第一章", depth: 1 },
-      { id: "ch-2", label: "第二章", depth: 1 },
-    ]);
-  });
-
-  it("软删章及其子树跳过；空树/未加载 → 空数组", () => {
-    const tree = makeTree();
-    (tree.children[0] as { children: { deleted: boolean }[] }).children[0].deleted = true;
-    expect(chapterNodeOptions(tree).map((o) => o.id)).toEqual(["ch-2"]);
-    expect(chapterNodeOptions(null)).toEqual([]);
-  });
-
-  it("chapterNodeExists：章 → true；场景/卷/软删章/未知 id → false", () => {
-    const tree = makeTree();
-    expect(chapterNodeExists(tree, "ch-1")).toBe(true);
-    expect(chapterNodeExists(tree, "sc-1")).toBe(false);
-    expect(chapterNodeExists(tree, "vol-1")).toBe(false);
-    expect(chapterNodeExists(tree, "ch-999")).toBe(false);
-    expect(chapterNodeExists(null, "ch-1")).toBe(false);
-    (tree.children[0] as { children: { deleted: boolean }[] }).children[0].deleted = true;
-    expect(chapterNodeExists(tree, "ch-1")).toBe(false);
-  });
-
+describe("lastChapterNode（锚点仅章：先序最后章）", () => {
   it("lastChapterNode：先序最后章（卷无章时跳过）；无章 → null", () => {
     expect(lastChapterNode(makeTree())).toBe("ch-2");
     const tree: OutlineTree = {

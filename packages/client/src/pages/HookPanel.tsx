@@ -58,8 +58,6 @@ import { HOOK_STATUS_LABEL, HOOK_TIMING_LABEL } from "../lib/entity-list";
 import {
   anchorNodeForAbandon,
   buildPlantRelationBody,
-  chapterNodeExists,
-  chapterNodeOptions,
   dependentsCount,
   dependencyNames,
   expandDependencyChain,
@@ -73,6 +71,7 @@ import {
   type HookLifecycleKind,
 } from "../lib/hook-panel";
 import { LIFECYCLE_STATUS } from "../lib/hook-panel";
+import { chapterNodeExists, chapterNodeOptions } from "../lib/outline-tree";
 import { cn } from "../lib/utils";
 
 import { useDataRefresh } from "../hooks/use-data-refresh";

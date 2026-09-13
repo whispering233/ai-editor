@@ -48,6 +48,11 @@ describe("resolveCurrentAtNode", () => {
     expect(resolveCurrentAtNode(null, ["ch-1"])).toBe("");
     expect(resolveCurrentAtNode("", ["ch-1"])).toBe("");
   });
+
+  it("选项只列章：存量指向场景/卷的 current_position → 空串（卡 7.1 收窄）", () => {
+    expect(resolveCurrentAtNode("sc-1", ["ch-1", "ch-2"])).toBe("");
+    expect(resolveCurrentAtNode("vol-1", ["ch-1"])).toBe("");
+  });
 });
 
 describe("characterDetailFields（详情页字段：单一顺序清单）", () => {
@@ -184,6 +189,16 @@ describe("resolveTabState（默认 tab 与四态同源）", () => {
       nodeIds: ["ch-1"],
     });
     expect(s).toEqual({ tab: "current", positionState: "ok" });
+  });
+
+  it("存量指向场景/卷（非章）→ invalid（选项只列章，提示去大纲重设；卡 7.1）", () => {
+    const s = resolveTabState({
+      configLoaded: true,
+      currentPosition: "sc-1",
+      outlineLoaded: true,
+      nodeIds: ["ch-1"],
+    });
+    expect(s).toEqual({ tab: "initial", positionState: "invalid" });
   });
 
   it("失效当前位置 → 回落 tab 1 + invalid", () => {
