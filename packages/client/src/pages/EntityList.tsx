@@ -13,7 +13,8 @@
 // （2026-08）：设定 tab（entityType==="setting"）改为**树形视图**（SettingTreeView，
 // 与设定树 tab 合并）；设定不走表格/分页，
 // 搜索+标签筛选在树内进行（树形视图自带工具栏），上级设定筛选被树形导航吸收（下拉移除）；
-// character/location 保持表格视图（行级 AskAiButton 已移除——右键菜单替代）
+// location 保持表格视图（**character 已改走 `#/characters` 人物工作台，本页不再服务 character**；
+// 行级 AskAiButton 已移除——右键菜单替代）
 // 「+ 新建」按钮（列表头/空态两个入口）→ 列表首行内联编辑行（UX4：name + 该类型首字段——
 // hook 的 status 下拉、其余文本；字段配置复用 lib/entity-list.ts CREATE_FIRST_FIELD；
 // 提交成功留在列表（2026-08 用户反馈：不自动跳详情），失败内联错误不关行）
@@ -24,7 +25,6 @@ import { ENTITY_TYPES } from "@whispering233/ai-editor-shared";
 import type { EntitySummary, EntityType } from "@whispering233/ai-editor-shared";
 import { Alert, Button, Input, Pagination, Select, Skeleton, Typography } from "antd";
 import { SearchOutlined } from "@ant-design/icons";
-import { TagChip } from "@/components/ui/tag-chip";
 import { PageHeader } from "@/components/ui/page-header";
 import {
   ApiError,
@@ -34,7 +34,6 @@ import {
   type EntityListRes,
 } from "../lib/api";
 import {
-  characterRowInfo,
   CREATE_FIRST_FIELD,
   ListableEntityType,
   PAGE_LIMIT,
@@ -348,7 +347,7 @@ export default function EntityList({ type }: { type: string }) {
                 onKeyDown={(e) => {
                   if (e.key === "Escape") cancelCreateRow();
                 }}
-                placeholder={entityType === "character" ? "名称（如：张三）" : "名称"}
+                placeholder="名称"
                 maxLength={100}
                 disabled={createSubmitting}
                 autoFocus
@@ -492,28 +491,18 @@ export default function EntityList({ type }: { type: string }) {
                         />
                       }
                     >
-                      {/* （用户复核修订）：character 四列（名称+动机第二行 / 角色 / 性格 /
-                          能力）由 CharacterRow 自渲染；其余类型保持原表格列 */}
-                      {entityType === "character" ? (
-                        <CharacterRow item={item} />
-                      ) : (
-                        <>
-                          <td className="max-w-64 truncate px-3 py-2 font-medium text-foreground">
-                            {item.name}
-                          </td>
-                          <td className="max-w-40 truncate px-3 py-2 text-muted-foreground">
-                            {summaryCellText(entityType, col.key1, item.summary[col.key1])}
-                          </td>
-                        </>
-                      )}
-                      {/* character 四列（名称+动机第二行 / 角色 / 性格 / 能力）由
-                          CharacterRow 自渲染，通用 key2/key3 单元格跳过（防表头/表体错位） */}
-                      {entityType !== "character" && col.key2 && (
+                      <td className="max-w-64 truncate px-3 py-2 font-medium text-foreground">
+                        {item.name}
+                      </td>
+                      <td className="max-w-40 truncate px-3 py-2 text-muted-foreground">
+                        {summaryCellText(entityType, col.key1, item.summary[col.key1])}
+                      </td>
+                      {col.key2 && (
                         <td className="max-w-40 truncate px-3 py-2 text-muted-foreground">
                           {summaryCellText(entityType, col.key2, item.summary[col.key2])}
                         </td>
                       )}
-                      {entityType !== "character" && col.key3 && (
+                      {col.key3 && (
                         // 描述列（M2，仅 setting）：行内 truncate + hover title 查看完整摘要（服务端已截断 100 字符）
                         <td
                           className="max-w-40 truncate px-3 py-2 text-muted-foreground"
@@ -558,61 +547,5 @@ export default function EntityList({ type }: { type: string }) {
         />
       )}
     </section>
-  );
-}
-
-/** 人物行四列布局（用户修订，2026-08）：名称列（第一行名称 + 第二行动机
- * 摘要，hover title 查看完整）+ 角色列（summary.role，T2 标签徽标样式）+ 性格列 + 能力列
- * （各前 2 个 chips，T2 徽标样式；空数组显示「—」占位与其余类型缺失语义一致）。
- * 角色/性格/能力独立成列——列头即区分，修复首版合并 chips 无法分辨的反馈。
- * **2026-09（卡片 2.1）**：能力列改读 `summary.ability_panel`（面板**顶层分组名**前 2 个，如「火系」——
- * 旧标签数组 abilities 已由 007 迁为面板）。*/
-function CharacterRow({ item }: { item: EntitySummary }) {
-  const { role, motivation, personality, abilityPanel } = characterRowInfo(item.summary);
-  const badge = (text: string) => <TagChip key={text}>{text}</TagChip>;
-  return (
-    <>
-      {/* 名称列：名称 + 动机第二行（弱化样式，空动机不渲染） */}
-      <td className="px-3 py-2">
-        <div className="min-w-0">
-          <span className="block max-w-64 truncate font-medium text-foreground" title={item.name}>
-            {item.name}
-          </span>
-          {motivation !== "" && (
-            <span
-              className="mt-0.5 block max-w-72 truncate text-xs text-muted-foreground"
-              title={motivation}
-            >
-              {motivation}
-            </span>
-          )}
-        </div>
-      </td>
-      {/* 角色列 */}
-      <td className="px-3 py-2">
-        {role !== "" ? <TagChip>{role}</TagChip> : <span className="text-muted-foreground">—</span>}
-      </td>
-      {/* 性格列（前 2 chips）：td 保持 table-cell（禁止直接加 flex——浏览器表格布局会把
-          非 cell 盒塞进同一列槽，能力列与性格列重叠，实测踩坑），flex 只作用内层容器 */}
-      <td className="px-3 py-2">
-        <div className="flex flex-wrap items-center gap-1">
-          {personality.length > 0 ? (
-            personality.map(badge)
-          ) : (
-            <span className="text-muted-foreground">—</span>
-          )}
-        </div>
-      </td>
-      {/* 能力列（面板顶层分组名前 2 chips）：同上 */}
-      <td className="px-3 py-2">
-        <div className="flex flex-wrap items-center gap-1">
-          {abilityPanel.length > 0 ? (
-            abilityPanel.map(badge)
-          ) : (
-            <span className="text-muted-foreground">—</span>
-          )}
-        </div>
-      </td>
-    </>
   );
 }

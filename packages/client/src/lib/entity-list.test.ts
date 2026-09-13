@@ -1,7 +1,6 @@
 // entity-list 纯函数与配置测试（S3.5）：分页计算、摘要列配置完整性、单元格文案映射、创建首字段配置
 import { describe, expect, it } from "vitest";
 import {
-  characterRowInfo,
   CREATE_FIRST_FIELD,
   pageCount,
   SUMMARY_COLUMNS,
@@ -73,43 +72,6 @@ describe("summaryCellText（摘要单元格文案）", () => {
     expect(summaryCellText("character", "role", undefined)).toBe("—");
     expect(summaryCellText("character", "role", null)).toBe("—");
     expect(summaryCellText("character", "role", "")).toBe("—");
-  });
-});
-
-describe("characterRowInfo（人物行数据提取：角色/性格/能力独立列 + 动机摘要）", () => {
-  it("提取角色/动机/性格/能力（各自独立，防御性截断）", () => {
-    const info = characterRowInfo({
-      role: "主角",
-      motivation: "复仇".repeat(30),
-      personality: ["坚韧", "孤僻", "善良"],
-      ability_panel: ["火系", "水系"], // 2026-09：能力摘要 = 面板顶层分组名
-    });
-    expect(info.role).toBe("主角");
-    expect(info.motivation).toBe("复仇".repeat(20)); // 40 字符截断
-    expect(info.personality).toEqual(["坚韧", "孤僻"]); // 前 2
-    expect(info.abilityPanel).toEqual(["火系", "水系"]); // 前 2
-  });
-
-  it("空值归一为空串/空数组（行内不渲染空段）", () => {
-    expect(characterRowInfo({})).toEqual({
-      role: "",
-      motivation: "",
-      personality: [],
-      abilityPanel: [],
-    });
-    expect(
-      characterRowInfo({
-        role: undefined,
-        motivation: 123,
-        personality: "非数组",
-        ability_panel: ["", "火系"],
-      }),
-    ).toEqual({
-      role: "",
-      motivation: "",
-      personality: [],
-      abilityPanel: ["火系"],
-    });
   });
 });
 

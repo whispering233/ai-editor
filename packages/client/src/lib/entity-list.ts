@@ -22,6 +22,8 @@ export interface SummaryColumnConfig {
   label3?: string;
 }
 
+// 注（2026-09，发布前清理）：character 已改走 `#/characters` 人物工作台，本表不再服务 character；
+// 其键仅作**兜底/类型完整性**保留（`EntityList` 的 entityType 对未知/relations 回退到 "character"）。
 export const SUMMARY_COLUMNS: Record<ListableEntityType, SummaryColumnConfig> = {
  // （2026-08）+ 用户修订：状态列移除（详情页表单亦移除）；角色/性格/能力
  // 独立成列（修订：原「角色徽标内联名称旁」改独立列——首版行布局表头/表体错位致角色列空白）
@@ -53,30 +55,6 @@ export const SUMMARY_COLUMNS: Record<ListableEntityType, SummaryColumnConfig> = 
 };
 // 注：reference 列配置已随T3 移除——参考资料已有独立中栏 tab（#/references），
 // 实体二级 tab 不再渲染泛型表格（旧路由重定向），此处无 reference 分支。
-
-/** 人物行两行式行布局数据提取（2026-08）：
- * 第一行 = 名称 + 角色徽标（summary.role）；第二行 = 动机摘要 + 性格/能力标签 chips。
- * 服务端摘要已截断（motivation 40 / personality 前 2 / ability_panel 面板顶层分组名前 2），
- * 此处防御性再截断；空值一律归一为空串/空数组（行内不渲染空段）。*/
-export function characterRowInfo(summary: Record<string, unknown>): {
-  role: string;
-  motivation: string;
-  personality: string[];
-  abilityPanel: string[];
-} {
-  const str = (v: unknown): string => (typeof v === "string" ? v : "");
-  const tagList = (v: unknown, cap: number): string[] =>
-    Array.isArray(v)
-      ? (v as unknown[]).filter((t): t is string => typeof t === "string" && t !== "").slice(0, cap)
-      : [];
-  return {
-    role: str(summary.role),
-    motivation: str(summary.motivation).slice(0, 40),
-    personality: tagList(summary.personality, 2),
- // 能力 chips = 面板顶层分组名（2026-09；summary 键名即 ability_panel）
-    abilityPanel: tagList(summary.ability_panel, 2),
-  };
-}
 
 /** hook 枚举值 → 中文（展示映射；未收录的原样显示）；详情页表单下拉复用（S3.6） */
 export const HOOK_STATUS_LABEL: Record<string, string> = {
@@ -120,6 +98,7 @@ export interface CreateFirstFieldConfig {
   options?: string[];
 }
 
+// 注（2026-09，发布前清理）：同 SUMMARY_COLUMNS——character 键仅作兜底/类型完整性保留。
 export const CREATE_FIRST_FIELD: Record<ListableEntityType, CreateFirstFieldConfig> = {
   character: { key: "role", label: "角色定位", input: "text" },
  // K2（2026-08 用户复核）：设定分类统一字段 tags——新建行直接打标签（逗号分隔多值）
