@@ -24,7 +24,7 @@ import type { OutlineNode } from "@whispering233/ai-editor-shared";
 import { DeleteOutlined, RightOutlined, AimOutlined } from "@ant-design/icons";
 import { CHILD_TYPE, TYPE_LABEL } from "../components/outline/dialogs";
 import { NodeHookMarkBadge } from "../components/outline/node-hook-badge";
-import { TagChip } from "@/components/ui/tag-chip";
+import { TypeChip } from "@/components/ui/tag-chip";
 import { DropIndicator } from "@/components/ui/drop-indicator";
 import { PageHeader } from "@/components/ui/page-header";
 import { RowContextMenu } from "@/components/entity/row-context-menu";
@@ -745,7 +745,7 @@ export default function Outline() {
             ) : (
               <span className="w-7 shrink-0" />
             )}
-            <TagChip className="w-7 shrink-0 justify-center">{TYPE_LABEL[node.type]}</TagChip>
+            <TypeChip className="w-7 shrink-0 justify-center">{TYPE_LABEL[node.type]}</TypeChip>
             {/* 标题：点击就地编辑（Enter 保存 / Esc 取消 / 失焦保存）；stopPropagation 隔离——
                 单击标题 = 编辑而非选中（冲突设计） */}
             {editingTitle ? (
@@ -872,9 +872,9 @@ export default function Outline() {
               style={{ paddingLeft: (depth + 1) * 20 + 8 }}
             >
               <span className="w-7 shrink-0" />
-              <TagChip className="h-5 w-7 shrink-0 justify-center">
+              <TypeChip className="h-5 w-7 shrink-0 justify-center">
                 {TYPE_LABEL[creatingAt.type]}
-              </TagChip>
+              </TypeChip>
               {inlineInput(
                 createValue,
                 setCreateValue,

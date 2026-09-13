@@ -22,7 +22,7 @@ import { NodeDeltaList } from "../components/delta/node-delta-list";
 import { DeltaCreateForm } from "../components/delta/delta-create-form";
 import { TYPE_LABEL } from "../components/outline/dialogs";
 import { Button, Input, Select } from "antd";
-import { TagChip } from "@/components/ui/tag-chip";
+import { TypeChip } from "@/components/ui/tag-chip";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SectionCard } from "@/components/ui/section-card";
@@ -224,7 +224,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
           /* 元信息行：类型徽标 + 更新时间 + 阅读进度（文字与大纲列表页徽标语义一致） */
           node ? (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <TagChip>{TYPE_LABEL[node.type]}</TagChip>
+              <TypeChip>{TYPE_LABEL[node.type]}</TypeChip>
               <span>更新于 {formatTimestamp(node.updatedAt)}</span>
               {isCurrent && (
                 <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-xs text-accent-foreground">

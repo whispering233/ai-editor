@@ -16,7 +16,7 @@ import type { EntityType } from "@whispering233/ai-editor-shared";
 import { formatRelativeTime } from "@whispering233/ai-editor-shared";
 import { Alert, Button, Skeleton, Typography } from "antd";
 import { PageHeader } from "@/components/ui/page-header";
-import { TagChip } from "@/components/ui/tag-chip";
+import { TypeChip } from "@/components/ui/tag-chip";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DeleteOutlined, RedoOutlined, ReloadOutlined } from "@ant-design/icons";
 import { ConfirmDialog } from "../components/outline/dialogs";
@@ -57,11 +57,9 @@ const NODE_TYPE_LABEL: Record<OutlineNodeType, string> = {
   scene: "场",
 };
 
-/** 类型徽标（antd Tag；实体/大纲类型共用） */
+/** 类型徽标（实体/大纲类型共用；中性底，枚举不上 tint——DESIGN.md §Components `type-badge`） */
 function TypeBadge({ label }: { label: string }) {
-  return (
-    <TagChip className="shrink-0">{label}</TagChip>
-  );
+  return <TypeChip className="shrink-0">{label}</TypeChip>;
 }
 
 /** purge 确认目标（实体 / 节点） */

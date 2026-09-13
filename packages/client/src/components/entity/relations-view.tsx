@@ -22,7 +22,7 @@ import { EmptyState } from "../ui/empty-state";
 import { entityDetailPath } from "../../lib/entity-paths";
 import type { EntityType } from "@whispering233/ai-editor-shared";
 import { Alert, Button, Input, Select, Skeleton } from "antd";
-import { TagChip } from "@/components/ui/tag-chip";
+import { TypeChip } from "@/components/ui/tag-chip";
 import { PageDivider } from "@/components/ui/page-header";
 import { DeleteOutlined, SearchOutlined } from "@ant-design/icons";
 import { navigate } from "../../hooks/use-route";
@@ -83,7 +83,7 @@ export function filterRelations(
 
 /** 端点类型徽标（人物/设定/地点/伏笔/大纲节点） */
 function EndpointBadge({ type }: { type: string }) {
-  return <TagChip>{ENDPOINT_TYPE_LABEL[type] ?? type}</TagChip>;
+  return <TypeChip>{ENDPOINT_TYPE_LABEL[type] ?? type}</TypeChip>;
 }
 
 /** 端点名（含徽标）：四类实体跳实体详情；大纲节点（S12.2 起）跳节点详情 #/outline/:nodeId；未知类型灰显不可点 */
@@ -307,9 +307,9 @@ export function RelationsView({
               <li key={r.id} className="flex items-center gap-2 px-3 py-2 text-sm">
                 {scope !== undefined ? (
                   <>
-                    <TagChip className="shrink-0 truncate" label={relationTypeLabel(r.relationType)}>
+                    <TypeChip className="shrink-0 truncate">
                       {relationTypeLabel(r.relationType)} →
-                    </TagChip>
+                    </TypeChip>
                     <span className="min-w-0 flex-1">
                       <EndpointLink type={r.targetType} id={r.targetId} name={r.targetName} />
                     </span>
@@ -321,12 +321,9 @@ export function RelationsView({
                     </span>
                     {/* 关系类型列：等宽 1/4 + 左对齐（与源/目标列、表头同列同对齐——居中会让 chip 相对表头位移） */}
                     <div className="w-1/4 min-w-0 shrink-0">
-                      <TagChip
-                        className="max-w-full truncate"
-                        label={relationTypeLabel(r.relationType)}
-                      >
+                      <TypeChip className="max-w-full truncate">
                         {relationTypeLabel(r.relationType)} →
-                      </TagChip>
+                      </TypeChip>
                     </div>
                     <span className="min-w-0 flex-1">
                       <EndpointLink type={r.targetType} id={r.targetId} name={r.targetName} />
