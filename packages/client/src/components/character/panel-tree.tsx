@@ -23,13 +23,12 @@ import {
   PANEL_TEMPLATES,
   insertPanelNode,
   movePanelNode,
-  panelNodeAt,
   panelPathKey,
   panelWarningMap,
+  planPanelRowDrop,
   removePanelNode,
   renamePanelNode,
   setPanelLeafValue,
-  siblingDropIndex,
   type PanelIndexPath,
 } from "../../lib/panel-tree";
 import { ConfirmDialog } from "../outline/dialogs";
@@ -42,8 +41,19 @@ function valueText(value: string | number | undefined): string {
   return value === undefined ? "" : String(value);
 }
 
-/** 拖拽形态：索引路径字符串载荷 + 目标行（上/下插入线，中段 = 成为子级） */
-type PanelDragTarget = { path: string; placement: "before" | "on" | "after" } | null;
+/** 拖拽形态：索引路径字符串载荷 + 目标行（上/下插入线，中段 = 成为子级）。
+ * `reject: true` = **会被拒绝的落点**（目标为带值叶子）：不显任何反馈，但需放行 drop 以给提示 */
+type PanelDragTarget =
+  | { path: string; placement: "before" | "on" | "after"; reject?: boolean }
+  | null;
+
+/** 「带值叶子」提示文案（新增子级 / 拖成子级两条路径**同源**——策略：拒绝而非丢值） */
+const LEAF_HAS_VALUE_HINT = "该字段已有值，先清空值再添加子级";
+
+/** 索引路径字符串 → 下标链（`panelPathKey` 的逆；空串 = 根层级） */
+function parsePathKey(key: string): PanelIndexPath {
+  return key === "" ? [] : key.split(".").map((s) => Number(s));
+}
 
 /** 待确认的替换（模板 / 从角色复制——两者都是**整体替换**语义） */
 interface PendingReplace {
@@ -114,7 +124,7 @@ export function PanelTree({
       return;
     }
     if (node.value !== undefined) {
-      useUiStore.getState().showToast("该字段已有值，先清空值再添加子级", "error");
+      useUiStore.getState().showToast(LEAF_HAS_VALUE_HINT, "error");
       return;
     }
     addNode(path, 0, "新字段");
@@ -122,7 +132,7 @@ export function PanelTree({
 
   function commitRename(): void {
     if (editing === null) return;
-    const path = editing.path.split(".").map((s) => Number(s));
+    const path = parsePathKey(editing.path);
     const next = renamePanelNode(nodes, path, editing.draft);
     setEditing(null);
     commit(next);
@@ -152,12 +162,30 @@ export function PanelTree({
     return "on";
   }
 
+  /** 行落点决策（**唯一决策点**：dragover 与 drop 共用 `planPanelRowDrop`，防两处判断漂移） */
+  function rowDropPlan(key: string, placement: "before" | "on" | "after") {
+    if (dragPath === null) return null;
+    return planPanelRowDrop(nodes, parsePathKey(dragPath), parsePathKey(key), placement);
+  }
+
   function handleRowDragOver(e: DragEvent, key: string): void {
-    if (dragPath === null || dragPath === key) return;
-    e.preventDefault();
-    e.stopPropagation();
+    if (dragPath === null) return;
+    e.stopPropagation(); // 行内接管判定：非法落点不得冒泡成「拖到空白区移为末尾」
+    const placement = rowPlacement(e);
+    const plan = rowDropPlan(key, placement);
+    if (plan === null) {
+      // 非法落点（防自拖/防环）：**不显示任何反馈**（不显插入线、不显高亮），也不放行 drop
+      setDropTarget(null);
+      return;
+    }
+    e.preventDefault(); // 放行 drop（拒绝型落点也需要 drop 事件来给提示）
+    if (plan.kind === "reject-value-leaf") {
+      // 带值叶子：不显高亮（不可放），但松手时给提示（不丢值）
+      setDropTarget({ path: key, placement, reject: true });
+      return;
+    }
     e.dataTransfer.dropEffect = "move";
-    setDropTarget({ path: key, placement: rowPlacement(e) });
+    setDropTarget({ path: key, placement });
   }
 
   function handleDrop(e: DragEvent): void {
@@ -167,30 +195,21 @@ export function PanelTree({
     setDragPath(null);
     setDropTarget(null);
     if (dragPath === null || target === null) return;
-    const from = dragPath.split(".").map((s) => Number(s));
-    const to = target.path.split(".").map((s) => Number(s));
-    if (target.placement === "on") {
-      const host = panelNodeAt(nodes, to);
-      const dropsValue = host !== null && host !== undefined && !isAbilityBranch(host) && host.value !== undefined;
-      commit(movePanelNode(nodes, from, { parent: to, index: host?.children?.length ?? 0 }));
-      if (dropsValue) {
-        useUiStore.getState().showToast("已成为其子级；原字段值已清除（含子级的节点不可赋值）");
-      }
+    const from = parsePathKey(dragPath);
+    const plan = planPanelRowDrop(nodes, from, parsePathKey(target.path), target.placement);
+    if (plan === null) return; // 非法：无动作、无提示（静默不可放）
+    if (plan.kind === "reject-value-leaf") {
+      useUiStore.getState().showToast(LEAF_HAS_VALUE_HINT, "error");
       return;
     }
-    commit(
-      movePanelNode(nodes, from, {
-        parent: to.slice(0, -1),
-        index: siblingDropIndex(from, to, target.placement),
-      }),
-    );
+    commit(movePanelNode(nodes, from, { parent: plan.parent, index: plan.index }));
   }
 
   /** 拖到列表空白区 = 移为顶层末尾（同级拖拽的兜底出口，同设定树「拖到空白区移为根」） */
   function handleRootDrop(e: DragEvent): void {
     e.preventDefault();
     if (dragPath === null) return;
-    const from = dragPath.split(".").map((s) => Number(s));
+    const from = parsePathKey(dragPath);
     setDragPath(null);
     setDropTarget(null);
     commit(movePanelNode(nodes, from, { parent: [], index: nodes.length }));
@@ -409,7 +428,9 @@ function PanelRows({
         const branch = isAbilityBranch(node);
         const isCollapsed = collapsed.includes(key);
         const warning = warnings.get(key);
-        const target = dropTarget?.path === key ? dropTarget.placement : null;
+        // 视觉目标：拒绝型落点不显示任何反馈（不显插入线、不显高亮）
+        const target =
+          dropTarget?.path === key && dropTarget.reject !== true ? dropTarget.placement : null;
         const isDragging = dragPath === key;
         return (
           <div key={key}>

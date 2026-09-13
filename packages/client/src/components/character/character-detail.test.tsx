@@ -150,6 +150,18 @@ describe("CharacterDetailView（字段三分：两分区与归属）", () => {
     expect(html).toContain('draggable="true"');
   });
 
+  it("默认无拖拽反馈（非法落点不显插入线/高亮；拒绝型落点同样无高亮）", () => {
+    const html = render("initial");
+    const panel = html.slice(html.indexOf("能力面板"));
+    // DropIndicator（插入线）与拖拽目标行高亮都是「合法落点」专属的临时态
+    expect(panel).not.toContain("ring-primary/30"); // 目标行高亮
+    expect(panel).not.toContain("bg-primary/10"); // 目标行淡染面
+    // 插入线 = DropIndicator 的绝对定位横线（aria-hidden 小圆点 + 横条）
+    expect(panel).not.toContain("-top-[3px]");
+    expect(panel).not.toContain("-bottom-[3px]");
+    expect(panel).not.toContain("bg-primary");
+  });
+
   it("名字含「.」/同层重名 → 行内警告（不静默改写数据）", () => {
     const html = renderToString(
       <CharacterDetailView

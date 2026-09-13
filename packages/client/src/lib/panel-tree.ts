@@ -10,7 +10,7 @@
 //   时有歧义（那是 Delta 字段路径的解析口径），编辑器内部不得复用，否则「改名后拖错行」
 // - 非法操作返回 `null`（空名、路径不存在、拖进自身子树）——**不静默改写数据**
 import type { AbilityPanelNode } from "@whispering233/ai-editor-shared";
-import { coerceAbilityValue, parseAbilityPanel } from "@whispering233/ai-editor-shared";
+import { coerceAbilityValue, isAbilityBranch, parseAbilityPanel } from "@whispering233/ai-editor-shared";
 
 /** 索引路径（从根数组起的下标链；空数组 = 根层级） */
 export type PanelIndexPath = readonly number[];
@@ -37,7 +37,9 @@ export function panelNodeAt(
 }
 
 /** 父节点的子数组（`parentPath = []` → 根数组）；路径不存在 → null。
- * **叶子父节点按不变式转分支**（丢弃 `value`——分支不可赋值）；空数组由 `parseAbilityPanel` 归一回叶子 */
+ * **无值叶子按不变式转分支**（空数组由 `parseAbilityPanel` 归一回叶子）；
+ * **带值叶子不可成为父节点 → null**（转分支就要丢 `value`——「不静默丢用户数据」，
+ * 与 UI「新增子级 / 拖成子级」两条路径的拒绝策略同源；空值叶子可安全转分支）。 */
 function childrenAt(
   nodes: AbilityPanelNode[],
   parentPath: PanelIndexPath,
@@ -45,10 +47,10 @@ function childrenAt(
   if (parentPath.length === 0) return nodes;
   const parent = panelNodeAt(nodes, parentPath);
   if (parent === null) return null;
-  if (!Array.isArray(parent.children)) {
-    delete parent.value;
-    parent.children = [];
-  }
+  if (Array.isArray(parent.children) && parent.children.length > 0) return parent.children;
+  if (parent.value !== undefined) return null; // 带值叶子：拒绝（丢值不可接受）
+  delete parent.value;
+  parent.children = [];
   return parent.children;
 }
 
@@ -129,7 +131,8 @@ export function setPanelLeafValue(
  *
  * 语义（与大纲/设定树的拖拽语言一致）：
  * - `to.parent` 与被移动节点**同一父** → 同级重排（先摘后插，index 按**摘除后**的数组算）
- * - `to.parent` 为其它分支 → 成为其子级（父节点因此变分支，其叶子 `value` 按不变式丢弃）
+ * - `to.parent` 为其它分支（或无值叶子→转分支） → 成为其子级
+ * - **目标父是带值叶子 → null**（转分支会丢 `value`——不静默丢用户数据）
  * - **拖进自身/自身子树 → null**（防环）；`from === to.parent` 亦属此类
  */
 export function movePanelNode(
@@ -184,6 +187,69 @@ export function panelWarningMap(nodes: readonly AbilityPanelNode[]): Map<string,
   };
   walk(nodes, []);
   return out;
+}
+
+/**
+ * 路径是否等于 `ancestor` 或位于其子树内（索引路径前缀比较，与「名」无关）。
+ * `ancestor = []`（根）包含一切；`path` 短于 `ancestor` → false。
+ */
+export function isPanelPathAtOrUnder(
+  path: PanelIndexPath,
+  ancestor: PanelIndexPath,
+): boolean {
+  if (path.length < ancestor.length) return false;
+  return ancestor.every((seg, i) => path[i] === seg);
+}
+
+/**
+ * 行落点是否合法（**防自拖 / 防环**）。
+ *
+ * 非法落点由 UI 约定为**不显示任何反馈**（不显插入线、不显高亮——`docs/ui/DESIGN.md`：
+ * 无反馈即「不可放」），且**不得冒泡成「拖到空白区移为末尾」**。
+ *
+ * - `from` 为空（根数组不可移动）→ 非法
+ * - `to === from`（拖到自己身上，无意义）→ 非法
+ * - **落点父**在 `from` 自身或其子树内 → 非法：`placement="on"` 的落点父 = `to`；
+ *   `before`/`after` 的落点父 = `to` 的父
+ */
+export function isLegalPanelDrop(
+  from: PanelIndexPath,
+  to: PanelIndexPath,
+  placement: "before" | "on" | "after",
+): boolean {
+  if (from.length === 0) return false;
+  if (isPanelPathAtOrUnder(to, from) && isPanelPathAtOrUnder(from, to)) return false; // to === from
+  const parentPath = placement === "on" ? to : to.slice(0, -1);
+  return !isPanelPathAtOrUnder(parentPath, from);
+}
+
+/** 行落点计划（含拒绝原因；`null` = 非法落点） */
+export type PanelRowDropPlan =
+  | { kind: "move"; parent: PanelIndexPath; index: number }
+  | { kind: "reject-value-leaf" };
+
+/**
+ * 行落点决策（拖拽的**唯一决策点**：dragover 与 drop 共用同一函数，防止两处判断漂移）。
+ *
+ * - `null` = 非法落点 → UI 不显示任何反馈，drop 也不产生动作（**也不弹 toast**——静默不可放）
+ * - `{ kind: "reject-value-leaf" }` = 目标是**带值叶子**（成为其子级会丢值）→ UI 拒绝：
+ *   不显高亮、松手时提示（文案与「新增子级」同源），**不改数据**
+ * - `{ kind: "move" }` = 合法移动（`before`/`after` 的下标已按「先摘后插」折算）
+ */
+export function planPanelRowDrop(
+  nodes: readonly AbilityPanelNode[],
+  from: PanelIndexPath,
+  to: PanelIndexPath,
+  placement: "before" | "on" | "after",
+): PanelRowDropPlan | null {
+  if (!isLegalPanelDrop(from, to, placement)) return null;
+  if (placement === "on") {
+    const host = panelNodeAt(nodes, to);
+    if (host === null) return null;
+    if (!isAbilityBranch(host) && host.value !== undefined) return { kind: "reject-value-leaf" };
+    return { kind: "move", parent: to, index: host.children?.length ?? 0 };
+  }
+  return { kind: "move", parent: to.slice(0, -1), index: siblingDropIndex(from, to, placement) };
 }
 
 /**

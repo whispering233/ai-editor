@@ -5,10 +5,13 @@ import { describe, expect, it } from "vitest";
 import {
   PANEL_TEMPLATES,
   insertPanelNode,
+  isLegalPanelDrop,
+  isPanelPathAtOrUnder,
   movePanelNode,
   panelNodeAt,
   panelPathKey,
   panelWarningMap,
+  planPanelRowDrop,
   removePanelNode,
   renamePanelNode,
   setPanelLeafValue,
@@ -111,14 +114,17 @@ describe("movePanelNode（同级重排 / 拖成子级 / 防环）", () => {
     expect(next?.map((n) => n.name)).toEqual(["水系", "火系"]);
   });
 
-  it("拖成子级：父节点变分支（其叶子 value 按不变式丢弃）", () => {
+  it("拖成子级：无值叶子可成为父节点；**带值叶子拒绝**（不静默丢值）", () => {
     const nodes = fixture();
     const next = movePanelNode(nodes, [0], { parent: [1], index: 0 });
     expect(next?.[0]).toEqual({ name: "水系", children: [nodes[0]] });
-    // 目标原为叶子且无值 —— 无值可丢；再验证「带值叶子被拖入子级后丢值」
     const withValue = setPanelLeafValue(nodes, [1], "5")!;
-    const nested = movePanelNode(withValue, [0], { parent: [1], index: 0 });
-    expect(nested?.[0]).toEqual({ name: "水系", children: [withValue[0]] });
+    expect(withValue[1]?.value).toBe(5);
+    // 目标父是带值叶子 → 拒绝（返回 null，值不丢）——策略同源：新增子级 / 拖成子级
+    expect(movePanelNode(withValue, [0], { parent: [1], index: 0 })).toBeNull();
+    expect(withValue[1]).toEqual({ name: "水系", value: 5 });
+    // 新增子级（insert）同策略
+    expect(insertPanelNode(withValue, [1], 0, "新字段")).toBeNull();
   });
 
   it("防环：拖进自身或自身子树 → null；根不可移动", () => {
@@ -150,6 +156,57 @@ describe("panelWarningMap（内联警告；不改写数据）", () => {
     expect(warnings.get("2")).toContain("同层重名");
     expect(warnings.has("3")).toBe(false);
     expect(warnings.size).toBe(3);
+  });
+});
+
+describe("isLegalPanelDrop / planPanelRowDrop（落点合法性；非法落点无反馈）", () => {
+  it("子树前缀判断：自身 / 子孙 / 兄弟 / 跨分支 / 根", () => {
+    expect(isPanelPathAtOrUnder([], [])).toBe(true); // 根包含一切（空路径 = 根）
+    expect(isPanelPathAtOrUnder([1], [])).toBe(true);
+    expect(isPanelPathAtOrUnder([0, 1], [0])).toBe(true); // 子孙
+    expect(isPanelPathAtOrUnder([0], [0, 1])).toBe(false); // 父不在子内
+    expect(isPanelPathAtOrUnder([1, 0], [0])).toBe(false); // 兄弟子树
+  });
+
+  it("非法落点：自拖 / 拖进自身子树（含 before·after 落在自身子孙行上）/ 根 / 目标行不存在", () => {
+    expect(isLegalPanelDrop([0], [0], "on")).toBe(false);
+    expect(isLegalPanelDrop([0], [0], "before")).toBe(false); // 自拖（无意义）
+    expect(isLegalPanelDrop([0], [0], "after")).toBe(false);
+    expect(isLegalPanelDrop([0], [0, 1], "on")).toBe(false); // 拖进自身子树
+    expect(isLegalPanelDrop([0], [0, 1], "before")).toBe(false); // 落点父 = [0]（自身）
+    expect(isLegalPanelDrop([0], [0, 1], "after")).toBe(false);
+    expect(isLegalPanelDrop([], [1], "on")).toBe(false); // 根不可移动
+  });
+
+  it("合法落点：兄弟 / 跨分支 / 子级升到根；计划带折算后的下标", () => {
+    const nodes = fixture();
+    expect(isLegalPanelDrop([0], [1], "before")).toBe(true);
+    expect(planPanelRowDrop(nodes, [0], [1], "before")).toEqual({
+      kind: "move",
+      parent: [],
+      index: 0, // 同父“先摘后插”折算（0 在目标位之前 → 目标位左移一位）
+    });
+    expect(isLegalPanelDrop([0, 1], [1], "on")).toBe(true); // 子级升到根分支下
+    expect(planPanelRowDrop(nodes, [0, 1], [1], "on")).toEqual({
+      kind: "move",
+      parent: [1],
+      index: 0, // 目标原为无值叶子 → 成为其首个子级
+    });
+    // 非法（拖进自身子树）→ null：UI 不显插入线/高亮，也不弹 toast
+    expect(planPanelRowDrop(nodes, [0], [0, 0], "on")).toBeNull();
+  });
+
+  it("带值叶子：拖成其子级 → 拒绝计划（UI 提示且不改数据）；无值叶子 → 正常计划", () => {
+    const nodes = fixture();
+    const withValue = setPanelLeafValue(nodes, [1], "5")!;
+    expect(planPanelRowDrop(withValue, [0], [1], "on")).toEqual({ kind: "reject-value-leaf" });
+    expect(planPanelRowDrop(nodes, [0], [1], "on")).toEqual({
+      kind: "move",
+      parent: [1],
+      index: 0,
+    });
+    // 同一条策略下，move 也拒绝（纯函数层兜底）
+    expect(movePanelNode(withValue, [0], { parent: [1], index: 0 })).toBeNull();
   });
 });
 

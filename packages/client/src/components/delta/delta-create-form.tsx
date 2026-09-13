@@ -128,11 +128,11 @@ export function DeltaCreateForm({
 
   /** 字段下拉项（实体按类型 schema keys——S13.3 起仅实体目标；面板叶子按目标实体面板动态展开） */
   const fieldOptions = entityDeltaFieldOptions(targetType, targetData?.ability_panel);
+  const selectedOption = fieldOptions.find((o) => o.key === field);
   /** 目标当前值（update from 来源：实体详情 data / 面板叶子按点分路径取值） */
   const currentValue = deltaFieldCurrentValue(targetType, field, targetData);
   /** 值解析是否按数字（面板叶子按 `DeltaFieldOption.numeric` 覆盖静态清单） */
-  const numericField =
-    fieldOptions.find((o) => o.key === field)?.numeric ?? isNumericField(targetType, field);
+  const numericField = selectedOption?.numeric ?? isNumericField(targetType, field);
   /** 当前字段的 op 可用集（数组 add/remove、标量 update/set 或仅 set） */
   const opInfo = inferOpOptions({ array: isArrayField(targetType, field), currentValue });
 
@@ -170,6 +170,8 @@ export function DeltaCreateForm({
       rawValue: value,
       numeric: numericField,
       currentValue,
+      // 面板叶子：与面板编辑器同源解析（无值叶子也一致，不因当前值类型而分流）
+      panelLeaf: selectedOption?.panelLeaf === true,
     });
     if ("error" in built) {
       setSubmitError(built.error);

@@ -69,10 +69,10 @@ describe("entityDeltaFieldOptions（字段名 = shared ENTITY_DATA_SCHEMAS keys�
     expect(keys).toContain("ability_panel.火系.等级");
     expect(keys).toContain("ability_panel.火系.熟练度");
     const level = opts.find((o) => o.key === "ability_panel.火系.等级");
-    expect(level).toMatchObject({ label: "火系.等级", array: false, numeric: true });
-    // 无值的叶子 → 不标 numeric（默认按文本解析）
+    expect(level).toMatchObject({ label: "火系.等级", array: false, numeric: true, panelLeaf: true });
+    // 无值的叶子 → 不标 numeric（值输入仍走面板同源解析：`panelLeaf`）
     const proficiency = opts.find((o) => o.key === "ability_panel.火系.熟练度");
-    expect(proficiency).toMatchObject({ array: false, numeric: false });
+    expect(proficiency).toMatchObject({ array: false, numeric: false, panelLeaf: true });
     // 整树仍不进下拉（只有叶子）
     expect(keys).not.toContain("ability_panel");
   });
@@ -270,6 +270,57 @@ describe("buildDeltaChange（per-op 必填语义 + update 自动 from）", () =>
     ).toEqual({
       change: { field: "age", op: "set", to: "十六" },
     });
+  });
+
+  it("面板叶子：与面板编辑器同源解析（纯数字 → number；无值叶子不因 numeric=false 而分流）", () => {
+    // 有值叶子（numeric=true）与无值叶子（numeric=false）输入 "12" → 均为 number 12
+    for (const numeric of [true, false]) {
+      expect(
+        buildDeltaChange({
+          field: "ability_panel.火系.等级",
+          op: "set",
+          rawValue: "12",
+          numeric,
+          currentValue: undefined,
+          panelLeaf: true,
+        }),
+      ).toEqual({ change: { field: "ability_panel.火系.等级", op: "set", to: 12 } });
+    }
+    // 非纯数字文本 → 原样字符串（与面板编辑器同口径）
+    expect(
+      buildDeltaChange({
+        field: "ability_panel.火系.等级",
+        op: "set",
+        rawValue: "初阶",
+        numeric: true,
+        currentValue: undefined,
+        panelLeaf: true,
+      }),
+    ).toEqual({ change: { field: "ability_panel.火系.等级", op: "set", to: "初阶" } });
+    // 面板编辑器不支持的字面（指数/十六进制/前导 +）→ 文本（与 coerceAbilityValue 同源）
+    for (const raw of ["1e3", "0x10", "+5"]) {
+      expect(
+        buildDeltaChange({
+          field: "ability_panel.火系.等级",
+          op: "set",
+          rawValue: raw,
+          numeric: true,
+          currentValue: undefined,
+          panelLeaf: true,
+        }),
+      ).toEqual({ change: { field: "ability_panel.火系.等级", op: "set", to: raw } });
+    }
+    // update：from 取自目标当前值（面板叶子路径解析），to 同源解析
+    expect(
+      buildDeltaChange({
+        field: "ability_panel.火系.等级",
+        op: "update",
+        rawValue: "5",
+        numeric: true,
+        currentValue: 3,
+        panelLeaf: true,
+      }),
+    ).toEqual({ change: { field: "ability_panel.火系.等级", op: "update", from: 3, to: 5 } });
   });
 
   it("空值 → 报错", () => {

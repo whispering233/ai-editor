@@ -9,6 +9,7 @@ import type { DeltaChange, DeltaOp, EntityType } from "@whispering233/ai-editor-
 import {
   ENTITY_TYPES,
   abilityPanelFieldPath,
+  coerceAbilityValue,
   panelLeafPaths,
 } from "@whispering233/ai-editor-shared";
 // 类型-only 导入 schema 常量（编译期擦除，不打包 zod；用于断言本地字段清单 = shared schema keys）
@@ -126,6 +127,9 @@ export interface DeltaFieldOption {
  /** 数字字段（值输入解析为 number）；缺省 = 按 `isNumericField` 的类型清单判定。
  * 面板叶子按**其当前值类型**携带该标记（叶子值域 `string | number`） */
   numeric?: boolean;
+ /** 面板叶子（`ability_panel.<点分路径>`）：值输入走 shared `coerceAbilityValue`
+ *（与面板编辑器同源——两条写入路径的类型判定一致，无值叶子也不例外） */
+  panelLeaf?: boolean;
 }
 
 /** 不可变字段（不参与 Delta——`docs/db/schema.md`「人物 data 分层」/`10-data-model.md` §14 不变式 1）：
@@ -164,6 +168,7 @@ export function entityDeltaFieldOptions(type: string, panel?: unknown): DeltaFie
     label: leaf.path,
     array: false,
     numeric: typeof leaf.value === "number",
+    panelLeaf: true,
   }));
   return [...base, ...leaves];
 }
@@ -219,6 +224,8 @@ export interface BuildDeltaChangeArgs {
   numeric: boolean;
  /** op=update 用：目标当前值（实体详情 data；自动取 from） */
   currentValue: unknown;
+ /** 面板叶子：值解析走 shared `coerceAbilityValue`（与面板编辑器同源） */
+  panelLeaf?: boolean;
 }
 
 export type BuildDeltaChangeResult = { change: DeltaChange } | { error: string };
@@ -228,7 +235,12 @@ export function buildDeltaChange(args: BuildDeltaChangeArgs): BuildDeltaChangeRe
   const v = args.rawValue.trim();
   if (v === "") return { error: "请填写值" };
   const num = Number(v);
-  const parsed: string | number = args.numeric && !Number.isNaN(num) ? num : v;
+  // 面板叶子：与面板编辑器同源解析（纯数字 → number，其余 → 原文本；`""` 已在上面拦下）
+  const parsed: string | number = args.panelLeaf
+    ? (coerceAbilityValue(v) ?? v)
+    : args.numeric && !Number.isNaN(num)
+      ? num
+      : v;
   switch (args.op) {
     case "add":
       return { change: { field: args.field, op: "add", value: parsed } };
