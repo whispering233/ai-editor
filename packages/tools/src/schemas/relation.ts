@@ -4,7 +4,8 @@ import { Type, type Static } from "@earendil-works/pi-ai";
 import { RELATION_TYPES } from "@whispering233/ai-editor-shared";
 import { stringEnum } from "./helpers.js";
 
-/** 关系类型白名单（预定义 16 种；工具参数由 LLM 生成，枚举提前拦非法值——与 REST 层的宽松 string 不同） */
+/** 关系类型白名单（预定义全集 = `RELATION_TYPES`；工具参数由 LLM 生成，枚举提前拦非法值——
+ * 与 REST 层的自由字符串（可自定义）不同；自定义类型 AI 只能读到、不能创建） */
 export const relationTypeSchema = stringEnum(RELATION_TYPES);
 
 /**

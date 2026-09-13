@@ -5,6 +5,40 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [v0.0.36] - 2026-09-13
+
+> **关系类型收口 + 人物页关系区**：关系类型的属性（展示名 / 分组 / 对称性）收为 shared 单一定义（`RELATION_TYPE_META`），散在四处的手写清单全部改为派生；`relation_type` 从**枚举放宽为自由字符串**——作者可在建立关联时自定义类型（无需迁移，`relation_type` 本就无 CHECK）；人物页「人物关系网」新增**零依赖手写 SVG 星形图**；client 新增人物字段清单与 schema 的一致性编译期断言。**无 API 破坏性变更**：放宽方向兼容（原先必 400 的输入现在可能 201），预定义类型与既有数据行为不变。
+
+### Added
+
+- **关系类型属性注册表**：`shared/constants/entity.ts` 新增 `RELATION_TYPE_META: Record<RelationType, { label; group; symmetric? }>`（`group` ∈ `character`/`structure`/`anchor`/`hook`/`mount`/`canvas`）——一张表取代原先的手写清单（client 17 项中文标签表、人物页人↔人 5 类子集、对称集合、对话框排除集）。`Record` 穷尽性 = 加关系类型不补属性即编译失败；消费方（客户端标签与子集、tools 冲突检测）一律派生。
+- **自定义关系类型（轻量口径）**：作者可在「建立关联」对话框直接输入新类型（语法 = `trim` 后非空 / 长度 ≤ 32 / 禁控制字符，单一校验函数被 REST schema、db `createRelation` 守卫、client 预校验共用）。下拉 = 调用方预定义子集 ∪ 「本项目已用的**自定义**类型」（带条数，从关系行派生）；**无中心记录**（类型只活在数据里 ⇒ 无改名/合并入口，已登记 backlog）。**不需要迁移**（`relation_type` 无 CHECK）。
+- **新控件形态 `select-free-input`**（antd `AutoComplete` = combobox；契约在 `DESIGN.md`）：预定义类型以**中文标签**展示/选中、自定义类型以**原名**展示（列表 label 带 ` · N`），提交前反解回 `relation_type` 真实取值；打开下拉即清搜索词（全部选项可浏览）、无匹配时提示「将新建『X』」、语法非法内联报错且不发请求。人物页两个关系 tab 与通用关联页过滤下拉同步接入。
+- **人物关系星形图（`relation-star-graph`，零依赖手写 SVG）**：「人物关系网」tab 内、分组列表之上的纯展示图——中心 = 当前角色，叶子 = **按人物去重**的对方（同一人多条关系合并为一叶，条数 > 1 显示 ` · N`；out/in 并存或对称合并行不画箭头），叶子可点击切换选中角色；阈值 = 去重后叶子数 < 4 不渲染、> 24 只画点不写名；**不引入布局库**（1 跳星形 = 极坐标，多跳/拖拽/缩放出现时再评估 `d3-force`，见 backlog）。
+- **人物字段清单一致性断言（client）**：`CHARACTER_MUTABLE_DATA_KEYS` / `CHARACTER_DETAIL_FIELD_KEYS` 改 `as const satisfies readonly EntityDataKey<"character">[]` + 穷尽性编译期断言（schema 新增可变字段而详情页/能力面板/自定义字段未接 → 编译失败），运行期另断言「基础 ∪ 可变 === 详情清单」。零新依赖（type-only 引用 schema，zod 不进客户端产物）。
+- **AI 工具描述从注册表派生**：`query_relationships` / `propose_add_relation` 的 `relation_type` 描述改由 `RELATION_TYPES` 拼接（原先手写且写错数量、漏 `occurs_in`），并明确「作者在界面自定义的类型 AI 不可创建」。
+
+### Changed
+
+- **对称关系口径统一（tools `detect_conflicts` 行为变化）**：对称集合从注册表派生 = `ally`/`rival`/`family`（此前 tools 手写 `ally`/`family`）——**单向 `rival` 从此报「反向缺失」矛盾**（与显示层的双向合并口径一致）。`mentor`/`kills` 等有向类型不受影响。
+- **`relation_type` 契约放宽**：REST schema 由 `z.enum(RELATION_TYPES)` 改自由字符串 + 语法校验；db 守卫同源；`relation_type` 的 `trim` 归一位于 REST 边界。预定义专属校验（伏笔锚点仅章 / `belongs_to` 防环 / `occurs_at` 挂载）按类型名判断，自定义类型天然不触发。**AI 侧保持枚举**（有意分层，见 `tool-calling.md`）。
+- 星形图半径预算从 `min(宽, 高)/2` 改为 `min(宽度预算, 480/2)` 且**画布高度随半径长高**（原先约 10 叶起半径饱和、叶子挤成一圈）；标签横向余量不足时锚点翻向内（原先长名字被 SVG 视口裁掉字尾）。
+
+### Fixed
+
+- 关系类型控件在中文界面显示内部 key（如 `ally`）——combobox 输入框显示 option 的 `value`，原实现 value = 原始 key；现改为展示值/落库值分离（三层反解）。
+- 自由输入下拉「打开只看到当前项」（当前值被当作搜索词）——改为打开即清搜索词，关闭时提交已输入文本（自由输入不被「点别处」丢掉）。
+- server 一条「枚举拒绝」断言随契约放宽变假（`relation_type: "friend"` 由 400 变 201）——同源修订为「语法非法 → 400 / 自定义类型 → 201 原样落库」。
+
+### Docs
+
+- `docs/db/schema.md`：关系类型 = 预定义词表 ∪ 自定义；对称关系口径（含自定义一律有向）；新增/自定义类型**不需要迁移**（修正原先「新增类型走迁移」的错误说法）。
+- `docs/design/10-data-model.md` §3：关系类型分层（属性注册表单一定义 / 自定义类型轻量口径 / AI 侧有意收窄）。
+- `docs/api/40-api-relation.md`：`relation_type` 自由字符串与语法规则；`docs/api/tool-calling.md`：AI 仍限预定义 17 类。
+- `docs/ui/DESIGN.md`：新控件形态 `select-free-input`（含两条 antd 源码事实：combobox `filterOption` 默认 `false`、`onChange` 可能给 `undefined`）；`relation-star-graph` 契约（按人去重 / `· N` / 阈值 / 画布随半径长高 / 标签翻锚点）；`character-relations` 段同步。
+- `docs/design/backlog.md`：删已解决两条（人物字段清单断言、关系星形图）；新增 oracle 留存量（R2 互斥对字面量、db 守卫只校验不归一、非字符串文案、dist 新鲜度假绿窗口、对话框其余下拉浮层宽度、对话框全量拉取性能边界、自定义类型改名/合并）；登记「星形图 `· N` = 列表行数」有意口径。
+- `AGENTS.md`：`RELATION_TYPE_META` 单一定义、编译期断言只能放 src 模块、改上游 `src` 后先 `pnpm -r build`（假绿窗口）、并行派工必须 fresh context + 硬完成判据。
+
 ## [v0.0.35] - 2026-09-13
 
 > **人物页信息架构与文案**：人物页改**四个平级 tab**（人物档案 / 阅读进度 / 人物关系网 / 其他关联 · N）；字段区改**档案式网格**（不再分「基础信息 / 可变数据」，阅读进度画纯文本值）；全站「当前位置」文案改「阅读进度」；三个"选章"选择器收窄为仅章。**无 API 破坏性变更**（`current_position` 等字段名与 `POST /delta/compute` 契约不变）。

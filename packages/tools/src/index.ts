@@ -38,7 +38,7 @@ export * from "./proposal/reference.js";
 // S6.7 执行层：导出 executor 门面与 13 个执行函数（不注册工具——见文件头注释）
 export * from "./executor/index.js";
 
-import { TOOL_PERMISSION } from "@whispering233/ai-editor-shared";
+import { RELATION_TYPES, TOOL_PERMISSION } from "@whispering233/ai-editor-shared";
 import {
   computeStateArgsSchema,
   getDeltaHistoryArgsSchema,
@@ -83,9 +83,11 @@ const queryToolDefs: ToolDefinition[] = [
     name: "query_relationships",
     description:
       "关系图查询：按端点/关系类型过滤（depth 1=紧邻直接关系、2=k跳路径、3=全量遍历）。" +
-      "端点可为实体或大纲节点（outline_node）；relation_type 取值限定预定义 16 种：" +
-      "belongs_to/owns/masters/ally/rival/mentor/family/kills/appears_in/occurs_at/" +
-      "plot_edge/plants/advances/resolves/depends_on/involves；端点软删的关系不可见。",
+      "端点可为实体或大纲节点（outline_node）；relation_type 取值限定预定义 " +
+      RELATION_TYPES.length +
+      " 种：" +
+      RELATION_TYPES.join("/") +
+      "；端点软删的关系不可见。",
     parameters: queryRelationshipsArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
     run: runQueryRelationships,
@@ -369,8 +371,11 @@ const proposalToolDefs: ToolDefinition[] = [
     name: "propose_add_relation",
     description:
       "新增关系提案：source/target 为端点 id（实体 id 如 char-xxx，或大纲节点 id 如 ch-xxx，" +
-      "类型自动识别），type 为预定义关系类型（belongs_to/owns/masters/ally/rival/mentor/family/" +
-      "kills/appears_in/occurs_at/plot_edge/plants/advances/resolves/depends_on/involves），" +
+      "类型自动识别），type 为预定义关系类型（" +
+      RELATION_TYPES.join("/") +
+      "，共 " +
+      RELATION_TYPES.length +
+      " 种；**作者在界面自定义的类型 AI 不可创建**），" +
       "metadata 可选。**伏笔三类关系（plants/advances/resolves）的源端必须是章大纲节点**" +
       "（卷/场景报错；源端为实体等反向组合同样拒绝——无消费者属数据卫生）。" +
       "仅生成提案，需用户确认后生效；端点不存在或已软删返回错误。",
