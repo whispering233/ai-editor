@@ -5,6 +5,26 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [v0.0.35] - 2026-09-13
+
+> **人物页信息架构与文案**：人物页改**四个平级 tab**（人物档案 / 阅读进度 / 人物关系网 / 其他关联 · N）；字段区改**档案式网格**（不再分「基础信息 / 可变数据」，阅读进度画纯文本值）；全站「当前位置」文案改「阅读进度」；三个"选章"选择器收窄为仅章。**无 API 破坏性变更**（`current_position` 等字段名与 `POST /delta/compute` 契约不变）。
+
+### Changed
+
+- **人物页改四平级 tab**：「人物档案」（可编辑）/「阅读进度」/「人物关系网」/「其他关联 · N」——关系两块从「tab 之下共享」提为**各自独立 tab**（不因状态视图只读而受限），「其他关联」**去掉折叠态**（tab 即收起）、条数常显于 tab 标签（涵盖 `appears_in` 等 AI 分析数据源）。默认 tab 判据不变（有有效阅读进度 → 阅读进度；未设置 / 已失效 → 人物档案）。
+- **人物档案 = 档案式字段网格**：一个 `card` 内的网格（label 左置 64px、单行字段 ≥`md` 两列、长文本与标签列表整行），字段顺序 = `CHARACTER_DETAIL_FIELD_KEYS` 单一清单；**删除「基础信息 / 可变数据」两个分区**——不可变性分层只服务变更记录白名单与 AI 提案边界，不再在 UI 表达（`10-data-model.md` §14 不变式不变）。
+- **阅读进度画纯文本值**：同一网格、label 逐一致，值以文本渲染（空值 `—`），不再渲染一排 disabled 输入框；`panel-tree` 同 tab 走只读形态（缩进「名称 + 值文本」行，无输入框/工具条/行操作/拖拽），叶子空值也**不再用 `—` 占位符**（占位符会被误读为已有值）。
+- **文案统一**：「当前位置」→「阅读进度」（InfoBar / 概览页 / 大纲页徽标与右键菜单 / 大纲详情页按钮与元信息行 / HookPanel / compute 探针 / 成功与失败 toast）；「计算节点」→「进度节点」；`current_position` 字段名与 `lib/current-position.ts` 模块名不变（`docs/api/10-api-project.md` 登记口径）。「暂无变更记录」空态统一为「初始值」（人物页「人物档案初始值」/ Delta 预览「实体当前状态即初始值」）。
+- **三个选章选择器收窄为仅章**：人物页「进度节点」、通用 compute 探针（设定/地点/伏笔/时间点详情页）、`#/hooks/:id` 的「预计回收节点」——状态按**章序前缀**累积，非章节点只是某章的**别名**（场景→所属章、卷→该卷末章、root→初始值），列出只会造成"粒度更细"的错觉；`chapterNodeOptions` / `chapterNodeExists` 归位到 `lib/outline-tree.ts`（原在 `lib/hook-panel.ts`）。**API/工具层不变**：`POST /delta/compute` 与工具 `compute_state` 的 `at_node_id` 仍不限层级（AI 可用场景语言提问）；`Timeline` / `create-relation-dialog` 的节点选择是自由引用，有意保持全层级。
+- **人物页新增失效口径**：存量指向场景/卷的 `current_position` 在人物页判为「阅读进度已失效」并给「去大纲重设」入口（服务端读侧仍按父链宽松推导，不受影响）。
+
+### Docs
+
+- 新建 `docs/design/backlog.md`：遗留项与「有意保留口径」从 `tasks.md` 拆出，按「数据与契约 / 前端 UI / AI 产品 / MVP 明确不做 / 有意保留」分类，每条给现状 → 影响 → 触发条件 → 最小修法或升级路径；`tasks.md` 只留当前任务卡。
+- `docs/ui/DESIGN.md`：`character-workbench`（四 tab / 档案网格 / 只读纯文本 / 进度节点只列章）、`character-relations` 与「其他关联（tab）」（pane 制、无区标题、无折叠）、`panel-tree`（空值无占位符、只读形态）改写。
+- `docs/db/schema.md`、`docs/design/10-data-model.md`、`docs/api/10-api-project.md`：登记「UI 文案 = 阅读进度 / 字段名 = `current_position`」、「compute 探针的非章入口只存 API/工具层」、「`hook.data.expected_resolve_node_id` 三层口径（UI 只列章 / 数据层任意节点 / 分析层容忍非章——与伏笔关系源端硬校验章不是同一层）」。
+- `README.md`：版本说明与 §当前能力 增补本条。
+
 ## [v0.0.34] - 2026-09-13
 
 > **章级锚点收窄 + 人物页工作台**：大纲/变更记录/伏笔三类锚点一律收到「章」；`computeState` 改章序前缀累积；character 数据重构（新增 `description`/`alias`/`race`，移除 `status`，标签式 `abilities` 升级为**能力面板树**，`SCHEMA_VERSION 6 → 7`）；人物页改为 master-detail 工作台（左栏列表 + 双视图 tab + 关系网/其他关联 + `panel-tree`）。**API 破坏性变更见 Breaking**。
