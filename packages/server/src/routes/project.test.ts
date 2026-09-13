@@ -135,6 +135,31 @@ function initProjectDir(dir: string, config: ProjectFileConfig, outline: Outline
   closeDatabase(db);
 }
 
+/** 造可迁移的旧版本项目（user_version = SCHEMA_VERSION - 1；含旧 abilities 角色行）——供「开机路径 vs 显式 open」一致性用例 */
+function seedMigratableProject(dir: string): void {
+  mkdirSync(dir, { recursive: true });
+  const legacy = SCHEMA_VERSION - 1;
+  writeProjectFile(dir, { ...makeConfig("proj-mig", "旧库"), schema_version: legacy });
+  writeOutlineFile(dir, { id: "root", type: "root", schema_version: legacy, children: [] });
+  const db = openDatabase(join(dir, "data.db"));
+  setUserVersion(db, legacy);
+  db.prepare("INSERT INTO entities (id, type, name, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)").run(
+    "char-1",
+    "character",
+    "张三",
+    JSON.stringify({ role: "主角", abilities: ["剑术", "炼丹"] }),
+    T0,
+    T0,
+  );
+  closeDatabase(db);
+}
+
+/** 读 char-1 的 data（JSON 解析后对象）——两条路径的迁移产物比对用 */
+function readCharacterData(db: ReturnType<typeof openDatabase>): Record<string, unknown> {
+  const row = db.prepare("SELECT data FROM entities WHERE id = 'char-1'").get() as { data: string };
+  return JSON.parse(row.data) as Record<string, unknown>;
+}
+
 beforeEach(() => {
   tmpRoot = mkdtempSync(join(tmpdir(), "ai-editor-project-"));
   setCurrentProject(null);
@@ -409,6 +434,36 @@ describe("POST /project/open", () => {
         .prepare("INSERT INTO entities (id, type, name, created_at, updated_at) VALUES (?, 'event', ?, ?, ?)")
         .run("ev-1", "玉佩事件", T0, T0),
     ).not.toThrow();
+  });
+
+  it("开机直达与显式 open 的版本对齐结果一致（卡 2.8）——两条路径同源旧库产出相同版本与迁移产物", async () => {
+    const dirStartup = makeTmpDir();
+    const dirOpen = makeTmpDir();
+    seedMigratableProject(dirStartup);
+    seedMigratableProject(dirOpen);
+
+ // 开机路径（detectProject = startServer 实际调用）
+    const startup = detectProject(dirStartup);
+    expect(startup).not.toBeNull();
+    const startupVersion = getUserVersion(startup!.db);
+    const startupData = readCharacterData(startup!.db);
+    closeProject(startup!);
+
+ // 显式 open 路径（同一旧库）
+    const res = await buildApp().request("/api/v1/project/open", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: dirOpen }),
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.migrated).toBe(true);
+
+    const active = getCurrentProject()!;
+    expect(startupVersion).toBe(SCHEMA_VERSION);
+    expect(getUserVersion(active.db)).toBe(SCHEMA_VERSION);
+    expect(readCharacterData(active.db)).toEqual(startupData);
+    expect(startupData.ability_panel).toEqual([{ name: "能力", children: [{ name: "剑术" }, { name: "炼丹" }] }]);
   });
 
   it("目录不含 project.json → 400 INVALID_PROJECT_PATH", async () => {

@@ -18,11 +18,10 @@ import {
 import { Hono, type Context } from "hono";
 import type { ProjectFileConfig } from "@whispering233/ai-editor-shared";
 import { mapProjectFileToConfig } from "@whispering233/ai-editor-shared";
-import { openDatabase } from "@whispering233/ai-editor-db";
-import { ensureSchemaCompatible, DATA_DB_FILE_NAME } from "@whispering233/ai-editor-db";
 import { SchemaVersionError, type MigrationResult, type Db } from "@whispering233/ai-editor-db";
 import { OUTLINE_FILE_NAME } from "@whispering233/ai-editor-db";
 import { PROJECT_FILE_NAME } from "@whispering233/ai-editor-db";
+import { DATA_DB_FILE_NAME } from "@whispering233/ai-editor-db";
 import {
   agentsFileMtimeIso,
   findOutlineNode,
@@ -50,6 +49,7 @@ import {
   closeProject,
   getCurrentProject,
   initProject,
+  openProjectDatabase,
   requireCurrentProject,
   setCurrentProject,
   type ProjectContext,
@@ -175,7 +175,7 @@ projectRoutes.post("/open", async (c) => {
   }
 
  // 打开顺序（oracle 审核建议 1）：**先开新项目成功后再关旧的**——
- // 若先 closeProject(prev) 再开新项目，openDatabase/ensureSchemaCompatible 抛错时
+ // 若先 closeProject(prev) 再开新项目，openProjectDatabase 抛错时
  // currentProject 会悬挂指向连接已关闭的旧项目（后续请求 "connection not open" → 500）。
  // 失败语义：open 失败 = 操作未生效——当前项目保持原样（连接仍有效、单例不变）。
  // schema 版本检测：data.db user_version——
@@ -185,17 +185,15 @@ projectRoutes.post("/open", async (c) => {
  // 堵降级路径数据丢失）。SchemaVersionError 由 db 包
  // 抛出前已关闭本次打开的连接（无句柄泄漏）。
   try {
-    const dbPath = join(dir, DATA_DB_FILE_NAME);
-    const db = openDatabase(dbPath);
+ // 打开管道（卡 2.8）：与开机路径 detectProject 共用 `openProjectDatabase`——
+ // 版本对齐（迁移/重建/迁移前快照）与未来版本拒绝只有一处实现
     let activeDb: Db;
     let result: MigrationResult;
     try {
-      const out = ensureSchemaCompatible(db, dir, dbPath);
-      activeDb = out.db;
-      result = out.result;
+      ({ db: activeDb, result } = openProjectDatabase(dir));
     } catch (err) {
  // 未来版本拒绝（SchemaVersionError → 409 PROJECT_VERSION_NEWER，message 透传
- // 「请升级程序后打开」；连接已由 db 包关闭，此处仅做错误码映射）
+ // 「请升级程序后打开」；连接已由 openProjectDatabase 关闭，此处仅做错误码映射）
       if (err instanceof SchemaVersionError) {
         throw new HttpError(409, "PROJECT_VERSION_NEWER", err.message);
       }
@@ -238,7 +236,7 @@ projectRoutes.post("/open", async (c) => {
     );
   } catch (err) {
  // open 失败恢复（oracle 审核建议 1 兜底）：正常情况下当前项目连接未被触碰（见上注释）；
- // 防御性检查——若旧项目连接已被关闭（如未来 ensureSchemaCompatible 失败路径提前关连接），
+ // 防御性检查——若旧项目连接已被关闭（如未来 openProjectDatabase 失败路径提前关连接），
  // 清空单例，后续业务请求走 requireCurrentProject → 409 NO_PROJECT_OPEN（语义化错误而非 500）
     const prev = getCurrentProject();
     if (prev !== null && !prev.db.open) {

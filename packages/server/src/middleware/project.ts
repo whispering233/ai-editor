@@ -3,6 +3,8 @@
 // 职责（第 121-122 行 middleware/project.ts「项目路径注入」）：
 // 1. detectProject：检测 project.json——存在则打开（部署场景「启动即用」）；不存在返回
 // null 待命（不初始化、不建文件，由前端 Dashboard 引导 create/open；S1.4 开/建页依赖）
+// openProjectDatabase：data.db 打开 + schema 版本对齐的**唯一管道**（开机路径与
+// POST /project/open 共用，卡 2.8——开机直达不再跳过迁移）
 // initProject：显式初始化三文件（S1.2 create 路由专用，含建目录 + user_version）
 // 2. currentProject 内存单例（S1.2）：create/open 切换、close 清空，
 // 模块级可变状态由路由（routes/project.ts）读写，projectMiddleware 从状态注入 Hono 上下文
@@ -15,6 +17,7 @@ import type { Context, MiddlewareHandler } from "hono";
 import type { ProjectFileConfig } from "@whispering233/ai-editor-shared";
 import { generateProjectId, DEFAULT_BACKUP_FREQUENCY_MINUTES } from "@whispering233/ai-editor-shared";
 import { closeDatabase, openDatabase, setUserVersion, type Db } from "@whispering233/ai-editor-db";
+import { ensureSchemaCompatible, SchemaVersionError, type MigrationResult } from "@whispering233/ai-editor-db";
 import { readProjectFile, writeProjectFile } from "@whispering233/ai-editor-db";
 import { writeOutlineFile } from "@whispering233/ai-editor-db";
 import { SCHEMA_VERSION } from "@whispering233/ai-editor-db";
@@ -90,25 +93,73 @@ export function requireCurrentProject(): ProjectContext {
 }
 
 /**
+ * data.db 打开 + schema 版本对齐的**唯一管道**（卡 2.8 收敛）：
+ * 开机路径（detectProject）与显式 `POST /project/open` 共用，避免两条路径语义漂移。
+ *
+ * 语义（`docs/db/schema.md`「schema 版本与迁移」三态分流）：
+ * - `user_version === SCHEMA_VERSION` → 原连接返回（rebuilt=false）；
+ * - 旧版本**有迁移路径** → 前向迁移（迁移前自动快照 `data.db.v{n}.{时间戳}.bak`）；
+ * - 旧版本**无迁移路径** → 删库重建兜底（备份 `data.db.v{n}.bak` + outline 重置）；
+ * - **未来版本** → 关闭连接并抛 `SchemaVersionError`（调用方决定策略：
+ *   路由映射 409 `PROJECT_VERSION_NEWER`；开机态回待命）。
+ *
+ * @returns 已对齐版本的活动连接 + 迁移/重建结果（路由用于响应提示）
+ * @throws SchemaVersionError 未来版本拒绝打开；迁移/重建过程的 I/O 错误
+ */
+export function openProjectDatabase(dir: string): { db: Db; result: MigrationResult } {
+  const dbPath = join(dir, DATA_DB_FILE_NAME);
+  const db = openDatabase(dbPath);
+  try {
+    const out = ensureSchemaCompatible(db, dir, dbPath);
+    return { db: out.db, result: out.result };
+  } catch (err) {
+ // 幂等：拒绝/迁移失败分支内已关连接（db 包保证无句柄泄漏），此处仅防御
+    closeDatabase(db);
+    throw err;
+  }
+}
+
+/**
  * 检测并打开项目（启动流程 ④ 修订——设计缺陷修复）：
- * project.json 存在 → openDatabase 打开，返回项目上下文（打开语义，部署场景「启动即用」）；
+ * project.json 存在 → 走 `openProjectDatabase`（版本检测 + 迁移/重建，与 open 路由同管道），
+ * 返回项目上下文（打开语义，部署场景「启动即用」）；
  * project.json 不存在 → **返回 null（待命）**——不初始化、不建任何文件（含目录），
  * 由前端 Dashboard 引导走 POST /project/create 或 /project/open（S1.4 开/建页；
  * 此前无条件初始化导致引导永不显示、dev 态污染 packages/server 包目录）。
  * project.json 损坏（JSON 解析失败）→ 抛错（readProjectFile 语义：不静默重建，防数据误伤）。
- * 打开时不写 user_version——版本检测交给 open 路由的 ensureSchemaCompatible（S1.1）；
- * 显式初始化（create 路由）用 initProject（内部写 user_version=SCHEMA_VERSION）。
+ *
+ * **版本对齐（卡 2.8）**：旧库有迁移路径 → 前向迁移（含迁移前快照）；无路径 → 删库重建兜底；
+ * **未来版本库**（`SchemaVersionError`）→ 拒绝打开、**零写操作**，本函数记日志并回待命
+ *（用户点开这本书时 open 路由仍返回 409 `PROJECT_VERSION_NEWER`）；打开/迁移的其他错误
+ * 同理回待命并记日志（下次 open/重启重试）——与 `detectLastProject` 的「不阻断启动」
+ * 语义一致，数据原封不动。
  */
 export function detectProject(root: string): ProjectContext | null {
   const existing = readProjectFile(root);
   if (existing === null) {
     return null;
   }
-  const project: ProjectContext = { root, config: existing, db: openDatabase(join(root, DATA_DB_FILE_NAME)) };
- // 自动迁移：project.json 有非空 prompt 且无 → 迁移写入（原样，一次性）
+  let db: Db;
+  try {
+    ({ db } = openProjectDatabase(root));
+  } catch (err) {
+    logStartupOpenFailure(root, err);
+    return null;
+  }
+  const project: ProjectContext = { root, config: existing, db };
+ // 自动迁移：project.json 有非空 prompt 且无 AGENTS.md → 迁移写入（原样，一次性）
  //（实现位于 backup.ts——backup 模块不依赖 middleware，middleware 侧经 ../backup.js 复用）
   migratePromptToAgents(project);
   return project;
+}
+
+/** 启动路径打开失败的日志（不阻断启动；未来版本另给明确文案） */
+function logStartupOpenFailure(root: string, err: unknown): void {
+  if (err instanceof SchemaVersionError) {
+    console.error(`[server] 启动自动打开被拒绝（data.db 版本高于程序版本，已回待命）: ${root} — ${err.message}`);
+    return;
+  }
+  console.error(`[server] 启动自动打开失败（已回待命，下次 open/重启重试）: ${root}`, err);
 }
 
 /**

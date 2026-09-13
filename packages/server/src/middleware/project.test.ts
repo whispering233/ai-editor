@@ -1,10 +1,19 @@
 // 项目上下文中间件测试（T6.1）：来源校验+ 自动初始化
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
-import { getUserVersion, SCHEMA_VERSION } from "@whispering233/ai-editor-db";
+import type { ProjectFileConfig } from "@whispering233/ai-editor-shared";
+import {
+  closeDatabase,
+  getUserVersion,
+  openDatabase,
+  SCHEMA_VERSION,
+  setUserVersion,
+  writeOutlineFile,
+  writeProjectFile,
+} from "@whispering233/ai-editor-db";
 import { errorHandler } from "./error.js";
 import {
   closeProject,
@@ -140,5 +149,101 @@ describe("项目检测与初始化（启动待命，不无条件初始化）", (
     } finally {
       closeProject(project);
     }
+  });
+});
+
+// ============ 启动路径的版本对齐（卡 2.8：开机直达不再跳过迁移） ============
+
+const T0 = "2026-08-01T10:00:00Z";
+
+/** 可迁移的旧版本号（当前版本 - 1）——模拟「上一版程序写的库」；
+ * 注：本仓迁移存在数据型（如 007）与 DDL 型两类，此处用「当前 DDL 库 + 旧 user_version」
+ * 模拟旧库（数据型迁移的忠实仿真；DDL 型迁移另有 routes/project.test.ts 的手建旧表用例） */
+const PREV_VERSION = SCHEMA_VERSION - 1;
+
+/** 造旧版本项目：project.json + outline.json + data.db（user_version=version，含一条旧 abilities 角色行） */
+function seedLegacyProject(dir: string, version: number): void {
+  mkdirSync(dir, { recursive: true });
+  const config: ProjectFileConfig = {
+    id: "proj-legacy",
+    name: "旧库",
+    language: "zh",
+    schema_version: version,
+    current_position: null,
+    created_at: T0,
+    updated_at: T0,
+  };
+  writeProjectFile(dir, config);
+  writeOutlineFile(dir, { id: "root", type: "root", schema_version: version, children: [] });
+  const db = openDatabase(join(dir, "data.db"));
+  setUserVersion(db, version);
+  db.prepare("INSERT INTO entities (id, type, name, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)").run(
+    "char-1",
+    "character",
+    "张三",
+    JSON.stringify({ role: "主角", abilities: ["剑术", "炼丹"] }),
+    T0,
+    T0,
+  );
+  closeDatabase(db);
+}
+
+describe("启动路径的版本对齐（卡 2.8）", () => {
+  it("旧版本库（可迁移）：开机直达即前向迁移——版本对齐 + abilities→ability_panel + 迁移前快照", () => {
+    const dir = makeTmpDir();
+    seedLegacyProject(dir, PREV_VERSION);
+
+    const project = detectProject(dir);
+    try {
+      expect(project).not.toBeNull();
+      expect(getUserVersion(project!.db)).toBe(SCHEMA_VERSION);
+      const row = project!.db.prepare("SELECT data FROM entities WHERE id = 'char-1'").get() as { data: string };
+      const data = JSON.parse(row.data) as Record<string, unknown>;
+      expect(data.abilities).toBeUndefined();
+      expect(data.ability_panel).toEqual([{ name: "能力", children: [{ name: "剑术" }, { name: "炼丹" }] }]);
+    } finally {
+      closeProject(project!);
+    }
+ // 迁移前自动快照：data.db.v{n}.{时间戳}.bak
+    const snapshots = readdirSync(dir).filter(
+      (f) => f.startsWith(`data.db.v${PREV_VERSION}.`) && f.endsWith(".bak"),
+    );
+    expect(snapshots).toHaveLength(1);
+  });
+
+  it("未来版本库：开机直达拒绝打开（回待命）——版本与数据零触碰、无备份生成", () => {
+    const dir = makeTmpDir();
+    const future = SCHEMA_VERSION + 1;
+    seedLegacyProject(dir, future);
+
+    expect(detectProject(dir)).toBeNull();
+
+    const db = openDatabase(join(dir, "data.db"));
+    try {
+      expect(getUserVersion(db)).toBe(future); // 版本未被改写
+      const count = db.prepare("SELECT COUNT(*) AS n FROM entities").get() as { n: number };
+      expect(count.n).toBe(1); // 数据仍在（未重建、未清空）
+    } finally {
+      closeDatabase(db);
+    }
+    expect(readdirSync(dir).some((f) => f.endsWith(".bak"))).toBe(false);
+  });
+
+  it("无迁移路径的旧库（user_version=0）：开机直达走删库重建兜底——备份 + 版本对齐 + 数据清空", () => {
+    const dir = makeTmpDir();
+    seedLegacyProject(dir, 0);
+
+    const project = detectProject(dir);
+    try {
+      expect(project).not.toBeNull();
+      expect(getUserVersion(project!.db)).toBe(SCHEMA_VERSION);
+      const count = project!.db.prepare("SELECT COUNT(*) AS n FROM entities").get() as { n: number };
+      expect(count.n).toBe(0);
+    } finally {
+      closeProject(project!);
+    }
+    const files = readdirSync(dir);
+    expect(files).toContain("data.db.v0.bak");
+    expect(files).toContain("outline.json.v0.bak");
   });
 });
