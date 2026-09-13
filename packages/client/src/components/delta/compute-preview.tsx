@@ -4,7 +4,7 @@
 // 交互：at_node 选择器（默认 project store 的 currentPosition，须在大纲树中存在；未设置 → 要求手动选择）
 // + [计算] → 结果区三段：状态差异（diffStateFields，相对当前 data）/ 应用的变更记录（含 skipped 内联标注）/
 // conflicts 警示块（border-destructive/30 bg-destructive/10 text-destructive + WarningFilled）
-// 空态：deltaCount === 0 → 轻量文案（当前状态即初始状态），不展示计算控件
+// 空态：deltaCount === 0 → 轻量文案（当前状态即初始值），不展示计算控件
 import { useEffect, useState } from "react";
 import { Button, Select } from "antd";
 import { WarningFilled } from "@ant-design/icons";
@@ -92,8 +92,8 @@ export function ComputePreview({
       </h2>
 
       {deltaCount === 0 ? (
-        /* 空态：无 Delta 时轻量提示（当前状态即初始状态），不展示计算控件 */
-        <p className="text-sm text-muted-foreground">暂无变更记录——实体当前状态即初始状态</p>
+        /* 空态：无 Delta 时轻量提示（当前状态即初始值），不展示计算控件 */
+        <p className="text-sm text-muted-foreground">暂无变更记录——实体当前状态即初始值</p>
       ) : (
         <>
           {/* 进度节点选择 + [计算] */}
