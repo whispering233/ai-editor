@@ -40,7 +40,7 @@ export interface ProjectFileConfig {
  /**
  * 自动备份频率（**可选字段**——旧项目文件可缺失，读侧兜底缺省 10；
  * 写侧「只写显式值」：未在 patch 中出现则不写盘，避免污染旧数据）
- * 仅接受枚举 5/10/15/30/60；null / 0 = 关闭（0 为读侧兼容旧数据语义）
+ * 仅接受枚举 1/5/10/15/30/60（BACKUP_FREQUENCIES）；null / 0 = 关闭（0 为读侧兼容旧数据语义）
  */
   backup_frequency_minutes?: number | null;
   created_at: string;

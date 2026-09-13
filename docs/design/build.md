@@ -36,7 +36,7 @@ node packages/server/dist/index.js [projectRoot]   # 或安装态 npx ai-editor 
 - **绑定与访问**：默认绑定 `127.0.0.1`（不对外网开放）；提示 URL / 打开浏览器一律用 `127.0.0.1` 而非 `localhost`（IPv6 优先系统上 localhost 可能解析为 `::1` 导致连接被拒）。
 - SPA：`defaultClientDist` 双路径（monorepo 开发态 `../../client/dist` / 打包安装态包内 `client-dist`）挂载为 fallback；单进程 Hono 同时服务 `/api/v1` 与静态文件。
 - 本地看界面：`pnpm start:test-project`（= `pnpm -r build` + 生产态启动 test-project，自动打开浏览器）。
-- 调试日志：创作根 `.ai-editor/config.json` 的 `debug` 段（chat/request/stream/usage/http 五类别；纯配置文件无 env 开关），见 config.md。
+- 调试日志：创作根 `.ai-editor/config.json` 的 `debug` 段（chat/request/usage/http 四类别；纯配置文件无 env 开关），见 config.md。
 - 客户端首帧：服务端已代为先打开了上次的书 → 前端首帧若落在书架路由（`#/`）则直接进该书概览（`#/overview`）；点左栏顶部「书架」本身不弹回（仅首帧判定一次）。
 
 ## 构建与打包

@@ -1,6 +1,6 @@
 # 错误码说明（ErrorCode）
 
-> **单一来源**：`@whispering233/ai-editor-shared` `types/api.ts` `ERROR_CODES` 枚举——REST 错误响应、SSE `error` 事件、工具结果共用；本文档表格为同一枚举的说明视图，新增/修订错误码须同步改枚举注释。
+> **单一来源**：`@whispering233/ai-editor-shared` `types/api.ts` `ERROR_CODES` 枚举——REST 错误响应与工具结果共用（**SSE 流内无 `error` 帧**，错误以 `agent_end` 的 `stopReason`/`errorMessage` 表达，见 `80-api-chat.md`）；本文档表格为同一枚举的说明视图，新增/修订错误码须同步改枚举注释。**服务端另有扩展码**（不在 shared 枚举内，与 client 的 `CLIENT_NETWORK_ERROR` 同类）：`INTERNAL_ERROR` 500 / `FORBIDDEN` 403 / `NOT_FOUND` 404 / `NO_PROJECT_OPEN` 409 / `PROJECT_ALREADY_EXISTS` 409 / `LLM_API_KEY_MISSING` 400（`packages/server/src/middleware/error.ts` 的 `SERVER_ERROR_CODES`）。错误码分散（shared 枚举 + 服务端补充 + client 补充）为已登记技术债，MVP 不收敛。
 
 | code | HTTP | 说明 |
 | :--- | :--- | :--- |
@@ -26,7 +26,7 @@
 | `DELTA_CONFLICT` | —（已废弃） | 已废弃（2026-08 修订：computeState 以 conflicts 字段替代 409） |
 | `TOOL_RESULT_TOO_LARGE` | — | 单条工具结果超 token 上限：**截断 + 结构化提示**（不终止对话；同时写调试日志使用量类别） |
 
-- REST 错误响应统一 `{ success: false, error: { code, message } }`；SSE 流内的错误不再有独立 `error` 事件——错误以 `agent_end` 帧的 `stopReason`（`error`/`aborted`）与 `errorMessage` 表达（见 [80-api-chat.md](./80-api-chat.md)）。
+- REST 错误响应统一 `{ success: false, error: { code, message } }`；**SSE 流内无独立 `error` 事件**——错误以 `agent_end` 帧的 `stopReason`（`error`/`aborted`）与 `errorMessage` 表达（见 [80-api-chat.md](./80-api-chat.md)）。
 - HTTP 状态码约定：200 成功 / 400 参数 / 404 不存在 / 409 冲突 / 500 服务端错误（端点级特例见各模块文档）。
 - `DELTA_CONFLICT` 为 2026-08 修订废弃码（computeState 改 skipped/conflicts 字段呈现），保留枚举兼容历史引用。
 

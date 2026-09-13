@@ -142,7 +142,7 @@
                                     // 错误码分两类：不存在/已软删 → 400 OUTLINE_NODE_NOT_FOUND（既有语义，
                                     //   project 路由用 400 而非 404——参数语义错误）；
                                     //   非章（volume/scene）→ 400 VALIDATION_ERROR
-  backup_frequency_minutes?: number | null;  // 自动备份频率；null = 关闭；仅接受枚举值 5/10/15/30/60，其他（含 0）→ 400 VALIDATION_ERROR——0 仅读侧兼容旧数据，写侧不接受
+  backup_frequency_minutes?: number | null;  // 自动备份频率；null = 关闭；仅接受枚举值 1/5/10/15/30/60（BACKUP_FREQUENCIES），其他（含 0）→ 400 VALIDATION_ERROR——0 仅读侧兼容旧数据，写侧不接受
 }
 
 // Res: 200
@@ -219,7 +219,7 @@
 
 **语义**：
 - 导出**当前打开项目**（无项目 → 409 `NO_PROJECT_OPEN`，与 `/config` 一致）。
-- zip 天然不含 DeepSeek key（key 存用户级配置 `~/.ai-editor/config.json`，不入项目文件）。
+- zip 天然不含 DeepSeek key（key 存 pi agent dir 的 `~/.pi/agent/auth.json`，不入项目文件；旧的 `~/.ai-editor/config.json` 已废弃、代码忽略）。
 - 三文件缺失任一 → 500 `INTERNAL_ERROR`（打开的项目三文件必然齐全，缺失即损坏，不导出半成品包）。
 - **references/ 与 sessions/ 目录**：存在则递归打包（条目名 `<目录>/<相对路径>`，含 `.trash/`）；不存在则跳过（旧项目无目录不报错；旧备份包无 `sessions/` 仍可导入，恢复时该目录按「整体还原」清空）。
 

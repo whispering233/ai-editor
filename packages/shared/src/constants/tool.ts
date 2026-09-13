@@ -89,10 +89,10 @@ export const EXECUTOR_TOOLS = [
   "reorder_timepoints",
 ] as const;
 
-/** 自动级工具（查询 + 分析 + 伏笔分析，共 18 个） */
+/** 自动级工具（查询 9 + 分析 5 + 伏笔分析 5，共 19 个） */
 export const AUTO_TOOLS = [...QUERY_TOOLS, ...ANALYSIS_TOOLS, ...HOOK_ANALYSIS_TOOLS] as const;
 
-/** 全部工具名（自动 18 + 提案 15 + 执行 13 = 46 个） */
+/** 全部工具名（自动 19 + 提案 16 + 执行 13 = 48 个） */
 export const TOOL_NAMES = [...AUTO_TOOLS, ...PROPOSAL_TOOLS, ...EXECUTOR_TOOLS] as const;
 
 /** 工具名（从 TOOL_NAMES 派生） */

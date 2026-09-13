@@ -28,7 +28,7 @@
 | 能力 | 由谁提供 | 本仓的接入点 |
 |---|---|---|
 | 模型目录 / provider 目录 / 认证状态 | `ModelRuntime`（静态内置目录 + `~/.pi/agent/models.json` 覆盖 + 远端 catalog overlay + credential store） | 设置页读写；激活模型查询 |
-| 凭据 | pi credential store（`~/.pi/agent/auth.json`，env 优先） | 设置页写 key（不再有自建 key 解析链） |
+| 凭据 | pi credential store（`~/.pi/agent/auth.json`；**存量凭据优先、环境变量仅在该家无条目时兜底**） | 设置页写 key（不再有自建 key 解析链） |
 | 会话文件（v3 树状 JSONL、含 thinking/压缩/model_change 等 entry） | `SessionManager` | 会话目录 = `<项目目录>/sessions/`；列表/读取/删除/续聊 |
 | 对话循环 / 工具派发 / 取消 / steering | `pi-agent-core` Agent（`AgentSession` 包装） | `AgentSession.prompt()` + 事件订阅 |
 | 重试 / 上下文压缩 | pi auto-retry + auto-compaction | 参数走 pi settings，不在本仓 |

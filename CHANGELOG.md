@@ -5,9 +5,9 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [v0.0.37] - 2026-09-14
 
-> **UI 收口**：关联总览列对齐统一、大纲行尾徽标不再推移删除按钮、人物页进度节点下拉可搜索；**人物关系星形图整体移除**（分组列表已是关系网的完整明细，图的索引价值不足以抵一张 SVG）；**徽标配色收口**（tint 只给用户标签并收到 3 档；类型/分类徽标改描边式；人物页角色定位橙色）。
+> **UI 收口 + 发布前扫尘**：关联总览列对齐统一、大纲行尾徽标不再推移删除按钮、人物页进度节点下拉可搜索；**人物关系星形图整体移除**（分组列表已是关系网的完整明细，图的索引价值不足以抵一张 SVG）；**徽标配色收口**（tint 只给用户标签并收到 3 档；类型/分类徽标改描边式；人物页角色定位橙色）；修掉概览页阅读进度卡在原始 id 的 effect 依赖漏项；发布前审计扫掉一批文档/注释与冗余清单（含 `server` 的 pi 依赖声明错位）。
 
 ### Added
 
@@ -24,6 +24,7 @@
   - **已知代价**：徽标边框与语义 `error`（`#e03131`）同色相（描边比实底轻、位置固定在行首/类型列，已登记）。
 - 关联总览列表（`relations-view`）：关系类型列由**居中改左对齐**——与源/目标列、表头同口径（居中会让类型 chip 相对表头位移，看起来像列错位）。
 - 大纲行尾「阅读进度」徽标改排在删除按钮**左侧**：删除按钮恒贴行尾，不再被徽标往左推（跨行操作列对齐）。
+- **客户端伏笔标记类型不再手抄**：`lib/outline-hooks.ts` 的 `HOOK_MARK_TYPES` / `HOOK_MARK_TYPE_ORDER` 改为派生自 shared `HOOK_RELATION_TYPES`（原先两遍手写字面量 `["plants","advances","resolves"]`，违反「关系类型清单单一来源」规则）。
 
 ### Removed
 
@@ -31,6 +32,7 @@
 
 ### Fixed
 
+- **`server` 的 pi 依赖声明错位**：`@earendil-works/pi-ai` / `pi-coding-agent` 是 `server/src` 的**运行时 import**（`model-runtime.ts`、`routes/settings.ts`）却声明在 `devDependencies`——靠 `agent` 包的传递依赖 hoist 才跑得起来（pnpm 严格布局下安装态会 `ERR_MODULE_NOT_FOUND`）。修法：两包移入 `dependencies`（版本不变）。
 - **概览页「阅读进度」长期停在原始 entity id**（连带「大纲概览」永远骨架、「创作要素」永远 `–`）：`Dashboard` 的两个概览态 effect（大纲补拉 / 要素统计）依赖数组**漏了 `mode`**，而 `#/` → `#/overview`（`useEnterLastBook` 自动进书）是**同实例改 prop、不重挂载** ⇒ 依赖值全没变，effect 不再执行，`loadOutline()` 永不调用；进度节点只剩 `findOutlineNodeTitle` 回退的 id 原文，要等用户点「刷新数据」或进大纲/人物/时间轴等别处加载 outline 才恢复可读标题。修法：两处依赖补 `mode`（`:206` / `:236`；会话 effect `:246` 本就带 `mode`，故只有这两个区块卡住）。
 
 ### Docs
@@ -40,6 +42,7 @@
 - `docs/design/backlog.md`：删「星形图叶子 `· N` = 列表行数」登记项（星形图已不存在）。
 - `AGENTS.md`：人物页条目去掉星形图描述。
 - `docs/design/backlog.md`：新登「参考资料分类徽标形态不统一」与「关联页端点类型徽标缺 `timepoint`/`event` 中文标签」（后者 = 关联总览显示原始英文类型串）。
+- **发布前文档扫尘（2026-09-14）**：`docs/ui/DESIGN.md` 标签 tint 口径 6 档 → 3 档（与代码 `tag-tint.ts` 对齐）、`status-badge` 附近笔误修正；`docs/api/` 四处与代码不符——`50-api-delta.md` 变更目标白名单方向（是 `ENTITY_TYPES` 去掉 `event`，不是「含 event」）、`10-api-project.md` 备份频率补 `1` 分钟档且 key 载体改 pi agent dir、`30-api-entity.md` 详情类型补 `reference` / setting 字段删已废弃键 / 补 `GET /reference/scan/status`（连 `00-api-index.md` 索引行）、`error-code.md` 删不存在的 SSE `error` 帧并登记服务端扩展码、`tool-calling.md` 执行类补 `reorder_timepoints`；`docs/db/schema.md` 迁移目标 v6 → v7、`hook` 字段补 `expected_resolve_node_id`、画布坐标残留删除；`docs/design/` 删画布 localStorage 残留（`10-data-model.md` / `config.md`）、`build.md` debug 类别四类（删 `stream`）、`architecture.md` 凭据优先序改「存量优先」、`00-master-design.md` 删除不存在的「全量回溯」（实际深度上限 3）、`10-data-model.md` 状态计算改章序前缀口径、`backlog.md` 两条登记刷新；`README.md` 版本与能力叙述同步（v0.0.37 / 星形图已移除 / 文案与计数修正）；根 `AGENTS.md` 新增两条硬约束（路由形态 gate 的 effect 依赖；pi 依赖声明位置）并简化 `tasks.md`（批次叙事归 CHANGELOG）；shared/tools/agent 三处注释计数漂移修正（工具 19+16+13=48、备份频率含 1）。
 
 ## [v0.0.36] - 2026-09-13
 

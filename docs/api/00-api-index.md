@@ -39,6 +39,7 @@
 | PUT | `/api/v1/entity/:type/:id` | 实体 CRUD |
 | DELETE | `/api/v1/entity/:type/:id` | 实体 CRUD |
 | POST | `/api/v1/reference/scan` | 实体 CRUD |
+| GET | `/api/v1/reference/scan/status` | 实体 CRUD |
 | PUT | `/api/v1/entity/event/:id/move` | 实体 CRUD |
 | PUT | `/api/v1/entity/timepoint/:id/move` | 实体 CRUD |
 | PUT | `/api/v1/entity/setting/:id/move` | 实体 CRUD |

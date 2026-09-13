@@ -306,7 +306,7 @@ components:
   - **为什么橙/浅红不能做边框**：实测彩色边框压在**灰底**上看不见——橙 `#ef8354` 对 `#f0eeec` 仅 1.43:1、浅红 `#ffb3b3` 仅 1.07:1（1px 线宽下等于没有）。浅色系只能做**面积**（tint 底），做**线**必须中深档。
   - **已知代价**：边框色与语义 `error`（`#e03131`）同色相。描边比实底轻，且徽标位置固定在行首/类型列；若日后混淆，改 `type-badge-border`。
 - 营销站那套 bold 黄（`#f9e79f`）与深蓝 hero 带**不纳入**。
-- **分配规则（唯一，不维护语义色表）**：按 chip 文案（标签名）做 FNV-1a 哈希后取模 6，选中 tint；**同名恒同色**（跨页一致，无随机、无按状态变色）。字色固定 `{colors.primary}`（6 个 pastel 底上对比度均 ≥ 10:1，不需为每个 tint 配前景色）。
+- **分配规则（唯一，不维护语义色表）**：按 chip 文案（标签名）做 FNV-1a 哈希后取模 3，选中 tint；**同名恒同色**（跨页一致，无随机、无按状态变色）。字色固定 `{colors.primary}`（3 个浅底上墨字对比 8.80–9.71:1，不需为每个 tint 配前景色）。
 - **深色态**：3 色同色相以 20% 不透明度叠在深色面板上（保留色相、不刺眼），字色随 `{colors.primary}` 变 81% 白——**实测这套 3 色在深色态均达标**（叠 `#202020` 后的合成底与 81% 白字对比 5.96–6.18）。**浅/深两套色调只定义在 `index.css` 的 `--tag-*` 段**（与 `AntdProvider` 的 antd 色阶并列——tint 不是 antd token，无法从 seed 派生，也不写成硬编码色值散落各处）。
 
 ### 交互与语义
@@ -483,7 +483,7 @@ components:
 **`data-row`** / **`data-row-hover`** — 列表/树/大纲行：无底色 + 底部 1px `{colors.hairline-soft}`；hover = `{colors.surface-soft}`。行级交互：双击进详情、单击标题行内编辑；**链式新建（Enter 建同级/子级）后新条目 = 选中 + 聚焦**（只聚焦不选中会让下一次 Enter 被「无选中」守卫静默吞掉；新建按钮同理）。**行尾状态徽标排在操作按钮左侧**（如大纲行的「阅读进度」徽标）：右侧 `icon-button` 恒贴行尾——徽标出现不得把它推离原位（否则同一列按钮在行间错位）。
 **`table-header`** — 表头**白底**（不是 antd 默认灰底）+ 1px `{colors.hairline}` 底线 + caption 字色 `{colors.secondary}`。
 **`relations-view`（关联总览列表）** — 源 / 关系 / 目标三列**表头与单元格同宽同对齐**：一律**左对齐**（关系列也不居中——居中会让类型 chip 相对表头位移，看起来像列错位）。
-**`tag`** — **用户标签 chip**（`data.tags` 数组元素：设定标签 / 事件标签 / 参考资料标签）：`{rounded.xs}` + **tint 六色底** + caption 字号 + `{colors.primary}` 字色（按名称 hash 稳定分配，见 §Colors 分配规则）。实现 = `components/ui/tag-chip.tsx` 的 `TagChip`（自绘 span + `bg-tag-*` token 类）——**不用** antd `Tag` 的预设色：`Tag` 的默认底色由组件 token 派发、自定义 tint 只能走 `Tag` 的 preset/内联色，与「禁硬编码色值」冲突。antd `Tag` 仅保留给**带交互的元信息 chip**（如 focus 小条的 closable 标签）。**标签不做按钮形态**。
+**`tag`** — **用户标签 chip**（`data.tags` 数组元素：设定标签 / 事件标签 / 参考资料标签）：`{rounded.xs}` + **tint 三色底** + caption 字号 + `{colors.primary}` 字色（按名称 hash 稳定分配，见 §Colors 分配规则）。实现 = `components/ui/tag-chip.tsx` 的 `TagChip`（自绘 span + `bg-tag-*` token 类）——**不用** antd `Tag` 的预设色：`Tag` 的默认底色由组件 token 派发、自定义 tint 只能走 `Tag` 的 preset/内联色，与「禁硬编码色值」冲突。antd `Tag` 仅保留给**带交互的元信息 chip**（如 focus 小条的 closable 标签）。**标签不做按钮形态**。
 **准入规则（收口，2026-09）**：**只有 `data.tags` 元素走 tint**。枚举值（卷/章/场、实体类型、端点类型、关系类型、伏笔 `category`、回收站类型）→ `type-badge`；字段值（人物 `role` 等）→ 纯文本 / 表单控件（不是 chip）；状态 → `status-badge` / 中性命中 span。判据的代码形式 = 两个组件名：`TagChip`（tint）vs `TypeChip`（中性）——不许再给 `TagChip` 传枚举文案。
 **`type-badge`** — **类型/分类徽标**（枚举值的唯一形态：大纲节点卷/章/场、实体类型、关联端点类型（源/目标）、关系类型、伏笔 `category`、回收站类型）：`{rounded.xs}` + `{colors.surface-muted}` 底 + **1px `type-badge-border` `#d94a4a` 边框** + caption 字号 + `{colors.primary}` 字色。实现 = `components/ui/tag-chip.tsx` 的 `TypeChip`。**为什么是描边而不是实底**：实底彩色要么压不住读（`#ef8354` 上墨字仅 4.70:1、白字 2.61:1），要么让每行都摆出一块告警色；描边把一个色相拆成「轮廓」而不是「面积」——既与 tint 标签（面积式）在形态上彻底分开，又不会霸占背景。**为什么边框不能用浅色系**：1px 线在灰底上需 ≥3:1 才看得见（实测橙 1.43、浅红 1.07 = 等于没有）；`#d94a4a` 是少数两态都过线的红系（浅 3.61 / 深 3.34）。**为什么不用 tint**：① 类型是枚举不是用户数据，逐个发彩色等于给每列都上装饰，反而让「彩色 = 这是标签」的信号失效；② hash 取模只保证「同名恒同色」，不承载语义，同一概念的文案变了就变色；③ 类型与「标签」视觉同形时，用户无法区分「这行是分类」还是「这行是标签」——所以两形态用**两套形态语言**（描边 = 类型，实底 = 标签）。
 **`status-badge`** — 状态胶囊（进行中/已确认/已失效等）：`{rounded.full}` + caption 字号 + **语义色**（success / warning / error；中性状态用 `{colors.surface-muted}` 灰面）——**不用 tint**（tint 只给用户标签，见上「准入规则」）；状态图标用 antd **Filled** 变体（`CheckCircleFilled`/`CloseCircleFilled`/`ExclamationCircleFilled`）。
@@ -585,7 +585,7 @@ components:
 ## Known Gaps
 
 - **深色 token 未公开**：源分析文档明示未提取 Notion 深色值，上表深色列是推断值，只保证 antd 派生一致，未与实机逐项比对。
-- **标签 tint 分配规则**：已实现（§Colors 标签色 —— 名称 hash 取模 6，同名恒同色）；**准入已收口（2026-09）：tint 只给 `data.tags` 元素，枚举类型走描边式 `type-badge`**。新增标签体系时先看现有档位为什么不狗，不要另起色表。
+- **标签 tint 分配规则**：已实现（§Colors 标签色 —— 名称 hash 取模 3，同名恒同色）；**准入已收口（2026-09）：tint 只给 `data.tags` 元素，枚举类型走描边式 `type-badge`**。新增标签体系时先看现有档位为什么不够，不要另起色表。
 - **tint 深色值未与实机比对**：深色态用「同色相 20% 叠色」推断（Notion 未公开深色 token），若日后观感不对，只改 `index.css` 的 `--tag-*` 深色段。（2026-09 换色板时已验算：叠色合成底 + 81% 白字 5.96–6.18 全部达标。）
 - **antd 派生色未登记**：hover/active/禁用底、`colorFill*`、浅色色阶由算法派生，本文件不复制（避免漂移）。
 - **MD 编辑器是独立表皮**：参考资料页的 `@uiw/react-md-editor` 自带一套排版与配色，未纳入本设计系统（编辑器内部不套 chrome token）；若观感冲突，再单独收。
@@ -596,7 +596,7 @@ components:
 ## Iteration Guide
 
 1. 改视觉 → 先改本文件，再改 `AntdProvider.tsx`，最后改调用点；顺序反了必然产生「文档与实现两套事实」
-2. 每次改完跑 `designmd lint docs/ui/DESIGN.md`（error 必须清零）。**两类稳定存在的 warning 属预期**：① `orphaned-tokens`——`{colors.hairline*}`、6 个 tint 只出现在 prose（规范无 border 子 token）；② 深浅算法的派生值不登记（避免与实现漂移）
+2. 每次改完跑 `designmd lint docs/ui/DESIGN.md`（error 必须清零）。**两类稳定存在的 warning 属预期**：① `orphaned-tokens`——`{colors.hairline*}`、3 个 tint 只出现在 prose（规范无 border 子 token）；② 深浅算法的派生值不登记（避免与实现漂移）
 3. 新组件先加 `components:` 条目 + §Components 一行说明，再写代码
 4. 需要新色/新字号 = 先问「现有档位为什么不够」，能复用就复用（四档字号、四档圆角是刻意收紧的）
 5. 覆盖 antd 组件 token 必须登记进覆盖表；调用点 `!` 前缀类是禁止项

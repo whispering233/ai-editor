@@ -12,9 +12,9 @@
 {
   node_id: string;                // 触发变更的大纲节点 ID——**仅章**（node.type='chapter'；卷/场景 → 400
                                   //   VALIDATION_ERROR，2026-09 收紧：一章一个状态变化点才是叙事粒度）
-  target_type: string;            // 变更目标类型——**仅实体类型**（白名单由 ENTITY_TYPES 派生：
-                                  //   character/setting/location/hook/event，event 自动扩入）
-                                  //   （2026-08 收紧：大纲节点不可作为变更目标——节点代表的故事导致实体
+  target_type: string;            // 变更目标类型——**仅实体类型且不含 event**（白名单 = ENTITY_TYPES
+                                  //   去掉 event：character/setting/location/hook/timepoint/reference；
+                                  //   event（时间轴事件）不产生 Delta，2026-08 收紧：大纲节点不可作为变更目标——节点代表的故事导致实体
                                   //   发生变更，节点结构化信息不出现在变更记录中；历史 outline_node 目标
                                   //   数据保留展示，仅创建路径拒绝；校验在路由层，shared schema 不动）
   target_id: string;              // 变更目标 ID
@@ -42,7 +42,8 @@
 // Res: 400
 // { error: { code: "VALIDATION_ERROR" } }
 // 触发条件：schema 校验失败（含 fields）；per-op 必填缺失（set→to、update→from+to、add/remove→value）；
-//   target_type 非实体类型（2026-08 收紧：仅实体类型，白名单由 ENTITY_TYPES 派生——含 event；路由层白名单校验）；
+//   target_type 非实体类型（2026-08 收紧：仅实体类型——白名单 = ENTITY_TYPES.filter(t => t !== "event")，
+//   含 timepoint/reference、不含 event；client 下拉另排除无字段可编辑的 timepoint/reference；路由层白名单校验）；
 //   node_id 指向的节点非章（2026-09 收紧：仅 chapter 可挂变更记录；/delta/compute 的 at_node_id 不受限）
 
 // 示例

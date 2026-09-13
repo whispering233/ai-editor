@@ -1,7 +1,7 @@
 // 工具执行上下文（S6.3 ToolContext 设计）
 // 由上层（agent/server，S7）注入：db 访问 + outline.json 读取 + projectId。
 // 工具实现只依赖本接口工作，不持有任何全局状态——同一实例可服务多次工具调用；
-// projectId 本卡查询工具暂未使用（S6.6 提案工具需要提案归属项目），先定义供后续扩展。
+// projectId = 当前打开项目的 id（提案绑定 project_id，S6.6 起提案工具已在用）。
 //
 // 注入方职责（S7.4 executor 组装）：
 // - db：当前项目的 data.db 连接（better-sqlite3 同步连接，查询层 API 直接使用）

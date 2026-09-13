@@ -39,12 +39,22 @@
   - 现状：`filters.status` 保留给 hook 生命周期（有意保留）；character 的 `status` 已从表单/列表/AI 摘要与 data 契约删除，旧残留由 `.passthrough()` 容错。
   - 触发条件：无（仅在整体清理查询参数面时顺带处理）。
 
+- **书名校验两份实现**（2026-09 发布前审计发现）
+  - 现状：`client/src/lib/book-name.ts` 与 `server/src/routes/project.ts` 各有一份同正则 + 同中文文案的校验（`grep -rn "书名不能包含" packages` → server 1 处 + client 1 处 + 客户端测试夹住）。文案/规则已经开始分叉的风险点。
+  - 触发条件：下次改书名规则或文案时。
+  - 最小修法：提 shared 纯函数 + 文案常量（REST schema、路由校验、客户端预校验共用）。
+
 ## 前端 / UI
 
+- **客户端 `SettingTreeNode.category` 是死键**（2026-09 发布前审计发现）
+  - 现状：`client/src/lib/setting-tree.ts` 的树节点带 `category`，只写不读（旧分类徐标残留；`components/entity/setting-tree.tsx:769` 注释已说明改用 tags）；注意 **`EntitySummary.summary.category` 仍是活字段**（`parent-setting-select.tsx` 在渲染），不能一并删。
+  - 触发条件：下次触碰设定树数据派生时。
+  - 最小修法：删 `SettingTreeNode.category` + 输入映射 + `setting-tree.test.ts` 对应断言。
+
 - **参考资料页「分类徽标」形态与类型徽标不一致**（卡 10.4 登记）
-  - 现状：`pages/ReferenceDetail.tsx:354` 的分类徽标已是中性色，但形态是**描边徽标**（`border border-border rounded-md`），与 `TypeChip`（无描边 + `surface-muted` 底 + `rounded-sm`）不同——它同时也是页头右侧的元信息位（不是行内徽标）。
+  - 现状：`pages/ReferenceDetail.tsx:354` 的分类徽标已是中性色，但形态是**描边徽标**（`border border-border rounded-md`），与 `TypeChip`（**描边式**：1px `type-badge-border` + `surface-muted` 底 + `rounded-sm`）仍有差异——圆角档不同，且它同时是页头右侧的元信息位（不是行内徽标）。
   - 触发条件：再次调整参考资料页头部布局时。
-  - 最小修法：换 `TypeChip`（一行），代价是页头那一块视觉微变（去描边、底色由近白 `bg-muted` 变 `#f0eeec`）。
+  - 最小修法：换 `TypeChip`（一行），代价是页头那一块视觉微变（圆角 `rounded-md` → `rounded-sm`、边框色 `border-border` → `type-badge-border`）。
 - **关联页端点类型徽标缺 `timepoint`/`event` 中文标签**（卡 10.5 浏览器实测发现）
   - 现状：`components/entity/relations-view.tsx:32` `ENDPOINT_TYPE_LABEL` 只有 `character`/`setting`/`location`/`hook`/`outline_node`；时间点↔事件关系（`occurs_at`）在关联总览的源/目标列直接显示原始类型串 `timepoint` / `event`（fallback `?? type`）。
   - 影响：用户看到程序设计语义的英文标识（正是本仓多次收敛过的那类问题）。

@@ -165,7 +165,7 @@ export const defaultProposalStore: ProposalStore = createProposalStore();
 export type ProposalBuilder = (ctx: ToolContext, args: unknown) => Proposal;
 
 /**
- * 15 个 propose_* 工具名 → build 层函数。
+ * 16 个 propose_* 工具名 → build 层函数。
  * 运行时查表缺失（非提案工具）返回 undefined；完整性由测试断言覆盖
  * （Object.keys(PROPOSAL_BUILDERS) === PROPOSAL_TOOLS）。
  */

@@ -96,7 +96,7 @@ type: "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "r
 
 ```typescript
 // Path
-type: "character" | "setting" | "location" | "hook" | "event" | "timepoint";
+type: "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "reference";
 id: string;
 
 // Res: 200
@@ -135,9 +135,9 @@ type: "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "r
 //            （2026-09：description 必填（**仅前端校验** + AI 工具约定；**校验落地 = 卡 3.3 前端表单**，
 //             服务端不硬校验，保护提案/旧数据/备份导入三条路径）；status 已移除；abilities 经 007 迁为 ability_panel；
 //             分层与面板结构见 ../db/schema.md「人物 data 分层」）
-// setting:   { category?, parent_id?, description?, rules?: string[], custom_fields? }
+// setting:   { description?, tags?: string[], rules?: string[], custom_fields? }（category/parent_id 已废弃，由 passthrough 容错）
 // location:  { type?, parent_id?, description?, custom_fields? }
-// hook:      { status?, category?, expected_payoff?, payoff_timing?, half_life?, is_core?, notes? }
+// hook:      { status?, category?, expected_payoff?, payoff_timing?, half_life?, is_core?, notes?, expected_resolve_node_id? }
 //             (hook data 字段 schema：shared `hookDataSchema`，服务端校验)
 // event:     { description?, tags?: string[] }（精校验 + passthrough，详见本章节开头字段表）
 // timepoint: {}（G2：时间标签文本 = name，data 无专属字段）
@@ -241,6 +241,22 @@ id: string;
 - 反向：所有非软删 file 类索引，文件在 `references/` 与 `.trash/` 均缺失 → 索引同步软删（进回收站可还原，软删语义）；
 - frontmatter 缺失/非法 → 容错纯 markdown（title=文件名去扩展名、category=material、tags=[]），不报错；
 - 仅处理顶层文件（不支持子目录，YAGNI）；无项目 → 409 `NO_PROJECT_OPEN`。
+
+### GET /api/v1/reference/scan/status
+
+**只读探测**：`references/` 下未同步的本地文档数（无副作用，不建索引）。列表页打开时提示条「检测到 N 个未同步的本地文档」用；执行 `POST /reference/scan` 后该值应为 0。
+
+```typescript
+// Res: 200
+{
+  unsynced: number;  // 未同步文件数（同 scanReferences 的匹配规则：新增 + mtime 不一致 + 软删可还原）
+}
+```
+
+```typescript
+// Res: 409
+{ error: { code: "NO_PROJECT_OPEN" } }
+```
 
 ### PUT /api/v1/entity/event/:id/move
 

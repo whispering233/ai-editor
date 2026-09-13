@@ -226,6 +226,9 @@ advance_hook(hook_id, node_id, description)  → id   // 复合写（2026-08 修
                                                      // node_id **仅章**（2026-09）：伏笔锚点限 chapter
 resolve_hook(hook_id, node_id, description)  → id   // 复合写：delta 记 status=resolved + relation 插 resolves
 abandon_hook(hook_id, description)          → id   // 复合写：delta 记 status=abandoned（2026-08 修订）
+reorder_timepoints(timepoint_ids)           → { reordered }  // 时间点批量重排（G2：整组线性序，不是单条移动）
+                                                     //   校验 timepoint_ids 与库内集合相等（缺/多 → 抛错），
+                                                     //   事务内按新序重写 entities.sort_order 0..n-1；无 delta/无 relation
 ```
 
 > **复合写说明（2026-08 修订）**：`advance_hook` / `resolve_hook` 对应伏笔生命周期的推进/回收动作，确认后由 Tool Executor 调用，封装「delta + relation」两步写为一次提交，失败不产生半状态。
