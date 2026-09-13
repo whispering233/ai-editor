@@ -1,6 +1,6 @@
 // 新建人物弹窗（卡片 3.5）
 //
-// 契约：`docs/design/tasks.md` 卡 3.5、`docs/ui/DESIGN.md` §数据展示 `character-workbench`
+// 契约：`docs/ui/DESIGN.md` §数据展示 `character-create-dialog` 与 `character-workbench`
 //   （左栏行头「+ 新建」`button-primary` / 空态主操作 / 受控 `Dialog` + 不新增色值字号）、
 //   `docs/db/schema.md`「人物 data 分层」（`description` 必填=**仅前端**）与「能力面板结构」。
 // 分层：`CreateCharacterFormView` = 纯展示（SSR 走查用，仓内无 jsdom）；`CreateCharacterDialog` = 容器（取数/提交）。

@@ -1,6 +1,6 @@
 // 新建人物弹窗纯函数与判据（卡片 3.5）
 //
-// 契约：`docs/design/tasks.md` 卡 3.5（必填 = 姓名/角色定位/描述，**仅前端**校验；其余可选；
+// 契约：`docs/ui/DESIGN.md` `character-create-dialog`（必填 = 姓名/角色定位/描述，**仅前端**校验；其余可选；
 //   面板三选 = 空白 / 内置模板 / 从已有角色复制；重名软提示不阻断；提交后自动选中）；
 //   `docs/ui/DESIGN.md` §数据展示 `character-workbench`（左栏行头「+ 新建」/ 空态主操作）；
 //   `docs/db/schema.md`「人物 data 分层」（`description` 必填=仅前端；面板结构与宽校验）；
