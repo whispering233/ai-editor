@@ -603,6 +603,9 @@ function CharacterCurrentTab({
               onChange={(value) => setAtNodeId(value)}
               aria-label="进度节点"
               popupMatchSelectWidth={false}
+              /* 可搜索：选项 value 是节点 id（搜不到标题）——必须显式 `optionFilterProp="label"` */
+              showSearch
+              optionFilterProp="label"
               options={[
                 { value: "", label: "请选择大纲节点" },
                 ...chapterNodes.map((o) => ({
