@@ -282,7 +282,7 @@ describe("POST /api/v1/proposal/:proposalId/confirm 成功", () => {
     const proposal = buildProposal(
       toolCtx(),
       "propose_add_delta",
-      { node_id: "ch-1", target_type: "character", target_id: charId, changes: [{ field: "status", op: "set", to: "dead" }] },
+      { node_id: "ch-1", target_type: "character", target_id: charId, changes: [{ field: "alias", op: "set", to: "影" }] },
       [refOutlineNode(chapterNode()), refEntity(getEntity(project.db, charId)!)],
       "为节点「第一章」追加 1 项属性变更",
     );
@@ -361,7 +361,7 @@ describe("confirm 快照重校验 → 409 PROPOSAL_STALE", () => {
     const proposal = buildProposal(
       toolCtx(),
       "propose_add_delta",
-      { node_id: "ch-1", target_type: "character", target_id: charId, changes: [{ field: "status", op: "set", to: "dead" }] },
+      { node_id: "ch-1", target_type: "character", target_id: charId, changes: [{ field: "alias", op: "set", to: "影" }] },
       [refOutlineNode(chapterNode()), refEntity(getEntity(getCurrentProject()!.db, charId)!)],
       "为节点追加变更",
     );
@@ -379,7 +379,7 @@ describe("confirm 快照重校验 → 409 PROPOSAL_STALE", () => {
     const proposal = buildProposal(
       toolCtx(),
       "propose_add_delta",
-      { node_id: "ch-1", target_type: "character", target_id: charId, changes: [{ field: "status", op: "set", to: "dead" }] },
+      { node_id: "ch-1", target_type: "character", target_id: charId, changes: [{ field: "alias", op: "set", to: "影" }] },
       [refOutlineNode(chapterNode()), refEntity(getEntity(getCurrentProject()!.db, charId)!)],
       "为节点追加变更",
     );
@@ -398,7 +398,7 @@ describe("confirm 快照重校验 → 409 PROPOSAL_STALE", () => {
     const refsProposal = buildProposal(
       toolCtx(),
       "propose_add_delta",
-      { node_id: "ch-1", target_type: "character", target_id: charId, changes: [{ field: "status", op: "set", to: "dead" }] },
+      { node_id: "ch-1", target_type: "character", target_id: charId, changes: [{ field: "alias", op: "set", to: "影" }] },
       [refOutlineNode(chapterNode()), refEntity(getEntity(project.db, charId)!)],
       "先执行一次",
     );
@@ -412,7 +412,7 @@ describe("confirm 快照重校验 → 409 PROPOSAL_STALE", () => {
       ...buildProposal(
         toolCtx(),
         "propose_add_delta",
-        { node_id: "ch-1", target_type: "character", target_id: charId, changes: [{ field: "status", op: "set", to: "dead" }] },
+        { node_id: "ch-1", target_type: "character", target_id: charId, changes: [{ field: "alias", op: "set", to: "影" }] },
         [],
         "带 delta 引用",
       ),

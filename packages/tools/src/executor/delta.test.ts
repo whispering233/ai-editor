@@ -138,6 +138,42 @@ describe("add_delta", () => {
     expect(listDeltasByTarget(db, hook.id, dir)).toHaveLength(2);
   });
 
+  it("character 已移除字段兜底：status/abilities → 抛错且不落库；自定义字段与面板叶子不受影响（卡片 5.5）", () => {
+    writeOutlineFile(dir, seedOutlineTree());
+    const char = createEntity(db, { type: "character", name: "阿强", data: { alias: "影" } });
+ // status（无展示面）/ abilities（经 007 迁为 ability_panel）已从 schema 移除——
+ // executor 直写 db 绕过提案层，本层必须自行拒绍（与提案层同源守卫：assertRemovedCharacterFields）
+    for (const field of ["status", "abilities"] as const) {
+      expect(() =>
+        executeAddDelta(
+          makeCtx(),
+          buildProposal(
+            makeCtx(),
+            "propose_add_delta",
+            { node_id: "ch-1", target_type: "character", target_id: char.id, changes: [{ field, op: "set", to: "x" }] },
+            [],
+            "s",
+          ),
+        ),
+      ).toThrow(/已移除/);
+    }
+    expect(listDeltasByTarget(db, char.id, dir)).toHaveLength(0); // 抛错路径不落库
+ // 自定义字段（schema 外，如战力）与可变字段、面板叶子仍可写入——不得收窄成整字段白名单
+    executeAddDelta(
+      makeCtx(),
+      buildProposal(makeCtx(), "propose_add_delta", { node_id: "ch-1", target_type: "character", target_id: char.id, changes: [{ field: "combat_power", op: "update", from: 100, to: 150 }] }, [], "s1"),
+    );
+    executeAddDelta(
+      makeCtx(),
+      buildProposal(makeCtx(), "propose_add_delta", { node_id: "ch-1", target_type: "character", target_id: char.id, changes: [{ field: "alias", op: "set", to: "影武者" }] }, [], "s2"),
+    );
+    executeAddDelta(
+      makeCtx(),
+      buildProposal(makeCtx(), "propose_add_delta", { node_id: "ch-1", target_type: "character", target_id: char.id, changes: [{ field: "ability_panel.能力.等级", op: "set", to: 3 }] }, [], "s3"),
+    );
+    expect(listDeltasByTarget(db, char.id, dir)).toHaveLength(3);
+  });
+
   it("order 服务端全局单调生成（两次插入 order 递增）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const char = createEntity(db, { type: "character", name: "阿强" });

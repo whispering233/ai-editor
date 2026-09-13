@@ -8,6 +8,7 @@
 import type { DeltaChange, DeltaOp, EntityType } from "@whispering233/ai-editor-shared";
 import {
   ENTITY_TYPES,
+  SET_ONLY_FIELDS,
   abilityPanelFieldPath,
   coerceAbilityValue,
   panelLeafPaths,
@@ -107,16 +108,12 @@ const NUMERIC_FIELDS: Record<string, readonly string[]> = {
 };
 
 /**
- * 「事实字段」（只能「设为」）：**写路径已把当前值同步进 `data`** 的字段——
+ * 字段是否事实字段（只能「设为」，见 shared `SET_ONLY_FIELDS`）：**写路径已把当前值同步进 `data`** 的字段——
  * hook 的 `status`（复合写同步 `data.status`；终态守卫/列表分组/AI 统计直接读它）。
  * 对它用 `op=update` 必然假冲突（重放基座即最新值，`from` 永远对不上）；`set` 与写路径自洽。
+ * 白名单**单一事实源 = shared `SET_ONLY_FIELDS`**（tools 侧写入守卫消费同一常量，禁止手抄）。
  * 依据：`docs/design/10-data-model.md` §4「物化事实字段不用 CAS」。
  */
-const SET_ONLY_FIELDS: Record<string, readonly string[]> = {
-  hook: ["status"],
-};
-
-/** 字段是否事实字段（写路径同步当前值——变更记录只能「设为」，见 `SET_ONLY_FIELDS`） */
 export function isSetOnlyField(scope: string, key: string): boolean {
   return (SET_ONLY_FIELDS[scope] ?? []).includes(key);
 }

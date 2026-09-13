@@ -24,6 +24,8 @@ import {
   PROPOSAL_TOOLS,
   QUERY_TOOLS,
   RELATION_TYPES,
+  REMOVED_CHARACTER_FIELDS,
+  SET_ONLY_FIELDS,
   TOOL_NAMES,
   TOOL_PERMISSION,
 } from "./index.js";
@@ -90,6 +92,13 @@ describe("伏笔常量", () => {
   it("PAYOFF_TIMING 5 种节奏", () => {
     expect(PAYOFF_TIMING).toEqual(["immediate", "near_term", "mid_arc", "slow_burn", "endgame"]);
     expect(PAYOFF_TIMING).toHaveLength(5);
+  });
+
+  it("Delta 字段约束常量（卡片 5.5）：单一定义——client 下拉与 tools 写入守卫共消费", () => {
+ // 事实字段（只能用 op=set）：`docs/design/10-data-model.md` §4
+    expect(SET_ONLY_FIELDS).toEqual({ hook: ["status"] });
+ // character 已移除字段（schema 已删，写入只会留脏键）：`docs/db/schema.md`「人物 data 分层」
+    expect(REMOVED_CHARACTER_FIELDS).toEqual(["status", "abilities"]);
   });
 
   it("DEFAULT_HALF_LIFE 缺省映射与 一致（单位：章）", () => {
