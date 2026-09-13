@@ -8,10 +8,10 @@
 
 ## 当前任务卡
 
-- [ ] **5.4 纵深防御补口（卡 5.3 oracle 建议，各 5–10 行）**
-  - (a) **executor 兜底**：`packages/tools/src/executor/delta.ts` 的 `executeAddDelta` 加与提案层同源的守卫——`hook` + `field="status"` 且 `op !== "set"` → 抛错（手工构造 proposal / 直调 executor 才可达，属纵深防御；与卡 1.5 的锚点兜底同模式）。
-  - (b) **character 已移除字段防脏键**：`propose_add_delta` 对 **character 目标**拒绝 `field ∈ {"status", "abilities"}`（卡 2.1 已把两者从 schema 移除；现在仍可写入脏键，不参与任何展示但留残留）。工具描述不必改（属已移除字段）。
-  - 测试：两条各补边界用例（executor 非 set → 抛错且不落库；character + status/abilities → 抛错）；`combat_power` 这类**自定义字段**仍必须可用（不得收窄成整字段白名单）；既有用例全绿。
+- [ ] **5.5 最后两条建议（卡 5.4 oracle）**
+  - (a) **executor 层对 character 已移除字段兜底**：`packages/tools/src/executor/delta.ts` 的手工构造路径同样拒绝 character 的 `status`/`abilities`（与提案层同源），补齐"两层同口径"。
+  - (b) **白名单去重**：`SET_ONLY_FIELDS`（hook.status 仅 set）与 `REMOVED_CHARACTER_FIELDS`（character 已移除字段）现为 **client 与 tools 两份手抄**（client 不能 import tools）→ 移到 `packages/shared`（纯常量，无 schema/TypeBox）作为**单一定义**，client 与 tools 各自消费；容器类型统一为数组（tools 内部再转 Set 或用 `includes`）。
+  - 测试：(a) 补边界用例；(b) 既有用例全绿 + 可选加一条"shared 常量被两侧引用"的守卫断言。
 
 ## 延期项（远期，未排期）
 

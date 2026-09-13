@@ -68,6 +68,15 @@ pnpm test:packed    # 一键串联（backlog #8 打包安装测试：tarball 安
 
 前置（一次性，npmjs）：账号开 2FA；5 个发布包各配置 Trusted Publisher（GitHub Actions / whispering233/ai-editor 仓库 / publish.yml 工作流）。**token 能力边界（2026-09-11 实测修订）**：本仓 granular token **可以执行 `npm deprecate`**（实测 10 条成功、无需 OTP）；被拒的是账号/组织/设置类操作（`npm profile get` → 403，npm 2026-07-31 起限制 bypass-2FA token 的设置类操作）。`unpublish` 未实测（不可逆）——官方文档仍列为需 2FA 的敏感操作，真要 unpublish 请备好 `--otp`。2027-01 起 bypass-2FA token 将失去直接发布能力，本仓已用 OIDC Trusted Publisher 不受影响。
 
+## 变异/探针验证的安全姿势（2026-09 实测踩坑）
+
+验证代理（oracle）常需“改坏代码看测试是否咬人”，**禁止在仓库内做硬链接副本后用就地截断写**：
+
+- `/tmp` 与仓库常不在同一文件系统 → `cp -al` 会产生**空副本**；
+- 改用同文件系统的硬链接副本后，Python `open(path,"w")` / 多数脚本的**就地截断写会写穿 hardlink**（同一 inode）→ **污染源仓库**（真实发生：一次变异把 `if (false && …)` 写进了 `packages/tools/src/proposal/delta.ts`，靠 `git checkout --` 恢复）。
+
+**安全姿势（择一）**：① `cp -r` 真副本 + 软链 `node_modules`；② `git worktree add /tmp/... <ref>`（然后装依赖/软链）；③ 只把待变异文件复制到 `/tmp` 后用 `git stash` 手段对照。变异后恢复必须**复跑全量回归**再报告结论。
+
 ## 发布管道坑记录（供后续发布参考）
 
 - npm 12 publish 在 postpack 恢复后生成 registry manifest → prepack 替换只影响 tarball（manifest 残留 `workspace:*`，`npm install` 报 EUNSUPPORTEDPROTOCOL）→ 发布前主动替换 + `--ignore-scripts`
