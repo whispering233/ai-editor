@@ -1,6 +1,6 @@
 // 大纲节点详情页（S12.2；麦基字段集；「节点详情页」；
-// S13.2：header 加「设为当前位置」——入口自大纲页迁入，PUT /project/config { current_position }，
-// 已是当前位置禁用；store updateConfig 自动重拉 config 联动 InfoBar/行尾徽标/compute 默认节点）
+// S13.2：header 加「设为阅读进度」——入口自大纲页迁入，PUT /project/config { current_position }，
+// 已是阅读进度禁用；store updateConfig 自动重拉 config 联动 InfoBar/行尾徽标/compute 默认节点）
 // 路由：#/outline/:nodeId（中栏大纲 tab 二级路由，main.tsx outline 分支拦截第二段，仿实体详情）
 // 数据：节点本体来自 project store 的 outline 树（GET /outline 已含 data）——findNode 按 id 查找，
 // 软删/缺失 → 404 态；**变更记录仅章**（卡片 1.2：卷/场景不渲染该区块，也不留必定 400 的入口）——
@@ -58,7 +58,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
   const [dataForm, setDataForm] = useState<Record<string, unknown> | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  // 设为当前位置提交态（防重复提交）
+  // 设为阅读进度提交态（防重复提交）
   const [settingCurrent, setSettingCurrent] = useState(false);
   // 相关实体：新建关系对话框 + 重载信号
   const [relationDialogOpen, setRelationDialogOpen] = useState(false);
@@ -87,7 +87,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
   const fields = node ? detailFieldsForNodeType(node.type) : [];
   const sceneOptions = sceneNodeOptions(outline?.children ?? []);
   const isCurrent = config?.currentPosition === nodeId;
-  /** 本页节点是否可承载「当前位置」（卡片 1.1 章级收窄：仅章；节点未加载时不置灰按钮由 node===null 分支承担） */
+  /** 本页节点是否可承载「阅读进度」（卡片 1.1 章级收窄：仅章；节点未加载时不置灰按钮由 node===null 分支承担） */
   const currentPositionHost = node !== null && isCurrentPositionHost(node.type);
 
   // 节点 → 表单（依赖 node 引用：outline 未刷新则引用稳定不重置；保存后 loadOutline 新树 → 重置）
@@ -139,10 +139,10 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
   }
 
   /**
-   * 设为当前位置（S13.2，自大纲页迁入）：提交实现 = lib/current-position.ts 唯一入口
+   * 设为阅读进度（S13.2，自大纲页迁入）：提交实现 = lib/current-position.ts 唯一入口
    * （大纲行右键菜单共用）——PUT /project/config { current_position }，store 内部 updateConfig
-   * 成功后自动重拉 config，联动 InfoBar「当前位置」/大纲行尾徽标/compute 预览默认节点（S5.4）/
-   * S9 伏笔健康指标基准。已是当前位置 → 按钮禁用不触发；在途防重入由 settingCurrent 承担。
+   * 成功后自动重拉 config，联动 InfoBar「阅读进度」/大纲行尾徽标/compute 预览默认节点（S5.4）/
+   * S9 伏笔健康指标基准。已是阅读进度 → 按钮禁用不触发；在途防重入由 settingCurrent 承担。
    * 服务端只接受章节点（卷/场景 → 400）——本页对非章节点禁用按钮（currentPositionHost），
    * 入口可见性与右键菜单同口径（卡片 1.1）。
    */
@@ -188,13 +188,13 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
 
   return (
     <section>
-      {/* 页头（统一壳）：标题 + 操作区（设为当前位置 / 保存）+ 元信息行 + 分割线 */}
+      {/* 页头（统一壳）：标题 + 操作区（设为阅读进度 / 保存）+ 元信息行 + 分割线 */}
       <PageHeader
         title={node?.title ?? "…"}
         truncateTitle
         action={
           <>
-            {/* S13.2 设为当前位置（动作入口；状态徽标在元信息行）：已是当前位置 → 禁用 + 「当前位置」标记，
+            {/* S13.2 设为阅读进度（动作入口；状态徽标在元信息行）：已是阅读进度 → 禁用 + 「阅读进度」标记，
                 与 S13.1 前大纲页 disabled={isCurrent || busy} 语义一致；
                 卡片 1.1 章级收窄：非章节点（卷/场景）禁用并说明原因——服务端接受非章会 400，
                 留一个必定失败的按钮只会报出误导性错误（同上） */}
@@ -202,14 +202,14 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
               disabled={node === null || isCurrent || settingCurrent || !currentPositionHost}
               title={
                 !currentPositionHost
-                  ? "仅章节点可设为当前位置（卷/场景不承载写作进度）"
+                  ? "仅章节点可设为阅读进度（卷/场景不可标记）"
                   : isCurrent
-                    ? "当前节点已是创作进度位置"
-                    : "标记为创作进度位置（InfoBar 展示 + 定位跳转基准）"
+                    ? "当前节点已是阅读进度位置"
+                    : "标记为阅读进度位置（顶栏展示 + 定位跳转基准）"
               }
               onClick={() => void handleSetCurrent()}
             >
-              {isCurrent ? "当前位置" : "设为当前位置"}
+              {isCurrent ? "阅读进度" : "设为阅读进度"}
             </Button>
             <Button
               type="primary"
@@ -221,14 +221,14 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
           </>
         }
         description={
-          /* 元信息行：类型徽标 + 更新时间 + 当前位置（文字与大纲列表页徽标语义一致） */
+          /* 元信息行：类型徽标 + 更新时间 + 阅读进度（文字与大纲列表页徽标语义一致） */
           node ? (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <TagChip>{TYPE_LABEL[node.type]}</TagChip>
               <span>更新于 {formatTimestamp(node.updatedAt)}</span>
               {isCurrent && (
                 <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-xs text-accent-foreground">
-                  当前位置
+                  阅读进度
                 </span>
               )}
             </div>

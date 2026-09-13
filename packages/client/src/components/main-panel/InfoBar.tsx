@@ -1,7 +1,7 @@
-// 中栏信息条：项目名（点击进 #/overview 项目概览）+ 当前位置（outline 树映射，点击跳 #/outline 并定位）+ 语言
+// 中栏信息条：项目名（点击进 #/overview 项目概览）+ 阅读进度（outline 树映射，点击跳 #/outline 并定位）+ 语言
 // 数据源 stores/project.ts（GET /api/v1/project/config）；加载失败保持 null 显示「书架」不阻塞；
-// 当前位置标题由 outline 树 id→title 映射（findOutlineNodeTitle）
-// 定位实现（U4 方案 A）：点击当前位置 → ui store 设置 focusOutlineNodeId（transient）→ 跳 #/outline，
+// 阅读进度标题由 outline 树 id→title 映射（findOutlineNodeTitle）
+// 定位实现（U4 方案 A）：点击阅读进度 → ui store 设置 focusOutlineNodeId（transient）→ 跳 #/outline，
 // Outline 页消费（展开祖先+滚动+高亮）后清除；不侵入 hash 路由
 // <1024px 时右栏为抽屉：信息条右侧显示聊天开关
 // 刷新按钮（问题 1）：InfoBar 是中栏统一头部（全 tab 常驻），在此放刷新 = 一个入口
@@ -28,7 +28,7 @@ export function InfoBar({
   const notifyDataChanged = useUiStore((s) => s.notifyDataChanged);
   const isDesktop = useMediaQuery("(min-width: 1024px)");
 
-  // 当前位置：null → 「未设置」；有 id 时优先 outline 树映射标题，未加载 outline 则显示 id 占位
+  // 阅读进度：null → 「未设置」；有 id 时优先 outline 树映射标题，未加载 outline 则显示 id 占位
   const positionTitle =
     config?.currentPosition != null
       ? (findOutlineNodeTitle(outline, config.currentPosition) ?? config.currentPosition)
@@ -49,8 +49,8 @@ export function InfoBar({
         <span className="truncate">{projectTitle}</span>
       </a>
 
-      {/* 当前位置：点击跳 #/outline 并定位该节点（U4：ui store transient focusOutlineNodeId，
-       * Outline 页消费后清除；未设置当前位置时仅跳转不定） */}
+      {/* 阅读进度：点击跳 #/outline 并定位该节点（U4：ui store transient focusOutlineNodeId，
+       * Outline 页消费后清除；未设置阅读进度时仅跳转不定） */}
       <a
         href="#/outline"
         onClick={() => {
@@ -59,7 +59,7 @@ export function InfoBar({
         title={config?.currentPosition != null ? "跳转大纲并定位该节点" : undefined}
         className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
-        <span className="shrink-0">当前位置:</span>
+        <span className="shrink-0">阅读进度:</span>
         <span className="truncate text-foreground">{positionTitle ?? "未设置"}</span>
       </a>
 

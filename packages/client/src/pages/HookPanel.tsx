@@ -612,7 +612,7 @@ export default function HookPanel() {
               {lifecycleKind !== "abandon" && (
                 <div>
                   <p className="mb-1 text-sm font-medium text-foreground">
-                    章节点（默认当前位置）
+                    章节点（默认阅读进度）
                   </p>
                   <OutlineNodeSelect
                     value={lifecycleNodeId}

@@ -3,7 +3,7 @@
 //   新建（折叠/空书架主表单）+ 打开其他路径（折叠）+ 错误/加载/空态四态；打开/新建成功 → 跳 #/overview
 // - overview（`#/overview`）：项目概览四区块——项目信息（config）/ 创作要素（×4 并行 total）/
 //   大纲概览（递归统计卷章场 + 最近更新）/ 最近会话（chat store 前 5 条）；无项目 → 回书架引导卡
-// 交互：当前位置/去大纲 → #/outline 并定位节点（ui store focusOutlineNodeId 跨页传参）；
+// 交互：阅读进度/去大纲 → #/outline 并定位节点（ui store focusOutlineNodeId 跨页传参）；
 // 会话行 → chat store setCurrentSession(id)（右栏恢复会话）；[开始新对话] → setCurrentSession(null)
 // 错误/加载/空态按：区块级骨架、区块内「加载失败 [重试]」、空态一句说明 + 主操作
 import { useEffect, useRef, useState } from "react";
@@ -119,7 +119,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
   const loadSessions = useChatStore((s) => s.loadSessions);
   const setCurrentSession = useChatStore((s) => s.setCurrentSession);
   const currentSessionId = useChatStore((s) => s.currentSessionId);
-  // 跨页定位（方案 A）：点击当前位置/去大纲 → 设置 transient 目标后跳 #/outline，Outline 页消费
+  // 跨页定位（方案 A）：点击阅读进度/去大纲 → 设置 transient 目标后跳 #/outline，Outline 页消费
   const setFocusOutlineNode = useUiStore((s) => s.setFocusOutlineNode);
 
   // 引导表单状态
@@ -164,7 +164,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
 
   const noProject = config === null && !configLoading;
   const outlineSummary = outline ? summarizeOutline(outline.children) : null;
-  // 当前位置标题（id→title 映射；outline 未加载时回退 id 占位，与 InfoBar 同语义）
+  // 阅读进度标题（id→title 映射；outline 未加载时回退 id 占位，与 InfoBar 同语义）
   const positionTitle =
     config?.currentPosition != null
       ? (findOutlineNodeTitle(outline, config.currentPosition) ?? config.currentPosition)
@@ -478,7 +478,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     window.setTimeout(() => renameInputRef.current?.focus(), 0);
   }
 
-  /** 跳大纲并定位当前位置节点（当前位置未设置时仅跳转；「操作流」） */
+  /** 跳大纲并定位阅读进度节点（阅读进度未设置时仅跳转；「操作流」） */
   function goOutline() {
     if (config?.currentPosition != null) setFocusOutlineNode(config.currentPosition);
   }
@@ -847,7 +847,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
               <dd className="text-foreground">{config?.language === "zh" ? "中文" : "English"}</dd>
             </div>
             <div className="flex items-center gap-2">
-              <dt className="w-16 shrink-0 text-muted-foreground">当前位置</dt>
+              <dt className="w-16 shrink-0 text-muted-foreground">阅读进度</dt>
               <dd className="min-w-0 flex-1 truncate">
                 {config?.currentPosition != null ? (
                   <a href="#/outline" onClick={goOutline} className="text-primary hover:underline">

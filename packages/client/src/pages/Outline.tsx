@@ -2,21 +2,21 @@
 // S12.2：⋯ 菜单「变更记录」→「详情」（跳 #/outline/:nodeId 节点详情页），行内 Delta 面板随详情页落地移除；
 // S13.1 交互重构：取消 ⋯ 操作条 → 行尾平铺图标（＋ 新建 / 详情 / 移入回收站）；删除「移动到…」对话框
 // （拖拽修复后已覆盖）；拖拽上下半判定 + 插入指示线（同级排序可用）；摘要移到标题下方独立行（默认显示）；
-// 删除底部回收站折叠区（Trash tab 已覆盖）；「设为当前位置」入口迁往详情页（S13.2）；当前位置徽标 token 化；
+// 删除底部回收站折叠区（Trash tab 已覆盖）；「设为阅读进度」入口迁往详情页（S13.2）；阅读进度徽标 token 化；
 // S9.2 伏笔标记：title 行尾紧凑徽标（plants/advances/resolves 图标 + title tooltip 伏笔名），
 // 数据 = GET /relation（source_type=outline_node）三类并行拉取聚合（lib/outline-hooks）
-// 交互收敛：行级「详情」「＋ 新建」按钮移除（只留删除 + 当前位置徽标）——单击行选中、
+// 交互收敛：行级「详情」「＋ 新建」按钮移除（只留删除 + 阅读进度徽标）——单击行选中、
 // 选中后 Enter 新建子级（类型由父层级推导）、双击行跳详情、单击标题/摘要行内编辑、拖拽排序保留；
 // 行级 AskAiButton 已移除——右键菜单替代（RowContextMenu：注入会话上下文 + 建立关联
-// + 「设为当前位置」——卡片 1.1：仅章节点行传入，卷/场景行不出现；已是当前位置则禁用）
-// 路由：#/outline；数据：GET /api/v1/outline（整树）+ GET /api/v1/relation（伏笔标记，S9.2）；操作：POST/PUT/DELETE /outline、PUT /project/config（设当前位置）
+// + 「设为阅读进度」——卡片 1.1：仅章节点行传入，卷/场景行不出现；已是阅读进度则禁用）
+// 路由：#/outline；数据：GET /api/v1/outline（整树）+ GET /api/v1/relation（伏笔标记，S9.2）；操作：POST/PUT/DELETE /outline、PUT /project/config（设阅读进度）
 // （S2.4 + S13.1 + 版）——行内编辑标题/摘要（Enter 保存/Esc 取消/失焦保存）、
 // 选中节点按 Enter 就地插入子节点（类型由父决定，root 可切卷/章）、拖拽移动（原生 HTML5 DnD，上下半判定：
 // 目标行上半 = 插到该节点前、下半 = 插到该节点后，跨父移动按，顶层空白区 = 排末尾）、
 // 双击行跳详情（#/outline/:nodeId）、软删直接执行（H2：不再弹二次确认，回收站可还原；仅彻底删除保留确认）
 // 刷新策略：所有写操作成功后统一 loadOutline 重拉整树（服务端权威——move 重排 order、软删级联子树、
 // 还原级联；本地补丁易与服务端不一致；本地文件读取毫秒级，重拉成本可忽略）。outline 树数据仍在
-// project store（跨页共用：顶栏当前位置标题映射、节点 id → title 映射），本页只持有 UI 态
+// project store（跨页共用：顶栏阅读进度标题映射、节点 id → title 映射），本页只持有 UI 态
 import { useEffect, useState } from "react";
 import type { DragEvent, KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { Button, Input } from "antd";
@@ -166,7 +166,7 @@ export default function Outline() {
   const config = useProjectStore((s) => s.config);
   const configLoading = useProjectStore((s) => s.configLoading);
   const loadOutline = useProjectStore((s) => s.loadOutline);
-  // 跨页定位（U4 方案 A）：ui store 的 transient 目标节点 id——InfoBar/概览页点击「当前位置」
+  // 跨页定位（U4 方案 A）：ui store 的 transient 目标节点 id——InfoBar/概览页点击「阅读进度」
   // 设置后跳转本页；本页消费（展开祖先+滚动+高亮）后清除，不侵入 hash 路由
   const focusOutlineNodeId = useUiStore((s) => s.focusOutlineNodeId);
   const clearFocusOutlineNode = useUiStore((s) => s.clearFocusOutlineNode);
@@ -242,7 +242,7 @@ export default function Outline() {
     return () => clearTimeout(t);
   }, [focusedNodeId]);
 
-  // 跨页定位消费（U4 方案 A，「点击当前位置 → 跳 #/outline 并定位该节点」）：
+  // 跨页定位消费（U4 方案 A，「点击阅读进度 → 跳 #/outline 并定位该节点」）：
   // 读取 ui store 的 transient 目标——展开折叠祖先使节点进入 DOM（折叠态节点不渲染无法滚动），
   // 渲染完成后再 scrollIntoView + 临时高亮（bg-accent 3s），最后清除 store（一次性请求）；
   // 节点不存在（软删/purge 后）直接放弃定位
@@ -627,10 +627,10 @@ export default function Outline() {
   }
 
   /**
-   * 行级「设为当前位置」（卡片 1.1）：仅章节点行提供入口（卷/场景行不传菜单项）——
+   * 行级「设为阅读进度」（卡片 1.1）：仅章节点行提供入口（卷/场景行不传菜单项）——
    * 提交实现与详情页共用（lib/current-position.ts），成功后 store 重拉 config 联动
-   * InfoBar「当前位置」/ 行尾徽标 / 概览页 / compute 预览默认节点。
-   * 已是当前位置 → 菜单项禁用（与行尾「当前位置」徽标同判据）。
+   * InfoBar「阅读进度」/ 行尾徽标 / 概览页 / compute 预览默认节点。
+   * 已是阅读进度 → 菜单项禁用（与行尾「阅读进度」徽标同判据）。
    */
   async function handleSetCurrentPosition(node: OutlineNode) {
     if (config?.currentPosition === node.id) return; // 禁用态双保险（菜单已关但状态可能刚变）
@@ -680,7 +680,7 @@ export default function Outline() {
   }
 
   /** 整树渲染（内部递归函数，闭包共享页面 state；S13.1 两行结构：
-   * 第一行 = 折叠箭头 | 类型徽标（w-7 固定宽，第二行占位精确对齐）| 标题 | 伏笔标记 | 右端操作区（问AI/回收站）| 当前位置徽标；
+   * 第一行 = 折叠箭头 | 类型徽标（w-7 固定宽，第二行占位精确对齐）| 标题 | 伏笔标记 | 右端操作区（问AI/回收站）| 阅读进度徽标；
    * 第二行 = 摘要（缩进对齐标题下方，默认显示、空不渲染、点击就地编辑）；
    * 拖拽：整节点块可拖，目标行上半/下半 → 插入指示线（accent 2px 绝对定位层，pointer-events-none 不拦截事件）；
    * 行可聚焦（tabIndex=-1）承载选中/Enter/双击；单击行选中、双击行跳详情、选中后 Enter 新建子级 */
@@ -722,7 +722,7 @@ export default function Outline() {
       // 行内容（第一行 + 摘要第二行 + 插入指示线）
       const rowChildren = (
         <>
-          {/* 第一行：折叠箭头 | 类型徽标 | 标题 | 伏笔标记 | 右端操作区（回收站）| 当前位置徽标
+          {/* 第一行：折叠箭头 | 类型徽标 | 标题 | 伏笔标记 | 右端操作区（回收站）| 阅读进度徽标
               （O2 起：操作区 ml-auto 右端对齐，时间戳显示已移除；详情/＋新建按钮移除；
                AskAiButton 移除——右键菜单替代（注入会话上下文 + 建立关联）） */}
           <div className="flex items-center gap-2">
@@ -781,7 +781,7 @@ export default function Outline() {
                 ))}
               </span>
             )}
-            {/* 操作区：右端对齐（ml-auto）；回收站 → 当前位置徽标；
+            {/* 操作区：右端对齐（ml-auto）；回收站 → 阅读进度徽标；
                 详情/＋ 就地新建按钮已移除——详情改双击、新建改选中后 Enter；AskAiButton 移除 */}
             <span className="ml-auto flex shrink-0 items-center gap-1">
               <Button
@@ -795,7 +795,7 @@ export default function Outline() {
               />
               {isCurrent && (
                 <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-xs text-accent-foreground">
-                  当前位置
+                  阅读进度
                 </span>
               )}
             </span>
@@ -835,10 +835,10 @@ export default function Outline() {
       return (
         <div key={node.id}>
           {/* 节点块（第一行 + 摘要第二行；整块可拖拽：编辑态/自身拖拽中禁用 draggable，避免文本选择与嵌套拖动）；
-              data-node-id 为跨页定位锚点（U4：InfoBar 点击当前位置 → scrollIntoView 定位）；
+              data-node-id 为跨页定位锚点（U4：InfoBar 点击阅读进度 → scrollIntoView 定位）；
               tabIndex=-1 使行可聚焦（单击选中后按 Enter 触发新建子级 onKeyDown）；
               行级右键菜单（RowContextMenu）——注入会话上下文（focus_node_id）+ 建立关联
-              （outline_node 源端点）+ 设为当前位置（仅章节点行，卡片 1.1）；编辑态不挂右键菜单（行内输入框保留原生文本菜单：复制/粘贴） */}
+              （outline_node 源端点）+ 设为阅读进度（仅章节点行，卡片 1.1）；编辑态不挂右键菜单（行内输入框保留原生文本菜单：复制/粘贴） */}
           {editingTitle || editingSummary ? (
             <div {...rowProps}>{rowChildren}</div>
           ) : (
@@ -853,7 +853,7 @@ export default function Outline() {
                     onClick={() => void handleSetCurrentPosition(node)}
                   >
                     <AimOutlined className="text-sm" />
-                    设为当前位置
+                    设为阅读进度
                   </ContextMenuItem>
                 ) : undefined
               }

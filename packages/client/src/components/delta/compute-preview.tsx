@@ -35,7 +35,7 @@ export function ComputePreview({
   const loadOutline = useProjectStore((s) => s.loadOutline);
 
   const [atNodeId, setAtNodeId] = useState<string>(() => {
-    // 默认取当前位置：须在大纲树中存在（软删后选择无意义，回退为空要求手动选择）
+    // 默认取阅读进度：须在大纲树中存在（软删后选择无意义，回退为空要求手动选择）
     const cp = useProjectStore.getState().config?.currentPosition ?? "";
     const tree = useProjectStore.getState().outline?.children ?? [];
     return cp !== "" && flattenTree(tree).some((o) => o.id === cp) ? cp : "";
@@ -72,7 +72,7 @@ export function ComputePreview({
     } catch (err) {
       setResult(null);
       if (err instanceof ApiError && err.code === "OUTLINE_NODE_NOT_FOUND") {
-        setError("该节点已不存在，请重新选择计算节点");
+        setError("该节点已不存在，请重新选择进度节点");
       } else {
         setError(
           err instanceof ApiError ? err.message : "无法连接服务，请确认 ai-editor 服务已启动",
@@ -96,11 +96,11 @@ export function ComputePreview({
         <p className="text-sm text-muted-foreground">暂无变更记录——实体当前状态即初始状态</p>
       ) : (
         <>
-          {/* 计算节点选择 + [计算] */}
+          {/* 进度节点选择 + [计算] */}
           <div className="flex flex-wrap items-end gap-2">
             <div className="flex flex-col gap-1">
               <span className="text-xs text-muted-foreground">
-                计算节点（到达该节点时的累积状态）
+                进度节点（到达该节点时的累积状态）
               </span>
               {outline === null ? (
                 <div className="flex items-center gap-2">
@@ -114,7 +114,7 @@ export function ComputePreview({
                   className="min-w-56"
                   value={atNodeId}
                   onChange={(value) => setAtNodeId(value)}
-                  aria-label="计算节点"
+                  aria-label="进度节点"
                   options={[
                     { value: "", label: "请选择大纲节点" },
                     ...options.map((o) => ({
@@ -130,7 +130,7 @@ export function ComputePreview({
             </Button>
           </div>
           {config?.currentPosition == null && (
-            <p className="mt-1 text-xs text-muted-foreground">未设置当前位置，请手动选择计算节点</p>
+            <p className="mt-1 text-xs text-muted-foreground">未设置阅读进度，请手动选择进度节点</p>
           )}
 
           {/* 计算失败：行内提示（不阻塞表单操作） */}
@@ -160,7 +160,7 @@ export function ComputePreview({
 }
 
 /** 计算结果展示（三段：conflicts 警示 / 状态差异 / 应用的变更记录）。
- * 导出供人物页「当前位置数据」tab 复用（卡 3.2）——conflicts/skipped 标注照搬，本组件行为不变。 */
+ * 导出供人物页「阅读进度」tab 复用（卡 3.2）——conflicts/skipped 标注照搬，本组件行为不变。 */
 export function ComputeResult({
   result,
   currentData,

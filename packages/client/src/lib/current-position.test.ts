@@ -1,4 +1,4 @@
-// 「设为当前位置」入口判据测试（卡片 1.1：章级收窄——仅章节点可承载写作进度）
+// 「设为阅读进度」入口判据测试（卡片 1.1：章级收窄——仅章节点可承载阅读进度）
 // setCurrentPosition 本身只在调用点触发 store action + toast（无纯逻辑），
 // 服务端契约由 packages/server/src/routes/project.test.ts 覆盖（非章 → 400 VALIDATION_ERROR）。
 import { describe, expect, it } from "vitest";

@@ -241,7 +241,7 @@ function findNodeInTree(node: OutlineNode, id: string): OutlineNode | null {
   return null;
 }
 
-/** 按 id 查找节点标题（顶栏「当前位置」展示用：从本地 outline 树映射 id→title） */
+/** 按 id 查找节点标题（顶栏「阅读进度」展示用：从本地 outline 树映射 id→title） */
 export function findOutlineNodeTitle(tree: OutlineTree | null, id: string | null): string | null {
   if (!tree || !id) return null;
   for (const child of tree.children) {
