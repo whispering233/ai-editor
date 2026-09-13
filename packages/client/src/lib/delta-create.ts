@@ -6,7 +6,11 @@
 // compute 时跳过 + conflicts 标注，机制兜底）、
 // shared ENTITY_DATA_SCHEMAS（字段名编译期断言：client 只消费类型不打包 zod，schema 变更即编译报错防漂移）
 import type { DeltaChange, DeltaOp, EntityType } from "@whispering233/ai-editor-shared";
-import { ENTITY_TYPES } from "@whispering233/ai-editor-shared";
+import {
+  ENTITY_TYPES,
+  abilityPanelFieldPath,
+  panelLeafPaths,
+} from "@whispering233/ai-editor-shared";
 // 类型-only 导入 schema 常量（编译期擦除，不打包 zod；用于断言本地字段清单 = shared schema keys）
 import type { ENTITY_DATA_SCHEMAS } from "@whispering233/ai-editor-shared/schemas";
 import { detailFieldsForType } from "./entity-detail";
@@ -106,7 +110,7 @@ export function isArrayField(scope: string, key: string): boolean {
   return (ARRAY_FIELDS[scope] ?? []).includes(key);
 }
 
-/** 字段是否数字（值提交时解析 Number） */
+/** 字段是否数字（类型清单静态判定；面板叶子另由 `DeltaFieldOption.numeric` 动态覆盖） */
 export function isNumericField(scope: string, key: string): boolean {
   return (NUMERIC_FIELDS[scope] ?? []).includes(key);
 }
@@ -119,6 +123,9 @@ export interface DeltaFieldOption {
   label: string;
  /** 数组字段（op 推断依据） */
   array: boolean;
+ /** 数字字段（值输入解析为 number）；缺省 = 按 `isNumericField` 的类型清单判定。
+ * 面板叶子按**其当前值类型**携带该标记（叶子值域 `string | number`） */
+  numeric?: boolean;
 }
 
 /** 不可变字段（不参与 Delta——`docs/db/schema.md`「人物 data 分层」/`10-data-model.md` §14 不变式 1）：
@@ -129,21 +136,52 @@ const IMMUTABLE_FIELDS: Record<string, readonly string[]> = {
 };
 
 /** 整字段不进下拉的额外排除：`custom_fields`（record 无法用标量值表达）+ `ability_panel`
- *（面板是用户自定义树，**只有已存在的叶子**可被 Delta 改——走点分路径，整树不进下拉；
- * 叶子路径下拉由批次 3 的面板 UI 提供）*/
+ *（面板是用户自定义树，**只有已存在的叶子**可被 Delta 改——整树不进下拉，
+ * 叶子按**点分路径**动态展开，见 `entityDeltaFieldOptions` 的 `panel` 入参）*/
 const NON_DELTA_FIELDS: readonly string[] = ["custom_fields", "ability_panel"];
 
-/** 实体目标字段选项：ENTITY_DATA_KEYS 除去不可变字段、custom_fields 与 ability_panel → label + array 标记 */
-export function entityDeltaFieldOptions(type: string): DeltaFieldOption[] {
+/**
+ * 实体目标字段选项：ENTITY_DATA_KEYS 除去不可变字段、`custom_fields` 与整树 `ability_panel` → label + array 标记。
+ *
+ * `panel` = **当前所选目标实体**的 `data.ability_panel`（raw 可直接传）：面板叶子按
+ * `abilityPanelFieldPath` 展开为额外选项（`key = ability_panel.<点分路径>`，label = 点分路径）——
+ * 只有**已存在的叶子**可被 Delta 改（`docs/design/10-data-model.md` §14 不变式 4）；
+ * 叶子是标量（`array: false`），且按其**当前值类型**标记 `numeric`（值输入解析依据）。
+ */
+export function entityDeltaFieldOptions(type: string, panel?: unknown): DeltaFieldOption[] {
   const keys = (ENTITY_DATA_KEYS as Record<string, readonly string[]>)[type] ?? [];
   const immutable = IMMUTABLE_FIELDS[type] ?? [];
-  return keys
+  const base = keys
     .filter((k) => !NON_DELTA_FIELDS.includes(k) && !immutable.includes(k))
     .map((k) => ({
       key: k,
       label: ENTITY_FIELD_LABELS[type]?.[k] ?? k,
       array: isArrayField(type, k),
     }));
+  if (type !== "character" || panel === undefined) return base;
+  const leaves = panelLeafPaths(panel).map((leaf) => ({
+    key: abilityPanelFieldPath(leaf),
+    label: leaf.path,
+    array: false,
+    numeric: typeof leaf.value === "number",
+  }));
+  return [...base, ...leaves];
+}
+
+/**
+ * 字段的「目标当前值」（op=update 的 from 来源 / op 推断依据）。
+ * 面板叶子路径（`ability_panel.<点分路径>`）→ 从面板里取该叶子的值；其余 → data 顶层字段。
+ */
+export function deltaFieldCurrentValue(
+  type: string,
+  field: string,
+  data: Record<string, unknown> | null | undefined,
+): unknown {
+  if (type === "character" && field.startsWith("ability_panel.")) {
+    const leaf = panelLeafPaths(data?.ability_panel).find((l) => abilityPanelFieldPath(l) === field);
+    return leaf?.value;
+  }
+  return data?.[field];
 }
 
 // ============ op 推断与 changes 构造 ============

@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   DELTA_TARGET_TYPE_OPTIONS,
   buildDeltaChange,
+  deltaFieldCurrentValue,
   entityDeltaFieldOptions,
   inferOpOptions,
   isArrayField,
@@ -57,6 +58,48 @@ describe("entityDeltaFieldOptions（字段名 = shared ENTITY_DATA_SCHEMAS keys�
 
   it("未知类型 → 空数组", () => {
     expect(entityDeltaFieldOptions("unknown_type")).toEqual([]);
+  });
+
+  it("character + 面板：叶子按点分路径展开（前缀 = shared abilityPanelFieldPath；标量；numeric 按当前值类型）", () => {
+    const panel = [
+      { name: "火系", children: [{ name: "等级", value: 3 }, { name: "熟练度" }] },
+    ];
+    const opts = entityDeltaFieldOptions("character", panel);
+    const keys = opts.map((o) => o.key);
+    expect(keys).toContain("ability_panel.火系.等级");
+    expect(keys).toContain("ability_panel.火系.熟练度");
+    const level = opts.find((o) => o.key === "ability_panel.火系.等级");
+    expect(level).toMatchObject({ label: "火系.等级", array: false, numeric: true });
+    // 无值的叶子 → 不标 numeric（默认按文本解析）
+    const proficiency = opts.find((o) => o.key === "ability_panel.火系.熟练度");
+    expect(proficiency).toMatchObject({ array: false, numeric: false });
+    // 整树仍不进下拉（只有叶子）
+    expect(keys).not.toContain("ability_panel");
+  });
+
+  it("面板为空/未传/非 character：不追加叶子选项（既有清单不变）", () => {
+    expect(entityDeltaFieldOptions("character", [])).toHaveLength(
+      entityDeltaFieldOptions("character").length,
+    );
+    expect(entityDeltaFieldOptions("character", undefined)).toHaveLength(
+      entityDeltaFieldOptions("character").length,
+    );
+    expect(entityDeltaFieldOptions("hook", [{ name: "x" }])).toEqual(entityDeltaFieldOptions("hook"));
+  });
+});
+
+describe("deltaFieldCurrentValue（update 的 from 来源）", () => {
+  it("普通字段取 data 顶层；面板叶子按点分路径从面板里取当前值", () => {
+    const data = {
+      age: 18,
+      ability_panel: [{ name: "火系", children: [{ name: "等级", value: 3 }] }],
+    };
+    expect(deltaFieldCurrentValue("character", "age", data)).toBe(18);
+    expect(deltaFieldCurrentValue("character", "ability_panel.火系.等级", data)).toBe(3);
+    // 无值叶子 / 路径未命中 / data 为空 → undefined（update 无旧值可写，表单引导改「设为」）
+    expect(deltaFieldCurrentValue("character", "ability_panel.火系.未知", data)).toBeUndefined();
+    expect(deltaFieldCurrentValue("character", "ability_panel.火系.等级", null)).toBeUndefined();
+    expect(deltaFieldCurrentValue("hook", "status", { status: "planted" })).toBe("planted");
   });
 });
 

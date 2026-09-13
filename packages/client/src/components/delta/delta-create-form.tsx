@@ -21,6 +21,7 @@ import {
 import {
   DELTA_TARGET_TYPE_OPTIONS,
   buildDeltaChange,
+  deltaFieldCurrentValue,
   entityDeltaFieldOptions,
   inferOpOptions,
   isArrayField,
@@ -125,10 +126,13 @@ export function DeltaCreateForm({
 
   // ============ 派生值（字段选项 / 当前值 / op 可用集） ============
 
-  /** 字段下拉项（实体按类型 schema keys——S13.3 起仅实体目标） */
-  const fieldOptions = entityDeltaFieldOptions(targetType);
-  /** 目标当前值（update from 来源：实体详情 data） */
-  const currentValue = targetData?.[field];
+  /** 字段下拉项（实体按类型 schema keys——S13.3 起仅实体目标；面板叶子按目标实体面板动态展开） */
+  const fieldOptions = entityDeltaFieldOptions(targetType, targetData?.ability_panel);
+  /** 目标当前值（update from 来源：实体详情 data / 面板叶子按点分路径取值） */
+  const currentValue = deltaFieldCurrentValue(targetType, field, targetData);
+  /** 值解析是否按数字（面板叶子按 `DeltaFieldOption.numeric` 覆盖静态清单） */
+  const numericField =
+    fieldOptions.find((o) => o.key === field)?.numeric ?? isNumericField(targetType, field);
   /** 当前字段的 op 可用集（数组 add/remove、标量 update/set 或仅 set） */
   const opInfo = inferOpOptions({ array: isArrayField(targetType, field), currentValue });
 
@@ -136,8 +140,10 @@ export function DeltaCreateForm({
   function handleFieldChange(next: string) {
     setField(next);
     setOp(
-      inferOpOptions({ array: isArrayField(targetType, next), currentValue: targetData?.[next] })
-        .default,
+      inferOpOptions({
+        array: isArrayField(targetType, next),
+        currentValue: deltaFieldCurrentValue(targetType, next, targetData),
+      }).default,
     );
   }
 
@@ -162,7 +168,7 @@ export function DeltaCreateForm({
       field,
       op,
       rawValue: value,
-      numeric: isNumericField(targetType, field),
+      numeric: numericField,
       currentValue,
     });
     if ("error" in built) {

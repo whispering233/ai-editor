@@ -135,11 +135,50 @@ describe("CharacterDetailView（字段三分：两分区与归属）", () => {
     expect(mutable).not.toContain("已废弃的旧能力标签");
   });
 
-  it("能力面板宿主区块在可变数据区（叶子路径 + 值；能力面板标题）", () => {
+  it("能力面板控件在可变数据区（树行：分组 + 叶子值输入 + 工具条）", () => {
     const html = render("initial");
     expect(html).toContain("能力面板");
-    expect(html).toContain("火系.等级");
-    expect(html).toContain(">3<");
+    // 分支行与叶子行分别渲染（不再是只读的点分路径文本）
+    expect(html).toContain(">火系</button>");
+    expect(html).toContain(">等级</button>");
+    expect(html).toContain('value="3"'); // 叶子值
+    // 工具条：新增分组 / 应用模板 / 从角色复制（卡片 3.4 的模板与派生入口）
+    expect(html).toContain("+ 新增分组");
+    expect(html).toContain("应用模板");
+    expect(html).toContain("从角色复制");
+    // 可编辑态：行可拖拽（结构编辑 = 人工编辑，不产生 Delta）
+    expect(html).toContain('draggable="true"');
+  });
+
+  it("名字含「.」/同层重名 → 行内警告（不静默改写数据）", () => {
+    const html = renderToString(
+      <CharacterDetailView
+        detail={{ ...DETAIL, data: { ...DETAIL.data, ability_panel: undefined } }}
+        name={DETAIL.name}
+        onNameChange={() => {}}
+        form={{
+          ...FORM,
+          ability_panel: [{ name: "火.系" }, { name: "同名" }, { name: "同名" }],
+        }}
+        onFieldChange={() => {}}
+        tab="initial"
+        onTabChange={() => {}}
+        basicsErrors={NO_ERRORS}
+        saving={false}
+        saveError={null}
+        onSave={() => {}}
+        onDelete={() => {}}
+        onReload={() => {}}
+        currentPosition={null}
+        positionState="unset"
+        outlineNodes={NODES}
+        outlineLoaded
+        outlineLoading={false}
+        onLoadOutline={() => {}}
+      />,
+    );
+    expect(html).toContain("名字含「.」：变更记录无法定位该节点");
+    expect(html).toContain("同层重名：变更记录只命中先序第一个");
   });
 
   it("无面板数据 → 一行空态说明", () => {
@@ -207,6 +246,15 @@ describe("CharacterDetailView（tab 2 只读）", () => {
     expect(countDisabled(html)).toBeGreaterThan(0);
     // 计算节点选择器保留（可手选任意节点）
     expect(html).toContain("计算节点");
+  });
+
+  it("tab 2：面板树只读（行不可拖拽 + 工具条/值输入禁用，不隐藏）", () => {
+    const html = render("current", { currentPosition: "ch-1" });
+    const panel = html.slice(html.indexOf("能力面板"));
+    expect(panel).not.toContain('draggable="true"'); // 禁拖拽
+    expect(panel).toContain("+ 新增分组"); // 工具条仍在（位置稳定），但被禁用
+    expect(panel).toContain('disabled=""');
+    expect(panel).toContain(">等级</button>"); // 字段行位置不变
   });
 
   it("未设置当前位置（已确认）→ 提示 + 「去大纲设位置」入口（#/outline）", () => {

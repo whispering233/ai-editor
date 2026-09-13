@@ -19,13 +19,14 @@
 //   DELETE（软删 + 级联计数 → 跳 `#/characters`）、POST /delta/compute（tab 2 自动计算）、POST/DELETE /relation。
 import { useEffect, useMemo, useRef, useState } from "react";
 import { HolderOutlined } from "@ant-design/icons";
-import { formatTimestamp, panelLeafPaths } from "@whispering233/ai-editor-shared";
+import { formatTimestamp } from "@whispering233/ai-editor-shared";
 import type { ComputeStateResult } from "@whispering233/ai-editor-shared";
 import { Button, Input, Select, Tabs } from "antd";
 import type { InputRef } from "antd";
 import { ComputeResult } from "../delta/compute-preview";
 import { CreateRelationDialog } from "../entity/create-relation-dialog";
 import { ConfirmDialog } from "../outline/dialogs";
+import { PanelTree } from "./panel-tree";
 import { EmptyState } from "../ui/empty-state";
 import { PageHeader } from "../ui/page-header";
 import { SectionCard } from "../ui/section-card";
@@ -310,7 +311,8 @@ function FieldControl({
 
 /**
  * 人物字段表单（两个 tab 共用同一字段集与控件形态——只读态靠 `disabled` 而非换渲染，字段位置才稳定）。
- * 字段集 = `detailFieldsForType("character")`（三分分区属卡 3.3；能力面板 `panel-tree` 属卡 3.4）。
+ * 字段集 = `detailFieldsForType("character")`（三分分区属卡 3.3）；能力面板 = `panel-tree` 控件（卡 3.4，
+ * 结构编辑为人工编辑、不产生 Delta——见 `docs/design/10-data-model.md` §14 不变式 4）。
  */
 export function CharacterFieldsForm({
   fields,
@@ -355,34 +357,6 @@ export function CharacterFieldsForm({
 }
 
 /**
- * 能力面板宿主区块（卡片 3.3 预留挂载位；结构编辑控件属卡片 3.4）。
- * 本卡只做只读呈现（叶子点分路径 + 值）——面板是可变数据，两个 tab 都会显示，
- * tab 2 展示的是 `computeState` 累积后的叶子值（叶子路径口径见 shared `abilityPanelFieldPath`）。
- */
-function CharacterPanelHost({ panel }: { panel: unknown }) {
-  const leaves = panelLeafPaths(panel);
-  return (
-    <section className="mt-4 border-t border-border pt-3">
-      <p className="mb-1 text-sm font-medium text-foreground">能力面板</p>
-      {leaves.length === 0 ? (
-        <p className="text-xs text-muted-foreground">暂无面板字段</p>
-      ) : (
-        <ul className="flex flex-col gap-1">
-          {leaves.map((leaf) => (
-            <li key={leaf.path} className="flex items-baseline gap-2 text-sm">
-              <span className="shrink-0 text-muted-foreground">{leaf.path}</span>
-              <span className="min-w-0 flex-1 truncate text-foreground">
-                {readOnlyFieldValue(leaf.value)}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-}
-
-/**
  * 人物字段两分区（**两个 tab 共用同一分区结构**——只读态靠 `disabled` 而非另一套渲染，字段位置才稳定）：
  * 「基础信息」（姓名 / 角色定位 / 描述，不可变）+「可变数据」（假名 / 性别 / 年龄 / 种族 / 动机 / 性格
  * + 能力面板宿主 + 已有 `custom_fields`）。
@@ -395,6 +369,7 @@ function CharacterSections({
   disabled,
   basicsErrors,
   showCustomFields,
+  selfId,
 }: {
  /** 姓名（`entities.name` 列，不是 data 字段；不可变但人工可编辑） */
   name: string;
@@ -406,6 +381,8 @@ function CharacterSections({
   basicsErrors?: CharacterBasicsErrors;
  /** `custom_fields` 仅在响应 data 已有该键时显示（MVP 边界：无键不可新增，同泛型详情页） */
   showCustomFields: boolean;
+  /** 本角色 id（面板「从角色复制」候选里排除自己） */
+  selfId?: string;
 }) {
   const [basics, mutable] = characterFieldGroups();
   // 「描述为空」提示：仅**可编辑态**且值为空时给（tab 2 只读不保存，提示无意义）
@@ -444,7 +421,12 @@ function CharacterSections({
           onChange={onFieldChange}
           disabled={disabled}
         />
-        <CharacterPanelHost panel={values.ability_panel} />
+        <PanelTree
+          panel={values.ability_panel}
+          onChange={(next) => onFieldChange("ability_panel", next)}
+          disabled={disabled}
+          selfId={selfId}
+        />
         {showCustomFields && (
           <div className="mt-4 border-t border-border pt-3">
             <p className="mb-1 text-sm font-medium text-foreground">自定义字段</p>
@@ -656,6 +638,7 @@ function CharacterCurrentTab({
         onFieldChange={() => {}}
         disabled
         showCustomFields={"custom_fields" in detail.data}
+        selfId={detail.id}
       />
 
       {/* 计算明细（conflicts 警示 / 状态差异 / 应用的变更记录——与 ComputePreview 同实现） */}
@@ -857,6 +840,7 @@ export function CharacterDetailView({
                   onFieldChange={onFieldChange}
                   basicsErrors={basicsErrors}
                   showCustomFields={"custom_fields" in detail.data}
+                  selfId={detail.id}
                 />
                 {saveError !== null && <p className="text-sm text-destructive">{saveError}</p>}
               </div>
