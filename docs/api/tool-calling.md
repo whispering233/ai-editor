@@ -48,7 +48,7 @@ search_entities(type, query, filters?)
 query_relationships(opts: {
   source_type?: string, source_id?: string,
   target_type?: string, target_id?: string,
-  relation_type?: string,
+  relation_type?: string,   // 仅预定义 17 类（enum；自定义类型 AI 读到不拦，但不能作为过滤值）
   depth: 1 | 2 | 3  // 1=紧邻, 2=k跳, 3=全量
 })
   → 关系图子图 [{ source, target, type, metadata }]
@@ -163,6 +163,7 @@ propose_delete_entity(entity_id)
   → { proposal_id, cascade_warning }
 
 propose_add_relation(source, target, type, metadata?)
+  注：type **仅预定义 17 类**（工具 schema = enum，2026-09）——自定义关系类型由作者在 UI 建立，AI 只能看到、不能创建（有意分层；语法与存储口径见 [40-api-relation.md](./40-api-relation.md)）
 propose_remove_relation(relation_id)
   → 同上，展示 diff
 

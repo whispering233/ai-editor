@@ -153,6 +153,13 @@ CREATE INDEX idx_relation_type   ON relation_records(relation_type) WHERE delete
 | `depends_on` | 伏笔依赖 | hook→hook |
 | `involves` | 涉及 | hook→实体 |
 
+> **对称关系（2026-09）**：`ally` / `rival` / `family` 语义对等——展示层合并为一行 + 「双向」徽标（不自动建反边）、AI 冲突检测把「单向存在」报为数据缺口；两者共用同一属性（shared `RELATION_TYPE_META[*].symmetric`）。其余类型（含 `mentor`）有向，**自定义类型一律有向**。
+
+**关系类型 = 预定义词表 ∪ 自定义**：`relation_type` 无 CHECK（裸 `TEXT`），写入白名单严格性只在写入路径（REST schema / db 守卫 / AI 工具 schema），**新增或自定义类型不需要迁移**。
+
+- 预定义 17 类 = 推荐词表（AI 契约与 UI 分组依据）；其属性（label / group / symmetric）**单一来源 = shared `RELATION_TYPE_META`**（`Record<RelationType, …>`，加类型即编译报错直到补属性），消费方（client 标签与子集、tools 冲突检测）一律派生，禁止手抄。
+- 自定义类型（2026-09）：`trim` 后非空、长度 ≤ 32、禁控制字符；**无中心记录**（类型只活在 `relation_records.relation_type` 里，下拉从「预定义 ∪ 本项目已用类型」派生）⇒ 无改名/合并入口（见 `../design/backlog.md`）。视觉/字段名区分：自定义类型显示原文（`relationTypeLabel` 回退），不参与伏笔锚点、`belongs_to` 防环等预定义专属校验。
+
 ## delta_records — 属性变更表
 
 ```sql

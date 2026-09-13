@@ -55,7 +55,7 @@
   source_id: string;
   target_type: string;
   target_id: string;
-  relation_type: string;     // 参见 ../db/schema.md 预定义关系类型（含 occurs_in 事件锚定）
+  relation_type: string;     // 预定义 17 类 ∪ 自定义类型（语法见下方说明）
   metadata?: Record<string, unknown>;
 }
 
@@ -77,6 +77,7 @@
 
 > **层级校验（2026-08）**：`relation_type=belongs_to` 且两端均为 `setting` 时（设定层级：子设定 → 父设定）——禁自指（target ≠ source）、**防环**（新父的祖先链不得含该子设定，沿 belongs_to 边向上遍历，db 层全量边邻接表构建）——违规 → 400 `VALIDATION_ERROR` + 中文信息。其余 belongs_to（如人物→设定）与其它关系类型不受影响。
 > **伏笔锚点仅章（2026-09）**：`relation_type ∈ {plants, advances, resolves}` 且 `source_type=outline_node` 时，源节点必须为 `chapter`——卷/场景 → 400 `VALIDATION_ERROR`（伏笔是章级叙事事件，与 Delta 锚点同口径；AI 提案通道 `propose_add_relation` 在 tools 层同步拒绝）。
+> **关系类型自由化（2026-09）**：`relation_type` 为**自由字符串**（不再枚举校验）= 预定义 17 类 ∪ 自定义类型；语法 = `trim` 后非空、长度 ≤ 32、禁控制字符——违规 → 400 `VALIDATION_ERROR`（校验单一来源 = shared 纯函数，db `createRelation` 守卫同口径）。预定义专属校验（伏笔仅章 / `belongs_to` 防环 / `occurs_at` 挂载）按类型名判断，**自定义类型天然不触发**。属性（展示名 / 分组 / 对称）见 `../db/schema.md` 预定义关系类型表；**AI 提案通道仍限预定义 17 类**（见 [tool-calling.md](./tool-calling.md)）。
 > **父子查询约定**：查「X 的父」= `GET /relation?target_type=setting&target_id=X&relation_type=belongs_to&depth=1`（来源端）；查「X 的子」= `GET /relation?source_type=setting&source_id=X&relation_type=belongs_to&depth=1`（目标端）。
 
 ### PUT /api/v1/relation/:id

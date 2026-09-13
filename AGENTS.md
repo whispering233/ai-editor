@@ -42,7 +42,8 @@
 - **`computeState` = 章序前缀累积**（不是树父链）：状态 = 初始 `data` + 「章序 ≤ 目标进度章」的全部已确认 Delta；目标节点→进度章：章→自身、场景→所属章、卷→该卷最后一个未软删章。章序 = **文件位置序（含软删章，编号不重排）**，「当前章」退化必须取**最后一个未软删章**。
 - **character 数据分层**（`docs/db/schema.md`「人物 data 分层」）：不可变（`role`/`description`）**不参与 Delta**；可变字段 + 能力面板**叶子**走点分路径（`ability_panel.火系.等级`，仅标量 `set`/`update`）。字段白名单的**单一定义 = `shared/src/constants/delta.ts`**（`SET_ONLY_FIELDS` / `REMOVED_CHARACTER_FIELDS` / `IMMUTABLE_FIELDS`），client/tools **禁止手抄**。
 - **人物页是工作台**（`#/characters` master-detail，无独立列表页）：右栏 = `components/character/character-detail.tsx`（**四 tab**：人物档案可编辑 / 阅读进度只读 / 人物关系网 / 其他关联 · N——关系两块是**平级 tab**，不在字段 tab 之下；字段区 = 一个 card 内的**档案式网格**，「基础信息 / 可变数据」分区已删，阅读进度值画纯文本）；泛型 `EntityList`/`EntityDetail` 只服务 setting/location（**已冻结，不再承载新能力**）。新增 antd 组件/样式前先扩 `DESIGN.md` 与 token 守卫。
+- **关系类型属性单一来源** = shared `RELATION_TYPE_META`（`Record<RelationType, { label, group, symmetric }>`，group ∈ character/structure/anchor/hook/mount/canvas）：client 标签、人物页人↔人子集、对话框排除集、tools 冲突检测的对称口径**一律派生**，禁止再手抄清单。自定义类型语法校验（`trim` 非空 / ≤32 / 禁控制字符）的单一来源 = shared 纯函数（REST schema、db `createRelation` 守卫、client 预校验共用）；AI 工具 `relation_type` 仍是预定义 `z.enum`（有意分层）。
 - **db 打开只有一条管道** = `packages/server/src/middleware/project.ts` 的 `openProjectDatabase`（开机 `detectProject` 与 `POST /project/open` 共用）：迁移前快照、未来版本拒绝（不重建）、无迁移路径才重建兜底；**缺 `data.db` 的「全新空库」直接写 `SCHEMA_VERSION`**（不重置 `outline.json`）。
 - **变异/探针验证**：禁止用硬链接副本 + 就地截断写（会写穿 inode 污染源仓库，真实发生过）；只能 `cp -r` 真副本或 `git worktree`，恢复后必须复跑全量回归（见 `build.md`）。
-- 测试：各包 `test` script = `vitest run`；各包 tsconfig 已 `exclude: ["src/**/*.test.ts"]`，不要改回。
+- 测试：各包 `test` script = `vitest run`；各包 tsconfig 已 `exclude: ["src/**/*.test.ts"]`，不要改回——**测试文件不进 `pnpm typecheck`**，编译期断言（`satisfies` / 穷尽性检查）必须写在 src 模块里。
 - 延期项：多标签页并发、undo、token 统计、跨书参考资料导入（MVP 不做，勿顺手实现）；其余遗留项与有意口径见 `docs/design/backlog.md`。
