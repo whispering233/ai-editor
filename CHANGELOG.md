@@ -15,6 +15,10 @@
 
 ### Changed
 
+- **配色改造（视觉变更）**：⑧ **用户标签 tint 换 5 档**（`#93c5fd` sky / `#dbeafe` ice / `#6fb98f` mint / `#d1e2c4` sage / `#ffd800` yellow，取代原 6 档马卡龙）；⑤ **类型/分类徽标改固定橙底** `#ef8354` + **恒定墨字** `#37352f`（两态不随主题翻转；`text-foreground` 在深色态会翻成 81% 白，压橙底仅 2.61:1，而恒定墨字 4.70:1）；③ **人物页左栏「角色定位」改橙字**（浅色 `#b4551f` 4.93:1 / 深色 `#ef8354` 6.24:1——原橙作文字压白底只有 2.61:1，12px 小字不可用）。
+  - **深色模式已验算**：tint 五色均为浅色调，沿用「同色相 20% 不透明度叠深色面板 + 81% 白字」后对比度 5.90–7.13 全部达标（零新增深色值）；徽标橙两态恒定（浏览器实测：深色态底 `rgb(239,131,84)` + 字 `rgb(55,53,47)`）。
+  - **注意**：tint 由 6 档改 5 档 ⇒ `hash % 5`，**所有既有标签会重排换色**（同名仍恒同色）。
+  - **已知代价**：徽标橙与语义色 `warning`（`#dd5b00`）同色相，橙在「类型」与「警告」两个位置均出现；拆分的依据是位置与形态（已登记）。
 - **标签 tint 准入收口（视觉变更）**：tint 六色底**只给用户标签 chip**（`data.tags` 元素：设定/事件/参考资料标签）；**枚举类型/分类不再上色**——卷/章/场（大纲列表、就地新建行、大纲详情元信息行）、实体类型与节点类型（回收站）、关联端点类型（源/目标列）与关系类型、伏笔 `category` 全部改走中性徽标（`{colors.surface-muted}` 底 + `{colors.tertiary}` 字）。改因：着色实现是「文案 hash 取模 6」且无准入规则，同一类「类型」在不同页面各行其是（人物页 `role` 无色、阅读进度有色与否看页面），6 档 hash 本身撞色（实测「设定/场/参考资料」同色、「事件/时间点」同色）⇒ 彩色不承载语义，反而让「彩色 = 这是标签」的信号失效。**准入规则的代码形式 = 两个组件名**：`TagChip`（tint，用户标签）/ `TypeChip`（中性，类型徽标）。
 - **中性徽标可读性**：`TypeChip` 字色由 `{colors.tertiary}` 提到 `{colors.primary}`——底 `{colors.surface-muted}` 与白画布只有 1.16:1（与 tint peach 的 1.18 同量级；tint 靠色相辨识、中性底无色相），tertiary 字在灰底上仅 3.92:1（实测「灰底淡斑、看不出是徽标」），primary 为 10.59:1。此后 `tag` / `type-badge` 两形态**只差底色有无色相**。
 - 同语义的既有灰 chip 一并统一到 `TypeChip`：伏笔列表行 `category`（原 tint）+ 伏笔详情 `category` + 人物页关系类型 / 「双向」徽标 + 实体详情页（设定/地点/时间点等）「其他关联」的关系类型（原内联灰 span，底色由未 seed 的 `colorFillAlter`（浅色 2% 黑，≈`#fafafa`）改为已登记的 `surface-muted` `#f0eeec`）。
@@ -27,6 +31,7 @@
 
 ### Docs
 
+- `docs/ui/DESIGN.md`：登记 tint 五色新值 + 色相分布事实（sky/ice 同色相只差明度）；新增 `type-badge-bg` / `type-badge-ink`（两态恒定）与 `Character Role` 两态值 + 对比度实测；`type-badge` 规格由「中性底」改写为「固定橙底 + 恒定墨字」并记录为什么不能用 `{colors.primary}`；`character-rail` 行描述同步。
 - `docs/ui/DESIGN.md`：`tag` / `type-badge` 拆为两个组件规格（原 `tag` 即中性规格，字色由 `{colors.secondary}` 改为与 tint 同档的 `{colors.primary}`）并登记**准入规则**（tint 只给 `data.tags`）；§Colors「标签色」重写适用范围（枚举不上色，并记录现状不一致与撞色事实）；`status-badge` 去掉「或 tint 底色」授权（状态属枚举，不用 tint）；Do's 增「不给枚举类型上彩色」。
 - `docs/ui/DESIGN.md`：新增 `relations-view` 列对齐口径；`data-row` 登记「行尾状态徽标排在操作按钮左侧」；`character-workbench` 进度节点选择器登记搜索口径；删 `relation-star-graph` 整段并同步 `character-relations` 段。
 - `docs/design/backlog.md`：删「星形图叶子 `· N` = 列表行数」登记项（星形图已不存在）。
