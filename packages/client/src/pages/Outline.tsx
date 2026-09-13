@@ -680,7 +680,7 @@ export default function Outline() {
   }
 
   /** 整树渲染（内部递归函数，闭包共享页面 state；S13.1 两行结构：
-   * 第一行 = 折叠箭头 | 类型徽标（w-7 固定宽，第二行占位精确对齐）| 标题 | 伏笔标记 | 右端操作区（问AI/回收站）| 阅读进度徽标；
+   * 第一行 = 折叠箭头 | 类型徽标（w-7 固定宽，第二行占位精确对齐）| 标题 | 伏笔标记 | 右端操作区（阅读进度徽标在前、删除按钮贴尾）；
    * 第二行 = 摘要（缩进对齐标题下方，默认显示、空不渲染、点击就地编辑）；
    * 拖拽：整节点块可拖，目标行上半/下半 → 插入指示线（accent 2px 绝对定位层，pointer-events-none 不拦截事件）；
    * 行可聚焦（tabIndex=-1）承载选中/Enter/双击；单击行选中、双击行跳详情、选中后 Enter 新建子级 */
@@ -722,7 +722,7 @@ export default function Outline() {
       // 行内容（第一行 + 摘要第二行 + 插入指示线）
       const rowChildren = (
         <>
-          {/* 第一行：折叠箭头 | 类型徽标 | 标题 | 伏笔标记 | 右端操作区（回收站）| 阅读进度徽标
+          {/* 第一行：折叠箭头 | 类型徽标 | 标题 | 伏笔标记 | 右端操作区（阅读进度徽标 + 删除按钮，删除贴行尾）
               （O2 起：操作区 ml-auto 右端对齐，时间戳显示已移除；详情/＋新建按钮移除；
                AskAiButton 移除——右键菜单替代（注入会话上下文 + 建立关联）） */}
           <div className="flex items-center gap-2">
@@ -781,9 +781,15 @@ export default function Outline() {
                 ))}
               </span>
             )}
-            {/* 操作区：右端对齐（ml-auto）；回收站 → 阅读进度徽标；
-                详情/＋ 就地新建按钮已移除——详情改双击、新建改选中后 Enter；AskAiButton 移除 */}
+            {/* 操作区：右端对齐（ml-auto）；状态徽标 → 行尾操作按钮；
+                详情/＋ 就地新建按钮已移除——详情改双击、新建改选中后 Enter；AskAiButton 移除。
+                徽标排在删除按钮**左侧**：删除按钮恒贴行尾（徽标出现不得把它往左推——跨行操作列才能对齐） */}
             <span className="ml-auto flex shrink-0 items-center gap-1">
+              {isCurrent && (
+                <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-xs text-accent-foreground">
+                  阅读进度
+                </span>
+              )}
               <Button
                 color="default"
                 variant="text"
@@ -793,11 +799,6 @@ export default function Outline() {
                 onClick={() => void handleDelete(node)}
                 icon={<DeleteOutlined className="text-sm" />}
               />
-              {isCurrent && (
-                <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-xs text-accent-foreground">
-                  阅读进度
-                </span>
-              )}
             </span>
           </div>
           {/* 第二行：摘要（缩进对齐标题下方——w-4/w-7 占位与第一行同列；默认显示、空不渲染；点击就地编辑） */}
