@@ -7,6 +7,8 @@
 // 分区/去重/排序口径全在 `lib/character-relations.ts`（纯函数，单测覆盖）；本文件只管渲染与副作用。
 // 位置：两个数据集与两个字段 tab **平级**（关系不参与 `computeState`，与状态视图正交——见 `10-data-model.md` §14 分层表）。
 // 只读语义：关系区的建/删与字段视图无关（各 tab 独立），不随阅读进度视图只读——它不是状态计算的一部分。
+// 卡 8.4：关系网 pane 在操作行与分组列表之间插一张星形图（纯展示，见 `relation-star-graph.tsx` / DESIGN.md
+//   §数据展示 `relation-star-graph`）——图 = 索引、列表 = 明细，同一数据集，不加 tab/路由/请求。
 import { useMemo, useState } from "react";
 import { DeleteOutlined } from "@ant-design/icons";
 import { Button } from "antd";
@@ -26,6 +28,7 @@ import { relationTypeLabel } from "../../lib/entity-detail";
 import { CreateRelationDialog } from "../entity/create-relation-dialog";
 import { ConfirmDialog } from "../outline/dialogs";
 import { SectionCard } from "../ui/section-card";
+import { RelationStarGraph } from "./relation-star-graph";
 import { useUiStore } from "../../stores/ui";
 
 /** 关系区的两个 pane（= 两个 tab 内容：人↔人关系网 / 其他关联） */
@@ -108,6 +111,8 @@ export interface CharacterRelationsViewProps {
   pane: CharacterRelationsPane;
   /** 关系网（按类型分组，已去重） */
   groups: CharacterRelationGroup[];
+  /** 本角色名（星形图中心点标签） */
+  selfName: string;
   /** 其他关联行（未分组、未去重） */
   otherRows: CharacterRelationRow[];
   onAddCharacterRelation: () => void;
@@ -123,6 +128,7 @@ export interface CharacterRelationsViewProps {
 export function CharacterRelationsView({
   pane,
   groups,
+  selfName,
   otherRows,
   onAddCharacterRelation,
   onAddOtherRelation,
@@ -134,6 +140,8 @@ export function CharacterRelationsView({
         <div className="mb-1 flex justify-end">
           <Button onClick={onAddCharacterRelation}>+ 添加人物关系</Button>
         </div>
+        {/* 星形图：操作行与分组列表之间，仅在达阈值时自渲染（`relation-star-graph`） */}
+        <RelationStarGraph rows={groups.flatMap((group) => group.rows)} selfName={selfName} />
         {groups.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground/70">
             还没有人物关系，添加一条
@@ -225,6 +233,7 @@ export function CharacterRelations({
       <CharacterRelationsView
         pane={pane}
         groups={groups}
+        selfName={detail.name}
         otherRows={otherRows}
         onAddCharacterRelation={() => setNetworkDialogOpen(true)}
         onAddOtherRelation={() => setOtherDialogOpen(true)}
