@@ -59,26 +59,41 @@ export type RelationSource =
 
 export function CreateRelationDialog({
   source,
+  lockTargetType,
+  relationTypes,
   onCreated,
   onClose,
 }: {
   source: RelationSource | null;
+  /**
+   * 目标端类型锁定（人物关系网「+ 添加人物关系」：人↔人语义）——锁定后不渲染目标类型下拉，
+   * 改为只读卡片（同源端样式）；省略 = 现行自由选择（其他关联区/列表模式不受影响）。
+   */
+  lockTargetType?: EntityType;
+  /**
+   * 关系类型下拉覆盖（省略 = `dialogRelationTypeOptions(source)` 基集）；
+   * 人物关系网传人↔人 5 类（`lib/character-relations.ts`）——**入口收窄**，其他关系类型走「其他关联」入口。
+   * 调用方保证传入值非空（空数组会让默认值 undefined）；本组件不做静态校验。
+   */
+  relationTypes?: readonly string[];
   onCreated: () => void | Promise<void>;
   onClose: () => void;
 }) {
   const outline = useProjectStore((s) => s.outline);
+  // 关系类型选项（本组件内只读：挂载后不变，对话框开/关即重挂）
+  const typeOptions = relationTypes ?? dialogRelationTypeOptions(source);
   // 列表模式源端（详情模式不用）
   const [sourceType, setSourceType] = useState<EntityType>("character");
   const [sourceEntities, setSourceEntities] = useState<EntitySummary[] | null>(null);
   const [sourceId, setSourceId] = useState("");
-  // 目标端（两模式共用；"outline_node" = 大纲节点，relation_records 端点类型）
-  const [otherType, setOtherType] = useState<EntityType | "outline_node">("character");
+  // 目标端（两模式共用；"outline_node" = 大纲节点，relation_records 端点类型；锁定类型优先）
+  const [otherType, setOtherType] = useState<EntityType | "outline_node">(
+    lockTargetType ?? "character",
+  );
   const [otherEntities, setOtherEntities] = useState<EntitySummary[] | null>(null);
   const [otherId, setOtherId] = useState("");
   // 默认关系类型 = 当前源端可选集的首项（保证默认值 ⊆ 选项集，源端过滤后仍成立）
-  const [relationType, setRelationType] = useState<string>(
-    () => dialogRelationTypeOptions(source)[0],
-  );
+  const [relationType, setRelationType] = useState<string>(() => typeOptions[0]);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -188,10 +203,7 @@ export function CreateRelationDialog({
                 className="w-full"
                 value={relationType}
                 onChange={(value) => setRelationType(value)}
-                options={dialogRelationTypeOptions(source).map((t) => ({
-                  value: t,
-                  label: relationTypeLabel(t),
-                }))}
+                options={typeOptions.map((t) => ({ value: t, label: relationTypeLabel(t) }))}
               />
               <span
                 aria-hidden="true"
@@ -203,18 +215,25 @@ export function CreateRelationDialog({
             {/* 右列：目标实体（大纲节点用 outline store 树） */}
             <div className="flex flex-col gap-2">
               <p className="text-sm font-medium text-foreground">目标实体</p>
-              <Select
-                className="w-full"
-                value={otherType}
-                onChange={(value) => setOtherType(value as EntityType | "outline_node")}
-                options={[
-                  { value: "character", label: "人物" },
-                  { value: "setting", label: "设定" },
-                  { value: "location", label: "地点" },
-                  { value: "hook", label: "伏笔" },
-                  { value: "outline_node", label: "大纲节点" },
-                ]}
-              />
+              {lockTargetType === undefined ? (
+                <Select
+                  className="w-full"
+                  value={otherType}
+                  onChange={(value) => setOtherType(value as EntityType | "outline_node")}
+                  options={[
+                    { value: "character", label: "人物" },
+                    { value: "setting", label: "设定" },
+                    { value: "location", label: "地点" },
+                    { value: "hook", label: "伏笔" },
+                    { value: "outline_node", label: "大纲节点" },
+                  ]}
+                />
+              ) : (
+                /* 类型锁定态：只读卡片（同源端样式）——人物关系网仅人↔人 */
+                <div className="min-w-0 truncate rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground">
+                  {TYPE_LABEL[lockTargetType]}
+                </div>
+              )}
               {otherType === "outline_node" ? (
                 <Select
                   className="w-full"

@@ -24,9 +24,8 @@ import type { ComputeStateResult } from "@whispering233/ai-editor-shared";
 import { Button, Input, Select, Tabs } from "antd";
 import type { InputRef } from "antd";
 import { ComputeResult } from "../delta/compute-preview";
-import { CreateRelationDialog } from "../entity/create-relation-dialog";
-import { ConfirmDialog } from "../outline/dialogs";
 import { PanelTree } from "./panel-tree";
+import { CharacterRelations } from "./character-relations";
 import { EmptyState } from "../ui/empty-state";
 import { PageHeader } from "../ui/page-header";
 import { SectionCard } from "../ui/section-card";
@@ -37,11 +36,9 @@ import {
   CLIENT_NETWORK_ERROR,
   computeDeltaState,
   deleteEntity,
-  deleteRelation,
   getEntityDetail,
   updateEntity,
   type EntityDetailRes,
-  type RelationSummaryItem,
 } from "../../lib/api";
 import {
   characterFieldGroups,
@@ -57,7 +54,7 @@ import {
   type CharacterPositionState,
   type CharacterViewTab,
 } from "../../lib/character-detail";
-import { diffData, relationTypeLabel, type DetailFieldConfig } from "../../lib/entity-detail";
+import { diffData, type DetailFieldConfig } from "../../lib/entity-detail";
 import { entityListPath } from "../../lib/entity-paths";
 import { flattenTree, type FlatNodeOption } from "../../lib/outline-tree";
 import { useSaveShortcut } from "../../lib/save-shortcut";
@@ -73,21 +70,6 @@ const LIST_ROUTE = entityListPath("character");
 /** 字段值 → 表单字符串（undefined/null → 空串；与 `EntityDetail` 同语义） */
 function fieldValue(raw: unknown): string {
   return raw === undefined || raw === null ? "" : String(raw);
-}
-
-/** 关系行端点名称（本实体端用本实体名，另一端优先联表名称，缺省 id） */
-function relationEndpointName(
-  relation: RelationSummaryItem,
-  side: "source" | "target",
-  selfName: string,
-  selfId: string,
-): string {
-  const isSelf = (side === "source" ? relation.sourceId : relation.targetId) === selfId;
-  if (isSelf) return selfName;
-  return (
-    (side === "source" ? relation.sourceName : relation.targetName) ??
-    (side === "source" ? relation.sourceId : relation.targetId)
-  );
 }
 
 /**
@@ -644,88 +626,6 @@ function CharacterCurrentTab({
       {/* 计算明细（conflicts 警示 / 状态差异 / 应用的变更记录——与 ComputePreview 同实现） */}
       {!computing && result !== null && (
         <ComputeResult result={result} currentData={detail.data} nodeTitles={nodeTitles} />
-      )}
-    </div>
-  );
-}
-
-/**
- * 关系区块（1 跳双向；本卡保持既有能力：列表 + 新建关联 + 物理删）。
- * 卡 3.6 将替换为「人物关系网（人↔人，按关系类型分组）+ 其他关联（折叠区）」。
- */
-function CharacterRelations({
-  detail,
-  onChanged,
-}: {
-  detail: EntityDetailRes;
-  onChanged: () => void;
-}) {
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<RelationSummaryItem | null>(null);
-
-  async function handleDelete() {
-    if (!deleteTarget) return;
-    try {
-      await deleteRelation(deleteTarget.id);
-      useUiStore.getState().showToast("已删除关系");
-      setDeleteTarget(null);
-      onChanged();
-    } catch (err) {
-      throw err; // 冒泡给 ConfirmDialog 内联显示
-    }
-  }
-
-  return (
-    <div className="mt-4 rounded-md border border-border p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-foreground">关联</h2>
-        <Button onClick={() => setDialogOpen(true)}>+ 新增关联</Button>
-      </div>
-
-      {detail.relations.length === 0 ? (
-        <p className="py-6 text-center text-sm text-muted-foreground/70">暂无关联，新增一个</p>
-      ) : (
-        <ul className="divide-y divide-border/50">
-          {detail.relations.map((r) => {
-            const isSource = r.sourceId === detail.id;
-            const left = relationEndpointName(r, "source", detail.name, detail.id);
-            const right = relationEndpointName(r, "target", detail.name, detail.id);
-            return (
-              <li key={r.id} className="flex items-center gap-2 py-2 text-sm">
-                <span className="max-w-28 min-w-0 truncate text-foreground">{left}</span>
-                <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-                  {relationTypeLabel(r.relationType)} {isSource ? "→" : "←"}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-foreground">{right}</span>
-                <Button danger size="small" className="shrink-0" onClick={() => setDeleteTarget(r)}>
-                  删除
-                </Button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
-      {dialogOpen && (
-        <CreateRelationDialog
-          source={{ type: ENTITY_TYPE, id: detail.id, name: detail.name }}
-          onCreated={() => {
-            setDialogOpen(false);
-            onChanged();
-          }}
-          onClose={() => setDialogOpen(false)}
-        />
-      )}
-
-      {deleteTarget && (
-        <ConfirmDialog
-          title="删除关系"
-          description={`删除关系「${relationEndpointName(deleteTarget, "source", detail.name, detail.id)} ${relationTypeLabel(deleteTarget.relationType)} ${relationEndpointName(deleteTarget, "target", detail.name, detail.id)}」？物理删除不可恢复，可重新建立。`}
-          confirmLabel="删除"
-          danger
-          onConfirm={handleDelete}
-          onClose={() => setDeleteTarget(null)}
-        />
       )}
     </div>
   );

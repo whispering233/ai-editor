@@ -4,7 +4,7 @@
 // 故当前位置/大纲一律由 props 注入，不依赖 setState 播种）。
 // 覆盖：页头壳（元信息行无「变更记录」入口）/ tab 行两 tab / 字段分区与归属 / 能力面板宿主 /
 //       `description` 必填内联错误 / tab 1 可编辑 / tab 2 只读（全部 disabled + caption）/
-//       未设置与已失效两种提示 / 关系区块保持既有能力。
+//       未设置与已失效两种提示 / 关系区（卡 3.6：关系网 + 其他关联折叠区，容器渲染）。
 import { describe, expect, it } from "vitest";
 import { renderToString } from "react-dom/server";
 import { CharacterDetailView } from "./character-detail";
@@ -100,11 +100,14 @@ describe("CharacterDetailView（页头 + tab 行）", () => {
     expect(html).toContain("当前位置数据");
   });
 
-  it("关系区块保留既有能力（列表空态 + 新增关联入口）", () => {
+  it("关系区块（卡 3.6 分区）：关系网空态 + 其他关联折叠标题常显条数", () => {
     const html = render("initial");
-    expect(html).toContain("关联");
-    expect(html).toContain("+ 新增关联");
-    expect(html).toContain("暂无关联，新增一个");
+    expect(html).toContain("人物关系网");
+    expect(html).toContain("+ 添加人物关系");
+    expect(html).toContain("还没有人物关系，添加一条");
+    // 折叠区默认收起但条数常显（收起但不可藏）
+    expect(html).toContain("其他关联 · 0 条");
+    expect(html).not.toContain("+ 添加关联");
   });
 });
 
