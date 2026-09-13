@@ -28,7 +28,7 @@ import {
 } from "@ant-design/icons";
 import { RowContextMenu } from "../components/entity/row-context-menu";
 import { Button, Input, Select } from "antd";
-import { TagChip } from "@/components/ui/tag-chip";
+import { TypeChip } from "@/components/ui/tag-chip";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { errorBannerClass } from "@/lib/styles";
@@ -770,7 +770,7 @@ function HookGroupSection({
                   <span className="min-w-0 truncate font-medium text-foreground" title={hook.name}>
                     {hook.name}
                   </span>
-                  {category && <TagChip className="shrink-0">{category}</TagChip>}
+                  {category && <TypeChip className="shrink-0">{category}</TypeChip>}
                   {/* 操作按钮全部展开（H3：禁止收进 ⋯ 二级展开；图标 + title/aria-label）；
                       AskAiButton 已移除——右键菜单替代 */}
                   <span className="ml-auto flex shrink-0 items-center gap-0.5">
@@ -884,11 +884,9 @@ function HookDetailView({ detail }: { detail: EntityDetailRes }) {
     <div className="flex flex-col gap-3 text-sm">
       <div className="flex items-center gap-2">
         <span className="font-medium text-foreground">{detail.name}</span>
-        {category && (
-          <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-            {category}
-          </span>
-        )}
+        {/* 分类 = 枚举/自由文本分类，走中性 type-badge（不是用户标签，不上 tint）；
+            状态是同组元信息但另属状态语义，保持灰底字色现状 */}
+        {category && <TypeChip>{category}</TypeChip>}
         {status && (
           <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
             {HOOK_STATUS_LABEL[status] ?? status}

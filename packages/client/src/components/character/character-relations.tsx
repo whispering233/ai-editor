@@ -26,6 +26,7 @@ import { relationTypeLabel } from "../../lib/entity-detail";
 import { CreateRelationDialog } from "../entity/create-relation-dialog";
 import { ConfirmDialog } from "../outline/dialogs";
 import { SectionCard } from "../ui/section-card";
+import { TypeChip } from "../ui/tag-chip";
 import { useUiStore } from "../../stores/ui";
 
 /** 关系区的两个 pane（= 两个 tab 内容：人↔人关系网 / 其他关联） */
@@ -70,13 +71,11 @@ function RelationRow({
         <span className="flex items-center gap-1.5">
           <RelationOtherName row={row} />
           {withType ? (
-            <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+            <TypeChip className="shrink-0">
               {label} {directionArrow(row.direction)}
-            </span>
+            </TypeChip>
           ) : row.direction === "both" ? (
-            <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
-              双向
-            </span>
+            <TypeChip className="shrink-0">双向</TypeChip>
           ) : (
             <span
               title={row.direction === "in" ? "对方 → 本角色" : "本角色 → 对方"}
