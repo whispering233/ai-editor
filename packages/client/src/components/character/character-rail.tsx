@@ -131,7 +131,7 @@ export function CharacterRail({
                   >
                     <span className="min-w-0 flex-1 truncate text-sm">{item.name}</span>
                     {item.role !== "" && (
-                      <span className="max-w-[45%] shrink-0 truncate text-xs text-muted-foreground">
+                      <span className="max-w-[45%] shrink-0 truncate text-xs text-character-role">
                         {item.role}
                       </span>
                     )}

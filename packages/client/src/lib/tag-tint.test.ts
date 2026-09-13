@@ -11,9 +11,9 @@ describe("tagTint：名称 → tint 稳定性", () => {
   });
 
   it("固定值锁定（改哈希实现或色档顺序必须显式更新本断言——防「悄悄换色」）", () => {
-    expect(tagTint("主角")).toBe("peach");
-    expect(tagTint("宗门")).toBe("mint");
-    expect(tagTintClass("伏笔")).toBe("bg-tag-sky");
+    expect(tagTint("主角")).toBe("sage");
+    expect(tagTint("宗门")).toBe("yellow");
+    expect(tagTintClass("伏笔")).toBe("bg-tag-sage");
     // 6 个色档都可达（不同名称散列到不同档，避免实现退化成常量）
     const reached = new Set(Array.from({ length: 200 }, (_, i) => tagTint(`标签${i}`)));
     expect(reached.size).toBe(TAG_TINTS.length);

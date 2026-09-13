@@ -10,26 +10,26 @@ import { TagChip, TypeChip } from "./tag-chip";
 describe("TagChip（用户标签：tint 底）", () => {
   it("按文案 hash 取 tint 类 + 墨字 + 与 TypeChip 同形状类", () => {
     const html = renderToString(<TagChip>宗门</TagChip>);
-    expect(html).toContain("bg-tag-mint"); // 固定值锁定（tag-tint.test.ts 同档）
+    expect(html).toContain("bg-tag-yellow"); // 固定值锁定（tag-tint.test.ts 同档）
     expect(html).toContain("text-foreground");
     expect(html).toContain("rounded-sm");
     expect(html).toContain("text-xs");
   });
 
   it("富内容（非单字符串 children）显式给 label 时按 label 取色；不给则回落首色且不抛错", () => {
-    expect(renderToString(<TagChip label="宗门">宗门 →</TagChip>)).toContain("bg-tag-mint");
+    expect(renderToString(<TagChip label="宗门">宗门 →</TagChip>)).toContain("bg-tag-yellow");
     // 多子节点（非单字符串）且没给 label：key = 空串 → 回落首色，不抛错
-    expect(renderToString(<TagChip>{["宗门", "→"]}</TagChip>)).toContain("bg-tag-peach");
+    expect(renderToString(<TagChip>{["宗门", "→"]}</TagChip>)).toContain("bg-tag-sky");
   });
 });
 
 describe("TypeChip（类型/分类徽标：中性底，不参与 tint）", () => {
-  it("带中性底 + 墨字（与 TagChip 同字色），且**不含**任何 tint 底色类", () => {
+  it("固定橙底 + 恒定墨字（两态不翻转），且**不含**任何 tint 底色类", () => {
     const html = renderToString(<TypeChip>章</TypeChip>);
-    expect(html).toContain("bg-accent");
-    // 字色与 tint chip 同档（primary）：底几乎与白同量级，靠字色提供可读性（卡 10.6）
-    expect(html).toContain("text-foreground");
-    expect(html).not.toContain("text-muted-foreground");
+    expect(html).toContain("bg-type-badge");
+    // 不能用 text-foreground：它在深色态翻成 81% 白，压橙底仅 2.61:1（卡 11.3）
+    expect(html).toContain("text-type-badge-fg");
+    expect(html).not.toContain("text-foreground");
     expect(html).not.toContain("bg-tag-");
   });
 
