@@ -10,7 +10,30 @@
 
 ## 当前任务卡
 
-（无进行中任务卡。）
+### 卡 9.1 关联总览三列左对齐
+
+- [ ] `relations-view.tsx` 列表模式：关系类型列去 `justify-center`（与源/目标列、表头同左对齐）
+- [ ] `DESIGN.md` §数据展示登记列对齐口径
+- [ ] 验证：`pnpm --filter @whispering233/ai-editor-client test` + 浏览器像素
+
+### 卡 9.2 大纲行尾徽标不推移删除按钮
+
+- [ ] `Outline.tsx` 节点行：阅读进度徽标排在删除按钮**左侧**（删除按钮恒贴行尾，跨行不位移）
+- [ ] `DESIGN.md` §数据展示 `data-row` 登记「行尾状态徽标不得推移操作按钮」
+- [ ] 验证：typecheck/lint + 浏览器像素（设当前位置的章行）
+
+### 卡 9.3 人物页进度节点下拉支持搜索
+
+- [ ] `character-detail.tsx` 阅读进度 tab：进度节点 `Select` 加 `showSearch` + `optionFilterProp="label"`
+- [ ] `DESIGN.md` `character-workbench` 进度节点选择器登记搜索口径（antd 默认按 value 过滤的坑）
+- [ ] 验证：client 测试 + 浏览器像素（输入章名可筛出）
+
+### 卡 9.4 删除人物关系星形图
+
+- [ ] 删 `components/character/relation-star-graph.tsx`、`lib/relation-star.ts`、`lib/relation-star.test.ts`
+- [ ] `character-relations.tsx`：去 import / 去渲染 / 去 `selfName` prop（容器与走查测试同步）
+- [ ] 文档：`DESIGN.md` 删 `relation-star-graph` 段 + `character-relations` 段同步；`backlog.md` 删星形图登记项；`AGENTS.md` 人物页条目同步；`CHANGELOG.md` 记 Removed
+- [ ] 验证：typecheck/lint/test + 浏览器像素（关系网 tab 无图）
 
 ---
 

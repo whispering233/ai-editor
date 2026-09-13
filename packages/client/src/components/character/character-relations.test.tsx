@@ -1,8 +1,7 @@
-// 关系区渲染走查（卡 3.6；卡 6.3 改 pane 制；卡 8.4 关系网 pane 插星形图）：仓内无 jsdom/@testing-library
+// 关系区渲染走查（卡 3.6；卡 6.3 改 pane 制）：仓内无 jsdom/@testing-library
 // （既有纪律：不引新依赖），用 react-dom/server renderToString 直渲染展示层 `CharacterRelationsView`（数据由 props 注入）。
 // 覆盖：两个 pane（render 时按 `pane` 只渲一个）/ 组头「类型 · 条数」/ 行（对方姓名 + 方向箭头 + 备注）/
-//       「双向」徽标 / 各自 pane 的添加入口与空态 / 删除入口（**不再有折叠态**——其他关联本身即 tab）/
-//       星形图（仅关系网 pane 且达阈值时；< 4 行不出图）。
+//       「双向」徽标 / 各自 pane 的添加入口与空态 / 删除入口（**不再有折叠态**——其他关联本身即 tab）。
 import { describe, expect, it } from "vitest";
 import { renderToString } from "react-dom/server";
 import { CharacterRelationsView } from "./character-relations";
@@ -48,7 +47,6 @@ function render(
     <CharacterRelationsView
       pane={pane}
       groups={opts.groups ?? GROUPS}
-      selfName="张三"
       otherRows={opts.otherRows ?? [OTHER_ROW]}
       onAddCharacterRelation={() => {}}
       onAddOtherRelation={() => {}}
@@ -102,44 +100,5 @@ describe("关系区渲染（卡 6.3：两个 pane）", () => {
     expect(html).toContain('aria-label="删除与「王五」的对手关系"');
     const other = render("other");
     expect(other).toContain('aria-label="删除与「第一章」的出现于关系"');
-  });
-
-  it("星形图（卡 8.4）：关系网 pane 达阈值才出图，叶子可点切该角色；其他关联 pane 无图", () => {
-    const twoRows = render("network"); // GROUPS 共 2 行 → 不足 4 行不出图（删除按钮的 svg 图标不计）
-    expect(twoRows).not.toContain("人物关系图");
-
-    const fourRows = render("network", {
-      groups: [
-        {
-          relationType: "ally",
-          rows: [
-            OUT_ROW,
-            BOTH_ROW,
-            {
-              ...OUT_ROW,
-              key: "ally:out:r4",
-              relationId: "r4",
-              other: { type: "character", id: "char-4", name: "赵六" },
-            },
-            {
-              ...OUT_ROW,
-              key: "ally:out:r5",
-              relationId: "r5",
-              other: { type: "character", id: "char-5", name: "钱七" },
-            },
-          ],
-        },
-      ],
-    });
-    expect(fourRows).toContain("<svg");
-    expect(fourRows).toContain("人物关系图：本角色与 4 位人物的关系");
-    // 图专有元素：连线 + 箭头 marker
-    expect(fourRows).toContain("<line");
-    expect(fourRows).toContain("<marker");
-    expect(fourRows).toContain("张三"); // 中心 = 当前角色
-    expect(fourRows).toContain('href="#/characters/char-2"'); // 叶子可点（与列表行同行为）
-    expect(fourRows).toContain('title="打开「赵六」"');
-
-    expect(render("other")).not.toContain("人物关系图");
   });
 });

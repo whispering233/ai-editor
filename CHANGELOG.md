@@ -5,6 +5,29 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+> **UI 收口**：关联总览列对齐统一、大纲行尾徽标不再推移删除按钮、人物页进度节点下拉可搜索；**人物关系星形图整体移除**（分组列表已是关系网的完整明细，图的索引价值不足以抵一张 SVG）。
+
+### Added
+
+- 人物页「阅读进度」tab 的进度节点下拉支持搜索：`showSearch` + `optionFilterProp="label"`（antd `Select` 无 `optionFilterProp` 时按 `value` 过滤，而本选择器 value = 节点 id，不显式指定则搜标题搜不到）。
+
+### Changed
+
+- 关联总览列表（`relations-view`）：关系类型列由**居中改左对齐**——与源/目标列、表头同口径（居中会让类型 chip 相对表头位移，看起来像列错位）。
+- 大纲行尾「阅读进度」徽标改排在删除按钮**左侧**：删除按钮恒贴行尾，不再被徽标往左推（跨行操作列对齐）。
+
+### Removed
+
+- **人物关系星形图（`relation-star-graph` 组件 + `lib/relation-star` 几何/判据模块及其单测）整体删除**：关系网 tab 只保留按 `relationType` 分组的关系列表；`CharacterRelationsView` 的 `selfName` prop 随之移除。
+
+### Docs
+
+- `docs/ui/DESIGN.md`：新增 `relations-view` 列对齐口径；`data-row` 登记「行尾状态徽标排在操作按钮左侧」；`character-workbench` 进度节点选择器登记搜索口径；删 `relation-star-graph` 整段并同步 `character-relations` 段。
+- `docs/design/backlog.md`：删「星形图叶子 `· N` = 列表行数」登记项（星形图已不存在）。
+- `AGENTS.md`：人物页条目去掉星形图描述。
+
 ## [v0.0.36] - 2026-09-13
 
 > **关系类型收口 + 人物页关系区**：关系类型的属性（展示名 / 分组 / 对称性）收为 shared 单一定义（`RELATION_TYPE_META`），散在四处的手写清单全部改为派生；`relation_type` 从**枚举放宽为自由字符串**——作者可在建立关联时自定义类型（无需迁移，`relation_type` 本就无 CHECK）；人物页「人物关系网」新增**零依赖手写 SVG 星形图**；client 新增人物字段清单与 schema 的一致性编译期断言。**无 API 破坏性变更**：放宽方向兼容（原先必 400 的输入现在可能 201），预定义类型与既有数据行为不变。
