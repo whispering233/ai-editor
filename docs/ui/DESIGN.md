@@ -507,7 +507,7 @@ components:
 
 **其他关联（折叠区）** — 标题行 = 「其他关联 · N 条」+ chevron（`icon-button`）+ 展开后 `button-default`「+ 添加关联」（通用对话框）；默认**收起**。行语言同 `character-relations`（不分类型组，按类型序）；涵盖 `appears_in` / `belongs_to` / `owns` / `masters` 等——它们是 AI 分析的数据源（如孤儿诊断依赖 `appears_in`），因此**收起但不可藏**。
 
-**`panel-tree`（能力面板树）** — 自绘缩进行（**不用 antd `Tree`**：其选中面派生 token 不可信，且项目已有大纲/设定两处自绘缩进行先例）：缩进按层；**分支行** = 展开箭头 + 名称 + 行尾 `icon-button`（**新增同级 / 新增子级 / 改名 / 删除**——四项，操作集完整性优先）；**叶子行** = 名称 + 值输入框（`input` 的 `size="small"` 24px 档，宽度按内容列定档）+ 空值显示 `—`（`{colors.quaternary}`）。拖拽走 `drag-indicator`（同级插入线）+ 拖到行中段 = 成为子级（primary 10% 淡染目标行，同 §拖拽目标行）；**tab 2 只读时整树禁用**输入与操作图标。值自动判定类型（纯数字 → number，否则 string）。**结构与值分离**：结构编辑走页面的显式保存（`PUT partial`，**不产生 Delta**）；仅已有叶子值可被变更记录改（叶子路径进「+ 新建变更」字段下拉，前缀由 shared helper 拼）。**内联提示（不静默改写数据）**：名字含 `.`（不可被变更记录寻址）/ 同层重名 / 空名。
+**`panel-tree`（能力面板树）** — 自绘缩进行（**不用 antd `Tree`**：其选中面派生 token 不可信，且项目已有大纲/设定两处自绘缩进行先例）：缩进按层；**分支行** = 展开箭头 + 名称 + 行尾 `icon-button`（**新增同级 / 新增子级 / 改名 / 删除**——四项，操作集完整性优先）；**叶子行** = 名称 + 值输入框（`input` 的 `size="small"` 24px 档，宽度按内容列定档）+ 空值显示 `—`（`{colors.quaternary}`）。拖拽走 `drag-indicator`（同级插入线）+ 拖到行中段 = 成为子级（primary 10% 淡染目标行，同 §拖拽目标行）；**tab 2 只读时整树禁用**输入与操作图标。值自动判定类型（纯数字 → number，否则 string）。**结构与值分离**：结构编辑走页面的显式保存（`PUT partial`，**不产生 Delta**）；仅已有叶子值可被变更记录改（叶子路径进「+ 新建变更」字段下拉，前缀由 shared helper 拼）。**内联提示（不静默改写数据）**：名字含 `.`（不可被变更记录寻址）/ 同层重名 → 行内警告（`panelWarningMap`）；**空名**不属行内警告（shared 解析会把空名节点丢弃、渲染树里不可能存在）——由**改名输入态**的行内提示拦下（「名字不能为空」，提交被拒且不落库）。
 
 > 以上三个人物页专有形态**不新增色值/字号/圆角**——全部落在既有 token 档内（选中面 `{colors.surface-muted}`、次级字 `{colors.tertiary}`、行 hover `{colors.surface-soft}`、拖拽线 `{colors.primary}`、描边 `{colors.hairline}` / `{colors.hairline-soft}`）。
 

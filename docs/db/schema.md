@@ -86,7 +86,7 @@ CREATE TABLE entities (
 ```
 
 - **结构不变式**：有 `children` = 分支（**不可赋值**）；无 `children` = 叶子（**可赋值**）；**空数组 `children: []` 视为叶子**（归一化时删除该键——与「删掉最后一个子节点即降级为叶子」一致）。删除分支的最后一个子节点 → 该节点降级为叶子。叶子 `value` 允许缺省（空值）。嵌套层数不限；顺序 = 数组顺序（**无 `sort_order` 列、无迁移**）。
-- **叶子值类型**：`string | number`（与 `DeltaChange` 的 `from`/`to`/`value` 同域）；UI 自动判定（纯数字 → number）。
+- **叶子值类型**：`string | number`（与 `DeltaChange` 的 `from`/`to`/`value` 同域）；UI 自动判定（纯数字 → number）。**已知边界（卡 3.4 oracle）**：无值叶子的**类型由首次写入路径决定**——面板编辑器（`coerceAbilityValue`）写 `"12"` 存 `number`，而「+ 新建变更」下拉对无值叶子默认按文本解析存 `"12"`（字符串）；显示一致、存储类型可能不同，后续 `numeric` 判定会随之变化。要彻底对齐需两条写入路径同源（待办）。
 - **结构与值分工**：增删/改名/排序节点 = 人工编辑（`PUT /entity/character/:id` partial，**不产生 Delta**）；**只有已存在的叶子**可被 Delta 修改，字段路径 = 点分拼接（如 `ability_panel.火系.等级`）。
 - **宽校验**：`characterDataSchema` 对 `ability_panel` 不做结构精校验（`z.unknown().optional()`，沿用 `custom_fields` 的宽松先例）——UI 输入受控 + 读取端防御（**口径：缺失/顶层非数组 → 空面板；数组内坏元素跳过、合法元素保留**，绝不抛错打挂 `computeState`/列表接口）。**因此所有读端（摘要/统计/叶子路径枚举/副本派生）都必须先过 `parseAbilityPanel` 规范化**，消费方不得假定 `data.ability_panel` 是规范形状。
 

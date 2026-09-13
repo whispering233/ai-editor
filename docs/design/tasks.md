@@ -28,6 +28,13 @@
   - `readOnlyFieldValue` 对对象值输出 `[object Object]`（`custom_fields` 嵌套值会在 tab 2 可读列表出现）→ 改 JSON 序列化或统一显示 `—`。
   - 验收：三条各有 SSR/单测断言 + 一次像素核验（截图）。
 
+- [ ] **3.4 修复轮（oracle 三条交互缺陷 + 一条改法）**
+  - ① **误报 toast**：`panel-tree.tsx` 拖拽处理先取 `movePanelNode(...)` 结果，`null`（防环/非法）→ **直接 return 且不弹任何 toast**；只有真正 commit 成功后才提示「原字段值已清除」。
+  - ② **非法落点不得有反馈**：拖到**自身子树**行时不得显示 `before/on/after` 高亮与插入线（`DESIGN.md` 口径：非法落点无反馈即「不可放」）——hover 时判断目标是否在 `from` 子树内，非法则不设 `dropTarget`。
+  - ③ **「带值叶子」策略统一**：现「新增子级」拒绝（提示先清值）而「拖成子级」允许并丢值 → **统一为拒绝 + 提示**（不丢用户数据，最保守）。
+  - ④ 若 `buildDeltaChange` 的 numeric 路径能安全复用 `coerceAbilityValue`（非数字不报错），则把面板叶子两条写入路径的**类型判定对齐**；不能则保持 `docs/db/schema.md` 的已知边界登记（在报告说明）。
+  - 测试：三条各补单测/SSR 断言；既有 client 测试全绿（728 基线）。
+
 - [ ] 3.4 `panel-tree` 控件（结构编辑 + 叶子值 + 拖拽 + 只读态 + 模板/复制入口）
   - **含**：把面板**叶子路径**接入「+ 新建变更」字段下拉（`lib/delta-create.ts` 现以 `NON_DELTA_FIELDS` 排除整树，需按当前实体的面板结构动态展开叶子路径，用 shared `abilityPanelFieldPath` 拼前缀）；结构编辑需内联提示「名字含 `.` 不可寻址 / 同层重名」（口径见 `docs/db/schema.md`）。
 - [ ] 3.5 新建人物弹窗（必填 姓名 / 角色定位 / 描述；重名软提示；面板「空白 / 内置模板 / 从角色复制」；提交后自动选中）
