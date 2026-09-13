@@ -8,11 +8,10 @@
 
 ## 当前任务卡
 
-- [ ] **5.3 AI 侧 hook 状态字段收窄为 `set`（卡 5.2 oracle 建议，成本极低）**
-  - 现状：手动 UI 路径已收窄（5.2(c)），但 AI 的 `propose_add_delta` 仍可对 `hook.status` 造 `op=update` → 落库后 `compute_state` 产生假 `conflicts`（oracle 探针实测：`conflicts=[{field:"status", expected:"planted"}]`）。
-  - 修法：`packages/tools/src/proposal/delta.ts` 在既有白名单旁加一条——目标为 `hook` 且 `field === "status"` 时**要求 `op === "set"`**（或归一化为 set，二选一并在报告说明）；工具描述补一句。
-  - 测试：hook status + update → 抛错（或归一化为 set）；hook status + set / 其他 hook 字段（category 等）/ character 面板叶子不受影响。
-  - 验收：AI 路径不再能产出该字段的 CAS 假冲突；REST 泛型行为保持（登记口径见 `10-data-model.md` §14 不变式 1）。
+- [ ] **5.4 纵深防御补口（卡 5.3 oracle 建议，各 5–10 行）**
+  - (a) **executor 兜底**：`packages/tools/src/executor/delta.ts` 的 `executeAddDelta` 加与提案层同源的守卫——`hook` + `field="status"` 且 `op !== "set"` → 抛错（手工构造 proposal / 直调 executor 才可达，属纵深防御；与卡 1.5 的锚点兜底同模式）。
+  - (b) **character 已移除字段防脏键**：`propose_add_delta` 对 **character 目标**拒绝 `field ∈ {"status", "abilities"}`（卡 2.1 已把两者从 schema 移除；现在仍可写入脏键，不参与任何展示但留残留）。工具描述不必改（属已移除字段）。
+  - 测试：两条各补边界用例（executor 非 set → 抛错且不落库；character + status/abilities → 抛错）；`combat_power` 这类**自定义字段**仍必须可用（不得收窄成整字段白名单）；既有用例全绿。
 
 ## 延期项（远期，未排期）
 
