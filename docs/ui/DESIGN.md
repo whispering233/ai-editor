@@ -180,13 +180,15 @@ components:
     backgroundColor: "{colors.canvas}"
     textColor: "{colors.secondary}"
     typography: "{typography.caption}"
-  tag:
+  # 类型/分类徽标（中性 chip；枚举值的唯一形态，见 §Components `type-badge`）
+  type-badge:
     backgroundColor: "{colors.surface-muted}"
-    textColor: "{colors.secondary}"
+    textColor: "{colors.tertiary}"
     typography: "{typography.caption}"
     rounded: "{rounded.xs}"
     padding: "0 {spacing.xxs}"
-  # 标签 tint 六色（按名称 hash 稳定分配，见 §Components `tag`）：分类/标签 chip 与类型徽标的唯一底色来源
+  # 标签 tint 六色（按名称 hash 稳定分配，见 §Components `tag`）：**只给用户标签 chip**（`data.tags` 元素），
+  # 类型徽标不用 tint（走上面的中性 `type-badge`）
   tag-peach:
     backgroundColor: "{colors.tint-peach}"
     textColor: "{colors.primary}"
@@ -299,7 +301,7 @@ components:
 - **Canvas (#ffffff)**：内容面板底色（中栏内容、卡片、浮层、下拉面板）。
 - **Surface (#f6f5f4)**：外壳底色（左栏、窗口留白区）——比 canvas 暗一档，让面板「浮」出来，但不用阴影。
 - **Surface Soft (#fafaf9)**：行 hover、focus 小条等最弱反馈面。
-- **Surface Muted (#f0eeec)**：选中态/次级面（菜单选中项、user 气泡、Tag 底色）——**选中靠灰面而不是彩色**。
+- **Surface Muted (#f0eeec)**：选中态/次级面（菜单选中项、user 气泡、中性徽标 `type-badge` 底色）——**选中靠灰面而不是彩色**。
 
 ### 描边（hairline → hairline-strong）
 
@@ -314,9 +316,9 @@ components:
 
 ### 标签色（tint 系，Notion database property 的回声）
 
-- **tint-peach / tint-rose / tint-mint / tint-lavender / tint-sky / tint-yellow**：6 个马卡龙实底，专供标签/分类 chip（`data.tags`）与类型徽标（人物/设定/地点/伏笔/事件/时间点/参考资料/关系类型/回收站类型）等信息色块。**只做小面积底色，不做大面积背景**。
+- **tint-peach / tint-rose / tint-mint / tint-lavender / tint-sky / tint-yellow**：6 个马卡龙实底，**只给用户标签 chip**（`data.tags` 元素：设定标签、事件标签、参考资料标签）。**枚举值（类型/分类/状态）一律不用 tint**——卷/章/场、实体类型、端点类型、关系类型、伏笔 `category`、回收站类型全部走中性 `type-badge`（§Components）。理由：类型是**枚举**不是用户数据，逐个发彩色只是给每列都上了装饰，读者反而失去「彩色 = 这是标签」的信号；且 6 档 hash 本来就会撞色（实测「设定/场/参考资料」同色、「事件/时间点」同色），着色并不承载语义。**只做小面积底色，不做大面积背景**。
 - 营销站那套 bold 黄（`#f9e79f`）与深蓝 hero 带**不纳入**。
-- **分配规则（唯一，不维护语义色表）**：按 chip 文案（标签名 / 类型中文名 / 分类名）做 FNV-1a 哈希后取模 6，选中 tint；**同名恒同色**（跨页一致，无随机、无按状态变色）。字色固定 `{colors.primary}`（6 个 pastel 底上对比度均 ≥ 10:1，不需为每个 tint 配前景色）。
+- **分配规则（唯一，不维护语义色表）**：按 chip 文案（标签名）做 FNV-1a 哈希后取模 6，选中 tint；**同名恒同色**（跨页一致，无随机、无按状态变色）。字色固定 `{colors.primary}`（6 个 pastel 底上对比度均 ≥ 10:1，不需为每个 tint 配前景色）。
 - **深色态**：6 色同色相以 20% 不透明度叠在深色面板上（保留色相、不刺眼），字色随 `{colors.primary}` 变 81% 白。**浅/深两套色调只定义在 `index.css` 的 `--tag-*` 段**（与 `AntdProvider` 的 antd 色阶并列——tint 不是 antd token，无法从 seed 派生，也不写成硬编码色值散落各处）。
 
 ### 交互与语义
@@ -493,7 +495,9 @@ components:
 **`data-row`** / **`data-row-hover`** — 列表/树/大纲行：无底色 + 底部 1px `{colors.hairline-soft}`；hover = `{colors.surface-soft}`。行级交互：双击进详情、单击标题行内编辑；**链式新建（Enter 建同级/子级）后新条目 = 选中 + 聚焦**（只聚焦不选中会让下一次 Enter 被「无选中」守卫静默吞掉；新建按钮同理）。**行尾状态徽标排在操作按钮左侧**（如大纲行的「阅读进度」徽标）：右侧 `icon-button` 恒贴行尾——徽标出现不得把它推离原位（否则同一列按钮在行间错位）。
 **`table-header`** — 表头**白底**（不是 antd 默认灰底）+ 1px `{colors.hairline}` 底线 + caption 字色 `{colors.secondary}`。
 **`relations-view`（关联总览列表）** — 源 / 关系 / 目标三列**表头与单元格同宽同对齐**：一律**左对齐**（关系列也不居中——居中会让类型 chip 相对表头位移，看起来像列错位）。
-**`tag`** — 分类/标签 chip（`data.tags`）与类型徽标：`{rounded.xs}` + **tint 六色底** + caption 字号 + `{colors.primary}` 字色（按名称 hash 稳定分配，见 §Colors 分配规则）。实现 = `components/ui/tag-chip.tsx`（自绘 span + `bg-tag-*` token 类）——**不用** antd `Tag` 的预设色：`Tag` 的默认底色由组件 token 派发、自定义 tint 只能走 `Tag` 的 preset/内联色，与「禁硬编码色值」冲突。antd `Tag` 仅保留给**带交互的元信息 chip**（如 focus 小条的 closable 标签）。**标签不做按钮形态**；灰色 `{colors.surface-muted}` 底仅用于无标签语义的占位 chip。
+**`tag`** — **用户标签 chip**（`data.tags` 数组元素：设定标签 / 事件标签 / 参考资料标签）：`{rounded.xs}` + **tint 六色底** + caption 字号 + `{colors.primary}` 字色（按名称 hash 稳定分配，见 §Colors 分配规则）。实现 = `components/ui/tag-chip.tsx` 的 `TagChip`（自绘 span + `bg-tag-*` token 类）——**不用** antd `Tag` 的预设色：`Tag` 的默认底色由组件 token 派发、自定义 tint 只能走 `Tag` 的 preset/内联色，与「禁硬编码色值」冲突。antd `Tag` 仅保留给**带交互的元信息 chip**（如 focus 小条的 closable 标签）。**标签不做按钮形态**。
+**准入规则（收口，2026-09）**：**只有 `data.tags` 元素走 tint**。枚举值（卷/章/场、实体类型、端点类型、关系类型、伏笔 `category`、回收站类型）→ `type-badge`；字段值（人物 `role` 等）→ 纯文本 / 表单控件（不是 chip）；状态 → `status-badge` / 中性命中 span。判据的代码形式 = 两个组件名：`TagChip`（tint）vs `TypeChip`（中性）——不许再给 `TagChip` 传枚举文案。
+**`type-badge`** — **类型/分类徽标**（枚举值的唯一形态：大纲节点卷/章/场、实体类型、关联端点类型（源/目标）、关系类型、伏笔 `category`、回收站类型）：`{rounded.xs}` + `{colors.surface-muted}` 底 + caption 字号 + `{colors.tertiary}` 字色（与 `tag` 同尺寸同字号，只换底色与字色）。实现 = `components/ui/tag-chip.tsx` 的 `TypeChip`。**为什么不用 tint**：① 类型是枚举不是用户数据，逐个发彩色等于给每列都上装饰，反而让「彩色 = 这是标签」的信号失效；② 6 档 hash 只保证「同名恒同色」，不承载语义（实测「设定/场/参考资料」同色、「事件/时间点」同色），同一概念的文案变了就变色；③ 类型与「标签」视觉同形时，用户无法区分「这行是分类」还是「这行是标签」。
 **`status-badge`** — 状态胶囊（进行中/已确认/已失效等）：`{rounded.full}` + caption 字号 + 语义色或 tint 底色；状态图标用 antd **Filled** 变体（`CheckCircleFilled`/`CloseCircleFilled`/`ExclamationCircleFilled`）。
 
 **`character-workbench`（人物工作台，2026-09）** — 人物页（`#/characters` / `#/characters/:id`）是中栏内的 **master-detail**（无导航级变动，路由已是一级段）：
@@ -571,6 +575,7 @@ components:
 - 颜色只经 antd token / 本文件登记的值；改色只改 `AntdProvider` 一处
 - 用 1px 描边和底色档表达层级；浮层才允许唯一那一条阴影
 - 选中态用 `{colors.surface-muted}` 灰面，不用彩色底
+- tint 底色只给**用户标签** chip（`data.tags`）；枚举类型/分类徽标一律中性 `type-badge`（不给类型上彩色）
 - 字号只用四档（20 / 16 / 14 / 12）；标题一律 `Typography.Title level={4|5}`
 - 图标一律 `@ant-design/icons`；尺寸随字号类（14 `text-sm` / 16 `text-base` / 20 `text-xl` / 空态 24 `text-2xl`）；状态用 Filled、操作与导航用 Outlined；面板收起/展开 = `DoubleLeft/RightOutlined` 镜像对（禁 `Border*` / `MenuFold*` / `Vertical*`）。**唯一例外 = `provider-icon`**（供应商品牌 logo，走自持 svg 精灵 + 品牌自带色，见 §Components）
 - 文字型**操作**按钮带边框（H4 红线）；操作按钮一律直接展示，不收进 `⋯` 菜单。导航入口（左栏 Navigation/Menu 项）不属此列
@@ -592,7 +597,7 @@ components:
 ## Known Gaps
 
 - **深色 token 未公开**：源分析文档明示未提取 Notion 深色值，上表深色列是推断值，只保证 antd 派生一致，未与实机逐项比对。
-- **标签 tint 分配规则**：已实现（§Colors 标签色 —— 名称 hash 取模 6，同名恒同色）；新增标签体系时先看现有档位为什么不狗，不要另起色表。
+- **标签 tint 分配规则**：已实现（§Colors 标签色 —— 名称 hash 取模 6，同名恒同色）；**准入已收口（2026-09）：tint 只给 `data.tags` 元素，枚举类型走中性 `type-badge`**。新增标签体系时先看现有档位为什么不狗，不要另起色表。
 - **tint 深色值未与实机比对**：深色态用「同色相 20% 叠色」推断（Notion 未公开深色 token），若日后观感不对，只改 `index.css` 的 `--tag-*` 深色段。
 - **antd 派生色未登记**：hover/active/禁用底、`colorFill*`、浅色色阶由算法派生，本文件不复制（避免漂移）。
 - **MD 编辑器是独立表皮**：参考资料页的 `@uiw/react-md-editor` 自带一套排版与配色，未纳入本设计系统（编辑器内部不套 chrome token）；若观感冲突，再单独收。

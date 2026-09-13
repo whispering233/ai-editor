@@ -1,11 +1,21 @@
-// 标签/类型 chip（DESIGN.md §Components `tag`，全站唯一实现）：tint 六色底 + 墨字 + caption 字号 + rounded.xs。
+// 徽标 chip 的两个形态（DESIGN.md §Components `tag` / `type-badge`，全站各自唯一实现）：
+// - `TagChip`  = **用户标签**（`data.tags` 数组元素）：tint 六色底 + 墨字
+// - `TypeChip` = **类型/分类徽标**（卷/章/场、实体类型、端点类型、关系类型、伏笔 category、回收站类型）：
+//               中性底（`{colors.surface-muted}`）+ tertiary 字——**枚举值不上色**
+// 准入规则（2026-09 收口，别再扩散）：tint 只给用户标签。枚举类型是「结构」不是用户数据，逐个发彩色
+// 只会让「彩色 = 这是标签」的信号失效（历史上同一类「类型」在大纲页/关联页/回收站页有色、人物页无色，
+// 每页各自发挥）。判据的代码形式 = 两个组件名，调用点必须显式选一个。
+//
 // 为什么不用 antd `Tag`：`Tag` 的底色由组件 token 统一派发（`defaultBg`），要上 tint 只能用
 // preset 色名或内联色值——前者是 antd 默认色板（全站禁 preset）、后者违反「禁硬编码色值」。
-// 自绘 span + `bg-tag-*` token 类则让色值仍只定义在 `index.css` 一处。
+// 自绘 span + `bg-tag-*`/`bg-accent` token 类则让色值仍只定义在 `index.css`/`AntdProvider` 两处。
 // antd `Tag` 仅保留给「带交互的元信息 chip」（如会话 focus 小条的 closable 标签）。
 import type { ReactNode } from "react";
 import { tagTintClass } from "../../lib/tag-tint";
 import { cn } from "../../lib/utils";
+
+/** 两形态共用的形状类（同尺寸同字号，只差底色/字色——类型徽标与标签并排时基线一致） */
+const CHIP_BASE = "inline-flex items-center rounded-sm px-1 py-0.5 text-xs whitespace-nowrap";
 
 export interface TagChipProps {
   children: ReactNode;
@@ -18,19 +28,24 @@ export interface TagChipProps {
   title?: string;
 }
 
+/** 用户标签 chip（tint 六色底 + 墨字）：**只给 `data.tags` 元素**，枚举类型请用 `TypeChip` */
 export function TagChip({ children, label: labelProp, className, title }: TagChipProps) {
   // 取色 key：显式 label 优先，其次单个字符串 children；都没有 → 空串（回落首色，不抛错）
   const label = labelProp ?? (typeof children === "string" ? children : "");
   return (
-    <span
-      title={title}
-      className={cn(
-        "inline-flex items-center rounded-sm px-1 py-0.5 text-xs whitespace-nowrap text-foreground",
-        tagTintClass(label),
-        className,
-      )}
-    >
+    <span title={title} className={cn(CHIP_BASE, "text-foreground", tagTintClass(label), className)}>
       {children}
     </span>
   );
+}
+
+export interface TypeChipProps {
+  children: ReactNode;
+  /** 上下文附加类（截断 / 伸缩 / 外边距由调用点给） */
+  className?: string;
+}
+
+/** 类型/分类徽标（中性底 + tertiary 字）：卷/章/场、实体类型、端点类型、关系类型、回收站类型 */
+export function TypeChip({ children, className }: TypeChipProps) {
+  return <span className={cn(CHIP_BASE, "bg-accent text-muted-foreground", className)}>{children}</span>;
 }
