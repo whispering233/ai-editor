@@ -242,7 +242,8 @@ export function CreateRelationDialog({
             <div className="flex flex-col gap-2 sm:w-44">
               <p className="text-sm font-medium text-foreground">关系类型</p>
               {/* 自由输入下拉（`select-free-input`）：filterOption 必须显式传（combobox 模式默认不筛）；
-                  `onChange` 在无值时可能给 undefined → 兜底空串；无匹配给「将新建『X』」提示 */}
+                  `onChange` 在无值时可能给 undefined → 兜底空串；无匹配给「将新建『X』」提示；
+                  浮层宽度按内容（窄列 176px 下跟触发器宽会截断长自定义类型名——DESIGN.md §select-option-selected） */}
               <AutoComplete
                 className="w-full"
                 aria-label="关系类型"
@@ -251,6 +252,7 @@ export function CreateRelationDialog({
                 options={relationTypeOptions}
                 filterOption={filterByLabel}
                 notFoundContent={`将新建『${relationType}』`}
+                popupMatchSelectWidth={false}
               />
               <span
                 aria-hidden="true"
