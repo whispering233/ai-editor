@@ -66,7 +66,7 @@ export function customRelationTypeUsages(
     .sort((a, b) => (a.count !== b.count ? b.count - a.count : a.type < b.type ? -1 : a.type > b.type ? 1 : 0));
 }
 
-/** 关系类型选项（`select-free-input` / 过滤下拉共用）：调用方子集在前（中文标签），
+/** 关系类型选项（过滤下拉专用：`Select` 用 option label 展示，值 = 原始类型）：调用方子集在前（中文标签），
  * 已用自定义类型在后（`原名 · 条数`）——**不把子集之外的预定义类型带回来**（保持入口收窄）。 */
 export function relationTypeSelectOptions(
   baseTypes: readonly string[],
@@ -76,4 +76,35 @@ export function relationTypeSelectOptions(
     ...baseTypes.map((t) => ({ value: t, label: relationTypeLabel(t) })),
     ...customUsages.map((u) => ({ value: u.type, label: `${u.type} · ${u.count}` })),
   ];
+}
+
+// ============ 自由输入控件的展示/取值映射（卡片 8.2 像素验证轮） ============
+//
+// `AutoComplete` 是 combobox：**输入框显示的是 option 的 `value`**（不是 label）——若 value 用原始 key，
+// 中文界面里就会出现「ally」这种内部标识（既有 `Select` 路径用 label 展示，无此问题）。
+// 因此自由输入控件单独一组选项：预定义的 `value` = 中文标签，自定义的 `value` = 原名（label 带条数只进列表）。
+// 提交前用 `resolveRelationTypeInput` 反解回 `relation_records.relation_type` 的真实取值。
+
+/** 自由输入控件选项：预定义 → value = 中文标签；自定义 → value = 原名（列表 label 带 ` · N`） */
+export function relationTypeInputOptions(
+  baseTypes: readonly string[],
+  customUsages: readonly RelationTypeUsage[],
+): { value: string; label: string }[] {
+  return [
+    ...baseTypes.map((t) => ({ value: relationTypeLabel(t), label: relationTypeLabel(t) })),
+    ...customUsages.map((u) => ({ value: u.type, label: `${u.type} · ${u.count}` })),
+  ];
+}
+
+/**
+ * 自由输入文本 → 落库取值（三层判定，顺序要紧）：
+ * 1. 文本本身就是预定义 key（作者直接敲 `ally`——幂等，不新造同名自定义类型）；
+ * 2. 文本命中某个预定义**中文标签**（自由输入控件里预定义的展示形态）→ 该 key；
+ * 3. 其余 → 原样（自定义类型，语法校验交给 shared `relationTypeSyntaxError`）。
+ */
+export function resolveRelationTypeInput(text: string): string {
+  const trimmed = text.trim();
+  if ((RELATION_TYPES as readonly string[]).includes(trimmed)) return trimmed;
+  const byLabel = RELATION_TYPES.find((t) => relationTypeLabel(t) === trimmed);
+  return byLabel ?? trimmed;
 }

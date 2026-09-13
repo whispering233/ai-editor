@@ -29,7 +29,8 @@ import { flattenTree } from "../../lib/outline-tree";
 import {
   customRelationTypeUsages,
   dialogRelationTypeOptions,
-  relationTypeSelectOptions,
+  relationTypeInputOptions,
+  resolveRelationTypeInput,
 } from "../../lib/relation-types";
 import type { RelationTypeUsage } from "../../lib/relation-types";
 import { useProjectStore } from "../../stores/project";
@@ -111,8 +112,15 @@ export function CreateRelationDialog({
   );
   const [otherEntities, setOtherEntities] = useState<EntitySummary[] | null>(null);
   const [otherId, setOtherId] = useState("");
-  // 默认关系类型 = 当前源端可选集的首项（保证默认值 ⊆ 选项集，源端过滤后仍成立）
-  const [relationType, setRelationType] = useState<string>(() => typeOptions[0]);
+  // 默认关系类型文本 = 当前源端可选集的首项（保证默认值 ⊆ 选项集，源端过滤后仍成立）；
+  // **存的是展示文本**（自由输入控件里预定义 = 中文标签、自定义 = 原名），提交前反解回落库取值
+  const [relationTypeText, setRelationTypeText] = useState<string>(
+    () => relationTypeInputOptions(typeOptions, [])[0]?.value ?? "",
+  );
+  // 搜索词（combobox 受控）：null = 不在搜索（输入框显示已选文本）。
+  // 打开下拉即清空搜索词——否则预填的选中值会被当成搜索词，下拉只剩它一项（无法浏览其它类型）；
+  // 关闭时把已输入的文本提交为选中值（自由输入不能被“点别处”丢掉）
+  const [relationTypeSearch, setRelationTypeSearch] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -155,8 +163,11 @@ export function CreateRelationDialog({
   }, [otherType]);
 
   const outlineOptions = flattenTree(outline?.children ?? []);
-  // 关系类型选项：调用方预定义子集 + 已用自定义类型（带条数，自定义在后）
-  const relationTypeOptions = relationTypeSelectOptions(typeOptions, customUsages);
+  // 自由输入控件选项（combobox：输入框显示 option 的 value）——预定义 = 中文标签；
+  // 自定义 = 原名（列表 label 带 ` · N`）；落库取值由 `resolveRelationTypeInput` 反解
+  const relationTypeOptions = relationTypeInputOptions(typeOptions, customUsages);
+  // 落库取值：文本命中预定义 key / 中文标签 → 该 key；否则原样（自定义类型）
+  const relationType = resolveRelationTypeInput(relationTypeText);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -247,11 +258,28 @@ export function CreateRelationDialog({
               <AutoComplete
                 className="w-full"
                 aria-label="关系类型"
-                value={relationType}
-                onChange={(value) => setRelationType(value ?? "")}
+                value={relationTypeText}
+                searchValue={relationTypeSearch ?? undefined}
+                onSearch={(text) => setRelationTypeSearch(text)}
+                onOpenChange={(open) => {
+                  if (open) {
+                    setRelationTypeSearch(""); // 打开即全部可浏览
+                    return;
+                  }
+                  // 关闭：已输入的非空文本提交为选中值；未输入则回到已选文本
+                  setRelationTypeText((current) => {
+                    const typed = relationTypeSearch;
+                    return typed !== null && typed.trim() !== "" ? typed : current;
+                  });
+                  setRelationTypeSearch(null);
+                }}
+                onChange={(value) => {
+                  setRelationTypeText(value ?? "");
+                  setRelationTypeSearch(null);
+                }}
                 options={relationTypeOptions}
                 filterOption={filterByLabel}
-                notFoundContent={`将新建『${relationType}』`}
+                notFoundContent={`将新建『${relationTypeSearch ?? relationTypeText}』`}
                 popupMatchSelectWidth={false}
               />
               <span

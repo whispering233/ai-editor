@@ -6,7 +6,9 @@ import { RELATION_TYPE_META } from "@whispering233/ai-editor-shared";
 import {
   customRelationTypeUsages,
   dialogRelationTypeOptions,
+  relationTypeInputOptions,
   relationTypeSelectOptions,
+  resolveRelationTypeInput,
 } from "./relation-types";
 
 const HOOK_TYPES = ["plants", "advances", "resolves"];
@@ -97,5 +99,26 @@ describe("relationTypeSelectOptions（预定义子集 + 自定义类型拼接）
     const options = relationTypeSelectOptions(["ally", "kills"], []);
     expect(options.map((o) => o.value)).toEqual(["ally", "kills"]);
     expect(options.map((o) => o.value)).not.toContain("occurs_at");
+  });
+});
+
+describe("relationTypeInputOptions + resolveRelationTypeInput（自由输入控件的展示/取值映射）", () => {
+  it("预定义 → value = 中文标签（combobox 显示 value，不能是裸 key）；自定义 → value = 原名、label 带条数", () => {
+    const options = relationTypeInputOptions(["ally", "rival"], [{ type: "宿敌", count: 2 }]);
+    expect(options).toEqual([
+      { value: RELATION_TYPE_META.ally.label, label: RELATION_TYPE_META.ally.label },
+      { value: RELATION_TYPE_META.rival.label, label: RELATION_TYPE_META.rival.label },
+      { value: "宿敌", label: "宿敌 · 2" },
+    ]);
+    expect(options.map((o) => o.value)).not.toContain("ally");
+  });
+
+  it("反解：预定义 key 原样、中文标签 → key、自定义原样（trim 后）", () => {
+    expect(resolveRelationTypeInput("ally")).toBe("ally");
+    expect(resolveRelationTypeInput(RELATION_TYPE_META.ally.label)).toBe("ally");
+    expect(resolveRelationTypeInput(RELATION_TYPE_META.mentor.label)).toBe("mentor");
+    expect(resolveRelationTypeInput("  宿敌  ")).toBe("宿敌");
+    expect(resolveRelationTypeInput("青梅竹马")).toBe("青梅竹马");
+    expect(resolveRelationTypeInput("")).toBe("");
   });
 });
