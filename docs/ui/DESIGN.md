@@ -389,7 +389,7 @@ components:
 
 ### 中栏页头结构
 
-自上而下：**标题行**（`page-title`，每页一个）→ **二级 tab 行**（可选：设置页二级 tab、人物页双视图 tab）→ **控件行**（可选：左侧搜索框恒最左 192px（`search-input`）、操作按钮靠右）→ **分割线** → **内容区块**。
+自上而下：**标题行**（`page-title`，每页一个）→ **二级 tab 行**（可选：设置页二级 tab、人物页四 tab）→ **控件行**（可选：左侧搜索框恒最左 192px（`search-input`）、操作按钮靠右）→ **分割线** → **内容区块**。
 
 - **分割线**：1px `{colors.hairline}`（结构描边档，与 `info-bar` 底线同档；不是 `hairline-soft` 的行分隔档），宽度与内容区块同宽——不穿透中栏内容区的内边距。
 - **有 tab 时不再另画分割线**：antd line 型 `Tabs` 的横向导航条**自带** 1px `{colors.hairline}` 底线（`antd/es/tabs/style/index.js` 的 `&-nav-list::before { borderBottom }`），该底线即分割线；配套 `horizontalMargin: 0`（antd 默认 `0 0 16px 0` 会在 tab 与内容间留 16px 空档，压在分割线上就是双线）。
@@ -471,9 +471,9 @@ components:
 ### 导航与外壳
 
 **`sidebar`** — 左栏底 `{colors.surface}`（比内容面板暗一档），右侧 1px `{colors.hairline}`；**顶部标识 = 「◈ 书架」（书架主页入口，`#/`）**、其下**书名按钮**（`#/overview` 项目概览入口）、八项一级导航、工具区（回收站）、底部「立即备份」快捷入口 + 设置与主题。**「概览」不再占一级导航位**（入口收敛到书名按钮，`#/overview` 时书名按钮用选中面；书架路由 `#/` 下左栏无选中面——书架自身就是当前页）。
-**导航入口不受「文字按钮必须带边框」约束**：左栏导航项（Menu 八项 + 书名 / 设置 / 主题三个入口）与 Menu 项同级——无边框、选中态用 `{colors.surface-muted}` 灰面（Tailwind `bg-accent` = `colorFillTertiary`）、文字不变色，禁用 H4 只约束操作按钮（新建/重命名/重试/删除等）。**左栏底部区形态单一**：立即备份 / 设置 / 主题三入口同为 `block` + `color="default" variant="text"` 的无边框文字按钮——「立即备份」是动作而非导航，形态随底部区（**H4 登记例外，仅此一处**）；禁用/加载态由 antd Button 派发（无项目 → 禁用；在途 → `loading` 防连点），失败经 `message` 提示。**`menu-item`** / **`menu-item-selected`** — 菜单项 32px 高、`{rounded.sm}`；**选中 = `{colors.surface-muted}` 灰面 + 文字不变色**（antd 默认的彩色选中项要显式覆盖：`itemSelectedBg` / `itemSelectedColor`）。**`info-bar`** — 中栏顶部 1px 底线；项目名（点击进 `#/overview` 项目概览）+ 当前位置 + 语言 + 小屏聊天开关。字号 `{typography.caption}`。
+**导航入口不受「文字按钮必须带边框」约束**：左栏导航项（Menu 八项 + 书名 / 设置 / 主题三个入口）与 Menu 项同级——无边框、选中态用 `{colors.surface-muted}` 灰面（Tailwind `bg-accent` = `colorFillTertiary`）、文字不变色，禁用 H4 只约束操作按钮（新建/重命名/重试/删除等）。**左栏底部区形态单一**：立即备份 / 设置 / 主题三入口同为 `block` + `color="default" variant="text"` 的无边框文字按钮——「立即备份」是动作而非导航，形态随底部区（**H4 登记例外，仅此一处**）；禁用/加载态由 antd Button 派发（无项目 → 禁用；在途 → `loading` 防连点），失败经 `message` 提示。**`menu-item`** / **`menu-item-selected`** — 菜单项 32px 高、`{rounded.sm}`；**选中 = `{colors.surface-muted}` 灰面 + 文字不变色**（antd 默认的彩色选中项要显式覆盖：`itemSelectedBg` / `itemSelectedColor`）。**`info-bar`** — 中栏顶部 1px 底线；项目名（点击进 `#/overview` 项目概览）+ 阅读进度 + 语言 + 小屏聊天开关。字号 `{typography.caption}`。
 
-**`tabs`（二级 tab）** — 页面内分区导航（设置页二级 tab / 人物页双视图 tab）：antd `Tabs` line 型（`items` 数组，`activeKey` 受控）。未选中 `{colors.secondary}`，选中与悬浮 `{colors.primary}`（`itemSelectedColor` / `itemHoverColor` / `inkBarColor` 的 antd 默认值就是 `colorPrimary`，**不重复覆盖**），选中指示条 2px `{colors.primary}`，底线 1px `{colors.hairline}` = 页头分割线（见 §Layout「中栏页头结构」）。**页内 tab 不进 URL、不参与左栏导航高亮**，选中态是页面 state（刷新回落默认 tab）。
+**`tabs`（二级 tab）** — 页面内分区导航（设置页二级 tab / 人物页四 tab）：antd `Tabs` line 型（`items` 数组，`activeKey` 受控）。未选中 `{colors.secondary}`，选中与悬浮 `{colors.primary}`（`itemSelectedColor` / `itemHoverColor` / `inkBarColor` 的 antd 默认值就是 `colorPrimary`，**不重复覆盖**），选中指示条 2px `{colors.primary}`，底线 1px `{colors.hairline}` = 页头分割线（见 §Layout「中栏页头结构」）。**页内 tab 不进 URL、不参与左栏导航高亮**，选中态是页面 state（刷新回落默认 tab）。
 
 **`sub-nav`（三级导航）** — 带子内容区块的页内分区导航（目前仅设置页「AI 模型」）：竖向 antd `Menu` inline，宽 160px（= `sidebar` 登记的宽度档），**契约完全复用 `menu-item` / `menu-item-selected`**（32px 行高、`{rounded.sm}`、选中 = `{colors.surface-muted}` 灰面 + 文字不变色），不新增设计语言；项文案超宽截断（`title` 给全文），项前置 `provider-icon`。
 
@@ -496,16 +496,18 @@ components:
 **`character-workbench`（人物工作台，2026-09）** — 人物页（`#/characters` / `#/characters/:id`）是中栏内的 **master-detail**（无导航级变动，路由已是一级段）：
 
 - **左栏**（固定 240px，右侧 1px `{colors.hairline}`）= 人物列表，**它就是列表本身**（不再有独立人物列表页）：行 = 姓名（`{colors.primary}`）+ 角色定位（`{typography.caption}` + `{colors.tertiary}`）、32px 行高、`{rounded.sm}`、选中 = `{colors.surface-muted}` 灰面 + 文字不变色（**完全复用 `menu-item` / `menu-item-selected` 语言**）；**行头两行**（240px 内物理上塞不下 192px 搜索框 + 下拉 + 按钮）：第一行 `search-input`（192px，独占一行）、第二行排序 `select`（内容宽 + `popupMatchSelectWidth={false}`）+ 主操作（「+ 新建」`button-primary`，卡 3.5 接入）。排序默认 `updated_at` 降序（后端列表默认），可切 `name` / `created_at`。
-- **右栏** = 详情，内容区自上而下：**页头**（`page-header` 壳不变）→ **双视图 tab**（「初始化数据」/「当前位置数据」，走 `tabs` 契约）→ **不可变区**（区标题「基础信息」：姓名 / 角色定位 / 描述）→ **可变区**（区标题「可变数据」：假名 / 性别 / 年龄 / 种族 / 动机 / 性格 + `panel-tree`）→ **`character-relations`（人物关系网，默认展开）** → **其他关联（默认折叠，标题带条数）**。两个区的区标题均走 `card` 容器 + `section-title`（`SectionCard`）；**两个 tab 共用同一分区结构**（只读态靠 `disabled` 而非另一套渲染，字段位置才稳定）。
-- **层级语义**：**tab 只包「不可变区 + 可变区」**；关系网/其他关联在 tab **之下**，两个 tab 共享（关系不参与 `computeState`，与状态视图正交——放进 tab 会让用户以为"关系也会变"）。不可变字段不参与 Delta，两个 tab 显示值必然相同。
-- **只读语义**：tab 2（当前位置数据）的输入控件全部 `disabled`（**不隐藏**——字段位置稳定才好对比），并在区首给一行 `caption-text`「由变更记录累积，只读」。
+- **右栏** = 详情，内容区自上而下：**页头**（`page-header` 壳不变）→ **四 tab**（「人物档案」/「阅读进度」/「人物关系网」/「其他关联」，走 `tabs` 契约）→ 各 tab 内容。**tab 文案 = 用户语言，不出数据分层词**：数据层的不可变性分层只服务变更记录白名单与 AI 提案边界，UI 不再分「基础信息 / 可变数据」两块（见 `10-data-model.md` §14）。
+- **`人物档案` tab** = 一张 `card` 内的**档案式字段网格**（无区标题、不分块）：**单行字段**（姓名 / 角色定位 / 假名 / 性别 / 年龄 / 种族）走「label 左置（固定宽 64px、`{colors.secondary}`）+ 值」的两列网格（≥`md` 两列，行距 12px / 列距 16px），**长文本与列表字段**（描述 / 性格 / 动机）整行占满；网格之下依次是 `panel-tree`（自带标题行 + 1px hairline 上边线）与「自定义字段」（仅响应 `data` 已有该键时渲染）。
+- **层级语义**：四个 tab 平级，各自承载一个数据集——初始值字段（`人物档案`）、按阅读进度累积的值（`阅读进度`）、人↔人关系、其他关联。**关系不参与 `computeState`**，与两个字段 tab 正交：拆成平级 tab 是因为它们本就是不同的数据集，而不是「关系会随进度变」。**`其他关联` tab 标签常显条数**（`其他关联 · N`）——它涵盖 `appears_in` / `belongs_to` 等 AI 分析数据源，条数可见即「不可藏」。
+- **只读语义**：`阅读进度` tab 的字段值 = `computeState(at_node = current_position)` 的累积结果，**画纯文本值列**（空值 `—`、`{colors.quaternary}`），label 与网格位与 `人物档案` 逐一致（对比无位移）；`panel-tree` 在同 tab 走只读形态，tab 首行给 `caption-text`「由变更记录累积，只读」。**编辑只发生在 `人物档案` 视图**——要改当前状态就必须建变更记录（`10-data-model.md` §14 不变式 3）。
+- **默认 tab**：有有效阅读进度 → `阅读进度`；未设置 / 已失效 → `人物档案`（失效时在 tab 行上方给提示 + 「去大纲重设」入口）；四个 tab 的选中态是页面 state、**不进 URL**（刷新回落默认 tab）。
 - **窄屏（<1024px）**：退化为两级——左栏列表全宽 → 点进详情全宽（详情页头左侧给返回入口）；与「本设计语言不对移动端另立规则」一致。
 - **全高双滚动布局（实现约定）**：工作台自带「左栏/右栏各自纵向滚动」的全高布局，**需抵消中栏内容区的 `p-6`（24px）内边距**（实现为 `-m-6 h-[calc(100%+3rem)]`）——改中栏内边距时必须同步此处（否则错位）。
 - **空列表**：右栏 `empty-state` + 主操作「新建第一个角色」；`#/characters` 无 id 时自动选中第一个角色（有角色则重定向到 `#/characters/<id>`），避免"左栏有内容、右栏悬空"。**自动选首个只在桌面态生效**（窄屏两级下会自动弹回详情、使「返回列表」失效）；窄屏两级：列表全宽 ↔ 详情全宽 + 返回入口。
 
 **`character-relations`（人物关系网）** — 行语言 = `data-row`（底部 1px `{colors.hairline-soft}`、hover `{colors.surface-soft}`）：按 `relationType` **分组**（组头 = `section-title` 字号档中的 caption 行 + 条数，**条数 = 去重后行数**），行 = 对方姓名（可点击切选中该角色）+ 方向箭头（`→` / `←`，双向边标「双向」徽标）+ `metadata` 备注副行（`caption-text`）+ `icon-button` 删除；区头右侧 `button-default`「+ 添加人物关系」（**关系类型下拉 = 人↔人 5 类**（`ally`/`rival`/`mentor`/`family`/`kills`），**目标端类型锁定 `character`**（只读卡片，无下拉））。**对称关系显示去重**（`ally`/`rival`/`family` 同时存在两条边时合并一行 + 「双向」），但**不自动建反边**（显示层去重，不做双写）；**合并行删除只删方向边（out）那一条**，确认文案需声明只删其中一条。仅展示以本角色为一端的关系（其余 = 其他关联）。
 
-**其他关联（折叠区）** — 标题行 = 「其他关联 · N 条」+ chevron（`icon-button`）+ 展开后 `button-default`「+ 添加关联」（通用对话框）；默认**收起**。行语言同 `character-relations`（不分类型组，按类型序）；涵盖 `appears_in` / `belongs_to` / `owns` / `masters` 等——它们是 AI 分析的数据源（如孤儿诊断依赖 `appears_in`），因此**收起但不可藏**。
+**其他关联（tab）** — tab 标签 = 「其他关联 · N」（N = 行数）；tab 内容 = 标题行右侧 `button-default`「+ 添加关联」（通用对话框）+ 行列表。行语言同 `character-relations`（不分类型组，按类型序）；涵盖 `appears_in` / `belongs_to` / `owns` / `masters` 等——它们是 AI 分析的数据源（如孤儿诊断依赖 `appears_in`），因此**条数常显于 tab 标签、不可藏**。空态给一行 `empty-state` 引导。
 
 **`character-create-dialog`（新建人物弹窗，2026-09）** — 复用 `components/ui/dialog.tsx`（受控，**不新造浮层**）：**单窗两段，不做多步向导**。
 
@@ -516,7 +518,7 @@ components:
 - **提交**：成功 → 关窗 + toast + 左栏插入并**选中新角色**（路由跳 `#/characters/<id>`）；失败 → 窗内内联错误不关窗；在途 `loading` 防连点。**
 - **入口形态**：左栏行头第二行「+ 新建」= `button-primary`；**空态主操作**——左栏空态用 `button-default`（避免与行头主按钮抢焦点）、右栏空态用 `button-primary`「新建第一个角色」。
 
-**`panel-tree`（能力面板树）** — 自绘缩进行（**不用 antd `Tree`**：其选中面派生 token 不可信，且项目已有大纲/设定两处自绘缩进行先例）：缩进按层；**分支行** = 展开箭头 + 名称 + 行尾 `icon-button`（**新增同级 / 新增子级 / 改名 / 删除**——四项，操作集完整性优先）；**叶子行** = 名称 + 值输入框（`input` 的 `size="small"` 24px 档，宽度按内容列定档）+ 空值显示 `—`（`{colors.quaternary}`）。拖拽走 `drag-indicator`（同级插入线）+ 拖到行中段 = 成为子级（primary 10% 淡染目标行，同 §拖拽目标行）；**tab 2 走只读值列（不渲染可编辑树、不提供编辑入口）**。值自动判定类型（纯数字 → number，否则 string）。**结构与值分离**：结构编辑走页面的显式保存（`PUT partial`，**不产生 Delta**）；仅已有叶子值可被变更记录改（叶子路径进「+ 新建变更」字段下拉，前缀由 shared helper 拼）。**内联提示（不静默改写数据）**：名字含 `.`（不可被变更记录寻址）/ 同层重名 → 行内警告（`panelWarningMap`）；**空名**不属行内警告（shared 解析会把空名节点丢弃、渲染树里不可能存在）——由**改名输入态**的行内提示拦下（「名字不能为空」，提交被拒且不落库）。
+**`panel-tree`（能力面板树）** — 自绘缩进行（**不用 antd `Tree`**：其选中面派生 token 不可信，且项目已有大纲/设定两处自绘缩进行先例）：缩进按层；**分支行** = 展开箭头 + 名称 + 行尾 `icon-button`（**新增同级 / 新增子级 / 改名 / 删除**——四项，操作集完整性优先）；**叶子行** = 名称 + 值输入框（`input` 的 `size="small"` 24px 档，宽度按内容列定档），**空值 = 空输入框**（不给 `—` 占位符——占位符会被误读为已有值）。拖拽走 `drag-indicator`（同级插入线）+ 拖到行中段 = 成为子级（primary 10% 淡染目标行，同 §拖拽目标行）；**`阅读进度` tab 走只读形态**：同缩进的「名称 + 值文本」行（空值 `—`、`{colors.quaternary}`），不渲染输入框、工具条与行操作。值自动判定类型（纯数字 → number，否则 string）。**结构与值分离**：结构编辑走页面的显式保存（`PUT partial`，**不产生 Delta**）；仅已有叶子值可被变更记录改（叶子路径进「+ 新建变更」字段下拉，前缀由 shared helper 拼）。**内联提示（不静默改写数据）**：名字含 `.`（不可被变更记录寻址）/ 同层重名 → 行内警告（`panelWarningMap`）；**空名**不属行内警告（shared 解析会把空名节点丢弃、渲染树里不可能存在）——由**改名输入态**的行内提示拦下（「名字不能为空」，提交被拒且不落库）。
 
 > 以上三个人物页专有形态**不新增色值/字号/圆角**——全部落在既有 token 档内（选中面 `{colors.surface-muted}`、次级字 `{colors.tertiary}`、行 hover `{colors.surface-soft}`、拖拽线 `{colors.primary}`、描边 `{colors.hairline}` / `{colors.hairline-soft}`）。
 

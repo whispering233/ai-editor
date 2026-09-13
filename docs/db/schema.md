@@ -57,7 +57,7 @@ CREATE TABLE entities (
 
 | type | data 关键字段 |
 |------|-------------|
-| `character` | **不可变**：`role`（角色定位——**新建弹窗必填；详情页允许为空**，两者口径有意不同）, `description`（**必填**——人物概述：这个人物是谁；**校验落地 = 卡 3.3 前端表单 + AI 工具约定，服务端不硬校验**）；**可变**：`alias`（假名/化名——**单值**：当前位置时这个人的化名是什么；Delta `set`/`update` 标量而非数组）, `gender`, `age`, `race`, `motivation`, `personality[]`, `ability_panel`（能力面板树）；`custom_fields`。（**2026-09 修订**：`status` 彻底移除——详情表单/列表/AI 摘要三处早已无展示，旧残留由 `.passthrough()` 容错；`abilities[]` 经 007 迁移为 `ability_panel`，见下方「人物 data 分层」） |
+| `character` | **不可变**：`role`（角色定位——**新建弹窗必填；详情页允许为空**，两者口径有意不同）, `description`（**必填**——人物概述：这个人物是谁；**校验落地 = 卡 3.3 前端表单 + AI 工具约定，服务端不硬校验**）；**可变**：`alias`（假名/化名——**单值**：阅读进度时这个人的化名是什么；Delta `set`/`update` 标量而非数组）, `gender`, `age`, `race`, `motivation`, `personality[]`, `ability_panel`（能力面板树）；`custom_fields`。（**2026-09 修订**：`status` 彻底移除——详情表单/列表/AI 摘要三处早已无展示，旧残留由 `.passthrough()` 容错；`abilities[]` 经 007 迁移为 `ability_panel`，见下方「人物 data 分层」） |
 | `setting` | `description`, `tags[]`（**分类标签，统一字段**）, `rules[]`（**规则条款，仅详情页编辑**）, `custom_fields` —— **`parent_id` 与 `category` 均已废弃**：层级由 belongs_to 关系表达、分类由 tags 承接；旧字段残留由 `.passthrough()` 容错；旧 rules 分类值经 004 迁移（SCHEMA_VERSION 4）复制到 tags |
 | `location` | `type`, `parent_id`, `description`, `custom_fields` |
 | `hook` | 伏笔（关系生命周期见下方 `plants`/`advances`/`resolves` 等）；data 字段集见 shared `hookDataSchema`（status/category/expected_payoff/payoff_timing/half_life/is_core/notes），服务端按 schema 校验 |
@@ -67,12 +67,12 @@ CREATE TABLE entities (
 
 ### 人物 data 分层（2026-09）
 
-人物 data 按**可变性三分**建模——它同时是「双视图」（初始化数据 / 当前位置数据）、「变更记录字段白名单」与「AI 变更提案边界」的共同依据：
+人物 data 按**可变性三分**建模——它同时是「双视图」（UI 文案：人物档案 / 阅读进度）、「变更记录字段白名单」与「AI 变更提案边界」的共同依据：
 
 | 分层 | 字段 | 是否参与 Delta |
 |------|------|----------------|
 | **不可变** | `entities.name`（姓名，**列**不是 data 字段）、`data.role`（角色定位）、`data.description`（描述，必填） | **否**——不出现在变更记录的字段下拉；人工经 `PUT` 直接编辑 |
-| **可变** | `data.alias` / `gender` / `age` / `race` / `motivation` / `personality[]` / `ability_panel` 叶子值 / **`custom_fields`**（可被点分路径 Delta 命中，故与不可变区语义互诉；MVP 只在已有该键时渲染、不可新增键） | **是**——沿大纲树父链（章序前缀）累积，构成「当前位置数据」视图 |
+| **可变** | `data.alias` / `gender` / `age` / `race` / `motivation` / `personality[]` / `ability_panel` 叶子值 / **`custom_fields`**（可被点分路径 Delta 命中，故与不可变区语义互诉；MVP 只在已有该键时渲染、不可新增键） | **是**——沿大纲树父链（章序前缀）累积，构成「阅读进度」视图 |
 | **关系网** | `relation_records`（人↔人 5 类 + `appears_in` / `belongs_to` / `owns` / `masters`） | 否——关系不参与 `computeState` |
 
 **`ability_panel` 能力面板结构**（用户自定义字段树，递归）：
@@ -279,7 +279,7 @@ CREATE TABLE delta_records (
 | `language` | `"zh"` \| `"en"` | 语言 |
 | `prompt` | string | **已废弃**：项目级提示词——不再读写；项目规则改由项目目录 `AGENTS.md` 承载（见下节）。旧文件中的残留字段宽松读取（不参与 schema_version 判定），新写入不再产生该字段 |
 | `schema_version` | number | JSON 结构版本（与 outline.json 顶层同步写入） |
-| `current_position` | string \| null | 大纲「当前位置」节点 id（伏笔健康指标/双视图依赖；null = 未设置；**须指向存在的非软删 `chapter` 节点**——卷/场景不承载写作进度，非章 → `PUT /project/config` 400）。**读侧宽松**：存量指向非章节点的值由 `ChapterIndex.chapterOf` 沿父链推导兜底，不报错 |
+| `current_position` | string \| null | 大纲「阅读进度」节点 id（**UI 文案 = 阅读进度；字段名不变**；伏笔健康指标/双视图依赖；null = 未设置；**须指向存在的非软删 `chapter` 节点**——卷/场景不承载写作进度，非章 → `PUT /project/config` 400）。**读侧宽松**：存量指向非章节点的值由 `ChapterIndex.chapterOf` 沿父链推导兜底，不报错 |
 | `backup_frequency_minutes` | number \| null | **自动备份频率（可选字段）**：分钟数，仅接受枚举 1/5/10/15/30/60；`null` / `0` = 关闭；**缺省 = 10**（新项目默认开启）；随书籍（每项目独立）；不参与 schema_version 判定（宽松读取，缺省兜底） |
 | `created_at` / `updated_at` | string | ISO 8601，应用层写入；首次初始化写 `created_at`，配置变更更新 `updated_at` |
 
