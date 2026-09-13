@@ -60,7 +60,7 @@
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
-  /* 标签 tint 三色（DESIGN.md §Colors 标签色；浅色底 + 墨字，最低 6.80:1）——tint 不是 antd token
+  /* 标签 tint 三色（DESIGN.md §Colors 标签色；浅色底 + 墨字，最低 8.80:1）——tint 不是 antd token
      （无法从 seed 派生），因此色调定义在 CSS（本文件与 AntdProvider 并列 = 设计系统仅有的两处色值定义点 */
   --color-tag-sky: var(--tag-sky);
   --color-tag-sage: var(--tag-sage);
@@ -71,10 +71,10 @@
 }
 
 /* 标签 tint 色值（浅色 = DESIGN.md §Colors 登记值；深色 = 同色相 20% 不透明度叠在深色面板上
-   ——保留色相又不刺眼，字色随 --foreground 变 81% 白；2026-09 收到 3 档时验算：叠色合成底 + 81% 白字 6.08–6.66 均达标）。
+   ——保留色相又不刺眼，字色随 --foreground 变 81% 白；2026-09 收到 3 档时验算：叠色合成底 + 81% 白字 5.96–6.18 均达标）。
    分配规则见 lib/tag-tint.ts（名称 hash 取模 3，同名恒同色）。*/
 :root {
-  --tag-sky: #93c5fd;
+  --tag-sky: #cce9fc;
   --tag-sage: #d1e2c4;
   --tag-yellow: #ffd800;
   /* 类型徽标边框（描边式 chip）：两态同一值——1px 线在灰底上需 ≥3:1 才可见（浅底 3.61 / 深底 3.34）。
@@ -85,7 +85,7 @@
 }
 
 .dark {
-  --tag-sky: rgb(147 197 253 / 0.2);
+  --tag-sky: rgb(204 233 252 / 0.2);
   --tag-sage: rgb(209 226 196 / 0.2);
   --tag-yellow: rgb(255 216 0 / 0.2);
   --character-role: #ef8354;

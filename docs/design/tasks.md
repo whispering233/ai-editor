@@ -10,7 +10,12 @@
 
 ## 当前任务卡
 
-（无进行中任务卡。）
+### 卡 11.7 — tint 蓝档换 `#cce9fc`
+
+**任务卡**：
+- [x] 11.7 `index.css`（`--tag-sky` 浅/深两段）+ `DESIGN.md`（colors/§Colors 数值与色相分布表述）同步；实测 底vs白 1.26 / 墨字 9.71 / 深色叠色后 5.96
+
+**验证**：`pnpm typecheck` / `lint` / `-r test` / `designmd lint`；浏览器两态实测 `bg-tag-sky`
 
 ---
 
