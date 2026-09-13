@@ -1,5 +1,6 @@
 // 人物详情纯函数与判据（卡 3.2；卡 3.3 补：必填判据、tab 判据三态；卡 3.3 修复轮：对象值只读渲染 /
-// 描述为空提示 / 大纲加载文案单一来源；卡 6.2 改：删可变性分区标题、立详情页字段顺序单一清单）
+// 描述为空提示 / 大纲加载文案单一来源；卡 6.2 改：删可变性分区标题、立详情页字段顺序单一清单；
+// 卡 8.3 补：字段清单加 shared `characterDataSchema` 编译期一致性断言——字段名（`satisfies`）+ 穷尽性（`never`））
 // 契约：`docs/ui/DESIGN.md` §数据展示 `character-workbench`（四 tab / 档案式字段网格 / 只读纯文本值）与
 //   `tabs`（页内 tab、不进 URL）；
 //   `docs/design/10-data-model.md` §14：不变式 1（不可变字段不参与 Delta，人工可编辑）、
@@ -8,7 +9,14 @@
 // 本模块只做判据与取值整形——不碰 DOM、不发请求（仓内无 jsdom，纯函数便于单测）。
 
 import { IMMUTABLE_FIELDS } from "@whispering233/ai-editor-shared";
+// 类型-only 导入 schema 常量（编译期擦除，不打包 zod；断言本地字段清单 = shared schema keys，
+// 与 `lib/delta-create.ts` 同款写法）
+import type { ENTITY_DATA_SCHEMAS } from "@whispering233/ai-editor-shared/schemas";
 import { detailFieldsForType, type DetailFieldConfig } from "./entity-detail";
+
+/** shared `characterDataSchema` 的 data 键（单一事实源；schema 增删键 → 下方断言编译报错） */
+type EntityDataKey<T extends keyof typeof ENTITY_DATA_SCHEMAS> =
+  keyof (typeof ENTITY_DATA_SCHEMAS)[T]["shape"];
 
 /** 页内 tab 键（四 tab：人物档案 / 阅读进度 / 人物关系网 / 其他关联；刷新回落默认 tab——DESIGN.md `tabs` 契约） */
 export type CharacterViewTab = "initial" | "current" | "relations" | "other";
@@ -32,13 +40,13 @@ export const CHARACTER_MUTABLE_DATA_KEYS = [
   "race",
   "motivation",
   "personality",
-] as const;
+] as const satisfies readonly EntityDataKey<"character">[];
 
 /**
  * 详情页字段渲染顺序（**单一清单**）：档案式阅读顺序 = 身份（角色定位）→ 短字段（假名/性别/年龄/种族）
  * → 长篇（描述/性格/动机）。可变性分层**不进 UI**（两 tab 共用本顺序，label 逐一致才好对比）。
  */
-export const CHARACTER_DETAIL_FIELD_KEYS: readonly string[] = [
+export const CHARACTER_DETAIL_FIELD_KEYS = [
   "role",
   "alias",
   "gender",
@@ -47,7 +55,21 @@ export const CHARACTER_DETAIL_FIELD_KEYS: readonly string[] = [
   "description",
   "personality",
   "motivation",
-];
+] as const satisfies readonly EntityDataKey<"character">[];
+
+/**
+ * 穷尽性编译期断言（卡 8.3）：字段清单以外的 data 键只剩结构特殊、由独立组件渲染的两个——
+ * 能力面板 `ability_panel`（`panel-tree` 整树）与自定义字段 `custom_fields`（自由键值）。
+ * shared `characterDataSchema` 新增键而未登记进本清单 → `MissingCharacterDataKeys` 非 `never` →
+ * 类型变 `false`、赋 `true` 立即编译报错。护栏必要性：漏登记的键不会渲染，表现为「两视图缺字段」且无报错。
+ */
+type RenderedCharacterDataKeys =
+  | (typeof CHARACTER_DETAIL_FIELD_KEYS)[number]
+  | "ability_panel"
+  | "custom_fields";
+type MissingCharacterDataKeys = Exclude<EntityDataKey<"character">, RenderedCharacterDataKeys>;
+const _characterDataKeysExhaustive: MissingCharacterDataKeys extends never ? true : false = true;
+void _characterDataKeysExhaustive; // 读取一次以满足 noUnusedLocals / eslint（断言本身只在编译期有意义）
 
 /**
  * 按 key 取字段配置（缺失 → 抛错：配置漂移应在测试里立刻暴露，不静默丢字段）。
