@@ -16,7 +16,14 @@
 
 **批次 2（云端收口，2026-09-15）已完成**：卡 A 备份命名唯一化（`13f1d2b` + 收口 `3256108`）、卡 B 旧包上传诚实化（`e43869e`）——两张卡各自通过独立 oracle 验证（A = 有条件 PASS → 文档收口；B = 有条件 PASS → 三处文本/注释收口），逐卡事实见根 `CHANGELOG.md` 的 `Unreleased` 段。
 
-**待排（用户未定）**：`backlog.md` 里「云端收口小项」那批（失败文案去「未执行」断言、`refresh()` 的 busy 归属、冲突框带 `fileName`、`getProjectBackups` 失败区分、AggregateError 取码、`/cloud/test` 可写不可删降级、URL 校验不回显 raw、shared 注释镜像、status 复查宿主上移、`DESIGN.md §544` 口径）——`clearStatus()` 清对话框状态已在卡 B 顺带完成。
+**当前任务卡：云端收口批次 3（2026-09-15，用户已定：分「代码类 / 文案类」两卡）**：
+
+| 卡 | 目标 | 主要交付物 | 完成判据（硬） |
+| :--- | :--- | :--- | :--- |
+| **C** | **收口·代码类**（行为/逻辑） | ① `stores/cloud.ts` 的 `refresh()` busy 归属（谁设的谁清，不再无条件清）；② 冲突框「保留云端」显式传 `pullTarget.fileName`（`pull(entry)` 已有入参，改调用点）；③ 本机份列表读取失败与「真的没有备份」区分（`localLatest` 加 `localLatestUnavailable` 或等效；两个对话框的强推/上传按钮与文案据此禁用）；④ 旧包确认框在「本机无备份」时禁用「上传旧备份」（`DESIGN.md` §549）；⑤ `webdav.ts` 不可达文案取 `cause.errors[].code`（AggregateError）；⑥ `/cloud/test` 的 DELETE 失败降级为成功 + 残留提示（`DESIGN.md`/`40-cloud-sync.md` §9 口径已写）；⑦ status 复查宿主从 `NavRail` 上移 `AppShell`（左栏收起也复查） | ①-⑦ 每条有守卫测试（client 6 条 + server 2 条量级）；门禁全绿；浏览器像素核对一次（角标仍在、两个对话框按钮禁用态正确）；新 commit |
+| **D** | **收口·文案类**（字符串/注释/文档） | ① 三处「无法连接服务，推送/拉取/测试未执行」→「未确认」口径（超时可能服务端已执行）；② `routes/cloud.ts` 的 `normalizeWebdavUrl` 两条错路**不回显原始输入**（只回显协议段或固定文案）+ 一条守卫测试；③ `packages/shared/src/types/api.ts` 的 cloud 注释镜像补「url+username 皆空 ⇒ password 一并丢弃」「拒绝 userinfo」两行；④ `DESIGN.md §544` 失败态口径已按实现改写（本卡只需确认无残留矛盾） | ①-④ 落地；文案类改动不改任何行为（测试仅新增 URL 回显守卫）；门禁全绿；新 commit |
+
+**待排（更远）**：`backlog.md` 其余条目（旧命名份永不清、zip 生成窗口、零备份 UX、restore 后 backupStale 等）。
 
 > 上一轮 oracle 复核列出的「云端收口小项」（失败文案去「未执行」断言、`refresh()` 的 busy 归属、`clearStatus()` 清对话框状态、冲突框带 fileName、`getProjectBackups` 失败区分、AggregateError 取码、`/cloud/test` 可写不可删降级、URL 校验不回显 raw、shared 注释镜像、status 复查宿主上移、`§544` 口径）待卡 A/B 落地后另排。
 
