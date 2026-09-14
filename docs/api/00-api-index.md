@@ -96,6 +96,16 @@
 | POST | `/api/v1/proposal/:proposalId/confirm` | AI 对话与提案确认 |
 | POST | `/api/v1/proposal/:proposalId/reject` | AI 对话与提案确认 |
 
+### 云端存档（[100-api-cloud.md](./100-api-cloud.md)）
+
+| 方法 | 路径 | 文档 |
+| :--- | :--- | :--- |
+| GET | `/api/v1/cloud/status` | 云端存档 |
+| PUT | `/api/v1/cloud/config` | 云端存档 |
+| POST | `/api/v1/cloud/test` | 云端存档 |
+| POST | `/api/v1/cloud/push` | 云端存档 |
+| POST | `/api/v1/cloud/pull` | 云端存档 |
+
 ### 系统设置（[90-api-settings.md](./90-api-settings.md)）
 
 | 方法 | 路径 | 文档 |

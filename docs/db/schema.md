@@ -292,10 +292,12 @@ CREATE TABLE delta_records (
 | `backup_frequency_minutes` | number \| null | **自动备份频率（可选字段）**：分钟数，仅接受枚举 1/5/10/15/30/60；`null` / `0` = 关闭；**缺省 = 10**（新项目默认开启）；随书籍（每项目独立）；不参与 schema_version 判定（宽松读取，缺省兜底） |
 | `created_at` / `updated_at` | string | ISO 8601，应用层写入；首次初始化写 `created_at`，配置变更更新 `updated_at` |
 
+> **云盘凭据不在本文件**（铁律）：云端存档的 WebDAV 地址/用户名/密码与同步状态落**创作根** `<创作根>/.ai-editor/cloud.json`（明文 + 权限 0600），与模型 API key 同等对待——**绝不进项目文件、不进备份 zip**。见 `../design/40-cloud-sync.md` 与 `../api/100-api-cloud.md`。
+
 **约束**：
 - 模型 API key **绝不写入本文件**——凭据归 pi 的 agent dir（`~/.pi/agent/auth.json`，一家一条且存量凭据优先，环境变量仅在该家无条目时兜底；写入只在设置页经 pi credential store），见 `docs/design/config.md`。
 - 文件写入遵循原子写流程（outline.json 同款：临时文件 + fsync + rename）。
-- **自动备份目录**：项目目录内 `.backups/` 子目录存放备份 zip（时间戳命名 `<YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip` 毫秒精度，**kind 类型标记段**：`m` = 手动（无名称也带 `-m` 段，与自动可靠区分）/ `a` = 自动备份重命名后带名称；自动备份与覆盖前快照为纯时间戳 `<YYYYMMDD-HHmmssSSS>.zip`；手动带名称 `<YYYYMMDD-HHmmssSSS>-m-<名称>.zip`；**旧格式兼容解析不迁移**：旧秒级 `<YYYYMMDD-HHmmss>.zip` → auto、旧带名称无 kind 段 `<YYYYMMDD-HHmmssSSS>-<名称>.zip` → manual、纯时间戳 → auto；格式 = 导出包：project.json + outline.json + data.db）；**每项目保留最近 20 份**（超出删除最旧，含覆盖前自动快照；清理失败不阻塞备份主流程）；备份文件不入 git、不算数据文件（可随时删除）。**实现细节（2026-08 实测）**：同毫秒冲突用「时间戳 +1 毫秒循环去重」（保持文件名格式契约可解析）；「有变更才备份」的 mtime 判定加 1s 容差（备份管道内 wal_checkpoint 会把 data.db mtime 刷新到备份时刻，严格 `mtime > 上次备份时刻` 会自激误判——毫秒精度下文件名截断误差已消除，但粗粒度 mtime 文件系统（如 FAT/exFAT 2s 粒度）下容差仍是必要防御，`BACKUP_CHANGE_TOLERANCE_MS` 保留 1s）；重命名备份只改名称段（时间戳与 kind 保持，同目录 rename 原子）。
+- **自动备份目录**：项目目录内 `.backups/` 子目录存放备份 zip。命名格式：`<YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip`——毫秒时间戳（本地时区，字典序 = 时间序，`parseBackupFileName` 解析为列表项的 `createdAt` 与保留策略排序依据）＋类型段（`自动` = 定时器 / 覆盖前快照，`手动` = 立即备份）＋设备段（必填：来源机器，缺省 = 简化 hostname；禁 `-`）＋可选用户标签（1-30 字符）＋**尾部固定三段统计**（人物/设定/章 = 生成时点的未软删存量；固定尾部使解析可从尾部倒切）。**旧格式兼容解析不迁移**：旧秒级 `<YYYYMMDD-HHmmss>.zip` → auto、旧带标签无类型段 → manual、旧单字母 `-m`/`-a` 段 → 对应类型；旧文件名无设备/统计字段，读侧缺省。包内容 = 导出包：project.json + outline.json + data.db + `references/**` + `sessions/**`。**每项目保留最近 20 份**（超出删除最旧，含覆盖前自动快照；清理失败不阻塞备份主流程）；备份文件不入 git、不算数据文件（可随时删除）。**实现细节（2026-08 实测）**：同毫秒冲突用「时间戳 +1 毫秒循环去重」（保持文件名格式契约可解析）；「有变更才备份」的 mtime 判定加 1s 容差（备份管道内 wal_checkpoint 会把 data.db mtime 刷新到备份时刻，严格 `mtime > 上次备份时刻` 会自激误判——毫秒精度下文件名截断误差已消除，但粗粒度 mtime 文件系统（如 FAT/exFAT 2s 粒度）下容差仍是必要防御，`BACKUP_CHANGE_TOLERANCE_MS` 保留 1s）；变更判定同时看 `references/` 与 `sessions/` **目录自身**的 mtime（删除文件不刷新剩余文件 mtime）；重命名备份只改标签段（时间戳/类型/设备/统计保持，同目录 rename 原子）。
 
 ## AGENTS.md — 项目规则文件（2026-08）
 

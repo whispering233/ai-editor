@@ -462,12 +462,12 @@ components:
 
 ### 导航与外壳
 
-**`sidebar`** — 左栏底 `{colors.surface}`（比内容面板暗一档），右侧 1px `{colors.hairline}`；**顶部标识 = 「◈ 书架」（书架主页入口，`#/`）**、其下**书名按钮**（`#/overview` 项目概览入口）、八项一级导航、工具区（回收站）、底部「立即备份」快捷入口 + 设置与主题。**「概览」不再占一级导航位**（入口收敛到书名按钮，`#/overview` 时书名按钮用选中面；书架路由 `#/` 下左栏无选中面——书架自身就是当前页）。
-**导航入口不受「文字按钮必须带边框」约束**：左栏导航项（Menu 八项 + 书名 / 设置 / 主题三个入口）与 Menu 项同级——无边框、选中态用 `{colors.surface-muted}` 灰面（Tailwind `bg-accent` = `colorFillTertiary`）、文字不变色，禁用 H4 只约束操作按钮（新建/重命名/重试/删除等）。**左栏底部区形态单一**：立即备份 / 设置 / 主题三入口同为 `block` + `color="default" variant="text"` 的无边框文字按钮——「立即备份」是动作而非导航，形态随底部区（**H4 登记例外，仅此一处**）；禁用/加载态由 antd Button 派发（无项目 → 禁用；在途 → `loading` 防连点），失败经 `message` 提示。**`menu-item`** / **`menu-item-selected`** — 菜单项 32px 高、`{rounded.sm}`；**选中 = `{colors.surface-muted}` 灰面 + 文字不变色**（antd 默认的彩色选中项要显式覆盖：`itemSelectedBg` / `itemSelectedColor`）。**`info-bar`** — 中栏顶部 1px 底线；项目名（点击进 `#/overview` 项目概览）+ 阅读进度 + 语言 + 小屏聊天开关。字号 `{typography.caption}`。
+**`sidebar`** — 左栏底 `{colors.surface}`（比内容面板暗一档），右侧 1px `{colors.hairline}`；**顶部标识 = 「◈ 书架」（书架主页入口，`#/`）**、其下**书名按钮**（`#/overview` 项目概览入口）、八项一级导航、工具区（回收站）、底部四快捷入口（立即备份 / 同步云端 / 设置 / 主题）。**「概览」不再占一级导航位**（入口收敛到书名按钮，`#/overview` 时书名按钮用选中面；书架路由 `#/` 下左栏无选中面——书架自身就是当前页）。
+**导航入口不受「文字按钮必须带边框」约束**：左栏导航项（Menu 八项 + 书名 / 设置 / 主题三个入口）与 Menu 项同级——无边框、选中态用 `{colors.surface-muted}` 灰面（Tailwind `bg-accent` = `colorFillTertiary`）、文字不变色，禁用 H4 只约束操作按钮（新建/重命名/重试/删除等）。**左栏底部区形态单一**：立即备份 / 同步云端 / 设置 / 主题四入口同为 `block` + `color="default" variant="text"` 的无边框文字按钮（**四行固定顺序**，「同步云端」在「立即备份」与「设置」之间）；「立即备份」「同步云端」是动作而非导航，形态随底部区（**H4 登记例外，仅此两处**）；禁用/加载态由 antd Button 派发（无项目 → 禁用；在途 → `loading` 防连点），失败经 `message` 提示。**`menu-item`** / **`menu-item-selected`** — 菜单项 32px 高、`{rounded.sm}`；**选中 = `{colors.surface-muted}` 灰面 + 文字不变色**（antd 默认的彩色选中项要显式覆盖：`itemSelectedBg` / `itemSelectedColor`）。**`info-bar`** — 中栏顶部 1px 底线；项目名（点击进 `#/overview` 项目概览）+ 阅读进度 + 语言 + 小屏聊天开关。字号 `{typography.caption}`。
 
 **`tabs`（二级 tab）** — 页面内分区导航（设置页二级 tab / 人物页四 tab）：antd `Tabs` line 型（`items` 数组，`activeKey` 受控）。未选中 `{colors.secondary}`，选中与悬浮 `{colors.primary}`（`itemSelectedColor` / `itemHoverColor` / `inkBarColor` 的 antd 默认值就是 `colorPrimary`，**不重复覆盖**），选中指示条 2px `{colors.primary}`，底线 1px `{colors.hairline}` = 页头分割线（见 §Layout「中栏页头结构」）。**页内 tab 不进 URL、不参与左栏导航高亮**，选中态是页面 state（刷新回落默认 tab）。
 
-**`sub-nav`（三级导航）** — 带子内容区块的页内分区导航（目前仅设置页「AI 模型」）：竖向 antd `Menu` inline，宽 160px（= `sidebar` 登记的宽度档），**契约完全复用 `menu-item` / `menu-item-selected`**（32px 行高、`{rounded.sm}`、选中 = `{colors.surface-muted}` 灰面 + 文字不变色），不新增设计语言；项文案超宽截断（`title` 给全文），项前置 `provider-icon`。
+**`sub-nav`（三级导航）** — 带子内容区块的页内分区导航（**两处**：设置页「AI 模型」= provider 列表；设置页「备份」= 固定的「自动备份 / 云端备份」两项）：竖向 antd `Menu` inline，宽 160px（= `sidebar` 登记的宽度档），**契约完全复用 `menu-item` / `menu-item-selected`**（32px 行高、`{rounded.sm}`、选中 = `{colors.surface-muted}` 灰面 + 文字不变色），不新增设计语言；项文案超宽截断（`title` 给全文）；项前置图标只在有图标语义的场景出现（AI 模型页的 `provider-icon`、导航下方「添加」项）——备份页两项不带图标。
 
 **`sub-nav` 的「添加」弹窗（设置页 AI 模型，2026-09）** — 三级导航**只列已配置的家**（`authConfigured`：env / OAuth / auth.json 任一来源）+ 当前激活家 + 刚配置成功的家（**「配置了多少显示多少」**，40 家全列会让导航不可用）；导航下方 `button-default`（`size="small"` + `block`）「添加」→ **打开受控 `Dialog`**（复用 `components/ui/dialog.tsx`，不新造浮层）：
 - **选择步**（标题「添加 provider」+ 一句说明）：搜索框（antd `Input` + `SearchOutlined` + `allowClear` + `autoFocus`，宽度随弹窗而非列表页 `search-input` 的 192px 档）+ 可滚动紧凑行列表（`provider-icon` + 名称，行高 28px、hover = `bg-muted`（`colorFillAlter` 档，与书架行同款）、整行可点）。
@@ -528,6 +528,28 @@ components:
 **`thinking-block`** — 思维链（assistant 消息内的 thinking 内容）：**默认折叠为一行摘要**（`思考过程 · N 字` + 左侧 chevron，`{colors.tertiary}` 字色、无底色、无描边）；展开后 `{colors.surface-soft}` 底 + 左侧 2px `{colors.hairline-strong}` 竖线 + caption 字号 + `{colors.secondary}` 字色 + `pre-wrap`（长文可滚动，限高约 200px；展开态正文字色以 `colorText` 80% 实现——Tailwind 主题未暴露 `colorTextSecondary` utility，属近似 secondary 的登记值，非新色）。**流式生成期间自动展开、本轮结束后自动折叠为摘要行**。历史回看：消息接口只回 240 字预览（`docs/api/80-api-chat.md`），点「展开全文」按需拉取全文（带 loading 态）。同一消息同时持有本轮累积全量与服务端预览时**只渲染一个块**（渲染优先级：有流式累积文本则不渲染预览块）。实现优先用 `@ant-design/x` 的 `Thought` 组件；其外观不满足本契约时自绘，但**不得引入新色或新字号**。
 **`proposal-card`** — 提案卡：1px 描边卡片 + 确认/拒绝按钮（确认按钮用 `button-primary`，禁用态由 antd 派发）。
 **`toast`** — 全局提示走 antd `message`（`App.useApp()`），顶部居中；`success/error/info` 对应 store 的 `ToastKind`，时长由 store 的 3s 定时器决定（`duration: 3` 对齐）。**命令式反馈的上下文入口**：`AntdProvider` 在 `ConfigProvider` 内部包 `<App component={false}>`（`component={false}` 不渲染包裹 div，不插进三栏 flex 链）——`message`/`notification`/`modal` 需经 `App.useApp()` 取实例才能继承本 Provider 的主题与 locale，不要用静态方法。
+
+### 备份与云端存档（设置页「备份」+ 左栏底部）
+
+**`backup-pane`（设置页 → 二级 tab「备份」）** — pane 内走 `sub-nav` 布局：左 160px 固定两项（「自动备份」/「云端备份」，缺省选中自动备份）+ 右侧面板；**选中态是 node state、不进 URL**（刷新回落默认项，与 AI 模型页同款）。两面板共用一个 `caption-text` 引导句（「备份与频率跟随书籍；云端为可选的异地副本，本地数据不依赖它」）。
+
+**`auto-backup-panel`（自动备份）** — 自上而下：一行操作区（频率 `select` + 备份标签 `input`（占位符「备份名称（可选）」）+ 主操作「立即备份」`button-primary`）；下方「历史备份」列表——行语言 = `data-row`（底部 1px `{colors.hairline-soft}`、hover `{colors.surface-soft}`），行 = 时间（`formatBackupTime`）+ 类型 `type-badge`（自动 / 手动）+ 用户标签（加粗）+ 行尾 `icon-button`（重命名，行内编辑态 = `input` + 确认/取消，现有实现不变）；**设备与统计作为 caption 行**：`苹果本 · 人物32 · 设定58 · 章120`（**旧格式备份无这两项 → 整行省略**，不用占位符；**UI 不自行解析文件名**——字段来自 API 的 `device` / `stats`）。
+
+**`sync-cloud-button`（左栏底部第二项）** — 与底部区其余三入口同形（无边框文字按钮 + 左对齐标签 + `@ant-design/icons` 图标，不新增形态）；**角标 = 状态提示**：状态为「有未推改动 / 云端有更新 / 冲突」时显示小圆点（antd `Badge dot`，颜色走语义 token，**不用预设色**）；状态来自打开项目时那次检查 + 每次点击实时复查，**不做轮询**。点击 = 一键状态机（`docs/design/40-cloud-sync.md` §3）：未配置 → 跳设置页并选中「备份 → 云端备份」；未打开项目 → 禁用；已同步 → toast 提示已是最新；有未推改动 → 直接推送；云端更新且本机无改动 → 弹 `cloud-pull-confirm`；冲突 → 弹 `cloud-conflict-dialog`；云端不可达 → toast 错误文案（强调本地功能不受影响）。在途 `loading` 防连点。
+
+**`cloud-backup-panel`（云端备份）** — 三段，每段一张 `card`（`section-title` 标题 + 说明行）：
+
+1. **账号配置**：`url` / 用户名 / 应用密码 / 设备名四个 `input`（密码**从不回传** → 占位符「留空则不修改」；设备名占位符显示当前生效值）+ `button-default`「测试连接」+ 主操作「保存」（`button-primary`，`loading` 防连点）。下方 `caption-text` 两句：凭据以明文保存在本机 `.ai-editor/cloud.json`（权限 600）；免费账户上传流量有限（如 1GB/月），自动推送会消耗配额。
+2. **自动推送**：antd `Switch` + 一行说明（每 2 小时且只在创作数据有变更时推；关闭项目与手动备份会额外触发一次；纯聊天不单独触发）。
+3. **同步状态**：状态行（云端最新份 = 时间 · 类型 · 标签 · 设备 · 统计 · 大小；本机已推份；上次同步时间；未推改动标记）+ **云端份列表**（时间倒序 ≤ 5 行，行语言同 `data-row`，行尾标「云端最新」）+ 动作 `button-default`「推送」/「拉取」。失败态：错误文案 + `button-default`「重试」；未配置：`empty-state` + 引导。
+
+**`cloud-pull-confirm`（拉取确认框）** — 复用 `components/ui/dialog.tsx`（受控）：展示云端那份的元信息（时间 / 类型 / 标签 / 设备 / 统计 / 大小）+ 两句后果声明（「本机当前状态将先自动快照到本地备份」「本机独有的对话与资料会保留（不会被覆盖）」）；Footer = `[取消]` + `[拉取]`（`button-primary`）。
+
+**`cloud-conflict-dialog`（冲突裁决框）** — 同款对话框：并排对比「云端那份」与「本机最新份」（时间 / 设备 / 统计 / 大小）+ 一句「两边都会各留一份备份」；Footer = `[保留云端（拉取覆盖本机）]` + `[用本机覆盖云端]` —— **两个选项等权，两个都用 `button-default`（不用主色、不用 danger）**：任何一方都不比另一方“正确”，主色按钮会诱导误点。
+
+**删除传播提示**：删除会话 / 参考资料成功后的 toast 补一句「推送到云端后，另一台也会同步删除」（删除要推送才传播，见设计文档 §4）。
+
+> 本小节全部形态**不新增色值/字号/圆角**：沿用 `input` / `select` / `button-default` / `button-primary` / `data-row` / `type-badge` / `caption-text` / `empty-state` 与既有 token 档。新增 antd 组件仅 `Switch` 与 `Badge`（均走全局 seed token 派生，无组件级覆盖）。
 
 ### antd 组件 token 覆盖（全部覆盖项就这些）
 
