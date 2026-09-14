@@ -241,10 +241,13 @@ export function CloudBackupPanel() {
           </span>
         </div>
 
-        {/* 自动推送失败（卡 7）：一行，不弹窗；成功即消失（服务端成功时清 lastAutoPushError） */}
+        {/* 自动推送失败（卡 7）：一行，不弹窗；任何一次推送成功后消失（唯一清除点 = pushBackup 成功写） */}
         {autoPushError !== null && (
           <p className="mt-2 text-xs text-destructive">
             自动推送失败（{formatBackupTime(autoPushError.at)} · {autoPushError.code}）：{autoPushError.message}
+            {autoPushError.code === "CLOUD_CONFLICT"
+              ? "——请用上方「推送到云端」手动裁决（冲突时可在裁决框选择用本机覆盖云端）"
+              : ""}
           </p>
         )}
 

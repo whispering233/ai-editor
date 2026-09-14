@@ -31,6 +31,7 @@ import {
 } from "../backup.js";
 import type { ProjectContext } from "../middleware/project.js";
 import { initCloudState, readBookState, writeBookState, writeCloudConfig } from "./state.js";
+import { pushBackup } from "./sync.js";
 import { AUTO_PUSH_THROTTLE_MS, autoPushAfterManualBackup, autoPushOnClose, maybeAutoPush } from "./auto-push.js";
 
 const BASE = "https://dav.example.com/dav/ai-editor";
@@ -328,6 +329,22 @@ describe("自动推送：开关与三条触发路径", () => {
     expect(readBookState(project.config.id)?.lastAutoPushAt).toBeUndefined();
   });
 });
+
+  it("失败标记的清除是**任何一次推送成功**就清（手动推送成功后台账不再残留）", async () => {
+    // 先制造一条自动推送失败（云盘不可达）
+    vi.stubGlobal("fetch", () => Promise.reject(new Error("ECONNREFUSED")));
+    await maybeAutoPush(project); // 无变更/或失败都行——这里直接构造失败态
+    stubDav(); // 恢复可用的假云盘
+    writeBookState(project.config.id, {
+      lastAutoPushError: { code: "CLOUD_UNREACHABLE", message: "旧失败", at: T0 },
+    });
+    expect(readBookState(project.config.id)?.lastAutoPushError?.code).toBe("CLOUD_UNREACHABLE");
+
+    // 手动推送成功（走 pushBackup 的成功写）→ 标记应被清除
+    writeBackup(project, { kind: "manual" }); // 推送需要一份本地备份
+    await pushBackup(project);
+    expect(readBookState(project.config.id)?.lastAutoPushError).toBeUndefined();
+  });
 
 describe("hasAuthoringChangesSince：创作数据口径（排除 sessions/、含 AGENTS.md）", () => {
   it("只动 sessions/ → 不算创作变更（hasLocalEditsSince 仍算：关闭项目那次要带上聊天）", () => {

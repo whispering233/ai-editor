@@ -439,6 +439,9 @@ export async function pushBackup(project: ProjectContext, options: PushOptions =
   const after = (await client.list(dirName)) ?? [];
 
   // ⑦ 更新本机同步状态（推送成功后；baseEntries = zip 内两个打包目录的条目名，供拉取三方比较）
+  // `lastAutoPushError` 的**唯一清除点**在这里（`undefined` 在合并写下即删除该键）：口径是
+  // 「最近一次自动推送失败」——任何一次推送成功都证明它已过期，不能只由自动路径清
+  //（否则用户手动推送成功后，面板仍常驻一行过期的失败提示；见卡 7 oracle 反例 4）
   writeBookState(projectId, {
     dirName,
     lastPushedFileName: local.fileName,
@@ -446,6 +449,7 @@ export async function pushBackup(project: ProjectContext, options: PushOptions =
     lastSyncAt: new Date().toISOString(),
     lastSeenCloudFiles: cloudFileSet(after),
     baseEntries: packedEntriesOfZip(local.bytes),
+    lastAutoPushError: undefined,
   });
 
   const parsedLocal = parseBackupFileName(local.fileName) as NonNullable<ReturnType<typeof parseBackupFileName>>;

@@ -60,7 +60,7 @@ function recordFailure(project: ProjectContext, err: unknown, atMillis: number):
 /**
  * 推一次（三条路径共用）——推的内容 = **最新一份本地备份**（手动备份后调用时即刚生成的那份）。
  *
- * - 成功：清 `lastAutoPushError`；`writeThrottle` 时一并把 `lastAutoPushAt` 推进到本次时刻
+ * - 成功：`writeThrottle` 时把 `lastAutoPushAt` 推进到本次时刻（`lastAutoPushError` 由 `pushBackup` 成功后清）
  * - 本机没有任何备份（`pushBackup` 404）：**跳过**——自动路径从不传 `fileName`，故 404 只可能
  *   是「没有可推送的备份」（另一个 404 分支要求显式 `fileName`），不推进节流、不写错误标记
  * - 其他失败：`recordFailure`（不抛）
@@ -79,9 +79,8 @@ async function pushOnce(
     return false;
   }
   safeWriteBookState(project.config.id, {
+    // 只推进节流基准；失败标记的清除是 `pushBackup` 成功写的单点职责（见 sync.ts ⑦ 注释）
     ...(options.writeThrottle ? { lastAutoPushAt: new Date(options.atMillis).toISOString() } : {}),
-    // 成功即清失败标记（`undefined` 在合并写 + JSON.stringify 下即「删除该键」）
-    lastAutoPushError: undefined,
   });
   return true;
 }
