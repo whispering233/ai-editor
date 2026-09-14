@@ -37,6 +37,7 @@ import {
 import type { ProjectFileConfig } from "@whispering233/ai-editor-shared";
 import { initCloudState, readBookState } from "./state.js";
 import { pushBackup } from "./sync.js";
+import { BACKUPS_DIR_NAME } from "../backup.js";
 import type { ProjectContext } from "../middleware/project.js";
 import { createWebdavClient } from "./webdav.js";
 
@@ -352,6 +353,39 @@ function makeProjectFixture(id: string, name: string): { project: ProjectContext
   const db = openDatabase(join(dir, DATA_DB_FILE_NAME));
   return { project: { root: dir, config: readProjectFile(dir) as ProjectFileConfig, db }, dir };
 }
+
+describe("pullBackup × 真 HTTP 服务", () => {
+  it("端到端：推送 → 本地改动 → 拉取（同名文件云端取胜、覆盖前自动快照、并集不删本机独有文件）", async () => {
+    dav = await startFakeDav(root);
+    await configure(dav.url);
+    const { project, dir } = makeProjectFixture("proj-pull-e2e", "拉取书");
+    mkdirSync(join(dir, ".backups"), { recursive: true });
+    const { writeBackup } = await import("../backup.js");
+    const { pullBackup } = await import("./sync.js");
+    writeBackup(project, { kind: "manual" }); // 先生成一份本地备份
+    const pushed = await pushBackup(project); // 推上去（云端 head = 本机这份）
+
+    // 本机改动：改了已有参考资料 + 新增一份本机独有资料
+    const refDir = join(dir, "references");
+    writeFileSync(join(refDir, "笔记.md"), "# 本机改过的笔记");
+    writeFileSync(join(refDir, "本机独有.md"), "# 只在本机");
+
+    const result = await pullBackup(project);
+
+    expect(result.pulled.fileName).toBe(pushed.pushed.fileName);
+    // 同名文件：云端取胜（本机改动被覆盖，但覆盖前已自动快照）
+    expect(readFileSync(join(refDir, "笔记.md"), "utf8")).toBe("# 笔记");
+    expect(existsSync(join(dir, BACKUPS_DIR_NAME, result.snapshot.fileName))).toBe(true);
+    // 并集：本机独有文件保留（基线里没有它）
+    expect(existsSync(join(refDir, "本机独有.md"))).toBe(true);
+    expect(result.merged.kept).toBe(1);
+    // 云端那份落进本地 .backups/
+    expect(existsSync(join(dir, BACKUPS_DIR_NAME, result.pulled.fileName))).toBe(true);
+
+    closeDatabase(project.db);
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
 
 describe("pushBackup × 真 HTTP 服务", () => {
   it("端到端：建目录 → 临时名上传 → MOVE → 云端正式名内容与本地逐字节一致、无 .tmp- 残留、状态落盘", async () => {

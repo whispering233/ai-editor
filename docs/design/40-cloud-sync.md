@@ -82,14 +82,20 @@
 
 ### 三态状态机（UI 与一键同步的唯一依据）
 
-| 云端有更新（head ≠ lastSeenHead） | 本机有改动（创作数据 mtime > lastSyncAt，含两个打包目录自身的 mtime） | 状态 | 可用动作 |
+| 云端有更新（云端**文件集合** ≠ `lastSeenCloudFiles`） | 本机有改动（创作数据 mtime > `lastSyncAt`） | 状态 | 可用动作 |
 | :--- | :--- | :--- | :--- |
 | 否 | 否 | 已同步 | 无（显示「已同步 · <时间>」） |
 | 是 | 否 | 云端更新 | 拉取 |
-| 否 | 是 | 有未推送改动 | 推送 |
+| 否 | 是 | 有未同步改动 | 推送 |
 | 是 | 是 | **冲突** | 裁决：保留云端 / 用本机强推 |
 
-`lastSeenHeadFileName` = 本机最后一次看到（推送后或拉取后）的云端 head。
+**为什么「云端有更新」用文件集合而不是 head**（卡 5 定稿）：`head = 文件名时间戳最大者`，而时间戳来自**各机器本地时钟**——时钟偏慢那台推上来的份不会成为 head，用 head 比较会**漏报**「云端有更新」（见本节末尾「已知边界」）。用「书目录内的文件集合是否与 `lastSeenCloudFiles`（上次同步时记下的集合）相同」判定与时钟无关，也不会被保留策略清理误伤（清理后集合会重新记录）。
+
+**「本机有改动」的 mtime 口径**：三文件 + `data.db-wal` + `references/` 与 `sessions/`（含两个目录自身的 mtime）——**不含 `.backups/`**（`force` 会把云端那份写进那里，不能算作创作改动）。
+
+**无同步记录时**（`lastSyncAt`/`lastSeenCloudFiles` 缺失）：本机按「有改动」处理；云端有份即视为「有更新」⇒ 两边都有 = **冲突**（保守：先让用户裁决，而不是静默覆盖任一侧）。
+
+字段分工：`lastPushedFileName` = **冲突判定基准**（最后一次成功**同步**——推或拉——到的云端文件名）；`lastSeenHeadFileName` = 诊断快照（不参与判定）；`lastSeenCloudFiles` = 集合基准。
 
 ### 冲突裁决：两条路都把两边留成文件
 
@@ -212,9 +218,10 @@
   "books": {
     "proj-V1StGXR8Z5jdHi6BmyT4": {
       "dirName": "斗破苍穹-proj-V1StGXR8Z5jdHi6BmyT4",
-      "lastPushedFileName": "…",
-      "lastSeenHeadFileName": "…",
+      "lastPushedFileName": "…",      // 冲突判定基准（推/拉后都更新）
+      "lastSeenHeadFileName": "…",    // 诊断快照（不参与判定）
       "lastSyncAt": "2026-08-13T10:15:30.123+08:00",
+      "lastSeenCloudFiles": ["20260813-101530123-自动-苹果本-人物32-设定58-章120.zip"],
       "baseEntries": ["references/a.md", "sessions/xxx.jsonl"]
     }
   }

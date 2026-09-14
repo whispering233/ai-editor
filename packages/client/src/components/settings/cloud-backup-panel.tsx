@@ -7,23 +7,27 @@
 // - `status` 当前只有 6 字段（remote/local/state/errorCode 属卡 4/5）
 // - `/cloud/test` 的 400/502 文案为中文可读，直接展示
 //
-// 卡 3 做「账号配置」与「自动推送」两段；卡 4 增第三段「同步状态」（云端最新份 / 本机最新份 / 推送按钮）。
-// 拉取与三态状态机（含冲突裁决对话框）属卡 5/6——届时本段的冲突分支改为弹 `cloud-conflict-dialog`。
+// 卡 3 做「账号配置」与「自动推送」两段；卡 4 增「同步状态」段；卡 5 补齐三态提示、云端份列表与拉取
+//（含 `cloud-pull-confirm` 确认框与拉取后刷新项目数据）。冲突裁决对话框仍属卡 6——本段冲突分支先在行内给
+//「用本机覆盖云端」入口，届时替换为 `cloud-conflict-dialog`。
 // 状态持有：与「AI 模型」「项目规则」两个 pane 一致——**页内 state + 直接调 API**，不引 store
 //（第二个消费者出现时再上提：卡 6 的左栏「同步云端」按钮需要跨组件共享状态）。
 
 import { useEffect, useState } from "react";
-import { Button, Input, Switch } from "antd";
+import { Button, Input, Switch, Tag, Typography } from "antd";
 import type { CloudStatus } from "@whispering233/ai-editor-shared";
 import {
   ApiError,
   getCloudStatus,
   getProjectBackups,
+  pullCloudBackup,
   pushCloudBackup,
   putCloudConfig,
   testCloudConnection,
   type BackupEntry,
 } from "../../lib/api";
+import type { CloudBackupEntry, CloudSyncState } from "@whispering233/ai-editor-shared";
+import { ConfirmDialog } from "../outline/dialogs";
 import { BACKUP_KIND_LABELS, formatBackupMeta, formatBackupTime, formatBytes } from "../../lib/backup";
 import {
   EMPTY_CLOUD_CONFIG_FORM,
@@ -33,11 +37,27 @@ import {
   isCredentialHalfFilled,
   type CloudConfigForm,
 } from "../../lib/cloud-config";
+import { useProjectStore } from "../../stores/project";
+import { useChatStore } from "../../stores/chat";
 import { useUiStore } from "../../stores/ui";
 import { SectionCard } from "../ui/section-card";
 
+/** 三态文案（`state` → 一句人话；卡片 5/6 的提示与动作都据此派生） */
+const SYNC_STATE_LABELS: Record<CloudSyncState, string> = {
+  unconfigured: "未配置云盘",
+  "no-project": "未打开项目",
+  unreachable: "云端检查失败（本地功能不受影响）",
+  synced: "已同步",
+  "local-ahead": "本机有未同步的改动（可推送）",
+  "remote-ahead": "云端有更新（可拉取）",
+  conflict: "两边都有改动——需裁决（保留云端 / 用本机覆盖）",
+};
+
 export function CloudBackupPanel() {
   const showToast = useUiStore((s) => s.showToast);
+  const notifyDataChanged = useUiStore((s) => s.notifyDataChanged);
+  const loadConfig = useProjectStore((s) => s.loadConfig);
+  const loadOutline = useProjectStore((s) => s.loadOutline);
 
   /** 服务端配置快照（null = 尚未读到 / 读取失败） */
   const [status, setStatus] = useState<CloudStatus | null>(null);
@@ -52,6 +72,9 @@ export function CloudBackupPanel() {
   const [pushing, setPushing] = useState(false);
   /** 推送失败信息（含冲突：409 CLOUD_CONFLICT 时给「用本机覆盖云端」入口） */
   const [pushError, setPushError] = useState<{ message: string; conflict: boolean } | null>(null);
+  const [pulling, setPulling] = useState(false);
+  /** 待确认的拉取目标（非 null → 渲染 `cloud-pull-confirm` 确认框） */
+  const [pullTarget, setPullTarget] = useState<CloudBackupEntry | null>(null);
 
   /**
    * 拉状态；`refill` 决定是否同时用服务端值重填表单：
@@ -87,6 +110,8 @@ export function CloudBackupPanel() {
   const configured = status?.configured === true;
   /** 云端最新一份（head = 列表首项；无云端目录/无备份 → null） */
   const remoteHead = status?.remote?.backups[0] ?? null;
+  /** 云端份列表（≤5 行 = 云端保留上限；时间倒序） */
+  const remoteBackups = status?.remote?.backups.slice(0, 5) ?? [];
   const autoPush = status?.autoPush === true;
   const dirty = isCloudConfigDirty(form, status);
   const halfFilled = isCredentialHalfFilled(form);
@@ -134,6 +159,34 @@ export function CloudBackupPanel() {
       showToast(errorText(err, "自动推送开关未保存"), "error");
     } finally {
       setSwitching(false);
+    }
+  }
+
+  /**
+   * 拉取（确认后执行）：成功 → 刷新项目数据（config / outline / 会话，与 restore 同款）
+   * + 只刷状态（`refill = false`，不动表单草稿）。
+   * 覆盖前服务端已自动快照本机状态；两个打包目录走并集合并（本机独有的对话/资料不会丢）。
+   */
+  async function handlePull(entry: CloudBackupEntry): Promise<void> {
+    if (pulling) return;
+    setPullTarget(null);
+    setPulling(true);
+    try {
+      const res = await pullCloudBackup({ fileName: entry.fileName });
+      await refresh(false);
+      await loadLocalLatest();
+      await Promise.all([loadConfig(), loadOutline()]);
+      notifyDataChanged();
+      useChatStore.getState().clearSessions();
+      void useChatStore.getState().loadSessions();
+      const { kept, written, removed } = res.merged;
+      const mergeNote =
+        kept > 0 || removed > 0 ? `（本机独有保留 ${kept} 个、云端新增 ${written} 个、按云端删除 ${removed} 个文件）` : "";
+      showToast(`已从云端拉取，覆盖前状态已自动快照（${res.snapshot.fileName}）${mergeNote}`);
+    } catch (err) {
+      showToast(errorText(err, "无法连接服务，拉取未执行"), "error");
+    } finally {
+      setPulling(false);
     }
   }
 
@@ -268,10 +321,40 @@ export function CloudBackupPanel() {
                   localLatest.name !== undefined ? ` · ${localLatest.name}` : ""
                 } · ${formatBytes(localLatest.size)}`}
           </span>
-          {status?.errorCode !== undefined && (
-            <span className="text-destructive">云端检查失败（{status.errorCode}）——本地功能不受影响</span>
-          )}
+          <span>
+            本机已推份：
+            {status?.local?.lastPushedFileName ?? "（还没同步过）"}
+            {status?.local?.lastSyncAt != null ? ` · 上次同步 ${formatBackupTime(status.local.lastSyncAt)}` : ""}
+            {status?.local?.dirty === true ? " · 有未同步改动" : ""}
+          </span>
+          <span>
+            状态：{status === null ? "读取中…" : SYNC_STATE_LABELS[status.state]}
+            {status?.errorCode !== undefined ? `（${status.errorCode}）` : ""}
+          </span>
         </div>
+
+        {/* 云端份列表（≤5 行 = 云端保留上限；行尾标「云端最新」、行内可拉取任一份） */}
+        {remoteBackups.length > 0 && (
+          <ul className="mt-3 divide-y divide-border rounded-lg border border-border">
+            {remoteBackups.map((entry, index) => (
+              <li key={entry.fileName} className="flex items-center gap-2 px-2 py-1.5">
+                <span className="min-w-0 flex-1 truncate text-sm" title={entry.fileName}>
+                  <Typography.Text type="secondary">{formatBackupTime(entry.createdAt)}</Typography.Text>
+                  <Tag className="ml-1.5">{BACKUP_KIND_LABELS[entry.kind]}</Tag>
+                  {entry.name !== undefined ? <Typography.Text strong>{entry.name}</Typography.Text> : null}
+                  {index === 0 ? <Tag className="ml-1.5">云端最新</Tag> : null}
+                </span>
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {formatBackupMeta(entry) !== null ? `${formatBackupMeta(entry)} · ` : ""}
+                  {formatBytes(entry.size)}
+                </span>
+                <Button size="small" disabled={pulling} onClick={() => setPullTarget(entry)}>
+                  拉取
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Button
@@ -281,12 +364,35 @@ export function CloudBackupPanel() {
           >
             推送到云端
           </Button>
+          <Button
+            disabled={remoteHead === null || pulling}
+            loading={pulling}
+            onClick={() => remoteHead !== null && setPullTarget(remoteHead)}
+          >
+            拉取云端最新
+          </Button>
           {remoteHead !== null && (
             <span className="text-xs text-muted-foreground">
-              推送会把本机最新份上传为云端新版本（云端已有 {status?.remote?.backups.length ?? 0} 份，保留最近 5 份）
+              云端已有 {status?.remote?.backups.length ?? 0} 份（保留最近 5 份）；拉取会用云端那份覆盖三文件，
+              本机独有的对话与资料按并集保留
             </span>
           )}
         </div>
+
+        {pullTarget !== null && (
+          <ConfirmDialog
+            title="从云端拉取"
+            description={`${formatBackupTime(pullTarget.createdAt)} · ${BACKUP_KIND_LABELS[pullTarget.kind]}${
+              pullTarget.name !== undefined ? ` · ${pullTarget.name}` : ""
+            }${formatBackupMeta(pullTarget) !== null ? ` · ${formatBackupMeta(pullTarget)}` : ""} · ${formatBytes(
+              pullTarget.size,
+            )}。将用云端那份覆盖当前项目的三文件（id/书名不变）；本机当前状态会先自动快照到本地备份（可回退），本机独有的对话与资料按并集保留（不会被删）。`}
+            confirmLabel="拉取"
+            danger
+            onConfirm={() => handlePull(pullTarget)}
+            onClose={() => setPullTarget(null)}
+          />
+        )}
 
         {pushError !== null && (
           <div className="mt-2 flex flex-col gap-2">

@@ -8,15 +8,15 @@
 // 凭据纪律：password 永不进响应——不是脱敏展示，而是根本不回传。
 
 import { Hono } from "hono";
-import { cloudConfigPutReqSchema, cloudPushReqSchema } from "@whispering233/ai-editor-shared/schemas";
+import { cloudConfigPutReqSchema, cloudPullReqSchema, cloudPushReqSchema } from "@whispering233/ai-editor-shared/schemas";
 import type { CloudConfigPutResult, CloudStatus, CloudTestResult } from "@whispering233/ai-editor-shared";
 import { sanitizeDeviceName } from "@whispering233/ai-editor-shared";
 import { HttpError, ok } from "../middleware/error.js";
 import { getCurrentProject, requireCurrentProject } from "../middleware/project.js";
 import { currentDeviceName } from "../cloud/device.js";
 import { readAutoPush, readBookState, readWebdavConfig, writeCloudConfig } from "../cloud/state.js";
-import { findExistingCloudDir, pushBackup, toCloudBackups } from "../cloud/sync.js";
-import { createWebdavClient } from "../cloud/webdav.js";
+import { cloudFileSet, computeCloudSync, findExistingCloudDir, pullBackup, pushBackup, toCloudBackups } from "../cloud/sync.js";
+import { createWebdavClient, type DavEntry } from "../cloud/webdav.js";
 
 /** 云端存档路由（挂载于 /api/v1/cloud） */
 export const cloudRoutes = new Hono();
@@ -54,27 +54,32 @@ function normalizeWebdavUrl(raw: string): string {
   return parsed.toString().replace(/\/+$/, "");
 }
 
-// GET /api/v1/cloud/status —— 配置段 + 云端段（remote：目录与该目录内的备份列表）
-// 已配置且打开了项目时发起一次 PROPFIND；失败不影响本端点成功返回（remote=null + errorCode）
+// GET /api/v1/cloud/status —— 配置段 + 云端段（remote：目录与备份列表）+ 本机段与三态（local/state）
+// 已配置且打开了项目时发起 PROPFIND（缓存命中 2 次、需回退扫描时 3 次：书目录 + 目录列举 [+ 云根]）；
+// 失败不影响本端点成功返回（remote=null + errorCode，state="unreachable"）
 cloudRoutes.get("/status", async (c) => {
   const webdav = readWebdavConfig();
   const project = getCurrentProject();
   let remote: CloudStatus["remote"] = null;
+  let rawEntries: DavEntry[] = [];
   let errorCode: string | undefined;
   if (webdav !== null && project !== null) {
     try {
       const client = createWebdavClient(webdav);
       const state = readBookState(project.config.id);
       const dirName = await findExistingCloudDir(client, project, state?.dirName);
-      remote = {
-        dirName,
-        backups: dirName === null ? [] : toCloudBackups((await client.list(dirName)) ?? []),
-      };
+      rawEntries = dirName === null ? [] : ((await client.list(dirName)) ?? []);
+      remote = { dirName, backups: toCloudBackups(rawEntries) };
     } catch (err) {
       // 云端检查失败：只反映在状态里（remote=null + errorCode），不阻塞本地功能
       errorCode = err instanceof HttpError ? err.code : "CLOUD_UNREACHABLE";
     }
   }
+  const { local, state } = computeCloudSync(
+    project,
+    webdav !== null,
+    remote === null ? null : { files: cloudFileSet(rawEntries) },
+  );
   const payload: CloudStatus = {
     configured: webdav !== null,
     url: webdav?.url ?? null,
@@ -83,9 +88,24 @@ cloudRoutes.get("/status", async (c) => {
     autoPush: readAutoPush(),
     projectId: project?.config.id ?? null,
     remote,
+    local,
+    state,
     ...(errorCode !== undefined ? { errorCode } : {}),
   };
   return c.json(ok(payload));
+});
+
+// POST /api/v1/cloud/pull —— 从云端拉取一份备份应用到当前项目（缺省 = 云端 head）
+// 语义：三文件覆盖 + references/ 与 sessions/ **并集合并**（基线三方比较、删除优先）；
+// 覆盖前自动快照本机当前状态（restore 管道既有行为）
+cloudRoutes.post("/pull", async (c) => {
+  const project = requireCurrentProject(); // 409 NO_PROJECT_OPEN
+  const body: unknown = await c.req.json().catch(() => ({}));
+  const parsed = cloudPullReqSchema.parse(body);
+  const result = await pullBackup(project, {
+    ...(parsed.file_name !== undefined ? { fileName: parsed.file_name } : {}),
+  });
+  return c.json(ok(result));
 });
 
 // PUT /api/v1/cloud/config —— 写入账号配置/设备名/自动推送开关（合并写；响应不含凭据）

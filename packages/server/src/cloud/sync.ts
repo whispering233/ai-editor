@@ -9,13 +9,20 @@
 // - 云端书目录按 `project.id` 定位（缓存 `dirName` 快路径 → 404 回退扫描根目录按 `-<id>` 后缀匹配）
 // - 推送前本地体积检查（云盘单文件上限），不等服务器回 413
 
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Unzip } from "fflate";
-import { parseBackupFileName, type CloudBackupEntry, type CloudPushResult } from "@whispering233/ai-editor-shared";
+import {
+  parseBackupFileName,
+  type CloudBackupEntry,
+  type CloudLocalState,
+  type CloudPullResult,
+  type CloudPushResult,
+  type CloudSyncState,
+} from "@whispering233/ai-editor-shared";
 import { HttpError } from "../middleware/error.js";
 import type { ProjectContext } from "../middleware/project.js";
-import { BACKUPS_DIR_NAME, PACKED_DIR_NAMES } from "../backup.js";
+import { BACKUPS_DIR_NAME, PACKED_DIR_NAMES, hasFileChangesSince, restoreBackup } from "../backup.js";
 import { readBookState, readWebdavConfig, writeBookState } from "./state.js";
 import { createWebdavClient, type DavEntry, type WebdavClient } from "./webdav.js";
 
@@ -213,6 +220,144 @@ export async function renameCloudDir(project: ProjectContext): Promise<void> {
   writeBookState(project.config.id, { dirName: next });
 }
 
+/** 云端书目录内的**文件集合**（排序；目录条目剔除）——「云端有更新」的判定基准（与时间戳无关） */
+export function cloudFileSet(entries: readonly DavEntry[]): string[] {
+  return entries
+    .filter((entry) => !entry.isCollection)
+    .map((entry) => entry.name)
+    .sort();
+}
+
+/** `GET /cloud/status` 的本机段 + 三态（UI 据此决定提示与可用动作） */
+export interface CloudSyncComputation {
+  local: CloudLocalState | null;
+  state: CloudSyncState;
+}
+
+/**
+ * 计算本机侧状态与三态（卡 5 定稿口径）：
+ * - **「云端有更新」= 云端文件集合 ≠ `lastSeenCloudFiles`**（不看时间戳：跨机器时钟偏差会让 head 比较漏报，见设计文档 §3）
+ * - **「本机有改动」= 创作数据 mtime 晚于 `lastSyncAt`**（三文件 + `data.db-wal` + `references/`/`sessions/`；
+ *   **不含 `.backups/`**——force 会把云端旧份写进那里，不能算作创作改动）
+ * - 无同步记录（`lastSyncAt`/`lastSeenCloudFiles` 缺失）→ 云端有份即视为「有更新」、本机按「有改动」处理（保守）
+ */
+export function computeCloudSync(
+  project: ProjectContext | null,
+  webdavConfigured: boolean,
+  remote: { files: readonly string[] } | null,
+): CloudSyncComputation {
+  if (project === null) {
+    return { local: null, state: webdavConfigured ? "no-project" : "unconfigured" };
+  }
+  const state = readBookState(project.config.id);
+  const lastSyncAt = state?.lastSyncAt ?? null;
+  const dirty = lastSyncAt === null ? true : hasFileChangesSince(project, new Date(lastSyncAt));
+  const local: CloudLocalState = {
+    lastPushedFileName: state?.lastPushedFileName ?? null,
+    lastSyncAt,
+    dirty,
+    latestBackupFileName: latestLocalBackupName(join(project.root, BACKUPS_DIR_NAME)),
+  };
+  if (!webdavConfigured) return { local, state: "unconfigured" };
+  if (remote === null) return { local, state: "unreachable" };
+  const seen = state?.lastSeenCloudFiles;
+  const remoteChanged =
+    seen === undefined ? remote.files.length > 0 : seen.join("\n") !== [...remote.files].sort().join("\n");
+  if (remoteChanged && dirty) return { local, state: "conflict" };
+  if (remoteChanged) return { local, state: "remote-ahead" };
+  if (dirty) return { local, state: "local-ahead" };
+  return { local, state: "synced" };
+}
+
+export interface PullOptions {
+  /** 要拉取的云端备份文件名（缺省 = 云端 head）；须通过 parseBackupFileName 白名单 */
+  fileName?: string;
+}
+
+/**
+ * 从云端拉取一份备份应用到当前项目（`POST /cloud/pull` 的实现）。
+ *
+ * 流程：定位书目录 → 列目录取目标（缺省 head）→ 下载 → 原样落进本地 `.backups/`（校验失败则回收）→
+ * 走 **restore 管道**（覆盖前自动快照 + 校验 + 原子替换三文件 + db 重连 + 重启备份定时器）+
+ * **两个打包目录并集合并**（基线 = `cloud.json` 的 `baseEntries`，删除优先）→ 更新同步状态
+ *（`lastPushedFileName` = 拉到的这份，既是新的冲突判定基准，也是「本机已基于该版本」的标记；
+ * `lastSeenCloudFiles` = 当前云端集合 → 立刻复查不会判「云端有更新」）。
+ *
+ * @throws HttpError 409 CLOUD_NOT_CONFIGURED、404 CLOUD_FILE_NOT_FOUND、400 VALIDATION_ERROR（坏包/文件名非法）、
+ *   409 SCHEMA_VERSION_MISMATCH（备份来自更高版本）、502 三码
+ */
+export async function pullBackup(project: ProjectContext, options: PullOptions = {}): Promise<CloudPullResult> {
+  const webdav = readWebdavConfig();
+  if (webdav === null) {
+    throw new HttpError(409, "CLOUD_NOT_CONFIGURED", "云盘未配置：请先在设置页填写 WebDAV 地址与用户名/应用密码");
+  }
+  if (options.fileName !== undefined && parseBackupFileName(options.fileName) === null) {
+    throw new HttpError(400, "VALIDATION_ERROR", `备份文件名不在白名单内: ${options.fileName}`);
+  }
+  const projectId = project.config.id;
+  const client = createWebdavClient(webdav);
+  const stateBefore = readBookState(projectId);
+  const dirName = await findExistingCloudDir(client, project, stateBefore?.dirName);
+  const entries = dirName === null ? [] : ((await client.list(dirName)) ?? []);
+  const backups = toCloudBackups(entries);
+  const head = backups[0] ?? null;
+  const target =
+    options.fileName === undefined ? head : (backups.find((entry) => entry.fileName === options.fileName) ?? null);
+  if (target === null || dirName === null) {
+    throw new HttpError(
+      404,
+      "CLOUD_FILE_NOT_FOUND",
+      options.fileName === undefined
+        ? "云端还没有可拉取的备份（先在本机推送一份）"
+        : `云端那份备份已不存在: ${options.fileName}（可能已被保留策略清理或手动删除）`,
+    );
+  }
+
+  const bytes = await client.get(`${dirName}/${target.fileName}`);
+  if (bytes === null) {
+    throw new HttpError(404, "CLOUD_FILE_NOT_FOUND", `云端那份备份已不存在: ${target.fileName}`);
+  }
+
+  // 原样落进本地 .backups/（成为一份普通本地备份，参与保留策略；校验失败则回收，不留坏包）
+  const backupsDir = join(project.root, BACKUPS_DIR_NAME);
+  mkdirSync(backupsDir, { recursive: true });
+  const localPath = join(backupsDir, target.fileName);
+  const createdLocally = !existsSync(localPath);
+  if (createdLocally) writeFileSync(localPath, bytes);
+
+  let restored: ReturnType<typeof restoreBackup>;
+  try {
+    // 走 restore 管道（覆盖前自动快照 / 校验 / 原子替换 / 重连 / 定时器），但两目录用并集合并
+    restored = restoreBackup(project, target.fileName, {
+      mergePackedDirs: { baseEntries: stateBefore?.baseEntries ?? [] },
+    });
+  } catch (err) {
+    if (createdLocally) {
+      try {
+        unlinkSync(localPath); // 坏包/版本不兼容：不留一份无法使用的“备份”
+      } catch {
+        // 回收失败不掩盖原始错误
+      }
+    }
+    throw err;
+  }
+
+  writeBookState(projectId, {
+    dirName,
+    lastPushedFileName: target.fileName,
+    lastSeenHeadFileName: head.fileName,
+    lastSyncAt: new Date().toISOString(),
+    lastSeenCloudFiles: cloudFileSet(entries),
+    baseEntries: packedEntriesOfZip(bytes),
+  });
+
+  return {
+    pulled: target,
+    snapshot: restored.snapshot,
+    merged: restored.merged ?? { kept: 0, written: 0, removed: 0 },
+  };
+}
+
 /**
  * 推送一份本地备份到云端（`POST /cloud/push` 的实现）。
  *
@@ -233,6 +378,9 @@ export async function pushBackup(project: ProjectContext, options: PushOptions =
   const dirName = await resolveBookDirName(client, project, stateBefore?.dirName);
   let entries = await client.list(dirName);
   if (entries === null) {
+    // 云根也可能不存在（从未跑过「测试连接」）——先幂等建根，否则 MKCOL 书目录会因父目录缺失报 409
+    //（被映射成「云盘不可达」，文案误导；见 backlog）
+    if ((await client.list("")) === null) await client.mkcol("");
     await client.mkcol(dirName);
     entries = (await client.list(dirName)) ?? [];
   }
@@ -281,17 +429,20 @@ export async function pushBackup(project: ProjectContext, options: PushOptions =
     throw err;
   }
 
-  // ⑥ 更新本机同步状态（推送成功后；baseEntries = zip 内两个打包目录的条目名，供拉取三方比较）
+  // ⑥ 保留清理（只在推送成功后；失败不阻塞——pruneCloudBackups 内部吞错记日志）
+  // 注意：状态里的 lastSeenCloudFiles 必须记**清理后**的集合（否则下次检查会把被清理的份当成变化）
+  const pruned = await pruneCloudBackups(client, dirName, await client.list(dirName).then((list) => list ?? []));
+  const after = (await client.list(dirName)) ?? [];
+
+  // ⑦ 更新本机同步状态（推送成功后；baseEntries = zip 内两个打包目录的条目名，供拉取三方比较）
   writeBookState(projectId, {
     dirName,
     lastPushedFileName: local.fileName,
-    lastSeenHeadFileName: local.fileName,
+    lastSeenHeadFileName: toCloudBackups(after)[0]?.fileName ?? local.fileName,
     lastSyncAt: new Date().toISOString(),
+    lastSeenCloudFiles: cloudFileSet(after),
     baseEntries: packedEntriesOfZip(local.bytes),
   });
-
-  // ⑦ 保留清理（只在推送成功后；失败不阻塞——pruneCloudBackups 内部吞错记日志）
-  const pruned = await pruneCloudBackups(client, dirName, await client.list(dirName).then((list) => list ?? []));
 
   const parsedLocal = parseBackupFileName(local.fileName) as NonNullable<ReturnType<typeof parseBackupFileName>>;
   const pushed: CloudBackupEntry = {

@@ -61,6 +61,8 @@ describe("GET /api/v1/cloud/status（配置段）", () => {
       autoPush: false,
       projectId: null,
       remote: null,
+      local: null,
+      state: "unconfigured",
     });
     expect(typeof body.data.device).toBe("string");
     expect(body.data.device.length).toBeGreaterThan(0);
@@ -80,6 +82,8 @@ describe("GET /api/v1/cloud/status（配置段）", () => {
       autoPush: true,
       projectId: null,
       remote: null, // 无项目打开 → 不做云端检查（卡 4 起 remote 段）
+      local: null, // 无项目打开 → 无本机段（卡 5）
+      state: "no-project", // 三态（卡 5）：已配置但未打开项目
     });
   });
 });

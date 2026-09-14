@@ -30,9 +30,21 @@ export interface CloudWebdavConfig {
  */
 export interface CloudBookSyncState {
   dirName?: string;
+  /**
+   * **冲突判定基准**：本机最后一次成功**同步**（推送或拉取）到的云端文件名。
+   * 推送时写本次推上去的份；拉取时写拉下来的那份（拉取后本机即基于该版本，再推送不应判冲突）。
+   */
   lastPushedFileName?: string;
+  /** 诊断：上次同步时云端 head 的快照（不参与状态判定——head 会被时钟偏差影响，见设计文档 §3 已知边界） */
   lastSeenHeadFileName?: string;
+  /** 上次同步成功时刻（ISO 8601） */
   lastSyncAt?: string;
+  /**
+   * 上次同步时云端书目录内的**文件集合**（排序）。**「云端有更新」的判定基准**：
+   * 集合变化 = 别的机器动过（与时间戳/时钟无关，故比 head 比较更可靠）。
+   */
+  lastSeenCloudFiles?: string[];
+  /** `references/` 与 `sessions/` 的条目名单（拉取并集的三方比较基线；= 最近一次推送/拉取包的条目） */
   baseEntries?: string[];
 }
 
@@ -69,6 +81,15 @@ export interface CloudRemoteState {
   backups: CloudBackupEntry[];
 }
 
+/** `POST /api/v1/cloud/pull` 响应（卡 5） */
+export interface CloudPullResult {
+  pulled: CloudBackupEntry;
+  /** 覆盖前本机自动快照（restore 管道既有行为） */
+  snapshot: { fileName: string; createdAt: string };
+  /** 两个打包目录的并集结果：kept = 本机独有保留；written = 云端写入；removed = 云端删除而删本机 */
+  merged: { kept: number; written: number; removed: number };
+}
+
 /** `POST /api/v1/cloud/push` 响应（卡 4） */
 export interface CloudPushResult {
   pushed: CloudBackupEntry;
@@ -79,12 +100,34 @@ export interface CloudPushResult {
   snapshot?: { fileName: string };
 }
 
+/** 本机侧同步状态（`GET /cloud/status` 的 `local` 段；卡 5） */
+export interface CloudLocalState {
+  /** 本机最后一次成功同步（推/拉）到的云端文件名（= 冲突判定基准） */
+  lastPushedFileName: string | null;
+  lastSyncAt: string | null;
+  /** 本机创作数据自上次同步后有改动（三文件 + `data.db-wal` + `references/`/`sessions/`；**不含 `.backups/`**） */
+  dirty: boolean;
+  /** 最新一份本地备份（推送缺省目标） */
+  latestBackupFileName: string | null;
+}
+
+/** 三态状态机（`GET /cloud/status` 的 `state`；判定依据见 `docs/design/40-cloud-sync.md` §3） */
+export type CloudSyncState =
+  | "unconfigured" // 未配置云盘
+  | "no-project" // 未打开项目
+  | "unreachable" // 云端检查失败（附 errorCode；本地功能不受影响）
+  | "synced" // 已同步（云端无更新 + 本机无改动）
+  | "local-ahead" // 本机有未同步改动（可推送）
+  | "remote-ahead" // 云端有更新且本机无改动（可拉取）
+  | "conflict"; // 两边都有改动（需裁决）
+
 /**
- * `GET /api/v1/cloud/status` 响应。
+ * `GET /api/v1/cloud/status` 响应（配置段 + `remote` + `local` + `state`，卡 2/4/5 逐步落地）。
  *
- * 已落地：配置段（卡 2）+ `remote` 段（卡 4）。
- * `local`（本机已推份 / 未推改动）与 `state`（三态状态机）**属卡 5**——不在本类型里，
- * 避免出现「字段存在但永远为 null」的假契约。
+ * 判定口径（卡 5 定稿）：
+ * - 「云端有更新」= 云端文件集合 ≠ `cloud.json` 里的 `lastSeenCloudFiles`（**不看时间戳**：跨机器时钟偏差会让 head 比较漏报）
+ * - 「本机有改动」= 创作数据（三文件 + `data.db-wal` + `references/`/`sessions/` 的 mtime）晚于 `lastSyncAt`
+ * - 无同步记录（`lastSyncAt` 缺失）时按「本机有改动」处理（保守：先推/先拉由用户决定）
  */
 export interface CloudStatus {
   /** webdav 三项（url/username/password）齐备且非空 */
@@ -98,6 +141,10 @@ export interface CloudStatus {
   projectId: string | null;
   /** 云端侧状态：未配置 / 未打开项目 / 云端检查失败 → null */
   remote: CloudRemoteState | null;
+  /** 本机侧状态：未打开项目 → null */
+  local: CloudLocalState | null;
+  /** 三态状态机（UI 据此决定提示与可用动作） */
+  state: CloudSyncState;
   /** 云端检查失败时的错误码（`CLOUD_AUTH_FAILED` / `CLOUD_UNREACHABLE` / `CLOUD_QUOTA_EXCEEDED`）；不阻塞本地功能 */
   errorCode?: string;
 }

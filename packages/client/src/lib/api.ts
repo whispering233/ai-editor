@@ -5,6 +5,7 @@ import type {
   BackupKind,
   ChatSessionMessage,
   CloudConfigPutResult,
+  CloudPullResult,
   CloudPushResult,
   CloudStatus,
   CloudTestResult,
@@ -1152,6 +1153,19 @@ export function putCloudConfig(patch: {
  */
 export function testCloudConnection(): Promise<CloudTestResult> {
   return apiFetch<CloudTestResult>("/cloud/test", { method: "POST" });
+}
+
+/**
+ * POST /api/v1/cloud/pull —— 从云端拉取一份备份应用到当前项目（缺省 = 云端 head；卡 5）。
+ * 语义：三文件覆盖 + `references/` 与 `sessions/` **并集合并**（删除优先）；覆盖前自动快照本机当前状态。
+ * 失败：409 CLOUD_NOT_CONFIGURED / NO_PROJECT_OPEN / SCHEMA_VERSION_MISMATCH、404 CLOUD_FILE_NOT_FOUND、
+ *      400 VALIDATION_ERROR（坏包/文件名非法）、502 三码。
+ */
+export function pullCloudBackup(options: { fileName?: string } = {}): Promise<CloudPullResult> {
+  return apiFetch<CloudPullResult>("/cloud/pull", {
+    method: "POST",
+    body: { ...(options.fileName !== undefined ? { file_name: options.fileName } : {}) },
+  });
 }
 
 /**

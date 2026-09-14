@@ -1048,6 +1048,17 @@ export const cloudPushReqSchema = z
   .strict();
 export type CloudPushReq = z.infer<typeof cloudPushReqSchema>;
 
+// POST /api/v1/cloud/pull：从云端拉取一份备份应用到当前项目（卡 5）
+// - file_name 缺省 = 云端 head；须通过 parseBackupFileName 白名单（服务端校验 → 400）
+// - 语义 = 三文件覆盖 + references/ 与 sessions/ **并集合并**（基线三方比较、删除优先）；
+//   与本地 restore（整体覆盖）不同，见 docs/api/100-api-cloud.md
+export const cloudPullReqSchema = z
+  .object({
+    file_name: z.string().optional(),
+  })
+  .strict();
+export type CloudPullReq = z.infer<typeof cloudPullReqSchema>;
+
 // ============ chat SSE 事件 ============
 //
 // 事件集（服务端→客户端的 pi 事件投影）以 docs/api/80-api-chat.md 为契约。本文件**不再镜像**

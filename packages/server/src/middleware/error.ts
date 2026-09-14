@@ -26,6 +26,7 @@ export const SERVER_ERROR_CODES = [
   "CLOUD_QUOTA_EXCEEDED", // 502：上游 507 或配额提示
   "CLOUD_CONFLICT", // 409：推送时云端 head ≠ 本机 lastPushedFileName（另一台机器写过）
   "CLOUD_BACKUP_TOO_LARGE", // 400：备份包超过云盘单文件上限（推送前本地判定）
+  "CLOUD_FILE_NOT_FOUND", // 404：拉取指定的云端备份不存在（已被保留策略清理或手动删除）
 ] as const;
 export type ServerErrorCode = (typeof SERVER_ERROR_CODES)[number];
 

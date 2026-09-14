@@ -12,9 +12,12 @@
 
 云端与本机的同步状态（设置页面板与左栏「同步云端」按钮的唯一数据源）。
 
-> **落地进度**：配置段（卡 2）+ `remote` 段与 `errorCode`（卡 4：已配置且打开了项目时发起一次 `PROPFIND` 列书目录，失败不影响本端点成功返回）；
-> `local`（本机已推份 / 未推改动）与 `state`（三态状态机）**属卡 5**——`shared` 的 `CloudStatus` 类型按此收窄，
-> 客户端不要按完整契约建状态机（未落地字段不在类型里）。
+> **已全部落地**（卡 2 配置段 + 卡 4 `remote`/`errorCode` + 卡 5 `local`/`state`）。已配置且打开了项目时发起 `PROPFIND`；
+> **请求预算**：每次刷新 ≤ 3 次 PROPFIND（`dirName` 缓存命中 2 次：书目录 + 目录列举；缓存失效需扫云根 +1）。
+> 云端检查失败不影响本端点成功返回（`remote: null` + `errorCode`，`state: "unreachable"`）。
+>
+> **三态判定**（`docs/design/40-cloud-sync.md` §3）：`云端有更新` = 云端文件集合 ≠ `lastSeenCloudFiles`（**不看时间戳**）；
+> `本机有改动` = 创作数据 mtime 晚于 `lastSyncAt`（**不含 `.backups/`**）；无同步记录 ⇒ 本机按「有改动」、云端有份按「有更新」⇒ `conflict`（保守）。
 
 ```typescript
 // Res: 200
@@ -37,11 +40,10 @@
       size: number;
     }>;
   };
-  local: null | {
-    lastPushedFileName: string | null;   // 本机最后一次成功推送的云端文件名
-    lastSeenHeadFileName: string | null; // 本机最后一次看到的云端 head（推送后 / 拉取后更新）
-    lastSyncAt: string | null;           // ISO 8601
-    dirty: boolean;                      // 本机有未推送改动（创作数据 + references/ + sessions/ 的 mtime 晚于 lastSyncAt）
+  local: null | {            // 本机侧状态（未打开项目 → null）
+    lastPushedFileName: string | null;   // **冲突判定基准** = 本机最后一次成功同步（推/拉）到的云端文件名
+    lastSyncAt: string | null;           // 上次同步成功时刻（ISO 8601）；null = 从未同步过
+    dirty: boolean;                      // 本机创作数据自 lastSyncAt 后有改动（三文件 + data.db-wal + 两个打包目录；**不含 .backups/**）
     latestBackupFileName: string | null; // 最新一份本地备份（推送缺省目标）
   };
   state: "unconfigured" | "no-project" | "synced" | "local-ahead" | "remote-ahead" | "conflict" | "unreachable";
@@ -56,10 +58,12 @@
 | `unconfigured` | 未配置 webdav | 引导进设置页云端面板 |
 | `no-project` | 未打开项目 | 按钮禁用 |
 | `unreachable` | 本次 PROPFIND 失败（附 `errorCode`） | 状态区显示失败原因 + 重试 |
-| `synced` | 云端无更新（head == lastSeenHead）且本机无改动 | 「已同步 · <时间>」 |
-| `remote-ahead` | 云端有更新、本机无改动 | 「拉取」 |
+| `synced` | 云端无更新且本机无改动 | 「已同步」 |
+| `remote-ahead` | **云端文件集合 ≠ `lastSeenCloudFiles`**、本机无改动 | 「拉取」 |
 | `local-ahead` | 本机有改动、云端无更新 | 「推送」 |
-| `conflict` | 两者皆有 | 裁决（保留云端 / 用本机强推） |
+| `conflict` | 两者皆有（含「从未同步过 + 云端有份」） | 裁决（保留云端 / 用本机强推） |
+
+> `conflict` 与 `remote-ahead` 的差别只在「本机是否有改动」；**云端更新的判定不看时间戳**（跨机器时钟偏差会漏报）。
 
 ### PUT /api/v1/cloud/config
 
@@ -158,6 +162,8 @@
 ```
 
 **流程**：`GET` 云端那份 → **覆盖前自动快照本机当前状态**（restore 管道既有）→ `validateBackupPackage`（zip 结构/白名单/三文件齐全/data.db `user_version` 三态分流）→ **三文件覆盖**（`project.json` 的 `name` 归一为当前目录名、`id` 保留——与 restore 同口径）+ **两目录并集**（基线三方比较、删除优先，见设计文档 §4）→ 重连 data.db + 版本对齐 + 重启备份定时器 → 更新 `lastSeenHeadFileName` / `lastSyncAt` / `baseEntries`。
+
+**同步状态更新**：`lastPushedFileName` = **拉到的这份**（既是新的冲突判定基准，也是「本机已基于该版本」的标记——拉取后立刻推送不会被判冲突）；`lastSeenHeadFileName` = 云端 head；`lastSeenCloudFiles` = 拉取时的云端文件集合；`baseEntries` = 该包的打包目录条目（下次并集比较的基线）。
 
 **与本地 restore 的区别（不可混用语义）**：本地 restore 是「回到那个时间点」= **整体覆盖**（保持现状不变）；云端 pull 是「把另一台机器的东西拿过来」= 三文件覆盖 + 两目录**并集**（本机独有的对话/资料不被静默吃掉）。并集只对 pull 生效——实现上是显式参数，restore 路径行为不变。
 
