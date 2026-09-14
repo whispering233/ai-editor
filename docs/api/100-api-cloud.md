@@ -132,7 +132,7 @@
    **同一份重推幂等覆盖**（用户连点、上次清理失败再推，否则目标已存在会 412 卡死）；跨机器同名冲突由 head 判定拦在前面，
    不靠 `MOVE` 412 兜底
 5. 更新 `lastPushedFileName` / `lastSeenHeadFileName` / `lastSyncAt` / `baseEntries`（= 本次推送包内两个打包目录的条目名）
-6. **保留策略**：只保留最近 5 份 + **带用户标签的永不清理** + 只删「能解析出时间戳」或 `.tmp-` 前缀的文件；**只在推送成功后执行**，清理失败不阻塞推送
+6. **保留策略**：只保留最近 5 份 + **带用户标签的永不清理** + 只删「能解析出时间戳」的份（`.tmp-` 垃圾由第 2 步清理，不属保留策略）；**只在推送成功后执行**，清理失败不阻塞推送
 
 **错误码**：409 `NO_PROJECT_OPEN` / `CLOUD_NOT_CONFIGURED` / `CLOUD_CONFLICT`、404 `VALIDATION_ERROR`（本地备份不存在 / 本机没有任何可推送的备份——**先于任何网络动作**）、400 `VALIDATION_ERROR` / `CLOUD_BACKUP_TOO_LARGE`、502 `CLOUD_AUTH_FAILED` / `CLOUD_UNREACHABLE` / `CLOUD_QUOTA_EXCEEDED`。
 
