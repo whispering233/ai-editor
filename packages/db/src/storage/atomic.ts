@@ -36,9 +36,11 @@ export function nowIso(): string {
  *
  * @param filePath 目标文件绝对路径（父目录必须存在）
  * @param data 任意可 JSON 序列化的数据
+ * @param opts.mode 文件权限（缺省 0o644）；凭据类文件用 0o600——**临时文件即按此模式创建**，
+ *   rename 保持模式，保证每次重写后权限不被重置（卡 2：云端凭据 `cloud.json`）
  * @throws 序列化失败 / 目录不可写 / 磁盘错误时抛出，且原文件保持完好
  */
-export function writeJsonAtomic(filePath: string, data: unknown): void {
+export function writeJsonAtomic(filePath: string, data: unknown, opts?: { mode?: number }): void {
   const dir = dirname(filePath);
   const tmpPath = join(dir, `.${basename(filePath)}.tmp`);
   let fd: number | undefined;
@@ -51,7 +53,7 @@ export function writeJsonAtomic(filePath: string, data: unknown): void {
     }
     const payload = `${JSON.stringify(data, null, 2)}\n`;
  // "wx"：独占创建——若存在文件（含并发竞争）立即失败，绝不覆盖他人临时文件
-    fd = openSync(tmpPath, "wx", 0o644);
+    fd = openSync(tmpPath, "wx", opts?.mode ?? 0o644);
     writeFileSync(fd, payload);
     fsyncSync(fd); // 文件数据落盘后再 rename
     closeSync(fd);

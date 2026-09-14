@@ -41,6 +41,8 @@ import {
 import { projectRoutes, setProjectRoot } from "./routes/project.js";
 import { readLastProject } from "./last-project.js";
 import { outlineRoutes } from "./routes/outline.js";
+import { initCloudState } from "./cloud/state.js";
+import { cloudRoutes } from "./routes/cloud.js";
 import { namesRoutes } from "./routes/names.js"; // 批量名称解析（工具调用人类可读化）
 import { proposalRoutes } from "./routes/proposal.js";
 import { trashRoutes } from "./routes/trash.js";
@@ -174,6 +176,10 @@ export async function startServer(projectRoot: string, options: StartServerOptio
  // 不阻断启动。运行中改配置文件不生效——热加载 YAGNI）
   initDebugConfig(root);
 
+  // 云端存档状态初始化（卡 2）：创作根是 `cloud.json` 的定位依据（注入后 `cloud/state.ts` 才能
+  // 读写配置；未注入 → 一律视为未配置——仅影响测试/降级路径，不阻断启动）
+  initCloudState(root);
+
   // 出站 HTTP dispatcher（嵌入 pi 运行时的必需环节，见 http-dispatcher.ts 文件头）：
   // 装 undici dispatcher 以拿到 pi CLI 同款行为（IPv6 黑洞链路的 autoSelectFamily 退避 +
   // 环境代理支持 + 可配 HTTP 空闲超时）；不装 → 部分网络下 provider 请求稳定 ETIMEDOUT。
@@ -237,6 +243,9 @@ export async function startServer(projectRoot: string, options: StartServerOptio
  // 关系路由（S3.4）：查询（k 跳）/创建（判重）/物理删
   app.route("/api/v1/relation", relationRoutes);
   app.route("/api/v1/reference", referenceRoutes); // 参考资料专属端点（scan）
+
+ // 云端存档路由（卡 2）：账号配置 + 连通性测试（不要求项目已打开）
+  app.route("/api/v1/cloud", cloudRoutes);
 
  // Delta 路由（S5.3）：追加 / 按节点查询 / compute 状态计算
   app.route("/api/v1/delta", deltaRoutes);

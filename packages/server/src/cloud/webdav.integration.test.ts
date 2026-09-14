@@ -1,0 +1,268 @@
+// 云端存档集成测试（卡 2）：对**真的 HTTP 服务**跑 WebDAV 客户端与 `/cloud/test` 端点
+//
+// 为什么需要：单测（`webdav.test.ts`）用 stub 的 fetch 覆盖协议与错误映射；本文件起一个最小
+// WebDAV 服务（node:http + 真文件系统）验证「真 HTTP 往返」：URL 编码（中文书名）、邮箱风格
+// 用户名、Basic 认证、目录列举、MKCOL/PUT/DELETE、以及 `/cloud/test` 的读+写探测结果。
+// 本机无 rclone / wsgidav（已确认），故用最小自建服务——它只服务本测试文件，不入包。
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import type { AddressInfo } from "node:net";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, relative, resolve, sep } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { Hono } from "hono";
+import { errorHandler } from "../middleware/error.js";
+import { cloudRoutes } from "../routes/cloud.js";
+import { initCloudState } from "./state.js";
+import { createWebdavClient } from "./webdav.js";
+
+const HOST_HEADERS = { host: "127.0.0.1:3456" };
+const JSON_HEADERS = { ...HOST_HEADERS, "content-type": "application/json" };
+const USER = "me@example.com";
+const PASSWORD = "app-password-秘密值";
+
+// ============ 最小 WebDAV 服务（仅本测试用） ============
+
+interface FakeDavOptions {
+  username?: string;
+  password?: string;
+  /** 非空时，PUT 一律返回该状态码（配额用例） */
+  putStatus?: number;
+}
+
+interface FakeDav {
+  /** `http://127.0.0.1:<port>/dav` */
+  url: string;
+  close: () => Promise<void>;
+}
+
+/** 把请求 URL 映射到根目录下的真实路径（越界 → null，防穿越） */
+function resolveTarget(davRoot: string, rawUrl: string): string | null {
+  const pathname = decodeURIComponent(new URL(rawUrl, "http://placeholder").pathname);
+  const target = resolve(davRoot, `.${pathname}`);
+  return target === davRoot || target.startsWith(`${davRoot}/`) ? target : null;
+}
+
+/** 目录列举响应（含自身条目；href 逐段百分号编码 + 集合带尾斜杠，与真实服务器一致） */
+function propfindXml(davRoot: string, target: string): string {
+  const entries: Array<{ abs: string; isDir: boolean }> = [
+    { abs: target, isDir: true },
+    ...readdirSync(target).map((name) => ({ abs: join(target, name), isDir: statSync(join(target, name)).isDirectory() })),
+  ];
+  const responses = entries
+    .map(({ abs, isDir }) => {
+      const rel = relative(davRoot, abs);
+      const segments = rel.split(sep).filter((s) => s !== "");
+      const href =
+        segments.length === 0 ? "/" : `/${segments.map(encodeURIComponent).join("/")}${isDir ? "/" : ""}`;
+      const stat = statSync(abs);
+      return `<d:response><d:href>${href}</d:href><d:propstat><d:prop><d:resourcetype>${
+        isDir ? "<d:collection/>" : ""
+      }</d:resourcetype>${isDir ? "" : `<d:getcontentlength>${stat.size}</d:getcontentlength>`}<d:getlastmodified>${new Date(
+        stat.mtimeMs,
+      ).toUTCString()}</d:getlastmodified></d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>`;
+    })
+    .join("");
+  return `<?xml version="1.0" encoding="utf-8"?><d:multistatus xmlns:d="DAV:">${responses}</d:multistatus>`;
+}
+
+/** 启动最小 WebDAV 服务（根 = `<root>/dav`） */
+async function startFakeDav(root: string, options: FakeDavOptions = {}): Promise<FakeDav> {
+  const username = options.username ?? USER;
+  const password = options.password ?? PASSWORD;
+  const davRoot = join(root, "dav");
+  mkdirSync(davRoot, { recursive: true });
+
+  const server: Server = createServer((req: IncomingMessage, res: ServerResponse) => {
+    const expected = `Basic ${Buffer.from(`${username}:${password}`, "utf8").toString("base64")}`;
+    if (req.headers.authorization !== expected) {
+      res.writeHead(401, { "WWW-Authenticate": 'Basic realm="dav"' }).end("unauthorized");
+      return;
+    }
+    const target = resolveTarget(davRoot, req.url ?? "/");
+    if (target === null) {
+      res.writeHead(403).end("forbidden");
+      return;
+    }
+
+    switch (req.method) {
+      case "PROPFIND": {
+        if (!existsSync(target)) {
+          res.writeHead(404).end("not found");
+          return;
+        }
+        res.writeHead(207, { "content-type": "application/xml; charset=utf-8" }).end(propfindXml(davRoot, target));
+        return;
+      }
+      case "MKCOL": {
+        if (existsSync(target)) {
+          res.writeHead(405).end("already exists");
+          return;
+        }
+        if (!existsSync(dirname(target))) {
+          res.writeHead(409).end("parent missing");
+          return;
+        }
+        mkdirSync(target);
+        res.writeHead(201).end();
+        return;
+      }
+      case "PUT": {
+        if (options.putStatus !== undefined) {
+          res.writeHead(options.putStatus).end("insufficient storage");
+          return;
+        }
+        const chunks: Buffer[] = [];
+        req.on("data", (c: Buffer) => chunks.push(c));
+        req.on("end", () => {
+          writeFileSync(target, Buffer.concat(chunks));
+          res.writeHead(201).end();
+        });
+        return;
+      }
+      case "DELETE": {
+        if (!existsSync(target)) {
+          res.writeHead(404).end("not found");
+          return;
+        }
+        if (statSync(target).isDirectory()) rmSync(target, { recursive: true, force: true });
+        else unlinkSync(target);
+        res.writeHead(204).end();
+        return;
+      }
+      default: {
+        res.writeHead(405).end("method not allowed");
+      }
+    }
+  });
+
+  await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+  const port = (server.address() as AddressInfo).port;
+  return {
+ // 假服务的根就是 davRoot（无 URL 前缀）：需要前缀的用例自行拼子路径（`${url}/ai-editor`）
+    url: `http://127.0.0.1:${port}`,
+    close: () =>
+      new Promise<void>((done) => {
+        server.close(() => done());
+      }),
+  };
+}
+
+// ============ 集成用例 ============
+
+let root: string;
+let dav: FakeDav | null = null;
+let app: Hono;
+
+beforeEach(() => {
+  root = mkdtempSync(join(tmpdir(), "ai-editor-cloud-integ-"));
+  initCloudState(root);
+  app = new Hono();
+  app.onError(errorHandler());
+  app.route("/api/v1/cloud", cloudRoutes);
+});
+
+afterEach(async () => {
+  if (dav !== null) {
+    await dav.close();
+    dav = null;
+  }
+  initCloudState(null);
+  rmSync(root, { recursive: true, force: true });
+});
+
+/** 配置云盘指向当前假服务（走真实端点，顺带覆盖写入路径） */
+async function configure(url: string, password: string = PASSWORD) {
+  const res = await app.request("/api/v1/cloud/config", {
+    method: "PUT",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ url, username: USER, password }),
+  });
+  expect(res.status).toBe(200);
+}
+
+describe("WebDAV 客户端 × 真 HTTP 服务", () => {
+  it("list() 真往返：中文名 / 百分号编码 / size / 集合判定（真实 PROPFIND 解析）", async () => {
+    dav = await startFakeDav(root);
+    const davRoot = join(root, "dav");
+    mkdirSync(join(davRoot, "斗破苍穹-proj-x"));
+    writeFileSync(join(davRoot, "斗破苍穹-proj-x", "20260813-101530123-自动-苹果本-人物32-设定58-章120.zip"), "zip-bytes");
+    writeFileSync(join(davRoot, "斗破苍穹-proj-x", ".tmp-半截.zip"), "");
+
+    const client = createWebdavClient({ url: dav.url, username: USER, password: PASSWORD, timeoutMs: 5000 });
+    const entries = await client.list("斗破苍穹-proj-x");
+    expect(entries?.map((e) => e.name)).toEqual([
+      ".tmp-半截.zip",
+      "20260813-101530123-自动-苹果本-人物32-设定58-章120.zip",
+    ]);
+    expect(entries?.[1]).toMatchObject({ size: 9, isCollection: false });
+    expect(entries?.[1]?.lastModified).toMatch(/GMT$/);
+  });
+
+  it("mkcol（幂等）/ put / remove 真往返；根目录不存在时 404 → 创建", async () => {
+    dav = await startFakeDav(root);
+    const client = createWebdavClient({ url: dav.url, username: USER, password: PASSWORD, timeoutMs: 5000 });
+    // 目录不存在 → list null → mkcol 创建 → 再列得空
+    expect(await client.list("新书-proj-y")).toBeNull();
+    expect(await client.mkcol("新书-proj-y")).toBe(true);
+    expect(await client.mkcol("新书-proj-y")).toBe(false); // 已存在
+    expect(await client.list("新书-proj-y")).toEqual([]);
+    // 上传 + 删除（真字节与真文件）
+    await client.put("新书-proj-y/a.zip", new TextEncoder().encode("PK"));
+    expect(statSync(join(root, "dav", "新书-proj-y", "a.zip")).size).toBe(2);
+    await client.remove("新书-proj-y/a.zip");
+    expect(existsSync(join(root, "dav", "新书-proj-y", "a.zip"))).toBe(false);
+    await expect(client.remove("新书-proj-y/a.zip")).resolves.toBeUndefined(); // 幂等
+  });
+});
+
+describe("POST /api/v1/cloud/test × 真 HTTP 服务", () => {
+  it("读 + 写探测通过：200 {connected:true, created:false}，服务端不留临时文件", async () => {
+    dav = await startFakeDav(root);
+    await configure(dav.url);
+    const res = await app.request("/api/v1/cloud/test", { method: "POST", headers: HOST_HEADERS });
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toEqual({ connected: true, baseUrl: dav.url, created: false });
+    // 写探测的临时文件已被删除（不留垃圾）
+    expect(readdirSync(join(root, "dav"))).toEqual([]);
+  });
+
+  it("根目录原先不存在 → 本次创建（created:true）并完成读写探测", async () => {
+    dav = await startFakeDav(root);
+    const nested = `${dav.url}/ai-editor`;
+    await configure(nested);
+    const res = await app.request("/api/v1/cloud/test", { method: "POST", headers: HOST_HEADERS });
+    expect((await res.json()).data).toMatchObject({ connected: true, created: true, baseUrl: nested });
+    expect(existsSync(join(root, "dav", "ai-editor"))).toBe(true);
+    expect(readdirSync(join(root, "dav", "ai-editor"))).toEqual([]);
+  });
+
+  it("凭据错误 → 502 CLOUD_AUTH_FAILED（真 401）", async () => {
+    dav = await startFakeDav(root);
+    await configure(dav.url, "错误的密码");
+    const res = await app.request("/api/v1/cloud/test", { method: "POST", headers: HOST_HEADERS });
+    expect(res.status).toBe(502);
+    expect((await res.json()).error.code).toBe("CLOUD_AUTH_FAILED");
+  });
+
+  it("服务不可达（端口已关闭）→ 502 CLOUD_UNREACHABLE", async () => {
+    dav = await startFakeDav(root);
+    const url = dav.url;
+    await dav.close();
+    dav = null;
+    await configure(url);
+    const res = await app.request("/api/v1/cloud/test", { method: "POST", headers: HOST_HEADERS });
+    expect(res.status).toBe(502);
+    const body = await res.json();
+    expect(body.error.code).toBe("CLOUD_UNREACHABLE");
+    expect(body.error.message).toContain("无法连接云盘");
+  });
+
+  it("配额耗尽（PUT 507）→ 502 CLOUD_QUOTA_EXCEEDED", async () => {
+    dav = await startFakeDav(root, { putStatus: 507 });
+    await configure(dav.url);
+    const res = await app.request("/api/v1/cloud/test", { method: "POST", headers: HOST_HEADERS });
+    expect(res.status).toBe(502);
+    expect((await res.json()).error.code).toBe("CLOUD_QUOTA_EXCEEDED");
+  });
+});

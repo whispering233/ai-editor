@@ -40,7 +40,7 @@ import {
   writeAgentsFile,
 } from "@whispering233/ai-editor-db";
 import { SESSIONS_DIR_NAME } from "@whispering233/ai-editor-agent";
-import { defaultDeviceName } from "./device-name.js";
+import { currentDeviceName } from "./cloud/device.js";
 import { HttpError } from "./middleware/error.js";
 import type { ProjectContext } from "./middleware/project.js";
 
@@ -221,10 +221,10 @@ export function writeBackup(project: ProjectContext, opts?: { name?: string; kin
     }
     name = sanitized;
   }
- // 统计快照在打包前取（同一连接同一时刻视角）；设备名缺省 = 本机 hostname 派生
- // （云端存档启用后由 cloud.json 的 device 覆盖，见 device-name.ts）
+ // 统计快照在打包前取（同一连接同一时刻视角）；设备名 = 当前生效值
+ //（云端配置的 device 优先，缺省 = 本机 hostname 派生，见 cloud/device.ts）
   const stats = getBackupStats(project.db, project.root);
-  const device = defaultDeviceName();
+  const device = currentDeviceName();
   const zip = createBackupZip(project);
   const backupsDir = join(project.root, BACKUPS_DIR_NAME);
   mkdirSync(backupsDir, { recursive: true });

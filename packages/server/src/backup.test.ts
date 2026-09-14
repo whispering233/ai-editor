@@ -12,6 +12,7 @@ import { parseBackupFileName } from "@whispering233/ai-editor-shared";
 import {
   AGENTS_FILE_NAME,
   closeDatabase,
+  createEntity,
   DATA_DB_FILE_NAME,
   openDatabase,
   OUTLINE_FILE_NAME,
@@ -25,6 +26,7 @@ import {
 } from "@whispering233/ai-editor-db";
 import { errorHandler } from "./middleware/error.js";
 import { defaultDeviceName } from "./device-name.js";
+import { initCloudState, writeCloudConfig } from "./cloud/state.js";
 import { HttpError } from "./middleware/error.js";
 import {
   closeProject,
@@ -510,6 +512,57 @@ describe("GET /project/backups 与 POST /project/backup", () => {
     const backups = (await listRes.json()).data.backups;
     expect(backups).toHaveLength(1);
     expect(backups[0]).toMatchObject({ fileName: backup.fileName, kind: "manual", name: "交编辑前" });
+  });
+
+  it("GET /backups 的 device/stats 与项目实际存量一致（HTTP 层非零统计：2 人物 / 1 设定 / 1 章）", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-stats-http", "统计非零"));
+    const app = await openProject(dir);
+    const project = getCurrentProject() as NonNullable<ReturnType<typeof getCurrentProject>>;
+ // 造真实存量（走 db 层：2 人物 + 1 设定；夹具大纲自带 1 章）
+    createEntity(project.db, { type: "character", name: "张三" });
+    createEntity(project.db, { type: "character", name: "李四" });
+    createEntity(project.db, { type: "setting", name: "灵气" });
+    createEntity(project.db, { type: "location", name: "青云山" }); // 不计入统计段
+
+    const created = await app.request("/api/v1/project/backup", { method: "POST", headers: HOST_HEADERS });
+    expect(created.status).toBe(200);
+    const backup = (await created.json()).data.backup;
+    expect(backup.device).toBe(defaultDeviceName());
+    expect(backup.stats).toEqual({ characters: 2, settings: 1, chapters: 1 });
+    expect(backup.fileName).toMatch(/-人物2-设定1-章1\.zip$/);
+
+ // 列表端点回一样的统计（HTTP 黑盒：非全零）
+    const listRes = await app.request("/api/v1/project/backups", { headers: HOST_HEADERS });
+    const listed = (await listRes.json()).data.backups[0];
+    expect(listed).toMatchObject({ fileName: backup.fileName, device: backup.device, stats: backup.stats });
+  });
+
+  it("配置了云端设备名时，备份文件名用配置值（而非 hostname 派生）", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-device-cfg", "设备名配置"));
+ // 云端配置载体 = 创作根 `.ai-editor/cloud.json`（本用例把临时目录同时当作创作根）
+    initCloudState(dir);
+    try {
+      writeCloudConfig({ device: "家里的台式机" });
+      const project = {
+        root: dir,
+        config: readProjectFile(dir) as ProjectFileConfig,
+        db: openDatabase(join(dir, DATA_DB_FILE_NAME)),
+      };
+      try {
+        const info = writeBackup(project, { kind: "manual" });
+        expect(info.device).toBe("家里的台式机");
+        expect(info.fileName).toContain("-手动-家里的台式机-");
+        // 收到标签时设备段仍在前（段序固定）
+        const named = writeBackup(project, { kind: "manual", name: "定稿" });
+        expect(named.fileName).toContain("-手动-家里的台式机-定稿-");
+      } finally {
+        closeDatabase(project.db);
+      }
+    } finally {
+      initCloudState(null); // 复位（模块级状态：不影响其它用例的设备名解析）
+    }
   });
 
   it("POST /backup 名称非法 → 400 VALIDATION_ERROR（路由层 zod 校验 + writeBackup sanitize）", async () => {

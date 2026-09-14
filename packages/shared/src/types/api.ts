@@ -1017,6 +1017,25 @@ export const namesResolveResSchema = z.object({
 
 export type NamesResolveResult = z.infer<typeof namesResolveResSchema>;
 
+// ============ 云端存档（卡 2：账号配置段） ============
+//
+// PUT /api/v1/cloud/config：写入云端账号配置与设备名、自动推送开关
+// - url / username：**空串 = 清空该项**（url+username+password 三项齐空 → 回到「未配置」）
+// - password：**缺省或空串 = 不修改**（响应从不回传，设置页表单留空即保留原值）
+// - device：空串 = 回到缺省（简化 hostname）；语法规则执行点在 shared sanitizeDeviceName（非空时）
+// - autoPush：缺省 = 不修改（本机级开关，缺省 false）
+// - url 非空时的归一化（http(s) 绝对地址、去尾斜杠）在路由层校验（→ 400 VALIDATION_ERROR）
+export const cloudConfigPutReqSchema = z
+  .object({
+    url: z.string().optional(),
+    username: z.string().optional(),
+    password: z.string().optional(),
+    device: z.string().optional(),
+    autoPush: z.boolean().optional(),
+  })
+  .strict();
+export type CloudConfigPutReq = z.infer<typeof cloudConfigPutReqSchema>;
+
 // ============ chat SSE 事件 ============
 //
 // 事件集（服务端→客户端的 pi 事件投影）以 docs/api/80-api-chat.md 为契约。本文件**不再镜像**

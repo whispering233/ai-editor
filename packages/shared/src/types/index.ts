@@ -7,4 +7,5 @@ export type * from "./entity.js";
 export type * from "./ability-panel.js";
 export type * from "./outline.js";
 export type * from "./project.js";
+export type * from "./cloud.js";
 export type * from "./api.js";

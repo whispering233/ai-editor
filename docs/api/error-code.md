@@ -1,6 +1,6 @@
 # 错误码说明（ErrorCode）
 
-> **单一来源**：`@whispering233/ai-editor-shared` `types/api.ts` `ERROR_CODES` 枚举——REST 错误响应与工具结果共用（**SSE 流内无 `error` 帧**，错误以 `agent_end` 的 `stopReason`/`errorMessage` 表达，见 `80-api-chat.md`）；本文档表格为同一枚举的说明视图，新增/修订错误码须同步改枚举注释。**服务端另有扩展码**（不在 shared 枚举内，与 client 的 `CLIENT_NETWORK_ERROR` 同类）：`INTERNAL_ERROR` 500 / `FORBIDDEN` 403 / `NOT_FOUND` 404 / `NO_PROJECT_OPEN` 409 / `PROJECT_ALREADY_EXISTS` 409 / `LLM_API_KEY_MISSING` 400 / 云端存档七码 `CLOUD_NOT_CONFIGURED` 409、`CLOUD_AUTH_FAILED` 502、`CLOUD_UNREACHABLE` 502、`CLOUD_QUOTA_EXCEEDED` 502、`CLOUD_BACKUP_TOO_LARGE` 400、`CLOUD_CONFLICT` 409、`CLOUD_FILE_NOT_FOUND` 404（`packages/server/src/middleware/error.ts` 的 `SERVER_ERROR_CODES`）。错误码分散（shared 枚举 + 服务端补充 + client 补充）为已登记技术债，MVP 不收敛。
+> **单一来源**：`@whispering233/ai-editor-shared` `types/api.ts` `ERROR_CODES` 枚举——REST 错误响应与工具结果共用（**SSE 流内无 `error` 帧**，错误以 `agent_end` 的 `stopReason`/`errorMessage` 表达，见 `80-api-chat.md`）；本文档表格为同一枚举的说明视图，新增/修订错误码须同步改枚举注释。**服务端另有扩展码**（不在 shared 枚举内，与 client 的 `CLIENT_NETWORK_ERROR` 同类）：`INTERNAL_ERROR` 500 / `FORBIDDEN` 403 / `NOT_FOUND` 404 / `NO_PROJECT_OPEN` 409 / `PROJECT_ALREADY_EXISTS` 409 / `LLM_API_KEY_MISSING` 400 / 云端存档四码（已实现）`CLOUD_NOT_CONFIGURED` 409、`CLOUD_AUTH_FAILED` 502、`CLOUD_UNREACHABLE` 502、`CLOUD_QUOTA_EXCEEDED` 502（`packages/server/src/middleware/error.ts` 的 `SERVER_ERROR_CODES`；`CLOUD_BACKUP_TOO_LARGE` / `CLOUD_CONFLICT` / `CLOUD_FILE_NOT_FOUND` 已定契约、随推送与拉取卡片引入）。错误码分散（shared 枚举 + 服务端补充 + client 补充）为已登记技术债，MVP 不收敛。
 
 | code | HTTP | 说明 |
 | :--- | :--- | :--- |
@@ -25,13 +25,13 @@
 | `REFERENCE_FILE_MISSING` | 409 | 409 参考资料 file 类文件缺失（PUT 更新时读原文件失败——外部删除，提示先扫描同步） |
 | `DELTA_CONFLICT` | —（已废弃） | 已废弃（2026-08 修订：computeState 以 conflicts 字段替代 409） |
 | `TOOL_RESULT_TOO_LARGE` | — | 单条工具结果超 token 上限：**截断 + 结构化提示**（不终止对话；同时写调试日志使用量类别） |
-| `CLOUD_NOT_CONFIGURED` | 409 | 409 云盘未配置（`cloud.json` 的 webdav url/username/password 三项未齐）就调用需要云端的动作 |
-| `CLOUD_AUTH_FAILED` | 502 | 502 云盘认证失败（上游 401/403：凭据被吊销、应用密码错误、权限不足）；不自动重试，引导去设置页核对 |
-| `CLOUD_UNREACHABLE` | 502 | 502 云盘不可达（网络 / DNS / TLS / 超时 / 上游 5xx）；本地功能不受影响 |
-| `CLOUD_QUOTA_EXCEEDED` | 502 | 502 云盘配额耗尽（上游 507 或配额提示：空间或上传流量用尽，免费账户 1GB/月） |
-| `CLOUD_BACKUP_TOO_LARGE` | 400 | 400 备份包超过云盘单文件上限（500MB，**推送前本地判定**，不等服务器回 413） |
-| `CLOUD_CONFLICT` | 409 | 409 推送时云端 head ≠ 本机 `lastPushedFileName`（另一台机器写过）→ 弹出裁决（保留云端 / 用本机强推） |
-| `CLOUD_FILE_NOT_FOUND` | 404 | 404 拉取指定的云端备份不存在（已被保留策略清理或被手动删除） |
+| `CLOUD_NOT_CONFIGURED` | 409 | 409 云盘未配置（`cloud.json` 的 webdav url/username/password 三项未齐）就调用需要云端的动作（已实现：卡 2） |
+| `CLOUD_AUTH_FAILED` | 502 | 502 云盘认证失败（上游 401/403：凭据被吊销、应用密码错误、权限不足）；不自动重试，引导去设置页核对（已实现：卡 2） |
+| `CLOUD_UNREACHABLE` | 502 | 502 云盘不可达（网络 / DNS / TLS / 超时 / 上游 5xx）；本地功能不受影响（已实现：卡 2） |
+| `CLOUD_QUOTA_EXCEEDED` | 502 | 502 云盘配额耗尽（上游 507 或 403 带配额提示：空间或上传流量用尽，免费账户 1GB/月）（已实现：卡 2） |
+| `CLOUD_BACKUP_TOO_LARGE` | 400 | 400 备份包超过云盘单文件上限（500MB，**推送前本地判定**，不等服务器回 413）（实现：卡 4） |
+| `CLOUD_CONFLICT` | 409 | 409 推送时云端 head ≠ 本机 `lastPushedFileName`（另一台机器写过）→ 弹出裁决（保留云端 / 用本机强推）（实现：卡 4） |
+| `CLOUD_FILE_NOT_FOUND` | 404 | 404 拉取指定的云端备份不存在（已被保留策略清理或被手动删除）（实现：卡 5） |
 
 - REST 错误响应统一 `{ success: false, error: { code, message } }`；**SSE 流内无独立 `error` 事件**——错误以 `agent_end` 帧的 `stopReason`（`error`/`aborted`）与 `errorMessage` 表达（见 [80-api-chat.md](./80-api-chat.md)）。
 - HTTP 状态码约定：200 成功 / 400 参数 / 404 不存在 / 409 冲突 / 500 服务端错误（端点级特例见各模块文档）。

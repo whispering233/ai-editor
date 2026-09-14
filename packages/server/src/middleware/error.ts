@@ -18,6 +18,12 @@ export const SERVER_ERROR_CODES = [
   "NO_PROJECT_OPEN",
   "PROJECT_ALREADY_EXISTS",
   "LLM_API_KEY_MISSING", // S7.6：POST /chat 未配置 DeepSeek key——400
+ // 云端存档（卡 2）：码表说明见 docs/api/error-code.md；CONFLICT / FILE_NOT_FOUND / BACKUP_TOO_LARGE
+ // 在推送/拉取卡片（卡 4/5）随功能引入
+  "CLOUD_NOT_CONFIGURED", // 409：webdav 三项未齐就调用需要云端的动作
+  "CLOUD_AUTH_FAILED", // 502：上游 401/403（凭据/权限）
+  "CLOUD_UNREACHABLE", // 502：网络/DNS/TLS/超时/上游 5xx
+  "CLOUD_QUOTA_EXCEEDED", // 502：上游 507 或配额提示
 ] as const;
 export type ServerErrorCode = (typeof SERVER_ERROR_CODES)[number];
 
