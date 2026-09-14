@@ -4,6 +4,9 @@
 import type {
   BackupKind,
   ChatSessionMessage,
+  CloudConfigPutResult,
+  CloudStatus,
+  CloudTestResult,
   ChatSessionSummary,
   ChatThinkingPreview,
   ComputeStateResult,
@@ -1101,4 +1104,39 @@ export interface RejectProposalRes {
 /** 拒绝提案（错误码语义同 confirm；拒绝同样是不可逆消费动作，跨项目拒绝不消费他项目提案） */
 export function rejectProposal(proposalId: string): Promise<RejectProposalRes> {
   return apiFetch<RejectProposalRes>(`/proposal/${proposalId}/reject`, { method: "POST" });
+}
+
+// ============ 云端存档（卡 3：账号配置段；推送/拉取端点在卡 4/5） ============
+//
+// 契约 = docs/api/100-api-cloud.md（卡 2 只实现配置段：status/config/test）。
+// 注意：status 当前只有 6 字段（configured/url/username/device/autoPush/projectId）——
+// remote/local/state/errorCode 属卡 4/5，类型（shared CloudStatus）即收窄版。
+
+/** GET /api/v1/cloud/status —— 云端与本机同步状态（卡 3 只用配置段；不发起云端请求） */
+export function getCloudStatus(): Promise<CloudStatus> {
+  return apiFetch<CloudStatus>("/cloud/status");
+}
+
+/**
+ * PUT /api/v1/cloud/config —— 写入云端账号配置/设备名/自动推送开关。
+ * 语义（服务端）：url/username 空串 = 清空该项；password 缺省或空串 = 不修改
+ *（但 url 与 username 皆空 ⇒ password 一并丢弃）；device 空串 = 回缺省 hostname。
+ */
+export function putCloudConfig(patch: {
+  url?: string;
+  username?: string;
+  password?: string;
+  device?: string;
+  autoPush?: boolean;
+}): Promise<CloudConfigPutResult> {
+  return apiFetch<CloudConfigPutResult>("/cloud/config", { method: "PUT", body: patch });
+}
+
+/**
+ * POST /api/v1/cloud/test —— 连通性 + 读/写权限探测（设置页「测试连接」）。
+ * 失败：409 CLOUD_NOT_CONFIGURED / 502 CLOUD_AUTH_FAILED | CLOUD_UNREACHABLE | CLOUD_QUOTA_EXCEEDED
+ *（文案为中文可读，直接展示即可）。
+ */
+export function testCloudConnection(): Promise<CloudTestResult> {
+  return apiFetch<CloudTestResult>("/cloud/test", { method: "POST" });
 }

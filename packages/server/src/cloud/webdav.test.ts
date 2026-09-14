@@ -254,6 +254,22 @@ describe("错误映射（→ HttpError；码表 docs/api/error-code.md）", () =
     }
   });
 
+  it("undici 笼统的 `fetch failed` 会带上 cause.code（对用户可行动：ECONNREFUSED/ENOTFOUND…）", async () => {
+    stubFetch(() => {
+ // undici 真实形态：message 笼统、诊断在 cause.code
+      const err = new Error("fetch failed") as Error & { cause?: { code?: string } };
+      err.cause = { code: "ECONNREFUSED" };
+      throw err;
+    });
+    await expect(makeClient().list("")).rejects.toMatchObject({ code: "CLOUD_UNREACHABLE" });
+    try {
+      await makeClient().list("");
+      expect.unreachable("应当抛错");
+    } catch (err) {
+      expect((err as HttpError).message).toContain("fetch failed（ECONNREFUSED）");
+    }
+  });
+
   it("单次请求带超时信号（AbortSignal；缺省 30s）", async () => {
     const spy = stubFetch(() => new Response(PROPFIND_XML, { status: 207 }));
     await makeClient().list("");

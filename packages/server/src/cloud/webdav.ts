@@ -202,7 +202,12 @@ export function createWebdavClient(options: WebdavClientOptions): WebdavClient {
       });
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
-      throw new HttpError(502, "CLOUD_UNREACHABLE", `无法连接云盘（${method}）：${reason}`);
+ // undici 的顶层错误常是笼统的 `fetch failed`，真正的诊断信息在 `cause.code`
+ // （ECONNREFUSED/ENOTFOUND/ETIMEDOUT…）——把它带上，让「测试连接」的提示可行动
+      const causeCode = (err as { cause?: { code?: unknown } }).cause?.code;
+      const detail =
+        typeof causeCode === "string" && !reason.includes(causeCode) ? `${reason}（${causeCode}）` : reason;
+      throw new HttpError(502, "CLOUD_UNREACHABLE", `无法连接云盘（${method}）：${detail}`);
     }
   }
 

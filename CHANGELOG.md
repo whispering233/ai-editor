@@ -16,6 +16,8 @@
 - shared：`MAX_DEVICE_NAME_LENGTH`、`BackupStats`、`sanitizeDeviceName`、`deviceNameFromHostname`（纯函数）；db：`getBackupStats`（实体计数走单条 COUNT、未软删口径）。
 - **云端存档账号配置与连通性测试（卡 2）**：`GET /api/v1/cloud/status`（配置段）/ `PUT /api/v1/cloud/config` / `POST /api/v1/cloud/test`（`PROPFIND` 根 → 缺则 `MKCOL` → 写临时文件再删，验证**读 + 写**权限）。配置载体 = `<创作根>/.ai-editor/cloud.json`（**明文 + 权限 0600**，含在既有更宽权限文件上重写；合并写、未知键与 `books` 段原样保留）；**任何响应都不回传 password**（不是脱敏，而是根本不回传）；URL 内嵌用户名/密码（userinfo）直接 400 拒绝（不静默剥离）；**凭据三件套要么齐、要么全无**——清空 url + username 时 password 一并丢弃（避免磁盘留下已失效的密码）。设置页 UI 在卡 3。
 - **WebDAV 最小客户端**（`PROPFIND`/`MKCOL`/`PUT`/`DELETE` + 窄 XML 解析 + Basic 认证 + 30s 超时；出站走全局 dispatcher，不引 SDK/XML 依赖；列表结果剥掉 base 路径前缀 → `path` 恒为 base 相对，且自身条目（含根）一律剔除）与四个云错误码：`CLOUD_NOT_CONFIGURED` 409、`CLOUD_AUTH_FAILED` 502、`CLOUD_UNREACHABLE` 502、`CLOUD_QUOTA_EXCEEDED` 502（`CLOUD_CONFLICT`/`CLOUD_FILE_NOT_FOUND`/`CLOUD_BACKUP_TOO_LARGE` 随推送/拉取卡片引入）。
+- **设置页「备份」改为三级导航 + 新增「云端备份」面板（卡 3）**：左 160px 固定两项（自动备份 / 云端备份，与「AI 模型」同款 `sub-nav` 契约）；自动备份面板内容原样搬入；云端备份面板 = 账号配置（WebDAV 地址 / 用户名 / 应用密码（掩码，留空 = 不修改）/ 设备名（预填当前生效值）四个输入 + 测试连接 + 保存）+ 自动推送开关（选择即保存）+ 明文 0600 与「免费云盘上传流量 1GB/月」提示。表单→请求语义收敛在 `lib/cloud-config.ts` 纯函数（密码留空不提交、**凭据不全不提交密码**、地址与用户名半填时行内提示）。
+- **`/cloud/test` 不可达提示带上底层错误码**：undici 顶层错误常是笼统的 `fetch failed`，现附 `cause.code`（`ECONNREFUSED`/`ENOTFOUND`/`ETIMEDOUT`…），「测试连接」失败时能看出是端口、域名还是超时。
 - **设备名可配置**：`cloud.json` 的 `webdav.device` 优先生效（非法值不生效、回缺省），备份文件名的设备段随设置页改写而变化（之前固定为 hostname 派生）。
 
 ### Changed
