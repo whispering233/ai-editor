@@ -186,7 +186,8 @@ export default function ReferenceList() {
   async function handleDelete(item: EntitySummary) {
     try {
       await deleteEntity("reference", item.id);
-      useUiStore.getState().showToast(`已移入回收站：《${item.name}》，可随时还原`);
+      // 删除要**推送**才传播（DESIGN.md §550）：本地删除不会被拉取复活，但另一台的删除要等这次推送
+      useUiStore.getState().showToast(`已移入回收站：《${item.name}》，可随时还原；推送到云端后，另一台也会同步删除`);
       setReloadTick((t) => t + 1);
     } catch (e) {
       useUiStore

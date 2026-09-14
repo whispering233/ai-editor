@@ -475,7 +475,8 @@ export const useChatStore = create<ChatState>((set, get) => {
         sessions: s.sessions === null ? null : s.sessions.filter((x) => x.id !== sessionId),
       }));
       if (get().currentSessionId === sessionId) get().newSession();
-      useUiStore.getState().showToast("会话已删除");
+      // 删除要**推送**才传播到云端与另一台（DESIGN.md §550 / 40-cloud-sync.md §4「用户如何真正删除」）
+      useUiStore.getState().showToast("会话已删除；推送到云端后，另一台也会同步删除");
     },
 
     loadMessages: async (sessionId) => {

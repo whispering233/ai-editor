@@ -352,7 +352,7 @@ describe("setCurrentSession / newSession / clearSessions（U5：选择即恢复�
     expect(s.currentSessionId).toBeNull(); // 当前会话被删 → 新会话
     expect(s.messages).toEqual([]);
     expect(s.contextUsage).toBeNull();
-    expect(useUiStore.getState().toast?.text).toBe("会话已删除");
+    expect(useUiStore.getState().toast?.text).toBe("会话已删除；推送到云端后，另一台也会同步删除");
   });
 
   it("deleteSession 删非当前会话：列表移除但当前会话与消息不变", async () => {

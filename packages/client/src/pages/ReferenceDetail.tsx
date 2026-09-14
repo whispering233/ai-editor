@@ -279,7 +279,7 @@ export default function ReferenceDetail({ id, draft }: { id?: string; draft?: "m
     if (detail === null) return;
     try {
       await deleteEntity("reference", detail.id);
-      useUiStore.getState().showToast("已移入回收站，可随时还原");
+      useUiStore.getState().showToast("已移入回收站，可随时还原；推送到云端后，另一台也会同步删除");
       navigate("#/references");
     } catch (e) {
       useUiStore
