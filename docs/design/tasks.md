@@ -23,7 +23,7 @@
 
 | 卡 | 目标 | 主要交付物 | 完成判据（硬） |
 | :--- | :--- | :--- | :--- |
-| **7** | **自动推送**（2 小时节流 + 排除纯聊天触发 + 关闭项目尽力推 + 手动备份后立刻推） | `server`：复用现有自动备份 tick 链（不新增第二套定时器）、`cloud.json` 的 `autoPush` 生效、关闭项目路径接入推送（失败只记日志 + 状态标记）、手动备份成功后触发推送 | ① `autoPush` 关闭时任何自动路径都不推；② 打开时纯聊天（只改 `sessions/`）不触发推送，创作数据变更后到点即推；③ 节流：2 小时内的第二次变更不推（常量注入测试）；④ 关闭项目时推送一次（含聊天变更），失败不阻塞关闭且状态区标记；⑤ 手动备份成功后立即推送（不受节流限制）；⑥ typecheck/lint/test 全绿 + 新 commit |
+| **7** | **自动推送**（2 小时节流 + 排除纯聊天触发 + 关闭项目尽力推 + 手动备份后立刻推） | `server`：**单一定时器**（不新增第二套）——`backup.ts` 的 tick 链排程条件改为「备份频率开启 **或** `autoPush` 开启」（只 autoPush 时按 2h 常量排程）；新增 `cloud/auto-push.ts`（`AUTO_PUSH_THROTTLE_MS` 常量可注入、`maybeAutoPush` / `autoPushOnClose` / `autoPushAfterManualBackup`）；`cloud.json` book state 新增 `lastAutoPushAt`（节流基准，仅自动路径推进）与 `lastAutoPushError`（失败标记，`GET /cloud/status` 的 `local` 段透出）；`POST /project/close` 与 `POST /project/backup` fire-and-forget 触发；client 面板显示失败行 + 说明行补全触发口径 | ① `autoPush` 关闭时任何自动路径都不推（含关闭项目/手动备份路径）；② 打开时纯聊天（只改 `sessions/`）不触发定时推送，创作数据变更后到点即推；③ 节流：2 小时内的第二次变更不推（常量注入）；④ 关闭项目时推送一次（含聊天变更），失败不阻塞关闭且 `lastAutoPushError` 落库并在面板可见；⑤ 手动备份成功后立即推送（不受节流限制）；⑥ 备份频率关闭但 autoPush 开启时仍按 2h 排程（口径 (B)）；⑦ typecheck/lint/test 全绿 + 新 commit |
 
 **卡 7 开工前必读（卡 6 oracle 复核提出的八条债务）**：
 

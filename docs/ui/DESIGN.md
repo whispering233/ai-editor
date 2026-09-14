@@ -537,7 +537,7 @@ components:
 
 **`sync-cloud-button`（左栏底部第二项）** — 与底部区其余三入口同形（无边框文字按钮 + 左对齐标签 + `@ant-design/icons` 图标，不新增形态）；**角标 = 状态提示**：状态为「有未推改动 / 云端有更新 / 冲突」时显示小圆点（antd `Badge dot`，颜色走语义 token、**不用预设色**，**两色口径**：`冲突` = error（`var(--ant-color-error)`）、`有未推改动`/`云端有更新` = warning（`var(--ant-color-warning)`）——这两种是「有事可做」而非「出错」，与 `unreachable` 不亮一起保证「红点 = 需要你裁决」唯一；圆点渲染在按钮行尾（`shrink-0`，标签 `flex-1` 把圆点推到最右，不随出现/消失挪动文字））；状态来自打开项目时那次检查 + 每次点击实时复查，**不做轮询**（`/status` 每次 2–3 次 PROPFIND，云盘免费额度 600 次/30 分钟）。点击 = 一键状态机（`docs/design/40-cloud-sync.md` §3）：未配置 → 跳设置页并选中「备份 → 云端备份」（**跨页意图经 `stores/cloud.ts` 一次性下传**；设置页二级 tab 的选中态仍不进 URL、刷新回落默认项）；未打开项目 → 禁用；已同步 → toast 提示已是最新；有未推改动 → 直接推送；云端更新且本机无改动 → 弹 `cloud-pull-confirm`；冲突 → 弹 `cloud-conflict-dialog`；云端不可达 → toast 错误文案（强调本地功能不受影响）。在途 `loading` 防连点。
 
-**`cloud-backup-panel`（云端备份）** — 三段，每段一张 `card`（`section-title` 标题 + 说明行）：
+**`cloud-backup-panel`（云端备份）** — 三段，每段一张 `card`（`section-title` 标题 + 说明行）（**自动推送说明行须写全触发口径**（卡 7）：每 2 小时且只在创作数据有变更时推一次 / 关闭项目与手动备份各触发一次（不受节流）/ 纯聊天不单独触发 / **自动备份频率关闭时按 2 小时排程、不会静默失效**；自动路径最近一次失败以一行 `caption-text text-destructive` 显示（来自 `status.local.lastAutoPushError`，成功即消失，**不弹窗**））：
 
 1. **账号配置**：`url` / 用户名 / 应用密码 / 设备名四个 `input`（密码**从不回传** → 占位符「留空则不修改」；**设备名预填当前生效值**（配置值或 hostname 派生值），留空 / 清空 = 回退本机名派生——代价：首次保存会把当时的派生值**显式写进** `cloud.json`，改机名后需手改设备名）+ `button-default`「测试连接」+ 主操作「保存」（`button-primary`，`loading` 防连点；未改动时禁用）。下方 `caption-text` 两句：凭据以明文保存在本机 `.ai-editor/cloud.json`（权限 600）；免费账户上传流量有限（如 1GB/月），自动推送会消耗配额。
 2. **自动推送**：antd `Switch` + 一行说明（每 2 小时且只在创作数据有变更时推；关闭项目与手动备份会额外触发一次；纯聊天不单独触发）。
