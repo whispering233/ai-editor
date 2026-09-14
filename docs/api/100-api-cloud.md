@@ -117,7 +117,8 @@
   pushed: { fileName: string; size: number; device: string; kind: "auto" | "manual"; name?: string;
             stats?: { characters: number; settings: number; chapters: number } };
   remote: { dirName: string; headFileName: string };
-  pruned: string[];      // 本次云端清理删除的文件名（带用户标签的份永不列入；只删可解析的与 .tmp-*）
+  pruned: string[];      // 本次云端保留清理删除的文件名（带用户标签的份永不列入；只删「能解析出时间戳且无标签」的份）。
+                         //   注意：`.tmp-*` 的清理属流程第 2 步（垃圾回收），**不计入** pruned
   snapshot?: { fileName: string };  // force 且云端有 head 时：下载存档进 .backups/ 的那份
 }
 ```
@@ -127,11 +128,13 @@
 1. 定位云端书目录：`cloud.json` 缓存 `dirName` 走快路径 → `PROPFIND` 404 时回退扫描根目录、按目录名后缀 `-<projectId>` 匹配并修正缓存；目录不存在 → `MKCOL` 幂等创建
 2. 清理遗留 `.tmp-*` → 列目录取 head → **冲突检测**（head 存在且 ≠ `lastPushedFileName` → 无 `force` 时 409 `CLOUD_CONFLICT`）
 3. **体积检查**：zip > 500MB（云盘单文件上限）→ 400 `CLOUD_BACKUP_TOO_LARGE`（不等服务器回 413）
-4. `PUT` 到 `.tmp-<正式文件名>` → `MOVE` 成正式名（**正式名下永远是完整包**）
+4. `PUT` 到 `.tmp-<正式文件名>` → `MOVE` 成正式名（**正式名下永远是完整包**）；`MOVE` 带 **`Overwrite: T`**——
+   **同一份重推幂等覆盖**（用户连点、上次清理失败再推，否则目标已存在会 412 卡死）；跨机器同名冲突由 head 判定拦在前面，
+   不靠 `MOVE` 412 兜底
 5. 更新 `lastPushedFileName` / `lastSeenHeadFileName` / `lastSyncAt` / `baseEntries`（= 本次推送包内两个打包目录的条目名）
 6. **保留策略**：只保留最近 5 份 + **带用户标签的永不清理** + 只删「能解析出时间戳」或 `.tmp-` 前缀的文件；**只在推送成功后执行**，清理失败不阻塞推送
 
-**错误码**：409 `NO_PROJECT_OPEN` / `CLOUD_NOT_CONFIGURED` / `CLOUD_CONFLICT`、400 `VALIDATION_ERROR` / `CLOUD_BACKUP_TOO_LARGE`、502 `CLOUD_AUTH_FAILED` / `CLOUD_UNREACHABLE` / `CLOUD_QUOTA_EXCEEDED`。
+**错误码**：409 `NO_PROJECT_OPEN` / `CLOUD_NOT_CONFIGURED` / `CLOUD_CONFLICT`、404 `VALIDATION_ERROR`（本地备份不存在 / 本机没有任何可推送的备份——**先于任何网络动作**）、400 `VALIDATION_ERROR` / `CLOUD_BACKUP_TOO_LARGE`、502 `CLOUD_AUTH_FAILED` / `CLOUD_UNREACHABLE` / `CLOUD_QUOTA_EXCEEDED`。
 
 ### POST /api/v1/cloud/pull
 
