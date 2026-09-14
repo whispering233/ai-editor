@@ -37,7 +37,7 @@
       createdAt: string;      // ISO 8601（由文件名时间戳解析，本地时区）
       kind: "auto" | "manual";
       name?: string;          // 用户标签（带标签的份永不参与云端清理）
-      device?: string;        // 来源设备（新命名格式；旧格式文件名无此字段）
+      device: string;         // 来源设备（必填：唯一命名格式恒有此段）
       stats?: { characters: number; settings: number; chapters: number }; // 新格式尾部三段统计
       size: number;
     }>;
