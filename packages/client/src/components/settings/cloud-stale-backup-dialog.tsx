@@ -68,6 +68,3 @@ export function CloudStaleBackupDialog() {
     </Dialog>
   );
 }
-
-/** 供设置页面板复用的文案（状态行提示与对话框必须同一套口径，避免「同一状态两种说法」） */
-export const STALE_BACKUP_HINT = "本机有改动未进最新备份，云端只能上传旧份——先「立即备份」";

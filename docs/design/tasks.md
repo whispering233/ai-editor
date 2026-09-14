@@ -14,17 +14,14 @@
 
 **批次状态（2026-09-15）**：云端存档 7 张卡全部完成并通过各自独立 oracle 验证（逐卡事实见根 `CHANGELOG.md` `Unreleased`）。
 
-**当前任务卡：云端收口批次 2（2026-09-15）** —— 用户已拍两条口径：
+**批次 2（云端收口，2026-09-15）已完成**：卡 A 备份命名唯一化（`13f1d2b` + 收口 `3256108`）、卡 B 旧包上传诚实化（`e43869e`）——两张卡各自通过独立 oracle 验证（A = 有条件 PASS → 文档收口；B = 有条件 PASS → 三处文本/注释收口），逐卡事实见根 `CHANGELOG.md` 的 `Unreleased` 段。
 
-- **卡 A：备份命名唯一化**（砍掉旧格式兼容层）：写入 = 解析 = 唯一格式；旧命名文件留盘不识别；**开项目兜底备份**（`.backups/` 有文件但无一可解析 → 立即生成一份新格式备份，不重命名旧份——旧份无设备/统计信息，硬补会谎报）。
-- **卡 B：旧包上传诚实化（职责分离，(ii) 口径）**：**云端永不创建备份**（自动路径不做按需备份）；自动路径（2h 定时 / 关闭项目）在「本机有改动未进最新备份」时**跳过不推**并只在状态里标注；用户主动点「同步云端」时弹 `cloud-stale-backup-dialog` 让其选「立即手动备份并推送」/「上传旧备份」；状态行提示「云端将上传旧份（<时间>），先『立即备份』」。
+**待排（用户未定）**：`backlog.md` 里「云端收口小项」那批（失败文案去「未执行」断言、`refresh()` 的 busy 归属、冲突框带 `fileName`、`getProjectBackups` 失败区分、AggregateError 取码、`/cloud/test` 可写不可删降级、URL 校验不回显 raw、shared 注释镜像、status 复查宿主上移、`DESIGN.md §544` 口径）——`clearStatus()` 清对话框状态已在卡 B 顺带完成。
 
 > 上一轮 oracle 复核列出的「云端收口小项」（失败文案去「未执行」断言、`refresh()` 的 busy 归属、`clearStatus()` 清对话框状态、冲突框带 fileName、`getProjectBackups` 失败区分、AggregateError 取码、`/cloud/test` 可写不可删降级、URL 校验不回显 raw、shared 注释镜像、status 复查宿主上移、`§544` 口径）待卡 A/B 落地后另排。
 
 | 卡 | 目标 | 主要交付物 | 完成判据（硬） |
 | :--- | :--- | :--- | :--- |
-| **A** | **备份命名唯一化**（写入 = 解析，砍兼容层） | `shared/utils/backup.ts`：删 3 个旧正则与 `formatBackupFileName` 的旧形态输出分支，`parseBackupFileName` 只认当前格式、`device`/`stats` 变必填；`server/backup.ts`：`renameBackup` 删旧形态分支、新增 `ensureParseableBackup(project)`（`.backups/` 有文件但无一可解析 → `writeBackup({kind:"auto"})`）并在 `middleware/project.ts` 的 `setCurrentProject(project)` 里调用（best-effort 记日志）；契约收敛（`shared/types/api.ts` + client `lib/api.ts` 的 `BackupEntry.device`/`stats` 必填）；client 删「旧格式未记录 / 整行省略」死分支（`lib/backup.ts` 的 `formatBackupMeta` 返回 string、`auto-backup-panel.tsx`、`cloud-conflict-dialog.tsx`、`cloud-backup-panel.tsx`）；测试：删旧形状用例 + 新增「旧形状一律 null」与「开项目兜底备份」用例 | ① `parseBackupFileName` 对三类旧命名一律返回 null，且当前格式仍全绿；② `formatBackupFileName` 只产唯一格式（旧形态输出分支已删）；③ 开项目时「有旧文件但无可解析份」→ 生成一份新格式备份（且已有可解析份时不重复备份）；④ API 契约里 `device`/`stats` 必填，client 无「旧格式」分支；⑤ typecheck/lint/test 全绿 + 新 commit |
-| **B** | **旧包上传诚实化**（职责分离，(ii)） | `shared`：`GET /cloud/status` 的 `local` 段新增「本机有改动未进最新备份」状态位（如 `backupStale: boolean`）；`server/cloud/auto-push.ts`：定时与关闭项目路径在该状态下**跳过**（不推、不写 `lastAutoPushError`，可记中性状态）；`client`：面板状态行提示「云端将上传旧份（<时间>），先『立即备份』」+ 新增 `cloud-stale-backup-dialog`（两个等权 `button-default`：`[立即手动备份并推送]`（先 `POST /project/backup` 再 push）/ `[上传旧备份]`）+ store 的 `syncNow` 在该状态弹出该对话框 | ① 自动路径（2h 定时 / 关闭项目）在该状态下零网络请求且不写 `lastAutoPushError`；② 手动备份后的路径不受影响（刚生成的份必定最新）；③ 点「同步云端」在该状态下弹对话框，两个选项分别走「先备份再推」与「照推旧包」；④ 无该状态时行为与现状一致；⑤ 文档（`40-cloud-sync.md` §5 / `DESIGN.md` §538、§540 / `100-api-cloud.md`）同步；⑥ typecheck/lint/test 全绿 + 像素核对一次 + 新 commit |
 
 **全局约束**：
 
