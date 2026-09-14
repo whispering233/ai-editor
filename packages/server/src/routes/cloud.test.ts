@@ -180,6 +180,28 @@ describe("POST /api/v1/cloud/test", () => {
     return spy;
   }
 
+  it("URL 校验失败不回显原始输入（含 userinfo 串，卡 D）", async () => {
+    for (const bad of ["ftp://u:pw@host/dav", "https://u:pw@", "不是 URL"]) {
+      const res = await app.request("/api/v1/cloud/config", {
+        method: "PUT",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ url: bad, username: "u", password: "pw" }),
+      });
+      expect(res.status).toBe(400);
+      const text = JSON.stringify(await res.json());
+      expect(text).not.toContain("u:pw"); // 原始输入（可能含密码）不得回显
+      expect(text).not.toContain("不是 URL");
+    }
+    // 只回显协议段是允许的（给用户可行动的线索）
+    const res = await app.request("/api/v1/cloud/config", {
+      method: "PUT",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ url: "ftp://host/dav", username: "u", password: "pw" }),
+    });
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(await res.json())).toContain("ftp:");
+  });
+
   it("未配置 → 409 CLOUD_NOT_CONFIGURED（不发起任何请求）", async () => {
     const spy = stubHealthy();
     const res = await app.request("/api/v1/cloud/test", { method: "POST", headers: HOST_HEADERS });

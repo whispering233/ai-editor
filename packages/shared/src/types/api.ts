@@ -1021,7 +1021,9 @@ export type NamesResolveResult = z.infer<typeof namesResolveResSchema>;
 //
 // PUT /api/v1/cloud/config：写入云端账号配置与设备名、自动推送开关
 // - url / username：**空串 = 清空该项**（url+username+password 三项齐空 → 回到「未配置」）
+// - **凭据三件套要么齐、要么全无**：url 与 username 皆为空 ⇒ **password 一并丢弃**（避免磁盘留下已失效的密码）
 // - password：**缺省或空串 = 不修改**（响应从不回传，设置页表单留空即保留原值）
+// - **URL 内嵌 userinfo（`https://用户名:密码@host/dav`）直接 400 拒绝**（不静默剥离——那会让用户以为已生效）
 // - device：空串 = 回到缺省（简化 hostname）；语法规则执行点在 shared sanitizeDeviceName（非空时）
 // - autoPush：缺省 = 不修改（本机级开关，缺省 false）
 // - url 非空时的归一化（http(s) 绝对地址、去尾斜杠）在路由层校验（→ 400 VALIDATION_ERROR）

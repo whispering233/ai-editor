@@ -37,11 +37,13 @@ function normalizeWebdavUrl(raw: string): string {
     throw new HttpError(
       400,
       "VALIDATION_ERROR",
-      `WebDAV 地址不是合法 URL：${raw}（示例：https://dav.jianguoyun.com/dav/ai-editor）`,
+      // 不回显原始输入（用户可能把 ftp://用户名:密码@host 这类串粘进来；卡 D）
+      "WebDAV 地址不是合法 URL（示例：https://dav.jianguoyun.com/dav/ai-editor）",
     );
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw new HttpError(400, "VALIDATION_ERROR", `WebDAV 地址只接受 http/https：${raw}`);
+    // 只回显协议段（`parsed.protocol`），不回显原始输入（同上；卡 D）
+    throw new HttpError(400, "VALIDATION_ERROR", `WebDAV 地址只接受 http/https（当前：${parsed.protocol}）`);
   }
  // 拒绝 URL 内嵌凭据（oracle 卡 2 验证 F1）：undici 拒绍带 credentials 的 URL（保存后永远不通），
  // 且该串会被原样回显进响应（凭据泄露）。**不静默剥离**——静默会让用户以为填对了。

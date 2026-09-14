@@ -87,7 +87,7 @@ export function CloudBackupPanel() {
       if (next !== null) setForm(cloudConfigFormFrom(next));
       showToast("云端配置已保存");
     } catch (err) {
-      showToast(cloudErrorText(err, "无法连接服务，配置未保存"), "error");
+      showToast(cloudErrorText(err, "无法连接服务，配置是否保存未确认"), "error");
     } finally {
       setSaving(false);
     }
@@ -108,7 +108,7 @@ export function CloudBackupPanel() {
             : "连接成功（已写入并删除测试文件）",
       );
     } catch (err) {
-      showToast(cloudErrorText(err, "无法连接服务，测试未执行"), "error");
+      showToast(cloudErrorText(err, "无法连接服务，测试未完成"), "error");
     } finally {
       setTesting(false);
     }

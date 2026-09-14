@@ -218,7 +218,7 @@ export const useCloudStore = create<CloudState>((set, get) => ({
       useUiStore.getState().showToast(`已推送到云端（${formatBytes(res.pushed.size)}）${prunedNote}${snapshotNote}`);
       set({ conflictOpen: false });
     } catch (err) {
-      const message = cloudErrorText(err, "无法连接服务，推送未执行");
+      const message = cloudErrorText(err, "无法连接服务，推送结果未确认（可能已在服务端执行）");
       set({ lastError: message });
       // 冲突（409）直接开裁决框：行内入口已由 `cloud-conflict-dialog` 取代（DESIGN.md §544）
       if (err instanceof ApiError && err.code === "CLOUD_CONFLICT") set({ conflictOpen: true });
@@ -239,7 +239,7 @@ export const useCloudStore = create<CloudState>((set, get) => ({
     try {
       await createProjectBackup();
     } catch (err) {
-      const message = cloudErrorText(err, "无法连接服务，备份未执行");
+      const message = cloudErrorText(err, "无法连接服务，备份结果未确认");
       set({ lastError: message });
       useUiStore.getState().showToast(message, "error");
       return;
@@ -268,7 +268,7 @@ export const useCloudStore = create<CloudState>((set, get) => ({
         .showToast(`已从云端拉取，覆盖前状态已自动快照（${res.snapshot.fileName}）${mergeNote}`);
       set({ conflictOpen: false });
     } catch (err) {
-      const message = cloudErrorText(err, "无法连接服务，拉取未执行");
+      const message = cloudErrorText(err, "无法连接服务，拉取结果未确认（可能已在服务端执行）");
       set({ lastError: message });
       useUiStore.getState().showToast(message, "error");
     } finally {
