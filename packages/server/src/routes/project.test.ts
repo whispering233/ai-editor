@@ -1885,7 +1885,7 @@ describe("POST /project/backup/rename", () => {
     const dir = makeTmpDir();
     initProjectDir(dir, makeConfig("proj-ren-ep", "端点改名"));
     const app = await openProject(dir);
- // 造一个带名称的手动备份（POST /backup 落 -m- 段）
+ // 造一个带标签的手动备份（POST /backup）
     const bk = await app.request("/api/v1/project/backup", {
       method: "POST",
       headers: HOST_HEADERS,
@@ -1893,7 +1893,7 @@ describe("POST /project/backup/rename", () => {
     });
     expect(bk.status).toBe(200);
     const oldName = (await bk.json()).data.backup.fileName;
-    expect(oldName).toMatch(/-m-旧名\.zip$/);
+    expect(oldName).toMatch(/-旧名-人物\d+-设定\d+-章\d+\.zip$/);
 
     const res = await app.request("/api/v1/project/backup/rename", {
       method: "POST",
@@ -1902,7 +1902,8 @@ describe("POST /project/backup/rename", () => {
     });
     expect(res.status).toBe(200);
     const backup = (await res.json()).data.backup;
-    expect(backup.fileName).toBe(oldName.replace("-m-旧名.zip", "-m-新名.zip")); // 时间戳与 kind 段保持
+ // 时间戳/类型/设备/统计段保持，仅标签段改变（旧名 → 新名）
+    expect(backup.fileName).toBe(oldName.replace("-旧名-人物", "-新名-人物"));
     expect(backup.kind).toBe("manual");
     expect(backup.name).toBe("新名");
     expect(existsSync(join(dir, ".backups", oldName))).toBe(false); // 旧文件已改名
@@ -1915,7 +1916,7 @@ describe("POST /project/backup/rename", () => {
     expect(backups[0]).toMatchObject({ fileName: backup.fileName, kind: "manual", name: "新名" });
   });
 
-  it("auto 备份改名：-a- 段保持（kind 不随重命名改变）；name 空串清除名称段 → 纯时间戳", async () => {
+  it("auto 备份改名：旧格式 -a- 段保持（kind 不随重命名改变，旧文件不迁移）；name 空串清除标签段", async () => {
     const dir = makeTmpDir();
     initProjectDir(dir, makeConfig("proj-ren-auto", "自动备份改名"));
     const app = await openProject(dir);

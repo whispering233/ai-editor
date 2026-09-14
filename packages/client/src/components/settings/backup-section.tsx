@@ -6,7 +6,9 @@
 // 清空输入 + 刷新列表 + toast「已备份」；失败 toast（磁盘错误透传 message）
 // - 历史备份列表：GET /project/backups → 行 = 时间（当年 MM-DD HH:mm:ss / 跨年 YY-MM-DD
 // HH:mm:ss，补秒）+ 类型标签（自动=中性徽标 / 手动=强调徽标）+ 自定义
-// 名称（如有）+ 大小（KB/MB 人类可读）+ [重命名] [加载]
+// 名称（如有）+ 大小（KB/MB 人类可读）+ [重命名] [加载]；行下补一行
+// **元信息**（`设备 · 人物N · 设定N · 章N`，由 API 的 device/stats 送达——UI 不解析文件名；
+// 旧格式备份两项均缺 → 整行省略）
 // - [重命名]（行内编辑，无 Dialog）：铅笔按钮 → 该行切编辑态（行内 input 预填当前
 // 名称 + 确认/取消按钮）；Enter/确认提交 POST /project/backup/rename（空输入 = 清除名称段）、
 // Esc/失焦取消、输入未变更不发请求（幂等保护）；400/404 行内错误提示并保持编辑态，成功
@@ -32,6 +34,7 @@ import {
 import {
   BACKUP_FREQUENCY_OPTIONS,
   BACKUP_KIND_LABELS,
+  formatBackupMeta,
   formatBackupTime,
   formatBytes,
 } from "../../lib/backup";
@@ -47,6 +50,19 @@ import { ConfirmDialog } from "../outline/dialogs";
  * 避免「关项目后旧响应落地覆盖新列表 / 切项目后闪现旧项目数据」的竞态
  */
 let backupListSeq = 0;
+
+/** 加载确认框描述：时间 · 类型 · 标签 · 设备/规模 · 大小 + 后果声明 */
+function restoreDescription(entry: BackupEntry): string {
+  const meta = formatBackupMeta(entry);
+  const parts = [
+    formatBackupTime(entry.createdAt),
+    BACKUP_KIND_LABELS[entry.kind],
+    ...(entry.name !== undefined ? [entry.name] : []),
+    ...(meta !== null ? [meta] : []),
+    formatBytes(entry.size),
+  ];
+  return `${parts.join(" · ")}。将覆盖当前项目数据；覆盖前会自动备份当前状态（可回退）`;
+}
 
 export function BackupSection() {
   const showToast = useUiStore((s) => s.showToast);
@@ -309,6 +325,8 @@ export function BackupSection() {
               <ul className="divide-y divide-border">
                 {backups.map((b) => {
                   const editing = renaming !== null && renaming.fileName === b.fileName;
+                  // 元信息行（设备 + 规模）：旧格式备份无这两项 → null → 整行省略（不用占位符）
+                  const meta = formatBackupMeta(b);
                   return (
                     <li key={b.fileName} className="px-2 py-1.5">
                       <div className="flex items-center gap-2">
@@ -323,8 +341,7 @@ export function BackupSection() {
                           {!editing && b.name !== undefined ? (
                             <Typography.Text strong>{b.name}</Typography.Text>
                           ) : null}
-                        </span>
-                        {!editing ? (
+                        </span>                        {!editing ? (
                           <span className="shrink-0 text-xs text-muted-foreground">
                             {formatBytes(b.size)}
                           </span>
@@ -403,6 +420,12 @@ export function BackupSection() {
                           </>
                         )}
                       </div>
+                      {/* 元信息行（设备 · 规模）：旧格式备份不渲染（UI 不自行解析文件名，字段来自 API） */}
+                      {meta !== null ? (
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground" title={meta}>
+                          {meta}
+                        </p>
+                      ) : null}
                       {/* 行内错误提示（400/404 透传服务端 message / 网络失败固定文案），保持编辑态 */}
                       {editing && renaming.error !== null ? (
                         <p className="mt-1 text-xs text-destructive">{renaming.error}</p>
@@ -421,9 +444,7 @@ export function BackupSection() {
       {restoreTarget !== null && (
         <ConfirmDialog
           title="加载备份"
-          description={`${formatBackupTime(restoreTarget.createdAt)} · ${BACKUP_KIND_LABELS[restoreTarget.kind]}${
-            restoreTarget.name !== undefined ? ` · ${restoreTarget.name}` : ""
-          } · ${formatBytes(restoreTarget.size)}。将覆盖当前项目数据；覆盖前会自动备份当前状态（可回退）`}
+          description={restoreDescription(restoreTarget)}
           confirmLabel="确认加载"
           danger
           onConfirm={handleRestore}

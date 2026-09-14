@@ -816,13 +816,17 @@ export async function importProjectZip(file: File, name: string): Promise<Import
 
 /** 备份条目（GET /project/backups 列表元素 / POST /project/backup 响应 backup） */
 export interface BackupEntry {
-  fileName: string; // 时间戳命名（毫秒精度 <YYYYMMDD-HHmmssSSS>.zip；restore 用此引用）
+  fileName: string; // 时间戳命名（毫秒精度，含类型/设备/统计段；restore 用此引用）
   size: number; // 字节数
   createdAt: string; // 备份时间（ISO 8601，由文件名时间戳解析）
- /** 备份类型（必填，文件名解析：自动/快照/旧秒级 = auto；手动/旧带名称 = manual） */
+ /** 备份类型（必填，文件名解析：自动/快照 = auto；手动 = manual；旧格式单字母段同理） */
   kind: BackupKind;
- /** 手动备份自定义名称（由文件名解析——自动备份/覆盖前快照/旧备份无此字段） */
+ /** 用户标签（由文件名解析——自动备份/覆盖前快照/旧备份无此字段） */
   name?: string;
+ /** 来源设备（仅当前命名格式；旧格式文件名无此字段） */
+  device?: string;
+ /** 备份内容的未软删规模快照（仅当前命名格式；旧格式文件名无此字段） */
+  stats?: { characters: number; settings: number; chapters: number };
 }
 
 /** GET /api/v1/project/backups 响应（按时间倒序；.backups/ 不存在返回空数组不报错） */

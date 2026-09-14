@@ -21,13 +21,14 @@ import { closeSync, existsSync, fsyncSync, mkdirSync, mkdtempSync, openSync, rea
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { Unzip, UnzipInflate, zipSync } from "fflate";
-import { BACKUP_FREQUENCIES, DEFAULT_BACKUP_FREQUENCY_MINUTES, formatBackupFileName, MAX_BACKUPS_PER_PROJECT, MAX_BACKUP_NAME_LENGTH, parseBackupFileName, sanitizeBackupName, type BackupKind } from "@whispering233/ai-editor-shared";
+import { BACKUP_FREQUENCIES, DEFAULT_BACKUP_FREQUENCY_MINUTES, formatBackupFileName, MAX_BACKUPS_PER_PROJECT, MAX_BACKUP_NAME_LENGTH, parseBackupFileName, sanitizeBackupName, type BackupKind, type BackupStats } from "@whispering233/ai-editor-shared";
 import { PROJECT_EXPORT_FILE_NAMES } from "@whispering233/ai-editor-shared/schemas";
 import {
   closeDatabase,
   checkpointWal,
   DATA_DB_FILE_NAME,
   ensureSchemaCompatible,
+  getBackupStats,
   getUserVersion,
   hasMigrationPath,
   openDatabase,
@@ -39,6 +40,7 @@ import {
   writeAgentsFile,
 } from "@whispering233/ai-editor-db";
 import { SESSIONS_DIR_NAME } from "@whispering233/ai-editor-agent";
+import { defaultDeviceName } from "./device-name.js";
 import { HttpError } from "./middleware/error.js";
 import type { ProjectContext } from "./middleware/project.js";
 
@@ -114,10 +116,14 @@ export interface BackupFileInfo {
   fileName: string;
   size: number;
   createdAt: string; // ISO 8601，由文件名时间戳解析（无状态语义）
- /** 备份类型（由文件名 kind 段解析：auto = 自动/manual = 手动） */
+ /** 备份类型（由文件名类型段解析：auto = 自动/manual = 手动） */
   kind: BackupKind;
- /** 手动备份自定义名称（由文件名解析，自动备份/快照/旧备份无此字段） */
+ /** 用户自定义标签（由文件名解析，自动备份/快照/旧备份无此字段） */
   name?: string;
+ /** 来源设备（仅当前命名格式；旧格式文件名无此字段） */
+  device?: string;
+ /** 备份内容的未软删规模快照（仅当前命名格式；旧格式文件名无此字段） */
+  stats?: BackupStats;
 }
 
 /**
@@ -167,13 +173,9 @@ export function createBackupZip(project: ProjectContext): Uint8Array<ArrayBuffer
 }
 
 /**
- * 生成不冲突的备份文件名：`<YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip`（毫秒精度 +
- * kind 段；shared formatBackupFileName；kind 缺省 auto——纯时间戳；带自定义名称 →
- * `-a-<名称>`（auto）/ `-m-<名称>`（manual））。
- *
- * 同毫秒冲突（如「立即备份 + restore 覆盖前快照」连续触发，理论罕见）处理：
- * 时间戳 +1 毫秒循环去重，**保持 <YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip 格式**——
- * parseBackupFileName 解析与 restore 白名单校验不受影响。
+ * 生成不冲突的备份文件名：`<时间戳>-<类型>-<设备>[-<标签>]-人物N-设定N-章N.zip`（毫秒精度 +
+ * 设备段 + 统计段；shared formatBackupFileName）。同毫秒冲突（如「立即备份 + restore 覆盖前
+ * 快照」连续触发，理论罕见）处理：时间戳 +1 毫秒循环去重，**保持格式契约可解析**。
  *
  * @returns { fileName, date }——date 为最终去重后的时间戳（与 fileName 时间戳段一致，
  * 调用方直接用于构造 createdAt，免 parse 回读）
@@ -181,14 +183,13 @@ export function createBackupZip(project: ProjectContext): Uint8Array<ArrayBuffer
 function uniqueBackupFileName(
   backupsDir: string,
   date: Date,
-  opts?: { kind?: BackupKind; name?: string },
+  opts: { kind?: BackupKind; name?: string; device: string; stats: BackupStats },
 ): { fileName: string; date: Date } {
-  const kind = opts?.kind ?? "auto";
-  const name = opts?.name;
-  let fileName = formatBackupFileName(date, { kind, name });
+  const { kind = "auto", name, device, stats } = opts;
+  let fileName = formatBackupFileName(date, { kind, name, device, stats });
   while (existsSync(join(backupsDir, fileName))) {
     date = new Date(date.getTime() + 1);
-    fileName = formatBackupFileName(date, { kind, name });
+    fileName = formatBackupFileName(date, { kind, name, device, stats });
   }
   return { fileName, date };
 }
@@ -220,10 +221,14 @@ export function writeBackup(project: ProjectContext, opts?: { name?: string; kin
     }
     name = sanitized;
   }
+ // 统计快照在打包前取（同一连接同一时刻视角）；设备名缺省 = 本机 hostname 派生
+ // （云端存档启用后由 cloud.json 的 device 覆盖，见 device-name.ts）
+  const stats = getBackupStats(project.db, project.root);
+  const device = defaultDeviceName();
   const zip = createBackupZip(project);
   const backupsDir = join(project.root, BACKUPS_DIR_NAME);
   mkdirSync(backupsDir, { recursive: true });
-  const { fileName, date } = uniqueBackupFileName(backupsDir, new Date(), { kind, name });
+  const { fileName, date } = uniqueBackupFileName(backupsDir, new Date(), { kind, name, device, stats });
   writeFileSync(join(backupsDir, fileName), zip); // 失败抛错 → 500（不产出半截备份）
   pruneBackups(backupsDir); // 清理失败仅记日志，不阻塞备份主流程
   return {
@@ -232,6 +237,8 @@ export function writeBackup(project: ProjectContext, opts?: { name?: string; kin
     createdAt: toIso(date), // date = 最终去重后的时间戳，与 fileName 时间戳段一致（无状态语义）
     kind,
     ...(name !== undefined ? { name } : {}),
+    device,
+    stats,
   };
 }
 
@@ -281,8 +288,16 @@ export function renameBackup(project: ProjectContext, fileName: string, name?: s
     if (sanitized !== null) nextName = sanitized;
   }
 
- // 3. 新文件名（时间戳与 kind 保持原备份——kind 不随重命名改变）
-  const newFileName = formatBackupFileName(parsed.time, { kind: parsed.kind, name: nextName });
+ // 3. 新文件名（时间戳、类型、设备与统计段保持原备份——重命名只改标签段；旧格式备份
+ // 保持旧形态：没有设备/统计段，不得用当前项目状态凑一份）
+  const formatOpts = {
+    kind: parsed.kind,
+    name: nextName,
+    ...(parsed.device !== undefined && parsed.stats !== undefined
+      ? { device: parsed.device, stats: parsed.stats }
+      : {}),
+  };
+  const newFileName = formatBackupFileName(parsed.time, formatOpts);
 
  // 4. 幂等：名称未变 → 不移动文件，返回当前条目（重新 stat 取 size；读不到 → 404）
   if (newFileName === fileName) {
@@ -293,6 +308,8 @@ export function renameBackup(project: ProjectContext, fileName: string, name?: s
         createdAt: toIso(parsed.time),
         kind: parsed.kind,
         ...(nextName !== undefined ? { name: nextName } : {}),
+        ...(parsed.device !== undefined ? { device: parsed.device } : {}),
+        ...(parsed.stats !== undefined ? { stats: parsed.stats } : {}),
       };
     } catch {
       throw new HttpError(404, "VALIDATION_ERROR", `备份不存在: ${fileName}`);
@@ -322,6 +339,8 @@ export function renameBackup(project: ProjectContext, fileName: string, name?: s
     createdAt: toIso(parsed.time),
     kind: parsed.kind,
     ...(nextName !== undefined ? { name: nextName } : {}),
+    ...(parsed.device !== undefined ? { device: parsed.device } : {}),
+    ...(parsed.stats !== undefined ? { stats: parsed.stats } : {}),
   };
 }
 
@@ -373,6 +392,8 @@ export function listBackups(project: ProjectContext): BackupFileInfo[] {
           createdAt: toIso(parsed.time),
           kind: parsed.kind,
           ...(parsed.name !== undefined ? { name: parsed.name } : {}),
+          ...(parsed.device !== undefined ? { device: parsed.device } : {}),
+          ...(parsed.stats !== undefined ? { stats: parsed.stats } : {}),
         };
       } catch {
         return null; // 列表读取瞬间被删（竞态）→ 跳过
@@ -592,13 +613,16 @@ function latestBackupTime(backupsDir: string): Date | null {
 }
 
 /**
- * 三文件 + data.db-wal 伴生文件是否在 since 之后有变更（「任一 mtime 晚于
- * 上次备份时刻」；F2 修订：data.db 以 WAL 模式运行，普通写事务只追加 -wal 伴生文件、
- * 主文件 mtime 不变，故 data.db-wal 一并纳入判定）：
- * 任一文件 mtime > since + 容差 → 有变更；**主文件缺失 → 视为有变更**（防御：不静默
- * 跳过，让备份管道报错暴露损坏）；**data.db-wal 缺失 ≠ 变更**（无未 checkpoint 的写，
- * 属正常状态，跳过——与主文件缺失语义不同，否则每次 tick 都误备份，产生垃圾备份）；
- * mtime 判定见 BACKUP_CHANGE_TOLERANCE_MS 注释。
+ * 三文件 + `data.db-wal` 伴生文件 + 两个打包目录，是否在 since 之后有变更
+ *（「任一 mtime 晚于上次备份时刻」）：
+ * - 三文件：任一 mtime > since + 容差 → 有变更；**主文件缺失 → 视为有变更**（防御：不静默
+ *   跳过，让备份管道报错暴露损坏）
+ * - `data.db-wal`（F2）：普通写事务只追加 `-wal`、主文件 mtime 不变；**wal 缺失 ≠ 变更**
+ *   （无未 checkpoint 的写，属正常状态，否则每次 tick 都误备份）
+ * - `references/` 与 `sessions/`：目录内**任一文件** mtime 命中，或**目录自身** mtime 命中
+ *   （F3：删除文件不刷新任何剩余文件的 mtime，只看文件会漏检删除）；目录缺失（ENOENT）
+ *   = 无文件、不算变更；其余错误防御视为有变更
+ * mtime 判定容差见 BACKUP_CHANGE_TOLERANCE_MS 注释。
  */
 function hasFileChangesSince(project: ProjectContext, since: Date): boolean {
   const limit = since.getTime() + BACKUP_CHANGE_TOLERANCE_MS;
@@ -618,11 +642,16 @@ function hasFileChangesSince(project: ProjectContext, since: Date): boolean {
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") return true;
   }
- // 打包目录（references/ 与 sessions/）：内文件任一 mtime 晚于 limit → 有变更——
- // 本地新增/外部编辑 md 文档、新增聊天会话同样触发自动备份；目录缺失 = 无文件跳过；
+ // 打包目录（references/ 与 sessions/）：目录自身或其内任一文件 mtime 晚于 limit → 有变更——
+ // 本地新增/外部编辑 md 文档、新增聊天会话、**删除文件**同样触发自动备份；
  // 遍历竞态（读取中删除）→ 防御视为无变更（下一 tick 重检）
   try {
     for (const dirName of PACKED_DIR_NAMES) {
+      try {
+        if (statSync(join(project.root, dirName)).mtimeMs > limit) return true;
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== "ENOENT") return true;
+      }
       for (const rel of listDirFiles(project.root, dirName)) {
         if (statSync(join(project.root, dirName, rel)).mtimeMs > limit) return true;
       }

@@ -50,3 +50,20 @@ export const BACKUP_KIND_LABELS: Record<BackupKind, string> = {
   auto: "自动",
   manual: "手动",
 };
+
+/**
+ * 备份行的元信息行（来源设备与内容规模）：`苹果本 · 人物32 · 设定58 · 章120`。
+ * 字段均来自 API（`device` / `stats`）——**UI 不自行解析文件名**；
+ * 旧格式备份两项都缺 → 返回 null（调用方整行省略，不用占位符）。
+ */
+export function formatBackupMeta(entry: {
+  device?: string;
+  stats?: { characters: number; settings: number; chapters: number };
+}): string | null {
+  const parts: string[] = [];
+  if (entry.device !== undefined && entry.device !== "") parts.push(entry.device);
+  if (entry.stats !== undefined) {
+    parts.push(`人物${entry.stats.characters}`, `设定${entry.stats.settings}`, `章${entry.stats.chapters}`);
+  }
+  return parts.length === 0 ? null : parts.join(" · ");
+}

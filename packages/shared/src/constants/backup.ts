@@ -13,5 +13,21 @@ export const MAX_BACKUPS_PER_PROJECT = 20;
 /** 手动备份自定义名称最大长度（trim 后 1-30 字符；超出 → 400 VALIDATION_ERROR） */
 export const MAX_BACKUP_NAME_LENGTH = 30;
 
+/**
+ * 设备名最大长度（trim 后 1-16 字符）。设备段是文件名的第 3 段，不得出现 `-`
+ * （段分隔符）——主机名里的 `-` 在派生时转写为 `_`，用户手工配置时非法 → 400 VALIDATION_ERROR。
+ */
+export const MAX_DEVICE_NAME_LENGTH = 16;
+
 /** 备份类型：auto = 自动（定时器/覆盖前快照）/ manual = 手动（立即备份触发）；文件名 kind 标记段来源 */
 export type BackupKind = "auto" | "manual";
+
+/**
+ * 备份包内容规模快照（写入文件名的尾部三段统计，`人物N-设定N-章N`）。
+ * 口径：**未软删**存量（实体表不含回收站；章 = outline.json 中未软删 `chapter` 节点）。
+ */
+export interface BackupStats {
+  characters: number;
+  settings: number;
+  chapters: number;
+}
