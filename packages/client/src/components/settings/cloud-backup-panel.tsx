@@ -219,7 +219,7 @@ export function CloudBackupPanel() {
                 : "（未配置）"
               : `${formatBackupTime(remoteHead.createdAt)} · ${BACKUP_KIND_LABELS[remoteHead.kind]}${
                   remoteHead.name !== undefined ? ` · ${remoteHead.name}` : ""
-                }${formatBackupMeta(remoteHead) !== null ? ` · ${formatBackupMeta(remoteHead)}` : ""} · ${formatBytes(remoteHead.size)}`}
+                } · ${formatBackupMeta(remoteHead)} · ${formatBytes(remoteHead.size)}`}
           </span>
           <span>
             本机最新份：
@@ -263,8 +263,7 @@ export function CloudBackupPanel() {
                   {index === 0 ? <Tag className="ml-1.5">云端最新</Tag> : null}
                 </span>
                 <span className="shrink-0 text-xs text-muted-foreground">
-                  {formatBackupMeta(entry) !== null ? `${formatBackupMeta(entry)} · ` : ""}
-                  {formatBytes(entry.size)}
+                  {formatBackupMeta(entry)} · {formatBytes(entry.size)}
                 </span>
                 <Button size="small" disabled={pulling} onClick={() => openPullConfirm(entry)}>
                   拉取

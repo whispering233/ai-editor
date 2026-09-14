@@ -1928,30 +1928,30 @@ describe("POST /project/backup/rename", () => {
     expect(backups[0]).toMatchObject({ fileName: backup.fileName, kind: "manual", name: "新名" });
   });
 
-  it("auto 备份改名：旧格式 -a- 段保持（kind 不随重命名改变，旧文件不迁移）；name 空串清除标签段", async () => {
+  it("auto 备份改名：类型/设备/统计段保持（kind 不随重命名改变）；name 空串清除标签段", async () => {
     const dir = makeTmpDir();
     initProjectDir(dir, makeConfig("proj-ren-auto", "自动备份改名"));
     const app = await openProject(dir);
- // 手工造 auto 带名称备份文件（模拟自动备份重命名场景）
+ // 手工造 auto 带标签备份文件（模拟自动备份重命名场景）
     const backupsDir = join(dir, ".backups");
     mkdirSync(backupsDir, { recursive: true });
-    writeFileSync(join(backupsDir, "20260813-101500123-a-旧名.zip"), "auto");
+    writeFileSync(join(backupsDir, "20260813-101500123-自动-设备-旧名-人物1-设定2-章3.zip"), "auto");
 
- // 改名 → -a- 段保持
+ // 改名 → 只换标签段（类型/设备/统计保持原份的值）
     const res = await app.request("/api/v1/project/backup/rename", {
       method: "POST",
       headers: HOST_HEADERS,
-      body: JSON.stringify({ fileName: "20260813-101500123-a-旧名.zip", name: "新名" }),
+      body: JSON.stringify({ fileName: "20260813-101500123-自动-设备-旧名-人物1-设定2-章3.zip", name: "新名" }),
     });
     expect(res.status).toBe(200);
     const backup = (await res.json()).data.backup;
-    expect(backup.fileName).toBe("20260813-101500123-a-新名.zip");
+    expect(backup.fileName).toBe("20260813-101500123-自动-设备-新名-人物1-设定2-章3.zip");
     expect(backup.kind).toBe("auto");
     expect(backup.name).toBe("新名");
-    expect(existsSync(join(backupsDir, "20260813-101500123-a-旧名.zip"))).toBe(false);
+    expect(existsSync(join(backupsDir, "20260813-101500123-自动-设备-旧名-人物1-设定2-章3.zip"))).toBe(false);
     expect(existsSync(join(backupsDir, backup.fileName))).toBe(true);
 
- // 再清名称（name 空串）→ 纯时间戳（auto 无名称不落段）
+ // 再清名称（name 空串）→ 无标签段（尾部统计段仍可从尾部倒切）
     const clearRes = await app.request("/api/v1/project/backup/rename", {
       method: "POST",
       headers: HOST_HEADERS,
@@ -1959,7 +1959,7 @@ describe("POST /project/backup/rename", () => {
     });
     expect(clearRes.status).toBe(200);
     const cleared = (await clearRes.json()).data.backup;
-    expect(cleared.fileName).toBe("20260813-101500123.zip");
+    expect(cleared.fileName).toBe("20260813-101500123-自动-设备-人物1-设定2-章3.zip");
     expect(cleared.kind).toBe("auto");
     expect(cleared).not.toHaveProperty("name");
   });
@@ -2025,7 +2025,7 @@ describe("POST /project/backup/rename", () => {
     const notFound = await app.request("/api/v1/project/backup/rename", {
       method: "POST",
       headers: HOST_HEADERS,
-      body: JSON.stringify({ fileName: "20260813-101500123.zip", name: "新名" }),
+      body: JSON.stringify({ fileName: "20260813-101500000-手动-设备-人物0-设定0-章0.zip", name: "新名" }),
     });
     expect(notFound.status).toBe(404);
     const notFoundBody = await notFound.json();
@@ -2033,28 +2033,28 @@ describe("POST /project/backup/rename", () => {
     expect(notFoundBody.error.message).toContain("备份不存在");
   });
 
-  it("目标文件名已存在 → 409 BACKUP_TARGET_EXISTS（oracle P1-1：旧秒级改名毫秒补 000 撞上毫秒为 0 的自动备份）", async () => {
+  it("目标文件名已存在 → 409 BACKUP_TARGET_EXISTS（oracle P1-1：同毫秒双 manual 清标签后撞名）", async () => {
     const dir = makeTmpDir();
     initProjectDir(dir, makeConfig("proj-ren-conflict", "目标冲突"));
     const app = await openProject(dir);
- // 造可达冲突：旧秒级源文件 + 已存在的毫秒为 0 自动备份（改名目标）
+ // 造可达冲突：同毫秒 manual 源（带标签） + 已存在的无标签目标（清标签后撞名）
     const backupsDir = join(dir, ".backups");
     mkdirSync(backupsDir, { recursive: true });
-    writeFileSync(join(backupsDir, "20260813-101500.zip"), "legacy"); // 旧秒级（遗留）
-    writeFileSync(join(backupsDir, "20260813-101500000-a-自动.zip"), "auto"); // 已存在目标
+    writeFileSync(join(backupsDir, "20260813-101500000-手动-设备-来源-人物0-设定0-章0.zip"), "src");
+    writeFileSync(join(backupsDir, "20260813-101500000-手动-设备-人物0-设定0-章0.zip"), "target");
 
     const res = await app.request("/api/v1/project/backup/rename", {
       method: "POST",
       headers: HOST_HEADERS,
-      body: JSON.stringify({ fileName: "20260813-101500.zip", name: "自动" }),
+      body: JSON.stringify({ fileName: "20260813-101500000-手动-设备-来源-人物0-设定0-章0.zip", name: "" }),
     });
     expect(res.status).toBe(409);
     const body = await res.json();
     expect(body.error.code).toBe("BACKUP_TARGET_EXISTS");
     expect(body.error.message).toContain("目标备份文件名已存在");
  // 数据零损失：源未被移动、目标未被覆盖
-    expect(existsSync(join(backupsDir, "20260813-101500.zip"))).toBe(true);
-    expect(readFileSync(join(backupsDir, "20260813-101500000-a-自动.zip"), "utf8")).toBe("auto");
+    expect(existsSync(join(backupsDir, "20260813-101500000-手动-设备-来源-人物0-设定0-章0.zip"))).toBe(true);
+    expect(readFileSync(join(backupsDir, "20260813-101500000-手动-设备-人物0-设定0-章0.zip"), "utf8")).toBe("target");
   });
 
   it("请求体校验：缺 fileName / 多余字段 → 400 VALIDATION_ERROR（含 fields）", async () => {

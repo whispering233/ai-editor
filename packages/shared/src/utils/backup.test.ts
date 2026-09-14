@@ -1,9 +1,9 @@
 // 备份文件名纯函数测试（B2.1 + B2.5 + B2.6 + 云端存档批次 1）
 //
 // 覆盖：
-// - 当前格式 `<YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip` 的生成/解析
+// - 唯一格式 `<YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip` 的生成/解析
 //   与「尾部三段固定倒切」的消歧能力
-// - 旧格式输出（仅重命名历史备份用）与旧格式解析兼容（-m/-a 段、旧带名称、旧秒级）
+// - 旧命名（秒级 / 带名称无类型段 / 单字母 `-m`/`-a` 段）一律不解析（→ null，文件留盘不识别）
 // - 设备名规则（sanitizeDeviceName）与 hostname 派生（deviceNameFromHostname）
 // - sanitizeBackupName 规则（标签）
 import { describe, expect, it } from "vitest";
@@ -21,7 +21,7 @@ const STATS = { characters: 32, settings: 58, chapters: 120 };
 /** 标准时间戳（2026-08-13 10:15:30.123 本地时间） */
 const AT = new Date(2026, 7, 13, 10, 15, 30, 123);
 
-describe("formatBackupFileName：当前格式（时间戳 + 类型 + 设备 + 标签 + 统计）", () => {
+describe("formatBackupFileName：唯一格式（时间戳 + 类型 + 设备 + 标签 + 统计）", () => {
   it("自动备份（无标签）：<时间戳>-自动-<设备>-人物N-设定N-章N.zip", () => {
     expect(formatBackupFileName(AT, { device: "苹果本", stats: STATS })).toBe(
       "20260813-101530123-自动-苹果本-人物32-设定58-章120.zip",
@@ -46,11 +46,10 @@ describe("formatBackupFileName：当前格式（时间戳 + 类型 + 设备 + �
     );
   });
 
-  it("空标签不产生空段；空设备串（无设备）退化旧格式", () => {
+  it("空标签不产生空段（无标签 = 无标签段）", () => {
     expect(formatBackupFileName(AT, { name: "", device: "苹果本", stats: STATS })).toBe(
       "20260813-101530123-自动-苹果本-人物32-设定58-章120.zip",
     );
-    expect(formatBackupFileName(AT, { device: "", stats: STATS })).toBe("20260813-101530123.zip");
   });
 
   it("毫秒 3 位补零 + 统计为 0 也照写", () => {
@@ -63,19 +62,8 @@ describe("formatBackupFileName：当前格式（时间戳 + 类型 + 设备 + �
   });
 });
 
-describe("formatBackupFileName：旧格式输出（仅重命名历史备份时保持原形态）", () => {
-  it("未传设备/统计 → -a-/-m- 段与纯时间戳（不迁移）", () => {
-    expect(formatBackupFileName(AT)).toBe("20260813-101530123.zip");
-    expect(formatBackupFileName(AT, { kind: "auto" })).toBe("20260813-101530123.zip");
-    expect(formatBackupFileName(AT, { kind: "auto", name: "定稿" })).toBe("20260813-101530123-a-定稿.zip");
-    expect(formatBackupFileName(AT, { kind: "manual" })).toBe("20260813-101530123-m.zip");
-    expect(formatBackupFileName(AT, { kind: "manual", name: "定稿" })).toBe("20260813-101530123-m-定稿.zip");
-    expect(formatBackupFileName(AT, { name: "" })).toBe("20260813-101530123.zip");
-  });
-});
-
-describe("parseBackupFileName（→ { time, kind, name?, device?, stats? } | null）", () => {
-  it("当前格式：与 format 往返一致（自动/手动 + 标签 + 设备 + 统计）", () => {
+describe("parseBackupFileName（→ { time, kind, name?, device, stats } | null）", () => {
+  it("唯一格式：与 format 往返一致（自动/手动 + 标签 + 设备 + 统计）", () => {
     const auto = formatBackupFileName(AT, { device: "苹果本", stats: STATS });
     expect(parseBackupFileName(auto)).toEqual({ time: AT, kind: "auto", device: "苹果本", stats: STATS });
     const manual = formatBackupFileName(AT, { kind: "manual", name: "定稿", device: "苹果本", stats: STATS });
@@ -116,93 +104,28 @@ describe("parseBackupFileName（→ { time, kind, name?, device?, stats? } | nul
     expect(parseBackupFileName("20260813-101530123-自动-设备甲-人物0-设定0-章0.zip")?.kind).toBe("auto");
   });
 
-  it("当前格式也接受旧单字母类型段（宽容：-a-/-m- + 设备 + 统计）", () => {
-    expect(parseBackupFileName("20260813-101530123-m-苹果本-人物1-设定2-章3.zip")).toEqual({
-      time: AT,
-      kind: "manual",
-      device: "苹果本",
-      stats: { characters: 1, settings: 2, chapters: 3 },
-    });
+  it("缺统计段/缺设备段的文件名不被唯一格式吞掉：一律 null（格式完整是硬要求）", () => {
+    expect(parseBackupFileName("20260813-101530123-自动-苹果本.zip")).toBeNull();
+    expect(parseBackupFileName("20260813-101530123-手动-苹果本-定稿-人物32-设定58.zip")).toBeNull();
   });
 
-  it("缺统计段的文件名不被当前格式吞掉：回退旧带名称解析（manual + 名称，登记口径）", () => {
-    expect(parseBackupFileName("20260813-101530123-自动-苹果本.zip")).toEqual({
-      time: AT,
-      kind: "manual",
-      name: "自动-苹果本",
-    });
-    expect(parseBackupFileName("20260813-101530123-手动-苹果本-定稿-人物32-设定58.zip")).toEqual({
-      time: AT,
-      kind: "manual",
-      name: "手动-苹果本-定稿-人物32-设定58",
-    });
+  it("三类旧命名一律 null（秒级 / 带名称无类型段 / 单字母 -m/-a 段）", () => {
+    expect(parseBackupFileName("20260813-101500.zip")).toBeNull(); // 旧秒级
+    expect(parseBackupFileName("20260813-101530123-初稿.zip")).toBeNull(); // 旧带名称（无类型段）
+    expect(parseBackupFileName("20260813-101530123-定稿-最终版 v2.zip")).toBeNull();
+    expect(parseBackupFileName("20260813-101530123-定稿.v2.zip")).toBeNull();
+    expect(parseBackupFileName("20260813-101530123-m.zip")).toBeNull(); // 旧单字母类型段
+    expect(parseBackupFileName("20260813-101530123-a.zip")).toBeNull();
+    expect(parseBackupFileName("20260813-101530123-m-定稿.zip")).toBeNull();
+    expect(parseBackupFileName("20260813-101530123-a-定稿.zip")).toBeNull();
+    expect(parseBackupFileName("20260813-101530123-m-定稿-最终版.zip")).toBeNull();
+    expect(parseBackupFileName("20260813-101530123-m-.zip")).toBeNull(); // 类型段后空名称
+    expect(parseBackupFileName("20260813-101530123-m-苹果本-人物1-设定2-章3.zip")).toBeNull(); // 单字母段 + 设备/统计
+    expect(parseBackupFileName("20260813-101530123-随意-设备-人物1-设定2-章3.zip")).toBeNull(); // 类型段仅接受 手动/自动
   });
 
-  it("旧格式毫秒级 kind 段：-m.zip → manual 无名称；-m-名称 → manual+名称；-a-名称 → auto+名称", () => {
-    expect(parseBackupFileName("20260813-101530123-m.zip")).toEqual({ time: AT, kind: "manual" });
-    expect(parseBackupFileName("20260813-101530123-m-定稿.zip")).toEqual({
-      time: AT,
-      kind: "manual",
-      name: "定稿",
-    });
-    expect(parseBackupFileName("20260813-101530123-a-定稿.zip")).toEqual({
-      time: AT,
-      kind: "auto",
-      name: "定稿",
-    });
- // 旧格式名称可含连字符：-m-定稿-最终版.zip → manual + 名称「定稿-最终版」
-    expect(parseBackupFileName("20260813-101530123-m-定稿-最终版.zip")).toEqual({
-      time: AT,
-      kind: "manual",
-      name: "定稿-最终版",
-    });
-  });
-
-  it("旧格式纯时间戳（毫秒级）解析为 auto 无名称", () => {
-    const parsed = parseBackupFileName("20260813-101530123.zip");
-    expect(parsed).toEqual({ time: AT, kind: "auto" });
-    expect(parsed?.device).toBeUndefined();
-    expect(parsed?.stats).toBeUndefined();
-  });
-
-  it("kind 段后空名称（-m-.zip）→ 旧毫秒格式不匹配，回退旧带名称解析为 manual + 名称「m-」（oracle P2-5 钉死现状）", () => {
-    expect(parseBackupFileName("20260813-101530123-m-.zip")).toEqual({
-      time: AT,
-      kind: "manual",
-      name: "m-",
-    });
-  });
-
-  it("歧义用例（接受）：旧「名称恰为单字母 a/m」的备份按旧毫秒格式解析为 kind 标记（无名称）", () => {
-    expect(parseBackupFileName("20260813-101530123-m.zip")?.kind).toBe("manual");
-    expect(parseBackupFileName("20260813-101530123-m.zip")?.name).toBeUndefined();
-    expect(parseBackupFileName("20260813-101530123-a.zip")?.kind).toBe("auto");
-    expect(parseBackupFileName("20260813-101530123-a.zip")?.name).toBeUndefined();
-  });
-
-  it("旧带名称（无 kind 段）解析出 time/name + kind manual（兼容为手动）", () => {
-    const parsed = parseBackupFileName("20260813-101530123-定稿-最终版 v2.zip");
-    expect(parsed?.time).toEqual(AT);
-    expect(parsed?.kind).toBe("manual");
-    expect(parsed?.name).toBe("定稿-最终版 v2");
-  });
-
-  it("名称含点（v1.2 类）合法解析（旧带名称格式 → kind manual）", () => {
-    const parsed = parseBackupFileName("20260813-101530123-定稿.v2.zip");
-    expect(parsed?.name).toBe("定稿.v2");
-    expect(parsed?.kind).toBe("manual");
-    expect(parsed?.time.getMilliseconds()).toBe(123);
-  });
-
-  it("旧秒级格式兼容解析（不迁移；毫秒 = 0、无名称、kind auto）", () => {
-    const parsed = parseBackupFileName("20260813-101500.zip");
-    expect(parsed).toEqual({ time: new Date(2026, 7, 13, 10, 15, 0), kind: "auto" });
-    expect(parsed?.time.getMilliseconds()).toBe(0);
-    expect(parsed?.name).toBeUndefined();
-  });
-
-  it("个位数分量（20260103-050709123.zip）解析正确（kind auto）", () => {
-    const parsed = parseBackupFileName("20260103-050709123.zip");
+  it("个位数分量（20260103-050709123-自动-d-人物1-设定2-章3.zip）解析正确（kind auto）", () => {
+    const parsed = parseBackupFileName("20260103-050709123-自动-d-人物1-设定2-章3.zip");
     expect(parsed?.time).toEqual(new Date(2026, 0, 3, 5, 7, 9, 123));
     expect(parsed?.kind).toBe("auto");
   });
@@ -213,10 +136,8 @@ describe("parseBackupFileName（→ { time, kind, name?, device?, stats? } | nul
     expect(parseBackupFileName("a/20260813-101500123.zip")).toBeNull();
     expect(parseBackupFileName("20260813-101500123.zip/..")).toBeNull();
     expect(parseBackupFileName(".backups/20260813-101500123.zip")).toBeNull();
-    expect(parseBackupFileName("20260813-101500123-a/b.zip")).toBeNull(); // 名称含 /
-    expect(parseBackupFileName("20260813-101500123-a\\b.zip")).toBeNull(); // 名称含 \\
-    expect(parseBackupFileName("20260813-101500123-m-a/b.zip")).toBeNull(); // 旧格式名称含 /
-    expect(parseBackupFileName("20260813-101500123-m-a\\b.zip")).toBeNull(); // 旧格式名称含 \\
+    expect(parseBackupFileName("20260813-101500123-自动-设备-标/签-人物1-设定2-章3.zip")).toBeNull(); // 标签含 /
+    expect(parseBackupFileName("20260813-101500123-自动-设备-标\\签-人物1-设定2-章3.zip")).toBeNull(); // 标签含 \\
     expect(parseBackupFileName("20260813-101500123-自动-设备/甲-人物1-设定2-章3.zip")).toBeNull(); // 设备含 /
     expect(parseBackupFileName("20260813-101500123-自动-设备-定稿/甲-人物1-设定2-章3.zip")).toBeNull(); // 标签含 /
   });
@@ -230,31 +151,18 @@ describe("parseBackupFileName（→ { time, kind, name?, device?, stats? } | nul
     expect(parseBackupFileName("20260813-101500123.ZIP")).toBeNull(); // 大小写不符
     expect(parseBackupFileName("")).toBeNull();
     expect(parseBackupFileName("20260813-101500123.zipx")).toBeNull();
-    expect(parseBackupFileName("20260813-101500123-.zip")).toBeNull(); // 空名称（后无字符）
-    expect(parseBackupFileName("20260813-101500123-a-.zip")?.name).toBe("a-"); // 旧格式空名称不匹配 → 回退旧带名称（名称 "a-"）
- // kind 段仅接受 a/m：其他单字母（如 x）按旧带名称回退解析（备份名 "x" 仍可解析/恢复）
-    expect(parseBackupFileName("20260813-101500123-x.zip")).toEqual({
-      time: new Date(2026, 7, 13, 10, 15, 0, 123),
-      kind: "manual",
-      name: "x",
-    });
- // 类型段非法（既非中文也非 a/m）→ 回退旧带名称
-    expect(parseBackupFileName("20260813-101500123-随意-设备-人物1-设定2-章3.zip")).toEqual({
-      time: new Date(2026, 7, 13, 10, 15, 0, 123),
-      kind: "manual",
-      name: "随意-设备-人物1-设定2-章3",
-    });
+    expect(parseBackupFileName("20260813-101500123-.zip")).toBeNull(); // 无类型段
+    expect(parseBackupFileName("20260813-101500123-自动-.zip")).toBeNull(); // 类型段后无设备/统计段
   });
 
   it("数字合法但日期不存在 → null（Date 滚动进位回读校验拒绝，含毫秒进位）", () => {
-    expect(parseBackupFileName("20261301-101500123.zip")).toBeNull(); // 13 月
-    expect(parseBackupFileName("20260230-101500123.zip")).toBeNull(); // 2 月 30 日
-    expect(parseBackupFileName("20260832-101500123.zip")).toBeNull(); // 8 月 32 日
-    expect(parseBackupFileName("20260813-246000123.zip")).toBeNull(); // 24 时
-    expect(parseBackupFileName("20260813-106000123.zip")).toBeNull(); // 60 分
-    expect(parseBackupFileName("20260813-101060123.zip")).toBeNull(); // 60 秒
-    expect(parseBackupFileName("20260813-1015309999.zip")).toBeNull(); // 4 位毫秒
-    expect(parseBackupFileName("20261301-101500123-自动-设备-人物1-设定2-章3.zip")).toBeNull(); // 当前格式同样拒绝
+    expect(parseBackupFileName("20261301-101500123-自动-设备-人物1-设定2-章3.zip")).toBeNull(); // 13 月
+    expect(parseBackupFileName("20260230-101500123-自动-设备-人物1-设定2-章3.zip")).toBeNull(); // 2 月 30 日
+    expect(parseBackupFileName("20260832-101500123-自动-设备-人物1-设定2-章3.zip")).toBeNull(); // 8 月 32 日
+    expect(parseBackupFileName("20260813-246000123-自动-设备-人物1-设定2-章3.zip")).toBeNull(); // 24 时
+    expect(parseBackupFileName("20260813-106000123-自动-设备-人物1-设定2-章3.zip")).toBeNull(); // 60 分
+    expect(parseBackupFileName("20260813-101060123-自动-设备-人物1-设定2-章3.zip")).toBeNull(); // 60 秒
+    expect(parseBackupFileName("20260813-1015309999-自动-设备-人物1-设定2-章3.zip")).toBeNull(); // 4 位毫秒
   });
 });
 

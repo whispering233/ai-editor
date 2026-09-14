@@ -56,8 +56,8 @@ export function CloudConflictDialog() {
   if (!open) return null;
 
   const remote = status?.remote?.backups[0] ?? null;
-  const remoteMeta = remote !== null ? formatBackupMeta(remote) : null;
-  const localMeta = localLatest !== null ? formatBackupMeta(localLatest) : null;
+  const remoteMeta = remote !== null ? formatBackupMeta(remote) : "";
+  const localMeta = localLatest !== null ? formatBackupMeta(localLatest) : "";
 
   return (
     <Dialog open onOpenChange={(v) => !v && busy === null && closeConflict()}>
@@ -80,8 +80,8 @@ export function CloudConflictDialog() {
                     { label: "时间", value: formatBackupTime(remote.createdAt) },
                     { label: "类型", value: BACKUP_KIND_LABELS[remote.kind] },
                     ...(remote.name !== undefined ? [{ label: "标签", value: remote.name }] : []),
-                    { label: "设备", value: remote.device ?? "（旧格式未记录）" },
-                    { label: "统计", value: remoteMeta ?? "（旧格式未记录）" },
+                    { label: "设备", value: remote.device },
+                    { label: "统计", value: remoteMeta },
                     { label: "大小", value: formatBytes(remote.size) },
                   ]
             }
@@ -95,8 +95,8 @@ export function CloudConflictDialog() {
                     { label: "时间", value: formatBackupTime(localLatest.createdAt) },
                     { label: "类型", value: BACKUP_KIND_LABELS[localLatest.kind] },
                     ...(localLatest.name !== undefined ? [{ label: "标签", value: localLatest.name }] : []),
-                    { label: "设备", value: localLatest.device ?? "（旧格式未记录）" },
-                    { label: "统计", value: localMeta ?? "（旧格式未记录）" },
+                    { label: "设备", value: localLatest.device },
+                    { label: "统计", value: localMeta },
                     { label: "大小", value: formatBytes(localLatest.size) },
                   ]
             }

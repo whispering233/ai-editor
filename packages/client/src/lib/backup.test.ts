@@ -75,18 +75,8 @@ describe("BACKUP_FREQUENCY_OPTIONS（修订：关闭 + 1/5/10/15/30/60，与 sha
 describe("formatBackupMeta（行元信息：设备 · 规模）", () => {
   const stats = { characters: 32, settings: 58, chapters: 120 };
 
-  it("设备 + 三项统计 → 中间点分隔", () => {
+  it("设备 + 三项统计 → 中间点分隔（唯一命名格式保证两项恒存在）", () => {
     expect(formatBackupMeta({ device: "苹果本", stats })).toBe("苹果本 · 人物32 · 设定58 · 章120");
-  });
-
-  it("只有设备 / 只有统计 → 各自成行（段序：设备在前）", () => {
-    expect(formatBackupMeta({ device: "苹果本" })).toBe("苹果本");
-    expect(formatBackupMeta({ stats })).toBe("人物32 · 设定58 · 章120");
-  });
-
-  it("旧格式备份（两项均缺）→ null（调用方整行省略，不用占位符）", () => {
-    expect(formatBackupMeta({})).toBeNull();
-    expect(formatBackupMeta({ device: "" })).toBeNull();
   });
 
   it("统计为 0 照常显示（不当作缺失）", () => {

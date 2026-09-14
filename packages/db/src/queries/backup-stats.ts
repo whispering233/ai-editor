@@ -8,7 +8,8 @@
 // - 章 = outline.json 中 `type === "chapter"` 且未软删的节点数（严格三层：章挂卷下或直挂 root，场景不计数）
 //
 // 调用时机：备份打包之前（同一连接、同一时刻视角）；统计描述的是**备份内容**，
-// 因此旧备份重命名时不得用当前项目状态重算（见 shared `formatBackupFileName` 注释）。
+// 因此重命名备份时一律沿用原文件名里的统计段，不得用当前项目状态重算
+// （见 server `renameBackup` 与 shared `formatBackupFileName` 注释）。
 
 import type { BackupStats, OutlineFileTree } from "@whispering233/ai-editor-shared";
 import { and, count, eq, isNull } from "drizzle-orm";

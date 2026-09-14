@@ -96,8 +96,8 @@ export function toCloudBackups(entries: readonly DavEntry[]): CloudBackupEntry[]
       createdAt: parsed.time.toISOString(),
       kind: parsed.kind,
       ...(parsed.name !== undefined ? { name: parsed.name } : {}),
-      ...(parsed.device !== undefined ? { device: parsed.device } : {}),
-      ...(parsed.stats !== undefined ? { stats: parsed.stats } : {}),
+      device: parsed.device,
+      stats: parsed.stats,
       size: entry.size ?? 0,
     });
   }
@@ -458,8 +458,8 @@ export async function pushBackup(project: ProjectContext, options: PushOptions =
     createdAt: parsedLocal.time.toISOString(),
     kind: parsedLocal.kind,
     ...(parsedLocal.name !== undefined ? { name: parsedLocal.name } : {}),
-    ...(parsedLocal.device !== undefined ? { device: parsedLocal.device } : {}),
-    ...(parsedLocal.stats !== undefined ? { stats: parsedLocal.stats } : {}),
+    device: parsedLocal.device,
+    stats: parsedLocal.stats,
     size: local.size,
   };
   return {

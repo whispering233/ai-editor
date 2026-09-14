@@ -2,71 +2,56 @@
 // 纯函数，零 Node 依赖（client 浏览器打包安全）
 // 时区约定：文件名时间戳为本地时区（无时区后缀），format/parse 对称使用本地时间
 //
-// 当前格式——<YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip：
+// **唯一格式（写入 = 解析）**——<YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip：
 // - 自动备份/覆盖前快照：<时间戳>-自动-苹果本-人物32-设定58-章120.zip
 // - 手动备份（带标签）：<时间戳>-手动-苹果本-定稿-人物32-设定58-章120.zip
 // 段序固定：尾部三段统计可**从尾部倒切**，故设备/标签里出现类似字样也不歧义；
 // 设备段禁 `-`（见 sanitizeDeviceName），标签为自由文本（1-30 字符）。
 //
-// 旧格式（兼容解析不迁移，仍可列出/恢复/参与保留策略）：
-// - <时间戳>[-m][-<名称>].zip / <时间戳>-a-<名称>.zip（单字母 kind 段）
-// - 旧带名称无 kind 段：<时间戳>-<名称>.zip → manual
-// - 旧秒级：<YYYYMMDD-HHmmss>.zip → auto（毫秒为 0）
-// 重命名旧备份时**保持其旧形态**（不补设备/统计段——统计必须描述备份内容，不能拿当前项目状态凑）。
+// 早期开发期的三类旧命名（秒级 <YYYYMMDD-HHmmss>.zip、带名称无类型段 <YYYYMMDD-HHmmssSSS>-<名称>.zip、
+// 单字母 `-m`/`-a` 段）**不再解析**：文件留在磁盘但不识别（不出现在列表、不可恢复、不参与保留策略），
+// 也不做重命名迁移（旧份没有设备/统计信息，硬补会谎报——统计必须描述该备份的内容）。
+// 升级兜底（只剩旧命名时立即生成一份新格式备份）见 server 侧 `ensureParseableBackup`。
 
 import { MAX_BACKUP_NAME_LENGTH, MAX_DEVICE_NAME_LENGTH, type BackupKind, type BackupStats } from "../constants/backup.js";
 
 /**
- * 当前格式（设备段 + 尾部三段统计）：<时间戳>-<自动|手动|m|a>-<设备>[-<标签>]-人物N-设定N-章N.zip。
+ * 唯一格式（设备段 + 尾部三段统计）：<时间戳>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip。
  * 设备与标签两组均排除路径分隔符（`/` 与 `\\`）——解析结果是 restore/rename 的文件名白名单，
  * 含分隔符即路径穿越。设备段另禁 `-`（与写入侧 sanitizeDeviceName 同口径）；标签自由文本
- * （可含 `-`，故统计段从尾部固定倒切）。类型段同时接受中文与旧单字母（宽容解析）。
+ * （可含 `-`，故统计段从尾部固定倒切）。
  */
-const BACKUP_FILE_NAME_PATTERN_DEVICE_STATS =
-  /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(\d{3})-(手动|自动|m|a)-([^-/\\]+?)(?:-([^/\\]+?))?-人物(\d+)-设定(\d+)-章(\d+)\.zip$/;
-/** 旧格式：<YYYYMMDD-HHmmssSSS>[-<kind>][-<名称>].zip——组 8 = kind 段（a→auto、m→manual、
- * 无 → auto）、组 9 = 名称；名称部分 [^/\\]+ 拒绝路径分隔符（防路径穿越）；写入侧
- * sanitizeBackupName 严格限制字符集。
- * 已知歧义（接受）：旧「名称恰为单字母 a/m」的备份（如 <时间戳>-m.zip）按本正则
- * 解析为 kind 标记（auto/manual 无名称），不按旧带名称格式回退。*/
-const BACKUP_FILE_NAME_PATTERN_MS = /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(\d{3})(?:-(a|m)(?:-([^/\\]+?))?)?\.zip$/;
-/** 旧带名称（无 kind 段，格式）：<YYYYMMDD-HHmmssSSS>-<名称>.zip → 兼容为 manual + 名称 */
-const BACKUP_FILE_NAME_PATTERN_LEGACY_NAMED = /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(\d{3})-([^/\\]+?)\.zip$/;
-/** 旧格式（秒精度）：仅解析兼容 → kind=auto */
-const BACKUP_FILE_NAME_PATTERN_LEGACY = /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})\.zip$/;
+const BACKUP_FILE_NAME_PATTERN =
+  /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(\d{3})-(手动|自动)-([^-/\\]+?)(?:-([^/\\]+?))?-人物(\d+)-设定(\d+)-章(\d+)\.zip$/;
 
-/** 备份文件名解析结果（time + 类型 + 可选标签/设备/统计） */
+/** 备份文件名解析结果（time + 类型 + 可选标签 + 设备 + 统计） */
 export interface ParsedBackupFileName {
- /** 本地时区时间（文件名时间戳；旧秒级格式 → 毫秒为 0） */
+ /** 本地时区时间（文件名时间戳，毫秒精度） */
   time: Date;
- /** 备份类型（由类型段解析：自动/手动；旧带名称 → manual、旧秒级 → auto） */
+ /** 备份类型（由类型段解析：自动/手动） */
   kind: BackupKind;
- /** 用户自定义标签（自动备份/快照/旧秒级备份无此字段） */
+ /** 用户自定义标签（自动备份/覆盖前快照无此字段） */
   name?: string;
- /** 来源设备（仅当前格式；旧格式文件名无此字段） */
-  device?: string;
- /** 尾部三段统计（仅当前格式；旧格式文件名无此字段） */
-  stats?: BackupStats;
+ /** 来源设备（唯一格式恒有此段） */
+  device: string;
+ /** 尾部三段统计（唯一格式恒有此段） */
+  stats: BackupStats;
 }
 
 /**
- * 解析备份文件名 → { time, kind, name?, device?, stats? }。
+ * 解析备份文件名 → { time, kind, name?, device, stats }；不符唯一格式一律 null。
  *
  * 格式不符返回 null：非时间戳形状（含路径分隔符、`..`、空串、非数字、多后缀等）一律
- * 拒绝——白名单校验语义（restore 流程第 1 步）。兼容四类：当前格式（设备 + 统计）/ 旧毫秒
- * 带 kind 段 / 旧带名称无 kind 段 / 旧秒级格式（历史备份不迁移）。
+ * 拒绝——白名单校验语义（restore 流程第 1 步）。**只认唯一格式**：三类旧命名（秒级 /
+ * 带名称无类型段 / 单字母 `-m`/`-a` 段）同样返回 null——文件留盘但不识别。
  * 数字合法但日期不存在（如 20261301、2 月 30 日）同样返回 null：Date 构造会对
  * 越界值滚动进位（20261301 → 2027-01-01），回读比对不一致即拒绝。
  *
  * @param fileName 备份文件名（如 "20260813-101530123-自动-苹果本-人物32-设定58-章120.zip"）
- * @returns 本地时区时间 + 类型 + 可选标签/设备/统计；格式不符返回 null
+ * @returns 本地时区时间 + 类型 + 可选标签 + 设备 + 统计；格式不符返回 null
  */
 export function parseBackupFileName(fileName: string): ParsedBackupFileName | null {
-  const m =
-    BACKUP_FILE_NAME_PATTERN_DEVICE_STATS.exec(fileName) ??
-    BACKUP_FILE_NAME_PATTERN_MS.exec(fileName) ??
-    BACKUP_FILE_NAME_PATTERN_LEGACY_NAMED.exec(fileName) ??
-    BACKUP_FILE_NAME_PATTERN_LEGACY.exec(fileName);
+  const m = BACKUP_FILE_NAME_PATTERN.exec(fileName);
   if (m === null) return null;
   const y = Number(m[1]);
   const mo = Number(m[2]);
@@ -74,8 +59,7 @@ export function parseBackupFileName(fileName: string): ParsedBackupFileName | nu
   const h = Number(m[4]);
   const mi = Number(m[5]);
   const s = Number(m[6]);
- // 毫秒位：新格式第 7 组捕获，旧格式无（= 0）
-  const milli = m[7] !== undefined ? Number(m[7]) : 0;
+  const milli = Number(m[7]); // 唯一格式恒捕获毫秒段
   const date = new Date(y, mo - 1, d, h, mi, s, milli);
  // 越界日期回读比对（Date 滚动进位后各分量必然变化，一致性校验即拒绝）
   if (
@@ -89,44 +73,22 @@ export function parseBackupFileName(fileName: string): ParsedBackupFileName | nu
   ) {
     return null;
   }
- // 当前格式优先（该模式的组 10 = 标签、11-13 = 三段统计；旧模式只有 9 组）——
- // 用 m[11] 判命中（组 11-13 在新模式中必填）
-  if (m[11] !== undefined && m[12] !== undefined && m[13] !== undefined) {
-    const typeSegment = m[8];
-    const result: ParsedBackupFileName = {
-      time: date,
-      kind: typeSegment === "手动" || typeSegment === "m" ? "manual" : "auto",
-      device: m[9],
-      stats: { characters: Number(m[11]), settings: Number(m[12]), chapters: Number(m[13]) },
-    };
-    if (m[10] !== undefined) result.name = m[10];
-    return result;
-  }
-  const result: ParsedBackupFileName = { time: date, kind: "auto" };
- // kind/名称：旧格式组 8 为 kind 段（a/m，缺省 auto）、组 9 为名称；旧带名称格式组 8 为名称
- // （无 kind 段 → 兼容为 manual）。歧义注：旧「名称恰为单字母 a/m」的备份按旧毫秒格式
- // 解析为 kind 标记（无名称），接受——见 BACKUP_FILE_NAME_PATTERN_MS 注释。
-  if (m[8] === "a" || m[8] === "m") {
-    result.kind = m[8] === "a" ? "auto" : "manual";
- // 名称组 [^/\\]+ 的 + 已保证非空（组匹配即非空），仅需判 undefined
-    if (m[9] !== undefined) {
-      result.name = m[9];
-    }
-  } else if (m[8] !== undefined) {
-    result.kind = "manual"; // 旧带名称（格式）→ 兼容为 manual
-    result.name = m[8];
-  }
+ // 组序：8 = 类型段（手动/自动）、9 = 设备、10 = 标签（可选）、11-13 = 尾部三段统计
+  const result: ParsedBackupFileName = {
+    time: date,
+    kind: m[8] === "手动" ? "manual" : "auto",
+    device: m[9],
+    stats: { characters: Number(m[11]), settings: Number(m[12]), chapters: Number(m[13]) },
+  };
+  if (m[10] !== undefined) result.name = m[10];
   return result;
 }
 
 /**
- * 生成备份文件名。
+ * 生成备份文件名（**唯一格式**）：`<时间戳>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip`。
  *
- * **两种输出形态**：
- * - 传入 `device` 与 `stats`（成对）→ 当前格式
- *   `<时间戳>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip`；
- * - 两者缺省 → 旧格式 `<时间戳>[-m|-a][-<标签>].zip`（**仅供重命名历史备份时保持原形态**：
- *   旧备份没有设备/统计段，不能用当前项目状态凑一份——那会谎报备份内容）。
+ * `device` 与 `stats` 必填（写入侧只有这一种形态，调用方保证：device 已 sanitize 且非空、
+ * stats 描述该备份的内容）——与 parseBackupFileName 互为逆运算；类型系统即约束，无运行时兜底分支。
  *
  * 毫秒精度；本地时区；`.backups/` 内按文件名排序即时间序（保留策略依赖）。
  *
@@ -137,26 +99,14 @@ export function parseBackupFileName(fileName: string): ParsedBackupFileName | nu
  */
 export function formatBackupFileName(
   date: Date,
-  opts?: { kind?: BackupKind; name?: string; device?: string; stats?: BackupStats },
+  opts: { kind?: BackupKind; name?: string; device: string; stats: BackupStats },
 ): string {
   const pad = (n: number): string => String(n).padStart(2, "0");
   const pad3 = (n: number): string => String(n).padStart(3, "0");
   const base = `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}${pad3(date.getMilliseconds())}`;
-  const kind = opts?.kind ?? "auto";
-  const name = opts?.name;
-  const device = opts?.device;
-  const stats = opts?.stats;
- // 当前格式（设备 + 统计成对出现）
-  if (device !== undefined && device.length > 0 && stats !== undefined) {
-    const typeSegment = kind === "auto" ? "自动" : "手动";
-    const tag = name !== undefined && name.length > 0 ? `-${name}` : "";
-    return `${base}-${typeSegment}-${device}${tag}-人物${stats.characters}-设定${stats.settings}-章${stats.chapters}.zip`;
-  }
- // 旧格式输出（重命名历史备份用）
-  if (kind === "auto" && (name === undefined || name.length === 0)) return `${base}.zip`;
-  if (kind === "auto") return `${base}-a-${name}.zip`;
-  if (name === undefined || name.length === 0) return `${base}-m.zip`;
-  return `${base}-m-${name}.zip`;
+  const typeSegment = (opts.kind ?? "auto") === "auto" ? "自动" : "手动";
+  const tag = opts.name !== undefined && opts.name.length > 0 ? `-${opts.name}` : "";
+  return `${base}-${typeSegment}-${opts.device}${tag}-人物${opts.stats.characters}-设定${opts.stats.settings}-章${opts.stats.chapters}.zip`;
 }
 
 /**

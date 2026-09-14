@@ -1,6 +1,6 @@
 // 自动备份与恢复测试（B2.2 + B2.5）：
 // 备份管道（有变更才备份/同毫秒去重/保留策略）、备份管理端点（列表/立即备份/restore）、
-// 定时器生命周期（open 启/close 停/无变更跳过）；自定义名称/旧格式兼容
+// 定时器生命周期（open 启/close 停/无变更跳过）；自定义名称/命名唯一化（旧命名不解析 + 开项目兜底备份）
 import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
@@ -36,7 +36,7 @@ import {
   setCurrentProject,
 } from "./middleware/project.js";
 import { projectRoutes, setProjectRoot } from "./routes/project.js";
-import { BACKUPS_DIR_NAME, createBackupZip, isAllowedBackupEntry, maybeAutoBackup, pruneBackups, renameBackup, validateBackupPackage, writeBackup, writeProjectFilesFromBackup } from "./backup.js";
+import { BACKUPS_DIR_NAME, createBackupZip, ensureParseableBackup, isAllowedBackupEntry, maybeAutoBackup, pruneBackups, renameBackup, validateBackupPackage, writeBackup, writeProjectFilesFromBackup } from "./backup.js";
 import { unzipSync } from "fflate";
 
 /** 旧会话格式（v1 扁平 JSONL）夹具写入：备份管道只按目录条目处理 sessions/，与文件内容格式无关 */
@@ -167,6 +167,11 @@ function backupFileNames(dir: string): string[] {
     return []; // .backups/ 不存在
   }
   return files.filter((f) => parseBackupFileName(f) !== null).sort();
+}
+
+/** 唯一格式假备份名（列表/保留策略/改名只解析文件名，不读 zip 内容）：`i` = 秒序（同日递增 = 时间递增） */
+function fakeBackupName(i: number): string {
+  return `20260813-${String(i).padStart(6, "0")}000-自动-设备-人物0-设定0-章0.zip`;
 }
 
 /** .backups/ 最新备份时间（文件名解析） */
@@ -418,28 +423,30 @@ describe("writeBackup 与保留策略", () => {
     const dir = makeTmpDir();
     const backupsDir = join(dir, BACKUPS_DIR_NAME);
     mkdirSync(backupsDir, { recursive: true });
- // 手工造 25 份：20260813-000000.zip ~ 000024.zip（时间递增，000000 最旧）
+ // 手工造 25 份唯一格式假备份（秒序递增，i=0 最旧）
     for (let i = 0; i < 25; i++) {
-      writeFileSync(join(backupsDir, `20260813-${String(i).padStart(6, "0")}.zip`), `fake-${i}`);
+      writeFileSync(join(backupsDir, fakeBackupName(i)), `fake-${i}`);
     }
     pruneBackups(backupsDir);
     const remaining = readdirSync(backupsDir).sort();
     expect(remaining).toHaveLength(20);
-    expect(remaining[0]).toBe("20260813-000005.zip"); // 最旧 5 份（000000-000004）被删
-    expect(remaining[19]).toBe("20260813-000024.zip");
+    expect(remaining[0]).toBe(fakeBackupName(5)); // 最旧 5 份（i=0-4）被删
+    expect(remaining[19]).toBe(fakeBackupName(24));
   });
 
-  it("非法文件名不参与保留判定（手工放入的非时间戳文件不受影响）", () => {
+  it("旧命名与非时间戳文件不参与保留判定（留盘不动）", () => {
     const dir = makeTmpDir();
     const backupsDir = join(dir, BACKUPS_DIR_NAME);
     mkdirSync(backupsDir, { recursive: true });
     for (let i = 0; i < 21; i++) {
-      writeFileSync(join(backupsDir, `20260813-${String(i).padStart(6, "0")}.zip`), "x");
+      writeFileSync(join(backupsDir, fakeBackupName(i)), "x");
     }
-    writeFileSync(join(backupsDir, "notes.txt"), "非法文件"); // 不在白名单格式内
+    writeFileSync(join(backupsDir, "notes.txt"), "非法文件"); // 不在唯一命名格式内
+    writeFileSync(join(backupsDir, "20260813-101500.zip"), "旧命名"); // 旧秒级：不解析 ⇒ 不参与清理
     pruneBackups(backupsDir);
     expect(existsSync(join(backupsDir, "notes.txt"))).toBe(true); // 非法文件不参与清理
-    expect(readdirSync(backupsDir).filter((f) => f.endsWith(".zip"))).toHaveLength(20);
+    expect(existsSync(join(backupsDir, "20260813-101500.zip"))).toBe(true); // 旧命名不参与清理
+    expect(readdirSync(backupsDir).filter((f) => f.endsWith(".zip"))).toHaveLength(21);
   });
 });
 
@@ -455,21 +462,28 @@ describe("GET /project/backups 与 POST /project/backup", () => {
     expect(emptyRes.status).toBe(200);
     expect((await emptyRes.json()).data.backups).toEqual([]);
 
- // 手工造 3 份不同时间的备份（内容随意，列表不校验内容）
+ // 手工造 3 份不同时间的唯一格式备份（内容随意，列表不校验内容）
     const backupsDir = join(dir, BACKUPS_DIR_NAME);
     mkdirSync(backupsDir, { recursive: true });
-    writeFileSync(join(backupsDir, "20260813-120000.zip"), "a");
-    writeFileSync(join(backupsDir, "20260813-140000.zip"), "c");
-    writeFileSync(join(backupsDir, "20260813-130000.zip"), "b");
+    writeFileSync(join(backupsDir, "20260813-120000000-自动-设备-人物0-设定0-章0.zip"), "a");
+    writeFileSync(join(backupsDir, "20260813-140000000-自动-设备-人物0-设定0-章0.zip"), "c");
+    writeFileSync(join(backupsDir, "20260813-130000000-自动-设备-人物0-设定0-章0.zip"), "b");
     writeFileSync(join(backupsDir, "notes.txt"), "非法文件不展示");
 
     const res = await app.request("/api/v1/project/backups", { headers: HOST_HEADERS });
     expect(res.status).toBe(200);
     const backups = (await res.json()).data.backups;
     expect(backups).toHaveLength(3);
-    expect(backups[0]).toEqual({ fileName: "20260813-140000.zip", size: 1, createdAt: new Date(2026, 7, 13, 14, 0, 0).toISOString(), kind: "auto" });
-    expect(backups[1].fileName).toBe("20260813-130000.zip");
-    expect(backups[2].fileName).toBe("20260813-120000.zip");
+    expect(backups[0]).toEqual({
+      fileName: "20260813-140000000-自动-设备-人物0-设定0-章0.zip",
+      size: 1,
+      createdAt: new Date(2026, 7, 13, 14, 0, 0).toISOString(),
+      kind: "auto",
+      device: "设备",
+      stats: { characters: 0, settings: 0, chapters: 0 },
+    });
+    expect(backups[1].fileName).toBe("20260813-130000000-自动-设备-人物0-设定0-章0.zip");
+    expect(backups[2].fileName).toBe("20260813-120000000-自动-设备-人物0-设定0-章0.zip");
   });
 
   it("POST /backup：立即备份返回 { backup: { fileName, size, createdAt, kind, device, stats } }，文件落盘且 createdAt 与文件名解析一致（手动备份落中文类型段）", async () => {
@@ -583,25 +597,19 @@ describe("GET /project/backups 与 POST /project/backup", () => {
     expect((await listRes.json()).data.backups).toEqual([]);
   });
 
-  it("GET /backups：旧秒级格式 kind auto 无 name；旧带名称（无 kind 段）kind manual 含 name；时间倒序（兼容）", async () => {
+  it("GET /backups：旧命名份不出现在列表（文件留盘不识别）", async () => {
     const dir = makeTmpDir();
-    initProjectDir(dir, makeConfig("proj-legacy", "旧格式"));
+    initProjectDir(dir, makeConfig("proj-legacy", "旧命名"));
     const app = await openProject(dir);
     const backupsDir = join(dir, BACKUPS_DIR_NAME);
     mkdirSync(backupsDir, { recursive: true });
-    writeFileSync(join(backupsDir, "20260813-120000.zip"), "legacy"); // 旧秒级格式（手工遗留）→ kind auto
-    writeFileSync(join(backupsDir, "20260813-130000999-初稿.zip"), "named"); // 旧带名称（无 kind 段）→ kind manual
+    writeFileSync(join(backupsDir, "20260813-120000.zip"), "legacy"); // 旧秒级
+    writeFileSync(join(backupsDir, "20260813-130000999-初稿.zip"), "named"); // 旧带名称（无类型段）
+    writeFileSync(join(backupsDir, "20260813-140000000-m-定稿.zip"), "letter"); // 旧单字母类型段
 
     const res = await app.request("/api/v1/project/backups", { headers: HOST_HEADERS });
     expect(res.status).toBe(200);
-    const backups = (await res.json()).data.backups;
-    expect(backups).toHaveLength(2);
-    expect(backups[0].fileName).toBe("20260813-130000999-初稿.zip"); // 最新在前
-    expect(backups[0].kind).toBe("manual"); // 旧带名称兼容为 manual
-    expect(backups[0].name).toBe("初稿");
-    expect(backups[1].fileName).toBe("20260813-120000.zip"); // 旧格式兼容列出
-    expect(backups[1].kind).toBe("auto"); // 旧秒级 → auto
-    expect(backups[1]).not.toHaveProperty("name");
+    expect((await res.json()).data.backups).toEqual([]); // 旧命名一律不解析
   });
 
   it("无当前项目时备份端点 → 409 NO_PROJECT_OPEN（与 /config 一致）", async () => {
@@ -614,7 +622,7 @@ describe("GET /project/backups 与 POST /project/backup", () => {
     const renameRes = await app.request("/api/v1/project/backup/rename", {
       method: "POST",
       headers: HOST_HEADERS,
-      body: JSON.stringify({ fileName: "20260813-101500123.zip", name: "新名" }),
+      body: JSON.stringify({ fileName: "20260813-101500000-手动-设备-人物0-设定0-章0.zip", name: "新名" }),
     });
     expect(renameRes.status).toBe(409);
     const restoreRes = await app.request("/api/v1/project/backup/restore", {
@@ -718,12 +726,12 @@ describe("renameBackup", () => {
     const project = await openProjectCtx(dir);
     const backupsDir = join(dir, BACKUPS_DIR_NAME);
     mkdirSync(backupsDir, { recursive: true });
- // 同毫秒双 manual：T-m-来源.zip（源）与 T-m-目标.zip（已存在目标）——改名撞名场景
-    writeFileSync(join(backupsDir, "20260813-101500000-m-来源.zip"), "src");
-    writeFileSync(join(backupsDir, "20260813-101500000-m-目标.zip"), "target");
+ // 同毫秒双 manual：T-手动-设备-来源.zip（源）与 T-手动-设备-目标.zip（已存在目标）——改名撞名场景
+    writeFileSync(join(backupsDir, "20260813-101500000-手动-设备-来源-人物0-设定0-章0.zip"), "src");
+    writeFileSync(join(backupsDir, "20260813-101500000-手动-设备-目标-人物0-设定0-章0.zip"), "target");
     let err: unknown;
     try {
-      renameBackup(project, "20260813-101500000-m-来源.zip", "目标");
+      renameBackup(project, "20260813-101500000-手动-设备-来源-人物0-设定0-章0.zip", "目标");
     } catch (e) {
       err = e;
     }
@@ -733,28 +741,8 @@ describe("renameBackup", () => {
     expect(he.code).toBe("BACKUP_TARGET_EXISTS");
     expect(he.message).toContain("目标备份文件名已存在");
  // 数据零损失：源文件未被移动、目标文件原内容未被覆盖
-    expect(existsSync(join(backupsDir, "20260813-101500000-m-来源.zip"))).toBe(true);
-    expect(readFileSync(join(backupsDir, "20260813-101500000-m-目标.zip"), "utf8")).toBe("target");
-  });
-
-  it("旧格式兼容改名：旧秒级（kind auto）改名后落 -a- 段；旧带名称（kind manual）改名保持 -m- 段", async () => {
-    const dir = makeTmpDir();
-    initProjectDir(dir, makeConfig("proj-rn4", "旧格式改名"));
-    const project = await openProjectCtx(dir);
-    const backupsDir = join(dir, BACKUPS_DIR_NAME);
-    mkdirSync(backupsDir, { recursive: true });
- // 旧秒级（遗留）→ 解析 kind auto（毫秒 = 0）→ 改名后 -a- 段（format 统一毫秒精度）
-    writeFileSync(join(backupsDir, "20260813-101500.zip"), "legacy");
-    const legacyRes = renameBackup(project, "20260813-101500.zip", "升级整理");
-    expect(legacyRes.fileName).toBe("20260813-101500000-a-升级整理.zip");
-    expect(legacyRes.kind).toBe("auto");
-    expect(existsSync(join(backupsDir, "20260813-101500.zip"))).toBe(false);
-    expect(existsSync(join(backupsDir, legacyRes.fileName))).toBe(true);
- // 旧带名称（遗留）→ 解析 kind manual → 改名保持 -m- 段
-    writeFileSync(join(backupsDir, "20260813-101500999-初稿.zip"), "named");
-    const namedRes = renameBackup(project, "20260813-101500999-初稿.zip", "定稿");
-    expect(namedRes.fileName).toBe("20260813-101500999-m-定稿.zip");
-    expect(namedRes.kind).toBe("manual");
+    expect(existsSync(join(backupsDir, "20260813-101500000-手动-设备-来源-人物0-设定0-章0.zip"))).toBe(true);
+    expect(readFileSync(join(backupsDir, "20260813-101500000-手动-设备-目标-人物0-设定0-章0.zip"), "utf8")).toBe("target");
   });
 
   it("格式合法但备份不存在 → 404 VALIDATION_ERROR", async () => {
@@ -763,7 +751,7 @@ describe("renameBackup", () => {
     const project = await openProjectCtx(dir);
     let err: unknown;
     try {
-      renameBackup(project, "20260813-101500.zip", "新名");
+      renameBackup(project, "20260813-101500000-手动-设备-人物0-设定0-章0.zip", "新名");
     } catch (e) {
       err = e;
     }
@@ -1026,7 +1014,7 @@ describe("POST /project/backup/restore", () => {
     const res = await app.request("/api/v1/project/backup/restore", {
       method: "POST",
       headers: HOST_HEADERS,
-      body: JSON.stringify({ fileName: "20260813-101500.zip" }), // 合法格式，.backups/ 内不存在
+      body: JSON.stringify({ fileName: "20260813-101500000-自动-设备-人物0-设定0-章0.zip" }), // 唯一格式合法，.backups/ 内不存在
     });
     const body = await res.json();
     expect(res.status).toBe(404);
@@ -1042,14 +1030,14 @@ describe("POST /project/backup/restore", () => {
     const badZip = zipSync({ [PROJECT_FILE_NAME]: readFileSync(join(dir, PROJECT_FILE_NAME)) });
     const backupsDir = join(dir, BACKUPS_DIR_NAME);
     mkdirSync(backupsDir, { recursive: true });
-    writeFileSync(join(backupsDir, "20260813-101500.zip"), badZip);
+    writeFileSync(join(backupsDir, "20260813-101500000-自动-设备-人物0-设定0-章0.zip"), badZip);
 
     const outlineBefore = readFileSync(join(dir, OUTLINE_FILE_NAME), "utf8");
     const configBefore = readFileSync(join(dir, PROJECT_FILE_NAME), "utf8");
     const res = await app.request("/api/v1/project/backup/restore", {
       method: "POST",
       headers: HOST_HEADERS,
-      body: JSON.stringify({ fileName: "20260813-101500.zip" }),
+      body: JSON.stringify({ fileName: "20260813-101500000-自动-设备-人物0-设定0-章0.zip" }),
     });
     expect(res.status).toBe(400);
     expect((await res.json()).error.message).toContain("缺少文件");
@@ -1075,14 +1063,14 @@ describe("POST /project/backup/restore", () => {
     });
     const backupsDir = join(dir, BACKUPS_DIR_NAME);
     mkdirSync(backupsDir, { recursive: true });
-    writeFileSync(join(backupsDir, "20260813-101500.zip"), highZip);
+    writeFileSync(join(backupsDir, "20260813-101500000-自动-设备-人物0-设定0-章0.zip"), highZip);
 
     const outlineBefore = readFileSync(join(dir, OUTLINE_FILE_NAME), "utf8");
     const configBefore = readFileSync(join(dir, PROJECT_FILE_NAME), "utf8");
     const res = await app.request("/api/v1/project/backup/restore", {
       method: "POST",
       headers: HOST_HEADERS,
-      body: JSON.stringify({ fileName: "20260813-101500.zip" }),
+      body: JSON.stringify({ fileName: "20260813-101500000-自动-设备-人物0-设定0-章0.zip" }),
     });
     const body = await res.json();
     expect(res.status).toBe(409);
@@ -1095,7 +1083,7 @@ describe("POST /project/backup/restore", () => {
     expect(cfg.status).toBe(200);
   });
 
-  it("自定义名称备份可恢复（restore 白名单兼容 <时间戳>-<名称>.zip）", async () => {
+  it("自定义名称备份可恢复（唯一命名格式含标签段）", async () => {
     const dir = makeTmpDir();
     initProjectDir(dir, { ...makeConfig("proj-named-restore", "命名恢复"), prompt: "旧提示词" });
     const app = await openProject(dir);
@@ -1117,9 +1105,9 @@ describe("POST /project/backup/restore", () => {
     expect(readProjectFile(dir)?.prompt).toBe("旧提示词"); // 数据回滚
   });
 
-  it("旧秒级格式备份可恢复（restore 白名单兼容 <YYYYMMDD-HHmmss>.zip，升级前遗留）", async () => {
+  it("旧命名份不可恢复（白名单只认唯一命名格式：旧秒级 → 400）", async () => {
     const dir = makeTmpDir();
-    initProjectDir(dir, { ...makeConfig("proj-legacy-restore", "旧格式恢复"), prompt: "旧提示词" });
+    initProjectDir(dir, { ...makeConfig("proj-legacy-restore", "旧命名恢复"), prompt: "旧提示词" });
     const app = await openProject(dir);
     const project = getCurrentProject() as NonNullable<ReturnType<typeof getCurrentProject>>;
 
@@ -1128,15 +1116,78 @@ describe("POST /project/backup/restore", () => {
     const legacyName = "20260813-101500.zip";
     renameSync(join(dir, BACKUPS_DIR_NAME, bkp.fileName), join(dir, BACKUPS_DIR_NAME, legacyName));
 
- // 修改内容后按旧格式名恢复 → 200 + 数据回滚
+ // 按旧格式名恢复 → 400（文件留盘但不可引用），数据未被覆盖
     writeProjectFile(dir, { ...readProjectFile(dir)!, prompt: "新提示词" });
     const res = await app.request("/api/v1/project/backup/restore", {
       method: "POST",
       headers: HOST_HEADERS,
       body: JSON.stringify({ fileName: legacyName }),
     });
-    expect(res.status).toBe(200);
-    expect(readProjectFile(dir)?.prompt).toBe("旧提示词");
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("VALIDATION_ERROR");
+    expect(readProjectFile(dir)?.prompt).toBe("新提示词");
+  });
+});
+
+// ============ ensureParseableBackup（开项目升级兜底） ============
+
+describe("ensureParseableBackup（开项目升级兜底）", () => {
+  it(".backups/ 只剩旧命名 → 生成一份新格式备份并返回 true（该份可被 parseBackupFileName 解析）", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-ensure", "旧命名兜底"));
+    await openProject(dir);
+    const project = getCurrentProject() as NonNullable<ReturnType<typeof getCurrentProject>>;
+    const backupsDir = join(dir, BACKUPS_DIR_NAME);
+    mkdirSync(backupsDir, { recursive: true });
+    writeFileSync(join(backupsDir, "20260813-120000.zip"), "legacy"); // 旧秒级
+    writeFileSync(join(backupsDir, "20260813-130000999-初稿.zip"), "named"); // 旧带名称
+
+    expect(ensureParseableBackup(project)).toBe(true);
+    const created = backupFileNames(dir);
+    expect(created).toHaveLength(1);
+    expect(parseBackupFileName(created[0] as string)).toMatchObject({ kind: "auto", device: defaultDeviceName() });
+ // 旧命名份留盘不动（不重命名、不删除——重命名会谎报统计）
+    expect(existsSync(join(backupsDir, "20260813-120000.zip"))).toBe(true);
+    expect(existsSync(join(backupsDir, "20260813-130000999-初稿.zip"))).toBe(true);
+  });
+
+  it("已有可解析份（哪怕再放一个旧命名文件）→ 返回 false 且不新增文件", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-ensure2", "已有可解析份"));
+    await openProject(dir);
+    const project = getCurrentProject() as NonNullable<ReturnType<typeof getCurrentProject>>;
+    writeBackup(project); // 先有一份新格式
+    writeFileSync(join(dir, BACKUPS_DIR_NAME, "20260813-120000.zip"), "legacy"); // 旧命名混入
+    const before = backupFileNames(dir);
+
+    expect(ensureParseableBackup(project)).toBe(false);
+    expect(backupFileNames(dir)).toEqual(before); // 不重复备份
+  });
+
+  it(".backups/ 为空或不存在 → 返回 false（无旧命名残留，不预生成备份）", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-ensure3", "空目录"));
+    await openProject(dir);
+    const project = getCurrentProject() as NonNullable<ReturnType<typeof getCurrentProject>>;
+    expect(ensureParseableBackup(project)).toBe(false);
+    expect(backupFileNames(dir)).toEqual([]);
+  });
+
+  it("兜底失败（打包抛错）→ 只记日志返回 false，不向上抛", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-ensure4", "兜底失败"));
+    await openProject(dir);
+    const project = getCurrentProject() as NonNullable<ReturnType<typeof getCurrentProject>>;
+    const brokenRoot = makeTmpDir(); // 三文件缺失的「项目目录」→ 打包必失败
+    mkdirSync(join(brokenRoot, BACKUPS_DIR_NAME), { recursive: true });
+    writeFileSync(join(brokenRoot, BACKUPS_DIR_NAME, "20260813-120000.zip"), "legacy");
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect(ensureParseableBackup({ root: brokenRoot, config: project.config, db: project.db })).toBe(false);
+      expect(errorSpy.mock.calls.map((c) => String(c[0])).join("\n")).toContain("命名迁移兜底备份失败");
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });
 

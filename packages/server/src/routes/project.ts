@@ -623,7 +623,7 @@ projectRoutes.get("/backups", (c) => {
 // POST /api/v1/project/backup —— 立即备份（手动触发；同款管道 + 保留策略清理）
 // 请求体可选 name（手动备份自定义名称，trim 后 1-30 字符；形状校验 zod schema，
 // 名称规范化/权威校验收敛 sanitizeBackupName → writeBackup 唯一执行点）。
-// 手动备份文件名落 kind 段 -m（无名称 <时间戳>-m.zip / 带名称 <时间戳>-m-<名称>.zip）
+// 手动备份文件名落类型段「手动」（<时间戳>-手动-<设备>[-<标签>]-人物N-设定N-章N.zip）
 projectRoutes.post("/backup", async (c) => {
   const project = requireCurrentProject();
   const raw = await c.req.json().catch(() => null);
@@ -631,7 +631,7 @@ projectRoutes.post("/backup", async (c) => {
   if (!parsed.success) {
     throw new HttpError(400, "VALIDATION_ERROR", `备份请求体非法: ${parsed.error.issues[0]?.message ?? "参数校验失败"}`);
   }
- // kind 显式传 "manual"：name undefined 时 writeBackup 内部不 sanitize、无名称段（落 -m 段）
+ // kind 显式传 "manual"：name undefined 时 writeBackup 内部不 sanitize、无标签段
   const backup = writeBackup(project, { name: parsed.data.name, kind: "manual" });
  // 自动推送（卡 7）：手动备份成功后无条件推一次（**fire-and-forget**，不 await；不受节流、不推进
  // lastAutoPushAt；推的内容 = 最新一份 = 刚生成的这份）。推送失败不影响备份响应
@@ -642,9 +642,9 @@ projectRoutes.post("/backup", async (c) => {
 // POST /api/v1/project/backup/rename —— 重命名备份（只改名称段，时间戳与 kind 保持）
 //
 // 请求体（projectBackupRenameReqSchema）：
-// - fileName 必填：.backups/ 下时间戳格式（parseBackupFileName 白名单校验 → 非法 400）
+// - fileName 必填：.backups/ 下唯一命名格式（parseBackupFileName 白名单校验 → 非法 400）
 // - name 可选：非空 → sanitizeBackupName 规范化（非法 400）；空串/缺省 → 清除名称段
-// 语义：auto 备份重命名后仍落 -a-<名称> 段、manual 仍落 -m[-<名称>] 段（kind 不随重命名改变）；
+// 语义：重命名只改标签段（时间戳/类型/设备/统计保持原份的值，kind 不随重命名改变）；
 // 幂等——新文件名与原文件名相同 → 返回当前条目（不报错）。备份不存在 → 404。
 projectRoutes.post("/backup/rename", async (c) => {
   const project = requireCurrentProject(); // 无当前项目 → 409 NO_PROJECT_OPEN（与 /backup 一致）
@@ -657,8 +657,7 @@ projectRoutes.post("/backup/rename", async (c) => {
 // POST /api/v1/project/backup/restore —— 从备份恢复当前项目（覆盖恢复）
 //
 // 流程：
-// 1. fileName 白名单校验（仅 .backups/ 下时间戳格式—— 兼容毫秒级/带 kind 段/旧带名称/旧秒级，
-// 防路径穿越）→ 非法 400
+// 1. fileName 白名单校验（仅 .backups/ 下唯一命名格式，防路径穿越）→ 非法 400
 // 2. 覆盖前自动快照（复用备份管道，参与保留策略——后悔药）→ 备份不存在 404
 // 3. 备份包校验（zip/白名单//user_version 三态）→ 400/409 零触碰
 // 4. 原子替换三文件 + 重连 data.db + 同步内存 config + 重启定时器（restoreBackup）

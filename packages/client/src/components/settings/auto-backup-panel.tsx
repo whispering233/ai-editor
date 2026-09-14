@@ -10,8 +10,8 @@
 // - 历史备份列表：GET /project/backups → 行 = 时间（当年 MM-DD HH:mm:ss / 跨年 YY-MM-DD
 // HH:mm:ss，补秒）+ 类型标签（自动=中性徽标 / 手动=强调徽标）+ 自定义
 // 名称（如有）+ 大小（KB/MB 人类可读）+ [重命名] [加载]；行下补一行
-// **元信息**（`设备 · 人物N · 设定N · 章N`，由 API 的 device/stats 送达——UI 不解析文件名；
-// 旧格式备份两项均缺 → 整行省略）
+// **元信息**（`设备 · 人物N · 设定N · 章N`，恒有一行——唯一命名格式保证两项均在场，
+// 由 API 的 device/stats 送达——UI 不解析文件名）
 // - [重命名]（行内编辑，无 Dialog）：铅笔按钮 → 该行切编辑态（行内 input 预填当前
 // 名称 + 确认/取消按钮）；Enter/确认提交 POST /project/backup/rename（空输入 = 清除名称段）、
 // Esc/失焦取消、输入未变更不发请求（幂等保护）；400/404 行内错误提示并保持编辑态，成功
@@ -61,7 +61,7 @@ function restoreDescription(entry: BackupEntry): string {
     formatBackupTime(entry.createdAt),
     BACKUP_KIND_LABELS[entry.kind],
     ...(entry.name !== undefined ? [entry.name] : []),
-    ...(meta !== null ? [meta] : []),
+    meta,
     formatBytes(entry.size),
   ];
   return `${parts.join(" · ")}。将覆盖当前项目数据；覆盖前会自动备份当前状态（可回退）`;
@@ -328,7 +328,7 @@ export function AutoBackupPanel() {
               <ul className="divide-y divide-border">
                 {backups.map((b) => {
                   const editing = renaming !== null && renaming.fileName === b.fileName;
-                  // 元信息行（设备 + 规模）：旧格式备份无这两项 → null → 整行省略（不用占位符）
+                  // 元信息行（设备 + 规模）：唯一命名格式恒有，直接渲染
                   const meta = formatBackupMeta(b);
                   return (
                     <li key={b.fileName} className="px-2 py-1.5">
@@ -423,12 +423,10 @@ export function AutoBackupPanel() {
                           </>
                         )}
                       </div>
-                      {/* 元信息行（设备 · 规模）：旧格式备份不渲染（UI 不自行解析文件名，字段来自 API） */}
-                      {meta !== null ? (
-                        <p className="mt-0.5 truncate text-xs text-muted-foreground" title={meta}>
-                          {meta}
-                        </p>
-                      ) : null}
+                      {/* 元信息行（设备 · 规模）：字段来自 API，UI 不自行解析文件名 */}
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground" title={meta}>
+                        {meta}
+                      </p>
                       {/* 行内错误提示（400/404 透传服务端 message / 网络失败固定文案），保持编辑态 */}
                       {editing && renaming.error !== null ? (
                         <p className="mt-1 text-xs text-destructive">{renaming.error}</p>

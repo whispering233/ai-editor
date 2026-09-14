@@ -23,7 +23,7 @@ import { writeOutlineFile } from "@whispering233/ai-editor-db";
 import { SCHEMA_VERSION } from "@whispering233/ai-editor-db";
 import { nowIso } from "@whispering233/ai-editor-db";
 import { HttpError, fail, type ApiErrorCode } from "./error.js";
-import { migratePromptToAgents, setProjectTick, startAutoBackup, stopAutoBackup } from "../backup.js";
+import { ensureParseableBackup, migratePromptToAgents, setProjectTick, startAutoBackup, stopAutoBackup } from "../backup.js";
 import { AUTO_PUSH_THROTTLE_MS, maybeAutoPush } from "../cloud/auto-push.js";
 import { readAutoPush } from "../cloud/state.js";
 import { disposeProjectRuntime } from "../chat-runtime.js";
@@ -89,6 +89,10 @@ export function setCurrentProject(project: ProjectContext | null): void {
   disposeProjectRuntime();
   currentProject = project;
   if (project !== null) {
+ // 升级兜底（卡 A）：旧命名份不再被解析，若磁盘上只剩旧命名且**自动备份频率关闭**，
+ // 用户点「立即备份」前列表会是空的——先补一份新格式档（best-effort，函数内部自吞异常记日志，
+ // 不阻塞打开；已有可解析份则不做任何事）
+    ensureParseableBackup(project);
     startAutoBackup(project);
   } else {
     stopAutoBackup();

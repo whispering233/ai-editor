@@ -43,7 +43,7 @@ export const BACKUP_FREQUENCY_OPTIONS: ReadonlyArray<{ value: number | null; lab
 
 /**
  * 备份类型标签文案（B2.6）：列表行徽标与恢复 Dialog 描述共用；
- * auto = 自动（按频率/覆盖前快照/旧秒级），manual = 手动（立即备份/带自定义名称）；
+ * auto = 自动（按频率/覆盖前快照），manual = 手动（立即备份/带自定义名称）；
  * 键类型与 shared BackupKind（constants/backup.ts）对齐，防漂移
  */
 export const BACKUP_KIND_LABELS: Record<BackupKind, string> = {
@@ -54,16 +54,13 @@ export const BACKUP_KIND_LABELS: Record<BackupKind, string> = {
 /**
  * 备份行的元信息行（来源设备与内容规模）：`苹果本 · 人物32 · 设定58 · 章120`。
  * 字段均来自 API（`device` / `stats`）——**UI 不自行解析文件名**；
- * 旧格式备份两项都缺 → 返回 null（调用方整行省略，不用占位符）。
+ * 唯一命名格式保证两项恒存在（旧命名不再被解析/列出），故恒返回非空文案。
  */
 export function formatBackupMeta(entry: {
-  device?: string;
-  stats?: { characters: number; settings: number; chapters: number };
-}): string | null {
-  const parts: string[] = [];
-  if (entry.device !== undefined && entry.device !== "") parts.push(entry.device);
-  if (entry.stats !== undefined) {
-    parts.push(`人物${entry.stats.characters}`, `设定${entry.stats.settings}`, `章${entry.stats.chapters}`);
-  }
-  return parts.length === 0 ? null : parts.join(" · ");
+  device: string;
+  stats: { characters: number; settings: number; chapters: number };
+}): string {
+  return [entry.device, `人物${entry.stats.characters}`, `设定${entry.stats.settings}`, `章${entry.stats.chapters}`].join(
+    " · ",
+  );
 }

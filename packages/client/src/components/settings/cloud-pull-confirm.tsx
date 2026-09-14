@@ -21,7 +21,7 @@ export function CloudPullConfirm() {
       title="从云端拉取"
       description={`${formatBackupTime(target.createdAt)} · ${BACKUP_KIND_LABELS[target.kind]}${
         target.name !== undefined ? ` · ${target.name}` : ""
-      }${meta !== null ? ` · ${meta}` : ""} · ${formatBytes(
+      } · ${meta} · ${formatBytes(
         target.size,
       )}。将用云端那份覆盖当前项目的三文件（id/书名不变）；本机当前状态会先自动快照到本地备份（可回退），本机独有的对话与资料按并集保留（不会被删）。`}
       confirmLabel="拉取"
