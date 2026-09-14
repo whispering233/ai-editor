@@ -1,6 +1,6 @@
 # 错误码说明（ErrorCode）
 
-> **单一来源**：`@whispering233/ai-editor-shared` `types/api.ts` `ERROR_CODES` 枚举——REST 错误响应与工具结果共用（**SSE 流内无 `error` 帧**，错误以 `agent_end` 的 `stopReason`/`errorMessage` 表达，见 `80-api-chat.md`）；本文档表格为同一枚举的说明视图，新增/修订错误码须同步改枚举注释。**服务端另有扩展码**（不在 shared 枚举内，与 client 的 `CLIENT_NETWORK_ERROR` 同类）：`INTERNAL_ERROR` 500 / `FORBIDDEN` 403 / `NOT_FOUND` 404 / `NO_PROJECT_OPEN` 409 / `PROJECT_ALREADY_EXISTS` 409 / `LLM_API_KEY_MISSING` 400 / 云端存档四码（已实现）`CLOUD_NOT_CONFIGURED` 409、`CLOUD_AUTH_FAILED` 502、`CLOUD_UNREACHABLE` 502、`CLOUD_QUOTA_EXCEEDED` 502（`packages/server/src/middleware/error.ts` 的 `SERVER_ERROR_CODES`；`CLOUD_BACKUP_TOO_LARGE` / `CLOUD_CONFLICT` / `CLOUD_FILE_NOT_FOUND` 已定契约、随推送与拉取卡片引入）。错误码分散（shared 枚举 + 服务端补充 + client 补充）为已登记技术债，MVP 不收敛。
+> **单一来源**：`@whispering233/ai-editor-shared` `types/api.ts` `ERROR_CODES` 枚举——REST 错误响应与工具结果共用（**SSE 流内无 `error` 帧**，错误以 `agent_end` 的 `stopReason`/`errorMessage` 表达，见 `80-api-chat.md`）；本文档表格为同一枚举的说明视图，新增/修订错误码须同步改枚举注释。**服务端另有扩展码**（不在 shared 枚举内，与 client 的 `CLIENT_NETWORK_ERROR` 同类）：`INTERNAL_ERROR` 500 / `FORBIDDEN` 403 / `NOT_FOUND` 404 / `NO_PROJECT_OPEN` 409 / `PROJECT_ALREADY_EXISTS` 409 / `LLM_API_KEY_MISSING` 400 / 云端存档七码（**已实现**：`CLOUD_NOT_CONFIGURED` 409 / `CLOUD_AUTH_FAILED` 502 / `CLOUD_UNREACHABLE` 502 / `CLOUD_QUOTA_EXCEEDED` 502 属卡 2，`CLOUD_BACKUP_TOO_LARGE` 400 / `CLOUD_CONFLICT` 409 属卡 4，`CLOUD_FILE_NOT_FOUND` 404 属卡 5；均在 `packages/server/src/middleware/error.ts` 的 `SERVER_ERROR_CODES`）。错误码分散（shared 枚举 + 服务端补充 + client 补充）为已登记技术债，MVP 不收敛。
 
 | code | HTTP | 说明 |
 | :--- | :--- | :--- |
