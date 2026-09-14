@@ -18,6 +18,13 @@
 - **WebDAV 最小客户端**（`PROPFIND`/`MKCOL`/`PUT`/`DELETE` + 窄 XML 解析 + Basic 认证 + 30s 超时；出站走全局 dispatcher，不引 SDK/XML 依赖；列表结果剥掉 base 路径前缀 → `path` 恒为 base 相对，且自身条目（含根）一律剔除）与四个云错误码：`CLOUD_NOT_CONFIGURED` 409、`CLOUD_AUTH_FAILED` 502、`CLOUD_UNREACHABLE` 502、`CLOUD_QUOTA_EXCEEDED` 502（`CLOUD_CONFLICT`/`CLOUD_FILE_NOT_FOUND`/`CLOUD_BACKUP_TOO_LARGE` 随推送/拉取卡片引入）。
 - **设置页「备份」改为三级导航 + 新增「云端备份」面板（卡 3）**：左 160px 固定两项（自动备份 / 云端备份，与「AI 模型」同款 `sub-nav` 契约）；自动备份面板内容原样搬入；云端备份面板 = 账号配置（WebDAV 地址 / 用户名 / 应用密码（掩码，留空 = 不修改）/ 设备名（预填当前生效值）四个输入 + 测试连接 + 保存）+ 自动推送开关（选择即保存）+ 明文 0600 与「免费云盘上传流量 1GB/月」提示。表单→请求语义收敛在 `lib/cloud-config.ts` 纯函数（密码留空不提交、**凭据不全不提交密码**、地址与用户名半填时行内提示）。
 - **`/cloud/test` 不可达提示带上底层错误码**：undici 顶层错误常是笼统的 `fetch failed`，现附 `cause.code`（`ECONNREFUSED`/`ENOTFOUND`/`ETIMEDOUT`…），「测试连接」失败时能看出是端口、域名还是超时。
+- **云端推送（卡 4）**：`POST /api/v1/cloud/push`（推送一份本地备份到云盘；`GET /cloud/status` 增 `remote` 段 = 云端书目录 + 备份列表）。要点：
+  **上传 = 本地备份文件逐字节拷贝**；`PUT` 到 `.tmp-<名>` 再 `MOVE` 成正式名（正式名下永远是完整包，中断只留 `.tmp-` 垃圾，推送前清理）；
+  **冲突判定 = 云端 head ≠ 本机 `lastPushedFileName`** → 409 `CLOUD_CONFLICT`（`force` 时先把云端那份下载存进本地 `.backups/` 再覆盖，两边都留档）；
+  **保留最近 5 份**（只删能解析出时间戳且**不带用户标签**的份，非本程序命名的文件一律不碰，清理失败不阻塞推送）；
+  云端书目录按 `project.id` 定位（`cloud.json` 缓存 `dirName` 快路径 → 失效时扫根目录按 `-<id>` 后缀重新定位）；
+  推送前本地体积检查（>500MB → 400 `CLOUD_BACKUP_TOO_LARGE`）。书名改名时云端目录跟随 `MOVE`（失败不阻塞本地改名，下次同步按 id 重新定位）。
+  设置页「备份 → 云端备份」增「同步状态」段（云端最新份 / 本机最新份 / 推送按钮 / 冲突时行内「用本机覆盖云端」）。
 - **卡 3 收尾修补**：云端配置表单「纯空白密码」= 留空（不提交，避免存下空白密码导致 configured 却永远认证 401；非空密码提交原值、不 trim）；切「自动推送」开关不再清掉未保存的表单草稿；半填凭据的行内提示补「当前不会提交密码」；`DESIGN.md` 同步（设备名预填生效值 + 代价登记、两面板各自 caption、同步状态段标卡 4/5）、`tasks.md` 卡 3 交付物改述（页内 state，store 上提留卡 6）。
 - **设备名可配置**：`cloud.json` 的 `webdav.device` 优先生效（非法值不生效、回缺省），备份文件名的设备段随设置页改写而变化（之前固定为 hostname 派生）。
 

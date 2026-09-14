@@ -29,8 +29,8 @@
 | `CLOUD_AUTH_FAILED` | 502 | 502 云盘认证失败（上游 401/403：凭据被吊销、应用密码错误、权限不足）；不自动重试，引导去设置页核对（已实现：卡 2） |
 | `CLOUD_UNREACHABLE` | 502 | 502 云盘不可达（网络 / DNS / TLS / 超时 / 上游 5xx）；本地功能不受影响（已实现：卡 2） |
 | `CLOUD_QUOTA_EXCEEDED` | 502 | 502 云盘配额耗尽（上游 507 或 403 带配额提示：空间或上传流量用尽，免费账户 1GB/月）（已实现：卡 2） |
-| `CLOUD_BACKUP_TOO_LARGE` | 400 | 400 备份包超过云盘单文件上限（500MB，**推送前本地判定**，不等服务器回 413）（实现：卡 4） |
-| `CLOUD_CONFLICT` | 409 | 409 推送时云端 head ≠ 本机 `lastPushedFileName`（另一台机器写过）→ 弹出裁决（保留云端 / 用本机强推）（实现：卡 4） |
+| `CLOUD_BACKUP_TOO_LARGE` | 400 | 400 备份包超过云盘单文件上限（500MB，**推送前本地判定**，不等服务器回 413）（已实现：卡 4） |
+| `CLOUD_CONFLICT` | 409 | 409 推送时云端 head ≠ 本机 `lastPushedFileName`（另一台机器写过）→ 弹出裁决（保留云端 / 用本机强推）（已实现：卡 4） |
 | `CLOUD_FILE_NOT_FOUND` | 404 | 404 拉取指定的云端备份不存在（已被保留策略清理或被手动删除）（实现：卡 5） |
 
 - REST 错误响应统一 `{ success: false, error: { code, message } }`；**SSE 流内无独立 `error` 事件**——错误以 `agent_end` 帧的 `stopReason`（`error`/`aborted`）与 `errorMessage` 表达（见 [80-api-chat.md](./80-api-chat.md)）。

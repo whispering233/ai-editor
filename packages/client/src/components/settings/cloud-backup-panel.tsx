@@ -7,14 +7,24 @@
 // - `status` 当前只有 6 字段（remote/local/state/errorCode 属卡 4/5）
 // - `/cloud/test` 的 400/502 文案为中文可读，直接展示
 //
-// 本卡只做「账号配置」与「自动推送」两段：状态区 / 云端份列表 / 推送 / 拉取属卡 4/5（那时才有时序数据）。
+// 卡 3 做「账号配置」与「自动推送」两段；卡 4 增第三段「同步状态」（云端最新份 / 本机最新份 / 推送按钮）。
+// 拉取与三态状态机（含冲突裁决对话框）属卡 5/6——届时本段的冲突分支改为弹 `cloud-conflict-dialog`。
 // 状态持有：与「AI 模型」「项目规则」两个 pane 一致——**页内 state + 直接调 API**，不引 store
 //（第二个消费者出现时再上提：卡 6 的左栏「同步云端」按钮需要跨组件共享状态）。
 
 import { useEffect, useState } from "react";
 import { Button, Input, Switch } from "antd";
 import type { CloudStatus } from "@whispering233/ai-editor-shared";
-import { ApiError, getCloudStatus, putCloudConfig, testCloudConnection } from "../../lib/api";
+import {
+  ApiError,
+  getCloudStatus,
+  getProjectBackups,
+  pushCloudBackup,
+  putCloudConfig,
+  testCloudConnection,
+  type BackupEntry,
+} from "../../lib/api";
+import { BACKUP_KIND_LABELS, formatBackupMeta, formatBackupTime, formatBytes } from "../../lib/backup";
 import {
   EMPTY_CLOUD_CONFIG_FORM,
   buildCloudConfigPatch,
@@ -37,6 +47,11 @@ export function CloudBackupPanel() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [switching, setSwitching] = useState(false);
+  /** 本机最新一份备份（推送缺省目标；无项目/无备份 → null） */
+  const [localLatest, setLocalLatest] = useState<BackupEntry | null>(null);
+  const [pushing, setPushing] = useState(false);
+  /** 推送失败信息（含冲突：409 CLOUD_CONFLICT 时给「用本机覆盖云端」入口） */
+  const [pushError, setPushError] = useState<{ message: string; conflict: boolean } | null>(null);
 
   /**
    * 拉状态；`refill` 决定是否同时用服务端值重填表单：
@@ -54,11 +69,24 @@ export function CloudBackupPanel() {
     }
   }
 
+  /** 拉本机最新一份备份（推送按钮的目标；无项目打开 → null，不报错） */
+  async function loadLocalLatest(): Promise<void> {
+    try {
+      const res = await getProjectBackups();
+      setLocalLatest(res.backups[0] ?? null);
+    } catch {
+      setLocalLatest(null);
+    }
+  }
+
   useEffect(() => {
     void refresh(true);
+    void loadLocalLatest();
   }, []);
 
   const configured = status?.configured === true;
+  /** 云端最新一份（head = 列表首项；无云端目录/无备份 → null） */
+  const remoteHead = status?.remote?.backups[0] ?? null;
   const autoPush = status?.autoPush === true;
   const dirty = isCloudConfigDirty(form, status);
   const halfFilled = isCredentialHalfFilled(form);
@@ -106,6 +134,32 @@ export function CloudBackupPanel() {
       showToast(errorText(err, "自动推送开关未保存"), "error");
     } finally {
       setSwitching(false);
+    }
+  }
+
+  /**
+   * 推送（缺省最新一份）：成功后只刷状态与云端列表（`refill = false`，不动表单草稿）+
+   * 重取本机最新份（本机侧无变化，但保持数据新鲜）。冲突（409）时把服务端文案落到面板里，
+   * 并给出「用本机覆盖云端」入口（正式裁决对话框在卡 6）。
+   */
+  async function handlePush(force = false): Promise<void> {
+    if (pushing) return;
+    setPushing(true);
+    setPushError(null);
+    try {
+      const res = await pushCloudBackup(force ? { force: true } : {});
+      await refresh(false);
+      await loadLocalLatest();
+      const prunedNote = res.pruned.length > 0 ? `，已清理云端 ${res.pruned.length} 份旧备份` : "";
+      const snapshotNote = res.snapshot !== undefined ? `；云端原版本已存为本地备份 ${res.snapshot.fileName}` : "";
+      showToast(`已推送到云端（${formatBytes(res.pushed.size)}）${prunedNote}${snapshotNote}`);
+    } catch (err) {
+      const message = errorText(err, "无法连接服务，推送未执行");
+      const conflict = err instanceof ApiError && err.code === "CLOUD_CONFLICT";
+      setPushError({ message, conflict });
+      showToast(message, "error");
+    } finally {
+      setPushing(false);
     }
   }
 
@@ -191,6 +245,64 @@ export function CloudBackupPanel() {
           <span className="text-sm">{autoPush ? "已开启" : "已关闭"}</span>
           {!configured && <span className="text-xs text-muted-foreground">先完成账号配置</span>}
         </div>
+      </SectionCard>
+
+      {/* ③ 同步状态（卡 4：云端最新份 / 本机最新份 / 推送；拉取与三态状态机属卡 5/6） */}
+      <SectionCard title="同步状态">
+        <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+          <span>
+            云端最新份：
+            {remoteHead === null
+              ? configured
+                ? "（云端还没有备份）"
+                : "（未配置）"
+              : `${formatBackupTime(remoteHead.createdAt)} · ${BACKUP_KIND_LABELS[remoteHead.kind]}${
+                  remoteHead.name !== undefined ? ` · ${remoteHead.name}` : ""
+                }${formatBackupMeta(remoteHead) !== null ? ` · ${formatBackupMeta(remoteHead)}` : ""} · ${formatBytes(remoteHead.size)}`}
+          </span>
+          <span>
+            本机最新份：
+            {localLatest === null
+              ? "（无可用备份，先「立即备份」）"
+              : `${formatBackupTime(localLatest.createdAt)} · ${BACKUP_KIND_LABELS[localLatest.kind]}${
+                  localLatest.name !== undefined ? ` · ${localLatest.name}` : ""
+                } · ${formatBytes(localLatest.size)}`}
+          </span>
+          {status?.errorCode !== undefined && (
+            <span className="text-destructive">云端检查失败（{status.errorCode}）——本地功能不受影响</span>
+          )}
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Button
+            disabled={!configured || localLatest === null || pushing}
+            loading={pushing}
+            onClick={() => void handlePush()}
+          >
+            推送到云端
+          </Button>
+          {remoteHead !== null && (
+            <span className="text-xs text-muted-foreground">
+              推送会把本机最新份上传为云端新版本（云端已有 {status?.remote?.backups.length ?? 0} 份，保留最近 5 份）
+            </span>
+          )}
+        </div>
+
+        {pushError !== null && (
+          <div className="mt-2 flex flex-col gap-2">
+            <p className="text-xs text-destructive">{pushError.message}</p>
+            {pushError.conflict && (
+              <div className="flex items-center gap-2">
+                <Button size="small" disabled={pushing} onClick={() => void handlePush(true)}>
+                  用本机覆盖云端
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  覆盖前会先把云端那份下载存进本机备份（两边都留档）
+                </span>
+              </div>
+            )}
+          </div>
+        )}
       </SectionCard>
     </div>
   );

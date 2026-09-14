@@ -56,7 +56,7 @@ const REFERENCE_DIR_NAME = "references";
  * 白名单前缀 + 递归打包 + 参与变更判定 + 恢复时整体覆盖。
  * `SESSIONS_DIR_NAME` 取自 agent 包的 pi 运行时（会话目录的唯一事实来源；pi 的 session 文件落在此目录）。
  */
-const PACKED_DIR_NAMES: readonly string[] = [REFERENCE_DIR_NAME, SESSIONS_DIR_NAME];
+export const PACKED_DIR_NAMES: readonly string[] = [REFERENCE_DIR_NAME, SESSIONS_DIR_NAME];
 
 /** 备份包条目白名单判定（三文件 + 打包目录前缀——逐名比对天然防 zip 路径穿越；
  * 目录子路径拒绝含 `..` 的条目防相对路径逃逸） */

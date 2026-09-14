@@ -66,6 +66,10 @@ export interface WebdavClient {
   mkcol(relPath: string): Promise<boolean>;
   /** 上传（PUT）：覆盖同名文件 */
   put(relPath: string, body: Uint8Array): Promise<void>;
+  /** 下载（GET）：文件不存在（404）→ null */
+  get(relPath: string): Promise<Uint8Array | null>;
+  /** 同目录/跨目录改名（MOVE）：用于「临时名 → 正式名」的原子落盘与书名改名时的目录迁移 */
+  move(fromRelPath: string, toRelPath: string): Promise<void>;
   /** 删除文件/目录（幂等：404 视为已删） */
   remove(relPath: string): Promise<void>;
 }
@@ -270,6 +274,24 @@ export function createWebdavClient(options: WebdavClientOptions): WebdavClient {
         headers: { "Content-Type": "application/zip" },
       });
       if (!res.ok) await throwMapped(res, `上传 ${relPath}`);
+    },
+
+    async get(relPath) {
+      const res = await davFetch("GET", urlOf(relPath));
+      if (res.status === 404) return null;
+      if (!res.ok) await throwMapped(res, `下载 ${relPath}`);
+      return new Uint8Array(await res.arrayBuffer());
+    },
+
+    async move(fromRelPath, toRelPath) {
+      // RFC 4918：MOVE 的目标写在 `Destination` 头（绝对 URL）。
+      // `Overwrite: T`（默认）：**同一份备份重复推送**（用户连点、或上次推完清理失败再推）时
+      // 正式名已存在，覆盖它才是幂等语义；跨机器同名冲突由推送侧的 head 判定拦在前面，
+      // 不靠 MOVE 报 412 兜底（那会让「重推同一份」永远失败）。
+      const res = await davFetch("MOVE", urlOf(fromRelPath), {
+        headers: { Destination: urlOf(toRelPath), Overwrite: "T" },
+      });
+      if (!res.ok) await throwMapped(res, `改名 ${fromRelPath} → ${toRelPath}`);
     },
 
     async remove(relPath) {

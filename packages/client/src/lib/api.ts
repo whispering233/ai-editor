@@ -5,6 +5,7 @@ import type {
   BackupKind,
   ChatSessionMessage,
   CloudConfigPutResult,
+  CloudPushResult,
   CloudStatus,
   CloudTestResult,
   ChatSessionSummary,
@@ -27,7 +28,15 @@ const API_BASE = "/api/v1";
 
 /** 客户端侧错误码补充（不在服务端 ErrorCode 枚举内）：网络层 / 响应解析失败 */
 export const CLIENT_NETWORK_ERROR = "CLIENT_NETWORK_ERROR" as const;
-export type ClientErrorCode = typeof CLIENT_NETWORK_ERROR;
+
+/**
+ * 服务端扩展码中**客户端需要分支**的部分（`packages/server/src/middleware/error.ts` 的
+ * `SERVER_ERROR_CODES`）。shared 的 `ErrorCode` 枚举不含服务端扩展码——「错误码分散」是已登记
+ * 技术债（见 `docs/api/error-code.md`）；客户端要按码分支时在此声明，避免各处 `as` 强转。
+ */
+export type ServerBranchErrorCode = "CLOUD_CONFLICT" | "CLOUD_BACKUP_TOO_LARGE";
+
+export type ClientErrorCode = typeof CLIENT_NETWORK_ERROR | ServerBranchErrorCode;
 
 /** API 错误：服务端 {success:false,error} 包裹或客户端网络层失败 */
 export class ApiError extends Error {
@@ -1112,7 +1121,11 @@ export function rejectProposal(proposalId: string): Promise<RejectProposalRes> {
 // 注意：status 当前只有 6 字段（configured/url/username/device/autoPush/projectId）——
 // remote/local/state/errorCode 属卡 4/5，类型（shared CloudStatus）即收窄版。
 
-/** GET /api/v1/cloud/status —— 云端与本机同步状态（卡 3 只用配置段；不发起云端请求） */
+/**
+ * GET /api/v1/cloud/status —— 云端与本机同步状态。
+ * 已配置且打开了项目时会发起一次云端 PROPFIND；云端检查失败不影响响应成功
+ *（`remote: null` + `errorCode`），本地功能不受影响。
+ */
 export function getCloudStatus(): Promise<CloudStatus> {
   return apiFetch<CloudStatus>("/cloud/status");
 }
@@ -1139,4 +1152,20 @@ export function putCloudConfig(patch: {
  */
 export function testCloudConnection(): Promise<CloudTestResult> {
   return apiFetch<CloudTestResult>("/cloud/test", { method: "POST" });
+}
+
+/**
+ * POST /api/v1/cloud/push —— 推送一份本地备份到云端（卡 4）。
+ * 缺省推最新一份；`force = true` 时不因冲突中止（先把云端那份下载存进本地 `.backups/` 再覆盖云端）。
+ * 失败：409 CLOUD_NOT_CONFIGURED / CLOUD_CONFLICT / NO_PROJECT_OPEN、
+ *      400 CLOUD_BACKUP_TOO_LARGE、404（本地备份不存在）、502 三码（文案中文可读，直接展示）。
+ */
+export function pushCloudBackup(options: { fileName?: string; force?: boolean } = {}): Promise<CloudPushResult> {
+  return apiFetch<CloudPushResult>("/cloud/push", {
+    method: "POST",
+    body: {
+      ...(options.fileName !== undefined ? { file_name: options.fileName } : {}),
+      ...(options.force !== undefined ? { force: options.force } : {}),
+    },
+  });
 }

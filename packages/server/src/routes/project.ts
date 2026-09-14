@@ -54,6 +54,7 @@ import {
   setCurrentProject,
   type ProjectContext,
 } from "../middleware/project.js";
+import { renameCloudDir } from "../cloud/sync.js";
 import { logSoftDeleteReconcile, reconcileSoftDelete } from "../consistency.js";
 import { writeLastProject } from "../last-project.js";
 
@@ -725,5 +726,12 @@ projectRoutes.post("/rename", async (c) => {
  // 引用同步：当前项目路径指向新目录（config 内存同步为写盘值；会话按 id 不受影响）
   project.root = targetDir;
   project.config = written;
+
+ // 云端书目录跟随改名（卡 4）：**不阻塞本地改名**（云端慢/不可达时改名照常成功）；
+ // 失败只记日志——下一轮同步按 `-<projectId>` 回退扫描仍能定位（云端目录名暂时落后）
+  void renameCloudDir(project).catch((err: unknown) => {
+    console.error("[cloud] 云端书目录改名失败（不阻塞本地改名，下次同步会按 id 重新定位）:", err);
+  });
+
   return c.json(ok({ renamed: true as const, path: targetDir, name }));
 });

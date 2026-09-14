@@ -19,6 +19,7 @@ import { dirname, join } from "node:path";
 import { writeJsonAtomic } from "@whispering233/ai-editor-db";
 import {
   sanitizeDeviceName,
+  type CloudBookSyncState,
   type CloudConfigFile,
   type CloudWebdavConfig,
 } from "@whispering233/ai-editor-shared";
@@ -90,6 +91,48 @@ export function configuredDeviceName(): string | null {
   const device = readCloudFile()?.webdav?.device;
   if (typeof device !== "string") return null;
   return sanitizeDeviceName(device);
+}
+
+/**
+ * 书级同步状态（= shared `CloudBookSyncState`；`cloud.json` 的 `books[<projectId>]`）。
+ * 类型定义在 shared（`types/cloud.ts`）——服务端与将来的客户端读同一份形状，不各写一份。
+ */
+export type CloudBookState = CloudBookSyncState;
+
+/** `books` 段整体（键 = project.id） */
+export type CloudBooksState = Record<string, CloudBookState>;
+
+/** 读取 `books` 段（缺失/结构不符 → 空对象；非对象条目跳过） */
+export function readBooksState(): CloudBooksState {
+  const raw = readCloudFile()?.books;
+  if (typeof raw !== "object" || raw === null) return {};
+  const out: CloudBooksState = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value === "object" && value !== null) out[key] = value as CloudBookState;
+  }
+  return out;
+}
+
+/** 读某书的同步状态（无记录 → null） */
+export function readBookState(projectId: string): CloudBookState | null {
+  return readBooksState()[projectId] ?? null;
+}
+
+/**
+ * 合并写某书的同步状态（只覆盖 patch 里出现的键，其余原样保留；原子写 + 0600）。
+ * 与 `writeCloudConfig` 同一套合并语义：未涉及的顶层键（webdav/autoPush）与其他书的状态不动。
+ */
+export function writeBookState(projectId: string, patch: CloudBookState): void {
+  const path = cloudConfigPath();
+  if (path === null) {
+    throw new HttpError(500, "INTERNAL_ERROR", "创作根未初始化（startServer 未调用 initCloudState）");
+  }
+  const current = (readCloudFile() ?? {}) as CloudConfigFile & Record<string, unknown>;
+  const books = readBooksState();
+  const nextBook = { ...(books[projectId] ?? {}), ...patch };
+  const next: Record<string, unknown> = { ...current, books: { ...books, [projectId]: nextBook } };
+  mkdirSync(dirname(path), { recursive: true });
+  writeJsonAtomic(path, next, { mode: CLOUD_CONFIG_FILE_MODE });
 }
 
 /**

@@ -54,7 +54,14 @@ describe("GET /api/v1/cloud/status（配置段）", () => {
     const res = await app.request("/api/v1/cloud/status", { headers: HOST_HEADERS });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.data).toMatchObject({ configured: false, url: null, username: null, autoPush: false, projectId: null });
+    expect(body.data).toMatchObject({
+      configured: false,
+      url: null,
+      username: null,
+      autoPush: false,
+      projectId: null,
+      remote: null,
+    });
     expect(typeof body.data.device).toBe("string");
     expect(body.data.device.length).toBeGreaterThan(0);
   });
@@ -72,6 +79,7 @@ describe("GET /api/v1/cloud/status（配置段）", () => {
       device: "苹果本",
       autoPush: true,
       projectId: null,
+      remote: null, // 无项目打开 → 不做云端检查（卡 4 起 remote 段）
     });
   });
 });

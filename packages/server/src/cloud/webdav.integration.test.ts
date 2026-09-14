@@ -6,14 +6,38 @@
 // 本机无 rclone / wsgidav（已确认），故用最小自建服务——它只服务本测试文件，不入包。
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { errorHandler } from "../middleware/error.js";
 import { cloudRoutes } from "../routes/cloud.js";
-import { initCloudState } from "./state.js";
+import {
+  DATA_DB_FILE_NAME,
+  openDatabase,
+  closeDatabase,
+  readProjectFile,
+  setUserVersion,
+  writeOutlineFile,
+  writeProjectFile,
+  SCHEMA_VERSION,
+} from "@whispering233/ai-editor-db";
+import type { ProjectFileConfig } from "@whispering233/ai-editor-shared";
+import { initCloudState, readBookState } from "./state.js";
+import { pushBackup } from "./sync.js";
+import type { ProjectContext } from "../middleware/project.js";
 import { createWebdavClient } from "./webdav.js";
 
 const HOST_HEADERS = { host: "127.0.0.1:3456" };
@@ -118,6 +142,28 @@ async function startFakeDav(root: string, options: FakeDavOptions = {}): Promise
           writeFileSync(target, Buffer.concat(chunks));
           res.writeHead(201).end();
         });
+        return;
+      }
+      case "GET": {
+        if (!existsSync(target) || statSync(target).isDirectory()) {
+          res.writeHead(404).end("not found");
+          return;
+        }
+        res.writeHead(200, { "content-type": "application/zip" }).end(readFileSync(target));
+        return;
+      }
+      case "MOVE": {
+        const destination = typeof req.headers.destination === "string" ? resolveTarget(davRoot, req.headers.destination) : null;
+        if (destination === null || !existsSync(target)) {
+          res.writeHead(404).end("not found");
+          return;
+        }
+        if (existsSync(destination) && req.headers.overwrite === "F") {
+          res.writeHead(412).end("precondition failed");
+          return;
+        }
+        renameSync(target, destination);
+        res.writeHead(201).end();
         return;
       }
       case "DELETE": {
@@ -278,5 +324,90 @@ describe("POST /api/v1/cloud/test × 真 HTTP 服务", () => {
     const res = await app.request("/api/v1/cloud/test", { method: "POST", headers: HOST_HEADERS });
     expect(res.status).toBe(502);
     expect((await res.json()).error.code).toBe("CLOUD_QUOTA_EXCEEDED");
+  });
+});
+
+// ============ 推送端到端（卡 4：真 HTTP + 真文件系统） ============
+
+/** 造一个真项目（三文件 + references/ + sessions/），返回可直接喂给 pushBackup 的上下文 */
+function makeProjectFixture(id: string, name: string): { project: ProjectContext; dir: string } {
+  const dir = mkdtempSync(join(tmpdir(), "ai-editor-push-"));
+  writeProjectFile(dir, {
+    id,
+    name,
+    language: "zh",
+    schema_version: SCHEMA_VERSION,
+    current_position: null,
+    created_at: "2026-08-01T10:00:00Z",
+    updated_at: "2026-08-01T10:00:00Z",
+  });
+  writeOutlineFile(dir, { id: "root", type: "root", schema_version: SCHEMA_VERSION, children: [] });
+  const db0 = openDatabase(join(dir, DATA_DB_FILE_NAME));
+  setUserVersion(db0, SCHEMA_VERSION);
+  closeDatabase(db0);
+  mkdirSync(join(dir, "references"), { recursive: true });
+  writeFileSync(join(dir, "references", "笔记.md"), "# 笔记");
+  mkdirSync(join(dir, "sessions"), { recursive: true });
+  writeFileSync(join(dir, "sessions", "s1.jsonl"), "{}\n");
+  const db = openDatabase(join(dir, DATA_DB_FILE_NAME));
+  return { project: { root: dir, config: readProjectFile(dir) as ProjectFileConfig, db }, dir };
+}
+
+describe("pushBackup × 真 HTTP 服务", () => {
+  it("端到端：建目录 → 临时名上传 → MOVE → 云端正式名内容与本地逐字节一致、无 .tmp- 残留、状态落盘", async () => {
+    dav = await startFakeDav(root);
+    await configure(dav.url);
+    const { project, dir } = makeProjectFixture("proj-push-e2e", "推送书");
+
+    const backupDir = join(dir, ".backups");
+    mkdirSync(backupDir, { recursive: true });
+    // 走真备份管道生成 zip（含 references/ 与 sessions/）
+    const { writeBackup } = await import("../backup.js");
+    const info = writeBackup(project, { kind: "manual", name: "定稿" });
+
+    const result = await pushBackup(project);
+    expect(result.pushed.fileName).toBe(info.fileName);
+    const cloudDir = join(root, "dav", result.remote.dirName);
+    expect(readdirSync(cloudDir)).toEqual([info.fileName]); // 只有正式名（无 .tmp- 残留）
+    // 云端内容与本地逐字节一致
+    expect(readFileSync(join(cloudDir, info.fileName)).equals(readFileSync(join(backupDir, info.fileName)))).toBe(true);
+
+    // 同步状态落盘（本机视角；含 baseEntries 基线）
+    const state = readBookState("proj-push-e2e");
+    expect(state?.dirName).toBe(result.remote.dirName);
+    expect(state?.lastPushedFileName).toBe(info.fileName);
+    expect(state?.baseEntries).toContain("references/笔记.md");
+    expect(state?.baseEntries).toContain("sessions/s1.jsonl");
+
+    closeDatabase(project.db);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("冲突与强推端到端：云端更新的份 → 409；force → 云端那份被存档进本地 .backups/ 后覆盖", async () => {
+    dav = await startFakeDav(root);
+    await configure(dav.url);
+    const { project, dir } = makeProjectFixture("proj-push-conflict", "冲突书");
+
+    const backupDir = join(dir, ".backups");
+    mkdirSync(backupDir, { recursive: true });
+    const { writeBackup } = await import("../backup.js");
+    writeBackup(project, { kind: "manual" });
+    await pushBackup(project); // 本机先推一份（lastPushed = 它）
+
+    // 模拟另一台机器写了更新的份（时间戳更晚 → 成为 head）
+    const cloudDir = join(root, "dav", readBookState("proj-push-conflict")?.dirName ?? "");
+    const otherName = "20990101-000000000-自动-别的机器-人物1-设定2-章3.zip";
+    writeFileSync(join(cloudDir, otherName), "CLOUD-FROM-OTHER-MACHINE");
+
+    await expect(pushBackup(project)).rejects.toMatchObject({ code: "CLOUD_CONFLICT" });
+    expect(existsSync(join(cloudDir, otherName))).toBe(true); // 冲突时云端未被改写
+
+    const forced = await pushBackup(project, { force: true });
+    expect(forced.snapshot?.fileName).toBe(otherName);
+    // 云端旧份原样存进本地 .backups/（两边都留档）
+    expect(readFileSync(join(backupDir, otherName), "utf8")).toBe("CLOUD-FROM-OTHER-MACHINE");
+
+    closeDatabase(project.db);
+    rmSync(dir, { recursive: true, force: true });
   });
 });

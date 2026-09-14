@@ -1036,6 +1036,18 @@ export const cloudConfigPutReqSchema = z
   .strict();
 export type CloudConfigPutReq = z.infer<typeof cloudConfigPutReqSchema>;
 
+// POST /api/v1/cloud/push：推送一份本地备份（卡 4）
+// - file_name 缺省 = 最新一份；须通过 parseBackupFileName 白名单（服务端校验 → 400）
+// - force 缺省 false：云端 head ≠ 本机 lastPushedFileName 时 409 CLOUD_CONFLICT；
+//   true = 先把云端那份下载存进本地 .backups/（两边都留档）再覆盖云端
+export const cloudPushReqSchema = z
+  .object({
+    file_name: z.string().optional(),
+    force: z.boolean().optional(),
+  })
+  .strict();
+export type CloudPushReq = z.infer<typeof cloudPushReqSchema>;
+
 // ============ chat SSE 事件 ============
 //
 // 事件集（服务端→客户端的 pi 事件投影）以 docs/api/80-api-chat.md 为契约。本文件**不再镜像**

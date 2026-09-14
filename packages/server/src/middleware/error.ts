@@ -24,6 +24,8 @@ export const SERVER_ERROR_CODES = [
   "CLOUD_AUTH_FAILED", // 502：上游 401/403（凭据/权限）
   "CLOUD_UNREACHABLE", // 502：网络/DNS/TLS/超时/上游 5xx
   "CLOUD_QUOTA_EXCEEDED", // 502：上游 507 或配额提示
+  "CLOUD_CONFLICT", // 409：推送时云端 head ≠ 本机 lastPushedFileName（另一台机器写过）
+  "CLOUD_BACKUP_TOO_LARGE", // 400：备份包超过云盘单文件上限（推送前本地判定）
 ] as const;
 export type ServerErrorCode = (typeof SERVER_ERROR_CODES)[number];
 

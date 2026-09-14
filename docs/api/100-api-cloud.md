@@ -12,9 +12,9 @@
 
 云端与本机的同步状态（设置页面板与左栏「同步云端」按钮的唯一数据源）。
 
-> **卡 2 范围**：本端点当前只返回**配置段**（下方 `configured` / `url` / `username` / `device` / `autoPush` / `projectId`）；
-> 字段 `remote` / `local` / `state` / `errorCode` 与「打开项目时那次 `PROPFIND` 检查」在**卡 4/5**（推送/拉取）落地——
-> 在此之前本端点**不发起任何网络请求**，客户端不要按完整契约建状态机（`shared` 的 `CloudStatus` 类型也按此收窄）。
+> **落地进度**：配置段（卡 2）+ `remote` 段与 `errorCode`（卡 4：已配置且打开了项目时发起一次 `PROPFIND` 列书目录，失败不影响本端点成功返回）；
+> `local`（本机已推份 / 未推改动）与 `state`（三态状态机）**属卡 5**——`shared` 的 `CloudStatus` 类型按此收窄，
+> 客户端不要按完整契约建状态机（未落地字段不在类型里）。
 
 ```typescript
 // Res: 200

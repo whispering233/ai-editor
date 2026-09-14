@@ -8,13 +8,14 @@
 // 凭据纪律：password 永不进响应——不是脱敏展示，而是根本不回传。
 
 import { Hono } from "hono";
-import { cloudConfigPutReqSchema } from "@whispering233/ai-editor-shared/schemas";
+import { cloudConfigPutReqSchema, cloudPushReqSchema } from "@whispering233/ai-editor-shared/schemas";
 import type { CloudConfigPutResult, CloudStatus, CloudTestResult } from "@whispering233/ai-editor-shared";
 import { sanitizeDeviceName } from "@whispering233/ai-editor-shared";
 import { HttpError, ok } from "../middleware/error.js";
-import { getCurrentProject } from "../middleware/project.js";
+import { getCurrentProject, requireCurrentProject } from "../middleware/project.js";
 import { currentDeviceName } from "../cloud/device.js";
-import { readAutoPush, readWebdavConfig, writeCloudConfig } from "../cloud/state.js";
+import { readAutoPush, readBookState, readWebdavConfig, writeCloudConfig } from "../cloud/state.js";
+import { findExistingCloudDir, pushBackup, toCloudBackups } from "../cloud/sync.js";
 import { createWebdavClient } from "../cloud/webdav.js";
 
 /** 云端存档路由（挂载于 /api/v1/cloud） */
@@ -53,10 +54,27 @@ function normalizeWebdavUrl(raw: string): string {
   return parsed.toString().replace(/\/+$/, "");
 }
 
-// GET /api/v1/cloud/status —— 配置段（不发起任何网络请求；云端状态在卡 4 起补）
-cloudRoutes.get("/status", (c) => {
+// GET /api/v1/cloud/status —— 配置段 + 云端段（remote：目录与该目录内的备份列表）
+// 已配置且打开了项目时发起一次 PROPFIND；失败不影响本端点成功返回（remote=null + errorCode）
+cloudRoutes.get("/status", async (c) => {
   const webdav = readWebdavConfig();
   const project = getCurrentProject();
+  let remote: CloudStatus["remote"] = null;
+  let errorCode: string | undefined;
+  if (webdav !== null && project !== null) {
+    try {
+      const client = createWebdavClient(webdav);
+      const state = readBookState(project.config.id);
+      const dirName = await findExistingCloudDir(client, project, state?.dirName);
+      remote = {
+        dirName,
+        backups: dirName === null ? [] : toCloudBackups((await client.list(dirName)) ?? []),
+      };
+    } catch (err) {
+      // 云端检查失败：只反映在状态里（remote=null + errorCode），不阻塞本地功能
+      errorCode = err instanceof HttpError ? err.code : "CLOUD_UNREACHABLE";
+    }
+  }
   const payload: CloudStatus = {
     configured: webdav !== null,
     url: webdav?.url ?? null,
@@ -64,6 +82,8 @@ cloudRoutes.get("/status", (c) => {
     device: currentDeviceName(),
     autoPush: readAutoPush(),
     projectId: project?.config.id ?? null,
+    remote,
+    ...(errorCode !== undefined ? { errorCode } : {}),
   };
   return c.json(ok(payload));
 });
@@ -106,6 +126,18 @@ cloudRoutes.put("/config", async (c) => {
 
   const payload: CloudConfigPutResult = { saved: true };
   return c.json(ok(payload));
+});
+
+// POST /api/v1/cloud/push —— 推送一份本地备份到云端（缺省取最新一份；force = 冲突时用本机覆盖云端）
+cloudRoutes.post("/push", async (c) => {
+  const project = requireCurrentProject(); // 409 NO_PROJECT_OPEN
+  const body: unknown = await c.req.json().catch(() => ({}));
+  const parsed = cloudPushReqSchema.parse(body);
+  const result = await pushBackup(project, {
+    ...(parsed.file_name !== undefined ? { fileName: parsed.file_name } : {}),
+    ...(parsed.force !== undefined ? { force: parsed.force } : {}),
+  });
+  return c.json(ok(result));
 });
 
 // POST /api/v1/cloud/test —— 连通性 + 读/写权限探测（认证通过但无写权限是最常见的误配）
