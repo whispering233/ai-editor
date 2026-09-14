@@ -3,18 +3,27 @@
 // `Tabs.horizontalMargin: 0` 保证底线紧贴内容，不留 16px 空档）
 // 二级 tab 选中态是**页内 state**，不进 URL（`#/preferences` 恒为设置页；刷新回落默认 tab）——见 DESIGN.md §Components `tabs`
 // 各 tab 内容自带数据加载与草稿（antd Tabs 懒渲染：未访问的分区不拉数据、不请求备份列表）
-import { useState } from "react";
+// 跨页意图（卡 6）：左栏「同步云端」在未配置时会置 `pendingSettingsPane`——本页负责切到「备份」tab，
+// 再由 `BackupSection` 消费并清空（二级 tab 选中态仍不进 URL）
+import { useEffect, useState } from "react";
 import { Tabs } from "antd";
 import { PageHeader } from "@/components/ui/page-header";
 import { BackupSection } from "../components/settings/backup-section";
 import { LlmSection } from "../components/settings/llm-section";
 import { ProjectRulesSection } from "../components/settings/project-rules-section";
+import { useCloudStore } from "../stores/cloud";
 
 /** 二级 tab 键（顺序 = 配置 AI → 配置项目 → 数据安全） */
 type TabKey = "llm" | "rules" | "backup";
 
 export default function Settings() {
   const [tab, setTab] = useState<TabKey>("llm");
+  /** 跨页意图（卡 6）：只驱动顶层 tab，**不消费**（消费与清空由 `BackupSection` 负责） */
+  const pendingPane = useCloudStore((s) => s.pendingSettingsPane);
+
+  useEffect(() => {
+    if (pendingPane === "cloud") setTab("backup");
+  }, [pendingPane]);
 
   return (
     <section>

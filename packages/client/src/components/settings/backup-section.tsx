@@ -6,10 +6,11 @@
 //
 // 拆分历史：本文件原为「自动备份」区全部实现，卡 3 拆成三件——
 // `backup-section.tsx`（本文件：容器 + 导航）/ `auto-backup-panel.tsx` / `cloud-backup-panel.tsx`。
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Menu } from "antd";
 import { AutoBackupPanel } from "./auto-backup-panel";
 import { CloudBackupPanel } from "./cloud-backup-panel";
+import { useCloudStore } from "../../stores/cloud";
 
 /** 面板键（缺省「自动备份」——数据安全的第一落点） */
 type BackupPanelKey = "auto" | "cloud";
@@ -21,6 +22,16 @@ const PANEL_ITEMS = [
 
 export function BackupSection() {
   const [panel, setPanel] = useState<BackupPanelKey>("auto");
+  /** 跨页意图（卡 6）：左栏「同步云端」在未配置时会跳到这里并请求选中「云端备份」 */
+  const pendingPane = useCloudStore((s) => s.pendingSettingsPane);
+  const consumePendingPane = useCloudStore((s) => s.consumePendingPane);
+
+  // 订阅而非只看 mount：设置页已在「备份」时再次请求（路由未变、组件未重挂）也能切过去
+  useEffect(() => {
+    if (pendingPane !== "cloud") return;
+    setPanel("cloud");
+    consumePendingPane();
+  }, [pendingPane, consumePendingPane]);
 
   return (
     <div className="flex gap-4">

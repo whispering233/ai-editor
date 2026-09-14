@@ -7,15 +7,19 @@
 // 书架路由 #/ 下左栏无选中面（书架自身就是当前页）。
 // 主题/色纪律：颜色一律取语义 token 类（bg-background / border-border / bg-accent，均为 index.css 对 antd token 的转发）；
 // 禁止内联 style 与硬编码色值（旧版 selected 态用 inline `token.colorPrimaryBg` 已改为 `bg-accent` = `{colors.surface-muted}`）。
-// - 底部区「立即备份」/ 设置 / 主题三入口同为无边框文字按钮（DESIGN.md §导航与外壳 `sidebar`：
-//   立即备份是动作、形态随底部区，H4 登记例外）；备份在途 `loading` 防连点，无项目禁用。
-//   三入口标签一律 `min-w-0 flex-1 truncate text-left`——antd Button 根是 `inline-flex +
+// - 底部区「立即备份」/「同步云端」/ 设置 / 主题四入口同为无边框文字按钮（DESIGN.md §导航与外壳 `sidebar`：
+//   立即备份与同步云端是动作、形态随底部区，H4 登记例外）；在途 `loading` 防连点，无项目禁用。
+//   四入口标签一律 `min-w-0 flex-1 truncate text-left`——antd Button 根是 `inline-flex +
 //   justify-content: center`，标签不 grow 时「图标 + 文字」会整组居中（用户反馈：底部区要左对齐）。
-import { Button, Menu } from "antd";
-import { useState } from "react";
+// - 「同步云端」= 卡 6 的一键状态机入口（DESIGN.md §538 `sync-cloud-button`）：动作与角标都取
+//   `stores/cloud.ts`；角标只在「有未推改动 / 云端有更新 / 冲突」时亮（`unreachable` 明确不亮），
+//   状态在「打开项目」与「每次点击」复查，**不轮询**（/status 每次 2-3 次 PROPFIND，云盘有配额）。
+import { Badge, Button, Menu } from "antd";
+import { useEffect, useState } from "react";
 import {
   ApartmentOutlined,
   BookOutlined,
+  CloudSyncOutlined,
   DeleteOutlined,
   DoubleLeftOutlined,
   EnvironmentOutlined,
@@ -31,6 +35,7 @@ import {
   TagsOutlined,
 } from "@ant-design/icons";
 import { ApiError, CLIENT_NETWORK_ERROR, createProjectBackup } from "../../lib/api";
+import { cloudBadgeTone, useCloudStore } from "../../stores/cloud";
 import type { Route } from "../../hooks/use-route";
 import { navigate, useHashRoute } from "../../hooks/use-route";
 import { useTheme } from "../../hooks/use-theme";
@@ -74,6 +79,24 @@ export function NavRail({
   const route = useHashRoute();
   /** 立即备份在途（防连点；antd loading 同时拦点击） */
   const [backingUp, setBackingUp] = useState(false);
+  /** 云端：状态 / 一键动作 / 角标（store = 唯一状态源，与设置页面板共享） */
+  const cloudStatus = useCloudStore((s) => s.status);
+  const cloudBusy = useCloudStore((s) => s.busy);
+  const syncNow = useCloudStore((s) => s.syncNow);
+  const refreshCloud = useCloudStore((s) => s.refresh);
+  const clearCloudStatus = useCloudStore((s) => s.clearStatus);
+  const badgeTone = cloudBadgeTone(cloudStatus);
+
+  // 「打开项目时那次检查」：项目切换才刷一次（关闭项目 → 清空，角标不留上一本书的判断）。
+  // 不做轮询——/status 每次 2-3 次 PROPFIND，云盘免费额度只有 600 次/30 分钟。
+  const projectId = config?.id ?? null;
+  useEffect(() => {
+    if (projectId === null) {
+      clearCloudStatus();
+      return;
+    }
+    void refreshCloud();
+  }, [projectId, refreshCloud, clearCloudStatus]);
 
   /** 立即备份（无名称 = 纯时间戳文件名 `-m` 段；文案与设置页 BackupSection 对齐） */
   async function handleBackupNow() {
@@ -179,6 +202,25 @@ export function NavRail({
           onClick={() => void handleBackupNow()}
         >
           <span className="min-w-0 flex-1 truncate text-left">立即备份</span>
+        </Button>
+        {/* 同步云端（卡 6 一键状态机）：角标 = 状态提示（仅「有未推改动 / 云端有更新 / 冲突」亮） */}
+        <Button
+          color="default" variant="text"
+          block
+          icon={<CloudSyncOutlined />}
+          disabled={config === null}
+          loading={cloudBusy !== null}
+          onClick={() => void syncNow()}
+          title="同步云端（推送 / 拉取）"
+        >
+          <span className="min-w-0 flex-1 truncate text-left">同步云端</span>
+          {badgeTone !== null && (
+            <Badge
+              dot
+              color={badgeTone === "error" ? "var(--ant-color-error)" : "var(--ant-color-warning)"}
+              className="shrink-0"
+            />
+          )}
         </Button>
         <Button
           color="default" variant="text"

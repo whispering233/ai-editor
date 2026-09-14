@@ -17,6 +17,8 @@ import { usePanels } from "../hooks/use-panels";
 import { cn } from "../lib/utils";
 import { ChatPanel } from "./chat/ChatPanel";
 import { FeedbackHost } from "./feedback/FeedbackHost";
+import { CloudConflictDialog } from "./settings/cloud-conflict-dialog";
+import { CloudPullConfirm } from "./settings/cloud-pull-confirm";
 import { MainPanel } from "./main-panel/MainPanel";
 import { NavRail } from "./nav/NavRail";
 
@@ -162,6 +164,10 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
           onToggleCollapse={isDesktop ? () => toggleCollapse("chat") : undefined}
         />
       )}
+      {/* 云端两个对话框的单点宿主（卡 6）：左栏「同步云端」与设置页云端面板共用同一份状态；
+          挂在外壳层——左栏收起（NavRail 不渲染）时也能弹 */}
+      <CloudPullConfirm />
+      <CloudConflictDialog />
       <FeedbackHost />
     </div>
   );

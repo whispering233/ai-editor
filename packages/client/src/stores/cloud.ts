@@ -1,0 +1,219 @@
+// 云端（WebDAV）同步的**唯一状态源 + 一键状态机**（卡 6 上提，替代面板页内 state）
+//
+// 契约：`docs/ui/DESIGN.md` §538 `sync-cloud-button`（角标 + 一键状态机）、§548 `cloud-conflict-dialog`；
+// `docs/design/40-cloud-sync.md` §3 三态流转；`docs/api/100-api-cloud.md` 端点信封。
+//
+// 两条硬约束（卡 5 oracle 复核的债）：
+// - **不轮询**：`/status` 每次 2-3 次 PROPFIND（云盘配额 600 次/30 分钟）→ 只在「打开项目」「点击按钮」
+//   「推送/拉取/保存配置后」刷新；同一时刻的并发请求合并为一个（`inFlight`）。
+// - **`unreachable` 只轻提示**：角标不亮、不弹窗；toast 文案强调本地功能不受影响（离线可用底线）。
+//
+// 边界（有意留白）：账号表单草稿（url / 用户名 / 密码 / 设备名）**不进 store**——纯页内 UI 状态，
+// 切走面板即弃；本 store 只持「服务端状态 + 跨组件动作 + 跨页意图」。
+
+import { create } from "zustand";
+import type { CloudBackupEntry, CloudStatus } from "@whispering233/ai-editor-shared";
+import {
+  ApiError,
+  getCloudStatus,
+  getProjectBackups,
+  pullCloudBackup,
+  pushCloudBackup,
+  type BackupEntry,
+} from "../lib/api";
+import { formatBytes } from "../lib/backup";
+import { navigate } from "../hooks/use-route";
+import { useProjectStore } from "./project";
+import { useChatStore } from "./chat";
+import { useUiStore } from "./ui";
+
+/** 设置页「备份」pane 的二级项（跨页跳转意图的目标） */
+export type SettingsBackupPane = "cloud";
+
+/** 角标语义色：`conflict` = error（需人裁决）、未推改动/云端更新 = warning（有事可做、非错误）；
+ * 其余状态不显示角标（`unreachable` 明确不亮——见 DESIGN.md §538）。 */
+export function cloudBadgeTone(status: CloudStatus | null): "error" | "warning" | null {
+  if (status === null) return null;
+  if (status.state === "conflict") return "error";
+  if (status.state === "local-ahead" || status.state === "remote-ahead") return "warning";
+  return null;
+}
+
+/** 失败提示：服务端文案（400 校验 / 409 冲突 / 502 三码）已中文可读，直接透传；网络层给固定文案。
+ * 导出：`lib/api.ts` 是唯一 API 入口，错误文案口径（含 `CLIENT_NETWORK_ERROR`）必须与面板一致 */
+export function cloudErrorText(err: unknown, fallback: string): string {
+  return err instanceof ApiError && err.code !== "CLIENT_NETWORK_ERROR" ? err.message : fallback;
+}
+
+interface CloudState {
+  /** 服务端状态快照；null = 尚未检查（未打开项目 / 检查前） */
+  status: CloudStatus | null;
+  /** 状态读取失败（网络层）：面板据此提示「重试」，角标不亮 */
+  statusFailed: boolean;
+  /** 本机最新一份备份（推送缺省目标 / 裁决框「本机那份」的展示；无项目或无备份 → null） */
+  localLatest: BackupEntry | null;
+  /** 在途动作（防连点；左栏按钮 `loading` 与面板按钮 `disabled` 都看它） */
+  busy: "refresh" | "push" | "pull" | null;
+  /** 最近一次动作失败文案（面板行内展示；toast 之外留一份可回看） */
+  lastError: string | null;
+  /** 裁决对话框开关（左栏与面板共用同一个宿主） */
+  conflictOpen: boolean;
+  /** 待确认的拉取目标（非 null → 渲染 `cloud-pull-confirm`） */
+  pullTarget: CloudBackupEntry | null;
+  /** 跨页意图：非 null → 设置页「备份」pane 选中该项（消费后置回 null） */
+  pendingSettingsPane: SettingsBackupPane | null;
+
+  /** 刷新状态（并发合并；返回最新快照，网络层失败 → null）。不轮询，只在事件点调用。 */
+  refresh: () => Promise<CloudStatus | null>;
+  /** 清空状态（关闭项目 / 回到书架：角标随之熄灭，不残留上一本书的判断） */
+  clearStatus: () => void;
+  /** 左栏「同步云端」一键状态机（先实时复查，再按 state 分派） */
+  syncNow: () => Promise<void>;
+  /** 推送云端（`force` = 用本机覆盖云端；成功后失败态清空，冲突则弹裁决框） */
+  push: (options?: { force?: boolean }) => Promise<void>;
+  /** 拉取（省略 entry = 云端最新一份）；成功后刷新项目数据（config / outline / 会话） */
+  pull: (entry?: CloudBackupEntry) => Promise<void>;
+  openPullConfirm: (entry: CloudBackupEntry) => void;
+  closePullConfirm: () => void;
+  openConflict: () => void;
+  closeConflict: () => void;
+  /** 请求「跳到设置页 → 备份 → 云端备份」（未配置时的引导） */
+  requestCloudPane: () => void;
+  consumePendingPane: () => void;
+}
+
+/** 在途的 `/status` 请求（合并并发；finally 清空——成功后不留缓存，保证「点击即实时复查」） */
+let inFlight: Promise<CloudStatus | null> | null = null;
+
+export const useCloudStore = create<CloudState>((set, get) => ({
+  status: null,
+  statusFailed: false,
+  localLatest: null,
+  busy: null,
+  lastError: null,
+  conflictOpen: false,
+  pullTarget: null,
+  pendingSettingsPane: null,
+
+  refresh: async () => {
+    if (inFlight !== null) return inFlight;
+    set({ busy: get().busy ?? "refresh" });
+    inFlight = (async () => {
+      try {
+        const [next, backups] = await Promise.all([
+          getCloudStatus(),
+          // 本机份列表是本地读写（不碰云盘），与状态一起刷，两个消费者看到同一份快照
+          getProjectBackups().catch(() => null),
+        ]);
+        set({ status: next, statusFailed: false, localLatest: backups?.backups[0] ?? null });
+        return next;
+      } catch {
+        set({ statusFailed: true, status: null, localLatest: null });
+        return null;
+      } finally {
+        set({ busy: null });
+      }
+    })();
+    try {
+      return await inFlight;
+    } finally {
+      inFlight = null;
+    }
+  },
+
+  clearStatus: () => set({ status: null, statusFailed: false, localLatest: null, lastError: null }),
+
+  syncNow: async () => {
+    if (get().busy !== null) return;
+    const next = await get().refresh(); // 每次点击实时复查（DESIGN.md §538：不做轮询）
+    if (next === null) {
+      useUiStore.getState().showToast("云端状态读取失败，本地功能不受影响", "error");
+      return;
+    }
+    const toast = (text: string, kind?: "success" | "error") => useUiStore.getState().showToast(text, kind);
+    switch (next.state) {
+      case "no-project":
+        return; // 无项目时按钮本就禁用（这里兜底：不动作、不报错）
+      case "unconfigured":
+        // 引导：跳设置页并选中「备份 → 云端备份」（意图经 store 下传，选中态仍不进 URL）
+        get().requestCloudPane();
+        navigate("/preferences");
+        return;
+      case "unreachable":
+        toast(`云端不可达${next.errorCode !== undefined ? `（${next.errorCode}）` : ""}，本地功能不受影响`, "error");
+        return;
+      case "synced":
+        toast("已是最新（云端与本机一致）");
+        return;
+      case "local-ahead":
+        await get().push();
+        return;
+      case "remote-ahead": {
+        const head = next.remote?.backups[0];
+        if (head !== undefined) get().openPullConfirm(head);
+        return;
+      }
+      case "conflict":
+        get().openConflict();
+        return;
+    }
+  },
+
+  push: async (options = {}) => {
+    if (get().busy !== null) return;
+    set({ busy: "push", lastError: null });
+    try {
+      const res = await pushCloudBackup(options.force === true ? { force: true } : {});
+      await get().refresh();
+      const prunedNote = res.pruned.length > 0 ? `，已清理云端 ${res.pruned.length} 份旧备份` : "";
+      const snapshotNote =
+        res.snapshot !== undefined ? `；云端原版本已存为本地备份 ${res.snapshot.fileName}` : "";
+      useUiStore.getState().showToast(`已推送到云端（${formatBytes(res.pushed.size)}）${prunedNote}${snapshotNote}`);
+      set({ conflictOpen: false });
+    } catch (err) {
+      const message = cloudErrorText(err, "无法连接服务，推送未执行");
+      set({ lastError: message });
+      // 冲突（409）直接开裁决框：行内入口已由 `cloud-conflict-dialog` 取代（DESIGN.md §544）
+      if (err instanceof ApiError && err.code === "CLOUD_CONFLICT") set({ conflictOpen: true });
+      useUiStore.getState().showToast(message, "error");
+    } finally {
+      set({ busy: null });
+    }
+  },
+
+  pull: async (entry) => {
+    if (get().busy !== null) return;
+    set({ busy: "pull", pullTarget: null, lastError: null });
+    try {
+      const res = await pullCloudBackup(entry !== undefined ? { fileName: entry.fileName } : {});
+      // 项目数据与 restore 同款刷新（服务端已重连 data.db）
+      await Promise.all([useProjectStore.getState().loadConfig(), useProjectStore.getState().loadOutline()]);
+      useChatStore.getState().clearSessions();
+      void useChatStore.getState().loadSessions();
+      useUiStore.getState().notifyDataChanged();
+      await get().refresh();
+      const { kept, written, removed } = res.merged;
+      const mergeNote =
+        kept > 0 || removed > 0
+          ? `（本机独有保留 ${kept} 个、云端新增 ${written} 个、按云端删除 ${removed} 个文件）`
+          : "";
+      useUiStore
+        .getState()
+        .showToast(`已从云端拉取，覆盖前状态已自动快照（${res.snapshot.fileName}）${mergeNote}`);
+      set({ conflictOpen: false });
+    } catch (err) {
+      const message = cloudErrorText(err, "无法连接服务，拉取未执行");
+      set({ lastError: message });
+      useUiStore.getState().showToast(message, "error");
+    } finally {
+      set({ busy: null });
+    }
+  },
+
+  openPullConfirm: (entry) => set({ pullTarget: entry }),
+  closePullConfirm: () => set({ pullTarget: null }),
+  openConflict: () => set({ conflictOpen: true }),
+  closeConflict: () => set({ conflictOpen: false }),
+  requestCloudPane: () => set({ pendingSettingsPane: "cloud" }),
+  consumePendingPane: () => set({ pendingSettingsPane: null }),
+}));

@@ -7,7 +7,7 @@
 
 ## [Unreleased]
 
-> **云端存档批次**（2026-09）：卡 1 备份命名升级（设备段 + 尾部三段统计、类型段中文化、目录 mtime 变更判定）；卡 2 云端基础层（`cloud.json` 配置载体 + WebDAV 最小客户端 + 配置/状态/测试三端点）。设计和契约见 `docs/design/40-cloud-sync.md` 与 `docs/api/100-api-cloud.md`；推送/拉取随后续卡片。
+> **云端存档批次**（2026-09）：卡 1 备份命名升级（设备段 + 尾部三段统计、类型段中文化、目录 mtime 变更判定）；卡 2 云端基础层（`cloud.json` 配置载体 + WebDAV 最小客户端 + 配置/状态/测试三端点）；卡 3 设置页云端面板；卡 4 推送；卡 5 拉取与三态；卡 6 一键同步与冲突裁决。设计和契约见 `docs/design/40-cloud-sync.md` 与 `docs/api/100-api-cloud.md`；自动推送（卡 7）随后。
 
 ### Added
 
@@ -15,9 +15,9 @@
 - **备份列表新增一行元信息**：设置页备份行与「加载备份」确认框显示 `设备 · 人物32 · 设定58 · 章120`（旧格式备份无这两项 → 整行省略，不用占位符）。
 - shared：`MAX_DEVICE_NAME_LENGTH`、`BackupStats`、`sanitizeDeviceName`、`deviceNameFromHostname`（纯函数）；db：`getBackupStats`（实体计数走单条 COUNT、未软删口径）。
 - **云端存档账号配置与连通性测试（卡 2）**：`GET /api/v1/cloud/status`（配置段）/ `PUT /api/v1/cloud/config` / `POST /api/v1/cloud/test`（`PROPFIND` 根 → 缺则 `MKCOL` → 写临时文件再删，验证**读 + 写**权限）。配置载体 = `<创作根>/.ai-editor/cloud.json`（**明文 + 权限 0600**，含在既有更宽权限文件上重写；合并写、未知键与 `books` 段原样保留）；**任何响应都不回传 password**（不是脱敏，而是根本不回传）；URL 内嵌用户名/密码（userinfo）直接 400 拒绝（不静默剥离）；**凭据三件套要么齐、要么全无**——清空 url + username 时 password 一并丢弃（避免磁盘留下已失效的密码）。设置页 UI 在卡 3。
-- **WebDAV 最小客户端**（`PROPFIND`/`MKCOL`/`PUT`/`DELETE` + 窄 XML 解析 + Basic 认证 + 30s 超时；出站走全局 dispatcher，不引 SDK/XML 依赖；列表结果剥掉 base 路径前缀 → `path` 恒为 base 相对，且自身条目（含根）一律剔除）与四个云错误码：`CLOUD_NOT_CONFIGURED` 409、`CLOUD_AUTH_FAILED` 502、`CLOUD_UNREACHABLE` 502、`CLOUD_QUOTA_EXCEEDED` 502（`CLOUD_CONFLICT`/`CLOUD_FILE_NOT_FOUND`/`CLOUD_BACKUP_TOO_LARGE` 随推送/拉取卡片引入）。
+- **WebDAV 最小客户端**（`PROPFIND`/`MKCOL`/`PUT`/`DELETE` + 窄 XML 解析 + Basic 认证 + 30s 超时；出站走全局 dispatcher，不引 SDK/XML 依赖；列表结果剥掉 base 路径前缀 → `path` 恒为 base 相对，且自身条目（含根）一律剔除）与四个云错误码：`CLOUD_NOT_CONFIGURED` 409、`CLOUD_AUTH_FAILED` 502、`CLOUD_UNREACHABLE` 502、`CLOUD_QUOTA_EXCEEDED` 502（`CLOUD_CONFLICT`/`CLOUD_FILE_NOT_FOUND`/`CLOUD_BACKUP_TOO_LARGE` 已随后续卡片落地，见卡 4/卡 5 条目）。
 - **设置页「备份」改为三级导航 + 新增「云端备份」面板（卡 3）**：左 160px 固定两项（自动备份 / 云端备份，与「AI 模型」同款 `sub-nav` 契约）；自动备份面板内容原样搬入；云端备份面板 = 账号配置（WebDAV 地址 / 用户名 / 应用密码（掩码，留空 = 不修改）/ 设备名（预填当前生效值）四个输入 + 测试连接 + 保存）+ 自动推送开关（选择即保存）+ 明文 0600 与「免费云盘上传流量 1GB/月」提示。表单→请求语义收敛在 `lib/cloud-config.ts` 纯函数（密码留空不提交、**凭据不全不提交密码**、地址与用户名半填时行内提示）。
-- **`/cloud/test` 不可达提示带上底层错误码**：undici 顶层错误常是笼统的 `fetch failed`，现附 `cause.code`（`ECONNREFUSED`/`ENOTFOUND`/`ETIMEDOUT`…），「测试连接」失败时能看出是端口、域名还是超时。
+- **`/cloud/test` 不可达提示带上底层错误码**：undici 顶层错误常是笼统的 `fetch failed`，现附 `cause.code`（`ECONNREFUSED`/`ENOTFOUND`/`ETIMEDOUT`…），「测试连接」失败时能看出是端口、域名还是超时。**已知边界**（卡 5 oracle 复核）：底层抛 `AggregateError`（多地址轮询全部失败）时 `cause.code` 为 undefined，文案退回 `fetch failed`——待补（`backlog.md`）。
 - **云端推送（卡 4）**：`POST /api/v1/cloud/push`（推送一份本地备份到云盘；`GET /cloud/status` 增 `remote` 段 = 云端书目录 + 备份列表）。要点：
   **上传 = 本地备份文件逐字节拷贝**；`PUT` 到 `.tmp-<名>` 再 `MOVE` 成正式名（正式名下永远是完整包，中断只留 `.tmp-` 垃圾，推送前清理）；
   **冲突判定 = 云端 head ≠ 本机 `lastPushedFileName`** → 409 `CLOUD_CONFLICT`（`force` 时先把云端那份下载存进本地 `.backups/` 再覆盖，两边都留档）；
@@ -32,6 +32,13 @@
 - **卡 3 收尾修补**：云端配置表单「纯空白密码」= 留空（不提交，避免存下空白密码导致 configured 却永远认证 401；非空密码提交原值、不 trim）；切「自动推送」开关不再清掉未保存的表单草稿；半填凭据的行内提示补「当前不会提交密码」；`DESIGN.md` 同步（设备名预填生效值 + 代价登记、两面板各自 caption、同步状态段标卡 4/5）、`tasks.md` 卡 3 交付物改述（页内 state，store 上提留卡 6）。
 - **设备名可配置**：`cloud.json` 的 `webdav.device` 优先生效（非法值不生效、回缺省），备份文件名的设备段随设置页改写而变化（之前固定为 hostname 派生）。
 
+- **一键「同步云端」与冲突裁决（卡 6）**：左栏底部新增第二项「同步云端」（四入口固定顺序：立即备份 / 同步云端 / 设置 / 主题）+ 状态角标；**状态与动作上提到 `stores/cloud.ts`**（左栏按钮与设置页云端面板共享同一份 `status`——否则会出现「角标说冲突、面板说已同步」）。要点：
+  **一键状态机**（点一次 = 先实时复查状态再分派）：未配置 → 跳设置页并选中「备份 → 云端备份」（跨页意图经 store 下传，二级 tab 选中态仍不进 URL）；未打开项目 → 禁用；已同步 → toast「已是最新」；有未推改动 → 直接推送；云端更新 → 弹拉取确认；冲突 → 弹裁决框；不可达 → 只 toast（含 `errorCode`，强调本地功能不受影响）。
+  **角标两色**：`冲突` = error、`有未推改动`/`云端有更新` = warning（「有事可做」而非「出错」），`unreachable` 与其余状态**不亮**；`/status` 只在「打开项目 / 点击按钮 / 动作之后」跑，**无定时器**（每次 2–3 次 PROPFIND，免费云盘额度 600 次/30 分钟）。
+  **`cloud-conflict-dialog`**：并排对比云端那份与本机最新份（时间/类型/标签/设备/统计/大小）+ 两个等权选项（`保留云端（拉取覆盖本机）` / `用本机覆盖云端`）——两条路都会把另一边留档成一份本地备份（文件名就地回显）；本机无备份时强推禁用，强推后若云端仍有更晚的他机份可**再次强推**。
+  **`cloud-pull-confirm` 与裁决框都是单点宿主**（挂 `AppShell`）：面板行内「拉取」与左栏按钮共用同一个对话框实例，左栏收起时也弹得出来；面板的推送冲突分支不再有行内「用本机覆盖云端」入口。
+  表单草稿（url/用户名/密码/设备名）仍留面板页内，不进 store。
+
 ### Changed
 
 - **类型段由单字母 `m`/`a` 改为 `自动`/`手动`**（`20260813-101530123-m-定稿.zip` → `20260813-101530123-手动-苹果本-定稿-人物32-设定58-章120.zip`）；旧文件名继续可列出/恢复/参与保留策略（不迁移、不改名），重命名旧备份时保持其旧形态。
@@ -40,7 +47,7 @@
 
 ### Docs
 
-- `docs/api/20-api-backup.md`（命名格式 + 「设备与统计」口径 + 变更检测 + 与云端的关系 + 重命名旧格式的形态规则）、`docs/db/schema.md`（`.backups/` 命名）、`docs/design/10-data-model.md` §11、`docs/ui/DESIGN.md`（§备份与云端存档）。
+- `docs/design/40-cloud-sync.md`（§3 新增「客户端接入」小节：单一状态源、查状态触发点、角标语义、一键状态机分派表）、`docs/ui/DESIGN.md`（§538 角标两色口径与跨页意图、§544/§548 对话框单点宿主与本机无备份的禁用口径）、`docs/api/20-api-backup.md`（命名格式 + 「设备与统计」口径 + 变更检测 + 与云端的关系 + 重命名旧格式的形态规则）、`docs/db/schema.md`（`.backups/` 命名）、`docs/design/10-data-model.md` §11、`docs/ui/DESIGN.md`（§备份与云端存档）。
 
 ## [v0.0.37] - 2026-09-14
 
