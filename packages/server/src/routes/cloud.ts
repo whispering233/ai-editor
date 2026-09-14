@@ -41,6 +41,15 @@ function normalizeWebdavUrl(raw: string): string {
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new HttpError(400, "VALIDATION_ERROR", `WebDAV 地址只接受 http/https：${raw}`);
   }
+ // 拒绝 URL 内嵌凭据（oracle 卡 2 验证 F1）：undici 拒绍带 credentials 的 URL（保存后永远不通），
+ // 且该串会被原样回显进响应（凭据泄露）。**不静默剥离**——静默会让用户以为填对了。
+  if (parsed.username !== "" || parsed.password !== "") {
+    throw new HttpError(
+      400,
+      "VALIDATION_ERROR",
+      "WebDAV 地址不得内嵌用户名/密码（如 https://user:pw@host/dav）——请分别填到用户名与应用密码字段",
+    );
+  }
   return parsed.toString().replace(/\/+$/, "");
 }
 

@@ -37,7 +37,11 @@ export interface DavEntry {
   href: string;
   /** 末段名称（已解码，如 `20260813-101530123-自动-苹果本-人物32-设定58-章120.zip`） */
   name: string;
-  /** 解码后的相对路径（如 `books/斗破苍穹-proj-x/file.zip`） */
+  /**
+ * 解码后的**基路径相对**路径（如 `书-proj-x/file.zip`）：base 带路径前缀时
+ *（如 `https://host/dav/ai-editor`）服务端 href 多出的 `dav/ai-editor` 段会被剥掉
+ *（由 `list()` 归一，`parsePropfind` 保留服务端原样）
+ */
   path: string;
   isCollection: boolean;
   /** 字节数（集合或未提供 → null） */
@@ -139,10 +143,13 @@ export function parsePropfind(xml: string): DavEntry[] {
   return out.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 }
 
-/** 列出目录时的自身条目判定（href 是绝对路径、relPath 是相对路径 → 用后缀匹配） */
+/**
+ * 列出目录时的自身条目判定：传入的 `path` 已剥掉 base 段（见客户端的 toBaseRelativeSegments）
+ * → 退化为与 relPath 直接比较；保留 `endsWith` 兜底（服务器返回与请求不一致的前缀时）。
+ */
 function isSelf(entryPath: string, relPath: string): boolean {
   const rel = normalizeRel(relPath).join("/");
-  if (rel === "") return entryPath === ""; // 根：href 形如 `/` → 解码后无段
+  if (rel === "") return entryPath === ""; // 根：href 解码后无段（`/` 或 base 段被剥光）
   return entryPath === rel || entryPath.endsWith(`/${rel}`);
 }
 
@@ -151,6 +158,23 @@ export function createWebdavClient(options: WebdavClientOptions): WebdavClient {
   const base = options.url.replace(/\/+$/, "");
   const timeoutMs = options.timeoutMs ?? DEFAULT_WEBDAV_TIMEOUT_MS;
   const authHeader = `Basic ${Buffer.from(`${options.username}:${options.password}`, "utf8").toString("base64")}`;
+
+ // base 的路径段（解码后）：带路径前缀的 base（`.../dav/ai-editor`）下，服务端 href 会多出这些段，
+ // 列表结果统一剥掉它们 → `path` 始终是「相对 base」的（与 JSDoc 一致，自身条目判定也简化）
+  const baseSegments: string[] = (() => {
+    try {
+      return normalizeRel(new URL(base).pathname).map(decodeSegment);
+    } catch {
+      return [];
+    }
+  })();
+
+  /** href 解码段 → base 相对段（前缀匹配则剥离；不匹配则原样保留，容错反代重写 href） */
+  function toBaseRelativeSegments(segments: string[]): string[] {
+    if (baseSegments.length === 0) return segments;
+    const head = segments.slice(0, baseSegments.length).join("/");
+    return head === baseSegments.join("/") ? segments.slice(baseSegments.length) : segments;
+  }
 
   /**
  * 相对路径 → 绝对 URL（逐段编码）。
@@ -218,7 +242,12 @@ export function createWebdavClient(options: WebdavClientOptions): WebdavClient {
       if (res.status === 404) return null; // 目录不存在（是否创建由调用方决定）
       if (res.status !== 207 && !res.ok) await throwMapped(res, `列目录 ${relPath === "" ? "/" : relPath}`);
       const xml = await res.text();
-      return parsePropfind(xml).filter((entry) => !isSelf(entry.path, relPath));
+      return parsePropfind(xml)
+        .map((entry) => ({
+          ...entry,
+          path: toBaseRelativeSegments(entry.path === "" ? [] : entry.path.split("/")).join("/"),
+        }))
+        .filter((entry) => !isSelf(entry.path, relPath));
     },
 
     async mkcol(relPath) {

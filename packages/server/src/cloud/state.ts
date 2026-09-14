@@ -107,6 +107,7 @@ export interface CloudConfigPatch {
 /**
  * 合并写配置（原子写 + 0600）：
  * - webdav 三项齐空 → 删除 `webdav` 段；但**设备名非空时保留**（设备不是凭据，仍作用于备份文件名）
+ * - **凭据三件套要么齐、要么全无**：url 与 username 皆空 ⇒ password 一并丢弃（不留在磁盘上发霉）
  * - `autoPush` 与 `books` 段在每次写入后保持显式存在/原样保留
  *
  * @throws HttpError 500 创作根未初始化（装配错误）；I/O 错误向上抛（路由 → 500）
@@ -128,16 +129,20 @@ export function writeCloudConfig(patch: CloudConfigPatch): void {
   const url = pick(patch.url, currentWebdav.url);
   const username = pick(patch.username, currentWebdav.username);
   const password = pick(patch.password, currentWebdav.password);
+ // **凭据三件套要么齐、要么全无**（oracle 卡 2 验证 F3）：url 与 username 皆空时一并丢弃 password——
+ // 否则磁盘会留下一个已失效的密码（password 空串的语义是「不修改」，端点无法单独清除它），
+ // 也会让文档「三项一起清空即清除凭据」变得不可达。
+  const effectivePassword = url === "" && username === "" ? "" : password;
   const device = patch.device === undefined ? currentWebdav.device : (patch.device ?? undefined);
   const hasDevice = typeof device === "string" && device !== "";
 
   const next: Record<string, unknown> = { ...current };
-  if (url === "" && username === "" && password === "") {
+  if (url === "" && username === "" && effectivePassword === "") {
  // 未配置态：删掉凭据段（保留设备名——它仍参与备份文件名）
     if (hasDevice) next.webdav = { url: "", username: "", password: "", device };
     else delete next.webdav;
   } else {
-    next.webdav = { url, username, password, ...(hasDevice ? { device } : {}) };
+    next.webdav = { url, username, password: effectivePassword, ...(hasDevice ? { device } : {}) };
   }
   next.autoPush = patch.autoPush ?? current.autoPush === true;
 

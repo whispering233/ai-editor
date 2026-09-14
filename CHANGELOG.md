@@ -14,8 +14,8 @@
 - **备份文件名新增「来源设备」与「规模统计」两段**：`<YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip`（例：`20260813-101530123-手动-苹果本-定稿-人物32-设定58-章120.zip`）。设备段 = 来源机器（缺省 = 简化 hostname：去域名后缀、`-` 与非法字符转 `_`、**剥首尾空白与 `_`**、截 16 字符；规则禁 `-`，故设备段与标签段的边界无歧义；派生结果恒通过 `sanitizeDeviceName`）；统计三项 = 生成该备份时点的**未软删**存量（人物 / 设定 / `outline.json` 未软删 `chapter`，不含回收站），由服务端在打包前统计并写入文件名——**重命名旧备份不会重算统计**（统计必须描述该备份的内容）。
 - **备份列表新增一行元信息**：设置页备份行与「加载备份」确认框显示 `设备 · 人物32 · 设定58 · 章120`（旧格式备份无这两项 → 整行省略，不用占位符）。
 - shared：`MAX_DEVICE_NAME_LENGTH`、`BackupStats`、`sanitizeDeviceName`、`deviceNameFromHostname`（纯函数）；db：`getBackupStats`（实体计数走单条 COUNT、未软删口径）。
-- **云端存档账号配置与连通性测试（卡 2）**：`GET /api/v1/cloud/status`（配置段）/ `PUT /api/v1/cloud/config` / `POST /api/v1/cloud/test`（`PROPFIND` 根 → 缺则 `MKCOL` → 写临时文件再删，验证**读 + 写**权限）。配置载体 = `<创作根>/.ai-editor/cloud.json`（**明文 + 权限 0600**，合并写、未知键与 `books` 段原样保留）；**任何响应都不回传 password**（不是脱敏，而是根本不回传）。设置页 UI 在卡 3。
-- **WebDAV 最小客户端**（`PROPFIND`/`MKCOL`/`PUT`/`DELETE` + 窄 XML 解析 + Basic 认证 + 30s 超时；出站走全局 dispatcher，不引 SDK/XML 依赖）与四个云错误码：`CLOUD_NOT_CONFIGURED` 409、`CLOUD_AUTH_FAILED` 502、`CLOUD_UNREACHABLE` 502、`CLOUD_QUOTA_EXCEEDED` 502（`CLOUD_CONFLICT`/`CLOUD_FILE_NOT_FOUND`/`CLOUD_BACKUP_TOO_LARGE` 随推送/拉取卡片引入）。
+- **云端存档账号配置与连通性测试（卡 2）**：`GET /api/v1/cloud/status`（配置段）/ `PUT /api/v1/cloud/config` / `POST /api/v1/cloud/test`（`PROPFIND` 根 → 缺则 `MKCOL` → 写临时文件再删，验证**读 + 写**权限）。配置载体 = `<创作根>/.ai-editor/cloud.json`（**明文 + 权限 0600**，含在既有更宽权限文件上重写；合并写、未知键与 `books` 段原样保留）；**任何响应都不回传 password**（不是脱敏，而是根本不回传）；URL 内嵌用户名/密码（userinfo）直接 400 拒绝（不静默剥离）；**凭据三件套要么齐、要么全无**——清空 url + username 时 password 一并丢弃（避免磁盘留下已失效的密码）。设置页 UI 在卡 3。
+- **WebDAV 最小客户端**（`PROPFIND`/`MKCOL`/`PUT`/`DELETE` + 窄 XML 解析 + Basic 认证 + 30s 超时；出站走全局 dispatcher，不引 SDK/XML 依赖；列表结果剥掉 base 路径前缀 → `path` 恒为 base 相对，且自身条目（含根）一律剔除）与四个云错误码：`CLOUD_NOT_CONFIGURED` 409、`CLOUD_AUTH_FAILED` 502、`CLOUD_UNREACHABLE` 502、`CLOUD_QUOTA_EXCEEDED` 502（`CLOUD_CONFLICT`/`CLOUD_FILE_NOT_FOUND`/`CLOUD_BACKUP_TOO_LARGE` 随推送/拉取卡片引入）。
 - **设备名可配置**：`cloud.json` 的 `webdav.device` 优先生效（非法值不生效、回缺省），备份文件名的设备段随设置页改写而变化（之前固定为 hostname 派生）。
 
 ### Changed

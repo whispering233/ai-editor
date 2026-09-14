@@ -87,11 +87,25 @@ describe("PUT /api/v1/cloud/config", () => {
     expect(readWebdavConfig()).toEqual({ url: "https://dav.example.com/dav", username: "u", password: PASSWORD });
   });
 
-  it("url 归一化：去尾斜杠；**空串清空**，三项齐空 → 回到未配置", async () => {
-    await putConfig({ url: "https://dav.example.com/dav/ai-editor///", username: "u", password: "pw" });
+  it("url 归一化：去尾斜杠；**三项齐空 → 回到未配置且密码一并丢弃**（oracle 卡 2 F3）", async () => {
+    await putConfig({ url: "https://dav.example.com/dav/ai-editor///", username: "u", password: "SECRET-PW" });
     expect(readWebdavConfig()?.url).toBe("https://dav.example.com/dav/ai-editor");
-    await putConfig({ url: "", username: "", password: "" });
+ // UI 表单里的「清除凭据」：清空 url+username，密码框留空（不传 / 空串）
+    await putConfig({ url: "", username: "" });
     expect(readWebdavConfig()).toBeNull();
+    expect(JSON.stringify(readCloudFile())).not.toContain("SECRET-PW"); // 死密码不留在磁盘上
+    await putConfig({ url: "", username: "" });
+    expect((await (await app.request("/api/v1/cloud/status", { headers: HOST_HEADERS })).json()).data.configured).toBe(false);
+  });
+
+  it("url 内嵌用户名/密码（userinfo）→ 400，且不静默剥离、不落盘（oracle 卡 2 F1）", async () => {
+    const res = await putConfig({ url: "https://user:URL-SECRET@dav.example.com/dav", username: "u", password: "pw" });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.code).toBe("VALIDATION_ERROR");
+    expect(body.error.message).toContain("不得内嵌用户名/密码");
+    expect(body.error.message).not.toContain("URL-SECRET"); // 错误文案也不回显输入里的凭据
+    expect(readCloudFile()).toBeNull(); // 未落盘（没把坏配置存下来）
   });
 
   it("password 缺省或空串 = 不修改（设置页表单留空即保留原值）", async () => {

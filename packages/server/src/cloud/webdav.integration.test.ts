@@ -199,6 +199,20 @@ describe("WebDAV 客户端 × 真 HTTP 服务", () => {
     expect(entries?.[1]?.lastModified).toMatch(/GMT$/);
   });
 
+  it("带路径前缀的 base（真 HTTP）：根条目剔除且 path 为 base 相对（oracle 卡 2 F2）", async () => {
+    dav = await startFakeDav(root);
+    mkdirSync(join(root, "dav", "ai-editor", "书-proj-x"), { recursive: true });
+    writeFileSync(join(root, "dav", "ai-editor", "x.zip"), "PK");
+    const client = createWebdavClient({
+      url: `${dav.url}/ai-editor`,
+      username: USER,
+      password: PASSWORD,
+      timeoutMs: 5000,
+    });
+    expect((await client.list(""))?.map((e) => e.path)).toEqual(["x.zip", "书-proj-x"]);
+    expect(await client.list("书-proj-x")).toEqual([]);
+  });
+
   it("mkcol（幂等）/ put / remove 真往返；根目录不存在时 404 → 创建", async () => {
     dav = await startFakeDav(root);
     const client = createWebdavClient({ url: dav.url, username: USER, password: PASSWORD, timeoutMs: 5000 });

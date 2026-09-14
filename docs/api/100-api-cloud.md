@@ -10,7 +10,11 @@
 
 ### GET /api/v1/cloud/status
 
-云端与本机的同步状态（设置页面板与左栏「同步云端」按钮的唯一数据源）。**会发起一次云端 `PROPFIND`**（列该书目录）——失败不影响本端点成功返回（状态落在 `state` / `errorCode`）。
+云端与本机的同步状态（设置页面板与左栏「同步云端」按钮的唯一数据源）。
+
+> **卡 2 范围**：本端点当前只返回**配置段**（下方 `configured` / `url` / `username` / `device` / `autoPush` / `projectId`）；
+> 字段 `remote` / `local` / `state` / `errorCode` 与「打开项目时那次 `PROPFIND` 检查」在**卡 4/5**（推送/拉取）落地——
+> 在此之前本端点**不发起任何网络请求**，客户端不要按完整契约建状态机（`shared` 的 `CloudStatus` 类型也按此收窄）。
 
 ```typescript
 // Res: 200
@@ -65,10 +69,13 @@
 // Req（字段全部可选；缺省 = 不修改）
 {
   url?: string;       // 完整 WebDAV 根 URL（含用户自定义前缀），如 https://dav.jianguoyun.com/dav/ai-editor
-                      // 空串 = 清空该项（三项齐空 = 回到「未配置」）
+                      // 空串 = 清空该项（与 username 皆空 = 回到「未配置」）
+                      // **不得内嵌用户名/密码**（userinfo，如 https://u:pw@host/dav）→ 400 VALIDATION_ERROR：
+                      // 该形态在本机 fetch 层不可用，且会把凭据回显进响应（不静默剥离）
   username?: string;  // 空串 = 清空
-  password?: string;  // **缺省或空串 = 不修改**（从不回传 → 表单留空即保留原值）；
-                      // 要清除凭据就把 url/username/password 三项一起清空
+  password?: string;  // **缺省或空串 = 不修改**（从不回传 → 表单留空即保留原值）
+                      // 例外（凭据三件套要么齐、要么全无）：url 与 username **皆清空**时，password
+                      // 一并丢弃——「清除凭据」只需清空 url + username（密码框留空即可）
   device?: string;    // 设备名；规则：trim 后 1-16 字符，禁 `-`（文件名分隔符）与路径分隔符/保留字符
                       // （\ / : * ? " < > |）/控制字符/纯点 → 否则 400 VALIDATION_ERROR；空串 = 回缺省 hostname
   autoPush?: boolean; // 自动推送开关
@@ -159,5 +166,5 @@
 
 - **不改动本地 restore**（`POST /project/backup/restore` 保持整体覆盖语义）；云端书架（列云端全部书一键拉）与增量上传见 `../design/backlog.md`。
 - **不做服务端定时重试**：手动动作失败由用户重试；自动推送失败等下一个 tick；关闭项目时推送失败只记日志 + 状态区标记。
-- **不做密码回传 / 密码脱敏展示**：任何响应都不含 password 字段（前端表单留空 = 保留原值）。
+- **不做密码回传 / 密码脱敏展示**：任何响应都不含 password 字段（前端表单留空 = 保留原值）；URL 里的内嵌凭据同样被拒绝，而不是剥离后回显「干净的 URL」。
 - **不校验书名与云端目录名一致**：云端定位按 `projectId` 匹配；书名变化走 `POST /project/rename` 时的目录 `MOVE`。

@@ -138,6 +138,19 @@ describe("云端配置写入（合并写 + 0600）", () => {
     expect(configuredDeviceName()).toBe("苹果本"); // 但设备名还在
   });
 
+  it("凭据三件套要么齐、要么全无：url 与 username 皆空 ⇒ password 一并丢弃（oracle 卡 2 F3）", () => {
+    writeCloudConfig({ url: "https://dav.example.com/dav", username: "u", password: "SECRET-PW" });
+ // UI「清除凭据」流程：清空 url + username，密码框留空（patch 不传 password）
+    writeCloudConfig({ url: "", username: "" });
+    expect(JSON.stringify(readCloudFile())).not.toContain("SECRET-PW");
+    expect(readWebdavConfig()).toBeNull();
+ // 仅清 url（username 仍在）→ 未配置，但密码保留（尚未真正「清空凭据」）
+    writeCloudConfig({ url: "https://dav.example.com/dav", username: "u", password: "SECRET-PW" });
+    writeCloudConfig({ url: "" });
+    expect(readWebdavConfig()).toBeNull();
+    expect(JSON.stringify(readCloudFile())).toContain("SECRET-PW");
+  });
+
   it("autoPush 显式 false 落盘（读侧 true/false 往返）", () => {
     writeCloudConfig({ autoPush: true });
     expect(readAutoPush()).toBe(true);

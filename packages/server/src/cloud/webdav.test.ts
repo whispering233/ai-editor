@@ -136,6 +136,24 @@ describe("list（Depth: 1，剔除目录自身）", () => {
     expect(entries?.[0]).toMatchObject({ name: "书-proj-x", isCollection: true });
   });
 
+  it("带路径前缀的 base：自身条目被剔除，且 path 为 **base 相对**（oracle 卡 2 F2）", async () => {
+    const rootXml = `<d:multistatus xmlns:d="DAV:"><d:response><d:href>/dav/ai-editor/</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop></d:propstat></d:response><d:response><d:href>/dav/ai-editor/%E4%B9%A6-proj-x/</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop></d:propstat></d:response><d:response><d:href>/dav/ai-editor/x.zip</d:href><d:propstat><d:prop><d:resourcetype/><d:getcontentlength>3</d:getcontentlength></d:prop></d:propstat></d:response></d:multistatus>`;
+    stubFetch(() => new Response(rootXml, { status: 207 }));
+    const entries = await makeClient().list("");
+    // 无 `dav/ai-editor/` 前缀，也无幽灵根条目（代码单元序：x < 书）
+    expect(entries?.map((e) => e.path)).toEqual(["x.zip", "书-proj-x"]);
+
+    const subXml = `<d:multistatus xmlns:d="DAV:"><d:response><d:href>/dav/ai-editor/sub</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop></d:propstat></d:response><d:response><d:href>/dav/ai-editor/sub/y.zip</d:href><d:propstat><d:prop><d:resourcetype/><d:getcontentlength>1</d:getcontentlength></d:prop></d:propstat></d:response></d:multistatus>`;
+    stubFetch(() => new Response(subXml, { status: 207 }));
+    expect((await makeClient().list("sub"))?.map((e) => e.path)).toEqual(["sub/y.zip"]);
+  });
+
+  it("服务器 href 与请求前缀不一致（反代重写）：不做剥离、不误剔", async () => {
+    const xml = `<d:multistatus xmlns:d="DAV:"><d:response><d:href>/x.zip</d:href><d:propstat><d:prop><d:resourcetype/><d:getcontentlength>1</d:getcontentlength></d:prop></d:propstat></d:response></d:multistatus>`;
+    stubFetch(() => new Response(xml, { status: 207 }));
+    expect((await makeClient().list(""))?.map((e) => e.path)).toEqual(["x.zip"]);
+  });
+
   it("尾斜杠的 base url 归一（不产生双斜杠）", async () => {
     const spy = stubFetch(() => new Response(PROPFIND_XML, { status: 207 }));
     await makeClient({ url: "https://dav.example.com/dav/ai-editor///" }).list("");
