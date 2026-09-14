@@ -64,6 +64,11 @@
   - 反代把 href 重写成与请求前缀不一致的形态 → 不剥离前缀（避免误剔），代价是该形态下根自身条目回到列表（`list` 的「不含自身」保证只在 href 前缀一致时成立）。
   - href 段解码出 `/`（`%2F`）时 `path` 的段往返错位 → 不剥离、`path` 非 base 相对（极端文件名，接受）；根治需 `parsePropfind` 直接返回段数组。
 
+- **不可达文案在 AggregateError 形态下拿不到 `cause.code`**（卡 5 oracle 复核登记）
+  - 现状：`webdav.ts` 的不可达分支读 `err.cause.code`；当底层抛的是 `AggregateError`（多地址尝试失败，如 `ECONNREFUSED` 被聚合）时 `cause.code` 为 undefined → 文案退回 `fetch failed`（CHANGELOG 卡 2 条目宣称「带上底层错误码」在此时不成立）。
+  - 触发条件：用户看到「无法连接云盘（PROPFIND）：fetch failed」这类无信息量提示时。
+  - 最小修法：`cause` 为 AggregateError 时遍历 `cause.errors` 取首个带 `code` 的（或取 `cause.errors.map(e => e.code)`）。
+
 - **云根不存在时推送的报错文案误导**（卡 4 oracle 验证登记）
   - 现状：`pushBackup` 只 `MKCOL` **书目录**；若配置的 WebDAV 根路径本身不存在（从未跑过 `/cloud/test`、也没建根），`MKCOL` 会因父目录缺失返回 409 → 映射成 `CLOUD_UNREACHABLE`（「无法连接云盘」），而真实原因是「根目录不存在」。
   - 触发条件：卡 5 打开项目时的后台检查路径（同样先 `PROPFIND` 云根）。

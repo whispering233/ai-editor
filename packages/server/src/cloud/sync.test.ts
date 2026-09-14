@@ -666,7 +666,7 @@ describe("computeCloudSync：三态判定（集合基准 + 本机 mtime，不含
     expect(computeCloudSync(project, true, files([])).state).toBe("local-ahead");
   });
 
-  it("两边都有改动 → conflict；无同步记录 + 云端有份 → remote-ahead（保守）", () => {
+  it("两边都有改动 → conflict；无同步记录 + 云端有份 → conflict（保守）", () => {
     writeBookState(project.config.id, { lastSyncAt: "2026-01-01T00:00:00.000Z", lastSeenCloudFiles: ["x.zip"] });
     expect(computeCloudSync(project, true, files(["x.zip", "y.zip"])).state).toBe("conflict");
     // 无同步记录：`writeBookState` 是合并写（不能清字段）→ 用全新项目模拟「从未同步过」
@@ -689,6 +689,49 @@ describe("computeCloudSync：三态判定（集合基准 + 本机 mtime，不含
     writeFile(strayBackup, "stray");
     utimesSync(strayBackup, newest, newest);
     const out = computeCloudSync(project, true, files([]));
+    expect(out.local?.dirty).toBe(false);
+    expect(out.state).toBe("synced");
+  });
+
+  it("容差只给 data.db：references/ 改动严格比较（同步后 0.5s 的改动也算 dirty）", () => {
+    // 基准设在未来：夹具写入的三文件/两目录 mtime 都早于它 → 初始不 dirty（确定性构造）
+    const base = new Date(Date.now() + 10_000);
+    writeBookState(project.config.id, { lastSyncAt: base.toISOString(), lastSeenCloudFiles: [] });
+    expect(computeCloudSync(project, true, files([])).local?.dirty).toBe(false);
+
+    const refPath = join(project.root, "references", "同.md");
+    writeFile(refPath, "edited");
+    const within = new Date(base.getTime() + 500); // +0.5s：落在 data.db 的 1s 容差窗口内
+    utimesSync(refPath, within, within);
+    const out = computeCloudSync(project, true, files([]));
+    expect(out.local?.dirty).toBe(true); // 严格比较命中
+    expect(out.state).toBe("local-ahead");
+  });
+
+  it("容差给 data.db / -wal：其 mtime 落在窗口内不算 dirty（防 checkpoint 自激）", () => {
+    const base = new Date(Date.now() + 10_000);
+    writeBookState(project.config.id, { lastSyncAt: base.toISOString(), lastSeenCloudFiles: [] });
+    const within = new Date(base.getTime() + 500); // +0.5s：仍在容差内
+    const dbPath = join(project.root, DATA_DB_FILE_NAME);
+    utimesSync(dbPath, within, within);
+    const walPath = `${dbPath}-wal`;
+    if (existsSync(walPath)) utimesSync(walPath, within, within);
+
+    const out = computeCloudSync(project, true, files([]));
+    expect(out.local?.dirty).toBe(false); // data.db/-wal 在容差窗口内 → 不算改动
+    expect(out.state).toBe("synced");
+  });
+
+  it("拉取后立刻复查 → synced（严格比较不得把管道自己写的文件误判成本机改动）", async () => {
+    const cloud = makeCloudZip({ references: ["a.md"], sessions: ["s1.jsonl"] });
+    const dirName = `测试书-${project.config.id}`;
+    store.set(dirName, { isDir: true, bytes: new Uint8Array(), mtime: Date.now() });
+    seedCloudFile(`${dirName}/${cloud.fileName}`, cloud.bytes);
+    writeBookState(project.config.id, { dirName });
+
+    await pullBackup(project);
+
+    const out = computeCloudSync(project, true, files([cloud.fileName]));
     expect(out.local?.dirty).toBe(false);
     expect(out.state).toBe("synced");
   });

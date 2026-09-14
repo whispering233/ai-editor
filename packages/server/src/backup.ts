@@ -733,6 +733,55 @@ export function hasFileChangesSince(project: ProjectContext, since: Date): boole
 }
 
 /**
+ * 「本机创作数据自 since 后有改动」判定（**云端三态专用**，与备份定时器的 `hasFileChangesSince`
+ * 口径刻意不同——见 `docs/design/40-cloud-sync.md` §3）：
+ *
+ * - `project.json` / `outline.json` / `references/` / `sessions/`（含两目录自身 mtime）：
+ *   **严格** `mtime > since`。这些文件不会被备份/同步管道写入，容差在这里只有代价：
+ *   `lastSyncAt` 是**不推进的固定基准**（只在下一次同步时前移），容差会把 `[since, since+1s]`
+ *   内的本机改动**永久漏判**（状态误报「已同步」，用户可能因此拉取覆盖它）。
+ * - `data.db` / `data.db-wal`：保留 `BACKUP_CHANGE_TOLERANCE_MS` 容差——备份/推送管道内的
+ *   `wal_checkpoint` 会把 `data.db` mtime 刷到同步时刻，严格比较会自激误判「永远有改动」。
+ */
+export function hasLocalEditsSince(project: ProjectContext, since: Date): boolean {
+  const strictLimit = since.getTime();
+  const tolerantLimit = strictLimit + BACKUP_CHANGE_TOLERANCE_MS;
+  for (const name of [PROJECT_FILE_NAME, OUTLINE_FILE_NAME]) {
+    try {
+      if (statSync(join(project.root, name)).mtimeMs > strictLimit) return true;
+    } catch {
+      return true; // 主文件缺失 = 损坏，视为有改动（不静默）
+    }
+  }
+  try {
+    if (statSync(join(project.root, DATA_DB_FILE_NAME)).mtimeMs > tolerantLimit) return true;
+  } catch {
+    return true;
+  }
+  const walPath = join(project.root, `${DATA_DB_FILE_NAME}-wal`);
+  try {
+    if (statSync(walPath).mtimeMs > tolerantLimit) return true;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") return true;
+  }
+  try {
+    for (const dirName of PACKED_DIR_NAMES) {
+      try {
+        if (statSync(join(project.root, dirName)).mtimeMs > strictLimit) return true;
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== "ENOENT") return true;
+      }
+      for (const rel of listDirFiles(project.root, dirName)) {
+        if (statSync(join(project.root, dirName, rel)).mtimeMs > strictLimit) return true;
+      }
+    }
+  } catch {
+    // 遍历竞态（读取中删除）：下一次状态检查重检
+  }
+  return false;
+}
+
+/**
  * 自动备份单次检查（定时器 tick 核心，纯同步、可单测）：
  *
  * 1. 频率判定：关闭（null/0/非枚举）→ 直接返回 false（null/0 = 关闭；

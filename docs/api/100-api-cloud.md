@@ -17,7 +17,7 @@
 > 云端检查失败不影响本端点成功返回（`remote: null` + `errorCode`，`state: "unreachable"`）。
 >
 > **三态判定**（`docs/design/40-cloud-sync.md` §3）：`云端有更新` = 云端文件集合 ≠ `lastSeenCloudFiles`（**不看时间戳**）；
-> `本机有改动` = 创作数据 mtime 晚于 `lastSyncAt`（**不含 `.backups/`**）；无同步记录 ⇒ 本机按「有改动」、云端有份按「有更新」⇒ `conflict`（保守）。
+> `本机有改动` = 创作数据 mtime 晚于 `lastSyncAt`（**不含 `.backups/`**；`data.db`/`-wal` 比较带 1s 容差——checkpoint 会刷新其 mtime，其余文件**严格比较**）；无同步记录 ⇒ 本机按「有改动」、云端有份按「有更新」⇒ `conflict`（保守）。
 
 ```typescript
 // Res: 200
