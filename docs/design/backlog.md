@@ -49,6 +49,16 @@
   - 触发条件：云端批次（卡 2-7）要给备份响应加字段时——那会让第三份手抄出现。
   - 最小修法：把备份条目响应 schema（`backups` / `backup`）提到 shared，client 与 server 共用；顺带修正 `docs/api/20-api-backup.md` 首行「响应 schema 单一来源」的表述。
 
+- **URL 校验的错路回显用户输入**（卡 2 oracle 复核残留 1）
+  - 现状：`routes/cloud.ts` 的 `normalizeWebdavUrl` 两条**先于** userinfo 检查的分支仍原样回显输入（`不是合法 URL：${raw}` / `只接受 http/https：${raw}`）——`ftp://u:pw@host/dav`、`https://u:pw@`（无 host）这类串会把刚键入的整串回显进 400 body。不新增泄露面（HttpError 分支不打日志、hono logger 只打 method/path/status ⇒ 只回到同一客户端），故按小项登记。
+  - 最小修法：两条分支只回显 `parsed.protocol` 或固定文案，不回显 `raw`。
+- **`shared/src/types/api.ts` 的 cloud 注释镜像未同步**（卡 2 oracle 复核残留 4）
+  - 现状：该注释块只写「url/username 空串 = 清空」「password 缺省或空串 = 不修改」，未写「url+username 皆空 ⇒ password 一并丢弃」与「userinfo 拒绝」。权威在 `docs/api/100-api-cloud.md`（已同步），类型文件是契约镜像。
+  - 最小修法：下次触碰该文件时补 2 行注释。
+- **`webdav.ts` 两处已知边界（接受口径，非待办）**（卡 2 oracle 复核残留 2/3）
+  - 反代把 href 重写成与请求前缀不一致的形态 → 不剥离前缀（避免误剔），代价是该形态下根自身条目回到列表（`list` 的「不含自身」保证只在 href 前缀一致时成立）。
+  - href 段解码出 `/`（`%2F`）时 `path` 的段往返错位 → 不剥离、`path` 非 base 相对（极端文件名，接受）；根治需 `parsePropfind` 直接返回段数组。
+
 - **云根目录的 `.tmp-` 探测文件永不被清 + DELETE 不可用时 `/cloud/test` 误报认证失败**（卡 2 oracle 验证 F4）
   - 现状：`POST /cloud/test` 会在**云盘根目录**写 `.tmp-ai-editor-writetest` 再删；若服务器允许写但禁止删（DELETE 403），该文件残留，且端点报 502 `CLOUD_AUTH_FAILED`（凭据其实正常）。
   - 影响：卡 4 的保留清理只扫**书目录**，云根这份不会被回收；「`.tmp-*` 无残留」判据的口径需写明范围。
