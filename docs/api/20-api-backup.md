@@ -34,7 +34,7 @@
     createdAt: string;  // 备份时间（ISO 8601，由文件名时间戳解析）
     kind: "auto" | "manual";  // 备份类型标签（必填；由文件名解析——
                               //   自动/手动 段）
-    name?: string;      // 用户标签（由文件名解析——自动备份/快照/旧备份无此字段）
+    name?: string;      // 用户标签（由文件名解析——自动备份/快照无此字段）
     device: string;     // 来源设备（必填：唯一命名格式恒有此段）
     stats: {           // 尾部三段统计（必填：唯一命名格式恒有此段）
       characters: number;  // 人物数（未软删）
@@ -96,8 +96,8 @@
     createdAt: string;
     kind: "auto" | "manual";
     name?: string;      // 新标签（清除后无此字段）
-    device?: string;
-    stats?: { characters: number; settings: number; chapters: number };
+    device: string;     // 来源设备（必填：重命名只改标签段，设备沿用原份）
+    stats: { characters: number; settings: number; chapters: number };  // 尾部三段统计（同上，沿用原份）
   };
 }
 ```
