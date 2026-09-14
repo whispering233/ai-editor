@@ -8,7 +8,7 @@
 
 ---
 
-## 当前任务卡：云端存档（批次 1，2026-09）
+## 云端存档（批次 1-3，2026-09）——**全部完成，当前无进行中任务卡**
 
 契约依据：`docs/design/40-cloud-sync.md`（为什么与不变式）、`docs/api/100-api-cloud.md`（端点）、`docs/api/20-api-backup.md`（命名与备份端点）、`docs/ui/DESIGN.md` §备份与云端存档、`docs/design/config.md`（cloud.json 载体）。
 
@@ -18,12 +18,8 @@
 
 **批次 3（云端收口，2026-09-15）已完成**：卡 C 代码类（`4329660`）、卡 D 文案类（`8a13594`）+ 收口提交——卡 C oracle = 有条件 PASS（两处纯文档/注释条件已收口）、卡 D = PASS。
 
-**待排（更远）**：`backlog.md` 其余条目（旧命名份永不清、zip 生成窗口、零备份 UX、restore 后 backupStale 等）。
+**新卡应从 `backlog.md` 选**：当前剩余条目分两类——① **等触发条件**（并发推送串行化、失败重试退避、`head` 改 CAS 元数据、DELETE 受限云盘的清理收敛、restore 后 `backupStale` 短暂为真）；② **产品决策未定**（云端书架、文件级增量上传、内建端到端加密、保留策略 GFS）。另：**真云盘（坚果云）人工验收 7 步**只能由用户在真机上执行（清单见 `backlog.md`）。
 
-> 上一轮 oracle 复核列出的「云端收口小项」（失败文案去「未执行」断言、`refresh()` 的 busy 归属、`clearStatus()` 清对话框状态、冲突框带 fileName、`getProjectBackups` 失败区分、AggregateError 取码、`/cloud/test` 可写不可删降级、URL 校验不回显 raw、shared 注释镜像、status 复查宿主上移、`§544` 口径）待卡 A/B 落地后另排。
-
-| 卡 | 目标 | 主要交付物 | 完成判据（硬） |
-| :--- | :--- | :--- | :--- |
 
 **全局约束**：
 
