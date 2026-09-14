@@ -44,6 +44,11 @@
   - 触发条件：下次改书名规则或文案时。
   - 最小修法：提 shared 纯函数 + 文案常量（REST schema、路由校验、客户端预校验共用）。
 
+- **视觉守卫的两处盲区**（卡 3 oracle 复核登记）
+  - 现状：`design-discipline.test.ts` 的 `antd-root-override` 只扫 `className`（不扫内联 `style={{}}`），且 `ANTD_GUARDED_COMPONENTS` 只覆盖 `Button` / `Input`（`Select` / `Input.Password` 根元素未覆盖）。既有 3 处内联宽度（`auto-backup-panel.tsx` 的频率下拉 `minWidth`、备份名与重命名输入框 `width`）因此长期存在。
+  - 触发条件：新增 antd 组件到守卫清单时，或再遇到「antd 无层 CSS 压掉 Tailwind 类」的实际故障。
+  - 最小修法：守卫加内联 style 扫描 + 扩组件清单；存量 3 处宽度迁移到 antd 的 `size`/`style` 之外的既有档（需先确认不被无层 CSS 压掉）。
+
 - **备份响应 schema 未收敛到 shared**（卡 1 oracle 验证登记）
   - 现状：`docs/api/*.md` 声明「响应 schema 单一来源 = shared `types/api.ts`」，但备份响应类型实际在 `client/src/lib/api.ts`（`BackupEntry`）与 `packages/server/src/backup.ts`（`BackupFileInfo`）**各写一份**（请求侧两个 zod schema 确在 shared）。
   - 触发条件：云端批次（卡 2-7）要给备份响应加字段时——那会让第三份手抄出现。
