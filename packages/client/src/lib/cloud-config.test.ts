@@ -72,6 +72,17 @@ describe("buildCloudConfigPatch（表单 → PUT /cloud/config 补丁）", () =>
     });
   });
 
+  it("纯空白密码 = 留空：不提交（否则服务端会当它真密码存下 → configured 却永远 401）", () => {
+    for (const blank of ["   ", "\t", " \t "]) {
+      const patch = buildCloudConfigPatch({ url: "https://dav/x", username: "u", password: blank, device: "" });
+      expect("password" in patch).toBe(false);
+    }
+    // 非空密码提交**原值**（不做 trim——不改用户密码内容）
+    expect(buildCloudConfigPatch({ url: "https://dav/x", username: "u", password: " pw ", device: "" }).password).toBe(
+      " pw ",
+    );
+  });
+
   it("首尾空白被 trim；device 清空照传空串（= 回退本机名派生）", () => {
     expect(buildCloudConfigPatch({ url: "  https://dav/x  ", username: "  u  ", password: "", device: "  苹果本  " })).toEqual({
       url: "https://dav/x",
@@ -102,6 +113,12 @@ describe("isCloudConfigDirty（未保存改动判定）", () => {
     expect(isCloudConfigDirty({ ...base, username: "other@example.com" }, STATUS)).toBe(true);
     expect(isCloudConfigDirty({ ...base, device: "办公室台式机" }, STATUS)).toBe(true);
     expect(isCloudConfigDirty({ ...base, password: "new-pw" }, STATUS)).toBe(true);
+  });
+
+  it("密码为纯空白 = 未改动（与服务端「空白 = 留空」一致：不点亮保存又不产生改动）", () => {
+    const base = cloudConfigFormFrom(STATUS);
+    expect(isCloudConfigDirty({ ...base, password: "   " }, STATUS)).toBe(false);
+    expect(isCloudConfigDirty({ ...base, password: " x " }, STATUS)).toBe(true);
   });
 
   it("status 未加载（null）：空表单不算改动，填任意字段即算", () => {

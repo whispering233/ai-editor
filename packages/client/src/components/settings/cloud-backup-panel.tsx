@@ -38,12 +38,16 @@ export function CloudBackupPanel() {
   const [testing, setTesting] = useState(false);
   const [switching, setSwitching] = useState(false);
 
-  /** 重新拉取状态并重填表单（保存/切换开关后调用） */
-  async function refresh(): Promise<void> {
+  /**
+   * 拉状态；`refill` 决定是否同时用服务端值重填表单：
+   * - 保存成功后 `refill = true`（表单与服务端对齐，密码框随之清空）
+   * - 只是切开关时 `refill = false`（**不能清掉用户正在编辑的草稿**）
+   */
+  async function refresh(refill: boolean): Promise<void> {
     try {
       const next = await getCloudStatus();
       setStatus(next);
-      setForm(cloudConfigFormFrom(next));
+      if (refill) setForm(cloudConfigFormFrom(next));
       setLoadFailed(false);
     } catch {
       setLoadFailed(true);
@@ -51,7 +55,7 @@ export function CloudBackupPanel() {
   }
 
   useEffect(() => {
-    void refresh();
+    void refresh(true);
   }, []);
 
   const configured = status?.configured === true;
@@ -69,7 +73,7 @@ export function CloudBackupPanel() {
     setSaving(true);
     try {
       await putCloudConfig(buildCloudConfigPatch(form));
-      await refresh();
+      await refresh(true);
       showToast("云端配置已保存");
     } catch (err) {
       showToast(errorText(err, "无法连接服务，配置未保存"), "error");
@@ -96,7 +100,7 @@ export function CloudBackupPanel() {
     setSwitching(true);
     try {
       await putCloudConfig({ autoPush: next });
-      await refresh();
+      await refresh(false); // 只刷开关状态：不清用户未保存的表单草稿
       showToast(next ? "已开启自动推送" : "已关闭自动推送");
     } catch (err) {
       showToast(errorText(err, "自动推送开关未保存"), "error");
@@ -143,7 +147,7 @@ export function CloudBackupPanel() {
 
         {halfFilled && (
           <p className="mt-2 text-xs text-destructive">
-            地址与用户名要么都填、要么都清空（都清空 = 关闭云存档，密码会一并丢弃）
+            地址与用户名要么都填、要么都清空（都清空 = 关闭云存档，密码会一并丢弃）；当前不会提交密码
           </p>
         )}
         {!configured && status !== null && !halfFilled && (

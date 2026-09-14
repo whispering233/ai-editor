@@ -18,6 +18,7 @@
 - **WebDAV 最小客户端**（`PROPFIND`/`MKCOL`/`PUT`/`DELETE` + 窄 XML 解析 + Basic 认证 + 30s 超时；出站走全局 dispatcher，不引 SDK/XML 依赖；列表结果剥掉 base 路径前缀 → `path` 恒为 base 相对，且自身条目（含根）一律剔除）与四个云错误码：`CLOUD_NOT_CONFIGURED` 409、`CLOUD_AUTH_FAILED` 502、`CLOUD_UNREACHABLE` 502、`CLOUD_QUOTA_EXCEEDED` 502（`CLOUD_CONFLICT`/`CLOUD_FILE_NOT_FOUND`/`CLOUD_BACKUP_TOO_LARGE` 随推送/拉取卡片引入）。
 - **设置页「备份」改为三级导航 + 新增「云端备份」面板（卡 3）**：左 160px 固定两项（自动备份 / 云端备份，与「AI 模型」同款 `sub-nav` 契约）；自动备份面板内容原样搬入；云端备份面板 = 账号配置（WebDAV 地址 / 用户名 / 应用密码（掩码，留空 = 不修改）/ 设备名（预填当前生效值）四个输入 + 测试连接 + 保存）+ 自动推送开关（选择即保存）+ 明文 0600 与「免费云盘上传流量 1GB/月」提示。表单→请求语义收敛在 `lib/cloud-config.ts` 纯函数（密码留空不提交、**凭据不全不提交密码**、地址与用户名半填时行内提示）。
 - **`/cloud/test` 不可达提示带上底层错误码**：undici 顶层错误常是笼统的 `fetch failed`，现附 `cause.code`（`ECONNREFUSED`/`ENOTFOUND`/`ETIMEDOUT`…），「测试连接」失败时能看出是端口、域名还是超时。
+- **卡 3 收尾修补**：云端配置表单「纯空白密码」= 留空（不提交，避免存下空白密码导致 configured 却永远认证 401；非空密码提交原值、不 trim）；切「自动推送」开关不再清掉未保存的表单草稿；半填凭据的行内提示补「当前不会提交密码」；`DESIGN.md` 同步（设备名预填生效值 + 代价登记、两面板各自 caption、同步状态段标卡 4/5）、`tasks.md` 卡 3 交付物改述（页内 state，store 上提留卡 6）。
 - **设备名可配置**：`cloud.json` 的 `webdav.device` 优先生效（非法值不生效、回缺省），备份文件名的设备段随设置页改写而变化（之前固定为 hostname 派生）。
 
 ### Changed
