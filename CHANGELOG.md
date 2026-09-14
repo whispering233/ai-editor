@@ -7,7 +7,9 @@
 
 ## [Unreleased]
 
-> **云端存档批次**（2026-09）：卡 1 备份命名升级（设备段 + 尾部三段统计、类型段中文化、目录 mtime 变更判定）；卡 2 云端基础层（`cloud.json` 配置载体 + WebDAV 最小客户端 + 配置/状态/测试三端点）；卡 3 设置页云端面板；卡 4 推送；卡 5 拉取与三态；卡 6 一键同步与冲突裁决；卡 7 自动推送。设计和契约见 `docs/design/40-cloud-sync.md` 与 `docs/api/100-api-cloud.md`。
+> **云端存档批次**（2026-09）：**7 张卡全部完成**并通过各自独立 oracle 验证——卡 1 备份命名升级（设备段 + 尾部三段统计、类型段中文化、目录 mtime 变更判定）；卡 2 云端基础层（`cloud.json` 配置载体 + WebDAV 最小客户端 + 配置/状态/测试三端点）；卡 3 设置页云端面板；卡 4 推送；卡 5 拉取与三态；卡 6 一键同步与冲突裁决；卡 7 自动推送。设计和契约见 `docs/design/40-cloud-sync.md` 与 `docs/api/100-api-cloud.md`。
+>
+> **真实坚果云人工验收**：自动化只到「本地 WebDAV + mock fetch」；云盘的**认证 / 配额 / 跨时区**三项无法在 CI 覆盖——步骤清单见 `docs/design/backlog.md`「真云盘（坚果云）人工验收清单」。
 
 ### Added
 
@@ -45,6 +47,9 @@
   **手动备份成功后**（无条件推一次，不受节流）——后两条都不推进节流基准。
   **单一定时器**：不新增第二套定时器，自动推送挂在自动备份的 `setTimeout` tick 链上（`backup.ts` 的 `setProjectTick` 钩子由 composition 层注册）——排程条件 = 「备份频率开启」**或**「`autoPush` 开启」；备份频率关闭时按 `AUTO_PUSH_THROTTLE_MS`（2h）兜底排程，**不会因关掉自动备份而静默失效**。
   **失败只记状态不阻塞**：`cloud.json` book state 新增 `lastAutoPushAt`（节流基准，仅定时路径推进）与 `lastAutoPushError`（`{code, message, at}`，成功即清），由 `GET /cloud/status` 的 `local` 段透出；`POST /project/close` 与 `POST /project/backup` 均**fire-and-forget**（推送失败不影响响应，关闭项目不被网络拖住）。本机没有任何备份 → 视为**跳过**（不写错误标记）。设置页云端面板：自动推送说明行写全触发口径，失败时在「同步状态」段显示一行 `text-destructive`（不弹窗）。
+
+- **卡 7 oracle 收口**：`lastAutoPushError` 的清除点单点化到 `pushBackup` 的成功写（任何一次推送成功都清，避免手动推送后面板常驻过期提示）；面板失败行在 `CLOUD_CONFLICT` 时补行动指引；「备份频率关闭 + `autoPush` 开启时推的是旧包」等三条已登记 `backlog.md`。
+- **卡 6 oracle 收口**：删除会话 / 参考资料后的 toast 补「推送到云端后，另一台也会同步删除」（删除要推送才传播）；跨页意图补顶层 tab 消费（未配置点「同步云端」落到「备份 → 云端备份」而不是 AI 模型页）。
 
 ### Changed
 
