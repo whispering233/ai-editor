@@ -15,6 +15,7 @@ import { create } from "zustand";
 import type { CloudBackupEntry, CloudStatus } from "@whispering233/ai-editor-shared";
 import {
   ApiError,
+  createProjectBackup,
   getCloudStatus,
   getProjectBackups,
   pullCloudBackup,
@@ -62,6 +63,8 @@ interface CloudState {
   pullTarget: CloudBackupEntry | null;
   /** 跨页意图：非 null → 设置页「备份」pane 选中该项（消费后置回 null） */
   pendingSettingsPane: SettingsBackupPane | null;
+  /** 旧包上传确认框开关（卡 B：`local.backupStale` 时点「同步云端」弹它，二选一） */
+  staleDialogOpen: boolean;
 
   /** 刷新状态（并发合并；返回最新快照，网络层失败 → null）。不轮询，只在事件点调用。 */
   refresh: () => Promise<CloudStatus | null>;
@@ -71,12 +74,16 @@ interface CloudState {
   syncNow: () => Promise<void>;
   /** 推送云端（`force` = 用本机覆盖云端；成功后失败态清空，冲突则弹裁决框） */
   push: (options?: { force?: boolean }) => Promise<void>;
+  /** 先「立即备份」生成新格式备份，再推送（旧包上传确认框的第一个选项） */
+  pushAfterFreshBackup: () => Promise<void>;
   /** 拉取（省略 entry = 云端最新一份）；成功后刷新项目数据（config / outline / 会话） */
   pull: (entry?: CloudBackupEntry) => Promise<void>;
   openPullConfirm: (entry: CloudBackupEntry) => void;
   closePullConfirm: () => void;
   openConflict: () => void;
   closeConflict: () => void;
+  openStaleDialog: () => void;
+  closeStaleDialog: () => void;
   /** 请求「跳到设置页 → 备份 → 云端备份」（未配置时的引导） */
   requestCloudPane: () => void;
   consumePendingPane: () => void;
@@ -94,6 +101,7 @@ export const useCloudStore = create<CloudState>((set, get) => ({
   conflictOpen: false,
   pullTarget: null,
   pendingSettingsPane: null,
+  staleDialogOpen: false,
 
   refresh: async () => {
     if (inFlight !== null) return inFlight;
@@ -121,7 +129,18 @@ export const useCloudStore = create<CloudState>((set, get) => ({
     }
   },
 
-  clearStatus: () => set({ status: null, statusFailed: false, localLatest: null, lastError: null }),
+  clearStatus: () =>
+    set({
+      status: null,
+      statusFailed: false,
+      localLatest: null,
+      lastError: null,
+      // 关闭项目/切书时一并收掉对话框与跨页意图（否则旧书的状态会挂在界面上）
+      conflictOpen: false,
+      pullTarget: null,
+      staleDialogOpen: false,
+      pendingSettingsPane: null,
+    }),
 
   syncNow: async () => {
     if (get().busy !== null) return;
@@ -143,9 +162,20 @@ export const useCloudStore = create<CloudState>((set, get) => ({
         toast(`云端不可达${next.errorCode !== undefined ? `（${next.errorCode}）` : ""}，本地功能不受影响`, "error");
         return;
       case "synced":
+        // 卡 B：`synced` 只说明「上次同步后没改动」——若最新备份早于最新改动（推过旧包的典型形态），
+        // 直接说「已是最新」会撒谎：改弹旧包确认框让用户决定
+        if (next.local?.backupStale === true) {
+          get().openStaleDialog();
+          return;
+        }
         toast("已是最新（云端与本机一致）");
         return;
       case "local-ahead":
+        // 卡 B：有改动未进最新备份 → 不直接推旧包（云端永不创建备份），交用户二选一
+        if (next.local?.backupStale === true) {
+          get().openStaleDialog();
+          return;
+        }
         await get().push();
         return;
       case "remote-ahead": {
@@ -161,7 +191,8 @@ export const useCloudStore = create<CloudState>((set, get) => ({
 
   push: async (options = {}) => {
     if (get().busy !== null) return;
-    set({ busy: "push", lastError: null });
+    // staleDialogOpen：用户在旧包确认框里选了「上传旧备份」→ 关框（与 pull 清 pullTarget 同款）
+    set({ busy: "push", lastError: null, staleDialogOpen: false });
     try {
       const res = await pushCloudBackup(options.force === true ? { force: true } : {});
       await get().refresh();
@@ -179,6 +210,25 @@ export const useCloudStore = create<CloudState>((set, get) => ({
     } finally {
       set({ busy: null });
     }
+  },
+
+  /**
+   * 先备份再推送（卡 B 的「立即手动备份并推送」）：
+   * `POST /project/backup`（新格式、统计为当下真实值）→ 再走既有 `push()`（含留档/冲突/失败处理）。
+   * 备份失败只 toast（不推旧包——用户的意图是「推最新的」，不是「凑合推一份」）。
+   */
+  pushAfterFreshBackup: async () => {
+    if (get().busy !== null) return;
+    set({ staleDialogOpen: false, lastError: null });
+    try {
+      await createProjectBackup();
+    } catch (err) {
+      const message = cloudErrorText(err, "无法连接服务，备份未执行");
+      set({ lastError: message });
+      useUiStore.getState().showToast(message, "error");
+      return;
+    }
+    await get().push();
   },
 
   pull: async (entry) => {
@@ -214,6 +264,8 @@ export const useCloudStore = create<CloudState>((set, get) => ({
   closePullConfirm: () => set({ pullTarget: null }),
   openConflict: () => set({ conflictOpen: true }),
   closeConflict: () => set({ conflictOpen: false }),
+  openStaleDialog: () => set({ staleDialogOpen: true }),
+  closeStaleDialog: () => set({ staleDialogOpen: false }),
   requestCloudPane: () => set({ pendingSettingsPane: "cloud" }),
   consumePendingPane: () => set({ pendingSettingsPane: null }),
 }));

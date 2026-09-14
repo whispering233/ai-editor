@@ -24,6 +24,7 @@ import type { ProjectFileConfig } from "@whispering233/ai-editor-shared";
 import {
   hasAuthoringChangesSince,
   hasLocalEditsSince,
+  hasUnbackedChanges,
   setProjectTick,
   startAutoBackup,
   stopAutoBackup,
@@ -205,6 +206,18 @@ function makeBackupAndBaseline(): number {
   return base;
 }
 
+/**
+ * 造「有改动，且已被最新备份涵盖」的形态（卡 B 守卫的前提）：
+ * 变更 mtime 落在 (lastSyncAt, 备份时间戳) 之间——先把 lastSyncAt 与变更都放到过去，再生成备份。
+ * 注意不能用 `writeAfter(rel, base)`（mtime = base + 60s 落在未来），那样任何备份都「盖不住」它。
+ */
+function changeCoveredByBackup(rel: string): void {
+  const now = Date.now();
+  writeBookState(project.config.id, { lastSyncAt: new Date(now - 300_000).toISOString() });
+  writeAfter(rel, now - 120_000, 0);
+  writeBackup(project, { kind: "auto" });
+}
+
 beforeEach(() => {
   stubDav();
   cloudRoot = mkdtempSync(join(tmpdir(), "ai-editor-autopush-root-"));
@@ -240,14 +253,14 @@ describe("自动推送：开关与三条触发路径", () => {
   });
 
   it("纯聊天变更（只动 sessions/）不触发定时推送；references/ 变更即推一次", async () => {
-    const base = makeBackupAndBaseline();
-    writeAfter(join("sessions", "s2.jsonl"), base);
+    makeBackupAndBaseline();
+    writeAfter(join("sessions", "s2.jsonl"), Date.now() - 60_000, 0); // 1 分钟前的纯聊天改动
 
     expect(await maybeAutoPush(project)).toBe(false);
     expect(putCount()).toBe(0);
     expect(readBookState(project.config.id)?.lastAutoPushAt).toBeUndefined();
 
-    writeAfter(join("references", "新资料.md"), base);
+    changeCoveredByBackup(join("references", "新资料.md")); // 生产里 tick 内先 maybeAutoBackup 生成新份
 
     expect(await maybeAutoPush(project)).toBe(true);
     expect(putCount()).toBe(1);
@@ -256,41 +269,45 @@ describe("自动推送：开关与三条触发路径", () => {
   });
 
   it("节流（注入 throttleMs 与假时钟）：窗口内的第二次变更不推，越过窗口即推", async () => {
-    const base = makeBackupAndBaseline();
-    let clock = base;
+    changeCoveredByBackup(join("references", "一.md")); // 变更已被最新备份涵盖（卡 B 守卫的前提）
+    let clock = Date.now();
     const push = (): Promise<boolean> => maybeAutoPush(project, { throttleMs: 1000, now: () => clock });
 
-    writeAfter(join("references", "一.md"), base);
     expect(await push()).toBe(true); // 首次：无 lastAutoPushAt → 放行
-    expect(readBookState(project.config.id)?.lastAutoPushAt).toBe(new Date(base).toISOString());
+    expect(readBookState(project.config.id)?.lastAutoPushAt).toBe(new Date(clock).toISOString());
     expect(putCount()).toBe(1);
 
-    writeAfter(join("references", "二.md"), clock);
-    expect(await push()).toBe(false); // 距上次 < 1000ms → 节流挡下（即便确有变更）
+    changeCoveredByBackup(join("references", "二.md")); // 确有新变更（且已被备份涵盖）
+    expect(await push()).toBe(false); // 距上次 < 1000ms → 节流挡下
     expect(putCount()).toBe(1);
 
-    clock = base + 1000;
+    clock += 1000;
     expect(await push()).toBe(true);
     expect(putCount()).toBe(2);
   });
 
-  it("关闭项目：纯聊天变更也推一次（不受节流），且不推进 lastAutoPushAt", async () => {
-    const base = makeBackupAndBaseline();
-    writeAfter(join("references", "一.md"), base);
+  it("关闭项目：聊天变更若已被最新备份涵盖则推一次（不受节流、不推进 lastAutoPushAt）；未涵盖则跳过", async () => {
+    changeCoveredByBackup(join("references", "一.md"));
     expect(await maybeAutoPush(project, { throttleMs: 10 * 60_000 })).toBe(true); // 先占住节流基准
     const throttledAt = readBookState(project.config.id)?.lastAutoPushAt;
 
-    writeAfter(join("sessions", "s2.jsonl"), Date.now()); // 纯聊天（只在关闭项目路径算变更）
+    // 场景 A：纯聊天变更**未**进最新备份 → 关闭项目跳过（卡 B (ii)：不静默推旧包）
+    writeAfter(join("sessions", "s2.jsonl"), Date.now() - 60_000, 0);
+    const beforeSkip = putCount();
     await autoPushOnClose(project);
+    expect(putCount()).toBe(beforeSkip);
+    expect(readBookState(project.config.id)?.lastAutoPushError).toBeUndefined();
 
-    expect(putCount()).toBe(2);
+    // 场景 B：备份涵盖聊天变更后 → 关闭项目推一次（不受节流、不推进节流基准）
+    changeCoveredByBackup(join("sessions", "s3.jsonl"));
+    await autoPushOnClose(project);
+    expect(putCount()).toBe(beforeSkip + 1);
     expect(readBookState(project.config.id)?.lastAutoPushAt).toBe(throttledAt);
     expect(readBookState(project.config.id)?.lastAutoPushError).toBeUndefined();
   });
 
   it("关闭项目：云盘不可达时不抛，只写 lastAutoPushError（关闭语义不受影响）", async () => {
-    const base = makeBackupAndBaseline();
-    writeAfter(join("references", "一.md"), base);
+    changeCoveredByBackup(join("references", "一.md"));
     vi.stubGlobal(
       "fetch",
       vi.fn(() => Promise.reject(new Error("network down"))),
@@ -305,8 +322,7 @@ describe("自动推送：开关与三条触发路径", () => {
   });
 
   it("手动备份后：无条件立刻推一次（未到节流、也没有新变更），不推进节流基准", async () => {
-    const base = makeBackupAndBaseline();
-    writeAfter(join("references", "一.md"), base);
+    changeCoveredByBackup(join("references", "一.md"));
     expect(await maybeAutoPush(project, { throttleMs: 10 * 60_000 })).toBe(true);
     const throttledAt = readBookState(project.config.id)?.lastAutoPushAt;
 
@@ -344,6 +360,32 @@ describe("自动推送：开关与三条触发路径", () => {
     writeBackup(project, { kind: "manual" }); // 推送需要一份本地备份
     await pushBackup(project);
     expect(readBookState(project.config.id)?.lastAutoPushError).toBeUndefined();
+  });
+
+  it("卡 B：有改动未进最新备份（backupStale）→ 定时与关闭项目路径都跳过（零网络请求、不写失败标记）", async () => {
+    makeBackupAndBaseline(); // 写一份备份 + 把 lastSyncAt 设到 base
+    // 让「最新改动」晚于最新备份：mtime 放到 1 秒后（确认式构造：任何已存在的备份都盖不住它）
+    writeAfter("references/笔记.md", Date.now() + 1000, 0);
+    expect(hasUnbackedChanges(project)).toBe(true);
+
+    const before = putCount();
+    expect(await maybeAutoPush(project)).toBe(false); // 定时路径跳过
+    await autoPushOnClose(project); // 关闭项目路径跳过
+    expect(putCount()).toBe(before); // 零 PUT
+    expect(readBookState(project.config.id)?.lastAutoPushError).toBeUndefined(); // 不是失败
+    // 把该改动"收进"备份（mtime 回到过去 + 生成新份）→ 状态消除
+    writeAfter("references/笔记.md", Date.now() - 60_000, 0);
+    writeBackup(project, { kind: "manual" });
+    expect(hasUnbackedChanges(project)).toBe(false);
+  });
+
+  it("卡 B：手动备份后的路径不受 backupStale 限制（刚生成的份必然最新）", async () => {
+    makeBackupAndBaseline();
+    writeBackup(project, { kind: "manual" }); // 模拟「手动备份成功」
+    expect(hasUnbackedChanges(project)).toBe(false);
+    const before = putCount();
+    await autoPushAfterManualBackup(project);
+    expect(putCount()).toBeGreaterThan(before); // 真的推了
   });
 
 describe("hasAuthoringChangesSince：创作数据口径（排除 sessions/、含 AGENTS.md）", () => {
@@ -434,9 +476,8 @@ describe("排程钩子：自动推送挂在自动备份的同一条 tick 链上�
     }
   });
 
-  it("生产装配（middleware 注册）：备份频率关闭 + autoPush 开启 → 2h tick 真的推一次", async () => {
-    const base = makeBackupAndBaseline();
-    writeAfter(join("references", "一.md"), base);
+  it("生产装配（middleware 注册）：备份频率关闭 + autoPush 开启 + 改动已被最新备份涵盖 → 2h tick 真的推一次", async () => {
+    changeCoveredByBackup(join("references", "一.md")); // 卡 B：有未备份改动时 tick 会跳过，这里造「已涵盖」
     const freqOff: ProjectContext = { ...project, config: { ...project.config, backup_frequency_minutes: null } };
 
     // 本文件其余用例都是显式注入钩子（且 afterEach 会清空）——此处**首次**运行时加载该模块，
@@ -455,5 +496,27 @@ describe("排程钩子：自动推送挂在自动备份的同一条 tick 链上�
     // tick 里的推送是 fire-and-forget（`void maybeAutoPush`）——给它一拍真实时间再断言
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(putCount()).toBe(1);
+  });
+
+  it("生产装配：备份频率关闭 + 有改动未进最新备份 → 2h tick 跳过（零 PUT、不写失败标记）", async () => {
+    const base = makeBackupAndBaseline();
+    writeAfter(join("references", "未备份.md"), base - 120_000, 0); // 变更早于备份？不——放到备份之前即「已涵盖」
+    writeAfter(join("references", "更新的.md"), Date.now() - 30_000, 0); // 30s 前的改动 → 晚于最新备份
+    const freqOff: ProjectContext = { ...project, config: { ...project.config, backup_frequency_minutes: null } };
+    await import("../middleware/project.js");
+
+    vi.useFakeTimers();
+    startAutoBackup(freqOff);
+    try {
+      await vi.advanceTimersByTimeAsync(AUTO_PUSH_THROTTLE_MS);
+    } finally {
+      stopAutoBackup();
+      vi.useRealTimers();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(putCount()).toBe(0);
+    expect(readBookState(project.config.id)?.lastAutoPushError).toBeUndefined();
+    expect(readBookState(project.config.id)?.lastAutoPushAt).toBeUndefined();
   });
 });

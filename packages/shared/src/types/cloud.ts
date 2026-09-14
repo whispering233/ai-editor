@@ -134,6 +134,12 @@ export interface CloudLocalState {
   dirty: boolean;
   /** 最新一份本地备份（推送缺省目标） */
   latestBackupFileName: string | null;
+  /**
+   * 「有改动未进最新备份」= 最新一份本地备份的时间早于最新创作改动（含 `sessions/`）。
+   * **不随同步前移**：推完旧包后 `state` 会变 `synced`，但它仍为真——用它把「已同步」与
+   * 「云端内容不落后」分开表达（卡 B：自动路径在此状态下跳过不推，面板提示先「立即备份」）。
+   */
+  backupStale: boolean;
   /** 自动推送最近一次失败（book state 透出；成功即消失，缺省不出现） */
   lastAutoPushError?: CloudAutoPushError;
 }

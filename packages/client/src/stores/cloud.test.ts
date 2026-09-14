@@ -11,6 +11,7 @@ vi.mock("../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../lib/api")>();
   return {
     ...actual,
+    createProjectBackup: vi.fn(),
     getCloudStatus: vi.fn(),
     getProjectBackups: vi.fn(),
     pushCloudBackup: vi.fn(),
@@ -20,6 +21,7 @@ vi.mock("../lib/api", async (importOriginal) => {
 vi.mock("../hooks/use-route", () => ({ navigate: vi.fn() }));
 
 import {
+  createProjectBackup as apiCreateProjectBackup,
   getCloudStatus as apiGetCloudStatus,
   getProjectBackups as apiGetProjectBackups,
   pullCloudBackup as apiPullCloudBackup,
@@ -30,11 +32,22 @@ import { cloudBadgeTone, useCloudStore } from "./cloud";
 import { useUiStore } from "./ui";
 
 /** 造一份状态快照（只有 state 是断言关心的；其余字段给合法空值） */
-function status(state: CloudSyncState, extra: Partial<CloudStatus> = {}): CloudStatus {
+function status(
+  state: CloudSyncState,
+  extra: Partial<CloudStatus> = {},
+  local: { backupStale?: boolean } = {},
+): CloudStatus {
   return {
     configured: state !== "unconfigured",
     autoPush: false,
     state,
+    local: {
+      lastPushedFileName: null,
+      lastSyncAt: null,
+      dirty: state === "local-ahead" || state === "conflict",
+      latestBackupFileName: "20260915-013215757-手动-验证机-人物0-设定0-章0.zip",
+      backupStale: local.backupStale === true,
+    },
     ...extra,
   } as CloudStatus;
 }
@@ -60,6 +73,7 @@ beforeEach(() => {
     conflictOpen: false,
     pullTarget: null,
     pendingSettingsPane: null,
+    staleDialogOpen: false,
   });
   vi.mocked(apiGetProjectBackups).mockResolvedValue({ backups: [] });
 });
@@ -211,6 +225,86 @@ describe("push / pull：失败态与裁决框归位", () => {
     expect(apiPullCloudBackup).toHaveBeenCalledTimes(1);
     release?.();
     await first;
+  });
+});
+
+describe("卡 B：有改动未进最新备份（backupStale）", () => {
+  it("local-ahead + backupStale → 点同步云端**不直接推**，改弹旧包确认框", async () => {
+    vi.mocked(apiGetCloudStatus).mockResolvedValue(status("local-ahead", {}, { backupStale: true }));
+    await useCloudStore.getState().syncNow();
+    expect(useCloudStore.getState().staleDialogOpen).toBe(true);
+    expect(apiPushCloudBackup).not.toHaveBeenCalled();
+    expect(useCloudStore.getState().conflictOpen).toBe(false);
+  });
+
+  it("synced + backupStale（推过旧包的典型形态）→ 不谎报「已是最新」，改弹旧包确认框", async () => {
+    vi.mocked(apiGetCloudStatus).mockResolvedValue(status("synced", {}, { backupStale: true }));
+    await useCloudStore.getState().syncNow();
+    expect(useCloudStore.getState().staleDialogOpen).toBe(true);
+    expect(useStoreToast()).not.toContain("已是最新");
+  });
+
+  it("backupStale=false 时行为与现状一致（local-ahead 直接推、synced 只提示）", async () => {
+    vi.mocked(apiPushCloudBackup).mockResolvedValue({
+      pushed: { fileName: "b.zip", size: 1 },
+      remote: { dirName: "d", headFileName: "b.zip" },
+      pruned: [],
+    } as Awaited<ReturnType<typeof apiPushCloudBackup>>);
+    vi.mocked(apiGetCloudStatus).mockResolvedValue(status("local-ahead"));
+    await useCloudStore.getState().syncNow();
+    expect(apiPushCloudBackup).toHaveBeenCalledTimes(1);
+    expect(useCloudStore.getState().staleDialogOpen).toBe(false);
+
+    vi.mocked(apiGetCloudStatus).mockResolvedValue(status("synced"));
+    await useCloudStore.getState().syncNow();
+    expect(useStoreToast()).toContain("已是最新");
+  });
+
+  it("「立即手动备份并推送」= 先 POST /project/backup 再推送", async () => {
+    vi.mocked(apiCreateProjectBackup).mockResolvedValue({ backup: {} } as Awaited<ReturnType<typeof apiCreateProjectBackup>>);
+    vi.mocked(apiPushCloudBackup).mockResolvedValue({
+      pushed: { fileName: "b.zip", size: 1 },
+      remote: { dirName: "d", headFileName: "b.zip" },
+      pruned: [],
+    } as Awaited<ReturnType<typeof apiPushCloudBackup>>);
+    vi.mocked(apiGetCloudStatus).mockResolvedValue(status("synced"));
+    useCloudStore.setState({ staleDialogOpen: true });
+
+    await useCloudStore.getState().pushAfterFreshBackup();
+
+    expect(apiCreateProjectBackup).toHaveBeenCalledTimes(1);
+    expect(apiPushCloudBackup).toHaveBeenCalledTimes(1);
+    expect(useCloudStore.getState().staleDialogOpen).toBe(false);
+  });
+
+  it("备份失败时不推旧包（用户的意图是「推最新的」），只 toast 错误", async () => {
+    vi.mocked(apiCreateProjectBackup).mockRejectedValue(new ApiError("VALIDATION_ERROR", "备份名称非法"));
+    useCloudStore.setState({ staleDialogOpen: true });
+    await useCloudStore.getState().pushAfterFreshBackup();
+    expect(apiPushCloudBackup).not.toHaveBeenCalled();
+    expect(useStoreToast()).toContain("备份名称非法");
+    expect(useCloudStore.getState().staleDialogOpen).toBe(false);
+  });
+
+  it("「上传旧备份」= 直接走既有 push（不带 force）", async () => {
+    vi.mocked(apiGetCloudStatus).mockResolvedValue(status("local-ahead"));
+    vi.mocked(apiPushCloudBackup).mockResolvedValue({
+      pushed: { fileName: "b.zip", size: 1 },
+      remote: { dirName: "d", headFileName: "b.zip" },
+      pruned: [],
+    } as Awaited<ReturnType<typeof apiPushCloudBackup>>);
+    useCloudStore.setState({ staleDialogOpen: true });
+    await useCloudStore.getState().push();
+    expect(apiCreateProjectBackup).not.toHaveBeenCalled();
+    expect(apiPushCloudBackup).toHaveBeenCalledWith({});
+    expect(useCloudStore.getState().staleDialogOpen).toBe(false);
+  });
+
+  it("clearStatus 一并收掉对话框状态与跨页意图（切书不残留）", () => {
+    useCloudStore.setState({ conflictOpen: true, pullTarget: {} as never, staleDialogOpen: true, pendingSettingsPane: "cloud" });
+    useCloudStore.getState().clearStatus();
+    const s = useCloudStore.getState();
+    expect([s.conflictOpen, s.pullTarget, s.staleDialogOpen, s.pendingSettingsPane]).toEqual([false, null, false, null]);
   });
 });
 

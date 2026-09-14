@@ -192,8 +192,9 @@ export function CloudBackupPanel() {
       <SectionCard title="自动推送">
         <p className="mb-2 text-xs text-muted-foreground">
           每 2 小时且只在创作数据有变更时推送一次（创作数据 = 正文数据、大纲、参考资料、项目规则）；
-          关闭项目与手动备份后各额外触发一次，且不受 2 小时节流限制；纯聊天不单独触发（聊天记录会随下一次
-          创作变更一起上云）。自动备份频率关闭时按 2 小时排程，不会静默失效。关闭时仍可在云端面板手动推送。
+          关闭项目与手动备份后各额外触发一次，且不受 2 小时节流限制（关闭项目那次若「有改动未进最新备份」则跳过）；
+          纯聊天不单独触发（聊天记录会随下一次创作变更一起上云）。自动备份频率关闭时按 2 小时排程，不会静默失效。
+          关闭时仍可在云端面板手动推送。
         </p>
         <div className="flex items-center gap-2">
           <Switch
@@ -240,6 +241,14 @@ export function CloudBackupPanel() {
             {status?.errorCode !== undefined ? `（${status.errorCode}）` : ""}
           </span>
         </div>
+
+        {/* 有改动未进最新备份（卡 B）：一行提示，不弹窗——自动路径在该状态跳过不推，用户可点「立即备份」 */}
+        {status?.local?.backupStale === true && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            本机有改动未进最新备份（最新备份：{status.local.latestBackupFileName ?? "（还没有备份）"}）——云端只会上传旧份，
+            先「立即备份」（或点左栏「同步云端」时选择处理方式）。
+          </p>
+        )}
 
         {/* 自动推送失败（卡 7）：一行，不弹窗；任何一次推送成功后消失（唯一清除点 = pushBackup 成功写） */}
         {autoPushError !== null && (

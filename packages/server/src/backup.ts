@@ -853,6 +853,28 @@ export function hasAuthoringChangesSince(project: ProjectContext, since: Date): 
 }
 
 /**
+ * 最新一份**可解析**备份的时间（旧命名不算；无 → null）。`hasUnbackedChanges` 的基准，
+ * 也用于「升级兜底后是否已有新格式档」的判断。
+ */
+export function latestParseableBackupTime(project: ProjectContext): Date | null {
+  return latestBackupTime(join(project.root, BACKUPS_DIR_NAME));
+}
+
+/**
+ * 「本机有改动未进最新备份」（卡 B，`GET /cloud/status` 的 `local.backupStale`）：
+ * 最新一份本地备份的时间早于最新创作改动（三文件 + `references/` + `sessions/`，口径同
+ * `hasLocalEditsSince`，`data.db`/`-wal` 带 1s 容差）。**没有任何可解析备份 → true**
+ *（那时推送会 404「没有可推送的备份」，语义上也是「还没有能代表当前的档」）。
+ *
+ * 用途：自动推送的守卫（有未备份改动时跳过，不做「按需备份」——备份归本地、云端只是镜像）。
+ */
+export function hasUnbackedChanges(project: ProjectContext): boolean {
+  const latest = latestParseableBackupTime(project);
+  if (latest === null) return true;
+  return hasLocalEditsSince(project, latest);
+}
+
+/**
  * 自动备份单次检查（定时器 tick 核心，纯同步、可单测）：
  *
  * 1. 频率判定：关闭（null/0/非枚举）→ 直接返回 false（null/0 = 关闭；

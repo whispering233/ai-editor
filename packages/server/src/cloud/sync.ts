@@ -22,7 +22,7 @@ import {
 } from "@whispering233/ai-editor-shared";
 import { HttpError } from "../middleware/error.js";
 import type { ProjectContext } from "../middleware/project.js";
-import { BACKUPS_DIR_NAME, PACKED_DIR_NAMES, hasLocalEditsSince, restoreBackup } from "../backup.js";
+import { BACKUPS_DIR_NAME, PACKED_DIR_NAMES, hasLocalEditsSince, hasUnbackedChanges, restoreBackup } from "../backup.js";
 import { readBookState, readWebdavConfig, writeBookState } from "./state.js";
 import { createWebdavClient, type DavEntry, type WebdavClient } from "./webdav.js";
 
@@ -259,6 +259,8 @@ export function computeCloudSync(
     lastSyncAt,
     dirty,
     latestBackupFileName: latestLocalBackupName(join(project.root, BACKUPS_DIR_NAME)),
+    // 「有改动未进最新备份」（卡 B）：自动路径据此跳过、面板据此提示（不随同步前移）
+    backupStale: hasUnbackedChanges(project),
     // 自动推送最近一次失败（缺省不出现——成功即清，见 cloud/auto-push.ts）
     ...(state?.lastAutoPushError !== undefined ? { lastAutoPushError: state.lastAutoPushError } : {}),
   };

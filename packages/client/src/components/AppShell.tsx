@@ -19,6 +19,7 @@ import { ChatPanel } from "./chat/ChatPanel";
 import { FeedbackHost } from "./feedback/FeedbackHost";
 import { CloudConflictDialog } from "./settings/cloud-conflict-dialog";
 import { CloudPullConfirm } from "./settings/cloud-pull-confirm";
+import { CloudStaleBackupDialog } from "./settings/cloud-stale-backup-dialog";
 import { MainPanel } from "./main-panel/MainPanel";
 import { NavRail } from "./nav/NavRail";
 
@@ -168,6 +169,7 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
           挂在外壳层——左栏收起（NavRail 不渲染）时也能弹 */}
       <CloudPullConfirm />
       <CloudConflictDialog />
+      <CloudStaleBackupDialog />
       <FeedbackHost />
     </div>
   );

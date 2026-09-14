@@ -7,6 +7,10 @@
 //   不改创作数据，不该单烧一次配额）；关闭项目路径看**任何变更**（含 `sessions/`）
 // - **失败一律不抛、不阻塞**：只写 `lastAutoPushError` + `console.error`（关闭项目那次尤其如此——
 //   网络差时一次 push 可能数秒，不能拖住关闭；`POST /project/close` / `/project/backup` 都是 fire-and-forget）
+// - **职责分离（卡 B）**：云端**永不创建备份**；定时与关闭项目路径在「有改动未进最新备份」
+//   （`hasUnbackedChanges`）时**跳过**——不推旧包、也不写 `lastAutoPushError`（不是失败，是还没有
+//   能代表当下的档）；手动备份后的路径不受此限（刚生成的份必然最新）。用户主动同步时的二选一见
+//   `cloud-stale-backup-dialog`（客户端）。
 // - **本机没有任何备份 → 跳过而非失败**：用户还没「立即备份」过，不写错误标记（不是出问题，是没东西可推）
 // - 定时路径不推进 `lastAutoPushAt` 之外的任何状态——推送成功后的 `lastSyncAt`/`lastPushedFileName`
 //   由 `pushBackup` 写入（与手动推送同一套）
@@ -14,7 +18,7 @@
 // 依赖方向：本模块 → backup / cloud(state, sync)；**不得反向**（backup 模块不 import cloud，
 // tick 钩子由 middleware/project.ts 注册，见 backup.ts 的 `setProjectTick`）。
 
-import { hasAuthoringChangesSince, hasLocalEditsSince } from "../backup.js";
+import { hasAuthoringChangesSince, hasLocalEditsSince, hasUnbackedChanges } from "../backup.js";
 import { HttpError } from "../middleware/error.js";
 import type { ProjectContext } from "../middleware/project.js";
 import { readAutoPush, readBookState, readWebdavConfig, writeBookState, type CloudBookState } from "./state.js";
@@ -108,7 +112,11 @@ export async function maybeAutoPush(project: ProjectContext, options: AutoPushOp
     if (!Number.isNaN(last) && now() - last < throttleMs) return false;
   }
 
-  // ② 变更（只看创作数据；`sessions/` 的改动由关闭项目那次带走）
+  // ② 有改动未进最新备份（卡 B）→ **跳过不推**，也不记失败：这不是失败，是「还没有能代表当下的档」。
+  //    云端永不创建备份（职责分离）——等下次备份 tick（频率开启时）自然补上，或用户主动同步时二选一。
+  if (hasUnbackedChanges(project)) return false;
+
+  // ③ 变更（只看创作数据；`sessions/` 的改动由关闭项目那次带走）
   const lastSyncAt = state?.lastSyncAt;
   const changed =
     typeof lastSyncAt !== "string" ||
@@ -129,6 +137,8 @@ export async function maybeAutoPush(project: ProjectContext, options: AutoPushOp
  */
 export async function autoPushOnClose(project: ProjectContext): Promise<void> {
   if (autoPushOff()) return;
+  // 卡 B：有改动未进最新备份 → 跳过（同定时路径；免得把落后内容静默推上去让另一台误以为已同步）
+  if (hasUnbackedChanges(project)) return;
   const lastSyncAt = readBookState(project.config.id)?.lastSyncAt;
   const changed =
     typeof lastSyncAt !== "string" ||
