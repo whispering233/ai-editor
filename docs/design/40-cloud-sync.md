@@ -315,7 +315,7 @@
 | :--- | :--- | :--- |
 | 未配置就调用需要云端的动作 | `CLOUD_NOT_CONFIGURED`（409） | 「未配置云盘」→ 引导进设置页云端面板 |
 | 上游 401/403（凭据被吊销、应用密码错误、权限不足） | `CLOUD_AUTH_FAILED`（502） | 「云盘认证失败，请检查用户名/应用密码」，不自动重试 |
-| 网络不可达 / DNS / TLS / 超时 / 上游 5xx | `CLOUD_UNREACHABLE`（502） | 「无法连接云盘（…）：<底层原因>」（**带上底层错误码**：普通 Error 取 `cause.code`，undici 多地址聚合失败时取 `cause.errors[].code` 里首个可用值——否则文案退化成无信息量的 `fetch failed`） |
+| 网络不可达 / DNS / TLS / 超时 / 上游 5xx | `CLOUD_UNREACHABLE`（502） | 「无法连接云盘（…）：<底层原因>」（**带上底层错误码**：普通 Error 取 `cause.code`，undici 多地址聚合失败时取 `cause.errors[].code` 并**去重合并展示**（如 `ECONNREFUSED/ETIMEDOUT`）——否则文案退化成无信息量的 `fetch failed`） |
 | 上游 507 / 配额提示（流量或容量耗尽） | `CLOUD_QUOTA_EXCEEDED`（502） | 「云盘空间或上传流量已用尽」（提示免费账户 1GB/月） |
 | zip 超过单文件上限（本地先判） | `CLOUD_BACKUP_TOO_LARGE`（400） | 「备份包 N MB 超过云盘单文件上限 500MB，未推送」 |
 | 推送时 head ≠ lastPushed | `CLOUD_CONFLICT`（409） | 弹出裁决 |
@@ -323,3 +323,4 @@
 
 **上游 404（书目录不存在）不是错误**：推送前 `MKCOL` 幂等创建。错误码登记见 `../api/error-code.md`（服务端扩展码）。
 **「可写不可删」的云盘不报认证失败**：`/cloud/test` 的写测试文件删除失败（DELETE 403/405 等）**不降级为 `CLOUD_AUTH_FAILED`**——凭据本身是好的，读 + 写都通过了，只是清理失败；返回成功并在文案里说明「已在云盘根目录留下 `.tmp-` 测试文件，可手动删除」（删除失败的具体状态码进日志）。反过来说：`PUT` 失败才是真的写权限问题（`AUTH_FAILED`）。
+**代价（登记）**：DELETE 受限的云盘上，保留策略清理与 `.tmp-*` 清理也只会 `console.error` 并放行（设计如此：清理失败不阻塞推送）——表现是**份数不收敛**（可能堆到配额上限）与临时文件残留，靠下次推送重试；`/cloud/test` 的文案只提示测试文件残留，不覆盖这条。

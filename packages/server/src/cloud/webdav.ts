@@ -229,8 +229,8 @@ export function createWebdavClient(options: WebdavClientOptions): WebdavClient {
 
   /**
  * 底层错误的「可读原因」：优先 `cause.code`（`ECONNREFUSED`/`ENOTFOUND`/`ETIMEDOUT`…）；
- * `cause` 是 `AggregateError`（多地址/多族轮询全失败）时取 `cause.errors[].code` 里首个可用值。
- * 取不到 → null（调用方回退到顶层 message）。
+ * `cause` 是 `AggregateError`（多地址/多族轮询全失败）时取 `cause.errors[].code` 并**去重合并展示**
+ * （如 `ECONNREFUSED/ETIMEDOUT`——比只报第一个更有诊断价值）。取不到 → null（调用方回退顶层 message）。
  */
 function describeErrorCause(cause: unknown): string | null {
   const direct = (cause as { code?: unknown } | null | undefined)?.code;

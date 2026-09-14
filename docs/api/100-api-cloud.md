@@ -109,7 +109,8 @@
 ```typescript
 // Req: (none —— 用已保存的配置；先 PUT /config 再 test)
 // Res: 200
-{ connected: true; baseUrl: string; created: boolean }  // created = 本次新建了根目录
+{ connected: true; baseUrl: string; created: boolean; leftoverWriteTestFile?: boolean }
+// created = 本次新建了根目录；leftoverWriteTestFile = 云盘不允许删除（写测试文件残留，凭据仍有效）
 ```
 
 **错误码**：409 `CLOUD_NOT_CONFIGURED`、502 `CLOUD_AUTH_FAILED` / `CLOUD_UNREACHABLE` / `CLOUD_QUOTA_EXCEEDED`。

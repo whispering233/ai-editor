@@ -150,6 +150,7 @@ export const useCloudStore = create<CloudState>((set, get) => ({
       status: null,
       statusFailed: false,
       localLatest: null,
+      localLatestUnavailable: false,
       lastError: null,
       // 关闭项目/切书时一并收掉对话框与跨页意图（否则旧书的状态会挂在界面上）
       conflictOpen: false,
