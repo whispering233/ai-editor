@@ -177,10 +177,18 @@ cloudRoutes.post("/test", async (c) => {
   // 1) 根目录可达性：列不出来（404）→ 幂等创建
   const entries = await client.list("");
   const created = entries === null ? await client.mkcol("") : false;
-  // 2) 写权限探测：写一个临时小文件再删除（留下残file也不怕——`.tmp-` 前缀在清理白名单内）
+  // 2) 写权限探测：写一个临时小文件再删除。
+  // **可写不可删的云盘（DELETE 403/405…）不降级为认证失败**——读 + 写都通过了，凭据有效，只是清理失败；
+  // 报 502 AUTH_FAILED 会误导用户去查凭据。这里改为成功 + 提示残留（具体状态码进日志）。
   await client.put(WEBDAV_WRITE_TEST_FILE, new TextEncoder().encode("ai-editor webdav write test"));
-  await client.remove(WEBDAV_WRITE_TEST_FILE);
+  let leftover = false;
+  try {
+    await client.remove(WEBDAV_WRITE_TEST_FILE);
+  } catch (err) {
+    leftover = true;
+    console.error("[cloud] 测试文件删除失败（云盘可能不允许删除；凭据本身正常）:", err);
+  }
 
-  const payload: CloudTestResult = { connected: true, baseUrl: webdav.url, created };
+  const payload: CloudTestResult = { connected: true, baseUrl: webdav.url, created, ...(leftover ? { leftoverWriteTestFile: true } : {}) };
   return c.json(ok(payload));
 });

@@ -194,4 +194,9 @@ export interface CloudTestResult {
   baseUrl: string;
   /** 本次测试创建了根目录（原先不存在） */
   created: boolean;
+  /**
+   * 云盘不允许删除（DELETE 403/405…）：写测试文件已写入但删不掉（卡 C 收口）。
+   * 凭据有效（读 + 写都通过），UI 只需提示「云盘根目录残留一个 `.tmp-` 测试文件，可手动删除」。
+   */
+  leftoverWriteTestFile?: boolean;
 }

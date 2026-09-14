@@ -99,7 +99,14 @@ export function CloudBackupPanel() {
     try {
       const res = await testCloudConnection();
       // created = 本次测试顺带在云盘上创建了根目录（首次接入的常见路径）
-      showToast(res.created ? "连接成功，已在云盘创建目录" : "连接成功（已写入并删除测试文件）");
+      // leftoverWriteTestFile = 云盘不允许删除：连接与写权限都正常，只是测试文件留在根目录（卡 C）
+      showToast(
+        res.leftoverWriteTestFile === true
+          ? "连接成功（云盘不允许删除，根目录残留 .tmp- 测试文件，可手动删除）"
+          : res.created
+            ? "连接成功，已在云盘创建目录"
+            : "连接成功（已写入并删除测试文件）",
+      );
     } catch (err) {
       showToast(cloudErrorText(err, "无法连接服务，测试未执行"), "error");
     } finally {

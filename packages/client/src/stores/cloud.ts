@@ -53,6 +53,9 @@ interface CloudState {
   statusFailed: boolean;
   /** 本机最新一份备份（推送缺省目标 / 裁决框「本机那份」的展示；无项目或无备份 → null） */
   localLatest: BackupEntry | null;
+  /** 本机份列表**读取失败**（与「真的没有备份」区分，卡 C）：true 时禁用强推/上传旧备份并说明原因，
+   * 不得把故障显示成「本机还没有备份」（那是把故障说成事实） */
+  localLatestUnavailable: boolean;
   /** 在途动作（防连点；左栏按钮 `loading` 与面板按钮 `disabled` 都看它） */
   busy: "refresh" | "push" | "pull" | null;
   /** 最近一次动作失败文案（面板行内展示；toast 之外留一份可回看） */
@@ -82,6 +85,7 @@ interface CloudState {
   closePullConfirm: () => void;
   openConflict: () => void;
   closeConflict: () => void;
+  pullConflictKeepCloud: () => Promise<void>;
   openStaleDialog: () => void;
   closeStaleDialog: () => void;
   /** 请求「跳到设置页 → 备份 → 云端备份」（未配置时的引导） */
@@ -96,6 +100,7 @@ export const useCloudStore = create<CloudState>((set, get) => ({
   status: null,
   statusFailed: false,
   localLatest: null,
+  localLatestUnavailable: false,
   busy: null,
   lastError: null,
   conflictOpen: false,
@@ -105,21 +110,32 @@ export const useCloudStore = create<CloudState>((set, get) => ({
 
   refresh: async () => {
     if (inFlight !== null) return inFlight;
-    set({ busy: get().busy ?? "refresh" });
+    // busy 归属（卡 C）：只在自己「从空闲变为 refresh」时设它，也只在**自己设过**时清它——
+    // 否则会在 push/pull 在途时把它们的 busy 清掉（虽同 tick 内窗口极小，但破坏「谁设的谁清」不变式）
+    const ownsBusy = get().busy === null;
+    if (ownsBusy) set({ busy: "refresh" });
     inFlight = (async () => {
       try {
-        const [next, backups] = await Promise.all([
+        // 本机份列表是本地读写（不碰云盘），与状态一起刷，两个消费者看到同一份快照。
+        // 读取失败要能与「真的没有备份」区分（卡 C）——用结果对象而不是闭包赋值（TS 收窄）
+        const [next, backupsResult] = await Promise.all([
           getCloudStatus(),
-          // 本机份列表是本地读写（不碰云盘），与状态一起刷，两个消费者看到同一份快照
-          getProjectBackups().catch(() => null),
+          getProjectBackups()
+            .then((res) => ({ ok: true as const, res }))
+            .catch(() => ({ ok: false as const })),
         ]);
-        set({ status: next, statusFailed: false, localLatest: backups?.backups[0] ?? null });
+        set({
+          status: next,
+          statusFailed: false,
+          localLatest: backupsResult.ok ? (backupsResult.res.backups[0] ?? null) : null,
+          localLatestUnavailable: !backupsResult.ok,
+        });
         return next;
       } catch {
         set({ statusFailed: true, status: null, localLatest: null });
         return null;
       } finally {
-        set({ busy: null });
+        if (ownsBusy) set({ busy: null });
       }
     })();
     try {
@@ -260,6 +276,12 @@ export const useCloudStore = create<CloudState>((set, get) => ({
     }
   },
 
+  /** 冲突裁决框「保留云端（拉取覆盖本机）」：**显式带上对话框里展示的那一份**（卡 C）——
+   * 不能只写「拉取云端 head」：对话框与点击之间云端可能又多了新份，界面承诺要与实际动作一致 */
+  pullConflictKeepCloud: async () => {
+    // 与冲突框展示同一数据源（`status.remote.backups[0]`），不是「服务端当下 head」
+    await get().pull(get().status?.remote?.backups[0]);
+  },
   openPullConfirm: (entry) => set({ pullTarget: entry }),
   closePullConfirm: () => set({ pullTarget: null }),
   openConflict: () => set({ conflictOpen: true }),

@@ -74,6 +74,7 @@ beforeEach(() => {
     pullTarget: null,
     pendingSettingsPane: null,
     staleDialogOpen: false,
+    localLatestUnavailable: false,
   });
   vi.mocked(apiGetProjectBackups).mockResolvedValue({ backups: [] });
 });
@@ -305,6 +306,57 @@ describe("卡 B：有改动未进最新备份（backupStale）", () => {
     useCloudStore.getState().clearStatus();
     const s = useCloudStore.getState();
     expect([s.conflictOpen, s.pullTarget, s.staleDialogOpen, s.pendingSettingsPane]).toEqual([false, null, false, null]);
+  });
+});
+
+describe("卡 C：busy 归属 / 冲突框带份 / 读取失败区分 / 宿主上移", () => {
+  it("refresh 在 push 在途时不抢也不清 busy（谁设的谁清）", async () => {
+    vi.mocked(apiGetCloudStatus).mockResolvedValue(status("synced"));
+    // 模拟 push 在途：busy 已由 push 设为 "push"
+    useCloudStore.setState({ busy: "push" });
+    await useCloudStore.getState().refresh();
+    expect(useCloudStore.getState().busy).toBe("push"); // 未被 refresh 清掉
+  });
+
+  it("refresh 自己设的 busy 在结束后归位", async () => {
+    vi.mocked(apiGetCloudStatus).mockResolvedValue(status("synced"));
+    useCloudStore.setState({ busy: null });
+    await useCloudStore.getState().refresh();
+    expect(useCloudStore.getState().busy).toBeNull();
+  });
+
+  it("冲突框「保留云端」拉取的是**框里展示的那一份**（不是服务端当下 head）", async () => {
+    const shown = { ...REMOTE_ENTRY, fileName: "20260915-013216970-手动-验证机-人物0-设定0-章0.zip" };
+    useCloudStore.setState({
+      status: status("conflict", { remote: { dirName: "d", backups: [shown] } }),
+      conflictOpen: true,
+    });
+    vi.mocked(apiPullCloudBackup).mockResolvedValue({
+      pulled: shown,
+      snapshot: { fileName: "s.zip" },
+      merged: { kept: 0, written: 0, removed: 0 },
+    } as Awaited<ReturnType<typeof apiPullCloudBackup>>);
+    vi.mocked(apiGetCloudStatus).mockResolvedValue(status("synced"));
+
+    await useCloudStore.getState().pullConflictKeepCloud();
+
+    expect(apiPullCloudBackup).toHaveBeenCalledWith({ fileName: shown.fileName });
+  });
+
+  it("本机份列表读取失败 → localLatestUnavailable=true（与「真的没有备份」区分）", async () => {
+    vi.mocked(apiGetCloudStatus).mockResolvedValue(status("synced"));
+    vi.mocked(apiGetProjectBackups).mockRejectedValue(new ApiError("INTERNAL_ERROR", "读目录失败"));
+    await useCloudStore.getState().refresh();
+    expect(useCloudStore.getState().localLatestUnavailable).toBe(true);
+    expect(useCloudStore.getState().localLatest).toBeNull();
+  });
+
+  it("本机确实没有备份（列表读得到但为空）→ unavailable=false", async () => {
+    vi.mocked(apiGetCloudStatus).mockResolvedValue(status("synced"));
+    vi.mocked(apiGetProjectBackups).mockResolvedValue({ backups: [] });
+    await useCloudStore.getState().refresh();
+    expect(useCloudStore.getState().localLatestUnavailable).toBe(false);
+    expect(useCloudStore.getState().localLatest).toBeNull();
   });
 });
 

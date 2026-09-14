@@ -47,11 +47,12 @@ export function CloudConflictDialog() {
   const open = useCloudStore((s) => s.conflictOpen);
   const status = useCloudStore((s) => s.status);
   const localLatest = useCloudStore((s) => s.localLatest);
+  const localUnavailable = useCloudStore((s) => s.localLatestUnavailable);
+  const keepCloud = useCloudStore((s) => s.pullConflictKeepCloud);
   const busy = useCloudStore((s) => s.busy);
   const lastError = useCloudStore((s) => s.lastError);
   const closeConflict = useCloudStore((s) => s.closeConflict);
   const push = useCloudStore((s) => s.push);
-  const pull = useCloudStore((s) => s.pull);
 
   if (!open) return null;
 
@@ -104,18 +105,28 @@ export function CloudConflictDialog() {
         </div>
 
         {lastError !== null && <p className="mt-1 text-xs text-destructive">{lastError}</p>}
-        {localLatest === null && (
+        {/* 读取失败 ≠ 没有备份（卡 C）：把故障说成事实会误导（用户会以为备份丢了） */}
+        {localUnavailable && (
+          <p className="mt-1 text-xs text-destructive">
+            本机备份列表读取失败——无法确认本机有没有可用备份，先刷新设置页面板再裁决。
+          </p>
+        )}
+        {localLatest === null && !localUnavailable && (
           <p className="mt-1 text-xs text-muted-foreground">
             本机还没有备份，先在设置页「立即备份」生成一份，才能用本机覆盖云端。
           </p>
         )}
 
         <DialogFooter>
-          <Button disabled={busy !== null || remote === null} loading={busy === "pull"} onClick={() => void pull()}>
+          <Button
+            disabled={busy !== null || remote === null}
+            loading={busy === "pull"}
+            onClick={() => void keepCloud()} // 拉取**框里展示的这份**（卡 C）
+          >
             保留云端（拉取覆盖本机）
           </Button>
           <Button
-            disabled={busy !== null || localLatest === null}
+            disabled={busy !== null || localLatest === null || localUnavailable}
             loading={busy === "push"}
             onClick={() => void push({ force: true })}
           >

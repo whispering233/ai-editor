@@ -15,7 +15,7 @@
 //   `stores/cloud.ts`；角标只在「有未推改动 / 云端有更新 / 冲突」时亮（`unreachable` 明确不亮），
 //   状态在「打开项目」与「每次点击」复查，**不轮询**（/status 每次 2-3 次 PROPFIND，云盘有配额）。
 import { Badge, Button, Menu } from "antd";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   ApartmentOutlined,
   BookOutlined,
@@ -83,20 +83,10 @@ export function NavRail({
   const cloudStatus = useCloudStore((s) => s.status);
   const cloudBusy = useCloudStore((s) => s.busy);
   const syncNow = useCloudStore((s) => s.syncNow);
-  const refreshCloud = useCloudStore((s) => s.refresh);
-  const clearCloudStatus = useCloudStore((s) => s.clearStatus);
   const badgeTone = cloudBadgeTone(cloudStatus);
 
-  // 「打开项目时那次检查」：项目切换才刷一次（关闭项目 → 清空，角标不留上一本书的判断）。
-  // 不做轮询——/status 每次 2-3 次 PROPFIND，云盘免费额度只有 600 次/30 分钟。
-  const projectId = config?.id ?? null;
-  useEffect(() => {
-    if (projectId === null) {
-      clearCloudStatus();
-      return;
-    }
-    void refreshCloud();
-  }, [projectId, refreshCloud, clearCloudStatus]);
+  // 「打开项目时那次检查」已上移到 `AppShell`（卡 C）：左栏收起时 NavRail 不挂载，
+  // 检查与清空都不能只挂在这里（自动推送会改服务端同步状态，收起左栏时也得能复查）。
 
   /** 立即备份（无名称 = 纯时间戳文件名 `-m` 段；文案与设置页 BackupSection 对齐） */
   async function handleBackupNow() {

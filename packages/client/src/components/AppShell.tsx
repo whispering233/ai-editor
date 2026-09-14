@@ -5,7 +5,7 @@
 // ChatPanel（或收起窄条）；收起态下手柄隐藏/禁用（拖拽与收起互斥）。
 // <1024px 小屏不渲染手柄/收起条，三栏回退默认百分比类（右栏抽屉行为不变，开关在 InfoBar 右侧，
 // 抽屉渲染在 ChatPanel；open 状态在此持有）
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "antd";
 import {
   DoubleLeftOutlined,
@@ -14,6 +14,8 @@ import {
 } from "@ant-design/icons";
 import type { Route } from "../hooks/use-route";
 import { usePanels } from "../hooks/use-panels";
+import { useCloudStore } from "../stores/cloud";
+import { useProjectStore } from "../stores/project";
 import { cn } from "../lib/utils";
 import { ChatPanel } from "./chat/ChatPanel";
 import { FeedbackHost } from "./feedback/FeedbackHost";
@@ -97,6 +99,20 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
   const { layout, isDesktop, dragSide, toggleCollapse, startResize, moveResize, endResize } =
     usePanels();
   const isDragging = dragSide !== null;
+
+  // 云端状态的「打开项目时那次检查」挂在外壳层（卡 C）：左栏收起时 NavRail 不挂载，
+  // 不能只挂在那里——自动推送会改服务端同步状态，收起左栏同样需要复查与清理。
+  // 不做轮询：/status 每次 2-3 次 PROPFIND，云盘免费额度 600 次/30 分钟；并发由 store 合并。
+  const projectId = useProjectStore((s) => s.config?.id ?? null);
+  const refreshCloud = useCloudStore((s) => s.refresh);
+  const clearCloudStatus = useCloudStore((s) => s.clearStatus);
+  useEffect(() => {
+    if (projectId === null) {
+      clearCloudStatus();
+      return;
+    }
+    void refreshCloud();
+  }, [projectId, refreshCloud, clearCloudStatus]);
 
   return (
     // 拖拽期间根容器禁文本选中（指针已 capture 在手柄上，兜底防边缘选中）

@@ -207,10 +207,12 @@ export function createWebdavClient(options: WebdavClientOptions): WebdavClient {
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
  // undici 的顶层错误常是笼统的 `fetch failed`，真正的诊断信息在 `cause.code`
- // （ECONNREFUSED/ENOTFOUND/ETIMEDOUT…）——把它带上，让「测试连接」的提示可行动
-      const causeCode = (err as { cause?: { code?: unknown } }).cause?.code;
+ // （ECONNREFUSED/ENOTFOUND/ETIMEDOUT…）——把它带上，让「测试连接」的提示可行动。
+ // 多地址轮询全失败时 undici 抛 AggregateError（`cause.errors[]`，本身没有 `code`）——
+ // 那时逐个取 `errors[].code`，否则文案又退化成无信息量的 `fetch failed`（卡 5 复核登记的坑）。
+      const causeCode = describeErrorCause((err as { cause?: unknown }).cause);
       const detail =
-        typeof causeCode === "string" && !reason.includes(causeCode) ? `${reason}（${causeCode}）` : reason;
+        causeCode !== null && !reason.includes(causeCode) ? `${reason}（${causeCode}）` : reason;
       throw new HttpError(502, "CLOUD_UNREACHABLE", `无法连接云盘（${method}）：${detail}`);
     }
   }
@@ -225,7 +227,25 @@ export function createWebdavClient(options: WebdavClientOptions): WebdavClient {
     }
   }
 
-  /** 非预期状态码 → 按码表抛错（配额判定需要在 403 时看响应体） */
+  /**
+ * 底层错误的「可读原因」：优先 `cause.code`（`ECONNREFUSED`/`ENOTFOUND`/`ETIMEDOUT`…）；
+ * `cause` 是 `AggregateError`（多地址/多族轮询全失败）时取 `cause.errors[].code` 里首个可用值。
+ * 取不到 → null（调用方回退到顶层 message）。
+ */
+function describeErrorCause(cause: unknown): string | null {
+  const direct = (cause as { code?: unknown } | null | undefined)?.code;
+  if (typeof direct === "string" && direct !== "") return direct;
+  const errors = (cause as { errors?: unknown } | null | undefined)?.errors;
+  if (Array.isArray(errors)) {
+    const codes = errors
+      .map((e) => (e as { code?: unknown } | null | undefined)?.code)
+      .filter((c): c is string => typeof c === "string" && c !== "");
+    if (codes.length > 0) return [...new Set(codes)].join("/"); // 多地址同因（ECONNREFUSED×2）合并展示
+  }
+  return null;
+}
+
+/** 非预期状态码 → 按码表抛错（配额判定需要在 403 时看响应体） */
   async function throwMapped(res: Response, what: string): Promise<never> {
     const detail = await bodySnippet(res);
     const suffix = detail === "" ? "" : `：${detail}`;

@@ -237,6 +237,16 @@ describe("POST /api/v1/cloud/test", () => {
     expect((await res.json()).error.code).toBe("CLOUD_AUTH_FAILED");
   });
 
+  it("可写不可删（DELETE 403）→ 仍 200 + leftoverWriteTestFile:true（不误报认证失败，卡 C）", async () => {
+    await putConfig({ url: "https://dav.example.com/dav/ai-editor", username: "u", password: "pw" });
+    stubHealthy({ DELETE: new Response("forbidden", { status: 403 }) });
+    const res = await app.request("/api/v1/cloud/test", { method: "POST", headers: HOST_HEADERS });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { data: { connected: boolean; leftoverWriteTestFile?: boolean } };
+    expect(body.data.connected).toBe(true);
+    expect(body.data.leftoverWriteTestFile).toBe(true);
+  });
+
   it("响应文本永不含 password（含失败路径）", async () => {
     await putConfig({ url: "https://dav.example.com/dav/ai-editor", username: "u", password: PASSWORD });
     stubHealthy({ PROPFIND: new Response("Unauthorized", { status: 401 }) });

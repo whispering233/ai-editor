@@ -277,3 +277,40 @@ describe("错误映射（→ HttpError；码表 docs/api/error-code.md）", () =
     expect(DEFAULT_WEBDAV_TIMEOUT_MS).toBe(30_000);
   });
 });
+
+describe("不可达文案的底层错误码（卡 C）", () => {
+  it("普通 Error 的 cause.code 照旧带上（ECONNREFUSED）", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("fetch failed", { cause: { code: "ECONNREFUSED" } }))));
+    const client = createWebdavClient({ url: "https://dav.example.com/dav", username: "u", password: "p" });
+    await expect(client.list("")).rejects.toMatchObject({
+      code: "CLOUD_UNREACHABLE",
+      message: expect.stringContaining("ECONNREFUSED"),
+    });
+    vi.unstubAllGlobals();
+  });
+
+  it("AggregateError（多地址全失败）取 cause.errors[].code，不退化成 fetch failed", async () => {
+    const agg = Object.assign(new Error("fetch failed"), {
+      cause: Object.assign(new Error("all addresses failed"), {
+        errors: [{ code: "ECONNREFUSED" }, { code: "ECONNREFUSED" }, { code: "ETIMEDOUT" }],
+      }),
+    });
+    vi.stubGlobal("fetch", vi.fn(() => Promise.reject(agg)));
+    const client = createWebdavClient({ url: "https://dav.example.com/dav", username: "u", password: "p" });
+    const err = await client.list("").catch((e: unknown) => e as { message: string });
+    expect(err.message).toContain("ECONNREFUSED"); // 去重后合并展示
+    expect(err.message).toContain("ETIMEDOUT");
+    expect(err.message).not.toContain("fetch failed）"); // 不再是「fetch failed」裸文案
+    vi.unstubAllGlobals();
+  });
+
+  it("cause.errors 里没有可用 code → 回退顶层 message（不抛、不空文案）", async () => {
+    const agg = Object.assign(new Error("fetch failed"), {
+      cause: Object.assign(new Error("agg"), { errors: [new Error("x"), new Error("y")] }),
+    });
+    vi.stubGlobal("fetch", vi.fn(() => Promise.reject(agg)));
+    const client = createWebdavClient({ url: "https://dav.example.com/dav", username: "u", password: "p" });
+    await expect(client.list("")).rejects.toMatchObject({ message: expect.stringContaining("fetch failed") });
+    vi.unstubAllGlobals();
+  });
+});

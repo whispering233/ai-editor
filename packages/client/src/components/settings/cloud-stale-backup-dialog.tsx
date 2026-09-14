@@ -23,6 +23,7 @@ import {
 export function CloudStaleBackupDialog() {
   const open = useCloudStore((s) => s.staleDialogOpen);
   const localLatest = useCloudStore((s) => s.localLatest);
+  const localUnavailable = useCloudStore((s) => s.localLatestUnavailable);
   const busy = useCloudStore((s) => s.busy);
   const lastError = useCloudStore((s) => s.lastError);
   const closeStaleDialog = useCloudStore((s) => s.closeStaleDialog);
@@ -55,9 +56,20 @@ export function CloudStaleBackupDialog() {
         </ul>
 
         {lastError !== null && <p className="text-xs text-destructive">{lastError}</p>}
+        {localLatest === null && !localUnavailable && (
+          <p className="text-xs text-muted-foreground">本机还没有备份，「上传旧备份」不可用——用左边那条先生成一份。</p>
+        )}
+        {localUnavailable && (
+          <p className="text-xs text-destructive">本机备份列表读取失败，无法确认有没有可上传的旧备份。</p>
+        )}
 
         <DialogFooter>
-          <Button disabled={busy !== null} loading={busy === "push"} onClick={() => void push()}>
+          {/* 本机没有任何备份（或列表读取失败）→ 禁用「上传旧备份」（服务端会 404；DESIGN.md §549） */}
+          <Button
+            disabled={busy !== null || localLatest === null || localUnavailable}
+            loading={busy === "push"}
+            onClick={() => void push()}
+          >
             上传旧备份
           </Button>
           <Button disabled={busy !== null} onClick={() => void pushAfterFreshBackup()}>
