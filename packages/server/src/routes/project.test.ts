@@ -4,7 +4,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { unzipSync, zipSync } from "fflate";
 import type { OutlineFileTree, ProjectFileConfig } from "@whispering233/ai-editor-shared";
@@ -38,6 +38,18 @@ import {
   setCurrentProject,
 } from "../middleware/project.js";
 import { projectRoutes, setProjectRoot } from "./project.js";
+
+// 卡 7：自动推送的两条**事件路径**在路由层被 fire-and-forget 接线（服务层语义见 `cloud/auto-push.test.ts`）。
+// 这里 mock 三个出口，只断言「被调用」与「reject 不影响响应」；常量与其余导出保持真实实现。
+vi.mock("../cloud/auto-push.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../cloud/auto-push.js")>();
+  return { ...actual, maybeAutoPush: vi.fn(), autoPushOnClose: vi.fn(), autoPushAfterManualBackup: vi.fn() };
+});
+
+import {
+  autoPushAfterManualBackup as mockAutoPushAfterManualBackup,
+  autoPushOnClose as mockAutoPushOnClose,
+} from "../cloud/auto-push.js";
 
 const HOST_HEADERS = { host: "127.0.0.1:3456" }; // 来源校验 host 白名单
 const T0 = "2026-08-01T10:00:00Z";
@@ -2086,5 +2098,56 @@ describe("导出/导入 zip 条目（ora-4）", () => {
     expect([...PROJECT_EXPORT_FILE_NAMES].sort()).toEqual(
       [PROJECT_FILE_NAME, OUTLINE_FILE_NAME, DATA_DB_FILE_NAME].sort(),
     );
+  });
+});
+
+// ============ 卡 7：自动推送的路由接线（fire-and-forget） ============
+
+describe("卡 7 自动推送接线", () => {
+  beforeEach(() => {
+    vi.mocked(mockAutoPushOnClose).mockReset().mockResolvedValue(undefined);
+    vi.mocked(mockAutoPushAfterManualBackup).mockReset().mockResolvedValue(undefined);
+  });
+
+  /** 打开一本临时书（返回 app 与目录） */
+  async function openBook(id: string): Promise<Hono> {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig(id, "推送接线"));
+    const app = buildApp();
+    const res = await app.request("/api/v1/project/open", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: dir }),
+    });
+    expect(res.status).toBe(200);
+    return app;
+  }
+
+  it("手动备份成功后触发一次自动推送（不改变 backup 响应）", async () => {
+    const app = await openBook("proj-ap1");
+    const res = await app.request("/api/v1/project/backup", { method: "POST", headers: HOST_HEADERS });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { success: boolean; data: { backup: { fileName: string } } };
+    expect(body.success).toBe(true);
+    await vi.waitFor(() => expect(vi.mocked(mockAutoPushAfterManualBackup)).toHaveBeenCalledTimes(1));
+    // 参数 = 当前项目（推送只读 .backups/ 与 cloud.json，不需要 db 连接）
+    expect(vi.mocked(mockAutoPushAfterManualBackup).mock.calls[0]?.[0]?.config.id).toBe("proj-ap1");
+  });
+
+  it("关闭项目时触发一次自动推送；即使推送 reject，close 响应仍为 saved:true（不阻塞）", async () => {
+    const app = await openBook("proj-ap2");
+    vi.mocked(mockAutoPushOnClose).mockRejectedValue(new Error("云盘不可达（模拟）"));
+    const res = await app.request("/api/v1/project/close", { method: "POST", headers: HOST_HEADERS });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ success: true, data: { saved: true } });
+    await vi.waitFor(() => expect(vi.mocked(mockAutoPushOnClose)).toHaveBeenCalledTimes(1));
+    expect(getCurrentProject()).toBeNull();
+  });
+
+  it("无项目时 close 不触发推送（幂等路径不误推）", async () => {
+    const app = buildApp();
+    const res = await app.request("/api/v1/project/close", { method: "POST", headers: HOST_HEADERS });
+    expect(res.status).toBe(200);
+    expect(vi.mocked(mockAutoPushOnClose)).not.toHaveBeenCalled();
   });
 });

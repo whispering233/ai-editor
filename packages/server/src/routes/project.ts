@@ -54,6 +54,7 @@ import {
   setCurrentProject,
   type ProjectContext,
 } from "../middleware/project.js";
+import { autoPushAfterManualBackup, autoPushOnClose } from "../cloud/auto-push.js";
 import { renameCloudDir } from "../cloud/sync.js";
 import { logSoftDeleteReconcile, reconcileSoftDelete } from "../consistency.js";
 import { writeLastProject } from "../last-project.js";
@@ -303,6 +304,11 @@ function listResponse(c: Context, result: { rootPath: string; books: Array<{ nam
 projectRoutes.post("/close", (c) => {
   const project = getCurrentProject();
   if (project !== null) {
+ // 自动推送（卡 7）：「工作段结束」语义——变更判定含 sessions/（纯聊天也算），不受 2h 节流。
+ // **fire-and-forget**（不 await）：网络差时一次 push 可能数秒，不能拖住关闭；失败只记
+ // lastAutoPushError + 日志（响应语义与无云盘时完全一致）。推送只读 .backups/ 与 cloud.json，
+ // 不碰 data.db 连接，故先启动再关连接安全
+    void autoPushOnClose(project);
     closeProject(project);
     setCurrentProject(null);
   }
@@ -626,7 +632,11 @@ projectRoutes.post("/backup", async (c) => {
     throw new HttpError(400, "VALIDATION_ERROR", `备份请求体非法: ${parsed.error.issues[0]?.message ?? "参数校验失败"}`);
   }
  // kind 显式传 "manual"：name undefined 时 writeBackup 内部不 sanitize、无名称段（落 -m 段）
-  return c.json(ok({ backup: writeBackup(project, { name: parsed.data.name, kind: "manual" }) }));
+  const backup = writeBackup(project, { name: parsed.data.name, kind: "manual" });
+ // 自动推送（卡 7）：手动备份成功后无条件推一次（**fire-and-forget**，不 await；不受节流、不推进
+ // lastAutoPushAt；推的内容 = 最新一份 = 刚生成的这份）。推送失败不影响备份响应
+  void autoPushAfterManualBackup(project);
+  return c.json(ok({ backup }));
 });
 
 // POST /api/v1/project/backup/rename —— 重命名备份（只改名称段，时间戳与 kind 保持）

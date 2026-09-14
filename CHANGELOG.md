@@ -7,7 +7,7 @@
 
 ## [Unreleased]
 
-> **云端存档批次**（2026-09）：卡 1 备份命名升级（设备段 + 尾部三段统计、类型段中文化、目录 mtime 变更判定）；卡 2 云端基础层（`cloud.json` 配置载体 + WebDAV 最小客户端 + 配置/状态/测试三端点）；卡 3 设置页云端面板；卡 4 推送；卡 5 拉取与三态；卡 6 一键同步与冲突裁决。设计和契约见 `docs/design/40-cloud-sync.md` 与 `docs/api/100-api-cloud.md`；自动推送（卡 7）随后。
+> **云端存档批次**（2026-09）：卡 1 备份命名升级（设备段 + 尾部三段统计、类型段中文化、目录 mtime 变更判定）；卡 2 云端基础层（`cloud.json` 配置载体 + WebDAV 最小客户端 + 配置/状态/测试三端点）；卡 3 设置页云端面板；卡 4 推送；卡 5 拉取与三态；卡 6 一键同步与冲突裁决；卡 7 自动推送。设计和契约见 `docs/design/40-cloud-sync.md` 与 `docs/api/100-api-cloud.md`。
 
 ### Added
 
@@ -39,6 +39,12 @@
   **`cloud-pull-confirm` 与裁决框都是单点宿主**（挂 `AppShell`）：面板行内「拉取」与左栏按钮共用同一个对话框实例，左栏收起时也弹得出来；面板的推送冲突分支不再有行内「用本机覆盖云端」入口。
   表单草稿（url/用户名/密码/设备名）仍留面板页内，不进 store。
 - **删除传播提示（卡 6 前置债务 9 / DESIGN.md §550）**：删除会话与参考资料成功后的 toast 补一句「推送到云端后，另一台也会同步删除」——本地删除不会被拉取复活（并集规则 4），但要让云端与另一台也删掉，必须**推送一次**（手动或等自动推送）。
+- **自动推送（卡 7）**：`autoPush` 开启后本地改动自动上云，**三条触发路径**（`packages/server/src/cloud/auto-push.ts`）：
+  **定时**（每 2 小时 + 只在**创作数据**有变更时推一次；创作数据 = 三文件 + `AGENTS.md` + `references/`，**排除 `sessions/`**——纯聊天时段不单独烧一次配额，聊天记录随下一次创作变更的 zip 一起上云）、
+  **关闭项目**（「工作段结束」语义：任何变更含 `sessions/` 就推一次，**不受节流**）、
+  **手动备份成功后**（无条件推一次，不受节流）——后两条都不推进节流基准。
+  **单一定时器**：不新增第二套定时器，自动推送挂在自动备份的 `setTimeout` tick 链上（`backup.ts` 的 `setProjectTick` 钩子由 composition 层注册）——排程条件 = 「备份频率开启」**或**「`autoPush` 开启」；备份频率关闭时按 `AUTO_PUSH_THROTTLE_MS`（2h）兜底排程，**不会因关掉自动备份而静默失效**。
+  **失败只记状态不阻塞**：`cloud.json` book state 新增 `lastAutoPushAt`（节流基准，仅定时路径推进）与 `lastAutoPushError`（`{code, message, at}`，成功即清），由 `GET /cloud/status` 的 `local` 段透出；`POST /project/close` 与 `POST /project/backup` 均**fire-and-forget**（推送失败不影响响应，关闭项目不被网络拖住）。本机没有任何备份 → 视为**跳过**（不写错误标记）。设置页云端面板：自动推送说明行写全触发口径，失败时在「同步状态」段显示一行 `text-destructive`（不弹窗）。
 
 ### Changed
 

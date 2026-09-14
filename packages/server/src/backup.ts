@@ -8,7 +8,9 @@
 // 新旧格式文件名均参与——parseBackupFileName 兼容解析）
 // - 自动定时器：跟随当前项目生命周期（middleware/project.ts setCurrentProject 挂载启停），
 // 有变更才备份（三文件 + data.db-wal 伴生文件 mtime 与 .backups/ 最新备份时间比较，
-// 无状态、服务重启不丢；F2：WAL 模式写只刷新 -wal，补查避免漏检 data.db 变更）
+// 无状态、服务重启不丢；F2：WAL 模式写只刷新 -wal，补查避免漏检 data.db 变更）；
+// 频率关闭时回落 `setProjectTick` 注入的兑底间隔（卡 7：自动推送挂在同一条 tick 链上，
+// 按 2h 排程——不新起第二个定时器）
 // - 备份包校验（restore 与 import 共用）：zip 解析/白名单/三文件齐全/顶层/
 // data.db user_version 三态分流（绝不静默重建）
 // - restore：fileName 白名单 → 覆盖前自动快照 → 校验 → 原子替换三文件
@@ -24,6 +26,7 @@ import { Unzip, UnzipInflate, zipSync } from "fflate";
 import { BACKUP_FREQUENCIES, DEFAULT_BACKUP_FREQUENCY_MINUTES, formatBackupFileName, MAX_BACKUPS_PER_PROJECT, MAX_BACKUP_NAME_LENGTH, parseBackupFileName, sanitizeBackupName, type BackupKind, type BackupStats } from "@whispering233/ai-editor-shared";
 import { PROJECT_EXPORT_FILE_NAMES } from "@whispering233/ai-editor-shared/schemas";
 import {
+  AGENTS_FILE_NAME,
   closeDatabase,
   checkpointWal,
   DATA_DB_FILE_NAME,
@@ -733,17 +736,21 @@ export function hasFileChangesSince(project: ProjectContext, since: Date): boole
 }
 
 /**
- * 「本机创作数据自 since 后有改动」判定（**云端三态专用**，与备份定时器的 `hasFileChangesSince`
- * 口径刻意不同——见 `docs/design/40-cloud-sync.md` §3）：
+ * mtime 变更判定内核（`hasLocalEditsSince` 与 `hasAuthoringChangesSince` 共用，避免两份漂移）：
+ * 三文件（`data.db`/`-wal` 带 `BACKUP_CHANGE_TOLERANCE_MS` 容差，其余**严格** `>`）→ 额外单文件
+ * （`scope.extraFiles`，严格；ENOENT = 该可选文件不存在，不算变更）→ `scope.dirs` 各目录
+ * （**目录自身**与其内任一文件 mtime 命中即算「有改动」——删除文件不刷新剩余文件 mtime，
+ * 只看文件会漏检删除；目录缺失 = 无文件，不算变更）。
  *
- * - `project.json` / `outline.json` / `references/` / `sessions/`（含两目录自身 mtime）：
- *   **严格** `mtime > since`。这些文件不会被备份/同步管道写入，容差在这里只有代价：
- *   `lastSyncAt` 是**不推进的固定基准**（只在下一次同步时前移），容差会把 `[since, since+1s]`
- *   内的本机改动**永久漏判**（状态误报「已同步」，用户可能因此拉取覆盖它）。
- * - `data.db` / `data.db-wal`：保留 `BACKUP_CHANGE_TOLERANCE_MS` 容差——备份/推送管道内的
- *   `wal_checkpoint` 会把 `data.db` mtime 刷到同步时刻，严格比较会自激误判「永远有改动」。
+ * 容差只给 `data.db` 与 `-wal` 的原因：备份/推送管道内的 `wal_checkpoint` 会把其 mtime 刷到
+ * 同步时刻，严格比较会自激误判「永远有改动」；其余文件不会被管道写入，给容差反而会让
+ * 「基准后 1 秒内的改动」被长期漏判（基准是不推进的固定值，直到下次同步才前移）。
  */
-export function hasLocalEditsSince(project: ProjectContext, since: Date): boolean {
+function hasChangesSince(
+  project: ProjectContext,
+  since: Date,
+  scope: { dirs: readonly string[]; extraFiles?: readonly string[] },
+): boolean {
   const strictLimit = since.getTime();
   const tolerantLimit = strictLimit + BACKUP_CHANGE_TOLERANCE_MS;
   for (const name of [PROJECT_FILE_NAME, OUTLINE_FILE_NAME]) {
@@ -764,8 +771,15 @@ export function hasLocalEditsSince(project: ProjectContext, since: Date): boolea
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") return true;
   }
+  for (const name of scope.extraFiles ?? []) {
+    try {
+      if (statSync(join(project.root, name)).mtimeMs > strictLimit) return true;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") return true;
+    }
+  }
   try {
-    for (const dirName of PACKED_DIR_NAMES) {
+    for (const dirName of scope.dirs) {
       try {
         if (statSync(join(project.root, dirName)).mtimeMs > strictLimit) return true;
       } catch (err) {
@@ -779,6 +793,31 @@ export function hasLocalEditsSince(project: ProjectContext, since: Date): boolea
     // 遍历竞态（读取中删除）：下一次状态检查重检
   }
   return false;
+}
+
+/**
+ * 「本机创作数据自 since 后有改动」判定（**云端三态专用**，与备份定时器的 `hasFileChangesSince`
+ * 口径刻意不同——见 `docs/design/40-cloud-sync.md` §3）：
+ *
+ * - `project.json` / `outline.json` / `references/` / `sessions/`（含两目录自身 mtime）：
+ *   **严格** `mtime > since`。这些文件不会被备份/同步管道写入，容差在这里只有代价：
+ *   `lastSyncAt` 是**不推进的固定基准**（只在下一次同步时前移），容差会把 `[since, since+1s]`
+ *   内的本机改动**永久漏判**（状态误报「已同步」，用户可能因此拉取覆盖它）。
+ * - `data.db` / `data.db-wal`：保留 `BACKUP_CHANGE_TOLERANCE_MS` 容差——备份/推送管道内的
+ *   `wal_checkpoint` 会把 `data.db` mtime 刷到同步时刻，严格比较会自激误判「永远有改动」。
+ */
+export function hasLocalEditsSince(project: ProjectContext, since: Date): boolean {
+  return hasChangesSince(project, since, { dirs: PACKED_DIR_NAMES });
+}
+
+/**
+ * 「本机**创作数据**自 since 后有改动」判定（**自动推送专用**，卡 7；`docs/design/40-cloud-sync.md` §5）：
+ * 与 `hasLocalEditsSince` 同一套 mtime 口径，但 `sessions/` **不参与**（会话是聊天产物，纯聊天时段
+ * 不该单独烧一次云盘配额——聊天记录会随下一次创作变更的 zip 一起上云，zip 永远含 `sessions/`），
+ * 并**纳入 `AGENTS.md`**（项目规则也是创作数据，改规则值得推一次）。
+ */
+export function hasAuthoringChangesSince(project: ProjectContext, since: Date): boolean {
+  return hasChangesSince(project, since, { dirs: [REFERENCE_DIR_NAME], extraFiles: [AGENTS_FILE_NAME] });
 }
 
 /**
@@ -808,10 +847,34 @@ export function maybeAutoBackup(project: ProjectContext): boolean {
 let backupTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
+ * tick 钩子（composition 层注入，卡 7）：自动推送不新起定时器，挂在同一条 tick 链上——
+ * 本模块不 import `cloud/`（那会形成 backup → cloud → backup 的循环依赖），故由上层注册。
+ */
+export interface ProjectTickHooks {
+  /** tick 内自动备份之后调用（同步函数；抛错只记日志，不中断定时链） */
+  onTick?: (project: ProjectContext) => void;
+  /** **备份频率关闭**时的 tick 间隔（毫秒；null = 不排程）——自动推送的 2h 排程经此注入 */
+  fallbackIntervalMs?: () => number | null;
+}
+
+/** 已注册的 tick 钩子（缺省空 = 仅备份行为，与卡 7 之前一致） */
+let tickHooks: ProjectTickHooks = {};
+
+/**
+ * 注册 tick 钩子（`middleware/project.ts` 启动时调用一次；**整体替换**，测试可注入小间隔）。
+ * 用模块级注册而不是每次 `startAutoBackup` 传参：`overwriteProjectFiles` 尾部那次重启
+ *（restore / 导入 / 云拉取后）也必须带上同一套钩子。
+ */
+export function setProjectTick(hooks: ProjectTickHooks): void {
+  tickHooks = hooks;
+}
+
+/**
  * 启动/重启自动备份调度（open/切换项目时调用；restore 后频率可能变化也调用）：
- * 按当前项目频率 setTimeout 链——每 tick 检查「有变更才备份」后按最新频率重新排程
+ * 按当前项目频率 setTimeout 链——每 tick 检查「有变更才备份」后按最新间隔重新排程
  * （tick 内重读 config，restore 改变频率无需显式通知）。
- * 频率关闭（null/0/非枚举）→ 不排程（等价停止）。
+ * 频率关闭（null/0/非枚举）→ 回落到 `tickHooks.fallbackIntervalMs()`（自动推送的 2h 兜底排程）；
+ * 两者皆空 → 不排程（等价停止）。
  */
 export function startAutoBackup(project: ProjectContext): void {
   stopAutoBackup();
@@ -826,10 +889,14 @@ export function stopAutoBackup(): void {
   }
 }
 
-/** 按项目当前频率排程下一次检查；频率关闭 → 不排程 */
+/**
+ * 按项目当前间隔排程下一次检查：
+ * 备份频率开启 → `freq * 60_000`；关闭 → `tickHooks.fallbackIntervalMs()`（null = 不排程）。
+ */
 function scheduleNext(project: ProjectContext): void {
   const freq = resolveBackupFrequency(project.config.backup_frequency_minutes);
-  if (freq === null) return;
+  const intervalMs = freq === null ? (tickHooks.fallbackIntervalMs?.() ?? null) : freq * 60_000;
+  if (intervalMs === null) return;
   backupTimer = setTimeout(() => {
     backupTimer = null;
     try {
@@ -837,8 +904,13 @@ function scheduleNext(project: ProjectContext): void {
     } catch (err) {
       console.error("[backup] 自动备份检查失败:", err);
     }
-    scheduleNext(project); // 每次 tick 重读频率（restore/切换可能改变）
-  }, freq * 60_000);
+    try {
+      tickHooks.onTick?.(project); // 钩子抛错同样不中断调度（自动推送的失败在钩子内部自记状态）
+    } catch (err) {
+      console.error("[backup] 定时器钩子失败:", err);
+    }
+    scheduleNext(project); // 每次 tick 重读频率与钩子（restore/切换/云端配置可能改变）
+  }, intervalMs);
  // unref：定时器不阻止进程退出（测试/服务关闭后无残留句柄）
   (backupTimer as { unref?: () => void }).unref?.();
 }

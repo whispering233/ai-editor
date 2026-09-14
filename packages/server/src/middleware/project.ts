@@ -23,7 +23,9 @@ import { writeOutlineFile } from "@whispering233/ai-editor-db";
 import { SCHEMA_VERSION } from "@whispering233/ai-editor-db";
 import { nowIso } from "@whispering233/ai-editor-db";
 import { HttpError, fail, type ApiErrorCode } from "./error.js";
-import { migratePromptToAgents, startAutoBackup, stopAutoBackup } from "../backup.js";
+import { migratePromptToAgents, setProjectTick, startAutoBackup, stopAutoBackup } from "../backup.js";
+import { AUTO_PUSH_THROTTLE_MS, maybeAutoPush } from "../cloud/auto-push.js";
+import { readAutoPush } from "../cloud/state.js";
 import { disposeProjectRuntime } from "../chat-runtime.js";
 
 /** data.db 文件名（项目根目录） */
@@ -57,6 +59,23 @@ export function getProject(c: Context<{ Variables: ProjectVariables }>): Project
 
 /** 当前打开的项目（null = 无） */
 let currentProject: ProjectContext | null = null;
+
+/**
+ * 定时器钩子注册（composition 层，卡 7）——**模块加载时注册一次**：自动推送**不新起定时器**，
+ * 挂在自动备份的 tick 链上（`backup.ts` 的 `setProjectTick`）。排程条件 = 备份频率开启**或**
+ * `autoPush` 开启：备份频率关闭时按 `AUTO_PUSH_THROTTLE_MS`（2h）兜底排程——否则设置页里开着的
+ * 「自动推送」会随「关掉自动备份」静默失效（两者动机不同，见 `docs/design/40-cloud-sync.md` §5）。
+ *
+ * 钩子内的读写（`readWebdavConfig` / `readAutoPush`）依赖 `initCloudState(root)` 已执行；
+ * 未注入（测试/降级）→ 读到「未配置」→ 不排程，无副作用。`startServer` 的顺序（`initCloudState`
+ * 先于第一次 open）已满足。
+ */
+setProjectTick({
+  onTick: (project) => void maybeAutoPush(project), // 内部自记失败状态，永不 reject
+  // 兜底只看 autoPush 开关（**不看「此刻是否已配置」**）：否则「先开项目、后配云盘」的会话里
+  // 永远排不上 tick；未配置时 tick 落到 `maybeAutoPush` 会立即返回，零副作用
+  fallbackIntervalMs: () => (readAutoPush() ? AUTO_PUSH_THROTTLE_MS : null),
+});
 
 /**
  * 设置当前项目（create/open 成功后调用；传 null 清空——close 时）。

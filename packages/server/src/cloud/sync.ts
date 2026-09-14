@@ -240,6 +240,7 @@ export interface CloudSyncComputation {
  * - **「本机有改动」= 创作数据 mtime 晚于 `lastSyncAt`**（`hasLocalEditsSince`，三文件 + `data.db-wal` +
  *   `references/`/`sessions/`；**不含 `.backups/`**——force 会把云端旧份写进那里）。
  *   注意口径差异：`data.db`/`-wal` 比较带 1s 容差（checkpoint 会刷新其 mtime），其余**严格比较**
+ * - 自动推送的失败标记（`lastAutoPushError`）原样透出（面板显示一行，成功即消失；卡 7）
  * - 无同步记录（`lastSyncAt`/`lastSeenCloudFiles` 缺失）→ 云端有份即视为「有更新」、本机按「有改动」处理（保守）
  */
 export function computeCloudSync(
@@ -258,6 +259,8 @@ export function computeCloudSync(
     lastSyncAt,
     dirty,
     latestBackupFileName: latestLocalBackupName(join(project.root, BACKUPS_DIR_NAME)),
+    // 自动推送最近一次失败（缺省不出现——成功即清，见 cloud/auto-push.ts）
+    ...(state?.lastAutoPushError !== undefined ? { lastAutoPushError: state.lastAutoPushError } : {}),
   };
   if (!webdavConfigured) return { local, state: "unconfigured" };
   if (remote === null) return { local, state: "unreachable" };

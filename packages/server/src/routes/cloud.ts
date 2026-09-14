@@ -15,6 +15,7 @@ import { HttpError, ok } from "../middleware/error.js";
 import { getCurrentProject, requireCurrentProject } from "../middleware/project.js";
 import { currentDeviceName } from "../cloud/device.js";
 import { readAutoPush, readBookState, readWebdavConfig, writeCloudConfig } from "../cloud/state.js";
+import { startAutoBackup } from "../backup.js";
 import { cloudFileSet, computeCloudSync, findExistingCloudDir, pullBackup, pushBackup, toCloudBackups } from "../cloud/sync.js";
 import { createWebdavClient, type DavEntry } from "../cloud/webdav.js";
 
@@ -143,6 +144,11 @@ cloudRoutes.put("/config", async (c) => {
     ...(device !== undefined ? { device } : {}),
     ...(parsed.autoPush !== undefined ? { autoPush: parsed.autoPush } : {}),
   });
+
+  // 自动推送的排程条件依赖自动备份频率：本机开关可能在本次保存中改变——立即重排一次 tick
+  //（幂等；只在「备份频率关闭 + autoPush」时才真的排上 2h 兜底）——否则要等下次 open/restore
+  const project = getCurrentProject();
+  if (project !== null) startAutoBackup(project);
 
   const payload: CloudConfigPutResult = { saved: true };
   return c.json(ok(payload));

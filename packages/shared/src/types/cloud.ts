@@ -20,6 +20,20 @@ export interface CloudWebdavConfig {
 }
 
 /**
+ * 自动推送最近一次失败（`cloud.json` book state 的 `lastAutoPushError`）。
+ * 自动路径（定时 / 关闭项目 / 手动备份后）失败时写入，**成功即清**；
+ * `GET /cloud/status` 的 `local` 段原样透出，面板显示一行，不弹窗、不阻塞请求。
+ */
+export interface CloudAutoPushError {
+  /** 错误码（如 `CLOUD_UNREACHABLE`）；非 HttpError 的意外错误记 `INTERNAL_ERROR` */
+  code: string;
+  /** 服务端中文文案（直接展示） */
+  message: string;
+  /** 失败时刻（ISO 8601） */
+  at: string;
+}
+
+/**
  * `cloud.json` 的 `books` 段（键 = `project.id`）：**本机视角**的书级同步状态。
  * 跨机器不共享（每台机器一份），字段含义见 `docs/design/40-cloud-sync.md` §7：
  * - `dirName`：云端书目录名缓存（改名后由回退扫描按 `-<id>` 后缀重新定位）
@@ -27,6 +41,7 @@ export interface CloudWebdavConfig {
  * - `lastSeenHeadFileName`：本机最后一次看到的云端 head（推送后 / 拉取后更新）
  * - `lastSyncAt`：上次同步成功时刻（ISO 8601）
  * - `baseEntries`：`references/` 与 `sessions/` 的条目名单（拉取并集的三方比较基线）
+ * - `lastAutoPushAt` / `lastAutoPushError`：自动推送的节流基准与失败标记（卡 7）
  */
 export interface CloudBookSyncState {
   dirName?: string;
@@ -46,6 +61,14 @@ export interface CloudBookSyncState {
   lastSeenCloudFiles?: string[];
   /** `references/` 与 `sessions/` 的条目名单（拉取并集的三方比较基线；= 最近一次推送/拉取包的条目） */
   baseEntries?: string[];
+  /**
+   * **自动推送节流基准**（上次自动推送成功时刻，ISO 8601）。
+   * **只有定时路径推进**：关闭项目那次不推进（「工作段结束」语义，与 2 小时节流无关）、
+   * 手动推送/手动备份后那次也不推进（无条件触发，不占节流额度）——见 `docs/design/40-cloud-sync.md` §5。
+   */
+  lastAutoPushAt?: string;
+  /** 自动路径最近一次失败（成功即清） */
+  lastAutoPushError?: CloudAutoPushError;
 }
 
 /**
@@ -109,6 +132,8 @@ export interface CloudLocalState {
   dirty: boolean;
   /** 最新一份本地备份（推送缺省目标） */
   latestBackupFileName: string | null;
+  /** 自动推送最近一次失败（book state 透出；成功即消失，缺省不出现） */
+  lastAutoPushError?: CloudAutoPushError;
 }
 
 /** 三态状态机（`GET /cloud/status` 的 `state`；判定依据见 `docs/design/40-cloud-sync.md` §3） */

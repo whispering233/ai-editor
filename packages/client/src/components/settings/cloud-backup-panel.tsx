@@ -70,6 +70,8 @@ export function CloudBackupPanel() {
   /** 云端份列表（≤5 行 = 云端保留上限；时间倒序） */
   const remoteBackups = status?.remote?.backups.slice(0, 5) ?? [];
   const autoPush = status?.autoPush === true;
+  /** 自动推送最近一次失败（`status.local.lastAutoPushError`；成功即消失，只显示一行不弹窗） */
+  const autoPushError = status?.local?.lastAutoPushError ?? null;
   const dirty = isCloudConfigDirty(form, status);
   const halfFilled = isCredentialHalfFilled(form);
   const pulling = busy === "pull";
@@ -189,8 +191,9 @@ export function CloudBackupPanel() {
       {/* ② 自动推送 */}
       <SectionCard title="自动推送">
         <p className="mb-2 text-xs text-muted-foreground">
-          每 2 小时且只在创作数据有变更时推送一次；关闭项目与手动备份会额外触发一次；纯聊天不单独触发。
-          关闭时仍可在云端面板手动推送。
+          每 2 小时且只在创作数据有变更时推送一次（创作数据 = 正文数据、大纲、参考资料、项目规则）；
+          关闭项目与手动备份后各额外触发一次，且不受 2 小时节流限制；纯聊天不单独触发（聊天记录会随下一次
+          创作变更一起上云）。自动备份频率关闭时按 2 小时排程，不会静默失效。关闭时仍可在云端面板手动推送。
         </p>
         <div className="flex items-center gap-2">
           <Switch
@@ -237,6 +240,13 @@ export function CloudBackupPanel() {
             {status?.errorCode !== undefined ? `（${status.errorCode}）` : ""}
           </span>
         </div>
+
+        {/* 自动推送失败（卡 7）：一行，不弹窗；成功即消失（服务端成功时清 lastAutoPushError） */}
+        {autoPushError !== null && (
+          <p className="mt-2 text-xs text-destructive">
+            自动推送失败（{formatBackupTime(autoPushError.at)} · {autoPushError.code}）：{autoPushError.message}
+          </p>
+        )}
 
         {/* 云端份列表（≤5 行 = 云端保留上限；行尾标「云端最新」、行内可拉取任一份） */}
         {remoteBackups.length > 0 && (
