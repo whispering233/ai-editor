@@ -44,6 +44,11 @@
   - 触发条件：下次改书名规则或文案时。
   - 最小修法：提 shared 纯函数 + 文案常量（REST schema、路由校验、客户端预校验共用）。
 
+- **备份响应 schema 未收敛到 shared**（卡 1 oracle 验证登记）
+  - 现状：`docs/api/*.md` 声明「响应 schema 单一来源 = shared `types/api.ts`」，但备份响应类型实际在 `client/src/lib/api.ts`（`BackupEntry`）与 `packages/server/src/backup.ts`（`BackupFileInfo`）**各写一份**（请求侧两个 zod schema 确在 shared）。
+  - 触发条件：云端批次（卡 2-7）要给备份响应加字段时——那会让第三份手抄出现。
+  - 最小修法：把备份条目响应 schema（`backups` / `backup`）提到 shared，client 与 server 共用；顺带修正 `docs/api/20-api-backup.md` 首行「响应 schema 单一来源」的表述。
+
 ## 云端存档（2026-09，MVP 已发布后的遗留项）
 
 - **云端书架**（列云端全部书的目录、一键拉取到本机）

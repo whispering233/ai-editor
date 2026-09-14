@@ -207,14 +207,23 @@ export function sanitizeDeviceName(raw: string): string | null {
 
 /**
  * 主机名 → 缺省设备名（纯函数，os.hostname() 的读取在服务端）：
- * 取第一个 `.` 之前的部分（`MacBook-Pro.local` → `MacBook-Pro`）→ 非法字符（含 `-`，Windows
- * 主机名常见）替换为 `_` → 合并连续 `_`、去首尾 `_` → 截到 16 字符（截断后再去尾 `_`）
- * → 空串兜底 `"unknown"`。结果必然通过 sanitizeDeviceName。
+ * ① trim → 取第一个 `.` 之前的部分（`MacBook-Pro.local` → `MacBook-Pro`）→ ② 非法字符（含 `-`，
+ * Windows 主机名常见）替换为 `_` 并折叠连续 `_` → ③ **剥首尾空白与 `_`**（必须在截断前做，
+ * 否则 `"__abc__"` 类会残留）→ ④ 截到 16 字符 → ⑤ **再去尾空白与 `_`**（截断可能切出新的尾部）
+ * → ⑥ 空（含纯空白 / 纯点）兜底 `"unknown"`。
+ *
+ * **不变式**：对任意输入，`sanitizeDeviceName(deviceNameFromHostname(h)) === deviceNameFromHostname(h)`
+ * 且恒非 null（单测以样本矩阵钤住：`"_ _:>"`、`" ? 99|"`、`"   "`、`"---"`、
+ * `"a".repeat(15) + " "`、`"aaaaaaaaaaaaaaa bcdef"` 等）。
  */
 export function deviceNameFromHostname(hostname: string): string {
+ // ① 取第一个 `.` 之前的部分（域名后缀丢弃；`.local` 即在此步消失）
   const first = hostname.trim().split(".")[0] ?? "";
+ // ② 非法字符 → `_`，并折叠连续 `_`
   const mapped = first.replace(/[\\/:*?"<>|\x00-\x1f\x7f-]/g, "_").replace(/_+/g, "_");
-  const trimmed = mapped.replace(/^_+|_+$/g, "");
-  const cut = trimmed.slice(0, MAX_DEVICE_NAME_LENGTH).replace(/_+$/g, "");
+ // ③ 剥首尾空白与 `_`（截断前；空白同属非规范字符——否则会产出 sanitizeDeviceName 拒绝的值）
+  const trimmed = mapped.replace(/^[\s_]+|[\s_]+$/g, "");
+ // ④⑤ 截断后再去尾（截断可能把空白/`_` 切到末尾）
+  const cut = trimmed.slice(0, MAX_DEVICE_NAME_LENGTH).replace(/[\s_]+$/, "");
   return cut === "" ? "unknown" : cut;
 }

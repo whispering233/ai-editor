@@ -18,7 +18,7 @@
   configured: boolean;        // cloud.json 的 webdav url/username/password 三项齐备
   url: string | null;         // 回显（**不含密码**）
   username: string | null;
-  device: string;             // 生效设备名（配置值；未配 → 简化 hostname：去 .local、滤非法字符、截 16 字符）
+  device: string;             // 生效设备名（配置值；未配 → 简化 hostname：去域名后缀、滤非法字符、剥首尾空白与 `_`、截 16 字符）
   autoPush: boolean;          // 自动推送开关（本机级，缺省 false）
   projectId: string | null;   // 当前打开的项目 id（无项目 → null，下面两段为 null）
   remote: null | {

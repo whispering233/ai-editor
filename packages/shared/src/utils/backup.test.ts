@@ -300,6 +300,25 @@ describe("deviceNameFromHostname（主机名 → 缺省设备名）", () => {
     expect(deviceNameFromHostname("主机:甲")).toBe("主机_甲");
   });
 
+  it("首尾空白一律剥除（空格 / 制表符 / NBSP）——含剥后为空与截断后再剥两类", () => {
+ // oracle 实测反例：截断处落在空白上（5 例）
+    expect(deviceNameFromHostname("aaaaaaaaaaaaaaa bcdef")).toBe("aaaaaaaaaaaaaaa");
+    expect(deviceNameFromHostname(" ? 99|")).toBe("99");
+    expect(deviceNameFromHostname("?>//-<\t   ~")).toBe("~");
+    expect(deviceNameFromHostname("<<| a~:")).toBe("a~");
+    expect(deviceNameFromHostname("\u00a0甲\u00a0")).toBe("甲"); // NBSP 也算空白（trim 口径）
+ // 剥后为空（含纯空白 / 只剩分隔符）→ unknown
+    expect(deviceNameFromHostname("_ _:>")).toBe("unknown");
+    expect(deviceNameFromHostname("   ")).toBe("unknown");
+    expect(deviceNameFromHostname("\t \u00a0")).toBe("unknown");
+  });
+
+  it("首尾空白与 `_` 的剥除在截断前做（`__abc__` 类不残留）", () => {
+    expect(deviceNameFromHostname("__abc__")).toBe("abc");
+    expect(deviceNameFromHostname("__" + "a".repeat(20) + "__")).toBe("a".repeat(MAX_DEVICE_NAME_LENGTH));
+    expect(deviceNameFromHostname("__ _ __")).toBe("unknown");
+  });
+
   it("超长截断到 MAX_DEVICE_NAME_LENGTH，且截断后不残留尾随下划线", () => {
     const long = "a".repeat(MAX_DEVICE_NAME_LENGTH + 5);
     expect(deviceNameFromHostname(long)).toBe("a".repeat(MAX_DEVICE_NAME_LENGTH));
@@ -330,6 +349,41 @@ describe("deviceNameFromHostname（主机名 → 缺省设备名）", () => {
     for (const s of samples) {
       const device = deviceNameFromHostname(s);
       expect(sanitizeDeviceName(device)).toBe(device);
+    }
+  });
+
+  it("不变式（恒合法且已规范）：sanitizeDeviceName(d) === d 且非 null——含空白/分隔符边界样本矩阵", () => {
+ // oracle 验证轮（卡 1）实测的 277 样本里的失败集 + 边界集：修前 44 例非幂等、1 例被 sanitize 拒绝
+    const samples = [
+      "_ _:>",
+      " ? 99|",
+      " \t甲甲\\ZZ9\t<\\ /*",
+      "?>//-<\t   ~",
+      "<<| a~:",
+      "/\t🙂-9|<-\\_9<?|-🙂|\\Z ?",
+      "aaaaaaaaaaaaaaa bcdef",
+      "aaaaaaaaaaaaaaa-",
+      `${"a".repeat(15)} `,
+      " ",
+      "\t",
+      "\u00a0",
+      "   ",
+      "...",
+      "---",
+      "__abc__",
+      "__ _ __",
+      "",
+      "a".repeat(64),
+      `${"a".repeat(15)}-bcd`,
+      "主机:甲",
+      "MacBook-Pro.local",
+    ];
+    for (const h of samples) {
+      const device = deviceNameFromHostname(h);
+      expect(sanitizeDeviceName(device)).toBe(device); // 等价于同时挡住 null 与首尾空白
+      expect(device.length).toBeLessThanOrEqual(MAX_DEVICE_NAME_LENGTH);
+      expect(device).not.toContain("-");
+      expect(device.trim()).toBe(device);
     }
   });
 });
