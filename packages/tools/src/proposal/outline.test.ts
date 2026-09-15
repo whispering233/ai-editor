@@ -166,6 +166,23 @@ describe("propose_move_node", () => {
     expect(() => runProposeMoveNode(makeCtx(), { node_id: "ch-1", parent_id: "root", order: 0 })).toThrow(/层级非法/);
   });
 
+  it("存量根级章：提案可移进卷（读容忍），但不能新建、不能移回 root", () => {
+    const tree = seedOutlineTree();
+ // 直挂 root 的章已无 API 入口 → 直接写文件播种存量数据（无迁移的读容忍口径）
+    tree.children.push({ id: "ch-legacy", type: "chapter", title: "直挂章", updated_at: T0, children: [] });
+    writeOutlineFile(dir, tree);
+ // 移进卷：允许（存量数据可被收拾干净）
+    expect(() =>
+      runProposeMoveNode(makeCtx(), { node_id: "ch-legacy", parent_id: "vol-1", order: 0 }),
+    ).not.toThrow();
+ // 移回 root：拒绝（章只挂卷）
+    expect(() =>
+      runProposeMoveNode(makeCtx(), { node_id: "ch-legacy", parent_id: "root", order: 0 }),
+    ).toThrow(/层级非法/);
+ // 缺省挂根新建章：拒绝（存量容忍不等于新写入合法）
+    expect(() => runProposeOutlineNode(makeCtx(), { type: "chapter", title: "新直挂章" })).toThrow(/层级非法/);
+  });
+
   it("目标父层级非法→ 抛错；节点/父不存在 → 抛错", () => {
     writeOutlineFile(dir, seedOutlineTree());
     expect(() => runProposeMoveNode(makeCtx(), { node_id: "sc-1", parent_id: "vol-1", order: 0 })).toThrow(/层级非法/);

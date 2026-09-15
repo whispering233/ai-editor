@@ -119,6 +119,18 @@ describe("POST /outline 创建（严格三层）", () => {
     expect((await res.json()).error.code).toBe("VALIDATION_ERROR");
   });
 
+  it("chapter 挂 root → 400 VALIDATION_ERROR（2026-09：root 仅接纳卷，章只挂卷）", async () => {
+    const app = buildApp();
+    await openProject();
+    const res = await app.request("/api/v1/outline", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ type: "chapter", title: "直挂章", parent_id: "root" }),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("VALIDATION_ERROR");
+  });
+
   it("父节点不存在 → 400 OUTLINE_NODE_NOT_FOUND；缺 parent_id → 400 VALIDATION_ERROR（schema 层）", async () => {
     const app = buildApp();
     await openProject();

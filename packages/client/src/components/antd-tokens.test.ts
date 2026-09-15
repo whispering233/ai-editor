@@ -117,3 +117,23 @@ describe("Tabs 组件 token（中栏页头分割线契约）", () => {
     expect(COMPONENT_TOKENS_DARK.Tabs?.itemColor).toBe(DARK_TOKEN.colorTextSecondary);
   });
 });
+
+describe("行高/缩进列几何（大纲页缩进列对齐依赖的 antd 值）", () => {
+  // 为什么需要它：大纲行的「无子节点占位」必须与折叠箭头（`<Button size="small"` icon-only）同几何——
+  // antd 的 icon-only 宽度取 `controlHeight`，small 档取 `controlHeightSM` = `controlHeight × 0.75`
+  // （`antd/es/button/style/index.js` 的 `genSizeSmallButtonStyle`），本仓 seed 32 ⇒ 24px，
+  // 于是占位写成 `-ml-2 w-6`（24px）。antd 是 `^6.6.2`（caret），上游 minor 若动 32/0.75，
+  // 两类行会再次错 12px 而**无任何报错**——必须在此拦（改 antd 时同步改 `Outline.tsx` 的占位宽）。
+  const SMALL_ICON_ONLY_WIDTH_PX = 24; // 与 `w-6` 同值
+
+  it("浅/深两态 controlHeightSM 均为 24px（= 大纲行占位 `w-6` 与折叠箭头同宽的前提）", () => {
+    for (const [name, config] of [
+      ["light", { algorithm: theme.defaultAlgorithm, token: LIGHT_TOKEN }],
+      ["dark", { algorithm: theme.darkAlgorithm, token: DARK_TOKEN }],
+    ] as const) {
+      const token = theme.getDesignToken(config);
+      expect(token.controlHeightSM, `${name} controlHeightSM`).toBe(SMALL_ICON_ONLY_WIDTH_PX);
+      expect(token.controlHeight * 0.75, `${name} controlHeight×0.75`).toBe(SMALL_ICON_ONLY_WIDTH_PX);
+    }
+  });
+});
