@@ -8,14 +8,13 @@
 
 ---
 
-## 当前任务卡：桌面版（Electron 外壳）K5–K6
+## 当前任务卡：桌面版（Electron 外壳）K6
 
-设计契约 = `docs/design/50-desktop.md`（唯一事实源，§7 已录 K0 实测结论）。卡序 K5 → K6。
+设计契约 = `docs/design/50-desktop.md`（唯一事实源，§7 已录 K0 实测结论）。
 
-（已完成：**D0** 设计定稿 → **P12** pnpm 12.4.2（含去 `--legacy`）→ **K0** 打包 spike → **K1** 书库位置 → **K2** 目录选择闭环 → **K3** 壳层（应用菜单 + 日志）→ **K4** 安全与导航（外链/非同源导航拦截 + 沙箱基线，打包态 devtools 不暴露）。
-⚠ **待人工验证（本机 WSLg 无法断言）**：① 原生目录选择框的**可见性与交互**（WSLg 下 GTK 文件对话框挂起；最小 Electron 对照实验同样挂起，非本仓代码问题）；② **macOS 的 Cmd+C/V**（菜单 Edit 角色为本机无法验证的平台行为）；③ 菜单项「打开书库/日志目录」的 `shell.openPath` 真开文件管理器。需在真实 Linux 桌面 / macOS / Windows 上点一次。
+（已完成：**D0** 设计定稿 → **P12** pnpm 12.4.2（含去 `--legacy`）→ **K0** 打包 spike → **K1** 书库位置 → **K2** 目录选择闭环 → **K3** 壳层（应用菜单 + 日志）→ **K4** 安全与导航 → **K5** 设置页「通用」tab + 切换书库（桌面版 CDP 实测 tab/路径/按钮；浏览器形态 SSR 测试 + 真实浏览器实测都无该 tab）。
+⚠ **待人工验证（本机 WSLg 无法断言）**：① 原生目录选择框的**可见性与交互**（WSLg 下 GTK 文件对话框挂起；最小 Electron 对照实验同样挂起，非本仓代码问题）——涉及首次启动选书库、书架页「浏览…」、**设置页「更改…」并确认重启后落在新书库**三处；② **macOS 的 Cmd+C/V**（菜单 Edit 角色为本机无法验证的平台行为）；③ 菜单项「打开书库/日志目录」的 `shell.openPath` 真开文件管理器。需在真实 Linux 桌面 / macOS / Windows 上点一次。
 
-- [ ] **K5 切换书库** — 设置页二级 tab「通用」+「书库位置」项（`DESIGN.md` `library-location`）→ 写配置 + `app.relaunch()`。**判据**：切换后重启落在新书库；浏览器形态无该 tab。
 - [ ] **K6 发布链路** — `.github/workflows/desktop.yml`（tag 触发、三平台 matrix）+ `scripts/sync-version.mjs` 纳入 `desktop` 版本 + README/CHANGELOG。**判据**：tag 触发后 Release 挂上三平台安装包。
 
 **开新卡**：从 `backlog.md` 选（当前剩余分两类）——

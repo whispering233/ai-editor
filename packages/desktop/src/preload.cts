@@ -8,4 +8,8 @@ contextBridge.exposeInMainWorld("aiEditorDesktop", {
   ready: true,
   /** 弹原生目录选择框；返回选中路径，用户取消返回 null */
   pickDirectory: (): Promise<string | null> => ipcRenderer.invoke("desktop:pick-directory"),
+  /** 当前书库位置（创作根绝对路径；启动时已确定） */
+  getLibraryRoot: (): Promise<string | null> => ipcRenderer.invoke("desktop:get-library-root"),
+  /** 更改书库位置：写配置 + 重启应用；返回新路径，用户取消返回 null */
+  changeLibraryRoot: (): Promise<string | null> => ipcRenderer.invoke("desktop:change-library-root"),
 });

@@ -30,7 +30,12 @@ describe("desktopBridge", () => {
   });
 
   it("桌面版（合法桥）→ 返回该桥", () => {
-    const bridge = { ready: true, pickDirectory: async () => "/books/mine" };
+    const bridge = {
+      ready: true,
+      pickDirectory: async () => "/books/mine",
+      getLibraryRoot: async () => "/books",
+      changeLibraryRoot: async () => null,
+    };
     setWindow({ aiEditorDesktop: bridge });
     expect(desktopBridge()).toBe(bridge);
   });

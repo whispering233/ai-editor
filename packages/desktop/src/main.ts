@@ -15,6 +15,18 @@ const here = dirname(fileURLToPath(import.meta.url));
 
 let handle: ServerHandle | null = null;
 
+/** 当前书库位置（创作根）；启动解析后写入，供设置页「通用」查看与切换 */
+let libraryRoot: string | null = null;
+
+/** 服务关闭防重入：切换书库会先关再 quit，`before-quit` 还会再喊一次 */
+let closing = false;
+
+async function closeServer(): Promise<void> {
+  if (closing) return;
+  closing = true;
+  await handle?.close();
+}
+
 /**
  * 最小应用菜单。**Edit 角色不是装饰**：macOS 上不设菜单 ⇒ Cmd+C/V 失效（输入框全废）。
  * 自有条目只有两个目录入口（书库/日志）；devtools 仅在未打包态出现。
@@ -137,6 +149,7 @@ async function openWindow(): Promise<void> {
     return;
   }
   console.log(`[desktop] server: http://127.0.0.1:${handle.port} root=${root}`);
+  libraryRoot = root;
 
   installMenu(root, dirname(logFile), !app.isPackaged);
   console.log(`[desktop] 菜单已就绪（书库 / 日志目录入口；devtools 项: ${!app.isPackaged}）；日志: ${logFile}`);
@@ -159,11 +172,28 @@ async function openWindow(): Promise<void> {
 void app.whenReady().then(async () => {
   // 渲染层「浏览…」入口：经 preload 桥 invoke（能力检测在 client 侧；浏览器形态无此通道）
   ipcMain.handle("desktop:pick-directory", () => pickDirectory({ title: "选择项目目录" }));
+  ipcMain.handle("desktop:get-library-root", () => libraryRoot);
+  ipcMain.handle("desktop:change-library-root", async () => {
+    const chosen = await pickDirectory({
+      title: "选择新的书库位置",
+      ...(libraryRoot !== null ? { defaultPath: libraryRoot } : {}),
+    });
+    if (chosen === null || chosen === libraryRoot) return null;
+
+    mkdirSync(chosen, { recursive: true });
+    writeDesktopConfig(desktopConfigPath(app.getPath("userData")), { projectRoot: chosen });
+    console.log(`[desktop] 书库位置切换为 ${chosen}，重启应用`);
+
+    await closeServer(); // 先收敛 WAL/备份调度再重启，不靠进程猝死
+    app.relaunch();
+    app.quit();
+    return chosen;
+  });
   await openWindow();
 });
 
 app.on("window-all-closed", () => app.quit());
 
 app.on("before-quit", () => {
-  void handle?.close();
+  void closeServer();
 });

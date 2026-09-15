@@ -6,6 +6,10 @@ export interface DesktopBridge {
   ready: boolean;
   /** 弹原生目录选择框；返回选中路径，用户取消返回 null */
   pickDirectory(): Promise<string | null>;
+  /** 当前书库位置（创作根绝对路径） */
+  getLibraryRoot(): Promise<string | null>;
+  /** 更改书库位置：写配置 + 重启应用；返回新路径，用户取消/未变更返回 null */
+  changeLibraryRoot(): Promise<string | null>;
 }
 
 declare global {
