@@ -36,6 +36,10 @@ project.json
 *.tgz
 .package.json.publish-backup
 
+# 桌面版打包产物（pnpm deploy 目录与 electron-builder 输出）
+packages/desktop/.deploy/
+packages/desktop/release/
+
 # 测试项目目录：整体不入库（AGENTS.md 约定）——创作根偏好 .ai-editor/（debug 开关 / lastProject）
 # 同样忽略；调试开关写法见 README「快速开始」，本地自行创建
 test-project/*

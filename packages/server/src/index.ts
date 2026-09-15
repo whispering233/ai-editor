@@ -375,9 +375,21 @@ export function parsePortEnv(value: string | undefined): number | undefined {
 // dist/index.js 的**符号链接**——经 bin 执行时 process.argv[1] 是 symlink 路径而非真实文件路径，
 // 直接与 import.meta.url 比较会误判为「非直接执行」导致进程静默退出（无输出、exit 0）。
 // 因此两侧都经 realpathSync 归一化后再比较。
-const isDirectRun =
-  process.argv[1] !== undefined &&
-  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+//
+// 桌面版（Electron 主进程 import 本模块，2026-10 实测）：Electron 的 process.argv[1] 是**命令行开关**
+// （如 `--no-sandbox`）而非脚本路径 → 未做防护的 realpathSync 抛 ENOENT 打挂整个主进程。
+// 故判定包一层 try/catch：路径不存在/不可解析一律判否（bin 语义不变，只是不再抛错）。
+function isDirectExecution(): boolean {
+  const entry = process.argv[1];
+  if (entry === undefined) return false;
+  try {
+    return realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+const isDirectRun = isDirectExecution();
 
 if (isDirectRun) {
   const projectRoot = process.argv[2] ?? process.cwd();

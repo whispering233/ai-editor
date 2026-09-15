@@ -9,7 +9,12 @@
 
 ### Added
 
-- **桌面版（Electron 外壳）设计定稿**：新增 `docs/design/50-desktop.md`（进程模型 / 端口策略 / 配置位置 / preload 契约 / 原生能力边界 / 打包与发布）；`architecture.md` 增第七个包 `packages/desktop` 与 `electron` 44.3.0 exact pin；`build.md` 增桌面版开发/打包/发布链路；`config.md` 登记 `<userData>/desktop.json`；`docs/ui/DESIGN.md` 登记设置页「通用」tab 与书架页「浏览…」按钮；`AGENTS.md` 登记桌面版硬约束。**实现尚未开始**（待排清单见 `docs/design/tasks.md`）。
+- **桌面版骨架（Electron 外壳）可构建、可打包、可运行**：新增 `packages/desktop`（主进程 ESM + 沙箱 `preload.cts` → CJS；主进程内 in-process 启 `startServer()` 并加载 `http://127.0.0.1:<端口>`）。`pnpm desktop:dist` 一键出 Linux AppImage（`pnpm deploy --legacy` 收自包含依赖 → electron-builder asar + 安装包，`asarUnpack` 放原生模块）。实测确认：better-sqlite3 v13 的 N-API 预编译在 Electron 44.3.0 上**免 electron-rebuild**、打包产物能起窗口（React 挂载 + preload 桥可见）并走通建项目（含 SQLite 建库）。
+- **桌面版（Electron 外壳）设计定稿**：新增 `docs/design/50-desktop.md`（进程模型 / 端口策略 / 配置位置 / preload 契约 / 原生能力边界 / 打包与发布）；`architecture.md` 增第七个包 `packages/desktop` 与 `electron` 44.3.0 exact pin；`build.md` 增桌面版开发/打包/发布链路；`config.md` 登记 `<userData>/desktop.json`；`docs/ui/DESIGN.md` 登记设置页「通用」tab 与书架页「浏览…」按钮；`AGENTS.md` 登记桌面版硬约束。
+
+### Fixed
+
+- **server bin 自检在 Electron 主进程下崩溃**：`realpathSync(process.argv[1])` 在 Electron 里拿到的是命令行开关（如 `--no-sandbox`）而非脚本路径 → 抛 `ENOENT` 打挂整个主进程。现包一层 try/catch，路径不可解析即判「非直接执行」（npm bin 的符号链接语义不变，server 575 测试全绿）。
 
 ## [v0.0.39] - 2026-09-15
 

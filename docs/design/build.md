@@ -64,15 +64,18 @@ pnpm test:packed    # 一键串联（backlog #8 打包安装测试：tarball 安
 ### 桌面版（electron-builder）
 
 ```
-pnpm --filter @whispering233/ai-editor-desktop build   # tsc：主进程 ESM + preload CJS
-pnpm --filter @whispering233/ai-editor-desktop dist    # electron-builder：当前平台安装包
-pnpm desktop:dist                                      # 根脚本（构建全仓 + 出包，供 CI 用）
+pnpm --filter @whispering233/ai-editor-desktop build   # tsc：主进程 ESM + preload CJS（一个 tsconfig，.cts）
+pnpm --filter @whispering233/ai-editor-desktop start   # 开发：构建后 electron .（in-process 起 server）
+pnpm desktop:dist                                      # 全仓构建 + pnpm deploy --legacy + electron-builder（供 CI 用）
 ```
 
-- **依赖收集**：先 `pnpm deploy --prod` 生成扁平 app 目录（pnpm 的符号链接树会让打包器漏收 `@whispering233/*` workspace 包）；失败时触发 esbuild bundle 兑底路径（见 `50-desktop.md` §5）。
-- **原生模块**：`asarUnpack` 放 `**/*.node`（asar 内不能 load 原生模块）。
+- **打包三段**：`pnpm -r build` → `pnpm --filter <desktop> deploy --prod --legacy packages/desktop/.deploy/app` → `electron-builder --config electron-builder.yml`（封装在 `packages/desktop/scripts/pack.mjs`）。`--legacy` 不可省（pnpm 11 默认拒结非 injected workspace），`electron-builder.yml` 里 `npmRebuild: false` + `linux.executableName` 不可省（原因见 `50-desktop.md` §5 实测栏）。
+- **首次装 electron 二进制可能很慢**（从 GitHub 下载 ~100MB）：可临时给环境变量 `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ ELECTRON_CUSTOM_DIR='{{ version }}'`（**不写进仓库配置**——CI 与其他开发者的拉取源不应被改写）。
+- **原生模块**：`asarUnpack` 放 `**/*.node`，产物在 `release/linux-unpacked/resources/app.asar.unpacked/`。
 - **平台矩阵**：win-x64（nsis）/ mac-arm64 + mac-x64（dmg）/ linux-x64（AppImage）。首版**不签名**（macOS 首次需右键打开、Windows 有 SmartScreen 提示——README 写明），因此也**不做自动更新**（electron-updater 在 macOS 要求已签名）。
-- **首次打包必验证三件事**（K0 spike 的硬判据）：① 主进程能 load better-sqlite3 并开库；② 产物含 `*.node` 且能起服务；③ 装出来的包能双击起界面。
+- **本地占用**：`.deploy/`（依赖部署，约 220MB）与 `release/`（含 AppImage ~158MB）均不入库（gitignore）；`pack.mjs` **在 finally 里清 `.deploy`**——留在 workspace 内会让 pnpm 的依赖状态检查误判（`.deploy/app` 是 workspace 外的 package.json + node_modules，之后任何 `pnpm` 脚本都会报「需重建 modules 目录」而中止）。
+- **CI 影响**：`publish.yml` 的 `pnpm install --frozen-lockfile` 现会连带拉 electron 二进制（~100MB，仅 tag 触发，不阻塞日常）；桌面安装包由独立的 `desktop.yml` 出（见下）。
+- **验收硬判据**（K0 已过，回归时重跑）：① 主进程能 load better-sqlite3 并建库；② 产物含 `*.node` 且能起服务；③ 打包体启得起窗口（CDP 可读 `window.aiEditorDesktop`）。
 
 发布脚本链：`scripts/sync-version.mjs`（`pnpm release:version X.Y.Z` 同步版本，只改 version 字段）、`scripts/publish-packages.mjs`、`scripts/verify-installed.mjs`（发布后冒烟：先 `npm view` 轮询 5 包 registry 可见，再 mkdtemp 安装并断言 version/`.bin/ai-editor`/短时启动输出「服务已启动」）。
 

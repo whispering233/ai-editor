@@ -16,6 +16,7 @@
     "typecheck": "pnpm -r exec tsc --noEmit -p tsconfig.json",
     "test": "pnpm -r test",
     "pack:test": "node scripts/pack-test-install.mjs",
+    "desktop:dist": "pnpm -r build && node packages/desktop/scripts/pack.mjs",
     "start:test": "node scripts/start-test-install.mjs",
     "test:packed": "pnpm pack:test && pnpm start:test",
     "release:version": "node scripts/sync-version.mjs",

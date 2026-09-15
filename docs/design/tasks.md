@@ -8,17 +8,18 @@
 
 ---
 
-## 当前任务卡：桌面版（Electron 外壳）K0–K6
+## 当前任务卡：桌面版（Electron 外壳）K1–K6
 
-设计契约 = `docs/design/50-desktop.md`（唯一事实源）。卡序 K0 → K1 → K2 → K3 → K4 → K5 → K6；**K0 未过不开 K1**（打包路径是否成立决定后续所有卡）。
+设计契约 = `docs/design/50-desktop.md`（唯一事实源，§7 已录 K0 实测结论）。卡序 K1 → K2 → K3 → K4 → K5 → K6。
 
-- [ ] **K0 打包 spike** — `packages/desktop` 骨架（主进程 ESM + `preload.cts`）+ 主进程内 in-process `startServer()` + 窗口加载实际端口 + electron-builder/`pnpm deploy` 出 Linux 安装包。**判据**：① 主进程能 load better-sqlite3 并开库；② 打包产物含 `*.node` 且能起服务；③ 本机安装包能双击起界面。失败 → 停下讨论再走 esbuild 兜底（不自行改方案）。
-- [ ] **K1 书库位置** — `<userData>/desktop.json` 读写 + 首次启动原生目录框（建议值 `<documents>/AI Editor`）+ 启动接线（**替代 `process.cwd()` / `argv[2]`**）。**判据**：删配置能重现首次流程；有配置时重启直达上次的书。
+（K0 打包 spike 已完成：`packages/desktop` 骨架 + `pnpm deploy --legacy` + electron-builder 出 AppImage；三条判据均过，另修 server bin 自检在 Electron 下的 `argv[1]` 崩溃。）
+
+- [ ] **K1 书库位置** — `<userData>/desktop.json` 读写 + 首次启动原生目录框（建议值 `<documents>/AI Editor`）+ 启动接线（**替代 `process.cwd()` / `argv[2]`**，当前是 K0 的 `spike-root` 临时目录）。**判据**：删配置能重现首次流程；有配置时重启直达上次的书。
 - [ ] **K2 目录选择闭环** — preload `pickDirectory` + client 能力检测 + 书架页「浏览…」按钮（`DESIGN.md` `dashboard-open-path`）。**判据**：桌面版弹原生框且能直开；浏览器形态按钮不渲染、手输路径行为与现有测试不变。
 - [ ] **K3 壳层** — 应用菜单（Edit 角色 + 打开书库目录 + 打开日志目录 + reload/devtools）+ console → `<userData>/logs/ai-editor.log`。**判据**：macOS Cmd+C/V 可用；日志文件含启动日志。
 - [ ] **K4 安全与导航** — `setWindowOpenHandler` / `will-navigate` → `shell.openExternal` + 沙箱基线复核。**判据**：参考资料页外链在系统浏览器打开；生产包不暴露 devtools。
 - [ ] **K5 切换书库** — 设置页二级 tab「通用」+「书库位置」项（`DESIGN.md` `library-location`）→ 写配置 + `app.relaunch()`。**判据**：切换后重启落在新书库；浏览器形态无该 tab。
-- [ ] **K6 发布链路** — `.github/workflows/desktop.yml`（tag 触发、三平台 matrix）+ README/CHANGELOG。**判据**：tag 触发后 Release 挂上三平台安装包。
+- [ ] **K6 发布链路** — `.github/workflows/desktop.yml`（tag 触发、三平台 matrix）+ `scripts/sync-version.mjs` 纳入 `desktop` 版本 + README/CHANGELOG。**判据**：tag 触发后 Release 挂上三平台安装包。
 
 **开新卡**：从 `backlog.md` 选（当前剩余分两类）——
 

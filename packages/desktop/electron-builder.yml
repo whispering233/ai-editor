@@ -1,0 +1,34 @@
+# 桌面版打包配置（electron-builder）。
+#
+# 打包源 = `pnpm deploy --legacy` 产物（`.deploy/app`，自包含的扁平部署目录）——见
+# `docs/design/50-desktop.md` §5：pnpm 的符号链接树会让打包器漏收 workspace 依赖，
+# 因此依赖收集交给 pnpm deploy，electron-builder 只负责 asar + 安装包。
+appId: com.whispering233.ai-editor
+productName: AI Editor
+
+directories:
+  app: .deploy/app
+  output: release
+
+# 只打运行所需：dist（主进程 + preload）+ node_modules；排除源码与 tsconfig
+files:
+  - "**/*"
+  - "!src/**"
+  - "!tsconfig.json"
+  - "!**/*.map"
+
+# 原生模块不能在 asar 内 load
+asarUnpack:
+  - "**/*.node"
+
+# better-sqlite3 v13 是 N-API 预编译模块，不需要针对 Electron 重编译
+npmRebuild: false
+
+linux:
+  target:
+    - AppImage
+  category: Office
+  # 应用目录 package.json 的 name 含 scope（@whispering233/...）——executableName 会推导出含 `@`
+  # 的名字，AppImage 工具链拒收（仅允许字母/数字/`-`/`_`/`.`/空格），必须显式指定
+  executableName: ai-editor
+  artifactName: ${productName}-${version}-linux-${arch}.${ext}
