@@ -9,7 +9,7 @@
 ├── books/                    # 书架子目录（S1.5 起）
 │   └── <书名>/               # 每本书一个目录（创建书 = 新建子目录）
 │       ├── project.json       # 项目配置（id/schema_version/current_position 等，见下文契约）
-│       ├── outline.json       # 大纲树（卷 → 章 → 场景，严格三层，无游离节点）
+│       ├── outline.json       # 大纲树（卷 → 章 → 场景，严格三层，无游离节点；2026-09：章只挂卷）
 │       ├── AGENTS.md          # 项目规则文件（项目规则唯一事实源，可选文件，见下文）
 │       ├── sessions/          # 对话历史（一 session 一 JSONL，格式 = pi session v3）
 │       │   └── <timestamp>_<session_id>.jsonl
@@ -214,7 +214,7 @@ CREATE TABLE delta_records (
 
 ## outline.json — 大纲树
 
-大纲树是纯 JSON 文件，不与 SQLite 混合。**严格三层（卷 → 章 → 场景），无游离节点**。
+大纲树是纯 JSON 文件，不与 SQLite 混合。**严格三层（卷 → 章 → 场景），无游离节点**。**2026-09 收紧：`root` 仅接纳卷（章只挂卷）**——存量根级章读容忍（可渲染/改名/删除/拖进卷，不能再新建或移回 root），无迁移。
 
 ```json
 {

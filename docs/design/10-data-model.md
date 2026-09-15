@@ -19,7 +19,8 @@
 
 ## 2. 大纲树：严格三层，无游离节点
 
-- 固定三层 **volume（卷）→ chapter（章）→ scene（场景）**；创建必须显式指定 `parent_id`：volume 挂 root、chapter 挂 volume 或 root、**scene 只能挂 chapter**，无默认值。
+- 固定三层 **volume（卷）→ chapter（章）→ scene（场景）**；创建必须显式指定 `parent_id`：volume 挂 root、**chapter 只能挂 volume**、**scene 只能挂 chapter**，无默认值。
+  - **章只挂卷（2026-09）**：`root` 仅接纳卷——“根级章”（不属任何卷的章）使「卷末章」「章序前缀」类推导多出一条分支，而写作现实里章总归属某卷。**收紧仅限写入**（`db.assertCanHold` 单点 + 提案层/工具描述 + 前端 `parentOptionsForType` 三面同口径）；**存量根级章读容忍**：能渲染/改名/删除/拖进卷，但不能再新建、也不能再移回 root（无迁移）。
 - **不存在游离节点**（无 `orphan_nodes` 机制）——游离节点制造「树外状态」的语义裂缝，状态计算、软删级联、提案快照都要为它开特例；取消后树路径唯一、规则单一，全链路简化。
 - 节点带 `updated_at` 版本戳（任何字段变更时由服务端原子写统一更新），顶层带 `schema_version`。节点级 `updated_at` 同时支撑提案快照比对（见 `30-agent-loop.md` §2）。
 

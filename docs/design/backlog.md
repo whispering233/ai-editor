@@ -236,3 +236,8 @@
 - **`filters.status`**：保留给 hook 生命周期查询，character 侧不再消费。
 - **数据/接口字段名 `current_position` 不改**：前端显示为「阅读进度」（UI 文案与字段名分离，见 `../ui/DESIGN.md` `character-workbench` 与 `../api/10-api-project.md`）。
 - **延期项≠技术债记录**：真正"必须做但没做"的项请写进本文件的相应小节，并在触发条件写清"何时必须做"。
+- **大纲页 / 设定页不迁移 antd `Tree`（2026-09 考察结论）**
+  - 结论：保持自绘缩进行。成本 = `Outline.tsx` / `setting-tree.tsx` 两处视图层重写（纯逻辑 `lib/outline-tree.ts` / `lib/setting-tree.ts` 与单测可留）；**语义冲突在拖拽**——rc-tree 用鼠标水平位置（`dropLevelOffset`）决定落层级，与现有「行上下半 = 同级前后 / 行中段 = 成为子级 / 空白区 = 排根末尾」·三套语义不对应，且**空片区落点 rc-tree 无对应**；antd `Tree.js` 把 `dropIndicatorRender` 写在 props 展开之后（**不可注入**），指示线只能改 CSS。
+  - 收益只有两项：键盘导航（↑↓ `activeKey` / ←→ 折叠）、大树虚拟滚动（`virtual` 默认 true）——但**触发条件：单本项目大纲节点数百且展开卡顿，或明确需要键盘无障碍时**⇒ **按需单点补**（默认只展开卷 / 只给大纲页加虚拟列表 / rc-tree 直接接管），不换引擎。
+  - 可用 token（日后真要迁）：`indentSize` / `titleHeight`（默认 = `controlHeightSM` 24，可按层级覆盖）、`nodeSelectedBg`；v6 语义槽 `classNames.item|itemTitle|itemSwitcher|itemIcon`。
+  - **已失效的旧理由（不要再用）**：`DESIGN.md` 曾写「antd Tree 选中面派生 token 不可信」——`controlItemBgActive` 已在 `AntdProvider` 全局覆盖为 `{colors.surface-muted}`，并有 `antd-tokens.test.ts` 对比度守卫；真理由是行为集与拖拽语义。

@@ -42,7 +42,7 @@
 
 ### POST /api/v1/outline
 
-创建新大纲节点。**严格三层，parent_id 必填**（无游离节点）。
+创建新大纲节点。**严格三层，parent_id 必填**（无游离节点）。**层级非法 → 400 `VALIDATION_ERROR`**（`db assertCanHold` 单点校验，创建与移动共用）；**存量根级章（旧数据）读容忍**——能渲染/改名/删除/拖进卷，但不能再新建、也不能移回 root。
 
 ```typescript
 // Req
@@ -51,7 +51,7 @@
   title: string;                 // 1-200 字符
   parent_id: string;             // 必填，无默认值
                                  // volume → 挂 root
-                                 // chapter → 挂 volume 或 root
+                                 // chapter → 只能挂 volume（2026-09：root 不再接纳章）
                                  // scene → 必须挂 chapter
   summary?: string;
   data?: Record<string, unknown>; // 可选，节点结构化信息（按层级 schema 校验）
