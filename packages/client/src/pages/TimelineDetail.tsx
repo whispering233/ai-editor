@@ -54,6 +54,7 @@ import {
   mountedTimepointId,
 } from "../lib/timeline-detail";
 import { flattenTree } from "../lib/outline-tree";
+import { relationTypeLabel } from "../lib/entity-detail";
 import { ConfirmDialog } from "../components/outline/dialogs";
 import { TagSuggest } from "../components/timeline/TagSuggest";
 import { navigate } from "../hooks/use-route";
@@ -449,7 +450,11 @@ export default function TimelineDetail({ id }: { id: string }) {
           {/* 右栏：occurs_in 关联节点管理（详情页核心交互；UX3：选择器为 Popover 轻量弹层） */}
           <div className="rounded-md border border-border p-4">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-foreground">关联节点（occurs_in）</h2>
+              {/* 标题不再暴露内部关系键（`occurs_in` 是 `relation_records.relation_type` 的取值，
+                  中文名唯一来源 = shared `RELATION_TYPE_META`，经 `relationTypeLabel` 取——与关联页同口径） */}
+              <h2 className="text-sm font-semibold text-foreground">
+                关联节点（{relationTypeLabel("occurs_in")}）
+              </h2>
               <Popover
                 open={relationOpen}
                 onOpenChange={(v) => {

@@ -637,8 +637,8 @@ export default function HookPanel() {
                 <p className="font-medium text-foreground">将写入：</p>
                 <p className="mt-1 text-muted-foreground">
                   status → {LIFECYCLE_STATUS[lifecycleKind]}
-                  {lifecycleKind === "advance" && " + advances 关系"}
-                  {lifecycleKind === "resolve" && " + resolves 关系"}
+                  {lifecycleKind === "advance" && " + 推进关系"}
+                  {lifecycleKind === "resolve" && " + 回收关系"}
                   {" + 同步 status"}
                 </p>
                 {/* 回收依赖者提示（S3 降级：depends_on 边加载失败时无法确认依赖者，明示不可用） */}
@@ -898,21 +898,21 @@ function HookDetailView({ detail }: { detail: EntityDetailRes }) {
       </p>
       {/* 埋点/回收位置（MVP：节点 id；章节序后续迭代服务端现推——backlog #13） */}
       <RelationBlock
-        title="埋点节点（plants）"
+        title="埋点节点"
         items={plants.map((r) => r.sourceName ?? r.sourceId)}
       />
       <RelationBlock
-        title="推进节点（advances）"
+        title="推进节点"
         items={advances.map((r) => r.sourceName ?? r.sourceId)}
       />
       <RelationBlock
-        title="回收节点（resolves）"
+        title="回收节点"
         items={resolves.map((r) => r.sourceName ?? r.sourceId)}
       />
       <RelationBlock title="预计回收节点" items={expectedResolve ? [expectedResolve] : []} />
-      <RelationBlock title="依赖（depends_on）" items={deps} />
+      <RelationBlock title="依赖" items={deps} />
       <RelationBlock title="被依赖（其他伏笔依赖本伏笔）" items={dependents} />
-      <RelationBlock title="涉及（involves）" items={involves} />
+      <RelationBlock title="涉及" items={involves} />
     </div>
   );
 }
