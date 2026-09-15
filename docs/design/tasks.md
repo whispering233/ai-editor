@@ -8,12 +8,12 @@
 
 ---
 
-## 当前任务卡：桌面版（Electron 外壳）K3–K6
+## 当前任务卡：桌面版（Electron 外壳）K4–K6
 
-设计契约 = `docs/design/50-desktop.md`（唯一事实源，§7 已录 K0 实测结论）。卡序 K3 → K4 → K5 → K6。
+设计契约 = `docs/design/50-desktop.md`（唯一事实源，§7 已录 K0 实测结论）。卡序 K4 → K5 → K6。
 
-（已完成：**D0** 设计定稿 → **P12** pnpm 12.4.2（含去 `--legacy`）→ **K0** 打包 spike → **K1** 书库位置 → **K2** 目录选择闭环（preload 桥 + 书架页「浏览…」；桌面版 CDP 实测、浏览器形态实测无按钮）。
-⚠ **待人工验证（本机 WSLg 无法断言）**：原生目录选择框的**可见性与交互**——WSLg 下 GTK 文件对话框挂起（最小 Electron 对照实验同样挂起，非本仓代码问题）。需在真实 Linux 桌面 / macOS / Windows 上点一次（首次启动选目录 + 书架页「浏览…」）。
+（已完成：**D0** 设计定稿 → **P12** pnpm 12.4.2（含去 `--legacy`）→ **K0** 打包 spike → **K1** 书库位置 → **K2** 目录选择闭环 → **K3** 壳层（应用菜单 + 日志落盘，dev 态实测日志文件含启动行与 devtools:true）。
+⚠ **待人工验证（本机 WSLg 无法断言）**：① 原生目录选择框的**可见性与交互**（WSLg 下 GTK 文件对话框挂起；最小 Electron 对照实验同样挂起，非本仓代码问题）；② **macOS 的 Cmd+C/V**（菜单 Edit 角色为本机无法验证的平台行为）；③ 菜单项「打开书库/日志目录」的 `shell.openPath` 真开文件管理器。需在真实 Linux 桌面 / macOS / Windows 上点一次。
 - [ ] **K3 壳层** — 应用菜单（Edit 角色 + 打开书库目录 + 打开日志目录 + reload/devtools）+ console → `<userData>/logs/ai-editor.log`。**判据**：macOS Cmd+C/V 可用；日志文件含启动日志。
 - [ ] **K4 安全与导航** — `setWindowOpenHandler` / `will-navigate` → `shell.openExternal` + 沙箱基线复核。**判据**：参考资料页外链在系统浏览器打开；生产包不暴露 devtools。
 - [ ] **K5 切换书库** — 设置页二级 tab「通用」+「书库位置」项（`DESIGN.md` `library-location`）→ 写配置 + `app.relaunch()`。**判据**：切换后重启落在新书库；浏览器形态无该 tab。

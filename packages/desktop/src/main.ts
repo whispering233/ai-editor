@@ -3,16 +3,46 @@
 // 职责（`docs/design/50-desktop.md` §1/§2）：解析书库位置（`<userData>/desktop.json`，首次启动弹
 // 原生目录选择框）→ 主进程内 in-process 启动 server → 窗口加载 `http://127.0.0.1:<实际端口>`
 // （与前端相对路径 API_BASE 同源）。**不开子进程**、**不依赖 `process.cwd()` / 命令行参数**。
-import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell, type MenuItemConstructorOptions } from "electron";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { startServer, type ServerHandle } from "@whispering233/ai-editor-server";
 import { desktopConfigPath, readDesktopConfig, suggestedLibraryDir, writeDesktopConfig } from "./config.js";
+import { logFilePath, redirectConsoleToFile } from "./log.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
 let handle: ServerHandle | null = null;
+
+/**
+ * 最小应用菜单。**Edit 角色不是装饰**：macOS 上不设菜单 ⇒ Cmd+C/V 失效（输入框全废）。
+ * 自有条目只有两个目录入口（书库/日志）；devtools 仅在未打包态出现。
+ */
+function installMenu(libraryRoot: string, logDir: string, isDev: boolean): void {
+  const template: MenuItemConstructorOptions[] = [
+    ...(process.platform === "darwin" ? [{ role: "appMenu" as const }] : []),
+    { role: "editMenu" },
+    {
+      label: "书库",
+      submenu: [
+        { label: "打开书库目录", click: () => void shell.openPath(libraryRoot) },
+        { label: "打开日志目录", click: () => void shell.openPath(logDir) },
+      ],
+    },
+    ...(isDev
+      ? [
+          {
+            label: "开发",
+            submenu: [{ role: "reload" as const }, { role: "forceReload" as const }, { role: "toggleDevTools" as const }],
+          },
+        ]
+      : []),
+    { role: "windowMenu" },
+    ...(process.platform === "darwin" ? [] : [{ label: "退出", role: "quit" as const }]),
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
 
 /**
  * 弹原生目录选择框（`createDirectory` 允许随手新建）；返回 null = 用户取消。
@@ -58,6 +88,11 @@ async function resolveLibraryRoot(): Promise<string | null> {
 }
 
 async function openWindow(): Promise<void> {
+  // 日志落盘要在一切之前（GUI 用户没有终端；启动期的报错也要能事后查）
+  const userData = app.getPath("userData");
+  const logFile = logFilePath(userData);
+  redirectConsoleToFile(logFile);
+
   const root = await resolveLibraryRoot();
   if (root === null) {
     console.log("[desktop] 未选择书库位置，退出");
@@ -75,6 +110,9 @@ async function openWindow(): Promise<void> {
     return;
   }
   console.log(`[desktop] server: http://127.0.0.1:${handle.port} root=${root}`);
+
+  installMenu(root, dirname(logFile), !app.isPackaged);
+  console.log(`[desktop] 菜单已就绪（书库 / 日志目录入口；devtools 项: ${!app.isPackaged}）；日志: ${logFile}`);
 
   const win = new BrowserWindow({
     width: 1280,
