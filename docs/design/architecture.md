@@ -161,9 +161,11 @@ shared（纯类型/常量/工具，零 Node 依赖，可被 client 安全 tree-s
   }
 }
 
-// packages/desktop/package.json（private）
+// packages/desktop/package.json（private；**包名有意不带 scope**——electron-builder 的
+// `updaterCacheDirName` 派生自 name 且无配置项，带 scope 会在 %LOCALAPPDATA% 生成怪目录名，
+// 详见 50-desktop.md §5.1）
 {
-  "name": "@whispering233/ai-editor-desktop",
+  "name": "ai-editor-desktop",
   "dependencies": {
     "@whispering233/ai-editor-server": "workspace:*"   // 主进程 in-process 启动（唯一运行时依赖）
   },

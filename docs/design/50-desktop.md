@@ -85,6 +85,8 @@
 
 macOS 无卸载器（拖废纸篓即卸）→ 本机制只对 Windows 生效；将来若需跨平台的「清除数据」，应做成应用内入口（设置页）。
 
+**安装器缓存副本的清理**：`%LOCALAPPDATA%\<name>-updater\installer.exe`（约 130MB）是 electron-builder 的 NSIS 安装器安装时写出的**自身副本**（供差分更新 / `quitAndInstall`；本项目未启用自动更新），属**程序文件而非用户数据** → 卸载时**无条件清理**（上游默认卸载器不删它，electron-builder#9505）。该目录名派生自包名（`sanitizeFileName(name).toLowerCase() + "-updater"`，**无配置项可覆盖**），因此 desktop 包**有意不带 scope**（`ai-editor-desktop`）——带 scope 会得到 `@whispering233ai-editor-desktop-updater` 这种拼音式怪名；卸载器同时清带 scope 的旧名残留。
+
 ## 6. 客户端契约增量（唯一改动）
 
 - 设置页新增二级 tab「**通用**」（位置最前：通用 → AI 模型 → 项目规则 → 备份），首项「书库位置」= 当前创作根路径（只读文本）+「更改…」按钮（`button-default`）+ 一句说明（更改后需重启应用）。**仅桌面版渲染**（能力检测），浏览器形态该 tab 不出现。
@@ -94,7 +96,7 @@ macOS 无卸载器（拖废纸篓即卸）→ 本机制只对 Windows 生效；�
 
 ## 7. 已验证结论（K0 打包 spike，2026-10 实测）
 
-三条假设均已在 Linux x64 + Electron 44.3.0 上跑通（`pnpm --filter @whispering233/ai-editor-desktop dist` 一键出 AppImage）：
+三条假设均已在 Linux x64 + Electron 44.3.0 上跑通（`pnpm --filter ai-editor-desktop dist` 一键出 AppImage）：
 
 1. **better-sqlite3 免 rebuild** ✓：Electron 44.3.0 内置 Node 24.18.1 ≥ Node-API 10 门槛（Node 22.14），N-API 预编译 `.node` 直接 load——开发态与打包态各建库一次（`data.db` + 表结构正确），未做任何 electron-rebuild。
 2. **`pnpm deploy` 能收集 workspace 依赖** ✓：`.deploy/app` 自包含（`node_modules/.pnpm` 在目标目录内、无 electron/typescript 泄漏），打包产物 `resources/app.asar.unpacked` 内含 `better-sqlite3/prebuilds/linux-x64.node`。

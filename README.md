@@ -46,7 +46,7 @@ shared → db → tools → agent → server    （依赖方向，client 只依�
 - `@whispering233/ai-editor-agent`：pi 运行时装配（`ModelRuntime` + `SessionManager` + `AgentSession`）、内核提示词、工具适配、会话事件投影
 - `@whispering233/ai-editor-server`：Hono API + SPA 静态托管（单进程部署）
 - `@whispering233/ai-editor-client`：React SPA
-- `@whispering233/ai-editor-desktop`：Electron 外壳（窗口/菜单/目录选择/书库位置/日志/打包；**不含业务逻辑**）
+- `ai-editor-desktop`：Electron 外壳（窗口/菜单/目录选择/书库位置/日志/打包；**不含业务逻辑**）
 
 ## 桌面版（安装包）
 

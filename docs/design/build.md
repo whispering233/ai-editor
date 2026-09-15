@@ -29,7 +29,7 @@ pnpm dev            # pnpm -r --parallel run dev
 
 ```
 pnpm dev                                  # client(5173) + server(3456) + 各包 tsc --watch
-pnpm --filter @whispering233/ai-editor-desktop dev   # electron：窗口加载 5173（主进程内不启 server）
+pnpm --filter ai-editor-desktop dev   # electron：窗口加载 5173（主进程内不启 server）
 ```
 
 - 桌面版 dev 态窗口指向 Vite（`http://127.0.0.1:5173`），API 经 Vite proxy 打到 3456——**不在 Electron 里另起一套 server**，否则与 dev server 争端口。
@@ -64,8 +64,8 @@ pnpm test:packed    # 一键串联（backlog #8 打包安装测试：tarball 安
 ### 桌面版（electron-builder）
 
 ```
-pnpm --filter @whispering233/ai-editor-desktop build   # tsc：主进程 ESM + preload CJS（一个 tsconfig，.cts）
-pnpm --filter @whispering233/ai-editor-desktop start   # 开发：构建后 electron .（in-process 起 server）
+pnpm --filter ai-editor-desktop build   # tsc：主进程 ESM + preload CJS（一个 tsconfig，.cts）
+pnpm --filter ai-editor-desktop start   # 开发：构建后 electron .（in-process 起 server）
 pnpm desktop:dist                                      # 全仓构建 + pnpm deploy + electron-builder（**当前平台**）
 ```
 
@@ -141,6 +141,7 @@ pnpm desktop:dist                                      # 全仓构建 + pnpm dep
 
 ## 桌面版打包坑记录（v0.0.40 起实测）
 
+- **`updaterCacheDirName` 派生自包名且不可配置**（`app-builder-lib/out/appInfo.js` 只有 getter：`sanitizeFileName(name).toLowerCase() + "-updater"`）：带 scope 的包名会在 `%LOCALAPPDATA%` 下生成 `@whispering233ai-editor-desktop-updater\` 这种拼音式目录名——要名字干净只能改 package.json 的 `name`（desktop 包因此**有意不带 scope**）。另：NSIS 默认卸载器**不删**这个目录（electron-builder#9505，约 130MB 安装包副本），本项目在 `installer.nsh` 里无条件清理（属程序文件，非用户数据）。
 - **`nsis.include` 路径相对 buildResources 目录**（默认 `<projectDir>/build`），**不是**相对 projectDir：`app-builder-lib` 的 `getResource()` 先查 build 目录的文件清单、再 `path.resolve(buildResourcesDir, custom)`。写 `include: build/installer.nsh` 会被解析成 `build/build/installer.nsh` 而报错——**正确写法 = `installer.nsh`**（`50-desktop.md` §5.1 的自定义卸载脚本靠它加载）。
 - **NSIS 脚本可本地先验证语法**（不必推 CI 才发现）：`apt install nsis` 后用 `makensis` 编译一个最小包装工程（`Unicode true` + `!include "installer.nsh"` + 在 Uninstall section 里 `!insertmacro customUnInstall`）即可；只有一个 `WriteUninstaller` 的预期警告。
 - **桌面包缺 SPA ⇒ 能启动但界面是 404 JSON**。server 的 SPA 走「`<server>/client-dist`」兜底路径（`server/src/index.ts` 的 `resolveClientDist`），而该目录**只在 server 包 prepack 时生成**（`scripts/copy-client-dist.mjs`）；桌面打包走 `pnpm deploy`，**CI 上那个目录从未生成** → 包内无 SPA，窗口只显示 `client/dist 未构建` 的 JSON。⚠ **本机测试会骗你**：开发机常常残留着旧日 `packages/server/client-dist`，于是本地包能跑、CI 包不能——v0.0.40 的 Windows 包就是这样发出去的。现 `pack.mjs` 在 deploy **之前**先跑同一个 copy 脚本，并在 deploy **之后**断言 `client-dist/index.html` 存在（宁可在打包阶段红）。

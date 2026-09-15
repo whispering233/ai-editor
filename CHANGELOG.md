@@ -7,6 +7,13 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **桌面版包名去 scope**：`@whispering233/ai-editor-desktop` → `ai-editor-desktop`。动因：electron-builder 的 `updaterCacheDirName`（`%LOCALAPPDATA%\<name>-updater\`）**派生自包名且无配置项可覆盖**，带 scope 会生成 `@whispering233ai-editor-desktop-updater` 这种拼音式目录名。private 包不发布，仅影响仓库内引用（`pack.mjs` 的 filter 名 + 文档）。
+
+### Fixed
+
+- **卸载残留的安装器缓存（约 130MB）**：`%LOCALAPPDATA%\<name>-updater\installer.exe` 是 electron-builder 的 NSIS 安装器安装时写出的自身副本（供差分更新 / `quitAndInstall`），而**默认卸载器不清理它**（上游 electron-builder#9505）。现 `installer.nsh` **无条件删除**（属程序文件而非用户数据，且本项目未启用自动更新），并兼容带 scope 的旧目录名。
 ## [v0.0.42] - 2026-09-16
 
 > **桌面版健壮性：书库位置回退 + 卸载清理（含签名门禁）**：书库位置三级回退（`c4dca12`）+ 卸载时可清除使用数据、且**只删带签名文件的书库目录**（`54eeee9`）。回归：build / typecheck / lint / `-r test` 全绿（desktop 21，其余同 v0.0.41）。

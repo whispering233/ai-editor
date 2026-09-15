@@ -10,7 +10,13 @@ import { fileURLToPath } from "node:url";
 
 const pkgDir = dirname(dirname(fileURLToPath(import.meta.url)));
 const workspaceRoot = join(pkgDir, "..", "..");
-const packageName = "@whispering233/ai-editor-desktop";
+/**
+ * 包名**不带 scope**（`ai-editor-desktop`，与其他包的 `@whispering233/*` 命名不同是有意的）：
+ * electron-builder 的 `updaterCacheDirName` 派生自 package.json 的 `name` 且**无配置项可覆盖**
+ * （`app-builder-lib/out/appInfo.js` 的 getter）——带 scope 会在 `%LOCALAPPDATA%` 下生成
+ * `@whispering233ai-editor-desktop-updater\`（去斜杠拼接后的怪名）。
+ */
+const packageName = "ai-editor-desktop";
 const deployDir = join(pkgDir, ".deploy");
 const deployApp = join(deployDir, "app");
 

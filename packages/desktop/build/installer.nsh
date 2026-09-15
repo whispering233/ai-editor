@@ -15,6 +15,14 @@
 ; 「设置 → 通用 → 书库位置」随时能看到真实路径）。
 
 !macro customUnInstall
+  ; —— 安装器自身的缓存副本（属**程序文件**，非用户数据）→ **无条件**清理 ——
+  ; `%LOCALAPPDATA%\<name>-updater\installer.exe` 约 130MB，是 electron-builder 的 NSIS 安装器
+  ; 安装时写出的自身副本（供差分更新 / quitAndInstall 用；本项目未启用自动更新）。
+  ; 上游默认卸载器**不删它**（electron-builder#9505）——不主动清就是一百多 MB 垃圾。
+  ; 两个名字：新名派生自包名 `ai-editor-desktop`；带 scope 的那个是改名前版本的残留。
+  RMDir /r "$LOCALAPPDATA\ai-editor-desktop-updater"
+  RMDir /r "$LOCALAPPDATA\@whispering233ai-editor-desktop-updater"
+
   MessageBox MB_YESNO|MB_ICONEXCLAMATION|MB_DEFBUTTON2 \
     "是否同时清除 AI Editor 的使用数据？$\r$\n$\r$\n将删除（仅限确认属于本应用的目录）：$\r$\n  • 书库：$DOCUMENTS\AI Editor 或 $PROFILE\AI Editor（书籍、备份、对话历史）$\r$\n  • 应用数据：$APPDATA\AI Editor（设置、日志、缓存）$\r$\n$\r$\n判断依据：书库目录下存在本应用的签名文件 .ai-editor\library.json——同名但非本应用创建的目录不会被删除。$\r$\n若你曾在「设置 → 通用 → 书库位置」把书库改到别处，那部分数据也不会被自动删除。$\r$\n$\r$\n删除后无法恢复。选择「否」则全部保留（重新安装后可继续使用）。" \
     IDNO ai_editor_keep_data
