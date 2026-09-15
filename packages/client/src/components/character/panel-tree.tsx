@@ -607,7 +607,8 @@ function PanelRows({
 
 /**
  * 只读形态行（阅读进度 tab）：同缩进的「名称 + 值文本」——分支名为分组标题（foreground + medium），
- * 叶子名走 muted（与字段网格的 label 同档）、值走 foreground、空值 `—`（quaternary）。
+ * 叶子名走 muted（与字段网格的 label 同档）、值走 foreground；**空值不渲染任何占位符**
+ * （与可编辑形态「空值 = 空输入框」同口径；`—` 只留给字段网格的只读值——占位符会被误读为已有值）。
  * 不渲染输入框/工具条/行操作/拖拽：可编辑树只在人物档案 tab 出现。
  */
 function PanelReadOnlyRows({
@@ -635,13 +636,9 @@ function PanelReadOnlyRows({
               >
                 {node.name}
               </span>
-              {!branch && (
+              {!branch && node.value !== undefined && (
                 <span className="min-w-0 flex-1 truncate text-foreground">
-                  {node.value === undefined ? (
-                    <span className="text-muted-foreground/70">—</span>
-                  ) : (
-                    valueText(node.value)
-                  )}
+                  {valueText(node.value)}
                 </span>
               )}
             </div>

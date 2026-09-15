@@ -351,6 +351,22 @@ describe("CharacterDetailView（阅读进度 tab 只读：纯文本值）", () =
     expect(panel).toContain(">3<"); // 叶子值（文本）
   });
 
+  it("阅读进度 tab：能力面板空值叶子不渲染占位符（`—` 只留给字段网格）", () => {
+    const html = renderWith({
+      tab: "current",
+      detail: {
+        ...DETAIL,
+        data: {
+          ...DETAIL.data,
+          ability_panel: [{ name: "火系", children: [{ name: "等级", value: 3 }, { name: "抗性" }] }],
+        },
+      },
+    });
+    const panel = html.slice(html.indexOf("能力面板"));
+    expect(panel).toContain("抗性"); // 叶子名仍在（行不消失）
+    expect(panel).not.toContain("—"); // 空值不给占位符（会被误读为已有值）
+  });
+
   it("未设置当前位置（已确认）→ 提示 + 「去大纲设进度」入口（#/outline）", () => {
     const html = render("current", { currentPosition: null, positionState: "unset" });
     expect(html).toContain("未设置阅读进度，显示人物档案初始值");
