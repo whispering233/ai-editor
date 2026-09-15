@@ -771,11 +771,7 @@ export default function Outline() {
                 详情/＋ 就地新建按钮已移除——详情改双击、新建改选中后 Enter；AskAiButton 移除。
                 徽标排在删除按钮**左侧**：删除按钮恒贴行尾（徽标出现不得把它往左推——跨行操作列才能对齐） */}
             <span className="ml-auto flex shrink-0 items-center gap-1">
-              {isCurrent && (
-                <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-xs text-accent-foreground">
-                  阅读进度
-                </span>
-              )}
+              {isCurrent && <TypeChip className="shrink-0">阅读进度</TypeChip>}
               {/* 行级建子级（卡 3，DESIGN.md `data-row`）：卷 → 新建章、章 → 新建场；插在删除左侧
                   （删除恒贴行尾）；场无合法子层级 → 不渲染。与 Enter 建子级同一路径
                   （startCreate → 子级末尾就地输入行），成功后新条目选中 + 聚焦 */}

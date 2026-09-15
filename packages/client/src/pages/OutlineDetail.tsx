@@ -226,11 +226,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <TypeChip>{TYPE_LABEL[node.type]}</TypeChip>
               <span>更新于 {formatTimestamp(node.updatedAt)}</span>
-              {isCurrent && (
-                <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-xs text-accent-foreground">
-                  阅读进度
-                </span>
-              )}
+              {isCurrent && <TypeChip className="shrink-0">阅读进度</TypeChip>}
             </div>
           ) : undefined
         }
