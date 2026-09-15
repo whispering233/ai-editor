@@ -10,7 +10,7 @@
 
 ## 当前无进行中任务卡
 
-最近完成的批次：**UX/UI 样式优化（9 张卡：卡 0 文档 + 卡 1/2a/2b/3/4/5/6/7/8 实现与归档）**——逐卡事实见根 `CHANGELOG.md` 的 `## [Unreleased]` 段；每卡一 commit（`e7dd82f` → `8b65fe7`），独立 oracle 代码级复核 + 浏览器像素量测（数字见 CHANGELOG）。
+最近完成的批次：**UX/UI 样式优化（9 张卡 + 3 张收口）**——逐卡事实见根 `CHANGELOG.md` 的 `## [Unreleased]` 段；每卡一 commit（`e7dd82f` … `fe9144d`），独立 oracle 代码级复核（发现项已全部收口）+ 浏览器逐行像素量测（数字见 CHANGELOG）。
 
 **开新卡**：从 `backlog.md` 选（当前剩余分两类）——
 

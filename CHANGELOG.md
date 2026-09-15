@@ -7,7 +7,7 @@
 
 ## [Unreleased]
 
-> **UX/UI 样式优化批（9 张卡）**：卡 0 文档口径先行（`e7dd82f`）→ 卡 2b 层级契约收紧（`9694e5c`）→ 卡 1 大纲缩进列对齐（`eec69d6`）→ 卡 2a 页头「+ 新建卷」（`8b9a5a8`）→ 卡 3 大纲行级新建（`0f7dfc6`）→ 卡 4 设定行级新建（`32a1f19`）→ 卡 5 关联页端点徽标中文（`56de716`）→ 卡 6 只读面板空值（`a15d249`）→ 卡 7 阅读进度徽标（`8b65fe7`）。每卡一 commit，独立 oracle 代码级复核 + 浏览器逐行量测（19 行大纲 / 45 行关联 / 37 行设定）；回归：build/typecheck/lint/`pnpm -r test` 全绿（shared 222 / db 281 / client 858 / tools 286 / agent 82 / server 574）。
+> **UX/UI 样式优化批（9 张卡 + 3 张收口 commit）**：卡 0 文档口径先行（`e7dd82f`）→ 卡 2b 层级契约收紧（`9694e5c`）→ 卡 1 大纲缩进列对齐（`eec69d6`）→ 卡 2a 页头「+ 新建卷」（`8b9a5a8`）→ 卡 3 大纲行级新建（`0f7dfc6`）→ 卡 4 设定行级新建（`32a1f19`）→ 卡 5 关联页端点徽标中文（`56de716`）→ 卡 6 只读面板空值（`a15d249`）→ 卡 7 阅读进度徽标（`8b65fe7`）；随后按**独立 oracle 复核**收口三张：注释口径/backlog/清卡/本段（`7f61d68`）、补三处守卫（`1db7b1f`）、用户可见文案不再暴露内部枚举键（`fe9144d`）。每卡一 commit，oracle 代码级复核（PASS 11/PARTIAL 1/FAIL-注释残留 1 → 均已收口）+ 浏览器逐行量测（19 行大纲 / 45 行关联 / 37 行设定）；回归：`pnpm -r build` → typecheck（0 error）→ lint → `pnpm -r test` 全绿（shared 222 / db 281 / client 859 / tools 287 / agent 82 / server 575），`designmd lint docs/ui/DESIGN.md` errors 0（warnings 5 = 预期 orphaned-tokens）。
 
 ### Added
 
@@ -25,6 +25,7 @@
 ### Fixed
 
 - **关联页端点类型徽标漏英文**：`relations-view.tsx` 的 `ENDPOINT_TYPE_LABEL` 原是手抄的四类表（character/setting/location/hook + outline_node），`timepoint`/`event`/`reference` 在源/目标列与端点类型过滤下拉直接显示原始串（「timepoint」「event」）。改为派生 shared `ENTITY_TYPE_LABELS` + 补 `outline_node`。
+- **用户可见文案不再暴露内部枚举键**（同型问题的其余两处，oracle 复核发现）：时间轴事件详情的小节标题「关联节点（occurs_in）」→ 取 shared 关系类型中文名（「锚定于」）；伏笔页五个分区块标题去掉括号里的关系键（埋点节点/推进节点/回收节点/依赖/涉及）与生命周期预览里的 `+ advances 关系` / `+ resolves 关系`。全 client 重扫描「中文文案 + 内部枚举键混排」= clean。
 
 ### 有意保留（本批）
 
