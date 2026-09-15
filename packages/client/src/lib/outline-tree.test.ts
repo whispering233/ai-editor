@@ -297,7 +297,7 @@ describe("findParentIdOf / findNodePosition（拖拽目标父与原地判定，S
     expect(findParentIdOf(tree, "ghost")).toBe(null);
   });
 
-  it("findParentIdOf：root 直挂章（chapter 可挂 root）", () => {
+  it("findParentIdOf：root 直挂章（存量数据读容忍）", () => {
     const rootChapter: OutlineNode = {
       id: "ch-9",
       type: "chapter",

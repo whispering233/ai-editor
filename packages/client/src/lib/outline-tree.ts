@@ -2,7 +2,7 @@
 import type { OutlineNode, OutlineTree } from "@whispering233/ai-editor-shared";
 import type { OutlineNodeType } from "./api";
 
-/** 大纲根（虚拟）id——volume/chapter 挂 root 时使用的 parent_id */
+/** 大纲根（虚拟）id——**卷**挂 root 时使用的 parent_id（章只挂卷，2026-09） */
 export const ROOT_NODE_ID = "root";
 
 /** 父节点候选（树形下拉选项；depth：root=0、卷=1、章=2，用于缩进展示） */
@@ -145,7 +145,7 @@ export function editFailureRecovery(code: string | null): "abandon" | "restore" 
 }
 
 /**
- * 在树中查找节点（或 root）的子节点列表——move 对话框计算目标 order 用。
+ * 在树中查找节点（或 root）的子节点列表——拖拽移动计算目标 order 用。
  * root → 树的顶层 children；目标不存在 → null；目标无 children（scene）→ []
  */
 export function findNodeChildren(nodes: OutlineNode[], nodeId: string): OutlineNode[] | null {

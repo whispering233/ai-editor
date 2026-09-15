@@ -172,6 +172,15 @@
 
 ## 前端 / UI
 
+- **大纲页交互无自动化守卫（浏览器像素走查是唯一防线）**（UX 批次 oracle 登记）
+  - 现状：本仓无 jsdom，SSR 断言只覆盖「有 presenter 拆分」的组件（如 `CharacterDetailView`）；大纲页/设定树/PanelTree 的页面级交互（场行不渲染新建按钮、根级新建行只建卷且无切换按钮、阅读进度徽标走 `TypeChip`、角标在删除左侧）本轮只经像素量测确认，**未入库为测试**。
+  - 影响：下次改动只靠人眼复查（本轮已量测的具体数字见 CHANGELOG）。
+  - 触发条件：再改这三处行结构/行尾操作区时。
+  - 最小修法：把 Outline 的页头/行操作区拆成 presenter 组件后补 `renderToString` 断言（与人物页同款）；**代价 = 一次真实拆分**，不要在页面里塞测试钩子。
+- **antd 是 caret 依赖（`^6.6.2`），而缩进对齐依赖其 `controlHeightSM`**（UX 批次 oracle 登记）
+  - 现状：无子节点行占位用 `-ml-2 w-6`（24px）与 antd icon-only `size="small"` 按钮同几何——24 来自 `controlHeight(32) × 0.75`；已在 `components/antd-tokens.test.ts` 加一条「`controlHeightSM === 24`」断言兜底（上游 minor 改动会报红而不是静默错位）。
+  - 触发条件：antd minor 升级时（测试会提醒，届时对齐 `w-6` 或改成 token 驱动的宽度）。
+
 - **客户端 `SettingTreeNode.category` 是死键**（2026-09 发布前审计发现）
   - 现状：`client/src/lib/setting-tree.ts` 的树节点带 `category`，只写不读（旧分类徐标残留；`components/entity/setting-tree.tsx:769` 注释已说明改用 tags）；注意 **`EntitySummary.summary.category` 仍是活字段**（`parent-setting-select.tsx` 在渲染），不能一并删。
   - 触发条件：下次触碰设定树数据派生时。
@@ -181,11 +190,11 @@
   - 现状：`pages/ReferenceDetail.tsx:354` 的分类徽标已是中性色，但形态是**描边徽标**（`border border-border rounded-md`），与 `TypeChip`（**描边式**：1px `type-badge-border` + `surface-muted` 底 + `rounded-sm`）仍有差异——圆角档不同，且它同时是页头右侧的元信息位（不是行内徽标）。
   - 触发条件：再次调整参考资料页头部布局时。
   - 最小修法：换 `TypeChip`（一行），代价是页头那一块视觉微变（圆角 `rounded-md` → `rounded-sm`、边框色 `border-border` → `type-badge-border`）。
-- **关联页端点类型徽标缺 `timepoint`/`event` 中文标签**（卡 10.5 浏览器实测发现）
-  - 现状：`components/entity/relations-view.tsx:32` `ENDPOINT_TYPE_LABEL` 只有 `character`/`setting`/`location`/`hook`/`outline_node`；时间点↔事件关系（`occurs_at`）在关联总览的源/目标列直接显示原始类型串 `timepoint` / `event`（fallback `?? type`）。
-  - 影响：用户看到程序设计语义的英文标识（正是本仓多次收敛过的那类问题）。
-  - 触发条件：下次触碰关联页或统一「类型→中文名」映射时。
-  - 升级路径：把该表与 `Trash.tsx` 的 `ENTITY_TYPE_LABEL`、`lib/entity-list.ts` 的类型标签合并为一份（另一端点在人物页/大纲页都已有中文名）。
+- **关联页端点类型徽标的中文名（卡 5 已修，残留见下）**（卡 10.5 发现 → 2026-09 卡 5 修复）
+  - 现状：**已修**——`components/entity/relations-view.tsx` 的 `ENDPOINT_TYPE_LABEL` 改为派生 shared `ENTITY_TYPE_LABELS` + `outline_node`（原先手抄的四类表让 `timepoint`/`event`/`reference` 直接漏英文），过滤下拉同源；单测守住「新增实体类型不再漏中文名」。
+  - 残留：「类型→中文名」仍是**三份表**（shared `ENTITY_TYPE_LABELS` / `pages/Trash.tsx` 的 `ENTITY_TYPE_LABEL` / `lib/entity-list.ts` 的列表标签）——三者值已一致，但新增实体类型时要记得同步。
+  - 触发条件：再次新增实体类型，或统一类型标签来源时。
+  - 升级路径：Trash 与 entity-list 的内联表改派生 shared（各一行 import）。
 - **关联对话框其余下拉的浮层宽度**（卡 8.2 oracle 登记，既有）
   - 现状：`select-free-input`（关系类型）已加 `popupMatchSelectWidth={false}`；同弹窗另 4 个 `Select` 与通用关联页两个过滤 `Select` 仍跟触发器宽度（长实体名会截断）。
   - 触发条件：再次触碰这两个文件时。

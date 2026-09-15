@@ -8,20 +8,16 @@
 
 ---
 
-## 当前批次：UX/UI 样式优化（2026-09）
+## 当前无进行中任务卡
 
-契约已先落文档（本批次卡 0）：`docs/ui/DESIGN.md`（行级新建按钮 / 缩进列对齐 / 大纲页页头「+ 新建卷」/ `panel-tree` 只读空值 / `type-badge` 准入）、`docs/design/10-data-model.md` §2（章只挂卷）、`docs/api/60-api-outline.md`、`docs/db/schema.md`、`docs/design/backlog.md`（antd Tree 不迁移）。
+最近完成的批次：**UX/UI 样式优化（9 张卡：卡 0 文档 + 卡 1/2a/2b/3/4/5/6/7/8 实现与归档）**——逐卡事实见根 `CHANGELOG.md` 的 `## [Unreleased]` 段；每卡一 commit（`e7dd82f` → `8b65fe7`），独立 oracle 代码级复核 + 浏览器像素量测（数字见 CHANGELOG）。
 
-- [x] **卡 0 文档口径先行**（不改代码）：DESIGN.md 四处 + 10-data-model §2 + api/60 + schema.md + backlog（Tree 考察结论）+ 本文件卡片。commit: 待填
-- [ ] **卡 2b 契约：章只挂卷**（db `assertCanHold` 单点 + tools 提案/工具描述 + client `parentOptionsForType` + 测试翻转；改 `db`/`tools` 的 `src` ⇒ 先 `pnpm -r build`）
-- [ ] **卡 2a 大纲页页头「+ 新建卷」**（去卷/章切换 + 就地新建行补 `TypeChip 卷` + 缩进对齐标题列）
-- [ ] **卡 1 大纲页缩进列对齐**（折叠箭头 24px ↔ 占位同几何：`-ml-2 w-6`；行内类型徽标/标题/摘要/就地新建行四处同列）
-- [ ] **卡 3 大纲页行级新建**（卷 → 新建章、章 → 新建场；`PlusOutlined` icon-button，插在删除左侧；场无按钮）
-- [ ] **卡 4 设定页行级新建**（任意设定行 → 新建子设定；同位置规则）
-- [ ] **卡 5 关联页端点类型中文**（`ENDPOINT_TYPE_LABEL` → shared `ENTITY_TYPE_LABELS` + `outline_node`；同处过滤下拉一并修）
-- [ ] **卡 6 人物页只读面板空值无占位**（`PanelReadOnlyRows` 空值不渲染 `—`；单测补一条）
-- [ ] **卡 7 阅读进度徽标 → `TypeChip`**（大纲行 + 节点详情页）
-- [ ] **卡 8 考察结论归档**（Tree 评估已写进 `backlog.md` + DESIGN.md 旧理由修正；无代码、随卡 0 一并交付）
+**开新卡**：从 `backlog.md` 选（当前剩余分两类）——
+
+- **等触发条件**：并发推送串行化、失败重试退避、`head` 改 CAS 元数据、DELETE 受限云盘的清理收敛、restore 后 `backupStale` 短暂为真（未验证）、旧命名残留份的处理、类型标签仍在三份表、大纲页交互无自动化守卫；
+- **产品决策未定**：云端书架、文件级增量上传、内建端到端加密、保留策略 GFS；
+- **只能人工执行**：真云盘（坚果云）验收 7 步（清单见 `backlog.md`）。
+
 
 **本批次验收**：`pnpm -r build` → `pnpm typecheck` → `pnpm lint` → `pnpm -r test`；UI 四张卡（2a/1/3/4/6/7）额外用浏览器核一次像素（子代理）。一卡一 commit，卡内不做卡外顺手改动。
 

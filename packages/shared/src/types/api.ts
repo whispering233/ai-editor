@@ -734,7 +734,7 @@ export const outlineCreateReqSchema = z
   .object({
     type: z.enum(["volume", "chapter", "scene"]),
     title: z.string().min(1).max(200),
-    parent_id: z.string(), // volume→root；chapter→volume 或 root；scene→必须 chapter
+    parent_id: z.string(), // volume→root；chapter→volume（章只挂卷，2026-09）；scene→必须 chapter
     summary: z.string().optional(),
     data: z.record(z.string(), z.unknown()).optional(), // 节点结构化信息（宽松 record，按层级 schema 精校验）
   })

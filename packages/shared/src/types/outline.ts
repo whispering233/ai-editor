@@ -62,7 +62,7 @@ export interface OutlineTree {
   type: "root";
  /** outline.json 顶层 schema_version */
   schemaVersion: number;
- /** 根下可挂卷或直挂章（chapter → volume 或 root）；卷下只有章、章下只有场景 */
+ /** 根下挂卷；**存量文件可含直挂章**（2026-09 前旧数据，读容忍）——卷下只有章、章下只有场景 */
   children: (OutlineVolume | OutlineChapter)[];
 }
 
@@ -112,6 +112,6 @@ export interface OutlineFileTree {
   type: "root";
  /** 与 project.json 的 schema_version 同步写入 */
   schema_version: number;
- /** 根下可挂卷或直挂章（chapter → volume 或 root） */
+ /** 根下挂卷；**存量文件可含直挂章**（2026-09 前旧数据，读容忍） */
   children: (OutlineFileVolume | OutlineFileChapter)[];
 }

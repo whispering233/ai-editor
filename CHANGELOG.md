@@ -7,6 +7,30 @@
 
 ## [Unreleased]
 
+> **UX/UI 样式优化批（9 张卡）**：卡 0 文档口径先行（`e7dd82f`）→ 卡 2b 层级契约收紧（`9694e5c`）→ 卡 1 大纲缩进列对齐（`eec69d6`）→ 卡 2a 页头「+ 新建卷」（`8b9a5a8`）→ 卡 3 大纲行级新建（`0f7dfc6`）→ 卡 4 设定行级新建（`32a1f19`）→ 卡 5 关联页端点徽标中文（`56de716`）→ 卡 6 只读面板空值（`a15d249`）→ 卡 7 阅读进度徽标（`8b65fe7`）。每卡一 commit，独立 oracle 代码级复核 + 浏览器逐行量测（19 行大纲 / 45 行关联 / 37 行设定）；回归：build/typecheck/lint/`pnpm -r test` 全绿（shared 222 / db 281 / client 858 / tools 286 / agent 82 / server 574）。
+
+### Added
+
+- **大纲页行级「新建章 / 新建场」与设定页行级「新建子设定」按钮**：行尾 `icon-button`（`PlusOutlined`），位置 = **删除按钮左侧**（删除恒贴行尾）；点击 = 在该行子级末尾打开就地输入行（与「选中后 Enter 建子级」同一路径 `startCreate`，成功后新条目选中 + 聚焦）。**无合法子层级的行不渲染该按钮**（场是叶子）。`docs/ui/DESIGN.md` `data-row` 段登记（行级新建位置规则 + 缩进列对齐规则）。
+- **层级契约：章只能挂卷（root 仅接纳卷）**：`db.assertCanHold` 单点收紧（创建与移动共用）→ tools 提案层与 LLM 可见工具描述同步（`propose_outline_node` 缺省挂根、`propose_move_node` 的 `parent_id:"root"` 均只对 volume 合法）→ client `parentOptionsForType("chapter")` 不再含 root（拖到顶层空白区对章行按「非法落点无反馈」拒绝）。**存量根级章读容忍**：能渲染/改名/删除/拖进卷，但不能新建、不能移回 root，**无数据迁移**。文档同步 `docs/design/10-data-model.md` §2、`docs/api/60-api-outline.md`、`docs/db/schema.md`。
+- client 单测：端点类型徽标文案覆盖全部实体类型 + 大纲节点的守卫（`relations-view.test.ts`）；只读面板空值叶子不渲染占位符的 SSR 断言（`character-detail.test.tsx`）。
+
+### Changed
+
+- **大纲页页头主操作改为「+ 新建卷」，就地新建行取消卷/章切换**：原先点「卷/章」按钮会先让输入框失焦 → `onBlur` 取消整行（切换按钮随行卸载，表现为「点一下就关」）；现固定 `TypeChip 卷` + 与树行同列的占位，新建行看上去就是即将插入的那行卷。层级收紧后顶层只剩卷可建（章一律建在卷下）。
+- **大纲页缩进列对齐修正**：无子节点行的占位从 `w-7`（28px）改为与折叠箭头同几何的 `-ml-2 w-6`（antd icon-only small 按钮 = `controlHeightSM` 24px）——原先「有场章 / 无场章」两类行的类型徽标、标题、摘要第二行、就地新建行各差 12px。
+- **阅读进度徽标统一走 `TypeChip`**（大纲行 + 节点详情页）：原是无边框灰面自绘 span（chip 的第二套实现），与同行的卷/章/场徽标不同形；现共用 `border-type-badge-border` + `bg-accent` 一对 token（`DESIGN.md` `type-badge` 准入登记「中性命中标记」也走该组件）。
+- **人物页「阅读进度」tab 的能力面板空值叶子不再给占位符**：与可编辑形态「空值 = 空输入框」同口径；字段网格的只读值仍用 `—`（两条口径的差异在 `DESIGN.md` 分别登记）。
+
+### Fixed
+
+- **关联页端点类型徽标漏英文**：`relations-view.tsx` 的 `ENDPOINT_TYPE_LABEL` 原是手抄的四类表（character/setting/location/hook + outline_node），`timepoint`/`event`/`reference` 在源/目标列与端点类型过滤下拉直接显示原始串（「timepoint」「event」）。改为派生 shared `ENTITY_TYPE_LABELS` + 补 `outline_node`。
+
+### 有意保留（本批）
+
+- 就地新建行仍「失焦即取消」（全站既有语义，与行内编辑的「失焦保存」成对）；卷/章切换按钮删除后，行内已无可误触该路径的元素。
+- 大纲/设定/PanelTree 三处自绘缩进行**不迁移 antd `Tree`**：完整成本收益评估与触发条件见 `docs/design/backlog.md`「有意保留」。
+
 ## [v0.0.38] - 2026-09-15
 
 > **云端存档（WebDAV）整批落地**：7 张卡 + 3 张补丁卡，每张都经独立 oracle 验证——备份命名升级（设备段 + 尾部三段统计）→ 云端基础层（`cloud.json` + WebDAV 最小客户端）→ 设置页云端面板 → 推送 → 拉取与三态 → 一键「同步云端」与冲突裁决 → 自动推送；随后按真机（坚果云）反馈收口：命名唯一化（`13f1d2b`）、旧包上传诚实化（`e43869e`）、错误诊断与幂等修复（`5005287`/`cbced2f`/`2cf9ac4`）、地址语义改为云盘根（`cb82bb6`）、同步状态三行重排（`0181a0d`）。

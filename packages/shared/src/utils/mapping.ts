@@ -143,7 +143,8 @@ function mapFileSceneToScene(file: OutlineFileScene): OutlineScene {
   };
 }
 
-/** OutlineFileNode → OutlineNode（按 type 分派递归映射；支持「chapter 直挂 root」） */
+/** OutlineFileNode → OutlineNode（按 type 分派递归映射；支持**存量**「直挂 root 的 chapter」——
+ * 2026-09 前旧数据形状，读容忍；写入侧 `assertCanHold` 已拒绝） */
 function mapFileNodeToNode(file: OutlineFileNode): OutlineNode {
   switch (file.type) {
     case "volume":
@@ -210,7 +211,7 @@ function mapSceneToFileScene(node: OutlineScene): OutlineFileScene {
   };
 }
 
-/** OutlineNode → OutlineFileNode（按 type 分派递归映射；支持「chapter 直挂 root」） */
+/** OutlineNode → OutlineFileNode（按 type 分派递归映射；支持**存量**「直挂 root 的 chapter」——读容忍） */
 function mapNodeToFileNode(node: OutlineNode): OutlineFileNode {
   switch (node.type) {
     case "volume":

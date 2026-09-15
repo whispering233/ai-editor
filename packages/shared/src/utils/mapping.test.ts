@@ -155,7 +155,7 @@ describe("大纲映射（递归 children + 软删字段）", () => {
     expect(mapTreeToOutlineFile(mapOutlineFileToTree(fileTree))).toEqual(fileTree);
   });
 
-  it("直挂 root 的 chapter 映射正确（chapter → volume 或 root；oracle 回修）", () => {
+  it("直挂 root 的 chapter 映射正确（**存量数据**读容忍；写入侧 2026-09 起拒绝该层级）", () => {
     const file: OutlineFileTree = {
       id: "root",
       type: "root",
