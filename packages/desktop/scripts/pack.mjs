@@ -4,11 +4,12 @@
 // 为什么不让 electron-builder 自己收依赖：pnpm 的符号链接树会让它漏收 `@whispering233/*`
 // workspace 包（`docs/design/50-desktop.md` §5）。deploy 负责依赖，builder 只管安装包。
 import { execFileSync } from "node:child_process";
-import { rmSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const pkgDir = dirname(dirname(fileURLToPath(import.meta.url)));
+const workspaceRoot = join(pkgDir, "..", "..");
 const packageName = "@whispering233/ai-editor-desktop";
 const deployDir = join(pkgDir, ".deploy");
 const deployApp = join(deployDir, "app");
@@ -29,11 +30,40 @@ function run(cmd, args, cwd = pkgDir) {
   execFileSync(cmd, args, { cwd, stdio: "inherit", shell: USE_SHELL });
 }
 
+/**
+ * 校验 deploy 产物里真的带上了 SPA。
+ *
+ * 为什么必须有：server 的 SPA 走「<server>/client-dist」兜底路径（`server/src/index.ts` 的
+ * `resolveClientDist`），而该目录**只在 server 包 prepack 时生成**；deploy 直接收依赖会漏掉它——
+ * 结果是包能启动、窗口却只显示 `client/dist 未构建` 的 404 JSON（v0.0.40 的 Windows 包实测踩到，
+ * 本地因为残留的旧目录而没暴露）。宁可在打包阶段红，也不要发一个坏包出去。
+ */
+function assertSpaBundled() {
+  const spaIndex = join(
+    deployApp,
+    "node_modules",
+    "@whispering233",
+    "ai-editor-server",
+    "client-dist",
+    "index.html",
+  );
+  if (!existsSync(spaIndex)) {
+    throw new Error(
+      `打包校验失败：deploy 产物缺 SPA（${spaIndex}）——请先 pnpm -r build，再重跑（脚本会先执行 copy-client-dist）`,
+    );
+  }
+}
+
 rmSync(deployDir, { recursive: true, force: true });
 
 try {
+  // 先把 SPA 复制到 server 包（与 npm 发布链路的 prepack 用同一个脚本，单一实现）；
+  // 必须在 deploy 之前——deploy 只收 server 包 package.json `files` 里已存在的目录。
+  run(process.execPath, [join(workspaceRoot, "scripts", "copy-client-dist.mjs")]);
+
   // pnpm 12.2+ 的 deploy 默认实现不再要求 injected workspace（链接的 workspace 依赖会改写成 file:）
   run("pnpm", ["--filter", packageName, "deploy", "--prod", deployApp]);
+  assertSpaBundled();
 
   // 目标平台参数透传（如 `--linux AppImage` / `--mac dmg` / `--win nsis`），缺省用配置里的默认
   run("pnpm", ["exec", "electron-builder", "--config", "electron-builder.yml", ...process.argv.slice(2)]);

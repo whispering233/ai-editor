@@ -26,7 +26,7 @@
 
 **userData 的平台含义**（Electron `app.getPath('userData')` = `appData` + 应用名）：Windows `%APPDATA%\AI Editor\`、macOS `~/Library/Application Support/AI Editor/`、Linux `~/.config/AI Editor/`。
 
-**首次启动**（`desktop.json` 不存在或无 `projectRoot`）：弹原生目录选择框，建议值 `<documents>/AI Editor` → 用户确认（或改选）后建目录 → 以它为创作根启动。**不静默创建**、不默认落到桌面/下载目录；**用户取消 = 应用退出**（没有书库位置无法继续，且不落任何配置）。已保存的路径若被手工删掉 → 重建目录（创作根只是容器，重建无副作用）。
+**首次启动**（`desktop.json` 不存在或无 `projectRoot`）：**直接使用默认书库位置** `<文档>/AI Editor`（建目录 + 写配置），**不弹任何对话框**——先让用户进得去软件，要不要换目录是之后的决定（设置页「通用 → 书库位置」随时可改）。已保存的路径若被手工删掉 → 重建目录（创作根只是容器，重建无副作用）。
 
 **启动失败（端口耗尽 / 库打不开等）**：弹原生错误框 + 退出——桌面版用户没有终端，堆栈得看得见（完整日志落盘属 K3）。
 

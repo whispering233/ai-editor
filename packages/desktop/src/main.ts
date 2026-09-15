@@ -58,7 +58,7 @@ function installMenu(libraryRoot: string, logDir: string, isDev: boolean): void 
 
 /**
  * 弹原生目录选择框（`createDirectory` 允许随手新建）；返回 null = 用户取消。
- * 两处消费：首次启动选书库位置，以及渲染层「浏览…」（经 preload 桥 → IPC）。
+ * 消费方：渲染层「浏览…」（书架页）与「更改…」（设置页）——均经 preload 桥 → IPC。
  */
 async function pickDirectory(options: {
   title: string;
@@ -102,28 +102,24 @@ function guardNavigation(win: BrowserWindow, port: number): void {
 }
 
 /**
- * 解析书库位置（创作根）：已保存 → 直接用；未配置 → 弹原生目录选择框（建议值 `<文档>/AI Editor`）。
- * **不静默创建**；返回 null = 用户取消（调用方退出应用）。
+ * 解析书库位置（创作根）：已配置 → 直接用；未配置 → **直接使用默认目录**
+ * （`<文档>/AI Editor`，建目录 + 写配置）。
+ *
+ * 为什么首次不弹目录框：先让用户**进得去软件**（首次启动零交互），要不要换目录是之后的决定——
+ * 设置页「通用 → 书库位置」随时可改（改完自动重启）。旧行为（弹原生框、取消则退出）在 WSLg 环境下
+ * 还会直接卡死首次启动。
  */
-async function resolveLibraryRoot(): Promise<string | null> {
+function resolveLibraryRoot(): string {
   const configFile = desktopConfigPath(app.getPath("userData"));
   const saved = readDesktopConfig(configFile);
-  if (saved !== null) {
-    mkdirSync(saved.projectRoot, { recursive: true }); // 目录被手工删掉时重建（创作根只是容器）
-    return saved.projectRoot;
+  const root = saved?.projectRoot ?? suggestedLibraryDir(app.getPath("documents"));
+
+  mkdirSync(root, { recursive: true }); // 已保存的目录被手工删掉时重建（创作根只是容器）
+  if (saved === null) {
+    writeDesktopConfig(configFile, { projectRoot: root });
+    console.log(`[desktop] 首次启动：使用默认书库位置 ${root}（可在 设置 → 通用 → 书库位置 更改）`);
   }
-
-  const chosen = await pickDirectory({
-    title: "选择书库位置",
-    message: "书籍、备份与对话历史都会存放在这个目录里（可稍后在设置中更改）",
-    buttonLabel: "使用此目录",
-    defaultPath: suggestedLibraryDir(app.getPath("documents")),
-  });
-  if (chosen === null) return null;
-
-  mkdirSync(chosen, { recursive: true });
-  writeDesktopConfig(configFile, { projectRoot: chosen });
-  return chosen;
+  return root;
 }
 
 async function openWindow(): Promise<void> {
@@ -132,13 +128,7 @@ async function openWindow(): Promise<void> {
   const logFile = logFilePath(userData);
   redirectConsoleToFile(logFile);
 
-  const root = await resolveLibraryRoot();
-  if (root === null) {
-    console.log("[desktop] 未选择书库位置，退出");
-    app.quit();
-    return;
-  }
-
+  const root = resolveLibraryRoot();
   try {
     // openBrowser:false —— 桌面版自带窗口，不再拉起系统浏览器
     handle = await startServer(root, { openBrowser: false });

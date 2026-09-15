@@ -25,9 +25,11 @@
 ### Changed
 
 - **pnpm 11.22.0 → 12.4.2**（根 `packageManager`；CI 的 `pnpm/action-setup` 读同一字段自动跟随）：clean install + `-r build` / `typecheck` / `lint` / `-r test`（shared 222 / db 281 / client 859 / tools 287 / agent 82 / server 575）+ `test:packed`（tarball 安装态冒烟）+ `desktop:dist` 全绿。`pnpm-workspace.yaml` 的 `allowBuilds` 在 12 下仍被正确识别；lockfile 由 12 重写（新增 `packageManagerDependencies` 与 `@pnpm/exe.*` 条目，本地零字节安装成本）。**桌面打包去掉 `--legacy`**：12.2+ 的 `pnpm deploy` 默认实现不再要求 injected workspace，新路径经打包产物实测可用（窗口 + preload 桥 + SQLite 建库均通）。
+- **桌面版首次启动不再弹目录选择框**：直接使用默认书库位置 `<文档>/AI Editor`（建目录 + 写配置），先让用户进得去软件；要不要换目录随时在 设置 → 通用 → 书库位置 改（改完自动重启）。旧行为（弹原生框、取消则退出）在 WSLg 环境下还会直接卡死首次启动。原生选择框仍服务于书架页「浏览…」与设置页「更改…」两处。
 
 ### Fixed
 
+- **桌面包缺前端 SPA（v0.0.40 的 Windows 包实测）**：server 的 SPA 走 `<server>/client-dist` 兜底路径，而该目录只在 server 包 prepack 时生成——桌面打包走 `pnpm deploy`，CI 上从未生成 ⇒ 包能启动、窗口却只显示 `client/dist 未构建` 的 404 JSON（本机因为残留的旧目录而没暴露）。现 `pack.mjs` 在 deploy 前先跑 `scripts/copy-client-dist.mjs`（与 npm 发布链路同一脚本），并在 deploy 后**断言** `client-dist/index.html` 存在，防止再发出坏包。
 - **Windows 打包失败（v0.0.40 实测两轮）**：`pack.mjs` 用 `execFileSync("pnpm", …)` 在 Windows 上拿到的是 `.cmd` 包装脚本 → `spawnSync pnpm ENOENT`；改用 `pnpm.cmd` 又撞上 Node 20+ 对 `.bat`/`.cmd` 的直接 spawn 禁令 → `spawnSync pnpm.cmd EINVAL`。正解 = `shell: true`（仅 Windows 开，官方解法 nodejs/node#52681）。另补 `win.executableName: ai-editor`（与 linux 同因：scope 包名会推导出含 `@` 的非法可执行名）。
 - **补包入口**：`.github/workflows/desktop.yml` 增 `workflow_dispatch`（输入 `release_tag`）——在某平台打包失败时从修复后的 ref 重新产包并挂到同一 Release，避免重推 tag（会把 tag 指向改到修复后的 commit）。
 - **pnpm 版本在 CI 与本地漂移**：`.github/workflows/publish.yml` 原本硬编码 `version: 11.22.0`（升级 pnpm 12.4.2 后本地与 CI 会用不同版本跑同一份 lockfile）；现改为不写 `version`，从根 `package.json` 的 `packageManager` 读（单一事实源）。

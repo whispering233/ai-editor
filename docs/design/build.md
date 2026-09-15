@@ -131,6 +131,7 @@ pnpm desktop:dist                                      # 全仓构建 + pnpm dep
 
 ## 桌面版打包坑记录（v0.0.40 实测）
 
+- **桌面包缺 SPA ⇒ 能启动但界面是 404 JSON**。server 的 SPA 走「`<server>/client-dist`」兜底路径（`server/src/index.ts` 的 `resolveClientDist`），而该目录**只在 server 包 prepack 时生成**（`scripts/copy-client-dist.mjs`）；桌面打包走 `pnpm deploy`，**CI 上那个目录从未生成** → 包内无 SPA，窗口只显示 `client/dist 未构建` 的 JSON。⚠ **本机测试会骗你**：开发机常常残留着旧日 `packages/server/client-dist`，于是本地包能跑、CI 包不能——v0.0.40 的 Windows 包就是这样发出去的。现 `pack.mjs` 在 deploy **之前**先跑同一个 copy 脚本，并在 deploy **之后**断言 `client-dist/index.html` 存在（宁可在打包阶段红）。
 - **Windows：pnpm 必须经 shell 调**。Windows 上 pnpm 是 `.cmd` 包装脚本，而 Node 20+（CVE-2024-27980 修补）**禁止直接 spawn `.bat`/`.cmd`**：不带 shell 是 `spawnSync pnpm ENOENT`，指定 `pnpm.cmd` 是 `spawnSync pnpm.cmd EINVAL`（两种写法各失败一次）；正解 = `execFileSync(..., { shell: true })`（仅 Windows 开，官方解法见 nodejs/node#52681）。**副作用**：`shell: true` 不会自动给参数加引号 ⇒ 参数不得含空格（当前参数集满足）；将来若出现含空格路径，改用 cross-spawn 或显式引号。
 - **Windows：`executableName` 必须显式设**，与 linux 同因——不设会用含 scope 的包名推导出非法可执行名（`@`）。
 - **补包入口（不要重推 tag）**：某平台在 tag 运行时失败（如 v0.0.40 的 Windows），**不要** `git push :refs/tags/X && git push origin X`（会把 tag 指向改到修复后的 commit）；`desktop.yml` 有 `workflow_dispatch`（输入 `release_tag`）——从当前 ref 构建、资产挂到指定 Release（同名资产覆盖）。npm 包的对应处理：`publish-packages.mjs` 本身幂等（已存在版本跳过）。
