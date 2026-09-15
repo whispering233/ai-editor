@@ -33,7 +33,9 @@ export function cloudConfigFormFrom(status: CloudStatus | null): CloudConfigForm
     url: status.url ?? "",
     username: status.username ?? "",
     password: "",
-    device: status.device,
+    // 只预填**用户设过**的设备名（卡 (a)）：没设过就留空（说明行告知「留空 = 用本机名 <生效值>」），
+    // 否则「只点保存」会把派生值钉进 cloud.json，从此不再跟随 hostname
+    device: status.deviceConfigured ? status.device : "",
   };
 }
 
@@ -82,7 +84,7 @@ export function isCloudConfigDirty(form: CloudConfigForm, status: CloudStatus | 
   return (
     form.url.trim() !== (status.url ?? "") ||
     form.username.trim() !== (status.username ?? "") ||
-    form.device.trim() !== status.device ||
+    form.device.trim() !== (status.deviceConfigured ? status.device : "") ||
     // 密码：空白与空串同为「未改动」（与服务端「空白 = 留空」语义一致，否则点亮保存却发出空改动）
     form.password.trim() !== ""
   );

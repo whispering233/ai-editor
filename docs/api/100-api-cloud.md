@@ -29,7 +29,7 @@
   configured: boolean;        // cloud.json 的 webdav url/username/password 三项齐备
   url: string | null;         // 回显（**不含密码**）
   username: string | null;
-  device: string;             // 生效设备名（配置值；未配 → 简化 hostname：去域名后缀、滤非法字符、剥首尾空白与 `_`、截 16 字符）
+  device: string;             // **生效**设备名（用户设过取配置值；没设过 = 简化 hostname 派生：去域名后缀、滤非法字符、剥首尾空白与 `_`、截 16 字符）
   autoPush: boolean;          // 自动推送开关（本机级，缺省 false）
   projectId: string | null;   // 当前打开的项目 id（无项目 → null，下面两段为 null）
   remote: null | {
@@ -91,7 +91,8 @@
   password?: string;  // **缺省或空串 = 不修改**（从不回传 → 表单留空即保留原值）
                       // 例外（凭据三件套要么齐、要么全无）：url 与 username **皆清空**时，password
                       // 一并丢弃——「清除凭据」只需清空 url + username（密码框留空即可）
-  device?: string;    // 设备名；规则：trim 后 1-16 字符，禁 `-`（文件名分隔符）与路径分隔符/保留字符
+  device?: string;    // 设备名；规则：trim 后 1-16 字符，禁 `-`（文件名分隔符）与路径分隔符/保留字符；
+                      // **空串 = 回缺省（删掉配置值 ⇒ 重新跟随 hostname 派生）**；缺省 = 不修改
                       // （\ / : * ? " < > |）/控制字符/纯点 → 否则 400 VALIDATION_ERROR；空串 = 回缺省 hostname
   autoPush?: boolean; // 自动推送开关
 }

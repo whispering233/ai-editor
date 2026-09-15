@@ -167,8 +167,14 @@ export interface CloudStatus {
   configured: boolean;
   url: string | null;
   username: string | null;
-  /** 生效设备名（配置值；未配置 → 简化 hostname 派生） */
+  /** **生效**设备名（`cloud.json` 里用户设的值；没设过 → 简化 hostname 派生） */
   device: string;
+  /**
+   * 用户**是否显式设过**设备名（`cloud.json` 的 `webdav.device` 存在且合法）。
+   * 为什么需要它：面板预填只能用「设过的值」——若拿生效值（= 派生值）去预填，用户
+   * **没碰设备名只点保存**就会把这个派生值钉进配置，从此不再跟随 hostname（本卡（a）修的就是这个）。
+   */
+  deviceConfigured: boolean;
   autoPush: boolean;
   /** 当前打开的项目 id（无项目打开 → null） */
   projectId: string | null;

@@ -66,6 +66,8 @@ describe("GET /api/v1/cloud/status（配置段）", () => {
     });
     expect(typeof body.data.device).toBe("string");
     expect(body.data.device.length).toBeGreaterThan(0);
+    // 没设过设备名 → device 是派生值、deviceConfigured=false（面板据此**不预填**，卡 (a)）
+    expect(body.data.deviceConfigured).toBe(false);
   });
 
   it("配置后回显三项中的 url/username + 设备名与开关；**响应文本不含 password**", async () => {
@@ -79,12 +81,22 @@ describe("GET /api/v1/cloud/status（配置段）", () => {
       url: "https://dav.example.com/dav/ai-editor",
       username: "me@example.com",
       device: "苹果本",
+      deviceConfigured: true, // 用户显式设过（面板据此预填该值）
       autoPush: true,
       projectId: null,
       remote: null, // 无项目打开 → 不做云端检查（卡 4 起 remote 段）
       local: null, // 无项目打开 → 无本机段（卡 5）
       state: "no-project", // 三态（卡 5）：已配置但未打开项目
     });
+  });
+
+  it("清空设备名（空串）→ 回缺省 hostname 派生，且 deviceConfigured 回到 false（卡 (a)）", async () => {
+    await putConfig({ url: "https://dav.example.com/dav/ai-editor", username: "me@example.com", password: PASSWORD, device: "苹果本" });
+    await putConfig({ device: "" }); // 清空 = 回缺省
+    const body = await (await app.request("/api/v1/cloud/status", { headers: HOST_HEADERS })).json();
+    expect(body.data.deviceConfigured).toBe(false);
+    expect(body.data.device.length).toBeGreaterThan(0);
+    expect(body.data.device).not.toBe("苹果本");
   });
 });
 
@@ -163,6 +175,7 @@ describe("PUT /api/v1/cloud/config", () => {
     expect(file.books).toEqual({ "proj-a": { dirName: "书-proj-a" } });
   });
 });
+
 
 describe("POST /api/v1/cloud/test", () => {
   /** 按方法分派的 fetch stub（健康路径）+ 记录调用 */

@@ -190,8 +190,10 @@ export function CloudBackupPanel() {
           凭据以明文保存在本机 .ai-editor/cloud.json（权限 600），不进项目文件、不进备份包；接口响应从不回传密码。
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
-          设备名决定备份文件名里的来源段（留空 / 清空 = 用本机名派生）。免费云盘有上传流量限制
-          （如坚果云免费账户 1GB/月），开启自动推送会持续消耗配额。
+          设备名决定备份文件名里的来源段：留空 = 用本机名派生（当前会写成{" "}
+          <span className="font-medium">{status?.device ?? "（读取中）"}</span>）；填了并保存则固定为它，
+          换机器名也不会自动跟随。免费云盘有上传流量限制（如坚果云免费账户 1GB/月），
+          开启自动推送会持续消耗配额。
         </p>
       </SectionCard>
 

@@ -14,7 +14,7 @@ import { sanitizeDeviceName } from "@whispering233/ai-editor-shared";
 import { HttpError, ok } from "../middleware/error.js";
 import { getCurrentProject, requireCurrentProject } from "../middleware/project.js";
 import { currentDeviceName } from "../cloud/device.js";
-import { readAutoPush, readBookState, readWebdavConfig, writeCloudConfig } from "../cloud/state.js";
+import { configuredDeviceName, readAutoPush, readBookState, readWebdavConfig, writeCloudConfig } from "../cloud/state.js";
 import { startAutoBackup } from "../backup.js";
 import { cloudFileSet, computeCloudSync, findExistingCloudDir, pullBackup, pushBackup, toCloudBackups } from "../cloud/sync.js";
 import { createWebdavClient, type DavEntry } from "../cloud/webdav.js";
@@ -88,6 +88,8 @@ cloudRoutes.get("/status", async (c) => {
     url: webdav?.url ?? null,
     username: webdav?.username ?? null,
     device: currentDeviceName(),
+    // 「用户显式设过」与「生效值」分开（卡 (a)）：面板只预填设过的值，避免保存时把派生值钉进配置
+    deviceConfigured: configuredDeviceName() !== null,
     autoPush: readAutoPush(),
     projectId: project?.config.id ?? null,
     remote,

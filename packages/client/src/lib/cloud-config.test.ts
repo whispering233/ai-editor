@@ -12,14 +12,19 @@ import {
   isCredentialHalfFilled,
 } from "./cloud-config";
 
+/** 用户**显式设过**设备名（`device` = 配置值，`deviceConfigured` = true） */
 const STATUS: CloudStatus = {
   configured: true,
   url: "https://dav.jianguoyun.com/dav/ai-editor",
   username: "me@example.com",
   device: "家里的台式机",
+  deviceConfigured: true,
   autoPush: false,
   projectId: "proj-x",
 };
+
+/** 用户**没设过**设备名：`device` 是 hostname 派生值，`deviceConfigured` = false（卡 (a) 修的场景） */
+const STATUS_UNSET_DEVICE: CloudStatus = { ...STATUS, device: "whispering2333", deviceConfigured: false };
 
 describe("cloudConfigFormFrom（status → 表单预填）", () => {
   it("未配置 / 未加载（null）→ 空表单", () => {
@@ -31,8 +36,19 @@ describe("cloudConfigFormFrom（status → 表单预填）", () => {
       url: STATUS.url,
       username: STATUS.username,
       password: "",
-      device: "家里的台式机", // 预填生效值（可能是 hostname 派生值）
+      device: "家里的台式机", // 用户设过的值 → 预填
     });
+  });
+
+  it("设备名没设过（device 是派生值）→ **预填空串**（保存不会把派生值钉进配置；卡 (a)）", () => {
+    expect(cloudConfigFormFrom(STATUS_UNSET_DEVICE).device).toBe("");
+  });
+
+  it("没设过时脏判定对齐空串：原样保存不算改动（保存按钮保持禁用）", () => {
+    const form = cloudConfigFormFrom(STATUS_UNSET_DEVICE);
+    expect(form.device).toBe("");
+    expect(isCloudConfigDirty(form, STATUS_UNSET_DEVICE)).toBe(false); // 不因「派生值 vs 空串」误判为脏
+    expect(isCloudConfigDirty({ ...form, device: "家里的台式机" }, STATUS_UNSET_DEVICE)).toBe(true); // 用户主动填 → 脏
   });
 
   it("已配置但 url/username 缺失（异常态）→ 回显空串，不抛错", () => {
