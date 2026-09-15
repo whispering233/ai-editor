@@ -7,6 +7,10 @@
 
 ## [Unreleased]
 
+## [v0.0.41] - 2026-09-16
+
+> **导入书名修正 + 桌面打包口径收敛**：修复「导入备份后书名变成备份文件名」（`f67472e`）；打包分工落定（本地只打 Linux 包、CI 只出 Windows 包）。回归：`pnpm -r build` → typecheck → lint → `pnpm -r test` 全绿（server 577 / client 865 / desktop 16，其余同 v0.0.40）。
+
 ### Changed
 
 - **桌面打包分工（2026-10 定）**：**本地只打 Linux 包测试**（`pnpm desktop:dist`，产物在 `packages/desktop/release/`）；**Windows 包由 CI 出**（`desktop.yml` 的 windows-latest，可手动触发+下载 artifact 先验）；macOS 包暂不做（无 mac runner 可验）。将来有真实用户需求再恢复三平台 matrix（项已注释保留）。Windows 本地交叉构建需 Wine（electron-builder 官方口径），本仓不往开发机装该依赖。

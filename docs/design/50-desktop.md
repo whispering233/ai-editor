@@ -61,10 +61,10 @@
   - **`--legacy` 已不需要（pnpm 12 起）**：pnpm 11 默认拒结非 injected workspace 的 deploy（`ERR_PNPM_DEPLOY_NONINJECTED_WORKSPACE`），12.2+ 的默认实现把链接的 workspace 依赖改写成 `file:` 写入专用 deploy lockfile——升级后 `pack.mjs` 已去担此 flag，且打包产物经实测可用（窗口 + preload + 建库全通）。若将来被要求降回 pnpm 11，需重新加回。
   - **`electron-builder` 需显式 `linux.executableName`（实测）**：应用目录 package.json 的 name 带 scope（`@whispering233/...`）→ 推导出的可执行名含 `@`，AppImage 工具链拒收（仅允许字母/数字/`-`/`_`/`.`/空格）。另需 `npmRebuild: false`（N-API 模块无需针对 Electron 重编译）。
 - **原生模块**：`asarUnpack` 放 `**/*.node`。better-sqlite3 v13 是 N-API（`NAPI_VERSION=10`）+ 预编译 8 平台 `.node`，在 Electron 44.3.0（内置 Node 24.18.1）**免 rebuild 直接可用**——已实测（dev 态与打包态各建库一次）。
-- **平台矩阵**：win-x64（nsis）/ mac-arm64 + mac-x64（dmg）/ linux-x64（AppImage）。
+- **平台矩阵（2026-10 定）**：**本地只打 Linux 包测试**（`pnpm desktop:dist` → AppImage）；**Windows 包由 CI 出**（nsis，唯一的自动出包平台）；macOS（dmg）暂不做——无 mac 环境可验。将来有真实用户需求再恢复三平台 matrix（`desktop.yml` 里两个平台项已注释保留）。Windows 本地交叉构建需 Wine（electron-builder 官方口径），本仓不往开发机装该依赖。
 - **签名**：首版不做（macOS 首次需右键打开、Windows 有 SmartScreen 提示，README 写明）。触发条件 = 用户量起来或要上自动更新。
 - **自动更新**：首版**手动**（GitHub Releases 下载新包）。electron-updater 在 macOS 上要求 app 已签名，签名未做之前上自动更新是纯负债。
-- **CI**：`.github/workflows/desktop.yml`，与 `publish.yml` 同触发（push `v*` tag），三平台 matrix 产 artifacts 挂到 GitHub Release。发布纪律见 `build.md`。
+- **CI**：`.github/workflows/desktop.yml`，与 `publish.yml` 同触发（push `v*` tag），**只跑 windows-latest**，产物挂到该 tag 的 GitHub Release（并额外上传 CI artifact 供本地下载验）。发布纪律见 `build.md`。
 - **版本号**：与根 `version` 同源，同一 tag 同时产 npm 包与桌面安装包。
 
 ## 6. 客户端契约增量（唯一改动）

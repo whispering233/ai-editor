@@ -1,4 +1,8 @@
-# 桌面版打包工作流：push 版本 tag（v*）时出三平台安装包并挂到该 tag 的 GitHub Release。
+# 桌面版打包工作流：push 版本 tag（v*）时出 **Windows 安装包**并挂到该 tag 的 GitHub Release。
+#
+# 平台范围（2026-10 定）：只跑 windows-latest。本地开发机（Linux/WSL）只出 Linux 包做测试——
+# electron-builder 交叉构建 Windows 目标需 Wine（官方口径），本仓不往开发机装该依赖；
+# macOS 同理需 mac runner。matrix 里两个平台项已注释保留，有真实用户需求再恢复。
 #
 # 与 publish.yml（npm 发 5 包）同触发；两者互不阻塞：npm 包与桌面安装包共用同一个 tag 与版本号
 # （版本号由 scripts/sync-version.mjs 统一抬，含 desktop 包）。

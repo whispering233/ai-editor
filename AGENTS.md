@@ -61,5 +61,6 @@
   - **Electron 42+ 无 postinstall**（改懒下载）：`pnpm install` 不下载 electron 二进制，开发态首次 `electron .` 才下；不要在 install 阶段依赖它存在。
   - **能力检测唯一入口** = `packages/client/src/lib/desktop.ts` 的 `desktopBridge()`（浏览器形态/SSR 返回 null）；桌面版专属 UI 一律据此条件渲染，**禁止在组件里直接摸 `window.aiEditorDesktop`**（否则浏览器形态会出现半个入口或直接白屏）。
   - **workflow 不写 pnpm `version`**：版本从根 `packageManager` 读（单一事实源）；三个 workflow（release / publish / desktop）同由 push `v*` tag 触发，写死版本会导致本地与 CI 静默漂移。
+  - **打包分工（2026-10 定）**：**本地只打 Linux 包**（`pnpm desktop:dist`，用于自查）；**Windows 包只由 CI 出**（`desktop.yml` 只跑 windows-latest；macOS/Linux 两项在 matrix 里注释保留）——Windows 本地交叉构建需 Wine，不往开发机装该依赖；macOS 需 mac runner。本地要验 Windows 包时用手动触发 + `gh run download`，不要重推 tag（见 `build.md`）。
 - 测试：各包 `test` script = `vitest run`；各包 tsconfig 已 `exclude: ["src/**/*.test.ts"]`，不要改回——**`*.test.ts` 不进 `pnpm typecheck`**，编译期断言（`satisfies` / 穷尽性检查）必须写在 src 模块里。⚠ **`.test.tsx` 仍会被 typecheck**（exclude 通配不盖 `.tsx`；client 的 SSR 测试属此列——这是**有意保留**：改测试时类型错要在 `pnpm typecheck` 期暴露，真正的隐患是误以为「测试不会被检查」而在测试里写坏类型。**改 shared/db/tools 的 `src` 后先 `pnpm -r build` 再 typecheck/下游测试**：client 的编译期断言与 server/tools 测试读的是上游 **dist**，不重建会给假绿（卡 8.3 oracle 实证）。
 - 延期项：多标签页并发、undo、token 统计、跨书参考资料导入（MVP 不做，勿顺手实现）；其余遗留项与有意口径见 `docs/design/backlog.md`。

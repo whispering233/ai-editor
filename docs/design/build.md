@@ -8,7 +8,7 @@ Node ≥ 22.12（engines 声明；CI 用 22）、**全仓 ESM**、pnpm 由根 pa
 
 ⚠ **fresh clone 后先 `pnpm -r build` 再 `pnpm typecheck`**——`dist/` 不入库（gitignore），`@whispering233/ai-editor-*` 的 `types`/`exports` 指向 `./dist/index.d.ts`，不先构建则 tsc 报 TS2307。
 
-**桌面版运行时**：`electron` **44.3.0 exact pin**（内置 Node 24.18.1——同时满足 better-sqlite3 v13 的 Node-API 10 门槛（Node ≥ 22.14）与 pi 的 `engines: node >= 22.19`）；打包用 electron-builder。升级 = 一个显式 commit 抬版本 + 三平台重打包验证（同 pi 依赖纪律）。
+**桌面版运行时**：`electron` **44.3.0 exact pin**（内置 Node 24.18.1——同时满足 better-sqlite3 v13 的 Node-API 10 门槛（Node ≥ 22.14）与 pi 的 `engines: node >= 22.19`）；打包用 electron-builder。升级 = 一个显式 commit 抬版本 + 重打包验证（本地 Linux 包 + CI Windows 包）+ 全量测试（同 pi 依赖纪律）。
 
 ## 本地开发
 
@@ -94,7 +94,7 @@ pnpm desktop:dist                                      # 全仓构建 + pnpm dep
 
 **发布形态**：5 个包（shared/db/tools/agent/server）全部发布 npm；用户只装 `@whispering233/ai-editor-server`（bin `ai-editor`），其余 4 个包由 npm 自动拉取；`client` 保持 private 不发布（SPA 构建产物随 server 包分发）。发布链路是本仓唯一的 CI（`.github/workflows/`，仅 push `v*` tag 触发）。
 
-**桌面版与 npm 同一 tag 发布**：`.github/workflows/desktop.yml` 与 `publish.yml` / `release.yml` 同触发（push `v*` tag），三平台 matrix（ubuntu / macos / windows）各自 `pnpm -r build` + `node packages/desktop/scripts/pack.mjs <平台参数>`，产物经 `softprops/action-gh-release` 挂到该 tag 的 Release（Release 通常已由 `release.yml` 建好，此 action 只挂资产）。**workflow 一律不写 pnpm `version`**——版本从根 `package.json` 的 `packageManager` 读（单一事实源；写死会在升级时静默漂移：2026-10 升 pnpm 12.4.2 时 `publish.yml` 实际残留 `11.22.0`，已改）。⚠ tag 纪律同下（一次只推一个 tag）。
+**桌面版与 npm 同一 tag 发布**：`.github/workflows/desktop.yml` 与 `publish.yml` / `release.yml` 同触发（push `v*` tag），**当前只跑 windows-latest**（`pnpm -r build` + `node packages/desktop/scripts/pack.mjs --win nsis`），产物经 `softprops/action-gh-release` 挂到该 tag 的 Release（Release 通常已由 `release.yml` 建好，此 action 只挂资产），并额外上传 CI artifact（`desktop-windows-latest`）供本地下载验。**workflow 一律不写 pnpm `version`**——版本从根 `package.json` 的 `packageManager` 读（单一事实源；写死会在升级时静默漂移：2026-10 升 pnpm 12.4.2 时 `publish.yml` 实际残留 `11.22.0`，已改）。⚠ tag 纪律同下（一次只推一个 tag）。
 
 ```
 1. 更新根 CHANGELOG.md：把 Unreleased 条目搬运为新版本段（## [vX.Y.Z] - <日期>）
@@ -145,4 +145,4 @@ pnpm desktop:dist                                      # 全仓构建 + pnpm dep
 - **Windows：pnpm 必须经 shell 调**。Windows 上 pnpm 是 `.cmd` 包装脚本，而 Node 20+（CVE-2024-27980 修补）**禁止直接 spawn `.bat`/`.cmd`**：不带 shell 是 `spawnSync pnpm ENOENT`，指定 `pnpm.cmd` 是 `spawnSync pnpm.cmd EINVAL`（两种写法各失败一次）；正解 = `execFileSync(..., { shell: true })`（仅 Windows 开，官方解法见 nodejs/node#52681）。**副作用**：`shell: true` 不会自动给参数加引号 ⇒ 参数不得含空格（当前参数集满足）；将来若出现含空格路径，改用 cross-spawn 或显式引号。
 - **Windows：`executableName` 必须显式设**，与 linux 同因——不设会用含 scope 的包名推导出非法可执行名（`@`）。
 - **补包入口（不要重推 tag）**：某平台在 tag 运行时失败（如 v0.0.40 的 Windows），**不要** `git push :refs/tags/X && git push origin X`（会把 tag 指向改到修复后的 commit）；`desktop.yml` 有 `workflow_dispatch`（输入 `release_tag`）——从当前 ref 构建、资产挂到指定 Release（同名资产覆盖）。npm 包的对应处理：`publish-packages.mjs` 本身幂等（已存在版本跳过）。
-- **同一个 tag 的三个 workflow 互不阻塞**：`release.yml`（建 Release）→ `publish.yml`（npm 5 包）+ `desktop.yml`（三平台安装包）；`release.yml` 通常是第一个完成的（十几秒），桌面资产随后挂上。
+- **同一个 tag 的三个 workflow 互不阻塞**：`release.yml`（建 Release）→ `publish.yml`（npm 5 包）+ `desktop.yml`（Windows 安装包）；`release.yml` 通常是第一个完成的（十几秒）。
