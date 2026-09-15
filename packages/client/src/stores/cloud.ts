@@ -46,6 +46,15 @@ export function cloudErrorText(err: unknown, fallback: string): string {
   return err instanceof ApiError && err.code !== "CLIENT_NETWORK_ERROR" ? err.message : fallback;
 }
 
+/**
+ * toast 用的**摘要**文案（卡：用户反馈长错误在 toast 里显示不全）。
+ * 完整文案（含上游响应片段、可能数百字符）落在面板行内（`lastError` / 测试连接错误行），
+ * toast 只给前 `max` 字符 + 「…」（后接「详见下方」由调用方拼）。
+ */
+export function cloudToastText(message: string, max = 80): string {
+  return message.length <= max ? message : `${message.slice(0, max)}…`;
+}
+
 interface CloudState {
   /** 服务端状态快照；null = 尚未检查（未打开项目 / 检查前） */
   status: CloudStatus | null;
@@ -223,7 +232,7 @@ export const useCloudStore = create<CloudState>((set, get) => ({
       set({ lastError: message });
       // 冲突（409）直接开裁决框：行内入口已由 `cloud-conflict-dialog` 取代（DESIGN.md §544）
       if (err instanceof ApiError && err.code === "CLOUD_CONFLICT") set({ conflictOpen: true });
-      useUiStore.getState().showToast(message, "error");
+      useUiStore.getState().showToast(`${cloudToastText(message)}（详见下方状态行）`, "error");
     } finally {
       set({ busy: null });
     }
@@ -242,7 +251,7 @@ export const useCloudStore = create<CloudState>((set, get) => ({
     } catch (err) {
       const message = cloudErrorText(err, "无法连接服务，备份结果未确认");
       set({ lastError: message });
-      useUiStore.getState().showToast(message, "error");
+      useUiStore.getState().showToast(`${cloudToastText(message)}（详见下方状态行）`, "error");
       return;
     }
     await get().push();
@@ -271,7 +280,7 @@ export const useCloudStore = create<CloudState>((set, get) => ({
     } catch (err) {
       const message = cloudErrorText(err, "无法连接服务，拉取结果未确认（可能已在服务端执行）");
       set({ lastError: message });
-      useUiStore.getState().showToast(message, "error");
+      useUiStore.getState().showToast(`${cloudToastText(message)}（详见下方状态行）`, "error");
     } finally {
       set({ busy: null });
     }

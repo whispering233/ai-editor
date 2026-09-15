@@ -14,7 +14,7 @@ import { useEffect, useState } from "react";
 import { Button, Input, Switch, Tag, Typography } from "antd";
 import { putCloudConfig, testCloudConnection } from "../../lib/api";
 import type { CloudSyncState } from "@whispering233/ai-editor-shared";
-import { cloudErrorText, useCloudStore } from "../../stores/cloud";
+import { cloudErrorText, cloudToastText, useCloudStore } from "../../stores/cloud";
 import { BACKUP_KIND_LABELS, formatBackupMeta, formatBackupTime, formatBytes } from "../../lib/backup";
 import {
   EMPTY_CLOUD_CONFIG_FORM,
@@ -55,6 +55,8 @@ export function CloudBackupPanel() {
   const [form, setForm] = useState<CloudConfigForm>({ ...EMPTY_CLOUD_CONFIG_FORM });
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  /** 测试连接失败文案（完整；toast 只显示摘要——长文案在 toast 里会被截断） */
+  const [testError, setTestError] = useState<string | null>(null);
   const [switching, setSwitching] = useState(false);
 
   useEffect(() => {
@@ -96,6 +98,7 @@ export function CloudBackupPanel() {
   async function handleTest(): Promise<void> {
     if (testing) return;
     setTesting(true);
+    setTestError(null);
     try {
       const res = await testCloudConnection();
       // created = 本次测试顺带在云盘上创建了根目录（首次接入的常见路径）
@@ -108,7 +111,9 @@ export function CloudBackupPanel() {
             : "连接成功（已写入并删除测试文件）",
       );
     } catch (err) {
-      showToast(cloudErrorText(err, "无法连接服务，测试未完成"), "error");
+      const message = cloudErrorText(err, "无法连接服务，测试未完成");
+      setTestError(message); // 完整文案落面板（toast 只给摘要）
+      showToast(`${cloudToastText(message)}（完整信息见下方）`, "error");
     } finally {
       setTesting(false);
     }
@@ -175,6 +180,10 @@ export function CloudBackupPanel() {
         )}
         {!configured && status !== null && !halfFilled && (
           <p className="mt-2 text-xs text-muted-foreground">填写地址与用户名/应用密码并保存后即可测试连接。</p>
+        )}
+        {/* 测试连接失败的**完整**文案（可换行；toast 里长文案会被截断，用户反馈过） */}
+        {testError !== null && (
+          <p className="mt-2 break-all text-xs text-destructive">测试连接失败：{testError}</p>
         )}
         {configured && (
           <p className="mt-2 text-xs text-muted-foreground">

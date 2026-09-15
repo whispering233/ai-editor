@@ -24,6 +24,9 @@ export const cloudRoutes = new Hono();
 
 /** 读写探测用的临时文件名（沿用 `.tmp-` 约定：推送前清理流程会顺带回收遗留文件） */
 export const WEBDAV_WRITE_TEST_FILE = ".tmp-ai-editor-writetest";
+/** 探针用的工作子目录：**坚果云等云盘不允许在根目录直接建文件**（PUT 根 → 404 ObjectNotFound），
+ * 但允许建子目录 ⇒ 探针写进它里面；建不了子目录（不支持/权限不足）时退回根目录写法 */
+export const WEBDAV_WRITE_TEST_DIR = ".tmp-ai-editor-writetest-dir";
 
 /**
  * 归一化 WebDAV 根 URL：必须是 `http(s)` 绝对地址；去尾斜杠（路径拼接由客户端逐段编码）。
@@ -193,16 +196,33 @@ cloudRoutes.post("/test", async (c) => {
       );
     }
   }
-  // 2) 写权限探测：写一个临时小文件再删除。
+  // 2) 写权限探测：**优先写进工作子目录**（坚果云等云盘根目录不可写文件：PUT `/dav/x` → 404
+  // ObjectNotFound，而建子目录是允许的）；子目录建不了（不支持/权限不足）→ 退回根目录写法。
   // **可写不可删的云盘（DELETE 403/405…）不降级为认证失败**——读 + 写都通过了，凭据有效，只是清理失败；
   // 报 502 AUTH_FAILED 会误导用户去查凭据。这里改为成功 + 提示残留（具体状态码进日志）。
-  await client.put(WEBDAV_WRITE_TEST_FILE, new TextEncoder().encode("ai-editor webdav write test"));
+  let probeDir: string | null = null;
+  try {
+    await client.mkcol(WEBDAV_WRITE_TEST_DIR); // 幂等：已存在返回 false，同样可用
+    probeDir = WEBDAV_WRITE_TEST_DIR;
+  } catch (err) {
+    console.error("[cloud] 工作子目录创建失败，探针退回根目录写法:", err);
+  }
+  const probePath = probeDir === null ? WEBDAV_WRITE_TEST_FILE : `${probeDir}/${WEBDAV_WRITE_TEST_FILE}`;
+  await client.put(probePath, new TextEncoder().encode("ai-editor webdav write test"));
   let leftover = false;
   try {
-    await client.remove(WEBDAV_WRITE_TEST_FILE);
+    await client.remove(probePath);
   } catch (err) {
     leftover = true;
     console.error("[cloud] 测试文件删除失败（云盘可能不允许删除；凭据本身正常）:", err);
+  }
+  if (probeDir !== null && !leftover) {
+    // 子目录一并清掉（删不掉不算错：文件已删干净，只留一个空目录）
+    try {
+      await client.remove(probeDir);
+    } catch {
+      /* 忽略：空目录残留无害 */
+    }
   }
 
   const payload: CloudTestResult = { connected: true, baseUrl: webdav.url, created, ...(leftover ? { leftoverWriteTestFile: true } : {}) };

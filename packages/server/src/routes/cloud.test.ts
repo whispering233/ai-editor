@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { errorHandler } from "../middleware/error.js";
-import { WEBDAV_WRITE_TEST_FILE } from "./cloud.js";
+import { WEBDAV_WRITE_TEST_DIR, WEBDAV_WRITE_TEST_FILE } from "./cloud.js";
 import { cloudRoutes } from "./cloud.js";
 import { initCloudState, readCloudFile, readWebdavConfig } from "../cloud/state.js";
 
@@ -234,10 +234,12 @@ describe("POST /api/v1/cloud/test", () => {
       created: false,
     });
     const methods = spy.mock.calls.map((c) => String((c[1] as RequestInit).method));
-    expect(methods).toEqual(["PROPFIND", "PUT", "DELETE"]);
-    // 探测文件名走 `.tmp-` 前缀（推送前清理流程会回收遗留）
-    const putUrl = String((spy.mock.calls[1] as unknown as [unknown])[0]);
+    // 探针先建工作子目录再写文件（坚果云等云盘根目录不可写文件），成功路径连子目录一起清掉
+    expect(methods).toEqual(["PROPFIND", "MKCOL", "PUT", "DELETE", "DELETE"]);
+    // 探测文件名走 `.tmp-` 前缀（推送前清理流程会回收遗留）；本轮起写在**工作子目录内**
+    const putUrl = String((spy.mock.calls[2] as unknown as [unknown])[0]);
     expect(putUrl.endsWith(`/${WEBDAV_WRITE_TEST_FILE}`)).toBe(true);
+    expect(putUrl).toContain(`${WEBDAV_WRITE_TEST_DIR}/`);
   });
 
   it("根目录不存在（404）→ MKCOL 创建 → **复核已存在** → created:true", async () => {
@@ -261,7 +263,9 @@ describe("POST /api/v1/cloud/test", () => {
       "PROPFIND",
       "MKCOL",
       "PROPFIND",
+      "MKCOL",
       "PUT",
+      "DELETE",
       "DELETE",
     ]);
   });
@@ -275,6 +279,27 @@ describe("POST /api/v1/cloud/test", () => {
     expect(body.error.code).toBe("CLOUD_UNREACHABLE");
     expect(body.error.message).toContain("云盘目录不存在且创建失败");
     expect(body.error.message).toContain("dav.jianguoyun.com/dav");
+  });
+
+  it("探针写进工作子目录（坚果云根目录不可写文件），成功后连子目录一起清理", async () => {
+    await putConfig({ url: "https://dav.jianguoyun.com/dav/ai-editor", username: "u", password: "pw" });
+    const spy = stubHealthy();
+    const res = await app.request("/api/v1/cloud/test", { method: "POST", headers: HOST_HEADERS });
+    expect((await res.json()).data).toMatchObject({ connected: true });
+    const calls = spy.mock.calls.map((c) => [String((c[1] as RequestInit).method), String(c[0])] as const);
+    // 顺序：PROPFIND 根 → MKCOL 探针目录 → PUT 探针文件（目录内）→ DELETE 文件 → DELETE 目录
+    expect(calls.map(([m]) => m).slice(0, 5)).toEqual(["PROPFIND", "MKCOL", "PUT", "DELETE", "DELETE"]);
+    expect(calls[1]?.[1]).toContain(".tmp-ai-editor-writetest-dir");
+    expect(calls[2]?.[1]).toContain(".tmp-ai-editor-writetest-dir/.tmp-ai-editor-writetest");
+  });
+
+  it("工作子目录建不出来（不支持 MKCOL）→ 探针退回根目录写法（老行为，不因探针失败而误报）", async () => {
+    await putConfig({ url: "https://dav.example.com/dav/ai-editor", username: "u", password: "pw" });
+    const spy = stubHealthy({ MKCOL: new Response("nope", { status: 403 }) });
+    const res = await app.request("/api/v1/cloud/test", { method: "POST", headers: HOST_HEADERS });
+    expect(res.status).toBe(200);
+    const put = spy.mock.calls.find((c) => String((c[1] as RequestInit).method) === "PUT");
+    expect(String(put?.[0])).not.toContain("writetest-dir/"); // 直接写在根下
   });
 
   it("认证失败（401）→ 502 CLOUD_AUTH_FAILED；不可达（网络错误）→ 502 CLOUD_UNREACHABLE", async () => {

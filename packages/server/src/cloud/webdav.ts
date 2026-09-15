@@ -249,17 +249,19 @@ function describeErrorCause(cause: unknown): string | null {
   async function throwMapped(res: Response, what: string): Promise<never> {
     const detail = await bodySnippet(res);
     const suffix = detail === "" ? "" : `：${detail}`;
+    // 第四个参数 = 上游原始状态码（对外仍是 502/… 的映射码；调用方靠它区分错因，如「名字被拒」）
     if (res.status === 507 || (res.status === 403 && /quota|insufficient|配额|空间|流量|容量/i.test(detail))) {
-      throw new HttpError(502, "CLOUD_QUOTA_EXCEEDED", `云盘空间或上传流量不足（${what}）${suffix}`);
+      throw new HttpError(502, "CLOUD_QUOTA_EXCEEDED", `云盘空间或上传流量不足（${what}）${suffix}`, res.status);
     }
     if (res.status === 401 || res.status === 403) {
       throw new HttpError(
         502,
         "CLOUD_AUTH_FAILED",
         `云盘认证失败（${what}，HTTP ${res.status}）——请检查 WebDAV 地址与用户名/应用密码`,
+        res.status,
       );
     }
-    throw new HttpError(502, "CLOUD_UNREACHABLE", `云盘返回 HTTP ${res.status}（${what}）${suffix}`);
+    throw new HttpError(502, "CLOUD_UNREACHABLE", `云盘返回 HTTP ${res.status}（${what}）${suffix}`, res.status);
   }
 
   return {

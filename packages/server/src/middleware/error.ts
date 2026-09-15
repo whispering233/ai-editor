@@ -53,11 +53,18 @@ export function fail(
 export class HttpError extends Error {
   readonly status: ContentfulStatusCode;
   readonly code: ApiErrorCode;
-  constructor(status: ContentfulStatusCode, code: ApiErrorCode, message: string) {
+  /**
+   * 上游（云盘）返回的原始 HTTP 状态码——仅当本错误是**上游错误的映射**时才有值
+   * （例如云盘 400 被映射成对外 502 `CLOUD_UNREACHABLE`）。调用方据此区分「云盘不接受这个请求」
+   * 与「网络/认证问题」：`ensureBookDir` 就靠它决定「名字被拒 → 换短名重试」。
+   */
+  readonly upstreamStatus?: number;
+  constructor(status: ContentfulStatusCode, code: ApiErrorCode, message: string, upstreamStatus?: number) {
     super(message);
     this.name = "HttpError";
     this.status = status;
     this.code = code;
+    if (upstreamStatus !== undefined) this.upstreamStatus = upstreamStatus;
   }
 }
 

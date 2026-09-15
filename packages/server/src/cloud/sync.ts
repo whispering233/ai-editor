@@ -126,16 +126,57 @@ export async function findExistingCloudDir(
   project: ProjectContext,
   cachedDirName?: string,
 ): Promise<string | null> {
-  const suffix = `-${project.config.id}`;
+  const id = project.config.id;
   if (typeof cachedDirName === "string" && cachedDirName !== "" && (await client.list(cachedDirName)) !== null) {
     return cachedDirName;
   }
   const root = await client.list("");
-  const match = (root ?? []).find((entry) => entry.isCollection && entry.name.endsWith(suffix));
+  // 匹配三种命名（都含完整 id）：`<书名>-<id>`（默认）、`ai-editor-<id>`（名字被拒后的回退）、
+  // `<id>`（回退链最后一档，某些云盘对名字长度限制极严时用）
+  const match = (root ?? []).find(
+    (entry) => entry.isCollection && (entry.name === id || entry.name.endsWith(`-${id}`)),
+  );
   return match?.name ?? null;
 }
 
 /** 推送用：已存在则用它，否则回落到预期名（由 `MKCOL` 创建） */
+/**
+ * 幂等建书目录；**名字被云盘拒绝时回退短名**（坚果云实测：`<书名>-<id>` 可能触发
+ * `400 IllegalArgument / sandbox name is too long`，其单段名字限制比文档里的 255 字符路径上限严得多）。
+ *
+ * 回退名务必**仍以 `-<id>` 结尾**——`findExistingCloudDir` 的回退扫描就是按这个后缀找目录的；
+ * 长度 = `ai-editor-` (10) + `-` + id（26）≈ 37 字符纯 ASCII，比任意中文书名短且稳定。
+ *
+ * @returns 实际生效的目录名（正常 = 传入名；回退 = 短名）
+ */
+export async function ensureBookDir(
+  client: WebdavClient,
+  dirName: string,
+  project: ProjectContext,
+): Promise<string> {
+  // 候选链：漂亮名 → 短前缀名 → 纯 id（后者一定最短，且仍被回退扫描匹配）
+  const candidates = [dirName, `ai-editor-${project.config.id}`, project.config.id].filter(
+    (name, i, all) => all.indexOf(name) === i,
+  );
+  let lastErr: unknown;
+  for (const name of candidates) {
+    try {
+      await client.mkcol(name);
+      if (name !== dirName) {
+        console.warn(`[cloud] 云盘拒绝较长的目录名，改用「${name}」（原候选「${dirName}」）`);
+      }
+      return name;
+    } catch (err) {
+      lastErr = err;
+      // 只在「名字不被接受」这类 4xx 上换名字重试；网络/认证/配额等照旧抛。
+      // 注意用 `upstreamStatus`（上游原始码）——对外的 `status` 一律是映射后的 502。
+      const upstream = err instanceof HttpError ? err.upstreamStatus : undefined;
+      if (upstream === undefined || upstream < 400 || upstream >= 500) throw err;
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error("云盘拒绝创建书目录（名字长度限制？）");
+}
+
 export async function resolveBookDirName(
   client: WebdavClient,
   project: ProjectContext,
@@ -381,13 +422,15 @@ export async function pushBackup(project: ProjectContext, options: PushOptions =
 
   // ① 定位云端书目录（缓存 → 回退扫描 → 预期名）；目录不存在 → 幂等 MKCOL
   const stateBefore = readBookState(projectId);
-  const dirName = await resolveBookDirName(client, project, stateBefore?.dirName);
+  const resolved = await resolveBookDirName(client, project, stateBefore?.dirName);
+  let dirName = resolved;
   let entries = await client.list(dirName);
   if (entries === null) {
     // 云根也可能不存在（从未跑过「测试连接」）——先幂等建根，否则 MKCOL 书目录会因父目录缺失报 409
     //（被映射成「云盘不可达」，文案误导；见 backlog）
     if ((await client.list("")) === null) await client.mkcol("");
-    await client.mkcol(dirName);
+    // 名字过长被拒时回退短名（坚果云实测），回退结果就是这次真正使用的目录名
+    dirName = await ensureBookDir(client, dirName, project);
     entries = (await client.list(dirName)) ?? [];
   }
 

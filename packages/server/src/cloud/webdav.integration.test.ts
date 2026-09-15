@@ -53,6 +53,8 @@ interface FakeDavOptions {
   password?: string;
   /** 非空时，PUT 一律返回该状态码（配额用例） */
   putStatus?: number;
+  /** 非空时，MKCOL 的目标名超过该长度 → 400 IllegalArgument（模拟坚果云 "sandbox name is too long"） */
+  mkcolRejectLongNames?: number;
 }
 
 interface FakeDav {
@@ -120,6 +122,16 @@ async function startFakeDav(root: string, options: FakeDavOptions = {}): Promise
         return;
       }
       case "MKCOL": {
+        const rejectAt = options.mkcolRejectLongNames;
+        if (rejectAt !== undefined) {
+          const seg = decodeURIComponent(new URL(String(req.url), "http://x").pathname).split("/").filter(Boolean).pop() ?? "";
+          if (seg.length > rejectAt) {
+            res.writeHead(400, { "content-type": "application/xml" }).end(
+              '<?xml version="1.0"?><d:error xmlns:d="DAV:" xmlns:s="http://ns.jianguoyun.com"><s:exception>IllegalArgument</s:exception><s:message>sandbox name is too long</s:message></d:error>',
+            );
+            return;
+          }
+        }
         if (existsSync(target)) {
           res.writeHead(405).end("already exists");
           return;
@@ -381,6 +393,26 @@ describe("pullBackup × 真 HTTP 服务", () => {
     expect(result.merged.kept).toBe(1);
     // 云端那份落进本地 .backups/
     expect(existsSync(join(dir, BACKUPS_DIR_NAME, result.pulled.fileName))).toBe(true);
+
+    closeDatabase(project.db);
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("书目录名被云盘拒绝 → 回退短名（坚果云实测口径）", () => {
+  it("MKCOL 400（名字过长）→ 回退 ai-editor-<id>，并把回退名落进 state.dirName", async () => {
+    dav = await startFakeDav(root, { mkcolRejectLongNames: 30 });
+    await configure(dav.url);
+    const { project, dir } = makeProjectFixture("proj-dirname-fallback", "末世灾星：我能提取词条");
+    mkdirSync(join(dir, ".backups"), { recursive: true });
+    const { writeBackup } = await import("../backup.js");
+    writeBackup(project, { kind: "manual" });
+
+    const result = await pushBackup(project);
+
+    expect(result.remote.dirName).toBe("proj-dirname-fallback"); // 三档候选里最后那档（纯 id）
+    expect(existsSync(join(root, "dav", "proj-dirname-fallback"))).toBe(true);
+    expect(readBookState("proj-dirname-fallback")?.dirName).toBe("proj-dirname-fallback");
 
     closeDatabase(project.db);
     rmSync(dir, { recursive: true, force: true });
