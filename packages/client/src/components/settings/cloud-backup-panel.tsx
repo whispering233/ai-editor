@@ -152,10 +152,12 @@ export function CloudBackupPanel() {
             placeholder="用户名（坚果云填注册邮箱）"
             aria-label="WebDAV 用户名"
           />
+          {/* 密码从不回传（安全），输入框恒为空——占位符按「是否已保存」变化，
+              否则用户输完密码保存后看到空框会以为没存上 */}
           <Input.Password
             value={form.password}
             onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-            placeholder="应用密码（留空则不修改）"
+            placeholder={configured ? "应用密码已保存（留空则不修改）" : "应用密码"}
             aria-label="WebDAV 应用密码"
           />
           <Input
@@ -173,6 +175,11 @@ export function CloudBackupPanel() {
         )}
         {!configured && status !== null && !halfFilled && (
           <p className="mt-2 text-xs text-muted-foreground">填写地址与用户名/应用密码并保存后即可测试连接。</p>
+        )}
+        {configured && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            应用密码已保存（接口从不回传密码，所以这里不回显；要改就直接输入新密码，留空 = 保持不变）。
+          </p>
         )}
         {statusFailed && <p className="mt-2 text-xs text-destructive">云端配置读取失败，请刷新页面重试。</p>}
 
