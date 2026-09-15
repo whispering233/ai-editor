@@ -32,3 +32,23 @@ linux:
   # 的名字，AppImage 工具链拒收（仅允许字母/数字/`-`/`_`/`.`/空格），必须显式指定
   executableName: ai-editor
   artifactName: ${productName}-${version}-linux-${arch}.${ext}
+
+mac:
+  target:
+    - dmg
+  category: public.app-category.productivity
+  # 首版不签名/不公证（无 Apple Developer 证书）：identity 置 null，避免 CI 尝试签名而失败。
+  # 代价：macOS 首次打开需右键 → 打开（见 README）。触发条件见 backlog。
+  identity: null
+  artifactName: ${productName}-${version}-mac-${arch}.${ext}
+
+win:
+  target:
+    - nsis
+  # 首版不签名（无代码签名证书）：Windows 会提示 SmartScreen，README 写明。
+  artifactName: ${productName}-${version}-win-${arch}.${ext}
+
+nsis:
+  # 非一键安装：让用户能选安装目录（默认的 oneClick 静默装到用户目录，不好排查）
+  oneClick: false
+  allowToChangeInstallationDirectory: true

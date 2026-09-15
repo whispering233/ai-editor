@@ -5,8 +5,8 @@
 //   node scripts/sync-version.mjs 0.2.0          # 同步全部包版本为 0.2.0
 //   node scripts/sync-version.mjs 0.2.0 --dry-run # 只输出将改动的文件，不写盘
 //
-// 同步范围：packages/{shared,db,tools,agent,server,client} + 根 package.json。
-// client 虽 private 不发布，但保持仓库内版本一致（发布流程只发 5 包：shared/db/tools/agent/server）。
+// 同步范围：packages/{shared,db,tools,agent,server,client,desktop} + 根 package.json。
+// client 与 desktop 虽 private 不发布，但保持仓库内版本一致（发布流程发 5 包 + 同一 tag 的桌面安装包）。
 // 校验：semver 格式 /^\d+\.\d+\.\d+(-[\w.]+)?$/（含预发布后缀如 0.2.0-beta.1）。
 // 输出：改动的文件清单（dry-run 时标注「将改动」）。
 import { readFile, writeFile } from "node:fs/promises";
@@ -29,7 +29,7 @@ if (!/^\d+\.\d+\.\d+(-[\w.]+)?$/.test(version)) {
   process.exit(1);
 }
 
-const PACKAGES = ["shared", "db", "tools", "agent", "server", "client"];
+const PACKAGES = ["shared", "db", "tools", "agent", "server", "client", "desktop"];
 const rootPkgPath = join(workspaceRoot, "package.json");
 
 /** 读取并返回 JSON 对象 */

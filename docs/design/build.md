@@ -73,7 +73,7 @@ pnpm desktop:dist                                      # 全仓构建 + pnpm dep
 - **Electron 二进制不再随 install 下载**（Electron 42+ 移除 postinstall，改懒下载）：`pnpm install` 不碰二进制；开发态首次 `pnpm --filter <desktop> start` 会打印 `Downloading Electron binary...` 并下载（此时才需要 `ELECTRON_MIRROR`）；打包时 electron-builder 自行下载所需二进制。`ELECTRON_SKIP_BINARY_DOWNLOAD` 已失效，手动预下载用 `pnpm --filter <desktop> exec install-electron --no`。
 - **首次装 electron 二进制可能很慢**（从 GitHub 下载 ~100MB）：可临时给环境变量 `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ ELECTRON_CUSTOM_DIR='{{ version }}'`（**不写进仓库配置**——CI 与其他开发者的拉取源不应被改写）；该变量只在开发态首次启动（懒下载）与 `install-electron` 手动预下载时生效。
 - **原生模块**：`asarUnpack` 放 `**/*.node`，产物在 `release/linux-unpacked/resources/app.asar.unpacked/`。
-- **平台矩阵**：win-x64（nsis）/ mac-arm64 + mac-x64（dmg）/ linux-x64（AppImage）。首版**不签名**（macOS 首次需右键打开、Windows 有 SmartScreen 提示——README 写明），因此也**不做自动更新**（electron-updater 在 macOS 要求已签名）。
+- **平台矩阵**：win-x64（nsis，`oneClick: false` 让用户能选安装目录）/ mac-{arm64,x64}（dmg）/ linux-x64（AppImage）。首版**不签名**（macOS 首次需右键打开、Windows 有 SmartScreen 提示——README 写明）：`mac.identity: null` 显式关签名，否则 CI 在 macOS runner 上会尝试签名而失败。也因此**不做自动更新**（electron-updater 在 macOS 要求已签名）。
 - **本地占用**：`.deploy/`（依赖部署，约 220MB）与 `release/`（含 AppImage ~158MB）均不入库（gitignore）；`pack.mjs` **在 finally 里清 `.deploy`**——留在 workspace 内会让 pnpm 的依赖状态检查误判（`.deploy/app` 是 workspace 外的 package.json + node_modules，之后任何 `pnpm` 脚本都会报「需重建 modules 目录」而中止）。
 - **CI 影响**：`publish.yml` 的 `pnpm install --frozen-lockfile` 现会连带拉 electron 二进制（~100MB，仅 tag 触发，不阻塞日常）；桌面安装包由独立的 `desktop.yml` 出（见下）。
 - **验收硬判据**（K0 已过，回归时重跑）：① 主进程能 load better-sqlite3 并建库；② 产物含 `*.node` 且能起服务；③ 打包体启得起窗口（CDP 可读 `window.aiEditorDesktop`）。
@@ -84,7 +84,7 @@ pnpm desktop:dist                                      # 全仓构建 + pnpm dep
 
 **发布形态**：5 个包（shared/db/tools/agent/server）全部发布 npm；用户只装 `@whispering233/ai-editor-server`（bin `ai-editor`），其余 4 个包由 npm 自动拉取；`client` 保持 private 不发布（SPA 构建产物随 server 包分发）。发布链路是本仓唯一的 CI（`.github/workflows/`，仅 push `v*` tag 触发）。
 
-**桌面版与 npm 同一 tag 发布**：`.github/workflows/desktop.yml` 与 `publish.yml` 同触发（push `v*` tag），三平台 matrix 产出安装包并挂到该 tag 的 GitHub Release；版本号与根 `version` 同源（`release:version` 一并同步 `desktop` 的 `version` 与 electron-builder 的 `buildVersion`）。⚠ tag 纪律同下（一次只推一个 tag）。
+**桌面版与 npm 同一 tag 发布**：`.github/workflows/desktop.yml` 与 `publish.yml` / `release.yml` 同触发（push `v*` tag），三平台 matrix（ubuntu / macos / windows）各自 `pnpm -r build` + `node packages/desktop/scripts/pack.mjs <平台参数>`，产物经 `softprops/action-gh-release` 挂到该 tag 的 Release（Release 通常已由 `release.yml` 建好，此 action 只挂资产）。**workflow 一律不写 pnpm `version`**——版本从根 `package.json` 的 `packageManager` 读（单一事实源；写死会在升级时静默漂移：2026-10 升 pnpm 12.4.2 时 `publish.yml` 实际残留 `11.22.0`，已改）。⚠ tag 纪律同下（一次只推一个 tag）。
 
 ```
 1. 更新根 CHANGELOG.md：把 Unreleased 条目搬运为新版本段（## [vX.Y.Z] - <日期>）

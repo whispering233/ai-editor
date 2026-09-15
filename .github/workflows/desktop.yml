@@ -1,0 +1,55 @@
+# 桌面版打包工作流：push 版本 tag（v*）时出三平台安装包并挂到该 tag 的 GitHub Release。
+#
+# 与 publish.yml（npm 发 5 包）同触发；两者互不阻塞：npm 包与桌面安装包共用同一个 tag 与版本号
+# （版本号由 scripts/sync-version.mjs 统一抬，含 desktop 包）。
+#
+# 依赖收集 = `pnpm deploy --prod`（自包含扁平部署目录）→ electron-builder 只做 asar + 安装包，
+# 原因见 docs/design/50-desktop.md §5（pnpm 符号链接树会让打包器漏收 workspace 包）。
+#
+# 首版**不签名**：macOS 无 Apple 证书（需右键打开）、Windows 有 SmartScreen 提示——README 写明；
+# 也因此**不做自动更新**（electron-updater 在 macOS 要求已签名）。触发条件见 backlog。
+name: Desktop
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write # 上传安装包到该 tag 的 Release
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false # 一个平台挂了不代表其余平台的结论无效，让三平台都跑完
+      matrix:
+        include:
+          - os: ubuntu-latest
+            args: --linux AppImage
+            files: "*.AppImage"
+          - os: macos-latest
+            args: --mac dmg --arm64 --x64
+            files: "*.dmg"
+          - os: windows-latest
+            args: --win nsis
+            files: "*.exe"
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40 # 首次会下载 electron 二进制 + 原生打包工具链
+    steps:
+      - uses: actions/checkout@v6
+      # pnpm 版本读 package.json 的 packageManager（不写 version——单一事实源）
+      - uses: pnpm/action-setup@v4.4.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # 全仓构建：desktop 的 main/preload 与五个 workspace 包的 dist 都在这一步产出
+      - run: pnpm -r build
+      # 打包（deploy + electron-builder；平台参数由矩阵给出）
+      - run: node packages/desktop/scripts/pack.mjs ${{ matrix.args }}
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: packages/desktop/release/${{ matrix.files }}
+          # Release 通常已由 release.yml 从 CHANGELOG 建好；此处只挂资产（不存在时才创建）
+          fail_on_unmatched_files: true

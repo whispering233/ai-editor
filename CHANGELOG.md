@@ -9,6 +9,7 @@
 
 ### Added
 
+- **桌面版发布链路**：新增 `.github/workflows/desktop.yml`（push `v*` tag 触发，ubuntu / macos / windows 三平台矩阵各自 `pnpm -r build` + `node packages/desktop/scripts/pack.mjs <平台参数>`，产物挂到该 tag 的 GitHub Release）；`scripts/sync-version.mjs` 纳入 `desktop`（版本号与 npm 包同源，同一 tag 产 npm 包 + 三平台安装包）；electron-builder 补 mac（dmg，`identity: null` 显式不签名）/ win（NSIS，`oneClick: false` 让用户能选安装目录）配置；README 增桌面版安装说明与平台注意事项。
 - **桌面版设置页「通用」tab 与切换书库**：设置页二级 tab 顺序改为「通用 → AI 模型 → 项目规则 → 备份」，其中「通用」**仅桌面版渲染**（含「书库位置」卡片：只读路径 + 「更改…」+ 重启说明）。更改流程 = preload 桥 → 原生目录框 → 写 `<userData>/desktop.json` → 先关服务（收敛 WAL 与备份调度）再 `app.relaunch()`。**浏览器形态 tab 集合与行为零变化**（SSR 守卫 + 真实浏览器实测都无该 tab）。附 2 条 SSR 守卫（无桥无「通用」/有桥排首位）。
 - **桌面版导航守卫与沙箱基线复核**：`setWindowOpenHandler` 一律 deny（外链交系统浏览器），`will-navigate` 只放行同源 `http://127.0.0.1:<端口>`（含 SPA hash），非 http(s) 协议直接丢弃；渲染层基线 = `contextIsolation: true` / `nodeIntegration: false` / `sandbox: true`，preload 只暴露 `pickDirectory`。实测（CDP）：`window.open` 返回 null、`location.href` 跳外部域名不导航且落日志、同源 hash 导航正常；**打包态验证 devtools 菜单项不存在**（`devtools 项: false`）。
 - **桌面版壳层：应用菜单 + 日志落盘**：最小应用菜单——**Edit 角色不是装饰**（macOS 上不设菜单 ⇒ Cmd+C/V 失效、输入框全废），自有条目只有「打开书库目录 / 打开日志目录」，devtools 仅在未打包态出现，非 macOS 补「退出」。`console.*` 同时落 `<userData>/logs/ai-editor.log`（**同步追加**：桌面版日志频率低，写即落盘比吐吞量重要——崩溃现场最后几行往往就是死因；写失败静默不阻断创作）。附 8 条日志层单测（格式化/截断/循环对象/stdout 行为不变/追加语义）。
@@ -23,6 +24,7 @@
 
 ### Fixed
 
+- **pnpm 版本在 CI 与本地漂移**：`.github/workflows/publish.yml` 原本硬编码 `version: 11.22.0`（升级 pnpm 12.4.2 后本地与 CI 会用不同版本跑同一份 lockfile）；现改为不写 `version`，从根 `package.json` 的 `packageManager` 读（单一事实源）。
 - **server bin 自检在 Electron 主进程下崩溃**：`realpathSync(process.argv[1])` 在 Electron 里拿到的是命令行开关（如 `--no-sandbox`）而非脚本路径 → 抛 `ENOENT` 打挂整个主进程。现包一层 try/catch，路径不可解析即判「非直接执行」（npm bin 的符号链接语义不变，server 575 测试全绿）。
 
 ## [v0.0.39] - 2026-09-15

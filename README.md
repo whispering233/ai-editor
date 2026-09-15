@@ -8,7 +8,7 @@
 
 | 层 | 技术选型 |
 |---|---------|
-| 包管理 | pnpm workspace（6 包 monorepo：5 发布包 + 私有 client） |
+| 包管理 | pnpm workspace（7 包 monorepo：5 发布包 + 私有 client / desktop） |
 | 运行时 | Node ≥ 22.12，全仓 ESM |
 | 语言 | TypeScript strict mode |
 | API 服务端 | Hono 4 + `@hono/node-server` |
@@ -18,6 +18,7 @@
 | Schema 校验 | Zod 4（仅服务端执行，client 不打包校验函数） |
 | AI 运行时 | 嵌入 `@earendil-works/pi-coding-agent` 0.85.1（含 pi-ai 模型层 / pi-agent-core 循环；**exact pin**）——模型目录、凭据、会话文件、重试、上下文压缩、工具派发全部由 pi 承担；本仓提供领域工具、内核提示词与 HTTP/SSE 契约（见 `docs/design/architecture.md`） |
 | 测试 | vitest（各包独立 `test` script） |
+| 桌面版 | Electron 44.3.0（**exact pin**）+ electron-builder（安装包）；主进程内嵌 server，与你自己装的 CLI 版共用同一份数据（`docs/design/50-desktop.md`） |
 
 ## UI（v0.0.39 大纲/设定行级新建与层级收紧 + v0.0.38 云端同步状态区与一键同步 + v0.0.37 徽标两形态定稿与星形图移除 + v0.0.36 自由输入下拉 + v0.0.34 人物工作台与能力面板 + v0.0.33 导航归位与弹窗添加 + v0.0.32 思维链与会话渲染）
 
@@ -36,7 +37,7 @@
 ## 包结构
 
 ```
-shared → db → tools → agent → server    （依赖方向，client 只依赖 shared）
+shared → db → tools → agent → server    （依赖方向，client 只依赖 shared，desktop 只依赖 server）
 ```
 
 - `@whispering233/ai-editor-shared`：前后端共享类型 / 常量 / 工具 / API 契约（零 Node 依赖，浏览器安全）
@@ -45,6 +46,22 @@ shared → db → tools → agent → server    （依赖方向，client 只依�
 - `@whispering233/ai-editor-agent`：pi 运行时装配（`ModelRuntime` + `SessionManager` + `AgentSession`）、内核提示词、工具适配、会话事件投影
 - `@whispering233/ai-editor-server`：Hono API + SPA 静态托管（单进程部署）
 - `@whispering233/ai-editor-client`：React SPA
+- `@whispering233/ai-editor-desktop`：Electron 外壳（窗口/菜单/目录选择/书库位置/日志/打包；**不含业务逻辑**）
+
+## 桌面版（安装包）
+
+下载安装包，装完双击即用（**不需要 Node / npm**）：
+
+| 平台 | 安装包 | 首次打开注意 |
+|---|---|---|
+| Windows | `AI Editor-<版本>-win-x64.exe`（NSIS，可选安装目录） | 首版未签名 → 可能弹 SmartScreen，选「仍要运行」 |
+| macOS | `AI Editor-<版本>-mac-{arm64,x64}.dmg` | 首版未签名未公证 → **右键 → 打开**放行一次 |
+| Linux | `AI Editor-<版本>-linux-x86_64.AppImage` | `chmod +x` 后直接运行 |
+
+- 安装包挂在每个版本的 GitHub Release 上（与 npm 包共用同一个 tag）
+- 首次启动会让你选**书库位置**（书籍、备份、对话历史都放那里）；随时可在 设置 → 通用 → 书库位置 更改（改完自动重启）
+- 桌面版与 CLI 版**共用同一份数据与凭据**（`~/.pi/agent/`、项目目录格式一致）——两边可以打开同一个书库
+- 本地出包：`pnpm desktop:dist`（产物在 `packages/desktop/release/`）
 
 ## 快速开始
 
@@ -133,7 +150,7 @@ ai-editor <项目目录>   # 启动服务 + 自动打开浏览器 http://127.0.0
 
 **发布前置（一次性，npmjs 手动）**：① 开启 npm 账号 **2FA**（npmjs 要求开启两步验证才能配置包管理；开启会撤销现有 token，需重新生成 Automation token）；② 为 `@whispering233/ai-editor-shared`、`@whispering233/ai-editor-db`、`@whispering233/ai-editor-tools`、`@whispering233/ai-editor-agent`、`@whispering233/ai-editor-server` 五包各配置 Trusted Publisher：Publisher = GitHub Actions、工作流名 = `publish.yml`；配置后 CI 无需 token（OIDC 自动换证）。
 
-**发布流程**（详见 `docs/design/build.md`「正式发布链路」）：更新根 `CHANGELOG.md`（Unreleased 搬运为新版本段）→ `pnpm release:version X.Y.Z` 同步 5 包 + client + 根版本 → commit + 手动 annotated tag `vX.Y.Z` → push tag 后 workflow 自动执行（release.yml 建 GitHub Release，publish.yml 发布 5 包 npm + 安装态冒烟验证）。
+**发布流程**（详见 `docs/design/build.md`「正式发布链路」）：更新根 `CHANGELOG.md`（Unreleased 搬运为新版本段）→ `pnpm release:version X.Y.Z` 同步 5 包 + client + desktop + 根版本 → commit + 手动 annotated tag `vX.Y.Z` → push tag 后 workflow 自动执行（release.yml 建 GitHub Release，publish.yml 发布 5 包 npm + 安装态冒烟验证，desktop.yml 三平台打包并挂安装包到该 Release）。
 
 ## 文档（文档即契约）
 

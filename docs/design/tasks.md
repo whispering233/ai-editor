@@ -8,14 +8,16 @@
 
 ---
 
-## 当前任务卡：桌面版（Electron 外壳）K6
+## 当前任务卡：无（桌面版 K0–K6 与 P12 均已完成）
 
-设计契约 = `docs/design/50-desktop.md`（唯一事实源，§7 已录 K0 实测结论）。
+桌面版已完成：**D0** 设计定稿 → **P12** pnpm 12.4.2 → **K0** 打包 spike → **K1** 书库位置 → **K2** 目录选择闭环 → **K3** 壳层（应用菜单 + 日志）→ **K4** 安全与导航 → **K5** 设置页「通用」tab + 切换书库 → **K6** 发布链路（三平台 workflow + 版本同步 + README）。逐卡事实见根 `CHANGELOG.md` 的 `## [Unreleased]` 段。
 
-（已完成：**D0** 设计定稿 → **P12** pnpm 12.4.2（含去 `--legacy`）→ **K0** 打包 spike → **K1** 书库位置 → **K2** 目录选择闭环 → **K3** 壳层（应用菜单 + 日志）→ **K4** 安全与导航 → **K5** 设置页「通用」tab + 切换书库（桌面版 CDP 实测 tab/路径/按钮；浏览器形态 SSR 测试 + 真实浏览器实测都无该 tab）。
-⚠ **待人工验证（本机 WSLg 无法断言）**：① 原生目录选择框的**可见性与交互**（WSLg 下 GTK 文件对话框挂起；最小 Electron 对照实验同样挂起，非本仓代码问题）——涉及首次启动选书库、书架页「浏览…」、**设置页「更改…」并确认重启后落在新书库**三处；② **macOS 的 Cmd+C/V**（菜单 Edit 角色为本机无法验证的平台行为）；③ 菜单项「打开书库/日志目录」的 `shell.openPath` 真开文件管理器。需在真实 Linux 桌面 / macOS / Windows 上点一次。
+⚠ **待验证（本机 WSLg 无法断言，需真实桌面 / 首次发布）**：
 
-- [ ] **K6 发布链路** — `.github/workflows/desktop.yml`（tag 触发、三平台 matrix）+ `scripts/sync-version.mjs` 纳入 `desktop` 版本 + README/CHANGELOG。**判据**：tag 触发后 Release 挂上三平台安装包。
+1. 原生目录选择框的**可见性与交互**（WSLg 下 GTK 文件对话框挂起；最小 Electron 对照实验同样挂起，非本仓代码）——涉及首次启动选书库、书架页「浏览…」、设置页「更改…」后确认重启落在新书库三处；
+2. **macOS 的 Cmd+C/V**（菜单 Edit 角色为本机无法验证的平台行为）；
+3. 菜单项「打开书库/日志目录」的 `shell.openPath` 真开文件管理器；
+4. **CI 三平台打包**（`desktop.yml` 首次 tag 触发）：Windows NSIS / macOS dmg（arm64+x64）/ Linux AppImage 三平台产物能出且挂上 Release——本机只验过 Linux 分支。
 
 **开新卡**：从 `backlog.md` 选（当前剩余分两类）——
 
