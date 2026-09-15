@@ -60,6 +60,10 @@ pnpm test:packed    # 一键串联（backlog #8 打包安装测试：tarball 安
 3. git add -A && git commit -m "chore(release): bump version to vX.Y.Z"
 4. git tag -a vX.Y.Z -m "vX.Y.Z"（手动 annotated tag，轻量 tag 不触发发布规范）
 5. git push origin main && git push origin vX.Y.Z
+   ⤷ 纪律：tag 永远单独一条 push 命令，**不要攒着补推**（`--tags` / `--follow-tags` 一次新建 >3 个 tag
+     时 GitHub 丢弃 tag 事件 → workflow 静默不跑，tag 本身却推上去了；详见「发布管道坑记录」）
+   ⤷ 自检（返回 0 = 事件被吞，按「发布管道坑记录」删 tag 后再单独推恢复）：
+     gh api "repos/whispering233/ai-editor/actions/runs?head_sha=$(git rev-parse vX.Y.Z)" --jq .total_count
 → CI（.github/workflows/）：release.yml 从 CHANGELOG.md 按 tag 建 GitHub Release；
   publish.yml 5 包 npm 发布（OIDC Trusted Publisher）+ verify-installed 安装态冒烟
 ```
@@ -84,4 +88,11 @@ pnpm test:packed    # 一键串联（backlog #8 打包安装测试：tarball 安
 - npm 12 发布自动生成 sigstore provenance，npmjs 校验 manifest `repository.url` 一致（E422）→ 各包补 `repository` 字段
 - setup-node 注入占位 `NODE_AUTH_TOKEN` 优先于 OIDC → 发布前 `delete process.env.NODE_AUTH_TOKEN`
 - registry 文档缓存传播延迟（dist-tags 即时、`npm view`/install 短暂 404/ETARGET）→ verify-installed 先 `npm view` 轮询 5 包可见（20×30s = 10 分钟窗口）再 install
+- **一次 push 新建 tag >3 个 → GitHub 丢弃 tag 事件**（官方文档 push 事件：「Events will not be created for tags when more than three tags are pushed at once.」；`create` / `delete` 事件同限）。2026-09-15 实证：`git push --tags` 补推积压的 4 个 tag → 远端 tag 全在、Actions 零 run、npm 无版本（删除其中 v0.0.38 后单独重推，Publish + Release 立即触发并发布成功）。**纪律**：发布只走 `git push origin main && git push origin vX.Y.Z`，tag 不积压、不用 `--tags`/`--follow-tags` 批量补。**恢复**：远端已有的 tag 重推是 no-op（不产生事件），必须先删再推，且一个 tag 一条命令——删 tag 不占「新建」额度、只删不建也不会触发：
+
+  ```bash
+  git push origin :refs/tags/vX.Y.Z && git push origin vX.Y.Z   # 分两条命令最稳
+  gh api "repos/whispering233/ai-editor/actions/runs?head_sha=$(git rev-parse vX.Y.Z)" --jq .total_count  # >0 = 已触发
+  ```
+
 - 发布方式细节：发布前主动执行 copy-client-dist（server 的 SPA 随包）+ prepare 替换 workspace:*，然后 `npm publish --access public --ignore-scripts`（跳过 prepack/postpack 钩子），发布后 finally 主动 restore 恢复
