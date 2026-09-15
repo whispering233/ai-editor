@@ -8,7 +8,7 @@ import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { startServer, type ServerHandle } from "@whispering233/ai-editor-server";
-import { desktopConfigPath, readDesktopConfig, suggestedLibraryDir, writeDesktopConfig } from "./config.js";
+import { desktopConfigPath, libraryRootCandidates, readDesktopConfig, writeDesktopConfig } from "./config.js";
 import { logFilePath, redirectConsoleToFile } from "./log.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -102,24 +102,44 @@ function guardNavigation(win: BrowserWindow, port: number): void {
 }
 
 /**
- * 解析书库位置（创作根）：已配置 → 直接用；未配置 → **直接使用默认目录**
- * （`<文档>/AI Editor`，建目录 + 写配置）。
+ * 解析书库位置（创作根）：
+ * - 已配置 → 优先用它（目录被手工删掉时重建）；**该位置不可用**（盘拔了/被删了/无写权限）→ 走候选链回退。
+ * - 未配置（首次启动）→ 直接从候选链选第一个可用的（**不弹对话框**：先让用户进得去软件，
+ *   要不要换目录是之后的决定，设置页「通用 → 书库位置」随时可改）。
  *
- * 为什么首次不弹目录框：先让用户**进得去软件**（首次启动零交互），要不要换目录是之后的决定——
- * 设置页「通用 → 书库位置」随时可改（改完自动重启）。旧行为（弹原生框、取消则退出）在 WSLg 环境下
- * 还会直接卡死首次启动。
+ * 候选链与「为什么需要它」见 `config.ts` 的 `libraryRootCandidates`。全部不可用才抛错。
  */
 function resolveLibraryRoot(): string {
-  const configFile = desktopConfigPath(app.getPath("userData"));
+  const userData = app.getPath("userData");
+  const configFile = desktopConfigPath(userData);
   const saved = readDesktopConfig(configFile);
-  const root = saved?.projectRoot ?? suggestedLibraryDir(app.getPath("documents"));
 
-  mkdirSync(root, { recursive: true }); // 已保存的目录被手工删掉时重建（创作根只是容器）
-  if (saved === null) {
-    writeDesktopConfig(configFile, { projectRoot: root });
-    console.log(`[desktop] 首次启动：使用默认书库位置 ${root}（可在 设置 → 通用 → 书库位置 更改）`);
+  const fallbacks = libraryRootCandidates({
+    documents: app.getPath("documents"),
+    home: app.getPath("home"),
+    userData,
+  });
+  // 已保存的位置排在最前（试不成就往下退），且去重避免重复尝试
+  const candidates = saved === null ? fallbacks : [...new Set([saved.projectRoot, ...fallbacks])];
+
+  for (const candidate of candidates) {
+    try {
+      mkdirSync(candidate, { recursive: true });
+    } catch (err) {
+      console.warn(`[desktop] 书库位置不可用，尝试下一个：${candidate}（${err instanceof Error ? err.message : String(err)}）`);
+      continue;
+    }
+    if (saved?.projectRoot !== candidate) {
+      writeDesktopConfig(configFile, { projectRoot: candidate });
+      console.log(
+        saved === null
+          ? `[desktop] 首次启动：使用默认书库位置 ${candidate}（可在 设置 → 通用 → 书库位置 更改）`
+          : `[desktop] 原书库位置 ${saved.projectRoot} 不可用 → 改用 ${candidate}`,
+      );
+    }
+    return candidate;
   }
-  return root;
+  throw new Error(`没有可用的书库位置（已尝试：${candidates.join(" → ")}）`);
 }
 
 async function openWindow(): Promise<void> {
@@ -128,7 +148,16 @@ async function openWindow(): Promise<void> {
   const logFile = logFilePath(userData);
   redirectConsoleToFile(logFile);
 
-  const root = resolveLibraryRoot();
+  let root: string;
+  try {
+    root = resolveLibraryRoot();
+  } catch (err) {
+    console.error("[desktop] 无可用书库位置", err);
+    dialog.showErrorBox("AI Editor 无法启动", err instanceof Error ? err.message : String(err));
+    app.quit();
+    return;
+  }
+
   try {
     // openBrowser:false —— 桌面版自带窗口，不再拉起系统浏览器
     handle = await startServer(root, { openBrowser: false });

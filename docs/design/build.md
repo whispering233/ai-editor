@@ -139,8 +139,10 @@ pnpm desktop:dist                                      # 全仓构建 + pnpm dep
 
 - 发布方式细节：发布前主动执行 copy-client-dist（server 的 SPA 随包）+ prepare 替换 workspace:*，然后 `npm publish --access public --ignore-scripts`（跳过 prepack/postpack 钩子），发布后 finally 主动 restore 恢复
 
-## 桌面版打包坑记录（v0.0.40 实测）
+## 桌面版打包坑记录（v0.0.40 起实测）
 
+- **`nsis.include` 路径相对 buildResources 目录**（默认 `<projectDir>/build`），**不是**相对 projectDir：`app-builder-lib` 的 `getResource()` 先查 build 目录的文件清单、再 `path.resolve(buildResourcesDir, custom)`。写 `include: build/installer.nsh` 会被解析成 `build/build/installer.nsh` 而报错——**正确写法 = `installer.nsh`**（`50-desktop.md` §5.1 的自定义卸载脚本靠它加载）。
+- **NSIS 脚本可本地先验证语法**（不必推 CI 才发现）：`apt install nsis` 后用 `makensis` 编译一个最小包装工程（`Unicode true` + `!include "installer.nsh"` + 在 Uninstall section 里 `!insertmacro customUnInstall`）即可；只有一个 `WriteUninstaller` 的预期警告。
 - **桌面包缺 SPA ⇒ 能启动但界面是 404 JSON**。server 的 SPA 走「`<server>/client-dist`」兜底路径（`server/src/index.ts` 的 `resolveClientDist`），而该目录**只在 server 包 prepack 时生成**（`scripts/copy-client-dist.mjs`）；桌面打包走 `pnpm deploy`，**CI 上那个目录从未生成** → 包内无 SPA，窗口只显示 `client/dist 未构建` 的 JSON。⚠ **本机测试会骗你**：开发机常常残留着旧日 `packages/server/client-dist`，于是本地包能跑、CI 包不能——v0.0.40 的 Windows 包就是这样发出去的。现 `pack.mjs` 在 deploy **之前**先跑同一个 copy 脚本，并在 deploy **之后**断言 `client-dist/index.html` 存在（宁可在打包阶段红）。
 - **Windows：pnpm 必须经 shell 调**。Windows 上 pnpm 是 `.cmd` 包装脚本，而 Node 20+（CVE-2024-27980 修补）**禁止直接 spawn `.bat`/`.cmd`**：不带 shell 是 `spawnSync pnpm ENOENT`，指定 `pnpm.cmd` 是 `spawnSync pnpm.cmd EINVAL`（两种写法各失败一次）；正解 = `execFileSync(..., { shell: true })`（仅 Windows 开，官方解法见 nodejs/node#52681）。**副作用**：`shell: true` 不会自动给参数加引号 ⇒ 参数不得含空格（当前参数集满足）；将来若出现含空格路径，改用 cross-spawn 或显式引号。
 - **Windows：`executableName` 必须显式设**，与 linux 同因——不设会用含 scope 的包名推导出非法可执行名（`@`）。

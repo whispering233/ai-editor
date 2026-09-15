@@ -26,7 +26,15 @@
 
 **userData 的平台含义**（Electron `app.getPath('userData')` = `appData` + 应用名）：Windows `%APPDATA%\AI Editor\`、macOS `~/Library/Application Support/AI Editor/`、Linux `~/.config/AI Editor/`。
 
-**首次启动**（`desktop.json` 不存在或无 `projectRoot`）：**直接使用默认书库位置** `<文档>/AI Editor`（建目录 + 写配置），**不弹任何对话框**——先让用户进得去软件，要不要换目录是之后的决定（设置页「通用 → 书库位置」随时可改）。已保存的路径若被手工删掉 → 重建目录（创作根只是容器，重建无副作用）。
+**首次启动**（`desktop.json` 不存在或无 `projectRoot`）：**直接使用候选链上第一个可用目录**（不弹任何对话框）——先让用户进得去软件，要不要换目录是之后的决定（设置页「通用 → 书库位置」随时可改）。
+
+**书库位置候选链**（单一实现 = `packages/desktop/src/config.ts` 的 `libraryRootCandidates`）：
+
+1. `<文档>/AI Editor`——符合用户直觉；但**文档目录被 OneDrive 重定向时跳过**（书库内有 `data.db` 与备份 zip，不放实时同步盘：锁竞争与冲突风险）
+2. `<主目录>/AI Editor`——不进云同步，用户自己找得到
+3. `<userData>/AI Editor`——必定可写（兜底）
+
+已保存的位置**不可用**时（盘拔了 / 目录被删 / 无写权限）也走同一条链回退并改写配置；**全部不可用才报错退出**（弹原生错误框）。没有这层兜底就是「首次启动直接崩」——Windows 的「文档」是已知文件夹（`SHGetKnownFolderPath`），可能被重定向到**并不存在**的路径（OneDrive 卸载后的注册表残留是常见成因），此时 `mkdir` 直接抛错。
 
 **启动失败（端口耗尽 / 库打不开等）**：弹原生错误框 + 退出——桌面版用户没有终端，堆栈得看得见（完整日志落盘属 K3）。
 
@@ -66,6 +74,14 @@
 - **自动更新**：首版**手动**（GitHub Releases 下载新包）。electron-updater 在 macOS 上要求 app 已签名，签名未做之前上自动更新是纯负债。
 - **CI**：`.github/workflows/desktop.yml`，与 `publish.yml` 同触发（push `v*` tag），**只跑 windows-latest**，产物挂到该 tag 的 GitHub Release（并额外上传 CI artifact 供本地下载验）。发布纪律见 `build.md`。
 - **版本号**：与根 `version` 同源，同一 tag 同时产 npm 包与桌面安装包。
+
+## 5.1 卸载时的数据清理（Windows NSIS）
+
+卸载器默认只删程序文件，书库与 `<userData>` 都留在盘上。`packages/desktop/build/installer.nsh` 的 `customUnInstall` 在卸载前问一次「是否同时清除使用数据」，**默认「否」**（保留，便于重装续用）；选「是」则删 `<文档>/AI Editor`、`<主目录>/AI Editor`、`<userData>\AI Editor`。
+
+**已知取舍（有意，非缺陷）**：卸载器**不解析 `desktop.json`** 去精确定位自定义书库——NSIS 读 UTF-8 JSON 有编码坑、用 PowerShell 回传中文路径同样不稳；改为扫默认候选位置，**自定义位置的书库不会被自动删**，提示文案里明确告知（应用内 设置 → 通用 → 书库位置 可见真实路径）。若将来要做精确定位，正解是应用额外写一份 UTF-16LE 路径镜像供 NSIS 读，而不是在卸载器里解析 JSON。
+
+macOS 无卸载器（拖废纸篓即卸）→ 本机制只对 Windows 生效；将来若需跨平台的「清除数据」，应做成应用内入口（设置页）。
 
 ## 6. 客户端契约增量（唯一改动）
 

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   desktopConfigPath,
+  libraryRootCandidates,
   parseDesktopConfig,
   readDesktopConfig,
   suggestedLibraryDir,
@@ -73,5 +74,31 @@ describe("路径助手", () => {
 
   it("建议书库位置 = 文档目录下的 AI Editor", () => {
     expect(suggestedLibraryDir("/home/me/Documents")).toBe("/home/me/Documents/AI Editor");
+  });
+});
+
+describe("libraryRootCandidates（3 级回退）", () => {
+  const dirs = { documents: "/home/me/Documents", home: "/home/me", userData: "/cfg/app" };
+
+  it("顺序 = 文档 → 主目录 → userData", () => {
+    expect(libraryRootCandidates(dirs)).toEqual([
+      "/home/me/Documents/AI Editor",
+      "/home/me/AI Editor",
+      "/cfg/app/AI Editor",
+    ]);
+  });
+
+  it("文档目录被 OneDrive 重定向 → 跳过它（不把 SQLite/备份放实时同步盘）", () => {
+    const c = libraryRootCandidates({
+      documents: "/home/me/OneDrive/Documents",
+      home: "/home/me",
+      userData: "/cfg/app",
+    });
+    expect(c).toEqual(["/home/me/AI Editor", "/cfg/app/AI Editor"]);
+  });
+
+  it("去重（home 与 documents 同值时不留重复项）", () => {
+    const c = libraryRootCandidates({ documents: "/x", home: "/x", userData: "/x" });
+    expect(c).toEqual(["/x/AI Editor"]);
   });
 });

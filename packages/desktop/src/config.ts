@@ -20,10 +20,39 @@ export function desktopConfigPath(userDataDir: string): string {
 
 /**
  * 首次启动的建议书库位置：`<文档目录>/AI Editor`。
- * 只是对话框的初始值——**不静默创建**（用户可改选或取消）。
+ * 只是候选链的第一项——**不弹对话框**，但也不保证可用（见 `libraryRootCandidates`）。
  */
 export function suggestedLibraryDir(documentsDir: string): string {
   return join(documentsDir, "AI Editor");
+}
+
+/** 是否 OneDrive 重定向出来的路径（Documents 常见被「已知文件夹移动」改到这里） */
+function isCloudSynced(documentsDir: string): boolean {
+  return /onedrive/i.test(documentsDir);
+}
+
+/**
+ * 默认书库目录**候选链**（按优先级，调用方逐个试 `mkdir`，第一个成功的就是它）：
+ *
+ * 1. `<文档>/AI Editor` —— 符合用户直觉；但**跳过 OneDrive 重定向的文档目录**：
+ * 我们把 `data.db`（SQLite）与备份 zip 放在书库内，实时云同步目录下会有锁竞争与冲突风险。
+ * 2. `<主目录>/AI Editor` —— 不进云同步，且是用户能自己找到的地方。
+ * 3. `<userData>/AI Editor` —— 应用数据目录，必定可写（前两项都不可用时的兜底）。
+ *
+ * 为什么需要链：Windows 上「文档」是已知文件夹，可能被重定向到**并不存在**的路径
+ * （OneDrive 卸载后的注册表残留是常见成因），此时 `mkdir` 会直接抛错——
+ * 不兜底就是「首次启动直接崩」（其他 Electron 应用踩过）。
+ */
+export function libraryRootCandidates(dirs: {
+  documents: string;
+  home: string;
+  userData: string;
+}): string[] {
+  const candidates: string[] = [];
+  if (!isCloudSynced(dirs.documents)) candidates.push(suggestedLibraryDir(dirs.documents));
+  candidates.push(join(dirs.home, "AI Editor"));
+  candidates.push(join(dirs.userData, "AI Editor"));
+  return [...new Set(candidates)]; // 去重（如 home 与 userData 同盘时仍可能重复）
 }
 
 /** 解析配置文本：非法 JSON / 结构不符 / 相对路径 → null（一律视为「未配置」） */

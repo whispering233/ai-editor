@@ -54,3 +54,9 @@ nsis:
   # 非一键安装：让用户能选安装目录（默认的 oneClick 静默装到用户目录，不好排查）
   oneClick: false
   allowToChangeInstallationDirectory: true
+  # 自定义卸载脚本（卸载前问「是否同时清除使用数据」，默认否）。
+  # ⚠ 路径**相对 buildResources 目录**（默认 `<projectDir>/build`）解析——不是相对 projectDir：
+  # `app-builder-lib` 的 `getResource()` 先查 build 目录下的文件清单，再
+  # `path.resolve(buildResourcesDir, custom)`；写成 `build/installer.nsh` 会被解析成
+  # `build/build/installer.nsh` 而直接报错（除非另设 `directories.buildResources`）。
+  include: installer.nsh
