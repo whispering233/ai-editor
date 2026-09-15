@@ -109,8 +109,8 @@ outlineRoutes.get("/", (c) => {
     throw query.error;
   }
   const tree = readOutlineFile(project.root);
- // shared 映射（oracle 回修后支持「chapter 直挂 root」——换回 mapOutlineFileToTree，
- // 删除 S2.2 的自写 mapTreeToApi 绕过）
+ // shared 映射（oracle 回修后支持任意顶层节点类型——卷/存量根级章均不误映射，
+ // 换回 mapOutlineFileToTree，删除 S2.2 的自写 mapTreeToApi 绕过）
   const apiTree = mapOutlineFileToTree(filterDeletedTree(tree));
   if (query.data.with_metadata === true) {
     attachMetadata(apiTree, project.db);

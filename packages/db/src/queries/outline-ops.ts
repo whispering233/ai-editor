@@ -10,7 +10,7 @@
 // NODE_NOT_FOUND → 404 OUTLINE_NODE_NOT_FOUND
 // PARENT_NOT_FOUND → 400 OUTLINE_NODE_NOT_FOUND（父不存在是请求参数错误——
 // S2.2 实际映射为 400，2026-08 审核同步注释）
-// INVALID_HIERARCHY → 400 VALIDATION_ERROR（严格三层违反）
+// INVALID_HIERARCHY → 400 VALIDATION_ERROR（严格三层违反；2026-09 起章只挂卷）
 // OUTLINE_ANCESTOR_DELETED → 409 OUTLINE_ANCESTOR_DELETED
 
 import type { OutlineFileNode, OutlineFileTree, OutlineNodeType } from "@whispering233/ai-editor-shared";
@@ -45,12 +45,13 @@ function childrenOf(node: OutlineFileTree | OutlineFileNode): OutlineFileNode[] 
 }
 
 /**
- * 严格三层约束校验：childType 能否挂 parentType 下。
- * volume → root；chapter → volume 或 root；scene → 必须 chapter。
+ * 严格三层约束校验（唯一单点：创建与移动共用）：childType 能否挂 parentType 下。
+ * volume → root；chapter → **必须 volume**（2026-09：root 不再接纳章）；scene → 必须 chapter。
+ * 收紧仅限写入——存量根级章读容忍（能渲染/改名/删除/拖进卷，但不能再新建或移回 root）。
  */
 export function assertCanHold(parentType: "root" | OutlineNodeType, childType: OutlineNodeType): void {
   const ok =
-    (parentType === "root" && (childType === "volume" || childType === "chapter")) ||
+    (parentType === "root" && childType === "volume") ||
     (parentType === "volume" && childType === "chapter") ||
     (parentType === "chapter" && childType === "scene");
   if (!ok) {

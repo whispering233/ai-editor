@@ -6,7 +6,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { findOutlineNode, readOutlineFile } from "../storage/outline.js";
+import { findOutlineNode, readOutlineFile, writeOutlineFile } from "../storage/outline.js";
 import {
   createOutlineNode,
   deleteOutlineNode,
@@ -72,10 +72,12 @@ describe("createOutlineNode（严格三层）", () => {
     expect(tree.children[0].children![0].children![0].id).toBe(sc.id);
   });
 
-  it("chapter 直接挂 root 允许（chapter → volume 或 root）", () => {
-    const ch = createOutlineNode(dir, { type: "chapter", title: "直挂章", parentId: "root", updatedAt: T0 });
-    expect(ch.id).toMatch(/^ch-/);
-    expect(readOutlineFile(dir).children.some((n) => n.id === ch.id)).toBe(true);
+  it("chapter 直接挂 root 拒绝（2026-09：章只挂卷）", () => {
+    expectOutlineError(
+      () => createOutlineNode(dir, { type: "chapter", title: "直挂章", parentId: "root", updatedAt: T0 }),
+      "INVALID_HIERARCHY",
+    );
+    expect(readOutlineFile(dir).children).toEqual([]);
   });
 
   it("父节点不存在 → PARENT_NOT_FOUND", () => {
@@ -111,15 +113,13 @@ describe("createOutlineNode（严格三层）", () => {
   });
 
   it("挂 root 不向顶层写入 updated_at", () => {
- // create 挂 root（volume 与 chapter 直挂两种）
-    createOutlineNode(dir, { type: "volume", title: "卷", parentId: "root", updatedAt: T0 });
-    createOutlineNode(dir, { type: "chapter", title: "直挂章", parentId: "root", updatedAt: T1 });
- // move 挂 root（chapter 从卷内移到 root 下）
-    const t1 = readOutlineFile(dir);
-    const volId = t1.children[0].id;
-    createOutlineNode(dir, { type: "chapter", title: "卷内章", parentId: volId, updatedAt: T0 });
+ // create 挂 root（只有 volume）+ move 挂 root（卷在 root 内重排）
+    const vol1 = createOutlineNode(dir, { type: "volume", title: "卷一", parentId: "root", updatedAt: T0 });
+    createOutlineNode(dir, { type: "volume", title: "卷二", parentId: "root", updatedAt: T0 });
     const t2 = readOutlineFile(dir);
-    moveOutlineNode(dir, t2.children[0].children![0].id, { parentId: "root", order: 0 }, T1);
+    moveOutlineNode(dir, t2.children[1].id, { parentId: "root", order: 0 }, T1);
+    expect(readOutlineFile(dir).children.map((n) => n.title)).toEqual(["卷二", "卷一"]);
+    expect(vol1.updated_at).toBe(T0); // 内存旧引用不受影响（读树是新对象）
 
  // 顶层字段集合必须严格等于四字段（无 updated_at）
     const tree = readOutlineFile(dir);
@@ -276,6 +276,26 @@ describe("moveOutlineNode（PUT /outline/:nodeId/move）", () => {
       () => moveOutlineNode(dir, sc1.id, { parentId: v2.id, order: 0 }, T1),
       "INVALID_HIERARCHY",
     );
+  });
+
+  it("chapter 移到 root → INVALID_HIERARCHY（2026-09：章只挂卷）；存量根级章仍可移进卷", () => {
+    seedTree();
+    const tree0 = readOutlineFile(dir);
+    const ch1 = tree0.children[0].children![0];
+    const v2 = tree0.children[1];
+ // 卷内章 → root：拒绝
+    expectOutlineError(
+      () => moveOutlineNode(dir, ch1.id, { parentId: "root", order: 0 }, T1),
+      "INVALID_HIERARCHY",
+    );
+ // 存量根级章（无 API 入口 → 直接写文件播种，测试读容忍路径）→ 移进卷：允许
+    const seeded = readOutlineFile(dir);
+    seeded.children.splice(1, 0, { id: "ch-legacy", type: "chapter", title: "直挂章", updated_at: T0 });
+    writeOutlineFile(dir, seeded);
+    const r = moveOutlineNode(dir, "ch-legacy", { parentId: v2.id, order: 0 }, T1);
+    expect(r.previousParentId).toBe("root");
+    expect(r.newParentId).toBe(v2.id);
+    expect(readOutlineFile(dir).children[1].children![0].id).toBe("ch-legacy");
   });
 
   it("目标父不存在 → PARENT_NOT_FOUND；节点不存在 → NODE_NOT_FOUND", () => {
@@ -446,11 +466,19 @@ describe("章节序推导", () => {
     expect(getChapterNumber(dir, "sc-999")).toBeNull();
   });
 
-  it("直接挂 root 的 chapter 按兄弟顺序编号", () => {
+  it("存量根级章：直接写树文件播种时按兄弟顺序编号（2026-09 后写入侧已拒绝，读侧仍容忍）", () => {
     createOutlineNode(dir, { type: "volume", title: "卷", parentId: "root", updatedAt: T0 });
-    createOutlineNode(dir, { type: "chapter", title: "直挂章", parentId: "root", updatedAt: T0 });
-    const t3 = readOutlineFile(dir);
-    createOutlineNode(dir, { type: "chapter", title: "卷内章", parentId: t3.children[0].id, updatedAt: T0 });
+    const volId = readOutlineFile(dir).children[0].id;
+    createOutlineNode(dir, { type: "chapter", title: "卷内章", parentId: volId, updatedAt: T0 });
+ // 直挂 root 的章已无 API 入口 → 直接改文件播种存量数据（读容忍路径）
+    const seeded = readOutlineFile(dir);
+    seeded.children.splice(1, 0, {
+      id: "ch-legacy",
+      type: "chapter",
+      title: "直挂章",
+      updated_at: T0,
+    });
+    writeOutlineFile(dir, seeded);
 
     const order = deriveChapterOrder(dir);
  // root.children 顺序：卷（第1个，其内部章=1）、直挂章（第2个，=2）

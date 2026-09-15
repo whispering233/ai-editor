@@ -12,22 +12,22 @@ export interface ParentOption {
   depth: number;
 }
 
-/** root 虚拟父选项（volume 固定、chapter 可选） */
+/** root 虚拟父选项（**只有 volume 挂 root**；2026-09 起章不再直接挂根） */
 export const ROOT_PARENT_OPTION: ParentOption = { id: ROOT_NODE_ID, label: "（根）", depth: 0 };
 
 /** 递归遍历用节点视图（OutlineNode 判别联合中 scene 无 children 属性——访问时收窄为可选） */
 type TreeNode = OutlineNode & { children?: TreeNode[] };
 
 /**
- * 按类型返回合法父节点候选（严格三层）：
+ * 按类型返回合法父节点候选（严格三层，与 db `assertCanHold` 同口径）：
  * - volume → 仅 root（隐藏选择器场景由调用方处理，本函数仍返回 [root]）
- * - chapter → root + 全部 volume
+ * - chapter → 全部 volume（**不含 root**——2026-09 收紧：章只挂卷；存量根级章可渲染但与前端无关）
  * - scene → 全部 chapter（不含 root/volume）
  * 遍历序 = 树序（创建对话框下拉的展示序）
  */
 export function parentOptionsForType(nodes: OutlineNode[], type: OutlineNodeType): ParentOption[] {
   if (type === "volume") return [ROOT_PARENT_OPTION];
-  const options: ParentOption[] = type === "chapter" ? [ROOT_PARENT_OPTION] : [];
+  const options: ParentOption[] = [];
   const collect = (children: TreeNode[], depth: number): void => {
     for (const node of children) {
       if (type === "chapter" && node.type === "volume") {

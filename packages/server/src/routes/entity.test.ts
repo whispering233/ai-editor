@@ -635,10 +635,16 @@ describe("event 时间轴（C2）", () => {
     openProject();
     const app = buildApp();
     const { id: evId } = await createEvent(app, "玉佩事件");
- // 建大纲节点（chapter 直挂 root）
+ // 建大纲节点（卷 → 章；2026-09 起章只挂卷，不再直挂 root）
+    const volRes = await app.request(
+      "/api/v1/outline",
+      jsonRequest("POST", "", { type: "volume", title: "第一卷", parent_id: "root" }),
+    );
+    expect(volRes.status).toBe(201);
+    const volId = ((await volRes.json()) as { data: { id: string } }).data.id;
     const nodeRes = await app.request(
       "/api/v1/outline",
-      jsonRequest("POST", "", { type: "chapter", title: "第一章", parent_id: "root" }),
+      jsonRequest("POST", "", { type: "chapter", title: "第一章", parent_id: volId }),
     );
     expect(nodeRes.status).toBe(201);
     const nodeId = ((await nodeRes.json()) as { data: { id: string } }).data.id;

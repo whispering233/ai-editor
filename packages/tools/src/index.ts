@@ -409,8 +409,8 @@ const proposalToolDefs: ToolDefinition[] = [
   {
     name: "propose_outline_node",
     description:
-      "新增大纲节点提案：type 取值 volume|chapter|scene（严格三层：卷挂根、章挂卷或根、" +
-      "场景必须挂章），title 必填，parent_id 指定父节点（缺省挂根）。" +
+      "新增大纲节点提案：type 取值 volume|chapter|scene（严格三层：卷挂根、章只能挂卷、" +
+      "场景必须挂章），title 必填，parent_id 指定父节点（缺省挂根——只有卷能缺省）。" +
       "仅生成提案，需用户确认后生效；父节点不存在/已软删或层级非法返回错误。",
     parameters: proposeOutlineNodeArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,

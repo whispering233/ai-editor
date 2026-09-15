@@ -149,7 +149,7 @@ describe("createProposalSink", () => {
     const payload = sink({
       toolName: "propose_outline_node",
       toolCallId: "call-1",
-      params: { type: "chapter", title: "第一卷" },
+      params: { type: "volume", title: "第一卷" },
       result: { proposal_id: "prop_run", summary: "新建章节「第一卷」" },
       toolContext: makeCtx("proj-1"),
     });
@@ -162,7 +162,7 @@ describe("createProposalSink", () => {
     expect(stored?.proposal_id).toBe("prop_run");
     expect(stored?.project_id).toBe("proj-1");
     expect(stored?.type).toBe("propose_outline_node");
-    expect(stored?.args).toEqual({ type: "chapter", title: "第一卷" });
+    expect(stored?.args).toEqual({ type: "volume", title: "第一卷" });
 
     // preview 缺省回落：`{type, summary, args}`，其中 summary 取 **build 层**的措辞
     // （run 返回值里的 summary 只进模型可见的 tool content，见 tools.ts 的 ack 文案）
@@ -212,7 +212,7 @@ describe("createProposalSink", () => {
       const payload = sink({
         toolName: "propose_outline_node",
         toolCallId: "call-3",
-        params: { type: "chapter", title: "开场" },
+        params: { type: "volume", title: "开场" },
         result: { proposal_id: "prop_singleton", summary: "新建章节" },
         toolContext: makeCtx("proj-1"),
       });

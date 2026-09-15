@@ -109,14 +109,17 @@ describe("propose_outline_node", () => {
     expect(findOutlineNode(tree, "ch-2")).toBeUndefined();
   });
 
-  it("严格三层：scene 无 parent 拒绝；scene 挂卷拒绝；章挂章拒绝", () => {
+  it("严格三层：scene 无 parent 拒绝；scene 挂卷拒绝；章挂章拒绝；**章缺省挂根拒绝**（2026-09）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     expect(() => runProposeOutlineNode(makeCtx(), { type: "scene", title: "孤儿场景" })).toThrow(/层级非法/);
     expect(() => runProposeOutlineNode(makeCtx(), { type: "scene", title: "场景", parent_id: "vol-1" })).toThrow(/层级非法/);
     expect(() => runProposeOutlineNode(makeCtx(), { type: "chapter", title: "章", parent_id: "ch-1" })).toThrow(/层级非法/);
+ // 章只挂卷：缺省挂根（root）不再合法
+    expect(() => runProposeOutlineNode(makeCtx(), { type: "chapter", title: "直挂根章" })).toThrow(/层级非法/);
  // 合法组合不抛
     expect(() => runProposeOutlineNode(makeCtx(), { type: "scene", title: "场景三", parent_id: "ch-1" })).not.toThrow();
-    expect(() => runProposeOutlineNode(makeCtx(), { type: "chapter", title: "直挂根章" })).not.toThrow();
+    expect(() => runProposeOutlineNode(makeCtx(), { type: "chapter", title: "第二章", parent_id: "vol-1" })).not.toThrow();
+    expect(() => runProposeOutlineNode(makeCtx(), { type: "volume", title: "第二卷" })).not.toThrow();
   });
 
   it("父节点不存在 / 已软删 → 抛错", () => {
@@ -148,7 +151,7 @@ describe("propose_move_node", () => {
     expect(ch1.children!.map((c) => c.id)).toEqual(["sc-1", "sc-2"]); // 未交换
   });
 
-  it("目标父为 root（volume/chapter 可挂根）：提案成功，快照不含 root 引用", () => {
+  it("目标父为 root（仅 volume 可挂根）：提案成功，快照不含 root 引用；章移回根拒绝", () => {
     writeOutlineFile(dir, seedOutlineTree());
  // volume 移到树根（树首）→ 合法，references 只有节点自身（root 非引用对象）
     const proposal = buildProposeMoveNode(makeCtx(), { node_id: "vol-1", parent_id: "root", order: 0 });
@@ -159,6 +162,8 @@ describe("propose_move_node", () => {
     expect(result.summary).toContain("树根");
  // scene 不能挂 root（严格三层）→ 拒绝
     expect(() => runProposeMoveNode(makeCtx(), { node_id: "sc-1", parent_id: "root", order: 0 })).toThrow(/层级非法/);
+ // 章也不能挂 root（2026-09：章只挂卷）→ 拒绝
+    expect(() => runProposeMoveNode(makeCtx(), { node_id: "ch-1", parent_id: "root", order: 0 })).toThrow(/层级非法/);
   });
 
   it("目标父层级非法→ 抛错；节点/父不存在 → 抛错", () => {

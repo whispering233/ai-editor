@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
-import { SCHEMA_VERSION } from "@whispering233/ai-editor-db";
+import { SCHEMA_VERSION, readOutlineFile, writeOutlineFile } from "@whispering233/ai-editor-db";
 import { errorHandler } from "../middleware/error.js";
 import {
   closeProject,
@@ -183,15 +183,19 @@ describe("GET /outline 整树", () => {
     expect((await res.json()).data.children).toEqual([]);
   });
 
-  it("chapter 直挂 root 时整树 type 正确（server 侧映射规避 shared 硬编码，冒烟发现）", async () => {
+  it("存量根级章：整树 type 正确（server 侧映射规避 shared 硬编码，冒烟发现）", async () => {
     const app = buildApp();
-    await openProject();
-    const ch = (await (await app.request("/api/v1/outline", {
-      method: "POST", headers: HOST_HEADERS, body: JSON.stringify({ type: "chapter", title: "直挂章", parent_id: "root" }),
-    })).json()).data;
-    await app.request("/api/v1/outline", {
-      method: "POST", headers: HOST_HEADERS, body: JSON.stringify({ type: "scene", title: "场景", parent_id: ch.id }),
+    const dir = await openProject();
+ // 直挂 root 的章已无 API 入口（2026-09：章只挂卷）→ 直接写文件播种存量数据（读容忍路径）
+    const tree = readOutlineFile(dir);
+    tree.children.push({
+      id: "ch-legacy",
+      type: "chapter",
+      title: "直挂章",
+      updated_at: T0,
+      children: [{ id: "sc-legacy", type: "scene", title: "场景", updated_at: T0 }],
     });
+    writeOutlineFile(dir, tree);
 
     const res = await app.request("/api/v1/outline", { headers: HOST_HEADERS });
     const body = await res.json();

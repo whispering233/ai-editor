@@ -3,8 +3,8 @@
 //
 // 写路径：直接调 db outline-ops（唯一写路径；outline.json 原子写由 db 层保证）；
 // updatedAt 由应用层 nowIso 传入（时间约定：ISO 8601 应用层写入，模块不生成时间）。
-// 层级约束（严格三层）由 db assertCanHold 兜底：scene 挂 chapter、chapter 挂卷/根、
-// volume 挂根；parent_id 缺省挂 root（volume/chapter 可挂根，scene 缺省即拒绝——与提案层同语义）。
+// 层级约束（严格三层）由 db assertCanHold 兜底：scene 挂 chapter、chapter **只能挂卷**（2026-09）、
+// volume 挂根；parent_id 缺省挂 root（**只有 volume 能缺省**，chapter/scene 缺省即拒绝——与提案层同语义）。
 // 软删语义：delete_node 软删 + 递归子树（本体保留可回收站还原）。
 
 import { createOutlineNode, deleteOutlineNode, moveOutlineNode, nowIso } from "@whispering233/ai-editor-db";

@@ -60,10 +60,9 @@ describe("parentOptionsForType（父节点按类型过滤）", () => {
     expect(parentOptionsForType(tree, "volume")).toEqual([ROOT_PARENT_OPTION]);
   });
 
-  it("chapter → root + 全部 volume（不收集 chapter/scene）", () => {
+  it("chapter → 全部 volume（不收集 root/chapter/scene；2026-09：章只挂卷）", () => {
     const options = parentOptionsForType(tree, "chapter");
     expect(options).toEqual([
-      ROOT_PARENT_OPTION,
       { id: "vol-1", label: "第一卷", depth: 1 },
       { id: "vol-2", label: "第二卷", depth: 1 },
     ]);
@@ -78,13 +77,13 @@ describe("parentOptionsForType（父节点按类型过滤）", () => {
     ]);
   });
 
-  it("空树：chapter 仅 root；scene 空（无合法父）", () => {
-    expect(parentOptionsForType([], "chapter")).toEqual([ROOT_PARENT_OPTION]);
+  it("空树：chapter 空（无合法父）、scene 空、volume 仅 root", () => {
+    expect(parentOptionsForType([], "chapter")).toEqual([]);
     expect(parentOptionsForType([], "scene")).toEqual([]);
     expect(parentOptionsForType([], "volume")).toEqual([ROOT_PARENT_OPTION]);
   });
 
-  it("scene 不收集挂在 root 下的 chapter（合法场景）", () => {
+  it("存量根级章仍可作场景父（读容忍：层级校验只看父自身 type）", () => {
     const flat: OutlineNode[] = [
       { id: "ch-9", type: "chapter", title: "根下章", updatedAt: "t0" },
       ...tree,
@@ -156,8 +155,8 @@ describe("canMoveTo（拖拽目标合法性，S2.4）", () => {
     expect(canMoveTo(sc1, "vol-1", tree)).toBe(false);
   });
 
-  it("chapter → root 或 volume 可接收（scene 拒绝——chapter 不能挂 chapter）", () => {
-    expect(canMoveTo(ch1, ROOT_NODE_ID, tree)).toBe(true);
+  it("chapter → 只能卷接收（root/scene 拒绝；2026-09 章只挂卷）", () => {
+    expect(canMoveTo(ch1, ROOT_NODE_ID, tree)).toBe(false);
     expect(canMoveTo(ch1, "vol-2", tree)).toBe(true);
     expect(canMoveTo(ch1, "ch-3", tree)).toBe(false);
   });
@@ -178,9 +177,9 @@ describe("canMoveTo（拖拽目标合法性，S2.4）", () => {
     expect(canMoveTo(ch1, "sc-1", tree)).toBe(false);
   });
 
-  it("root 是 volume/chapter 的合法目标（顶层拖放区）", () => {
+  it("root 是 volume 的合法目标（顶层拖放区；章不再是）", () => {
     expect(canMoveTo(vol2, ROOT_NODE_ID, tree)).toBe(true);
-    expect(canMoveTo(ch1, ROOT_NODE_ID, tree)).toBe(true);
+    expect(canMoveTo(ch1, ROOT_NODE_ID, tree)).toBe(false);
     expect(canMoveTo(sc1, ROOT_NODE_ID, tree)).toBe(false);
   });
 });

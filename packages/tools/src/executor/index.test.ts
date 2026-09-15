@@ -139,10 +139,12 @@ describe("executeProposal（proposal.type → 执行函数映射）", () => {
     expect(readOutlineFile(dir).children.map((c) => c.id)).toContain(result.id);
   });
 
-  it("propose_move_node → move_node：跨父移动", () => {
-    writeOutlineFile(dir, seedOutlineTree());
-    const result = executeProposal(makeCtx(), makeProposal("propose_move_node", { node_id: "ch-1", parent_id: "root", order: 0 }));
-    expect(result).toMatchObject({ id: "ch-1", previousParentId: "vol-1", newParentId: "root" });
+  it("propose_move_node → move_node：跨父移动（章在卷间）", () => {
+    const tree = seedOutlineTree();
+    tree.children.push({ id: "vol-2", type: "volume", title: "第二卷", updated_at: T0, children: [] });
+    writeOutlineFile(dir, tree);
+    const result = executeProposal(makeCtx(), makeProposal("propose_move_node", { node_id: "ch-1", parent_id: "vol-2", order: 0 }));
+    expect(result).toMatchObject({ id: "ch-1", previousParentId: "vol-1", newParentId: "vol-2" });
   });
 
   it("propose_delete_node → delete_node：软删子树", () => {

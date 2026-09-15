@@ -116,11 +116,15 @@ describe("move_node", () => {
     expect(childrenOf(nodeOf("ch-1")).map((c) => c.id)).toEqual(["sc-2", "sc-1"]); // 移动到 0 位
   });
 
-  it("移到 root（chapter 可挂根）", () => {
-    writeOutlineFile(dir, seedOutlineTree());
-    const result = executeMoveNode(makeCtx(), makeProposal("propose_move_node", { node_id: "ch-1", parent_id: "root", order: 0 }));
+  it("移到 root（卷可挂根；章移回根 2026-09 起拒绝）", () => {
+    const tree = seedOutlineTree();
+    tree.children.push({ id: "vol-2", type: "volume", title: "第二卷", updated_at: T0, children: [] });
+    writeOutlineFile(dir, tree);
+    const result = executeMoveNode(makeCtx(), makeProposal("propose_move_node", { node_id: "vol-2", parent_id: "root", order: 0 }));
     expect(result.newParentId).toBe("root");
-    expect(readOutlineFile(dir).children.map((c) => c.id)).toEqual(["ch-1", "vol-1"]);
+    expect(readOutlineFile(dir).children.map((c) => c.id)).toEqual(["vol-2", "vol-1"]);
+ // 章移回 root（章只挂卷）→ 拒绝
+    expect(() => executeMoveNode(makeCtx(), makeProposal("propose_move_node", { node_id: "ch-1", parent_id: "root", order: 0 }))).toThrow(/层级非法/);
   });
 
   it("order 越界 clamp（拖拽边界宽松处理，db 语义）", () => {

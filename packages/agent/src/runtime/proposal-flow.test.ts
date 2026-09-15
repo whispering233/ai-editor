@@ -70,7 +70,7 @@ describe("提案链路（模型工具调用 → 仓 + SSE）", () => {
 
     try {
       faux.setResponses([
-        fauxAssistantMessage([fauxToolCall("propose_outline_node", { type: "chapter", title: "第一卷" })]),
+        fauxAssistantMessage([fauxToolCall("propose_outline_node", { type: "volume", title: "第一卷" })]),
         fauxAssistantMessage("提案已发出，等你确认。"),
       ]);
 
@@ -102,7 +102,7 @@ describe("提案链路（模型工具调用 → 仓 + SSE）", () => {
       // 仓内可查：同一 id、绑定项目、args 为执行参数
       const stored = store.get(payload.proposal_id, PROJECT_ID);
       expect(stored).not.toBeNull();
-      expect(stored?.args).toEqual({ type: "chapter", title: "第一卷" });
+      expect(stored?.args).toEqual({ type: "volume", title: "第一卷" });
       expect(store.get(payload.proposal_id, "proj-other")).toBeNull();
 
       // 帧序列完整性：本轮没有 partial（delta 帧也不带完整消息）

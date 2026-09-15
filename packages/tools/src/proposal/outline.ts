@@ -5,8 +5,8 @@
 // **不落盘、不写任何数据**（与 S6.7 create_outline_node/move_node/delete_node 对比的核心差异）。
 //
 // 生成时校验：
-// - propose_outline_node：parent_id 缺省挂根（volume/chapter 可挂 root，scene 必须挂 chapter——
-// assertCanHold 抛 INVALID_HIERARCHY）；父节点存在且未软删时采集节点级 updated_at 快照
+// - propose_outline_node：parent_id 缺省挂根（**2026-09：只有 volume 能缺省挂根**；chapter 只能挂 volume、
+// scene 必须挂 chapter——assertCanHold 抛 INVALID_HIERARCHY）；父节点存在且未软删时采集节点级 updated_at 快照
 // - propose_move_node：节点与目标父均存在且未软删，且目标父可容纳该层级（严格三层）；
 // 采集两节点 updated_at 快照
 // - propose_delete_node：节点存在且未软删（软删 + 递归子树，可回收站还原）
@@ -16,9 +16,9 @@ import type { ProposeDeleteNodeArgs, ProposeMoveNodeArgs, ProposeOutlineNodeArgs
 import type { ToolContext } from "../context.js";
 import { buildProposal, checkProposalAborted, refOutlineNode, requireOutlineNode, type Proposal, type ProposalReference, type ToolProposalResult } from "./types.js";
 
-/** 产出新增大纲节点提案（parent_id 缺省挂根；scene 无 parent 直接拒绝） */
+/** 产出新增大纲节点提案（parent_id 缺省挂根；**只有 volume 能缺省**，chapter 必须显式指定卷） */
 export function buildProposeOutlineNode(ctx: ToolContext, args: ProposeOutlineNodeArgs): Proposal {
- // 层级约束（严格三层）：root 可挂 volume/chapter；scene 必须挂 chapter（缺省 root 即拒绝）
+ // 层级约束（严格三层，2026-09 收紧）：root 仅收 volume；chapter 只能挂 volume；scene 必须挂 chapter
   const references: ProposalReference[] = [];
   if (args.parent_id === undefined) {
     assertCanHold("root", args.type);
@@ -49,10 +49,11 @@ export function runProposeOutlineNode(
 
 /**
  * 产出移动大纲节点提案（目标父须可容纳该层级）。
- * parent_id 可为 "root"（volume/chapter 可挂 root——db moveOutlineNode 支持
+ * parent_id 可为 "root"（**只有 volume 可挂 root**——db moveOutlineNode 支持
  * parentId === "root"，AI 可提案「把卷移到树首」等合法操作）：root 恒存在、非节点，
  * 跳过 requireOutlineNode 且**不采集 root 引用快照**（与 propose_outline_node 缺省挂根语义对齐）；
- * 此时层级约束只取决于 node 自身类型（volume/chapter 可挂 root，scene 不可）。
+ * 此时层级约束只取决于 node 自身类型（仅 volume 可挂 root；chapter 移回根 2026-09 起已拒绝，
+ * 存量根级章仍可往卷里移）。
  * order 语义：目标父 children 数组中的目标位置（0 起）；超出长度的行为（clamp 或抛错）
  * 由 S6.7/db 执行时定义，生成时校验不做上限（见 schema 注释）。
  */
@@ -62,7 +63,7 @@ export function buildProposeMoveNode(ctx: ToolContext, args: ProposeMoveNodeArgs
  // 目标父展示名（root 恒存在、非节点，无 title）
   let parentLabel = "树根";
   if (args.parent_id === "root") {
- // root 恒存在、非引用对象：仅校验层级（scene 不能挂 root，严格三层）
+ // root 恒存在、非引用对象：仅校验层级（2026-09：root 只收 volume）
     assertCanHold("root", node.type);
   } else {
     const parent = requireOutlineNode(ctx, args.parent_id);
