@@ -11,7 +11,7 @@
 // + 「设为阅读进度」——卡片 1.1：仅章节点行传入，卷/场景行不出现；已是阅读进度则禁用）
 // 路由：#/outline；数据：GET /api/v1/outline（整树）+ GET /api/v1/relation（伏笔标记，S9.2）；操作：POST/PUT/DELETE /outline、PUT /project/config（设阅读进度）
 // （S2.4 + S13.1 + 版）——行内编辑标题/摘要（Enter 保存/Esc 取消/失焦保存）、
-// 选中节点按 Enter 就地插入子节点（类型由父决定，root 可切卷/章）、拖拽移动（原生 HTML5 DnD，上下半判定：
+// 选中节点按 Enter 就地插入子节点（类型由父决定；顶层只建卷）、拖拽移动（原生 HTML5 DnD，上下半判定：
 // 目标行上半 = 插到该节点前、下半 = 插到该节点后，跨父移动按，顶层空白区 = 排末尾）、
 // 双击行跳详情（#/outline/:nodeId）、软删直接执行（H2：不再弹二次确认，回收站可还原；仅彻底删除保留确认）
 // 刷新策略：所有写操作成功后统一 loadOutline 重拉整树（服务端权威——move 重排 order、软删级联子树、
@@ -68,7 +68,7 @@ import { useUiStore } from "../stores/ui";
 /** 就地编辑目标（一次只编辑一个字段） */
 type EditingState = { nodeId: string; field: "title" | "summary" } | null;
 
-/** 就地新建目标：parentId "root" = 顶层（卷/章可切），否则父节点决定子类型（CHILD_TYPE） */
+/** 就地新建目标：parentId "root" = 顶层（**只建卷**，2026-09：章只挂卷），否则父节点决定子类型（CHILD_TYPE） */
 type CreatingState = { parentId: string; type: OutlineNodeType } | null;
 
 /** 提取错误码（ApiError → 服务端码；未知 → null 走兜底文案） */
@@ -113,19 +113,16 @@ function inlineInput(
   );
 }
 
-/** root 顶层就地新建行：卷/章切换（chapter 可挂 root）+ 输入行。
- * 树容器（renderRootCreateRow）与空态引导卡共用，避免两处重复（S2.4 oracle 补丁） */
+/** root 顶层就地新建行：卷类型徽标（固定）+ 输入行——**类型不可切**（2026-09：章只挂卷，root 只建卷，
+ * 类型切换按钮的去留见 DESIGN.md「大纲页页头主操作」）。
+ * 树容器（renderRootCreateRow）与空态引导卡共用，避免两处重复（S2.4 oracle 补丁 + 卡 2a 去切换） */
 function RootCreateRow({
-  type,
-  onTypeChange,
   value,
   onChange,
   onKeyDown,
   onCancel,
   className,
 }: {
-  type: OutlineNodeType;
-  onTypeChange: (t: OutlineNodeType) => void;
   value: string;
   onChange: (v: string) => void;
   onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void;
@@ -134,24 +131,11 @@ function RootCreateRow({
 }) {
   return (
     <div className={cn("flex items-center gap-2 rounded-md px-2 py-1", className)}>
-      <div className="flex shrink-0 gap-1">
-        {(["volume", "chapter"] as const).map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => onTypeChange(t)}
-            className={cn(
-              "rounded border px-2 py-0.5 text-xs transition-colors",
-              type === t
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
-            )}
-          >
-            {TYPE_LABEL[t]}
-          </button>
-        ))}
-      </div>
-      {inlineInput(value, onChange, onKeyDown, onCancel, `新${TYPE_LABEL[type]}标题，Enter 创建`)}
+      {/* 占位 + 类型徽标：与树行同列（折叠箭头几何 `-ml-2 w-6` + `w-7` 徽标）——
+          新建行看上去就是即将插入的那一行卷 */}
+      <span className="-ml-2 w-6 shrink-0" />
+      <TypeChip className="w-7 shrink-0 justify-center">{TYPE_LABEL.volume}</TypeChip>
+      {inlineInput(value, onChange, onKeyDown, onCancel, "新卷标题，Enter 创建")}
     </div>
   );
 }
@@ -669,8 +653,6 @@ export default function Outline() {
     return (
       <RootCreateRow
         className="mb-1"
-        type={creatingAt.type}
-        onTypeChange={(t) => setCreatingAt({ parentId: ROOT_NODE_ID, type: t })}
         value={createValue}
         onChange={setCreateValue}
         onKeyDown={handleCreateKeyDown}
@@ -914,7 +896,7 @@ export default function Outline() {
               {collapsed.size > 0 ? "全部展开" : "全部折叠"}
             </Button>
             <Button type="primary" onClick={() => startCreate(ROOT_NODE_ID, "volume")}>
-              + 新建
+              + 新建卷
             </Button>
           </>
         }
@@ -961,8 +943,6 @@ export default function Outline() {
             action={
               <div className="mx-auto max-w-sm">
                 <RootCreateRow
-                  type={creatingAt.type}
-                  onTypeChange={(t) => setCreatingAt({ parentId: ROOT_NODE_ID, type: t })}
                   value={createValue}
                   onChange={setCreateValue}
                   onKeyDown={handleCreateKeyDown}
