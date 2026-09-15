@@ -352,6 +352,14 @@ projectRoutes.get("/export", (c) => {
 /** 上传大小上限（50MB；ora-4 复核保留——zip 含 data.db，正常项目远小于此） */
 const MAX_IMPORT_SIZE = 50 * 1024 * 1024;
 
+/** 书名为空/非法时的兜底名（后续会被 uniqueBookDir 去重成「导入的书籍 (2)」等） */
+const FALLBACK_IMPORT_NAME = "导入的书籍";
+
+/** 书名合法性（纯判定，不抛）：与 client 同规则——禁路径分隔符/纯点/控制字符 */
+function isBookNameValid(name: string): boolean {
+  return name !== "" && !/[\\/]|^\.+$|[\u0000-\u001f]/.test(name);
+}
+
 /** 书名校验（与 client Sidebar 新建项目同规则）：禁路径分隔符/纯点/控制字符 */
 function validateBookName(name: string): void {
   if (!name) {
@@ -359,7 +367,7 @@ function validateBookName(name: string): void {
   }
  // 与 client 同规则（Sidebar.tsx L3）："/"、"\"、纯点（. / ..）、控制字符一律拒绝——
  // name 直接拼 books/<name>/ 目录名，否则可逃出 books/（防越权精神）
-  if (/[\\/]|^\.+$|[\u0000-\u001f]/.test(name)) {
+  if (!isBookNameValid(name)) {
     throw new HttpError(400, "VALIDATION_ERROR", "书名不能包含 /、\\ 或为 . / ..");
   }
 }
@@ -434,9 +442,10 @@ projectRoutes.post("/import", async (c) => {
   }
 
  // 1. multipart 解析（Hono 4 c.req.parseBody；非 multipart body → 解析失败 → 400）
+ // 书名为**可选**：留空 = 用备份内的书名（备份是权威——备份文件名是
+ // `<时间戳>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip`，拿它当书名是错的）
   const body = await c.req.parseBody().catch(() => null);
-  const name = typeof body?.name === "string" ? body.name.trim() : "";
-  validateBookName(name);
+  const requestedName = typeof body?.name === "string" ? body.name.trim() : "";
   const file = body?.file;
   if (!(file instanceof File)) {
     throw new HttpError(400, "VALIDATION_ERROR", "缺少文件字段 file（zip 备份包）");
@@ -452,13 +461,26 @@ projectRoutes.post("/import", async (c) => {
  // 失败抛 HttpError（400 坏包 / 409 SCHEMA_VERSION_MISMATCH），未触碰任何目标数据。
   let entries: Record<string, Uint8Array>;
   let projectId: string;
+  let projectName: string;
   try {
     const validated = validateBackupPackage(new Uint8Array(await file.arrayBuffer()));
     entries = validated.entries;
     projectId = validated.projectId;
+    projectName = validated.projectName;
   } catch (err) {
     if (err instanceof HttpError) throw err;
     throw new HttpError(400, "VALIDATION_ERROR", "不是有效的项目备份包（zip 解析失败）");
+  }
+
+ // 最终书名：用户显式填写优先（非法 → 400，与原语义一致）；留空 → 用备份内的
+ // （备份名可能为空串或非法字符——isValidProjectFile 只校验类型，故需兜底）
+  let name: string;
+  if (requestedName !== "") {
+    validateBookName(requestedName);
+    name = requestedName;
+  } else {
+    const backed = projectName.trim();
+    name = isBookNameValid(backed) ? backed : FALLBACK_IMPORT_NAME;
   }
 
  // 5. 分流（import 节）：id 匹配书架已有项目 → 覆盖恢复；

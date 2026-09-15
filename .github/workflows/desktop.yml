@@ -29,18 +29,20 @@ permissions:
 jobs:
   package:
     strategy:
-      fail-fast: false # 一个平台挂了不代表其余平台的结论无效，让三平台都跑完
+      fail-fast: false # 多平台并发时一个挂了不代表其余平台结论无效（当前仅 Windows）
       matrix:
         include:
-          - os: ubuntu-latest
-            args: --linux AppImage
-            files: "*.AppImage"
-          - os: macos-latest
-            args: --mac dmg --arm64 --x64
-            files: "*.dmg"
+          # 当前只出 **Windows 包**（2026-10 定）：macOS/Linux 暂无真实用户需求，需要时取消下面注释即可恢复。
+          # 本地开发机的 Windows 交叉构建需 Wine（electron-builder 官方口径），本仓以 CI 的 windows-latest 为唯一出包路径。
           - os: windows-latest
             args: --win nsis
             files: "*.exe"
+          # - os: ubuntu-latest
+          #   args: --linux AppImage
+          #   files: "*.AppImage"
+          # - os: macos-latest
+          #   args: --mac dmg --arm64 --x64
+          #   files: "*.dmg"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40 # 首次会下载 electron 二进制 + 原生打包工具链
     steps:
@@ -63,3 +65,12 @@ jobs:
           files: packages/desktop/release/${{ matrix.files }}
           # Release 通常已由 release.yml 从 CHANGELOG 建好；此处只挂资产（不存在时才创建）
           fail_on_unmatched_files: true
+      # 同时传一份 CI artifact：手动触发时可直接下载到本地测试
+      #（`gh run download <run-id> -n desktop-windows-latest`），不必先碰 Release。
+      # `if: always()`：即使上面的 Release 上传失败也保留产物供排查。
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: desktop-${{ matrix.os }}
+          path: packages/desktop/release/${{ matrix.files }}
+          if-no-files-found: warn

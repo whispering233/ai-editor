@@ -66,8 +66,18 @@ pnpm test:packed    # 一键串联（backlog #8 打包安装测试：tarball 安
 ```
 pnpm --filter @whispering233/ai-editor-desktop build   # tsc：主进程 ESM + preload CJS（一个 tsconfig，.cts）
 pnpm --filter @whispering233/ai-editor-desktop start   # 开发：构建后 electron .（in-process 起 server）
-pnpm desktop:dist                                      # 全仓构建 + pnpm deploy + electron-builder（供 CI 用）
+pnpm desktop:dist                                      # 全仓构建 + pnpm deploy + electron-builder（**当前平台**）
 ```
+
+- **分工（2026-10 定）**：**本地只打 Linux 包做测试**（`pnpm desktop:dist` → `packages/desktop/release/`）；**Windows 包由 CI 出**（`desktop.yml` 的 windows-latest）。原因：electron-builder 在 Linux/WSL 交叉构建 Windows 目标需 **Wine**（官方口径：`--win nsis` 与 portable 都要，exe 元数据/图标写入要跑 Windows 工具），本仓不为打包往开发机装 1GB 级依赖；macOS 同理必须 mac runner。
+- **本地拿 Windows 包验**（不推 tag、不碰 Release）：手动触发 workflow → 下载 CI artifact：
+
+  ```bash
+  gh workflow run desktop.yml --ref main -f release_tag=vX.Y.Z   # 手动触发（release_tag 仅决定资产挂到哪个 Release）
+  gh run download <run-id> -n desktop-windows-latest -D /tmp/win-pkg
+  ```
+
+- **CI 出包范围（2026-10 起）**：只出 **Windows** 包；macOS/Linux 的 matrix 项**注释保留**，将来有真实用户需求再取消注释恢复三平台（GitHub runner 侧无额外成本，只是每次发版多跑两个 job）。`workflow_dispatch`（输入 `release_tag`）既是补包入口、也是手动出包入口。
 
 - **打包三段**：`pnpm -r build` → `pnpm --filter <desktop> deploy --prod packages/desktop/.deploy/app` → `electron-builder --config electron-builder.yml`（封装在 `packages/desktop/scripts/pack.mjs`）。`electron-builder.yml` 里 `npmRebuild: false` + `linux.executableName` 不可省（原因见 `50-desktop.md` §5 实测栏）。
 - **Electron 二进制不再随 install 下载**（Electron 42+ 移除 postinstall，改懒下载）：`pnpm install` 不碰二进制；开发态首次 `pnpm --filter <desktop> start` 会打印 `Downloading Electron binary...` 并下载（此时才需要 `ELECTRON_MIRROR`）；打包时 electron-builder 自行下载所需二进制。`ELECTRON_SKIP_BINARY_DOWNLOAD` 已失效，手动预下载用 `pnpm --filter <desktop> exec install-electron --no`。

@@ -7,6 +7,14 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **桌面打包分工（2026-10 定）**：**本地只打 Linux 包测试**（`pnpm desktop:dist`，产物在 `packages/desktop/release/`）；**Windows 包由 CI 出**（`desktop.yml` 的 windows-latest，可手动触发+下载 artifact 先验）；macOS 包暂不做（无 mac runner 可验）。将来有真实用户需求再恢复三平台 matrix（项已注释保留）。Windows 本地交叉构建需 Wine（electron-builder 官方口径），本仓不往开发机装该依赖。
+
+### Fixed
+
+- **导入备份后书名变成备份文件名**：client 选 zip 后会自动把「文件名去 `.zip`」预填为书名，而备份命名是 `<时间戳>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip` —— 整串元信息被当成书名写进目录名与 `project.json`。现改为 `POST /project/import` 的 `name` **可选**：留空即用备份内 `project.json` 的 name（备份是权威），显式填写才覆盖（非法仍 400）；备份内名字为空/含非法字符（手工改坏的包）→ 兑底「导入的书籍」。client 不再预填，输入框占位符改「留空 = 使用备份里的书名」。
+
 ## [v0.0.40] - 2026-09-16
 
 > **桌面版（Electron 外壳）落地**：设计定稿（`3850d99`）→ pnpm 12.4.2（`fb1630a`）→ 骨架与打包链路（`a15b6b1`）→ 书库位置（`2bbc5b1`）→ 目录选择闭环（`368a099`）→ 应用菜单与日志（`d714bae`）→ 安全与导航（`bb6b2b0`）→ 设置页「通用」tab（`bb66e1d`）→ 三平台发布链路（`ecc8c07`）。桌面端到端实测：打包产物起窗口 + preload 桥可见 + SQLite 建库 + 外链/跨源导航被拦 + 日志落盘；浏览器形态零变化（真实浏览器 + SSR 守卫）。回归：`pnpm -r build` → typecheck → lint → `pnpm -r test` 全绿（shared 222 / db 281 / client 865 / tools 287 / agent 82 / server 575 / desktop 16）。

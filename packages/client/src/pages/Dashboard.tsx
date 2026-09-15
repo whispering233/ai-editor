@@ -398,11 +398,8 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     const file = e.target.files?.[0] ?? null;
     setImportFile(file);
     setImportError(null);
-    if (file) {
-      const suggested = file.name.replace(/\.zip$/i, "");
-      setImportName(importName.trim() === "" ? suggested : importName);
-      evaluateImportConflict(importName.trim() === "" ? suggested : importName);
-    }
+    // 不把 zip 文件名预填为书名：备份命名是 `<时间戳>-<自动|手动>-<设备>-人物N-设定N-章N.zip`，
+    // 拿它当书名会把一整串元信息写进目录名与 project.json。书名留空 = 服务端用备份内的书名。
   }
 
   /** 导入提交（普通 = 当前输入名；冲突态 = 基础名「保持原样」/ 编辑名「重命名导入」）；
@@ -414,10 +411,13 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
       setImportError("请选择备份文件");
       return;
     }
-    const err = validateBookName(trimmed);
-    if (err !== null) {
-      setImportError(err);
-      return;
+    // 留空 = 用备份内的书名（服务端以备份 project.json 为准）；填了才做本地预校验
+    if (trimmed !== "") {
+      const err = validateBookName(trimmed);
+      if (err !== null) {
+        setImportError(err);
+        return;
+      }
     }
     setImporting(true);
     setImportError(null);
@@ -794,7 +794,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
               <Input
                 value={importName}
                 onChange={handleImportNameChange}
-                placeholder="书名（默认取文件名）"
+                placeholder="书名（留空 = 使用备份里的书名）"
                 maxLength={60}
                 disabled={importing}
               />

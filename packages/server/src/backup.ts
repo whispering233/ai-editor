@@ -600,7 +600,12 @@ function isValidOutlineFile(parsed: unknown): boolean {
  *
  * @throws HttpError 400（坏包/缺文件/未知条目/不符）/ 409 SCHEMA_VERSION_MISMATCH
  */
-export function validateBackupPackage(zipData: Uint8Array): { entries: Record<string, Uint8Array>; projectId: string } {
+export function validateBackupPackage(zipData: Uint8Array): {
+  entries: Record<string, Uint8Array>;
+  projectId: string;
+  /** 备份内的书名（project.json 的 name，已校验为非空字符串）——导入时未指定书名则用它 */
+  projectName: string;
+} {
  // 1/2. 解压 + 白名单（严格拒绝）：三数据文件名 + references/ 前缀
   let entries: Record<string, Uint8Array>;
   let entryNames: string[];
@@ -686,7 +691,7 @@ export function validateBackupPackage(zipData: Uint8Array): { entries: Record<st
       if (db !== null) closeDatabase(db);
     }
 
-    return { entries, projectId: projectConfig.id };
+    return { entries, projectId: projectConfig.id, projectName: projectConfig.name };
   } finally {
     rmSync(tmpDir, { recursive: true, force: true });
   }

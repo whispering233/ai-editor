@@ -1626,7 +1626,7 @@ describe("POST /project/import（zip 导入新书）", () => {
     expect(existsSync(join(root, "books", "..", "escape"))).toBe(false);
   });
 
-  it("缺少 multipart 字段（无 file / 无 name）→ 400 VALIDATION_ERROR", async () => {
+  it("缺少 file → 400；**未传 name → 用备份内的书名**（name 可选，2026-10 起）", async () => {
     const root = makeTmpDir();
     setProjectRoot(root);
  // 无 file
@@ -1639,23 +1639,55 @@ describe("POST /project/import（zip 导入新书）", () => {
     });
     expect(res1.status).toBe(400);
     expect((await res1.json()).error.message).toContain("file");
- // 无 name
+ // 无 name（书名为空）→ 不应 400：以备份内的 project.json 的 name 为准
+ //（背景：备份文件名是 `<时间戳>-<自动|手动>-<设备>-人物N-设定N-章N`，拿它当书名会把元信息写进目录名）
     const dir = makeTmpDir();
-    initProjectDir(dir, makeConfig("proj-n", "n"));
-    const zip = zipSync({
-      "project.json": readFileSync(join(dir, "project.json")),
-      "outline.json": readFileSync(join(dir, "outline.json")),
-      "data.db": readFileSync(join(dir, "data.db")),
-    });
+    initProjectDir(dir, makeConfig("proj-n", "备份里的书名"));
     const noName = new FormData();
-    noName.append("file", new File([zip], "backup.zip"));
+    noName.append("file", new File([bookZip(dir)], "backup.zip"));
     const res2 = await buildApp().request("/api/v1/project/import", {
       method: "POST",
       headers: HOST_HEADERS,
       body: noName,
     });
-    expect(res2.status).toBe(400);
-    expect((await res2.json()).error.message).toContain("name");
+    expect(res2.status).toBe(200);
+    const body2 = await res2.json();
+    expect(body2.data.name).toBe("备份里的书名");
+    expect(body2.data.mode).toBe("new");
+ // 目录名与 project.json 内 name 均为备份名（「目录名 = 书名」不变式）
+    const target = join(root, "books", "备份里的书名", PROJECT_FILE_NAME);
+    expect(existsSync(target)).toBe(true);
+    expect(JSON.parse(readFileSync(target, "utf8")).name).toBe("备份里的书名");
+  });
+
+  it("备份内书名为空串/非法字符（手工改坏的包）→ 兜底「导入的书籍」", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-bad", "bad/name")); // 含 “/” 非法
+    const form = new FormData();
+    form.append("file", new File([bookZip(dir)], "backup.zip"));
+    const res = await buildApp().request("/api/v1/project/import", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: form,
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).data.name).toBe("导入的书籍");
+    expect(existsSync(join(root, "books", "导入的书籍", PROJECT_FILE_NAME))).toBe(true);
+  });
+
+  it("显式传入非法书名 → 400（用户输入仍严格校验，不静默兑底）", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-x", "合法名"));
+    const res = await buildApp().request("/api/v1/project/import", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: importForm(bookZip(dir), "../escape2"),
+    });
+    expect(res.status).toBe(400);
   });
 
   it("创作根未注入（setProjectRoot 未调用）→ 500 INTERNAL_ERROR（防御，同 list）", async () => {
