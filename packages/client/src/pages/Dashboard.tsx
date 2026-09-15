@@ -43,6 +43,7 @@ import { describeExportError, describeImportError } from "../lib/error-messages"
 import { validateBookName } from "../lib/book-name";
 import { entityListHost } from "../lib/entity-paths";
 import { describeOpenError } from "../lib/error-messages";
+import { desktopBridge } from "../lib/desktop";
 import { cn } from "../lib/utils";
 import { navigate } from "../hooks/use-route";
 import { buildBookPath, findOutlineNodeTitle, useProjectStore } from "../stores/project";
@@ -131,6 +132,8 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showPathForm, setShowPathForm] = useState(false);
   const [path, setPath] = useState("");
+  // 桌面版能力桥（浏览器形态为 null → 「浏览…」按钮不渲染；每次渲染取值，桥是无状态对象）
+  const bridge = desktopBridge();
   const [pathError, setPathError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   // 导入备份（Sidebar 独有能力搬入书架主页——zip + 书名，同名二选一冲突态）
@@ -303,6 +306,24 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
       navigate("/overview");
     } catch (err) {
       setBookOpenError(describeOpenError(openErrorCode(err)));
+    }
+  }
+
+  /** 桌面版「浏览…」：原生选目录 → 直接以该路径打开（取消则不动任何状态） */
+  async function handleBrowse() {
+    if (bridge === null || submitting) return;
+    setPathError(null);
+    const picked = await bridge.pickDirectory();
+    if (picked === null) return;
+    setPath(picked);
+    setSubmitting(true);
+    try {
+      await openProjectAt(picked);
+      navigate("/overview");
+    } catch (err) {
+      setPathError(describeOpenError(openErrorCode(err)));
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -714,12 +735,22 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
             </button>
             {showPathForm && (
               <form onSubmit={handleOpenPath} className="mt-2 flex flex-col gap-2 text-left">
-                <Input
-                  value={path}
-                  onChange={(e) => setPath(e.target.value)}
-                  placeholder="/absolute/path/to/project（须含 project.json）"
-                  disabled={submitting}
-                />
+                <div className="flex items-center gap-2">
+                  <div className="flex-1">
+                    <Input
+                      value={path}
+                      onChange={(e) => setPath(e.target.value)}
+                      placeholder="/absolute/path/to/project（须含 project.json）"
+                      disabled={submitting}
+                    />
+                  </div>
+                  {/* 桌面版专属：原生目录选择框直接打开所选项目；浏览器形态无桥 → 不渲染 */}
+                  {bridge !== null && (
+                    <Button disabled={submitting} onClick={() => void handleBrowse()}>
+                      浏览…
+                    </Button>
+                  )}
+                </div>
                 <div>
                   <Button htmlType="submit" disabled={submitting}>
                     打开

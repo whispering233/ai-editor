@@ -538,7 +538,7 @@ components:
 
 **`library-location`（通用 tab 首项，也是当前唯一项）** — 一张 `card`：`section-title`「书库位置」+ 当前路径只读文本（`caption-text` + 超宽 `truncate` + `title` 给全文）+ 行尾 `button-default`「更改…」；卡片底部一行 `caption-text` 说明（更改后应用会重启）。点击「更改…」→ 原生目录框（preload `pickDirectory`）→ 确认后写应用级配置并重启应用。**不新增视觉语言**（全部复用 `card` / `section-title` / `caption-text` / `button-default`）。
 
-**`dashboard-open-path`（书架页「打开其他路径」行，2026-10）** — 原有手输路径 `input` 保留；在其右侧追加 `button-default`「浏览…」（**仅桌面版渲染**，同能力检测）→ 原生目录框 → 选中后直接以该路径打开项目。手输框与按钮同行（输入框 `flex-1`、按钮 `shrink-0`）；浏览器形态只有输入框（现有布局不变）。
+**`dashboard-open-path`（书架页「打开其他路径」行，2026-10）** — 原有手输路径 `input` 保留；在其右侧追加 `button-default`「浏览…」（**仅桌面版渲染**，同能力检测）→ 原生目录框 → 选中后直接以该路径打开项目。手输框与按钮同行：**输入框外包一个 `flex-1` 容器**（不给 antd `Input` 挂布局类——`antd-root-override` 守卫禁止在 antd 组件根元素上挂会被无层 CSS 压掉的类；按钮不挂类，自然尺寸）；浏览器形态只有输入框（现有布局不变）。
 
 ### 备份与云端存档（设置页「备份」+ 左栏底部）
 

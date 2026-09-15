@@ -1,7 +1,11 @@
 // 桌面版 preload（**必须 CJS**：沙箱 preload 不支持 ESM，见 `docs/design/50-desktop.md` §3）。
 //
-// K0 只验证「编译成 .cjs + 被 Electron 按沙箱 preload 加载」这条路径；目录选择能力（
-// `pickDirectory`）属 K2——届时经 `contextBridge` 暴露，**不暴露 fs/shell/ipcRenderer 原语**。
-import { contextBridge } from "electron";
+// 只经 `contextBridge` 暴露**目录选择一个能力**——不暴露 fs / shell / ipcRenderer 原语。
+// 浏览器形态（npm CLI + 浏览器）没有这个桥，client 侧一律能力检测（见 `client/src/lib/desktop.ts`）。
+import { contextBridge, ipcRenderer } from "electron";
 
-contextBridge.exposeInMainWorld("aiEditorDesktop", { ready: true });
+contextBridge.exposeInMainWorld("aiEditorDesktop", {
+  ready: true,
+  /** 弹原生目录选择框；返回选中路径，用户取消返回 null */
+  pickDirectory: (): Promise<string | null> => ipcRenderer.invoke("desktop:pick-directory"),
+});
