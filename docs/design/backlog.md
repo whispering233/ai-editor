@@ -235,6 +235,18 @@
   - 现状：由 AI 的 `get_delta_history` 覆盖（页面不给时间线 UI）。
   - 触发条件：作者频繁需要"逐条回看这个角色改过什么"。
 
+## 桌面版（2026-10 设计定稿，首版未做）
+
+设计契约见 `docs/design/50-desktop.md`。以下为有意顺延项（已在 §9 登记），触发条件写在这里：
+
+- **窗口尺寸/位置记忆** — 现状：每次启动回默认尺寸。触发条件：有用户抱怨布局丢失（与 `localStorage` 面板偏好丢失同源体验问题，一起做）。最小修法：写进 `desktop.json`（一个 `window` 字段），窗口 `resize`/`move` 防抖写入。
+- **macOS 公证 + Windows 代码签名** — 现状：首版不签名（macOS 需右键打开、Windows 有 SmartScreen 提示）。触发条件：**上自动更新（前置条件）**；或下载转化率/安全提示成为反馈主题。升级路径：Apple Developer（$99/年）+ Windows 证书 → `electron-builder` 的 `notarize` / `signtool` 配置。
+- **electron-updater 自动更新** — 现状：手动下载新包。触发条件：签名已做 + 版本发布频率让手动更新成为负担。
+- **端口 +1 时的偏好丢失** — 现状：3456 被别的程序占用时落到 3457，`localStorage` 按 origin 隔离 → 主题/面板偏好重置（一次）。触发条件：真实反馈重复出现。升级路径：自定义协议 `app://` + protocol handler 反代 `/api/*`（需验证 SSE 流透传）；或偏好转经服务端配置持久化。
+- **Linux deb/rpm 包** — 现状：只有 AppImage。触发条件：Linux 用户量起来。
+- **开机自启** — 现状：不做。触发条件：用户要求（与「自动备份需要进程活着的」的期待相关）。
+- **`pnpm deploy` 失效时的 esbuild 兜底** — 现状：主路径未验证通过前不预先实现兜底。触发条件：打包主路径（`pnpm deploy` + electron-builder）被实测证伪（collect 不到 workspace 依赖或原生模块 load 失败）。
+
 ## MVP 明确不做（勿顺手实现）
 
 多标签页并发、undo、token 统计、跨书参考资料导入——为 MVP 边界，实现前需先改产品口径（见 `00-master-design.md`）。

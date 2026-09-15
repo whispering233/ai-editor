@@ -20,6 +20,7 @@
 | **样式** | Tailwind CSS 4（**仅布局 utility，不含颜色**）+ `docs/ui/DESIGN.md` 视觉契约 + `design-discipline.test.ts` 源码扫描 | v4 CSS-first 配置；**antd 样式是运行时无层 CSS，会静默压掉 Tailwind 工具类**——antd 组件根元素上不挂 `w-/h-/px-/py-/justify-/rounded-/text-*` |
 | **Schema 验证** | Zod 4 | 运行时类型安全，**仅 API 入参**（工具参数改用 TypeBox） |
 | **路由** | 轻量 hash-based（自制 `useHashRoute`） | 单页桌面应用不需要 React Router；路由一级化（见 `ui/DESIGN.md`） |
+| **桌面外壳** | Electron **44.3.0**（exact pin）+ electron-builder | 主进程内 in-process 复用整个 Node 侧服务形态，零 server 改动；设计见 `50-desktop.md` |
 
 ## AI 运行时（pi 嵌入形态）
 
@@ -41,7 +42,7 @@
 
 ## 分包方案
 
-五个发布包 + 一个私有前端包：
+五个发布包 + 两个私有包（client / desktop）：
 
 ```
 packages/
@@ -49,8 +50,9 @@ packages/
 ├── db        # 存储层：连接/事务/WAL、schema 版本三态分流、增量迁移、drizzle 查询、项目目录文件存储（参考资料、原子写）
 ├── tools     # 领域工具层：TypeBox 工具定义 + 查询/分析实现 + 提案仓 + 确认后执行的写操作
 ├── agent     # AI 运行时层：pi 嵌入装配（ModelRuntime/SessionManager/AgentSession）、系统提示词、事件→SSE 帧映射
-├── server    # Hono API 层：REST 路由 + SSE 流 + 静态 SPA 托管（顶层装配包）
-└── client    # React SPA（private，不发布）：页面、组件（antd v6 + @ant-design/x）、store、hooks、lib
+├── server    # Hono API 层：REST 路由 + SSE 流 + 静态 SPA 托管（服务端装配包）
+├── client    # React SPA（private，不发布）：页面、组件（antd v6 + @ant-design/x）、store、hooks、lib
+└── desktop   # Electron 外壳（private，不发布）：主进程接线（in-process 启 server）+ preload + 打包配置
 ```
 
 | 包 | 职责边界 | 对外契约 |
@@ -61,13 +63,14 @@ packages/
 | `agent` | pi 运行时装配：模型/凭据/会话/循环接入、系统提示词、事件映射、工具注册 | `AgentSession` 生命周期 API 与事件流；写操作一律走工具提案 |
 | `server` | HTTP/路由/请求校验/项目生命周期（书架）/自动备份/静态托管 | `/api/v1` REST + `POST /chat` SSE（契约见 shared schema + api 文档） |
 | `client` | UI：页面、组件、状态、hash 路由；只消费 shared 类型/常量（编译期消失） | 无对外 API |
+| `desktop` | 桌面外壳：窗口/菜单/preload 目录选择/书库位置配置/日志落盘/electron-builder 打包；**不承载业务逻辑** | 无对外 API |
 
 **约束要点**：
 
-- 依赖只许沿 `shared → db → tools → agent → server`，`client → shared`（仅类型+常量）；禁止反向或旁路依赖。
+- 依赖只许沿 `shared → db → tools → agent → server → desktop`，`client → shared`（仅类型+常量）；禁止反向或旁路依赖。
 - **前端页面组织与后端 API 路由完全解耦**：API 按数据对象类型划分，页面形状/导航层级/hash 路由名变更只动 client。
 - **Zod 校验仅在服务端执行**——client 不打包校验函数（避免 50KB 级依赖进浏览器包）。
-- server 是**顶层装配包**：依赖任一下层方向均合规、无环。
+- server 是**服务端装配包**（依赖任一下层方向均合规、无环）；`desktop` 是**顶层外壳**——只依赖 server，不被任何包依赖。
 
 ## 包依赖链与方向
 
@@ -77,10 +80,11 @@ shared（纯类型/常量/工具，零 Node 依赖，可被 client 安全 tree-s
   ├── tools   ← db（查询/分析直连 db；提案仅返回对象不执行；executor 确认后执行）
   ├── agent   ← pi-coding-agent（模型/循环/会话）+ tools（工具注册）
   ├── server  ← db（GUI 直接读写）+ agent（chat 流）+ tools（提案执行）
-  └── client  ← shared（仅类型/常量）
+  ├── client  ← shared（仅类型/常量）
+  └── desktop ← server（in-process 启动 + 同源加载 SPA）+ electron 44.3.0（exact pin）
 ```
 
-依赖方向图：`shared ← db ← tools ← agent ← server`；`client ← shared`（编译期消失，零运行时依赖）。
+依赖方向图：`shared ← db ← tools ← agent ← server ← desktop`；`client ← shared`（编译期消失，零运行时依赖）。
 
 ### 各包依赖声明
 
@@ -156,9 +160,21 @@ shared（纯类型/常量/工具，零 Node 依赖，可被 client 安全 tree-s
     "zustand": "^5.0.0"
   }
 }
+
+// packages/desktop/package.json（private）
+{
+  "name": "@whispering233/ai-editor-desktop",
+  "dependencies": {
+    "@whispering233/ai-editor-server": "workspace:*"   // 主进程 in-process 启动（唯一运行时依赖）
+  },
+  "devDependencies": {
+    "electron": "44.3.0",                              // exact pin（同 @earendil-works/* 纪律）
+    "electron-builder": "^26.15.3"
+  }
+}
 ```
 
-## 为什么拆六包
+## 为什么拆七包
 
 **核心原则：每个包只有一种理由变更。**
 
@@ -170,6 +186,7 @@ shared（纯类型/常量/工具，零 Node 依赖，可被 client 安全 tree-s
 | `agent` | pi 集成/提示词/事件协议变更 | ❌ 紧耦合 pi + tools |
 | `server` | HTTP/路由变更 | ❌ 应用层 |
 | `client` | UI 变更 | ✅ 纯浏览器端，可换框架 |
+| `desktop` | 外壳/打包/分发变更 | ❌ 紧耦合 server + Electron |
 
 模型接入与对话循环不再单独成包：两者都由 pi 提供，本仓剩下的是**装配与领域工具**——`agent` 一个变更理由（pi 集成）覆盖两者。
 
@@ -195,4 +212,4 @@ import { nanoid } from "nanoid";
 
 ## 运行与部署
 
-本地开发、构建、打包发布、启动流程（端口/绑定/创作根/书架/调试）见 `docs/design/build.md`；配置载体与读写边界见 `docs/design/config.md`。
+本地开发、构建、打包发布、启动流程（端口/绑定/创作根/书架/调试）见 `docs/design/build.md`；配置载体与读写边界见 `docs/design/config.md`；桌面版（Electron 外壳：进程模型/端口策略/打包分发）见 `docs/design/50-desktop.md`。

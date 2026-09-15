@@ -8,6 +8,8 @@ Node ≥ 22.12（engines 声明；CI 用 22）、**全仓 ESM**、pnpm 由根 pa
 
 ⚠ **fresh clone 后先 `pnpm -r build` 再 `pnpm typecheck`**——`dist/` 不入库（gitignore），`@whispering233/ai-editor-*` 的 `types`/`exports` 指向 `./dist/index.d.ts`，不先构建则 tsc 报 TS2307。
 
+**桌面版运行时**：`electron` **44.3.0 exact pin**（内置 Node 24.18.1——同时满足 better-sqlite3 v13 的 Node-API 10 门槛（Node ≥ 22.14）与 pi 的 `engines: node >= 22.19`）；打包用 electron-builder。升级 = 一个显式 commit 抬版本 + 三平台重打包验证（同 pi 依赖纪律）。
+
 ## 本地开发
 
 ```
@@ -22,6 +24,17 @@ pnpm dev            # pnpm -r --parallel run dev
 - 质量门：`pnpm typecheck` / `pnpm lint`（ESLint 9 flat config + typescript-eslint）/ `pnpm test`（vitest；单包 `pnpm --filter <包> test`）。
 - ⚠ **跨包测试的 dist 陷阱（2026-09 实测踩坑）**：`server` 测试经 `@whispering233/ai-editor-tools` 的 **dist** 消费、`tools` 经 `db` 的 dist 消费——改了上游包的 `src` 而不重建，下游套件会**对着旧实现给出假绿灯**（曾导致一张卡的「锚点仅章」守卫在 tools 测试里绿、server 里实际 2 条 fixture 已废却未暴露）。**约定**：凡改动 shared/db/tools 的 `src`，跑下游测试前先 `pnpm --filter @whispering233/ai-editor-db build && pnpm --filter @whispering233/ai-editor-tools build`（或直接用 `pnpm test:packed` 级别的全量重建）。
 - 日常联调用仓库内 `test-project/`（运行时数据不入库）。
+
+**桌面版开发**（两步并行，与现有 dev 共存——窗口指向 Vite，HMR 照常）：
+
+```
+pnpm dev                                  # client(5173) + server(3456) + 各包 tsc --watch
+pnpm --filter @whispering233/ai-editor-desktop dev   # electron：窗口加载 5173（主进程内不启 server）
+```
+
+- 桌面版 dev 态窗口指向 Vite（`http://127.0.0.1:5173`），API 经 Vite proxy 打到 3456——**不在 Electron 里另起一套 server**，否则与 dev server 争端口。
+- `dev` 态必须能跑：Electron 主进程 ESM 入口 + `preload.cts`（沙箱 preload 不支持 ESM，见 `50-desktop.md` §3）。
+- 用户数据（`<userData>/desktop.json` 与日志）在 dev 态落在**开发态 Electron 的 userData**（`app.getName()` 同源），与安装态隔离。
 
 ## 启动流程（生产态 / 单命令部署）
 
@@ -48,11 +61,26 @@ pnpm start:test     # 启动安装态服务
 pnpm test:packed    # 一键串联（backlog #8 打包安装测试：tarball 安装态冒烟）
 ```
 
+### 桌面版（electron-builder）
+
+```
+pnpm --filter @whispering233/ai-editor-desktop build   # tsc：主进程 ESM + preload CJS
+pnpm --filter @whispering233/ai-editor-desktop dist    # electron-builder：当前平台安装包
+pnpm desktop:dist                                      # 根脚本（构建全仓 + 出包，供 CI 用）
+```
+
+- **依赖收集**：先 `pnpm deploy --prod` 生成扁平 app 目录（pnpm 的符号链接树会让打包器漏收 `@whispering233/*` workspace 包）；失败时触发 esbuild bundle 兑底路径（见 `50-desktop.md` §5）。
+- **原生模块**：`asarUnpack` 放 `**/*.node`（asar 内不能 load 原生模块）。
+- **平台矩阵**：win-x64（nsis）/ mac-arm64 + mac-x64（dmg）/ linux-x64（AppImage）。首版**不签名**（macOS 首次需右键打开、Windows 有 SmartScreen 提示——README 写明），因此也**不做自动更新**（electron-updater 在 macOS 要求已签名）。
+- **首次打包必验证三件事**（K0 spike 的硬判据）：① 主进程能 load better-sqlite3 并开库；② 产物含 `*.node` 且能起服务；③ 装出来的包能双击起界面。
+
 发布脚本链：`scripts/sync-version.mjs`（`pnpm release:version X.Y.Z` 同步版本，只改 version 字段）、`scripts/publish-packages.mjs`、`scripts/verify-installed.mjs`（发布后冒烟：先 `npm view` 轮询 5 包 registry 可见，再 mkdtemp 安装并断言 version/`.bin/ai-editor`/短时启动输出「服务已启动」）。
 
 ## 正式发布链路
 
 **发布形态**：5 个包（shared/db/tools/agent/server）全部发布 npm；用户只装 `@whispering233/ai-editor-server`（bin `ai-editor`），其余 4 个包由 npm 自动拉取；`client` 保持 private 不发布（SPA 构建产物随 server 包分发）。发布链路是本仓唯一的 CI（`.github/workflows/`，仅 push `v*` tag 触发）。
+
+**桌面版与 npm 同一 tag 发布**：`.github/workflows/desktop.yml` 与 `publish.yml` 同触发（push `v*` tag），三平台 matrix 产出安装包并挂到该 tag 的 GitHub Release；版本号与根 `version` 同源（`release:version` 一并同步 `desktop` 的 `version` 与 electron-builder 的 `buildVersion`）。⚠ tag 纪律同下（一次只推一个 tag）。
 
 ```
 1. 更新根 CHANGELOG.md：把 Unreleased 条目搬运为新版本段（## [vX.Y.Z] - <日期>）

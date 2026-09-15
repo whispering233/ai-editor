@@ -532,6 +532,14 @@ components:
 **`proposal-card`** — 提案卡：1px 描边卡片 + 确认/拒绝按钮（确认按钮用 `button-primary`，禁用态由 antd 派发）。
 **`toast`** — 全局提示走 antd `message`（`App.useApp()`），顶部居中；`success/error/info` 对应 store 的 `ToastKind`，时长由 store 的 3s 定时器决定（`duration: 3` 对齐）。**命令式反馈的上下文入口**：`AntdProvider` 在 `ConfigProvider` 内部包 `<App component={false}>`（`component={false}` 不渲染包裹 div，不插进三栏 flex 链）——`message`/`notification`/`modal` 需经 `App.useApp()` 取实例才能继承本 Provider 的主题与 locale，不要用静态方法。
 
+### 设置页「通用」区（桌面版专属）
+
+**`tab-general`（设置页二级 tab「通用」，2026-10）** — 设置页二级 tab 顺序 = **通用 → AI 模型 → 项目规则 → 备份**；**「通用」仅在桌面版渲染**（client 能力检测：无 preload 桥则整个 tab 不出现，浏览器形态的 tab 集合与行为完全不变）。
+
+**`library-location`（通用 tab 首项，也是当前唯一项）** — 一张 `card`：`section-title`「书库位置」+ 当前路径只读文本（`caption-text` + 超宽 `truncate` + `title` 给全文）+ 行尾 `button-default`「更改…」；卡片底部一行 `caption-text` 说明（更改后应用会重启）。点击「更改…」→ 原生目录框（preload `pickDirectory`）→ 确认后写应用级配置并重启应用。**不新增视觉语言**（全部复用 `card` / `section-title` / `caption-text` / `button-default`）。
+
+**`dashboard-open-path`（书架页「打开其他路径」行，2026-10）** — 原有手输路径 `input` 保留；在其右侧追加 `button-default`「浏览…」（**仅桌面版渲染**，同能力检测）→ 原生目录框 → 选中后直接以该路径打开项目。手输框与按钮同行（输入框 `flex-1`、按钮 `shrink-0`）；浏览器形态只有输入框（现有布局不变）。
+
 ### 备份与云端存档（设置页「备份」+ 左栏底部）
 
 **`backup-pane`（设置页 → 二级 tab「备份」）** — pane 内走 `sub-nav` 布局：左 160px 固定两项（「自动备份」/「云端备份」，缺省选中自动备份）+ 右侧面板；**选中态是 node state、不进 URL**（刷新回落默认项，与 AI 模型页同款）。两面板**各自一行 `caption-text` 说明**（自动备份沿用原句「跟随书籍：备份与频率均为本项目独立…」；云端面板有独立 intro：云端是备份的另一块磁盘、本地数据不依赖它）。

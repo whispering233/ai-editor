@@ -7,6 +7,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **桌面版（Electron 外壳）设计定稿**：新增 `docs/design/50-desktop.md`（进程模型 / 端口策略 / 配置位置 / preload 契约 / 原生能力边界 / 打包与发布）；`architecture.md` 增第七个包 `packages/desktop` 与 `electron` 44.3.0 exact pin；`build.md` 增桌面版开发/打包/发布链路；`config.md` 登记 `<userData>/desktop.json`；`docs/ui/DESIGN.md` 登记设置页「通用」tab 与书架页「浏览…」按钮；`AGENTS.md` 登记桌面版硬约束。**实现尚未开始**（待排清单见 `docs/design/tasks.md`）。
+
 ## [v0.0.39] - 2026-09-15
 
 > **UX/UI 样式优化批（9 张卡 + 3 张收口 commit）**：卡 0 文档口径先行（`e7dd82f`）→ 卡 2b 层级契约收紧（`9694e5c`）→ 卡 1 大纲缩进列对齐（`eec69d6`）→ 卡 2a 页头「+ 新建卷」（`8b9a5a8`）→ 卡 3 大纲行级新建（`0f7dfc6`）→ 卡 4 设定行级新建（`32a1f19`）→ 卡 5 关联页端点徽标中文（`56de716`）→ 卡 6 只读面板空值（`a15d249`）→ 卡 7 阅读进度徽标（`8b65fe7`）；随后按**独立 oracle 复核**收口三张：注释口径/backlog/清卡/本段（`7f61d68`）、补三处守卫（`1db7b1f`）、用户可见文案不再暴露内部枚举键（`fe9144d`）。每卡一 commit，oracle 代码级复核（PASS 11/PARTIAL 1/FAIL-注释残留 1 → 均已收口）+ 浏览器逐行量测（19 行大纲 / 45 行关联 / 37 行设定）；回归：`pnpm -r build` → typecheck（0 error）→ lint → `pnpm -r test` 全绿（shared 222 / db 281 / client 859 / tools 287 / agent 82 / server 575），`designmd lint docs/ui/DESIGN.md` errors 0（warnings 5 = 预期 orphaned-tokens）。

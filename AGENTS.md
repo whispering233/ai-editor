@@ -9,7 +9,7 @@
 - 任何改动前先读对应文档；发现文档之间或文档与代码矛盾，先停下提问，不要自行发明。
 - 涉及 pi 的行为以 `node_modules` 里实际安装的 `@earendil-works/*`（0.85.1）代码/类型为准，**禁止凭记忆写接口**。
 - 状态与演进：根 `CHANGELOG.md`（逐版本事实）+ `tasks.md`（当前任务卡）+ `backlog.md`（未排期遗留项与有意口径）。云端存档另见 `docs/design/40-cloud-sync.md` 与 `docs/api/100-api-cloud.md`。
-- 运行/构建/发布：`build.md`；配置载体与读写边界：`config.md`。
+- 运行/构建/发布：`build.md`；配置载体与读写边界：`config.md`；桌面版（Electron 外壳）设计：`50-desktop.md`。
 
 ## 协作流程
 
@@ -22,7 +22,7 @@
 
 ## 版本发布
 
-按 `docs/design/build.md`「正式发布链路」执行（当前发布面 = 5 包：shared/db/tools/agent/server）。
+按 `docs/design/build.md`「正式发布链路」执行（当前发布面 = 5 个 npm 包：shared/db/tools/agent/server + 同一 tag 的三平台桌面安装包）。
 
 ## 代码级硬约束（设计文档不承载实现细节，仅此处登记）
 
@@ -56,5 +56,6 @@
 - **关系类型属性单一来源** = shared `RELATION_TYPE_META`（`Record<RelationType, { label, group, symmetric }>`，group ∈ character/structure/anchor/hook/mount/canvas）：client 标签、人物页人↔人子集、对话框排除集、tools 冲突检测的对称口径**一律派生**，禁止再手抄清单。自定义类型语法校验（`trim` 非空 / ≤32 / 禁控制字符）的单一来源 = shared 纯函数（REST schema、db `createRelation` 守卫、client 预校验共用）；AI 工具 `relation_type` 仍是预定义 `z.enum`（有意分层）。
 - **db 打开只有一条管道** = `packages/server/src/middleware/project.ts` 的 `openProjectDatabase`（开机 `detectProject` 与 `POST /project/open` 共用）：迁移前快照、未来版本拒绝（不重建）、无迁移路径才重建兜底；**缺 `data.db` 的「全新空库」直接写 `SCHEMA_VERSION`**（不重置 `outline.json`）。
 - **变异/探针验证**：禁止用硬链接副本 + 就地截断写（会写穿 inode 污染源仓库，真实发生过）；只能 `cp -r` 真副本或 `git worktree`，恢复后必须复跑全量回归（见 `build.md`）。
+- **桌面版（`packages/desktop`）硬约束**（详见 `docs/design/50-desktop.md`）：`electron` **44.3.0 exact pin**（同 pi 纪律：升级 = 显式 commit + 三平台重打包验证）；**preload 必须 CJS**（源文件 `preload.cts`——沙箱 preload 不支持 ESM，而 `sandbox: true` 是既定基线），主进程 ESM；服务走主进程 in-process `startServer()`（**不开子进程**），退出复用 `ServerHandle.close()`；窗口加载 `http://127.0.0.1:<实际端口>` 且**端口固定优先**（3456 → 占用才 +1）——`localStorage` 按 origin 隔离，端口漂移 = 主题/面板偏好重置；应用级配置唯一载体 = `<userData>/desktop.json`（`projectRoot`），**CLI 形态永不读**；桌面包**不得依赖 `process.cwd()` / 命令行参数**；日志落 `<userData>/logs/ai-editor.log`；原生能力只经 preload 的 `pickDirectory()`，client 侧一律能力检测（浏览器形态行为不变）。
 - 测试：各包 `test` script = `vitest run`；各包 tsconfig 已 `exclude: ["src/**/*.test.ts"]`，不要改回——**`*.test.ts` 不进 `pnpm typecheck`**，编译期断言（`satisfies` / 穷尽性检查）必须写在 src 模块里。⚠ **`.test.tsx` 仍会被 typecheck**（exclude 通配不盖 `.tsx`；client 的 SSR 测试属此列——这是**有意保留**：改测试时类型错要在 `pnpm typecheck` 期暴露，真正的隐患是误以为「测试不会被检查」而在测试里写坏类型。**改 shared/db/tools 的 `src` 后先 `pnpm -r build` 再 typecheck/下游测试**：client 的编译期断言与 server/tools 测试读的是上游 **dist**，不重建会给假绿（卡 8.3 oracle 实证）。
 - 延期项：多标签页并发、undo、token 统计、跨书参考资料导入（MVP 不做，勿顺手实现）；其余遗留项与有意口径见 `docs/design/backlog.md`。
