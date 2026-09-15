@@ -8,7 +8,13 @@ import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { startServer, type ServerHandle } from "@whispering233/ai-editor-server";
-import { desktopConfigPath, libraryRootCandidates, readDesktopConfig, writeDesktopConfig } from "./config.js";
+import {
+  desktopConfigPath,
+  libraryRootCandidates,
+  readDesktopConfig,
+  writeDesktopConfig,
+  writeLibraryMarker,
+} from "./config.js";
 import { logFilePath, redirectConsoleToFile } from "./log.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -137,6 +143,9 @@ function resolveLibraryRoot(): string {
           : `[desktop] 原书库位置 ${saved.projectRoot} 不可用 → 改用 ${candidate}`,
       );
     }
+    // 签名文件（幂等）：卸载器只删带它的目录——没有它就无法区分「本应用建的书库」
+    // 与「用户自己早已建好的同名目录」，RMDir 就成了不可恢复的误删。
+    writeLibraryMarker(candidate);
     return candidate;
   }
   throw new Error(`没有可用的书库位置（已尝试：${candidates.join(" → ")}）`);

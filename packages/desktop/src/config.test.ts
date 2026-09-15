@@ -5,11 +5,13 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   desktopConfigPath,
+  libraryMarkerPath,
   libraryRootCandidates,
   parseDesktopConfig,
   readDesktopConfig,
   suggestedLibraryDir,
   writeDesktopConfig,
+  writeLibraryMarker,
 } from "./config.js";
 
 /** 建一个临时目录（每个用例独立，避免互相污染） */
@@ -74,6 +76,25 @@ describe("路径助手", () => {
 
   it("建议书库位置 = 文档目录下的 AI Editor", () => {
     expect(suggestedLibraryDir("/home/me/Documents")).toBe("/home/me/Documents/AI Editor");
+  });
+});
+
+describe("libraryMarker（卸载器的删除依据）", () => {
+  it("路径 = <书库>/.ai-editor/library.json", () => {
+    expect(libraryMarkerPath("/books/mine")).toBe("/books/mine/.ai-editor/library.json");
+  });
+
+  it("写入幂等：已存在则不改（保留首次 createdAt）", () => {
+    const root = tempDir();
+    writeLibraryMarker(root, new Date("2026-01-02T03:04:05.000Z"));
+    const file = libraryMarkerPath(root);
+    expect(JSON.parse(readFileSync(file, "utf-8"))).toEqual({
+      app: "ai-editor",
+      createdAt: "2026-01-02T03:04:05.000Z",
+    });
+    writeLibraryMarker(root, new Date("2030-01-01T00:00:00.000Z"));
+    expect(JSON.parse(readFileSync(file, "utf-8")).createdAt).toBe("2026-01-02T03:04:05.000Z");
+    expect(() => readFileSync(`${file}.tmp`, "utf-8")).toThrow(); // 不留临时文件
   });
 });
 

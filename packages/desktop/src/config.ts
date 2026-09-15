@@ -4,7 +4,7 @@
 // 不能存进它自己的 `<创作根>/.ai-editor/config.json`（那要先知道创作根才能读）；CLI 形态永不读本文件。
 //
 // 本模块只做纯路径/编解码（入参是路径，不碰 `app.getPath`），便于单测与主进程注入。
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 
 /** desktop.json 的结构（当前只有一个键；解析时未知键一律忽略） */
@@ -16,6 +16,18 @@ export interface DesktopConfig {
 /** 配置文件路径：`<userData>/desktop.json` */
 export function desktopConfigPath(userDataDir: string): string {
   return join(userDataDir, "desktop.json");
+}
+
+/**
+ * 书库**签名文件**路径：`<书库>/.ai-editor/library.json`。
+ *
+ * 用途：卸载器只删带这个标记的目录。没有它的话，卸载器只能按目录名猜（如 `Documents\AI Editor`），
+ * 一旦用户早就在那里手工建过同名目录（放自己的东西），`RMDir /r` 就是不可恢复的误删。
+ * 文件名/位置由本应用独占（`.ai-editor/` 不进备份、不参与项目文件），因此「有这个文件」=
+ * 「这个目录是本应用建的/用的」。
+ */
+export function libraryMarkerPath(root: string): string {
+  return join(root, ".ai-editor", "library.json");
 }
 
 /**
@@ -83,5 +95,26 @@ export function writeDesktopConfig(file: string, config: DesktopConfig): void {
   mkdirSync(dirname(file), { recursive: true });
   const tmp = `${file}.tmp`;
   writeFileSync(tmp, `${JSON.stringify(config, null, 2)}\n`, "utf-8");
+  renameSync(tmp, file);
+}
+
+export interface LibraryMarker {
+  /** 固定标识（卸载器看的是「这个文件存不存在」，值只供人排查） */
+  app: "ai-editor";
+  /** 首次标记时间（ISO）；已存在时不覆盖 */
+  createdAt: string;
+}
+
+/**
+ * 写书库签名文件（幂等：已存在则不动它）——每次启动都调，让老书库（标记机制之前创建的）
+ * 也拿到标记，从而能被卸载器正确处理。
+ */
+export function writeLibraryMarker(root: string, at: Date = new Date()): void {
+  const file = libraryMarkerPath(root);
+  if (existsSync(file)) return;
+  mkdirSync(dirname(file), { recursive: true });
+  const marker: LibraryMarker = { app: "ai-editor", createdAt: at.toISOString() };
+  const tmp = `${file}.tmp`;
+  writeFileSync(tmp, `${JSON.stringify(marker, null, 2)}\n`, "utf-8");
   renameSync(tmp, file);
 }

@@ -79,6 +79,8 @@
 
 卸载器默认只删程序文件，书库与 `<userData>` 都留在盘上。`packages/desktop/build/installer.nsh` 的 `customUnInstall` 在卸载前问一次「是否同时清除使用数据」，**默认「否」**（保留，便于重装续用）；选「是」则删 `<文档>/AI Editor`、`<主目录>/AI Editor`、`<userData>\AI Editor`。
 
+**删除前提 = 应用签名文件（安全约束，不可省）**：书库目录名 `AI Editor` 是通用名，用户完全可能早就自己建过同名目录放别的东西——无差别 `RMDir /r` 就是**不可恢复的误删**。因此应用每次启动会在书库下幂等写 `.ai-editor/library.json`（`config.ts` 的 `writeLibraryMarker`，内容 `{ app: "ai-editor", createdAt }`），**卸载器只删带这个文件的目录**；同名但无签名的目录一律跳过（提示文案里写明判断依据）。`<userData>` 的存在性检查用 `desktop.json`（同样是本应用写的）。
+
 **已知取舍（有意，非缺陷）**：卸载器**不解析 `desktop.json`** 去精确定位自定义书库——NSIS 读 UTF-8 JSON 有编码坑、用 PowerShell 回传中文路径同样不稳；改为扫默认候选位置，**自定义位置的书库不会被自动删**，提示文案里明确告知（应用内 设置 → 通用 → 书库位置 可见真实路径）。若将来要做精确定位，正解是应用额外写一份 UTF-16LE 路径镜像供 NSIS 读，而不是在卸载器里解析 JSON。
 
 macOS 无卸载器（拖废纸篓即卸）→ 本机制只对 Windows 生效；将来若需跨平台的「清除数据」，应做成应用内入口（设置页）。

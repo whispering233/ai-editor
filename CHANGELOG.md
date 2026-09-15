@@ -9,7 +9,7 @@
 
 ### Added
 
-- **卸载时的「清除使用数据」选项（Windows）**：新增 `packages/desktop/build/installer.nsh`，卸载前询问一次（**默认「否」**= 保留数据，便于重装续用）；选「是」则清理书库默认候选位置（`<文档>/AI Editor`、`<主目录>/AI Editor`）与 `<userData>\AI Editor`（desktop.json / 日志 / 缓存）。**自定义书库位置不会被自动删**（卸载器不解析 desktop.json——NSIS 读 UTF-8 JSON 有编码坑），提示文案里明确告知。
+- **卸载时的「清除使用数据」选项（Windows）**：新增 `packages/desktop/build/installer.nsh`，卸载前询问一次（**默认「否」**= 保留数据，便于重装续用）；选「是」则清理书库默认候选位置（`<文档>/AI Editor`、`<主目录>/AI Editor`）与 `<userData>\AI Editor`（desktop.json / 日志 / 缓存）。**删除前提 = 应用签名文件**：应用每次启动幂等写入 `<书库>/.ai-editor/library.json`，卸载器只删带这个文件的目录——同名但非本应用创建的目录一律跳过（避免不可恢复的误删）。**自定义书库位置不会被自动删**（卸载器不解析 desktop.json——NSIS 读 UTF-8 JSON 有编码坑），提示文案里写明判断依据。
 
 ### Fixed
 
