@@ -21,7 +21,7 @@ import { useEffect, useState } from "react";
 import type { DragEvent, KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { Button, Input } from "antd";
 import type { OutlineNode } from "@whispering233/ai-editor-shared";
-import { DeleteOutlined, RightOutlined, AimOutlined } from "@ant-design/icons";
+import { DeleteOutlined, PlusOutlined, RightOutlined, AimOutlined } from "@ant-design/icons";
 import { CHILD_TYPE, TYPE_LABEL } from "../components/outline/dialogs";
 import { NodeHookMarkBadge } from "../components/outline/node-hook-badge";
 import { TypeChip } from "@/components/ui/tag-chip";
@@ -679,6 +679,8 @@ export default function Outline() {
       const creatingHere = creatingAt?.parentId === node.id;
       const focused = node.id === focusedNodeId;
       const selected = selectedNodeId === node.id;
+      // 行级新建子级：子类型由本行层级推导；null = 叶子（场），无按钮
+      const childType = CHILD_TYPE[node.type];
       // 行根元素 props（右键菜单 trigger 与普通 div 共用；编辑态退化为普通 div）
       const rowProps = {
         "data-node-id": node.id,
@@ -773,6 +775,20 @@ export default function Outline() {
                 <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-xs text-accent-foreground">
                   阅读进度
                 </span>
+              )}
+              {/* 行级建子级（卡 3，DESIGN.md `data-row`）：卷 → 新建章、章 → 新建场；插在删除左侧
+                  （删除恒贴行尾）；场无合法子层级 → 不渲染。与 Enter 建子级同一路径
+                  （startCreate → 子级末尾就地输入行），成功后新条目选中 + 聚焦 */}
+              {childType !== null && (
+                <Button
+                  color="default"
+                  variant="text"
+                  size="small"
+                  title={`新建${TYPE_LABEL[childType]}`}
+                  aria-label={`在《${node.title}》下新建${TYPE_LABEL[childType]}`}
+                  onClick={() => startCreate(node.id, childType)}
+                  icon={<PlusOutlined className="text-sm" />}
+                />
               )}
               <Button
                 color="default"
