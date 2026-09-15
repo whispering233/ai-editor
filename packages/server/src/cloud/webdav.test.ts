@@ -278,6 +278,30 @@ describe("错误映射（→ HttpError；码表 docs/api/error-code.md）", () =
   });
 });
 
+describe("MKCOL 形态与目录复核（坚果云实测反馈）", () => {
+  it("mkcol 请求 URL 不带尾斜杠（带尾斜杠时部分服务器回 405 却并不创建）", async () => {
+    const spy = vi.fn(() => Promise.resolve(new Response(null, { status: 201 })));
+    vi.stubGlobal("fetch", spy);
+    const client = createWebdavClient({ url: "https://dav.jianguoyun.com/dav", username: "u", password: "p" });
+    await client.mkcol("ai-editor");
+    expect(spy.mock.calls[0]?.[0]).toBe("https://dav.jianguoyun.com/dav/ai-editor");
+    expect(String(spy.mock.calls[0]?.[0])).not.toMatch(/\/$/);
+    vi.unstubAllGlobals();
+  });
+
+  it("405 仍视为「已存在」（不抛错），其它状态抛映射错误并带上路径", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(null, { status: 405 }))));
+    const client = createWebdavClient({ url: "https://dav.example.com/dav", username: "u", password: "p" });
+    await expect(client.mkcol("x")).resolves.toBe(false);
+    vi.unstubAllGlobals();
+
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response("nope", { status: 409 }))));
+    const client2 = createWebdavClient({ url: "https://dav.example.com/dav", username: "u", password: "p" });
+    await expect(client2.mkcol("x")).rejects.toMatchObject({ message: expect.stringContaining("创建目录 x") });
+    vi.unstubAllGlobals();
+  });
+});
+
 describe("不可达文案的底层错误码（卡 C）", () => {
   it("普通 Error 的 cause.code 照旧带上（ECONNREFUSED）", async () => {
     vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("fetch failed", { cause: { code: "ECONNREFUSED" } }))));

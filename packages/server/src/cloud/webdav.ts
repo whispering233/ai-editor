@@ -280,7 +280,10 @@ function describeErrorCause(cause: unknown): string | null {
     },
 
     async mkcol(relPath) {
-      const res = await davFetch("MKCOL", urlOf(relPath, true));
+      // **不带尾斜杠**：RFC 4918 §9.3.1 的示例形态。带尾斜杠时部分服务器（实测坚果云）会回
+      // 405「已存在」却并不创建 → 调用方以为目录就绪，后续 PUT 才 404（误导性极强的错位）。
+      const target = urlOf(relPath, false);
+      const res = await davFetch("MKCOL", target);
       if (res.ok) return true;
       // 405 = 目标已存在（RFC 4918）；301/302 = 部分服务器对已存在目录的规范化跳转
       if (res.status === 405 || res.status === 301 || res.status === 302) return false;

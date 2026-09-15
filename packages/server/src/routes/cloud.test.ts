@@ -240,12 +240,41 @@ describe("POST /api/v1/cloud/test", () => {
     expect(putUrl.endsWith(`/${WEBDAV_WRITE_TEST_FILE}`)).toBe(true);
   });
 
-  it("根目录不存在（404）→ MKCOL 创建，返回 created:true", async () => {
+  it("根目录不存在（404）→ MKCOL 创建 → **复核已存在** → created:true", async () => {
     await putConfig({ url: "https://dav.example.com/dav/ai-editor", username: "u", password: "pw" });
-    const spy = stubHealthy({ PROPFIND: new Response(null, { status: 404 }) });
+    // 第一次 PROPFIND 404（目录不存在）→ MKCOL → 第二次 PROPFIND 207（复核存在）
+    let propfind = 0;
+    const spy = vi.fn((_input: unknown, init?: RequestInit) => {
+      const method = String(init?.method ?? "GET");
+      if (method === "PROPFIND") {
+        propfind += 1;
+        return Promise.resolve(propfind === 1 ? new Response(null, { status: 404 }) : new Response(PROPFIND_ROOT_OK, { status: 207 }));
+      }
+      if (method === "MKCOL" || method === "PUT") return Promise.resolve(new Response(null, { status: 201 }));
+      if (method === "DELETE") return Promise.resolve(new Response(null, { status: 204 }));
+      return Promise.resolve(new Response(null, { status: 200 }));
+    });
+    vi.stubGlobal("fetch", spy);
     const res = await app.request("/api/v1/cloud/test", { method: "POST", headers: HOST_HEADERS });
     expect((await res.json()).data).toMatchObject({ connected: true, created: true });
-    expect(spy.mock.calls.map((c) => String((c[1] as RequestInit).method))).toEqual(["PROPFIND", "MKCOL", "PUT", "DELETE"]);
+    expect(spy.mock.calls.map((c) => String((c[1] as RequestInit).method))).toEqual([
+      "PROPFIND",
+      "MKCOL",
+      "PROPFIND",
+      "PUT",
+      "DELETE",
+    ]);
+  });
+
+  it("MKCOL 之后目录仍不存在（服务器敷衍式应答）→ 502 明确报「目录不存在且创建失败」（不再错位到 PUT 的 404）", async () => {
+    await putConfig({ url: "https://dav.jianguoyun.com/dav/ai-editor", username: "u", password: "pw" });
+    stubHealthy({ PROPFIND: new Response(null, { status: 404 }) }); // 永远列不出来
+    const res = await app.request("/api/v1/cloud/test", { method: "POST", headers: HOST_HEADERS });
+    expect(res.status).toBe(502);
+    const body = (await res.json()) as { error: { code: string; message: string } };
+    expect(body.error.code).toBe("CLOUD_UNREACHABLE");
+    expect(body.error.message).toContain("云盘目录不存在且创建失败");
+    expect(body.error.message).toContain("dav.jianguoyun.com/dav");
   });
 
   it("认证失败（401）→ 502 CLOUD_AUTH_FAILED；不可达（网络错误）→ 502 CLOUD_UNREACHABLE", async () => {

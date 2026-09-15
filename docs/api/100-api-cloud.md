@@ -119,6 +119,8 @@
 
 **错误码**：409 `CLOUD_NOT_CONFIGURED`、502 `CLOUD_AUTH_FAILED` / `CLOUD_UNREACHABLE` / `CLOUD_QUOTA_EXCEEDED`。
 
+**目录准备与诊断**：根目录列不出来（404）→ `MKCOL`（**不带尾斜杠**，部分服务器对 `/path/` 形态回 405 却不创建）→ **复核一次**；复核仍不存在 → 502 `CLOUD_UNREACHABLE`「云盘目录不存在且创建失败：<地址>（确认地址指向你的 WebDAV 根目录，坚果云为 `https://dav.jianguoyun.com/dav`）」。
+
 **「可写不可删」不报认证失败**：写测试文件的 `DELETE` 失败（403/405…）→ 仍返回 200 成功（读 + 写都通过；凭据有效），响应文案提示「测试文件残留，可手动删除」，具体状态码只进日志。`PUT` 失败才是写权限问题（`CLOUD_AUTH_FAILED`）。
 
 **400 文案不回显用户输入**：URL 校验失败的 400 只回显协议段或给固定文案，**不把原始输入串拼进 message**（用户可能把 `ftp://用户名:密码@host` 这类串粘进来）。

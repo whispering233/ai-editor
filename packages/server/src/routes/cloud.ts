@@ -178,9 +178,21 @@ cloudRoutes.post("/test", async (c) => {
   }
   const client = createWebdavClient(webdav);
 
-  // 1) 根目录可达性：列不出来（404）→ 幂等创建
+  // 1) 根目录可达性：列不出来（404）→ 幂等创建 → **复核**（卡：MKCOL 可能被服务器以
+  // 「已存在」等状态敷衍而不真正创建；不复核的话错误会错位到后面的 PUT 上，报 404 让人以为
+  // 是写权限问题）。复核仍不存在 → 报「目录不存在且创建失败」并给出地址与建议。
   const entries = await client.list("");
-  const created = entries === null ? await client.mkcol("") : false;
+  let created = false;
+  if (entries === null) {
+    created = await client.mkcol("");
+    if ((await client.list("")) === null) {
+      throw new HttpError(
+        502,
+        "CLOUD_UNREACHABLE",
+        `云盘目录不存在且创建失败：${webdav.url}（请确认地址指向你自己的 WebDAV 根目录，坚果云为 https://dav.jianguoyun.com/dav；若地址多带了一层不存在的子目录，先删掉它再测）`,
+      );
+    }
+  }
   // 2) 写权限探测：写一个临时小文件再删除。
   // **可写不可删的云盘（DELETE 403/405…）不降级为认证失败**——读 + 写都通过了，凭据有效，只是清理失败；
   // 报 502 AUTH_FAILED 会误导用户去查凭据。这里改为成功 + 提示残留（具体状态码进日志）。
