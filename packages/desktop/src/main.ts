@@ -63,6 +63,33 @@ async function pickDirectory(options: {
 }
 
 /**
+ * 外链一律交系统浏览器（不在 Electron 里开新窗口）。参考资料页有 `target="_blank"` 外链，
+ * 不拦就会弹出没有地址栏的怪窗口；非 http(s) 协议（file: / 自定义协议）直接丢弃。
+ */
+function openExternal(url: string): void {
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    console.log(`[desktop] 外部链接交由系统浏览器: ${url}`);
+    void shell.openExternal(url);
+  } else {
+    console.log(`[desktop] 已拦截非 http(s) 外部导航: ${url}`);
+  }
+}
+
+/** 导航守卫：新窗口一律 deny；顶层导航只允许本机 server 同源（其余转外部浏览器） */
+function guardNavigation(win: BrowserWindow, port: number): void {
+  const origin = `http://127.0.0.1:${port}`;
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    openExternal(url);
+    return { action: "deny" };
+  });
+  win.webContents.on("will-navigate", (event, url) => {
+    if (url === origin || url.startsWith(`${origin}/`)) return; // 同源（含 SPA hash 变化）放行
+    event.preventDefault();
+    openExternal(url);
+  });
+}
+
+/**
  * 解析书库位置（创作根）：已保存 → 直接用；未配置 → 弹原生目录选择框（建议值 `<文档>/AI Editor`）。
  * **不静默创建**；返回 null = 用户取消（调用方退出应用）。
  */
@@ -119,11 +146,13 @@ async function openWindow(): Promise<void> {
     height: 860,
     webPreferences: {
       preload: join(here, "preload.cjs"),
+      // 安全基线（`50-desktop.md` §3）：渲染层跑的是本地 HTTP 页面，不给 Node 权限
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
     },
   });
+  guardNavigation(win, handle.port);
   await win.loadURL(`http://127.0.0.1:${handle.port}`);
 }
 

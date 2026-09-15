@@ -51,7 +51,7 @@
 | :--- | :--- |
 | 目录选择 | preload `pickDirectory()` → 主进程 `dialog.showOpenDialog({properties:['openDirectory']})`。client 侧**能力检测**（无该 API 则不渲染按钮），浏览器形态保留手输路径框 |
 | 应用菜单 | 最小模板：Edit 角色（undo/redo/cut/copy/paste/selectAll）+ reload + devtools（仅 dev）+ 打开书库目录 + 打开日志目录 + quit/close。**macOS 上不设菜单 ⇒ Cmd+C/V 失效**（输入框粘贴全废），菜单是刚需不是装饰 |
-| 外链 | `setWindowOpenHandler` / `will-navigate` 拦截 → `shell.openExternal`。参考资料页有 `target="_blank"` 外链，不拦截会弹出无地址栏的怪窗口 |
+| 外链与导航 | `setWindowOpenHandler` → **一律 deny** + `shell.openExternal`；`will-navigate` 只放行同源 `http://127.0.0.1:<端口>`（含 SPA hash 变化），其余 `preventDefault` 后转外部浏览器；**非 http(s) 协议直接丢弃**（不调 openExternal）。参考资料页有 `target="_blank"` 外链，不拦就弹出无地址栏的怪窗口 |
 | 导出备份 zip | **零改动**：Electron 默认弹保存对话框（只有显式调 `setSavePath` 才会静默落盘） |
 | 不做 | 「在浏览器中打开」入口（web 能力由 CLI 形态承担）、API key 首配向导、托盘、多窗口、拖拽导入、`showDirectoryPicker`（Chromium 的 File System Access API 拿不到绝对路径，对「打开项目」无用） |
 

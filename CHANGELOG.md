@@ -9,6 +9,7 @@
 
 ### Added
 
+- **桌面版导航守卫与沙箱基线复核**：`setWindowOpenHandler` 一律 deny（外链交系统浏览器），`will-navigate` 只放行同源 `http://127.0.0.1:<端口>`（含 SPA hash），非 http(s) 协议直接丢弃；渲染层基线 = `contextIsolation: true` / `nodeIntegration: false` / `sandbox: true`，preload 只暴露 `pickDirectory`。实测（CDP）：`window.open` 返回 null、`location.href` 跳外部域名不导航且落日志、同源 hash 导航正常；**打包态验证 devtools 菜单项不存在**（`devtools 项: false`）。
 - **桌面版壳层：应用菜单 + 日志落盘**：最小应用菜单——**Edit 角色不是装饰**（macOS 上不设菜单 ⇒ Cmd+C/V 失效、输入框全废），自有条目只有「打开书库目录 / 打开日志目录」，devtools 仅在未打包态出现，非 macOS 补「退出」。`console.*` 同时落 `<userData>/logs/ai-editor.log`（**同步追加**：桌面版日志频率低，写即落盘比吐吞量重要——崩溃现场最后几行往往就是死因；写失败静默不阻断创作）。附 8 条日志层单测（格式化/截断/循环对象/stdout 行为不变/追加语义）。
 - **桌面版书架页「浏览…」目录选择闭环**：沙箱 preload 经 `contextBridge` 只暴露 `pickDirectory()`（不暴露 fs/shell/ipcRenderer 原语），主进程 `ipcMain.handle("desktop:pick-directory")` 与首次启动共用同一个原生目录框；client 新增 `lib/desktop.ts` 作为**唯一**能力检测入口（浏览器形态返回 null），书架页「打开其他路径」行据此条件渲染「浏览…」按钮，选中后直接打开该项目。**浏览器形态零变化**（真实浏览器实测无按钮、手输框行为不变；4 条 desktopBridge 单测 + client 863 测试全绿含 `design-discipline` 守卫）。
 - **桌面版「书库位置」落地**：新增 `packages/desktop/src/config.ts`——`<userData>/desktop.json` 的读写（防御解析：非法 JSON/结构不符/相对路径一律当未配置；原子写）。启动流程：已配置→直接用（目录被删则重建）；未配置→弹原生目录选择框（建议值 `<文档>/AI Editor`，**用户取消则退出且不落任何配置**）。主进程从此**不依赖 `process.cwd()` / 命令行参数**。服务启动失败时弹原生错误框 + 退出（桌面版没有终端可看堆栈）。附 8 条配置层单测，`pnpm -r test` 现覆盖 desktop 包。
