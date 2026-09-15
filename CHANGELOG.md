@@ -7,6 +7,10 @@
 
 ## [Unreleased]
 
+## [v0.0.43] - 2026-09-16
+
+> **卸载体验收尾**：清理 electron-builder 安装器留在 `%LOCALAPPDATA%` 的 130MB 缓存副本（`1a6467a`）+ desktop 包名去 scope（让该目录名可读）。回归：build / typecheck / lint / `-r test` 全绿（desktop 21，其余同 v0.0.42）。
+
 ### Changed
 
 - **桌面版包名去 scope**：`@whispering233/ai-editor-desktop` → `ai-editor-desktop`。动因：electron-builder 的 `updaterCacheDirName`（`%LOCALAPPDATA%\<name>-updater\`）**派生自包名且无配置项可覆盖**，带 scope 会生成 `@whispering233ai-editor-desktop-updater` 这种拼音式目录名。private 包不发布，仅影响仓库内引用（`pack.mjs` 的 filter 名 + 文档）。
