@@ -235,9 +235,10 @@ describe("POST /api/v1/cloud/test", () => {
     });
     const methods = spy.mock.calls.map((c) => String((c[1] as RequestInit).method));
     // 探针先建工作子目录再写文件（坚果云等云盘根目录不可写文件），成功路径连子目录一起清掉
-    expect(methods).toEqual(["PROPFIND", "MKCOL", "PUT", "DELETE", "DELETE"]);
+    // 预清理旧探针目录（DELETE）→ MKCOL → PUT → DELETE 文件 → DELETE 目录
+expect(methods).toEqual(["PROPFIND", "DELETE", "MKCOL", "PUT", "DELETE", "DELETE"]);
     // 探测文件名走 `.tmp-` 前缀（推送前清理流程会回收遗留）；本轮起写在**工作子目录内**
-    const putUrl = String((spy.mock.calls[2] as unknown as [unknown])[0]);
+    const putUrl = String((spy.mock.calls[3] as unknown as [unknown])[0]);
     expect(putUrl.endsWith(`/${WEBDAV_WRITE_TEST_FILE}`)).toBe(true);
     expect(putUrl).toContain(`${WEBDAV_WRITE_TEST_DIR}/`);
   });
@@ -263,6 +264,7 @@ describe("POST /api/v1/cloud/test", () => {
       "PROPFIND",
       "MKCOL",
       "PROPFIND",
+      "DELETE", // 预清理旧探针目录
       "MKCOL",
       "PUT",
       "DELETE",
@@ -288,9 +290,9 @@ describe("POST /api/v1/cloud/test", () => {
     expect((await res.json()).data).toMatchObject({ connected: true });
     const calls = spy.mock.calls.map((c) => [String((c[1] as RequestInit).method), String(c[0])] as const);
     // 顺序：PROPFIND 根 → MKCOL 探针目录 → PUT 探针文件（目录内）→ DELETE 文件 → DELETE 目录
-    expect(calls.map(([m]) => m).slice(0, 5)).toEqual(["PROPFIND", "MKCOL", "PUT", "DELETE", "DELETE"]);
-    expect(calls[1]?.[1]).toContain(".tmp-ai-editor-writetest-dir");
-    expect(calls[2]?.[1]).toContain(".tmp-ai-editor-writetest-dir/.tmp-ai-editor-writetest");
+    expect(calls.map(([m]) => m).slice(0, 6)).toEqual(["PROPFIND", "DELETE", "MKCOL", "PUT", "DELETE", "DELETE"]);
+    expect(calls[2]?.[1]).toContain(".tmp-ai-editor-writetest-dir");
+    expect(calls[3]?.[1]).toContain(".tmp-ai-editor-writetest-dir/.tmp-ai-editor-writetest");
   });
 
   it("工作子目录建不出来（不支持 MKCOL）→ 探针退回根目录写法（老行为，不因探针失败而误报）", async () => {

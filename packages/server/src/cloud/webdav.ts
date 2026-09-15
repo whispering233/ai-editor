@@ -72,6 +72,12 @@ export interface WebdavClient {
   move(fromRelPath: string, toRelPath: string): Promise<void>;
   /** 删除文件/目录（幂等：404 视为已删） */
   remove(relPath: string): Promise<void>;
+  /**
+   * 删除**目录**（幂等）：比 `remove` 多两件事——集合用带尾斜杠的 URL，并带 `Depth: infinity`
+   * （RFC 4918 §9.6.1：对集合的 DELETE 需要它；部分服务器（坚果云实测）缺了会拒绝/重定向导致残留）。
+   * 两种形态都失败时抛错（调用方自行决定是否忽略）。
+   */
+  removeDir(relPath: string): Promise<void>;
 }
 
 /** XML 实体反转义（只处理 href 里可能出现的五种 + 数字实体） */
@@ -329,6 +335,16 @@ function describeErrorCause(cause: unknown): string | null {
       const res = await davFetch("DELETE", urlOf(relPath));
       if (res.status === 404) return; // 幂等：已不存在即视为已删
       if (!res.ok) await throwMapped(res, `删除 ${urlOf(relPath)}`);
+    },
+
+    async removeDir(relPath) {
+      // 集合删除：先试「带尾斜杠 + Depth: infinity」（RFC 形态），失败再退回无斜杠形态
+      const withSlash = urlOf(relPath, true);
+      const first = await davFetch("DELETE", withSlash, { headers: { Depth: "infinity" } });
+      if (first.ok || first.status === 404) return;
+      const second = await davFetch("DELETE", urlOf(relPath));
+      if (second.ok || second.status === 404) return;
+      await throwMapped(second, `删除目录 ${urlOf(relPath)}`);
     },
   };
 }

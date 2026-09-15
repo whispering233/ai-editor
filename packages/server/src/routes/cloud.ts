@@ -202,6 +202,8 @@ cloudRoutes.post("/test", async (c) => {
   // 报 502 AUTH_FAILED 会误导用户去查凭据。这里改为成功 + 提示残留（具体状态码进日志）。
   let probeDir: string | null = null;
   try {
+    // 先清历史残留（上一次因删除失败留下的空目录）——顺带验证删除能力
+    await client.removeDir(WEBDAV_WRITE_TEST_DIR).catch(() => undefined);
     await client.mkcol(WEBDAV_WRITE_TEST_DIR); // 幂等：已存在返回 false，同样可用
     probeDir = WEBDAV_WRITE_TEST_DIR;
   } catch (err) {
@@ -217,11 +219,11 @@ cloudRoutes.post("/test", async (c) => {
     console.error("[cloud] 测试文件删除失败（云盘可能不允许删除；凭据本身正常）:", err);
   }
   if (probeDir !== null && !leftover) {
-    // 子目录一并清掉（删不掉不算错：文件已删干净，只留一个空目录）
+    // 子目录一并清掉（用 removeDir：集合删除需要尾斜杠 + Depth: infinity，否则某些云盘不删、留空目录）
     try {
-      await client.remove(probeDir);
-    } catch {
-      /* 忽略：空目录残留无害 */
+      await client.removeDir(probeDir);
+    } catch (err) {
+      console.error("[cloud] 测试目录删除失败（空目录残留，下次「测试连接」会再清一次）:", err);
     }
   }
 

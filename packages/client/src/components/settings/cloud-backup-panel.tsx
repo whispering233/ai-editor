@@ -141,7 +141,9 @@ export function CloudBackupPanel() {
       <SectionCard title="账号配置">
         <p className="mb-3 text-xs text-muted-foreground">
           把备份 zip 推送到你自己的 WebDAV 云盘（坚果云原生支持；其他云盘可用 rclone / AList 自建桥接）。
-          云端是备份的另一块磁盘，本地数据不依赖它，随时可以停用。
+          云端是备份的另一块磁盘，本地数据不依赖它，随时可以停用。地址**建议指向一个专属子目录**
+          （如 <code>https://dav.jianguoyun.com/dav/ai-editor</code>，会自动创建）：否则每本书的目录会直接建在
+          你云盘的根下，和别的文件混在一起。
         </p>
 
         <div className="flex flex-col gap-2">
