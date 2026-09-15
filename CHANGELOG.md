@@ -7,6 +7,10 @@
 
 ## [Unreleased]
 
+## [v0.0.42] - 2026-09-16
+
+> **桌面版健壮性：书库位置回退 + 卸载清理（含签名门禁）**：书库位置三级回退（`c4dca12`）+ 卸载时可清除使用数据、且**只删带签名文件的书库目录**（`54eeee9`）。回归：build / typecheck / lint / `-r test` 全绿（desktop 21，其余同 v0.0.41）。
+
 ### Added
 
 - **卸载时的「清除使用数据」选项（Windows）**：新增 `packages/desktop/build/installer.nsh`，卸载前询问一次（**默认「否」**= 保留数据，便于重装续用）；选「是」则清理书库默认候选位置（`<文档>/AI Editor`、`<主目录>/AI Editor`）与 `<userData>\AI Editor`（desktop.json / 日志 / 缓存）。**删除前提 = 应用签名文件**：应用每次启动幂等写入 `<书库>/.ai-editor/library.json`，卸载器只删带这个文件的目录——同名但非本应用创建的目录一律跳过（避免不可恢复的误删）。**自定义书库位置不会被自动删**（卸载器不解析 desktop.json——NSIS 读 UTF-8 JSON 有编码坑），提示文案里写明判断依据。
@@ -14,6 +18,8 @@
 ### Fixed
 
 - **书库位置解析加 3 级回退**：`<文档>/AI Editor`（文档目录被 OneDrive 重定向时**跳过**——书库内有 SQLite 与备份 zip，不放实时同步盘）→ `<主目录>/AI Editor` → `<userData>/AI Editor`；已保存位置不可用时同样走回退并改写配置，**全部不可用才报错退出**（弹原生错误框）。此前 `mkdirSync` 失败会让首次启动直接崩：Windows 的「文档」是已知文件夹，可能被重定向到并不存在的路径（OneDrive 卸载后的注册表残留）。实测：把 `desktop.json` 指向无权限路径 → 日志出现 `[warn] 书库位置不可用…（EACCES）` + `原书库位置…不可用 → 改用 …`，配置被改写为可用路径且服务正常起来。
+- **卸载删除的签名门禁**（安全性）：书库目录名 `AI Editor` 是通用名，**按名 `RMDir` 会误删用户早先自己建好的同名目录（不可恢复）**。现每次启动幂等写 `<书库>/.ai-editor/library.json`（`writeLibraryMarker`），卸载器**只删带该签名文件的目录**；`<userData>` 的存在性检查用 `desktop.json`（同样是本应用写的）。同名但无签名的目录一律跳过，提示文案里写明判断依据。
+
 ## [v0.0.41] - 2026-09-16
 
 > **导入书名修正 + 桌面打包口径收敛**：修复「导入备份后书名变成备份文件名」（`f67472e`）；打包分工落定（本地只打 Linux 包、CI 只出 Windows 包）。回归：`pnpm -r build` → typecheck → lint → `pnpm -r test` 全绿（server 577 / client 865 / desktop 16，其余同 v0.0.40）。
