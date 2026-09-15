@@ -10,6 +10,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "pnpm run build && electron .",
+    "test": "vitest run",
     "dist": "pnpm run build && node scripts/pack.mjs"
   },
   "dependencies": {
@@ -19,6 +20,7 @@
     "@types/node": "^24.13.3",
     "electron": "44.3.0",
     "electron-builder": "^26.15.3",
-    "typescript": "^5.8.0"
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.10"
   }
 }

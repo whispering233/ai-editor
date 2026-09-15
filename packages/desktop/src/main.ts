@@ -1,29 +1,63 @@
 // 桌面版主进程（ESM）。
 //
-// 职责（`docs/design/50-desktop.md` §1）：主进程内 in-process 启动 server → 窗口加载
-// `http://127.0.0.1:<实际端口>`（与前端相对路径 API_BASE 同源）。**不开子进程**、**不依赖
-// `process.cwd()`**。
-//
-// K0（打包 spike）：创作根暂用 `<userData>/spike-root`；`desktop.json` + 原生选目录属 K1。
-import { app, BrowserWindow } from "electron";
+// 职责（`docs/design/50-desktop.md` §1/§2）：解析书库位置（`<userData>/desktop.json`，首次启动弹
+// 原生目录选择框）→ 主进程内 in-process 启动 server → 窗口加载 `http://127.0.0.1:<实际端口>`
+// （与前端相对路径 API_BASE 同源）。**不开子进程**、**不依赖 `process.cwd()` / 命令行参数**。
+import { app, BrowserWindow, dialog } from "electron";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { startServer, type ServerHandle } from "@whispering233/ai-editor-server";
+import { desktopConfigPath, readDesktopConfig, suggestedLibraryDir, writeDesktopConfig } from "./config.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-/** K0 spike 创作根（K1 起改为读 `<userData>/desktop.json`） */
-const SPIKE_ROOT_NAME = "spike-root";
-
 let handle: ServerHandle | null = null;
 
-async function openWindow(): Promise<void> {
-  const root = join(app.getPath("userData"), SPIKE_ROOT_NAME);
-  mkdirSync(root, { recursive: true });
+/**
+ * 解析书库位置（创作根）：已保存 → 直接用；未配置 → 弹原生目录选择框（建议值 `<文档>/AI Editor`）。
+ * **不静默创建**；返回 null = 用户取消（调用方退出应用）。
+ */
+async function resolveLibraryRoot(): Promise<string | null> {
+  const configFile = desktopConfigPath(app.getPath("userData"));
+  const saved = readDesktopConfig(configFile);
+  if (saved !== null) {
+    mkdirSync(saved.projectRoot, { recursive: true }); // 目录被手工删掉时重建（创作根只是容器）
+    return saved.projectRoot;
+  }
 
-  // openBrowser:false —— 桌面版自带窗口，不要再拉起系统浏览器
-  handle = await startServer(root, { openBrowser: false });
+  const { canceled, filePaths } = await dialog.showOpenDialog({
+    title: "选择书库位置",
+    message: "书籍、备份与对话历史都会存放在这个目录里（可稍后在设置中更改）",
+    buttonLabel: "使用此目录",
+    defaultPath: suggestedLibraryDir(app.getPath("documents")),
+    properties: ["openDirectory", "createDirectory"],
+  });
+  const chosen = filePaths[0];
+  if (canceled || chosen === undefined) return null;
+
+  mkdirSync(chosen, { recursive: true });
+  writeDesktopConfig(configFile, { projectRoot: chosen });
+  return chosen;
+}
+
+async function openWindow(): Promise<void> {
+  const root = await resolveLibraryRoot();
+  if (root === null) {
+    console.log("[desktop] 未选择书库位置，退出");
+    app.quit();
+    return;
+  }
+
+  try {
+    // openBrowser:false —— 桌面版自带窗口，不再拉起系统浏览器
+    handle = await startServer(root, { openBrowser: false });
+  } catch (err) {
+    console.error("[desktop] 服务启动失败", err);
+    dialog.showErrorBox("AI Editor 启动失败", err instanceof Error ? err.message : String(err));
+    app.quit();
+    return;
+  }
   console.log(`[desktop] server: http://127.0.0.1:${handle.port} root=${root}`);
 
   const win = new BrowserWindow({

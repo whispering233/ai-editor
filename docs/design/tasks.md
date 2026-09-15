@@ -8,14 +8,14 @@
 
 ---
 
-## 当前任务卡：桌面版（Electron 外壳）K1–K6
+## 当前任务卡：桌面版（Electron 外壳）K2–K6
 
-设计契约 = `docs/design/50-desktop.md`（唯一事实源，§7 已录 K0 实测结论）。卡序 K1 → K2 → K3 → K4 → K5 → K6。
+设计契约 = `docs/design/50-desktop.md`（唯一事实源，§7 已录 K0 实测结论）。卡序 K2 → K3 → K4 → K5 → K6。
 
-（P12 pnpm 11.22.0 → 12.4.2 已完成：clean install + 四道门全绿 + `test:packed` + `desktop:dist`（已去 `--legacy`）均过；顺带查明 Electron 42+ 已移除 postinstall 改懒下载。K0 打包 spike 已完成：`packages/desktop` 骨架 + electron-builder 出 AppImage；三条判据均过，另修 server bin 自检在 Electron 下的 `argv[1]` 崩溃。）
+（已完成：**D0** 设计定稿 → **P12** pnpm 12.4.2 升级（含去 `--legacy`）→ **K0** 打包 spike（AppImage 出包 + 打包体实测）→ **K1** 书库位置（`desktop.json` + 首次启动原生选目录 + 重启动直达上次的书）。
+⚠ **待人工验证（本机 WSLg 无法断言）**：原生目录选择框的**可见性与交互**——WSLg 下 GTK 文件对话框挂起（最小 Electron 对照实验同样挂起，非本仓代码问题）。首次流程的逻辑分支已证（无 server 启动、不写配置、进程等待）。需在真实 Linux 桌面 / macOS / Windows 上点一次。
 
-- [ ] **K1 书库位置** — `<userData>/desktop.json` 读写 + 首次启动原生目录框（建议值 `<documents>/AI Editor`）+ 启动接线（**替代 `process.cwd()` / `argv[2]`**，当前是 K0 的 `spike-root` 临时目录）。**判据**：删配置能重现首次流程；有配置时重启直达上次的书。
-- [ ] **K2 目录选择闭环** — preload `pickDirectory` + client 能力检测 + 书架页「浏览…」按钮（`DESIGN.md` `dashboard-open-path`）。**判据**：桌面版弹原生框且能直开；浏览器形态按钮不渲染、手输路径行为与现有测试不变。
+- [ ] **K2 目录选择闭环** — preload `pickDirectory` + client 能力检测 + 书架页「浏览…」按钮（`DESIGN.md` `dashboard-open-path`）。**判据**：桌面版弹原生框且能直开（交互验证同受 WSLg 限制）；浏览器形态按钮不渲染、手输路径行为与现有测试不变。
 - [ ] **K3 壳层** — 应用菜单（Edit 角色 + 打开书库目录 + 打开日志目录 + reload/devtools）+ console → `<userData>/logs/ai-editor.log`。**判据**：macOS Cmd+C/V 可用；日志文件含启动日志。
 - [ ] **K4 安全与导航** — `setWindowOpenHandler` / `will-navigate` → `shell.openExternal` + 沙箱基线复核。**判据**：参考资料页外链在系统浏览器打开；生产包不暴露 devtools。
 - [ ] **K5 切换书库** — 设置页二级 tab「通用」+「书库位置」项（`DESIGN.md` `library-location`）→ 写配置 + `app.relaunch()`。**判据**：切换后重启落在新书库；浏览器形态无该 tab。
