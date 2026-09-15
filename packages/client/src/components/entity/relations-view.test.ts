@@ -1,8 +1,9 @@
 // RelationsView 纯逻辑测试（U8 关联 tab）：仓库无 jsdom / @testing-library 环境（node 纯逻辑测试），
 // 只测过滤纯函数 filterRelations——前端过滤是关联视图的核心（服务端不支持「任一端」OR 与名称模糊）。
 import { describe, expect, it } from "vitest";
+import { ENTITY_TYPES, ENTITY_TYPE_LABELS } from "@whispering233/ai-editor-shared";
 import type { RelationSummaryItem } from "../../lib/api";
-import { EMPTY_RELATION_FILTER, filterRelations } from "./relations-view";
+import { EMPTY_RELATION_FILTER, ENDPOINT_TYPE_LABEL, filterRelations } from "./relations-view";
 
 const makeRel = (over: Partial<RelationSummaryItem> & { id: string }): RelationSummaryItem => ({
   sourceType: "character",
@@ -137,5 +138,19 @@ describe("filterRelations（关联总览前端过滤）", () => {
       relationType: "rival",
     });
     expect(none).toHaveLength(0);
+  });
+});
+
+// 端点类型徽标文案（卡 5）：曾手抄一张只含四类的表，导致 event/timepoint/reference 在关联页
+// 原样显示英文；改为派生 shared `ENTITY_TYPE_LABELS` 后本条守住「新增实体类型不再漏中文名」。
+describe("ENDPOINT_TYPE_LABEL（端点类型徽标中文名）", () => {
+  it("覆盖全部实体类型（与 shared 同名同值）+ 大纲节点", () => {
+    for (const t of ENTITY_TYPES) {
+      expect(ENDPOINT_TYPE_LABEL[t]).toBe(ENTITY_TYPE_LABELS[t]);
+    }
+    expect(ENDPOINT_TYPE_LABEL.outline_node).toBe("大纲节点");
+    expect(ENDPOINT_TYPE_LABEL.event).toBe("事件");
+    expect(ENDPOINT_TYPE_LABEL.timepoint).toBe("时间点");
+    expect(ENDPOINT_TYPE_LABEL.reference).toBe("参考资料");
   });
 });

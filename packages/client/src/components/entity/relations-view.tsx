@@ -12,7 +12,7 @@
 // （source_type+source_id，depth=1），隐藏前端过滤区（列表短，无过滤必要）。
 // 样式 token 类（禁止硬编码色类）。
 import { useEffect, useState } from "react";
-import { ENTITY_TYPES, RELATION_TYPES } from "@whispering233/ai-editor-shared";
+import { ENTITY_TYPES, RELATION_TYPES, ENTITY_TYPE_LABELS } from "@whispering233/ai-editor-shared";
 import { ApiError, CLIENT_NETWORK_ERROR, deleteRelation, listRelations } from "../../lib/api";
 import type { RelationSummaryItem } from "../../lib/api";
 import { relationTypeLabel } from "../../lib/entity-detail";
@@ -28,12 +28,11 @@ import { DeleteOutlined, SearchOutlined } from "@ant-design/icons";
 import { navigate } from "../../hooks/use-route";
 import { useUiStore } from "../../stores/ui";
 
-/** 端点类型 → 中文徽标（relation_records 端点类型；未知原样显示） */
+/** 端点类型 → 中文徽标（`relation_records` 端点类型）：实体类型中文名的**单一来源 = shared `ENTITY_TYPE_LABELS`**
+ * （曾在本文件手抄一张只含四类的表 → `event` / `timepoint` / `reference` 徽标原样漏出英文）；
+ * `outline_node` 不是实体类型（大纲节点），单独补上。未知类型仍原样显示（不骗人）。 */
 export const ENDPOINT_TYPE_LABEL: Record<string, string> = {
-  character: "人物",
-  setting: "设定",
-  location: "地点",
-  hook: "伏笔",
+  ...ENTITY_TYPE_LABELS,
   outline_node: "大纲节点",
 };
 
