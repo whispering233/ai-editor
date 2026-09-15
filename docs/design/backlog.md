@@ -64,6 +64,14 @@
   - 反代把 href 重写成与请求前缀不一致的形态 → 不剥离前缀（避免误剔），代价是该形态下根自身条目回到列表（`list` 的「不含自身」保证只在 href 前缀一致时成立）。
   - href 段解码出 `/`（`%2F`）时 `path` 的段往返错位 → 不剥离、`path` 非 base 相对（极端文件名，接受）；根治需 `parsePropfind` 直接返回段数组。
 
+- **`PUT /cloud/config` 省略 `device`（undefined）的 REST 层断言缺失**（设备名预填修正的 oracle 登记）
+  - 现状：「省略 = 不修改配置值」的语义只在 `state.test.ts` 间接覆盖（「清除凭据但设备名非空 → 保留设备名」），REST 层没有显式用例。
+  - 触发条件：改动 `writeCloudConfig` 的 device 分支时先补这条断言。
+- **`client/src/stores/cloud.test.ts` 的 `status()` 夹具缺 `deviceConfigured`**（同上登记）
+  - 因为用 `} as CloudStatus` 断言绕过类型检查，新字段在 store 侧无守卫；下次改该夹具时顺带补上。
+- **面板说明行的派生值兜底用 `??` 而非 `||`**（同上登记，nit）
+  - `status?.device ?? "（读取中）"` 挡不住空串（仅当 `hostname()` 派生为空才可能，极边缘）。
+
 - **`refresh()` 在途时点「同步云端」会静默早退**（卡 C oracle 登记，可选）
   - 现状：`syncNow` 首行 `if (get().busy !== null) return;`——状态检查在途时（打开项目后那几秒）用户点按钮没有 toast、没有排队，表现为「点了没反应」。
   - 最小修法：早退时给一句中性 toast（「正在读取云端状态…」）或把点击排到 `inFlight` 之后。

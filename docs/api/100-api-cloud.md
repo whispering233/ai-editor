@@ -30,6 +30,9 @@
   url: string | null;         // 回显（**不含密码**）
   username: string | null;
   device: string;             // **生效**设备名（用户设过取配置值；没设过 = 简化 hostname 派生：去域名后缀、滤非法字符、剥首尾空白与 `_`、截 16 字符）
+  deviceConfigured: boolean;  // 用户**是否显式设过**设备名（cloud.json 的 webdav.device 存在且合法）；
+                              //   false 时 `device` 是 hostname 派生值，设置页**不预填**（否则「只点保存」
+                              //   会把派生值钉进配置，从此不再跟随 hostname）
   autoPush: boolean;          // 自动推送开关（本机级，缺省 false）
   projectId: string | null;   // 当前打开的项目 id（无项目 → null，下面两段为 null）
   remote: null | {

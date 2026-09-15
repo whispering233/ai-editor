@@ -1,7 +1,7 @@
 // 云端配置表单的纯函数（卡 3）：表单状态 ↔ API 补丁 / 预填 / 脏判定
 //
 // 为什么独立成模块：表单到请求的映射有几条容易搞错的语义（密码留空不提交、空串清空、
-// 凭据不全时不提交密码、设备名预填生效值），把它们收敛成可单测的纯函数，面板组件只管渲染与副作用。
+// 凭据不全时不提交密码、设备名只在「用户设过」时预填），把它们收敛成可单测的纯函数，面板组件只管渲染与副作用。
 //
 // 契约：`docs/api/100-api-cloud.md` 的 `PUT /cloud/config`（卡 2 服务端语义）、
 // `docs/design/40-cloud-sync.md` §7（凭据三件套要么齐、要么全无）、`docs/ui/DESIGN.md` §备份与云端存档。
@@ -23,9 +23,10 @@ export const EMPTY_CLOUD_CONFIG_FORM: CloudConfigForm = { url: "", username: "",
  * 由 status 预填表单：
  * - `url` / `username`：回显已配置值（未配置 → 空串）
  * - `password`：**恒为空串**（服务端从不回传；留空 = 保留原值）
- * - `device`：预填**当前生效值**（配置值或 hostname 派生值）。字段可见 = 不隐藏「实际会写进备份文件名的是什么」；
- *   清空该字段再保存 = 回退 hostname 派生（`PUT /cloud/config` 的 `device: ""` 语义）。
- *   代价（已登记）：首次保存会把当前的 hostname 派生值显式写进 cloud.json——机器改名后需手动改设备名。
+ * - `device`：**只在 `deviceConfigured`（用户显式设过）时预填该值；没设过 → 空串**
+ *   （预填生效值会让「没碰设备名、只点保存」把派生值写进 `cloud.json`，从此不再跟随 hostname——已修）；
+ *   空串再保存 = 保持 / 回到 hostname 派生（`PUT /cloud/config` 的 `device: ""` 语义）；
+ *   「最终会写成什么名字」由面板说明行给出（`留空 = 用本机名 <生效值>`），不靠预填表达。
  */
 export function cloudConfigFormFrom(status: CloudStatus | null): CloudConfigForm {
   if (status === null) return { ...EMPTY_CLOUD_CONFIG_FORM };
