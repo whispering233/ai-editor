@@ -55,8 +55,8 @@
 
 ## 5. 打包与发布
 
-- **工具**：electron-builder（多平台安装包格式开箱即用）+ `pnpm deploy --prod --legacy` 生成扁平部署目录（pnpm 符号链接树会让打包器漏收 `@whispering233/*` workspace 依赖）。兜底方案 = esbuild 把主进程与 workspace 依赖 bundle 成单文件 + better-sqlite3 external + 手工拷 `.node`。
-  - **`--legacy` 是必须的（实测）**：pnpm 11 默认拒结非 injected workspace 的 deploy（`ERR_PNPM_DEPLOY_NONINJECTED_WORKSPACE`，v12.2.0 起才放开）——而开启 `injectWorkspacePackages` 会改变全仓 node_modules 布局，代价远大于一个 flag。
+- **工具**：electron-builder（多平台安装包格式开箱即用）+ `pnpm deploy --prod` 生成扁平部署目录（pnpm 符号链接树会让打包器漏收 `@whispering233/*` workspace 依赖）。兜底方案 = esbuild 把主进程与 workspace 依赖 bundle 成单文件 + better-sqlite3 external + 手工拷 `.node`。
+  - **`--legacy` 已不需要（pnpm 12 起）**：pnpm 11 默认拒结非 injected workspace 的 deploy（`ERR_PNPM_DEPLOY_NONINJECTED_WORKSPACE`），12.2+ 的默认实现把链接的 workspace 依赖改写成 `file:` 写入专用 deploy lockfile——升级后 `pack.mjs` 已去担此 flag，且打包产物经实测可用（窗口 + preload + 建库全通）。若将来被要求降回 pnpm 11，需重新加回。
   - **`electron-builder` 需显式 `linux.executableName`（实测）**：应用目录 package.json 的 name 带 scope（`@whispering233/...`）→ 推导出的可执行名含 `@`，AppImage 工具链拒收（仅允许字母/数字/`-`/`_`/`.`/空格）。另需 `npmRebuild: false`（N-API 模块无需针对 Electron 重编译）。
 - **原生模块**：`asarUnpack` 放 `**/*.node`。better-sqlite3 v13 是 N-API（`NAPI_VERSION=10`）+ 预编译 8 平台 `.node`，在 Electron 44.3.0（内置 Node 24.18.1）**免 rebuild 直接可用**——已实测（dev 态与打包态各建库一次）。
 - **平台矩阵**：win-x64（nsis）/ mac-arm64 + mac-x64（dmg）/ linux-x64（AppImage）。
@@ -77,7 +77,7 @@
 三条假设均已在 Linux x64 + Electron 44.3.0 上跑通（`pnpm --filter @whispering233/ai-editor-desktop dist` 一键出 AppImage）：
 
 1. **better-sqlite3 免 rebuild** ✓：Electron 44.3.0 内置 Node 24.18.1 ≥ Node-API 10 门槛（Node 22.14），N-API 预编译 `.node` 直接 load——开发态与打包态各建库一次（`data.db` + 表结构正确），未做任何 electron-rebuild。
-2. **`pnpm deploy --legacy` 能收集 workspace 依赖** ✓：`.deploy/app` 自包含（`node_modules/.pnpm` 在目标目录内、无 electron/typescript 泄漏），打包产物 `resources/app.asar.unpacked` 内含 `better-sqlite3/prebuilds/linux-x64.node`。
+2. **`pnpm deploy` 能收集 workspace 依赖** ✓：`.deploy/app` 自包含（`node_modules/.pnpm` 在目标目录内、无 electron/typescript 泄漏），打包产物 `resources/app.asar.unpacked` 内含 `better-sqlite3/prebuilds/linux-x64.node`。
 3. **打包产物能起界面** ✓：`release/linux-unpacked/ai-editor` 启动后 server 监听、窗口加载 `http://127.0.0.1:3456/`（React 挂载出书架页 UI），CDP 读到 `window.aiEditorDesktop = { ready: true }`（**沙箱 preload 的 CJS 产物加载成功**），并经 HTTP 建成项目。
 
 **顺带修掉的真实缺陷**（桌面版暴露的）：server 的 bin 自检 `realpathSync(process.argv[1])` 在 Electron 主进程里收到命令行开关（`--no-sandbox`）→ 抛 ENOENT 打挂整个主进程。现改为 try/catch 包裹、解析失败即判否（bin 语义不变）。

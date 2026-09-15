@@ -4,7 +4,7 @@
 
 ## 运行环境
 
-Node ≥ 22.12（engines 声明；CI 用 22）、**全仓 ESM**、pnpm 由根 package.json `packageManager: "pnpm@11.22.0"` 钉版本（CI `pnpm/action-setup` 同版本——两侧必须一致，不一致 publish.yml 报 Multiple versions）。pnpm-workspace.yaml `allowBuilds` 至少含 `better-sqlite3`/`esbuild`/`@google/genai`/`protobufjs`；引入新的原生/含 postinstall 的依赖时按 pnpm 安装提示补充批准项。
+Node ≥ 22.12（engines 声明；CI 用 22）、**全仓 ESM**、pnpm 由根 package.json `packageManager: "pnpm@12.4.2"` 钉版本（CI `pnpm/action-setup` 读同一字段——两侧天然一致）。pnpm-workspace.yaml `allowBuilds` 至少含 `better-sqlite3`/`esbuild`/`@google/genai`/`protobufjs`；引入新的原生/含 postinstall 的依赖时按 pnpm 安装提示补充批准项。
 
 ⚠ **fresh clone 后先 `pnpm -r build` 再 `pnpm typecheck`**——`dist/` 不入库（gitignore），`@whispering233/ai-editor-*` 的 `types`/`exports` 指向 `./dist/index.d.ts`，不先构建则 tsc 报 TS2307。
 
@@ -66,11 +66,12 @@ pnpm test:packed    # 一键串联（backlog #8 打包安装测试：tarball 安
 ```
 pnpm --filter @whispering233/ai-editor-desktop build   # tsc：主进程 ESM + preload CJS（一个 tsconfig，.cts）
 pnpm --filter @whispering233/ai-editor-desktop start   # 开发：构建后 electron .（in-process 起 server）
-pnpm desktop:dist                                      # 全仓构建 + pnpm deploy --legacy + electron-builder（供 CI 用）
+pnpm desktop:dist                                      # 全仓构建 + pnpm deploy + electron-builder（供 CI 用）
 ```
 
-- **打包三段**：`pnpm -r build` → `pnpm --filter <desktop> deploy --prod --legacy packages/desktop/.deploy/app` → `electron-builder --config electron-builder.yml`（封装在 `packages/desktop/scripts/pack.mjs`）。`--legacy` 不可省（pnpm 11 默认拒结非 injected workspace），`electron-builder.yml` 里 `npmRebuild: false` + `linux.executableName` 不可省（原因见 `50-desktop.md` §5 实测栏）。
-- **首次装 electron 二进制可能很慢**（从 GitHub 下载 ~100MB）：可临时给环境变量 `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ ELECTRON_CUSTOM_DIR='{{ version }}'`（**不写进仓库配置**——CI 与其他开发者的拉取源不应被改写）。
+- **打包三段**：`pnpm -r build` → `pnpm --filter <desktop> deploy --prod packages/desktop/.deploy/app` → `electron-builder --config electron-builder.yml`（封装在 `packages/desktop/scripts/pack.mjs`）。`electron-builder.yml` 里 `npmRebuild: false` + `linux.executableName` 不可省（原因见 `50-desktop.md` §5 实测栏）。
+- **Electron 二进制不再随 install 下载**（Electron 42+ 移除 postinstall，改懒下载）：`pnpm install` 不碰二进制；开发态首次 `pnpm --filter <desktop> start` 会打印 `Downloading Electron binary...` 并下载（此时才需要 `ELECTRON_MIRROR`）；打包时 electron-builder 自行下载所需二进制。`ELECTRON_SKIP_BINARY_DOWNLOAD` 已失效，手动预下载用 `pnpm --filter <desktop> exec install-electron --no`。
+- **首次装 electron 二进制可能很慢**（从 GitHub 下载 ~100MB）：可临时给环境变量 `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ ELECTRON_CUSTOM_DIR='{{ version }}'`（**不写进仓库配置**——CI 与其他开发者的拉取源不应被改写）；该变量只在开发态首次启动（懒下载）与 `install-electron` 手动预下载时生效。
 - **原生模块**：`asarUnpack` 放 `**/*.node`，产物在 `release/linux-unpacked/resources/app.asar.unpacked/`。
 - **平台矩阵**：win-x64（nsis）/ mac-arm64 + mac-x64（dmg）/ linux-x64（AppImage）。首版**不签名**（macOS 首次需右键打开、Windows 有 SmartScreen 提示——README 写明），因此也**不做自动更新**（electron-updater 在 macOS 要求已签名）。
 - **本地占用**：`.deploy/`（依赖部署，约 220MB）与 `release/`（含 AppImage ~158MB）均不入库（gitignore）；`pack.mjs` **在 finally 里清 `.deploy`**——留在 workspace 内会让 pnpm 的依赖状态检查误判（`.deploy/app` 是 workspace 外的 package.json + node_modules，之后任何 `pnpm` 脚本都会报「需重建 modules 目录」而中止）。

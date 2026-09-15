@@ -21,8 +21,8 @@ function run(cmd, args, cwd = pkgDir) {
 rmSync(deployDir, { recursive: true, force: true });
 
 try {
-  // --legacy：pnpm 11 默认拒绝非 injected workspace 的 deploy（v12.2.0 起才放开）
-  run("pnpm", ["--filter", packageName, "deploy", "--prod", "--legacy", deployApp]);
+  // pnpm 12.2+ 的 deploy 默认实现不再要求 injected workspace（链接的 workspace 依赖会改写成 file:）
+  run("pnpm", ["--filter", packageName, "deploy", "--prod", deployApp]);
 
   // 目标平台参数透传（如 `--linux AppImage` / `--mac dmg` / `--win nsis`），缺省用配置里的默认
   run("pnpm", ["exec", "electron-builder", "--config", "electron-builder.yml", ...process.argv.slice(2)]);
