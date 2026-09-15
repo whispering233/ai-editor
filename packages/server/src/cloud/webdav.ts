@@ -64,6 +64,12 @@ export interface WebdavClient {
   list(relPath: string): Promise<DavEntry[] | null>;
   /** 创建目录（幂等）：true = 本次创建；false = 已存在（405） */
   mkcol(relPath: string): Promise<boolean>;
+  /**
+   * 幂等确保**工作区**存在：先建用户云盘根（`options.url`），再建工作根 `<云盘根>/ai-editor`。
+   * 返回 `true` = 本次创建了工作根（对外 `/cloud/test` 的 `created` 语义）。用户把地址填成一个
+   * 还不存在的路径时也能自愈（父目录缺失会抛错，由调用方转成可读文案）。
+   */
+  ensureWorkingRoot(): Promise<boolean>;
   /** 上传（PUT）：覆盖同名文件 */
   put(relPath: string, body: Uint8Array): Promise<void>;
   /** 下载（GET）：文件不存在（404）→ null */
@@ -164,8 +170,19 @@ function isSelf(entryPath: string, relPath: string): boolean {
 }
 
 /** 创建 WebDAV 客户端（每个云端操作会话一个；无内部状态） */
+/**
+ * 应用在用户云盘根**下面**固定使用的子目录名（工作根）。**唯一拼接点就在本函数**：
+ * `cloud.json` 的 `webdav.url` 与设置页里，都只表达「用户的云盘根」（如 `https://dav.jianguoyun.com/dav`），
+ * 用户不需要知道我们怎么放东西；实际读写一律发生在 `<云盘根>/ai-editor/…` 下。
+ * 好处：设计语义留在应用侧（用户云盘根不被书目录污染），配置里也不出现我们的目录约定。
+ */
+export const CLOUD_WORK_DIR = "ai-editor";
+
 export function createWebdavClient(options: WebdavClientOptions): WebdavClient {
-  const base = options.url.replace(/\/+$/, "");
+  // 拼工作根（唯一处）：无论前端传什么（云盘根 / 带尾斜杠 / 恰好已经带了 `ai-editor`），
+  // 都在其后追加一段 `ai-editor` —— 不做「截断再拼回」的迁移分支，保持单一路径。
+  const baseWithoutWork = options.url.replace(/\/+$/, "");
+  const base = `${baseWithoutWork}/${CLOUD_WORK_DIR}`;
   const timeoutMs = options.timeoutMs ?? DEFAULT_WEBDAV_TIMEOUT_MS;
   const authHeader = `Basic ${Buffer.from(`${options.username}:${options.password}`, "utf8").toString("base64")}`;
 
@@ -291,6 +308,20 @@ function describeErrorCause(cause: unknown): string | null {
           path: toBaseRelativeSegments(entry.path === "" ? [] : entry.path.split("/")).join("/"),
         }))
         .filter((entry) => !isSelf(entry.path, relPath));
+    },
+
+    async ensureWorkingRoot() {
+      // 用户云盘根：可能是用户随手写的还不存在的路径 → 幂等创建（已存在 405/301/302 视为无需创建）
+      const rootRes = await davFetch("MKCOL", baseWithoutWork);
+      if (!rootRes.ok && rootRes.status !== 405 && rootRes.status !== 301 && rootRes.status !== 302) {
+        await throwMapped(rootRes, `创建云盘根目录 ${baseWithoutWork}`);
+      }
+      // 工作根 `<云盘根>/ai-editor`
+      const workRes = await davFetch("MKCOL", `${base}/`);
+      if (workRes.ok) return true;
+      if (workRes.status === 405 || workRes.status === 301 || workRes.status === 302) return false;
+      await throwMapped(workRes, `创建工作目录 ${base}`);
+      return false;
     },
 
     async mkcol(relPath) {

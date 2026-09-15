@@ -24,7 +24,7 @@ import { HttpError } from "../middleware/error.js";
 import { initCloudState, writeBookState, writeCloudConfig, readBookState } from "./state.js";
 import { MAX_CLOUD_BACKUPS, computeCloudSync, pullBackup, pushBackup } from "./sync.js";
 
-const BASE = "https://dav.example.com/dav/ai-editor";
+const BASE = "https://dav.example.com/dav"; // 云盘根（配置值）；客户端会拼上工作根 `ai-editor`
 const USER = "u@example.com";
 const PASSWORD = "app-pw";
 const T0 = "2026-08-01T10:00:00Z";
@@ -48,7 +48,8 @@ let moveFailure: ((rel: string, destination: string) => boolean) | null;
 /** 绝对 URL → BASE 之后的相对路径（空串 = 根） */
 function relOfUrl(input: string): string {
   const pathname = new URL(input).pathname;
-  const basePath = new URL(BASE).pathname.replace(/\/+$/, "");
+  // 请求路径 = 云盘根 + 工作根（`ai-editor`）+ relPath → 去掉前两段取 relPath
+  const basePath = `${new URL(BASE).pathname.replace(/\/+$/, "")}/ai-editor`;
   const rest = pathname.startsWith(basePath) ? pathname.slice(basePath.length) : pathname;
   return rest
     .split("/")

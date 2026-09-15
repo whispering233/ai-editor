@@ -9,7 +9,7 @@ import { DEFAULT_WEBDAV_TIMEOUT_MS, createWebdavClient, parsePropfind } from "./
 /** 构造客户端（默认指向一个假云盘根；timeoutMs 小值避免测试悬挂） */
 function makeClient(overrides: Partial<Parameters<typeof createWebdavClient>[0]> = {}) {
   return createWebdavClient({
-    url: "https://dav.example.com/dav/ai-editor",
+    url: "https://dav.example.com/dav", // 云盘根；工作根 `…/ai-editor` 由客户端拼接
     username: "me@example.com",
     password: "app-pw",
     timeoutMs: 1000,
@@ -156,7 +156,7 @@ describe("list（Depth: 1，剔除目录自身）", () => {
 
   it("尾斜杠的 base url 归一（不产生双斜杠）", async () => {
     const spy = stubFetch(() => new Response(PROPFIND_XML, { status: 207 }));
-    await makeClient({ url: "https://dav.example.com/dav/ai-editor///" }).list("");
+    await makeClient({ url: "https://dav.example.com/dav///" }).list("");
     expect(callOf(spy).url).toBe("https://dav.example.com/dav/ai-editor/");
   });
 
@@ -284,7 +284,7 @@ describe("PROPFIND 空 multistatus = 路径不存在（坚果云实测）", () =
       "fetch",
       vi.fn(() => Promise.resolve(new Response('<?xml version="1.0"?><D:multistatus xmlns:D="DAV:"></D:multistatus>', { status: 207 }))),
     );
-    const client = createWebdavClient({ url: "https://dav.jianguoyun.com/dav/ai-editor", username: "u", password: "p" });
+    const client = createWebdavClient({ url: "https://dav.jianguoyun.com/dav" /* 云盘根 */, username: "u", password: "p" });
     await expect(client.list("")).resolves.toBeNull();
     vi.unstubAllGlobals();
   });
@@ -292,7 +292,7 @@ describe("PROPFIND 空 multistatus = 路径不存在（坚果云实测）", () =
   it("207 + 仅自身条目 → 存在但为空：返回 []（与「不存在」区分）", async () => {
     const selfOnly = `<?xml version="1.0"?><D:multistatus xmlns:D="DAV:"><D:response><D:href>/dav/ai-editor/</D:href><D:propstat><D:prop><D:displayname>ai-editor</D:displayname><D:resourcetype><D:collection/></D:resourcetype></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response></D:multistatus>`;
     vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(selfOnly, { status: 207 }))));
-    const client = createWebdavClient({ url: "https://dav.jianguoyun.com/dav/ai-editor", username: "u", password: "p" });
+    const client = createWebdavClient({ url: "https://dav.jianguoyun.com/dav" /* 云盘根 */, username: "u", password: "p" });
     await expect(client.list("")).resolves.toEqual([]);
     vi.unstubAllGlobals();
   });
@@ -311,7 +311,7 @@ describe("MKCOL 形态与目录复核（坚果云实测反馈）", () => {
     vi.stubGlobal("fetch", spy);
     const client = createWebdavClient({ url: "https://dav.jianguoyun.com/dav", username: "u", password: "p" });
     await client.mkcol("ai-editor");
-    expect(spy.mock.calls[0]?.[0]).toBe("https://dav.jianguoyun.com/dav/ai-editor");
+    expect(spy.mock.calls[0]?.[0]).toBe("https://dav.jianguoyun.com/dav/ai-editor/ai-editor"); // 云盘根 + 工作根
     expect(String(spy.mock.calls[0]?.[0])).not.toMatch(/\/$/);
     vi.unstubAllGlobals();
   });
@@ -326,7 +326,7 @@ describe("MKCOL 形态与目录复核（坚果云实测反馈）", () => {
     const client2 = createWebdavClient({ url: "https://dav.example.com/dav", username: "u", password: "p" });
     // 报错带上完整 URL（自查路径用；本卡同时把「创建目录 x」改成目标地址）
     await expect(client2.mkcol("x")).rejects.toMatchObject({
-      message: expect.stringContaining("创建目录 https://dav.example.com/dav/x"),
+      message: expect.stringContaining("创建目录 https://dav.example.com/dav/ai-editor/x"),
     });
     vi.unstubAllGlobals();
   });

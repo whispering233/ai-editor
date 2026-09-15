@@ -99,7 +99,7 @@ function propfindXml(davRoot: string, target: string): string {
 async function startFakeDav(root: string, options: FakeDavOptions = {}): Promise<FakeDav> {
   const username = options.username ?? USER;
   const password = options.password ?? PASSWORD;
-  const davRoot = join(root, "dav");
+  const davRoot = join(root, "dav"); // HTTP 挂载点（与客户端拼的 `ai-editor` 工作根无关）
   mkdirSync(davRoot, { recursive: true });
 
   const calls: Array<{ method: string; path: string }> = [];
@@ -248,8 +248,8 @@ async function configure(url: string, password: string = PASSWORD) {
 describe("WebDAV 客户端 × 真 HTTP 服务", () => {
   it("list() 真往返：中文名 / 百分号编码 / size / 集合判定（真实 PROPFIND 解析）", async () => {
     dav = await startFakeDav(root);
-    const davRoot = join(root, "dav");
-    mkdirSync(join(davRoot, "斗破苍穹-proj-x"));
+    const davRoot = join(root, "dav", "ai-editor"); // 工作根（`<云盘根>/ai-editor`）
+    mkdirSync(join(davRoot, "斗破苍穹-proj-x"), { recursive: true });
     writeFileSync(join(davRoot, "斗破苍穹-proj-x", "20260813-101530123-自动-苹果本-人物32-设定58-章120.zip"), "zip-bytes");
     writeFileSync(join(davRoot, "斗破苍穹-proj-x", ".tmp-半截.zip"), "");
 
@@ -265,10 +265,11 @@ describe("WebDAV 客户端 × 真 HTTP 服务", () => {
 
   it("带路径前缀的 base（真 HTTP）：根条目剔除且 path 为 base 相对（oracle 卡 2 F2）", async () => {
     dav = await startFakeDav(root);
-    mkdirSync(join(root, "dav", "ai-editor", "书-proj-x"), { recursive: true });
-    writeFileSync(join(root, "dav", "ai-editor", "x.zip"), "PK");
+    // 配置值 = 用户云盘根下的自定义前缀（`nested`）；客户端的 base 是 `<配置值>/ai-editor`
+    mkdirSync(join(root, "dav", "nested", "ai-editor", "书-proj-x"), { recursive: true });
+    writeFileSync(join(root, "dav", "nested", "ai-editor", "x.zip"), "PK");
     const client = createWebdavClient({
-      url: `${dav.url}/ai-editor`,
+      url: `${dav.url}/nested`,
       username: USER,
       password: PASSWORD,
       timeoutMs: 5000,
@@ -280,6 +281,9 @@ describe("WebDAV 客户端 × 真 HTTP 服务", () => {
   it("mkcol（幂等）/ put / remove 真往返；根目录不存在时 404 → 创建", async () => {
     dav = await startFakeDav(root);
     const client = createWebdavClient({ url: dav.url, username: USER, password: PASSWORD, timeoutMs: 5000 });
+    // 工作根先建出来（真实流程：/cloud/test 或 push 的「建根」步骤；MKCOL 不递归，父缺失时服务器回 409）
+    expect(await client.list("")).toBeNull();
+    expect(await client.mkcol("")).toBe(true);
     // 目录不存在 → list null → mkcol 创建 → 再列得空
     expect(await client.list("新书-proj-y")).toBeNull();
     expect(await client.mkcol("新书-proj-y")).toBe(true);
@@ -287,9 +291,9 @@ describe("WebDAV 客户端 × 真 HTTP 服务", () => {
     expect(await client.list("新书-proj-y")).toEqual([]);
     // 上传 + 删除（真字节与真文件）
     await client.put("新书-proj-y/a.zip", new TextEncoder().encode("PK"));
-    expect(statSync(join(root, "dav", "新书-proj-y", "a.zip")).size).toBe(2);
+    expect(statSync(join(root, "dav", "ai-editor", "新书-proj-y", "a.zip")).size).toBe(2);
     await client.remove("新书-proj-y/a.zip");
-    expect(existsSync(join(root, "dav", "新书-proj-y", "a.zip"))).toBe(false);
+    expect(existsSync(join(root, "dav", "ai-editor", "新书-proj-y", "a.zip"))).toBe(false);
     await expect(client.remove("新书-proj-y/a.zip")).resolves.toBeUndefined(); // 幂等
   });
 });
@@ -297,22 +301,24 @@ describe("WebDAV 客户端 × 真 HTTP 服务", () => {
 describe("POST /api/v1/cloud/test × 真 HTTP 服务", () => {
   it("读 + 写探测通过：200 {connected:true, created:false}，服务端不留临时文件", async () => {
     dav = await startFakeDav(root);
+    mkdirSync(join(root, "dav", "ai-editor"), { recursive: true }); // 工作根预先存在 → created:false
     await configure(dav.url);
     const res = await app.request("/api/v1/cloud/test", { method: "POST", headers: HOST_HEADERS });
     expect(res.status).toBe(200);
     expect((await res.json()).data).toEqual({ connected: true, baseUrl: dav.url, created: false });
     // 写探测的临时文件已被删除（不留垃圾）
-    expect(readdirSync(join(root, "dav"))).toEqual([]);
+    expect(readdirSync(join(root, "dav", "ai-editor"))).toEqual([]);
   });
 
   it("根目录原先不存在 → 本次创建（created:true）并完成读写探测", async () => {
     dav = await startFakeDav(root);
-    const nested = `${dav.url}/ai-editor`;
+    const nested = `${dav.url}/nested`;
     await configure(nested);
     const res = await app.request("/api/v1/cloud/test", { method: "POST", headers: HOST_HEADERS });
+    // baseUrl 回显**用户的云盘根**（配置值）；实际读写发生在 `<配置值>/ai-editor` 下
     expect((await res.json()).data).toMatchObject({ connected: true, created: true, baseUrl: nested });
-    expect(existsSync(join(root, "dav", "ai-editor"))).toBe(true);
-    expect(readdirSync(join(root, "dav", "ai-editor"))).toEqual([]);
+    expect(existsSync(join(root, "dav", "nested", "ai-editor"))).toBe(true);
+    expect(readdirSync(join(root, "dav", "nested", "ai-editor"))).toEqual([]);
   });
 
   it("凭据错误 → 502 CLOUD_AUTH_FAILED（真 401）", async () => {
@@ -440,7 +446,7 @@ describe("书目录名被云盘拒绝 → 回退短名（坚果云实测口径�
     const result = await pushBackup(project);
 
     expect(result.remote.dirName).toBe("proj-dirname-fallback"); // 三档候选里最后那档（纯 id）
-    expect(existsSync(join(root, "dav", "proj-dirname-fallback"))).toBe(true);
+    expect(existsSync(join(root, "dav", "ai-editor", "proj-dirname-fallback"))).toBe(true);
     expect(readBookState("proj-dirname-fallback")?.dirName).toBe("proj-dirname-fallback");
 
     closeDatabase(project.db);
@@ -462,7 +468,7 @@ describe("pushBackup × 真 HTTP 服务", () => {
 
     const result = await pushBackup(project);
     expect(result.pushed.fileName).toBe(info.fileName);
-    const cloudDir = join(root, "dav", result.remote.dirName);
+    const cloudDir = join(root, "dav", "ai-editor", result.remote.dirName);
     expect(readdirSync(cloudDir)).toEqual([info.fileName]); // 只有正式名（无 .tmp- 残留）
     // 云端内容与本地逐字节一致
     expect(readFileSync(join(cloudDir, info.fileName)).equals(readFileSync(join(backupDir, info.fileName)))).toBe(true);
@@ -490,7 +496,7 @@ describe("pushBackup × 真 HTTP 服务", () => {
     await pushBackup(project); // 本机先推一份（lastPushed = 它）
 
     // 模拟另一台机器写了更新的份（时间戳更晚 → 成为 head）
-    const cloudDir = join(root, "dav", readBookState("proj-push-conflict")?.dirName ?? "");
+    const cloudDir = join(root, "dav", "ai-editor", readBookState("proj-push-conflict")?.dirName ?? "");
     const otherName = "20990101-000000000-自动-别的机器-人物1-设定2-章3.zip";
     writeFileSync(join(cloudDir, otherName), "CLOUD-FROM-OTHER-MACHINE");
 

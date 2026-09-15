@@ -35,7 +35,7 @@ import { initCloudState, readBookState, writeBookState, writeCloudConfig } from 
 import { pushBackup } from "./sync.js";
 import { AUTO_PUSH_THROTTLE_MS, autoPushAfterManualBackup, autoPushOnClose, maybeAutoPush } from "./auto-push.js";
 
-const BASE = "https://dav.example.com/dav/ai-editor";
+const BASE = "https://dav.example.com/dav"; // 云盘根（配置值）；客户端会拼上工作根 `ai-editor`
 const USER = "u@example.com";
 const PASSWORD = "app-pw";
 const T0 = "2026-08-01T10:00:00Z";
@@ -53,7 +53,8 @@ let calls: Array<{ method: string; path: string }>;
 
 function relOfUrl(input: string): string {
   const pathname = new URL(input).pathname;
-  const basePath = new URL(BASE).pathname.replace(/\/+$/, "");
+  // 请求路径 = 云盘根 + 工作根（`ai-editor`）+ relPath → 去掉前两段取 relPath
+  const basePath = `${new URL(BASE).pathname.replace(/\/+$/, "")}/ai-editor`;
   const rest = pathname.startsWith(basePath) ? pathname.slice(basePath.length) : pathname;
   return rest
     .split("/")

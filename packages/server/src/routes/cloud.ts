@@ -187,7 +187,7 @@ cloudRoutes.post("/test", async (c) => {
   const entries = await client.list("");
   let created = false;
   if (entries === null) {
-    created = await client.mkcol("");
+    created = await client.ensureWorkingRoot(); // 云盘根 + 工作根都幂等创建（地址还不存在也能自愈）
     if ((await client.list("")) === null) {
       throw new HttpError(
         502,
@@ -227,6 +227,7 @@ cloudRoutes.post("/test", async (c) => {
     }
   }
 
+  // baseUrl 回显**用户的云盘根**（配置值；工作根 `<根>/ai-editor` 由客户端层拼，不进配置语义）
   const payload: CloudTestResult = { connected: true, baseUrl: webdav.url, created, ...(leftover ? { leftoverWriteTestFile: true } : {}) };
   return c.json(ok(payload));
 });

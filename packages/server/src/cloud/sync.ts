@@ -429,9 +429,9 @@ export async function pushBackup(project: ProjectContext, options: PushOptions =
   let dirName = resolved;
   let entries = await client.list(dirName);
   if (entries === null) {
-    // 云根也可能不存在（从未跑过「测试连接」）——先幂等建根，否则 MKCOL 书目录会因父目录缺失报 409
-    //（被映射成「云盘不可达」，文案误导；见 backlog）
-    if ((await client.list("")) === null) await client.mkcol("");
+    // 工作区可能还不存在（从未跑过「测试连接」）——幂等建「云盘根 + 工作根」，
+    // 否则 MKCOL 书目录会因父目录缺失报 409（被映射成「云盘不可达」，文案误导；见 backlog）
+    if ((await client.list("")) === null) await client.ensureWorkingRoot();
     // 名字过长被拒时回退短名（坚果云实测），回退结果就是这次真正使用的目录名
     dirName = await ensureBookDir(client, dirName, project);
     entries = (await client.list(dirName)) ?? [];

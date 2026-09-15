@@ -262,7 +262,8 @@ expect(methods).toEqual(["PROPFIND", "DELETE", "MKCOL", "PUT", "DELETE", "DELETE
     expect((await res.json()).data).toMatchObject({ connected: true, created: true });
     expect(spy.mock.calls.map((c) => String((c[1] as RequestInit).method))).toEqual([
       "PROPFIND",
-      "MKCOL",
+      "MKCOL", // ensureWorkingRoot：云盘根
+      "MKCOL", // ensureWorkingRoot：工作根 <云盘根>/ai-editor
       "PROPFIND",
       "DELETE", // 预清理旧探针目录
       "MKCOL",
