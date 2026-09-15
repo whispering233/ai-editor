@@ -2,7 +2,14 @@
 // 备份时间/大小格式化 + 频率选项常量 + 行元信息行（设备与规模）
 import { describe, expect, it } from "vitest";
 import { BACKUP_FREQUENCIES } from "@whispering233/ai-editor-shared";
-import { BACKUP_FREQUENCY_OPTIONS, formatBackupMeta, formatBackupTime, formatBytes } from "./backup";
+import {
+  BACKUP_FREQUENCY_OPTIONS,
+  compareBackupTime,
+  formatBackupMeta,
+  formatBackupTime,
+  formatBytes,
+  formatSyncRow,
+} from "./backup";
 
 describe("formatBackupTime", () => {
  // 固定基准时间：2026-08-13 12:00（本地时区构造，与实现同用本地时间）
@@ -83,5 +90,36 @@ describe("formatBackupMeta（行元信息：设备 · 规模）", () => {
     expect(formatBackupMeta({ device: "d", stats: { characters: 0, settings: 0, chapters: 0 } })).toBe(
       "d · 人物0 · 设定0 · 章0",
     );
+  });
+});
+
+describe("同步状态区：新旧判定与统一行文案（C 项）", () => {
+  it("compareBackupTime：云端新 / 本机新 / 相同 / 缺一侧 → null", () => {
+    expect(compareBackupTime({ createdAt: "2026-09-15T02:02:20.000Z" }, { createdAt: "2026-09-15T01:00:00.000Z" })).toBe("remote");
+    expect(compareBackupTime({ createdAt: "2026-09-15T01:00:00.000Z" }, { createdAt: "2026-09-15T02:02:20.000Z" })).toBe("local");
+    expect(compareBackupTime({ createdAt: "2026-09-15T01:00:00.000Z" }, { createdAt: "2026-09-15T01:00:00.000Z" })).toBe("same");
+    expect(compareBackupTime(null, { createdAt: "2026-09-15T01:00:00.000Z" })).toBeNull();
+    expect(compareBackupTime({ createdAt: "2026-09-15T01:00:00.000Z" }, null)).toBeNull();
+    expect(compareBackupTime({ createdAt: "坏值" }, { createdAt: "2026-09-15T01:00:00.000Z" })).toBeNull();
+  });
+
+  it("formatSyncRow：字段与顺序固定（时间 · 类型 · 标签 · 设备 · 统计 · 大小），缺项不省略", () => {
+    const row = formatSyncRow({
+      createdAt: "2026-09-15T02:02:20.573Z",
+      kind: "auto",
+      device: "主机电脑",
+      stats: { characters: 2, settings: 36, chapters: 8 },
+      size: 55296,
+    });
+    expect(row).toMatch(/^09-15 \d{2}:\d{2}:\d{2} · 自动 · 主机电脑 · 人物2 · 设定36 · 章8 · /);
+    const withName = formatSyncRow({
+      createdAt: "2026-09-15T02:02:20.573Z",
+      kind: "manual",
+      name: "定稿",
+      device: "主机电脑",
+      stats: { characters: 2, settings: 36, chapters: 8 },
+      size: 1024,
+    });
+    expect(withName).toContain("· 手动 · 定稿 · 主机电脑 · 人物2 · 设定36 · 章8 · ");
   });
 });

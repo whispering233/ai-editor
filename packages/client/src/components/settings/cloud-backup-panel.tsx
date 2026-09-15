@@ -15,7 +15,15 @@ import { Button, Input, Switch, Tag, Typography } from "antd";
 import { putCloudConfig, testCloudConnection } from "../../lib/api";
 import type { CloudSyncState } from "@whispering233/ai-editor-shared";
 import { cloudErrorText, cloudToastText, useCloudStore } from "../../stores/cloud";
-import { BACKUP_KIND_LABELS, formatBackupMeta, formatBackupTime, formatBytes } from "../../lib/backup";
+import {
+  BACKUP_FRESHNESS_LABELS,
+  BACKUP_KIND_LABELS,
+  compareBackupTime,
+  formatBackupMeta,
+  formatBackupTime,
+  formatBytes,
+  formatSyncRow,
+} from "../../lib/backup";
 import {
   EMPTY_CLOUD_CONFIG_FORM,
   buildCloudConfigPatch,
@@ -45,6 +53,8 @@ export function CloudBackupPanel() {
   const status = useCloudStore((s) => s.status);
   const statusFailed = useCloudStore((s) => s.statusFailed);
   const localLatest = useCloudStore((s) => s.localLatest);
+  /** 本机份列表读取失败（≠ 真的没有备份；卡 C）——面板据此显示「读取失败」而不是「无备份」 */
+  const localUnavailable = useCloudStore((s) => s.localLatestUnavailable);
   const busy = useCloudStore((s) => s.busy);
   const lastError = useCloudStore((s) => s.lastError);
   const refresh = useCloudStore((s) => s.refresh);
@@ -72,6 +82,8 @@ export function CloudBackupPanel() {
   /** 云端份列表（≤5 行 = 云端保留上限；时间倒序） */
   const remoteBackups = status?.remote?.backups.slice(0, 5) ?? [];
   const autoPush = status?.autoPush === true;
+  /** 云端那份 vs 本机那份的新旧（行尾徽标；任一侧缺失 → null 不显示） */
+  const freshness = compareBackupTime(remoteHead, localLatest);
   /** 自动推送最近一次失败（`status.local.lastAutoPushError`；成功即消失，只显示一行不弹窗） */
   const autoPushError = status?.local?.lastAutoPushError ?? null;
   const dirty = isCloudConfigDirty(form, status);
@@ -238,30 +250,38 @@ export function CloudBackupPanel() {
 
       {/* ③ 同步状态（状态行 + 云端份列表 + 推送 / 拉取） */}
       <SectionCard title="同步状态">
+        {/* 三行 **同字段同顺序**（时间 · 类型 · 标签 · 设备 · 统计 · 大小），行尾给「云端更新 / 本机更新 / 相同」
+            的相对判定——用户不必自己比时间（2026-09 反馈：原先三行各说各话，看不出哪份更新） */}
         <div className="flex flex-col gap-1 text-xs text-muted-foreground">
-          <span>
-            云端最新份：
-            {remoteHead === null
-              ? configured
-                ? "（云端还没有备份）"
-                : "（未配置）"
-              : `${formatBackupTime(remoteHead.createdAt)} · ${BACKUP_KIND_LABELS[remoteHead.kind]}${
-                  remoteHead.name !== undefined ? ` · ${remoteHead.name}` : ""
-                } · ${formatBackupMeta(remoteHead)} · ${formatBytes(remoteHead.size)}`}
+          <span className="flex flex-wrap items-baseline gap-x-1.5">
+            <span className="shrink-0">云端最新份</span>
+            <span className="min-w-0 break-all">
+              {remoteHead === null
+                ? configured
+                  ? "（云端还没有备份）"
+                  : "（未配置）"
+                : formatSyncRow(remoteHead)}
+            </span>
+            {freshness !== null && <Tag className="ml-auto shrink-0">{BACKUP_FRESHNESS_LABELS[freshness]}</Tag>}
           </span>
-          <span>
-            本机最新份：
-            {localLatest === null
-              ? "（无可用备份，先「立即备份」）"
-              : `${formatBackupTime(localLatest.createdAt)} · ${BACKUP_KIND_LABELS[localLatest.kind]}${
-                  localLatest.name !== undefined ? ` · ${localLatest.name}` : ""
-                } · ${formatBytes(localLatest.size)}`}
+          <span className="flex flex-wrap items-baseline gap-x-1.5">
+            <span className="shrink-0">本机最新份</span>
+            <span className="min-w-0 break-all">
+              {localUnavailable
+                ? "（读取失败——见下方提示）"
+                : localLatest === null
+                  ? "（无可用备份，先「立即备份」）"
+                  : formatSyncRow(localLatest)}
+            </span>
           </span>
-          <span>
-            本机已推份：
-            {status?.local?.lastPushedFileName ?? "（还没同步过）"}
-            {status?.local?.lastSyncAt != null ? ` · 上次同步 ${formatBackupTime(status.local.lastSyncAt)}` : ""}
-            {status?.local?.dirty === true ? " · 有未同步改动" : ""}
+          <span className="flex flex-wrap items-baseline gap-x-1.5">
+            <span className="shrink-0">上次同步</span>
+            <span className="min-w-0 break-all">
+              {status?.local?.lastSyncAt == null
+                ? "（还没同步过）"
+                : `${formatBackupTime(status.local.lastSyncAt)} · ${status.local.lastPushedFileName ?? "（无记录）"}`}
+              {status?.local?.dirty === true ? " · 有未同步改动" : ""}
+            </span>
           </span>
           <span>
             状态：{status === null ? "读取中…" : SYNC_STATE_LABELS[status.state]}
