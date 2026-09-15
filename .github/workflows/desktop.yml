@@ -14,6 +14,14 @@ on:
   push:
     tags:
       - "v*"
+  # 手动补包入口（不规范地重推 tag 会把 tag 指向变掉的 commit）：指定要挂资产的 Release tag，
+  # 从当前 ref 构建三平台产物。用途：某个平台打包在 tag 运行时失败（如 v0.0.40 的 Windows
+  # `spawnSync pnpm ENOENT`），修复后用本入口补产并挂到同一 Release（同名资产会被覆盖）。
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "要挂资产的 Release tag（如 v0.0.40）"
+        required: true
 
 permissions:
   contents: write # 上传安装包到该 tag 的 Release
@@ -50,6 +58,8 @@ jobs:
       - run: node packages/desktop/scripts/pack.mjs ${{ matrix.args }}
       - uses: softprops/action-gh-release@v2
         with:
+          # push tag 时用 tag 名；手动触发时用输入（补包到已有 Release）
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
           files: packages/desktop/release/${{ matrix.files }}
           # Release 通常已由 release.yml 从 CHANGELOG 建好；此处只挂资产（不存在时才创建）
           fail_on_unmatched_files: true

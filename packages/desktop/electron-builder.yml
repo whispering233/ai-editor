@@ -45,6 +45,8 @@ mac:
 win:
   target:
     - nsis
+  # 同 linux：executableName 会从含 scope 的包名推导出非法文件名（`@`），必须显式指定
+  executableName: ai-editor
   # 首版不签名（无代码签名证书）：Windows 会提示 SmartScreen，README 写明。
   artifactName: ${productName}-${version}-win-${arch}.${ext}
 

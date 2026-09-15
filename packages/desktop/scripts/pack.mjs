@@ -18,14 +18,20 @@ function run(cmd, args, cwd = pkgDir) {
   execFileSync(cmd, args, { cwd, stdio: "inherit" });
 }
 
+/**
+ * pnpm 命令行名称：Windows 上是 `pnpm.cmd`——`execFileSync` 不经 shell 时**不会**解析 `.cmd`
+ * 扩展名，直接传 `pnpm` 会 `spawnSync pnpm ENOENT`（v0.0.40 的 Windows 打包 job 实测踩到）。
+ */
+const PNPM = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+
 rmSync(deployDir, { recursive: true, force: true });
 
 try {
   // pnpm 12.2+ 的 deploy 默认实现不再要求 injected workspace（链接的 workspace 依赖会改写成 file:）
-  run("pnpm", ["--filter", packageName, "deploy", "--prod", deployApp]);
+  run(PNPM, ["--filter", packageName, "deploy", "--prod", deployApp]);
 
   // 目标平台参数透传（如 `--linux AppImage` / `--mac dmg` / `--win nsis`），缺省用配置里的默认
-  run("pnpm", ["exec", "electron-builder", "--config", "electron-builder.yml", ...process.argv.slice(2)]);
+  run(PNPM, ["exec", "electron-builder", "--config", "electron-builder.yml", ...process.argv.slice(2)]);
 } finally {
   // 必须清：`.deploy/app` 里有 workspace 外的 package.json + node_modules，会让 pnpm 的依赖状态
   // 检查误判（后续任何 pnpm 脚本都报「需重建 modules 目录」）；产物已在 release/，无保留价值。
@@ -33,7 +39,7 @@ try {
   // 再跑一次冻结安装把 pnpm 的内部状态对齐（deploy 会在 workspace 内留痕，仅清目录不足以恢复；
   // 已是最新时它是无网络、毫秒级、不修改 lockfile 的幂等操作）。
   try {
-    run("pnpm", ["install", "--frozen-lockfile"]);
+    run(PNPM, ["install", "--frozen-lockfile"]);
   } catch {
     console.warn("[pack] 冻结安装恢复失败（不影响已产出的安装包）");
   }
