@@ -278,6 +278,33 @@ describe("错误映射（→ HttpError；码表 docs/api/error-code.md）", () =
   });
 });
 
+describe("PROPFIND 空 multistatus = 路径不存在（坚果云实测）", () => {
+  it("207 + 空 body → list() 返回 null（否则调用方会跳过 MKCOL，PUT 才报 404）", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.resolve(new Response('<?xml version="1.0"?><D:multistatus xmlns:D="DAV:"></D:multistatus>', { status: 207 }))),
+    );
+    const client = createWebdavClient({ url: "https://dav.jianguoyun.com/dav/ai-editor", username: "u", password: "p" });
+    await expect(client.list("")).resolves.toBeNull();
+    vi.unstubAllGlobals();
+  });
+
+  it("207 + 仅自身条目 → 存在但为空：返回 []（与「不存在」区分）", async () => {
+    const selfOnly = `<?xml version="1.0"?><D:multistatus xmlns:D="DAV:"><D:response><D:href>/dav/ai-editor/</D:href><D:propstat><D:prop><D:displayname>ai-editor</D:displayname><D:resourcetype><D:collection/></D:resourcetype></D:prop><D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response></D:multistatus>`;
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(selfOnly, { status: 207 }))));
+    const client = createWebdavClient({ url: "https://dav.jianguoyun.com/dav/ai-editor", username: "u", password: "p" });
+    await expect(client.list("")).resolves.toEqual([]);
+    vi.unstubAllGlobals();
+  });
+
+  it("404 仍返回 null（原有语义不变）", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(null, { status: 404 }))));
+    const client = createWebdavClient({ url: "https://dav.example.com/dav", username: "u", password: "p" });
+    await expect(client.list("")).resolves.toBeNull();
+    vi.unstubAllGlobals();
+  });
+});
+
 describe("MKCOL 形态与目录复核（坚果云实测反馈）", () => {
   it("mkcol 请求 URL 不带尾斜杠（带尾斜杠时部分服务器回 405 却并不创建）", async () => {
     const spy = vi.fn(() => Promise.resolve(new Response(null, { status: 201 })));
@@ -297,7 +324,10 @@ describe("MKCOL 形态与目录复核（坚果云实测反馈）", () => {
 
     vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response("nope", { status: 409 }))));
     const client2 = createWebdavClient({ url: "https://dav.example.com/dav", username: "u", password: "p" });
-    await expect(client2.mkcol("x")).rejects.toMatchObject({ message: expect.stringContaining("创建目录 x") });
+    // 报错带上完整 URL（自查路径用；本卡同时把「创建目录 x」改成目标地址）
+    await expect(client2.mkcol("x")).rejects.toMatchObject({
+      message: expect.stringContaining("创建目录 https://dav.example.com/dav/x"),
+    });
     vi.unstubAllGlobals();
   });
 });

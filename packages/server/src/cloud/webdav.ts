@@ -269,9 +269,15 @@ function describeErrorCause(cause: unknown): string | null {
         body: PROPFIND_BODY,
       });
       if (res.status === 404) return null; // 目录不存在（是否创建由调用方决定）
-      if (res.status !== 207 && !res.ok) await throwMapped(res, `列目录 ${relPath === "" ? "/" : relPath}`);
+      if (res.status !== 207 && !res.ok) await throwMapped(res, `列目录 ${urlOf(relPath, true)}`);
       const xml = await res.text();
-      return parsePropfind(xml)
+      const parsed = parsePropfind(xml);
+      // **空 multistatus = 路径不存在**（不是「存在但为空」）：Depth:1 的 PROPFIND 对**存在的**集合
+      // 必然至少返回集合自身一个条目（我们随后会把它过滤掉，故「存在但空目录」也可能得到 `[]`——
+      // 区别就在这里：先看**原始**条目数）。部分服务器（坚果云实测）对不存在的集合回 207 + 空 body
+      // 而不是 404；若把它当「存在但空」，调用方会跳过 MKCOL，后续 PUT 才报 404 ObjectNotFound。
+      if (parsed.length === 0) return null;
+      return parsed
         .map((entry) => ({
           ...entry,
           path: toBaseRelativeSegments(entry.path === "" ? [] : entry.path.split("/")).join("/"),
@@ -287,7 +293,7 @@ function describeErrorCause(cause: unknown): string | null {
       if (res.ok) return true;
       // 405 = 目标已存在（RFC 4918）；301/302 = 部分服务器对已存在目录的规范化跳转
       if (res.status === 405 || res.status === 301 || res.status === 302) return false;
-      await throwMapped(res, `创建目录 ${relPath === "" ? "/" : relPath}`);
+      await throwMapped(res, `创建目录 ${target}`);
       return false;
     },
 
@@ -296,13 +302,13 @@ function describeErrorCause(cause: unknown): string | null {
         body,
         headers: { "Content-Type": "application/zip" },
       });
-      if (!res.ok) await throwMapped(res, `上传 ${relPath}`);
+      if (!res.ok) await throwMapped(res, `上传 ${urlOf(relPath)}`);
     },
 
     async get(relPath) {
       const res = await davFetch("GET", urlOf(relPath));
       if (res.status === 404) return null;
-      if (!res.ok) await throwMapped(res, `下载 ${relPath}`);
+      if (!res.ok) await throwMapped(res, `下载 ${urlOf(relPath)}`);
       return new Uint8Array(await res.arrayBuffer());
     },
 
@@ -320,7 +326,7 @@ function describeErrorCause(cause: unknown): string | null {
     async remove(relPath) {
       const res = await davFetch("DELETE", urlOf(relPath));
       if (res.status === 404) return; // 幂等：已不存在即视为已删
-      if (!res.ok) await throwMapped(res, `删除 ${relPath}`);
+      if (!res.ok) await throwMapped(res, `删除 ${urlOf(relPath)}`);
     },
   };
 }
