@@ -680,7 +680,7 @@ export default function Outline() {
   }
 
   /** 整树渲染（内部递归函数，闭包共享页面 state；S13.1 两行结构：
-   * 第一行 = 折叠箭头 | 类型徽标（w-7 固定宽，第二行占位精确对齐）| 标题 | 伏笔标记 | 右端操作区（阅读进度徽标在前、删除按钮贴尾）；
+   * 第一行 = 折叠箭头 | 类型徽标（w-7 固定宽）| 标题 | 伏笔标记 | 右端操作区（阅读进度徽标在前、删除按钮贴尾）；
    * 第二行 = 摘要（缩进对齐标题下方，默认显示、空不渲染、点击就地编辑）；
    * 拖拽：整节点块可拖，目标行上半/下半 → 插入指示线（accent 2px 绝对定位层，pointer-events-none 不拦截事件）；
    * 行可聚焦（tabIndex=-1）承载选中/Enter/双击；单击行选中、双击行跳详情、选中后 Enter 新建子级 */
@@ -743,7 +743,9 @@ export default function Outline() {
                 }
               />
             ) : (
-              <span className="w-7 shrink-0" />
+              /* 无子节点行占位：**必须与折叠箭头同几何**（icon-only small 按钮 = 24px 宽 + -ml-2）；
+                 写成 w-7（28px）会让「有场/无场」两类章的类型徽标、标题、摘要、新建行各差 12px */
+              <span className="-ml-2 w-6 shrink-0" />
             )}
             <TypeChip className="w-7 shrink-0 justify-center">{TYPE_LABEL[node.type]}</TypeChip>
             {/* 标题：点击就地编辑（Enter 保存 / Esc 取消 / 失焦保存）；stopPropagation 隔离——
@@ -801,10 +803,11 @@ export default function Outline() {
               />
             </span>
           </div>
-          {/* 第二行：摘要（缩进对齐标题下方——w-4/w-7 占位与第一行同列；默认显示、空不渲染；点击就地编辑） */}
+          {/* 第二行：摘要（缩进对齐标题下方——首占位同折叠箭头几何（-ml-2 w-6）+ 类型徽标占位 w-7；
+              默认显示、空不渲染、点击就地编辑） */}
           {editingSummary || node.summary ? (
             <div className="mt-0.5 flex items-center gap-2">
-              <span className="w-7 shrink-0" />
+              <span className="-ml-2 w-6 shrink-0" />
               <span className="w-7 shrink-0" />
               {editingSummary ? (
                 inlineInput(
@@ -871,7 +874,7 @@ export default function Outline() {
               className="flex items-center gap-2 rounded-md px-2 py-1"
               style={{ paddingLeft: (depth + 1) * 20 + 8 }}
             >
-              <span className="w-7 shrink-0" />
+              <span className="-ml-2 w-6 shrink-0" />
               <TypeChip className="h-5 w-7 shrink-0 justify-center">
                 {TYPE_LABEL[creatingAt.type]}
               </TypeChip>
