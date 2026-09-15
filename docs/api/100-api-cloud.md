@@ -43,7 +43,7 @@
       kind: "auto" | "manual";
       name?: string;          // 用户标签（带标签的份永不参与云端清理）
       device: string;         // 来源设备（必填：唯一命名格式恒有此段）
-      stats?: { characters: number; settings: number; chapters: number }; // 新格式尾部三段统计
+      stats: { characters: number; settings: number; chapters: number };  // 尾部三段统计（唯一命名格式恒有）
       size: number;
     }>;
   };
@@ -87,7 +87,7 @@
 ```typescript
 // Req（字段全部可选；缺省 = 不修改）
 {
-  url?: string;       // 完整 WebDAV 根 URL（含用户自定义前缀），如 https://dav.jianguoyun.com/dav/ai-editor
+  url?: string;       // 用户云盘根 URL（如 https://dav.jianguoyun.com/dav）；实际读写在其下 <云盘根>/ai-editor/
                       // 空串 = 清空该项（与 username 皆空 = 回到「未配置」）
                       // **不得内嵌用户名/密码**（userinfo，如 https://u:pw@host/dav）→ 400 VALIDATION_ERROR：
                       // 该形态在本机 fetch 层不可用，且会把凭据回显进响应（不静默剥离）
@@ -144,7 +144,7 @@
 // Res: 200
 {
   pushed: { fileName: string; size: number; device: string; kind: "auto" | "manual"; name?: string;
-            stats?: { characters: number; settings: number; chapters: number } };
+            stats: { characters: number; settings: number; chapters: number } };
   remote: { dirName: string; headFileName: string };
   pruned: string[];      // 本次云端保留清理删除的文件名（带用户标签的份永不列入；只删「能解析出时间戳且无标签」的份）。
                          //   注意：`.tmp-*` 的清理属流程第 2 步（垃圾回收），**不计入** pruned

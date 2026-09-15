@@ -8,7 +8,7 @@
 
 - 任何改动前先读对应文档；发现文档之间或文档与代码矛盾，先停下提问，不要自行发明。
 - 涉及 pi 的行为以 `node_modules` 里实际安装的 `@earendil-works/*`（0.85.1）代码/类型为准，**禁止凭记忆写接口**。
-- 状态与演进：根 `CHANGELOG.md`（逐版本事实）+ `tasks.md`（当前任务卡）+ `backlog.md`（未排期遗留项与有意口径）。
+- 状态与演进：根 `CHANGELOG.md`（逐版本事实）+ `tasks.md`（当前任务卡）+ `backlog.md`（未排期遗留项与有意口径）。云端存档另见 `docs/design/40-cloud-sync.md` 与 `docs/api/100-api-cloud.md`。
 - 运行/构建/发布：`build.md`；配置载体与读写边界：`config.md`。
 
 ## 协作流程
@@ -29,7 +29,14 @@
 - **pi 依赖 exact pin**：`@earendil-works/*` 一律写精确版本（当前 `0.85.1`），禁止 `^`/`~`；升级 = 一个显式 commit 齐抬版本（`pi-ai`/`pi-agent-core`/`pi-coding-agent`）+ 全量测试。typebox 的 `Type`/`Static` 经 `pi-ai` 重导出，不单独装 typebox。**声明位置按 import 性质**：运行时 import 必须进 `dependencies`（`server` 曾把 `pi-ai`/`pi-coding-agent` 放进 `devDependencies`——靠 `agent` 包的传递依赖 hoist 才跑得起来，pnpm 严格布局下会解析失败）。
 - **pi 配置/凭据的唯一读写入口** = `packages/server/src/model-runtime.ts` 的 `getModelRuntime()` / `getSettingsManager()`；业务代码不得直读 `~/.pi/agent/auth.json`/`settings.json`（会话 id、模型目录、凭据状态一律经 pi API）。
 - **出站 HTTP**：服务启动时安装全局 undici dispatcher（`packages/server/src/http-dispatcher.ts`，与 pi CLI 同款：连接族退避 + 环境代理 + 空闲超时）。**不要在业务代码里另建 fetch/agent**——否则丢失代理与连接行为（真实故障场景见 v0.0.32 CHANGELOG）。云端存档的 WebDAV 请求同样走它。
-- **云端存档（2026-09）**：云盘凭据与同步状态的唯一载体 = `<创作根>/.ai-editor/cloud.json`（0600 明文；**不进项目文件 / 备份 zip / 任何 API 响应**），读写唯一入口 = `packages/server/src/cloud/state.ts`。**拉取的并集语义只对云 pull 生效**——`overwriteProjectFiles` 的合并参数默认关（restore 必须保持纯覆盖，改动需守卫测试）；自动推送**复用现有备份 tick 链**（不得新增第二套定时器）；云端书目录按 `project.id` 定位（**不用书名拼路径**）；云端正式文件名下永远是完整包（`PUT` 临时名 + `MOVE`）；清理只删可解析时间戳或 `.tmp-` 前缀且**带用户标签的永不删**。
+- **云端存档（v0.0.38 定稿）**：凭据与同步状态的唯一载体 = `<创作根>/.ai-editor/cloud.json`（0600 明文；**不进项目文件 / 备份 zip / 任何 API 响应**），读写唯一入口 = `packages/server/src/cloud/state.ts`。
+  - **地址语义 = 用户云盘根**；工作根 `<云盘根>/ai-editor/` 由 `createWebdavClient` **唯一一处拼接**（配置/UI 都只表达云盘根，不做「截断再拼回」）；`ensureWorkingRoot()` 幂等建「云盘根 + 工作根」。
+  - **备份命名唯一格式**（写入 = 解析，`shared/utils/backup.ts` 单正则）：`<时间戳>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip`；三类旧命名**不解析**（留盘不列表），**不做重命名迁移**；打开项目时若 `.backups/` 有文件但无一可解析 → 兜底生成一份（`ensureParseableBackup`）。`device`/`stats` 恒有。
+  - **三态与「有未备份改动」**：`local.backupStale` = `hasUnbackedChanges` **且** `dirty`（拉取/恢复后必为 false；`backupStale` 不随同步前移）；**自动推送的守卫用纯 `hasUnbackedChanges`**（更严格，避免推旧包上云）——两处口径不同是有意的。
+  - **自动推送复用备份 tick 链**（**不得新增第二套定时器**：排程条件 = 备份频率开启 **或** `autoPush` 开启，后者按 2h 兜底）；节流基准 `lastAutoPushAt` 只由定时路径推进；失败只记 `lastAutoPushError`（清除点 = `pushBackup` 成功写）。
+  - **云端写入协议**：`PUT .tmp-<名>` → `MOVE` 成正式名（同名同大小已存在则跳过上传；`MOVE` 撞 409/412 时删目标重试一次）；书目录名 `<书名>-<id>` 被云盘拒时回退 `ai-editor-<id>` → `<id>`（回退扫描认 `name === id || endsWith('-'+id)`）；清理只删可解析时间戳或 `.tmp-` 前缀，**带用户标签的永不删**。
+  - **坚果云实测口径**（改 WebDAV 客户端前必读）：`PROPFIND` 对不存在的集合回 `207`+空 body（**空 multistatus = 不存在**）；`MKCOL` **不带尾斜杠**；集合删除要**尾斜杠 + `Depth: infinity`**；根目录**不可直接写文件**（探针写工作子目录）；对单段名字长度限制严（`400 IllegalArgument / sandbox name is too long`）；`MOVE` 目标已存在时**不认 `Overwrite: T`**。
+  - **拉取的并集语义只对云 pull 生效**——`overwriteProjectFiles` 的合并参数默认关（restore 必须保持纯覆盖，改动需守卫测试）。
 - `db` 查询层统一经 `queryDb` 取 drizzle 实例，**禁止绕过直接 `prepare`**（迁移管线除外）；JSON 列（data/changes/metadata）一律 text 模式 + 行映射防御解析，**禁用 drizzle `mode:'json'`**（坏 JSON 会打挂整表查询）。
 - **对话历史唯一存储 = 项目目录 `sessions/`，文件格式与命名归 pi（session v3）**：会话 id 是**不透明值**，服务端只能经「磁盘发现 + header id 映射」解析为路径，**禁止用客户端传入值拼接路径**；旧 v1 扁平文件留在磁盘但不读取。写文件类迁移（`up(db, ctx)`）必须幂等（整文件重写），崩溃后重跑收敛。
 - **项目目录内的「随包目录」（`references/`、`sessions/`）改动必须同步四处**：备份白名单、打包、变更判定（mtime）、恢复/导入的整体覆盖——漏一处就出现「备份丢数据」或「只聊天不触发自动备份」。
