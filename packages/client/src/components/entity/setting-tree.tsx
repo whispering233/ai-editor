@@ -23,6 +23,7 @@ import { Button, Input, Select } from "antd";
 import {
   DeleteOutlined,
   DownOutlined,
+  PlusOutlined,
   RightOutlined,
   SearchOutlined,
   UpOutlined,
@@ -762,9 +763,8 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
                 {node.children.length} 个子设定
               </span>
             )}
-            {/* 行尾操作区（T1：标签徽标 + 删除按钮——标签收进行尾、删除按钮左边，
-              不紧跟名称干扰树呈现；行级只留删除，H2 直接软删不弹确认；
-              右键菜单替代行级问 AI） */}
+            {/* 行尾操作区（T1：标签徽标 + 新建子设定 + 删除——标签收进行尾、删除按钮恒贴行尾；
+              行级删直接软删不弹确认（H2）；右键菜单替代行级问 AI） */}
             <span className="ml-auto flex shrink-0 items-center gap-1.5">
               {/* 标签徽标（summary.tags 前 3，统一字段；替代已废弃的 category 徽标） */}
               {tags.length > 0 && (
@@ -804,6 +804,19 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
                   />
                 </span>
               )}
+              {/* 新建子设定（卡 4，DESIGN.md `data-row`）：与 Enter 建子级同一路径（startCreate），
+                  插在删除左侧、悬停箭头右侧；任意设定都可作父（无层级深度限制） */}
+              <Button
+                color="default" variant="text"
+                size="small"
+                title="新建子设定"
+                aria-label={`在「${node.name}」下新建子设定`}
+                onClick={(e) => {
+                  e.stopPropagation(); // 不触发行选中（handleRowClick 的 closest 已拦截，双保险）
+                  startCreate(node.id);
+                }}
+                icon={<PlusOutlined className="text-sm" />}
+              />
               <Button
                 color="default" variant="text"
                 size="small"
