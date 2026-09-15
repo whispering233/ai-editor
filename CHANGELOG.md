@@ -28,6 +28,8 @@
 
 ### Fixed
 
+- **Windows 打包失败（v0.0.40 实测两轮）**：`pack.mjs` 用 `execFileSync("pnpm", …)` 在 Windows 上拿到的是 `.cmd` 包装脚本 → `spawnSync pnpm ENOENT`；改用 `pnpm.cmd` 又撞上 Node 20+ 对 `.bat`/`.cmd` 的直接 spawn 禁令 → `spawnSync pnpm.cmd EINVAL`。正解 = `shell: true`（仅 Windows 开，官方解法 nodejs/node#52681）。另补 `win.executableName: ai-editor`（与 linux 同因：scope 包名会推导出含 `@` 的非法可执行名）。
+- **补包入口**：`.github/workflows/desktop.yml` 增 `workflow_dispatch`（输入 `release_tag`）——在某平台打包失败时从修复后的 ref 重新产包并挂到同一 Release，避免重推 tag（会把 tag 指向改到修复后的 commit）。
 - **pnpm 版本在 CI 与本地漂移**：`.github/workflows/publish.yml` 原本硬编码 `version: 11.22.0`（升级 pnpm 12.4.2 后本地与 CI 会用不同版本跑同一份 lockfile）；现改为不写 `version`，从根 `package.json` 的 `packageManager` 读（单一事实源）。
 - **server bin 自检在 Electron 主进程下崩溃**：`realpathSync(process.argv[1])` 在 Electron 里拿到的是命令行开关（如 `--no-sandbox`）而非脚本路径 → 抛 `ENOENT` 打挂整个主进程。现包一层 try/catch，路径不可解析即判「非直接执行」（npm bin 的符号链接语义不变，server 575 测试全绿）。
 
