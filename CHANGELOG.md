@@ -7,6 +7,10 @@
 
 ## [Unreleased]
 
+## [v0.0.40] - 2026-09-16
+
+> **桌面版（Electron 外壳）落地**：设计定稿（`3850d99`）→ pnpm 12.4.2（`fb1630a`）→ 骨架与打包链路（`a15b6b1`）→ 书库位置（`2bbc5b1`）→ 目录选择闭环（`368a099`）→ 应用菜单与日志（`d714bae`）→ 安全与导航（`bb6b2b0`）→ 设置页「通用」tab（`bb66e1d`）→ 三平台发布链路（`ecc8c07`）。桌面端到端实测：打包产物起窗口 + preload 桥可见 + SQLite 建库 + 外链/跨源导航被拦 + 日志落盘；浏览器形态零变化（真实浏览器 + SSR 守卫）。回归：`pnpm -r build` → typecheck → lint → `pnpm -r test` 全绿（shared 222 / db 281 / client 865 / tools 287 / agent 82 / server 575 / desktop 16）。
+
 ### Added
 
 - **桌面版发布链路**：新增 `.github/workflows/desktop.yml`（push `v*` tag 触发，ubuntu / macos / windows 三平台矩阵各自 `pnpm -r build` + `node packages/desktop/scripts/pack.mjs <平台参数>`，产物挂到该 tag 的 GitHub Release）；`scripts/sync-version.mjs` 纳入 `desktop`（版本号与 npm 包同源，同一 tag 产 npm 包 + 三平台安装包）；electron-builder 补 mac（dmg，`identity: null` 显式不签名）/ win（NSIS，`oneClick: false` 让用户能选安装目录）配置；README 增桌面版安装说明与平台注意事项。

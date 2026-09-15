@@ -23,15 +23,14 @@ describe("desktopBridge", () => {
   });
 
   it("桥形状非法（pickDirectory 缺失或非函数）→ null", () => {
-    setWindow({ aiEditorDesktop: { ready: true } });
+    setWindow({ aiEditorDesktop: {} });
     expect(desktopBridge()).toBeNull();
-    setWindow({ aiEditorDesktop: { ready: true, pickDirectory: "nope" } });
+    setWindow({ aiEditorDesktop: { pickDirectory: "nope" } });
     expect(desktopBridge()).toBeNull();
   });
 
   it("桌面版（合法桥）→ 返回该桥", () => {
     const bridge = {
-      ready: true,
       pickDirectory: async () => "/books/mine",
       getLibraryRoot: async () => "/books",
       changeLibraryRoot: async () => null,

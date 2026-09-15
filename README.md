@@ -20,7 +20,7 @@
 | 测试 | vitest（各包独立 `test` script） |
 | 桌面版 | Electron 44.3.0（**exact pin**）+ electron-builder（安装包）；主进程内嵌 server，与你自己装的 CLI 版共用同一份数据（`docs/design/50-desktop.md`） |
 
-## UI（v0.0.39 大纲/设定行级新建与层级收紧 + v0.0.38 云端同步状态区与一键同步 + v0.0.37 徽标两形态定稿与星形图移除 + v0.0.36 自由输入下拉 + v0.0.34 人物工作台与能力面板 + v0.0.33 导航归位与弹窗添加 + v0.0.32 思维链与会话渲染）
+## UI（v0.0.40 桌面版外壳 + v0.0.39 大纲/设定行级新建与层级收紧 + v0.0.38 云端同步状态区与一键同步 + v0.0.37 徽标两形态定稿与星形图移除 + v0.0.36 自由输入下拉 + v0.0.34 人物工作台与能力面板 + v0.0.33 导航归位与弹窗添加 + v0.0.32 思维链与会话渲染）
 
 视觉语言 = **Notion 工作区**一脉：暖灰纸感中性色（`#37352f` 暖炭墨 / `#f6f5f4` 外壳底 / 三层描边）、hairline 分栏、零阴影、扁平、**彩色只服务状态与标签**；实现基座是 antd v6 的 token 派发（改色唯一入口 = `AntdProvider.tsx`），组件语言只有一套 antd（无自绘按钮/输入框/图标库第二套），排版四档 20/16/14/12，图标统一 `@ant-design/icons`（状态 Filled / 操作 Outlined）。**视觉契约（单一事实源）= `docs/ui/DESIGN.md`**，并由 `design-discipline.test.ts` 把纪律变成可执行断言。
 
@@ -67,7 +67,7 @@ shared → db → tools → agent → server    （依赖方向，client 只依�
 
 ```bash
 pnpm install
-pnpm -r build        # 按依赖序构建 6 包
+pnpm -r build        # 按依赖序构建 7 包
 
 # 开发态（client :5173 + server :3456，proxy /api）
 pnpm dev
@@ -92,7 +92,9 @@ pnpm typecheck && pnpm lint && pnpm -r test
 #   （环境变量开关已移除，配置文件是唯一来源）
 ```
 
-## 当前能力（2026-09）
+## 当前能力（2026-10）
+
+- **桌面版（Electron 外壳，v0.0.40，2026-10）**：用户下载安装包、装完双击即用（**不需要 Node / npm**）——与 npm CLI 版**共用同一份数据与凭据**（`~/.pi/agent/`、项目目录格式一致，两边能打开同一书库）。要点：① **外壳不是第二产品**——主进程内 in-process 起现有 server（`packages/server` 未改一行），窗口加载 `http://127.0.0.1:<端口>`，端口固定优先（保 `localStorage` 偏好稳定）；② **书库位置**首次启动选（建议值 `<文档>/AI Editor`），存 `<userData>/desktop.json`，设置页「通用」tab 可改（改完自动重启）；③ **原生能力只开一个**——preload（沙箱 CJS）仅暴露目录选择，书架页据此多一个「浏览…」按钮，**浏览器形态零变化**（能力检测无桥即不渲染）；④ **安全基线**——`contextIsolation`/`sandbox` 开、`nodeIntegration` 关，外链一律交系统浏览器、跨源导航被拦、生产包不暴露 devtools；⑤ **日志落盘** `<userData>/logs/ai-editor.log`（桌面用户没有终端，日志是排障唯一线索）；⑥ **打包**——electron-builder（Windows NSIS / macOS dmg / Linux AppImage），`pnpm deploy` 收自包含依赖、better-sqlite3 的 N-API 预编译在 Electron 44 上**免 rebuild**；首版不签名（macOS 首次需右键打开、Windows 有 SmartScreen 提示）。设计与契约：`docs/design/50-desktop.md`。
 
 - **UX/UI 优化：树行新建入口 + 层级收紧 + 三处显示修正（v0.0.39，2026-09）**：① **行级「新建子级」按钮**——大纲页（卷 → 新建章、章 → 新建场）与设定页（任意设定 → 新建子设定）行尾新增 `+` 图标按钮，位置恒在删除按钮左侧（删除贴行尾，跨行操作列对齐）；原生入口（选中按 Enter 建子级）保留，两者同一路径。② **层级收紧：章只能挂卷**——此前章可直挂根（「根级章」）；现 `root` 仅接纳卷（写入侧三层同口径：REST 400 / AI 提案层 / 前端拖拽拒绝），**存量根级章读容忍**（可渲染/改名/删除/拖进卷，不能新建或移回 root，**无迁移**）。③ **大纲页页头改「+ 新建卷」**，就地新建行取消卷/章切换（原先点切换按钮会让输入框失焦→整行取消，表现为「点一下就关」）。④ **大纲行缩进列对齐修正**——无子节点行的占位与折叠箭头几何不一致，导致「有场章 / 无场章」两类行的类型徽标/标题/摘要/新建行各差 12px。⑤ **关联页端点类型徽标漏中文**——「时间点」「事件」等端点曾原样显示 `timepoint` / `event`（手抄的四类表漏项），现派生 shared `ENTITY_TYPE_LABELS`；同型问题一并清掉（时间轴事件详情「关联节点（occurs_in）」、伏笔页分区块标题与生命周期预览里的关系键）。⑥ **阅读进度徽标统一走 `TypeChip`**（与卷/章/场同形，1px 描边）；人物页「阅读进度」tab 的能力面板空值叶子不再给 `—` 占位符。
 - **云端存档（WebDAV，v0.0.38，2026-09）**：给备份加**异地副本 + 多设备续写**——推送/拉取整包 zip 到用户自己的 WebDAV 云盘（**坚果云原生支持**；其他云盘用 rclone / AList 桥接），**不自建后端**。要点：① **本地仍是唯一事实源**——云端只是「备份的另一块磁盘」，离线可用优先，云端失败不阻塞本地功能；② **凭据只落** `<创作根>/.ai-editor/cloud.json`（0600 明文；不进项目文件 / 备份 zip / 任何 API 响应，接口从不回传密码）；③ **地址 = 用户云盘根**（如 `https://dav.jianguoyun.com/dav`），工作根 `<云盘根>/ai-editor/` 由应用自动拼接与创建；④ **推送 = 本地备份 zip 逐字节上传**（`PUT .tmp-<名>` → `MOVE` 成正式名，正式名下永远是完整包；同名同大小幂等跳过；只保留最近 5 份，**带标签的永不清理**）；⑤ **拉取 = 三文件覆盖 + `references/`/`sessions/` 并集合并**（云端删的删本机、本机删的不复活、本机新增保留），覆盖前自动快照——与本地 restore 的整体覆盖语义**刻意不同**；⑥ **三态状态机**（已同步 / 云端更新 / 本机改动）+ 左栏「同步云端」一键动作与两色角标（冲突 = red、有事可做 = warning、不可达不亮）；⑦ **冲突裁决**：两条路都各留一份备份（保留云端 / 用本机覆盖）；⑧ **自动推送**：2 小时节流（复用备份定时链，不新增定时器），关闭项目与手动备份各触发一次，纯聊天不单独触发；有未备份改动时跳过（不把落后内容静默推上云）。设计与契约：`docs/design/40-cloud-sync.md`、`docs/api/100-api-cloud.md`；真机验收清单见 `docs/design/backlog.md`。
@@ -146,7 +148,7 @@ npm install -g @whispering233/ai-editor-server
 ai-editor <项目目录>   # 启动服务 + 自动打开浏览器 http://127.0.0.1:3456
 ```
 
-> 版本说明：**当前仓库版本 v0.0.39**（npm 上最新为 v0.0.38；push `v0.0.39` tag 后由 CI OIDC 自动发布，发布全链路自动化已验证）。⚠ **v0.0.31 / v0.0.34 / v0.0.35 / v0.0.37 未推送 tag、npm 上不存在**——它们在本地成版（CHANGELOG 与版本号已写）但发布未执行（v0.0.37 属「一次推多个 tag → GitHub 丢弃事件」的那批，见 `docs/design/build.md`「发布管道坑记录」），变更已累积进后续版本；**npm 实际序列：… 0.0.30 → 0.0.32 → 0.0.33 → 0.0.36 → 0.0.38 → 0.0.39**。各版本要点：v0.0.39 = **树行新建入口（大纲/设定）+ 章只能挂卷（存量根级章读容忍）+ 大纲缩进列对齐 + 关联页端点徽标中文 + 阅读进度徽标描边统一**（详见 `CHANGELOG.md`，本版为纯前端与展示层修正，无数据迁移）；v0.0.38 = **云端存档（WebDAV 整批）**；v0.0.36 = **关系类型属性单一定义 + 自定义关系类型（无需迁移）+ 人物字段清单编译期断言**（放宽了 `relation_type` 校验：原先必 400 的输入现在可能 201）；v0.0.35 = **人物页四平级 tab + 档案式字段网格 + 「阅读进度」文案统一 + 三个选章选择器只列章**；v0.0.34 = **章级锚点收窄 + 章序前缀累积 + 能力面板（SCHEMA_VERSION 6→7）+ 人物页工作台（双视图 tab/关系网/新建弹窗）+ 启动路径迁移修复**；v0.0.33 = 导航归位（书架/概览入口）+ 打开即回到上次那本书 + 设置页「AI 模型」只列已配置、弹窗添加与供应商品牌图标 + 凭据优先级文案修正；v0.0.32 = **AI 内核换为 pi**（嵌入 pi-coding-agent 0.85.1；会话格式 = pi session v3、配置迁 pi agent dir、SSE 事件集改 pi 投影、新增思维链）+ 发布面 6→5 包；v0.0.31 = 对话历史迁出数据库（`chat_messages` → 项目目录 `sessions/*.jsonl`，SCHEMA_VERSION 5→6）+ 会话删除端点 + 上下文预算配置化 + 设置页信息架构重构；**v0.0.1/v0.0.2 不可安装**——其 npm manifest 残留 `workspace:*` 协议（npm `EUNSUPPORTEDPROTOCOL`，已用 `npm view` 复验），**已于 2026-09-11 在 npm 上标注 deprecate**（db/tools/agent/server 等包 × 2 版本，registry 复验通过；`shared` 无依赖可正常安装，未标注）；安装时使用 `@whispering233/ai-editor-server@latest` 即可。
+> 版本说明：**当前仓库版本 v0.0.40**（本版含首个桌面版安装包；npm 包与三平台安装包由同一个 tag 产出）。⚠ **v0.0.31 / v0.0.34 / v0.0.35 / v0.0.37 未推送 tag、npm 上不存在**——它们在本地成版（CHANGELOG 与版本号已写）但发布未执行（v0.0.37 属「一次推多个 tag → GitHub 丢弃事件」的那批，见 `docs/design/build.md`「发布管道坑记录」），变更已累积进后续版本；**npm 实际序列：… 0.0.32 → 0.0.33 → 0.0.36 → 0.0.38 → 0.0.39 → 0.0.40**。各版本要点：v0.0.40 = **桌面版（Electron 外壳）首版**（安装包分发 + 书库位置 + 目录选择 + 应用菜单与日志 + 安全导航 + 三平台 CI；npm CLI 与浏览器形态不变）；v0.0.39 = **树行新建入口（大纲/设定）+ 章只能挂卷（存量根级章读容忍）+ 大纲缩进列对齐 + 关联页端点徽标中文 + 阅读进度徽标描边统一**（详见 `CHANGELOG.md`，本版为纯前端与展示层修正，无数据迁移）；v0.0.38 = **云端存档（WebDAV 整批）**；v0.0.36 = **关系类型属性单一定义 + 自定义关系类型（无需迁移）+ 人物字段清单编译期断言**（放宽了 `relation_type` 校验：原先必 400 的输入现在可能 201）；v0.0.35 = **人物页四平级 tab + 档案式字段网格 + 「阅读进度」文案统一 + 三个选章选择器只列章**；v0.0.34 = **章级锚点收窄 + 章序前缀累积 + 能力面板（SCHEMA_VERSION 6→7）+ 人物页工作台（双视图 tab/关系网/新建弹窗）+ 启动路径迁移修复**；v0.0.33 = 导航归位（书架/概览入口）+ 打开即回到上次那本书 + 设置页「AI 模型」只列已配置、弹窗添加与供应商品牌图标 + 凭据优先级文案修正；v0.0.32 = **AI 内核换为 pi**（嵌入 pi-coding-agent 0.85.1；会话格式 = pi session v3、配置迁 pi agent dir、SSE 事件集改 pi 投影、新增思维链）+ 发布面 6→5 包；v0.0.31 = 对话历史迁出数据库（`chat_messages` → 项目目录 `sessions/*.jsonl`，SCHEMA_VERSION 5→6）+ 会话删除端点 + 上下文预算配置化 + 设置页信息架构重构；**v0.0.1/v0.0.2 不可安装**——其 npm manifest 残留 `workspace:*` 协议（npm `EUNSUPPORTEDPROTOCOL`，已用 `npm view` 复验），**已于 2026-09-11 在 npm 上标注 deprecate**（db/tools/agent/server 等包 × 2 版本，registry 复验通过；`shared` 无依赖可正常安装，未标注）；安装时使用 `@whispering233/ai-editor-server@latest` 即可。
 
 **发布前置（一次性，npmjs 手动）**：① 开启 npm 账号 **2FA**（npmjs 要求开启两步验证才能配置包管理；开启会撤销现有 token，需重新生成 Automation token）；② 为 `@whispering233/ai-editor-shared`、`@whispering233/ai-editor-db`、`@whispering233/ai-editor-tools`、`@whispering233/ai-editor-agent`、`@whispering233/ai-editor-server` 五包各配置 Trusted Publisher：Publisher = GitHub Actions、工作流名 = `publish.yml`；配置后 CI 无需 token（OIDC 自动换证）。
 

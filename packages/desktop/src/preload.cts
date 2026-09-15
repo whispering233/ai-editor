@@ -5,7 +5,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 contextBridge.exposeInMainWorld("aiEditorDesktop", {
-  ready: true,
   /** 弹原生目录选择框；返回选中路径，用户取消返回 null */
   pickDirectory: (): Promise<string | null> => ipcRenderer.invoke("desktop:pick-directory"),
   /** 当前书库位置（创作根绝对路径；启动时已确定） */

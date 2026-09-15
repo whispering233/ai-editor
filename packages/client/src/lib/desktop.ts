@@ -3,7 +3,6 @@
 // preload 只在桌面版存在（浏览器形态 = npm CLI + 浏览器，没有这个桥）。任何桌面专属 UI
 // 都必须经 `desktopBridge()` 判空决定是否渲染，浏览器形态行为因此完全不变。
 export interface DesktopBridge {
-  ready: boolean;
   /** 弹原生目录选择框；返回选中路径，用户取消返回 null */
   pickDirectory(): Promise<string | null>;
   /** 当前书库位置（创作根绝对路径） */

@@ -235,9 +235,9 @@
   - 现状：由 AI 的 `get_delta_history` 覆盖（页面不给时间线 UI）。
   - 触发条件：作者频繁需要"逐条回看这个角色改过什么"。
 
-## 桌面版（2026-10 设计定稿，首版未做）
+## 桌面版（v0.0.40 已交付主功能）
 
-设计契约见 `docs/design/50-desktop.md`。以下为有意顺延项（已在 §9 登记），触发条件写在这里：
+> 已交付部分（书库位置 / 目录选择闭环 / 菜单与日志 / 安全与导航 / 设置页通用 tab / 三平台 workflow）见根 `CHANGELOG.md` 的 `## [v0.0.40]`；设计契约见 `docs/design/50-desktop.md`。下列是**仍未做**的顺延项与待验证项：
 
 - **窗口尺寸/位置记忆** — 现状：每次启动回默认尺寸。触发条件：有用户抱怨布局丢失（与 `localStorage` 面板偏好丢失同源体验问题，一起做）。最小修法：写进 `desktop.json`（一个 `window` 字段），窗口 `resize`/`move` 防抖写入。
 - **macOS 公证 + Windows 代码签名** — 现状：首版不签名（macOS 需右键打开、Windows 有 SmartScreen 提示）。触发条件：**上自动更新（前置条件）**；或下载转化率/安全提示成为反馈主题。升级路径：Apple Developer（$99/年）+ Windows 证书 → `electron-builder` 的 `notarize` / `signtool` 配置。
@@ -246,6 +246,7 @@
 - **Linux deb/rpm 包** — 现状：只有 AppImage。触发条件：Linux 用户量起来。
 - **开机自启** — 现状：不做。触发条件：用户要求（与「自动备份需要进程活着的」的期待相关）。
 - **`pnpm deploy` 失效时的 esbuild 兜底** — 现状：主路径未验证通过前不预先实现兜底。触发条件：打包主路径（`pnpm deploy` + electron-builder）被实测证伪（collect 不到 workspace 依赖或原生模块 load 失败）。
+- **CI 三平台打包的首次实物验证** — 现状：`desktop.yml` 已写好，但只有 Linux 分支在本机跑过；Windows NSIS / macOS dmg（arm64+x64）从未实际产出过（runner 上的 `pnpm deploy` 路径、electron 二进制下载、mac `identity: null` 行为均未实证）。触发条件：**v0.0.40 首次 tag 触发即验证**（若失败，先修 workflow 再重推 tag——tag 不积压）。最小验证：Release 页三个平台安装包都能下、Windows 包能装能启。
 - **原生文件对话框的真实桌面验收（只能人工）** — 现状：WSLg 下 GTK 文件对话框挂起，开发机无法断言其可见性与交互（最小 Electron 对照实验同样挂起 → 环境问题，非本仓代码）。影响：首次启动选目录、书架页「浏览…」、设置页「更改书库位置」三处的真实体验未验证。触发条件：有 macOS / Windows / 真实 Linux 桌面环境可用时。最小验证：首次启动点一次选目录 + 选完确认重启后是否直达该书库。
 
 ## MVP 明确不做（勿顺手实现）

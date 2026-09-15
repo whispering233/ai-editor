@@ -15,7 +15,6 @@ afterEach(() => {
 });
 
 const BRIDGE = {
-  ready: true,
   pickDirectory: async () => null,
   getLibraryRoot: async () => "/books",
   changeLibraryRoot: async () => null,

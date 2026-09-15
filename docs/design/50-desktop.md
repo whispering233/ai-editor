@@ -84,7 +84,7 @@
 
 **顺带修掉的真实缺陷**（桌面版暴露的）：server 的 bin 自检 `realpathSync(process.argv[1])` 在 Electron 主进程里收到命令行开关（`--no-sandbox`）→ 抛 ENOENT 打挂整个主进程。现改为 try/catch 包裹、解析失败即判否（bin 语义不变）。
 
-**未验**：macOS / Windows 打包（需 CI runner）；清单见 `tasks.md` K6。
+**平台覆盖**：Linux（AppImage）已在本机实测（打包 + 启动 + 建库 + 窗口）；Windows（NSIS）与 macOS（dmg arm64/x64）由 `.github/workflows/desktop.yml` 在对应 runner 上产出，**首次 tag 触发时验证**（待验证总表见 `tasks.md`，长期跟踪见 `backlog.md`）。
 
 ## 8. 与既有形态的关系
 
