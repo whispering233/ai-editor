@@ -321,13 +321,19 @@ describe("自动推送：开关与三条触发路径", () => {
     expect(err?.at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
-  it("手动备份后：无条件立刻推一次（未到节流、也没有新变更），不推进节流基准", async () => {
+  it("手动备份后：无条件立刻推一次（未到节流），不推进节流基准；**同一份重复推 = 零上传**", async () => {
     changeCoveredByBackup(join("references", "一.md"));
     expect(await maybeAutoPush(project, { throttleMs: 10 * 60_000 })).toBe(true);
     const throttledAt = readBookState(project.config.id)?.lastAutoPushAt;
 
-    await autoPushAfterManualBackup(project); // 节流中且无变更 → 仍需推
+    // 场景 A：同一份再推一次 → 幂等跳过上传（云端已有同名同大小份；省配额、避开 MOVE 覆盖语义差异）
+    await autoPushAfterManualBackup(project);
+    expect(putCount()).toBe(1);
+    expect(readBookState(project.config.id)?.lastAutoPushAt).toBe(throttledAt);
 
+    // 场景 B：**新**一份（手动备份刚生成的那份）→ 真的上传
+    writeBackup(project, { kind: "manual", name: "新一份" });
+    await autoPushAfterManualBackup(project);
     expect(putCount()).toBe(2);
     expect(readBookState(project.config.id)?.lastAutoPushAt).toBe(throttledAt);
   });

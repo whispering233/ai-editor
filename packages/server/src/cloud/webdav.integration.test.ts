@@ -61,6 +61,8 @@ interface FakeDav {
   /** `http://127.0.0.1:<port>/dav` */
   url: string;
   close: () => Promise<void>;
+  /** 已处理的请求（method + 目标路径）——断言「零上传」这类行为用 */
+  calls: Array<{ method: string; path: string }>;
 }
 
 /** 把请求 URL 映射到根目录下的真实路径（越界 → null，防穿越） */
@@ -100,7 +102,9 @@ async function startFakeDav(root: string, options: FakeDavOptions = {}): Promise
   const davRoot = join(root, "dav");
   mkdirSync(davRoot, { recursive: true });
 
+  const calls: Array<{ method: string; path: string }> = [];
   const server: Server = createServer((req: IncomingMessage, res: ServerResponse) => {
+    calls.push({ method: req.method ?? "?", path: decodeURIComponent(req.url ?? "/") });
     const expected = `Basic ${Buffer.from(`${username}:${password}`, "utf8").toString("base64")}`;
     if (req.headers.authorization !== expected) {
       res.writeHead(401, { "WWW-Authenticate": 'Basic realm="dav"' }).end("unauthorized");
@@ -200,6 +204,7 @@ async function startFakeDav(root: string, options: FakeDavOptions = {}): Promise
   return {
  // 假服务的根就是 davRoot（无 URL 前缀）：需要前缀的用例自行拼子路径（`${url}/ai-editor`）
     url: `http://127.0.0.1:${port}`,
+    calls,
     close: () =>
       new Promise<void>((done) => {
         server.close(() => done());
@@ -393,6 +398,30 @@ describe("pullBackup × 真 HTTP 服务", () => {
     expect(result.merged.kept).toBe(1);
     // 云端那份落进本地 .backups/
     expect(existsSync(join(dir, BACKUPS_DIR_NAME, result.pulled.fileName))).toBe(true);
+
+    closeDatabase(project.db);
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("重复推送同一份 = 幂等跳过上传（坚果云 409 DuplicateName 口径）", () => {
+  it("第二次推送同一份：零 PUT / 零 MOVE，但状态照旧更新", async () => {
+    dav = await startFakeDav(root);
+    await configure(dav.url);
+    const { project, dir } = makeProjectFixture("proj-repush", "重推书");
+    mkdirSync(join(dir, ".backups"), { recursive: true });
+    const { writeBackup } = await import("../backup.js");
+    const info = writeBackup(project, { kind: "manual" });
+
+    const first = await pushBackup(project);
+    expect(first.pushed.fileName).toBe(info.fileName);
+    const before = dav.calls.filter((c) => c.method === "PUT" || c.method === "MOVE").length;
+
+    const second = await pushBackup(project); // 同一份再推
+    expect(second.pushed.fileName).toBe(info.fileName);
+    const after = dav.calls.filter((c) => c.method === "PUT" || c.method === "MOVE").length;
+    // **零 PUT / 零 MOVE**（同名同大小 ⇒ 跳过上传；只做状态刷新用的 PROPFIND）
+    expect(after - before).toBe(0);
 
     closeDatabase(project.db);
     rmSync(dir, { recursive: true, force: true });

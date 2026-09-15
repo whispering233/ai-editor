@@ -52,7 +52,8 @@
     lastSyncAt: string | null;           // 上次同步成功时刻（ISO 8601）；null = 从未同步过
     dirty: boolean;                      // 本机创作数据自 lastSyncAt 后有改动（三文件 + data.db-wal + 两个打包目录；**不含 .backups/**）
     latestBackupFileName: string | null; // 最新一份本地备份（推送缺省目标）
-    backupStale: boolean;                 // 最新一份本地备份早于最新创作改动（含 sessions/）＝「有改动未进备份」；
+    backupStale: boolean;                 // 「最新备份早于最新改动」**且**「有未同步改动（dirty）」＝「有改动未进备份」；
+                                          //   拉取/恢复后为 false（覆盖前快照的时间戳早于写入的文件，只看 mtime 会误报）
                                           //   自动路径在此状态下跳过不推（卡 B），面板提示「先『立即备份』」
     lastAutoPushError?: {                 // 自动推送最近一次失败（**任何一次推送成功**即清；缺省 = 无）
       code: string;                       // 错误码（如 CLOUD_UNREACHABLE）

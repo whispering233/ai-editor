@@ -328,7 +328,18 @@ function describeErrorCause(cause: unknown): string | null {
       const res = await davFetch("MOVE", urlOf(fromRelPath), {
         headers: { Destination: urlOf(toRelPath), Overwrite: "T" },
       });
-      if (!res.ok) await throwMapped(res, `改名 ${fromRelPath} → ${toRelPath}`);
+      if (res.ok) return;
+      // 兜底：部分云盘（坚果云实测）即使带 `Overwrite: T` 也因「目标已存在」回 409 DuplicateName——
+      // 此时删掉目标再重试一次（目标是被覆盖的那一份，删掉不会损失别的东西）。
+      if (res.status === 409 || res.status === 412) {
+        await this.remove(toRelPath).catch(() => undefined);
+        const retry = await davFetch("MOVE", urlOf(fromRelPath), {
+          headers: { Destination: urlOf(toRelPath), Overwrite: "T" },
+        });
+        if (retry.ok) return;
+        await throwMapped(retry, `改名 ${urlOf(fromRelPath)} → ${urlOf(toRelPath)}`);
+      }
+      await throwMapped(res, `改名 ${urlOf(fromRelPath)} → ${urlOf(toRelPath)}`);
     },
 
     async remove(relPath) {

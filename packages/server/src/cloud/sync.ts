@@ -300,8 +300,11 @@ export function computeCloudSync(
     lastSyncAt,
     dirty,
     latestBackupFileName: latestLocalBackupName(join(project.root, BACKUPS_DIR_NAME)),
-    // 「有改动未进最新备份」（卡 B）：自动路径据此跳过、面板据此提示（不随同步前移）
-    backupStale: hasUnbackedChanges(project),
+    // 「有改动未进最新备份」**且**「确有未同步改动」：后者把「管道自己刚写下的文件」排掉——
+    // 拉取/恢复会用刚生成的快照（时间戳早于写入）当最新备份，若只看 mtime 会立刻误报「有改动未进备份」
+    //（用户实测）。自动路径的守卫用的是**纯** `hasUnbackedChanges`（那边必须严格：最新备份确实落后于本机状态
+    // 就不能推，否则会把旧内容推上去），两者口径不同是有意的。
+    backupStale: hasUnbackedChanges(project) && dirty,
     // 自动推送最近一次失败（缺省不出现——成功即清，见 cloud/auto-push.ts）
     ...(state?.lastAutoPushError !== undefined ? { lastAutoPushError: state.lastAutoPushError } : {}),
   };
@@ -465,17 +468,22 @@ export async function pushBackup(project: ProjectContext, options: PushOptions =
   }
 
   // ⑤ 上传：临时名 → MOVE（正式名下永远是完整包；MOVE 失败清理临时名后抛出）
-  const tmpName = `${CLOUD_TMP_PREFIX}${local.fileName}`;
-  await client.put(`${dirName}/${tmpName}`, local.bytes);
-  try {
-    await client.move(`${dirName}/${tmpName}`, `${dirName}/${local.fileName}`);
-  } catch (err) {
+  // 已存在同名同大小的份 → **跳过上传**（用户连点、上次推完又推、自动推送重试）：既省云盘配额，
+  // 也避开「目标已存在」在部分云盘上的 MOVE 语义差异（坚果云即使带 `Overwrite: T` 也回 409 DuplicateName）
+  const alreadyThere = entries.some((entry) => !entry.isCollection && entry.name === local.fileName && entry.size === local.size);
+  if (!alreadyThere) {
+    const tmpName = `${CLOUD_TMP_PREFIX}${local.fileName}`;
+    await client.put(`${dirName}/${tmpName}`, local.bytes);
     try {
-      await client.remove(`${dirName}/${tmpName}`);
-    } catch {
-      // 临时名残留由下次推送前清理；原始错误优先
+      await client.move(`${dirName}/${tmpName}`, `${dirName}/${local.fileName}`);
+    } catch (err) {
+      try {
+        await client.remove(`${dirName}/${tmpName}`);
+      } catch {
+        // 临时名残留由下次推送前清理；原始错误优先
+      }
+      throw err;
     }
-    throw err;
   }
 
   // ⑥ 保留清理（只在推送成功后；失败不阻塞——pruneCloudBackups 内部吞错记日志）

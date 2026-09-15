@@ -734,6 +734,26 @@ describe("computeCloudSync：三态判定（集合基准 + 本机 mtime，不含
     const out = computeCloudSync(project, true, files([cloud.fileName]));
     expect(out.local?.dirty).toBe(false);
     expect(out.state).toBe("synced");
+    // **拉取后不再误报「有改动未进最新备份」**（用户实测）：覆盖前快照的时间戳早于拉取写入的文件，
+    // 只看 mtime 会永远为真 ⇒ `backupStale` 必须与「确有未同步改动」合取
+    expect(out.local?.backupStale).toBe(false);
+  });
+
+  it("backupStale 与 dirty 合取：同步后新改动才为真", () => {
+    const backupName = makeBackup("基线");
+    const base = new Date(Date.now() + 10_000).toISOString(); // 基准放未来 → 夹具文件都算「已覆盖」
+    writeBookState(project.config.id, { lastSyncAt: base, lastSeenCloudFiles: [] });
+    expect(computeCloudSync(project, true, files([])).local?.backupStale).toBe(false);
+
+    // 改一处创作数据且晚于 lastSyncAt → dirty=true 且备份未覆盖 → backupStale=true
+    const ref = join(project.root, "references", "新.md");
+    writeFileSync(ref, "x");
+    const after = new Date(Date.now() + 20_000);
+    utimesSync(ref, after, after);
+    const out = computeCloudSync(project, true, files([]));
+    expect(out.local?.dirty).toBe(true);
+    expect(out.local?.backupStale).toBe(true);
+    expect(out.local?.latestBackupFileName).toBe(backupName);
   });
 
   it("本机段字段：lastPushedFileName / lastSyncAt / latestBackupFileName", () => {
