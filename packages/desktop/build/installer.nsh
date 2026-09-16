@@ -15,11 +15,25 @@
 ; 「设置 → 通用 → 书库位置」随时能看到真实路径）。
 
 !macro customUnInstall
-  ; —— 安装器自身的缓存副本（属**程序文件**，非用户数据）→ **无条件**清理 ——
+  ; ⚠⚠ **升级路径不是“用户在卸载”**：安装器覆盖安装前，会用 `/S /KEEP_APP_DATA --updated _?=$INSTDIR`
+  ; 去调**旧版卸载器**先清程序文件（`templates/nsis/include/installUtil.nsh`），此时本宏同样会被调用。
+  ; 后果（v0.0.44 真机实测）：升级过程中弹出「是否清除使用数据」框，而 MessageBox 在 `/S` 静默模式
+  ; 下照样弹；用户要是点了「是」，书库与 `%APPDATA%\AI Editor` 就被删了——**升级不该动用户数据**。
+  ; `${isUpdated}` 由 `NsisScriptGenerator.flags(["updated", …])` 生成（查命令行里的 `--updated`），
+  ; 上游自己的数据清理就是用 `${ifNot} ${isUpdated}` 护住的（`templates/nsis/uninstaller.nsh`）。
+  ; 另外 `${Silent}`（脚本化 `Uninstall.exe /S`）也不弹框、默认保留数据。
+  ${If} ${isUpdated}
+    Return
+  ${EndIf}
+  ${If} ${Silent}
+    Return
+  ${EndIf}
+
+  ; —— 安装器自身的缓存副本（属**程序文件**，非用户数据）→ 仅在**用户主动卸载**时清 ——
   ; `%LOCALAPPDATA%\<name>-updater\installer.exe` 约 130MB，是 electron-builder 的 NSIS 安装器
-  ; 安装时写出的自身副本（供差分更新 / quitAndInstall 用；本项目未启用自动更新）。
-  ; 上游默认卸载器**不删它**（electron-builder#9505）——不主动清就是一百多 MB 垃圾。
-  ; 两个名字：新名派生自包名 `ai-editor-desktop`；带 scope 的那个是改名前版本的残留。
+  ; 安装时写出的自身副本（差分更新的 base）；上游默认卸载器**不删它**（electron-builder#9505）。
+  ; ⚠ 升级时必须跳过：那个目录里此刻正躺着**正在执行的**待装安装包（`pending\…exe`），
+  ; 而且新安装会自己刷新这份缓存。两个名字：新名派生自包名 `ai-editor-desktop`；带 scope 的是改名前残留。
   RMDir /r "$LOCALAPPDATA\ai-editor-desktop-updater"
   RMDir /r "$LOCALAPPDATA\@whispering233ai-editor-desktop-updater"
 

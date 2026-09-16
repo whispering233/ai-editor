@@ -8,7 +8,27 @@
 
 ---
 
-## 当前无进行中任务卡
+## 进行中任务卡
+
+### 卡 B1 — 修 v0.0.44 真机暴露的两个缺陷
+
+**背景**（真机实测，契约见 `docs/design/50-desktop.md` §5.1/§5.2）：① 升级时弹出「是否清除使用数据」框——`customUnInstall` 没护 `${isUpdated}`/`${Silent}`，用户点「是」会删书库与 `%APPDATA%\AI Editor`（数据丢失风险）；② 手动检查弹两个框（「正在后台下载」+「已下载」），且差分 0 字节时「正在下载」是假话。
+
+**改动**：
+- `packages/desktop/build/installer.nsh`：`customUnInstall` 开头 `${If} ${isUpdated}` / `${If} ${Silent}` → `Return`（不弹框、不删数据、不清安装器缓存）；缓存清理只留给用户主动卸载
+- `packages/desktop/src/updater.ts`：`manualCheckInFlight` 让手动流程独占对话框（事件路径不弹框）；手动路径改「单框」——下载秒完（缓存/差分 0 字节）只弹安装框，确实耗时才先提示「正在后台下载…」；连点菜单时有「正在检查/下载更新」回应
+- `packages/desktop/src/updater.ts`：`autoUpdater.disableWebInstaller = true`（本仓只发完整包；兼消除真机日志里的上游告警）
+- `docs/design/50-desktop.md` §5.1（升级路径不变式 + 过渡注意）/ §5.2（手动路径只弹一框 + 第三条硬约定）
+
+**验收**：`pnpm -r build` / `typecheck` / `lint` / `-r test` 全绿；NSIS 脚本 `makensis` 编译通过（`build.md` 配方，只允许预期 warning 6020）；打包态启动冒烟。**真机复验属于卡 B2**。
+
+### 卡 B2 — 发 v0.0.45 + 真机复验两版闭环
+
+**目标**：用真实新版本验完「发现 → 下载 → 确认 → 静默安装 → **版本号真的变**」全链（v0.0.44 那次是影子包，只能验到安装链路）。
+
+**步骤**：版本号 → CHANGELOG 搬运（含「v0.0.44 → v0.0.45 仍会弹一次清除数据框，**必须选否**」的过渡提醒）→ commit + annotated tag → push tag → 核对三资产与 `latest.yml` url 逐字一致。
+
+**真机验收（Windows）**：v0.0.44 上点 菜单 → 帮助 → 检查更新… → 应**只弹一个框**（新版本已下载）→ 点「立即重启安装」→ 若旧卸载器弹清除数据框**选「否」**（另：**别点是**，否则书库没了）→ 应用退出、静默安装、自动拉起 → 菜单 → 帮助 版本号应为 **v0.0.45**；日志应含 `Found version 0.0.45` 与 `Install: isSilent: true, isForceRunAfter: true`；再做一次 v0.0.45 → v0.0.46 式升级（再发一版或临时影子）确认**不再弹清除数据框**。
 
 ---
 

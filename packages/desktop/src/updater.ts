@@ -28,6 +28,17 @@ export interface UpdateDeps {
   logFile: string;
 }
 
+/**
+ * 手动检查进行中（v0.0.44 真机实测的修正）：
+ * `checkForUpdates()` 只**发起**下载就返回，而下载完成事件（`update-downloaded`）稍后才触发——
+ * 两条路径各弹一个框就会出现「先『正在后台下载』、紧接着『已下载』」的双弹窗
+ * （差分 0 字节时几乎是瞬间叠在一起）。约定：**手动流程期间，对话框由手动流程独占**，事件不弹框。
+ */
+let manualCheckInFlight = false;
+
+/** 「下载是不是已经好了」的判定窗口：缓存命中/差分 0 字节时是毫秒级，超过它就说明真在下 */
+const INSTANT_DOWNLOAD_MS = 1200;
+
 /** 启动后台检查（在窗口 loadURL 之后调用；仅 win32 且安装态真正发起请求） */
 export function setupAutoUpdate(deps: UpdateDeps): void {
   if (!isUpdateSupported()) return;
@@ -43,6 +54,10 @@ export function setupAutoUpdate(deps: UpdateDeps): void {
     error: (message: unknown) => console.error(message),
   };
 
+  // 本仓只发**完整** nsis 安装包（不发 nsis-web 差分包）：显式关掉 web installer，兼消除上游
+  // 「disableWebInstaller is set to false …」告警（真机日志里出现过）。
+  autoUpdater.disableWebInstaller = true;
+
   // 发现即后台下载，下载期间不打扰用户（提示只在 update-downloaded 之后）
   autoUpdater.autoDownload = true;
   // **只在用户确认后安装**：退出时静默替换撞上游 #7807（Windows 关机/注销杀掉安装器 ⇒ 卸载了没装回），
@@ -50,6 +65,8 @@ export function setupAutoUpdate(deps: UpdateDeps): void {
   autoUpdater.autoInstallOnAppQuit = false;
 
   autoUpdater.on("update-downloaded", (info) => {
+    // 手动检查进行中时，对话框由那条流程自己弹（否则真机实测会弹两个： 「正在后台下载」+ 「已下载」）
+    if (manualCheckInFlight) return;
     void promptInstall(deps, info.version).catch((err: unknown) => {
       console.error("[desktop] 更新安装提示失败", err);
     });
@@ -79,37 +96,73 @@ async function promptInstall(deps: UpdateDeps, version: string): Promise<void> {
 }
 
 /**
- * 菜单「帮助 → 检查更新…」入口：**必须有回应**——已是最新 / 发现新版本（后台下载中）/ 检查失败（附日志路径）。
+ * 菜单「帮助 → 检查更新…」入口：**必须有回应且只弹一个框**——已是最新 / 新版本已下载（带安装按钮）/ 失败（附日志路径）。
  * 用户主动点了却没反应 = 像坏了（`50-desktop.md` §5.2 手动路径反馈）。
  */
 export async function checkForUpdatesManually(deps: UpdateDeps): Promise<void> {
   if (!isUpdateSupported()) return;
 
-  // 类型从 electron-updater 自己的签名派生，不手抄类型名（pin 升级时不会悄悄漂移）
-  let result: Awaited<ReturnType<typeof autoUpdater.checkForUpdates>> = null;
+  // 连点菜单：上游会把并发检查去重，但对话框会叠——这里直接给一句真话
+  if (manualCheckInFlight) {
+    await info(deps, "正在检查 / 下载更新", "完成后会提示你重启安装。");
+    return;
+  }
+  manualCheckInFlight = true;
   try {
-    result = await autoUpdater.checkForUpdates();
-  } catch (err) {
-    await showFailure(deps, "检查更新失败", err);
-    return;
-  }
+    // 类型从 electron-updater 自己的签名派生，不手抄类型名（pin 升级时不会悄悄漂移）
+    let result: Awaited<ReturnType<typeof autoUpdater.checkForUpdates>> = null;
+    try {
+      result = await autoUpdater.checkForUpdates();
+    } catch (err) {
+      await showFailure(deps, "检查更新失败", err);
+      return;
+    }
 
-  if (result === null || result.isUpdateAvailable !== true) {
-    await dialog.showMessageBox(deps.win, {
-      type: "info",
-      message: `已是最新版本（v${app.getVersion()}）`,
-      buttons: ["好"],
-      noLink: true,
-    });
-    return;
-  }
+    if (result === null || result.isUpdateAvailable !== true) {
+      await info(deps, `已是最新版本（v${app.getVersion()}）`);
+      return;
+    }
 
-  // 下载是自动路径（静默），但用户正看着这次手动检查的结果 ⇒ 下载失败不能静默，否则「说下载中却永远没下文」
-  void result.downloadPromise?.catch((err: unknown) => showFailure(deps, "下载新版本失败", err));
+    const version = result.updateInfo.version;
+    const downloadPromise = result.downloadPromise;
+    if (downloadPromise === null || downloadPromise === undefined) {
+      // autoDownload 关掉时才会走到（当前配置不会）；防御性给一句
+      await info(deps, `发现新版本 v${version}`, "下载完成后重启安装即可。");
+      return;
+    }
+
+    // 先看它会不会秒完（已缓存 / 差分 0 字节）：秒完就**不说**「正在下载」——那是假话，也是双弹窗的来源
+    const finishedInstantly = await Promise.race([
+      downloadPromise.then(
+        () => true,
+        () => true, // 失败也当「已结束」：下面 await 会拿到真正的错误
+      ),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), INSTANT_DOWNLOAD_MS)),
+    ]);
+    if (!finishedInstantly) {
+      await info(deps, `发现新版本 v${version}，正在后台下载…`, "完成后会提示你重启安装。");
+    }
+
+    try {
+      await downloadPromise;
+    } catch (err) {
+      await showFailure(deps, "下载新版本失败", err);
+      return;
+    }
+
+    // 下载完成的提示与安装确认都由手动流程自己弹（事件已被 manualCheckInFlight 挡掉）
+    await promptInstall(deps, version);
+  } finally {
+    manualCheckInFlight = false;
+  }
+}
+
+/** 手动路径的普通提示（单按钮） */
+async function info(deps: UpdateDeps, message: string, detail?: string): Promise<void> {
   await dialog.showMessageBox(deps.win, {
     type: "info",
-    message: `发现新版本 v${result.updateInfo.version}，正在后台下载…`,
-    detail: "下载完成后会再弹一次对话框，由你决定何时重启安装。",
+    message,
+    ...(detail === undefined ? {} : { detail }),
     buttons: ["好"],
     noLink: true,
   });

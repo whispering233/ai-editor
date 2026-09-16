@@ -83,6 +83,12 @@
 
 **已知取舍（有意，非缺陷）**：卸载器**不解析 `desktop.json`** 去精确定位自定义书库——NSIS 读 UTF-8 JSON 有编码坑、用 PowerShell 回传中文路径同样不稳；改为扫默认候选位置，**自定义位置的书库不会被自动删**，提示文案里明确告知（应用内 设置 → 通用 → 书库位置 可见真实路径）。若将来要做精确定位，正解是应用额外写一份 UTF-16LE 路径镜像供 NSIS 读，而不是在卸载器里解析 JSON。
 
+**⚠ 升级路径不是卸载（v0.0.45 修的缺陷，不得回退此守卫）**：安装器覆盖安装前会用 `/S /KEEP_APP_DATA --updated _?=$INSTDIR` 调**旧版卸载器**先清程序文件（`templates/nsis/include/installUtil.nsh`），此时 `customUnInstall` 同样会被执行——v0.0.44 的脚本无条件弹「是否清除使用数据」（`MessageBox` 在 `/S` 静默模式下照样弹），真机表现为**升级时冒出清除数据询问框**，用户若点「是」则书库与 `%APPDATA%\AI Editor` 被删（不可恢复）。
+
+**不变式**：`customUnInstall` 开头必须以 `${isUpdated}`（升级内部调用）或 `${Silent}`（脚本化静默卸载）直接 `Return`——不弹框、不删用户数据、**也不清安装器缓存**（升级时 `%LOCALAPPDATA%\<name>-updater\pending\` 里正躺着正在执行的待装包，且新安装会自己刷新缓存；缓存清理只属用户主动卸载）。`${isUpdated}` 由 `NsisScriptGenerator.flags(["updated", …])` 生成（查命令行里的 `--updated`），上游自己的数据清理也是用 `${ifNot} ${isUpdated}` 护住的（`uninstaller.nsh`）。
+
+**过渡注意（仅一次）**：v0.0.44 → v0.0.45 这次升级仍会弹一次清除数据框——旧卸载器已经在用户机器上，**无法远程修补**；届时**必须选「否」**（选「是」会删数据）。v0.0.45 起的每次升级都不再弹。
+
 macOS 无卸载器（拖废纸篓即卸）→ 本机制只对 Windows 生效；将来若需跨平台的「清除数据」，应做成应用内入口（设置页）。
 
 **安装器缓存副本的清理**：`%LOCALAPPDATA%\<name>-updater\installer.exe`（约 130MB）是 electron-builder 的 NSIS 安装器安装时写出的**自身副本**（供差分更新 / `quitAndInstall`，v0.0.44 起被自动更新真正使用），属**程序文件而非用户数据** → 卸载时**无条件清理**（上游默认卸载器不删它，electron-builder#9505）。该目录名派生自包名（`sanitizeFileName(name).toLowerCase() + "-updater"`，**无配置项可覆盖**），因此 desktop 包**有意不带 scope**（`ai-editor-desktop`）——带 scope 会得到 `@whispering233ai-editor-desktop-updater` 这种拼音式怪名；卸载器同时清带 scope 的旧名残留。
@@ -95,14 +101,14 @@ macOS 无卸载器（拖废纸篓即卸）→ 本机制只对 Windows 生效；�
 | :--- | :--- | :--- |
 | 检查时机 | 启动后异步一次（不阻塞窗口）+ 菜单「帮助 → 检查更新…」；**无定时器** | 关窗即退出、无托盘驻留，定时检查在真实使用里几乎不触发 |
 | 自动路径反馈 | 全静默；下载完成才弹原生对话框「立即重启安装 / 稍后」 | 网络抖动不该打扰写作；GUI 用户排障看日志 |
-| 手动路径反馈 | 必有应答：已是最新 vX / 发现新版本（后台下载中）/ 检查失败（附日志路径） | 用户主动点了却没反应 = 像坏了 |
+| 手动路径反馈 | 必有应答且**只弹一个框**：已是最新 vX / 新版本已下载 + 安装按钮 / 检查失败（附日志路径）；仅当下载确实耗时（秒级判定窗口）时才先给一句「正在后台下载…」 | 用户主动点了却没反应 = 像坏了；反之弹两个框（「正在下载」+「已下载」）是 v0.0.44 真机实测的缺陷 |
 | 安装时机 | **只在用户确认后安装**（`autoInstallOnAppQuit = false`）；对话框默认按钮与 Esc 都是「稍后」 | 退出时静默替换撞上游 #7807（Windows 关机/注销杀掉安装器 ⇒ 卸载了没装回），这类故障用户自己修不了 |
 | 安装步骤 | 先 `await closeServer()`（收敛 WAL/备份调度，同「切换书库」姿势）→ `quitAndInstall(true, true)`（静默 + 装完拉起应用） | 不在退出中途丢数据；重启后端口与 `localStorage` 偏好不变 |
 | 差分更新 | 保持默认开启；要求**每个 Release 三资产齐全** | 零代码；缺旧版 blockmap 只损失那一次带宽（自动回退全量下载） |
 | 版本可见性 | 菜单「帮助」→ `AI Editor vX.Y.Z`（disabled） | 真机验证与用户排障的唯一抓手，且 **client 零改动** |
 | 签名 | 仍不签名 | electron-updater 在 `app-update.yml` 无 `publisherName` 时**跳过** Authenticode 校验；强制签名的是 macOS，而 macOS 不出包 |
 
-**两条硬约定**：① 提示与安装只在 `update-downloaded` 之后（下载期间不打扰用户）；② 安装前必须先 `await closeServer()`——安装器要替换正在运行的程序文件。
+**三条硬约定**：① 提示与安装只在 `update-downloaded` 之后（下载期间不打扰用户）；② 安装前必须先 `await closeServer()`——安装器要替换正在运行的程序文件；③ **手动检查期间对话框由手动流程独占**（`manualCheckInFlight`），事件路径不弹框——否则真机实测会出现「正在后台下载」+「已下载」两个框（差分 0 字节时几乎是瞬间叠在一起）。
 
 **信任锚与安全边界（未签名 + GitHub Releases）**：可执行文件的可信性 = GitHub Releases 的 TLS + 仓库写权限（2FA）+ `latest.yml` 里的 sha512。**sha512 与安装包同源**：挡得住下载损坏/中间人，**挡不住 Release 被篡改**；用户侧 SmartScreen 提示依旧（与首版一致，不新增问题）。消除这条边界的唯一办法 = 代码签名（触发条件见 `backlog.md`）。
 
