@@ -88,6 +88,13 @@ pnpm desktop:dist                                      # 全仓构建 + pnpm dep
   timeout 40 packages/desktop/release/linux-unpacked/ai-editor --user-data-dir=/tmp/smoke
   # 期望：存活到 timeout（124）、日志出现「菜单已就绪（… 检查更新项: <bool>）」、无更新相关异常
   ```
+  - **win32 分支在 Linux 上也能跑一遍**（本地唯一能执行该分支的办法，2026-10 实测）：临时把 `isUpdateSupported()` 改成 `return true`，重打包后带假 `APPIMAGE` 跑：
+  ```bash
+  # 变异后：pnpm --filter ai-editor-desktop build && node packages/desktop/scripts/pack.mjs
+  APPIMAGE=/tmp/fake.AppImage timeout 60 packages/desktop/release/linux-unpacked/ai-editor --user-data-dir=/tmp/smoke
+  # 期望：日志出现 [info] Checking for update / [error] Cannot find latest-linux.yml … 404（网络与错误路径都真跑）
+  git checkout -- packages/desktop/src/updater.ts   # 恢复守卫后必须重新 build+pack，别把变异产物当成品
+  ```
 
 - **真机更新验证（两版闭环，只能人工）**：发 vX（首个带更新能力的版本）→ 真机装 `AI-Editor-vX-win-x64.exe` → 发 vX+1（确认三资产已挂在 Release）→ 启动 vX：应弹「新版本 vX+1 已下载」→ 点「立即重启安装」→ 重启后 菜单 → 帮助 里的版本号应为 vX+1。⚠ **老版本（无更新器）不可能自动升上来**，这一跳必须手动装一次；日志看 `<userData>\logs\ai-editor.log`。
 - **Electron 二进制不再随 install 下载**（Electron 42+ 移除 postinstall，改懒下载）：`pnpm install` 不碰二进制；开发态首次 `pnpm --filter <desktop> start` 会打印 `Downloading Electron binary...` 并下载（此时才需要 `ELECTRON_MIRROR`）；打包时 electron-builder 自行下载所需二进制。`ELECTRON_SKIP_BINARY_DOWNLOAD` 已失效，手动预下载用 `pnpm --filter <desktop> exec install-electron --no`。

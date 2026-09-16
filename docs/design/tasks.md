@@ -10,21 +10,7 @@
 
 ## 进行中任务卡
 
-> 卡 A1（桌面版自动更新：发布链路）已完成：`03443fb` + 修复 `5c32efa`（资产名去空格 + `pack.mjs` 的 `assertUpdateAssetNames()` 打包期断言）——残留「无独立复现（本环境子代理无 shell）」已如实登记于下方待验证区。
-
-### 卡 A2 — 桌面版自动更新：主进程逻辑与菜单入口
-
-**目标**：Windows 安装态能自检自更新（逐条对齐 `50-desktop.md` §5.2 的表与两条硬约定）。
-
-**改动**：
-- `packages/desktop/package.json`：`electron-updater` `"6.8.9"` 进 `dependencies`（**exact pin**，不得进 devDependencies）
-- 新增 `packages/desktop/src/updater.ts`：`setupAutoUpdate(win)`（win32 守卫 → 启动异步检查 → `autoInstallOnAppQuit = false` → `update-downloaded` 弹原生对话框（默认/取消按钮 = 稍后）→ 点「立即重启安装」则 `await closeServer()` → `quitAndInstall(true, true)`）+ 手动检查入口（已最新 / 发现新版本 / 失败 三应答）
-- `packages/desktop/src/main.ts`：接线；菜单新增「帮助」（`AI Editor vX.Y.Z` disabled + 「检查更新…」）
-- 根 `CHANGELOG.md` 的 `## [Unreleased]` 补条目（含「老版本需手动装一次」的事实）+ 根 `README.md` 的「桌面版（安装包）」节补一句：安装态会自动检查更新；**首个带更新能力的版本需手动装一次**（老版本没有更新器）。
-
-**验收（自动 + 冒烟）**：`pnpm -r build` → `pnpm typecheck` → `pnpm lint` → `pnpm -r test` 全绿；`pnpm desktop:dist` 后本地起 Linux 包（窗口正常、日志无更新相关异常）；`git diff --stat` 证明 client / preload 零改动。
-
-**待真机（不阻塞本卡验收）**：两版闭环，见下方待验证区第 6 条与 `build.md`。
+> 卡 A1（发布链路：`03443fb` + `5c32efa`）与卡 A2（主进程逻辑与菜单：`a103cb1` + `4e46c10` + `55fbbf5`）均已完成并通过独立 oracle 复核（oracle 两轮各捉到一条真缺陷：资产名空格导致更新 404、`console.info` 不落盘导致排障日志缺上下文）。**当前无进行中任务卡**；剩余工作 = 下方「待验证」第 6-9 条（真机/CI，等 v0.0.44 发布）。
 
 ---
 
@@ -37,9 +23,11 @@
 3. **安装器缓存被清**（v0.0.43 新验项）：卸载后 `%LOCALAPPDATA%` 下不应再有 `ai-editor-desktop-updater\`（安装时会新建，卸载时无条件删）；旧名 `@whispering233ai-editor-desktop-updater\` 也应被清；
 4. 原生目录选择框的**可见性与交互**（WSLg 下 GTK 文件对话框挂起，非本仓代码）——剩书架页「浏览…」与设置页「更改…」两处；
 5. **macOS 的 Cmd+C/V**（菜单 Edit 角色，本机无法验证）、菜单项「打开书库/日志目录」的 `shell.openPath`；
-6. **Windows 自动更新的两版闭环**（需先发出含更新能力的版本）：装 v0.0.44 → 发 v0.0.45 → 启动应弹「新版本 v0.0.45 已下载」→ 点「立即重启安装」→ 重启后 菜单 → 帮助 版本号应为 v0.0.45；顺带观察 Defender/杀软是否拦静默安装（未验证项）。⚠ 老版本不会自己升上来，首跳必须手动装一次。
-7. **CI 侧三资产首跑（v0.0.44 发版时）**：Release 上必须同时有 `AI-Editor-0.0.44-win-x64.exe` + `latest.yml` + `AI-Editor-0.0.44-win-x64.exe.blockmap`，且 `latest.yml` 的 `files[0].url` / `path` 与资产名**逐字一致**（本地 Linux 侧已由 `pack.mjs` 的 `assertUpdateAssetNames()` 守住同一不变式）。
-8. **本仓验证独立性限制（环境事实，已登记）**：卡 A1 的打包/断言/commit 由编排者代跑——子代理（worker / oracle / delegate）在本环境**均无 shell 工具**（能力列表宣称有 `bash`，实际不可用）⇒ 「独立复现」只做到「独立静态判读 + 产物阅读」，命令级证据均为编排者提供。
+6. **Windows 自动更新的真机两版闭环**（v0.0.44 发布后立刻可做）：装 v0.0.44（⚠ **首跳必须手动装一次**，老版本没有更新器）→ 发 v0.0.45（Release 三资产齐全）→ 启动 v0.0.44：`<userData>\logs\ai-editor.log` 应出现 `Checking for update` / `Found version v0.0.45`（**验 info 行确实落盘**）→ 弹「新版本 v0.0.45 已下载」→ 点「立即重启安装」→ 应用退出、静默安装、自动拉起 → 菜单 → 帮助 版本号 = v0.0.45。同批观察四件：① Esc 与 Enter 都走「稍后」（不重启、版本不变）；② 日志出现 `Cannot run installer: error code: …` ⇒ 静默安装被拦（杀软/Defender），需手动下载；③ 差分是否命中（base = `%LOCALAPPDATA%\ai-editor-desktop-updater\installer.exe`；卸载后首更回退全量，无功能影响）；④ `--force-run` 是否真拉起应用。
+7. **无更新 / 失败的手动分支**：菜单「检查更新…」在无新版时应弹「已是最新版本（vX）」；负向用例（撤掉 Release 的 `latest.yml`）应弹「检查更新失败」且日志含 `ERR_UPDATER_CHANNEL_FILE_NOT_FOUND`。⚠ 本地已跑通后半段：临时掀掉 `isUpdateSupported()` 守卫 + `APPIMAGE=/tmp/fake` 在 Linux 打包态实测 → 日志出现 `[info] Checking for update` 与 `[error] … Cannot find latest-linux.yml … 404`（**同时直接验证了 info 行落盘的修复**），但**对话框 UI 面仍只能在真机验**。
+8. **CI 侧三资产首跑（v0.0.44 发版时）**：Release 上必须同时有 `AI-Editor-0.0.44-win-x64.exe` + `latest.yml` + `AI-Editor-0.0.44-win-x64.exe.blockmap`，且 `latest.yml` 的 `files[0].url` / `path` 与资产名**逐字一致**（本地 Linux 侧已由 `pack.mjs` 的 `assertUpdateAssetNames()` 守住同一不变式）。
+9. **win32 分支在 Windows 上的启动冒烟（缺）**：本地只能在 Linux 上以「临时掀守卫」方式执行该分支（已做：无崩溃、日志接线正确、网络与错误路径都跑通）；Windows runner 上「`检查更新项: true` + 无 `SyntaxError`/`Uncaught Exception`」的断言仍缺（卡见 `backlog.md`「CI 侧打包态启动冒烟」）。
+10. **本仓验证独立性限制（环境事实，已登记）**：卡 A1/A2 的打包/断言/commit 均由编排者代跑——子代理（worker / oracle / delegate）在本环境**均无 shell 工具**（能力列表宣称有 `bash`，实际不可用）⇒ 「独立复现」只做到「独立静态判读 + 产物阅读」，命令级证据均为编排者提供。
 
 **开新卡**：从 `backlog.md` 选（当前剩余分两类）——
 
