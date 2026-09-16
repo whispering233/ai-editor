@@ -8,7 +8,42 @@
 
 ---
 
-## 当前无进行中任务卡
+## 进行中任务卡
+
+### 卡 A1 — 桌面版自动更新：发布链路（publish 段 + 三资产）
+
+**目标**：让打包/发布产出自动更新需要的全部元数据；**不改任何主进程 / client 代码**。契约依据 = `50-desktop.md` §5.2 + `build.md`「自动更新的元数据」。
+
+**改动（仅三处）**：
+- `packages/desktop/electron-builder.yml`：加 `publish`（`provider: github` / `owner: whispering233` / `repo: ai-editor`）
+- `packages/desktop/scripts/pack.mjs`：electron-builder 调用显式加 `--publish never`（上传唯一路径 = `softprops/action-gh-release`）
+- `.github/workflows/desktop.yml`：Release `files` 与 CI artifact `path` 两处 glob 补 `latest.yml`、`*.blockmap`
+
+**验收（自动）**：
+1. `pnpm -r build` → `pnpm desktop:dist`（本地 Linux 包）
+2. 断言 `packages/desktop/release/linux-unpacked/resources/app-update.yml` 存在且含 `provider: github`、`owner: whispering233`、`repo: ai-editor`、`updaterCacheDirName: ai-editor-desktop-updater`
+3. 断言 `packages/desktop/release/` 下出现 `latest-linux.yml`（publish 段生效的旁证）
+4. 全程无上传行为（不应出现 GH_TOKEN 相关报错）
+
+（Windows 侧三资产由 CI 验，不阻塞本卡：`gh workflow run desktop.yml --ref main -f release_tag=<tag>` → `gh run download <id> -n desktop-windows-latest` → 断言 `.exe` + `latest.yml` + `.exe.blockmap` 三资产，且 `latest.yml` 的 `url` 与资产名一致。）
+
+**禁**：改 `main.ts` / client / preload；动 `installer.nsh`；顺手改其他 YAML 语义。
+
+### 卡 A2 — 桌面版自动更新：主进程逻辑与菜单入口
+
+**目标**：Windows 安装态能自检自更新（逐条对齐 `50-desktop.md` §5.2 的表与两条硬约定）。
+
+**改动**：
+- `packages/desktop/package.json`：`electron-updater` `"6.8.9"` 进 `dependencies`（**exact pin**，不得进 devDependencies）
+- 新增 `packages/desktop/src/updater.ts`：`setupAutoUpdate(win)`（win32 守卫 → 启动异步检查 → `autoInstallOnAppQuit = false` → `update-downloaded` 弹原生对话框（默认/取消按钮 = 稍后）→ 点「立即重启安装」则 `await closeServer()` → `quitAndInstall(true, true)`）+ 手动检查入口（已最新 / 发现新版本 / 失败 三应答）
+- `packages/desktop/src/main.ts`：接线；菜单新增「帮助」（`AI Editor vX.Y.Z` disabled + 「检查更新…」）
+- 根 `CHANGELOG.md` 的 `## [Unreleased]` 补条目（含「老版本需手动装一次」的事实）+ 根 `README.md` 的「桌面版（安装包）」节补一句：安装态会自动检查更新；**首个带更新能力的版本需手动装一次**（老版本没有更新器）。
+
+**验收（自动 + 冒烟）**：`pnpm -r build` → `pnpm typecheck` → `pnpm lint` → `pnpm -r test` 全绿；`pnpm desktop:dist` 后本地起 Linux 包（窗口正常、日志无更新相关异常）；`git diff --stat` 证明 client / preload 零改动。
+
+**待真机（不阻塞本卡验收）**：两版闭环，见下方待验证区第 6 条与 `build.md`。
+
+---
 
 最近完成的批次：**卸载残留清理 + 包名去 scope（v0.0.43）**——清理 electron-builder 安装器在 `%LOCALAPPDATA%` 留下的 130MB 缓存副本（卸载时无条件删，兼容旧名）；事实见根 `CHANGELOG.md` 的 `## [v0.0.43]` 段。此前三批：v0.0.42（书库位置 3 级回退 + 卸载选项与签名门禁）、v0.0.41（导入备份书名修正 + 打包口径收敛）、v0.0.40（桌面版整批）。
 
@@ -18,7 +53,8 @@
 2. **签名门禁的负向用例**（只能真机）：手工建一个 `<文档>\AI Editor`（无 `.ai-editor/library.json`）→ 卸载选「是」→ 该目录**必须仍在**；
 3. **安装器缓存被清**（v0.0.43 新验项）：卸载后 `%LOCALAPPDATA%` 下不应再有 `ai-editor-desktop-updater\`（安装时会新建，卸载时无条件删）；旧名 `@whispering233ai-editor-desktop-updater\` 也应被清；
 4. 原生目录选择框的**可见性与交互**（WSLg 下 GTK 文件对话框挂起，非本仓代码）——剩书架页「浏览…」与设置页「更改…」两处；
-5. **macOS 的 Cmd+C/V**（菜单 Edit 角色，本机无法验证）、菜单项「打开书库/日志目录」的 `shell.openPath`。
+5. **macOS 的 Cmd+C/V**（菜单 Edit 角色，本机无法验证）、菜单项「打开书库/日志目录」的 `shell.openPath`；
+6. **Windows 自动更新的两版闭环**（需先发出含更新能力的版本）：装 v0.0.44 → 发 v0.0.45 → 启动应弹「新版本 v0.0.45 已下载」→ 点「立即重启安装」→ 重启后 菜单 → 帮助 版本号应为 v0.0.45；顺带观察 Defender/杀软是否拦静默安装（未验证项）。⚠ 老版本不会自己升上来，首跳必须手动装一次。
 
 **开新卡**：从 `backlog.md` 选（当前剩余分两类）——
 

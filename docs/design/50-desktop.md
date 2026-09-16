@@ -70,8 +70,8 @@
   - **`electron-builder` 需显式 `linux.executableName`（实测）**：应用目录 package.json 的 name 带 scope（`@whispering233/...`）→ 推导出的可执行名含 `@`，AppImage 工具链拒收（仅允许字母/数字/`-`/`_`/`.`/空格）。另需 `npmRebuild: false`（N-API 模块无需针对 Electron 重编译）。
 - **原生模块**：`asarUnpack` 放 `**/*.node`。better-sqlite3 v13 是 N-API（`NAPI_VERSION=10`）+ 预编译 8 平台 `.node`，在 Electron 44.3.0（内置 Node 24.18.1）**免 rebuild 直接可用**——已实测（dev 态与打包态各建库一次）。
 - **平台矩阵（2026-10 定）**：**本地只打 Linux 包测试**（`pnpm desktop:dist` → AppImage）；**Windows 包由 CI 出**（nsis，唯一的自动出包平台）；macOS（dmg）暂不做——无 mac 环境可验。将来有真实用户需求再恢复三平台 matrix（`desktop.yml` 里两个平台项已注释保留）。Windows 本地交叉构建需 Wine（electron-builder 官方口径），本仓不往开发机装该依赖。
-- **签名**：首版不做（macOS 首次需右键打开、Windows 有 SmartScreen 提示，README 写明）。触发条件 = 用户量起来或要上自动更新。
-- **自动更新**：首版**手动**（GitHub Releases 下载新包）。electron-updater 在 macOS 上要求 app 已签名，签名未做之前上自动更新是纯负债。
+- **签名**：首版不做（macOS 首次需右键打开、Windows 有 SmartScreen 提示，README 写明）。触发条件 = 用户量起来或 SmartScreen 提示成为反馈主题（**不再是「上自动更新」**——Windows 更新已在未签名下跑通，信任锚与安全边界见 §5.2）。
+- **自动更新**：**Windows 安装态已启用**（electron-updater 6.8.9 + GitHub Releases；macOS 仍受签名阻塞）——时机/反馈/安装口径与安全边界见 §5.2。
 - **CI**：`.github/workflows/desktop.yml`，与 `publish.yml` 同触发（push `v*` tag），**只跑 windows-latest**，产物挂到该 tag 的 GitHub Release（并额外上传 CI artifact 供本地下载验）。发布纪律见 `build.md`。
 - **版本号**：与根 `version` 同源，同一 tag 同时产 npm 包与桌面安装包。
 
@@ -85,7 +85,34 @@
 
 macOS 无卸载器（拖废纸篓即卸）→ 本机制只对 Windows 生效；将来若需跨平台的「清除数据」，应做成应用内入口（设置页）。
 
-**安装器缓存副本的清理**：`%LOCALAPPDATA%\<name>-updater\installer.exe`（约 130MB）是 electron-builder 的 NSIS 安装器安装时写出的**自身副本**（供差分更新 / `quitAndInstall`；本项目未启用自动更新），属**程序文件而非用户数据** → 卸载时**无条件清理**（上游默认卸载器不删它，electron-builder#9505）。该目录名派生自包名（`sanitizeFileName(name).toLowerCase() + "-updater"`，**无配置项可覆盖**），因此 desktop 包**有意不带 scope**（`ai-editor-desktop`）——带 scope 会得到 `@whispering233ai-editor-desktop-updater` 这种拼音式怪名；卸载器同时清带 scope 的旧名残留。
+**安装器缓存副本的清理**：`%LOCALAPPDATA%\<name>-updater\installer.exe`（约 130MB）是 electron-builder 的 NSIS 安装器安装时写出的**自身副本**（供差分更新 / `quitAndInstall`，v0.0.44 起被自动更新真正使用），属**程序文件而非用户数据** → 卸载时**无条件清理**（上游默认卸载器不删它，electron-builder#9505）。该目录名派生自包名（`sanitizeFileName(name).toLowerCase() + "-updater"`，**无配置项可覆盖**），因此 desktop 包**有意不带 scope**（`ai-editor-desktop`）——带 scope 会得到 `@whispering233ai-editor-desktop-updater` 这种拼音式怪名；卸载器同时清带 scope 的旧名残留。
+
+### 5.2 自动更新（Windows 安装态，2026-10）
+
+**形态**：electron-updater（**6.8.9 exact pin**，与 electron-builder 26 同线；7.x 改了 `quitAndInstall` 签名与 `autoInstallEvent` 语义，**不要混用**）+ GitHub Releases（仓库 public ⇒ **app 内不塞任何 token**，更新器走 `/releases/latest` 不碰 API 配额）。只对 **Windows NSIS 安装态**生效：主进程侧 `process.platform === "win32"` 守卫，其他平台不出包也不检查（将来真发 Linux/macOS 更新时另立卡，不在本机制的假定范围内）。
+
+| 项 | 决定 | 理由 |
+| :--- | :--- | :--- |
+| 检查时机 | 启动后异步一次（不阻塞窗口）+ 菜单「帮助 → 检查更新…」；**无定时器** | 关窗即退出、无托盘驻留，定时检查在真实使用里几乎不触发 |
+| 自动路径反馈 | 全静默；下载完成才弹原生对话框「立即重启安装 / 稍后」 | 网络抖动不该打扰写作；GUI 用户排障看日志 |
+| 手动路径反馈 | 必有应答：已是最新 vX / 发现新版本（后台下载中）/ 检查失败（附日志路径） | 用户主动点了却没反应 = 像坏了 |
+| 安装时机 | **只在用户确认后安装**（`autoInstallOnAppQuit = false`）；对话框默认按钮与 Esc 都是「稍后」 | 退出时静默替换撞上游 #7807（Windows 关机/注销杀掉安装器 ⇒ 卸载了没装回），这类故障用户自己修不了 |
+| 安装步骤 | 先 `await closeServer()`（收敛 WAL/备份调度，同「切换书库」姿势）→ `quitAndInstall(true, true)`（静默 + 装完拉起应用） | 不在退出中途丢数据；重启后端口与 `localStorage` 偏好不变 |
+| 差分更新 | 保持默认开启；要求**每个 Release 三资产齐全** | 零代码；缺旧版 blockmap 只损失那一次带宽（自动回退全量下载） |
+| 版本可见性 | 菜单「帮助」→ `AI Editor vX.Y.Z`（disabled） | 真机验证与用户排障的唯一抓手，且 **client 零改动** |
+| 签名 | 仍不签名 | electron-updater 在 `app-update.yml` 无 `publisherName` 时**跳过** Authenticode 校验；强制签名的是 macOS，而 macOS 不出包 |
+
+**两条硬约定**：① 提示与安装只在 `update-downloaded` 之后（下载期间不打扰用户）；② 安装前必须先 `await closeServer()`——安装器要替换正在运行的程序文件。
+
+**信任锚与安全边界（未签名 + GitHub Releases）**：可执行文件的可信性 = GitHub Releases 的 TLS + 仓库写权限（2FA）+ `latest.yml` 里的 sha512。**sha512 与安装包同源**：挡得住下载损坏/中间人，**挡不住 Release 被篡改**；用户侧 SmartScreen 提示依旧（与首版一致，不新增问题）。消除这条边界的唯一办法 = 代码签名（触发条件见 `backlog.md`）。
+
+**首次升级路径（不可自动化的一跳）**：第一个带更新能力的版本**必须手动下载安装一次**——老版本里没有更新器。README / CHANGELOG 要写明，否则用户会以为「早该自动升上来」。
+
+**发布侧前置**：每个 Release 必须同时挂 `AI.Editor-<v>-win-x64.exe` + `latest.yml` + `<同名>.exe.blockmap`。**缺 `latest.yml` ⇒ 所有旧版的检查更新直接失败**（`ERR_UPDATER_CHANNEL_FILE_NOT_FOUND`）；缺 blockmap 只影响带宽。electron-builder 只负责产出这三样与包内 `resources/app-update.yml`（`electron-builder.yml` 的 `publish` 段是这两份元数据的前提），**上传唯一路径仍是 `softprops/action-gh-release`**，`pack.mjs` 显式传 `--publish never` 防两条上传路径打架（CI 也没有 GH_TOKEN 可交给 electron-builder）。完整发布纪律见 `build.md`。
+
+**差分 base 的位置**：`%LOCALAPPDATA%\ai-editor-desktop-updater\installer.exe`（安装器安装时写出的自身副本）。卸载会清掉它（§5.1）⇒ 卸载后重装的第一次更新回退全量下载，无功能影响。
+
+**不做**（有意）：设置页内嵌更新面板（要扩 `DesktopBridge` + client UI）、灰度 staging、macOS/Linux 自动更新、静默自动安装。延期项与触发条件见 `backlog.md`。
 
 ## 6. 客户端契约增量（唯一改动）
 
@@ -119,4 +146,4 @@ macOS 无卸载器（拖废纸篓即卸）→ 本机制只对 Windows 生效；�
 
 ## 9. 顺延项（不进首版）
 
-窗口尺寸/位置记忆、macOS 公证与 Windows 代码签名、electron-updater 自动更新、端口 +1 时的偏好丢失兜底、Linux deb/rpm 包、开机自启。触发条件见 `backlog.md`。
+窗口尺寸/位置记忆、macOS 公证与 Windows 代码签名、macOS 自动更新（签名是硬前置）、端口 +1 时的偏好丢失兜底、Linux deb/rpm 包、开机自启。触发条件见 `backlog.md`。

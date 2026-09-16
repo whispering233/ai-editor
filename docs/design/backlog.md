@@ -240,13 +240,16 @@
 > 已交付部分（书库位置 / 目录选择闭环 / 菜单与日志 / 安全与导航 / 设置页通用 tab / Windows 打包 workflow）见根 `CHANGELOG.md` 的 `## [v0.0.40]` 与 `## [v0.0.41]`；设计契约见 `docs/design/50-desktop.md`。下列是**仍未做**的顺延项与待验证项：
 
 - **窗口尺寸/位置记忆** — 现状：每次启动回默认尺寸。触发条件：有用户抱怨布局丢失（与 `localStorage` 面板偏好丢失同源体验问题，一起做）。最小修法：写进 `desktop.json`（一个 `window` 字段），窗口 `resize`/`move` 防抖写入。
-- **macOS 公证 + Windows 代码签名** — 现状：首版不签名（macOS 需右键打开、Windows 有 SmartScreen 提示）。触发条件：**上自动更新（前置条件）**；或下载转化率/安全提示成为反馈主题。升级路径：Apple Developer（$99/年）+ Windows 证书 → `electron-builder` 的 `notarize` / `signtool` 配置。
-- **electron-updater 自动更新** — 现状：手动下载新包。触发条件：签名已做 + 版本发布频率让手动更新成为负担。
+- **Windows 代码签名 + macOS 公证** — 现状：不签名（Windows 有 SmartScreen 提示、macOS 首次需右键打开）。**不再是自动更新的前置**：Windows 更新已在未签名下跑通，代价是信任锚仅为「GitHub Releases + sha512」且 SmartScreen 提示不消（安全边界见 `50-desktop.md` §5.2）。触发条件：SmartScreen/安全提示成为反馈主题，或分发规模需要用户侧验签。升级路径：Windows 代码签名证书（或 Azure Trusted Signing）→ `electron-builder` 的 `signtool` / `win.publisherName`（写上後会**自动启用**更新包的 Authenticode 校验）；macOS 另需 Apple Developer（$99/年）+ `notarize` 配置。
+- **设置页内嵌更新面板**（显示版本 / 手动检查 / 下载进度）— 现状：v0.0.44 起更新走主进程原生对话框 + 菜单「帮助 → 检查更新…」，client 侧零改动（`50-desktop.md` §5.2）。触发条件：用户反馈找不到检查入口、或要看下载进度。最小修法：扩 `DesktopBridge`（invoke + 状态推送）+ 设置页「通用」一行，更新逻辑不动。
+- **更新灰度 / 预发布通道** — 现状：所有安装态都从 `/releases/latest` 拿最新正式版。触发条件：需要先给部分人验版本。**口径（必须遵守）**：将来若发 `vX.Y.Z-beta.1` 这类 tag，Release **必须勾 prerelease**——否则 `/releases/latest` 会把 beta 推给所有正式用户（`50-desktop.md` §5.2）。
+- **macOS / Linux 自动更新** — 现状：更新器有 win32 守卫，只对 Windows 安装态生效。触发条件：相应平台恢复出包（macOS 另需签名/公证——那是 electron-updater 的硬前置）。
 - **端口 +1 时的偏好丢失** — 现状：3456 被别的程序占用时落到 3457，`localStorage` 按 origin 隔离 → 主题/面板偏好重置（一次）。触发条件：真实反馈重复出现。升级路径：自定义协议 `app://` + protocol handler 反代 `/api/*`（需验证 SSE 流透传）；或偏好转经服务端配置持久化。
 - **Linux deb/rpm 包** — 现状：只有 AppImage。触发条件：Linux 用户量起来。
 - **开机自启** — 现状：不做。触发条件：用户要求（与「自动备份需要进程活着的」的期待相关）。
 - **`pnpm deploy` 失效时的 esbuild 兜底** — 现状：主路径未验证通过前不预先实现兜底。触发条件：打包主路径（`pnpm deploy` + electron-builder）被实测证伪（collect 不到 workspace 依赖或原生模块 load 失败）。
 - **Windows 包的真实安装验收（只能人工/真机）** — 现状：`desktop.yml` 已在 v0.0.40 跑通三平台、随后收窄为只出 Windows；包能构建、能下载，但**「装得上、启得开、选书库、建库、导入备份」全链路未在真实 Windows 上逐项验过**（本仓开发机是 WSL，Windows 交叉构建需 Wine 故不做）。触发条件：发版后拿到 exe 的人实测。最小验证：安装 → 首次启动直达书架 → 新建一本 → 导入一个备份（书名应取自备份而非 zip 文件名）。
+- **Windows 自动更新的真机闭环（只能人工/真机）** — 现状：v0.0.44 起更新链路代码与 CI 三资产已就位，但「装 vX → 发 vX+1 → 弹提示 → 点立即重启 → 重启后版本号变 vX+1」未在真实 Windows 上跑过（且**首个带能力的版本必须手动装一次**，老版本不会自己升上来）。触发条件：vX+1 发布后立即验。最小验证：按 `build.md`「真机更新验证（两版闭环）」；顺带观察 Defender/杀软是否拦静默安装（未验证项）。
 - **macOS / Linux 安装包的恢复** — 现状：matrix 里两项已注释（无真实用户需求 + 无 mac 环境可验）。触发条件：出现相应平台的真实用户。（Linux 包本机可随时出；macOS 需 mac runner。）
 - **原生文件对话框的真实桌面验收（只能人工）** — 现状：WSLg 下 GTK 文件对话框挂起，开发机无法断言其可见性与交互（最小 Electron 对照实验同样挂起 → 环境问题，非本仓代码）。影响：首次启动选目录、书架页「浏览…」、设置页「更改书库位置」三处的真实体验未验证。触发条件：有 macOS / Windows / 真实 Linux 桌面环境可用时。最小验证：首次启动点一次选目录 + 选完确认重启后是否直达该书库。
 
