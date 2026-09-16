@@ -35,8 +35,13 @@ export function setupAutoUpdate(deps: UpdateDeps): void {
   // electron-updater 的 logger 默认就是 `console`，但它的 info 走 `console.info`——而 `log.ts` 只接管了
   // `console.log/warn/error`（实测 `console.info !== console.log`）⇒ 不显式接一遍，更新流程的 info 行
   // （Checking for update / Found version … / Downloading …）只会写 stdout、**安装态无人收**，真机排障时
-  // 日志里只剩 error。把它接到已被接管的 console 方法上。
-  autoUpdater.logger = { info: console.log, warn: console.warn, error: console.error };
+  // 日志里只剩 error。箭头包装（而非直接写 `console.log`）：调用时才查当前方法，不依赖
+  // 「本函数必须在 redirectConsoleToFile 之后跑」这条隐式顺序。
+  autoUpdater.logger = {
+    info: (message: unknown) => console.log(message),
+    warn: (message: unknown) => console.warn(message),
+    error: (message: unknown) => console.error(message),
+  };
 
   // 发现即后台下载，下载期间不打扰用户（提示只在 update-downloaded 之后）
   autoUpdater.autoDownload = true;
