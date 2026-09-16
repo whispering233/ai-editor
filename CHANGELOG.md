@@ -7,6 +7,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **桌面版 Windows 自动更新**：`electron-updater` 6.8.9（exact pin）+ GitHub Releases。启动后异步检查一次（**静默**：发现新版即后台下载，下载完成才弹原生对话框「立即重启安装 / 稍后」，默认与 Esc 都是「稍后」）+ 菜单新增「帮助」（`AI Editor vX.Y.Z` disabled + 「检查更新…」，手动路径必有应答：已是最新 / 发现新版本（后台下载中）/ 检查失败并附日志路径）。**只在用户确认后安装**（`autoInstallOnAppQuit = false`；安装前先 `await closeServer()` 收敛 WAL 与备份调度，再 `quitAndInstall(true, true)`），只替换程序文件，**不动书库数据**。仅对 Windows 安装态生效（其他平台不出包也不检查）。⚠ **首个带更新能力的版本需手动下载安装一次**——老版本里没有更新器，不会自动升上来。
+
 ## [v0.0.43] - 2026-09-16
 
 > **卸载体验收尾**：清理 electron-builder 安装器留在 `%LOCALAPPDATA%` 的 130MB 缓存副本（`1a6467a`）+ desktop 包名去 scope（让该目录名可读）。回归：build / typecheck / lint / `-r test` 全绿（desktop 21，其余同 v0.0.42）。

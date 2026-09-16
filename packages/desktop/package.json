@@ -14,7 +14,8 @@
     "dist": "pnpm run build && node scripts/pack.mjs"
   },
   "dependencies": {
-    "@whispering233/ai-editor-server": "workspace:*"
+    "@whispering233/ai-editor-server": "workspace:*",
+    "electron-updater": "6.8.9"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",

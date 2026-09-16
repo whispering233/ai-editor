@@ -16,6 +16,7 @@ import {
   writeLibraryMarker,
 } from "./config.js";
 import { logFilePath, redirectConsoleToFile } from "./log.js";
+import { checkForUpdatesManually, isUpdateSupported, setupAutoUpdate } from "./updater.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -35,9 +36,15 @@ async function closeServer(): Promise<void> {
 
 /**
  * 最小应用菜单。**Edit 角色不是装饰**：macOS 上不设菜单 ⇒ Cmd+C/V 失效（输入框全废）。
- * 自有条目只有两个目录入口（书库/日志）；devtools 仅在未打包态出现。
+ * 自有条目 = 两个目录入口（书库/日志）+ 「帮助」（版本可见性 + 检查更新）；devtools 仅在未打包态出现。
+ * `onCheckUpdates` 为 null = 当前平台没有更新能力（菜单项不出现，不留点了没反应的死项）。
  */
-function installMenu(libraryRoot: string, logDir: string, isDev: boolean): void {
+function installMenu(
+  libraryRoot: string,
+  logDir: string,
+  isDev: boolean,
+  onCheckUpdates: (() => void) | null,
+): void {
   const template: MenuItemConstructorOptions[] = [
     ...(process.platform === "darwin" ? [{ role: "appMenu" as const }] : []),
     { role: "editMenu" },
@@ -46,6 +53,13 @@ function installMenu(libraryRoot: string, logDir: string, isDev: boolean): void 
       submenu: [
         { label: "打开书库目录", click: () => void shell.openPath(libraryRoot) },
         { label: "打开日志目录", click: () => void shell.openPath(logDir) },
+      ],
+    },
+    {
+      label: "帮助",
+      submenu: [
+        { label: `AI Editor v${app.getVersion()}`, enabled: false }, // 版本可见性：真机验证与排障的唯一抓手
+        ...(onCheckUpdates === null ? [] : [{ label: "检查更新…", click: onCheckUpdates }]),
       ],
     },
     ...(isDev
@@ -179,9 +193,6 @@ async function openWindow(): Promise<void> {
   console.log(`[desktop] server: http://127.0.0.1:${handle.port} root=${root}`);
   libraryRoot = root;
 
-  installMenu(root, dirname(logFile), !app.isPackaged);
-  console.log(`[desktop] 菜单已就绪（书库 / 日志目录入口；devtools 项: ${!app.isPackaged}）；日志: ${logFile}`);
-
   const win = new BrowserWindow({
     width: 1280,
     height: 860,
@@ -194,7 +205,20 @@ async function openWindow(): Promise<void> {
     },
   });
   guardNavigation(win, handle.port);
+
+  // 菜单在窗口创建之后装：更新对话框要属主窗口，闭包直接引用已确定的 `win`
+  // （否则得先声明 `let win` 再用非空断言，或者让菜单模板依赖一个还没有的值）
+  const onCheckUpdates = isUpdateSupported()
+    ? () => void checkForUpdatesManually({ win, closeServer, logFile })
+    : null;
+  installMenu(root, dirname(logFile), !app.isPackaged, onCheckUpdates);
+  console.log(
+    `[desktop] 菜单已就绪（书库 / 日志目录入口；devtools 项: ${!app.isPackaged}；检查更新项: ${onCheckUpdates !== null}）；日志: ${logFile}`,
+  );
+
   await win.loadURL(`http://127.0.0.1:${handle.port}`);
+  // 窗口出来之后再后台检查（不阻塞启动）；失败静默，细节落 logFile
+  setupAutoUpdate({ win, closeServer, logFile });
 }
 
 void app.whenReady().then(async () => {

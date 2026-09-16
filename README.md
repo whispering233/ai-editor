@@ -61,6 +61,7 @@ shared → db → tools → agent → server    （依赖方向，client 只依�
 - 安装包挂在每个版本的 GitHub Release 上（与 npm 包共用同一个 tag）；**当前只提供 Windows 安装包**（macOS/Linux 等有真实用户需求再做）
 - 首次启动**零交互**：自动用 `<文档>/AI Editor` 作书库（书籍、备份、对话历史都放那里）；随时可在 设置 → 通用 → 书库位置 更改（改完自动重启）。该路径不可用时逐级回退到 `<主目录>/AI Editor` → `<userData>/AI Editor`
 - 桌面版与 CLI 版**共用同一份数据与凭据**（`~/.pi/agent/`、项目目录格式一致）——两边可以打开同一个书库
+- **自动更新（仅 Windows 安装态）**：启动后自动检查 GitHub Releases 的新版本，下载完成后弹对话框由你决定何时重启安装；也可手动点 菜单 → 帮助 → 检查更新…。更新**只替换程序文件，不动书库数据**。⚠ **首个带更新能力的版本需手动下载安装一次**——老版本里没有更新器，不会自动升上来
 - 本地出包：`pnpm desktop:dist`（产物在 `packages/desktop/release/`）
 
 ## 快速开始
