@@ -108,7 +108,7 @@ macOS 无卸载器（拖废纸篓即卸）→ 本机制只对 Windows 生效；�
 
 **首次升级路径（不可自动化的一跳）**：第一个带更新能力的版本**必须手动下载安装一次**——老版本里没有更新器。README / CHANGELOG 要写明，否则用户会以为「早该自动升上来」。
 
-**发布侧前置**：每个 Release 必须同时挂 `AI.Editor-<v>-win-x64.exe` + `latest.yml` + `<同名>.exe.blockmap`。**缺 `latest.yml` ⇒ 所有旧版的检查更新直接失败**（`ERR_UPDATER_CHANNEL_FILE_NOT_FOUND`）；缺 blockmap 只影响带宽。electron-builder 只负责产出这三样与包内 `resources/app-update.yml`（`electron-builder.yml` 的 `publish` 段是这两份元数据的前提），**上传唯一路径仍是 `softprops/action-gh-release`**，`pack.mjs` 显式传 `--publish never` 防两条上传路径打架（CI 也没有 GH_TOKEN 可交给 electron-builder）。完整发布纪律见 `build.md`。
+**发布侧前置**：每个 Release 必须同时挂 `AI-Editor-<v>-win-x64.exe` + `latest.yml` + `<同名>.exe.blockmap`。**资产名不得含空格**——自动更新要求「磁盘文件名 = 上传后的资产名 = `latest.yml` 里的 `url`」**逐字一致**：GitHub 上传会把空格换成**点**（v0.0.43 实测资产名 = `AI.Editor-0.0.43-win-x64.exe`），而 electron-builder 写进 `latest.yml` 的是把空格换成**短横**的名字，更新器又按 yml 的 `url` 直拼 `/releases/download/<tag>/<名>`（`GitHubProvider.resolveFiles`，**不做资产清单回退**）⇒ 差一个字符就 404、更新全断。因此 `win.artifactName` / `linux.artifactName` 固定为无空格的 `AI-Editor-…`。**缺 `latest.yml` ⇒ 所有旧版的检查更新直接失败**（`ERR_UPDATER_CHANNEL_FILE_NOT_FOUND`）；缺 blockmap 只影响带宽。electron-builder 只负责产出这三样与包内 `resources/app-update.yml`（`electron-builder.yml` 的 `publish` 段是这两份元数据的前提），**上传唯一路径仍是 `softprops/action-gh-release`**，`pack.mjs` 显式传 `--publish never` 防两条上传路径打架（CI 也没有 GH_TOKEN 可交给 electron-builder）。完整发布纪律见 `build.md`。
 
 **差分 base 的位置**：`%LOCALAPPDATA%\ai-editor-desktop-updater\installer.exe`（安装器安装时写出的自身副本）。卸载会清掉它（§5.1）⇒ 卸载后重装的第一次更新回退全量下载，无功能影响。
 

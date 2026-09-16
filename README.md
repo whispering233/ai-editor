@@ -54,9 +54,9 @@ shared → db → tools → agent → server    （依赖方向，client 只依�
 
 | 平台 | 安装包 | 首次打开注意 |
 |---|---|---|
-| Windows | `AI Editor-<版本>-win-x64.exe`（NSIS，可选安装目录） | 首版未签名 → 可能弹 SmartScreen，选「仍要运行」 |
+| Windows | `AI-Editor-<版本>-win-x64.exe`（NSIS，可选安装目录） | 首版未签名 → 可能弹 SmartScreen，选「仍要运行」 |
 | macOS | `AI Editor-<版本>-mac-{arm64,x64}.dmg` | 首版未签名未公证 → **右键 → 打开**放行一次 |
-| Linux | `AI Editor-<版本>-linux-x86_64.AppImage` | `chmod +x` 后直接运行 |
+| Linux | `AI-Editor-<版本>-linux-x86_64.AppImage` | `chmod +x` 后直接运行 |
 
 - 安装包挂在每个版本的 GitHub Release 上（与 npm 包共用同一个 tag）；**当前只提供 Windows 安装包**（macOS/Linux 等有真实用户需求再做）
 - 首次启动**零交互**：自动用 `<文档>/AI Editor` 作书库（书籍、备份、对话历史都放那里）；随时可在 设置 → 通用 → 书库位置 更改（改完自动重启）。该路径不可用时逐级回退到 `<主目录>/AI Editor` → `<userData>/AI Editor`

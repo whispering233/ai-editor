@@ -4,7 +4,7 @@
 // 为什么不让 electron-builder 自己收依赖：pnpm 的符号链接树会让它漏收 `@whispering233/*`
 // workspace 包（`docs/design/50-desktop.md` §5）。deploy 负责依赖，builder 只管安装包。
 import { execFileSync } from "node:child_process";
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -30,6 +30,39 @@ const deployApp = join(deployDir, "app");
  * 若将来出现含空格的参数（如含空格的用户路径），必须改为显式加引号或换用 cross-spawn。
  */
 const USE_SHELL = process.platform === "win32";
+
+/**
+ * 自动更新的**资产名不变式**：`latest*.yml` 里的 `files[].url` / `path` 必须与 `release/` 下的
+ * 磁盘产物名**逐字相等**。
+ *
+ * 为什么必须有：GitHub 上传（`softprops/action-gh-release`）用的是磁盘文件名（basename），而更新器
+ * 按 yml 里的 url 直拼 `/releases/download/<tag>/<名>`（`GitHubProvider.resolveFiles`，**无资产清单回退**）
+ * ——差一个字符就 404、自动更新全断。真实事故：`artifactName` 含空格时 GitHub 把空格换成**点**
+ * （v0.0.43 实测资产名 `AI.Editor-0.0.43-win-x64.exe`），而 electron-builder 写进 yml 的是把空格换成
+ * **短横**的名字（`computeSafeArtifactNameIfNeeded`）。宁可在打包阶段红，也不要发一个升不上去的包出去。
+ * 不变式与取舍见 `docs/design/50-desktop.md` §5.2。
+ */
+function assertUpdateAssetNames() {
+  const releaseDir = join(pkgDir, "release");
+  const infoFiles = readdirSync(releaseDir).filter((name) => /^latest.*\.ya?ml$/.test(name));
+  if (infoFiles.length === 0) {
+    throw new Error(`打包校验失败：${releaseDir} 下没有 latest*.yml——检查 electron-builder.yml 的 publish 段与目标平台`);
+  }
+  for (const infoFile of infoFiles) {
+    const text = readFileSync(join(releaseDir, infoFile), "utf8");
+    const names = [...text.matchAll(/^\s*-?\s*(?:url|path):\s*(\S+)\s*$/gm)].map((m) => m[1]);
+    if (names.length === 0) {
+      throw new Error(`打包校验失败：${infoFile} 里没有 url/path 字段`);
+    }
+    for (const name of new Set(names)) {
+      if (!existsSync(join(releaseDir, name))) {
+        throw new Error(
+          `打包校验失败：${infoFile} 的 url=${name} 在 release/ 下没有同名产物——资产名与元数据不一致会让自动更新 404`,
+        );
+      }
+    }
+  }
+}
 
 /** 同步执行并继承 stdio（打包过程需可见；失败即抛，由调用方脚本链中断） */
 function run(cmd, args, cwd = pkgDir) {
@@ -74,15 +107,19 @@ try {
   // 目标平台参数透传（如 `--linux AppImage` / `--mac dmg` / `--win nsis`），缺省用配置里的默认。
   // `--publish never` 不可省：上传唯一路径 = CI 的 softprops/action-gh-release，CI 也没有 GH_TOKEN
   // 可交给 electron-builder——不显式关掉，两条上传路径会打架（配置里的 publish 段只为产出元数据）。
+  // 放在透传参数**之后**：yargs 后值覆盖面值，这样调用方手滑传 `--publish always` 也覆盖不掉。
   run("pnpm", [
     "exec",
     "electron-builder",
     "--config",
     "electron-builder.yml",
+    ...process.argv.slice(2),
     "--publish",
     "never",
-    ...process.argv.slice(2),
   ]);
+
+  // 元数据与产物名逐字一致（自动更新的硬前提，见 assertUpdateAssetNames 注释）
+  assertUpdateAssetNames();
 } finally {
   // 必须清：`.deploy/app` 里有 workspace 外的 package.json + node_modules，会让 pnpm 的依赖状态
   // 检查误判（后续任何 pnpm 脚本都报「需重建 modules 目录」）；产物已在 release/，无保留价值。
