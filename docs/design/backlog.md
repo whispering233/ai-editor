@@ -10,8 +10,6 @@
 
 ## 数据与契约
 
-- **`log.ts` 只接管 `console.log/warn/error`（未接管 `info`/`debug`）** — 现状：桌面版日志落盘的唯一实现只替换这三个方法（`console.info !== console.log`，实测），任何用 `console.info`/`console.debug` 输出的库都不落盘；当前靠调用方显式接 logger 绕过（2026-10 更新器即如此：`autoUpdater.logger = { info: console.log, … }`）。影响：真机排障时库的 info 级上下文丢失（只留 error/warn）。触发条件：下一次某个依赖的 info/debug 输出成为排障必需。最小修法：`log.ts` 的 levels 表加 `["info", "info"]` / `["debug", "debug"]`；**副作用要先想清楚**——Chromium/依赖的 debug 噪声会进水，可能需要按前缀过滤或另开 verbose 开关。
-
 - **关系类型 R2 互斥对仍是字面量**（tools `analysis/conflict.ts`；卡 8.1 oracle 登记）
   - 现状：不对称性（`symmetric`）已收进 shared 注册表，但「互斥对」`MUTUALLY_EXCLUSIVE_PAIRS = [["ally","rival"]]` 仍是本文件字面量——互斥是**类型对**语义，不是单类型属性，未纳入注册表。
   - 触发条件：出现第二对互斥关系（或想在前端表达互斥提示）时。
@@ -241,8 +239,9 @@
 
 > 已交付部分（书库位置 / 目录选择闭环 / 菜单与日志 / 安全与导航 / 设置页通用 tab / Windows 打包 workflow）见根 `CHANGELOG.md` 的 `## [v0.0.40]` 与 `## [v0.0.41]`；设计契约见 `docs/design/50-desktop.md`。下列是**仍未做**的顺延项与待验证项：
 
+- **`log.ts` 只接管 `console.log/warn/error`（未接管 `info`/`debug`）** — 现状：桌面版日志落盘的唯一实现只替换这三个方法（`console.info !== console.log`，实测），任何用 `console.info`/`console.debug` 输出的库都不落盘；当前靠调用方显式接 logger 绕过（2026-10 更新器即如此：`autoUpdater.logger = { info: (m) => console.log(m), … }`）。影响：真机排障时库的 info 级上下文丢失（只留 error/warn）。触发条件：下一次某个依赖的 info/debug 输出成为排障必需。最小修法：`log.ts` 的 levels 表加 `["info", "info"]` / `["debug", "debug"]`；**副作用要先想清楚**——Chromium/依赖的 debug 噪声会进水，可能需要按前缀过滤或另开 verbose 开关。
 - **窗口尺寸/位置记忆** — 现状：每次启动回默认尺寸。触发条件：有用户抱怨布局丢失（与 `localStorage` 面板偏好丢失同源体验问题，一起做）。最小修法：写进 `desktop.json`（一个 `window` 字段），窗口 `resize`/`move` 防抖写入。
-- **Windows 代码签名 + macOS 公证** — 现状：不签名（Windows 有 SmartScreen 提示、macOS 首次需右键打开）。**不再是自动更新的前置**：Windows 更新已在未签名下跑通，代价是信任锚仅为「GitHub Releases + sha512」且 SmartScreen 提示不消（安全边界见 `50-desktop.md` §5.2）。触发条件：SmartScreen/安全提示成为反馈主题，或分发规模需要用户侧验签。升级路径：Windows 代码签名证书（或 Azure Trusted Signing）→ `electron-builder` 的 `signtool` / `win.publisherName`（写上後会**自动启用**更新包的 Authenticode 校验）；macOS 另需 Apple Developer（$99/年）+ `notarize` 配置。
+- **Windows 代码签名 + macOS 公证** — 现状：不签名（Windows 有 SmartScreen 提示、macOS 首次需右键打开）。**不再是自动更新的前置**：Windows 更新已在未签名下跑通，代价是信任锚仅为「GitHub Releases + sha512」且 SmartScreen 提示不消（安全边界见 `50-desktop.md` §5.2）。触发条件：SmartScreen/安全提示成为反馈主题，或分发规模需要用户侧验签。升级路径：Windows 代码签名证书（或 Azure Trusted Signing）→ `electron-builder` 的 `signtool` / `win.publisherName`（写上后会**自动启用**更新包的 Authenticode 校验）；macOS 另需 Apple Developer（$99/年）+ `notarize` 配置。
 - **设置页内嵌更新面板**（显示版本 / 手动检查 / 下载进度）— 现状：v0.0.44 起更新走主进程原生对话框 + 菜单「帮助 → 检查更新…」，client 侧零改动（`50-desktop.md` §5.2）。触发条件：用户反馈找不到检查入口、或要看下载进度。最小修法：扩 `DesktopBridge`（invoke + 状态推送）+ 设置页「通用」一行，更新逻辑不动。
 - **非打包态（win32 开发机）点「检查更新…」会显示「已是最新版本」**（`50-desktop.md` §5.2 的守卫只管 win32，dev 态 electron-updater 直接不检查）— 现状：有回应但信息是假的（oracle 复核登记）。触发条件：dev 态被这条误导过。最小修法：`isUpdateSupported()` 里补 `&& app.isPackaged`（一处改动同时让菜单项消失，符合 main.ts「onCheckUpdates 为 null = 没有更新能力」原则）；**不要**只在 `checkForUpdatesManually` 里加分支（那会留下一个点了就撒谎的菜单项）。
 - **`await closeServer()` 之后 `quitAndInstall` 失败的窗口期**（应用活着但后端已关）— 现状：同步失败只可能在 `installerPath == null`（与 `update-downloaded` 事件矛盾，几乎不可达）；真实失败是 spawn 的**异步**错误（EACCES/ENOENT，杀软拦截同列），那时应用照常退出、只是没装上，兜底也拦不到。触发条件：真机日志出现 `Cannot run installer: error code: …`。最小修法：`quitAndInstall` 前 `autoUpdater.once("error", …)` 弹一次错误框（3 行）；当前不做（YAGNI）。

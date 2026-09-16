@@ -16,13 +16,13 @@
 - 任务以 `docs/design/tasks.md` 为清单：按卡开发，垂直切片、一次一张、一卡一 commit、独立验证、卡内不做卡外顺手改动；完成后清理卡片并向用户汇报。
 - 每卡「实现 fixer + 独立验证 oracle」双代理；并行卡片用临时分支 + git worktree，验证后合回 main 并清理。
 - 并行派工的硬要求（2026-09 实测）：子代理必须显式 `context: "fresh"`——`worker` 默认 fork 会把父会话的**编排叙事**当成自己的进度（实测三道 fixer 全部零改动回 PASS）；每份任务需带**硬完成判据**（`git log` 必须含新 commit + `git status` 干净，无 commit 不许报 PASS）与「汇报必附 commit hash / 命令输出」条款。
-- 验证：`pnpm typecheck` / `pnpm lint` / `pnpm -r test`（单包 `pnpm --filter <包> test`）；⚠ fresh clone 先 `pnpm -r build` 再 typecheck；UI 改动额外用浏览器核一次像素。
+- 验证：`pnpm typecheck` / `pnpm lint` / `pnpm -r test`（单包 `pnpm --filter <包> test`）；⚠ fresh clone 先 `pnpm -r build` 再 typecheck；UI 改动额外用浏览器核一次像素；**改桌面版主进程（依赖/import）后必须跑打包态启动冒烟**（`build.md`：`typecheck` 绿 ≠ 打包态能起）。
 - 提交信息用中文，遵循 conventional commits（如 `feat(doc): ...`）。
 - 日常不 push、不建 PR、不新增 CI；远端与 CI 仅服务发布链路（push `v*` tag 触发 `.github/workflows/`）。
 
 ## 版本发布
 
-按 `docs/design/build.md`「正式发布链路」执行（当前发布面 = 5 个 npm 包：shared/db/tools/agent/server + 同一 tag 的三平台桌面安装包）。
+按 `docs/design/build.md`「正式发布链路」执行（当前发布面 = 5 个 npm 包：shared/db/tools/agent/server + 同一 tag 的 **Windows 安装包三资产**：`.exe` + `latest.yml` + `.exe.blockmap`）。
 
 ## 代码级硬约束（设计文档不承载实现细节，仅此处登记）
 
@@ -63,6 +63,6 @@
   - **workflow 不写 pnpm `version`**：版本从根 `packageManager` 读（单一事实源）；三个 workflow（release / publish / desktop）同由 push `v*` tag 触发，写死版本会导致本地与 CI 静默漂移。
   - **打包分工（2026-10 定）**：**本地只打 Linux 包**（`pnpm desktop:dist`，用于自查）；**Windows 包只由 CI 出**（`desktop.yml` 只跑 windows-latest；macOS/Linux 两项在 matrix 里注释保留）——Windows 本地交叉构建需 Wine，不往开发机装该依赖；macOS 需 mac runner。本地要验 Windows 包时用手动触发 + `gh run download`，不要重推 tag（见 `build.md`）。
   - **卸载清理的安全约束（不可简化）**：`packages/desktop/build/installer.nsh` 删目录前**必须先验签名文件**（`<书库>/.ai-editor/library.json`，由 `writeLibraryMarker` 每次启动幂等写入）——书库目录名 `AI Editor` 是通用名，按名 `RMDir /r` 会误删用户早先自己建好的同名目录（不可恢复）。`<userData>` 的存在性检查用 `desktop.json`。改这段脚本前先读 `50-desktop.md` §5.1。
-  - **自动更新（Windows 安装态，v0.0.44 起）**：`electron-updater` **6.8.9 exact pin**（与 electron-builder 26 同线；7.x 改了 `quitAndInstall` 签名与 `autoInstallEvent`，不要混用）；只对 Windows 安装态生效（主进程 `win32` 守卫）；`autoInstallOnAppQuit = false`，**只在用户确认后**先 `await closeServer()` 再 `quitAndInstall(true, true)`；**每个 Release 必须三资产齐全**（`.exe` + `latest.yml` + `.exe.blockmap`，**缺 `latest.yml` ⇒ 所有旧版检查更新直接失败**）——见 `50-desktop.md` §5.2 / `build.md`。
+  - **自动更新（Windows 安装态，v0.0.44 起）**：`electron-updater` **6.8.9 exact pin**（与 electron-builder 26 同线；7.x 改了 `quitAndInstall` 签名与 `autoInstallEvent`，不要混用）；**该包是 CJS ⇒ 必须默认导入 + 解构**（`import electronUpdater from "electron-updater"`；具名导入在打包态直接崩、而 typecheck 不报）；只对 Windows 安装态生效（主进程 `win32` 守卫）；`autoInstallOnAppQuit = false`，**只在用户确认后**先 `await closeServer()` 再 `quitAndInstall(true, true)`；**每个 Release 必须三资产齐全**（`.exe` + `latest.yml` + `.exe.blockmap`，**缺 `latest.yml` ⇒ 所有旧版检查更新直接失败**；资产名不得含空格——磁盘名/资产名/`latest.yml` 的 url 必须逐字一致）——见 `50-desktop.md` §5.2 / `build.md`。
 - 测试：各包 `test` script = `vitest run`；各包 tsconfig 已 `exclude: ["src/**/*.test.ts"]`，不要改回——**`*.test.ts` 不进 `pnpm typecheck`**，编译期断言（`satisfies` / 穷尽性检查）必须写在 src 模块里。⚠ **`.test.tsx` 仍会被 typecheck**（exclude 通配不盖 `.tsx`；client 的 SSR 测试属此列——这是**有意保留**：改测试时类型错要在 `pnpm typecheck` 期暴露，真正的隐患是误以为「测试不会被检查」而在测试里写坏类型。**改 shared/db/tools 的 `src` 后先 `pnpm -r build` 再 typecheck/下游测试**：client 的编译期断言与 server/tools 测试读的是上游 **dist**，不重建会给假绿（卡 8.3 oracle 实证）。
 - 延期项：多标签页并发、undo、token 统计、跨书参考资料导入（MVP 不做，勿顺手实现）；其余遗留项与有意口径见 `docs/design/backlog.md`。

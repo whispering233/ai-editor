@@ -87,7 +87,7 @@ macOS 无卸载器（拖废纸篓即卸）→ 本机制只对 Windows 生效；�
 
 **安装器缓存副本的清理**：`%LOCALAPPDATA%\<name>-updater\installer.exe`（约 130MB）是 electron-builder 的 NSIS 安装器安装时写出的**自身副本**（供差分更新 / `quitAndInstall`，v0.0.44 起被自动更新真正使用），属**程序文件而非用户数据** → 卸载时**无条件清理**（上游默认卸载器不删它，electron-builder#9505）。该目录名派生自包名（`sanitizeFileName(name).toLowerCase() + "-updater"`，**无配置项可覆盖**），因此 desktop 包**有意不带 scope**（`ai-editor-desktop`）——带 scope 会得到 `@whispering233ai-editor-desktop-updater` 这种拼音式怪名；卸载器同时清带 scope 的旧名残留。
 
-### 5.2 自动更新（Windows 安装态，2026-10）
+### 5.2 自动更新（Windows 安装态，v0.0.44 起）
 
 **形态**：electron-updater（**6.8.9 exact pin**，与 electron-builder 26 同线；7.x 改了 `quitAndInstall` 签名与 `autoInstallEvent` 语义，**不要混用**）+ GitHub Releases（仓库 public ⇒ **app 内不塞任何 token**，更新器走 `/releases/latest` 不碰 API 配额）。只对 **Windows NSIS 安装态**生效：主进程侧 `process.platform === "win32"` 守卫，其他平台不出包也不检查（将来真发 Linux/macOS 更新时另立卡，不在本机制的假定范围内）。
 

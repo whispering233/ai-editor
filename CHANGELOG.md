@@ -7,9 +7,24 @@
 
 ## [Unreleased]
 
+## [v0.0.44] - 2026-09-16
+
+> **桌面版 Windows 自动更新**：`electron-updater` 6.8.9 + GitHub Releases，安装态启动自动检查 → 后台下载 → 弹框确认后静默安装（`6cdad08` 设计、`03443fb`+`5c32efa` 发布链路、`a103cb1` 主进程逻辑、`4e46c10`+`55fbbf5` 两处修复）。回归：build / typecheck / lint / `-r test` 全绿（154 文件 / 2335 测试：client 865、server 577、tools 287、db 281、shared 222、agent 82、desktop 21）+ 打包态启动冒烟。
+
 ### Added
 
-- **桌面版 Windows 自动更新**：`electron-updater` 6.8.9（exact pin）+ GitHub Releases。启动后异步检查一次（**静默**：发现新版即后台下载，下载完成才弹原生对话框「立即重启安装 / 稍后」，默认与 Esc 都是「稍后」）+ 菜单新增「帮助」（`AI Editor vX.Y.Z` disabled + 「检查更新…」，手动路径必有应答：已是最新 / 发现新版本（后台下载中）/ 检查失败并附日志路径）。**只在用户确认后安装**（`autoInstallOnAppQuit = false`；安装前先 `await closeServer()` 收敛 WAL 与备份调度，再 `quitAndInstall(true, true)`），只替换程序文件，**不动书库数据**。仅对 Windows 安装态生效（其他平台不出包也不检查）。⚠ **首个带更新能力的版本需手动下载安装一次**——老版本里没有更新器，不会自动升上来。
+- **桌面版 Windows 自动更新**：启动后异步检查一次（**静默**：发现新版即后台下载，下载完成才弹原生对话框「立即重启安装 / 稍后」，默认与 Esc 都是「稍后」）+ 菜单新增「帮助」（`AI Editor vX.Y.Z` disabled + 「检查更新…」，手动路径必有应答：已是最新 / 发现新版本（后台下载中）/ 检查失败并附日志路径）。**只在用户确认后安装**（`autoInstallOnAppQuit = false`；安装前先 `await closeServer()` 收敛 WAL 与备份调度，再 `quitAndInstall(true, true)`），只替换程序文件，**不动书库数据**。仅对 Windows 安装态生效（其他平台不出包也不检查）。⚠ **首个带更新能力的版本需手动下载安装一次**——老版本里没有更新器，不会自动升上来。
+- **发布链路产出自动更新元数据**：`electron-builder.yml` 新增 `publish`（github / owner / repo）→ 包内 `resources/app-update.yml` + Release 资产 `latest.yml`；`desktop.yml` 的资产 glob 改为**三件套**（`AI-Editor-<v>-win-x64.exe` + `latest.yml` + `.exe.blockmap`，后者供差分下载）；`pack.mjs` 显式传 `--publish never`（上传唯一路径 = `softprops/action-gh-release`），并新增 `assertUpdateAssetNames()` 打包期断言。
+
+### Fixed
+
+- **资产名含空格 ⇒ 自动更新必 404**（oracle 复核产出）：磁盘名 `AI Editor-…`（空格）、GitHub 上传后 `AI.Editor-…`（点）、而 electron-builder 写进 `latest.yml` 的是 `AI-Editor-…`（短横），更新器又按 yml 的 url 直拼 `/releases/download/<tag>/<名>`（不做资产清单回退）。现 `artifactName` 固定为无空格的 `AI-Editor-<v>-<os>-<arch>.<ext>`，并用打包期断言守住「磁盘名 = 资产名 = `latest.yml` 的 url」这条不变式（变异探针验证过会报错中断打包）。
+- **`electron-updater` 具名导入在打包态直接崩**（打包态冒烟产出）：`import { autoUpdater } from "electron-updater"` 在 Electron 的 ESM loader 下报 `does not provide an export named 'autoUpdater'`（该包是 CJS），而 `typecheck`/`lint`/单测**全绿**、开发态看不出来。现改默认导入 + 解构；根 `AGENTS.md`/`build.md` 已登记“主进程改 import 后必跑打包态启动冒烟”。
+- **更新流程的 info 行不落盘**（oracle 复核产出）：`log.ts` 只接管 `console.log/warn/error`，而 electron-updater 默认 logger 的 `info` 走 `console.info`（实测 `console.info !== console.log`）⇒ 真机排障时日志里只剩 error。现显式接 `autoUpdater.logger`（箭头包装，不依赖调用顺序）。
+
+### Docs
+
+- `docs/design/50-desktop.md` 新增 §5.2（选型/时机/反馈/安装口径/信任锚与安全边界/发布侧前置）；`build.md` 补三资产纪律、打包态启动冒烟、真机两版闭环、win32 分支本地跑法；`backlog.md` 修正“签名是自动更新前置”的旧口径并登记 6 条新遗留项；`AGENTS.md` 新增桌面版自动更新硬约束。
 
 ## [v0.0.43] - 2026-09-16
 

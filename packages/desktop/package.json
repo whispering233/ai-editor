@@ -1,7 +1,7 @@
 {
   "name": "ai-editor-desktop",
   "productName": "AI Editor",
-  "version": "0.0.43",
+  "version": "0.0.44",
   "license": "MIT",
   "description": "AI Editor 桌面版（Electron 外壳）",
   "private": true,
