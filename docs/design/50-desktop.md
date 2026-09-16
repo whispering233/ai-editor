@@ -26,7 +26,7 @@
 
 **userData 的平台含义**（Electron `app.getPath('userData')` = `appData` + 应用名）：Windows `%APPDATA%\AI Editor\`、macOS `~/Library/Application Support/AI Editor/`、Linux `~/.config/AI Editor/`。
 
-**首次启动**（`desktop.json` 不存在或无 `projectRoot`）：**直接使用候选链上第一个可用目录**（不弹任何对话框）——先让用户进得去软件，要不要换目录是之后的决定（设置页「通用 → 书库位置」随时可改）。
+**首次启动**（`desktop.json` 不存在 / 无 `projectRoot` / **JSON 不可读**——`readDesktopConfig` 读不到就返回 null，包括文件损坏）：**直接使用候选链上第一个可用目录**（不弹任何对话框）——先让用户进得去软件，要不要换目录是之后的决定（设置页「通用 → 书库位置」随时可改）；读不到时会**重写配置**（自愈；日志里表现为「首次启动：使用默认书库位置」）。
 
 **书库位置候选链**（单一实现 = `packages/desktop/src/config.ts` 的 `libraryRootCandidates`）：
 
@@ -87,7 +87,7 @@
 
 **不变式**：`customUnInstall` 开头必须以 `${isUpdated}`（升级内部调用）或 `${Silent}`（脚本化静默卸载）直接 `Return`——不弹框、不删用户数据、**也不清安装器缓存**（升级时 `%LOCALAPPDATA%\<name>-updater\pending\` 里正躺着正在执行的待装包，且新安装会自己刷新缓存；缓存清理只属用户主动卸载）。`${isUpdated}` 由 `NsisScriptGenerator.flags(["updated", …])` 生成（查命令行里的 `--updated`），上游自己的数据清理也是用 `${ifNot} ${isUpdated}` 护住的（`uninstaller.nsh`）。
 
-**过渡注意（仅一次）**：v0.0.44 → v0.0.45 这次升级仍会弹一次清除数据框——旧卸载器已经在用户机器上，**无法远程修补**；届时**必须选「否」**（选「是」会删数据）。v0.0.45 起的每次升级都不再弹。
+**过渡注意（历史，已过去）**：v0.0.44 及更早的卸载器没有这层守卫，所以从那些版本升级时会弹一次清除数据框（旧卸载器已在用户机器上、**无法远程修补**）；自 v0.0.45 起不再弹。真机已验证（2026-09-16：v0.0.46 → v0.0.47 升级全程无该框）。
 
 macOS 无卸载器（拖废纸篓即卸）→ 本机制只对 Windows 生效；将来若需跨平台的「清除数据」，应做成应用内入口（设置页）。
 
