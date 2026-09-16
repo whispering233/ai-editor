@@ -20,7 +20,11 @@
 4. **原生目录选择框的可见性与交互**（WSLg 下 GTK 文件对话框挂起，非本仓代码）——书架页「浏览…」与设置页「更改…」两处；
 5. **macOS 的 Cmd+C/V**（菜单 Edit 角色）、菜单项「打开书库/日志目录」的 `shell.openPath`；
 6. **Windows 自动更新的真机两版闭环**（v0.0.44 已发布，立刻可做）：装 v0.0.44（⚠ **首跳必须手动装一次**，老版本没有更新器）→ 发 v0.0.45（Release 三资产齐全）→ 启动 v0.0.44：`<userData>\logs\ai-editor.log` 应出现 `Checking for update` / `Found version v0.0.45`（**验 info 行确实落盘**）→ 弹「新版本 v0.0.45 已下载」→ 点「立即重启安装」→ 应用退出、静默安装、自动拉起 → 菜单 → 帮助 版本号 = v0.0.45。同批观察四件：① Esc 与 Enter 都走「稍后」（不重启、版本不变）；② 日志出现 `Cannot run installer: error code: …` ⇒ 静默安装被拦（杀软/Defender），需手动下载；③ 差分是否命中（base = `%LOCALAPPDATA%\ai-editor-desktop-updater\installer.exe`；卸载后首更回退全量，无功能影响）；④ `--force-run` 是否真拉起应用。
-7. **失败 / 边界分支**：负向用例（临时撤掉 Release 的 `latest.yml`）应弹「检查更新失败」且日志含 `ERR_UPDATER_CHANNEL_FILE_NOT_FOUND`。✅ **真机已验（2026-09-16，Windows）**：v0.0.44 上点 菜单 → 帮助 → 检查更新… 弹「已是最新版本（v0.0.44）」——同时实证了包内 `app-update.yml` 定位、GitHub `latest.yml` 获取与解析、版本比较、win32 守卫与菜单装配在真机成立（用户在真机截图确认）。待补：撤 `latest.yml` 的负向用例；启动时静默检查的 `Checking for update` info 行是否落盘（看 `<userData>\logs\ai-editor.log`）。
+7. **失败 / 边界分支**：负向用例（临时撤掉 Release 的 `latest.yml`）应弹「检查更新失败」且日志含 `ERR_UPDATER_CHANNEL_FILE_NOT_FOUND`。✅ **真机已验（2026-09-16，Windows v0.0.44）**：
+   - 手动点 菜单 → 帮助 → 检查更新… → 弹「已是最新版本（v0.0.44）」（实证包内 `app-update.yml` 定位、GitHub `latest.yml` 获取/解析、版本比较、win32 守卫与菜单装配）；
+   - 日志实证 info 行确实落盘（`4e46c10` 真机生效）：`[info] Checking for update` / `[info] Generated new staging user ID: …` / `[info] Update for version 0.0.44 is not available (latest version: 0.0.44, downgrade is disallowed).`；
+   - 另一时段日志 `[info] Checking for update` + `[error] Error: net::ERR_CONNECTION_TIMED_OUT` —— **自动路径失败静默（无弹窗）符合设计**；但该机器直连 GitHub 不稳，见 `backlog.md`「自动检查失败对网络不稳的用户完全不可见」。
+   - 待补：撤 `latest.yml` 的负向用例。
 8. **win32 分支在 Windows 上的启动冒烟**：✅ **真机已验（功能面）**——v0.0.44 在 Windows 上菜单可点、弹框正常、网络路径跑通；缺的是 **CI 自动断言**（`检查更新项: true` + 无 `SyntaxError`/`Uncaught Exception`），见 `backlog.md`「CI 侧打包态启动冒烟」。本地仍可用「临时掀守卫」方式在 Linux 上跑该分支（`build.md`）。
 9. **验证独立性限制（环境事实）**：v0.0.44 两卡的打包/断言/commit 均由编排者代跑——本环境子代理（worker / oracle / delegate）**均无 shell 工具**（能力列表宣称有 `bash`，实际不可用）⇒ 「独立复现」只做到「独立静态判读 + 产物阅读」，命令级证据均为编排者提供。派工时按此前提安排（子代理写代码、编排者跑门禁与 commit）。
 

@@ -112,6 +112,8 @@ macOS 无卸载器（拖废纸篓即卸）→ 本机制只对 Windows 生效；�
 
 **差分 base 的位置**：`%LOCALAPPDATA%\ai-editor-desktop-updater\installer.exe`（安装器安装时写出的自身副本）。卸载会清掉它（§5.1）⇒ 卸载后重装的第一次更新回退全量下载，无功能影响。
 
+**网络路径（排障口径）**：更新请求走 **Electron 的 `net` 模块**（Chromium 网络栈，跟随系统代理），**不经过** server 侧安装的 undici dispatcher（那是 Node 出站 HTTP 的路径）——两者排障不能混为一谈。实测：网络直连 GitHub 不稳时，自动检查会静默失败（只落日志，见 `backlog.md`「自动检查失败对网络不稳的用户完全不可见」）。
+
 **不做**（有意）：设置页内嵌更新面板（要扩 `DesktopBridge` + client UI）、灰度 staging、macOS/Linux 自动更新、静默自动安装。延期项与触发条件见 `backlog.md`。
 
 ## 6. 客户端契约增量（唯一改动）
