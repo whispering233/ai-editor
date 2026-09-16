@@ -10,6 +10,8 @@
 
 ## 数据与契约
 
+- **`log.ts` 只接管 `console.log/warn/error`（未接管 `info`/`debug`）** — 现状：桌面版日志落盘的唯一实现只替换这三个方法（`console.info !== console.log`，实测），任何用 `console.info`/`console.debug` 输出的库都不落盘；当前靠调用方显式接 logger 绕过（2026-10 更新器即如此：`autoUpdater.logger = { info: console.log, … }`）。影响：真机排障时库的 info 级上下文丢失（只留 error/warn）。触发条件：下一次某个依赖的 info/debug 输出成为排障必需。最小修法：`log.ts` 的 levels 表加 `["info", "info"]` / `["debug", "debug"]`；**副作用要先想清楚**——Chromium/依赖的 debug 噪声会进水，可能需要按前缀过滤或另开 verbose 开关。
+
 - **关系类型 R2 互斥对仍是字面量**（tools `analysis/conflict.ts`；卡 8.1 oracle 登记）
   - 现状：不对称性（`symmetric`）已收进 shared 注册表，但「互斥对」`MUTUALLY_EXCLUSIVE_PAIRS = [["ally","rival"]]` 仍是本文件字面量——互斥是**类型对**语义，不是单类型属性，未纳入注册表。
   - 触发条件：出现第二对互斥关系（或想在前端表达互斥提示）时。

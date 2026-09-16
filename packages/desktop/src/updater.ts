@@ -32,6 +32,12 @@ export interface UpdateDeps {
 export function setupAutoUpdate(deps: UpdateDeps): void {
   if (!isUpdateSupported()) return;
 
+  // electron-updater 的 logger 默认就是 `console`，但它的 info 走 `console.info`——而 `log.ts` 只接管了
+  // `console.log/warn/error`（实测 `console.info !== console.log`）⇒ 不显式接一遍，更新流程的 info 行
+  // （Checking for update / Found version … / Downloading …）只会写 stdout、**安装态无人收**，真机排障时
+  // 日志里只剩 error。把它接到已被接管的 console 方法上。
+  autoUpdater.logger = { info: console.log, warn: console.warn, error: console.error };
+
   // 发现即后台下载，下载期间不打扰用户（提示只在 update-downloaded 之后）
   autoUpdater.autoDownload = true;
   // **只在用户确认后安装**：退出时静默替换撞上游 #7807（Windows 关机/注销杀掉安装器 ⇒ 卸载了没装回），
