@@ -10,24 +10,7 @@
 
 ## 进行中任务卡
 
-### 卡 A1 — 桌面版自动更新：发布链路（publish 段 + 三资产）
-
-**目标**：让打包/发布产出自动更新需要的全部元数据；**不改任何主进程 / client 代码**。契约依据 = `50-desktop.md` §5.2 + `build.md`「自动更新的元数据」。
-
-**改动（仅三处）**：
-- `packages/desktop/electron-builder.yml`：加 `publish`（`provider: github` / `owner: whispering233` / `repo: ai-editor`）
-- `packages/desktop/scripts/pack.mjs`：electron-builder 调用显式加 `--publish never`（上传唯一路径 = `softprops/action-gh-release`）
-- `.github/workflows/desktop.yml`：Release `files` 与 CI artifact `path` 两处 glob 补 `latest.yml`、`*.blockmap`
-
-**验收（自动）**：
-1. `pnpm -r build` → `pnpm desktop:dist`（本地 Linux 包）
-2. 断言 `packages/desktop/release/linux-unpacked/resources/app-update.yml` 存在且含 `provider: github`、`owner: whispering233`、`repo: ai-editor`、`updaterCacheDirName: ai-editor-desktop-updater`
-3. 断言 `packages/desktop/release/` 下出现 `latest-linux.yml`（publish 段生效的旁证）
-4. 全程无上传行为（不应出现 GH_TOKEN 相关报错）
-
-（Windows 侧三资产由 CI 验，不阻塞本卡：`gh workflow run desktop.yml --ref main -f release_tag=<tag>` → `gh run download <id> -n desktop-windows-latest` → 断言 `.exe` + `latest.yml` + `.exe.blockmap` 三资产，且 `latest.yml` 的 `url` 与资产名一致。）
-
-**禁**：改 `main.ts` / client / preload；动 `installer.nsh`；顺手改其他 YAML 语义。
+> 卡 A1（桌面版自动更新：发布链路）已完成：`03443fb` + 修复 `5c32efa`（资产名去空格 + `pack.mjs` 的 `assertUpdateAssetNames()` 打包期断言）——残留「无独立复现（本环境子代理无 shell）」已如实登记于下方待验证区。
 
 ### 卡 A2 — 桌面版自动更新：主进程逻辑与菜单入口
 
@@ -55,6 +38,8 @@
 4. 原生目录选择框的**可见性与交互**（WSLg 下 GTK 文件对话框挂起，非本仓代码）——剩书架页「浏览…」与设置页「更改…」两处；
 5. **macOS 的 Cmd+C/V**（菜单 Edit 角色，本机无法验证）、菜单项「打开书库/日志目录」的 `shell.openPath`；
 6. **Windows 自动更新的两版闭环**（需先发出含更新能力的版本）：装 v0.0.44 → 发 v0.0.45 → 启动应弹「新版本 v0.0.45 已下载」→ 点「立即重启安装」→ 重启后 菜单 → 帮助 版本号应为 v0.0.45；顺带观察 Defender/杀软是否拦静默安装（未验证项）。⚠ 老版本不会自己升上来，首跳必须手动装一次。
+7. **CI 侧三资产首跑（v0.0.44 发版时）**：Release 上必须同时有 `AI-Editor-0.0.44-win-x64.exe` + `latest.yml` + `AI-Editor-0.0.44-win-x64.exe.blockmap`，且 `latest.yml` 的 `files[0].url` / `path` 与资产名**逐字一致**（本地 Linux 侧已由 `pack.mjs` 的 `assertUpdateAssetNames()` 守住同一不变式）。
+8. **本仓验证独立性限制（环境事实，已登记）**：卡 A1 的打包/断言/commit 由编排者代跑——子代理（worker / oracle / delegate）在本环境**均无 shell 工具**（能力列表宣称有 `bash`，实际不可用）⇒ 「独立复现」只做到「独立静态判读 + 产物阅读」，命令级证据均为编排者提供。
 
 **开新卡**：从 `backlog.md` 选（当前剩余分两类）——
 
