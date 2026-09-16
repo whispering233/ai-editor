@@ -71,8 +71,18 @@ try {
   run("pnpm", ["--filter", packageName, "deploy", "--prod", deployApp]);
   assertSpaBundled();
 
-  // 目标平台参数透传（如 `--linux AppImage` / `--mac dmg` / `--win nsis`），缺省用配置里的默认
-  run("pnpm", ["exec", "electron-builder", "--config", "electron-builder.yml", ...process.argv.slice(2)]);
+  // 目标平台参数透传（如 `--linux AppImage` / `--mac dmg` / `--win nsis`），缺省用配置里的默认。
+  // `--publish never` 不可省：上传唯一路径 = CI 的 softprops/action-gh-release，CI 也没有 GH_TOKEN
+  // 可交给 electron-builder——不显式关掉，两条上传路径会打架（配置里的 publish 段只为产出元数据）。
+  run("pnpm", [
+    "exec",
+    "electron-builder",
+    "--config",
+    "electron-builder.yml",
+    "--publish",
+    "never",
+    ...process.argv.slice(2),
+  ]);
 } finally {
   // 必须清：`.deploy/app` 里有 workspace 外的 package.json + node_modules，会让 pnpm 的依赖状态
   // 检查误判（后续任何 pnpm 脚本都报「需重建 modules 目录」）；产物已在 release/，无保留价值。

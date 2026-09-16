@@ -24,6 +24,15 @@ asarUnpack:
 # better-sqlite3 v13 是 N-API 预编译模块，不需要针对 Electron 重编译
 npmRebuild: false
 
+# 自动更新元数据的来源（见 50-desktop.md §5.2）：本段负责产出
+# ① 包内 resources/app-update.yml（更新器读它定位更新源）
+# ② Release 资产 latest.yml（旧版靠它得知有新版本）
+# 上传不在这里做——CI 用 softprops/action-gh-release；`pack.mjs` 传 `--publish never`。
+publish:
+  provider: github
+  owner: whispering233
+  repo: ai-editor
+
 linux:
   target:
     - AppImage

@@ -40,13 +40,19 @@ jobs:
           # 本地开发机的 Windows 交叉构建需 Wine（electron-builder 官方口径），本仓以 CI 的 windows-latest 为唯一出包路径。
           - os: windows-latest
             args: --win nsis
-            files: "*.exe"
+            # 三资产（自动更新必需，见 50-desktop.md §5.2 / build.md）：`.exe` + `latest.yml` + `.exe.blockmap`。
+            # 必须是**带目录前缀的完整路径**：多行值插进 `${{ matrix.files }}` 时只有第一行拿到属主
+            # 拼上的前缀，其余行会落到仓库根下（Release 步骤的 `fail_on_unmatched_files: true` 会直接红）。
+            files: |
+              packages/desktop/release/*.exe
+              packages/desktop/release/latest.yml
+              packages/desktop/release/*.blockmap
           # - os: ubuntu-latest
           #   args: --linux AppImage
-          #   files: "*.AppImage"
+          #   files: "packages/desktop/release/*.AppImage"
           # - os: macos-latest
           #   args: --mac dmg --arm64 --x64
-          #   files: "*.dmg"
+          #   files: "packages/desktop/release/*.dmg"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40 # 首次会下载 electron 二进制 + 原生打包工具链
     steps:
@@ -66,7 +72,7 @@ jobs:
         with:
           # push tag 时用 tag 名；手动触发时用输入（补包到已有 Release）
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
-          files: packages/desktop/release/${{ matrix.files }}
+          files: ${{ matrix.files }}
           # Release 通常已由 release.yml 从 CHANGELOG 建好；此处只挂资产（不存在时才创建）
           fail_on_unmatched_files: true
       # 同时传一份 CI artifact：手动触发时可直接下载到本地测试
@@ -76,5 +82,5 @@ jobs:
         if: always()
         with:
           name: desktop-${{ matrix.os }}
-          path: packages/desktop/release/${{ matrix.files }}
+          path: ${{ matrix.files }}
           if-no-files-found: warn
