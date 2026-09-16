@@ -116,7 +116,7 @@ macOS 无卸载器（拖废纸篓即卸）→ 本机制只对 Windows 生效；�
 
 **发布侧前置**：每个 Release 必须同时挂 `AI-Editor-<v>-win-x64.exe` + `latest.yml` + `<同名>.exe.blockmap`。**资产名不得含空格**——自动更新要求「磁盘文件名 = 上传后的资产名 = `latest.yml` 里的 `url`」**逐字一致**：GitHub 上传会把空格换成**点**（v0.0.43 实测资产名 = `AI.Editor-0.0.43-win-x64.exe`），而 electron-builder 写进 `latest.yml` 的是把空格换成**短横**的名字，更新器又按 yml 的 `url` 直拼 `/releases/download/<tag>/<名>`（`GitHubProvider.resolveFiles`，**不做资产清单回退**）⇒ 差一个字符就 404、更新全断。因此 `win.artifactName` / `linux.artifactName` 固定为无空格的 `AI-Editor-…`。**缺 `latest.yml` ⇒ 所有旧版的检查更新直接失败**（`ERR_UPDATER_CHANNEL_FILE_NOT_FOUND`）；缺 blockmap 只影响带宽。electron-builder 只负责产出这三样与包内 `resources/app-update.yml`（`electron-builder.yml` 的 `publish` 段是这两份元数据的前提），**上传唯一路径仍是 `softprops/action-gh-release`**，`pack.mjs` 显式传 `--publish never` 防两条上传路径打架（CI 也没有 GH_TOKEN 可交给 electron-builder）。完整发布纪律见 `build.md`。
 
-**差分 base 的位置**：`%LOCALAPPDATA%\ai-editor-desktop-updater\installer.exe`（安装器安装时写出的自身副本）。卸载会清掉它（§5.1）⇒ 卸载后重装的第一次更新回退全量下载，无功能影响。
+**差分 base 的位置**：`%LOCALAPPDATA%\ai-editor-desktop-updater\installer.exe`（安装器安装时写出的自身副本）。卸载会清掉它（§5.1）⇒ 卸载后重装的第一次更新回退全量下载，无功能影响。⚠ **差分失败会自动回退全量**（日志形如 `Cannot download differentially, fallback to full download: sha512 checksum mismatch`）——这是上游的设计回退，不是故障；根因是 base 与当前已装版本不一致（中间做过同版本重装 / 卸载清了缓存 / 影子实验）。诊断差分是否真的生效：看 `To download: … KB (N%)` 的比例与 `File has … changed blocks`。
 
 **网络路径（排障口径）**：更新请求走 **Electron 的 `net` 模块**（Chromium 网络栈，跟随系统代理），**不经过** server 侧安装的 undici dispatcher（那是 Node 出站 HTTP 的路径）——两者排障不能混为一谈。实测：网络直连 GitHub 不稳时，自动检查会静默失败（只落日志，见 `backlog.md`「自动检查失败对网络不稳的用户完全不可见」）。
 

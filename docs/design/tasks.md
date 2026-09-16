@@ -43,7 +43,9 @@
    - 发现新版本：`Found version 0.0.45` / `Found version 0.0.46`；**差分下载生效**：`File has 112 changed blocks` / `Full: 132,598 KB, To download: 2,277 KB (2%)`（第二跳 1%）；下载中旧缓存 sha512 不匹配时自愈（`Directory for cached update will be cleaned`）
    - 安装：`Install: isSilent: true, isForceRunAfter: true` + `Executing: …pending\AI-Editor-0.0.4x-win-x64.exe with args: --updated,/S,--force-run` → 应用退出 → 静默安装 → **自动拉起**（日志重启行）→ 版本号真的变为 v0.0.46（`Update for version 0.0.46 is not available`）
    - 杀软/Defender 未拦截；用户确认书库与 `%APPDATA%\AI Editor` 完好
-   - 待补的小项：UAC 是否弹出、Esc/Enter 是否都走「稍后」（两跳均未专门观察）
+   - **终态补测（2026-09-16，v0.0.46 → v0.0.47）**：`Found version 0.0.47` → 差分 `File has 77 changed blocks` / `To download: 1,567 KB (1%)` → `Install: isSilent: true, isForceRunAfter: true` → 10 秒后应用重启 → `Update for version 0.0.47 is not available` ⇒ **版本真的变为 v0.0.47**，全程无清除数据框；且该次运行**无** `disableWebInstaller` warn（= 跑的是含 v0.0.45 修复的新代码；该 warn 是判断代码新旧的可靠指纹）
+   - 待补的小项：UAC 是否弹出、Esc/Enter 是否都走「稍后」（各跳均未专门观察）
+   - 观测：**差分失败会自动回退全量**（v0.0.44 上那次：`Cannot download differentially, fallback to full download: sha512 checksum mismatch`）——上游设计行为，不是故障；根因是差分 base（`%LOCALAPPDATA%\ai-editor-desktop-updater\installer.exe`）与当前已装版本不一致（中间做过同版本重装 / 卸载清了缓存 / 影子实验），代价只有带宽
 7. ✅ **卸载提示框修复的真机验证（2026-09-16）**：v0.0.46（含修复）→ 影子 v0.0.47（载荷仍是 0.0.46）升级：用户确认**全程未出现「是否清除使用数据」框**，静默安装 + 自动拉起。此前 v0.0.44 → 0.0.45 / 0.0.46 两跳各弹一次、均选「否」（旧卸载器无法远程修补，与设计文档的过渡提醒一致）。
    - 残留：撤 `latest.yml` 的负向用例（手动检查应弹「检查更新失败」）未做——低优先级（网络超时时已实证自动路径静默落 `[error]`）。
    - 观察待定：手动路径在**下载确实耗时**（>1.2s 判定窗口）时会先后弹两个框（「正在后台下载…」→「已下载」）——两者都是真话，但用户可感知为“两个框”；见 `backlog.md` 相应条目。
