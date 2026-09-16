@@ -21,9 +21,8 @@
 5. **macOS 的 Cmd+C/V**（菜单 Edit 角色）、菜单项「打开书库/日志目录」的 `shell.openPath`；
 6. **Windows 自动更新的真机两版闭环**（v0.0.44 已发布，立刻可做）：装 v0.0.44（⚠ **首跳必须手动装一次**，老版本没有更新器）→ 发 v0.0.45（Release 三资产齐全）→ 启动 v0.0.44：`<userData>\logs\ai-editor.log` 应出现 `Checking for update` / `Found version v0.0.45`（**验 info 行确实落盘**）→ 弹「新版本 v0.0.45 已下载」→ 点「立即重启安装」→ 应用退出、静默安装、自动拉起 → 菜单 → 帮助 版本号 = v0.0.45。同批观察四件：① Esc 与 Enter 都走「稍后」（不重启、版本不变）；② 日志出现 `Cannot run installer: error code: …` ⇒ 静默安装被拦（杀软/Defender），需手动下载；③ 差分是否命中（base = `%LOCALAPPDATA%\ai-editor-desktop-updater\installer.exe`；卸载后首更回退全量，无功能影响）；④ `--force-run` 是否真拉起应用。
 7. **无更新 / 失败的手动分支**：菜单「检查更新…」在无新版时应弹「已是最新版本（vX）」；负向用例（撤掉 Release 的 `latest.yml`）应弹「检查更新失败」且日志含 `ERR_UPDATER_CHANNEL_FILE_NOT_FOUND`。⚠ **本地已验**：临时掀掉 `isUpdateSupported()` 守卫 + `APPIMAGE=/tmp/fake`，Linux 打包态实测日志出现 `[info] Checking for update` 与 `[error] … Cannot find latest-linux.yml … 404`（同时直接验证了 info 行落盘的修复）；**对话框 UI 面仍只能真机验**。
-8. **CI 侧三资产首跑（v0.0.44）**：Release 上必须同时有 `AI-Editor-0.0.44-win-x64.exe` + `latest.yml` + `AI-Editor-0.0.44-win-x64.exe.blockmap`，且 `latest.yml` 的 `files[0].url` / `path` 与资产名**逐字一致**（本地 Linux 侧已由 `pack.mjs` 的 `assertUpdateAssetNames()` 守住同一不变式）。
-9. **win32 分支在 Windows 上的启动冒烟（缺）**：本地只能在 Linux 上以「临时掀守卫」方式执行该分支（已做：无崩溃、日志接线正确、网络与错误路径都跑通）；Windows runner 上「`检查更新项: true` + 无 `SyntaxError`/`Uncaught Exception`」的断言仍缺（见 `backlog.md`「CI 侧打包态启动冒烟」）。
-10. **验证独立性限制（环境事实）**：v0.0.44 两卡的打包/断言/commit 均由编排者代跑——本环境子代理（worker / oracle / delegate）**均无 shell 工具**（能力列表宣称有 `bash`，实际不可用）⇒ 「独立复现」只做到「独立静态判读 + 产物阅读」，命令级证据均为编排者提供。派工时按此前提安排（子代理写代码、编排者跑门禁与 commit）。
+8. **win32 分支在 Windows 上的启动冒烟（缺）**：本地只能在 Linux 上以「临时掀守卫」方式执行该分支（已做：无崩溃、日志接线正确、网络与错误路径都跑通）；Windows runner 上「`检查更新项: true` + 无 `SyntaxError`/`Uncaught Exception`」的断言仍缺（见 `backlog.md`「CI 侧打包态启动冒烟」）。
+9. **验证独立性限制（环境事实）**：v0.0.44 两卡的打包/断言/commit 均由编排者代跑——本环境子代理（worker / oracle / delegate）**均无 shell 工具**（能力列表宣称有 `bash`，实际不可用）⇒ 「独立复现」只做到「独立静态判读 + 产物阅读」，命令级证据均为编排者提供。派工时按此前提安排（子代理写代码、编排者跑门禁与 commit）。
 
 **开新卡**：从 `backlog.md` 选（当前分三类）——
 

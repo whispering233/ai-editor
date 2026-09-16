@@ -252,6 +252,8 @@
 - **开机自启** — 现状：不做。触发条件：用户要求（与「自动备份需要进程活着的」的期待相关）。
 - **`pnpm deploy` 失效时的 esbuild 兜底** — 现状：主路径未验证通过前不预先实现兜底。触发条件：打包主路径（`pnpm deploy` + electron-builder）被实测证伪（collect 不到 workspace 依赖或原生模块 load 失败）。
 - **Windows 包的真实安装验收（只能人工/真机）** — 现状：`desktop.yml` 已在 v0.0.40 跑通三平台、随后收窄为只出 Windows；包能构建、能下载，但**「装得上、启得开、选书库、建库、导入备份」全链路未在真实 Windows 上逐项验过**（本仓开发机是 WSL，Windows 交叉构建需 Wine 故不做）。触发条件：发版后拿到 exe 的人实测。最小验证：安装 → 首次启动直达书架 → 新建一本 → 导入一个备份（书名应取自备份而非 zip 文件名）。
+- **GitHub Actions 的 Node 20 弃用告警（v0.0.44 首现）** — 现状：Desktop workflow 报 `actions/upload-artifact@v4` 与 `softprops/action-gh-release@v2` 被强制跑在 Node 24（`Node.js 20 is deprecated`），**仅告警、任务成功**。触发条件：上游改成硬报错，或两个 action 各抬一个 major（`upload-artifact@v5` / `action-gh-release@v3`）时。最小修法：两个 action 各抬一个 major，其余 `actions/*` 一并核对（三个 workflow 共用）。
+
 - **CI 侧打包态启动冒烟（缺失的护栏）** — 现状：卡 A1/A2 验收里的「打包后起一次」只在本地人工做过（v0.0.44 的 `electron-updater` ESM 具名导入就是这样被捉到的：typecheck/lint/单测全绿，打包态直接启动失败），CI 只验证「包能构建、三资产齐全」，**不验证「包能起来」**。触发条件：下一次主进程依赖/import 变动导致同类回归（很便宜就能重现）。最小修法：`desktop.yml` 在 electron-builder 后加一步：解压/使用 `release/win-unpacked/ai-editor.exe --user-data-dir=<tmp>`，等几秒后断言日志里有「菜单已就绪」且无 `SyntaxError`/`Uncaught Exception`（Windows runner 需要处理无交互会话下的窗口创建，可能要 `--no-sandbox` 或改为断言「主进程跑到了 server 启动行」）。
 
 - **Windows 自动更新的真机闭环（只能人工/真机）** — 现状：v0.0.44 起更新链路代码与 CI 三资产已就位，但「装 vX → 发 vX+1 → 弹提示 → 点立即重启 → 重启后版本号变 vX+1」未在真实 Windows 上跑过（且**首个带能力的版本必须手动装一次**，老版本不会自己升上来）。触发条件：vX+1 发布后立即验。最小验证：按 `build.md`「真机更新验证（两版闭环）」；顺带观察 Defender/杀软是否拦静默安装（未验证项）。
