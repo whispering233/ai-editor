@@ -16,7 +16,6 @@
 - 任务以 `docs/design/tasks.md` 为清单：按卡开发，垂直切片、一次一张、一卡一 commit、独立验证、卡内不做卡外顺手改动；完成后清理卡片并向用户汇报。
 - 每卡「实现 fixer + 独立验证 oracle」双代理；并行卡片用临时分支 + git worktree，验证后合回 main 并清理。
 - 并行派工的硬要求（2026-09 实测）：子代理必须显式 `context: "fresh"`——`worker` 默认 fork 会把父会话的**编排叙事**当成自己的进度（实测三道 fixer 全部零改动回 PASS）；每份任务需带**硬完成判据**（`git log` 必须含新 commit + `git status` 干净，无 commit 不许报 PASS）与「汇报必附 commit hash / 命令输出」条款。
-- **本环境实测补充（2026-09-16）**：子代理（`worker` / `oracle` / `delegate`）**均无 shell 工具**（任务声明的能力里有 `bash`，实际调用报 `Tool bash not found`）⇒ 派工时按「**子代理只落代码与静态判读、编排者跑门禁与 commit**」安排；「独立复现」在本环境最多做到独立静态判读 + 产物阅读，命令级证据由编排者提供并在汇报里注明。
 - 验证：`pnpm typecheck` / `pnpm lint` / `pnpm -r test`（单包 `pnpm --filter <包> test`）；⚠ fresh clone 先 `pnpm -r build` 再 typecheck；UI 改动额外用浏览器核一次像素；**改桌面版主进程（依赖/import）后必须跑打包态启动冒烟**（`build.md`：`typecheck` 绿 ≠ 打包态能起）。
 - 提交信息用中文，遵循 conventional commits（如 `feat(doc): ...`）。
 - 日常不 push、不建 PR、不新增 CI；远端与 CI 仅服务发布链路（push `v*` tag 触发 `.github/workflows/`）。
