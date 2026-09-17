@@ -23,6 +23,12 @@ let root: string;
 /** 读写测试用配置路径（<创作根>/.ai-editor/cloud.json） */
 const configPath = (): string => join(root, ".ai-editor", "cloud.json");
 
+/** 绕过写守卫直接改盘写设备名（模拟旧版本/手工编辑留下的坏配置） */
+function putRawDevice(device: string): void {
+  const file = readCloudFile() as Record<string, unknown>;
+  writeFileSync(configPath(), JSON.stringify({ ...file, webdav: { ...(file.webdav as object), device } }));
+}
+
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "ai-editor-cloud-state-"));
   initCloudState(root);
@@ -158,12 +164,15 @@ describe("云端配置写入（合并写 + 0600）", () => {
     expect(readAutoPush()).toBe(false);
   });
 
-  it("设备名等于应用密码 → 400（凭据不得进文件名段），且零落盘", () => {
-    writeCloudConfig({ url: "https://dav.example.com/dav", username: "u", password: "atqrrh2u3k8mp57p" });
+  it("已保存密码：设备名改成它 → 400 且零落盘（trim 口径）；清除凭据后同值放行", () => {
+    // 密码首尾带空白（粘贴常见）——与设备名（trim 后）同值时也需命中
+    writeCloudConfig({ url: "https://dav.example.com/dav", username: "u", password: " atqrrh2u3k8mp57p " });
     const before = readFileSync(configPath(), "utf8");
     expect(() => writeCloudConfig({ device: "atqrrh2u3k8mp57p" })).toThrowError(/设备名不能与 WebDAV 应用密码相同/);
     expect(readFileSync(configPath(), "utf8")).toBe(before); // 抛错发生在写盘前
-    expect(configuredDeviceName()).toBeNull();
+    writeCloudConfig({ url: null, username: null, password: null }); // 清除凭据（密码一并丢弃）
+    writeCloudConfig({ device: "atqrrh2u3k8mp57p" }); // 不再是凭据 → 放行
+    expect(configuredDeviceName()).toBe("atqrrh2u3k8mp57p");
   });
 
   it("同一请求里新设的密码 + 新设的设备名也挡（比较用生效值，不留到下次保存才发现）", () => {
@@ -171,14 +180,6 @@ describe("云端配置写入（合并写 + 0600）", () => {
       writeCloudConfig({ url: "https://dav.example.com/dav", username: "u", password: "atqrrh2u3k8mp57p", device: "atqrrh2u3k8mp57p" }),
     ).toThrowError(/设备名不能与 WebDAV 应用密码相同/);
     expect(readCloudFile()).toBeNull(); // 整个请求零落盘（不留下半套凭据）
-  });
-
-  it("密码带首尾空白（粘贴常带空格）按 trim 口径挡；清除凭据后同值设备名放行", () => {
-    writeCloudConfig({ url: "https://dav.example.com/dav", username: "u", password: " atqrrh2u3k8mp57p ", device: "台式机" });
-    expect(() => writeCloudConfig({ device: "atqrrh2u3k8mp57p" })).toThrowError(/应用密码相同/);
-    writeCloudConfig({ url: null, username: null, password: null }); // 清除凭据（密码一并丢弃）
-    writeCloudConfig({ device: "atqrrh2u3k8mp57p" }); // 不再是凭据 → 放行
-    expect(configuredDeviceName()).toBe("atqrrh2u3k8mp57p");
   });
 
   it("未初始化创作根 → 写入 500 INTERNAL_ERROR（装配错误不静默吞）", () => {
@@ -219,23 +220,14 @@ describe("设备名解析（配置优先，缺省 hostname 派生）", () => {
 
   it("存量坏值（设备名 == 应用密码）→ 读侧按未配置处理（回退 hostname，立刻止漏）", () => {
     writeCloudConfig({ url: "https://dav.example.com/dav", username: "u", password: "atqrrh2u3k8mp57p" });
-    // 绕过写守卫直接写盘（模拟旧版本/手工编辑留下的坏配置）
-    const file = readCloudFile() as Record<string, unknown>;
-    writeFileSync(
-      configPath(),
-      JSON.stringify({ ...file, webdav: { ...(file.webdav as object), device: "atqrrh2u3k8mp57p" } }),
-    );
+    putRawDevice("atqrrh2u3k8mp57p");
     expect(configuredDeviceName()).toBeNull();
     expect(currentDeviceName()).toBe(defaultDeviceName());
   });
 
   it("设备名与密码同值时，清掉密码后设备名重新生效（守卫只跟凭据绑定）", () => {
     writeCloudConfig({ url: "https://dav.example.com/dav", username: "u", password: "atqrrh2u3k8mp57p" });
-    const file = readCloudFile() as Record<string, unknown>;
-    writeFileSync(
-      configPath(),
-      JSON.stringify({ ...file, webdav: { ...(file.webdav as object), device: "atqrrh2u3k8mp57p" } }),
-    );
+    putRawDevice("atqrrh2u3k8mp57p");
     expect(configuredDeviceName()).toBeNull();
     writeCloudConfig({ url: null, username: null, password: null }); // 密码一并丢弃
     expect(configuredDeviceName()).toBe("atqrrh2u3k8mp57p");
