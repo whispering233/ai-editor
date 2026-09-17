@@ -32,6 +32,7 @@
 - **云端存档（v0.0.38 定稿）**：凭据与同步状态的唯一载体 = `<创作根>/.ai-editor/cloud.json`（0600 明文；**不进项目文件 / 备份 zip / 任何 API 响应**），读写唯一入口 = `packages/server/src/cloud/state.ts`。
   - **地址语义 = 用户云盘根**；工作根 `<云盘根>/ai-editor/` 由 `createWebdavClient` **唯一一处拼接**（配置/UI 都只表达云盘根，不做「截断再拼回」）；`ensureWorkingRoot()` 幂等建「云盘根 + 工作根」。
   - **备份命名唯一格式**（写入 = 解析，`shared/utils/backup.ts` 单正则）：`<时间戳>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip`；三类旧命名**不解析**（留盘不列表），**不做重命名迁移**；打开项目时若 `.backups/` 有文件但无一可解析 → 兜底生成一份（`ensureParseableBackup`）。`device`/`stats` 恒有。
+  - **凭据不得进文件名段**（2026-09 安全修复，不可回退）：设备名与备份标签都会进 `.backups/` 文件名 + 上传云盘 + 冲突框展示 ⇒ 等于 WebDAV 应用密码一律 400（唯一比较口径 = `cloud/state.ts` 的 `equalsCredential`；写侧 = `writeCloudConfig` + `backup.ts` 的 `writeBackup`/`renameBackup` 两入口）；读侧 `configuredDeviceName` 把存量坏值当未配置（回退 hostname，立刻止漏）。**新增任何「用户文本进文件名」的入口都要挂同一守卫。**
   - **三态与「有未备份改动」**：`local.backupStale` = `hasUnbackedChanges` **且** `dirty`（拉取/恢复后必为 false；`backupStale` 不随同步前移）；**自动推送的守卫用纯 `hasUnbackedChanges`**（更严格，避免推旧包上云）——两处口径不同是有意的。
   - **自动推送复用备份 tick 链**（**不得新增第二套定时器**：排程条件 = 备份频率开启 **或** `autoPush` 开启，后者按 2h 兜底）；节流基准 `lastAutoPushAt` 只由定时路径推进；失败只记 `lastAutoPushError`（清除点 = `pushBackup` 成功写）。
   - **云端写入协议**：`PUT .tmp-<名>` → `MOVE` 成正式名（同名同大小已存在则跳过上传；`MOVE` 撞 409/412 时删目标重试一次）；书目录名 `<书名>-<id>` 被云盘拒时回退 `ai-editor-<id>` → `<id>`（回退扫描认 `name === id || endsWith('-'+id)`）；清理只删可解析时间戳或 `.tmp-` 前缀，**带用户标签的永不删**。

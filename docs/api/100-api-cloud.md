@@ -96,9 +96,9 @@
   password?: string;  // **缺省或空串 = 不修改**（从不回传 → 表单留空即保留原值）
                       // 例外（凭据三件套要么齐、要么全无）：url 与 username **皆清空**时，password
                       // 一并丢弃——「清除凭据」只需清空 url + username（密码框留空即可）
-  device?: string;    // 设备名；规则：trim 后 1-16 字符，禁 `-`（文件名分隔符）与路径分隔符/保留字符；
+  device?: string;    // 设备名；规则：trim 后 1-16 字符，禁 `-`（文件名分隔符）与路径分隔符/保留字符
+                      // （\ / : * ? " < > |）/控制字符/纯点，否则 400 VALIDATION_ERROR；
                       // **空串 = 回缺省（删掉配置值 ⇒ 重新跟随 hostname 派生）**；缺省 = 不修改
-                      // （\ / : * ? " < > |）/控制字符/纯点 → 否则 400 VALIDATION_ERROR；空串 = 回缺省 hostname
                       // **不得等于生效的 WebDAV 应用密码** → 400 VALIDATION_ERROR（设备名会进备份文件名
                       // 并上传云盘；比较口径含 trim，同一请求里新设密码 + 新设备名一起拦）
   autoPush?: boolean; // 自动推送开关
