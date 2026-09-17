@@ -419,6 +419,30 @@ describe("writeBackup 与保留策略", () => {
     }
   });
 
+  it("备份标签等于 WebDAV 应用密码 → 400（凭据不得进文件名段，与设备名同一不变式）", () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-pw-label", "标签即密码"));
+    initCloudState(dir); // 创作根 = 本临时目录（cloud.json 写在 <root>/.ai-editor/）
+    try {
+      writeCloudConfig({ url: "https://dav.example.com/dav", username: "u", password: "atqrrh2u3k8mp57p" });
+      const project = {
+        root: dir,
+        config: readProjectFile(dir) as ProjectFileConfig,
+        db: openDatabase(join(dir, DATA_DB_FILE_NAME)),
+      };
+      try {
+        expect(() => writeBackup(project, { name: "atqrrh2u3k8mp57p" })).toThrow(/备份名称不能与 WebDAV 应用密码相同/);
+        expect(() => writeBackup(project, { name: " atqrrh2u3k8mp57p " })).toThrow(/应用密码相同/); // trim 后同值
+        expect(backupFileNames(dir)).toHaveLength(0); // 拦在写盘前，零产出
+        expect(writeBackup(project, { name: "定稿" }).fileName).toContain("-定稿-"); // 普通标签照常
+      } finally {
+        closeDatabase(project.db);
+      }
+    } finally {
+      initCloudState(null); // 复位（模块级状态：不影响其它用例的设备名解析）
+    }
+  });
+
   it("保留策略：超出 20 份删除最旧（按文件名时间戳排序）", () => {
     const dir = makeTmpDir();
     const backupsDir = join(dir, BACKUPS_DIR_NAME);
@@ -801,6 +825,21 @@ describe("renameBackup", () => {
     }
  // 非法名称不产生改名副作用（原文件仍在）
     expect(existsSync(join(dir, BACKUPS_DIR_NAME, a.fileName))).toBe(true);
+  });
+
+  it("新标签等于 WebDAV 应用密码 → 400（与 writeBackup 同守卫），原文件不动", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-rn-pw", "改名为密码"));
+    const project = await openProjectCtx(dir);
+    const a = writeBackup(project, { kind: "manual", name: "旧名" });
+    initCloudState(dir); // 创作根 = 本临时目录
+    try {
+      writeCloudConfig({ url: "https://dav.example.com/dav", username: "u", password: "atqrrh2u3k8mp57p" });
+      expect(() => renameBackup(project, a.fileName, "atqrrh2u3k8mp57p")).toThrow(/备份名称不能与 WebDAV 应用密码相同/);
+      expect(existsSync(join(dir, BACKUPS_DIR_NAME, a.fileName))).toBe(true);
+    } finally {
+      initCloudState(null); // 复位
+    }
   });
 });
 

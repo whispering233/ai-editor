@@ -45,6 +45,7 @@ import {
 } from "@whispering233/ai-editor-db";
 import { SESSIONS_DIR_NAME } from "@whispering233/ai-editor-agent";
 import { currentDeviceName } from "./cloud/device.js";
+import { equalsCredential, readWebdavConfig } from "./cloud/state.js";
 import { HttpError } from "./middleware/error.js";
 import type { ProjectContext } from "./middleware/project.js";
 
@@ -67,6 +68,22 @@ export const PACKED_DIR_NAMES: readonly string[] = [REFERENCE_DIR_NAME, SESSIONS
 export function isAllowedBackupEntry(name: string): boolean {
   if ((PROJECT_EXPORT_FILE_NAMES as readonly string[]).includes(name)) return true;
   return PACKED_DIR_NAMES.some((d) => name.startsWith(`${d}/`)) && !name.split("/").includes("..");
+}
+
+/**
+ * 备份标签（名称段）不得等于 WebDAV 应用密码：标签会进 `.backups/` 文件名并随备份上传到云盘，
+ * 凭据一旦落在文件名上就等于向云端广播（见 `cloud/state.ts` `equalsCredential` 的事故记录）。
+ * 与设备名（`configuredDeviceName` / `writeCloudConfig`）同一不变式，两处入口共用同一比较口径。
+ *
+ * @throws HttpError 400 VALIDATION_ERROR 标签等于应用密码（未配置云盘/无密码 → 恒不触发）
+ */
+function assertNotCredential(label: string): void {
+  if (!equalsCredential(label, readWebdavConfig()?.password)) return;
+  throw new HttpError(
+    400,
+    "VALIDATION_ERROR",
+    "备份名称不能与 WebDAV 应用密码相同（它会写进备份文件名并上传到云盘）",
+  );
 }
 
 /** 项目目录内某子目录的全部文件（递归，含 .trash/）相对路径（`/` 分隔）；目录缺失 → [] */
@@ -279,7 +296,8 @@ function uniqueBackupFileName(
  * @param opts.name 手动备份自定义名称（仅带名称的手动/重命名场景传入）：
  * sanitizeBackupName 是名称校验/规范化**唯一执行点**——非法（含路径分隔符/超长/纯点）→
  * 400 VALIDATION_ERROR；自动备份/覆盖前快照不传 name，文件名无标签段。
- * 注意：name 仅在 opts.name !== undefined 且 sanitize 通过后传入 formatBackupFileName。
+ * 另：名称等于 WebDAV 应用密码 → 400（标签会进文件名并随备份上传云盘，见 cloud/state.ts
+ * `equalsCredential`）；自动备份/覆盖前快照不传 name，不涉该守卫。
  */
 export function writeBackup(project: ProjectContext, opts?: { name?: string; kind?: BackupKind }): BackupFileInfo {
   const kind = opts?.kind ?? "auto";
@@ -293,6 +311,7 @@ export function writeBackup(project: ProjectContext, opts?: { name?: string; kin
         `备份名称非法（trim 后 1-${MAX_BACKUP_NAME_LENGTH} 字符，禁路径分隔符/保留字符/控制字符/纯点）`,
       );
     }
+    assertNotCredential(sanitized);
     name = sanitized;
   }
  // 统计快照在打包前取（同一连接同一时刻视角）；设备名 = 当前生效值
@@ -393,7 +412,10 @@ export function renameBackup(project: ProjectContext, fileName: string, name?: s
         `备份名称非法（trim 后 1-${MAX_BACKUP_NAME_LENGTH} 字符，禁路径分隔符/保留字符/控制字符/纯点）`,
       );
     }
-    if (sanitized !== null) nextName = sanitized;
+    if (sanitized !== null) {
+      assertNotCredential(sanitized);
+      nextName = sanitized;
+    }
   }
 
  // 3. 新文件名（时间戳/类型/设备/统计段保持原备份——重命名只改标签段）
