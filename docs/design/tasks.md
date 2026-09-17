@@ -8,21 +8,7 @@
 
 ---
 
-## 当前任务卡（安全修复：凭据不得进文件名段）
-
-背景（2026-09-17，用户报告）：设置页「设备名」框收到应用密码后，app 未加阻拦，把它写进本机备份文件名、上传成云端文件名、并在冲突裁决框展示；强推时又把带密码的云端文件名原样拷贝回本机。契约与口径已定稿：`design/40-cloud-sync.md` §7、`api/100-api-cloud.md`、`api/20-api-backup.md`、`design/config.md`。
-
-- [ ] **卡 1：设备名凭据守卫（写入 400 + 读取回退）**
-  - 范围：`packages/server/src/cloud/state.ts`（新增 `equalsCredential`；`configuredDeviceName` 读侧回退；`writeCloudConfig` 写侧 400）+ `cloud/state.test.ts`。
-  - 验收：`pnpm --filter @whispering233/ai-editor-server test`；写侧 400 且零落盘；读侧坏值 → `configuredDeviceName() === null` 且 `currentDeviceName() === defaultDeviceName()`。
-  - commit：`fix(cloud): 设备名不得等于应用密码（写侧 400 + 读侧回退 hostname）`
-- [ ] **卡 2：备份标签凭据守卫（写 + 改名两入口）**
-  - 范围：`packages/server/src/backup.ts`（`assertNotCredential`；`writeBackup` 与 `renameBackup` 两处调用）+ `backup.test.ts`。
-  - 验收：标签 == 应用密码 → 400 且不产出/不改名；普通标签照常；trim 口径生效。
-  - commit：`fix(backup): 备份标签不得等于应用密码（写/改名两入口 400）`
-- [ ] **卡 3：收口（回归 + CHANGELOG + 清卡）**
-  - 验收：`pnpm -r build` → `pnpm typecheck` → `pnpm lint` → `pnpm -r test` 全绿；`CHANGELOG.md` `[Unreleased]` 登记；本文件卡片清掉。
-  - commit：`docs(changelog): 登记凭据不得进文件名段的安全修复`
+## 当前无进行中任务卡
 
 ---
 
