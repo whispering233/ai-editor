@@ -86,11 +86,34 @@ export function readAutoPush(): boolean {
 /**
  * 配置的设备名：只有通过 `sanitizeDeviceName` 才认（非法/缺失 → null → 上层回缺省 hostname）。
  * 校验在此处收敛，写入侧（路由）也走同一函数。
+ *
+ * **读侧凭据守卫**：值等于已保存的应用密码时同样按「未配置」处理（`equalsCredential`）——坏配置若继续
+ * 生效，会把密码写进本机与云端的备份文件名；回退 hostname 派生值即立刻止漏，且 `deviceConfigured`
+ * 随之 false，设置页不会把坏值预填回表单。
  */
 export function configuredDeviceName(): string | null {
-  const device = readCloudFile()?.webdav?.device;
+  const webdav = readCloudFile()?.webdav;
+  const device = webdav?.device;
   if (typeof device !== "string") return null;
-  return sanitizeDeviceName(device);
+  const sanitized = sanitizeDeviceName(device);
+  if (sanitized === null) return null;
+  return equalsCredential(sanitized, webdav?.password) ? null : sanitized;
+}
+
+/**
+ * 文本是否等于凭据（WebDAV 应用密码）——「凭据不得进文件名段」的**唯一比较口径**
+ *（消费方：本模块的设备名读/写守卫、`backup.ts` 的备份标签守卫）。
+ *
+ * 为什么需要：设备名与备份标签都会进 `.backups/` 文件名、上传到云盘、并在冲突裁决框里展示；
+ * 用户误把应用密码贴进「设备名」框时凭据就会被广播（2026-09 真实事故：云端出现
+ * `20260917-071459587-手动-<应用密码>-人物2-设定37-章9.zip`）。语法规则（trim 后 1-16 字符、禁 `-`）
+ * 对 16 位小写字母数字的坚果云应用密码完全放行，所以必须单独挡一道。
+ *
+ * 比较口径：原值 + `trim()`（写入侧设备名/标签已 trim，密码不做 trim）。
+ */
+export function equalsCredential(value: string, password: string | undefined): boolean {
+  if (typeof password !== "string" || password === "") return false;
+  return value === password || value === password.trim();
 }
 
 /**
@@ -153,7 +176,8 @@ export interface CloudConfigPatch {
  * - **凭据三件套要么齐、要么全无**：url 与 username 皆空 ⇒ password 一并丢弃（不留在磁盘上发霉）
  * - `autoPush` 与 `books` 段在每次写入后保持显式存在/原样保留
  *
- * @throws HttpError 500 创作根未初始化（装配错误）；I/O 错误向上抛（路由 → 500）
+ * @throws HttpError 400 VALIDATION_ERROR 设备名等于应用密码（凭据不得进文件名段，见 `equalsCredential`）；
+ *   500 创作根未初始化（装配错误）；I/O 错误向上抛（路由 → 500）
  */
 export function writeCloudConfig(patch: CloudConfigPatch): void {
   const path = cloudConfigPath();
@@ -178,6 +202,16 @@ export function writeCloudConfig(patch: CloudConfigPatch): void {
   const effectivePassword = url === "" && username === "" ? "" : password;
   const device = patch.device === undefined ? currentWebdav.device : (patch.device ?? undefined);
   const hasDevice = typeof device === "string" && device !== "";
+ // **凭据不得进文件名段**（与 `configuredDeviceName` 读侧同一不变式）：设备名会进 `.backups/` 文件名
+ // 并上传到云盘 → 等于应用密码时拒绝写入。比较用**生效值**：同一请求里新设的密码 + 新设的设备名
+ // 也一起挡（否则要等下一次保存才发现）。
+  if (hasDevice && equalsCredential(device, effectivePassword)) {
+    throw new HttpError(
+      400,
+      "VALIDATION_ERROR",
+      "设备名不能与 WebDAV 应用密码相同（它会写进备份文件名并上传到云盘）",
+    );
+  }
 
   const next: Record<string, unknown> = { ...current };
   if (url === "" && username === "" && effectivePassword === "") {

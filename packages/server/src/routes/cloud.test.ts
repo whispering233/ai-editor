@@ -3,12 +3,13 @@
 // 契约：docs/api/100-api-cloud.md（三端点的字段与错误码）、docs/design/40-cloud-sync.md §7（凭据纪律）。
 // 隔离：临时创作根 + initCloudState；fetch 全部 stub（不打真实网络）。
 // 断言重点：**任何响应都不含 password**（不是脱敏，而是根本不回传）、0600 权限、错误码映射。
-import { mkdtempSync, rmSync, statSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { errorHandler } from "../middleware/error.js";
+import { defaultDeviceName } from "../device-name.js";
 import { WEBDAV_WRITE_TEST_DIR, WEBDAV_WRITE_TEST_FILE } from "./cloud.js";
 import { cloudRoutes } from "./cloud.js";
 import { initCloudState, readCloudFile, readWebdavConfig } from "../cloud/state.js";
@@ -16,6 +17,9 @@ import { initCloudState, readCloudFile, readWebdavConfig } from "../cloud/state.
 const HOST_HEADERS = { host: "127.0.0.1:3456" };
 const JSON_HEADERS = { ...HOST_HEADERS, "content-type": "application/json" };
 const PASSWORD = "app-password-秘密值";
+/** 形如坚果云应用密码（16 位小写字母+数字、无 `-`）——它**恰好通过** `sanitizeDeviceName` 语法规则，
+ * 所以凭据进入文件名段只能靠单独一道守卫拦住（2026-09 真实事故的样本值） */
+const PW_AS_VALID_DEVICE = "atqrrh2u3k8mp57p";
 
 /** 组装带错误处理的测试 app */
 function buildApp(): Hono {
@@ -98,6 +102,19 @@ describe("GET /api/v1/cloud/status（配置段）", () => {
     expect(body.data.device.length).toBeGreaterThan(0);
     expect(body.data.device).not.toBe("苹果本");
   });
+
+  it("存量坏设备名（== 应用密码）→ 读侧按未配置口径回退 hostname（deviceConfigured=false，立刻止漏）", async () => {
+    await putConfig({ url: "https://dav.example.com/dav", username: "me@example.com", password: PW_AS_VALID_DEVICE });
+ // 绕过写守卫直接改盘（模拟旧版本/手工编辑留下的坏配置）
+    const path = join(root, ".ai-editor", "cloud.json");
+    const file = JSON.parse(readFileSync(path, "utf8")) as { webdav: Record<string, unknown> };
+    writeFileSync(path, JSON.stringify({ ...file, webdav: { ...file.webdav, device: PW_AS_VALID_DEVICE } }));
+    const text = await (await app.request("/api/v1/cloud/status", { headers: HOST_HEADERS })).text();
+    expect(text).not.toContain(PW_AS_VALID_DEVICE); // 凭据不得回显（含统计/设备行）
+    const body = JSON.parse(text).data;
+    expect(body.device).toBe(defaultDeviceName());
+    expect(body.deviceConfigured).toBe(false);
+  });
 });
 
 describe("PUT /api/v1/cloud/config", () => {
@@ -151,6 +168,18 @@ describe("PUT /api/v1/cloud/config", () => {
     // 清除后 status.device 回缺省（非空且不等于被清除的值）
     const status = await (await app.request("/api/v1/cloud/status", { headers: HOST_HEADERS })).json();
     expect(status.data.device).not.toBe("家里的台式机");
+  });
+
+  it("设备名等于应用密码 → 400 VALIDATION_ERROR（同一请求里新设密码 + 新设备名也拦）；零落盘、错误文案不含密码", async () => {
+    await putConfig({ url: "https://dav.example.com/dav", username: "u", password: PW_AS_VALID_DEVICE });
+    const res = await putConfig({ device: PW_AS_VALID_DEVICE });
+    const text = await res.text();
+    expect(res.status).toBe(400);
+    expect(JSON.parse(text).error).toMatchObject({ code: "VALIDATION_ERROR" });
+    expect(text).not.toContain(PW_AS_VALID_DEVICE); // 错误文案不回显凭据
+    expect(readCloudFile()?.webdav?.device).toBeUndefined(); // 拒绝发生在写盘前
+ // 同一请求里新设的密码 + 新设备名（首次保存的常见形态）也拦
+    expect((await putConfig({ url: "https://dav2.example.com/dav", username: "u", password: PW_AS_VALID_DEVICE, device: PW_AS_VALID_DEVICE })).status).toBe(400);
   });
 
   it("url 非法（非 URL / 非 http(s)）→ 400 VALIDATION_ERROR；未知字段 → 400（strict schema）", async () => {
