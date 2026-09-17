@@ -30,7 +30,8 @@
   url: string | null;         // 回显（**不含密码**）
   username: string | null;
   device: string;             // **生效**设备名（用户设过取配置值；没设过 = 简化 hostname 派生：去域名后缀、滤非法字符、剥首尾空白与 `_`、截 16 字符）
-  deviceConfigured: boolean;  // 用户**是否显式设过**设备名（cloud.json 的 webdav.device 存在且合法）；
+                              //   配置值等于已保存的应用密码 → 按未配置处理（回退 hostname；凭据不得进文件名段）
+  deviceConfigured: boolean;  // 用户**是否显式设过**设备名（cloud.json 的 webdav.device 存在且合法，且不等于应用密码）；
                               //   false 时 `device` 是 hostname 派生值，设置页**不预填**（否则「只点保存」
                               //   会把派生值钉进配置，从此不再跟随 hostname）
   autoPush: boolean;          // 自动推送开关（本机级，缺省 false）
@@ -98,6 +99,8 @@
   device?: string;    // 设备名；规则：trim 后 1-16 字符，禁 `-`（文件名分隔符）与路径分隔符/保留字符；
                       // **空串 = 回缺省（删掉配置值 ⇒ 重新跟随 hostname 派生）**；缺省 = 不修改
                       // （\ / : * ? " < > |）/控制字符/纯点 → 否则 400 VALIDATION_ERROR；空串 = 回缺省 hostname
+                      // **不得等于生效的 WebDAV 应用密码** → 400 VALIDATION_ERROR（设备名会进备份文件名
+                      // 并上传云盘；比较口径含 trim，同一请求里新设密码 + 新设备名一起拦）
   autoPush?: boolean; // 自动推送开关
 }
 

@@ -23,7 +23,7 @@
 - 用户级旧文件 `~/.ai-editor/config.json` **已废弃**（key/模型/预算全部迁往 pi agent dir）：代码不再读取，文件保留在磁盘不影响行为。
 - 项目文件（project.json/outline.json/AGENTS.md）走原子写；`sessions/` 由 pi `SessionManager` 追加写（整文件重写仅限迁移）。
 - 创作根 `.ai-editor/config.json` 的两个键属**服务端**：`debug` 由用户手编（启动读一次，含 `debug` 段以外的未知键一律忽略），`lastProject` 由服务端在 `POST /project/open` 成功后合并写入（写前先读、只改本键，不碰 `debug`）。
-- 创作根 `.ai-editor/cloud.json`（**独立文件，不并入 config.json**）：凭据与偏好分离——`config.json` 的语义是「用户可手编」且常被贴进 issue，凭据物理上就该在另一条路径上；`0600` 权限只需加给一个文件。由设置页端点写入（`PUT /api/v1/cloud/config`）；文件内容属服务端，用户不需要手编。**云盘凭据与模型 API key 同等对待：绝不进项目文件、不进备份 zip、不进任何 API 响应。**
+- 创作根 `.ai-editor/cloud.json`（**独立文件，不并入 config.json**）：凭据与偏好分离——`config.json` 的语义是「用户可手编」且常被贴进 issue，凭据物理上就该在另一条路径上；`0600` 权限只需加给一个文件。由设置页端点写入（`PUT /api/v1/cloud/config`）；文件内容属服务端，用户不需要手编。**云盘凭据与模型 API key 同等对待：绝不进项目文件、不进备份 zip、不进任何 API 响应、不进备份文件名段**（后者：设备名/备份标签等于应用密码 → `PUT /cloud/config` 与两个备份写入端点一律 400；存量坏设备名读侧按未配置处理，见 `40-cloud-sync.md` §7）。**
 - 桌面版 `<userData>/desktop.json` 只属外壳进程（不由 server 读写、不进项目文件/备份 zip/任何 API 响应）；设置页「书库位置」的展示值由外壳经 preload 下发，不新增服务端端点。
 
 ## 可配 / 不可配边界（判据）
