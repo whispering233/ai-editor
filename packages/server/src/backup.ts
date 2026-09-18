@@ -52,16 +52,13 @@ import type { ProjectContext } from "./middleware/project.js";
 /** 备份目录名（项目目录内 .backups/，随书籍移动自然携带） */
 export const BACKUPS_DIR_NAME = ".backups";
 
-/** 参考资料目录名（项目目录内 references/，随备份 zip 打包） */
-const REFERENCE_DIR_NAME = "references";
-
 /**
  * 随备份 zip 整体打包的目录（目录名已登记在 `docs/api/20-api-backup.md`）：
- * `references/`（参考资料含 .trash/）与 `sessions/`（会话 JSONL）——两者语义一致：
- * 白名单前缀 + 递归打包 + 参与变更判定 + 恢复时整体覆盖。
+ * 只一个 —— `sessions/`（会话 JSONL）。语义：白名单前缀 + 递归打包 + 参与变更判定 + 恢复时整体覆盖。
  * `SESSIONS_DIR_NAME` 取自 agent 包的 pi 运行时（会话目录的唯一事实来源；pi 的 session 文件落在此目录）。
+ * （卡 12.7b：原 `references/` 随包目录已退役——参考资料正文在 `data.db` 的 `document_records` 里。）
  */
-export const PACKED_DIR_NAMES: readonly string[] = [REFERENCE_DIR_NAME, SESSIONS_DIR_NAME];
+export const PACKED_DIR_NAMES: readonly string[] = [SESSIONS_DIR_NAME];
 
 /** 备份包条目白名单判定（三文件 + 打包目录前缀——逐名比对天然防 zip 路径穿越；
  * 目录子路径拒绝含 `..` 的条目防相对路径逃逸） */
@@ -243,7 +240,7 @@ function assertBackupFileNameFormat(fileName: string): NonNullable<ReturnType<ty
  * 打包当前项目为 zip（export 同款管道）：
  * wal_checkpoint(TRUNCATE) 把 WAL 合并回主文件（zip 内 data.db 为完整快照，
  * 无需附带 -wal/-shm）→ zipSync 打包（键序稳定：project.json → outline.json → data.db
- * → references/** → sessions/**（打包目录含 .trash/ 随包——项目自包含））。
+ * → sessions/**——正文与参考资料在 data.db 内，不再有其他目录条目）。
  * 三文件缺失任一 → 抛错（打开的项目三文件必然齐全，缺失即损坏，不导出半成品包）。
  */
 export function createBackupZip(project: ProjectContext): Uint8Array<ArrayBuffer> {
@@ -560,7 +557,7 @@ function unzipWithBudget(zipData: Uint8Array, budget: number): { entries: Record
   let total = 0;
   const unzipper = new Unzip((file) => {
     names.push(file.name);
-    if (!isAllowedBackupEntry(file.name)) return; // 未知条目不解压（白名单 = 三文件 + references/）
+    if (!isAllowedBackupEntry(file.name)) return; // 未知条目不解压（白名单 = 三文件 + sessions/）
     const chunks: Uint8Array[] = [];
     let size = 0;
     file.ondata = (err, chunk, final) => {
@@ -606,7 +603,7 @@ function isValidOutlineFile(parsed: unknown): boolean {
  * 备份包完整校验（自 import 校验顺序 3-7 提取，restore 与 import 共用）：
  *
  * 1. zip 解析（流式 + 解压总字节预算 200MB，zip 炸弹防御；失败 400「不是有效的项目备份包」）
- * 2. 条目白名单（只接受 PROJECT_EXPORT_FILE_NAMES 三文件名 + references/ 与 sessions/ 目录条目；
+ * 2. 条目白名单（只接受 PROJECT_EXPORT_FILE_NAMES 三文件名 + sessions/ 目录条目；
  * 逐名比对天然防 zip 路径穿越；**目录条目为非必需**——旧备份包无 sessions/ 仍可导入）
  * 3. 三文件齐全
  * 4. 临时目录写入 → project.json / outline.json 顶层（JSON 损坏 / 不符 → 400）
@@ -628,7 +625,7 @@ export function validateBackupPackage(zipData: Uint8Array): {
   /** 备份内的书名（project.json 的 name，已校验为非空字符串）——导入时未指定书名则用它 */
   projectName: string;
 } {
- // 1/2. 解压 + 白名单（严格拒绝）：三数据文件名 + references/ 前缀
+ // 1/2. 解压 + 白名单（严格拒绝）：三数据文件名 + sessions/ 前缀
   let entries: Record<string, Uint8Array>;
   let entryNames: string[];
   try {
@@ -745,13 +742,13 @@ function latestBackupTime(backupsDir: string): Date | null {
 }
 
 /**
- * 三文件 + `data.db-wal` 伴生文件 + 两个打包目录，是否在 since 之后有变更
+ * 三文件 + `data.db-wal` 伴生文件 + 随包目录（`sessions/`）是否在 since 之后有变更
  *（「任一 mtime 晚于上次备份时刻」）：
  * - 三文件：任一 mtime > since + 容差 → 有变更；**主文件缺失 → 视为有变更**（防御：不静默
  *   跳过，让备份管道报错暴露损坏）
  * - `data.db-wal`（F2）：普通写事务只追加 `-wal`、主文件 mtime 不变；**wal 缺失 ≠ 变更**
  *   （无未 checkpoint 的写，属正常状态，否则每次 tick 都误备份）
- * - `references/` 与 `sessions/`：目录内**任一文件** mtime 命中，或**目录自身** mtime 命中
+ * - `sessions/`：目录内**任一文件** mtime 命中，或**目录自身** mtime 命中
  *   （F3：删除文件不刷新任何剩余文件的 mtime，只看文件会漏检删除）；目录缺失（ENOENT）
  *   = 无文件、不算变更；其余错误防御视为有变更
  * mtime 判定容差见 BACKUP_CHANGE_TOLERANCE_MS 注释。
@@ -774,8 +771,8 @@ export function hasFileChangesSince(project: ProjectContext, since: Date): boole
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") return true;
   }
- // 打包目录（references/ 与 sessions/）：目录自身或其内任一文件 mtime 晚于 limit → 有变更——
- // 本地新增/外部编辑 md 文档、新增聊天会话、**删除文件**同样触发自动备份；
+ // 随包目录（sessions/）：目录自身或其内任一文件 mtime 晚于 limit → 有变更——
+ // 新增聊天会话、**删除文件**同样触发自动备份；
  // 遍历竞态（读取中删除）→ 防御视为无变更（下一 tick 重检）
   try {
     for (const dirName of PACKED_DIR_NAMES) {
@@ -808,7 +805,7 @@ export function hasFileChangesSince(project: ProjectContext, since: Date): boole
 function hasChangesSince(
   project: ProjectContext,
   since: Date,
-  scope: { dirs: readonly string[]; extraFiles?: readonly string[] },
+  scope: { dirs?: readonly string[]; extraFiles?: readonly string[] },
 ): boolean {
   const strictLimit = since.getTime();
   const tolerantLimit = strictLimit + BACKUP_CHANGE_TOLERANCE_MS;
@@ -838,7 +835,7 @@ function hasChangesSince(
     }
   }
   try {
-    for (const dirName of scope.dirs) {
+    for (const dirName of scope.dirs ?? []) {
       try {
         if (statSync(join(project.root, dirName)).mtimeMs > strictLimit) return true;
       } catch (err) {
@@ -858,7 +855,7 @@ function hasChangesSince(
  * 「本机创作数据自 since 后有改动」判定（**云端三态专用**，与备份定时器的 `hasFileChangesSince`
  * 口径刻意不同——见 `docs/design/40-cloud-sync.md` §3）：
  *
- * - `project.json` / `outline.json` / `references/` / `sessions/`（含两目录自身 mtime）：
+ * - `project.json` / `outline.json` / `sessions/`（含目录自身 mtime）：
  *   **严格** `mtime > since`。这些文件不会被备份/同步管道写入，容差在这里只有代价：
  *   `lastSyncAt` 是**不推进的固定基准**（只在下一次同步时前移），容差会把 `[since, since+1s]`
  *   内的本机改动**永久漏判**（状态误报「已同步」，用户可能因此拉取覆盖它）。
@@ -874,9 +871,11 @@ export function hasLocalEditsSince(project: ProjectContext, since: Date): boolea
  * 与 `hasLocalEditsSince` 同一套 mtime 口径，但 `sessions/` **不参与**（会话是聊天产物，纯聊天时段
  * 不该单独烧一次云盘配额——聊天记录会随下一次创作变更的 zip 一起上云，zip 永远含 `sessions/`），
  * 并**纳入 `AGENTS.md`**（项目规则也是创作数据，改规则值得推一次）。
+ *
+ * 创作数据本体 = 三文件（正文/参考资料在 `data.db` 内，卡 12.7b 后已无随包目录参与本档）。
  */
 export function hasAuthoringChangesSince(project: ProjectContext, since: Date): boolean {
-  return hasChangesSince(project, since, { dirs: [REFERENCE_DIR_NAME], extraFiles: [AGENTS_FILE_NAME] });
+  return hasChangesSince(project, since, { extraFiles: [AGENTS_FILE_NAME] });
 }
 
 /**
@@ -889,8 +888,8 @@ export function latestParseableBackupTime(project: ProjectContext): Date | null 
 
 /**
  * 「本机有改动未进最新备份」（卡 B，`GET /cloud/status` 的 `local.backupStale`）：
- * 最新一份本地备份的时间早于最新创作改动（三文件 + `references/` + `sessions/`，口径同
- * `hasLocalEditsSince`，`data.db`/`-wal` 带 1s 容差）。**没有任何可解析备份 → true**
+ * 最新一份本地备份的时间早于最新创作改动（三文件 + `sessions/`，口径同 `hasLocalEditsSince`，
+ * `data.db`/`-wal` 带 1s 容差）。**没有任何可解析备份 → true**
  *（那时推送会 404「没有可推送的备份」，语义上也是「还没有能代表当前的档」）。
  *
  * 用途：自动推送的守卫（有未备份改动时跳过，不做「按需备份」——备份归本地、云端只是镜像）。
@@ -1019,11 +1018,11 @@ export function writeProjectFilesFromBackup(
     keepId?: string;
     name?: string;
     snapshotFileName?: string;
-    /** 两个打包目录走**并集合并**（云拉取语义）；缺省 = 整体覆盖（本地 restore / import 语义不变） */
+    /** 随包目录走**并集合并**（云拉取语义）；缺省 = 整体覆盖（本地 restore / import 语义不变） */
     mergePackedDirs?: { baseEntries: readonly string[] };
   } = {},
 ): MergeCounts | undefined {
- // 替换顺序：JSON 两文件在前，data.db 最后，references/ 收尾——db 替换失败时其余已替换
+ // 替换顺序：JSON 两文件在前，data.db 最后，sessions/ 收尾——db 替换失败时其余已替换
  // （校验已通过，文件内容本身有效，部分替换可经重新恢复修复）；replaced 清单供失败日志使用（P1-2）
   const targetNames = [PROJECT_FILE_NAME, OUTLINE_FILE_NAME, DATA_DB_FILE_NAME];
   const replaced: string[] = [];
@@ -1041,7 +1040,7 @@ export function writeProjectFilesFromBackup(
     replaced.push(OUTLINE_FILE_NAME);
     writeFileAtomic(join(dir, DATA_DB_FILE_NAME), entries[DATA_DB_FILE_NAME]);
     replaced.push(DATA_DB_FILE_NAME);
- // 打包目录（references/ 含 .trash/、sessions/ 会话 JSONL）：
+ // 随包目录（sessions/ 会话 JSONL）：
  // - 默认「整体覆盖」——恢复/导入是「整体还原」语义，目录以备份内容为准，本地残留不混入
  // - `mergePackedDirs`（云拉取）= 与基线做三方比较的**并集合并**（删除优先，本机新增保留）
     for (const dirName of PACKED_DIR_NAMES) {
@@ -1281,7 +1280,7 @@ export function restoreBackup(
   });
 
  // 5. 会话无归属迁移：对话历史已出库为项目目录内 `sessions/*.jsonl`（迁移 006），归属由
- // 目录表达，不再依赖 data.db 的 project_id——恢复只需覆盖三文件 + references/
+ // 目录表达，不再依赖 data.db 的 project_id——恢复只需覆盖三文件
  // （`sessions/` 的入包与覆盖语义由备份管道承担，见 createBackupZip / writeProjectFilesFromBackup）。
 
  //：snapshot 仅含 fileName/createdAt（size 属内部信息不暴露）

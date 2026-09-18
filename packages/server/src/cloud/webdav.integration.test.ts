@@ -353,7 +353,7 @@ describe("POST /api/v1/cloud/test × 真 HTTP 服务", () => {
 
 // ============ 推送端到端（卡 4：真 HTTP + 真文件系统） ============
 
-/** 造一个真项目（三文件 + references/ + sessions/），返回可直接喂给 pushBackup 的上下文 */
+/** 造一个真项目（三文件 + sessions/），返回可直接喂给 pushBackup 的上下文 */
 function makeProjectFixture(id: string, name: string): { project: ProjectContext; dir: string } {
   const dir = mkdtempSync(join(tmpdir(), "ai-editor-push-"));
   writeProjectFile(dir, {
@@ -369,8 +369,6 @@ function makeProjectFixture(id: string, name: string): { project: ProjectContext
   const db0 = openDatabase(join(dir, DATA_DB_FILE_NAME));
   setUserVersion(db0, SCHEMA_VERSION);
   closeDatabase(db0);
-  mkdirSync(join(dir, "references"), { recursive: true });
-  writeFileSync(join(dir, "references", "笔记.md"), "# 笔记");
   mkdirSync(join(dir, "sessions"), { recursive: true });
   writeFileSync(join(dir, "sessions", "s1.jsonl"), "{}\n");
   const db = openDatabase(join(dir, DATA_DB_FILE_NAME));
@@ -388,19 +386,19 @@ describe("pullBackup × 真 HTTP 服务", () => {
     writeBackup(project, { kind: "manual" }); // 先生成一份本地备份
     const pushed = await pushBackup(project); // 推上去（云端 head = 本机这份）
 
-    // 本机改动：改了已有参考资料 + 新增一份本机独有资料
-    const refDir = join(dir, "references");
-    writeFileSync(join(refDir, "笔记.md"), "# 本机改过的笔记");
-    writeFileSync(join(refDir, "本机独有.md"), "# 只在本机");
+    // 本机改动：改了已有会话文件 + 新增一份本机独有会话
+    const sessDir = join(dir, "sessions");
+    writeFileSync(join(sessDir, "s1.jsonl"), "本机改过的会话");
+    writeFileSync(join(sessDir, "本机独有.jsonl"), "只在本机");
 
     const result = await pullBackup(project);
 
     expect(result.pulled.fileName).toBe(pushed.pushed.fileName);
     // 同名文件：云端取胜（本机改动被覆盖，但覆盖前已自动快照）
-    expect(readFileSync(join(refDir, "笔记.md"), "utf8")).toBe("# 笔记");
+    expect(readFileSync(join(sessDir, "s1.jsonl"), "utf8")).toBe("{}\n");
     expect(existsSync(join(dir, BACKUPS_DIR_NAME, result.snapshot.fileName))).toBe(true);
     // 并集：本机独有文件保留（基线里没有它）
-    expect(existsSync(join(refDir, "本机独有.md"))).toBe(true);
+    expect(existsSync(join(sessDir, "本机独有.jsonl"))).toBe(true);
     expect(result.merged.kept).toBe(1);
     // 云端那份落进本地 .backups/
     expect(existsSync(join(dir, BACKUPS_DIR_NAME, result.pulled.fileName))).toBe(true);
@@ -462,7 +460,7 @@ describe("pushBackup × 真 HTTP 服务", () => {
 
     const backupDir = join(dir, ".backups");
     mkdirSync(backupDir, { recursive: true });
-    // 走真备份管道生成 zip（含 references/ 与 sessions/）
+    // 走真备份管道生成 zip（含 sessions/）
     const { writeBackup } = await import("../backup.js");
     const info = writeBackup(project, { kind: "manual", name: "定稿" });
 
@@ -477,8 +475,7 @@ describe("pushBackup × 真 HTTP 服务", () => {
     const state = readBookState("proj-push-e2e");
     expect(state?.dirName).toBe(result.remote.dirName);
     expect(state?.lastPushedFileName).toBe(info.fileName);
-    expect(state?.baseEntries).toContain("references/笔记.md");
-    expect(state?.baseEntries).toContain("sessions/s1.jsonl");
+    expect(state?.baseEntries).toEqual(["sessions/s1.jsonl"]);
 
     closeDatabase(project.db);
     rmSync(dir, { recursive: true, force: true });

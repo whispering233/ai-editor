@@ -14,6 +14,7 @@ import {
   closeDatabase,
   DATA_DB_FILE_NAME,
   openDatabase,
+  OUTLINE_FILE_NAME,
   readProjectFile,
   SCHEMA_VERSION,
   setUserVersion,
@@ -179,8 +180,6 @@ function makeProject(id = "proj-autopush-1", name = "自动推送测试书"): Pr
   const db0 = openDatabase(join(dir, DATA_DB_FILE_NAME));
   setUserVersion(db0, SCHEMA_VERSION);
   closeDatabase(db0);
-  mkdirSync(join(dir, "references"), { recursive: true });
-  writeFileSync(join(dir, "references", "笔记.md"), "# 笔记");
   mkdirSync(join(dir, "sessions"), { recursive: true });
   writeFileSync(join(dir, "sessions", "s1.jsonl"), "{}\n");
   const db = openDatabase(join(dir, DATA_DB_FILE_NAME));
@@ -242,7 +241,7 @@ describe("自动推送：开关与三条触发路径", () => {
   it("autoPush 关：三条路径都不推（零网络请求，也不写任何自动推送状态）", async () => {
     writeCloudConfig({ autoPush: false });
     const base = makeBackupAndBaseline();
-    writeAfter(join("references", "新资料.md"), base); // 确有创作变更——被开关挡下
+    writeAfter(AGENTS_FILE_NAME, base); // 确有创作变更（AGENTS.md）——被开关挡下
 
     expect(await maybeAutoPush(project)).toBe(false);
     await autoPushOnClose(project);
@@ -253,7 +252,7 @@ describe("自动推送：开关与三条触发路径", () => {
     expect(readBookState(project.config.id)?.lastAutoPushError).toBeUndefined();
   });
 
-  it("纯聊天变更（只动 sessions/）不触发定时推送；references/ 变更即推一次", async () => {
+  it("纯聊天变更（只动 sessions/）不触发定时推送；AGENTS.md（创作数据）变更即推一次", async () => {
     makeBackupAndBaseline();
     writeAfter(join("sessions", "s2.jsonl"), Date.now() - 60_000, 0); // 1 分钟前的纯聊天改动
 
@@ -261,7 +260,7 @@ describe("自动推送：开关与三条触发路径", () => {
     expect(putCount()).toBe(0);
     expect(readBookState(project.config.id)?.lastAutoPushAt).toBeUndefined();
 
-    changeCoveredByBackup(join("references", "新资料.md")); // 生产里 tick 内先 maybeAutoBackup 生成新份
+    changeCoveredByBackup(AGENTS_FILE_NAME); // 生产里 tick 内先 maybeAutoBackup 生成新份
 
     expect(await maybeAutoPush(project)).toBe(true);
     expect(putCount()).toBe(1);
@@ -270,7 +269,7 @@ describe("自动推送：开关与三条触发路径", () => {
   });
 
   it("节流（注入 throttleMs 与假时钟）：窗口内的第二次变更不推，越过窗口即推", async () => {
-    changeCoveredByBackup(join("references", "一.md")); // 变更已被最新备份涵盖（卡 B 守卫的前提）
+    changeCoveredByBackup(AGENTS_FILE_NAME); // 变更已被最新备份涵盖（卡 B 守卫的前提）
     let clock = Date.now();
     const push = (): Promise<boolean> => maybeAutoPush(project, { throttleMs: 1000, now: () => clock });
 
@@ -372,7 +371,7 @@ describe("自动推送：开关与三条触发路径", () => {
   it("卡 B：有改动未进最新备份（backupStale）→ 定时与关闭项目路径都跳过（零网络请求、不写失败标记）", async () => {
     makeBackupAndBaseline(); // 写一份备份 + 把 lastSyncAt 设到 base
     // 让「最新改动」晚于最新备份：mtime 放到 1 秒后（确认式构造：任何已存在的备份都盖不住它）
-    writeAfter("references/笔记.md", Date.now() + 1000, 0);
+    writeAfter(join("sessions", "s1.jsonl"), Date.now() + 1000, 0);
     expect(hasUnbackedChanges(project)).toBe(true);
 
     const before = putCount();
@@ -381,7 +380,7 @@ describe("自动推送：开关与三条触发路径", () => {
     expect(putCount()).toBe(before); // 零 PUT
     expect(readBookState(project.config.id)?.lastAutoPushError).toBeUndefined(); // 不是失败
     // 把该改动"收进"备份（mtime 回到过去 + 生成新份）→ 状态消除
-    writeAfter("references/笔记.md", Date.now() - 60_000, 0);
+    writeAfter(join("sessions", "s1.jsonl"), Date.now() - 60_000, 0);
     writeBackup(project, { kind: "manual" });
     expect(hasUnbackedChanges(project)).toBe(false);
   });
@@ -404,9 +403,9 @@ describe("hasAuthoringChangesSince：创作数据口径（排除 sessions/、含
     expect(hasLocalEditsSince(project, new Date(base))).toBe(true);
   });
 
-  it("动 references/ → 算创作变更", () => {
+  it("动 outline.json（三文件）→ 算创作变更（卡 12.7b：创作数据 = 三文件 + AGENTS.md）", () => {
     const base = makeBackupAndBaseline();
-    writeAfter(join("references", "新资料.md"), base);
+    writeAfter(OUTLINE_FILE_NAME, base);
 
     expect(hasAuthoringChangesSince(project, new Date(base))).toBe(true);
   });

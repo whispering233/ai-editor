@@ -105,7 +105,7 @@ export function toCloudBackups(entries: readonly DavEntry[]): CloudBackupEntry[]
   return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-/** zip 内两个打包目录的条目名（`baseEntries` 基线；**只读名字不碰数据**，零解压开销） */
+/** zip 内随包目录（`sessions/`）的条目名（`baseEntries` 基线；**只读名字不碰数据**，零解压开销） */
 export function packedEntriesOfZip(zip: Uint8Array): string[] {
   const names: string[] = [];
   const unzipper = new Unzip((file) => {
@@ -279,7 +279,7 @@ export interface CloudSyncComputation {
  * 计算本机侧状态与三态（卡 5 定稿口径）：
  * - **「云端有更新」= 云端文件集合 ≠ `lastSeenCloudFiles`**（不看时间戳：跨机器时钟偏差会让 head 比较漏报，见设计文档 §3）
  * - **「本机有改动」= 创作数据 mtime 晚于 `lastSyncAt`**（`hasLocalEditsSince`，三文件 + `data.db-wal` +
- *   `references/`/`sessions/`；**不含 `.backups/`**——force 会把云端旧份写进那里）。
+ *   `sessions/`；**不含 `.backups/`**——force 会把云端旧份写进那里）。
  *   注意口径差异：`data.db`/`-wal` 比较带 1s 容差（checkpoint 会刷新其 mtime），其余**严格比较**
  * - 自动推送的失败标记（`lastAutoPushError`）原样透出（面板显示一行，成功即消失；卡 7）
  * - 无同步记录（`lastSyncAt`/`lastSeenCloudFiles` 缺失）→ 云端有份即视为「有更新」、本机按「有改动」处理（保守）
@@ -329,7 +329,7 @@ export interface PullOptions {
  *
  * 流程：定位书目录 → 列目录取目标（缺省 head）→ 下载 → 原样落进本地 `.backups/`（校验失败则回收）→
  * 走 **restore 管道**（覆盖前自动快照 + 校验 + 原子替换三文件 + db 重连 + 重启备份定时器）+
- * **两个打包目录并集合并**（基线 = `cloud.json` 的 `baseEntries`，删除优先）→ 更新同步状态
+ * **随包目录（`sessions/`）并集合并**（基线 = `cloud.json` 的 `baseEntries`，删除优先）→ 更新同步状态
  *（`lastPushedFileName` = 拉到的这份，既是新的冲突判定基准，也是「本机已基于该版本」的标记；
  * `lastSeenCloudFiles` = 当前云端集合 → 立刻复查不会判「云端有更新」）。
  *
@@ -491,7 +491,7 @@ export async function pushBackup(project: ProjectContext, options: PushOptions =
   const pruned = await pruneCloudBackups(client, dirName, await client.list(dirName).then((list) => list ?? []));
   const after = (await client.list(dirName)) ?? [];
 
-  // ⑦ 更新本机同步状态（推送成功后；baseEntries = zip 内两个打包目录的条目名，供拉取三方比较）
+  // ⑦ 更新本机同步状态（推送成功后；baseEntries = zip 内 `sessions/` 的条目名，供拉取三方比较）
   // `lastAutoPushError` 的**唯一清除点**在这里（`undefined` 在合并写下即删除该键）：口径是
   // 「最近一次自动推送失败」——任何一次推送成功都证明它已过期，不能只由自动路径清
   //（否则用户手动推送成功后，面板仍常驻一行过期的失败提示；见卡 7 oracle 反例 4）

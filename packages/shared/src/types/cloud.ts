@@ -40,7 +40,7 @@ export interface CloudAutoPushError {
  * - `lastPushedFileName`：本机最后一次成功推送的云端文件名（冲突判定基准）
  * - `lastSeenHeadFileName`：本机最后一次看到的云端 head（推送后 / 拉取后更新）
  * - `lastSyncAt`：上次同步成功时刻（ISO 8601）
- * - `baseEntries`：`references/` 与 `sessions/` 的条目名单（拉取并集的三方比较基线）
+ * - `baseEntries`：`sessions/` 的条目名单（拉取并集的三方比较基线）
  * - `lastAutoPushAt` / `lastAutoPushError`：自动推送的节流基准与失败标记（卡 7）
  */
 export interface CloudBookSyncState {
@@ -59,7 +59,7 @@ export interface CloudBookSyncState {
    * 集合变化 = 别的机器动过（与时间戳/时钟无关，故比 head 比较更可靠）。
    */
   lastSeenCloudFiles?: string[];
-  /** `references/` 与 `sessions/` 的条目名单（拉取并集的三方比较基线；= 最近一次推送/拉取包的条目） */
+  /** `sessions/` 的条目名单（拉取并集的三方比较基线；= 最近一次推送/拉取包的条目） */
   baseEntries?: string[];
   /**
    * **自动推送节流基准**（上次自动推送成功时刻，ISO 8601）。
@@ -130,7 +130,7 @@ export interface CloudLocalState {
   /** 本机最后一次成功同步（推/拉）到的云端文件名（= 冲突判定基准） */
   lastPushedFileName: string | null;
   lastSyncAt: string | null;
-  /** 本机创作数据自上次同步后有改动（三文件 + `data.db-wal` + `references/`/`sessions/`；**不含 `.backups/`**） */
+  /** 本机创作数据自上次同步后有改动（三文件 + `data.db-wal` + `sessions/`；**不含 `.backups/`**） */
   dirty: boolean;
   /** 最新一份本地备份（推送缺省目标） */
   latestBackupFileName: string | null;
@@ -159,7 +159,7 @@ export type CloudSyncState =
  *
  * 判定口径（卡 5 定稿）：
  * - 「云端有更新」= 云端文件集合 ≠ `cloud.json` 里的 `lastSeenCloudFiles`（**不看时间戳**：跨机器时钟偏差会让 head 比较漏报）
- * - 「本机有改动」= 创作数据（三文件 + `data.db-wal` + `references/`/`sessions/` 的 mtime）晚于 `lastSyncAt`
+ * - 「本机有改动」= 创作数据（三文件 + `data.db-wal` + `sessions/` 的 mtime）晚于 `lastSyncAt`
  * - 无同步记录（`lastSyncAt` 缺失）时按「本机有改动」处理（保守：先推/先拉由用户决定）
  */
 export interface CloudStatus {

@@ -615,6 +615,42 @@ describe("reference 参考资料（卡 12.7a：正文进 document_records）", (
     expect((await detailData(app, id)).content).toBe(REF_BLOCKS_JSON);
   });
 
+  it("存量行遗留 data.content：PUT 不带 content 时剔除旧键（正文行与其余字段不变）", async () => {
+    openProject();
+    const app = buildApp();
+    const { json } = await createRef(app, { name: "存量文档", data: { type: "素材", content: REF_BLOCKS_JSON } });
+    const id = json.data.id;
+    const docBefore = refDocRow(id)!;
+ // 造「存量行」：旧版把正文写在 entities.data.content 里（直写库内 JSON 模拟 12.7a 之前的行）
+    getCurrentProject()!.db
+      .prepare("UPDATE entities SET data = ? WHERE id = ?")
+      .run(JSON.stringify({ type: "素材", content: REF_BLOCKS_JSON }), id);
+    expect(entityData(id).content).toBe(REF_BLOCKS_JSON);
+
+    const res = await app.request(
+      `/api/v1/entity/reference/${id}`,
+      jsonRequest("PUT", "", { name: "改名", data: { type: "理论" } }),
+    );
+    expect(res.status).toBe(200);
+ // 旧键已剔除，其余字段按浅合并更新
+    expect(entityData(id)).toEqual({ type: "理论" });
+    expect("content" in entityData(id)).toBe(false);
+ // 正文行（真相）不动——未带 content = 正文不动
+    expect(refDocRow(id)).toEqual(docBefore);
+ // 详情仍从文档行装回（只有一份正文）
+    expect(await detailData(app, id)).toEqual({ type: "理论", content: REF_BLOCKS_JSON });
+
+ // 第二轮：PUT 只带 name（data 缺省）——同样剔除旧键且其余字段原样保留
+    getCurrentProject()!.db
+      .prepare("UPDATE entities SET data = ? WHERE id = ?")
+      .run(JSON.stringify({ type: "理论", url: "https://example.com/b", content: "旧正文" }), id);
+    expect(
+      (await app.request(`/api/v1/entity/reference/${id}`, jsonRequest("PUT", "", { name: "再改名" }))).status,
+    ).toBe(200);
+    expect(entityData(id)).toEqual({ type: "理论", url: "https://example.com/b" });
+    expect(refDocRow(id)).toEqual(docBefore);
+  });
+
   it("更新带 content：整篇覆盖 + 投影替换 + 版本戳推进（created_at 保留）；首写经 PUT 建行", async () => {
     openProject();
     const app = buildApp();

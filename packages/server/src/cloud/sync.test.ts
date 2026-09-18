@@ -194,8 +194,6 @@ function makeProject(id = "proj-sync-1", name = "测试书"): ProjectContext {
   const db0 = openDatabase(join(dir, DATA_DB_FILE_NAME));
   setUserVersion(db0, SCHEMA_VERSION);
   closeDatabase(db0);
-  mkdirSync(join(dir, "references"), { recursive: true });
-  writeFileSync(join(dir, "references", "笔记.md"), "# 笔记");
   mkdirSync(join(dir, "sessions"), { recursive: true });
   writeFileSync(join(dir, "sessions", "s1.jsonl"), "{}\n");
   const db = openDatabase(join(dir, DATA_DB_FILE_NAME));
@@ -218,7 +216,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** 通过备份管道造一份真备份（含 references/ 与 sessions/ 条目） */
+/** 通过备份管道造一份真备份（含 sessions/ 条目——唯一随包目录） */
 function makeBackup(name?: string, kind: "auto" | "manual" = "manual"): string {
   return writeBackup(project, { kind, ...(name !== undefined ? { name } : {}) }).fileName;
 }
@@ -451,9 +449,8 @@ describe("pushBackup：状态更新（cloud.json 的 books 段）", () => {
     expect(state?.lastPushedFileName).toBe(result.pushed.fileName);
     expect(state?.lastSeenHeadFileName).toBe(result.pushed.fileName);
     expect(typeof state?.lastSyncAt).toBe("string");
-    // baseEntries = 备份包内两个打包目录的条目名（拉取并集的基线）
-    expect(state?.baseEntries).toContain("references/笔记.md");
-    expect(state?.baseEntries).toContain("sessions/s1.jsonl");
+    // baseEntries = 备份包内 sessions/ 的条目名（拉取并集的基线）
+    expect(state?.baseEntries).toEqual(["sessions/s1.jsonl"]);
   });
 
   it("只覆盖出现过的键：重复推送不丢已有状态（含其它书的记录）", async () => {
@@ -478,8 +475,8 @@ describe("HttpError 基本形态（防回归：码与状态成对）", () => {
 
 import { readFileSync as readFile, writeFileSync as writeFile, mkdirSync as mkdirP, utimesSync } from "node:fs";
 
-/** 造一份「云端侧」备份 zip（真走备份管道，只在 references/ 与 sessions/ 放指定文件） */
-function makeCloudZip(packed: { references?: string[]; sessions?: string[]; packInto?: string }): {
+/** 造一份「云端侧」备份 zip（真走备份管道，只在 sessions/ 放指定文件） */
+function makeCloudZip(packed: { sessions?: string[]; packInto?: string }): {
   bytes: Uint8Array;
   fileName: string;
 } {
@@ -497,10 +494,6 @@ function makeCloudZip(packed: { references?: string[]; sessions?: string[]; pack
   const db0 = openDatabase(join(dir, DATA_DB_FILE_NAME));
   setUserVersion(db0, SCHEMA_VERSION);
   closeDatabase(db0);
-  for (const name of packed.references ?? []) {
-    mkdirP(join(dir, "references"), { recursive: true });
-    writeFile(join(dir, "references", name), `cloud:${name}`);
-  }
   for (const name of packed.sessions ?? []) {
     mkdirP(join(dir, "sessions"), { recursive: true });
     writeFile(join(dir, "sessions", name), `cloud:${name}`);
@@ -519,19 +512,17 @@ function makeCloudZip(packed: { references?: string[]; sessions?: string[]; pack
 describe("pullBackup：并集合并六种情形（基线三方比较、删除优先）", () => {
   it("两边都有→云端取胜；云端删了→删本机；本机新增→保留；本机删了→不复活；云端新增→写入", async () => {
     // 基线（上次同步时云端那份的内容）
-    const base = ["references/a.md", "references/b.md", "references/c.md", "sessions/s1.jsonl"];
-    // 本机现状：a.md 改过、b.md 还在、local-only.md 是本机新增、s1.jsonl 还在；c.md 本机已删
-    const refDir = join(project.root, "references");
+    const base = ["sessions/a.jsonl", "sessions/b.jsonl", "sessions/c.jsonl", "sessions/s1.jsonl"];
+    // 本机现状：a.jsonl 改过、b.jsonl 还在、local-only.jsonl 是本机新增、s1.jsonl 还在；c.jsonl 本机已删
     const sessDir = join(project.root, "sessions");
-    mkdirP(refDir, { recursive: true });
     mkdirP(sessDir, { recursive: true });
-    writeFile(join(refDir, "a.md"), "local:a.md");
-    writeFile(join(refDir, "b.md"), "local:b.md");
-    writeFile(join(refDir, "local-only.md"), "local-only");
+    writeFile(join(sessDir, "a.jsonl"), "local:a.jsonl");
+    writeFile(join(sessDir, "b.jsonl"), "local:b.jsonl");
+    writeFile(join(sessDir, "local-only.jsonl"), "local-only");
     writeFile(join(sessDir, "s1.jsonl"), "local:s1");
 
-    // 云端那份：a.md（云端版）、c.md（本机已删 → 不该复活）、cloud-only.md（云端新增）；b.md 与 s1.jsonl 已被云端删掉
-    const cloud = makeCloudZip({ references: ["a.md", "c.md", "cloud-only.md"] });
+    // 云端那份：a.jsonl（云端版）、c.jsonl（本机已删 → 不该复活）、cloud-only.jsonl（云端新增）；b.jsonl 与 s1.jsonl 已被云端删掉
+    const cloud = makeCloudZip({ sessions: ["a.jsonl", "c.jsonl", "cloud-only.jsonl"] });
     const dirName = `测试书-${project.config.id}`;
     store.set(dirName, { isDir: true, bytes: new Uint8Array(), mtime: Date.now() });
     seedCloudFile(`${dirName}/${cloud.fileName}`, cloud.bytes);
@@ -544,19 +535,19 @@ describe("pullBackup：并集合并六种情形（基线三方比较、删除优
     const result = await pullBackup(project, { fileName: cloud.fileName });
 
     expect(result.pulled.fileName).toBe(cloud.fileName);
-    // kept=2：夹具自带的 references/笔记.md + 本机新增的 local-only.md（都不在基线与云端）
-    expect(result.merged).toEqual({ kept: 2, written: 1, removed: 2 });
+    // kept=1：本机新增的 local-only.jsonl（不在基线与云端）；removed=2：b.jsonl 与 s1.jsonl（云端删了它们）
+    expect(result.merged).toEqual({ kept: 1, written: 1, removed: 2 });
     // case 1：两边都有 → 云端取胜
-    expect(readFile(join(refDir, "a.md"), "utf8")).toBe("cloud:a.md");
+    expect(readFile(join(sessDir, "a.jsonl"), "utf8")).toBe("cloud:a.jsonl");
     // case 5：云端新增 → 写入
-    expect(readFile(join(refDir, "cloud-only.md"), "utf8")).toBe("cloud:cloud-only.md");
+    expect(readFile(join(sessDir, "cloud-only.jsonl"), "utf8")).toBe("cloud:cloud-only.jsonl");
     // case 3：本机新增 → 保留
-    expect(readFile(join(refDir, "local-only.md"), "utf8")).toBe("local-only");
-    // case 2：云端删除 → 删本机（b.md 与 sessions/s1.jsonl）
-    expect(existsSync(join(refDir, "b.md"))).toBe(false);
+    expect(readFile(join(sessDir, "local-only.jsonl"), "utf8")).toBe("local-only");
+    // case 2：云端删除 → 删本机（b.jsonl 与 s1.jsonl）
+    expect(existsSync(join(sessDir, "b.jsonl"))).toBe(false);
     expect(existsSync(join(sessDir, "s1.jsonl"))).toBe(false);
-    // case 4：本机删除优先 → c.md 不被云端复活
-    expect(existsSync(join(refDir, "c.md"))).toBe(false);
+    // case 4：本机删除优先 → c.jsonl 不被云端复活
+    expect(existsSync(join(sessDir, "c.jsonl"))).toBe(false);
     // 覆盖前自动快照存在（后悔药）
     expect(existsSync(join(project.root, BACKUPS_DIR_NAME, result.snapshot.fileName))).toBe(true);
     // 云端那份也落进了本地 .backups/（参与保留策略）
@@ -564,9 +555,9 @@ describe("pullBackup：并集合并六种情形（基线三方比较、删除优
   });
 
   it("基线缺失（首次同步）→ 不删任何本机文件、云端都写进来（保守）", async () => {
-    const refDir = join(project.root, "references");
-    writeFile(join(refDir, "local-only.md"), "local-only");
-    const cloud = makeCloudZip({ references: ["a.md"], sessions: ["s1.jsonl"] });
+    const sessDir = join(project.root, "sessions");
+    writeFile(join(sessDir, "local-only.jsonl"), "local-only");
+    const cloud = makeCloudZip({ sessions: ["a.jsonl", "s1.jsonl"] });
     const dirName = `测试书-${project.config.id}`;
     store.set(dirName, { isDir: true, bytes: new Uint8Array(), mtime: Date.now() });
     seedCloudFile(`${dirName}/${cloud.fileName}`, cloud.bytes);
@@ -574,16 +565,16 @@ describe("pullBackup：并集合并六种情形（基线三方比较、删除优
 
     const result = await pullBackup(project);
 
-    // 本机原有 references/笔记.md + local-only.md 都保留（kept=2）；云端 a.md 写入（written=1）；
-    // 夹具自带 sessions/s1.jsonl 两边都有 → 不比 written（case 1 覆盖不计）
-    expect(result.merged).toEqual({ kept: 2, written: 1, removed: 0 });
-    expect(existsSync(join(refDir, "local-only.md"))).toBe(true);
-    expect(existsSync(join(refDir, "a.md"))).toBe(true);
+    // 本机独有的 local-only.jsonl 保留（kept=1）；云端新增 a.jsonl 写入（written=1）；无基线 → 不删
+    // （夹具自带 sessions/s1.jsonl 两边都有 → 计入 case 1 覆盖，不算 kept/written）
+    expect(result.merged).toEqual({ kept: 1, written: 1, removed: 0 });
+    expect(existsSync(join(sessDir, "local-only.jsonl"))).toBe(true);
+    expect(existsSync(join(sessDir, "a.jsonl"))).toBe(true);
     expect(existsSync(join(project.root, "sessions", "s1.jsonl"))).toBe(true);
   });
 
   it("拉取后同步状态更新：lastPushedFileName = 拉到的这份、lastSeenCloudFiles = 云端集合、baseEntries = 该包条目", async () => {
-    const cloud = makeCloudZip({ references: ["a.md"] });
+    const cloud = makeCloudZip({ sessions: ["a.jsonl"] });
     const dirName = `测试书-${project.config.id}`;
     store.set(dirName, { isDir: true, bytes: new Uint8Array(), mtime: Date.now() });
     seedCloudFile(`${dirName}/${cloud.fileName}`, cloud.bytes);
@@ -595,12 +586,12 @@ describe("pullBackup：并集合并六种情形（基线三方比较、删除优
     expect(state?.lastPushedFileName).toBe(cloud.fileName);
     expect(state?.lastSeenHeadFileName).toBe(cloud.fileName);
     expect(state?.lastSeenCloudFiles).toEqual([cloud.fileName]);
-    expect(state?.baseEntries).toEqual(["references/a.md"]);
+    expect(state?.baseEntries).toEqual(["sessions/a.jsonl"]);
   });
 
   it("缺省拉取云端 head；指定不存在/非法文件名 → 404/400；未配置 → 409", async () => {
-    const older = makeCloudZip({ references: ["old.md"] });
-    const newer = makeCloudZip({ references: ["new.md"] });
+    const older = makeCloudZip({ sessions: ["old.jsonl"] });
+    const newer = makeCloudZip({ sessions: ["new.jsonl"] });
     const dirName = `测试书-${project.config.id}`;
     store.set(dirName, { isDir: true, bytes: new Uint8Array(), mtime: Date.now() });
     // 让 newer 的时间戳晚于 older：直接改 store 里的键名时间戳不可行 → 用两个真备份名（时间戳由管道生成，newer 必然更晚）
@@ -622,7 +613,7 @@ describe("pullBackup：并集合并六种情形（基线三方比较、删除优
 
   it("云端那份版本过高（SCHEMA_VERSION_MISMATCH）→ 409 且不留坏包、数据零触碰", async () => {
     // 造一份 user_version 更高的 data.db 的 zip
-    const cloud = makeCloudZip({ references: ["a.md"] });
+    const cloud = makeCloudZip({ sessions: ["a.jsonl"] });
     const dirName = `测试书-${project.config.id}`;
     store.set(dirName, { isDir: true, bytes: new Uint8Array(), mtime: Date.now() });
     seedCloudFile(`${dirName}/${cloud.fileName}`, cloud.bytes);
@@ -635,9 +626,9 @@ describe("pullBackup：并集合并六种情形（基线三方比较、删除优
 
     await expect(pullBackup(project, { fileName: bogus })).rejects.toMatchObject({ status: 400 });
     expect(existsSync(join(project.root, BACKUPS_DIR_NAME, bogus))).toBe(false); // 坏包被回收
-    // 数据零触碰：references/笔记.md 仍在、a.md 未被写入
-    expect(existsSync(join(project.root, "references", "笔记.md"))).toBe(true);
-    expect(existsSync(join(project.root, "references", "a.md"))).toBe(false);
+    // 数据零触碰：sessions/s1.jsonl 仍在、a.jsonl 未被写入
+    expect(existsSync(join(project.root, "sessions", "s1.jsonl"))).toBe(true);
+    expect(existsSync(join(project.root, "sessions", "a.jsonl"))).toBe(false);
   });
 });
 
@@ -662,7 +653,7 @@ describe("computeCloudSync：三态判定（集合基准 + 本机 mtime，不含
     expect(out.state).toBe("remote-ahead");
   });
 
-  it("本机有改动：创作数据晚于 lastSyncAt（references/ 改动即算）", () => {
+  it("本机有改动：创作数据晚于 lastSyncAt（三文件 / sessions/ 改动即算）", () => {
     writeBookState(project.config.id, { lastSyncAt: "2026-01-01T00:00:00.000Z", lastSeenCloudFiles: [] });
     expect(computeCloudSync(project, true, files([])).state).toBe("local-ahead");
   });
@@ -694,16 +685,16 @@ describe("computeCloudSync：三态判定（集合基准 + 本机 mtime，不含
     expect(out.state).toBe("synced");
   });
 
-  it("容差只给 data.db：references/ 改动严格比较（同步后 0.5s 的改动也算 dirty）", () => {
-    // 基准设在未来：夹具写入的三文件/两目录 mtime 都早于它 → 初始不 dirty（确定性构造）
+  it("容差只给 data.db：sessions/ 改动严格比较（同步后 0.5s 的改动也算 dirty）", () => {
+    // 基准设在未来：夹具写入的三文件/sessions 的 mtime 都早于它 → 初始不 dirty（确定性构造）
     const base = new Date(Date.now() + 10_000);
     writeBookState(project.config.id, { lastSyncAt: base.toISOString(), lastSeenCloudFiles: [] });
     expect(computeCloudSync(project, true, files([])).local?.dirty).toBe(false);
 
-    const refPath = join(project.root, "references", "同.md");
-    writeFile(refPath, "edited");
+    const sessPath = join(project.root, "sessions", "同.jsonl");
+    writeFile(sessPath, "edited");
     const within = new Date(base.getTime() + 500); // +0.5s：落在 data.db 的 1s 容差窗口内
-    utimesSync(refPath, within, within);
+    utimesSync(sessPath, within, within);
     const out = computeCloudSync(project, true, files([]));
     expect(out.local?.dirty).toBe(true); // 严格比较命中
     expect(out.state).toBe("local-ahead");
@@ -724,7 +715,7 @@ describe("computeCloudSync：三态判定（集合基准 + 本机 mtime，不含
   });
 
   it("拉取后立刻复查 → synced（严格比较不得把管道自己写的文件误判成本机改动）", async () => {
-    const cloud = makeCloudZip({ references: ["a.md"], sessions: ["s1.jsonl"] });
+    const cloud = makeCloudZip({ sessions: ["s1.jsonl"] });
     const dirName = `测试书-${project.config.id}`;
     store.set(dirName, { isDir: true, bytes: new Uint8Array(), mtime: Date.now() });
     seedCloudFile(`${dirName}/${cloud.fileName}`, cloud.bytes);
@@ -746,11 +737,11 @@ describe("computeCloudSync：三态判定（集合基准 + 本机 mtime，不含
     writeBookState(project.config.id, { lastSyncAt: base, lastSeenCloudFiles: [] });
     expect(computeCloudSync(project, true, files([])).local?.backupStale).toBe(false);
 
-    // 改一处创作数据且晚于 lastSyncAt → dirty=true 且备份未覆盖 → backupStale=true
-    const ref = join(project.root, "references", "新.md");
-    writeFileSync(ref, "x");
+    // 改一处本机创作数据（sessions/）且晚于 lastSyncAt → dirty=true 且备份未覆盖 → backupStale=true
+    const sess = join(project.root, "sessions", "新.jsonl");
+    writeFileSync(sess, "x");
     const after = new Date(Date.now() + 20_000);
-    utimesSync(ref, after, after);
+    utimesSync(sess, after, after);
     const out = computeCloudSync(project, true, files([]));
     expect(out.local?.dirty).toBe(true);
     expect(out.local?.backupStale).toBe(true);

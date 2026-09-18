@@ -17,7 +17,6 @@ import {
 } from "@ant-design/icons";
 import MDEditor from "@uiw/react-md-editor";
 import "@uiw/react-md-editor/markdown-editor.css"; // N3 选型：@uiw/react-md-editor 自带样式（textarea + 分屏预览）
-import { parseReferenceFrontmatter } from "@whispering233/ai-editor-shared";
 import type { EntityDetailRes } from "../lib/api";
 import {
   createEntity,
@@ -183,12 +182,12 @@ export default function ReferenceDetail({ id, draft }: { id?: string; draft?: "m
     }
   }
 
-  // 导入 md 文档（N4，卡 11.6：纯前端——FileReader 读文本 + frontmatter 解析预填，
-  // 内容进编辑器，保存走既有 PUT/POST 由服务端落盘；无独立上传端点）
+  // 导入 md 文档（N4，卡 11.6：纯前端——FileReader 读文本进编辑器，
+  // 保存走既有 PUT/POST 由服务端落盘；无独立上传端点）
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
 
-  /** 文件选择 → 读文本 → 解析 frontmatter 预填标题/分类/标签 + 正文进编辑器 */
+  /** 文件选择 → 读文本 → 整篇进编辑器 */
   function handleImportFile(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = ""; // 允许重复选择同一文件
@@ -198,13 +197,11 @@ export default function ReferenceDetail({ id, draft }: { id?: string; draft?: "m
     reader.onload = () => {
       try {
         const text = String(reader.result ?? "");
-        const parsed = parseReferenceFrontmatter(text); // 容错：无 frontmatter → 全当正文
+ // 卡 12.7b：frontmatter 预填随 shared 工具退役临时移除，12.8 重构参考资料页时按新契约处理
         setForm((f) => ({
           ...f,
-          name: parsed.title ?? file.name.replace(/\.md$/i, ""),
-          type: parsed.category ?? f.type,
-          tagsInput: parsed.tags.join(", "),
-          content: parsed.body,
+          name: file.name.replace(/\.md$/i, ""),
+          content: text,
         }));
         useUiStore.getState().showToast(`已导入《${file.name}》——检查内容后保存`);
       } catch {
@@ -262,11 +259,7 @@ export default function ReferenceDetail({ id, draft }: { id?: string; draft?: "m
         setReloadTick((t) => t + 1);
       }
     } catch (e) {
-      if (e instanceof ApiError && e.code === "REFERENCE_FILE_MISSING") {
-        setFormError("文件已在文件管理器中被删除，请到列表页「扫描」同步后再编辑");
-      } else {
-        setFormError(e instanceof ApiError ? e.message : "保存失败，请重试");
-      }
+      setFormError(e instanceof ApiError ? e.message : "保存失败，请重试");
     } finally {
       setSaving(false);
     }

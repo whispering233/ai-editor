@@ -45,7 +45,6 @@ export const ERROR_CODES = [
   "SCHEMA_VERSION_MISMATCH", // 409 导入 zip 的 data.db user_version 与当前程序版本不匹配（拒绝导入，不静默重建）
   "PROJECT_VERSION_NEWER", // 409 open 时项目 data.db user_version 高于当前程序版本（拒绝打开并提示升级程序，堵降级数据丢失）
   "BACKUP_TARGET_EXISTS", // 409 重命名备份目标文件名已存在（B2.6：renameSync 目标存在会静默覆盖——显式拒绝防数据丢失）
-  "REFERENCE_FILE_MISSING", // 409 参考资料 file 类文件缺失（PUT 更新时读原文件失败——外部删除，提示先扫描同步）
   "SESSION_NOT_FOUND", // 404 会话不存在（消息/思维链/删除端点：id 经磁盘发现未命中）
   "SESSION_BUSY", // 409 删除会话时该会话有在途 SSE 流（拒删）
   "CHAT_BUSY", // 409 当前项目已有在途 chat 流（单项目单流约束，docs/api/80-api-chat.md）
@@ -1083,7 +1082,7 @@ export type CloudPushReq = z.infer<typeof cloudPushReqSchema>;
 
 // POST /api/v1/cloud/pull：从云端拉取一份备份应用到当前项目（卡 5）
 // - file_name 缺省 = 云端 head；须通过 parseBackupFileName 白名单（服务端校验 → 400）
-// - 语义 = 三文件覆盖 + references/ 与 sessions/ **并集合并**（基线三方比较、删除优先）；
+// - 语义 = 三文件覆盖 + `sessions/` **并集合并**（基线三方比较、删除优先）；
 //   与本地 restore（整体覆盖）不同，见 docs/api/100-api-cloud.md
 export const cloudPullReqSchema = z
   .object({

@@ -48,7 +48,6 @@ import { namesRoutes } from "./routes/names.js"; // 批量名称解析（工具�
 import { proposalRoutes } from "./routes/proposal.js";
 import { trashRoutes } from "./routes/trash.js";
 import { relationRoutes } from "./routes/relation.js";
-import { referenceRoutes } from "./routes/reference.js"; // 参考资料专属端点（scan）
 import { logSoftDeleteReconcile, reconcileSoftDelete } from "./consistency.js";
 
 /** 默认端口（dev 态 Vite proxy 写死 3456） */
@@ -246,8 +245,6 @@ export async function startServer(projectRoot: string, options: StartServerOptio
 
  // 关系路由（S3.4）：查询（k 跳）/创建（判重）/物理删
   app.route("/api/v1/relation", relationRoutes);
-  app.route("/api/v1/reference", referenceRoutes); // 参考资料专属端点（scan）
-
  // 云端存档路由（卡 2）：账号配置 + 连通性测试（不要求项目已打开）
   app.route("/api/v1/cloud", cloudRoutes);
 

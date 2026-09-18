@@ -104,7 +104,7 @@ cloudRoutes.get("/status", async (c) => {
 });
 
 // POST /api/v1/cloud/pull —— 从云端拉取一份备份应用到当前项目（缺省 = 云端 head）
-// 语义：三文件覆盖 + references/ 与 sessions/ **并集合并**（基线三方比较、删除优先）；
+// 语义：三文件覆盖 + `sessions/` **并集合并**（基线三方比较、删除优先）；
 // 覆盖前自动快照本机当前状态（restore 管道既有行为）
 cloudRoutes.post("/pull", async (c) => {
   const project = requireCurrentProject(); // 409 NO_PROJECT_OPEN

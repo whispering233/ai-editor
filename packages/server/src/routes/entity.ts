@@ -28,6 +28,7 @@ import {
   updateEntity,
   upsertDocument,
   withTransaction,
+  type Db,
 } from "@whispering233/ai-editor-db";
 import { blocksToPlainMd, isBlockArray, type EntityType } from "@whispering233/ai-editor-shared";
 import { ENTITY_DATA_SCHEMAS, entityCreateReqSchema, entityListQuerySchema, entityMoveReqSchema, entityTypeSchema, entityUpdateReqSchema, eventMoveToReqSchema, settingMoveReqSchema } from "@whispering233/ai-editor-shared/schemas";
@@ -94,6 +95,26 @@ function splitReferenceContent(
   const rest = { ...data };
   delete rest.content;
   return { data: rest, content: { raw, text } };
+}
+
+/**
+ * 剔除存量行遗留的 `data.content` 旧键（卡 12.7b）：
+ * 旧版把参考资料正文写在 `entities.data.content` 里，12.7a 起正文真相 = `document_records`。
+ * `updateEntity` 的 data 浅合并只增不减 ⇒ 用 `content: undefined` 作为「删该键」的显式标记
+ * （落库走 `JSON.stringify`，值为 `undefined` 的键不写进 JSON ⇒ 旧键在下一次写入时消失），
+ * 行内其余字段照旧浅合并；「未带 content = 正文行（document_records）不动」语义不受影响。
+ * 无旧键（或非 reference / 实体不存在）→ 原样返回请求 data，走 updateEntity 缺省合并。
+ */
+function stripLegacyReferenceContent(
+  db: Db,
+  type: EntityType,
+  id: string,
+  data: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (type !== "reference") return data;
+  const existing = getEntity(db, id);
+  if (existing === null || !("content" in existing.data)) return data;
+  return { ...(data ?? {}), content: undefined };
 }
 
 // GET /api/v1/entity/:type —— 列表（q/offset/limit/sort/order；响应 camelCase）
@@ -231,7 +252,7 @@ entityRoutes.post("/:type", async (c) => {
 // PUT /api/v1/entity/:type/:id —— 部分更新（仅合并传入字段；data 浅合并）
 // reference 特例（2026-10）：`data.content` 传入 → 与实体行同一事务整篇覆盖文档行（单事务，
 // 无「先写文件后写库」的先后性与自愈问题）；**未携带 content 时正文保持不动**——
-// 行内编辑标题/分类/标签不碰正文，也不再随写文件联动。
+// 行内编辑标题/分类/标签不碰正文，也不再随写文件联动；存量行的遗留 `data.content` 旧键随本次写入剔除。
 entityRoutes.put("/:type/:id", async (c) => {
   const project = requireCurrentProject();
   const type = parseTypeParam(c.req.param("type"));
@@ -244,7 +265,10 @@ entityRoutes.put("/:type/:id", async (c) => {
   }
   const { data, content } = splitReferenceContent(type, parsed.data.data);
   const row = withTransaction(project.db, () => {
-    const updated = updateEntity(project.db, id, { name: parsed.data.name, data });
+    const updated = updateEntity(project.db, id, {
+      name: parsed.data.name,
+      data: stripLegacyReferenceContent(project.db, type, id, data),
+    });
     if (updated === null) {
       throw new HttpError(404, "ENTITY_NOT_FOUND", `实体不存在: ${id}`);
     }
