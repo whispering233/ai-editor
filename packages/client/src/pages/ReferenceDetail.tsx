@@ -600,8 +600,9 @@ export default function ReferenceDetail({ id, draft = false }: { id?: string; dr
         </div>
         {/* 正文（块编辑器；改色只在 components/blocknote/blocknote.css）：编辑态自动保存，
             新建态由「创建」按钮随 POST 一次提交。
-            `flex-1 min-h-0` + 包裹层 `flex flex-col` = 高度链第二、三环（短正文也铺满，点空白落文末） */}
-        <div className="flex flex-1 min-h-0 items-start gap-2">
+            `flex-1 min-h-0` + 包裹层 `flex flex-col` = 高度链第二、三环（短正文也铺满，点空白落文末）。
+            本行不写 items-start（默认 stretch）：交叉轴拉伸才让包裹层拿到行高，`flex:1` 才有剩余空间可分配 */}
+        <div className="flex flex-1 min-h-0 gap-2">
           <label className="mt-2 w-12 shrink-0 text-sm text-muted-foreground">正文</label>
           <div className="flex min-w-0 flex-1 flex-col">
             <DocumentEditor
