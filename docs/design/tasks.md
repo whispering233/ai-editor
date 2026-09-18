@@ -8,6 +8,16 @@
 
 ---
 
+## 批 14：正文手动保存按钮
+
+| 卡 | 内容 | 依赖 | 验收 |
+| :-- | :-- | :-- | :-- |
+| [ ] 14.1 | **正文页「保存」按钮（工具条右端）**：`editor-toolbar.tsx` 加可选 `save?: { onSave: () => void; saving: boolean }`（不传 = 不渲染 ⇒ 参考资料页不出现；那页本有手动保存），右侧顺序改为 撤销 / 重做 / **保存** / 写作设置 / 命令帮助 / 专注模式 / 状态区；`document-editor.tsx` 透传；`pages/Manuscript.tsx` 传 `onSave = () => void saveContent(latestRef.current ?? "")`（**恒发一次 PUT**，含无待存内容的情况）+ `saving = saveState === "saving"`；`command-help.tsx` 补一条（工具条按钮集**同卡维护**） | — | 点击后状态转「保存中… → 已保存 · HH:MM」；`saving` 期间按钮禁用；专态与常规态都在（sticky 工具条）；参考资料页无此按钮；`pnpm typecheck`/`lint`/client test |
+
+**依据**：`docs/ui/DESIGN.md` §Components「写作面」内容行 + 「为什么手动保存放在工具条」段；`docs/design/backlog.md` 已登记「关页面/退出桌面版可能丢最后 1.5s」（手动按钮是用户侧保底，非自动兜底）。
+
+---
+
 ## 当前无进行中任务卡
 
 ---
