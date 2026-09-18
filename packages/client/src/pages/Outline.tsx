@@ -25,6 +25,7 @@ import { Button, Input } from "antd";
 import type { OutlineNode } from "@whispering233/ai-editor-shared";
 import { DeleteOutlined, PlusOutlined, RightOutlined, AimOutlined } from "@ant-design/icons";
 import { CHILD_TYPE, TYPE_LABEL } from "../components/outline/dialogs";
+import { ChapterView } from "../components/outline/chapter-view";
 import { NodeHookMarkBadge } from "../components/outline/node-hook-badge";
 import { TypeChip } from "@/components/ui/tag-chip";
 import { DropIndicator } from "@/components/ui/drop-indicator";
@@ -73,6 +74,9 @@ type EditingState = { nodeId: string; field: "title" | "summary" } | null;
 
 /** 就地新建目标：parentId "root" = 顶层（**只建卷**，2026-09：章只挂卷），否则父节点决定子类型（CHILD_TYPE） */
 type CreatingState = { parentId: string; type: OutlineNodeType } | null;
+
+/** 页面形态：大纲树（默认）/ 章视图（平铺章列表）——**页面 state，不持久化**（刷新回落树视图） */
+type OutlineView = "tree" | "chapters";
 
 /** 提取错误码（ApiError → 服务端码；未知 → null 走兜底文案） */
 function errorCode(err: unknown): string | null {
@@ -172,6 +176,8 @@ export default function Outline() {
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
   /** 选中节点 id（单击行选中，选中后按 Enter 新建子级）；null = 无选中 */
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  /** 页面形态（大纲树 / 章视图；页面 state——不持久化，见 DESIGN.md「大纲页双视图」） */
+  const [view, setView] = useState<OutlineView>("tree");
 
   // S2.4 就地交互状态
   const [editing, setEditing] = useState<EditingState>(null);
@@ -393,6 +399,7 @@ export default function Outline() {
   function startCreate(parentId: string, type: OutlineNodeType) {
     cancelEdit();
     setSelectedNodeId(null); // 选中态与新建态互斥（创建输入框接管 Enter）
+    setView("tree"); // 就地输入行只活在树视图：章视图里点「+ 新建卷」/ 空态入口 → 切回树视图再开输入行
     setCreatingAt({ parentId, type });
     setCreateValue("");
     if (parentId !== ROOT_NODE_ID) expand(parentId); // 新建输入显示在父 children 末尾
@@ -925,13 +932,23 @@ export default function Outline() {
         title="大纲"
         controls={
           <>
+            {/* 视图切换（DESIGN.md「大纲页双视图」）：文案 = **目标视图**——单按钮写「点它会去哪」
+                比写「现在在哪」少一次解读；位置 = 「全部折叠」左侧（ml-auto 挂本按钮） */}
             <Button
               className="ml-auto"
-              onClick={toggleAllCollapse}
-              disabled={!outline || outline.children.length === 0}
+              onClick={() => setView((v) => (v === "tree" ? "chapters" : "tree"))}
             >
-              {collapsed.size > 0 ? "全部展开" : "全部折叠"}
+              {view === "tree" ? "章视图" : "大纲树"}
             </Button>
+            {/* 「全部折叠」只在树视图出现（平铺章列表无折叠语义） */}
+            {view === "tree" && (
+              <Button
+                onClick={toggleAllCollapse}
+                disabled={!outline || outline.children.length === 0}
+              >
+                {collapsed.size > 0 ? "全部展开" : "全部折叠"}
+              </Button>
+            )}
             <Button type="primary" onClick={() => startCreate(ROOT_NODE_ID, "volume")}>
               + 新建卷
             </Button>
@@ -1004,6 +1021,26 @@ export default function Outline() {
             </span>
           </EmptyState>
         )
+      ) : view === "chapters" ? (
+        /* 章视图（DESIGN.md「大纲页双视图」）：平铺章列表——只放改名 + 进详情；
+           新建/删除/拖拽仍只在树视图（所以 startCreate 会先切回树视图） */
+        <ChapterView
+          rows={numbering.chapterRows}
+          currentPositionId={config?.currentPosition ?? null}
+          hookMarks={hookMarks}
+          editing={
+            editing?.field === "title"
+              ? { nodeId: editing.nodeId, value: editingValue }
+              : null /* 摘要编辑态不映射到本视图（本视图只有标题输入框） */}
+          focusedNodeId={focusedNodeId}
+          handlers={{
+            onStartEdit: (node) => startEdit(node, "title"),
+            onChangeEditingValue: setEditingValue,
+            onCommitEdit: (node) => void commitEdit(node, "title"),
+            onCancelEdit: cancelEdit,
+            onOpenDetail: (nodeId) => navigate(`/outline/${nodeId}`),
+          }}
+        />
       ) : (
         /* 整树渲染（容器同时是 root 拖放目标：拖到空白处 = 排顶层末尾；scene 会被 canMoveTo 拒绝） */
         <div
