@@ -288,6 +288,7 @@
 - **桌面版「另存为」原生对话框** — 现状：导入导出走标准 `<input type=file>` / `<a download>`（桌面版会落在默认下载目录）。触发条件：用户抱怨找不到导出文件。最小修法：preload 新增 `saveTextFile()`（必须走 `desktopBridge()` 能力检测，浏览器形态不变）。
 - **正文级搜索/全文统计（UI 侧）** — 现状：只有大纲/章视图的 `metadata.textLength` 与参考资料列表摘要。触发条件：全书搜索需求落地时（与 `search_manuscript` 同批考虑，复用 `content_text`）。
 - **块编辑器升级纪律的执行细则** — 现状：`@blocknote/*` exact pin，升级 = 显式 commit + 全量测 + 像素核对（同 pi）。触发条件：每次升级时要核对的清单（`blockSpecs`/`--bn-*` 变量名/ariakit 变体行为）——目前只有原则，无 checklist。
+- **`document_records` 的两份 DDL 文本差一行行尾注释**（卡 12.2 oracle 登记，P3 无功能影响） — 现状：`packages/db/src/tables.ts` 的声明 DDL 在 `PRIMARY KEY (owner_kind, owner_id)` 后带 `-- 一 owner 一行（…）` 注释，`migrations/008_document_records.ts` 的迁移 DDL 无该注释；去注释后逐字相等。唯一消费该文本的是「v0 空库结构快照」（只对 `user_version === 0` 生效，已到 v8 的库不参与）。触发条件：有人想加「迁移 DDL 文本 == 声明 DDL 文本」的断言时。最小修法：把注释挪到行首或去掉（同步改两处）。
 
 ## MVP 明确不做（勿顺手实现）
 
