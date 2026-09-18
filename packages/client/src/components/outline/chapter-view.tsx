@@ -5,12 +5,12 @@
 // 会带来「建了却看不见」的困惑。
 // 纯 presenter：数据与副作用（提交改名 / 重拉树 / 路由）都在容器 `pages/Outline.tsx`，
 // 故 SSR `renderToString` 可直接渲染（仓内无 jsdom）——行结构断言见 `chapter-view.test.tsx`。
-import { Input } from "antd";
 import type { KeyboardEvent } from "react";
 import type { OutlineChapter } from "@whispering233/ai-editor-shared";
 import { TypeChip } from "@/components/ui/tag-chip";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NodeHookMarkBadge } from "./node-hook-badge";
+import { InlineInput } from "./inline-input";
 import type { NodeHookMark } from "@/lib/outline-hooks";
 import type { OutlineChapterRow } from "@/lib/outline-tree";
 import { cn } from "@/lib/utils";
@@ -102,16 +102,11 @@ export function ChapterView({
               )}
               <TypeChip className={NUMBER_CHIP_CLASS}>{row.chapterLabel}</TypeChip>
               {editingHere ? (
-                <Input
-                  size="small"
-                  className="min-w-0 flex-1"
-                  autoComplete="off"
-                  autoFocus
+                <InlineInput
                   value={editing.value}
-                  onChange={(e) => handlers.onChangeEditingValue(e.target.value)}
+                  onChange={handlers.onChangeEditingValue}
                   onKeyDown={onEditKeyDown}
                   onBlur={() => handlers.onCommitEdit(node)}
-                  maxLength={200}
                   placeholder="标题"
                 />
               ) : (

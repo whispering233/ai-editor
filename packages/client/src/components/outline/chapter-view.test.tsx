@@ -59,6 +59,10 @@ describe("ChapterView（章视图平铺列表）", () => {
     expect(out).toContain("主角离乡"); // 摘要
     expect(out.split("第1卷")).toHaveLength(3); // 卷1 的两行各带一次（split 段数 = 出现数 + 1）
     expect(out).toContain('data-node-id="ch-9"'); // 跨页定位锚点
+    // 有意收窄（DESIGN「大纲页双视图」）：行内无任何操作按钮——删除/新建/拖拽都不在本视图
+    expect(out).not.toContain("<button");
+    expect(out).not.toContain("移入回收站");
+    expect(out).not.toContain("draggable");
   });
 
   it("存量根级章无卷号（不渲染空卷号徽标）", () => {

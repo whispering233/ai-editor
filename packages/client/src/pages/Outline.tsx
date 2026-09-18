@@ -21,11 +21,12 @@
 // project store（跨页共用：顶栏阅读进度标题映射、节点 id → title 映射），本页只持有 UI 态
 import { useEffect, useMemo, useState } from "react";
 import type { DragEvent, KeyboardEvent, MouseEvent, ReactNode } from "react";
-import { Button, Input } from "antd";
+import { Button } from "antd";
 import type { OutlineNode } from "@whispering233/ai-editor-shared";
 import { DeleteOutlined, PlusOutlined, RightOutlined, AimOutlined } from "@ant-design/icons";
 import { CHILD_TYPE, TYPE_LABEL } from "../components/outline/dialogs";
 import { ChapterView } from "../components/outline/chapter-view";
+import { InlineInput } from "../components/outline/inline-input";
 import { NodeHookMarkBadge } from "../components/outline/node-hook-badge";
 import { TypeChip } from "@/components/ui/tag-chip";
 import { DropIndicator } from "@/components/ui/drop-indicator";
@@ -95,31 +96,6 @@ function describeOutlineError(code: string | null): string {
   }
 }
 
-/** 就地输入行（标题/摘要/新建共用；autoFocus 进入即聚焦——组件级复用，无页面 state 依赖；
- * 行内编辑用 antd `Input` small 档 = 24px，对齐行高） */
-function inlineInput(
-  value: string,
-  onChange: (v: string) => void,
-  onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void,
-  onBlur: () => void,
-  placeholder: string,
-) {
-  return (
-    <Input
-      size="small"
-      className="min-w-0 flex-1"
-      autoComplete="off"
-      autoFocus
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      onKeyDown={onKeyDown}
-      onBlur={onBlur}
-      maxLength={200}
-      placeholder={placeholder}
-    />
-  );
-}
-
 /** root 顶层就地新建行：卷类型徽标（固定）+ 输入行——**类型不可切**（2026-09：章只挂卷，root 只建卷，
  * 类型切换按钮的去留见 DESIGN.md「大纲页页头主操作」）。
  * 树容器（renderRootCreateRow）与空态引导卡共用，避免两处重复（S2.4 oracle 补丁 + 卡 2a 去切换） */
@@ -142,7 +118,13 @@ function RootCreateRow({
           新建行看上去就是即将插入的那一行卷（编号未分配前只给枚举文案，宽度与编号徽标同几何） */}
       <span className="-ml-2 w-6 shrink-0" />
       <TypeChip className="min-w-14 shrink-0 justify-center">{TYPE_LABEL.volume}</TypeChip>
-      {inlineInput(value, onChange, onKeyDown, onCancel, "新卷标题，Enter 创建")}
+      <InlineInput
+        value={value}
+        onChange={onChange}
+        onKeyDown={onKeyDown}
+        onBlur={onCancel}
+        placeholder="新卷标题，Enter 创建"
+      />
     </div>
   );
 }
@@ -759,13 +741,13 @@ export default function Outline() {
             {/* 标题：点击就地编辑（Enter 保存 / Esc 取消 / 失焦保存）；stopPropagation 隔离——
                 单击标题 = 编辑而非选中（冲突设计） */}
             {editingTitle ? (
-              inlineInput(
-                editingValue,
-                setEditingValue,
-                handleEditKeyDown(node, "title"),
-                () => void commitEdit(node, "title"),
-                "标题",
-              )
+              <InlineInput
+                value={editingValue}
+                onChange={setEditingValue}
+                onKeyDown={handleEditKeyDown(node, "title")}
+                onBlur={() => void commitEdit(node, "title")}
+                placeholder="标题"
+              />
             ) : (
               <span
                 className={cn(
@@ -829,13 +811,13 @@ export default function Outline() {
               <span className="-ml-2 w-6 shrink-0" />
               <span className={cn("shrink-0", numberLabel !== undefined ? "min-w-14" : "w-7")} />
               {editingSummary ? (
-                inlineInput(
-                  editingValue,
-                  setEditingValue,
-                  handleEditKeyDown(node, "summary"),
-                  () => void commitEdit(node, "summary"),
-                  "摘要",
-                )
+                <InlineInput
+                  value={editingValue}
+                  onChange={setEditingValue}
+                  onKeyDown={handleEditKeyDown(node, "summary")}
+                  onBlur={() => void commitEdit(node, "summary")}
+                  placeholder="摘要"
+                />
               ) : (
                 <span
                   className="min-w-0 cursor-text truncate text-xs text-muted-foreground hover:underline"
@@ -904,13 +886,13 @@ export default function Outline() {
               >
                 {TYPE_LABEL[creatingAt.type]}
               </TypeChip>
-              {inlineInput(
-                createValue,
-                setCreateValue,
-                handleCreateKeyDown,
-                cancelCreate,
-                `新${TYPE_LABEL[creatingAt.type]}标题，Enter 创建`,
-              )}
+              <InlineInput
+                value={createValue}
+                onChange={setCreateValue}
+                onKeyDown={handleCreateKeyDown}
+                onBlur={cancelCreate}
+                placeholder={`新${TYPE_LABEL[creatingAt.type]}标题，Enter 创建`}
+              />
             </div>
           )}
         </div>
