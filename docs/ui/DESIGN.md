@@ -364,10 +364,11 @@ components:
 | `--bn-colors-border` | `{colors.hairline}` | 结构描边 |
 | `--bn-colors-side-menu` | `{colors.quaternary}` | 块手柄/加号 |
 | `--bn-colors-highlights-*` | 不映射（编辑器自有） | 高亮/颜色选项保留库默认（md 导出本丢弃，见 `backlog.md`） |
-| `--bn-font-family` | 本文件 `typography.body.fontFamily` | 与全站同栈；**写作面字体偏好**经 `--writing-font` 间接引用（见下节） |
+| `--bn-font-family` | 本文件 `typography.body.fontFamily` | **界面 chrome 的字体**（工具条 / 浮层 / 菜单）：与全站同栈。**写作面字体不走这里**——库把基准字体写在挂在 `.bn-editor` 上的 `.bn-default-styles` 上，登记在 `.bn-root` 的它既到不了正文、又会把 chrome 一起改成衬线（见下节） |
 | 字号/行高 | **吃库默认，不个性定制** | 跟排观感冲突再单独收（先吃默认，收敛策略同 antd 侧「先用默认档」） |
 
-**硬约束**：① 块编辑器的改色**只能在 `blocknote.css`**（调用点不得写 `--bn-*` 覆盖、不得内联色值）；② 深浅两态**同源**——映射值全是随 antd 算法切换的变量（`--ant-*`），因此实现为「一段声明 + `.bn-root` 与 `.bn-root[data-color-scheme="dark"]` 两个选择器」（而不是浅/深两段硬值；库自带的深色默认段在构建产物中排在我们之后，必须用同特异性选择器并列才压得住，卡 12.5 实测）；两态仍必须各看一遍像素；③ 新增/修订映射必须同步本表（顺序同 antd：先改本文件 → 再改 `blocknote.css`）；④ **用户偏好只能改「值的来源」，不能改映射目标**——写作面偏好（字体/纸张）由调用侧在容器上设 `--writing-*` / `--paper-*` 变量（`blocknote.css` 里写成 `var(--writing-font, var(--font-sans))` 形式的**间接引用**），**调用点仍不得写 `--bn-*`**，守卫 `design-discipline.test.ts` 不变。
+**硬约束**：① 块编辑器的改色**只能在 `blocknote.css`**（调用点不得写 `--bn-*` 覆盖、不得内联色值）；② 深浅两态**同源**——映射值全是随 antd 算法切换的变量（`--ant-*`），因此实现为「一段声明 + `.bn-root` 与 `.bn-root[data-color-scheme="dark"]` 两个选择器」（而不是浅/深两段硬值；库自带的深色默认段在构建产物中排在我们之后，必须用同特异性选择器并列才压得住，卡 12.5 实测）；两态仍必须各看一遍像素；③ 新增/修订映射必须同步本表（顺序同 antd：先改本文件 → 再改 `blocknote.css`）；④ **用户偏好只能改「值的来源」，不能改映射目标**——写作面偏好（字体/纸张）由调用侧在容器上设 `--writing-*` / `--paper-*` 变量（`blocknote.css` 里写成 `var(--writing-font, var(--font-sans))` 形式的**间接引用**），**调用点仍不得写 `--bn-*`**，守卫 `design-discipline.test.ts` 不变；
+  ⑤ **间接引用要落在「库自己也显式声明过」的那个元素上**，不能落在只是被继承的上游：字号/字体/行高都属此列（库把基准写死在 `.bn-default-styles`（挂在 `.bn-editor`）与 `.bn-block-outer` 上），所以本仓一律写成 `.bn-container .bn-editor { … }` / `.bn-container .bn-block-outer { … }`（0,2,0 压过库的单类 0,1,0）。**2026-10 实测教训**：字体当初按 `--bn-font-family`（登记在 `.bn-root`）做，结果正文 font-family 仍是库的 `Inter…`（被 `.bn-default-styles` 隔断）、而**工具条反而变成了宋体**——两头都错。
 
 ### 写作面偏好（字体 / 纸张 / 缩进），2026-10
 
@@ -375,7 +376,7 @@ components:
 
 | 维度 | 档位（默认加粗） | 变量 | 说明 |
 | :--- | :--- | :--- | :--- |
-| 字体 | **无衬线** / 宋体 / 楷体 / 仿宋 / 等宽 | `--writing-font` | 全**系统字体栈**（不下载 web 字体）；宋/楷/仿宋按 `Songti SC`/`SimSun`、`Kaiti SC`/`KaiTi`、`FangSong` 顺序回落，最终落 `serif`；等宽落 `ui-monospace`/`Consolas`/`monospace` |
+| 字体 | **无衬线** / 宋体 / 楷体 / 仿宋 / 等宽 | `--writing-font` | 全**系统字体栈**（不下载 web 字体）；宋/楷/仿宋按 `Songti SC`/`SimSun`、`Kaiti SC`/`KaiTi`、`FangSong` 顺序回落，最终落 `serif`；等宽落 `ui-monospace`/`Consolas`/`monospace`。**落点 = 正文元素**（`.bn-container .bn-editor`，不走 `--bn-font-family`——那是 chrome 的字体，见上节硬约束⑤）；代码块钉住等宽（库未给 `codeBlock` 设等宽，不钉会被写作面字体带着变衬线） |
 | 字号 | 14 / **16** / 18 / 20 | `--writing-font-size` | 库默认正文基准是 16px；标题级别在库内是 em 基准（`3em`…`.8em`）⇒ 改基准字号标题同比缩放，安全 |
 | 行高 | **1.5** / 1.8 / 2.0 | `--writing-line-height` | 覆盖库的 `.bn-block-outer{line-height}`（库默认 1.5） |
 | 纸张 | **默认（`{colors.canvas}`）** / 米黄 `{colors.paper-cream}` / 暖灰 `{colors.paper-warm}` | `--paper-bg` | 深色态对应值（`#221f19` / `#262522`）同 `--tag-*` 口径写在 `index.css`；实测浅色态字色对比 11.47:1 / 10.77:1，深色态 11.10:1 / 10.54:1（默认底 12.26:1 / 11.10:1） |
