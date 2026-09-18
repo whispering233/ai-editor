@@ -64,6 +64,7 @@ afterEach(() => {
     config: null,
     loadError: null,
     outline: null,
+    outlineWithMetadata: false,
     configLoading: false,
     outlineLoading: false,
     bookshelf: null,
@@ -128,6 +129,35 @@ describe("loadConfig 在途复用（多调用点并发 → 只发一次请求，
     mocked.getProjectConfig.mockResolvedValue(sampleConfig);
     await useProjectStore.getState().loadConfig();
     expect(mocked.getProjectConfig).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("loadOutline 的 withMetadata 口径（卡 12.5：统计按页开启）", () => {
+  const emptyTree = { id: "root" as const, type: "root" as const, schemaVersion: 1, children: [] };
+
+  it("默认不带统计：getOutline({withMetadata:false}) + 标记落 false", async () => {
+    mocked.getOutline.mockResolvedValue(emptyTree);
+    await useProjectStore.getState().loadOutline();
+    expect(mocked.getOutline).toHaveBeenCalledWith({ withMetadata: false });
+    expect(useProjectStore.getState().outlineWithMetadata).toBe(false);
+  });
+
+  it("页面传 withMetadata:true → 带统计拉取，标记落 true（返回后本页不再重拉）", async () => {
+ // 先无统计加载（其他页路径），再带统计补拉
+    mocked.getOutline.mockResolvedValue(emptyTree);
+    await useProjectStore.getState().loadOutline();
+    await useProjectStore.getState().loadOutline({ withMetadata: true });
+    expect(mocked.getOutline).toHaveBeenLastCalledWith({ withMetadata: true });
+    expect(useProjectStore.getState().outlineWithMetadata).toBe(true);
+  });
+
+  it("加载失败：树置空且统计标记回落 false（下次进页重拉）", async () => {
+    mocked.getOutline.mockResolvedValue(emptyTree);
+    await useProjectStore.getState().loadOutline({ withMetadata: true });
+    mocked.getOutline.mockRejectedValue(new ApiError("CLIENT_NETWORK_ERROR", "网络请求失败"));
+    await useProjectStore.getState().loadOutline();
+    expect(useProjectStore.getState().outline).toBeNull();
+    expect(useProjectStore.getState().outlineWithMetadata).toBe(false);
   });
 });
 

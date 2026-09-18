@@ -9,7 +9,8 @@
 // 选中后 Enter 新建子级（类型由父层级推导）、双击行跳详情、单击标题/摘要行内编辑、拖拽排序保留；
 // 行级 AskAiButton 已移除——右键菜单替代（RowContextMenu：注入会话上下文 + 建立关联
 // + 「设为阅读进度」——卡片 1.1：仅章节点行传入，卷/场景行不出现；已是阅读进度则禁用）
-// 路由：#/outline；数据：GET /api/v1/outline（整树）+ GET /api/v1/relation（伏笔标记，S9.2）；操作：POST/PUT/DELETE /outline、PUT /project/config（设阅读进度）
+// 路由：#/outline；数据：GET /api/v1/outline?with_metadata=true（整树 + 章的字数统计；
+// 本页章视图行展示 metadata.textLength，按页开启见 hooks/use-outline-loader）+ GET /api/v1/relation（伏笔标记，S9.2）；操作：POST/PUT/DELETE /outline、PUT /project/config（设阅读进度）
 // 2026-09：卷/章行的类型徽标改为**编号徽标**（`第N卷` / `第N章`，展示口径——只计可见节点、删后重排，
 // 与服务端 `deriveChapterOrder` 不同源；纯函数 = lib/outline-tree 的 numberOutline）；占位几何随徽标宽度同步（见 DESIGN.md）。
 // （S2.4 + S13.1 + 版）——行内编辑标题/摘要（Enter 保存/Esc 取消/失焦保存）、
@@ -66,6 +67,7 @@ import { cn } from "../lib/utils";
 import { focusNewItem } from "../lib/new-item-focus";
 import { useSaveShortcut } from "../lib/save-shortcut";
 import { navigate } from "../hooks/use-route";
+import { useOutlineLoader } from "../hooks/use-outline-loader";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
@@ -138,7 +140,8 @@ export default function Outline() {
   const outlineLoading = useProjectStore((s) => s.outlineLoading);
   const config = useProjectStore((s) => s.config);
   const configLoading = useProjectStore((s) => s.configLoading);
-  const loadOutline = useProjectStore((s) => s.loadOutline);
+ // 大纲加载（本页章视图行要章的 metadata.textLength ⇒ withMetadata: true；hook 管首拉/补齐/失败重试）
+  const { reload, retry } = useOutlineLoader({ withMetadata: true });
   // 跨页定位（U4 方案 A）：ui store 的 transient 目标节点 id——InfoBar/概览页点击「阅读进度」
   // 设置后跳转本页；本页消费（展开祖先+滚动+高亮）后清除，不侵入 hash 路由
   const focusOutlineNodeId = useUiStore((s) => s.focusOutlineNodeId);
@@ -146,10 +149,8 @@ export default function Outline() {
 
   // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉整树；
   // 伏笔标记 effect 依赖 outline 对象，树重拉后自动联动刷新（见该 effect 注释）
-  useDataRefresh(() => void loadOutline());
+  useDataRefresh(() => void reload());
 
-  // 首次加载标记：loadOutline 在 store 内静默吞错，用 loadAttempted 呈现「加载失败 + 重试」
-  const [loadAttempted, setLoadAttempted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** 折叠的节点 id 集合（空集 = 全部展开） */
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -179,14 +180,6 @@ export default function Outline() {
    * `docs/design/10-data-model.md` §4 的服务端章序不同源）——树视图行为徽标查 `labels`，
    * 章视图直接读 `chapterRows` */
   const numbering = useMemo(() => numberOutline(outline), [outline]);
-
-  // 首次加载：outline 未加载且未尝试过 → loadOutline
-  useEffect(() => {
-    if (outline === null && !outlineLoading && !loadAttempted) {
-      setLoadAttempted(true);
-      void loadOutline();
-    }
-  }, [outline, outlineLoading, loadAttempted, loadOutline]);
 
   // 伏笔标记（S9.2，数据流 API → 映射 → 渲染）：大纲树就绪后并行拉取三类标记关系
   // （GET /relation，source_type=outline_node，relation_type 单值过滤，depth=1——「关系」）→
@@ -268,7 +261,7 @@ export default function Outline() {
    * focusNodeId：创建成功后滚动到位 + 聚焦新节点（原型「成功后自动展开父节点、新节点高亮」，A2） */
   async function afterTreeChanged(expandParentId?: string, focusNodeId?: string) {
     if (expandParentId) expand(expandParentId);
-    await loadOutline();
+    await reload();
     if (focusNodeId) setFocusedNodeId(focusNodeId);
   }
 
@@ -968,7 +961,7 @@ export default function Outline() {
         /* 加载失败（loadOutline 静默吞错后的兜底呈现） */
         <div className="rounded-md border border-border p-4 text-sm text-muted-foreground">
           大纲加载失败
-          <Button className="ml-3" onClick={() => setLoadAttempted(false)}>
+          <Button className="ml-3" onClick={retry}>
             重试
           </Button>
         </div>

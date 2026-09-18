@@ -1,0 +1,37 @@
+/* 块编辑器（@blocknote/*）的**唯一改色入口**（契约：docs/ui/DESIGN.md §Colors「块编辑器（--bn-*）」）。
+   调用点不得写 --bn-* 覆盖、不得内联色值（守卫 design-discipline.test.ts 的 hardcoded-color 扫色值）。
+
+   变量名清单（装包后从 node_modules 核出，**只映射文档登记表里有的**；未列出的库内变量保留库默认）：
+   `@blocknote/react/src/editor/styles.css` 定义默认值（浅色段 + `.bn-root[data-color-scheme="dark"]` 段）：
+     --bn-colors-editor-text / --bn-colors-editor-background
+     --bn-colors-menu-text / --bn-colors-menu-background
+     --bn-colors-tooltip-text / --bn-colors-tooltip-background
+     --bn-colors-hovered-text / --bn-colors-hovered-background
+     --bn-colors-selected-text / --bn-colors-selected-background
+     --bn-colors-border / --bn-colors-side-menu / --bn-colors-highlights-<色>-text|background
+     --bn-font-family（另有派生/尺寸类变量 --bn-border-radius*、--bn-shadow-*、--bn-border、
+     --bn-table-handle-size、--bn-table-widget-size、--bn-ui-base-z-index、--bn-mobile-keyboard-offset、
+     --bn-source-popup-anchor：不映射，吃库默认）
+   映射目标全部是 antd token（--ant-*，经 <html class="ai-editor-theme"> 全局可用）或 index.css 的
+   语义变量（--accent = surface-muted / --border = hairline）——不写任何色值 ⇒ 深浅两态由 antd 双算法跟随。
+
+   选择器：浅色态挂 .bn-root 即可；深色态库自己有一段 `.bn-root[data-color-scheme="dark"]` 默认值
+   （#cfcfcf 一批），**必须与它同特异性且后加载**才压得住——故把 dark 选择器并列写进同一张表
+   （映射值两态同源，不复制两份色值，DESIGN.md 的两态映射表由此兑现）。 */
+.bn-root,
+.bn-root[data-color-scheme="dark"] {
+  --bn-colors-editor-text: var(--ant-color-text);
+  --bn-colors-editor-background: var(--ant-color-bg-container);
+  --bn-colors-menu-text: var(--ant-color-text);
+  --bn-colors-menu-background: var(--ant-color-bg-container);
+  --bn-colors-tooltip-text: var(--ant-color-text);
+  --bn-colors-tooltip-background: var(--ant-color-bg-container);
+  --bn-colors-hovered-text: var(--ant-color-text);
+  --bn-colors-hovered-background: var(--accent); /* = surface-muted（colorFillTertiary） */
+  --bn-colors-selected-text: var(--ant-color-text);
+  --bn-colors-selected-background: var(--accent);
+  --bn-colors-border: var(--border); /* 结构描边 = hairline（colorBorderSecondary） */
+  --bn-colors-side-menu: var(--ant-color-text-quaternary); /* 块手柄/加号 */
+  /* --bn-colors-highlights-*（高亮/颜色选项）：**有意不映射**——留库自带色板（DESIGN.md 登记表） */
+  --bn-font-family: var(--font-sans); /* 与全站同栈（不下载 web 字体） */
+}

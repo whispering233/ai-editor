@@ -36,9 +36,11 @@ import {
   type NodeFieldConfig,
 } from "../lib/outline-detail";
 import { findNode, shouldCommitSummary, shouldCommitTitle } from "../lib/outline-tree";
+import { formatTextLength } from "../lib/manuscript";
 import { navigate } from "../hooks/use-route";
 import { useSaveShortcut } from "../lib/save-shortcut";
 import { useDataRefresh } from "../hooks/use-data-refresh";
+import { useOutlineLoader } from "../hooks/use-outline-loader";
 import { isCurrentPositionHost, setCurrentPosition } from "../lib/current-position";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
@@ -48,10 +50,9 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
   const outlineLoading = useProjectStore((s) => s.outlineLoading);
   const config = useProjectStore((s) => s.config);
   const configLoading = useProjectStore((s) => s.configLoading);
-  const loadOutline = useProjectStore((s) => s.loadOutline);
-
-  // 首次加载标记：loadOutline 在 store 内静默吞错，用 loadAttempted 呈现「加载失败 + 重试」（同大纲列表页）
-  const [loadAttempted, setLoadAttempted] = useState(false);
+  // 大纲加载（本页元信息行展示章的 metadata.textLength ⇒ withMetadata: true；
+  // hook 管首拉/补齐/失败重试——loadOutline 在 store 内静默吞错，页面以 outline===null 兜底）
+  const { reload, retry } = useOutlineLoader({ withMetadata: true });
   // 表单（node 数据副本；树刷新后重置为服务端权威值）
   const [titleValue, setTitleValue] = useState("");
   const [summaryValue, setSummaryValue] = useState("");
@@ -67,17 +68,10 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
   const [deltaFormOpen, setDeltaFormOpen] = useState(false);
   const [deltaReloadKey, setDeltaReloadKey] = useState(0);
 
-  useEffect(() => {
-    if (outline === null && !outlineLoading && !loadAttempted) {
-      setLoadAttempted(true);
-      void loadOutline();
-    }
-  }, [outline, outlineLoading, loadAttempted, loadOutline]);
-
   // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉整树（node 变化驱动
   // 表单重置）+ 相关实体与变更记录区块重载（AI 可能为本节点新增关系/变更记录）
   useDataRefresh(() => {
-    void loadOutline();
+    void reload();
     setRelKey((k) => k + 1);
     setDeltaReloadKey((k) => k + 1);
   });
@@ -89,6 +83,11 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
   const isCurrent = config?.currentPosition === nodeId;
   /** 本页节点是否可承载「阅读进度」（卡片 1.1 章级收窄：仅章；节点未加载时不置灰按钮由 node===null 分支承担） */
   const currentPositionHost = node !== null && isCurrentPositionHost(node.type);
+  /** 本章正文字数文案（卡 12.5；卷/场景无正文，0 或未写 → null 不显示）——
+   *  数据来自 GET /outline?with_metadata=true 的 metadata.textLength（不读正文全文） */
+  const textLengthLabel = formatTextLength(
+    node?.type === "chapter" ? (node.metadata?.textLength ?? 0) : 0,
+  );
 
   // 节点 → 表单（依赖 node 引用：outline 未刷新则引用稳定不重置；保存后 loadOutline 新树 → 重置）
   useEffect(() => {
@@ -120,11 +119,11 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
     try {
       await updateOutlineNode(node.id, patch);
       useUiStore.getState().showToast("已保存");
-      await loadOutline();
+      await reload();
     } catch (err) {
       if (err instanceof ApiError && err.code === "OUTLINE_NODE_NOT_FOUND") {
         // 节点已被 purge：重拉树后自然进入 404 态（节点不在树中）
-        await loadOutline();
+        await reload();
         return;
       }
       setSaveError(err instanceof ApiError ? err.message : "保存失败，请重试");
@@ -194,6 +193,10 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
         truncateTitle
         action={
           <>
+            {/* 写正文（卡 12.5）：仅章节点（正文只挂章，卷/场景 → 端点 400，不留必定失败的入口） */}
+            {node?.type === "chapter" && (
+              <Button onClick={() => navigate(`/manuscript/${node.id}`)}>写正文</Button>
+            )}
             {/* S13.2 设为阅读进度（动作入口；状态徽标在元信息行）：已是阅读进度 → 禁用 + 「阅读进度」标记，
                 与 S13.1 前大纲页 disabled={isCurrent || busy} 语义一致；
                 卡片 1.1 章级收窄：非章节点（卷/场景）禁用并说明原因——服务端接受非章会 400，
@@ -226,6 +229,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <TypeChip>{TYPE_LABEL[node.type]}</TypeChip>
               <span>更新于 {formatTimestamp(node.updatedAt)}</span>
+              {textLengthLabel !== null && <span className="tabular-nums">{textLengthLabel}</span>}
               {isCurrent && <TypeChip className="shrink-0">阅读进度</TypeChip>}
             </div>
           ) : undefined
@@ -259,7 +263,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
         /* 树加载失败（loadOutline 静默吞错后的兜底呈现，同大纲列表页） */
         <div className="rounded-md border border-border p-4 text-sm text-muted-foreground">
           大纲加载失败
-          <Button className="ml-3" onClick={() => setLoadAttempted(false)}>
+          <Button className="ml-3" onClick={retry}>
             重试
           </Button>
         </div>

@@ -1,5 +1,6 @@
 // 章视图（大纲页第二形态，2026-09）：平铺章列表——阅读序 = 卷序 → 卷内章序，行 = `第N卷` + `第N章`
-// 两枚编号徽标 + 标题 + 摘要 + 伏笔标记 + 「阅读进度」徽标。
+// 两枚编号徽标 + 标题 + 摘要 + 伏笔标记 + 正文字数 + 「写正文」入口 + 「阅读进度」徽标。
+// 「写正文」= 指向 #/manuscript/:id 的**导航链接**（卡 12.5；非操作按钮，仍不破「本视图不做结构编辑」的收窄）。
 // 交互有意收窄（契约见 `docs/ui/DESIGN.md`「大纲页双视图」）：**单击标题就地改名 + 双击行进详情**，
 // 不做删除 / 新建 / 拖拽——结构编辑与排序的唯一入口仍是大纲树，且「在章视图里新建出的场景不显示」
 // 会带来「建了却看不见」的困惑。
@@ -12,6 +13,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { NodeHookMarkBadge } from "./node-hook-badge";
 import { InlineInput } from "./inline-input";
 import type { NodeHookMark } from "@/lib/outline-hooks";
+import { formatTextLength } from "@/lib/manuscript";
 import type { OutlineChapterRow } from "@/lib/outline-tree";
 import { cn } from "@/lib/utils";
 
@@ -65,6 +67,8 @@ export function ChapterView({
         const node = row.chapter;
         const marks = hookMarks?.get(node.id) ?? [];
         const editingHere = editing?.nodeId === node.id;
+        /** 本章正文字数文案（metadata.textLength；未写/0 → null 不显示） */
+        const textLengthLabel = formatTextLength(node.metadata?.textLength ?? 0);
         const onEditKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
           if (e.key === "Enter") {
             e.preventDefault();
@@ -128,9 +132,21 @@ export function ChapterView({
                   ))}
                 </span>
               )}
-              {/* 行尾徽标区：与树视图同约定——徽标在右、不占操作按钮位（本视图无操作按钮） */}
-              <span className="ml-auto flex shrink-0 items-center gap-1">
+              {/* 行尾区：写正文入口（卡 12.5，导航链接而非操作按钮）+ 正文字数 + 「阅读进度」徽标
+                  （徽标在右、不占操作按钮位：本视图仍无结构编辑按钮） */}
+              <span className="ml-auto flex shrink-0 items-center gap-2">
+                {textLengthLabel !== null && (
+                  <span className="tabular-nums text-xs text-muted-foreground">
+                    {textLengthLabel}
+                  </span>
+                )}
                 {currentPositionId === node.id && <TypeChip className="shrink-0">阅读进度</TypeChip>}
+                <a
+                  href={`#/manuscript/${node.id}`}
+                  className="text-xs text-muted-foreground underline hover:text-foreground"
+                >
+                  写正文
+                </a>
               </span>
             </div>
             {/* 摘要（空不渲染）：缩进 = 两枚编号徽标占位，左右 gap 与首行同（标题左缘对齐） */}

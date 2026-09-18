@@ -185,9 +185,14 @@ export function saveProjectAgents(content: string): Promise<SaveProjectAgentsRes
   return apiFetch<SaveProjectAgentsRes>("/project/agents", { method: "PUT", body: { content } });
 }
 
-/** GET /api/v1/outline（shared types/api.ts outlineTreeSchema） */
-export function getOutline(): Promise<OutlineTree> {
-  return apiFetch<OutlineTree>("/outline");
+/** GET /api/v1/outline（shared types/api.ts outlineTreeSchema）
+ * withMetadata：联查统计（节点 hookCount/charCount/deltaCount + **章的 textLength**）——
+ * **按页开启**（卡 12.5）：只有展示字数的页面（大纲页 / 章详情页）传 true，其余页面留默认
+ * （少一次跨表联查）；口径见 docs/api/60-api-outline.md、docs/api/110-api-manuscript.md */
+export function getOutline(options: { withMetadata?: boolean } = {}): Promise<OutlineTree> {
+  return apiFetch<OutlineTree>("/outline", {
+    query: options.withMetadata === true ? { with_metadata: "true" } : {},
+  });
 }
 
 // ============ 大纲操作（S2.3；「大纲操作」L514-656，严格三层） ============
@@ -275,6 +280,51 @@ export interface OutlinePathRes {
 /** 获取节点路径（从根到指定节点；404 = 节点已 purge） */
 export function getOutlinePath(nodeId: string): Promise<OutlinePathRes> {
   return apiFetch<OutlinePathRes>(`/outline/${nodeId}/path`);
+}
+
+// ============ 章正文（卡 12.5；契约 docs/api/110-api-manuscript.md） ============
+
+/** GET /api/v1/manuscript/:chapterNodeId 响应（共享类型见 shared manuscriptGetResSchema） */
+export interface ManuscriptRes {
+  chapterNodeId: string;
+ /** 块数组 JSON 字符串；从未写过 = ""（客户端按空文档处理） */
+  content: string;
+ /** 版本戳（ISO 8601）；从未写过 = null——保存时作为 base_updated_at 回传做冲突判定 */
+  updatedAt: string | null;
+ /** 正文字数（= 服务端派生投影的 JS 字符串长度；从未写过 = 0） */
+  charCount: number;
+}
+
+/** 读取章正文（404 OUTLINE_NODE_NOT_FOUND = 章不存在/已软删；400 VALIDATION_ERROR = 非章节点） */
+export function getManuscript(chapterNodeId: string): Promise<ManuscriptRes> {
+  return apiFetch<ManuscriptRes>(`/manuscript/${chapterNodeId}`);
+}
+
+/** PUT /api/v1/manuscript/:chapterNodeId 响应 */
+export interface SaveManuscriptRes {
+  updated: true;
+ /** 本次写入后的新版本戳——客户端保存成功后以此更新本地基准 */
+  updatedAt: string;
+  charCount: number;
+}
+
+/**
+ * 保存章正文（整篇覆盖）：
+ * - `baseUpdatedAt` = 保存前读到的版本戳；**省略 = 不做冲突检查**（「覆盖保存」路径）——
+ *   服务端仅在携带 base_updated_at 时比对，不一致 → 409 DOCUMENT_STALE
+ * - 请求体字段为服务端 snake_case（本函数负责映射，同 moveSetting 写法）
+ */
+export function saveManuscript(
+  chapterNodeId: string,
+  body: { content: string; baseUpdatedAt?: string },
+): Promise<SaveManuscriptRes> {
+  return apiFetch<SaveManuscriptRes>(`/manuscript/${chapterNodeId}`, {
+    method: "PUT",
+    body: {
+      content: body.content,
+      ...(body.baseUpdatedAt !== undefined ? { base_updated_at: body.baseUpdatedAt } : {}),
+    },
+  });
 }
 
 // ============ 回收站（S2.3 大纲侧 + S4.4 实体侧补齐；「回收站」L660-736） ============

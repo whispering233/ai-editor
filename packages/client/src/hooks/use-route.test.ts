@@ -69,3 +69,13 @@ describe("parseHashRoute", () => {
     expect(parseHashRoute("#/references")).toEqual({ path: "/references", segments: ["references"], isFallback: false });
     expect(parseHashRoute("#/references/ref-abc")).toEqual({ path: "/references/ref-abc", segments: ["references", "ref-abc"], isFallback: false });
   });
+
+  it("manuscript 章正文段解析（卡 12.5：2 段 = #/manuscript/:chapterId）", () => {
+    expect(parseHashRoute("#/manuscript/ch-1")).toEqual({
+      path: "/manuscript/ch-1",
+      segments: ["manuscript", "ch-1"],
+      isFallback: false,
+    });
+ // 1 段（缺章 id）也是已知段：由 main.tsx 归一回大纲页，不当作未知 hash 回退
+    expect(parseHashRoute("#/manuscript").isFallback).toBe(false);
+  });

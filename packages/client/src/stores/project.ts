@@ -33,6 +33,8 @@ interface ProjectState {
  /** 大纲树（GET /outline）；null = 未加载/加载失败 */
   outline: OutlineTree | null;
   outlineLoading: boolean;
+ /** 当前树是否带联查统计（loadOutline 的 withMetadata 口径）——展示字数的页面据此判断要不要补拉 */
+  outlineWithMetadata: boolean;
  /** 书架（GET /project/list）；null = 未加载/加载失败 */
   bookshelf: ProjectList | null;
   bookshelfLoading: boolean;
@@ -50,7 +52,7 @@ interface ProjectState {
   loadConfig: () => Promise<void>;
  /** 更新配置（PUT /project/config，请求体 snake_case）；成功后重新拉取最新配置 */
   updateConfig: (patch: UpdateProjectConfigBody) => Promise<void>;
-  loadOutline: () => Promise<void>;
+  loadOutline: (options?: { withMetadata?: boolean }) => Promise<void>;
  /** 刷新书架（GET /project/list）；失败记录 bookshelfError */
   loadBookshelf: () => Promise<void>;
  /** 打开项目（POST /project/open）：成功刷新 config/outline；rebuilt 时 toast 提示 */
@@ -79,6 +81,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   loadError: null,
   outline: null,
   outlineLoading: false,
+  outlineWithMetadata: false,
   bookshelf: null,
   bookshelfLoading: false,
   bookshelfError: null,
@@ -117,14 +120,16 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     await get().loadConfig();
   },
 
-  loadOutline: async () => {
+  loadOutline: async (options) => {
     if (get().outlineLoading) return;
+    // withMetadata 按页开启（卡 12.5）：带 stats 的树供大纲页/章详情页展示章的 textLength
+    const withMetadata = options?.withMetadata === true;
     set({ outlineLoading: true });
     try {
-      const outline = await getOutline();
-      set({ outline });
+      const outline = await getOutline({ withMetadata });
+      set({ outline, outlineWithMetadata: withMetadata });
     } catch {
-      set({ outline: null });
+      set({ outline: null, outlineWithMetadata: false });
     } finally {
       set({ outlineLoading: false });
     }
@@ -183,6 +188,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       config: null,
       loadError: null,
       outline: null,
+      outlineWithMetadata: false,
       agents: null,
       agentsProjectId: null,
       agentsError: null,

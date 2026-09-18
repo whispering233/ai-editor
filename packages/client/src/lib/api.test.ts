@@ -30,6 +30,8 @@ import {
   listEntities,
   listProjects,
   moveOutlineNode,
+  getManuscript,
+  getOutline,
   openProject,
   parseContentDispositionFilename,
   purgeOutlineNode,
@@ -38,6 +40,7 @@ import {
   renameProjectBackup,
   restoreOutlineNode,
   restoreProjectBackup,
+  saveManuscript,
   updateEntity,
   updateOutlineNode,
   updateRelationMeta,
@@ -103,6 +106,66 @@ function mockFetchOnce(response: { status?: number; body: unknown }) {
 afterEach(() => {
   globalThis.fetch = originalFetch;
   vi.restoreAllMocks();
+});
+
+describe("章正文端点（卡 12.5；docs/api/110-api-manuscript.md）", () => {
+  it("getManuscript：GET /manuscript/:chapterNodeId；内容/版本戳/字数透传", async () => {
+    const calls = mockFetchOnce({
+      body: {
+        success: true,
+        data: { chapterNodeId: "ch-1", content: '[{"type":"paragraph"}]', updatedAt: "t1", charCount: 8 },
+      },
+    });
+    const res = await getManuscript("ch-1");
+    expect(calls[0].url).toBe("/api/v1/manuscript/ch-1");
+    expect(calls[0].init?.method).toBe("GET");
+    expect(res).toEqual({
+      chapterNodeId: "ch-1",
+      content: '[{"type":"paragraph"}]',
+      updatedAt: "t1",
+      charCount: 8,
+    });
+  });
+
+  it("getManuscript：404 OUTLINE_NODE_NOT_FOUND → ApiError code 透传（页面 404 态）", async () => {
+    mockFetchOnce({
+      status: 404,
+      body: { success: false, error: { code: "OUTLINE_NODE_NOT_FOUND", message: "大纲节点不存在" } },
+    });
+    await expect(getManuscript("ch-x")).rejects.toMatchObject({ code: "OUTLINE_NODE_NOT_FOUND" });
+  });
+
+  it("saveManuscript：PUT /manuscript/:id；baseUpdatedAt → base_updated_at（snake_case）", async () => {
+    const calls = mockFetchOnce({
+      body: { success: true, data: { updated: true, updatedAt: "t2", charCount: 3 } },
+    });
+    const res = await saveManuscript("ch-1", { content: "[{}]", baseUpdatedAt: "t1" });
+    expect(calls[0].url).toBe("/api/v1/manuscript/ch-1");
+    expect(calls[0].init?.method).toBe("PUT");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({
+      content: "[{}]",
+      base_updated_at: "t1",
+    });
+    expect(res.updatedAt).toBe("t2");
+  });
+
+  it("saveManuscript：省略 baseUpdatedAt = 覆盖保存（body 不带 base_updated_at）", async () => {
+    const calls = mockFetchOnce({
+      body: { success: true, data: { updated: true, updatedAt: "t3", charCount: 1 } },
+    });
+    await saveManuscript("ch-1", { content: "[{}]" });
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ content: "[{}]" });
+  });
+
+  it("saveManuscript：409 DOCUMENT_STALE → ApiError code 透传（冲突对话框分支）", async () => {
+    mockFetchOnce({
+      status: 409,
+      body: { success: false, error: { code: "DOCUMENT_STALE", message: "正文已被其他窗口修改" } },
+    });
+    await expect(saveManuscript("ch-1", { content: "[{}]" })).rejects.toMatchObject({
+      code: "DOCUMENT_STALE",
+    });
+  });
 });
 
 describe("createProject（POST /api/v1/project/create）", () => {
@@ -412,6 +475,16 @@ describe("大纲端点（S2.3，严格三层）", () => {
     const res = await getOutlinePath("sc-15");
     expect(res.path).toEqual(["root", "vol-1", "ch-3", "sc-15"]);
     expect(calls[0].url).toBe("/api/v1/outline/sc-15/path");
+  });
+
+  it("getOutline：默认不带统计；withMetadata:true → ?with_metadata=true（字数按页开启）", async () => {
+    const empty = { id: "root", type: "root", schemaVersion: 1, children: [] };
+    const plain = mockFetchOnce({ body: { success: true, data: empty } });
+    await getOutline();
+    expect(plain[0].url).toBe("/api/v1/outline");
+    const stats = mockFetchOnce({ body: { success: true, data: empty } });
+    await getOutline({ withMetadata: true });
+    expect(stats[0].url).toBe("/api/v1/outline?with_metadata=true");
   });
 });
 

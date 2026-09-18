@@ -19,6 +19,7 @@ import Timeline from "./pages/Timeline";
 import TimelineDetail from "./pages/TimelineDetail";
 import ReferenceList from "./pages/ReferenceList";
 import ReferenceDetail from "./pages/ReferenceDetail";
+import Manuscript from "./pages/Manuscript";
 import Trash from "./pages/Trash";
 import Settings from "./pages/Settings";
 import "./index.css";
@@ -116,6 +117,14 @@ function renderPage(route: Route): ReactNode {
         <ReferenceDetail key={second} id={second} />
       ) : (
         <ReferenceList />
+      );
+    case "manuscript":
+      // 章正文页（卡 12.5）：#/manuscript/:chapterId——缺章 id 或多余段归一回大纲页
+      // （key = chapterId 变化强制卸载重挂：正文按章重置、在途自动保存 flush）
+      return second !== undefined && third === undefined ? (
+        <Manuscript key={second} chapterId={second} />
+      ) : (
+        <RedirectTo to="/outline" />
       );
     case "trash":
       return <Trash />;

@@ -1,19 +1,26 @@
 // 章视图 presenter 渲染走查（2026-09 大纲页双视图）：仓内无 jsdom，用 react-dom/server `renderToString`
 // 直渲染展示层（数据与副作用在容器 `pages/Outline.tsx`）。
 // 覆盖：两枚编号徽标 + 标题 + 摘要（卷号按行重复）/ 存量根级章无卷号 / 「阅读进度」徽标 /
-//       伏笔标记 / 单击改名输入态 / 空态（有卷无章）。
+//       伏笔标记 / 「写正文」入口 + 正文字数（卡 12.5）/ 单击改名输入态 / 空态（有卷无章）。
 import { describe, expect, it } from "vitest";
 import { renderToString } from "react-dom/server";
 import type { OutlineChapter } from "@whispering233/ai-editor-shared";
 import { ChapterView, type ChapterViewHandlers } from "./chapter-view";
 import type { OutlineChapterRow } from "../../lib/outline-tree";
 
-const chapter = (id: string, title: string, summary?: string): OutlineChapter => ({
+const chapter = (
+  id: string,
+  title: string,
+  summary?: string,
+  /** 正文字数（卡 12.5；来自 GET /outline?with_metadata=true 的 metadata.textLength） */
+  textLength?: number,
+): OutlineChapter => ({
   id,
   type: "chapter",
   title,
   summary,
   updatedAt: "t",
+  ...(textLength !== undefined ? { metadata: { textLength } } : {}),
 });
 
 /** 造行：卷1（第1章（带摘要）、第2章）、存量根级章（无卷号） */
@@ -25,7 +32,7 @@ const ROWS: OutlineChapterRow[] = [
     chapterLabel: "第1章",
   },
   {
-    chapter: chapter("ch-2", "旧盟友"),
+    chapter: chapter("ch-2", "旧盟友", undefined, 1200),
     volumeId: "vol-1",
     volumeLabel: "第1卷",
     chapterLabel: "第2章",
@@ -59,7 +66,8 @@ describe("ChapterView（章视图平铺列表）", () => {
     expect(out).toContain("主角离乡"); // 摘要
     expect(out.split("第1卷")).toHaveLength(3); // 卷1 的两行各带一次（split 段数 = 出现数 + 1）
     expect(out).toContain('data-node-id="ch-9"'); // 跨页定位锚点
-    // 有意收窄（DESIGN「大纲页双视图」）：行内无任何操作按钮——删除/新建/拖拽都不在本视图
+    // 有意收窄（DESIGN「大纲页双视图」）：行内无任何操作**按钮**——删除/新建/拖拽都不在本视图
+    // （「写正文」是指向正文页的导航链接，不破这条收窄，见下一例）
     expect(out).not.toContain("<button");
     expect(out).not.toContain("移入回收站");
     expect(out).not.toContain("draggable");
@@ -83,6 +91,22 @@ describe("ChapterView（章视图平铺列表）", () => {
     ]);
     expect(html({ hookMarks })).toContain("埋设伏笔：青铜钥匙");
     expect(html({ hookMarks: null })).not.toContain("埋设伏笔");
+  });
+
+  it("「写正文」入口（卡 12.5）：每行一个指向 #/manuscript/:id 的导航链接", () => {
+    const out = html();
+    expect(out).toContain('href="#/manuscript/ch-1"');
+    expect(out).toContain('href="#/manuscript/ch-2"');
+    expect(out).toContain('href="#/manuscript/ch-9"');
+    expect(out.split(">写正文<")).toHaveLength(4); // 每行一个（split 段数 = 出现数 + 1）
+  });
+
+  it("正文字数（metadata.textLength）：> 0 显示文案，未写（0 / 无 metadata）不显示", () => {
+    const out = html();
+    expect(out).toContain("1.2 千字"); // ch-2 = 1200 字
+    expect(out).not.toContain("0 字"); // 无 metadata 的章不落「0 字」占位
+    expect(html({ rows: [ROWS[1]] })).toContain("1.2 千字");
+    expect(html({ rows: [ROWS[0]] })).not.toContain("字"); // 无正文 → 整处文案不渲染
   });
 
   it("改名态：该行渲染输入框（带当前值），标题不再是可点文本", () => {

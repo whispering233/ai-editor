@@ -2,7 +2,8 @@
 // 解析 location.hash（形如 "#/outline"、"#/characters/char-abc"）为结构化路由。
 // 路由表见 （10 路由，一级化）：#/、#/overview、#/outline、#/outline/:nodeId、
 // #/characters[/:id]、#/setting[/:id]、#/locations[/:id]、#/relations、#/hooks[/:id]、
-// #/timeline、#/timeline/:id、#/timepoints/:id、#/references[/:id]、#/trash、#/preferences
+// #/timeline、#/timeline/:id、#/timepoints/:id、#/references[/:id]、#/manuscript/:chapterId、
+// #/trash、#/preferences
 // （#/chat、#/canvas 已移除；#/entities/* 与 #/settings 仅作旧址重定向；未知 hash 回退 #/ 兜底）
 import { useEffect, useState } from "react";
 
@@ -29,6 +30,7 @@ export const KNOWN_ROUTE_SEGMENTS = [
   "timeline",
   "timepoints",
   "references",
+  "manuscript",
   "trash",
   "settings",
   "preferences",
