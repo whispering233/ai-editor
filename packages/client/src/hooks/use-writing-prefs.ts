@@ -1,7 +1,7 @@
 // 写作面偏好 hook（卡 13.2 字体/字号/行高 + 卡 13.3 纸张/纹理/段首缩进）。
 // 契约：docs/ui/DESIGN.md §Colors「写作面偏好（字体 / 纸张 / 缩进）」——本文件的档位常量是**唯一定义处**
 // （DESIGN.md 表是契约，测试断言两者同值：改档位必须同步那张表）。
-// - 唯一存储 = localStorage key `ai-editor:writing`（全站第三个 key，同哲学：纯展示偏好，
+// - 唯一存储 = localStorage key `ai-editor:writing`（同哲学：纯展示偏好，
 //   不进项目文件 / 备份 / 云同步）；全局一份，两处书写面（章正文 + 参考资料正文）共用。
 // - 存一个扁平 JSON 对象（{ font, fontSize, lineHeight, paper, paperTexture, indent }）：解析是
 //   **逐字段白名单**——缺键 / 坏类型 / 越界值各自回落默认，未知键忽略（13.3 加字段时旧值照旧可读）。
@@ -11,7 +11,7 @@
 // - 纯函数（解析 / 序列化 / 档位 → CSS 值）从 hook 抽出供测试；hook 本体依赖 window（node 环境不渲染）。
 import { useState, type CSSProperties } from "react";
 
-/** localStorage key（全站第三个 key，见 DESIGN.md §Colors 写作面偏好） */
+/** localStorage key（见 DESIGN.md §Colors 写作面偏好；key 清单见 docs/design/config.md） */
 export const WRITING_PREFS_STORAGE_KEY = "ai-editor:writing";
 
 export type WritingFont = "sans" | "song" | "kai" | "fang" | "mono";
