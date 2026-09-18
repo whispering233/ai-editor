@@ -3,18 +3,19 @@
 //
 // （软删级联）、（时间轴事件：全局线性序 sort_order，仅 event 使用）、
 // G2 修订（时间标签点实体化：timepoint 全局线性序 + occurs_at 挂载 + 跨组拖拽复合端点）。
+// reference 特例（2026-10，docs/api/30-api-entity.md）：正文是块文档——`data.content` 拆写进
+// document_records（owner_kind='reference'，单事务），详情再装回；列表摘要读 content_text 投影。
 // 错误映射（对照 错误码）：
 // type 参数非法 / 参数校验失败 → 400 VALIDATION_ERROR（zod 抛错由 errorHandler 统一映射，含 fields）
 // 实体不存在或已软删 → 404 ENTITY_NOT_FOUND
 import { Hono } from "hono";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import {
   countDeltasForEntity,
   createEntity,
   createRelation,
   deleteRelation,
   eventOccursAt,
+  getDocument,
   getEntity,
   listEntities,
   listRelations,
@@ -25,21 +26,13 @@ import {
   RelationError,
   softDeleteEntity,
   updateEntity,
+  upsertDocument,
   withTransaction,
 } from "@whispering233/ai-editor-db";
-import type { EntityType } from "@whispering233/ai-editor-shared";
-import { sanitizeReferenceFileName } from "@whispering233/ai-editor-shared";
+import { blocksToPlainMd, isBlockArray, type EntityType } from "@whispering233/ai-editor-shared";
 import { ENTITY_DATA_SCHEMAS, entityCreateReqSchema, entityListQuerySchema, entityMoveReqSchema, entityTypeSchema, entityUpdateReqSchema, eventMoveToReqSchema, settingMoveReqSchema } from "@whispering233/ai-editor-shared/schemas";
 import { HttpError, ok } from "../middleware/error.js";
 import { requireCurrentProject } from "../middleware/project.js";
-import {
-  getReferenceRow,
-  moveReferenceToTrash,
-  readReferenceFile,
-  REFERENCE_DIR,
-  uniqueFileNameIn,
-  writeReferenceFile,
-} from "../reference-files.js";
 import { mapRelationError } from "./relation.js";
 
 /** 实体路由（挂载于 /api/v1/entity，index.ts） */
@@ -60,6 +53,47 @@ function validateDataByType(type: EntityType, data: Record<string, unknown>): vo
   if (!check.success) {
     throw check.error; // → errorHandler → 400 VALIDATION_ERROR（含 fields）
   }
+}
+
+/** 浅校验块文档 content（同章正文端点口径）：JSON.parse 后必须是块数组（shared `isBlockArray`），
+ * 否则 400 VALIDATION_ERROR（服务端投影前先校验，坏块不得落库） */
+function parseBlockContent(content: string): unknown[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    throw new HttpError(400, "VALIDATION_ERROR", "content 必须是块数组 JSON 字符串");
+  }
+  if (!isBlockArray(parsed)) {
+    throw new HttpError(400, "VALIDATION_ERROR", "content 必须是块数组 JSON 字符串");
+  }
+  return parsed;
+}
+
+/**
+ * reference 的 data.content 拆分（2026-10 装载拆分，docs/api/30-api-entity.md「reference 特例」）：
+ * `content` 是**端点对外字段名**，真相落 `document_records` ⇒ 返回的 data 已剔除 content。
+ * - content 未携带（字段不存在或非对象 data）→ `content` 为 null = **正文保持不动**
+ *   （行内改标题/分类/标签场景，旧「先写文件后写库」链路的替代语义）
+ * - content 非字符串 → 400（referenceDataSchema 已拦，此处防御）
+ * - 非 reference 类型原样透传（其余类型无本字段语义）
+ */
+function splitReferenceContent(
+  type: EntityType,
+  data: Record<string, unknown> | undefined,
+): { data: Record<string, unknown> | undefined; content: { raw: string; text: string } | null } {
+  if (type !== "reference" || data === undefined || data.content === undefined) {
+    return { data, content: null };
+  }
+  const raw = data.content;
+  if (typeof raw !== "string") {
+    throw new HttpError(400, "VALIDATION_ERROR", "content 必须是块数组 JSON 字符串");
+  }
+  // 服务端派生投影（唯一写入人）；blocksToPlainMd 容错、绝不抛错 ⇒ 派生失败也不阻断保存
+  const text = blocksToPlainMd(parseBlockContent(raw));
+  const rest = { ...data };
+  delete rest.content;
+  return { data: rest, content: { raw, text } };
 }
 
 // GET /api/v1/entity/:type —— 列表（q/offset/limit/sort/order；响应 camelCase）
@@ -114,6 +148,8 @@ entityRoutes.get("/:type", (c) => {
 });
 
 // GET /api/v1/entity/:type/:id —— 详情（含紧邻 relations + deltaCount）
+// reference 特例（2026-10）：`data.content` 不在 entities.data 里，从 document_records 装回
+// （写入侧拆分的逆操作）——库内无行（从未写过正文）→ 不附加 content 键（详情不凭空造空文档）
 entityRoutes.get("/:type/:id", (c) => {
   const project = requireCurrentProject();
   parseTypeParam(c.req.param("type"));
@@ -122,6 +158,7 @@ entityRoutes.get("/:type/:id", (c) => {
   if (row === null) {
     throw new HttpError(404, "ENTITY_NOT_FOUND", `实体不存在: ${id}`);
   }
+  const doc = row.type === "reference" ? getDocument(project.db, "reference", id) : null;
   const deltaCount = countDeltasForEntity(project.db, id);
  // relations 紧邻（S3.2：listRelations depth=1，任一端点软删即不可见；
  // outline.json 校验路径 = project.root）。
@@ -141,7 +178,7 @@ entityRoutes.get("/:type/:id", (c) => {
       id: row.id,
       type: row.type,
       name: row.name,
-      data: row.data,
+      data: doc === null ? row.data : { ...row.data, content: doc.content },
       relations,
       deltaCount,
       createdAt: row.created_at,
@@ -151,8 +188,10 @@ entityRoutes.get("/:type/:id", (c) => {
 });
 
 // POST /api/v1/entity/:type —— 创建（name 必填 1-100；data 按类型精确校验；201）
-// reference 特例：kind 缺省视为 link（url 必填校验）；kind='file' → 先落盘
-// references/<标题 sanitize>.md（frontmatter + 正文）再建索引（data 补 file_name/file_mtime/content 镜像）
+// reference 特例（2026-10，docs/api/30-api-entity.md）：`data.content`（块数组 JSON 字符串）
+// **不进 entities.data**，与实体行同一事务拆写进 `document_records`（owner_kind='reference'，
+// 服务端派生 content_text 投影）；未携带 content = 允许先建条目后写正文（不落文档行）；
+// url 可选（纯本地笔记不需外源链接）。
 entityRoutes.post("/:type", async (c) => {
   const project = requireCurrentProject();
   const type = parseTypeParam(c.req.param("type"));
@@ -162,46 +201,37 @@ entityRoutes.post("/:type", async (c) => {
   if (parsed.data.data !== undefined) {
     validateDataByType(type, parsed.data.data);
   }
-  let data = parsed.data.data ?? {};
-  if (type === "reference") {
-    const kind = data.kind === "file" ? "file" : "link"; // 缺省视为 link
-    if (kind === "link") {
- // link 类：url 必填（trim 非空）
-      if (typeof data.url !== "string" || data.url.trim() === "") {
-        throw new HttpError(400, "VALIDATION_ERROR", "外源链接参考资料必须提供 url");
-      }
-      data = { ...data, kind: "link", url: data.url.trim() };
-    } else {
- // file 类：先原子写文件（frontmatter + 正文镜像），再建索引
-      const base = sanitizeReferenceFileName(parsed.data.name);
-      const fileName = uniqueFileNameIn(join(project.root, REFERENCE_DIR), base);
-      const body = typeof data.content === "string" ? data.content : "";
-      const { mtime } = writeReferenceFile(
-        project.root,
-        fileName,
-        { title: parsed.data.name, category: (data.type as string | undefined) ?? "material", tags: Array.isArray(data.tags) ? (data.tags as string[]) : [] },
-        body,
-      );
-      data = {
-        ...data,
-        kind: "file",
-        file_name: fileName,
-        file_mtime: mtime,
-        content: body,
-      };
+  const { data, content } = splitReferenceContent(type, parsed.data.data);
+  const row = withTransaction(project.db, () => {
+    const created = createEntity(project.db, { type, name: parsed.data.name, data: data ?? {} });
+    if (content !== null) {
+      upsertDocument(project.db, {
+        ownerKind: "reference",
+        ownerId: created.id,
+        content: content.raw, // 真相原样存（不重新序列化）
+        contentText: content.text,
+        now: nowIso(),
+      });
     }
-  }
-  const row = createEntity(project.db, { type, name: parsed.data.name, data });
+    return created;
+  });
   return c.json(
-    ok({ id: row.id, type: row.type, name: row.name, data: row.data, createdAt: row.created_at }),
+    ok({
+      id: row.id,
+      type: row.type,
+      name: row.name,
+      // 对外形态不变：携带了 content 就回显（真相在文档表）
+      data: content === null ? row.data : { ...row.data, content: content.raw },
+      createdAt: row.created_at,
+    }),
     201,
   );
 });
 
 // PUT /api/v1/entity/:type/:id —— 部分更新（仅合并传入字段；data 浅合并）
-// reference file 类特例：**先原子写文件再更新 DB**——正文真相在文件：
-// 请求未携带 data.content 时（行内编辑标题/分类/标签）读原文件正文与最新元数据重写 frontmatter 保留正文；
-// 文件读失败（外部删除）→ 409 REFERENCE_FILE_MISSING 提示先扫描；文件名不随标题重命名（创建时确定）
+// reference 特例（2026-10）：`data.content` 传入 → 与实体行同一事务整篇覆盖文档行（单事务，
+// 无「先写文件后写库」的先后性与自愈问题）；**未携带 content 时正文保持不动**——
+// 行内编辑标题/分类/标签不碰正文，也不再随写文件联动。
 entityRoutes.put("/:type/:id", async (c) => {
   const project = requireCurrentProject();
   const type = parseTypeParam(c.req.param("type"));
@@ -212,45 +242,23 @@ entityRoutes.put("/:type/:id", async (c) => {
   if (parsed.data.data !== undefined) {
     validateDataByType(type, parsed.data.data);
   }
-  let name = parsed.data.name;
-  let data = parsed.data.data;
-  if (type === "reference") {
-    const existing = getReferenceRow(project.db, id);
-    if (existing === null) {
+  const { data, content } = splitReferenceContent(type, parsed.data.data);
+  const row = withTransaction(project.db, () => {
+    const updated = updateEntity(project.db, id, { name: parsed.data.name, data });
+    if (updated === null) {
       throw new HttpError(404, "ENTITY_NOT_FOUND", `实体不存在: ${id}`);
     }
-    if (existing.data.kind === "file" && typeof existing.data.file_name === "string") {
-      const fileName = existing.data.file_name;
-      const file = readReferenceFile(project.root, fileName);
-      if (file === null) {
-        throw new HttpError(409, "REFERENCE_FILE_MISSING", `参考资料文件缺失: references/${fileName}——可能已在文件管理器中被删除，请先扫描同步`);
-      }
- // 元数据 = 请求新值 ?? 文件现状 ?? 索引现状；正文 = data.content 传入 ? 新值 : 文件正文
-      const nextTitle = name ?? file.title ?? existing.row.name;
-      const nextCategory = (data?.type as string | undefined) ?? file.category ?? "material";
-      const nextTags = Array.isArray(data?.tags) ? (data.tags as string[]) : file.tags;
-      const nextBody = typeof data?.content === "string" ? data.content : file.body;
-      const { mtime } = writeReferenceFile(
-        project.root,
-        fileName,
-        { title: nextTitle, category: nextCategory, tags: nextTags, extraLines: file.extraLines },
-        nextBody,
-      );
- // 服务端维护字段：kind/file_name/file_mtime 不接受客户端覆盖（防御）
-      data = {
-        ...(data ?? {}),
-        kind: "file",
-        file_name: fileName,
-        file_mtime: mtime,
-        content: nextBody,
-      };
-      name = nextTitle;
+    if (content !== null) {
+      upsertDocument(project.db, {
+        ownerKind: "reference",
+        ownerId: id,
+        content: content.raw,
+        contentText: content.text,
+        now: nowIso(),
+      });
     }
-  }
-  const row = updateEntity(project.db, id, { name, data });
-  if (row === null) {
-    throw new HttpError(404, "ENTITY_NOT_FOUND", `实体不存在: ${id}`);
-  }
+    return updated;
+  });
   return c.json(ok({ id: row.id, updated: true }));
 });
 
@@ -397,31 +405,13 @@ entityRoutes.post("/event/:id/move_to", async (c) => {
 });
 
 // DELETE /api/v1/entity/:type/:id —— 软删（级联软删关系与 Delta，本体保留可还原）
-// reference file 类特例：先移文件入 references/.trash/（冲突递增命名）再 DB 软删——
-// 文件移动失败 → 操作报错（文件未动、索引未删，可重试）；DB 软删失败（罕见）→ 文件在 .trash/ 且
-// 索引未软删，scan 反向规则（references/ 下缺失 → 软删）自愈
+// reference 特例（2026-10）：正文行（document_records）**保留**——软删期间端点 404 不可见，
+// 还原后原样可见；purge 时才随实体物理删（trash 路由）。此前「文件移入 references/.trash/」的
+// 文件联动已随本卡移除（原属 12.7b 范围）。
 entityRoutes.delete("/:type/:id", (c) => {
   const project = requireCurrentProject();
-  const type = parseTypeParam(c.req.param("type"));
+  parseTypeParam(c.req.param("type"));
   const id = c.req.param("id");
-  if (type === "reference") {
-    const existing = getReferenceRow(project.db, id);
-    if (existing === null) {
-      throw new HttpError(404, "ENTITY_NOT_FOUND", `实体不存在: ${id}`);
-    }
-    if (existing.data.kind === "file" && typeof existing.data.file_name === "string") {
-      const fileName = existing.data.file_name;
- // 文件缺失（外部已删）→ 不阻塞软删（索引照删，scan 语义一致）；文件在 → 移入 .trash/
-      const full = join(project.root, REFERENCE_DIR, fileName);
-      if (existsSync(full)) {
-        const trashName = moveReferenceToTrash(project.root, fileName);
- // 冲突递增导致 .trash/ 实际名 ≠ 原 file_name → 更新索引 file_name（软删后仅回收站展示）
-        if (trashName !== fileName) {
-          updateEntity(project.db, id, { data: { file_name: trashName } });
-        }
-      }
-    }
-  }
   const result = softDeleteEntity(project.db, id, nowIso());
   if (result === null) {
     throw new HttpError(404, "ENTITY_NOT_FOUND", `实体不存在: ${id}`);

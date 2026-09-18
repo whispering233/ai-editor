@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { closeDatabase, openDatabase, type Db } from "../connection.js";
-import { deleteDocumentsByOwner, getDocument, getDocumentTextLengths, upsertDocument } from "./document.js";
+import { deleteDocumentsByOwner, getDocument, getDocumentTextLengths, getDocumentTexts, upsertDocument } from "./document.js";
 
 const T1 = "2026-10-01T10:00:00Z";
 const T2 = "2026-10-01T10:05:00Z";
@@ -108,6 +108,20 @@ describe("deleteDocumentsByOwner / 未知 owner", () => {
  // 幂等：再删一次为 0
     expect(deleteDocumentsByOwner(db, "chapter", "ch-1")).toBe(0);
     expect(countRows()).toBe(1);
+  });
+});
+
+describe("getDocumentTexts（实体列表 reference 摘要的批量来源，卡 12.7a）", () => {
+  it("一次查询多 owner：命中行给投影、无行不出现、跨 kind 不混入、空集返回空 Map", () => {
+    upsertDocument(db, { ownerKind: "reference", ownerId: "ref-1", content: doc("木曰曲直"), contentText: "木曰曲直", now: T1 });
+    upsertDocument(db, { ownerKind: "reference", ownerId: "ref-2", content: "[]", contentText: "", now: T1 });
+    upsertDocument(db, { ownerKind: "chapter", ownerId: "ref-3", content: "[]", contentText: "不混入", now: T1 });
+
+    expect([...getDocumentTexts(db, "reference", ["ref-1", "ref-2", "ref-404"])]).toEqual([
+      ["ref-1", "木曰曲直"], // 空串投影也返回（调用方按空摘要处理）
+      ["ref-2", ""],
+    ]); // ref-404 无行不出现；ref-3 是 chapter 行，不混入
+    expect(getDocumentTexts(db, "reference", []).size).toBe(0);
   });
 });
 

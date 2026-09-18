@@ -162,20 +162,18 @@ export const eventDataSchema = z
 /** timepoint 专属字段（G2 时间标签点）：data 空——时间标签文本 = name，可重命名，YAGNI 不加 data 字段 */
 export const timepointDataSchema = z.object({}).passthrough();
 
-/** reference 专属字段（参考资料：type 分类 / content 全文长文本 / source 来源 / tags 标签数组；
- * type 为自由文本分类（不再预置枚举，缺省 material 写入侧兜底）；
- * 两类承载——kind = file（本地 md 文档：file_name 相对路径 + content 正文镜像 + file_mtime
- * 上次同步快照）/ link（外源链接：url 必填 + content 可选备注）；kind 缺省视为 link（存量条目运行时兼容）；
- * source 仅存量旧条目使用（新建不再写入）） */
+/** reference 专属字段（参考资料：type 自由文本分类 / url 外源链接 / tags 标签数组 / content 正文块数组 JSON）；
+ * type 缺省 material 写入侧兜底；url 可选（纯本地笔记不需要，外源链接才填）。
+ *
+ * **content 只是端点对外的字段名**（2026-10 reference 特例）：真相存 `document_records`
+ * （`owner_kind='reference'`，见 docs/api/30-api-entity.md「reference 特例」），entities.data 里
+ * **不落** content——服务端路由层把请求里的 data.content 拆出、详情响应里再装回（存储形态见 docs/db/schema.md）。
+ * `kind` / `file_name` / `file_mtime` / `source` **已废弃**（旧值不读、不迁移；`.passthrough()` 容错存量残留）。 */
 export const referenceDataSchema = z
   .object({
     type: z.string().optional(), // 自由文本分类（取消预置枚举；缺省 material 写入侧兜底）
-    kind: z.enum(["file", "link"]).optional(), // 缺省视为 link
-    file_name: z.string().optional(), // file 类：references/ 下相对路径（服务端写入，客户端只读）
-    file_mtime: z.string().optional(), // file 类：上次同步时文件 mtime（scan 比对基准，服务端写入）
-    url: z.string().optional(), // link 类：外源链接 URL（创建时必填校验在服务端 route 层）
-    content: z.string().optional(),
-    source: z.string().nullable().optional(), // 存量旧条目兼容（新建不再写入）
+    url: z.string().optional(), // 外源链接 URL（可选——纯本地笔记不需要）
+    content: z.string().optional(), // 块数组 JSON 字符串（拆分点：路由层写入 document_records，不进 data）
     tags: z.array(z.string()).optional(),
   })
   .passthrough(); // 允许未知字段（创作工具，用户自定义字段自由）

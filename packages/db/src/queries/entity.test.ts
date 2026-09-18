@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { closeDatabase, openDatabase, type Db } from "../connection.js";
+import { upsertDocument } from "./document.js";
 import { createRelation, listSettingHierarchyEdges, RelationError } from "./relation.js";
 import {
   assertEventSingleOccursAt,
@@ -1049,5 +1050,51 @@ describe("moveSetting（设定同级手动排序：改父 + 同级重排复合�
     expect(moveSetting(db, c, { parentId: a, order: 2 }, dir)).toEqual({ moved: true });
     expect(upd(b)).toBe(updB); // 未移动行时间戳不变
     expect(upd(c)).not.toBe(updCBefore); // 被移行刷新
+  });
+});
+
+// ============ 卡 12.7a：reference 列表摘要读 content_text 投影 ============
+
+describe("listEntities reference 摘要（content_text 投影，卡 12.7a）", () => {
+  it("content 摘要来自文档表投影（截断 120），data 里的旧正文不再进列表响应", () => {
+    const live = createEntity(db, {
+      type: "reference",
+      name: "有正文",
+      data: { type: "摘抄", tags: ["五行", "笔记", "素材", "第四个"], url: "https://example.com/a" },
+    });
+    upsertDocument(db, {
+      ownerKind: "reference",
+      ownerId: live.id,
+      content: JSON.stringify([{ id: "b1", type: "paragraph" }]),
+      contentText: "长".repeat(200),
+      now: "2026-10-01T00:00:00Z",
+    });
+ // 存量形态：data 里带旧正文且无文档行 → 摘要不出现 content（投影是唯一来源）
+    createEntity(db, { type: "reference", name: "旧行", data: { type: "material", content: "旧正文" } });
+
+    const { items, total } = listEntities(db, { type: "reference" });
+    expect(total).toBe(2);
+    expect(items.find((i) => i.id === live.id)!.summary).toEqual({
+      type: "摘抄",
+      url: "https://example.com/a",
+      content: "长".repeat(120),
+      tags: ["五行", "笔记", "素材"], // tags 前 3
+    });
+    expect(items.find((i) => i.name === "旧行")!.summary).toEqual({ type: "material" });
+  });
+
+  it("JS 过滤分支（filters/tag）同样补投影；无行/空投影不出现 content 键", () => {
+    const withDoc = createEntity(db, { type: "reference", name: "A", data: { tags: ["命中"] } });
+    upsertDocument(db, { ownerKind: "reference", ownerId: withDoc.id, content: "[]", contentText: "正文摘要", now: "2026-10-01T00:00:00Z" });
+    const emptyDoc = createEntity(db, { type: "reference", name: "B", data: { tags: ["命中"] } });
+    upsertDocument(db, { ownerKind: "reference", ownerId: emptyDoc.id, content: "[]", contentText: "", now: "2026-10-01T00:00:00Z" });
+    const noDoc = createEntity(db, { type: "reference", name: "C", data: { tags: ["命中"] } });
+
+ // filters 走全量行 + JS 过滤路径（本卡新增的 summarize 在两路均生效）
+    const { items, total } = listEntities(db, { type: "reference", filters: { tags: ["命中"] } });
+    expect(total).toBe(3);
+    expect(items.find((i) => i.id === withDoc.id)!.summary.content).toBe("正文摘要");
+    expect(items.find((i) => i.id === emptyDoc.id)!.summary).not.toHaveProperty("content");
+    expect(items.find((i) => i.id === noDoc.id)!.summary).not.toHaveProperty("content");
   });
 });

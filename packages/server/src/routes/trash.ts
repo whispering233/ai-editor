@@ -103,6 +103,7 @@ trashRoutes.post("/entity/:type/:id/restore", (c) => {
  // 文件缺失（外部清理）不阻塞还原（仅还原索引，详情读取时 409 REFERENCE_FILE_MISSING）；
  // references/ 同名冲突 → 递增命名 + 更新索引 file_name（uniqueFileNameIn）；
  // DB 还原失败（罕见）→ 文件已回 references/ + 索引仍软删 → scan「软删索引 + 文件回归」还原自愈
+ // （卡 12.7a：正文行 document_records 在软删期间保留，本路径无需处理——还原后原样可见）
   if (type === "reference") {
     const existing = getReferenceRowAny(project.db, id);
     if (existing !== null && existing.data.kind === "file" && typeof existing.data.file_name === "string") {
@@ -151,6 +152,11 @@ trashRoutes.delete("/entity/:type/:id", (c) => {
   }
   if (purgeEntity(project.db, type, id) === null) {
     throw new HttpError(404, "ENTITY_NOT_FOUND", `实体不存在: ${id}`); // 防御（上一步已确认存在）
+  }
+ // reference 正文行连带物理删（卡 12.7a）：软删期间行保留（还原后原样可见），
+ // purge 时随实体一并清行；其余类型 id 命中 0 行，幂等
+  if (type === "reference") {
+    deleteDocumentsByOwner(project.db, "reference", id);
   }
   return c.json(ok({ purged: true as const }));
 });

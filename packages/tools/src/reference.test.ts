@@ -8,7 +8,7 @@ import { join } from "node:path";
 
 import type { ToolContext } from "../context.js";
 import { closeDatabase, openDatabase, type Db } from "@whispering233/ai-editor-db";
-import { createEntity, softDeleteEntity } from "@whispering233/ai-editor-db";
+import { createEntity, softDeleteEntity, upsertDocument } from "@whispering233/ai-editor-db";
 import { runSearchReferences } from "./query/reference.js";
 import { buildProposeCreateReference, runProposeCreateReference } from "./proposal/reference.js";
 import { executeCreateReference } from "./executor/reference.js";
@@ -32,12 +32,20 @@ function makeCtx(): ToolContext {
 
 describe("search_references", () => {
   it("返回匹配参考资料摘要列表（content 截断 120 字 + type 分类）", () => {
-    createEntity(db, {
+ // 卡 12.7a：正文真相在 document_records（data.content 不再被读）——摘要 content = content_text 投影
+    const row = createEntity(db, {
       type: "reference",
       name: "五行相生摘抄",
-      data: { type: "theory", content: "金生水、水生木……（长文省略）".repeat(40), tags: ["五行", "设定"] },
+      data: { type: "theory", tags: ["五行", "设定"] },
     });
-    createEntity(db, { type: "reference", name: "灵感：主角觉醒", data: { type: "inspiration", content: "雨天里的顿悟", tags: ["灵感"] } });
+    upsertDocument(db, {
+      ownerKind: "reference",
+      ownerId: row.id,
+      content: "[]",
+      contentText: "金生水、水生木……（长文省略）".repeat(40),
+      now: "2026-08-01T00:00:00Z",
+    });
+    createEntity(db, { type: "reference", name: "灵感：主角觉醒", data: { type: "inspiration", tags: ["灵感"] } });
 
     const r = runSearchReferences(makeCtx(), { query: "五行" });
     expect(r.total).toBe(1);

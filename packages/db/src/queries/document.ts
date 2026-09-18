@@ -101,22 +101,34 @@ export function deleteDocumentsByOwner(db: Db, ownerKind: DocumentOwnerKind, own
 }
 
 /**
- * 批量取多个 owner 的 `content_text` 长度（供 `GET /outline?with_metadata=true` 的章 `metadata.textLength`）。
+ * 批量取多个 owner 的 `content_text` 投影（列表摘要来源：实体列表的 reference 摘要、章 textLength）。
  *
  * - **一次查询**（IN 集合）——调用方勿逐 owner 调 `getDocument` 造成 N+1
- * - **只取投影列**，不读 `content` 块 JSON 全文
- * - 长度口径 = JS 字符串长度，与章正文端点 `charCount` 同源；无行的 owner 不出现在 Map（调用方按 0 处理）
+ * - **只取投影列**，不读 `content` 块 JSON 全文（列表/搜索不得把块体拉进内存）
+ * - 无行的 owner 不出现在 Map（调用方按「无正文」处理）
  */
-export function getDocumentTextLengths(
+export function getDocumentTexts(
   db: Db,
   ownerKind: DocumentOwnerKind,
   ownerIds: readonly string[],
-): Map<string, number> {
+): Map<string, string> {
   if (ownerIds.length === 0) return new Map();
   const rows = queryDb(db)
     .select({ ownerId: documentRecords.owner_id, contentText: documentRecords.content_text })
     .from(documentRecords)
     .where(and(eq(documentRecords.owner_kind, ownerKind), inArray(documentRecords.owner_id, [...ownerIds])))
     .all();
-  return new Map(rows.map((row) => [row.ownerId, row.contentText.length]));
+  return new Map(rows.map((row) => [row.ownerId, row.contentText]));
+}
+
+/**
+ * 批量取多个 owner 的 `content_text` 长度（供 `GET /outline?with_metadata=true` 的章 `metadata.textLength`）。
+ * 长度口径 = JS 字符串长度，与章正文端点 `charCount` 同源；同 `getDocumentTexts` 一次查询取投影。
+ */
+export function getDocumentTextLengths(
+  db: Db,
+  ownerKind: DocumentOwnerKind,
+  ownerIds: readonly string[],
+): Map<string, number> {
+  return new Map([...getDocumentTexts(db, ownerKind, ownerIds)].map(([ownerId, text]) => [ownerId, text.length]));
 }

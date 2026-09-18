@@ -34,6 +34,8 @@ import { nowIso } from "../storage/atomic.js";
 import { withTransaction, type Db } from "../connection.js";
 import { deltaRecords, entities, relationRecords } from "../tables.js";
 import { queryDb } from "../query-db.js";
+// reference 列表摘要的 content 投影来源（一次批量查询，见 listEntities）
+import { getDocumentTexts } from "./document.js";
 // relation.ts ↔ entity.ts 循环引用（relation.ts import getEntity）：仅函数调用期使用
 // RelationError/rowToRelationRow，无模块顶层求值依赖，ESM 运行时安全。
 import {
@@ -77,8 +79,9 @@ export interface EntityListResult {
   total: number;
 }
 
-/** 行 → 摘要：data 已解析，按类型提取关键字段（字段缺失即不出现——Record 稀疏语义） */
-function toSummary(row: EntityRow): EntitySummary {
+/** 行 → 摘要：data 已解析，按类型提取关键字段（字段缺失即不出现——Record 稀疏语义）。
+ * `contentText` = 文档表 `content_text` 投影（**仅 reference 传入**，列表摘要用；见 listEntities）。 */
+function toSummary(row: EntityRow, contentText?: string): EntitySummary {
   const data = row.data as Record<string, unknown>;
   const summary: Record<string, unknown> = {};
   switch (row.type) {
@@ -127,21 +130,13 @@ function toSummary(row: EntityRow): EntitySummary {
       if (data.description !== undefined) summary.description = data.description;
       if (data.tags !== undefined) summary.tags = data.tags;
       break;
- // reference（参考资料 + type 分类 + content 摘要截断 120 字 + tags 前 3
- // + 来源字段（11.1 补 source；11.4 起按 kind 区分：file → file_name、link → url、
- // 存量无 kind 条目 → source 兼容）——全文长文本不随列表返回（防列表响应与
- // search_entities 工具上下文膨胀），完整 content 在详情页（get_entity 全量 data）
+ // reference（参考资料，2026-10）：data 只留短字段（type/url/tags）；
+ // content 摘要截断 120 字 = **文档表的 content_text 投影**（非 data.content、非块 JSON 原文——
+ // 列表/搜索不得把块体拉入内存与响应），完整正文在详情（GET /:type/:id 由 server 层装回）
     case "reference":
       if (data.type !== undefined) summary.type = data.type;
-      if (data.kind === "file") {
-        if (typeof data.file_name === "string" && data.file_name !== "") summary.file_name = data.file_name;
-      } else {
-        if (typeof data.url === "string" && data.url !== "") summary.url = data.url;
-        else if (typeof data.source === "string" && data.source !== "") summary.source = data.source; // 存量兼容
-      }
-      if (typeof data.content === "string" && data.content !== "") {
-        summary.content = data.content.slice(0, 120);
-      }
+      if (typeof data.url === "string" && data.url !== "") summary.url = data.url;
+      if (contentText !== undefined && contentText !== "") summary.content = contentText.slice(0, 120);
       if (Array.isArray(data.tags)) {
         summary.tags = (data.tags as unknown[]).filter((t): t is string => typeof t === "string" && t !== "").slice(0, 3);
       }
@@ -249,6 +244,15 @@ function collectSettingDescendants(db: Db, rootId: string): Set<string> {
  * event/timepoint 固定 sql 模板排序 NULL 沉底）。
  */
 export function listEntities(db: Db, query: EntityListQuery): EntityListResult {
+  /**
+ * 页面行 → 摘要：reference 的 content 摘要来自文档表 `content_text` 投影——按页面 id **一次 IN 查询**
+ * （勿逐行 getDocument 造成 N+1）；其余类型摘要全来自 data，不需补查。截断 120 字在 toSummary 内。
+ */
+  const summarize = (pageRows: Array<Record<string, unknown>>): EntitySummary[] => {
+    const items = pageRows.map(rowToEntityRow);
+    const texts = query.type === "reference" ? getDocumentTexts(db, "reference", items.map((r) => r.id)) : null;
+    return items.map((item) => toSummary(item, texts?.get(item.id)));
+  };
   const q = queryDb(db);
   const conds: SQLWrapper[] = [isNull(entities.deleted_at)];
   if (query.type !== undefined) {
@@ -289,7 +293,7 @@ export function listEntities(db: Db, query: EntityListQuery): EntityListResult {
       return true;
     });
     return {
-      items: filtered.slice(offset, offset + limit).map((r) => toSummary(rowToEntityRow(r))),
+      items: summarize(filtered.slice(offset, offset + limit)),
       total: filtered.length,
     };
   }
@@ -304,7 +308,7 @@ export function listEntities(db: Db, query: EntityListQuery): EntityListResult {
     .offset(offset)
     .all() as unknown as Array<Record<string, unknown>>;
 
-  return { items: rows.map((r) => toSummary(rowToEntityRow(r))), total };
+  return { items: summarize(rows), total };
 }
 
 /** 按 id 取实体详情（GET /api/v1/entity/:type/:id）；不存在或已软删返回 null */

@@ -503,6 +503,221 @@ describe("DELETE /api/v1/entity/:type/:id 软删", () => {
   });
 });
 
+// ============ reference 参考资料（卡 12.7a）：块文档装载拆分 ============
+
+/** 测试块数组（真相载荷）+ 其投影（literal 期望值——不调 blocksToPlainMd，避免自证） */
+const REF_BLOCKS = [
+  { id: "r1", type: "heading", props: { level: 2 }, content: [{ type: "text", text: "五行摘抄" }] },
+  { id: "r2", type: "paragraph", content: [{ type: "text", text: "木曰曲直" }] },
+];
+const REF_BLOCKS_JSON = JSON.stringify(REF_BLOCKS);
+const REF_PLAIN_MD = "## 五行摘抄\n\n木曰曲直";
+
+describe("reference 参考资料（卡 12.7a：正文进 document_records）", () => {
+ /** 创建参考资料（POST /api/v1/entity/reference），返回状态与响应体 */
+  async function createRef(app: Hono, body: Record<string, unknown>) {
+    const res = await app.request("/api/v1/entity/reference", jsonRequest("POST", "", body));
+    return {
+      status: res.status,
+      json: (await res.json()) as { data: { id: string; data: Record<string, unknown> } },
+    };
+  }
+
+ /** 直查实体行 data（绕过端点自说自话） */
+  function entityData(id: string): Record<string, unknown> {
+    const row = getCurrentProject()!.db.prepare("SELECT data FROM entities WHERE id = ?").get(id) as
+      | { data: string }
+      | undefined;
+    return row === undefined ? {} : (JSON.parse(row.data) as Record<string, unknown>);
+  }
+
+ /** 直查正文行（owner_kind='reference'） */
+  function refDocRow(ownerId: string) {
+    return getCurrentProject()!.db
+      .prepare(
+        "SELECT content, content_text, created_at, updated_at FROM document_records WHERE owner_kind = 'reference' AND owner_id = ?",
+      )
+      .get(ownerId) as { content: string; content_text: string; created_at: string; updated_at: string } | undefined;
+  }
+
+ /** 详情 data（GET /entity/reference/:id） */
+  async function detailData(app: Hono, id: string): Promise<Record<string, unknown>> {
+    const res = await app.request(`/api/v1/entity/reference/${id}`, { headers: HOST_HEADERS });
+    expect(res.status).toBe(200);
+    return ((await res.json()) as { data: { data: Record<string, unknown> } }).data.data;
+  }
+
+  it("创建带 content：entities.data 无 content、文档行有且投影正确（直查 SQLite）", async () => {
+    openProject();
+    const app = buildApp();
+    const { status, json } = await createRef(app, {
+      name: "五行摘抄",
+      data: { type: "摘抄", tags: ["五行"], url: "https://example.com/a", content: REF_BLOCKS_JSON },
+    });
+    expect(status).toBe(201);
+    const id = json.data.id;
+    expect(id).toMatch(/^ref-/);
+    expect(json.data.data.content).toBe(REF_BLOCKS_JSON); // 对外形态不变：创建响应仍回显 content
+
+ // 存储形态：短字段进 entities.data，正文不在其中
+    expect(entityData(id)).toEqual({ type: "摘抄", tags: ["五行"], url: "https://example.com/a" });
+    expect("content" in entityData(id)).toBe(false);
+ // 正文行：真相原样存（不重新序列化）+ 服务端派生投影
+    const row = refDocRow(id)!;
+    expect(row.content).toBe(REF_BLOCKS_JSON);
+    expect(row.content_text).toBe(REF_PLAIN_MD);
+  });
+
+  it("创建不带 content：不落文档行（先建条目后写正文）；url 不再必填", async () => {
+    openProject();
+    const app = buildApp();
+    const { status, json } = await createRef(app, { name: "纯本地笔记", data: { type: "material" } });
+    expect(status).toBe(201);
+    const id = json.data.id;
+    expect(json.data.data).toEqual({ type: "material" }); // 不凭空回显 content
+    expect(refDocRow(id)).toBeUndefined();
+    expect(await detailData(app, id)).toEqual({ type: "material" }); // 详情也不凭空造 content 键
+  });
+
+  it("详情：data.content 从文档行装回（拆分的逆操作）", async () => {
+    openProject();
+    const app = buildApp();
+    const { json } = await createRef(app, {
+      name: "五行摘抄",
+      data: { type: "摘抄", tags: ["五行"], content: REF_BLOCKS_JSON },
+    });
+    expect(await detailData(app, json.data.id)).toEqual({
+      type: "摘抄",
+      tags: ["五行"],
+      content: REF_BLOCKS_JSON,
+    });
+  });
+
+  it("更新不带 content：正文与文档行版本戳不动（行内改标题/分类/标签）", async () => {
+    openProject();
+    const app = buildApp();
+    const { json } = await createRef(app, { name: "原标题", data: { type: "material", content: REF_BLOCKS_JSON } });
+    const id = json.data.id;
+    const before = refDocRow(id)!;
+    await new Promise((r) => setTimeout(r, 5)); // nowIso 毫秒精度：版本戳可分辨
+
+    const res = await app.request(
+      `/api/v1/entity/reference/${id}`,
+      jsonRequest("PUT", "", { name: "新标题", data: { type: "理论" } }),
+    );
+    expect(res.status).toBe(200);
+ // 实体行：标题/分类已改
+    const entity = getCurrentProject()!.db.prepare("SELECT name, data FROM entities WHERE id = ?").get(id) as { name: string; data: string };
+    expect(entity.name).toBe("新标题");
+    expect(JSON.parse(entity.data)).toEqual({ type: "理论" });
+ // 正文行：原封不动
+    expect(refDocRow(id)).toEqual(before);
+    expect((await detailData(app, id)).content).toBe(REF_BLOCKS_JSON);
+  });
+
+  it("更新带 content：整篇覆盖 + 投影替换 + 版本戳推进（created_at 保留）；首写经 PUT 建行", async () => {
+    openProject();
+    const app = buildApp();
+    const { json } = await createRef(app, { name: "摘抄", data: { content: REF_BLOCKS_JSON } });
+    const id = json.data.id;
+    const before = refDocRow(id)!;
+    await new Promise((r) => setTimeout(r, 5));
+
+    const next = JSON.stringify([{ id: "r9", type: "paragraph", content: [{ type: "text", text: "改稿" }] }]);
+    const res = await app.request(`/api/v1/entity/reference/${id}`, jsonRequest("PUT", "", { data: { content: next } }));
+    expect(res.status).toBe(200);
+    const after = refDocRow(id)!;
+    expect(after.content).toBe(next);
+    expect(after.content_text).toBe("改稿");
+    expect(after.created_at).toBe(before.created_at); // 覆盖写不动创建时间
+    expect(after.updated_at).not.toBe(before.updated_at); // 版本戳推进
+    expect(await detailData(app, id)).toEqual({ content: next }); // data 仍无 content 之外的短字段
+
+ // 首次写入走 PUT：创建时不带 content → 此行由 PUT 新建
+    const { json: bare } = await createRef(app, { name: "无正文", data: { type: "素材" } });
+    expect(refDocRow(bare.data.id)).toBeUndefined();
+    expect(
+      (await app.request(`/api/v1/entity/reference/${bare.data.id}`, jsonRequest("PUT", "", { data: { content: "[]" } }))).status,
+    ).toBe(200);
+    expect(refDocRow(bare.data.id)!.content).toBe("[]");
+    expect(refDocRow(bare.data.id)!.content_text).toBe("");
+  });
+
+  it("坏 content → 400 VALIDATION_ERROR（非 JSON / 非数组 / 元素非对象 / 非字符串），不落库", async () => {
+    openProject();
+    const app = buildApp();
+    const badContents: unknown[] = ["not json", "{}", "[1]", 42];
+    for (const content of badContents) {
+      const res = await app.request(
+        "/api/v1/entity/reference",
+        jsonRequest("POST", "", { name: "坏正文", data: { content } }),
+      );
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { error: { code: string } }).error.code).toBe("VALIDATION_ERROR");
+    }
+ // 创建失败零副作用：无实体行、无文档行
+    expect((getCurrentProject()!.db.prepare("SELECT COUNT(*) AS c FROM entities").get() as { c: number }).c).toBe(0);
+    expect((getCurrentProject()!.db.prepare("SELECT COUNT(*) AS c FROM document_records").get() as { c: number }).c).toBe(0);
+
+ // 更新路径同口径：坏 content 400，旧正文与旧 data 不动
+    const { json } = await createRef(app, { name: "正常", data: { type: "素材", content: REF_BLOCKS_JSON } });
+    const bad = await app.request(
+      `/api/v1/entity/reference/${json.data.id}`,
+      jsonRequest("PUT", "", { data: { type: "理论", content: "not json" } }),
+    );
+    expect(bad.status).toBe(400);
+    expect(refDocRow(json.data.id)!.content).toBe(REF_BLOCKS_JSON);
+    expect(await detailData(app, json.data.id)).toEqual({ type: "素材", content: REF_BLOCKS_JSON });
+  });
+
+  it("软删 → 还原 → purge 的文档行生命周期（软删保留、purge 物理删）", async () => {
+    openProject();
+    const app = buildApp();
+    const { json } = await createRef(app, { name: "回收站验证", data: { content: REF_BLOCKS_JSON } });
+    const id = json.data.id;
+
+ // 未软删 purge → 400 拦截，行不动
+    expect((await app.request(`/api/v1/trash/entity/reference/${id}`, { method: "DELETE", headers: HOST_HEADERS })).status).toBe(400);
+    expect(refDocRow(id)).not.toBeUndefined();
+
+ // 软删：实体行不可见，正文行保留（还原后原样可见）
+    expect((await app.request(`/api/v1/entity/reference/${id}`, { method: "DELETE", headers: HOST_HEADERS })).status).toBe(200);
+    expect((await app.request(`/api/v1/entity/reference/${id}`, { headers: HOST_HEADERS })).status).toBe(404);
+    expect(refDocRow(id)!.content).toBe(REF_BLOCKS_JSON);
+
+ // 还原：正文原样回来
+    expect((await app.request(`/api/v1/trash/entity/reference/${id}/restore`, { method: "POST", headers: HOST_HEADERS })).status).toBe(200);
+    expect((await detailData(app, id)).content).toBe(REF_BLOCKS_JSON);
+
+ // 再软删 → purge：文档行物理删
+    await app.request(`/api/v1/entity/reference/${id}`, { method: "DELETE", headers: HOST_HEADERS });
+    expect((await app.request(`/api/v1/trash/entity/reference/${id}`, { method: "DELETE", headers: HOST_HEADERS })).status).toBe(200);
+    expect(refDocRow(id)).toBeUndefined();
+    expect((getCurrentProject()!.db.prepare("SELECT COUNT(*) AS c FROM entities WHERE id = ?").get(id) as { c: number }).c).toBe(0);
+  });
+
+  it("列表摘要：content = 投影纯文本截断 120 字（非块 JSON 片段）", async () => {
+    openProject();
+    const app = buildApp();
+    const long = "长".repeat(200);
+    await createRef(app, { name: "短篇", data: { type: "摘抄", content: REF_BLOCKS_JSON } });
+    await createRef(app, { name: "长篇", data: { type: "素材", content: JSON.stringify([{ id: "r1", type: "paragraph", content: [{ type: "text", text: long }] }]) } });
+    await createRef(app, { name: "无正文", data: { type: "素材" } });
+
+    const res = await app.request("/api/v1/entity/reference", { headers: HOST_HEADERS });
+    const body = (await res.json()) as { data: { items: Array<{ name: string; summary: Record<string, unknown> }> } };
+    const summaryOf = (name: string): Record<string, unknown> => body.data.items.find((i) => i.name === name)!.summary;
+ // 短篇：投影纯文本（不是块 JSON）
+    expect(summaryOf("短篇")).toEqual({ type: "摘抄", content: REF_PLAIN_MD });
+ // 长篇：投影截断 120 字
+    expect(summaryOf("长篇")).toEqual({ type: "素材", content: "长".repeat(120) });
+ // 无正文：不出现 content 键
+    expect(summaryOf("无正文")).toEqual({ type: "素材" });
+ // 列表响应里不携带块体（块 JSON 原文不得进列表）
+    expect(JSON.stringify(body)).not.toContain('"r1"');
+  });
+});
+
 // ============ 时间轴事件（C2）：泛型 CRUD + move 端点 + occurs_in 关系链路 ============
 
 describe("event 时间轴（C2）", () => {
