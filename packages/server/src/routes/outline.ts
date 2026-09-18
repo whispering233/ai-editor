@@ -61,15 +61,24 @@ function filterDeletedTree(tree: OutlineFileTree): OutlineFileTree {
   return { ...tree, children: filterNodes(tree.children) } as OutlineFileTree;
 }
 
-/** 收集 nodeId 及其整棵子树的 id 集（含自身；供 relation/delta 级联软删/还原/清除用） */
+/**
+ * 收集 nodeId 及其**全部后代**的 id 集（含自身；**不含祖先**——供 relation/delta 级联软删/还原/清除用）。
+ * 语义与函数名/docs 一致：「删卷必然带上卷下所有章与场景」「删场景不动祖先与兄弟」。
+ * 节点不存在 → 404 OUTLINE_NODE_NOT_FOUND。
+ */
 export function collectSubtreeIds(tree: OutlineFileTree, nodeId: string): string[] {
   const ids: string[] = [];
+  const collectDescendants = (node: OutlineFileNode): void => {
+    ids.push(node.id);
+    for (const child of (node as { children?: OutlineFileNode[] }).children ?? []) collectDescendants(child);
+  };
   const visit = (nodes: readonly OutlineFileNode[]): boolean => {
     for (const n of nodes) {
-      if (n.id === nodeId || visit((n as { children?: OutlineFileNode[] }).children ?? [])) {
-        ids.push(n.id);
+      if (n.id === nodeId) {
+        collectDescendants(n);
         return true;
       }
+      if (visit((n as { children?: OutlineFileNode[] }).children ?? [])) return true;
     }
     return false;
   };

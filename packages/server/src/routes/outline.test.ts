@@ -321,6 +321,49 @@ describe("更新/移动/路径", () => {
 // ============ DELETE 软删 + 回收站 ============
 
 describe("软删与回收站", () => {
+ /** 建 卷[章[场景], 兄弟章] 结构（级联面测试用），返回各节点 id */
+  async function seedBranch(app: Hono): Promise<{ vol: string; ch: string; sc: string; ch2: string }> {
+    await openProject();
+    const post = async (body: Record<string, unknown>): Promise<{ id: string }> =>
+      (await (await app.request("/api/v1/outline", { method: "POST", headers: HOST_HEADERS, body: JSON.stringify(body) })).json()).data;
+    const vol = await post({ type: "volume", title: "第一卷", parent_id: "root" });
+    const ch = await post({ type: "chapter", title: "第一章", parent_id: vol.id });
+    const sc = await post({ type: "scene", title: "场景一", parent_id: ch.id });
+    const ch2 = await post({ type: "chapter", title: "第二章", parent_id: vol.id });
+    return { vol: vol.id, ch: ch.id, sc: sc.id, ch2: ch2.id };
+  }
+
+ /** 给每个节点各播一条 relation（outline_node → character）与一条 delta（直插，级联命中面用） */
+  function seedNodeRecords(ids: string[]): void {
+    const project = getCurrentProject()!;
+    const insertRel = project.db.prepare(
+      "INSERT INTO relation_records (id, source_type, source_id, target_type, target_id, relation_type, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    );
+    const insertDelta = project.db.prepare(
+      "INSERT INTO delta_records (id, node_id, target_type, target_id, changes, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    );
+    for (const id of ids) {
+      insertRel.run(`rel-${id}`, "outline_node", id, "character", "char-1", "appears_in", T0, T0);
+      insertDelta.run(`delta-${id}`, id, "character", "char-1", "[]", "测试", T0, T0);
+    }
+  }
+
+ /** 各节点的 relation/delta 软删标记（null = 未软删） */
+  function softDeleteFlags(ids: string[]): Record<string, { relation: string | null; delta: string | null }> {
+    const project = getCurrentProject()!;
+    const rel = project.db.prepare("SELECT deleted_at FROM relation_records WHERE id = ?");
+    const delta = project.db.prepare("SELECT deleted_at FROM delta_records WHERE id = ?");
+    return Object.fromEntries(
+      ids.map((id) => [
+        id,
+        {
+          relation: (rel.get(`rel-${id}`) as { deleted_at: string | null }).deleted_at,
+          delta: (delta.get(`delta-${id}`) as { deleted_at: string | null }).deleted_at,
+        },
+      ]),
+    );
+  }
+
   it("DELETE 软删：cascaded.children 计数；节点本体保留（回收站列表可见）", async () => {
     const app = buildApp();
     await openProject();
@@ -368,6 +411,52 @@ describe("软删与回收站", () => {
  // DB 中已标软删
     const rel = project.db.prepare("SELECT deleted_at FROM relation_records WHERE id = ?").get("rel-node") as { deleted_at: string | null };
     expect(rel.deleted_at).toBeTruthy();
+  });
+
+  it("级联软删命中真子树：删卷 → 卷/两章/场景的关系与 Delta 全被标软删", async () => {
+    const app = buildApp();
+    const { vol, ch, sc, ch2 } = await seedBranch(app);
+    seedNodeRecords([vol, ch, sc, ch2]);
+
+    const res = await app.request(`/api/v1/outline/${vol}`, { method: "DELETE", headers: HOST_HEADERS });
+    expect((await res.json()).data.cascaded).toEqual({ children: 3, relations: 4, deltas: 4 });
+    for (const flags of Object.values(softDeleteFlags([vol, ch, sc, ch2]))) {
+      expect(flags.relation).toBeTruthy();
+      expect(flags.delta).toBeTruthy();
+    }
+  });
+
+  it("级联软删不越界：删场景 → 仅场景命中，祖先（卷/章）与兄弟章不受影响", async () => {
+    const app = buildApp();
+    const { vol, ch, sc, ch2 } = await seedBranch(app);
+    seedNodeRecords([vol, ch, sc, ch2]);
+
+    await app.request(`/api/v1/outline/${sc}`, { method: "DELETE", headers: HOST_HEADERS });
+    const flags = softDeleteFlags([vol, ch, sc, ch2]);
+    expect(flags[sc]).toEqual({ relation: expect.any(String), delta: expect.any(String) });
+    expect(flags[ch]).toEqual({ relation: null, delta: null }); // 祖先链不得进入结果集
+    expect(flags[vol]).toEqual({ relation: null, delta: null });
+    expect(flags[ch2]).toEqual({ relation: null, delta: null }); // 兄弟节点不受影响
+  });
+
+  it("restore 与 delete 对称：还原卷 → 子树全部关系/Delta 还原；还原场景 → 只还原自己的", async () => {
+    const app = buildApp();
+    const { vol, ch, sc, ch2 } = await seedBranch(app);
+    seedNodeRecords([vol, ch, sc, ch2]);
+
+ // 场景级：删 → 还原（只命中自身）
+    await app.request(`/api/v1/outline/${sc}`, { method: "DELETE", headers: HOST_HEADERS });
+    const scRestore = await app.request(`/api/v1/trash/outline/${sc}/restore`, { method: "POST", headers: HOST_HEADERS });
+    expect((await scRestore.json()).data).toMatchObject({ restoredRelations: 1, restoredDeltas: 1 });
+    expect(softDeleteFlags([sc])[sc]).toEqual({ relation: null, delta: null });
+
+ // 卷级：删 → 还原（整棵子树的关系/Delta 一并还原）
+    await app.request(`/api/v1/outline/${vol}`, { method: "DELETE", headers: HOST_HEADERS });
+    const volRestore = await app.request(`/api/v1/trash/outline/${vol}/restore`, { method: "POST", headers: HOST_HEADERS });
+    expect((await volRestore.json()).data).toMatchObject({ restoredRelations: 4, restoredDeltas: 4 });
+    for (const flags of Object.values(softDeleteFlags([vol, ch, sc, ch2]))) {
+      expect(flags).toEqual({ relation: null, delta: null });
+    }
   });
 
   it("restore：级联还原子树 + 关联关系与 Delta；祖先软删 → 409 OUTLINE_ANCESTOR_DELETED", async () => {
