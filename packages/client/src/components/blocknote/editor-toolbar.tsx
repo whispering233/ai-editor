@@ -17,6 +17,11 @@
 //   没有专注入口，见 DESIGN.md §Components「专注模式入口」）。
 // - 卡 13.5：右端「写作设置」与「专注模式」之间再插「命令帮助」按钮（打开同目录 command-help.tsx 的
 //   静态弹窗；与工具条按钮集同卡维护）。**开合状态就本组件持有**（弹窗受控、不进 store）。
+// - 卡 14.1：右端「重做」之后加可选「保存」按钮（仅章正文页由页面注入 `save`；不传 = 不渲染 ⇒
+//   参考资料详情页天然没有——那页本就有自己的手动保存）。动机见 DESIGN.md §Components
+//   「为什么手动「保存」放在工具条而不是页头」：页头随正文滚走，只有 sticky 的工具条「随时可点」。
+//   `saving` 期间禁用（防连点双发）；**不在这里做「有无待存内容」判断**——点击恒发一次 PUT，
+//   保证点击必有可见反应（状态转「保存中…」→「已保存 · HH:MM」）。
 import { useState, type ReactNode } from "react";
 import {
   FontSizeOutlined,
@@ -24,6 +29,7 @@ import {
   FullscreenOutlined,
   QuestionCircleOutlined,
   RedoOutlined,
+  SaveOutlined,
   UndoOutlined,
 } from "@ant-design/icons";
 import {
@@ -51,6 +57,8 @@ export interface EditorToolbarProps {
   status?: ReactNode;
   /** 专注模式开关（仅章正文页注入；不传 = 工具条不渲染专注按钮） */
   focus?: ToolbarFocus;
+  /** 手动保存（仅章正文页注入；不传 = 工具条不渲染保存按钮） */
+  save?: ToolbarSave;
 }
 
 /** 专注模式开关（页面注入给工具条的那一份状态） */
@@ -61,7 +69,15 @@ export interface ToolbarFocus {
   onToggle: () => void;
 }
 
-export function EditorToolbar({ prefs, setPref, status, focus }: EditorToolbarProps) {
+/** 手动保存开关（页面注入：点击 = 立即落盘一次，`saving` = 在途标志，用于禁用防连点） */
+export interface ToolbarSave {
+ /** 点击处理：页面恒发一次保存请求（无待存内容也重发） */
+  onSave: () => void;
+ /** 保存请求在途（true 时按钮禁用） */
+  saving: boolean;
+}
+
+export function EditorToolbar({ prefs, setPref, status, focus, save }: EditorToolbarProps) {
   const editor = useBlockNoteEditor();
   const components = useComponentsContext();
   // 命令帮助弹窗的开合（本组件私有：弹窗受控，状态不往上传）
@@ -101,6 +117,16 @@ export function EditorToolbar({ prefs, setPref, status, focus }: EditorToolbarPr
         icon={<RedoOutlined />}
         onClick={() => editor.redo()}
       />
+      {/* 手动保存（仅章正文页注入，卡 14.1）：与撤销/重做同一套库按钮构件 */}
+      {save !== undefined && (
+        <FormattingToolbar.Button
+          label="保存"
+          mainTooltip="保存"
+          icon={<SaveOutlined />}
+          isDisabled={save.saving}
+          onClick={save.onSave}
+        />
+      )}
       <WritingSettings prefs={prefs} setPref={setPref}>
         <FormattingToolbar.Button label="写作设置" mainTooltip="写作设置" icon={<FontSizeOutlined />} />
       </WritingSettings>

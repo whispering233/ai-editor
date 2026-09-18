@@ -61,6 +61,12 @@ describe("commandHelpSections（帮助内容）", () => {
     }
   });
 
+  it("工具条条目含「保存」且带说明（卡 14.1：加按钮就补条目，同 DESIGN.md `command-help` 条）", () => {
+    const save = section("写作工具条").entries.find((entry) => entry.name === "保存");
+    // 说明里提自动保存：手动按钮是保底入口，用户要知道它在干什么（时长由 AUTOSAVE_DELAY_MS 插值）
+    expect(save?.note).toContain("自动保存");
+  });
+
   it("编辑器内条目名取自库字典（添加块按钮）且斜杠菜单提示即库 placeholder", () => {
     const names = section("编辑器内").entries.map((entry) => entry.name);
     expect(names).toContain(zh.side_menu.add_block_label);

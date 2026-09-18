@@ -14,8 +14,11 @@
 //      编译进 `dist/src-Buuo5l7X.js`）的 keymap：`"Mod-z"` → `editor.undo()`，
 //      `"Mod-y"` / `"Shift-Mod-z"` → `editor.redo()`。键名字法在这里取字典的展示风格（`Mod+B`，
 //      加号 + 大写）而非 prosemirror 的 `Mod-z`（连字符 + 小写）——键位本身没变，只统一写法。
-//    - 本仓自绘的四个按钮名（撤销 / 重做 / 写作设置 / 专注模式）：与 editor-toolbar.tsx 的 label 手工同值
-//      （DESIGN.md 的「同卡维护」指的就是这里；库字典里没有任何一条是它们）。
+//    - 本仓自绘的五个按钮名（撤销 / 重做 / 保存 / 写作设置 / 专注模式，卡 14.1 加「保存」）：与
+//      editor-toolbar.tsx 的 label 手工同值（DESIGN.md 的「同卡维护」指的就是这里；库字典里没有任何
+//      一条是它们）。
+//    - 「保存」的说明里的自动保存时长**从 `AUTOSAVE_DELAY_MS` 插值**（不复述数字：改常量则文案随动，
+//      同 AGENTS.md「数值单源」纪律）。
 // ③ 样式只走 antd token / Tailwind 语义类：无硬编码色值 / 无 `!` 前缀类 / 无拼接类名
 //    （守卫 design-discipline.test.ts）。
 // 渲染位：`CommandHelpDialog` 是受控叶子（复用 components/ui/dialog.tsx，Esc / 遮罩 / 右上角关闭都由它兜住）；
@@ -24,6 +27,7 @@ import { formatKeyboardShortcut } from "@blocknote/core";
 import { zh } from "@blocknote/core/locales";
 import { blockTypeSelectItems } from "@blocknote/react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/dialog";
+import { AUTOSAVE_DELAY_MS } from "../../lib/manuscript";
 
 /** 一条帮助条目 */
 export interface CommandHelpEntry {
@@ -75,6 +79,10 @@ export function commandHelpSections(): CommandHelpSection[] {
         { name: `${toolbar.nest.tooltip} / ${toolbar.unnest.tooltip}` },
         { name: toolbar.link.tooltip },
         { name: "撤销 / 重做" },
+        {
+          name: "保存",
+          note: `立即把当前正文落盘；平时停止输入约 ${AUTOSAVE_DELAY_MS / 1000}s 会自动保存`,
+        },
         {
           name: "写作设置",
           note: "字体 · 字号 · 行高 · 纸张 · 纹理 · 段首缩进",

@@ -17,6 +17,7 @@
 //   prefs / setPref 同时递给工具条（数据只有这一处来源）。
 // - 卡 13.4：`status`（工具条右端状态区：字数 · 保存态）与 `focus`（专注开关）原样透传给工具条；
 //   本组件**不持有**专注状态（源头 = ui store，外壳与页头各自订阅）。
+// - 卡 14.1：`save`（手动保存）同样原样透传；不传 = 工具条不渲染该按钮（参考资料页因此没有）。
 import { useEffect, useMemo, type ReactNode } from "react";
 import type { PartialBlock } from "@blocknote/core";
 import { zh } from "@blocknote/core/locales";
@@ -25,7 +26,7 @@ import { BlockNoteView } from "@blocknote/ariakit";
 import { isBlockArray } from "@whispering233/ai-editor-shared";
 import { useThemeMode } from "../../hooks/use-theme-mode";
 import { toWritingCssVars, useWritingPrefs } from "../../hooks/use-writing-prefs";
-import { EditorToolbar, type ToolbarFocus } from "./editor-toolbar";
+import { EditorToolbar, type ToolbarFocus, type ToolbarSave } from "./editor-toolbar";
 import "@blocknote/ariakit/style.css";
 import "./blocknote.css";
 
@@ -72,6 +73,8 @@ export interface DocumentEditorProps {
   status?: ReactNode;
  /** 专注模式开关（仅章正文页注入）；不传 = 工具条无专注入口（卡 13.4） */
   focus?: ToolbarFocus;
+  /** 手动保存（仅章正文页注入）；不传 = 工具条无保存按钮（卡 14.1） */
+  save?: ToolbarSave;
 }
 
 export function DocumentEditor({
@@ -80,6 +83,7 @@ export function DocumentEditor({
   onReady,
   status,
   focus,
+  save,
 }: DocumentEditorProps) {
   const theme = useThemeMode();
   const { prefs, setPref } = useWritingPrefs();
@@ -119,7 +123,7 @@ export function DocumentEditor({
       data-writing-indent={prefs.indent ? "on" : "off"}
       onChange={(next) => onChange(JSON.stringify(next.document))}
     >
-      <EditorToolbar prefs={prefs} setPref={setPref} status={status} focus={focus} />
+      <EditorToolbar prefs={prefs} setPref={setPref} status={status} focus={focus} save={save} />
     </BlockNoteView>
   );
 }

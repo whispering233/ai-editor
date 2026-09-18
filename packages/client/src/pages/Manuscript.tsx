@@ -6,6 +6,8 @@
 // （store 已缓存时不再请求；本页不展示字数统计，故不带 with_metadata）。
 // 保存：**自动保存**——编辑器内容变化 → 空闲 1500ms 落盘（lib/manuscript 的 createAutosave），
 // 卸载 / 切路由前 flush（useEffect cleanup）；保存失败必须可见（顶部错误条 + 重试，不静默）。
+// 手动「保存」（卡 14.1）：工具条右端按钮**恒发一次 PUT**（即使无待存内容也重发，保证点击必有
+// 可见反应）——是用户侧保底入口，**不是**关页面/退出桌面版的自动兜底（已登记 backlog）。
 // 冲突（409 DOCUMENT_STALE）：对话框二选一——「重新加载（丢弃本地）」重拉服务端版本并换 key 重挂
 // 编辑器，「覆盖保存」重发且**不带 base_updated_at**（服务端据此跳过冲突检查）。
 // 章节不存在 / 已软删（404 OUTLINE_NODE_NOT_FOUND）→ 页面 404 态（写法同 OutlineDetail）。
@@ -413,6 +415,12 @@ export default function Manuscript({ chapterId }: { chapterId: string }) {
           status={focusMode ? statusText : undefined}
           /* 专注入口：唯一入口就在工具条右端（DESIGN.md §Components「专注模式入口」） */
           focus={{ active: focusMode, onToggle: () => setFocusMode(!focusMode) }}
+          /* 手动保存（卡 14.1）：恒发一次 PUT（不先 flush——会双发）；saving 期间禁用防连点。
+             口径见 DESIGN.md §Components「为什么手动「保存」放在工具条而不是页头」 */
+          save={{
+            onSave: () => void saveContent(latestRef.current ?? ""),
+            saving: saveState === "saving",
+          }}
         />
       )}
 
