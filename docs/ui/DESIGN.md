@@ -22,6 +22,8 @@ colors:
   tint-sky: "#cce9fc"
   tint-sage: "#d1e2c4"
   tint-yellow: "#ffd800"
+  paper-cream: "#fbf7ee"
+  paper-warm: "#f2f0eb"
   type-badge-border: "#d94a4a"
   character-role: "#b4551f"
 typography:
@@ -257,7 +259,7 @@ components:
 
 ## Overview
 
-**定位**：本地优先的写作助手工作台——三栏密集布局，长时间盯屏，结构化数据（大纲/人物/设定/地点/伏笔/时间轴/关联/参考资料）+ 章级正文 + 常驻 AI 会话栏。**正文在系统内书写（2026-10）**，但视觉主体仍是「创作资料台」：正文页是一个安静的单栏块编辑器（无侧边格式栏、无状态栏），资料页维持高密度工作台形态。
+**定位**：本地优先的写作助手工作台——三栏密集布局，长时间盯屏，结构化数据（大纲/人物/设定/地点/伏笔/时间轴/关联/参考资料）+ 章级正文 + 常驻 AI 会话栏。**正文在系统内书写（2026-10）**，但视觉主体仍是「创作资料台」：正文页 = **一行常显写作工具条** + 安静的单栏块编辑器（无侧边格式栏、无状态栏），可切「专注模式」把三栏外壳与页头一并收起；资料页维持高密度工作台形态。
 
 **风格来源**：Notion **工作区**（不是 notion.com 营销站）。工作区与营销站是两套语言——营销站的紫色 CTA、深蓝 hero 带、马卡龙功能卡、80px 标题一律不采用；采用其工作区那一半：
 
@@ -354,7 +356,7 @@ components:
 | `--bn-*` 变量 | 本文件 token | 说明 |
 | :--- | :--- | :--- |
 | `--bn-colors-editor-text` | `{colors.primary}` | 正文文字 |
-| `--bn-colors-editor-background` | `{colors.canvas}` | 正文底 |
+| `--bn-colors-editor-background` | `{colors.canvas}` | 正文底（**写作面纸张偏好**经 `--paper-*` 间接覆盖，见下节） |
 | `--bn-colors-menu-text` / `--bn-colors-tooltip-text` | `{colors.primary}` | 菜单/提示文字 |
 | `--bn-colors-menu-background` / `--bn-colors-tooltip-background` | `{colors.canvas}` | 浮层底（深色态用 `{colors.canvas}` 深色值） |
 | `--bn-colors-hovered-text` / `--bn-colors-selected-text` | `{colors.primary}` | 悬浮/选中文字 |
@@ -362,10 +364,29 @@ components:
 | `--bn-colors-border` | `{colors.hairline}` | 结构描边 |
 | `--bn-colors-side-menu` | `{colors.quaternary}` | 块手柄/加号 |
 | `--bn-colors-highlights-*` | 不映射（编辑器自有） | 高亮/颜色选项保留库默认（md 导出本丢弃，见 `backlog.md`） |
-| `--bn-font-family` | 本文件 `typography.body.fontFamily` | 与全站同栈 |
+| `--bn-font-family` | 本文件 `typography.body.fontFamily` | 与全站同栈；**写作面字体偏好**经 `--writing-font` 间接引用（见下节） |
 | 字号/行高 | **吃库默认，不个性定制** | 跟排观感冲突再单独收（先吃默认，收敛策略同 antd 侧「先用默认档」） |
 
-**硬约束**：① 块编辑器的改色**只能在 `blocknote.css`**（调用点不得写 `--bn-*` 覆盖、不得内联色值）；② 深浅两态**同源**——映射值全是随 antd 算法切换的变量（`--ant-*`），因此实现为「一段声明 + `.bn-root` 与 `.bn-root[data-color-scheme="dark"]` 两个选择器」（而不是浅/深两段硬值；库自带的深色默认段在构建产物中排在我们之后，必须用同特异性选择器并列才压得住，卡 12.5 实测）；两态仍必须各看一遍像素；③ 新增/修订映射必须同步本表（顺序同 antd：先改本文件 → 再改 `blocknote.css`）。
+**硬约束**：① 块编辑器的改色**只能在 `blocknote.css`**（调用点不得写 `--bn-*` 覆盖、不得内联色值）；② 深浅两态**同源**——映射值全是随 antd 算法切换的变量（`--ant-*`），因此实现为「一段声明 + `.bn-root` 与 `.bn-root[data-color-scheme="dark"]` 两个选择器」（而不是浅/深两段硬值；库自带的深色默认段在构建产物中排在我们之后，必须用同特异性选择器并列才压得住，卡 12.5 实测）；两态仍必须各看一遍像素；③ 新增/修订映射必须同步本表（顺序同 antd：先改本文件 → 再改 `blocknote.css`）；④ **用户偏好只能改「值的来源」，不能改映射目标**——写作面偏好（字体/纸张）由调用侧在容器上设 `--writing-*` / `--paper-*` 变量（`blocknote.css` 里写成 `var(--writing-font, var(--font-sans))` 形式的**间接引用**），**调用点仍不得写 `--bn-*`**，守卫 `design-discipline.test.ts` 不变。
+
+### 写作面偏好（字体 / 纸张 / 缩进），2026-10
+
+章正文与参考资料共用的**用户自选书写偏好**（不是新组件表皮：一律经 `blocknote.css` 的间接引用生效）。**唯一存储** = `localStorage` key `ai-editor:writing`（全站第三个 key，与主题、三栏宽度同哲学：纯展示偏好，不进项目文件 / 备份 / 云同步）；全局一份，两处书写面共用。**档位数值的单一定义 = `packages/client/src/hooks/use-writing-prefs.ts` 的常量**（本表是契约，测试断言两者同值——避免「改值漏改档位」的老毛病）。
+
+| 维度 | 档位（默认加粗） | 变量 | 说明 |
+| :--- | :--- | :--- | :--- |
+| 字体 | **无衬线** / 宋体 / 楷体 / 仿宋 / 等宽 | `--writing-font` | 全**系统字体栈**（不下载 web 字体）；宋/楷/仿宋按 `Songti SC`/`SimSun`、`Kaiti SC`/`KaiTi`、`FangSong` 顺序回落，最终落 `serif`；等宽落 `ui-monospace`/`Consolas`/`monospace` |
+| 字号 | 14 / **16** / 18 / 20 | `--writing-font-size` | 库默认正文基准是 16px；标题级别在库内是 em 基准（`3em`…`.8em`）⇒ 改基准字号标题同比缩放，安全 |
+| 行高 | **1.5** / 1.8 / 2.0 | `--writing-line-height` | 覆盖库的 `.bn-block-outer{line-height}`（库默认 1.5） |
+| 纸张 | **默认（`{colors.canvas}`）** / 米黄 `{colors.paper-cream}` / 暖灰 `{colors.paper-warm}` | `--paper-bg` | 深色态对应值（`#221f19` / `#262522`）同 `--tag-*` 口径写在 `index.css`；实测浅色态字色对比 11.47:1 / 10.77:1，深色态 11.10:1 / 10.54:1（默认底 12.26:1 / 11.10:1） |
+| 纹理 | **无** / 横线 / 网格 | `data-writing-paper` | 线色 = `{colors.hairline}`（经 `--ant-color-border-secondary`，不另造灰）；实测线 vs 纸底 1.13–1.23:1，**纯装饰**、间距固定、**不与文本行对齐**（有意：标题/列表/图片高度各异，相位必然错开；真对齐须锁死行高与段距、禁用标题类块，得不偿失） |
+| 段首缩进 | **关** / 开 | `data-writing-indent` | 开 = 段落首行 `text-indent: 2em`（中文小说惯例）；只作用于段落块，标题/列表/引用不受影响 |
+
+**为什么纸张不算「大面彩色」**：三档中两档是低饱和「纸感」中性色（明度差 ≤1.5:1），默认仍是 `{colors.canvas}`；且它作用面只有书写区，不参与列表/表单/徽标。（§Don't「不把彩色用于大面背景」的登记例外。）
+
+**为什么字体是中国写作场景的例外**：界面 chrome 一律无衬线（§Typography），但正文书写面上「宋/楷/仿宋」是写作习惯而非装饰；实现不引入 web 字体、不新增字号档（四个字号档位仍受 §Typography 约束——写作面字号是**正文基准字号**，不是新的界面字号档）。
+
+**纹理不再当「纸」卖**：横线/网格只做纸张质感，间距与线色都按装饰级调（默认关闭）——这是与「正文可读性优先」的取舍。
 
 ## Typography
 
@@ -385,7 +406,7 @@ components:
 
 **行高**：正文 1.57（antd 22px/14px），标题 1.4，caption 1.67（antd 20px/12px）。
 
-**无衬线、无例外**：界面 chrome 与书封一律禁衬线——旧 `--font-serif` / `--font-heading` 与书封取色模块 `lib/book-cover.ts` 均已删除（T10）。
+**无衬线 = 界面 chrome 的规则（唯一例外 = 正文书写面）**：标题、导航、按钮、表格、书封一律禁衬线——旧 `--font-serif` / `--font-heading` 与书封取色模块 `lib/book-cover.ts` 均已删除（T10）。**唯一例外 = 用户在写作面自选的字体**（宋/楷/仿宋/等宽，见 §Colors 写作面偏好）：那是「稿纸」而不是界面，且**默认仍是无衬线栈**；「不下载 web 字体」这条对例外同样成立。
 
 ## Layout
 
@@ -396,6 +417,7 @@ components:
 - **控件高**：常规 32px（`--ant-control-height`），小号 24px，大号 40px；行高 32-36px 保证密集列表节奏一致。
 - **响应式**：`<1024px` 折叠右栏为抽屉、隐藏拖拽手柄（见「布局」三栏段）；本设计语言不对移动端另立规则。
 - **滚动**：各栏独立纵向滚动；分栏之间靠 1px hairline，不靠阴影或沟槽分隔线（旧 6px 灰分隔条已废）。
+- **专注模式（2026-10，仅章正文页）**：隐藏左栏 / 右栏 / `info-bar` / 页头，正文独占视口宽度；**不另起悬浮条**——写作工具条本身即顶部常驻条，右端承载「字数 · 保存态 · 退出专注」；`Esc` 退出；状态**不持久化**（不入 localStorage，刷新即回常规布局）。
 
 ### 中栏页头结构
 
@@ -460,6 +482,19 @@ components:
 **`section-title`** — 区块标题，`level={5}`（16px/600）。区块容器用 `card`：1px `{colors.hairline}` + `{rounded.md}` + `{spacing.md}` 内边距，**不带表头底色**（antd Card 默认行为，不用 `headerBg`）。
 **`caption-text`** — metadata/表头/说明，`Typography.Text type="secondary"`（12px `{colors.tertiary}`）。
 **`empty-state`** — 空态：虚线 `{colors.hairline}` 描边 + `{rounded.md}` + 居中 `{colors.tertiary}` 说明 + 可选主操作。antd `Empty` 的插图与外层组件统一（不再各页自画虚线框）。
+
+### 写作面（工具条 / 专注模式）
+
+**`writing-toolbar`** — 章正文与参考资料正文共用的一行常显工具条（**唯一实现 = `components/blocknote/editor-toolbar.tsx`**，随块编辑器组件内置，两页自动获得）：
+
+- **几何**：高 40px（4px 内边距 + 32px 档按钮，与库自带工具条同构）；底 = 正文底（跟纸张偏好走，避免纸上出现一条异色带）；底部 1px `{colors.hairline}`；**无阴影**；`sticky` 贴中栏内容区顶部。
+- **内容**：左侧 = 块类型下拉 + 粗/斜/下/删 + 颜色 + 对齐 + 缩进 + 链接（**全部复用库自带按钮组件** ⇒ 与编辑器同源表皮，激活态由库管理）；右侧 = 撤销 / 重做 / 写作设置（字体·字号·行高·纸张·纹理·段首缩进）/ 命令帮助 / 专注模式（仅章正文页由页面注入）/ 字数与保存态。
+- **失焦态**：库按钮无选中时回落到光标所在块，故常显可用；**不做禁用态**（库无 `canUndo`：撤销/重做保持可点、点空即无变化——宁可无反馈也不要假禁用）。
+- **与浮动工具条并存**：选中文字时的浮动条保留（就近操作）；两者按钮集有意重叠；若日后观感重复，关浮动条 = `formattingToolbar={false}` 一处开关。
+
+**`command-help`** — 工具条「命令帮助」打开的静态弹窗（复用 `components/ui/dialog.tsx`）：`/` 斜杠菜单、块手柄、`Cmd/Ctrl+B/I/U`、`Cmd/Ctrl+Z`、`Tab` / `Shift+Tab` 缩进。用途 = 「不让用户猜命令」的兜底文档；与工具条按钮集**同卡维护**（加按钮就补条目）。
+
+**专注模式入口** = 工具条右端按钮；退出 = 同一按钮或 `Esc`（不新增全局快捷键占用）。
 
 ### 按钮与表单
 
@@ -625,18 +660,19 @@ components:
 - 文字型**操作**按钮带边框（H4 红线）；操作按钮一律直接展示，不收进 `⋯` 菜单。导航入口（左栏 Navigation/Menu 项）不属此列
 - 思维链默认折叠（流式期间临时展开），不占正文视线
 - 中文排版靠系统字体栈；不引入 web 字体
+- 写作面偏好只落 `localStorage` 的 `ai-editor:writing`（全局一份，两处书写面共用）；下传只经 `--writing-*` / `--paper-*` 变量，调用点不得写 `--bn-*`
 
 ### Don't
 
 - 不用营销站那套：紫 CTA、深蓝 hero 带、马卡龙大面积功能卡、胶囊按钮、80px 展示字
-- 不用 `font-serif` / 宋体做标题（**无例外**：书封与界面一致）
+- 不用衬线做界面 chrome 与标题（书封同）；**唯一例外 = 写作面的用户字体偏好**（宋/楷/仿宋/等宽，见 §Colors 写作面偏好）
 - 不硬编码色值/色类（`text-blue-500`、`#1677ff`、`rgba(...)` 手写值）——**唯一例外**：`html.dark body` 的首帧 FOUC 兜底色（`index.html` 内联脚本，防深色模式闪白）
 - 不用 `!` 前缀类压 antd 组件样式
 - **不要用 Tailwind 类去覆盖 antd 组件根元素上 antd 自己声明的属性**（`width` / `height` / `padding` / `margin` / `font-size` / `color` / `background` / `border` / `border-radius` / `display`）：antd 样式是运行时注入的**无层 CSS**，而 Tailwind 工具类在 `@layer utilities`——按 CSS 级联规范**无层胜出**，此类覆盖会静默失效（历史上满仓 `!` 就是这么来的）。正确做法：宽度/伸缩用**外层容器**承载；具体尺寸用组件 `size`；状态面用组件 `variant`（如 `variant="filled"` = `colorFillTertiary` = `{colors.surface-muted}`）或组件 token
 - **不要让 `:root` 的语义变量失去 `--ant-*` 来源**：`cssVar.key` 与 `index.html` 的 `<html class>` 必须同值（见 §Colors 踩坑段），否则全站语义色集体失效
 - 不用阴影、渐变、彩色 focus 环、卡片 hover 抬升
 - 不引入第二套组件系统（图标只有 `@ant-design/icons`、提示只有 antd `message`、按钮/输入只有 antd）；自绘只限 antd 无对应语义的浮层与业务组件
-- 不用胶囊形按钮；不把彩色用于大面背景或正文
+- 不用胶囊形按钮；不把彩色用于大面背景或正文（**唯一例外 = 用户自选的写作面纸张**：2 档低饱和纸色，默认仍为 `{colors.canvas}`）
 
 ## Known Gaps
 
@@ -648,11 +684,14 @@ components:
 - **插件/第三方浮层未覆盖**：x-markdown 渲染出的表格/引用块样式由库自带，未做 token 映射。
 - **x 组件的内部面不可 token 化（已知边界）**：`Conversations` 的会话项选中/悬浮面取 antd 全局 `colorBgTextHover`（浅色 `rgba(0,0,0,0.06)`），该组件只开放 `creation*` 四个 token，无选中面 token——要把它换成精确的 `{colors.surface-muted}` 只能改全局 `colorBgTextHover`（连带 Menu 悬浮面、text 按钮悬浮面），代价大于收益（两值在白底上目测无差）。其他 x 组件（`Sender`/`Bubble`/`ThoughtChain`）同理：内部色由 x 自己派发。
 - **响应式未细化**：只定义 `<1024px` 的抽屉回退，触屏尺寸与最小点击区未定义。
+- **写作面纸张纹理不与文本对齐（有意）**：纹理是装饰级纸张感（间距固定、线色 1.13–1.23:1、默认关闭）。真对齐需锁死行高与段距并放弃标题类块，未做。
+- **写作面字体在缺字族的系统上会退化**：Linux 常见发行版无宋/楷/仿宋族，回落 `serif` 通用族（观感不保证）；「不下载 web 字体」优先于字体一致性。
+- **纸张深色值未与实机比对**：`#221f19` / `#262522` 按「暖色深色纸」推得（与字色对比 11.10 / 10.54:1 已验算），同 tint 口径——观感不对只改 `index.css` 一处。
 
 ## Iteration Guide
 
 1. 改视觉 → 先改本文件，再改 `AntdProvider.tsx`，最后改调用点；顺序反了必然产生「文档与实现两套事实」
-2. 每次改完跑 `designmd lint docs/ui/DESIGN.md`（error 必须清零）。**两类稳定存在的 warning 属预期**：① `orphaned-tokens`——`{colors.hairline*}`、3 个 tint 只出现在 prose（规范无 border 子 token）；② 深浅算法的派生值不登记（避免与实现漂移）
+2. 每次改完跑 `designmd lint docs/ui/DESIGN.md`（error 必须清零）。**两类稳定存在的 warning 属预期**：① `orphaned-tokens`——`{colors.hairline*}`、3 个 tint、2 个 paper 只出现在 prose（规范无 border 子 token）；② 深浅算法的派生值不登记（避免与实现漂移）
 3. 新组件先加 `components:` 条目 + §Components 一行说明，再写代码
 4. 需要新色/新字号 = 先问「现有档位为什么不够」，能复用就复用（四档字号、四档圆角是刻意收紧的）
 5. 覆盖 antd 组件 token 必须登记进覆盖表；调用点 `!` 前缀类是禁止项
