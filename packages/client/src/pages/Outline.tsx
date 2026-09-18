@@ -68,6 +68,7 @@ import { focusNewItem } from "../lib/new-item-focus";
 import { useSaveShortcut } from "../lib/save-shortcut";
 import { navigate } from "../hooks/use-route";
 import { useOutlineLoader } from "../hooks/use-outline-loader";
+import { useOutlineView } from "../hooks/use-outline-view";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
@@ -78,8 +79,7 @@ type EditingState = { nodeId: string; field: "title" | "summary" } | null;
 /** 就地新建目标：parentId "root" = 顶层（**只建卷**，2026-09：章只挂卷），否则父节点决定子类型（CHILD_TYPE） */
 type CreatingState = { parentId: string; type: OutlineNodeType } | null;
 
-/** 页面形态：大纲树（默认）/ 章视图（平铺章列表）——**页面 state，不持久化**（刷新回落树视图） */
-type OutlineView = "tree" | "chapters";
+/** 页面形态：大纲树（默认）/ 章视图（平铺章列表）——见 `hooks/use-outline-view`（持久化，卡 18.3） */
 
 /** 提取错误码（ApiError → 服务端码；未知 → null 走兜底文案） */
 function errorCode(err: unknown): string | null {
@@ -159,8 +159,8 @@ export default function Outline() {
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
   /** 选中节点 id（单击行选中，选中后按 Enter 新建子级）；null = 无选中 */
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  /** 页面形态（大纲树 / 章视图；页面 state——不持久化，见 DESIGN.md「大纲页双视图」） */
-  const [view, setView] = useState<OutlineView>("tree");
+  /** 页面形态（大纲树 / 章视图；选择落 localStorage——跳转/刷新后保持，见 DESIGN.md「大纲页双视图」） */
+  const [view, setView] = useOutlineView();
 
   // S2.4 就地交互状态
   const [editing, setEditing] = useState<EditingState>(null);
@@ -911,7 +911,7 @@ export default function Outline() {
                 比写「现在在哪」少一次解读；位置 = 「全部折叠」左侧（ml-auto 挂本按钮） */}
             <Button
               className="ml-auto"
-              onClick={() => setView((v) => (v === "tree" ? "chapters" : "tree"))}
+              onClick={() => setView(view === "tree" ? "chapters" : "tree")}
             >
               {view === "tree" ? "章视图" : "大纲树"}
             </Button>
