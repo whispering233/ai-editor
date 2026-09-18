@@ -35,7 +35,7 @@ import {
   type ProjectRuntime,
   type SseFrame,
 } from "@whispering233/ai-editor-agent";
-import { findOutlineNode, getEntity, readOutlineFile } from "@whispering233/ai-editor-db";
+import { findOutlineNode, getDocument, getEntity, readOutlineFile } from "@whispering233/ai-editor-db";
 import { truncate } from "@whispering233/ai-editor-shared";
 import {
   chatMessagesResSchema,
@@ -83,10 +83,15 @@ export interface ChatRouteDeps {
 
 // ============ 聚焦上下文（本轮消息的一部分，见 docs/design/20-context.md §2） ============
 
+/** 聚焦章注入的正文节选上限（字符；完整正文由模型调 get_chapter_text 按 offset 分页拉取） */
+export const FOCUS_CHAPTER_EXCERPT_CHARS = 2000;
+
 /**
  * 聚焦上下文文本：focus_entity_id → 实体、focus_node_id → 大纲节点，拼成结构化文本。
  * 查询不到（已软删/不存在/跨项目）→ 跳过该项（不报错）：客户端可能携带过期 focus。
  * 两项皆无 → undefined（不注入，消息原文保持干净）。
+ * 聚焦**章**：另注入正文前 `FOCUS_CHAPTER_EXCERPT_CHARS` 字符节选（带「节选」标注）——
+ * **不做整章自动入上下文**（正文预算与对话历史共享同一窗口，见 docs/design/20-context.md §2）。
  */
 export function buildFocusText(
   project: ProjectContext,
@@ -103,11 +108,20 @@ export function buildFocusText(
     const node = findOutlineNode(readOutlineFile(project.root), context.focus_node_id);
     if (node !== undefined && node.deleted !== true) {
       parts.push(
-        `大纲节点：${node.type}「${node.title}」（id=${node.id}）${node.summary ? `\n摘要：${node.summary}` : ""}`,
+        `大纲节点：${node.type}「${node.title}」（id=${node.id}）${node.summary ? `\n摘要：${node.summary}` : ""}` +
+          chapterExcerptOf(project, node.type, node.id),
       );
     }
   }
   return parts.length > 0 ? parts.join("\n\n") : undefined;
+}
+
+/** 聚焦章的正文节选段：非章 / 未写过正文 → 空串（维持现状）；只取前 N 字符，完整正文由工具拉取 */
+function chapterExcerptOf(project: ProjectContext, nodeType: string, nodeId: string): string {
+  if (nodeType !== "chapter") return "";
+  const text = getDocument(project.db, "chapter", nodeId)?.content_text ?? "";
+  if (text === "") return "";
+  return `\n正文（节选，完整正文请用 get_chapter_text 读取）：\n${text.slice(0, FOCUS_CHAPTER_EXCERPT_CHARS)}`;
 }
 
 // ============ 调试日志（配置文件 debug 段；关闭时零开销） ============

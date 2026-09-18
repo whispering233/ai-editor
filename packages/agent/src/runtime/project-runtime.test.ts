@@ -233,7 +233,7 @@ describe("会话文件位置", () => {
 // ============ 5. 工具装配与执行 ============
 
 describe("领域工具装配", () => {
-  it("35 个工具全部可用、builtin 全关，faux 的工具调用真正执行", async () => {
+  it("36 个工具全部可用、builtin 全关，faux 的工具调用真正执行", async () => {
     const env = await createFauxEnv();
     const projectRoot = mkTempDir("ai-editor-k2-tools-");
     const agentDir = mkTempDir("ai-editor-k2-agentdir4-");
@@ -259,7 +259,7 @@ describe("领域工具装配", () => {
       const expectedNames = listTools().map((tool) => tool.name);
       const activeNames = runtime.session.getActiveToolNames();
       expect(new Set(activeNames)).toEqual(new Set(expectedNames));
-      expect(expectedNames).toHaveLength(35);
+      expect(expectedNames).toHaveLength(36);
       for (const builtin of ["read", "bash", "edit", "write"]) {
         expect(activeNames).not.toContain(builtin);
       }
@@ -289,6 +289,9 @@ describe("系统提示词", () => {
       const prompt = runtime.session.systemPrompt;
       expect(prompt).toContain("创作顾问");
       expect(prompt).toContain("不生成正文");
+ // 卡 12.9：正文可读、绝不改写（工具面无线工具——提示词只是双层证据的一层）
+      expect(prompt).toContain("绝不改写正文");
+      expect(prompt).toContain("get_chapter_text");
       expect(prompt).not.toContain("Available tools");
       expect(prompt).not.toContain("bash");
     } finally {

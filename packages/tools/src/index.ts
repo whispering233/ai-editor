@@ -18,6 +18,7 @@ export * from "./schemas/index.js";
 export * from "./query/entity.js";
 export * from "./query/relation.js";
 export * from "./query/outline.js";
+export * from "./query/manuscript.js";
 export * from "./query/delta.js";
 export * from "./query/reference.js";
 export * from "./analysis/utils.js";
@@ -41,6 +42,7 @@ export * from "./executor/index.js";
 import { RELATION_TYPES, TOOL_PERMISSION } from "@whispering233/ai-editor-shared";
 import {
   computeStateArgsSchema,
+  getChapterTextArgsSchema,
   getDeltaHistoryArgsSchema,
   getEntityArgsSchema,
   getEntitySummaryArgsSchema,
@@ -55,16 +57,18 @@ import { runGetEntity, runGetEntitySummary, runSearchEntities } from "./query/en
 import { runSearchReferences } from "./query/reference.js";
 import { runQueryRelationships } from "./query/relation.js";
 import { runGetOutline, runGetOutlinePath } from "./query/outline.js";
+import { runGetChapterText } from "./query/manuscript.js";
 import { runComputeState, runGetDeltaHistory } from "./query/delta.js";
 
-/** 查询类工具定义（S6.3，「查询类（自动）」8 个；权限全为 AUTO） */
+/** 查询类工具定义（S6.3 + 卡 12.9，「查询类（自动）」10 个；权限全为 AUTO） */
 const queryToolDefs: ToolDefinition[] = [
   {
     name: "get_entity",
     description:
       "实体详情查询：按类型与 id 获取单个实体（含 data 字段完整内容）。" +
-      "type 取值 character|setting|location|hook|event|timepoint；id 为实体 id（char-/set-/loc-/hook-/ev-/tp- 前缀）。" +
-      "不存在或已软删返回 null。",
+      "type 取值 character|setting|location|hook|event|timepoint|reference；id 为实体 id（char-/set-/loc-/hook-/ev-/tp-/ref- 前缀）。" +
+      "不存在或已软删返回 null。" +
+      "reference（参考资料）另附 content = 正文的轻量 md 投影（非块 JSON；未写过正文为空串）。",
     parameters: getEntityArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
     run: runGetEntity,
@@ -109,6 +113,19 @@ const queryToolDefs: ToolDefinition[] = [
     parameters: getOutlinePathArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
     run: runGetOutlinePath,
+  },
+  {
+    name: "get_chapter_text",
+    description:
+      "章正文只读查询：按 node_id 分页读取某章正文的轻量 md 投影（服务端派生，保块级结构、弃行内样式）——" +
+      "用于分析节奏、核对与设定的冲突、评价具体段落。node_id **必须是章节点**（卷/场景报错；不存在或已软删报错）。" +
+      "offset 为起始字符下标（缺省 0），max_chars 为本次最多返回字符数（缺省 6000、上限 20000）；" +
+      "text 末尾出现「已截断」提示时，用其中给出的 offset 继续读取（长章分段读完）。" +
+      "未写过正文的章返回 char_count=0、text=\"\"。" +
+      "**只读**：工具面不存在任何正文写工具——正文只读、只评论、只建议，落笔由作者完成。",
+    parameters: getChapterTextArgsSchema,
+    permission: TOOL_PERMISSION.AUTO,
+    run: runGetChapterText,
   },
   {
     name: "compute_state",
@@ -501,7 +518,8 @@ const proposalToolDefs: ToolDefinition[] = [
     name: "propose_create_reference",
     description:
       "创建参考资料提案：向用户提议把读到/总结的素材、灵感或写作要点保存为参考资料（外部素材/灵感笔记，" +
-      "非本书正文）。name 标题必填，type 分类可选（自由文本，建议沿用项目内已有分类，缺省 material），content 全文长文本，source 来源（URL/书名/作者）可选，tags 标签数组可选。" +
+      "非本书正文）。name 标题必填，type 分类可选（自由文本，建议沿用项目内已有分类，缺省 material），" +
+      "content 纯文本摘录（可含换行；按行落为段落块，不做 markdown 转换），source 来源（URL/书名/作者）可选，tags 标签数组可选。" +
       "仅生成提案（返回 proposal_id + 一句话摘要），需用户在界面确认后才写入——请勿重复提案或视为已保存。",
     parameters: proposeCreateReferenceArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,

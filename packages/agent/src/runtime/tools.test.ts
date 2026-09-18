@@ -1,6 +1,6 @@
 // K2 工具适配层测试：领域工具 → pi 工具定义（TypeBox 直通 + 提案载荷走 details）
 //
-// 用 registry 的真实工具（35 个）验证适配面，不 mock 工具实现：
+// 用 registry 的真实工具（36 个）验证适配面，不 mock 工具实现：
 // - get_outline：AUTO 工具，content = 结果文本化，details = 原始结果
 // - propose_create_entity：PROPOSAL 工具，接 sink 时 content 只给「提案已发出」，details = 载荷
 // - compute_state：stub db 下必然抛错 → execute 必须 reject（抛错即失败，不编码进 content）

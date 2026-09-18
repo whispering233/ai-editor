@@ -9,7 +9,7 @@
 // - get_entity_summary：db getEntitySummaryStats（S6.3 下沉：总数 + 类型专属分布，
 // 稀疏字段知识归拢 db 单一位置）——工具层透传
 
-import { getEntity as dbGetEntity, getEntitySummaryStats, listEntities } from "@whispering233/ai-editor-db";
+import { getDocument, getEntity as dbGetEntity, getEntitySummaryStats, listEntities } from "@whispering233/ai-editor-db";
 import { mapRowToEntity } from "@whispering233/ai-editor-shared";
 import type { Entity } from "@whispering233/ai-editor-shared";
 import type { EntityListResult, EntitySummaryStats } from "@whispering233/ai-editor-db";
@@ -19,16 +19,29 @@ import type { GetEntityArgs, GetEntitySummaryArgs, SearchEntitiesArgs } from "..
 // ============ get_entity ============
 
 /**
+ * get_entity 结果：实体详情 + `content`（**仅 reference 填充**）。
+ * reference 的正文真相在 `document_records`，此处只回 `content_text` 轻量 md 投影——
+ * 块 JSON 原文归编辑器，不进模型上下文（卡 12.9，docs/api/30-api-entity.md「reference 特例」）。
+ */
+export interface GetEntityResult extends Entity {
+  content?: string;
+}
+
+/**
  * 实体详情（get_entity(type, id) → 实体详情，含 data JSON 解析后的字段）。
  * - db 层 getEntity 默认过滤软删（回收站对象不可见）
  * - type 与行内实际类型不一致 → null（参数错误，id 前缀体系下正常调用不会出现；
  * LLM 传错类型时得到「不存在」而非脏数据）
  * - 不存在/已软删 → null（查询无结果 ≠ 失败，LLM 据 null 自纠或向用户确认）
+ * - reference：附全文投影 `content`（未写过正文 → 空串；列表摘要的 120 字截断只在
+ * search_references，详情取全文）
  */
-export function runGetEntity(ctx: ToolContext, args: GetEntityArgs): Entity | null {
+export function runGetEntity(ctx: ToolContext, args: GetEntityArgs): GetEntityResult | null {
   const row = dbGetEntity(ctx.db, args.id);
   if (row === null || row.type !== args.type) return null;
-  return mapRowToEntity(row);
+  const entity = mapRowToEntity(row);
+  if (row.type !== "reference") return entity;
+  return { ...entity, content: getDocument(ctx.db, "reference", row.id)?.content_text ?? "" };
 }
 
 // ============ search_entities ============

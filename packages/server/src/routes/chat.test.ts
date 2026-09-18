@@ -29,7 +29,7 @@ import {
 } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { createProjectRuntime, defaultProposalStore, openProjectSessionManager, type Proposal } from "@whispering233/ai-editor-agent";
-import { createEntity, SCHEMA_VERSION, writeOutlineFile } from "@whispering233/ai-editor-db";
+import { createEntity, SCHEMA_VERSION, upsertDocument, writeOutlineFile } from "@whispering233/ai-editor-db";
 import type { OutlineFileTree } from "@whispering233/ai-editor-shared";
 import type { RuntimeFactory } from "../chat-runtime.js";
 import { errorHandler } from "../middleware/error.js";
@@ -42,7 +42,7 @@ import {
   setCurrentProject,
   type ProjectContext,
 } from "../middleware/project.js";
-import { createChatRoutes } from "./chat.js";
+import { buildFocusText, createChatRoutes, FOCUS_CHAPTER_EXCERPT_CHARS } from "./chat.js";
 import { initDebugConfig } from "../debug.js";
 
 const HOST_HEADERS = { host: "127.0.0.1:3456" };
@@ -75,7 +75,7 @@ function openProject(): ProjectContext {
   return project;
 }
 
-/** 聚焦注入测试用大纲树（单卷 → 单章 → 单场景 sc-focus） */
+/** 聚焦注入测试用大纲树（单卷 → 两章：ch-1[sc-focus]，ch-2 用作「无正文的章」） */
 function focusOutline(): OutlineFileTree {
   return {
     id: "root",
@@ -97,6 +97,8 @@ function focusOutline(): OutlineFileTree {
               { id: "sc-focus", type: "scene", title: "灵根测试失败", updated_at: "2026-08-01T10:00:00Z" },
             ],
           },
+          // 无正文的章（聚焦注入测试用：未写过正文 → 不注入节选）
+          { id: "ch-2", type: "chapter", title: "第二章", updated_at: "2026-08-01T10:00:00Z" },
         ],
       },
     ],
@@ -815,6 +817,36 @@ describe("POST /chat SSE 事件集与过滤", () => {
       .join("\n");
     expect(userTexts).toContain("无聚焦本轮");
     expect(userTexts).not.toContain("当前聚焦");
+  });
+
+  it("聚焦章注入正文节选（节选标注 + 截断到 2000 字符）；非章/无正文维持现状", () => {
+ // 直接调 buildFocusText（SSE 链路已在上一例覆盖；本卡只验注入内容与截断长度）
+    const project = openProject();
+    writeOutlineFile(project.root, focusOutline());
+    const longText = "甲".repeat(FOCUS_CHAPTER_EXCERPT_CHARS + 500);
+    upsertDocument(project.db, {
+      ownerKind: "chapter",
+      ownerId: "ch-1",
+      content: "[]",
+      contentText: longText,
+      now: "2026-08-01T10:00:00Z",
+    });
+
+    const focused = buildFocusText(project, { focus_node_id: "ch-1" })!;
+    expect(focused).toContain("大纲节点：chapter「第一章」");
+    expect(focused).toContain("正文（节选，完整正文请用 get_chapter_text 读取）：");
+    expect(focused).toContain("甲".repeat(FOCUS_CHAPTER_EXCERPT_CHARS)); // 前 2000 字符在内
+    expect(focused).not.toContain("甲".repeat(FOCUS_CHAPTER_EXCERPT_CHARS + 1)); // 第 2001 字符已被截断
+
+ // 场景节点：不注入正文（正文只挂章）
+    const scene = buildFocusText(project, { focus_node_id: "sc-focus" })!;
+    expect(scene).toContain("大纲节点：scene「灵根测试失败」");
+    expect(scene).not.toContain("节选");
+
+ // 未写过正文的章：不注入正文段
+    const empty = buildFocusText(project, { focus_node_id: "ch-2" })!;
+    expect(empty).toContain("大纲节点：chapter「第二章」");
+    expect(empty).not.toContain("节选");
   });
 
   it("续聊：携带 session_id → 历史喂回模型（第二轮请求含首轮消息）", async () => {
