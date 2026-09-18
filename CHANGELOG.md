@@ -110,9 +110,9 @@
 
 ### Fixed
 
-- **资产名含空格 ⇒ 自动更新必 404**（oracle 复核产出）：磁盘名 `AI Editor-…`（空格）、GitHub 上传后 `AI.Editor-…`（点）、而 electron-builder 写进 `latest.yml` 的是 `AI-Editor-…`（短横），更新器又按 yml 的 url 直拼 `/releases/download/<tag>/<名>`（不做资产清单回退）。现 `artifactName` 固定为无空格的 `AI-Editor-<v>-<os>-<arch>.<ext>`，并用打包期断言守住「磁盘名 = 资产名 = `latest.yml` 的 url」这条不变式（变异探针验证过会报错中断打包）。
+- **资产名含空格 ⇒ 自动更新必 404**：磁盘名 `AI Editor-…`（空格）、GitHub 上传后 `AI.Editor-…`（点）、而 electron-builder 写进 `latest.yml` 的是 `AI-Editor-…`（短横），更新器又按 yml 的 url 直拼 `/releases/download/<tag>/<名>`（不做资产清单回退）。现 `artifactName` 固定为无空格的 `AI-Editor-<v>-<os>-<arch>.<ext>`，并用打包期断言守住「磁盘名 = 资产名 = `latest.yml` 的 url」这条不变式（变异探针验证过会报错中断打包）。
 - **`electron-updater` 具名导入在打包态直接崩**（打包态冒烟产出）：`import { autoUpdater } from "electron-updater"` 在 Electron 的 ESM loader 下报 `does not provide an export named 'autoUpdater'`（该包是 CJS），而 `typecheck`/`lint`/单测**全绿**、开发态看不出来。现改默认导入 + 解构；根 `AGENTS.md`/`build.md` 已登记“主进程改 import 后必跑打包态启动冒烟”。
-- **更新流程的 info 行不落盘**（oracle 复核产出）：`log.ts` 只接管 `console.log/warn/error`，而 electron-updater 默认 logger 的 `info` 走 `console.info`（实测 `console.info !== console.log`）⇒ 真机排障时日志里只剩 error。现显式接 `autoUpdater.logger`（箭头包装，不依赖调用顺序）。
+- **更新流程的 info 行不落盘**：`log.ts` 只接管 `console.log/warn/error`，而 electron-updater 默认 logger 的 `info` 走 `console.info`（实测 `console.info !== console.log`）⇒ 真机排障时日志里只剩 error。现显式接 `autoUpdater.logger`（箭头包装，不依赖调用顺序）。
 
 ### Docs
 
@@ -184,8 +184,6 @@
 
 ## [v0.0.39] - 2026-09-15
 
-> **UX/UI 样式优化批（9 张卡 + 3 张收口 commit）**：卡 0 文档口径先行（`e7dd82f`）→ 卡 2b 层级契约收紧（`9694e5c`）→ 卡 1 大纲缩进列对齐（`eec69d6`）→ 卡 2a 页头「+ 新建卷」（`8b9a5a8`）→ 卡 3 大纲行级新建（`0f7dfc6`）→ 卡 4 设定行级新建（`32a1f19`）→ 卡 5 关联页端点徽标中文（`56de716`）→ 卡 6 只读面板空值（`a15d249`）→ 卡 7 阅读进度徽标（`8b65fe7`）；随后按**独立 oracle 复核**收口三张：注释口径/backlog/清卡/本段（`7f61d68`）、补三处守卫（`1db7b1f`）、用户可见文案不再暴露内部枚举键（`fe9144d`）。每卡一 commit，oracle 代码级复核（PASS 11/PARTIAL 1/FAIL-注释残留 1 → 均已收口）+ 浏览器逐行量测（19 行大纲 / 45 行关联 / 37 行设定）；回归：`pnpm -r build` → typecheck（0 error）→ lint → `pnpm -r test` 全绿（shared 222 / db 281 / client 859 / tools 287 / agent 82 / server 575），`designmd lint docs/ui/DESIGN.md` errors 0（warnings 5 = 预期 orphaned-tokens）。
-
 ### Added
 
 - **大纲页行级「新建章 / 新建场」与设定页行级「新建子设定」按钮**：行尾 `icon-button`（`PlusOutlined`），位置 = **删除按钮左侧**（删除恒贴行尾）；点击 = 在该行子级末尾打开就地输入行（与「选中后 Enter 建子级」同一路径 `startCreate`，成功后新条目选中 + 聚焦）。**无合法子层级的行不渲染该按钮**（场是叶子）。`docs/ui/DESIGN.md` `data-row` 段登记（行级新建位置规则 + 缩进列对齐规则）。
@@ -202,16 +200,16 @@
 ### Fixed
 
 - **关联页端点类型徽标漏英文**：`relations-view.tsx` 的 `ENDPOINT_TYPE_LABEL` 原是手抄的四类表（character/setting/location/hook + outline_node），`timepoint`/`event`/`reference` 在源/目标列与端点类型过滤下拉直接显示原始串（「timepoint」「event」）。改为派生 shared `ENTITY_TYPE_LABELS` + 补 `outline_node`。
-- **用户可见文案不再暴露内部枚举键**（同型问题的其余两处，oracle 复核发现）：时间轴事件详情的小节标题「关联节点（occurs_in）」→ 取 shared 关系类型中文名（「锚定于」）；伏笔页五个分区块标题去掉括号里的关系键（埋点节点/推进节点/回收节点/依赖/涉及）与生命周期预览里的 `+ advances 关系` / `+ resolves 关系`。全 client 重扫描「中文文案 + 内部枚举键混排」= clean。
+- **用户可见文案不再暴露内部枚举键**（同型问题的其余两处）：时间轴事件详情的小节标题「关联节点（occurs_in）」→ 取 shared 关系类型中文名（「锚定于」）；伏笔页五个分区块标题去掉括号里的关系键（埋点节点/推进节点/回收节点/依赖/涉及）与生命周期预览里的 `+ advances 关系` / `+ resolves 关系`。全 client 重扫描「中文文案 + 内部枚举键混排」= clean。
 
-### 有意保留（本批）
+### 有意保留
 
 - 就地新建行仍「失焦即取消」（全站既有语义，与行内编辑的「失焦保存」成对）；卷/章切换按钮删除后，行内已无可误触该路径的元素。
 - 大纲/设定/PanelTree 三处自绘缩进行**不迁移 antd `Tree`**：完整成本收益评估与触发条件见 `docs/design/backlog.md`「有意保留」。
 
 ## [v0.0.38] - 2026-09-15
 
-> **云端存档（WebDAV）整批落地**：7 张卡 + 3 张补丁卡，每张都经独立 oracle 验证——备份命名升级（设备段 + 尾部三段统计）→ 云端基础层（`cloud.json` + WebDAV 最小客户端）→ 设置页云端面板 → 推送 → 拉取与三态 → 一键「同步云端」与冲突裁决 → 自动推送；随后按真机（坚果云）反馈收口：命名唯一化（`13f1d2b`）、旧包上传诚实化（`e43869e`）、错误诊断与幂等修复（`5005287`/`cbced2f`/`2cf9ac4`）、地址语义改为云盘根（`cb82bb6`）、同步状态三行重排（`0181a0d`）。
+> **云端存档（WebDAV）落地**：备份命名升级（设备段 + 尾部三段统计）→ 云端基础层（`cloud.json` + WebDAV 最小客户端）→ 设置页云端面板 → 推送 → 拉取与三态 → 一键「同步云端」与冲突裁决 → 自动推送；随后按真机（坚果云）反馈收口：命名唯一化、旧包上传诚实化、错误诊断与幂等修复、地址语义改为云盘根、同步状态三行重排。
 >
 > **本地仍是唯一事实源**：云端只是备份的另一块磁盘（离线可用优先，云端失败不阻塞本地功能）；凭据只落 `<创作根>/.ai-editor/cloud.json`（0600，不进项目文件/备份包/任何响应）。设计与契约见 `docs/design/40-cloud-sync.md` 与 `docs/api/100-api-cloud.md`；**真实坚果云人工验收清单**（认证/配额/跨时区无法在 CI 覆盖）见 `docs/design/backlog.md`。
 
@@ -220,45 +218,45 @@
 - **备份文件名新增「来源设备」与「规模统计」两段**：`<YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip`（例：`20260813-101530123-手动-苹果本-定稿-人物32-设定58-章120.zip`）。设备段 = 来源机器（缺省 = 简化 hostname：去域名后缀、`-` 与非法字符转 `_`、**剥首尾空白与 `_`**、截 16 字符；规则禁 `-`，故设备段与标签段的边界无歧义；派生结果恒通过 `sanitizeDeviceName`）；统计三项 = 生成该备份时点的**未软删**存量（人物 / 设定 / `outline.json` 未软删 `chapter`，不含回收站），由服务端在打包前统计并写入文件名——**重命名旧备份不会重算统计**（统计必须描述该备份的内容）。
 - **备份列表新增一行元信息**：设置页备份行与「加载备份」确认框显示 `设备 · 人物32 · 设定58 · 章120`（旧格式备份无这两项 → 整行省略，不用占位符）。
 - shared：`MAX_DEVICE_NAME_LENGTH`、`BackupStats`、`sanitizeDeviceName`、`deviceNameFromHostname`（纯函数）；db：`getBackupStats`（实体计数走单条 COUNT、未软删口径）。
-- **云端存档账号配置与连通性测试（卡 2）**：`GET /api/v1/cloud/status`（配置段）/ `PUT /api/v1/cloud/config` / `POST /api/v1/cloud/test`（`PROPFIND` 根 → 缺则 `MKCOL` → 写临时文件再删，验证**读 + 写**权限）。配置载体 = `<创作根>/.ai-editor/cloud.json`（**明文 + 权限 0600**，含在既有更宽权限文件上重写；合并写、未知键与 `books` 段原样保留）；**任何响应都不回传 password**（不是脱敏，而是根本不回传）；URL 内嵌用户名/密码（userinfo）直接 400 拒绝（不静默剥离）；**凭据三件套要么齐、要么全无**——清空 url + username 时 password 一并丢弃（避免磁盘留下已失效的密码）。设置页 UI 在卡 3。
-- **WebDAV 最小客户端**（`PROPFIND`/`MKCOL`/`PUT`/`DELETE` + 窄 XML 解析 + Basic 认证 + 30s 超时；出站走全局 dispatcher，不引 SDK/XML 依赖；列表结果剥掉 base 路径前缀 → `path` 恒为 base 相对，且自身条目（含根）一律剔除）与四个云错误码：`CLOUD_NOT_CONFIGURED` 409、`CLOUD_AUTH_FAILED` 502、`CLOUD_UNREACHABLE` 502、`CLOUD_QUOTA_EXCEEDED` 502（`CLOUD_CONFLICT`/`CLOUD_FILE_NOT_FOUND`/`CLOUD_BACKUP_TOO_LARGE` 已随后续卡片落地，见卡 4/卡 5 条目）。
-- **设置页「备份」改为三级导航 + 新增「云端备份」面板（卡 3）**：左 160px 固定两项（自动备份 / 云端备份，与「AI 模型」同款 `sub-nav` 契约）；自动备份面板内容原样搬入；云端备份面板 = 账号配置（WebDAV 地址 / 用户名 / 应用密码（掩码，留空 = 不修改）/ 设备名（预填当前生效值）四个输入 + 测试连接 + 保存）+ 自动推送开关（选择即保存）+ 明文 0600 与「免费云盘上传流量 1GB/月」提示。表单→请求语义收敛在 `lib/cloud-config.ts` 纯函数（密码留空不提交、**凭据不全不提交密码**、地址与用户名半填时行内提示）。
-- **`/cloud/test` 不可达提示带上底层错误码**：undici 顶层错误常是笼统的 `fetch failed`，现附 `cause.code`（`ECONNREFUSED`/`ENOTFOUND`/`ETIMEDOUT`…），「测试连接」失败时能看出是端口、域名还是超时。**已知边界**（卡 5 oracle 复核）：底层抛 `AggregateError`（多地址轮询全部失败）时 `cause.code` 为 undefined，文案退回 `fetch failed`——待补（`backlog.md`）。
-- **云端推送（卡 4）**：`POST /api/v1/cloud/push`（推送一份本地备份到云盘；`GET /cloud/status` 增 `remote` 段 = 云端书目录 + 备份列表）。要点：
+- **云端存档账号配置与连通性测试**：`GET /api/v1/cloud/status`（配置段）/ `PUT /api/v1/cloud/config` / `POST /api/v1/cloud/test`（`PROPFIND` 根 → 缺则 `MKCOL` → 写临时文件再删，验证**读 + 写**权限）。配置载体 = `<创作根>/.ai-editor/cloud.json`（**明文 + 权限 0600**，含在既有更宽权限文件上重写；合并写、未知键与 `books` 段原样保留）；**任何响应都不回传 password**（不是脱敏，而是根本不回传）；URL 内嵌用户名/密码（userinfo）直接 400 拒绝（不静默剥离）；**凭据三件套要么齐、要么全无**——清空 url + username 时 password 一并丢弃（避免磁盘留下已失效的密码）。设置页 UI 见下一条。
+- **WebDAV 最小客户端**（`PROPFIND`/`MKCOL`/`PUT`/`DELETE` + 窄 XML 解析 + Basic 认证 + 30s 超时；出站走全局 dispatcher，不引 SDK/XML 依赖；列表结果剥掉 base 路径前缀 → `path` 恒为 base 相对，且自身条目（含根）一律剔除）与四个云错误码：`CLOUD_NOT_CONFIGURED` 409、`CLOUD_AUTH_FAILED` 502、`CLOUD_UNREACHABLE` 502、`CLOUD_QUOTA_EXCEEDED` 502（`CLOUD_CONFLICT`/`CLOUD_FILE_NOT_FOUND`/`CLOUD_BACKUP_TOO_LARGE` 随后落地，见推送与拉取两条）。
+- **设置页「备份」改为三级导航 + 新增「云端备份」面板**：左 160px 固定两项（自动备份 / 云端备份，与「AI 模型」同款 `sub-nav` 契约）；自动备份面板内容原样搬入；云端备份面板 = 账号配置（WebDAV 地址 / 用户名 / 应用密码（掩码，留空 = 不修改）/ 设备名（预填当前生效值）四个输入 + 测试连接 + 保存）+ 自动推送开关（选择即保存）+ 明文 0600 与「免费云盘上传流量 1GB/月」提示。表单→请求语义收敛在 `lib/cloud-config.ts` 纯函数（密码留空不提交、**凭据不全不提交密码**、地址与用户名半填时行内提示）。
+- **`/cloud/test` 不可达提示带上底层错误码**：undici 顶层错误常是笼统的 `fetch failed`，现附 `cause.code`（`ECONNREFUSED`/`ENOTFOUND`/`ETIMEDOUT`…），「测试连接」失败时能看出是端口、域名还是超时。**已知边界**：底层抛 `AggregateError`（多地址轮询全部失败）时 `cause.code` 为 undefined，文案退回 `fetch failed`——待补（`backlog.md`）。
+- **云端推送**：`POST /api/v1/cloud/push`（推送一份本地备份到云盘；`GET /cloud/status` 增 `remote` 段 = 云端书目录 + 备份列表）。要点：
   **上传 = 本地备份文件逐字节拷贝**；`PUT` 到 `.tmp-<名>` 再 `MOVE` 成正式名（正式名下永远是完整包，中断只留 `.tmp-` 垃圾，推送前清理）；
   **冲突判定 = 云端 head ≠ 本机 `lastPushedFileName`** → 409 `CLOUD_CONFLICT`（`force` 时先把云端那份下载存进本地 `.backups/` 再覆盖，两边都留档）；
   **保留最近 5 份**（只删能解析出时间戳且**不带用户标签**的份，非本程序命名的文件一律不碰，清理失败不阻塞推送）；
   云端书目录按 `project.id` 定位（`cloud.json` 缓存 `dirName` 快路径 → 失效时扫根目录按 `-<id>` 后缀重新定位）；
   推送前本地体积检查（>500MB → 400 `CLOUD_BACKUP_TOO_LARGE`）。书名改名时云端目录跟随 `MOVE`（失败不阻塞本地改名，下次同步按 id 重新定位）。
   设置页「备份 → 云端备份」增「同步状态」段（云端最新份 / 本机最新份 / 推送按钮 / 冲突时行内「用本机覆盖云端」）。
-- **云端拉取（卡 5）**：`POST /api/v1/cloud/pull`（缺省拉云端 head；也可指定云端任一份）+ `GET /cloud/status` 补齐 `local` 段与三态 `state`。要点：
+- **云端拉取**：`POST /api/v1/cloud/pull`（缺省拉云端 head；也可指定云端任一份）+ `GET /cloud/status` 补齐 `local` 段与三态 `state`。要点：
   **拉取 = 三文件覆盖 + `references/` 与 `sessions/` 并集合并**（基线三方比较、删除优先：云端删的删本机、本机删的不复活、本机新增的保留、云端新增的写入）——与本地 restore 的整体覆盖语义**刻意不同**（restore 是「回到那个时间点」，拉取是「把那边的东西拿过来」）；覆盖前仍自动快照本机状态（后悔药）。
   **三态判定改用「云端文件集合」基准**：`云端有更新` = 云端文件集合 ≠ `lastSeenCloudFiles`（原先比较 head，跨机器时钟偏差会漏报）；`本机有改动` = 创作数据 mtime 晚于 `lastSyncAt`（**不含 `.backups/`**）。拉取后 `lastPushedFileName` = 拉到的这份（拉完立刻推送不误判冲突）。
   设置页「云端备份」面板补齐：三态状态行 + 本机已推份/上次同步时间/未同步标记 + 云端份列表（≤5 行、行内可拉取任一份）+「拉取云端最新」+ `cloud-pull-confirm` 确认框；拉取成功后刷新 config/outline/会话。
-- **卡 3 收尾修补**：云端配置表单「纯空白密码」= 留空（不提交，避免存下空白密码导致 configured 却永远认证 401；非空密码提交原值、不 trim）；切「自动推送」开关不再清掉未保存的表单草稿；半填凭据的行内提示补「当前不会提交密码」；`DESIGN.md` 同步（设备名预填生效值 + 代价登记、两面板各自 caption、同步状态段标卡 4/5）、`tasks.md` 卡 3 交付物改述（页内 state，store 上提留卡 6）。
+- **云端备份面板的收尾修补**：云端配置表单「纯空白密码」= 留空（不提交，避免存下空白密码导致 configured 却永远认证 401；非空密码提交原值、不 trim）；切「自动推送」开关不再清掉未保存的表单草稿；半填凭据的行内提示补「当前不会提交密码」；`DESIGN.md` 同步（设备名预填生效值 + 代价登记、两面板各自 caption、同步状态段口径补登）、`tasks.md` 交付物改述。
 - **设备名可配置**：`cloud.json` 的 `webdav.device` 优先生效（非法值不生效、回缺省），备份文件名的设备段随设置页改写而变化（之前固定为 hostname 派生）。
 
-- **一键「同步云端」与冲突裁决（卡 6）**：左栏底部新增第二项「同步云端」（四入口固定顺序：立即备份 / 同步云端 / 设置 / 主题）+ 状态角标；**状态与动作上提到 `stores/cloud.ts`**（左栏按钮与设置页云端面板共享同一份 `status`——否则会出现「角标说冲突、面板说已同步」）。要点：
+- **一键「同步云端」与冲突裁决**：左栏底部新增第二项「同步云端」（四入口固定顺序：立即备份 / 同步云端 / 设置 / 主题）+ 状态角标；**状态与动作上提到 `stores/cloud.ts`**（左栏按钮与设置页云端面板共享同一份 `status`——否则会出现「角标说冲突、面板说已同步」）。要点：
   **一键状态机**（点一次 = 先实时复查状态再分派）：未配置 → 跳设置页并选中「备份 → 云端备份」（跨页意图经 store 下传，二级 tab 选中态仍不进 URL）；未打开项目 → 禁用；已同步 → toast「已是最新」；有未推改动 → 直接推送；云端更新 → 弹拉取确认；冲突 → 弹裁决框；不可达 → 只 toast（含 `errorCode`，强调本地功能不受影响）。
   **角标两色**：`冲突` = error、`有未推改动`/`云端有更新` = warning（「有事可做」而非「出错」），`unreachable` 与其余状态**不亮**；`/status` 只在「打开项目 / 点击按钮 / 动作之后」跑，**无定时器**（每次 2–3 次 PROPFIND，免费云盘额度 600 次/30 分钟）。
   **`cloud-conflict-dialog`**：并排对比云端那份与本机最新份（时间/类型/标签/设备/统计/大小）+ 两个等权选项（`保留云端（拉取覆盖本机）` / `用本机覆盖云端`）——两条路都会把另一边留档成一份本地备份（文件名就地回显）；本机无备份时强推禁用，强推后若云端仍有更晚的他机份可**再次强推**。
   **`cloud-pull-confirm` 与裁决框都是单点宿主**（挂 `AppShell`）：面板行内「拉取」与左栏按钮共用同一个对话框实例，左栏收起时也弹得出来；面板的推送冲突分支不再有行内「用本机覆盖云端」入口。
   表单草稿（url/用户名/密码/设备名）仍留面板页内，不进 store。
-- **删除传播提示（卡 6 前置债务 9 / DESIGN.md §550）**：删除会话与参考资料成功后的 toast 补一句「推送到云端后，另一台也会同步删除」——本地删除不会被拉取复活（并集规则 4），但要让云端与另一台也删掉，必须**推送一次**（手动或等自动推送）。
-- **自动推送（卡 7）**：`autoPush` 开启后本地改动自动上云，**三条触发路径**（`packages/server/src/cloud/auto-push.ts`）：
+- **删除传播提示（DESIGN.md §550）**：删除会话与参考资料成功后的 toast 补一句「推送到云端后，另一台也会同步删除」——本地删除不会被拉取复活（并集规则 4），但要让云端与另一台也删掉，必须**推送一次**（手动或等自动推送）。
+- **自动推送**：`autoPush` 开启后本地改动自动上云，**三条触发路径**（`packages/server/src/cloud/auto-push.ts`）：
   **定时**（每 2 小时 + 只在**创作数据**有变更时推一次；创作数据 = 三文件 + `AGENTS.md` + `references/`，**排除 `sessions/`**——纯聊天时段不单独烧一次配额，聊天记录随下一次创作变更的 zip 一起上云）、
   **关闭项目**（「工作段结束」语义：任何变更含 `sessions/` 就推一次，**不受节流**）、
   **手动备份成功后**（无条件推一次，不受节流）——后两条都不推进节流基准。
   **单一定时器**：不新增第二套定时器，自动推送挂在自动备份的 `setTimeout` tick 链上（`backup.ts` 的 `setProjectTick` 钩子由 composition 层注册）——排程条件 = 「备份频率开启」**或**「`autoPush` 开启」；备份频率关闭时按 `AUTO_PUSH_THROTTLE_MS`（2h）兜底排程，**不会因关掉自动备份而静默失效**。
   **失败只记状态不阻塞**：`cloud.json` book state 新增 `lastAutoPushAt`（节流基准，仅定时路径推进）与 `lastAutoPushError`（`{code, message, at}`，成功即清），由 `GET /cloud/status` 的 `local` 段透出；`POST /project/close` 与 `POST /project/backup` 均**fire-and-forget**（推送失败不影响响应，关闭项目不被网络拖住）。本机没有任何备份 → 视为**跳过**（不写错误标记）。设置页云端面板：自动推送说明行写全触发口径，失败时在「同步状态」段显示一行 `text-destructive`（不弹窗）。
 
-- **卡 7 oracle 收口**：`lastAutoPushError` 的清除点单点化到 `pushBackup` 的成功写（任何一次推送成功都清，避免手动推送后面板常驻过期提示）；面板失败行在 `CLOUD_CONFLICT` 时补行动指引；「备份频率关闭 + `autoPush` 开启时推的是旧包」等三条已登记 `backlog.md`。
-- **卡 6 oracle 收口**：删除会话 / 参考资料后的 toast 补「推送到云端后，另一台也会同步删除」（删除要推送才传播）；跨页意图补顶层 tab 消费（未配置点「同步云端」落到「备份 → 云端备份」而不是 AI 模型页）。
+- **自动推送收口**：`lastAutoPushError` 的清除点单点化到 `pushBackup` 的成功写（任何一次推送成功都清，避免手动推送后面板常驻过期提示）；面板失败行在 `CLOUD_CONFLICT` 时补行动指引；「备份频率关闭 + `autoPush` 开启时推的是旧包」等三条已登记 `backlog.md`。
+- **同步与删除提示收口**：删除会话 / 参考资料后的 toast 补「推送到云端后，另一台也会同步删除」（删除要推送才传播）；跨页意图补顶层 tab 消费（未配置点「同步云端」落到「备份 → 云端备份」而不是 AI 模型页）。
 
-- **旧包上传诚实化：职责分离 + 用户二选一（卡 B）**：**云端永不创建备份**（云端只是本地 zip 的镜像），自动路径（2h 定时 / 关闭项目）在「**有改动未进最新备份**」时**跳过不推**——不推旧包、也不写 `lastAutoPushError`（这不是失败，是还没有能代表当下的档）；`GET /cloud/status` 的 `local` 段新增 `backupStale`（**不随同步前移**：推过旧包后 `state` 会变 `synced` 而它仍为真，用它把「已同步」与「云端内容不落后」分开表达）。用户主动点「同步云端」在该状态下弹 `cloud-stale-backup-dialog`：`[立即手动备份并推送]`（先 `POST /project/backup` 再推）/ `[上传旧备份]`（照推当前最新那份），两个选项等权；面板状态行同时给一行提示「本机有改动未进最新备份（最新备份：…）——云端只会上传旧份，先『立即备份』」。**为什么**：推旧包会把 `lastSyncAt` 前移到 now → 状态显示「已同步」而云端落后，另一台拉下去会覆盖它自己更新的三文件（有覆盖前快照兜底，但用户看到「内容缩水」）。
-- **顺带收口**（卡 6 复核遗留）：`clearStatus()` 现在一并清 `conflictOpen`/`pullTarget`/`staleDialogOpen`/`pendingSettingsPane`（切书后不再残留对话框状态）。
+- **旧包上传诚实化：职责分离 + 用户二选一**：**云端永不创建备份**（云端只是本地 zip 的镜像），自动路径（2h 定时 / 关闭项目）在「**有改动未进最新备份**」时**跳过不推**——不推旧包、也不写 `lastAutoPushError`（这不是失败，是还没有能代表当下的档）；`GET /cloud/status` 的 `local` 段新增 `backupStale`（**不随同步前移**：推过旧包后 `state` 会变 `synced` 而它仍为真，用它把「已同步」与「云端内容不落后」分开表达）。用户主动点「同步云端」在该状态下弹 `cloud-stale-backup-dialog`：`[立即手动备份并推送]`（先 `POST /project/backup` 再推）/ `[上传旧备份]`（照推当前最新那份），两个选项等权；面板状态行同时给一行提示「本机有改动未进最新备份（最新备份：…）——云端只会上传旧份，先『立即备份』」。**为什么**：推旧包会把 `lastSyncAt` 前移到 now → 状态显示「已同步」而云端落后，另一台拉下去会覆盖它自己更新的三文件（有覆盖前快照兜底，但用户看到「内容缩水」）。
+- **顺带收口**：`clearStatus()` 现在一并清 `conflictOpen`/`pullTarget`/`staleDialogOpen`/`pendingSettingsPane`（切书后不再残留对话框状态）。
 
-- **云端收口·代码类（卡 C）**：7 项行为/逻辑收口——
+- **云端收口·代码类**：7 项行为/逻辑收口——
   ① `refresh()` 的 `busy` **归属明确**（只清自己设的那个，不再可能清掉 `push`/`pull` 在途标记）；
   ② 冲突裁决框「保留云端（拉取覆盖本机）」**显式拉取框里展示的那一份**（不再写「服务端当下 head」——对话框与点击之间云端可能又多了新份）；
   ③ **本机份列表读取失败与「真的没有备份」区分**（新 `localLatestUnavailable`：读取失败时两个对话框禁用依赖它的按钮并说明原因，不把故障显示成「本机还没有备份」）；
@@ -267,7 +265,7 @@
   ⑥ `/cloud/test` 遇**可写不可删**的云盘（DELETE 403/405…）**不再误报 `CLOUD_AUTH_FAILED`**：读 + 写都通过即成功，响应带 `leftoverWriteTestFile: true`，UI toast 提示「云盘不允许删除，根目录残留 `.tmp-` 测试文件，可手动删除」（具体状态码只进日志）；
   ⑦ 云端状态的「打开项目时那次检查」宿主从 `NavRail` **上移到 `AppShell`**（左栏收起时 NavRail 不挂载，原先收起状态下无人复查——自动推送会改服务端状态，收起左栏同样需要它；实测：收起左栏刷新后再展开，角标已在，无需点击）。
 
-- **云端收口·文案类（卡 D）**：① 失败文案去掉「未执行」这类**事实断言**（网络超时可能服务端**已执行**）——推送/拉取改为「结果未确认（可能已在服务端执行）」、备份改「备份结果未确认」、配置保存改「配置是否保存未确认」、测试连接改「测试未完成」；
+- **云端收口·文案类**：① 失败文案去掉「未执行」这类**事实断言**（网络超时可能服务端**已执行**）——推送/拉取改为「结果未确认（可能已在服务端执行）」、备份改「备份结果未确认」、配置保存改「配置是否保存未确认」、测试连接改「测试未完成」；
   ② WebDAV 地址校验的两条错路**不再回显用户原始输入**（原先 `ftp://用户名:密码@host` 这类串会被拼进 400 message）——只回显协议段或给固定文案 + 示例；新增守卫测试（三类非法输入都断言不回显、且协议段可见）；
   ③ `shared/src/types/api.ts` 的 cloud 契约注释补齐两条已有口径：「凭据三件套要么齐、要么全无（url+username 皆空 ⇒ password 一并丢弃）」「URL 内嵌 userinfo 直接 400 拒绝（不静默剥离）」；
   ④ `DESIGN.md` §544 失败态口径已按实现改写（**一行文案、刻意不做独立「重试」按钮与 `empty-state`**，重试入口冗余），删除与代码不一致的承诺。
@@ -290,7 +288,7 @@
 - **类型段由单字母 `m`/`a` 改为 `自动`/`手动`**（`20260813-101530123-m-定稿.zip` → `20260813-101530123-手动-苹果本-定稿-人物32-设定58-章120.zip`）；当时旧文件名仍可列出/恢复/参与保留策略（不迁移、不改名），重命名旧备份保持其旧形态（**该兼容层已在下方「备份命名唯一化」中砍掉**）。
 - **自动备份的变更判定新增两个打包目录自身的 mtime**：删除 `references/` / `sessions/` 内文件不刷新任何剩余文件的 mtime，原先只比文件 mtime 会漏检删除 → 删文件现在同样触发自动备份。
 - 备份列表与备份响应新增 `device` / `stats` 可选字段（旧格式文件名无这两项，读侧缺省）。
-- **备份命名唯一化（卡 A，写入 = 解析）**：命名只有一种形态——`<时间戳>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip`；早期三类旧命名（秒级 `<YYYYMMDD-HHmmss>.zip`、带名称无类型段 `<YYYYMMDD-HHmmssSSS>-<名称>.zip`、单字母 `-m`/`-a` 段）**不再解析**——文件留在磁盘但不识别（不出现在列表、不可恢复、不参与保留策略），也不做重命名迁移（旧份没有设备/统计信息，硬补会谎报）。**打开项目时若 `.backups/` 有文件但无一可解析 → 立即生成一份新格式备份**（升级兜底，best-effort，不重复备份、不重命名旧份）；自动备份频率开启时下一次 tick 也会补一份。API 契约收敛：`device` / `stats` 由可选变**必填**（本地 `BackupEntry` 与云端 `CloudBackupEntry` 同步），client 删除「旧格式未记录 / 整行省略」死分支。
+- **备份命名唯一化（写入 = 解析）**：命名只有一种形态——`<时间戳>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip`；早期三类旧命名（秒级 `<YYYYMMDD-HHmmss>.zip`、带名称无类型段 `<YYYYMMDD-HHmmssSSS>-<名称>.zip`、单字母 `-m`/`-a` 段）**不再解析**——文件留在磁盘但不识别（不出现在列表、不可恢复、不参与保留策略），也不做重命名迁移（旧份没有设备/统计信息，硬补会谎报）。**打开项目时若 `.backups/` 有文件但无一可解析 → 立即生成一份新格式备份**（升级兜底，best-effort，不重复备份、不重命名旧份）；自动备份频率开启时下一次 tick 也会补一份。API 契约收敛：`device` / `stats` 由可选变**必填**（本地 `BackupEntry` 与云端 `CloudBackupEntry` 同步），client 删除「旧格式未记录 / 整行省略」死分支。
 
 ### Docs
 
@@ -333,7 +331,7 @@
 - `docs/design/backlog.md`：删「星形图叶子 `· N` = 列表行数」登记项（星形图已不存在）。
 - `AGENTS.md`：人物页条目去掉星形图描述。
 - `docs/design/backlog.md`：新登「参考资料分类徽标形态不统一」与「关联页端点类型徽标缺 `timepoint`/`event` 中文标签」（后者 = 关联总览显示原始英文类型串）。
-- **发布前文档扫尘（2026-09-14）**：`docs/ui/DESIGN.md` 标签 tint 口径 6 档 → 3 档（与代码 `tag-tint.ts` 对齐）、`status-badge` 附近笔误修正；`docs/api/` 四处与代码不符——`50-api-delta.md` 变更目标白名单方向（是 `ENTITY_TYPES` 去掉 `event`，不是「含 event」）、`10-api-project.md` 备份频率补 `1` 分钟档且 key 载体改 pi agent dir、`30-api-entity.md` 详情类型补 `reference` / setting 字段删已废弃键 / 补 `GET /reference/scan/status`（连 `00-api-index.md` 索引行）、`error-code.md` 删不存在的 SSE `error` 帧并登记服务端扩展码、`tool-calling.md` 执行类补 `reorder_timepoints`；`docs/db/schema.md` 迁移目标 v6 → v7、`hook` 字段补 `expected_resolve_node_id`、画布坐标残留删除；`docs/design/` 删画布 localStorage 残留（`10-data-model.md` / `config.md`）、`build.md` debug 类别四类（删 `stream`）、`architecture.md` 凭据优先序改「存量优先」、`00-master-design.md` 删除不存在的「全量回溯」（实际深度上限 3）、`10-data-model.md` 状态计算改章序前缀口径、`backlog.md` 两条登记刷新；`README.md` 版本与能力叙述同步（v0.0.37 / 星形图已移除 / 文案与计数修正）；根 `AGENTS.md` 新增两条硬约束（路由形态 gate 的 effect 依赖；pi 依赖声明位置）并简化 `tasks.md`（批次叙事归 CHANGELOG）；shared/tools/agent 三处注释计数漂移修正（工具 19+16+13=48、备份频率含 1）。
+- **发布前文档扫尘（2026-09-14）**：`docs/ui/DESIGN.md` 标签 tint 口径 6 档 → 3 档（与代码 `tag-tint.ts` 对齐）、`status-badge` 附近笔误修正；`docs/api/` 四处与代码不符——`50-api-delta.md` 变更目标白名单方向（是 `ENTITY_TYPES` 去掉 `event`，不是「含 event」）、`10-api-project.md` 备份频率补 `1` 分钟档且 key 载体改 pi agent dir、`30-api-entity.md` 详情类型补 `reference` / setting 字段删已废弃键 / 补 `GET /reference/scan/status`（连 `00-api-index.md` 索引行）、`error-code.md` 删不存在的 SSE `error` 帧并登记服务端扩展码、`tool-calling.md` 执行类补 `reorder_timepoints`；`docs/db/schema.md` 迁移目标 v6 → v7、`hook` 字段补 `expected_resolve_node_id`、画布坐标残留删除；`docs/design/` 删画布 localStorage 残留（`10-data-model.md` / `config.md`）、`build.md` debug 类别四类（删 `stream`）、`architecture.md` 凭据优先序改「存量优先」、`00-master-design.md` 删除不存在的「全量回溯」（实际深度上限 3）、`10-data-model.md` 状态计算改章序前缀口径、`backlog.md` 两条登记刷新；`README.md` 版本与能力叙述同步（v0.0.37 / 星形图已移除 / 文案与计数修正）；根 `AGENTS.md` 新增两条硬约束（路由形态 gate 的 effect 依赖；pi 依赖声明位置）并简化 `tasks.md`（开发流程叙事不留在仓库文档）；shared/tools/agent 三处注释计数漂移修正（工具 19+16+13=48、备份频率含 1）。
 
 ## [v0.0.36] - 2026-09-13
 
@@ -366,7 +364,7 @@
 - `docs/design/10-data-model.md` §3：关系类型分层（属性注册表单一定义 / 自定义类型轻量口径 / AI 侧有意收窄）。
 - `docs/api/40-api-relation.md`：`relation_type` 自由字符串与语法规则；`docs/api/tool-calling.md`：AI 仍限预定义 17 类。
 - `docs/ui/DESIGN.md`：新控件形态 `select-free-input`（含两条 antd 源码事实：combobox `filterOption` 默认 `false`、`onChange` 可能给 `undefined`）；`relation-star-graph` 契约（按人去重 / `· N` / 阈值 / 画布随半径长高 / 标签翻锚点）；`character-relations` 段同步。
-- `docs/design/backlog.md`：删已解决两条（人物字段清单断言、关系星形图）；新增 oracle 留存量（R2 互斥对字面量、db 守卫只校验不归一、非字符串文案、dist 新鲜度假绿窗口、对话框其余下拉浮层宽度、对话框全量拉取性能边界、自定义类型改名/合并）；登记「星形图 `· N` = 列表行数」有意口径。
+- `docs/design/backlog.md`：删已解决两条（人物字段清单断言、关系星形图）；新增复核留存量（R2 互斥对字面量、db 守卫只校验不归一、非字符串文案、dist 新鲜度假绿窗口、对话框其余下拉浮层宽度、对话框全量拉取性能边界、自定义类型改名/合并）；登记「星形图 `· N` = 列表行数」有意口径。
 - `AGENTS.md`：`RELATION_TYPE_META` 单一定义、编译期断言只能放 src 模块、改上游 `src` 后先 `pnpm -r build`（假绿窗口）、并行派工必须 fresh context + 硬完成判据。
 
 ## [v0.0.35] - 2026-09-13
@@ -396,7 +394,7 @@
 ### Breaking
 
 - **锚点仅章**：`current_position`（`PUT /project/config`）、变更记录的触发节点（`POST /delta` 的 `node_id`）、伏笔锚点（`plants`/`advances`/`resolves` 的源节点）一律**只支持 `chapter`**——卷/场景 → 400 `VALIDATION_ERROR`；AI 提案层与 executor 同口径拒绝（executor 直写 db 也拦）。卷/场景详情页不再提供变更记录区与「设为当前位置」入口。
-- **状态累积改章序前缀**：`computeState` 由「沿树父链」改为「**章序 ≤ 目标进度章的全部已确认 Delta**」（跨卷/跨章累积）；目标节点 → 进度章：章→自身、场景→所属章、卷→该卷最后一个未软删章、`root` 不可作 `at_node`（404）。**卡 1.2 之前写入的非章锚点 Delta 不再参与累积**（无 UI 入口，静默 inert）。
+- **状态累积改章序前缀**：`computeState` 由「沿树父链」改为「**章序 ≤ 目标进度章的全部已确认 Delta**」（跨卷/跨章累积）；目标节点 → 进度章：章→自身、场景→所属章、卷→该卷最后一个未软删章、`root` 不可作 `at_node`（404）。**早期写入的非章锚点 Delta 不再参与累积**（无 UI 入口，静默 inert）。
 - **character 字段调整**：移除 `status`（无 UI 展示、无写入路径）；`abilities[]` 经 `007` 迁移为 `ability_panel`（顶层分组「能力」+ 每个标签一叶子，幂等且不覆盖已有面板）；新增 `description`（**新建/详情前端必填**，服务端不硬校验）、`alias`（单值假名）、`race`。`SCHEMA_VERSION 6 → 7`。
 - **人物页不再是列表页**：`#/characters` 现为 master-detail 工作台（左栏人物列表 + 右栏详情）；`#/characters/:id` 语义不变。
 
@@ -548,7 +546,6 @@
 
 > 用户反馈九项 + 静默失效根因 + 链式新建断链。**纯前端，API/数据契约零改动**；新增 4 条源码守卫规则（累计 13 条）。
 
-
 ### Fixed（两条静默失效根因——都是「测试全绿但像素全错」）
 
 - **语义色层整体失效（P0）**：antd v6 的 `cssVar` **从不把 `--ant-*` 注入 `:root`**，而是挂在组件级 class 作用域（`.css-var-<useId>`）；`index.css` 的 `:root { --primary: var(--ant-color-primary) }` 等映射因此全部解析为空——全站 Tailwind 语义色（`bg-card` / `border-border` / `text-muted-foreground` / `bg-primary` / hover 面 / chip 底色 / 拖拽指示线）静默透明（v0.0.26 引入，本次才被发现）。修复 = `cssVar: { key: CSS_VAR_KEY }` 与 `index.html` 的 `<html class>` 同值，并在 `design-discipline.test.ts` 加 `cssvar-scope` 守卫锁死两处字面量
@@ -691,7 +688,7 @@
   - 表结构声明收敛 `packages/db/src/tables.ts`（4 表 `sqliteTable` 定义 + 手写 DDL 常量同文件，schema.test.ts「列名/类型/notNull/主键」对齐断言锁双份同步）；`schema.ts` 瘦身为版本工具（user_version 三态）
   - 查询模块函数签名保持 `(db: Db)` 不变（调用方零改动），内部经 `queryDb` 辅助（WeakMap 缓存 drizzle 实例）混合风格渐进替换：**实现层 61 处 prepare 全部清零**——trash（13）/ delta（9：8 builder + 1 sql 模板 order 聚合）/ chat（5：listSessions 相关子查询聚合走 sql 模板参数绑定）/ relation（11：同表二次 join 用 alias）/ entity（23：动态 where、LIKE 通配符透传、排序白名单列对象、JS 过滤路径、inArray 动态占位符、批量 sort_order、级联软删，复杂排序/EXISTS 跨表 2 处 sql 模板）；compute-state/outline-ops（0 prepare 纯调用层）零改动；migration 管线保持 native
   - **约束保持**：JSON 列（data/changes/metadata/tool_calls）text 模式 + 行映射层防御解析（drizzle json mode 对坏 JSON 抛错，弃用）；shared API 契约类型不动（类型不反向流入 shared）；事务仍为 native `withTransaction`（连接级共享已验证：异常回滚两侧不可见）
-  - 全仓 1692 测试全绿（测试文件一字未改）+ typecheck/lint/build 通过；15.1-15.6 每卡「并行 worker 实现 + oracle 独立审查」零阻断
+  - 全仓 1692 测试全绿（测试文件一字未改）+ typecheck/lint/build 通过
 
 ## [v0.0.21] - 2026-08-23
 
@@ -713,9 +710,9 @@
 
 ### Fixed
 
-- **卡 13.1（2026-08 用户反馈——人物页「状态是什么？」）**：character 列表「状态」列移除——`data.status` 为无定义自由文本、存量恒空、列表恒显示「—」，用户无法理解其含义（信息展示缺陷）；详情页表单字段一并移除（列表与详情均不再展示，存量数据容错保留，AI 工具 filters.status 语义不变）
-- **卡 13.6（2026-08 用户复核）**：人物行首版两行式布局两处缺陷修复——①单 `<td>` 渲染与「名称|角色」双列表头错位致**角色列空白**；②性格/能力合并 chips 无法分辨；用户裁决改为**角色/性格/能力独立成列**
-- **卡 13.6 复修（2026-08 实测）**：四列版性格/能力两个 `<td>` 直接加 `flex` 类，覆盖 `table-cell` 后被浏览器表格布局塞进同一列槽（Chromium 实测两列 left 同为 573px 完全重叠）——改为 td 保持 table-cell、flex 移入内层容器；红线补入 layout.md §4.4
+- **人物页「状态是什么？」（2026-08 用户反馈）**：character 列表「状态」列移除——`data.status` 为无定义自由文本、存量恒空、列表恒显示「—」，用户无法理解其含义（信息展示缺陷）；详情页表单字段一并移除（列表与详情均不再展示，存量数据容错保留，AI 工具 filters.status 语义不变）
+- **人物行布局（2026-08 用户复核）**：人物行首版两行式布局两处缺陷修复——①单 `<td>` 渲染与「名称|角色」双列表头错位致**角色列空白**；②性格/能力合并 chips 无法分辨；用户裁决改为**角色/性格/能力独立成列**
+- **人物行布局复修（2026-08 实测）**：四列版性格/能力两个 `<td>` 直接加 `flex` 类，覆盖 `table-cell` 后被浏览器表格布局塞进同一列槽（Chromium 实测两列 left 同为 573px 完全重叠）——改为 td 保持 table-cell、flex 移入内层容器；红线补入 layout.md §4.4
 
 ### Changed
 
@@ -770,7 +767,7 @@
   - **决策 40：右键菜单替代行级问 AI**——删除全部 6 处行级 AskAiButton（实体/伏笔/参考资料/大纲/时间点/事件）；新增右键菜单（Base UI ContextMenu 封装）——「注入会话上下文」（复用 chat store focusContext）与「建立关联」（新建 relation_records，源端点按行对象预填）；InfoBar「问 AI」统一入口保留
   - **决策 41：项目规则文件 AGENTS.md**——项目目录 AGENTS.md 为项目规则唯一事实源；project.json `prompt` 字段废弃——打开项目时 prompt 存在且无 AGENTS.md 则自动迁移写入；设置页改为直接编辑 AGENTS.md；web 读取检测外部修改（mtime）；「## 项目设定」注入逻辑保留（数据源改为 AGENTS.md）；修订决策 25（rules.md 否决记录被取代）
   - **决策 42：实体设定页树形视图**——设定列表改为树形视图（参考大纲页设计）与设定树 tab 合并——层级天然展示；折叠/展开、行内编辑、拖拽调整层级（belongs_to 防环沿用决策 30，先建新边后删旧边）、Enter 新建子级、双击详情；筛选改为搜索+标签过滤（树内过滤），移除表格分页；`#/entities/setting-tree` 重定向到 `#/entities/setting`
-  - 每卡临时分支 + git worktree 并行开发（4 波次），独立 oracle 审验全 PASS，线性合入 main；全仓 1600 测试全绿 + typecheck/lint/build 通过；发布 v0.0.16（8 包版本同步）
+  - 全仓 1600 测试全绿 + typecheck/lint/build 通过；发布 v0.0.16（8 包版本同步）
 
 ## [v0.0.15] - 2026-08-19
 
@@ -795,7 +792,7 @@
   - O4 时间轴折叠/展开按钮移至时间点组标题左侧（参考大纲页折叠箭头位序）；
   - O5 设定树视图新增「全部展开 / 全部折叠」工具栏按钮（折叠态提升受控层 + `expandableSettingNodeIds` 纯函数）；
   - **O6 画布页移除（决策 33）**：删除 `#/canvas` 路由、中栏「画布」tab（7→6 tab）、`pages/Canvas.tsx` 与 `lib/canvas.ts`（及测试）；`plot_edge` 数据模型与 `POST/GET/DELETE /relation` 关系接口能力完整保留（仅无 UI 入口）；旧 localStorage 画布坐标为无害残留不清理；同步删除画布死后 CSS（`canvas-edge-flow`）。
-  - 每卡临时分支 + git worktree 并行开发（O1‖O2‖O3O4 → O5‖O6），独立 oracle 审验全 PASS，线性合入 main；全仓测试 1562 个全绿 + typecheck/lint/build 通过。
+  - 全仓测试 1562 个全绿 + typecheck/lint/build 通过。
 
 ## [v0.0.13] - 2026-08-19
 
@@ -804,7 +801,7 @@
 - **设定列表上级设定筛选（N1-N2，2026-08 新需求，决策 32）**——实体关系页「设定」tab 新增「上级设定」筛选：选择某上级设定后，列表只显示其**直接及所有后代设定（递归子树，不含上级自身）**：
   - `GET /api/v1/entity/setting` 新增可选查询参数 `parent_id`（**仅 setting 类型生效**，其他类型传入忽略），匹配语义 = 设定在层级树（belongs_to，决策 30）中直接或间接属于该上级；**复用既有 `listSettingHierarchyEdges` 全量层级边**（关系表索引、O(N)）建 childOf 邻接表栈式 DFS 收集后代集合（防环守卫 = Set 去重），走 db `listEntities` 既有 JS 过滤路径（total = 过滤后总数、分页正确；无过滤时保持 COUNT+LIMIT SQL 路径零回归）；与搜索 / 标签筛选 / 排序 / 分页组合（AND）；指向不存在的设定（含已软删）→ 空结果（宽松，同 tag 无匹配不 404）；软删联动由边查询可见性天然保证
   - 前端「上级设定 ▾」下拉（候选 = 全部设定按名称排序 +「全部」重置项，与「标签 ▾」并列；候选聚合与标签候选合并一次请求 limit 200）；父设定已软删或超 200 截断时下拉兑底「（已删除或不可见）」防空白；空态文案三分支（搜索无结果 / 「《X》下暂无设定」+ 清除上级筛选 / 无实体）；切换 tab / 类型重置
-  - 设计文档：`decisions.md` 决策 32、`endpoints.md` 实体列表契约（`parent_id`）、`entity-list.md` 关键交互与空态；oracle 独立审核无 P0/P1（P2：`parent_id` 空串防御归一化 + 空态文档补正已随卡处理）
+  - 设计文档：实体列表契约（`parent_id`）与关键交互/空态已落档；独立复核无 P0/P1（P2：`parent_id` 空串防御归一化 + 空态文档补正已同批处理）
 
 ## [v0.0.12] - 2026-08-18
 
