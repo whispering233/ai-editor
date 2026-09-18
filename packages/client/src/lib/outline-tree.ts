@@ -1,5 +1,5 @@
 // 大纲树辅助纯函数（S2.3）：父节点按类型过滤（严格三层）+ 子节点查找（move order 计算）
-import type { OutlineNode, OutlineTree } from "@whispering233/ai-editor-shared";
+import type { OutlineChapter, OutlineNode, OutlineTree } from "@whispering233/ai-editor-shared";
 import type { OutlineNodeType } from "./api";
 
 /** 大纲根（虚拟）id——**卷**挂 root 时使用的 parent_id（章只挂卷，2026-09） */
@@ -273,4 +273,60 @@ export function chapterNodeOptions(tree: OutlineTree | null): FlatNodeOption[] {
 /** 章节点是否存在且未软删（`current_position` 的章级有效性判定——锚点仅章） */
 export function chapterNodeExists(tree: OutlineTree | null, nodeId: string): boolean {
   return chapterNodeOptions(tree).some((o) => o.id === nodeId);
+}
+
+// ============ 大纲编号（展示口径：只计可见节点，删章后重排） ============
+// 与服务端 `deriveChapterOrder`（含软删章、保 Delta/伏笔引用稳定）**不同源**——见
+// `docs/design/10-data-model.md` §4「UI 展示编号 ≠ 本节的章序」：本处编号只作展示，不参与任何计算。
+
+/** 章视图行（阅读序：卷序 → 卷内章序） */
+export interface OutlineChapterRow {
+  chapter: OutlineChapter;
+  /** 所属卷 id；**存量直挂 root 的章** = `ROOT_NODE_ID` */
+  volumeId: string;
+  /** 所属卷的编号徽标文案（`第N卷`）；根级章无卷 → 空串 */
+  volumeLabel: string;
+  /** 章编号徽标文案（`第N章`） */
+  chapterLabel: string;
+}
+
+/** 大纲编号结果（树视图按 `labels` 查、章视图直接读 `chapterRows`） */
+export interface OutlineNumbering {
+  /** 节点 id → 编号徽标文案（`第1卷` / `第3章`）；**场景不编号**，不入 Map */
+  labels: Map<string, string>;
+  /** 章视图行（先序 = 阅读序） */
+  chapterRows: OutlineChapterRow[];
+}
+
+/**
+ * 从整树推导大纲编号（展示口径）：
+ * - 卷序 = 顶层卷按**文件位置序** 1-based
+ * - 章序 = **全书先序连续**（跨卷累计，含存量直挂 root 的章——它们不占卷号）
+ * - **只计可见节点**（`deleted === true` 的节点及其子树跳过）⇒ 删章后编号重排
+ * - `null` / 空树 → 空结果
+ */
+export function numberOutline(tree: OutlineTree | null): OutlineNumbering {
+  const labels = new Map<string, string>();
+  const chapterRows: OutlineChapterRow[] = [];
+  let volumeNumber = 0;
+  let chapterNumber = 0;
+  const pushChapter = (chapter: OutlineChapter, volumeId: string, volumeLabel: string): void => {
+    if (chapter.deleted === true) return;
+    chapterNumber += 1;
+    const chapterLabel = `第${chapterNumber}章`;
+    labels.set(chapter.id, chapterLabel);
+    chapterRows.push({ chapter, volumeId, volumeLabel, chapterLabel });
+  };
+  for (const child of tree?.children ?? []) {
+    if (child.deleted === true) continue;
+    if (child.type === "chapter") {
+      pushChapter(child, ROOT_NODE_ID, ""); // 存量根级章（读容忍）：参与章序，无卷号
+      continue;
+    }
+    volumeNumber += 1;
+    const volumeLabel = `第${volumeNumber}卷`;
+    labels.set(child.id, volumeLabel);
+    for (const chapter of child.children ?? []) pushChapter(chapter, child.id, volumeLabel);
+  }
+  return { labels, chapterRows };
 }

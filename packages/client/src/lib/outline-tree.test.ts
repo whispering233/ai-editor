@@ -16,6 +16,7 @@ import {
   flattenTree,
   isDescendant,
   isNoopDrop,
+  numberOutline,
   parentOptionsForType,
   ROOT_NODE_ID,
   ROOT_PARENT_OPTION,
@@ -457,5 +458,106 @@ describe("chapterNodeOptions / chapterNodeExists（卷/场景不承载锚点）"
     expect(chapterNodeExists(chapterTree(), "root")).toBe(false);
     expect(chapterNodeExists(chapterTree(), "ch-999")).toBe(false);
     expect(chapterNodeExists(null, "ch-1")).toBe(false);
+  });
+});
+
+/** 造树：卷1（章1（场1）、章2）、卷2（章3）、存量根级章 ch-9（直挂 root） */
+const numberTree = (): OutlineTree => ({
+  id: "root",
+  type: "root",
+  schemaVersion: 1,
+  children: [
+    {
+      id: "vol-1",
+      type: "volume",
+      title: "第一卷",
+      updatedAt: "t",
+      children: [
+        {
+          id: "ch-1",
+          type: "chapter",
+          title: "第一章",
+          updatedAt: "t",
+          children: [{ id: "sc-1", type: "scene", title: "场景一", updatedAt: "t" }],
+        },
+        { id: "ch-2", type: "chapter", title: "第二章", updatedAt: "t" },
+      ],
+    },
+    {
+      id: "vol-2",
+      type: "volume",
+      title: "第二卷",
+      updatedAt: "t",
+      children: [{ id: "ch-3", type: "chapter", title: "第三章", updatedAt: "t" }],
+    },
+    { id: "ch-9", type: "chapter", title: "旧根级章", updatedAt: "t" },
+  ],
+});
+
+describe("numberOutline（展示口径编号：卷序 + 全局章序）", () => {
+  it("卷序 1-based；章序全书连续（跨卷累计，含存量根级章）；场景不编号", () => {
+    const { labels } = numberOutline(numberTree());
+    expect(labels.get("vol-1")).toBe("第1卷");
+    expect(labels.get("vol-2")).toBe("第2卷");
+    expect(labels.get("ch-1")).toBe("第1章");
+    expect(labels.get("ch-2")).toBe("第2章");
+    expect(labels.get("ch-3")).toBe("第3章");
+    expect(labels.get("ch-9")).toBe("第4章"); // 根级章参与全局章序（在卷 2 之后 = 第4章）
+    expect(labels.has("sc-1")).toBe(false); // 场景不编号
+  });
+
+  it("chapterRows = 阅读序，带所属卷的 id 与卷号；根级章 volumeLabel 为空", () => {
+    const { chapterRows } = numberOutline(numberTree());
+    expect(chapterRows.map((r) => [r.chapter.id, r.volumeId, r.volumeLabel, r.chapterLabel])).toEqual([
+      ["ch-1", "vol-1", "第1卷", "第1章"],
+      ["ch-2", "vol-1", "第1卷", "第2章"],
+      ["ch-3", "vol-2", "第2卷", "第3章"],
+      ["ch-9", ROOT_NODE_ID, "", "第4章"],
+    ]);
+  });
+
+  it("只计可见节点：软删卷整卷跳过、软删章不占号（删后重排）", () => {
+    const softDeleted: OutlineTree = {
+      id: "root",
+      type: "root",
+      schemaVersion: 1,
+      children: [
+        {
+          id: "vol-1",
+          type: "volume",
+          title: "第一卷",
+          updatedAt: "t",
+          children: [
+            { id: "ch-1", type: "chapter", title: "软删章", updatedAt: "t", deleted: true },
+            { id: "ch-2", type: "chapter", title: "第二章", updatedAt: "t" },
+          ],
+        },
+        {
+          id: "vol-2",
+          type: "volume",
+          title: "软删卷",
+          updatedAt: "t",
+          deleted: true,
+          children: [{ id: "ch-3", type: "chapter", title: "第三章", updatedAt: "t" }],
+        },
+        { id: "ch-9", type: "chapter", title: "旧根级章", updatedAt: "t" },
+      ],
+    };
+    const { labels, chapterRows } = numberOutline(softDeleted);
+    expect(labels.get("vol-1")).toBe("第1卷");
+    expect(labels.has("ch-1")).toBe(false); // 软删章不占号
+    expect(labels.get("ch-2")).toBe("第1章"); // 删后重排
+    expect(labels.has("vol-2")).toBe(false); // 软删卷整卷跳过
+    expect(labels.has("ch-3")).toBe(false);
+    expect(labels.get("ch-9")).toBe("第2章");
+    expect(chapterRows.map((r) => r.chapter.id)).toEqual(["ch-2", "ch-9"]);
+  });
+
+  it("null 树 / 空树 → 空编号", () => {
+    expect(numberOutline(null)).toEqual({ labels: new Map(), chapterRows: [] });
+    expect(numberOutline({ id: "root", type: "root", schemaVersion: 1, children: [] })).toEqual({
+      labels: new Map(),
+      chapterRows: [],
+    });
   });
 });
