@@ -12,19 +12,28 @@ import { useThemeMode } from "../../hooks/use-theme-mode";
 import "@blocknote/ariakit/style.css";
 import "./blocknote.css";
 
-/** 块数组 JSON 字符串 → 初始块：空串 / 解析失败 / 非块数组 → 空文档（坏数据不炸页面） */
-export function parseBlockContent(content: string): PartialBlock[] {
-  if (content === "") return [];
+/**
+ * 块数组 JSON 字符串 → 初始块：空串 / 解析失败 / 非块数组 → `undefined`（交给 BlockNote 的默认空段落）。
+ *
+ * **绝不能返回空数组 `[]`**（真事故：新章「写正文」整页被错误边界接管）：
+ * `@blocknote/core` 建文档的写法是 `t.initialContent || [{ type: "paragraph", id: generateID() }]`，
+ * 随后立即 `if (!Array.isArray(e) || e.length === 0) throw` —— `[]` 是 truthy，默认段落不会兜底，
+ * 紧接着就命中 length === 0 抛错，外层 catch 再包成
+ * `Error creating document from blocks passed as \`initialContent\``（已对已装包 0.54.2 源码核实）。
+ * 空缺内容（服务端「从未写过」= `""`，或合法但为空的 `"[]"`）必须传 `undefined`。
+ */
+export function parseBlockContent(content: string): PartialBlock[] | undefined {
+  if (content === "") return undefined;
   try {
     const parsed: unknown = JSON.parse(content);
-    return isBlockArray(parsed) ? (parsed as PartialBlock[]) : [];
+    return isBlockArray(parsed) && parsed.length > 0 ? (parsed as PartialBlock[]) : undefined;
   } catch {
-    return [];
+    return undefined;
   }
 }
 
 export interface DocumentEditorProps {
- /** 初始内容（块数组 JSON 字符串；空串 = 空文档）——仅挂载时消费，外部改写请换 key 重挂 */
+ /** 初始内容（块数组 JSON 字符串；空串 / 空数组 = 空文档）——仅挂载时消费，外部改写请换 key 重挂 */
   initialContent: string;
  /** 内容变化：把 editor.document 序列化为块数组 JSON 字符串交给调用方（保存/自动保存） */
   onChange: (content: string) => void;
