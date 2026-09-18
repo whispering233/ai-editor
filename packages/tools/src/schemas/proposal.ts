@@ -197,7 +197,7 @@ export type ProposeAbandonHookArgs = Static<typeof proposeAbandonHookArgsSchema>
 /**
  * propose_reorder_timepoints 入参：timepoint_ids——LLM 按时间点 name 语义识别先后后产出的
  * **有序时间点 id 全量序列**（须覆盖当前全部未软删时间点，缺/多/重复由生成时校验拒绝）；
- * 200 = 时间点量上限，与列表 limit 对齐。
+ * maxItems 与列表 limit 的 db clamp 上限对齐（数值单源在 db，本 schema 不复述）。
  */
 export const proposeReorderTimepointsArgsSchema = Type.Object(
   {

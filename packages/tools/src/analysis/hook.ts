@@ -7,8 +7,8 @@
 // plants/advances/resolves 不存章节元数据，由关系 source_id 经 ChapterIndex（查询时现推，
 // 节点 move 后不陈旧）
 // - 当前章节 = project.json 的 current_position（经共享 ChapterIndex，与 S6.4 孤儿工具同口径）
-// - half_life：显式优先；缺省按 payoff_timing 映射（immediate=3/near_term=8/mid_arc=15/
-// slow_burn=25/endgame=40）；payoff_timing 缺失/非法 → slow_burn（长线保守默认）
+// - half_life：显式优先；缺省按 payoff_timing 取 shared `DEFAULT_HALF_LIFE` 映射
+//   （数值单源 = shared/src/constants/hook.ts，本文件不复述）；payoff_timing 缺失/非法 → slow_burn（长线保守默认）
 // - ready_to_resolve：expected_resolve_node_id 设置时 = current >= 该节点章节序；
 // 未设置/节点无章号 → 未计算（null），不猜测
 // - blocked：本 hook 依赖（depends_on 的 target）尚未 resolved
@@ -341,7 +341,7 @@ export interface HookPayoffSuggestion {
  * 回收建议（suggest_hook_payoff(hook_id)）：
  * 候选 = 大纲中**当前章节之后**（含当前章）的**章**节点（非软删），排除已回收节点
  * （卡片 1.3：锚点仅章——候选从场景改为章，与 REST/提案层 plants·advances·resolves 口径一致）；
- * 理想回收点 = 埋设章 + 半衰期（节奏匹配）；按与理想点距离升序取 top 3。
+ * 理想回收点 = 埋设章 + 半衰期（节奏匹配）；按与理想点距离升序取前若干条（条数上限见函数尾 slice）。
  * hook 不存在/已软删 → null；无埋设记录或大纲无候选章 → 空建议。
  */
 export function runSuggestHookPayoff(ctx: ToolContext, args: SuggestHookPayoffArgs, signal?: AbortSignal): { suggestions: HookPayoffSuggestion[] } | null {

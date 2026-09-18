@@ -33,7 +33,7 @@ export interface GetEntityResult extends Entity {
  * - type 与行内实际类型不一致 → null（参数错误，id 前缀体系下正常调用不会出现；
  * LLM 传错类型时得到「不存在」而非脏数据）
  * - 不存在/已软删 → null（查询无结果 ≠ 失败，LLM 据 null 自纠或向用户确认）
- * - reference：附全文投影 `content`（未写过正文 → 空串；列表摘要的 120 字截断只在
+ * - reference：附全文投影 `content`（未写过正文 → 空串；列表摘要的截断只在
  * search_references，详情取全文）
  */
 export function runGetEntity(ctx: ToolContext, args: GetEntityArgs): GetEntityResult | null {
@@ -53,7 +53,7 @@ export type SearchEntitiesResult = EntityListResult;
  * 实体搜索（search_entities(type, query, filters?) → 匹配实体列表）。
  * 透传 db listEntities：type + name LIKE 模糊匹配 + **软删过滤**
  * + filters（tags AND / status 精确匹配，data 字段 JS 过滤）+ 摘要提取（db 单一实现）。
- * limit 传 200（db clamp 上限）：搜索结果尽量全（token 截断由上层按 处理）。
+ * limit 取 db `listEntities` 的 clamp 上限（clamp 数值单源在 db）：搜索结果尽量全（token 截断由上层按需处理）。
  */
 export function runSearchEntities(ctx: ToolContext, args: SearchEntitiesArgs): SearchEntitiesResult {
   return listEntities(ctx.db, {

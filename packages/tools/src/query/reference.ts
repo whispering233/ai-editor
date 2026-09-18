@@ -4,7 +4,8 @@
 // 靠工具按需拉取保护 token 预算）。全文取详情走 get_entity('reference', id) 的 reference 分支。
 //
 // 实现：复用 db listEntities（type='reference' + q 名称软删过滤 + filters.tags AND 匹配
-// + 摘要提取）——db toSummary 已对 reference 做 type + content 摘要截断 120 字 + tags 前 3，
+// + 摘要提取）——db toSummary 已对 reference 做 type + content 投影摘要截断 + tags 条数截断
+// （两者长度/条数上限的数值单源在 db `toSummary`），
 // 列表/搜索不会把全文长文本带回（防 token 膨胀）。
 // search 的 type 参数指「参考资料分类」（data.type 枚举），非实体类型——listEntities 的
 // filters 不支持 data.type 过滤（仅 tags/status），故在结果层做 JS 过滤（total 同步修正）。

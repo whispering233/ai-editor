@@ -39,7 +39,7 @@ export * from "./proposal/reference.js";
 // S6.7 执行层：导出 executor 门面与 13 个执行函数（不注册工具——见文件头注释）
 export * from "./executor/index.js";
 
-import { RELATION_TYPES, TOOL_PERMISSION } from "@whispering233/ai-editor-shared";
+import { DEFAULT_HALF_LIFE, RELATION_TYPES, TOOL_PERMISSION } from "@whispering233/ai-editor-shared";
 import {
   computeStateArgsSchema,
   getChapterTextArgsSchema,
@@ -168,7 +168,8 @@ const queryToolDefs: ToolDefinition[] = [
     description:
       "参考资料搜索：按关键词搜索标题+标签命中的参考资料摘要列表（type 分类可选过滤：自由文本分类，" +
       "建议沿用项目内已有分类；tags 标签 AND 过滤）。" +
-      "返回摘要（content 截断 120 字）——取全文请用 get_entity 的 reference 类型。用于 AI 不知道书里有哪些参考资料时先检索。",
+      "返回摘要（content 为截断后的投影摘要，非全文；截断长度见 db toSummary）——取全文请用 get_entity 的 reference 类型。" +
+      "用于 AI 不知道书里有哪些参考资料时先检索。",
     parameters: searchReferencesArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
     run: runSearchReferences,
@@ -257,6 +258,12 @@ import {
 } from "./schemas/index.js";
 import { runAnalyzeHookHealth, runDetectHookConflicts, runFindHookOpportunities, runSuggestHookPayoff, runTraceHookLifecycle } from "./analysis/hook.js";
 
+// 半衰期缺省映射的模型可见文案：插值自 shared `DEFAULT_HALF_LIFE`（数值单源，禁止手写数字）——
+// 回归断言见 index.test.ts「半衰期映射串 = 常量五项」
+const halfLifeDefaultsText = Object.entries(DEFAULT_HALF_LIFE)
+  .map(([timing, chapters]) => `${timing}=${chapters}`)
+  .join("/");
+
 /** 伏笔分析工具定义（S6.5，「工具扩展」+；权限全为 AUTO） */
 const hookToolDefs: ToolDefinition[] = [
   {
@@ -265,7 +272,7 @@ const hookToolDefs: ToolDefinition[] = [
       "伏笔健康总览（无参）：统计全部活跃伏笔（planted/progressing）——stale（休眠超过半衰期）、" +
       "overdue（埋设超过两倍半衰期）、blocked（依赖尚未回收）及人类可读 warnings。" +
       "返回 { current_chapter, active_count, stale, overdue, blocked_chains, warnings }；" +
-      "半衰期显式 half_life 优先、缺省按 payoff_timing 映射（immediate=3/near_term=8/mid_arc=15/slow_burn=25/endgame=40）。",
+      "半衰期显式 half_life 优先、缺省按 payoff_timing 映射（" + halfLifeDefaultsText + "）。",
     parameters: analyzeHookHealthArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
     run: runAnalyzeHookHealth,
@@ -284,7 +291,7 @@ const hookToolDefs: ToolDefinition[] = [
     name: "suggest_hook_payoff",
     description:
       "伏笔回收建议：基于埋设章与半衰期（显式优先、缺省按 payoff_timing 映射）推荐理想回收**章**" +
-      "（节奏匹配 top 3，候选为当前章节之后的未回收章；伏笔锚点仅章）。返回 { suggestions: [{ at_node, reason }] }；" +
+      "（节奏匹配，取距离最近的若干章；候选为当前章节之后的未回收章；伏笔锚点仅章）。返回 { suggestions: [{ at_node, reason }] }；" +
       "hook 不存在/已软删返回 null，无埋设记录或大纲无候选章返回空建议。",
     parameters: suggestHookPayoffArgsSchema,
     permission: TOOL_PERMISSION.AUTO,

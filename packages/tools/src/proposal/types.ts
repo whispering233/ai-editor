@@ -1,7 +1,8 @@
 // 提案对象类型 + 构造辅助（S6.6，proposal/ 模块公共层）
 //
 // **提案是服务端运行时对象**（仅内存、不落盘、随 SSE 推送 GUI；prop_ 前缀运行时 id，
-// 不跨 client——故定义在 tools 包而非 shared）。提案仓（TTL 10 分钟 + 条数上限 + 项目绑定）
+// 不跨 client——故定义在 tools 包而非 shared）。提案仓（TTL + 条数上限 + 项目绑定，
+// 两者数值单源 = agent `runtime/proposals.ts`）
 // 属 S7.4 范围，本模块只负责**产出提案对象结构**。
 //
 // 提案对象结构：

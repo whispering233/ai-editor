@@ -4,7 +4,7 @@
 // S6.5 伏笔 5 + S6.6 提案 16 + S6.7 卡 12.9（get_chapter_text）1 = 36 个；执行 13 个不暴露）；
 // workspace 依赖 @whispering233/ai-editor-db / @whispering233/ai-editor-shared 解析由 import 在编译/运行期验证
 import { describe, expect, it } from "vitest";
-import { PROPOSAL_TOOLS } from "@whispering233/ai-editor-shared";
+import { DEFAULT_HALF_LIFE, PROPOSAL_TOOLS } from "@whispering233/ai-editor-shared";
 import * as m from "./index";
 
 describe("@whispering233/ai-editor-tools 入口冒烟", () => {
@@ -40,6 +40,12 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
     expect(new Set(descriptionNumbers)).toEqual(
       new Set([String(m.DEFAULT_CHAPTER_TEXT_CHARS), String(m.MAX_CHAPTER_TEXT_CHARS)]),
     );
+ // 半衰期缺省映射防漂移：description 由 shared DEFAULT_HALF_LIFE 插值生成——
+ // 改成手写数字 / 值改了没同步，逐项比对即报红
+    const hookHealthDescription = m.getTool("analyze_hook_health")!.description;
+    for (const [timing, chapters] of Object.entries(DEFAULT_HALF_LIFE)) {
+      expect(hookHealthDescription).toContain(`${timing}=${chapters}`);
+    }
  // 提案类工具权限为 PROPOSAL（「提案类（需确认）」）
     expect(m.getTool("propose_create_entity")!.permission).toBe("proposal");
     expect(m.getTool("propose_abandon_hook")!.permission).toBe("proposal");

@@ -2,7 +2,7 @@
 // 语义：为指定实体发现与同类型其他实体的潜在关联（启发式信号）：
 // - S1 共享场景（强信号）：两角色共同 appears_in 于同一大纲节点（同场戏出现过）
 // - S2 共同邻居（次信号）：两实体在实体关系图中共享直接关联实体（「朋友的朋友」）
-// 已存在直接关系的候选跳过；建议按信号强度降序取 top 10；relation_type 建议
+// 已存在直接关系的候选跳过；建议按信号强度降序取 SUGGESTION_LIMIT 条；relation_type 建议
 // ally（同场戏相识）/ ally（经中间人相识）。
 // 数据访问：db 查询层（getEntity/listEntities/listRelations）+ 纯函数图分析，无原生 SQL。
 // signal：全量候选 × 信号计算为长任务候选，循环中检查。
@@ -102,7 +102,7 @@ export function runSuggestConnections(ctx: ToolContext, args: SuggestConnections
     }
   }
 
- // 4. 信号强度降序 → top 10（并列按 target_id 稳定排序）
+ // 4. 信号强度降序 → 取 SUGGESTION_LIMIT 条（并列按 target_id 稳定排序）
   scored.sort((a, b) => (b.score === a.score ? a.targetId.localeCompare(b.targetId) : b.score - a.score));
   return {
     suggestions: scored.slice(0, SUGGESTION_LIMIT).map((s) => ({ target_id: s.targetId, relation_type: s.relationType, reason: s.reason })),
