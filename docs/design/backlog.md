@@ -179,7 +179,7 @@
   - 最小修法：把 Outline 的页头/行操作区拆成 presenter 组件后补 `renderToString` 断言（与人物页同款）；**代价 = 一次真实拆分**，不要在页面里塞测试钩子。
   - **2026-09 局部兑现**：章视图已拆为 presenter（`components/outline/chapter-view.tsx`）+ `chapter-view.test.tsx`（renderToString：两枚编号徽标 / 命名态输入框 / 空态 / **否定契约**——不断言 `<button` 与 `draggable`，钉住「不搬删除·新建·拖拽进来」）；**大纲树行仍未拆**（本次只改徽标内容与占位几何，未动交互语义）——下次改树行操作区时仍按上一条拆。
 - **章视图不做结构编辑**（2026-09 大纲页双视图）
-  - 现状：章视图只有「改标题 + 进详情 + 写正文（导航链接）+ 正文字数」，删除 / 新建场 / 拖拽排序全在大纲树。
+  - 现状：章视图只有「改标题 + 进详情 + 写正文（图标按钮，导航）+ 正文字数」，删除 / 新建场 / 拖拽排序全在大纲树。
   - 触发条件：用户反馈要在章视图里直接排序或新建章。
   - 最小修法：把树行渲染（现闭在 `Outline.tsx` 的 `renderNodes` 内）抽成可复用 presenter 后给章视图接同行能力；**拖拽需先定义跨卷语义**（平铺列表里卷序不是锚点）。
 - **编号未扩散到其他位置**（2026-09）
@@ -195,10 +195,6 @@
   - 触发条件：下次触碰设定树数据派生时。
   - 最小修法：删 `SettingTreeNode.category` + 输入映射 + `setting-tree.test.ts` 对应断言。
 
-- **参考资料页「分类徽标」形态与类型徽标不一致**（卡 10.4 登记）
-  - 现状：`pages/ReferenceDetail.tsx` 页头的分类徽标已是中性色，但形态是**描边徽标**（`border border-border rounded-md`），与 `TypeChip`（**描边式**：1px `type-badge-border` + `surface-muted` 底 + `rounded-sm`）仍有差异——圆角档不同，且它同时是页头右侧的元信息位（不是行内徽标）。
-  - 触发条件：再次调整参考资料页头部布局时。
-  - 最小修法：换 `TypeChip`（一行），代价是页头那一块视觉微变（圆角 `rounded-md` → `rounded-sm`、边框色 `border-border` → `type-badge-border`）。
 - **关联页端点类型徽标的中文名（卡 5 已修，残留见下）**（卡 10.5 发现 → 2026-09 卡 5 修复）
   - 现状：**已修**——`components/entity/relations-view.tsx` 的 `ENDPOINT_TYPE_LABEL` 改为派生 shared `ENTITY_TYPE_LABELS` + `outline_node`（原先手抄的四类表让 `timepoint`/`event`/`reference` 直接漏英文），过滤下拉同源；单测守住「新增实体类型不再漏中文名」。
   - 残留：「类型→中文名」仍是**三份表**（shared `ENTITY_TYPE_LABELS` / `pages/Trash.tsx` 的 `ENTITY_TYPE_LABEL` / `lib/entity-list.ts` 的列表标签）——三者值已一致，但新增实体类型时要记得同步。

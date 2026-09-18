@@ -13,7 +13,7 @@
 | 项目目录 `sessions/` | 对话历史（一 session 一 JSONL，格式 = pi session v3） | `docs/db/schema.md` |
 | 创作根 `.ai-editor/config.json` | 创作根级偏好（不进项目文件）：`debug` 段 = 调试日志开关 `{ "debug": { "enabled": true, "categories": [...] } }`，四类别 chat/request/usage/http；categories 缺失 = 全部、enabled 缺失/false = 全关；文件不存在/非法 JSON/结构不符 = 全关（server 包 `src/debug.ts`）。`lastProject` = 上次成功打开的项目目录（绝对路径），启动时自动恢复（见 `build.md` §启动流程），open 成功后由服务端合并写入（原子写 + 保留其他字段；写入失败不影响打开结果） | server 包 `src/debug.ts` / `src/last-project.ts` |
 | 创作根 `.ai-editor/cloud.json` | **云端存档**账号配置与同步状态（不进项目文件）：`webdav` 段 = `url` / `username` / `password`（**应用密码，明文存储 + 文件权限 0600**）/ `device`（设备名，缺省 = 简化 hostname：去域名后缀、滤非法字符、剥首尾空白与 `_`、截 16 字符）；`autoPush` = 自动推送开关（**本机级**，缺省关）；`books` = 按 `project.id` 记 `dirName` / `lastPushedFileName` / `lastSeenHeadFileName` / `lastSyncAt` / `baseEntries`（并集基线）。**任何 API 响应永不回传 password** | server 包 `src/cloud/`；语义见 `40-cloud-sync.md`，端点见 `../api/100-api-cloud.md` |
-| 浏览器 localStorage | 展示层偏好，不进数据文件：主题 `ai-editor:theme`、三栏面板 `ai-editor:panels`、写作偏好 `ai-editor:writing`（仅此三个 key；画布已移除，无坐标/缩放存储） | `docs/ui/DESIGN.md` |
+| 浏览器 localStorage | 展示层偏好，不进数据文件：主题 `ai-editor:theme`、三栏面板 `ai-editor:panels`、写作偏好 `ai-editor:writing`、大纲页视图 `ai-editor:outline-view`（仅此四个 key；画布已移除，无坐标/缩放存储） | `docs/ui/DESIGN.md` |
 | 桌面版 `<userData>/desktop.json` | **桌面版专属**应用级配置：`projectRoot` = 书库位置（绝对路径）。创作根属于「部署级」——不能存进它自己的 `.ai-editor/config.json`（鸡生蛋）；CLI 形态**永不读取**（创作根由启动参数决定）。平台路径 = Windows `%APPDATA%\AI Editor\` / macOS `~/Library/Application Support/AI Editor/` / Linux `~/.config/AI Editor/` | 桌面版 `packages/desktop`；语义见 `50-desktop.md` §2 |
 
 **读写边界**：

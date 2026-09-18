@@ -15,7 +15,7 @@
 | `sessions/` | 对话历史（一 session 一 JSONL，格式由 pi 定义） | 会话随书目录走（备份/恢复/改名/移动天然携带）；追加写、可读可 diff；行格式 = pi session v3（消息/压缩/模型变更等 entry），本仓不定义、不解析行结构 |
 | `project.json` | 项目配置（id/name/language/schema_version/current_position 等） | 轻量元信息，与大纲同款原子写 |
 
-**不变式**：大纲树与剧情图是**同一数据的两种投影**（树与图共享同一数据中心），不是需同步的两份数据——图上的剧情连线是关系数据 `plot_edge`，不是独立存储。**画布 UI 已移除**（2026-08），`plot_edge` 数据能力保留（分析类工具仍可多线推演）；节点坐标与缩放**不入任何存储**（客户端 localStorage 只有主题 `ai-editor:theme`、三栏面板 `ai-editor:panels` 与写作偏好 `ai-editor:writing`）。
+**不变式**：大纲树与剧情图是**同一数据的两种投影**（树与图共享同一数据中心），不是需同步的两份数据——图上的剧情连线是关系数据 `plot_edge`，不是独立存储。**画布 UI 已移除**（2026-08），`plot_edge` 数据能力保留（分析类工具仍可多线推演）；节点坐标与缩放**不入任何存储**（客户端 localStorage 只有主题 `ai-editor:theme`、三栏面板 `ai-editor:panels`、写作偏好 `ai-editor:writing` 与大纲页视图 `ai-editor:outline-view`）。
 
 **块文档载荷单一存放点（2026-10）**：块编辑器承载的长文本（章正文、参考资料正文）统一存 `document_records`（`owner_kind` = `chapter` | `reference`，见 §13），实体自身的短字段仍在 `entities.data`（判定标准：**块文档编辑器承载的长文本 → 文档表；参与 Delta/筛选/摘要的结构化短字段 → 实体 data**）。章正文不进 `outline.json`（整树接口不能被长文本拖累），也不再有项目目录内的正文文件。
 

@@ -8,7 +8,26 @@
 
 ---
 
-## 当前无进行中任务卡
+## 卡 18.1 — 参考资料「分类」统一走 `TypeChip`（列表列 + 详情页头）
+
+- **背景**：分类既没进 `TagChip`（对，它不是用户标签）也没进 `TypeChip`——列表分类列是裸文字（批次十二 R3 有意去徽标，`f7e2529`），详情页头是自绘 `rounded-md border-border bg-muted` span（与类型徽标形态不一致，旧 `backlog.md` 卡 10.4 待办）。
+- **契约**：`docs/ui/DESIGN.md` §Components「准入规则」（分类 = 类型徽标 → `TypeChip` 描边式）。
+- **范围**：`lib/reference.ts` 增 `TYPE_LABELS` 单一来源（原两个页面各手抄一份）；`ReferenceList.tsx` 分类列改 `TypeChip`；`ReferenceDetail.tsx` 页头改 `TypeChip`（筛选下拉 / 表单输入 / `datalist` 不动）。删 `backlog.md` 已兑现项。
+- **判据**：列表分类列渲染出 `border-type-badge-border` + `bg-accent` 的 chip；详情页头同形；两页不再各有一份 `TYPE_LABELS`；`lib/reference.test.ts` 有映射断言（`material` → 素材摘抄）；`pnpm --filter @whispering233/ai-editor-client test` 绿。
+
+## 卡 18.2 — 章视图「写正文」改图标按钮（`EditOutlined`）
+
+- **背景**：`chapter-view.tsx` 行尾是下划线文字链接，与页内其余行尾控件（大纲树 = `icon-button`）不同形。
+- **契约**：`docs/ui/DESIGN.md` §Components `icon-button`（新增「导航型 = antd `Button` 传 `href` ⇒ 渲染 `<a>`」口径）。
+- **范围**：`chapter-view.tsx` 行尾「写正文」改 antd `Button`（`color="default" variant="text" size="small"` + `href={\`#/manuscript/${node.id}\`}` + `icon={<EditOutlined/>}` + `title`/`aria-label="写正文"`）；`chapter-view.test.tsx` 断言改 `aria-label` 计数。**不动**「本视图无 `<button`」否定断言（`href` ⇒ 渲染 `<a>`，断言必须继续绿）。
+- **判据**：渲染 HTML 无 `<button`、有 `aria-label="写正文"` 与 `href="#/manuscript/…"`、无下划线文字链接；测试绿。
+
+## 卡 18.3 — 大纲页视图选择持久化（`ai-editor:outline-view`）
+
+- **背景**：`#/outline` 视图是 `useState`，跳走 / 刷新就回落大纲树——写作期把章视图当常驻形态时每次都要重选。
+- **契约**：`docs/ui/DESIGN.md` §Components「大纲页双视图」（已改口径）、`config.md` / `10-data-model.md` §1 的 key 清单。
+- **范围**：新增 `hooks/use-outline-view.ts`（key 常量 + 纯函数 `parseOutlineView` + 安全读 / 写，唯一实现）；`pages/Outline.tsx` 初值改为读取、切换与 `startCreate` 时写回；**只记视图，不记 `collapsed`**。
+- **判据**：`use-outline-view.test.ts` 绿（坏值 / 未知值 / 空 → `tree`，`chapters` 往返）；浏览器走查：切章视图 → 跳详情 → 回大纲页仍是章视图；doc 四处无「三个 key」「不持久化」残留。
 
 ---
 
