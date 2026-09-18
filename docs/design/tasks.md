@@ -8,14 +8,6 @@
 
 ---
 
-## 批 15：写作面高度
-
-| 卡 | 内容 | 依赖 | 验收 |
-| :-- | :-- | :-- | :-- |
-| [ ] 15.1 | **正文页写作面铺满剩余高度**（用户反馈：正文只有几行时编辑器只剩一小块，像坏了）：`pages/Manuscript.tsx` 的 `<section>` 加 `flex min-h-full flex-col`；`blocknote.css` 给 `.bn-container` 与 `.bn-container .bn-editor` 各加 `flex: 1 1 auto`（含注释指向 DESIGN.md §Components 写作面「写作面高度」条） | — | 空章/几行正文时白色写作面铺满中栏可视区、点最后一行下方空白即聚焦文末；长文仍可滚动；参考资料详情页外观不变（其父非 flex ⇒ `flex:1` 不生效）；专注态同样铺满；`pnpm typecheck`/`lint`/client test |
-
----
-
 ## 当前无进行中任务卡
 
 ---
