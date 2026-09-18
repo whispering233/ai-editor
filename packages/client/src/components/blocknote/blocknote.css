@@ -33,10 +33,10 @@
   --bn-colors-border: var(--border); /* 结构描边 = hairline（colorBorderSecondary） */
   --bn-colors-side-menu: var(--ant-color-text-quaternary); /* 块手柄/加号 */
   /* --bn-colors-highlights-*（高亮/颜色选项）：**有意不映射**——留库自带色板（DESIGN.md 登记表） */
-  --bn-font-family: var(--writing-font, var(--font-sans)); /* 与全站同栈；写作面字体偏好经 --writing-font 间接引用 */
+  --bn-font-family: var(--font-sans); /* 这是**界面 chrome** 的字体（工具条 / 浮层 / 菜单）；写作面字体不走这里（见下面 .bn-container .bn-editor） */
 }
 
-/* ── 写作面偏好：字号 / 行高（卡 13.2）──────────────────────────────────────
+/* ── 写作面偏好：字体 / 字号 / 行高（卡 13.2）──────────────────────────────────────
    契约：DESIGN.md §Colors「写作面偏好」——`--writing-font-size` / `--writing-line-height` 由调用侧
    （document-editor.tsx 经 BlockNoteView 的 style，落在 .bn-root.bn-container 上）给出，本文件只做**间接引用**
    （调用点不写 --bn-*，DESIGN.md 硬约束 ④）。`var()` 的 fallback = 库默认值 ⇒ 没设变量时观感与库一致
@@ -52,6 +52,16 @@
    深浅两态不相干（字号/行高不随主题变）⇒ 只有这一段声明，不复制两份。 */
 .bn-container .bn-editor {
   font-size: var(--writing-font-size, 16px);
+  /* 库把基准字体写在 `.bn-default-styles{font-family:Inter,…}`（0,1,0）上，而该 class **就挂在 `.bn-editor` 身上**
+     ⇒ 正文元素自带的声明压过从 `.bn-root` 继承来的值，写作面字体只能落在正文元素上（本选择器 0,2,0 压过它）；
+     反过来若改 `--bn-font-family`（登记在 .bn-root）：既到不了正文，又会被工具条 / 库浮层继承成衬线 —— 两头错。 */
+  font-family: var(--writing-font, var(--font-sans));
+}
+
+/* 库未给 codeBlock 设等宽（core/dist/style.css 里只有 `.bn-inline-content code{font-family:monospace}` 与源码弹窗的
+   monospace）⇒ 写作面字体落到正文后，代码块会跟着变衬线，这里钉住；inline `code` 库内已是 monospace，不动。 */
+.bn-container [data-content-type="codeBlock"] pre {
+  font-family: ui-monospace, Consolas, monospace;
 }
 
 .bn-container .bn-block-outer {
