@@ -313,12 +313,14 @@ export default function Manuscript({ chapterId }: { chapterId: string }) {
   }
 
   return (
-    /* 写作面铺满剩余高度（卡 15.1，契约 DESIGN.md §Components 写作面「写作面高度」）：
-       `min-h-full` 吸收中栏滚动容器（MainPanel 的 `min-h-0 flex-1 overflow-y-auto p-6`）内容区高度，
-       `flex-col` 给下面的 `.bn-container` / `.bn-editor` 提供 flex 链（blocknote.css 里两处 `flex: 1 1 auto`
-       据此吸收剩余高度）。`min-height` 不封顶 ⇒ 长文照旧由中栏滚动条承接；
-       **只本页 section 有这条链**（参考资料详情页的编辑器父级非 flex ⇒ 那边保持内容高度）。 */
-    <section className="flex min-h-full flex-col">
+    /* 页头常驻（卡 17.1，契约 DESIGN.md §Layout「中栏页头结构 → 页头常驻」）：section 用 `h-full`
+       恰好等于中栏滚动容器（MainPanel 的 `min-h-0 flex-1 overflow-y-auto p-6`）内容区 ⇒ 外壳不滚，
+       滚动只发生在内层容器里，页头（标题/字数/保存态/上下一章/导入导出）与保存失败错误条留在视口。
+       写作面高度链（卡 15.1，DESIGN.md §Components「写作面高度」）在内层容器里续接：
+       内层 `flex min-h-0 flex-1 flex-col` → `.bn-container` / `.bn-editor` 的 `flex: 1 1 auto`
+       （blocknote.css）据此吸收剩余高度 ⇒ 写作面仍铺满；工具条 `sticky` 贴的是内层容器顶（页头之下）。
+       内层容器**不得**写 `items-start`/`self-start`（交叉轴截断会让 `flex:1` 失效，见卡 16.1）。 */
+    <section className="flex h-full min-h-0 flex-col">
       {/* 页头：章标题 + 字数/保存态（说明行）+ 上/下一章（阅读序相邻章，无则禁用）+ 导入/导出。
           专注模式下整没（契约 DESIGN.md §Layout「专注模式」）——字号/保存态改由工具条右端承载；
           下面是**保存失败错误条**，不受专注模式影响（失败必须可见，不静默） */}
@@ -402,42 +404,49 @@ export default function Manuscript({ chapterId }: { chapterId: string }) {
         </div>
       )}
 
-      {content === null ? (
-        /* 正文加载骨架（大纲未加载不影响正文：标题回落到「正文」） */
-        <div className="space-y-2 rounded-md border border-border p-3">
-          {Array.from({ length: 5 }, (_, i) => (
-            <div key={i} className={cn(skeletonClass, "h-5")} style={{ width: `${92 - i * 12}%` }} />
-          ))}
-        </div>
-      ) : (
-        <DocumentEditor
-          key={editorEpoch}
-          initialContent={content}
-          onChange={handleChange}
-          onReady={setEditorApi}
-          /* 字数 · 保存态（含保存时刻）：专注模式下页头已隐藏 ⇒ 改由工具条右端承载同一份 statusText
-             （非专注时仍在页头，不同时显示；时间字符串不在工具条另算） */
-          status={focusMode ? statusText : undefined}
-          /* 专注入口：唯一入口就在工具条右端（DESIGN.md §Components「专注模式入口」） */
-          focus={{ active: focusMode, onToggle: () => setFocusMode(!focusMode) }}
-          /* 手动保存（卡 14.1）：恒发一次 PUT（不先 flush——会双发）；saving 期间禁用防连点。
-             口径见 DESIGN.md §Components「为什么手动「保存」放在工具条而不是页头」 */
-          save={{
-            onSave: () => void saveContent(latestRef.current ?? ""),
-            saving: saveState === "saving",
-          }}
-        />
-      )}
+      {/* 内层滚动容器：编辑器与大纲兜底提示都在里面（页头与错误条之上已留在外层，不随内容滚动） */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        {content === null ? (
+          /* 正文加载骨架（大纲未加载不影响正文：标题回落到「正文」） */
+          <div className="space-y-2 rounded-md border border-border p-3">
+            {Array.from({ length: 5 }, (_, i) => (
+              <div
+                key={i}
+                className={cn(skeletonClass, "h-5")}
+                style={{ width: `${92 - i * 12}%` }}
+              />
+            ))}
+          </div>
+        ) : (
+          <DocumentEditor
+            key={editorEpoch}
+            initialContent={content}
+            onChange={handleChange}
+            onReady={setEditorApi}
+            /* 字数 · 保存态（含保存时刻）：专注模式下页头已隐藏 ⇒ 改由工具条右端承载同一份 statusText
+               （非专注时仍在页头，不同时显示；时间字符串不在工具条另算） */
+            status={focusMode ? statusText : undefined}
+            /* 专注入口：唯一入口就在工具条右端（DESIGN.md §Components「专注模式入口」） */
+            focus={{ active: focusMode, onToggle: () => setFocusMode(!focusMode) }}
+            /* 手动保存（卡 14.1）：恒发一次 PUT（不先 flush——会双发）；saving 期间禁用防连点。
+               口径见 DESIGN.md §Components「为什么手动「保存」放在工具条而不是页头」 */
+            save={{
+              onSave: () => void saveContent(latestRef.current ?? ""),
+              saving: saveState === "saving",
+            }}
+          />
+        )}
 
-      {/* 大纲树兜底：只有标题/上下章依赖它，正文本身不受影响（失败时点重试再拉） */}
-      {outline === null && (
-        <p className="mt-3 text-xs text-muted-foreground">
-          大纲未加载，章标题与上下章暂不可用
-          <Button className="ml-2" size="small" onClick={retry}>
-            重试
-          </Button>
-        </p>
-      )}
+        {/* 大纲树兜底：只有标题/上下章依赖它，正文本身不受影响（失败时点重试再拉） */}
+        {outline === null && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            大纲未加载，章标题与上下章暂不可用
+            <Button className="ml-2" size="small" onClick={retry}>
+              重试
+            </Button>
+          </p>
+        )}
+      </div>
 
       {/* 409 冲突（仅携带 base_updated_at 保存时可能）：二选一，不自动决定 */}
       <Dialog open={conflictOpen} onOpenChange={(open) => !open && setConflictOpen(false)}>
