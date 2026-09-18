@@ -29,7 +29,9 @@ export function MainPanel({
   onOpenChat: () => boolean;
   /** 桌面态标记（F7）：中栏 flex-1 弹性吸收左右栏固定宽之外的剩余空间；小屏回退默认 50% 百分比 */
   isDesktop: boolean;
-  /** 专注模式（卡 13.4，仅章正文页）：不渲染 `InfoBar`；内容区、滚动容器与悬浮球一律不变 */
+  /** 专注模式（卡 13.4，仅章正文页）：`InfoBar` 与「问 AI」悬浮球均不渲染
+   * （专注态 AI 入口整体不可达是有意口径，见 DESIGN.md §Layout「专注模式」）；
+   * 内容区与滚动容器不变 */
   focusMode?: boolean;
   children: ReactNode;
 }) {
@@ -60,41 +62,45 @@ export function MainPanel({
       className="relative flex min-w-0 flex-[5_1_50%] flex-col"
       style={isDesktop ? { flex: "1 1 0%", minWidth: MIDDLE_MIN_WIDTH } : undefined}
     >
-      {/* 信息条在专注模式下隐藏（契约 DESIGN.md §Layout「专注模式」）；内容区与悬浮球不受影响 */}
+      {/* 信息条在专注模式下隐藏（契约 DESIGN.md §Layout「专注模式」）；内容区不受影响 */}
       {!focusMode && <InfoBar chatOpen={chatOpen} onToggleChat={onToggleChat} />}
       {/* 页面内容区：溢出纵向滚动（原 AppShell p-6 保留，页面不自带 padding） */}
       <div className="min-h-0 flex-1 overflow-y-auto p-6">{children}</div>
       {/* 中栏右下悬浮「问 AI」（C1，用户反馈 #3）：绝对定位于中栏容器（不越到右栏，
           滚动区外不随内容滚动）；点「无焦点」= 普通进入聊天，聚焦右栏输入框。
           「点击必有反应」（用户反馈跟进）：右栏收起/小屏抽屉关着时先展开打开（onOpenChat），
-          无项目打开时不置 disabled（会吞掉点击与 tooltip）而是轻提示引导 */}
-      <FloatButton
-        icon={<CommentOutlined className="text-xl" />}
-        type="primary"
-        aria-label="问 AI"
-        tooltip={{
-          title: !config
-            ? "打开项目后可用"
-            : currentFocus
-              ? "带着当前页面上下文去问 AI"
-              : "去问 AI",
-          placement: "left",
-        }}
-        onClick={() => {
-          if (!config) {
-            useUiStore.getState().showToast("打开项目后可用", "info");
-            return;
-          }
-          setFocusContext(currentFocus);
-          requestFocusInput();
-          const opened = onOpenChat(); // 右栏本就可见 → false
-          // 无页面焦点（未进入任何具体条目）且右栏本就可见：聚焦输入框过于隐形，补中性提示说明本次点击
-          if (!currentFocus && !opened) {
-            useUiStore.getState().showToast("未选中具体条目，可直接在右栏提问", "info");
-          }
-        }}
-        style={{ position: "absolute", insetInlineEnd: 16, bottom: 16, zIndex: 30 }}
-      />
+          无项目打开时不置 disabled（会吞掉点击与 tooltip）而是轻提示引导。
+          专注模式下整体不渲染：右栏（及其小屏抽屉）同时被隐藏，点击后无面板可开 ——
+          专注态 AI 入口不可达是有意口径（契约 DESIGN.md §Layout「专注模式」） */}
+      {!focusMode && (
+        <FloatButton
+          icon={<CommentOutlined className="text-xl" />}
+          type="primary"
+          aria-label="问 AI"
+          tooltip={{
+            title: !config
+              ? "打开项目后可用"
+              : currentFocus
+                ? "带着当前页面上下文去问 AI"
+                : "去问 AI",
+            placement: "left",
+          }}
+          onClick={() => {
+            if (!config) {
+              useUiStore.getState().showToast("打开项目后可用", "info");
+              return;
+            }
+            setFocusContext(currentFocus);
+            requestFocusInput();
+            const opened = onOpenChat(); // 右栏本就可见 → false
+            // 无页面焦点（未进入任何具体条目）且右栏本就可见：聚焦输入框过于隐形，补中性提示说明本次点击
+            if (!currentFocus && !opened) {
+              useUiStore.getState().showToast("未选中具体条目，可直接在右栏提问", "info");
+            }
+          }}
+          style={{ position: "absolute", insetInlineEnd: 16, bottom: 16, zIndex: 30 }}
+        />
+      )}
     </main>
   );
 }
