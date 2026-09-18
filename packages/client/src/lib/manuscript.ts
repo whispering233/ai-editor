@@ -1,6 +1,6 @@
 // 章正文页（卡 12.5）的可测逻辑：自动保存调度器 + 相邻章推导 + 字数文案 + 端点错误分流。
 // 全部是无副作用纯函数 / 工厂（node 环境可测；仓内无 jsdom，页面组件不参与单测——BlockNote 的
-// 编辑器内部不测，见 tasks.md 卡 12.5 口径）。契约：docs/api/110-api-manuscript.md。
+// 编辑器内部不测，由浏览器走查承担）。契约：docs/api/110-api-manuscript.md。
 import type { OutlineTree } from "@whispering233/ai-editor-shared";
 import { numberOutline, type OutlineChapterRow } from "./outline-tree";
 

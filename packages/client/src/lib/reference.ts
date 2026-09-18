@@ -1,5 +1,5 @@
 // 参考资料页共享的纯逻辑（卡 12.8）：来源取值、实体 PUT 的 data 载荷、「导入 md 新建」分派。
-// 页面组件不参与单测（仓内无 jsdom，块编辑器内部不测，见 tasks.md 卡 12.5 口径）⇒ 有分支的判断放这里。
+// 页面组件不参与单测（仓内无 jsdom，块编辑器内部不测，由浏览器走查承担）⇒ 有分支的判断放这里。
 // 契约：docs/api/30-api-entity.md（reference 特例 / 导入导出）。
 import type { DocumentImportPlan } from "./document-io";
 import { planDocumentImport } from "./document-io";

@@ -1,5 +1,5 @@
 // 块编辑器封装的纯逻辑走查（卡 12.5）：`parseBlockContent`（块数组 JSON 字符串 → 初始块）。
-// 编辑器本体（BlockNote 内部）**有意不测**：仓内无 jsdom，库内部行为由浏览器走查承担（tasks.md 卡 12.5）。
+// 编辑器本体（BlockNote 内部）**有意不测**：仓内无 jsdom，库内部行为由浏览器走查承担。
 // ⚠ 关键口径 = 空缺内容一律 `undefined`：`[]` 会让 BlockNote 直接抛
 // `Error creating document from blocks passed as \`initialContent\``（真事故：新章「写正文」整页被错误边界接管）。
 import { describe, expect, it } from "vitest";

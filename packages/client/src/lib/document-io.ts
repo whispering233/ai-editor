@@ -4,7 +4,7 @@
 //
 // 分层：本文件**不 import 任何 @blocknote 模块**——「块 JSON ↔ markdown」只能由持有编辑器实例的一侧做
 // （components/blocknote/document-editor.tsx 的 `DocumentEditorApi`），以函数参数传进来；
-// 本文件只负责文件名 sanitize、有损判定与提示文案，故 node 环境可测（仓内无 jsdom，见 tasks.md 卡 12.5 口径）。
+// 本文件只负责文件名 sanitize、有损判定与提示文案，故 node 环境可测（仓内无 jsdom，编辑器本体不参与单测）。
 // 对话框/下载的**渲染**部分（confirm 弹层、真实文件对话框）由页面接线 + 浏览器走查承担。
 import { isBlockArray } from "@whispering233/ai-editor-shared";
 
@@ -14,14 +14,14 @@ export interface DocumentFile {
   body: string;
 }
 
-/** 文件名基名长度上限（与 shared 的 sanitizeReferenceFileName 同规则） */
+/** 文件名基名长度上限（与参考资料导入的文件名 sanitize 同规则） */
 const FILE_NAME_LIMIT = 100;
 
 /**
  * 文件名 sanitize（章标题 → 文件名基名）：
  * 控制字符与 Windows 保留字符 `\ / : * ? " < > |` → 空格；折叠空白、去首尾空白与首尾点（保留内部点，
  * 如「1.2 节」）；截断 100 字符；空结果 → "未命名"。
- * 规则照抄 shared `sanitizeReferenceFileName`（**不跨模块 import**：那个文件属卡 12.7b 的待删清单）。
+ * 规则与 `lib/reference-frontmatter.ts` 的条目名 sanitize 同款（路径分隔符/保留字符/控制字符/首尾点，限长 100）。
  */
 export function sanitizeDocumentFileName(name: string): string {
   const cleaned = name

@@ -68,7 +68,8 @@ get_chapter_text(node_id, offset?, max_chars?)
   用途：AI 需要看"作者到底写了什么"时按需拉取（分析节奏、核对与设定的冲突、评价具体段落）
   口径：只读路由——**工具面不存在任何正文/文档写工具**（结构性保证，非提示词约束）；
        text = 服务端派生的轻量 md 投影（保块级结构：标题/列表/引用/代码/表格，弃行内样式）
-       默认 max_chars ≈ 6000；truncated = true 时提示用 offset 续读（长章分段读完，不炸上下文）
+       默认 max_chars = 6000、上限 7000（实现层 clamp：连 JSON 信封与续读提示一起压进单条工具结果的
+       8000 token 预算，实测余量 ≈12%）；truncated = true 时提示用 offset 续读（长章分段读完，不炸上下文）
        node_id 必须为章（非章 → 报错，与 propose_add_delta 同口径）
 
 // === 参考资料全文（只读）===
