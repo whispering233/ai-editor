@@ -8,23 +8,7 @@
 
 ---
 
-## 当前任务卡（大纲页：自动编号 + 章视图，2026-09）
-
-契约已定稿：`ui/DESIGN.md` §数据展示（类型徽标承载层级序号 + 占位几何）与「大纲页双视图」；`design/10-data-model.md` §4（UI 展示编号 ≠ 服务端章序）。用户已确认的口径：全局连续章序、只计可见节点（删后重排）；编号只在树视图行 + 章视图行；切换按钮 = 页头「全部折叠」左侧单按钮（文案 = 目标视图，页面 state 不持久化）；章视图只支持改名与进详情。
-
-- [ ] **卡 1：编号纯函数 `numberOutline` + 单测**
-  - 范围：`packages/client/src/lib/outline-tree.ts`（导出 `OutlineNumbering` / `numberOutline(tree)`：`labels` = 节点 id → `第N卷` / `第N章`；`chapterRows` = 章视图行，含 `volumeId` / `volumeLabel` / `chapterLabel`）+ `outline-tree.test.ts`。
-  - 口径：卷序 = 顶层卷文件位置序 1-based；章序 = 全书先序连续（跨卷累计，含存量直挂 root 的章，其 `volumeId` = `ROOT_NODE_ID`、`volumeLabel` = `""`）；`deleted === true` 的节点及其子树跳过；`null` 树 → 空结果；场景不入 `labels`。
-  - 验收：`pnpm --filter @whispering233/ai-editor-client test`；用例如跨卷连续 / 存量根级章 / 软删跳过 / 空树。
-  - commit：`feat(outline): 大纲编号纯函数（卷序 + 全局章序，展示口径）`
-- [ ] **卡 2：树视图卷/章行编号徽标 + 占位几何同步**
-  - 范围：`packages/client/src/pages/Outline.tsx`（卷/章行徽标内容 = `numberOutline.labels`，类名 `min-w-14 justify-center tabular-nums`；场景行不变；**摘要第二行与就地新建行的占位宽度按行类型同步**）。
-  - 验收：`pnpm typecheck` / `pnpm lint` / `pnpm --filter @whispering233/ai-editor-client test`；浏览器像素：卷/章/场/摘要/新建行标题左缘同列，`第9章` / `第10章` 不抖。
-  - commit：`feat(outline): 树视图卷/章行改用第N卷/第N章编号徽标`
-- [ ] **卡 3：章视图 presenter + 页头视图切换**
-  - 范围：新增 `packages/client/src/components/outline/chapter-view.tsx`（纯 presenter：行 = `第N卷` + `第N章` 徽标 + 标题 + 摘要 + 伏笔标记 + 「阅读进度」徽标；单击标题就地改名、双击行进详情；有卷无章空态）+ `chapter-view.test.tsx`（renderToString）；`Outline.tsx` 接线（`view` state、页头切换按钮 `ml-auto`、「全部折叠」章视图隐藏、空态分支）。
-  - 验收：上述三命令 + 浏览器像素：切换按钮位于「全部折叠」左侧、章视图无「全部折叠」、改名落库、双击进 `#/outline/:id`、空态与暗色主题正常。
-  - commit：`feat(outline): 新增章视图与视图切换按钮`
+## 当前无进行中任务卡
 
 ---
 
