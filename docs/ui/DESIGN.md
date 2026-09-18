@@ -429,6 +429,9 @@ components:
 - **有 tab 时不再另画分割线**：antd line 型 `Tabs` 的横向导航条**自带** 1px `{colors.hairline}` 底线（`antd/es/tabs/style/index.js` 的 `&-nav-list::before { borderBottom }`），该底线即分割线；配套 `horizontalMargin: 0`（antd 默认 `0 0 16px 0` 会在 tab 与内容间留 16px 空档，压在分割线上就是双线）。
 - **间距**：页头与内容区块之间 `{spacing.md}`（16px）；页头内部三段之间 `{spacing.sm}`（12px）。
 - **覆盖范围 = 全部中栏页面**：列表/富页、概览、书架、回收站、设置，以及各详情页——详情页的页头 = 标题行 + 操作按钮 + 元信息行，分割线落在元信息行**之下**。加载态/空态/错误态同样保留（分割线属于页头，不随数据变）。
+- **页头常驻（2026-10 口径）**：页头（标题行 + 操作 + 元信息 + 分割线）**固定在内容区上方，只有内容区滚动**——避免滚动后找不到标题与页面级操作（章正文页原先跟着正文滚走，与参考资料页不一致）。**实现 = 页面 `section` 用 `flex h-full min-h-0 flex-col`，内容（含各自的错误条之下的部分）放进内层 `flex min-h-0 flex-1 flex-col overflow-y-auto`**；`h-full` 让 section 恰好等于中栏滚动容器的内容区 ⇒ 外壳不滚、内层滚（参考资料详情 / 参考资料列表 / 人物工作台 / 时间轴 / **章正文页** 采用）。
+  - **写作面的高度链在内层滚动容器里续接**：章正文页 = section（`h-full`）→ 内层滚动容器（`flex min-h-0 flex-1 flex-col overflow-y-auto`）→ `.bn-container`（`flex: 1 1 auto`，blocknote.css）⇒ 写作面仍铺满剩余高度，工具条 `sticky` 贴的是**内层**滚动容器顶（页头之下）。
+  - **尚未统一**：概览 / 大纲 / 实体列表 / 设置 / 回收站等仍走外壳滚动（页头随内容离开）——列入 `backlog.md`，逐页改造时按上面同一条实现口径。
 - **实现唯一入口 = `components/ui/page-header.tsx`**（标题行 / tab 行 / 控件行 / 分割线一次给全）：页面不自画页头分割线（表格行、分组头等区块内部的 `border-b border-border` 不属此列）。
 
 ## Elevation & Depth
