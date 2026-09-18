@@ -48,26 +48,29 @@
 }
 
 /* 用 `.bn-container` + 本类提高特异性，压掉 ariakit `.bn-ak-toolbar`（含它的 dark 变体）自带的
-   白底 / 阴影 / `.5rem` 圆角 / `overflow:scroll`；保留横向可滚动能力，但不要滚动条外观。 */
+   白底 / 阴影 / `.5rem` 圆角 / `overflow`。
+   **工具条不得成为自身滚动容器**（故下面必须显式写 `overflow: visible`）：`position: sticky` 已经让工具条
+   成为后代绝对定位元素的包含块（库给按钮挂 tooltip、块类型/颜色下拉挂 `.bn-ak-popover`），它一旦同时是
+   滚动容器（注意 `overflow-x: auto` 会把 `overflow-y: visible` 的计算值也变成 `auto`），这些浮层就被工具条
+   自己的盒子裁掉——实测 hover 按钮的 tooltip 整条落在工具条盒外（不可见），块类型下拉只剩 18px 高
+   （⇒「改块类型 / 改颜色」实际不可用）。库自带的浮动工具条 `.bn-ak-toolbar` 同样 `overflow:scroll` 却没事，
+   是因为它**没有 position** ⇒ 其 abspos 子元素的包含块在滚动容器之外。
+   窄幅因此不靠横向滚动，靠 `flex-wrap` 折行（工具条增高，不溢出/不裁切）。 */
 .bn-container .ai-writing-toolbar {
   order: -1;
   position: sticky;
   top: 0;
   z-index: 1; /* 压住正文（静态内容）；库的浮动工具条与浮层走 portal + z-index 40/50，仍在上面 */
-  height: 40px;
+  min-height: 40px; /* 单行 = 4px 内边距 + 32px 档按钮；折行时增高而非溢出 */
+  flex-wrap: wrap;
+  align-items: center;
   padding: 4px;
-  gap: 4px;
+  gap: 4px; /* 折行时上下间距同值 */
   border-radius: 0;
   background-color: var(--bn-colors-editor-background); /* 跟 §Colors「写作面偏好」的纸张走 */
   border-bottom: 1px solid var(--bn-colors-border);
   box-shadow: none;
-  overflow-x: auto;
-  overflow-y: visible;
-  scrollbar-width: none;
-}
-
-.bn-container .ai-writing-toolbar::-webkit-scrollbar {
-  display: none;
+  overflow: visible;
 }
 
 /* 工具条内的库按钮压到 32px 档（4px 内边距 + 32px = 40px，与 DESIGN.md 几何同构）；
