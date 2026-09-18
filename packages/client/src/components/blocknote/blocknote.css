@@ -133,7 +133,7 @@
 /* ── 写作面高度 = 填满剩余视口（卡 15.1）────────────────────────────────────
    契约：DESIGN.md §Components「写作面（工具条 / 专注模式）」的「写作面高度」条。
    下面 `.bn-container` 与 `.bn-container .bn-editor` 各自的 `flex: 1 1 auto` **只靠页面的 flex 链生效**
-   （`min-h-full` + `flex flex-col` 挂在章正文页 Manuscript.tsx 的 `section` 上，且中栏滚动容器
+   （章节页 = `section: h-full` + 内层滚动容器 `flex min-h-0 flex-1 flex-col`（见 DESIGN.md §Layout「页头常驻」），且中栏滚动容器
    `min-h-0 flex-1 overflow-y-auto` 给了确定高度 ⇒ `min-height:100%` 解析得出来）；
    容器高度为 auto 时（参考资料详情页：编辑器父级是普通 block，非 flex item）无剩余空间可分配，
    `flex` 不产生任何效果 ⇒ 那边外观不变。`min-height` 不封顶 ⇒ 长文照旧滚动。 */
