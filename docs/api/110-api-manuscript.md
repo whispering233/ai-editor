@@ -22,7 +22,7 @@ chapterNodeId: string;
   chapterNodeId: string;
   content: string;            // 块数组 JSON 字符串；从未写过 = ""（客户端按空文档处理）
   updatedAt: string | null;   // 版本戳（ISO 8601）；从未写过 = null
-  charCount: number;          // 正文字数（content_text 长度；从未写过 = 0）
+  charCount: number;          // 正文字数 = content_text 的 **JS 字符串长度**（UTF-16 code unit，与端点同源口径）；从未写过 = 0
 }
 
 // Res: 400（节点类型不是章）
@@ -54,7 +54,10 @@ chapterNodeId: string;
   charCount: number;            // 重算后的字数
 }
 
-// Res: 400（content 缺失 / 非法 JSON / 不是数组）
+// Res: 400（两条路径，状态码/错误码相同）
+// ① schema 层：content 缺失/非字符串/含未知字段（请求体 .strict）→ Zod 默认消息 + fields:["content"]
+//   例：{ error: { code: "VALIDATION_ERROR", message: "Invalid input: expected string, received undefined", fields: ["content"] } }
+// ② 路由层：content 不是合法块数组 JSON（解析失败 / 解析后非数组）
 { error: { code: "VALIDATION_ERROR", message: "content 必须是块数组 JSON 字符串" } }
 
 // Res: 404（节点不存在 / 已软删）
