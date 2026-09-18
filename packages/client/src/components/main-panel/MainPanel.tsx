@@ -18,6 +18,7 @@ export function MainPanel({
   onToggleChat,
   onOpenChat,
   isDesktop,
+  focusMode = false,
   children,
 }: {
   route: Route;
@@ -28,6 +29,8 @@ export function MainPanel({
   onOpenChat: () => boolean;
   /** 桌面态标记（F7）：中栏 flex-1 弹性吸收左右栏固定宽之外的剩余空间；小屏回退默认 50% 百分比 */
   isDesktop: boolean;
+  /** 专注模式（卡 13.4，仅章正文页）：不渲染 `InfoBar`；内容区、滚动容器与悬浮球一律不变 */
+  focusMode?: boolean;
   children: ReactNode;
 }) {
   const loadConfig = useProjectStore((s) => s.loadConfig);
@@ -37,8 +40,10 @@ export function MainPanel({
   const setFocusContext = useChatStore((s) => s.setFocusContext);
   const requestFocusInput = useChatStore((s) => s.requestFocusInput);
   // 路由切换清空页面焦点（useLayoutEffect 父先于子——在子页面 mount 上报新焦点前
-  // 清掉旧页残留，避免切页后「问 AI」注入过期上下文）
+  // 清掉旧页残留，避免切页后「问 AI」注入过期上下文）；卡 13.4：同一处把专注模式归零——
+  // 浏览器后退/前进（或切章）离开正文页时布局必须立刻恢复，专注态绝不跨页残留
   const clearCurrentFocus = useUiStore((s) => s.clearCurrentFocus);
+  const setFocusMode = useUiStore((s) => s.setFocusMode);
 
   // 挂载时拉取项目配置（失败静默，信息条显示「书架」不阻塞）
   useEffect(() => {
@@ -47,14 +52,16 @@ export function MainPanel({
 
   useLayoutEffect(() => {
     clearCurrentFocus();
-  }, [route.path, clearCurrentFocus]);
+    setFocusMode(false);
+  }, [route.path, clearCurrentFocus, setFocusMode]);
 
   return (
     <main
       className="relative flex min-w-0 flex-[5_1_50%] flex-col"
       style={isDesktop ? { flex: "1 1 0%", minWidth: MIDDLE_MIN_WIDTH } : undefined}
     >
-      <InfoBar chatOpen={chatOpen} onToggleChat={onToggleChat} />
+      {/* 信息条在专注模式下隐藏（契约 DESIGN.md §Layout「专注模式」）；内容区与悬浮球不受影响 */}
+      {!focusMode && <InfoBar chatOpen={chatOpen} onToggleChat={onToggleChat} />}
       {/* 页面内容区：溢出纵向滚动（原 AppShell p-6 保留，页面不自带 padding） */}
       <div className="min-h-0 flex-1 overflow-y-auto p-6">{children}</div>
       {/* 中栏右下悬浮「问 AI」（C1，用户反馈 #3）：绝对定位于中栏容器（不越到右栏，

@@ -12,7 +12,17 @@
 // - 本文件不写色值 / 不写 `--bn-*` 覆盖 / 不拼接类名（守卫 design-discipline.test.ts）。
 // - 卡 13.2：右端「写作设置」（撤销 / 重做之后）——偏好数据由 `DocumentEditor` 经 props 传入
 //   （**不在这里再调 useWritingPrefs**：两份状态会互不同步）。
-import { FontSizeOutlined, RedoOutlined, UndoOutlined } from "@ant-design/icons";
+// - 卡 13.4：右端再加两段可选内容——`status`（状态区：章正文页的字数 · 保存态，13.6 的保存时间戳
+//   复用同一位置）与 `focus`（专注模式开关）。两者都是页面注入：不传 = 不渲染（参考资料页因此天然
+//   没有专注入口，见 DESIGN.md §Components「专注模式入口」）。
+import type { ReactNode } from "react";
+import {
+  FontSizeOutlined,
+  FullscreenExitOutlined,
+  FullscreenOutlined,
+  RedoOutlined,
+  UndoOutlined,
+} from "@ant-design/icons";
 import {
   BasicTextStyleButton,
   BlockTypeSelect,
@@ -32,9 +42,22 @@ export interface EditorToolbarProps {
   prefs: WritingPrefs;
   /** 单字段更新（写作设置下拉用） */
   setPref: <K extends keyof WritingPrefs>(key: K, value: WritingPrefs[K]) => void;
+  /** 右侧最右端的状态区（章正文页：字数 · 保存态；专注模式下它是页头那行的唯一去处）——
+   * 不传 = 不渲染（参考资料页的字数/保存态不在工具条） */
+  status?: ReactNode;
+  /** 专注模式开关（仅章正文页注入；不传 = 工具条不渲染专注按钮） */
+  focus?: ToolbarFocus;
 }
 
-export function EditorToolbar({ prefs, setPref }: EditorToolbarProps) {
+/** 专注模式开关（页面注入给工具条的那一份状态） */
+export interface ToolbarFocus {
+ /** 当前是否处于专注模式（决定按钮文案与图标） */
+  active: boolean;
+ /** 进入 / 退出（同一按钮切换） */
+  onToggle: () => void;
+}
+
+export function EditorToolbar({ prefs, setPref, status, focus }: EditorToolbarProps) {
   const editor = useBlockNoteEditor();
   const components = useComponentsContext();
   // BlockNoteView 内必有 ComponentsContext（本组件只作为它的 children 用）；此守卫只为类型收敛
@@ -75,6 +98,18 @@ export function EditorToolbar({ prefs, setPref }: EditorToolbarProps) {
       <WritingSettings prefs={prefs} setPref={setPref}>
         <FormattingToolbar.Button label="写作设置" mainTooltip="写作设置" icon={<FontSizeOutlined />} />
       </WritingSettings>
+      {/* 专注模式（仅章正文页注入）：同一按钮切换进/出，走与撤销/重做同一套库按钮构件
+          （DESIGN.md §Components：入口收在工具条右端，不另起悬浮条） */}
+      {focus !== undefined && (
+        <FormattingToolbar.Button
+          label={focus.active ? "退出专注" : "专注模式"}
+          mainTooltip={focus.active ? "退出专注" : "专注模式"}
+          icon={focus.active ? <FullscreenExitOutlined /> : <FullscreenOutlined />}
+          onClick={focus.onToggle}
+        />
+      )}
+      {/* 状态区（右端最右）：字数 · 保存态——与页头说明行同一份文案，两处不同时显示 */}
+      {status !== undefined && <div className="ml-2">{status}</div>}
     </FormattingToolbar.Root>
   );
 }

@@ -1,4 +1,5 @@
 // 章正文页可测逻辑（卡 12.5）：自动保存调度（假定时器）、相邻章推导、字数文案、错误码分流。
+// 卡 13.4：专注模式 Esc 的开层守卫（hasVisibleOverlay）。
 // 页面组件（含 BlockNote 编辑器）不参与单测——仓内无 jsdom，BlockNote 内部不测（tasks.md 卡 12.5 口径）。
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OutlineTree } from "@whispering233/ai-editor-shared";
@@ -7,6 +8,7 @@ import {
   chapterNeighbors,
   createAutosave,
   formatTextLength,
+  hasVisibleOverlay,
   manuscriptErrorAction,
 } from "./manuscript";
 
@@ -126,5 +128,33 @@ describe("manuscriptErrorAction（正文端点错误码 → 页面动作）", ()
     expect(manuscriptErrorAction("VALIDATION_ERROR")).toBe("retry"); // 非章节点（400）
     expect(manuscriptErrorAction("CLIENT_NETWORK_ERROR")).toBe("retry");
     expect(manuscriptErrorAction(null)).toBe("retry");
+  });
+});
+
+describe("hasVisibleOverlay（专注模式 Esc 的开层守卫，卡 13.4）", () => {
+  // 仓内无 jsdom：打桩 document，只锁「可见性判据」这一条契约（关掉的浮层仍留在 DOM 里）
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const stubOverlays = (...visible: boolean[]): void => {
+    vi.stubGlobal("document", {
+      querySelectorAll: () => visible.map((v) => ({ checkVisibility: () => v })),
+    });
+  };
+
+  it("有可见浮层 → true（这次 Esc 归浮层，专注模式不退）", () => {
+    stubOverlays(false, true);
+    expect(hasVisibleOverlay()).toBe(true);
+  });
+
+  it("浮层都在 DOM 但不可见（关闭后的残留）→ false", () => {
+    stubOverlays(false, false);
+    expect(hasVisibleOverlay()).toBe(false);
+  });
+
+  it("没有任何浮层 → false（无浮层时 Esc 才退出专注）", () => {
+    stubOverlays();
+    expect(hasVisibleOverlay()).toBe(false);
   });
 });

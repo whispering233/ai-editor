@@ -37,6 +37,7 @@ import {
   chapterNeighbors,
   createAutosave,
   formatTextLength,
+  hasVisibleOverlay,
   manuscriptErrorAction,
 } from "../lib/manuscript";
 import {
@@ -89,6 +90,9 @@ export default function Manuscript({ chapterId }: { chapterId: string }) {
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [conflictOpen, setConflictOpen] = useState(false);
+  // 专注模式（卡 13.4）：**瞬态**全局标志（不持久化，路由变化由 MainPanel 的守卫归零）
+  const focusMode = useUiStore((s) => s.focusMode);
+  const setFocusMode = useUiStore((s) => s.setFocusMode);
 
   /** 版本戳基准（保存时回传 base_updated_at）；null = 服务端从未写过 */
   const baseRef = useRef<string | null>(null);
@@ -170,6 +174,20 @@ export default function Manuscript({ chapterId }: { chapterId: string }) {
 
   // 卸载 / 切路由前 flush：在途内容立刻落盘，不依赖组件存活（cleanup 内不 await）
   useEffect(() => () => void autosave.flush(), [autosave]);
+
+  // Esc 退出专注（DESIGN.md §Components「专注模式入口」：退出 = 同一按钮或 Esc；不新增全局快捷键）。
+  // - **捕获阶段**监听：开层守卫必须先于浮层自己的关闭动作看到 DOM——antd/ariakit 的 Esc 在冒泡阶段，
+  //   而 React 离散事件会同步刷 DOM ⇒ 等冒泡到 window 时下拉已经关了，守卫就形同虚设。
+  // - 有可见浮层在场 ⇒ 这次 Esc 归它（否则「关写作设置下拉」会顺手把专注模式也退掉）。
+  useEffect(() => {
+    if (!focusMode) return;
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== "Escape" || hasVisibleOverlay()) return;
+      setFocusMode(false);
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [focusMode, setFocusMode]);
 
   /** 编辑器内容变化：记录最新内容 + 排入自动保存 */
   function handleChange(text: string): void {
@@ -267,6 +285,18 @@ export default function Manuscript({ chapterId }: { chapterId: string }) {
 
   const notFound = loadError?.code === "OUTLINE_NODE_NOT_FOUND";
 
+  /**
+   * 「字数 · 保存态」文案（**唯一份**）：常规布局在页头说明行，专注模式在工具条右端——
+   * 两处不同时显示（任务约定），口径只有这一处定义。
+   */
+  const statusText = (
+    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <span className="tabular-nums">{formatTextLength(charCount) ?? "0 字"}</span>
+      {saveState === "saving" && <span>保存中…</span>}
+      {saveState === "saved" && <span>已保存</span>}
+    </div>
+  );
+
   if (notFound) return <ManuscriptMissing />;
 
   if (loadError !== null && content === null) {
@@ -275,80 +305,78 @@ export default function Manuscript({ chapterId }: { chapterId: string }) {
 
   return (
     <section>
-      {/* 页头：章标题 + 字数/保存态（说明行）+ 上/下一章（阅读序相邻章，无则禁用）+ 导入/导出 */}
-      <PageHeader
-        title={chapterTitle ?? "正文"}
-        truncateTitle
-        action={
-          <>
-            {/* 导入入口：隐藏文件框（浏览器与桌面同一套；按钮触发，选完清空 value 以便重复选同一文件） */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".md,.json,.txt,text/markdown,application/json,text/plain"
-              className="hidden"
-              aria-label="选择要导入的正文文件"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                event.target.value = "";
-                if (file !== undefined) void importFile(file);
-              }}
-            />
-            <Button
-              disabled={neighbors.prev === null}
-              title={neighbors.prev?.chapter.title}
-              onClick={() =>
-                neighbors.prev !== null && navigate(`/manuscript/${neighbors.prev.chapter.id}`)
-              }
-            >
-              上一章
-            </Button>
-            <Button
-              disabled={neighbors.next === null}
-              title={neighbors.next?.chapter.title}
-              onClick={() =>
-                neighbors.next !== null && navigate(`/manuscript/${neighbors.next.chapter.id}`)
-              }
-            >
-              下一章
-            </Button>
-            <Button
-              disabled={editorApi === null}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <ImportOutlined className="text-sm" />
-              导入
-            </Button>
-            <Dropdown
-              disabled={editorApi === null}
-              trigger={["click"]}
-              menu={{
-                items: [
-                  { key: "json", label: "导出块 JSON（无损）" },
-                  { key: "markdown", label: "导出 markdown（有损）" },
-                ],
-                onClick: ({ key }) => {
-                  if (key === "json") exportBlocksJson();
-                  else void exportMarkdown();
-                },
-              }}
-            >
-              <Button disabled={editorApi === null}>
-                <ExportOutlined className="text-sm" />
-                导出
-                <DownOutlined className="text-xs" />
+      {/* 页头：章标题 + 字数/保存态（说明行）+ 上/下一章（阅读序相邻章，无则禁用）+ 导入/导出。
+          专注模式下整没（契约 DESIGN.md §Layout「专注模式」）——字号/保存态改由工具条右端承载；
+          下面是**保存失败错误条**，不受专注模式影响（失败必须可见，不静默） */}
+      {!focusMode && (
+        <PageHeader
+          title={chapterTitle ?? "正文"}
+          truncateTitle
+          action={
+            <>
+              {/* 导入入口：隐藏文件框（浏览器与桌面同一套；按钮触发，选完清空 value 以便重复选同一文件） */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".md,.json,.txt,text/markdown,application/json,text/plain"
+                className="hidden"
+                aria-label="选择要导入的正文文件"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (file !== undefined) void importFile(file);
+                }}
+              />
+              <Button
+                disabled={neighbors.prev === null}
+                title={neighbors.prev?.chapter.title}
+                onClick={() =>
+                  neighbors.prev !== null && navigate(`/manuscript/${neighbors.prev.chapter.id}`)
+                }
+              >
+                上一章
               </Button>
-            </Dropdown>
-          </>
-        }
-        description={
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="tabular-nums">{formatTextLength(charCount) ?? "0 字"}</span>
-            {saveState === "saving" && <span>保存中…</span>}
-            {saveState === "saved" && <span>已保存</span>}
-          </div>
-        }
-      />
+              <Button
+                disabled={neighbors.next === null}
+                title={neighbors.next?.chapter.title}
+                onClick={() =>
+                  neighbors.next !== null && navigate(`/manuscript/${neighbors.next.chapter.id}`)
+                }
+              >
+                下一章
+              </Button>
+              <Button
+                disabled={editorApi === null}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <ImportOutlined className="text-sm" />
+                导入
+              </Button>
+              <Dropdown
+                disabled={editorApi === null}
+                trigger={["click"]}
+                menu={{
+                  items: [
+                    { key: "json", label: "导出块 JSON（无损）" },
+                    { key: "markdown", label: "导出 markdown（有损）" },
+                  ],
+                  onClick: ({ key }) => {
+                    if (key === "json") exportBlocksJson();
+                    else void exportMarkdown();
+                  },
+                }}
+              >
+                <Button disabled={editorApi === null}>
+                  <ExportOutlined className="text-sm" />
+                  导出
+                  <DownOutlined className="text-xs" />
+                </Button>
+              </Dropdown>
+            </>
+          }
+          description={statusText}
+        />
+      )}
 
       {/* 保存失败（可见、不静默）：错误条 + 重试（重发失败内容） */}
       {saveError !== null && (
@@ -373,6 +401,10 @@ export default function Manuscript({ chapterId }: { chapterId: string }) {
           initialContent={content}
           onChange={handleChange}
           onReady={setEditorApi}
+          /* 字数 · 保存态：专注模式下页头已隐藏 ⇒ 改由工具条右端承载（非专注时仍在页头，不同时显示） */
+          status={focusMode ? statusText : undefined}
+          /* 专注入口：唯一入口就在工具条右端（DESIGN.md §Components「专注模式入口」） */
+          focus={{ active: focusMode, onToggle: () => setFocusMode(!focusMode) }}
         />
       )}
 

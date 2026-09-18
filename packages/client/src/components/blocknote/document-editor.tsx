@@ -15,7 +15,9 @@
 //   `--paper-bg` **只在非默认纸张时给值**（默认档不给 ⇒ blocknote.css 的 `var(--paper-bg, …)` 兜到现行为）；
 //   `blocknote.css` 里是间接引用 ⇒ 调用点不写 `--bn-*`（DESIGN.md 硬约束 ④）。
 //   prefs / setPref 同时递给工具条（数据只有这一处来源）。
-import { useEffect, useMemo } from "react";
+// - 卡 13.4：`status`（工具条右端状态区：字数 · 保存态）与 `focus`（专注开关）原样透传给工具条；
+//   本组件**不持有**专注状态（源头 = ui store，外壳与页头各自订阅）。
+import { useEffect, useMemo, type ReactNode } from "react";
 import type { PartialBlock } from "@blocknote/core";
 import { zh } from "@blocknote/core/locales";
 import { useCreateBlockNote } from "@blocknote/react";
@@ -23,7 +25,7 @@ import { BlockNoteView } from "@blocknote/ariakit";
 import { isBlockArray } from "@whispering233/ai-editor-shared";
 import { useThemeMode } from "../../hooks/use-theme-mode";
 import { toWritingCssVars, useWritingPrefs } from "../../hooks/use-writing-prefs";
-import { EditorToolbar } from "./editor-toolbar";
+import { EditorToolbar, type ToolbarFocus } from "./editor-toolbar";
 import "@blocknote/ariakit/style.css";
 import "./blocknote.css";
 
@@ -66,9 +68,19 @@ export interface DocumentEditorProps {
   onChange: (content: string) => void;
  /** 实例能力出口：挂载（含换 key 重挂）后回调一次，页面存进 ref/state 供导入导出使用 */
   onReady?: (api: DocumentEditorApi) => void;
+ /** 工具条右端状态区（章正文页注入「字数 · 保存态」）；不传 = 该区不渲染（卡 13.4） */
+  status?: ReactNode;
+ /** 专注模式开关（仅章正文页注入）；不传 = 工具条无专注入口（卡 13.4） */
+  focus?: ToolbarFocus;
 }
 
-export function DocumentEditor({ initialContent, onChange, onReady }: DocumentEditorProps) {
+export function DocumentEditor({
+  initialContent,
+  onChange,
+  onReady,
+  status,
+  focus,
+}: DocumentEditorProps) {
   const theme = useThemeMode();
   const { prefs, setPref } = useWritingPrefs();
   // UI 语言 = 中文（项目语言恒 zh，页头「语言: zh」）：不传 dictionary 时 placeholder / 斜杠菜单 /
@@ -107,7 +119,7 @@ export function DocumentEditor({ initialContent, onChange, onReady }: DocumentEd
       data-writing-indent={prefs.indent ? "on" : "off"}
       onChange={(next) => onChange(JSON.stringify(next.document))}
     >
-      <EditorToolbar prefs={prefs} setPref={setPref} />
+      <EditorToolbar prefs={prefs} setPref={setPref} status={status} focus={focus} />
     </BlockNoteView>
   );
 }

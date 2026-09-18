@@ -64,6 +64,13 @@ interface UiState {
   clearCurrentFocus: () => void;
 
  /**
+ * 专注模式（卡 13.4，仅章正文页）：**瞬态**——与其余写作偏好不同，**不进 localStorage**
+ * （刷新即回常规布局）；离开正文页（路由变化）由 MainPanel 的路由守卫归零，不跨页残留。
+ */
+  focusMode: boolean;
+  setFocusMode: (on: boolean) => void;
+
+ /**
  * 数据版本信号（问题 1）：AI 提案确认写库后 / InfoBar 刷新按钮点击时 +1，
  * 中栏数据页面（EntityList/EntityDetail/Outline/OutlineDetail/HookPanel/Trash/Dashboard）
  * 订阅本字段变化后重拉各自数据，实现「AI 改完数据中栏同步刷新」。
@@ -117,6 +124,9 @@ export const useUiStore = create<UiState>((set, get) => ({
   currentFocus: null,
   setCurrentFocus: (ctx) => set({ currentFocus: ctx }),
   clearCurrentFocus: () => set({ currentFocus: null }),
+
+  focusMode: false,
+  setFocusMode: (on) => set({ focusMode: on }),
 
   dataVersion: 0,
   notifyDataChanged: () => set((s) => ({ dataVersion: s.dataVersion + 1 })),

@@ -86,6 +86,23 @@ export function formatTextLength(length: number): string | null {
   return `${(whole / 1000).toFixed(1).replace(/\.0$/, "")} 千字`;
 }
 
+/**
+ * 可见浮层的选择器（专注模式的 `Esc` 开层守卫，卡 13.4）：antd 三类根
+ * （`Popover` / `Dropdown` / `Modal`·自绘 `Dialog`）+ 块编辑器自带的两类 ariakit 浮层
+ * （写作设置下拉 / 斜杠菜单等）。关闭后元素通常仍留在 DOM（只是 `display:none`）
+ * ⇒ 判据必须是「可见」而非「存在」。
+ */
+export const OVERLAY_SELECTOR =
+  ".ant-popover, .ant-dropdown, [role='dialog'], .bn-ak-popover, .bn-ak-menu";
+
+/** 当前是否有可见浮层（有 ⇒ 这次 `Esc` 归它消费；专注模式退出退让，一次按键只做一件事） */
+export function hasVisibleOverlay(): boolean {
+  for (const el of document.querySelectorAll<HTMLElement>(OVERLAY_SELECTOR)) {
+    if (el.checkVisibility()) return true;
+  }
+  return false;
+}
+
 /** 正文端点错误码 → 页面动作（加载与保存两条路径共用同一判据） */
 export type ManuscriptErrorAction = "conflict" | "missing" | "retry";
 
