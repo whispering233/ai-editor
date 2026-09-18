@@ -10,6 +10,8 @@
 // 行级 AskAiButton 已移除——右键菜单替代（RowContextMenu：注入会话上下文 + 建立关联
 // + 「设为阅读进度」——卡片 1.1：仅章节点行传入，卷/场景行不出现；已是阅读进度则禁用）
 // 路由：#/outline；数据：GET /api/v1/outline（整树）+ GET /api/v1/relation（伏笔标记，S9.2）；操作：POST/PUT/DELETE /outline、PUT /project/config（设阅读进度）
+// 2026-09：卷/章行的类型徽标改为**编号徽标**（`第N卷` / `第N章`，展示口径——只计可见节点、删后重排，
+// 与服务端 `deriveChapterOrder` 不同源；纯函数 = lib/outline-tree 的 numberOutline）；占位几何随徽标宽度同步（见 DESIGN.md）。
 // （S2.4 + S13.1 + 版）——行内编辑标题/摘要（Enter 保存/Esc 取消/失焦保存）、
 // 选中节点按 Enter 就地插入子节点（类型由父决定；顶层只建卷）、拖拽移动（原生 HTML5 DnD，上下半判定：
 // 目标行上半 = 插到该节点前、下半 = 插到该节点后，跨父移动按，顶层空白区 = 排末尾）、
@@ -17,7 +19,7 @@
 // 刷新策略：所有写操作成功后统一 loadOutline 重拉整树（服务端权威——move 重排 order、软删级联子树、
 // 还原级联；本地补丁易与服务端不一致；本地文件读取毫秒级，重拉成本可忽略）。outline 树数据仍在
 // project store（跨页共用：顶栏阅读进度标题映射、节点 id → title 映射），本页只持有 UI 态
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { DragEvent, KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { Button, Input } from "antd";
 import type { OutlineNode } from "@whispering233/ai-editor-shared";
@@ -51,6 +53,7 @@ import {
   findNodePath,
   findParentIdOf,
   isNoopDrop,
+  numberOutline,
   ROOT_NODE_ID,
   sameDragTarget,
   shouldCommitSummary,
@@ -131,10 +134,10 @@ function RootCreateRow({
 }) {
   return (
     <div className={cn("flex items-center gap-2 rounded-md px-2 py-1", className)}>
-      {/* 占位 + 类型徽标：与树行同列（折叠箭头几何 `-ml-2 w-6` + `w-7` 徽标）——
-          新建行看上去就是即将插入的那一行卷 */}
+      {/* 占位 + 类型徽标：与树行同列（折叠箭头几何 `-ml-2 w-6` + 编号徽标 `min-w-14`）——
+          新建行看上去就是即将插入的那一行卷（编号未分配前只给枚举文案，宽度与编号徽标同几何） */}
       <span className="-ml-2 w-6 shrink-0" />
-      <TypeChip className="w-7 shrink-0 justify-center">{TYPE_LABEL.volume}</TypeChip>
+      <TypeChip className="min-w-14 shrink-0 justify-center">{TYPE_LABEL.volume}</TypeChip>
       {inlineInput(value, onChange, onKeyDown, onCancel, "新卷标题，Enter 创建")}
     </div>
   );
@@ -183,6 +186,11 @@ export default function Outline() {
   const [hookMarks, setHookMarks] = useState<Map<string, NodeHookMark[]> | null>(null);
 
   const noProject = config === null && !configLoading;
+
+  /** 大纲编号（展示口径：卷序 + 全局章序，只计可见节点 ⇒ 删后重排；与
+   * `docs/design/10-data-model.md` §4 的服务端章序不同源）——树视图行为徽标查 `labels`，
+   * 章视图直接读 `chapterRows` */
+  const numbering = useMemo(() => numberOutline(outline), [outline]);
 
   // 首次加载：outline 未加载且未尝试过 → loadOutline
   useEffect(() => {
@@ -679,6 +687,8 @@ export default function Outline() {
       const creatingHere = creatingAt?.parentId === node.id;
       const focused = node.id === focusedNodeId;
       const selected = selectedNodeId === node.id;
+      // 编号徽标文案（卷/章 = `第N卷` / `第N章`；场景不编号 → undefined，徽标回落到枚举文案）
+      const numberLabel = numbering.labels.get(node.id);
       // 行级新建子级：子类型由本行层级推导；null = 叶子（场），无按钮
       const childType = CHILD_TYPE[node.type];
       // 行根元素 props（右键菜单 trigger 与普通 div 共用；编辑态退化为普通 div）
@@ -731,7 +741,14 @@ export default function Outline() {
                  写成 w-7（28px）会让「有场/无场」两类章的类型徽标、标题、摘要、新建行各差 12px */
               <span className="-ml-2 w-6 shrink-0" />
             )}
-            <TypeChip className="w-7 shrink-0 justify-center">{TYPE_LABEL[node.type]}</TypeChip>
+            <TypeChip
+              className={cn(
+                "shrink-0 justify-center tabular-nums",
+                numberLabel !== undefined ? "min-w-14" : "w-7",
+              )}
+            >
+              {numberLabel ?? TYPE_LABEL[node.type]}
+            </TypeChip>
             {/* 标题：点击就地编辑（Enter 保存 / Esc 取消 / 失焦保存）；stopPropagation 隔离——
                 单击标题 = 编辑而非选中（冲突设计） */}
             {editingTitle ? (
@@ -797,12 +814,13 @@ export default function Outline() {
               />
             </span>
           </div>
-          {/* 第二行：摘要（缩进对齐标题下方——首占位同折叠箭头几何（-ml-2 w-6）+ 类型徽标占位 w-7；
+          {/* 第二行：摘要（缩进对齐标题下方——首占位同折叠箭头几何（-ml-2 w-6）+ **编号徽标占位同宽**
+              （卷/章行 `min-w-14`、场景行 `w-7`；不同宽即摘要行错位）；
               默认显示、空不渲染、点击就地编辑） */}
           {editingSummary || node.summary ? (
             <div className="mt-0.5 flex items-center gap-2">
               <span className="-ml-2 w-6 shrink-0" />
-              <span className="w-7 shrink-0" />
+              <span className={cn("shrink-0", numberLabel !== undefined ? "min-w-14" : "w-7")} />
               {editingSummary ? (
                 inlineInput(
                   editingValue,
@@ -869,7 +887,14 @@ export default function Outline() {
               style={{ paddingLeft: (depth + 1) * 20 + 8 }}
             >
               <span className="-ml-2 w-6 shrink-0" />
-              <TypeChip className="h-5 w-7 shrink-0 justify-center">
+              {/* 新建行的类型徽标：编号未分配 → 只给枚举文案，但几何与建出后的编号徽标同宽
+                  （卷/章 `min-w-14`、场 `w-7`，否则输入行与上面的行错位） */}
+              <TypeChip
+                className={cn(
+                  "h-5 shrink-0 justify-center",
+                  creatingAt.type === "scene" ? "w-7" : "min-w-14",
+                )}
+              >
                 {TYPE_LABEL[creatingAt.type]}
               </TypeChip>
               {inlineInput(
