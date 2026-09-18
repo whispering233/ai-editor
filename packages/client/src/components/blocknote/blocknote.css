@@ -51,6 +51,8 @@
      `@blocknote/ariakit/style.css` 之后引入（import 顺序，同 12.5 的深浅两态选择器口径），顺序上也占后。
    深浅两态不相干（字号/行高不随主题变）⇒ 只有这一段声明，不复制两份。 */
 .bn-container .bn-editor {
+  /* 可编辑区自身延伸到底（同一 flex 链，见上方「写作面高度」）：点最后一行下方的空白即聚焦文末 */
+  flex: 1 1 auto;
   font-size: var(--writing-font-size, 16px);
   /* 库把基准字体写在 `.bn-default-styles{font-family:Inter,…}`（0,1,0）上，而该 class **就挂在 `.bn-editor` 身上**
      ⇒ 正文元素自带的声明压过从 `.bn-root` 继承来的值，写作面字体只能落在正文元素上（本选择器 0,2,0 压过它）；
@@ -128,9 +130,17 @@
    唯一实现 = components/blocknote/editor-toolbar.tsx，它作为 `BlockNoteView` 的 children 渲染——在 DOM 里
    排在编辑器**之后**（`.bn-container` 内、contentEditable 之外），故靠 flex `order:-1` 提到顶部。
    色值全部走上面那批 `--bn-*`（含 `--bn-colors-editor-background`）：深浅两态同源，不写第二套值。 */
+/* ── 写作面高度 = 填满剩余视口（卡 15.1）────────────────────────────────────
+   契约：DESIGN.md §Components「写作面（工具条 / 专注模式）」的「写作面高度」条。
+   下面 `.bn-container` 与 `.bn-container .bn-editor` 各自的 `flex: 1 1 auto` **只靠页面的 flex 链生效**
+   （`min-h-full` + `flex flex-col` 挂在章正文页 Manuscript.tsx 的 `section` 上，且中栏滚动容器
+   `min-h-0 flex-1 overflow-y-auto` 给了确定高度 ⇒ `min-height:100%` 解析得出来）；
+   容器高度为 auto 时（参考资料详情页：编辑器父级是普通 block，非 flex item）无剩余空间可分配，
+   `flex` 不产生任何效果 ⇒ 那边外观不变。`min-height` 不封顶 ⇒ 长文照旧滚动。 */
 .bn-container {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
 }
 
 /* 用 `.bn-container` + 本类提高特异性，压掉 ariakit `.bn-ak-toolbar`（含它的 dark 变体）自带的

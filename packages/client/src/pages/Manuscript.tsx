@@ -313,7 +313,12 @@ export default function Manuscript({ chapterId }: { chapterId: string }) {
   }
 
   return (
-    <section>
+    /* 写作面铺满剩余高度（卡 15.1，契约 DESIGN.md §Components 写作面「写作面高度」）：
+       `min-h-full` 吸收中栏滚动容器（MainPanel 的 `min-h-0 flex-1 overflow-y-auto p-6`）内容区高度，
+       `flex-col` 给下面的 `.bn-container` / `.bn-editor` 提供 flex 链（blocknote.css 里两处 `flex: 1 1 auto`
+       据此吸收剩余高度）。`min-height` 不封顶 ⇒ 长文照旧由中栏滚动条承接；
+       **只本页 section 有这条链**（参考资料详情页的编辑器父级非 flex ⇒ 那边保持内容高度）。 */
+    <section className="flex min-h-full flex-col">
       {/* 页头：章标题 + 字数/保存态（说明行）+ 上/下一章（阅读序相邻章，无则禁用）+ 导入/导出。
           专注模式下整没（契约 DESIGN.md §Layout「专注模式」）——字号/保存态改由工具条右端承载；
           下面是**保存失败错误条**，不受专注模式影响（失败必须可见，不静默） */}
