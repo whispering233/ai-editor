@@ -523,8 +523,11 @@ export default function ReferenceDetail({ id, draft = false }: { id?: string; dr
         </div>
       )}
 
-      {/* 表单区（编辑态 = 详情页即编辑器；分类/标签/URL + 正文块编辑器） */}
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
+      {/* 表单区（编辑态 = 详情页即编辑器；分类/标签/URL + 正文块编辑器）。
+          `flex flex-col` 是写作面高度链的第一环（DESIGN.md「写作面高度 = 填满剩余视口」）：
+          容器 → 正文本行（flex-1 min-h-0）→ 编辑器包裹层（flex flex-col）三处接通，
+          `.bn-container` / `.bn-editor` 的 `flex: 1 1 auto`（blocknote.css）才会生效 */}
+      <div className="flex min-h-0 flex-1 flex-col space-y-3 overflow-y-auto">
         {/* 分类：文本框 + datalist 自动补全——建议项 = 项目内已用分类（存量回显名），
             不含预置枚举，用户可自由输入任意新分类 */}
         <div className="flex items-start gap-2">
@@ -596,31 +599,36 @@ export default function ReferenceDetail({ id, draft = false }: { id?: string; dr
           </div>
         </div>
         {/* 正文（块编辑器；改色只在 components/blocknote/blocknote.css）：编辑态自动保存，
-            新建态由「创建」按钮随 POST 一次提交 */}
-        <div className="flex items-start gap-2">
+            新建态由「创建」按钮随 POST 一次提交。
+            `flex-1 min-h-0` + 包裹层 `flex flex-col` = 高度链第二、三环（短正文也铺满，点空白落文末） */}
+        <div className="flex flex-1 min-h-0 items-start gap-2">
           <label className="mt-2 w-12 shrink-0 text-sm text-muted-foreground">正文</label>
-          <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 flex-1 flex-col">
             <DocumentEditor
               key={editorEpoch}
               initialContent={content}
               onChange={handleEditorChange}
               onReady={setEditorApi}
+              /* 手动保存统一到工具条（与章正文页同形同位）：动作 = 整页 handleSave；
+                 草稿态不注入 ⇒ 工具条不渲染该按钮（动作是带跳转的「创建」，留在下方操作行） */
+              save={draft ? undefined : { onSave: () => void handleSave(), saving }}
             />
           </div>
         </div>
         {formError !== null && <p className="text-xs text-destructive">{formError}</p>}
-        {/* 操作（正文已自动保存；这里提交的是名称/分类/标签/URL + 正文的整篇写） */}
-        <div className="flex justify-end gap-1.5 pt-1">
-          {draft && (
+        {/* 操作行**只在草稿态**渲染：草稿态的创建会跳转，不适合放工具条；
+            编辑态的「保存」已移到工具条右端（与章正文页同形同位，页头滚动离开也点得到） */}
+        {draft && (
+          <div className="flex justify-end gap-1.5 pt-1">
             <Button onClick={() => navigate("#/references")} disabled={saving}>
               取消
             </Button>
-          )}
-          <Button type="primary" onClick={handleSave} disabled={saving}>
-            {saving && <LoadingOutlined className="text-sm" spin />}
-            {draft ? "创建" : "保存"}
-          </Button>
-        </div>
+            <Button type="primary" onClick={handleSave} disabled={saving}>
+              {saving && <LoadingOutlined className="text-sm" spin />}
+              创建
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* 建立关联对话框（源端点预填当前 reference；新建态禁用——条目还不存在） */}
