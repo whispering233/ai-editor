@@ -9,11 +9,19 @@
 // 冲突（409 DOCUMENT_STALE）：对话框二选一——「重新加载（丢弃本地）」重拉服务端版本并换 key 重挂
 // 编辑器，「覆盖保存」重发且**不带 base_updated_at**（服务端据此跳过冲突检查）。
 // 章节不存在 / 已软删（404 OUTLINE_NODE_NOT_FOUND）→ 页面 404 态（写法同 OutlineDetail）。
+// 导入导出（卡 12.6，契约 docs/api/110-api-manuscript.md「导入导出（无端点）」）：纯客户端——导出 md（**先确认有损**）
+// / 块 JSON（无损），导入 md（往返比对，有损时必须用户确认后才覆盖）/ 块 JSON（浅校验失败即可见错误）。
+// 判定与文件名规则在 lib/document-io（node 可测）；对话框与下载走既有全局 confirm / 临时 <a download>。
+// 导入落地必须换 key 重挂编辑器（BlockNote 非受控），再把新内容交给自动保存落盘。
 // 样式纪律：颜色只走 token / 语义变量；块编辑器的改色只在 components/blocknote/blocknote.css。
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button } from "antd";
+import { Button, Dropdown } from "antd";
+import { DownOutlined, ExportOutlined, ImportOutlined } from "@ant-design/icons";
 import { PageHeader } from "@/components/ui/page-header";
-import { DocumentEditor } from "../components/blocknote/document-editor";
+import {
+  DocumentEditor,
+  type DocumentEditorApi,
+} from "../components/blocknote/document-editor";
 import { ManuscriptLoadFailure, ManuscriptMissing } from "../components/blocknote/manuscript-states";
 import {
   Dialog,
@@ -31,11 +39,21 @@ import {
   formatTextLength,
   manuscriptErrorAction,
 } from "../lib/manuscript";
+import {
+  downloadTextFile,
+  exportDocumentJson,
+  exportDocumentMarkdown,
+  MARKDOWN_LOSSY_NOTICE,
+  markdownImportConfirmMessage,
+  planDocumentImport,
+  readTextFile,
+} from "../lib/document-io";
 import { findNode } from "../lib/outline-tree";
 import { errorBannerClass, skeletonClass } from "../lib/styles";
 import { navigate } from "../hooks/use-route";
 import { useOutlineLoader } from "../hooks/use-outline-loader";
 import { useProjectStore } from "../stores/project";
+import { useUiStore } from "../stores/ui";
 import { cn } from "../lib/utils";
 
 type SaveState = "idle" | "saving" | "saved";
@@ -64,6 +82,10 @@ export default function Manuscript({ chapterId }: { chapterId: string }) {
   const [charCount, setCharCount] = useState(0);
   // 编辑器重挂信号（BlockNote 非受控：重新加载 / 丢弃本地改动后必须换 key 重挂）
   const [editorEpoch, setEditorEpoch] = useState(0);
+  // 导入导出的入口（卡 12.6）：md 互转要有编辑器实例 → 实例就绪后回调拿到能力出口；null = 编辑器未挂载
+  const [editorApi, setEditorApi] = useState<DocumentEditorApi | null>(null);
+  /** 隐藏的文件选择框（导入入口；桌面形态不加原生能力，同一套 <input type="file">） */
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [conflictOpen, setConflictOpen] = useState(false);
@@ -168,6 +190,81 @@ export default function Manuscript({ chapterId }: { chapterId: string }) {
     await saveContent(latestRef.current ?? "", { force: true });
   }
 
+  // ============ 导入导出（卡 12.6） ============
+
+  /** 本章文件名基名（章标题；大纲未加载时回落「正文」，与页头标题同口径） */
+  function documentTitle(): string {
+    return chapterTitle ?? "正文";
+  }
+
+  /** 导出块 JSON（无损，可再导入） */
+  function exportBlocksJson(): void {
+    const file = exportDocumentJson(latestRef.current ?? "", documentTitle());
+    downloadTextFile(file);
+    useUiStore.getState().showToast(`已导出 ${file.fileName}`);
+  }
+
+  /** 导出 markdown：**md 有损**（颜色/对齐/嵌套/媒体无表达）——下载前必须先让用户确认 */
+  async function exportMarkdown(): Promise<void> {
+    if (editorApi === null) return;
+    const content = latestRef.current ?? "";
+    const ok = await useUiStore.getState().confirm({
+      title: "导出 markdown（有损）",
+      description: `${MARKDOWN_LOSSY_NOTICE}。需要无损（可再导入）请改用「导出块 JSON」。`,
+    });
+    if (!ok) return;
+    const file = exportDocumentMarkdown(content, documentTitle(), (text) =>
+      editorApi.toMarkdown(text),
+    );
+    downloadTextFile(file);
+    useUiStore.getState().showToast(`已导出 ${file.fileName}（有损）`);
+  }
+
+  /**
+   * 导入落地的唯一路径：**换 key 重挂编辑器**换内容（BlockNote 非受控，外部改写只能重挂），
+   * 再把新内容交给自动保存落盘（导入 = 一次用户编辑，不新增端点）。
+   */
+  function applyImportedContent(next: string): void {
+    latestRef.current = next;
+    setContent(next);
+    setEditorEpoch((epoch) => epoch + 1);
+    autosave.schedule(next);
+  }
+
+  /** 导入（按扩展名分派；有损 md 必须先确认——判定在 lib/document-io，对话框用全局 confirm） */
+  async function importFile(file: File): Promise<void> {
+    if (editorApi === null) return;
+    let text: string;
+    try {
+      text = await readTextFile(file);
+    } catch {
+      useUiStore.getState().showToast("导入失败：文件读取异常", "error");
+      return;
+    }
+    const plan = planDocumentImport(file.name, text, (markdown) =>
+      editorApi.parseMarkdown(markdown),
+    );
+    switch (plan.action) {
+      case "error":
+        useUiStore.getState().showToast(plan.message, "error");
+        return;
+      case "confirm-lossy": {
+        const ok = await useUiStore.getState().confirm({
+          title: "导入 markdown（有损）",
+          description: `${markdownImportConfirmMessage(
+            plan.unsupportedCount,
+          )}；继续将用文件内容覆盖本章。需要无损请改用块 JSON。`,
+        });
+        if (!ok) return;
+        break;
+      }
+      case "apply":
+        break;
+    }
+    applyImportedContent(plan.content);
+    useUiStore.getState().showToast(`已用 ${file.name} 覆盖本章正文`);
+  }
+
   const notFound = loadError?.code === "OUTLINE_NODE_NOT_FOUND";
 
   if (notFound) return <ManuscriptMissing />;
@@ -178,12 +275,25 @@ export default function Manuscript({ chapterId }: { chapterId: string }) {
 
   return (
     <section>
-      {/* 页头：章标题 + 字数/保存态（说明行）+ 上/下一章（阅读序相邻章，无则禁用） */}
+      {/* 页头：章标题 + 字数/保存态（说明行）+ 上/下一章（阅读序相邻章，无则禁用）+ 导入/导出 */}
       <PageHeader
         title={chapterTitle ?? "正文"}
         truncateTitle
         action={
           <>
+            {/* 导入入口：隐藏文件框（浏览器与桌面同一套；按钮触发，选完清空 value 以便重复选同一文件） */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".md,.json,.txt,text/markdown,application/json,text/plain"
+              className="hidden"
+              aria-label="选择要导入的正文文件"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (file !== undefined) void importFile(file);
+              }}
+            />
             <Button
               disabled={neighbors.prev === null}
               title={neighbors.prev?.chapter.title}
@@ -202,6 +312,33 @@ export default function Manuscript({ chapterId }: { chapterId: string }) {
             >
               下一章
             </Button>
+            <Button
+              disabled={editorApi === null}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <ImportOutlined className="text-sm" />
+              导入
+            </Button>
+            <Dropdown
+              disabled={editorApi === null}
+              trigger={["click"]}
+              menu={{
+                items: [
+                  { key: "json", label: "导出块 JSON（无损）" },
+                  { key: "markdown", label: "导出 markdown（有损）" },
+                ],
+                onClick: ({ key }) => {
+                  if (key === "json") exportBlocksJson();
+                  else void exportMarkdown();
+                },
+              }}
+            >
+              <Button disabled={editorApi === null}>
+                <ExportOutlined className="text-sm" />
+                导出
+                <DownOutlined className="text-xs" />
+              </Button>
+            </Dropdown>
           </>
         }
         description={
@@ -231,7 +368,12 @@ export default function Manuscript({ chapterId }: { chapterId: string }) {
           ))}
         </div>
       ) : (
-        <DocumentEditor key={editorEpoch} initialContent={content} onChange={handleChange} />
+        <DocumentEditor
+          key={editorEpoch}
+          initialContent={content}
+          onChange={handleChange}
+          onReady={setEditorApi}
+        />
       )}
 
       {/* 大纲树兜底：只有标题/上下章依赖它，正文本身不受影响（失败时点重试再拉） */}
