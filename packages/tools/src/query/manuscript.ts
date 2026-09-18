@@ -20,8 +20,12 @@ import type { GetChapterTextArgs } from "../schemas/index.js";
 /** 缺省单次返回字符数（≈ 一段中等篇幅；长章分段读完，不炸上下文） */
 export const DEFAULT_CHAPTER_TEXT_CHARS = 6000;
 
-/** 单次返回字符数上限（clamp 上限，防一次拉爆上下文） */
-export const MAX_CHAPTER_TEXT_CHARS = 20000;
+/**
+ * 单次返回字符数上限（clamp 上限）——必须压进单条工具结果预算：agent 侧单条工具结果
+ * 上限 8000 tokens（docs/design/20-context.md §2），CJK 约 1 token/字 ⇒ 返回字符数超过
+ * 该预算就会被外层截断，连工具自带的「可用 offset 续读」提示一起截没（「截断必须显式告知」失效）。
+ */
+export const MAX_CHAPTER_TEXT_CHARS = 8000;
 
 /** get_chapter_text 结果（工具目录逐字对齐：docs/api/tool-calling.md「正文只读查询」） */
 export interface ChapterTextResult {

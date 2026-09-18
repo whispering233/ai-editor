@@ -139,7 +139,7 @@ describe("executeCreateReference（确认后写入）", () => {
       .get(id) as { content: string; content_text: string } | undefined;
   }
 
-  it("纯文本摘录 → 段落块数组 + content_text = 该纯文本；entities.data 无 content（直查 SQLite）", () => {
+  it("纯文本摘录 → 段落块数组 + content_text = 块投影；entities.data 无 content（直查 SQLite）", () => {
     const ctx = makeCtx();
     const proposal = buildProposeCreateReference(ctx, {
       name: "素材库第一条",
@@ -158,6 +158,22 @@ describe("executeCreateReference（确认后写入）", () => {
     const blocks = JSON.parse(doc!.content) as Array<{ type: string; content: Array<{ text: string }> }>;
     expect(blocks.map((b) => b.type)).toEqual(["paragraph", "paragraph", "paragraph"]);
     expect(blocks.map((b) => b.content.map((t) => t.text).join("")).join("\n")).toBe(doc!.content_text);
+  });
+
+  it("content_text 从块重算（不是提交原文）：单换行 → 空行分隔两段；单行原样", () => {
+    const ctx = makeCtx();
+    const twoLines = executeCreateReference(
+      ctx,
+      buildProposeCreateReference(ctx, { name: "两段摘录", content: "第一行\n第二行" }),
+    );
+    // 提交是单换行，投影是块间空行（与编辑器所见一致）；直落原文会让 AI 读到的文本与块投影不一致
+    expect(docRow(twoLines.id!)!.content_text).toBe("第一行\n\n第二行");
+
+    const single = executeCreateReference(
+      ctx,
+      buildProposeCreateReference(ctx, { name: "单行摘录", content: "单行" }),
+    );
+    expect(docRow(single.id!)!.content_text).toBe("单行");
   });
 
   it("未携带 content：实体照建、不落文档行（先建条目后写正文）；type 缺省 material", () => {

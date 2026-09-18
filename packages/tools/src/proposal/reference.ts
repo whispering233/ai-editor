@@ -13,12 +13,12 @@ import { buildProposal, checkProposalAborted, type ToolProposalResult } from "./
 
 /** 产出创建参考资料提案（无引用对象——新实体 id 由执行时生成）
  * data 只带短字段（type/url/tags）+ 待拆出的 content（纯文本摘录）；
- * source 参数映射为 url（来源列渲染依据），无 source 时 url 留空 */
+ * source 参数映射为 data.url（来源列唯一认的字段），无 source 时 url 留空 */
 export function buildProposeCreateReference(ctx: ToolContext, args: ProposeCreateReferenceArgs): ReturnType<typeof buildProposal> {
   const data: Record<string, unknown> = {};
   if (args.type !== undefined) data.type = args.type;
   if (args.content !== undefined) data.content = args.content;
- // source → url（link 类来源列渲染依据）
+  // source → data.url（详情/列表来源列只认 url；kind/file_name 等文件机制字段已废弃，不读）
   if (args.source !== undefined) data.url = args.source;
   if (args.tags !== undefined) data.tags = args.tags;
   return buildProposal(

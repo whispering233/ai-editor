@@ -8,9 +8,12 @@
 //   （`data` 只留 type/url/tags 等短字段）
 // - 真相 = `document_records.content`：按行拆为**段落块**（每行一个 paragraph；不引
 //   @blocknote——服务端不解析块语义，也不做 markdown 转换，作者在编辑器里自行排版）
-// - `content_text` = 该纯文本本身（AI 摘录的就是投影文本，无需再走一次块投影）
+// - `content_text` = **由块内容重算**（shared `blocksToPlainMd`）——对齐 docs/db/schema.md
+//   「投影单一写入人」：投影只能从真相派生，提交的纯文本不得直接当投影落库
+//   （提交文本的单换行 ≠ 投影的块间空行，直落会让工具读到的文本与编辑器所见不一致）
 // - 同一事务写入：实体行与文档行要么都在，要么都不在
 
+import { blocksToPlainMd } from "@whispering233/ai-editor-shared";
 import { nowIso, upsertDocument, withTransaction } from "@whispering233/ai-editor-db";
 import type { ExecutorResult, ExecutorFn } from "./types.js";
 import { requireRecord, requireString } from "./types.js";
@@ -56,11 +59,12 @@ export const executeCreateReference: ExecutorFn = (ctx, proposal): ExecutorResul
       },
     });
     if (content !== null) {
+      const blocks = paragraphBlocksOf(content);
       upsertDocument(ctx.db, {
         ownerKind: "reference",
         ownerId: requireString(created, "id"), // executeCreateEntity 恒返回新 id（防御取用）
-        content: JSON.stringify(paragraphBlocksOf(content)),
-        contentText: content,
+        content: JSON.stringify(blocks),
+        contentText: blocksToPlainMd(blocks), // 投影从块重算，绝不等于提交原文
         now,
       });
     }

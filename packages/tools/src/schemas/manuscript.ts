@@ -7,7 +7,7 @@ import { Type, type Static } from "@earendil-works/pi-ai";
 
 /**
  * get_chapter_text 入参：node_id（**必须是章节点**）+ offset（起始字符下标，缺省 0）
- * + max_chars（本次最多返回字符数，缺省 6000、上限 20000——实现层 clamp）。
+ * + max_chars（本次最多返回字符数，缺省 6000、上限 8000——实现层 clamp）。
  */
 export const getChapterTextArgsSchema = Type.Object(
   {

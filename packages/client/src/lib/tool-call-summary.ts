@@ -15,10 +15,12 @@ interface FieldDisplaySpec {
   id?: boolean;
 }
 
-/** 工具显示定义：lead = 行首动词短语；fields = 字段显示映射（未收录字段不渲染） */
+/** 工具显示定义：lead = 行首动词短语；fields = 字段显示映射（未收录字段不渲染）；
+ * render = 自定义摘要（给出则取代 fields 逐字段渲染——参数需组合表达的工具用） */
 interface ToolDisplaySpec {
   lead: string;
   fields: Record<string, FieldDisplaySpec>;
+  render?: (args: Record<string, unknown>, names: ResolvedNames | null | undefined) => string[];
 }
 
 /** 工具 → 显示定义（key 与 /registry 工具名一致；未知工具 → 无定义 → 回退 JSON） */
@@ -43,6 +45,7 @@ const TOOL_DISPLAY_SPECS: Record<string, ToolDisplaySpec> = {
   },
   get_outline: { lead: "读取大纲", fields: {} },
   get_outline_path: { lead: "读取节点路径", fields: { node_id: { label: "节点", id: true } } },
+  get_chapter_text: { lead: "读取章正文", fields: {}, render: summarizeChapterText },
   compute_state: {
     lead: "计算状态",
     fields: { target_id: { label: "目标", id: true }, at_node_id: { label: "锚定节点", id: true } },
@@ -167,8 +170,33 @@ function renderField(
 }
 
 /**
+ * get_chapter_text 摘要（卡 12.9）：节点名 + 分页位置合成一行——offset / max_chars 逐字段
+ * 分行读不出「从第 N 字起读 M 字」的语义；offset 口径与工具截断提示的 `offset=` 一致。
+ * 节点 id 解析失败 / names 缺失 → 只留动词短语行（不泄漏裸 id，同 summarizeToolCall 约定）。
+ */
+function summarizeChapterText(
+  args: Record<string, unknown>,
+  names: ResolvedNames | null | undefined,
+): string[] {
+  const id = args.node_id;
+  const resolved = typeof id === "string" ? names?.[id] : undefined;
+  const head =
+    resolved === null || resolved === undefined ? "读取章正文" : `读取章正文：章「${resolved.name}」`;
+  const offset = typeof args.offset === "number" && args.offset > 0 ? args.offset : null;
+  const maxChars = typeof args.max_chars === "number" ? args.max_chars : null;
+  const range =
+    offset !== null
+      ? `从第 ${offset} 字起${maxChars === null ? "" : `，读 ${maxChars} 字`}`
+      : maxChars === null
+        ? null
+        : `前 ${maxChars} 字`;
+  return [range === null ? head : `${head}（${range}）`];
+}
+
+/**
  * 工具调用摘要：返回人类可读摘要行数组。
  * - 未知工具（无显示定义）→ null（调用方回退原始 JSON）
+ * - 有 render 的工具（get_chapter_text）→ 自定义摘要
  * - 首行 = `{动词短语}：{主参}`，其余字段逐行
  * - id 字段解析失败 → 省略；全部字段省略 → 仅动词短语行
  * @param args 工具参数（LLM 产出形态，Record<string, unknown> | null）
@@ -182,6 +210,7 @@ export function summarizeToolCall(
   const spec = TOOL_DISPLAY_SPECS[tool];
   if (spec === undefined) return null;
   if (typeof args !== "object" || args === null) return [spec.lead];
+  if (spec.render !== undefined) return spec.render(args, names);
  // 按 args 字段顺序收集可渲染行（id 字段优先作主参——LLM 生成的字段顺序不可控，
  // type 等前置字段不应抢走「查询实体：实体「名称」」的主位）
   const rows: Array<{ isId: boolean; text: string }> = [];

@@ -9,6 +9,7 @@ const names: ResolvedNames = {
   "char-1": { label: "人物", name: "张三" },
   "sc-2": { label: "场景", name: "决斗现场" },
   "hook-3": { label: "伏笔", name: "玉佩来历" },
+  "ch-4": { label: "章", name: "第一章" },
   "rel-9": null, // 关系无名称 → null
 };
 
@@ -63,6 +64,26 @@ describe("summarizeToolCall", () => {
       names,
     );
     expect(lines).toEqual(["重排时间点"]);
+  });
+
+  it("get_chapter_text：章名 + 分页位置合成一行（前 N 字 / 从第 N 字起）", () => {
+    expect(summarizeToolCall("get_chapter_text", { node_id: "ch-4" }, names)).toEqual([
+      "读取章正文：章「第一章」",
+    ]);
+    expect(
+      summarizeToolCall("get_chapter_text", { node_id: "ch-4", max_chars: 3000 }, names),
+    ).toEqual(["读取章正文：章「第一章」（前 3000 字）"]);
+    expect(summarizeToolCall("get_chapter_text", { node_id: "ch-4", offset: 6000 }, names)).toEqual(
+      ["读取章正文：章「第一章」（从第 6000 字起）"],
+    );
+    expect(
+      summarizeToolCall("get_chapter_text", { node_id: "ch-4", offset: 6000, max_chars: 2000 }, names),
+    ).toEqual(["读取章正文：章「第一章」（从第 6000 字起，读 2000 字）"]);
+  });
+
+  it("get_chapter_text：节点 id 解析失败 / names 缺失 → 只留动词短语行（不泄漏裸 id）", () => {
+    expect(summarizeToolCall("get_chapter_text", { node_id: "ch-99" }, names)).toEqual(["读取章正文"]);
+    expect(summarizeToolCall("get_chapter_text", { node_id: "ch-4" }, null)).toEqual(["读取章正文"]);
   });
 
   it("未知工具 → null（调用方回退原始 JSON 兜底）", () => {
