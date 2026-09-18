@@ -177,6 +177,15 @@
   - 影响：下次改动只靠人眼复查（本轮已量测的具体数字见 CHANGELOG）。
   - 触发条件：再改这三处行结构/行尾操作区时。
   - 最小修法：把 Outline 的页头/行操作区拆成 presenter 组件后补 `renderToString` 断言（与人物页同款）；**代价 = 一次真实拆分**，不要在页面里塞测试钩子。
+  - **2026-09 局部兑现**：章视图已拆为 presenter（`components/outline/chapter-view.tsx`）+ `chapter-view.test.tsx`（renderToString：两枚编号徽标 / 就地编辑态 / 空态）；**大纲树行仍未拆**（本次只改徽标内容与占位几何，未动交互语义）——下次改树行操作区时仍按上一条拆。
+- **章视图不做结构编辑**（2026-09 大纲页双视图）
+  - 现状：章视图只有「改标题 + 进详情」，删除 / 新建场 / 拖拽排序全在大纲树。
+  - 触发条件：用户反馈要在章视图里直接排序或新建章。
+  - 最小修法：把树行渲染（现闭在 `Outline.tsx` 的 `renderNodes` 内）抽成可复用 presenter 后给章视图接同行能力；**拖拽需先定义跨卷语义**（平铺列表里卷序不是锚点）。
+- **编号未扩散到其他位置**（2026-09）
+  - 现状：`第N卷` / `第N章` 只在大纲页两个视图；章详情页标题 / 顶栏阅读进度 / 选章下拉 / 关系与伏笔面板仍是标题原文。
+  - 触发条件：用户要求在详情页或下拉里看到章号。
+  - 最小修法：详情页与顶栏可直接复用 `lib/outline-tree.ts` 的 `numberOutline`（已有树即可算）；下拉则要改全站公共的 `chapterNodeOptions`（影响人物页/伏笔/时间轴多个调用点），代价最高。
 - **antd 是 caret 依赖（`^6.6.2`），而缩进对齐依赖其 `controlHeightSM`**（UX 批次 oracle 登记）
   - 现状：无子节点行占位用 `-ml-2 w-6`（24px）与 antd icon-only `size="small"` 按钮同几何——24 来自 `controlHeight(32) × 0.75`；已在 `components/antd-tokens.test.ts` 加一条「`controlHeightSM === 24`」断言兜底（上游 minor 改动会报红而不是静默错位）。
   - 触发条件：antd minor 升级时（测试会提醒，届时对齐 `w-6` 或改成 token 驱动的宽度）。
