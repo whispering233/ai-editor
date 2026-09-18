@@ -83,7 +83,15 @@ export function ChapterView({
               "rounded-md px-2 py-1 transition-colors hover:bg-muted/60",
               focusedNodeId === node.id && "bg-primary/10 ring-1 ring-primary/30 ring-inset",
             )}
-            onDoubleClick={() => handlers.onOpenDetail(node.id)}
+            /* 双击进详情；与树视图同守卫（oracle P2-1）：
+               ① 双击标题时第一击已把标题换成输入框，第二击的 target = input（且 input 的 blur 已把
+                  编辑态清掉）⇒ 必须看 **事件 target** 而不只看 editingHere，否则「双击标题」会变成跳详情；
+               ② 改名态中不跳（丢弃未提交输入无意义） */
+            onDoubleClick={(e) => {
+              if ((e.target as HTMLElement).closest("button, input, a")) return;
+              if (editingHere) return;
+              handlers.onOpenDetail(node.id);
+            }}
           >
             <div className="flex items-center gap-2">
               {/* 卷号徽标：存量直挂 root 的章无卷号 → 留同宽占位，保各行标题列对齐 */}

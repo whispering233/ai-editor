@@ -553,6 +553,44 @@ describe("numberOutline（展示口径编号：卷序 + 全局章序）", () => 
     expect(chapterRows.map((r) => r.chapter.id)).toEqual(["ch-2", "ch-9"]);
   });
 
+  it("软删卷在前不影响后续卷号重排（oracle P2-3）", () => {
+    const tree: OutlineTree = {
+      id: "root",
+      type: "root",
+      schemaVersion: 1,
+      children: [
+        {
+          id: "vol-deleted",
+          type: "volume",
+          title: "软删卷",
+          updatedAt: "t",
+          deleted: true,
+          children: [{ id: "ch-x", type: "chapter", title: "第九章", updatedAt: "t" }],
+        },
+        {
+          id: "vol-1",
+          type: "volume",
+          title: "第一卷",
+          updatedAt: "t",
+          children: [{ id: "ch-1", type: "chapter", title: "第一章", updatedAt: "t" }],
+        },
+        {
+          id: "vol-2",
+          type: "volume",
+          title: "第二卷",
+          updatedAt: "t",
+          children: [{ id: "ch-2", type: "chapter", title: "第二章", updatedAt: "t" }],
+        },
+      ],
+    };
+    const { labels } = numberOutline(tree);
+    expect(labels.has("vol-deleted")).toBe(false);
+    expect(labels.get("vol-1")).toBe("第1卷"); // 软删卷不占卷号
+    expect(labels.get("vol-2")).toBe("第2卷");
+    expect(labels.get("ch-1")).toBe("第1章");
+    expect(labels.get("ch-2")).toBe("第2章");
+  });
+
   it("null 树 / 空树 → 空编号", () => {
     expect(numberOutline(null)).toEqual({ labels: new Map(), chapterRows: [] });
     expect(numberOutline({ id: "root", type: "root", schemaVersion: 1, children: [] })).toEqual({
