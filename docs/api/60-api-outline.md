@@ -32,13 +32,16 @@
   updatedAt: string;             // 节点版本戳（提案快照比对）
   metadata?: {                   // 仅 with_metadata=true 时返回
     hookCount?: number;          // 关联的伏笔数
-    charCount?: number;          // 关联角色数
+    charCount?: number;          // 关联角色数（appears_in 指向该节点的关系数）
     deltaCount?: number;         // 此节点触发的 Delta 数
+    textLength?: number;         // （章，2026-10）正文字数 = document_records.content_text 长度；无正文 = 0
   };
 }
 ```
 
 > **节点 `data`（2026-08 新增）**：按层级 schema（`OUTLINE_NODE_DATA_SCHEMAS`，shared 单一来源）校验——scene：`goal`/`conflict_levels`/`value_from`/`value_to`；chapter：`reversal`/`climax_scene`；volume：`climax_scene`/`inciting_scene`。引用字段（`climax_scene`/`inciting_scene`）宽松校验（任意场景节点 id），MVP 不校验引用范围。编辑 data 不自动生成 Delta。
+>
+> **节点 `metadata.textLength`（2026-10）**：仅 `with_metadata=true` 时返回的**章**统计——正文字数（= `document_records.content_text` 长度），大纲页/章视图据此展示「已写 / 字数」而**不拉取正文全文**。与既有 `metadata.charCount`（关联角色数）不是同一字段，勿混用。
 
 ### POST /api/v1/outline
 

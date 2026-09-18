@@ -257,7 +257,7 @@ components:
 
 ## Overview
 
-**定位**：本地优先的写作助手工作台——三栏密集布局，长时间盯屏，结构化数据（大纲/人物/设定/地点/伏笔/时间轴/关联/参考资料）+ 常驻 AI 会话栏。**产品不编辑正文**，所以视觉不是「编辑器」，而是「创作资料台」。
+**定位**：本地优先的写作助手工作台——三栏密集布局，长时间盯屏，结构化数据（大纲/人物/设定/地点/伏笔/时间轴/关联/参考资料）+ 章级正文 + 常驻 AI 会话栏。**正文在系统内书写（2026-10）**，但视觉主体仍是「创作资料台」：正文页是一个安静的单栏块编辑器（无侧边格式栏、无状态栏），资料页维持高密度工作台形态。
 
 **风格来源**：Notion **工作区**（不是 notion.com 营销站）。工作区与营销站是两套语言——营销站的紫色 CTA、深蓝 hero 带、马卡龙功能卡、80px 标题一律不采用；采用其工作区那一半：
 
@@ -346,6 +346,26 @@ components:
 **不登记派生色**：hover/active/禁用底、`colorFill*` 系列、深浅算法派生的色阶一律不写进本文件——登记了就必然与 antd 实际派发值漂移。本文件只登记「人为设定的值」。（守卫：`src/components/antd-tokens.test.ts` 用 antd 自己的 `theme.getDesignToken` 算出**派生后**的 token，断言选中面家族（`controlItemBgActive` / `controlItemBgActiveHover` / `controlItemBgHover`——组件级选中面全由其派生：`select/style/token.js` 的 `optionSelectedBg: controlItemBgActive`、`menu` 的 `itemSelectedBg`、`tree` 的 `nodeSelectedBg`、`table` 的 `rowSelectedBg` / `rowSelectedHoverBg` 等）与 `colorText` 的对比度 ≥ 4.5:1，浅/深各一条（半透明面按该模式面板底色合成后再算，否则深色态会得到假值）；另含「裸深墨 seed 时确实 < 4.5」的自检。实测：去掉覆盖后浅色报 `controlItemBgActive=#787771 → 2.73:1`、深色同样变红，还原即绿。）
 
 **深色值来源**：Notion 未公开深色 token（源分析文档 `Known Gaps` 明示）——上表深色列是**推断值**：中性面按 Notion 深色工作区观感（`#191919` / `#202020`），文字按 81%/65%/51%/34% 白的阶梯，其余交给 antd `darkAlgorithm`。若日后与实机对不上，只按观感调 `AntdProvider` 一处。
+
+### 块编辑器（`--bn-*`），2026-10
+
+章正文与参考资料正文用 `@blocknote/*`（ariakit 变体），它**不套 antd token**，而是由**唯一入口** `packages/client/src/components/blocknote/blocknote.css` 把 `--bn-*` 变量映射到本设计系统的色值/字体（等同 `AntdProvider.tsx` 之于 antd）：
+
+| `--bn-*` 变量 | 本文件 token | 说明 |
+| :--- | :--- | :--- |
+| `--bn-colors-editor-text` | `{colors.primary}` | 正文文字 |
+| `--bn-colors-editor-background` | `{colors.canvas}` | 正文底 |
+| `--bn-colors-menu-text` / `--bn-colors-tooltip-text` | `{colors.primary}` | 菜单/提示文字 |
+| `--bn-colors-menu-background` / `--bn-colors-tooltip-background` | `{colors.canvas}` | 浮层底（深色态用 `{colors.canvas}` 深色值） |
+| `--bn-colors-hovered-text` / `--bn-colors-selected-text` | `{colors.primary}` | 悬浮/选中文字 |
+| `--bn-colors-hovered-background` / `--bn-colors-selected-background` | `{colors.surface-muted}` | 悬浮/选中面（与 antd 选中面同一 token，不另起色） |
+| `--bn-colors-border` | `{colors.hairline}` | 结构描边 |
+| `--bn-colors-side-menu` | `{colors.quaternary}` | 块手柄/加号 |
+| `--bn-colors-highlights-*` | 不映射（编辑器自有） | 高亮/颜色选项保留库默认（md 导出本丢弃，见 `backlog.md`） |
+| `--bn-font-family` | 本文件 `typography.body.fontFamily` | 与全站同栈 |
+| 字号/行高 | **吃库默认，不个性定制** | 跟排观感冲突再单独收（同旧 `@uiw/react-md-editor` 的收敛策略） |
+
+**硬约束**：① 块编辑器的改色**只能在 `blocknote.css`**（调用点不得写 `--bn-*` 覆盖、不得内联色值）；② 深浅两态由 `theme` prop 跟随 `useThemeMode`，CSS 变量分浅/深两段写在同一文件；③ 新增/修订映射必须同步本表（顺序同 antd：先改本文件 → 再改 `blocknote.css`）。
 
 ## Typography
 
@@ -561,7 +581,7 @@ components:
 **`cloud-stale-backup-dialog`（旧备份上传确认框，卡 B）** — 同款对话框：一句说明（最新一份本地备份早于最新改动，云端若现在同步只会拿到旧内容）+ 两个等权 `button-default`：`[立即手动备份并推送]`（先 `POST /project/backup` 生成新格式备份、再推送）/ `[上传旧备份]`（照推当前最新那份；**本机没有任何备份时该按钮禁用**并提示先「立即备份」——服务端会 404）——**不用主色也不用 danger**：两者都是合法选择。
 **`cloud-conflict-dialog`（冲突裁决框）** — 同款对话框（**单点宿主挂 `AppShell`**：左栏「同步云端」与面板共用同一实例，左栏收起时也弹得出来；推送撞冲突时由 store 直接打开它，面板不再走行内入口）；并排对比「云端那份」与「本机最新份」（时间 / 设备 / 统计 / 大小）+ 一句「两边都会各留一份备份」；Footer = `[保留云端（拉取覆盖本机）]` + `[用本机覆盖云端]` —— **两个选项等权，两个都用 `button-default`（不用主色、不用 danger）**：任何一方都不比另一方“正确”，主色按钮会诱导误点。**「保留云端（拉取覆盖本机）」必须带上对话框里展示的那一份（`fileName` 显式传入）**——不能只写「拉取云端 head」：对话框与点击之间云端可能又多了新份，界面承诺与实际动作必须一致。**本机没有任何备份时**「用本机覆盖云端」禁用并提示先「立即备份」（服务端会以 404 拒绝空推送）；**「本机最新份」读取失败与「真的没有备份」必须区分**——读取失败时该行显示读取失败并禁用依赖它的按钮，不得显示成「本机还没有备份」（那是把故障说成事实）；失败文案（含强推后仍冲突）就地显示在框内，**关闭框不清除状态**——角标会继续亮，可再次强推（force 不是一次性动作）。
 
-**删除传播提示**：删除会话 / 参考资料成功后的 toast 补一句「推送到云端后，另一台也会同步删除」（删除要推送才传播，见设计文档 §4）。
+**删除传播提示**：删除**会话**成功后的 toast 补一句「推送到云端后，另一台也会同步删除」（删除要推送才传播；正文/参考资料随 `data.db` 走覆盖，见设计文档 §4）。
 
 > 本小节全部形态**不新增色值/字号/圆角**：沿用 `input` / `select` / `button-default` / `button-primary` / `data-row` / `type-badge` / `caption-text` / `empty-state` 与既有 token 档。新增 antd 组件仅 `Switch` 与 `Badge`（均走全局 seed token 派生，无组件级覆盖）。
 
@@ -624,7 +644,7 @@ components:
 - **标签 tint 分配规则**：已实现（§Colors 标签色 —— 名称 hash 取模 3，同名恒同色）；**准入已收口（2026-09）：tint 只给 `data.tags` 元素，枚举类型走描边式 `type-badge`**。新增标签体系时先看现有档位为什么不够，不要另起色表。
 - **tint 深色值未与实机比对**：深色态用「同色相 20% 叠色」推断（Notion 未公开深色 token），若日后观感不对，只改 `index.css` 的 `--tag-*` 深色段。（2026-09 换色板时已验算：叠色合成底 + 81% 白字 5.96–6.18 全部达标。）
 - **antd 派生色未登记**：hover/active/禁用底、`colorFill*`、浅色色阶由算法派生，本文件不复制（避免漂移）。
-- **MD 编辑器是独立表皮**：参考资料页的 `@uiw/react-md-editor` 自带一套排版与配色，未纳入本设计系统（编辑器内部不套 chrome token）；若观感冲突，再单独收。
+- **块编辑器是受控的第二套表皮（2026-10，取代旧「MD 编辑器是独立表皮」）**：块编辑器自带一套排版与配色，不纳入 antd 组件体系；但**改色入口是唯一的**（`blocknote.css` 映射表，见上节），且深浅两态必须各看一遍像素。旧 `@uiw/react-md-editor` 已移除。
 - **插件/第三方浮层未覆盖**：x-markdown 渲染出的表格/引用块样式由库自带，未做 token 映射。
 - **x 组件的内部面不可 token 化（已知边界）**：`Conversations` 的会话项选中/悬浮面取 antd 全局 `colorBgTextHover`（浅色 `rgba(0,0,0,0.06)`），该组件只开放 `creation*` 四个 token，无选中面 token——要把它换成精确的 `{colors.surface-muted}` 只能改全局 `colorBgTextHover`（连带 Menu 悬浮面、text 按钮悬浮面），代价大于收益（两值在白底上目测无差）。其他 x 组件（`Sender`/`Bubble`/`ThoughtChain`）同理：内部色由 x 自己派发。
 - **响应式未细化**：只定义 `<1024px` 的抽屉回退，触屏尺寸与最小点击区未定义。

@@ -1,11 +1,13 @@
 # 实体 CRUD
 
-> 七类实体泛型 CRUD + reference 文件联动扫描 + event/timepoint/setting 排序移动端点。公共约定/命名/响应结构见 [api-public.md](./api-public.md)，错误码见 [error-code.md](./error-code.md)；
+> 七类实体泛型 CRUD + event/timepoint/setting 排序移动端点。公共约定/命名/响应结构见 [api-public.md](./api-public.md)，错误码见 [error-code.md](./error-code.md)；
 > 请求/响应 schema 单一来源：`@whispering233/ai-editor-shared` `types/api.ts`；接口索引见 [00-api-index.md](./00-api-index.md)。
 
 > **软删过滤**：常规查询端点（GET 列表/详情、关系查询、Delta 查询等）**默认过滤软删对象**；回收站 API（`/api/v1/trash/*`）是访问软删对象的唯一入口。
 
-> **实体类型（2026-08；扩展）**：`type` 现支持 **7 种**——`character` / `setting` / `location` / `hook` / **`event`（事件，时间轴）** / **`timepoint`（时间标签点，时间轴）** / **`reference`（参考资料）**。前 6 种完全复用本章节泛型端点（列表/详情/创建/更新/软删），id 前缀 `ev-` / `tp-`；软删/回收站走 `/api/v1/trash/entity/:type/:id/*` 泛型路径（无需独立端点）。**reference 特例**：`kind='file'` 时服务端**文件联动**——create 落盘 `references/<标题>.md`（YAML frontmatter + 正文）+ 建索引；update **先原子写文件再更新 DB**（文件写失败操作报错、DB 失败 scan 自愈）；软删移文件入 `references/.trash/`、restore 移回、purge 物理删（trash 泛型端点内部分支）；`kind='link'` 纯 DB 无文件联动。
+> **实体类型（2026-08；扩展）**：`type` 现支持 **7 种**——`character` / `setting` / `location` / `hook` / **`event`（事件，时间轴）** / **`timepoint`（时间标签点，时间轴）** / **`reference`（参考资料）**。全部 7 种完全复用本章节泛型端点（列表/详情/创建/更新/软删），id 前缀 `ev-` / `tp-`；软删/回收站走 `/api/v1/trash/entity/:type/:id/*` 泛型路径（无需独立端点）。
+>
+> **reference 特例（2026-10 起）**：参考资料正文是**块文档**——真相存 `document_records`（`owner_kind='reference'`），`entities.data` 只留短字段（`type` / `url` / `tags`）。读写对本组端点的**外部形态不变**（请求/响应仍走 `data.content`），服务端内部把 `data.content` 拆写到文档表（单事务）。**不再有项目目录文件联动**：`references/` 目录、文件扫描、frontmatter、`kind`（file/link）与 `file_name`/`file_mtime` 均已废弃（外部编辑能力改为单文件导入导出，见下）。
 
 **event 的 data 字段（shared `eventDataSchema`）**：
 
@@ -71,8 +73,8 @@ type: "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "r
   //   hook      → status, payoff_timing (从 data JSON 提取)
   //   event     → description, tags (从 data JSON 提取)
   //   timepoint → （无专属摘要字段，G2：时间标签文本 = name）
-  //   reference → type, tags, source；kind（file/link）、file_name（file 类相对路径）、
-  //               url（link 类）——来源列渲染依据
+  //   reference → type, tags, url（可空）；content 字段 = **正文摘要截断 120 字**（来源 = 文档表的
+  //               `content_text` 投影，非 block JSON 原文——列表/搜索不得拉入块体）
   summary: Record<string, unknown>;
   // 手动排序位置（2026-08）：**仅 setting 类型填充**——同级组内线性序
   // （同父/同根组内 0..n-1，NULL = 未参与手动排序）；其余类型不出现（稀疏语义）
@@ -141,12 +143,11 @@ type: "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "r
 //             (hook data 字段 schema：shared `hookDataSchema`，服务端校验)
 // event:     { description?, tags?: string[] }（精校验 + passthrough，详见本章节开头字段表）
 // timepoint: {}（G2：时间标签文本 = name，data 无专属字段）
-// reference: 两类承载：
-//   file 类：{ kind: "file", type?, tags?, content? }——服务端落盘 references/<标题 sanitize>.md
-//     （YAML frontmatter: title/category/tags + 正文；重名自动 `标题 (N).md`）+ 建索引
-//     （data.file_name 相对路径 / content 正文镜像 / file_mtime 同步快照）；kind 缺省视为 link
-//   link 类：{ kind: "link", url, type?, tags?, content? }——url **必填**（非空字符串），纯 DB 无文件
-// 备注：新建条目不再写入 source 字段（存量旧条目兼容保留）
+// reference: { type?, url?, tags?, content? }——**内容 = 块文档**（2026-10）；
+//   与其余类型的关键差异：`content` 不在 entities.data 里直接落库，而是拆写进 `document_records`
+//   的 `owner_kind='reference'` 行（服务端派生 content_text 投影）；
+//   未传 content = 空文档（允许先建条目后写正文）；url 可选（纯本地笔记不需要，外源链接才填）
+//   存留字段：kind / file_name / file_mtime / source **已废弃**（旧值不读、不迁移）
 
 // Res: 201
 {
@@ -178,10 +179,10 @@ id: string;
   data?: Partial<Record<string, unknown>>;  // 只合并传入的 data 字段，不覆盖全部
 }
 
-// reference file 类特例：先原子写文件再更新 DB——
-//   正文真相在文件：请求未携带 data.content 时（行内编辑标题/分类/标签场景）服务端读原文件正文
-//   与最新元数据重写 frontmatter 保留正文；文件读失败（外部删除）→ 409 REFERENCE_FILE_MISSING
-//   提示先扫描；文件名不随标题重命名（创建时确定）
+// reference 特例（2026-10 起）：`data.content` 传入时**拆写进 `document_records`**（单事务），
+//   **未携带 `data.content` 时正文保持不动**（行内改标题/分类/标签场景）——取代旧的
+//   「先原子写文件再更新 DB」链路；两者不再有先后性与自愈问题（同一事务）。
+//   服务端另派生的 `content_text` 投影只进文档表，不出现在响应里。
 
 // Res: 200
 {
@@ -195,7 +196,7 @@ id: string;
 
 ### DELETE /api/v1/entity/:type/:id
 
-软删实体：标记 `deleted_at`，**本体保留**可还原；级联移除其关联的关系与 Delta 记录。**reference file 类特例**：文件同时移入 `references/.trash/`（restore 移回、purge 物理删）。
+软删实体：标记 `deleted_at`，**本体保留**可还原；级联移除其关联的关系与 Delta 记录。**reference 特例（2026-10 起）**：其文档行**保留**（不可见，还原后原样回来），purge 时与实体一并物理删。
 
 ```typescript
 // Path
@@ -215,48 +216,18 @@ id: string;
 { error: { code: "ENTITY_NOT_FOUND" } }
 ```
 
-### POST /api/v1/reference/scan
+### 参考资料正文的导入导出（无端点，纯客户端）
 
-扫描重建参考资料索引——幂等全量比对，**文件 = 真相源**：
+参考资料的正文是块文档（同章正文），**外部编辑器能力改为单文件导入导出**，不新增 API：
 
-```typescript
-// Req: {}（无参数）
+| 方向 | 格式 | 行为 |
+| :--- | :--- | :--- |
+| 导出 | 块 JSON | 无损（可再导入）；前端直接序列化编辑器文档 |
+| 导出 | markdown | **有损**：颜色/对齐/嵌套/媒体在 md 中无表达——导出前**必须提示** |
+| 导入（新建） | markdown | 列表页「导入 md 新建」：解析后与原文比对，**存在无法导入的结构时提示并要确认** → `POST /entity/reference` |
+| 导入（覆盖现有正文） | markdown / 块 JSON | 解析/校验后走 `PUT /entity/reference/:id`（携带 `data.content`）；同样先提示有损 |
 
-// Res: 200
-{
-  scanned: {
-    added: number;      // 新建索引（references/ 下无匹配索引的 md 文件）
-    updated: number;    // 更新索引（mtime 不一致 → 以文件为准重新解析 frontmatter + 正文）
-    restored: number;   // 还原索引（文件回归 references/ 且存在软删索引匹配）
-    removed: number;    // 软删索引（非软删 file 类索引对应文件在 references/ 与 .trash/ 均缺失）
-    skipped: number;    // 跳过（索引存在且 file_mtime 与文件 mtime 一致）
-    errors: string[];   // 解析失败文件列表（frontmatter 非法容错为纯 markdown，一般不产生）
-  }
-}
-```
-
-**语义**：
-- 遍历 `references/` 顶层 `*.md`（**排除 `.trash/`**，已软删文件不重复建索引）；
-- 匹配规则：非软删索引 `data.kind='file'` 且 `file_name` 相同 → mtime 比对（**一致跳过**，不一致以文件为准更新 title/category/tags/content/file_mtime/updated_at）；软删索引匹配 → 还原（`deleted_at=NULL`，文件留原地）并更新；无匹配 → 新建；
-- 反向：所有非软删 file 类索引，文件在 `references/` 与 `.trash/` 均缺失 → 索引同步软删（进回收站可还原，软删语义）；
-- frontmatter 缺失/非法 → 容错纯 markdown（title=文件名去扩展名、category=material、tags=[]），不报错；
-- 仅处理顶层文件（不支持子目录，YAGNI）；无项目 → 409 `NO_PROJECT_OPEN`。
-
-### GET /api/v1/reference/scan/status
-
-**只读探测**：`references/` 下未同步的本地文档数（无副作用，不建索引）。列表页打开时提示条「检测到 N 个未同步的本地文档」用；执行 `POST /reference/scan` 后该值应为 0。
-
-```typescript
-// Res: 200
-{
-  unsynced: number;  // 未同步文件数（同 scanReferences 的匹配规则：新增 + mtime 不一致 + 软删可还原）
-}
-```
-
-```typescript
-// Res: 409
-{ error: { code: "NO_PROJECT_OPEN" } }
-```
+**已废弃**（旧版能力，不再存在）：`POST /api/v1/reference/scan`、`GET /api/v1/reference/scan/status`、项目目录 `references/` 目录与 `.trash/`、frontmatter（title/category/tags）与文件名 sanitize 规则。参考资料不再从磁盘扫描进入系统——「我看不到磁盘上的笔记了」的替代路径就是上述导入。
 
 ### PUT /api/v1/entity/event/:id/move
 

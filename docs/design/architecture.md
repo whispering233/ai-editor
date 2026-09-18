@@ -16,7 +16,7 @@
 | **前端框架** | React 19 | 生态成熟，组件化 |
 | **前端构建** | Vite 7 | 快速 HMR，Tree-shaking |
 | **状态管理** | Zustand 5 | 轻量、TypeScript 优秀、selector 自动优化 |
-| **前端组件基座** | antd v6（ConfigProvider zhCN + 双主题 algorithm + **Notion 工作区暖灰 token 覆盖**）+ `@ant-design/icons`（**全站唯一图标集**）；会话场景 `@ant-design/x`（Bubble/Sender/Thought）+ `@ant-design/x-markdown` | 成熟组件红利统一视觉与交互；主题 = antd token 派发（**视觉契约见 `docs/ui/DESIGN.md`**）；颜色一律经 antd token，禁止硬编码色值/色类 |
+| **前端组件基座** | antd v6（ConfigProvider zhCN + 双主题 algorithm + **Notion 工作区暖灰 token 覆盖**）+ `@ant-design/icons`（**全站唯一图标集**）；会话场景 `@ant-design/x`（Bubble/Sender/Thought）+ `@ant-design/x-markdown`；**块文档编辑器 `@blocknote/core` + `@blocknote/react` + `@blocknote/ariakit`（exact pin）** | 成熟组件红利统一视觉与交互；主题 = antd token 派发（**视觉契约见 `docs/ui/DESIGN.md`**）；颜色一律经 antd token，禁止硬编码色值/色类；块编辑器是**受控的第二套表皮**（只改 `--bn-*` 变量，见 DESIGN.md） |
 | **样式** | Tailwind CSS 4（**仅布局 utility，不含颜色**）+ `docs/ui/DESIGN.md` 视觉契约 + `design-discipline.test.ts` 源码扫描 | v4 CSS-first 配置；**antd 样式是运行时无层 CSS，会静默压掉 Tailwind 工具类**——antd 组件根元素上不挂 `w-/h-/px-/py-/justify-/rounded-/text-*` |
 | **Schema 验证** | Zod 4 | 运行时类型安全，**仅 API 入参**（工具参数改用 TypeBox） |
 | **路由** | 轻量 hash-based（自制 `useHashRoute`） | 单页桌面应用不需要 React Router；路由一级化（见 `ui/DESIGN.md`） |
@@ -46,8 +46,8 @@
 
 ```
 packages/
-├── shared    # 前后端共享层：纯 TS 类型 + Zod（API schema）+ 常量 + 纯函数（零 Node 依赖）
-├── db        # 存储层：连接/事务/WAL、schema 版本三态分流、增量迁移、drizzle 查询、项目目录文件存储（参考资料、原子写）
+├── shared    # 前后端共享层：纯 TS 类型 + Zod（API schema）+ 常量 + 纯函数（零 Node 依赖；含块文档投影/校验）
+├── db        # 存储层：连接/事务/WAL、schema 版本三态分流、增量迁移、drizzle 查询、块文档（document_records）、项目目录文件存储（原子写）
 ├── tools     # 领域工具层：TypeBox 工具定义 + 查询/分析实现 + 提案仓 + 确认后执行的写操作
 ├── agent     # AI 运行时层：pi 嵌入装配（ModelRuntime/SessionManager/AgentSession）、系统提示词、事件→SSE 帧映射
 ├── server    # Hono API 层：REST 路由 + SSE 流 + 静态 SPA 托管（服务端装配包）
@@ -57,8 +57,8 @@ packages/
 
 | 包 | 职责边界 | 对外契约 |
 |----|---------|---------|
-| `shared` | 数据结构/类型/常量/纯工具（无 Node API）；**不持有业务逻辑** | `types/api.ts` Zod schema = API 请求/响应契约单一来源 |
-| `db` | 存储语义：表/查询/迁移/软删级联/状态计算 + 项目目录文件存储（参考资料、原子写） | `(db: Db)` 签名查询函数；`SCHEMA_VERSION` 与迁移目录；事务辅助 |
+| `shared` | 数据结构/类型/常量/纯工具（无 Node API）；**不持有业务逻辑** | `types/api.ts` Zod schema = API 请求/响应契约单一来源；块文档纯函数（`isBlockArray` 浅校验 + `blocksToPlainMd` 投影） |
+| `db` | 存储语义：表/查询/迁移/软删级联/状态计算 + 块文档读写（`document_records`）+ 项目目录文件存储（原子写） | `(db: Db)` 签名查询函数；`SCHEMA_VERSION` 与迁移目录；事务辅助 |
 | `tools` | 把模型意图映射到写操作：查询/分析工具（自动执行）+ 提案工具（确认后执行）；读写经 db | 工具定义（TypeBox schema + 权限级别）、提案仓、执行器 |
 | `agent` | pi 运行时装配：模型/凭据/会话/循环接入、系统提示词、事件映射、工具注册 | `AgentSession` 生命周期 API 与事件流；写操作一律走工具提案 |
 | `server` | HTTP/路由/请求校验/项目生命周期（书架）/自动备份/静态托管 | `/api/v1` REST + `POST /chat` SSE（契约见 shared schema + api 文档） |
@@ -153,7 +153,9 @@ shared（纯类型/常量/工具，零 Node 依赖，可被 client 安全 tree-s
     "@ant-design/icons": "^6.3.4",             // 全站唯一图标集
     "@ant-design/x": "^2.9.0",                 // 会话组件族（Bubble/Sender/Conversations…）
     "@ant-design/x-markdown": "^2.9.0",        // 流式 markdown 渲染
-    "@uiw/react-md-editor": "^4.1.1",          // 参考资料页 md 编辑器
+    "@blocknote/core": "0.54.2",              // 块文档模型/编辑器内核（exact pin）
+    "@blocknote/react": "0.54.2",             // React 绑定（useCreateBlockNote / BlockNoteView）
+    "@blocknote/ariakit": "0.54.2",           // 表皮变体（自带 54KB CSS；无额外 UI 库 peer）
     "clsx": "^2.1.1",                          // 类名拼接（cn = clsx + tailwind-merge）
     "tailwind-merge": "^3.6.0",
     "tw-animate-css": "^1.4.0",                // Tailwind 4 动画工具类（index.css 引入）

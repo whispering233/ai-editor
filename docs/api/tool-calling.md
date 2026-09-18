@@ -62,6 +62,19 @@ get_outline_path(node_id)
   → 从根到该节点的路径 ID 列表
   用途：AI 说"从卷1第3章到结局有哪几条路径"
 
+// === 正文只读查询（2026-10）===
+get_chapter_text(node_id, offset?, max_chars?)
+  → { chapter_id, chapter_number, title, char_count, offset, returned_chars, text, truncated }
+  用途：AI 需要看"作者到底写了什么"时按需拉取（分析节奏、核对与设定的冲突、评价具体段落）
+  口径：只读路由——**工具面不存在任何正文/文档写工具**（结构性保证，非提示词约束）；
+       text = 服务端派生的轻量 md 投影（保块级结构：标题/列表/引用/代码/表格，弃行内样式）
+       默认 max_chars ≈ 6000；truncated = true 时提示用 offset 续读（长章分段读完，不炸上下文）
+       node_id 必须为章（非章 → 报错，与 propose_add_delta 同口径）
+
+// === 参考资料全文（只读）===
+// get_entity('reference', id) 的 reference 分支返回 data.content 的**投影文本**（content_text），
+// 不是块 JSON 原文——列表摘要 120 字与详情全文分离，防长文撑爆响应（见下 search_references）
+
 // === 状态查询（Delta 相关）===
 compute_state(target_type, target_id, at_node_id)
   → 实体到达指定节点时的累积状态
@@ -190,16 +203,16 @@ propose_reorder_timepoints(timepoint_ids)
   用途：AI 按时间标签语义（如「第二天黄昏」「少年时」）自动识别先后顺序，
         用户确认后采用——时间点是语义序的天然载体
 
-propose_create_reference(name, type, content, source?, tags?)
+propose_create_reference(name, type, tags?, content?)
   → { proposal_id, preview, conflicts_with? }
-  用途：AI 读到灵感/素材后建议保存为参考资料（外部素材/灵感笔记，非本书正文）
-  参数说明：type 分类**自由文本**（原枚举已取消，建议沿用项目内已有分类，
-    缺省 material 写入侧兜底）；content 为全文长文本；tags 标签数组
+  用途：AI 读到灵感/素材后建议保存为参考资料（外部素材/灵感笔记）
+  参数说明：type 分类**自由文本**（建议沿用项目内已有分类，缺省 material 写入侧兜底）；
+    content 为**纯文本摘录**（可含换行）；tags 标签数组；url 可选（外源链接才填）
   预览：标题 + 内容摘要 + 标签（提案仅内存 + 快照重校验）
-  确认后：Executor 校验 references 存在性 + 快照 → create_entity(type='reference') 写入
-  AI 创建的条目归 **link 类**（data.kind='link'，source → url；
-    无 URL 时 url 留空、content 存摘录）——AI 不直接落盘文件（文件写入走用户编辑器保存）；
-    search_references / get_entity 详情全文照常（file 类经 content 镜像纯 DB 读取）
+  确认后：Executor 校验 references 存在性 + 快照 → create_entity(type='reference') 写入；
+    content 由**服务端按行拆分**为段落块数组（不做 markdown 语义转换——标题/列表等标记
+    原样作文本，作者在编辑器里自行排版）；content_text 投影由服务端派生
+  注：AI 不创建块级富格式（BlockNote 只活在 client 侧，服务端不引入其解析器）
 ```
 
 ### 执行类（用户通过 GUI 直接操作）
@@ -258,6 +271,8 @@ AI 不可以：
   ❌ 直接写入或修改数据
   ❌ 直接删除任何内容
   ❌ 调用执行类工具
+  ❌ 写入或改写正文与参考资料文档（2026-10：工具面上**不存在**任何文档写工具；
+      正文可读、可评论、可建议，落笔永远由作者完成）
 
 用户始终是最终决策者。
 ```

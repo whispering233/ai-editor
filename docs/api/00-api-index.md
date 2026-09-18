@@ -38,12 +38,17 @@
 | POST | `/api/v1/entity/:type` | 实体 CRUD |
 | PUT | `/api/v1/entity/:type/:id` | 实体 CRUD |
 | DELETE | `/api/v1/entity/:type/:id` | 实体 CRUD |
-| POST | `/api/v1/reference/scan` | 实体 CRUD |
-| GET | `/api/v1/reference/scan/status` | 实体 CRUD |
 | PUT | `/api/v1/entity/event/:id/move` | 实体 CRUD |
 | PUT | `/api/v1/entity/timepoint/:id/move` | 实体 CRUD |
 | PUT | `/api/v1/entity/setting/:id/move` | 实体 CRUD |
 | POST | `/api/v1/entity/event/:id/move_to` | 实体 CRUD |
+
+### 章正文（[110-api-manuscript.md](./110-api-manuscript.md)）
+
+| 方法 | 路径 | 文档 |
+| :--- | :--- | :--- |
+| GET | `/api/v1/manuscript/:chapterNodeId` | 章正文（块文档） |
+| PUT | `/api/v1/manuscript/:chapterNodeId` | 章正文（块文档） |
 
 ### 关系管理（[40-api-relation.md](./40-api-relation.md)）
 

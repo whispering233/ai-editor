@@ -170,7 +170,7 @@
 
 ### POST /api/v1/cloud/pull
 
-从云端拉取一份备份应用到当前项目（**三文件覆盖 + `references/` 与 `sessions/` 并集**）。
+从云端拉取一份备份应用到当前项目（**三文件覆盖 + `sessions/` 并集**）。
 
 ```typescript
 // Req
@@ -189,13 +189,13 @@
 }
 ```
 
-**流程**：`GET` 云端那份 → **覆盖前自动快照本机当前状态**（restore 管道既有）→ `validateBackupPackage`（zip 结构/白名单/三文件齐全/data.db `user_version` 三态分流）→ **三文件覆盖**（`project.json` 的 `name` 归一为当前目录名、`id` 保留——与 restore 同口径）+ **两目录并集**（基线三方比较、删除优先，见设计文档 §4）→ 重连 data.db + 版本对齐 + 重启备份定时器 → 更新 `lastSeenHeadFileName` / `lastSyncAt` / `baseEntries`。
+**流程**：`GET` 云端那份 → **覆盖前自动快照本机当前状态**（restore 管道既有）→ `validateBackupPackage`（zip 结构/白名单/三文件齐全/data.db `user_version` 三态分流）→ **三文件覆盖**（`project.json` 的 `name` 归一为当前目录名、`id` 保留——与 restore 同口径；**正文与参考资料在 `data.db` 内，随覆盖走**）+ **`sessions/` 并集**（基线三方比较、删除优先，见设计文档 §4）→ 重连 data.db + 版本对齐 + 重启备份定时器 → 更新 `lastSeenHeadFileName` / `lastSyncAt` / `baseEntries`。
 
-**同步状态更新**：`lastPushedFileName` = **拉到的这份**（既是新的冲突判定基准，也是「本机已基于该版本」的标记——拉取后立刻推送不会被判冲突）；`lastSeenHeadFileName` = 云端 head；`lastSeenCloudFiles` = 拉取时的云端文件集合；`baseEntries` = 该包的打包目录条目（下次并集比较的基线）。
+**同步状态更新**：`lastPushedFileName` = **拉到的这份**（既是新的冲突判定基准，也是「本机已基于该版本」的标记——拉取后立刻推送不会被判冲突）；`lastSeenHeadFileName` = 云端 head；`lastSeenCloudFiles` = 拉取时的云端文件集合；`baseEntries` = 该包的 `sessions/` 条目名（下次并集比较的基线）。
 
-**与本地 restore 的区别（不可混用语义）**：本地 restore 是「回到那个时间点」= **整体覆盖**（保持现状不变）；云端 pull 是「把另一台机器的东西拿过来」= 三文件覆盖 + 两目录**并集**（本机独有的对话/资料不被静默吃掉）。并集只对 pull 生效——实现上是显式参数，restore 路径行为不变。
+**与本地 restore 的区别（不可混用语义）**：本地 restore 是「回到那个时间点」= **整体覆盖**（保持现状不变）；云端 pull 是「把另一台机器的东西拿过来」= 三文件覆盖 + `sessions/`**并集**（本机独有的对话不被静默吃掉）。并集只对 pull 生效——实现上是显式参数，restore 路径行为不变。**正文/参考资料不做并集**：它们在 `data.db` 内，与大纲/实体/Delta 同为覆盖组（2026-10 修订）。
 
-**删除如何真正生效**：本机删除后**推送到云端**，另一台拉取时按「云端删除」规则删除（并集不得复活本机已删除的文件）。UI 义务：删除会话 / 参考资料后的 toast 提示「推送到云端后，另一台也会同步删除」。
+**删除如何真正生效**：本机删除后**推送到云端**，另一台拉取时按「云端删除」规则删除（并集不得复活本机已删除的文件）。UI 义务：**删除会话**后的 toast 提示「推送到云端后，另一台也会同步删除」；正文/参考资料属 `data.db` 覆盖组，随三文件覆盖自然传播（但另一台未推送的结构化改动会被覆盖，见 [`../design/40-cloud-sync.md`](../design/40-cloud-sync.md) §4）。
 
 **错误码**：409 `NO_PROJECT_OPEN` / `CLOUD_NOT_CONFIGURED` / `SCHEMA_VERSION_MISMATCH`、404 `CLOUD_FILE_NOT_FOUND`、400 `VALIDATION_ERROR`（坏包/文件名非法）、502 `CLOUD_AUTH_FAILED` / `CLOUD_UNREACHABLE` / `CLOUD_QUOTA_EXCEEDED`。
 
