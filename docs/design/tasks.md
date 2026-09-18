@@ -8,13 +8,11 @@
 
 ---
 
-## 批 14：正文手动保存按钮
+## 批 15：写作面高度
 
 | 卡 | 内容 | 依赖 | 验收 |
 | :-- | :-- | :-- | :-- |
-| [ ] 14.1 | **正文页「保存」按钮（工具条右端）**：`editor-toolbar.tsx` 加可选 `save?: { onSave: () => void; saving: boolean }`（不传 = 不渲染 ⇒ 参考资料页不出现；那页本有手动保存），右侧顺序改为 撤销 / 重做 / **保存** / 写作设置 / 命令帮助 / 专注模式 / 状态区；`document-editor.tsx` 透传；`pages/Manuscript.tsx` 传 `onSave = () => void saveContent(latestRef.current ?? "")`（**恒发一次 PUT**，含无待存内容的情况）+ `saving = saveState === "saving"`；`command-help.tsx` 补一条（工具条按钮集**同卡维护**） | — | 点击后状态转「保存中… → 已保存 · HH:MM」；`saving` 期间按钮禁用；专态与常规态都在（sticky 工具条）；参考资料页无此按钮；`pnpm typecheck`/`lint`/client test |
-
-**依据**：`docs/ui/DESIGN.md` §Components「写作面」内容行 + 「为什么手动保存放在工具条」段；`docs/design/backlog.md` 已登记「关页面/退出桌面版可能丢最后 1.5s」（手动按钮是用户侧保底，非自动兜底）。
+| [ ] 15.1 | **正文页写作面铺满剩余高度**（用户反馈：正文只有几行时编辑器只剩一小块，像坏了）：`pages/Manuscript.tsx` 的 `<section>` 加 `flex min-h-full flex-col`；`blocknote.css` 给 `.bn-container` 与 `.bn-container .bn-editor` 各加 `flex: 1 1 auto`（含注释指向 DESIGN.md §Components 写作面「写作面高度」条） | — | 空章/几行正文时白色写作面铺满中栏可视区、点最后一行下方空白即聚焦文末；长文仍可滚动；参考资料详情页外观不变（其父非 flex ⇒ `flex:1` 不生效）；专注态同样铺满；`pnpm typecheck`/`lint`/client test |
 
 ---
 
