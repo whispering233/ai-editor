@@ -2,7 +2,19 @@
 // 页面组件不参与单测（仓内无 jsdom），故这里覆盖页面里**会出错但看不见**的分支：
 // 只认 url 的来源列、空 content 不可发送（服务端 400）、导入有损必须走确认分支。
 import { describe, expect, it, vi } from "vitest";
-import { planReferenceImport, referenceSaveData, referenceSource } from "./reference";
+import { planReferenceImport, referenceSaveData, referenceSource, referenceTypeLabel } from "./reference";
+
+describe("referenceTypeLabel（分类展示文案：列表列与详情页头共用）", () => {
+  it("存量枚举回显中文名（分类徽标与筛选下拉同源）", () => {
+    expect(referenceTypeLabel("material")).toBe("素材摘抄");
+    expect(referenceTypeLabel("inspiration")).toBe("灵感记录");
+  });
+
+  it("自定义分类原样返回；空串仍是空串（调用点据此不渲染空徽标）", () => {
+    expect(referenceTypeLabel("人物设定考据")).toBe("人物设定考据");
+    expect(referenceTypeLabel("")).toBe("");
+  });
+});
 
 describe("referenceSource（来源列：只认 url）", () => {
   it("有 url → 原样返回", () => {

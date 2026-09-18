@@ -38,6 +38,7 @@ import { errorBannerClass, skeletonClass } from "../lib/styles";
 import { Button, Dropdown, Input } from "antd";
 import { PageTitle } from "../components/ui/page-title";
 import { PageHeader } from "../components/ui/page-header";
+import { TypeChip } from "../components/ui/tag-chip";
 import { TagSuggest } from "../components/timeline/TagSuggest";
 import {
   CreateRelationDialog,
@@ -54,15 +55,7 @@ import {
   planDocumentImport,
   readTextFile,
 } from "../lib/document-io";
-import { referenceSaveData, referenceSource } from "../lib/reference";
-
-/** 分类回显映射（**仅存量显示**——material 等旧枚举值回显中文名，非可选建议；新自定义分类无映射原样显示） */
-const TYPE_LABELS: Record<string, string> = {
-  material: "素材摘抄",
-  inspiration: "灵感记录",
-  theory: "写作理论",
-  reference: "设定参考",
-};
+import { referenceSaveData, referenceSource, referenceTypeLabel } from "../lib/reference";
 
 /** 新建条目的缺省分类（REST 不兜底，页面给缺省——见 docs/api/30-api-entity.md「reference 特例」） */
 const DEFAULT_TYPE = "material";
@@ -425,11 +418,10 @@ export default function ReferenceDetail({ id, draft = false }: { id?: string; dr
                     : (detail?.name ?? "参考资料")}
               </PageTitle>
             )}
-            {/* 分类徽标：新建态不显示——新建时分类未定且下方已有分类输入区；编辑态保留 */}
-            {!draft && (
-              <span className="shrink-0 rounded-md border border-border bg-muted px-1.5 py-0.5 text-xs whitespace-nowrap text-muted-foreground">
-                {TYPE_LABELS[form.type] ?? form.type}
-              </span>
+            {/* 分类徽标（卡 18.1）：分类 = 类型徽标 → `TypeChip`（与列表分类列同形；
+                新建态不显示——新建时分类未定且下方已有分类输入区） */}
+            {!draft && referenceTypeLabel(form.type) !== "" && (
+              <TypeChip className="shrink-0">{referenceTypeLabel(form.type)}</TypeChip>
             )}
           </div>
         }
@@ -544,7 +536,7 @@ export default function ReferenceDetail({ id, draft = false }: { id?: string; dr
             <datalist id="ref-detail-types">
               {typePool.map((t) => (
                 <option key={t} value={t}>
-                  {TYPE_LABELS[t] ?? t}
+                  {referenceTypeLabel(t)}
                 </option>
               ))}
             </datalist>

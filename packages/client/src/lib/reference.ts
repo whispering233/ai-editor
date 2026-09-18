@@ -7,6 +7,23 @@ import { parseReferenceFrontmatter } from "./reference-frontmatter";
 import { parseTagsInput } from "./timeline";
 
 /**
+ * 参考资料分类中文名映射（**仅存量回显**——`material` 等旧枚举值回显中文名，非可选建议；
+ * 新自定义分类无映射原样显示）。**单一来源**：列表分类列 / 详情页头 / 两处筛选与建议下拉都读这里，
+ * 不要再在页面里各手抄一份。
+ */
+export const TYPE_LABELS: Record<string, string> = {
+  material: "素材摘抄",
+  inspiration: "灵感记录",
+  theory: "写作理论",
+  reference: "设定参考",
+};
+
+/** 分类展示文案：有映射用中文名，自定义分类原样（空串 → 空串，调用点据此不渲染徽标） */
+export function referenceTypeLabel(type: string): string {
+  return TYPE_LABELS[type] ?? type;
+}
+
+/**
  * 来源取值（列表「来源」列与详情元信息行共用）：**只认 `url`**。
  * `kind` / `file_name` / `source` 是文件机制遗留字段（2026-10 起已废弃，读侧不认——旧值不迁移）。
  */

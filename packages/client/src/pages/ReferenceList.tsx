@@ -13,7 +13,7 @@ import type { MouseEvent } from "react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { Alert, Button, Input, Select, Skeleton } from "antd";
 import { PageHeader } from "@/components/ui/page-header";
-import { TagChip } from "@/components/ui/tag-chip";
+import { TagChip, TypeChip } from "@/components/ui/tag-chip";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
   DeleteOutlined,
@@ -25,7 +25,7 @@ import {
 import { createEntity, deleteEntity, listEntities, updateEntity } from "../lib/api";
 import { ApiError } from "../lib/api";
 import { markdownImportConfirmMessage, readTextFile } from "../lib/document-io";
-import { planReferenceImport, referenceSource } from "../lib/reference";
+import { planReferenceImport, referenceSource, referenceTypeLabel } from "../lib/reference";
 import { navigate } from "../hooks/use-route";
 import { useSaveShortcut } from "../lib/save-shortcut";
 import { useDataRefresh } from "../hooks/use-data-refresh";
@@ -33,14 +33,6 @@ import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
 import { RowContextMenu } from "../components/entity/row-context-menu";
 import { DocumentEditor, type DocumentEditorApi } from "../components/blocknote/document-editor";
-
-/** 分类回显映射（**仅存量显示**——material 等旧枚举值回显中文名，非可选建议；新自定义分类无映射原样显示） */
-const TYPE_LABELS: Record<string, string> = {
-  material: "素材摘抄",
-  inspiration: "灵感记录",
-  theory: "写作理论",
-  reference: "设定参考",
-};
 
 /** 新建条目的缺省分类（REST 不兜底，写入侧给缺省——见 docs/api/30-api-entity.md「reference 特例」） */
 const DEFAULT_TYPE = "material";
@@ -221,7 +213,7 @@ export default function ReferenceList() {
         onChange={(value) => setActiveType(value === "all" ? "all" : String(value))}
         options={[
           { value: "all", label: "全部分类" },
-          ...typePool.map((t) => ({ value: t, label: TYPE_LABELS[t] ?? t })),
+          ...typePool.map((t) => ({ value: t, label: referenceTypeLabel(t) })),
         ]}
       />
       <Select
@@ -475,9 +467,12 @@ function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowP
           </button>
         )}
       </td>
-      {/* 分类列（修订）：直接显示文字，不包裹徽标——表格形态下与标签列区分，对齐 EntityList 数据列样式 */}
-      <td className="max-w-28 truncate px-3 py-2 text-muted-foreground">
-        {TYPE_LABELS[type] ?? type}
+      {/* 分类列（2026-10 卡 18.1）：分类 = 类型徽标 → `TypeChip`（描边式，与标签列的 tint 实底两套形态语言；
+          此前是裸文字——分类既不像标签也不像类型，两页还各手抄一份中文名映射） */}
+      <td className="max-w-28 px-3 py-2">
+        {referenceTypeLabel(type) !== "" && (
+          <TypeChip className="max-w-full truncate">{referenceTypeLabel(type)}</TypeChip>
+        )}
       </td>
       {/* 标签列：tags 前 3 个徽标 */}
       <td className="px-3 py-2">
