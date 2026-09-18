@@ -10,7 +10,9 @@
 // - 右侧撤销/重做自绘：库没有 `canUndo`，只有 `undo()` / `redo()` 返回「是否真的改了内容」
 //   ⇒ **不做禁用态**（宁可点了没反应，也不要假禁用，见 DESIGN.md 同段落）。
 // - 本文件不写色值 / 不写 `--bn-*` 覆盖 / 不拼接类名（守卫 design-discipline.test.ts）。
-import { RedoOutlined, UndoOutlined } from "@ant-design/icons";
+// - 卡 13.2：右端「写作设置」（撤销 / 重做之后）——偏好数据由 `DocumentEditor` 经 props 传入
+//   （**不在这里再调 useWritingPrefs**：两份状态会互不同步）。
+import { FontSizeOutlined, RedoOutlined, UndoOutlined } from "@ant-design/icons";
 import {
   BasicTextStyleButton,
   BlockTypeSelect,
@@ -22,8 +24,17 @@ import {
   useBlockNoteEditor,
   useComponentsContext,
 } from "@blocknote/react";
+import type { WritingPrefs } from "../../hooks/use-writing-prefs";
+import { WritingSettings } from "./writing-settings";
 
-export function EditorToolbar() {
+export interface EditorToolbarProps {
+  /** 写作面偏好（全局一份，状态归 DocumentEditor 持有） */
+  prefs: WritingPrefs;
+  /** 单字段更新（写作设置下拉用） */
+  setPref: <K extends keyof WritingPrefs>(key: K, value: WritingPrefs[K]) => void;
+}
+
+export function EditorToolbar({ prefs, setPref }: EditorToolbarProps) {
   const editor = useBlockNoteEditor();
   const components = useComponentsContext();
   // BlockNoteView 内必有 ComponentsContext（本组件只作为它的 children 用）；此守卫只为类型收敛
@@ -47,7 +58,7 @@ export function EditorToolbar() {
       <NestBlockButton />
       <UnnestBlockButton />
       <CreateLinkButton />
-      {/* 撑开左侧，把右端按钮推到工具条末尾（13.2–13.5 的写作设置/命令帮助/专注模式接在这之后） */}
+      {/* 撑开左侧，把右端按钮推到工具条末尾（13.4/13.5 的命令帮助、专注模式接在这之后） */}
       <div className="flex-1" />
       <FormattingToolbar.Button
         label="撤销"
@@ -61,6 +72,9 @@ export function EditorToolbar() {
         icon={<RedoOutlined />}
         onClick={() => editor.redo()}
       />
+      <WritingSettings prefs={prefs} setPref={setPref}>
+        <FormattingToolbar.Button label="写作设置" mainTooltip="写作设置" icon={<FontSizeOutlined />} />
+      </WritingSettings>
     </FormattingToolbar.Root>
   );
 }

@@ -9,6 +9,10 @@
 // - 导入导出（卡 12.6）：md ↔ 块的互转要实例才做得了，经 `DocumentEditorApi`（onReady 回调）递给页面；
 //   纯函数层 lib/document-io.ts 不 import @blocknote
 // - 主题随 useThemeMode()（html.dark = 全站主题唯一事实源），深浅两态各看一次像素
+// - 写作面偏好（卡 13.2）：字体 / 字号 / 行高经 `useWritingPrefs` 取全局一份，以 CSS 变量
+//   （`--writing-*`）设在 `BlockNoteView` 的容器上（它 spread 到 `.bn-root.bn-container` 那个 div，
+//   不额外包一层 DOM）；`blocknote.css` 里是间接引用 ⇒ 调用点不写 `--bn-*`（DESIGN.md 硬约束 ④）。
+//   prefs / setPref 同时递给工具条（数据只有这一处来源）。
 import { useEffect, useMemo } from "react";
 import type { PartialBlock } from "@blocknote/core";
 import { zh } from "@blocknote/core/locales";
@@ -16,6 +20,7 @@ import { useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/ariakit";
 import { isBlockArray } from "@whispering233/ai-editor-shared";
 import { useThemeMode } from "../../hooks/use-theme-mode";
+import { toWritingCssVars, useWritingPrefs } from "../../hooks/use-writing-prefs";
 import { EditorToolbar } from "./editor-toolbar";
 import "@blocknote/ariakit/style.css";
 import "./blocknote.css";
@@ -63,6 +68,7 @@ export interface DocumentEditorProps {
 
 export function DocumentEditor({ initialContent, onChange, onReady }: DocumentEditorProps) {
   const theme = useThemeMode();
+  const { prefs, setPref } = useWritingPrefs();
   // UI 语言 = 中文（项目语言恒 zh，页头「语言: zh」）：不传 dictionary 时 placeholder / 斜杠菜单 /
   // 工具栏走 @blocknote/core 的英文默认。边界：本仓无 i18n 切换，将来引入多语言时这里改成按项目语言选择。
   const editor = useCreateBlockNote({
@@ -92,9 +98,10 @@ export function DocumentEditor({ initialContent, onChange, onReady }: DocumentEd
     <BlockNoteView
       editor={editor}
       theme={theme}
+      style={toWritingCssVars(prefs)}
       onChange={(next) => onChange(JSON.stringify(next.document))}
     >
-      <EditorToolbar />
+      <EditorToolbar prefs={prefs} setPref={setPref} />
     </BlockNoteView>
   );
 }
