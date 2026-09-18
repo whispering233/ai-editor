@@ -246,6 +246,14 @@ components:
   dropdown-panel:
     backgroundColor: "{colors.canvas}"
     rounded: "{rounded.md}"
+  writing-toolbar:
+    backgroundColor: "{colors.canvas}"
+    padding: "{spacing.xxs}"
+  command-help:
+    backgroundColor: "{colors.canvas}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.md}"
+    typography: "{typography.body}"
   toast:
     backgroundColor: "{colors.canvas}"
     textColor: "{colors.primary}"
@@ -356,7 +364,7 @@ components:
 | `--bn-*` 变量 | 本文件 token | 说明 |
 | :--- | :--- | :--- |
 | `--bn-colors-editor-text` | `{colors.primary}` | 正文文字 |
-| `--bn-colors-editor-background` | `{colors.canvas}` | 正文底（**写作面纸张偏好**经 `--paper-*` 间接覆盖，见下节） |
+| `--bn-colors-editor-background` | `{colors.canvas}` | 正文底（**写作面纸张偏好**经 `--paper-bg` 间接覆盖，见下节） |
 | `--bn-colors-menu-text` / `--bn-colors-tooltip-text` | `{colors.primary}` | 菜单/提示文字 |
 | `--bn-colors-menu-background` / `--bn-colors-tooltip-background` | `{colors.canvas}` | 浮层底（深色态用 `{colors.canvas}` 深色值） |
 | `--bn-colors-hovered-text` / `--bn-colors-selected-text` | `{colors.primary}` | 悬浮/选中文字 |
@@ -492,16 +500,16 @@ components:
 
 **`writing-toolbar`** — 章正文与参考资料正文共用的一行常显工具条（**唯一实现 = `components/blocknote/editor-toolbar.tsx`**，随块编辑器组件内置，两页自动获得）：
 
-- **几何**：高 40px（单行 = 4px 内边距 + 32px 档按钮，与库自带工具条同构）；底 = 正文底（跟纸张偏好走，避免纸上出现一条异色带）；底部 1px `{colors.hairline}`；**无阴影**；`sticky` 贴中栏内容区顶部。窄幅**折行增高**（`flex-wrap`，`min-height` 而非固定高）——**不做横向滚动**。
-- **写作面高度 = 填满剩余视口（2026-10，两处书写面同口径）**：正文只有几行时，写作面**不得**缩水成一小块——`.bn-container` 与 `.bn-editor` 各自吸收剩余高度（`flex: 1 1 auto`）⇒ 空白处仍在可编辑区内，**点空白即把光标落到文末**（Notion 同款）。长文照旧由滚动条承接（`min-height` 不封顶）。**flex 链由各页自己接通，三处缺一不可**：章正文页 = 该页 `<section>`（`flex h-full min-h-0 flex-col`）+ **内层滚动容器**（`flex min-h-0 flex-1 flex-col overflow-y-auto`，见 §Layout「页头常驻」）；参考资料详情页 = 表单滚动容器（`flex min-h-0 flex-1 flex-col`）→ 正文本行（`flex-1 min-h-0`）→ 编辑器包裹层（`flex min-w-0 flex-1 flex-col`）——编辑器下方的操作行（取消 / 创建）仍留在编辑器之下。
+- **几何**：高 40px（单行 = 4px 内边距 + 32px 档按钮，与库自带工具条同构）；底 = 正文底（跟纸张偏好走，避免纸上出现一条异色带）；底部 1px `{colors.hairline}`；**无阴影**；`sticky` 贴**内层滚动容器顶**（页头之下，见 §Layout「页头常驻」）。窄幅**折行增高**（`flex-wrap`，`min-height` 而非固定高）——**不做横向滚动**。
+- **写作面高度 = 填满剩余视口（2026-10，两处书写面同口径）**：正文只有几行时，写作面**不得**缩水成一小块——`.bn-container` 与 `.bn-editor` 各自吸收剩余高度（`flex: 1 1 auto`）⇒ 空白处仍在可编辑区内，**点空白即把光标落到文末**（Notion 同款）。长文照旧由滚动条承接（`flex-grow` 不封顶）。**flex 链由各页自己接通，三处缺一不可**：章正文页 = 该页 `<section>`（`flex h-full min-h-0 flex-col`）+ **内层滚动容器**（`flex min-h-0 flex-1 flex-col overflow-y-auto`，见 §Layout「页头常驻」）；参考资料详情页 = 表单滚动容器（`flex min-h-0 flex-1 flex-col`）→ 正文本行（`flex-1 min-h-0`）→ 编辑器包裹层（`flex min-w-0 flex-1 flex-col`）——编辑器下方的操作行（取消 / 创建）仍留在编辑器之下。
 - **不得让工具条成为自身滚动容器（2026-10 实测缺陷固化）**：`overflow` 必须为 `visible`。`position: sticky` 已使工具条成为后代绝对定位元素的**包含块**，若它同时是滚动容器（`overflow-x:auto` 会把 `overflow-y:visible` 的计算值变成 `auto`），库的 tooltip 与 ariakit 的 select / menu 就**被它自己裁掉**——实测：hover 的 `.bn-ak-tooltip` 落在 y 99–149 而工具条是 153–193（看不见），块类型下拉被压成 **18px** 高的一条缝（⇒ 「改块类型/颜色」实际不可用）。库自带浮动条同样有 `overflow:scroll` 却不受影响，是因为它**没有 position**（包含块在滚动容器之外）。窄幅因此用折行而非滚动。
 - **`sticky` 的作用域 = 编辑器区块**：包含块是 `.bn-container`，故滚过章末时工具条随区块一起离开（不是「永远贴在中栏顶部」——那需要 `fixed` 定位，会与页头/专注模式耦合，不采纳）。
 - **内容**：左侧 = 块类型下拉 + 粗/斜/下/删 + 颜色 + 对齐 + 缩进 + 链接（**全部复用库自带按钮组件** ⇒ 与编辑器同源表皮，激活态由库管理）；右侧 = 撤销 / 重做 / 保存（**章正文页与参考资料详情页（编辑态）各自注入**；新建参考资料草稿态不注入——那里是带跳转的「创建」动作）/ 写作设置（字体·字号·行高·纸张·纹理·段首缩进）/ 命令帮助 / 专注模式（仅章正文页由页面注入）/ 字数与保存态（**仅专注态由页面注入；常规态它在页头说明行，两处不同时显示**）。
-  - **为什么手动「保存」放在工具条而不是页头（2026-10）**：正文是 1.5s 空闲自动保存（`AUTOSAVE_DELAY_MS`），手动按钮是**保底**入口（用户诉求原文：「加一个保存按钮就行」）。页头会随正文滚动离开视口，而工具条 `sticky` ⇒ 只有它能「随时可点」。点击恒发一次 `PUT`（**即使无待存内容也重发**）——保证「点击必有可见反应」（状态转 `保存中…` → `已保存 · HH:MM`），且不会引入冲突（保存成功后版本戳前移）。`saving` 期间禁用（防连点双发）。
+  - **为什么手动「保存」放在工具条而不是页头（2026-10）**：正文是 1.5s 空闲自动保存（`AUTOSAVE_DELAY_MS`），手动按钮是**保底**入口（用户诉求原文：「加一个保存按钮就行」）。工具条随正文 `sticky`（与滚动位置无关）、页头不是 ⇒ 工具条是唯一「写着写着也点得到」的位置（两页都有，见 §Layout「页头常驻」）。点击恒发一次 `PUT`（**即使无待存内容也重发**）——保证「点击必有可见反应」（状态转 `保存中…` → `已保存 · HH:MM`），且不会引入冲突（保存成功后版本戳前移）。`saving` 期间禁用（防连点双发）。
 - **失焦态**：库按钮无选中时回落到光标所在块，故常显可用；**不做禁用态**（库无 `canUndo`：撤销/重做保持可点、点空即无变化——宁可无反馈也不要假禁用）。
 - **与浮动工具条并存**：选中文字时的浮动条保留（就近操作）；两者按钮集有意重叠；若日后观感重复，关浮动条 = `formattingToolbar={false}` 一处开关。
 
-**`command-help`** — 工具条「命令帮助」打开的静态弹窗（复用 `components/ui/dialog.tsx`）：`/` 斜杠菜单、块手柄、快捷键。**快捷键文案一律从 `@blocknote/core/locales` 的 `zh` 字典插值**（`formatting_toolbar.*.secondary_tooltip` + `formatKeyboardShortcut`，Mac = `⌘` / 其他 = `Ctrl`；撤销/重做字典内没有 ⇒ 由库 keymap 核实后取字面量并存出处注释），**禁止手抄**。用途 = 「不让用户猜命令」的兜底文档；与工具条按钮集**同卡维护**（加按钮就补条目）。**已知代价**：专注态下页头承载的操作（上一章 / 下一章 / 导入 / 导出）随之不可达，要动它们先退出专注（有意的取舍：专注 = 无干扰）。
+**`command-help`** — 工具条「命令帮助」打开的静态弹窗（复用 `components/ui/dialog.tsx`）：`/` 斜杠菜单、块手柄、快捷键。**快捷键文案一律从 `@blocknote/core/locales` 的 `zh` 字典插值**（`formatting_toolbar.*.secondary_tooltip` + `formatKeyboardShortcut`，Mac = `⌘` / 其他 = `Ctrl`；撤销/重做字典内没有 ⇒ 由库 keymap 核实后取字面量并存出处注释），**禁止手抄**。用途 = 「不让用户猜命令」的兜底文档；与工具条按钮集**同卡维护**（加按钮就补条目；**唯一例外 = 弹窗自身的入口**——自指条目无信息量）。**已知代价**：专注态下页头承载的操作（上一章 / 下一章 / 导入 / 导出）随之不可达，要动它们先退出专注（有意的取舍：专注 = 无干扰）。
 
 **专注模式入口** = 工具条右端按钮；退出 = 同一按钮或 `Esc`（不新增全局快捷键占用）。
 
@@ -548,7 +556,7 @@ components:
 **行级「新建子级」按钮（2026-09）**：大纲页与设定页的树行在行尾补一个 `icon-button`（`PlusOutlined`）新建子级入口，**位置 = 删除按钮左侧**（删除恒贴行尾；它左侧依次是「阅读进度」徽标 / 标签 chip / 手动排序 ↑↓）；`title` / `aria-label` 写全语义（新建章 / 新建场 / 新建子设定）。**无合法子层级的行不渲染该按钮**（大纲的场是叶子）。点击 = 在该行子级末尾打开就地输入行（与 Enter 建子级同一路径，成功后新条目选中 + 聚焦）。
 **缩进列对齐（2026-09 修正，2026-09 再扩写）**：缩进行的折叠箭头（`size="small"` icon-only，宽 24px）与**无子节点占位必须同几何**——占位写成 28px 会让「有子节点 / 无子节点」两类行的类型徽标、标题、摘要第二行、就地新建行各差 12px（大纲页曾是此状态）。**同一行块内的三处占位（折叠箭头 / 类型徽标 / 就地新建行）必须与该行自身的徽标同宽**：卷/章行是编号徽标 `min-w-14`、场行是 28px——任一处漏改即错位，改动行结构时三处一起看。
 **大纲页页头主操作 = 「+ 新建卷」**：直建卷（`button-primary`）；就地输入行**不再提供卷/章切换**（章只在卷下建，层级契约见 `10-data-model.md` §2）。
-**大纲页双视图（2026-09）**：大纲页有「大纲树（默认）/ 章视图」两态——**页面 state，不持久化**（刷新回落大纲树；客户端 localStorage 仍只有主题与三栏面板两个 key，见 `10-data-model.md` §1）。**切换按钮 = 页头控件行最右组的第一个**（`ml-auto` 挂它，位于「全部折叠」左侧），文案 = **目标视图**（树视图下写「章视图」，章视图下写「大纲树」）——单按钮写「点它会去哪」比写「现在在哪」少一次解读；**章视图隐藏「全部折叠」**（平铺列表无折叠语义）。**章视图 = 平铺章列表**（顺序 = 阅读序：卷序 → 卷内章序）：行 = `第N卷` + `第N章` 两枚编号徽标 + 标题 + 摘要（muted，空不渲染）+ 伏笔标记 + 「阅读进度」徽标 + **正文字数**（`metadata.textLength > 0` 时才渲染，文案 `N 字` / `N.N 千字`，0 不占位——「没写」不需要一个「0 字」提醒）+ **「写正文」入口**（导航链接，跳 `#/manuscript/:chapterId`；2026-10 新增）；**改名输入行与树视图同款**（`input` small 档 = 24px 行高，唯一实现 = `components/outline/inline-input.tsx`）；**交互只有三项：单击标题就地改名、双击行进详情、点「写正文」进章正文页**——不做删除 / 新建 / 拖拽（结构编辑与排序的唯一入口仍是大纲树；在章视图里新建出的场景不显示，会造成「建了却看不见」）。有卷无章时给空态提示。
+**大纲页双视图（2026-09）**：大纲页有「大纲树（默认）/ 章视图」两态——**页面 state，不持久化**（刷新回落大纲树；客户端 localStorage 只有主题 / 三栏面板 / 写作偏好三个 key，见 `10-data-model.md` §1）。**切换按钮 = 页头控件行最右组的第一个**（`ml-auto` 挂它，位于「全部折叠」左侧），文案 = **目标视图**（树视图下写「章视图」，章视图下写「大纲树」）——单按钮写「点它会去哪」比写「现在在哪」少一次解读；**章视图隐藏「全部折叠」**（平铺列表无折叠语义）。**章视图 = 平铺章列表**（顺序 = 阅读序：卷序 → 卷内章序）：行 = `第N卷` + `第N章` 两枚编号徽标 + 标题 + 摘要（muted，空不渲染）+ 伏笔标记 + 「阅读进度」徽标 + **正文字数**（`metadata.textLength > 0` 时才渲染，文案 `N 字` / `N.N 千字`，0 不占位——「没写」不需要一个「0 字」提醒）+ **「写正文」入口**（导航链接，跳 `#/manuscript/:chapterId`；2026-10 新增）；**改名输入行与树视图同款**（`input` small 档 = 24px 行高，唯一实现 = `components/outline/inline-input.tsx`）；**交互只有三项：单击标题就地改名、双击行进详情、点「写正文」进章正文页**——不做删除 / 新建 / 拖拽（结构编辑与排序的唯一入口仍是大纲树；在章视图里新建出的场景不显示，会造成「建了却看不见」）。有卷无章时给空态提示。
 **`table-header`** — 表头**白底**（不是 antd 默认灰底）+ 1px `{colors.hairline}` 底线 + caption 字色 `{colors.secondary}`。
 **`relations-view`（关联总览列表）** — 源 / 关系 / 目标三列**表头与单元格同宽同对齐**：一律**左对齐**（关系列也不居中——居中会让类型 chip 相对表头位移，看起来像列错位）。
 **`tag`** — **用户标签 chip**（`data.tags` 数组元素：设定标签 / 事件标签 / 参考资料标签）：`{rounded.xs}` + **tint 三色底** + caption 字号 + `{colors.primary}` 字色（按名称 hash 稳定分配，见 §Colors 分配规则）。实现 = `components/ui/tag-chip.tsx` 的 `TagChip`（自绘 span + `bg-tag-*` token 类）——**不用** antd `Tag` 的预设色：`Tag` 的默认底色由组件 token 派发、自定义 tint 只能走 `Tag` 的 preset/内联色，与「禁硬编码色值」冲突。antd `Tag` 仅保留给**带交互的元信息 chip**（如 focus 小条的 closable 标签）。**标签不做按钮形态**。

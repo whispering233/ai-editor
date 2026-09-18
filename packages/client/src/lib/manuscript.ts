@@ -102,7 +102,7 @@ export function formatSavedAt(date: Date): string {
  * （写作设置下拉 / 斜杠菜单等）。关闭后元素通常仍留在 DOM（只是 `display:none`）
  * ⇒ 判据必须是「可见」而非「存在」。
  */
-export const OVERLAY_SELECTOR =
+const OVERLAY_SELECTOR =
   ".ant-popover, .ant-dropdown, [role='dialog'], .bn-ak-popover, .bn-ak-menu";
 
 /** 当前是否有可见浮层（有 ⇒ 这次 `Esc` 归它消费；专注模式退出退让，一次按键只做一件事） */

@@ -17,7 +17,8 @@
 //   prefs / setPref 同时递给工具条（数据只有这一处来源）。
 // - 卡 13.4：`status`（工具条右端状态区：字数 · 保存态）与 `focus`（专注开关）原样透传给工具条；
 //   本组件**不持有**专注状态（源头 = ui store，外壳与页头各自订阅）。
-// - 卡 14.1：`save`（手动保存）同样原样透传；不传 = 工具条不渲染该按钮（参考资料页因此没有）。
+// - 卡 14.1：`save`（手动保存）同样原样透传；不传 = 工具条不渲染该按钮
+//   （章正文页与参考资料详情页（编辑态）各自注入，草稿态不注入）。
 import { useEffect, useMemo, type ReactNode } from "react";
 import type { PartialBlock } from "@blocknote/core";
 import { zh } from "@blocknote/core/locales";
@@ -73,7 +74,7 @@ export interface DocumentEditorProps {
   status?: ReactNode;
  /** 专注模式开关（仅章正文页注入）；不传 = 工具条无专注入口（卡 13.4） */
   focus?: ToolbarFocus;
-  /** 手动保存（仅章正文页注入）；不传 = 工具条无保存按钮（卡 14.1） */
+  /** 手动保存（章正文页 / 参考资料详情页编辑态各自注入）；不传 = 工具条无保存按钮（卡 14.1） */
   save?: ToolbarSave;
 }
 

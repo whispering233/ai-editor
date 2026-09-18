@@ -24,7 +24,7 @@ import {
   type WritingPrefs,
 } from "../../hooks/use-writing-prefs";
 
-export interface WritingSettingsProps {
+interface WritingSettingsProps {
   prefs: WritingPrefs;
   /** 单字段更新（类型收窄：`setPref("fontSize", 18)`），写入即持久化 */
   setPref: <K extends keyof WritingPrefs>(key: K, value: WritingPrefs[K]) => void;

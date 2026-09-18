@@ -83,7 +83,8 @@
   /* 人物页左栏「角色定位」字色（浅色态加深到 4.93:1；深色态换回原橙 6.24:1）*/
   --character-role: #b4551f;
   /* 写作面纸张（DESIGN.md §Colors「写作面偏好」，浅色 = 登记值 colors.paper-cream / paper-warm）——
-     色值唯一定义处就在这里（同 --tag-* 口径）；消费只在 blocknote.css（`--paper-bg` 的间接引用），
+     色值唯一定义处就在这里（同 --tag-* 口径）；CSS 侧只有 blocknote.css 消费（`--paper-bg` 的间接引用），
+     变量本体由 use-writing-prefs 经 style 下传，
      不进项目文件 / 备份 / 云同步（偏好本体只落 localStorage）*/
   --paper-cream: #fbf7ee;
   --paper-warm: #f2f0eb;

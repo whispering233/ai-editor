@@ -155,7 +155,7 @@ export function writingPaperCss(paper: WritingPaper): string | null {
 }
 
 /** 容器上要设的写作面变量（声明 = blocknote.css 间接引用的输入端） */
-export interface WritingCssVars extends CSSProperties {
+interface WritingCssVars extends CSSProperties {
   "--writing-font": string;
   "--writing-font-size": string;
   "--writing-line-height": string;

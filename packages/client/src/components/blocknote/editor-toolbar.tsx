@@ -1,7 +1,7 @@
 // 常显写作工具条（卡 13.1，骨架）：章正文与参考资料正文共用——随块编辑器组件内置，两页自动获得
 // （DESIGN.md §Components 的「唯一实现」）。契约：docs/ui/DESIGN.md §Components「写作面（工具条 / 专注模式）」
 // ——几何 40px（4px 内边距 + 32px 档按钮）、底 = 正文底（跟 §Colors「写作面偏好」的纸张走）、
-// 底部 1px 结构描边、无阴影、sticky 贴中栏内容区顶部；样式唯一入口 = 同目录 blocknote.css。
+// 底部 1px 结构描边、无阴影、sticky 贴**内层滚动容器顶**（页头之下——批 17 起章正文页与参考资料页都是页头常驻，见 DESIGN.md §Layout「页头常驻」）；样式唯一入口 = 同目录 blocknote.css。
 //
 // 渲染位：作为 `BlockNoteView` 的 children —— 落在 `.bn-container` 内、contentEditable **之外**，
 // 但在 BlockNoteContext + ComponentsContext 之内 ⇒ 这里既能拿 editor，也能直接用库自带的按钮组件
@@ -17,9 +17,9 @@
 //   没有专注入口，见 DESIGN.md §Components「专注模式入口」）。
 // - 卡 13.5：右端「写作设置」与「专注模式」之间再插「命令帮助」按钮（打开同目录 command-help.tsx 的
 //   静态弹窗；与工具条按钮集同卡维护）。**开合状态就本组件持有**（弹窗受控、不进 store）。
-// - 卡 14.1：右端「重做」之后加可选「保存」按钮（仅章正文页由页面注入 `save`；不传 = 不渲染 ⇒
-//   参考资料详情页天然没有——那页本就有自己的手动保存）。动机见 DESIGN.md §Components
-//   「为什么手动「保存」放在工具条而不是页头」：页头随正文滚走，只有 sticky 的工具条「随时可点」。
+// - 卡 14.1：右端「重做」之后加可选「保存」按钮（`save` 由页面注入；**章正文页与参考资料详情页（编辑态）
+//   各自注入**，草稿态与其它页面不传 = 不渲染）。动机见 DESIGN.md §Components
+//   「为什么手动「保存」放在工具条而不是页头」：工具条随正文 sticky（与滚动位置无关），而页头不是。
 //   `saving` 期间禁用（防连点双发）；**不在这里做「有无待存内容」判断**——点击恒发一次 PUT，
 //   保证点击必有可见反应（状态转「保存中…」→「已保存 · HH:MM」）。
 import { useState, type ReactNode } from "react";
@@ -47,7 +47,7 @@ import type { WritingPrefs } from "../../hooks/use-writing-prefs";
 import { CommandHelpDialog } from "./command-help";
 import { WritingSettings } from "./writing-settings";
 
-export interface EditorToolbarProps {
+interface EditorToolbarProps {
   /** 写作面偏好（全局一份，状态归 DocumentEditor 持有） */
   prefs: WritingPrefs;
   /** 单字段更新（写作设置下拉用） */
@@ -57,7 +57,7 @@ export interface EditorToolbarProps {
   status?: ReactNode;
   /** 专注模式开关（仅章正文页注入；不传 = 工具条不渲染专注按钮） */
   focus?: ToolbarFocus;
-  /** 手动保存（仅章正文页注入；不传 = 工具条不渲染保存按钮） */
+  /** 手动保存（章正文页 / 参考资料详情页编辑态各自注入；不传 = 工具条不渲染保存按钮） */
   save?: ToolbarSave;
 }
 
@@ -88,7 +88,7 @@ export function EditorToolbar({ prefs, setPref, status, focus, save }: EditorToo
 
   return (
     // 容器 = 库自带工具条表皮（ariakit：按钮的 ToolbarItem 上下文 + `bn-toolbar` 收窄按钮宽度/画激活态）；
-    // `ai-writing-toolbar` 是本仓的覆写点（白底/阴影/滚动条外观 → blocknote.css）。
+    // `ai-writing-toolbar` 是本仓的覆写点（纸色底 / 无阴影 / `overflow:visible` + 窄幅折行 → blocknote.css）。
     <FormattingToolbar.Root className="ai-writing-toolbar bn-toolbar">
       {/* 块类型下拉 + 粗/斜/下/删（**不要 code**：本仓正文不展示代码样式）/ 颜色 / 对齐 / 缩进 / 链接 */}
       <BlockTypeSelect />
@@ -117,7 +117,7 @@ export function EditorToolbar({ prefs, setPref, status, focus, save }: EditorToo
         icon={<RedoOutlined />}
         onClick={() => editor.redo()}
       />
-      {/* 手动保存（仅章正文页注入，卡 14.1）：与撤销/重做同一套库按钮构件 */}
+      {/* 手动保存（章正文页 / 参考资料详情页编辑态注入，卡 14.1）：与撤销/重做同一套库按钮构件 */}
       {save !== undefined && (
         <FormattingToolbar.Button
           label="保存"

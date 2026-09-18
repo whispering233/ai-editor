@@ -3,7 +3,7 @@
 // docs/ui/DESIGN.md §Colors「块编辑器（--bn-*）」。设计语义见 design/10-data-model.md §13。
 //
 // 数据：GET /manuscript/:chapterId（正文 + 版本戳 base + charCount）；标题与上下章取自大纲树
-// （store 已缓存时不再请求；本页不展示字数统计，故不带 with_metadata）。
+// （store 已缓存时不再请求）；字数取自正文端点的 `charCount`（不是大纲的 `metadata.textLength`），故不带 with_metadata。
 // 保存：**自动保存**——编辑器内容变化 → 空闲 1500ms 落盘（lib/manuscript 的 createAutosave），
 // 卸载 / 切路由前 flush（useEffect cleanup）；保存失败必须可见（顶部错误条 + 重试，不静默）。
 // 手动「保存」（卡 14.1）：工具条右端按钮**恒发一次 PUT**（即使无待存内容也重发，保证点击必有

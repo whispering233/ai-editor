@@ -14,7 +14,7 @@
 //      编译进 `dist/src-Buuo5l7X.js`）的 keymap：`"Mod-z"` → `editor.undo()`，
 //      `"Mod-y"` / `"Shift-Mod-z"` → `editor.redo()`。键名字法在这里取字典的展示风格（`Mod+B`，
 //      加号 + 大写）而非 prosemirror 的 `Mod-z`（连字符 + 小写）——键位本身没变，只统一写法。
-//    - 本仓自绘的五个按钮名（撤销 / 重做 / 保存 / 写作设置 / 专注模式，卡 14.1 加「保存」）：与
+//    - 本仓自绘的**六个**按钮名（撤销 / 重做 / 保存 / 写作设置 / **命令帮助** / 专注模式，卡 14.1 加「保存」）：与
 //      editor-toolbar.tsx 的 label 手工同值（DESIGN.md 的「同卡维护」指的就是这里；库字典里没有任何
 //      一条是它们）。
 //    - 「保存」的说明里的自动保存时长**从 `AUTOSAVE_DELAY_MS` 插值**（不复述数字：改常量则文案随动，
@@ -30,8 +30,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { AUTOSAVE_DELAY_MS } from "../../lib/manuscript";
 
 /** 一条帮助条目 */
-export interface CommandHelpEntry {
-  /** 入口 / 命令名（库按钮与库菜单项一律取库字典文案；本仓自绘的四个按钮见文件头 ② 的例外） */
+interface CommandHelpEntry {
+  /** 入口 / 命令名（库按钮与库菜单项一律取库字典文案；本仓自绘按钮见文件头 ② 的例外清单；
+   * 唯「命令帮助」自身不收条目——自指条目无信息量，属有意例外，见 DESIGN.md §Components `command-help`）外） */
   name: string;
   /** 平台化后的快捷键文案（无快捷键的入口不写） */
   shortcut?: string;
@@ -40,7 +41,7 @@ export interface CommandHelpEntry {
 }
 
 /** 一个帮助分组（本工具条 / 编辑器内 / 快捷键） */
-export interface CommandHelpSection {
+interface CommandHelpSection {
   title: string;
   entries: CommandHelpEntry[];
 }

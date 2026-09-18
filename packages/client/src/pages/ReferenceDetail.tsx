@@ -618,7 +618,8 @@ export default function ReferenceDetail({ id, draft = false }: { id?: string; dr
         </div>
         {formError !== null && <p className="text-xs text-destructive">{formError}</p>}
         {/* 操作行**只在草稿态**渲染：草稿态的创建会跳转，不适合放工具条；
-            编辑态的「保存」已移到工具条右端（与章正文页同形同位，页头滚动离开也点得到） */}
+            编辑态的「保存」已移到工具条右端（与章正文页同形同位；本页与章正文页都是页头常驻，
+            论据是「工具条随正文 sticky、与滚动位置无关」） */}
         {draft && (
           <div className="flex justify-end gap-1.5 pt-1">
             <Button onClick={() => navigate("#/references")} disabled={saving}>
