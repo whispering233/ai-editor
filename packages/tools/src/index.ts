@@ -57,7 +57,7 @@ import { runGetEntity, runGetEntitySummary, runSearchEntities } from "./query/en
 import { runSearchReferences } from "./query/reference.js";
 import { runQueryRelationships } from "./query/relation.js";
 import { runGetOutline, runGetOutlinePath } from "./query/outline.js";
-import { runGetChapterText } from "./query/manuscript.js";
+import { runGetChapterText, DEFAULT_CHAPTER_TEXT_CHARS, MAX_CHAPTER_TEXT_CHARS } from "./query/manuscript.js";
 import { runComputeState, runGetDeltaHistory } from "./query/delta.js";
 
 /** 查询类工具定义（S6.3 + 卡 12.9，「查询类（自动）」10 个；权限全为 AUTO） */
@@ -116,10 +116,16 @@ const queryToolDefs: ToolDefinition[] = [
   },
   {
     name: "get_chapter_text",
+    // 分页数值插值自 query/manuscript.ts 的常量（模型可见上限的唯一来源，禁止手写数字）——
+    // 单源 ⇒ 改值不会静默漂移；回归断言见 index.test.ts「description 数字集合 = 两个常量」
     description:
       "章正文只读查询：按 node_id 分页读取某章正文的轻量 md 投影（服务端派生，保块级结构、弃行内样式）——" +
       "用于分析节奏、核对与设定的冲突、评价具体段落。node_id **必须是章节点**（卷/场景报错；不存在或已软删报错）。" +
-      "offset 为起始字符下标（缺省 0），max_chars 为本次最多返回字符数（缺省 6000、上限 20000）；" +
+      "offset 为起始字符下标（缺省 0），max_chars 为本次最多返回字符数（缺省 " +
+      DEFAULT_CHAPTER_TEXT_CHARS +
+      "、上限 " +
+      MAX_CHAPTER_TEXT_CHARS +
+      "）；" +
       "text 末尾出现「已截断」提示时，用其中给出的 offset 继续读取（长章分段读完）。" +
       "未写过正文的章返回 char_count=0、text=\"\"。" +
       "**只读**：工具面不存在任何正文写工具——正文只读、只评论、只建议，落笔由作者完成。",

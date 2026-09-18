@@ -124,8 +124,10 @@ describe("get_chapter_text", () => {
     expect(result.char_count).toBe(text.length); // 全长与 offset 无关
   });
 
-  it("max_chars 缺省 6000；超上限按 MAX_CHAPTER_TEXT_CHARS clamp（上限≤单条工具结果 8000 token 预算）", () => {
-    expect(MAX_CHAPTER_TEXT_CHARS).toBeLessThanOrEqual(8000); // CJK 约 1 token/字：超了会被外层截掉截断提示
+  it("max_chars 缺省 6000；超上限按 MAX_CHAPTER_TEXT_CHARS clamp（压进外层 8000 token 预算 + ≥10% 余量）", () => {
+    // 数值与实测绑定：外层单条上限 8000 tokens（agent/src/runtime/tool-result.ts），CJK 约 1 token/字，
+    // 上限页 + JSON 信封 + 续读提示实测 7055 tokens（余量 11.8%）——超了就丢「可用 offset 续读」提示
+    expect(MAX_CHAPTER_TEXT_CHARS).toBe(7000);
     const long = "甲".repeat(MAX_CHAPTER_TEXT_CHARS + 1000);
     seedChapterText("ch-1", long);
     const ctx = makeCtx();

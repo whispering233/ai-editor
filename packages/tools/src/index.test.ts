@@ -32,6 +32,14 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
     expect(m.toolCount()).toBe(36);
     expect(m.getTool("get_entity")).toBeDefined();
     expect(m.getTool("get_chapter_text")!.permission).toBe("auto"); // 正文只读：自动权限
+ // 分页数值防漂移：description 由 query/manuscript.ts 的常量插值生成
+    const chapterTextDescription = m.getTool("get_chapter_text")!.description;
+    const descriptionNumbers = chapterTextDescription.match(/\d{4,}/g) ?? [];
+    // 描述里 4 位以上的数字集合必须恰好 = {缺省, 上限}：既证两个常量真的进了描述，
+    // 也挡住任何手写数值（如残留的「上限 20000」）——改为硬编码 / 改了值没同步，此处报红
+    expect(new Set(descriptionNumbers)).toEqual(
+      new Set([String(m.DEFAULT_CHAPTER_TEXT_CHARS), String(m.MAX_CHAPTER_TEXT_CHARS)]),
+    );
  // 提案类工具权限为 PROPOSAL（「提案类（需确认）」）
     expect(m.getTool("propose_create_entity")!.permission).toBe("proposal");
     expect(m.getTool("propose_abandon_hook")!.permission).toBe("proposal");
