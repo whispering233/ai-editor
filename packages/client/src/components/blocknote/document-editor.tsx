@@ -5,6 +5,7 @@
 // - 改色唯一入口 = 同目录 blocknote.css（调用点不得写 --bn-* 覆盖或内联色值）
 // - 主题随 useThemeMode()（html.dark = 全站主题唯一事实源），深浅两态各看一次像素
 import type { PartialBlock } from "@blocknote/core";
+import { zh } from "@blocknote/core/locales";
 import { useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/ariakit";
 import { isBlockArray } from "@whispering233/ai-editor-shared";
@@ -41,7 +42,12 @@ export interface DocumentEditorProps {
 
 export function DocumentEditor({ initialContent, onChange }: DocumentEditorProps) {
   const theme = useThemeMode();
-  const editor = useCreateBlockNote({ initialContent: parseBlockContent(initialContent) });
+  // UI 语言 = 中文（项目语言恒 zh，页头「语言: zh」）：不传 dictionary 时 placeholder / 斜杠菜单 /
+  // 工具栏走 @blocknote/core 的英文默认。边界：本仓无 i18n 切换，将来引入多语言时这里改成按项目语言选择。
+  const editor = useCreateBlockNote({
+    initialContent: parseBlockContent(initialContent),
+    dictionary: zh,
+  });
 
   return (
     <BlockNoteView
