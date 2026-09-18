@@ -16,7 +16,7 @@
 - 任务以 `docs/design/tasks.md` 为清单：按卡开发，垂直切片、一次一张、一卡一 commit、独立验证、卡内不做卡外顺手改动；完成后清理卡片并向用户汇报。
 - 每卡「实现 fixer + 独立验证 oracle」双代理；并行卡片用临时分支 + git worktree，验证后合回 main 并清理。
 - 并行派工的硬要求（2026-09 实测）：子代理必须显式 `context: "fresh"`——`worker` 默认 fork 会把父会话的**编排叙事**当成自己的进度（实测三道 fixer 全部零改动回 PASS）；每份任务需带**硬完成判据**（`git log` 必须含新 commit + `git status` 干净，无 commit 不许报 PASS）与「汇报必附 commit hash / 命令输出」条款。
-- 验证：`pnpm typecheck` / `pnpm lint` / `pnpm -r test`（单包 `pnpm --filter <包> test`）；⚠ fresh clone 先 `pnpm -r build` 再 typecheck；UI 改动额外用浏览器核一次像素；**改桌面版主进程（依赖/import）后必须跑打包态启动冒烟**（`build.md`：`typecheck` 绿 ≠ 打包态能起）。
+- 验证：`pnpm typecheck` / `pnpm lint` / `pnpm -r test`；**单包测试必须写包全名**（`pnpm --filter @whispering233/ai-editor-<pkg> test`）——短名（如 `--filter server`）会打印 `Scope: 0 of 8 workspace projects` 并**静默什么都不跑**（2026-10 实测踩坑，验收证据因此可能全是空的）；⚠ fresh clone 先 `pnpm -r build` 再 typecheck；UI 改动额外用浏览器核一次像素；**改桌面版主进程（依赖/import）后必须跑打包态启动冒烟**（`build.md`：`typecheck` 绿 ≠ 打包态能起）。
 - 提交信息用中文，遵循 conventional commits（如 `feat(doc): ...`）。
 - 日常不 push、不建 PR、不新增 CI；远端与 CI 仅服务发布链路（push `v*` tag 触发 `.github/workflows/`）。
 

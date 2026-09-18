@@ -146,7 +146,8 @@ type: "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "r
 // reference: { type?, url?, tags?, content? }——**内容 = 块文档**（2026-10）；
 //   与其余类型的关键差异：`content` 不在 entities.data 里直接落库，而是拆写进 `document_records`
 //   的 `owner_kind='reference'` 行（服务端派生 content_text 投影）；
-//   未传 content = 空文档（允许先建条目后写正文）；url 可选（纯本地笔记不需要，外源链接才填）
+//   未传 content = 正文保持不动（行内改标题/分类/标签场景）；url 可选（纯本地笔记不需要，外源链接才填）；
+//   **type 兜底不在 REST**：缺省 material 由 scan / AI executor / client 各自兜底，本组端点不补默认值
 //   存留字段：kind / file_name / file_mtime / source **已废弃**（旧值不读、不迁移）
 
 // Res: 201
@@ -215,6 +216,16 @@ id: string;
 // Res: 404
 { error: { code: "ENTITY_NOT_FOUND" } }
 ```
+
+> **「未写过」与「空文档」的响应形态（2026-10，卡 12.7a oracle 定口径）**：两者**详情可区分、列表不可区分**，且与章正文端点有意不相同——
+>
+> | 载体 | 未写过 | 写过空文档（`content: "[]"`） |
+> | :--- | :--- | :--- |
+> | 参考资料详情 | `data` 无 `content` 键（`data` 是稀疏对象，见 `../db/schema.md`） | `data.content = "[]"` |
+> | 章正文 `GET /manuscript/:id` | `content: ""`（固定字段，用空串表达） | `content: "[]"` |
+> | 两者列表 | 无 content 摘要（空投影不占位） | 同左 |
+>
+> 客户端按「**键缺失 / `""` / `"[]"` 一律当空文档**」处理（块编辑器封装里已如此）；差异只是两种载体的字段形状选择，**不要求服务端把它们归一**。
 
 ### 参考资料正文的导入导出（无端点，纯客户端）
 
