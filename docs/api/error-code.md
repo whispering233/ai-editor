@@ -22,7 +22,7 @@
 | `SCHEMA_VERSION_MISMATCH` | 409 | 409 导入 zip 的 data.db user_version 与当前程序版本不匹配（拒绝导入，不静默重建） |
 | `PROJECT_VERSION_NEWER` | 409 | 409 open 时项目 data.db user_version 高于当前程序版本（拒绝打开并提示升级程序，堵降级数据丢失） |
 | `BACKUP_TARGET_EXISTS` | 409 | 409 重命名备份目标文件名已存在（B2.6：renameSync 目标存在会静默覆盖——显式拒绝防数据丢失） |
-| `DOCUMENT_STALE` | 409 | 409 保存块文档（章正文 / 参考资料正文）时版本戳不一致（另一标签页/窗口已写入）；仅当请求携带 `base_updated_at` 时校验，省略 = 覆盖保存（拒绝隐式丢失他人写入） |
+| `DOCUMENT_STALE` | 409 | 409 保存**章正文**（`PUT /api/v1/manuscript/:chapterNodeId`）时版本戳不一致（另一标签页/窗口已写入）；仅当请求携带 `base_updated_at` 时校验，省略 = 覆盖保存。**不含参考资料**：`PUT /api/v1/entity/reference/:id` 无版本戳参数（`.strict()`），参考资料正文冲突 = 后写覆盖（与其它实体一致；见 `../design/backlog.md`「参考资料正文无覆盖保护」） |
 | `REFERENCE_FILE_MISSING` | —（已移除） | 2026-10 卡 12.7b 已从 shared `ERROR_CODES` 枚举删除（参考资料不再有磁盘文件与扫描链路，外部编辑改为单文件导入导出，见 [30-api-entity.md](./30-api-entity.md)） |
 | `DELTA_CONFLICT` | —（已废弃） | 已废弃（2026-08 修订：computeState 以 conflicts 字段替代 409） |
 | `TOOL_RESULT_TOO_LARGE` | — | 单条工具结果超 token 上限：**截断 + 结构化提示**（不终止对话；同时写调试日志使用量类别） |
