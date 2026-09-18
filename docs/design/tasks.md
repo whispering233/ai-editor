@@ -8,14 +8,6 @@
 
 ---
 
-## 批 16：参考资料详情页与正文页一致性
-
-| 卡 | 内容 | 依赖 | 验收 |
-| :-- | :-- | :-- | :-- |
-| [ ] 16.1 | **参考资料详情页：写作面铺满 + 保存按钮统一**（用户反馈两点）：① 高度 —— 该页表单滚动容器 `min-h-0 flex-1 overflow-y-auto` 加 `flex flex-col`、正文本行加 `flex-1 min-h-0`、编辑器包裹层 `min-w-0 flex-1` 加 `flex flex-col`（三处接通 flex 链，`.bn-container` 的 `flex:1 1 auto` 才会生效）；② 保存 —— **编辑态**给 `DocumentEditor` 传 `save={{ onSave: () => void handleSave(), saving }}`（动作 = 现有的整页 `handleSave`：名称/分类/URL/标签 + 正文一次提交，带 `autosave.reset()`），并**移除编辑态**底部那个「保存」按钮（草稿态保留「取消 / 创建」行，不注入 `save`）；`Ctrl/Cmd+S` 快捷入口不变 | 15.1 | 参考资料编辑态：白纸铺满剩余高度、点空白聚焦文末、底部无独立「保存」按钮、工具条右端「保存」与章正文页同形同位、`saving` 时禁用；草稿态：工具条无保存按钮、底部「取消 / 创建」仍在且可用；章正文页不受影响；`pnpm typecheck`/`lint`/client test |
-
----
-
 ## 当前无进行中任务卡
 
 ---
