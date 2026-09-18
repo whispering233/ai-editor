@@ -82,6 +82,11 @@
   --type-badge-border: #d94a4a;
   /* 人物页左栏「角色定位」字色（浅色态加深到 4.93:1；深色态换回原橙 6.24:1）*/
   --character-role: #b4551f;
+  /* 写作面纸张（DESIGN.md §Colors「写作面偏好」，浅色 = 登记值 colors.paper-cream / paper-warm）——
+     色值唯一定义处就在这里（同 --tag-* 口径）；消费只在 blocknote.css（`--paper-bg` 的间接引用），
+     不进项目文件 / 备份 / 云同步（偏好本体只落 localStorage）*/
+  --paper-cream: #fbf7ee;
+  --paper-warm: #f2f0eb;
 }
 
 .dark {
@@ -89,6 +94,10 @@
   --tag-sage: rgb(209 226 196 / 0.2);
   --tag-yellow: rgb(255 216 0 / 0.2);
   --character-role: #ef8354;
+  /* 纸张深色值 = 「暖色深色纸」推断值（DESIGN.md §Known gaps：「纸张深色值未与实机比对」）——
+     观感不对只改这一处，别去动 blocknote.css 的引用 */
+  --paper-cream: #221f19;
+  --paper-warm: #262522;
 }
 
 /* 浅色 = antd defaultAlgorithm tokens（cssVar 映射）：--ant-* 由 ConfigProvider 注入到「组件级 class

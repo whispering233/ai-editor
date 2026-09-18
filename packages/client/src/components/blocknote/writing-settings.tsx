@@ -1,6 +1,6 @@
-// 「写作设置」下拉（卡 13.2）：工具条右端（撤销 / 重做之后）——字体 / 字号 / 行高三行档位切换。
-// 契约：docs/ui/DESIGN.md §Components「写作面（工具条 / 专注模式）」右侧顺序 + §Colors「写作面偏好」
-// （档位数值与中文档位名的唯一定义 = hooks/use-writing-prefs.ts，本文件只消费，不复制任何档位）。
+// 「写作设置」下拉（卡 13.2 起）：工具条右端（撤销 / 重做之后）——字体 / 字号 / 行高 / 纸张 / 纹理 / 段首缩进
+// 六行档位切换。契约：docs/ui/DESIGN.md §Components「写作面（工具条 / 专注模式）」右侧顺序 +
+// §Colors「写作面偏好」（档位数值与中文档位名的唯一定义 = hooks/use-writing-prefs.ts，本文件只消费，不复制任何档位）。
 // - 数据（prefs / setPref）由 DocumentEditor 经 props 传入：**不在本组件再调一次 hook**
 //   ——两处各持一份状态会互不同步（工具条按钮与编辑器容器显示不同档位）。
 // - 触发器由工具条传入（库自带的工具条按钮，与撤销/重做同表皮）；点击打开（非 hover：
@@ -12,10 +12,15 @@ import type { ReactNode } from "react";
 import {
   WRITING_FONT_OPTIONS,
   WRITING_FONT_SIZE_OPTIONS,
+  WRITING_INDENT_OPTIONS,
   WRITING_LINE_HEIGHT_OPTIONS,
+  WRITING_PAPER_OPTIONS,
+  WRITING_PAPER_TEXTURE_OPTIONS,
   type WritingFont,
   type WritingFontSize,
   type WritingLineHeight,
+  type WritingPaper,
+  type WritingPaperTexture,
   type WritingPrefs,
 } from "../../hooks/use-writing-prefs";
 
@@ -27,11 +32,11 @@ export interface WritingSettingsProps {
   children: ReactNode;
 }
 
-/** 一行档位：定宽标签 + 档位组（标签宽度固定 ⇒ 三行档位组左缘对齐） */
+/** 一行档位：定宽标签 + 档位组（标签宽度固定 ⇒ 六行档位组左缘对齐；`w-14` 装得下最长标签「段首缩进」） */
 function PrefRow({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="w-8 shrink-0 text-xs text-muted-foreground">{label}</span>
+      <span className="w-14 shrink-0 text-xs text-muted-foreground">{label}</span>
       {children}
     </div>
   );
@@ -66,6 +71,30 @@ export function WritingSettings({ prefs, setPref, children }: WritingSettingsPro
               value={prefs.lineHeight}
               options={WRITING_LINE_HEIGHT_OPTIONS}
               onChange={(value) => setPref("lineHeight", value)}
+            />
+          </PrefRow>
+          <PrefRow label="纸张">
+            <Segmented<WritingPaper>
+              size="small"
+              value={prefs.paper}
+              options={WRITING_PAPER_OPTIONS}
+              onChange={(value) => setPref("paper", value)}
+            />
+          </PrefRow>
+          <PrefRow label="纹理">
+            <Segmented<WritingPaperTexture>
+              size="small"
+              value={prefs.paperTexture}
+              options={WRITING_PAPER_TEXTURE_OPTIONS}
+              onChange={(value) => setPref("paperTexture", value)}
+            />
+          </PrefRow>
+          <PrefRow label="段首缩进">
+            <Segmented<boolean>
+              size="small"
+              value={prefs.indent}
+              options={WRITING_INDENT_OPTIONS}
+              onChange={(value) => setPref("indent", value)}
             />
           </PrefRow>
         </div>

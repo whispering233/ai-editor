@@ -68,6 +68,60 @@
   line-height: var(--writing-line-height, 1.5);
 }
 
+/* ── 写作面偏好：纸张 / 纹理 / 段首缩进（卡 13.3）─────────────────────────
+   契约：DESIGN.md §Colors「写作面偏好」的纸张 / 纹理 / 段首缩进三行。
+   - 纸张：`--paper-bg` 由调用侧（document-editor.tsx 经 BlockNoteView 的 style）**只在非默认档**给出，
+     值 = `var(--paper-cream)` / `var(--paper-warm)`（色值唯一定义处 = index.css，同 --tag-* 口径：浅/深两段）。
+     默认档**不给变量** ⇒ 下面两个 `var()` 的 fallback 兜回现行为（`--bn-colors-editor-background` = {colors.canvas}）。
+   - 落点为何两处（硬约束⑤：间接引用必须落在库自己也显式声明过的元素上）：
+     库在 `.bn-editor` 上自带 `background-color: var(--bn-colors-editor-background)`（ariakit/dist/style.css，0,1,0）
+     —— 那才是真正的**正文底**元素，只写 `.bn-container` 会被它自己的声明盖住（纸色根本渲染不出来）；
+     容器加上声明只为补工具条以外的容器面（工具条底在下面单独一条，跟同一张纸）。
+   - 纹理：重复线性渐变，**纯装饰**——间距是固定常量、**有意不与文本行对齐**（标题/列表/图片高度各异，
+     相位必然错开；真对齐要锁死行高与段距并禁用标题类块，得不偿失，DESIGN.md 已登记）。
+     线色 = `--ant-color-border-secondary`（= {colors.hairline}，实测线 vs 纸底 1.13–1.23:1）——
+     深浅两态同源，**不另造灰**。
+   - 段首缩进：只作用于段落块（`data-content-type="paragraph"` 下的 `.bn-inline-content`，
+     装包核实的 DOM 形状：`div.bn-block-content[data-content-type=paragraph] > p.bn-inline-content`）。 */
+.bn-container {
+  /* 纹理间距常量（唯一出现处）：固定值，不随字号/行高变——装饰不参与排版（DESIGN.md：「不与文本行对齐」） */
+  --writing-paper-step: 28px;
+  background-color: var(--paper-bg, var(--bn-colors-editor-background));
+}
+
+.bn-container .bn-editor {
+  background-color: var(--paper-bg, var(--bn-colors-editor-background));
+}
+
+/* 横线（to bottom = 每格顶部一条线） */
+.bn-container[data-writing-paper="ruled"] .bn-editor {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--ant-color-border-secondary) 0 1px,
+    transparent 1px var(--writing-paper-step)
+  );
+}
+
+/* 网格 = 两层。CSS 里排在前面的层画在上面（同色 1px 线，交叉点无差别），两层同间距常量 */
+.bn-container[data-writing-paper="grid"] .bn-editor {
+  background-image:
+    repeating-linear-gradient(
+      to bottom,
+      var(--ant-color-border-secondary) 0 1px,
+      transparent 1px var(--writing-paper-step)
+    ),
+    repeating-linear-gradient(
+      to right,
+      var(--ant-color-border-secondary) 0 1px,
+      transparent 1px var(--writing-paper-step)
+    );
+}
+
+/* 段首缩进两字符（中文小说惯例）：只段落，标题 / 列表 / 引用不受影响（属性值约定见 document-editor.tsx） */
+.bn-container[data-writing-indent="on"] [data-content-type="paragraph"] .bn-inline-content {
+  text-indent: 2em;
+}
+
 /* ── 常显写作工具条（卡 13.1）──────────────────────────────────────────────
    契约：DESIGN.md §Components「写作面（工具条 / 专注模式）」——几何 40px（4px 内边距 + 32px 档按钮）、
    底 = 正文底、底部 1px 结构描边、无阴影、sticky 贴中栏内容区顶部。
@@ -99,7 +153,7 @@
   padding: 4px;
   gap: 4px; /* 折行时上下间距同值 */
   border-radius: 0;
-  background-color: var(--bn-colors-editor-background); /* 跟 §Colors「写作面偏好」的纸张走 */
+  background-color: var(--paper-bg, var(--bn-colors-editor-background)); /* 与正文底同源 ⇒ 纸上一色，不留异色带 */
   border-bottom: 1px solid var(--bn-colors-border);
   box-shadow: none;
   overflow: visible;

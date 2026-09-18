@@ -9,9 +9,11 @@
 // - 导入导出（卡 12.6）：md ↔ 块的互转要实例才做得了，经 `DocumentEditorApi`（onReady 回调）递给页面；
 //   纯函数层 lib/document-io.ts 不 import @blocknote
 // - 主题随 useThemeMode()（html.dark = 全站主题唯一事实源），深浅两态各看一次像素
-// - 写作面偏好（卡 13.2）：字体 / 字号 / 行高经 `useWritingPrefs` 取全局一份，以 CSS 变量
-//   （`--writing-*`）设在 `BlockNoteView` 的容器上（它 spread 到 `.bn-root.bn-container` 那个 div，
-//   不额外包一层 DOM）；`blocknote.css` 里是间接引用 ⇒ 调用点不写 `--bn-*`（DESIGN.md 硬约束 ④）。
+// - 写作面偏好（卡 13.2 / 13.3）：字体 / 字号 / 行高 / 纸张 / 纹理 / 段首缩进经 `useWritingPrefs` 取全局一份，
+//   以 CSS 变量（`--writing-*` / `--paper-bg`）与容器属性（`data-writing-paper` / `data-writing-indent`）
+//   设在 `BlockNoteView` 上（它 spread 到 `.bn-root.bn-container` 那个 div，不额外包一层 DOM）；
+//   `--paper-bg` **只在非默认纸张时给值**（默认档不给 ⇒ blocknote.css 的 `var(--paper-bg, …)` 兜到现行为）；
+//   `blocknote.css` 里是间接引用 ⇒ 调用点不写 `--bn-*`（DESIGN.md 硬约束 ④）。
 //   prefs / setPref 同时递给工具条（数据只有这一处来源）。
 import { useEffect, useMemo } from "react";
 import type { PartialBlock } from "@blocknote/core";
@@ -99,6 +101,10 @@ export function DocumentEditor({ initialContent, onChange, onReady }: DocumentEd
       editor={editor}
       theme={theme}
       style={toWritingCssVars(prefs)}
+      /* 属性值的约定：data-writing-paper 直接用纹理档名（none/ruled/grid，档位表是唯一定义处）；
+         data-writing-indent 是开关（on/off）——两串都要与 blocknote.css 的属性选择器逐字对应。 */
+      data-writing-paper={prefs.paperTexture}
+      data-writing-indent={prefs.indent ? "on" : "off"}
       onChange={(next) => onChange(JSON.stringify(next.document))}
     >
       <EditorToolbar prefs={prefs} setPref={setPref} />
