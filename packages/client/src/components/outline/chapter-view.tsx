@@ -1,12 +1,16 @@
 // 章视图（大纲页第二形态，2026-09）：平铺章列表——阅读序 = 卷序 → 卷内章序，行 = `第N卷` + `第N章`
 // 两枚编号徽标 + 标题 + 摘要 + 伏笔标记 + 正文字数 + 「写正文」入口 + 「阅读进度」徽标。
-// 「写正文」= 指向 #/manuscript/:id 的**导航链接**（卡 12.5；非操作按钮，仍不破「本视图不做结构编辑」的收窄）。
+// 「写正文」= 指向 #/manuscript/:id 的**导航链接**（卡 12.5；2026-10 卡 18.2 由下划线文字改为行尾
+// 图标按钮——给 antd `Button` 传 `href`，它渲染成 `<a>`：拿 `icon-button` 表皮的同时保住链接语义，
+// 也不破「本视图行内无操作按钮」的收窄）。
 // 交互有意收窄（契约见 `docs/ui/DESIGN.md`「大纲页双视图」）：**单击标题就地改名 + 双击行进详情**，
 // 不做删除 / 新建 / 拖拽——结构编辑与排序的唯一入口仍是大纲树，且「在章视图里新建出的场景不显示」
 // 会带来「建了却看不见」的困惑。
 // 纯 presenter：数据与副作用（提交改名 / 重拉树 / 路由）都在容器 `pages/Outline.tsx`，
 // 故 SSR `renderToString` 可直接渲染（仓内无 jsdom）——行结构断言见 `chapter-view.test.tsx`。
 import type { KeyboardEvent } from "react";
+import { Button } from "antd";
+import { EditOutlined } from "@ant-design/icons";
 import type { OutlineChapter } from "@whispering233/ai-editor-shared";
 import { TypeChip } from "@/components/ui/tag-chip";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -132,8 +136,8 @@ export function ChapterView({
                   ))}
                 </span>
               )}
-              {/* 行尾区：写正文入口（卡 12.5，导航链接而非操作按钮）+ 正文字数 + 「阅读进度」徽标
-                  （徽标在右、不占操作按钮位：本视图仍无结构编辑按钮） */}
+              {/* 行尾区：正文字数 + 「阅读进度」徽标 + 写正文入口（图标按钮 = 导航链接，见文件头）。
+                  按 `data-row` 口径：徽标排在操作位左侧、链接恒贴行尾（本视图仍无结构编辑按钮） */}
               <span className="ml-auto flex shrink-0 items-center gap-2">
                 {textLengthLabel !== null && (
                   <span className="tabular-nums text-xs text-muted-foreground">
@@ -141,12 +145,15 @@ export function ChapterView({
                   </span>
                 )}
                 {currentPositionId === node.id && <TypeChip className="shrink-0">阅读进度</TypeChip>}
-                <a
+                <Button
+                  color="default"
+                  variant="text"
+                  size="small"
                   href={`#/manuscript/${node.id}`}
-                  className="text-xs text-muted-foreground underline hover:text-foreground"
-                >
-                  写正文
-                </a>
+                  title="写正文"
+                  aria-label="写正文"
+                  icon={<EditOutlined className="text-sm" />}
+                />
               </span>
             </div>
             {/* 摘要（空不渲染）：缩进 = 两枚编号徽标占位，左右 gap 与首行同（标题左缘对齐） */}

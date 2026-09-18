@@ -67,7 +67,7 @@ describe("ChapterView（章视图平铺列表）", () => {
     expect(out.split("第1卷")).toHaveLength(3); // 卷1 的两行各带一次（split 段数 = 出现数 + 1）
     expect(out).toContain('data-node-id="ch-9"'); // 跨页定位锚点
     // 有意收窄（DESIGN「大纲页双视图」）：行内无任何操作**按钮**——删除/新建/拖拽都不在本视图
-    // （「写正文」是指向正文页的导航链接，不破这条收窄，见下一例）
+    // （「写正文」是图标按钮**链接**（antd `Button href` ⇒ `<a>`），不破这条收窄，见下一例）
     expect(out).not.toContain("<button");
     expect(out).not.toContain("移入回收站");
     expect(out).not.toContain("draggable");
@@ -93,12 +93,16 @@ describe("ChapterView（章视图平铺列表）", () => {
     expect(html({ hookMarks: null })).not.toContain("埋设伏笔");
   });
 
-  it("「写正文」入口（卡 12.5）：每行一个指向 #/manuscript/:id 的导航链接", () => {
+  it("「写正文」入口（卡 12.5 / 18.2）：每行一个 `EditOutlined` 图标按钮——antd `Button href` 渲染成 `<a>`，故仍是导航", () => {
     const out = html();
     expect(out).toContain('href="#/manuscript/ch-1"');
     expect(out).toContain('href="#/manuscript/ch-2"');
     expect(out).toContain('href="#/manuscript/ch-9"');
-    expect(out.split(">写正文<")).toHaveLength(4); // 每行一个（split 段数 = 出现数 + 1）
+    expect(out.split('aria-label="写正文"')).toHaveLength(4); // 每行一个（split 段数 = 出现数 + 1）
+    expect(out.split('title="写正文"')).toHaveLength(4);
+    expect(out).not.toContain(">写正文<"); // 文案不再落可见文本（改由 title / aria-label 承载）
+    expect(out.split('<a href="#/manuscript/')).toHaveLength(4); // 三个链接（段数 = 出现数 + 1）
+    expect(out).toContain("ant-btn-variant-text"); // 走 icon-button 表皮（antd 的 text 变体）
   });
 
   it("正文字数（metadata.textLength）：> 0 显示文案，未写（0 / 无 metadata）不显示", () => {
