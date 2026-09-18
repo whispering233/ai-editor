@@ -18,7 +18,6 @@
     "@blocknote/ariakit": "0.54.2",
     "@blocknote/core": "0.54.2",
     "@blocknote/react": "0.54.2",
-    "@uiw/react-md-editor": "^4.1.1",
     "@whispering233/ai-editor-shared": "workspace:*",
     "antd": "^6.6.2",
     "clsx": "^2.1.1",

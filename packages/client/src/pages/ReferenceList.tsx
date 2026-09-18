@@ -1,14 +1,14 @@
-// 参考资料列表页
-// 卡 11.1 交互重构 + 卡 11.4 新建分流：
-// - 点击标题 = 行内编辑（Enter 提交 / Esc 取消 / 失焦保存，模式）
-// - 双击行 = 进详情页（编辑态/按钮区不触发）
-// - 移除 Pencil 编辑按钮与编辑 Dialog（B1 异步回填竞态根除——完整编辑收敛到详情页）
-// - 行信息 = [标题、分类徽标、标签、来源]（来源列 11.4 起按 kind：file → 相对路径、link → URL 可点击）
-// - 新建入口分流两按钮（11.4）：「新建 md 文档」→ #/references/new/md、「新建外源链接」→ #/references/new/link
-// - 保留删除按钮、右键菜单（复用）
+// 参考资料列表页（卡 12.8）
+// - 点击标题 = 行内编辑（Enter 提交 / Esc 取消 / 失焦保存）；双击行 = 进详情页（编辑态即编辑器）
+// - 行信息 = [标题、分类、标签、来源]（来源列**只认 `url`**——kind / file_name / source 是文件机制遗留字段，不读）
+// - 新建入口收敛为**一个**（#/references/new）：名称 + 可选 URL + 分类 + 标签 + 正文块编辑器；
+//   旧草稿双路由 #/references/new/md、#/references/new/link 由 main.tsx 重定向到新入口
+// - 「导入 md 新建」= 文件机制退役后的替代路径（选 md → 解析 → 建条目 → 跳详情），
+//   frontmatter title 作条目名、其余为正文，有损必须先确认（lib/reference + lib/document-io）
+// - 文件扫描（「扫描」按钮 / 「未同步本地文档」提示条）已随文件机制退役删除
 // 数据：listEntities("reference", { limit: 200 }) 一次全量拉取（参考资料量小），
-// 分类/标签/关键词过滤在前端（列表摘要 summary.type/tags/kind/file_name/url 由 db toSummary 提供）
-import { useEffect, useMemo, useState } from "react";
+// 分类/标签/关键词过滤在前端（列表摘要 summary.type/tags/url/content 由 db toSummary 提供）
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { Alert, Button, Input, Select, Skeleton } from "antd";
@@ -19,24 +19,20 @@ import {
   DeleteOutlined,
   ExportOutlined,
   FileTextOutlined,
-  LinkOutlined,
-  ReloadOutlined,
+  ImportOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
-import {
-  deleteEntity,
-  getReferenceScanStatus,
-  listEntities,
-  scanReferences,
-  updateEntity,
-} from "../lib/api";
+import { createEntity, deleteEntity, listEntities, updateEntity } from "../lib/api";
 import { ApiError } from "../lib/api";
+import { markdownImportConfirmMessage, readTextFile } from "../lib/document-io";
+import { planReferenceImport, referenceSource } from "../lib/reference";
 import { navigate } from "../hooks/use-route";
 import { useSaveShortcut } from "../lib/save-shortcut";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
 import { RowContextMenu } from "../components/entity/row-context-menu";
+import { DocumentEditor, type DocumentEditorApi } from "../components/blocknote/document-editor";
 
 /** 分类回显映射（**仅存量显示**——material 等旧枚举值回显中文名，非可选建议；新自定义分类无映射原样显示） */
 const TYPE_LABELS: Record<string, string> = {
@@ -45,6 +41,9 @@ const TYPE_LABELS: Record<string, string> = {
   theory: "写作理论",
   reference: "设定参考",
 };
+
+/** 新建条目的缺省分类（REST 不兜底，写入侧给缺省——见 docs/api/30-api-entity.md「reference 特例」） */
+const DEFAULT_TYPE = "material";
 
 export default function ReferenceList() {
   const config = useProjectStore((s) => s.config);
@@ -58,54 +57,56 @@ export default function ReferenceList() {
   const [activeType, setActiveType] = useState<string | "all">("all");
   const [activeTag, setActiveTag] = useState<string | null>(null);
 
-  // 扫描同步（N6）：unsynced = 未同步文件数（null = 未探测/无项目）；
-  // 列表加载/刷新时只读探测（无副作用），>0 显示提示条引导扫描
-  const [scanBusy, setScanBusy] = useState(false);
-  const [unsynced, setUnsynced] = useState<number | null>(null);
+  // 「导入 md 新建」：隐藏文件框 + 隐藏块编辑器实例（md → 块的解析要真实例，能力出口 = DocumentEditorApi）
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importArmed, setImportArmed] = useState(false);
+  const [editorApi, setEditorApi] = useState<DocumentEditorApi | null>(null);
 
-  // 探测未同步文件（数据刷新后重跑——本地新增/外部修改后列表刷新即重新提示）
-  useEffect(() => {
-    if (config === null) {
-      setUnsynced(null);
+  /** 「导入 md 新建」：读文本 → frontmatter 取名 + md → 块（有损必须先确认）→ POST 建条目 → 跳详情 */
+  async function importMarkdown(file: File): Promise<void> {
+    if (editorApi === null) {
+      useUiStore.getState().showToast("编辑器未就绪，请重试", "error");
       return;
     }
-    let cancelled = false;
-    getReferenceScanStatus()
-      .then((res) => {
-        if (!cancelled) setUnsynced(res.unsynced);
-      })
-      .catch(() => {
-        if (!cancelled) setUnsynced(null); // 探测失败不阻塞列表（静默）
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [config, reloadTick]);
-
-  /** 扫描重建索引（POST /scan → toast 统计 + 刷新列表 + 清提示条） */
-  async function handleScan() {
-    if (scanBusy) return;
-    setScanBusy(true);
+    let text: string;
     try {
-      const r = await scanReferences();
-      const parts = [
-        r.added > 0 ? `新增 ${r.added}` : null,
-        r.updated > 0 ? `更新 ${r.updated}` : null,
-        r.restored > 0 ? `还原 ${r.restored}` : null,
-        r.removed > 0 ? `移除 ${r.removed}` : null,
-      ].filter((s): s is string => s !== null);
-      useUiStore
-        .getState()
-        .showToast(parts.length > 0 ? `扫描完成：${parts.join(" / ")}` : "扫描完成：已是最新");
-      setUnsynced(0);
+      text = await readTextFile(file);
+    } catch {
+      useUiStore.getState().showToast("导入失败：文件读取异常", "error");
+      return;
+    }
+    const plan = planReferenceImport(file.name, text, (markdown) =>
+      editorApi.parseMarkdown(markdown),
+    );
+    switch (plan.action) {
+      case "error":
+        useUiStore.getState().showToast(plan.message, "error");
+        return;
+      case "confirm-lossy": {
+        const ok = await useUiStore.getState().confirm({
+          title: "导入 markdown（有损）",
+          description: `${markdownImportConfirmMessage(
+            plan.unsupportedCount,
+          )}；继续将用文件内容新建参考资料。需要无损请改用块 JSON 导入。`,
+        });
+        if (!ok) return;
+        break;
+      }
+      case "apply":
+        break;
+    }
+    try {
+      const created = await createEntity("reference", {
+        name: plan.name,
+        data: { type: DEFAULT_TYPE, content: plan.content },
+      });
+      useUiStore.getState().showToast(`已从《${file.name}》新建参考资料《${plan.name}》`);
       useUiStore.getState().notifyDataChanged();
-      setReloadTick((t) => t + 1);
+      navigate(`#/references/${created.id}`);
     } catch (e) {
       useUiStore
         .getState()
-        .showToast(e instanceof ApiError ? e.message : "扫描失败，请重试", "error");
-    } finally {
-      setScanBusy(false);
+        .showToast(e instanceof ApiError ? e.message : "创建失败，请重试", "error");
     }
   }
 
@@ -187,7 +188,9 @@ export default function ReferenceList() {
     try {
       await deleteEntity("reference", item.id);
       // 删除要**推送**才传播（DESIGN.md §550）：本地删除不会被拉取复活，但另一台的删除要等这次推送
-      useUiStore.getState().showToast(`已移入回收站：《${item.name}》，可随时还原；推送到云端后，另一台也会同步删除`);
+      useUiStore
+        .getState()
+        .showToast(`已移入回收站：《${item.name}》，可随时还原；推送到云端后，另一台也会同步删除`);
       setReloadTick((t) => t + 1);
     } catch (e) {
       useUiStore
@@ -198,7 +201,7 @@ export default function ReferenceList() {
 
   const disabled = config === null;
 
-  /** 页头控件行（左=搜索/分类/标签；右=扫描/新建 md/新建外源链接） */
+  /** 页头控件行（左=搜索/分类/标签；右=导入 md 新建 / 新建） */
   const headerControls = (
     <>
       <div className="w-48">
@@ -236,29 +239,38 @@ export default function ReferenceList() {
         className="ml-auto flex items-center gap-2"
         title={disabled ? "请先打开项目" : undefined}
       >
+        {/* 导入入口：隐藏文件框（浏览器与桌面同一套；选完清空 value 以便重复选同一文件） */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".md,.markdown,text/markdown"
+          className="hidden"
+          aria-label="选择要导入的 md 文件（新建参考资料）"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (file !== undefined) void importMarkdown(file);
+          }}
+        />
         <Button
           disabled={disabled}
-          onClick={handleScan}
-          loading={scanBusy}
-          title="扫描项目目录 references/ 下的本地文档，同步到索引"
-          icon={<ReloadOutlined />}
+          icon={<ImportOutlined />}
+          title="把一个 markdown 文件新建为参考资料（frontmatter title 作名称）"
+          onClick={() => {
+            // 先挂隐藏编辑器（md → 块的解析要真实例）：文件对话框打开期间完成挂载
+            setImportArmed(true);
+            fileInputRef.current?.click();
+          }}
         >
-          扫描
-        </Button>
-        <Button
-          disabled={disabled}
-          onClick={() => navigate("#/references/new/md")}
-          icon={<FileTextOutlined />}
-        >
-          新建 md 文档
+          导入 md 新建
         </Button>
         <Button
           type="primary"
           disabled={disabled}
-          onClick={() => navigate("#/references/new/link")}
-          icon={<LinkOutlined />}
+          onClick={() => navigate("#/references/new")}
+          icon={<FileTextOutlined />}
         >
-          新建外源链接
+          新建
         </Button>
       </span>
     </>
@@ -266,28 +278,15 @@ export default function ReferenceList() {
 
   return (
     <section className="flex h-full min-h-0 flex-col">
-      {/* 页头（统一壳）：标题 + 控件行（左=搜索/分类/标签；右=扫描/新建 md/新建外源链接）+ 分割线 */}
+      {/* 页头（统一壳）：标题 + 控件行（左=搜索/分类/标签；右=导入 md 新建 / 新建）+ 分割线 */}
       <PageHeader title="参考资料" controls={headerControls} />
 
-      {/* 未同步提示条（N6）：检测到本地新增/外部修改 → 引导扫描（只读探测无副作用） */}
-      {unsynced !== null && unsynced > 0 && (
-        <Alert
-          className="mb-2"
-          type="info"
-          showIcon
-          icon={<ReloadOutlined />}
-          message={
-            <span>
-              检测到 <b>{unsynced}</b>{" "}
-              个未同步的本地文档（文件管理器新增或修改）——扫描后将同步到索引
-            </span>
-          }
-          action={
-            <Button size="small" onClick={handleScan} loading={scanBusy}>
-              立即扫描
-            </Button>
-          }
-        />
+      {/* 隐藏块编辑器实例：**只**作「导入 md 新建」的 md → 块能力出口（DocumentEditorApi 要真实例）；
+          点过导入后才挂载——列表页空转的编辑器不存在，SSR/单测也不渲染它 */}
+      {importArmed && (
+        <div className="hidden" aria-hidden="true">
+          <DocumentEditor initialContent="" onChange={() => {}} onReady={setEditorApi} />
+        </div>
       )}
 
       {/* 错误条（单区块失败不阻塞其他） */}
@@ -313,7 +312,7 @@ export default function ReferenceList() {
           </div>
         ) : visible === null || visible.length === 0 ? (
           /* 空态（R2）：无条目分支去重——纯文字提示，不显示书籍图标与新建按钮
-             （顶部标题行已有两个新建入口）；筛选/搜索无匹配分支保留「清空筛选」操作 */
+             （顶部标题行已有新建入口）；筛选/搜索无匹配分支保留「清空筛选」操作 */
           <EmptyState
             padding="sm"
             action={
@@ -379,23 +378,16 @@ interface RefRowProps {
   onRelationCreated: () => void;
 }
 
-/** 列表行（卡 11.1 + 11.4 + R3 表格平铺）：单行 tr，四列 [标题（点击行内编辑）、分类、标签、来源] + 删除；
- * 来源列按 kind 渲染（11.4）：file → 相对路径文本、link → URL 可点击（存量无 kind 条目 → source 兼容）；
- * 双击行 = 进详情页；右键菜单 [注入会话上下文、建立关联] 复用 */
+/** 列表行（卡 11.1 + R3 表格平铺）：单行 tr，四列 [标题（点击行内编辑）、分类、标签、来源] + 删除；
+ * 来源列只认 `url`（有 url → 可点击链接，否则不显示来源）；双击行 = 进详情页；
+ * 右键菜单 [注入会话上下文、建立关联] 复用 */
 function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowProps) {
   const type = (item.summary?.type as string | undefined) ?? "material";
   const tags = Array.isArray(item.summary?.tags)
     ? (item.summary?.tags as string[]).filter((t): t is string => typeof t === "string" && t !== "")
     : [];
-  // 来源：file → references/<file_name> 相对路径（文本）；link → url（可点击）；存量 → source 文本兼容
-  const isFile = item.summary?.kind === "file";
-  const source = isFile
-    ? `references/${typeof item.summary?.file_name === "string" ? (item.summary.file_name as string) : ""}`
-    : typeof item.summary?.url === "string"
-      ? (item.summary.url as string)
-      : typeof item.summary?.source === "string"
-        ? (item.summary.source as string)
-        : "";
+  // 来源列：只认 url（文件机制遗留的 kind / file_name / source 不再读）
+  const source = referenceSource(item.summary);
 
   // 标题行内编辑（点击标题进入，Enter 提交 / Esc 取消 / 失焦保存；对齐时间轴 TimelineEvent 模式）
   const [editing, setEditing] = useState(false);
@@ -497,10 +489,10 @@ function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowP
           </div>
         )}
       </td>
-      {/* 来源列：file → 相对路径文本；link → URL 可点击 */}
+      {/* 来源列：有 url 显示链接（http(s) 可点击），否则不显示来源 */}
       <td className="max-w-44 px-3 py-2">
         {source !== "" &&
-          (!isFile && /^https?:\/\//.test(source) ? (
+          (/^https?:\/\//.test(source) ? (
             <a
               href={source}
               target="_blank"
@@ -520,7 +512,8 @@ function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowP
       {/* 操作列：删除（H3 直接平铺不收 ⋯） */}
       <td className="w-10 px-2 py-2 text-right">
         <Button
-          color="default" variant="text"
+          color="default"
+          variant="text"
           danger
           onClick={() => onDelete(item)}
           aria-label="删除"

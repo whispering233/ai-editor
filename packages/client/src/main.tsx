@@ -108,11 +108,17 @@ function renderPage(route: Route): ReactNode {
       // （路由；key = id 变化强制卸载重挂——详情页表单按事件重置）
       return second !== undefined ? <TimelineDetail key={second} id={second} /> : <Timeline />;
     case "references":
-      // 参考资料（卡 11.4）：
-      // #/references → 列表；#/references/:id → 详情（编辑态）；
-      // #/references/new/md → 新建 md 文档草稿态；#/references/new/link → 新建外源链接草稿态
-      if (second === "new" && third === "md") return <ReferenceDetail draft="md" />;
-      if (second === "new" && third === "link") return <ReferenceDetail draft="link" />;
+      // 参考资料（卡 12.8）：
+      // #/references → 列表；#/references/:id → 详情（编辑态 = 编辑器）；
+      // #/references/new → **单一新建入口**（名称 + 可选 URL + 分类 + 标签 + 正文块编辑器）；
+      // 旧草稿双路由 #/references/new/md、#/references/new/link（及更深段）重定向到新入口
+      if (second === "new") {
+        return third === undefined ? (
+          <ReferenceDetail draft />
+        ) : (
+          <RedirectTo to="/references/new" />
+        );
+      }
       return second !== undefined ? (
         <ReferenceDetail key={second} id={second} />
       ) : (
