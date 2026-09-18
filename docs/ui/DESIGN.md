@@ -379,8 +379,8 @@ components:
 | 字体 | **无衬线** / 宋体 / 楷体 / 仿宋 / 等宽 | `--writing-font` | 全**系统字体栈**（不下载 web 字体）；宋/楷/仿宋按 `Songti SC`/`SimSun`、`Kaiti SC`/`KaiTi`、`FangSong` 顺序回落，最终落 `serif`；等宽落 `ui-monospace`/`Consolas`/`monospace`。**落点 = 正文元素**（`.bn-container .bn-editor`，不走 `--bn-font-family`——那是 chrome 的字体，见上节硬约束⑤）；代码块钉住等宽（库未给 `codeBlock` 设等宽，不钉会被写作面字体带着变衬线） |
 | 字号 | 14 / **16** / 18 / 20 | `--writing-font-size` | 库默认正文基准是 16px；标题级别在库内是 em 基准（`3em`…`.8em`）⇒ 改基准字号标题同比缩放，安全 |
 | 行高 | **1.5** / 1.8 / 2.0 | `--writing-line-height` | 覆盖库的 `.bn-block-outer{line-height}`（库默认 1.5） |
-| 纸张 | **默认（`{colors.canvas}`）** / 米黄 `{colors.paper-cream}` / 暖灰 `{colors.paper-warm}` | `--paper-bg` | 深色态对应值（`#221f19` / `#262522`）同 `--tag-*` 口径写在 `index.css`；实测浅色态字色对比 11.47:1 / 10.77:1，深色态 11.10:1 / 10.54:1（默认底 12.26:1 / 11.10:1） |
-| 纹理 | **无** / 横线 / 网格 | `data-writing-paper` | 线色 = `{colors.hairline}`（经 `--ant-color-border-secondary`，不另造灰）；实测线 vs 纸底 1.13–1.23:1，**纯装饰**、间距固定、**不与文本行对齐**（有意：标题/列表/图片高度各异，相位必然错开；真对齐须锁死行高与段距、禁用标题类块，得不偿失） |
+| 纸张 | **默认（`{colors.canvas}`）** / 米黄 `{colors.paper-cream}` / 暖灰 `{colors.paper-warm}` | `--paper-bg` | 深色态对应值（`#221f19` / `#262522`）同 `--tag-*` 口径写在 `index.css`；实测浅色态字色对比 11.47:1 / 10.77:1，深色态 11.10:1 / 10.54:1（默认底 12.26:1 / 11.10:1）。**默认档不给值**（`var(--paper-bg, …)` 兜回 `{colors.canvas}`）。**落点要写两处**：`.bn-container` **与** `.bn-container .bn-editor`——库给 `.bn-editor` 自己声明了不透明的 `background-color: var(--bn-colors-editor-background)`，只写容器会被它盖住（硬约束⑤ 的又一实例）；工具条底用**同一表达式**（DESIGN 的「纸上一色」） |
+| 纹理 | **无** / 横线 / 网格 | `data-writing-paper` | 画在正文底元素上（`.bn-container .bn-editor`，理由同上）；间距 = 常量 `--writing-paper-step`（**唯一定义处 = `blocknote.css`**）；线色 = `{colors.hairline}`（经 `--ant-color-border-secondary`，不另造灰）；实测线 vs 纸底 1.13–1.23:1，**纯装饰**、间距固定、**不与文本行对齐**（有意：标题/列表/图片高度各异，相位必然错开；真对齐须锁死行高与段距、禁用标题类块，得不偿失） |
 | 段首缩进 | **关** / 开 | `data-writing-indent` | 开 = 段落首行 `text-indent: 2em`（中文小说惯例）；只作用于段落块，标题/列表/引用不受影响 |
 
 **为什么纸张不算「大面彩色」**：三档中两档是低饱和「纸感」中性色（明度差 ≤1.5:1），默认仍是 `{colors.canvas}`；且它作用面只有书写区，不参与列表/表单/徽标。（§Don't「不把彩色用于大面背景」的登记例外。）
