@@ -96,9 +96,9 @@ describe("迁移 007（character 旧 abilities → ability_panel，2026-09）", 
   it("标签迁为「能力」分组叶子（value 留空）+ 旧键移除 + updated_at 刷新 + 版本推进到 SCHEMA_VERSION", () => {
     const { applied } = runMigrations(db, { migrations: MIGRATIONS, dbPath });
 
-    expect(applied.map((m) => m.version)).toEqual([7]);
+    expect(applied.map((m) => m.version)).toEqual([7, 8]);
     expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
-    expect(SCHEMA_VERSION).toBe(7);
+    expect(SCHEMA_VERSION).toBe(8);
 
     expect(dataOf("char-a")).toEqual({
       role: "主角",

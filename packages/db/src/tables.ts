@@ -13,7 +13,7 @@
 // - CHECK 约束与部分索引两处都声明（drizzle 侧供对齐核对；真实建表以 DDL 常量为准）。
 
 import { sql } from "drizzle-orm";
-import { check, index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { check, index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 /** entities：实体表（人物/设定/地点/伏笔/时间轴事件/时间标签点/参考资料） */
 export const entities = sqliteTable(
@@ -81,7 +81,25 @@ export const deltaRecords = sqliteTable(
 /** chat_messages：已删除（迁移 006：对话历史出库为 `sessions/*.jsonl`，表已 DROP） */
 
 /**
- * 三张业务表 + 索引的建表 SQL（幂等：CREATE TABLE/INDEX IF NOT EXISTS）——建表执行的事实来源。
+ * document_records：块文档表（章正文 / 参考资料正文，2026-10）——块数组 JSON 为真相 +
+ * 服务端派生的纯文本投影；owner 无外键（章在 outline.json、参考资料在 entities，存在性由写入侧守卫），
+ * 无 deleted_at（生命周期跟随 owner：软删即不可见、purge 时调用方删行）。
+ */
+export const documentRecords = sqliteTable(
+  "document_records",
+  {
+    owner_kind: text("owner_kind").notNull(), // 'chapter' | 'reference'（枚举值少且稳定，不加 CHECK）
+    owner_id: text("owner_id").notNull(), // 'ch-*'（章节点 id）| 'ref-*'（参考资料实体 id）
+    content: text("content").notNull(), // 块数组 JSON 字符串（真相；服务端读路径不解析）
+    content_text: text("content_text").notNull(), // 服务端派生的轻量 md 投影（AI 读取/摘要/字数）
+    created_at: text("created_at").notNull(),
+    updated_at: text("updated_at").notNull(), // 版本戳：多标签页防覆盖（base_updated_at 比对）
+  },
+  (t) => [primaryKey({ columns: [t.owner_kind, t.owner_id] })],
+);
+
+/**
+ * 四张业务表 + 索引的建表 SQL（幂等：CREATE TABLE/INDEX IF NOT EXISTS）——建表执行的事实来源。
  * 与上方 sqliteTable 定义必须同步（schema.test.ts 对齐断言覆盖）。
  */
 export const CREATE_TABLES_SQL = `
@@ -130,5 +148,16 @@ CREATE TABLE IF NOT EXISTS delta_records (
   updated_at  TEXT NOT NULL,               -- ISO 8601，应用层写入（提案快照比对）
   deleted_at  TEXT              -- 级联软删标记：仅实体/节点级联删除时写入。
                                 -- 可见性联动触发节点与目标实体：任一端软删即不可见
+);
+
+-- document_records：块文档表（章正文 / 参考资料正文，2026-10）
+CREATE TABLE IF NOT EXISTS document_records (
+  owner_kind   TEXT NOT NULL,   -- 'chapter' | 'reference'（枚举值少且稳定，不加 CHECK）
+  owner_id     TEXT NOT NULL,   -- 'ch-*'（章节点 id）| 'ref-*'（参考资料实体 id）
+  content      TEXT NOT NULL,   -- 块数组 JSON 字符串（真相；服务端读路径不解析）
+  content_text TEXT NOT NULL,   -- 服务端派生的轻量 md 投影（AI 读取/列表摘要/搜索/字数）
+  created_at   TEXT NOT NULL,   -- ISO 8601，应用层写入
+  updated_at   TEXT NOT NULL,   -- ISO 8601，应用层写入（版本戳：多标签页防覆盖）
+  PRIMARY KEY (owner_kind, owner_id)   -- 一 owner 一行（upsert 覆盖，行随 owner 生命周期）
 );
 `;

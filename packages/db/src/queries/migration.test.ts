@@ -9,7 +9,7 @@ import type { OutlineFileTree } from "@whispering233/ai-editor-shared";
 import { closeDatabase, openDatabase, type Db } from "../connection";
 import { getUserVersion, SCHEMA_VERSION, setUserVersion } from "../schema";
 import { OUTLINE_FILE_NAME, readOutlineFile, writeOutlineFile } from "../storage/outline";
-import { DATA_DB_FILE_NAME, ensureSchemaCompatible, SchemaVersionError } from "./migration";
+import { DATA_DB_FILE_NAME, ensureSchemaCompatible, runMigrations, SchemaVersionError } from "./migration";
 
 let dir: string;
 let dbPath: string;
@@ -45,6 +45,18 @@ function insertOldEntity(d: Db, id: string): void {
 /** 查 entities 行数 */
 function countEntities(d: Db): number {
   return (d.prepare("SELECT COUNT(*) AS c FROM entities").get() as { c: number }).c;
+}
+
+/** 查 document_records 行数（迁移 008 建表验证） */
+function countDocuments(d: Db): number {
+  return (d.prepare("SELECT COUNT(*) AS c FROM document_records").get() as { c: number }).c;
+}
+
+/** 直插一行块文档（不走 helper：验证迁移建出的表列齐全、可写可读） */
+function insertDocument(d: Db, ownerId: string): void {
+  d.prepare(
+    "INSERT INTO document_records (owner_kind, owner_id, content, content_text, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+  ).run("chapter", ownerId, "[]", "", "2026-10-01T00:00:00Z", "2026-10-01T00:00:00Z");
 }
 
 beforeEach(() => {
@@ -265,6 +277,34 @@ describe("ensureSchemaCompatible 全新空库（缺 data.db）", () => {
   });
 });
 
+describe("迁移 008（v7 → v8：document_records 块文档表）", () => {
+  it("v7 库前向迁移：表已建且可写可读、既有表数据完好、重复执行幂等", () => {
+ // 造 v7 库：当前 DDL 库回退掉 008 新增的表 + user_version=7（008 为纯 DDL，结构差异即新表）
+    db.exec("DROP TABLE document_records");
+    insertOldEntity(db, "char-1");
+    setUserVersion(db, 7);
+
+    const { applied } = runMigrations(db, { dbPath });
+    expect(applied.map((m) => m.version)).toEqual([8]);
+    expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
+    expect(getUserVersion(db)).toBe(8);
+ // 新表已建且可用（直插 + 计数，验证列齐全）
+    insertDocument(db, "ch-1");
+    expect(countDocuments(db)).toBe(1);
+ // 既有表数据完好（纯 DDL 不重建、不搬移）
+    expect(countEntities(db)).toBe(1);
+ // 幂等（版本已对齐 → 无 pending、不再快照）
+    const again = runMigrations(db, { dbPath });
+    expect(again.applied).toEqual([]);
+    expect(countDocuments(db)).toBe(1);
+ // 手工回退版本重跑（异常重试路径）→ CREATE TABLE IF NOT EXISTS 不报错、旧行不丢
+    setUserVersion(db, 7);
+    expect(() => runMigrations(db, { dbPath })).not.toThrow();
+    expect(countDocuments(db)).toBe(1);
+    expect(countEntities(db)).toBe(1);
+  });
+});
+
 // ============ ensureSchemaCompatible 旧版本迁移路径（注入） ============
 
 describe("ensureSchemaCompatible 旧版本有迁移路径", () => {
@@ -277,6 +317,7 @@ describe("ensureSchemaCompatible 旧版本有迁移路径", () => {
       { version: 5, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN fifth TEXT") },
       { version: 6, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN sixth TEXT") },
       { version: 7, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN seventh TEXT") },
+      { version: 8, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN eighth TEXT") },
     ];
     insertOldEntity(db, "char-1");
     writeOutlineFile(dir, oldTree());
@@ -332,6 +373,7 @@ describe("ensureSchemaCompatible 旧版本有迁移路径", () => {
       { version: 5, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN fifth TEXT") },
       { version: 6, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN sixth TEXT") },
       { version: 7, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN seventh TEXT") },
+      { version: 8, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN eighth TEXT") },
     ];
     insertOldEntity(db, "char-1");
 

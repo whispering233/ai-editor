@@ -16,12 +16,13 @@
 // - 失败 → 该迁移回滚 + 版本停在前一迁移后，下次 open 重试
 // - 无迁移路径的旧版本（如 v0 且无 0→1 条目）保持删库重建兜底
 //
-// **当前状态**：SCHEMA_VERSION = 7；真实迁移 002（v1→v2：entities 表 CHECK 扩为 5 种 +
+// **当前状态**：SCHEMA_VERSION = 8；真实迁移 002（v1→v2：entities 表 CHECK 扩为 5 种 +
 // sort_order 列，时间轴）、003（v2→v3：entities CHECK 扩 6 种含 timepoint +
 // event.data.time_label 迁移为 timepoint 实体 + occurs_at 挂载关系，G2）、
 // 004（v3→v4：setting 旧 rules 分类值 → data.tags，仅 data JSON）、005（v4→v5：CHECK 扩
 // 'reference'）、006（v5→v6：对话历史出库——chat_messages 导出为 sessions/<id>.jsonl 后 DROP 表）、
-// 007（v6→v7：character 旧 abilities[] → ability_panel，仅 data JSON）。
+// 007（v6→v7：character 旧 abilities[] → ability_panel，仅 data JSON）、
+// 008（v7→v8：新增 document_records 块文档表，纯 DDL）。
 // v0 库无 0→1 迁移条目，仍走删库重建兜底。
 
 import type { Db } from "../connection.js";
@@ -31,6 +32,7 @@ import migration004 from "./004_setting_tags.js";
 import migration005 from "./005_reference.js";
 import migration006 from "./006_sessions_jsonl.js";
 import migration007 from "./007_character_ability_panel.js";
+import migration008 from "./008_document_records.js";
 
 /** 迁移运行上下文（写文件类迁移需要项目目录：006 的会话 JSONL 导出） */
 export interface MigrationContext {
@@ -47,7 +49,7 @@ export interface Migration {
 
 /** 全量迁移集（按 version 升序：002 时间轴事件、003 时间标签点实体化（G2）、
  * 004 设定分类字段 tags（K2 修订）、005 参考资料 reference、006 对话历史出库、
- * 007 角色能力面板（旧 abilities 标签迁为 ability_panel）） */
+ * 007 角色能力面板（旧 abilities 标签迁为 ability_panel）、008 块文档表（document_records）） */
 export const MIGRATIONS: readonly Migration[] = [
   migration002,
   migration003,
@@ -55,4 +57,5 @@ export const MIGRATIONS: readonly Migration[] = [
   migration005,
   migration006,
   migration007,
+  migration008,
 ];

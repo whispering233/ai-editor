@@ -159,7 +159,10 @@ const T0 = "2026-08-01T10:00:00Z";
 /** 可迁移的旧版本号（当前版本 - 1）——模拟「上一版程序写的库」；
  * 注：本仓迁移存在数据型（如 007）与 DDL 型两类，此处用「当前 DDL 库 + 旧 user_version」
  * 模拟旧库（数据型迁移的忠实仿真；DDL 型迁移另有 routes/project.test.ts 的手建旧表用例） */
-const PREV_VERSION = SCHEMA_VERSION - 1;
+/** 可迁移的旧版本号——**最后一个「数据型」迁移（007 abilities→ability_panel）的前一版本 v6**；
+ * 008 起为纯 DDL 迁移（document_records），数据型仿真的起点固定在 v6，否则 v7 库只剩 008 可跑、
+ * 旧 abilities 不会被迁移（DDL 型迁移另有 routes/project.test.ts 的手建旧表用例） */
+const PREV_VERSION = 6;
 
 /** 造旧版本项目：project.json + outline.json + data.db（user_version=version，含一条旧 abilities 角色行） */
 function seedLegacyProject(dir: string, version: number): void {

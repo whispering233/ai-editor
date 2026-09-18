@@ -20,8 +20,10 @@ import { CREATE_TABLES_SQL } from "./tables.js";
  * （migrations/006_sessions_jsonl.ts；会话从此不入库）。
  * v6 → v7（角色能力面板，2026-09）：**无 DDL**——character 旧 `abilities[]` 标签
  * 迁为 `ability_panel` 顶层分组「能力」下的叶子（migrations/007_character_ability_panel.ts）。
+ * v7 → v8（块文档，2026-10）：新增 `document_records` 表（章正文 / 参考资料正文，
+ * 纯 DDL 无数据搬移，migrations/008_document_records.ts）。
  */
-export const SCHEMA_VERSION = 7; // +角色能力面板（007_character_ability_panel.ts 仅 data JSON 迁移）
+export const SCHEMA_VERSION = 8; // +块文档表 document_records（008_document_records.ts 纯 DDL）
 
 /**
  * 建表：执行全部 DDL（CREATE TABLE/INDEX IF NOT EXISTS，定义于 tables.ts），幂等，可重复调用。

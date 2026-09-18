@@ -46,12 +46,12 @@ describe("connection.ts openDatabase", () => {
     expect(db.pragma("synchronous", { simple: true })).toBe(2);
   });
 
-  it("打开后自动建表（3 张业务表已存在；对话历史已出库为 sessions/*.jsonl）", () => {
+  it("打开后自动建表（4 张业务表已存在；对话历史已出库为 sessions/*.jsonl）", () => {
     const tables = db
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
       .all() as Array<{ name: string }>;
     expect(tables.map((t) => t.name).sort()).toEqual(
-      ["delta_records", "entities", "relation_records"].sort(),
+      ["delta_records", "document_records", "entities", "relation_records"].sort(),
     );
   });
 });

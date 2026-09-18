@@ -147,10 +147,11 @@ function initProjectDir(dir: string, config: ProjectFileConfig, outline: Outline
   closeDatabase(db);
 }
 
-/** 造可迁移的旧版本项目（user_version = SCHEMA_VERSION - 1；含旧 abilities 角色行）——供「开机路径 vs 显式 open」一致性用例 */
+/** 造可迁移的旧版本项目（user_version = 6，最后一个数据型迁移 007 的前一版本；含旧 abilities 角色行）
+ * ——供「开机路径 vs 显式 open」一致性用例（008 起为纯 DDL，不再改动数据） */
 function seedMigratableProject(dir: string): void {
   mkdirSync(dir, { recursive: true });
-  const legacy = SCHEMA_VERSION - 1;
+  const legacy = 6;
   writeProjectFile(dir, { ...makeConfig("proj-mig", "旧库"), schema_version: legacy });
   writeOutlineFile(dir, { id: "root", type: "root", schema_version: legacy, children: [] });
   const db = openDatabase(join(dir, "data.db"));

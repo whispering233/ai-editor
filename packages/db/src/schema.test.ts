@@ -8,7 +8,7 @@ import { getTableConfig, type SQLiteTable } from "drizzle-orm/sqlite-core";
 
 import { openDatabase, closeDatabase, type Db } from "./connection.js";
 import { createTables, getUserVersion, SCHEMA_VERSION, setUserVersion } from "./schema.js";
-import { CREATE_TABLES_SQL, deltaRecords, entities, relationRecords } from "./tables.js";
+import { CREATE_TABLES_SQL, deltaRecords, documentRecords, entities, relationRecords } from "./tables.js";
 
 let dir: string;
 let dbPath: string;
@@ -55,6 +55,7 @@ describe("tables.ts 双份声明对齐", () => {
     entities,
     relation_records: relationRecords,
     delta_records: deltaRecords,
+    document_records: documentRecords,
   };
 
   it("DDL 常量与 sqliteTable 定义列级对齐（列名/类型/notNull/主键）", () => {
@@ -91,7 +92,7 @@ describe("tables.ts 双份声明对齐", () => {
  * 从 DDL 常量解析每张表的列声明（顶层两空格缩进行）：
  * ` <列名> <类型> <其余约束...>`，列名可能带双引号（"order" 关键字列）。
  * 返回 表名 → 列名 → { type: 'text'|'integer', notNull, primaryKey }。
- * 注释行（开头）与空行忽略。
+ * 注释行（开头）、空行与表级约束行（`PRIMARY KEY (...)`——复合主键由行为测试锁定）忽略。
  */
 function parseDdlColumns(
   ddl: string,
@@ -102,6 +103,7 @@ function parseDdlColumns(
     for (const line of m[2].split("\n")) {
       const trimmed = line.trim();
       if (trimmed === "" || trimmed.startsWith("--")) continue;
+      if (/^(PRIMARY KEY|UNIQUE|CHECK|FOREIGN KEY|CONSTRAINT)\b/i.test(trimmed)) continue; // 表级约束非列声明
       const colMatch = line.match(/^\s{2}(?:"([^"]+)"|(\w+))\s+(\w+)(.*)$/);
       if (!colMatch) continue;
       const colName = colMatch[1] ?? colMatch[2];
@@ -122,8 +124,8 @@ function parseDdlColumns(
 }
 
 describe("schema.ts 建表", () => {
-  it("打开后自动创建 3 张业务表（对话历史已出库为 sessions/*.jsonl）", () => {
-    expect(listTables(db).sort()).toEqual(["delta_records", "entities", "relation_records"].sort());
+  it("打开后自动创建 4 张业务表（对话历史已出库为 sessions/*.jsonl）", () => {
+    expect(listTables(db).sort()).toEqual(["delta_records", "document_records", "entities", "relation_records"].sort());
   });
 
   it("relation_records 有 3 个部分索引（WHERE deleted_at IS NULL）", () => {
@@ -138,7 +140,7 @@ describe("schema.ts 建表", () => {
 
   it("createTables 幂等：重复执行不报错、不重复建表", () => {
     expect(() => createTables(db)).not.toThrow();
-    expect(listTables(db)).toHaveLength(3);
+    expect(listTables(db)).toHaveLength(4);
   });
 
   it("entities.type CHECK 约束生效：非法 type 插入报错，合法 type 可插入（含 event、timepoint G2）", () => {
@@ -156,12 +158,12 @@ describe("schema.ts 建表", () => {
     }
   });
 
-  it("user_version 读写往返（SCHEMA_VERSION = 7，v1→v7 走增量迁移 002→003→004→005→006→007）", () => {
+  it("user_version 读写往返（SCHEMA_VERSION = 8，v1→v8 走增量迁移 002→003→004→005→006→007→008）", () => {
  // 新库默认 0
     expect(getUserVersion(db)).toBe(0);
     setUserVersion(db, SCHEMA_VERSION);
     expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
-    expect(SCHEMA_VERSION).toBe(7);
+    expect(SCHEMA_VERSION).toBe(8);
   });
 
   it("entities 有 sort_order 列（时间轴事件全局线性序，仅 event 使用，其余类型 NULL）", () => {
