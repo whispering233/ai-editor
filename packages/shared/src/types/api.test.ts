@@ -72,6 +72,7 @@ describe("ErrorCode 完整性", () => {
     expect(ERROR_CODES).toContain("SESSION_BUSY");
     expect(ERROR_CODES).toContain("CHAT_BUSY");
     expect(ERROR_CODES).toContain("THINKING_NOT_FOUND");
+    expect(ERROR_CODES).toContain("DOCUMENT_STALE"); // 块文档版本戳冲突（仅携带 base_updated_at 时校验）
   });
 
   it("errorCodeSchema 拒绝未知错误码；apiErrorSchema 形状正确", () => {

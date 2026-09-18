@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { closeDatabase, openDatabase, type Db } from "../connection.js";
-import { deleteDocumentsByOwner, getDocument, upsertDocument } from "./document.js";
+import { deleteDocumentsByOwner, getDocument, getDocumentTextLengths, upsertDocument } from "./document.js";
 
 const T1 = "2026-10-01T10:00:00Z";
 const T2 = "2026-10-01T10:05:00Z";
@@ -108,5 +108,20 @@ describe("deleteDocumentsByOwner / 未知 owner", () => {
  // 幂等：再删一次为 0
     expect(deleteDocumentsByOwner(db, "chapter", "ch-1")).toBe(0);
     expect(countRows()).toBe(1);
+  });
+});
+
+describe("getDocumentTextLengths（大纲章 textLength 的批量来源）", () => {
+  it("一次查询多 owner：命中行给长度、无行不出现、跨 kind 不混入、空集返回空 Map", () => {
+    upsertDocument(db, { ownerKind: "chapter", ownerId: "ch-1", content: doc("一二三"), contentText: "一二三", now: T1 });
+    upsertDocument(db, { ownerKind: "chapter", ownerId: "ch-2", content: "[]", contentText: "", now: T1 });
+    upsertDocument(db, { ownerKind: "reference", ownerId: "ch-3", content: "[]", contentText: "不混入", now: T1 });
+
+    const lengths = getDocumentTextLengths(db, "chapter", ["ch-1", "ch-2", "ch-404"]);
+    expect([...lengths]).toEqual([
+      ["ch-1", 3], // JS 字符串长度口径（与端点 charCount 同源）
+      ["ch-2", 0],
+    ]); // ch-404 无行不出现；ch-3 是 reference 行，不混入
+    expect(getDocumentTextLengths(db, "chapter", []).size).toBe(0);
   });
 });

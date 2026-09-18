@@ -8,7 +8,7 @@
 // 生命周期：无 deleted_at——owner 软删时调用方不读（端点 404）、purge 时调用方删行，
 // 故本模块只提供按 owner 删行的入口（deleteDocumentsByOwner）。
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { Db } from "../connection.js";
 import { queryDb } from "../query-db.js";
 import { documentRecords } from "../tables.js";
@@ -98,4 +98,25 @@ export function deleteDocumentsByOwner(db: Db, ownerKind: DocumentOwnerKind, own
     .delete(documentRecords)
     .where(and(eq(documentRecords.owner_kind, ownerKind), eq(documentRecords.owner_id, ownerId)))
     .run().changes;
+}
+
+/**
+ * 批量取多个 owner 的 `content_text` 长度（供 `GET /outline?with_metadata=true` 的章 `metadata.textLength`）。
+ *
+ * - **一次查询**（IN 集合）——调用方勿逐 owner 调 `getDocument` 造成 N+1
+ * - **只取投影列**，不读 `content` 块 JSON 全文
+ * - 长度口径 = JS 字符串长度，与章正文端点 `charCount` 同源；无行的 owner 不出现在 Map（调用方按 0 处理）
+ */
+export function getDocumentTextLengths(
+  db: Db,
+  ownerKind: DocumentOwnerKind,
+  ownerIds: readonly string[],
+): Map<string, number> {
+  if (ownerIds.length === 0) return new Map();
+  const rows = queryDb(db)
+    .select({ ownerId: documentRecords.owner_id, contentText: documentRecords.content_text })
+    .from(documentRecords)
+    .where(and(eq(documentRecords.owner_kind, ownerKind), inArray(documentRecords.owner_id, [...ownerIds])))
+    .all();
+  return new Map(rows.map((row) => [row.ownerId, row.contentText.length]));
 }

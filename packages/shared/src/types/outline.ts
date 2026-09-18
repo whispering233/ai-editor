@@ -13,6 +13,8 @@ export interface OutlineNodeMetadata {
   charCount?: number;
  /** 此节点触发的 Delta 数 */
   deltaCount?: number;
+ /** 章节点正文字数（document_records.content_text 长度；无文档 = 0；仅章节点返回，见 docs/api/110-api-manuscript.md） */
+  textLength?: number;
 }
 
 /** 大纲节点公共字段（API 形态 camelCase） */

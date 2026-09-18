@@ -41,6 +41,7 @@ import {
 import { projectRoutes, setProjectRoot } from "./routes/project.js";
 import { readLastProject } from "./last-project.js";
 import { outlineRoutes } from "./routes/outline.js";
+import { manuscriptRoutes } from "./routes/manuscript.js"; // 章正文（块文档，卡 12.4）
 import { initCloudState } from "./cloud/state.js";
 import { cloudRoutes } from "./routes/cloud.js";
 import { namesRoutes } from "./routes/names.js"; // 批量名称解析（工具调用人类可读化）
@@ -233,6 +234,9 @@ export async function startServer(projectRoot: string, options: StartServerOptio
 
  // 大纲路由（S2.2）：整树/创建/更新/移动/软删/路径（严格三层）
   app.route("/api/v1/outline", outlineRoutes);
+
+ // 章正文路由（卡 12.4）：GET/PUT /api/v1/manuscript/:chapterNodeId（块文档进 data.db）
+  app.route("/api/v1/manuscript", manuscriptRoutes);
 
  // 名称解析路由：POST /api/v1/names/resolve 批量名称解析（工具调用展示人类可读化）
   app.route("/api/v1/names", namesRoutes);

@@ -50,6 +50,7 @@ export const ERROR_CODES = [
   "SESSION_BUSY", // 409 删除会话时该会话有在途 SSE 流（拒删）
   "CHAT_BUSY", // 409 当前项目已有在途 chat 流（单项目单流约束，docs/api/80-api-chat.md）
   "THINKING_NOT_FOUND", // 404 思维链全文端点：blockIndex 越界或该块非 thinking
+  "DOCUMENT_STALE", // 409 保存块文档（章正文 / 参考资料正文）时版本戳不一致（另一标签页/窗口已写入）；**仅当请求携带 base_updated_at 时校验**，省略 = 覆盖保存（拒绝隐式丢失他人写入）
  // ---- 废弃（保留兼容）----
   "DELTA_CONFLICT", // 已废弃（2026-08 修订：computeState 以 conflicts 字段替代 409）
  // ---- 命名（调试日志用）----
@@ -706,6 +707,7 @@ export const outlineNodeSchema: z.ZodTypeAny = z.lazy(() =>
         hookCount: z.number().int().optional(),
         charCount: z.number().int().optional(),
         deltaCount: z.number().int().optional(),
+        textLength: z.number().int().optional(), // 章节点正文字数（content_text 长度；无文档 = 0；仅章节点返回）
       })
       .optional(), // 仅 with_metadata=true 时返回
   }),
@@ -860,6 +862,37 @@ export const trashRestoreNodeResSchema = z.object({
 export const trashPurgeResSchema = z.object({
   purged: z.literal(true),
 });
+
+// ============ manuscript 端点（「章正文」） ============
+//
+// 载荷 = 块编辑器原生文档（块数组）的 **JSON 字符串**：真相存 data.db 的 document_records
+// （owner_kind='chapter'，owner_id = 章节点 id）；`content_text` 投影只由服务端派生（端点不接受客户端投影）。
+// 契约见 docs/api/110-api-manuscript.md；层级仅 chapter（卷/场景 → 400）。
+
+// GET /api/v1/manuscript/:chapterNodeId（从未写过 → content ""/updatedAt null/charCount 0）
+export const manuscriptGetResSchema = z.object({
+  chapterNodeId: z.string(),
+  content: z.string(), // 块数组 JSON 字符串；"" = 从未写过（客户端按空文档处理）
+  updatedAt: z.string().nullable(), // 版本戳（ISO 8601）；从未写过 = null
+  charCount: z.number().int(), // 正文字数（content_text 长度）
+});
+
+// PUT /api/v1/manuscript/:chapterNodeId（整篇覆盖保存）
+export const manuscriptPutReqSchema = z
+  .object({
+    content: z.string(), // 块数组 JSON 字符串（服务端浅校验：JSON.parse 后必须是块数组，否则 400）
+    base_updated_at: z.string().optional(), // 保存前读到的版本戳；提供时不一致 → 409 DOCUMENT_STALE；省略 = 不做冲突检查（覆盖保存/导入路径显式使用）
+  })
+  .strict();
+
+export const manuscriptPutResSchema = z.object({
+  updated: z.literal(true),
+  updatedAt: z.string(), // 本次写入后的新版本戳
+  charCount: z.number().int(), // 重算后的字数
+});
+export type ManuscriptGetRes = z.infer<typeof manuscriptGetResSchema>;
+export type ManuscriptPutReq = z.infer<typeof manuscriptPutReqSchema>;
+export type ManuscriptPutRes = z.infer<typeof manuscriptPutResSchema>;
 
 // ============ chat 端点（「AI 对话」，持久化） ============
 

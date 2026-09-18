@@ -11,6 +11,7 @@
 import { Hono } from "hono";
 import type { Db } from "@whispering233/ai-editor-db";
 import { findOutlineNode, readOutlineFile } from "@whispering233/ai-editor-db";
+import { getDocumentTextLengths } from "@whispering233/ai-editor-db";
 import { getOutlinePathIds } from "@whispering233/ai-editor-db";
 import {
   createOutlineNode,
@@ -132,6 +133,8 @@ outlineRoutes.get("/", (c) => {
  * - hookCount：该节点出发的伏笔管理关系（plants/advances/resolves，source=outline_node → hook）
  * - charCount：appears_in 指向该节点的关系数（示例：char → 大纲节点）
  * - deltaCount：该节点触发的 Delta 数（delta_records.node_id）
+ * - textLength（仅章）：正文字数（document_records.content_text 长度；无文档 = 0——**不读块 JSON 全文**，
+ *   一次批量取长度勿 N+1）
  * 均为运行时计算，不写回数据（_health 同款口径）。
  */
 function attachMetadata(tree: OutlineTree, db: Db): void {
@@ -149,11 +152,20 @@ function attachMetadata(tree: OutlineTree, db: Db): void {
   const deltaStmt = db.prepare(
     `SELECT COUNT(*) AS c FROM delta_records WHERE node_id = ? AND deleted_at IS NULL`,
   );
+ // 先收全部章 id（含存量直挂章），一次批量取正文长度
+  const chapterIds: string[] = [];
+  const collectChapters = (node: OutlineNode): void => {
+    if (node.type === "chapter") chapterIds.push(node.id);
+    for (const child of (node as { children?: OutlineNode[] }).children ?? []) collectChapters(child);
+  };
+  for (const vol of tree.children) collectChapters(vol);
+  const textLengths = getDocumentTextLengths(db, "chapter", chapterIds);
   const visit = (node: OutlineNode): void => {
     const metadata: NonNullable<OutlineNode["metadata"]> = {};
     metadata.hookCount = (hookStmt.get(node.id, ...HOOK_RELATION_TYPES) as { c: number }).c;
     metadata.charCount = (charStmt.get(node.id) as { c: number }).c;
     metadata.deltaCount = (deltaStmt.get(node.id) as { c: number }).c;
+    if (node.type === "chapter") metadata.textLength = textLengths.get(node.id) ?? 0;
     node.metadata = metadata;
     for (const child of (node as { children?: OutlineNode[] }).children ?? []) visit(child);
   };

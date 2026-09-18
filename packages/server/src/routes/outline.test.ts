@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
-import { SCHEMA_VERSION, readOutlineFile, writeOutlineFile } from "@whispering233/ai-editor-db";
+import { SCHEMA_VERSION, readOutlineFile, upsertDocument, writeOutlineFile } from "@whispering233/ai-editor-db";
 import { errorHandler } from "../middleware/error.js";
 import {
   closeProject,
@@ -236,6 +236,25 @@ describe("GET /outline 整树", () => {
  // 默认不带 metadata
     const res2 = await app.request("/api/v1/outline", { headers: HOST_HEADERS });
     expect((await res2.json()).data.children[0].metadata).toBeUndefined();
+  });
+
+  it("with_metadata=true：章 textLength = 正文投影长度（无文档 = 0；仅章节点有该字段）", async () => {
+    const app = buildApp();
+    const { vol, ch } = await seedTree(app);
+    await app.request("/api/v1/outline", {
+      method: "POST", headers: HOST_HEADERS, body: JSON.stringify({ type: "chapter", title: "第二章", parent_id: vol }),
+    }); // 第二个章（无正文 → textLength 0）
+ // 只给第一章写正文（只读 content_text 投影，不解析块 JSON）
+    upsertDocument(getCurrentProject()!.db, {
+      ownerKind: "chapter", ownerId: ch, content: "[]", contentText: "正文两字", now: T0,
+    });
+
+    const body = (await (await app.request("/api/v1/outline?with_metadata=true", { headers: HOST_HEADERS })).json()).data;
+    const volNode = body.children[0];
+    expect(volNode.children[0].metadata.textLength).toBe("正文两字".length);
+    expect(volNode.children[1].metadata.textLength).toBe(0); // 无文档 = 0
+    expect(volNode.metadata.textLength).toBeUndefined(); // 卷无正文字段
+    expect(volNode.children[0].children[0].metadata.textLength).toBeUndefined(); // 场景无正文字段
   });
 });
 

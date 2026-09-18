@@ -6,7 +6,7 @@
 // restore 祖先链校验（大纲侧）：存在软删祖先 → 409 OUTLINE_ANCESTOR_DELETED。
 // purge 语义拦截（两侧同构）：未软删对象拒绝 purge——仅用于回收站清理。
 import { Hono } from "hono";
-import { cascadePurge, cascadeRestore, getOutlinePathIds, readOutlineFile } from "@whispering233/ai-editor-db";
+import { cascadePurge, cascadeRestore, deleteDocumentsByOwner, getOutlinePathIds, readOutlineFile } from "@whispering233/ai-editor-db";
 import { listDeletedEntities, listDeletedNodes, purgeEntity, purgeOutlineNode, restoreEntity, restoreOutlineNode } from "@whispering233/ai-editor-db";
 import type { OutlineFileNode, OutlineFileTree } from "@whispering233/ai-editor-shared";
 import { nowIso, updateEntity } from "@whispering233/ai-editor-db";
@@ -79,6 +79,11 @@ trashRoutes.delete("/outline/:nodeId", (c) => {
   }
  // 1. DB 物理清除关联关系与 Delta
   cascadePurge(project.db, subtreeIds);
+ // 1b. 正文行连带物理删（卡 12.4）：仅章可写正文（写入侧守卫）——卷/场景 id 命中 0 行，幂等；
+ // 软删章的行在软删期间保留（端点 404），此处为不可恢复的物理删
+  for (const id of subtreeIds) {
+    deleteDocumentsByOwner(project.db, "chapter", id);
+  }
  // 2. JSON 原子写（移除整棵子树；物理删除的极端崩溃窗口：DB 已清、JSON 未清，
  // 不在 S4.2 一致性校验范围——其只兜软删联动，同步操作中途
  // 崩溃概率极低，注释明示）
