@@ -87,6 +87,16 @@ export function formatTextLength(length: number): string | null {
 }
 
 /**
+ * 保存时刻文案（卡 13.6）：本地时区 24 小时制 `HH:MM`（两位补零）——只表示**这一次保存完成**的
+ * 本地时刻，不显示日期（跨天也只给时刻）；页面不持久化它（重新加载 / 换章后无旧时间）。
+ */
+export function formatSavedAt(date: Date): string {
+  const hh = String(date.getHours()).padStart(2, "0");
+  const mm = String(date.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
+/**
  * 可见浮层的选择器（专注模式的 `Esc` 开层守卫，卡 13.4）：antd 三类根
  * （`Popover` / `Dropdown` / `Modal`·自绘 `Dialog`）+ 块编辑器自带的两类 ariakit 浮层
  * （写作设置下拉 / 斜杠菜单等）。关闭后元素通常仍留在 DOM（只是 `display:none`）

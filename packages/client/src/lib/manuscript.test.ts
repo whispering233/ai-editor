@@ -1,5 +1,5 @@
 // 章正文页可测逻辑（卡 12.5）：自动保存调度（假定时器）、相邻章推导、字数文案、错误码分流。
-// 卡 13.4：专注模式 Esc 的开层守卫（hasVisibleOverlay）。
+// 卡 13.4：专注模式 Esc 的开层守卫（hasVisibleOverlay）。卡 13.6：保存时刻文案（formatSavedAt）。
 // 页面组件（含 BlockNote 编辑器）不参与单测——仓内无 jsdom，BlockNote 内部不测（tasks.md 卡 12.5 口径）。
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OutlineTree } from "@whispering233/ai-editor-shared";
@@ -7,6 +7,7 @@ import {
   AUTOSAVE_DELAY_MS,
   chapterNeighbors,
   createAutosave,
+  formatSavedAt,
   formatTextLength,
   hasVisibleOverlay,
   manuscriptErrorAction,
@@ -118,6 +119,23 @@ describe("formatTextLength（字数文案：0 不显示）", () => {
     expect(formatTextLength(1000)).toBe("1 千字");
     expect(formatTextLength(1200)).toBe("1.2 千字");
     expect(formatTextLength(12345)).toBe("12.3 千字");
+  });
+});
+
+describe("formatSavedAt（保存时刻文案：本地 HH:MM，卡 13.6）", () => {
+  // 用「本地时间分量」构造，断言与运行时时区无关（getHours/getMinutes 取的就是同一份本地分量）
+  it("个位数小时/分钟两位补零", () => {
+    expect(formatSavedAt(new Date(2026, 8, 1, 9, 5))).toBe("09:05");
+  });
+
+  it("零点 / 中午边界", () => {
+    expect(formatSavedAt(new Date(2026, 8, 1, 0, 0))).toBe("00:00");
+    expect(formatSavedAt(new Date(2026, 8, 1, 12, 0))).toBe("12:00");
+  });
+
+  it("24 小时制（13:05 不带 AM/PM、不写成 01:05）", () => {
+    expect(formatSavedAt(new Date(2026, 8, 1, 13, 5))).toBe("13:05");
+    expect(formatSavedAt(new Date(2026, 8, 1, 23, 59))).toBe("23:59");
   });
 });
 

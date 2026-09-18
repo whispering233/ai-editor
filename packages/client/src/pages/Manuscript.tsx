@@ -36,6 +36,7 @@ import {
   AUTOSAVE_DELAY_MS,
   chapterNeighbors,
   createAutosave,
+  formatSavedAt,
   formatTextLength,
   hasVisibleOverlay,
   manuscriptErrorAction,
@@ -88,6 +89,8 @@ export default function Manuscript({ chapterId }: { chapterId: string }) {
   /** 隐藏的文件选择框（导入入口；桌面形态不加原生能力，同一套 <input type="file">） */
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  /** 最近一次保存**完成**的本地时刻（卡 13.6）：瞬态，不持久化；null = 本页尚未保存过（无时间戳） */
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [conflictOpen, setConflictOpen] = useState(false);
   // 专注模式（卡 13.4）：**瞬态**全局标志（不持久化，路由变化由 MainPanel 的守卫归零）
@@ -114,6 +117,7 @@ export default function Manuscript({ chapterId }: { chapterId: string }) {
       setLoadError(null);
       setSaveError(null);
       setSaveState("idle");
+      setSavedAt(null); // 重新加载（含切章重挂）后不显示旧时间戳
       setEditorEpoch((epoch) => epoch + 1);
     } catch (err) {
       setLoadError(toLoadFailure(err));
@@ -143,6 +147,7 @@ export default function Manuscript({ chapterId }: { chapterId: string }) {
       setCharCount(res.charCount);
       setSaveError(null);
       setSaveState("saved");
+      setSavedAt(new Date()); // 「已保存 · HH:MM」的时刻基准 = 这次保存完成的时刻
     } catch (err) {
       const failure = toLoadFailure(err);
       setSaveState("idle");
@@ -286,14 +291,16 @@ export default function Manuscript({ chapterId }: { chapterId: string }) {
   const notFound = loadError?.code === "OUTLINE_NODE_NOT_FOUND";
 
   /**
-   * 「字数 · 保存态」文案（**唯一份**）：常规布局在页头说明行，专注模式在工具条右端——
-   * 两处不同时显示（任务约定），口径只有这一处定义。
+   * 「字数 · 保存态（含保存时刻）」文案（**唯一份**）：常规布局在页头说明行，专注模式在工具条右端——
+   * 两处不同时显示（任务约定），文案与时间字符串只有这一处定义（专注态复用同一 JSX，不另算时间）。
    */
   const statusText = (
     <div className="flex items-center gap-2 text-xs text-muted-foreground">
       <span className="tabular-nums">{formatTextLength(charCount) ?? "0 字"}</span>
       {saveState === "saving" && <span>保存中…</span>}
-      {saveState === "saved" && <span>已保存</span>}
+      {saveState === "saved" && savedAt !== null && (
+        <span className="tabular-nums">已保存 · {formatSavedAt(savedAt)}</span>
+      )}
     </div>
   );
 
@@ -401,7 +408,8 @@ export default function Manuscript({ chapterId }: { chapterId: string }) {
           initialContent={content}
           onChange={handleChange}
           onReady={setEditorApi}
-          /* 字数 · 保存态：专注模式下页头已隐藏 ⇒ 改由工具条右端承载（非专注时仍在页头，不同时显示） */
+          /* 字数 · 保存态（含保存时刻）：专注模式下页头已隐藏 ⇒ 改由工具条右端承载同一份 statusText
+             （非专注时仍在页头，不同时显示；时间字符串不在工具条另算） */
           status={focusMode ? statusText : undefined}
           /* 专注入口：唯一入口就在工具条右端（DESIGN.md §Components「专注模式入口」） */
           focus={{ active: focusMode, onToggle: () => setFocusMode(!focusMode) }}
