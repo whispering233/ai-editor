@@ -15,11 +15,14 @@
 // - 卡 13.4：右端再加两段可选内容——`status`（状态区：章正文页的字数 · 保存态，13.6 的保存时间戳
 //   复用同一位置）与 `focus`（专注模式开关）。两者都是页面注入：不传 = 不渲染（参考资料页因此天然
 //   没有专注入口，见 DESIGN.md §Components「专注模式入口」）。
-import type { ReactNode } from "react";
+// - 卡 13.5：右端「写作设置」与「专注模式」之间再插「命令帮助」按钮（打开同目录 command-help.tsx 的
+//   静态弹窗；与工具条按钮集同卡维护）。**开合状态就本组件持有**（弹窗受控、不进 store）。
+import { useState, type ReactNode } from "react";
 import {
   FontSizeOutlined,
   FullscreenExitOutlined,
   FullscreenOutlined,
+  QuestionCircleOutlined,
   RedoOutlined,
   UndoOutlined,
 } from "@ant-design/icons";
@@ -35,6 +38,7 @@ import {
   useComponentsContext,
 } from "@blocknote/react";
 import type { WritingPrefs } from "../../hooks/use-writing-prefs";
+import { CommandHelpDialog } from "./command-help";
 import { WritingSettings } from "./writing-settings";
 
 export interface EditorToolbarProps {
@@ -60,6 +64,8 @@ export interface ToolbarFocus {
 export function EditorToolbar({ prefs, setPref, status, focus }: EditorToolbarProps) {
   const editor = useBlockNoteEditor();
   const components = useComponentsContext();
+  // 命令帮助弹窗的开合（本组件私有：弹窗受控，状态不往上传）
+  const [helpOpen, setHelpOpen] = useState(false);
   // BlockNoteView 内必有 ComponentsContext（本组件只作为它的 children 用）；此守卫只为类型收敛
   if (components === undefined) return null;
   const { FormattingToolbar } = components;
@@ -98,6 +104,14 @@ export function EditorToolbar({ prefs, setPref, status, focus }: EditorToolbarPr
       <WritingSettings prefs={prefs} setPref={setPref}>
         <FormattingToolbar.Button label="写作设置" mainTooltip="写作设置" icon={<FontSizeOutlined />} />
       </WritingSettings>
+      {/* 命令帮助（卡 13.5）：静态弹窗的入口——与撤销/重做同一套库按钮构件 */}
+      <FormattingToolbar.Button
+        label="命令帮助"
+        mainTooltip="命令帮助"
+        icon={<QuestionCircleOutlined />}
+        onClick={() => setHelpOpen(true)}
+      />
+      <CommandHelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
       {/* 专注模式（仅章正文页注入）：同一按钮切换进/出，走与撤销/重做同一套库按钮构件
           （DESIGN.md §Components：入口收在工具条右端，不另起悬浮条） */}
       {focus !== undefined && (
