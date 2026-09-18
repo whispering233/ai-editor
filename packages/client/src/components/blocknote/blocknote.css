@@ -35,3 +35,47 @@
   /* --bn-colors-highlights-*（高亮/颜色选项）：**有意不映射**——留库自带色板（DESIGN.md 登记表） */
   --bn-font-family: var(--font-sans); /* 与全站同栈（不下载 web 字体） */
 }
+
+/* ── 常显写作工具条（卡 13.1）──────────────────────────────────────────────
+   契约：DESIGN.md §Components「写作面（工具条 / 专注模式）」——几何 40px（4px 内边距 + 32px 档按钮）、
+   底 = 正文底、底部 1px 结构描边、无阴影、sticky 贴中栏内容区顶部。
+   唯一实现 = components/blocknote/editor-toolbar.tsx，它作为 `BlockNoteView` 的 children 渲染——在 DOM 里
+   排在编辑器**之后**（`.bn-container` 内、contentEditable 之外），故靠 flex `order:-1` 提到顶部。
+   色值全部走上面那批 `--bn-*`（含 `--bn-colors-editor-background`）：深浅两态同源，不写第二套值。 */
+.bn-container {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 用 `.bn-container` + 本类提高特异性，压掉 ariakit `.bn-ak-toolbar`（含它的 dark 变体）自带的
+   白底 / 阴影 / `.5rem` 圆角 / `overflow:scroll`；保留横向可滚动能力，但不要滚动条外观。 */
+.bn-container .ai-writing-toolbar {
+  order: -1;
+  position: sticky;
+  top: 0;
+  z-index: 1; /* 压住正文（静态内容）；库的浮动工具条与浮层走 portal + z-index 40/50，仍在上面 */
+  height: 40px;
+  padding: 4px;
+  gap: 4px;
+  border-radius: 0;
+  background-color: var(--bn-colors-editor-background); /* 跟 §Colors「写作面偏好」的纸张走 */
+  border-bottom: 1px solid var(--bn-colors-border);
+  box-shadow: none;
+  overflow-x: auto;
+  overflow-y: visible;
+  scrollbar-width: none;
+}
+
+.bn-container .ai-writing-toolbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* 工具条内的库按钮压到 32px 档（4px 内边距 + 32px = 40px，与 DESIGN.md 几何同构）；
+   宽度不锁死：块类型下拉要装「图标 + 当前块类型名 + 箭头」（库给它 200px 宽 / 1rem 内边距，工具条里太肥）。 */
+.bn-container .ai-writing-toolbar .bn-ak-button {
+  height: 2rem;
+  min-width: 2rem;
+  justify-content: center;
+  padding-inline: 0.25rem;
+  border-radius: var(--bn-border-radius-small);
+}

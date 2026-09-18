@@ -2,6 +2,9 @@
 // - 编辑器实例 = @blocknote/react 的 useCreateBlockNote —— **初始内容只在挂载时消费一次**
 //   （BlockNote 非受控：外部改写内容必须换 key 重挂，见 pages/Manuscript.tsx 的 editorEpoch）
 // - 视图 = @blocknote/ariakit 变体（DESIGN.md §Colors「块编辑器」登记的第二套表皮；样式随该包引入）
+// - 常显写作工具条（卡 13.1）= 本组件的 children（EditorToolbar）：children 落在 `.bn-container` 内、
+//   contentEditable **之外**（仍在 BlockNoteContext + ComponentsContext 之内），靠 blocknote.css 的
+//   flex `order:-1` 提到编辑器上方；选中文字时的**浮动**工具条保持默认开启（两者并存，DESIGN.md 有意）
 // - 改色唯一入口 = 同目录 blocknote.css（调用点不得写 --bn-* 覆盖或内联色值）
 // - 导入导出（卡 12.6）：md ↔ 块的互转要实例才做得了，经 `DocumentEditorApi`（onReady 回调）递给页面；
 //   纯函数层 lib/document-io.ts 不 import @blocknote
@@ -13,6 +16,7 @@ import { useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/ariakit";
 import { isBlockArray } from "@whispering233/ai-editor-shared";
 import { useThemeMode } from "../../hooks/use-theme-mode";
+import { EditorToolbar } from "./editor-toolbar";
 import "@blocknote/ariakit/style.css";
 import "./blocknote.css";
 
@@ -89,6 +93,8 @@ export function DocumentEditor({ initialContent, onChange, onReady }: DocumentEd
       editor={editor}
       theme={theme}
       onChange={(next) => onChange(JSON.stringify(next.document))}
-    />
+    >
+      <EditorToolbar />
+    </BlockNoteView>
   );
 }
