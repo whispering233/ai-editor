@@ -288,6 +288,10 @@
 - **桌面版「另存为」原生对话框** — 现状：导入导出走标准 `<input type=file>` / `<a download>`（桌面版会落在默认下载目录）。触发条件：用户抱怨找不到导出文件。最小修法：preload 新增 `saveTextFile()`（必须走 `desktopBridge()` 能力检测，浏览器形态不变）。
 - **正文级搜索/全文统计（UI 侧）** — 现状：只有大纲/章视图的 `metadata.textLength` 与参考资料列表摘要。触发条件：全书搜索需求落地时（与 `search_manuscript` 同批考虑，复用 `content_text`）。
 - **块编辑器升级纪律的执行细则** — 现状：`@blocknote/*` exact pin，升级 = 显式 commit + 全量测 + 像素核对（同 pi）。触发条件：每次升级时要核对的清单（`blockSpecs`/`--bn-*` 变量名/ariakit 变体行为）——目前只有原则，无 checklist。
+- **md 导入的有损提示误报（卡 12.6 oracle 登记，安全侧放大）** — 现状：判定 = `blocksToMarkdownLossy(tryParseMarkdownToBlocks(原文))` 与归一化后的原文比对；**外部编辑器的合法写法会被判「有损」并弹确认**（实测：`-` 列表→`*`、`1)`→`1.`、`---`→`***`、`<br>`、无语言围栏的代码块→`text`、md 表格补对齐空格、行首全角空格）。自产 md 再导入不误报（校定 canonical），所以不是死循环；代价是用户多点一次确认。触发条件：实际导入外部草稿的用户抱怨频繁。收紧路径：改为比较「块级文本内容集合」而非 md 串（需写一个 md→文本片段的轻量抽取器，或直接比较两次 parse 的块 JSON 文本）。
+- **`sanitizeDocumentFileName` 的两处小缺陷（卡 12.6 oracle 登记，低危）** — ① docstring 声称「去首尾点」但 `../../etc/passwd` → `.. etc passwd`（首点残留；单段下载名，浏览器会平坦化，无穿越风险）；② 未处理 Windows 保留名（`CON`/`NUL`/`COM1`…）。触发条件：有用户报告下载失败或名字怪异。最小修法：点清理改为「去全部前导点」+ 加保留名后缀。
+- **导入路径的三个缺口（卡 12.6 oracle 与 fixer 登记）** — ① JSON 导入无二次确认（契约只要求 md 有损时确认）；② 含未知块类型的 JSON 能过浅校验、可能在挂载时被错误边界接管（与 REST 浅校验同宽）；③ 无文件体积上限。触发条件：真实用户误导入或大文件卡顿。最小修法：共用一次「覆盖前确认」、体积上限常量 + 提示。
+- **块编辑器接线无自动化回归钉（卡 12.12/12.5 修复轮登记）** — 现状：`initialContent: []` 崩页与 `dictionary: zh` 两个缺陷都只有浏览器走查证据；仓内无 jsdom，组件不参与单测。触发条件：重现「改一行传参把编辑器搞崩」。可选最小修法：按 `design-discipline.test.ts` 的源码扫描风格加一条断言（如 `document-editor.tsx` 必须包含 `dictionary: zh` 且不得出现 `initialContent: []`），或引入 jsdom 只测封装组件的挂载。
 - **`document_records` 的两份 DDL 文本差一行行尾注释**（卡 12.2 oracle 登记，P3 无功能影响） — 现状：`packages/db/src/tables.ts` 的声明 DDL 在 `PRIMARY KEY (owner_kind, owner_id)` 后带 `-- 一 owner 一行（…）` 注释，`migrations/008_document_records.ts` 的迁移 DDL 无该注释；去注释后逐字相等。唯一消费该文本的是「v0 空库结构快照」（只对 `user_version === 0` 生效，已到 v8 的库不参与）。触发条件：有人想加「迁移 DDL 文本 == 声明 DDL 文本」的断言时。最小修法：把注释挪到行首或去掉（同步改两处）。
 
 ## MVP 明确不做（勿顺手实现）
