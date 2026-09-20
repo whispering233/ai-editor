@@ -8,18 +8,6 @@
 
 ---
 
-## 卡 21.7 — S3 归并 + S4 报告 + 幂等与单批重跑
-
-- **背景**：归并写业务表 + 报告；重跑必须幂等且不覆盖用户手工编辑。
-- **契约**：`docs/design/60-decompose.md` §6 / §6.1；`docs/api/120-api-decompose.md` §rerun。
-- **范围**：`packages/server/src/decompose/merge.ts` 的写入执行（实体 / 关系 / 章摘要回写 `outline.json` / 报告 reference + 其块文档）+ 一次别名归并 LLM 调用（**纯逻辑已由 merge.ts 提供：去重 → 应用别名组 → 阈值 → 悬空关系过滤**，本卡只负责调 LLM 与按写入计划落库）+ `merge_written` 更新；rerun 端点（`done` 批重跑 → job 回 `running` → 重建归并与报告）。
-- **判据**：**幂等回归**（同一份批结果跑两遍 S3 → 实体/关系数量不变）；`updated_at` 变化过的实体不被覆盖、不被软删；新产物里消失的实体被软删（回收站可还原）；章摘要回写大纲节点；报告 reference 不重复建；faux provider 全流程跑通；`pnpm --filter @whispering233/ai-editor-server test` 绿。
-- **必守调用顺序（merge oracle 登记）**：必须**先 `validateAliasGroups`，只把 `accepted` 传进 `applyAliasGroups`**——`mergeCandidates` 不重跑校验，直接传原始组可以发明实体名。
-- **`AliasCandidate` 需补 `summary` 字段**（契约 §6 第 2 层要求 LLM 看到「短摘要」；当前类型无此字段）——取该人物出现章里最完整的一条 `description` 截断，勿让提示词输入与契约漂移。
-- **回写大纲只写 `summary`，不得写 `result.chapterTitle`**（21.6 oracle 登记）：章标题的权威来源 = S1 写的大纲节点标题（split 清洗后标题）；批结果里的 `chapterTitle` 只是模型回声，仅供展示/日志。顺手修掉 `extract.ts` 的陈旧注释（它仍写「标题以大纲为准」而代码取模型值——两源并存是有意的，注释要与现实一致）。
-
----
-
 ## 卡 21.8 — 前端入口（书架按钮 + 拆解对话框 + api client）
 
 - **背景**：入口在书架页：选文件 → 预览 → 填书名 → 开始拆解。
