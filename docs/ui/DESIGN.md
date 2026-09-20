@@ -343,6 +343,7 @@ components:
 | `colorSplit` | `#ede9e4` | `#373737` | `{colors.hairline-soft}`（行分隔：Table 内线 / data-row 底线） |
 | `colorLink` | `#0075de` | `#529cca` | `{colors.link}` |
 | `colorSuccess` / `colorWarning` / `colorError` | `#1aae39` / `#dd5b00` / `#e03131` | 同 | 语义三色 |
+| `colorInfo` | `#37352f` | `rgba(255,255,255,.81)` | `{colors.primary}`（**与主色同值**：antd `Progress` 的默认描边取 `colorInfo` 而不是 `colorPrimary`（`antd/es/progress/style/index.js` 的 `defaultColor`）——不设该 seed 时进度条会渲染成 antd 蓝 `#1677ff`，与深墨设计语言冲突（2026-09 像素实测）） |
 | `borderRadius` / `borderRadiusSM` / `borderRadiusLG` | `6px` / `4px` / `8px` | — | `{rounded.sm}` / `{rounded.xs}` / `{rounded.md}` |
 | `controlOutlineWidth` | `0` | `0` | 聚焦环宽度 = 0（焦点只靠 1px 描边色变化，见 §Elevation；selector 型组件的环唯一开关） |
 
@@ -663,15 +664,15 @@ components:
 
 - 页头：`page-title`「拆解小说」+ 元信息行（书名 · 范围 · 模型）+ 操作按钮（`button-default`「中止」/「续拆」，按状态显示其一）。
 - 阶段条：5 段（解析 / 建档 / 逐章抽取 / 归并 / 报告）——当前段 = `{colors.primary}` 加粗，已完成段 = `{colors.success}` 圆点，未开始 = `{colors.tertiary}`。
-- 进度条：antd `Progress`（描边走全局 `colorPrimary`，**无组件级 token 覆盖**）+ 右侧「已完成 N/M 批」文案（`caption-text`）。
+- 进度条：antd `Progress`（描边取全局 `colorInfo`，本仓已把 `colorInfo` 设为主色同值 ⇒ 视觉为深墨；**无组件级 token 覆盖**）+ 右侧「已完成 N/M 批」文案（`caption-text`）。
 - 批次列表：`data-row` 行，列 = 批序号 / 覆盖章范围 / 字数 / 状态徽标（`type-badge`，中性）/ 展开按钮 / 「重跑」按钮；展开区 = 该批抽取结果的**只读摘要**（人物 / 设定 / 地点 / 关系分组的文字列表，不倾倒原始 JSON）——展开是「核查后重跑」的前提，**不是可选装饰**。
 - 失败批：行内 `{colors.error}` 文案 + 「重跑」（`done` 与 `failed` 行都有该按钮）；重跑 `done` 行需二次确认（受控 Dialog，文案写明「将重新生成该批抽取结果，并重建归并与报告」）。
-- 完成态：本页变总结卡（`section-title`「拆解完成」+ 拆出 人物 / 设定 / 地点 / 关系 计数）+ 三个跳转（拆解报告 / 大纲 / 人物），**不自动跳转**。
+- 完成态：本页**总结卡在上 + 批列表在下**（`section-title`「拆解完成」+ 拆出 人物 / 设定 / 地点 / 关系 计数 + 三个跳转：拆解报告 / 大纲 / 人物，**不自动跳转**）——**完成态不得藏掉批列表**：「核查后重跑」是本功能的核心能力，`done` 批的重跑仍走二次确认。
 - 状态文案：`已暂停 · 可续拆` / `上次拆解中断，可续拆`（服务端重启归一后）。
 
 **概览页卡片** — `#/overview` 在有 job 时多一张 `card`：`section-title`「拆解任务」+ 一行状态（运行中 N/M 批 / 已暂停 / 已完成）+ 进入 `#/decompose` 的 `button-default`；无 job 不渲染。
 
-**书架行徽标** — 仅**当前打开的书**那行显示「拆解中 N/M」（`type-badge`）；其他书不显示（`GET /project/list` 不含 job 状态，逐本开 `data.db` 不值得；且切书即暂停）。
+**书架行徽标** — 仅**当前打开的书**那行显示：运行/待运行 → 「拆解中 N/M」；已暂停 → 「已暂停 N/M」（`type-badge`）；其他书不显示（`GET /project/list` 不含 job 状态，逐本开 `data.db` 不值得；且切书即暂停）。
 
 > 本小节**不新增色值/字号/圆角**：沿用 `button-default` / `button-primary` / `card` / `data-row` / `type-badge` / `caption-text` / 受控 Dialog。新增 antd 组件仅 `Progress`（走全局 seed 派生，**不进组件覆盖表**）。
 
