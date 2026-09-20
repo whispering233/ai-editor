@@ -139,8 +139,9 @@ export default function Manuscript({ chapterId }: { chapterId: string }) {
    * - `force` = 覆盖保存：**不带 base_updated_at**（服务端跳过冲突检查）
    * - base 为 null（本章从未写过）时同样不带：契约的 base_updated_at 无法表达「期望 null」，
    *   且此时不存在可被覆盖的他人写入
+   * 返回值 = 本次是否保存成功（`false` 供 Ctrl+S 判定不生成备份；自动保存/重试忽略它）
    */
-  async function saveContent(text: string, options: { force?: boolean } = {}): Promise<void> {
+  async function saveContent(text: string, options: { force?: boolean } = {}): Promise<boolean> {
     setSaveState("saving");
     const base = options.force === true ? null : baseRef.current;
     try {
@@ -153,6 +154,7 @@ export default function Manuscript({ chapterId }: { chapterId: string }) {
       setSaveError(null);
       setSaveState("saved");
       setSavedAt(new Date()); // 「已保存 · HH:MM」的时刻基准 = 这次保存完成的时刻
+      return true;
     } catch (err) {
       const failure = toLoadFailure(err);
       setSaveState("idle");
@@ -169,15 +171,17 @@ export default function Manuscript({ chapterId }: { chapterId: string }) {
         default:
           setSaveError(failure.message);
       }
+      return false; // 保存失败（含 409 冲突）：Ctrl+S 据此不生成备份
     }
   }
 
   // 在途保存链（工具条「保存」/ Ctrl+S 共用）：撞上在途保存时排在它之后——
   // 并发 PUT 会携同一个版本戳 → 第二个吃 409 冲突框（saveContent 自身不 reject，链不会断）
-  const saveChainRef = useRef<Promise<void>>(Promise.resolve());
+  const saveChainRef = useRef<Promise<unknown>>(Promise.resolve());
 
-  /** 立即保存最新内容（工具条「保存」/ Ctrl+S）：串行化在途保存，返回可等待的 Promise */
-  function saveNow(): Promise<void> {
+  /** 立即保存最新内容（工具条「保存」/ Ctrl+S）：串行化在途保存；
+   * 结果透传 `false`（保存失败）——Ctrl+S 据此不生成备份 */
+  function saveNow(): Promise<void | boolean> {
     const run = saveChainRef.current.then(() => saveContent(latestRef.current ?? ""));
     saveChainRef.current = run;
     return run;
@@ -189,7 +193,14 @@ export default function Manuscript({ chapterId }: { chapterId: string }) {
     saveRef.current = saveContent;
   });
   const autosave = useMemo(
-    () => createAutosave({ delayMs: AUTOSAVE_DELAY_MS, save: (text) => saveRef.current(text) }),
+    () =>
+      createAutosave({
+        delayMs: AUTOSAVE_DELAY_MS,
+        // 自动保存不关心保存结果（失败由页面错误 UI 呈现）→ 归一成 void 给调度器
+        save: async (text) => {
+          await saveRef.current(text);
+        },
+      }),
     [],
   );
 

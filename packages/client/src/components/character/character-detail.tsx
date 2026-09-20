@@ -918,7 +918,7 @@ export function CharacterDetail({ id, onSaved }: { id: string; onSaved?: () => v
     // 基础信息必填（**仅前端**）：先拦下空姓名/空描述，避免无谓的服务端往返
     const errors = validateCharacterBasics({ name: formName, description: form.description });
     setBasicsErrors(errors);
-    if (hasCharacterBasicsErrors(errors)) return;
+    if (hasCharacterBasicsErrors(errors)) return false; // 校验失败：Ctrl+S 据此不生成备份
     const changed = diffData(detail.data, form);
     const nextName = formName.trim();
     const nameChanged = nextName !== detail.name;
@@ -939,9 +939,10 @@ export function CharacterDetail({ id, onSaved }: { id: string; onSaved?: () => v
     } catch (err) {
       if (err instanceof ApiError && err.code === "ENTITY_NOT_FOUND") {
         setNotFound(true);
-        return;
+        return false;
       }
       setSaveError(err instanceof ApiError ? err.message : "保存失败，请重试");
+      return false; // 保存失败：Ctrl+S 据此不生成备份
     } finally {
       setSaving(false);
     }

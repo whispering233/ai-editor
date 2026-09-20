@@ -7,8 +7,12 @@
 // - 存档动作 registerArchiveHandler：**全站唯一注册者 = AppShell**（`hooks/use-save-archive.ts`）；
 //   与保存栈分开注册，因为存档必须在保存**落定之后**跑（栈语义是「只有一个生效」，合成不了两阶段）
 // - 全局唯一 keydown 监听在模块加载时挂载（仅浏览器环境）；SSR/测试环境无 window 时跳过
-//   keydown 顺序 = 先 await 栈顶保存动作（成功）→ 再触发存档；**保存失败不存档**（沿用该页错误 UI）。
-//   本页无保存动作时直接存档；两种情况都 preventDefault（全站拦下浏览器原生「保存网页」对话框）
+//   keydown 顺序 = 先 await 栈顶保存动作 → **成功才**触发存档；失败（promise 拒绝 **或 handler 返回 `false`**）
+//   沿用该页错误 UI、不存档。本页无保存动作时直接存档；两种情况都 preventDefault
+//   （全站拦下浏览器原生「保存网页」对话框）
+// - **为什么还需要 `false` 信号**：各页保存动作自己 catch 错误并给可见 UI（错误条/冲突框），
+//   promise 一律 resolve ⇒ 只看 rejection 会把「保存失败」当成成功（实测：校验失败/断网/409
+//   都会跟着生成一份旧内容备份 + 谎报 toast）。失败分支显式 `return false` 是各页的**契约义务**。
 import { useEffect, useRef } from "react";
 
 /** 保存快捷键主键（`KeyboardEvent.key` 小写；设置页「快捷键」清单的唯一键位来源） */
@@ -25,8 +29,9 @@ export function isSaveShortcut(e: {
   return (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === SAVE_SHORTCUT_KEY;
 }
 
-/** 保存动作：允许返回 Promise（keydown 会等它落定再存档）；同步动作按已兑现处理 */
-export type SaveHandler = () => void | Promise<void>;
+/** 保存动作：允许返回 Promise；**`false` = 本次保存失败**（页面失败分支的契约义务——各页自己 catch 后
+ * promise 会 resolve，只有这个信号能把「失败」传给快捷键流程） */
+export type SaveHandler = () => void | boolean | Promise<void | boolean>;
 const handlers: SaveHandler[] = [];
 
 /** 注册保存动作（栈顶 = 当前生效）；返回注销函数 */
@@ -49,7 +54,7 @@ export function registerArchiveHandler(handler: () => void): () => void {
 }
 
 /** 触发当前保存动作；无注册者返回 null（调用方据此直接进入存档阶段） */
-export function triggerSaveShortcut(): Promise<void> | null {
+export function triggerSaveShortcut(): Promise<void | boolean> | null {
   const handler = handlers[handlers.length - 1];
   if (!handler) return null;
   return Promise.resolve(handler());
@@ -71,7 +76,8 @@ function handleKeyDown(e: KeyboardEvent): void {
 
 /**
  * 快捷键流程（keydown 调用；导出以便单测「先保存、成功才存档」的次序）：
- * 无保存动作 → 直接存档；有 → 等它落定（失败则只记日志，不存档——该页自有错误 UI）。
+ * 无保存动作 → 直接存档；有 → 等它落定：返回 `false` 或 promise 拒绝 ⇒ 不存档
+ * （各页保存失败都有自己的可见 UI，这里不重复提示）。
  */
 export function runSaveShortcut(): void {
   const save = triggerSaveShortcut();
@@ -80,7 +86,9 @@ export function runSaveShortcut(): void {
     return;
   }
   void save.then(
-    () => triggerArchive(),
+    (result) => {
+      if (result !== false) triggerArchive();
+    },
     (err: unknown) => {
       // 各页保存失败都有自己的可见 UI（错误条/冲突框）；这里只防未处理的 rejection
       console.error("[save-shortcut] 保存动作失败，本次不生成存档", err);
@@ -101,9 +109,10 @@ if (typeof window !== "undefined") {
  * handler 经 ref 转发：每次渲染刷新最新闭包，注册只随 enabled 变化（避免频繁重排注册栈顺序）。
  * enabled=false（无保存语义/未进入编辑态）时不参与，快捷键落到下层注册者或存档阶段。
  * **返回 Promise 的动作会被等待**（Ctrl+S 存档以「保存已落定」为前提）——异步保存请直接返回它，
- * 不要写成 `() => void handleSave()`（那样存档会抢在落盘前跑，备份内容陈旧）。
+ * 不要写成 `() => void handleSave()`（那样存档会抢在落盘前跑，备份内容陈旧）；
+ * **失败分支必须 `return false`**（见 SaveHandler 注释），否则失败后仍会生成备份。
  */
-export function useSaveShortcut(handler: () => void | Promise<void>, enabled = true): void {
+export function useSaveShortcut(handler: () => void | boolean | Promise<void | boolean>, enabled = true): void {
   const ref = useRef(handler);
   ref.current = handler;
   useEffect(() => {

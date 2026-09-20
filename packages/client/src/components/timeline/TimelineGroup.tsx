@@ -135,6 +135,7 @@ export function TimelineGroupBlock({
       setEditing(false);
     } catch {
       // 失败保持编辑态（setEditing(false) 未执行）+ 输入值保留，可修正后重试；页面已 toast，不重复提示
+      return false; // 保存失败：Ctrl+S 据此不生成备份
     } finally {
       setSaving(false);
     }

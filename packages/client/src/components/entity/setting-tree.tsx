@@ -287,7 +287,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
         cancelEdit();
         useUiStore.getState().showToast("设定已不存在，列表已刷新", "error");
         reload();
-        return;
+        return false;
       }
       // 其余错误：保持编辑态 + 保留输入值（可修正后重试）
       useUiStore
@@ -296,6 +296,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
           err instanceof ApiError ? `保存失败：${err.message}` : "保存失败，请重试",
           "error",
         );
+      return false; // 保存失败：Ctrl+S 据此不生成备份
     } finally {
       setBusy(false);
     }

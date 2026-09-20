@@ -359,9 +359,10 @@ export default function EntityDetail({
     } catch (err) {
       if (err instanceof ApiError && err.code === "ENTITY_NOT_FOUND") {
         setNotFound(true);
-        return;
+        return false;
       }
       setSaveError(err instanceof ApiError ? err.message : "保存失败，请重试");
+      return false; // 保存失败：Ctrl+S 据此不生成备份
     } finally {
       setSaving(false);
     }

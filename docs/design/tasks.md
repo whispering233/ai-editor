@@ -16,8 +16,8 @@
   - `lib/save-shortcut.ts`：导出 `SAVE_SHORTCUT_KEY`（`isSaveShortcut` 用它比较）；handler 类型放宽为 `() => void | Promise<void>`；新增「存档动作」注册（全站唯一注册者 = `AppShell`）+ 触发函数；keydown 改为「先 await 页面保存 → 成功再触发存档」且恒 `preventDefault`。
   - 新增 `lib/shortcut-archive.ts`：节流（常量 `SHORTCUT_BACKUP_THROTTLE_MINUTES`、进程内时间戳、在途标志）+ 结果三态（`archived` / `skipped` / `failed`），依赖注入以便单测。
   - 新增 `hooks/use-save-archive.ts`：`AppShell` 挂载；无项目 → 跳过；toast 文案由常量插值。
-  - 12 处 `useSaveShortcut(() => void xxx(), …)` 改为返回 Promise（底层函数已全为 `async`）；`pages/Manuscript.tsx` 新增注册（`saving` 期间不重发）。
-- **判据**：新增/更新 `lib/shortcut-archive.test.ts`（节流窗内跳过、窗口过后存档、失败不推进节流基准、在途只跑一次）、`lib/save-shortcut.test.ts`（新返回契约 + 存档只在保存成功后触发 + 无注册者仍触发存档）；`pnpm --filter @whispering233/ai-editor-client test` / `pnpm typecheck` / `pnpm lint` 绿；浏览器核一次：章正文页 Ctrl+S 落盘且备份列表多一份、5 分钟内连按只多一份。
+  - 12 处 `useSaveShortcut(() => void xxx(), …)` 改为返回 Promise（底层函数已全为 `async`）并在**失败分支 `return false`**（各页 catch 后 promise 会 resolve，只有该信号能把「失败」传给快捷键流程）；`pages/Manuscript.tsx` 新增注册（`saving` 期间不重发）。
+- **判据**：新增/更新 `lib/shortcut-archive.test.ts`（节流窗内跳过、窗口过后存档、失败不推进节流基准、在途只跑一次）、`lib/save-shortcut.test.ts`（新返回契约 + 存档只在保存成功后触发 + `false` 信号与 rejection 两条失败路径都不存档 + 无注册者仍触发存档）；`pnpm --filter @whispering233/ai-editor-client test` / `pnpm typecheck` / `pnpm lint` 绿；浏览器核一次：章正文页 Ctrl+S 落盘且备份列表多一份、节流窗口内连按只多一份。
 
 ---
 

@@ -252,7 +252,7 @@ export default function ReferenceDetail({ id, draft = false }: { id?: string; dr
     const name = form.name.trim();
     if (name === "") {
       setFormError("名称必填");
-      return;
+      return false; // 保存失败：Ctrl+S 据此不生成备份
     }
     setSaving(true);
     setFormError(null);
@@ -274,6 +274,7 @@ export default function ReferenceDetail({ id, draft = false }: { id?: string; dr
       }
     } catch (e) {
       setFormError(e instanceof ApiError ? e.message : "保存失败，请重试");
+      return false; // 保存失败：Ctrl+S 据此不生成备份
     } finally {
       setSaving(false);
     }

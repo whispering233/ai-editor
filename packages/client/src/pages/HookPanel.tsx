@@ -304,6 +304,7 @@ export default function HookPanel() {
       setReloadTick((t) => t + 1);
     } catch (err) {
       setEditError(err instanceof ApiError ? err.message : "保存失败，请重试");
+      return false; // 保存失败：Ctrl+S 据此不生成备份
     } finally {
       setEditSaving(false);
     }

@@ -103,7 +103,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
     const title = titleValue.trim();
     if (title === "") {
       setSaveError("标题不能为空");
-      return;
+      return false; // 保存失败：Ctrl+S 据此不生成备份
     }
     const patch: UpdateOutlineBody = {};
     if (shouldCommitTitle(node.title, titleValue)) patch.title = title;
@@ -124,9 +124,10 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
       if (err instanceof ApiError && err.code === "OUTLINE_NODE_NOT_FOUND") {
         // 节点已被 purge：重拉树后自然进入 404 态（节点不在树中）
         await reload();
-        return;
+        return false;
       }
       setSaveError(err instanceof ApiError ? err.message : "保存失败，请重试");
+      return false; // 保存失败：Ctrl+S 据此不生成备份
     } finally {
       setSaving(false);
     }

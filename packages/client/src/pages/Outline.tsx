@@ -342,10 +342,11 @@ export default function Outline() {
         cancelEdit();
         setError(describeOutlineError(code));
         await afterTreeChanged();
-        return;
+        return false;
       }
       // 恢复编辑态并保留输入值（editing/editingValue 未动）；输入框已失焦，用户点击即可修正重试
       setError(describeOutlineError(code));
+      return false; // 保存失败：Ctrl+S 据此不生成备份
     } finally {
       setBusy(false);
     }

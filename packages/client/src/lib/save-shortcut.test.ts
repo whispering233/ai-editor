@@ -131,6 +131,21 @@ describe("runSaveShortcut（keydown 的流程）", () => {
     await vi.waitFor(() => expect(order).toEqual(["save", "archive"]));
   });
 
+  it("保存动作返回 false（页面失败分支）→ 不存档", async () => {
+    const order: string[] = [];
+    let settled = false;
+    register(async () => {
+      settled = true;
+      return false;
+    });
+    registerArchive(() => order.push("archive"));
+
+    runSaveShortcut();
+    await vi.waitFor(() => expect(settled).toBe(true));
+    await new Promise((resolve) => setTimeout(resolve, 0)); // 让 .then 回调排空
+    expect(order).toEqual([]);
+  });
+
   it("保存失败：不存档，只记日志（错误 UI 归各页）", async () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     const order: string[] = [];
