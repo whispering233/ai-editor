@@ -3,8 +3,8 @@
 // 契约：docs/design/60-decompose.md §6.1（三路比对与重跑幂等）/ §6.2（报告六段与落点）/ §5（章摘要回写）。
 // 覆盖：幂等回归（同一份批结果跑两遍 → 实体/关系数量与 id 全同、报告不重复建）/ 别名组与 description 的
 // 「（又称：…）」/ `data.alias` 单值 / 章摘要回写（只写 summary、不动标题）/ 报告六段落库 /
-// 用户编辑过的行重跑不覆盖、消失也不软删（keep-and-report）/ 消失实体软删（回收站可还原）/
-// 消失关系物理删且重现时重建。
+// 用户编辑过的行重跑不覆盖（keep-user-edited：产物还在，不覆盖也不另建）、产物消失也不软删（keep-and-report）/
+// 消失实体软删（回收站可还原）/ 消失关系物理删（raw SQL 判别：软删会留行）且重现时重建。
 
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -431,6 +431,36 @@ describe("用户编辑优先与消失行（§6.1）", () => {
     expect(reportDocument(project).text).toContain("未改动（用户手工编辑过，重跑不覆盖）：李四（character）");
   });
 
+  it("产物仍在但用户改过的实体：keep-user-edited 不覆盖也不另建一份", async () => {
+    const model = await fakeModel();
+    const { project, jobId } = projectFixture();
+    writeBatch(project.db, jobId, 1, batchResult(baseSpecs()));
+    model.script([aliasResponse("张三", ["三哥"]), "剧情摘要。"]);
+    await runMerge({ project, jobId, deps: model.deps });
+
+    const 李四 = characterIdByName(project.db, "李四");
+    const idsBefore = characterIds(project.db);
+    await sleep(); // updated_at 精度到毫秒：睡过同一毫秒才能造出「用户改过」的版本戳
+    updateEntity(project.db, 李四, { data: { role: "用户改过的定位" } });
+
+    // 第二轮产物仍含李四，只是描述换了一份（keep-user-edited：这份产物与用户行分歧保留，不落地）
+    const specs = baseSpecs().map((spec) => ({
+      ...spec,
+      characters: spec.characters?.map((character) =>
+        character.name === "李四" ? { ...character, description: "批结果里的新描述" } : character,
+      ),
+    }));
+    writeBatch(project.db, jobId, 1, batchResult(specs));
+    model.script([aliasResponse("张三", ["三哥"]), "剧情摘要。"]);
+    await runMerge({ project, jobId, deps: model.deps });
+
+    expect(characterIds(project.db)).toEqual(idsBefore); // 既不覆盖也不另建一份：id 集合逐项相同
+    expect(getEntity(project.db, 李四)!.data.role).toBe("用户改过的定位"); // 用户编辑未被覆盖
+    expect(getEntity(project.db, 李四)!.data.description).toBe("李四的描述");
+    // 产物还在 ⇒ 走 keep-user-edited（不动、不提示），不是 keep-and-report
+    expect(reportDocument(project).text).not.toContain("未改动（用户手工编辑过，重跑不覆盖）：李四");
+  });
+
   it("产物里消失的实体：软删进回收站（可还原），清单条目随之清除", async () => {
     const model = await fakeModel();
     const { project, jobId } = projectFixture();
@@ -472,6 +502,34 @@ describe("用户编辑优先与消失行（§6.1）", () => {
     const after = listRelations(project.db, {}, 1, project.root).relations;
     expect(after).toHaveLength(1);
     expect(after[0].id).not.toBe(before); // 重建 = 新行（不复活旧行）
+  });
+
+  it("产物里消失的关系：raw SQL 断言物理删（表内不留软删行）；产物重现按新行重建", async () => {
+    const model = await fakeModel();
+    const { project, jobId } = projectFixture();
+    writeBatch(project.db, jobId, 1, batchResult(baseSpecs()));
+    model.script([aliasResponse("张三", ["三哥"]), "剧情摘要。"]);
+    await runMerge({ project, jobId, deps: model.deps });
+    const before = listRelations(project.db, {}, 1, project.root).relations[0].id;
+    expect(project.db.prepare("SELECT id FROM relation_records").all()).toEqual([{ id: before }]); // 先证明 raw SQL 看得见这条行
+
+    const withoutRelations = baseSpecs().map((spec) => ({ ...spec, relations: [] }));
+    writeBatch(project.db, jobId, 1, batchResult(withoutRelations));
+    model.script([aliasResponse("张三", ["三哥"]), "剧情摘要。"]);
+    await runMerge({ project, jobId, deps: model.deps });
+
+    // 物理删的判别断言：raw SQL 也查不到（软删只置 deleted_at，listRelations 看不见但这里会留下行）
+    expect(project.db.prepare("SELECT id FROM relation_records").all()).toEqual([]);
+
+    writeBatch(project.db, jobId, 1, batchResult(baseSpecs()));
+    model.script([aliasResponse("张三", ["三哥"]), "剧情摘要。"]);
+    await runMerge({ project, jobId, deps: model.deps });
+    const rebuilt = project.db.prepare("SELECT id, deleted_at FROM relation_records").all() as Array<{
+      id: string;
+      deleted_at: string | null;
+    }>;
+    expect(rebuilt).toEqual([{ id: expect.any(String), deleted_at: null }]); // 重建 = 新插入的行（不是复活旧行）
+    expect(rebuilt[0].id).not.toBe(before);
   });
 
   it("用户改过的关系（updated_at 变了）：产物消失也保留，报告提示", async () => {
