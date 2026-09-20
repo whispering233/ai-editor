@@ -194,11 +194,11 @@
 // Res: 200
 { status: "running", seq: number }
 
-// Res: 404（批序号越界）；409（job 正在 running / paused，需先续拆或等待）
-{ error: { code: "DECOMPOSE_BATCH_NOT_FOUND" | "DECOMPOSE_JOB_STATE" } }
+// Res: 404（批序号越界）；409（job 正在 running / paused，需先续拆或等待）；400 `LLM_API_KEY_MISSING`（模型/凭据缺失——与 resume 同口径；**前置拦下可避免「缺凭据重跑先把已完成批的 result 清空」的数据损失路径**）
+{ error: { code: "DECOMPOSE_BATCH_NOT_FOUND" | "DECOMPOSE_JOB_STATE" | "LLM_API_KEY_MISSING" } }
 ```
 
-**语义**：重跑后 job 回到 `running`，阶段先回到 `extract` 再走 `merge`/`report`；已完成的批**不会**被重跑（只有该批与归并/报告重算）。归并按 `decompose_jobs.merge_written` 三路比对做幂等（见 [`../design/60-decompose.md`](../design/60-decompose.md) §6.1）。
+**语义**：重跑前先校验模型/凭据（缺失 → 400，且该批 `result` 与 job 状态均不变——`failBatch` 会把 `result` 置 NULL，不前置会烧掉一批已付 token 的产物）。重跑后 job 回到 `running`，阶段先回到 `extract` 再走 `merge`/`report`；已完成的批**不会**被重跑（只有该批与归并/报告重算）。归并按 `decompose_jobs.merge_written` 三路比对做幂等（见 [`../design/60-decompose.md`](../design/60-decompose.md) §6.1）。
 
 ## 错误码
 
