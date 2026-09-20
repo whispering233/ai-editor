@@ -493,7 +493,8 @@ function fallbackPartLengths(text: string): number[] {
       parts.push(size);
       size = 0;
     }
-    size += block + 1; // + 分隔换行
+    // 分隔换行只存在于块之间：每份的首块不补换行，否则末尾会多出 1 个并不存在的字符（charCount > totalChars）
+    size += size === 0 ? block : block + 1;
   }
   if (size > 0) parts.push(size);
   return parts;

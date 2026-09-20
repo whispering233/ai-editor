@@ -8,9 +8,11 @@ import { describe, expect, it } from "vitest";
 import {
   SPLIT_FALLBACK_TARGET_CHARS,
   SPLIT_MIN_SEGMENT_CHARS,
+  SPLIT_TITLE_MAX_CHARS,
   decodeNovel,
   normalizeText,
   splitNovel,
+  type SplitResult,
 } from "./split.js";
 
 const PROSE_LINE = "这是一段用于测试的正文，长度可控且不含任何章节标记。";
@@ -39,6 +41,10 @@ function fiveChapters(): string {
 
 const bytesOf = (text: string): Uint8Array => new TextEncoder().encode(text);
 const split = (text: string) => splitNovel(bytesOf(text));
+
+/** 章字数之和（切片长度口径）：任何路径都不得超过全文 */
+const chapterChars = (result: SplitResult): number =>
+  result.chapters.reduce((total, item) => total + item.charCount, 0);
 
 /** UTF-16 字节（含 BOM），BMP 足够用 */
 function utf16Bytes(text: string, littleEndian: boolean): Uint8Array {
@@ -133,8 +139,12 @@ describe("候选扫描", () => {
       prose(700),
       chapter("第五章 戊", 700),
     ]);
+    const result = split(text);
     // 只认「第N章」：四个歧义行都不成章（若误命中会各成一段 ≥ 阈值，titles 会多出条目）
-    expect(titles(text)).toEqual(["甲", "乙", "丙", "丁", "戊"]);
+    expect(result.chapters.map((item) => item.title)).toEqual(["甲", "乙", "丙", "丁", "戊"]);
+    // 「第三部分 / 第三部队」同样命中卷规则（卷优先）⇒ 排除集合也管着卷标记：四个歧义行都不产卷
+    expect(result.volumes).toEqual([{ index: 0, title: "全书" }]);
+    expect(result.chapters.every((item) => item.volumeIndex === 0)).toBe(true);
   });
 
   it("⑮ 标题清洗 + 前置块成「前言」章：去编号前缀与全角空格，剥离后为空则保留原文行", () => {
@@ -162,27 +172,62 @@ describe("候选扫描", () => {
     // 章序 = 文件位置序；章字数之和不超过全文
     expect(result.stats.min).toBeLessThanOrEqual(result.stats.median);
     expect(result.stats.median).toBeLessThanOrEqual(result.stats.max);
-    const sum = result.chapters.reduce((total, item) => total + item.charCount, 0);
-    expect(sum).toBeLessThanOrEqual(result.totalChars);
+    expect(chapterChars(result)).toBeLessThanOrEqual(result.totalChars);
     expect(result.totalChars).toBe(normalizeText(text).length);
+  });
+
+  it("⑯ 标题长度护栏：超长标题行不成章，其文本并入前章", () => {
+    const body = prose(400);
+    const longTitle = `第三章 ${"标".repeat(SPLIT_TITLE_MAX_CHARS - 1)}`;
+    const line = (position: number) => `第${CN[position - 1]}章 标题${position}`;
+    const text = book([
+      chapter(line(1)),
+      chapter(line(2)),
+      `${longTitle}\n${body}`,
+      chapter(line(4)),
+      chapter(line(5)),
+      chapter(line(6)),
+    ]);
+    const result = split(text);
+
+    // 护栏判据本身用常量表达：strip 后长度 = 上限 + 3
+    expect(longTitle.trim().length).toBe(SPLIT_TITLE_MAX_CHARS + 3);
+    expect(result.chapters.map((item) => item.title)).toEqual(["标题1", "标题2", "标题4", "标题5", "标题6"]);
+    // 超长行的文本落在第 2 章的切片内（去掉护栏时该行会自成第 3 章）
+    expect(result.chapters[1].charCount).toBe(`${line(2)}\n${body}\n${longTitle}\n${body}`.length);
+    expect(chapterChars(result)).toBeLessThanOrEqual(result.totalChars);
+  });
+
+  it("⑰ 歧义行不产卷也不成章：八节书里插入「第三节课 …」行，章标题恰为八个节名", () => {
+    const sections = [1, 2, 3, 4, 5, 6, 7, 8].map((position) => chapter(`第${CN[position - 1]}节 节名${position}`, 600));
+    const text = book([...sections.slice(0, 4), `第三节课 我们说过了\n${prose(600)}`, ...sections.slice(4)]);
+    const result = split(text);
+
+    expect(result.chapters.map((item) => item.title)).toEqual(sections.map((_, position) => `节名${position + 1}`));
+    // 幽灵章的直接证据：误命中时该行会成为标题「课 我们说过了」
+    expect(result.chapters.every((item) => !item.title.includes("课"))).toBe(true);
+    expect(result.volumes).toEqual([{ index: 0, title: "全书" }]);
+    expect(result.chapters.every((item) => item.volumeIndex === 0)).toBe(true);
+    expect(chapterChars(result)).toBeLessThanOrEqual(result.totalChars);
   });
 });
 
 describe("聚合校验与修复", () => {
   it("⑤ 相邻重复标题（裸行 + 全角缩进同名行）合并：取后者为起点", () => {
-    const text = book([
-      chapter("第一章 出山"),
-      "第二章 入城\n　　第二章 入城",
-      prose(400),
-      chapter("第三章 夜行"),
-      chapter("第四章 归途"),
-      chapter("第五章 终局"),
-    ]);
-    const result = split(text);
+    const bare = "第二章 入城";
+    const indented = `　　${bare}`;
+    const body = prose(400);
+    // 对照组 = 去掉裸行（保留全角缩进行）——用于确认合并起点是后者而非前者
+    const control = split(book([chapter("第一章 出山"), indented, body, chapter("第三章 夜行"), chapter("第四章 归途"), chapter("第五章 终局")]));
+    const result = split(book([chapter("第一章 出山"), `${bare}\n${indented}`, body, chapter("第三章 夜行"), chapter("第四章 归途"), chapter("第五章 终局")]));
 
     expect(result.chapters.map((item) => item.title)).toEqual(["出山", "入城", "夜行", "归途", "终局"]);
     expect(result.warnings.map((warning) => warning.code)).toContain("DUPLICATE_MERGED");
-    expect(result.warnings.find((warning) => warning.code === "DUPLICATE_MERGED")?.message).toContain("1");
+    expect(result.warnings.find((warning) => warning.code === "DUPLICATE_MERGED")?.message).toBe("相邻重复标题合并 1 处");
+    expect(result.chapters).toHaveLength(control.chapters.length);
+    // 取后者为起点（相对断言）：裸行被前章切片吸收；合并章起点 = 全角缩进行 ⇒ 字数与对照组相同
+    expect(result.chapters[0].charCount - control.chapters[0].charCount).toBe(bare.length + 1);
+    expect(result.chapters[1].charCount).toBe(control.chapters[1].charCount);
   });
 
   it("微段修复：段尾过短的候选并入前一段（候选判误命中丢弃，文本不丢）", () => {
@@ -239,7 +284,7 @@ describe("聚合校验与修复", () => {
     expect(result.warnings.map((warning) => warning.code)).not.toContain("LONG_BLOCK");
   });
 
-  it("⑫ 超长块回扫（补不到）：降级为「疑似合并章」提示，不静默处理", () => {
+  it("⑫b 超长块回扫（补不到）：降级为「疑似合并章」提示，不静默处理", () => {
     const text = book([
       ...[1, 2, 3, 4, 5, 6].map((index) => chapter(`第${CN[index - 1]}章 标题${index}`, 600)),
       chapter("第七章 长章", 3000),
@@ -336,6 +381,13 @@ describe("卷与退化路径", () => {
     expect(result.chapters.slice(0, -1).every((item) => item.charCount >= SPLIT_FALLBACK_TARGET_CHARS)).toBe(true);
     expect(result.chapters.every((item) => item.charCount > 0)).toBe(true);
     expect(result.volumes).toEqual([{ index: 0, title: "全书" }]);
+    expect(chapterChars(result)).toBeLessThanOrEqual(result.totalChars);
+    // 单份退化（全文短于目标字数，无章节结构）：切片就是全文 ⇒ charCount 恰等于 totalChars，
+    // 末尾并不存在的分隔换行不得计入（否则 39 字会报 40）
+    const single = split(book([1, 2, 3, 4, 5].map((index) => `第${CN[index - 1]}章 标题${index}`)));
+    expect(single.chapters).toHaveLength(1);
+    expect(single.chapters[0].charCount).toBe(single.totalChars);
+    expect(chapterChars(single)).toBeLessThanOrEqual(single.totalChars);
   });
 
   it("无字段文本（空文件）：零章、单卷兜底、无警告", () => {
