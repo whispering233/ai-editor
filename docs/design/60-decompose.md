@@ -231,4 +231,4 @@ createAgentSessionServices({ noExtensions, noSkills, noPromptTemplates, noContex
 
 ## 10. 延期项
 
-编辑切分（重命名/合并/拆分章）、自定义切分规则（字段形状对齐 Legado `TxtTocRule`，用户可粘贴社区规则）、编号重启自动分卷、Delta/伏笔/事件抽取（第二批维度）、报告标题块、并发调度、性能基准、删书入口——见 [`backlog.md`](./backlog.md)。
+编辑切分（重命名/合并/拆分章）、自定义切分规则（字段形状对齐 Legado `TxtTocRule`，用户可粘贴社区规则）、编号重启自动分卷、卷章同行只发卷切点、Delta/伏笔/事件抽取（第二批维度）、报告标题块、拆解耗时（串行、无基准）、别名候选上限截断、设定/地点无跨章阈值、删书入口、拆解期间手工建同名实体的冲突、目录页启发式误判开关——见 [`backlog.md`](./backlog.md)。

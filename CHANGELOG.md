@@ -7,11 +7,6 @@
 
 ## [Unreleased]
 
-### Fixed
-
-- **拆解小说在 opencode 系 provider 上必失败（400 MissingSessionID）**：拆解管线早期直连 `ModelRuntime.completeSimple`，绕过了 pi 的 Agent 包装层 ⇒ 缺 `x-opencode-session` 头，首次批调用即 400。现**一律走 pi 的 Agent 路径**（`createAgentSessionServices` + `createAgentSessionFromServices` + `SessionManager.inMemory`，无工具单轮会话）：provider 特化头、重试/超时设置、思考档位全部自动继承，不再自己维护一份适配。
-- **会话 id 适配**：拆解 job id（`job-<nanoid>`）可能以 `-` 结尾，而 pi 的会话 id 要求首尾为字母数字（直接当 id 会抛错）；现先按 pi 的约束清洗，清不出时交给 pi 自生成。
-
 ### Added
 
 - **拆解小说（导入式批量管线）**：书架页新增「拆解小说」入口——选小说 txt → 预览切分（编码探测 / 章数 / 字数分布 / 警告 / 预估）→ 开始拆解 → 自动建档（项目 + 卷章大纲 + 章正文全量导入）→ 逐章 LLM 抽取 → 归并（别名合并 / 关系聚合）→ 拆解报告；全流程在 `#/decompose` 进度页可见。
@@ -20,6 +15,12 @@
   - **进度页**：阶段条 / 进度条 / 批次列表（可展开看该批抽取结果）/ 单批重跑（二次确认）/ 中止与续拆 / 完成总结卡；概览页新增拆解任务卡片，书架当前书行显示进度徽标。
   - **断点续拆**：job 状态与批结果落 `data.db`（迁移 v9，新增 `decompose_jobs` / `decompose_batches` 两表，随备份/导出/云自动携带）；切书自动暂停、服务重启后归一为「已暂停，可续拆」；单批重跑幂等（不覆盖用户手工编辑、消失项软删/物理删）。
   - **入口形态**：原始字节上传（不在客户端解码），选文件 → 预览 → 填书名 → 开始拆解，一条路径浏览器/桌面通用。
+
+
+### Fixed
+
+- **拆解小说在 opencode 系 provider 上必失败（400 MissingSessionID）**：拆解管线早期直连 `ModelRuntime.completeSimple`，绕过了 pi 的 Agent 包装层 ⇒ 缺 `x-opencode-session` 头，首次批调用即 400。现**一律走 pi 的 Agent 路径**（`createAgentSessionServices` + `createAgentSessionFromServices` + `SessionManager.inMemory`，无工具单轮会话）：provider 特化头、重试/超时设置、思考档位全部自动继承，不再自己维护一份适配。
+- **会话 id 适配**：拆解 job id（`job-<nanoid>`）可能以 `-` 结尾，而 pi 的会话 id 要求首尾为字母数字（直接当 id 会抛错）；现先按 pi 的约束清洗，清不出时交给 pi 自生成。
 
 ## [v0.0.52] - 2026-09-20
 

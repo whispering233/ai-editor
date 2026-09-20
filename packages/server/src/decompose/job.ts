@@ -75,7 +75,7 @@ export function paragraphBlocksOf(text: string): unknown[] {
  * **`summary` 留空**（S2 抽取的章摘要由 S3 回写）。
  * @returns 章序（1-based 文件位置序）→ 章节点 id 的映射（批行 `chapter_ids` 与正文 owner 都用它）
  */
-export function writeOutlineFromSplit(dir: string, split: SplitWithSlices, now: string): Map<number, string> {
+function writeOutlineFromSplit(dir: string, split: SplitWithSlices, now: string): Map<number, string> {
   const tree = readOutlineFile(dir); // 新项目 = initProject 写的空树；children 由本函数整体装配
   const chapterIdByIndex = new Map<number, string>();
   const volumes: OutlineFileVolume[] = split.result.volumes.map((volume) => {
@@ -98,7 +98,7 @@ export function writeOutlineFromSplit(dir: string, split: SplitWithSlices, now: 
  * 段落块来自该章的真实切片文本；`content_text` 从块重算。
  * @returns 导入的章数
  */
-export function importChapterDocuments(
+function importChapterDocuments(
   db: Db,
   split: SplitWithSlices,
   chapterIdByIndex: ReadonlyMap<number, string>,
