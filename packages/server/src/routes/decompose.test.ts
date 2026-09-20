@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
-import { fauxProvider, InMemoryCredentialStore } from "@earendil-works/pi-ai";
+import { fauxAssistantMessage, fauxProvider, InMemoryCredentialStore } from "@earendil-works/pi-ai";
 import { ModelRuntime, SettingsManager } from "@earendil-works/pi-coding-agent";
 import type {
   DecomposeAnalyzeRes,
@@ -43,6 +43,8 @@ import {
 } from "../middleware/project.js";
 import { readLastProject } from "../last-project.js";
 import { DECOMPOSE_BATCH_TARGET_CHARS } from "../decompose/batching.js";
+import { ingestDecomposeProject } from "../decompose/job.js";
+import { splitNovelWithSlices } from "../decompose/split.js";
 import { setProjectRoot } from "./project.js";
 import { resetModelRuntime } from "../model-runtime.js";
 import {
@@ -97,8 +99,9 @@ async function analyzeOk(app: Hono, body: Uint8Array, query: string): Promise<De
   return (await res.json()).data as DecomposeAnalyzeRes;
 }
 
-/** 内存运行时 + 内存 settings：注册一个带费率的 faux provider（费率进 pi 模型目录） */
-async function runtimeWithCost(input: number, output: number): Promise<DecomposeRouteDeps> {
+/** 内存运行时 + 内存 settings：注册一个带费率的 faux provider（费率进 pi 模型目录）。
+ * `responses` = 脚本化的模型输出（start 会起 S2 批循环，须给确定性的假输出；空数组 = 不排队） */
+async function runtimeWithCost(input: number, output: number, responses: readonly string[] = []): Promise<DecomposeRouteDeps> {
   const faux = fauxProvider({
     models: [
       {
@@ -115,6 +118,7 @@ async function runtimeWithCost(input: number, output: number): Promise<Decompose
   const runtime = await ModelRuntime.create({ credentials, modelsPath: null, refreshOnCreate: false });
   runtime.registerNativeProvider(faux.provider);
   await runtime.refresh({ allowNetwork: false });
+  if (responses.length > 0) faux.setResponses(responses.map((text) => fauxAssistantMessage(text)));
   return { runtime, settings: SettingsManager.inMemory({}) };
 }
 
@@ -326,7 +330,7 @@ async function batchData(app: Hono, seq: string): Promise<DecomposeBatchRes> {
   return (await res.json()).data as DecomposeBatchRes;
 }
 
-/** 一批的最小契约形状（S2 才写，本卡测试直接落库造） */
+/** 一批的最小契约形状（S2 才写；本节测试直接落库造；覆盖给定章序的 JSON 用于脚本化 S2 输出） */
 function batchResult(): DecomposeBatchResult {
   return {
     chapters: [
@@ -335,9 +339,55 @@ function batchResult(): DecomposeBatchResult {
   };
 }
 
+function batchJsonOf(indexes: readonly number[]): string {
+  return JSON.stringify({
+    chapters: indexes.map((index) => ({
+      chapterIndex: index,
+      chapterTitle: `标题${index}`,
+      summary: `摘要${index}`,
+      characters: [],
+      settings: [],
+      locations: [],
+      relations: [],
+    })),
+  });
+}
+
+/** 轮询等待（start 会起 S2 批循环且后台跑：断言收口状态前先等它落库） */
+async function waitFor(predicate: () => boolean, label: string): Promise<void> {
+  for (let attempt = 0; attempt < 200; attempt++) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error(`等待超时：${label}`);
+}
+
+/**
+ * 直接跑 S1（**不经 route**，因此不起 S2 批循环）：进度投影 / 单批结果 / 结果形状守卫这类
+ * 「批执行前」的状态需要确定性夹具——经 route 建 job 的话，后台批循环会实时改写批行（赛跑）。
+ */
+function ingestProject(name: string, chapterCount = 6, scope: { start?: number; end?: number } = {}): string {
+  const project = initProject(bookDir(name), { name });
+  setCurrentProject(project);
+  const split = splitNovelWithSlices(bytesOf(novelText(chapterCount)));
+  const start = scope.start ?? 1;
+  const end = scope.end ?? chapterCount;
+  const { jobId } = ingestDecomposeProject({
+    project,
+    split,
+    scopedChapters: split.result.chapters.filter((chapter) => chapter.index >= start && chapter.index <= end),
+    scopeStart: start,
+    scopeEnd: end,
+    model: null,
+    now: nowIso(),
+  });
+  return jobId;
+}
+
 describe("POST /decompose/start（S1 建档）", () => {
   it("建档成功：大纲卷章 / 正文全量导入 / 批规划落库 / 切项目 + lastProject", async () => {
-    const deps = await runtimeWithCost(0.5, 1.5);
+    // start 建档后同一响应内起 S2（后台跑）：脚本化一批假输出 ⇒ 批行收口为 done（批执行细节见 runner.test.ts）
+    const deps = await runtimeWithCost(0.5, 1.5, [batchJsonOf([1, 2, 3, 4, 5, 6])]);
     const app = buildApp(deps);
     const data = await startOk(app, bytesOf(novelText(6)), startQuery("斗破苍穹"));
     const dir = bookDir("斗破苍穹");
@@ -389,8 +439,9 @@ describe("POST /decompose/start（S1 建档）", () => {
     expect(job.model).toBe(`${available[0].provider}/${available[0].id}`); // 审计用 provider/modelId
     const batches = listDecomposeBatches(db, job.id);
     expect(batches).toHaveLength(1);
-    expect(batches[0]).toMatchObject({ seq: 1, status: "pending", attempts: 0, error: null });
-    expect(batches[0].chapter_ids).toEqual(chapterIds); // 批行按章序映射到章节点 id
+    expect(batches[0].chapter_ids).toEqual(chapterIds); // 批行按章序映射到章节点 id（批规划 = S1 产物）
+    await waitFor(() => listDecomposeBatches(db, job.id)[0].status === "done", "S2 批收口");
+    expect(listDecomposeBatches(db, job.id)[0]).toMatchObject({ seq: 1, status: "done", attempts: 1, error: null });
 
     // 批规划与 analyze 预估同源（同一 planBatches，确定性）
     const preview = await analyzeOk(app, bytesOf(novelText(6)), `file_name=a.txt`);
@@ -547,12 +598,13 @@ describe("GET /decompose/job（进度轮询）", () => {
 
   it("不含批结果正文；stage 从 extract → merge；章节标题/序号/字数与大纲同源", async () => {
     const app = buildApp(await runtimeWithCost(0.5, 1.5));
-    const started = await startOk(app, bytesOf(novelText(6)), startQuery("进度"));
+    // 直接跑 S1（本用例看的是批执行**前**的投影；经 route 起 job 的话后台批循环会实时改写批行）
+    const jobId = ingestProject("进度");
     const project = getCurrentProject()!;
 
     const running = await jobData(app);
     expect(running).toMatchObject({
-      jobId: started.jobId,
+      jobId,
       status: "running",
       stage: "extract", // 批未收口 = 逐章抽取
       scopeStart: 1,
@@ -568,7 +620,7 @@ describe("GET /decompose/job（进度轮询）", () => {
     expect(running.batches[0].charCount).toBe([...textLengths.values()].reduce((total, length) => total + length, 0));
     expect(running.batches[0]).not.toHaveProperty("result"); // 列表口径不含批结果正文
 
-    completeBatch(project.db, { jobId: started.jobId, seq: 1, result: batchResult(), now: nowIso() });
+    completeBatch(project.db, { jobId, seq: 1, result: batchResult(), now: nowIso() });
     const settled = await jobData(app);
 
     expect(settled.progress).toEqual({ done: 1, failed: 0, total: 1 });
@@ -624,12 +676,12 @@ describe("GET /decompose/job（进度轮询）", () => {
 describe("GET /decompose/job/batches/:seq（单批结果）", () => {
   it("未完成 → result null；完成后 → 契约形状；越界 / 非数字 → 404 DECOMPOSE_BATCH_NOT_FOUND", async () => {
     const app = buildApp(await runtimeWithCost(0.5, 1.5));
-    const started = await startOk(app, bytesOf(novelText(6)), startQuery("单批"));
+    const jobId = ingestProject("单批"); // 直接跑 S1：本用例要的正是「批未跑」的初始行（见 ingestProject 注释）
     const project = getCurrentProject()!;
 
     expect(await batchData(app, "1")).toEqual({ seq: 1, status: "pending", attempts: 0, error: null, result: null });
 
-    completeBatch(project.db, { jobId: started.jobId, seq: 1, result: batchResult(), now: nowIso() });
+    completeBatch(project.db, { jobId, seq: 1, result: batchResult(), now: nowIso() });
     const done = await batchData(app, "1");
     expect(done.status).toBe("done");
     expect(done.result?.chapters[0]).toMatchObject({ chapterIndex: 1, chapterTitle: "标题1", summary: "绝密摘要标记" });
@@ -643,10 +695,10 @@ describe("GET /decompose/job/batches/:seq（单批结果）", () => {
 
   it("批 result 脏形状（db 层不校验）→ 守卫后按「未完成」透出", async () => {
     const app = buildApp(await runtimeWithCost(0.5, 1.5));
-    const started = await startOk(app, bytesOf(novelText(6)), startQuery("脏结果"));
+    const jobId = ingestProject("脏结果"); // 直接跑 S1（同上：不经 route ⇒ 无后台批循环改写）
     const project = getCurrentProject()!;
     // db 层只保证坏 JSON 不抛错：`[1,2]` 这类非契约形状会原样落库
-    completeBatch(project.db, { jobId: started.jobId, seq: 1, result: [1, 2] as unknown as DecomposeBatchResult, now: nowIso() });
+    completeBatch(project.db, { jobId, seq: 1, result: [1, 2] as unknown as DecomposeBatchResult, now: nowIso() });
 
     const data = await batchData(app, "1");
     expect(data.result).toBeNull(); // 不透出脏数据

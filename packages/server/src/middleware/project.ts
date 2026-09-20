@@ -18,6 +18,7 @@ import type { ProjectFileConfig } from "@whispering233/ai-editor-shared";
 import { generateProjectId, DEFAULT_BACKUP_FREQUENCY_MINUTES } from "@whispering233/ai-editor-shared";
 import { closeDatabase, openDatabase, setUserVersion, type Db } from "@whispering233/ai-editor-db";
 import { ensureSchemaCompatible, SchemaVersionError, type MigrationResult } from "@whispering233/ai-editor-db";
+import { pauseRunningJobs } from "@whispering233/ai-editor-db";
 import { readProjectFile, writeProjectFile } from "@whispering233/ai-editor-db";
 import { writeOutlineFile } from "@whispering233/ai-editor-db";
 import { SCHEMA_VERSION } from "@whispering233/ai-editor-db";
@@ -27,6 +28,7 @@ import { ensureParseableBackup, migratePromptToAgents, setProjectTick, startAuto
 import { AUTO_PUSH_THROTTLE_MS, maybeAutoPush } from "../cloud/auto-push.js";
 import { readAutoPush } from "../cloud/state.js";
 import { disposeProjectRuntime } from "../chat-runtime.js";
+import { cancelRunningDecomposeJobs } from "../decompose/runner.js";
 
 /** data.db 文件名（项目根目录） */
 export const DATA_DB_FILE_NAME = "data.db";
@@ -84,11 +86,22 @@ setProjectTick({
  * 调度器 tick 内重读 config 自行跟随。
  */
 export function setCurrentProject(project: ProjectContext | null): void {
+  // 拆解 job（设计 §7）：切书 / 关项目**不做跨书后台跑** —— 旧项目上的在跑 job 在此暂停：
+  // ① 通知进程内那一轮停在批间（当前批跑完即停，结果不浪费）；② job 行归一为 `paused`。
+  // `db.open` 守卫：切换路径可能已先关旧连接（start / open 路由的「新就绪再关旧的」顺序），
+  // 写不进去时由「下次打开这本书时的归一」接管（下面 open 分支）。
+  const previous = currentProject;
+  cancelRunningDecomposeJobs();
+  if (previous !== null && previous.db.open) pauseRunningJobs(previous.db, nowIso());
   // 旧项目的对话运行时在此释放：中止在途流 → dispose 会话订阅 → 清空提案仓
   //（单点覆盖 create/open/close/restore 全部切换路径，见 chat-runtime.ts）
   disposeProjectRuntime();
   currentProject = project;
   if (project !== null) {
+    // 打开项目即归一：服务端重启 / 崩溃残留的 `running` → `paused`（进程内已无在跑 job，
+    // UI 提示「上次拆解中断，可续拆」）。**只归一 job 行**：残留的 `running` 批由续拆取批承接
+    //（docs/db/schema.md「状态归一」不变式）——故本调用只改 decompose_jobs。
+    pauseRunningJobs(project.db, nowIso());
  // 升级兜底（卡 A）：旧命名份不再被解析，若磁盘上只剩旧命名且**自动备份频率关闭**，
  // 用户点「立即备份」前列表会是空的——先补一份新格式档（best-effort，函数内部自吞异常记日志，
  // 不阻塞打开；已有可解析份则不做任何事）

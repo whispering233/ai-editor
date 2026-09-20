@@ -1,7 +1,8 @@
-// 拆解小说路由（卡 21.4 analyze 预览 + 卡 21.5 start 建档 / job 进度 / 单批结果）
+// 拆解小说路由（analyze 预览 + start 建档 + job 进度 / 单批结果 + pause / resume）
 //
-// 契约单一来源：docs/api/120-api-decompose.md §analyze / §start / §job / §batches + 请求侧原始字节例外段
-//（docs/api/api-public.md）；语义见 docs/design/60-decompose.md §3（切分）/ §4（范围与预估）/ §7（状态机）。
+// 契约单一来源：docs/api/120-api-decompose.md §analyze / §start / §job / §batches / §pause / §resume +
+// 请求侧原始字节例外段（docs/api/api-public.md）；语义见 docs/design/60-decompose.md §3（切分）/
+// §4（范围与预估、批调度）/ §7（状态机与续拆）。
 // 口径：
 // - **不要求项目已打开**：预览不落库、不建项目、无状态（改范围 = 客户端重传原始字节，服务端不留临时文件）；
 //   start 总是**新建并打开**项目（等价 POST /project/open 的切换语义）；job / batches 读当前项目；
@@ -15,14 +16,13 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { basename, extname, join } from "node:path";
 import { Hono, type Context } from "hono";
-import type { ModelRuntime, SettingsManager } from "@earendil-works/pi-coding-agent";
 import type { DecomposeAnalyzeRes, DecomposeBatchRes, DecomposeStartRes } from "@whispering233/ai-editor-shared";
 import {
   decomposeAnalyzeQuerySchema,
   decomposeBatchResultSchema,
   decomposeStartQuerySchema,
 } from "@whispering233/ai-editor-shared/schemas";
-import { getDecomposeBatch, getDecomposeJob, nowIso } from "@whispering233/ai-editor-db";
+import { getDecomposeBatch, getDecomposeJob, nowIso, setJobError, updateJobStatus } from "@whispering233/ai-editor-db";
 import { HttpError, ok } from "../middleware/error.js";
 import { getModelRuntime, getSettingsManager, resolveActiveSelection } from "../model-runtime.js";
 import {
@@ -36,6 +36,7 @@ import { writeLastProject } from "../last-project.js";
 import { BOOKS_DIR_NAME, getProjectRoot, resolveProjectDir } from "./project.js";
 import { planBatches } from "../decompose/batching.js";
 import { buildJobResponse, ingestDecomposeProject } from "../decompose/job.js";
+import { pauseDecomposeJob, startDecomposeJob, type DecomposeRunnerDeps } from "../decompose/runner.js";
 import { splitNovelWithSlices, type SplitChapter } from "../decompose/split.js";
 
 /** 上传体积上限（原始字节；超限 400 DECOMPOSE_FILE_TOO_LARGE）。analyze 与 start 共用——同文件。 */
@@ -59,13 +60,11 @@ interface ModelCostRates {
   output: number;
 }
 
-/** 拆解路由可注入依赖（测试注入内存运行时；缺省走真实 pi 单例） */
-export interface DecomposeRouteDeps {
-  /** 模型/凭据运行时（缺省 = `getModelRuntime()` 单例） */
-  runtime?: ModelRuntime;
-  /** 全局 settings（缺省 = `getSettingsManager()` 单例） */
-  settings?: SettingsManager;
-}
+/**
+ * 拆解路由可注入依赖（测试注入内存运行时；缺省走真实 pi 单例）。
+ * 与批执行器 `DecomposeRunnerDeps` 同源：路由把同一份依赖原样传给 S2 runner（注入点只有一处）。
+ */
+export type DecomposeRouteDeps = DecomposeRunnerDeps;
 
 /**
  * 激活模型的费率——`resolveActiveSelection` 的口径与 chat / 设置页一致：
@@ -252,6 +251,8 @@ export function createDecomposeRoutes(deps: DecomposeRouteDeps = {}): Hono {
       model,
       now: nowIso(),
     });
+    // S2 批执行（**后台跑，不 await**）：S1 已同步完成，响应返回时批循环开跑（进度页轮询看状态）
+    void startDecomposeJob(project, deps);
     return c.json(
       ok({
         projectId: project.config.id,
@@ -302,6 +303,41 @@ export function createDecomposeRoutes(deps: DecomposeRouteDeps = {}): Hono {
         result: parsed !== null && parsed.success ? parsed.data : null,
       } satisfies DecomposeBatchRes),
     );
+  });
+
+  // POST /api/v1/decompose/job/pause —— 中止当前 job（当前批跑完即停，结果不浪费）
+  routes.post("/job/pause", (c) => {
+    const project = requireCurrentProject();
+    const job = getDecomposeJob(project.db);
+    if (job === null) {
+      throw new HttpError(404, "DECOMPOSE_JOB_NOT_FOUND", "当前项目没有拆解任务");
+    }
+    // 状态前置：`done` / `paused` / `failed` 都不允许再中止（api/120-api-decompose.md §pause）
+    if (job.status !== "running" && job.status !== "pending") {
+      throw new HttpError(409, "DECOMPOSE_JOB_STATE", `job 状态为 ${job.status}，不能中止（仅 running / pending 可暂停）`);
+    }
+    // 先置信号再写状态：进程内那一轮停在批间（已发出的模型调用不 abort），状态立刻可见（不等批收尾）
+    pauseDecomposeJob(job.id);
+    updateJobStatus(project.db, job.id, "paused", nowIso());
+    return c.json(ok({ status: "paused" as const }));
+  });
+
+  // POST /api/v1/decompose/job/resume —— 从第一个未完成批续拆（跳过 done 的批）
+  routes.post("/job/resume", async (c) => {
+    const project = requireCurrentProject();
+    const job = getDecomposeJob(project.db);
+    if (job === null) {
+      throw new HttpError(404, "DECOMPOSE_JOB_NOT_FOUND", "当前项目没有拆解任务");
+    }
+    if (job.status !== "paused") {
+      throw new HttpError(409, "DECOMPOSE_JOB_STATE", `job 状态为 ${job.status}，不能续拆（仅 paused 可续拆）`);
+    }
+    // 续拆前预检模型/凭据（与 start 同口径）：缺凭据 → 400 且不改状态（否则 job 卡在「running 无 runner」）
+    await requireActiveModel(deps);
+    updateJobStatus(project.db, job.id, "running", nowIso());
+    setJobError(project.db, job.id, null, nowIso()); // 开工清上一次的 job 级错误摘要
+    void startDecomposeJob(project, deps);
+    return c.json(ok({ status: "running" as const }));
   });
 
   return routes;

@@ -48,7 +48,7 @@ import { namesRoutes } from "./routes/names.js"; // 批量名称解析（工具�
 import { proposalRoutes } from "./routes/proposal.js";
 import { trashRoutes } from "./routes/trash.js";
 import { relationRoutes } from "./routes/relation.js";
-import { decomposeRoutes } from "./routes/decompose.js"; // 拆解小说（analyze 预览，卡 21.4）
+import { decomposeRoutes } from "./routes/decompose.js"; // 拆解小说（analyze 预览 / start 建档 / job / batches / pause / resume）
 import { logSoftDeleteReconcile, reconcileSoftDelete } from "./consistency.js";
 
 /** 默认端口（dev 态 Vite proxy 写死 3456） */
@@ -249,7 +249,8 @@ export async function startServer(projectRoot: string, options: StartServerOptio
  // 云端存档路由（卡 2）：账号配置 + 连通性测试（不要求项目已打开）
   app.route("/api/v1/cloud", cloudRoutes);
 
- // 拆解小说路由：POST /api/v1/decompose/analyze（原始字节 → 切分预览，**不要求项目已打开**）
+ // 拆解小说路由：POST /api/v1/decompose/analyze（原始字节 → 切分预览，**不要求项目已打开**）/
+ // start（建档 + 起 S2 批执行）/ GET job、job/batches/:seq（进度与单批结果）/ POST job/pause、job/resume（暂停与续拆）
   app.route("/api/v1/decompose", decomposeRoutes);
 
  // Delta 路由（S5.3）：追加 / 按节点查询 / compute 状态计算
