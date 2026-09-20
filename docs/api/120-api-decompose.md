@@ -29,7 +29,7 @@
     index: number;            // 1-based 文件位置序
     title: string;            // 已清洗（去编号前缀与前导全角空格）
     charCount: number;
-    volumeIndex: number | null; // 所属卷序号（单卷兜底 = 0）
+    volumeIndex: number;       // 所属卷序号（单卷兜底 = 0；永不为 null）
   }>;
   volumes: Array<{ index: number; title: string }>;  // 无卷标记 → 单卷「全书」
   stats: { min: number; median: number; max: number };  // 章字数分布
