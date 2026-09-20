@@ -28,7 +28,7 @@
 // 事务沿用 withTransaction（native db.transaction），连接级共享已验证（15.2 验证记录①）。
 
 import type { EntityRow, EntitySummary, EntityType, RelationRow } from "@whispering233/ai-editor-shared";
-import { ENTITY_TYPES, generateEntityId, panelTopLevelNames } from "@whispering233/ai-editor-shared";
+import { ENTITY_TYPES, MAX_ENTITY_LIST_LIMIT, generateEntityId, panelTopLevelNames } from "@whispering233/ai-editor-shared";
 import { and, asc, count, desc, eq, inArray, isNull, like, or, sql, type SQLWrapper } from "drizzle-orm";
 import { nowIso } from "../storage/atomic.js";
 import { withTransaction, type Db } from "../connection.js";
@@ -60,7 +60,7 @@ export interface EntityListQuery {
   filters?: { tags?: string[]; status?: string };
  /** 分页偏移，默认 0 */
   offset?: number;
- /** 每页条数，默认 50，最大 200（超限 clamp，防恶意大页） */
+ /** 每页条数，默认 50，上限 `MAX_ENTITY_LIST_LIMIT`（超限 clamp，防恶意大页） */
   limit?: number;
   sort?: "name" | "created_at" | "updated_at";
   order?: "asc" | "desc";
@@ -232,7 +232,7 @@ function collectSettingDescendants(db: Db, rootId: string): Set<string> {
 /**
  * 实体列表（GET /api/v1/entity/:type）：
  * type 过滤 + q 模糊搜索（name LIKE）+ 排序（name/created_at/updated_at × asc/desc，
- * 白名单防注入）+ 分页（limit clamp 1-200）+ **默认过滤软删**。
+ * 白名单防注入）+ 分页（limit clamp 1..`MAX_ENTITY_LIST_LIMIT`）+ **默认过滤软删**。
  * total 为过滤后总数（不含分页）。
  * filters 语义（S6.3 下沉）：data 字段 JS 过滤（列表摘要不含 data），此时 SQL 只做
  * type/q/软删过滤，filters + 分页在 JS 层（MVP 数据量小，全行查询可接受）；
@@ -276,7 +276,7 @@ export function listEntities(db: Db, query: EntityListQuery): EntityListResult {
       ? [sql`${entities.sort_order} IS NULL`, asc(entities.sort_order), asc(entities.id)]
       : [orderAsc ? asc(sortCol) : desc(sortCol), asc(entities.id)];
   const offset = Math.max(0, Math.trunc(query.offset ?? 0));
-  const limit = Math.min(200, Math.max(1, Math.trunc(query.limit ?? 50)));
+  const limit = Math.min(MAX_ENTITY_LIST_LIMIT, Math.max(1, Math.trunc(query.limit ?? 50)));
 
  // JS 过滤路径：filters（S6.3 工具下沉）或 parentId（上级设定筛选）存在时，
  // SQL 取全量候选行（type/q/软删），JS 层执行 data/层级过滤 + 分页（MVP 数据量小，全行查询可接受）；

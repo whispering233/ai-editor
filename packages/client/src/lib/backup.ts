@@ -32,7 +32,7 @@ export function formatBytes(size: number): string {
 }
 
 /**
- * 备份频率下拉选项（关闭 / 每 5 / 10 / 15 / 30 / 60 分钟）：
+ * 备份频率下拉选项（关闭 + shared `BACKUP_FREQUENCIES` 各档）：
  * value 与 shared BACKUP_FREQUENCIES 对齐（null = 关闭），label 为展示文案；
  * 下拉/select 的 option value 用 String(opt.value)（"null" / "5" / "10" …）
  */

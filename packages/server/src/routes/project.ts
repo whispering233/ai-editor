@@ -360,12 +360,12 @@ function isBookNameValid(name: string): boolean {
   return name !== "" && !/[\\/]|^\.+$|[\u0000-\u001f]/.test(name);
 }
 
-/** 书名校验（与 client Sidebar 新建项目同规则）：禁路径分隔符/纯点/控制字符 */
+/** 书名校验（与 client `lib/book-name.ts` 同规则）：禁路径分隔符/纯点/控制字符 */
 function validateBookName(name: string): void {
   if (!name) {
     throw new HttpError(400, "VALIDATION_ERROR", "缺少书名字段 name");
   }
- // 与 client 同规则（Sidebar.tsx L3）："/"、"\"、纯点（. / ..）、控制字符一律拒绝——
+ // 与 client 同规则（lib/book-name.ts）："/"、"\"、纯点（. / ..）、控制字符一律拒绝——
  // name 直接拼 books/<name>/ 目录名，否则可逃出 books/（防越权精神）
   if (!isBookNameValid(name)) {
     throw new HttpError(400, "VALIDATION_ERROR", "书名不能包含 /、\\ 或为 . / ..");

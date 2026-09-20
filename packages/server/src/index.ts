@@ -172,7 +172,7 @@ export async function startServer(projectRoot: string, options: StartServerOptio
   const root = resolve(projectRoot);
 
  // 调试配置初始化（**启动读一次**：<创作根>/.ai-editor/config.json——唯一来源，细粒度
- // 五类别 chat/request/stream/usage/http；文件不存在/非法 JSON/结构不符 → 全关；
+ // 四类别 chat/request/usage/http；文件不存在/非法 JSON/结构不符 → 全关；
  // 不阻断启动。运行中改配置文件不生效——热加载 YAGNI）
   initDebugConfig(root);
 

@@ -87,7 +87,7 @@ compute_state(target_type, target_id, at_node_id)
         注意：appliedDeltas 随进度增长（含前面所有章的 Delta，依赖截断机制）；
         **at_node_id 不限层级**（章/场景均可——「第3章第2场时他什么状态」是合法查询）；
         op=update 校验当前值等于 from，不匹配**跳过该 change 并继续累积**，结果在
-        conflicts 中标注 { field, expected, actual }（不再返回 409——手动编辑 data 是
+        conflicts 中标注 { deltaId, field, expected, actual }（不再返回 409——手动编辑 data 是
         正常用户行为，AI 应感知 conflicts 并向用户提示修复）；
         field 支持点分嵌套路径（2026-09，如 `ability_panel.火系.等级`）——逐层下钻定位
 

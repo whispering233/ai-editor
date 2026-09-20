@@ -8,6 +8,7 @@
 // signal：全量候选 × 信号计算为长任务候选，循环中检查。
 
 import { getEntity, listEntities, listRelations } from "@whispering233/ai-editor-db";
+import { MAX_ENTITY_LIST_LIMIT } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
 import { buildEntityGraph, intersectSets, isEntityType, throwIfAborted } from "./utils.js";
 import type { SuggestConnectionsArgs } from "../schemas/index.js";
@@ -41,8 +42,8 @@ export function runSuggestConnections(ctx: ToolContext, args: SuggestConnections
 
  // 1. 同类型候选（非软删，排除自身）；全量实体名映射（S2 共同邻居可能跨类型——
  // 邻居名从全量映射取，避免退化为 id）
-  const candidates = listEntities(ctx.db, { type: entity.type, limit: 200 }).items.filter((c) => c.id !== entity.id);
-  const allEntities = listEntities(ctx.db, { limit: 200 }).items;
+  const candidates = listEntities(ctx.db, { type: entity.type, limit: MAX_ENTITY_LIST_LIMIT }).items.filter((c) => c.id !== entity.id);
+  const allEntities = listEntities(ctx.db, { limit: MAX_ENTITY_LIST_LIMIT }).items;
   const entityName = new Map(allEntities.map((e) => [e.id, e.name]));
   if (candidates.length === 0) return { suggestions: [] };
 

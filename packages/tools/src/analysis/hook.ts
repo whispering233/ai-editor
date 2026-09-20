@@ -19,7 +19,7 @@
 // signal：全量 hook 遍历为长任务候选，循环中检查（AbortedError）。
 
 import { findOutlineNode, getEntity, listEntities, listRelations, readOutlineFile } from "@whispering233/ai-editor-db";
-import { DEFAULT_HALF_LIFE, PAYOFF_TIMING } from "@whispering233/ai-editor-shared";
+import { DEFAULT_HALF_LIFE, MAX_ENTITY_LIST_LIMIT, PAYOFF_TIMING } from "@whispering233/ai-editor-shared";
 import type { EntityRow, OutlineFileNode, RelationRecord } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
 import {
@@ -60,7 +60,7 @@ export interface HookRecord {
 function collectHooks(ctx: ToolContext, signal?: AbortSignal): { hooks: Map<string, HookRecord>; hookStatuses: Map<string, string> } {
   const hooks = new Map<string, HookRecord>();
   const hookStatuses = new Map<string, string>();
-  for (const summary of listEntities(ctx.db, { type: "hook", limit: 200 }).items) {
+  for (const summary of listEntities(ctx.db, { type: "hook", limit: MAX_ENTITY_LIST_LIMIT }).items) {
     throwIfAborted(signal);
     const entity = getEntity(ctx.db, summary.id);
     if (entity === null) continue; // 防御：摘要与详情不一致（不应出现）

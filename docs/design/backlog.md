@@ -84,7 +84,7 @@
   - 影响：自动推送活性（那一段改动晚一次上云），非数据丢失（本地数据在盘上）；触发条件是「正好在打包那几十毫秒里保存」。
 - **零备份 + `local-ahead` 时旧包确认框的「上传旧备份」会 404**（卡 B oracle 登记，UX 洞）
   - 现状：没有任何本地备份时 `hasUnbackedChanges` 恒真 ⇒ 点「同步云端」弹旧包框，其中「上传旧备份」未禁用，点了走 `pushBackup` 404「没有可推送的备份」，文案落到框内。
-  - 最小修法：该框在「本机无备份」时把「上传旧备份」禁用，并照 `DESIGN.md:550` 的口径提示先「立即备份」（另一半「立即手动备份并推送」仍可用）。
+  - 最小修法：该框在「本机无备份」时把「上传旧备份」禁用，并照 `DESIGN.md` §Components「云端存档」的口径提示先「立即备份」（另一半「立即手动备份并推送」仍可用）。
 - **卡 B 的两条测试用未来 mtime 造 stale**（卡 B oracle 登记，测试诚实性）
   - `Date.now() + 1000` 能确认式地造出 stale，但没覆盖现实序（备份后 0-1s 内编辑的容差边界）；另 `auto-push.test.ts` 的 2h tick 跳过用例里留了一句自问自答的困惑注释。
   - 何时必须做：若要动 `BACKUP_CHANGE_TOLERANCE_MS` 或 `hasUnbackedChanges` 的基准口径时，先补这两条边界用例。
@@ -116,7 +116,7 @@
   - **`clearStatus()` 未清 `conflictOpen`/`pullTarget`/`pendingSettingsPane`**：关闭项目/切书后旧对话框状态残留（模态遮罩挡住入口，可达性低）。
   - **失败文案的「未执行」断言**：网络超时可能服务端**已执行**（`无法连接服务，推送/拉取未执行`）→ 去掉断言、只说「未确认」。
   - **冲突框「保留云端」应带上框里展示的那份 `fileName`**（当前 `pull()` 无参 = 服务端当下 head）。
-  - **`DESIGN.md` §544 失败态口径与代码不一致**（文档写「错误文案 + 重试按钮；未配置 empty-state」，代码是纯文案）→ 改文档或补按钮。
+  - **`DESIGN.md` 失败态口径已对齐（2026-09 兑现）**：文档现写「刻意不做独立「重试」按钮与 `empty-state`」，与代码（纯文案）一致。
   - **`getProjectBackups()` 失败与「真的没有备份」不可区分**（`.catch(() => null)` → 冲突框禁用强推并说「本机还没有备份」，可能不实）。
 - **真云盘（坚果云）人工验收清单**（自动化环境只到「本地 WebDAV + mock fetch」；真实云盘的认证/配额/时区三项无法在 CI 覆盖）
   1. 坚果云网页端 → 安全选项 → **添加应用密码**（不是账号主密码）；在设置页「备份 → 云端备份」填**云盘根** `https://dav.jianguoyun.com/dav` + 注册邮箱 + 应用密码 → **保存** → **测试连接**（期望 toast「连接成功，已写入并删除测试文件」；应用会在其下自动建立并使用 `ai-editor/` 工作目录）。
@@ -127,10 +127,7 @@
   6. 配额/时区：坚果云免费账户有 1GB/月上传流量；跨时区两台机器的份按**文件集合**判定（不看时间戳），不应误报「已同步」。上传超 500MB 的包会被拒绝（`CLOUD_BACKUP_TOO_LARGE`，本机体积上限提示）。
   7. 凭据核对：`<创作根>/.ai-editor/cloud.json` 权限应为 `600`；`project.json` / 备份 zip / 任何 API 响应里都不应出现密码。
 
-- **不可达文案在 AggregateError 形态下拿不到 `cause.code`**（卡 5 oracle 复核登记）
-  - 现状：`webdav.ts` 的不可达分支读 `err.cause.code`；当底层抛的是 `AggregateError`（多地址尝试失败，如 `ECONNREFUSED` 被聚合）时 `cause.code` 为 undefined → 文案退回 `fetch failed`（CHANGELOG 卡 2 条目宣称「带上底层错误码」在此时不成立）。
-  - 触发条件：用户看到「无法连接云盘（PROPFIND）：fetch failed」这类无信息量提示时。
-  - 最小修法：`cause` 为 AggregateError 时遍历 `cause.errors` 取首个带 `code` 的（或取 `cause.errors.map(e => e.code)`）。
+- **不可达文案已能拿到底层错误码（2026-09 兑现）**：`webdav.ts` 的 `describeErrorCause` 会展开 `AggregateError.errors` 并去重合并 code，`40-cloud-sync.md` 已按新行为描述。
 
 - **云根不存在时推送的报错文案误导**（卡 4 oracle 验证登记）
   - 现状：`pushBackup` 只 `MKCOL` **书目录**；若配置的 WebDAV 根路径本身不存在（从未跑过 `/cloud/test`、也没建根），`MKCOL` 会因父目录缺失返回 409 → 映射成 `CLOUD_UNREACHABLE`（「无法连接云盘」），而真实原因是「根目录不存在」。
@@ -270,14 +267,14 @@
 
 - **CI 侧打包态启动冒烟（缺失的护栏）** — 现状：卡 A1/A2 验收里的「打包后起一次」只在本地人工做过（v0.0.44 的 `electron-updater` ESM 具名导入就是这样被捉到的：typecheck/lint/单测全绿，打包态直接启动失败），CI 只验证「包能构建、三资产齐全」，**不验证「包能起来」**。触发条件：下一次主进程依赖/import 变动导致同类回归（很便宜就能重现）。最小修法：`desktop.yml` 在 electron-builder 后加一步：解压/使用 `release/win-unpacked/ai-editor.exe --user-data-dir=<tmp>`，等几秒后断言日志里有「菜单已就绪」且无 `SyntaxError`/`Uncaught Exception`（Windows runner 需要处理无交互会话下的窗口创建，可能要 `--no-sandbox` 或改为断言「主进程跑到了 server 启动行」）。
 
-- **Windows 自动更新的真机闭环** — ✅ **已完成（2026-09-16/17，连续五跳：0.0.44→0.45→0.46→0.47→0.48）**：差分下载（每跳 1~2%）、静默安装（`--updated,/S,--force-run`）、自动拉起、版本号确实变化、v0.0.45 起全程无清除数据框；明细与「代码新旧指纹」见 `50-desktop.md` §5.2「验证状态」。**残留两个未专门观测的小项**：升级时是否弹 UAC（预期不弹，per-user）、安装对话框的 Esc/Enter 是否都走「稍后」。
+- **Windows 自动更新的真机闭环** — ✅ **已完成（2026-09-16/17，连续五跳：0.0.44→0.45→0.46→0.47→0.48）**；明细与「代码新旧指纹」见 `50-desktop.md` §5.2 与 `CHANGELOG.md`。**残留两个未专门观测的小项**：升级时是否弹 UAC（预期不弹，per-user）、安装对话框的 Esc/Enter 是否都走「稍后」——真机顺手验。
 - **macOS / Linux 安装包的恢复** — 现状：matrix 里两项已注释（无真实用户需求 + 无 mac 环境可验）。触发条件：出现相应平台的真实用户。（Linux 包本机可随时出；macOS 需 mac runner。）
 - **原生文件对话框的真实桌面验收（只能人工）** — 现状：WSLg 下 GTK 文件对话框挂起，开发机无法断言其可见性与交互（最小 Electron 对照实验同样挂起 → 环境问题，非本仓代码）。影响：首次启动选目录、书架页「浏览…」、设置页「更改书库位置」三处的真实体验未验证。触发条件：有 macOS / Windows / 真实 Linux 桌面环境可用时。最小验证：首次启动点一次选目录 + 选完确认重启后是否直达该书库。
 
 ## 块文档与正文（2026-10，批 12 交付后的遗留项）
 
 - **新建参考资料时的「名称」入口不可发现（12.8 走查实测）** — 现状：草稿页标题是**静态文本**「新建参考资料」，必须点它才切成输入框；而「名称必填」报错出现在表单底部（正文下方），离名称位置很远——实测第一次操作会把名字填进「分类」。触发条件：下一个真实用户（或自己隔一周再用）反馈「不知道怎么命名」。最小修法：草稿态直接渲染标题输入框（placeholder「未命名参考资料」）+ 报错就近显示在标题下方（只动 ReferenceDetail 的 titleNode 分支）。
-- **块文档格式选型的历史论证（已否决方案，勿重提）** — 2026-10 决策：正文/参考资料真相 = `document_records.content`（BlockNote 块数组 JSON，随 `data.db`）。**已否决**：① 项目目录 `manuscript/<章id>.md` 为真相（md↔块为**双向有损**转换，每次「打开→保存」都可能静默丢颜色/对齐/嵌套，且要额外维护备份四处同步 + `.trash/` + mtime 台账）；② `references/` 目录继续作真相（同上，且参考资料要改为受限 schema）。触发条件：只有在「必须能被 Obsidian 等外部编辑器直接改写正文」成为硬需求时才重新评估——届时升级路径 = 反向导出（块 JSON → md 落盘）+ 明确主从（导出物只读）。详细对比见本文件历史与批 12 的讨论记录。
+- **块文档格式选型的历史论证（已否决方案，勿重提）** — 2026-10 决策：正文/参考资料真相 = `document_records.content`（BlockNote 块数组 JSON，随 `data.db`）。**已否决**：① 项目目录 `manuscript/<章id>.md` 为真相（md↔块为**双向有损**转换，每次「打开→保存」都可能静默丢颜色/对齐/嵌套，且要额外维护备份四处同步 + `.trash/` + mtime 台账）；② `references/` 目录继续作真相（同上，且参考资料要改为受限 schema）。触发条件：只有在「必须能被 Obsidian 等外部编辑器直接改写正文」成为硬需求时才重新评估——届时升级路径 = 反向导出（块 JSON → md 落盘）+ 明确主从（导出物只读）。决策背景见 `CHANGELOG.md` v0.0.49 段与 `docs/design/10-data-model.md` §14。
 - **全书正文导出** — 现状：只能逐章导出（页头「导出」）。触发条件：作者要交给外部工具/自留稿。最小修法：client 侧逐章 `GET /manuscript/:id` + `blocksToMarkdownLossy` 打包 zip（无新端点；注意 md 有损提示）。
 - **正文检索工具 `search_manuscript`** — 现状：AI 只能逐章读（`get_chapter_text`）。触发条件：章节数上来后 AI 常找不到「哪章写过灵脉」。最小修法：`content_text` LIKE + 命中片段（与 `search_references` 同风格）；注意工具越多每轮工具列表越贵——先验证真实使用频率。
 - **AI 建议落库（章级批注）** — 现状：AI 对正文的建议只活在对话里（L1）。触发条件：用户反复问「刚才那条建议呢」。升级路径：新表（章级 suggestion：锚点可为块 id/纯章级）+ 采纳/忽略状态 + 正文页侧栏列表；**不得**演进为「AI 直写正文」。
@@ -303,6 +300,12 @@
   - 已知残差（有意接受）：客户端「先 GET 比对再 PUT」的预检方案不可靠（GET→PUT 之间正好是真竞态窗口，且每次自动保存多一次请求），**不要用**。
 - **块编辑器接线无自动化回归钉（卡 12.12/12.5 修复轮登记）** — 现状：`initialContent: []` 崩页与 `dictionary: zh` 两个缺陷都只有浏览器走查证据；仓内无 jsdom，组件不参与单测。触发条件：重现「改一行传参把编辑器搞崩」。可选最小修法：按 `design-discipline.test.ts` 的源码扫描风格加一条断言（如 `document-editor.tsx` 必须包含 `dictionary: zh` 且不得出现 `initialContent: []`），或引入 jsdom 只测封装组件的挂载。
 - **`document_records` 的两份 DDL 文本差一行行尾注释**（卡 12.2 oracle 登记，P3 无功能影响） — 现状：`packages/db/src/tables.ts` 的声明 DDL 在 `PRIMARY KEY (owner_kind, owner_id)` 后带 `-- 一 owner 一行（…）` 注释，`migrations/008_document_records.ts` 的迁移 DDL 无该注释；去注释后逐字相等。唯一消费该文本的是「v0 空库结构快照」（只对 `user_version === 0` 生效，已到 v8 的库不参与）。触发条件：有人想加「迁移 DDL 文本 == 声明 DDL 文本」的断言时。最小修法：把注释挪到行首或去掉（同步改两处）。
+
+## 文档与测试卫生（2026-09 发布前审计登记）
+
+- **文档日期口径不一致（待拍板）** — 现状：`docs/**`、`README.md`、`AGENTS.md` 共 67 处标 `2026-10`（写作面 / 块文档 / 桌面版等批次），而 git 提交与 tag 日期、`CHANGELOG.md` 各版本头均为 `2026-09`（v0.0.49 = 2026-09-19）。触发条件：下次文档批次或用户拍板「以哪个为准」。最小修法：先定基准（建议 = 版本头口径），再一次性全量替换；不要零敲碎打地改单处（会多出一种口径）。
+- **`auto-push.test.ts` 用 `references/` 造「变更」的前提已失效（测试诚实性）** — 现状：helper `changeCoveredByBackup` 与 4 处 `writeAfter(join("references", …))` 写的是已退役的随包目录，而变更判定只查三文件 + `data.db-wal` + `PACKED_DIR_NAMES`（= `sessions/`）⇒ 用例标题所述「有改动未进最新备份」实际走的是「无变更 → 不推」（守卫本体由同文件的 `sessions/` 用例覆盖）。触发条件：要动 `hasUnbackedChanges` / `AUTO_PUSH_THROTTLE_MS` 口径时。最小修法：改用 `sessions/s1.jsonl`（同文件已有正确写法），并先确认该用例的期望结果是否随之改变。
+- **README 安装包表的 macOS 行资产名含空格** — 现状：`AI Editor-<版本>-mac-{arm64,x64}.dmg` 与 `build.md`「资产名不得含空格」不变式冲突（`electron-builder.yml` 的 mac `artifactName` 亦仍含空格）。触发条件：恢复 macOS 出包时。最小修法：同步改 `artifactName` + README 该行。
 
 ## MVP 明确不做（勿顺手实现）
 

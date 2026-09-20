@@ -125,7 +125,7 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
   throw new ApiError(CLIENT_NETWORK_ERROR, `非预期响应（HTTP ${res.status}）`);
 }
 
-// ============ 端点函数（本卡 3 个示例验证封装；完整端点按各切片卡需求补充） ============
+// ============ 端点函数（按 shared types/api.ts 的 schema 封装，返回值类型同步同源） ============
 
 /** GET /api/v1/project/config（shared types/api.ts projectConfigResSchema） */
 export function getProjectConfig(): Promise<ProjectConfig> {

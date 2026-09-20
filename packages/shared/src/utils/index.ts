@@ -1,5 +1,4 @@
-// 纯工具函数聚合出口
-// 文件划分见 （utils/：id.ts / validate.ts / format.ts / backup.ts；validate.ts 随 Zod 于 T1.4 引入）
+// 纯工具函数聚合出口（新增子模块在此补 `export *`；不在注释里维护文件清单——`ls` 才是事实）
 export * from "./id.js";
 export * from "./format.js";
 export * from "./mapping.js";

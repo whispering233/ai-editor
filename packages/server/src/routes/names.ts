@@ -9,7 +9,7 @@
 // 响应 names 键集 = 请求 ids 去重后全集（每个 id 必有条目，未命中 = null）
 import { Hono } from "hono";
 import { getEntity, findOutlineNode, readOutlineFile } from "@whispering233/ai-editor-db";
-import { ENTITY_TYPE_LABELS, OUTLINE_NODE_TYPE_LABELS } from "@whispering233/ai-editor-shared";
+import { ENTITY_ID_PREFIX, ENTITY_TYPE_LABELS, OUTLINE_NODE_ID_PREFIX, OUTLINE_NODE_TYPE_LABELS } from "@whispering233/ai-editor-shared";
 import { namesResolveReqSchema } from "@whispering233/ai-editor-shared/schemas";
 import type { OutlineFileNode } from "@whispering233/ai-editor-shared";
 import { ok } from "../middleware/error.js";
@@ -18,11 +18,11 @@ import { requireCurrentProject, type ProjectContext } from "../middleware/projec
 /** 名称解析路由（挂载于 /api/v1/names，index.ts） */
 export const namesRoutes = new Hono();
 
-/** 实体 id 前缀（char-/set-/loc-/hook-/ev-/tp-/ref-，ENTITY_ID_PREFIX 同源） */
-const ENTITY_PREFIXES = ["char-", "set-", "loc-", "hook-", "ev-", "tp-", "ref-"] as const;
+/** 实体 id 前缀（**派生 shared `ENTITY_ID_PREFIX`**——单一来源，禁止手抄） */
+const ENTITY_PREFIXES: string[] = Object.values(ENTITY_ID_PREFIX);
 
-/** 大纲节点 id 前缀（vol-/ch-/sc） */
-const OUTLINE_PREFIXES = ["vol-", "ch-", "sc-"] as const;
+/** 大纲节点 id 前缀（**派生 shared `OUTLINE_NODE_ID_PREFIX`**） */
+const OUTLINE_PREFIXES: string[] = Object.values(OUTLINE_NODE_ID_PREFIX);
 
 /** 解析单个 id：未命中/未知前缀 → null */
 function resolveOne(id: string, project: ProjectContext): { label: string; name: string } | null {

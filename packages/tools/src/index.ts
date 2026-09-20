@@ -1,5 +1,5 @@
 // @whispering233/ai-editor-tools 入口：导出工具上下文 / 注册表 / 查询类与分析类工具实现
-// S6.3 查询类工具（自动权限，8 个）+ S6.4 分析类工具（自动权限，5 个）在此注册；
+// S6.3 查询类工具（自动权限，10 个）+ S6.4 分析类工具（自动权限，5 个）在此注册；
 // S6.5 伏笔 / S6.6 提案通过 registry.registerTool(s) 继续挂载（注册表是唯一事实来源）。
 // S6.7 执行类 13 个**不注册 registry**（LLM 不可见，「核心设计原则」）——
 // 仅经 executor 门面（executeProposal）导出，S7.5 提案确认后调用。
@@ -8,9 +8,8 @@
 // 工具定义集中在本入口（name/description/parameters/permission/run），
 // 参数 TypeBox schema 统一从 ./schemas 出口取（见 docs/api/tool-calling.md）。
 
-// 包标识常量（与 shared/llm 包风格一致：SHARED_PKG_NAME/LLM_PKG_NAME；agent 冒烟依赖）
+// 包标识常量（与 shared 包风格一致：SHARED_PKG_NAME；agent 冒烟依赖）
 export const TOOLS_PKG_NAME = "@whispering233/ai-editor-tools";
-export const TOOLS_PKG_VERSION = "0.1.0";
 
 export * from "./context.js";
 export * from "./registry.js";
@@ -363,7 +362,7 @@ import {
 import { runProposeReorderTimepoints } from "./proposal/reorder-timepoints.js";
 import { runProposeCreateReference } from "./proposal/reference.js";
 
-/** 提案类工具定义（S6.6 + F9 重排 + G2 时间点重排，「提案类」+ 「工具扩展」提案类，共 15 个；权限全为 PROPOSAL）
+/** 提案类工具定义（S6.6 + F9 重排 + G2 时间点重排，「提案类」+ 「工具扩展」提案类，共 16 个；权限全为 PROPOSAL）
  * 语义：AI 不能直接修改数据——propose_* 仅产出提案（tool_result 只有 proposal_id + 一句话摘要，
  * 不含预览细节，2026-08 修订；完整预览随 tool_execution_end 帧的 result.details 推送 GUI）；用户确认后由 S7.5 路由
  * 快照重校验并调用 S6.7 执行工具落库。*/

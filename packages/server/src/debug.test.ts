@@ -36,7 +36,6 @@ describe("initDebugConfig 配置文件解析", () => {
     expect(isCategoryEnabled("request")).toBe(true);
     expect(isCategoryEnabled("usage")).toBe(true);
     expect(isCategoryEnabled("chat")).toBe(false);
-    expect(isCategoryEnabled("stream")).toBe(false);
     expect(isCategoryEnabled("http")).toBe(false);
   });
 

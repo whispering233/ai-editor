@@ -10,7 +10,7 @@
 // 稀疏字段知识归拢 db 单一位置）——工具层透传
 
 import { getDocument, getEntity as dbGetEntity, getEntitySummaryStats, listEntities } from "@whispering233/ai-editor-db";
-import { mapRowToEntity } from "@whispering233/ai-editor-shared";
+import { MAX_ENTITY_LIST_LIMIT, mapRowToEntity } from "@whispering233/ai-editor-shared";
 import type { Entity } from "@whispering233/ai-editor-shared";
 import type { EntityListResult, EntitySummaryStats } from "@whispering233/ai-editor-db";
 import type { ToolContext } from "../context.js";
@@ -53,14 +53,14 @@ export type SearchEntitiesResult = EntityListResult;
  * 实体搜索（search_entities(type, query, filters?) → 匹配实体列表）。
  * 透传 db listEntities：type + name LIKE 模糊匹配 + **软删过滤**
  * + filters（tags AND / status 精确匹配，data 字段 JS 过滤）+ 摘要提取（db 单一实现）。
- * limit 取 db `listEntities` 的 clamp 上限（clamp 数值单源在 db）：搜索结果尽量全（token 截断由上层按需处理）。
+ * limit 取 `MAX_ENTITY_LIST_LIMIT`（数值单源在 shared）：搜索结果尽量全（token 截断由上层按需处理）。
  */
 export function runSearchEntities(ctx: ToolContext, args: SearchEntitiesArgs): SearchEntitiesResult {
   return listEntities(ctx.db, {
     type: args.type,
     q: args.query,
     filters: args.filters,
-    limit: 200,
+    limit: MAX_ENTITY_LIST_LIMIT,
   });
 }
 

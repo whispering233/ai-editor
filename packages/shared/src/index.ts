@@ -8,4 +8,3 @@ export * from "./constants/index.js";
 export * from "./utils/index.js";
 
 export const SHARED_PKG_NAME = "@whispering233/ai-editor-shared";
-export const SHARED_PKG_VERSION = "0.1.0";

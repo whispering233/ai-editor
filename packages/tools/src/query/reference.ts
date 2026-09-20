@@ -11,6 +11,7 @@
 // filters 不支持 data.type 过滤（仅 tags/status），故在结果层做 JS 过滤（total 同步修正）。
 
 import { listEntities } from "@whispering233/ai-editor-db";
+import { MAX_ENTITY_LIST_LIMIT } from "@whispering233/ai-editor-shared";
 import type { EntityListResult } from "@whispering233/ai-editor-db";
 import type { ToolContext } from "../context.js";
 import type { SearchReferencesArgs } from "../schemas/index.js";
@@ -21,7 +22,7 @@ export function runSearchReferences(ctx: ToolContext, args: SearchReferencesArgs
     type: "reference",
     q: args.query,
     filters: args.tags !== undefined ? { tags: args.tags } : undefined,
-    limit: 200,
+    limit: MAX_ENTITY_LIST_LIMIT,
   });
  // type 分类过滤（data.type 枚举经 db toSummary 暴露为 summary.type）：结果层 JS 过滤——total 同步
   if (args.type !== undefined) {

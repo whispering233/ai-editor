@@ -19,6 +19,7 @@
 // 幂等：UPDATE 均带 deleted_at IS NULL 过滤——一致状态返回零补标、无副作用，
 // 可安全重复执行（二次打开项目零补标）。
 import type { ProjectContext } from "./middleware/project.js";
+import { inPlaceholders } from "./sql-placeholders.js";
 import { listDeletedNodes, nowIso } from "@whispering233/ai-editor-db";
 
 /** 启动一致性校验结果（供调用方写日志，任务卡 S4.2） */
@@ -29,11 +30,6 @@ export interface SoftDeleteReconcileResult {
   relations: number;
  /** 补标的 Delta 数（node_id 命中已软删节点但 DB 未软删的 delta_records） */
   deltas: number;
-}
-
-/** 生成 SQL IN 占位符串（id 集来自服务端生成的 nanoid，无注入面；空集返回 "(NULL)" 恒假） */
-function inPlaceholders(ids: string[]): string {
-  return ids.length === 0 ? "(NULL)" : `(${ids.map(() => "?").join(",")})`;
 }
 
 /**

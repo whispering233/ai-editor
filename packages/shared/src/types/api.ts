@@ -6,7 +6,7 @@
 // zod 版本：^4（注意 v4 API：z.record 必须两参、z.enum 接受 readonly 数组）
 
 import { z } from "zod";
-import { ENTITY_TYPES } from "../constants/entity.js";
+import { ENTITY_TYPES, MAX_ENTITY_LIST_LIMIT } from "../constants/entity.js";
 import { normalizeRelationType, relationTypeSyntaxError } from "../utils/relation-type.js";
 import { HOOK_STATUSES, PAYOFF_TIMING } from "../constants/hook.js";
 import { CONFLICT_LEVELS } from "../constants/outline.js";
@@ -49,7 +49,7 @@ export const ERROR_CODES = [
   "SESSION_BUSY", // 409 删除会话时该会话有在途 SSE 流（拒删）
   "CHAT_BUSY", // 409 当前项目已有在途 chat 流（单项目单流约束，docs/api/80-api-chat.md）
   "THINKING_NOT_FOUND", // 404 思维链全文端点：blockIndex 越界或该块非 thinking
-  "DOCUMENT_STALE", // 409 保存块文档（章正文 / 参考资料正文）时版本戳不一致（另一标签页/窗口已写入）；**仅当请求携带 base_updated_at 时校验**，省略 = 覆盖保存（拒绝隐式丢失他人写入）
+  "DOCUMENT_STALE", // 409 保存章正文时版本戳不一致（另一标签页/窗口已写入；参考资料正文无版本戳、不在本码覆盖范围）；**仅当请求携带 base_updated_at 时校验**，省略 = 覆盖保存（拒绝隐式丢失他人写入）
  // ---- 废弃（保留兼容）----
   "DELTA_CONFLICT", // 已废弃（2026-08 修订：computeState 以 conflicts 字段替代 409）
  // ---- 命名（调试日志用）----
@@ -414,7 +414,7 @@ export const entitySummarySchema: z.ZodType<EntitySummary> = z.object({
 export const entityListQuerySchema = z.object({
   q: z.string().optional(), // 模糊匹配 name
   offset: z.coerce.number().int().min(0).default(0),
-  limit: z.coerce.number().int().min(1).max(200).default(50),
+  limit: z.coerce.number().int().min(1).max(MAX_ENTITY_LIST_LIMIT).default(50),
   sort: z.enum(["name", "created_at", "updated_at"]).optional(),
   order: z.enum(["asc", "desc"]).optional(),
  // 标签包含筛选（2026-08）：data 数组字段（setting.rules / event.tags）包含该标签即命中

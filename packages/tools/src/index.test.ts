@@ -1,6 +1,5 @@
 // 冒烟测试：验证 @whispering233/ai-editor-tools 入口可正常导入（T0.3 语义）
-// 入口重写（S6.3）后原空壳常量（TOOLS_PKG_NAME/DB_DEP）已移除——
-// 冒烟断言更新为新入口形态：注册表 API + 工具副作用注册（S6.3 查询 9 + S6.4 分析 5 +
+// 冒烟断言为新入口形态：注册表 API + 工具副作用注册（查询 10 + 分析 5 +
 // S6.5 伏笔 5 + S6.6 提案 16 + S6.7 卡 12.9（get_chapter_text）1 = 36 个；执行 13 个不暴露）；
 // workspace 依赖 @whispering233/ai-editor-db / @whispering233/ai-editor-shared 解析由 import 在编译/运行期验证
 import { describe, expect, it } from "vitest";

@@ -2,7 +2,7 @@
 //
 // 按 proposal.type 映射执行函数（PROPOSAL_TOOLS 名 ↔ EXECUTOR_TOOLS 名）：
 // propose_create_entity → create_entity、propose_add_relation → add_relation、
-// propose_advance_hook → advance_hook 等（15 提案 → 13 执行）；
+// propose_advance_hook → advance_hook 等（16 提案 → 13 执行）；
 // propose_create_hook / propose_update_hook 为适配器（hook 即 type=hook 的实体）：
 // - propose_create_hook → create_entity 注入 type="hook" + plant_at_node_id 时
 // 同事务补插 plants 关系（提案承诺「确认后建立 plants 关系」，生命周期「埋下」）
@@ -18,7 +18,7 @@
 // S7.5 确认路由在调用前做取消判定）。
 
 import { createEntity, createRelation, withTransaction } from "@whispering233/ai-editor-db";
-import { EXECUTOR_TOOLS, PROPOSAL_TOOLS } from "@whispering233/ai-editor-shared";
+import { PROPOSAL_TOOLS } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
 import { requireChapterNode, requireHook } from "../proposal/types.js";
 import type { Proposal } from "../proposal/types.js";
@@ -31,7 +31,7 @@ import { executeReorderTimepoints } from "./reorder-timepoints.js";
 import { executeCreateReference } from "./reference.js";
 import { optionalRecord, requireString, type ExecutorFn, type ExecutorResult } from "./types.js";
 
-/** 提案类型字面量联合（15 个，PROPOSAL_TOOLS 常量派生——注册表/门面共用） */
+/** 提案类型字面量联合（16 个，PROPOSAL_TOOLS 常量派生——注册表/门面共用） */
 export type ProposalType = (typeof PROPOSAL_TOOLS)[number];
 
 /** 适配 propose_create_hook → 复合建 hook：create_entity(type=hook) + plants 关系一次提交 */
@@ -110,4 +110,3 @@ export { executeAddDelta } from "./delta.js";
 export { executeCreateOutlineNode, executeMoveNode, executeDeleteNode } from "./outline.js";
 export { executeAdvanceHook, executeResolveHook, executeAbandonHook } from "./hook.js";
 export { executeReorderTimepoints } from "./reorder-timepoints.js";
-export { EXECUTOR_TOOLS };

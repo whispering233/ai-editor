@@ -11,7 +11,7 @@
 | 端口策略 | **固定优先**：先试 3456，被占才 +1（沿用 server 既有策略） | `localStorage` 按 origin 隔离，端口变化 = 主题/面板偏好重置。偏好存 `<创作根>/.ai-editor/config.json` 是错的（那不是展示层偏好）；自定义协议 `app://` 反代能彻底解决但要写协议层 + 验证 SSE 透传，当前不值得 |
 | 单实例 | `requestSingleInstanceLock()`，第二实例唤起已有窗口 | 顺带把「3456 被自己占用」的概率压到接近零 |
 | 退出 | 关窗即退出，复用 `ServerHandle.close()`（停自动备份调度 + 关 HTTP + 释放项目连接） | 灭掉「进程退出但 WAL 未收敛」的风险；无托盘、不驻留 |
-| 开发形态 | 窗口指向 Vite dev server（5173），server 仍由 `pnpm dev` 的 tsx watch 起 | 保住 HMR；一体形态（主进程内启 server）只在生产/打包验证时用 |
+| 开发形态 | 主进程内 in-process 起 server，窗口加载 `http://127.0.0.1:<实际端口>`（`pnpm --filter ai-editor-desktop start`） | 与生产同形态（同一段启动代码），不在 Electron 里另起子进程；代价是**无 HMR**——改前端要重建 client，需要 HMR 时用浏览器形态（`pnpm dev` + :5173） |
 
 **不变式**：桌面版启动路径**不得**依赖 `process.cwd()` 或命令行参数——macOS 下 cwd 是 `/`，双击启动没有可控参数。
 
@@ -116,7 +116,7 @@ macOS 无卸载器（拖废纸篓即卸）→ 本机制只对 Windows 生效；�
 
 **发布侧前置**：每个 Release 必须同时挂 `AI-Editor-<v>-win-x64.exe` + `latest.yml` + `<同名>.exe.blockmap`。**资产名不得含空格**——自动更新要求「磁盘文件名 = 上传后的资产名 = `latest.yml` 里的 `url`」**逐字一致**：GitHub 上传会把空格换成**点**（v0.0.43 实测资产名 = `AI.Editor-0.0.43-win-x64.exe`），而 electron-builder 写进 `latest.yml` 的是把空格换成**短横**的名字，更新器又按 yml 的 `url` 直拼 `/releases/download/<tag>/<名>`（`GitHubProvider.resolveFiles`，**不做资产清单回退**）⇒ 差一个字符就 404、更新全断。因此 `win.artifactName` / `linux.artifactName` 固定为无空格的 `AI-Editor-…`。**缺 `latest.yml` ⇒ 所有旧版的检查更新直接失败**（`ERR_UPDATER_CHANNEL_FILE_NOT_FOUND`）；缺 blockmap 只影响带宽。electron-builder 只负责产出这三样与包内 `resources/app-update.yml`（`electron-builder.yml` 的 `publish` 段是这两份元数据的前提），**上传唯一路径仍是 `softprops/action-gh-release`**，`pack.mjs` 显式传 `--publish never` 防两条上传路径打架（CI 也没有 GH_TOKEN 可交给 electron-builder）。完整发布纪律见 `build.md`。
 
-**验证状态（真机，2026-09-16/17）**：连续五跳升级全部成功——v0.0.44→0.0.45（差分 2%）、v0.0.44→0.0.46（1%）、v0.0.46→影子 0.0.47（同载荷，验「无清除数据框」与单框逻辑）、v0.0.46→0.0.47（1%）、v0.0.47→0.0.48（2%，98 个变更块 / 2,115 KB of 132,598 KB）。共同结论：差分下载真的生效（不是全量）、`--updated,/S,--force-run` 静默安装成功、应用自动拉起、版本号确实变化（日志 `Update for version 0.0.48 is not available`）、v0.0.45 起全程无清除数据框；下载时旧缓存 sha512 不匹配会自愈（`Directory for cached update will be cleaned`）。**代码新旧的可靠指纹**：旧代码会打 `disableWebInstaller is set to false …`，v0.0.45+ 不应出现。未专门观测：安装时是否弹 UAC、对话框 Esc/Enter 语义（列入 `tasks.md` 待验证）。
+**验证状态（真机，2026-09-16/17）**：连续五跳升级全部成功——v0.0.44→0.0.45（差分 2%）、v0.0.44→0.0.46（1%）、v0.0.46→影子 0.0.47（同载荷，验「无清除数据框」与单框逻辑）、v0.0.46→0.0.47（1%）、v0.0.47→0.0.48（2%，98 个变更块 / 2,115 KB of 132,598 KB）。共同结论：差分下载真的生效（不是全量）、`--updated,/S,--force-run` 静默安装成功、应用自动拉起、版本号确实变化（日志 `Update for version 0.0.48 is not available`）、v0.0.45 起全程无清除数据框；下载时旧缓存 sha512 不匹配会自愈（`Directory for cached update will be cleaned`）。**代码新旧的可靠指纹**：旧代码会打 `disableWebInstaller is set to false …`，v0.0.45+ 不应出现。未专门观测：安装时是否弹 UAC、对话框 Esc/Enter 语义（真机顺手验，登记于 `backlog.md`）。
 
 **差分 base 的位置**：`%LOCALAPPDATA%\ai-editor-desktop-updater\installer.exe`（安装器安装时写出的自身副本）。卸载会清掉它（§5.1）⇒ 卸载后重装的第一次更新回退全量下载，无功能影响。⚠ **差分失败会自动回退全量**（日志形如 `Cannot download differentially, fallback to full download: sha512 checksum mismatch`）——这是上游的设计回退，不是故障；根因是 base 与当前已装版本不一致（中间做过同版本重装 / 卸载清了缓存 / 影子实验）。诊断差分是否真的生效：看 `To download: … KB (N%)` 的比例与 `File has … changed blocks`。
 
@@ -141,7 +141,7 @@ macOS 无卸载器（拖废纸篓即卸）→ 本机制只对 Windows 生效；�
 
 **顺带修掉的真实缺陷**（桌面版暴露的）：server 的 bin 自检 `realpathSync(process.argv[1])` 在 Electron 主进程里收到命令行开关（`--no-sandbox`）→ 抛 ENOENT 打挂整个主进程。现改为 try/catch 包裹、解析失败即判否（bin 语义不变）。
 
-**平台覆盖**：Linux（AppImage）已在本机实测（打包 + 启动 + 建库 + 窗口）；Windows（NSIS）与 macOS（dmg arm64/x64）由 `.github/workflows/desktop.yml` 在对应 runner 上产出，**首次 tag 触发时验证**（待验证总表见 `tasks.md`，长期跟踪见 `backlog.md`）。
+**平台覆盖**：Linux（AppImage）已在本机实测（打包 + 启动 + 建库 + 窗口）；**Windows（NSIS）由 CI 产出并已真机闭环**（`.github/workflows/desktop.yml` 只跑 `windows-latest`，升级链路验证见 §5.2）；macOS（dmg）**暂不做**（无 mac 环境可验，`desktop.yml` 的 matrix 项已注释保留）——将来恢复三平台时的注意项见 `backlog.md`。
 
 ## 8. 与既有形态的关系
 

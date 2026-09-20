@@ -86,8 +86,10 @@ export const RELATION_TYPE_META: Record<
   occurs_in: { label: "锚定于", group: "anchor" },
 };
 
-/** 剧情连线关系类型（画布连线用 plot_edge，metadata 存连线标签） */
-export const PLOT_EDGE_TYPE = "plot_edge" as const;
+/** 实体列表 `limit` 上限（**单一定义**）：REST schema（types/api.ts 的 `.max()`）、
+ * db 查询层 clamp（queries/entity.ts）、工具调用点（tools 的 listEntities 调用）与
+ * 提案 schema 的 maxItems 一律引用本常量——散文与注释不得复述数字（AGENTS.md「数值单源」）。 */
+export const MAX_ENTITY_LIST_LIMIT = 200;
 
 /** 伏笔管理关系（伏笔关系约定：大纲节点 → hook） */
 export const HOOK_RELATION_TYPES = ["plants", "advances", "resolves"] as const;

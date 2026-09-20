@@ -4,7 +4,7 @@
 //
 // 交互（「关键交互」+ 任务卡 B2.4/B2.5/B2.6）：
 // - 频率下拉：选择即保存 PUT /project/config { backup_frequency_minutes }（null = 关闭，
-// 仅枚举 5/10/15/30/60）；载入用 config.backupFrequencyMinutes（缺省 10 / null → 关闭选中）
+// 选项 = shared BACKUP_FREQUENCIES）；载入用 config.backupFrequencyMinutes（缺省 10 / null → 关闭选中）
 // - [备份名称（可选）输入框] + [立即备份]：POST /project/backup（带 name）→
 // 清空输入 + 刷新列表 + toast「已备份」；失败 toast（磁盘错误透传 message）
 // - 历史备份列表：GET /project/backups → 行 = 时间（当年 MM-DD HH:mm:ss / 跨年 YY-MM-DD

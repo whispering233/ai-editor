@@ -16,6 +16,8 @@ import { CREATE_TABLES_SQL } from "./tables.js";
  * timepoint 实体 + occurs_at 挂载关系（从 event.data 移除 time_label）。
  * v3 → v4（K2 修订，2026-08）：**无 DDL**——仅 entities.data JSON 数据迁移
  * （setting 的旧 rules 分类值复制到 data.tags 并移除 rules，migrations/004_setting_tags.ts）。
+ * v4 → v5（参考资料实体）：entities 表 type CHECK 扩为 7 种（含 reference）
+ * （migrations/005_reference.ts，建新表拷数据四步换表）。
  * v5 → v6（对话历史出库）：chat_messages 导出为 `sessions/<id>.jsonl` 后 DROP 表
  * （migrations/006_sessions_jsonl.ts；会话从此不入库）。
  * v6 → v7（角色能力面板，2026-09）：**无 DDL**——character 旧 `abilities[]` 标签

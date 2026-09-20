@@ -6,6 +6,7 @@
 // patches（部分更新字段）以 `minProperties: 1` 表达「拒绝空对象」（等价原 zod `.refine`）。
 
 import { Type, type Static } from "@earendil-works/pi-ai";
+import { MAX_ENTITY_LIST_LIMIT } from "@whispering233/ai-editor-shared";
 import { entityTypeSchema } from "./entity.js";
 import { relationTypeSchema } from "./relation.js";
 import { outlineNodeTypeSchema } from "./outline.js";
@@ -197,11 +198,11 @@ export type ProposeAbandonHookArgs = Static<typeof proposeAbandonHookArgsSchema>
 /**
  * propose_reorder_timepoints 入参：timepoint_ids——LLM 按时间点 name 语义识别先后后产出的
  * **有序时间点 id 全量序列**（须覆盖当前全部未软删时间点，缺/多/重复由生成时校验拒绝）；
- * maxItems 与列表 limit 的 db clamp 上限对齐（数值单源在 db，本 schema 不复述）。
+ * maxItems 与列表 limit 上限同源（`MAX_ENTITY_LIST_LIMIT`，不在此复述数字）。
  */
 export const proposeReorderTimepointsArgsSchema = Type.Object(
   {
-    timepoint_ids: Type.Array(Type.String(), { minItems: 1, maxItems: 200 }),
+    timepoint_ids: Type.Array(Type.String(), { minItems: 1, maxItems: MAX_ENTITY_LIST_LIMIT }),
   },
   { additionalProperties: false },
 );

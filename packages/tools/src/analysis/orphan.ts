@@ -19,6 +19,7 @@ import {
   listEntities,
   listRelations,
 } from "@whispering233/ai-editor-db";
+import { MAX_ENTITY_LIST_LIMIT } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
 import { buildChapterIndex, throwIfAborted } from "./utils.js";
 import type { FindOrphanElementsArgs } from "../schemas/index.js";
@@ -107,7 +108,7 @@ function activityOf(
  * 输出按 id 升序（稳定排序，跨维度可预测）。
  */
 function collectUnusedCharacters(ctx: ToolContext, signal?: AbortSignal): UnusedCharacter[] {
-  const characters = listEntities(ctx.db, { type: "character", limit: 200 }).items;
+  const characters = listEntities(ctx.db, { type: "character", limit: MAX_ENTITY_LIST_LIMIT }).items;
  // appears_in（角色 → 大纲节点）按 sourceId 分组
   const appearsIn = new Map<string, string[]>();
   for (const r of listRelations(ctx.db, { sourceType: "character", relationType: "appears_in" }, 1, ctx.outlineDir).relations) {

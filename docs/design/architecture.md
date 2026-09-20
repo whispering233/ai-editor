@@ -134,6 +134,8 @@ shared（纯类型/常量/工具，零 Node 依赖，可被 client 安全 tree-s
     "@whispering233/ai-editor-db": "workspace:*",
     "@whispering233/ai-editor-tools": "workspace:*",
     "@whispering233/ai-editor-agent": "workspace:*",
+    "@earendil-works/pi-coding-agent": "0.85.1", // 会话/工具派发（exact pin）
+    "@earendil-works/pi-ai": "0.85.1",         // 模型目录与凭据（运行时 import，必须进 dependencies）
     "@hono/node-server": "^2.0.12",
     "hono": "^4.7.0",
     "fflate": "^0.8.3",          // 备份导出/导入的 zip 打包（无 Node 原生依赖）
@@ -169,7 +171,8 @@ shared（纯类型/常量/工具，零 Node 依赖，可被 client 安全 tree-s
 {
   "name": "ai-editor-desktop",
   "dependencies": {
-    "@whispering233/ai-editor-server": "workspace:*"   // 主进程 in-process 启动（唯一运行时依赖）
+    "@whispering233/ai-editor-server": "workspace:*",  // 主进程 in-process 启动
+    "electron-updater": "6.8.9"                        // Windows 安装态自动更新（exact pin；CJS ⇒ 默认导入）
   },
   "devDependencies": {
     "electron": "44.3.0",                              // exact pin（同 @earendil-works/* 纪律）

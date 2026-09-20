@@ -7,7 +7,7 @@
 // signal：全量关系遍历为长任务候选，循环中检查。
 
 import { listEntities, listRelations } from "@whispering233/ai-editor-db";
-import { RELATION_TYPES, RELATION_TYPE_META } from "@whispering233/ai-editor-shared";
+import { MAX_ENTITY_LIST_LIMIT, RELATION_TYPES, RELATION_TYPE_META } from "@whispering233/ai-editor-shared";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
 import { isEntityType, throwIfAborted } from "./utils.js";
@@ -57,7 +57,7 @@ export function runDetectConflicts(ctx: ToolContext, args: DetectConflictsArgs, 
   const relFilter = args.relation_filter !== undefined ? new Set<string>(args.relation_filter) : null;
 
  // 1. 全量非软删实体 + 全量可见关系（一次查询层调用各一）
-  const entities = listEntities(ctx.db, { limit: 200 }).items;
+  const entities = listEntities(ctx.db, { limit: MAX_ENTITY_LIST_LIMIT }).items;
   const relations = listRelations(ctx.db, {}, 1, ctx.outlineDir).relations;
   throwIfAborted(signal);
 

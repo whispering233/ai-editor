@@ -14,14 +14,14 @@ export interface DocumentFile {
   body: string;
 }
 
-/** 文件名基名长度上限（与参考资料导入的文件名 sanitize 同规则） */
+/** 文件名基名长度上限 */
 const FILE_NAME_LIMIT = 100;
 
 /**
  * 文件名 sanitize（章标题 → 文件名基名）：
  * 控制字符与 Windows 保留字符 `\ / : * ? " < > |` → 空格；折叠空白、去首尾空白与首尾点（保留内部点，
  * 如「1.2 节」）；截断 100 字符；空结果 → "未命名"。
- * 规则与 `lib/reference-frontmatter.ts` 的条目名 sanitize 同款（路径分隔符/保留字符/控制字符/首尾点，限长 100）。
+ * 规则 = 路径分隔符/保留字符/控制字符 → 空格 + 首尾点去除 + 截断 `FILE_NAME_LIMIT`。
  */
 export function sanitizeDocumentFileName(name: string): string {
   const cleaned = name

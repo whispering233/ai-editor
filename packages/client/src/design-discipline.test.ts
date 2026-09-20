@@ -4,12 +4,15 @@
 // ——这种失效不报错、只在浏览器里肉眼可见，必须由测试兜住。
 //
 // 规则与白名单（改白名单必须先改 DESIGN.md 并说明理由）：
+// `RULES` 常量（6 条源码扫描规则，逐条自检见文件末尾）：
 // 1. lucide-import      图标一律 @ant-design/icons（lucide 已退役）
 // 2. hardcoded-color    颜色只经 antd token / 语义变量；白名单：AntdProvider（token 定义唯一允许处）
 // 3. important-class    `!` 前缀类会掩盖「antd 无层 CSS 覆盖 Tailwind」这一事实，禁
 // 4. ad-hoc-font-size   字号只有四档（20/16/14/12），手写 px/rem 字号禁
-// 5. antd-root-override antd 组件根元素上不得挂会被 antd 自身声明压掉的布局/排版类
-//                       （Button/Input 的 width/height/padding/font-size/justify/border-radius）
+// 5. primary-bg-token   `colorPrimaryBg` 一类「主色浅底」在深墨 seed 下派生成中灰，禁作底色
+// 6. dropdown-menu-selectable  调用点不得另起一套下拉选中态（`selectable` 命中）
+// 另 4 条独立守卫（不在 `RULES` 表内，写法各异）：antd-root-override / cssvar-scope /
+// no-dynamic-class / button-variant-color。
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";

@@ -4,6 +4,12 @@
 > AI 工具（无 HTTP 接口）目录见 [tool-calling.md](./tool-calling.md)；请求/响应 schema 单一来源：`@whispering233/ai-editor-shared` `types/api.ts`。
 
 
+### 探活（[api-public.md](./api-public.md)）
+
+| 方法 | 路径 | 文档 |
+| :--- | :--- | :--- |
+| GET | `/api/v1/health` | 公共约定 |
+
 ### 项目管理（[10-api-project.md](./10-api-project.md)）
 
 | 方法 | 路径 | 文档 |

@@ -7,7 +7,6 @@
 import { TOOLS_PKG_NAME } from "@whispering233/ai-editor-tools";
 
 export const AGENT_PKG_NAME = "@whispering233/ai-editor-agent";
-export const AGENT_PKG_VERSION = "0.1.0";
 export const TOOLS_DEP = TOOLS_PKG_NAME;
 
 export {

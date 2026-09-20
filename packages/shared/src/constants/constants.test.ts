@@ -20,7 +20,6 @@ import {
   MAX_BACKUPS_PER_PROJECT,
   OUTLINE_NODE_TYPE_LABELS,
   PAYOFF_TIMING,
-  PLOT_EDGE_TYPE,
   PROPOSAL_TOOLS,
   QUERY_TOOLS,
   RELATION_TYPES,
@@ -72,8 +71,7 @@ describe("实体 / 关系常量", () => {
     expect(RELATION_TYPES).toHaveLength(17);
   });
 
-  it("分类常量：plot_edge 与伏笔三关系", () => {
-    expect(PLOT_EDGE_TYPE).toBe("plot_edge");
+  it("分类常量：伏笔三关系", () => {
     expect(HOOK_RELATION_TYPES).toEqual(["plants", "advances", "resolves"]);
   });
 

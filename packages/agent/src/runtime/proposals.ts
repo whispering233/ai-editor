@@ -5,7 +5,7 @@
 //
 // 本模块是提案仓与 `PROPOSAL_BUILDERS` 的**唯一实现**（提案端点与对话链路同仓消费）：
 // - 仓：set/get/peek/remove/clear/size
-// - build：15 个 propose_* 工具名 → 产出完整 Proposal 的构造函数
+// - build：16 个 propose_* 工具名 → 产出完整 Proposal 的构造函数
 //   （工具的 run 只返回 `{ proposal_id, summary }`，完整对象必须重建——工具的返回值要省 token）
 // - sink：pi 工具执行成功后的接线点——重建 Proposal 入仓 + 返回推给前端的载荷
 //
@@ -42,7 +42,7 @@ export const PROPOSAL_TTL_MS = 10 * 60_000;
 
 /**
  * 提案条数上限（超限淘汰 createdAt 最旧）。
- * 取 200 为数量级防御：正常会话一轮最多 15 个提案、挂卡不确认的残留按 TTL 自动过期，
+ * 取 200 为数量级防御：正常会话一轮最多 16 个提案、挂卡不确认的残留按 TTL 自动过期，
  * 200 足以覆盖极端多轮场景且内存占用可忽略（防无限增长）。
  */
 export const PROPOSAL_MAX_COUNT = 200;

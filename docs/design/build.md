@@ -25,14 +25,14 @@ pnpm dev            # pnpm -r --parallel run dev
 - ⚠ **跨包测试的 dist 陷阱（2026-09 实测踩坑）**：`server` 测试经 `@whispering233/ai-editor-tools` 的 **dist** 消费、`tools` 经 `db` 的 dist 消费——改了上游包的 `src` 而不重建，下游套件会**对着旧实现给出假绿灯**（曾导致一张卡的「锚点仅章」守卫在 tools 测试里绿、server 里实际 2 条 fixture 已废却未暴露）。**约定**：凡改动 shared/db/tools 的 `src`，跑下游测试前先 `pnpm --filter @whispering233/ai-editor-db build && pnpm --filter @whispering233/ai-editor-tools build`（或直接用 `pnpm test:packed` 级别的全量重建）。
 - 日常联调用仓库内 `test-project/`（运行时数据不入库）。
 
-**桌面版开发**（两步并行，与现有 dev 共存——窗口指向 Vite，HMR 照常）：
+**桌面版开发**（一体形态：主进程内 in-process 起 server，**无 HMR**）：
 
 ```
-pnpm dev                                  # client(5173) + server(3456) + 各包 tsc --watch
-pnpm --filter ai-editor-desktop dev   # electron：窗口加载 5173（主进程内不启 server）
+pnpm -r build                             # client 产物供 server 托管（resolveClientDist 优先取 packages/client/dist）
+pnpm --filter ai-editor-desktop start     # = tsc 构建主进程 + electron .；窗口加载 http://127.0.0.1:<实际端口>
 ```
 
-- 桌面版 dev 态窗口指向 Vite（`http://127.0.0.1:5173`），API 经 Vite proxy 打到 3456——**不在 Electron 里另起一套 server**，否则与 dev server 争端口。
+- 桌面版**没有**「窗口指向 Vite dev server」的形态（`packages/desktop` 无 `dev` 脚本、主进程恒走 `startServer()` + `loadURL(http://127.0.0.1:<端口>)`）。改前端代码后需重新 `pnpm --filter @whispering233/ai-editor-client build` 再重启；要 HMR 就用浏览器形态（`pnpm dev` + :5173，与桌面版互不干扰）。
 - `dev` 态必须能跑：Electron 主进程 ESM 入口 + `preload.cts`（沙箱 preload 不支持 ESM，见 `50-desktop.md` §3）。
 - 用户数据（`<userData>/desktop.json` 与日志）在 dev 态落在**开发态 Electron 的 userData**（`app.getName()` 同源），与安装态隔离。
 

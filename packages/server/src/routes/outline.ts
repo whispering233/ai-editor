@@ -9,6 +9,7 @@
 // 级联软删（cascadeSoftDelete）保留在路由层——与软删端点同文件内联，S4.1 任务边界只下沉
 // 还原/清除两个 helper（trash.ts 路由直接 import @whispering233/ai-editor-db）。
 import { Hono } from "hono";
+import { inPlaceholders } from "../sql-placeholders.js";
 import type { Db } from "@whispering233/ai-editor-db";
 import { findOutlineNode, readOutlineFile } from "@whispering233/ai-editor-db";
 import { getDocumentTextLengths } from "@whispering233/ai-editor-db";
@@ -87,10 +88,7 @@ export function collectSubtreeIds(tree: OutlineFileTree, nodeId: string): string
   throw new HttpError(404, "OUTLINE_NODE_NOT_FOUND", `大纲节点不存在: ${nodeId}`);
 }
 
-/** 生成 SQL IN 占位符串（id 集来自服务端生成的 nanoid，无注入面；空集返回 "(NULL)" 恒假） */
-export function inPlaceholders(ids: string[]): string {
-  return ids.length === 0 ? "(NULL)" : `(${ids.map(() => "?").join(",")})`;
-}
+/** 生成 SQL IN 占位符串（唯一实现见 `../sql-placeholders.js`） */
 
 /**
  * 级联软删该节点及子树关联的 relation/delta（任一端点软删即不可见）：

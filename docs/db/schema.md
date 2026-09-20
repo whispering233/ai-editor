@@ -150,7 +150,7 @@ CREATE INDEX idx_relation_type   ON relation_records(relation_type) WHERE delete
 | `kills` | 击杀 | 人物→人物 |
 | `appears_in` | 出现于大纲节点 | 实体→大纲节点 |
 | `occurs_in` | 发生于大纲节点（事件锚定） | event→大纲节点（多对多：一个事件可关联多个场景/章节，一个场景可被多个事件引用；**锚定 = 关系，无独立 chapter_anchor 字段**） |
-| `occurs_at` | 发生在地点 | 大纲节点→地点 |
+| `occurs_at` | 发生在地点 / 挂载时间点 | 大纲节点→地点（废弃语义）**＋ timepoint → event（1:n 挂载，G2 现行主用途）** |
 | `plot_edge` | 剧情连线（画布推演） | 大纲节点→大纲节点，`metadata` 存连线标签 |
 | `plants` / `advances` / `resolves` | 伏笔管理（**源端仅章**：仅有 `chapter` 节点可作为伏笔锚点，`POST /relation` 校验 400——伏笔是章级叙事事件） | 章节点→hook |
 | `depends_on` | 伏笔依赖 | hook→hook |

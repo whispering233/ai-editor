@@ -15,7 +15,6 @@ describe("@whispering233/ai-editor-shared 入口冒烟", () => {
   it("可正常导入且导出包名常量", () => {
     expect(m).toBeDefined();
     expect(m.SHARED_PKG_NAME).toBe("@whispering233/ai-editor-shared");
-    expect(m.SHARED_PKG_VERSION).toBe("0.1.0");
   });
 
   it("根 barrel 不含运行时 Zod schema（客户端打包安全，2026-08 修订）", () => {

@@ -4,8 +4,8 @@
 // 2026-08 演进：环境变量布尔开关 → 配置文件 + 细粒度类别 → **删除 env 模式**（本版）——
 // 配置文件是唯一来源，环境变量开关不再支持。
 // - 配置文件：<创作根>/.ai-editor/config.json（startServer 启动时 initDebugConfig 读一次）
-// - 五类别：chat（agent 事件日志）/ request（LLM 请求完整 prompt）/ stream（原始 SSE chunk）/
-// usage（tokens 统计）/ http（hono/logger 请求日志）
+// - 四类别：chat（agent 事件日志）/ request（LLM 请求完整 prompt）/ usage（tokens 统计）/
+// http（hono/logger 请求日志）——原 `stream`（原始 SSE chunk）已删（无生产者，见 CHANGELOG）
 // - 配置结构：{ "debug": { "enabled": true, "categories": ["request", "usage"] } }
 // enabled=false 或缺失 → 全关；categories 缺失 → 全部类别；未知名类别 → 忽略（前向兼容）
 // - 无 projectRoot / 文件不存在 / 非法 JSON / 结构不符 → **全关**（不阻断启动，不回退 env）
@@ -21,7 +21,7 @@ import { join } from "node:path";
  * 模型/凭据/运行参数自 K5 起全部在 pi agent dir，与本文件无关） */
 const DEBUG_CONFIG_RELATIVE_PATH = join(".ai-editor", "config.json");
 
-/** 五类别清单（isCategoryEnabled 判定依据；新增类别在此扩展） */
+/** 四类别清单（isCategoryEnabled 判定依据；新增类别在此扩展） */
 export const DEBUG_CATEGORIES = ["chat", "request", "usage", "http"] as const;
 
 /** 调试类别（细粒度开关；debugLog 第一参） */

@@ -82,7 +82,7 @@
 
 ### PUT /api/v1/relation/:id
 
-更新关系元数据（2026-08 交互优化 I1：画布连线标签线上编辑）。**仅支持 `metadata` 字段 patch**（当前唯一用途 = `plot_edge` 连线标签）；关系三元组（source/target/relation_type）不可变——要改连接请删后重建。
+更新关系元数据（2026-08 交互优化 I1：连线标签线上编辑）。**仅支持 `metadata` 字段 patch**（端点保留；画布 UI 已移除 ⇒ **当前无 UI 消费方**，仅 API 可用）；关系三元组（source/target/relation_type）不可变——要改连接请删后重建。
 
 ```typescript
 // Path
@@ -102,7 +102,7 @@ id: string;
 { error: { code: "RELATION_NOT_FOUND" } }   // 不存在（含已软删——软删关系不可编辑）
 ```
 
-**语义**：metadata 整体替换（非浅合并）——画布连线标签编辑时传 `{ label: "新标签" }`，清空标签传 `{}`；与 POST 创建侧的 trim 对称，服务端对 label 做首尾空格去除。
+**语义**：metadata 整体替换（非浅合并）——清空传 `{}`；与 POST 创建侧的 trim 对称，服务端对 label 做首尾空格去除。
 
 ### DELETE /api/v1/relation/:id
 
