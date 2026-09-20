@@ -1,7 +1,8 @@
-// 拆解 S3 规则归并与写入计划（纯函数）测试。契约：docs/design/60-decompose.md §6 + §6.1。
-// 覆盖：name 归一化（trim / 折叠空白 / 全角空格）/ 同名同类型同一实体（跨类型不并）/ 关系去重 +
-// 对称关系方向归一（判据 = shared RELATION_TYPE_META.symmetric）/ 跨章阈值（人物·关系设、设定·地点不设）/
-// 别名组硬校验（名字必须存在 / 不重复分组 / 组 ≥ 2 / 组大小上限 / 候选按提及次数截断）/ 候选排序稳定性 /
+// 拆解 S3 规则归并（四步有序纯管线）与写入计划（纯函数）测试。契约：docs/design/60-decompose.md §6 + §6.1。
+// 覆盖：name 归一化（trim / 折叠空白 / 全角空格）/ 同名同类型同一实体（跨类型不并）/ 关系去重 + 对称关系方向归一
+// （判据 = shared RELATION_TYPE_META.symmetric）/ 跨章阈值（人物·关系设、设定·地点不设）/ **四步顺序**（去重、
+// 别名重映射与重新去重、自环丢弃、别名归并后阈值才生效、悬空关系过滤）/ 别名组硬校验（名字必须存在 /
+// 不重复分组 / 组 ≥ 2 / 组大小上限 / 候选按提及次数截断）/ 候选排序稳定性 /
 // merge_written 三路比对五分支（create · reuse · keep-user-edited · soft-delete · keep-and-report）。
 import { describe, expect, it } from "vitest";
 import {
@@ -9,6 +10,7 @@ import {
   DECOMPOSE_ALIAS_GROUP_MAX,
   DECOMPOSE_ALIAS_GROUP_MIN_NAMES,
   DECOMPOSE_MENTION_MIN_CHAPTERS,
+  dedupeCandidates,
   mergeCandidates,
   normalizeEntityName,
   planMergeWrite,
@@ -18,7 +20,7 @@ import {
   type MergeSnapshotRow,
   type MergeWrittenEntry,
 } from "./merge.js";
-import type { DecomposeBatchResult, DecomposeExtractedChapter } from "@whispering2333/ai-editor-shared";
+import type { DecomposeBatchResult, DecomposeExtractedChapter } from "@whispering233/ai-editor-shared";
 
 /** 造一章归并输入（已经过 S2 归一，形状 = shared 的抽取结果） */
 function chapter(chapterIndex: number, overrides: Partial<DecomposeExtractedChapter> = {}): DecomposeExtractedChapter {
@@ -170,6 +172,79 @@ describe("跨章阈值（人物与关系设阈值；设定与地点不设）", (
     const outcome = mergeCandidates([batch(chapter(1, { characters: named("甲", "甲", "甲") }))]);
     expect(outcome.entities).toEqual([]);
     expect(outcome.filtered.characters[0]?.chapters).toEqual([1]);
+  });
+});
+
+describe("四步有序纯管线（去重 → 别名 → 阈值 → 悬空过滤）", () => {
+  // 对称关系（ally）的规范方向 = 名字升序：「乙」（U+4E59）< 「甲」（U+7532），故期望里都是乙在前
+  it("第 1 步单独调用不设阈值（单章人物原样保留；阈值是第 3 步的事）", () => {
+    const deduped = dedupeCandidates([batch(chapter(1, { characters: named("路人") }))]);
+    expect(deduped.entities).toEqual([{ type: "character", name: "路人", chapters: [1] }]);
+  });
+
+  it("关系去重键含 relation_type：同 (source, target) 的 ally 与 rival 各存一枚", () => {
+    const outcome = mergeCandidates([
+      batch(
+        chapter(1, { characters: named("甲", "乙"), relations: [relation("甲", "乙", "ally"), relation("甲", "乙", "rival")] }),
+        chapter(2, { characters: named("甲", "乙"), relations: [relation("甲", "乙", "rival"), relation("甲", "乙", "ally")] }),
+      ),
+    ]);
+    expect(outcome.relations.map((item) => `${item.source}→${item.target}:${item.type}`)).toEqual(["乙→甲:ally", "乙→甲:rival"]);
+    expect(outcome.relations.map((item) => item.chapters)).toEqual([[1, 2], [1, 2]]);
+  });
+
+  it("第 4 步 · 端点被阈值滤掉 ⇒ 关系即便达阈值也丢进 filtered（悬空边不留）", () => {
+    const outcome = mergeCandidates([
+      batch(
+        chapter(1, { characters: named("甲", "乙"), relations: [relation("甲", "乙", "ally")] }),
+        chapter(2, { characters: named("乙"), relations: [relation("甲", "乙", "ally")] }),
+      ),
+    ]);
+    expect(outcome.entities.map((entity) => entity.name)).toEqual(["乙"]);
+    expect(outcome.filtered.characters.map((entity) => entity.name)).toEqual(["甲"]);
+    expect(outcome.relations).toEqual([]);
+    expect(outcome.filtered.relations).toEqual([{ source: "乙", target: "甲", type: "ally", chapters: [1, 2] }]);
+  });
+
+  it("第 2 步 · 别名组：实体合并（章节集并集）+ 关系端点重映射并重新去重", () => {
+    const outcome = mergeCandidates(
+      [
+        batch(
+          chapter(1, { characters: named("甲", "乙"), relations: [relation("甲", "乙", "ally")] }),
+          chapter(2, { characters: named("甲某", "乙"), relations: [relation("甲某", "乙", "ally")] }),
+        ),
+      ],
+      [{ canonical: "甲某", aliases: ["甲"] }],
+    );
+    expect(outcome.entities).toEqual([
+      { type: "character", name: "甲某", chapters: [1, 2] },
+      { type: "character", name: "乙", chapters: [1, 2] },
+    ]);
+    expect(outcome.relations).toEqual([{ source: "乙", target: "甲某", type: "ally", chapters: [1, 2] }]);
+  });
+
+  it("第 3 步在第 2 步之后 · 别名把两个单章名并成跨 2 章实体 ⇒ 合并后不被阈值滤掉", () => {
+    const outcome = mergeCandidates(
+      [batch(chapter(1, { characters: named("甲") }), chapter(2, { characters: named("甲某") }))],
+      [{ canonical: "甲某", aliases: ["甲"] }],
+    );
+    expect(outcome.entities).toEqual([{ type: "character", name: "甲某", chapters: [1, 2] }]);
+    expect(outcome.filtered.characters).toEqual([]);
+  });
+
+  it("第 2 步 · 自环关系（别名把两端并成同一实体）被丢弃，且不计入 filtered", () => {
+    const outcome = mergeCandidates(
+      [
+        batch(
+          chapter(1, { characters: named("甲", "甲某"), relations: [relation("甲", "甲某", "ally")] }),
+          chapter(2, { characters: named("甲某", "甲"), relations: [relation("甲某", "甲", "ally")] }),
+        ),
+      ],
+      [{ canonical: "甲某", aliases: ["甲"] }],
+    );
+    expect(outcome.entities).toEqual([{ type: "character", name: "甲某", chapters: [1, 2] }]);
+    expect(outcome.relations).toEqual([]);
+    expect(outcome.filtered.relations).toEqual([]);
   });
 });
 

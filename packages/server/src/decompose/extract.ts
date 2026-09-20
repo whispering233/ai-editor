@@ -15,6 +15,7 @@ import type {
   DecomposeLocation,
   DecomposeRelation,
   DecomposeSetting,
+  RelationType,
 } from "@whispering233/ai-editor-shared";
 import { normalizeRelationType } from "@whispering233/ai-editor-shared";
 import { normalizeEntityName } from "./merge.js";
@@ -43,6 +44,8 @@ export const DECOMPOSE_CHAPTER_MAX_RELATIONS = 12;
  * 决定的语义，从正文里猜必然错位（模型会把「提到了地点」写成 `occurs_at`）。剩下的结构关系
  * （`belongs_to` / `owns` / `masters`）与人物关系（含 `kills`）才是正文能可靠支撑的。
  * 白名单外一律丢弃：不猜测、不映射到「近似类型」。
+ * `satisfies readonly RelationType[]`：类型写错字（不在 shared `RELATION_TYPES`）编译期报红，
+ * 否则白名单里的错字会让该关系被静默丢弃。
  */
 export const DECOMPOSE_RELATION_TYPES = [
   "ally",
@@ -53,7 +56,7 @@ export const DECOMPOSE_RELATION_TYPES = [
   "belongs_to",
   "owns",
   "masters",
-] as const;
+] as const satisfies readonly RelationType[];
 export type DecomposeRelationType = (typeof DECOMPOSE_RELATION_TYPES)[number];
 
 /** 归一结果：干净批结果 + 截断/丢弃记录（调用方负责写日志） */

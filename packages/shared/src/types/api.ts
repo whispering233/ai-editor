@@ -1208,7 +1208,7 @@ export const decomposeLocationSchema = z.object({
 });
 export type DecomposeLocation = z.infer<typeof decomposeLocationSchema>;
 
-/** 抽取关系（type 白名单收窄到 8 类，单一来源 = server `decompose/extract.ts` 的 DECOMPOSE_RELATION_TYPES） */
+/** 抽取关系（type 白名单收窄，单一来源 = server `decompose/extract.ts` 的 DECOMPOSE_RELATION_TYPES） */
 export const decomposeRelationSchema = z.object({
   source: z.string(),
   target: z.string(),

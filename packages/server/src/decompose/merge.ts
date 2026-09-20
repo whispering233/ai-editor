@@ -1,6 +1,6 @@
 // 拆解 S3：规则归并 + 写入计划（纯函数、无 IO、不碰 db）。
 //
-// 契约：docs/design/60-decompose.md §6（三层归并）与 §6.1（`merge_written` 三路比对）。
+// 契约：docs/design/60-decompose.md §6（四步**有序**纯管线 + 三层归并）与 §6.1（`merge_written` 三路比对）。
 // 分工：本模块只算「该写什么」——实体/关系/章摘要回写/报告的实际落库与一次别名归并 LLM 调用属后续卡。
 // 阈值与上限单一定义在本模块并导出；散文与注释只引用常量名，不复述数字。
 
@@ -39,59 +39,14 @@ export interface MergedRelationCandidate {
 export interface MergeOutcome {
   entities: MergedEntityCandidate[];
   relations: MergedRelationCandidate[];
-  /** 未达 DECOMPOSE_MENTION_MIN_CHAPTERS 的线索：报告里透明化（§6.2 第 6 段），不落库 */
+  /** 未达阈值的线索（§6.2 第 6 段）与悬空关系：报告里透明化，不落库 */
   filtered: { characters: MergedEntityCandidate[]; relations: MergedRelationCandidate[] };
 }
 
-/**
- * 名字归一化（**单一来源**）：trim + 折叠空白（含全角空格 U+3000）为单个半角空格。
- * 这是「同名同类型 → 同一实体」的比较基准，S2 的关系端点存在性校验与 S3 的实体去重必须同口径。
- */
-export function normalizeEntityName(name: string): string {
-  return name.replace(/[\s\u3000]+/gu, " ").trim();
-}
-
-/**
- * S3 第 1 层：零 LLM 成本的规则归并。
- * - 实体：名字归一化后「同名同类型 → 同一实体」（人物 / 设定 / 地点各自成集）；
- * - 关系：按 `(source, target, relation_type)` 去重 + 对称关系方向归一；
- * - 阈值：人物与关系要求跨章出现 ≥ DECOMPOSE_MENTION_MIN_CHAPTERS（设定与地点不设阈值——
- *   一次出现也可能是重要宝物/剑法，靠提示词约束「只抽对剧情有影响的」）。
- */
-export function mergeCandidates(results: readonly DecomposeBatchResult[]): MergeOutcome {
-  const entities = new Map<string, MergedEntityCandidate>();
-  const relations = new Map<string, MergedRelationCandidate>();
-
-  for (const result of results) {
-    for (const chapter of result.chapters) {
-      for (const character of chapter.characters) addEntity(entities, "character", character.name, chapter.chapterIndex);
-      for (const setting of chapter.settings) addEntity(entities, "setting", setting.name, chapter.chapterIndex);
-      for (const location of chapter.locations) addEntity(entities, "location", location.name, chapter.chapterIndex);
-      for (const relation of chapter.relations) addRelation(relations, relation, chapter.chapterIndex);
-    }
-  }
-
-  const keptEntities: MergedEntityCandidate[] = [];
-  const filteredCharacters: MergedEntityCandidate[] = [];
-  for (const entity of entities.values()) {
-    if (entity.type === "character" && entity.chapters.length < DECOMPOSE_MENTION_MIN_CHAPTERS) {
-      filteredCharacters.push(entity);
-    } else {
-      keptEntities.push(entity);
-    }
-  }
-  const keptRelations: MergedRelationCandidate[] = [];
-  const filteredRelations: MergedRelationCandidate[] = [];
-  for (const relation of relations.values()) {
-    const target = relation.chapters.length < DECOMPOSE_MENTION_MIN_CHAPTERS ? filteredRelations : keptRelations;
-    target.push(relation);
-  }
-
-  return {
-    entities: keptEntities,
-    relations: keptRelations,
-    filtered: { characters: filteredCharacters, relations: filteredRelations },
-  };
+/** 四步管线的前两步产物：已去重 / 已应用别名组，但尚未过阈值、尚未滤悬空边 */
+export interface MergedCandidateSet {
+  entities: MergedEntityCandidate[];
+  relations: MergedRelationCandidate[];
 }
 
 /** 别名归并候选（§6 第 2 层输入：规范名 + 出现章数 + 首次出现章；LLM 只看到这份清单，看不到原文） */
@@ -111,6 +66,104 @@ export interface AliasValidation {
   accepted: AliasGroup[];
   /** 被硬校验丢弃的组（保守原则：不确定就不合并，不做部分接受） */
   rejected: Array<{ group: AliasGroup; reason: string }>;
+}
+
+/**
+ * 名字归一化（**单一来源**）：trim + 折叠空白（含全角空格 U+3000）为单个半角空格。
+ * 这是「同名同类型 → 同一实体」的比较基准，S2 的关系端点存在性校验与 S3 的实体去重必须同口径。
+ */
+export function normalizeEntityName(name: string): string {
+  return name.replace(/[\s\u3000]+/gu, " ").trim();
+}
+
+/**
+ * 第 1 步 · 去重（零 LLM 成本；**此步不设阈值**——阈值要等别名归并后才有意义，别名合并会把章节集合变大）。
+ * - 实体：名字归一化后「同名同类型 → 同一实体」（人物 / 设定 / 地点各自成集）；
+ * - 关系：按 `(source, target, relation_type)` 去重 + 对称关系方向归一。
+ */
+export function dedupeCandidates(results: readonly DecomposeBatchResult[]): MergedCandidateSet {
+  const entities = new Map<string, MergedEntityCandidate>();
+  const relations = new Map<string, MergedRelationCandidate>();
+
+  for (const result of results) {
+    for (const chapter of result.chapters) {
+      for (const character of chapter.characters) addEntity(entities, "character", character.name, [chapter.chapterIndex]);
+      for (const setting of chapter.settings) addEntity(entities, "setting", setting.name, [chapter.chapterIndex]);
+      for (const location of chapter.locations) addEntity(entities, "location", location.name, [chapter.chapterIndex]);
+      for (const relation of chapter.relations) addRelation(relations, relation, [chapter.chapterIndex]);
+    }
+  }
+  return { entities: [...entities.values()], relations: [...relations.values()] };
+}
+
+/**
+ * 第 2 步 · 应用别名归并（§6 第 2 层的输出）：别名 → 规范名映射；合并章节集合（并集）；
+ * **关系端点同步重映射**并重新去重（重映射后原本分开的两枚关系可能变成同一枚）；丢弃自环关系。
+ * 只并人物——设定 / 地点只走第 1 步（§6 第 2 层的保守原则）。
+ */
+export function applyAliasGroups(candidates: MergedCandidateSet, groups: readonly AliasGroup[]): MergedCandidateSet {
+  const canonicalOf = aliasCanonicalMap(groups);
+  const entities = new Map<string, MergedEntityCandidate>();
+  for (const entity of candidates.entities) {
+    const name = entity.type === "character" ? canonicalOf.get(entity.name) ?? entity.name : entity.name;
+    addEntity(entities, entity.type, name, entity.chapters);
+  }
+
+  const relations = new Map<string, MergedRelationCandidate>();
+  for (const relation of candidates.relations) {
+    const source = canonicalOf.get(relation.source) ?? relation.source;
+    const target = canonicalOf.get(relation.target) ?? relation.target;
+    if (source === target) continue; // 自环：别名把两端并成同一实体，不是真实关系
+    addRelation(relations, { source, target, type: relation.type }, relation.chapters);
+  }
+  return { entities: [...entities.values()], relations: [...relations.values()] };
+}
+
+/**
+ * 第 3 步 · 阈值：人物与关系要求跨章出现 ≥ DECOMPOSE_MENTION_MIN_CHAPTERS，未达者进 `filtered`
+ * （报告里透明化，§6.2 第 6 段）；设定与地点不设阈值——一次出现也可能是重要宝物/剑法，
+ * 靠提示词约束「只抽对剧情有影响的」。
+ */
+export function applyMentionThreshold(candidates: MergedCandidateSet): MergeOutcome {
+  const entities: MergedEntityCandidate[] = [];
+  const filteredCharacters: MergedEntityCandidate[] = [];
+  for (const entity of candidates.entities) {
+    if (entity.type === "character" && entity.chapters.length < DECOMPOSE_MENTION_MIN_CHAPTERS) filteredCharacters.push(entity);
+    else entities.push(entity);
+  }
+
+  const relations: MergedRelationCandidate[] = [];
+  const filteredRelations: MergedRelationCandidate[] = [];
+  for (const relation of candidates.relations) {
+    const target = relation.chapters.length < DECOMPOSE_MENTION_MIN_CHAPTERS ? filteredRelations : relations;
+    target.push(relation);
+  }
+  return { entities, relations, filtered: { characters: filteredCharacters, relations: filteredRelations } };
+}
+
+/**
+ * 第 4 步 · 悬空关系过滤：两端都必须落在**落库实体集合**内，否则丢弃并计入 `filtered`——
+ * 既防模型幻觉出不存在的人物，也防阈值滤掉端点后留下悬空边。
+ */
+export function filterDanglingRelations(outcome: MergeOutcome): MergeOutcome {
+  const names = new Set(outcome.entities.map((entity) => entity.name));
+  const relations: MergedRelationCandidate[] = [];
+  const dangling = [...outcome.filtered.relations];
+  for (const relation of outcome.relations) {
+    if (names.has(relation.source) && names.has(relation.target)) relations.push(relation);
+    else dangling.push(relation);
+  }
+  return { entities: outcome.entities, relations, filtered: { characters: outcome.filtered.characters, relations: dangling } };
+}
+
+/**
+ * S3 第 1 层：四步**有序**纯管线——顺序不可交换（§6）：
+ * ① 去重（不设阈值）→ ② 应用别名组（关系端点重映射 + 重新去重 + 丢自环）→ ③ 阈值 → ④ 悬空关系过滤。
+ * 阈值必须排在别名归并之后（合并会放大章节集合，否则两个单章名会被错杀）；
+ * 悬空过滤必须排在阈值之后（阈值会滤掉端点，否则留下指向不存在实体的边）。
+ */
+export function mergeCandidates(results: readonly DecomposeBatchResult[], aliasGroups: readonly AliasGroup[] = []): MergeOutcome {
+  return filterDanglingRelations(applyMentionThreshold(applyAliasGroups(dedupeCandidates(results), aliasGroups)));
 }
 
 /**
@@ -246,16 +299,40 @@ export function planMergeWrite(
 
 // ── 模块私有 ─────────────────────────────────────────────────────────────────
 
-function addEntity(map: Map<string, MergedEntityCandidate>, type: DecomposeEntityKind, rawName: string, chapterIndex: number): void {
+/** 别名 → 规范名（归一化后比较）。组内名字按 normalizeEntityName 归一，与实体去重同口径。 */
+function aliasCanonicalMap(groups: readonly AliasGroup[]): Map<string, string> {
+  const canonicalOf = new Map<string, string>();
+  for (const group of groups) {
+    const canonical = normalizeEntityName(group.canonical);
+    if (canonical === "") continue;
+    for (const name of [group.canonical, ...group.aliases]) {
+      const normalized = normalizeEntityName(name);
+      if (normalized !== "") canonicalOf.set(normalized, canonical);
+    }
+  }
+  return canonicalOf;
+}
+
+function addEntity(
+  map: Map<string, MergedEntityCandidate>,
+  type: DecomposeEntityKind,
+  rawName: string,
+  chapters: readonly number[],
+): void {
   const name = normalizeEntityName(rawName);
   if (name === "") return;
   const key = `${type}\u0000${name}`;
   const existing = map.get(key);
-  if (existing === undefined) map.set(key, { type, name, chapters: [chapterIndex] });
-  else addChapter(existing.chapters, chapterIndex);
+  const entry: MergedEntityCandidate = existing ?? { type, name, chapters: [] };
+  if (existing === undefined) map.set(key, entry);
+  for (const chapterIndex of chapters) addChapter(entry.chapters, chapterIndex);
 }
 
-function addRelation(map: Map<string, MergedRelationCandidate>, relation: DecomposeRelation, chapterIndex: number): void {
+function addRelation(
+  map: Map<string, MergedRelationCandidate>,
+  relation: DecomposeRelation,
+  chapters: readonly number[],
+): void {
   const type = normalizeRelationType(relation.type);
   const source = normalizeEntityName(relation.source);
   const target = normalizeEntityName(relation.target);
@@ -263,8 +340,9 @@ function addRelation(map: Map<string, MergedRelationCandidate>, relation: Decomp
   const [from, to] = orderEndpoints(source, target, type);
   const key = `${from}\u0000${to}\u0000${type}`;
   const existing = map.get(key);
-  if (existing === undefined) map.set(key, { source: from, target: to, type, chapters: [chapterIndex] });
-  else addChapter(existing.chapters, chapterIndex);
+  const entry: MergedRelationCandidate = existing ?? { source: from, target: to, type, chapters: [] };
+  if (existing === undefined) map.set(key, entry);
+  for (const chapterIndex of chapters) addChapter(entry.chapters, chapterIndex);
 }
 
 /**
