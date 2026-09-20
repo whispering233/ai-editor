@@ -37,8 +37,8 @@
   - `user_version > SCHEMA_VERSION`（未来版本）→ **拒绝打开** 409 `PROJECT_VERSION_NEWER`（数据原封不动，提示升级程序）；
   - `user_version < SCHEMA_VERSION`（旧版本）→ **有迁移路径**（`packages/db/src/migrations/` 存在从当前版本到目标版本的连续迁移链）→ `runMigrations` 前向迁移；**无迁移路径** → 删库重建兜底（备份 `data.db.v{n}.bak` + `outline.json.v{n}.bak`）。
 - **迁移机制**：`migrations/` 目录每个文件导出一个 `Migration = { version, up }`（`001_xxx.ts` → version 1），`index.ts` 按 version 升序聚合导出 `MIGRATIONS`（tsc 编译进 dist 随包分发，无运行时目录读取）。`runMigrations` 对缺失版本逐个执行：**每个迁移一个事务（`up(db)` + `setUserVersion(version)` 原子提交——成功 ⇒ 版本已写入；失败 ⇒ 版本未变）**；**整批迁移前自动快照** data.db → `data.db.v{n}.{YYYYMMDDHHmmssSSSZ}.bak`（checkpoint 后复制主文件，时间戳命名，失败重试现场保留）。迁移失败 → 该迁移回滚 + 版本停在前一迁移后，下次 open 重试。（**粒度注**：迁移侧快照为毫秒时间戳且**无去重循环**——同一毫秒的两次批量迁移会后者覆盖前者；真实升级路径不可达，与备份侧 backup 的 +1ms 去重口径不同但已接受。）
-- 当前 `SCHEMA_VERSION = 8`；迁移链：`002_event_timeline.ts`（version 2：entities 表 CHECK 扩入 `'event'` + 新增 `sort_order` 列）、`003_timepoint.ts`（version 3，G2 修订：entities 表 CHECK 扩入 `'timepoint'` + `event.data.time_label` 迁移为 timepoint 实体 + occurs_at 关系，同名 time_label 合并为同一 timepoint）、`004_setting_tags.ts`（version 4，K2 修订：**无 DDL**——setting 旧 `data.rules` 分类值复制到 `data.tags` 并移除 rules，仅 data JSON 数据迁移）、`005_reference.ts`（version 5：entities 表 CHECK 扩入 `'reference'`，无数据搬移仅 DDL）、`006_sessions_jsonl.ts`（version 6：**对话历史出库**——`chat_messages` 全量导出为旧格式 `sessions/<session_id>.jsonl` 后 `DROP TABLE`；产物为旧 v1 格式，现已被 pi session 格式取代、不再被读取（数据保留在磁盘）；**id 不合法的旧会话以 `sess_legacy_<sha256 前 16 位>` 文件名导出**）、`007_character_ability_panel.ts`（version 7，2026-09：**无 DDL**——`character.data.abilities[]` 迁为 `ability_panel` 叶子并移除旧字段，幂等且不覆盖已有 `ability_panel`，仅 data JSON 数据迁移，同 004 先例）、`008_document_records.ts`（version 8，2026-09：新增 `document_records` 表（块文档），纯 DDL 无数据搬移——开发阶段，旧 `references/` 目录与旧参考资料行不作兼容读取）。**SQLite 无法直接修改 CHECK 约束**，迁移走「建新表（新 CHECK）→ 拷贝数据 → drop 旧表 → rename」四步（`relation_records`/`delta_records` 无外键指向 entities，迁移只动 entities 表）；v1 → v8 迁移链存在 ⇒ 旧库 open 时自动前向迁移，不再走删库重建兜底。
-- **import 侧联动**：导入备份时 `user_version < SCHEMA_VERSION` 且**有迁移路径** → 接受（搬入后 open 自动迁移，v5 及更早备份经增量迁移升到 **v8**，含对话历史出库、能力面板迁移与块文档表创建）；无路径 → 409 `SCHEMA_VERSION_MISMATCH`；`>` 当前 → 409（未来版本语义）。
+- 当前 `SCHEMA_VERSION = 9`；迁移链：`002_event_timeline.ts`（version 2：entities 表 CHECK 扩入 `'event'` + 新增 `sort_order` 列）、`003_timepoint.ts`（version 3，G2 修订：entities 表 CHECK 扩入 `'timepoint'` + `event.data.time_label` 迁移为 timepoint 实体 + occurs_at 关系，同名 time_label 合并为同一 timepoint）、`004_setting_tags.ts`（version 4，K2 修订：**无 DDL**——setting 旧 `data.rules` 分类值复制到 `data.tags` 并移除 rules，仅 data JSON 数据迁移）、`005_reference.ts`（version 5：entities 表 CHECK 扩入 `'reference'`，无数据搬移仅 DDL）、`006_sessions_jsonl.ts`（version 6：**对话历史出库**——`chat_messages` 全量导出为旧格式 `sessions/<session_id>.jsonl` 后 `DROP TABLE`；产物为旧 v1 格式，现已被 pi session 格式取代、不再被读取（数据保留在磁盘）；**id 不合法的旧会话以 `sess_legacy_<sha256 前 16 位>` 文件名导出**）、`007_character_ability_panel.ts`（version 7，2026-09：**无 DDL**——`character.data.abilities[]` 迁为 `ability_panel` 叶子并移除旧字段，幂等且不覆盖已有 `ability_panel`，仅 data JSON 数据迁移，同 004 先例）、`008_document_records.ts`（version 8，2026-09：新增 `document_records` 表（块文档），纯 DDL 无数据搬移——开发阶段，旧 `references/` 目录与旧参考资料行不作兼容读取）、`009_decompose.ts`（version 9：新增 `decompose_jobs` / `decompose_batches` 两表（拆解小说的 job 状态与批结果暂存），纯 DDL 无数据搬移——拆解是新增能力，旧项目没有 job 行，无需回填）。**SQLite 无法直接修改 CHECK 约束**，迁移走「建新表（新 CHECK）→ 拷贝数据 → drop 旧表 → rename」四步（`relation_records`/`delta_records` 无外键指向 entities，迁移只动 entities 表）；v1 → v9 迁移链存在 ⇒ 旧库 open 时自动前向迁移，不再走删库重建兜底。
+- **import 侧联动**：导入备份时 `user_version < SCHEMA_VERSION` 且**有迁移路径** → 接受（搬入后 open 自动迁移，v5 及更早备份经增量迁移升到 **v9**，含对话历史出库、能力面板迁移、块文档表与拆解两表创建）；无路径 → 409 `SCHEMA_VERSION_MISMATCH`；`>` 当前 → 409（未来版本语义）。
 - **全新空库短路（2026-09）**：`user_version = 0` 且**表结构与当前 DDL 一致**且**业务表无行** → 直接写入 `SCHEMA_VERSION`（**不重建、不备份、不碰 `outline.json`**）——覆盖“书目录有 project.json/outline.json 但缺 data.db”的场景（否则会走无路径重建兼重置大纲）。**反向守住**：结构陈旧（旧 CHECK / 残留表）或有数据的 v0 库仍走既有重建兑底。**已知不对称（已登记）**：备份包内的 v0 空库仍在导入侧被 409 拒绝（`validateBackupPackage` 复用 `hasMigrationPath`），而盘上同内容文件现在会被接受——偏差方向只宽松、无数据风险。
 
 ## entities — 实体表
@@ -221,6 +221,47 @@ CREATE TABLE document_records (
 | **不进 outline.json** | 章正文若写进大纲树，会让整树接口（大纲页、`get_outline` 工具）被动拖入长文本——因此单独成表 |
 
 **读取投影的两个消费面**：① AI 工具（单章只读拉取 / 参考资料全文）——只拿 `content_text`，绝不拿块 JSON；② 列表与摘要（参考资料列表的 `content` 摘要定长截断（长度单一定义 = db `toSummary`）、`GET /outline?with_metadata=true` 的章 `charCount`）——用 `length(content_text)` 与切片，不解析块体。
+
+## decompose_jobs / decompose_batches — 拆解小说（2026-09）
+
+拆解小说（导入式批量管线，设计见 [`../design/60-decompose.md`](../design/60-decompose.md)）的**job 状态与批结果暂存**。两表同库、同项目——job 属于它所在项目的 `data.db`，随备份/导出/云自动携带；**不新增项目目录**（`sessions/` 仍是唯一的随包目录）。
+
+```sql
+CREATE TABLE decompose_jobs (
+  id                 TEXT PRIMARY KEY,   -- 'job-*'
+  status             TEXT NOT NULL,      -- pending | running | paused | done | failed（枚举值少且稳定，不加 CHECK）
+  scope_start        INTEGER NOT NULL,   -- 分析范围起始章序（1-based，文件位置序）
+  scope_end          INTEGER NOT NULL,   -- 分析范围结束章序
+  batch_target_chars INTEGER NOT NULL,   -- 组批目标字数快照（续拆/重跑按同一口径重算批次）
+  model              TEXT,               -- 本次使用的模型（provider/id），审计用
+  merge_written      TEXT,               -- JSON: 上次归并写入清单 [{ id, type, updated_at }]（幂等/重跑三路比对）
+  error              TEXT,               -- job 级失败摘要
+  created_at         TEXT NOT NULL,      -- ISO 8601，应用层写入
+  updated_at         TEXT NOT NULL       -- ISO 8601，应用层写入
+);
+
+CREATE TABLE decompose_batches (
+  job_id      TEXT NOT NULL,             -- → decompose_jobs.id
+  seq         INTEGER NOT NULL,          -- 1-based 批序号（文件位置序）
+  chapter_ids TEXT NOT NULL,             -- JSON: 本批覆盖的章节点 id 列表（顺序 = 文件序）
+  status      TEXT NOT NULL,             -- pending | running | done | failed
+  result      TEXT,                      -- JSON: 该批抽取结果（逐章对齐；未完成 = NULL）
+  attempts    INTEGER NOT NULL DEFAULT 0,-- 已尝试次数（重试上限见设计文档）
+  error       TEXT,                      -- 该批失败摘要
+  updated_at  TEXT NOT NULL,
+  PRIMARY KEY (job_id, seq)
+);
+```
+
+| 不变式 | 口径 |
+| :--- | :--- |
+| **一项目一 job** | 拆解入口固定为「基于小说文件创建项目」⇒ 新项目只有一条 job 行；不设唯一约束（历史 job 由业务层保证不产生） |
+| **S2 不写业务表** | 批抽取结果只落 `decompose_batches.result`（暂存）；业务数据（`entities` / `relation_records` / `outline.json` / `document_records`）只由 S3/S4 写 |
+| **暂存 ≠ 草稿** | 批结果不是待用户确认的草稿，而是管线的中间产物（崩溃恢复 + 归并可重跑的依据）；对用户可见面只有「单批结果」只读展示 |
+| **幂等靠清单不靠 provenance** | 重跑归并的「上次写了什么」存在 `merge_written`（id + 写入时 `updated_at`），**不给 `entities` 加来源列**；`updated_at` 变化过的实体视为用户手工编辑 → 不覆盖、不软删 |
+| **JSON 列一律 text 模式** | 与 `entities.data` / `delta_records.changes` 同口径（坏 JSON 由行映射层防御解析，禁用 drizzle `mode:'json'`） |
+| **不进回收站** | job 与批结果无 `deleted_at`：拆解是导入类操作，撤销 = 删书目录或恢复拆解前的自动备份 zip（设计文档 §1） |
+| **状态归一** | 服务端重启后残留的 `running` 由打开项目时的归一逻辑改为 `paused`（进程内已无在跑 job），UI 提示可续拆 |
 
 ## sessions/*.jsonl — 对话历史（文件存储）
 

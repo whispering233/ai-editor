@@ -123,3 +123,17 @@
 | :--- | :--- | :--- |
 | GET | `/api/v1/settings/llm` | 系统设置 |
 | PUT | `/api/v1/settings/llm` | 系统设置 |
+
+### 拆解小说（[120-api-decompose.md](./120-api-decompose.md)）
+
+> 请求体是小说文件**原始字节**（`application/octet-stream`），元数据走 query string——见 [api-public.md](./api-public.md) 显式例外。
+
+| 方法 | 路径 | 文档 |
+| :--- | :--- | :--- |
+| POST | `/api/v1/decompose/analyze` | 拆解小说（切分预览，无状态） |
+| POST | `/api/v1/decompose/start` | 拆解小说（建档 + 启动 job） |
+| GET | `/api/v1/decompose/job` | 拆解小说（job 状态） |
+| GET | `/api/v1/decompose/job/batches/:seq` | 拆解小说（单批结果） |
+| POST | `/api/v1/decompose/job/pause` | 拆解小说（中止） |
+| POST | `/api/v1/decompose/job/resume` | 拆解小说（续拆） |
+| POST | `/api/v1/decompose/job/batches/:seq/rerun` | 拆解小说（单批重跑） |

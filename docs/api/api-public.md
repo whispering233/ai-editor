@@ -9,6 +9,7 @@
 - HTTP 状态码约定：200 成功 / 201 创建 / 400 参数错误（`VALIDATION_ERROR` 等）/ 404 不存在 / 409 冲突 / 500 服务端错误。
 - 错误码统一枚举 `ErrorCode`（见 [error-code.md](./error-code.md)），REST 响应与工具结果使用；SSE 流内错误以 `agent_end` 帧表达（不再发 `error` 事件）。
 - 显式例外：导出 zip（`GET /project/export`）响应二进制 `application/zip`，不走 `{ success, data }` 包裹。
+- 显式例外（**请求侧**）：拆解小说的 `POST /decompose/analyze` 与 `POST /decompose/start` 请求体是**文件原始字节**（`application/octet-stream`），其余参数走 query string——编码探测（UTF-8 → GB18030 回退）与切分由服务端单一实现，客户端不做解码，走原始字节避免 base64 膨胀（见 [120-api-decompose.md](./120-api-decompose.md)）。
 - **探活**：`GET /api/v1/health` → `{ success: true, data: { status: "ok" } }`（不依赖项目上下文，供启动/就绪探测）。
 
 ## 命名约定

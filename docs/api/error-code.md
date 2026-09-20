@@ -1,6 +1,6 @@
 # 错误码说明（ErrorCode）
 
-> **单一来源**：`@whispering233/ai-editor-shared` `types/api.ts` `ERROR_CODES` 枚举——REST 错误响应与工具结果共用（**SSE 流内无 `error` 帧**，错误以 `agent_end` 的 `stopReason`/`errorMessage` 表达，见 `80-api-chat.md`）；本文档表格为同一枚举的说明视图，新增/修订错误码须同步改枚举注释。**服务端另有扩展码**（不在 shared 枚举内，与 client 的 `CLIENT_NETWORK_ERROR` 同类）：`INTERNAL_ERROR` 500 / `FORBIDDEN` 403 / `NOT_FOUND` 404 / `NO_PROJECT_OPEN` 409 / `PROJECT_ALREADY_EXISTS` 409 / `LLM_API_KEY_MISSING` 400 / 云端存档七码（**已全部实现**：`CLOUD_NOT_CONFIGURED` 409 / `CLOUD_AUTH_FAILED` 502 / `CLOUD_UNREACHABLE` 502 / `CLOUD_QUOTA_EXCEEDED` 502 / `CLOUD_BACKUP_TOO_LARGE` 400 / `CLOUD_CONFLICT` 409 / `CLOUD_FILE_NOT_FOUND` 404；均在 `packages/server/src/middleware/error.ts` 的 `SERVER_ERROR_CODES`）。错误码分散（shared 枚举 + 服务端补充 + client 补充）为已登记技术债，MVP 不收敛。
+> **单一来源**：`@whispering233/ai-editor-shared` `types/api.ts` `ERROR_CODES` 枚举——REST 错误响应与工具结果共用（**SSE 流内无 `error` 帧**，错误以 `agent_end` 的 `stopReason`/`errorMessage` 表达，见 `80-api-chat.md`）；本文档表格为同一枚举的说明视图，新增/修订错误码须同步改枚举注释。**服务端另有扩展码**（不在 shared 枚举内，与 client 的 `CLIENT_NETWORK_ERROR` 同类）：`INTERNAL_ERROR` 500 / `FORBIDDEN` 403 / `NOT_FOUND` 404 / `NO_PROJECT_OPEN` 409 / `PROJECT_ALREADY_EXISTS` 409 / `LLM_API_KEY_MISSING` 400 / 云端存档七码（**已全部实现**：`CLOUD_NOT_CONFIGURED` 409 / `CLOUD_AUTH_FAILED` 502 / `CLOUD_UNREACHABLE` 502 / `CLOUD_QUOTA_EXCEEDED` 502 / `CLOUD_BACKUP_TOO_LARGE` 400 / `CLOUD_CONFLICT` 409 / `CLOUD_FILE_NOT_FOUND` 404 / 拆解小说五码（**已设计待实现**：`DECOMPOSE_FILE_TOO_LARGE` 400 / `DECOMPOSE_FILE_INVALID` 400 / `DECOMPOSE_JOB_NOT_FOUND` 404 / `DECOMPOSE_BATCH_NOT_FOUND` 404 / `DECOMPOSE_JOB_STATE` 409）；均在 `packages/server/src/middleware/error.ts` 的 `SERVER_ERROR_CODES`）。错误码分散（shared 枚举 + 服务端补充 + client 补充）为已登记技术债，MVP 不收敛。
 
 | code | HTTP | 说明 |
 | :--- | :--- | :--- |
@@ -33,6 +33,11 @@
 | `CLOUD_BACKUP_TOO_LARGE` | 400 | 400 备份包超过云盘单文件上限（500MB，**推送前本地判定**，不等服务器回 413）（已实现） |
 | `CLOUD_CONFLICT` | 409 | 409 推送时云端 head ≠ 本机 `lastPushedFileName`（另一台机器写过）→ 弹出裁决（保留云端 / 用本机强推）（已实现） |
 | `CLOUD_FILE_NOT_FOUND` | 404 | 404 拉取指定的云端备份不存在（已被保留策略清理或被手动删除）；云端还没有可拉取的备份（先在本机推送一份）同码（已实现） |
+| `DECOMPOSE_FILE_TOO_LARGE` | 400 | 400 拆解小说：上传文件超体积上限（`DECOMPOSE_MAX_FILE_BYTES`） |
+| `DECOMPOSE_FILE_INVALID` | 400 | 400 拆解小说：解码失败或文本为空 |
+| `DECOMPOSE_JOB_NOT_FOUND` | 404 | 404 拆解小说：当前项目没有 job |
+| `DECOMPOSE_BATCH_NOT_FOUND` | 404 | 404 拆解小说：批序号越界 |
+| `DECOMPOSE_JOB_STATE` | 409 | 409 拆解小说：当前 job 状态不允许该操作（pause / resume / rerun 的状态前置） |
 
 - REST 错误响应统一 `{ success: false, error: { code, message } }`；**SSE 流内无独立 `error` 事件**——错误以 `agent_end` 帧的 `stopReason`（`error`/`aborted`）与 `errorMessage` 表达（见 [80-api-chat.md](./80-api-chat.md)）。
 - HTTP 状态码约定：200 成功 / 400 参数 / 404 不存在 / 409 冲突 / 500 服务端错误（端点级特例见各模块文档）。

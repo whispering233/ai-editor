@@ -437,7 +437,7 @@ components:
 - **有 tab 时不再另画分割线**：antd line 型 `Tabs` 的横向导航条**自带** 1px `{colors.hairline}` 底线（`antd/es/tabs/style/index.js` 的 `&-nav-list::before { borderBottom }`），该底线即分割线；配套 `horizontalMargin: 0`（antd 默认 `0 0 16px 0` 会在 tab 与内容间留 16px 空档，压在分割线上就是双线）。
 - **间距**：页头与内容区块之间 `{spacing.md}`（16px）；页头内部三段之间 `{spacing.sm}`（12px）。
 - **覆盖范围 = 全部中栏页面**：列表/富页、概览、书架、回收站、设置，以及各详情页——详情页的页头 = 标题行 + 操作按钮 + 元信息行，分割线落在元信息行**之下**。加载态/空态/错误态同样保留（分割线属于页头，不随数据变）。
-- **页头常驻（2026-09 口径）**：页头（标题行 + 操作 + 元信息 + 分割线）**固定在内容区上方，只有内容区滚动**——避免滚动后找不到标题与页面级操作（章正文页原先跟着正文滚走，与参考资料页不一致）。**实现 = 页面 `section` 用 `flex h-full min-h-0 flex-col`，内容（含各自的错误条之下的部分）放进内层 `flex min-h-0 flex-1 flex-col overflow-y-auto`**；`h-full` 让 section 恰好等于中栏滚动容器的内容区 ⇒ 外壳不滚、内层滚（参考资料详情 / 参考资料列表 / 人物工作台 / 时间轴 / **章正文页** 采用）。
+- **页头常驻（2026-09 口径）**：页头（标题行 + 操作 + 元信息 + 分割线）**固定在内容区上方，只有内容区滚动**——避免滚动后找不到标题与页面级操作（章正文页原先跟着正文滚走，与参考资料页不一致）。**实现 = 页面 `section` 用 `flex h-full min-h-0 flex-col`，内容（含各自的错误条之下的部分）放进内层 `flex min-h-0 flex-1 flex-col overflow-y-auto`**；`h-full` 让 section 恰好等于中栏滚动容器的内容区 ⇒ 外壳不滚、内层滚（参考资料详情 / 参考资料列表 / 人物工作台 / 时间轴 / **章正文页** / **拆解进度页** 采用）。
   - **写作面的高度链在内层滚动容器里续接**：章正文页 = section（`h-full`）→ 内层滚动容器（`flex min-h-0 flex-1 flex-col overflow-y-auto`）→ `.bn-container`（`flex: 1 1 auto`，blocknote.css）⇒ 写作面仍铺满剩余高度，工具条 `sticky` 贴的是**内层**滚动容器顶（页头之下）。
   - **尚未统一**：概览 / 大纲 / 实体列表 / 设置 / 回收站等仍走外壳滚动（页头随内容离开）——列入 `backlog.md`，逐页改造时按上面同一条实现口径。
 - **实现唯一入口 = `components/ui/page-header.tsx`**（标题行 / tab 行 / 控件行 / 分割线一次给全）：页面不自画页头分割线（表格行、分组头等区块内部的 `border-b border-border` 不属此列）。
@@ -650,6 +650,30 @@ components:
 **删除传播提示**：删除**会话**成功后的 toast 补一句「推送到云端后，另一台也会同步删除」（删除要推送才传播；正文/参考资料随 `data.db` 走覆盖，见设计文档 §4）。
 
 > 本小节全部形态**不新增色值/字号/圆角**：沿用 `input` / `select` / `button-default` / `button-primary` / `data-row` / `type-badge` / `caption-text` / `empty-state` 与既有 token 档。新增 antd 组件仅 `Switch` 与 `Badge`（均走全局 seed token 派生，无组件级覆盖）。
+
+### 拆解小说（书架入口 + 进度页，2026-09）
+
+**入口** — 书架页「新建一本…」行内并列一个 `button-default`「拆解小说」（`dashboard-decompose`）；点击开**受控 Dialog**（三态：选文件 → 预览 → 填名开始），不新增一级导航、不改左栏。
+
+- 选文件：`<input type="file" accept=".txt">`（浏览器/桌面同一路径，**不加 preload 能力**）。
+- 预览：统计行（编码探测结果 / 总字数 / 章数 / 卷数 / 字数分布）+ 警告行（编号重启 / 疑似合并章 / 目录页丢弃 / 退化等分，用 `{colors.warning}` 文案）+ **可滚动章列表**（`data-row`，列 = 序号 / 标题 / 字数；数百行直接全量渲染，不引入虚拟滚动）+ 范围选择（起止章）+ 预估行（批次数 / 调用次数 / 粗估费用）+ 书名输入（默认取文件名，校验复用书名校验）。
+- 确认 = `button-primary`「开始拆解」；失败/警告均框内文案，不另开提示。
+
+**进度页 `#/decompose`** — 遵守§Layout「中栏页头结构」与**页头常驻**模板（section `h-full min-h-0 flex flex-col` + 内层滚动容器）：
+
+- 页头：`page-title`「拆解小说」+ 元信息行（书名 · 范围 · 模型）+ 操作按钮（`button-default`「中止」/「续拆」，按状态显示其一）。
+- 阶段条：5 段（解析 / 建档 / 逐章抽取 / 归并 / 报告）——当前段 = `{colors.primary}` 加粗，已完成段 = `{colors.success}` 圆点，未开始 = `{colors.tertiary}`。
+- 进度条：antd `Progress`（描边走全局 `colorPrimary`，**无组件级 token 覆盖**）+ 右侧「已完成 N/M 批」文案（`caption-text`）。
+- 批次列表：`data-row` 行，列 = 批序号 / 覆盖章范围 / 字数 / 状态徽标（`type-badge`，中性）/ 展开按钮 / 「重跑」按钮；展开区 = 该批抽取结果的**只读摘要**（人物 / 设定 / 地点 / 关系分组的文字列表，不倾倒原始 JSON）——展开是「核查后重跑」的前提，**不是可选装饰**。
+- 失败批：行内 `{colors.error}` 文案 + 「重跑」（`done` 与 `failed` 行都有该按钮）；重跑 `done` 行需二次确认（受控 Dialog，文案写明「将重新生成该批抽取结果，并重建归并与报告」）。
+- 完成态：本页变总结卡（`section-title`「拆解完成」+ 拆出 人物 / 设定 / 地点 / 关系 计数）+ 三个跳转（拆解报告 / 大纲 / 人物），**不自动跳转**。
+- 状态文案：`已暂停 · 可续拆` / `上次拆解中断，可续拆`（服务端重启归一后）。
+
+**概览页卡片** — `#/overview` 在有 job 时多一张 `card`：`section-title`「拆解任务」+ 一行状态（运行中 N/M 批 / 已暂停 / 已完成）+ 进入 `#/decompose` 的 `button-default`；无 job 不渲染。
+
+**书架行徽标** — 仅**当前打开的书**那行显示「拆解中 N/M」（`type-badge`）；其他书不显示（`GET /project/list` 不含 job 状态，逐本开 `data.db` 不值得；且切书即暂停）。
+
+> 本小节**不新增色值/字号/圆角**：沿用 `button-default` / `button-primary` / `card` / `data-row` / `type-badge` / `caption-text` / 受控 Dialog。新增 antd 组件仅 `Progress`（走全局 seed 派生，**不进组件覆盖表**）。
 
 ### antd 组件 token 覆盖（全部覆盖项就这些）
 
