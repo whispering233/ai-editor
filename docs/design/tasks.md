@@ -8,15 +8,6 @@
 
 ---
 
-## 卡 21.2 — 抽取结果契约 + 校验与归并纯逻辑
-
-- **背景**：S2 产出必须逐章对齐、字段收窄；S3 归并要能脱离 LLM 与 db 单测。
-- **契约**：`docs/design/60-decompose.md` §5（字段口径表 + 落库阈值）、§6（三层归并）、§6.1（`merge_written` 三路比对）；`docs/api/120-api-decompose.md`（响应结构）。
-- **范围**：`packages/shared/src/types/api.ts` 增拆解请求/响应 schema 与抽取结果类型（client 消费）；新增 `packages/server/src/decompose/extract.ts`（逐章对齐校验 / 条数上限截断 / 关系类型白名单 / 引用名字存在性 / 字段长度上限）+ `packages/server/src/decompose/merge.ts`（name 归一化去重 / 关系聚合与对称归一（判据 = shared `RELATION_TYPE_META.symmetric`）/ 别名组硬校验 / 三路比对 → 写入计划）+ 各自单测。
-- **判据**：单测覆盖：缺章报错 / 超条数截断 / 白名单外关系丢弃 / 不存在名字丢弃 / 别名组五条硬校验（名字必须存在 / 不重复分组 / 组 ≥ 2 / 组大小上限 / 候选截断）/ 三路比对四分支（含 `updated_at` 变化 → 不动）/ 对称关系方向归一 / 跨章阈值；改 shared 后先 `pnpm -r build` 再 `pnpm typecheck`（下游读 dist）。
-
----
-
 ## 卡 21.3 — DB 迁移 009 + db 层 helper
 
 - **背景**：job 状态与批结果要随备份/导出/云走，放 `data.db`（不新增项目目录）。
@@ -60,6 +51,8 @@
 - **契约**：`docs/design/60-decompose.md` §6 / §6.1；`docs/api/120-api-decompose.md` §rerun。
 - **范围**：`packages/server/src/decompose/merge.ts` 的写入执行（实体 / 关系 / 章摘要回写 `outline.json` / 报告 reference + 其块文档）+ 一次别名归并 LLM 调用（**纯逻辑已由 merge.ts 提供：去重 → 应用别名组 → 阈值 → 悬空关系过滤**，本卡只负责调 LLM 与按写入计划落库）+ `merge_written` 更新；rerun 端点（`done` 批重跑 → job 回 `running` → 重建归并与报告）。
 - **判据**：**幂等回归**（同一份批结果跑两遍 S3 → 实体/关系数量不变）；`updated_at` 变化过的实体不被覆盖、不被软删；新产物里消失的实体被软删（回收站可还原）；章摘要回写大纲节点；报告 reference 不重复建；faux provider 全流程跑通；`pnpm --filter @whispering233/ai-editor-server test` 绿。
+- **必守调用顺序（merge oracle 登记）**：必须**先 `validateAliasGroups`，只把 `accepted` 传进 `applyAliasGroups`**——`mergeCandidates` 不重跑校验，直接传原始组可以发明实体名。
+- **`AliasCandidate` 需补 `summary` 字段**（契约 §6 第 2 层要求 LLM 看到「短摘要」；当前类型无此字段）——取该人物出现章里最完整的一条 `description` 截断，勿让提示词输入与契约漂移。
 
 ---
 

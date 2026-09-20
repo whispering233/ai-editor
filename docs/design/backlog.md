@@ -340,6 +340,9 @@
 - **快捷键只读不可自定义**（2026-09）：设置页「快捷键」是说明页——键位写死在 `lib/save-shortcut.ts`（清单 `lib/shortcuts.ts` 引用同一常量）。触发条件：出现「想改键位/改组合键」的真实需求；升级路径：加一张 localStorage 覆盖表（清单与判定共读），不改现有注册栈。
 - **`SPLIT_TITLE_MAX_CHARS` 的值不锁**（2026-09，切分 oracle 判定项）：值是可调参数（真实语料可能要调到 45），文档只固定**常量名与语义**（标题行长度上限），测试夹具自缩放、不写死数值——锁死会阻碍调参，而调参是预期行为。
 - **测试文件里的包名 typo（旧账）** — 现状：`packages/client/src/lib/character-workbench.test.ts` 的 import 写成 `@whispering2333/ai-editor-shared`（多一个 `3`）；type-only + `.test.ts` 不进 `typecheck` ⇒ 静默，测试内类型错误永不被发现（同型 typo 已在切分卡内修过一处）。触发条件：下次触碰该文件时。最小修法：改包名（一行）。
+- **归并的两个已知边界（merge oracle 登记，均在 21.7 接线前无用户可见影响）**
+  - **悬空关系断言盲区**：现有用例只覆盖「source 保留 + target 被阈值滤掉」，只查 target 的变异全绿（行为本身两向对称，oracle 反例已验）。触发条件：下次触碰 `merge.test.ts`。最小修法：补一枚 source 侧悬空用例（有向关系如 `mentor`，源端为单章人物）。
+  - **端点重映射不区分实体类型**：`applyAliasGroups` 按名字改写关系端点 ⇒ 跨类型同名（人物「甲」+ 设定「甲」）+ 别名组 + 结构关系（`belongs_to`/`owns`）时，设定侧端点会被静默改写。触发条件：真出现跨类型同名 + 结构关系被改写的病例。修法：关系端点带实体类型（当前数据形状无此信息，不得顺手改）。
 - **延期项≠技术债记录**：真正"必须做但没做"的项请写进本文件的相应小节，并在触发条件写清"何时必须做"。
 - **大纲页 / 设定页不迁移 antd `Tree`（2026-09 考察结论）**
   - 结论：保持自绘缩进行。成本 = `Outline.tsx` / `setting-tree.tsx` 两处视图层重写（纯逻辑 `lib/outline-tree.ts` / `lib/setting-tree.ts` 与单测可留）；**语义冲突在拖拽**——rc-tree 用鼠标水平位置（`dropLevelOffset`）决定落层级，与现有「行上下半 = 同级前后 / 行中段 = 成为子级 / 空白区 = 排根末尾」·三套语义不对应，且**空片区落点 rc-tree 无对应**；antd `Tree.js` 把 `dropIndicatorRender` 写在 props 展开之后（**不可注入**），指示线只能改 CSS。
