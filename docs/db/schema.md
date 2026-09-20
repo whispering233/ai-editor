@@ -261,7 +261,7 @@ CREATE TABLE decompose_batches (
 | **幂等靠清单不靠 provenance** | 重跑归并的「上次写了什么」存在 `merge_written`（id + 写入时 `updated_at`），**不给 `entities` 加来源列**；`updated_at` 变化过的实体视为用户手工编辑 → 不覆盖、不软删 |
 | **JSON 列一律 text 模式** | 与 `entities.data` / `delta_records.changes` 同口径（坏 JSON 由行映射层防御解析，禁用 drizzle `mode:'json'`） |
 | **不进回收站** | job 与批结果无 `deleted_at`：拆解是导入类操作，撤销 = 删书目录或恢复拆解前的自动备份 zip（设计文档 §1） |
-| **状态归一** | 服务端重启后残留的 `running` 由打开项目时的归一逻辑改为 `paused`（进程内已无在跑 job），UI 提示可续拆 |
+| **状态归一** | 服务端重启后残留的 `running` 由打开项目时的归一逻辑改为 `paused`（进程内已无在跑 job），UI 提示可续拆。**只归一 job 行**：残留的 `running` **批**行由续拆时的取批逻辑承接（续拆取「第一个未完成批」，含 `running`）⇒ 进度页必须容忍「`paused` job + `running` 批」这个组合 |
 
 ## sessions/*.jsonl — 对话历史（文件存储）
 

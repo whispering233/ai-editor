@@ -8,15 +8,6 @@
 
 ---
 
-## 卡 21.3 — DB 迁移 009 + db 层 helper
-
-- **背景**：job 状态与批结果要随备份/导出/云走，放 `data.db`（不新增项目目录）。
-- **契约**：`docs/db/schema.md` §decompose_jobs / decompose_batches（含不变式表）。
-- **范围**：`packages/db/src/tables.ts` 两表声明（JSON 列 text 模式）；`packages/db/src/migrations/009_decompose.ts`（纯 DDL，幂等）+ `schema.ts` 的 `SCHEMA_VERSION` → 9；`packages/db/src/queries/decompose.ts`（job 读写 / 批读写 / `running` → `paused` 归一 / `merge_written` 读写）。
-- **判据**：迁移测试（v8 → v9 升级、重复执行幂等、全新空库短路不重建）+ queries 单测；`pnpm --filter @whispering233/ai-editor-db test` 绿；`pnpm -r build` 后 `pnpm typecheck` 绿。
-
----
-
 ## 卡 21.4 — POST /decompose/analyze（切分预览，无状态）
 
 - **背景**：客户端 POST 原始字节，服务端切分并返回预览 + 预估（范围变更 = 客户端重传，服务端无状态）。
@@ -32,7 +23,7 @@
 - **契约**：`docs/api/120-api-decompose.md` §start / §job / §batches；`docs/design/60-decompose.md` §2 / §4。
 - **范围**：`packages/server/src/decompose/job.ts`（job 创建 / 组批装箱 / 建大纲（卷→章）/ 逐章导入正文段落块（复用参考资料执行器的段落块形态）/ 写 `decompose_batches`）；`routes/decompose.ts` 的 start / job / batches 分支；凭据校验在建项目**之前**；副作用 = 打开项目 + 写创作根 `lastProject`。
   - **硬提醒（切分 oracle 实测登记）**：**不得拿 split 返回的 `charCount` 当偏移量裁文本**——它是近似计数（退化路径不含空行分隔符、正常路径 trim 掉分隔换行），当偏移量用会错位或丢字符；要裁文本必须自己按真实切片位置算。
-- **判据**：路由测试：建档成功（`outline.json` 卷章数 / `document_records` 行数 / `decompose_batches` 行数三向断言）/ 书名冲突 409 / 凭据缺失 400 且**不留半成品项目** / 范围只影响批规划而正文**全量导入** / `GET /job` 不含批结果正文；`pnpm --filter @whispering233/ai-editor-server test` 绿。
+- **判据**：路由测试：建档成功（`outline.json` 卷章数 / `document_records` 行数 / `decompose_batches` 行数三向断言）/ 书名冲突 409 / 凭据缺失 400 且**不留半成品项目** / 范围只影响批规划而正文**全量导入** / `GET /job` 不含批结果正文 / **多 job 并存时读接口取「最新」（`created_at` 降序 → `id` 降序）有断言**（db helper 已按此实现，断言落在路由层）；`pnpm --filter @whispering233/ai-editor-server test` 绿。
 
 ---
 
@@ -40,7 +31,8 @@
 
 - **背景**：LLM 调用、逐章对齐护栏、重试与失败标记、状态机与取消。
 - **契约**：`docs/design/60-decompose.md` §4 / §7；`docs/api/120-api-decompose.md` §pause / §resume。
-- **范围**：`packages/server/src/decompose/runner.ts`（串行批循环、`DECOMPOSE_CONCURRENCY` 常量、逐章对齐校验、重试上限 `DECOMPOSE_BATCH_MAX_ATTEMPTS`、失败批继续、滚动故事圣经、取消通道）；暂停挂点 = `setCurrentProject` 单点（与 `disposeProjectRuntime` 同一处）；打开项目时 `running` → `paused` 归一；pause / resume 端点。
+- **范围**：`packages/server/src/decompose/runner.ts`（串行批循环、`DECOMPOSE_CONCURRENCY` 常量、逐章对齐校验、重试上限 `DECOMPOSE_BATCH_MAX_ATTEMPTS`、失败批继续、滚动故事圣经、取消通道）；暂停挂点 = `setCurrentProject` 单点（与 `disposeProjectRuntime` 同一处）；打开项目时 `running` → `paused` 归一（**只归一 job 行**，见 `docs/db/schema.md` 不变式表）；pause / resume 端点。
+  - **硬提醒**：续拆取批必须取「**第一个未完成批**」（含重启后残留的 `running` 批），不能只取 `pending`；读 `decompose_batches.result` 前自行守卫形状（db 层不做形状校验，`[1,2]` 这类值会原样透出）。
 - **判据**：**faux provider 端到端**（注入假 LLM 返回固定 JSON，跑通 start → 全部批 `done`，断言批结果形状与状态）；暂停 / 续拆（跳过 `done` 批）；切书自动暂停；重启归一（直调归一函数断言 `running` → `paused`）；缺章重试与失败批不阻塞后续批；`pnpm --filter @whispering233/ai-editor-server test` 绿。
 
 ---
