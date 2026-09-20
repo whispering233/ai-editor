@@ -5,12 +5,17 @@
 // 拿不到「有 job」的形态。于是照同款口径扫源码，钉住几件会静默丢的东西：
 // ① `#/decompose` 必须已是已知路由段（卡 21.8 遗留 leg——漏了它对话框关闭后被当未知 hash 回退书架）；
 // ② 页头常驻模板（section `h-full min-h-0 flex-col` + 内层滚动容器）；
-// ③ antd Progress 无组件级 token 覆盖；
+// ③ antd Progress 无组件级 token 覆盖（走全局 colorInfo）；
 // ④ 阶段条文案只来自常量（禁止在页面里手抄一遍）；
 // ⑤ done 批重跑有二次确认且文案写明会重建归并与报告；
-// ⑥ 完成态**不自动跳转**（页面内不出现 navigate）。
+// ⑥ 完成态**不自动跳转**（页面内不出现 navigate）；
+// ⑦ 展开区**深一层**形状守卫：章内子数组缺失不得抛（只挡顶层 `result.chapters` 不够——
+//   `{chapters:[{}]}` 照样进 batchResultGroups 抛错，整页被 ErrorBoundary 换掉）；
+// ⑧ 重跑入口钉的是**形态**不是字面量：条件不得再叠加 failed-only 收窄（字面量扫描会静默放过）。
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import type { DecomposeBatchResult } from "@whispering233/ai-editor-shared";
+import { batchResultGroups } from "../lib/decompose";
 import { parseHashRoute } from "../hooks/use-route";
 
 const page = readFileSync(new URL("./Decompose.tsx", import.meta.url), "utf8");
@@ -46,7 +51,7 @@ describe("阶段条 / 进度条", () => {
     expect(page).not.toContain("建档");
   });
 
-  it("antd Progress 走全局 colorPrimary：无 strokeColor / 无组件级 styles 覆盖", () => {
+  it("antd Progress 走全局 colorInfo：无 strokeColor / 无组件级 styles 覆盖", () => {
     expect(page).toMatch(/<Progress percent=\{batchPercent\(current\.progress\)\} showInfo=\{false\} \/>/);
     expect(page).not.toContain("strokeColor");
     expect(page).not.toMatch(/<Progress[\s\S]{0,160}styles=/);
@@ -92,6 +97,10 @@ describe("完成态总结卡", () => {
     expect(page.match(/function renderBatchList\(/g)?.length).toBe(1);
     expect(page).toContain("{renderBatchList(current)}"); // 进度态也走同一份
     expect(page).toContain("canRerunBatch(current.status, batch.status)"); // done 批仍能重跑
+    // 形态断言（oracle R2）：字面量在 ≠ 入口在——条件被收窄成 `current.status === "failed" && canRerunBatch(...)`
+    // 时上面那行照样过（done 态整行不再渲染重跑按钮）。钉「开关就是 canRerunBatch 本身」+ 禁 failed-only 收窄。
+    expect(page).toMatch(/\{canRerunBatch\(current\.status, batch\.status\) && \(/);
+    expect(page).not.toMatch(/current\.status === "failed"\s*&&/);
   });
 
   it("批 result 形状守卫：脏形状降级成一行文案，不进 batchResultGroups", () => {
@@ -101,5 +110,15 @@ describe("完成态总结卡", () => {
     expect(page.indexOf("Array.isArray(detail.result.chapters)")).toBeLessThan(
       page.indexOf("batchResultGroups(detail.result)"),
     );
+  });
+});
+
+describe("展开区：章内子数组缺失不得抛（oracle R1）", () => {
+  it("{chapters:[{}]} → 四组空分组（页面渲染「—」），不是抛错换整页", () => {
+    // 顶层守卫（Array.isArray(result.chapters)）挡不住章内子数组缺失——这里不许抛
+    const groups = batchResultGroups({ chapters: [{}] } as unknown as DecomposeBatchResult);
+    expect(groups.map((group) => group.names)).toEqual([[], [], [], []]);
+    // 空分组由页面渲染成「—」（不改实现：页面这一行就是「空分组」的可见形态）
+    expect(page).toContain('group.names.length === 0 ? "—" : group.names.join("、")');
   });
 });

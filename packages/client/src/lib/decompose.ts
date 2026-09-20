@@ -268,6 +268,15 @@ export interface BatchResultGroup {
 }
 
 /**
+ * 形状守卫：`result` 是服务端 JSON 反序列化值，章内子数组可能缺失/非数组（老库、手工改库、
+ * 契约漂移）——一律当空数组，**不得抛**：展开区抛错会把整页（含左栏/聊天）交给 ErrorBoundary 换掉
+ * （页面只有顶层 `result.chapters` 一层守卫，深一层只能在这里兜）。
+ */
+function arrayOrEmpty<T>(value: readonly T[] | undefined): readonly T[] {
+  return Array.isArray(value) ? value : [];
+}
+
+/**
  * 批抽取结果 → 分组摘要（展开区；**只出名字清单，不倾倒原始 JSON**）。
  * 跨章同名去重（同一批内先出现的顺序保留），四个分组恒在（空组由调用方渲染「—」）。
  */
@@ -277,10 +286,10 @@ export function batchResultGroups(result: DecomposeBatchResult): BatchResultGrou
   const locations = new Set<string>();
   const relations = new Set<string>();
   for (const chapter of result.chapters) {
-    for (const character of chapter.characters) characters.add(character.name);
-    for (const setting of chapter.settings) settings.add(setting.name);
-    for (const location of chapter.locations) locations.add(location.name);
-    for (const relation of chapter.relations) {
+    for (const character of arrayOrEmpty(chapter.characters)) characters.add(character.name);
+    for (const setting of arrayOrEmpty(chapter.settings)) settings.add(setting.name);
+    for (const location of arrayOrEmpty(chapter.locations)) locations.add(location.name);
+    for (const relation of arrayOrEmpty(chapter.relations)) {
       relations.add(`${relation.source} → ${relation.target}（${relationTypeLabel(relation.type)}）`);
     }
   }
