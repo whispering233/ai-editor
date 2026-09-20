@@ -41,12 +41,31 @@ export interface SplitWarning {
   message: string;
 }
 
-/** 章（文件位置序）；charCount = 该段原文（含标题行）的字数 */
+/** 章（文件位置序）；charCount = 该段原文（含标题行）的字数——**近似计数，不是切片长**（§3.4） */
 export interface SplitChapter {
   index: number;
   title: string;
   charCount: number;
   volumeIndex: number;
+}
+
+/**
+ * 章原文切片：归一化文本上的真实偏移 `[start, end)`（含标题行）。
+ * 消费方要裁章文本必须用它，**不得拿 `charCount` 当偏移量**（近似计数：正常路径 trim 掉分隔换行、
+ * 退化路径不含空行分隔符 ⇒ 当偏移量会错位或丢字符，§3.4）。
+ */
+export interface SplitChapterSlice {
+  index: number;
+  title: string;
+  start: number;
+  end: number;
+}
+
+/** 切分结果 + 切片几何（`text` = 归一化文本，切片即其上的偏移） */
+export interface SplitWithSlices {
+  result: SplitResult;
+  text: string;
+  slices: SplitChapterSlice[];
 }
 
 export interface SplitVolume {
@@ -478,49 +497,100 @@ function countNumberingRestarts(candidates: ChapterCandidate[]): number {
 
 // ── 第四层 · 退化等分 ────────────────────────────────────────────────────────
 
-/** 段落边界（空行）优先于换行；贪心装箱到 SPLIT_FALLBACK_TARGET_CHARS */
-function fallbackPartLengths(text: string): number[] {
-  const blocks: number[] = [];
-  for (const paragraph of text.split(/\n{2,}/)) {
+/** 装箱单元（段落 / 行）：`length` = 计数口径（charCount 的近似来源），`start`/`end` = 真实位置 */
+interface TextBlock {
+  length: number;
+  start: number;
+  end: number;
+}
+
+/** 段落边界（空行）优先于换行：拆出装箱单元（计数与位置都来自同一遍扫描，不再分头算） */
+function fallbackBlocks(text: string): TextBlock[] {
+  const paragraphs: TextBlock[] = [];
+  const separator = /\n{2,}/g;
+  let cursor = 0;
+  for (let match = separator.exec(text); match !== null; match = separator.exec(text)) {
+    paragraphs.push({ length: match.index - cursor, start: cursor, end: match.index });
+    cursor = match.index + match[0].length;
+  }
+  paragraphs.push({ length: text.length - cursor, start: cursor, end: text.length });
+  const blocks: TextBlock[] = [];
+  for (const paragraph of paragraphs) {
     if (paragraph.length <= SPLIT_FALLBACK_TARGET_CHARS) {
-      blocks.push(paragraph.length);
+      blocks.push(paragraph);
       continue;
     }
-    for (const line of paragraph.split("\n")) blocks.push(line.length);
+    // 超长段落再按行拆：行位置在段落内按行长 + 1 个换行符累加
+    let lineStart = paragraph.start;
+    for (const line of text.slice(paragraph.start, paragraph.end).split("\n")) {
+      blocks.push({ length: line.length, start: lineStart, end: lineStart + line.length });
+      lineStart += line.length + 1;
+    }
   }
-  const parts: number[] = [];
+  return blocks;
+}
+
+/**
+ * 退化等分的每份（段落边界优先于换行；贪心装箱到 SPLIT_FALLBACK_TARGET_CHARS）：
+ * `length` = 计数（charCount，与旧实现逐字同口径），`start`/`end` = 真实切片位置。
+ * 两者在退化路径上**本来就不等**（计数不含空行分隔符，§3.4）——切片按位置、计数按旧口径。
+ */
+function fallbackParts(text: string): TextBlock[] {
+  const parts: TextBlock[] = [];
   let size = 0;
-  for (const block of blocks) {
+  let start = 0;
+  let end = 0;
+  for (const block of fallbackBlocks(text)) {
     if (size >= SPLIT_FALLBACK_TARGET_CHARS) {
-      parts.push(size);
+      parts.push({ length: size, start, end });
       size = 0;
     }
     // 分隔换行只存在于块之间：每份的首块不补换行，否则末尾会多出 1 个并不存在的字符（charCount > totalChars）
-    size += size === 0 ? block : block + 1;
+    if (size === 0) {
+      start = block.start;
+      size = block.length;
+    } else {
+      size += block.length + 1;
+    }
+    end = block.end;
   }
-  if (size > 0) parts.push(size);
+  if (size > 0) parts.push({ length: size, start, end });
+  // 切片首尾相接：每份的 `end` 取下一份的 `start`（块之间的空行分隔符归前一份——
+  // 与正常路径「切片到下一章起点」同口径），否则份与份之间的分隔符会落在所有切片之外。
+  for (let position = 0; position < parts.length - 1; position++) {
+    parts[position].end = parts[position + 1].start;
+  }
   return parts;
 }
 
-function fallbackEqualSplit(text: string, encoding: NovelEncoding): SplitResult {
-  const chapters: SplitChapter[] = fallbackPartLengths(text).map((charCount, position) => ({
-    index: position + 1,
+function fallbackEqualSplit(text: string, encoding: NovelEncoding): { result: SplitResult; blocks: ChapterBlock[] } {
+  const parts = fallbackParts(text);
+  const blocks: ChapterBlock[] = parts.map((part, position) => ({
     title: `第${position + 1}部分`,
-    charCount,
+    start: part.start,
+    end: part.end,
+  }));
+  const chapters: SplitChapter[] = parts.map((part, position) => ({
+    index: position + 1,
+    title: blocks[position].title,
+    charCount: part.length,
     volumeIndex: 0,
   }));
   return {
-    encoding,
-    totalChars: text.length,
-    chapters,
-    volumes: [SINGLE_VOLUME],
-    stats: statsOf(chapters.map((chapter) => chapter.charCount)),
-    warnings: [
-      {
-        code: "FALLBACK_EQUAL_SPLIT",
-        message: `未检测到章节结构，已按字数等分（每份约 ${SPLIT_FALLBACK_TARGET_CHARS} 字）`,
-      },
-    ],
+    result: {
+      encoding,
+      totalChars: text.length,
+      chapters,
+      volumes: [SINGLE_VOLUME],
+      stats: statsOf(chapters.map((chapter) => chapter.charCount)),
+      warnings: [
+        {
+          code: "FALLBACK_EQUAL_SPLIT",
+          message: `未检测到章节结构，已按字数等分（每份约 ${SPLIT_FALLBACK_TARGET_CHARS} 字）`,
+        },
+      ],
+    },
+    blocks,
   };
 }
 
@@ -545,7 +615,11 @@ function volumeIndexOf(start: number, volumes: SplitVolume[], markers: VolumeMar
   return Math.max(markers.filter((marker) => marker.start <= start).length - 1, 0);
 }
 
-function splitMarkedText(index: TextIndex, markers: { candidates: ChapterCandidate[]; volumes: VolumeMarker[] }, encoding: NovelEncoding): SplitResult {
+function splitMarkedText(
+  index: TextIndex,
+  markers: { candidates: ChapterCandidate[]; volumes: VolumeMarker[] },
+  encoding: NovelEncoding,
+): { result: SplitResult; blocks: ChapterBlock[] } {
   const text = index.text;
   const spec = pickChapterRule(markers.candidates, index, text.length);
   // 规则融合第二步：关键词标记（序章/楔子/…）不参与计数词竞争，确定性并入主规则
@@ -589,24 +663,49 @@ function splitMarkedText(index: TextIndex, markers: { candidates: ChapterCandida
     volumeIndex: volumeIndexOf(block.start, volumes, markers.volumes),
   }));
   return {
-    encoding,
-    totalChars: text.length,
-    chapters,
-    volumes,
-    stats: statsOf(chapters.map((chapter) => chapter.charCount)),
-    warnings,
+    result: {
+      encoding,
+      totalChars: text.length,
+      chapters,
+      volumes,
+      stats: statsOf(chapters.map((chapter) => chapter.charCount)),
+      warnings,
+    },
+    blocks,
   };
 }
 
 // ── 入口 ─────────────────────────────────────────────────────────────────────
 
-/** 切分小说原始字节：解码 → 归一化 → 候选扫描 → 聚合校验与修复 → 退化等分（纯函数，无 IO） */
-export function splitNovel(bytes: Uint8Array): SplitResult {
+/**
+ * 切分小说原始字节 + **章原文切片**：解码 → 归一化 → 候选扫描 → 聚合校验与修复 → 退化等分（纯函数，无 IO）。
+ * `slices` 与 `result.chapters` 同序同源（同一份块几何）——S1 导入正文按切片裁文本（§3.4：不得用 charCount）。
+ */
+export function splitNovelWithSlices(bytes: Uint8Array): SplitWithSlices {
   const { encoding, text: decoded } = decodeNovel(bytes);
   const text = normalizeText(decoded);
   const index = indexText(text);
   if (text.length === 0) {
-    return { encoding, totalChars: 0, chapters: [], volumes: [SINGLE_VOLUME], stats: { min: 0, median: 0, max: 0 }, warnings: [] };
+    return {
+      result: { encoding, totalChars: 0, chapters: [], volumes: [SINGLE_VOLUME], stats: { min: 0, median: 0, max: 0 }, warnings: [] },
+      text,
+      slices: [],
+    };
   }
-  return splitMarkedText(index, scanMarkers(index), encoding);
+  const { result, blocks } = splitMarkedText(index, scanMarkers(index), encoding);
+  return {
+    result,
+    text,
+    slices: blocks.map((block, position) => ({
+      index: position + 1,
+      title: block.title,
+      start: block.start,
+      end: block.end,
+    })),
+  };
+}
+
+/** 切分小说原始字节（切分结果本身；切片见 `splitNovelWithSlices`——纯函数，无 IO） */
+export function splitNovel(bytes: Uint8Array): SplitResult {
+  return splitNovelWithSlices(bytes).result;
 }

@@ -12,6 +12,7 @@ import {
   decodeNovel,
   normalizeText,
   splitNovel,
+  splitNovelWithSlices,
   type SplitResult,
 } from "./split.js";
 
@@ -404,5 +405,52 @@ describe("卷与退化路径", () => {
       stats: { min: 0, median: 0, max: 0 },
       warnings: [],
     });
+  });
+});
+
+// ============ splitNovelWithSlices（S1 导入正文用的真实切片几何，卡 21.5） ============
+//
+// 为什么单独测：`charCount` 是近似计数（§3.4），S1 裁章文本只能用切片位置——切片一旦错位，
+// 正文导入就会丢字/串章。此处锁三件事：① 与 `splitNovel` 结果逐字一致（同一份块几何）；
+// ② 切片首尾相接、恰好覆盖归一化文本；③ 退化路径的 charCount 与切片长**本来就不等**。
+describe("splitNovelWithSlices（切片几何）", () => {
+  const withSlices = (text: string) => splitNovelWithSlices(bytesOf(text));
+
+  it("① 差分：同一输入下 result 与 splitNovel 深等（标记路径 + 退化路径）", () => {
+    const marked = fiveChapters();
+    const fallback = Array.from({ length: 4 }, () => prose(4020)).join("\n\n");
+
+    expect(withSlices(marked).result).toEqual(splitNovel(bytesOf(marked)));
+    expect(withSlices(fallback).result).toEqual(splitNovel(bytesOf(fallback)));
+    expect(withSlices("   ").result).toEqual(splitNovel(bytesOf("   "))); // 空文本路径
+  });
+
+  it("② 切片与章同序同源：首尾相接、覆盖全文、每片首行 = 该章标题行", () => {
+    const text = fiveChapters();
+    const { result, text: normalized, slices } = withSlices(text);
+
+    expect(slices.map((slice) => slice.index)).toEqual(result.chapters.map((chapter) => chapter.index));
+    expect(slices.map((slice) => slice.title)).toEqual(result.chapters.map((chapter) => chapter.title));
+    expect(slices[0].start).toBe(0);
+    expect(slices[slices.length - 1].end).toBe(normalized.length);
+    for (let position = 1; position < slices.length; position++) {
+      expect(slices[position].start).toBe(slices[position - 1].end); // 无缝隙、无重叠
+    }
+    for (const slice of slices) {
+      expect(normalized.slice(slice.start, slice.end).split("\n")[0]).toBe(`第${CN[slice.index - 1]}章 标题${slice.index}`);
+    }
+  });
+
+  it("③ 退化路径：切片仍覆盖全文，但 charCount（计数口径）不等于切片长", () => {
+    const text = Array.from({ length: 4 }, () => prose(4020)).join("\n\n");
+    const { result, text: normalized, slices } = withSlices(text);
+    const sliceChars = slices.reduce((total, slice) => total + (slice.end - slice.start), 0);
+
+    expect(slices[0].start).toBe(0);
+    expect(slices[slices.length - 1].end).toBe(normalized.length);
+    expect(slices.every((slice, position) => position === 0 || slice.start === slices[position - 1].end)).toBe(true);
+    // 计数不含空行分隔符 ⇒ 切片长严格更大（这正是「不得拿 charCount 当偏移量」的直接证据）
+    expect(sliceChars).toBeGreaterThan(chapterChars(result));
+    expect(sliceChars).toBeLessThanOrEqual(normalized.length);
   });
 });

@@ -74,6 +74,11 @@ export function setProjectRoot(root: string | null): void {
   projectRoot = root;
 }
 
+/** 读创作根（拆解 start 在 `books/<书名>/` 下建书目录用；未初始化 → null） */
+export function getProjectRoot(): string | null {
+  return projectRoot;
+}
+
 /** books/ 子目录名（书架模式：创作根/books/<书名>/） */
 export const BOOKS_DIR_NAME = "books";
 
