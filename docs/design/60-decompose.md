@@ -110,22 +110,25 @@
 | `description` | 人物必填（人物契约的必填口径 = 前端表单 + AI 约定）；长度受 `DECOMPOSE_DESCRIPTION_MAX_CHARS` 约束 |
 | `alias` | **单值**（`character.data.alias` 是 `z.string()`，存不下多别名）；其余别名进 `description` 的「（又称：X、Y）」 |
 | `gender` / `age` / `race` | **只在文中明确时填**，不确定留空 |
-| `personality[]` / `motivation` | 有则填，受条数与长度上限约束 |
+| `personality[]` / `motivation` | 有则填；`personality` 限条数（`DECOMPOSE_PERSONALITY_MAX_ITEMS`）、`motivation` 限长度（`DECOMPOSE_MOTIVATION_MAX_CHARS`） |
 | `setting.tags[]` / `setting.rules[]` | 短标签与短句（UI 把 `rules` 渲染成 tags 控件，长文本放进去会难看） |
 | `location.type` | 自由文本；`parent_id` **不填**（不做地点层级） |
 | `ability_panel` / `custom_fields` | **不填**——能力面板是用户自定义字段树，AI 建树会污染结构；拆出的武功体系一律进「设定」 |
 | 关系 `type` | 收窄到 8 类：`ally` / `rival` / `mentor` / `family` / `kills` / `belongs_to` / `owns` / `masters`——**不给全 17 类**（否则会出现 `plants` / `occurs_at` 这类语义错的关系） |
-| 每章条数上限 | 人物 / 设定 / 地点 / 关系各有上限（常量 `DECOMPOSE_CHAPTER_MAX_ITEMS`），超限服务端截断并记日志 |
+| 每章条数上限 | 人物 / 设定 / 地点 / 关系**各自一个具名常量**（`DECOMPOSE_CHAPTER_MAX_CHARACTERS` / `_SETTINGS` / `_LOCATIONS` / `_RELATIONS`），超限服务端截断并记日志 |
 
 **落库阈值（S3）**：人物与关系要求**跨章出现 ≥ `DECOMPOSE_MENTION_MIN_CHAPTERS` 章**（单章出现的路人/一次性互动只进报告）——这是压噪音的主闸门；设定与地点**不设阈值**（一次出现也可能是重要宝物/剑法），靠提示词约束「只抽对剧情有影响的」。
 
 ## 6. 归并（S3）
 
-**第 1 层 · 服务端规则（零 LLM 成本）**
+**第 1 层 · 服务端规则（零 LLM 成本）** —— 四步**有序**纯逻辑（顺序有意义，不可交换）：
 
-- 实体：name 归一化（trim、折叠空白、全角空格）后「同名同类型 → 同一实体」。
-- 关系：按 `(source, target, relation_type)` 去重；**对称关系方向归一**——判据用 shared `RELATION_TYPE_META.symmetric`（单一定义，禁止手抄清单）；跨章数达标才落库。关系表无唯一约束（`db/schema.md`），去重必须在代码里做。
-- 关系端点必须落在已归并的实体集合内，否则丢弃（防模型幻觉出不存在的人物）。
+1. **去重**：name 归一化（trim、折叠空白、全角空格）后「同名同类型 → 同一实体」；关系按 `(source, target, relation_type)` 去重 + **对称关系方向归一**（判据 = shared `RELATION_TYPE_META.symmetric`，单一定义，禁止手抄清单）。**此步不设阈值**——阈值要等别名归并后才有意义（别名合并会把章节集合变大）。
+2. **应用别名归并**（§6 第 2 层的输出）：别名 → 规范名映射；合并章节集合；**关系端点同步重映射**并重新去重；丢弃自环关系。
+3. **阈值**：人物与关系的跨章数 < `DECOMPOSE_MENTION_MIN_CHAPTERS` → 进 `filtered`（设定/地点不设阈值）。
+4. **悬空关系过滤**：两端都必须落在**落库实体集合**内，否则丢弃并计入 `filtered`——既防模型幻觉出不存在的人物，也防阈值滤掉端点后留下悬空边。
+
+关系表无唯一约束（`db/schema.md`），去重必须在代码里做。
 
 **第 2 层 · 一次别名归并调用（只针对人物）**
 
