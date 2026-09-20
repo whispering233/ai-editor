@@ -354,6 +354,8 @@
 - **拆解的长任务路径未测**（21.6 oracle 登记） — 现状：真实 provider 的 429/限流/超时路径（faux 不模拟）、`DECOMPOSE_CONCURRENCY > 1`、章被物理删除后批素材剔除（`runner.ts` 只读码未跑用例）。触发条件：并发度真要调到 > 1，或真遇到限流故障。
 - **报告正文重跑会静默覆盖用户编辑**（21.7 oracle 登记，**有意口径**） — 现状：报告实体的 `updated_at` 不随正文编辑变化 ⇒ 三路比对恒判 `reuse` ⇒ 每次重跑重建报告正文（代码注释已写明理由：重跑后章摘要可能已变）。与 §9.5「用户编辑优先」不矛盾（那条只谈实体）。触发条件：用户抱怨「改过的报告被重跑冲掉」。最小修法：报告实体的正文编辑也推 `updated_at`（或比对 `document_records.updated_at`），需先定口径。
 - **用户手工建同三元组关系 ⇒ S3 每次重跑同一错误**（21.7 oracle 登记） — 现状：重跑 S3 时写关系抛 `RELATION_EXISTS` → 整事务回滚（清单/行数不变）⇒ job failed，且**每次重跑同一错误**，死循环需用户自己删那条关系。触发条件：真实撞上（用户手建关系与拆解产物同三元组）。最小修法：`createRelation` 捕获 `RELATION_EXISTS` 后采纳既有行 id 进清单（与实体侧「name 复用」同思路）。
+- **`Typography` 不在 antd 根元素守卫名单里（盲区）**（21.8 oracle 登记） — 现状：`design-discipline.test.ts` 的 `ANTD_GUARDED_COMPONENTS` 只扫 `Button` / `Input`，`Typography.Text` 上挂的 Tailwind 字号类会被 antd 无层 CSS 压掉（实测 `text-xs` 挂上、渲染仍是 14px）。触发条件：新增 antd 组件到守卫清单时（扩名单会连带扫描既有 13 处 `Typography` 用法，需一张独立卡）。最小修法：先把已发现的死类删掉（`decompose-dialog.tsx` 一处已随 21.9 收尾），再评估扩名单。
+- **antd `Typography` 自带字体栈与 `--font-sans` 不一致**（21.8 oracle 登记，非本卡引入） — 现状：antd 字体栈是 Latin+Emoji 栈，Linux 上数字与空格会落到彩色 emoji 字体（实测警告行「39」字形异常），Windows/macOS 命中系统字体无影响；既有先例（`Trash.tsx` 计数、云备份面板时间）同款。触发条件：出现 Linux 用户抱怨字体怪异。最小修法：给 antd 字体栈补 `PingFang SC` / `Microsoft YaHei`（或给 `--font-sans` 对齐），需全站核一遗像素。
 - **延期项≠技术债记录**：真正"必须做但没做"的项请写进本文件的相应小节，并在触发条件写清"何时必须做"。
 - **大纲页 / 设定页不迁移 antd `Tree`（2026-09 考察结论）**
   - 结论：保持自绘缩进行。成本 = `Outline.tsx` / `setting-tree.tsx` 两处视图层重写（纯逻辑 `lib/outline-tree.ts` / `lib/setting-tree.ts` 与单测可留）；**语义冲突在拖拽**——rc-tree 用鼠标水平位置（`dropLevelOffset`）决定落层级，与现有「行上下半 = 同级前后 / 行中段 = 成为子级 / 空白区 = 排根末尾」·三套语义不对应，且**空片区落点 rc-tree 无对应**；antd `Tree.js` 把 `dropIndicatorRender` 写在 props 展开之后（**不可注入**），指示线只能改 CSS。
