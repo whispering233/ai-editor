@@ -633,6 +633,10 @@ describe("pullBackup：并集合并六种情形（基线三方比较、删除优
 });
 
 describe("computeCloudSync：三态判定（集合基准 + 本机 mtime，不含 .backups/）", () => {
+  /** 「刚同步完」的基准 = **未来 10s**：文件系统 mtime 与 `Date.now()` 的毫秒截断之间有亚毫秒抖动，
+   *  用 `new Date()` 当基准会把 beforeEach 刚写完的 `sessions/`（严格比较，无容差）读成「本机有改动」——
+   *  实测约半数 flake（同一毫秒内写入）；基准设在未来等价于「同步后本机无改动」，且不损灵敏度（见同组 0.5s 用例）。 */
+  const SYNCED_BASE = new Date(Date.now() + 10_000).toISOString();
   const files = (names: string[]): { files: string[] } => ({ files: names });
 
   it("未配置 / 未打开项目 / 云端不可达", () => {
@@ -643,12 +647,12 @@ describe("computeCloudSync：三态判定（集合基准 + 本机 mtime，不含
   });
 
   it("已同步：云端集合 == lastSeenCloudFiles 且本机无改动", () => {
-    writeBookState(project.config.id, { lastSyncAt: new Date().toISOString(), lastSeenCloudFiles: ["x.zip"] });
+    writeBookState(project.config.id, { lastSyncAt: SYNCED_BASE, lastSeenCloudFiles: ["x.zip"] });
     expect(computeCloudSync(project, true, files(["x.zip"])).state).toBe("synced");
   });
 
   it("云端有更新：集合变化（即便 head 时间戳更早也不会漏报——集合基准）", () => {
-    writeBookState(project.config.id, { lastSyncAt: new Date().toISOString(), lastSeenCloudFiles: ["x.zip"] });
+    writeBookState(project.config.id, { lastSyncAt: SYNCED_BASE, lastSeenCloudFiles: ["x.zip"] });
     const out = computeCloudSync(project, true, files(["20200101-000000000-自动-别的机器-人物0-设定0-章0.zip", "x.zip"]));
     expect(out.state).toBe("remote-ahead");
   });
@@ -674,7 +678,7 @@ describe("computeCloudSync：三态判定（集合基准 + 本机 mtime，不含
   });
 
   it("`.backups/` 的变化**不算**本机改动（force 会把云端旧份写进那里）", () => {
-    writeBookState(project.config.id, { lastSyncAt: new Date().toISOString(), lastSeenCloudFiles: [] });
+    writeBookState(project.config.id, { lastSyncAt: SYNCED_BASE, lastSeenCloudFiles: [] });
     const newest = new Date(Date.now() + 2000);
     mkdirP(join(project.root, BACKUPS_DIR_NAME), { recursive: true });
     const strayBackup = join(project.root, BACKUPS_DIR_NAME, "20260915-000000000-自动-机上-人物0-设定0-章0.zip");
