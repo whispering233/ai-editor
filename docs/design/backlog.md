@@ -349,6 +349,9 @@
 - **路由层缺少编码/二进制/范围边界用例**（21.4 oracle 登记，低价值） — 现状：BOM/UTF-16 由 `split.test.ts` 覆盖、非文本二进制与 `scope_start > scope_end` 只在路由层无断言（口径已写入文档）。触发条件：改 analyze 的入参处理时。
 - **卷尾无章 ⇒ outline 出现空卷节点**（21.5 oracle 登记） — 现状：源文件末尾有卷标记但卷内无章时，S1 会建一个零章卷节点（反例实测卷章数 `[4,2,0]`）；契约不禁止、UI 会渲染空卷。触发条件：真出现空卷导致的困扰。最小修法：S1 跳过零章卷（需同步预览警告口径——当前警告码表无此码，是契约变更不是顺手改）。
 - **`job.ts` 的两个导出无外部消费方**（21.5 oracle 登记，低） — 现状：`writeOutlineFromSplit` / `importChapterDocuments` 只被测试走路由间接触达。触发条件：下次重构该模块时。最小修法：改非导出（若测试需要则保留并加注释说明用途）。
+- **切书「立刻写 paused」会被 `db.open` 守卫挡掉**（21.6 oracle 登记，有意口径） — 现状：`routes/decompose.ts` 与 `routes/project.ts` 都是先 `closeProject(prev)` 再 `setCurrentProject` ⇒ 挂点的写库被跳过，旧 job 行在磁盘上仍 `running`，直到下次打开该书由归一逻辑改判；**进程内确实立刻停跑**（取消挂点无条件），与 `api/120 §start` 的「暂停旧项目上的 job」观测等价。触发条件：真出现「不开书也要看 job 状态」的需求。最小修法：调 close/切换顺序，或让挂点按创作根重开库。
+- **resume 不更新 `job.model`**（21.6 oracle 登记，低） — 现状：审计字段仍是 start 时的模型，而 resume 实际用「当前激活模型」；文档未要求。触发条件：真要用 job.model 做审计对账时。
+- **拆解的长任务路径未测**（21.6 oracle 登记） — 现状：真实 provider 的 429/限流/超时路径（faux 不模拟）、`DECOMPOSE_CONCURRENCY > 1`、章被物理删除后批素材剔除（`runner.ts` 只读码未跑用例）。触发条件：并发度真要调到 > 1，或真遇到限流故障。
 - **延期项≠技术债记录**：真正"必须做但没做"的项请写进本文件的相应小节，并在触发条件写清"何时必须做"。
 - **大纲页 / 设定页不迁移 antd `Tree`（2026-09 考察结论）**
   - 结论：保持自绘缩进行。成本 = `Outline.tsx` / `setting-tree.tsx` 两处视图层重写（纯逻辑 `lib/outline-tree.ts` / `lib/setting-tree.ts` 与单测可留）；**语义冲突在拖拽**——rc-tree 用鼠标水平位置（`dropLevelOffset`）决定落层级，与现有「行上下半 = 同级前后 / 行中段 = 成为子级 / 空白区 = 排根末尾」·三套语义不对应，且**空片区落点 rc-tree 无对应**；antd `Tree.js` 把 `dropIndicatorRender` 写在 props 展开之后（**不可注入**），指示线只能改 CSS。

@@ -170,7 +170,7 @@
 // Res: 200
 { status: "paused" }
 
-// Res: 409（状态不允许：已 done / 已 paused / 已 failed）
+// Res: 409（状态不允许：已 done / 已 paused / 已 failed；`pending` 与 `running` 放行——`pending` 实际不可达，S1 同步置 `running` 后才返回）
 { error: { code: "DECOMPOSE_JOB_STATE" } }
 ```
 

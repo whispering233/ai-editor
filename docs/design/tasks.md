@@ -8,19 +8,6 @@
 
 ---
 
-## 卡 21.6 — S2 批执行器 + 暂停 / 续拆 / 重启归一
-
-- **背景**：LLM 调用、逐章对齐护栏、重试与失败标记、状态机与取消。
-- **契约**：`docs/design/60-decompose.md` §4 / §7；`docs/api/120-api-decompose.md` §pause / §resume。
-- **范围**：`packages/server/src/decompose/runner.ts`（串行批循环、`DECOMPOSE_CONCURRENCY` 常量、逐章对齐校验、重试上限 `DECOMPOSE_BATCH_MAX_ATTEMPTS`、失败批继续、滚动故事圣经、取消通道）；暂停挂点 = `setCurrentProject` 单点（与 `disposeProjectRuntime` 同一处）；打开项目时 `running` → `paused` 归一（**只归一 job 行**，见 `docs/db/schema.md` 不变式表）；pause / resume 端点。
-  - **硬提醒**：续拆取批必须取「**第一个未完成批**」（含重启后残留的 `running` 批），不能只取 `pending`；读 `decompose_batches.result` 前自行守卫形状（db 层不做形状校验，`[1,2]` 这类值会原样透出）。
-  - **本卡必须收口的两件（21.5 oracle 实测登记）**：
-    1. **旧 job 暂停挂点**：`pauseRunningJobs` 目前全仓无调用点（21.5 未挂）；`api/120 §start` 已把「暂停旧项目上的 job」写成 start 的既有语义 ⇒ 本卡必须在 `setCurrentProject` 单点接线并有断言（否则会出现「A 书 job 永远 running」）。
-    2. **stage = `merge` 的口径**：零批 job（`batchCount = 0`，空批数组 `every` 为真）stage 直接为 `merge`；本卡若以 stage 决定是否跑 S3，必须明确该口径并加断言。
-- **判据**：**faux provider 端到端**（注入假 LLM 返回固定 JSON，跑通 start → 全部批 `done`，断言批结果形状与状态）；暂停 / 续拆（跳过 `done` 批）；切书自动暂停；重启归一（直调归一函数断言 `running` → `paused`）；缺章重试与失败批不阻塞后续批；`pnpm --filter @whispering233/ai-editor-server test` 绿。
-
----
-
 ## 卡 21.7 — S3 归并 + S4 报告 + 幂等与单批重跑
 
 - **背景**：归并写业务表 + 报告；重跑必须幂等且不覆盖用户手工编辑。
@@ -29,6 +16,7 @@
 - **判据**：**幂等回归**（同一份批结果跑两遍 S3 → 实体/关系数量不变）；`updated_at` 变化过的实体不被覆盖、不被软删；新产物里消失的实体被软删（回收站可还原）；章摘要回写大纲节点；报告 reference 不重复建；faux provider 全流程跑通；`pnpm --filter @whispering233/ai-editor-server test` 绿。
 - **必守调用顺序（merge oracle 登记）**：必须**先 `validateAliasGroups`，只把 `accepted` 传进 `applyAliasGroups`**——`mergeCandidates` 不重跑校验，直接传原始组可以发明实体名。
 - **`AliasCandidate` 需补 `summary` 字段**（契约 §6 第 2 层要求 LLM 看到「短摘要」；当前类型无此字段）——取该人物出现章里最完整的一条 `description` 截断，勿让提示词输入与契约漂移。
+- **回写大纲只写 `summary`，不得写 `result.chapterTitle`**（21.6 oracle 登记）：章标题的权威来源 = S1 写的大纲节点标题（split 清洗后标题）；批结果里的 `chapterTitle` 只是模型回声，仅供展示/日志。顺手修掉 `extract.ts` 的陈旧注释（它仍写「标题以大纲为准」而代码取模型值——两源并存是有意的，注释要与现实一致）。
 
 ---
 
