@@ -18,14 +18,16 @@ import {
   type Context,
 } from "@earendil-works/pi-ai";
 import { ModelRuntime, SettingsManager } from "@earendil-works/pi-coding-agent";
-import type { DecomposeBatchResult } from "@whispering233/ai-editor-shared";
+import type { DecomposeBatchResult, DecomposeJobRes } from "@whispering233/ai-editor-shared";
 import { decomposeBatchResultSchema } from "@whispering233/ai-editor-shared/schemas";
 import {
   completeBatch,
   createDecomposeJob,
   getDecomposeBatch,
   getDecomposeJob,
+  getDocument,
   listDecomposeBatches,
+  listEntities,
   nowIso,
   startBatchAttempt,
   updateJobStatus,
@@ -99,6 +101,11 @@ function batchJson(options: { indexes: readonly number[]; summaryPrefix?: string
   });
 }
 
+/** S3 别名归并回复：无组（批循环测试不关心别名合并） */
+const NO_ALIASES = JSON.stringify({ groups: [] });
+/** S4 报告回复（全书剧情摘要正文；报告调用恒发一次） */
+const PLOT_SUMMARY = "全书剧情摘要。";
+
 /** 组装带中间件的测试 app（与 index.ts 同款装配顺序） */
 function buildApp(deps: DecomposeRouteDeps): Hono {
   const app = new Hono();
@@ -139,6 +146,23 @@ async function startOk(
   const res = await postNovel(app, "/start", bytesOf(novelText(chapterCount)), startQuery(name, extra));
   expect(res.status).toBe(200);
   return (await res.json()).data;
+}
+
+/** GET /decompose/job 的响应 data（进度轮询面） */
+async function getJob(app: Hono): Promise<DecomposeJobRes> {
+  const res = await app.request("/api/v1/decompose/job", { headers: HOST_HEADERS });
+  expect(res.status).toBe(200);
+  return (await res.json()).data as DecomposeJobRes;
+}
+
+/** 轮询到 job 状态为终态（done / failed）——批循环 + S3/S4 都是后台任务 */
+async function pollJob(app: Hono, label: string): Promise<DecomposeJobRes> {
+  for (let attempt = 0; attempt < 400; attempt++) {
+    const job = await getJob(app);
+    if (job.status === "done" || job.status === "failed") return job;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error(`等待超时：${label}`);
 }
 
 /** 轮询等待（fire-and-forget 的批循环是后台任务；超时即测试失败） */
@@ -246,12 +270,14 @@ afterEach(() => {
 // ============ S2 批循环（faux provider 端到端） ============
 
 describe("S2 批循环", () => {
-  it("start → 两批全 done：批结果形状 / attempts / job 停在 running（done 归 S3）+ stage 推到 merge", async () => {
+  it("start → 两批全 done → S3/S4 收口：批结果形状 / attempts / job done + report 投影", async () => {
     const model = await fakeModel();
     // 第一批输出放围栏 + 围栏后再带一段含花括号的说明文字（模型常见形态：只靠「首尾花括号」夹取会解析失败）
     model.script([
       `\`\`\`json\n${batchJson({ indexes: range(1, 10) })}\n\`\`\`\n以上是本章结果，字段口径见 {"chapters":[]}`,
       batchJson({ indexes: range(11, 12) }),
+      NO_ALIASES,
+      PLOT_SUMMARY,
     ]);
     const app = buildApp(model.deps);
 
@@ -274,15 +300,14 @@ describe("S2 批循环", () => {
       characters: [{ name: "人物1", role: "配角", description: "描述1" }],
     });
 
-    // job：批跑完停在 running（`done` = 全流程结束，归 S3/S4），阶段条推到 merge
-    const job = getDecomposeJob(project.db)!;
-    expect(job.status).toBe("running");
-    expect(job.error).toBeNull();
-    const progress = (await (await app.request("/api/v1/decompose/job", { headers: HOST_HEADERS })).json()).data;
-    expect(progress).toMatchObject({ status: "running", stage: "merge", progress: { done: 2, failed: 0, total: 2 } });
+    // job：批全部收口后接 S3 归并 + S4 报告 ⇒ 收口为 done，阶段条到 done
+    const job = await pollJob(app, "job 收口");
+    expect(job).toMatchObject({ status: "done", stage: "done", error: null, progress: { done: 2, failed: 0, total: 2 } });
+    expect(job.report).toMatchObject({ name: "《端到端》拆解报告" });
+    expect(getDecomposeJob(project.db)!.status).toBe("done");
 
     // 提示词：本批正文与章序；数字全由常量插值（模型看到的数字与常量同源）
-    expect(model.calls).toHaveLength(2);
+    expect(model.calls).toHaveLength(4); // 两批 + 一次别名归并 + 一次报告
     const firstPrompt = promptOf(model.calls, 0);
     expect(firstPrompt).toContain("【故事圣经】（本批是首批，尚无上文）");
     expect(firstPrompt).toContain("### 第1章 标题1");
@@ -300,6 +325,8 @@ describe("S2 批循环", () => {
     model.script([
       batchJson({ indexes: range(1, 10) }),
       batchJson({ indexes: range(11, 12), relation: { source: "人物1", target: "人物11", type: "ally" } }),
+      NO_ALIASES,
+      PLOT_SUMMARY,
     ]);
     const app = buildApp(model.deps);
 
@@ -321,6 +348,8 @@ describe("S2 批循环", () => {
       batchJson({ indexes: range(2, 10) }), // 漏第 1 章（本批应覆盖 1..10）
       batchJson({ indexes: range(1, 10) }),
       batchJson({ indexes: range(11, 12) }),
+      NO_ALIASES,
+      PLOT_SUMMARY,
     ]);
     const app = buildApp(model.deps);
 
@@ -331,12 +360,13 @@ describe("S2 批循环", () => {
     const batches = listDecomposeBatches(project.db, started.jobId);
     expect(batches.map((batch) => batch.attempts)).toEqual([2, 1]);
     expect(batches[0].error).toBeNull(); // 重试成功 ⇒ 不留失败摘要
-    expect(model.calls).toHaveLength(3);
+    expect((await pollJob(app, "重试后收口")).status).toBe("done");
+    expect(model.calls).toHaveLength(5); // 3 批调用（含一次重试）+ 别名归并 + 报告
     expect(promptOf(model.calls, 0)).toBe(promptOf(model.calls, 1)); // 重试 = 同一份提示词
     expect(decomposeBatchResultSchema.parse(getDecomposeBatch(project.db, started.jobId, 1)!.result).chapters.map((c) => c.chapterIndex)).toEqual(range(1, 10));
   });
 
-  it("失败批不阻塞后续批：重试用满上限 → 该批 failed，后批照跑，job 不 failed", async () => {
+  it("失败批不阻塞后续批：重试用满上限 → 该批 failed，后批照跑，job 仍收口为 done", async () => {
     const model = await fakeModel();
     const missingFirstChapter = batchJson({ indexes: range(2, 10) });
     model.script([
@@ -344,6 +374,8 @@ describe("S2 批循环", () => {
       missingFirstChapter,
       missingFirstChapter,
       batchJson({ indexes: range(11, 12) }),
+      NO_ALIASES,
+      PLOT_SUMMARY,
     ]);
     const app = buildApp(model.deps);
 
@@ -361,25 +393,25 @@ describe("S2 批循环", () => {
     ]);
     expect(batches[0].error).toContain("缺章"); // 失败摘要 = 最后一次的错因
     expect(getDecomposeBatch(project.db, started.jobId, 1)!.result).toBeNull(); // 失败批不留残余结果
-    expect(model.calls).toHaveLength(DECOMPOSE_BATCH_MAX_ATTEMPTS + 1);
-    const job = getDecomposeJob(project.db)!;
-    expect(job.status).toBe("running"); // 批级失败不阻塞整个 job（单批重跑归后续卡）
-    expect(job.error).toBeNull();
-    const progress = (await (await app.request("/api/v1/decompose/job", { headers: HOST_HEADERS })).json()).data;
-    expect(progress).toMatchObject({ stage: "merge", progress: { done: 1, failed: 1, total: 2 } });
+    // 批级失败不阻塞整个 job：全部批收口（含 failed）后照跑 S3/S4 并收口为 done（失败批可单批重跑）
+    const job = await pollJob(app, "job 收口");
+    expect(model.calls).toHaveLength(DECOMPOSE_BATCH_MAX_ATTEMPTS + 1 + 2); // 3 次重试 + 后批 + 归并 + 报告
+    expect(job).toMatchObject({ status: "done", stage: "done", error: null, progress: { done: 1, failed: 1, total: 2 } });
+    expect(getDecomposeJob(project.db)!.status).toBe("done");
+    expect(job.report).not.toBeNull();
   });
 
-  it("零批 job：不调模型，job 停在 running、stage 直接 merge（空批数组 every 为真）", async () => {
+  it("零批 job：S3/S4 照跑（无章摘要 ⇒ 不发报告调用），job 收口 done", async () => {
     const model = await fakeModel();
+    model.script([NO_ALIASES]); // 只有别名归并一次调用（报告无章摘要可聚合）
     const app = buildApp(model.deps);
 
     const started = await startOk(app, "零批", 6, "&scope_start=99"); // 范围落空 ⇒ 零批 job
     expect(started.batchCount).toBe(0);
-    const job = getDecomposeJob(getCurrentProject()!.db)!;
-    expect(job.status).toBe("running");
-    const progress = (await (await app.request("/api/v1/decompose/job", { headers: HOST_HEADERS })).json()).data;
-    expect(progress).toMatchObject({ stage: "merge", progress: { done: 0, failed: 0, total: 0 } });
-    expect(model.calls).toHaveLength(0);
+    const job = await pollJob(app, "零批 job 收口");
+    expect(job).toMatchObject({ status: "done", stage: "done", progress: { done: 0, failed: 0, total: 0 } });
+    expect(job.report).toMatchObject({ name: "《零批》拆解报告" });
+    expect(model.calls).toHaveLength(1); // 无章摘要 ⇒ 报告调用不发（输入为空）
   });
 });
 
@@ -403,6 +435,8 @@ describe("暂停与续拆", () => {
         return fauxAssistantMessage(batchJson({ indexes: range(1, 10) }));
       },
       batchJson({ indexes: range(11, 12) }),
+      NO_ALIASES,
+      PLOT_SUMMARY,
     ]);
     const app = buildApp(model.deps);
 
@@ -426,7 +460,8 @@ describe("暂停与续拆", () => {
     expect(await resumed.json()).toMatchObject({ data: { status: "running" } });
     await waitFor(() => listDecomposeBatches(project.db, started.jobId).every((batch) => batch.status === "done"), "续拆后两批 done");
     expect(listDecomposeBatches(project.db, started.jobId).map((batch) => batch.attempts)).toEqual([1, 1]); // 第一批没重跑
-    expect(model.calls).toHaveLength(2);
+    expect((await pollJob(app, "续拆收口")).status).toBe("done"); // 续拆跑完接 S3/S4
+    expect(model.calls).toHaveLength(4);
   });
 
   it("读已完成批的 result 前守卫形状：脏 result 不进圣经（否则续拆直接崩）", async () => {
@@ -442,7 +477,7 @@ describe("暂停与续拆", () => {
       now: nowIso(),
     });
     updateJobStatus(project.db, jobId, "paused", nowIso());
-    model.script([batchJson({ indexes: range(11, 12) })]);
+    model.script([batchJson({ indexes: range(11, 12) }), NO_ALIASES, PLOT_SUMMARY]);
 
     const resumed = await post(app, "/job/resume");
     expect(resumed.status).toBe(200);
@@ -487,7 +522,25 @@ describe("暂停与续拆", () => {
 
   it("状态前置：running 不能续拆 / paused 不能重复暂停 / done 不能暂停", async () => {
     const model = await fakeModel();
-    model.script([batchJson({ indexes: range(1, 10) }), batchJson({ indexes: range(11, 12) })]);
+    // 别名归并挂起：批全 done 后 job 仍在 running（S3 在飞）⇒ 此时暂停；归并收尾不得盖掉 paused
+    let releaseMerge!: () => void;
+    const mergeGate = new Promise<void>((resolve) => {
+      releaseMerge = resolve;
+    });
+    let mergeStarted!: () => void;
+    const inMerge = new Promise<void>((resolve) => {
+      mergeStarted = resolve;
+    });
+    model.script([
+      batchJson({ indexes: range(1, 10) }),
+      batchJson({ indexes: range(11, 12) }),
+      async () => {
+        mergeStarted();
+        await mergeGate;
+        return fauxAssistantMessage(NO_ALIASES);
+      },
+      PLOT_SUMMARY,
+    ]);
     const app = buildApp(model.deps);
 
     const started = await startOk(app, "状态前置");
@@ -497,11 +550,14 @@ describe("暂停与续拆", () => {
     expect(resumeRunning.status).toBe(409);
     expect((await resumeRunning.json()).error.code).toBe("DECOMPOSE_JOB_STATE");
 
-    // 批全收口后 job 仍停在 running（`done` = 全流程结束，归 S3/S4）⇒ 此时仍可中止
     await waitFor(() => listDecomposeBatches(project.db, started.jobId).every((batch) => batch.status === "done"), "两批 done");
+    await inMerge; // S3 已在飞（job 仍 running）
     const pauseRunning = await post(app, "/job/pause");
     expect(pauseRunning.status).toBe(200);
     expect(await pauseRunning.json()).toMatchObject({ data: { status: "paused" } });
+    releaseMerge();
+    await new Promise((resolve) => setTimeout(resolve, 50)); // 归并收尾窗口（应有而不发生 done 回写）
+    expect(getDecomposeJob(project.db)!.status).toBe("paused"); // 收尾不盖掉暂停
 
     const pausePaused = await post(app, "/job/pause");
     expect(pausePaused.status).toBe(409);
@@ -515,11 +571,28 @@ describe("暂停与续拆", () => {
 
   it("续拆前凭据缺失 → 400 LLM_API_KEY_MISSING 且不改状态", async () => {
     const model = await fakeModel();
-    // 先在离线假模型下把 job 推到 paused（第一批失败批不阻塞）
+    // 第一批挂起 ⇒ 暂停必定落在批中间（否则可能已收口 done，测试变成碰运气）
+    let releaseBatch!: () => void;
+    const batchGate = new Promise<void>((resolve) => {
+      releaseBatch = resolve;
+    });
+    let batchStarted!: () => void;
+    const inBatch = new Promise<void>((resolve) => {
+      batchStarted = resolve;
+    });
+    model.script([
+      async () => {
+        batchStarted();
+        await batchGate;
+        return fauxAssistantMessage(batchJson({ indexes: range(1, 10) }));
+      },
+    ]);
     const app = buildApp(model.deps);
     await startOk(app, "缺凭据续拆");
+    await inBatch;
     const project = getCurrentProject()!;
     await post(app, "/job/pause");
+    releaseBatch();
     expect(getDecomposeJob(project.db)!.status).toBe("paused");
 
     // 换一个没有凭据的空运行时（HOME 已隔离 ⇒ 走真实单例也读不到凭据）
@@ -529,6 +602,108 @@ describe("暂停与续拆", () => {
     expect(res.status).toBe(400);
     expect((await res.json()).error.code).toBe("LLM_API_KEY_MISSING");
     expect(getDecomposeJob(project.db)!.status).toBe("paused"); // 状态原样，未留下「running 无 runner」
+  });
+});
+
+// ============ 单批重跑（§rerun） ============
+
+describe("单批重跑", () => {
+  it("done 批重跑：只重跑该批（阶段先回 extract）→ 重建归并与报告 → 再次收口 done", async () => {
+    const model = await fakeModel();
+    model.script([batchJson({ indexes: range(1, 10) }), batchJson({ indexes: range(11, 12) }), NO_ALIASES, PLOT_SUMMARY]);
+    const app = buildApp(model.deps);
+
+    const started = await startOk(app, "单批重跑");
+    const project = getCurrentProject()!;
+    const first = await pollJob(app, "首次收口");
+    expect(first.report).not.toBeNull();
+    const charactersBefore = listEntities(project.db, { type: "character" }).total;
+
+    // 该批输出换一份摘要（报告重建的证据）+ 挂起 ⇒ 能观察到「job 回 running、阶段回 extract」
+    let releaseBatch!: () => void;
+    const batchGate = new Promise<void>((resolve) => {
+      releaseBatch = resolve;
+    });
+    model.script([
+      async () => {
+        await batchGate;
+        return fauxAssistantMessage(batchJson({ indexes: range(1, 10), summaryPrefix: "重跑摘要" }));
+      },
+      NO_ALIASES,
+      "重跑后的剧情摘要。",
+    ]);
+
+    const rerun = await post(app, "/job/batches/1/rerun");
+    expect(rerun.status).toBe(200);
+    expect(await rerun.json()).toMatchObject({ data: { status: "running", seq: 1 } });
+    await waitFor(() => listDecomposeBatches(project.db, started.jobId)[0].status === "running", "重跑批在飞");
+    expect(await getJob(app)).toMatchObject({ status: "running", stage: "extract" }); // 阶段先回 extract
+    releaseBatch();
+
+    const second = await pollJob(app, "重跑收口");
+    expect(second.status).toBe("done");
+    // 只有该批重跑（其余 done 批不动）
+    expect(listDecomposeBatches(project.db, started.jobId).map((batch) => batch.attempts)).toEqual([2, 1]);
+    expect(decomposeBatchResultSchema.parse(getDecomposeBatch(project.db, started.jobId, 1)!.result).chapters[0].summary).toBe("重跑摘要1");
+    // 归并 + 报告重建：报告仍是同一条（不重复建），报告调用拿到的是重跑后的章摘要
+    expect(second.report).toMatchObject({ entityId: first.report!.entityId });
+    expect(promptOf(model.calls, 6)).toContain("重跑摘要1"); // S4 的输入 = 重算后的章摘要
+    expect(getDocument(project.db, "reference", second.report!.entityId)!.content_text).toContain("重跑后的剧情摘要。");
+    expect(listEntities(project.db, { type: "character" }).total).toBe(charactersBefore); // 归并幂等
+    expect(model.calls).toHaveLength(7); // 首轮 4 次 + 重跑 3 次（该批 + 归并 + 报告）
+  });
+
+  it("状态前置与越界：running 时 409；批序号越界 404", async () => {
+    const model = await fakeModel();
+    let releaseBatch!: () => void;
+    const batchGate = new Promise<void>((resolve) => {
+      releaseBatch = resolve;
+    });
+    model.script([
+      async () => {
+        await batchGate;
+        return fauxAssistantMessage(batchJson({ indexes: range(1, 10) }));
+      },
+      batchJson({ indexes: range(11, 12) }),
+      NO_ALIASES,
+      PLOT_SUMMARY,
+    ]);
+    const app = buildApp(model.deps);
+
+    await startOk(app, "重跑前置");
+    const project = getCurrentProject()!;
+    const running = await post(app, "/job/batches/1/rerun");
+    expect(running.status).toBe(409);
+    expect((await running.json()).error.code).toBe("DECOMPOSE_JOB_STATE");
+
+    releaseBatch();
+    await pollJob(app, "收口");
+    for (const seq of ["99", "0"]) {
+      const res = await post(app, `/job/batches/${seq}/rerun`);
+      expect(res.status).toBe(404);
+      expect((await res.json()).error.code).toBe("DECOMPOSE_BATCH_NOT_FOUND");
+    }
+    expect(getDecomposeJob(project.db)!.status).toBe("done"); // 越界不触发重跑
+  });
+
+  it("缺凭据 → 400，且 job 状态与批结果均不变（不清已完成的 result）", async () => {
+    const model = await fakeModel();
+    model.script([batchJson({ indexes: range(1, 10) }), batchJson({ indexes: range(11, 12) }), NO_ALIASES, PLOT_SUMMARY]);
+    const app = buildApp(model.deps);
+
+    const started = await startOk(app, "重跑缺凭据");
+    const project = getCurrentProject()!;
+    await pollJob(app, "收口");
+    const resultBefore = getDecomposeBatch(project.db, started.jobId, 1)!.result;
+
+    // 换一个没有凭据的空运行时（HOME 已隔离 ⇒ 走真实单例也读不到凭据）
+    const bare = await ModelRuntime.create({ credentials: new InMemoryCredentialStore(), modelsPath: null, refreshOnCreate: false });
+    const bareApp = buildApp({ runtime: bare, settings: SettingsManager.inMemory({}) });
+    const res = await post(bareApp, "/job/batches/1/rerun");
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("LLM_API_KEY_MISSING");
+    expect(getDecomposeJob(project.db)!.status).toBe("done"); // 状态原样
+    expect(getDecomposeBatch(project.db, started.jobId, 1)!.result).toEqual(resultBefore); // 批结果原样
   });
 });
 
@@ -543,7 +718,7 @@ describe("切书与重启归一", () => {
     // 模拟「服务端崩在批中间」：批停在 running、job 归一为 paused（归一不动批行）
     startBatchAttempt(project.db, jobId, 1, nowIso());
     updateJobStatus(project.db, jobId, "paused", nowIso());
-    model.script([batchJson({ indexes: range(1, 6) })]);
+    model.script([batchJson({ indexes: range(1, 6) }), NO_ALIASES, PLOT_SUMMARY]);
 
     const resumed = await post(app, "/job/resume");
     expect(resumed.status).toBe(200);
@@ -568,6 +743,8 @@ describe("切书与重启归一", () => {
         return fauxAssistantMessage(batchJson({ indexes: range(1, 10) }));
       },
       batchJson({ indexes: range(11, 12) }),
+      NO_ALIASES,
+      PLOT_SUMMARY,
     ]);
     const app = buildApp(model.deps);
 

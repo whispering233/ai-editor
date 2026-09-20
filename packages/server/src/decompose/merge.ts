@@ -49,11 +49,13 @@ export interface MergedCandidateSet {
   relations: MergedRelationCandidate[];
 }
 
-/** 别名归并候选（§6 第 2 层输入：规范名 + 出现章数 + 首次出现章；LLM 只看到这份清单，看不到原文） */
+/** 别名归并候选（§6 第 2 层输入：规范名 + 出现章数 + 首次出现章 + 短摘要；LLM 只看到这份清单，看不到原文） */
 export interface AliasCandidate {
   name: string;
   chapterCount: number;
   firstChapter: number;
+  /** 短摘要 = 该人物出现章里最完整的一条 `description`（截断）：LLM 判别名组的依据 */
+  summary: string;
 }
 
 /** 别名组（§6 第 2 层输出：规范名 + 别名列表；规范名必须是候选集合里的名字） */

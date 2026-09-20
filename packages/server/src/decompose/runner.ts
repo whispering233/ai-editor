@@ -1,13 +1,15 @@
-// 拆解 S2 批执行器（卡 21.6）：串行批循环 + 滚动故事圣经 + 逐章对齐重试 + 取消通道（暂停 / 切书 / 重启归一）。
+// 拆解 S2 批执行器（卡 21.6）：串行批循环 + 滚动故事圣经 + 逐章对齐重试 + 取消通道（暂停 / 切书 / 重启归一）
+// + job 收口（卡 21.7：批全部收口后跑 S3 归并与 S4 报告，随后 job 置 `done`）与单批重跑入口。
 //
-// 契约：docs/design/60-decompose.md §4（批调度：组批 / 重试 / 串行 / 滚动故事圣经）、§5（抽取 schema 口径）、
-// §7（状态机与续拆）；docs/api/120-api-decompose.md §pause / §resume；状态不变式见
-// docs/db/schema.md「decompose 两表」（状态归一**只归一 job 行**）。本模块的三条口径：
+// 契约：docs/design/60-decompose.md §2（S3/S4 在全部批完成后各跑一次）、§4（批调度：组批 / 重试 / 串行 /
+// 滚动故事圣经）、§5（抽取 schema 口径）、§7（状态机、续拆、单批重跑）；docs/api/120-api-decompose.md
+// §pause / §resume / §rerun；状态不变式见 docs/db/schema.md「decompose 两表」（状态归一**只归一 job 行**）。本模块的四条口径：
 // - **续拆取「第一个未完成批」**：`done` 之外的批（`pending` / `running` / `failed`）都算未完成——
 //   服务端重启残留的 `running` 批由这里承接，不单独归一；
+// - **单批重跑只重跑该批**（§7）：重新抽取该批 → S3 重算（`merge_written` 三路比对保幂等）→ S4 重建报告；
 // - **S2 不写业务表**：批结果只落 `decompose_batches.result`（实体 / 关系 / 大纲 / 正文只由 S3/S4 写）；
-// - **批跑完时 job 留在 `running`**（`job.ts` 的 `deriveStage` 据「批是否全部收口」推出 `merge`）：
-//   `done` 的语义是**全流程**（归并 + 报告）结束，由后续卡推进——本卡只负责把批跑完。
+// - **批跑完时 job 留在 `running`**，全部批收口后才由 S3+S4 推到 `done`（job.ts 的 `deriveStage` 据
+//   「批是否全部收口」推出 `merge` / `report`）。
 //
 // 调用路径：`start` 建档后、`resume` 续拆后各起一轮（路由**不 await**：长任务是后台跑）。
 // 暂停 / 切书 = 置 abort：**当前批跑完即停**，已发出的模型调用不 abort（结果不浪费，批级幂等靠 `done` 跳过）。
@@ -15,16 +17,12 @@
 // 业务代码不自建 fetch / HTTP agent（出站行为统一由启动时装的全局 undici dispatcher 承担）。
 // 阈值与提示词里的数字一律取自常量（提示词按常量插值生成，散文不复述数字）。
 
-import { contentText, parseJsonWithRepair } from "@earendil-works/pi-ai";
-import type { ModelRuntime, SettingsManager } from "@earendil-works/pi-coding-agent";
 import type { DecomposeBatchResult, OutlineFileTree } from "@whispering233/ai-editor-shared";
-import { decomposeBatchResultSchema } from "@whispering233/ai-editor-shared/schemas";
 import {
   completeBatch,
   deriveChapterOrder,
   failBatch,
   findOutlineNode,
-  getDecomposeBatch,
   getDecomposeJob,
   getDocumentTexts,
   listDecomposeBatches,
@@ -33,11 +31,9 @@ import {
   setJobError,
   startBatchAttempt,
   updateJobStatus,
-  type Db,
   type DecomposeBatchRow,
   type DecomposeJobRow,
 } from "@whispering233/ai-editor-db";
-import { getModelRuntime, getSettingsManager, resolveActiveSelection } from "../model-runtime.js";
 import type { ProjectContext } from "../middleware/project.js";
 import {
   DECOMPOSE_CHAPTER_MAX_CHARACTERS,
@@ -51,7 +47,10 @@ import {
   DECOMPOSE_RELATION_TYPES,
   normalizeExtraction,
 } from "./extract.js";
+import { doneBatchResults } from "./job.js";
+import { completeOnce, parseModelJson, type DecomposeLlmDeps, type ModelRequest } from "./llm.js";
 import { normalizeEntityName } from "./merge.js";
+import { runDecomposeMerge } from "./merge-write.js";
 
 /** 批并发度：串行是既定口径（§4——不在 pi 的重试链里，429 / 限流要自己兜，后台任务慢比失败好）。
  * 单点可调：改成 N 即按 N 批一组并发跑；同组共用一份故事圣经快照（组内后批看不到同组前批的产出）。 */
@@ -62,16 +61,7 @@ export const DECOMPOSE_BATCH_MAX_ATTEMPTS = 3;
 export const DECOMPOSE_BIBLE_MAX_CHARS = 1200;
 
 /** 拆解 runner 可注入依赖（测试注入内存运行时 + faux provider 离线跑通；缺省走 pi 单例） */
-export interface DecomposeRunnerDeps {
-  runtime?: ModelRuntime;
-  settings?: SettingsManager;
-}
-
-/** 单次补全入参（系统提示 = 角色与输出契约；用户消息 = 故事圣经 + 本批正文） */
-interface ModelRequest {
-  system: string;
-  user: string;
-}
+export type DecomposeRunnerDeps = DecomposeLlmDeps;
 
 /** 一批里的单章素材（章序 = 1-based 文件位置序；正文 = 服务端派生的 `content_text` 投影） */
 interface BatchChapter {
@@ -178,41 +168,7 @@ function buildBatchPrompt(input: { chapters: readonly BatchChapter[]; bibleText:
   };
 }
 
-// ============ 模型调用（唯一入口 = pi ModelRuntime 单例） ============
-
-/**
- * 单次补全（无 agent 循环）：`ModelRuntime.completeSimple`。
- * 模型目录 / 凭据 / settings 全经 server 的 `getModelRuntime()` / `getSettingsManager()` 单例，
- * **不自建 fetch / agent**（出站统一走启动时装好的全局 undici dispatcher，见 http-dispatcher.ts）。
- */
-async function completeOnce(deps: DecomposeRunnerDeps, request: ModelRequest): Promise<string> {
-  const runtime = deps.runtime ?? (await getModelRuntime());
-  const selection = await resolveActiveSelection(runtime, deps.settings ?? getSettingsManager());
-  if (selection === null) throw new Error("未配置可用模型：请先在设置页选择模型");
-  if (!runtime.hasConfiguredAuth(selection.provider)) {
-    throw new Error(`未配置 ${selection.provider} 的凭据：请在设置页填写 API key`);
-  }
-  const model = runtime.getModel(selection.provider, selection.modelId);
-  if (model === undefined) throw new Error(`模型不可用: ${selection.provider}/${selection.modelId}`);
-  const message = await runtime.completeSimple(model, {
-    systemPrompt: request.system,
-    messages: [{ role: "user", content: [{ type: "text", text: request.user }], timestamp: Date.now() }],
-  });
-  if (message.stopReason === "error" || message.stopReason === "aborted") {
-    throw new Error(message.errorMessage ?? `模型调用失败（${message.stopReason}）`);
-  }
-  return contentText(message.content);
-}
-
-/** 取模型输出里的 JSON 对象：容忍 ```json 围栏与前后解释文字（模型常见形态）；坏 JSON 抛错 → 整批重试 */
-function parseModelJson(text: string): unknown {
-  const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(text);
-  const body = (fenced?.[1] ?? text).trim();
-  const start = body.indexOf("{");
-  const end = body.lastIndexOf("}");
-  if (start === -1 || end <= start) throw new Error("批结果里找不到 JSON 对象");
-  return parseJsonWithRepair<unknown>(body.slice(start, end + 1));
-}
+// ============ 模型调用（唯一入口 = pi ModelRuntime 单例；实现在 llm.ts） ============
 
 // ============ 批执行 ============
 
@@ -285,36 +241,33 @@ function batchChapters(
 }
 
 /**
- * 已完成批的抽取结果（续拆 / 重跑时重建滚动故事圣经：不重建的话上文的名字与关系全丢，
- * 跨批关系端点会被当成幻觉丢弃）。db 层不校验 `result` 形状（`[1,2]` 这类值原样透出）⇒ 此处按契约 schema 守卫。
+ * 已完成批的抽取结果读取（续拆 / 单批重跑时重建滚动故事圣经）：实现在 `job.ts`——S3 归并读同一份
+ * （不重建的话上文的名字与关系全丢，跨批关系端点会被当成幻觉丢弃）。
  */
-function doneBatchResults(db: Db, jobId: string, doneSeqs: readonly number[]): DecomposeBatchResult[] {
-  const results: DecomposeBatchResult[] = [];
-  for (const seq of doneSeqs) {
-    const parsed = decomposeBatchResultSchema.safeParse(getDecomposeBatch(db, jobId, seq)?.result);
-    if (parsed.success) results.push(parsed.data);
-  }
-  return results;
-}
 
+/** 一轮批执行的入参（对象字段，便于后续扩展不破签名） */
 interface ExecuteRunInput {
   project: ProjectContext;
   job: DecomposeJobRow;
   deps: DecomposeRunnerDeps;
   signal: AbortSignal;
+  /** 单批重跑：该批即使已 `done` 也重跑一次（其余 `done` 批不动）；其旧结果不入故事圣经（已知的过期输入） */
+  rerunSeq?: number;
 }
 
 /** 一轮批执行（S2）：串行逐批调模型，结果只写 `decompose_batches.result` */
 async function executeRun(input: ExecuteRunInput): Promise<void> {
   const { project, job, deps, signal } = input;
   const batches = listDecomposeBatches(project.db, job.id);
-  const pending = batches.filter((batch) => batch.status !== "done");
+  const pending = batches.filter((batch) => batch.status !== "done" || batch.seq === input.rerunSeq);
   const tree = readOutlineFile(project.root); // 一轮一份大纲快照（长任务里用户可能改标题）
   const chapterNumberById = new Map(deriveChapterOrder(project.root).map((entry) => [entry.chapterId, entry.chapterNumber]));
   let bible = doneBatchResults(
     project.db,
     job.id,
-    batches.filter((batch) => batch.status === "done").map((batch) => batch.seq),
+    batches
+      .filter((batch) => batch.status === "done" && batch.seq !== input.rerunSeq)
+      .map((batch) => batch.seq),
   ).reduce(extendStoryBible, emptyStoryBible());
 
   let executed = 0;
@@ -375,12 +328,21 @@ export function cancelRunningDecomposeJobs(): void {
   for (const run of activeRuns.values()) run.controller.abort();
 }
 
+/** 单批重跑选项（§7：`done` 与 `failed` 都可重跑，跑完重建 S3/S4） */
+export interface DecomposeRunOptions {
+  rerunSeq?: number;
+}
+
 /**
- * 启动 job 的批执行（**调用方不 await**：长任务）。状态前置校验归调用方（start / resume 各自置 `running`）。
- * 同一 job 已有在跑或排队的一轮时，本轮排在它后面（见上方「排队」）。
+ * 启动 job 的批执行（**调用方不 await**：长任务）。状态前置校验归调用方（start / resume / rerun 各自置 `running`）。
+ * 同一 job 已有在跑或排队的一轮时，本轮排在它后面（见上方「排队」）；批全部收口后接 S3 + S4 并把 job 置 `done`。
  * @returns 本轮收尾的 promise（调用方不 await；测试可 await）
  */
-export function startDecomposeJob(project: ProjectContext, deps: DecomposeRunnerDeps = {}): Promise<void> {
+export function startDecomposeJob(
+  project: ProjectContext,
+  deps: DecomposeRunnerDeps = {},
+  options: DecomposeRunOptions = {},
+): Promise<void> {
   const job = getDecomposeJob(project.db); // 一项目一 job：取最新一行（db helper 口径）
   if (job === null || job.status !== "running") return Promise.resolve();
   const controller = new AbortController();
@@ -391,7 +353,9 @@ export function startDecomposeJob(project: ProjectContext, deps: DecomposeRunner
     try {
       await previous?.done; // 上一轮先收尾（含它正在飞的批落库）
       if (controller.signal.aborted) return;
-      await executeRun({ project, job, deps, signal: controller.signal });
+      await executeRun({ project, job, deps, signal: controller.signal, rerunSeq: options.rerunSeq });
+      if (controller.signal.aborted) return; // 暂停 / 切书：不跑 S3/S4（状态归暂停与续拆路径）
+      await finishJob(project, job, deps);
     } catch (err) {
       failJob(project, job, controller.signal, err);
     } finally {
@@ -399,6 +363,24 @@ export function startDecomposeJob(project: ProjectContext, deps: DecomposeRunner
     }
   })();
   return run.done;
+}
+
+/**
+ * job 收口（§2「S3 只在全部批完成后跑一次」）：批全部收口 → S3 归并 + S4 报告 → job 置 `done`。
+ * 有未收口批（暂停 / 崩溃残留）→ 什么都不做（状态归暂停与续拆路径）。
+ * 状态回写前重读 job 行：S3/S4 期间可能被暂停 / 切书（长调用），不能盖掉那次状态。
+ */
+async function finishJob(project: ProjectContext, job: DecomposeJobRow, deps: DecomposeRunnerDeps): Promise<void> {
+  const settled = listDecomposeBatches(project.db, job.id).every(
+    (batch) => batch.status === "done" || batch.status === "failed",
+  );
+  if (!settled) return;
+  const summary = await runDecomposeMerge({ project, jobId: job.id, deps, now: nowIso() });
+  console.log(
+    `[decompose] job ${job.id} 归并与报告收尾：实体 ${summary.entities} / 关系 ${summary.relations} / 别名组 ${summary.aliasGroups} / 报告 ${summary.reportId}`,
+  );
+  if (getDecomposeJob(project.db)?.status !== "running") return;
+  updateJobStatus(project.db, job.id, "done", nowIso());
 }
 
 /**

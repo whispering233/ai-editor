@@ -15,13 +15,16 @@
 //   同构，但逐节点调用会让 N 章 × 原子写 fsync 变成 N+1 次落盘（导入一本数百章的书不可接受）；
 // - 时间（`now`）由调用方传入，本模块不生成时间。
 
-import type { DecomposeJobRes, OutlineFileChapter, OutlineFileVolume } from "@whispering233/ai-editor-shared";
+import type { DecomposeBatchResult, DecomposeJobRes, OutlineFileChapter, OutlineFileVolume } from "@whispering233/ai-editor-shared";
 import { blocksToPlainMd, generateOutlineNodeId } from "@whispering233/ai-editor-shared";
+import { decomposeBatchResultSchema } from "@whispering233/ai-editor-shared/schemas";
 import {
   createDecomposeJob,
   deriveChapterOrder,
   findOutlineNode,
+  getDecomposeBatch,
   getDocumentTextLengths,
+  getEntity,
   listDecomposeBatches,
   readOutlineFile,
   updateJobStatus,
@@ -32,6 +35,7 @@ import {
   type DecomposeJobRow,
 } from "@whispering233/ai-editor-db";
 import { DECOMPOSE_BATCH_TARGET_CHARS, planBatches } from "./batching.js";
+import { DECOMPOSE_REPORT_ENTITY_TYPE } from "./report.js";
 import type { SplitChapter, SplitWithSlices } from "./split.js";
 import type { ProjectContext } from "../middleware/project.js";
 
@@ -57,8 +61,9 @@ export interface IngestDecomposeProjectResult {
 /**
  * 纯文本 → 段落块数组（块数组最小形态：每行一个 paragraph，空行 = 空段落——
  * 与参考资料执行器 `paragraphBlocksOf` 同形态，保原文的段落/空行结构）。
+ * 共用面：S1 的逐章正文导入 + S4 的拆解报告正文（服务端不解析块语义）。
  */
-function paragraphBlocksOf(text: string): unknown[] {
+export function paragraphBlocksOf(text: string): unknown[] {
   return text.split("\n").map((line) => ({
     type: "paragraph",
     content: line === "" ? [] : [{ type: "text", text: line }],
@@ -155,15 +160,28 @@ function isSettledBatch(batch: DecomposeBatchRow): boolean {
 }
 
 /**
+ * 已完成批的抽取结果（续拆重建滚动故事圣经、S3 归并都读它）。
+ * db 层不校验 `result` 形状（`[1,2]` 这类值原样透出）⇒ 此处按契约 schema 守卫。
+ */
+export function doneBatchResults(db: Db, jobId: string, doneSeqs: readonly number[]): DecomposeBatchResult[] {
+  const results: DecomposeBatchResult[] = [];
+  for (const seq of doneSeqs) {
+    const parsed = decomposeBatchResultSchema.safeParse(getDecomposeBatch(db, jobId, seq)?.result);
+    if (parsed.success) results.push(parsed.data);
+  }
+  return results;
+}
+
+/**
  * 阶段推导（表里没有 stage 列 ⇒ 从 job 状态 + 批收口度 + 归并清单反推，§8 阶段条）：
- * `done` → 全流程结束；`pending` → 建档中；归并清单非空 → 只剩报告（S3 已落盘）；批全部收口 → 归并；
- * 其余（`running` / `paused` / `failed`）→ 逐章抽取。`report` 与 `merge` 的细分随 runner / 归并卡到位。
+ * `done` → 全流程结束；`pending` → 建档中；**还有未收口批 → 逐章抽取**（单批重跑把 job 拉回
+ * `running` 时阶段也随之回到 `extract`，§7）；批全部收口但归并清单还空 → 归并；清单非空 → 报告。
  */
 function deriveStage(job: DecomposeJobRow, batches: readonly DecomposeBatchRow[]): DecomposeJobRes["stage"] {
   if (job.status === "done") return "done";
   if (job.status === "pending") return "ingest";
-  if (job.merge_written.length > 0) return "report";
-  return batches.every(isSettledBatch) ? "merge" : "extract";
+  if (!batches.every(isSettledBatch)) return "extract";
+  return job.merge_written.length > 0 ? "report" : "merge";
 }
 
 /**
@@ -174,7 +192,7 @@ function deriveStage(job: DecomposeJobRow, batches: readonly DecomposeBatchRow[]
  * 标题取大纲节点 title，与大纲页同源）；`charCount` = 该批各章正文投影长度和（与章列表 `textLength`
  * 同口径，不存快照）。
  *
- * `report` 恒 null：拆解报告（S4）落盘后由归并清单投影，属归并/报告卡（21.7）。
+ * `report` 从归并清单投影（S4 落盘后非 null）：报告实体 id 记在清单的 `reference` 条目上。
  */
 export function buildJobResponse(project: ProjectContext, job: DecomposeJobRow): DecomposeJobRes {
   const batches = listDecomposeBatches(project.db, job.id);
@@ -217,6 +235,17 @@ export function buildJobResponse(project: ProjectContext, job: DecomposeJobRow):
       };
     }),
     error: job.error,
-    report: null,
+    report: reportProjection(project, job),
   };
+}
+
+/**
+ * 拆解报告投影（§6.2）：报告实体 id 记在 `merge_written` 的 `reference` 条目上（S4 写入；重跑更新同一条
+ * ⇒ 清单里恒至多一条）——按该 id 回读名字。实体被软删（用户丢进回收站）→ null（不报影子报告）。
+ */
+function reportProjection(project: ProjectContext, job: DecomposeJobRow): DecomposeJobRes["report"] {
+  const entry = job.merge_written.find((item) => item.type === DECOMPOSE_REPORT_ENTITY_TYPE);
+  if (entry === undefined) return null;
+  const entity = getEntity(project.db, entry.id);
+  return entity === null ? null : { entityId: entity.id, name: entity.name };
 }

@@ -340,6 +340,36 @@ export function createDecomposeRoutes(deps: DecomposeRouteDeps = {}): Hono {
     return c.json(ok({ status: "running" as const }));
   });
 
+  // POST /api/v1/decompose/job/batches/:seq/rerun —— 单批重跑（done 与 failed 都可重跑 → job 回 running）
+  routes.post("/job/batches/:seq/rerun", async (c) => {
+    const project = requireCurrentProject();
+    const job = getDecomposeJob(project.db);
+    if (job === null) {
+      throw new HttpError(404, "DECOMPOSE_JOB_NOT_FOUND", "当前项目没有拆解任务");
+    }
+    // 状态前置（api/120-api-decompose.md §rerun）：running / paused 不接（需先等收尾或续拆）
+    if (job.status !== "done" && job.status !== "failed") {
+      throw new HttpError(409, "DECOMPOSE_JOB_STATE", `job 状态为 ${job.status}，不能重跑（仅 done / failed 可重跑）`);
+    }
+    const rawSeq = c.req.param("seq");
+    const seq = Number(rawSeq);
+    if (!Number.isInteger(seq) || seq < 1) {
+      throw new HttpError(404, "DECOMPOSE_BATCH_NOT_FOUND", `批序号非法: ${rawSeq}`);
+    }
+    if (getDecomposeBatch(project.db, job.id, seq) === null) {
+      throw new HttpError(404, "DECOMPOSE_BATCH_NOT_FOUND", `批序号越界: ${seq}`);
+    }
+    // 模型/凭据前置（与 resume 同口径）：缺凭据时重跑会先把该批的抽取结果清掉（failBatch 置 NULL）
+    // 再走到 job failed——一次凭据抖动就烧掉一批已付 token 的产物。故 400 且**不改状态、不动批结果**。
+    await requireActiveModel(deps);
+    updateJobStatus(project.db, job.id, "running", nowIso());
+    setJobError(project.db, job.id, null, nowIso()); // 开工清上一次的 job 级错误摘要
+    // S2 重跑该批 → 批全部收口后自动接 S3 归并 + S4 报告（runner 的收口路径）
+    void startDecomposeJob(project, deps, { rerunSeq: seq });
+    // 形状归 shared `decomposeRerunResSchema`（与 pause / resume 同款：响应类型不另开别名）
+    return c.json(ok({ status: "running" as const, seq }));
+  });
+
   return routes;
 }
 

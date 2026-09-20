@@ -156,7 +156,9 @@ function normalizeChapter(
 
   return {
     chapterIndex,
-    // 标题以大纲为准（此处只为批结果可读）：模型没给就用章序兜底
+    // 标题取**模型回声**（缺则用章序兜底）——只为批结果可读（进度页展开行 / 日志）；
+    // 章标题的权威来源 = S1 写的大纲节点标题（切分清洗后的标题），两源并存是有意的：
+    // S3 回写章摘要时只写 `summary`，不得用本字段覆盖标题（见 merge-write.ts）
     chapterTitle: asText(raw.chapterTitle) ?? `第${chapterIndex}章`,
     summary: clip(summary, DECOMPOSE_CHAPTER_SUMMARY_MAX_CHARS),
     characters,
