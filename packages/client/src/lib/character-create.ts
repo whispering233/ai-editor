@@ -8,7 +8,7 @@
 //
 // 本模块只做判据与载荷整形——不碰 DOM、不发请求（仓内无 jsdom，纯函数便于单测）。
 
-import { cloneAbilityPanel, type AbilityPanelNode } from "@whispering233/ai-editor-shared";
+import { cloneAbilityPanel, MAX_ENTITY_LIST_LIMIT, type AbilityPanelNode } from "@whispering233/ai-editor-shared";
 import { ApiError, CLIENT_NETWORK_ERROR } from "./api";
 import {
   CHARACTER_BASICS_DATA_KEYS,
@@ -141,9 +141,9 @@ export const PANEL_MODE_OPTIONS: readonly { value: PanelChoiceMode; label: strin
 /** 默认面板来源 = 空白（用户不选也能直接创建） */
 export const DEFAULT_PANEL_CHOICE: PanelChoice = { mode: "blank", templateId: "", sourceId: "" };
 
-/** 候选角色单次拉取上限（重名判据 + 「从角色复制」共用一份；与左栏/面板树同档 200，
+/** 候选角色单次拉取上限（重名判据 + 「从角色复制」共用一份；与左栏/面板树同取 `MAX_ENTITY_LIST_LIMIT`，
  * 超出部分既不参与重名提示、也不出现在复制候选——已知边界，同 `RAIL_LIMIT`） */
-export const CHARACTER_CANDIDATE_LIMIT = 200;
+export const CHARACTER_CANDIDATE_LIMIT = MAX_ENTITY_LIST_LIMIT;
 
 /** 模板 → 面板结构（**深拷贝快照**：模板叶子 `value` 作为派生后的默认值；未知 id → 空面板） */
 export function panelFromTemplate(templateId: string): AbilityPanelNode[] {

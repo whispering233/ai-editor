@@ -12,14 +12,14 @@
 
 云端与本机的同步状态（设置页面板与左栏「同步云端」按钮的唯一数据源）。
 
-> **已全部落地**（卡 2 配置段 + 卡 4 `remote`/`errorCode` + 卡 5 `local`/`state`）。已配置且打开了项目时发起 `PROPFIND`；
+> **已全部落地**（配置段 + `remote`/`errorCode` + `local`/`state`）。已配置且打开了项目时发起 `PROPFIND`；
 > **请求预算**：每次刷新 ≤ 3 次 PROPFIND（`dirName` 缓存命中 2 次：书目录 + 目录列举；缓存失效需扫云根 +1）。
 > 云端检查失败不影响本端点成功返回（`remote: null` + `errorCode`，`state: "unreachable"`）。
 >
 > **三态判定**（`docs/design/40-cloud-sync.md` §3）：`云端有更新` = 云端文件集合 ≠ `lastSeenCloudFiles`（**不看时间戳**）；
-> **职责分离（卡 B）**：云端**永不创建备份**；自动路径（定时 / 关闭项目）在 `local.backupStale === true` 时**跳过不推**（不写 `lastAutoPushError`）；用户主动同步时由 `cloud-stale-backup-dialog` 二选一（立即手动备份并推送 / 上传旧备份）。
+> **职责分离**：云端**永不创建备份**；自动路径（定时 / 关闭项目）在 `local.backupStale === true` 时**跳过不推**（不写 `lastAutoPushError`）；用户主动同步时由 `cloud-stale-backup-dialog` 二选一（立即手动备份并推送 / 上传旧备份）。
 >
-> **自动推送**（卡 7）：不新起定时器，挂在自动备份 tick 链上——自动备份频率开启时按备份频率 tick、关闭但 `autoPush` 开启时按 2 小时 tick；节流基准 = `cloud.json` 的 `lastAutoPushAt`（仅自动路径推进）；失败只记 `lastAutoPushError` + 日志，不弹窗不阻塞（见 `docs/design/40-cloud-sync.md` §5）。
+> **自动推送**：不新起定时器，挂在自动备份 tick 链上——自动备份频率开启时按备份频率 tick、关闭但 `autoPush` 开启时按 2 小时 tick；节流基准 = `cloud.json` 的 `lastAutoPushAt`（仅自动路径推进）；失败只记 `lastAutoPushError` + 日志，不弹窗不阻塞（见 `docs/design/40-cloud-sync.md` §5）。
 >
 > `本机有改动` = 创作数据 mtime 晚于 `lastSyncAt`（**不含 `.backups/`**；`data.db`/`-wal` 比较带 1s 容差——checkpoint 会刷新其 mtime，其余文件**严格比较**）；无同步记录 ⇒ 本机按「有改动」、云端有份按「有更新」⇒ `conflict`（保守）。
 
@@ -55,7 +55,7 @@
     latestBackupFileName: string | null; // 最新一份本地备份（推送缺省目标）
     backupStale: boolean;                 // 「最新备份早于最新改动」**且**「有未同步改动（dirty）」＝「有改动未进备份」；
                                           //   拉取/恢复后为 false（覆盖前快照的时间戳早于写入的文件，只看 mtime 会误报）
-                                          //   自动路径在此状态下跳过不推（卡 B），面板提示「先『立即备份』」
+                                          //   自动路径在此状态下跳过不推，面板提示「先『立即备份』」
     lastAutoPushError?: {                 // 自动推送最近一次失败（**任何一次推送成功**即清；缺省 = 无）
       code: string;                       // 错误码（如 CLOUD_UNREACHABLE）
       message: string;                    // 服务端中文文案

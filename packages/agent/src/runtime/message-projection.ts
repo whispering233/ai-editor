@@ -17,12 +17,15 @@ import type {
   UserMessage,
 } from "@earendil-works/pi-ai";
 
-/** 思维链预览长度（与 pi-web 同口径：240 字符） */
+/** 思维链预览长度（与 pi-web 同口径） */
 export const THINKING_PREVIEW_MAX_CHARS = 240;
+
+/** 预览截断正则（由 `THINKING_PREVIEW_MAX_CHARS` 派生——数值单源，不在正则里复述数字） */
+const THINKING_PREVIEW_RE = new RegExp(`^[^\\r\\n]{0,${THINKING_PREVIEW_MAX_CHARS}}`, "u");
 
 /** 思维链投影（列表/帧里只给预览；`deferred: true` 表示全文需按需拉取） */
 export interface ThinkingPreviewProjection {
-  /** 前 240 字符预览（首行截取后 trimEnd） */
+  /** 前 `THINKING_PREVIEW_MAX_CHARS` 字符预览（首行截取后 trimEnd） */
   preview: string;
   deferred: true;
   /** 原消息 content 数组中的块下标（取全文时的定位参数） */
@@ -55,9 +58,9 @@ export interface WireMessage {
   createdAt: string;
 }
 
-/** 思维链预览：截首行 + 截断到 240 字符（同行首 240 字符，超长行同样截断） */
+/** 思维链预览：截首行 + 截断到 `THINKING_PREVIEW_MAX_CHARS`（同行首 N 字符，超长行同样截断） */
 export function getThinkingPreview(thinking: string): string {
-  return thinking.trimStart().match(/^[^\r\n]{0,240}/u)?.[0].trimEnd() ?? "";
+  return thinking.trimStart().match(THINKING_PREVIEW_RE)?.[0].trimEnd() ?? "";
 }
 
 /** 单块 thinking → 预览投影 */

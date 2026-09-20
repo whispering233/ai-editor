@@ -5,7 +5,7 @@
 // 时间约定：ISO 8601 应用层写入（nowIso），模块内不生成时间。
 //
 // 摘要字段提取：**行内解析**（SELECT 整行 → JSON.parse → JS 提取）——
-// character → role/description/motivation/personality/ability_panel（2026-09：面板顶层分组名前 2）、
+// character → role/description/motivation/personality/ability_panel（2026-09：面板顶层分组名截断）、
 // setting → tags/description（M2）、location → type、hook → status/payoff_timing、
 // event → description/tags；
 // 取舍：json_extract 免全量 parse 但需按类型动态列，SQL 复杂化；MVP 数据量小，行内解析
@@ -28,7 +28,7 @@
 // 事务沿用 withTransaction（native db.transaction），连接级共享已验证（15.2 验证记录①）。
 
 import type { EntityRow, EntitySummary, EntityType, RelationRow } from "@whispering233/ai-editor-shared";
-import { ENTITY_TYPES, MAX_ENTITY_LIST_LIMIT, generateEntityId, panelTopLevelNames } from "@whispering233/ai-editor-shared";
+import { DEFAULT_ENTITY_LIST_LIMIT, ENTITY_TYPES, MAX_ENTITY_LIST_LIMIT, generateEntityId, panelTopLevelNames } from "@whispering233/ai-editor-shared";
 import { and, asc, count, desc, eq, inArray, isNull, like, or, sql, type SQLWrapper } from "drizzle-orm";
 import { nowIso } from "../storage/atomic.js";
 import { withTransaction, type Db } from "../connection.js";
@@ -60,7 +60,7 @@ export interface EntityListQuery {
   filters?: { tags?: string[]; status?: string };
  /** 分页偏移，默认 0 */
   offset?: number;
- /** 每页条数，默认 50，上限 `MAX_ENTITY_LIST_LIMIT`（超限 clamp，防恶意大页） */
+ /** 每页条数，缺省 `DEFAULT_ENTITY_LIST_LIMIT`，上限 `MAX_ENTITY_LIST_LIMIT`（超限 clamp，防恶意大页） */
   limit?: number;
   sort?: "name" | "created_at" | "updated_at";
   order?: "asc" | "desc";
@@ -87,9 +87,9 @@ function toSummary(row: EntityRow, contentText?: string): EntitySummary {
   switch (row.type) {
     case "character":
       if (data.role !== undefined) summary.role = data.role;
- // 2026-09（卡片 2.1）：description 摘要（截断 100，同 setting 口径）；status 已移除。
- // 两行式行布局字段：动机摘要截断 40 字符（防 search_entities 工具上下文膨胀）
- // + 性格前 2 个 + 能力 = **面板顶层分组名**前 2 个（如「火系」「水系」——
+ // 2026-09（卡片 2.1）：description 摘要（固定长度截断，同 setting 口径）；status 已移除。
+ // 两行式行布局字段：动机摘要定长截断（防 search_entities 工具上下文膨胀）
+ // + 性格定条数截断 + 能力 = **面板顶层分组名**定条数截断（如「火系」「水系」——
  // 叶子名多是「等级/熟练度」这类重复词，按叶子计数无意义）
       if (typeof data.description === "string" && data.description !== "") {
         summary.description = data.description.slice(0, 100);
@@ -107,12 +107,12 @@ function toSummary(row: EntityRow, contentText?: string): EntitySummary {
       if (panelGroups.length > 0) summary.ability_panel = panelGroups.slice(0, 2);
       break;
     case "setting":
- // K2（2026-08）：分类由 data.tags 承接（与 event 同字段语义）——摘要暴露 tags（前 3 个）
+ // K2（2026-08）：分类由 data.tags 承接（与 event 同字段语义）——摘要暴露 tags（定条数截断）
       if (Array.isArray(data.tags)) {
         summary.tags = (data.tags as unknown[]).filter((t): t is string => typeof t === "string" && t !== "").slice(0, 3);
       }
- // M2（2026-08）：描述摘要截断 100 字符——列表行展示用；截断防 search_entities
- // 工具上下文膨胀（limit 200 × 长文描述会打爆 token 预算），完整文本在详情页
+ // M2（2026-08）：描述摘要定长截断——列表行展示用；截断防 search_entities
+ // 工具上下文膨胀（上限 limit × 长文描述会打爆 token 预算），完整文本在详情页
       if (typeof data.description === "string" && data.description !== "") {
         summary.description = data.description.slice(0, 100);
       }
@@ -131,7 +131,7 @@ function toSummary(row: EntityRow, contentText?: string): EntitySummary {
       if (data.tags !== undefined) summary.tags = data.tags;
       break;
  // reference（参考资料，2026-09）：data 只留短字段（type/url/tags）；
- // content 摘要截断 120 字 = **文档表的 content_text 投影**（非 data.content、非块 JSON 原文——
+ // content 摘要定长截断 = **文档表的 content_text 投影**（非 data.content、非块 JSON 原文——
  // 列表/搜索不得把块体拉入内存与响应），完整正文在详情（GET /:type/:id 由 server 层装回）
     case "reference":
       if (data.type !== undefined) summary.type = data.type;
@@ -246,7 +246,7 @@ function collectSettingDescendants(db: Db, rootId: string): Set<string> {
 export function listEntities(db: Db, query: EntityListQuery): EntityListResult {
   /**
  * 页面行 → 摘要：reference 的 content 摘要来自文档表 `content_text` 投影——按页面 id **一次 IN 查询**
- * （勿逐行 getDocument 造成 N+1）；其余类型摘要全来自 data，不需补查。截断 120 字在 toSummary 内。
+ * （勿逐行 getDocument 造成 N+1）；其余类型摘要全来自 data，不需补查。截断在 toSummary 内（本文件唯一处）。
  */
   const summarize = (pageRows: Array<Record<string, unknown>>): EntitySummary[] => {
     const items = pageRows.map(rowToEntityRow);
@@ -276,7 +276,7 @@ export function listEntities(db: Db, query: EntityListQuery): EntityListResult {
       ? [sql`${entities.sort_order} IS NULL`, asc(entities.sort_order), asc(entities.id)]
       : [orderAsc ? asc(sortCol) : desc(sortCol), asc(entities.id)];
   const offset = Math.max(0, Math.trunc(query.offset ?? 0));
-  const limit = Math.min(MAX_ENTITY_LIST_LIMIT, Math.max(1, Math.trunc(query.limit ?? 50)));
+  const limit = Math.min(MAX_ENTITY_LIST_LIMIT, Math.max(1, Math.trunc(query.limit ?? DEFAULT_ENTITY_LIST_LIMIT)));
 
  // JS 过滤路径：filters（S6.3 工具下沉）或 parentId（上级设定筛选）存在时，
  // SQL 取全量候选行（type/q/软删），JS 层执行 data/层级过滤 + 分页（MVP 数据量小，全行查询可接受）；

@@ -39,11 +39,11 @@
 | event | data（关键字段） | 说明 |
 | :--- | :--- | :--- |
 | `session` | `{ session_id }` | **服务端合成**：本流所属会话（新建或续聊），客户端据此持久化「当前会话」 |
-| `ping` | `{}` | 心跳（每 15-30s）：探活 + 断开检测 |
+| `ping` | `{}` | 心跳（按 `DEFAULT_HEARTBEAT_MS` 的随机区间）：探活 + 断开检测 |
 | `agent_start` | `{}` | 本轮开始 |
 | `turn_start` | `{}` | 一次模型请求（含其触发的整批工具执行）开始 |
 | `message_start` / `message_end` | `{ message: {...} }` | 消息生命周期（user / assistant / tool 三类均发） |
-| `message_update` | `{ assistantMessageEvent: {...} }` | assistant 流式增量：`text_delta` / `thinking_delta` / `toolcall_delta` 等（**已剥离 `partial` 全文对象**；`toolcall_*` 附带 `id` / `toolName` 便于前端提前渲染）。`thinking_end` 的 `content` 降为 240 字预览并附 `contentLength`（全文走按需端点，客户端已从 `thinking_delta` 拿到增量） |
+| `message_update` | `{ assistantMessageEvent: {...} }` | assistant 流式增量：`text_delta` / `thinking_delta` / `toolcall_delta` 等（**已剥离 `partial` 全文对象**；`toolcall_*` 附带 `id` / `toolName` 便于前端提前渲染）。`thinking_end` 的 `content` 降为 `THINKING_PREVIEW_MAX_CHARS` 字预览并附 `contentLength`（全文走按需端点，客户端已从 `thinking_delta` 拿到增量） |
 | `tool_execution_start` | `{ toolCallId, toolName, args }` | 工具开始执行 |
 | `tool_execution_update` | `{ toolCallId, toolName, partialResult }` | 工具流式进度（可选） |
 | `tool_execution_end` | `{ toolCallId, toolName, result: { content, details? }, isError }` | 工具结束；**AUTO 工具的 `details` 不下发**（与 `content` 重复且可能极大）；**PROPOSAL 工具的 `details` 携带提案载荷**（见 §提案确认） |
@@ -98,7 +98,7 @@ id: string;                  // 会话 ID（不透明值；服务端经磁盘发
     role: "user" | "assistant" | "tool";
     content?: string | null;    // 可见文本（thinking 不在此字段）
     thinking?: {                // assistant 消息的思维链投影（仅预览 + 标记，全文走独立端点）
-      preview: string;          // 前 240 字符预览
+      preview: string;          // 前 `THINKING_PREVIEW_MAX_CHARS` 字符预览
       deferred: true;
       blockIndex: number;       // 取全文时的块下标
       length: number;           // 原文字符数（前端展示「已折叠」提示）
@@ -162,7 +162,7 @@ id: string;                  // 会话 ID
 
 ## 提案确认
 
-提案**仅存服务端内存**（TTL 10 分钟 + 条数上限），随 `tool_execution_end` 帧的 `result.details` 到达前端：`details = { proposal_id, type, preview }`（`propose_*` 工具产出）；`preview` **恒含 `summary`**（一句话摘要），结构化预览字段平铺其上。生命周期与校验规则见 [`../design/30-agent-loop.md`](../design/30-agent-loop.md) §2。
+提案**仅存服务端内存**（TTL = `PROPOSAL_TTL_MS` + 条数上限），随 `tool_execution_end` 帧的 `result.details` 到达前端：`details = { proposal_id, type, preview }`（`propose_*` 工具产出）；`preview` **恒含 `summary`**（一句话摘要），结构化预览字段平铺其上。生命周期与校验规则见 [`../design/30-agent-loop.md`](../design/30-agent-loop.md) §2。
 
 ### POST /api/v1/proposal/:proposalId/confirm
 

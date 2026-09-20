@@ -55,7 +55,7 @@ mac:
   # 代价：macOS 首次打开需右键 → 打开（见 README）。触发条件见 backlog。
   identity: null
   # ⚠ 恢复出包时同样不得含空格（自动更新的资产名/元数据 url 一致性要求），且需补 zip 目标。
-  artifactName: ${productName}-${version}-mac-${arch}.${ext}
+  artifactName: AI-Editor-${version}-mac-${arch}.${ext}
 
 win:
   target:

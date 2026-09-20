@@ -34,7 +34,7 @@ type: "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "r
 {
   q?: string;           // 搜索关键词（模糊匹配 name）
   offset?: number;      // 分页偏移，默认 0
-  limit?: number;       // 每页条数，默认 50，最大 200
+  limit?: number;       // 每页条数，缺省/上限 = shared `DEFAULT_ENTITY_LIST_LIMIT` / `MAX_ENTITY_LIST_LIMIT`
   sort?: "name" | "created_at" | "updated_at";
   order?: "asc" | "desc";
   tag?: string;         // 标签包含筛选（2026-08）：data.tags 数组字段包含该标签即命中
@@ -61,19 +61,19 @@ type: "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "r
   type: "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "reference";
   name: string;
   // 各类型的关键摘要字段：
-  //   character → role, description (2026-09：data.description 截断 100 字符，同 setting 口径),
-  //               motivation（截断 40）、personality（前 2）、ability_panel（面板**顶层分组名**前 2）
+  //   character → role, description (2026-09：data.description 定长截断，同 setting 口径),
+  //               motivation（定长截断）、personality（定条数）、ability_panel（面板**顶层分组名**定条数）
   //               —— 2026-09 人物页改为工作台后，这些摘要只供 **AI 工具（search_entities）** 消费
   //               （工作台左栏只显示 姓名 + 角色定位；完整数据走 GET 详情）
   //               注：旧 abilities[]/status 不再提取（status 已移除，abilities 经 007 迁为 ability_panel）
-  //   setting   → tags (data.tags 前 3 个：分类统一字段，与 event 同语义),
-  //               description (M2，2026-08：data.description 截断 100 字符——列表行展示；
+  //   setting   → tags (data.tags 定条数：分类统一字段，与 event 同语义),
+  //               description (M2，2026-08：data.description 定长截断——列表行展示；
   //               截断防 search_entities 工具上下文膨胀，完整文本在详情页)
   //   location  → type
   //   hook      → status, payoff_timing (从 data JSON 提取)
   //   event     → description, tags (从 data JSON 提取)
   //   timepoint → （无专属摘要字段，G2：时间标签文本 = name）
-  //   reference → type, tags, url（可空）；content 字段 = **正文摘要截断 120 字**（来源 = 文档表的
+  //   reference → type, tags, url（可空）；content 字段 = **正文摘要定长截断**（长度单一定义 = db `toSummary`；来源 = 文档表的
   //               `content_text` 投影，非 block JSON 原文——列表/搜索不得拉入块体）
   summary: Record<string, unknown>;
   // 手动排序位置（2026-08）：**仅 setting 类型填充**——同级组内线性序
@@ -134,7 +134,7 @@ type: "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "r
 
 // 各 type 的 data 字段说明：
 // character: { role?, description?, alias?, gender?, age?, race?, personality?: string[], motivation?, ability_panel?, custom_fields? }
-//            （2026-09：description 必填（**仅前端校验** + AI 工具约定；**校验落地 = 卡 3.3 前端表单**，
+//            （2026-09：description 必填（**仅前端校验** + AI 工具约定；**校验落地 = 前端人物表单**，
 //             服务端不硬校验，保护提案/旧数据/备份导入三条路径）；status 已移除；abilities 经 007 迁为 ability_panel；
 //             分层与面板结构见 ../db/schema.md「人物 data 分层」）
 // setting:   { description?, tags?: string[], rules?: string[], custom_fields? }（category/parent_id 已废弃，由 passthrough 容错）
@@ -217,7 +217,7 @@ id: string;
 { error: { code: "ENTITY_NOT_FOUND" } }
 ```
 
-> **「未写过」与「空文档」的响应形态（2026-09，卡 12.7a oracle 定口径）**：两者**详情可区分、列表不可区分**，且与章正文端点有意不相同——
+> **「未写过」与「空文档」的响应形态（2026-09 定口径）**：两者**详情可区分、列表不可区分**，且与章正文端点有意不相同——
 >
 > | 载体 | 未写过 | 写过空文档（`content: "[]"`） |
 > | :--- | :--- | :--- |

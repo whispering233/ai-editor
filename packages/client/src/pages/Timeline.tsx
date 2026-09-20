@@ -26,6 +26,7 @@ import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { Button, Input, Select } from "antd";
 import { OrderedListOutlined } from "@ant-design/icons";
+import { MAX_ENTITY_LIST_LIMIT } from "@whispering233/ai-editor-shared";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -103,8 +104,8 @@ export default function Timeline() {
   // 标签筛选（tag 从当前列表聚合；activeTag null = 全部）
   const [activeTag, setActiveTag] = useState<string | null>(null);
 
-  // 标签建议池（F8：已存在标签全集，供表单 tags 输入建议；列表不足 50 条直接聚合已拉数据，
-  // 达到默认 limit 50 说明可能截断 → 补拉全量 200；补拉失败静默降级用已拉列表聚合）
+  // 标签建议池（F8：已存在标签全集，供表单 tags 输入建议；列表不足满页直接聚合已拉数据，
+  // 达到默认 limit 说明可能截断 → 补拉上限量；补拉失败静默降级用已拉列表聚合）
   const [tagPool, setTagPool] = useState<string[]>([]);
 
   // 新建对话框（G2 双入口：createTimepointId 非空 = 组尾「+ 在此时间点新建事件」预挂载）
@@ -172,11 +173,11 @@ export default function Timeline() {
         .then((res) => {
           if (!cancelled) {
             setItems(res.items);
-            // 标签建议池：先聚合已拉列表；满页（items 达到服务端 echo 的 limit，默认 50——可能截断）
-            // → 补拉全量 200 聚合，避免标签池不全（F8）；补拉失败静默降级用已拉列表聚合
+            // 标签建议池：先聚合已拉列表；满页（items 达到服务端 echo 的 limit，默认值——可能截断）
+            // → 补拉上限量聚合，避免标签池不全（F8）；补拉失败静默降级用已拉列表聚合
             setTagPool(collectEventTags(res.items));
             if (res.items.length >= res.limit) {
-              void listEntities("event", { limit: 200 })
+              void listEntities("event", { limit: MAX_ENTITY_LIST_LIMIT })
                 .then((full) => {
                   if (!cancelled) setTagPool(collectEventTags(full.items));
                 })

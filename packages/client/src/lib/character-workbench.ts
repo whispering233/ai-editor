@@ -1,7 +1,7 @@
 // 人物工作台（master-detail）纯函数与配置（卡 3.1）
 // 契约：docs/ui/DESIGN.md §数据展示 `character-workbench`（左栏 = 人物列表本身）
 // 本模块只做数据整形/选中推导/排序配置——不碰 DOM、不发请求，便于单测（仓内无 jsdom）。
-import type { EntitySummary } from "@whispering233/ai-editor-shared";
+import { MAX_ENTITY_LIST_LIMIT, type EntitySummary } from "@whispering233/ai-editor-shared";
 
 /** 左栏行模型：姓名 + 角色定位（`summary.role`） */
 export interface CharacterRailItem {
@@ -11,8 +11,8 @@ export interface CharacterRailItem {
   role: string;
 }
 
-/** 左栏单次拉取上限（与列表接口最大 limit 一致；超出走「仅显示前 N 个」提示，不做分页——左栏无分页位置） */
-export const RAIL_LIMIT = 200;
+/** 左栏单次拉取上限（= 列表接口最大 limit；超出走「仅显示前 N 个」提示，不做分页——左栏无分页位置） */
+export const RAIL_LIMIT = MAX_ENTITY_LIST_LIMIT;
 
 /**
  * 列表摘要 → 左栏行。

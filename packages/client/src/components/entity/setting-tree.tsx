@@ -1,7 +1,7 @@
 // 设定树形视图（2026-08）：实体关系页「设定」tab 的交互式树形视图，
 // 与原「设定树」tab（I4 只读树）合并——#/setting 即树形视图（一级化），
 // 旧 #/entities/setting-tree、#/entities/setting 由 main.tsx 重定向到新段。
-// 「设定 Tab（树形视图）」——全量 setting（limit 200 + 名称排序）+
+// 「设定 Tab（树形视图）」——全量 setting（limit 取 `MAX_ENTITY_LIST_LIMIT` + 名称排序）+
 // 全量 belongs_to 层级边 → buildSettingTree 组装递归树；行级交互对齐大纲（模式）：
 // - 折叠/展开：父节点 ▾/▸ 切换 + 顶栏「全部展开 / 全部折叠」（全部折叠 = 仅保留根级）
 // - 行内编辑（点击标题）：Enter 确认 PUT /entity/setting/:id { name }、Esc 取消、失焦保存
@@ -28,6 +28,7 @@ import {
   SearchOutlined,
   UpOutlined,
 } from "@ant-design/icons";
+import { MAX_ENTITY_LIST_LIMIT } from "@whispering233/ai-editor-shared";
 import { PageDivider } from "@/components/ui/page-header";
 import { RowContextMenu } from "./row-context-menu";
 import { TagChip } from "@/components/ui/tag-chip";
@@ -62,8 +63,8 @@ import { useSaveShortcut } from "../../lib/save-shortcut";
 import { navigate } from "../../hooks/use-route";
 import { useUiStore } from "../../stores/ui";
 
-/** 设定树拉取上限（listEntities limit 最大 200；超量截断提示 + 孤儿提升防御） */
-const TREE_SETTING_LIMIT = 200;
+/** 设定树拉取上限（`MAX_ENTITY_LIST_LIMIT`；超量截断提示 + 孤儿提升防御） */
+const TREE_SETTING_LIMIT = MAX_ENTITY_LIST_LIMIT;
 
 /** 拖拽目标（嵌套语义 + 行间插入线）：
  * row.on = 拖到行中段（成为其子级）；row.before/after = 拖到行上/下方插入线（**手动模式**同级重排）；

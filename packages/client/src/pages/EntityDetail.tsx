@@ -9,7 +9,7 @@
 // 就绪后补（带上下文进聊天）
 import { useEffect, useRef, useState } from "react";
 import { HolderOutlined } from "@ant-design/icons";
-import { formatTimestamp } from "@whispering233/ai-editor-shared";
+import { formatTimestamp, MAX_ENTITY_LIST_LIMIT } from "@whispering233/ai-editor-shared";
 import type { EntityType } from "@whispering233/ai-editor-shared";
 import { ConfirmDialog } from "../components/outline/dialogs";
 import { SuggestionDatalist } from "../components/ui/suggestion-datalist";
@@ -287,7 +287,7 @@ export default function EntityDetail({
       return;
     }
     let cancelled = false;
-    listEntities("setting", { limit: 200 })
+    listEntities("setting", { limit: MAX_ENTITY_LIST_LIMIT })
       .then((res) => {
         if (cancelled) return;
         const tags = new Set<string>();

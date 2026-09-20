@@ -20,6 +20,7 @@ import {
   LinkOutlined,
   LoadingOutlined,
 } from "@ant-design/icons";
+import { MAX_ENTITY_LIST_LIMIT } from "@whispering233/ai-editor-shared";
 import type { EntityDetailRes } from "../lib/api";
 import {
   ApiError,
@@ -115,7 +116,7 @@ export default function ReferenceDetail({ id, draft = false }: { id?: string; dr
   const [typePool, setTypePool] = useState<string[]>([]);
   useEffect(() => {
     let cancelled = false;
-    listEntities("reference", { limit: 200 })
+    listEntities("reference", { limit: MAX_ENTITY_LIST_LIMIT })
       .then((res) => {
         if (cancelled) return;
         const tagSet = new Set<string>();

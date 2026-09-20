@@ -397,7 +397,7 @@ export function purgeOutlineNode(nodeId: string): Promise<PurgeOutlineRes> {
 
 // ============ 实体 CRUD（S3.5；「实体 CRUD」L150-283，软删过滤） ============
 
-/** GET /api/v1/entity/:type 查询参数（snake_case；q 模糊匹配 name，limit 默认 50 最大 200；
+/** GET /api/v1/entity/:type 查询参数（snake_case；q 模糊匹配 name，limit 缺省/上限 = `DEFAULT_ENTITY_LIST_LIMIT` / `MAX_ENTITY_LIST_LIMIT`；
  * tag = 标签包含筛选，setting 走 data.rules、event 走 data.tags；
  * parent_id = 上级设定筛选（仅 setting）：递归子树（含所有后代、不含自身） */
 export interface ListEntitiesQuery {
@@ -913,7 +913,7 @@ export interface RestoreBackupRes {
 
 /**
  * 从备份列表恢复当前项目（覆盖恢复）：
- * - 覆盖前服务端自动快照当前状态 → 原子替换三文件 + references/ + sessions/（整体覆盖，本地残留不混入）
+ * - 覆盖前服务端自动快照当前状态 → 原子替换三文件 + `sessions/`（整体覆盖，本地残留不混入）
  * - 错误：404 VALIDATION_ERROR（备份不存在）、409 SCHEMA_VERSION_MISMATCH（备份来自更高版本，
  * 前端阻断提示——message 已按相对版本分流，透传展示）
  */
@@ -1189,7 +1189,7 @@ export function testCloudConnection(): Promise<CloudTestResult> {
 
 /**
  * POST /api/v1/cloud/pull —— 从云端拉取一份备份应用到当前项目（缺省 = 云端 head；卡 5）。
- * 语义：三文件覆盖 + `references/` 与 `sessions/` **并集合并**（删除优先）；覆盖前自动快照本机当前状态。
+ * 语义：三文件覆盖 + `sessions/` **并集合并**（删除优先）；覆盖前自动快照本机当前状态。
  * 失败：409 CLOUD_NOT_CONFIGURED / NO_PROJECT_OPEN / SCHEMA_VERSION_MISMATCH、404 CLOUD_FILE_NOT_FOUND、
  *      400 VALIDATION_ERROR（坏包/文件名非法）、502 三码。
  */

@@ -18,7 +18,12 @@ import {
   RightOutlined,
 } from "@ant-design/icons";
 import type { AbilityPanelNode, EntitySummary } from "@whispering233/ai-editor-shared";
-import { cloneAbilityPanel, isAbilityBranch, parseAbilityPanel } from "@whispering233/ai-editor-shared";
+import {
+  MAX_ENTITY_LIST_LIMIT,
+  cloneAbilityPanel,
+  isAbilityBranch,
+  parseAbilityPanel,
+} from "@whispering233/ai-editor-shared";
 import { getEntityDetail, listEntities } from "../../lib/api";
 import {
   PANEL_TEMPLATES,
@@ -242,7 +247,7 @@ export function PanelTree({
     if (copyCandidates !== null || copyLoading) return;
     setCopyLoading(true);
     try {
-      const res = await listEntities("character", { limit: 200 });
+      const res = await listEntities("character", { limit: MAX_ENTITY_LIST_LIMIT });
       setCopyCandidates(res.items.filter((it) => it.id !== selfId));
     } catch {
       useUiStore.getState().showToast("无法读取角色列表，请重试", "error");

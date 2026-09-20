@@ -4,7 +4,7 @@ import type { EntityType } from "@whispering233/ai-editor-shared";
 /** 实体二级 tab 可列表类型（T3：参考资料已有独立中栏 tab #/references，实体页泛型表格不再渲染） */
 export type ListableEntityType = Exclude<EntityType, "reference">;
 
-/** MVP 每页条数（原型：limit 固定 20；服务端默认 50 最大 200） */
+/** MVP 每页条数（原型：limit 固定 20；服务端缺省/上限 = `DEFAULT_ENTITY_LIST_LIMIT` / `MAX_ENTITY_LIST_LIMIT`） */
 export const PAGE_LIMIT = 20;
 
 /** 分页辅助：总页数（至少 1 页——total 为 0 时显示「第 1 / 1 页」） */

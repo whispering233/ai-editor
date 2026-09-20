@@ -6,7 +6,7 @@
 // zod 版本：^4（注意 v4 API：z.record 必须两参、z.enum 接受 readonly 数组）
 
 import { z } from "zod";
-import { ENTITY_TYPES, MAX_ENTITY_LIST_LIMIT } from "../constants/entity.js";
+import { DEFAULT_ENTITY_LIST_LIMIT, ENTITY_TYPES, MAX_ENTITY_LIST_LIMIT } from "../constants/entity.js";
 import { normalizeRelationType, relationTypeSyntaxError } from "../utils/relation-type.js";
 import { HOOK_STATUSES, PAYOFF_TIMING } from "../constants/hook.js";
 import { CONFLICT_LEVELS } from "../constants/outline.js";
@@ -414,7 +414,7 @@ export const entitySummarySchema: z.ZodType<EntitySummary> = z.object({
 export const entityListQuerySchema = z.object({
   q: z.string().optional(), // 模糊匹配 name
   offset: z.coerce.number().int().min(0).default(0),
-  limit: z.coerce.number().int().min(1).max(MAX_ENTITY_LIST_LIMIT).default(50),
+  limit: z.coerce.number().int().min(1).max(MAX_ENTITY_LIST_LIMIT).default(DEFAULT_ENTITY_LIST_LIMIT),
   sort: z.enum(["name", "created_at", "updated_at"]).optional(),
   order: z.enum(["asc", "desc"]).optional(),
  // 标签包含筛选（2026-08）：data 数组字段（setting.rules / event.tags）包含该标签即命中

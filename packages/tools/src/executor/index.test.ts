@@ -1,6 +1,6 @@
 // S6.7 executor 门面测试（executeProposal）
 // 覆盖：
-// - 15 个提案类型 → 13 个执行函数映射正确（proposal → 执行函数 → 结果落库；含 create_hook
+// - 提案类型（`PROPOSAL_TOOLS`）→ 执行函数（`EXECUTOR_TOOLS`）映射正确（proposal → 执行函数 → 结果落库；含 create_hook
 // → create_entity(type=hook) + plants 关系适配、update_hook → update_entity 适配、
 // propose_reorder_timepoints → reorder_timepoints 批量重排（G2，取代 F9 的 reorder_events））
 // - 未知提案类型 → 抛错（防静默）
@@ -28,7 +28,7 @@ import { findOutlineNode, readOutlineFile, writeOutlineFile } from "@whispering2
 import { buildProposal } from "../proposal/types.js";
 import { executeProposal } from "./index.js";
 import { listTools } from "../registry.js";
-import * as toolsEntry from "../index.js"; // 副作用注册（33 个 LLM 可见工具）
+import * as toolsEntry from "../index.js"; // 副作用注册（LLM 可见工具）
 
 let dir: string;
 let db: Db;

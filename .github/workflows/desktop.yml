@@ -1,6 +1,6 @@
 # 桌面版打包工作流：push 版本 tag（v*）时出 **Windows 安装包**并挂到该 tag 的 GitHub Release。
 #
-# 平台范围（2026-10 定）：只跑 windows-latest。本地开发机（Linux/WSL）只出 Linux 包做测试——
+# 平台范围（2026-09 定）：只跑 windows-latest。本地开发机（Linux/WSL）只出 Linux 包做测试——
 # electron-builder 交叉构建 Windows 目标需 Wine（官方口径），本仓不往开发机装该依赖；
 # macOS 同理需 mac runner。matrix 里两个平台项已注释保留，有真实用户需求再恢复。
 #
@@ -36,7 +36,7 @@ jobs:
       fail-fast: false # 多平台并发时一个挂了不代表其余平台结论无效（当前仅 Windows）
       matrix:
         include:
-          # 当前只出 **Windows 包**（2026-10 定）：macOS/Linux 暂无真实用户需求，需要时取消下面注释即可恢复。
+          # 当前只出 **Windows 包**（2026-09 定）：macOS/Linux 暂无真实用户需求，需要时取消下面注释即可恢复。
           # 本地开发机的 Windows 交叉构建需 Wine（electron-builder 官方口径），本仓以 CI 的 windows-latest 为唯一出包路径。
           - os: windows-latest
             args: --win nsis

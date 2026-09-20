@@ -49,7 +49,7 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
     expect(m.getTool("propose_create_entity")!.permission).toBe("proposal");
     expect(m.getTool("propose_abandon_hook")!.permission).toBe("proposal");
     expect(m.getTool("propose_reorder_timepoints")!.permission).toBe("proposal");
- // 16 个提案工具全部注册（PROPOSAL_TOOLS 常量与注册表一致；+propose_create_reference）
+ // 全部提案工具注册（`PROPOSAL_TOOLS` 常量与注册表一致；含 propose_create_reference）
     expect(PROPOSAL_TOOLS.length).toBe(16);
     for (const name of PROPOSAL_TOOLS) {
       expect(m.getTool(name)).toBeDefined();

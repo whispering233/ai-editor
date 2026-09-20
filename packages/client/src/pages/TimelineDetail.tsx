@@ -22,7 +22,7 @@
 // - 未保存离开守卫：EntityDetail 无此模式，不做（避免过度设计）
 import { useEffect, useState } from "react";
 import { Button, Input, Select } from "antd";
-import { formatTimestamp } from "@whispering233/ai-editor-shared";
+import { formatTimestamp, MAX_ENTITY_LIST_LIMIT } from "@whispering233/ai-editor-shared";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -81,7 +81,7 @@ export default function TimelineDetail({ id }: { id: string }) {
   const [deleteRelationTarget, setDeleteRelationTarget] = useState<RelationSummaryItem | null>(
     null,
   );
-  // 标签建议池（F8：独立补拉全量 200 聚合已存在标签；失败静默——无建议区，不影响表单）
+  // 标签建议池（F8：独立补拉上限量聚合已存在标签；失败静默——无建议区，不影响表单）
   const [tagPool, setTagPool] = useState<string[]>([]);
   // 挂载选择器数据（G2）：时间点列表（选项）+ 事件列表（当前位置保位）；失败 → 选择器重试
   const [timepoints, setTimepoints] = useState<EntitySummary[] | null>(null);
@@ -93,7 +93,7 @@ export default function TimelineDetail({ id }: { id: string }) {
   /** 补拉全量事件聚合标签池（F8；保存新标签后随 useDataRefresh 刷新，避免建议池陈旧——oracle P2） */
   async function loadTagPool(): Promise<void> {
     try {
-      const res = await listEntities("event", { limit: 200 });
+      const res = await listEntities("event", { limit: MAX_ENTITY_LIST_LIMIT });
       setTagPool(collectEventTags(res.items));
     } catch {
       // 失败静默（详情页独立补拉，失败仅无建议区）
@@ -102,7 +102,7 @@ export default function TimelineDetail({ id }: { id: string }) {
 
   /**
    * 挂载选择器数据（G2）：时间点列表（选项）+ 事件列表（当前位置——move_to 保位用；
-   * limit 200 拉全量——全局事件线性序，避免 >50 时 findIndex 落空）。
+   * limit 取上限拉全量——全局事件线性序，避免超过默认页大小时 findIndex 落空）。
    * 失败 → mountDataFailed（选择器显示重试，不阻塞详情主体/表单）。
    */
   async function loadMountData(): Promise<void> {
@@ -110,7 +110,7 @@ export default function TimelineDetail({ id }: { id: string }) {
     try {
       const [tpRes, evRes] = await Promise.all([
         listEntities("timepoint", {}),
-        listEntities("event", { limit: 200 }),
+        listEntities("event", { limit: MAX_ENTITY_LIST_LIMIT }),
       ]);
       setTimepoints(tpRes.items);
       setEvents(evRes.items);

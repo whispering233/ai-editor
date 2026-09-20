@@ -7,6 +7,32 @@
 
 ## [Unreleased]
 
+## [v0.0.51] - 2026-09-20
+
+> **文档与一致性版本（无功能变更）**：发布前审计清理——合同文档与代码注释里的过时引用、过时计数与数字复述，并继续收敛数值单源。回归：build / typecheck / lint / `-r test` 全绿（167 文件 / 2484 测试）。
+
+### Changed
+
+- **数值单源继续收口**：
+  - **客户端实体列表上限**不再各写裸数字：9 处 `limit: 200` 与 4 处复述数字的注释统一引用 shared `MAX_ENTITY_LIST_LIMIT`；新增 `DEFAULT_ENTITY_LIST_LIMIT` 作缺省的单一定义（REST schema 的 `.default()` 与 db 查询层 `??` 兜底同源）——此前一旦下调上限，这些调用点会直接吃 REST 的 400。
+  - **文档里的常量复述改为引用常量名**：`TOOL_RESULT_MAX_TOKENS`、`FOCUS_CHAPTER_EXCERPT_CHARS`、`DEFAULT_CHAPTER_TEXT_CHARS` / `MAX_CHAPTER_TEXT_CHARS`、`PROPOSAL_TTL_MS`、`DEFAULT_HEARTBEAT_MS`、`THINKING_PREVIEW_MAX_CHARS`。其中思维链预览的截断正则原先写死数字（常量存在但未被实现引用），现由常量派生。
+  - **列表摘要截断长度**（人物描述/动机、参考资料正文摘要、标签与面板顶层分组条数）的注释与文档不再复述数字，长度单一定义 = db `toSummary`。
+- **合同文档去历史编号引用**：`docs/api/`、`docs/db/`、`docs/ui/` 与 `docs/design/` 正文里的「卡 N / 卡 B」等任务卡编号全部清掉（`backlog.md` 保留登记来源）；`error-code.md` 的云端七码只留「已实现」。
+- **macOS 安装包资产名去空格**：`electron-builder.yml` 的 mac `artifactName` 改为 `AI-Editor-…`（与 win/linux 同规则）。当前不出 macOS 包，但配置不得留空格——恢复出包时不会再踩「磁盘名/资产名/`latest.yml` 的 url 不一致 ⇒ 更新 404」；README 安装包表同步。
+- **发布链路补 gh 账号检查**：`build.md` 发布步骤新增第 0 步 `gh auth status`（多账号环境先 `gh auth switch` 到仓库 owner）。
+
+### Fixed
+
+- **过时计数**：`tools` 执行器门面与测试注释里的「15 个提案类型」（实际 16）、测试注释里的「33 个 LLM 可见工具」（实际 36）——改为引用常量或去掉数字，防再次漂移。
+- **`auto-push.test.ts` 的测试诚实性**：8 处用已退役的 `references/` 目录造「有变更」的写法改为 `AGENTS.md` / `sessions/`（真正参与变更判定的文件）；「有改动未进最新备份」用例不再用未来 mtime，改为「备份时间戳 +1ms」的真实序；补上「无备份时 `pushBackup` 回 404 → 跳过而非失败」这条分支的唯一可达用例。
+- **客户端注释里的退役目录**：`lib/api.ts` 的 restore / 云端拉取说明仍写「三文件 + `references/` + `sessions/`」——改为现行口径（三文件 + `sessions/`，正文与参考资料随 `data.db`）。
+
+### Docs
+
+- **日期口径统一**：仓库内误标的 `2026-10` 全部修正为真实月份 `2026-09`（文档与代码注释）。
+- **发布自检命令修正**：`build.md` 的 `gh api … head_sha=` 补 `^{commit}`——annotated tag 的 `git rev-parse` 返回的是 tag 对象 SHA，不带 `^{commit}` 查得 0，会把「已触发」误判成「事件被吞」。
+- **`backlog.md` 审计登记刷新**：清掉本轮已修三项（macOS 资产名 / client limit 上限 / auto-push 测试诚实性），新增两项有意保留（api 文档的校验范围镜像、代码注释里的历史阶段编号）。
+
 ## [v0.0.50] - 2026-09-20
 
 ### Added

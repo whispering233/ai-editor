@@ -41,8 +41,8 @@ search_entities(type, query, filters?)
   filters: { tags?: string[], status?: string }
   status 口径（2026-09）：匹配 `data.status`——**实际只在伏笔（hook）上有意义**
     （生命周期 planted/progressing/resolved/abandoned）；character 的 status 字段已移除
-  character 摘要字段：role / description（截断 100）/ motivation（截断 40）/
-    personality 前 2 / **ability_panel 顶层分组名前 2**（完整面板走 get_entity 详情）
+  character 摘要字段：role / description / motivation（三者定长截断）/
+    personality、**ability_panel 顶层分组名**（定条数；长度单一定义 = db `toSummary`）（完整面板走 get_entity 详情）
 
 // === 关系查询 ===
 query_relationships(opts: {
@@ -68,13 +68,13 @@ get_chapter_text(node_id, offset?, max_chars?)
   用途：AI 需要看"作者到底写了什么"时按需拉取（分析节奏、核对与设定的冲突、评价具体段落）
   口径：只读路由——**工具面不存在任何正文/文档写工具**（结构性保证，非提示词约束）；
        text = 服务端派生的轻量 md 投影（保块级结构：标题/列表/引用/代码/表格，弃行内样式）
-       默认 max_chars = 6000、上限 7000（实现层 clamp：连 JSON 信封与续读提示一起压进单条工具结果的
-       8000 token 预算，实测余量 ≈12%）；truncated = true 时提示用 offset 续读（长章分段读完，不炸上下文）
+       默认/上限 max_chars = `DEFAULT_CHAPTER_TEXT_CHARS` / `MAX_CHAPTER_TEXT_CHARS`（实现层 clamp：连 JSON 信封与续读
+       提示一起压进单条工具结果的 `TOOL_RESULT_MAX_TOKENS` 预算，实测余量 ≈12%）；truncated = true 时提示用 offset 续读（长章分段读完，不炸上下文）
        node_id 必须为章（非章 → 报错，与 propose_add_delta 同口径）
 
 // === 参考资料全文（只读）===
 // get_entity('reference', id) 的 reference 分支返回 data.content 的**投影文本**（content_text），
-// 不是块 JSON 原文——列表摘要 120 字与详情全文分离，防长文撑爆响应（见下 search_references）
+// 不是块 JSON 原文——列表摘要定长截断与详情全文分离，防长文撑爆响应（见下 search_references）
 
 // === 状态查询（Delta 相关）===
 compute_state(target_type, target_id, at_node_id)
@@ -104,7 +104,7 @@ get_entity_summary(type)
 
 // === 参考资料查询 ===
 search_references(query, type?, tags?)
-  → 匹配的参考资料列表（标题 + 类型 + 标签 + 内容摘要截断 120 字）
+  → 匹配的参考资料列表（标题 + 类型 + 标签 + 内容摘要定长截断）
   用途：AI 不知道书里有哪些参考资料时先搜索（标题+tags 关键词命中）再按需取全文
   （详情取全文走 get_entity('reference', id) 的 reference 分支——列表摘要/详情全文分离防长文撑爆响应）
   type 参数（2026-08 修订）：**自由文本分类**（原预置枚举已取消），建议沿用项目内已有分类；

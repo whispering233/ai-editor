@@ -6,10 +6,11 @@
 // - 「导入 md 新建」= 文件机制退役后的替代路径（选 md → 解析 → 建条目 → 跳详情），
 //   frontmatter title 作条目名、其余为正文，有损必须先确认（lib/reference + lib/document-io）
 // - 文件扫描（「扫描」按钮 / 「未同步本地文档」提示条）已随文件机制退役删除
-// 数据：listEntities("reference", { limit: 200 }) 一次全量拉取（参考资料量小），
+// 数据：listEntities("reference", { limit: MAX_ENTITY_LIST_LIMIT }) 一次全量拉取（参考资料量小），
 // 分类/标签/关键词过滤在前端（列表摘要 summary.type/tags/url/content 由 db toSummary 提供）
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent } from "react";
+import { MAX_ENTITY_LIST_LIMIT } from "@whispering233/ai-editor-shared";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { Alert, Button, Input, Select, Skeleton } from "antd";
 import { PageHeader } from "@/components/ui/page-header";
@@ -107,7 +108,7 @@ export default function ReferenceList() {
     let cancelled = false;
     setItems(null);
     setError(null);
-    listEntities("reference", { limit: 200 })
+    listEntities("reference", { limit: MAX_ENTITY_LIST_LIMIT })
       .then((res) => {
         if (!cancelled) setItems(res.items);
       })
@@ -119,7 +120,7 @@ export default function ReferenceList() {
     };
   }, [reloadTick]);
 
-  // 聚合标签池（列表摘要 tags 前 3 个 —— 为覆盖全量已用 limit 200 拉取）
+  // 聚合标签池（列表摘要 tags 前 3 个 —— 为覆盖全量已用上限 limit 拉取）
   const tagPool = useMemo(() => {
     const set = new Set<string>();
     for (const it of items ?? []) {

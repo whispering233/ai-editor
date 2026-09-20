@@ -26,6 +26,7 @@ import {
   hasAuthoringChangesSince,
   hasLocalEditsSince,
   hasUnbackedChanges,
+  latestParseableBackupTime,
   setProjectTick,
   startAutoBackup,
   stopAutoBackup,
@@ -277,7 +278,7 @@ describe("自动推送：开关与三条触发路径", () => {
     expect(readBookState(project.config.id)?.lastAutoPushAt).toBe(new Date(clock).toISOString());
     expect(putCount()).toBe(1);
 
-    changeCoveredByBackup(join("references", "二.md")); // 确有新变更（且已被备份涵盖）
+    changeCoveredByBackup(AGENTS_FILE_NAME); // 确有新变更（且已被备份涵盖）
     expect(await push()).toBe(false); // 距上次 < 1000ms → 节流挡下
     expect(putCount()).toBe(1);
 
@@ -287,7 +288,7 @@ describe("自动推送：开关与三条触发路径", () => {
   });
 
   it("关闭项目：聊天变更若已被最新备份涵盖则推一次（不受节流、不推进 lastAutoPushAt）；未涵盖则跳过", async () => {
-    changeCoveredByBackup(join("references", "一.md"));
+    changeCoveredByBackup(AGENTS_FILE_NAME);
     expect(await maybeAutoPush(project, { throttleMs: 10 * 60_000 })).toBe(true); // 先占住节流基准
     const throttledAt = readBookState(project.config.id)?.lastAutoPushAt;
 
@@ -307,7 +308,7 @@ describe("自动推送：开关与三条触发路径", () => {
   });
 
   it("关闭项目：云盘不可达时不抛，只写 lastAutoPushError（关闭语义不受影响）", async () => {
-    changeCoveredByBackup(join("references", "一.md"));
+    changeCoveredByBackup(AGENTS_FILE_NAME);
     vi.stubGlobal(
       "fetch",
       vi.fn(() => Promise.reject(new Error("network down"))),
@@ -322,7 +323,7 @@ describe("自动推送：开关与三条触发路径", () => {
   });
 
   it("手动备份后：无条件立刻推一次（未到节流），不推进节流基准；**同一份重复推 = 零上传**", async () => {
-    changeCoveredByBackup(join("references", "一.md"));
+    changeCoveredByBackup(AGENTS_FILE_NAME);
     expect(await maybeAutoPush(project, { throttleMs: 10 * 60_000 })).toBe(true);
     const throttledAt = readBookState(project.config.id)?.lastAutoPushAt;
 
@@ -341,10 +342,13 @@ describe("自动推送：开关与三条触发路径", () => {
   it("本机没有任何备份：跳过（不写 lastAutoPushError、零网络请求）", async () => {
     const base = Date.now();
     writeBookState(project.config.id, { lastSyncAt: new Date(base).toISOString() });
-    writeAfter(join("references", "一.md"), base);
+    writeAfter(AGENTS_FILE_NAME, base);
 
     expect(await maybeAutoPush(project)).toBe(false);
     await autoPushOnClose(project);
+    // 手动备份后的路径**不查** backupStale（调用方刚生成备份）——这里没有备份，
+    // 走到 pushBackup 的 404 分支：跳过而非失败（该分支的唯一可达用例）
+    await autoPushAfterManualBackup(project);
 
     expect(calls).toEqual([]); // 「没有可推送的备份」在本地判定，先于任何网络动作
     expect(readBookState(project.config.id)?.lastAutoPushError).toBeUndefined();
@@ -370,8 +374,10 @@ describe("自动推送：开关与三条触发路径", () => {
 
   it("卡 B：有改动未进最新备份（backupStale）→ 定时与关闭项目路径都跳过（零网络请求、不写失败标记）", async () => {
     makeBackupAndBaseline(); // 写一份备份 + 把 lastSyncAt 设到 base
-    // 让「最新改动」晚于最新备份：mtime 放到 1 秒后（确认式构造：任何已存在的备份都盖不住它）
-    writeAfter(join("sessions", "s1.jsonl"), Date.now() + 1000, 0);
+    // 让「最新改动」晚于最新备份：mtime = 备份时间戳 + 1ms（真实序：备份刚结束就改了一笔；不造未来 mtime）
+    const backupAt = latestParseableBackupTime(project);
+    expect(backupAt).not.toBeNull();
+    writeAfter(join("sessions", "s1.jsonl"), backupAt!.getTime(), 1);
     expect(hasUnbackedChanges(project)).toBe(true);
 
     const before = putCount();
@@ -483,7 +489,7 @@ describe("排程钩子：自动推送挂在自动备份的同一条 tick 链上�
   });
 
   it("生产装配（middleware 注册）：备份频率关闭 + autoPush 开启 + 改动已被最新备份涵盖 → 2h tick 真的推一次", async () => {
-    changeCoveredByBackup(join("references", "一.md")); // 卡 B：有未备份改动时 tick 会跳过，这里造「已涵盖」
+    changeCoveredByBackup(AGENTS_FILE_NAME); // 卡 B：有未备份改动时 tick 会跳过，这里造「已涵盖」
     const freqOff: ProjectContext = { ...project, config: { ...project.config, backup_frequency_minutes: null } };
 
     // 本文件其余用例都是显式注入钩子（且 afterEach 会清空）——此处**首次**运行时加载该模块，
@@ -505,9 +511,10 @@ describe("排程钩子：自动推送挂在自动备份的同一条 tick 链上�
   });
 
   it("生产装配：备份频率关闭 + 有改动未进最新备份 → 2h tick 跳过（零 PUT、不写失败标记）", async () => {
-    const base = makeBackupAndBaseline();
-    writeAfter(join("references", "未备份.md"), base - 120_000, 0); // 变更早于备份？不——放到备份之前即「已涵盖」
-    writeAfter(join("references", "更新的.md"), Date.now() - 30_000, 0); // 30s 前的改动 → 晚于最新备份
+    makeBackupAndBaseline();
+    const backupAt = latestParseableBackupTime(project);
+    expect(backupAt).not.toBeNull();
+    writeAfter(join("sessions", "s2.jsonl"), backupAt!.getTime(), 1); // 改动晚于最新备份（sessions/ 参与变更判定）
     const freqOff: ProjectContext = { ...project, config: { ...project.config, backup_frequency_minutes: null } };
     await import("../middleware/project.js");
 

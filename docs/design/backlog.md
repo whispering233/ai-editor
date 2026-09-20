@@ -85,9 +85,9 @@
 - **零备份 + `local-ahead` 时旧包确认框的「上传旧备份」会 404**（卡 B oracle 登记，UX 洞）
   - 现状：没有任何本地备份时 `hasUnbackedChanges` 恒真 ⇒ 点「同步云端」弹旧包框，其中「上传旧备份」未禁用，点了走 `pushBackup` 404「没有可推送的备份」，文案落到框内。
   - 最小修法：该框在「本机无备份」时把「上传旧备份」禁用，并照 `DESIGN.md` §Components「云端存档」的口径提示先「立即备份」（另一半「立即手动备份并推送」仍可用）。
-- **卡 B 的两条测试用未来 mtime 造 stale**（卡 B oracle 登记，测试诚实性）
-  - `Date.now() + 1000` 能确认式地造出 stale，但没覆盖现实序（备份后 0-1s 内编辑的容差边界）；另 `auto-push.test.ts` 的 2h tick 跳过用例里留了一句自问自答的困惑注释。
-  - 何时必须做：若要动 `BACKUP_CHANGE_TOLERANCE_MS` 或 `hasUnbackedChanges` 的基准口径时，先补这两条边界用例。
+- **`BACKUP_CHANGE_TOLERANCE_MS` 的容差边界无覆盖**（卡 B oracle 登记的剩余部分）
+  - 现状：`sessions/` 侧已改「备份时间戳 +1ms」造真实序（v0.0.51 清掉未来 mtime 构造）；`data.db` / `data.db-wal` 的 1s 容差（备份管道 `wal_checkpoint` 自激防护）在 0 / 1000ms 边界仍无用例。
+  - 何时必须做：改 `BACKUP_CHANGE_TOLERANCE_MS` 或 `hasUnbackedChanges` 的基准口径时，补这两条边界用例。
 - **restore / 云 pull 之后 `backupStale` 会短暂为真**（卡 B oracle 未验证项）
   - 覆盖前快照的时间戳早于覆盖时刻 ⇒ 覆盖后 `hasUnbackedChanges` 可能判真 → 自动推送暂停到下一次备份（面板会显示提示行）。
   - 影响：自动路径延迟一次（提示行是诚实的），未验证是否有更糟的交互。
@@ -301,11 +301,10 @@
 - **块编辑器接线无自动化回归钉（卡 12.12/12.5 修复轮登记）** — 现状：`initialContent: []` 崩页与 `dictionary: zh` 两个缺陷都只有浏览器走查证据；仓内无 jsdom，组件不参与单测。触发条件：重现「改一行传参把编辑器搞崩」。可选最小修法：按 `design-discipline.test.ts` 的源码扫描风格加一条断言（如 `document-editor.tsx` 必须包含 `dictionary: zh` 且不得出现 `initialContent: []`），或引入 jsdom 只测封装组件的挂载。
 - **`document_records` 的两份 DDL 文本差一行行尾注释**（卡 12.2 oracle 登记，P3 无功能影响） — 现状：`packages/db/src/tables.ts` 的声明 DDL 在 `PRIMARY KEY (owner_kind, owner_id)` 后带 `-- 一 owner 一行（…）` 注释，`migrations/008_document_records.ts` 的迁移 DDL 无该注释；去注释后逐字相等。唯一消费该文本的是「v0 空库结构快照」（只对 `user_version === 0` 生效，已到 v8 的库不参与）。触发条件：有人想加「迁移 DDL 文本 == 声明 DDL 文本」的断言时。最小修法：把注释挪到行首或去掉（同步改两处）。
 
-## 发布前审计登记（2026-09，v0.0.50）
+## 发布前审计登记（2026-09，v0.0.51）
 
-- **`auto-push.test.ts` 用 `references/` 造「变更」的前提已失效（测试诚实性）** — 现状：helper `changeCoveredByBackup` 与 7 处 `writeAfter(join("references", …))`（共 8 处 references 路径写入）写的是已退役的随包目录，而变更判定只查三文件 + `data.db-wal` + `PACKED_DIR_NAMES`（= `sessions/`）⇒ 用例标题所述「有改动未进最新备份」实际走的是「无变更 → 不推」（守卫本体由同文件的 `sessions/` 用例覆盖）。触发条件：要动 `hasUnbackedChanges` / `AUTO_PUSH_THROTTLE_MS` 口径时。最小修法：改用 `sessions/s1.jsonl`（同文件已有正确写法），并先确认该用例的期望结果是否随之改变。
-- **README 安装包表的 macOS 行资产名含空格** — 现状：`AI Editor-<版本>-mac-{arm64,x64}.dmg` 与 `build.md`「资产名不得含空格」不变式冲突（`electron-builder.yml` 的 mac `artifactName` 亦仍含空格）。触发条件：恢复 macOS 出包时。最小修法：同步改 `artifactName` + README 该行。
-- **client 侧 `limit` 上限未收敛到 `MAX_ENTITY_LIST_LIMIT`** — 现状：shared 常量已收口服务端（REST schema `.max()` / db clamp / 工具调用点 / 提案 maxItems），但 client 仍有 9 处裸 `200`（`components/character/panel-tree.tsx`、`pages/ReferenceList.tsx`、`pages/ReferenceDetail.tsx`、`pages/EntityDetail.tsx`、`pages/Timeline.tsx`、`pages/TimelineDetail.tsx` ×2、`components/entity/setting-tree.tsx` 的 `TREE_SETTING_LIMIT`、`lib/character-workbench.ts` 的 `RAIL_LIMIT`、`lib/character-create.ts` 的 `CHARACTER_CANDIDATE_LIMIT`）与 3 处复述数字的注释（`lib/entity-list.ts` / `lib/api.ts` / `setting-tree.tsx`）。**风险**：REST 侧是 `.max(MAX)`（超限 **400 拒绝**，不是 clamp）⇒ 一旦下调 shared 常量，这些调用点会立刻 400。触发条件：下一个前端/文档批次，或任何要改该常量的改动。最小修法：client 侧常量改引 `MAX_ENTITY_LIST_LIMIT`（client 已依赖 shared），注释只留常量名不复述数字。
+- **REST 校验范围在 api 文档与 zod schema 两处出现（有意保留的契约镜像）** — 现状：`docs/api/*.md` 的请求体注释写明「1-100 字符」这类范围，单一来源 = shared `types/api.ts` 的 zod schema，文档是契约说明视图。触发条件：改任一校验范围时（schema 与文档同改）。**不**做「文档插值常量」——api 文档是给人读的契约，插值会降低可读性。
+- **代码注释里的历史阶段编号（`卡 N` / `S1.2` / `G2` / `F9`）** — 现状：约 300 处，作为 provenance 记号保留（不指向可变契约）；**合同文档的编号引用已在 v0.0.51 清掉**（`docs/api`、`docs/db`、`docs/ui`、`docs/design` 正文），`backlog.md` 保留（登记来源）。触发条件：若将来要求注释零历史编号，再做一次机械替换（无技术风险，纯 churn）。
 
 ## MVP 明确不做（勿顺手实现）
 
