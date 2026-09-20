@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ApiError,
   CLIENT_NETWORK_ERROR,
+  analyzeDecompose,
   closeProject,
   computeDeltaState,
   confirmProposal,
@@ -41,6 +42,7 @@ import {
   restoreOutlineNode,
   restoreProjectBackup,
   saveManuscript,
+  startDecompose,
   updateEntity,
   updateOutlineNode,
   updateRelationMeta,
@@ -1356,5 +1358,78 @@ describe("备份管理", () => {
       },
     });
     await expect(renameProject("新名")).rejects.toMatchObject({ code: "PROJECT_ALREADY_EXISTS" });
+  });
+});
+
+// ============ 拆解小说端点（原始字节上传；docs/api/120-api-decompose.md §analyze / §start） ============
+//
+// 请求侧原始字节是通用「JSON 请求 / {success,data} 响应」约定的显式例外（docs/api/api-public.md）：
+// body = 文件原始字节 + `application/octet-stream`，文件名 / 书名 / 范围走 query。
+describe("拆解小说端点（上传原始字节）", () => {
+  const FILE = new File(["第一章 雪夜\n正文"], "斗破苍穹.txt", { type: "text/plain" });
+
+  it("analyzeDecompose：POST /decompose/analyze，body 原样传 File、Content-Type = application/octet-stream", async () => {
+    const calls = mockFetchOnce({ body: { success: true, data: { encoding: "utf-8" } } });
+    await analyzeDecompose(FILE);
+    expect(calls[0].url).toBe("/api/v1/decompose/analyze?file_name=%E6%96%97%E7%A0%B4%E8%8B%8D%E7%A9%B9.txt");
+    expect(calls[0].init?.method).toBe("POST");
+    expect(calls[0].init?.body).toBe(FILE); // 不 base64 / 不 multipart：原样字节
+    expect((calls[0].init?.headers as Record<string, string>)["Content-Type"]).toBe(
+      "application/octet-stream",
+    );
+  });
+
+  it("analyzeDecompose：范围走 query（缺省不落参数）", async () => {
+    const calls = mockFetchOnce({ body: { success: true, data: {} } });
+    await analyzeDecompose(FILE, { scopeStart: 3, scopeEnd: 9 });
+    expect(calls[0].url).toBe(
+      "/api/v1/decompose/analyze?file_name=%E6%96%97%E7%A0%B4%E8%8B%8D%E7%A9%B9.txt&scope_start=3&scope_end=9",
+    );
+  });
+
+  it("startDecompose：POST /decompose/start，书名 + 范围走 query、body 仍是原始字节", async () => {
+    const calls = mockFetchOnce({
+      body: {
+        success: true,
+        data: {
+          projectId: "p1",
+          projectPath: "/root/books/斗破",
+          name: "斗破",
+          jobId: "j1",
+          status: "running",
+          batchCount: 12,
+        },
+      },
+    });
+    const res = await startDecompose(FILE, { name: "斗破", scopeStart: 1, scopeEnd: 5 });
+    expect(calls[0].url).toBe(
+      "/api/v1/decompose/start?file_name=%E6%96%97%E7%A0%B4%E8%8B%8D%E7%A9%B9.txt&name=%E6%96%97%E7%A0%B4&scope_start=1&scope_end=5",
+    );
+    expect((calls[0].init?.headers as Record<string, string>)["Content-Type"]).toBe(
+      "application/octet-stream",
+    );
+    expect(res.jobId).toBe("j1");
+  });
+
+  it("startDecompose：409 PROJECT_ALREADY_EXISTS → ApiError code 透传（对话框内换书名）", async () => {
+    mockFetchOnce({
+      status: 409,
+      body: { success: false, error: { code: "PROJECT_ALREADY_EXISTS", message: "同名书籍已存在" } },
+    });
+    const err = await startDecompose(FILE, { name: "斗破" }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).code).toBe("PROJECT_ALREADY_EXISTS");
+  });
+
+  it("analyzeDecompose：400 DECOMPOSE_FILE_TOO_LARGE → ApiError code 透传", async () => {
+    mockFetchOnce({
+      status: 400,
+      body: {
+        success: false,
+        error: { code: "DECOMPOSE_FILE_TOO_LARGE", message: "文件超过体积上限 16MB" },
+      },
+    });
+    const err = await analyzeDecompose(FILE).catch((e: unknown) => e);
+    expect((err as ApiError).code).toBe("DECOMPOSE_FILE_TOO_LARGE");
   });
 });

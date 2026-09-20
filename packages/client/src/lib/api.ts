@@ -14,6 +14,8 @@ import type {
   ComputeStateResult,
   DeltaChange,
   DeltaRecord,
+  DecomposeAnalyzeRes,
+  DecomposeStartRes,
   EntitySummary,
   ErrorCode,
   OutlineTree,
@@ -95,10 +97,19 @@ function isErrorEnvelope(
 }
 
 /**
+ * 非 JSON 请求体：FormData（multipart 上传，浏览器自动带 boundary）、Blob/File（拆解小说的
+ * 文件原始字节——请求侧显式例外，见 docs/api/api-public.md）、undefined（GET / DELETE 无体）。
+ * 前两者都不得由本函数设 Content-Type：multipart 的 boundary 由浏览器生成；原始字节的类型
+ * 由调用点显式声明（不借用 File.type——用户机上的 .txt 可能带 text/plain）。
+ */
+function isRawBody(body: unknown): body is FormData | Blob | undefined {
+  return body === undefined || body instanceof FormData || body instanceof Blob;
+}
+
+/**
  * 通用 fetch 封装：拼 /api/v1 前缀、JSON 序列化、解析统一响应包裹
  * 成功返回 data；失败抛 ApiError（code 为服务端 ErrorCode；网络层/解析失败为 CLIENT_NETWORK_ERROR）
- * body 为 FormData（导入 multipart 上传）时不 JSON 序列化、不手动设 Content-Type——
- * 浏览器自动带 multipart boundary；其余 body（JSON）语义不变
+ * body 为 FormData / Blob 时原样上传（见 isRawBody）；其余 body（JSON）语义不变
  */
 export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
   const { method = "GET", body, query, headers, signal } = options;
@@ -107,11 +118,8 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
   try {
     res = await fetch(buildUrl(path, query), {
       method,
-      headers:
-        body === undefined || body instanceof FormData
-          ? headers
-          : { "Content-Type": "application/json", ...headers },
-      body: body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body),
+      headers: isRawBody(body) ? headers : { "Content-Type": "application/json", ...headers },
+      body: isRawBody(body) ? body : JSON.stringify(body),
       signal,
     });
   } catch (err) {
@@ -1212,6 +1220,58 @@ export function pushCloudBackup(options: { fileName?: string; force?: boolean } 
     body: {
       ...(options.fileName !== undefined ? { file_name: options.fileName } : {}),
       ...(options.force !== undefined ? { force: options.force } : {}),
+    },
+  });
+}
+
+// ============ 拆解小说（请求体 = 小说文件原始字节，不走 JSON） ============
+//
+// 契约 = docs/api/120-api-decompose.md §analyze / §start；**请求侧原始字节**是通用约定
+//「成功 {success,data} JSON 包裹 / 请求 JSON」的显式例外，登记于 docs/api/api-public.md：
+// 编码探测（UTF-8 → GB18030 回退）与切分由服务端单一实现，**客户端不解码文件**（也不 base64 膨胀）。
+// 故 body = 文件原始字节 + `Content-Type: application/octet-stream`，文件名 / 书名 / 范围走 query。
+
+/** 拆解范围（1-based 文件位置序；缺省 = 起始 1 / 结束到末章）。范围只影响 AI 抽取批规划与预估——
+ * 正文始终全量导入，故缺省与越界都不报错（服务端夹取语义）。 */
+export interface DecomposeScope {
+  scopeStart?: number;
+  scopeEnd?: number;
+}
+
+/**
+ * POST /api/v1/decompose/analyze —— 切分预览（无状态、不落库、不要求已打开项目）。
+ * **改范围 = 重新调用**（服务端不留临时文件 / token）：客户端重传同一份原始字节。
+ * 失败：400 DECOMPOSE_FILE_TOO_LARGE / DECOMPOSE_FILE_INVALID / VALIDATION_ERROR（ApiError.code 透传）。
+ */
+export function analyzeDecompose(file: File, scope: DecomposeScope = {}): Promise<DecomposeAnalyzeRes> {
+  return apiFetch<DecomposeAnalyzeRes>("/decompose/analyze", {
+    method: "POST",
+    body: file,
+    headers: { "Content-Type": "application/octet-stream" },
+    query: { file_name: file.name, scope_start: scope.scopeStart, scope_end: scope.scopeEnd },
+  });
+}
+
+/**
+ * POST /api/v1/decompose/start —— 建档并启动拆解。
+ * **副作用**：新建并打开该项目（等价 POST /project/open 的切换语义）；S1（建项目 / 建大纲 /
+ * 导入正文 / 落批规划）同步完成后才返回，返回时 job 已 `running` → 调用方跳 `#/decompose` 看进度。
+ * 失败：400 VALIDATION_ERROR / DECOMPOSE_FILE_TOO_LARGE / DECOMPOSE_FILE_INVALID / LLM_API_KEY_MISSING、
+ *      409 PROJECT_ALREADY_EXISTS（书名对应目录已存在）。
+ */
+export function startDecompose(
+  file: File,
+  options: { name: string } & DecomposeScope,
+): Promise<DecomposeStartRes> {
+  return apiFetch<DecomposeStartRes>("/decompose/start", {
+    method: "POST",
+    body: file,
+    headers: { "Content-Type": "application/octet-stream" },
+    query: {
+      file_name: file.name,
+      name: options.name,
+      scope_start: options.scopeStart,
+      scope_end: options.scopeEnd,
     },
   });
 }

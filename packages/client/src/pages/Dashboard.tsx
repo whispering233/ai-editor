@@ -28,6 +28,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { SectionCard } from "@/components/ui/section-card";
+import { DecomposeDialog } from "@/components/decompose/decompose-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { skeletonClass } from "@/lib/styles";
@@ -138,6 +139,8 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
   const [submitting, setSubmitting] = useState(false);
   // 导入备份（Sidebar 独有能力搬入书架主页——zip + 书名，同名二选一冲突态）
   const [importOpen, setImportOpen] = useState(false);
+  // 拆解小说（卡 21.8）：三态对话框（选文件 → 预览 → 填名开始），入口在「新建一本…」行
+  const [decomposeOpen, setDecomposeOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importName, setImportName] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
@@ -695,13 +698,17 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                 <p className="mt-3 text-sm text-destructive">{bookOpenError}</p>
               )}
               <div className="mt-4 border-t border-border pt-3">
-                <button
-                  type="button"
-                  className="rounded-md border border-border px-2.5 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                  onClick={() => setShowCreateForm((v) => !v)}
-                >
-                  {showCreateForm ? "收起" : "新建一本…"}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="rounded-md border border-border px-2.5 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    onClick={() => setShowCreateForm((v) => !v)}
+                  >
+                    {showCreateForm ? "收起" : "新建一本…"}
+                  </button>
+                  {/* 拆解小说入口（卡 21.8）：导入式批量管线，不新增一级导航、不改左栏 */}
+                  <Button onClick={() => setDecomposeOpen(true)}>拆解小说</Button>
+                </div>
                 {showCreateForm && renderCreateBookForm("mt-2 flex flex-col gap-2 text-left")}
               </div>
             </>
@@ -839,6 +846,9 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* 拆解小说对话框（三态：选文件 → 预览 → 填名开始） */}
+        <DecomposeDialog open={decomposeOpen} onOpenChange={setDecomposeOpen} />
       </section>
     );
   }

@@ -1,7 +1,12 @@
 // describeOpenError 纯函数测试（S1.4 补丁）：错误码 → 引导文案映射锁定
-// 追加：describeImportError / describeExportError（导出/导入错误码映射）
+// 追加：describeImportError / describeExportError（导出/导入错误码映射）/ describeDecomposeError（拆解）
 import { describe, expect, it } from "vitest";
-import { describeExportError, describeImportError, describeOpenError } from "./error-messages";
+import {
+  describeDecomposeError,
+  describeExportError,
+  describeImportError,
+  describeOpenError,
+} from "./error-messages";
 
 describe("describeOpenError（项目开/建错误码映射）", () => {
   it("INVALID_PROJECT_PATH → 路径引导", () => {
@@ -79,5 +84,40 @@ describe("describeExportError（导出错误码映射）", () => {
       "项目数据文件缺失，无法导出: data.db",
     );
     expect(describeExportError(null, "导出失败，请重试")).toBe("导出失败，请重试");
+  });
+});
+
+describe("describeDecomposeError（拆解小说错误码映射）", () => {
+  it("DECOMPOSE_FILE_TOO_LARGE / DECOMPOSE_FILE_INVALID / VALIDATION_ERROR → 透传服务端 message", () => {
+    // 上限值 / 空文本判定都是服务端单一实现，客户端不复述数字
+    expect(
+      describeDecomposeError("DECOMPOSE_FILE_TOO_LARGE", "文件超过体积上限 16MB，请改用更小的文本文件"),
+    ).toContain("16MB");
+    expect(
+      describeDecomposeError("DECOMPOSE_FILE_INVALID", "文件没有可解析的文本（空文件或非文本内容）"),
+    ).toContain("没有可解析的文本");
+    expect(describeDecomposeError("VALIDATION_ERROR", "file_name 不能为空")).toBe("file_name 不能为空");
+  });
+
+  it("PROJECT_ALREADY_EXISTS → 换书名引导（框内可立即改名重试）", () => {
+    expect(describeDecomposeError("PROJECT_ALREADY_EXISTS", "同名书籍已存在: /x/y")).toContain(
+      "换一个书名",
+    );
+  });
+
+  it("LLM_API_KEY_MISSING → 设置页引导（两种服务端 message 共用一句用户动作）", () => {
+    expect(describeDecomposeError("LLM_API_KEY_MISSING", "未配置可用模型：请先在设置页选择模型")).toContain(
+      "设置页",
+    );
+    expect(describeDecomposeError("LLM_API_KEY_MISSING", "未配置 openai 的凭据")).toContain("设置页");
+  });
+
+  it("CLIENT_NETWORK_ERROR → 连接失败引导", () => {
+    expect(describeDecomposeError("CLIENT_NETWORK_ERROR", "Failed to fetch")).toContain("无法连接服务");
+  });
+
+  it("未知码 / null：有 message 透传，空 message 兜底", () => {
+    expect(describeDecomposeError("SOME_UNKNOWN", "服务端内部错误")).toBe("服务端内部错误");
+    expect(describeDecomposeError(null, "")).toBe("拆解失败，请稍后重试");
   });
 });
