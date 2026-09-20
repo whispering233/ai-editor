@@ -8,15 +8,6 @@
 
 ---
 
-## 卡 21.1 — 章节切分算法（服务端纯函数 + 全套 fixture 单测）
-
-- **背景**：拆解的第一层，切错则后面全错。四层 = 归一化（编码探测 + 换行归一）→ 候选扫描 → 聚合校验与修复（规则融合 5 维评分 / 相邻重复合并 / 微段修复 / 超长块回扫 / 卷首目录页启发式）→ 退化等分。
-- **契约**：`docs/design/60-decompose.md` §3（含「实测校准」表：**不加标点护栏、排除数字编号式、不引入全角缩进判据**、长度上限）。
-- **范围**：新增 `packages/server/src/decompose/split.ts`（编码探测 / 归一化 / 候选扫描 / 聚合修复 / 评分 / 退化 / 预览数据结构）+ `split.test.ts`；常量单一定义在本模块（`SPLIT_TITLE_MAX_CHARS` / `SPLIT_DUP_MERGE_CHARS` / `SPLIT_MIN_SEGMENT_CHARS` / `SPLIT_MIN_CHAPTERS` / `SPLIT_LONG_BLOCK_FACTOR` / `SPLIT_TOC_RUN_MIN` / `SPLIT_TOC_SEGMENT_CHARS` / `SPLIT_FALLBACK_TARGET_CHARS` / `SPLIT_MAX_VOLUMES`）。
-- **判据**：单测覆盖：GB18030 字节 / UTF-8 BOM / UTF-16LE / CRLF + NEL / 相邻重复标题合并 / 编号重启不误判且位置序正确 / 标点结尾标题保留 / 数字列表项不误判 / 排除规则 / 无章节退化等分 / 卷标记分卷 + 卷章同行卷优先 / 超长块回扫（补到与补不到两条）/ 目录页丢弃 / 规则融合评分选优（构造两套规则断言选对）/ 标题清洗 + 前置块成「前言」章；`pnpm --filter @whispering233/ai-editor-server test` / `pnpm typecheck` / `pnpm lint` 绿。
-
----
-
 ## 卡 21.2 — 抽取结果契约 + 校验与归并纯逻辑
 
 - **背景**：S2 产出必须逐章对齐、字段收窄；S3 归并要能脱离 LLM 与 db 单测。
@@ -40,7 +31,7 @@
 - **背景**：客户端 POST 原始字节，服务端切分并返回预览 + 预估（范围变更 = 客户端重传，服务端无状态）。
 - **契约**：`docs/api/120-api-decompose.md` §analyze；`docs/api/api-public.md` 请求侧原始字节例外。
 - **范围**：`packages/server/src/routes/decompose.ts`（analyze 分支：体积上限 → 切分 → 预览 + 预估）+ 路由注册；预估读 pi 模型目录 `Model.cost`（经 `getModelRuntime()`，**不自建定价表**，未配置模型/凭据时 `costApprox = null`）；新增错误码入 `middleware/error.ts` 的 `SERVER_ERROR_CODES`。
-- **判据**：路由测试：正常预览（编码/章数/统计/警告）/ 超体积 400 `DECOMPOSE_FILE_TOO_LARGE` / 解码失败或空文本 400 `DECOMPOSE_FILE_INVALID` / **不要求项目打开** / 范围参数只影响 `estimate`；`pnpm --filter @whispering233/ai-editor-server test` 绿。
+- **判据**：路由测试：正常预览（编码/章数/统计/警告）/ 超体积 400 `DECOMPOSE_FILE_TOO_LARGE` / 解码失败或空文本 400 `DECOMPOSE_FILE_INVALID` / **不要求项目打开** / 范围参数只影响 `estimate`；**统计只展示 `totalChars`**（章字数和恒小于总字数——切片 trim 掉分隔换行，并排展示会让用户以为丢了字）；`pnpm --filter @whispering233/ai-editor-server test` 绿。
 
 ---
 
@@ -49,6 +40,7 @@
 - **背景**：建档 + 导入正文 + 批规划落库；S1 同步完成后返回，客户端跳进度页。
 - **契约**：`docs/api/120-api-decompose.md` §start / §job / §batches；`docs/design/60-decompose.md` §2 / §4。
 - **范围**：`packages/server/src/decompose/job.ts`（job 创建 / 组批装箱 / 建大纲（卷→章）/ 逐章导入正文段落块（复用参考资料执行器的段落块形态）/ 写 `decompose_batches`）；`routes/decompose.ts` 的 start / job / batches 分支；凭据校验在建项目**之前**；副作用 = 打开项目 + 写创作根 `lastProject`。
+  - **硬提醒（切分 oracle 实测登记）**：**不得拿 split 返回的 `charCount` 当偏移量裁文本**——它是近似计数（退化路径不含空行分隔符、正常路径 trim 掉分隔换行），当偏移量用会错位或丢字符；要裁文本必须自己按真实切片位置算。
 - **判据**：路由测试：建档成功（`outline.json` 卷章数 / `document_records` 行数 / `decompose_batches` 行数三向断言）/ 书名冲突 409 / 凭据缺失 400 且**不留半成品项目** / 范围只影响批规划而正文**全量导入** / `GET /job` 不含批结果正文；`pnpm --filter @whispering233/ai-editor-server test` 绿。
 
 ---
