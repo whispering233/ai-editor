@@ -45,6 +45,8 @@ packages/desktop/release/
 test-project/*
 test-project/references/*
 
+references/*
+
 packages/server/books
 
 # 创作根运行时状态（服务器以某目录为创作根时会写 .ai-editor/config.json；packages/server 下
