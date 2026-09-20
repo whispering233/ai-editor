@@ -388,7 +388,7 @@ function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowP
   const [saving, setSaving] = useState(false);
 
   // Ctrl/Cmd+S（B2）：行内编辑进行中 → 提交当前编辑（Enter 同语义）；未编辑时不参与
-  useSaveShortcut(() => void commitEdit(), editing);
+  useSaveShortcut(() => commitEdit(), editing);
 
   /** 点击标题进入行内编辑（预填当前名） */
   function startEdit() {

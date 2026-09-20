@@ -304,7 +304,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
   // Ctrl/Cmd+S（B2）：行内编辑进行中 → 提交当前编辑（Enter 同语义）；未编辑时不参与
   useSaveShortcut(() => {
     const node = editingId !== null ? findSettingNode(roots ?? [], editingId) : null;
-    if (node) void commitEdit(node);
+    if (node) return commitEdit(node);
   }, editingId !== null);
 
   function handleEditKeyDown(node: SettingTreeNode) {

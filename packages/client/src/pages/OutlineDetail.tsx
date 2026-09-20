@@ -156,7 +156,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
   }
 
   // Ctrl/Cmd+S 保存（B2）：仅节点就绪时注册（notFound/无项目/加载失败时不抢快捷键）
-  useSaveShortcut(() => void handleSave(), node !== null);
+  useSaveShortcut(() => handleSave(), node !== null);
 
   // ============ 渲染 ============
 

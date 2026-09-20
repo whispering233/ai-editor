@@ -141,7 +141,7 @@ export function TimelineGroupBlock({
   }
 
   // Ctrl/Cmd+S（B2）：重命名编辑中 → 提交（Enter 同语义）；未编辑时不参与
-  useSaveShortcut(() => void commitRename(), editing);
+  useSaveShortcut(() => commitRename(), editing);
 
   /** 组标题行双击：双击 = 时间点详情（#/timepoints/:id——通用实体详情页承载，
    * 无独立时间点详情路由；不用 #/timeline/:id 是因为 TimelineDetail 会把 timepoint 当事件渲染

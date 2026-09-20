@@ -352,10 +352,11 @@ export default function Outline() {
   }
 
   // Ctrl/Cmd+S（B2）：行内编辑进行中 → 提交当前编辑（Enter 同语义）；未编辑时不参与
+  // （返回 Promise：快捷键会等保存落定再走存档阶段）
   useSaveShortcut(() => {
     if (editing === null) return;
     const node = findNode(outline?.children ?? [], editing.nodeId);
-    if (node) void commitEdit(node, editing.field);
+    if (node) return commitEdit(node, editing.field);
   }, editing !== null);
 
   function handleEditKeyDown(node: OutlineNode, field: "title" | "summary") {

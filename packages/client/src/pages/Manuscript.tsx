@@ -8,6 +8,8 @@
 // 卸载 / 切路由前 flush（useEffect cleanup）；保存失败必须可见（顶部错误条 + 重试，不静默）。
 // 手动「保存」（卡 14.1）：工具条右端按钮**恒发一次 PUT**（即使无待存内容也重发，保证点击必有
 // 可见反应）——是用户侧保底入口，**不是**关页面/退出桌面版的自动兜底（已登记 backlog）。
+// Ctrl/Cmd + S（契约 DESIGN.md §设置页「快捷键」区）：与本页「保存」同语义（`saveNow`，串行化在途保存），
+// 落盘后由外壳的存档阶段生成一份本地备份（快捷键链路见 lib/save-shortcut + hooks/use-save-archive）。
 // 冲突（409 DOCUMENT_STALE）：对话框二选一——「重新加载（丢弃本地）」重拉服务端版本并换 key 重挂
 // 编辑器，「覆盖保存」重发且**不带 base_updated_at**（服务端据此跳过冲突检查）。
 // 章节不存在 / 已软删（404 OUTLINE_NODE_NOT_FOUND）→ 页面 404 态（写法同 OutlineDetail）。
@@ -53,6 +55,7 @@ import {
   readTextFile,
 } from "../lib/document-io";
 import { findNode } from "../lib/outline-tree";
+import { useSaveShortcut } from "../lib/save-shortcut";
 import { errorBannerClass, skeletonClass } from "../lib/styles";
 import { navigate } from "../hooks/use-route";
 import { useOutlineLoader } from "../hooks/use-outline-loader";
@@ -169,6 +172,17 @@ export default function Manuscript({ chapterId }: { chapterId: string }) {
     }
   }
 
+  // 在途保存链（工具条「保存」/ Ctrl+S 共用）：撞上在途保存时排在它之后——
+  // 并发 PUT 会携同一个版本戳 → 第二个吃 409 冲突框（saveContent 自身不 reject，链不会断）
+  const saveChainRef = useRef<Promise<void>>(Promise.resolve());
+
+  /** 立即保存最新内容（工具条「保存」/ Ctrl+S）：串行化在途保存，返回可等待的 Promise */
+  function saveNow(): Promise<void> {
+    const run = saveChainRef.current.then(() => saveContent(latestRef.current ?? ""));
+    saveChainRef.current = run;
+    return run;
+  }
+
   // 自动保存调度器（跨渲染稳定；save 实现经 ref 取最新闭包，避免持有首帧状态）
   const saveRef = useRef(saveContent);
   useEffect(() => {
@@ -181,6 +195,10 @@ export default function Manuscript({ chapterId }: { chapterId: string }) {
 
   // 卸载 / 切路由前 flush：在途内容立刻落盘，不依赖组件存活（cleanup 内不 await）
   useEffect(() => () => void autosave.flush(), [autosave]);
+
+  // Ctrl/Cmd + S（契约 DESIGN.md §设置页「快捷键」区）：与工具条「保存」同语义——恒发一次 PUT
+  //（不先 flush：会双发），在途保存由 saveNow 串行化；返回 Promise 让快捷键等落盘后再走存档阶段。
+  useSaveShortcut(() => saveNow(), content !== null);
 
   // Esc 退出专注（DESIGN.md §Components「专注模式入口」：退出 = 同一按钮或 Esc；不新增全局快捷键）。
   // - **捕获阶段**监听：开层守卫必须先于浮层自己的关闭动作看到 DOM——antd/ariakit 的 Esc 在冒泡阶段，
@@ -431,7 +449,7 @@ export default function Manuscript({ chapterId }: { chapterId: string }) {
             /* 手动保存（卡 14.1）：恒发一次 PUT（不先 flush——会双发）；saving 期间禁用防连点。
                口径见 DESIGN.md §Components「为什么手动「保存」放在工具条而不是页头」 */
             save={{
-              onSave: () => void saveContent(latestRef.current ?? ""),
+              onSave: () => void saveNow(),
               saving: saveState === "saving",
             }}
           />

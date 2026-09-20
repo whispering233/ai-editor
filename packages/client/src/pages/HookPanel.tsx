@@ -310,7 +310,7 @@ export default function HookPanel() {
   }
 
   // Ctrl/Cmd+S 保存（B2）：仅编辑对话框打开时参与（其余情况快捷键落到下层/原生）
-  useSaveShortcut(() => void handleEditSave(), editTarget !== null);
+  useSaveShortcut(() => handleEditSave(), editTarget !== null);
 
   // ============ 新建 ============
 

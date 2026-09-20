@@ -286,7 +286,7 @@ export default function TimelineDetail({ id }: { id: string }) {
   }
 
   // Ctrl/Cmd+S 保存（B2）
-  useSaveShortcut(() => void handleSave(), detail !== null && form !== null);
+  useSaveShortcut(() => handleSave(), detail !== null && form !== null);
 
   // ============ 渲染 ============
 

@@ -948,7 +948,7 @@ export function CharacterDetail({ id, onSaved }: { id: string; onSaved?: () => v
   }
 
   // Ctrl/Cmd+S 保存（与既有详情页同语义）
-  useSaveShortcut(() => void handleSave(), detail !== null && form !== null);
+  useSaveShortcut(() => handleSave(), detail !== null && form !== null);
 
   /** 软删直接执行（不弹二次确认——与既有交互一致）：DELETE → toast（级联计数）→ 跳回列表 */
   async function handleDelete() {

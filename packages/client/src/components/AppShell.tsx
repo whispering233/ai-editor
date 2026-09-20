@@ -16,6 +16,7 @@ import type { Route } from "../hooks/use-route";
 import { usePanels } from "../hooks/use-panels";
 import { useCloudStore } from "../stores/cloud";
 import { useProjectStore } from "../stores/project";
+import { useSaveArchive } from "../hooks/use-save-archive";
 import { useUiStore } from "../stores/ui";
 import { cn } from "../lib/utils";
 import { ChatPanel } from "./chat/ChatPanel";
@@ -102,6 +103,10 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
   const isDragging = dragSide !== null;
   // 专注模式（卡 13.4，仅章正文页）：为真时只渲染中栏（左栏 / 右栏 / 两根拖拽手柄 / 收起条全不渲染）
   const focusMode = useUiStore((s) => s.focusMode);
+
+  // 全站 Ctrl/Cmd + S 的存档阶段（契约 DESIGN.md §设置页「快捷键」区）：
+  // 挂在外壳层 = 任意页面（含专注模式、左栏收起）按快捷键都能生成存档；无项目时只保存不存档
+  useSaveArchive();
 
   // 云端状态的「打开项目时那次检查」挂在外壳层（卡 C）：左栏收起时 NavRail 不挂载，
   // 不能只挂在那里——自动推送会改服务端同步状态，收起左栏同样需要复查与清理。

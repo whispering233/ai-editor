@@ -280,7 +280,7 @@ export default function ReferenceDetail({ id, draft = false }: { id?: string; dr
   }
 
   // Ctrl/Cmd+S 保存（编辑态 PUT / 新建态 POST 与「保存/创建」按钮同动作）
-  useSaveShortcut(() => void handleSave(), draft || detail !== null);
+  useSaveShortcut(() => handleSave(), draft || detail !== null);
 
   async function handleDelete() {
     if (detail === null) return;
