@@ -27,6 +27,13 @@ export const SERVER_ERROR_CODES = [
   "CLOUD_CONFLICT", // 409：推送时云端 head ≠ 本机 lastPushedFileName（另一台机器写过）
   "CLOUD_BACKUP_TOO_LARGE", // 400：备份包超过云盘单文件上限（推送前本地判定）
   "CLOUD_FILE_NOT_FOUND", // 404：拉取指定的云端备份不存在（已被保留策略清理或手动删除）
+ // 拆解小说（码表说明见 docs/api/120-api-decompose.md「错误码」）——五码一次补齐：
+ // 后三码属 job 链路（start / job / pause / resume / rerun），随对应端点引入
+  "DECOMPOSE_FILE_TOO_LARGE", // 400：上传的小说文件超体积上限（DECOMPOSE_MAX_FILE_BYTES）
+  "DECOMPOSE_FILE_INVALID", // 400：解码后无可解析文本（空文件 / 非文本内容）
+  "DECOMPOSE_JOB_NOT_FOUND", // 404：当前项目没有 job
+  "DECOMPOSE_BATCH_NOT_FOUND", // 404：批序号越界
+  "DECOMPOSE_JOB_STATE", // 409：当前 job 状态不允许该操作（pause / resume / rerun 的前置）
 ] as const;
 export type ServerErrorCode = (typeof SERVER_ERROR_CODES)[number];
 
