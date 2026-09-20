@@ -43,6 +43,11 @@ describe("planBatches（docs/design/60-decompose.md §4 组批）", () => {
       { chapterIndexes: [1], charCount: huge },
       { chapterIndexes: [2], charCount: 10 },
     ]);
+    // 反向（[小, 巨]）：超目标章同样不得并入前面的小批（批未满也照样开新批）
+    expect(planBatches([{ index: 1, charCount: 10 }, { index: 2, charCount: huge }])).toEqual([
+      { chapterIndexes: [1], charCount: 10 },
+      { chapterIndexes: [2], charCount: huge },
+    ]);
   });
 
   it("不改写入参（纯函数）", () => {

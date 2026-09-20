@@ -302,6 +302,11 @@ describe("聚合校验与修复", () => {
     ]);
     const longBlock = result.warnings.find((warning) => warning.code === "LONG_BLOCK");
     expect(longBlock?.message).toContain("长章");
+    // 契约：警告章号 = 该章在返回 chapters 里的 index。前置自述成「前言」章插到首位后不得少算一位
+    const shifted = split(`作者自述：这本书写了很多年。\n${text}`);
+    const shiftedWarning = shifted.warnings.find((warning) => warning.code === "LONG_BLOCK");
+    const shiftedIndex = shifted.chapters.findIndex((item) => item.title === "长章") + 1;
+    expect(shiftedWarning?.message).toContain(`第 ${shiftedIndex} 章「长章」`);
   });
 
   it("⑬ 卷首目录页丢弃：连续短节命中 → 丢段并记 TOC_DROPPED", () => {

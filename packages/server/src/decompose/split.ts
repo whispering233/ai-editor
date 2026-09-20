@@ -436,6 +436,8 @@ function rescanLongBlocks(
   index: TextIndex,
   blocks: ChapterBlock[],
   spec: ChapterRuleSpec,
+  /** 章号位移：警告里的章号 = 该章在返回 chapters 里的 index（「前言」章插到首位时为 1） */
+  chapterOffset: number,
 ): { blocks: ChapterBlock[]; warnings: SplitWarning[] } {
   if (blocks.length === 0) return { blocks, warnings: [] };
   const median = statsOf(blocks.map((block) => blockLength(index, block))).median;
@@ -455,7 +457,7 @@ function rescanLongBlocks(
     }
     warnings.push({
       code: "LONG_BLOCK",
-      message: `第 ${position + 1} 章「${block.title}」疑似合并章：长度超过中位段长的 ${SPLIT_LONG_BLOCK_FACTOR} 倍且块内未找到章标记`,
+      message: `第 ${position + chapterOffset + 1} 章「${block.title}」疑似合并章：长度超过中位段长的 ${SPLIT_LONG_BLOCK_FACTOR} 倍且块内未找到章标记`,
     });
     output.push(block);
   });
@@ -560,7 +562,10 @@ function splitMarkedText(index: TextIndex, markers: { candidates: ChapterCandida
     warnings.push({ code: "TOC_DROPPED", message: `丢弃了 ${withoutToc.dropped} 段作为目录页` });
   }
   const repaired = repairMicroSegments(index, withoutToc.kept);
-  const rescanned = rescanLongBlocks(index, buildBlocks(index, repaired), spec);
+  // 首个块起点在回扫前后不变（回扫只改块的 end）⇒ 提前判「前言」章，供回扫警告预留章号位移
+  const firstStart = repaired[0]?.start ?? 0;
+  const withPreamble = firstStart > 0 && segmentLength(index, 0, firstStart) > 0;
+  const rescanned = rescanLongBlocks(index, buildBlocks(index, repaired), spec, withPreamble ? 1 : 0);
   warnings.push(...rescanned.warnings);
 
   const lengths = rescanned.blocks.map((block) => blockLength(index, block));
@@ -574,11 +579,9 @@ function splitMarkedText(index: TextIndex, markers: { candidates: ChapterCandida
   }
 
   const volumes = buildVolumes(markers.volumes);
-  const firstStart = rescanned.blocks[0].start;
-  const blocks =
-    firstStart > 0 && segmentLength(index, 0, firstStart) > 0
-      ? [{ title: PREAMBLE_TITLE, start: 0, end: firstStart }, ...rescanned.blocks]
-      : rescanned.blocks;
+  const blocks = withPreamble
+    ? [{ title: PREAMBLE_TITLE, start: 0, end: firstStart }, ...rescanned.blocks]
+    : rescanned.blocks;
   const chapters = blocks.map((block, position) => ({
     index: position + 1,
     title: block.title,
