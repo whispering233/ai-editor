@@ -304,8 +304,9 @@
 ## 文档与测试卫生（2026-09 发布前审计登记）
 
 - **文档日期口径不一致（待拍板）** — 现状：`docs/**`、`README.md`、`AGENTS.md` 共 67 处标 `2026-10`（写作面 / 块文档 / 桌面版等批次），而 git 提交与 tag 日期、`CHANGELOG.md` 各版本头均为 `2026-09`（v0.0.49 = 2026-09-19）。触发条件：下次文档批次或用户拍板「以哪个为准」。最小修法：先定基准（建议 = 版本头口径），再一次性全量替换；不要零敲碎打地改单处（会多出一种口径）。
-- **`auto-push.test.ts` 用 `references/` 造「变更」的前提已失效（测试诚实性）** — 现状：helper `changeCoveredByBackup` 与 4 处 `writeAfter(join("references", …))` 写的是已退役的随包目录，而变更判定只查三文件 + `data.db-wal` + `PACKED_DIR_NAMES`（= `sessions/`）⇒ 用例标题所述「有改动未进最新备份」实际走的是「无变更 → 不推」（守卫本体由同文件的 `sessions/` 用例覆盖）。触发条件：要动 `hasUnbackedChanges` / `AUTO_PUSH_THROTTLE_MS` 口径时。最小修法：改用 `sessions/s1.jsonl`（同文件已有正确写法），并先确认该用例的期望结果是否随之改变。
+- **`auto-push.test.ts` 用 `references/` 造「变更」的前提已失效（测试诚实性）** — 现状：helper `changeCoveredByBackup` 与 7 处 `writeAfter(join("references", …))`（共 8 处 references 路径写入）写的是已退役的随包目录，而变更判定只查三文件 + `data.db-wal` + `PACKED_DIR_NAMES`（= `sessions/`）⇒ 用例标题所述「有改动未进最新备份」实际走的是「无变更 → 不推」（守卫本体由同文件的 `sessions/` 用例覆盖）。触发条件：要动 `hasUnbackedChanges` / `AUTO_PUSH_THROTTLE_MS` 口径时。最小修法：改用 `sessions/s1.jsonl`（同文件已有正确写法），并先确认该用例的期望结果是否随之改变。
 - **README 安装包表的 macOS 行资产名含空格** — 现状：`AI Editor-<版本>-mac-{arm64,x64}.dmg` 与 `build.md`「资产名不得含空格」不变式冲突（`electron-builder.yml` 的 mac `artifactName` 亦仍含空格）。触发条件：恢复 macOS 出包时。最小修法：同步改 `artifactName` + README 该行。
+- **client 侧 `limit` 上限未收敛到 `MAX_ENTITY_LIST_LIMIT`** — 现状：shared 常量已收口服务端（REST schema `.max()` / db clamp / 工具调用点 / 提案 maxItems），但 client 仍有 9 处裸 `200`（`components/character/panel-tree.tsx`、`pages/ReferenceList.tsx`、`pages/ReferenceDetail.tsx`、`pages/EntityDetail.tsx`、`pages/Timeline.tsx`、`pages/TimelineDetail.tsx` ×2、`components/entity/setting-tree.tsx` 的 `TREE_SETTING_LIMIT`、`lib/character-workbench.ts` 的 `RAIL_LIMIT`、`lib/character-create.ts` 的 `CHARACTER_CANDIDATE_LIMIT`）与 3 处复述数字的注释（`lib/entity-list.ts` / `lib/api.ts` / `setting-tree.tsx`）。**风险**：REST 侧是 `.max(MAX)`（超限 **400 拒绝**，不是 clamp）⇒ 一旦下调 shared 常量，这些调用点会立刻 400。触发条件：下一个前端/文档批次，或任何要改该常量的改动。最小修法：client 侧常量改引 `MAX_ENTITY_LIST_LIMIT`（client 已依赖 shared），注释只留常量名不复述数字。
 
 ## MVP 明确不做（勿顺手实现）
 

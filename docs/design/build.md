@@ -122,7 +122,10 @@ pnpm desktop:dist                                      # 全仓构建 + pnpm dep
    ⤷ 纪律：tag 永远单独一条 push 命令，**不要攒着补推**（`--tags` / `--follow-tags` 一次新建 >3 个 tag
      时 GitHub 丢弃 tag 事件 → workflow 静默不跑，tag 本身却推上去了；详见「发布管道坑记录」）
    ⤷ 自检（返回 0 = 事件被吞，按「发布管道坑记录」删 tag 后再单独推恢复）：
-     gh api "repos/whispering233/ai-editor/actions/runs?head_sha=$(git rev-parse vX.Y.Z)" --jq .total_count
+     gh api "repos/whispering233/ai-editor/actions/runs?head_sha=$(git rev-parse vX.Y.Z^{commit})" --jq .total_count
+     ⤷ 必须带 `^{commit}`：annotated tag 的 `git rev-parse vX.Y.Z` 返回的是 **tag 对象 SHA**，
+       用它查 head_sha 恒为 0，会把「已触发」误判成「事件被吞」（2026-09-20 实测：v0.0.50 三个 run 均已跑，
+       不带 `^{commit}` 查得 0、带则得 3）
 → CI（.github/workflows/）：release.yml 从 CHANGELOG.md 按 tag 建 GitHub Release；
   publish.yml 5 包 npm 发布（OIDC Trusted Publisher）+ verify-installed 安装态冒烟
 ```
@@ -151,7 +154,7 @@ pnpm desktop:dist                                      # 全仓构建 + pnpm dep
 
   ```bash
   git push origin :refs/tags/vX.Y.Z && git push origin vX.Y.Z   # 分两条命令最稳
-  gh api "repos/whispering233/ai-editor/actions/runs?head_sha=$(git rev-parse vX.Y.Z)" --jq .total_count  # >0 = 已触发
+  gh api "repos/whispering233/ai-editor/actions/runs?head_sha=$(git rev-parse vX.Y.Z^{commit})" --jq .total_count  # >0 = 已触发（`^{commit}` 不可省，见上）
   ```
 
 - 发布方式细节：发布前主动执行 copy-client-dist（server 的 SPA 随包）+ prepare 替换 workspace:*，然后 `npm publish --access public --ignore-scripts`（跳过 prepack/postpack 钩子），发布后 finally 主动 restore 恢复
