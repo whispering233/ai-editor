@@ -1,6 +1,6 @@
 # 错误码说明（ErrorCode）
 
-> **单一来源**：`@whispering233/ai-editor-shared` `types/api.ts` `ERROR_CODES` 枚举——REST 错误响应与工具结果共用（**SSE 流内无 `error` 帧**，错误以 `agent_end` 的 `stopReason`/`errorMessage` 表达，见 `80-api-chat.md`）；本文档表格为同一枚举的说明视图，新增/修订错误码须同步改枚举注释。**服务端另有扩展码**（不在 shared 枚举内，与 client 的 `CLIENT_NETWORK_ERROR` 同类）：`INTERNAL_ERROR` 500 / `FORBIDDEN` 403 / `NOT_FOUND` 404 / `NO_PROJECT_OPEN` 409 / `PROJECT_ALREADY_EXISTS` 409 / `LLM_API_KEY_MISSING` 400 / 云端存档七码（**已全部实现**：`CLOUD_NOT_CONFIGURED` 409 / `CLOUD_AUTH_FAILED` 502 / `CLOUD_UNREACHABLE` 502 / `CLOUD_QUOTA_EXCEEDED` 502 / `CLOUD_BACKUP_TOO_LARGE` 400 / `CLOUD_CONFLICT` 409 / `CLOUD_FILE_NOT_FOUND` 404 / 拆解小说五码（**已实现**：`DECOMPOSE_FILE_TOO_LARGE` 400 / `DECOMPOSE_FILE_INVALID` 400 / `DECOMPOSE_JOB_NOT_FOUND` 404 / `DECOMPOSE_BATCH_NOT_FOUND` 404 / `DECOMPOSE_JOB_STATE` 409）；均在 `packages/server/src/middleware/error.ts` 的 `SERVER_ERROR_CODES`）。错误码分散（shared 枚举 + 服务端补充 + client 补充）为已登记技术债，MVP 不收敛。
+> **单一来源**：`@whispering233/ai-editor-shared` `types/api.ts` `ERROR_CODES` 枚举——REST 错误响应与工具结果共用（**SSE 流内无 `error` 帧**，错误以 `agent_end` 的 `stopReason`/`errorMessage` 表达，见 `80-api-chat.md`）；本文档表格为同一枚举的说明视图，新增/修订错误码须同步改枚举注释。**服务端另有扩展码**（不在 shared 枚举内，与 client 的 `CLIENT_NETWORK_ERROR` 同类）：`INTERNAL_ERROR` 500 / `FORBIDDEN` 403 / `NOT_FOUND` 404 / `NO_PROJECT_OPEN` 409 / `PROJECT_ALREADY_EXISTS` 409 / `LLM_API_KEY_MISSING` 400 / 云端存档七码（**已全部实现**：`CLOUD_NOT_CONFIGURED` 409 / `CLOUD_AUTH_FAILED` 502 / `CLOUD_UNREACHABLE` 502 / `CLOUD_QUOTA_EXCEEDED` 502 / `CLOUD_BACKUP_TOO_LARGE` 400 / `CLOUD_CONFLICT` 409 / `CLOUD_FILE_NOT_FOUND` 404 / 拆解小说八码（**已实现**：`DECOMPOSE_FILE_TOO_LARGE` 400 / `DECOMPOSE_FILE_INVALID` 400 / `DECOMPOSE_JOB_NOT_FOUND` 404 / `DECOMPOSE_BATCH_NOT_FOUND` 404 / `DECOMPOSE_JOB_STATE` 409 / `DECOMPOSE_NO_CHAPTERS` 404 / `DECOMPOSE_NOTHING_TO_DO` 400 / `DECOMPOSE_JOB_RUNNING` 409）；均在 `packages/server/src/middleware/error.ts` 的 `SERVER_ERROR_CODES`）。错误码分散（shared 枚举 + 服务端补充 + client 补充）为已登记技术债，MVP 不收敛。
 
 | code | HTTP | 说明 |
 | :--- | :--- | :--- |
@@ -17,6 +17,7 @@
 | `PROPOSAL_PROJECT_MISMATCH` | 409 | 409 提案所属项目 ≠ 当前项目 |
 | `SESSION_NOT_FOUND` | 404 | 404 会话不存在（消息/思维链/删除端点：id 经磁盘发现解析未命中，或会话文件已被删除） |
 | `SESSION_BUSY` | 409 | 409 删除会话时该会话有在途 SSE 流（拒绝删除） |
+| `SESSION_READONLY` | 409 | 409 向拆解会话（`decompose-` 前缀）发消息：拆解会话只读，不可续聊（历史里是一整本原文，当上下文续聊费用与语义均错） |
 | `THINKING_NOT_FOUND` | 404 | 404 思维链全文端点：blockIndex 越界或该块非 thinking |
 | `CHAT_BUSY` | 409 | 409 当前项目已有在途 chat 流（单项目单流约束） |
 | `SCHEMA_VERSION_MISMATCH` | 409 | 409 导入 zip 的 data.db user_version 与当前程序版本不匹配（拒绝导入，不静默重建） |
@@ -37,7 +38,10 @@
 | `DECOMPOSE_FILE_INVALID` | 400 | 400 拆解小说：解码失败或文本为空 |
 | `DECOMPOSE_JOB_NOT_FOUND` | 404 | 404 拆解小说：当前项目没有 job |
 | `DECOMPOSE_BATCH_NOT_FOUND` | 404 | 404 拆解小说：批序号越界 |
-| `DECOMPOSE_JOB_STATE` | 409 | 409 拆解小说：当前 job 状态不允许该操作（pause / resume / rerun 的状态前置） |
+| `DECOMPOSE_JOB_STATE` | 409 | 409 拆解小说：当前 job 状态不允许该操作（pause / resume / rerun 的状态前置；`continue` 也用它：已有 running/paused job 时不给开新 job） |
+| `DECOMPOSE_NO_CHAPTERS` | 404 | 404 拆解小说：续拆预览时项目里没有章 |
+| `DECOMPOSE_NOTHING_TO_DO` | 400 | 400 拆解小说：续拆启动时范围里一章都没有（缺省且无未拆章） |
+| `DECOMPOSE_JOB_RUNNING` | 409 | 409 删除会话被拒：该 `decompose-` 会话所属 job 仍在跑 |
 | `NO_PROJECT_OPEN` | 409 | 409 无当前项目（服务端扩展码，复用）——`/decompose/job` 系列端点在无已打开项目时同码 |
 
 - REST 错误响应统一 `{ success: false, error: { code, message } }`；**SSE 流内无独立 `error` 事件**——错误以 `agent_end` 帧的 `stopReason`（`error`/`aborted`）与 `errorMessage` 表达（见 [80-api-chat.md](./80-api-chat.md)）。

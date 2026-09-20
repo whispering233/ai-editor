@@ -5,7 +5,7 @@
 
 **传输约定（本模块特有，登记进 [api-public.md](./api-public.md) 的显式例外）**：`analyze` 与 `start` 的请求体是**小说文件的原始字节**（`Content-Type: application/octet-stream`），文件名与其余参数走 query string。理由：编码探测（UTF-8 → GB18030 回退）与切分必须由服务端单一实现，客户端不做解码；走原始字节避免 base64 膨胀。体积上限 = `DECOMPOSE_MAX_FILE_BYTES`，超限 400 `DECOMPOSE_FILE_TOO_LARGE`。
 
-**状态机**：`pending → running → (paused | done | failed)`。job 绑定项目（一项目一 job；拆解入口总是新建项目）。
+**状态机**：`pending → running → (paused | done | failed)`。job 绑定项目（一项目**至多一个活跃 job**；历史 job 全保留，进度面只显最新）。拆解有两类入口：**首次拆解**（`analyze` / `start`，基于文件新建项目）与**续拆**（`plan` / `continue`，同一项目内开新 job）。
 
 ### POST /api/v1/decompose/analyze
 
@@ -100,6 +100,82 @@
 - 同项目重复 start 不可达（start 总是新建项目）；书名冲突 → 409 `PROJECT_ALREADY_EXISTS`。
 - 模型/凭据缺失 → 400 `LLM_API_KEY_MISSING`（在创建项目**之前**校验，避免留下半成品项目）。
 
+### GET /api/v1/decompose/plan
+
+续拆预览（**不吃文件字节**：章与正文已在库）。不落库、无状态。
+
+```typescript
+// Query
+{
+  scope_start?: number;        // 缺省 = 未拆章最小覆盖区间的起点
+  scope_end?: number;          // 缺省 = 未拆章最小覆盖区间的终点
+}
+
+// Res: 200
+{
+  scopeStart: number;          // 实际生效范围（无未拆章时为 0）
+  scopeEnd: number;
+  defaulted: boolean;          // true = 用了缺省范围
+  remainingCount: number;      // 未拆章总数（全书口径）
+  decomposedInScope: number;   // 范围内已拆章数（将重拆）
+  chapters: Array<{
+    index: number;
+    title: string;
+    charCount: number;
+    volumeIndex: number;
+    decomposed: boolean;       // 已拆（历史 job 的 done 批覆盖）
+  }>;
+  stats: { min: number; median: number; max: number };
+  estimate: {
+    batchCount: number;
+    llmCalls: number;          // batchCount + 2（归并 + 报告）
+    inputTokensApprox: number;
+    outputTokensApprox: number;
+    costApprox: number | null;
+  };
+}
+
+// Res: 400 VALIDATION_ERROR（范围参数非整数 / start > end）
+// Res: 404 DECOMPOSE_NO_CHAPTERS（项目里没有章）
+```
+
+**语义**：
+
+- **已拆判定** = 历史上所有 job 的 `done` 批覆盖的章并集；缺省范围 = 未拆章的**最小覆盖区间**（设计 §7.1）。
+- 显式范围包含已拆章 = **有意重拆**（归并按跨轮口径复用已有实体，不重复、不误删）。
+- 估算与 `analyze` 同一实现（只换输入章集）；不创建 job、不写任何状态。
+
+### POST /api/v1/decompose/continue
+
+续拆：在**当前项目**内开新 job（S1' 只落 job 与批规划，不建项目、不导正文）。
+
+```typescript
+// Query
+{
+  scope_start?: number;        // 缺省同 plan
+  scope_end?: number;
+}
+
+// Res: 200
+{
+  jobId: string;
+  scopeStart: number;
+  scopeEnd: number;
+  status: "running";
+  batchCount: number;
+}
+
+// Res: 400 LLM_API_KEY_MISSING（模型/凭据缺失——在建 job 之前校验）
+// Res: 400 DECOMPOSE_NOTHING_TO_DO（范围里一章都没有；缺省且无未拆章）
+// Res: 409 DECOMPOSE_JOB_STATE（已有 running / paused job）
+```
+
+**语义**：
+
+- **不吃文件字节**：S1 已把全书正文导入（设计 §3），续拆无需源文件、也不需要用户再导一次。
+- **旧 job 全留**（行与批结果都在 `data.db`）：进度面只显最新 job；更早的过程靠会话记录回看。
+- **先开会话再跑**：为新 job 建一枚 `decompose-<jobId>` 会话（创建前按 `DECOMPOSE_KEPT_SESSIONS` 清理超出的旧记录，见设计 §7.2）。
+
 ### GET /api/v1/decompose/job
 
 当前项目的 job 状态（进度页与概览卡片轮询用）。
@@ -162,6 +238,28 @@
 { error: { code: "DECOMPOSE_BATCH_NOT_FOUND" } }
 ```
 
+### GET /api/v1/decompose/job/log
+
+拆解过程时间线（读拆解会话里的 `custom` 过程条目；进度页展示）。
+
+```typescript
+// Res: 200
+{
+  sessionId: string;           // decompose-<jobId>
+  entries: Array<{
+    id: string;                // 会话文件里的 entry id
+    at: string;                // ISO 8601
+    kind: string;              // 过程条目类型（见设计 §8）
+    text: string;              // 单行可读文案（服务端渲染，客户端直接展示）
+    batchSeq?: number;         // 批相关条目
+  }>;
+}
+
+// Res: 404 DECOMPOSE_JOB_NOT_FOUND（当前项目没有 job）
+```
+
+**语义**：只记**批表里没有的**信息（每次尝试的时间与失败原因、模型与用量、归并/报告明细、快照组成）；批状态与批结果不重复记（`GET /decompose/job` + `/job/batches/:seq` 是唯一真相）。会话记录被用户删除时 `entries` 为空数组（不回 404）。
+
 ### POST /api/v1/decompose/job/pause
 
 中止当前 job（当前批跑完即停，结果不浪费）。
@@ -208,7 +306,11 @@
 | `DECOMPOSE_FILE_INVALID` | 400 | 解码失败或文本为空 |
 | `DECOMPOSE_JOB_NOT_FOUND` | 404 | 当前项目没有 job |
 | `DECOMPOSE_BATCH_NOT_FOUND` | 404 | 批序号越界 |
-| `DECOMPOSE_JOB_STATE` | 409 | 当前 job 状态不允许该操作（pause/resume/rerun 的状态前置） |
+| `DECOMPOSE_JOB_STATE` | 409 | 当前 job 状态不允许该操作（pause/resume/rerun 的状态前置；`continue` 也用它——已有 running/paused job 时不给开新 job） |
+| `DECOMPOSE_NO_CHAPTERS` | 404 | 续拆预览：项目里没有章（没有可拆的正文） |
+| `DECOMPOSE_NOTHING_TO_DO` | 400 | 续拆启动：范围里一章都没有（缺省且无未拆章） |
+| `SESSION_READONLY` | 409 | `POST /chat` 的 `session_id` 指向拆解会话（`decompose-` 前缀）：拆解会话只读，不可续聊（见 [80-api-chat.md](./80-api-chat.md)） |
+| `DECOMPOSE_JOB_RUNNING` | 409 | 删除会话被拒：该 `decompose-` 会话所属 job 仍在跑（见 [80-api-chat.md](./80-api-chat.md)） |
 | `PROJECT_ALREADY_EXISTS` | 409 | 书名对应目录已存在（服务端扩展码，复用） |
 | `LLM_API_KEY_MISSING` | 400 | 当前模型所属 provider 未配置凭据（服务端扩展码，复用） |
 | `INVALID_PROJECT_PATH` | 400 | 项目路径校验失败（服务端扩展码，复用） |
@@ -217,7 +319,7 @@
 
 | 项 | 口径 |
 | :--- | :--- |
-| chat | 拆解 job **不占** chat 的在途流（独立运行通道），拆解期间对话照常可用；切书会暂停 job（`setCurrentProject` 单点） |
+| chat | 拆解 job **不占** chat 的在途流（独立运行通道），拆解期间对话照常可用；切书会暂停 job（`setCurrentProject` 单点）。拆解会话与 chat 会话**同目录**：chat 面板可见，但**只读**（`POST /chat` 拒 `decompose-*`），有在途 job 时禁删 |
 | 提案 | 拆解**不走提案仓**——写操作由服务端确定性代码完成，用户通过「单批重跑」而非逐条确认修正 |
-| 备份 / 导出 / 云 | job 状态与批结果都在 `data.db`（`decompose_jobs` / `decompose_batches`），随备份/导出/云自动携带；项目目录不新增任何目录 |
+| 备份 / 导出 / 云 | job 状态与批结果都在 `data.db`（`decompose_jobs` / `decompose_batches`），拆解会话在 `sessions/`——两者都随备份/导出/云自动携带；项目目录不新增任何目录 |
 | 大纲 / 正文 / 实体 | 走既有表与文件（`outline.json` / `document_records` / `entities` / `relation_records`），**不新增写端点**；AI 工具面不变（无文档写工具） |

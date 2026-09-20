@@ -126,14 +126,17 @@
 
 ### 拆解小说（[120-api-decompose.md](./120-api-decompose.md)）
 
-> 请求体是小说文件**原始字节**（`application/octet-stream`），元数据走 query string——见 [api-public.md](./api-public.md) 显式例外。
+> 请求体是小说文件**原始字节**（`application/octet-stream`）**的只有 `analyze` / `start`**，元数据走 query string——见 [api-public.md](./api-public.md) 显式例外；续拆（`plan` / `continue`）不吃文件（章与正文已在库），只走 query。
 
 | 方法 | 路径 | 文档 |
 | :--- | :--- | :--- |
 | POST | `/api/v1/decompose/analyze` | 拆解小说（切分预览，无状态） |
 | POST | `/api/v1/decompose/start` | 拆解小说（建档 + 启动 job） |
+| GET | `/api/v1/decompose/plan` | 拆解小说（续拆预览，不吃文件） |
+| POST | `/api/v1/decompose/continue` | 拆解小说（续拆：开新 job） |
 | GET | `/api/v1/decompose/job` | 拆解小说（job 状态） |
 | GET | `/api/v1/decompose/job/batches/:seq` | 拆解小说（单批结果） |
+| GET | `/api/v1/decompose/job/log` | 拆解小说（过程时间线） |
 | POST | `/api/v1/decompose/job/pause` | 拆解小说（中止） |
-| POST | `/api/v1/decompose/job/resume` | 拆解小说（续拆） |
+| POST | `/api/v1/decompose/job/resume` | 拆解小说（续跑：同一 job 的未完成批） |
 | POST | `/api/v1/decompose/job/batches/:seq/rerun` | 拆解小说（单批重跑） |

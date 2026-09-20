@@ -26,6 +26,7 @@
 
 // Res: 404 SESSION_NOT_FOUND —— session_id 已给出但磁盘上不存在（客户端应改为新会话重试）
 // Res: 409 CHAT_BUSY —— 当前项目已有在途 chat 流
+// Res: 409 SESSION_READONLY —— session_id 指向拆解会话（`decompose-` 前缀）：拆解会话只读，不可续聊
 // Res: 400 LLM_API_KEY_MISSING —— 当前模型所属 provider 未配置凭据
 // Res: 409 NO_PROJECT_OPEN —— 无当前项目
 
@@ -73,6 +74,7 @@
 {
   sessions: {
     id: string;              // 会话 ID（pi session id）
+    name?: string;           // 会话显示名（pi session_info 条目）；拆解会话 = 「《书名》拆解」
     lastMessage: string;     // 最后一条可见文本摘要（截断）
     messageCount: number;
     createdAt: string;       // ISO 8601（会话 header 时间戳）
@@ -80,6 +82,8 @@
   }[];
 }
 // 按 updatedAt 倒序；仅当前项目的 sessions/ 目录；旧格式（v1）文件自动被 pi 的发现逻辑跳过
+// **列表包含拆解会话**（id 前缀 `decompose-`）：客户端必须据此渲染只读态（禁用输入、保留删除、优先显示 name）
+// —— 拆解会话不可续聊（`POST /chat` 返 409 SESSION_READONLY），有在途 job 时不可删（409 DECOMPOSE_JOB_RUNNING）
 ```
 
 ### GET /api/v1/chat/sessions/:id/messages
@@ -136,6 +140,7 @@ id: string;                  // 会话 ID
 
 // Res: 404 SESSION_NOT_FOUND —— 会话不存在（含 id 未知/旧格式文件）
 // Res: 409 SESSION_BUSY —— 该会话有在途 SSE 流
+// Res: 409 DECOMPOSE_JOB_RUNNING —— 该 `decompose-` 会话所属 job 仍在跑（在途任务会把文件原地重建）
 ```
 
 ### POST /api/v1/names/resolve

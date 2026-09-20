@@ -601,6 +601,7 @@ components:
 **`chat-bubble-assistant`** — assistant 消息：无底透明 + 正文排版（长文本可读性优先，不用气泡包）。
 **`focus-strip`** — 「正在讨论：{类型} {名称}」小条：`{colors.surface-soft}` 底 + 1px 描边 + caption。
 **`chat-session-item-menu`** — 会话列表项操作菜单（antd x `Conversations` 的 `menu`）：仅一项「删除会话」——**危险操作走 danger 样式 + `ConfirmDialog` 二次确认**（文案含「删除后无法恢复」），与回收站 purge 同款交互；流式生成中该项禁用（服务端以 409 `SESSION_BUSY` 兜底）。菜单浮层面复用 `dropdown-panel` 契约（canvas 面 + 1px hairline + 阴影）。**已知边界**：操作入口（ellipsis）由 x `Conversations` 内部渲染且**恒显不随 hover**——改它需覆盖 x 内部样式，代价大于收益（窄右栏多占 ~20px，已接受）。
+**`chat-session-decompose`** — 拆解会话（`decompose-` 前缀）的**只读态**：列表项显示会话名（`name` = 「《书名》拆解」，经 `appendSessionInfo` 写入、`GET /chat/sessions` 回传）而不是被截断的原文；正文区按普通消息渲染（真实 user / assistant——含本批原文与模型 JSON 产出，完整回放），**输入框整体不渲染**（不是禁用——不留「换个会话就能发」的错觉）；顶部一行 `caption-text`「拆解过程记录 · 只读 + 类型徽标「拆解」。删除入口保留（同款 danger + `ConfirmDialog` 二次确认，文案注明「删除只影响过程记录，拆解数据不受影响」）；该会话所属 job 在跑时删除项禁用（服务端 409 `DECOMPOSE_JOB_RUNNING` 兜底）。**不引入新色值/字号/圆角。**
 **`usage-bar`** — 上下文占用条（输入框下方工具条右侧）：2px 高圆角条 + caption 百分比。**口径 = pi `getContextUsage()`**（`percent` = tokens / 模型 `contextWindow`，随 `turn_end` / `agent_end` 帧下发，见 `docs/design/20-context.md` §2）——旧「历史预算分母」口径随自建裁剪逻辑一并废弃（那时历史预算远小于窗口，用窗口做分母才是假指标；现在整窗由 pi 的压缩管理，占比是真实信号，压缩后回落）。填充色按占比经 antd token 取色（≥90% `colorError`、≥70% `colorWarning`、其余 `colorPrimary`），**禁硬编码色值**；`title` 显示 `tokens / contextWindow`。**切会话 / 新会话 / 切项目时清零**。
 **`thinking-block`** — 思维链（assistant 消息内的 thinking 内容）：**默认折叠为一行摘要**（`思考过程 · N 字` + 左侧 chevron，`{colors.tertiary}` 字色、无底色、无描边）；展开后 `{colors.surface-soft}` 底 + 左侧 2px `{colors.hairline-strong}` 竖线 + caption 字号 + `{colors.secondary}` 字色 + `pre-wrap`（长文可滚动，限高约 200px；展开态正文字色以 `colorText` 80% 实现——Tailwind 主题未暴露 `colorTextSecondary` utility，属近似 secondary 的登记值，非新色）。**流式生成期间自动展开、本轮结束后自动折叠为摘要行**。历史回看：消息接口只回 `THINKING_PREVIEW_MAX_CHARS` 字预览（`docs/api/80-api-chat.md`），点「展开全文」按需拉取全文（带 loading 态）。同一消息同时持有本轮累积全量与服务端预览时**只渲染一个块**（渲染优先级：有流式累积文本则不渲染预览块）。实现优先用 `@ant-design/x` 的 `Thought` 组件；其外观不满足本契约时自绘，但**不得引入新色或新字号**。
 **`proposal-card`** — 提案卡：1px 描边卡片 + 确认/拒绝按钮（确认按钮用 `button-primary`，禁用态由 antd 派发）。
@@ -668,6 +669,8 @@ components:
 - 批次列表：`data-row` 行，列 = 批序号 / 覆盖章范围 / 字数 / 状态徽标（`type-badge`，中性）/ 展开按钮 / 「重跑」按钮；展开区 = 该批抽取结果的**只读摘要**（人物 / 设定 / 地点 / 关系分组的文字列表，不倾倒原始 JSON）——展开是「核查后重跑」的前提，**不是可选装饰**；分组为空 → 渲染「—」（与页面既有空值口径一致）。
 - 失败批：行内 `{colors.error}` 文案 + 「重跑」（`done` 与 `failed` 行都有该按钮）；重跑 `done` 行需二次确认（受控 Dialog，文案写明「将重新生成该批抽取结果，并重建归并与报告」）。
 - 完成态：本页**总结卡在上 + 批列表在下**（`section-title`「拆解完成」+ 拆出 人物 / 设定 / 地点 / 关系 计数 + 三个跳转：拆解报告 / 大纲 / 人物，**不自动跳转**）——**完成态不得藏掉批列表**：「核查后重跑」是本功能的核心能力，`done` 批的重跑仍走二次确认。
+- **拆解记录时间线**（任何状态都渲染，可折叠）：数据 = `GET /decompose/job/log`；每行 `data-row`（时刻 + 单行文案 + 可选批徽标）；空态 `caption-text`「暂无过程记录」；会话被删后仍渲染空态（不回 404）。
+- **续拆入口**（完成态）：`button-default`「继续拆解」→ 受控 Dialog（**跳过「选文件」段**，直接统计行 + 章列表 + 范围 + 预估行，全部来自 `GET /decompose/plan`）；章列表里已拆章带「已拆」`type-badge`；无未拆章时按钮禁用 + `caption-text` 说明。启动走 `POST /decompose/continue`，返回后刷新轮询状态。
 - 状态文案：`已暂停 · 可续拆` / `上次拆解中断，可续拆`（服务端重启归一后）。
 
 **概览页卡片** — `#/overview` 在有 job 时多一张 `card`：`section-title`「拆解任务」+ 一行状态（运行中 N/M 批 / 已暂停 / 已完成）+ 进入 `#/decompose` 的 `button-default`；无 job 不渲染。

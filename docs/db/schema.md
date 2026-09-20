@@ -255,10 +255,11 @@ CREATE TABLE decompose_batches (
 
 | 不变式 | 口径 |
 | :--- | :--- |
-| **一项目一 job** | 拆解入口固定为「基于小说文件创建项目」⇒ 新项目只有一条 job 行；不设唯一约束（历史 job 由业务层保证不产生） |
+| **一项目一活跃 job** | 首次拆解（基于文件建项目）与续拆（同项目开新 job）都只落 job 行；不设唯一约束，历史 job 全保留（进度面只显最新：`getDecomposeJob` 按 `created_at desc` 取）。互斥由业务层保证（存在 running / paused job 时不建新 job） |
+| **范围是单区间** | `scope_start` / `scope_end` = 本 job 要拆的章区间（文件位置序）；**已拆** = 历史上所有 job 的 `done` 批覆盖的章并集（`decompose_batches.status='done'`）；续拆缺省范围 = 未拆章的**最小覆盖区间** |
 | **S2 不写业务表** | 批抽取结果只落 `decompose_batches.result`（暂存）；业务数据（`entities` / `relation_records` / `outline.json` / `document_records`）只由 S3/S4 写 |
 | **暂存 ≠ 草稿** | 批结果不是待用户确认的草稿，而是管线的中间产物（崩溃恢复 + 归并可重跑的依据）；对用户可见面只有「单批结果」只读展示 |
-| **幂等靠清单不靠 provenance** | 重跑归并的「上次写了什么」存在 `merge_written`（id + 写入时 `updated_at`），**不给 `entities` 加来源列**；`updated_at` 变化过的实体视为用户手工编辑 → 不覆盖、不软删 |
+| **幂等靠清单不靠 provenance** | 归并的「上次写了什么」存在 `merge_written`（id + 写入时 `updated_at`），**不给 `entities` 加来源列**；`updated_at` 变化过的实体视为用户手工编辑 → 不覆盖、不软删。**跨轮 baseline = 历史全部 job 的 `merge_written` 并集**（同一 id 取最新一次记录的时间戳）——同名实体/关系复用同一行，跨轮未重现的产物**不软删**（软删只归本 job 重跑） |
 | **JSON 列一律 text 模式** | 与 `entities.data` / `delta_records.changes` 同口径（坏 JSON 由行映射层防御解析，禁用 drizzle `mode:'json'`） |
 | **不进回收站** | job 与批结果无 `deleted_at`：拆解是导入类操作，撤销 = 删书目录或恢复拆解前的自动备份 zip（设计文档 §1） |
 | **状态归一** | 服务端重启后残留的 `running` 由打开项目时的归一逻辑改为 `paused`（进程内已无在跑 job），UI 提示可续拆。**只归一 job 行**：残留的 `running` **批**行由续拆时的取批逻辑承接（续拆取「第一个未完成批」，含 `running`）⇒ 进度页必须容忍「`paused` job + `running` 批」这个组合 |
