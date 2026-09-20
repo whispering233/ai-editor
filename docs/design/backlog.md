@@ -344,6 +344,9 @@
   - **悬空关系断言盲区**：现有用例只覆盖「source 保留 + target 被阈值滤掉」，只查 target 的变异全绿（行为本身两向对称，oracle 反例已验）。触发条件：下次触碰 `merge.test.ts`。最小修法：补一枚 source 侧悬空用例（有向关系如 `mentor`，源端为单章人物）。
   - **端点重映射不区分实体类型**：`applyAliasGroups` 按名字改写关系端点 ⇒ 跨类型同名（人物「甲」+ 设定「甲」）+ 别名组 + 结构关系（`belongs_to`/`owns`）时，设定侧端点会被静默改写。触发条件：真出现跨类型同名 + 结构关系被改写的病例。修法：关系端点带实体类型（当前数据形状无此信息，不得顺手改）。
 - **迁移 DDL 与声明 DDL 的逐字断言（decompose 两表）** — 现状：`tables.ts` 与 `migrations/009_decompose.ts` 的两段 DDL 实测 byte-identical，但测试只锁列名 / 默认值 / 行为，**不锁类型字面**（把 `result TEXT` 改成 `INTEGER` 全绿）。触发条件：改这两张表字段时（或想加「两段 DDL 逐字相等」通用断言时——需先导出 DDL 常量，与 `document_records` 那份 DDL 注释差异同批处理）。最小修法：导出 DDL 常量 + 一条 `expect(migrationDdl).toBe(declaredDdl)`。
+- **切分测试的「无前言 + 超长块」方向无断言**（21.4 oracle 登记） — 现状：`LONG_BLOCK` 警告的章号偏移修正（前言插首位后回算）只被「有前言」用例锁住；把偏移固定成 1（无前言分支写错）时全套测试全绿。触发条件：下次触碰 `split.test.ts`。最小修法：补一条无前言 + 超长块用例，断言警告章号 == `chapters[].index`。
+- **上传体积上限在 `arrayBuffer()` 之后判定**（21.4 oracle 登记） — 现状：超体积文件先整体入内存再拒（本地应用影响有限；真要硬防需 Hono body limit 中间件，非应用层）。触发条件：出现真实的大文件卡顿报告。
+- **路由层缺少编码/二进制/范围边界用例**（21.4 oracle 登记，低价值） — 现状：BOM/UTF-16 由 `split.test.ts` 覆盖、非文本二进制与 `scope_start > scope_end` 只在路由层无断言（口径已写入文档）。触发条件：改 analyze 的入参处理时。
 - **延期项≠技术债记录**：真正"必须做但没做"的项请写进本文件的相应小节，并在触发条件写清"何时必须做"。
 - **大纲页 / 设定页不迁移 antd `Tree`（2026-09 考察结论）**
   - 结论：保持自绘缩进行。成本 = `Outline.tsx` / `setting-tree.tsx` 两处视图层重写（纯逻辑 `lib/outline-tree.ts` / `lib/setting-tree.ts` 与单测可留）；**语义冲突在拖拽**——rc-tree 用鼠标水平位置（`dropLevelOffset`）决定落层级，与现有「行上下半 = 同级前后 / 行中段 = 成为子级 / 空白区 = 排根末尾」·三套语义不对应，且**空片区落点 rc-tree 无对应**；antd `Tree.js` 把 `dropIndicatorRender` 写在 props 展开之后（**不可注入**），指示线只能改 CSS。

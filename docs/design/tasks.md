@@ -8,21 +8,13 @@
 
 ---
 
-## 卡 21.4 — POST /decompose/analyze（切分预览，无状态）
-
-- **背景**：客户端 POST 原始字节，服务端切分并返回预览 + 预估（范围变更 = 客户端重传，服务端无状态）。
-- **契约**：`docs/api/120-api-decompose.md` §analyze；`docs/api/api-public.md` 请求侧原始字节例外。
-- **范围**：`packages/server/src/routes/decompose.ts`（analyze 分支：体积上限 → 切分 → 预览 + 预估）+ 路由注册；预估读 pi 模型目录 `Model.cost`（经 `getModelRuntime()`，**不自建定价表**，未配置模型/凭据时 `costApprox = null`）；新增错误码入 `middleware/error.ts` 的 `SERVER_ERROR_CODES`。
-- **判据**：路由测试：正常预览（编码/章数/统计/警告）/ 超体积 400 `DECOMPOSE_FILE_TOO_LARGE` / 解码失败或空文本 400 `DECOMPOSE_FILE_INVALID` / **不要求项目打开** / 范围参数只影响 `estimate`；**统计只展示 `totalChars`**（章字数和恒小于总字数——切片 trim 掉分隔换行，并排展示会让用户以为丢了字）；`pnpm --filter @whispering233/ai-editor-server test` 绿。
-
----
-
 ## 卡 21.5 — POST /decompose/start + job 骨架（S0/S1）
 
 - **背景**：建档 + 导入正文 + 批规划落库；S1 同步完成后返回，客户端跳进度页。
 - **契约**：`docs/api/120-api-decompose.md` §start / §job / §batches；`docs/design/60-decompose.md` §2 / §4。
 - **范围**：`packages/server/src/decompose/job.ts`（job 创建 / 组批装箱 / 建大纲（卷→章）/ 逐章导入正文段落块（复用参考资料执行器的段落块形态）/ 写 `decompose_batches`）；`routes/decompose.ts` 的 start / job / batches 分支；凭据校验在建项目**之前**；副作用 = 打开项目 + 写创作根 `lastProject`。
   - **硬提醒（切分 oracle 实测登记）**：**不得拿 split 返回的 `charCount` 当偏移量裁文本**——它是近似计数（退化路径不含空行分隔符、正常路径 trim 掉分隔换行），当偏移量用会错位或丢字符；要裁文本必须自己按真实切片位置算。
+  - **复用已有件（21.4 已建，勿另起）**：体积上限常量与 analyze 同文件（`routes/decompose.ts`）；组批纯函数 `decompose/batching.ts`（`planBatches`）与目标字数/单批章数上限常量。
 - **判据**：路由测试：建档成功（`outline.json` 卷章数 / `document_records` 行数 / `decompose_batches` 行数三向断言）/ 书名冲突 409 / 凭据缺失 400 且**不留半成品项目** / 范围只影响批规划而正文**全量导入** / `GET /job` 不含批结果正文 / **多 job 并存时读接口取「最新」（`created_at` 降序 → `id` 降序）有断言**（db helper 已按此实现，断言落在路由层）；`pnpm --filter @whispering233/ai-editor-server test` 绿。
 
 ---
