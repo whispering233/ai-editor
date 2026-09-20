@@ -166,6 +166,10 @@
 - **同一会话在两台机器各自续聊**（并集的已知边界）
   - 现状：并集按「同名 → 云端取胜」，本机那段进覆盖前快照（不静默丢，但用户得知道去 `.backups/` 找）。
   - 升级路径：按会话文件最后一条 entry 的 timestamp 比较（append-only JSONL 语义）；需要解析而不只是列条目，优先级低。
+- **同步基准的毫秒截断 vs 文件系统 mtime 亚毫秒抖动**（2026-09 发布前审计登记）
+  - 现状：`lastSyncAt` 是 ISO（毫秒）基准，`hasChangesSince` 对 `project.json` / `outline.json` / `sessions/**` **严格 `>`** 比较；文件 mtime 带亚毫秒且与 `Date.now()` 的截断有抖动 ⇒ 同步完成同一毫秒内落盘的文件可能被读成「本机有改动」——表现为多一次「有未备份改动」/ 自动推送（无数据风险，仅提示噪声）。
+  - 触发条件：出现「刚同步完就报本机有改动」的真实反馈（测试侧已用「基准设在未来」的确定性构造避开）。
+  - 最小修法：严格比较也加 1ms 容差（或把基准向上取整到秒）——代价是「同步后 1ms 内的改动」漏判；`hasChangesSince` 与相关用例需同改。
 
 ## 前端 / UI
 
@@ -225,7 +229,7 @@
   - 触发条件：第三处页面也要这套字段控件时（两处不值得）。
   - 升级路径：把字段控件与标签编辑器上提为独立组件，泛型页与人物页同时改用它。
 - **Ctrl+S 存档的窄窗口与未证实项**（2026-09 快捷键卡 oracle 登记，非阻塞）
-  - 现状：① 结构化页的「保存中」重入门禁（`if (saving)` 类，11 处）返回 undefined ⇒ 在途保存未落定时按 Ctrl+S 会不等它落盘就进存档阶段（备份可能缺这一次改动；窗口 ≈ 一次 PUT RTT，Manuscript 已用 `saveNow` 串行链避开）；② `keydown` 的 `e.repeat` 早退帧不做 `preventDefault`（长按是否会重开浏览器原生保存对话框**未证实**）；③ 同步抛错的保存动作会绕过存档阶段（现 12 处均 async/返回 promise，无现实路径）。
+  - 现状：① 结构化页的「保存中」重入门禁（`if (saving)` 类）直接返回 undefined ⇒ 在途保存未落定时按 Ctrl+S 会不等它落盘就进存档阶段（备份可能缺这一次改动；窗口 ≈ 一次 PUT RTT，Manuscript 已用 `saveNow` 串行链避开）；② `keydown` 的 `e.repeat` 早退帧不做 `preventDefault`（长按是否会重开浏览器原生保存对话框**未证实**）；③ 同步抛错的保存动作会绕过存档阶段（现注册点均 async/返回 promise，无现实路径）。
   - 触发条件：出现「快速连按保存 + Ctrl+S 后备份内容陈旧」的真实反馈；或在真机验证长按 Ctrl+S 的原生行为。
   - 最小修法：门禁分支改成「返回在途保存的 promise」（需各页持有在途引用）或返回 `false`（本次按键未产生保存 → 不存档）；② 把 `preventDefault` 提到 `e.repeat` 判断之前；③ `triggerSaveShortcut` 用 `try/catch` 包住同步调用。
 
@@ -305,7 +309,7 @@
 - **块编辑器接线无自动化回归钉（卡 12.12/12.5 修复轮登记）** — 现状：`initialContent: []` 崩页与 `dictionary: zh` 两个缺陷都只有浏览器走查证据；仓内无 jsdom，组件不参与单测。触发条件：重现「改一行传参把编辑器搞崩」。可选最小修法：按 `design-discipline.test.ts` 的源码扫描风格加一条断言（如 `document-editor.tsx` 必须包含 `dictionary: zh` 且不得出现 `initialContent: []`），或引入 jsdom 只测封装组件的挂载。
 - **`document_records` 的两份 DDL 文本差一行行尾注释**（卡 12.2 oracle 登记，P3 无功能影响） — 现状：`packages/db/src/tables.ts` 的声明 DDL 在 `PRIMARY KEY (owner_kind, owner_id)` 后带 `-- 一 owner 一行（…）` 注释，`migrations/008_document_records.ts` 的迁移 DDL 无该注释；去注释后逐字相等。唯一消费该文本的是「v0 空库结构快照」（只对 `user_version === 0` 生效，已到 v8 的库不参与）。触发条件：有人想加「迁移 DDL 文本 == 声明 DDL 文本」的断言时。最小修法：把注释挪到行首或去掉（同步改两处）。
 
-## 发布前审计登记（2026-09，v0.0.51）
+## 发布前审计登记（2026-09，v0.0.52）
 
 - **REST 校验范围在 api 文档与 zod schema 两处出现（有意保留的契约镜像）** — 现状：`docs/api/*.md` 的请求体注释写明「1-100 字符」这类范围，单一来源 = shared `types/api.ts` 的 zod schema，文档是契约说明视图。触发条件：改任一校验范围时（schema 与文档同改）。**不**做「文档插值常量」——api 文档是给人读的契约，插值会降低可读性。
 - **代码注释里的历史阶段编号（`卡 N` / `S1.2` / `G2` / `F9`）** — 现状：约 300 处，作为 provenance 记号保留（不指向可变契约）；**合同文档的编号引用已在 v0.0.51 清掉**（`docs/api`、`docs/db`、`docs/ui`、`docs/design` 正文），`backlog.md` 保留（登记来源）。触发条件：若将来要求注释零历史编号，再做一次机械替换（无技术风险，纯 churn）。
@@ -319,6 +323,7 @@
 - **REST 保持泛型**：直连 API 仍可为 `hook.status` 写 `op=update`、为 character 写已移除字段。收窄落在前端 + AI 提案层 + executor；这是**分层口径**，不是漏改（已在 `10-data-model.md` §14 不变式 1 登记）。
 - **`filters.status`**：保留给 hook 生命周期查询，character 侧不再消费。
 - **数据/接口字段名 `current_position` 不改**：前端显示为「阅读进度」（UI 文案与字段名分离，见 `../ui/DESIGN.md` `character-workbench` 与 `../api/10-api-project.md`）。
+- **快捷键只读不可自定义**（2026-09）：设置页「快捷键」是说明页——键位写死在 `lib/save-shortcut.ts`（清单 `lib/shortcuts.ts` 引用同一常量）。触发条件：出现「想改键位/改组合键」的真实需求；升级路径：加一张 localStorage 覆盖表（清单与判定共读），不改现有注册栈。
 - **延期项≠技术债记录**：真正"必须做但没做"的项请写进本文件的相应小节，并在触发条件写清"何时必须做"。
 - **大纲页 / 设定页不迁移 antd `Tree`（2026-09 考察结论）**
   - 结论：保持自绘缩进行。成本 = `Outline.tsx` / `setting-tree.tsx` 两处视图层重写（纯逻辑 `lib/outline-tree.ts` / `lib/setting-tree.ts` 与单测可留）；**语义冲突在拖拽**——rc-tree 用鼠标水平位置（`dropLevelOffset`）决定落层级，与现有「行上下半 = 同级前后 / 行中段 = 成为子级 / 空白区 = 排根末尾」·三套语义不对应，且**空片区落点 rc-tree 无对应**；antd `Tree.js` 把 `dropIndicatorRender` 写在 props 展开之后（**不可注入**），指示线只能改 CSS。
