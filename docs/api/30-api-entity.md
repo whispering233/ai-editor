@@ -7,7 +7,7 @@
 
 > **实体类型（2026-08；扩展）**：`type` 现支持 **7 种**——`character` / `setting` / `location` / `hook` / **`event`（事件，时间轴）** / **`timepoint`（时间标签点，时间轴）** / **`reference`（参考资料）**。全部 7 种完全复用本章节泛型端点（列表/详情/创建/更新/软删），id 前缀 `ev-` / `tp-`；软删/回收站走 `/api/v1/trash/entity/:type/:id/*` 泛型路径（无需独立端点）。
 >
-> **reference 特例（2026-10 起）**：参考资料正文是**块文档**——真相存 `document_records`（`owner_kind='reference'`），`entities.data` 只留短字段（`type` / `url` / `tags`）。读写对本组端点的**外部形态不变**（请求/响应仍走 `data.content`），服务端内部把 `data.content` 拆写到文档表（单事务）。**不再有项目目录文件联动**：`references/` 目录、文件扫描、frontmatter、`kind`（file/link）与 `file_name`/`file_mtime` 均已废弃（外部编辑能力改为单文件导入导出，见下）。
+> **reference 特例（2026-09 起）**：参考资料正文是**块文档**——真相存 `document_records`（`owner_kind='reference'`），`entities.data` 只留短字段（`type` / `url` / `tags`）。读写对本组端点的**外部形态不变**（请求/响应仍走 `data.content`），服务端内部把 `data.content` 拆写到文档表（单事务）。**不再有项目目录文件联动**：`references/` 目录、文件扫描、frontmatter、`kind`（file/link）与 `file_name`/`file_mtime` 均已废弃（外部编辑能力改为单文件导入导出，见下）。
 
 **event 的 data 字段（shared `eventDataSchema`）**：
 
@@ -143,7 +143,7 @@ type: "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "r
 //             (hook data 字段 schema：shared `hookDataSchema`，服务端校验)
 // event:     { description?, tags?: string[] }（精校验 + passthrough，详见本章节开头字段表）
 // timepoint: {}（G2：时间标签文本 = name，data 无专属字段）
-// reference: { type?, url?, tags?, content? }——**内容 = 块文档**（2026-10）；
+// reference: { type?, url?, tags?, content? }——**内容 = 块文档**（2026-09）；
 //   与其余类型的关键差异：`content` 不在 entities.data 里直接落库，而是拆写进 `document_records`
 //   的 `owner_kind='reference'` 行（服务端派生 content_text 投影）；
 //   未传 content = 正文保持不动（行内改标题/分类/标签场景）；url 可选（纯本地笔记不需要，外源链接才填）；
@@ -180,7 +180,7 @@ id: string;
   data?: Partial<Record<string, unknown>>;  // 只合并传入的 data 字段，不覆盖全部
 }
 
-// reference 特例（2026-10 起）：`data.content` 传入时**拆写进 `document_records`**（单事务），
+// reference 特例（2026-09 起）：`data.content` 传入时**拆写进 `document_records`**（单事务），
 //   **未携带 `data.content` 时正文保持不动**（行内改标题/分类/标签场景）——取代旧的
 //   「先原子写文件再更新 DB」链路；两者不再有先后性与自愈问题（同一事务）。
 //   服务端另派生的 `content_text` 投影只进文档表，不出现在响应里。
@@ -197,7 +197,7 @@ id: string;
 
 ### DELETE /api/v1/entity/:type/:id
 
-软删实体：标记 `deleted_at`，**本体保留**可还原；级联移除其关联的关系与 Delta 记录。**reference 特例（2026-10 起）**：其文档行**保留**（不可见，还原后原样回来），purge 时与实体一并物理删。
+软删实体：标记 `deleted_at`，**本体保留**可还原；级联移除其关联的关系与 Delta 记录。**reference 特例（2026-09 起）**：其文档行**保留**（不可见，还原后原样回来），purge 时与实体一并物理删。
 
 ```typescript
 // Path
@@ -217,7 +217,7 @@ id: string;
 { error: { code: "ENTITY_NOT_FOUND" } }
 ```
 
-> **「未写过」与「空文档」的响应形态（2026-10，卡 12.7a oracle 定口径）**：两者**详情可区分、列表不可区分**，且与章正文端点有意不相同——
+> **「未写过」与「空文档」的响应形态（2026-09，卡 12.7a oracle 定口径）**：两者**详情可区分、列表不可区分**，且与章正文端点有意不相同——
 >
 > | 载体 | 未写过 | 写过空文档（`content: "[]"`） |
 > | :--- | :--- | :--- |

@@ -3,7 +3,7 @@
 //
 // （软删级联）、（时间轴事件：全局线性序 sort_order，仅 event 使用）、
 // G2 修订（时间标签点实体化：timepoint 全局线性序 + occurs_at 挂载 + 跨组拖拽复合端点）。
-// reference 特例（2026-10，docs/api/30-api-entity.md）：正文是块文档——`data.content` 拆写进
+// reference 特例（2026-09，docs/api/30-api-entity.md）：正文是块文档——`data.content` 拆写进
 // document_records（owner_kind='reference'，单事务），详情再装回；列表摘要读 content_text 投影。
 // 错误映射（对照 错误码）：
 // type 参数非法 / 参数校验失败 → 400 VALIDATION_ERROR（zod 抛错由 errorHandler 统一映射，含 fields）
@@ -72,7 +72,7 @@ function parseBlockContent(content: string): unknown[] {
 }
 
 /**
- * reference 的 data.content 拆分（2026-10 装载拆分，docs/api/30-api-entity.md「reference 特例」）：
+ * reference 的 data.content 拆分（2026-09 装载拆分，docs/api/30-api-entity.md「reference 特例」）：
  * `content` 是**端点对外字段名**，真相落 `document_records` ⇒ 返回的 data 已剔除 content。
  * - content 未携带（字段不存在或非对象 data）→ `content` 为 null = **正文保持不动**
  *   （行内改标题/分类/标签场景，旧「先写文件后写库」链路的替代语义）
@@ -169,7 +169,7 @@ entityRoutes.get("/:type", (c) => {
 });
 
 // GET /api/v1/entity/:type/:id —— 详情（含紧邻 relations + deltaCount）
-// reference 特例（2026-10）：`data.content` 不在 entities.data 里，从 document_records 装回
+// reference 特例（2026-09）：`data.content` 不在 entities.data 里，从 document_records 装回
 // （写入侧拆分的逆操作）——库内无行（从未写过正文）→ 不附加 content 键（详情不凭空造空文档）
 entityRoutes.get("/:type/:id", (c) => {
   const project = requireCurrentProject();
@@ -209,7 +209,7 @@ entityRoutes.get("/:type/:id", (c) => {
 });
 
 // POST /api/v1/entity/:type —— 创建（name 必填 1-100；data 按类型精确校验；201）
-// reference 特例（2026-10，docs/api/30-api-entity.md）：`data.content`（块数组 JSON 字符串）
+// reference 特例（2026-09，docs/api/30-api-entity.md）：`data.content`（块数组 JSON 字符串）
 // **不进 entities.data**，与实体行同一事务拆写进 `document_records`（owner_kind='reference'，
 // 服务端派生 content_text 投影）；未携带 content = 允许先建条目后写正文（不落文档行）；
 // url 可选（纯本地笔记不需外源链接）。
@@ -250,7 +250,7 @@ entityRoutes.post("/:type", async (c) => {
 });
 
 // PUT /api/v1/entity/:type/:id —— 部分更新（仅合并传入字段；data 浅合并）
-// reference 特例（2026-10）：`data.content` 传入 → 与实体行同一事务整篇覆盖文档行（单事务，
+// reference 特例（2026-09）：`data.content` 传入 → 与实体行同一事务整篇覆盖文档行（单事务，
 // 无「先写文件后写库」的先后性与自愈问题）；**未携带 content 时正文保持不动**——
 // 行内编辑标题/分类/标签不碰正文，也不再随写文件联动；存量行的遗留 `data.content` 旧键随本次写入剔除。
 entityRoutes.put("/:type/:id", async (c) => {
@@ -429,7 +429,7 @@ entityRoutes.post("/event/:id/move_to", async (c) => {
 });
 
 // DELETE /api/v1/entity/:type/:id —— 软删（级联软删关系与 Delta，本体保留可还原）
-// reference 特例（2026-10）：正文行（document_records）**保留**——软删期间端点 404 不可见，
+// reference 特例（2026-09）：正文行（document_records）**保留**——软删期间端点 404 不可见，
 // 还原后原样可见；purge 时才随实体物理删（trash 路由）。此前「文件移入 references/.trash/」的
 // 文件联动已随本卡移除（原属 12.7b 范围）。
 entityRoutes.delete("/:type/:id", (c) => {

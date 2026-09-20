@@ -81,7 +81,7 @@ export const deltaRecords = sqliteTable(
 /** chat_messages：已删除（迁移 006：对话历史出库为 `sessions/*.jsonl`，表已 DROP） */
 
 /**
- * document_records：块文档表（章正文 / 参考资料正文，2026-10）——块数组 JSON 为真相 +
+ * document_records：块文档表（章正文 / 参考资料正文，2026-09）——块数组 JSON 为真相 +
  * 服务端派生的纯文本投影；owner 无外键（章在 outline.json、参考资料在 entities，存在性由写入侧守卫），
  * 无 deleted_at（生命周期跟随 owner：软删即不可见、purge 时调用方删行）。
  */
@@ -150,7 +150,7 @@ CREATE TABLE IF NOT EXISTS delta_records (
                                 -- 可见性联动触发节点与目标实体：任一端软删即不可见
 );
 
--- document_records：块文档表（章正文 / 参考资料正文，2026-10）
+-- document_records：块文档表（章正文 / 参考资料正文，2026-09）
 CREATE TABLE IF NOT EXISTS document_records (
   owner_kind   TEXT NOT NULL,   -- 'chapter' | 'reference'（枚举值少且稳定，不加 CHECK）
   owner_id     TEXT NOT NULL,   -- 'ch-*'（章节点 id）| 'ref-*'（参考资料实体 id）

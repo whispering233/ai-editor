@@ -215,7 +215,7 @@
 //   data.db        // 导出前服务端 wal_checkpoint(TRUNCATE)——主文件为完整快照，无需附带 -wal/-shm
 //                  // **含正文与参考资料**（document_records）与全部结构化数据
 //   sessions/**    // 对话历史（一 session 一 JSONL）随包导出——聊天记录不丢
-// （2026-10：不再有 references/** 条目——参考资料正文已进 data.db）
+// （2026-09：不再有 references/** 条目——参考资料正文已进 data.db）
 ```
 
 **语义**：

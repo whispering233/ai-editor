@@ -1,6 +1,6 @@
 // 工具参数 schema：章正文域（get_chapter_text）
 //
-// 口径见 docs/api/tool-calling.md「正文只读查询（2026-10）」：AI 按需分页拉取章正文的
+// 口径见 docs/api/tool-calling.md「正文只读查询（2026-09）」：AI 按需分页拉取章正文的
 // 轻量 md 投影（document_records.content_text）；**工具面不存在任何正文/文档写工具**。
 
 import { Type, type Static } from "@earendil-works/pi-ai";

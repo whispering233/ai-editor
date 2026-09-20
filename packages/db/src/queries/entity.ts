@@ -130,7 +130,7 @@ function toSummary(row: EntityRow, contentText?: string): EntitySummary {
       if (data.description !== undefined) summary.description = data.description;
       if (data.tags !== undefined) summary.tags = data.tags;
       break;
- // reference（参考资料，2026-10）：data 只留短字段（type/url/tags）；
+ // reference（参考资料，2026-09）：data 只留短字段（type/url/tags）；
  // content 摘要截断 120 字 = **文档表的 content_text 投影**（非 data.content、非块 JSON 原文——
  // 列表/搜索不得把块体拉入内存与响应），完整正文在详情（GET /:type/:id 由 server 层装回）
     case "reference":

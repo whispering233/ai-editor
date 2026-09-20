@@ -17,8 +17,8 @@
 │           ├── entities       # 人物 / 设定 / 地点 / 伏笔 / 事件 / 时间点 / 参考资料
 │           ├── relation_records  # 通用关系表
 │           ├── delta_records    # 属性变更记录
-│           └── document_records # 块文档（章正文 / 参考资料正文，2026-10）
-│       # 注：项目目录下**不再有** references/ 目录（2026-10 废弃：参考资料正文进 document_records，
+│           └── document_records # 块文档（章正文 / 参考资料正文，2026-09）
+│       # 注：项目目录下**不再有** references/ 目录（2026-09 废弃：参考资料正文进 document_records，
 │       #     外部编辑能力改为单文件导入导出；历史遗留的同名目录不被读取、不被打包）
 
 # 兼容：启动目录本身含 project.json 时按旧语义打开；
@@ -37,7 +37,7 @@
   - `user_version > SCHEMA_VERSION`（未来版本）→ **拒绝打开** 409 `PROJECT_VERSION_NEWER`（数据原封不动，提示升级程序）；
   - `user_version < SCHEMA_VERSION`（旧版本）→ **有迁移路径**（`packages/db/src/migrations/` 存在从当前版本到目标版本的连续迁移链）→ `runMigrations` 前向迁移；**无迁移路径** → 删库重建兜底（备份 `data.db.v{n}.bak` + `outline.json.v{n}.bak`）。
 - **迁移机制**：`migrations/` 目录每个文件导出一个 `Migration = { version, up }`（`001_xxx.ts` → version 1），`index.ts` 按 version 升序聚合导出 `MIGRATIONS`（tsc 编译进 dist 随包分发，无运行时目录读取）。`runMigrations` 对缺失版本逐个执行：**每个迁移一个事务（`up(db)` + `setUserVersion(version)` 原子提交——成功 ⇒ 版本已写入；失败 ⇒ 版本未变）**；**整批迁移前自动快照** data.db → `data.db.v{n}.{YYYYMMDDHHmmssSSSZ}.bak`（checkpoint 后复制主文件，时间戳命名，失败重试现场保留）。迁移失败 → 该迁移回滚 + 版本停在前一迁移后，下次 open 重试。（**粒度注**：迁移侧快照为毫秒时间戳且**无去重循环**——同一毫秒的两次批量迁移会后者覆盖前者；真实升级路径不可达，与备份侧 backup 的 +1ms 去重口径不同但已接受。）
-- 当前 `SCHEMA_VERSION = 8`；迁移链：`002_event_timeline.ts`（version 2：entities 表 CHECK 扩入 `'event'` + 新增 `sort_order` 列）、`003_timepoint.ts`（version 3，G2 修订：entities 表 CHECK 扩入 `'timepoint'` + `event.data.time_label` 迁移为 timepoint 实体 + occurs_at 关系，同名 time_label 合并为同一 timepoint）、`004_setting_tags.ts`（version 4，K2 修订：**无 DDL**——setting 旧 `data.rules` 分类值复制到 `data.tags` 并移除 rules，仅 data JSON 数据迁移）、`005_reference.ts`（version 5：entities 表 CHECK 扩入 `'reference'`，无数据搬移仅 DDL）、`006_sessions_jsonl.ts`（version 6：**对话历史出库**——`chat_messages` 全量导出为旧格式 `sessions/<session_id>.jsonl` 后 `DROP TABLE`；产物为旧 v1 格式，现已被 pi session 格式取代、不再被读取（数据保留在磁盘）；**id 不合法的旧会话以 `sess_legacy_<sha256 前 16 位>` 文件名导出**）、`007_character_ability_panel.ts`（version 7，2026-09：**无 DDL**——`character.data.abilities[]` 迁为 `ability_panel` 叶子并移除旧字段，幂等且不覆盖已有 `ability_panel`，仅 data JSON 数据迁移，同 004 先例）、`008_document_records.ts`（version 8，2026-10：新增 `document_records` 表（块文档），纯 DDL 无数据搬移——开发阶段，旧 `references/` 目录与旧参考资料行不作兼容读取）。**SQLite 无法直接修改 CHECK 约束**，迁移走「建新表（新 CHECK）→ 拷贝数据 → drop 旧表 → rename」四步（`relation_records`/`delta_records` 无外键指向 entities，迁移只动 entities 表）；v1 → v8 迁移链存在 ⇒ 旧库 open 时自动前向迁移，不再走删库重建兜底。
+- 当前 `SCHEMA_VERSION = 8`；迁移链：`002_event_timeline.ts`（version 2：entities 表 CHECK 扩入 `'event'` + 新增 `sort_order` 列）、`003_timepoint.ts`（version 3，G2 修订：entities 表 CHECK 扩入 `'timepoint'` + `event.data.time_label` 迁移为 timepoint 实体 + occurs_at 关系，同名 time_label 合并为同一 timepoint）、`004_setting_tags.ts`（version 4，K2 修订：**无 DDL**——setting 旧 `data.rules` 分类值复制到 `data.tags` 并移除 rules，仅 data JSON 数据迁移）、`005_reference.ts`（version 5：entities 表 CHECK 扩入 `'reference'`，无数据搬移仅 DDL）、`006_sessions_jsonl.ts`（version 6：**对话历史出库**——`chat_messages` 全量导出为旧格式 `sessions/<session_id>.jsonl` 后 `DROP TABLE`；产物为旧 v1 格式，现已被 pi session 格式取代、不再被读取（数据保留在磁盘）；**id 不合法的旧会话以 `sess_legacy_<sha256 前 16 位>` 文件名导出**）、`007_character_ability_panel.ts`（version 7，2026-09：**无 DDL**——`character.data.abilities[]` 迁为 `ability_panel` 叶子并移除旧字段，幂等且不覆盖已有 `ability_panel`，仅 data JSON 数据迁移，同 004 先例）、`008_document_records.ts`（version 8，2026-09：新增 `document_records` 表（块文档），纯 DDL 无数据搬移——开发阶段，旧 `references/` 目录与旧参考资料行不作兼容读取）。**SQLite 无法直接修改 CHECK 约束**，迁移走「建新表（新 CHECK）→ 拷贝数据 → drop 旧表 → rename」四步（`relation_records`/`delta_records` 无外键指向 entities，迁移只动 entities 表）；v1 → v8 迁移链存在 ⇒ 旧库 open 时自动前向迁移，不再走删库重建兜底。
 - **import 侧联动**：导入备份时 `user_version < SCHEMA_VERSION` 且**有迁移路径** → 接受（搬入后 open 自动迁移，v5 及更早备份经增量迁移升到 **v8**，含对话历史出库、能力面板迁移与块文档表创建）；无路径 → 409 `SCHEMA_VERSION_MISMATCH`；`>` 当前 → 409（未来版本语义）。
 - **全新空库短路（2026-09，卡 2.9）**：`user_version = 0` 且**表结构与当前 DDL 一致**且**业务表无行** → 直接写入 `SCHEMA_VERSION`（**不重建、不备份、不碰 `outline.json`**）——覆盖“书目录有 project.json/outline.json 但缺 data.db”的场景（否则会走无路径重建兼重置大纲）。**反向守住**：结构陈旧（旧 CHECK / 残留表）或有数据的 v0 库仍走既有重建兑底。**已知不对称（已登记）**：备份包内的 v0 空库仍在导入侧被 409 拒绝（`validateBackupPackage` 复用 `hasMigrationPath`），而盘上同内容文件现在会被接受——偏差方向只宽松、无数据风险。
 
@@ -68,7 +68,7 @@ CREATE TABLE entities (
 > **`hook.data.expected_resolve_node_id`（预计回收节点）三层口径（卡 7.2 登记）**：**UI 只列章**（`HookPanel` 与 `#/hooks/:id` 两处渲染器都用 `chapterNodeOptions`）；**数据层接受任意节点**（`hookDataSchema` 无章约束）；**分析层容忍非章**（`packages/tools/src/analysis/hook.ts` 的 `ready_to_resolve`：节点无章号 → `null`，不猜测——场景值按其所属章序参与判定）。注意与**伏笔关系**源端（`plants`/`advances`/`resolves`）区分：那一层是**硬校验章**（服务端 400），与本 data 字段不是同一层。
 | `event` | `description`（文本）, `tags[]`（字符串数组，分类筛选用）——**G2 修订：`time_label` 已移除**（迁移至 timepoint 实体 + occurs_at 关系，见下） |
 | `timepoint` | `{}`（无专属字段——**G2：时间标签文本 = name**，可重命名；YAGNI 不加 data） |
-| `reference` | `type`（**自由文本分类**——缺省 `material` 写入侧兜底）、`url`（可选——外源链接才填）、`tags[]`（标签数组）——参考资料是外部素材/灵感笔记，AI 可读取参考、提案写入；**正文不在 data 里**：`content` 存在 `document_records`（`owner_kind='reference'`），`data` 只留上述短字段（**`kind` / `file_name` / `file_mtime` / `source` 均已废弃**，2026-10：两类承载合并为一类；外部编辑改为单文件导入导出，不再有 `references/` 目录与扫描） |
+| `reference` | `type`（**自由文本分类**——缺省 `material` 写入侧兜底）、`url`（可选——外源链接才填）、`tags[]`（标签数组）——参考资料是外部素材/灵感笔记，AI 可读取参考、提案写入；**正文不在 data 里**：`content` 存在 `document_records`（`owner_kind='reference'`），`data` 只留上述短字段（**`kind` / `file_name` / `file_mtime` / `source` 均已废弃**，2026-09：两类承载合并为一类；外部编辑改为单文件导入导出，不再有 `references/` 目录与扫描） |
 
 ### 人物 data 分层（2026-09）
 
@@ -195,7 +195,7 @@ CREATE TABLE delta_records (
 >
 > **状态机字段用 `set`（2026-09）**：伏笔 `status`（`planted → progressing → resolved / abandoned`）的 Delta 一律 `op=set`——该字段由写路径同步为**最新值**（终态守卫/列表分组/AI 统计直接读 `data.status`，见 `../design/10-data-model.md` §4、《钩子状态同步》），与 `update` 的「`data` = 初始值」前提互斥；用 `set` 后重放恒得正确终态、不再产生假 `conflicts`（from→to 叙事保留在 `description`）。**已知边界**：`at_node` 在首次转移之前时返回最新值（近似；按所属章的进度章判定，故该章之前的场景同属此窗口）。
 
-## document_records — 块文档表（2026-10）
+## document_records — 块文档表（2026-09）
 
 块文档（章正文 / 参考资料正文）的唯一存放点——**块编辑器原生文档（块数组 JSON）为真相**，外加服务端派生的纯文本投影：
 
@@ -327,7 +327,7 @@ CREATE TABLE document_records (
 **约束**：
 - 模型 API key **绝不写入本文件**——凭据归 pi 的 agent dir（`~/.pi/agent/auth.json`，一家一条且存量凭据优先，环境变量仅在该家无条目时兜底；写入只在设置页经 pi credential store），见 `docs/design/config.md`。
 - 文件写入遵循原子写流程（outline.json 同款：临时文件 + fsync + rename）。
-- **自动备份目录**：项目目录内 `.backups/` 子目录存放备份 zip。命名格式：`<YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip`——毫秒时间戳（本地时区，字典序 = 时间序，`parseBackupFileName` 解析为列表项的 `createdAt` 与保留策略排序依据）＋类型段（`自动` = 定时器 / 覆盖前快照，`手动` = 立即备份）＋设备段（必填：来源机器，缺省 = 简化 hostname；禁 `-`）＋可选用户标签（1-30 字符）＋**尾部固定三段统计**（人物/设定/章 = 生成时点的未软删存量；固定尾部使解析可从尾部倒切）。**写入 = 解析 = 唯一格式**（2026-09 收敛）：早期三类旧命名（秒级 / 带标签无类型段 / 单字母 `-m`/`-a` 段）**不再解析**（文件留盘但不列表、不可恢复、不参与保留策略），也不做重命名迁移；`device`/`stats` 恒有（API 契约必填）。**升级兜底**：打开项目时若 `.backups/` 有文件但无一可解析 → 立即生成一份新格式备份。包内容 = 导出包：project.json + outline.json + data.db（**含正文与参考资料**）+ `sessions/**`（2026-10 起不再含 `references/**`）。**每项目保留最近 20 份**（超出删除最旧，含覆盖前自动快照；清理失败不阻塞备份主流程）；备份文件不入 git、不算数据文件（可随时删除）。**实现细节（2026-08 实测）**：同毫秒冲突用「时间戳 +1 毫秒循环去重」（保持文件名格式契约可解析）；「有变更才备份」的 mtime 判定加 1s 容差（备份管道内 wal_checkpoint 会把 data.db mtime 刷新到备份时刻，严格 `mtime > 上次备份时刻` 会自激误判——毫秒精度下文件名截断误差已消除，但粗粒度 mtime 文件系统（如 FAT/exFAT 2s 粒度）下容差仍是必要防御，`BACKUP_CHANGE_TOLERANCE_MS` 保留 1s）；变更判定同时看 `sessions/` **目录自身**的 mtime（删除会话文件不刷新剩余文件 mtime；正文/参考资料写 `data.db`，由 `-wal` 判定涵盖）；重命名备份只改标签段（时间戳/类型/设备/统计保持，同目录 rename 原子）。
+- **自动备份目录**：项目目录内 `.backups/` 子目录存放备份 zip。命名格式：`<YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip`——毫秒时间戳（本地时区，字典序 = 时间序，`parseBackupFileName` 解析为列表项的 `createdAt` 与保留策略排序依据）＋类型段（`自动` = 定时器 / 覆盖前快照，`手动` = 立即备份）＋设备段（必填：来源机器，缺省 = 简化 hostname；禁 `-`）＋可选用户标签（1-30 字符）＋**尾部固定三段统计**（人物/设定/章 = 生成时点的未软删存量；固定尾部使解析可从尾部倒切）。**写入 = 解析 = 唯一格式**（2026-09 收敛）：早期三类旧命名（秒级 / 带标签无类型段 / 单字母 `-m`/`-a` 段）**不再解析**（文件留盘但不列表、不可恢复、不参与保留策略），也不做重命名迁移；`device`/`stats` 恒有（API 契约必填）。**升级兜底**：打开项目时若 `.backups/` 有文件但无一可解析 → 立即生成一份新格式备份。包内容 = 导出包：project.json + outline.json + data.db（**含正文与参考资料**）+ `sessions/**`（2026-09 起不再含 `references/**`）。**每项目保留最近 20 份**（超出删除最旧，含覆盖前自动快照；清理失败不阻塞备份主流程）；备份文件不入 git、不算数据文件（可随时删除）。**实现细节（2026-08 实测）**：同毫秒冲突用「时间戳 +1 毫秒循环去重」（保持文件名格式契约可解析）；「有变更才备份」的 mtime 判定加 1s 容差（备份管道内 wal_checkpoint 会把 data.db mtime 刷新到备份时刻，严格 `mtime > 上次备份时刻` 会自激误判——毫秒精度下文件名截断误差已消除，但粗粒度 mtime 文件系统（如 FAT/exFAT 2s 粒度）下容差仍是必要防御，`BACKUP_CHANGE_TOLERANCE_MS` 保留 1s）；变更判定同时看 `sessions/` **目录自身**的 mtime（删除会话文件不刷新剩余文件 mtime；正文/参考资料写 `data.db`，由 `-wal` 判定涵盖）；重命名备份只改标签段（时间戳/类型/设备/统计保持，同目录 rename 原子）。
 
 ## AGENTS.md — 项目规则文件（2026-08）
 

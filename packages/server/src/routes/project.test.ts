@@ -1627,7 +1627,7 @@ describe("POST /project/import（zip 导入新书）", () => {
     expect(existsSync(join(root, "books", "..", "escape"))).toBe(false);
   });
 
-  it("缺少 file → 400；**未传 name → 用备份内的书名**（name 可选，2026-10 起）", async () => {
+  it("缺少 file → 400；**未传 name → 用备份内的书名**（name 可选，2026-09 起）", async () => {
     const root = makeTmpDir();
     setProjectRoot(root);
  // 无 file

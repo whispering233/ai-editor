@@ -25,7 +25,7 @@ export function referenceTypeLabel(type: string): string {
 
 /**
  * 来源取值（列表「来源」列与详情元信息行共用）：**只认 `url`**。
- * `kind` / `file_name` / `source` 是文件机制遗留字段（2026-10 起已废弃，读侧不认——旧值不迁移）。
+ * `kind` / `file_name` / `source` 是文件机制遗留字段（2026-09 起已废弃，读侧不认——旧值不迁移）。
  */
 export function referenceSource(data: Record<string, unknown> | undefined): string {
   const url = data?.url;

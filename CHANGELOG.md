@@ -151,7 +151,7 @@
 
 ### Changed
 
-- **桌面打包分工（2026-10 定）**：**本地只打 Linux 包测试**（`pnpm desktop:dist`，产物在 `packages/desktop/release/`）；**Windows 包由 CI 出**（`desktop.yml` 的 windows-latest，可手动触发+下载 artifact 先验）；macOS 包暂不做（无 mac runner 可验）。将来有真实用户需求再恢复三平台 matrix（项已注释保留）。Windows 本地交叉构建需 Wine（electron-builder 官方口径），本仓不往开发机装该依赖。
+- **桌面打包分工（2026-09 定）**：**本地只打 Linux 包测试**（`pnpm desktop:dist`，产物在 `packages/desktop/release/`）；**Windows 包由 CI 出**（`desktop.yml` 的 windows-latest，可手动触发+下载 artifact 先验）；macOS 包暂不做（无 mac runner 可验）。将来有真实用户需求再恢复三平台 matrix（项已注释保留）。Windows 本地交叉构建需 Wine（electron-builder 官方口径），本仓不往开发机装该依赖。
 
 ### Fixed
 

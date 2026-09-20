@@ -69,7 +69,7 @@ pnpm --filter ai-editor-desktop start   # 开发：构建后 electron .（in-pro
 pnpm desktop:dist                                      # 全仓构建 + pnpm deploy + electron-builder（**当前平台**）
 ```
 
-- **分工（2026-10 定）**：**本地只打 Linux 包做测试**（`pnpm desktop:dist` → `packages/desktop/release/`）；**Windows 包由 CI 出**（`desktop.yml` 的 windows-latest）。原因：electron-builder 在 Linux/WSL 交叉构建 Windows 目标需 **Wine**（官方口径：`--win nsis` 与 portable 都要，exe 元数据/图标写入要跑 Windows 工具），本仓不为打包往开发机装 1GB 级依赖；macOS 同理必须 mac runner。
+- **分工（2026-09 定）**：**本地只打 Linux 包做测试**（`pnpm desktop:dist` → `packages/desktop/release/`）；**Windows 包由 CI 出**（`desktop.yml` 的 windows-latest）。原因：electron-builder 在 Linux/WSL 交叉构建 Windows 目标需 **Wine**（官方口径：`--win nsis` 与 portable 都要，exe 元数据/图标写入要跑 Windows 工具），本仓不为打包往开发机装 1GB 级依赖；macOS 同理必须 mac runner。
 - **本地拿 Windows 包验**（不推 tag、不碰 Release）：手动触发 workflow → 下载 CI artifact：
 
   ```bash
@@ -77,18 +77,18 @@ pnpm desktop:dist                                      # 全仓构建 + pnpm dep
   gh run download <run-id> -n desktop-windows-latest -D /tmp/win-pkg
   ```
 
-- **CI 出包范围（2026-10 起）**：只出 **Windows** 包；macOS/Linux 的 matrix 项**注释保留**，将来有真实用户需求再取消注释恢复三平台（GitHub runner 侧无额外成本，只是每次发版多跑两个 job）。`workflow_dispatch`（输入 `release_tag`）既是补包入口、也是手动出包入口。**每版的 Windows 资产 = 三件套**：`.exe` + `latest.yml` + `.exe.blockmap`（自动更新用；三样的各自作用见下一条）。
+- **CI 出包范围（2026-09 起）**：只出 **Windows** 包；macOS/Linux 的 matrix 项**注释保留**，将来有真实用户需求再取消注释恢复三平台（GitHub runner 侧无额外成本，只是每次发版多跑两个 job）。`workflow_dispatch`（输入 `release_tag`）既是补包入口、也是手动出包入口。**每版的 Windows 资产 = 三件套**：`.exe` + `latest.yml` + `.exe.blockmap`（自动更新用；三样的各自作用见下一条）。
 
 - **打包三段**：`pnpm -r build` → `pnpm --filter <desktop> deploy --prod packages/desktop/.deploy/app` → `electron-builder --config electron-builder.yml`（封装在 `packages/desktop/scripts/pack.mjs`）。`electron-builder.yml` 里 `npmRebuild: false` + `linux.executableName` 不可省（原因见 `50-desktop.md` §5 实测栏）。
-- **自动更新的元数据（三资产缺一不可，2026-10）**：`electron-builder.yml` 的 `publish` 段（provider github + owner/repo）是两份元数据的前提——包内 `resources/app-update.yml`（更新器读它定位更新源，本地 `pnpm desktop:dist` 后可断言存在）与 Release 资产 `latest.yml`（版本 + sha512，**旧版靠它才知道有新版本**）；`.exe.blockmap` 供差分下载。`pack.mjs` 对 electron-builder 显式传 `--publish never`：**上传唯一路径 = `softprops/action-gh-release`**（两条上传路径会打架，且 CI 没有 GH_TOKEN 可交给 electron-builder）。验收口径：本地打包断言 `app-update.yml` 存在且含 owner/repo 与 `updaterCacheDirName: ai-editor-desktop-updater`；CI 包断言三资产齐全且 **`latest.yml` 里的 `url` 与上传后的资产名逐字一致**。⚠ **资产名不得含空格**（含空格时 GitHub 上传换成**点**（v0.0.43 实测 `AI.Editor-0.0.43-win-x64.exe`），而 electron-builder 在 latest.yml 里把空格换成**短横**，更新器按 yml 的 url 直拼 `/releases/download/<tag>/<名>`（`GitHubProvider.resolveFiles`，无资产清单回退）⇒ 404、更新全断）。因此 `artifactName` 固定为无空格的 `AI-Editor-<v>-win-x64.exe`（linux 同规则，故本地 `latest-linux.yml` 的 `url` 恒等于磁盘文件名，可当不变式断言）。
-- **打包态启动冒烟不可省（2026-10 实测）**：`typecheck` / `lint` / 单测**全绿 ≠ 打包态能起**。v0.0.44 的 `updater.ts` 用 `import { autoUpdater } from "electron-updater"`（该包是 CJS），`tsc` 不报、开发态也看不出来，打包启动直接 `SyntaxError: The requested module 'electron-updater' does not provide an export named 'autoUpdater'`（Electron 的 ESM loader 与 Node 的 CJS 具名导出探测不一致）——现改为默认导入 + 解构。**改主进程依赖/import 后必跑**：
+- **自动更新的元数据（三资产缺一不可，2026-09）**：`electron-builder.yml` 的 `publish` 段（provider github + owner/repo）是两份元数据的前提——包内 `resources/app-update.yml`（更新器读它定位更新源，本地 `pnpm desktop:dist` 后可断言存在）与 Release 资产 `latest.yml`（版本 + sha512，**旧版靠它才知道有新版本**）；`.exe.blockmap` 供差分下载。`pack.mjs` 对 electron-builder 显式传 `--publish never`：**上传唯一路径 = `softprops/action-gh-release`**（两条上传路径会打架，且 CI 没有 GH_TOKEN 可交给 electron-builder）。验收口径：本地打包断言 `app-update.yml` 存在且含 owner/repo 与 `updaterCacheDirName: ai-editor-desktop-updater`；CI 包断言三资产齐全且 **`latest.yml` 里的 `url` 与上传后的资产名逐字一致**。⚠ **资产名不得含空格**（含空格时 GitHub 上传换成**点**（v0.0.43 实测 `AI.Editor-0.0.43-win-x64.exe`），而 electron-builder 在 latest.yml 里把空格换成**短横**，更新器按 yml 的 url 直拼 `/releases/download/<tag>/<名>`（`GitHubProvider.resolveFiles`，无资产清单回退）⇒ 404、更新全断）。因此 `artifactName` 固定为无空格的 `AI-Editor-<v>-win-x64.exe`（linux 同规则，故本地 `latest-linux.yml` 的 `url` 恒等于磁盘文件名，可当不变式断言）。
+- **打包态启动冒烟不可省（2026-09 实测）**：`typecheck` / `lint` / 单测**全绿 ≠ 打包态能起**。v0.0.44 的 `updater.ts` 用 `import { autoUpdater } from "electron-updater"`（该包是 CJS），`tsc` 不报、开发态也看不出来，打包启动直接 `SyntaxError: The requested module 'electron-updater' does not provide an export named 'autoUpdater'`（Electron 的 ESM loader 与 Node 的 CJS 具名导出探测不一致）——现改为默认导入 + 解构。**改主进程依赖/import 后必跑**：
   ```bash
   pnpm --filter ai-editor-desktop build && node packages/desktop/scripts/pack.mjs
   mkdir -p /tmp/smoke && printf '{"projectRoot":"/tmp/lib"}' > /tmp/smoke/desktop.json
   timeout 40 packages/desktop/release/linux-unpacked/ai-editor --user-data-dir=/tmp/smoke
   # 期望：存活到 timeout（124）、日志出现「菜单已就绪（… 检查更新项: <bool>）」、无更新相关异常
   ```
-  - **win32 分支在 Linux 上也能跑一遍**（本地唯一能执行该分支的办法，2026-10 实测）：临时把 `isUpdateSupported()` 改成 `return true`，重打包后带假 `APPIMAGE` 跑：
+  - **win32 分支在 Linux 上也能跑一遍**（本地唯一能执行该分支的办法，2026-09 实测）：临时把 `isUpdateSupported()` 改成 `return true`，重打包后带假 `APPIMAGE` 跑：
   ```bash
   # 变异后：pnpm --filter ai-editor-desktop build && node packages/desktop/scripts/pack.mjs
   APPIMAGE=/tmp/fake.AppImage timeout 60 packages/desktop/release/linux-unpacked/ai-editor --user-data-dir=/tmp/smoke
@@ -111,7 +111,7 @@ pnpm desktop:dist                                      # 全仓构建 + pnpm dep
 
 **发布形态**：5 个包（shared/db/tools/agent/server）全部发布 npm；用户只装 `@whispering233/ai-editor-server`（bin `ai-editor`），其余 4 个包由 npm 自动拉取；`client` 保持 private 不发布（SPA 构建产物随 server 包分发）。发布链路是本仓唯一的 CI（`.github/workflows/`，仅 push `v*` tag 触发）。
 
-**桌面版与 npm 同一 tag 发布**：`.github/workflows/desktop.yml` 与 `publish.yml` / `release.yml` 同触发（push `v*` tag），**当前只跑 windows-latest**（`pnpm -r build` + `node packages/desktop/scripts/pack.mjs --win nsis`），产物经 `softprops/action-gh-release` 挂到该 tag 的 Release（Release 通常已由 `release.yml` 建好，此 action 只挂资产），并额外上传 CI artifact（`desktop-windows-latest`）供本地下载验。挂的资产是**三件套**（`.exe` + `latest.yml` + `.exe.blockmap`）——**缺 `latest.yml` ⇒ 所有旧版的检查更新直接失败**，缺 blockmap 只损失差分带宽；用 `workflow_dispatch` 手动补包时同样必须补齐三样（同名资产会覆盖）。**workflow 一律不写 pnpm `version`**——版本从根 `package.json` 的 `packageManager` 读（单一事实源；写死会在升级时静默漂移：2026-10 升 pnpm 12.4.2 时 `publish.yml` 实际残留 `11.22.0`，已改）。⚠ tag 纪律同下（一次只推一个 tag）。
+**桌面版与 npm 同一 tag 发布**：`.github/workflows/desktop.yml` 与 `publish.yml` / `release.yml` 同触发（push `v*` tag），**当前只跑 windows-latest**（`pnpm -r build` + `node packages/desktop/scripts/pack.mjs --win nsis`），产物经 `softprops/action-gh-release` 挂到该 tag 的 Release（Release 通常已由 `release.yml` 建好，此 action 只挂资产），并额外上传 CI artifact（`desktop-windows-latest`）供本地下载验。挂的资产是**三件套**（`.exe` + `latest.yml` + `.exe.blockmap`）——**缺 `latest.yml` ⇒ 所有旧版的检查更新直接失败**，缺 blockmap 只损失差分带宽；用 `workflow_dispatch` 手动补包时同样必须补齐三样（同名资产会覆盖）。**workflow 一律不写 pnpm `version`**——版本从根 `package.json` 的 `packageManager` 读（单一事实源；写死会在升级时静默漂移：2026-09 升 pnpm 12.4.2 时 `publish.yml` 实际残留 `11.22.0`，已改）。⚠ tag 纪律同下（一次只推一个 tag）。
 
 ```
 1. 更新根 CHANGELOG.md：把 Unreleased 条目搬运为新版本段（## [vX.Y.Z] - <日期>）

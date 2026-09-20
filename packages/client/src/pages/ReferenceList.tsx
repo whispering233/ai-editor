@@ -467,7 +467,7 @@ function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowP
           </button>
         )}
       </td>
-      {/* 分类列（2026-10 卡 18.1）：分类 = 类型徽标 → `TypeChip`（描边式，与标签列的 tint 实底两套形态语言；
+      {/* 分类列（2026-09 卡 18.1）：分类 = 类型徽标 → `TypeChip`（描边式，与标签列的 tint 实底两套形态语言；
           此前是裸文字——分类既不像标签也不像类型，两页还各手抄一份中文名映射） */}
       <td className="max-w-28 px-3 py-2">
         {referenceTypeLabel(type) !== "" && (

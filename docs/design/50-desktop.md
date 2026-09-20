@@ -69,7 +69,7 @@
   - **`--legacy` 已不需要（pnpm 12 起）**：pnpm 11 默认拒结非 injected workspace 的 deploy（`ERR_PNPM_DEPLOY_NONINJECTED_WORKSPACE`），12.2+ 的默认实现把链接的 workspace 依赖改写成 `file:` 写入专用 deploy lockfile——升级后 `pack.mjs` 已去担此 flag，且打包产物经实测可用（窗口 + preload + 建库全通）。若将来被要求降回 pnpm 11，需重新加回。
   - **`electron-builder` 需显式 `linux.executableName`（实测）**：应用目录 package.json 的 name 带 scope（`@whispering233/...`）→ 推导出的可执行名含 `@`，AppImage 工具链拒收（仅允许字母/数字/`-`/`_`/`.`/空格）。另需 `npmRebuild: false`（N-API 模块无需针对 Electron 重编译）。
 - **原生模块**：`asarUnpack` 放 `**/*.node`。better-sqlite3 v13 是 N-API（`NAPI_VERSION=10`）+ 预编译 8 平台 `.node`，在 Electron 44.3.0（内置 Node 24.18.1）**免 rebuild 直接可用**——已实测（dev 态与打包态各建库一次）。
-- **平台矩阵（2026-10 定）**：**本地只打 Linux 包测试**（`pnpm desktop:dist` → AppImage）；**Windows 包由 CI 出**（nsis，唯一的自动出包平台）；macOS（dmg）暂不做——无 mac 环境可验。将来有真实用户需求再恢复三平台 matrix（`desktop.yml` 里两个平台项已注释保留）。Windows 本地交叉构建需 Wine（electron-builder 官方口径），本仓不往开发机装该依赖。
+- **平台矩阵（2026-09 定）**：**本地只打 Linux 包测试**（`pnpm desktop:dist` → AppImage）；**Windows 包由 CI 出**（nsis，唯一的自动出包平台）；macOS（dmg）暂不做——无 mac 环境可验。将来有真实用户需求再恢复三平台 matrix（`desktop.yml` 里两个平台项已注释保留）。Windows 本地交叉构建需 Wine（electron-builder 官方口径），本仓不往开发机装该依赖。
 - **签名**：首版不做（macOS 首次需右键打开、Windows 有 SmartScreen 提示，README 写明）。触发条件 = 用户量起来或 SmartScreen 提示成为反馈主题（**不再是「上自动更新」**——Windows 更新已在未签名下跑通，信任锚与安全边界见 §5.2）。
 - **自动更新**：**Windows 安装态已启用**（electron-updater 6.8.9 + GitHub Releases；macOS 仍受签名阻塞）——时机/反馈/安装口径与安全边界见 §5.2。
 - **CI**：`.github/workflows/desktop.yml`，与 `publish.yml` 同触发（push `v*` tag），**只跑 windows-latest**，产物挂到该 tag 的 GitHub Release（并额外上传 CI artifact 供本地下载验）。发布纪律见 `build.md`。
@@ -131,7 +131,7 @@ macOS 无卸载器（拖废纸篓即卸）→ 本机制只对 Windows 生效；�
 
 两条都不新增视觉语言：复用 `card` / `caption-text` / `button-default` / `input`，见 `docs/ui/DESIGN.md`。
 
-## 7. 已验证结论（K0 打包 spike，2026-10 实测）
+## 7. 已验证结论（K0 打包 spike，2026-09 实测）
 
 三条假设均已在 Linux x64 + Electron 44.3.0 上跑通（`pnpm --filter ai-editor-desktop dist` 一键出 AppImage）：
 

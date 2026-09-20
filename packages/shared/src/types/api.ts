@@ -164,7 +164,7 @@ export const timepointDataSchema = z.object({}).passthrough();
 /** reference 专属字段（参考资料：type 自由文本分类 / url 外源链接 / tags 标签数组 / content 正文块数组 JSON）；
  * type 缺省 material 写入侧兜底；url 可选（纯本地笔记不需要，外源链接才填）。
  *
- * **content 只是端点对外的字段名**（2026-10 reference 特例）：真相存 `document_records`
+ * **content 只是端点对外的字段名**（2026-09 reference 特例）：真相存 `document_records`
  * （`owner_kind='reference'`，见 docs/api/30-api-entity.md「reference 特例」），entities.data 里
  * **不落** content——服务端路由层把请求里的 data.content 拆出、详情响应里再装回（存储形态见 docs/db/schema.md）。
  * `kind` / `file_name` / `file_mtime` / `source` **已废弃**（旧值不读、不迁移；`.passthrough()` 容错存量残留）。 */

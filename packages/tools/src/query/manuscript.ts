@@ -2,7 +2,7 @@
 // get_chapter_text——AI 需要看「作者到底写了什么」时按需拉取（分析节奏、核对与设定的冲突、
 // 评价具体段落）。
 //
-// 口径（docs/api/tool-calling.md「正文只读查询（2026-10）」、
+// 口径（docs/api/tool-calling.md「正文只读查询（2026-09）」、
 // `docs/design/10-data-model.md` §13）：
 // - text = `document_records.content_text`（**服务端派生的轻量 md 投影**）——块 JSON 原文
 //   只服务编辑器，绝不进模型上下文
