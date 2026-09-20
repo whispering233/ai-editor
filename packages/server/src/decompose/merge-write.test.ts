@@ -415,6 +415,7 @@ describe("用户编辑优先与消失行（§6.1）", () => {
     await runMerge({ project, jobId, deps: model.deps });
 
     const 李四 = characterIdByName(project.db, "李四");
+    const idsBefore = listEntities(project.db, { type: "character" }).items.map((item) => item.id).sort();
     await sleep(); // updated_at 精度到毫秒：睡过同一毫秒才能造出「用户改过」的版本戳
     updateEntity(project.db, 李四, { data: { role: "用户改过的定位" } });
 
@@ -423,6 +424,8 @@ describe("用户编辑优先与消失行（§6.1）", () => {
     await runMerge({ project, jobId, deps: model.deps });
 
     expect(listEntities(project.db, { type: "character" }).items.map((item) => item.id)).toContain(李四); // 未被软删
+    // 既不覆盖也不另建一份（保留下来的就是原来那一行）
+    expect(listEntities(project.db, { type: "character" }).items.map((item) => item.id).sort()).toEqual(idsBefore);
     expect(getEntity(project.db, 李四)!.data.role).toBe("用户改过的定位"); // 用户编辑未被覆盖
     expect(listDeletedEntities(project.db).map((item) => item.id)).not.toContain(李四);
     expect(reportDocument(project).text).toContain("未改动（用户手工编辑过，重跑不覆盖）：李四（character）");
