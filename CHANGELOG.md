@@ -7,6 +7,10 @@
 
 ## [Unreleased]
 
+### Removed
+
+- **README 删掉「发布与安装」的历史版本说明**：该段（当前版本号、缺发布的 tag 清单、npm 实际序列、逐版本要点、v0.0.1/v0.0.2 不可安装与 deprecate 记录）与 `CHANGELOG.md` 重复且逐版膨胀，且清单本身已不准（实测 13 个 tag 无 Release 与 npm 版本）。版本事实以 `CHANGELOG.md` 与 GitHub Releases 为准。
+
 ## [v0.0.51] - 2026-09-20
 
 > **文档与一致性版本（无功能变更）**：发布前审计清理——合同文档与代码注释里的过时引用、过时计数与数字复述，并继续收敛数值单源。回归：build / typecheck / lint / `-r test` 全绿（167 文件 / 2484 测试）。
