@@ -49,7 +49,7 @@
 
 ### POST /api/v1/project/backup
 
-立即备份当前项目（手动触发；设置页「立即备份」按钮与左栏底部「立即备份」入口）。**kind 恒为 manual**。
+立即备份当前项目（手动触发；设置页「立即备份」按钮、左栏底部「立即备份」入口与全站 `Ctrl/Cmd + S`——快捷键路径由客户端按 `SHORTCUT_BACKUP_THROTTLE_MINUTES` 节流后调用，见 [`../ui/DESIGN.md`](../ui/DESIGN.md) §设置页「快捷键」区）。**kind 恒为 manual**。
 
 ```typescript
 // Req（请求体可选；缺省 = 纯时间戳文件名）
