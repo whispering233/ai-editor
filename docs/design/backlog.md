@@ -301,7 +301,7 @@
 - **块编辑器接线无自动化回归钉（卡 12.12/12.5 修复轮登记）** — 现状：`initialContent: []` 崩页与 `dictionary: zh` 两个缺陷都只有浏览器走查证据；仓内无 jsdom，组件不参与单测。触发条件：重现「改一行传参把编辑器搞崩」。可选最小修法：按 `design-discipline.test.ts` 的源码扫描风格加一条断言（如 `document-editor.tsx` 必须包含 `dictionary: zh` 且不得出现 `initialContent: []`），或引入 jsdom 只测封装组件的挂载。
 - **`document_records` 的两份 DDL 文本差一行行尾注释**（卡 12.2 oracle 登记，P3 无功能影响） — 现状：`packages/db/src/tables.ts` 的声明 DDL 在 `PRIMARY KEY (owner_kind, owner_id)` 后带 `-- 一 owner 一行（…）` 注释，`migrations/008_document_records.ts` 的迁移 DDL 无该注释；去注释后逐字相等。唯一消费该文本的是「v0 空库结构快照」（只对 `user_version === 0` 生效，已到 v8 的库不参与）。触发条件：有人想加「迁移 DDL 文本 == 声明 DDL 文本」的断言时。最小修法：把注释挪到行首或去掉（同步改两处）。
 
-## 文档与测试卫生（2026-09 发布前审计登记）
+## 发布前审计登记（2026-09，v0.0.50）
 
 - **文档日期口径不一致（待拍板）** — 现状：`docs/**`、`README.md`、`AGENTS.md` 共 67 处标 `2026-10`（写作面 / 块文档 / 桌面版等批次），而 git 提交与 tag 日期、`CHANGELOG.md` 各版本头均为 `2026-09`（v0.0.49 = 2026-09-19）。触发条件：下次文档批次或用户拍板「以哪个为准」。最小修法：先定基准（建议 = 版本头口径），再一次性全量替换；不要零敲碎打地改单处（会多出一种口径）。
 - **`auto-push.test.ts` 用 `references/` 造「变更」的前提已失效（测试诚实性）** — 现状：helper `changeCoveredByBackup` 与 7 处 `writeAfter(join("references", …))`（共 8 处 references 路径写入）写的是已退役的随包目录，而变更判定只查三文件 + `data.db-wal` + `PACKED_DIR_NAMES`（= `sessions/`）⇒ 用例标题所述「有改动未进最新备份」实际走的是「无变更 → 不推」（守卫本体由同文件的 `sessions/` 用例覆盖）。触发条件：要动 `hasUnbackedChanges` / `AUTO_PUSH_THROTTLE_MS` 口径时。最小修法：改用 `sessions/s1.jsonl`（同文件已有正确写法），并先确认该用例的期望结果是否随之改变。
