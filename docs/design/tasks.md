@@ -8,7 +8,12 @@
 
 ---
 
-## 当前无进行中任务卡
+## 卡 19.1 — 关联页端点列徽标前置（源/目标列类型徽标对齐）
+
+- **背景**：`relations-view.tsx` 的 `EndpointLink` 是「名称 + 类型徽标」，名称单行 `truncate` ⇒ 徽标 x 随名称长度浮动，短名行与长名行的徽标不在同一条竖线上（用户 2026-10 反馈）。
+- **契约**：`docs/ui/DESIGN.md` §Components `relations-view`（本次改口径：端点单元格 = 类型徽标在前、名称在后）。
+- **范围**：`components/entity/relations-view.tsx` 的 `EndpointLink`（可点 / 不可点两分支）徽标前置，徽标补 `shrink-0`；导出 `EndpointLink` 供 SSR 渲染序走查；`relations-view.test.ts` 增两条渲染序断言。**只改关联页**——人物页「其他关联」tab 与实体详情页的 `A [关系] B` 内联读法不动；大纲节点详情页的 scope 模式行走同一组件，自动同形。
+- **判据**：`relations-view.test.ts` 绿（渲染 HTML 中徽标文案下标 < 名称下标，可点 / 不可点两分支各一条）；`pnpm --filter @whispering233/ai-editor-client test` 绿；`pnpm typecheck` / `pnpm lint` 绿；浏览器走查 `#/relations`：源列与目标列各自的徽标在同一条竖线上（短名/长名两行对比）。
 
 ---
 
