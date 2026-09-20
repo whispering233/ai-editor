@@ -5,9 +5,9 @@
 // 由 schema.test.ts「DDL 与定义对齐」断言锁住（列名/类型/notNull/主键机械比对）。
 //
 // 边界：
-// - JSON 列（data/changes/metadata）一律 **text 模式**，不用 drizzle `mode:'json'`——
-// drizzle 的 json mode 对坏 JSON 直接 JSON.parse 抛错，会打挂整表查询；
-// 防御在 queries 的 parseDataColumn 行映射层（坏行返回 {}）。
+// - JSON 列（data/changes/metadata 与拆解三列 chapter_ids/result/merge_written）一律 **text 模式**，
+// 不用 drizzle `mode:'json'`——drizzle 的 json mode 对坏 JSON 直接 JSON.parse 抛错，
+// 会打挂整表查询；防御在 queries 的行映射层（entity.ts parseDataColumn / decompose.ts parse*）。
 // - 对话历史**不在库内**（项目目录 `sessions/*.jsonl`，见 sessions.ts / docs/db/schema.md）。
 // - 标识符由 drizzle escapeName 双引号包裹输出（`"order"` 关键字列安全，无需特殊转义）。
 // - CHECK 约束与部分索引两处都声明（drizzle 侧供对齐核对；真实建表以 DDL 常量为准）。
@@ -99,7 +99,44 @@ export const documentRecords = sqliteTable(
 );
 
 /**
- * 四张业务表 + 索引的建表 SQL（幂等：CREATE TABLE/INDEX IF NOT EXISTS）——建表执行的事实来源。
+ * decompose_jobs：拆解小说 job（导入式批量管线，设计见 docs/design/60-decompose.md）。
+ * 一项目一 job（业务层保证，不设唯一约束）：状态机 pending → running → (paused | done | failed)，
+ * 范围与组批口径是 S1 的快照（续拆/重跑按同一口径重算批次）；无 deleted_at——撤销 = 删书或恢复备份。
+ */
+export const decomposeJobs = sqliteTable("decompose_jobs", {
+  id: text("id").primaryKey(), // 'job-*'
+  status: text("status").notNull(), // pending | running | paused | done | failed（枚举值少且稳定，不加 CHECK）
+  scope_start: integer("scope_start").notNull(), // 分析范围起始章序（1-based，文件位置序）
+  scope_end: integer("scope_end").notNull(),
+  batch_target_chars: integer("batch_target_chars").notNull(), // 组批目标字数快照
+  model: text("model"), // 本次使用的模型（provider/id），审计用
+  merge_written: text("merge_written"), // JSON: 上次归并写入清单（幂等/重跑三路比对；text 模式）
+  error: text("error"), // job 级失败摘要
+  created_at: text("created_at").notNull(),
+  updated_at: text("updated_at").notNull(),
+});
+
+/**
+ * decompose_batches：批规划与批结果暂存（S2 的中间产物，不是待确认草稿）。
+ * 批结果只落 `result`（业务数据由 S3 写）；无外键——job 行删除时批行由 helper 连带删。
+ */
+export const decomposeBatches = sqliteTable(
+  "decompose_batches",
+  {
+    job_id: text("job_id").notNull(), // → decompose_jobs.id
+    seq: integer("seq").notNull(), // 1-based 批序号（文件位置序）
+    chapter_ids: text("chapter_ids").notNull(), // JSON: 本批覆盖的章节点 id 列表（顺序 = 文件序；text 模式）
+    status: text("status").notNull(), // pending | running | done | failed
+    result: text("result"), // JSON: 该批抽取结果（逐章对齐；未完成 = NULL；text 模式）
+    attempts: integer("attempts").notNull().default(0), // 已尝试次数（重试上限见设计文档）
+    error: text("error"), // 该批失败摘要
+    updated_at: text("updated_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.job_id, t.seq] })],
+);
+
+/**
+ * 全部业务表 + 索引的建表 SQL（幂等：CREATE TABLE/INDEX IF NOT EXISTS）——建表执行的事实来源。
  * 与上方 sqliteTable 定义必须同步（schema.test.ts 对齐断言覆盖）。
  */
 export const CREATE_TABLES_SQL = `
@@ -159,5 +196,32 @@ CREATE TABLE IF NOT EXISTS document_records (
   created_at   TEXT NOT NULL,   -- ISO 8601，应用层写入
   updated_at   TEXT NOT NULL,   -- ISO 8601，应用层写入（版本戳：多标签页防覆盖）
   PRIMARY KEY (owner_kind, owner_id)   -- 一 owner 一行（upsert 覆盖，行随 owner 生命周期）
+);
+
+-- decompose_jobs：拆解小说 job（一项目一 job，2026-09）
+CREATE TABLE IF NOT EXISTS decompose_jobs (
+  id                 TEXT PRIMARY KEY,   -- 'job-*'
+  status             TEXT NOT NULL,      -- pending | running | paused | done | failed（枚举值少且稳定，不加 CHECK）
+  scope_start        INTEGER NOT NULL,   -- 分析范围起始章序（1-based，文件位置序）
+  scope_end          INTEGER NOT NULL,
+  batch_target_chars INTEGER NOT NULL,   -- 组批目标字数快照（续拆/重跑按同一口径重算批次）
+  model              TEXT,               -- 本次使用的模型（provider/id），审计用
+  merge_written      TEXT,               -- JSON: 上次归并写入清单（幂等/重跑三路比对）
+  error              TEXT,               -- job 级失败摘要
+  created_at         TEXT NOT NULL,      -- ISO 8601，应用层写入
+  updated_at         TEXT NOT NULL
+);
+
+-- decompose_batches：批规划与批结果暂存（S2 中间产物；无外键，批行由 helper 连带删）
+CREATE TABLE IF NOT EXISTS decompose_batches (
+  job_id      TEXT NOT NULL,             -- → decompose_jobs.id
+  seq         INTEGER NOT NULL,          -- 1-based 批序号（文件位置序）
+  chapter_ids TEXT NOT NULL,             -- JSON: 本批覆盖的章节点 id 列表（顺序 = 文件序）
+  status      TEXT NOT NULL,             -- pending | running | done | failed
+  result      TEXT,                      -- JSON: 该批抽取结果（逐章对齐；未完成 = NULL）
+  attempts    INTEGER NOT NULL DEFAULT 0,-- 已尝试次数（重试上限见设计文档）
+  error       TEXT,                      -- 该批失败摘要
+  updated_at  TEXT NOT NULL,
+  PRIMARY KEY (job_id, seq)
 );
 `;

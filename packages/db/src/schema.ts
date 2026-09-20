@@ -24,8 +24,10 @@ import { CREATE_TABLES_SQL } from "./tables.js";
  * 迁为 `ability_panel` 顶层分组「能力」下的叶子（migrations/007_character_ability_panel.ts）。
  * v7 → v8（块文档，2026-09）：新增 `document_records` 表（章正文 / 参考资料正文，
  * 纯 DDL 无数据搬移，migrations/008_document_records.ts）。
+ * v8 → v9（拆解小说，2026-09）：新增 `decompose_jobs` / `decompose_batches` 两表
+ * （job 状态与批结果暂存，纯 DDL 无数据搬移，migrations/009_decompose.ts）。
  */
-export const SCHEMA_VERSION = 8; // +块文档表 document_records（008_document_records.ts 纯 DDL）
+export const SCHEMA_VERSION = 9; // +拆解两表 decompose_jobs / decompose_batches（009_decompose.ts 纯 DDL）
 
 /**
  * 建表：执行全部 DDL（CREATE TABLE/INDEX IF NOT EXISTS，定义于 tables.ts），幂等，可重复调用。

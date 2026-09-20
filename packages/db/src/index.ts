@@ -18,3 +18,4 @@ export * from "./queries/delta.js";
 export * from "./queries/compute-state.js";
 export * from "./queries/trash.js";
 export * from "./queries/document.js";
+export * from "./queries/decompose.js";
