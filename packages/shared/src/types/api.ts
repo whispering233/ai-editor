@@ -1091,6 +1091,202 @@ export const cloudPullReqSchema = z
   .strict();
 export type CloudPullReq = z.infer<typeof cloudPullReqSchema>;
 
+// ============ decompose 端点（「拆解小说」导入式批量管线） ============
+//
+// 契约：docs/api/120-api-decompose.md（端点结构）+ docs/design/60-decompose.md §5（抽取 schema 口径）。
+// **传输例外**：analyze / start 的请求体是小说文件原始字节（application/octet-stream），
+// 文件名与范围走 query —— 故本段只声明 query 与响应 schema（无 JSON 请求体可校验）。
+
+/** job 状态机（pending → running → (paused | done | failed)） */
+export const DECOMPOSE_JOB_STATUSES = ["pending", "running", "paused", "done", "failed"] as const;
+/** 批状态（pending → running → done | failed） */
+export const DECOMPOSE_BATCH_STATUSES = ["pending", "running", "done", "failed"] as const;
+/** 阶段条（进度页高亮用；`done` = 全流程结束） */
+export const DECOMPOSE_STAGES = ["ingest", "extract", "merge", "report", "done"] as const;
+
+/** 编码探测结果（与 server `decompose/split.ts` 的 NovelEncoding 同集：探测在服务端单一实现） */
+export const decomposeEncodingSchema = z.enum(["utf-8", "utf-8-bom", "utf-16le", "utf-16be", "gb18030"]);
+
+/** 切分警告（码表单一来源 = server `decompose/split.ts` 的 SPLIT_WARNING_CODES；client 不映射代码，故此处不复抄清单） */
+export const decomposeWarningSchema = z.object({
+  code: z.string(),
+  message: z.string(),
+});
+
+/** 预览章条目（index = 1-based 文件位置序） */
+export const decomposeChapterPreviewSchema = z.object({
+  index: z.number().int().min(1),
+  title: z.string(),
+  charCount: z.number().int().min(0),
+  volumeIndex: z.number().int().min(0),
+});
+
+/** 范围预估（费率来自 pi 模型目录；未配置模型/凭据 → costApprox = null） */
+export const decomposeEstimateSchema = z.object({
+  batchCount: z.number().int().min(0),
+  llmCalls: z.number().int().min(0),
+  inputTokensApprox: z.number().int().min(0),
+  outputTokensApprox: z.number().int().min(0),
+  costApprox: z.number().nullable(),
+});
+
+// POST /api/v1/decompose/analyze（Query；缺省语义 = 起始 1 / 结束到末章——章数由服务端切分后才知道，故不在 schema 里给默认）
+export const decomposeAnalyzeQuerySchema = z.object({
+  file_name: z.string().min(1),
+  scope_start: z.coerce.number().int().min(1).optional(),
+  scope_end: z.coerce.number().int().min(1).optional(),
+});
+
+// POST /api/v1/decompose/analyze（Res: 200 切分预览，无状态、不落库）
+export const decomposeAnalyzeResSchema = z.object({
+  encoding: decomposeEncodingSchema,
+  totalChars: z.number().int().min(0),
+  chapters: z.array(decomposeChapterPreviewSchema),
+  volumes: z.array(z.object({ index: z.number().int().min(0), title: z.string() })),
+  stats: z.object({ min: z.number().min(0), median: z.number().min(0), max: z.number().min(0) }), // median 可能是 x.5（偶数章取中位均值）
+  warnings: z.array(decomposeWarningSchema),
+  estimate: decomposeEstimateSchema,
+  defaultName: z.string(),
+});
+export type DecomposeAnalyzeRes = z.infer<typeof decomposeAnalyzeResSchema>;
+
+// POST /api/v1/decompose/start（Query）
+export const decomposeStartQuerySchema = z.object({
+  file_name: z.string().min(1),
+  name: z.string().min(1),
+  scope_start: z.coerce.number().int().min(1).optional(),
+  scope_end: z.coerce.number().int().min(1).optional(),
+});
+
+// POST /api/v1/decompose/start（Res: 200；S1 同步完成后再返回，job 已进入 running）
+export const decomposeStartResSchema = z.object({
+  projectId: z.string(),
+  projectPath: z.string(),
+  name: z.string(),
+  jobId: z.string(),
+  status: z.enum(["pending", "running"]),
+  batchCount: z.number().int().min(0),
+});
+export type DecomposeStartRes = z.infer<typeof decomposeStartResSchema>;
+
+// ── S2 抽取结果（逐章对齐；口径表见 docs/design/60-decompose.md §5） ──
+//
+// 本组 schema 同时是「服务端归一后的批结果形状」与「client 展开批结果时消费的类型」；
+// 模型原始输出先经 server `decompose/extract.ts` 的纯函数校验与归一（截断/丢弃/白名单），
+// 再按本形状落 `decompose_batches.result`——故此处**只声明干净形状**：
+// - 上限类约束（摘要/描述/动机长度、条数）由归一函数执行，schema 不重复声明数值；
+// - `ability_panel` / `custom_fields` / `location.parent_id` 契约禁止填（§5），不在此声明。
+
+/** 抽取人物（role 为自由文本：提示词给建议词表，服务端不校验、不给枚举） */
+export const decomposeCharacterSchema = z.object({
+  name: z.string(),
+  role: z.string().optional(),
+  description: z.string().optional(),
+  alias: z.string().optional(), // 单值（多别名进 description 的「（又称：…）」）
+  gender: z.string().optional(), // 只在文中明确时填
+  age: z.union([z.string(), z.number()]).optional(),
+  race: z.string().optional(),
+  personality: z.array(z.string()).optional(),
+  motivation: z.string().optional(),
+});
+export type DecomposeCharacter = z.infer<typeof decomposeCharacterSchema>;
+
+/** 抽取设定（tags = 短标签、rules = 短句——长文本进 description） */
+export const decomposeSettingSchema = z.object({
+  name: z.string(),
+  description: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  rules: z.array(z.string()).optional(),
+});
+export type DecomposeSetting = z.infer<typeof decomposeSettingSchema>;
+
+/** 抽取地点（type 自由文本；不做地点层级 ⇒ 无 parent_id） */
+export const decomposeLocationSchema = z.object({
+  name: z.string(),
+  type: z.string().optional(),
+  description: z.string().optional(),
+});
+export type DecomposeLocation = z.infer<typeof decomposeLocationSchema>;
+
+/** 抽取关系（type 白名单收窄到 8 类，单一来源 = server `decompose/extract.ts` 的 DECOMPOSE_RELATION_TYPES） */
+export const decomposeRelationSchema = z.object({
+  source: z.string(),
+  target: z.string(),
+  type: z.string(),
+  evidence: z.string().optional(),
+});
+export type DecomposeRelation = z.infer<typeof decomposeRelationSchema>;
+
+/** 单章抽取结果（chapterIndex = 1-based 文件位置序；批内必须逐章对齐） */
+export const decomposeExtractedChapterSchema = z.object({
+  chapterIndex: z.number().int().min(1),
+  chapterTitle: z.string(),
+  summary: z.string(),
+  characters: z.array(decomposeCharacterSchema),
+  settings: z.array(decomposeSettingSchema),
+  locations: z.array(decomposeLocationSchema),
+  relations: z.array(decomposeRelationSchema),
+});
+export type DecomposeExtractedChapter = z.infer<typeof decomposeExtractedChapterSchema>;
+
+/** 一批抽取结果（= `decompose_batches.result` 的 JSON 形状） */
+export const decomposeBatchResultSchema = z.object({
+  chapters: z.array(decomposeExtractedChapterSchema),
+});
+export type DecomposeBatchResult = z.infer<typeof decomposeBatchResultSchema>;
+
+// GET /api/v1/decompose/job（Res: 200；**不含批结果正文**，展开单批另取 batches/:seq）
+export const decomposeJobResSchema = z.object({
+  jobId: z.string(),
+  status: z.enum(DECOMPOSE_JOB_STATUSES),
+  stage: z.enum(DECOMPOSE_STAGES),
+  scopeStart: z.number().int().min(1),
+  scopeEnd: z.number().int().min(1),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  progress: z.object({
+    done: z.number().int().min(0),
+    failed: z.number().int().min(0),
+    total: z.number().int().min(0),
+  }),
+  batches: z.array(
+    z.object({
+      seq: z.number().int().min(1),
+      chapterIndexes: z.array(z.number().int().min(1)),
+      chapterTitles: z.array(z.string()), // 与 chapterIndexes 同序
+      charCount: z.number().int().min(0),
+      status: z.enum(DECOMPOSE_BATCH_STATUSES),
+      attempts: z.number().int().min(0),
+      error: z.string().nullable(),
+    }),
+  ),
+  error: z.string().nullable(),
+  report: z.object({ entityId: z.string(), name: z.string() }).nullable(),
+});
+export type DecomposeJobRes = z.infer<typeof decomposeJobResSchema>;
+
+// GET /api/v1/decompose/job/batches/:seq（Res: 200；result 未完成 = null）
+export const decomposeBatchResSchema = z.object({
+  seq: z.number().int().min(1),
+  status: z.enum(DECOMPOSE_BATCH_STATUSES),
+  attempts: z.number().int().min(0),
+  error: z.string().nullable(),
+  result: decomposeBatchResultSchema.nullable(),
+});
+export type DecomposeBatchRes = z.infer<typeof decomposeBatchResSchema>;
+
+// POST /api/v1/decompose/job/pause（409 DECOMPOSE_JOB_STATE：已 done / 已 paused / 已 failed）
+export const decomposePauseResSchema = z.object({ status: z.literal("paused") });
+
+// POST /api/v1/decompose/job/resume（409 DECOMPOSE_JOB_STATE：非 paused；400 LLM_API_KEY_MISSING）
+export const decomposeResumeResSchema = z.object({ status: z.literal("running") });
+
+// POST /api/v1/decompose/job/batches/:seq/rerun（404 批序号越界；409 job 正在 running / paused）
+export const decomposeRerunResSchema = z.object({
+  status: z.literal("running"),
+  seq: z.number().int().min(1),
+});
+
 // ============ chat SSE 事件 ============
 //
 // 事件集（服务端→客户端的 pi 事件投影）以 docs/api/80-api-chat.md 为契约。本文件**不再镜像**
