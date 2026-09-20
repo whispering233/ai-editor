@@ -1,4 +1,4 @@
-// Settings 设置页：页头（标题）+ 二级 tab 导航（通用 → AI 模型 → 项目规则 → 备份）+ 内容区块
+// Settings 设置页：页头（标题）+ 二级 tab 导航（通用 → AI 模型 → 项目规则 → 备份 → 快捷键）+ 内容区块
 // 布局契约：DESIGN.md §Layout「中栏页头结构」——分割线由 tab 条自带底线承担（`AntdProvider` 的
 // `Tabs.horizontalMargin: 0` 保证底线紧贴内容，不留 16px 空档）
 // 二级 tab 选中态是**页内 state**，不进 URL（`#/preferences` 恒为设置页；刷新回落默认 tab）——见 DESIGN.md §Components `tabs`
@@ -13,11 +13,12 @@ import { BackupSection } from "../components/settings/backup-section";
 import { LibraryLocationPanel } from "../components/settings/library-location-panel";
 import { LlmSection } from "../components/settings/llm-section";
 import { ProjectRulesSection } from "../components/settings/project-rules-section";
+import { ShortcutsSection } from "../components/settings/shortcuts-section";
 import { desktopBridge } from "../lib/desktop";
 import { useCloudStore } from "../stores/cloud";
 
-/** 二级 tab 键（顺序 = 应用级配置 → 配置 AI → 配置项目 → 数据安全） */
-type TabKey = "general" | "llm" | "rules" | "backup";
+/** 二级 tab 键（顺序 = 应用级配置 → 配置 AI → 配置项目 → 数据安全 → 快捷键说明） */
+type TabKey = "general" | "llm" | "rules" | "backup" | "shortcuts";
 
 export default function Settings() {
   const [tab, setTab] = useState<TabKey>("llm");
@@ -42,6 +43,8 @@ export default function Settings() {
           { key: "llm", label: "AI 模型", children: <LlmSection /> },
           { key: "rules", label: "项目规则", children: <ProjectRulesSection /> },
           { key: "backup", label: "备份", children: <BackupSection /> },
+          // 「快捷键」恒在末位：纯说明页（无可交互控件），浏览器与桌面版都渲染
+          { key: "shortcuts", label: "快捷键", children: <ShortcutsSection /> },
         ]}
       />
     </section>
