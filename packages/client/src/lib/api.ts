@@ -15,6 +15,8 @@ import type {
   DeltaChange,
   DeltaRecord,
   DecomposeAnalyzeRes,
+  DecomposeBatchRes,
+  DecomposeJobRes,
   DecomposeStartRes,
   EntitySummary,
   ErrorCode,
@@ -1274,4 +1276,52 @@ export function startDecompose(
       scope_end: options.scopeEnd,
     },
   });
+}
+
+// ============ 拆解小说进度面（进度页 / 概览卡片；docs/api/120-api-decompose.md §job … §rerun） ============
+//
+// 进度投影**不含批结果正文**（数百批 × 每条千级 token 会撑爆响应）：轮询只取 job，
+// 展开某批时按需另取 `batches/:seq`。错误码：404 DECOMPOSE_JOB_NOT_FOUND（当前项目没有 job，
+// 调用方据此停止轮询）、409 DECOMPOSE_JOB_STATE（状态不允许该操作）、400 LLM_API_KEY_MISSING。
+
+/** GET /api/v1/decompose/job（进度轮询；`signal` 用于离开页面时中止在途请求） */
+export function getDecomposeJob(signal?: AbortSignal): Promise<DecomposeJobRes> {
+  return apiFetch<DecomposeJobRes>("/decompose/job", { signal });
+}
+
+/** GET /api/v1/decompose/job/batches/:seq（展开行按需拉取；未完成 → `result: null`） */
+export function getDecomposeBatch(seq: number, signal?: AbortSignal): Promise<DecomposeBatchRes> {
+  return apiFetch<DecomposeBatchRes>(`/decompose/job/batches/${seq}`, { signal });
+}
+
+/** POST /api/v1/decompose/job/pause 响应（形状同 shared `decomposePauseResSchema`） */
+export interface DecomposePauseRes {
+  status: "paused";
+}
+
+/** POST /api/v1/decompose/job/pause —— 中止当前 job（当前批跑完即停，结果不浪费） */
+export function pauseDecomposeJob(): Promise<DecomposePauseRes> {
+  return apiFetch<DecomposePauseRes>("/decompose/job/pause", { method: "POST" });
+}
+
+/** POST /api/v1/decompose/job/resume 响应（形状同 shared `decomposeResumeResSchema`） */
+export interface DecomposeResumeRes {
+  status: "running";
+}
+
+/** POST /api/v1/decompose/job/resume —— 从第一个未完成批续拆（跳过 done 的批） */
+export function resumeDecomposeJob(): Promise<DecomposeResumeRes> {
+  return apiFetch<DecomposeResumeRes>("/decompose/job/resume", { method: "POST" });
+}
+
+/** POST /api/v1/decompose/job/batches/:seq/rerun 响应（形状同 shared `decomposeRerunResSchema`） */
+export interface DecomposeRerunRes {
+  status: "running";
+  seq: number;
+}
+
+/** POST /api/v1/decompose/job/batches/:seq/rerun —— 重跑单批（重算该批 → 重建归并与报告；
+ * 仅 `done` / `failed` job 上的 `done` / `failed` 批可重跑，否则 409） */
+export function rerunDecomposeBatch(seq: number): Promise<DecomposeRerunRes> {
+  return apiFetch<DecomposeRerunRes>(`/decompose/job/batches/${seq}/rerun`, { method: "POST" });
 }

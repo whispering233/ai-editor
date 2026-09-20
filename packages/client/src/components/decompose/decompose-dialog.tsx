@@ -115,7 +115,7 @@ export function DecomposeDialogView({
             <Typography.Text
               key={`${warning.code}-${index}`}
               type="warning"
-              className="block text-xs"
+              className="block"
             >
               {warning.message}
             </Typography.Text>

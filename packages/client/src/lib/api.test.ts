@@ -20,6 +20,8 @@ import {
   deleteOutlineNode,
   exportProjectZip,
   getDeltasByNode,
+  getDecomposeBatch,
+  getDecomposeJob,
   getEntityDetail,
   getOutlinePath,
   getProjectBackups,
@@ -35,12 +37,15 @@ import {
   getOutline,
   openProject,
   parseContentDispositionFilename,
+  pauseDecomposeJob,
   purgeOutlineNode,
   rejectProposal,
   renameProject,
   renameProjectBackup,
+  rerunDecomposeBatch,
   restoreOutlineNode,
   restoreProjectBackup,
+  resumeDecomposeJob,
   saveManuscript,
   startDecompose,
   updateEntity,
@@ -1431,5 +1436,65 @@ describe("拆解小说端点（上传原始字节）", () => {
     });
     const err = await analyzeDecompose(FILE).catch((e: unknown) => e);
     expect((err as ApiError).code).toBe("DECOMPOSE_FILE_TOO_LARGE");
+  });
+});
+
+// 拆解进度面（卡 21.9；docs/api/120-api-decompose.md §job … §rerun）——轮询 / 展开 / 中止续拆 / 重跑的 URL 形状。
+describe("拆解进度面端点", () => {
+  it("getDecomposeJob：GET /decompose/job；signal 透传（离开页面时中止在途轮询）", async () => {
+    const calls = mockFetchOnce({ body: { success: true, data: { status: "running" } } });
+    const controller = new AbortController();
+    const res = await getDecomposeJob(controller.signal);
+    expect(calls[0].url).toBe("/api/v1/decompose/job");
+    expect(calls[0].init?.method).toBe("GET");
+    expect(calls[0].init?.signal).toBe(controller.signal);
+    expect(res).toEqual({ status: "running" });
+  });
+
+  it("getDecomposeJob：404 DECOMPOSE_JOB_NOT_FOUND → ApiError code 透传（调用方据此停止轮询）", async () => {
+    mockFetchOnce({
+      status: 404,
+      body: {
+        success: false,
+        error: { code: "DECOMPOSE_JOB_NOT_FOUND", message: "当前项目没有拆解任务" },
+      },
+    });
+    const err = await getDecomposeJob().catch((e: unknown) => e);
+    expect((err as ApiError).code).toBe("DECOMPOSE_JOB_NOT_FOUND");
+  });
+
+  it("getDecomposeBatch：GET /decompose/job/batches/:seq（未完成 → result: null）", async () => {
+    const calls = mockFetchOnce({
+      body: { success: true, data: { seq: 3, status: "pending", attempts: 0, error: null, result: null } },
+    });
+    const res = await getDecomposeBatch(3);
+    expect(calls[0].url).toBe("/api/v1/decompose/job/batches/3");
+    expect(res.result).toBeNull();
+  });
+
+  it("pause / resume / rerun：POST 到各自路径，无请求体", async () => {
+    const pauseCalls = mockFetchOnce({ body: { success: true, data: { status: "paused" } } });
+    await pauseDecomposeJob();
+    expect(pauseCalls[0].url).toBe("/api/v1/decompose/job/pause");
+    expect(pauseCalls[0].init?.method).toBe("POST");
+    expect(pauseCalls[0].init?.body).toBeUndefined();
+
+    const resumeCalls = mockFetchOnce({ body: { success: true, data: { status: "running" } } });
+    await resumeDecomposeJob();
+    expect(resumeCalls[0].url).toBe("/api/v1/decompose/job/resume");
+
+    const rerunCalls = mockFetchOnce({ body: { success: true, data: { status: "running", seq: 2 } } });
+    const res = await rerunDecomposeBatch(2);
+    expect(rerunCalls[0].url).toBe("/api/v1/decompose/job/batches/2/rerun");
+    expect(res.seq).toBe(2);
+  });
+
+  it("resume：400 LLM_API_KEY_MISSING → ApiError code 透传（缺凭据不动状态）", async () => {
+    mockFetchOnce({
+      status: 400,
+      body: { success: false, error: { code: "LLM_API_KEY_MISSING", message: "未配置 API key" } },
+    });
+    const err = await resumeDecomposeJob().catch((e: unknown) => e);
+    expect((err as ApiError).code).toBe("LLM_API_KEY_MISSING");
   });
 });

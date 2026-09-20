@@ -28,6 +28,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { SectionCard } from "@/components/ui/section-card";
+import { TypeChip } from "@/components/ui/tag-chip";
 import { DecomposeDialog } from "@/components/decompose/decompose-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
@@ -41,6 +42,7 @@ import {
   renameProject,
 } from "../lib/api";
 import { describeExportError, describeImportError } from "../lib/error-messages";
+import { describeJobStatus, formatShelfBadge, isTerminalJobStatus } from "../lib/decompose";
 import { validateBookName } from "../lib/book-name";
 import { entityListHost } from "../lib/entity-paths";
 import { describeOpenError } from "../lib/error-messages";
@@ -50,6 +52,7 @@ import { navigate } from "../hooks/use-route";
 import { buildBookPath, findOutlineNodeTitle, useProjectStore } from "../stores/project";
 import { useChatStore } from "../stores/chat";
 import { useDataRefresh } from "../hooks/use-data-refresh";
+import { useDecomposeJob } from "../hooks/use-decompose-job";
 import { useUiStore } from "../stores/ui";
 
 /** 创作要素卡类型中文名（与 EntityList 本地映射一致；四卡顺序 = 统计请求顺序） */
@@ -123,6 +126,9 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
   const currentSessionId = useChatStore((s) => s.currentSessionId);
   // 跨页定位（方案 A）：点击阅读进度/去大纲 → 设置 transient 目标后跳 #/outline，Outline 页消费
   const setFocusOutlineNode = useUiStore((s) => s.setFocusOutlineNode);
+  // 当前项目的拆解 job（卡 21.9）：概览卡「拆解任务」+ 书架当前书行「拆解中 N/M」徽标共用同一份轮询
+  // （参数 = 项目 id：未打开书不发请求，切书立即重拉并清掉上一本的状态；终态停止轮询见 use-decompose-job）
+  const { job: decomposeJob } = useDecomposeJob(config?.id ?? null);
 
   // 引导表单状态
   const [bookName, setBookName] = useState("");
@@ -681,6 +687,11 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                         <span className="min-w-0 flex-1 truncate text-sm text-foreground">
                           {book.name}
                         </span>
+                        {isCurrent && decomposeJob !== null && !isTerminalJobStatus(decomposeJob.status) && (
+                          /* 书架行徽标（卡 21.9）：只服务**当前书**那行——GET /project/list 不含 job 状态，
+                             逐本开 data.db 不值得，且切书即暂停（DESIGN.md §拆解小说） */
+                          <TypeChip className="shrink-0">{formatShelfBadge(decomposeJob.progress)}</TypeChip>
+                        )}
                         {isCurrent && (
                           <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground">
                             已打开
@@ -878,6 +889,17 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
       <PageHeader title="项目概览" />
 
       <div className="grid gap-4 lg:grid-cols-2">
+        {/* 区块 0：拆解任务（卡 21.9）——**有 job 时才渲染**（无 job 不渲染，不占位）；
+            一行状态 + 进 #/decompose 的入口；状态文案与进度页同源（describeJobStatus） */}
+        {decomposeJob !== null && (
+          <SectionCard title="拆解任务" className="lg:col-span-2">
+            <p className="text-sm text-foreground">{describeJobStatus(decomposeJob)}</p>
+            <div className="mt-3">
+              <Button href="#/decompose">查看进度</Button>
+            </div>
+          </SectionCard>
+        )}
+
         {/* 区块 1：项目信息（数据 config，无失败态——项目已打开） */}
         <SectionCard title="项目信息">
           <dl className="mt-3 space-y-2 text-sm">

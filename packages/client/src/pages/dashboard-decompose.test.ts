@@ -21,3 +21,26 @@ describe("书架入口（卡 21.8）", () => {
     expect(dashboard).toMatch(/<DecomposeDialog[^>]*open=\{decomposeOpen\}/);
   });
 });
+
+// 概览卡片 + 书架徽标（卡 21.9）：同一份 job 投影的两处入口。
+// 断言「有 job 才渲染」与「徽标只服务当前书」两个易丢的收窄——源码扫描理由同上（zustand SSR 快照）。
+describe("拆解任务卡片与书架徽标（卡 21.9）", () => {
+  it("概览态增「拆解任务」卡，且有 job 才渲染（无 job 不渲染）+ 进 #/decompose 的按钮", () => {
+    expect(dashboard).toContain('title="拆解任务"');
+    expect(dashboard).toMatch(/\{decomposeJob !== null && \(/);
+    expect(dashboard).toContain('href="#/decompose"');
+  });
+
+  it("卡片状态行与进度页同源（describeJobStatus，不另写一份文案）", () => {
+    expect(dashboard).toContain("describeJobStatus(decomposeJob)");
+  });
+
+  it("书架当前书行徽标：isCurrent + 非终态 + formatShelfBadge", () => {
+    expect(dashboard).toMatch(/isCurrent && decomposeJob !== null && !isTerminalJobStatus\(decomposeJob\.status\)/);
+    expect(dashboard).toContain("formatShelfBadge(decomposeJob.progress)");
+  });
+
+  it("骨架：轮询参数 = 项目 id（未打开书不发请求、切书立即重拉）", () => {
+    expect(dashboard).toContain("useDecomposeJob(config?.id ?? null)");
+  });
+});
