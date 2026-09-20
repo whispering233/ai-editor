@@ -63,6 +63,14 @@ describe("选中面 token（全局派生 alias 覆盖）", () => {
   ] as const;
 
   for (const { name, config } of cases) {
+    it(`${name}：colorInfo = 主色（antd Progress 的 line 描边取 colorInfo 而非 colorPrimary）`, () => {
+      // 为什么需要它：`antd/es/progress/style/index.js` 的 `defaultColor: token.colorInfo` 是 Progress
+      // line 描边的唯一来源——本仓不设该 seed 时它取 antd 默认蓝 `#1677ff`，与深墨设计语言冲突
+      // （2026-09 像素实测：进度条渲染成 rgb(22,119,255)）。与主色同值是登记在案的契约。
+      const token = theme.getDesignToken(config);
+      expect(token.colorInfo, `${name} colorInfo`).toBe(token.colorPrimary);
+    });
+
     it(`${name}：选中/选中+hover 面与字色对比度 ≥ 4.5:1（WCAG AA）`, () => {
       const token = theme.getDesignToken(config);
       const base = over(token.colorBgContainer, [255, 255, 255]); // 该模式的面板底色

@@ -23,10 +23,18 @@ const BASE_SEED = { controlOutlineWidth: 0 };
  * 守卫测试 design-discipline.test.ts 断言两处字面量一致。*/
 export const CSS_VAR_KEY = "ai-editor-theme";
 
+/** 两态主色（DESIGN.md §Colors `{colors.primary}`）各取一个常量，好让 `colorInfo` 与它**同值**：
+ * antd `Progress` 的 line 描边取 `colorInfo` 而不是 `colorPrimary`（`antd/es/progress/style/index.js`
+ * 的 `defaultColor`）——不设该 seed 时进度条渲染成 antd 蓝 `#1677ff`（2026-09 像素实测），与深墨冲突。
+ * 两个 seed 从同一常量派生，改主色不会只改一半。*/
+const PRIMARY_LIGHT = "#37352f";
+const PRIMARY_DARK = "rgba(255,255,255,0.81)";
+
 /** 浅色 seed（DESIGN.md §Colors 映射表「浅色值」列逐行对应） */
 const LIGHT_SEED = {
   ...BASE_SEED,
-  colorPrimary: "#37352f",
+  colorPrimary: PRIMARY_LIGHT,
+  colorInfo: PRIMARY_LIGHT,
   colorText: "#37352f",
   colorTextSecondary: "#5d5b54",
   colorTextTertiary: "#787671",
@@ -51,7 +59,8 @@ const LIGHT_SEED = {
 /** 深色 seed（DESIGN.md 映射表「深色值（推断）」列；Notion 未公开深色 token，按观感推断） */
 const DARK_SEED = {
   ...BASE_SEED,
-  colorPrimary: "rgba(255,255,255,0.81)",
+  colorPrimary: PRIMARY_DARK,
+  colorInfo: PRIMARY_DARK,
   colorText: "rgba(255,255,255,0.81)",
   colorTextSecondary: "rgba(255,255,255,0.65)",
   colorTextTertiary: "rgba(255,255,255,0.51)",

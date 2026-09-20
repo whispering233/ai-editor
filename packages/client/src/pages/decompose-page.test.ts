@@ -82,4 +82,24 @@ describe("完成态总结卡", () => {
   it("计数走 formatCompletionCounts（库内计数口径）", () => {
     expect(page).toContain("formatCompletionCounts");
   });
+
+  it("完成态 = 总结卡在上 + 批列表在下（不得藏掉重跑入口）", () => {
+    // done 分支必须同时给出总结卡与批列表，且批列表只有一份实现（进度态与完成态共用）
+    expect(page).toMatch(
+      /if \(job\.status === "done"\) \{[\s\S]{0,200}renderSummary\(job\.report\)[\s\S]{0,200}renderBatchList\(job\)/,
+    );
+    expect(page).not.toMatch(/job\.status === "done"\)\s*return renderSummary/);
+    expect(page.match(/function renderBatchList\(/g)?.length).toBe(1);
+    expect(page).toContain("{renderBatchList(current)}"); // 进度态也走同一份
+    expect(page).toContain("canRerunBatch(current.status, batch.status)"); // done 批仍能重跑
+  });
+
+  it("批 result 形状守卫：脏形状降级成一行文案，不进 batchResultGroups", () => {
+    // 脏 result 直接进 batchResultGroups 会抛错 → 整页（含左栏/聊天）被 ErrorBoundary 换掉
+    expect(page).toContain("Array.isArray(detail.result.chapters)");
+    expect(page).toContain("结果形状异常");
+    expect(page.indexOf("Array.isArray(detail.result.chapters)")).toBeLessThan(
+      page.indexOf("batchResultGroups(detail.result)"),
+    );
+  });
 });

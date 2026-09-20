@@ -225,9 +225,11 @@ export function describeJobStatus(job: DecomposeJobRes): string {
   }
 }
 
-/** 书架当前书行徽标（`type-badge`）：「拆解中 N/M」（DESIGN.md §拆解小说 书架行徽标） */
-export function formatShelfBadge(progress: { done: number; total: number }): string {
-  return `拆解中 ${progress.done}/${progress.total}`;
+/** 书架当前书行徽标（`type-badge`）：运行 / 待运行 → 「拆解中 N/M」；已暂停 → 「已暂停 N/M」
+ * （DESIGN.md §拆解小说 书架行徽标——暂停还写「拆解中」是文案不准；终态无徽标由 `isTerminalJobStatus` 收窄） */
+export function formatShelfBadge(job: Pick<DecomposeJobRes, "status" | "progress">): string {
+  const { done, total } = job.progress;
+  return `${job.status === "paused" ? "已暂停" : "拆解中"} ${done}/${total}`;
 }
 
 /** 终态判定（轮询的停止条件 + 书架徽标是否显示，同一判定只此一处）：`done` / `failed` 不再变；

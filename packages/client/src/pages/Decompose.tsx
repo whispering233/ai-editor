@@ -8,7 +8,8 @@
 // - `pending` / `running`：阶段条 + 进度条 + 批列表；页头操作 = 中止
 // - `paused`：同上；页头操作 = 续拆；状态文案区分「已暂停」与「上次拆解中断」（paused + running 批）
 // - `failed`：同上 + job 级错误行（页头无操作）；失败批行内错误 + 重跑
-// - `done`：本页内容变总结卡（计数 + 三个跳转），**不自动跳转**
+// - `done`：总结卡（计数 + 三个跳转）在上 + 批列表在下（**完成态不藏批列表**：「核查后重跑」是本功能
+//   的核心能力，done 批重跑仍走二次确认），**不自动跳转**
 //
 // 数据：job / 批结果走 `hooks/use-decompose-job.ts`（轮询）+ `GET /decompose/job/batches/:seq`（展开按需）；
 // 完成总结计数 = 库内当前计数（同概览页「创作要素」口径，不解析报告正文）。
@@ -294,11 +295,19 @@ export default function Decompose() {
       }
       return <p className="text-sm text-muted-foreground">加载中…</p>;
     }
-    if (job.status === "done") return renderSummary(job.report);
+    // 完成态 = 总结卡在上 + 批列表在下（批列表的渲染与进度态同一份实现）
+    if (job.status === "done") {
+      return (
+        <>
+          {renderSummary(job.report)}
+          {renderBatchList(job)}
+        </>
+      );
+    }
     return renderProgress(job);
   }
 
-  /** 完成态：本页变总结卡（不自动跳转——用户自己决定去看报告还是大纲） */
+  /** 完成总结卡（不自动跳转——用户自己决定去看报告还是大纲） */
   function renderSummary(report: { entityId: string; name: string } | null) {
     return (
       <SectionCard title="拆解完成">
@@ -347,7 +356,7 @@ export default function Decompose() {
           ))}
         </div>
 
-        {/* 进度条：antd Progress 走全局 colorPrimary（**不加组件级 token 覆盖**）+ 批进度文案 */}
+        {/* 进度条：antd Progress 走全局 colorInfo（= 主色，**不加组件级 token 覆盖**）+ 批进度文案 */}
         <div className="mt-4 flex items-center gap-3">
           <div className="min-w-0 flex-1">
             <Progress percent={batchPercent(current.progress)} showInfo={false} />
@@ -365,7 +374,16 @@ export default function Decompose() {
           <p className="mt-2 text-sm text-destructive">{current.error}</p>
         )}
 
-        {/* 批次列表：批序号 / 覆盖章范围 / 字数 / 状态徽标 / 展开 / 重跑 */}
+        {/* 批次列表与 done 批重跑确认（进度态与完成态共用） */}
+        {renderBatchList(current)}
+      </>
+    );
+  }
+
+  /** 批次列表：批序号 / 覆盖章范围 / 字数 / 状态徽标 / 展开 / 重跑 + done 批重跑二次确认 */
+  function renderBatchList(current: NonNullable<typeof job>) {
+    return (
+      <>
         <ul className="mt-3 divide-y divide-border rounded-lg border border-border">
           {current.batches.map((batch) => {
             const open = expanded.includes(batch.seq);
@@ -416,6 +434,10 @@ export default function Decompose() {
                       <p className="text-sm text-destructive">{detail.error}</p>
                     ) : detail.result === null ? (
                       <p className="text-sm text-muted-foreground">该批还没有抽取结果</p>
+                    ) : !Array.isArray(detail.result.chapters) ? (
+                      /* 形状守卫：脏 result 直接进 batchResultGroups 会抛错，把整页（含左栏/聊天）交给
+                         ErrorBoundary 换掉；这里只降级成一行文案，页面其余部分照常。*/
+                      <p className="text-sm text-muted-foreground">结果形状异常</p>
                     ) : (
                       <div className="space-y-1">
                         {batchResultGroups(detail.result).map((group) => (

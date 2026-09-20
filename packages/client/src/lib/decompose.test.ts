@@ -309,9 +309,20 @@ describe("isTerminalJobStatus（轮询停止条件 + 书架徽标显示口径）
 });
 
 describe("formatShelfBadge（书架当前书行徽标）", () => {
-  it("拆解中 N/M（只给当前书那一行；非终态才显示）", () => {
-    expect(formatShelfBadge({ done: 3, total: 10 })).toBe("拆解中 3/10");
+  it("运行/待运行 → 拆解中 N/M（只给当前书那一行；终态才不显示）", () => {
+    expect(formatShelfBadge({ status: "running", progress: { done: 3, total: 10 } })).toBe(
+      "拆解中 3/10",
+    );
+    expect(formatShelfBadge({ status: "pending", progress: { done: 0, total: 10 } })).toBe(
+      "拆解中 0/10",
+    );
     expect(isTerminalJobStatus("done")).toBe(true); // 终态无徽标可言
+  });
+
+  it("已暂停 → 已暂停 N/M（暂停还说「拆解中」是文案不准）", () => {
+    expect(formatShelfBadge({ status: "paused", progress: { done: 3, total: 10 } })).toBe(
+      "已暂停 3/10",
+    );
   });
 });
 

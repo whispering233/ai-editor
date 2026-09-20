@@ -6,6 +6,7 @@
 // 于是照 `design-discipline.test.ts` 的口径扫源码：断言入口按钮的标签与对话框挂载两处都在。
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { formatShelfBadge } from "../lib/decompose";
 
 const dashboard = readFileSync(new URL("./Dashboard.tsx", import.meta.url), "utf8");
 
@@ -35,9 +36,14 @@ describe("拆解任务卡片与书架徽标（卡 21.9）", () => {
     expect(dashboard).toContain("describeJobStatus(decomposeJob)");
   });
 
-  it("书架当前书行徽标：isCurrent + 非终态 + formatShelfBadge", () => {
+  it("书架当前书行徽标：isCurrent + 非终态 + formatShelfBadge（传整个 job，状态进文案）", () => {
     expect(dashboard).toMatch(/isCurrent && decomposeJob !== null && !isTerminalJobStatus\(decomposeJob\.status\)/);
-    expect(dashboard).toContain("formatShelfBadge(decomposeJob.progress)");
+    expect(dashboard).toContain("formatShelfBadge(decomposeJob)");
+  });
+
+  it("徽标文案按状态：已暂停 → 「已暂停 N/M」（不再一律写「拆解中」）", () => {
+    expect(formatShelfBadge({ status: "paused", progress: { done: 3, total: 10 } })).toBe("已暂停 3/10");
+    expect(formatShelfBadge({ status: "running", progress: { done: 3, total: 10 } })).toBe("拆解中 3/10");
   });
 
   it("骨架：轮询参数 = 项目 id（未打开书不发请求、切书立即重拉）", () => {

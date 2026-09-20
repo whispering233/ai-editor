@@ -689,8 +689,9 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                         </span>
                         {isCurrent && decomposeJob !== null && !isTerminalJobStatus(decomposeJob.status) && (
                           /* 书架行徽标（卡 21.9）：只服务**当前书**那行——GET /project/list 不含 job 状态，
-                             逐本开 data.db 不值得，且切书即暂停（DESIGN.md §拆解小说） */
-                          <TypeChip className="shrink-0">{formatShelfBadge(decomposeJob.progress)}</TypeChip>
+                             逐本开 data.db 不值得，且切书即暂停（DESIGN.md §拆解小说）。文案按状态：
+                             运行/待运行「拆解中 N/M」、已暂停「已暂停 N/M」（同一函数口径）。*/
+                          <TypeChip className="shrink-0">{formatShelfBadge(decomposeJob)}</TypeChip>
                         )}
                         {isCurrent && (
                           <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground">
