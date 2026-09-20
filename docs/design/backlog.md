@@ -224,6 +224,10 @@
   - 现状口径（有意）：泛型 `EntityList`/`EntityDetail` **已冻结**只服务 setting/location，人物页独立演化；`FieldControl` / `TagsEditor` / `CustomFieldsEditor` 因此有近似两份实现。
   - 触发条件：第三处页面也要这套字段控件时（两处不值得）。
   - 升级路径：把字段控件与标签编辑器上提为独立组件，泛型页与人物页同时改用它。
+- **Ctrl+S 存档的窄窗口与未证实项**（2026-09 快捷键卡 oracle 登记，非阻塞）
+  - 现状：① 结构化页的「保存中」重入门禁（`if (saving)` 类，11 处）返回 undefined ⇒ 在途保存未落定时按 Ctrl+S 会不等它落盘就进存档阶段（备份可能缺这一次改动；窗口 ≈ 一次 PUT RTT，Manuscript 已用 `saveNow` 串行链避开）；② `keydown` 的 `e.repeat` 早退帧不做 `preventDefault`（长按是否会重开浏览器原生保存对话框**未证实**）；③ 同步抛错的保存动作会绕过存档阶段（现 12 处均 async/返回 promise，无现实路径）。
+  - 触发条件：出现「快速连按保存 + Ctrl+S 后备份内容陈旧」的真实反馈；或在真机验证长按 Ctrl+S 的原生行为。
+  - 最小修法：门禁分支改成「返回在途保存的 promise」（需各页持有在途引用）或返回 `false`（本次按键未产生保存 → 不存档）；② 把 `preventDefault` 提到 `e.repeat` 判断之前；③ `triggerSaveShortcut` 用 `try/catch` 包住同步调用。
 
 ## AI / 产品能力
 
