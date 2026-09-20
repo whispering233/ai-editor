@@ -1,9 +1,16 @@
 // RelationsView 纯逻辑测试（U8 关联 tab）：仓库无 jsdom / @testing-library 环境（node 纯逻辑测试），
 // 只测过滤纯函数 filterRelations——前端过滤是关联视图的核心（服务端不支持「任一端」OR 与名称模糊）。
 import { describe, expect, it } from "vitest";
+import { createElement } from "react";
+import { renderToString } from "react-dom/server";
 import { ENTITY_TYPES, ENTITY_TYPE_LABELS } from "@whispering233/ai-editor-shared";
 import type { RelationSummaryItem } from "../../lib/api";
-import { EMPTY_RELATION_FILTER, ENDPOINT_TYPE_LABEL, filterRelations } from "./relations-view";
+import {
+  EMPTY_RELATION_FILTER,
+  ENDPOINT_TYPE_LABEL,
+  EndpointLink,
+  filterRelations,
+} from "./relations-view";
 
 const makeRel = (over: Partial<RelationSummaryItem> & { id: string }): RelationSummaryItem => ({
   sourceType: "character",
@@ -152,5 +159,25 @@ describe("ENDPOINT_TYPE_LABEL（端点类型徽标中文名）", () => {
     expect(ENDPOINT_TYPE_LABEL.event).toBe("事件");
     expect(ENDPOINT_TYPE_LABEL.timepoint).toBe("时间点");
     expect(ENDPOINT_TYPE_LABEL.reference).toBe("参考资料");
+  });
+});
+
+// 端点单元格渲染序（卡 19.1）：类型徽标恒在名称前——徽标排在名称尾部时其 x 随名称长度浮动，
+// 短名行与长名行的徽标不在同一条竖线上（列内视觉对齐靠「位置固定」而非「等宽」）。
+// 走 react-dom/server 直渲（仓内无 jsdom，既有纪律）。
+describe("EndpointLink（端点单元格：徽标在前）", () => {
+  it("可点端点：徽标文案下标 < 名称下标", () => {
+    const html = renderToString(
+      createElement(EndpointLink, { type: "character", id: "char-1", name: "张三" }),
+    );
+    expect(html.indexOf("人物")).toBeGreaterThanOrEqual(0);
+    expect(html.indexOf("人物")).toBeLessThan(html.indexOf("张三"));
+  });
+
+  it("未知类型端点（不可点，徽标原样显示类型名）：同样徽标在前", () => {
+    const html = renderToString(
+      createElement(EndpointLink, { type: "vendor", id: "v-1", name: "某供应商" }),
+    );
+    expect(html.indexOf("vendor")).toBeLessThan(html.indexOf("某供应商"));
   });
 });
