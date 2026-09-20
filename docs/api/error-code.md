@@ -38,6 +38,7 @@
 | `DECOMPOSE_JOB_NOT_FOUND` | 404 | 404 拆解小说：当前项目没有 job |
 | `DECOMPOSE_BATCH_NOT_FOUND` | 404 | 404 拆解小说：批序号越界 |
 | `DECOMPOSE_JOB_STATE` | 409 | 409 拆解小说：当前 job 状态不允许该操作（pause / resume / rerun 的状态前置） |
+| `NO_PROJECT_OPEN` | 409 | 409 无当前项目（服务端扩展码，复用）——`/decompose/job` 系列端点在无已打开项目时同码 |
 
 - REST 错误响应统一 `{ success: false, error: { code, message } }`；**SSE 流内无独立 `error` 事件**——错误以 `agent_end` 帧的 `stopReason`（`error`/`aborted`）与 `errorMessage` 表达（见 [80-api-chat.md](./80-api-chat.md)）。
 - HTTP 状态码约定：200 成功 / 400 参数 / 404 不存在 / 409 冲突 / 500 服务端错误（端点级特例见各模块文档）。

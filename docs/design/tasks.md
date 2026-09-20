@@ -8,23 +8,15 @@
 
 ---
 
-## 卡 21.5 — POST /decompose/start + job 骨架（S0/S1）
-
-- **背景**：建档 + 导入正文 + 批规划落库；S1 同步完成后返回，客户端跳进度页。
-- **契约**：`docs/api/120-api-decompose.md` §start / §job / §batches；`docs/design/60-decompose.md` §2 / §4。
-- **范围**：`packages/server/src/decompose/job.ts`（job 创建 / 组批装箱 / 建大纲（卷→章）/ 逐章导入正文段落块（复用参考资料执行器的段落块形态）/ 写 `decompose_batches`）；`routes/decompose.ts` 的 start / job / batches 分支；凭据校验在建项目**之前**；副作用 = 打开项目 + 写创作根 `lastProject`。
-  - **硬提醒（切分 oracle 实测登记）**：**不得拿 split 返回的 `charCount` 当偏移量裁文本**——它是近似计数（退化路径不含空行分隔符、正常路径 trim 掉分隔换行），当偏移量用会错位或丢字符；要裁文本必须自己按真实切片位置算。
-  - **复用已有件（21.4 已建，勿另起）**：体积上限常量与 analyze 同文件（`routes/decompose.ts`）；组批纯函数 `decompose/batching.ts`（`planBatches`）与目标字数/单批章数上限常量。
-- **判据**：路由测试：建档成功（`outline.json` 卷章数 / `document_records` 行数 / `decompose_batches` 行数三向断言）/ 书名冲突 409 / 凭据缺失 400 且**不留半成品项目** / 范围只影响批规划而正文**全量导入** / `GET /job` 不含批结果正文 / **多 job 并存时读接口取「最新」（`created_at` 降序 → `id` 降序）有断言**（db helper 已按此实现，断言落在路由层）；`pnpm --filter @whispering233/ai-editor-server test` 绿。
-
----
-
 ## 卡 21.6 — S2 批执行器 + 暂停 / 续拆 / 重启归一
 
 - **背景**：LLM 调用、逐章对齐护栏、重试与失败标记、状态机与取消。
 - **契约**：`docs/design/60-decompose.md` §4 / §7；`docs/api/120-api-decompose.md` §pause / §resume。
 - **范围**：`packages/server/src/decompose/runner.ts`（串行批循环、`DECOMPOSE_CONCURRENCY` 常量、逐章对齐校验、重试上限 `DECOMPOSE_BATCH_MAX_ATTEMPTS`、失败批继续、滚动故事圣经、取消通道）；暂停挂点 = `setCurrentProject` 单点（与 `disposeProjectRuntime` 同一处）；打开项目时 `running` → `paused` 归一（**只归一 job 行**，见 `docs/db/schema.md` 不变式表）；pause / resume 端点。
   - **硬提醒**：续拆取批必须取「**第一个未完成批**」（含重启后残留的 `running` 批），不能只取 `pending`；读 `decompose_batches.result` 前自行守卫形状（db 层不做形状校验，`[1,2]` 这类值会原样透出）。
+  - **本卡必须收口的两件（21.5 oracle 实测登记）**：
+    1. **旧 job 暂停挂点**：`pauseRunningJobs` 目前全仓无调用点（21.5 未挂）；`api/120 §start` 已把「暂停旧项目上的 job」写成 start 的既有语义 ⇒ 本卡必须在 `setCurrentProject` 单点接线并有断言（否则会出现「A 书 job 永远 running」）。
+    2. **stage = `merge` 的口径**：零批 job（`batchCount = 0`，空批数组 `every` 为真）stage 直接为 `merge`；本卡若以 stage 决定是否跑 S3，必须明确该口径并加断言。
 - **判据**：**faux provider 端到端**（注入假 LLM 返回固定 JSON，跑通 start → 全部批 `done`，断言批结果形状与状态）；暂停 / 续拆（跳过 `done` 批）；切书自动暂停；重启归一（直调归一函数断言 `running` → `paused`）；缺章重试与失败批不阻塞后续批；`pnpm --filter @whispering233/ai-editor-server test` 绿。
 
 ---

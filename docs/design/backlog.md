@@ -39,10 +39,10 @@
   - 现状：`filters.status` 保留给 hook 生命周期（有意保留）；character 的 `status` 已从表单/列表/AI 摘要与 data 契约删除，旧残留由 `.passthrough()` 容错。
   - 触发条件：无（仅在整体清理查询参数面时顺带处理）。
 
-- **书名校验两份实现**（2026-09 发布前审计发现）
-  - 现状：`client/src/lib/book-name.ts` 与 `server/src/routes/project.ts` 各有一份同正则 + 同中文文案的校验（`grep -rn "书名不能包含" packages` → server 1 处 + client 1 处 + 客户端测试夹住）。文案/规则已经开始分叉的风险点。
+- **书名校验三份实现**（2026-09 发布前审计发现，21.5 oracle 扩登）
+  - 现状：`client/src/lib/book-name.ts`、`server/src/routes/project.ts`、`server/src/routes/decompose.ts` 各有一份同正则 + 同中文文案的校验（**服务端包内已有两份**，`decompose.ts` 的注释只承认「客户端跳包不共享」）。
   - 触发条件：下次改书名规则或文案时。
-  - 最小修法：提 shared 纯函数 + 文案常量（REST schema、路由校验、客户端预校验共用）。
+  - 最小修法：提 shared 纯函数 + 文案常量（REST schema、两处路由校验、客户端预校验共用）；**先定错误码差异**（`INVALID_PROJECT_PATH` vs `VALIDATION_ERROR`）再收敛，别顺手改。
 
 - **视觉守卫的两处盲区**（卡 3 oracle 复核登记）
   - 现状：`design-discipline.test.ts` 的 `antd-root-override` 只扫 `className`（不扫内联 `style={{}}`），且 `ANTD_GUARDED_COMPONENTS` 只覆盖 `Button` / `Input`（`Select` / `Input.Password` 根元素未覆盖）。既有 3 处内联宽度（`auto-backup-panel.tsx` 的频率下拉 `minWidth`、备份名与重命名输入框 `width`）因此长期存在。
@@ -347,6 +347,8 @@
 - **切分测试的「无前言 + 超长块」方向无断言**（21.4 oracle 登记） — 现状：`LONG_BLOCK` 警告的章号偏移修正（前言插首位后回算）只被「有前言」用例锁住；把偏移固定成 1（无前言分支写错）时全套测试全绿。触发条件：下次触碰 `split.test.ts`。最小修法：补一条无前言 + 超长块用例，断言警告章号 == `chapters[].index`。
 - **上传体积上限在 `arrayBuffer()` 之后判定**（21.4 oracle 登记） — 现状：超体积文件先整体入内存再拒（本地应用影响有限；真要硬防需 Hono body limit 中间件，非应用层）。触发条件：出现真实的大文件卡顿报告。
 - **路由层缺少编码/二进制/范围边界用例**（21.4 oracle 登记，低价值） — 现状：BOM/UTF-16 由 `split.test.ts` 覆盖、非文本二进制与 `scope_start > scope_end` 只在路由层无断言（口径已写入文档）。触发条件：改 analyze 的入参处理时。
+- **卷尾无章 ⇒ outline 出现空卷节点**（21.5 oracle 登记） — 现状：源文件末尾有卷标记但卷内无章时，S1 会建一个零章卷节点（反例实测卷章数 `[4,2,0]`）；契约不禁止、UI 会渲染空卷。触发条件：真出现空卷导致的困扰。最小修法：S1 跳过零章卷（需同步预览警告口径——当前警告码表无此码，是契约变更不是顺手改）。
+- **`job.ts` 的两个导出无外部消费方**（21.5 oracle 登记，低） — 现状：`writeOutlineFromSplit` / `importChapterDocuments` 只被测试走路由间接触达。触发条件：下次重构该模块时。最小修法：改非导出（若测试需要则保留并加注释说明用途）。
 - **延期项≠技术债记录**：真正"必须做但没做"的项请写进本文件的相应小节，并在触发条件写清"何时必须做"。
 - **大纲页 / 设定页不迁移 antd `Tree`（2026-09 考察结论）**
   - 结论：保持自绘缩进行。成本 = `Outline.tsx` / `setting-tree.tsx` 两处视图层重写（纯逻辑 `lib/outline-tree.ts` / `lib/setting-tree.ts` 与单测可留）；**语义冲突在拖拽**——rc-tree 用鼠标水平位置（`dropLevelOffset`）决定落层级，与现有「行上下半 = 同级前后 / 行中段 = 成为子级 / 空白区 = 排根末尾」·三套语义不对应，且**空片区落点 rc-tree 无对应**；antd `Tree.js` 把 `dropIndicatorRender` 写在 props 展开之后（**不可注入**），指示线只能改 CSS。
