@@ -101,7 +101,11 @@ export function buildDecomposeReportText(facts: DecomposeReportFacts, plotSummar
  * 全书剧情摘要调用（S4 的**唯一**模型调用）：输入 = 各章摘要（不是原文，成本与总字数无关）。
  * 无章摘要时不调用模型（无输入可聚合），由调用方按空文本落报告。
  */
-export async function completeReportPlot(deps: DecomposeLlmDeps, chapters: readonly ReportChapter[]): Promise<string> {
+export async function completeReportPlot(
+  deps: DecomposeLlmDeps,
+  chapters: readonly ReportChapter[],
+  sessionId?: string,
+): Promise<string> {
   const withSummary = chapters.filter((chapter) => chapter.summary !== "");
   if (withSummary.length === 0) return "";
   const request = {
@@ -111,7 +115,7 @@ export async function completeReportPlot(deps: DecomposeLlmDeps, chapters: reado
     ].join("\n"),
     user: withSummary.map((chapter) => `第${chapter.index}章 ${chapter.title}：${chapter.summary}`).join("\n"),
   };
-  const text = (await completeOnce(deps, request)).trim();
+  const text = (await completeOnce(deps, request, sessionId)).trim();
   return text.length <= DECOMPOSE_REPORT_PLOT_MAX_CHARS ? text : text.slice(0, DECOMPOSE_REPORT_PLOT_MAX_CHARS);
 }
 

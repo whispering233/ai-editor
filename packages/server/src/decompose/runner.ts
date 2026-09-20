@@ -203,7 +203,7 @@ async function runBatch(input: BatchRunInput): Promise<BatchOutcome> {
       throw new Error(`拆解批不存在：job ${input.jobId} 批 ${input.batch.seq}`);
     }
     try {
-      const text = await completeOnce(input.deps, buildBatchPrompt({ chapters: input.chapters, bibleText: input.bibleText }));
+      const text = await completeOnce(input.deps, buildBatchPrompt({ chapters: input.chapters, bibleText: input.bibleText }), input.jobId);
       const normalized = normalizeExtraction(
         parseModelJson(text),
         input.chapters.map((chapter) => chapter.index),
@@ -345,6 +345,8 @@ export function startDecomposeJob(
 ): Promise<void> {
   const job = getDecomposeJob(project.db); // 一项目一 job：取最新一行（db helper 口径）
   if (job === null || job.status !== "running") return Promise.resolve();
+  // 资源加载与会话 cwd = 项目根（拆解不注入 AGENTS.md，但 cwd 仍是 pi 的会话身份上下文）
+  const jobDeps: DecomposeRunnerDeps = deps.cwd === undefined ? { ...deps, cwd: project.root } : deps;
   const controller = new AbortController();
   const previous = activeRuns.get(job.id);
   const run: ActiveRun = { controller, done: Promise.resolve() };
@@ -353,9 +355,9 @@ export function startDecomposeJob(
     try {
       await previous?.done; // 上一轮先收尾（含它正在飞的批落库）
       if (controller.signal.aborted) return;
-      await executeRun({ project, job, deps, signal: controller.signal, rerunSeq: options.rerunSeq });
+      await executeRun({ project, job, deps: jobDeps, signal: controller.signal, rerunSeq: options.rerunSeq });
       if (controller.signal.aborted) return; // 暂停 / 切书：不跑 S3/S4（状态归暂停与续拆路径）
-      await finishJob(project, job, deps);
+      await finishJob(project, job, jobDeps);
     } catch (err) {
       failJob(project, job, controller.signal, err);
     } finally {

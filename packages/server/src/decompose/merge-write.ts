@@ -215,7 +215,7 @@ export async function runDecomposeMerge(input: DecomposeMergeInput): Promise<Dec
     .map((batch) => batch.seq);
   const results = doneBatchResults(input.project.db, input.jobId, doneSeqs);
 
-  const aliasGroups = await completeAliasGroups(input.deps, results); // S3 第 2 层：全书一次
+  const aliasGroups = await completeAliasGroups(input.deps, results, input.jobId); // S3 第 2 层：全书一次
   const outcome = mergeCandidates(results, aliasGroups); // S3 第 1 层：四步有序纯管线
   const mentions = aggregateMentions(results);
   writeChapterSummaries(input.project, results, input.now);
@@ -239,7 +239,7 @@ export async function runDecomposeMerge(input: DecomposeMergeInput): Promise<Dec
       keptUserEdited: keptUserEditedLabels(input.project, plan, job.merge_written),
     }),
   };
-  const reportText = buildDecomposeReportText(facts, await completeReportPlot(input.deps, facts.chapters));
+  const reportText = buildDecomposeReportText(facts, await completeReportPlot(input.deps, facts.chapters, input.jobId));
 
   // 落库与清单写在同一事务：中途失败（如用户手工建了同一枚关系 ⇒ RELATION_EXISTS）整体回滚，
   // 不留「行已写、清单没记」的半成品——那会让下一轮把同一产物当新产物再创建一遍（幂等破口）
@@ -271,13 +271,14 @@ export async function runDecomposeMerge(input: DecomposeMergeInput): Promise<Dec
 async function completeAliasGroups(
   deps: DecomposeLlmDeps,
   results: readonly DecomposeBatchResult[],
+  jobId: string,
 ): Promise<ReportAliasGroup[]> {
   const all = buildAliasCandidates(results);
   const candidates = selectAliasCandidates(all);
   if (all.length > candidates.length) {
     console.warn(`[decompose] 别名候选超出 ${DECOMPOSE_ALIAS_CANDIDATE_MAX} 条，按提及次数截断后归并`);
   }
-  const text = await completeOnce(deps, aliasPrompt(candidates));
+  const text = await completeOnce(deps, aliasPrompt(candidates), jobId);
   const proposed = proposedGroupsOf(parseModelJson(text));
   const validation = validateAliasGroups(proposed, candidates);
   if (validation.rejected.length > 0) {
