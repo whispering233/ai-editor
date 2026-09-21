@@ -5,7 +5,7 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [v0.0.54] - 2026-09-21
 
 > **书架管理 / 删除书籍 / 会话移出备份 / 云端恢复**：书架分「小说项目 / 小说拆解」两组（身份一律按项目 id）、书架可删书（云端先推一份再删）、`sessions/` 降级为纯本地目录（不进任何 zip）、新机器可「从云端恢复」导入新书。回归：build / typecheck / lint / `-r test` 全绿（196 文件 / 2966 测试）+ 浏览器端到端核对（删书两路径、云端恢复全链路）。
 
