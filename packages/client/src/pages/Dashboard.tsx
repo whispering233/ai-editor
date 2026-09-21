@@ -33,6 +33,7 @@ import { TypeChip } from "@/components/ui/tag-chip";
 import { DecomposeDialog } from "@/components/decompose/decompose-dialog";
 import { BookDeleteDialog } from "@/components/shelf/book-delete-dialog";
 import type { BookDeleteTarget } from "@/components/shelf/book-delete-dialog";
+import { CloudRemoteBooksDialog } from "@/components/shelf/cloud-remote-books-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { skeletonClass } from "@/lib/styles";
@@ -150,6 +151,8 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
   const [submitting, setSubmitting] = useState(false);
   // 导入备份（Sidebar 独有能力搬入书架主页——zip + 书名，同名二选一冲突态）
   const [importOpen, setImportOpen] = useState(false);
+  // 从云端恢复（卡 23.7）：列云端书目录 → 导入为本机新书（新机器路径，入口在页头「导入备份」旁）
+  const [cloudRestoreOpen, setCloudRestoreOpen] = useState(false);
   // 拆解小说（卡 21.8）：三态对话框（选文件 → 预览 → 填名开始），入口在「新建一本…」行
   const [decomposeOpen, setDecomposeOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
@@ -590,11 +593,18 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
             </p>
           }
           action={
-            /* 导入备份（Sidebar 迁入，1-3b）：zip 导入/覆盖恢复，Dialog 内同名二选一 */
-            <Button className="shrink-0" onClick={() => setImportOpen(true)}>
-              <UploadOutlined className="text-sm" />
-              导入备份
-            </Button>
+            <>
+              {/* 导入备份（Sidebar 迁入，1-3b）：zip 导入/覆盖恢复，Dialog 内同名二选一 */}
+              <Button className="shrink-0" onClick={() => setImportOpen(true)}>
+                <UploadOutlined className="text-sm" />
+                导入备份
+              </Button>
+              {/* 从云端恢复（卡 23.7）：新机器路径——列云端备份并导入为本机新书（不自动打开）；
+                  不新增一级导航，入口只在该行 */}
+              <Button className="shrink-0" onClick={() => setCloudRestoreOpen(true)}>
+                从云端恢复…
+              </Button>
+            </>
           }
         />
 
@@ -936,6 +946,13 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
             if (!open) setDeleteTarget(null);
           }}
           onDeleted={(book) => void handleBookDeleted(book)}
+        />
+
+        {/* 从云端恢复对话框（受控）：导入成功只刷新书架，**不自动打开**新书 */}
+        <CloudRemoteBooksDialog
+          open={cloudRestoreOpen}
+          onOpenChange={setCloudRestoreOpen}
+          onImported={() => void loadBookshelf()}
         />
       </section>
     );

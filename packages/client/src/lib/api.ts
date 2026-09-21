@@ -5,8 +5,10 @@ import type {
   BackupKind,
   ChatSessionMessage,
   CloudConfigPutResult,
+  CloudImportBookResult,
   CloudPullResult,
   CloudPushResult,
+  CloudRemoteBooksResult,
   CloudStatus,
   CloudTestResult,
   ChatSessionSummary,
@@ -43,7 +45,7 @@ export const CLIENT_NETWORK_ERROR = "CLIENT_NETWORK_ERROR" as const;
  * `SERVER_ERROR_CODES`）。shared 的 `ErrorCode` 枚举不含服务端扩展码——「错误码分散」是已登记
  * 技术债（见 `docs/api/error-code.md`）；客户端要按码分支时在此声明，避免各处 `as` 强转。
  */
-export type ServerBranchErrorCode = "CLOUD_CONFLICT" | "CLOUD_BACKUP_TOO_LARGE";
+export type ServerBranchErrorCode = "CLOUD_NOT_CONFIGURED" | "CLOUD_CONFLICT" | "CLOUD_BACKUP_TOO_LARGE";
 
 export type ClientErrorCode = typeof CLIENT_NETWORK_ERROR | ServerBranchErrorCode;
 
@@ -1250,6 +1252,35 @@ export function pushCloudBackup(options: { fileName?: string; force?: boolean } 
     body: {
       ...(options.fileName !== undefined ? { file_name: options.fileName } : {}),
       ...(options.force !== undefined ? { force: options.force } : {}),
+    },
+  });
+}
+
+/**
+ * GET /api/v1/cloud/remote-books —— 列云端工作根下的全部书目录（新机器「从云端恢复」的清单源）。
+ * **不要求项目已打开**（与 /status 同款），只要求云盘已配置；工作根不存在 → `books: []`。
+ * 失败：409 CLOUD_NOT_CONFIGURED、502 CLOUD_AUTH_FAILED / CLOUD_UNREACHABLE / CLOUD_QUOTA_EXCEEDED。
+ */
+export function getCloudRemoteBooks(): Promise<CloudRemoteBooksResult> {
+  return apiFetch<CloudRemoteBooksResult>("/cloud/remote-books");
+}
+
+/**
+ * POST /api/v1/cloud/import-book —— 把云端某本书的一份备份导入为本机新书（**不自动打开**）。
+ * 参数名 = 线上字段名（snake_case，同 pull/push 的请求体口径）：`dir_name` 为 remote-books 列的
+ * 云端目录名；`file_name` 缺省 = 该目录 head（导入最近一份）。
+ * 失败：409 CLOUD_NOT_CONFIGURED / PROJECT_ALREADY_EXISTS / SCHEMA_VERSION_MISMATCH、
+ *      404 CLOUD_FILE_NOT_FOUND（目录或那份不存在）、400 VALIDATION_ERROR（坏包/名字非法）、502 三码。
+ */
+export function importCloudBook(options: {
+  dir_name: string;
+  file_name?: string;
+}): Promise<CloudImportBookResult> {
+  return apiFetch<CloudImportBookResult>("/cloud/import-book", {
+    method: "POST",
+    body: {
+      dir_name: options.dir_name,
+      ...(options.file_name !== undefined ? { file_name: options.file_name } : {}),
     },
   });
 }

@@ -20,6 +20,7 @@ import {
   deleteOutlineNode,
   deleteProject,
   exportProjectZip,
+  getCloudRemoteBooks,
   getDeltasByNode,
   getDecomposeBatch,
   getDecomposeJob,
@@ -31,6 +32,7 @@ import {
   getSessionThinking,
   getSettingsLlm,
   getTrashList,
+  importCloudBook,
   importProjectZip,
   listEntities,
   listProjects,
@@ -1567,5 +1569,113 @@ describe("拆解进度面端点", () => {
     });
     const err = await resumeDecomposeJob().catch((e: unknown) => e);
     expect((err as ApiError).code).toBe("LLM_API_KEY_MISSING");
+  });
+});
+
+// 云端远程书架（卡 23.7）：GET /cloud/remote-books（无请求体）+ POST /cloud/import-book
+//（**请求体 snake_case**：dir_name / file_name；省略 file_name 时该键不得出现在 body）
+describe("云端远程书架端点（docs/api/100-api-cloud.md）", () => {
+  it("getCloudRemoteBooks：GET /cloud/remote-books，响应原样解析（books 内字段 camelCase）", async () => {
+    const calls = mockFetchOnce({
+      body: {
+        success: true,
+        data: {
+          books: [
+            {
+              dirName: "云端书-abc123",
+              name: "云端书",
+              projectId: "abc123",
+              localExists: false,
+              backups: [
+                {
+                  fileName: "2026-09-20-auto-苹果本-人物3-设定5-章12.zip",
+                  createdAt: "2026-09-20T10:15:30.000Z",
+                  kind: "auto",
+                  device: "苹果本",
+                  stats: { characters: 3, settings: 5, chapters: 12 },
+                  size: 2048,
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    const res = await getCloudRemoteBooks();
+
+    expect(calls[0].url).toBe("/api/v1/cloud/remote-books");
+    expect(calls[0].init?.method).toBe("GET");
+    expect(calls[0].init?.body).toBeUndefined();
+    expect(res.books[0]?.dirName).toBe("云端书-abc123");
+    expect(res.books[0]?.backups[0]?.fileName).toBe(
+      "2026-09-20-auto-苹果本-人物3-设定5-章12.zip",
+    );
+  });
+
+  it("importCloudBook：POST /cloud/import-book，body 键 snake_case（dir_name + file_name）", async () => {
+    const calls = mockFetchOnce({
+      body: {
+        success: true,
+        data: {
+          imported: true,
+          id: "abc123",
+          path: "/root/books/云端书",
+          name: "云端书",
+          fileName: "2026-09-20-auto-苹果本-人物3-设定5-章12.zip",
+          size: 2048,
+        },
+      },
+    });
+
+    const res = await importCloudBook({
+      dir_name: "云端书-abc123",
+      file_name: "2026-09-20-auto-苹果本-人物3-设定5-章12.zip",
+    });
+
+    expect(calls[0].url).toBe("/api/v1/cloud/import-book");
+    expect(calls[0].init?.method).toBe("POST");
+    const body = JSON.parse(String(calls[0].init?.body)) as Record<string, unknown>;
+    expect(body).toEqual({
+      dir_name: "云端书-abc123",
+      file_name: "2026-09-20-auto-苹果本-人物3-设定5-章12.zip",
+    });
+    expect(body).not.toHaveProperty("dirName"); // 线上字段名 = snake_case，不得漏成 camelCase
+    expect(res.name).toBe("云端书");
+  });
+
+  it("importCloudBook：省略 file_name → body 只剩 dir_name（缺省 = 该目录 head）", async () => {
+    const calls = mockFetchOnce({
+      body: {
+        success: true,
+        data: {
+          imported: true,
+          id: "abc123",
+          path: "/root/books/云端书",
+          name: "云端书",
+          fileName: "2026-09-20-auto-苹果本-人物3-设定5-章12.zip",
+          size: 2048,
+        },
+      },
+    });
+
+    await importCloudBook({ dir_name: "云端书-abc123" });
+
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ dir_name: "云端书-abc123" });
+  });
+
+  it("importCloudBook：409 PROJECT_ALREADY_EXISTS → ApiError code 与中文 message 透传（框内文案据此分支）", async () => {
+    mockFetchOnce({
+      status: 409,
+      body: {
+        success: false,
+        error: { code: "PROJECT_ALREADY_EXISTS", message: "本机书架已有这本书（id: abc123）" },
+      },
+    });
+
+    const err = await importCloudBook({ dir_name: "云端书-abc123" }).catch((e: unknown) => e);
+
+    expect((err as ApiError).code).toBe("PROJECT_ALREADY_EXISTS");
+    expect((err as ApiError).message).toContain("本机书架已有这本书");
   });
 });
