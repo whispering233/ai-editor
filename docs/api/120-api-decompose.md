@@ -124,7 +124,7 @@
     charCount: number;
     volumeIndex: number;
     decomposed: boolean;       // 已拆（历史 job 的 done 批覆盖）
-  }>;
+  }>;                          // **全书**章列表（含范围外），供用户在对话框里自行调整范围；scope 与 stats/estimate 才是"本范围"口径
   stats: { min: number; median: number; max: number };
   estimate: {
     batchCount: number;
