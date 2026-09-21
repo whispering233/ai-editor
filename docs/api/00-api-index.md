@@ -17,6 +17,7 @@
 | POST | `/api/v1/project/create` | 项目管理 |
 | POST | `/api/v1/project/open` | 项目管理 |
 | POST | `/api/v1/project/close` | 项目管理 |
+| POST | `/api/v1/project/delete` | 项目管理 |
 | GET | `/api/v1/project/list` | 项目管理 |
 | GET | `/api/v1/project/config` | 项目管理 |
 | PUT | `/api/v1/project/config` | 项目管理 |
@@ -116,6 +117,8 @@
 | POST | `/api/v1/cloud/test` | 云端存档 |
 | POST | `/api/v1/cloud/push` | 云端存档 |
 | POST | `/api/v1/cloud/pull` | 云端存档 |
+| GET | `/api/v1/cloud/remote-books` | 云端存档 |
+| POST | `/api/v1/cloud/import-book` | 云端存档 |
 
 ### 系统设置（[90-api-settings.md](./90-api-settings.md)）
 

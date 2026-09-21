@@ -224,7 +224,7 @@ CREATE TABLE document_records (
 
 ## decompose_jobs / decompose_batches — 拆解小说（2026-09）
 
-拆解小说（导入式批量管线，设计见 [`../design/60-decompose.md`](../design/60-decompose.md)）的**job 状态与批结果暂存**。两表同库、同项目——job 属于它所在项目的 `data.db`，随备份/导出/云自动携带；**不新增项目目录**（`sessions/` 仍是唯一的随包目录）。
+拆解小说（导入式批量管线，设计见 [`../design/60-decompose.md`](../design/60-decompose.md)）的**job 状态与批结果暂存**。两表同库、同项目——job 属于它所在项目的 `data.db`，随三文件进入备份/导出/云端；**不新增项目目录**（`sessions/` 是纯本地目录，不进任何 zip）。
 
 ```sql
 CREATE TABLE decompose_jobs (
@@ -266,7 +266,7 @@ CREATE TABLE decompose_batches (
 
 ## sessions/*.jsonl — 对话历史（文件存储）
 
-对话消息**不存 data.db**，一 session 一个 JSONL 文件，落在项目目录 `sessions/`。会话随书目录移动/备份/恢复自然携带，不依赖 db。
+对话消息**不存 data.db**，一 session 一个 JSONL 文件，落在项目目录 `sessions/`。会话随书目录移动/整体删除自然跟随，不依赖 db；但**不进任何 zip（备份 / 导出 / 云端）**——它不会跨机器搬运，本机删书即随之消失。
 
 **格式所有权归 pi**：文件名（`<timestamp>_<id>.jsonl`）与行结构（header + 树状 entry）由 pi `SessionManager` 定义与解析——本仓**不定义、不解析**行结构，只消费下表两个投影。pi 的版本迁移链（v1→v2→v3）由 pi 在载入时自动执行。
 
@@ -274,7 +274,7 @@ CREATE TABLE decompose_batches (
 
 | 契约 | 说明 |
 | :--- | :--- |
-| 目录 | `<项目目录>/sessions/`（缺失则创建；不入 git、随备份整目录打包） |
+| 目录 | `<项目目录>/sessions/`（缺失则创建；不入 git；**纯本地目录**——不进备份 zip / 导出 zip / 云端，恢复类操作（restore / import / 云 pull）不写也不删它） |
 | session_id | pi 生成的不透明 id；**客户端传入值只能经磁盘发现 + header id 映射解析为路径，禁止拼接** |
 | 消息投影 | 每条 entry 投影为 `{ id, role, content, toolCalls?, toolCallId?, createdAt }`；`role` ∈ `user` / `assistant` / `tool`（pi 的 `toolResult` 投影为 `tool`） |
 | 思维链 | assistant 消息的 thinking 内容随消息投影下发（列表投影只给预览，见 `docs/api/80-api-chat.md`） |
@@ -344,6 +344,7 @@ CREATE TABLE decompose_batches (
   "name": "我的小说",
   "language": "zh",
   "schema_version": 1,
+  "origin": "book",
   "current_position": "ch-12",
   "backup_frequency_minutes": 10,
   "created_at": "2026-08-01T10:00:00Z",
@@ -358,6 +359,7 @@ CREATE TABLE decompose_batches (
 | `id` | string | 项目唯一 id，首次初始化时生成（前缀 `proj-` + nanoid），**跨启动稳定**；**备份/恢复的唯一 key**——导入/加载备份时以 zip 内 id 与书架比对，匹配 → 覆盖恢复，不匹配 → 导入为新书 |
 | `name` | string | 项目名称，默认取目录名；**与目录名绑定**（「目录名 = 书名」不变式：同名并存时目录与 name 同步去重为 `<书名> (N)`） |
 | `language` | `"zh"` \| `"en"` | 语言 |
+| `origin` | `"book"` \| `"decompose"` | **项目出处（可选字段，2026-09）**：`"book"` = 手建/导入的普通书籍（缺省，读侧缺失即按此值），`"decompose"` = 由「拆解小说」建档。**只描述出处、不参与 schema_version 判定**（宽松读取，缺省兜底）；书架按它分「小说项目 / 小说拆解」两组。**只增不改**：一本书一旦由拆解产生就恒为 `"decompose"`（后续继续写作不改写）。存量补标：打开项目时若字段缺失且库内存在拆解 job → 写一次 `"decompose"`（幂等） |
 | `prompt` | string | **已废弃**：项目级提示词——不再读写；项目规则改由项目目录 `AGENTS.md` 承载（见下节）。旧文件中的残留字段宽松读取（不参与 schema_version 判定），新写入不再产生该字段 |
 | `schema_version` | number | JSON 结构版本（与 outline.json 顶层同步写入） |
 | `current_position` | string \| null | 大纲「阅读进度」节点 id（**UI 文案 = 阅读进度；字段名不变**；伏笔健康指标/双视图依赖；null = 未设置；**须指向存在的非软删 `chapter` 节点**——卷/场景不承载写作进度，非章 → `PUT /project/config` 400）。**读侧宽松**：存量指向非章节点的值由 `ChapterIndex.chapterOf` 沿父链推导兜底，不报错 |
@@ -369,7 +371,7 @@ CREATE TABLE decompose_batches (
 **约束**：
 - 模型 API key **绝不写入本文件**——凭据归 pi 的 agent dir（`~/.pi/agent/auth.json`，一家一条且存量凭据优先，环境变量仅在该家无条目时兜底；写入只在设置页经 pi credential store），见 `docs/design/config.md`。
 - 文件写入遵循原子写流程（outline.json 同款：临时文件 + fsync + rename）。
-- **自动备份目录**：项目目录内 `.backups/` 子目录存放备份 zip。命名格式：`<YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip`——毫秒时间戳（本地时区，字典序 = 时间序，`parseBackupFileName` 解析为列表项的 `createdAt` 与保留策略排序依据）＋类型段（`自动` = 定时器 / 覆盖前快照，`手动` = 立即备份）＋设备段（必填：来源机器，缺省 = 简化 hostname；禁 `-`）＋可选用户标签（1-30 字符）＋**尾部固定三段统计**（人物/设定/章 = 生成时点的未软删存量；固定尾部使解析可从尾部倒切）。**写入 = 解析 = 唯一格式**（2026-09 收敛）：早期三类旧命名（秒级 / 带标签无类型段 / 单字母 `-m`/`-a` 段）**不再解析**（文件留盘但不列表、不可恢复、不参与保留策略），也不做重命名迁移；`device`/`stats` 恒有（API 契约必填）。**升级兜底**：打开项目时若 `.backups/` 有文件但无一可解析 → 立即生成一份新格式备份。包内容 = 导出包：project.json + outline.json + data.db（**含正文与参考资料**）+ `sessions/**`（2026-09 起不再含 `references/**`）。**每项目保留最近 20 份**（超出删除最旧，含覆盖前自动快照；清理失败不阻塞备份主流程）；备份文件不入 git、不算数据文件（可随时删除）。**实现细节（2026-08 实测）**：同毫秒冲突用「时间戳 +1 毫秒循环去重」（保持文件名格式契约可解析）；「有变更才备份」的 mtime 判定加 1s 容差（备份管道内 wal_checkpoint 会把 data.db mtime 刷新到备份时刻，严格 `mtime > 上次备份时刻` 会自激误判——毫秒精度下文件名截断误差已消除，但粗粒度 mtime 文件系统（如 FAT/exFAT 2s 粒度）下容差仍是必要防御，`BACKUP_CHANGE_TOLERANCE_MS` 保留 1s）；变更判定同时看 `sessions/` **目录自身**的 mtime（删除会话文件不刷新剩余文件 mtime；正文/参考资料写 `data.db`，由 `-wal` 判定涵盖）；重命名备份只改标签段（时间戳/类型/设备/统计保持，同目录 rename 原子）。
+- **自动备份目录**：项目目录内 `.backups/` 子目录存放备份 zip。命名格式：`<YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip`——毫秒时间戳（本地时区，字典序 = 时间序，`parseBackupFileName` 解析为列表项的 `createdAt` 与保留策略排序依据）＋类型段（`自动` = 定时器 / 覆盖前快照，`手动` = 立即备份）＋设备段（必填：来源机器，缺省 = 简化 hostname；禁 `-`）＋可选用户标签（1-30 字符）＋**尾部固定三段统计**（人物/设定/章 = 生成时点的未软删存量；固定尾部使解析可从尾部倒切）。**写入 = 解析 = 唯一格式**（2026-09 收敛）：早期三类旧命名（秒级 / 带标签无类型段 / 单字母 `-m`/`-a` 段）**不再解析**（文件留盘但不列表、不可恢复、不参与保留策略），也不做重命名迁移；`device`/`stats` 恒有（API 契约必填）。**升级兜底**：打开项目时若 `.backups/` 有文件但无一可解析 → 立即生成一份新格式备份。包内容 = 导出包：**project.json + outline.json + data.db**（**含正文与参考资料**）——2026-09 起不再含 `references/**`，**也不再含 `sessions/**`**（会话是纯本地目录，见下节；存量旧包内的 `sessions/**` 条目读取时接受并忽略）。**每项目保留最近 20 份**（超出删除最旧，含覆盖前自动快照；清理失败不阻塞备份主流程）；备份文件不入 git、不算数据文件（可随时删除）。**实现细节（2026-08 实测）**：同毫秒冲突用「时间戳 +1 毫秒循环去重」（保持文件名格式契约可解析）；「有变更才备份」的 mtime 判定加 1s 容差（备份管道内 wal_checkpoint 会把 data.db mtime 刷新到备份时刻，严格 `mtime > 上次备份时刻` 会自激误判——毫秒精度下文件名截断误差已消除，但粗粒度 mtime 文件系统（如 FAT/exFAT 2s 粒度）下容差仍是必要防御，`BACKUP_CHANGE_TOLERANCE_MS` 保留 1s）；变更判定只看三文件 + `data.db-wal`（**不含 `sessions/`**：会话不进备份，纯聊天不应触发备份/推送；正文/参考资料写 `data.db`，由 `-wal` 判定涵盖）；重命名备份只改标签段（时间戳/类型/设备/统计保持，同目录 rename 原子）。
 
 ## AGENTS.md — 项目规则文件（2026-08）
 

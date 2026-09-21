@@ -51,7 +51,7 @@
   local: null | {            // 本机侧状态（未打开项目 → null）
     lastPushedFileName: string | null;   // **冲突判定基准** = 本机最后一次成功同步（推/拉）到的云端文件名
     lastSyncAt: string | null;           // 上次同步成功时刻（ISO 8601）；null = 从未同步过
-    dirty: boolean;                      // 本机创作数据自 lastSyncAt 后有改动（三文件 + data.db-wal + 两个打包目录；**不含 .backups/**）
+    dirty: boolean;                      // 本机创作数据自 lastSyncAt 后有改动（三文件 + data.db-wal；**不含 .backups/、也不含 sessions/**）
     latestBackupFileName: string | null; // 最新一份本地备份（推送缺省目标）
     backupStale: boolean;                 // 「最新备份早于最新改动」**且**「有未同步改动（dirty）」＝「有改动未进备份」；
                                           //   拉取/恢复后为 false（覆盖前快照的时间戳早于写入的文件，只看 mtime 会误报）
@@ -163,14 +163,14 @@
 4. `PUT` 到 `.tmp-<正式文件名>` → `MOVE` 成正式名（**正式名下永远是完整包**）；`MOVE` 带 **`Overwrite: T`**——
    **同一份重推幂等覆盖**（用户连点、上次清理失败再推，否则目标已存在会 412 卡死）；跨机器同名冲突由 head 判定拦在前面，
    不靠 `MOVE` 412 兜底
-5. 更新 `lastPushedFileName` / `lastSeenHeadFileName` / `lastSyncAt` / `baseEntries`（= 本次推送包内两个打包目录的条目名）
+5. 更新 `lastPushedFileName` / `lastSeenHeadFileName` / `lastSyncAt` / `lastSeenCloudFiles`（会话条目基线 `baseEntries` 自 2026-09 起停写——会话不再进包）
 6. **保留策略**：只保留最近 5 份 + **带用户标签的永不清理** + 只删「能解析出时间戳」的份（`.tmp-` 垃圾由第 2 步清理，不属保留策略）；**只在推送成功后执行**，清理失败不阻塞推送
 
 **错误码**：409 `NO_PROJECT_OPEN` / `CLOUD_NOT_CONFIGURED` / `CLOUD_CONFLICT`、404 `VALIDATION_ERROR`（本地备份不存在 / 本机没有任何可推送的备份——**先于任何网络动作**）、400 `VALIDATION_ERROR` / `CLOUD_BACKUP_TOO_LARGE`、502 `CLOUD_AUTH_FAILED` / `CLOUD_UNREACHABLE` / `CLOUD_QUOTA_EXCEEDED`。
 
 ### POST /api/v1/cloud/pull
 
-从云端拉取一份备份应用到当前项目（**三文件覆盖 + `sessions/` 并集**）。
+从云端拉取一份备份应用到当前项目（**三文件覆盖；会话目录不触碰**）。
 
 ```typescript
 // Req
@@ -182,26 +182,83 @@
 {
   pulled: { fileName: string; size: number; createdAt: string };
   snapshot: { fileName: string; createdAt: string };  // 覆盖前本机自动快照（restore 管道既有行为）
-  merged: { kept: number; written: number; removed: number };
-  // kept    = 本机独有（云端没有、基线也没有）→ 保留
-  // written = 云端新增（本机没有、基线也没有）→ 写入
-  // removed = 云端删除（本机有、基线有、云端没有）→ 删本机
 }
 ```
 
-**流程**：`GET` 云端那份 → **覆盖前自动快照本机当前状态**（restore 管道既有）→ `validateBackupPackage`（zip 结构/白名单/三文件齐全/data.db `user_version` 三态分流）→ **三文件覆盖**（`project.json` 的 `name` 归一为当前目录名、`id` 保留——与 restore 同口径；**正文与参考资料在 `data.db` 内，随覆盖走**）+ **`sessions/` 并集**（基线三方比较、删除优先，见设计文档 §4）→ 重连 data.db + 版本对齐 + 重启备份定时器 → 更新 `lastSeenHeadFileName` / `lastSyncAt` / `baseEntries`。
+**流程**：`GET` 云端那份 → **覆盖前自动快照本机当前状态**（restore 管道既有）→ `validateBackupPackage`（zip 结构/白名单/三文件齐全/data.db `user_version` 三态分流）→ **三文件覆盖**（`project.json` 的 `name` 归一为当前目录名、`id` 保留——与 restore 同口径；**正文与参考资料在 `data.db` 内，随覆盖走**；**不触碰 `sessions/`**——不写不删，存量旧包内的 `sessions/**` 条目接受并忽略）→ 重连 data.db + 版本对齐 + 重启备份定时器 → 更新 `lastSeenHeadFileName` / `lastSyncAt` / `lastSeenCloudFiles`。
 
-**同步状态更新**：`lastPushedFileName` = **拉到的这份**（既是新的冲突判定基准，也是「本机已基于该版本」的标记——拉取后立刻推送不会被判冲突）；`lastSeenHeadFileName` = 云端 head；`lastSeenCloudFiles` = 拉取时的云端文件集合；`baseEntries` = 该包的 `sessions/` 条目名（下次并集比较的基线）。
+**同步状态更新**：`lastPushedFileName` = **拉到的这份**（既是新的冲突判定基准，也是「本机已基于该版本」的标记——拉取后立刻推送不会被判冲突）；`lastSeenHeadFileName` = 云端 head；`lastSeenCloudFiles` = 拉取时的云端文件集合。
 
-**与本地 restore 的区别（不可混用语义）**：本地 restore 是「回到那个时间点」= **整体覆盖**（保持现状不变）；云端 pull 是「把另一台机器的东西拿过来」= 三文件覆盖 + `sessions/`**并集**（本机独有的对话不被静默吃掉）。并集只对 pull 生效——实现上是显式参数，restore 路径行为不变。**正文/参考资料不做并集**：它们在 `data.db` 内，与大纲/实体/Delta 同为覆盖组（2026-09 修订）。
+**与本地 restore 的区别（不可混用语义）**：本地 restore 是「回到那个时间点」；云端 pull 是「把另一台机器的东西拿过来」。**两者当下都只覆盖三文件**（2026-09 修订：原先 `sessions/` 的并集已取消——会话不再进任何 zip，不跨机器搬运；本机对话历史在两种操作里都不被写、不被删）。
 
-**删除如何真正生效**：本机删除后**推送到云端**，另一台拉取时按「云端删除」规则删除（并集不得复活本机已删除的文件）。UI 义务：**删除会话**后的 toast 提示「推送到云端后，另一台也会同步删除」；正文/参考资料属 `data.db` 覆盖组，随三文件覆盖自然传播（但另一台未推送的结构化改动会被覆盖，见 [`../design/40-cloud-sync.md`](../design/40-cloud-sync.md) §4）。
+**删除如何真正生效**：本机删书（`POST /project/delete`）可勾选同时删云端目录；会话不进云端，删书不涉云端传播。正文/参考资料属 `data.db` 覆盖组，随三文件覆盖自然传播（但另一台未推送的结构化改动会被覆盖，见 [`../design/40-cloud-sync.md`](../design/40-cloud-sync.md) §4）。
 
 **错误码**：409 `NO_PROJECT_OPEN` / `CLOUD_NOT_CONFIGURED` / `SCHEMA_VERSION_MISMATCH`、404 `CLOUD_FILE_NOT_FOUND`、400 `VALIDATION_ERROR`（坏包/文件名非法）、502 `CLOUD_AUTH_FAILED` / `CLOUD_UNREACHABLE` / `CLOUD_QUOTA_EXCEEDED`。
 
+### GET /api/v1/cloud/remote-books
+
+列出云端工作根下的全部书目录（新机器「从云端恢复」的清单源）。**不要求项目已打开**（与 `/status` 同款），只要求云盘已配置。
+
+```typescript
+// Query: (none)
+
+// Res: 200
+{
+  books: Array<{
+    dirName: string;      // 云端书目录名（<书名>-<projectId>，或坚果云长度回退后的 ai-editor-<id> / <id>）
+    name: string | null;  // 从目录名解析出的书名（回退命名/无法解析 → null，UI 回退显示 dirName）
+    projectId: string | null; // 从目录名解析出的 projectId（解析不出 → null，不可导入）
+    localExists: boolean; // 本机书架已有同 id 的项目（不可重复导入，UI 置灰并提示去打开同步）
+    backups: Array<{      // 该书目录下**可解析**的备份（时间倒序；[0] = head；空数组 = 不可导入）
+      fileName: string;
+      createdAt: string;
+      kind: "auto" | "manual";
+      name?: string;
+      device: string;
+      stats: { characters: number; settings: number; chapters: number };
+      size: number;
+    }>;
+  }>;
+}
+```
+
+**语义**：
+- 工作根（`<云盘根>/ai-editor/`）不存在 → 返回空数组（**GET 不写云盘**，不 MKCOL；用户先配好并在本机推一份）。
+- 每书目录一次 `PROPFIND`（请求量 = 1 + 书目录数，免费配额下无压力）；无法解析的目录也列出（`backups: []` / `projectId: null`，UI 置灰）。
+
+**错误码**：409 `CLOUD_NOT_CONFIGURED`、502 `CLOUD_AUTH_FAILED` / `CLOUD_UNREACHABLE` / `CLOUD_QUOTA_EXCEEDED`。
+
+### POST /api/v1/cloud/import-book
+
+把云端某本书的最新一份备份下载并**导入为本机新书**（新机器/换机器恢复路径）。**不要求项目已打开**。
+
+```typescript
+// Req
+{
+  dirName: string;   // GET /cloud/remote-books 列的云端书目录名（不得含路径分隔符/`..`；不存在的目录 → 404 CLOUD_FILE_NOT_FOUND）
+  fileName?: string; // 指定该目录内的一份（缺省 = head）；须通过备份文件名白名单
+}
+
+// Res: 200
+{
+  imported: true;
+  id: string;        // 沿用 zip 内 project.json 的 id（跨机器身份，后续同步按它匹配）
+  path: string;      // <创作根>/books/<书名>/（同名自动去重）
+  name: string;
+  fileName: string;  // 导入的那份云端文件名
+  size: number;
+}
+```
+
+**流程**：下载云端那份 → 走**既有导入校验管道**（`validateBackupPackage`：白名单/三文件齐全/顶层契约/data.db `user_version` 三态分流，与 `POST /project/import` 同一实现）→ **本机已有同 id 项目 → 409 `PROJECT_ALREADY_EXISTS`**（不静默覆盖；本机那本打开后自己同步）→ `books/<书名>/` 去重建目录（id 沿用、`name` 归一为目录名）→ **该 zip 原样落新书 `.backups/`**（新机器立刻有一份「最新本地备份」）→ 写 `cloud.json` 该书 state（`dirName` / `lastPushedFileName` = 导入的那份 / `lastSeenHeadFileName` = 云端 head / `lastSeenCloudFiles` = 当时云端集合 / `lastSyncAt` = 现在）→ **不自动打开**（与 import 一致）。
+
+**为什么导入要写同步状态**：不写则新机器一打开该书就是 `conflict`（云端有份 + 本机无同步记录）→ 逼用户各裁一次冲突——明明刚拉下来。写入后状态即「已同步」。
+
+**错误码**：409 `CLOUD_NOT_CONFIGURED` / `PROJECT_ALREADY_EXISTS`、404 `CLOUD_FILE_NOT_FOUND`（目录/文件不存在）、400 `VALIDATION_ERROR`（坏包/文件名非法）、409 `SCHEMA_VERSION_MISMATCH`、502 `CLOUD_AUTH_FAILED` / `CLOUD_UNREACHABLE` / `CLOUD_QUOTA_EXCEEDED`。
+
 ### 不做的事
 
-- **不改动本地 restore**（`POST /project/backup/restore` 保持整体覆盖语义）；云端书架（列云端全部书一键拉）与增量上传见 `../design/backlog.md`。
+- **不改动本地 restore**（`POST /project/backup/restore` 保持三文件整体覆盖语义）；**云端书架全量同步**（逐书冲突裁决 + 一键拉全部）与增量上传见 `../design/backlog.md`——本仓只做「列 + 导入新书」这个一次性迁移面。
 - **不做服务端定时重试**：手动动作失败由用户重试；自动推送失败等下一个 tick；关闭项目时推送失败只记日志 + 状态区标记。
 - **不做密码回传 / 密码脱敏展示**：任何响应都不含 password 字段（前端表单留空 = 保留原值）；URL 里的内嵌凭据同样被拒绝，而不是剥离后回显「干净的 URL」。
 - **不校验书名与云端目录名一致**：云端定位按 `projectId` 匹配；书名变化走 `POST /project/rename` 时的目录 `MOVE`。

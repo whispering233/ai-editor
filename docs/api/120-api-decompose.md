@@ -95,7 +95,8 @@
 **语义**：
 
 - 服务端**重新切分一次**（与 `analyze` 同一实现，确定性）——不依赖客户端回传的预览结果。
-- **副作用**：创建并**打开**该项目（等价 `POST /project/open` 的切换语义：释放旧项目运行时、暂停旧项目上的 job、写创作根 `.ai-editor/config.json` 的 `lastProject`）。
+- **副作用**：创建并**打开**该项目（等价 `POST /project/open` 的切换语义：释放旧项目运行时、暂停旧项目上的 job、写创作根 `.ai-editor/config.json` 的 `lastProject`），并给新项目 `project.json` 写 `origin: "decompose"`（书架据此分「小说拆解」组）。
+- **客户端义务（契约，不可省）**：成功后必须**收敛项目镜像**（重新拉 `GET /project/config` + `GET /outline`，并刷新书架）——服务端当前项目已切到新书；不刷新会出现「书架仍高亮旧书、旧书点开看到新项目的数据、云端状态不重查」的假象（2026-09 实测）。
 - **S1 同步完成后再返回**：建项目、建大纲（卷/章）、逐章导入正文（段落块）、落 `decompose_batches` 行——这一段不调 LLM，秒级；`Res` 返回时 job 已进入 `running`，客户端跳 `#/decompose` 看进度。
 - 同项目重复 start 不可达（start 总是新建项目）；书名冲突 → 409 `PROJECT_ALREADY_EXISTS`。
 - 模型/凭据缺失 → 400 `LLM_API_KEY_MISSING`（在创建项目**之前**校验，避免留下半成品项目）。
@@ -321,5 +322,5 @@
 | :--- | :--- |
 | chat | 拆解 job **不占** chat 的在途流（独立运行通道），拆解期间对话照常可用；切书会暂停 job（`setCurrentProject` 单点）。拆解会话与 chat 会话**同目录**：chat 面板可见，但**只读**（`POST /chat` 拒 `decompose-*`），有在途 job 时禁删 |
 | 提案 | 拆解**不走提案仓**——写操作由服务端确定性代码完成，用户通过「单批重跑」而非逐条确认修正 |
-| 备份 / 导出 / 云 | job 状态与批结果都在 `data.db`（`decompose_jobs` / `decompose_batches`），拆解会话在 `sessions/`——两者都随备份/导出/云自动携带；项目目录不新增任何目录 |
+| 备份 / 导出 / 云 | job 状态与批结果都在 `data.db`（`decompose_jobs` / `decompose_batches`）——随三文件进备份/导出/云端；**拆解会话在 `sessions/`，是纯本地目录、不进任何 zip**（新机器上不回放拆解过程记录）；项目目录不新增任何目录 |
 | 大纲 / 正文 / 实体 | 走既有表与文件（`outline.json` / `document_records` / `entities` / `relation_records`），**不新增写端点**；AI 工具面不变（无文档写工具） |

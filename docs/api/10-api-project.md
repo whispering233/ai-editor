@@ -80,6 +80,40 @@
 }
 ```
 
+### POST /api/v1/project/delete
+
+删除书架中的一本书（本地目录 + 可选云端目录）。**删除不可恢复**：本地 `.backups/` 在该书目录内，随目录一并删除。
+
+```typescript
+// Req
+{
+  path: string;           // 书目录绝对路径；须是 <创作根>/books/ 的**直接子目录**且含 project.json
+                          //   （不存在/链接跳转/不在 books/ 下 → 400 INVALID_PROJECT_PATH）
+  force?: boolean;        // true = 云端前置推送失败时仍然删除本机（缺省 false = 中止、不删任何东西）
+  delete_remote?: boolean;// true = 同时删除该书云端目录并清掉 cloud.json 的该书 state；
+                          //   缺省 false = 云端备份原样保留（用户可在云盘网页自行删除）
+}
+
+// Res: 200
+{
+  deleted: true;
+  path: string;
+  pushed?: { fileName: string };  // 删除前推送成功的那一份（云盘已配置且该书有同步记录时才有）
+  remoteDeleted?: true;           // delete_remote 且云端目录删除成功
+  remoteError?: { code: string; message: string };  // delete_remote 失败：本地已删、云端保留（best-effort）
+}
+```
+
+**语义**：
+
+1. **删除前推送（纯本地判据，不碰网络）**：`cloud.json` 已配置**且**该书有 book state（推过/拉过）→ 先打包本机最新状态并推送一次（未打开的书临时开 data.db，同覆盖前快照管道）；其余情况（云盘未配置 / 该书从未上云 = 「一个云端备份都没有」）→ 直接删，不发任何云端请求。
+2. **推送失败 → 502（`CLOUD_*` 原码）且不删**；`force: true` 才继续删（最新改动不会上云，风险由用户确认时承担）。
+3. **删除动作顺序**：取消在跑拆解 job（若该书有）→ 若删的是当前打开的书：`closeProject` + 清空 `currentProject` + 抹掉 `<创作根>/.ai-editor/config.json` 的 `lastProject` 键（下次启动回书架，不指向已删目录）→ 物理删目录。
+4. **`deleteRemote` 是 best-effort**：在本地删除**之后**执行（WebDAV 集合删除 = 尾斜杠 + `Depth: infinity` + 清 `cloud.json` state）；失败不改变「本地已删」的结果，以 `remoteError` 返回，UI 提示可去云盘网页手动清理。
+5. 目标已是当前书时，删完客户端应回书架并发刷新书架/项目配置/云端状态。
+
+**错误码**：400 `INVALID_PROJECT_PATH`（路径非法/已不存在/不在 `books/` 下/目录不含 `project.json`）、502 `CLOUD_*`（前置推送失败且未 `force`）。
+
 ### GET /api/v1/project/list
 
 书架列表（S1.5 书架模式）：扫描创作根 `books/` 下含 `project.json` 的子目录，供 Dashboard 书架展示。
@@ -91,8 +125,10 @@
 {
   rootPath: string;   // 创作根（server 启动参数 projectRoot）
   books: Array<{
+    id: string;        // project.json 的 id（**项目身份**：当前书高亮/打开判定一律按它，不按 name）
     name: string;      // 目录名（书名）
     path: string;      // 书目录绝对路径（创作根/books/<书名>/）
+    origin: "book" | "decompose";  // 出处：book = 手建/导入（缺省；project.json 无该字段即归此类），decompose = 由「拆解小说」建档
     updatedAt: string; // project.json 的 updated_at（ISO 8601）
   }>;
 }
@@ -100,7 +136,7 @@
 
 **语义**：
 - **不依赖当前项目**——书架模式待命（无 currentProject）时同样可用；`books/` 不存在返回空数组（不报错）。
-- 排序按 `updatedAt` 倒序（最近更新在前）。
+- 排序按 `updatedAt` 倒序（最近更新在前）；书架按 `origin` 分「小说项目 / 小说拆解」两组展示（空组不渲染）。
 - 过滤规则：仅目录 + 含 `project.json`（`readProjectFile` 探测）；`books/` 下无 project.json 的目录（如草稿箱）与普通文件不列出。
 - 兼容旧语义：创作根自身若有 `project.json`（旧部署模式）仍按 `detectProject` 打开，`list` 只列 `books/` 子目录（根自身不是书）。
 
@@ -214,15 +250,15 @@
 //   outline.json
 //   data.db        // 导出前服务端 wal_checkpoint(TRUNCATE)——主文件为完整快照，无需附带 -wal/-shm
 //                  // **含正文与参考资料**（document_records）与全部结构化数据
-//   sessions/**    // 对话历史（一 session 一 JSONL）随包导出——聊天记录不丢
-// （2026-09：不再有 references/** 条目——参考资料正文已进 data.db）
+// （2026-09：不再有 references/** 条目——参考资料正文已进 data.db；**也不再含 `sessions/**`**
+//   ——会话是纯本地目录，不进任何 zip）
 ```
 
 **语义**：
 - 导出**当前打开项目**（无项目 → 409 `NO_PROJECT_OPEN`，与 `/config` 一致）。
 - zip 天然不含 DeepSeek key（key 存 pi agent dir 的 `~/.pi/agent/auth.json`，不入项目文件；旧的 `~/.ai-editor/config.json` 已废弃、代码忽略）。
 - 三文件缺失任一 → 500 `INTERNAL_ERROR`（打开的项目三文件必然齐全，缺失即损坏，不导出半成品包）。
-- **`sessions/` 目录**：存在则递归打包（条目名 `sessions/<相对路径>`）；不存在则跳过（旧项目无目录不报错）。正文与参考资料随 `data.db` 走，无额外目录。
+- **`sessions/` 目录不在包内**（2026-09）：会话是纯本地目录，不进导出 zip（也不进备份/云端）——导出包只剩三文件；正文与参考资料随 `data.db` 走，无额外目录。
 
 ### POST /api/v1/project/import
 
@@ -257,7 +293,7 @@
 1. `content-length` 预检（> 50MB 快速拒绝，防超大请求先缓冲）+ `file.size` 复核
 2. 书名校验（防路径逃逸）
 3. zip 解压（fflate Unzip 流式 + **解压总字节预算 200MB**——zip 炸弹防御；解析失败/零条目 → 400 `VALIDATION_ERROR`「不是有效的项目备份包」）
-4. **条目白名单**：接受 `PROJECT_EXPORT_FILE_NAMES` 三文件名 + `sessions/` 前缀条目（前缀开头且不含 `..` 路径段才接受；未知条目严格拒绝——逐名比对天然防 zip 路径穿越）；**历史包内的 `references/` 条目按未知条目拒绝**（开发阶段无真实用户，不做兼容）
+4. **条目白名单**：接受 `PROJECT_EXPORT_FILE_NAMES` 三文件名 + `sessions/` 前缀条目（前缀开头且不含 `..` 路径段才接受；**存量旧包含 `sessions/**`，读取时接受并在搬入时忽略**；未知条目严格拒绝——逐名比对天然防 zip 路径穿越）；**历史包内的 `references/` 条目按未知条目拒绝**（开发阶段无真实用户，不做兼容）
 5. 三文件齐全（缺任一 → 400）
 6. `project.json`/`outline.json` 顶层契约（JSON 可解析 + id/name/schema_version；`{id:"root",type:"root",schema_version,children[]}`）
 7. `data.db`：**文件大小 > 0 → 打开成功（非 SQLite/空文件 → 400 坏包）→ `user_version` === 当前版本，或 < 当前版本且有迁移路径**（搬入后首次 open 自动前向迁移）
@@ -266,6 +302,6 @@
 - 400 `VALIDATION_ERROR`：坏包/缺文件/未知条目/契约不符/书名非法/超大小上限
 - 409 `SCHEMA_VERSION_MISMATCH`：data.db `user_version` 与当前程序版本不匹配且**无迁移路径**（`v > 当前` → 「备份来自更高版本程序」，零触碰；`v < 当前` 但有迁移路径 → 放行，搬入后 open 自动前向迁移）；**一律不静默重建**
 
-**原子搬入/覆盖**：校验在 `mkdtemp` 临时目录完成（无论成败清理）；通过后 `mkdir` + 复制三文件到 `books/<name>/`（或覆盖目标目录，覆盖前先快照），任一失败清理半成品（不留下残缺书）。导入**不自动打开**（与 create 一致，前端刷新书架）。
+**原子搬入/覆盖**：校验在 `mkdtemp` 临时目录完成（无论成败清理）；通过后 `mkdir` + 复制三文件到 `books/<name>/`（或覆盖目标目录，覆盖前先快照），任一失败清理半成品（不留下残缺书）。导入**不自动打开**（与 create 一致，前端刷新书架）。**覆盖恢复分支与 restore 同口径：只覆盖三文件，不触碰本机 `sessions/`**（会话是纯本地目录；存量旧包内的 `sessions/**` 条目接受但搬入时忽略）。
 
 ---
