@@ -534,6 +534,7 @@ export function createChatRoutes(deps: ChatRouteDeps = {}): Hono {
     const items = await Promise.all(
       sessions.map(async (info) => ({
         id: info.id,
+        name: info.name, // pi `session_info` 条目（普通 chat 会话没有 ⇒ undefined 被 JSON 序列化丢掉）
         lastMessage: truncate(await lastVisibleText(target, info.id), SESSION_LAST_MESSAGE_MAX_LEN),
         messageCount: info.messageCount,
         createdAt: info.created.toISOString(),

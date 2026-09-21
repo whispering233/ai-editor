@@ -10,6 +10,7 @@ import type {
   DecomposeBatchResult,
   DecomposeJobRes,
 } from "@whispering233/ai-editor-shared";
+import { DECOMPOSE_SESSION_ID_PREFIX } from "@whispering233/ai-editor-shared";
 import { relationTypeLabel } from "./entity-detail";
 
 /** 范围预估（`analyze` 响应里的一段；shared 只导出响应整体类型，故按字段取） */
@@ -322,4 +323,22 @@ export function formatCompletionCounts(counts: CompletionCounts): string {
     `地点 ${counts.location ?? "–"}`,
     `关系 ${counts.relation ?? "–"}`,
   ].join(" · ");
+}
+
+// ============ 拆解会话的只读态口径（DESIGN.md `chat-session-decompose`） ============
+
+/**
+ * 该会话 id 是否拆解会话（只读态的唯一判据）：前缀常量在 shared，client 不手抄 `decompose-` 字面量。
+ * 会话 id 是不透明值——只按前缀判别，不解析 id 内部（job id 清洗规则属服务端 `decomposeSessionId`）。
+ */
+export function isDecomposeSession(sessionId: string | null): boolean {
+  return sessionId !== null && sessionId.startsWith(DECOMPOSE_SESSION_ID_PREFIX);
+}
+
+/**
+ * job 是否在跑（拆解会话删除项的禁用条件）：`pending` / `running` 两种。
+ * `paused` **不算**——job 行虽已暂停，当前批仍可能在飞，那一层由服务端 409 `DECOMPOSE_JOB_RUNNING` 兜底。
+ */
+export function isJobRunning(status: DecomposeJobRes["status"]): boolean {
+  return status === "pending" || status === "running";
 }

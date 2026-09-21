@@ -1121,6 +1121,23 @@ describe("拆解会话守卫（decompose- 前缀）", () => {
     expect((await other.json()).error.code).toBe("SESSION_NOT_FOUND");
   });
 
+  it("GET /sessions：拆解会话带 name（会话名）；普通 chat 会话无 name 字段", async () => {
+    const project = openProject();
+    const { sessionId } = seedDecomposeSession(project, seedJob(project, "done"));
+    const env = await createFauxEnv();
+    const app = buildApp(createChatRoutes({ runtimeFactory: env.factory }));
+    scripted(env, [() => fauxAssistantMessage("普通会话回复")]);
+    const chat = await readSseFrames(await app.request("/api/v1/chat", postChat({ message: "普通提问" })));
+    const chatId = (chat.find((f) => f.event === "session")!.data as { session_id: string }).session_id;
+
+    const res = await app.request("/api/v1/chat/sessions", { headers: HOST_HEADERS });
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    const byId = (id: string) => data.sessions.find((s: { id: string }) => s.id === id);
+    expect(byId(sessionId).name).toBe("《测试书》拆解"); // pi session_info 条目
+    expect(byId(chatId)).not.toHaveProperty("name"); // 普通 chat 会话 pi 不写 name ⇒ 字段不下发
+  });
+
   it("DELETE /chat/sessions/:id：在跑 job 的拆解会话 409 DECOMPOSE_JOB_RUNNING；终态后可删（物理删）", async () => {
     const project = openProject();
     const jobId = seedJob(project, "running");

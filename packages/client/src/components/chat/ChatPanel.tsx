@@ -29,6 +29,7 @@ import { useMediaQuery } from "../../hooks/use-media-query";
 import { CHAT_MIN_WIDTH } from "../../hooks/use-panels";
 import { useProjectStore } from "../../stores/project";
 import {
+  getDecomposeJob,
   getSessionThinking,
   getSettingsLlm,
   resolveNames,
@@ -37,6 +38,8 @@ import {
   type SettingsLlmConfig,
   type ThinkingLevel,
 } from "../../lib/api";
+import { isDecomposeSession, isJobRunning } from "../../lib/decompose";
+import { TypeChip } from "../ui/tag-chip";
 import {
   collectIdCandidates,
   summarizePreview,
@@ -288,7 +291,17 @@ function ComposerConfigRow() {
 // - x `Conversations` 的选中/悬浮面走全局 `colorBgTextHover`（6% 黑灰面）+ `colorText` 字色，可读。
 
 /**
- * 会话列表项（导出供渲染走查测试）：两行 = 摘要 + 「条数 · 相对时间」；
+ * 会话显示标题（列表项 / 标题按钮 / 删除确认框共用）：**会话名优先**（pi `session_info` 条目——
+ * 拆解会话 = 「《书名》拆解」），其次末条摘要，最后「（空会话）」。
+ */
+export function sessionTitle(session: ChatSessionSummary): string {
+  const name = session.name?.trim() ?? "";
+  return name !== "" ? name : session.lastMessage || "（空会话）";
+}
+
+/**
+ * 会话列表项（导出供渲染走查测试）：两行 = 标题 + 「条数 · 相对时间」；
+ * 拆解会话（`decompose-` 前缀）带中性 `type-badge`「拆解」；
  * sessions 为 null（未加载）/ 空数组（无历史）→ 单条禁用提示项（x Conversations 无空态样式）。
  */
 export function sessionItems(sessions: ChatSessionSummary[] | null): ConversationItemType[] {
@@ -299,7 +312,10 @@ export function sessionItems(sessions: ChatSessionSummary[] | null): Conversatio
     key: ss.id,
     label: (
       <span className="flex min-w-0 flex-col">
-        <span className="truncate text-sm">{ss.lastMessage || "（空会话）"}</span>
+        <span className="flex min-w-0 items-center gap-1">
+          <span className="truncate text-sm">{sessionTitle(ss)}</span>
+          {isDecomposeSession(ss.id) && <TypeChip className="shrink-0">拆解</TypeChip>}
+        </span>
         <span className="truncate text-xs text-muted-foreground">
           {ss.messageCount} 条 · {formatRelativeTime(ss.updatedAt)}
         </span>
@@ -313,15 +329,29 @@ export const MENU_KEY_DELETE_SESSION = "delete-session";
 
 /**
  * 会话项操作菜单（DESIGN.md `chat-session-item-menu`；导出供渲染走查测试）：
- * 仅一项「删除会话」（antd danger 样式由 token 派发）；`streaming`（在途生成）时禁用——
- * 服务端以 409 `SESSION_BUSY` 兼底。浮层面由 x 的内部 Dropdown 承担（canvas 面 = `colorBgElevated`）。
+ * 仅一项「删除会话」（antd danger 样式由 token 派发）；两种禁用：`streaming`（在途生成，服务端 409
+ * `SESSION_BUSY` 兜底）/ `jobRunning` 且该项是拆解会话（拆解 job 在跑，服务端 409
+ * `DECOMPOSE_JOB_RUNNING` 兜底——删文件会被在途任务原地重建）。
+ *
+ * 已知口径（有意）：一项目一 job（最新一行），故 job 在跑时同项目的拆解会话**一律**禁删；
+ * 历史 job 的会话实际仍可删（服务端按会话 id ↔ job id 精确判定）。精确到「该项属于在跑的那个 job」
+ * 需要 client 重抄服务端 `decomposeSessionId` 的 id 清洗规则——宁可少禁一点场景，也不两份清洗逻辑。
+ * 浮层面由 x 的内部 Dropdown 承担（canvas 面 = `colorBgElevated`）。
  */
 export function sessionItemMenu(
   streaming: boolean,
+  jobRunning: boolean,
   onDelete: (sessionId: string) => void,
 ): (item: ConversationItemType) => MenuProps {
   return (item) => ({
-    items: [{ key: MENU_KEY_DELETE_SESSION, label: "删除会话", danger: true, disabled: streaming }],
+    items: [
+      {
+        key: MENU_KEY_DELETE_SESSION,
+        label: "删除会话",
+        danger: true,
+        disabled: streaming || (jobRunning && isDecomposeSession(item.key)),
+      },
+    ],
     onClick: ({ key, domEvent }) => {
  // 阻止冒泡：菜单点击不得触发会话项选中
       domEvent.stopPropagation();
@@ -346,23 +376,38 @@ function SessionTitleBar({
   const newSession = useChatStore((s) => s.newSession);
   const deleteSession = useChatStore((s) => s.deleteSession);
   const streaming = useChatStore((s) => s.streaming);
+  const projectId = useProjectStore((s) => s.config?.id ?? null);
   // 当前会话 = 列表中 id 匹配项；未选（null）/ 列表未加载 / 不在列表 → 新会话
   const currentSession = sessions?.find((s) => s.id === currentSessionId) ?? null;
-  const title = currentSession ? currentSession.lastMessage || "（空会话）" : "新会话";
+  const title = currentSession ? sessionTitle(currentSession) : "新会话";
   /** 弹层开关（自定义弹层不经 Menu 上报点击，不会自动关——选中项后手动关） */
   const [open, setOpen] = useState(false);
   /** 待删除会话（非 null 时渲染二次确认对话框） */
   const [deleteTarget, setDeleteTarget] = useState<ChatSessionSummary | null>(null);
+  /** 当前项目的拆解 job 是否在跑（删除项禁用条件之一） */
+  const [jobRunning, setJobRunning] = useState(false);
+
+  // 下拉打开时现拉一次 job 状态：聊天面板常驻，不为此挂常驻轮询（`useDecomposeJob` 是页面级进度轮询）；
+  // 打开后才起的 job 让这里的状态过期 → 服务端 409 `DECOMPOSE_JOB_RUNNING` 兜底（转 toast）
+  function refreshJobRunning(): void {
+    if (projectId === null) {
+      setJobRunning(false);
+      return;
+    }
+    void getDecomposeJob()
+      .then((job) => setJobRunning(isJobRunning(job.status)))
+      .catch(() => setJobRunning(false)); // 404 无 job / 网络失败：不拦删除（服务端仍是权威）
+  }
 
   const conversationItems = useMemo(() => sessionItems(sessions), [sessions]);
-  // 菜单由每项自行渲染（键由项回调透传）；菜单项按 streaming 禁用（服务端 409 兼底）
+  // 菜单由每项自行渲染（键由项回调透传）；菜单项按 streaming / job 在跑禁用（服务端 409 兼底）
   const itemMenu = useMemo(
     () =>
-      sessionItemMenu(streaming, (sessionId) => {
+      sessionItemMenu(streaming, jobRunning, (sessionId) => {
         const target = sessions?.find((s) => s.id === sessionId) ?? null;
         if (target !== null) setDeleteTarget(target);
       }),
-    [streaming, sessions],
+    [streaming, jobRunning, sessions],
   );
 
   return (
@@ -372,7 +417,10 @@ function SessionTitleBar({
         disabled={disabled}
         trigger={["click"]}
         open={open}
-        onOpenChange={setOpen}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (next) refreshJobRunning();
+        }}
         // 弹层 = x Conversations（项高 40px 是 x 默认值，本项目两行内容用 styles.item 抬到 auto）
         // 浮层面自补：旧的路由是 `AntDropdown + Menu`，那层面由 `.ant-dropdown-menu` 提供——换成 Conversations
         // 后弹层根只剩定位（背景透明、padding 0），故按 `ui/context-menu.tsx` 的同一套自绘浮层类补上
@@ -438,7 +486,11 @@ function SessionTitleBar({
       {deleteTarget !== null && (
         <ConfirmDialog
           title="删除会话"
-          description={`将删除会话「${deleteTarget.lastMessage || "（空会话）"}」及其 ${deleteTarget.messageCount} 条消息，删除后无法恢复。`}
+          description={
+            isDecomposeSession(deleteTarget.id)
+              ? `将删除拆解过程记录「${sessionTitle(deleteTarget)}」及其 ${deleteTarget.messageCount} 条消息——删除只影响过程记录，拆解数据不受影响。`
+              : `将删除会话「${sessionTitle(deleteTarget)}」及其 ${deleteTarget.messageCount} 条消息，删除后无法恢复。`
+          }
           confirmLabel="确认删除"
           danger
           onConfirm={() => deleteSession(deleteTarget.id)}
@@ -900,6 +952,34 @@ function FocusBar() {
   );
 }
 
+// ============ 拆解会话只读态（DESIGN.md `chat-session-decompose`） ============
+// 会话 id 前缀 `decompose-`（shared 常量）即 kind：正文照常渲染，输入区整体不渲染，只留一行只读说明。
+
+/** 拆解会话只读说明条（顶部一行 `caption-text` + 类型徽标）；导出供 SSR 走查 */
+export function DecomposeReadonlyBar() {
+  return (
+    <div className="flex shrink-0 items-center gap-1.5 border-b border-border bg-muted px-3 py-1.5">
+      <span className="text-xs text-muted-foreground">拆解过程记录 · 只读</span>
+      <TypeChip>拆解</TypeChip>
+    </div>
+  );
+}
+
+/**
+ * 底部区（focus 小条 + 输入区）：当前会话是拆解会话（`readonly`）时**输入区整体不渲染**——
+ * 不是禁用：不留「换个会话就能发」的错觉。导出供 SSR 走查（zustand 的 getServerSnapshot 恒为初始态，
+ * store 里的当前会话在 SSR 看不到）。
+ */
+export function ComposerArea({ readonly }: { readonly: boolean }) {
+  if (readonly) return null;
+  return (
+    <>
+      <FocusBar />
+      <InputArea />
+    </>
+  );
+}
+
 // ============ 输入区：x Sender（Enter 发送 / Shift+Enter 换行，IME 安全内建） ============
 // textarea 自研发送逻辑退役；loading = streaming 思考态。
 // 行为修订注记：原实现 streaming 期间禁用输入框；x Sender 无 disabled 透传，改为
@@ -1046,11 +1126,15 @@ function ChatPanelBody({
   onToggleCollapse?: () => void;
 }) {
   const config = useProjectStore((s) => s.config);
+  const currentSessionId = useChatStore((s) => s.currentSessionId);
   const disabled = !config;
+  // 拆解会话 = 只读态：顶部一行说明，底部输入区不渲染（DESIGN.md `chat-session-decompose`）
+  const readonly = isDecomposeSession(currentSessionId);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <SessionTitleBar disabled={disabled} onClose={onClose} onToggleCollapse={onToggleCollapse} />
+      {!disabled && readonly && <DecomposeReadonlyBar />}
       {!disabled && (
         <>
           <DisconnectBanner />
@@ -1058,12 +1142,7 @@ function ChatPanelBody({
         </>
       )}
       <MessageList disabled={disabled} />
-      {!disabled && (
-        <>
-          <FocusBar />
-          <InputArea />
-        </>
-      )}
+      {!disabled && <ComposerArea readonly={readonly} />}
     </div>
   );
 }

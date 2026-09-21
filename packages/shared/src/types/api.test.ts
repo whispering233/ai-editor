@@ -8,6 +8,7 @@ import {
   apiErrorSchema,
   characterDataSchema,
   chatSendReqSchema,
+  chatSessionSummarySchema,
   decomposeAnalyzeQuerySchema,
   decomposeAnalyzeResSchema,
   decomposeBatchResSchema,
@@ -597,6 +598,19 @@ describe("OUTLINE_NODE_DATA_SCHEMAS", () => {
 });
 
 describe("chat 端点", () => {
+  it("会话列表项：name（会话名）可选——拆解会话回传；普通会话缺省", () => {
+    const base = {
+      id: "sess-1",
+      lastMessage: "帮我梳理第三章的冲突",
+      messageCount: 3,
+      createdAt: "2026-08-01T10:00:00Z",
+      updatedAt: "2026-08-01T11:00:00Z",
+    };
+    expect(chatSessionSummarySchema.safeParse(base).success).toBe(true); // 无 name（普通 chat 会话）
+    expect(chatSessionSummarySchema.parse({ ...base, name: "《测试书》拆解" }).name).toBe("《测试书》拆解");
+    expect(chatSessionSummarySchema.safeParse({ ...base, name: 42 }).success).toBe(false);
+  });
+
   it("POST /chat：message 必填；session_id 与 context 可选", () => {
     expect(chatSendReqSchema.safeParse({}).success).toBe(false);
     expect(

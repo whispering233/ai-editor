@@ -455,6 +455,8 @@ export const useChatStore = create<ChatState>((set, get) => {
       } catch (err) {
  // apiFetch 只抛 ApiError（code 透传服务端 ErrorCode）；非 ApiError 属理论不可达，按网络错误兜底
         const code = err instanceof ApiError ? err.code : CLIENT_NETWORK_ERROR;
+        // 服务端专属码（如 DECOMPOSE_JOB_RUNNING）不在 client 的 ErrorCode 联合里 ⇒ 比对按字符串
+        const codeText: string = code;
         const message = err instanceof Error ? err.message : "网络请求失败";
         if (code === "SESSION_NOT_FOUND") {
           // 目标已不存在（他处已删/文件被外部删除）：刷新列表对齐 UI，不抛（对话框可关）
@@ -465,6 +467,9 @@ export const useChatStore = create<ChatState>((set, get) => {
         if (code === "SESSION_BUSY") {
           // 在途生成中：列表不变、保留条目（服务端 409 兜底；UI 侧菜单项已按 streaming 禁用）
           useUiStore.getState().showToast("该会话正在生成中，请稍后再删", "error");
+        } else if (codeText === "DECOMPOSE_JOB_RUNNING") {
+          // 拆解 job 在跑：同上（UI 侧菜单项已按 job 状态禁用；兜底「下拉打开后才起 job」的竞态）
+          useUiStore.getState().showToast("拆解任务仍在跑，暂不可删该过程记录", "error");
         } else {
           useUiStore.getState().showError(code, message);
         }

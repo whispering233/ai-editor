@@ -383,6 +383,17 @@ describe("setCurrentSession / newSession / clearSessions（U5：选择即恢复�
     expect(useUiStore.getState().toast?.text).toBe("该会话正在生成中，请稍后再删");
   });
 
+  it("deleteSession 409 DECOMPOSE_JOB_RUNNING：列表不变 + 错误 toast + 抛出（确认框保持打开）", async () => {
+    mocked.deleteChatSession.mockRejectedValue(new ApiError("DECOMPOSE_JOB_RUNNING" as never, "拆解任务仍在跑"));
+    useChatStore.setState({ sessions: [sampleSession], currentSessionId: null });
+
+    await expect(useChatStore.getState().deleteSession("decompose-job-abc")).rejects.toThrow("拆解任务仍在跑");
+
+    const s = useChatStore.getState();
+    expect(s.sessions?.map((x) => x.id)).toEqual(["sess-1"]); // 不移除
+    expect(useUiStore.getState().toast?.text).toBe("拆解任务仍在跑，暂不可删该过程记录");
+  });
+
   it("deleteSession 404 SESSION_NOT_FOUND：刷新列表 + 不抛出（对话框可关）", async () => {
     mocked.deleteChatSession.mockRejectedValue(new ApiError("SESSION_NOT_FOUND", "会话不存在"));
     mocked.listSessions.mockResolvedValue([]);

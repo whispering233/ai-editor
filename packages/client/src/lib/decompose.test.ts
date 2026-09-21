@@ -28,6 +28,8 @@ import {
   formatJobScope,
   formatPreviewStats,
   formatShelfBadge,
+  isDecomposeSession,
+  isJobRunning,
   isTerminalJobStatus,
   jobActionFor,
   parseScopeInput,
@@ -409,5 +411,22 @@ describe("jobActionFor（页头操作：按状态显示其一）", () => {
   it("终态无操作（done 没得可做；failed 的补救是逐批重跑而不是续拆）", () => {
     expect(jobActionFor("done")).toBeNull();
     expect(jobActionFor("failed")).toBeNull();
+  });
+});
+
+describe("isDecomposeSession / isJobRunning（拆解会话只读态的两个判据）", () => {
+  it("拆解会话 = 会话 id 前缀（shared 常量），不是「名字里含 decompose」", () => {
+    expect(isDecomposeSession("decompose-job-abc")).toBe(true);
+    expect(isDecomposeSession("my-decompose-1")).toBe(false);
+    expect(isDecomposeSession("sess-1")).toBe(false);
+    expect(isDecomposeSession(null)).toBe(false); // 未选会话 / 列表未加载
+  });
+
+  it("job 在跑 = pending / running；paused 不算（残留批由服务端 409 兜底）", () => {
+    expect(isJobRunning("pending")).toBe(true);
+    expect(isJobRunning("running")).toBe(true);
+    for (const status of ["paused", "done", "failed"] as const) {
+      expect(isJobRunning(status)).toBe(false);
+    }
   });
 });
