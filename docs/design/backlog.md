@@ -147,6 +147,12 @@
 
 ## 云端存档（2026-09，MVP 已发布后的遗留项）
 
+- **导入的书首次打开后变 `local-ahead`（2026-09 浏览器端到端实测登记，体验型）**
+  - 机制：导入包里的 `data.db` 无伴生 `-wal`；首次打开该书时引擎创建/写 `data.db-wal`（job 归一、一致性补标等书务写入），mtime 晚于 `lastSyncAt` ⇒ 状态从 `synced` 转 `local-ahead`（点「同步云端」弹旧备份确认框）。**不是冲突**（云端集合未变），无数据风险；点「立即手动备份并推送」即回到已同步。
+  - 触发条件：「从云端恢复 → 打开 → 首次同步」这个必然路径上多一些摩擦；用户抱怨时再做。
+  - 最小修法：book state 加可选 `importedAt`（导入时写）；`setCurrentProject` 打开项目时若该书 state 有 `importedAt` → 把它当「导入后尚未打开」，把 `lastSyncAt` 重置为 `max(now, ceil(三文件 mtime))` 并删标记（即首次打开后再取一次基准，书务写入不再计入改动）。需同步改 `docs/api/100-api-cloud.md` 的边界段与加一条开路径测试。
+  - 备选（不推荐）：改变更判定忽略 `-wal`——会丢掉「正文写入触发备份/推送」这个核心信号。
+
 - **从云端恢复面的两个小缺口（2026-09 云端书架 oracle 登记）**
   - ① `GET /cloud/remote-books` 对 `books/` 里损坏的 `project.json` 会抛（`findBookDirById` 同 list/open 口径）⇒ 一本坏书挡住整个恢复面（500）。低频、与既有口径一致，暂不改；真要修则扫描时跳过坏书并单独标一行。
   - ② `import-book` 的 500 `INTERNAL_ERROR`（创作根未注入）未进文档错误码表——与 push/pull 同款（装配错误，不可能在真机上出现），不补。
