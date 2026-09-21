@@ -187,7 +187,7 @@ export function CloudRemoteBooksDialog({
     setImportingDir(book.dirName);
     setImportError(null);
     try {
-      const res = await importCloudBook({ dir_name: book.dirName });
+      const res = await importCloudBook({ dirName: book.dirName });
       // 成功：关框 + toast（带书名）+ 刷新书架；不自动打开（用户自己决定何时进这本书）
       seq.current += 1; // 关框后迟到的列表响应作废
       onOpenChange(false);

@@ -311,7 +311,7 @@ describe("GET /api/v1/cloud/remote-books", () => {
     });
     // 回退命名 `ai-editor-<id>`：projectId 解析得出，书名段不是真书名 → name = null（UI 回退显示 dirName）
     expect(byDir.get(`ai-editor-${foreign}`)).toMatchObject({ name: null, projectId: foreign, localExists: false });
-    // 无法解析 id 的目录：也列出（UI 置灰），不可导入
+    // 无法解析 id 的目录：也列出（projectId: null = 目录名没带 id，不阻止导入；导入路径见「目录名解析不出 id … 仍可导入」用例）
     expect(byDir.get("没有 id 的目录")).toMatchObject({ name: null, projectId: null, localExists: false });
     expect(byDir.get(emptyDir)?.backups).toEqual([]);
   });

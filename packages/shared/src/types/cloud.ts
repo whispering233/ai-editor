@@ -115,7 +115,7 @@ export interface CloudRemoteBook {
   dirName: string;
   /** 从目录名解析出的书名（回退命名/解析不出 → null，UI 回退显示 dirName） */
   name: string | null;
-  /** 从目录名解析出的 projectId（解析不出 → null，不可导入） */
+  /** 从目录名解析出的 projectId（解析不出 → null = 目录名没带 id，不阻止导入） */
   projectId: string | null;
   /** 本机书架已有同 id 的项目（不可重复导入，UI 置灰并提示去打开同步） */
   localExists: boolean;

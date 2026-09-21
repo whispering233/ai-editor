@@ -1629,8 +1629,8 @@ describe("云端远程书架端点（docs/api/100-api-cloud.md）", () => {
     });
 
     const res = await importCloudBook({
-      dir_name: "云端书-abc123",
-      file_name: "2026-09-20-auto-苹果本-人物3-设定5-章12.zip",
+      dirName: "云端书-abc123",
+      fileName: "2026-09-20-auto-苹果本-人物3-设定5-章12.zip",
     });
 
     expect(calls[0].url).toBe("/api/v1/cloud/import-book");
@@ -1659,7 +1659,7 @@ describe("云端远程书架端点（docs/api/100-api-cloud.md）", () => {
       },
     });
 
-    await importCloudBook({ dir_name: "云端书-abc123" });
+    await importCloudBook({ dirName: "云端书-abc123" });
 
     expect(JSON.parse(String(calls[0].init?.body))).toEqual({ dir_name: "云端书-abc123" });
   });
@@ -1673,7 +1673,7 @@ describe("云端远程书架端点（docs/api/100-api-cloud.md）", () => {
       },
     });
 
-    const err = await importCloudBook({ dir_name: "云端书-abc123" }).catch((e: unknown) => e);
+    const err = await importCloudBook({ dirName: "云端书-abc123" }).catch((e: unknown) => e);
 
     expect((err as ApiError).code).toBe("PROJECT_ALREADY_EXISTS");
     expect((err as ApiError).message).toContain("本机书架已有这本书");

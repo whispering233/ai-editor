@@ -1267,20 +1267,20 @@ export function getCloudRemoteBooks(): Promise<CloudRemoteBooksResult> {
 
 /**
  * POST /api/v1/cloud/import-book —— 把云端某本书的一份备份导入为本机新书（**不自动打开**）。
- * 参数名 = 线上字段名（snake_case，同 pull/push 的请求体口径）：`dir_name` 为 remote-books 列的
- * 云端目录名；`file_name` 缺省 = 该目录 head（导入最近一份）。
+ * `dirName` 为 remote-books 列的云端目录名；`fileName` 缺省 = 该目录 head（导入最近一份）。
+ * 调用侧 camelCase、请求体映射 snake_case（`dir_name` / `file_name`，同 pull/push 口径）。
  * 失败：409 CLOUD_NOT_CONFIGURED / PROJECT_ALREADY_EXISTS / SCHEMA_VERSION_MISMATCH、
  *      404 CLOUD_FILE_NOT_FOUND（目录或那份不存在）、400 VALIDATION_ERROR（坏包/名字非法）、502 三码。
  */
 export function importCloudBook(options: {
-  dir_name: string;
-  file_name?: string;
+  dirName: string;
+  fileName?: string;
 }): Promise<CloudImportBookResult> {
   return apiFetch<CloudImportBookResult>("/cloud/import-book", {
     method: "POST",
     body: {
-      dir_name: options.dir_name,
-      ...(options.file_name !== undefined ? { file_name: options.file_name } : {}),
+      dir_name: options.dirName,
+      ...(options.fileName !== undefined ? { file_name: options.fileName } : {}),
     },
   });
 }

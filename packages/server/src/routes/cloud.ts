@@ -258,7 +258,7 @@ function requireWebdavConfig() {
 }
 
 /**
- * 云端书目录名 → `{ name, projectId }`；解析不出 → null（UI 置灰、不可导入）。
+ * 云端书目录名 → `{ name, projectId }`；解析不出 → null（= 目录名没带 id / 无 id 声明，**不阻止导入**；UI 只对无备份置灰）。
  *
  * 三种命名（`docs/api/100-api-cloud.md`）：`<书名>-<projectId>`（默认）、`ai-editor-<projectId>`
  * （云盘拒长名后的回退）、`<projectId>`（回退链最后一档）。projectId 形状 = `proj-` + 21 位 URL 安全

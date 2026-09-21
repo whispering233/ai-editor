@@ -207,7 +207,7 @@
   books: Array<{
     dirName: string;      // 云端书目录名（<书名>-<projectId>，或坚果云长度回退后的 ai-editor-<id> / <id>）
     name: string | null;  // 从目录名解析出的书名（回退命名/无法解析 → null，UI 回退显示 dirName）
-    projectId: string | null; // 从目录名解析出的 projectId（解析不出 → null，不可导入）
+    projectId: string | null; // 从目录名解析出的 projectId（解析不出 → null = 目录名没带 id，不阻止导入）
     localExists: boolean; // 本机书架已有同 id 的项目（不可重复导入，UI 置灰并提示去打开同步）
     backups: Array<{      // 该书目录下**可解析**的备份（时间倒序；[0] = head；空数组 = 不可导入）
       fileName: string;
@@ -224,7 +224,7 @@
 
 **语义**：
 - 工作根（`<云盘根>/ai-editor/`）不存在 → 返回空数组（**GET 不写云盘**，不 MKCOL；用户先配好并在本机推一份）。
-- 每书目录一次 `PROPFIND`（请求量 = 1 + 书目录数，免费配额下无压力）；无法解析的目录也列出（`backups: []` / `projectId: null`，UI 置灰）。
+- 每书目录一次 `PROPFIND`（请求量 = 1 + 书目录数，免费配额下无压力）；无法解析的目录也列出——**`projectId: null` 只表示目录名没带 id（无 id 声明），不阻止导入**；UI 只对**无备份（`backups: []`）**才置灰。
 
 **错误码**：409 `CLOUD_NOT_CONFIGURED`、502 `CLOUD_AUTH_FAILED` / `CLOUD_UNREACHABLE` / `CLOUD_QUOTA_EXCEEDED`。
 
