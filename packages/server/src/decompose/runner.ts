@@ -18,7 +18,9 @@
 // 业务代码不自建 fetch / HTTP agent（出站行为统一由启动时装的全局 undici dispatcher 承担）。
 // 阈值与提示词里的数字一律取自常量（提示词按常量插值生成，散文不复述数字）。
 
+import { unlinkSync } from "node:fs";
 import type { DecomposeBatchResult, OutlineFileTree } from "@whispering233/ai-editor-shared";
+import { findProjectSession } from "@whispering233/ai-editor-agent";
 import {
   completeBatch,
   deriveChapterOrder,
@@ -27,6 +29,7 @@ import {
   getDecomposeJob,
   getDocumentTexts,
   listDecomposeBatches,
+  listDecomposeJobs,
   listRelations,
   nowIso,
   readOutlineFile,
@@ -51,7 +54,14 @@ import {
   normalizeExtraction,
 } from "./extract.js";
 import { doneBatchResults } from "./job.js";
-import { openDecomposeSession, parseModelJson, type DecomposeLlmDeps, type DecomposeSession, type ModelRequest } from "./llm.js";
+import {
+  decomposeSessionId,
+  openDecomposeSession,
+  parseModelJson,
+  type DecomposeLlmDeps,
+  type DecomposeSession,
+  type ModelRequest,
+} from "./llm.js";
 import { normalizeEntityName } from "./merge.js";
 import { listAllLiveEntities, runDecomposeMerge } from "./merge-write.js";
 
@@ -67,6 +77,8 @@ export const DECOMPOSE_SNAPSHOT_PREV_CHAPTERS = 3;
 export const DECOMPOSE_SNAPSHOT_MAX_CHARS = 2000;
 /** 人物 `role` 的展示权重（§4.1：主角 → … → 龙套，词表外的 role 归末位）——同时是批提示词的建议词表 */
 export const DECOMPOSE_ROLE_ORDER = ["主角", "主要配角", "配角", "反派", "龙套"] as const;
+/** 拆解会话保留上限（§7.2）：按 job `created_at` 保留最近这么多枚，超出的在新一轮拆解创建会话之前清掉 */
+export const DECOMPOSE_KEPT_SESSIONS = 5;
 
 /** 拆解 runner 可注入依赖（测试注入内存运行时 + faux provider 离线跑通；缺省走 pi 单例） */
 export type DecomposeRunnerDeps = DecomposeLlmDeps;
@@ -580,6 +592,44 @@ export function isDecomposeJobActive(jobId: string): boolean {
   return activeRuns.has(jobId);
 }
 
+/**
+ * 清理超出保留上限的拆解会话（§7.2）：按 job `created_at` 保留最近 `DECOMPOSE_KEPT_SESSIONS` 枚
+ * （`job-<nanoid>` 里没有可解析时间 ⇒ 排序依据只能是 job 行，不是文件名），更早的会话文件物理删除
+ * （与 `DELETE /chat/sessions/:id` 同款：pi 磁盘发现拿路径 → `unlinkSync`）。
+ *
+ * - **只碰会话 id 为 `decompose-` 前缀的记录**：候选集 = 历史 job 行，会话 id 由 `decomposeSessionId`
+ *   组装、查找走 pi 的磁盘发现 + 会话 id 命中（文件名带时间戳前缀，**不得**按文件名 glob）
+ *   ⇒ chat 会话结构上不可能参与（用户资产）；
+ * - **在跑的一律不删**：job 行 `pending` / `running`，或进程内有在跑轮次（暂停后当前批仍在飞，
+ *   删了会被这轮原地重建）；
+ * - 单个文件删不掉只记日志（同 `pruneBackups` 口径），整段失败也不阻塞拆解。
+ *
+ * @returns 实际删除的会话枚数（无需清理 / 失败 → 0）
+ */
+export async function pruneDecomposeSessions(project: ProjectContext): Promise<number> {
+  try {
+    const jobs = listDecomposeJobs(project.db); // created_at 升序
+    const extras = jobs.slice(0, Math.max(0, jobs.length - DECOMPOSE_KEPT_SESSIONS));
+    let pruned = 0;
+    for (const job of extras) {
+      if (job.status === "pending" || job.status === "running" || isDecomposeJobActive(job.id)) continue;
+      const sessionId = decomposeSessionId(job.id);
+      const info = await findProjectSession(project.root, sessionId);
+      if (info === null) continue; // 从未落盘 / 已被删 ⇒ 无事可做（清理幂等）
+      try {
+        unlinkSync(info.path);
+        pruned++;
+      } catch (err) {
+        console.error(`[decompose] 清理旧拆解会话失败（跳过，不阻塞）: ${sessionId}`, err);
+      }
+    }
+    return pruned;
+  } catch (err) {
+    console.error("[decompose] 清理旧拆解会话失败（跳过，不阻塞）:", err);
+    return 0;
+  }
+}
+
 /** 单批重跑选项（§7：`done` 与 `failed` 都可重跑，跑完重建 S3/S4） */
 export interface DecomposeRunOptions {
   rerunSeq?: number;
@@ -605,12 +655,22 @@ export function startDecomposeJob(
     try {
       await previous?.done; // 上一轮先收尾（含它正在飞的批落库）
       if (controller.signal.aborted) return;
+      // §7.2：清理超限的更早拆解会话——**必须在创建本轮会话之前**（幂等；失败只记日志，不阻塞拆解）
+      const pruned = await pruneDecomposeSessions(project);
       // 会话（落盘 + 过程条目）一轮一枚：S2 各批 + S3 归并 + S4 报告都写进它（deps 缺模型/凭据 → 抛错 → job 标失败）
       const session = await openDecomposeSession(deps, {
         projectRoot: project.root,
         jobId: job.id,
         bookName: project.config.name,
       });
+      if (pruned > 0) {
+        // 删除不静默：日志 + 本轮会话的过程条目（`#/decompose` 时间线可见）；枚数由常量插值，散文不复述数字
+        console.log(`[decompose] 已清理 ${pruned} 份更早的拆解会话（保留最近 ${DECOMPOSE_KEPT_SESSIONS} 份）`);
+        session.log({
+          kind: "session_pruned",
+          text: `已清理 ${pruned} 份更早的拆解记录（保留最近 ${DECOMPOSE_KEPT_SESSIONS} 份）`,
+        });
+      }
       await executeRun({ project, job, session, signal: controller.signal, rerunSeq: options.rerunSeq });
       if (controller.signal.aborted) return; // 暂停 / 切书：不跑 S3/S4（状态归暂停与续拆路径）
       await finishJob(project, job, session);

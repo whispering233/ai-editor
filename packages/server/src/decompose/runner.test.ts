@@ -17,8 +17,8 @@ import {
   type AssistantMessage,
   type Context,
 } from "@earendil-works/pi-ai";
-import { ModelRuntime, SettingsManager } from "@earendil-works/pi-coding-agent";
-import { MAX_ENTITY_LIST_LIMIT, type DecomposeBatchResult, type DecomposeJobRes } from "@whispering233/ai-editor-shared";
+import { ModelRuntime, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
+import { MAX_ENTITY_LIST_LIMIT, DECOMPOSE_SESSION_ID_PREFIX, type DecomposeBatchResult, type DecomposeJobRes } from "@whispering233/ai-editor-shared";
 import { decomposeBatchResultSchema } from "@whispering233/ai-editor-shared/schemas";
 import {
   completeBatch,
@@ -46,6 +46,7 @@ import {
   originCheckMiddleware,
   projectMiddleware,
   setCurrentProject,
+  type ProjectContext,
 } from "../middleware/project.js";
 import { resetModelRuntime } from "../model-runtime.js";
 import { setProjectRoot } from "../routes/project.js";
@@ -61,12 +62,14 @@ import { ingestDecomposeProject } from "./job.js";
 import { decomposeSessionId } from "./llm.js";
 import {
   DECOMPOSE_BATCH_MAX_ATTEMPTS,
+  DECOMPOSE_KEPT_SESSIONS,
   DECOMPOSE_ROLE_ORDER,
   DECOMPOSE_SNAPSHOT_MAX_CHARS,
   DECOMPOSE_SNAPSHOT_PREV_CHAPTERS,
   emptyStoryBible,
   extendStoryBible,
   isDecomposeJobActive,
+  pruneDecomposeSessions,
   readStartSnapshot,
   snapshotComposition,
   snapshotKnownNames,
@@ -554,6 +557,113 @@ describe("拆解会话落盘", () => {
     const after = await app.request(`/api/v1/chat/sessions/${sessionId}`, { method: "DELETE", headers: HOST_HEADERS });
     expect(after.status).toBe(200);
     expect(readdirSync(join(project.root, "sessions")).some((name) => name.endsWith(`_${sessionId}.jsonl`))).toBe(false);
+  });
+});
+
+// ============ 拆解会话保留上限（§7.2） ============
+
+/** 会话文件落盘（形态与生产一致：pi 写完首条 assistant 消息才会把 header + 条目刷到磁盘） */
+function writeSessionFile(projectRoot: string, sessionId: string): void {
+  const manager = SessionManager.create(projectRoot, join(projectRoot, "sessions"), { id: sessionId });
+  manager.appendSessionInfo(`《测试》${sessionId}`);
+  manager.appendMessage(fauxAssistantMessage("ok"));
+}
+
+/** 造一枚历史 job 行（`created_at` 由测试给 ⇒ 保留窗口的排序确定；空批规划 = 不调模型） */
+function historicalJob(project: ProjectContext, createdAt: string): string {
+  const job = createDecomposeJob(project.db, {
+    scopeStart: 1,
+    scopeEnd: 1,
+    batchTargetChars: DECOMPOSE_BATCH_TARGET_CHARS,
+    model: null,
+    batches: [],
+    now: createdAt,
+  });
+  updateJobStatus(project.db, job.id, "done", createdAt);
+  return job.id;
+}
+
+/** `<项目根>/sessions` 下的会话 id（pi 文件名 = `<时间戳>_<会话 id>.jsonl`，时间戳段不含 `_`） */
+function sessionIdsIn(projectRoot: string): string[] {
+  return readdirSync(join(projectRoot, "sessions"))
+    .filter((name) => name.endsWith(".jsonl"))
+    .map((name) => name.slice(name.indexOf("_") + 1, -".jsonl".length));
+}
+
+describe("拆解会话保留上限（§7.2）", () => {
+  it("新一轮开跑前清理：只剩最近 5 枚 decompose- 会话；chat 会话不受影响；新会话里有不静默的过程条目", async () => {
+    const model = await fakeModel();
+    model.script([NO_ALIASES]); // 空批 job 收口只发一次别名归并调用（无章摘要 ⇒ 报告不发请求）
+    const project = initProject(bookDir("保留上限"), { name: "保留上限" });
+    setCurrentProject(project);
+    // 六枚历史 job + 各自的会话文件；另造一枚 chat 会话（无前缀 ⇒ 永不参与）
+    const jobIds = [1, 2, 3, 4, 5, 6].map((n) => {
+      const jobId = historicalJob(project, `2026-01-01T00:00:0${n}.000Z`);
+      writeSessionFile(project.root, decomposeSessionId(jobId));
+      return jobId;
+    });
+    writeSessionFile(project.root, "chat-keep");
+    // 新一轮 = 第七枚 job（最新）⇒ 保留窗口 = 最近 5 枚，最旧两枚的会话该被清掉
+    const newJobId = historicalJob(project, "2026-02-01T00:00:00.000Z");
+    updateJobStatus(project.db, newJobId, "running", nowIso());
+
+    await startDecomposeJob(project, model.deps);
+
+    const ids = sessionIdsIn(project.root);
+    expect(ids.filter((id) => id.startsWith(DECOMPOSE_SESSION_ID_PREFIX))).toHaveLength(DECOMPOSE_KEPT_SESSIONS);
+    expect(ids).toContain("chat-keep");
+    const newest = decomposeSessionId(newJobId);
+    expect(ids).toContain(newest);
+    for (const old of jobIds.slice(0, 2)) expect(ids).not.toContain(decomposeSessionId(old));
+    // 不静默：过程条目写在本轮会话里（枚数与上限都由常量插值，散文不复述数字）
+    expect(sessionLogsOf(project.root, newest)[0]).toEqual({
+      kind: "session_pruned",
+      text: `已清理 2 份更早的拆解记录（保留最近 ${DECOMPOSE_KEPT_SESSIONS} 份）`,
+      at: expect.any(String),
+    });
+  });
+
+  it("在跑的 job 的会话绝不删（含暂停后仍在飞的轮次）；清理幂等；轮次收尾后不再受保护", async () => {
+    const model = await fakeModel();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    model.script([
+      async () => {
+        await gate;
+        return fauxAssistantMessage(NO_ALIASES);
+      },
+    ]);
+    const project = initProject(bookDir("保留上限·在跑"), { name: "在跑" });
+    setCurrentProject(project);
+    // 先起一枚 job 的轮次并卡在模型调用上（在跑轮次）；会话文件已在上一次轮次落盘（续拆形态）
+    const runningJobId = historicalJob(project, "2026-01-01T00:00:01.000Z");
+    writeSessionFile(project.root, decomposeSessionId(runningJobId));
+    updateJobStatus(project.db, runningJobId, "running", nowIso());
+    const run = startDecomposeJob(project, model.deps);
+    await waitFor(() => model.calls.length >= 1, "本轮调用已发出");
+    // 暂停（job 行已是 paused，但本轮仍在飞）+ 补五枚更新的 job（把它挤出保留窗口）
+    updateJobStatus(project.db, runningJobId, "paused", nowIso());
+    const olderJobId = historicalJob(project, "2026-01-01T00:00:00.000Z");
+    writeSessionFile(project.root, decomposeSessionId(olderJobId));
+    for (const n of [3, 4, 5, 6, 7]) writeSessionFile(project.root, decomposeSessionId(historicalJob(project, `2026-01-01T00:00:0${n}.000Z`)));
+
+    // 超出保留窗口的两枚：旧 job 被删，在跑的那枚不动（job 行 paused ⇒ 只靠「有在跑轮次」守住）
+    expect(await pruneDecomposeSessions(project)).toBe(1);
+    const runningSession = decomposeSessionId(runningJobId);
+    expect(sessionIdsIn(project.root)).toContain(runningSession);
+    expect(sessionIdsIn(project.root)).not.toContain(decomposeSessionId(olderJobId));
+    // 幂等：再跑一次无副作用（同一批 job 仍然只剩同一枚可删）
+    const afterFirst = sessionIdsIn(project.root).sort();
+    expect(await pruneDecomposeSessions(project)).toBe(0);
+    expect(sessionIdsIn(project.root).sort()).toEqual(afterFirst);
+
+    // 轮次收尾后不再受保护（清理不会把该 job 的会话永久钉住）
+    release();
+    await run;
+    expect(await pruneDecomposeSessions(project)).toBe(1);
+    expect(sessionIdsIn(project.root)).not.toContain(runningSession);
   });
 });
 

@@ -64,6 +64,7 @@ export interface DecomposeCompletion {
 
 /** 过程条目类别（`#/decompose` 时间线按它分组；文案由服务端渲染成单行中文，客户端直接展示） */
 export const DECOMPOSE_LOG_KINDS = [
+  "session_pruned",
   "snapshot",
   "batch_start",
   "attempt_failed",
