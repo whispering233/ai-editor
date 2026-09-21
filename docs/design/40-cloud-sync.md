@@ -349,11 +349,11 @@
 | 端点 | 做什么 |
 | :--- | :--- |
 | `GET /cloud/remote-books` | `PROPFIND` 工作根 → 列每书的目录名/解析出的书名与 `projectId`/可解析备份（head 时间、份数、大小）/`localExists`。工作根不存在 → 空列表（**不写云盘**） |
-| `POST /cloud/import-book` | 下载该目录 head（或指定份）→ `validateBackupPackage`（与 `POST /project/import` 同一实现）→ 本机已有同 id → 409 → `uniqueBookDir` 建档（**id 沿用**）→ zip 原样落新书 `.backups/` → 写 `cloud.json` 同步状态 |
+| `POST /cloud/import-book` | 下载该目录 head（或指定份）→ **目录名解析出的 id 与包内 id 不符 → 拒绝**（防把书写进别的书的云端目录）→ `validateBackupPackage`（与 `POST /project/import` 同一实现）→ 本机已有同 id → 409 → `uniqueBookDir` 建档（**id 沿用**）→ zip 原样落新书 `.backups/` → 写 `cloud.json` 同步状态 |
 
 **三条为什么这样定**：
 
-1. **导入必须写同步状态**（`lastPushedFileName` = 导入的那份 / `lastSeenCloudFiles` = 当时云端集合 / `lastSyncAt` = now）：不写，新机器第一次打开这本书就是 `conflict`（云端有份 + 本机无同步记录）——刚拉下来就逼用户裁决，荒谬。写入后状态即「已同步」，后续推送/拉取正常。
+1. **导入必须写同步状态**（`lastPushedFileName` = 导入的那份 / `lastSeenCloudFiles` = 当时云端集合 / `lastSyncAt` = `max(now, 三文件 mtime 向上取整到毫秒)`——基准不由自己刚写的文件决定，否则导入完立刻查状态会因「毫秒截断 vs 亚毫秒 mtime」被读成 `local-ahead`）：不写，新机器第一次打开这本书就是 `conflict`（云端有份 + 本机无同步记录）——刚拉下来就逼用户裁决，荒谬。写入后状态即「已同步」，后续推送/拉取正常。
 2. **导入 = 建新书（不自动打开、不合并）**：机器上本来就没有这本书，没有可合并的对象；语义与「导入备份」完全一致（同一校验管道、同一条建目录路径）。本机已有同 id → 拒绝（那本书应该在应用内自己同步，不走导入）。
 3. **那份 zip 要落到 `.backups/`**：否则新机器上「最新一份本地备份」是空的，`backupStale`/旧包确认框等本地备份语义会立刻报「还没有备份」。落一份后，本地备份链从「刚才拉下来的那份」开始。
 

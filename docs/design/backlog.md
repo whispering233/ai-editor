@@ -147,6 +147,10 @@
 
 ## 云端存档（2026-09，MVP 已发布后的遗留项）
 
+- **从云端恢复面的两个小缺口（2026-09 云端书架 oracle 登记）**
+  - ① `GET /cloud/remote-books` 对 `books/` 里损坏的 `project.json` 会抛（`findBookDirById` 同 list/open 口径）⇒ 一本坏书挡住整个恢复面（500）。低频、与既有口径一致，暂不改；真要修则扫描时跳过坏书并单独标一行。
+  - ② `import-book` 的 500 `INTERNAL_ERROR`（创作根未注入）未进文档错误码表——与 push/pull 同款（装配错误，不可能在真机上出现），不补。
+
 - **删书端点的两个小缺口（2026-09 删书 oracle 登记）**
   - ① **路由层 409 透传无用例**：`POST /project/delete` 的前置推送撞冲突时承诺原码透传 409 `CLOUD_CONFLICT`（UI 的 force 分支依赖它），但现有「推送失败」用例只走 502；把 `throw err` 变异成硬编码 502，那些用例仍绿。最小修法（7~10 行）：照 502 用例复制一份——stub 里让云端 head 与 `lastPushedFileName` 不同，断言 409 + `code === "CLOUD_CONFLICT"` + 目录/state 保留 + 无 DELETE。
   - ② **force + 推送失败 + 存量无 `dirName` 时文案失真**：实际回 `CLOUD_FILE_NOT_FOUND`（「从未同步过」），而当时云端可能刚被建了空目录。方向安全（云端留档、state 不清、可重试），仅文案不准；下次改这段文案时一并修。
