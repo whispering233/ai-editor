@@ -32,6 +32,7 @@ import {
   getOutline as apiGetOutline,
   getProjectConfig as apiGetProjectConfig,
   listProjects as apiListProjects,
+  type ProjectList,
 } from "../../lib/api";
 import { navigate } from "../../hooks/use-route";
 import { useProjectStore } from "../../stores/project";
@@ -181,9 +182,9 @@ const NEW_BOOK_OUTLINE: OutlineTree = {
   children: [],
 };
 
-const NEW_BOOK_SHELF = {
+const NEW_BOOK_SHELF: ProjectList = {
   rootPath: "/root",
-  books: [{ name: "斗破苍穹", path: "/root/books/斗破苍穹", updatedAt: "2026-09-01T10:00:00Z" }],
+  books: [{ id: "proj-new", name: "斗破苍穹", path: "/root/books/斗破苍穹", origin: "decompose", updatedAt: "2026-09-01T10:00:00Z" }],
 };
 
 afterEach(() => {

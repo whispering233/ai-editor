@@ -16,7 +16,7 @@ import {
   type Dirent,
 } from "node:fs";
 import { Hono, type Context } from "hono";
-import type { ProjectFileConfig } from "@whispering233/ai-editor-shared";
+import type { ProjectFileConfig, ProjectListBook } from "@whispering233/ai-editor-shared";
 import { mapProjectFileToConfig } from "@whispering233/ai-editor-shared";
 import { SchemaVersionError, type MigrationResult, type Db } from "@whispering233/ai-editor-db";
 import { OUTLINE_FILE_NAME } from "@whispering233/ai-editor-db";
@@ -276,9 +276,18 @@ projectRoutes.get("/list", (c) => {
     .map((e) => ({ name: e.name, dir: join(booksDir, e.name) }))
     .map((b) => {
       const config = readProjectFile(b.dir);
-      return config === null ? null : { name: b.name, path: b.dir, updatedAt: config.updated_at };
+      return config === null
+        ? null
+        : {
+            id: config.id,
+            name: b.name,
+            path: b.dir,
+ // 缺省归一：project.json 缺 origin（存量书 / 手建书）= book（client 分组只看响应字段）
+            origin: config.origin ?? "book",
+            updatedAt: config.updated_at,
+          };
     })
-    .filter((b): b is { name: string; path: string; updatedAt: string } => b !== null)
+    .filter((b): b is ProjectListBook => b !== null)
  // 倒序：最近更新在前（ISO 8601 字符串字典序 = 时间序）
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   return listResponse(c, { rootPath: projectRoot, books });
@@ -293,7 +302,7 @@ projectRoutes.get("/list", (c) => {
  * 参数错误，直接让 ZodError 冒泡会误报 400。故 catch 后重新抛 HttpError(500, INTERNAL_ERROR)，
  * 保持「入参 ZodError → 400、服务端自检 ZodError → 500」的语义边界。
  */
-function listResponse(c: Context, result: { rootPath: string; books: Array<{ name: string; path: string; updatedAt: string }> }) {
+function listResponse(c: Context, result: { rootPath: string; books: ProjectListBook[] }) {
   try {
     return c.json(ok(projectListResSchema.parse(result)));
   } catch (err) {

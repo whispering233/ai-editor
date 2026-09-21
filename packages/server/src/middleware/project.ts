@@ -18,7 +18,7 @@ import type { ProjectFileConfig } from "@whispering233/ai-editor-shared";
 import { generateProjectId, DEFAULT_BACKUP_FREQUENCY_MINUTES } from "@whispering233/ai-editor-shared";
 import { closeDatabase, openDatabase, setUserVersion, type Db } from "@whispering233/ai-editor-db";
 import { ensureSchemaCompatible, SchemaVersionError, type MigrationResult } from "@whispering233/ai-editor-db";
-import { pauseRunningJobs } from "@whispering233/ai-editor-db";
+import { getDecomposeJob, pauseRunningJobs } from "@whispering233/ai-editor-db";
 import { readProjectFile, writeProjectFile } from "@whispering233/ai-editor-db";
 import { writeOutlineFile } from "@whispering233/ai-editor-db";
 import { SCHEMA_VERSION } from "@whispering233/ai-editor-db";
@@ -102,6 +102,7 @@ export function setCurrentProject(project: ProjectContext | null): void {
     // UI 提示「上次拆解中断，可续拆」）。**只归一 job 行**：残留的 `running` 批由续拆取批承接
     //（docs/db/schema.md「状态归一」不变式）——故本调用只改 decompose_jobs。
     pauseRunningJobs(project.db, nowIso());
+    backfillProjectOrigin(project);
  // 升级兜底（卡 A）：旧命名份不再被解析，若磁盘上只剩旧命名且**自动备份频率关闭**，
  // 用户点「立即备份」前列表会是空的——先补一份新格式档（best-effort，函数内部自吞异常记日志，
  // 不阻塞打开；已有可解析份则不做任何事）
@@ -115,6 +116,26 @@ export function setCurrentProject(project: ProjectContext | null): void {
 /** 读取当前项目（可能为 null） */
 export function getCurrentProject(): ProjectContext | null {
   return currentProject;
+}
+
+/**
+ * 存量项目出处补标（幂等，失败不阻断打开）：project.json 缺 `origin` 且库内已有拆解 job
+ * → 写一次 `origin: "decompose"` 并同步内存 config（docs/db/schema.md「project.json」的存量补标口径）。
+ *
+ * **单点理由**：本函数只在 `setCurrentProject`（打开项目的唯一入口——开机 detect 与
+ * `POST /project/open` 都经它）调用，不在两处各写一份；判据只看库内有无 job，不看目录名。
+ * 写盘失败（权限 / 磁盘）只记日志——补标只是展示分组，绝不能阻塞打开。
+ */
+function backfillProjectOrigin(project: ProjectContext): void {
+  if (project.config.origin !== undefined) return;
+  try {
+    if (getDecomposeJob(project.db) === null) return;
+    const config: ProjectFileConfig = { ...project.config, origin: "decompose" };
+    writeProjectFile(project.root, config);
+    project.config = config;
+  } catch (err) {
+    console.error(`[server] 项目出处补标失败（不阻断打开）: ${project.root}`, err);
+  }
 }
 
 /**
@@ -207,13 +228,14 @@ function logStartupOpenFailure(root: string, err: unknown): void {
  * 避免后续 open 时 ensureSchemaCompatible 触发无意义重建并留空库 data.db.v0.bak）。
  * 注：`prompt` 已废弃——新项目不再写入该字段（项目规则改由 承载）。
  *
- * @param configOverride 可选覆盖 {name?, language?}（create 请求的 config 字段）；
- * 传入时 updated_at 一并刷新
+ * @param configOverride 可选覆盖 {name?, language?, origin?}（create 请求的 config 字段 /
+ * decompose start 的建档）；传入时 updated_at 一并刷新。**未传 origin 则不写该字段**——
+ * project.json 缺 `origin` = 读侧缺省 `book`（docs/db/schema.md「project.json」）。
  * @returns 已打开的项目上下文（调用方负责 closeProject；create 路由创建后即关闭）
  */
 export function initProject(
   root: string,
-  configOverride?: Partial<Pick<ProjectFileConfig, "name" | "language">>,
+  configOverride?: Partial<Pick<ProjectFileConfig, "name" | "language" | "origin">>,
 ): ProjectContext {
   mkdirSync(root, { recursive: true });
   const now = nowIso();

@@ -1084,14 +1084,15 @@ describe(" 自动迁移", () => {
 
 describe("GET /project/list（书架：创作根 books/ 扫描）", () => {
  /** 在创作根下造一本书（books/<name>/ 含 project.json，updated_at 可控） */
-  function seedBook(root: string, name: string, updatedAt: string): string {
+  function seedBook(root: string, name: string, updatedAt: string, origin?: ProjectFileConfig["origin"]): string {
     const dir = join(root, "books", name);
     mkdirSync(dir, { recursive: true });
-    writeProjectFile(dir, { ...makeConfig(`proj-${name}`, name), updated_at: updatedAt });
+    // origin 未传 = 不写该字段（存量 project.json 的真实形状：缺省 = book）
+    writeProjectFile(dir, { ...makeConfig(`proj-${name}`, name), origin, updated_at: updatedAt });
     return dir;
   }
 
-  it("books/ 下两本书 → 返回两条（name/path/updatedAt），按 updatedAt 倒序", async () => {
+  it("books/ 下两本书 → 返回两条（id/name/path/origin/updatedAt），按 updatedAt 倒序", async () => {
     const root = makeTmpDir();
     setProjectRoot(root);
     seedBook(root, "第一本", "2026-08-01T10:00:00Z");
@@ -1103,8 +1104,22 @@ describe("GET /project/list（书架：创作根 books/ 扫描）", () => {
     expect(body.success).toBe(true);
     expect(body.data.rootPath).toBe(root);
     expect(body.data.books).toEqual([
-      { name: "第二本", path: join(root, "books", "第二本"), updatedAt: "2026-08-02T10:00:00Z" },
-      { name: "第一本", path: join(root, "books", "第一本"), updatedAt: "2026-08-01T10:00:00Z" },
+      { id: "proj-第二本", name: "第二本", path: join(root, "books", "第二本"), origin: "book", updatedAt: "2026-08-02T10:00:00Z" },
+      { id: "proj-第一本", name: "第一本", path: join(root, "books", "第一本"), origin: "book", updatedAt: "2026-08-01T10:00:00Z" },
+    ]);
+  });
+
+  it("origin：存量书（project.json 无该字段）→ 归一为 book；拆解建档的书 → decompose", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    seedBook(root, "手建书", "2026-08-01T10:00:00Z"); // 无 origin 字段
+    seedBook(root, "拆解书", "2026-08-02T10:00:00Z", "decompose");
+
+    const res = await buildApp().request("/api/v1/project/list", { headers: HOST_HEADERS });
+    const body = await res.json();
+    expect(body.data.books.map((b: { name: string; origin: string }) => [b.name, b.origin])).toEqual([
+      ["拆解书", "decompose"],
+      ["手建书", "book"],
     ]);
   });
 
@@ -1126,7 +1141,7 @@ describe("GET /project/list（书架：创作根 books/ 扫描）", () => {
     const res = await buildApp().request("/api/v1/project/list", { headers: HOST_HEADERS });
     const body = await res.json();
     expect(body.data.books).toEqual([
-      { name: "真书", path: join(root, "books", "真书"), updatedAt: "2026-08-01T10:00:00Z" },
+      { id: "proj-真书", name: "真书", path: join(root, "books", "真书"), origin: "book", updatedAt: "2026-08-01T10:00:00Z" },
     ]);
   });
 
@@ -1151,7 +1166,7 @@ describe("GET /project/list（书架：创作根 books/ 扫描）", () => {
     const body = await res.json();
  // 根自身不出现在 books 列表（books 只列 books/ 子目录）
     expect(body.data.books).toEqual([
-      { name: "书架上的书", path: join(root, "books", "书架上的书"), updatedAt: "2026-08-01T10:00:00Z" },
+      { id: "proj-书架上的书", name: "书架上的书", path: join(root, "books", "书架上的书"), origin: "book", updatedAt: "2026-08-01T10:00:00Z" },
     ]);
   });
 
@@ -1178,13 +1193,14 @@ describe("GET /project/list（书架：创作根 books/ 扫描）", () => {
  // 三文件已创建（create 语义不回归）
     expect(readProjectFile(bookDir)?.name).toBe("联动书");
 
- // list 扫到该书：name/path/updatedAt 与盘上 project.json 一致（不依赖 open/currentProject）
+ // list 扫到该书：id/name/path/origin/updatedAt 与盘上 project.json 一致（不依赖 open/currentProject）
     const listRes = await app.request("/api/v1/project/list", { headers: HOST_HEADERS });
     expect(listRes.status).toBe(200);
     const body = await listRes.json();
     expect(body.data.rootPath).toBe(root);
+ // 普通 create 的书写无 origin 字段 → 响应归一为 book（项目身份按 id 回传）
     expect(body.data.books).toEqual([
-      { name: "联动书", path: bookDir, updatedAt: readProjectFile(bookDir)?.updated_at },
+      { id: readProjectFile(bookDir)?.id, name: "联动书", path: bookDir, origin: "book", updatedAt: readProjectFile(bookDir)?.updated_at },
     ]);
 
  // 再建一本 → 仍可扫到（两本）

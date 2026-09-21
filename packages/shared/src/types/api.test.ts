@@ -186,27 +186,42 @@ describe("project 端点", () => {
     expect(projectBackupReqSchema.safeParse({ name: "x", extra: 1 }).success).toBe(false);
   });
 
-  it("projectListResSchema：合法响应 parse 通过（books 数组、倒序语义由服务端保证）", () => {
+  it("projectListResSchema：合法响应 parse 通过（books 数组、id/origin 必填、倒序语义由服务端保证）", () => {
     const res = projectListResSchema.parse({
       rootPath: "/home/me/bookshelf",
       books: [
-        { name: "第二本", path: "/home/me/bookshelf/books/第二本", updatedAt: "2026-08-02T10:00:00Z" },
-        { name: "第一本", path: "/home/me/bookshelf/books/第一本", updatedAt: "2026-08-01T10:00:00Z" },
+        { id: "proj-2", name: "第二本", path: "/home/me/bookshelf/books/第二本", origin: "decompose", updatedAt: "2026-08-02T10:00:00Z" },
+        { id: "proj-1", name: "第一本", path: "/home/me/bookshelf/books/第一本", origin: "book", updatedAt: "2026-08-01T10:00:00Z" },
       ],
     });
     expect(res.rootPath).toBe("/home/me/bookshelf");
     expect(res.books).toHaveLength(2);
     expect(res.books[0].name).toBe("第二本");
+    expect(res.books[0].origin).toBe("decompose");
   });
 
-  it("projectListResSchema：books 为空数组合法；缺字段/类型不符拒绝", () => {
+  it("projectListResSchema：books 为空数组合法；缺字段（id / origin）/ 未知 origin / 类型不符拒绝", () => {
  // 空书架合法
     expect(projectListResSchema.parse({ rootPath: "/x", books: [] }).books).toEqual([]);
  // 书缺 updatedAt → 拒绝
     expect(
       projectListResSchema.safeParse({
         rootPath: "/x",
-        books: [{ name: "书", path: "/x/books/书" }],
+        books: [{ id: "proj-1", name: "书", path: "/x/books/书", origin: "book" }],
+      }).success,
+    ).toBe(false);
+ // 书缺 origin（服务端必须归一，不得缺失）→ 拒绝
+    expect(
+      projectListResSchema.safeParse({
+        rootPath: "/x",
+        books: [{ id: "proj-1", name: "书", path: "/x/books/书", updatedAt: "2026-08-01T10:00:00Z" }],
+      }).success,
+    ).toBe(false);
+ // origin 枚举外取值 → 拒绝
+    expect(
+      projectListResSchema.safeParse({
+        rootPath: "/x",
+        books: [{ id: "proj-1", name: "书", path: "/x/books/书", origin: "imported", updatedAt: "2026-08-01T10:00:00Z" }],
       }).success,
     ).toBe(false);
  // rootPath 非 string → 拒绝

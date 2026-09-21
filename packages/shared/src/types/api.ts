@@ -11,6 +11,7 @@ import { normalizeRelationType, relationTypeSyntaxError } from "../utils/relatio
 import { HOOK_STATUSES, PAYOFF_TIMING } from "../constants/hook.js";
 import { CONFLICT_LEVELS } from "../constants/outline.js";
 import { BACKUP_FREQUENCIES } from "../constants/backup.js";
+import { PROJECT_ORIGINS } from "../constants/project.js";
 import type { ComputeStateResult, DeltaRecord, EntitySummary, ProjectAgents, ProjectConfig, RelationRecord } from "./index.js";
 
 // ============ 基础 schema ============
@@ -256,10 +257,14 @@ export const projectListResSchema = z.object({
  /** books/ 下含 project.json 的书，按 updatedAt 倒序（最近更新在前） */
   books: z.array(
     z.object({
+ /** project.json 的 id——**项目身份**：当前书高亮 / 已打开判定一律按它，不按 name */
+      id: z.string(),
  /** 目录名（书名） */
       name: z.string(),
  /** 书目录绝对路径（books/<name>） */
       path: z.string(),
+ /** 项目出处（**响应里恒有值**：服务端把 project.json 缺失的 origin 归一为 `book`） */
+      origin: z.enum(PROJECT_ORIGINS),
  /** project.json 的 updated_at（ISO 8601，应用层写入） */
       updatedAt: z.string(),
     }),

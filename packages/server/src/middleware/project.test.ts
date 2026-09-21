@@ -2,13 +2,15 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import type { ProjectFileConfig } from "@whispering233/ai-editor-shared";
 import {
   closeDatabase,
+  createDecomposeJob,
   getUserVersion,
   openDatabase,
+  readProjectFile,
   SCHEMA_VERSION,
   setUserVersion,
   writeOutlineFile,
@@ -27,6 +29,13 @@ import {
 
 const tmpDirs: string[] = [];
 
+// 存量补标（卡 23.2）的写盘计数：writeProjectFile 包一层 mock，实现保持真实
+//（vi.mock 作用本文件全图，只有这一条导出被换——其余 db 导出一律走 original）。
+vi.mock("@whispering233/ai-editor-db", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@whispering233/ai-editor-db")>();
+  return { ...actual, writeProjectFile: vi.fn(actual.writeProjectFile) };
+});
+
 function makeTmpDir(): string {
   const dir = mkdtempSync(join(tmpdir(), "ai-editor-test-"));
   tmpDirs.push(dir);
@@ -35,6 +44,7 @@ function makeTmpDir(): string {
 
 afterEach(() => {
   setCurrentProject(null); // 清理模块级 currentProject 单例（S1.2），防跨测试泄漏
+  vi.clearAllMocks();
   for (const dir of tmpDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -290,6 +300,118 @@ describe("全新空库（卡 2.9：缺 data.db 的书）", () => {
       expect(readdirSync(dir).filter((f) => f.endsWith(".bak"))).toEqual([]);
     } finally {
       closeProject(project!);
+    }
+  });
+});
+
+// ============ 项目出处 origin（卡 23.2：书架两类 + 当前书按 id） ============
+
+/** 造「存量拆解书」：project.json **无 origin** 字段 + 库内一条拆解 job（旧版拆解建档产物） */
+function seedLegacyDecomposeProject(dir: string): void {
+  mkdirSync(dir, { recursive: true });
+  const config: ProjectFileConfig = {
+    id: "proj-legacy-decompose",
+    name: "存量拆解书",
+    language: "zh",
+    schema_version: SCHEMA_VERSION,
+    current_position: null,
+    created_at: T0,
+    updated_at: T0,
+  };
+  writeProjectFile(dir, config);
+  writeOutlineFile(dir, { id: "root", type: "root", schema_version: SCHEMA_VERSION, children: [] });
+  const db = openDatabase(join(dir, "data.db"));
+  setUserVersion(db, SCHEMA_VERSION);
+  createDecomposeJob(db, {
+    scopeStart: 1,
+    scopeEnd: 1,
+    batchTargetChars: 6000,
+    model: null,
+    batches: [{ seq: 1, chapterIds: ["ch-1"] }],
+    now: T0,
+  });
+  closeDatabase(db);
+}
+
+describe("项目出处 origin（卡 23.2）", () => {
+  it("initProject：未传 origin 时不写该字段（缺省 = book，读侧兜底）", () => {
+    const dir = makeTmpDir();
+    const project = initProject(dir, { name: "手建书" });
+    try {
+      const raw = JSON.parse(readFileSync(join(dir, "project.json"), "utf8")) as Record<string, unknown>;
+      expect("origin" in raw).toBe(false);
+    } finally {
+      closeProject(project);
+    }
+  });
+
+  it("initProject：origin 覆盖参数写入 project.json（拆解建档传 decompose）", () => {
+    const dir = makeTmpDir();
+    const project = initProject(dir, { name: "拆解书", origin: "decompose" });
+    try {
+      expect(readProjectFile(dir)?.origin).toBe("decompose");
+    } finally {
+      closeProject(project);
+    }
+  });
+
+  it("存量补标：缺 origin 且有拆解 job → 打开写一次 decompose + 同步内存 config；幂等（再开不重写）", () => {
+    const dir = makeTmpDir();
+    seedLegacyDecomposeProject(dir);
+    const first = detectProject(dir);
+    expect(first).not.toBeNull();
+    vi.clearAllMocks(); // 只看 setCurrentProject 这一段的写盘
+    setCurrentProject(first);
+    expect(readProjectFile(dir)?.origin).toBe("decompose"); // 已落盘
+    expect(first!.config.origin).toBe("decompose"); // 内存 config 同步（本次打开即生效）
+    expect(vi.mocked(writeProjectFile)).toHaveBeenCalledTimes(1);
+
+    // 幂等：重新打开（盘上已有 origin）→ 不再写盘
+    setCurrentProject(null);
+    closeProject(first!);
+    const second = detectProject(dir)!;
+    try {
+      setCurrentProject(second);
+      expect(vi.mocked(writeProjectFile)).toHaveBeenCalledTimes(1);
+    } finally {
+      setCurrentProject(null);
+      closeProject(second);
+    }
+  });
+
+  it("存量补标：无拆解 job → 不写盘（手建 / 导入的书不得被标成拆解）", () => {
+    const dir = makeTmpDir();
+    closeProject(initProject(dir, { name: "手建书" }));
+    const project = detectProject(dir)!;
+    try {
+      vi.clearAllMocks();
+      setCurrentProject(project);
+      expect(readProjectFile(dir)?.origin).toBeUndefined();
+      expect(project.config.origin).toBeUndefined();
+      expect(vi.mocked(writeProjectFile)).not.toHaveBeenCalled();
+    } finally {
+      setCurrentProject(null);
+      closeProject(project);
+    }
+  });
+
+  it("存量补标：写盘失败只记日志、不阻断打开（内存不假装成功）", () => {
+    const dir = makeTmpDir();
+    seedLegacyDecomposeProject(dir);
+    const project = detectProject(dir)!;
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      vi.clearAllMocks();
+      vi.mocked(writeProjectFile).mockImplementationOnce(() => {
+        throw new Error("磁盘满");
+      });
+      expect(() => setCurrentProject(project)).not.toThrow();
+      expect(project.config.origin).toBeUndefined();
+      expect(errorSpy).toHaveBeenCalled();
+    } finally {
+      errorSpy.mockRestore();
+      setCurrentProject(null);
+      closeProject(project);
     }
   });
 });

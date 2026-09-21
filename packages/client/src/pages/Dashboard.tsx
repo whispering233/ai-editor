@@ -17,7 +17,7 @@ import {
   LoadingOutlined,
   UploadOutlined,
 } from "@ant-design/icons";
-import { Button, Input } from "antd";
+import { Button, Input, Typography } from "antd";
 import type { InputRef } from "antd";
 import {
   Dialog,
@@ -44,6 +44,7 @@ import {
 import { describeExportError, describeImportError } from "../lib/error-messages";
 import { describeJobStatus, formatShelfBadge, isTerminalJobStatus } from "../lib/decompose";
 import { validateBookName } from "../lib/book-name";
+import { groupShelfBooks } from "../lib/shelf";
 import { entityListHost } from "../lib/entity-paths";
 import { describeOpenError } from "../lib/error-messages";
 import { desktopBridge } from "../lib/desktop";
@@ -665,47 +666,57 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
             </div>
           ) : shelfHasBooks ? (
             <>
-              <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
-                {bookshelf!.books.map((book) => {
-                  const isCurrent = config !== null && book.name === config.name;
-                  return (
-                    <li key={book.path}>
-                      <button
-                        type="button"
-                        title={isCurrent ? `继续创作《${book.name}》` : `打开《${book.name}》`}
-                        onClick={() => {
-                          if (isCurrent) navigate("/overview");
-                          else void handleOpenBook(book.path);
-                        }}
-                        className={cn(
-                          "flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted",
-                          // 当前打开的书：primary 淡染面（近白的 surface-muted 面在卡片白底上不可见）
-                          isCurrent && "bg-primary/10 ring-1 ring-primary/30 ring-inset",
-                        )}
-                      >
-                        <BookOutlined className="shrink-0 text-base text-muted-foreground/60" />
-                        <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-                          {book.name}
-                        </span>
-                        {isCurrent && decomposeJob !== null && !isTerminalJobStatus(decomposeJob.status) && (
-                          /* 书架行徽标（卡 21.9）：只服务**当前书**那行——GET /project/list 不含 job 状态，
-                             逐本开 data.db 不值得，且切书即暂停（DESIGN.md §拆解小说）。文案按状态：
-                             运行/待运行「拆解中 N/M」、已暂停「已暂停 N/M」（同一函数口径）。*/
-                          <TypeChip className="shrink-0">{formatShelfBadge(decomposeJob)}</TypeChip>
-                        )}
-                        {isCurrent && (
-                          <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground">
-                            已打开
-                          </span>
-                        )}
-                        <span className="shrink-0 text-xs text-muted-foreground">
-                          {formatRelativeTime(book.updatedAt)}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+              {/* 两组小标题（小说项目 / 小说拆解，卡 23.2）：组序 / 文案 = lib/shelf.ts 单一定义；
+                  空组由 groupShelfBooks 丢弃（只有一类书时就是一张列表）；标题档 = DESIGN.md §书架主页 的 `section-title` */}
+              {groupShelfBooks(bookshelf!.books).map((group) => (
+                <div key={group.origin} className="mt-4 first:mt-0">
+                  <Typography.Title level={5}>
+                    {group.label} · {group.books.length}
+                  </Typography.Title>
+                  <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+                    {group.books.map((book) => {
+                      // 当前书判定按**项目 id**（不是书名）：同名不同 id 并存时按 name 会高亮错书
+                      const isCurrent = config !== null && book.id === config.id;
+                      return (
+                        <li key={book.path}>
+                          <button
+                            type="button"
+                            title={isCurrent ? `继续创作《${book.name}》` : `打开《${book.name}》`}
+                            onClick={() => {
+                              if (isCurrent) navigate("/overview");
+                              else void handleOpenBook(book.path);
+                            }}
+                            className={cn(
+                              "flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted",
+                              // 当前打开的书：primary 淡染面（近白的 surface-muted 面在卡片白底上不可见）
+                              isCurrent && "bg-primary/10 ring-1 ring-primary/30 ring-inset",
+                            )}
+                          >
+                            <BookOutlined className="shrink-0 text-base text-muted-foreground/60" />
+                            <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                              {book.name}
+                            </span>
+                            {isCurrent && decomposeJob !== null && !isTerminalJobStatus(decomposeJob.status) && (
+                              /* 书架行徽标（卡 21.9）：只服务**当前书**那行——GET /project/list 不含 job 状态，
+                                 逐本开 data.db 不值得，且切书即暂停（DESIGN.md §拆解小说）。文案按状态：
+                                 运行/待运行「拆解中 N/M」、已暂停「已暂停 N/M」（同一函数口径）。*/
+                              <TypeChip className="shrink-0">{formatShelfBadge(decomposeJob)}</TypeChip>
+                            )}
+                            {isCurrent && (
+                              <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground">
+                                已打开
+                              </span>
+                            )}
+                            <span className="shrink-0 text-xs text-muted-foreground">
+                              {formatRelativeTime(book.updatedAt)}
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ))}
               {bookOpenError !== null && (
                 <p className="mt-3 text-sm text-destructive">{bookOpenError}</p>
               )}

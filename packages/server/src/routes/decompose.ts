@@ -281,7 +281,7 @@ export function createDecomposeRoutes(deps: DecomposeRouteDeps = {}): Hono {
 
     // 建档 + 打开（等价 POST /project/open 的切换语义：新项目就绪后再关旧的，失败时当前项目保持原样；
     // open 的两条兜底——旧 prompt 迁移与软删一致性补标——对新项目无对象，故不调用）
-    const project = initProject(dir, { name });
+    const project = initProject(dir, { name, origin: "decompose" });
     const previous = getCurrentProject();
     if (previous !== null && previous.db !== project.db) closeProject(previous);
     setCurrentProject(project); // 释放旧项目运行时（disposeProjectRuntime 单点）

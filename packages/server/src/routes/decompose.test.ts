@@ -435,6 +435,7 @@ describe("POST /decompose/start（S1 建档）", () => {
     expect(project?.root).toBe(dir);
     expect(data.projectId).toBe(project?.config.id);
     expect(readProjectFile(dir)?.name).toBe("斗破苍穹");
+    expect(readProjectFile(dir)?.origin).toBe("decompose"); // 建档即写出处（书架落「小说拆解」组）
     expect(readLastProject(tmpRoot)).toBe(dir); // 创作根 .ai-editor/config.json 的 lastProject
 
     // ① 大纲：单卷「全书」+ 6 章（标题 = 切分清洗后的标题；summary 留空待 S3 回写）
