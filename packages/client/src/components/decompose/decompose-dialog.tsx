@@ -22,6 +22,7 @@ import {
 } from "../../lib/decompose";
 import { describeDecomposeError } from "../../lib/error-messages";
 import { navigate } from "../../hooks/use-route";
+import { useProjectStore } from "../../stores/project";
 import {
   Dialog,
   DialogContent,
@@ -283,9 +284,9 @@ export function DecomposeDialog({ open, onOpenChange }: DecomposeDialogProps) {
     setError(null);
     try {
       await startDecompose(file, { name: name.trim(), ...parseScopeInput(scopeStart, scopeEnd) });
-      // start 已把新项目打开（服务端 S1 同步完成）→ 去进度页（路由由卡 21.9 建）
+      // start 已把新项目打开且**当前项目**已切到新书（服务端 S1 同步完成）→ 先收敛项目镜像再跳进度页
       handleOpenChange(false);
-      navigate("/decompose");
+      await enterStartedProject();
     } catch (err) {
       setError(describeDecomposeError(codeOf(err), messageOf(err)));
       setStarting(false);
@@ -340,6 +341,19 @@ export function DecomposeDialog({ open, onOpenChange }: DecomposeDialogProps) {
       </DialogContent>
     </Dialog>
   );
+}
+
+/**
+ * start 成功后进入新项目（契约：docs/api/120-api-decompose.md §start「客户端义务（契约，不可省）」）：
+ * 服务端已把当前项目切到新书 ⇒ 先收敛项目镜像（重拉 config / outline + 刷新书架），再跳进度页。
+ * 不刷新会出现「书架仍高亮旧书、点旧书看到新项目的数据、云端状态不重查」。
+ * 三个 loader 各自 catch（失败只落 store 的 error 态）⇒ 刷新失败不阻断跳转。
+ * 抽成模块级函数供测试直调（容器交互无 jsdom，同 `submitContinueDecompose` 惯例）。
+ */
+export async function enterStartedProject(): Promise<void> {
+  const { loadConfig, loadOutline, loadBookshelf } = useProjectStore.getState();
+  await Promise.all([loadConfig(), loadOutline(), loadBookshelf()]);
+  navigate("/decompose");
 }
 
 /** ApiError → 错误码（非 ApiError 视为未知码，走兜底文案） */
