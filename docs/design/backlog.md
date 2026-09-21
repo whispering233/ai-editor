@@ -185,6 +185,11 @@
 
 ## 前端 / UI
 
+- **删书确认框的两处文案收窄（2026-09 删书 oracle 登记，低危）**
+  - ① **force 分支触发面比契约宽**：现在是「任何 error」都换 `[仍要删除]`（`book-delete-dialog.tsx`），DESIGN 只要求「云前置推送失败」——`INVALID_PROJECT_PATH` 下重试必败，那个按钮是空承诺；严格口径可收窄为 `CLOUD_*` + `INTERNAL_ERROR`（后者必须留：打包失败可 force）。
+  - ② **`remoteError` toast 重复**：服务端 message 已含「（本地已删除）」，客户端又拼「云端备份未能删除…可到云盘网页手动清理」→ `CLOUD_NOT_CONFIGURED` / `CLOUD_FILE_NOT_FOUND` 下句子重复且建议无意义。修法：toast 只保留服务端文案 + 一句「本地已删除」。
+- **`shelf.test.ts` 一条用例标题强于断言（2026-09 删书 oracle 登记）**
+  - 现状：「id 不匹配（同名也算不匹配）」一例传入的 config 没有 `name` 字段 ⇒ 把实现改成按 name 也能通过（真正拦住回退的是同组「同 id → 当前书」用例）。触发条件：下次改 `isCurrentBook` 时。最小修法：给该例的 config 补上与 book 同名的 `name`（一行）。
 - **项目镜像刷新的在途去重窗口（2026-09 oracle 登记）**
   - 现状：`loadConfig` 有 `configPromise` 在途复用、`loadOutline` / `loadBookshelf` 在 `loading` 中直接 return、云 `refresh` 有 `inFlight` 合并——拆解 start 成功后立即收敛镜像时，若恰有同类在途请求，会 await 到**旧结果**并跳过新拉（后续 load 会再收敛，镜像短暂滞后）。
   - 触发条件：出现「刚拆解完还是显示旧书」的真实反馈。
