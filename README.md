@@ -9,7 +9,7 @@
 | 工程 | pnpm workspace（7 包：5 发布包 + 私有 client / desktop）；Node ≥ 22.12；全仓 ESM；TypeScript strict；测试 vitest（各包独立 `test` script） |
 | 服务端 | Hono 4 + `@hono/node-server`；Zod 4（仅服务端校验）；better-sqlite3 ^13（WAL，N-API 预编译）+ drizzle-orm 0.45 |
 | 前端 | React 19 + Vite 7 + Zustand 5 + **antd v6**（主题 = Notion 工作区暖灰 token 覆盖）+ `@ant-design/icons` + `@ant-design/x`（Bubble/Sender）+ `@ant-design/x-markdown`（流式）+ Tailwind 4（仅布局）+ **@blocknote/core·react·ariakit**（块编辑器，exact pin）；自制 hash 路由 |
-| AI 运行时 | 嵌入 `@earendil-works/pi-coding-agent` 0.85.1（**exact pin**）：模型目录、凭据、会话文件、重试、上下文压缩、工具派发全由 pi 承担；本仓只提供领域工具、内核提示词与 HTTP/SSE 契约 |
+| AI 运行时 | 嵌入 `@earendil-works/pi-coding-agent` 0.85.1（**exact pin**）：模型目录、凭据、会话文件、重试、上下文压缩、工具派发全由 pi 承担，**凡调 LLM（含拆解管线）一律走 pi 的 Agent 路径**；本仓只提供领域工具、内核提示词与 HTTP/SSE 契约 |
 | 桌面版 | Electron 44.3.0（**exact pin**）+ electron-builder；主进程内嵌 server，与 CLI 版共用同一份数据 |
 
 ## 界面与布局
@@ -18,7 +18,7 @@
 
 书架主页 + 一级导航 + 常驻聊天三区，可拖拽调宽 + 收起/展开（宽度与收起态、写作偏好、大纲视图选择记 localStorage）：
 
-- **`#/` 书架主页**：书籍列表（打开高亮、行内导出/重命名/继续创作）+ 新建 / 导入备份 / 打开其他路径
+- **`#/` 书架主页**：书籍列表（打开高亮、行内导出/重命名/继续创作）+ 新建 / 导入备份 / 打开其他路径 / **拆解小说**（选 txt → 切分预览 → 建档拆解；进度页可看「拆解记录」过程时间线、按未拆章「继续拆解」，过程会话在 chat 面板可回看但只读）
 - **`#/manuscript/:chapterId` 正文书写面**（入口：大纲页章视图行 / 章详情「写正文」）：常显写作工具条（块类型 / 格式 / 颜色 / 对齐 / 缩进 / 链接 / 撤销重做 / 保存 / 写作设置 / 专注模式）+ 铺满剩余高度的写作面；写作偏好（字体·字号·行高·纸色·纸纹理·段首缩进）记本机、所有正文共用；停止输入约 1.5s 自动保存，另有手动保存与保存时间
 - **左栏**：`◈ 书架` 入口 + 书名按钮（项目概览）+ 八项导航（大纲 | 人物 | 设定 | 地点 | 伏笔 | 时间轴 | 关联 | 参考资料）+ 回收站 + 设置 / 主题切换
 - **中栏**：信息条（项目名、阅读进度、语言、全局刷新）+ 页面内容区 + 右下悬浮「问 AI」（带当前页面上下文注入右栏）

@@ -5,14 +5,15 @@
 // 项目数据快照）、§4.1（两层快照：起始快照 + 本轮累积、预算与丢弃顺序、knownNames 全集）、
 // §5（抽取 schema 口径）、§7（状态机、续拆、单批重跑）；docs/api/120-api-decompose.md
 // §pause / §resume / §rerun；状态不变式见 docs/db/schema.md「decompose 两表」（状态归一**只归一 job 行**）。本模块的四条口径：
-// - **续拆取「第一个未完成批」**：`done` 之外的批（`pending` / `running` / `failed`）都算未完成——
+// - **续跑取「第一个未完成批」**：`done` 之外的批（`pending` / `running` / `failed`）都算未完成——
 //   服务端重启残留的 `running` 批由这里承接，不单独归一；
 // - **单批重跑只重跑该批**（§7）：重新抽取该批 → S3 重算（`merge_written` 三路比对保幂等）→ S4 重建报告；
 // - **S2 不写业务表**：批结果只落 `decompose_batches.result`（实体 / 关系 / 大纲 / 正文只由 S3/S4 写）；
 // - **批跑完时 job 留在 `running`**，全部批收口后才由 S3+S4 推到 `done`（job.ts 的 `deriveStage` 据
 //   「批是否全部收口」推出 `merge` / `report`）。
 //
-// 调用路径：`start` 建档后、`resume` 续拆后各起一轮（路由**不 await**：长任务是后台跑）。
+// 调用路径：`start`（首次）/ `continue`（续拆）/ `resume`（续跑）/ 单批 `rerun` 各起一轮（路由**不 await**：长任务是后台跑）；
+// 建会话前先按 `DECOMPOSE_KEPT_SESSIONS` 清理超限的更早拆解会话（§7.2，告知不静默）。
 // 暂停 / 切书 = 置 abort：**当前批跑完即停**，已发出的模型调用不 abort（结果不浪费，批级幂等靠 `done` 跳过）。
 // 模型调用只经 pi 的 `ModelRuntime`（`getModelRuntime()` / `getSettingsManager()` 唯一入口）——
 // 业务代码不自建 fetch / HTTP agent（出站行为统一由启动时装的全局 undici dispatcher 承担）。

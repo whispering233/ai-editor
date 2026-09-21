@@ -5,7 +5,9 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [v0.0.53] - 2026-09-21
+
+> **拆解会话与续拆版本**：拆解过程可查（每轮一枚落盘会话 + 进度页时间线）、续拆支持「同一项目拆剩下的章」、LLM 调用统一收口到 pi 的 Agent 路径（含源码扫描守卫）。回归：build / typecheck / lint / `-r test` 全绿（188 文件 / 2858 测试）。
 
 ### Added
 
