@@ -7,7 +7,7 @@
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import {
   contentText,
@@ -664,6 +664,47 @@ describe("拆解会话保留上限（§7.2）", () => {
     await run;
     expect(await pruneDecomposeSessions(project)).toBe(1);
     expect(sessionIdsIn(project.root)).not.toContain(runningSession);
+  });
+
+  it("开会话抛错（缺模型）也不静默：删除日志已落，job 走 failJob 且不 reject", async () => {
+    // 无凭据 / 无模型的运行时 ⇒ `openDecomposeSession` 抛「未配置可用模型」，而清理就发生在它之前
+    const runtime = await ModelRuntime.create({
+      credentials: new InMemoryCredentialStore(),
+      modelsPath: null,
+      refreshOnCreate: false,
+    });
+    await runtime.refresh({ allowNetwork: false });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const project = initProject(bookDir("保留上限·开会话失败"), { name: "开会话失败" });
+      setCurrentProject(project);
+      const jobIds = [1, 2, 3, 4, 5, 6].map((n) => {
+        const jobId = historicalJob(project, `2026-01-01T00:00:0${n}.000Z`);
+        writeSessionFile(project.root, decomposeSessionId(jobId));
+        return jobId;
+      });
+      const newJobId = historicalJob(project, "2026-02-01T00:00:00.000Z");
+      updateJobStatus(project.db, newJobId, "running", nowIso());
+
+      await startDecomposeJob(project, { runtime, settings: SettingsManager.inMemory({}) }); // 不 reject = 后台任务兜底
+
+      // 删除不静默：开会话抛错时只剩这条日志，必须已经落下
+      expect(logSpy.mock.calls.map((call) => call.join(" "))).toContain(
+        `[decompose] 已清理 2 份更早的拆解会话（保留最近 ${DECOMPOSE_KEPT_SESSIONS} 份）`,
+      );
+      const ids = sessionIdsIn(project.root);
+      for (const old of jobIds.slice(0, 2)) expect(ids).not.toContain(decomposeSessionId(old));
+      // job 走 failJob：错误摘要 + failed；本轮会话没建成（开会话在落盘前抛错）
+      expect(getDecomposeJob(project.db)).toMatchObject({
+        status: "failed",
+        error: expect.stringContaining("未配置可用模型"),
+      });
+      expect(ids).not.toContain(decomposeSessionId(newJobId));
+    } finally {
+      logSpy.mockRestore();
+      errorSpy.mockRestore();
+    }
   });
 });
 

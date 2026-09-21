@@ -657,6 +657,11 @@ export function startDecomposeJob(
       if (controller.signal.aborted) return;
       // §7.2：清理超限的更早拆解会话——**必须在创建本轮会话之前**（幂等；失败只记日志，不阻塞拆解）
       const pruned = await pruneDecomposeSessions(project);
+      if (pruned > 0) {
+        // 删除不静默（§9 不变式 9）：日志必须赶在开会话**之前**——开会话抛错（缺模型 / 凭据 / 会话目录不可写）
+        // 时只有这条落得下；下面的过程条目依赖新会话，只能留在原地。枚数由常量插值，散文不复述数字
+        console.log(`[decompose] 已清理 ${pruned} 份更早的拆解会话（保留最近 ${DECOMPOSE_KEPT_SESSIONS} 份）`);
+      }
       // 会话（落盘 + 过程条目）一轮一枚：S2 各批 + S3 归并 + S4 报告都写进它（deps 缺模型/凭据 → 抛错 → job 标失败）
       const session = await openDecomposeSession(deps, {
         projectRoot: project.root,
@@ -664,8 +669,7 @@ export function startDecomposeJob(
         bookName: project.config.name,
       });
       if (pruned > 0) {
-        // 删除不静默：日志 + 本轮会话的过程条目（`#/decompose` 时间线可见）；枚数由常量插值，散文不复述数字
-        console.log(`[decompose] 已清理 ${pruned} 份更早的拆解会话（保留最近 ${DECOMPOSE_KEPT_SESSIONS} 份）`);
+        // 删除不静默：本轮会话的过程条目（`#/decompose` 时间线可见）
         session.log({
           kind: "session_pruned",
           text: `已清理 ${pruned} 份更早的拆解记录（保留最近 ${DECOMPOSE_KEPT_SESSIONS} 份）`,
