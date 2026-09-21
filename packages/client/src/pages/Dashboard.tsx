@@ -12,6 +12,7 @@ import { formatRelativeTime } from "@whispering233/ai-editor-shared";
 import type { EntityType, OutlineNode } from "@whispering233/ai-editor-shared";
 import {
   BookOutlined,
+  DeleteOutlined,
   DownloadOutlined,
   EditOutlined,
   LoadingOutlined,
@@ -30,6 +31,8 @@ import {
 import { SectionCard } from "@/components/ui/section-card";
 import { TypeChip } from "@/components/ui/tag-chip";
 import { DecomposeDialog } from "@/components/decompose/decompose-dialog";
+import { BookDeleteDialog } from "@/components/shelf/book-delete-dialog";
+import type { BookDeleteTarget } from "@/components/shelf/book-delete-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { skeletonClass } from "@/lib/styles";
@@ -44,7 +47,7 @@ import {
 import { describeExportError, describeImportError } from "../lib/error-messages";
 import { describeJobStatus, formatShelfBadge, isTerminalJobStatus } from "../lib/decompose";
 import { validateBookName } from "../lib/book-name";
-import { groupShelfBooks } from "../lib/shelf";
+import { groupShelfBooks, isCurrentBook } from "../lib/shelf";
 import { entityListHost } from "../lib/entity-paths";
 import { describeOpenError } from "../lib/error-messages";
 import { desktopBridge } from "../lib/desktop";
@@ -52,6 +55,7 @@ import { cn } from "../lib/utils";
 import { navigate } from "../hooks/use-route";
 import { buildBookPath, findOutlineNodeTitle, useProjectStore } from "../stores/project";
 import { useChatStore } from "../stores/chat";
+import { useCloudStore } from "../stores/cloud";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useDecomposeJob } from "../hooks/use-decompose-job";
 import { useUiStore } from "../stores/ui";
@@ -156,6 +160,8 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
   const [importConflictBase, setImportConflictBase] = useState("");
   // 导出当前项目备份进行态（防连点）
   const [exporting, setExporting] = useState(false);
+  // 删书确认框（卡 23.5）：非 null = 打开；目标恒带项目 id（删的是不是当前书按 id 判定）
+  const [deleteTarget, setDeleteTarget] = useState<BookDeleteTarget | null>(null);
   // 当前书行内重命名（仅当前打开书；行内输入态，Enter/失焦提交、Esc 取消）
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState("");
@@ -503,6 +509,22 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     }
   }
 
+  /** 删除成功后由书架页收敛（对话框回调）：刷新书架；删的是当前书 → 回书架并清项目/云端镜像 */
+  async function handleBookDeleted(target: BookDeleteTarget) {
+    await loadBookshelf();
+    if (config === null || target.id !== config.id) return; // 删非当前书：只刷新书架
+    // 删的是当前书：服务端已关连接 + 清 currentProject + 抹 lastProject，这里再走一次 store 的
+    // closeProject 是幂等调用（无项目时服务端仍回 saved:true），作用 = **清空客户端镜像**
+    //（config / outline / agents → null，下游 AppShell 的云端状态与拆解轮询随之收敛）
+    useCloudStore.getState().clearStatus();
+    try {
+      await useProjectStore.getState().closeProject();
+    } catch {
+      // 网络层失败：书架区已有「加载失败 + 重试」入口，刷新后收敛（不另造第二套镜像清理）
+    }
+    navigate("/");
+  }
+
   /** 开始行内重命名（当前书条输入态；autoFocus 后失焦守卫：挂载即失焦不误退） */
   function startRename() {
     setRenameValue(config?.name ?? "");
@@ -530,6 +552,10 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     const shelfLoading = bookshelf === null && bookshelfLoading;
     const shelfError = bookshelfError !== null;
     const shelfHasBooks = bookshelf !== null && bookshelf.books.length > 0;
+    // 当前书在书架里的那一条（删除入口需要书目录绝对路径，走 isCurrentBook 同一判据）：
+    // 用「打开其他路径」打开的项目不在 books/ 下，而删书只支持 books/ 直接子目录 → 这类项目不给
+    // 删除入口（不给必然会 400 的死路按钮）；书架未加载时也拿不到路径（加载完即出现）
+    const currentShelfBook = bookshelf?.books.find((b) => isCurrentBook(b, config)) ?? null;
     /** 新建表单（空书架主操作 / 有书折叠次级共用；错误与提交态由页面持有） */
     function renderCreateBookForm(className: string) {
       return (
@@ -637,6 +663,16 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                       <EditOutlined className="text-sm" />
                       重命名
                     </Button>
+                    {currentShelfBook !== null && (
+                      <Button
+                        size="small"
+                        className="shrink-0"
+                        onClick={() => setDeleteTarget(currentShelfBook)}
+                      >
+                        <DeleteOutlined className="text-sm" />
+                        删除
+                      </Button>
+                    )}
                     <Button
                       type="primary"
                       size="small"
@@ -676,41 +712,62 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                   <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
                     {group.books.map((book) => {
                       // 当前书判定按**项目 id**（不是书名）：同名不同 id 并存时按 name 会高亮错书
-                      const isCurrent = config !== null && book.id === config.id;
+                      //（纯函数 isCurrentBook，卡 23.5 收口；行为级用例见 lib/shelf.test.ts）
+                      const isCurrent = isCurrentBook(book, config);
+                      // 行容器 = div：行内既要有「打开」又要行尾垃圾桶，而 HTML 不允许按钮嵌套
+                      // ——整行 <button> 包图标按钮是无效结构（点击冒泡成「打开」）
                       return (
                         <li key={book.path}>
-                          <button
-                            type="button"
-                            title={isCurrent ? `继续创作《${book.name}》` : `打开《${book.name}》`}
-                            onClick={() => {
-                              if (isCurrent) navigate("/overview");
-                              else void handleOpenBook(book.path);
-                            }}
+                          <div
                             className={cn(
-                              "flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted",
+                              "flex w-full items-center gap-1 px-3 py-2.5 transition-colors hover:bg-muted",
                               // 当前打开的书：primary 淡染面（近白的 surface-muted 面在卡片白底上不可见）
                               isCurrent && "bg-primary/10 ring-1 ring-primary/30 ring-inset",
                             )}
                           >
-                            <BookOutlined className="shrink-0 text-base text-muted-foreground/60" />
-                            <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-                              {book.name}
-                            </span>
-                            {isCurrent && decomposeJob !== null && !isTerminalJobStatus(decomposeJob.status) && (
-                              /* 书架行徽标（卡 21.9）：只服务**当前书**那行——GET /project/list 不含 job 状态，
-                                 逐本开 data.db 不值得，且切书即暂停（DESIGN.md §拆解小说）。文案按状态：
-                                 运行/待运行「拆解中 N/M」、已暂停「已暂停 N/M」（同一函数口径）。*/
-                              <TypeChip className="shrink-0">{formatShelfBadge(decomposeJob)}</TypeChip>
-                            )}
-                            {isCurrent && (
-                              <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground">
-                                已打开
+                            <button
+                              type="button"
+                              title={
+                                isCurrent ? `继续创作《${book.name}》` : `打开《${book.name}》`
+                              }
+                              onClick={() => {
+                                if (isCurrent) navigate("/overview");
+                                else void handleOpenBook(book.path);
+                              }}
+                              className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                            >
+                              <BookOutlined className="shrink-0 text-base text-muted-foreground/60" />
+                              <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                                {book.name}
                               </span>
-                            )}
-                            <span className="shrink-0 text-xs text-muted-foreground">
-                              {formatRelativeTime(book.updatedAt)}
-                            </span>
-                          </button>
+                              {isCurrent && decomposeJob !== null && !isTerminalJobStatus(decomposeJob.status) && (
+                                /* 书架行徽标（卡 21.9）：只服务**当前书**那行——GET /project/list 不含 job 状态，
+                                   逐本开 data.db 不值得，且切书即暂停（DESIGN.md §拆解小说）。文案按状态：
+                                   运行/待运行「拆解中 N/M」、已暂停「已暂停 N/M」（同一函数口径）。*/
+                                <TypeChip className="shrink-0">{formatShelfBadge(decomposeJob)}</TypeChip>
+                              )}
+                              {isCurrent && (
+                                <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground">
+                                  已打开
+                                </span>
+                              )}
+                              <span className="shrink-0 text-xs text-muted-foreground">
+                                {formatRelativeTime(book.updatedAt)}
+                              </span>
+                            </button>
+                            {/* 行尾垃圾桶（恒贴行尾；删除书不可恢复 → danger）：title / aria-label 写全语义 */}
+                            <Button
+                              color="default"
+                              variant="text"
+                              danger
+                              size="small"
+                              className="shrink-0"
+                              title="删除书籍"
+                              aria-label="删除书籍"
+                              icon={<DeleteOutlined />}
+                              onClick={() => setDeleteTarget(book)}
+                            />
+                          </div>
                         </li>
                       );
                     })}
@@ -872,6 +929,15 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
 
         {/* 拆解小说对话框（三态：选文件 → 预览 → 填名开始） */}
         <DecomposeDialog open={decomposeOpen} onOpenChange={setDecomposeOpen} />
+
+        {/* 删书确认框（行尾垃圾桶与当前书条「删除」共用同一实例；受控：deleteTarget） */}
+        <BookDeleteDialog
+          book={deleteTarget}
+          onOpenChange={(open) => {
+            if (!open) setDeleteTarget(null);
+          }}
+          onDeleted={(book) => void handleBookDeleted(book)}
+        />
       </section>
     );
   }

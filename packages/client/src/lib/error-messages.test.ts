@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import {
   describeDecomposeError,
+  describeDeleteBookError,
   describeExportError,
   describeImportError,
   describeOpenError,
@@ -119,5 +120,40 @@ describe("describeDecomposeError（拆解小说错误码映射）", () => {
   it("未知码 / null：有 message 透传，空 message 兜底", () => {
     expect(describeDecomposeError("SOME_UNKNOWN", "服务端内部错误")).toBe("服务端内部错误");
     expect(describeDecomposeError(null, "")).toBe("拆解失败，请稍后重试");
+  });
+});
+
+describe("describeDeleteBookError（删书框内文案，卡 23.5）", () => {
+  it("409 CLOUD_CONFLICT：透传服务端 message（含两份文件名）并写明本机未删任何东西", () => {
+    const text = describeDeleteBookError(
+      "CLOUD_CONFLICT",
+      "云端已有更新的备份（2026-09-21-auto-本机-人物1-设定2-章3.zip），本机上次推送的是 （无记录）",
+    );
+    expect(text).toContain("2026-09-21-auto-本机-人物1-设定2-章3.zip");
+    expect(text).toContain("本机未删除任何东西");
+  });
+
+  it("其他推送链路失败（502 CLOUD_UNREACHABLE / 400 CLOUD_BACKUP_TOO_LARGE）同口径", () => {
+    expect(describeDeleteBookError("CLOUD_UNREACHABLE", "云盘不可达")).toContain("未删除任何东西");
+    expect(
+      describeDeleteBookError("CLOUD_BACKUP_TOO_LARGE", "备份包 600MB 超过云盘单文件上限"),
+    ).toContain("云盘单文件上限");
+  });
+
+  it("INVALID_PROJECT_PATH → 刷新书架引导；CLIENT_NETWORK_ERROR → 连接引导", () => {
+    expect(describeDeleteBookError("INVALID_PROJECT_PATH", "目录不存在")).toContain("刷新书架");
+    expect(describeDeleteBookError("CLIENT_NETWORK_ERROR", "Failed to fetch")).toContain("无法连接服务");
+  });
+
+  it("删除动作本身的失败（INTERNAL_ERROR）不声称「未删除」——只透传服务端 message", () => {
+    const text = describeDeleteBookError("INTERNAL_ERROR", "移除目录失败");
+    expect(text).toBe("移除目录失败");
+    expect(text).not.toContain("未删除任何东西");
+  });
+
+  it("未知码 / null：有 message 透传，空 message 兜底", () => {
+    expect(describeDeleteBookError("SOME_UNKNOWN", "服务端内部错误")).toBe("服务端内部错误");
+    expect(describeDeleteBookError(null, "")).toBe("删除失败，请稍后重试");
+    expect(describeDeleteBookError("CLOUD_CONFLICT", "")).toBe("删除前的云端推送未成功——本机未删除任何东西");
   });
 });

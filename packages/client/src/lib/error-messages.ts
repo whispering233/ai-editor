@@ -65,6 +65,31 @@ export function describeExportError(code: string | null, message: string): strin
 }
 
 /**
+ * 删书错误码 → 框内文案（`book-delete-dialog`；推送失败分支可选 `force` 继续）。
+ * - **删除前的云端推送失败**（409 `CLOUD_CONFLICT` / 400 `CLOUD_BACKUP_TOO_LARGE` / 502 三码）：
+ *   服务端在删任何东西之前就中止了——服务端 message 已中文可读（含两份文件名等具体信息），
+ *   本地补上「本机未删除任何东西」这句结论；仍要删除由框内按钮（force）决定。
+ * - `INVALID_PROJECT_PATH`：书目录已不在（另有窗口删过 / 被移动）。其余码透传服务端 message
+ *  （不在这类码上声称「未删除」：删除动作本身失败是可能的，不许把不确定说成事实）。
+ */
+export function describeDeleteBookError(code: string | null, message: string): string {
+  switch (code) {
+    case "INVALID_PROJECT_PATH":
+      return "该书已不在书架目录里（可能已被删除或被移动），请刷新书架";
+    case "CLIENT_NETWORK_ERROR":
+      return "无法连接服务，请确认 ai-editor 服务已启动";
+    case "CLOUD_CONFLICT":
+    case "CLOUD_BACKUP_TOO_LARGE":
+    case "CLOUD_AUTH_FAILED":
+    case "CLOUD_UNREACHABLE":
+    case "CLOUD_QUOTA_EXCEEDED":
+      return `${message === "" ? "删除前的云端推送未成功" : message}——本机未删除任何东西`;
+    default:
+      return message === "" ? "删除失败，请稍后重试" : message;
+  }
+}
+
+/**
  * 拆解小说错误码 → 框内引导文案（拆解对话框；失败与警告一律落框内，不另开提示）。
  * - 体积 / 文本 / 校验类**透传服务端 message**：上限值、空文本判定都由服务端单一实现，
  *   客户端不复述数字（同一数值两处出现必然漂移）。

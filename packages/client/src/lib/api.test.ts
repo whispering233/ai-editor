@@ -18,6 +18,7 @@ import {
   createProject,
   deleteEntity,
   deleteOutlineNode,
+  deleteProject,
   exportProjectZip,
   getDeltasByNode,
   getDecomposeBatch,
@@ -337,6 +338,57 @@ describe("listProjects（GET /api/v1/project/list，S1.5 书架）", () => {
     mockFetchOnce({ body: { success: true, data: { rootPath: "/home/me/novels", books: [] } } });
     const res = await listProjects();
     expect(res.books).toEqual([]);
+  });
+});
+
+describe("deleteProject（POST /api/v1/project/delete，卡 23.5）", () => {
+  it("请求体 snake_case：path + force + delete_remote；响应解析 pushed / remoteError", async () => {
+    const calls = mockFetchOnce({
+      body: {
+        success: true,
+        data: {
+          deleted: true,
+          path: "/home/me/novels/books/书1",
+          pushed: { fileName: "2026-09-21-auto-本机-人物1-设定2-章3.zip" },
+        },
+      },
+    });
+    const res = await deleteProject({
+      path: "/home/me/novels/books/书1",
+      force: true,
+      delete_remote: true,
+    });
+    expect(calls[0].url).toBe("/api/v1/project/delete");
+    expect(calls[0].init?.method).toBe("POST");
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({
+      path: "/home/me/novels/books/书1",
+      force: true,
+      delete_remote: true,
+    });
+    expect(res.deleted).toBe(true);
+    expect(res.pushed?.fileName).toBe("2026-09-21-auto-本机-人物1-设定2-章3.zip");
+    expect(res.remoteError).toBeUndefined();
+  });
+
+  it("省略 force / delete_remote 时请求体不带这两个键（缺省语义由服务端决定）", async () => {
+    const calls = mockFetchOnce({
+      body: { success: true, data: { deleted: true, path: "/home/me/novels/books/书1" } },
+    });
+    await deleteProject({ path: "/home/me/novels/books/书1" });
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ path: "/home/me/novels/books/书1" });
+  });
+
+  it("409 CLOUD_CONFLICT → 抛 ApiError（框内走 force 分支的依据）", async () => {
+    mockFetchOnce({
+      status: 409,
+      body: {
+        success: false,
+        error: { code: "CLOUD_CONFLICT", message: "云端已有更新的备份（x.zip）" },
+      },
+    });
+    await expect(deleteProject({ path: "/p/books/书1" })).rejects.toMatchObject({
+      code: "CLOUD_CONFLICT",
+    });
   });
 });
 

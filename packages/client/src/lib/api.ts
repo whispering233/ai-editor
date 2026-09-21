@@ -26,6 +26,7 @@ import type {
   OutlineTree,
   ProjectAgents,
   ProjectConfig,
+  ProjectDeleteRes,
   ProjectImportRes,
   ProjectLanguage,
   ProjectListBook,
@@ -783,6 +784,30 @@ export interface CloseProjectRes {
 /** 关闭当前项目（释放数据库连接） */
 export function closeProject(): Promise<CloseProjectRes> {
   return apiFetch<CloseProjectRes>("/project/close", { method: "POST" });
+}
+
+/**
+ * POST /api/v1/project/delete —— 删除书架中的一本书（本地目录 + 可选云端目录）。
+ * 返回类型直接用 shared `projectDeleteResSchema` 的推导类型（响应形状不在此手抄）。
+ * 失败码（docs/api/10-api-project.md）：400 `INVALID_PROJECT_PATH`、
+ * 400 `CLOUD_BACKUP_TOO_LARGE` / 502 `CLOUD_*` / 409 `CLOUD_CONFLICT`（删除前的云端推送失败，
+ * 未 `force` 时**什么都没删**）、500 `INTERNAL_ERROR`。
+ */
+export function deleteProject(body: {
+  path: string;
+  /** true = 云端前置推送失败时仍然删除本机（缺省 false = 中止） */
+  force?: boolean;
+  /** true = 同时删除云端书目录（缺省 false = 云端备份原样保留） */
+  delete_remote?: boolean;
+}): Promise<ProjectDeleteRes> {
+  return apiFetch<ProjectDeleteRes>("/project/delete", {
+    method: "POST",
+    body: {
+      path: body.path,
+      ...(body.force !== undefined ? { force: body.force } : {}),
+      ...(body.delete_remote !== undefined ? { delete_remote: body.delete_remote } : {}),
+    },
+  });
 }
 
 // ============ 导出/导入（「项目管理」段末尾 + shared types/api.ts
