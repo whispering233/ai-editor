@@ -189,6 +189,9 @@
 
 ## 前端 / UI
 
+- **云端恢复框的「导入路径 409 CLOUD_NOT_CONFIGURED」无去设置页入口（2026-09 云端恢复 oracle 登记，低危）**
+  - 现状：`cloud-remote-books-dialog.tsx` 只在**列表拉取**失败时置 `loadNotConfigured`；若打开框后凭据被清（罕见），点「导入」得到 409，文案承诺「去设置页」但框内没有那个按钮。
+  - 最小修法（~6 行）：加 `importNotConfigured` state，导入错误为 `CLOUD_NOT_CONFIGURED` 时置位并在 presenter 里与列表失败态合并渲染同一个入口。
 - **删书确认框的两处文案收窄（2026-09 删书 oracle 登记，低危）**
   - ① **force 分支触发面比契约宽**：现在是「任何 error」都换 `[仍要删除]`（`book-delete-dialog.tsx`），DESIGN 只要求「云前置推送失败」——`INVALID_PROJECT_PATH` 下重试必败，那个按钮是空承诺；严格口径可收窄为 `CLOUD_*` + `INTERNAL_ERROR`（后者必须留：打包失败可 force）。
   - ② **`remoteError` toast 重复**：服务端 message 已含「（本地已删除）」，客户端又拼「云端备份未能删除…可到云盘网页手动清理」→ `CLOUD_NOT_CONFIGURED` / `CLOUD_FILE_NOT_FOUND` 下句子重复且建议无意义。修法：toast 只保留服务端文案 + 一句「本地已删除」。

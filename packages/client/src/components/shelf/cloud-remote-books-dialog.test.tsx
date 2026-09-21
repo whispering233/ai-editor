@@ -40,6 +40,8 @@ const NO_BACKUP: CloudRemoteBook = {
   backups: [],
 };
 const FALLBACK_NAME: CloudRemoteBook = { ...IMPORTABLE, dirName: "ai-editor-abc123", name: null };
+/** 目录名**不带 id**（`projectId: null`，用户手工建的目录）：仍可导入（无 id 声明，不置灰） */
+const NO_ID: CloudRemoteBook = { ...IMPORTABLE, dirName: "我手工建的目录", name: "手工目录", projectId: null };
 
 const noop = () => {};
 
@@ -51,7 +53,7 @@ function rowChunks(html: string): string[] {
 function render(over: Partial<CloudRemoteBooksViewProps> = {}): string {
   return renderToString(
     <CloudRemoteBooksView
-      books={[IMPORTABLE, ALREADY_LOCAL, NO_BACKUP, FALLBACK_NAME]}
+      books={[IMPORTABLE, ALREADY_LOCAL, NO_BACKUP, FALLBACK_NAME, NO_ID]}
       loadError={null}
       loadNotConfigured={false}
       importError={null}
@@ -72,6 +74,13 @@ describe("CloudRemoteBooksView 行列表（三分支行状态）", () => {
     const rows = rowChunks(html);
     expect(rows[0]).toContain("<span>导 入</span>");
     expect(rows[3]).toContain("<span>导 入</span>"); // 回退命名那份同样可导入
+  });
+
+  it("目录名不带 id（projectId: null）：仍可导入，不置灰", () => {
+    const rows = rowChunks(html);
+    expect(rows[4]).toContain("<span>导 入</span>");
+    expect(rows[4]).not.toContain("本机已有");
+    expect(rows[4]).not.toContain("无备份");
   });
 
   it("「本机已有」行：行尾中性徽标，不给「导入」按钮", () => {
