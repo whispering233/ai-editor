@@ -107,12 +107,12 @@
 **语义**：
 
 1. **删除前推送（纯本地判据，不碰网络）**：`cloud.json` 已配置**且**该书有 book state（推过/拉过）→ 先打包本机最新状态并推送一次（未打开的书临时开 data.db，同覆盖前快照管道）；其余情况（云盘未配置 / 该书从未上云 = 「一个云端备份都没有」）→ 直接删，不发任何云端请求。
-2. **推送链路失败 → 不删**，按原错误码返回（云错误 502 `CLOUD_*`：不可达 / 认证 / 配额 / 冲突；项目库版本高于程序 409 `PROJECT_VERSION_NEWER`；其它 500 `INTERNAL_ERROR`）；`force: true` 才继续删（最新改动不会上云，风险由用户确认时承担）。
+2. **推送链路失败 → 不删**，按原错误码返回（云错误 502 `CLOUD_*`：不可达 / 认证 / 配额 / 冲突；打包或统计失败等本机错误 500 `INTERNAL_ERROR`）；`force: true` 才继续删（最新改动不会上云，风险由用户确认时承担）。**前置推送对未打开的书用裸连接打开 `data.db`（不走 open 的版本对齐管道）**——删书不应触发迁移/重建；版本更高导致的读取失败按 500 处理（可 `force` 越过）。
 3. **删除动作顺序**：取消在跑拆解 job（若该书有）→ 若删的是当前打开的书：`closeProject` + 清空 `currentProject` + 抹掉 `<创作根>/.ai-editor/config.json` 的 `lastProject` 键（下次启动回书架，不指向已删目录）→ 物理删目录。
 4. **`deleteRemote` 是 best-effort**：在本地删除**之后**执行（WebDAV 集合删除 = 尾斜杠 + `Depth: infinity` + 清 `cloud.json` state）；失败不改变「本地已删」的结果，以 `remoteError` 返回，UI 提示可去云盘网页手动清理。
 5. 目标已是当前书时，删完客户端应回书架并发刷新书架/项目配置/云端状态。
 
-**错误码**：400 `INVALID_PROJECT_PATH`（路径非法/已不存在/不在 `books/` 下/目录不含 `project.json`）、502 `CLOUD_*` / 409 `PROJECT_VERSION_NEWER` / 500 `INTERNAL_ERROR`（前置推送链路失败且未 `force`）。
+**错误码**：400 `INVALID_PROJECT_PATH`（路径非法/已不存在/不在 `books/` 下/目录不含 `project.json`）、502 `CLOUD_*` / 500 `INTERNAL_ERROR`（前置推送链路失败且未 `force`）。
 
 ### GET /api/v1/project/list
 
