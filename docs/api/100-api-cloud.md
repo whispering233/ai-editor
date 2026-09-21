@@ -250,7 +250,7 @@
 }
 ```
 
-**流程**：下载云端那份 → **目录名一致性守卫**（目录名能解析出 `projectId` 且 ≠ 包内 `project.json` 的 id → 400 `VALIDATION_ERROR`，拒绝在触碰 `books/` 之前——防把书写进别的书的云端目录；目录名解析不出 id 的（用户手工命名的目录）放行）→ 走**既有导入校验管道**（`validateBackupPackage`：白名单/三文件齐全/顶层契约/data.db `user_version` 三态分流，与 `POST /project/import` 同一实现）→ **本机已有同 id 项目 → 409 `PROJECT_ALREADY_EXISTS`**（不静默覆盖；本机那本打开后自己同步）→ `books/<书名>/` 去重建目录（id 沿用、`name` 归一为目录名）→ **该 zip 原样落新书 `.backups/`**（新机器立刻有一份「最新本地备份」）→ 写 `cloud.json` 该书 state（`dirName` / `lastPushedFileName` = 导入的那份 / `lastSeenHeadFileName` = 云端 head / `lastSeenCloudFiles` = 当时云端集合 / `lastSyncAt` = max(now, 三文件 mtime 向上取整到毫秒)，见下）→ **不自动打开**（与 import 一致）。
+**流程**：下载云端那份 → 走**既有导入校验管道**（`validateBackupPackage`：白名单/三文件齐全/顶层契约/data.db `user_version` 三态分流，与 `POST /project/import` 同一实现）→ **目录名一致性守卫**（目录名能解析出 `projectId` 且 ≠ 包内 `project.json` 的 id → 400 `VALIDATION_ERROR`，**从未触碰 `books/`**——防把书写进别的书的云端目录；目录名解析不出 id 的（用户手工命名的目录）放行。守卫必须读包内 id，故物理上在校验之后）→ **本机已有同 id 项目 → 409 `PROJECT_ALREADY_EXISTS`**（不静默覆盖；本机那本打开后自己同步）→ `books/<书名>/` 去重建目录（id 沿用、`name` 归一为目录名）→ **该 zip 原样落新书 `.backups/`**（新机器立刻有一份「最新本地备份」）→ 写 `cloud.json` 该书 state（`dirName` / `lastPushedFileName` = 导入的那份 / `lastSeenHeadFileName` = 云端 head / `lastSeenCloudFiles` = 当时云端集合 / `lastSyncAt` = max(now, 三文件 mtime 向上取整到毫秒)，见下）→ **不自动打开**（与 import 一致）。
 
 **为什么导入要写同步状态**：不写则新机器一打开该书就是 `conflict`（云端有份 + 本机无同步记录）→ 逼用户各裁一次冲突——明明刚拉下来。写入后状态即「已同步」。
 

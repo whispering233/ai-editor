@@ -349,7 +349,7 @@
 | 端点 | 做什么 |
 | :--- | :--- |
 | `GET /cloud/remote-books` | `PROPFIND` 工作根 → 列每书的目录名/解析出的书名与 `projectId`/可解析备份（head 时间、份数、大小）/`localExists`。工作根不存在 → 空列表（**不写云盘**） |
-| `POST /cloud/import-book` | 下载该目录 head（或指定份）→ **目录名解析出的 id 与包内 id 不符 → 拒绝**（防把书写进别的书的云端目录）→ `validateBackupPackage`（与 `POST /project/import` 同一实现）→ 本机已有同 id → 409 → `uniqueBookDir` 建档（**id 沿用**）→ zip 原样落新书 `.backups/` → 写 `cloud.json` 同步状态 |
+| `POST /cloud/import-book` | 下载该目录 head（或指定份）→ `validateBackupPackage`（与 `POST /project/import` 同一实现）→ **目录名解析出的 id 与包内 id 不符 → 拒绝**（必读包内 id，故在包校验之后、触碰 `books/` 之前；防把书写进别的书的云端目录）→ 本机已有同 id → 409 → `uniqueBookDir` 建档（**id 沿用**）→ zip 原样落新书 `.backups/` → 写 `cloud.json` 同步状态 |
 
 **三条为什么这样定**：
 

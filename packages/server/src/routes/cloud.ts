@@ -324,7 +324,9 @@ cloudRoutes.get("/remote-books", async (c) => {
 // POST /api/v1/cloud/import-book —— 把云端某本书的一份备份导入为本机新书（不要求项目已打开）
 //
 // 流程：目录/文件存在性（404）→ 下载 → **既有导入校验管道** `validateBackupPackage`
-// （与 `POST /project/import` 同一实现：坏包 400 / 版本 409）→ 本机已有同 id → 409（不静默覆盖：
+// （与 `POST /project/import` 同一实现：坏包 400 / 版本 409）→ **目录名一致性守卫**
+// （目录名能解析出 id 且 ≠ 包内 id → 400；必读包内 id 故此时才能比对；从未触碰 `books/`）
+// → 本机已有同 id → 409（不静默覆盖：
 // 那本书应在应用内自己同步）→ `uniqueBookDir` 建档（**id 沿用**、name 归一为目录名）→
 // 那份 zip **原样**落新书 `.backups/`（新机器立刻有一份「最新本地备份」）→ 写 `cloud.json` book state
 // （`lastPushedFileName` = 导入的那份 / `lastSeenCloudFiles` = 当时云端集合 / `lastSyncAt` = 见
