@@ -331,9 +331,8 @@ export function RelationsView({
                   </>
                 )}
                 <Button
-                  color="default" variant="text"
+                  color="danger" variant="text"
                   size="small"
-                  danger
                   aria-label={`删除关系（${endpointLabel(r, "source")} → ${endpointLabel(r, "target")}）`}
                   title="删除（物理删，可重新建立）"
                   icon={<DeleteOutlined />}

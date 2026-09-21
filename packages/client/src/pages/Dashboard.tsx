@@ -755,11 +755,10 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                                 {formatRelativeTime(book.updatedAt)}
                               </span>
                             </button>
-                            {/* 行尾垃圾桶（恒贴行尾；删除书不可恢复 → danger）：title / aria-label 写全语义 */}
+                            {/* 行尾垃圾桶（恒贴行尾；删除书不可恢复 → color="danger"，**不能**用 danger 糖：与 color+variant 同给时被忽略） */}
                             <Button
-                              color="default"
+                              color="danger"
                               variant="text"
-                              danger
                               size="small"
                               className="shrink-0"
                               title="删除书籍"

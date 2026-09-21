@@ -88,7 +88,6 @@ function RelationRow({
         <RelationNote note={row.note} />
       </span>
       <Button
-        danger
         color="danger"
         variant="text"
         size="small"

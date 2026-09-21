@@ -508,10 +508,10 @@ function RefRow({ item, onRename, onDelete, onGoto, onRelationCreated }: RefRowP
       </td>
       {/* 操作列：删除（H3 直接平铺不收 ⋯） */}
       <td className="w-10 px-2 py-2 text-right">
+        {/* 移入回收站 = 软删（可还原）→ 常规色，**不用**危险色（DESIGN §icon-button：危险色只给不可撤销） */}
         <Button
           color="default"
           variant="text"
-          danger
           onClick={() => onDelete(item)}
           aria-label="删除"
           title="移入回收站"

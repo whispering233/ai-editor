@@ -11,8 +11,8 @@
 // 4. ad-hoc-font-size   字号只有四档（20/16/14/12），手写 px/rem 字号禁
 // 5. primary-bg-token   `colorPrimaryBg` 一类「主色浅底」在深墨 seed 下派生成中灰，禁作底色
 // 6. dropdown-menu-selectable  调用点不得另起一套下拉选中态（`selectable` 命中）
-// 另 4 条独立守卫（不在 `RULES` 表内，写法各异）：antd-root-override / cssvar-scope /
-// no-dynamic-class / button-variant-color。
+// 另 5 条独立守卫（不在 `RULES` 表内，写法各异）：antd-root-override / cssvar-scope /
+// no-dynamic-class / button-variant-color / danger-color-variant。
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -89,6 +89,22 @@ function buttonVariantWithoutColor(source: string): boolean {
   while (match !== null) {
     const opening = openingTagAt(source, match.index) ?? "";
     if (/\svariant=/.test(opening) && !/\scolor=/.test(opening)) return true;
+    match = tag.exec(source);
+  }
+  return false;
+}
+
+/** `danger` 糖只在 `color` 与 `variant` **未同时**给出时生效（同上 `Button.js` 分支）——
+ * `color="default" variant="text" danger` 里的 `danger` 被静默忽略（实测渲染为常规墨色，
+ * 不可恢复操作的危险色信号丢失）。危险色一律写 `color="danger" variant="text"`。*/
+function dangerIgnoredByColorVariant(source: string): boolean {
+  const tag = /<Button\b/g;
+  let match = tag.exec(source);
+  while (match !== null) {
+    const opening = openingTagAt(source, match.index) ?? "";
+    if (/\scolor=/.test(opening) && /\svariant=/.test(opening) && /\sdanger(?:[=\s/>])/.test(opening)) {
+      return true;
+    }
     match = tag.exec(source);
   }
   return false;
@@ -205,6 +221,11 @@ describe("视觉纪律守卫（源码扫描）", () => {
     const hits = FILES.filter((file) => buttonVariantWithoutColor(file.text)).map((f) => f.path);
     expect(hits).toEqual([]);
   });
+
+  it("danger-color-variant：color+variant 同时给出时不得再用 danger 糖（会被静默忽略）", () => {
+    const hits = FILES.filter((file) => dangerIgnoredByColorVariant(file.text)).map((f) => f.path);
+    expect(hits).toEqual([]);
+  });
 });
 
 describe("守卫规则自检（规则必须能识别违规样例，否则规则形同虚设）", () => {
@@ -238,6 +259,15 @@ describe("守卫规则自检（规则必须能识别违规样例，否则规则�
     expect(buttonVariantWithoutColor(`<Button\n  variant="filled"\n  icon={<A />}\n/>`)).toBe(true);
     expect(buttonVariantWithoutColor(`<Button color="default" variant="text" />`)).toBe(false);
     expect(buttonVariantWithoutColor(`<Button type="primary" danger />`)).toBe(false);
+  });
+
+  it("danger-color-variant 命中被忽略的 danger 糖、放过合法写法", () => {
+    expect(dangerIgnoredByColorVariant(`<Button\n  color="default"\n  variant="text"\n  danger\n/>`)).toBe(true);
+    expect(dangerIgnoredByColorVariant(`<Button color="default" variant="text" danger />`)).toBe(true);
+    expect(dangerIgnoredByColorVariant(`<Button color="danger" variant="text" />`)).toBe(false);
+    expect(dangerIgnoredByColorVariant(`<Button type="primary" danger />`)).toBe(false);
+    // `dangerouslySetInnerHTML` 一类前缀不得误报（无 color 时也不该命中）
+    expect(dangerIgnoredByColorVariant(`<Button color="x" variant="y" dangerouslySetInnerHTML={{ __html: "" }} />`)).toBe(false);
   });
 
   it("antd-root-override 命中根元素、放过子元素", () => {

@@ -304,9 +304,8 @@ export default function Trash() {
                         onClick={() => void handleRestoreEntity(item)}
                       />
                       <Button
-                        color="default" variant="text"
+                        color="danger" variant="text"
                         size="small"
-                        danger
                         aria-label={`彻底删除《${item.name}》（不可恢复）`}
                         title="彻底删除（不可恢复）"
                         icon={<DeleteOutlined />}
@@ -348,9 +347,8 @@ export default function Trash() {
                           onClick={() => void handleRestoreNode(node)}
                         />
                         <Button
-                          color="default" variant="text"
+                          color="danger" variant="text"
                           size="small"
-                          danger
                           aria-label={`彻底删除《${node.title}》（不可恢复）`}
                           title="彻底删除（不可恢复）"
                           icon={<DeleteOutlined />}
