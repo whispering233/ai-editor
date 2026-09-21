@@ -1,8 +1,9 @@
-// 拆解 S1 建档 + job 骨架（卡 21.5）：建大纲（卷→章）→ 逐章导入正文段落块 → 落 job 与批规划行；
+// 拆解 S1 建档 + S1' 续拆建 job + job 骨架（卡 21.5 / 22.7）：建大纲（卷→章）→ 逐章导入正文段落块 →
+// 落 job 与批规划行（续拆只落 job 与批规划，不建大纲不导正文）；续拆预览（plan）的库内读取面同在本模块。
 // 进度轮询（GET /decompose/job）的状态投影也在这里。
 //
-// 契约：docs/design/60-decompose.md §2（S1 建档）/ §4（范围与组批）/ §7（状态机）/ §8（进度面）；
-// docs/api/120-api-decompose.md §start / §job / §batches；表不变式见 docs/db/schema.md「decompose 两表」。
+// 契约：docs/design/60-decompose.md §2（S1 建档）/ §4（范围与组批）/ §7 / §7.1（状态机与续拆）/ §8（进度面）；
+// docs/api/120-api-decompose.md §start / §plan / §continue / §job / §batches；表不变式见 docs/db/schema.md「decompose 两表」。
 // 口径：
 // - **正文全量导入**（不受 scope 限制）：scope 只决定批规划与 job 记录的 range（§4「范围」）；
 // - 切章文本 = `splitNovelWithSlices` 的**真实切片**（归一化文本上的 `[start, end)`）——
@@ -26,6 +27,7 @@ import {
   getDocumentTextLengths,
   getEntity,
   listDecomposeBatches,
+  listDecomposeJobs,
   readOutlineFile,
   updateJobStatus,
   upsertDocument,
@@ -133,25 +135,155 @@ export function ingestDecomposeProject(input: IngestDecomposeProjectInput): Inge
   const { project, split, now } = input;
   const chapterIdByIndex = writeOutlineFromSplit(project.root, split, now);
   importChapterDocuments(project.db, split, chapterIdByIndex, now);
+  return createRunningJob(project, {
+    batches: planBatchRows(input.scopedChapters, chapterIdByIndex),
+    scopeStart: input.scopeStart,
+    scopeEnd: input.scopeEnd,
+    model: input.model,
+    now,
+  });
+}
 
-  const batches = planBatches(input.scopedChapters).map((plan, position) => ({
+/** 续拆启动入参（S1'：不建大纲、不导正文、不吃源文件） */
+export interface ContinueDecomposeInput {
+  project: ProjectContext;
+  /** 范围过滤后的章（= 批规划输入；章序必须落在库内章序上） */
+  scopedChapters: readonly SplitChapter[];
+  scopeStart: number;
+  scopeEnd: number;
+  /** 本次使用的模型（`provider/id`，审计用）；未配置 → null */
+  model: string | null;
+  now: string;
+}
+
+/**
+ * S1'（续拆）：**只**落 job 行 + 批规划行——不建大纲、不导正文、不动 `outline.json` / `document_records`
+ *（正文是 S1 全量导入的一次性产物，设计 §7.1）；随后 job 置 `running`，批执行归 S2 runner（与 start 同款）。
+ */
+export function ingestDecomposeContinue(input: ContinueDecomposeInput): IngestDecomposeProjectResult {
+  const chapterIdByIndex = new Map(
+    deriveChapterOrder(input.project.root).map((entry) => [entry.chapterNumber, entry.chapterId]),
+  );
+  return createRunningJob(input.project, {
+    batches: planBatchRows(input.scopedChapters, chapterIdByIndex),
+    scopeStart: input.scopeStart,
+    scopeEnd: input.scopeEnd,
+    model: input.model,
+    now: input.now,
+  });
+}
+
+/** 批规划行（章序 → 批行 `chapter_ids`）：缺映射 = 调用方传错（静默跳过会丢章） */
+function planBatchRows(
+  scopedChapters: readonly SplitChapter[],
+  chapterIdByIndex: ReadonlyMap<number, string>,
+): Array<{ seq: number; chapterIds: string[] }> {
+  return planBatches(scopedChapters).map((plan, position) => ({
     seq: position + 1,
     chapterIds: plan.chapterIndexes.map((chapterIndex) => {
       const chapterId = chapterIdByIndex.get(chapterIndex);
-      if (chapterId === undefined) throw new Error(`ingestDecomposeProject: 章序 ${chapterIndex} 没有对应的大纲节点`);
+      if (chapterId === undefined) throw new Error(`拆解批规划：章序 ${chapterIndex} 没有对应的大纲节点`);
       return chapterId;
     }),
   }));
+}
+
+/**
+ * 落 job 行 + 全部批行（同一事务，`createDecomposeJob`）并置 `running` —— S1 与 S1' 的公共尾段
+ * （两处各写一遍必漂移）。
+ */
+function createRunningJob(
+  project: ProjectContext,
+  input: {
+    batches: Array<{ seq: number; chapterIds: string[] }>;
+    scopeStart: number;
+    scopeEnd: number;
+    model: string | null;
+    now: string;
+  },
+): IngestDecomposeProjectResult {
   const job = createDecomposeJob(project.db, {
     scopeStart: input.scopeStart,
     scopeEnd: input.scopeEnd,
     batchTargetChars: DECOMPOSE_BATCH_TARGET_CHARS,
     model: input.model,
-    batches,
-    now,
+    batches: input.batches,
+    now: input.now,
   });
-  updateJobStatus(project.db, job.id, "running", now);
-  return { jobId: job.id, batchCount: batches.length };
+  updateJobStatus(project.db, job.id, "running", input.now);
+  return { jobId: job.id, batchCount: input.batches.length };
+}
+
+// ============ 续拆预览（GET /decompose/plan 与 POST /decompose/continue 共用的库内事实） ============
+
+/** 续拆后的章条目（章序 = `deriveChapterOrder` 的文件位置序；`charCount` = 正文投影长度） */
+export interface DecomposeChapterEntry {
+  index: number;
+  title: string;
+  charCount: number;
+  volumeIndex: number;
+  decomposed: boolean;
+}
+
+/** 续拆预览的库内事实：全书章（含已拆标记）+ 未拆章最小覆盖区间 */
+export interface DecomposeProjectPlan {
+  chapters: DecomposeChapterEntry[];
+  /** 未拆章总数（全书口径） */
+  remainingCount: number;
+  /** 未拆章最小覆盖区间；无未拆章 → 0 / 0 */
+  defaultScopeStart: number;
+  defaultScopeEnd: number;
+}
+
+/**
+ * 已拆章集合 = 历史上**所有** job 的 `done` 批覆盖的章并集（设计 §7.1；`failed` / 未完成批不算）。
+ * 历史 job 全留在 `data.db`（进度面只显最新），故扫全量 job 行。
+ */
+function decomposedChapterIds(db: Db): Set<string> {
+  const ids = new Set<string>();
+  for (const job of listDecomposeJobs(db)) {
+    for (const batch of listDecomposeBatches(db, job.id)) {
+      if (batch.status !== "done") continue;
+      for (const chapterId of batch.chapter_ids) ids.add(chapterId);
+    }
+  }
+  return ids;
+}
+
+/**
+ * 库内章清单（顺序 = `deriveChapterOrder`：root → 卷 → 章先序遍历）+ 已拆标记 + 缺省范围。
+ * plan 与 continue **共用同一读取面**（各扫一遍必然漂移：预览说要拆的章与实际落的批不一致）。
+ * `volumeIndex` = root 下的卷序号（卷序号从 0 起、单卷与存量直挂 root 的章均为 0——与切分的口径同形）。
+ */
+export function readDecomposeProjectPlan(project: ProjectContext): DecomposeProjectPlan {
+  const decomposed = decomposedChapterIds(project.db);
+  const entries: Array<{ id: string; title: string; volumeIndex: number }> = [];
+  let volumeIndex = 0;
+  for (const child of readOutlineFile(project.root).children) {
+    if (child.type === "chapter") {
+      entries.push({ id: child.id, title: child.title, volumeIndex: 0 });
+      continue;
+    }
+    const index = volumeIndex++;
+    for (const chapter of child.children ?? []) {
+      entries.push({ id: chapter.id, title: chapter.title, volumeIndex: index });
+    }
+  }
+  const textLengthById = getDocumentTextLengths(project.db, "chapter", entries.map((entry) => entry.id));
+  const chapters: DecomposeChapterEntry[] = entries.map((entry, position) => ({
+    index: position + 1,
+    title: entry.title,
+    charCount: textLengthById.get(entry.id) ?? 0,
+    volumeIndex: entry.volumeIndex,
+    decomposed: decomposed.has(entry.id),
+  }));
+  const remaining = chapters.filter((chapter) => !chapter.decomposed);
+  return {
+    chapters,
+    remainingCount: remaining.length,
+    defaultScopeStart: remaining[0]?.index ?? 0,
+    defaultScopeEnd: remaining[remaining.length - 1]?.index ?? 0,
+  };
 }
 
 /** 批是否已收口（`done` / `failed` 都不再跑）——阶段推导与进度统计共用 */

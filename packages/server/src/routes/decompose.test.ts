@@ -5,7 +5,7 @@
 // 注入内存运行时 + faux 费率 → 按 pi 模型目录 `Model.cost` 算出）。
 // fixture 全部自造，不读 test-project/（该目录整体不入库）。
 
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -16,19 +16,24 @@ import type {
   DecomposeAnalyzeRes,
   DecomposeBatchRes,
   DecomposeBatchResult,
+  DecomposeContinueRes,
   DecomposeJobLogRes,
   DecomposeJobRes,
+  DecomposePlanRes,
   DecomposeStartRes,
   OutlineFileVolume,
 } from "@whispering233/ai-editor-shared";
 import {
   completeBatch,
   createDecomposeJob,
+  deriveChapterOrder,
   getDecomposeJob,
   getDocument,
   getDocumentTextLengths,
   listDecomposeBatches,
+  listDecomposeJobs,
   nowIso,
+  OUTLINE_FILE_NAME,
   readOutlineFile,
   readProjectFile,
   updateJobStatus,
@@ -47,7 +52,7 @@ import { readLastProject } from "../last-project.js";
 import { DECOMPOSE_BATCH_TARGET_CHARS } from "../decompose/batching.js";
 import { ingestDecomposeProject } from "../decompose/job.js";
 import { DECOMPOSE_LOG_CUSTOM_TYPE, decomposeSessionId } from "../decompose/llm.js";
-import { DECOMPOSE_SNAPSHOT_MAX_CHARS } from "../decompose/runner.js";
+import { DECOMPOSE_SNAPSHOT_MAX_CHARS, isDecomposeJobActive } from "../decompose/runner.js";
 import { splitNovelWithSlices } from "../decompose/split.js";
 import { setProjectRoot } from "./project.js";
 import { resetModelRuntime } from "../model-runtime.js";
@@ -343,6 +348,19 @@ async function batchData(app: Hono, seq: string): Promise<DecomposeBatchRes> {
   const res = await app.request(`/api/v1/decompose/job/batches/${seq}`, { headers: HOST_HEADERS });
   expect(res.status).toBe(200);
   return (await res.json()).data as DecomposeBatchRes;
+}
+
+async function planData(app: Hono, query = ""): Promise<DecomposePlanRes> {
+  const res = await app.request(`/api/v1/decompose/plan${query === "" ? "" : `?${query}`}`, { headers: HOST_HEADERS });
+  expect(res.status).toBe(200);
+  return (await res.json()).data as DecomposePlanRes;
+}
+
+function postContinue(app: Hono, query = ""): Promise<Response> {
+  return app.request(`/api/v1/decompose/continue${query === "" ? "" : `?${query}`}`, {
+    method: "POST",
+    headers: HOST_HEADERS,
+  });
 }
 
 /** 一批的最小契约形状（S2 才写；本节测试直接落库造；覆盖给定章序的 JSON 用于脚本化 S2 输出） */
@@ -807,5 +825,190 @@ describe("GET /decompose/job/log（拆解记录时间线）", () => {
     const res = await app.request("/api/v1/decompose/job/log", { headers: HOST_HEADERS });
     expect(res.status).toBe(404);
     expect((await res.json()).error.code).toBe("DECOMPOSE_JOB_NOT_FOUND");
+  });
+});
+
+// ============ 卡 22.7：GET /decompose/plan + POST /decompose/continue（续拆） ============
+//
+// 覆盖：plan 缺省范围（未拆章最小覆盖区间）/ 已拆标注（历史**所有** job 的 done 批并集）/ 显式范围
+// （defaulted=false + decomposedInScope = 将重拆）/ 不落库 / stats 与 estimate（与 analyze 同一实现、
+// 同一公式与同一费率口径）/ 无章 404 / 范围非法 400 / 无未拆章 → 0-0；continue 互斥 409（running /
+// paused）/ 空范围 400 / 凭据缺失 400 不落行 / 成功时 **S1' 只落 job 与批规划**（outline.json 与
+// document_records 未被改动）+ batchCount 与 plan 同源 + 历史 job 全留 + 批行章序正确。
+
+/** 已拆夹具：按 scope 落一个 job 并把它的批标 `done`、job 置 `done`（模拟历史 job 拆过的章） */
+function decomposedJob(name: string, chapterCount: number, scope: { start: number; end: number }): string {
+  const jobId = ingestProject(name, chapterCount, scope);
+  const project = getCurrentProject()!;
+  for (const batch of listDecomposeBatches(project.db, jobId)) {
+    completeBatch(project.db, { jobId, seq: batch.seq, result: batchResult(), now: nowIso() });
+  }
+  updateJobStatus(project.db, jobId, "done", nowIso());
+  return jobId;
+}
+
+/** 大纲里的章节点 id（文件位置序；单卷兜底 ⇒ children[0] 是卷） */
+function chapterIdsOf(root: string): string[] {
+  const tree = readOutlineFile(root);
+  return (tree.children[0] as OutlineFileVolume).children!.map((chapter) => chapter.id);
+}
+
+describe("GET /decompose/plan（续拆预览）", () => {
+  it("缺省范围 = 未拆章最小覆盖区间；已拆章带标注；不落库、无状态", async () => {
+    const app = buildApp(await runtimeWithCost(0.5, 1.5));
+    const jobId = decomposedJob("续拆缺省", 6, { start: 1, end: 2 });
+    const project = getCurrentProject()!;
+    const chapterIds = chapterIdsOf(project.root);
+    const lengths = getDocumentTextLengths(project.db, "chapter", chapterIds);
+
+    const plan = await planData(app);
+
+    expect(plan).toMatchObject({ scopeStart: 3, scopeEnd: 6, defaulted: true, remainingCount: 4, decomposedInScope: 0 });
+    expect(plan.chapters.map((chapter) => chapter.index)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(plan.chapters.map((chapter) => chapter.decomposed)).toEqual([true, true, false, false, false, false]);
+    expect(plan.chapters[0]).toMatchObject({ title: "标题1", volumeIndex: 0, charCount: lengths.get(chapterIds[0]) });
+    // 没有新 job / 批行落库（预览无副作用）
+    expect(listDecomposeJobs(project.db)).toHaveLength(1);
+    expect(listDecomposeBatches(project.db, jobId)).toHaveLength(1);
+  });
+
+  it("显式范围含已拆章 = 有意重拆：defaulted=false + decomposedInScope；estimate 与 analyze 同一实现", async () => {
+    const app = buildApp(await runtimeWithCost(0.5, 1.5));
+    decomposedJob("续拆显式", 6, { start: 1, end: 2 });
+    const project = getCurrentProject()!;
+    const chapterIds = chapterIdsOf(project.root);
+    const lengths = getDocumentTextLengths(project.db, "chapter", chapterIds);
+
+    const plan = await planData(app, "scope_start=1&scope_end=4");
+
+    expect(plan).toMatchObject({ scopeStart: 1, scopeEnd: 4, defaulted: false, remainingCount: 4, decomposedInScope: 2 });
+    // 公式单源：输入 = 范围正文 / 每字 token 数 + 每批固定开销；输出 = 章数 × 每章输出；调用 = 批数 + 归并 + 报告
+    const chars = [1, 2, 3, 4].reduce((sum, index) => sum + (lengths.get(chapterIds[index - 1]) ?? 0), 0);
+    const inputTokens = Math.ceil(chars / DECOMPOSE_CHARS_PER_TOKEN) + plan.estimate.batchCount * DECOMPOSE_BATCH_OVERHEAD_TOKENS;
+    const outputTokens = 4 * DECOMPOSE_OUTPUT_TOKENS_PER_CHAPTER;
+    expect(plan.estimate).toEqual({
+      batchCount: plan.estimate.batchCount,
+      llmCalls: plan.estimate.batchCount + 2,
+      inputTokensApprox: inputTokens,
+      outputTokensApprox: outputTokens,
+      costApprox: (inputTokens * 0.5 + outputTokens * 1.5) / 1_000_000, // 费率口径 = pi 模型目录 Model.cost（每百万 token）
+    });
+    // 跨端点同源：同一组章（4 章）在 analyze 与 plan 上组批与调用数一致
+    const analyze = await analyzeOk(app, bytesOf(novelText(6)), "file_name=同源.txt&scope_start=1&scope_end=4");
+    expect(analyze.estimate.batchCount).toBe(plan.estimate.batchCount);
+    expect(analyze.estimate.llmCalls).toBe(plan.estimate.llmCalls);
+  });
+
+  it("范围参数非法（非整数 / 越界 / start > end）→ 400 VALIDATION_ERROR", async () => {
+    const app = buildApp(await runtimeWithCost(0.5, 1.5));
+    decomposedJob("续拆非法", 6, { start: 1, end: 2 });
+
+    for (const query of ["scope_start=abc", "scope_start=0", "scope_start=5&scope_end=2"]) {
+      const res = await app.request(`/api/v1/decompose/plan?${query}`, { headers: HOST_HEADERS });
+      expect(res.status, query).toBe(400);
+      expect((await res.json()).error.code, query).toBe("VALIDATION_ERROR");
+    }
+  });
+
+  it("没有已打开项目 → 409 NO_PROJECT_OPEN；项目里没有章 → 404 DECOMPOSE_NO_CHAPTERS", async () => {
+    const app = buildApp(await runtimeWithCost(0.5, 1.5));
+
+    const noProject = await app.request("/api/v1/decompose/plan", { headers: HOST_HEADERS });
+    expect(noProject.status).toBe(409);
+    expect((await noProject.json()).error.code).toBe("NO_PROJECT_OPEN");
+
+    setCurrentProject(initProject(bookDir("没有章"), { name: "没有章" }));
+    const empty = await app.request("/api/v1/decompose/plan", { headers: HOST_HEADERS });
+    expect(empty.status).toBe(404);
+    expect((await empty.json()).error.code).toBe("DECOMPOSE_NO_CHAPTERS");
+  });
+
+  it("无未拆章 → scopeStart/scopeEnd = 0、remainingCount = 0（零批 + 归并/报告两次调用）", async () => {
+    const app = buildApp(await runtimeWithCost(0.5, 1.5));
+    decomposedJob("续拆全拆完", 6, { start: 1, end: 6 });
+
+    const plan = await planData(app);
+
+    expect(plan).toMatchObject({ scopeStart: 0, scopeEnd: 0, defaulted: true, remainingCount: 0, decomposedInScope: 0 });
+    expect(plan.chapters.every((chapter) => chapter.decomposed)).toBe(true);
+    expect(plan.estimate).toMatchObject({ batchCount: 0, llmCalls: 2, outputTokensApprox: 0 });
+  });
+});
+
+describe("POST /decompose/continue（续拆启动）", () => {
+  it("已有未收尾 job（running / paused）→ 409 DECOMPOSE_JOB_STATE，不落新 job", async () => {
+    const app = buildApp(await runtimeWithCost(0.5, 1.5));
+    const jobId = ingestProject("续拆互斥", 6, { start: 1, end: 2 }); // job 留在 running
+    const project = getCurrentProject()!;
+
+    const running = await postContinue(app);
+    expect(running.status).toBe(409);
+    expect((await running.json()).error.code).toBe("DECOMPOSE_JOB_STATE");
+
+    updateJobStatus(project.db, jobId, "paused", nowIso());
+    const paused = await postContinue(app);
+    expect(paused.status).toBe(409);
+    expect((await paused.json()).error.code).toBe("DECOMPOSE_JOB_STATE");
+
+    expect(listDecomposeJobs(project.db)).toHaveLength(1);
+  });
+
+  it("缺省范围里没有未拆章 → 400 DECOMPOSE_NOTHING_TO_DO，不落新 job", async () => {
+    const app = buildApp(await runtimeWithCost(0.5, 1.5));
+    decomposedJob("续拆无事可做", 6, { start: 1, end: 6 });
+    const project = getCurrentProject()!;
+
+    const res = await postContinue(app);
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("DECOMPOSE_NOTHING_TO_DO");
+    expect(listDecomposeJobs(project.db)).toHaveLength(1);
+  });
+
+  it("缺模型/凭据 → 400 LLM_API_KEY_MISSING（在建 job 之前校验），不落 job 行", async () => {
+    const app = buildApp(); // 缺省 deps：本文件已隔离 HOME + 清空 provider env ⇒ 无凭据
+    decomposedJob("续拆无凭据", 6, { start: 1, end: 2 });
+    const project = getCurrentProject()!;
+
+    const res = await postContinue(app);
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("LLM_API_KEY_MISSING");
+    expect(listDecomposeJobs(project.db)).toHaveLength(1);
+  });
+
+  it("成功：S1' 只落 job 与批规划（不动 outline.json / document_records）；batchCount 与 plan 同源", async () => {
+    // 空脚本：批必失败（faux 无排队响应）⇒ S2/S3 不会写业务表；S3 的第一次模型调用（别名归并）就在
+    // 写章摘要之前 ⇒ 本用例期间 outline.json 不会被 S3 改写（否定断言的确定性来源）
+    const app = buildApp(await runtimeWithCost(0.5, 1.5));
+    const firstJobId = decomposedJob("续拆落job", 6, { start: 1, end: 2 });
+    const project = getCurrentProject()!;
+    const outlineBefore = readFileSync(join(project.root, OUTLINE_FILE_NAME), "utf8");
+    const chapterIds = chapterIdsOf(project.root);
+    const documentsBefore = chapterIds.map((id) => getDocument(project.db, "chapter", id)?.content ?? null);
+    const plan = await planData(app);
+
+    const res = await postContinue(app);
+    expect(res.status).toBe(200);
+    const data = (await res.json()).data as DecomposeContinueRes;
+
+    expect(data).toMatchObject({
+      scopeStart: plan.scopeStart,
+      scopeEnd: plan.scopeEnd,
+      status: "running",
+      batchCount: plan.estimate.batchCount, // 预览说几批，落的就是几批（同一组批实现）
+    });
+    // 历史 job 全留（行与批结果都在 data.db）：两行
+    expect(new Set(listDecomposeJobs(project.db).map((job) => job.id))).toEqual(new Set([firstJobId, data.jobId]));
+    // 新 job 的批行 = 未拆章（3–6，一批；章序经大纲映射回文件位置序）
+    const numberById = new Map(deriveChapterOrder(project.root).map((entry) => [entry.chapterId, entry.chapterNumber]));
+    expect(
+      listDecomposeBatches(project.db, data.jobId).map((batch) => batch.chapter_ids.map((id) => numberById.get(id))),
+    ).toEqual([[3, 4, 5, 6]]);
+    // **S1' 的否定断言**：不建大纲、不导正文（正文是 S1 的全量一次性产物）
+    expect(readFileSync(join(project.root, OUTLINE_FILE_NAME), "utf8")).toBe(outlineBefore);
+    expect(chapterIds.map((id) => getDocument(project.db, "chapter", id)?.content ?? null)).toEqual(documentsBefore);
+    // S2 后台跑（不 await）：等这一轮收尾，避免用例结束后写库
+    await waitFor(() => !isDecomposeJobActive(data.jobId), "续拆轮次收尾");
   });
 });

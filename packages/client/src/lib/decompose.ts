@@ -9,6 +9,7 @@ import type {
   DecomposeBatchRes,
   DecomposeBatchResult,
   DecomposeJobRes,
+  DecomposePlanRes,
 } from "@whispering233/ai-editor-shared";
 import { DECOMPOSE_SESSION_ID_PREFIX } from "@whispering233/ai-editor-shared";
 import { relationTypeLabel } from "./entity-detail";
@@ -341,4 +342,47 @@ export function isDecomposeSession(sessionId: string | null): boolean {
  */
 export function isJobRunning(status: DecomposeJobRes["status"]): boolean {
   return status === "pending" || status === "running";
+}
+
+// ============ 续拆入口的展示口径（DESIGN.md §拆解小说「续拆入口」） ============
+
+/**
+ * 续拆对话框的统计行：章数 / 未拆章数 / 单章字数分布。
+ * 分布只展示服务端 `stats` 三个字段（章数不由客户端重组，口径与预览页同）。
+ */
+export function formatPlanStats(plan: DecomposePlanRes): string {
+  const { stats } = plan;
+  return [
+    `章数 ${formatCharCount(plan.chapters.length)}`,
+    `未拆 ${formatCharCount(plan.remainingCount)}`,
+    `单章字数 最少 ${formatCharCount(stats.min)} / 中位 ${formatCharCount(stats.median)} / 最多 ${formatCharCount(stats.max)}`,
+  ].join(" · ");
+}
+
+/**
+ * 续拆范围一行（对话框）：范围 + 缺省说明 + 有意重拆提示。
+ * `defaulted` = 服务端用了缺省范围（未拆章最小覆盖区间）；`decomposedInScope > 0` = 本范围含已拆章（将重拆）。
+ * `scopeStart === 0` = 无未拆章（服务端口径：没有实际范围）。
+ */
+export function describeContinueScope(plan: DecomposePlanRes): string {
+  if (plan.scopeStart === 0) return "全书章都已拆过，没有可续拆的范围";
+  const scope =
+    plan.scopeStart === plan.scopeEnd
+      ? `第 ${plan.scopeStart} 章`
+      : `第 ${plan.scopeStart}–${plan.scopeEnd} 章`;
+  const parts = [`续拆范围 ${scope}`];
+  if (plan.defaulted) parts.push(`按未拆章自动选定（共 ${formatCharCount(plan.remainingCount)} 章）`);
+  if (plan.decomposedInScope > 0) {
+    parts.push(`本范围含 ${formatCharCount(plan.decomposedInScope)} 章已拆，将重拆`);
+  }
+  return parts.join(" · ");
+}
+
+/**
+ * 「继续拆解」按钮的禁用说明（无未拆章时给 `caption-text`，否则 null）。
+ * `plan === null`（尚未取到 / 读取失败）**不禁用**：「未知」不等于「没有」，读取失败由对话框内的文案承担。
+ */
+export function continueDisabledReason(plan: DecomposePlanRes | null): string | null {
+  if (plan === null || plan.remainingCount > 0) return null;
+  return "全书章都已拆过，没有可续拆的范围（要重拆某几章请用下方批列表的「重跑」）";
 }

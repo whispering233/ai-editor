@@ -8,15 +8,20 @@
 // - `pending` / `running`：阶段条 + 进度条 + 批列表；页头操作 = 中止
 // - `paused`：同上；页头操作 = 续拆；状态文案区分「已暂停」与「上次拆解中断」（paused + running 批）
 // - `failed`：同上 + job 级错误行（页头无操作）；失败批行内错误 + 重跑
-// - `done`：总结卡（计数 + 三个跳转）在上 + 批列表在下（**完成态不藏批列表**：「核查后重跑」是本功能
-//   的核心能力，done 批重跑仍走二次确认），**不自动跳转**
+// - `done`：总结卡（计数 + 三个跳转 + 续拆入口「继续拆解」）在上 + 批列表在下（**完成态不藏批列表**：
+//   「核查后重跑」是本功能的核心能力，done 批重跑仍走二次确认），**不自动跳转**
 //
 // 数据：job / 批结果走 `hooks/use-decompose-job.ts`（轮询）+ `GET /decompose/job/batches/:seq`（展开按需）；
 // 拆解记录时间线走 `GET /decompose/job/log`（**复用同一轮询的节拍**：jobId / 阶段 / 已完成批数变化时拉一次）；
+// 续拆预览走 `GET /decompose/plan`（仅 done 态拉一次，只用于按钮禁用态；对话框自己再拉）；
 // 完成总结计数 = 库内当前计数（同概览页「创作要素」口径，不解析报告正文）。
 import { useEffect, useState } from "react";
-import type { DecomposeBatchResult, DecomposeJobLogRes, EntityType } from "@whispering233/ai-editor-shared";
+import type { DecomposeBatchResult, DecomposeJobLogRes, DecomposePlanRes, EntityType } from "@whispering233/ai-editor-shared";
 import { Button, Progress, Typography } from "antd";
+import {
+  ContinueDecomposeButton,
+  DecomposeContinueDialog,
+} from "@/components/decompose/decompose-continue";
 import { DecomposeLogSection } from "@/components/decompose/decompose-log";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
@@ -35,6 +40,7 @@ import {
   CLIENT_NETWORK_ERROR,
   getDecomposeBatch,
   getDecomposeJobLog,
+  getDecomposePlan,
   getSettingsLlm,
   listEntities,
   listRelations,
@@ -90,6 +96,10 @@ export default function Decompose() {
   const [confirmRerunSeq, setConfirmRerunSeq] = useState<number | null>(null);
   /** 完成总结计数（仅 done 态拉取；null 字段渲染「–」而不是 0） */
   const [counts, setCounts] = useState<CompletionCounts | null>(null);
+  /** 续拆预览（仅 done 态拉取；null = 尚未取到 / 读取失败 ⇒ 按钮不禁用，框内承担失败文案） */
+  const [plan, setPlan] = useState<DecomposePlanRes | null>(null);
+  /** 续拆对话框开关（受控） */
+  const [continueOpen, setContinueOpen] = useState(false);
   /** 拆解记录（过程条目）：null = 尚未取到 / 当前项目没有 job */
   const [logEntries, setLogEntries] = useState<DecomposeJobLogRes["entries"] | null>(null);
   const [logError, setLogError] = useState<string | null>(null);
@@ -154,6 +164,25 @@ export default function Decompose() {
     });
     return () => {
       cancelled = true;
+    };
+  }, [status]);
+
+  // 续拆预览（done 态）：只为「继续拆解」按钮的禁用态取一行数据（remainingCount）；
+  // 对话框自己开框时再拉一次（拆解期间章数 / 已拆集合会变）。读取失败 → plan 留 null（按钮可点，框内报错）
+  useEffect(() => {
+    if (status !== "done") return;
+    let cancelled = false;
+    const controller = new AbortController();
+    getDecomposePlan({}, controller.signal)
+      .then((res) => {
+        if (!cancelled) setPlan(res);
+      })
+      .catch(() => {
+        if (!cancelled) setPlan(null);
+      });
+    return () => {
+      cancelled = true;
+      controller.abort();
     };
   }, [status]);
 
@@ -370,7 +399,7 @@ export default function Decompose() {
     );
   }
 
-  /** 完成总结卡（不自动跳转——用户自己决定去看报告还是大纲） */
+  /** 完成总结卡（不自动跳转——用户自己决定去看报告还是大纲）；完成态也是续拆入口的宿主 */
   function renderSummary(report: { entityId: string; name: string } | null) {
     return (
       <SectionCard title="拆解完成">
@@ -389,7 +418,15 @@ export default function Decompose() {
           </Button>
           <Button href="#/outline">大纲</Button>
           <Button href="#/characters">人物</Button>
+          {/* 续拆入口：未拆章还有 ⇒ 开对话框；全拆完 ⇒ 禁用 + 说明（DESIGN §拆解小说） */}
+          <ContinueDecomposeButton plan={plan} onOpen={() => setContinueOpen(true)} />
         </div>
+        {/* 续拆对话框：确认后回到本页轮询（`refresh` 重启既有 job 轮询，不新增定时器） */}
+        <DecomposeContinueDialog
+          open={continueOpen}
+          onOpenChange={setContinueOpen}
+          onStarted={refresh}
+        />
       </SectionCard>
     );
   }

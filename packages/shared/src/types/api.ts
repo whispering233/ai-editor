@@ -1124,6 +1124,13 @@ export const decomposeChapterPreviewSchema = z.object({
   volumeIndex: z.number().int().min(0),
 });
 
+/** 章字数分布（min / median / max；median 可能是 x.5——偶数章取中位均值） */
+export const decomposeChapterStatsSchema = z.object({
+  min: z.number().min(0),
+  median: z.number().min(0),
+  max: z.number().min(0),
+});
+
 /** 范围预估（费率来自 pi 模型目录；未配置模型/凭据 → costApprox = null） */
 export const decomposeEstimateSchema = z.object({
   batchCount: z.number().int().min(0),
@@ -1146,7 +1153,7 @@ export const decomposeAnalyzeResSchema = z.object({
   totalChars: z.number().int().min(0),
   chapters: z.array(decomposeChapterPreviewSchema),
   volumes: z.array(z.object({ index: z.number().int().min(0), title: z.string() })),
-  stats: z.object({ min: z.number().min(0), median: z.number().min(0), max: z.number().min(0) }), // median 可能是 x.5（偶数章取中位均值）
+  stats: decomposeChapterStatsSchema,
   warnings: z.array(decomposeWarningSchema),
   estimate: decomposeEstimateSchema,
   defaultName: z.string(),
@@ -1171,6 +1178,40 @@ export const decomposeStartResSchema = z.object({
   batchCount: z.number().int().min(0),
 });
 export type DecomposeStartRes = z.infer<typeof decomposeStartResSchema>;
+
+// 续拆两端点（GET /decompose/plan + POST /decompose/continue）**共用一个 query**：范围解析是同一实现
+// （缺省 = 未拆章最小覆盖区间，由服务端按历史 done 批推导 ⇒ 缺省值不进 schema）。
+// **不吃文件字节**：章与正文已在库（S1 全量导入），故本组无请求体 schema。
+export const decomposeContinueQuerySchema = z.object({
+  scope_start: z.coerce.number().int().min(1).optional(),
+  scope_end: z.coerce.number().int().min(1).optional(),
+});
+
+// GET /api/v1/decompose/plan（Res: 200 续拆预览；不落库、无状态）
+// `decomposed` = 历史**所有** job 的 done 批覆盖；`scopeStart/scopeEnd = 0` = 无未拆章（无实际范围）。
+export const decomposePlanChapterSchema = decomposeChapterPreviewSchema.extend({ decomposed: z.boolean() });
+
+export const decomposePlanResSchema = z.object({
+  scopeStart: z.number().int().min(0),
+  scopeEnd: z.number().int().min(0),
+  defaulted: z.boolean(), // true = 用了缺省范围（未拆章最小覆盖区间）
+  remainingCount: z.number().int().min(0), // 未拆章总数（全书口径）
+  decomposedInScope: z.number().int().min(0), // 范围内已拆章数（将重拆）
+  chapters: z.array(decomposePlanChapterSchema), // 全书章列表（含已拆标注）
+  stats: decomposeChapterStatsSchema,
+  estimate: decomposeEstimateSchema,
+});
+export type DecomposePlanRes = z.infer<typeof decomposePlanResSchema>;
+
+// POST /api/v1/decompose/continue（Res: 200；S1' 只落 job 与批规划，返回时 job 已 running）
+export const decomposeContinueResSchema = z.object({
+  jobId: z.string(),
+  scopeStart: z.number().int().min(1),
+  scopeEnd: z.number().int().min(1),
+  status: z.literal("running"),
+  batchCount: z.number().int().min(0),
+});
+export type DecomposeContinueRes = z.infer<typeof decomposeContinueResSchema>;
 
 // ── S2 抽取结果（逐章对齐；口径表见 docs/design/60-decompose.md §5） ──
 //

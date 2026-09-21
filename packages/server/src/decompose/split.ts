@@ -596,7 +596,9 @@ function fallbackEqualSplit(text: string, encoding: NovelEncoding): { result: Sp
 
 // ── 汇总 ─────────────────────────────────────────────────────────────────────
 
-function statsOf(counts: number[]): SplitStats {
+/** 章字数分布（min / median / max；偶数章取中位均值 → median 可能是 x.5）。
+ * 预览两端点（analyze 从切分结果、plan 从库内章）**同源**：两处各算一遍必然漂移。 */
+export function statsOf(counts: number[]): SplitStats {
   if (counts.length === 0) return { min: 0, median: 0, max: 0 };
   const sorted = [...counts].sort((left, right) => left - right);
   const middle = sorted.length >> 1;

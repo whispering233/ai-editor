@@ -12,6 +12,9 @@
 // - estimate：批数走 `decompose/batching.ts` 的组批实现（与落批同一份）、`llmCalls = 批数 + 归并 + 报告`、
 //   token 按字数与章数粗估；费率读 pi 模型目录 `Model.cost`（`getModelRuntime()` 唯一入口，**不自建定价表**），
 //   未配置模型/凭据（或模型目录不可读）→ `costApprox = null`，预览照常返回。
+// - **续拆两端点（plan / continue）不吃文件字节**：章与正文已在库（S1 全量导入），范围缺省 = 未拆章最小
+//   覆盖区间（`decompose/job.ts` 的 `readDecomposeProjectPlan`）；两端的范围解析与估算走同一实现
+//   （预览说拆哪些，启动就必须拆哪些），continue 的 S1' **只落 job 与批规划**。
 
 import { existsSync, mkdirSync } from "node:fs";
 import { basename, extname, join } from "node:path";
@@ -20,11 +23,13 @@ import type {
   DecomposeAnalyzeRes,
   DecomposeBatchRes,
   DecomposeJobLogRes,
+  DecomposePlanRes,
   DecomposeStartRes,
 } from "@whispering233/ai-editor-shared";
 import {
   decomposeAnalyzeQuerySchema,
   decomposeBatchResultSchema,
+  decomposeContinueQuerySchema,
   decomposeJobLogResSchema,
   decomposeLogEntrySchema,
   decomposeStartQuerySchema,
@@ -43,10 +48,10 @@ import {
 import { writeLastProject } from "../last-project.js";
 import { BOOKS_DIR_NAME, getProjectRoot, resolveProjectDir } from "./project.js";
 import { planBatches } from "../decompose/batching.js";
-import { buildJobResponse, ingestDecomposeProject } from "../decompose/job.js";
+import { buildJobResponse, ingestDecomposeContinue, ingestDecomposeProject, readDecomposeProjectPlan, type DecomposeProjectPlan } from "../decompose/job.js";
 import { pauseDecomposeJob, startDecomposeJob, DECOMPOSE_SNAPSHOT_MAX_CHARS, type DecomposeRunnerDeps } from "../decompose/runner.js";
 import { DECOMPOSE_LOG_CUSTOM_TYPE, decomposeSessionId } from "../decompose/llm.js";
-import { splitNovelWithSlices, type SplitChapter } from "../decompose/split.js";
+import { splitNovelWithSlices, statsOf, type SplitChapter } from "../decompose/split.js";
 
 /** 上传体积上限（原始字节；超限 400 DECOMPOSE_FILE_TOO_LARGE）。analyze 与 start 共用——同文件。 */
 export const DECOMPOSE_MAX_FILE_BYTES = 16 * 1024 * 1024;
@@ -150,6 +155,32 @@ function jobScope(
   chapterCount: number,
 ): { start: number; end: number } {
   return { start: scopeStart ?? 1, end: Math.min(scopeEnd ?? chapterCount, chapterCount) };
+}
+
+/**
+ * 续拆范围解析（plan 与 continue **共用同一实现**）：逐项缺省 = 未拆章最小覆盖区间（无未拆章 → 0/0）；
+ * 显式范围包含已拆章 = **有意重拆**（归并按跨轮口径复用已有实体，设计 §7.1）。
+ * `start > end` → 400 `VALIDATION_ERROR`（缺省范围本身恒合法，故只可能来自显式参数）。
+ */
+function resolveContinueScope(
+  plan: DecomposeProjectPlan,
+  query: { scope_start?: number; scope_end?: number },
+): { scopeStart: number; scopeEnd: number; defaulted: boolean } {
+  const scopeStart = query.scope_start ?? plan.defaultScopeStart;
+  const scopeEnd = query.scope_end ?? plan.defaultScopeEnd;
+  if (scopeStart > scopeEnd) {
+    throw new HttpError(400, "VALIDATION_ERROR", `范围非法：起始章 ${scopeStart} 大于结束章 ${scopeEnd}`);
+  }
+  return {
+    scopeStart,
+    scopeEnd,
+    defaulted: query.scope_start === undefined || query.scope_end === undefined,
+  };
+}
+
+/** 续拆范围里的章（章序 = 1-based 文件位置序，连续 ⇒ 过滤即夹取——与 `chaptersInScope` 同口径） */
+function planChaptersInScope(plan: DecomposeProjectPlan, scopeStart: number, scopeEnd: number) {
+  return plan.chapters.filter((chapter) => chapter.index >= scopeStart && chapter.index <= scopeEnd);
 }
 
 /**
@@ -278,6 +309,74 @@ export function createDecomposeRoutes(deps: DecomposeRouteDeps = {}): Hono {
         status: "running" as const, // S1 已同步完成 ⇒ 返回时 job 已进入 running（批执行归 S2 runner）
         batchCount,
       } satisfies DecomposeStartRes),
+    );
+  });
+
+  // GET /api/v1/decompose/plan?scope_start=&scope_end= —— 续拆预览（不落库、无状态；**不吃文件字节**）
+  routes.get("/plan", async (c) => {
+    const query = decomposeContinueQuerySchema.parse(c.req.query()); // 范围非整数 / < 1 → 400 VALIDATION_ERROR
+    const project = requireCurrentProject(); // 无已打开项目 → 409 NO_PROJECT_OPEN
+    const plan = readDecomposeProjectPlan(project);
+    if (plan.chapters.length === 0) {
+      throw new HttpError(404, "DECOMPOSE_NO_CHAPTERS", "当前项目没有章：没有可续拆的正文（先在本书导入正文或重新拆解）");
+    }
+    const scope = resolveContinueScope(plan, query);
+    const scoped = planChaptersInScope(plan, scope.scopeStart, scope.scopeEnd);
+    return c.json(
+      ok({
+        scopeStart: scope.scopeStart,
+        scopeEnd: scope.scopeEnd,
+        defaulted: scope.defaulted,
+        remainingCount: plan.remainingCount,
+        decomposedInScope: scoped.filter((chapter) => chapter.decomposed).length,
+        chapters: plan.chapters, // 全书章列表（含已拆标注）——与 analyze 同为全量口径
+        stats: statsOf(plan.chapters.map((chapter) => chapter.charCount)),
+        // 估算与 analyze **同一实现**（`buildEstimate`）：只换输入章集（库内章而非切分结果）
+        estimate: buildEstimate(scoped, await activeCostRates(deps)),
+      } satisfies DecomposePlanRes),
+    );
+  });
+
+  // POST /api/v1/decompose/continue?scope_start=&scope_end= —— 续拆：当前项目内开新 job（S1' 只落 job 与批规划）
+  routes.post("/continue", async (c) => {
+    const query = decomposeContinueQuerySchema.parse(c.req.query());
+    const project = requireCurrentProject();
+    // 顺序 = 模型/凭据 → 活跃 job 互斥 → 范围解析：缺凭据不先落 job 行（同 start 的「不留半成品」口径）；
+    // 互斥拦在范围解析前——已有 running / paused job 时范围解析无意义（只有终态 done / failed 可开新 job，§7.1）
+    const model = await requireActiveModel(deps);
+    const current = getDecomposeJob(project.db); // 一项目取最新 job（db helper 口径）
+    if (current !== null && current.status !== "done" && current.status !== "failed") {
+      throw new HttpError(
+        409,
+        "DECOMPOSE_JOB_STATE",
+        `job ${current.id} 状态为 ${current.status}，不能开新 job（先等它收尾，或对它续拆 / 重跑）`,
+      );
+    }
+    const plan = readDecomposeProjectPlan(project);
+    const scope = resolveContinueScope(plan, query);
+    const scoped = planChaptersInScope(plan, scope.scopeStart, scope.scopeEnd);
+    if (scoped.length === 0) {
+      throw new HttpError(400, "DECOMPOSE_NOTHING_TO_DO", "范围里没有可拆的章（缺省且无未拆章——可显式指定范围重拆）");
+    }
+    // S1'：只落新 job 行 + 批规划行（**不建大纲、不导正文**，正文是 S1 的全量一次性产物）
+    const { jobId, batchCount } = ingestDecomposeContinue({
+      project,
+      scopedChapters: scoped,
+      scopeStart: scope.scopeStart,
+      scopeEnd: scope.scopeEnd,
+      model,
+      now: nowIso(),
+    });
+    // S2 批执行（**后台跑，不 await**）：响应返回时 job 已 running（进度页轮询看状态，与 start 同款）
+    void startDecomposeJob(project, deps);
+    return c.json(
+      ok({
+        jobId,
+        scopeStart: scope.scopeStart,
+        scopeEnd: scope.scopeEnd,
+        status: "running" as const,
+        batchCount,
+      }),
     );
   });
 

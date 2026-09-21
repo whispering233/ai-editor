@@ -16,8 +16,10 @@ import type {
   DeltaRecord,
   DecomposeAnalyzeRes,
   DecomposeBatchRes,
+  DecomposeContinueRes,
   DecomposeJobLogRes,
   DecomposeJobRes,
+  DecomposePlanRes,
   DecomposeStartRes,
   EntitySummary,
   ErrorCode,
@@ -1276,6 +1278,32 @@ export function startDecompose(
       scope_start: options.scopeStart,
       scope_end: options.scopeEnd,
     },
+  });
+}
+
+// ============ 拆解小说续拆面（docs/api/120-api-decompose.md §plan / §continue） ============
+//
+// 续拆**不吃文件字节**：S1 已把全书正文导入，章与正文都在库。范围同样走 query，语义与 analyze 不同：
+// 缺省 = 未拆章**最小覆盖区间**（历史所有 job 的 done 批覆盖的并集之外那一段，服务端推导）；
+// 显式范围包含已拆章 = 有意重拆。失败码：404 DECOMPOSE_NO_CHAPTERS（没有章）、
+// 400 DECOMPOSE_NOTHING_TO_DO（范围里没有章）、409 DECOMPOSE_JOB_STATE（已有未收尾 job）。
+
+/** GET /api/v1/decompose/plan —— 续拆预览（不落库、无状态；缺省范围 = 未拆章最小覆盖区间） */
+export function getDecomposePlan(scope: DecomposeScope = {}, signal?: AbortSignal): Promise<DecomposePlanRes> {
+  return apiFetch<DecomposePlanRes>("/decompose/plan", {
+    query: { scope_start: scope.scopeStart, scope_end: scope.scopeEnd },
+    signal,
+  });
+}
+
+/**
+ * POST /api/v1/decompose/continue —— 在当前项目内开新 job（S1' 只落 job 与批规划：不建项目、不导正文）。
+ * 返回时 job 已 `running` → 调用方刷新 job 轮询（**不新增定时器**）。
+ */
+export function continueDecompose(scope: DecomposeScope = {}): Promise<DecomposeContinueRes> {
+  return apiFetch<DecomposeContinueRes>("/decompose/continue", {
+    method: "POST",
+    query: { scope_start: scope.scopeStart, scope_end: scope.scopeEnd },
   });
 }
 

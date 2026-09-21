@@ -8,6 +8,7 @@ import type {
   DecomposeBatchResult,
   DecomposeEstimate,
   DecomposeJobRes,
+  DecomposePlanRes,
 } from "@whispering233/ai-editor-shared";
 import { validateBookName } from "./book-name";
 import {
@@ -17,7 +18,9 @@ import {
   batchResultGroups,
   batchStatusLabel,
   canRerunBatch,
+  continueDisabledReason,
   defaultBookNameFromFileName,
+  describeContinueScope,
   describeJobStatus,
   formatBatchChapters,
   formatBatchProgress,
@@ -26,6 +29,7 @@ import {
   formatEstimate,
   formatJobMeta,
   formatJobScope,
+  formatPlanStats,
   formatPreviewStats,
   formatShelfBadge,
   isDecomposeSession,
@@ -428,5 +432,55 @@ describe("isDecomposeSession / isJobRunning（拆解会话只读态的两个判�
     for (const status of ["paused", "done", "failed"] as const) {
       expect(isJobRunning(status)).toBe(false);
     }
+  });
+});
+
+// ============ 续拆入口的展示口径（卡 22.7） ============
+
+/** 续拆预览夹具（6 章：1–2 已拆，缺省范围 3–6） */
+function planFixture(overrides: Partial<DecomposePlanRes> = {}): DecomposePlanRes {
+  return {
+    scopeStart: 3,
+    scopeEnd: 6,
+    defaulted: true,
+    remainingCount: 4,
+    decomposedInScope: 0,
+    chapters: [1, 2, 3, 4, 5, 6].map((index) => ({
+      index,
+      title: `标题${index}`,
+      charCount: index * 1000,
+      volumeIndex: 0,
+      decomposed: index <= 2,
+    })),
+    stats: { min: 1000, median: 3500, max: 6000 },
+    estimate: { batchCount: 1, llmCalls: 3, inputTokensApprox: 2000, outputTokensApprox: 1600, costApprox: 0.5 },
+    ...overrides,
+  };
+}
+
+describe("formatPlanStats / describeContinueScope（续拆对话框的两行口径）", () => {
+  it("统计行：章数 / 未拆 / 单章字数分布（分布取服务端 stats，客户端不自己数）", () => {
+    expect(formatPlanStats(planFixture())).toBe("章数 6 · 未拆 4 · 单章字数 最少 1,000 / 中位 3,500 / 最多 6,000");
+  });
+
+  it("范围行：缺省说明 + 有意重拆提示（含已拆章时明说将重拆）", () => {
+    expect(describeContinueScope(planFixture())).toBe("续拆范围 第 3–6 章 · 按未拆章自动选定（共 4 章）");
+    expect(describeContinueScope(planFixture({ defaulted: false, scopeStart: 1, scopeEnd: 4, decomposedInScope: 2 }))).toBe(
+      "续拆范围 第 1–4 章 · 本范围含 2 章已拆，将重拆",
+    );
+    expect(describeContinueScope(planFixture({ scopeStart: 3, scopeEnd: 3, defaulted: false }))).toBe("续拆范围 第 3 章");
+    // 无未拆章：服务端口径是 0 / 0——不编造范围
+    expect(describeContinueScope(planFixture({ scopeStart: 0, scopeEnd: 0, remainingCount: 0 }))).toBe(
+      "全书章都已拆过，没有可续拆的范围",
+    );
+  });
+
+  it("按钮禁用说明：还有未拆章 → null；全拆完 → 一句 `caption-text`（不静默禁用）", () => {
+    expect(continueDisabledReason(planFixture())).toBeNull();
+    // 读取失败 / 尚未取到：**不禁用**（「未知」不等于「没有」，失败由对话框内文案承担）
+    expect(continueDisabledReason(null)).toBeNull();
+    expect(continueDisabledReason(planFixture({ remainingCount: 0, scopeStart: 0, scopeEnd: 0 }))).toContain(
+      "没有可续拆的范围",
+    );
   });
 });
