@@ -1,6 +1,6 @@
 // 删书端点测试（卡 23.4）：路径校验 / 云端前置推送（零请求 · 顺序 · 失败中止与 force）/
-// 当前书收尾（连接 + currentProject + lastProject）/ delete_remote（成功与 best-effort 失败）/
-// 删非当前书不影响当前书的在跑拆解 job。
+// 当前书收尾（连接 + currentProject + lastProject）/ delete_remote（成功、best-effort 失败、推送后取目录名）/
+// 跨书 state 隔离 / 删非当前书不影响当前书的在跑拆解 job。
 //
 // 契约：docs/api/10-api-project.md §POST /project/delete、docs/design/40-cloud-sync.md §4 / §8.5。
 // 云端用**内存版最小 WebDAV**（stub 全局 fetch）：既能断言请求序列与「推送发生在本地删除之前」，
@@ -401,20 +401,50 @@ describe("POST /project/delete —— delete_remote（best-effort）", () => {
     expect(readBookState(id)?.dirName).toBe(dirName); // 云端未删 → state 不清理
   });
 
-  it("delete_remote 但该书无云端目录记录 → 本地删完回 remoteError（不猜目录名）", async () => {
+  it("state 无 dirName + 云端原本没有目录 → 前置推送建目录后按写回的 dirName 发 DELETE（不猜名、不漏删）", async () => {
     const dir = await createBook("无目录记录");
     configureCloud();
     const id = bookId(dir);
     writeBookState(id, {}); // 有 state 但没 dirName（存量形态）
-    const dav = stubDav(dir);
+    const dav = stubDav(dir); // 云端没有任何目录：目录来自本次前置推送的 MKCOL
 
     const res = await request("/api/v1/project/delete", { path: dir, delete_remote: true });
-    const data = await responseData<{ remoteError: { code: string } }>(res);
+    const data = await responseData<{ remoteDeleted?: true; remoteError?: { code: string } }>(res);
 
     expect(res.status).toBe(200);
-    expect(data.remoteError.code).toBe("CLOUD_FILE_NOT_FOUND");
-    expect(dav.calls.some((call) => call.method === "DELETE")).toBe(false);
+    expect(data.remoteError).toBeUndefined();
+    expect(data.remoteDeleted).toBe(true);
+    const del = dav.calls.find((call) => call.method === "DELETE");
+    expect(del?.path).toBe(`无目录记录-${id}`); // 推送写回 state 的那个目录名，不是猜的
+    expect(del?.localDirExists).toBe(false); // 删除在本地删除之后
+    expect(dav.dirs.has(`无目录记录-${id}`)).toBe(false); // 刚推上去的副本不留在云端
     expect(existsSync(dir)).toBe(false);
+    expect(readBookState(id)).toBeNull();
+  });
+
+  it("delete_remote 只清该书的 state：另一本书的同步状态原样保留", async () => {
+    const dirA = await createBook("保留的书");
+    const dirB = await createBook("删掉的书");
+    configureCloud();
+    const idA = bookId(dirA);
+    const idB = bookId(dirB);
+    const stateA = { dirName: `保留的书-${idA}`, lastPushedFileName: EXISTING_BACKUP };
+    writeBookState(idA, stateA);
+    const dirNameB = `删掉的书-${idB}`;
+    writeBookState(idB, { dirName: dirNameB, lastPushedFileName: EXISTING_BACKUP });
+    const dav = stubDav(dirB);
+    dav.dirs.add(dirNameB);
+    dav.files.set(`${dirNameB}/${EXISTING_BACKUP}`, new Uint8Array([1]));
+
+    const res = await request("/api/v1/project/delete", { path: dirB, delete_remote: true });
+    const data = await responseData<{ remoteDeleted?: true }>(res);
+
+    expect(res.status).toBe(200);
+    expect(data.remoteDeleted).toBe(true);
+    expect(dav.dirs.has(dirNameB)).toBe(false);
+    expect(readBookState(idB)).toBeNull(); // 删的那本 state 清掉
+    expect(readBookState(idA)).toEqual(stateA); // 另一本（及其 dirName/lastPushed）不动
+    expect(existsSync(dirA)).toBe(true);
   });
 });
 

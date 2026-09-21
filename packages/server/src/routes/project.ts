@@ -850,7 +850,7 @@ projectRoutes.post("/delete", async (c) => {
     try {
       pushed = await pushLatestBackupBeforeDelete(dir, config);
     } catch (err) {
-      if (parsed.data.force !== true) throw err; // 不删：原错误码透传（502 CLOUD_* / 409 PROJECT_VERSION_NEWER / 500）
+      if (parsed.data.force !== true) throw err; // 不删：原错误码透传（502 CLOUD_* / 409 CLOUD_CONFLICT / 500 INTERNAL_ERROR）
       console.error(`[cloud] 删书前置推送失败，force 继续删除: ${dir}`, err);
     }
   }
@@ -868,7 +868,9 @@ projectRoutes.post("/delete", async (c) => {
   let remoteDeleted = false;
   let remoteError: { code: string; message: string } | undefined;
   if (parsed.data.delete_remote === true) {
-    const dirName = stateBefore?.dirName;
+    // 目录名在**前置推送之后**重读：原来没有 `dirName` 的书，推送成功会把这次建/用的目录名写回 state；
+    // 照推送前的快照取名字就会漏掉刚推上去的那份（只回 remoteError，一次 DELETE 都不发）
+    const dirName = readBookState(config.id)?.dirName ?? stateBefore?.dirName;
     if (webdav === null) {
       remoteError = { code: "CLOUD_NOT_CONFIGURED", message: "云盘未配置，云端备份未删除（本地已删除）" };
     } else if (dirName === undefined) {
