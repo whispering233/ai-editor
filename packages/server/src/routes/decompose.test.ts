@@ -47,6 +47,7 @@ import { readLastProject } from "../last-project.js";
 import { DECOMPOSE_BATCH_TARGET_CHARS } from "../decompose/batching.js";
 import { ingestDecomposeProject } from "../decompose/job.js";
 import { DECOMPOSE_LOG_CUSTOM_TYPE, decomposeSessionId } from "../decompose/llm.js";
+import { DECOMPOSE_SNAPSHOT_MAX_CHARS } from "../decompose/runner.js";
 import { splitNovelWithSlices } from "../decompose/split.js";
 import { setProjectRoot } from "./project.js";
 import { resetModelRuntime } from "../model-runtime.js";
@@ -55,6 +56,7 @@ import {
   DECOMPOSE_CHARS_PER_TOKEN,
   DECOMPOSE_MAX_FILE_BYTES,
   DECOMPOSE_OUTPUT_TOKENS_PER_CHAPTER,
+  DECOMPOSE_PROMPT_OVERHEAD_TOKENS,
   createDecomposeRoutes,
   type DecomposeRouteDeps,
 } from "./decompose.js";
@@ -199,6 +201,16 @@ describe("POST /decompose/analyze（切分预览）", () => {
     );
     expect(data.estimate.outputTokensApprox).toBe(data.chapters.length * DECOMPOSE_OUTPUT_TOKENS_PER_CHAPTER);
     expect(data.estimate.costApprox).toBeNull(); // 无凭据（见下方 costApprox 用例）
+  });
+
+  it("每批固定开销从快照预算派生（回退成手写数字 ⇒ 改预算时预估静默失真）", () => {
+    // 快照预算是固定开销的量级主导项：开销必须 ≥ 它的 token 换算（手写 800 这类小数字会当场报红）
+    expect(DECOMPOSE_BATCH_OVERHEAD_TOKENS).toBeGreaterThanOrEqual(
+      Math.ceil(DECOMPOSE_SNAPSHOT_MAX_CHARS / DECOMPOSE_CHARS_PER_TOKEN),
+    );
+    expect(DECOMPOSE_BATCH_OVERHEAD_TOKENS).toBe(
+      Math.ceil(DECOMPOSE_SNAPSHOT_MAX_CHARS / DECOMPOSE_CHARS_PER_TOKEN) + DECOMPOSE_PROMPT_OVERHEAD_TOKENS,
+    );
   });
 
   it("范围只影响 estimate：章列表仍全量返回；越界范围 → 零批但归并/报告照跑", async () => {

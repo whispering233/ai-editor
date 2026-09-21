@@ -44,7 +44,7 @@ import { writeLastProject } from "../last-project.js";
 import { BOOKS_DIR_NAME, getProjectRoot, resolveProjectDir } from "./project.js";
 import { planBatches } from "../decompose/batching.js";
 import { buildJobResponse, ingestDecomposeProject } from "../decompose/job.js";
-import { pauseDecomposeJob, startDecomposeJob, type DecomposeRunnerDeps } from "../decompose/runner.js";
+import { pauseDecomposeJob, startDecomposeJob, DECOMPOSE_SNAPSHOT_MAX_CHARS, type DecomposeRunnerDeps } from "../decompose/runner.js";
 import { DECOMPOSE_LOG_CUSTOM_TYPE, decomposeSessionId } from "../decompose/llm.js";
 import { splitNovelWithSlices, type SplitChapter } from "../decompose/split.js";
 
@@ -53,8 +53,15 @@ export const DECOMPOSE_MAX_FILE_BYTES = 16 * 1024 * 1024;
 
 /** 每 token 的汉字数（中文粗估；换 tokenizer 只调这一处——预估本就是量级参考） */
 export const DECOMPOSE_CHARS_PER_TOKEN = 1.5;
-/** 每批固定开销 token 粗估（系统提示 + 指令 + 项目数据快照）——批处理省的是这个，省不了正文与输出 */
-export const DECOMPOSE_BATCH_OVERHEAD_TOKENS = 800;
+/** 每批固定开销里与快照无关的那部分（系统提示 + 输出契约 + 各上限说明）token 粗估 */
+export const DECOMPOSE_PROMPT_OVERHEAD_TOKENS = 500;
+/**
+ * 每批固定开销 token 粗估（系统提示 + 指令 + 项目数据快照）——**由快照预算派生**，不手写：
+ * 快照是量级主导项（§4.1 的 `DECOMPOSE_SNAPSHOT_MAX_CHARS`），写死数字会在改预算时静默失真
+ * （预估与实际脱钩、无人报错）；批处理省的是这份开销，省不了正文与输出。
+ */
+export const DECOMPOSE_BATCH_OVERHEAD_TOKENS =
+  Math.ceil(DECOMPOSE_SNAPSHOT_MAX_CHARS / DECOMPOSE_CHARS_PER_TOKEN) + DECOMPOSE_PROMPT_OVERHEAD_TOKENS;
 /** 每章输出 token 粗估（一条摘要（受 `DECOMPOSE_CHAPTER_SUMMARY_MAX_CHARS` 约束）+ 若干实体线索） */
 export const DECOMPOSE_OUTPUT_TOKENS_PER_CHAPTER = 400;
 

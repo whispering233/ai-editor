@@ -68,6 +68,8 @@ import {
   extendStoryBible,
   isDecomposeJobActive,
   readStartSnapshot,
+  snapshotComposition,
+  snapshotKnownNames,
   snapshotText,
   startDecomposeJob,
   type DecomposeStartSnapshot,
@@ -247,6 +249,28 @@ async function fakeModel(): Promise<FakeModel> {
 function promptOf(calls: readonly Context[], index: number): string {
   const content = calls[index].messages[0].content;
   return typeof content === "string" ? content : contentText(content);
+}
+
+/** 拆解会话文件条目（`<项目根>/sessions/<时间戳>_<会话 id>.jsonl`；header 除外） */
+function sessionEntriesOf(projectRoot: string, sessionId: string): Record<string, unknown>[] {
+  const dir = join(projectRoot, "sessions");
+  const file = readdirSync(dir).find((name) => name.endsWith(`_${sessionId}.jsonl`));
+  if (file === undefined) throw new Error(`拆解会话文件不存在：${sessionId}`);
+  return readFileSync(join(dir, file), "utf8")
+    .trim()
+    .split("\n")
+    .map((line) => JSON.parse(line) as Record<string, unknown>)
+    .filter((entry) => entry.type !== "session");
+}
+
+/** 会话里的过程条目（§8 时间线） */
+function sessionLogsOf(
+  projectRoot: string,
+  sessionId: string,
+): Array<{ kind: string; text: string; batchSeq?: number; at: string }> {
+  return sessionEntriesOf(projectRoot, sessionId)
+    .filter((entry) => entry.type === "custom")
+    .map((entry) => entry.data as { kind: string; text: string; batchSeq?: number; at: string });
 }
 
 // ============ 环境隔离（HOME + 凭据环境变量；与 routes/decompose.test.ts 同款） ============
@@ -432,19 +456,7 @@ describe("S2 批循环", () => {
 // ============ 拆解会话落盘与过程条目（§2.1 / §8 时间线口径；卡 22.2） ============
 
 describe("拆解会话落盘", () => {
-  /** 拆解会话文件条目（`<项目根>/sessions/<时间戳>_<会话 id>.jsonl`；header 除外） */
-  function sessionEntriesOf(projectRoot: string, sessionId: string): Record<string, unknown>[] {
-    const dir = join(projectRoot, "sessions");
-    const file = readdirSync(dir).find((name) => name.endsWith(`_${sessionId}.jsonl`));
-    if (file === undefined) throw new Error(`拆解会话文件不存在：${sessionId}`);
-    return readFileSync(join(dir, file), "utf8")
-      .trim()
-      .split("\n")
-      .map((line) => JSON.parse(line) as Record<string, unknown>)
-      .filter((entry) => entry.type !== "session");
-  }
-
-  it("过程条目：批开始 / 失败尝试 / 批完成（计数 + 用量）/ 归并 / 报告；会话名 = 《书名》拆解", async () => {
+  it("过程条目：快照组成 / 批开始 / 失败尝试 / 批完成（计数 + 用量）/ 归并 / 报告；会话名 = 《书名》拆解", async () => {
     const model = await fakeModel();
     const missingFirstChapter = batchJson({ indexes: range(2, 10) });
     model.script([
@@ -462,10 +474,9 @@ describe("拆解会话落盘", () => {
 
     const entries = sessionEntriesOf(project.root, decomposeSessionId(started.jobId));
     expect(entries.find((entry) => entry.type === "session_info")?.name).toBe("《记录》拆解");
-    const logs = entries
-      .filter((entry) => entry.type === "custom")
-      .map((entry) => entry.data as { kind: string; text: string; batchSeq?: number; at: string });
+    const logs = sessionLogsOf(project.root, decomposeSessionId(started.jobId));
     expect(logs.map((log) => log.kind)).toEqual([
+      "snapshot",
       "batch_start",
       "attempt_failed",
       "batch_done",
@@ -474,15 +485,41 @@ describe("拆解会话落盘", () => {
       "merge_done",
       "report_done",
     ]);
-    expect(logs[0]).toMatchObject({ batchSeq: 1, text: "批 1 开始（10 章）" });
-    expect(logs[1]?.text).toContain("批 1 第 1 次尝试失败：");
-    expect(logs[2]?.text).toContain("批 1 完成：人物 10 / 设定 0 / 地点 0 / 关系 0；本次用量 输入 ");
-    expect(logs[3]).toMatchObject({ batchSeq: 2, text: "批 2 开始（2 章）" });
-    expect(logs[5]?.text).toContain("归并完成：实体 ");
-    expect(logs[6]?.text).toMatch(/^报告完成：《记录》拆解报告（id=ref-.+）$/);
+    // 快照组成条目（§8）：一轮一条，只有计数与省略告知（不带批锚）
+    expect(logs[0]).toMatchObject({ text: "快照：人物 0 / 设定 0 / 地点 0 / 关系 0 / 前置摘要 0 条" });
+    expect(logs[0]?.batchSeq).toBeUndefined();
+    expect(logs[1]).toMatchObject({ batchSeq: 1, text: "批 1 开始（10 章；快照 名字 0 / 关系 0）" });
+    expect(logs[2]?.text).toContain("批 1 第 1 次尝试失败：");
+    expect(logs[3]?.text).toContain("批 1 完成：人物 10 / 设定 0 / 地点 0 / 关系 0；本次用量 输入 ");
+    expect(logs[4]).toMatchObject({ batchSeq: 2, text: "批 2 开始（2 章；快照 名字 10 / 关系 0）" }); // 本轮累积进批开始规模
+    expect(logs[6]?.text).toContain("归并完成：实体 ");
+    expect(logs[7]?.text).toMatch(/^报告完成：《记录》拆解报告（id=ref-.+）$/);
     expect(logs.every((log) => !Number.isNaN(Date.parse(log.at)))).toBe(true);
     // 过程条目**不进模型请求**（custom entry 不参与 LLM 上下文）
     for (const call of model.calls) expect(JSON.stringify(call.messages)).not.toContain("批 1 开始");
+    for (const call of model.calls) expect(JSON.stringify(call.messages)).not.toContain("快照：人物");
+  });
+
+  it("快照组成条目：起始快照各块计数（读库一次，不随批刷新）", async () => {
+    const model = await fakeModel();
+    const jobId = ingestProject("快照组成", 6); // 直接 S1：6 章 = 一批
+    const project = getCurrentProject()!;
+    const hero = createEntity(project.db, { type: "character", name: "萧炎", data: { role: "主角" } });
+    const elder = createEntity(project.db, { type: "character", name: "药老", data: { role: "配角" } });
+    createEntity(project.db, { type: "setting", name: "斗气" });
+    createEntity(project.db, { type: "location", name: "乌坦城" });
+    createRelation(
+      project.db,
+      { sourceType: "character", sourceId: hero.id, targetType: "character", targetId: elder.id, relationType: "mentor" },
+      project.root,
+    );
+    model.script([batchJson({ indexes: range(1, 6) }), NO_ALIASES, PLOT_SUMMARY]);
+
+    await startDecomposeJob(project, model.deps);
+
+    const logs = sessionLogsOf(project.root, decomposeSessionId(jobId));
+    expect(logs[0]).toMatchObject({ kind: "snapshot", text: "快照：人物 2 / 设定 1 / 地点 1 / 关系 1 / 前置摘要 0 条" });
+    expect(logs[1]).toMatchObject({ kind: "batch_start", batchSeq: 1, text: "批 1 开始（6 章；快照 名字 2 / 关系 1）" });
   });
 
   it("DELETE /chat/sessions/<拆解会话>：暂停后当前批仍在飞 → 409；轮次收尾后可删", async () => {
@@ -926,7 +963,7 @@ describe("job 级失败", () => {
 
 /** 空快照夹具（各用例只填关心的那块） */
 function startOf(over: Partial<DecomposeStartSnapshot>): DecomposeStartSnapshot {
-  return { characters: [], settingsAndLocations: [], relations: [], prevSummaries: [], ...over };
+  return { characters: [], settings: [], locations: [], relations: [], prevSummaries: [], ...over };
 }
 
 describe("项目数据快照（起始快照 + 本轮累积）", () => {
@@ -982,7 +1019,7 @@ describe("项目数据快照（起始快照 + 本轮累积）", () => {
     // 词表外的 role 与未填 role 同归末位（同权重的先后由稳定排序保持查询顺序，不做更强断言）
     expect(snapshot.characters.slice(5).map((character) => character.name).sort()).toEqual(["萧炎", "路人甲"]);
     expect(DECOMPOSE_ROLE_ORDER).toEqual(["主角", "主要配角", "配角", "反派", "龙套"]);
-    expect(snapshot.settingsAndLocations).toEqual(["斗气", "乌坦城"]); // 设定 / 地点只给名字
+    expect([...snapshot.settings, ...snapshot.locations]).toEqual(["斗气", "乌坦城"]); // 设定 / 地点只给名字
     expect(snapshot.relations).toEqual(["萧炎→药老（mentor）"]);
     expect(snapshot.prevSummaries).toEqual([
       { chapterNumber: 4, summary: "第四章摘要" }, // 紧邻起点者在最前
@@ -1007,7 +1044,7 @@ describe("项目数据快照（起始快照 + 本轮累积）", () => {
     const text = snapshotText(
       startOf({
         characters: [{ name: "萧炎", role: "主角" }],
-        settingsAndLocations: settings,
+        settings,
         relations: ["萧炎→药老（mentor）", "药老→萧炎（mentor）"],
         prevSummaries: [{ chapterNumber: 4, summary: "第四章摘要" }],
       }),
@@ -1094,5 +1131,77 @@ describe("项目数据快照（起始快照 + 本轮累积）", () => {
     expect(firstPrompt).not.toContain(droppedName); // 该端点名只在库里、没进提示词
     const batch = decomposeBatchResultSchema.parse(getDecomposeBatch(project.db, jobId, 1)!.result);
     expect(batch.chapters[5].relations).toEqual([{ source: droppedName, target: "人物1", type: "ally", evidence: "证据" }]);
+  });
+
+  it("起始快照分页取全：同类型实体超过一页时，超出页的名字仍在全集里——引用它的关系端点不被丢弃", async () => {
+    const model = await fakeModel();
+    const jobId = ingestProject("分页取全"); // 默认 6 章 = 一批
+    const project = getCurrentProject()!;
+    const names = Array.from(
+      { length: MAX_ENTITY_LIST_LIMIT + 50 },
+      (_, index) => `角色${index + 1}号${"长".repeat(4)}`,
+    );
+    for (const name of names) createEntity(project.db, { type: "character", name });
+    // 首页（`listEntities` 单页上限）之外的某个名字：只读首页的旧实现必然漏掉它
+    const firstPage = new Set(
+      listEntities(project.db, { type: "character", limit: MAX_ENTITY_LIST_LIMIT }).items.map((item) => item.name),
+    );
+    const beyondPage = names.find((name) => !firstPage.has(name))!;
+
+    const snapshot = readStartSnapshot({
+      project,
+      scopeStart: 1,
+      chapterOrder: deriveChapterOrder(project.root),
+      tree: readOutlineFile(project.root),
+    });
+    expect(snapshot.characters).toHaveLength(names.length); // 分页取全（只取首页 = 少 50 个）
+    expect(snapshotKnownNames(snapshot, emptyStoryBible())).toContain(beyondPage);
+    // 渲染预算装不下这么多名字 ⇒ 提示词里被裁；**校验全集不受影响**（两套东西，见 `snapshotKnownNames`）
+    expect(snapshotText(snapshot, emptyStoryBible())).toMatch(/（已省略 \d+ 个名字）/);
+
+    model.script([
+      batchJson({ indexes: range(1, 6), relation: { source: beyondPage, target: "人物1", type: "ally" } }),
+      NO_ALIASES,
+      PLOT_SUMMARY,
+    ]);
+    await startDecomposeJob(project, model.deps);
+
+    const batch = decomposeBatchResultSchema.parse(getDecomposeBatch(project.db, jobId, 1)!.result);
+    expect(batch.chapters[5].relations).toEqual([{ source: beyondPage, target: "人物1", type: "ally", evidence: "证据" }]);
+    // 快照组成条目报的是全集计数（不是一页）+ 与渲染同源的省略告知
+    const logs = sessionLogsOf(project.root, decomposeSessionId(jobId));
+    expect(logs[0]?.kind).toBe("snapshot");
+    expect(logs[0]?.text).toContain(`人物 ${names.length} /`);
+    expect(logs[0]?.text).toContain("（已省略 ");
+  });
+
+  it("起始快照的关系不分页：超过一页条数的关系全部进快照（当轮规模计数）", () => {
+    ingestProject("关系取全");
+    const project = getCurrentProject()!;
+    const source = createEntity(project.db, { type: "character", name: "甲" });
+    const target = createEntity(project.db, { type: "character", name: "乙" });
+    const total = MAX_ENTITY_LIST_LIMIT + 5; // > 一页
+    for (let index = 1; index <= total; index++) {
+      createRelation(
+        project.db,
+        {
+          sourceType: "character",
+          sourceId: source.id,
+          targetType: "character",
+          targetId: target.id,
+          relationType: `类型${index}`,
+        },
+        project.root,
+      );
+    }
+
+    const snapshot = readStartSnapshot({
+      project,
+      scopeStart: 1,
+      chapterOrder: deriveChapterOrder(project.root),
+      tree: readOutlineFile(project.root),
+    });
+    expect(snapshot.relations).toHaveLength(total);
+    expect(snapshotComposition(snapshot, emptyStoryBible()).merged.relations).toBe(total);
   });
 });

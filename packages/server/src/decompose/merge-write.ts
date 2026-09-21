@@ -436,8 +436,12 @@ function reportEntryId(entries: Iterable<MergeWrittenEntry>): string | null {
   return reportId;
 }
 
-/** 某类型的**全部**活实体（`listEntities` 每页上限 MAX_ENTITY_LIST_LIMIT ⇒ 分页取全：同名复用必须看全库） */
-function listAllLiveEntities(db: Db, type: DecomposeEntityKind): EntitySummary[] {
+/**
+ * 某类型的**全部**活实体（`listEntities` 每页上限 `MAX_ENTITY_LIST_LIMIT` ⇒ 分页取全）：
+ * 两个调用面都要「全库」，不得只看首页——S3 的同名复用（这里）与起始快照的 `snapshotKnownNames` 全集
+ * （`runner.ts` 的 `readStartSnapshot`）；两处各写一份必然漂移，故共用本实现。
+ */
+export function listAllLiveEntities(db: Db, type: DecomposeEntityKind): EntitySummary[] {
   const entities: EntitySummary[] = [];
   for (let offset = 0; ; offset += MAX_ENTITY_LIST_LIMIT) {
     const page = listEntities(db, { type, limit: MAX_ENTITY_LIST_LIMIT, offset });

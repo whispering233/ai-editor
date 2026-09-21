@@ -19,7 +19,6 @@
 // 阈值与提示词里的数字一律取自常量（提示词按常量插值生成，散文不复述数字）。
 
 import type { DecomposeBatchResult, OutlineFileTree } from "@whispering233/ai-editor-shared";
-import { MAX_ENTITY_LIST_LIMIT } from "@whispering233/ai-editor-shared";
 import {
   completeBatch,
   deriveChapterOrder,
@@ -28,7 +27,6 @@ import {
   getDecomposeJob,
   getDocumentTexts,
   listDecomposeBatches,
-  listEntities,
   listRelations,
   nowIso,
   readOutlineFile,
@@ -55,7 +53,7 @@ import {
 import { doneBatchResults } from "./job.js";
 import { openDecomposeSession, parseModelJson, type DecomposeLlmDeps, type DecomposeSession, type ModelRequest } from "./llm.js";
 import { normalizeEntityName } from "./merge.js";
-import { runDecomposeMerge } from "./merge-write.js";
+import { listAllLiveEntities, runDecomposeMerge } from "./merge-write.js";
 
 /** 批并发度：串行是既定口径（§4——不在 pi 的重试链里，429 / 限流要自己兜，后台任务慢比失败好）。
  * 单点可调：改成 N 即按 N 批一组并发跑；同组共用一份项目数据快照（组内后批看不到同组前批的产出）。 */
@@ -64,7 +62,8 @@ export const DECOMPOSE_CONCURRENCY = 1;
 export const DECOMPOSE_BATCH_MAX_ATTEMPTS = 3;
 /** 起始快照回溯的章数（§4.1：只取紧邻范围起点的连续若干章——续拆 / 有范围时的前置连续性） */
 export const DECOMPOSE_SNAPSHOT_PREV_CHAPTERS = 3;
-/** 项目数据快照长度上限（§4.1：起始快照 + 本轮累积的总预算；与 `DECOMPOSE_BATCH_OVERHEAD_TOKENS` 同量级） */
+/** 项目数据快照长度上限（§4.1：起始快照 + 本轮累积的总预算）——`routes/decompose.ts` 的每批固定开销
+ * 预估由它派生（改这里预估跟着变） */
 export const DECOMPOSE_SNAPSHOT_MAX_CHARS = 2000;
 /** 人物 `role` 的展示权重（§4.1：主角 → … → 龙套，词表外的 role 归末位）——同时是批提示词的建议词表 */
 export const DECOMPOSE_ROLE_ORDER = ["主角", "主要配角", "配角", "反派", "龙套"] as const;
@@ -130,8 +129,10 @@ export function extendStoryBible(bible: StoryBible, result: DecomposeBatchResult
 export interface DecomposeStartSnapshot {
   /** 已有的人物（带 `role`；顺序 = `DECOMPOSE_ROLE_ORDER` 权重） */
   characters: Array<{ name: string; role: string }>;
-  /** 已有的设定 / 地点名（§4.1：只给名字——这两类没有关系端点判据要保） */
-  settingsAndLocations: string[];
+  /** 已有的设定名（§4.1：只给名字——这两类没有关系端点判据要保） */
+  settings: string[];
+  /** 已有的地点名（与设定同款只给名字；分列存是为了「快照组成」条目能报各自计数，渲染时仍合成一块） */
+  locations: string[];
   /** 已有的关系（「源→靶（类型）」） */
   relations: string[];
   /** 范围起点前 `DECOMPOSE_SNAPSHOT_PREV_CHAPTERS` 章的摘要（紧邻起点者在最前；范围从第 1 章开始 → 空） */
@@ -149,15 +150,16 @@ export function readStartSnapshot(input: {
   tree: OutlineFileTree;
 }): DecomposeStartSnapshot {
   const { project, scopeStart, chapterOrder, tree } = input;
-  // ponytail: 每类型一次列表查询（限 `MAX_ENTITY_LIST_LIMIT`，与 tools 的「全量」同款）；快照预算远小于该上限，够用。
-  // 刻度：单类型实体数超过该上限的大书会让 `snapshotKnownNames` 不再真「全集」——到那时再给 db 加无上限 / 分页读取。
-  const characters = listEntities(project.db, { type: "character", limit: MAX_ENTITY_LIST_LIMIT }).items
+  // 实体**分页取全**（`listAllLiveEntities`，与 S3 同名复用同一实现）：实体列表每页上限
+  // `MAX_ENTITY_LIST_LIMIT`，早先按「单类型 ≤ 一页够用」这个刻度读首页——尺度失效点很明确：
+  // 一旦某类型实体超过一页，`snapshotKnownNames` 就不再是全集，超出的名字每轮被当成幻觉，
+  // 连带把引用它的关系整条丢掉（§4.1 / §9 不变式 13）。故该刻度被移除：取全，不按页猜。
+  // 关系无此问题：`listRelations` 不分页、单查询返回全部可见关系（不得为它另加 limit）。
+  const characters = listAllLiveEntities(project.db, "character")
     .map((item) => ({ name: item.name, role: typeof item.summary.role === "string" ? item.summary.role : "" }))
     .sort((a, b) => roleRank(a.role) - roleRank(b.role)); // 稳定排序：同权重保持查询顺序
-  const settingsAndLocations = [
-    ...listEntities(project.db, { type: "setting", limit: MAX_ENTITY_LIST_LIMIT }).items,
-    ...listEntities(project.db, { type: "location", limit: MAX_ENTITY_LIST_LIMIT }).items,
-  ].map((item) => item.name);
+  const settings = listAllLiveEntities(project.db, "setting").map((item) => item.name);
+  const locations = listAllLiveEntities(project.db, "location").map((item) => item.name);
   const relations = listRelations(project.db, {}, 1, project.root).relations.map(
     (relation) =>
       `${relation.sourceName ?? relation.sourceId}→${relation.targetName ?? relation.targetId}（${relation.relationType}）`,
@@ -171,7 +173,7 @@ export function readStartSnapshot(input: {
       const summary = findOutlineNode(tree, entry.chapterId)?.summary?.trim();
       return summary === undefined || summary === "" ? [] : [{ chapterNumber: entry.chapterNumber, summary }];
     });
-  return { characters, settingsAndLocations, relations, prevSummaries };
+  return { characters, settings, locations, relations, prevSummaries };
 }
 
 /** role 排序权重：词表内取下标，其余（含空串）排最后 */
@@ -188,13 +190,20 @@ function roleRank(role: string): number {
  * 连带把它的关系整条丢掉——名字数组与渲染文本是两套东西，不得合并。
  */
 export function snapshotKnownNames(start: DecomposeStartSnapshot, bible: StoryBible): string[] {
-  return [...start.characters.map((character) => character.name), ...start.settingsAndLocations, ...bible.names];
+  return [
+    ...start.characters.map((character) => character.name),
+    ...start.settings,
+    ...start.locations,
+    ...bible.names,
+  ];
 }
 
 /**
  * 快照块：`items` 顺序 = 保留顺序（尾部先丢）；被丢条目换成一行**显式告知**（§4.1 禁止静默截断）。
  */
 interface SnapshotBlock {
+  /** 块身份（`snapshotComposition` 按它取当轮规模，不靠数组下标） */
+  key: "names" | "summaries" | "relations" | "places";
   /** 单行前缀（摘要块为空：该项自带标签） */
   prefix: string;
   /** 项分隔符 */
@@ -211,9 +220,12 @@ interface SnapshotBlock {
  * （同在摘要块；预算紧时先丢离本轮最远的上下文）。
  */
 function snapshotBlocks(start: DecomposeStartSnapshot, bible: StoryBible): SnapshotBlock[] {
-  const rendered = new Set([...start.characters.map((character) => character.name), ...start.settingsAndLocations].map(normalizeEntityName));
+  const rendered = new Set(
+    [...start.characters.map((character) => character.name), ...start.settings, ...start.locations].map(normalizeEntityName),
+  );
   return [
     {
+      key: "names",
       prefix: "名字：",
       separator: "、",
       dropLabel: "名字",
@@ -226,6 +238,7 @@ function snapshotBlocks(start: DecomposeStartSnapshot, bible: StoryBible): Snaps
       ],
     },
     {
+      key: "summaries",
       prefix: "",
       separator: "\n",
       dropLabel: "摘要",
@@ -235,12 +248,13 @@ function snapshotBlocks(start: DecomposeStartSnapshot, bible: StoryBible): Snaps
       ],
     },
     {
+      key: "relations",
       prefix: "已有关系：",
       separator: "、",
       dropLabel: "关系",
       items: [...new Set([...start.relations, ...bible.relations])],
     },
-    { prefix: "设定 / 地点：", separator: "、", dropLabel: "设定 / 地点名", items: start.settingsAndLocations },
+    { key: "places", prefix: "设定 / 地点：", separator: "、", dropLabel: "设定 / 地点名", items: [...start.settings, ...start.locations] },
   ];
 }
 
@@ -251,6 +265,11 @@ function snapshotBlocks(start: DecomposeStartSnapshot, bible: StoryBible): Snaps
  */
 export function snapshotText(start: DecomposeStartSnapshot, bible: StoryBible): string {
   const blocks = snapshotBlocks(start, bible);
+  return renderSnapshot(blocks, fitSnapshot(blocks));
+}
+
+/** 预算裁剪：返回各块保留数（尾部先丢；块顺序 = `snapshotBlocks` 定义顺序） */
+function fitSnapshot(blocks: readonly SnapshotBlock[]): number[] {
   const keep = blocks.map((block) => block.items.length);
   let text = renderSnapshot(blocks, keep);
   for (let index = blocks.length - 1; index >= 0 && text.length > DECOMPOSE_SNAPSHOT_MAX_CHARS; index--) {
@@ -259,7 +278,48 @@ export function snapshotText(start: DecomposeStartSnapshot, bible: StoryBible): 
       text = renderSnapshot(blocks, keep);
     }
   }
-  return text;
+  return keep;
+}
+
+/** 快照组成（§8 拆解记录时间线：条目只报计数与省略告知，不塞全文） */
+export interface SnapshotComposition {
+  /** 起始快照（job 开始时读库一次）各块计数 = 条目文案的「人物 N / 设定 N / 地点 N / 关系 N / 前置摘要 N 条」 */
+  start: { characters: number; settings: number; locations: number; relations: number; prevSummaries: number };
+  /** 当轮快照规模（起始快照 + 本轮累积；= 提示词里实际渲染的那份的条数） */
+  merged: { names: number; relations: number };
+  /** 预算丢弃告知（与渲染同源；空数组 = 没丢） */
+  omitted: string[];
+}
+
+/**
+ * 快照组成**与 `snapshotText` 共用同一份分块 + 预算**（`fitSnapshot`）——所以条目里的「已省略」
+ * 与提示词里模型看到的告知逐字一致；两处各算一遍必然漂移（数值单源）。
+ */
+export function snapshotComposition(start: DecomposeStartSnapshot, bible: StoryBible): SnapshotComposition {
+  const blocks = snapshotBlocks(start, bible);
+  const keep = fitSnapshot(blocks);
+  const itemsOf = (key: SnapshotBlock["key"]): number => blocks.find((block) => block.key === key)?.items.length ?? 0;
+  return {
+    start: {
+      characters: start.characters.length,
+      settings: start.settings.length,
+      locations: start.locations.length,
+      relations: start.relations.length,
+      prevSummaries: start.prevSummaries.length,
+    },
+    merged: { names: itemsOf("names"), relations: itemsOf("relations") },
+    omitted: blocks.flatMap((block, index) => {
+      const dropped = block.items.length - keep[index];
+      return dropped === 0 ? [] : [`${dropped} 个${block.dropLabel}`];
+    }),
+  };
+}
+
+/** 快照组成条目文案（§8；调用方不拼字符串，避免两处各写一份格式） */
+function snapshotLogText(composition: SnapshotComposition): string {
+  const { characters, settings, locations, relations, prevSummaries } = composition.start;
+  const head = `快照：人物 ${characters} / 设定 ${settings} / 地点 ${locations} / 关系 ${relations} / 前置摘要 ${prevSummaries} 条`;
+  return composition.omitted.length === 0 ? head : `${head}（已省略 ${composition.omitted.join("、")}）`;
 }
 
 /** 渲染快照（`keep[index]` = 保留块 index 的前 N 项；被丢条目换成一行告知文案） */
@@ -326,6 +386,8 @@ interface BatchRunInput {
   chapters: readonly BatchChapter[];
   /** 项目数据快照文本（起始快照 + 本轮累积；受 `DECOMPOSE_SNAPSHOT_MAX_CHARS` 约束） */
   snapshotText: string;
+  /** 当轮快照规模（§8 批开始条目的「名字 N / 关系 M」；与 `snapshotText` 同源，不塞全文） */
+  snapshotSize: string;
   /** 关系端点校验的候选名字全集（**未受预算裁剪**，见 `snapshotKnownNames`） */
   knownNames: readonly string[];
   /** 本 job 的拆解会话（S2 各批 + S3 归并 + S4 报告同写这一枚） */
@@ -343,7 +405,7 @@ async function runBatch(input: BatchRunInput): Promise<BatchOutcome> {
   input.session.log({
     kind: "batch_start",
     batchSeq: input.batch.seq,
-    text: `批 ${input.batch.seq} 开始（${input.chapters.length} 章）`,
+    text: `批 ${input.batch.seq} 开始（${input.chapters.length} 章；快照 ${input.snapshotSize}）`,
   });
   for (let attempt = 1; attempt <= DECOMPOSE_BATCH_MAX_ATTEMPTS; attempt++) {
     if (input.signal.aborted) return { result: null, failed: false };
@@ -446,24 +508,28 @@ async function executeRun(input: ExecuteRunInput): Promise<void> {
       .filter((batch) => batch.status === "done" && batch.seq !== input.rerunSeq)
       .map((batch) => batch.seq),
   ).reduce(extendStoryBible, emptyStoryBible());
+  // 快照组成条目（§8）：一轮一条，报本次读库的规模与预算省略（不塞全文；模型看不到这行）
+  session.log({ kind: "snapshot", text: snapshotLogText(snapshotComposition(startSnapshot, bible)) });
 
   let executed = 0;
   let failed = 0;
   for (let start = 0; start < pending.length && !signal.aborted; start += DECOMPOSE_CONCURRENCY) {
     const outcomes = await Promise.all(
-      pending.slice(start, start + DECOMPOSE_CONCURRENCY).map((batch) =>
-        runBatch({
+      pending.slice(start, start + DECOMPOSE_CONCURRENCY).map((batch) => {
+        const composition = snapshotComposition(startSnapshot, bible); // 每批重算：本轮累积随批增长
+        return runBatch({
           project,
           jobId: job.id,
           batch,
           chapters: batchChapters(project, batch, tree, chapterNumberById),
           // 提示词受预算裁剪，校验用全集不裁（两套东西，见 `snapshotKnownNames`）
           snapshotText: snapshotText(startSnapshot, bible),
+          snapshotSize: `名字 ${composition.merged.names} / 关系 ${composition.merged.relations}`,
           knownNames: snapshotKnownNames(startSnapshot, bible),
           session,
           signal,
-        }),
-      ),
+        });
+      }),
     );
     for (const outcome of outcomes) {
       executed++;
