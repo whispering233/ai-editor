@@ -16,6 +16,7 @@ import type {
   DeltaRecord,
   DecomposeAnalyzeRes,
   DecomposeBatchRes,
+  DecomposeJobLogRes,
   DecomposeJobRes,
   DecomposeStartRes,
   EntitySummary,
@@ -1292,6 +1293,11 @@ export function getDecomposeJob(signal?: AbortSignal): Promise<DecomposeJobRes> 
 /** GET /api/v1/decompose/job/batches/:seq（展开行按需拉取；未完成 → `result: null`） */
 export function getDecomposeBatch(seq: number, signal?: AbortSignal): Promise<DecomposeBatchRes> {
   return apiFetch<DecomposeBatchRes>(`/decompose/job/batches/${seq}`, { signal });
+}
+
+/** GET /api/v1/decompose/job/log（拆解记录时间线；会话被删 → `entries: []`，无 job → 404） */
+export function getDecomposeJobLog(signal?: AbortSignal): Promise<DecomposeJobLogRes> {
+  return apiFetch<DecomposeJobLogRes>("/decompose/job/log", { signal });
 }
 
 /** POST /api/v1/decompose/job/pause 响应（形状同 shared `decomposePauseResSchema`） */

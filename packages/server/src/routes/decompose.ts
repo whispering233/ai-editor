@@ -16,12 +16,20 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { basename, extname, join } from "node:path";
 import { Hono, type Context } from "hono";
-import type { DecomposeAnalyzeRes, DecomposeBatchRes, DecomposeStartRes } from "@whispering233/ai-editor-shared";
+import type {
+  DecomposeAnalyzeRes,
+  DecomposeBatchRes,
+  DecomposeJobLogRes,
+  DecomposeStartRes,
+} from "@whispering233/ai-editor-shared";
 import {
   decomposeAnalyzeQuerySchema,
   decomposeBatchResultSchema,
+  decomposeJobLogResSchema,
+  decomposeLogEntrySchema,
   decomposeStartQuerySchema,
 } from "@whispering233/ai-editor-shared/schemas";
+import { readProjectSession, type SessionEntry } from "@whispering233/ai-editor-agent";
 import { getDecomposeBatch, getDecomposeJob, nowIso, setJobError, updateJobStatus } from "@whispering233/ai-editor-db";
 import { HttpError, ok } from "../middleware/error.js";
 import { getModelRuntime, getSettingsManager, resolveActiveSelection } from "../model-runtime.js";
@@ -37,6 +45,7 @@ import { BOOKS_DIR_NAME, getProjectRoot, resolveProjectDir } from "./project.js"
 import { planBatches } from "../decompose/batching.js";
 import { buildJobResponse, ingestDecomposeProject } from "../decompose/job.js";
 import { pauseDecomposeJob, startDecomposeJob, type DecomposeRunnerDeps } from "../decompose/runner.js";
+import { DECOMPOSE_LOG_CUSTOM_TYPE, decomposeSessionId } from "../decompose/llm.js";
 import { splitNovelWithSlices, type SplitChapter } from "../decompose/split.js";
 
 /** 上传体积上限（原始字节；超限 400 DECOMPOSE_FILE_TOO_LARGE）。analyze 与 start 共用——同文件。 */
@@ -305,6 +314,23 @@ export function createDecomposeRoutes(deps: DecomposeRouteDeps = {}): Hono {
     );
   });
 
+  // GET /api/v1/decompose/job/log —— 拆解过程时间线（读拆解会话里的 custom 过程条目）
+  routes.get("/job/log", async (c) => {
+    const project = requireCurrentProject();
+    const job = getDecomposeJob(project.db);
+    if (job === null) {
+      throw new HttpError(404, "DECOMPOSE_JOB_NOT_FOUND", "当前项目没有拆解任务");
+    }
+    // 会话定位按**会话 id**（经 pi 的磁盘发现 + id 命中）——pi 落盘文件名带时间戳前缀，不得按文件名 glob；
+    // 会话文件被用户删掉 / 尚未落盘 ⇒ entries: []（契约：job 还在就回 200，不回 404）
+    const sessionId = decomposeSessionId(job.id);
+    const opened = await readProjectSession(project.root, sessionId);
+    return jobLogResponse(c, {
+      sessionId,
+      entries: opened === null ? [] : projectLogEntries(opened.entries),
+    });
+  });
+
   // POST /api/v1/decompose/job/pause —— 中止当前 job（当前批跑完即停，结果不浪费）
   routes.post("/job/pause", (c) => {
     const project = requireCurrentProject();
@@ -371,6 +397,43 @@ export function createDecomposeRoutes(deps: DecomposeRouteDeps = {}): Hono {
   });
 
   return routes;
+}
+
+/**
+ * 过程条目投影（§8 时间线）：**只**取 `customType = decompose` 的 custom 条目——同一文件里还有
+ * message / model_change / session_info 以及别的扩展写的 custom 条目，一律不进响应（原文与模型产出
+ * 因此不可能泄漏到时间线里）。形状不符的条目跳过（同 batches 路由的形状守卫口径：脏数据不发客户端），
+ * `at` 缺 / 坏则回退条目自身的时间戳。顺序 = 文件顺序。
+ */
+function projectLogEntries(entries: readonly SessionEntry[]): DecomposeJobLogRes["entries"] {
+  const projected: DecomposeJobLogRes["entries"] = [];
+  for (const entry of entries) {
+    if (entry.type !== "custom" || entry.customType !== DECOMPOSE_LOG_CUSTOM_TYPE) continue;
+    const data =
+      typeof entry.data === "object" && entry.data !== null ? (entry.data as Record<string, unknown>) : {};
+    const parsed = decomposeLogEntrySchema.safeParse({
+      id: entry.id,
+      at: typeof data.at === "string" ? data.at : entry.timestamp,
+      kind: data.kind,
+      text: data.text,
+      batchSeq: data.batchSeq,
+    });
+    if (parsed.success) projected.push(parsed.data);
+  }
+  return projected;
+}
+
+/** 响应自检出口（参照 chat.ts sessionsResponse）：parse 失败 = 500 INTERNAL_ERROR（不让 ZodError 冒泡成 400） */
+function jobLogResponse(c: Context, payload: DecomposeJobLogRes): Response {
+  try {
+    return c.json(ok(decomposeJobLogResSchema.parse(payload)));
+  } catch (err) {
+    throw new HttpError(
+      500,
+      "INTERNAL_ERROR",
+      `拆解记录响应不符合契约: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 }
 
 /** 拆解路由（挂载于 /api/v1/decompose，index.ts）；测试用 `createDecomposeRoutes(deps)` 注入运行时 */

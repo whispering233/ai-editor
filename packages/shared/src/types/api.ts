@@ -1278,6 +1278,26 @@ export const decomposeBatchResSchema = z.object({
 });
 export type DecomposeBatchRes = z.infer<typeof decomposeBatchResSchema>;
 
+// ── 拆解过程条目（GET /api/v1/decompose/job/log；docs/design/60-decompose.md §8 时间线） ──
+// `text` = 服务端渲染好的**单行**中文文案（客户端直接展示，不解析、不拼接）；`kind` 是条目类别标签
+// （值集 = server `decompose/llm.ts` 的 `DECOMPOSE_LOG_KINDS`，client 只展示不映射 ⇒ 此处收成 string）。
+// 只记批表里没有的信息——批状态与批结果走 `GET /decompose/job` + `/job/batches/:seq`，不在此重复。
+export const decomposeLogEntrySchema = z.object({
+  id: z.string(), // 会话文件里的 entry id
+  at: z.string(), // ISO 8601（条目落盘时刻）
+  kind: z.string(),
+  text: z.string(),
+  batchSeq: z.number().int().min(1).optional(), // 批相关条目（归并 / 报告条目不带）
+});
+export type DecomposeLogEntry = z.infer<typeof decomposeLogEntrySchema>;
+
+// GET /api/v1/decompose/job/log（Res: 200；**会话记录被删除时 entries 为空数组**，不回 404）
+export const decomposeJobLogResSchema = z.object({
+  sessionId: z.string(), // decompose-<jobId>（服务端组装）
+  entries: z.array(decomposeLogEntrySchema), // 顺序 = 会话文件顺序
+});
+export type DecomposeJobLogRes = z.infer<typeof decomposeJobLogResSchema>;
+
 // POST /api/v1/decompose/job/pause（409 DECOMPOSE_JOB_STATE：已 done / 已 paused / 已 failed）
 export const decomposePauseResSchema = z.object({ status: z.literal("paused") });
 

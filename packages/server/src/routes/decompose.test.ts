@@ -11,11 +11,12 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
 import { fauxAssistantMessage, fauxProvider, InMemoryCredentialStore } from "@earendil-works/pi-ai";
-import { ModelRuntime, SettingsManager } from "@earendil-works/pi-coding-agent";
+import { ModelRuntime, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
 import type {
   DecomposeAnalyzeRes,
   DecomposeBatchRes,
   DecomposeBatchResult,
+  DecomposeJobLogRes,
   DecomposeJobRes,
   DecomposeStartRes,
   OutlineFileVolume,
@@ -32,6 +33,7 @@ import {
   readProjectFile,
   updateJobStatus,
 } from "@whispering233/ai-editor-db";
+import { projectSessionsDir } from "@whispering233/ai-editor-agent";
 import { errorHandler } from "../middleware/error.js";
 import {
   closeProject,
@@ -44,6 +46,7 @@ import {
 import { readLastProject } from "../last-project.js";
 import { DECOMPOSE_BATCH_TARGET_CHARS } from "../decompose/batching.js";
 import { ingestDecomposeProject } from "../decompose/job.js";
+import { DECOMPOSE_LOG_CUSTOM_TYPE, decomposeSessionId } from "../decompose/llm.js";
 import { splitNovelWithSlices } from "../decompose/split.js";
 import { setProjectRoot } from "./project.js";
 import { resetModelRuntime } from "../model-runtime.js";
@@ -703,5 +706,94 @@ describe("GET /decompose/job/batches/:seq（单批结果）", () => {
     const data = await batchData(app, "1");
     expect(data.result).toBeNull(); // 不透出脏数据
     expect(data.status).toBe("done"); // 状态照常（只是结果不可信）
+  });
+});
+
+// ============ 卡 22.4：GET /api/v1/decompose/job/log（拆解记录时间线） ============
+//
+// 覆盖：只投影 `customType = decompose` 的 custom 条目（message / model_change / session_info /
+// 别的扩展的 custom 条目一律滤掉 ⇒ 原文与模型产出不可能泄漏）、顺序 = 文件顺序 /
+// job 在但会话文件被删 → 200 空数组（不回 404）/ 无 job → 404 DECOMPOSE_JOB_NOT_FOUND。
+
+/** 过程条目（时间线唯一写入方 = server `decompose/llm.ts` 的 `log()`，形状与它逐字同源） */
+interface SeededLog {
+  kind: string;
+  text: string;
+  batchSeq?: number;
+}
+
+/**
+ * 落一枚真拆解会话文件（会话 id = `decompose-<jobId>`，与 llm.ts 同一组装函数）并写入条目。
+ * pi 只在文件里出现 assistant 消息后才落盘（`SessionManager._persist`）⇒ 夹具补一轮问答。
+ * 同时混入非 decompose 条目（其它 customType / 原文消息 / 元数据），供「滤除」断言用。
+ */
+function seedDecomposeSession(projectRoot: string, jobId: string, logs: readonly SeededLog[]): string {
+  const sessionId = decomposeSessionId(jobId);
+  const manager = SessionManager.create(projectRoot, projectSessionsDir(projectRoot), { id: sessionId });
+  manager.appendSessionInfo("《时间线》拆解");
+  for (const log of logs) {
+    manager.appendCustomEntry(DECOMPOSE_LOG_CUSTOM_TYPE, { ...log, at: new Date().toISOString() });
+  }
+  manager.appendCustomEntry("other-extension", { kind: "other", text: "别的扩展写的条目" });
+  manager.appendMessage({
+    role: "user",
+    content: [{ type: "text", text: "批 1 正文原文：绝不外泄标记" }],
+    timestamp: Date.now(),
+  });
+  manager.appendMessage(fauxAssistantMessage("绝密摘要标记"));
+  return sessionId;
+}
+
+async function logData(app: Hono): Promise<DecomposeJobLogRes> {
+  const res = await app.request("/api/v1/decompose/job/log", { headers: HOST_HEADERS });
+  expect(res.status).toBe(200);
+  return (await res.json()).data as DecomposeJobLogRes;
+}
+
+describe("GET /decompose/job/log（拆解记录时间线）", () => {
+  it("只投影 customType=decompose 的条目（顺序 = 文件顺序）；原文 / 批产出 / 别的扩展条目都不进响应", async () => {
+    const app = buildApp(await runtimeWithCost(0.5, 1.5));
+    const jobId = ingestProject("时间线");
+    const project = getCurrentProject()!;
+    const sessionId = seedDecomposeSession(project.root, jobId, [
+      { kind: "batch_start", batchSeq: 1, text: "批 1 开始（3 章）" },
+      { kind: "attempt_failed", batchSeq: 1, text: "批 1 第 1 次尝试失败：模型输出缺章 2" },
+      { kind: "merge_done", text: "归并完成：实体 12 / 关系 3" },
+    ]);
+
+    const data = await logData(app);
+
+    expect(data.sessionId).toBe(sessionId);
+    expect(data.sessionId).toBe(decomposeSessionId(jobId));
+    expect(data.entries.map((entry) => [entry.kind, entry.text, entry.batchSeq])).toEqual([
+      ["batch_start", "批 1 开始（3 章）", 1],
+      ["attempt_failed", "批 1 第 1 次尝试失败：模型输出缺章 2", 1],
+      ["merge_done", "归并完成：实体 12 / 关系 3", undefined],
+    ]);
+    expect(data.entries.every((entry) => !Number.isNaN(Date.parse(entry.at)))).toBe(true);
+    expect(data.entries.every((entry) => entry.id !== "")).toBe(true);
+
+    const raw = JSON.stringify(data);
+    expect(raw).not.toContain("绝不外泄标记"); // 原文消息（user）不进响应
+    expect(raw).not.toContain("绝密摘要标记"); // 批结果正文（assistant）不进响应
+    expect(raw).not.toContain("别的扩展写的条目"); // 其它 customType 被滤掉
+    expect(raw).not.toContain("《时间线》拆解"); // session_info / model_change 等元数据条目不进响应
+  });
+
+  it("拆解会话文件不存在（尚未落盘 / 被用户删掉）→ 200 + entries: []（不回 404）", async () => {
+    const app = buildApp(await runtimeWithCost(0.5, 1.5));
+    ingestProject("无会话"); // 直接跑 S1：job 已落库，但没有任何会话文件（没起 S2）
+
+    const data = await logData(app);
+    expect(data.entries).toEqual([]);
+  });
+
+  it("当前项目没有 job → 404 DECOMPOSE_JOB_NOT_FOUND", async () => {
+    const app = buildApp(await runtimeWithCost(0.5, 1.5));
+    setCurrentProject(initProject(bookDir("无 job"), { name: "无 job" }));
+
+    const res = await app.request("/api/v1/decompose/job/log", { headers: HOST_HEADERS });
+    expect(res.status).toBe(404);
+    expect((await res.json()).error.code).toBe("DECOMPOSE_JOB_NOT_FOUND");
   });
 });

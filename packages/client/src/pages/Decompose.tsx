@@ -2,7 +2,7 @@
 //
 // 契约：docs/ui/DESIGN.md §拆解小说（进度页结构 / **页头常驻**模板 / 阶段条 5 段 / antd Progress
 // 无组件级 token 覆盖 / 批次列表可展开 / 失败批行内错误 / done 批重跑二次确认 / 完成总结卡）+
-// docs/api/120-api-decompose.md §job / §batches / §pause / §resume / §rerun。
+// docs/api/120-api-decompose.md §job / §batches / §log / §pause / §resume / §rerun。
 //
 // 四态渲染点（同一份 job 投影，状态文案见 `lib/decompose.ts` 的 `describeJobStatus`）：
 // - `pending` / `running`：阶段条 + 进度条 + 批列表；页头操作 = 中止
@@ -12,10 +12,12 @@
 //   的核心能力，done 批重跑仍走二次确认），**不自动跳转**
 //
 // 数据：job / 批结果走 `hooks/use-decompose-job.ts`（轮询）+ `GET /decompose/job/batches/:seq`（展开按需）；
+// 拆解记录时间线走 `GET /decompose/job/log`（**复用同一轮询的节拍**：jobId / 阶段 / 已完成批数变化时拉一次）；
 // 完成总结计数 = 库内当前计数（同概览页「创作要素」口径，不解析报告正文）。
 import { useEffect, useState } from "react";
-import type { DecomposeBatchResult, EntityType } from "@whispering233/ai-editor-shared";
+import type { DecomposeBatchResult, DecomposeJobLogRes, EntityType } from "@whispering233/ai-editor-shared";
 import { Button, Progress, Typography } from "antd";
+import { DecomposeLogSection } from "@/components/decompose/decompose-log";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -32,6 +34,7 @@ import {
   ApiError,
   CLIENT_NETWORK_ERROR,
   getDecomposeBatch,
+  getDecomposeJobLog,
   getSettingsLlm,
   listEntities,
   listRelations,
@@ -87,6 +90,17 @@ export default function Decompose() {
   const [confirmRerunSeq, setConfirmRerunSeq] = useState<number | null>(null);
   /** 完成总结计数（仅 done 态拉取；null 字段渲染「–」而不是 0） */
   const [counts, setCounts] = useState<CompletionCounts | null>(null);
+  /** 拆解记录（过程条目）：null = 尚未取到 / 当前项目没有 job */
+  const [logEntries, setLogEntries] = useState<DecomposeJobLogRes["entries"] | null>(null);
+  const [logError, setLogError] = useState<string | null>(null);
+  /** 时间线展开态（缺省收起） */
+  const [logExpanded, setLogExpanded] = useState(false);
+
+  /**
+   * 时间线拉取键：jobId + 阶段 + 已完成批数。**复用 job 轮询的节拍**（不新增定时器）——
+   * 进页时 job 一到就拉一次；阶段推进 / 每批收口时再拉；终态后 job 不再变 ⇒ 不再重拉。
+   */
+  const logKey = job === null ? null : `${job.jobId}|${job.stage}|${job.progress.done}`;
 
   const hasJob = job !== null;
   const status = job?.status ?? null;
@@ -142,6 +156,37 @@ export default function Decompose() {
       cancelled = true;
     };
   }, [status]);
+
+  // 拆解记录时间线（失败只降级成本区的一行错误，不把整页交给 ErrorBoundary）
+  useEffect(() => {
+    if (logKey === null) {
+      setLogEntries(null);
+      setLogError(null);
+      return;
+    }
+    let cancelled = false;
+    const controller = new AbortController();
+    getDecomposeJobLog(controller.signal)
+      .then((res) => {
+        if (cancelled) return;
+        setLogEntries(res.entries);
+        setLogError(null);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setLogEntries(null);
+        setLogError(
+          describeDecomposeError(
+            err instanceof ApiError ? err.code : CLIENT_NETWORK_ERROR,
+            err instanceof Error ? err.message : "",
+          ),
+        );
+      });
+    return () => {
+      cancelled = true;
+      controller.abort(); // 离开页面 / 键变化：中止在途请求（同轮询口径）
+    };
+  }, [logKey]);
 
   /** 中止 / 续拆：成功后立即重拉（轮询重启）；失败走 toast（页面此时没有行内错误位） */
   async function runJobAction(action: "pause" | "resume") {
@@ -301,10 +346,28 @@ export default function Decompose() {
         <>
           {renderSummary(job.report)}
           {renderBatchList(job)}
+          {renderLog()}
         </>
       );
     }
-    return renderProgress(job);
+    return (
+      <>
+        {renderProgress(job)}
+        {renderLog()}
+      </>
+    );
+  }
+
+  /** 拆解记录时间线（任何 job 状态都渲染：过程条目是核查「为何失败 / 花了多少」的唯一去处） */
+  function renderLog() {
+    return (
+      <DecomposeLogSection
+        entries={logEntries ?? []}
+        expanded={logExpanded}
+        onToggle={() => setLogExpanded((open) => !open)}
+        error={logError}
+      />
+    );
   }
 
   /** 完成总结卡（不自动跳转——用户自己决定去看报告还是大纲） */

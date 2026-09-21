@@ -22,6 +22,7 @@ import {
   getDeltasByNode,
   getDecomposeBatch,
   getDecomposeJob,
+  getDecomposeJobLog,
   getEntityDetail,
   getOutlinePath,
   getProjectBackups,
@@ -1470,6 +1471,18 @@ describe("拆解进度面端点", () => {
     const res = await getDecomposeBatch(3);
     expect(calls[0].url).toBe("/api/v1/decompose/job/batches/3");
     expect(res.result).toBeNull();
+  });
+
+  it("getDecomposeJobLog：GET /decompose/job/log；signal 透传（条目空数组 = 会话记录已删）", async () => {
+    const calls = mockFetchOnce({
+      body: { success: true, data: { sessionId: "decompose-job-1", entries: [] } },
+    });
+    const controller = new AbortController();
+    const res = await getDecomposeJobLog(controller.signal);
+    expect(calls[0].url).toBe("/api/v1/decompose/job/log");
+    expect(calls[0].init?.method).toBe("GET");
+    expect(calls[0].init?.signal).toBe(controller.signal);
+    expect(res.entries).toEqual([]);
   });
 
   it("pause / resume / rerun：POST 到各自路径，无请求体", async () => {
