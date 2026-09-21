@@ -34,11 +34,12 @@ import {
   writeProjectFile,
   SCHEMA_VERSION,
 } from "@whispering233/ai-editor-db";
-import type { ProjectFileConfig } from "@whispering233/ai-editor-shared";
+import { formatBackupFileName, generateProjectId, type ProjectFileConfig } from "@whispering233/ai-editor-shared";
 import { initCloudState, readBookState } from "./state.js";
 import { pushBackup } from "./sync.js";
-import { BACKUPS_DIR_NAME } from "../backup.js";
+import { BACKUPS_DIR_NAME, createBackupZip } from "../backup.js";
 import type { ProjectContext } from "../middleware/project.js";
+import { setProjectRoot } from "../routes/project.js";
 import { createWebdavClient } from "./webdav.js";
 
 const HOST_HEADERS = { host: "127.0.0.1:3456" };
@@ -232,6 +233,7 @@ afterEach(async () => {
     dav = null;
   }
   initCloudState(null);
+  setProjectRoot(null); // 创作根是模块级状态（用例内注入，用后复位）
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -502,6 +504,76 @@ describe("pushBackup × 真 HTTP 服务", () => {
     expect(forced.snapshot?.fileName).toBe(otherName);
     // 云端旧份原样存进本地 .backups/（两边都留档）
     expect(readFileSync(join(backupDir, otherName), "utf8")).toBe("CLOUD-FROM-OTHER-MACHINE");
+
+    closeDatabase(project.db);
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("云端书架端点 × 真 HTTP 服务（列 + 导入新书，中文目录名百分号编码往返）", () => {
+  it("GET /cloud/remote-books 列目录 → POST /cloud/import-book 落地新书（zip 逐字节一致 + 同步状态）", async () => {
+    dav = await startFakeDav(root);
+    await configure(dav.url);
+    setProjectRoot(root); // 生产由 startServer 注入（`localExists` / 新书目录都基于它）
+    const { project, dir } = makeProjectFixture(generateProjectId(), "斗破苍穹");
+    const backupName = formatBackupFileName(new Date("2026-08-01T10:00:00Z"), {
+      kind: "manual",
+      device: "苹果本",
+      stats: { characters: 32, settings: 58, chapters: 120 },
+    });
+    // 云端预置：一本中文书名目录 + 一份真备份 zip（模拟另一台机器推上去的那份）
+    const cloudBookDir = join(root, "dav", "ai-editor", `斗破苍穹-${project.config.id}`);
+    mkdirSync(cloudBookDir, { recursive: true });
+    const zip = createBackupZip(project);
+    writeFileSync(join(cloudBookDir, backupName), zip);
+
+    const listed = await app.request("/api/v1/cloud/remote-books");
+    expect(listed.status).toBe(200);
+    const books = ((await listed.json()) as { data: { books: Array<Record<string, unknown>> } }).data.books;
+    expect(books).toEqual([
+      {
+        dirName: `斗破苍穹-${project.config.id}`,
+        name: "斗破苍穹",
+        projectId: project.config.id,
+        localExists: false, // 这本书还没在本机书架（zip 来源目录不在 books/ 下）
+        backups: [
+          {
+            fileName: backupName,
+            createdAt: new Date("2026-08-01T10:00:00Z").toISOString(),
+            kind: "manual",
+            device: "苹果本",
+            stats: { characters: 32, settings: 58, chapters: 120 },
+            size: zip.length,
+          },
+        ],
+      },
+    ]);
+
+    const imported = await app.request("/api/v1/cloud/import-book", {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ dirName: `斗破苍穹-${project.config.id}` }),
+    });
+    expect(imported.status).toBe(200);
+    const bookDir = join(root, "books", "斗破苍穹");
+    expect(((await imported.json()) as { data: unknown }).data).toEqual({
+      imported: true,
+      id: project.config.id,
+      path: bookDir,
+      name: "斗破苍穹",
+      fileName: backupName,
+      size: zip.length,
+    });
+    // 新书三文件 + 那份 zip 原样落 .backups/（逐字节一致）；云端那份不动
+    expect(readProjectFile(bookDir)?.id).toBe(project.config.id);
+    expect(readFileSync(join(bookDir, BACKUPS_DIR_NAME, backupName)).equals(Buffer.from(zip))).toBe(true);
+    expect(existsSync(join(cloudBookDir, backupName))).toBe(true);
+    expect(readBookState(project.config.id)).toMatchObject({
+      dirName: `斗破苍穹-${project.config.id}`,
+      lastPushedFileName: backupName,
+      lastSeenHeadFileName: backupName,
+      lastSeenCloudFiles: [backupName],
+    });
 
     closeDatabase(project.db);
     rmSync(dir, { recursive: true, force: true });

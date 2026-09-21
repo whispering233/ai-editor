@@ -373,8 +373,12 @@ const MAX_IMPORT_SIZE = 50 * 1024 * 1024;
 /** 书名为空/非法时的兜底名（后续会被 uniqueBookDir 去重成「导入的书籍 (2)」等） */
 const FALLBACK_IMPORT_NAME = "导入的书籍";
 
-/** 书名合法性（纯判定，不抛）：与 client 同规则——禁路径分隔符/纯点/控制字符 */
-function isBookNameValid(name: string): boolean {
+/**
+ * 书名合法性（纯判定，不抛）：与 client 同规则——禁路径分隔符/纯点/控制字符。
+ * 导出供 `/cloud/import-book` 复用（那份书名有两种来源：云端目录名、包内 project.json——后者
+ * 只经「非空字符串」校验，拼 `books/<书名>/` 前必须过同一道规则，否则可逃出 books/）。
+ */
+export function isBookNameValid(name: string): boolean {
   return name !== "" && !/[\\/]|^\.+$|[\u0000-\u001f]/.test(name);
 }
 
@@ -398,8 +402,9 @@ function validateBookName(name: string): void {
  * 按 project_id 在书架 books/ 下定位书目录（唯一 key = project_id）：
  * 遍历 books/ 下各书目录的 project.json 读 id 比对；无匹配返回 null。
  * 损坏的 project.json 抛错向上传播（与 list/open 语义一致：坏数据不静默吞）。
+ * 导出供 `/cloud/remote-books`（`localExists`）与 `/cloud/import-book`（同 id 拒重复导入）复用。
  */
-function findBookDirById(root: string, id: string): string | null {
+export function findBookDirById(root: string, id: string): string | null {
   const booksDir = join(root, BOOKS_DIR_NAME);
   let entries: Dirent[];
   try {
@@ -422,7 +427,7 @@ function findBookDirById(root: string, id: string): string | null {
  * 返回去重后的目录绝对路径。project.json 内部 name 由调用方同步为去重名
  * （「目录名 = 书名」不变式）。
  */
-function uniqueBookDir(root: string, name: string): string {
+export function uniqueBookDir(root: string, name: string): string {
   const booksDir = join(root, BOOKS_DIR_NAME);
   let candidate = join(booksDir, name);
   for (let n = 2; existsSync(candidate); n++) {

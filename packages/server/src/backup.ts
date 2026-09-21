@@ -225,6 +225,25 @@ export function writeBackup(project: ProjectContext, opts?: { name?: string; kin
 }
 
 /**
+ * 把一份**原始字节**的备份落进某项目目录的 `.backups/`（不重新打包、不改名、不参与保留策略）：
+ * 云端导入路径专用（`POST /cloud/import-book`）——把刚下载的那份 zip 原样落进新书，让新机器立刻有
+ * 一份「最新本地备份」（本地备份链从这份开始，否则 `backupStale` 等本地语义会立刻报「还没备份」，
+ * 见 `docs/design/40-cloud-sync.md` §10 为什么 3）。
+ *
+ * 文件名走备份命名白名单（与 rename/restore 同一道 `assertBackupFileNameFormat`，防路径穿越；
+ * 非法 → 400）；同名文件已存在 → 保留原有那份（不覆盖）；写入走原子写。
+ *
+ * @param projectDir 项目目录（不必是已打开的项目——云端导入的书写入时不带连接）
+ */
+export function writeRawBackupFile(projectDir: string, fileName: string, bytes: Uint8Array): void {
+  assertBackupFileNameFormat(fileName);
+  const backupsDir = join(projectDir, BACKUPS_DIR_NAME);
+  mkdirSync(backupsDir, { recursive: true });
+  const path = join(backupsDir, fileName);
+  if (!existsSync(path)) writeFileAtomic(path, bytes);
+}
+
+/**
  * 升级兜底（卡 A）：`.backups/` 里**有文件但没有任何一份可解析**（旧命名残留形态）→
  * 立即 `writeBackup(project, { kind: "auto" })` 生成一份新格式备份并返回 true；
  * 已有可解析份（或目录为空/不存在）→ 什么都不做，返回 false（**不重复备份**）。

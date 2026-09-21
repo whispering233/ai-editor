@@ -13,6 +13,7 @@ import { CONFLICT_LEVELS } from "../constants/outline.js";
 import { BACKUP_FREQUENCIES } from "../constants/backup.js";
 import { PROJECT_ORIGINS } from "../constants/project.js";
 import type { ComputeStateResult, DeltaRecord, EntitySummary, ProjectAgents, ProjectConfig, RelationRecord } from "./index.js";
+import type { CloudBackupEntry, CloudImportBookResult, CloudRemoteBooksResult } from "./cloud.js";
 
 // ============ 基础 schema ============
 
@@ -1124,6 +1125,53 @@ export const cloudPullReqSchema = z
   })
   .strict();
 export type CloudPullReq = z.infer<typeof cloudPullReqSchema>;
+
+/** 云端一份备份的投影（`GET /cloud/remote-books` 的条目内复用；遍历口径见 server `toCloudBackups`） */
+export const cloudBackupEntrySchema: z.ZodType<CloudBackupEntry> = z.object({
+  fileName: z.string(),
+  createdAt: z.string(),
+  kind: z.enum(["auto", "manual"]),
+  name: z.string().optional(),
+  device: z.string(),
+  stats: z.object({ characters: z.number(), settings: z.number(), chapters: z.number() }),
+  size: z.number(),
+});
+
+// GET /api/v1/cloud/remote-books：列云端工作根下的书目录（不要求项目已打开；工作根不存在 → 空数组）
+// 字段语义：dirName / 解析出的 name 与 projectId（解析不出 → null）/ localExists（本机书架同 id）/ backups
+// （时间倒序，[0] = head；字段与 shared CloudBackupEntry 同形）
+export const cloudRemoteBooksResSchema: z.ZodType<CloudRemoteBooksResult> = z.object({
+  books: z.array(
+    z.object({
+      dirName: z.string(),
+      name: z.string().nullable(),
+      projectId: z.string().nullable(),
+      localExists: z.boolean(),
+      backups: z.array(cloudBackupEntrySchema),
+    }),
+  ),
+});
+
+// POST /api/v1/cloud/import-book：把云端某本书的一份备份导入为本机新书（不自动打开）
+// 请求体字段按契约文档用 camelCase（与 pull/push 的 snake_case 不同）；dirName 须为单段目录名
+// （不含路径分隔符/`..`，服务端校验 → 400）；fileName 缺省 = head，须通过备份命名白名单
+// （服务端校验 → 400）。
+export const cloudImportBookReqSchema = z
+  .object({
+    dirName: z.string(),
+    fileName: z.string().optional(),
+  })
+  .strict();
+export type CloudImportBookReq = z.infer<typeof cloudImportBookReqSchema>;
+
+export const cloudImportBookResSchema: z.ZodType<CloudImportBookResult> = z.object({
+  imported: z.literal(true),
+  id: z.string(),
+  path: z.string(),
+  name: z.string(),
+  fileName: z.string(),
+  size: z.number(),
+});
 
 // ============ decompose 端点（「拆解小说」导入式批量管线） ============
 //

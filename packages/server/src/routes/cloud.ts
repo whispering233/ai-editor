@@ -1,23 +1,37 @@
-// 云端存档路由：GET /status、PUT /config、POST /test（挂载于 /api/v1/cloud）
+// 云端存档路由：GET /status、PUT /config、POST /test、GET /remote-books、POST /import-book（挂载于 /api/v1/cloud）
 //
 // 契约 = `docs/api/100-api-cloud.md`；语义与不变式 = `docs/design/40-cloud-sync.md`。
-// 卡 2 只做**配置段**：账号读写 + 连通性/读写权限测试；云端的列表、推送、拉取在后续卡片，
-// 那时 status 会补上 remote/local/state（现在不填，避免「字段存在但永远为 null」的假契约）。
 //
-// 三个端点均**不要求**项目已打开（设置页需先能配账号；projectId 仅作回显）。
-// 凭据纪律：password 永不进响应——不是脱敏展示，而是根本不回传。
+// 除 push/pull（需当前项目）外均**不要求**项目已打开（设置页需先能配账号；projectId 仅作回显；
+// 新机器恢复时书架还没打开任何书）。凭据纪律：password 永不进响应——不是脱敏展示，而是根本不回传。
 
 import { Hono } from "hono";
-import { cloudConfigPutReqSchema, cloudPullReqSchema, cloudPushReqSchema } from "@whispering233/ai-editor-shared/schemas";
-import type { CloudConfigPutResult, CloudStatus, CloudTestResult } from "@whispering233/ai-editor-shared";
-import { sanitizeDeviceName } from "@whispering233/ai-editor-shared";
+import { mkdirSync, rmSync, statSync } from "node:fs";
+import { join, basename } from "node:path";
+import {
+  cloudConfigPutReqSchema,
+  cloudImportBookReqSchema,
+  cloudPullReqSchema,
+  cloudPushReqSchema,
+  PROJECT_EXPORT_FILE_NAMES,
+} from "@whispering233/ai-editor-shared/schemas";
+import type {
+  CloudConfigPutResult,
+  CloudImportBookResult,
+  CloudRemoteBook,
+  CloudRemoteBooksResult,
+  CloudStatus,
+  CloudTestResult,
+} from "@whispering233/ai-editor-shared";
+import { parseBackupFileName, sanitizeDeviceName } from "@whispering233/ai-editor-shared";
 import { HttpError, ok } from "../middleware/error.js";
 import { getCurrentProject, requireCurrentProject } from "../middleware/project.js";
 import { currentDeviceName } from "../cloud/device.js";
-import { configuredDeviceName, readAutoPush, readBookState, readWebdavConfig, writeCloudConfig } from "../cloud/state.js";
-import { startAutoBackup } from "../backup.js";
+import { configuredDeviceName, readAutoPush, readBookState, readWebdavConfig, writeBookState, writeCloudConfig } from "../cloud/state.js";
+import { startAutoBackup, validateBackupPackage, writeProjectFilesFromBackup, writeRawBackupFile } from "../backup.js";
 import { cloudFileSet, computeCloudSync, findExistingCloudDir, pullBackup, pushBackup, toCloudBackups } from "../cloud/sync.js";
-import { createWebdavClient, type DavEntry } from "../cloud/webdav.js";
+import { CLOUD_WORK_DIR, createWebdavClient, type DavEntry } from "../cloud/webdav.js";
+import { findBookDirById, getProjectRoot, isBookNameValid, uniqueBookDir } from "./project.js";
 
 /** 云端存档路由（挂载于 /api/v1/cloud） */
 export const cloudRoutes = new Hono();
@@ -229,5 +243,172 @@ cloudRoutes.post("/test", async (c) => {
 
   // baseUrl 回显**用户的云盘根**（配置值；工作根 `<根>/ai-editor` 由客户端层拼，不进配置语义）
   const payload: CloudTestResult = { connected: true, baseUrl: webdav.url, created, ...(leftover ? { leftoverWriteTestFile: true } : {}) };
+  return c.json(ok(payload));
+});
+
+// ============ 新机器恢复：列云端书 + 导入为新书（`docs/design/40-cloud-sync.md` §10） ============
+
+/** 未配置云盘时两个端点的统一拒绝（码表：409 CLOUD_NOT_CONFIGURED） */
+function requireWebdavConfig() {
+  const webdav = readWebdavConfig();
+  if (webdav === null) {
+    throw new HttpError(409, "CLOUD_NOT_CONFIGURED", "云盘未配置：请先在设置页填写 WebDAV 地址与用户名/应用密码");
+  }
+  return webdav;
+}
+
+/**
+ * 云端书目录名 → `{ name, projectId }`；解析不出 → null（UI 置灰、不可导入）。
+ *
+ * 三种命名（`docs/api/100-api-cloud.md`）：`<书名>-<projectId>`（默认）、`ai-editor-<projectId>`
+ * （云盘拒长名后的回退）、`<projectId>`（回退链最后一档）。projectId 形状 = `proj-` + 21 位 URL 安全
+ * 字母（shared `generateProjectId`）——按这个形状匹配尾部，不按 `-` 切分（书名与 nanoid 段都可含 `-`）。
+ * 两种回退命名的首段不是真书名 → `name = null`。
+ */
+function parseCloudBookDirName(dirName: string): { name: string | null; projectId: string } | null {
+  const match = /^(?:(.+)-)?(proj-[A-Za-z0-9_-]{21})$/.exec(dirName);
+  if (match === null) return null;
+  const name = match[1] === undefined || match[1] === CLOUD_WORK_DIR ? null : match[1];
+  return { name, projectId: match[2] as string };
+}
+
+/**
+ * 导入完成时的同步基准（写进 `cloud.json` 的 `lastSyncAt`）= `max(now, 刚写下的三文件 mtime 向上取整到毫秒)`。
+ *
+ * 为何不直接 `new Date()`：文件系统 mtime 是**亚毫秒**精度，而 `new Date()` 只到毫秒——同一毫秒内
+ * 写下的文件会被 `hasLocalEditsSince` 的**严格**比较（project.json/outline.json 无容差）读成
+ * 「本机有改动」，于是刚导入完查状态就是 `local-ahead`（实测同毫秒写入下约 1/6 概率）。
+ * 基准不由自己写入的文件决定，才符合「刚导入 = 已同步」的语义。
+ */
+function importSyncBaseline(bookDir: string): string {
+  let baseline = Date.now();
+  for (const name of PROJECT_EXPORT_FILE_NAMES) {
+    try {
+      baseline = Math.max(baseline, Math.ceil(statSync(join(bookDir, name)).mtimeMs));
+    } catch {
+      continue; // 三文件刚写完，stat 失败不改变基准（基准只影响三态判定的灵敏度）
+    }
+  }
+  return new Date(baseline).toISOString();
+}
+
+// GET /api/v1/cloud/remote-books —— 列云端工作根下的全部书目录（不要求项目已打开）
+// 工作根不存在 → 空数组（**GET 不写云盘**：不 MKCOL，用户先配好并在本机推一份）；
+// 每书目录一次 PROPFIND（请求量 = 1 + 书目录数）；无法解析的目录也列出（backups:[] / projectId:null）
+cloudRoutes.get("/remote-books", async (c) => {
+  const webdav = requireWebdavConfig();
+  const client = createWebdavClient(webdav);
+  const rootEntries = await client.list("");
+  if (rootEntries === null) {
+    const empty: CloudRemoteBooksResult = { books: [] };
+    return c.json(ok(empty));
+  }
+  const root = getProjectRoot();
+  const books: CloudRemoteBook[] = [];
+  for (const dir of rootEntries.filter((entry) => entry.isCollection)) {
+    const entries = (await client.list(dir.name)) ?? [];
+    const parsed = parseCloudBookDirName(dir.name);
+    books.push({
+      dirName: dir.name,
+      name: parsed?.name ?? null,
+      projectId: parsed?.projectId ?? null,
+      // 本机已有同 id 的书 → 不可重复导入（UI 置灰并提示去打开同步）
+      localExists: parsed !== null && root !== null && findBookDirById(root, parsed.projectId) !== null,
+      backups: toCloudBackups(entries),
+    });
+  }
+  const payload: CloudRemoteBooksResult = { books };
+  return c.json(ok(payload));
+});
+
+// POST /api/v1/cloud/import-book —— 把云端某本书的一份备份导入为本机新书（不要求项目已打开）
+//
+// 流程：目录/文件存在性（404）→ 下载 → **既有导入校验管道** `validateBackupPackage`
+// （与 `POST /project/import` 同一实现：坏包 400 / 版本 409）→ 本机已有同 id → 409（不静默覆盖：
+// 那本书应在应用内自己同步）→ `uniqueBookDir` 建档（**id 沿用**、name 归一为目录名）→
+// 那份 zip **原样**落新书 `.backups/`（新机器立刻有一份「最新本地备份」）→ 写 `cloud.json` book state
+// （`lastPushedFileName` = 导入的那份 / `lastSeenCloudFiles` = 当时云端集合 / `lastSyncAt` = now）——
+// 不写则新机器一打开就是 `conflict`（云端有份 + 本机无同步记录），刚拉下来就逼用户裁决。**不自动打开**。
+cloudRoutes.post("/import-book", async (c) => {
+  const webdav = requireWebdavConfig();
+  const parsed = cloudImportBookReqSchema.parse(await c.req.json().catch(() => ({})));
+  const root = getProjectRoot();
+  if (root === null) {
+    throw new HttpError(500, "INTERNAL_ERROR", "创作根未初始化（startServer 未调用 setProjectRoot）");
+  }
+  // dirName 进云盘路径拼接，也作书名兜底 → 只接受**单段目录名**（不含路径分隔符与 `..`，
+  // 且通过书名规则：纯点/控制字符同样拒——`books/` 下目标目录名就从它派生）
+  if (parsed.dirName.trim() === "" || /[/\\]|\.\./.test(parsed.dirName) || !isBookNameValid(parsed.dirName)) {
+    throw new HttpError(
+      400,
+      "VALIDATION_ERROR",
+      `云端目录名非法（须为不含路径分隔符与 .. 的单段名）: ${parsed.dirName}`,
+    );
+  }
+  if (parsed.fileName !== undefined && parseBackupFileName(parsed.fileName) === null) {
+    throw new HttpError(400, "VALIDATION_ERROR", `备份文件名不在白名单内: ${parsed.fileName}`);
+  }
+
+  const client = createWebdavClient(webdav);
+  const entries = await client.list(parsed.dirName);
+  if (entries === null) {
+    throw new HttpError(404, "CLOUD_FILE_NOT_FOUND", `云端没有这个书目录: ${parsed.dirName}`);
+  }
+  const backups = toCloudBackups(entries);
+  const head = backups[0] ?? null;
+  const target =
+    parsed.fileName === undefined ? head : (backups.find((entry) => entry.fileName === parsed.fileName) ?? null);
+  if (target === null) {
+    throw new HttpError(
+      404,
+      "CLOUD_FILE_NOT_FOUND",
+      parsed.fileName === undefined
+        ? `云端书目录里没有可导入的备份: ${parsed.dirName}`
+        : `云端那份备份已不存在: ${parsed.fileName}`,
+    );
+  }
+  const bytes = await client.get(`${parsed.dirName}/${target.fileName}`);
+  if (bytes === null) {
+    throw new HttpError(404, "CLOUD_FILE_NOT_FOUND", `云端那份备份已不存在: ${target.fileName}`);
+  }
+
+  // 校验通过前不触碰 books/（与 import 同管道同语义）；版本过高/坏包直接抛出，不落半成品
+  const validated = validateBackupPackage(new Uint8Array(bytes));
+  if (findBookDirById(root, validated.projectId) !== null) {
+    throw new HttpError(
+      409,
+      "PROJECT_ALREADY_EXISTS",
+      `本机书架已有这本书（id: ${validated.projectId}）——打开它自己同步即可，不重复导入`,
+    );
+  }
+
+  // 书名：目录名解析出的优先（云端目录名就是书名来源）；回退命名解析不出 → 包内 project.json 的书名；
+  // 两者都不合法（包内书名只经「非空字符串」校验，拼目录前必须过同一道规则）→ 用目录名（已验单段）
+  const candidate = parseCloudBookDirName(parsed.dirName)?.name ?? validated.projectName.trim();
+  const bookDir = uniqueBookDir(root, isBookNameValid(candidate) ? candidate : parsed.dirName);
+  try {
+    mkdirSync(bookDir, { recursive: true });
+    writeProjectFilesFromBackup(bookDir, validated.entries, { name: basename(bookDir) }); // id 沿用（keepId 不传）
+    writeRawBackupFile(bookDir, target.fileName, bytes);
+    writeBookState(validated.projectId, {
+      dirName: parsed.dirName,
+      lastPushedFileName: target.fileName,
+      lastSeenHeadFileName: head?.fileName ?? target.fileName,
+      lastSyncAt: importSyncBaseline(bookDir),
+      lastSeenCloudFiles: cloudFileSet(entries),
+    });
+  } catch (err) {
+    rmSync(bookDir, { recursive: true, force: true }); // 半成品不留（含已落盘的那份 zip）
+    throw err;
+  }
+
+  const payload: CloudImportBookResult = {
+    imported: true,
+    id: validated.projectId,
+    path: bookDir,
+    name: basename(bookDir),
+    fileName: target.fileName,
+    size: bytes.length,
+  };
   return c.json(ok(payload));
 });

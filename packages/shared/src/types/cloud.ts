@@ -109,6 +109,39 @@ export interface CloudRemoteState {
   backups: CloudBackupEntry[];
 }
 
+/** `GET /api/v1/cloud/remote-books` 的一本书（= 云端工作根下的一个书目录） */
+export interface CloudRemoteBook {
+  /** 云端书目录名（`<书名>-<projectId>`，或云盘拒长名后的回退命名 `ai-editor-<id>` / `<id>`） */
+  dirName: string;
+  /** 从目录名解析出的书名（回退命名/解析不出 → null，UI 回退显示 dirName） */
+  name: string | null;
+  /** 从目录名解析出的 projectId（解析不出 → null，不可导入） */
+  projectId: string | null;
+  /** 本机书架已有同 id 的项目（不可重复导入，UI 置灰并提示去打开同步） */
+  localExists: boolean;
+  /** 该书目录下**可解析**的备份（时间倒序；[0] = head；空数组 = 不可导入） */
+  backups: CloudBackupEntry[];
+}
+
+/** `GET /api/v1/cloud/remote-books` 响应（新机器「从云端恢复」的清单源；不要求项目已打开） */
+export interface CloudRemoteBooksResult {
+  books: CloudRemoteBook[];
+}
+
+/** `POST /api/v1/cloud/import-book` 响应 */
+export interface CloudImportBookResult {
+  imported: true;
+  /** 沿用 zip 内 project.json 的 id（跨机器身份，后续同步按它匹配） */
+  id: string;
+  /** `<创作根>/books/<书名>/`（同名自动去重） */
+  path: string;
+  /** 新书目录名（= 归一后的书名） */
+  name: string;
+  /** 导入的那份云端文件名 */
+  fileName: string;
+  size: number;
+}
+
 /** `POST /api/v1/cloud/pull` 响应（卡 5） */
 export interface CloudPullResult {
   pulled: CloudBackupEntry;
