@@ -19,6 +19,7 @@ import { Hono, type Context } from "hono";
 import type { ProjectFileConfig, ProjectListBook } from "@whispering233/ai-editor-shared";
 import { mapProjectFileToConfig } from "@whispering233/ai-editor-shared";
 import { SchemaVersionError, type MigrationResult, type Db } from "@whispering233/ai-editor-db";
+import { closeDatabase, openDatabase } from "@whispering233/ai-editor-db";
 import { OUTLINE_FILE_NAME } from "@whispering233/ai-editor-db";
 import { PROJECT_FILE_NAME } from "@whispering233/ai-editor-db";
 import { DATA_DB_FILE_NAME } from "@whispering233/ai-editor-db";
@@ -40,6 +41,7 @@ import {
   projectBackupReqSchema,
   projectConfigUpdateReqSchema,
   projectCreateReqSchema,
+  projectDeleteReqSchema,
   projectListResSchema,
   projectOpenReqSchema,
 } from "@whispering233/ai-editor-shared/schemas";
@@ -55,9 +57,11 @@ import {
   type ProjectContext,
 } from "../middleware/project.js";
 import { autoPushAfterManualBackup, autoPushOnClose } from "../cloud/auto-push.js";
-import { renameCloudDir } from "../cloud/sync.js";
+import { deleteBookState, readBookState, readWebdavConfig } from "../cloud/state.js";
+import { pushBackup, renameCloudDir } from "../cloud/sync.js";
+import { createWebdavClient } from "../cloud/webdav.js";
 import { logSoftDeleteReconcile, reconcileSoftDelete } from "../consistency.js";
-import { writeLastProject } from "../last-project.js";
+import { clearLastProject, writeLastProject } from "../last-project.js";
 
 // ============ 创作根（书架模式 S1.5） ============
 //
@@ -779,4 +783,120 @@ projectRoutes.post("/rename", async (c) => {
   });
 
   return c.json(ok({ renamed: true as const, path: targetDir, name }));
+});
+
+/**
+ * 删书前置推送（`POST /project/delete` 第 1 步）：打包一份最新备份并推送。
+ *
+ * - **当前打开的书**：复用现有连接（`getCurrentProject`）走备份管道；
+ * - **未打开的书**：临时 `openDatabase` data.db → 打包 → 关闭（同 `snapshotBookDir` 管道）；
+ *   **不走 `openProjectDatabase`**——删书不该触发迁移/重建（删前最后一步只读不写结构）。
+ *
+ * @returns 本次推送的备份文件名
+ * @throws 推送链路原错误（HttpError 502 CLOUD_* / 409；其他 → 500）
+ */
+async function pushLatestBackupBeforeDelete(
+  dir: string,
+  config: ProjectFileConfig,
+): Promise<{ fileName: string }> {
+  const current = getCurrentProject();
+  if (current !== null && current.root === dir) {
+    const backup = writeBackup(current);
+    await pushBackup(current, { fileName: backup.fileName });
+    return { fileName: backup.fileName };
+  }
+  const db = openDatabase(join(dir, DATA_DB_FILE_NAME));
+  try {
+    const project: ProjectContext = { root: dir, config, db };
+    const backup = writeBackup(project);
+    await pushBackup(project, { fileName: backup.fileName });
+    return { fileName: backup.fileName };
+  } finally {
+    closeDatabase(db);
+  }
+}
+
+// POST /api/v1/project/delete —— 删除书架中的一本书（本地目录；可选云端目录）
+//
+// 契约 = `docs/api/10-api-project.md` §POST /project/delete、`docs/design/40-cloud-sync.md` §4 / §8.5。
+// **删除不可恢复**：该书 `.backups/` 在书目录内，随目录一并消失 → 有云同步记录的书删前必
+// 推一份最新副本（不变式：删书前必有一份**不在同一磁盘上**的副本，或用户明确的 `force`）。
+// 删除顺序（当前书先收尾）：closeProject + setCurrentProject(null)（该单点负责取消在跑拆解 job、
+// 释放会话运行时与定时器）+ 抹 lastProject → rm；非当前书直接 rm（不碰当前项目的任何运行态）。
+// `delete_remote` 在本地删除**之后**执行，best-effort（失败只回 `remoteError`，本地已删不回退）。
+projectRoutes.post("/delete", async (c) => {
+  if (projectRoot === null) {
+    throw new HttpError(500, "INTERNAL_ERROR", "创作根未初始化（startServer 未调用 setProjectRoot）");
+  }
+  const parsed = projectDeleteReqSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    throw parsed.error; // → 400 VALIDATION_ERROR（含 fields）
+  }
+  const dir = resolveProjectDir(parsed.data.path); // 绝对路径 + 规范化 + 链接校验（不存在/链接跳转 → 400）
+ // 只删 books/ 的**直接子目录**（创作根自身、嵌套目录、books/ 之外一律拒——路径归一后比较，不再拼用户输入）
+  if (dirname(dir) !== join(projectRoot, BOOKS_DIR_NAME)) {
+    throw new HttpError(400, "INVALID_PROJECT_PATH", `仅支持删除书架 books/ 下的书: ${dir}`);
+  }
+  const config = readProjectFile(dir); // 目录不含 project.json → 400（同 open 口径）
+  if (config === null) {
+    throw new HttpError(400, "INVALID_PROJECT_PATH", `目标目录不含 project.json，不是项目: ${dir}`);
+  }
+
+ // 前置推送（判据**纯本地**：云盘已配置 **且** 该书有同步记录（推过/拉过）；其余情况零云端请求）
+  const stateBefore = readBookState(config.id);
+  const webdav = readWebdavConfig();
+  let pushed: { fileName: string } | undefined;
+  if (webdav !== null && stateBefore !== null) {
+    try {
+      pushed = await pushLatestBackupBeforeDelete(dir, config);
+    } catch (err) {
+      if (parsed.data.force !== true) throw err; // 不删：原错误码透传（502 CLOUD_* / 409 PROJECT_VERSION_NEWER / 500）
+      console.error(`[cloud] 删书前置推送失败，force 继续删除: ${dir}`, err);
+    }
+  }
+
+ // 删除：当前书先收尾（关连接 + 清单例 → 取消在跑拆解 job、释放会话运行时、停定时器）
+  const current = getCurrentProject();
+  if (current !== null && current.root === dir) {
+    closeProject(current);
+    setCurrentProject(null);
+    clearLastProject(projectRoot); // 下次启动回书架，不指向已删目录
+  }
+  rmSync(dir, { recursive: true, force: true });
+
+ // 云端书目录删除（本地删除之后；目录名只认 book state 的记录，**不猜**；失败不回退本地结果）
+  let remoteDeleted = false;
+  let remoteError: { code: string; message: string } | undefined;
+  if (parsed.data.delete_remote === true) {
+    const dirName = stateBefore?.dirName;
+    if (webdav === null) {
+      remoteError = { code: "CLOUD_NOT_CONFIGURED", message: "云盘未配置，云端备份未删除（本地已删除）" };
+    } else if (dirName === undefined) {
+      remoteError = {
+        code: "CLOUD_FILE_NOT_FOUND",
+        message: "该书没有云端目录记录（从未同步过），未删除云端内容（本地已删除）",
+      };
+    } else {
+      try {
+        await createWebdavClient(webdav).removeDir(dirName); // 集合删除：尾斜杠 + Depth: infinity 由客户端负责
+        deleteBookState(config.id); // 云端已删 → 清掉该书 state（失败静默，不影响已删结果）
+        remoteDeleted = true;
+      } catch (err) {
+        remoteError = {
+          code: err instanceof HttpError ? err.code : "INTERNAL_ERROR",
+          message: err instanceof Error ? err.message : String(err),
+        };
+      }
+    }
+  }
+
+  return c.json(
+    ok({
+      deleted: true as const,
+      path: dir,
+      ...(pushed !== undefined ? { pushed } : {}),
+      ...(remoteDeleted ? { remoteDeleted: true as const } : {}),
+      ...(remoteError !== undefined ? { remoteError } : {}),
+    }),
+  );
 });

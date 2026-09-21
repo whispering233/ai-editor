@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { LAST_PROJECT_KEY, readLastProject, writeLastProject } from "./last-project.js";
+import { LAST_PROJECT_KEY, clearLastProject, readLastProject, writeLastProject } from "./last-project.js";
 
 const tmpDirs: string[] = [];
 
@@ -69,5 +69,27 @@ describe("lastProject 读写", () => {
     // .ai-editor 是文件（非目录）→ mkdir 失败 → 静默；调用方（open 流程）不受影响
     writeFileSync(join(root, ".ai-editor"), "占位", "utf8");
     expect(() => writeLastProject(root, "/books/新")).not.toThrow();
+  });
+
+  it("clearLastProject：只删该键、同文件其他键保留（删书后回书架）", () => {
+    const root = makeTmpDir();
+    writeRootConfig(root, JSON.stringify({ debug: { enabled: true }, [LAST_PROJECT_KEY]: "/books/已删" }));
+    clearLastProject(root);
+    expect(readLastProject(root)).toBeNull();
+    expect(readRootConfig(root).debug).toEqual({ enabled: true });
+  });
+
+  it("clearLastProject：无该键 / 无文件 / 非法 JSON / 不可写 → 静默", () => {
+    const root = makeTmpDir();
+    expect(() => clearLastProject(root)).not.toThrow(); // 文件不存在
+    writeRootConfig(root, JSON.stringify({ debug: { enabled: true } }));
+    clearLastProject(root); // 无该键 → 不写盘
+    expect(readRootConfig(root)).toEqual({ debug: { enabled: true } });
+    const broken = makeTmpDir();
+    writeRootConfig(broken, "{ 坏文件");
+    expect(() => clearLastProject(broken)).not.toThrow();
+    const unwritable = makeTmpDir();
+    writeFileSync(join(unwritable, ".ai-editor"), "占位", "utf8"); // .ai-editor 被文件占住 → mkdir 失败
+    expect(() => clearLastProject(unwritable)).not.toThrow();
   });
 });

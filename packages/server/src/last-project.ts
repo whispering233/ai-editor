@@ -48,3 +48,20 @@ export function writeLastProject(projectRoot: string, projectDir: string): void 
     // 只读创作根 / 磁盘错误：偏好写入失败不影响已完成的 open
   }
 }
+
+/**
+ * 抹掉 `lastProject` 键（删书端点：下次启动回书架，不指向已删目录）。
+ * 合并写（同文件其他键原样保留）；**无该键 → 不写盘**；失败静默（偏好清理失败不影响删除本身）。
+ */
+export function clearLastProject(projectRoot: string): void {
+  try {
+    const current = readRootConfig(projectRoot);
+    if (!(LAST_PROJECT_KEY in current)) return;
+    const next = { ...current };
+    delete next[LAST_PROJECT_KEY];
+    mkdirSync(dirname(configFilePath(projectRoot)), { recursive: true });
+    writeJsonAtomic(configFilePath(projectRoot), next);
+  } catch {
+    // 只读创作根 / 磁盘错误：偏好清理失败不影响已完成的删除
+  }
+}

@@ -250,6 +250,33 @@ export const projectCloseResSchema = z.object({
   saved: z.literal(true),
 });
 
+// POST /api/v1/project/delete（删书：本地目录 + 可选云端目录）
+// 语义（docs/api/10-api-project.md）：**删除不可恢复**——该书 `.backups/` 在书目录内，随目录一并消失。
+// - `path` 须是 `<创作根>/books/` 的**直接子目录**且含 project.json（否则 400 INVALID_PROJECT_PATH）
+// - 该书有云同步记录（`cloud.json` 已配置 **且** 有 book state）→ 删前先推一份最新副本上云；
+//   推送失败默认中止不删，`force` 才继续（最新改动不上云的风险由用户确认时承担）
+// - `delete_remote` = 本地删除**之后**的 best-effort：失败不回退本地已删的结果，以 `remoteError` 告知
+export const projectDeleteReqSchema = z
+  .object({
+    path: z.string(), // 书目录绝对路径（books/ 直接子目录 + 含 project.json）
+    force: z.boolean().optional(), // true = 云端前置推送失败时仍删本机（缺省 false = 中止，不删任何东西）
+    delete_remote: z.boolean().optional(), // true = 同时删云端书目录并清 cloud.json 的该书 state（缺省 false = 云端备份原样保留）
+  })
+  .strict();
+
+export const projectDeleteResSchema = z.object({
+  deleted: z.literal(true),
+  path: z.string(),
+  /** 删除前推送成功的那一份（云盘已配置且该书有同步记录时才有） */
+  pushed: z.object({ fileName: z.string() }).optional(),
+  /** delete_remote 且云端目录删除成功 */
+  remoteDeleted: z.literal(true).optional(),
+  /** delete_remote 失败：本地已删、云端保留（best-effort，UI 提示可去云盘网页手动清理） */
+  remoteError: z.object({ code: z.string(), message: z.string() }).optional(),
+});
+export type ProjectDeleteReq = z.infer<typeof projectDeleteReqSchema>;
+export type ProjectDeleteRes = z.infer<typeof projectDeleteResSchema>;
+
 // GET /api/v1/project/list（书架模式 S1.5：列出创作根 books/ 下的书，供 Dashboard 书架展示）
 export const projectListResSchema = z.object({
  /** 创作根（server 启动参数 projectRoot） */

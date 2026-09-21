@@ -159,6 +159,28 @@ export function writeBookState(projectId: string, patch: CloudBookState): void {
 }
 
 /**
+ * 删除某书的同步状态（删书端点：`delete_remote` 成功后清掉 `books[<projectId>]`）。
+ * 合并写（webdav/autoPush 段与其他书的状态不动）；无该记录 / 未初始化 / 云配置不存在 → 不写盘。
+ * **失败静默**（只记日志）：调用点在本地目录已删除之后，清理同步状态失败不该把「已删」变成错误响应。
+ */
+export function deleteBookState(projectId: string): void {
+  try {
+    const path = cloudConfigPath();
+    if (path === null) return;
+    const current = readCloudFile();
+    if (current === null) return;
+    const books = readBooksState();
+    if (books[projectId] === undefined) return;
+    const nextBooks = { ...books };
+    delete nextBooks[projectId];
+    mkdirSync(dirname(path), { recursive: true });
+    writeJsonAtomic(path, { ...current, books: nextBooks }, { mode: CLOUD_CONFIG_FILE_MODE });
+  } catch (err) {
+    console.error(`[cloud] 清理书籍同步状态失败（该书已删除，不影响删除结果）: ${projectId}`, err);
+  }
+}
+
+/**
  * 写入补丁：`undefined` = 不修改该项；`null` = 清除该项（url/username/password/device）。
  * `autoPush` 只接受布尔（`undefined` = 不修改）。
  */
