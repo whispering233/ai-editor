@@ -1090,8 +1090,7 @@ export type CloudPushReq = z.infer<typeof cloudPushReqSchema>;
 
 // POST /api/v1/cloud/pull：从云端拉取一份备份应用到当前项目（卡 5）
 // - file_name 缺省 = 云端 head；须通过 parseBackupFileName 白名单（服务端校验 → 400）
-// - 语义 = 三文件覆盖 + `sessions/` **并集合并**（基线三方比较、删除优先）；
-//   与本地 restore（整体覆盖）不同，见 docs/api/100-api-cloud.md
+// - 语义 = 三文件覆盖（`sessions/` 是纯本地目录，不写不删），见 docs/api/100-api-cloud.md
 export const cloudPullReqSchema = z
   .object({
     file_name: z.string().optional(),

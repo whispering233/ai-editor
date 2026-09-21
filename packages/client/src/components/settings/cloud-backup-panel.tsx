@@ -343,7 +343,7 @@ export function CloudBackupPanel() {
           {remoteHead !== null && (
             <span className="text-xs text-muted-foreground">
               云端已有 {status?.remote?.backups.length ?? 0} 份（保留最近 5 份）；拉取会用云端那份覆盖三文件，
-              本机独有的对话与资料按并集保留
+              本机对话历史不受影响（会话是纯本地目录）
             </span>
           )}
         </div>

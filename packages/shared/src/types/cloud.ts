@@ -40,7 +40,7 @@ export interface CloudAutoPushError {
  * - `lastPushedFileName`：本机最后一次成功推送的云端文件名（冲突判定基准）
  * - `lastSeenHeadFileName`：本机最后一次看到的云端 head（推送后 / 拉取后更新）
  * - `lastSyncAt`：上次同步成功时刻（ISO 8601）
- * - `baseEntries`：`sessions/` 的条目名单（拉取并集的三方比较基线）
+ * - `baseEntries`：**已停写**（2026-09 会话不进包后并集合并已取消）——字段仅读侧容忍，不再写入/使用
  * - `lastAutoPushAt` / `lastAutoPushError`：自动推送的节流基准与失败标记（卡 7）
  */
 export interface CloudBookSyncState {
@@ -59,7 +59,10 @@ export interface CloudBookSyncState {
    * 集合变化 = 别的机器动过（与时间戳/时钟无关，故比 head 比较更可靠）。
    */
   lastSeenCloudFiles?: string[];
-  /** `sessions/` 的条目名单（拉取并集的三方比较基线；= 最近一次推送/拉取包的条目） */
+  /**
+   * **已停写**（历史字段）：曾是 `sessions/` 的条目名单（拉取并集的三方比较基线）。
+   * 会话是纯本地目录、不进任何 zip ⇒ 并集已取消；存量文件里的旧值**读侧容忍**（不报错、不再重写）。
+   */
   baseEntries?: string[];
   /**
    * **自动推送节流基准**（上次自动推送成功时刻，ISO 8601）。
@@ -111,8 +114,6 @@ export interface CloudPullResult {
   pulled: CloudBackupEntry;
   /** 覆盖前本机自动快照（restore 管道既有行为） */
   snapshot: { fileName: string; createdAt: string };
-  /** 两个打包目录的并集结果：kept = 本机独有保留；written = 云端写入；removed = 云端删除而删本机 */
-  merged: { kept: number; written: number; removed: number };
 }
 
 /** `POST /api/v1/cloud/push` 响应（卡 4） */
@@ -130,12 +131,12 @@ export interface CloudLocalState {
   /** 本机最后一次成功同步（推/拉）到的云端文件名（= 冲突判定基准） */
   lastPushedFileName: string | null;
   lastSyncAt: string | null;
-  /** 本机创作数据自上次同步后有改动（三文件 + `data.db-wal` + `sessions/`；**不含 `.backups/`**） */
+  /** 本机创作数据自上次同步后有改动（三文件 + `data.db-wal`；**不含 `.backups/`、也不含 `sessions/`**） */
   dirty: boolean;
   /** 最新一份本地备份（推送缺省目标） */
   latestBackupFileName: string | null;
   /**
-   * 「有改动未进最新备份」= 最新一份本地备份的时间早于最新创作改动（含 `sessions/`）。
+   * 「有改动未进最新备份」= 最新一份本地备份的时间早于最新创作改动（三文件口径）。
    * **不随同步前移**：推完旧包后 `state` 会变 `synced`，但它仍为真——用它把「已同步」与
    * 「云端内容不落后」分开表达（卡 B：自动路径在此状态下跳过不推，面板提示先「立即备份」）。
    */
@@ -159,7 +160,7 @@ export type CloudSyncState =
  *
  * 判定口径（卡 5 定稿）：
  * - 「云端有更新」= 云端文件集合 ≠ `cloud.json` 里的 `lastSeenCloudFiles`（**不看时间戳**：跨机器时钟偏差会让 head 比较漏报）
- * - 「本机有改动」= 创作数据（三文件 + `data.db-wal` + `sessions/` 的 mtime）晚于 `lastSyncAt`
+ * - 「本机有改动」= 创作数据（三文件 + `data.db-wal` 的 mtime）晚于 `lastSyncAt`
  * - 无同步记录（`lastSyncAt` 缺失）时按「本机有改动」处理（保守：先推/先拉由用户决定）
  */
 export interface CloudStatus {

@@ -926,7 +926,7 @@ export interface RestoreBackupRes {
 
 /**
  * 从备份列表恢复当前项目（覆盖恢复）：
- * - 覆盖前服务端自动快照当前状态 → 原子替换三文件 + `sessions/`（整体覆盖，本地残留不混入）
+ * - 覆盖前服务端自动快照当前状态 → 原子替换三文件（`sessions/` 是纯本地目录，不写不删）
  * - 错误：404 VALIDATION_ERROR（备份不存在）、409 SCHEMA_VERSION_MISMATCH（备份来自更高版本，
  * 前端阻断提示——message 已按相对版本分流，透传展示）
  */
@@ -1202,7 +1202,7 @@ export function testCloudConnection(): Promise<CloudTestResult> {
 
 /**
  * POST /api/v1/cloud/pull —— 从云端拉取一份备份应用到当前项目（缺省 = 云端 head；卡 5）。
- * 语义：三文件覆盖 + `sessions/` **并集合并**（删除优先）；覆盖前自动快照本机当前状态。
+ * 语义：三文件覆盖（`sessions/` 是纯本地目录，不写不删）；覆盖前自动快照本机当前状态。
  * 失败：409 CLOUD_NOT_CONFIGURED / NO_PROJECT_OPEN / SCHEMA_VERSION_MISMATCH、404 CLOUD_FILE_NOT_FOUND、
  *      400 VALIDATION_ERROR（坏包/文件名非法）、502 三码。
  */

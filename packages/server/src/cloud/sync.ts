@@ -11,7 +11,6 @@
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { Unzip } from "fflate";
 import {
   parseBackupFileName,
   type CloudBackupEntry,
@@ -22,7 +21,7 @@ import {
 } from "@whispering233/ai-editor-shared";
 import { HttpError } from "../middleware/error.js";
 import type { ProjectContext } from "../middleware/project.js";
-import { BACKUPS_DIR_NAME, PACKED_DIR_NAMES, hasLocalEditsSince, hasUnbackedChanges, restoreBackup } from "../backup.js";
+import { BACKUPS_DIR_NAME, hasLocalEditsSince, hasUnbackedChanges, restoreBackup } from "../backup.js";
 import { readBookState, readWebdavConfig, writeBookState } from "./state.js";
 import { createWebdavClient, type DavEntry, type WebdavClient } from "./webdav.js";
 
@@ -103,16 +102,6 @@ export function toCloudBackups(entries: readonly DavEntry[]): CloudBackupEntry[]
   }
   // 时间倒序（最新在前；head = [0]）——与本地备份列表同口径
   return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-}
-
-/** zip 内随包目录（`sessions/`）的条目名（`baseEntries` 基线；**只读名字不碰数据**，零解压开销） */
-export function packedEntriesOfZip(zip: Uint8Array): string[] {
-  const names: string[] = [];
-  const unzipper = new Unzip((file) => {
-    names.push(file.name); // 不 start()：只收名，不做任何解压
-  });
-  unzipper.push(zip, true);
-  return names.filter((name) => PACKED_DIR_NAMES.some((dir) => name.startsWith(`${dir}/`))).sort();
 }
 
 /**
@@ -278,8 +267,8 @@ export interface CloudSyncComputation {
 /**
  * 计算本机侧状态与三态（卡 5 定稿口径）：
  * - **「云端有更新」= 云端文件集合 ≠ `lastSeenCloudFiles`**（不看时间戳：跨机器时钟偏差会让 head 比较漏报，见设计文档 §3）
- * - **「本机有改动」= 创作数据 mtime 晚于 `lastSyncAt`**（`hasLocalEditsSince`，三文件 + `data.db-wal` +
- *   `sessions/`；**不含 `.backups/`**——force 会把云端旧份写进那里）。
+ * - **「本机有改动」= 创作数据 mtime 晚于 `lastSyncAt`**（`hasLocalEditsSince`，三文件 + `data.db-wal`；
+ *   **不含 `.backups/`**——force 会把云端旧份写进那里；**也不含 `sessions/`**——会话不进包）。
  *   注意口径差异：`data.db`/`-wal` 比较带 1s 容差（checkpoint 会刷新其 mtime），其余**严格比较**
  * - 自动推送的失败标记（`lastAutoPushError`）原样透出（面板显示一行，成功即消失；卡 7）
  * - 无同步记录（`lastSyncAt`/`lastSeenCloudFiles` 缺失）→ 云端有份即视为「有更新」、本机按「有改动」处理（保守）
@@ -328,8 +317,8 @@ export interface PullOptions {
  * 从云端拉取一份备份应用到当前项目（`POST /cloud/pull` 的实现）。
  *
  * 流程：定位书目录 → 列目录取目标（缺省 head）→ 下载 → 原样落进本地 `.backups/`（校验失败则回收）→
- * 走 **restore 管道**（覆盖前自动快照 + 校验 + 原子替换三文件 + db 重连 + 重启备份定时器）+
- * **随包目录（`sessions/`）并集合并**（基线 = `cloud.json` 的 `baseEntries`，删除优先）→ 更新同步状态
+ * 走 **restore 管道**（覆盖前自动快照 + 校验 + **三文件覆盖** + db 重连 + 重启备份定时器；
+ * 本机 `sessions/` **不写不删**）→ 更新同步状态
  *（`lastPushedFileName` = 拉到的这份，既是新的冲突判定基准，也是「本机已基于该版本」的标记；
  * `lastSeenCloudFiles` = 当前云端集合 → 立刻复查不会判「云端有更新」）。
  *
@@ -377,10 +366,8 @@ export async function pullBackup(project: ProjectContext, options: PullOptions =
 
   let restored: ReturnType<typeof restoreBackup>;
   try {
-    // 走 restore 管道（覆盖前自动快照 / 校验 / 原子替换 / 重连 / 定时器），但两目录用并集合并
-    restored = restoreBackup(project, target.fileName, {
-      mergePackedDirs: { baseEntries: stateBefore?.baseEntries ?? [] },
-    });
+    // 走 restore 管道（覆盖前自动快照 / 校验 / 三文件覆盖 / 重连 / 定时器；本机会话不写不删）
+    restored = restoreBackup(project, target.fileName);
   } catch (err) {
     if (createdLocally) {
       try {
@@ -398,13 +385,11 @@ export async function pullBackup(project: ProjectContext, options: PullOptions =
     lastSeenHeadFileName: head.fileName,
     lastSyncAt: new Date().toISOString(),
     lastSeenCloudFiles: cloudFileSet(entries),
-    baseEntries: packedEntriesOfZip(bytes),
   });
 
   return {
     pulled: target,
     snapshot: restored.snapshot,
-    merged: restored.merged ?? { kept: 0, written: 0, removed: 0 },
   };
 }
 
@@ -491,7 +476,7 @@ export async function pushBackup(project: ProjectContext, options: PushOptions =
   const pruned = await pruneCloudBackups(client, dirName, await client.list(dirName).then((list) => list ?? []));
   const after = (await client.list(dirName)) ?? [];
 
-  // ⑦ 更新本机同步状态（推送成功后；baseEntries = zip 内 `sessions/` 的条目名，供拉取三方比较）
+  // ⑦ 更新本机同步状态（推送成功后；`baseEntries` 已停写——存量旧值读侧容忍，不再重写）
   // `lastAutoPushError` 的**唯一清除点**在这里（`undefined` 在合并写下即删除该键）：口径是
   // 「最近一次自动推送失败」——任何一次推送成功都证明它已过期，不能只由自动路径清
   //（否则用户手动推送成功后，面板仍常驻一行过期的失败提示；见卡 7 oracle 反例 4）
@@ -501,7 +486,6 @@ export async function pushBackup(project: ProjectContext, options: PushOptions =
     lastSeenHeadFileName: toCloudBackups(after)[0]?.fileName ?? local.fileName,
     lastSyncAt: new Date().toISOString(),
     lastSeenCloudFiles: cloudFileSet(after),
-    baseEntries: packedEntriesOfZip(local.bytes),
     lastAutoPushError: undefined,
   });
 

@@ -318,7 +318,7 @@ function listResponse(c: Context, result: { rootPath: string; books: ProjectList
 projectRoutes.post("/close", (c) => {
   const project = getCurrentProject();
   if (project !== null) {
- // 自动推送（卡 7）：「工作段结束」语义——变更判定含 sessions/（纯聊天也算），不受 2h 节流。
+ // 自动推送（卡 7）：「工作段结束」语义——变更判定 = 三文件（`sessions/` 不参与），不受 2h 节流。
  // **fire-and-forget**（不 await）：网络差时一次 push 可能数秒，不能拖住关闭；失败只记
  // lastAutoPushError + 日志（响应语义与无云盘时完全一致）。推送只读 .backups/ 与 cloud.json，
  // 不碰 data.db 连接，故先启动再关连接安全

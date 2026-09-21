@@ -53,18 +53,19 @@ import type { ProjectContext } from "./middleware/project.js";
 export const BACKUPS_DIR_NAME = ".backups";
 
 /**
- * 随备份 zip 整体打包的目录（目录名已登记在 `docs/api/20-api-backup.md`）：
- * 只一个 —— `sessions/`（会话 JSONL）。语义：白名单前缀 + 递归打包 + 参与变更判定 + 恢复时整体覆盖。
- * `SESSIONS_DIR_NAME` 取自 agent 包的 pi 运行时（会话目录的唯一事实来源；pi 的 session 文件落在此目录）。
- * （卡 12.7b：原 `references/` 随包目录已退役——参考资料正文在 `data.db` 的 `document_records` 里。）
+ * **遗留白名单**（2026-09 会话移出备份后只剩这一条）：`sessions/` 曾是随包目录，现在是
+ * **纯本地目录**（不进任何 zip）。本清单只服务「接受旧包」——`isAllowedBackupEntry` /
+ * `validateBackupPackage` 放行 `sessions/**` 条目（存量旧包继续可导入），条目内容**一律忽略**
+ * （恢复/导入/云拉取都不写不删本机会话）。
+ * `SESSIONS_DIR_NAME` 取自 agent 包的 pi 运行时（会话目录的唯一事实来源）。
  */
-export const PACKED_DIR_NAMES: readonly string[] = [SESSIONS_DIR_NAME];
+export const LEGACY_PACKED_DIR_NAMES: readonly string[] = [SESSIONS_DIR_NAME];
 
-/** 备份包条目白名单判定（三文件 + 打包目录前缀——逐名比对天然防 zip 路径穿越；
+/** 备份包条目白名单判定（三文件 + 遗留目录前缀——逐名比对天然防 zip 路径穿越；
  * 目录子路径拒绝含 `..` 的条目防相对路径逃逸） */
 export function isAllowedBackupEntry(name: string): boolean {
   if ((PROJECT_EXPORT_FILE_NAMES as readonly string[]).includes(name)) return true;
-  return PACKED_DIR_NAMES.some((d) => name.startsWith(`${d}/`)) && !name.split("/").includes("..");
+  return LEGACY_PACKED_DIR_NAMES.some((d) => name.startsWith(`${d}/`)) && !name.split("/").includes("..");
 }
 
 /**
@@ -81,110 +82,6 @@ function assertNotCredential(label: string): void {
     "VALIDATION_ERROR",
     "备份名称不能与 WebDAV 应用密码相同（它会写进备份文件名并上传到云盘）",
   );
-}
-
-/** 项目目录内某子目录的全部文件（递归，含 .trash/）相对路径（`/` 分隔）；目录缺失 → [] */
-function listDirFiles(root: string, dirName: string): string[] {
-  const base = join(root, dirName);
-  if (!existsSync(base)) return [];
-  const out: string[] = [];
-  const walk = (dir: string, prefix: string): void => {
-    for (const e of readdirSync(dir, { withFileTypes: true })) {
-      const rel = prefix === "" ? e.name : `${prefix}/${e.name}`;
-      const full = join(dir, e.name);
-      if (e.isDirectory()) walk(full, rel);
-      else out.push(rel);
-    }
-  };
-  walk(base, "");
-  return out;
-}
-
-/**
- * 用备份条目**整体覆盖**项目目录内的打包目录（恢复/导入语义：目录以备份内容为准，
- * 本地残留不混入）。目录不存在则创建；`..` 条目跳过（白名单已校验，双保险）。
- */
-function overwriteDirFromEntries(dir: string, dirName: string, entries: Record<string, Uint8Array>): void {
-  const baseDir = join(dir, dirName);
-  if (existsSync(baseDir)) rmSync(baseDir, { recursive: true, force: true });
-  for (const key of Object.keys(entries)) {
-    if (!key.startsWith(`${dirName}/`)) continue;
-    const rel = key.slice(dirName.length + 1);
-    if (rel === "" || rel.split("/").includes("..")) continue;
-    const target = join(baseDir, ...rel.split("/"));
-    mkdirSync(dirname(target), { recursive: true });
-    writeFileAtomic(target, entries[key]);
-  }
-}
-
-/** 并集合并计数（`POST /cloud/pull` 响应的 `merged`；见 `docs/design/40-cloud-sync.md` §4） */
-export interface MergeCounts {
-  /** 本机独有（云端没有、基线也没有）→ 保留 */
-  kept: number;
-  /** 云端新增（本机没有、基线也没有）→ 写入 */
-  written: number;
-  /** 云端删除（本机有、基线有、云端没有）→ 删本机 */
-  removed: number;
-}
-
-/**
- * 用备份条目与本机现有文件做**并集合并**（云拉取语义；本地 restore 不走这里）：
- * 逐文件三方比较（本机 / 云端那份 / 基线 `baseEntries`）——
- *
- * | 本机 | 云端 | 基线 | 动作 |
- * | 有 | 有 | — | 写云端那份（同名 = 同一资产） |
- * | 有 | 无 | ✔ | 删本机（云端删除传播） |
- * | 有 | 无 | ✘ | 保留本机（本机新增） |
- * | 无 | 有 | ✔ | **不写回**（本机删除优先，不被复活） |
- * | 无 | 有 | ✘ | 写进来（云端新增） |
- *
- * 基线由 `cloud.json` 的 `books[<id>].baseEntries`（= 最近一次推送/拉取包的条目）提供。
- */
-function mergeDirFromEntries(
-  dir: string,
-  dirName: string,
-  entries: Record<string, Uint8Array>,
-  baseEntries: readonly string[],
-): MergeCounts {
-  const baseDir = join(dir, dirName);
-  const rel = (key: string): string => key.slice(dirName.length + 1);
-  const localSet = new Set(listDirFiles(dir, dirName));
-  const cloudKeys = Object.keys(entries).filter((k) => k.startsWith(`${dirName}/`) && rel(k) !== "");
-  const cloudSet = new Set(cloudKeys.map(rel));
-  const baseSet = new Set(baseEntries.filter((e) => e.startsWith(`${dirName}/`) && rel(e) !== "").map(rel));
-
-  const counts: MergeCounts = { kept: 0, written: 0, removed: 0 };
-  const safeSegments = (path: string): string[] | null => {
-    const segments = path.split("/");
-    return segments.includes("..") ? null : segments; // 白名单已校验，双保险
-  };
-
-  // 本机侧：云端没有的份，按基线判「云端删了它」还是「本机新增」
-  for (const path of localSet) {
-    if (cloudSet.has(path)) continue; // 两边都有 → 由云端侧写云端那份
-    const segments = safeSegments(path);
-    if (segments === null) continue;
-    if (baseSet.has(path)) {
-      rmSync(join(baseDir, ...segments), { force: true });
-      counts.removed += 1;
-    } else {
-      counts.kept += 1;
-    }
-  }
-
-  // 云端侧：本机没有的份，按基线判「本机删了它」（不复活）还是「云端新增」
-  for (const key of cloudKeys) {
-    const path = rel(key);
-    const segments = safeSegments(path);
-    if (segments === null) continue;
-    const isLocalNew = !localSet.has(path);
-    if (isLocalNew && baseSet.has(path)) continue; // 本机删除优先
-    const target = join(baseDir, ...segments);
-    mkdirSync(dirname(target), { recursive: true });
-    writeFileAtomic(target, entries[key] as Uint8Array);
-    if (isLocalNew) counts.written += 1;
-  }
-  return counts;
 }
 
 /** 解压总字节预算（200MB，zip 炸弹防御——与 import 同款，restore 复用） */
@@ -239,8 +136,9 @@ function assertBackupFileNameFormat(fileName: string): NonNullable<ReturnType<ty
 /**
  * 打包当前项目为 zip（export 同款管道）：
  * wal_checkpoint(TRUNCATE) 把 WAL 合并回主文件（zip 内 data.db 为完整快照，
- * 无需附带 -wal/-shm）→ zipSync 打包（键序稳定：project.json → outline.json → data.db
- * → sessions/**——正文与参考资料在 data.db 内，不再有其他目录条目）。
+ * 无需附带 -wal/-shm）→ zipSync 打包（键序稳定：project.json → outline.json → data.db）。
+ * **条目恰好三文件**——`sessions/` 是纯本地目录，不进任何 zip（备份/导出/云端）；
+ * 正文与参考资料在 data.db 内。
  * 三文件缺失任一 → 抛错（打开的项目三文件必然齐全，缺失即损坏，不导出半成品包）。
  */
 export function createBackupZip(project: ProjectContext): Uint8Array<ArrayBuffer> {
@@ -251,12 +149,6 @@ export function createBackupZip(project: ProjectContext): Uint8Array<ArrayBuffer
     [OUTLINE_FILE_NAME]: readFileSync(join(dir, OUTLINE_FILE_NAME)),
     [DATA_DB_FILE_NAME]: readFileSync(join(dir, DATA_DB_FILE_NAME)),
   };
- // 打包目录随包（存在则递归打包；不存在跳过——旧项目无目录不报错）
-  for (const dirName of PACKED_DIR_NAMES) {
-    for (const rel of listDirFiles(dir, dirName)) {
-      zipEntries[`${dirName}/${rel}`] = readFileSync(join(dir, dirName, rel));
-    }
-  }
   return zipSync(zipEntries, { level: 6 });
 }
 
@@ -557,7 +449,7 @@ function unzipWithBudget(zipData: Uint8Array, budget: number): { entries: Record
   let total = 0;
   const unzipper = new Unzip((file) => {
     names.push(file.name);
-    if (!isAllowedBackupEntry(file.name)) return; // 未知条目不解压（白名单 = 三文件 + sessions/）
+    if (!isAllowedBackupEntry(file.name)) return; // 未知条目不解压（白名单 = 三文件 + 遗留 sessions/）
     const chunks: Uint8Array[] = [];
     let size = 0;
     file.ondata = (err, chunk, final) => {
@@ -603,7 +495,8 @@ function isValidOutlineFile(parsed: unknown): boolean {
  * 备份包完整校验（自 import 校验顺序 3-7 提取，restore 与 import 共用）：
  *
  * 1. zip 解析（流式 + 解压总字节预算 200MB，zip 炸弹防御；失败 400「不是有效的项目备份包」）
- * 2. 条目白名单（只接受 PROJECT_EXPORT_FILE_NAMES 三文件名 + sessions/ 目录条目；
+ * 2. 条目白名单（只接受 PROJECT_EXPORT_FILE_NAMES 三文件名 + 遗留的 sessions/ 目录条目——
+ * 存量旧包含 `sessions/**`，接受但**内容一律忽略**；新包不会再含它。
  * 逐名比对天然防 zip 路径穿越；**目录条目为非必需**——旧备份包无 sessions/ 仍可导入）
  * 3. 三文件齐全
  * 4. 临时目录写入 → project.json / outline.json 顶层（JSON 损坏 / 不符 → 400）
@@ -625,7 +518,7 @@ export function validateBackupPackage(zipData: Uint8Array): {
   /** 备份内的书名（project.json 的 name，已校验为非空字符串）——导入时未指定书名则用它 */
   projectName: string;
 } {
- // 1/2. 解压 + 白名单（严格拒绝）：三数据文件名 + sessions/ 前缀
+ // 1/2. 解压 + 白名单（严格拒绝）：三数据文件名 + 遗留的 sessions/ 前缀
   let entries: Record<string, Uint8Array>;
   let entryNames: string[];
   try {
@@ -641,7 +534,7 @@ export function validateBackupPackage(zipData: Uint8Array): {
     throw new HttpError(
       400,
       "VALIDATION_ERROR",
-      `备份包含未知条目: ${unknown.join(", ")}（只接受 ${PROJECT_EXPORT_FILE_NAMES.join("/")} 与 ${PACKED_DIR_NAMES.map((d) => `${d}/`).join("/")}）`,
+      `备份包含未知条目: ${unknown.join(", ")}（只接受 ${PROJECT_EXPORT_FILE_NAMES.join("/")}；存量旧包另可含 ${LEGACY_PACKED_DIR_NAMES.map((d) => `${d}/`).join("/")}，其内容被忽略）`,
     );
   }
   const missing = PROJECT_EXPORT_FILE_NAMES.filter((f) => !(f in entries));
@@ -742,15 +635,12 @@ function latestBackupTime(backupsDir: string): Date | null {
 }
 
 /**
- * 三文件 + `data.db-wal` 伴生文件 + 随包目录（`sessions/`）是否在 since 之后有变更
- *（「任一 mtime 晚于上次备份时刻」）：
+ * 三文件 + `data.db-wal` 伴生文件是否在 since 之后有变更（「任一 mtime 晚于上次备份时刻」）：
  * - 三文件：任一 mtime > since + 容差 → 有变更；**主文件缺失 → 视为有变更**（防御：不静默
  *   跳过，让备份管道报错暴露损坏）
  * - `data.db-wal`（F2）：普通写事务只追加 `-wal`、主文件 mtime 不变；**wal 缺失 ≠ 变更**
  *   （无未 checkpoint 的写，属正常状态，否则每次 tick 都误备份）
- * - `sessions/`：目录内**任一文件** mtime 命中，或**目录自身** mtime 命中
- *   （F3：删除文件不刷新任何剩余文件的 mtime，只看文件会漏检删除）；目录缺失（ENOENT）
- *   = 无文件、不算变更；其余错误防御视为有变更
+ * `sessions/` **不参与**（纯本地目录：不进包 ⇒ 写会话不该触发备份，见 `docs/design/40-cloud-sync.md` §3）。
  * mtime 判定容差见 BACKUP_CHANGE_TOLERANCE_MS 注释。
  */
 export function hasFileChangesSince(project: ProjectContext, since: Date): boolean {
@@ -771,32 +661,14 @@ export function hasFileChangesSince(project: ProjectContext, since: Date): boole
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") return true;
   }
- // 随包目录（sessions/）：目录自身或其内任一文件 mtime 晚于 limit → 有变更——
- // 新增聊天会话、**删除文件**同样触发自动备份；
- // 遍历竞态（读取中删除）→ 防御视为无变更（下一 tick 重检）
-  try {
-    for (const dirName of PACKED_DIR_NAMES) {
-      try {
-        if (statSync(join(project.root, dirName)).mtimeMs > limit) return true;
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== "ENOENT") return true;
-      }
-      for (const rel of listDirFiles(project.root, dirName)) {
-        if (statSync(join(project.root, dirName, rel)).mtimeMs > limit) return true;
-      }
-    }
-  } catch {
- // 忽略（下一 tick 重检）
-  }
+ // sessions/ 不参与变更判定（纯本地目录）
   return false;
 }
 
 /**
  * mtime 变更判定内核（`hasLocalEditsSince` 与 `hasAuthoringChangesSince` 共用，避免两份漂移）：
  * 三文件（`data.db`/`-wal` 带 `BACKUP_CHANGE_TOLERANCE_MS` 容差，其余**严格** `>`）→ 额外单文件
- * （`scope.extraFiles`，严格；ENOENT = 该可选文件不存在，不算变更）→ `scope.dirs` 各目录
- * （**目录自身**与其内任一文件 mtime 命中即算「有改动」——删除文件不刷新剩余文件 mtime，
- * 只看文件会漏检删除；目录缺失 = 无文件，不算变更）。
+ * （`scope.extraFiles`，严格；ENOENT = 该可选文件不存在，不算变更）。
  *
  * 容差只给 `data.db` 与 `-wal` 的原因：备份/推送管道内的 `wal_checkpoint` 会把其 mtime 刷到
  * 同步时刻，严格比较会自激误判「永远有改动」；其余文件不会被管道写入，给容差反而会让
@@ -805,7 +677,7 @@ export function hasFileChangesSince(project: ProjectContext, since: Date): boole
 function hasChangesSince(
   project: ProjectContext,
   since: Date,
-  scope: { dirs?: readonly string[]; extraFiles?: readonly string[] },
+  scope: { extraFiles?: readonly string[] },
 ): boolean {
   const strictLimit = since.getTime();
   const tolerantLimit = strictLimit + BACKUP_CHANGE_TOLERANCE_MS;
@@ -834,20 +706,6 @@ function hasChangesSince(
       if ((err as NodeJS.ErrnoException).code !== "ENOENT") return true;
     }
   }
-  try {
-    for (const dirName of scope.dirs ?? []) {
-      try {
-        if (statSync(join(project.root, dirName)).mtimeMs > strictLimit) return true;
-      } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== "ENOENT") return true;
-      }
-      for (const rel of listDirFiles(project.root, dirName)) {
-        if (statSync(join(project.root, dirName, rel)).mtimeMs > strictLimit) return true;
-      }
-    }
-  } catch {
-    // 遍历竞态（读取中删除）：下一次状态检查重检
-  }
   return false;
 }
 
@@ -855,24 +713,24 @@ function hasChangesSince(
  * 「本机创作数据自 since 后有改动」判定（**云端三态专用**，与备份定时器的 `hasFileChangesSince`
  * 口径刻意不同——见 `docs/design/40-cloud-sync.md` §3）：
  *
- * - `project.json` / `outline.json` / `sessions/`（含目录自身 mtime）：
+ * - `project.json` / `outline.json`：
  *   **严格** `mtime > since`。这些文件不会被备份/同步管道写入，容差在这里只有代价：
  *   `lastSyncAt` 是**不推进的固定基准**（只在下一次同步时前移），容差会把 `[since, since+1s]`
  *   内的本机改动**永久漏判**（状态误报「已同步」，用户可能因此拉取覆盖它）。
  * - `data.db` / `data.db-wal`：保留 `BACKUP_CHANGE_TOLERANCE_MS` 容差——备份/推送管道内的
  *   `wal_checkpoint` 会把 `data.db` mtime 刷到同步时刻，严格比较会自激误判「永远有改动」。
+ * - `sessions/` **不参与**（纯本地目录，不进包 ⇒ 纯聊天不产生「有东西待推」）。
  */
 export function hasLocalEditsSince(project: ProjectContext, since: Date): boolean {
-  return hasChangesSince(project, since, { dirs: PACKED_DIR_NAMES });
+  return hasChangesSince(project, since, {});
 }
 
 /**
  * 「本机**创作数据**自 since 后有改动」判定（**自动推送专用**，卡 7；`docs/design/40-cloud-sync.md` §5）：
- * 与 `hasLocalEditsSince` 同一套 mtime 口径，但 `sessions/` **不参与**（会话是聊天产物，纯聊天时段
- * 不该单独烧一次云盘配额——聊天记录会随下一次创作变更的 zip 一起上云，zip 永远含 `sessions/`），
- * 并**纳入 `AGENTS.md`**（项目规则也是创作数据，改规则值得推一次）。
+ * 与 `hasLocalEditsSince` 同一套 mtime 口径（两者都不含 `sessions/`——会话是纯本地目录、不进包），
+ * 但**额外纳入 `AGENTS.md`**（项目规则也是创作数据，改规则值得推一次）。
  *
- * 创作数据本体 = 三文件（正文/参考资料在 `data.db` 内，卡 12.7b 后已无随包目录参与本档）。
+ * 创作数据本体 = 三文件（正文/参考资料在 `data.db` 内）。
  */
 export function hasAuthoringChangesSince(project: ProjectContext, since: Date): boolean {
   return hasChangesSince(project, since, { extraFiles: [AGENTS_FILE_NAME] });
@@ -888,7 +746,7 @@ export function latestParseableBackupTime(project: ProjectContext): Date | null 
 
 /**
  * 「本机有改动未进最新备份」（卡 B，`GET /cloud/status` 的 `local.backupStale`）：
- * 最新一份本地备份的时间早于最新创作改动（三文件 + `sessions/`，口径同 `hasLocalEditsSince`，
+ * 最新一份本地备份的时间早于最新创作改动（三文件口径同 `hasLocalEditsSince`，
  * `data.db`/`-wal` 带 1s 容差）。**没有任何可解析备份 → true**
  *（那时推送会 404「没有可推送的备份」，语义上也是「还没有能代表当前的档」）。
  *
@@ -1009,6 +867,8 @@ function scheduleNext(project: ProjectContext): void {
  * （与 db 包 writeJsonAtomic 同款格式惯例）
  * - outline.json / data.db：原样字节原子写
  *
+ * **`sessions/` 一律不碰**（不写不删）：它是纯本地目录，包内的存量 `sessions/**` 条目接受但忽略。
+ *
  * 注意：本函数只管文件层，不含 data.db 连接管理（重连见 overwriteProjectFiles）。
  */
 export function writeProjectFilesFromBackup(
@@ -1018,15 +878,12 @@ export function writeProjectFilesFromBackup(
     keepId?: string;
     name?: string;
     snapshotFileName?: string;
-    /** 随包目录走**并集合并**（云拉取语义）；缺省 = 整体覆盖（本地 restore / import 语义不变） */
-    mergePackedDirs?: { baseEntries: readonly string[] };
   } = {},
-): MergeCounts | undefined {
- // 替换顺序：JSON 两文件在前，data.db 最后，sessions/ 收尾——db 替换失败时其余已替换
+): void {
+ // 替换顺序：JSON 两文件在前，data.db 最后——db 替换失败时其余已替换
  // （校验已通过，文件内容本身有效，部分替换可经重新恢复修复）；replaced 清单供失败日志使用（P1-2）
   const targetNames = [PROJECT_FILE_NAME, OUTLINE_FILE_NAME, DATA_DB_FILE_NAME];
   const replaced: string[] = [];
-  let merged: MergeCounts | undefined;
   try {
     const parsedProject = JSON.parse(new TextDecoder().decode(entries[PROJECT_FILE_NAME])) as Record<string, unknown>;
     const nextProject = {
@@ -1040,20 +897,6 @@ export function writeProjectFilesFromBackup(
     replaced.push(OUTLINE_FILE_NAME);
     writeFileAtomic(join(dir, DATA_DB_FILE_NAME), entries[DATA_DB_FILE_NAME]);
     replaced.push(DATA_DB_FILE_NAME);
- // 随包目录（sessions/ 会话 JSONL）：
- // - 默认「整体覆盖」——恢复/导入是「整体还原」语义，目录以备份内容为准，本地残留不混入
- // - `mergePackedDirs`（云拉取）= 与基线做三方比较的**并集合并**（删除优先，本机新增保留）
-    for (const dirName of PACKED_DIR_NAMES) {
-      if (opts.mergePackedDirs === undefined) {
-        overwriteDirFromEntries(dir, dirName, entries);
-      } else {
-        const counts = mergeDirFromEntries(dir, dirName, entries, opts.mergePackedDirs.baseEntries);
-        merged = merged ?? { kept: 0, written: 0, removed: 0 };
-        merged.kept += counts.kept;
-        merged.written += counts.written;
-        merged.removed += counts.removed;
-      }
-    }
   } catch (err) {
  // P1-2：失败路径日志（对齐「记日志暴露部分替换」承诺）——已替换/未替换文件清单 + 覆盖前快照名
     const notReplaced = targetNames.filter((n) => !replaced.includes(n));
@@ -1065,7 +908,6 @@ export function writeProjectFilesFromBackup(
     );
     throw err;
   }
-  return merged;
 }
 
 /**
@@ -1120,12 +962,10 @@ export function overwriteProjectFiles(
   opts: {
     name?: string;
     snapshotFileName?: string;
-    mergePackedDirs?: { baseEntries: readonly string[] };
   } = {},
-): MergeCounts | undefined {
+): void {
   const dbPath = join(project.root, DATA_DB_FILE_NAME);
   closeDatabase(project.db); // 释放当前连接（替换 data.db 前必须；替换失败恢复见 catch）
-  let merged: MergeCounts | undefined;
   try {
  // 清理陈旧 WAL/SHM 残留（正常关闭通常已清理；防御：替换后新库不得复用旧 WAL）
     for (const suffix of ["-wal", "-shm"]) {
@@ -1135,11 +975,10 @@ export function overwriteProjectFiles(
         if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
       }
     }
-    merged = writeProjectFilesFromBackup(project.root, entries, {
+    writeProjectFilesFromBackup(project.root, entries, {
       keepId: project.config.id,
       ...(opts.name !== undefined ? { name: opts.name } : {}),
       ...(opts.snapshotFileName !== undefined ? { snapshotFileName: opts.snapshotFileName } : {}),
-      ...(opts.mergePackedDirs !== undefined ? { mergePackedDirs: opts.mergePackedDirs } : {}),
     });
  // 重连 + 版本对齐
     let active = openDatabase(dbPath);
@@ -1176,7 +1015,6 @@ export function overwriteProjectFiles(
     throw err;
   }
   startAutoBackup(project); // 重启定时器（覆盖包内频率可能不同）
-  return merged;
 }
 
 /**
@@ -1252,8 +1090,7 @@ function writeFileAtomic(filePath: string, data: Uint8Array): void {
 export function restoreBackup(
   project: ProjectContext,
   fileName: string,
-  options: { mergePackedDirs?: { baseEntries: readonly string[] } } = {},
-): { snapshot: Pick<BackupFileInfo, "fileName" | "createdAt">; merged?: MergeCounts } {
+): { snapshot: Pick<BackupFileInfo, "fileName" | "createdAt"> } {
  // 1. 白名单校验（assertBackupFileNameFormat：parseBackupFileName 全格式校验，防路径穿越；
  // 旧命名不可解析 ⇒ 一并被拒）
   assertBackupFileNameFormat(fileName);
@@ -1273,20 +1110,16 @@ export function restoreBackup(
  // 重连 data.db + 同步 config + 重启定时器。
  // name 归一为当前目录名（审核裁决：与 import 覆盖一致，维持「目录名 = 书名」
  // 不变式——id 是身份、name 是展示名；改名需求走 /project/rename）
-  const merged = overwriteProjectFiles(project, entries, {
+  overwriteProjectFiles(project, entries, {
     name: basename(project.root),
     snapshotFileName: snapshot.fileName,
-    ...(options.mergePackedDirs !== undefined ? { mergePackedDirs: options.mergePackedDirs } : {}),
   });
 
- // 5. 会话无归属迁移：对话历史已出库为项目目录内 `sessions/*.jsonl`（迁移 006），归属由
- // 目录表达，不再依赖 data.db 的 project_id——恢复只需覆盖三文件
- // （`sessions/` 的入包与覆盖语义由备份管道承担，见 createBackupZip / writeProjectFilesFromBackup）。
+ // 5. `sessions/` 不碰：对话历史是纯本地目录（不进任何 zip）——本机会话在恢复里不写不删；
+ // 存量旧包内的 `sessions/**` 条目接受但忽略（见 writeProjectFilesFromBackup）。
 
- //：snapshot 仅含 fileName/createdAt（size 属内部信息不暴露）
-  // snapshot 仅含 fileName/createdAt（size 属内部信息不暴露）；merged 仅在并集合并模式下有值
+  // snapshot 仅含 fileName/createdAt（size 属内部信息不暴露）
   return {
     snapshot: { fileName: snapshot.fileName, createdAt: snapshot.createdAt },
-    ...(merged !== undefined ? { merged } : {}),
   };
 }

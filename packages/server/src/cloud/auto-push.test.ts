@@ -208,6 +208,16 @@ function makeBackupAndBaseline(): number {
 }
 
 /**
+ * `outline.json` 的「改动」制造：写**合法大纲** + 显式置 mtime——备份管道要读它取统计，
+ * 不能用 `writeAfter` 塞非 JSON 内容（stats 解析会抛）。
+ */
+function changeOutlineAfter(baseMs: number, deltaMs = 60_000): void {
+  const at = new Date(baseMs + deltaMs);
+  writeOutlineFile(project.root, { id: "root", type: "root", schema_version: SCHEMA_VERSION, children: [] });
+  utimesSync(join(project.root, OUTLINE_FILE_NAME), at, at);
+}
+
+/**
  * 造「有改动，且已被最新备份涵盖」的形态（卡 B 守卫的前提）：
  * 变更 mtime 落在 (lastSyncAt, 备份时间戳) 之间——先把 lastSyncAt 与变更都放到过去，再生成备份。
  * 注意不能用 `writeAfter(rel, base)`（mtime = base + 60s 落在未来），那样任何备份都「盖不住」它。
@@ -215,7 +225,8 @@ function makeBackupAndBaseline(): number {
 function changeCoveredByBackup(rel: string): void {
   const now = Date.now();
   writeBookState(project.config.id, { lastSyncAt: new Date(now - 300_000).toISOString() });
-  writeAfter(rel, now - 120_000, 0);
+  if (rel === OUTLINE_FILE_NAME) changeOutlineAfter(now - 120_000, 0);
+  else writeAfter(rel, now - 120_000, 0);
   writeBackup(project, { kind: "auto" });
 }
 
@@ -287,24 +298,33 @@ describe("自动推送：开关与三条触发路径", () => {
     expect(putCount()).toBe(2);
   });
 
-  it("关闭项目：聊天变更若已被最新备份涵盖则推一次（不受节流、不推进 lastAutoPushAt）；未涵盖则跳过", async () => {
+  it("关闭项目：三文件改动未进最新备份则跳过；已被备份涵盖则推一次（不受节流、不推进 lastAutoPushAt）；纯聊天不推", async () => {
     changeCoveredByBackup(AGENTS_FILE_NAME);
     expect(await maybeAutoPush(project, { throttleMs: 10 * 60_000 })).toBe(true); // 先占住节流基准
     const throttledAt = readBookState(project.config.id)?.lastAutoPushAt;
 
-    // 场景 A：纯聊天变更**未**进最新备份 → 关闭项目跳过（卡 B (ii)：不静默推旧包）
-    writeAfter(join("sessions", "s2.jsonl"), Date.now() - 60_000, 0);
+    // 场景 A：本机改动**未**进最新备份 → 关闭项目跳过（卡 B (ii)：不静默推旧包）
+    const backupAt = latestParseableBackupTime(project);
+    expect(backupAt).not.toBeNull();
+    changeOutlineAfter(backupAt!.getTime(), 1); // 1ms 晚于最新备份（真实序：备份刚结束就改了一笔）
     const beforeSkip = putCount();
     await autoPushOnClose(project);
     expect(putCount()).toBe(beforeSkip);
     expect(readBookState(project.config.id)?.lastAutoPushError).toBeUndefined();
 
-    // 场景 B：备份涵盖聊天变更后 → 关闭项目推一次（不受节流、不推进节流基准）
-    changeCoveredByBackup(join("sessions", "s3.jsonl"));
+    // 场景 B：三文件改动已被备份涵盖 → 关闭项目推一次（不受节流、不推进节流基准）
+    changeCoveredByBackup(OUTLINE_FILE_NAME);
     await autoPushOnClose(project);
     expect(putCount()).toBe(beforeSkip + 1);
     expect(readBookState(project.config.id)?.lastAutoPushAt).toBe(throttledAt);
     expect(readBookState(project.config.id)?.lastAutoPushError).toBeUndefined();
+
+    // 场景 C：只动 sessions/（纯聊天）→ 不推（会话是纯本地目录，不进包；基准放到未来 ⇒ 三文件都算「已同步」）
+    writeBookState(project.config.id, { lastSyncAt: new Date(Date.now() + 10_000).toISOString() });
+    writeAfter(join("sessions", "s2.jsonl"), Date.now());
+    const beforeChat = putCount();
+    await autoPushOnClose(project);
+    expect(putCount()).toBe(beforeChat);
   });
 
   it("关闭项目：云盘不可达时不抛，只写 lastAutoPushError（关闭语义不受影响）", async () => {
@@ -377,7 +397,7 @@ describe("自动推送：开关与三条触发路径", () => {
     // 让「最新改动」晚于最新备份：mtime = 备份时间戳 + 1ms（真实序：备份刚结束就改了一笔；不造未来 mtime）
     const backupAt = latestParseableBackupTime(project);
     expect(backupAt).not.toBeNull();
-    writeAfter(join("sessions", "s1.jsonl"), backupAt!.getTime(), 1);
+    changeOutlineAfter(backupAt!.getTime(), 1);
     expect(hasUnbackedChanges(project)).toBe(true);
 
     const before = putCount();
@@ -386,7 +406,7 @@ describe("自动推送：开关与三条触发路径", () => {
     expect(putCount()).toBe(before); // 零 PUT
     expect(readBookState(project.config.id)?.lastAutoPushError).toBeUndefined(); // 不是失败
     // 把该改动"收进"备份（mtime 回到过去 + 生成新份）→ 状态消除
-    writeAfter(join("sessions", "s1.jsonl"), Date.now() - 60_000, 0);
+    changeOutlineAfter(Date.now() - 60_000, 0);
     writeBackup(project, { kind: "manual" });
     expect(hasUnbackedChanges(project)).toBe(false);
   });
@@ -401,17 +421,25 @@ describe("自动推送：开关与三条触发路径", () => {
   });
 
 describe("hasAuthoringChangesSince：创作数据口径（排除 sessions/、含 AGENTS.md）", () => {
-  it("只动 sessions/ → 不算创作变更（hasLocalEditsSince 仍算：关闭项目那次要带上聊天）", () => {
+  it("只动 sessions/ → 两个口径都**不算**变更（会话是纯本地目录，不进包）", () => {
     const base = makeBackupAndBaseline();
     writeAfter(join("sessions", "s2.jsonl"), base);
 
     expect(hasAuthoringChangesSince(project, new Date(base))).toBe(false);
+    expect(hasLocalEditsSince(project, new Date(base))).toBe(false);
+  });
+
+  it("动 outline.json / data.db-wal → 两个口径都算变更", () => {
+    const base = makeBackupAndBaseline();
+    changeOutlineAfter(base);
+
     expect(hasLocalEditsSince(project, new Date(base))).toBe(true);
+    expect(hasAuthoringChangesSince(project, new Date(base))).toBe(true);
   });
 
   it("动 outline.json（三文件）→ 算创作变更（卡 12.7b：创作数据 = 三文件 + AGENTS.md）", () => {
     const base = makeBackupAndBaseline();
-    writeAfter(OUTLINE_FILE_NAME, base);
+    changeOutlineAfter(base);
 
     expect(hasAuthoringChangesSince(project, new Date(base))).toBe(true);
   });
@@ -514,7 +542,7 @@ describe("排程钩子：自动推送挂在自动备份的同一条 tick 链上�
     makeBackupAndBaseline();
     const backupAt = latestParseableBackupTime(project);
     expect(backupAt).not.toBeNull();
-    writeAfter(join("sessions", "s2.jsonl"), backupAt!.getTime(), 1); // 改动晚于最新备份（sessions/ 参与变更判定）
+    changeOutlineAfter(backupAt!.getTime(), 1); // 三文件改动晚于最新备份（有改动未进备份）
     const freqOff: ProjectContext = { ...project, config: { ...project.config, backup_frequency_minutes: null } };
     await import("../middleware/project.js");
 

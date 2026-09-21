@@ -7,8 +7,10 @@ import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync, existsSync 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { unzipSync, zipSync } from "fflate";
 import {
   DATA_DB_FILE_NAME,
+  OUTLINE_FILE_NAME,
   openDatabase,
   closeDatabase,
   readProjectFile,
@@ -216,7 +218,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** 通过备份管道造一份真备份（含 sessions/ 条目——唯一随包目录） */
+/** 通过备份管道造一份真备份（三文件——`sessions/` 不进包） */
 function makeBackup(name?: string, kind: "auto" | "manual" = "manual"): string {
   return writeBackup(project, { kind, ...(name !== undefined ? { name } : {}) }).fileName;
 }
@@ -440,7 +442,8 @@ describe("pushBackup：目录定位与体积/白名单校验", () => {
 });
 
 describe("pushBackup：状态更新（cloud.json 的 books 段）", () => {
-  it("写入 dirName / lastPushedFileName / lastSeenHeadFileName / lastSyncAt / baseEntries", async () => {
+  it("写入 dirName / lastPushedFileName / lastSeenHeadFileName / lastSyncAt；`baseEntries` 停写（旧值原样保留）", async () => {
+    writeBookState(project.config.id, { baseEntries: ["sessions/旧基线.jsonl"] }); // 存量旧值（读侧容忍）
     makeBackup("本机的");
     const result = await pushBackup(project);
     const state = readBookState(project.config.id);
@@ -449,8 +452,8 @@ describe("pushBackup：状态更新（cloud.json 的 books 段）", () => {
     expect(state?.lastPushedFileName).toBe(result.pushed.fileName);
     expect(state?.lastSeenHeadFileName).toBe(result.pushed.fileName);
     expect(typeof state?.lastSyncAt).toBe("string");
-    // baseEntries = 备份包内 sessions/ 的条目名（拉取并集的基线）
-    expect(state?.baseEntries).toEqual(["sessions/s1.jsonl"]);
+    // 并集合并已取消：字段读侧容忍但不重写（推送后仍是旧值）
+    expect(state?.baseEntries).toEqual(["sessions/旧基线.jsonl"]);
   });
 
   it("只覆盖出现过的键：重复推送不丢已有状态（含其它书的记录）", async () => {
@@ -471,15 +474,15 @@ describe("HttpError 基本形态（防回归：码与状态成对）", () => {
   });
 });
 
-// ============ 卡 5：拉取（并集合并 / 基线三方比较）与三态判定 ============
+// ============ 卡 5：拉取（三文件覆盖）与三态判定 ============
 
 import { readFileSync as readFile, writeFileSync as writeFile, mkdirSync as mkdirP, utimesSync } from "node:fs";
 
-/** 造一份「云端侧」备份 zip（真走备份管道，只在 sessions/ 放指定文件） */
-function makeCloudZip(packed: { sessions?: string[]; packInto?: string }): {
-  bytes: Uint8Array;
-  fileName: string;
-} {
+/**
+ * 造一份「云端侧」备份 zip（真走备份管道 → 三文件）。`legacySessions` 用于模拟**存量旧包**：
+ * 在真包上追加 `sessions/**` 条目（读取侧一律忽略——只验证「接受但不用」）。
+ */
+function makeCloudZip(opts: { legacySessions?: string[] } = {}): { bytes: Uint8Array; fileName: string } {
   const dir = mkdtempSync(join(tmpdir(), "ai-editor-sync-cloud-"));
   writeProjectFile(dir, {
     id: "proj-cloud-side",
@@ -494,91 +497,62 @@ function makeCloudZip(packed: { sessions?: string[]; packInto?: string }): {
   const db0 = openDatabase(join(dir, DATA_DB_FILE_NAME));
   setUserVersion(db0, SCHEMA_VERSION);
   closeDatabase(db0);
-  for (const name of packed.sessions ?? []) {
-    mkdirP(join(dir, "sessions"), { recursive: true });
-    writeFile(join(dir, "sessions", name), `cloud:${name}`);
-  }
   const db = openDatabase(join(dir, DATA_DB_FILE_NAME));
   const info = writeBackup({ root: dir, config: readProjectFile(dir) as ProjectFileConfig, db }, { kind: "manual" });
   closeDatabase(db);
-  const zipPath = join(dir, BACKUPS_DIR_NAME, info.fileName);
-  const bytes = new Uint8Array(readFile(zipPath));
-  if (packed.packInto !== undefined) {
-    // 把 zip 复制到目标项目（避免临时目录被清理时丢失字节——本函数直接返回字节，此参数仅用于就近取证）
+  let bytes = new Uint8Array(readFile(join(dir, BACKUPS_DIR_NAME, info.fileName)));
+  if (opts.legacySessions !== undefined) {
+    const entries = unzipSync(bytes);
+    for (const name of opts.legacySessions) entries[`sessions/${name}`] = new TextEncoder().encode(`legacy:${name}`);
+    bytes = zipSync(entries);
   }
   return { bytes, fileName: info.fileName };
 }
 
-describe("pullBackup：并集合并六种情形（基线三方比较、删除优先）", () => {
-  it("两边都有→云端取胜；云端删了→删本机；本机新增→保留；本机删了→不复活；云端新增→写入", async () => {
-    // 基线（上次同步时云端那份的内容）
-    const base = ["sessions/a.jsonl", "sessions/b.jsonl", "sessions/c.jsonl", "sessions/s1.jsonl"];
-    // 本机现状：a.jsonl 改过、b.jsonl 还在、local-only.jsonl 是本机新增、s1.jsonl 还在；c.jsonl 本机已删
+describe("pullBackup：三文件覆盖（sessions/ 是纯本地目录，不写不删）", () => {
+  it("拉取只覆盖三文件：本机会话字节不变、本机独有文件不被删、旧包条目不被写入", async () => {
+    // 本机会话：与旧包同名的一份（内容不同）+ 本机独有的一份
     const sessDir = join(project.root, "sessions");
-    mkdirP(sessDir, { recursive: true });
-    writeFile(join(sessDir, "a.jsonl"), "local:a.jsonl");
-    writeFile(join(sessDir, "b.jsonl"), "local:b.jsonl");
-    writeFile(join(sessDir, "local-only.jsonl"), "local-only");
-    writeFile(join(sessDir, "s1.jsonl"), "local:s1");
+    writeFile(join(sessDir, "sess_same.jsonl"), "本机版本");
+    writeFile(join(sessDir, "本机独有.jsonl"), "只在本机");
 
-    // 云端那份：a.jsonl（云端版）、c.jsonl（本机已删 → 不该复活）、cloud-only.jsonl（云端新增）；b.jsonl 与 s1.jsonl 已被云端删掉
-    const cloud = makeCloudZip({ sessions: ["a.jsonl", "c.jsonl", "cloud-only.jsonl"] });
+    // 云端那份 = 存量旧包形态（额外带 sessions/** 条目）
+    const cloud = makeCloudZip({ legacySessions: ["sess_same.jsonl", "sess_from_cloud.jsonl"] });
     const dirName = `测试书-${project.config.id}`;
     store.set(dirName, { isDir: true, bytes: new Uint8Array(), mtime: Date.now() });
     seedCloudFile(`${dirName}/${cloud.fileName}`, cloud.bytes);
-    writeBookState(project.config.id, {
-      dirName,
-      lastPushedFileName: cloud.fileName, // 不判冲突（本机以云端那份为基准）
-      baseEntries: base,
-    });
+    writeBookState(project.config.id, { dirName, lastPushedFileName: cloud.fileName });
 
     const result = await pullBackup(project, { fileName: cloud.fileName });
 
     expect(result.pulled.fileName).toBe(cloud.fileName);
-    // kept=1：本机新增的 local-only.jsonl（不在基线与云端）；removed=2：b.jsonl 与 s1.jsonl（云端删了它们）
-    expect(result.merged).toEqual({ kept: 1, written: 1, removed: 2 });
-    // case 1：两边都有 → 云端取胜
-    expect(readFile(join(sessDir, "a.jsonl"), "utf8")).toBe("cloud:a.jsonl");
-    // case 5：云端新增 → 写入
-    expect(readFile(join(sessDir, "cloud-only.jsonl"), "utf8")).toBe("cloud:cloud-only.jsonl");
-    // case 3：本机新增 → 保留
-    expect(readFile(join(sessDir, "local-only.jsonl"), "utf8")).toBe("local-only");
-    // case 2：云端删除 → 删本机（b.jsonl 与 s1.jsonl）
-    expect(existsSync(join(sessDir, "b.jsonl"))).toBe(false);
-    expect(existsSync(join(sessDir, "s1.jsonl"))).toBe(false);
-    // case 4：本机删除优先 → c.jsonl 不被云端复活
-    expect(existsSync(join(sessDir, "c.jsonl"))).toBe(false);
-    // 覆盖前自动快照存在（后悔药）
+    expect(readFile(join(sessDir, "sess_same.jsonl"), "utf8")).toBe("本机版本"); // 同名不被覆盖
+    expect(readFile(join(sessDir, "本机独有.jsonl"), "utf8")).toBe("只在本机"); // 不被删
+    expect(existsSync(join(sessDir, "sess_from_cloud.jsonl"))).toBe(false); // 旧包条目不写入
+    // restore 管道本身生效：覆盖前快照 + 云端那份落进本地 .backups/（参与保留策略）
     expect(existsSync(join(project.root, BACKUPS_DIR_NAME, result.snapshot.fileName))).toBe(true);
-    // 云端那份也落进了本地 .backups/（参与保留策略）
     expect(existsSync(join(project.root, BACKUPS_DIR_NAME, cloud.fileName))).toBe(true);
   });
 
-  it("基线缺失（首次同步）→ 不删任何本机文件、云端都写进来（保守）", async () => {
-    const sessDir = join(project.root, "sessions");
-    writeFile(join(sessDir, "local-only.jsonl"), "local-only");
-    const cloud = makeCloudZip({ sessions: ["a.jsonl", "s1.jsonl"] });
+  it("本机没有 sessions/ 目录也不被创建（旧包条目不会让它复活）", async () => {
+    rmSync(join(project.root, "sessions"), { recursive: true, force: true });
+    const cloud = makeCloudZip({ legacySessions: ["a.jsonl"] });
     const dirName = `测试书-${project.config.id}`;
     store.set(dirName, { isDir: true, bytes: new Uint8Array(), mtime: Date.now() });
     seedCloudFile(`${dirName}/${cloud.fileName}`, cloud.bytes);
-    writeBookState(project.config.id, { dirName, baseEntries: [] }); // 无基线
+    writeBookState(project.config.id, { dirName, lastPushedFileName: cloud.fileName });
 
-    const result = await pullBackup(project);
+    await pullBackup(project);
 
-    // 本机独有的 local-only.jsonl 保留（kept=1）；云端新增 a.jsonl 写入（written=1）；无基线 → 不删
-    // （夹具自带 sessions/s1.jsonl 两边都有 → 计入 case 1 覆盖，不算 kept/written）
-    expect(result.merged).toEqual({ kept: 1, written: 1, removed: 0 });
-    expect(existsSync(join(sessDir, "local-only.jsonl"))).toBe(true);
-    expect(existsSync(join(sessDir, "a.jsonl"))).toBe(true);
-    expect(existsSync(join(project.root, "sessions", "s1.jsonl"))).toBe(true);
+    expect(existsSync(join(project.root, "sessions"))).toBe(false);
   });
 
-  it("拉取后同步状态更新：lastPushedFileName = 拉到的这份、lastSeenCloudFiles = 云端集合、baseEntries = 该包条目", async () => {
-    const cloud = makeCloudZip({ sessions: ["a.jsonl"] });
+  it("拉取后同步状态更新：lastPushedFileName = 拉到的这份、lastSeenHeadFileName / lastSeenCloudFiles 同步；`baseEntries` 旧值不被重写", async () => {
+    const cloud = makeCloudZip();
     const dirName = `测试书-${project.config.id}`;
     store.set(dirName, { isDir: true, bytes: new Uint8Array(), mtime: Date.now() });
     seedCloudFile(`${dirName}/${cloud.fileName}`, cloud.bytes);
-    writeBookState(project.config.id, { dirName });
+    writeBookState(project.config.id, { dirName, baseEntries: ["sessions/旧基线.jsonl"] }); // 存量旧值
 
     await pullBackup(project);
 
@@ -586,12 +560,12 @@ describe("pullBackup：并集合并六种情形（基线三方比较、删除优
     expect(state?.lastPushedFileName).toBe(cloud.fileName);
     expect(state?.lastSeenHeadFileName).toBe(cloud.fileName);
     expect(state?.lastSeenCloudFiles).toEqual([cloud.fileName]);
-    expect(state?.baseEntries).toEqual(["sessions/a.jsonl"]);
+    expect(state?.baseEntries).toEqual(["sessions/旧基线.jsonl"]); // 读侧容忍 + 停写
   });
 
   it("缺省拉取云端 head；指定不存在/非法文件名 → 404/400；未配置 → 409", async () => {
-    const older = makeCloudZip({ sessions: ["old.jsonl"] });
-    const newer = makeCloudZip({ sessions: ["new.jsonl"] });
+    const older = makeCloudZip();
+    const newer = makeCloudZip();
     const dirName = `测试书-${project.config.id}`;
     store.set(dirName, { isDir: true, bytes: new Uint8Array(), mtime: Date.now() });
     // 让 newer 的时间戳晚于 older：直接改 store 里的键名时间戳不可行 → 用两个真备份名（时间戳由管道生成，newer 必然更晚）
@@ -613,7 +587,7 @@ describe("pullBackup：并集合并六种情形（基线三方比较、删除优
 
   it("云端那份版本过高（SCHEMA_VERSION_MISMATCH）→ 409 且不留坏包、数据零触碰", async () => {
     // 造一份 user_version 更高的 data.db 的 zip
-    const cloud = makeCloudZip({ sessions: ["a.jsonl"] });
+    const cloud = makeCloudZip();
     const dirName = `测试书-${project.config.id}`;
     store.set(dirName, { isDir: true, bytes: new Uint8Array(), mtime: Date.now() });
     seedCloudFile(`${dirName}/${cloud.fileName}`, cloud.bytes);
@@ -634,7 +608,7 @@ describe("pullBackup：并集合并六种情形（基线三方比较、删除优
 
 describe("computeCloudSync：三态判定（集合基准 + 本机 mtime，不含 .backups/）", () => {
   /** 「刚同步完」的基准 = **未来 10s**：文件系统 mtime 与 `Date.now()` 的毫秒截断之间有亚毫秒抖动，
-   *  用 `new Date()` 当基准会把 beforeEach 刚写完的 `sessions/`（严格比较，无容差）读成「本机有改动」——
+   *  用 `new Date()` 当基准会把 beforeEach 刚写完的 `project.json` / `outline.json`（严格比较，无容差）读成「本机有改动」——
    *  实测约半数 flake（同一毫秒内写入）；基准设在未来等价于「同步后本机无改动」，且不损灵敏度（见同组 0.5s 用例）。 */
   const SYNCED_BASE = new Date(Date.now() + 10_000).toISOString();
   const files = (names: string[]): { files: string[] } => ({ files: names });
@@ -657,7 +631,7 @@ describe("computeCloudSync：三态判定（集合基准 + 本机 mtime，不含
     expect(out.state).toBe("remote-ahead");
   });
 
-  it("本机有改动：创作数据晚于 lastSyncAt（三文件 / sessions/ 改动即算）", () => {
+  it("本机有改动：创作数据晚于 lastSyncAt（三文件改动即算）", () => {
     writeBookState(project.config.id, { lastSyncAt: "2026-01-01T00:00:00.000Z", lastSeenCloudFiles: [] });
     expect(computeCloudSync(project, true, files([])).state).toBe("local-ahead");
   });
@@ -689,19 +663,22 @@ describe("computeCloudSync：三态判定（集合基准 + 本机 mtime，不含
     expect(out.state).toBe("synced");
   });
 
-  it("容差只给 data.db：sessions/ 改动严格比较（同步后 0.5s 的改动也算 dirty）", () => {
-    // 基准设在未来：夹具写入的三文件/sessions 的 mtime 都早于它 → 初始不 dirty（确定性构造）
+  it("sessions/ 改动**不算**本机改动（纯本地目录，不进包 ⇒ 纯聊天不产生「有东西待推」）", () => {
+    // 基准设在未来：夹具写入的三文件的 mtime 都早于它 → 初始不 dirty（确定性构造）
     const base = new Date(Date.now() + 10_000);
     writeBookState(project.config.id, { lastSyncAt: base.toISOString(), lastSeenCloudFiles: [] });
     expect(computeCloudSync(project, true, files([])).local?.dirty).toBe(false);
 
-    const sessPath = join(project.root, "sessions", "同.jsonl");
+    const sessDir = join(project.root, "sessions");
+    const sessPath = join(sessDir, "同.jsonl");
     writeFile(sessPath, "edited");
-    const within = new Date(base.getTime() + 500); // +0.5s：落在 data.db 的 1s 容差窗口内
-    utimesSync(sessPath, within, within);
+    const after = new Date(base.getTime() + 500); // 晚于基准（且落在 data.db 的 1s 容差窗口内）
+    utimesSync(sessPath, after, after);
+    utimesSync(sessDir, after, after); // 目录自身 mtime 同样不参与
+
     const out = computeCloudSync(project, true, files([]));
-    expect(out.local?.dirty).toBe(true); // 严格比较命中
-    expect(out.state).toBe("local-ahead");
+    expect(out.local?.dirty).toBe(false);
+    expect(out.state).toBe("synced");
   });
 
   it("容差给 data.db / -wal：其 mtime 落在窗口内不算 dirty（防 checkpoint 自激）", () => {
@@ -719,7 +696,7 @@ describe("computeCloudSync：三态判定（集合基准 + 本机 mtime，不含
   });
 
   it("拉取后立刻复查 → synced（严格比较不得把管道自己写的文件误判成本机改动）", async () => {
-    const cloud = makeCloudZip({ sessions: ["s1.jsonl"] });
+    const cloud = makeCloudZip();
     const dirName = `测试书-${project.config.id}`;
     store.set(dirName, { isDir: true, bytes: new Uint8Array(), mtime: Date.now() });
     seedCloudFile(`${dirName}/${cloud.fileName}`, cloud.bytes);
@@ -741,11 +718,11 @@ describe("computeCloudSync：三态判定（集合基准 + 本机 mtime，不含
     writeBookState(project.config.id, { lastSyncAt: base, lastSeenCloudFiles: [] });
     expect(computeCloudSync(project, true, files([])).local?.backupStale).toBe(false);
 
-    // 改一处本机创作数据（sessions/）且晚于 lastSyncAt → dirty=true 且备份未覆盖 → backupStale=true
-    const sess = join(project.root, "sessions", "新.jsonl");
-    writeFileSync(sess, "x");
+    // 改一处本机创作数据（outline.json）且晚于 lastSyncAt → dirty=true 且备份未覆盖 → backupStale=true
+    const outline = join(project.root, OUTLINE_FILE_NAME);
+    writeFile(outline, "{}");
     const after = new Date(Date.now() + 20_000);
-    utimesSync(sess, after, after);
+    utimesSync(outline, after, after);
     const out = computeCloudSync(project, true, files([]));
     expect(out.local?.dirty).toBe(true);
     expect(out.local?.backupStale).toBe(true);

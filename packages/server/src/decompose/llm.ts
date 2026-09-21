@@ -7,7 +7,8 @@
 // 自己补一遍等于「无限期跟随上游」。
 //
 // 形态 = **每 job 一枚落盘会话，每 turn 独立成根**（docs/design/60-decompose.md §2.1）：
-// - 落点：`<项目根>/sessions/<时间戳>_decompose-<jobId>.jsonl`（与 chat 会话同目录 ⇒ 随备份/导出/云携带）；
+// - 落点：`<项目根>/sessions/<时间戳>_decompose-<jobId>.jsonl`（与 chat 会话同目录 ⇒ 纯本地目录，不进任何 zip；
+//   换机器/换创作根后拆解过程记录不跟随，job 状态与批结果在 data.db 内、随三文件走）；
 // - 会话 id：`decompose-<清洗后的 jobId>`（清洗与组装同一纯函数 `decomposeSessionId`；前缀常量在 shared）；
 // - 每 turn：`resetLeaf()` 后再 prompt ⇒ 本轮用户消息是**新根**（`parentId: null`），模型上下文只含本轮
 //   ——累积历史是 O(N²) 重复付费（一本 757 章的书差两个数量级），故每轮必须新根；

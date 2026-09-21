@@ -202,14 +202,12 @@ describe("push / pull：失败态与裁决框归位", () => {
     vi.mocked(apiPullCloudBackup).mockResolvedValue({
       pulled: REMOTE_ENTRY,
       snapshot: { fileName: "20260915-013217008-自动-验证机-人物0-设定0-章0.zip" },
-      merged: { kept: 1, written: 1, removed: 1 },
     } as Awaited<ReturnType<typeof apiPullCloudBackup>>);
     useCloudStore.setState({ pullTarget: REMOTE_ENTRY as never });
     await useCloudStore.getState().pull(REMOTE_ENTRY as never);
     expect(apiPullCloudBackup).toHaveBeenCalledWith({ fileName: REMOTE_ENTRY.fileName });
     expect(useCloudStore.getState().pullTarget).toBeNull();
     expect(useStoreToast()).toContain("20260915-013217008-自动-验证机-人物0-设定0-章0.zip");
-    expect(useStoreToast()).toContain("本机独有保留 1 个");
   });
 
   it("在途动作互斥：push 进行中再点 pull 不重复发请求", async () => {
@@ -217,7 +215,7 @@ describe("push / pull：失败态与裁决框归位", () => {
     let release: (() => void) | null = null;
     vi.mocked(apiPullCloudBackup).mockImplementation(
       () => new Promise((resolve) => {
-        release = () => resolve({ pulled: REMOTE_ENTRY, snapshot: { fileName: "s.zip" }, merged: { kept: 0, written: 0, removed: 0 } } as never);
+        release = () => resolve({ pulled: REMOTE_ENTRY, snapshot: { fileName: "s.zip" } } as never);
       }),
     );
     const first = useCloudStore.getState().pull(REMOTE_ENTRY as never);
@@ -334,7 +332,6 @@ describe("卡 C：busy 归属 / 冲突框带份 / 读取失败区分 / 宿主上
     vi.mocked(apiPullCloudBackup).mockResolvedValue({
       pulled: shown,
       snapshot: { fileName: "s.zip" },
-      merged: { kept: 0, written: 0, removed: 0 },
     } as Awaited<ReturnType<typeof apiPullCloudBackup>>);
     vi.mocked(apiGetCloudStatus).mockResolvedValue(status("synced"));
 

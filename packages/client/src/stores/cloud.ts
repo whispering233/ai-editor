@@ -268,14 +268,9 @@ export const useCloudStore = create<CloudState>((set, get) => ({
       void useChatStore.getState().loadSessions();
       useUiStore.getState().notifyDataChanged();
       await get().refresh();
-      const { kept, written, removed } = res.merged;
-      const mergeNote =
-        kept > 0 || removed > 0
-          ? `（本机独有保留 ${kept} 个、云端新增 ${written} 个、按云端删除 ${removed} 个文件）`
-          : "";
       useUiStore
         .getState()
-        .showToast(`已从云端拉取，覆盖前状态已自动快照（${res.snapshot.fileName}）${mergeNote}`);
+        .showToast(`已从云端拉取，覆盖前状态已自动快照（${res.snapshot.fileName}）`);
       set({ conflictOpen: false });
     } catch (err) {
       const message = cloudErrorText(err, "无法连接服务，拉取结果未确认（可能已在服务端执行）");

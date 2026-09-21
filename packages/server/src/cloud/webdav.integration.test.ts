@@ -376,7 +376,7 @@ function makeProjectFixture(id: string, name: string): { project: ProjectContext
 }
 
 describe("pullBackup × 真 HTTP 服务", () => {
-  it("端到端：推送 → 本地改动 → 拉取（同名文件云端取胜、覆盖前自动快照、并集不删本机独有文件）", async () => {
+  it("端到端：推送 → 本地改动 → 拉取（三文件覆盖 + 覆盖前自动快照；本机会话不写不删）", async () => {
     dav = await startFakeDav(root);
     await configure(dav.url);
     const { project, dir } = makeProjectFixture("proj-pull-e2e", "拉取书");
@@ -386,7 +386,7 @@ describe("pullBackup × 真 HTTP 服务", () => {
     writeBackup(project, { kind: "manual" }); // 先生成一份本地备份
     const pushed = await pushBackup(project); // 推上去（云端 head = 本机这份）
 
-    // 本机改动：改了已有会话文件 + 新增一份本机独有会话
+    // 本机改动：改了已有会话文件 + 新增一份本机独有会话（会话是纯本地目录 → 拉取不碰）
     const sessDir = join(dir, "sessions");
     writeFileSync(join(sessDir, "s1.jsonl"), "本机改过的会话");
     writeFileSync(join(sessDir, "本机独有.jsonl"), "只在本机");
@@ -394,13 +394,11 @@ describe("pullBackup × 真 HTTP 服务", () => {
     const result = await pullBackup(project);
 
     expect(result.pulled.fileName).toBe(pushed.pushed.fileName);
-    // 同名文件：云端取胜（本机改动被覆盖，但覆盖前已自动快照）
-    expect(readFileSync(join(sessDir, "s1.jsonl"), "utf8")).toBe("{}\n");
+    // 会话不被写、不被删：两份都保持本机字节
+    expect(readFileSync(join(sessDir, "s1.jsonl"), "utf8")).toBe("本机改过的会话");
+    expect(readFileSync(join(sessDir, "本机独有.jsonl"), "utf8")).toBe("只在本机");
+    // 三文件覆盖前自动快照 + 云端那份落进本地 .backups/
     expect(existsSync(join(dir, BACKUPS_DIR_NAME, result.snapshot.fileName))).toBe(true);
-    // 并集：本机独有文件保留（基线里没有它）
-    expect(existsSync(join(sessDir, "本机独有.jsonl"))).toBe(true);
-    expect(result.merged.kept).toBe(1);
-    // 云端那份落进本地 .backups/
     expect(existsSync(join(dir, BACKUPS_DIR_NAME, result.pulled.fileName))).toBe(true);
 
     closeDatabase(project.db);
@@ -460,7 +458,7 @@ describe("pushBackup × 真 HTTP 服务", () => {
 
     const backupDir = join(dir, ".backups");
     mkdirSync(backupDir, { recursive: true });
-    // 走真备份管道生成 zip（含 sessions/）
+    // 走真备份管道生成 zip（三文件）
     const { writeBackup } = await import("../backup.js");
     const info = writeBackup(project, { kind: "manual", name: "定稿" });
 
@@ -471,11 +469,11 @@ describe("pushBackup × 真 HTTP 服务", () => {
     // 云端内容与本地逐字节一致
     expect(readFileSync(join(cloudDir, info.fileName)).equals(readFileSync(join(backupDir, info.fileName)))).toBe(true);
 
-    // 同步状态落盘（本机视角；含 baseEntries 基线）
+    // 同步状态落盘（本机视角）；`baseEntries` 已停写（会话不进包 ⇒ 无并集基线）
     const state = readBookState("proj-push-e2e");
     expect(state?.dirName).toBe(result.remote.dirName);
     expect(state?.lastPushedFileName).toBe(info.fileName);
-    expect(state?.baseEntries).toEqual(["sessions/s1.jsonl"]);
+    expect(state?.baseEntries).toBeUndefined();
 
     closeDatabase(project.db);
     rmSync(dir, { recursive: true, force: true });
