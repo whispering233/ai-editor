@@ -327,8 +327,9 @@ cloudRoutes.get("/remote-books", async (c) => {
 // （与 `POST /project/import` 同一实现：坏包 400 / 版本 409）→ 本机已有同 id → 409（不静默覆盖：
 // 那本书应在应用内自己同步）→ `uniqueBookDir` 建档（**id 沿用**、name 归一为目录名）→
 // 那份 zip **原样**落新书 `.backups/`（新机器立刻有一份「最新本地备份」）→ 写 `cloud.json` book state
-// （`lastPushedFileName` = 导入的那份 / `lastSeenCloudFiles` = 当时云端集合 / `lastSyncAt` = now）——
-// 不写则新机器一打开就是 `conflict`（云端有份 + 本机无同步记录），刚拉下来就逼用户裁决。**不自动打开**。
+// （`lastPushedFileName` = 导入的那份 / `lastSeenCloudFiles` = 当时云端集合 / `lastSyncAt` = 见
+// `importSyncBaseline`）——不写则新机器一打开就是 `conflict`（云端有份 + 本机无同步记录），
+// 刚拉下来就逼用户裁决。**不自动打开**。
 cloudRoutes.post("/import-book", async (c) => {
   const webdav = requireWebdavConfig();
   const parsed = cloudImportBookReqSchema.parse(await c.req.json().catch(() => ({})));
@@ -336,38 +337,38 @@ cloudRoutes.post("/import-book", async (c) => {
   if (root === null) {
     throw new HttpError(500, "INTERNAL_ERROR", "创作根未初始化（startServer 未调用 setProjectRoot）");
   }
-  // dirName 进云盘路径拼接，也作书名兜底 → 只接受**单段目录名**（不含路径分隔符与 `..`，
+  // dir_name 进云盘路径拼接，也作书名兜底 → 只接受**单段目录名**（不含路径分隔符与 `..`，
   // 且通过书名规则：纯点/控制字符同样拒——`books/` 下目标目录名就从它派生）
-  if (parsed.dirName.trim() === "" || /[/\\]|\.\./.test(parsed.dirName) || !isBookNameValid(parsed.dirName)) {
+  if (parsed.dir_name.trim() === "" || /[/\\]|\.\./.test(parsed.dir_name) || !isBookNameValid(parsed.dir_name)) {
     throw new HttpError(
       400,
       "VALIDATION_ERROR",
-      `云端目录名非法（须为不含路径分隔符与 .. 的单段名）: ${parsed.dirName}`,
+      `云端目录名非法（须为不含路径分隔符与 .. 的单段名）: ${parsed.dir_name}`,
     );
   }
-  if (parsed.fileName !== undefined && parseBackupFileName(parsed.fileName) === null) {
-    throw new HttpError(400, "VALIDATION_ERROR", `备份文件名不在白名单内: ${parsed.fileName}`);
+  if (parsed.file_name !== undefined && parseBackupFileName(parsed.file_name) === null) {
+    throw new HttpError(400, "VALIDATION_ERROR", `备份文件名不在白名单内: ${parsed.file_name}`);
   }
 
   const client = createWebdavClient(webdav);
-  const entries = await client.list(parsed.dirName);
+  const entries = await client.list(parsed.dir_name);
   if (entries === null) {
-    throw new HttpError(404, "CLOUD_FILE_NOT_FOUND", `云端没有这个书目录: ${parsed.dirName}`);
+    throw new HttpError(404, "CLOUD_FILE_NOT_FOUND", `云端没有这个书目录: ${parsed.dir_name}`);
   }
   const backups = toCloudBackups(entries);
   const head = backups[0] ?? null;
   const target =
-    parsed.fileName === undefined ? head : (backups.find((entry) => entry.fileName === parsed.fileName) ?? null);
+    parsed.file_name === undefined ? head : (backups.find((entry) => entry.fileName === parsed.file_name) ?? null);
   if (target === null) {
     throw new HttpError(
       404,
       "CLOUD_FILE_NOT_FOUND",
-      parsed.fileName === undefined
-        ? `云端书目录里没有可导入的备份: ${parsed.dirName}`
-        : `云端那份备份已不存在: ${parsed.fileName}`,
+      parsed.file_name === undefined
+        ? `云端书目录里没有可导入的备份: ${parsed.dir_name}`
+        : `云端那份备份已不存在: ${parsed.file_name}`,
     );
   }
-  const bytes = await client.get(`${parsed.dirName}/${target.fileName}`);
+  const bytes = await client.get(`${parsed.dir_name}/${target.fileName}`);
   if (bytes === null) {
     throw new HttpError(404, "CLOUD_FILE_NOT_FOUND", `云端那份备份已不存在: ${target.fileName}`);
   }
@@ -384,14 +385,14 @@ cloudRoutes.post("/import-book", async (c) => {
 
   // 书名：目录名解析出的优先（云端目录名就是书名来源）；回退命名解析不出 → 包内 project.json 的书名；
   // 两者都不合法（包内书名只经「非空字符串」校验，拼目录前必须过同一道规则）→ 用目录名（已验单段）
-  const candidate = parseCloudBookDirName(parsed.dirName)?.name ?? validated.projectName.trim();
-  const bookDir = uniqueBookDir(root, isBookNameValid(candidate) ? candidate : parsed.dirName);
+  const candidate = parseCloudBookDirName(parsed.dir_name)?.name ?? validated.projectName.trim();
+  const bookDir = uniqueBookDir(root, isBookNameValid(candidate) ? candidate : parsed.dir_name);
   try {
     mkdirSync(bookDir, { recursive: true });
     writeProjectFilesFromBackup(bookDir, validated.entries, { name: basename(bookDir) }); // id 沿用（keepId 不传）
     writeRawBackupFile(bookDir, target.fileName, bytes);
     writeBookState(validated.projectId, {
-      dirName: parsed.dirName,
+      dirName: parsed.dir_name,
       lastPushedFileName: target.fileName,
       lastSeenHeadFileName: head?.fileName ?? target.fileName,
       lastSyncAt: importSyncBaseline(bookDir),

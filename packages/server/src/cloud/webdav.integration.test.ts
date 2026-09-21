@@ -552,7 +552,7 @@ describe("云端书架端点 × 真 HTTP 服务（列 + 导入新书，中文目
     const imported = await app.request("/api/v1/cloud/import-book", {
       method: "POST",
       headers: JSON_HEADERS,
-      body: JSON.stringify({ dirName: `斗破苍穹-${project.config.id}` }),
+      body: JSON.stringify({ dir_name: `斗破苍穹-${project.config.id}` }),
     });
     expect(imported.status).toBe(200);
     const bookDir = join(root, "books", "斗破苍穹");

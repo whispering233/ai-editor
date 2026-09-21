@@ -1153,13 +1153,12 @@ export const cloudRemoteBooksResSchema: z.ZodType<CloudRemoteBooksResult> = z.ob
 });
 
 // POST /api/v1/cloud/import-book：把云端某本书的一份备份导入为本机新书（不自动打开）
-// 请求体字段按契约文档用 camelCase（与 pull/push 的 snake_case 不同）；dirName 须为单段目录名
-// （不含路径分隔符/`..`，服务端校验 → 400）；fileName 缺省 = head，须通过备份命名白名单
-// （服务端校验 → 400）。
+// 请求体字段 snake_case（同 pull/push）；dir_name 须为单段目录名（不含路径分隔符/`..`，
+// 服务端校验 → 400）；file_name 缺省 = head，须通过备份命名白名单（服务端校验 → 400）。
 export const cloudImportBookReqSchema = z
   .object({
-    dirName: z.string(),
-    fileName: z.string().optional(),
+    dir_name: z.string(),
+    file_name: z.string().optional(),
   })
   .strict();
 export type CloudImportBookReq = z.infer<typeof cloudImportBookReqSchema>;

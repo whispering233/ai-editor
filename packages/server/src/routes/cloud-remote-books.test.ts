@@ -342,7 +342,7 @@ describe("GET /api/v1/cloud/remote-books", () => {
 
 describe("POST /api/v1/cloud/import-book", () => {
   it("未配置云盘 → 409 CLOUD_NOT_CONFIGURED", async () => {
-    const res = await request("/api/v1/cloud/import-book", "POST", { dirName: "任意" });
+    const res = await request("/api/v1/cloud/import-book", "POST", { dir_name: "任意" });
     expect(res.status).toBe(409);
     expect((await errorBody(res)).code).toBe("CLOUD_NOT_CONFIGURED");
   });
@@ -356,7 +356,7 @@ describe("POST /api/v1/cloud/import-book", () => {
     seedCloudBook(dav, dirName, [zip]);
     rmSync(local.dir, { recursive: true, force: true }); // 模拟新机器：本机没有这本书
 
-    const res = await request("/api/v1/cloud/import-book", "POST", { dirName });
+    const res = await request("/api/v1/cloud/import-book", "POST", { dir_name: dirName });
 
     expect(res.status).toBe(200);
     const bookDir = importedBookDir("云端来的书");
@@ -395,7 +395,7 @@ describe("POST /api/v1/cloud/import-book", () => {
     seedCloudBook(dav, dirName, [zip]);
     rmSync(local.dir, { recursive: true, force: true });
 
-    expect((await request("/api/v1/cloud/import-book", "POST", { dirName })).status).toBe(200);
+    expect((await request("/api/v1/cloud/import-book", "POST", { dir_name: dirName })).status).toBe(200);
     const bookDir = importedBookDir("刚拉下的书");
     expect((await request("/api/v1/project/open", "POST", { path: bookDir })).status).toBe(200);
 
@@ -415,7 +415,7 @@ describe("POST /api/v1/cloud/import-book", () => {
     seedCloudBook(dav, `ai-editor-${local.id}`, [zip]); // 云盘拒长名后的回退命名
     rmSync(local.dir, { recursive: true, force: true });
 
-    const res = await request("/api/v1/cloud/import-book", "POST", { dirName: `ai-editor-${local.id}` });
+    const res = await request("/api/v1/cloud/import-book", "POST", { dir_name: `ai-editor-${local.id}` });
 
     expect(res.status).toBe(200);
     expect(await responseData(res)).toMatchObject({ id: local.id, name: "原名很长的书" });
@@ -436,7 +436,7 @@ describe("POST /api/v1/cloud/import-book", () => {
     ]);
     rmSync(local.dir, { recursive: true, force: true });
 
-    const res = await request("/api/v1/cloud/import-book", "POST", { dirName, fileName: older });
+    const res = await request("/api/v1/cloud/import-book", "POST", { dir_name: dirName, file_name: older });
 
     expect(res.status).toBe(200);
     expect(await responseData(res)).toMatchObject({ fileName: older, size: zip.bytes.length });
@@ -459,13 +459,13 @@ describe("POST /api/v1/cloud/import-book", () => {
     seedCloudBook(dav, dirName, [zip]);
     rmSync(local.dir, { recursive: true, force: true });
 
-    const first = await request("/api/v1/cloud/import-book", "POST", { dirName });
+    const first = await request("/api/v1/cloud/import-book", "POST", { dir_name: dirName });
 
     expect(first.status).toBe(200);
     expect(await responseData(first)).toMatchObject({ name: "重名书 (2)" }); // 目录去重（N 从 2 起）
     expect(readProjectFile(importedBookDir("重名书 (2)"))?.id).toBe(local.id);
 
-    const again = await request("/api/v1/cloud/import-book", "POST", { dirName });
+    const again = await request("/api/v1/cloud/import-book", "POST", { dir_name: dirName });
 
     expect(again.status).toBe(409);
     expect((await errorBody(again)).code).toBe("PROJECT_ALREADY_EXISTS");
@@ -481,7 +481,7 @@ describe("POST /api/v1/cloud/import-book", () => {
       { fileName: backupNameAt("2026-08-01T10:00:00Z"), bytes: new TextEncoder().encode("not a zip") },
     ]);
 
-    const res = await request("/api/v1/cloud/import-book", "POST", { dirName });
+    const res = await request("/api/v1/cloud/import-book", "POST", { dir_name: dirName });
 
     expect(res.status).toBe(400);
     expect((await errorBody(res)).code).toBe("VALIDATION_ERROR");
@@ -506,7 +506,7 @@ describe("POST /api/v1/cloud/import-book", () => {
     seedCloudBook(dav, dirName, [{ fileName: zip.fileName, bytes: futureZip }]);
     rmSync(local.dir, { recursive: true, force: true });
 
-    const res = await request("/api/v1/cloud/import-book", "POST", { dirName });
+    const res = await request("/api/v1/cloud/import-book", "POST", { dir_name: dirName });
 
     expect(res.status).toBe(409);
     expect((await errorBody(res)).code).toBe("SCHEMA_VERSION_MISMATCH");
@@ -522,13 +522,13 @@ describe("POST /api/v1/cloud/import-book", () => {
     const dirName = `不存在-${local.id}`;
     seedCloudBook(dav, dirName, [zip]);
 
-    const noDir = await request("/api/v1/cloud/import-book", "POST", { dirName: `别的目录-${generateProjectId()}` });
+    const noDir = await request("/api/v1/cloud/import-book", "POST", { dir_name: `别的目录-${generateProjectId()}` });
     expect(noDir.status).toBe(404);
     expect((await errorBody(noDir)).code).toBe("CLOUD_FILE_NOT_FOUND");
 
     const noFile = await request("/api/v1/cloud/import-book", "POST", {
-      dirName,
-      fileName: backupNameAt("2020-01-01T00:00:00Z"),
+      dir_name: dirName,
+      file_name: backupNameAt("2020-01-01T00:00:00Z"),
     });
     expect(noFile.status).toBe(404);
     expect((await errorBody(noFile)).code).toBe("CLOUD_FILE_NOT_FOUND");
@@ -536,7 +536,7 @@ describe("POST /api/v1/cloud/import-book", () => {
     // 目录里一份可解析的备份都没有（缺省 head）→ 同码
     const emptyDir = `空目录-${generateProjectId()}`;
     seedCloudBook(dav, emptyDir, []);
-    const noHead = await request("/api/v1/cloud/import-book", "POST", { dirName: emptyDir });
+    const noHead = await request("/api/v1/cloud/import-book", "POST", { dir_name: emptyDir });
     expect(noHead.status).toBe(404);
     expect((await errorBody(noHead)).code).toBe("CLOUD_FILE_NOT_FOUND");
 
@@ -550,16 +550,20 @@ describe("POST /api/v1/cloud/import-book", () => {
     const id = generateProjectId();
 
     for (const dirName of [`../${id}`, `a/${id}`, "a\\b", "..", ".", ""]) {
-      const res = await request("/api/v1/cloud/import-book", "POST", { dirName });
+      const res = await request("/api/v1/cloud/import-book", "POST", { dir_name: dirName });
       expect(res.status, `dirName=${dirName}`).toBe(400);
       expect((await errorBody(res)).code).toBe("VALIDATION_ERROR");
     }
     const badName = await request("/api/v1/cloud/import-book", "POST", {
-      dirName: `书-${id}`,
-      fileName: "不是备份文件名.zip",
+      dir_name: `书-${id}`,
+      file_name: "不是备份文件名.zip",
     });
     expect(badName.status).toBe(400);
     expect((await errorBody(badName)).code).toBe("VALIDATION_ERROR");
+    // 旧 camelCase 字段名（曾错抄契约）→ strict 拒绝（请求体一律 snake_case）
+    const legacy = await request("/api/v1/cloud/import-book", "POST", { dirName: `书-${id}` });
+    expect(legacy.status).toBe(400);
+    expect((await errorBody(legacy)).code).toBe("VALIDATION_ERROR");
     expect(dav.spy).not.toHaveBeenCalled(); // 全部在发起网络请求前拒绝
   });
 });
