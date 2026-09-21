@@ -16,6 +16,8 @@ import { blocksToPlainMd } from "@whispering233/ai-editor-shared";
 import type { DecomposeBatchResult, DecomposeExtractedChapter } from "@whispering233/ai-editor-shared";
 import {
   completeBatch,
+  createDecomposeJob,
+  createEntity,
   deriveChapterOrder,
   findOutlineNode,
   getDecomposeJob,
@@ -27,6 +29,7 @@ import {
   nowIso,
   readOutlineFile,
   restoreEntity,
+  softDeleteEntity,
   updateEntity,
   updateRelationMetadata,
   type Db,
@@ -43,7 +46,7 @@ import { setProjectRoot } from "../routes/project.js";
 import { ingestDecomposeProject } from "./job.js";
 import { openDecomposeSession, type DecomposeLlmDeps } from "./llm.js";
 import { DECOMPOSE_ALIAS_GROUP_MAX, DECOMPOSE_ALIAS_GROUP_MIN_NAMES } from "./merge.js";
-import { DECOMPOSE_MERGE_RELATION_TYPE, runDecomposeMerge, type DecomposeMergeSummary } from "./merge-write.js";
+import { DECOMPOSE_MERGE_RELATION_TYPE, mergeEntityData, runDecomposeMerge, type DecomposeMergeSummary } from "./merge-write.js";
 import { DECOMPOSE_REPORT_KIND, DECOMPOSE_REPORT_SECTIONS } from "./report.js";
 import { splitNovelWithSlices } from "./split.js";
 
@@ -86,20 +89,24 @@ interface CharacterSpec {
   description?: string;
   alias?: string;
   role?: string;
+  gender?: string;
+  age?: string | number;
+  race?: string;
+  personality?: readonly string[];
 }
 
 interface ChapterSpec {
   summary: string;
   characters?: readonly CharacterSpec[];
   settings?: readonly { name: string; description?: string; tags?: string[] }[];
-  locations?: readonly { name: string; type?: string }[];
+  locations?: readonly { name: string; type?: string; description?: string }[];
   relations?: readonly { source: string; target: string; type: string }[];
 }
 
-/** 批结果（`chapterTitle` 写成「回声N」：与大纲标题不同 ⇒ 回写若写标题必报红） */
-function batchResult(specs: readonly ChapterSpec[]): DecomposeBatchResult {
+/** 批结果（`chapterTitle` 写成「回声N」：与大纲标题不同 ⇒ 回写若写标题必报红）；`firstIndex` = 本批首章的章序（续拆批不从头数） */
+function batchResult(specs: readonly ChapterSpec[], firstIndex = 1): DecomposeBatchResult {
   const chapters: DecomposeExtractedChapter[] = specs.map((spec, position) => ({
-    chapterIndex: position + 1,
+    chapterIndex: position + firstIndex,
     chapterTitle: `回声${position + 1}`,
     summary: spec.summary,
     characters: (spec.characters ?? []).map((character) => ({
@@ -107,6 +114,10 @@ function batchResult(specs: readonly ChapterSpec[]): DecomposeBatchResult {
       ...(character.role === undefined ? {} : { role: character.role }),
       ...(character.description === undefined ? {} : { description: character.description }),
       ...(character.alias === undefined ? {} : { alias: character.alias }),
+      ...(character.gender === undefined ? {} : { gender: character.gender }),
+      ...(character.age === undefined ? {} : { age: character.age }),
+      ...(character.race === undefined ? {} : { race: character.race }),
+      ...(character.personality === undefined ? {} : { personality: [...character.personality] }),
     })),
     settings: (spec.settings ?? []).map((setting) => ({
       name: setting.name,
@@ -116,6 +127,7 @@ function batchResult(specs: readonly ChapterSpec[]): DecomposeBatchResult {
     locations: (spec.locations ?? []).map((location) => ({
       name: location.name,
       ...(location.type === undefined ? {} : { type: location.type }),
+      ...(location.description === undefined ? {} : { description: location.description }),
     })),
     relations: (spec.relations ?? []).map((relation) => ({ ...relation })),
   }));
@@ -611,5 +623,251 @@ describe("S4 报告（§6.2 六段）", () => {
     expect(model.prompts[0]).not.toContain("正文正文"); // 不把原文喂给归并调用
     expect(model.prompts[1]).toContain("第1章 标题1：摘要1");
     expect(model.prompts[1]).not.toContain("正文正文"); // 报告只看章摘要
+  });
+});
+
+// ============ 跨轮续拆（§6 第 3 层 / §6.1 跨轮 baseline） ============
+
+/** 跑一轮 S3 + S4（先 script 好别名归并回复与剧情摘要正文） */
+async function mergeRound(input: {
+  project: ProjectContext;
+  jobId: string;
+  model: FakeModel;
+  /** 别名归并回复（规范名 + 并入的别名）；缺省 = 本轮无合并组 */
+  aliases?: readonly [string, readonly string[]];
+  plot: string;
+}): Promise<DecomposeMergeSummary> {
+  input.model.script([
+    input.aliases === undefined ? noAliases() : aliasResponse(input.aliases[0], input.aliases[1]),
+    input.plot,
+  ]);
+  return runMerge({ project: input.project, jobId: input.jobId, deps: input.model.deps });
+}
+
+/** 续拆 job（§7.1 形态：同项目开新 job，不建大纲不导正文——本卡只需「历史 job + 新 job」两行） */
+function continueJob(project: ProjectContext, start: number, end: number): string {
+  const chapterIds = deriveChapterOrder(project.root)
+    .filter((entry) => entry.chapterNumber >= start && entry.chapterNumber <= end)
+    .map((entry) => entry.chapterId);
+  return createDecomposeJob(project.db, {
+    scopeStart: start,
+    scopeEnd: end,
+    batchTargetChars: 6000,
+    model: null,
+    batches: [{ seq: 1, chapterIds }],
+    now: nowIso(),
+  }).id;
+}
+
+/** 第一轮（ch1-3）产物：张三（含别名组「三哥」）/ 李四 / 设定「功法」/ 地点「山谷」/ 关系「张三→李四」 */
+function firstRoundSpecs(): ChapterSpec[] {
+  const ally = { source: "张三", target: "李四", type: "ally" };
+  return [
+    {
+      summary: "一轮摘要1",
+      characters: [
+        { name: "张三", role: "主角", description: "张三（第一卷的描述）", alias: "小张", gender: "男", personality: ["果断"] },
+        { name: "李四", role: "配角", description: "李四的较长描述（第一轮）" },
+        { name: "三哥", description: "三哥的描述" },
+      ],
+      settings: [{ name: "功法", description: "功法描述", tags: ["武学"] }],
+      locations: [{ name: "山谷", type: "野外", description: "山谷描述" }],
+      relations: [ally],
+    },
+    { summary: "一轮摘要2", characters: [{ name: "张三" }, { name: "李四" }, { name: "三哥" }], relations: [ally] },
+    { summary: "一轮摘要3", characters: [{ name: "张三" }] },
+  ];
+}
+
+/**
+ * 第二轮（ch4-6）产物：同名项跨轮重现（张三 / 李四 / 赵六 / 山谷 / 关系「张三→李四」），另有新增（王五 / 关系「张三→王五」）
+ * 与只出现于第二轮的名字（张先生——本轮别名组把它并进张三）。张三描述本轮更长，李四描述本轮更短。
+ */
+function secondRoundSpecs(): ChapterSpec[] {
+  const 张三 = (): CharacterSpec => ({
+    name: "张三",
+    role: "主要配角",
+    description: "张三（第二卷：这一段的描述明显更长，本轮应当胜出）",
+    gender: "女",
+    age: "三十",
+    race: "人族",
+    personality: ["沉稳"],
+  });
+  const 李四 = { name: "李四", role: "配角", description: "李四（短）" };
+  const 赵六 = { name: "赵六", role: "配角", description: "赵六的描述（本轮）" };
+  return [
+    {
+      summary: "二轮摘要1",
+      characters: [张三(), { name: "王五", role: "配角", description: "王五的描述" }, 赵六, { name: "张先生", description: "张先生" }],
+      relations: [{ source: "张三", target: "王五", type: "ally" }],
+    },
+    {
+      summary: "二轮摘要2",
+      characters: [张三(), { name: "王五" }, 赵六, 李四, { name: "张先生" }],
+      relations: [
+        { source: "张三", target: "王五", type: "ally" },
+        { source: "张三", target: "李四", type: "ally" },
+      ],
+    },
+    {
+      summary: "二轮摘要3",
+      characters: [张三(), 李四, { name: "张先生" }],
+      locations: [{ name: "山谷", type: "野外", description: "山谷" }],
+      relations: [{ source: "张三", target: "李四", type: "ally" }],
+    },
+  ];
+}
+
+describe("跨轮续拆（§6 第 3 层增量更新 / §6.1 跨轮 baseline）", () => {
+  it("两个 job（范围不重叠）：同名行复用不重复建、关系不撞 RELATION_EXISTS、第一轮产物不软删、报告更新同一条", async () => {
+    const model = await fakeModel();
+    const { project, jobId: job1 } = projectFixture();
+    writeBatch(project.db, job1, 1, batchResult(firstRoundSpecs()));
+    const first = await mergeRound({ project, jobId: job1, model, aliases: ["张三", ["三哥"]], plot: "一轮剧情摘要。" });
+    expect(entityCounts(project.db)).toEqual({ character: 2, setting: 1, location: 1, reference: 1 });
+
+    // 用户手工改过李四（第二轮不得覆盖）：版本戳必须偏离 baseline 记录值
+    const 李四 = characterIdByName(project.db, "李四");
+    const 张三 = characterIdByName(project.db, "张三");
+    await sleep();
+    updateEntity(project.db, 李四, { data: { role: "用户改过的定位", description: "用户手写的描述" } });
+    const 李四Edited = getEntity(project.db, 李四)!.updated_at;
+    const relationBefore = listRelations(project.db, {}, 1, project.root).relations[0].id;
+    // 库内同身份行、两边清单都没有（用户手工建）：复用该行，不得再 create 重复行（createEntity 无同名守卫）
+    const 赵六 = createEntity(project.db, { type: "character", name: "赵六", data: { role: "用户手建" } }).id;
+
+    await sleep(); // created_at 精度到毫秒：baseline 的「最新一次记录」按 job 创建时间序覆盖
+    const job2 = continueJob(project, 4, 6);
+    writeBatch(project.db, job2, 1, batchResult(secondRoundSpecs(), 4));
+    const second = await mergeRound({ project, jobId: job2, model, aliases: ["张三", ["张先生"]], plot: "二轮剧情摘要。" });
+
+    // ① 复用不重复建：人物 2 → 4（新增王五 + 手建赵六，赵六不另建第二行），设定/地点/报告数量不变；
+    //    关系 1 → 2（只新增张三→王五，无 RELATION_EXISTS）
+    expect(entityCounts(project.db)).toEqual({ character: 4, setting: 1, location: 1, reference: 1 });
+    expect(characterIdByName(project.db, "张三")).toBe(张三);
+    expect(characterIdByName(project.db, "李四")).toBe(李四);
+    expect(characterIdByName(project.db, "赵六")).toBe(赵六);
+    expect(getEntity(project.db, 赵六)!.data.role).toBe("用户手建"); // 手建行只复用，不写内容
+    expect(listEntities(project.db, { type: "character", q: "张先生" }).total).toBe(0); // 别名不单独落库
+    const relations = listRelations(project.db, {}, 1, project.root).relations;
+    expect(relations).toHaveLength(2);
+    expect(relations.find((relation) => relation.targetName === "李四")?.id).toBe(relationBefore); // 复用了第一轮那枚关系
+
+    // ② 第一轮产物未被软删（跨轮未重现：设定「功法」只有第一轮抽到）
+    expect(listDeletedEntities(project.db)).toEqual([]);
+    expect(listEntities(project.db, { type: "setting", q: "功法" }).total).toBe(1);
+
+    // ③ 增量更新：description 更长者胜 + 别名段跨轮合并（不丢上一轮的「三哥」）；personality 并集；
+    //    gender 库内已有 ⇒ 不覆盖；age / race 库内为空 ⇒ 填
+    const merged张三 = getEntity(project.db, 张三)!;
+    expect(merged张三.data).toMatchObject({
+      role: "主要配角", // role：本轮非空则覆盖
+      alias: "小张",
+      gender: "男",
+      age: "三十",
+      race: "人族",
+      personality: ["果断", "沉稳"],
+      description: "张三（第二卷：这一段的描述明显更长，本轮应当胜出）（又称：三哥、张先生）",
+    });
+    // ④ 用户编辑优先：李四的内容与版本戳都不动
+    const edited李四 = getEntity(project.db, 李四)!;
+    expect(edited李四.data).toMatchObject({ role: "用户改过的定位", description: "用户手写的描述" });
+    expect(edited李四.updated_at).toBe(李四Edited);
+    // 地点：本轮描述更短 ⇒ 保留上一轮（更长者胜的另一个方向）
+    const 山谷 = listEntities(project.db, { type: "location" }).items[0]!.id;
+    expect(getEntity(project.db, 山谷)!.data).toMatchObject({ type: "野外", description: "山谷描述" });
+
+    // ⑤ 报告跨轮更新同一条（id 从 baseline 取）
+    expect(second.reportId).toBe(first.reportId);
+    expect(listEntities(project.db, { type: "reference" }).total).toBe(1);
+    expect(reportDocument(project).text).toContain("二轮剧情摘要。");
+    expect(reportDocument(project).text).toContain("王五");
+
+    // ⑥ 增量写入必须刷新清单里的 updated_at（漏了下一轮会把自己的写入误判成「用户编辑过」，从此不再更新）
+    const entries = getDecomposeJob(project.db)!.merge_written; // 最新 job = 第二轮
+    expect(entries.find((entry) => entry.id === 张三)?.updated_at).toBe(merged张三.updated_at);
+    expect(entries.some((entry) => entry.id === second.reportId)).toBe(true);
+  });
+
+  it("同 job 重跑保持原语义：跨轮行不再被判「用户编辑过」，本 job 写过的行产物消失仍软删/物理删；报告被删后不复活旧行", async () => {
+    const model = await fakeModel();
+    const { project, jobId: job1 } = projectFixture();
+    writeBatch(project.db, job1, 1, batchResult(firstRoundSpecs()));
+    await mergeRound({ project, jobId: job1, model, aliases: ["张三", ["三哥"]], plot: "一轮剧情摘要。" });
+
+    await sleep();
+    const job2 = continueJob(project, 4, 6);
+    writeBatch(project.db, job2, 1, batchResult(secondRoundSpecs(), 4));
+    const second = await mergeRound({ project, jobId: job2, model, aliases: ["张三", ["张先生"]], plot: "二轮剧情摘要。" });
+    const 张三 = characterIdByName(project.db, "张三");
+    const 张三UpdatedAt = getEntity(project.db, 张三)!.updated_at;
+    // 用户把报告丢进回收站：重跑不得复活旧行，但也不得每轮都多建一条
+    softDeleteEntity(project.db, second.reportId, nowIso());
+
+    // 重跑第二轮：产物去掉王五与「张三→王五」，别名组也不再现（张三的别名段不得因此丢上一轮并进来的名字）
+    const rerun = secondRoundSpecs().map((spec) => ({
+      ...spec,
+      characters: spec.characters?.filter((character) => character.name !== "王五" && character.name !== "张先生"),
+      relations: spec.relations?.filter((relation) => relation.target !== "王五"),
+    }));
+    writeBatch(project.db, job2, 1, batchResult(rerun, 4));
+    const third = await mergeRound({ project, jobId: job2, model, plot: "二轮重跑剧情摘要。" });
+
+    // 本 job 清单里的行、产物消失且 updated_at 未变 → 实体软删（回收站）/ 关系物理删
+    expect(listEntities(project.db, { type: "character", q: "王五" }).total).toBe(0);
+    expect(new Set(listDeletedEntities(project.db).map((item) => item.name))).toEqual(
+      new Set(["王五", `《${BOOK_NAME}》${DECOMPOSE_REPORT_KIND}`]), // 顺序不计（同一毫秒删除时排序不稳定）
+    );
+    expect(listRelations(project.db, {}, 1, project.root).relations).toHaveLength(1);
+    // 跨轮行（张三）未被误判：不重写（updated_at 不抖动）、别名段仍留着上一轮的「张先生」
+    expect(getEntity(project.db, 张三)!.updated_at).toBe(张三UpdatedAt);
+    expect(getEntity(project.db, 张三)!.data.description).toBe(
+      "张三（第二卷：这一段的描述明显更长，本轮应当胜出）（又称：三哥、张先生）",
+    );
+    expect(listEntities(project.db, { type: "setting", q: "功法" }).total).toBe(1); // 第一轮产物仍不动
+    // 报告：旧行留在回收站（不复活），重跑按新行重建且仍然只有一条活行
+    expect(third.reportId).not.toBe(second.reportId);
+    expect(listEntities(project.db, { type: "reference" }).total).toBe(1);
+    expect(getDecomposeJob(project.db)!.merge_written.some((entry) => entry.id === third.reportId)).toBe(true);
+  });
+});
+
+// ============ 增量更新的字段口径（§6 第 3 层） ============
+
+describe("mergeEntityData（增量更新字段口径）", () => {
+  it("description 取更长者（比的是剥掉别名段后的正文）、别名段并集", () => {
+    expect(mergeEntityData({ description: "短的（又称：旧名）" }, { description: "明显更长的一段描述" })).toEqual({
+      description: "明显更长的一段描述（又称：旧名）",
+    });
+    // 上一轮别名段更长，不因此挡住本轮更长的正文
+    expect(
+      mergeEntityData({ description: "短描述（又称：甲、乙、丙）" }, { description: "这是一段比别名段更长的正文描述" }),
+    ).toEqual({ description: "这是一段比别名段更长的正文描述（又称：甲、乙、丙）" });
+    // 本轮更短 → 保留库内正文，本轮的新别名仍然并进去
+    expect(mergeEntityData({ description: "长正文（又称：甲）" }, { description: "短（又称：甲、乙）" })).toEqual({
+      description: "长正文（又称：甲、乙）",
+    });
+  });
+
+  it("数组字段取并集（库内在前）；role 本轮非空则覆盖；其余字段仅库内为空时填", () => {
+    expect(mergeEntityData({ personality: ["果断"] }, { personality: ["果断", "沉稳"] })).toEqual({
+      personality: ["果断", "沉稳"],
+    });
+    expect(mergeEntityData({ role: "配角" }, { role: "主角" })).toEqual({ role: "主角" });
+    expect(mergeEntityData({ role: "主角" }, {})).toEqual({ role: "主角" }); // 本轮没提 role ⇒ 不动
+    expect(mergeEntityData({ gender: "男", age: 30 }, { gender: "女", age: 40, race: "人族" })).toEqual({
+      gender: "男",
+      age: 30,
+      race: "人族",
+    });
+    expect(mergeEntityData({ alias: "小张" }, { alias: "三哥" })).toEqual({ alias: "小张" });
+  });
+
+  it("结果无变化 → 返回入参本身（同一引用，调用方据此判「不写」）", () => {
+    const current = { role: "主角", description: "正文（又称：甲）", personality: ["果断"] };
+    expect(mergeEntityData(current, { role: "主角", description: "正文（又称：甲）", personality: ["果断"] })).toBe(current);
+    expect(mergeEntityData(current, {})).toBe(current);
+    const empty: Record<string, unknown> = {};
+    expect(mergeEntityData(empty, {})).toBe(empty); // 空产物：连空对象都不换
   });
 });

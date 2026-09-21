@@ -217,11 +217,11 @@ export function validateAliasGroups(groups: readonly AliasGroup[], candidates: r
 // ── §6.1 三路比对 → 写入计划 ─────────────────────────────────────────────────
 
 export type MergeWriteAction =
-  | "create" // 新产物有、清单里没有
-  | "reuse" // 新旧都有，库内 updated_at 等于清单记录值
-  | "keep-user-edited" // 新旧都有，但 updated_at 变了（用户手工改过）
-  | "soft-delete" // 清单里有、新产物没有，且 updated_at 未变
-  | "keep-and-report"; // 清单里有、新产物没有，但 updated_at 变了（保留 + 报告里提示）
+  | "create" // 新产物有、记录面（本 job 清单 / baseline）与库内同身份行都没有
+  | "reuse" // 库内行的 updated_at 等于记录值（上一轮写的）⇒ 复用 + 增量更新
+  | "keep-user-edited" // 库内行存在但不可判定为本管线所写（记录值不一致 / 无记录）⇒ 不动
+  | "soft-delete" // 本 job 清单里有、新产物没有，且 updated_at 未变
+  | "keep-and-report"; // 本 job 清单里有、新产物没有，但 updated_at 变了（保留 + 报告里提示）
 
 /** 新产物（归并算出的应写入项，尚未落库） */
 export interface MergeWriteProduct {
@@ -255,32 +255,42 @@ export interface MergeWritePlanItem {
 }
 
 /**
- * 三路比对：新产物 × `merge_written` 清单 × 库内快照 → 写入计划（不改 db）。
+ * 三路比对：新产物 × 库内快照 × 记录面 → 写入计划（不改 db）。
+ * 记录面有两条（§6.1）：`written` = **本 job 清单**（软删面：只有本 job 写过的行才允许软删）与
+ * `baseline` = **历史全部 job 的 `merge_written` 并集**（跨轮面：复用与增量更新的比对基准）。
  *
- * 判据（§6.1）：`updated_at` 与清单记录值一致 ⇒ 这条行还是上一轮写的（可复用/可软删）；
+ * 判据：`updated_at` 与记录值一致 ⇒ 这条行还是上一轮写的（可复用 + 增量更新）；
  * 变了 ⇒ 用户手工编辑过（**用户编辑优先**：不覆盖、不软删，只在报告里提示）。
+ * **库内同身份行存在但没有记录**（用户手工建的）⇒ 复用该行、内容不动：`createEntity` 无同名守卫，
+ * 再 create 会建出重复行；关系的 `createRelation` 对同 `(source, target, type)` 直接抛 `RELATION_EXISTS`，
+ * 而 S3 落库与清单写在同一事务 ⇒ 会打挂整轮 S3。
+ * **跨轮条目**（baseline 有、本 job 清单没有）：新产物没有 ⇒ 不进计划（不软删——续拆不是全量重算）；
+ * 有新产物 ⇒ 同上复用 + 增量更新。
  * **软删行视同不存在**：回收站里的旧行不参与比对，产物重现时按新行创建（不复活旧行）。
  */
 export function planMergeWrite(
   products: readonly MergeWriteProduct[],
   written: readonly MergeWrittenEntry[],
   snapshot: readonly MergeSnapshotRow[],
+  /** 跨轮 baseline（缺省 = 无历史 job，只有本 job 清单一条记录面） */
+  baseline: readonly MergeWrittenEntry[] = [],
 ): MergeWritePlanItem[] {
   const writtenById = new Map(written.map((entry) => [entry.id, entry]));
+  const baselineById = new Map(baseline.map((entry) => [entry.id, entry]));
   const liveById = new Map(snapshot.filter((row) => row.deleted_at === null).map((row) => [row.id, row]));
   const matched = new Set<string>();
   const plan: MergeWritePlanItem[] = [];
 
   for (const product of products) {
     const row = product.id === null ? undefined : liveById.get(product.id);
-    const entry = product.id === null ? undefined : writtenById.get(product.id);
-    if (row === undefined || entry === undefined) {
+    if (row === undefined) {
       plan.push({ action: "create", id: null, key: product.key });
       continue;
     }
     matched.add(row.id);
+    const entry = writtenById.get(row.id) ?? baselineById.get(row.id);
     plan.push({
-      action: row.updated_at === entry.updated_at ? "reuse" : "keep-user-edited",
+      action: row.updated_at === entry?.updated_at ? "reuse" : "keep-user-edited",
       id: row.id,
       key: product.key,
     });

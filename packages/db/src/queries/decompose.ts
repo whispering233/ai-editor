@@ -226,6 +226,20 @@ export function getDecomposeJob(db: Db): DecomposeJobRow | null {
 }
 
 /**
+ * 读**全部** job 行（创建时间升序，同时间按 id）——S3 三路比对的**跨轮 baseline** 面：
+ * 「历史全部 job 的 `merge_written` 并集（同一 id 取最新一次记录的时间戳）」按此顺序覆盖取并
+ * （`docs/design/60-decompose.md` §6.1）。
+ */
+export function listDecomposeJobs(db: Db): DecomposeJobRow[] {
+  const rows = queryDb(db)
+    .select()
+    .from(decomposeJobs)
+    .orderBy(asc(decomposeJobs.created_at), asc(decomposeJobs.id))
+    .all() as unknown as Array<Record<string, unknown>>;
+  return rows.map(toJobRow);
+}
+
+/**
  * job 状态流转（pending → running → paused/done/failed；前置状态校验归端点/runner，
  * 状态字面量集见 `DecomposeJobStatus`）。同时推进 `updated_at`（进度轮询的时间戳）。
  * @returns 影响行数（0 = job 不存在）

@@ -17,6 +17,7 @@ import {
   getDecomposeBatch,
   getDecomposeJob,
   listDecomposeBatches,
+  listDecomposeJobs,
   pauseRunningJobs,
   setJobError,
   startBatchAttempt,
@@ -191,6 +192,29 @@ describe("批状态流转与 attempts", () => {
  // 新一轮尝试清上一条错误
     expect(startBatchAttempt(db, job.id, 1, T2)).toBe(1);
     expect(listDecomposeBatches(db, job.id)[0]?.error).toBeNull();
+  });
+});
+
+describe("listDecomposeJobs（跨轮 baseline 的读取面）", () => {
+  it("全部 job 按创建时间升序返回（跨轮 baseline 按此顺序覆盖取并）；空库 → 空数组", () => {
+    const old = seedJob();
+    const fresh = createDecomposeJob(db, {
+      scopeStart: 4,
+      scopeEnd: 6,
+      batchTargetChars: 6000,
+      model: null,
+      batches: [{ seq: 1, chapterIds: ["ch-4"] }],
+      now: T2,
+    });
+
+    expect(listDecomposeJobs(db).map((job) => job.id)).toEqual([old.id, fresh.id]);
+
+    const empty = openDatabase(join(dir, "empty.db"));
+    try {
+      expect(listDecomposeJobs(empty)).toEqual([]);
+    } finally {
+      closeDatabase(empty);
+    }
   });
 });
 

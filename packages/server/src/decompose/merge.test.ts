@@ -3,7 +3,8 @@
 // （判据 = shared RELATION_TYPE_META.symmetric）/ 跨章阈值（人物·关系设、设定·地点不设）/ **四步顺序**（去重、
 // 别名重映射与重新去重、自环丢弃、别名归并后阈值才生效、悬空关系过滤）/ 别名组硬校验（名字必须存在 /
 // 不重复分组 / 组 ≥ 2 / 组大小上限 / 候选按提及次数截断）/ 候选排序稳定性 /
-// merge_written 三路比对五分支（create · reuse · keep-user-edited · soft-delete · keep-and-report）。
+// merge_written 三路比对五分支（create · reuse · keep-user-edited · soft-delete · keep-and-report）+ 跨轮 baseline 面
+// （复用已有行不重复建 · 跨轮 keep 不软删 · 用户编辑优先）。
 import { describe, expect, it } from "vitest";
 import {
   DECOMPOSE_ALIAS_CANDIDATE_MAX,
@@ -309,7 +310,7 @@ describe("别名组硬校验（§6 第 2 层）", () => {
   });
 });
 
-describe("merge_written 三路比对（新产物 × 清单 × 库内快照）", () => {
+describe("merge_written 三路比对（新产物 × 记录面 × 库内快照）", () => {
   const written = (id: string, updatedAt: string): MergeWrittenEntry => ({ id, type: "character", updated_at: updatedAt });
   const row = (id: string, updatedAt: string, deletedAt: string | null = null): MergeSnapshotRow => ({
     id,
@@ -318,14 +319,33 @@ describe("merge_written 三路比对（新产物 × 清单 × 库内快照）", 
     deleted_at: deletedAt,
   });
 
-  it("分支 1 · 新产物有、清单里没有 → create", () => {
+  it("分支 1 · 新产物有、记录面与库内都没有 → create", () => {
     const plan = planMergeWrite([{ key: "character:新人物", id: null }], [], []);
     expect(plan).toEqual([{ action: "create", id: null, key: "character:新人物" }]);
   });
 
-  it("分支 1 变体 · 库内已有同身份行但清单里没有（用户手工建的）→ 仍 create", () => {
+  it("分支 1 变体 · 库内已有同身份行但记录面都没有（用户手工建的）→ 复用该行、不 create 重复行", () => {
     const plan = planMergeWrite([{ key: "character:张三", id: "char-1" }], [], [row("char-1", "t1")]);
-    expect(plan).toEqual([{ action: "create", id: null, key: "character:张三" }]);
+    expect(plan).toEqual([{ action: "keep-user-edited", id: "char-1", key: "character:张三" }]);
+  });
+
+  it("跨轮 · baseline 有记录、本 job 清单没有，库内值一致 → reuse（复用 + 增量更新）", () => {
+    const plan = planMergeWrite([{ key: "character:张三", id: "char-1" }], [], [row("char-1", "t1")], [written("char-1", "t1")]);
+    expect(plan).toEqual([{ action: "reuse", id: "char-1", key: "character:张三" }]);
+  });
+
+  it("跨轮 · baseline 有记录与库内不一致（用户改过）→ keep-user-edited（不覆盖、不认领）", () => {
+    const plan = planMergeWrite([{ key: "character:张三", id: "char-1" }], [], [row("char-1", "t2")], [written("char-1", "t1")]);
+    expect(plan).toEqual([{ action: "keep-user-edited", id: "char-1", key: "character:张三" }]);
+  });
+
+  it("跨轮 · baseline 有、本 job 清单没有、新产物也没有 → 不进计划（不软删——续拆不是全量重算）", () => {
+    expect(planMergeWrite([], [], [row("char-1", "t1")], [written("char-1", "t1")])).toEqual([]);
+    expect(planMergeWrite([], [], [row("char-1", "t2")], [written("char-1", "t1")])).toEqual([]);
+  });
+
+  it("本 job 清单是软删面：跨轮条目即使库内行已消失也不产计划项", () => {
+    expect(planMergeWrite([], [written("char-1", "t1")], [], [written("char-1", "t1")])).toEqual([]);
   });
 
   it("分支 2 · 新旧都有且库内 updated_at 等于清单记录值 → reuse（不动）", () => {
@@ -376,8 +396,9 @@ describe("merge_written 三路比对（新产物 × 清单 × 库内快照）", 
     const products = [{ key: "character:张三", id: "char-1" }];
     const entries = [written("char-1", "t1")];
     const snapshot = [row("char-1", "t2")];
-    const before = JSON.stringify({ products, entries, snapshot });
-    planMergeWrite(products, entries, snapshot);
-    expect(JSON.stringify({ products, entries, snapshot })).toBe(before);
+    const baseline = [written("char-1", "t0")];
+    const before = JSON.stringify({ products, entries, snapshot, baseline });
+    planMergeWrite(products, entries, snapshot, baseline);
+    expect(JSON.stringify({ products, entries, snapshot, baseline })).toBe(before);
   });
 });

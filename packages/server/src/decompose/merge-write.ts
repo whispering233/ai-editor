@@ -4,7 +4,11 @@
 // §6.2（报告落点：一条 `entities(reference)` + 其块文档）；docs/api/120-api-decompose.md §rerun。
 // 口径：
 // - **写入计划是唯一写入依据**（create / reuse / keep-user-edited / soft-delete / keep-and-report）：
-//   计划外的一律不碰（用户自己建的同名实体、回收站里的旧行都不参与）；
+//   计划外的一律不碰（回收站里的旧行不参与）；用户手工建的同名行**复用同一行但不写内容**（不重复建）；
+// - **记录面两条**：本 job 清单（软删面）+ 跨轮 baseline = 历史全部 job 的 `merge_written` 并集
+//   （同一 id 取最新一次记录）⇒ 续拆时同名实体/关系复用同一行、跨轮未重现的产物不软删、报告更新同一条；
+// - **增量更新**（跨轮复用已存在的行）：`mergeEntityData` 的字段口径（description 取更长者 / 数组取并集 /
+//   `role` 本轮非空则覆盖 / 其余仅库内为空时填），**无变化则不写**，写了必须刷新清单条目里的 `updated_at`；
 // - **消失行**：实体 → `softDeleteEntity`（进回收站可还原，§6.1）；关系 → `deleteRelation` **物理删**——
 //   本仓关系没有回收站路径（relations 软删只作为实体级联的副作用存在，`docs/api/70-api-trash.md` 只服务
 //   实体与大纲节点），与「手动删关系 = 物理删」同口径；产物重现时按新行创建，幂等性不靠旧行；
@@ -21,21 +25,23 @@ import {
   deleteRelation,
   deriveChapterOrder,
   findOutlineNode,
-  getDecomposeJob,
   getDocumentTextLengths,
   getEntity,
   getRelation,
   listDecomposeBatches,
+  listDecomposeJobs,
   listEntities,
   listRelations,
   readOutlineFile,
   softDeleteEntity,
+  updateEntity,
   updateOutlineNode,
   upsertDocument,
   withTransaction,
   writeMergeWritten,
   writeOutlineFile,
   type Db,
+  type DecomposeJobRow,
 } from "@whispering233/ai-editor-db";
 import type { ProjectContext } from "../middleware/project.js";
 import { DECOMPOSE_DESCRIPTION_MAX_CHARS } from "./extract.js";
@@ -204,12 +210,16 @@ export function reportChapters(project: ProjectContext, results: readonly Decomp
 
 /**
  * S3 + S4 一轮：别名归并调用 → 四步纯管线 → 三路比对 → 落库（实体 / 关系 / 章摘要 / 报告）→ 写 `merge_written`。
- * 幂等由 `merge_written` 三路比对保证（同一份批结果跑两遍：实体/关系数量不变，报告更新同一条）。
+ * 幂等由三路比对保证（同一份批结果跑两遍：实体/关系数量不变，报告更新同一条）；**跨轮 baseline** =
+ * 历史全部 job 的 `merge_written` 并集（§6.1）⇒ 续拆时同名行复用 + 增量更新，跨轮未重现的产物不软删。
  * 调用方（runner 收口路径）负责 job 状态；本模块只写业务数据与清单。
  */
 export async function runDecomposeMerge(input: DecomposeMergeInput): Promise<DecomposeMergeSummary> {
-  const job = getDecomposeJob(input.project.db);
-  if (job === null || job.id !== input.jobId) throw new Error(`拆解 job 不存在：${input.jobId}`);
+  const jobs = listDecomposeJobs(input.project.db);
+  // 历史 job 全保留（§7.1）⇒ 目标 job 按 id 取，不取「最新一行」（多 job 并存时后者可能不是本轮）
+  const job = jobs.find((row) => row.id === input.jobId);
+  if (job === undefined) throw new Error(`拆解 job 不存在：${input.jobId}`);
+  const baseline = mergeBaselineOf(jobs);
   const doneSeqs = listDecomposeBatches(input.project.db, input.jobId)
     .filter((batch) => batch.status === "done")
     .map((batch) => batch.seq);
@@ -220,13 +230,14 @@ export async function runDecomposeMerge(input: DecomposeMergeInput): Promise<Dec
   const mentions = aggregateMentions(results);
   writeChapterSummaries(input.project, results, input.now);
 
-  const snapshot = readMergeSnapshot(input.project, job.merge_written);
+  const snapshot = readMergeSnapshot(input.project, baseline);
   const reportName = decomposeReportName(input.project.config.name);
   const products = buildMergeProducts({ outcome, mentions, aliasGroups, snapshot, reportName });
   const plan = planMergeWrite(
     [...products.values()].map((product) => ({ key: product.key, id: product.id })),
     job.merge_written,
     [...snapshot.rows.values()],
+    [...baseline.values()],
   );
   const facts: DecomposeReportFacts = {
     bookName: input.project.config.name,
@@ -357,11 +368,21 @@ interface MergeSnapshot {
 }
 
 /**
+ * 跨轮比对面（§6.1）：**历史全部 job** 的 `merge_written` 并集——同一 id 取**最新一次**记录
+ * （job 按创建时间升序读出 ⇒ 后者覆盖）。本 job 清单另存（它是软删面：只有本 job 写过的行才允许软删）。
+ */
+function mergeBaselineOf(jobs: readonly DecomposeJobRow[]): Map<string, MergeWrittenEntry> {
+  const baseline = new Map<string, MergeWrittenEntry>();
+  for (const job of jobs) for (const entry of job.merge_written) baseline.set(entry.id, entry);
+  return baseline;
+}
+
+/**
  * 库内快照（§6.1 三路比对的第三路）：实体按 `类型:归一化名`、关系按 `源 id + 靶 id + 类型` 索引；
- * 报告行按 `merge_written` 里 `DECOMPOSE_REPORT_ENTITY_TYPE` 的条目回读（§6.2「不重复建」）。
+ * 报告行按 baseline 里 `DECOMPOSE_REPORT_ENTITY_TYPE` 的条目回读（§6.2「跨轮更新同一条」）。
  * **软删行不进快照**（回收站旧行不参与比对：产物重现时按新行创建，不复活旧行）。
  */
-function readMergeSnapshot(project: ProjectContext, written: readonly MergeWrittenEntry[]): MergeSnapshot {
+function readMergeSnapshot(project: ProjectContext, baseline: ReadonlyMap<string, MergeWrittenEntry>): MergeSnapshot {
   const snapshot: MergeSnapshot = {
     rows: new Map(),
     entityIdOf: new Map(),
@@ -396,7 +417,7 @@ function readMergeSnapshot(project: ProjectContext, written: readonly MergeWritt
     if (source === undefined || target === undefined) continue;
     snapshot.relationIdOf.set(relationIdentity(source, target, row.relation_type), row.id);
   }
-  const reportId = reportEntryId(written);
+  const reportId = reportEntryId(baseline.values());
   const report = reportId === null ? null : getEntity(project.db, reportId);
   if (report !== null) {
     snapshot.rows.set(report.id, { id: report.id, type: report.type, updated_at: report.updated_at, deleted_at: null });
@@ -405,9 +426,14 @@ function readMergeSnapshot(project: ProjectContext, written: readonly MergeWritt
   return snapshot;
 }
 
-/** 报告实体 id（`merge_written` 里类型为报告实体的条目）；从未写过 → null */
-function reportEntryId(written: readonly MergeWrittenEntry[]): string | null {
-  return written.find((entry) => entry.type === DECOMPOSE_REPORT_ENTITY_TYPE)?.id ?? null;
+/**
+ * 报告实体 id（baseline 里类型为报告实体的条目）：**最新一次记录胜出**（报告被用户删掉后重跑会另建
+ * 新行，那时并集里会有两条 reference 记录；取最旧的一条会每轮重复建行）。从未写过 → null。
+ */
+function reportEntryId(entries: Iterable<MergeWrittenEntry>): string | null {
+  let reportId: string | null = null;
+  for (const entry of entries) if (entry.type === DECOMPOSE_REPORT_ENTITY_TYPE) reportId = entry.id;
+  return reportId;
 }
 
 /** 某类型的**全部**活实体（`listEntities` 每页上限 MAX_ENTITY_LIST_LIMIT ⇒ 分页取全：同名复用必须看全库） */
@@ -507,8 +533,9 @@ interface MergePlanExecution {
 /**
  * 按写入计划落库，返回新的 `merge_written` 清单：
  * - `create` → 建行（实体 / 关系 / 报告），记新行的 `updated_at`；
- * - `reuse` → 不动（报告例外：正文每轮重建，摘要可能已变；实体行不动 ⇒ `updated_at` 稳定，清单原样沿用）；
- * - `keep-user-edited` / `keep-and-report` → **不动**，清单沿用旧快照（分歧保留，下一次仍判「编辑过」）；
+ * - `reuse` → 复用库内行 + **增量更新**（见 reuseRow）；
+ * - `keep-user-edited` / `keep-and-report` → **不动**（用户编辑优先 / 分歧保留）；清单条目沿用本 job 清单里那条
+ *   （跨轮条目本就不在本 job 清单里 ⇒ 不认领，不越权把用户行当作本管线所写）；
  * - `soft-delete` → 实体软删（回收站可还原）/ 关系物理删，条目从清单移除（旧行不再参与比对）。
  */
 function executeMergePlan(input: MergePlanExecution): MergeWrittenEntry[] {
@@ -534,15 +561,119 @@ function executeMergePlan(input: MergePlanExecution): MergeWrittenEntry[] {
       continue;
     }
     if (item.action === "reuse") {
-      // 报告正文每轮重建（重跑后章摘要可能已变）；实体行不动 ⇒ updated_at 稳定，清单原样沿用
-      if (product.kind === "report" && product.id !== null) writeReportDocument(project.db, product.id, input.reportText, now);
-      if (previous !== undefined) entries.push(previous);
+      const entry = reuseRow(project, product, execution, previous);
+      if (entry !== null) entries.push(entry);
       continue;
     }
     const entry = createRow(project, product, execution);
     if (entry !== null) entries.push(entry);
   }
   return entries;
+}
+
+/**
+ * `reuse`：库内行是上一轮（本 job 清单 / 跨轮 baseline 记录值一致）写的 ⇒ 复用并**增量更新**（§6 第 3 层）。
+ * - 实体：把本轮 data 并进库内现值（口径见 `mergeEntityData`），**无变化则不写**（避免 `updated_at` 抖动）；
+ * - **写了一定要记新版本戳**：漏了它下一轮会把我们自己的写入误判成「用户编辑过」，从此不再更新该行；
+ * - 跨轮行（本 job 清单里没有）**首次写入时认领**：清单自此覆盖它（下一次它被重跑去掉就归软删面管）；
+ * - 报告：正文每轮重建（重跑后章摘要 / 人物小传可能已变）；关系：无可增量字段（复用即不动）。
+ * @returns 清单条目（没写且本 job 清单里也没有该行 → null，不凭空认领）
+ */
+function reuseRow(
+  project: ProjectContext,
+  product: MergeProduct,
+  execution: MergePlanExecution,
+  previous: MergeWrittenEntry | undefined,
+): MergeWrittenEntry | null {
+  if (product.id === null) return previous ?? null;
+  if (product.kind === "report") {
+    writeReportDocument(project.db, product.id, execution.reportText, execution.now);
+    return previous ?? entityEntry(project.db, product.id);
+  }
+  if (product.kind === "entity") {
+    const current = getEntity(project.db, product.id);
+    if (current !== null) {
+      const data = mergeEntityData(current.data, product.data);
+      if (data !== current.data) {
+        const next = updateEntity(project.db, product.id, { data });
+        if (next !== null) return { id: next.id, type: next.type, updated_at: next.updated_at };
+      }
+    }
+  }
+  return previous ?? null;
+}
+
+/** 库内实体行的清单条目（报告正文重建后认领它；行不可见 → null） */
+function entityEntry(db: Db, id: string): MergeWrittenEntry | null {
+  const row = getEntity(db, id);
+  return row === null ? null : { id: row.id, type: row.type, updated_at: row.updated_at };
+}
+
+/**
+ * 增量更新（§6 第 3 层）：把本轮实体 data 并进库内现值。**无变化时返回入参本身**（同一引用）
+ * —— 调用方据此判「不写」（`updated_at` 同时是 baseline 比对依据）。
+ * - `description`：剥掉「（又称：…）」段后**取更长者**（与 `entityDataOf` 的「最长的一条」同口径），
+ *   别名段取**并集**（不丢上一轮别名）；
+ * - 数组字段（`personality` / `tags` / `rules`）：**并集**（库内在前 ⇒ 顺序稳定，重跑幂等）；
+ * - `role`：本轮**非空则覆盖**（续拆后定位可能变化）；
+ * - 其余字段（`gender` / `age` / `race` / `alias` / `type` / `motivation` …）：**仅库内为空时填**。
+ */
+export function mergeEntityData(
+  current: Record<string, unknown>,
+  incoming: Record<string, unknown>,
+): Record<string, unknown> {
+  let next: Record<string, unknown> | null = null;
+  const write = (field: string, value: unknown): void => {
+    next ??= { ...current };
+    next[field] = value;
+  };
+  for (const [field, value] of Object.entries(incoming)) {
+    if (field === "description" || value === undefined) continue;
+    const existing = current[field];
+    if (Array.isArray(existing) && Array.isArray(value)) {
+      const union = [...new Set([...existing, ...value])];
+      if (union.length !== existing.length) write(field, union);
+      continue;
+    }
+    if (field === "role" ? isFilled(value) : !isFilled(existing)) {
+      if (existing !== value) write(field, value);
+    }
+  }
+  const previousDescription = textOf(current.description);
+  const description = mergeDescription(previousDescription, textOf(incoming.description));
+  if (description !== previousDescription) write("description", description);
+  return next ?? current;
+}
+
+/** description 的「更长者胜 + 别名并集」（比较基准 = 剥掉别名段后的正文） */
+function mergeDescription(previous: string, incoming: string): string {
+  const before = splitAliasNote(previous);
+  const after = splitAliasNote(incoming);
+  const base = after.base.length > before.base.length ? after.base : before.base;
+  return appendAliasNote(base, [...new Set([...before.aliases, ...after.aliases])]);
+}
+
+/** 拆开 `appendAliasNote` 拼上的「（又称：…）」段；不是该形态 → 整段当正文（别名取不到） */
+function splitAliasNote(description: string): { base: string; aliases: string[] } {
+  const index = description.lastIndexOf(DECOMPOSE_ALIAS_NOTE_PREFIX);
+  if (index < 0 || !description.endsWith("）")) return { base: description, aliases: [] };
+  const aliases = description
+    .slice(index + DECOMPOSE_ALIAS_NOTE_PREFIX.length, -1)
+    .split(DECOMPOSE_ALIAS_NOTE_SEPARATOR)
+    .filter((alias) => alias !== "");
+  return { base: description.slice(0, index), aliases };
+}
+
+/** 非空值（空串 / 空数组 / null / undefined 视同未填）——「库内为空才填」的判据 */
+function isFilled(value: unknown): boolean {
+  if (value === undefined || value === null) return false;
+  if (typeof value === "string") return value.trim() !== "";
+  if (Array.isArray(value)) return value.length > 0;
+  return true;
+}
+
+function textOf(value: unknown): string {
+  return typeof value === "string" ? value : "";
 }
 
 /**
