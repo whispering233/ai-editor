@@ -49,7 +49,7 @@
 
 ### 卡 22.8 · server：拆解会话保留上限（与 22.7 同批，设计 §7.2）
 
-- **范围**：`DECOMPOSE_KEPT_SESSIONS`（server 拆解模块常量）；新一轮建会话前按 job `created_at` 保留最近若干枚、只删 `decompose-` 前缀且 job 不在跑；清理写日志 + 往新会话追加一条过程条目；失败不阻塞。
+- **范围**：`DECOMPOSE_KEPT_SESSIONS`（server 拆解模块常量）；新一轮建会话前按 job `created_at` 保留最近若干枚、只删**会话 id** 为 `decompose-` 前缀且 job 不在跑的记录（文件名带 pi 时间戳前缀，**不得**用文件名 glob）；清理写日志 + 往新会话追加一条过程条目；失败不阻塞。
 - **完成判据**：单测造 6 轮 job → `sessions/` 下只剩 5 枚 `decompose-`，chat 会话不受影响，最新一轮会话里有「已清理」过程条目。
 
 ---

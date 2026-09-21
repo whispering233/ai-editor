@@ -57,8 +57,8 @@ createAgentSessionServices({ noExtensions, noSkills, noPromptTemplates, noContex
 | 口径 | 值 | 理由 |
 | :--- | :--- | :--- |
 | 会话数 | **每 job 一枚**（S2 各批 + S3 归并 + S4 报告同写这一枚） | 用户可查完整过程；会话 : 批 = 1 : N |
-| 落点 | `<项目根>/sessions/decompose-<jobId>.jsonl`（`sessions/` **根目录**，与 chat 会话同目录） | chat 面板可见；随备份/导出/云自动携带（`sessions/` 是唯一随包目录） |
-| 会话 id | `decompose-<jobId>`（经 pi 的 id 约束清洗） | 前缀即 kind（零成本判别）；provider 侧会话身份/缓存键稳定 |
+| 落点 | `<项目根>/sessions/`（**根目录**，与 chat 会话同目录）；pi 的落盘文件名为 `<时间戳>_decompose-<jobId>.jsonl`（命名由 pi 生成，本仓不自造） | chat 面板可见；随备份/导出/云自动携带（`sessions/` 是唯一随包目录） |
+| 会话 id | `decompose-<jobId>`（经 pi 的 id 约束清洗） | 前缀即 kind（零成本判别）；**判定与查找一律用会话 id**（文件名带时间戳前缀，不得用文件名 glob）；provider 侧会话身份/缓存键稳定 |
 | 每批 turn | prompt 前 `resetLeaf()` ⇒ **新根** | 上下文只含本轮（累积历史是 O(N²) 重复付费，见下表） |
 | 自动压缩 | `setAutoCompactionEnabled(false)` | 一轮一上下文，没有可压缩的东西 |
 | 工具 | `noTools: "all"` | 拆解只需模型产出 JSON；**正文由服务端注入，不需要工具来读**（§4.1） |
@@ -266,7 +266,7 @@ createAgentSessionServices({ noExtensions, noSkills, noPromptTemplates, noContex
 ### 7.2 拆解会话的保留上限
 
 - 保留 `DECOMPOSE_KEPT_SESSIONS` 枚（按 job `created_at` 保留最近的，排序依据不取会话文件名——`job-<nanoid>` 里没有可解析时间）；**新一轮拆解创建会话之前**清理。
-- 只删 `decompose-` 前缀且其 job **不在跑**；**chat 会话永不参与自动清理**（用户资产）。
+- 只删**会话 id**为 `decompose-` 前缀、且其 job **不在跑**的记录（查找走 pi 的磁盘发现 / id 后缀命中——文件名带时间戳前缀，**不得**用文件名 glob）；**chat 会话永不参与自动清理**（用户资产）。
 - 清理**不静默**：服务端日志 + 新一轮会话里记一条过程条目（`#/decompose` 时间线可见）；清理失败不阻塞拆解（同 `pruneBackups` 口径）。
 
 ## 8. 进度语义
