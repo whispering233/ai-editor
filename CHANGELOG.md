@@ -5,6 +5,28 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+> **书架管理 / 删除书籍 / 会话移出备份 / 云端恢复**：书架分「小说项目 / 小说拆解」两组（身份一律按项目 id）、书架可删书（云端先推一份再删）、`sessions/` 降级为纯本地目录（不进任何 zip）、新机器可「从云端恢复」导入新书。回归：build / typecheck / lint / `-r test` 全绿（196 文件 / 2966 测试）+ 浏览器端到端核对（删书两路径、云端恢复全链路）。
+
+### Added
+
+- **云端恢复（新机器/换机路径）**：书架新增「从云端恢复…」（`GET /cloud/remote-books` + `POST /cloud/import-book`）——列出云端各书的可恢复备份（书名 / 最近备份时间 · 份数 · 大小），一键导入为本机新书（沿用原项目 id、zip 原样落 `.backups/`、**不自动打开**）；导入即写同步状态，首次同步不再是冲突裁决。本机已有同 id 的行置灰；目录名与包内 id 不符（手改名/改名未 MOVE）拒绝导入，防跨书污染。
+- **书架删除书籍（本地 + 可选云端）**：书籍行尾与当前书条新增删除入口；确认框写明三行后果（`.backups/` 一并删、不可恢复；已启用云备份时先推一份最新状态；在跑拆解任务取消）并提供「同时删除云端备份」（默认不勾）。服务端 `POST /project/delete`：纯本地判据决定是否前置推送（未配置云盘/从未上云 → 直接删，零网络请求）、推送失败默认中止（`force` 才继续）、删当前书连带关项目/清 `lastProject`、云端目录删除 best-effort。
+- **书架两类分组**：`project.json` 新增 `origin`（`book` / `decompose`），书架按它分「小说项目 / 小说拆解」两组（空组不渲染）；`GET /project/list` 回传 `id` 与 `origin`，**「当前打开的书」一律按项目 id 判定**（不再按书名）。存量拆解书在打开时自动补标一次。
+
+### Changed
+
+- **`sessions/` 降级为纯本地目录**：备份 zip / 导出 zip / 云端同步都只含三文件（`project.json` + `outline.json` + `data.db`）——会话含大量重复内容，进包会让体积不受控增长。恢复类操作（本地 restore / 导入 / 云端拉取）只覆盖三文件，**不写也不删**本机会话目录；存量包含 `sessions/**` 的旧包继续可导入（条目被忽略）。纯聊天不再触发自动备份与云推送。
+- **云端拉取语义收窄**：`POST /cloud/pull` 仅三文件覆盖（原先 `sessions/` 并集与 `cloud.json` 的 `baseEntries` 一并废止，`CloudPullResult.merged` 字段移除）。
+- **拆解小说建档写 `origin: "decompose"`**；`POST /decompose/start` 成功后客户端改为先收敛项目镜像（config / 大纲 / 书架）再跳进度页。
+
+### Fixed
+
+- **拆解小说会「抢走」当前打开的书**：服务端 start 会切换当前项目，而客户端镜像不刷新 ⇒ 书架仍高亮旧书、点旧书看到的是新项目的数据、云端状态不重查。现在 start 成功后客户端立即重拉配置/大纲/书架（云端状态与聊天会话随 `config.id` 变化自动收敛）。
+- **`danger` 图标按钮渲染不出危险色**：antd 6 的 `Button` 在 `color` + `variant` 同时给出时忽略 `danger` 糖（实测渲染为常规墨色）；6 处不可恢复操作改为 `color="danger" variant="text"`（含 1 处软删误用），并新增源码守卫 `danger-color-variant` 防复发。
+- **删书确认框的按钮色与文案口径**、**云端导入请求体 snake_case**（对齐 `api-public.md`）、**导入后立刻查状态偶发 `local-ahead`**（`lastSyncAt` 基准改为 `max(now, 三文件 mtime 向上取整)`）等一致性修复。
+
 ## [v0.0.53] - 2026-09-21
 
 > **拆解会话与续拆版本**：拆解过程可查（每轮一枚落盘会话 + 进度页时间线）、续拆支持「同一项目拆剩下的章」、LLM 调用统一收口到 pi 的 Agent 路径（含源码扫描守卫）。回归：build / typecheck / lint / `-r test` 全绿（188 文件 / 2858 测试）。
