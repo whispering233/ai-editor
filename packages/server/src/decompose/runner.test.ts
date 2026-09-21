@@ -1,4 +1,4 @@
-// 卡 21.6 拆解 S2 批执行器测试：串行批循环 / 逐章对齐重试 / 失败批不阻塞 / 滚动故事圣经 /
+// 卡 21.6 拆解 S2 批执行器测试：串行批循环 / 逐章对齐重试 / 失败批不阻塞 / 项目数据快照（起始快照 + 本轮累积）/
 // 暂停（批间）与续拆（跳过 done 批）/ 切书自动暂停 / 重启归一 / stage = merge 口径 / job 级失败。
 //
 // 全部经 **faux provider（内存运行时注册假模型）离线跑**，不触网、不调真实模型；
@@ -18,19 +18,25 @@ import {
   type Context,
 } from "@earendil-works/pi-ai";
 import { ModelRuntime, SettingsManager } from "@earendil-works/pi-coding-agent";
-import type { DecomposeBatchResult, DecomposeJobRes } from "@whispering233/ai-editor-shared";
+import { MAX_ENTITY_LIST_LIMIT, type DecomposeBatchResult, type DecomposeJobRes } from "@whispering233/ai-editor-shared";
 import { decomposeBatchResultSchema } from "@whispering233/ai-editor-shared/schemas";
 import {
   completeBatch,
   createDecomposeJob,
+  createEntity,
+  createRelation,
+  deriveChapterOrder,
+  findOutlineNode,
   getDecomposeBatch,
   getDecomposeJob,
   getDocument,
   listDecomposeBatches,
   listEntities,
   nowIso,
+  readOutlineFile,
   startBatchAttempt,
   updateJobStatus,
+  writeOutlineFile,
 } from "@whispering233/ai-editor-db";
 import { errorHandler } from "../middleware/error.js";
 import {
@@ -55,12 +61,16 @@ import { ingestDecomposeProject } from "./job.js";
 import { decomposeSessionId } from "./llm.js";
 import {
   DECOMPOSE_BATCH_MAX_ATTEMPTS,
-  DECOMPOSE_BIBLE_MAX_CHARS,
+  DECOMPOSE_ROLE_ORDER,
+  DECOMPOSE_SNAPSHOT_MAX_CHARS,
+  DECOMPOSE_SNAPSHOT_PREV_CHAPTERS,
   emptyStoryBible,
   extendStoryBible,
   isDecomposeJobActive,
+  readStartSnapshot,
+  snapshotText,
   startDecomposeJob,
-  storyBibleText,
+  type DecomposeStartSnapshot,
 } from "./runner.js";
 import { splitNovelWithSlices } from "./split.js";
 
@@ -233,7 +243,7 @@ async function fakeModel(): Promise<FakeModel> {
   };
 }
 
-/** 第 n 次调用的用户消息（故事圣经 + 本批正文） */
+/** 第 n 次调用的用户消息（项目数据快照 + 本批正文） */
 function promptOf(calls: readonly Context[], index: number): string {
   const content = calls[index].messages[0].content;
   return typeof content === "string" ? content : contentText(content);
@@ -313,7 +323,7 @@ describe("S2 批循环", () => {
     // 提示词：本批正文与章序；数字全由常量插值（模型看到的数字与常量同源）
     expect(model.calls).toHaveLength(4); // 两批 + 一次别名归并 + 一次报告
     const firstPrompt = promptOf(model.calls, 0);
-    expect(firstPrompt).toContain("【故事圣经】（本批是首批，尚无上文）");
+    expect(firstPrompt).toContain("【项目数据快照】（本批是首批，尚无上文）");
     expect(firstPrompt).toContain("### 第1章 标题1");
     expect(firstPrompt).toContain("正文正文");
     expect(firstPrompt).not.toContain("### 第11章"); // 批边界：本批只带自己那几章
@@ -323,7 +333,7 @@ describe("S2 批循环", () => {
     for (const relationType of DECOMPOSE_RELATION_TYPES) expect(systemPrompt).toContain(relationType);
   });
 
-  it("滚动故事圣经进下一批：名字与上批摘要进提示词，且跨批关系端点不被当幻觉丢弃", async () => {
+  it("本轮累积进下一批：名字与上批摘要进提示词，且跨批关系端点不被当幻觉丢弃", async () => {
     const model = await fakeModel();
     // 第二批的关系端点「人物1」只在第一批出现过 ⇒ 靠圣经的 knownNames 才留得下来
     model.script([
@@ -339,7 +349,7 @@ describe("S2 批循环", () => {
     await waitFor(() => listDecomposeBatches(project.db, started.jobId).every((batch) => batch.status === "done"), "两批 done");
 
     const secondPrompt = promptOf(model.calls, 1);
-    expect(secondPrompt).toContain("已出现的名字：");
+    expect(secondPrompt).toContain("名字：人物1"); // 本轮累积的名字进下一批的快照
     expect(secondPrompt).toContain("人物1");
     expect(secondPrompt).toContain("上一批摘要：摘要1");
     const second = decomposeBatchResultSchema.parse(getDecomposeBatch(project.db, started.jobId, 2)!.result);
@@ -577,7 +587,7 @@ describe("暂停与续拆", () => {
     const resumed = await post(app, "/job/resume");
     expect(resumed.status).toBe(200);
     await waitFor(() => listDecomposeBatches(project.db, jobId)[1].status === "done", "第二批 done");
-    expect(promptOf(model.calls, 0)).toContain("【故事圣经】（本批是首批，尚无上文）"); // 脏结果未进圣经
+    expect(promptOf(model.calls, 0)).toContain("【项目数据快照】（本批是首批，尚无上文）"); // 脏结果未进本轮累积
     expect(promptOf(model.calls, 0)).not.toContain("脏标记");
   });
 
@@ -895,7 +905,7 @@ describe("切书与重启归一", () => {
   });
 });
 
-// ============ job 级失败与滚动故事圣经（纯函数） ============
+// ============ job 级失败与项目数据快照（§4.1） ============
 
 describe("job 级失败", () => {
   it("大纲文件损坏 → 写 job 级错误摘要 + failed；批循环不 reject（后台任务的兜底）", async () => {
@@ -914,35 +924,175 @@ describe("job 级失败", () => {
   });
 });
 
-describe("滚动故事圣经（纯函数）", () => {
-  const resultWith = (index: number, names: readonly string[], summary: string): DecomposeBatchResult => ({
-    chapters: [
-      {
-        chapterIndex: index,
-        chapterTitle: `第${index}章`,
-        summary,
-        characters: names.map((name) => ({ name })),
-        settings: [],
-        locations: [],
-        relations: [{ source: names[0] ?? "甲", target: names[1] ?? names[0] ?? "乙", type: "ally" }],
-      },
-    ],
+/** 空快照夹具（各用例只填关心的那块） */
+function startOf(over: Partial<DecomposeStartSnapshot>): DecomposeStartSnapshot {
+  return { characters: [], settingsAndLocations: [], relations: [], prevSummaries: [], ...over };
+}
+
+describe("项目数据快照（起始快照 + 本轮累积）", () => {
+  it("起始快照三块：人物按 role 排序 / 设定地点只给名字 / 关系 / 紧邻范围起点的连续 K 章摘要", () => {
+    ingestProject("起始快照", 8); // 8 章 ⇒ 范围可取到中间的起点（S1 直接建档，不起批循环）
+    const project = getCurrentProject()!;
+
+    // 章摘要（S3 回写的位置）——范围从第 5 章开始 ⇒ 前置窗口 = 第 4、3、2 章（第 1 / 5 章不取）
+    const tree = readOutlineFile(project.root);
+    const chapterOrder = deriveChapterOrder(project.root);
+    for (const [chapterNumber, summary] of [
+      [1, "第一章摘要"],
+      [2, "第二章摘要"],
+      [3, "第三章摘要"],
+      [4, "第四章摘要"],
+      [5, "第五章摘要"],
+    ] as const) {
+      const chapterId = chapterOrder.find((entry) => entry.chapterNumber === chapterNumber)!.chapterId;
+      findOutlineNode(tree, chapterId)!.summary = summary;
+    }
+    writeOutlineFile(project.root, tree);
+
+    // 库里已有的人物 / 设定 / 地点 / 关系（乱序写入：断言的是 role 排序结果）
+    const addCharacter = (name: string, role: string) => createEntity(project.db, { type: "character", name, data: { role } });
+    addCharacter("路人甲", "路人"); // 词表外 → 末位
+    addCharacter("龙套甲", "龙套");
+    addCharacter("女主", "主要配角");
+    addCharacter("男主", "主角");
+    addCharacter("反派甲", "反派");
+    const yao = addCharacter("药老", "配角");
+    const xiao = createEntity(project.db, { type: "character", name: "萧炎" }); // 没填 role
+    createEntity(project.db, { type: "setting", name: "斗气" });
+    createEntity(project.db, { type: "location", name: "乌坦城" });
+    createRelation(
+      project.db,
+      { sourceType: "character", sourceId: xiao.id, targetType: "character", targetId: yao.id, relationType: "mentor" },
+      project.root,
+    );
+
+    const snapshot = readStartSnapshot({
+      project,
+      scopeStart: 5,
+      chapterOrder: deriveChapterOrder(project.root),
+      tree: readOutlineFile(project.root),
+    });
+    expect(snapshot.characters.slice(0, 5).map((character) => [character.name, character.role])).toEqual([
+      ["男主", "主角"],
+      ["女主", "主要配角"],
+      ["药老", "配角"],
+      ["反派甲", "反派"],
+      ["龙套甲", "龙套"],
+    ]);
+    // 词表外的 role 与未填 role 同归末位（同权重的先后由稳定排序保持查询顺序，不做更强断言）
+    expect(snapshot.characters.slice(5).map((character) => character.name).sort()).toEqual(["萧炎", "路人甲"]);
+    expect(DECOMPOSE_ROLE_ORDER).toEqual(["主角", "主要配角", "配角", "反派", "龙套"]);
+    expect(snapshot.settingsAndLocations).toEqual(["斗气", "乌坦城"]); // 设定 / 地点只给名字
+    expect(snapshot.relations).toEqual(["萧炎→药老（mentor）"]);
+    expect(snapshot.prevSummaries).toEqual([
+      { chapterNumber: 4, summary: "第四章摘要" }, // 紧邻起点者在最前
+      { chapterNumber: 3, summary: "第三章摘要" },
+      { chapterNumber: 2, summary: "第二章摘要" },
+    ]);
+    expect(DECOMPOSE_SNAPSHOT_PREV_CHAPTERS).toBe(3);
+
+    // 范围从第 1 章开始 → 无前置块
+    expect(readStartSnapshot({ project, scopeStart: 1, chapterOrder, tree }).prevSummaries).toEqual([]);
+
+    // 渲染：三块都进「项目数据快照」文本
+    const text = snapshotText(snapshot, emptyStoryBible());
+    expect(text).toContain("名字：男主（主角）、女主（主要配角）");
+    expect(text).toContain("设定 / 地点：斗气、乌坦城");
+    expect(text).toContain("已有关系：萧炎→药老（mentor）");
+    expect(text).toContain("第4章摘要：第四章摘要");
   });
 
-  it("名字累计去重、摘要整批替换；文本受 DECOMPOSE_BIBLE_MAX_CHARS 约束且名字行优先保留", () => {
-    const longName = (index: number): string => `人物${index}${"长".repeat(40)}`;
-    let bible = emptyStoryBible();
-    for (let index = 1; index <= 40; index++) {
-      bible = extendStoryBible(bible, resultWith(index, [longName(index)], `很长的摘要${index}${"文".repeat(60)}`));
+  it("超预算丢弃顺序：设定 / 地点名先丢，名字最后丢（尾部先丢，保留项完整）", () => {
+    const settings = Array.from({ length: 60 }, (_, index) => `设定${index + 1}${"长".repeat(30)}`);
+    const text = snapshotText(
+      startOf({
+        characters: [{ name: "萧炎", role: "主角" }],
+        settingsAndLocations: settings,
+        relations: ["萧炎→药老（mentor）", "药老→萧炎（mentor）"],
+        prevSummaries: [{ chapterNumber: 4, summary: "第四章摘要" }],
+      }),
+      emptyStoryBible(),
+    );
+    expect(text.length).toBeLessThanOrEqual(DECOMPOSE_SNAPSHOT_MAX_CHARS);
+    // 先丢的块：设定 / 地点名被裁（头部保留、尾部丢弃 + 显式告知），保留项仍是完整名字
+    const settingsLine = text.split("\n").find((line) => line.startsWith("设定 / 地点："))!;
+    const kept = settingsLine.replace("设定 / 地点：", "").split("、");
+    expect(kept.length).toBeGreaterThan(0);
+    expect(kept.length).toBeLessThan(settings.length);
+    for (const name of kept) expect(settings).toContain(name);
+    expect(text).toMatch(/（已省略 \d+ 个设定 \/ 地点名）/);
+    // 后丢的块原样保留
+    expect(text).toContain("名字：萧炎（主角）");
+    expect(text).toContain("已有关系：萧炎→药老（mentor）、药老→萧炎（mentor）");
+    expect(text).toContain("第4章摘要：第四章摘要");
+  });
+
+  it("预算继续吃紧：按 关系 → 前置摘要 → 名字 顺序丢，每一块都带告知文案", () => {
+    const text = snapshotText(
+      startOf({
+        characters: [{ name: "萧炎", role: "主角" }],
+        relations: Array.from({ length: 200 }, (_, index) => `人物${index}→人物${index + 1}（ally）`),
+        prevSummaries: Array.from({ length: 12 }, (_, index) => ({ chapterNumber: index + 1, summary: "摘".repeat(200) })),
+      }),
+      emptyStoryBible(),
+    );
+    expect(text.length).toBeLessThanOrEqual(DECOMPOSE_SNAPSHOT_MAX_CHARS);
+    expect(text).toMatch(/（已省略 200 个关系）/); // 关系整块丢光
+    expect(text).toMatch(/（已省略 \d+ 个摘要）/); // 再接着丢前置摘要（上一批摘要排在最前）
+    expect(text).toContain("名字：萧炎（主角）"); // 人物名最后丢 —— 本场景里还轮不到它
+    expect(text).not.toMatch(/（已省略 \d+ 个名字）/);
+  });
+
+  it("极端预算：名字也按尾部丢弃并显式告知（不静默截断），头部保留", () => {
+    const characters = Array.from({ length: 400 }, (_, index) => ({ name: `人物${index + 1}${"长".repeat(10)}`, role: "配角" }));
+    const text = snapshotText(startOf({ characters }), emptyStoryBible());
+    expect(text.length).toBeLessThanOrEqual(DECOMPOSE_SNAPSHOT_MAX_CHARS);
+    expect(text.startsWith("名字：人物1长")).toBe(true); // 头部保留
+    expect(text).toMatch(/（已省略 \d+ 个名字）/);
+  });
+
+  it("空快照 → 空文本（提示词走「尚无上文」），本轮累积与起始快照合并成同一份文本", () => {
+    expect(snapshotText(startOf({}), emptyStoryBible())).toBe("");
+    const bible = extendStoryBible(emptyStoryBible(), {
+      chapters: [
+        {
+          chapterIndex: 1,
+          chapterTitle: "第1章",
+          summary: "上一批摘要",
+          characters: [{ name: "药老" }],
+          settings: [],
+          locations: [],
+          relations: [{ source: "药老", target: "萧炎", type: "mentor" }],
+        },
+      ],
+    });
+    const text = snapshotText(startOf({ characters: [{ name: "萧炎", role: "主角" }] }), bible);
+    expect(text).toContain("名字：萧炎（主角）、药老"); // 两层合进同一份文本（带 role 的在前，本轮累积名接在后面）
+    expect(text).toContain("上一批摘要：上一批摘要");
+    expect(text).toContain("已有关系：药老→萧炎（mentor）");
+  });
+
+  it("预算裁掉名字渲染时，关系端点校验仍用全集（库里已有名字不被当幻觉丢弃）", async () => {
+    const model = await fakeModel();
+    const jobId = ingestProject("快照全集"); // 默认 6 章 = 一批
+    const project = getCurrentProject()!;
+    for (let index = 0; index < 60; index++) {
+      createEntity(project.db, { type: "setting", name: `设定${index + 1}${"长".repeat(30)}` });
     }
-    bible = extendStoryBible(bible, resultWith(41, [longName(1)], "最新摘要")); // 重名不重复计入
+    // 渲染顺序与 `listEntities` 一致 ⇒ 末条必被预算裁掉（快照文本里的省略计数 > 0）
+    const droppedName = listEntities(project.db, { type: "setting", limit: MAX_ENTITY_LIST_LIMIT }).items.at(-1)!.name;
+    model.script([
+      batchJson({ indexes: range(1, 6), relation: { source: droppedName, target: "人物1", type: "ally" } }),
+      NO_ALIASES,
+      PLOT_SUMMARY,
+    ]);
 
-    expect(bible.names).toHaveLength(40);
-    expect(bible.summaries).toEqual(["最新摘要"]); // 摘要整批替换 = 只留最近一批
+    await startDecomposeJob(project, model.deps);
 
-    const text = storyBibleText(bible);
-    expect(text.length).toBeLessThanOrEqual(DECOMPOSE_BIBLE_MAX_CHARS);
-    expect(text.startsWith("已出现的名字：")).toBe(true); // 名字行优先保留（关系端点判据靠它）
-    expect(storyBibleText(emptyStoryBible())).toBe(""); // 空圣经 → 空文本（提示词走「首批，尚无上文」）
+    const firstPrompt = promptOf(model.calls, 0);
+    expect(firstPrompt).toMatch(/（已省略 \d+ 个设定 \/ 地点名）/); // 快照确实被裁
+    expect(firstPrompt).not.toContain(droppedName); // 该端点名只在库里、没进提示词
+    const batch = decomposeBatchResultSchema.parse(getDecomposeBatch(project.db, jobId, 1)!.result);
+    expect(batch.chapters[5].relations).toEqual([{ source: droppedName, target: "人物1", type: "ally", evidence: "证据" }]);
   });
 });

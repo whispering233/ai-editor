@@ -160,7 +160,7 @@ function isSettledBatch(batch: DecomposeBatchRow): boolean {
 }
 
 /**
- * 已完成批的抽取结果（续拆重建滚动故事圣经、S3 归并都读它）。
+ * 已完成批的抽取结果（续拆重建本轮累积、S3 归并都读它）。
  * db 层不校验 `result` 形状（`[1,2]` 这类值原样透出）⇒ 此处按契约 schema 守卫。
  */
 export function doneBatchResults(db: Db, jobId: string, doneSeqs: readonly number[]): DecomposeBatchResult[] {

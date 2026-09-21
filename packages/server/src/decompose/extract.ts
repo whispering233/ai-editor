@@ -70,7 +70,7 @@ export interface ExtractionNormalization {
  *
  * - `expectedChapterIndexes` = 本批应覆盖的章序（1-based 文件位置序），来自 `decompose_batches.chapter_ids` 的映射；
  *   结果**按该顺序**输出，缺章抛错（runner 捕获后整批重试），批外章条目丢弃。
- * - `knownNames` = 本批之外的累计候选名字（滚动故事圣经里已出现过的人物/设定/地点名）；
+ * - `knownNames` = 本批之外的累计候选名字（项目数据快照里已出现过的人物 / 设定 / 地点名）；
  *   关系端点必须落在「本批 ∪ 累计」集合内，否则丢弃（§6 第 1 层：防模型幻觉出不存在的人物）。
  */
 export function normalizeExtraction(

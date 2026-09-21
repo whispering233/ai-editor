@@ -53,7 +53,7 @@ export const DECOMPOSE_MAX_FILE_BYTES = 16 * 1024 * 1024;
 
 /** 每 token 的汉字数（中文粗估；换 tokenizer 只调这一处——预估本就是量级参考） */
 export const DECOMPOSE_CHARS_PER_TOKEN = 1.5;
-/** 每批固定开销 token 粗估（系统提示 + 指令 + 滚动故事圣经）——批处理省的是这个，省不了正文与输出 */
+/** 每批固定开销 token 粗估（系统提示 + 指令 + 项目数据快照）——批处理省的是这个，省不了正文与输出 */
 export const DECOMPOSE_BATCH_OVERHEAD_TOKENS = 800;
 /** 每章输出 token 粗估（一条摘要（受 `DECOMPOSE_CHAPTER_SUMMARY_MAX_CHARS` 约束）+ 若干实体线索） */
 export const DECOMPOSE_OUTPUT_TOKENS_PER_CHAPTER = 400;
