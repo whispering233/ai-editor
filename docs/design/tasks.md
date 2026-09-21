@@ -39,7 +39,7 @@
 
 ### 卡 23.6 · shared+server：云端书架列出与导入新书
 
-- **范围**：① shared `cloudRemoteBooksResSchema` / `cloudImportBookReqSchema` / `cloudImportBookResSchema`；② `GET /api/v1/cloud/remote-books`（工作根不存在 → 空数组、不 MKCOL；每目录 1 次 PROPFIND；解析 `<书名>`/`projectId`、列出可解析备份、标 `localExists`）；③ `POST /api/v1/cloud/import-book`（下载 head / 指定份 → 既有 `validateBackupPackage` 管道 → 同 id 已存在 409 → `uniqueBookDir` 建档、id 沿用 → 该 zip 原样落新书 `.backups/`（新增写原始字节的 helper，文件名走备份命名白名单校验）→ 写 `cloud.json` book state（`dirName` / `lastPushedFileName` / `lastSeenHeadFileName` / `lastSeenCloudFiles` / `lastSyncAt`）→ 不自动打开）。
+- **范围**：① shared `cloudRemoteBooksResSchema` / `cloudImportBookReqSchema` / `cloudImportBookResSchema`；② `GET /api/v1/cloud/remote-books`（工作根不存在 → 空数组、不 MKCOL；每目录 1 次 PROPFIND；解析 `<书名>`/`projectId`、列出可解析备份、标 `localExists`）；③ `POST /api/v1/cloud/import-book`（**请求体 snake_case**：`dir_name` / `file_name`，见 `api-public.md`；下载 head / 指定份 → 既有 `validateBackupPackage` 管道 → 同 id 已存在 409 → `uniqueBookDir` 建档、id 沿用 → 该 zip 原样落新书 `.backups/`（新增写原始字节的 helper，文件名走备份命名白名单校验）→ 写 `cloud.json` book state（`dirName` / `lastPushedFileName` / `lastSeenHeadFileName` / `lastSeenCloudFiles` / `lastSyncAt` = `max(now, 三文件 mtime 向上取整)`）→ 不自动打开）。
 - **完成判据**：server 测试（列目录含无备份目录与无法解析 id 的目录；导入后 `GET /project/list` 出现新书且为 `book` 组、`.backups/` 有一份同名字节一致的 zip、`GET /cloud/status` 状态为 `synced`；同 id 二次导入 409；坏包 400；目录不存在 404）；与真 WebDAV（本地 `rclone serve webdav`）集成跑一次。
 
 ### 卡 23.7 · client：从云端恢复对话框
