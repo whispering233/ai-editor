@@ -260,6 +260,7 @@ createAgentSessionServices({ noExtensions, noSkills, noPromptTemplates, noContex
 - **已拆判定** = 历史上所有 job 的 `done` 批覆盖的章并集（`decompose_batches.status='done'`）。
 - **默认范围** = 未拆章的**最小覆盖区间**；范围仍是**单区间**（`scope_start` / `scope_end`）—— 多段形态（如已拆 1–100 与 200–300）下默认会把中间的已拆章一起重拆；罕见且无数据风险（§6 的幂等与「用户编辑优先」兜底），代价只是几批 token。
 - **显式范围含已拆章 = 有意重拆**：预览里标注「本范围含 N 章已拆（将重拆）」。
+- **预览字数口径与首次预览可能差 1 批**：`plan` 从库内 `content_text` 投影长取字（= 真正喂模型的口径），`analyze` 从源切片 trim 长取字；不保留源文件就**无法同值**（估算实现同源，仅输入口径不同）。两个数字都只是预估，不追同值。
 - **互斥**：存在 `running` / `paused` job 时不给开新 job（409 `DECOMPOSE_JOB_STATE`）。
 - **历史 job 全部保留**（行与批结果都在 `data.db`），进度页只展示最新一个；更早的过程靠会话记录回看（§7.2）。
 - **追加新章不在范围**：正文是 S1 全量导入的一次性产物；后续新增章节要正文增量导入——另属一个功能（`backlog.md`）。
