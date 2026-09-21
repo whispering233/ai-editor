@@ -48,7 +48,7 @@ import {
   normalizeExtraction,
 } from "./extract.js";
 import { doneBatchResults } from "./job.js";
-import { completeOnce, parseModelJson, type DecomposeLlmDeps, type ModelRequest } from "./llm.js";
+import { openDecomposeSession, parseModelJson, type DecomposeLlmDeps, type DecomposeSession, type ModelRequest } from "./llm.js";
 import { normalizeEntityName } from "./merge.js";
 import { runDecomposeMerge } from "./merge-write.js";
 
@@ -186,7 +186,8 @@ interface BatchRunInput {
   chapters: readonly BatchChapter[];
   bibleText: string;
   knownNames: readonly string[];
-  deps: DecomposeRunnerDeps;
+  /** 本 job 的拆解会话（S2 各批 + S3 归并 + S4 报告同写这一枚） */
+  session: DecomposeSession;
   signal: AbortSignal;
 }
 
@@ -197,15 +198,22 @@ interface BatchRunInput {
  */
 async function runBatch(input: BatchRunInput): Promise<BatchOutcome> {
   let lastError = "批未完成";
+  input.session.log({
+    kind: "batch_start",
+    batchSeq: input.batch.seq,
+    text: `批 ${input.batch.seq} 开始（${input.chapters.length} 章）`,
+  });
   for (let attempt = 1; attempt <= DECOMPOSE_BATCH_MAX_ATTEMPTS; attempt++) {
     if (input.signal.aborted) return { result: null, failed: false };
     if (startBatchAttempt(input.project.db, input.jobId, input.batch.seq, nowIso()) === null) {
       throw new Error(`拆解批不存在：job ${input.jobId} 批 ${input.batch.seq}`);
     }
     try {
-      const text = await completeOnce(input.deps, buildBatchPrompt({ chapters: input.chapters, bibleText: input.bibleText }), input.jobId);
+      const completion = await input.session.complete(
+        buildBatchPrompt({ chapters: input.chapters, bibleText: input.bibleText }),
+      );
       const normalized = normalizeExtraction(
-        parseModelJson(text),
+        parseModelJson(completion.text),
         input.chapters.map((chapter) => chapter.index),
         input.knownNames,
       );
@@ -213,14 +221,38 @@ async function runBatch(input: BatchRunInput): Promise<BatchOutcome> {
         console.warn(`[decompose] job ${input.jobId} 批 ${input.batch.seq} 归一丢弃：${normalized.discarded.join("；")}`);
       }
       completeBatch(input.project.db, { jobId: input.jobId, seq: input.batch.seq, result: normalized.result, now: nowIso() });
+      input.session.log({
+        kind: "batch_done",
+        batchSeq: input.batch.seq,
+        text: `批 ${input.batch.seq} 完成：${batchCountsText(normalized.result)}；本次用量 输入 ${completion.usage.input} token / 输出 ${completion.usage.output} token`,
+      });
       return { result: normalized.result, failed: false };
     } catch (err) {
       lastError = errorMessage(err);
+      input.session.log({
+        kind: "attempt_failed",
+        batchSeq: input.batch.seq,
+        text: `批 ${input.batch.seq} 第 ${attempt} 次尝试失败：${lastError}`,
+      });
       console.warn(`[decompose] job ${input.jobId} 批 ${input.batch.seq} 第 ${attempt} 次尝试失败：${lastError}`);
     }
   }
   failBatch(input.project.db, { jobId: input.jobId, seq: input.batch.seq, error: lastError, now: nowIso() });
   return { result: null, failed: true };
+}
+
+/** 一批的抽取计数（过程条目的「批完成」文案：各分组条数，不含原文与批结果本身） */
+function batchCountsText(result: DecomposeBatchResult): string {
+  const totals = result.chapters.reduce(
+    (sum, chapter) => ({
+      characters: sum.characters + chapter.characters.length,
+      settings: sum.settings + chapter.settings.length,
+      locations: sum.locations + chapter.locations.length,
+      relations: sum.relations + chapter.relations.length,
+    }),
+    { characters: 0, settings: 0, locations: 0, relations: 0 },
+  );
+  return `人物 ${totals.characters} / 设定 ${totals.settings} / 地点 ${totals.locations} / 关系 ${totals.relations}`;
 }
 
 /** 一批的素材：章序 / 标题来自大纲（章序 = 文件位置序），正文一次批量取投影（勿逐章查） */
@@ -249,7 +281,7 @@ function batchChapters(
 interface ExecuteRunInput {
   project: ProjectContext;
   job: DecomposeJobRow;
-  deps: DecomposeRunnerDeps;
+  session: DecomposeSession;
   signal: AbortSignal;
   /** 单批重跑：该批即使已 `done` 也重跑一次（其余 `done` 批不动）；其旧结果不入故事圣经（已知的过期输入） */
   rerunSeq?: number;
@@ -257,7 +289,7 @@ interface ExecuteRunInput {
 
 /** 一轮批执行（S2）：串行逐批调模型，结果只写 `decompose_batches.result` */
 async function executeRun(input: ExecuteRunInput): Promise<void> {
-  const { project, job, deps, signal } = input;
+  const { project, job, session, signal } = input;
   const batches = listDecomposeBatches(project.db, job.id);
   const pending = batches.filter((batch) => batch.status !== "done" || batch.seq === input.rerunSeq);
   const tree = readOutlineFile(project.root); // 一轮一份大纲快照（长任务里用户可能改标题）
@@ -282,7 +314,7 @@ async function executeRun(input: ExecuteRunInput): Promise<void> {
           chapters: batchChapters(project, batch, tree, chapterNumberById),
           bibleText: storyBibleText(bible),
           knownNames: bible.names,
-          deps,
+          session,
           signal,
         }),
       ),
@@ -328,6 +360,14 @@ export function cancelRunningDecomposeJobs(): void {
   for (const run of activeRuns.values()) run.controller.abort();
 }
 
+/**
+ * 该 job 是否有在跑（或排队）的一轮（chat 侧的删除守卫用）：
+ * **暂停后当前批仍在飞**——job 行已是 `paused`，但会话文件还会被这轮原地重建，同样不能删（§7.2）。
+ */
+export function isDecomposeJobActive(jobId: string): boolean {
+  return activeRuns.has(jobId);
+}
+
 /** 单批重跑选项（§7：`done` 与 `failed` 都可重跑，跑完重建 S3/S4） */
 export interface DecomposeRunOptions {
   rerunSeq?: number;
@@ -345,8 +385,6 @@ export function startDecomposeJob(
 ): Promise<void> {
   const job = getDecomposeJob(project.db); // 一项目一 job：取最新一行（db helper 口径）
   if (job === null || job.status !== "running") return Promise.resolve();
-  // 资源加载与会话 cwd = 项目根（拆解不注入 AGENTS.md，但 cwd 仍是 pi 的会话身份上下文）
-  const jobDeps: DecomposeRunnerDeps = deps.cwd === undefined ? { ...deps, cwd: project.root } : deps;
   const controller = new AbortController();
   const previous = activeRuns.get(job.id);
   const run: ActiveRun = { controller, done: Promise.resolve() };
@@ -355,9 +393,15 @@ export function startDecomposeJob(
     try {
       await previous?.done; // 上一轮先收尾（含它正在飞的批落库）
       if (controller.signal.aborted) return;
-      await executeRun({ project, job, deps: jobDeps, signal: controller.signal, rerunSeq: options.rerunSeq });
+      // 会话（落盘 + 过程条目）一轮一枚：S2 各批 + S3 归并 + S4 报告都写进它（deps 缺模型/凭据 → 抛错 → job 标失败）
+      const session = await openDecomposeSession(deps, {
+        projectRoot: project.root,
+        jobId: job.id,
+        bookName: project.config.name,
+      });
+      await executeRun({ project, job, session, signal: controller.signal, rerunSeq: options.rerunSeq });
       if (controller.signal.aborted) return; // 暂停 / 切书：不跑 S3/S4（状态归暂停与续拆路径）
-      await finishJob(project, job, jobDeps);
+      await finishJob(project, job, session);
     } catch (err) {
       failJob(project, job, controller.signal, err);
     } finally {
@@ -372,12 +416,12 @@ export function startDecomposeJob(
  * 有未收口批（暂停 / 崩溃残留）→ 什么都不做（状态归暂停与续拆路径）。
  * 状态回写前重读 job 行：S3/S4 期间可能被暂停 / 切书（长调用），不能盖掉那次状态。
  */
-async function finishJob(project: ProjectContext, job: DecomposeJobRow, deps: DecomposeRunnerDeps): Promise<void> {
+async function finishJob(project: ProjectContext, job: DecomposeJobRow, session: DecomposeSession): Promise<void> {
   const settled = listDecomposeBatches(project.db, job.id).every(
     (batch) => batch.status === "done" || batch.status === "failed",
   );
   if (!settled) return;
-  const summary = await runDecomposeMerge({ project, jobId: job.id, deps, now: nowIso() });
+  const summary = await runDecomposeMerge({ project, jobId: job.id, session, now: nowIso() });
   console.log(
     `[decompose] job ${job.id} 归并与报告收尾：实体 ${summary.entities} / 关系 ${summary.relations} / 别名组 ${summary.aliasGroups} / 报告 ${summary.reportId}`,
   );

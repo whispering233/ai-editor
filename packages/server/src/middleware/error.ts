@@ -34,6 +34,7 @@ export const SERVER_ERROR_CODES = [
   "DECOMPOSE_JOB_NOT_FOUND", // 404：当前项目没有 job
   "DECOMPOSE_BATCH_NOT_FOUND", // 404：批序号越界
   "DECOMPOSE_JOB_STATE", // 409：当前 job 状态不允许该操作（pause / resume / rerun 的前置）
+  "DECOMPOSE_JOB_RUNNING", // 409：删除拆解会话被拒——该 `decompose-` 会话所属 job 仍在跑（chat 侧守卫）
 ] as const;
 export type ServerErrorCode = (typeof SERVER_ERROR_CODES)[number];
 

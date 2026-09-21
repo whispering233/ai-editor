@@ -47,6 +47,7 @@ export const ERROR_CODES = [
   "BACKUP_TARGET_EXISTS", // 409 重命名备份目标文件名已存在（B2.6：renameSync 目标存在会静默覆盖——显式拒绝防数据丢失）
   "SESSION_NOT_FOUND", // 404 会话不存在（消息/思维链/删除端点：id 经磁盘发现未命中）
   "SESSION_BUSY", // 409 删除会话时该会话有在途 SSE 流（拒删）
+  "SESSION_READONLY", // 409 向拆解会话（`decompose-` 前缀）发消息：拆解会话只读，不可续聊（docs/api/80-api-chat.md）
   "CHAT_BUSY", // 409 当前项目已有在途 chat 流（单项目单流约束，docs/api/80-api-chat.md）
   "THINKING_NOT_FOUND", // 404 思维链全文端点：blockIndex 越界或该块非 thinking
   "DOCUMENT_STALE", // 409 保存章正文时版本戳不一致（另一标签页/窗口已写入；参考资料正文无版本戳、不在本码覆盖范围）；**仅当请求携带 base_updated_at 时校验**，省略 = 覆盖保存（拒绝隐式丢失他人写入）

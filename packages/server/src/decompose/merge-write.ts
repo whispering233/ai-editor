@@ -40,7 +40,7 @@ import {
 import type { ProjectContext } from "../middleware/project.js";
 import { DECOMPOSE_DESCRIPTION_MAX_CHARS } from "./extract.js";
 import { doneBatchResults, paragraphBlocksOf } from "./job.js";
-import { completeOnce, parseModelJson, type DecomposeLlmDeps, type ModelRequest } from "./llm.js";
+import { parseModelJson, type DecomposeSession, type ModelRequest } from "./llm.js";
 import {
   DECOMPOSE_ALIAS_CANDIDATE_MAX,
   DECOMPOSE_ALIAS_GROUP_MAX,
@@ -83,11 +83,11 @@ export const DECOMPOSE_ENTITY_KINDS = ["character", "setting", "location"] as co
 /** 报告在写入计划里的归并身份（与实体/关系身份格式不冲突：实体身份必带类别前缀） */
 const REPORT_PRODUCT_KEY = "report";
 
-/** S3 + S4 的入参：项目 / job / 可注入模型依赖 / 时间（本模块不生成时间） */
+/** S3 + S4 的入参：项目 / job / 本 job 的拆解会话（模型调用与过程条目都写它）/ 时间（本模块不生成时间） */
 export interface DecomposeMergeInput {
   project: ProjectContext;
   jobId: string;
-  deps: DecomposeLlmDeps;
+  session: DecomposeSession;
   now: string;
 }
 
@@ -215,7 +215,7 @@ export async function runDecomposeMerge(input: DecomposeMergeInput): Promise<Dec
     .map((batch) => batch.seq);
   const results = doneBatchResults(input.project.db, input.jobId, doneSeqs);
 
-  const aliasGroups = await completeAliasGroups(input.deps, results, input.jobId); // S3 第 2 层：全书一次
+  const aliasGroups = await completeAliasGroups(input.session, results); // S3 第 2 层：全书一次
   const outcome = mergeCandidates(results, aliasGroups); // S3 第 1 层：四步有序纯管线
   const mentions = aggregateMentions(results);
   writeChapterSummaries(input.project, results, input.now);
@@ -239,7 +239,7 @@ export async function runDecomposeMerge(input: DecomposeMergeInput): Promise<Dec
       keptUserEdited: keptUserEditedLabels(input.project, plan, job.merge_written),
     }),
   };
-  const reportText = buildDecomposeReportText(facts, await completeReportPlot(input.deps, facts.chapters, input.jobId));
+  const reportText = buildDecomposeReportText(facts, await completeReportPlot(input.session, facts.chapters));
 
   // 落库与清单写在同一事务：中途失败（如用户手工建了同一枚关系 ⇒ RELATION_EXISTS）整体回滚，
   // 不留「行已写、清单没记」的半成品——那会让下一轮把同一产物当新产物再创建一遍（幂等破口）
@@ -257,28 +257,34 @@ export async function runDecomposeMerge(input: DecomposeMergeInput): Promise<Dec
     writeMergeWritten(input.project.db, input.jobId, writtenEntries, input.now);
     return writtenEntries;
   });
-  return {
+  const summary: DecomposeMergeSummary = {
     entities: outcome.entities.length,
     relations: outcome.relations.length,
     aliasGroups: aliasGroups.length,
     reportId: entries.find((entry) => entry.type === DECOMPOSE_REPORT_ENTITY_TYPE)?.id ?? "",
   };
+  // 过程条目（不参与 LLM 上下文）：归并计数与报告落点——批表没有的信息（§8 时间线口径）
+  input.session.log({
+    kind: "merge_done",
+    text: `归并完成：实体 ${summary.entities} / 关系 ${summary.relations} / 别名组 ${summary.aliasGroups}`,
+  });
+  input.session.log({ kind: "report_done", text: `报告完成：${reportName}（id=${summary.reportId}）` });
+  return summary;
 }
 
 // ============ S3 别名归并调用（§6 第 2 层；全书一次） ============
 
 /** 别名归并调用：LLM 只看候选清单；命中硬校验的组才生效（缺依据的组按保守原则直接丢弃） */
 async function completeAliasGroups(
-  deps: DecomposeLlmDeps,
+  session: DecomposeSession,
   results: readonly DecomposeBatchResult[],
-  jobId: string,
 ): Promise<ReportAliasGroup[]> {
   const all = buildAliasCandidates(results);
   const candidates = selectAliasCandidates(all);
   if (all.length > candidates.length) {
     console.warn(`[decompose] 别名候选超出 ${DECOMPOSE_ALIAS_CANDIDATE_MAX} 条，按提及次数截断后归并`);
   }
-  const text = await completeOnce(deps, aliasPrompt(candidates), jobId);
+  const { text } = await session.complete(aliasPrompt(candidates));
   const proposed = proposedGroupsOf(parseModelJson(text));
   const validation = validateAliasGroups(proposed, candidates);
   if (validation.rejected.length > 0) {

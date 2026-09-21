@@ -11,7 +11,7 @@
 // - POST /chat：开流前校验（400/404/409/LLM_API_KEY_MISSING）、首帧 session、事件集与
 //   `partial` 剥离、AUTO 工具 details 不下发、提案 details 下发、AGENTS.md 与聚焦注入、
 //   续聊历史喂回、单项目单流 409 CHAT_BUSY、断开取消（provider signal aborted + 提案作废）
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -27,11 +27,18 @@ import {
   type Model,
   type SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
-import { ModelRuntime } from "@earendil-works/pi-coding-agent";
-import { createProjectRuntime, defaultProposalStore, openProjectSessionManager, type Proposal } from "@whispering233/ai-editor-agent";
-import { createEntity, SCHEMA_VERSION, upsertDocument, writeOutlineFile } from "@whispering233/ai-editor-db";
+import { ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
+import {
+  createProjectRuntime,
+  defaultProposalStore,
+  openProjectSessionManager,
+  projectSessionsDir,
+  type Proposal,
+} from "@whispering233/ai-editor-agent";
+import { createDecomposeJob, createEntity, nowIso, SCHEMA_VERSION, updateJobStatus, upsertDocument, writeOutlineFile } from "@whispering233/ai-editor-db";
 import type { OutlineFileTree } from "@whispering233/ai-editor-shared";
 import type { RuntimeFactory } from "../chat-runtime.js";
+import { decomposeSessionId } from "../decompose/llm.js";
 import { errorHandler } from "../middleware/error.js";
 import {
   closeProject,
@@ -1064,5 +1071,76 @@ describe("项目切换清理", () => {
 
     release();
     await reader.cancel().catch(() => {});
+  });
+});
+
+// ============ 拆解会话守卫（docs/design/60-decompose.md §2.1 只读 / §7.2 在跑禁删） ============
+
+describe("拆解会话守卫（decompose- 前缀）", () => {
+  /** 落一枚真拆解会话文件（id = `decompose-<jobId>`，与 llm.ts 同一组装函数） */
+  function seedDecomposeSession(project: ProjectContext, jobId: string): { sessionId: string; file: string } {
+    const sessionId = decomposeSessionId(jobId);
+    const manager = SessionManager.create(project.root, projectSessionsDir(project.root), { id: sessionId });
+    manager.appendSessionInfo("《测试书》拆解");
+    // pi 要等 assistant 消息才落盘（`SessionManager._persist`）⇒ 夹具补一轮问答，文件才真的在磁盘上
+    manager.appendMessage({ role: "user", content: [{ type: "text", text: "批 1 正文" }], timestamp: Date.now() });
+    manager.appendMessage(fauxAssistantMessage("拆解产物"));
+    const file = manager.getSessionFile();
+    if (file === undefined) throw new Error("拆解会话未落盘");
+    return { sessionId, file };
+  }
+
+  /** 建一个 job 行（无批规划即可：守卫只看状态） */
+  function seedJob(project: ProjectContext, status: "running" | "done"): string {
+    const job = createDecomposeJob(project.db, {
+      scopeStart: 1,
+      scopeEnd: 1,
+      batchTargetChars: 6000,
+      model: null,
+      batches: [],
+      now: nowIso(),
+    });
+    updateJobStatus(project.db, job.id, status, nowIso());
+    return job.id;
+  }
+
+  it("POST /chat：拆解会话 → 409 SESSION_READONLY（请求没到模型）；非前缀仍走既有 404", async () => {
+    const project = openProject();
+    const { sessionId } = seedDecomposeSession(project, seedJob(project, "running"));
+    const env = await createFauxEnv();
+    const app = buildApp(createChatRoutes({ runtimeFactory: env.factory }));
+
+    const res = await app.request("/api/v1/chat", postChat({ message: "接着聊这本小说", session_id: sessionId }));
+    expect(res.status).toBe(409);
+    expect((await res.json()).error.code).toBe("SESSION_READONLY");
+    expect(env.requests).toEqual([]); // 只读判定在装配与 prompt 之前
+
+    // 只是「名字里含 decompose」但非前缀 → 既有行为逐字不变（磁盘发现未命中即 404）
+    const other = await app.request("/api/v1/chat", postChat({ message: "hi", session_id: "my-decompose-1" }));
+    expect(other.status).toBe(404);
+    expect((await other.json()).error.code).toBe("SESSION_NOT_FOUND");
+  });
+
+  it("DELETE /chat/sessions/:id：在跑 job 的拆解会话 409 DECOMPOSE_JOB_RUNNING；终态后可删（物理删）", async () => {
+    const project = openProject();
+    const jobId = seedJob(project, "running");
+    const { sessionId, file } = seedDecomposeSession(project, jobId);
+    const app = buildApp(createChatRoutes());
+
+    const running = await app.request(`/api/v1/chat/sessions/${sessionId}`, { method: "DELETE", headers: HOST_HEADERS });
+    expect(running.status).toBe(409);
+    expect((await running.json()).error.code).toBe("DECOMPOSE_JOB_RUNNING");
+    expect(existsSync(file)).toBe(true); // 拒删时文件原地不动（在途任务会把文件重建）
+
+    updateJobStatus(project.db, jobId, "done", nowIso());
+    const done = await app.request(`/api/v1/chat/sessions/${sessionId}`, { method: "DELETE", headers: HOST_HEADERS });
+    expect(done.status).toBe(200);
+    expect(existsSync(file)).toBe(false);
+
+    // 历史 job 的拆解会话（job 行已不是它）→ 无在跑轮次，同样可删
+    const old = seedDecomposeSession(project, "job-old");
+    const removed = await app.request(`/api/v1/chat/sessions/${old.sessionId}`, { method: "DELETE", headers: HOST_HEADERS });
+    expect(removed.status).toBe(200);
+    expect(existsSync(old.file)).toBe(false);
   });
 });

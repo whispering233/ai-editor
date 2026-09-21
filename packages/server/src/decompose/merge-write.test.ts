@@ -41,7 +41,7 @@ import {
 import { resetModelRuntime } from "../model-runtime.js";
 import { setProjectRoot } from "../routes/project.js";
 import { ingestDecomposeProject } from "./job.js";
-import type { DecomposeLlmDeps } from "./llm.js";
+import { openDecomposeSession, type DecomposeLlmDeps } from "./llm.js";
 import { DECOMPOSE_ALIAS_GROUP_MAX, DECOMPOSE_ALIAS_GROUP_MIN_NAMES } from "./merge.js";
 import { DECOMPOSE_MERGE_RELATION_TYPE, runDecomposeMerge, type DecomposeMergeSummary } from "./merge-write.js";
 import { DECOMPOSE_REPORT_KIND, DECOMPOSE_REPORT_SECTIONS } from "./report.js";
@@ -201,9 +201,18 @@ function noAliases(): string {
   return JSON.stringify({ groups: [] });
 }
 
-/** 跑一轮 S3 + S4（调用方先 script 好模型回复） */
-function runMerge(input: { project: ProjectContext; jobId: string; deps: DecomposeLlmDeps }): Promise<DecomposeMergeSummary> {
-  return runDecomposeMerge({ ...input, now: nowIso() });
+/** 跑一轮 S3 + S4（调用方先 script 好模型回复）：会话落项目根 `sessions/`（与 runner 同款；续写同一枚） */
+async function runMerge(input: {
+  project: ProjectContext;
+  jobId: string;
+  deps: DecomposeLlmDeps;
+}): Promise<DecomposeMergeSummary> {
+  const session = await openDecomposeSession(input.deps, {
+    projectRoot: input.project.root,
+    jobId: input.jobId,
+    bookName: BOOK_NAME,
+  });
+  return runDecomposeMerge({ project: input.project, jobId: input.jobId, session, now: nowIso() });
 }
 
 /** 库内实体计数（按类型；只计未软删） */

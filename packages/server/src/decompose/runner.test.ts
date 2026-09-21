@@ -4,7 +4,7 @@
 // 全部经 **faux provider（内存运行时注册假模型）离线跑**，不触网、不调真实模型；
 // 批循环是后台任务（路由不 await）⇒ 断言前统一用 `waitFor` 轮询等服务端落库。
 
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -44,6 +44,7 @@ import {
 import { resetModelRuntime } from "../model-runtime.js";
 import { setProjectRoot } from "../routes/project.js";
 import { createDecomposeRoutes, type DecomposeRouteDeps } from "../routes/decompose.js";
+import { createChatRoutes } from "../routes/chat.js";
 import { DECOMPOSE_BATCH_TARGET_CHARS } from "./batching.js";
 import {
   DECOMPOSE_CHAPTER_MAX_CHARACTERS,
@@ -51,11 +52,13 @@ import {
   DECOMPOSE_RELATION_TYPES,
 } from "./extract.js";
 import { ingestDecomposeProject } from "./job.js";
+import { decomposeSessionId } from "./llm.js";
 import {
   DECOMPOSE_BATCH_MAX_ATTEMPTS,
   DECOMPOSE_BIBLE_MAX_CHARS,
   emptyStoryBible,
   extendStoryBible,
+  isDecomposeJobActive,
   startDecomposeJob,
   storyBibleText,
 } from "./runner.js";
@@ -113,6 +116,7 @@ function buildApp(deps: DecomposeRouteDeps): Hono {
   app.use("*", originCheckMiddleware());
   app.use("*", projectMiddleware());
   app.route("/api/v1/decompose", createDecomposeRoutes(deps));
+  app.route("/api/v1/chat", createChatRoutes()); // 拆解会话的 chat 侧守卫（删除守卫的「在跑轮次」分支）
   return app;
 }
 
@@ -412,6 +416,97 @@ describe("S2 批循环", () => {
     expect(job).toMatchObject({ status: "done", stage: "done", progress: { done: 0, failed: 0, total: 0 } });
     expect(job.report).toMatchObject({ name: "《零批》拆解报告" });
     expect(model.calls).toHaveLength(1); // 无章摘要 ⇒ 报告调用不发（输入为空）
+  });
+});
+
+// ============ 拆解会话落盘与过程条目（§2.1 / §8 时间线口径；卡 22.2） ============
+
+describe("拆解会话落盘", () => {
+  /** 拆解会话文件条目（`<项目根>/sessions/<时间戳>_<会话 id>.jsonl`；header 除外） */
+  function sessionEntriesOf(projectRoot: string, sessionId: string): Record<string, unknown>[] {
+    const dir = join(projectRoot, "sessions");
+    const file = readdirSync(dir).find((name) => name.endsWith(`_${sessionId}.jsonl`));
+    if (file === undefined) throw new Error(`拆解会话文件不存在：${sessionId}`);
+    return readFileSync(join(dir, file), "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>)
+      .filter((entry) => entry.type !== "session");
+  }
+
+  it("过程条目：批开始 / 失败尝试 / 批完成（计数 + 用量）/ 归并 / 报告；会话名 = 《书名》拆解", async () => {
+    const model = await fakeModel();
+    const missingFirstChapter = batchJson({ indexes: range(2, 10) });
+    model.script([
+      missingFirstChapter, // 第 1 批首次尝试缺章 ⇒ 重试（记一条失败条目）
+      batchJson({ indexes: range(1, 10) }),
+      batchJson({ indexes: range(11, 12) }),
+      NO_ALIASES,
+      PLOT_SUMMARY,
+    ]);
+    const app = buildApp(model.deps);
+
+    const started = await startOk(app, "记录");
+    const project = getCurrentProject()!;
+    await pollJob(app, "job 收口");
+
+    const entries = sessionEntriesOf(project.root, decomposeSessionId(started.jobId));
+    expect(entries.find((entry) => entry.type === "session_info")?.name).toBe("《记录》拆解");
+    const logs = entries
+      .filter((entry) => entry.type === "custom")
+      .map((entry) => entry.data as { kind: string; text: string; batchSeq?: number; at: string });
+    expect(logs.map((log) => log.kind)).toEqual([
+      "batch_start",
+      "attempt_failed",
+      "batch_done",
+      "batch_start",
+      "batch_done",
+      "merge_done",
+      "report_done",
+    ]);
+    expect(logs[0]).toMatchObject({ batchSeq: 1, text: "批 1 开始（10 章）" });
+    expect(logs[1]?.text).toContain("批 1 第 1 次尝试失败：");
+    expect(logs[2]?.text).toContain("批 1 完成：人物 10 / 设定 0 / 地点 0 / 关系 0；本次用量 输入 ");
+    expect(logs[3]).toMatchObject({ batchSeq: 2, text: "批 2 开始（2 章）" });
+    expect(logs[5]?.text).toContain("归并完成：实体 ");
+    expect(logs[6]?.text).toMatch(/^报告完成：《记录》拆解报告（id=ref-.+）$/);
+    expect(logs.every((log) => !Number.isNaN(Date.parse(log.at)))).toBe(true);
+    // 过程条目**不进模型请求**（custom entry 不参与 LLM 上下文）
+    for (const call of model.calls) expect(JSON.stringify(call.messages)).not.toContain("批 1 开始");
+  });
+
+  it("DELETE /chat/sessions/<拆解会话>：暂停后当前批仍在飞 → 409；轮次收尾后可删", async () => {
+    const model = await fakeModel();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    model.script([
+      async () => {
+        await gate;
+        return fauxAssistantMessage(batchJson({ indexes: range(1, 6) }));
+      },
+      NO_ALIASES,
+      PLOT_SUMMARY,
+    ]);
+    const app = buildApp(model.deps);
+
+    const started = await startOk(app, "删除守卫", 6);
+    const project = getCurrentProject()!;
+    await waitFor(() => model.calls.length >= 1, "批调用已发出");
+
+    // job 行已置 paused（模拟暂停），但在飞批仍会写回这枚会话文件 ⇒ 仍禁删（§7.2）
+    updateJobStatus(project.db, started.jobId, "paused", nowIso());
+    const sessionId = decomposeSessionId(started.jobId);
+    const busy = await app.request(`/api/v1/chat/sessions/${sessionId}`, { method: "DELETE", headers: HOST_HEADERS });
+    expect(busy.status).toBe(409);
+    expect((await busy.json()).error.code).toBe("DECOMPOSE_JOB_RUNNING");
+
+    release();
+    await waitFor(() => !isDecomposeJobActive(started.jobId), "轮次收尾");
+    const after = await app.request(`/api/v1/chat/sessions/${sessionId}`, { method: "DELETE", headers: HOST_HEADERS });
+    expect(after.status).toBe(200);
+    expect(readdirSync(join(project.root, "sessions")).some((name) => name.endsWith(`_${sessionId}.jsonl`))).toBe(false);
   });
 });
 

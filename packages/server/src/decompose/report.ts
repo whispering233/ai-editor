@@ -5,7 +5,7 @@
 // 正文 = 纯文本小标题 + 段落（服务端按行拆段落块，不做 markdown 语义转换，与参考资料导入同口径）。
 // 数值上限与文案单一定义在本模块并导出；散文与注释只引用常量名，不复述数字。
 
-import { completeOnce, type DecomposeLlmDeps } from "./llm.js";
+import { type DecomposeSession } from "./llm.js";
 import { SPLIT_LONG_BLOCK_FACTOR } from "./split.js";
 
 /** 报告实体的落点口径：`entities.type`（第 7 种实体）+ `data.type` / `tags` / 名字后缀共用这个词 */
@@ -102,9 +102,8 @@ export function buildDecomposeReportText(facts: DecomposeReportFacts, plotSummar
  * 无章摘要时不调用模型（无输入可聚合），由调用方按空文本落报告。
  */
 export async function completeReportPlot(
-  deps: DecomposeLlmDeps,
+  session: DecomposeSession,
   chapters: readonly ReportChapter[],
-  sessionId?: string,
 ): Promise<string> {
   const withSummary = chapters.filter((chapter) => chapter.summary !== "");
   if (withSummary.length === 0) return "";
@@ -115,7 +114,8 @@ export async function completeReportPlot(
     ].join("\n"),
     user: withSummary.map((chapter) => `第${chapter.index}章 ${chapter.title}：${chapter.summary}`).join("\n"),
   };
-  const text = (await completeOnce(deps, request, sessionId)).trim();
+  const { text: raw } = await session.complete(request);
+  const text = raw.trim();
   return text.length <= DECOMPOSE_REPORT_PLOT_MAX_CHARS ? text : text.slice(0, DECOMPOSE_REPORT_PLOT_MAX_CHARS);
 }
 

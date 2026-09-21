@@ -79,6 +79,7 @@ describe("ErrorCode 完整性", () => {
     expect(ERROR_CODES).toContain("TOOL_RESULT_TOO_LARGE");
     expect(ERROR_CODES).toContain("SESSION_NOT_FOUND");
     expect(ERROR_CODES).toContain("SESSION_BUSY");
+    expect(ERROR_CODES).toContain("SESSION_READONLY"); // 拆解会话只读（decompose- 前缀）
     expect(ERROR_CODES).toContain("CHAT_BUSY");
     expect(ERROR_CODES).toContain("THINKING_NOT_FOUND");
     expect(ERROR_CODES).toContain("DOCUMENT_STALE"); // 块文档版本戳冲突（仅携带 base_updated_at 时校验）

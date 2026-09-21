@@ -7,6 +7,8 @@
 // - 无当前项目 → 409 NO_PROJECT_OPEN（与其他业务路由一致）
 // - 请求体校验失败 → 400 VALIDATION_ERROR（JSON，非 SSE——校验在开流之前）
 // - 单项目单在途流 → 409 CHAT_BUSY；重复会话删除 → 404 SESSION_NOT_FOUND；在途会话 → 409 SESSION_BUSY
+// - 拆解会话（id 前缀 `decompose-`）**只读**：`POST /chat` → 409 SESSION_READONLY；其 job 在跑时禁删 → 409
+//   DECOMPOSE_JOB_RUNNING（§2.1 / §7.2；会话可见、可看、可删）
 // - 模型/凭据缺失 → 400 LLM_API_KEY_MISSING（同样在开流之前，JSON）
 // - 会话归属由项目目录表达：`session_id` 只经磁盘发现映射到文件（**不做路径拼接**），
 //   缺省则新建会话（pi 生成 id，首帧 `session` 回给客户端）
@@ -35,8 +37,8 @@ import {
   type ProjectRuntime,
   type SseFrame,
 } from "@whispering233/ai-editor-agent";
-import { findOutlineNode, getDocument, getEntity, readOutlineFile } from "@whispering233/ai-editor-db";
-import { truncate } from "@whispering233/ai-editor-shared";
+import { findOutlineNode, getDocument, getDecomposeJob, getEntity, readOutlineFile } from "@whispering233/ai-editor-db";
+import { DECOMPOSE_SESSION_ID_PREFIX, truncate } from "@whispering233/ai-editor-shared";
 import {
   chatMessagesResSchema,
   chatSendReqSchema,
@@ -46,6 +48,8 @@ import {
 } from "@whispering233/ai-editor-shared/schemas";
 import { HttpError, ok } from "../middleware/error.js";
 import { requireCurrentProject, type ProjectContext } from "../middleware/project.js";
+import { decomposeSessionId } from "../decompose/llm.js";
+import { isDecomposeJobActive } from "../decompose/runner.js";
 import { debugLog, isCategoryEnabled } from "../debug.js";
 import {
   acquireProjectRuntime,
@@ -343,6 +347,10 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
       // ---- 目标会话：session_id 只经磁盘发现映射（未命中 → 404） ----
       let sessionFile: string | undefined;
       if (session_id !== undefined) {
+        // 拆解会话只读（§2.1）：历史里是一整本原文，当上下文续聊费用与语义均错；前缀即 kind，先于磁盘发现
+        if (session_id.startsWith(DECOMPOSE_SESSION_ID_PREFIX)) {
+          throw new HttpError(409, "SESSION_READONLY", `拆解会话只读，不可续聊: ${session_id}`);
+        }
         const info = await findProjectSession(target.root, session_id);
         if (info === null) {
           throw new HttpError(404, "SESSION_NOT_FOUND", `会话不存在: ${session_id}（客户端应改为新会话重试）`);
@@ -491,6 +499,19 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
 
 // ============ 会话端点辅助 ============
 
+/**
+ * 拆解会话删除守卫（§7.2「有在途 job 时禁删」）：会话 id 与 job 用**同一纯函数**组装，故直接比对。
+ * 三种「仍在跑」都算：job 行 `pending` / `running`，或**进程内有在跑轮次**——暂停后当前批仍在飞
+ * （job 行已是 `paused`），此时删文件会被这轮原地重建。历史 job 的会话（job 行已不是它）可直接删。
+ */
+function assertDecomposeSessionDeletable(project: ProjectContext, sessionId: string): void {
+  const job = getDecomposeJob(project.db); // 一项目一 job：最新一行（db helper 口径）
+  if (job === null || decomposeSessionId(job.id) !== sessionId) return;
+  const running = job.status === "pending" || job.status === "running" || isDecomposeJobActive(job.id);
+  if (!running) return;
+  throw new HttpError(409, "DECOMPOSE_JOB_RUNNING", `拆解任务仍在跑，会话文件会被原地重建，暂不可删: ${sessionId}`);
+}
+
 /** 会话末条可见文本（列表摘要用）+ 50 字截断 */
 async function lastVisibleText(target: ChatProjectTarget, sessionId: string): Promise<string> {
   const opened = await readProjectSession(target.root, sessionId);
@@ -557,13 +578,14 @@ export function createChatRoutes(deps: ChatRouteDeps = {}): Hono {
   });
 
   // DELETE /api/v1/chat/sessions/:id —— 物理删除会话（无回收站；前端二次确认）
-  // 校验顺序：在途流（防流把文件原地重建）→ 文件存在性（磁盘发现未命中即 404）
+  // 校验顺序：在途流（防流把文件原地重建）→ 拆解 job 在跑（在途任务会把文件原地重建）→ 文件存在性（磁盘发现未命中即 404）
   routes.delete("/sessions/:id", async (c) => {
     const project = requireCurrentProject();
     const sessionId = c.req.param("id");
     if (isSessionInFlight(sessionId)) {
       throw new HttpError(409, "SESSION_BUSY", `会话有在途对话流，请先停止生成再删除: ${sessionId}`);
     }
+    if (sessionId.startsWith(DECOMPOSE_SESSION_ID_PREFIX)) assertDecomposeSessionDeletable(project, sessionId);
     const info = await findProjectSession(project.root, sessionId);
     if (info === null) {
       throw new HttpError(404, "SESSION_NOT_FOUND", `会话不存在: ${sessionId}`);
