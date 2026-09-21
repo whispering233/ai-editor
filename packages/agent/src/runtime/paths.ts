@@ -6,7 +6,7 @@
 import { join, resolve } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 
-/** 项目内会话目录名（与备份管道登记的随包目录同名） */
+/** 项目内会话目录名（纯本地目录：不进备份/导出/云端；server 侧遗留白名单与恢复口径共用同一常量） */
 export const SESSIONS_DIR_NAME = "sessions";
 
 /** 项目规则文件名（唯一持久化上下文通道；读取只认项目根这一个文件） */
