@@ -36,7 +36,7 @@ import {
   setCurrentProject,
 } from "./middleware/project.js";
 import { projectRoutes, setProjectRoot } from "./routes/project.js";
-import { BACKUPS_DIR_NAME, createBackupZip, ensureParseableBackup, isAllowedBackupEntry, maybeAutoBackup, pruneBackups, renameBackup, validateBackupPackage, writeBackup, writeProjectFilesFromBackup } from "./backup.js";
+import { BACKUPS_DIR_NAME, createBackupZip, ensureParseableBackup, isAllowedBackupEntry, maybeAutoBackup, pruneBackups, renameBackup, validateBackupPackage, writeBackup, writeProjectFilesFromBackup, writeRawBackupFile } from "./backup.js";
 import { unzipSync } from "fflate";
 
 /** 旧会话格式（v1 扁平 JSONL）夹具写入：备份管道只按目录条目处理 sessions/，与文件内容格式无关 */
@@ -1422,5 +1422,40 @@ describe("sessions/ 纯本地目录", () => {
       "sessions/../evil.jsonl": new TextEncoder().encode("x"),
     });
     expect(() => validateBackupPackage(zip)).toThrowError(/未知条目/);
+  });
+});
+
+// ============ writeRawBackupFile（云端导入把 zip 原样落进新书 .backups/） ============
+
+describe("writeRawBackupFile", () => {
+  it("非法名（穿越/子路径/反斜杠/缺 .zip/随意名）→ 抛错且盘上无落点", () => {
+    const dir = makeTmpDir();
+    const illegal = ["../../evil.zip", "sub/好名.zip", "sub\\好名.zip", "20260813-101530123-自动-设备-人物0-设定0-章0", "随便名"];
+    for (const fileName of illegal) {
+      expect(() => writeRawBackupFile(dir, fileName, new Uint8Array([1, 2, 3])), `fileName=${fileName}`).toThrowError(
+        HttpError,
+      );
+    }
+    let code: string | undefined;
+    try {
+      writeRawBackupFile(dir, "../../evil.zip", new Uint8Array([1]));
+    } catch (err) {
+      code = (err as HttpError).code;
+    }
+    expect(code).toBe("VALIDATION_ERROR"); // 与 rename/restore 同一道 assertBackupFileNameFormat
+    expect(readdirSync(dir)).toEqual([]); // 未建 .backups/、未落任何文件
+    expect(existsSync(join(tmpRoot, "evil.zip"))).toBe(false); // 未逃出项目目录
+  });
+
+  it("合法名 → 原样落盘（字节一致）；同名已存在 → 保留原有那份（不覆盖）", () => {
+    const dir = makeTmpDir();
+    const fileName = fakeBackupName(1);
+
+    writeRawBackupFile(dir, fileName, new Uint8Array([1, 2, 3]));
+
+    const landed = join(dir, BACKUPS_DIR_NAME, fileName);
+    expect([...readFileSync(landed)]).toEqual([1, 2, 3]);
+    writeRawBackupFile(dir, fileName, new Uint8Array([9, 9])); // 同名再写一份不同的
+    expect([...readFileSync(landed)]).toEqual([1, 2, 3]); // 原份保留（导入不覆盖已有备份）
   });
 });

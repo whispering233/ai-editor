@@ -375,6 +375,16 @@ cloudRoutes.post("/import-book", async (c) => {
 
   // 校验通过前不触碰 books/（与 import 同管道同语义）；版本过高/坏包直接抛出，不落半成品
   const validated = validateBackupPackage(new Uint8Array(bytes));
+  // 目录名解析出的 id ≠ 包内 id → 拒绝（设计文档 §10 表）。危害不是「导入错书」而是 state.dirName 取自目录名：
+  // 之后推送会把这本书写进**别人的书的云端目录**（跨书污染）。解析不出 id（用户手工命名目录）无 id 声明，不算冲突。
+  const declaredId = parseCloudBookDirName(parsed.dir_name)?.projectId ?? null;
+  if (declaredId !== null && declaredId !== validated.projectId) {
+    throw new HttpError(
+      400,
+      "VALIDATION_ERROR",
+      `云端目录与备份内容不是同一本书（目录名声明 id: ${declaredId}，备份包内 id: ${validated.projectId}）——请确认选对了书目录`,
+    );
+  }
   if (findBookDirById(root, validated.projectId) !== null) {
     throw new HttpError(
       409,

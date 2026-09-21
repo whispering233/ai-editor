@@ -4,13 +4,15 @@
 // 云端用**内存版最小 WebDAV**（stub 全局 fetch）：能精确构造「工作根不存在 / 无法解析 id 的目录 /
 // 无备份目录 / 非本程序命名的文件 / 坏包 / 未来版本包」，并断言**零写请求**；协议本身由
 // webdav.test.ts / webdav.integration.test.ts 覆盖。
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { unzipSync, zipSync } from "fflate";
 import { formatBackupFileName, generateProjectId, type ProjectFileConfig } from "@whispering233/ai-editor-shared";
+// 三文件名单单源（与备份管道逐字同一常量；根入口是 type-only barrel，运行时常量只在 schemas 子路径）
+import { PROJECT_EXPORT_FILE_NAMES } from "@whispering233/ai-editor-shared/schemas";
 import {
   closeDatabase,
   DATA_DB_FILE_NAME,
@@ -235,6 +237,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers(); // 复位 fake timers（lastSyncAt 基准那条用）
   const current = getCurrentProject();
   if (current !== null) {
     closeProject(current);
@@ -447,6 +450,69 @@ describe("POST /api/v1/cloud/import-book", () => {
       lastSyncAt: expect.any(String),
       lastSeenCloudFiles: [older, newer].sort(),
     });
+  });
+
+  it("导入后 lastSyncAt 基准取自三文件 mtime（非本地时钟）", async () => {
+    // 确定性用例：把本地时钟停在 2020，基准若取 `new Date()` 就会滞后于刚写下的三文件 → 本条红
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2020-01-01T00:00:00Z"));
+    configureCloud();
+    const dav = stubDav();
+    const local = makeLocalBook("基准书");
+    const zip = makeBackupZip(local.dir);
+    const dirName = `基准书-${local.id}`;
+    seedCloudBook(dav, dirName, [zip]);
+    rmSync(local.dir, { recursive: true, force: true });
+
+    expect((await request("/api/v1/cloud/import-book", "POST", { dir_name: dirName })).status).toBe(200);
+    const bookDir = importedBookDir("基准书");
+    const newestMtime = Math.max(
+      ...PROJECT_EXPORT_FILE_NAMES.map((name) => Math.ceil(statSync(join(bookDir, name)).mtimeMs)),
+    );
+    // 基准早于任一自己刚写下的文件 ⇒ project.json/outline.json 的**严格**比较读成「本机有改动」
+    const state = readBookState(local.id);
+    expect(Date.parse(state?.lastSyncAt as string)).toBeGreaterThanOrEqual(newestMtime);
+
+    expect((await request("/api/v1/project/open", "POST", { path: bookDir })).status).toBe(200);
+    expect((await responseData<{ state: string }>(await request("/api/v1/cloud/status", "GET"))).state).toBe("synced");
+  });
+
+  it("目录名解析出的 id 与包内 id 不符 → 400 VALIDATION_ERROR，零残留（防把书写进别人的云端目录）", async () => {
+    configureCloud();
+    const dav = stubDav();
+    const local = makeLocalBook("包内书"); // zip 来源（包内 id）
+    const zip = makeBackupZip(local.dir);
+    const otherId = generateProjectId(); // 目录名声明的 id（别人的书）
+    const dirName = `别人的书-${otherId}`;
+    seedCloudBook(dav, dirName, [zip]);
+    const booksBefore = readdirSync(join(root, "books"));
+
+    const res = await request("/api/v1/cloud/import-book", "POST", { dir_name: dirName });
+
+    expect(res.status).toBe(400);
+    const error = await errorBody(res);
+    expect(error.code).toBe("VALIDATION_ERROR");
+    expect(error.message).toContain(otherId); // 两个 id 都写进文案
+    expect(error.message).toContain(local.id);
+    expect(readdirSync(join(root, "books"))).toEqual(booksBefore); // books/ 无新增
+    expect(readBookState(otherId)).toBeNull(); // 无 state ⇒ 之后不会推进别人的云端目录
+    expect(dav.calls.every((call) => call.method === "PROPFIND" || call.method === "GET")).toBe(true); // 拒绝前不写云盘
+  });
+
+  it("目录名解析不出 id（用户手工命名）→ 仍可导入（无 id 声明，不算冲突）", async () => {
+    configureCloud();
+    const dav = stubDav();
+    const local = makeLocalBook("手工目录里的书");
+    const zip = makeBackupZip(local.dir);
+    const dirName = "我手工建的目录";
+    seedCloudBook(dav, dirName, [zip]);
+    rmSync(local.dir, { recursive: true, force: true });
+
+    const res = await request("/api/v1/cloud/import-book", "POST", { dir_name: dirName });
+
+    expect(res.status).toBe(200);
+    expect(await responseData(res)).toMatchObject({ id: local.id, name: "手工目录里的书" }); // 书名回退包内名
+    expect(readBookState(local.id)?.dirName).toBe(dirName);
   });
 
   it("本机已有同名但不同 id 的书 → 目录去重；同 id 再导一次 → 409 PROJECT_ALREADY_EXISTS", async () => {
