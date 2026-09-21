@@ -182,6 +182,15 @@
 
 ## 前端 / UI
 
+- **项目镜像刷新的在途去重窗口（2026-09 oracle 登记）**
+  - 现状：`loadConfig` 有 `configPromise` 在途复用、`loadOutline` / `loadBookshelf` 在 `loading` 中直接 return、云 `refresh` 有 `inFlight` 合并——拆解 start 成功后立即收敛镜像时，若恰有同类在途请求，会 await 到**旧结果**并跳过新拉（后续 load 会再收敛，镜像短暂滞后）。
+  - 触发条件：出现「刚拆解完还是显示旧书」的真实反馈。
+  - 最小修法：给这三个 loader 加 `force` 参数（跳过在途复用并重发），`enterStartedProject` 传 `force: true`；连带云 `refresh` 的 force。
+- **「丢 await」无测试防守（2026-09 oracle 登记）**
+  - 现状：`enterStartedProject` 的 `await Promise.all([...])` 改成 `void` 也能让现有用例全绿（用例只断言「发了请求」，咬不住「等到了」）；实际语义差异 = 跳转时 config 可能还是旧 id。
+  - 触发条件：再改该函数或其它「先刷新再跳转」的流程时。
+  - 最小修法：断言「navigate 发生时 store 的 `config.id` 已是新书 id」（现成 mock 已能提供该断言所需数据，一行）。
+
 - **大纲页交互无自动化守卫（浏览器像素走查是唯一防线）**（UX 批次 oracle 登记）
   - 现状：本仓无 jsdom，SSR 断言只覆盖「有 presenter 拆分」的组件（如 `CharacterDetailView`）；大纲页/设定树/PanelTree 的页面级交互（场行不渲染新建按钮、根级新建行只建卷且无切换按钮、阅读进度徽标走 `TypeChip`、角标在删除左侧）本轮只经像素量测确认，**未入库为测试**。
   - 影响：下次改动只靠人眼复查（本轮已量测的具体数字见 CHANGELOG）。
