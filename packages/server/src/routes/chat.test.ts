@@ -11,6 +11,7 @@
 // - POST /chat：开流前校验（400/404/409/LLM_API_KEY_MISSING）、首帧 session、事件集与
 //   `partial` 剥离、AUTO 工具 details 不下发、提案 details 下发、AGENTS.md 与聚焦注入、
 //   续聊历史喂回、单项目单流 409 CHAT_BUSY、断开取消（provider signal aborted + 提案作废）
+// - 会话用量：turn_end / agent_end 的 usage、assistant message_end 的 speed、历史响应 usage 同源同值
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -33,10 +34,11 @@ import {
   defaultProposalStore,
   openProjectSessionManager,
   projectSessionsDir,
+  SPEED_MIN_DURATION_MS,
   type Proposal,
 } from "@whispering233/ai-editor-agent";
 import { createDecomposeJob, createEntity, nowIso, SCHEMA_VERSION, updateJobStatus, upsertDocument, writeOutlineFile } from "@whispering233/ai-editor-db";
-import type { OutlineFileTree } from "@whispering233/ai-editor-shared";
+import type { ChatSpeed, ChatUsage, OutlineFileTree } from "@whispering233/ai-editor-shared";
 import type { RuntimeFactory } from "../chat-runtime.js";
 import { decomposeSessionId, decomposeWorkerSessionId } from "../decompose/llm.js";
 import { errorHandler } from "../middleware/error.js";
@@ -129,9 +131,11 @@ type FauxStep = (
   options: SimpleStreamOptions | undefined,
 ) => ReturnType<typeof fauxAssistantMessage> | Promise<ReturnType<typeof fauxAssistantMessage>>;
 
-async function createFauxEnv(): Promise<FauxEnv> {
+async function createFauxEnv(options: { tokensPerSecond?: number } = {}): Promise<FauxEnv> {
   const faux = fauxProvider({
     models: [{ id: "faux-1", name: "Faux 1", contextWindow: 128_000, maxTokens: 8192 }],
+    // 速度样本需跨过 SPEED_MIN_DURATION_MS：需要 pacing 的用例按 tokensPerSecond 节流（缺省不节流）
+    ...(options.tokensPerSecond === undefined ? {} : { tokensPerSecond: options.tokensPerSecond }),
   });
   const credentials = new InMemoryCredentialStore();
   await credentials.modify(faux.provider.id, async () => ({ type: "api_key", key: "faux-key" }));
@@ -152,6 +156,15 @@ async function createFauxEnv(): Promise<FauxEnv> {
       sessionManager: openProjectSessionManager(target.root, sessionFile),
     });
   return { factory, faux, model, requests };
+}
+
+/** 把运行时的占用口径改成「未知」（pi 语义：压缩后到下一次模型响应之间 tokens/percent 为 null） */
+function withUnknownContextUsage(factory: RuntimeFactory, contextWindow: number): RuntimeFactory {
+  return async (request) => {
+    const runtime = await factory(request);
+    runtime.session.getContextUsage = () => ({ tokens: null, percent: null, contextWindow });
+    return runtime;
+  };
 }
 
 /** 把下一步响应设成「捕获 Context 的固定回复」 */
@@ -911,6 +924,73 @@ describe("POST /chat SSE 事件集与过滤", () => {
     const again = await app.request("/api/v1/chat", postChat({ message: "再来" }));
     expect(again.status).toBe(200);
     await readSseFrames(again);
+  });
+});
+
+// ============ 会话用量下发（usage / speed；口径见 docs/design/20-context.md §2.1） ============
+
+/** 速度用例的 faux 节流值（tokens/s）：与正文长度一起保证时长跨过 `SPEED_MIN_DURATION_MS` */
+const SPEED_TEST_TOKENS_PER_SECOND = 100;
+
+/** 速度用例的正文长度（字符）：faux 按 4 字符/token 估算 ⇒ 输出 token 数与节流后时长都够 */
+const SPEED_TEST_TEXT_CHARS = 200;
+
+describe("会话用量下发（usage / speed）", () => {
+  it("turn_end / agent_end 带 usage；assistant 的 message_end 带 speed；历史响应与帧同源同值", async () => {
+    openProject();
+    const env = await createFauxEnv({ tokensPerSecond: SPEED_TEST_TOKENS_PER_SECOND });
+    scripted(env, [() => fauxAssistantMessage("字".repeat(SPEED_TEST_TEXT_CHARS))]);
+    const app = buildApp(createChatRoutes({ runtimeFactory: env.factory }));
+
+    const frames = await readSseFrames(await app.request("/api/v1/chat", postChat({ message: "写点什么" })));
+    const sessionId = (frames.find((f) => f.event === "session")!.data as { session_id: string }).session_id;
+
+    // speed：只挂 assistant 的 message_end（非 assistant 的 message_end 无该键）
+    const messageEnds = frames.filter((f) => f.event === "message_end");
+    const assistantEnd = messageEnds.find((f) => (f.data as { message: { role: string } }).message.role === "assistant");
+    expect(assistantEnd).toBeDefined();
+    const speed = (assistantEnd!.data as { speed: ChatSpeed }).speed;
+    expect(speed.ms).toBeGreaterThanOrEqual(SPEED_MIN_DURATION_MS);
+    expect(speed.outputTokens).toBeGreaterThan(0);
+    expect(speed.tps).toBeCloseTo(speed.outputTokens / (speed.ms / 1000));
+    for (const frame of messageEnds) {
+      if ((frame.data as { message: { role: string } }).message.role !== "assistant") {
+        expect((frame.data as { speed?: unknown }).speed).toBeUndefined();
+      }
+    }
+
+    // usage：turn_end 与 agent_end 都带，数值自洽（faux 无价格 ⇒ cost 恒 0；faux 非订阅凭据）
+    const turnEndUsage = (frames.find((f) => f.event === "turn_end")!.data as { usage: ChatUsage }).usage;
+    const agentEndUsage = (frames.at(-1)!.data as { usage: ChatUsage }).usage;
+    for (const usage of [turnEndUsage, agentEndUsage]) {
+      expect(usage.output).toBeGreaterThan(0);
+      expect(usage.total).toBe(usage.input + usage.output + usage.cacheRead + usage.cacheWrite);
+      expect(usage.cost).toBe(0);
+      expect(usage.subscription).toBe(false);
+    }
+
+    // 历史响应：同一 `sessionUsage()` 实现 ⇒ 与帧同值（历史不带 speed）
+    const history = await (
+      await app.request(`/api/v1/chat/sessions/${sessionId}/messages`, { headers: HOST_HEADERS })
+    ).json();
+    expect(history.data.usage).toEqual(agentEndUsage);
+  });
+
+  it("contextUsage 的 tokens/percent 为 null → 帧照发且字段为 null", async () => {
+    openProject();
+    const env = await createFauxEnv();
+    scripted(env, [() => fauxAssistantMessage("答")]);
+    const app = buildApp(
+      createChatRoutes({ runtimeFactory: withUnknownContextUsage(env.factory, env.model.contextWindow) }),
+    );
+
+    const frames = await readSseFrames(await app.request("/api/v1/chat", postChat({ message: "问" })));
+    const expected = { tokens: null, percent: null, contextWindow: env.model.contextWindow };
+    const turnEnd = frames.find((f) => f.event === "turn_end");
+    expect(turnEnd!.data.contextUsage).toEqual(expected);
+    const agentEnd = frames.at(-1)!;
+    expect(agentEnd.event).toBe("agent_end");
+    expect(agentEnd.data.contextUsage).toEqual(expected);
   });
 });
 

@@ -12,8 +12,9 @@
 // 事件表没有登记 = UI 没有消费方，转发只会变成无人接的噪声。
 
 import type { AgentSessionEvent, ContextUsage } from "@earendil-works/pi-coding-agent";
-import { PROPOSAL_TOOLS } from "@whispering233/ai-editor-shared";
+import { PROPOSAL_TOOLS, type ChatUsage } from "@whispering233/ai-editor-shared";
 import { getThinkingPreview, projectMessageForWire, type WireMessage } from "./message-projection.js";
+import type { SpeedMeter } from "./speed.js";
 
 /** 一帧 SSE（`event: <event>` + `data: <json>`） */
 export interface SseFrame {
@@ -25,6 +26,10 @@ export interface SseFrame {
 export interface SseProjectionOptions {
   /** 占用条口径：由 `AgentSession.getContextUsage()` 提供（turn_end / agent_end 帧附带） */
   getContextUsage?: () => ContextUsage | undefined;
+  /** 状态栏账目：由 `sessionUsage(entries, ...)` 提供（turn_end / agent_end 帧附带；返回 undefined 则省略该键） */
+  getSessionUsage?: () => ChatUsage | undefined;
+  /** 解码速度测量器（每个事件喂一次；样本由 assistant 的 message_end 帧下发，见 docs/design/20-context.md §2.1） */
+  speedMeter?: SpeedMeter;
 }
 
 type MessageUpdateEvent = Extract<AgentSessionEvent, { type: "message_update" }>;
@@ -56,13 +61,22 @@ export function createPingFrame(): SseFrame {
   return { event: "ping", data: {} };
 }
 
-/** 占用条字段（无 getContextUsage 或返回 undefined 时不带该键） */
-function contextUsageField(options: SseProjectionOptions): Record<string, unknown> {
+/**
+ * 占用条字段（无 getContextUsage 或返回 undefined 时不带该键）。
+ * 导出供 server 合成 agent_end 复用——字段名只在此处拼一次。
+ */
+export function contextUsageField(options: SseProjectionOptions): Record<string, unknown> {
   const usage = options.getContextUsage?.();
   if (usage === undefined) return {};
   return {
     contextUsage: { percent: usage.percent, tokens: usage.tokens, contextWindow: usage.contextWindow },
   };
+}
+
+/** 会话累计用量字段（无 getSessionUsage 或返回 undefined 时不带该键） */
+function usageField(options: SseProjectionOptions): Record<string, unknown> {
+  const usage = options.getSessionUsage?.();
+  return usage === undefined ? {} : { usage };
 }
 
 /** 从 partial 快照里取工具调用的 id/name（toolcall_start/delta 事件不带这两个字段） */
@@ -126,9 +140,12 @@ function messageField(message: unknown): Record<string, unknown> | null {
 
 /**
  * 单个 pi 会话事件 → SSE 帧；不投影的事件返回 null（调用方跳过）。
- * 纯函数：同样的输入 + 同样的 options 取值 ⇒ 同样的帧（便于单测逐事件断言）。
+ * 帧内容只由输入与 options 取值决定（便于单测逐事件断言）；唯一例外是 `speedMeter` 的有状态推进：
+ * 同样的输入 + 同样的 options 取值 + 同样的 meter 状态 ⇒ 同样的帧。
  */
 export function toSseFrame(event: AgentSessionEvent, options: SseProjectionOptions = {}): SseFrame | null {
+  // 每个事件先喂一次 meter（它自己按事件类型决定起表/出样本），样本只在 assistant 的 message_end 帧用上
+  const speed = options.speedMeter?.onEvent(event) ?? null;
   const type = (event as { type: string }).type;
   if (DROPPED_EVENT_TYPES.has(type)) return null;
 
@@ -139,8 +156,14 @@ export function toSseFrame(event: AgentSessionEvent, options: SseProjectionOptio
 
     case "message_start":
     case "message_end": {
-      const data = messageField((event as { message: unknown }).message);
-      return data === null ? null : { event: type, data };
+      const message = (event as { message: unknown }).message;
+      const data = messageField(message);
+      if (data === null) return null;
+      // speed 只挂 assistant 的 message_end（meter 也只在该事件出样本；此处再按角色收窄，非 assistant 帧绝无该键）
+      if (type !== "message_end" || speed === null || (message as { role?: unknown }).role !== "assistant") {
+        return { event: type, data };
+      }
+      return { event: type, data: { ...data, speed } };
     }
 
     case "message_update": {
@@ -194,6 +217,7 @@ export function toSseFrame(event: AgentSessionEvent, options: SseProjectionOptio
             .map((result) => projectMessageForWire(result))
             .filter((result): result is WireMessage => result !== null),
           ...contextUsageField(options),
+          ...usageField(options),
         },
       };
     }
@@ -252,7 +276,7 @@ export function toSseFrame(event: AgentSessionEvent, options: SseProjectionOptio
       const end = event as { messages: readonly unknown[] };
       return {
         event: "agent_end",
-        data: { ...lastAssistantFailure(end.messages), ...contextUsageField(options) },
+        data: { ...lastAssistantFailure(end.messages), ...contextUsageField(options), ...usageField(options) },
       };
     }
 

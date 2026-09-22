@@ -7,6 +7,8 @@ export * from "./system-prompt.js";
 export * from "./tool-result.js";
 export * from "./tools.js";
 export * from "./message-projection.js";
+export * from "./usage.js";
+export * from "./speed.js";
 export * from "./events.js";
 export * from "./proposals.js";
 export * from "./project-runtime.js";

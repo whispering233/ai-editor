@@ -21,8 +21,10 @@ import { unlinkSync } from "node:fs";
 import { Hono, type Context } from "hono";
 import { streamSSE } from "hono/streaming";
 import {
+  contextUsageField,
   createPingFrame,
   createSessionFrame,
+  createSpeedMeter,
   defaultProposalStore,
   findProjectSession,
   FOCUS_TITLE,
@@ -32,13 +34,15 @@ import {
   projectSessionMessages,
   readProjectSession,
   readSessionThinking,
+  sessionUsage,
   toSseFrame,
   type ProposalStore,
   type ProjectRuntime,
   type SseFrame,
+  type SseProjectionOptions,
 } from "@whispering233/ai-editor-agent";
 import { findOutlineNode, getDocument, getDecomposeJob, getEntity, readOutlineFile } from "@whispering233/ai-editor-db";
-import { DECOMPOSE_SESSION_ID_PREFIX, truncate } from "@whispering233/ai-editor-shared";
+import { DECOMPOSE_SESSION_ID_PREFIX, truncate, type ChatUsage } from "@whispering233/ai-editor-shared";
 import {
   chatMessagesResSchema,
   chatSendReqSchema,
@@ -48,6 +52,7 @@ import {
 } from "@whispering233/ai-editor-shared/schemas";
 import { HttpError, ok } from "../middleware/error.js";
 import { requireCurrentProject, type ProjectContext } from "../middleware/project.js";
+import { getModelRuntime } from "../model-runtime.js";
 import { decomposeSessionId, decomposeWorkerSessionPrefix } from "../decompose/llm.js";
 import { isDecomposeJobActive } from "../decompose/runner.js";
 import { debugLog, isCategoryEnabled } from "../debug.js";
@@ -305,11 +310,12 @@ function sleepAbortable(ms: number, signals: readonly AbortSignal[]): Promise<vo
   });
 }
 
-/** 占用条字段（与事件投影同口径：`AgentSession.getContextUsage()`） */
-function contextUsageField(runtime: ProjectRuntime): Record<string, unknown> {
-  const usage = runtime.session.getContextUsage();
-  if (usage === undefined) return {};
-  return { contextUsage: { percent: usage.percent, tokens: usage.tokens, contextWindow: usage.contextWindow } };
+/**
+ * 订阅判定谓词（帧与历史响应用量同源；**不用 `isUsingOAuth()`**——OAuth ≠ 订阅，口径见
+ * docs/design/20-context.md §2.1）。pi 方法名只在此处出现一次。
+ */
+function subscriptionPredicate(modelRuntime: ProjectRuntime["modelRuntime"]): (provider: string) => boolean {
+  return (provider) => modelRuntime.isUsingSubscription(provider);
 }
 
 // ============ POST /api/v1/chat（POST + SSE） ============
@@ -386,6 +392,15 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
       const focusText = buildFocusText(project, context);
       const promptText = focusText === undefined ? message : `${FOCUS_TITLE}\n${focusText}\n\n${message}`;
       const logEvent = createChatDebugLogger(runtime);
+      // 状态栏投影（每流一份）：占用 = pi getContextUsage()，账目 = sessionUsage()，速度 = 每流一个 meter
+      const projectionOptions: SseProjectionOptions = {
+        getContextUsage: () => runtime.session.getContextUsage(),
+        getSessionUsage: () =>
+          sessionUsage(runtime.session.sessionManager.getEntries(), {
+            isUsingSubscription: subscriptionPredicate(runtime.modelRuntime),
+          }),
+        speedMeter: createSpeedMeter(),
+      };
 
       // 项目切换/关闭时由 chat-runtime 触发中止（占位已在，中止回调就绪即可被叫停）
       chat.setAbort(() => {
@@ -446,7 +461,7 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
             entered = true;
             unsubscribe = runtime.session.subscribe((event) => {
               logEvent(event as unknown as MinimalAgentEvent);
-              const frame = toSseFrame(event, { getContextUsage: () => runtime.session.getContextUsage() });
+              const frame = toSseFrame(event, projectionOptions);
               if (frame === null) return;
               void writeFrame(frame); // 排入 writer（FIFO 保证顺序），不阻塞循环
             });
@@ -459,7 +474,7 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
             debugLog("chat", "chat", `prompt 失败：${message}`);
             await writeFrame({
               event: "agent_end",
-              data: { stopReason: "error", errorMessage: message, ...contextUsageField(runtime) },
+              data: { stopReason: "error", errorMessage: message, ...contextUsageField(projectionOptions) },
             });
           } finally {
             unsubscribe?.();
@@ -558,7 +573,11 @@ export function createChatRoutes(deps: ChatRouteDeps = {}): Hono {
     if (opened === null) {
       throw new HttpError(404, "SESSION_NOT_FOUND", `会话不存在: ${sessionId}`);
     }
-    return messagesResponse(c, sessionId, projectSessionMessages(opened.entries));
+    const modelRuntime = await getModelRuntime(); // 历史响应侧无会话运行时：订阅判定从进程级模型运行时取
+    const usage: ChatUsage = sessionUsage(opened.entries, {
+      isUsingSubscription: subscriptionPredicate(modelRuntime),
+    });
+    return messagesResponse(c, sessionId, projectSessionMessages(opened.entries), usage);
   });
 
   // GET /api/v1/chat/sessions/:id/messages/:messageId/thinking —— 思维链全文（按块按需拉取）
@@ -627,9 +646,9 @@ function sessionsResponse(c: Context, sessions: unknown[]): Response {
   }
 }
 
-function messagesResponse(c: Context, sessionId: string, messages: unknown[]): Response {
+function messagesResponse(c: Context, sessionId: string, messages: unknown[], usage: ChatUsage): Response {
   try {
-    return c.json(ok(chatMessagesResSchema.parse({ sessionId, messages })));
+    return c.json(ok(chatMessagesResSchema.parse({ sessionId, messages, usage })));
   } catch (err) {
     throw new HttpError(500, "INTERNAL_ERROR", `messages 响应不符合契约: ${err instanceof Error ? err.message : String(err)}`);
   }

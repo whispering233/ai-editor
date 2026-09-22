@@ -6,12 +6,15 @@
 // - message_update 的 toolcall_* 附带 id/toolName（前端提前渲染用）
 // - thinking 降预览（全文不进帧）
 // - tool_execution_end 的 details 门控（PROPOSAL 才下发）
-// - turn_end / agent_end 的 contextUsage 与失败信息
+// - turn_end / agent_end 的 contextUsage（含 tokens/percent 为 null）与失败信息、usage
+// - assistant 的 message_end 的 speed（meter 喂入 / 无 meter / 非 assistant 三种情形）
 
 import { describe, expect, it } from "vitest";
 import type { AgentSessionEvent, ContextUsage } from "@earendil-works/pi-coding-agent";
 import type { AssistantMessage, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
+import type { ChatUsage } from "@whispering233/ai-editor-shared";
 import { createPingFrame, createSessionFrame, toSseFrame, type SseProjectionOptions } from "./events.js";
+import { createSpeedMeter, SPEED_MIN_DURATION_MS, type SpeedMeter } from "./speed.js";
 
 // ============ 构造辅助 ============
 
@@ -436,6 +439,16 @@ describe("压缩与重试帧", () => {
 
 describe("轮次结束与运行结束", () => {
   const usage: ContextUsage = { percent: 42, tokens: 42_000, contextWindow: 100_000 };
+  const chatUsage: ChatUsage = {
+    input: 1200,
+    output: 340,
+    cacheRead: 800,
+    cacheWrite: 0,
+    total: 2340,
+    cost: 0.0123,
+    cacheHitRate: 0.4,
+    subscription: false,
+  };
 
   it("turn_end：toolResults 投影 + contextUsage（取自 getContextUsage）", () => {
     const options: SseProjectionOptions = { getContextUsage: () => usage };
@@ -453,6 +466,32 @@ describe("轮次结束与运行结束", () => {
     const frame = toSseFrame(asEvent({ type: "turn_end", message: assistant([]), toolResults: [] }));
     expect(frame?.data).toEqual({ toolResults: [] });
     expect(Object.keys(frame?.data ?? {})).toEqual(["toolResults"]);
+  });
+
+  it("contextUsage 的 tokens/percent 为 null（压缩后占用未知）→ 帧照发，字段保持 null", () => {
+    const unknown: ContextUsage = { percent: null, tokens: null, contextWindow: 100_000 };
+    const options: SseProjectionOptions = { getContextUsage: () => unknown };
+    const turnEnd = toSseFrame(asEvent({ type: "turn_end", message: assistant([]), toolResults: [] }), options);
+    expect(turnEnd?.data.contextUsage).toEqual({ percent: null, tokens: null, contextWindow: 100_000 });
+    const agentEnd = toSseFrame(asEvent({ type: "agent_end", messages: [assistant([])] }), options);
+    expect(agentEnd?.data.contextUsage).toEqual({ percent: null, tokens: null, contextWindow: 100_000 });
+  });
+
+  it("turn_end / agent_end：带 usage（getSessionUsage 的取值原样下发）", () => {
+    const options: SseProjectionOptions = { getContextUsage: () => usage, getSessionUsage: () => chatUsage };
+    expect(toSseFrame(asEvent({ type: "turn_end", message: assistant([]), toolResults: [] }), options)?.data.usage).toEqual(
+      chatUsage,
+    );
+    expect(toSseFrame(asEvent({ type: "agent_end", messages: [assistant([])] }), options)?.data.usage).toEqual(chatUsage);
+  });
+
+  it("无 getSessionUsage 或返回 undefined → 不带 usage 键", () => {
+    const without = toSseFrame(asEvent({ type: "turn_end", message: assistant([]), toolResults: [] }));
+    expect(Object.keys(without?.data ?? {})).toEqual(["toolResults"]);
+    const undefinedUsage = toSseFrame(asEvent({ type: "agent_end", messages: [assistant([])] }), {
+      getSessionUsage: () => undefined,
+    });
+    expect(Object.keys(undefinedUsage?.data ?? {})).toEqual([]);
   });
 
   it("agent_end：不下发 messages；失败时提取 stopReason/errorMessage", () => {
@@ -478,6 +517,68 @@ describe("轮次结束与运行结束", () => {
   it("agent_end：末条非 assistant（如工具结果结尾）→ 不带失败字段", () => {
     const frame = toSseFrame(asEvent({ type: "agent_end", messages: [assistant([]), toolResult("结果")] }));
     expect(frame?.data).toEqual({});
+  });
+});
+
+// ============ 解码速度（assistant message_end 的 speed） ============
+
+describe("速度帧（speed）", () => {
+  /** 首字增量事件（meter 据此起表） */
+  const firstDelta = (): AgentSessionEvent =>
+    asEvent({
+      type: "message_update",
+      message: assistant([{ type: "text", text: "答" }]),
+      assistantMessageEvent: {
+        type: "text_delta",
+        contentIndex: 0,
+        delta: "答",
+        partial: assistant([{ type: "text", text: "答" }]),
+      },
+    });
+
+  /** assistant 收尾事件（带真实输出 token 数） */
+  const assistantEnd = (output: number): AgentSessionEvent =>
+    asEvent({ type: "message_end", message: assistant([{ type: "text", text: "答" }], { usage: { ...USAGE, output } }) });
+
+  it("assistant 的 message_end：meter 出样本时帧带 speed（非 assistant 帧不带）", () => {
+    let now = 0;
+    const meter = createSpeedMeter({ now: () => now });
+    const options: SseProjectionOptions = { speedMeter: meter };
+
+    // 首字增量起表（该帧自身不带 speed）
+    expect(toSseFrame(firstDelta(), options)?.data.speed).toBeUndefined();
+    now += SPEED_MIN_DURATION_MS;
+
+    const end = toSseFrame(assistantEnd(100), options);
+    expect(end?.data.speed).toEqual({
+      outputTokens: 100,
+      ms: SPEED_MIN_DURATION_MS,
+      tps: 100 / (SPEED_MIN_DURATION_MS / 1000),
+    });
+
+    // 非 assistant 的 message_end 绝无 speed 键（同一 meter 已出过样本）
+    expect(toSseFrame(asEvent({ type: "message_end", message: user("问") }), options)?.data.speed).toBeUndefined();
+  });
+
+  it("无 meter / meter 无样本（从未收到增量）→ 不带 speed 键", () => {
+    expect(Object.keys(toSseFrame(assistantEnd(100))?.data ?? {})).toEqual(["message"]);
+    const meter = createSpeedMeter({ now: () => 0 });
+    const frame = toSseFrame(assistantEnd(100), { speedMeter: meter });
+    expect(Object.keys(frame?.data ?? {})).toEqual(["message"]);
+  });
+
+  it("每个事件都喂一次 meter（含投影丢弃的事件）", () => {
+    const seen: string[] = [];
+    const meter: SpeedMeter = {
+      onEvent(event) {
+        seen.push(event.type);
+        return null;
+      },
+    };
+    const options: SseProjectionOptions = { speedMeter: meter };
+    toSseFrame(asEvent({ type: "entry_appended", entry: { type: "message" } }), options);
+    toSseFrame(asEvent({ type: "turn_start" }), options);
+    expect(seen).toEqual(["entry_appended", "turn_start"]);
   });
 });
 
