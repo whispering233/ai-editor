@@ -45,7 +45,7 @@
 - **服务端唯一实现点**：累计用量 = agent 包 `sessionUsage(entries)`（口径 = pi `AgentSession.getSessionStats()`：assistant 消息 + `toolResult.usage` + `compaction` / `branch_summary` 的 usage 三类累加），命中率与订阅布尔同在此处算；速度 = agent 包 `createSpeedMeter()`。**客户端不累加、不计时、不复算分母**（UI 只做格式化与优先级隐藏）。
 - **下发面**：`turn_end` / `agent_end` 帧带 `usage`；assistant 的 `message_end` 帧带 `speed`；`GET /chat/sessions/:id/messages` 带 `usage`（形状见 `docs/api/80-api-chat.md` §会话用量字段）。
 - **命中率 = `cacheRead / (input + cacheRead + cacheWrite)`**：会话累计口径（不是「最近一条」），分母为 0 时省略该字段而**不是**报 0%。
-- **成本是账目不是账单**：pi 按模型目录价格累加；模型无价格配置 → 恒 0（UI 隐藏该项）；订阅凭据（OAuth / `kimi-coding`）→ 数值仅为估算，UI 标「订阅 · 估算」；订阅判定用**末条 assistant 消息的 provider**（历史会话中途换过模型也按当时那家算，不用「当前设置里的模型」）。
+- **成本是账目不是账单**：pi 按模型目录价格累加；模型无价格配置 → 恒 0（UI 隐藏该项）；订阅制凭据 → 数值仅为估算，UI 标「订阅 · 估算」。订阅判定用**末条 assistant 消息的 provider**（历史会话中途换过模型也按当时那家算，不用「当前设置里的模型」），谓词 = pi `ModelRuntime.isUsingSubscription()`（OAuth 且该家 `auth.oauth.isSubscription`）**或** API-key 认证的订阅家 `kimi-coding`；**不用 `isUsingOAuth`**（它把 openrouter / radius 这类「OAuth 但按量计费」的家也算进来，会把真实账单标成估算）。
 - **速度 = 解码速度**：首个流式增量 → `message_end`；区间起点**刻意避开首字延迟与排队**（否则同一模型的速度会随网络抖动）；分子 = 该条消息的 `usage.output`（含思考 token）。守卫（任一命中即不下发）：无增量到达（非流式回退）/ `output <= 0` / 时长小于最小时长常量 / `stopReason` 为 `error` · `aborted`。**只报最近一轮**：不做实时估算（需自建 chars→token 估算 = 第二套口径）、不做会话平均。
 - **历史会话只回账目，不回占用百分比**：pi 的 `getContextUsage()` 建在 `estimateContextTokens(当前上下文消息)` 上，而该函数**未导出** ⇒ 历史重建等于复刻一套估算口径，故不做。历史会话的占用段按「窗口已知 / 占用未知」渲染（`? · 窗口`，窗口取出当前激活模型目录）；速度同理无值（时序不落盘）。
 

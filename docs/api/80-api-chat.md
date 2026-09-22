@@ -68,7 +68,7 @@
 | total | 是 | number | ≥ 0 | `input + output + cacheRead + cacheWrite` |
 | cost | 是 | number | ≥ 0 | 美元；pi 按模型目录价格累加，**模型无价格配置时恒 0** |
 | cacheHitRate | 否 | number | 0..1 | 命中率 = `cacheRead / (input + cacheRead + cacheWrite)`；**分母为 0 时省略该键**；服务端预算（客户端不复算分母口径） |
-| subscription | 是 | boolean | | true = 末条 assistant 消息的 provider 用订阅凭据（OAuth / `kimi-coding`）⇒ `cost` 仅估算，UI 须标明 |
+| subscription | 是 | boolean | | true = 末条 assistant 消息的 provider 属**订阅制凭据** ⇒ `cost` 仅估算，UI 须标明。判定 = pi `ModelRuntime.isUsingSubscription()`（= OAuth 且该家 `auth.oauth.isSubscription`）**或** API-key 认证的订阅家（`kimi-coding`——pi 的该方法要求 OAuth 而判不出它，pi footer 同样靠字面量兜）——**不得用 `isUsingOAuth`**：openrouter / radius 有 OAuth 但按量计费，会被误标 |
 
 `speed`（**仅 assistant 的 `message_end`**；历史接口不带——时序不落盘，无法重建）：
 
