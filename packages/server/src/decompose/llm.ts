@@ -46,6 +46,7 @@ import {
 import { DECOMPOSE_SESSION_ID_PREFIX } from "@whispering233/ai-editor-shared";
 import { projectSessionsDir, resolveAgentDir } from "@whispering233/ai-editor-agent";
 import { getModelRuntime, getSettingsManager, resolveActiveSelection } from "../model-runtime.js";
+import type { ModelTokenLimits } from "./budget.js";
 
 /** 拆解管线的可注入依赖（缺省走 pi 单例；同一份依赖贯穿 S2 / S3 / S4） */
 export interface DecomposeLlmDeps {
@@ -99,6 +100,11 @@ export const DECOMPOSE_LOG_CUSTOM_TYPE = "decompose";
 export interface DecomposeSession {
   /** pi 会话 id（主 = `decompose-<清洗后 jobId>`；worker = 主 id + `-w<段号>`） */
   sessionId: string;
+  /**
+   * 本 run **实际使用的模型**的两侧上限（`Model.contextWindow` / `Model.maxTokens`）——
+   * 批预算预检（§4）读它：解析点与本会话的模型调用同源，不另走一遍模型目录。
+   */
+  modelLimits: ModelTokenLimits;
   /** 单轮补全：本轮 system + 本轮素材 → 末条 assistant 文本（每轮独立成根，上下文只含本轮） */
   complete(request: ModelRequest): Promise<DecomposeCompletion>;
   /** 记一条过程条目（不参与 LLM 上下文） */
@@ -213,6 +219,7 @@ export async function openDecomposeSession(
 
   return {
     sessionId,
+    modelLimits: { contextWindow: model.contextWindow, maxTokens: model.maxTokens },
     async complete(request) {
       // 建会话前先清 leaf：否则 pi 会把「leaf 路径上的历史」装回 agent，本轮请求体会带上整段旧原文
       sessionManager.resetLeaf();

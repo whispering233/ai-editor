@@ -18,7 +18,7 @@ import {
   type Context,
 } from "@earendil-works/pi-ai";
 import { ModelRuntime, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
-import { MAX_ENTITY_LIST_LIMIT, DECOMPOSE_SESSION_ID_PREFIX, type DecomposeBatchResult, type DecomposeJobRes } from "@whispering233/ai-editor-shared";
+import { MAX_ENTITY_LIST_LIMIT, DECOMPOSE_SESSION_ID_PREFIX, type DecomposeAnalyzeRes, type DecomposeBatchResult, type DecomposeJobRes } from "@whispering233/ai-editor-shared";
 import { decomposeBatchResultSchema } from "@whispering233/ai-editor-shared/schemas";
 import {
   completeBatch,
@@ -53,6 +53,10 @@ import { setProjectRoot } from "../routes/project.js";
 import { createDecomposeRoutes, type DecomposeRouteDeps } from "../routes/decompose.js";
 import { createChatRoutes } from "../routes/chat.js";
 import { DECOMPOSE_BATCH_TARGET_CHARS } from "./batching.js";
+import {
+  DECOMPOSE_INPUT_SAFETY_TOKENS,
+  DECOMPOSE_OUTPUT_TOKENS_PER_CHAPTER,
+} from "./budget.js";
 import {
   DECOMPOSE_CHAPTER_MAX_CHARACTERS,
   DECOMPOSE_CHAPTER_SUMMARY_MAX_CHARS,
@@ -241,9 +245,22 @@ interface FakeModel {
   calls: Context[];
 }
 
-async function fakeModel(): Promise<FakeModel> {
+/** faux 假模型的两侧上限（缺省 = 大窗口 8k 输出，既有用例不受批预算守卫影响；守卫用例传小值） */
+interface FakeModelLimits {
+  contextWindow?: number;
+  maxTokens?: number;
+}
+
+async function fakeModel(limits: FakeModelLimits = {}): Promise<FakeModel> {
   const faux = fauxProvider({
-    models: [{ id: "faux-a", name: "Faux A", contextWindow: 128_000, maxTokens: 8192 }],
+    models: [
+      {
+        id: "faux-a",
+        name: "Faux A",
+        contextWindow: limits.contextWindow ?? 128_000,
+        maxTokens: limits.maxTokens ?? 8192,
+      },
+    ],
   });
   const credentials = new InMemoryCredentialStore();
   await credentials.modify(faux.provider.id, async () => ({ type: "api_key", key: "faux-key" }));
@@ -566,6 +583,78 @@ describe("S2 批循环", () => {
     await startDecomposeJob(project, model.deps);
     const batch = decomposeBatchResultSchema.parse(getDecomposeBatch(project.db, jobId, 1)!.result);
     expect(batch.chapters[9].relations).toEqual([{ ...relation, evidence: "证据" }]);
+  });
+});
+
+// ============ 批大小守卫（§4：落批按预算拆批 + 执行期预检） ============
+
+/** 超长章正文的标记字（断言「该批未发调用」＝ 这个字不出现在任何请求里） */
+const HUGE_CHAPTER_MARKER = "巨";
+
+/** 小章 + 一章超长（批预算守卫的对照夹具：小章批过、超长单章批不过） */
+function novelWithHugeChapter(smallCount: number, hugeChars: number): string {
+  const small = Array.from({ length: smallCount }, (_, position) => chapterSource(position + 1));
+  return [...small, `第${smallCount + 1}章 标题${smallCount + 1}\n${HUGE_CHAPTER_MARKER.repeat(hugeChars)}`].join("\n");
+}
+
+describe("批大小守卫（§4）", () => {
+  it("落批按模型输出上限拆批：结构上的一批 → 预算成多批；预览与落批同源", async () => {
+    const chaptersPerBatch = 2;
+    const model = await fakeModel({ maxTokens: chaptersPerBatch * DECOMPOSE_OUTPUT_TOKENS_PER_CHAPTER });
+    contentAwareScript(model, 8); // 3 批 + 归并 + 报告（多排无妨：队列按调用顺序消费）
+    const app = buildApp(model.deps);
+
+    // 预览的批数 = 落批的批数（同一份预算守卫：不出现「预览 N 批、实际 M 批」）
+    const previewRes = await postNovel(app, "/analyze", bytesOf(novelText(6)), "file_name=预算.txt");
+    expect(previewRes.status).toBe(200);
+    const preview = (await previewRes.json()).data as DecomposeAnalyzeRes;
+    expect(preview.estimate.batchCount).toBe(3); // 6 章结构上一批 → 每批 2 章 → 3 批
+
+    const started = await startOk(app, "预算拆批", 6);
+    expect(started.batchCount).toBe(preview.estimate.batchCount);
+    const project = getCurrentProject()!;
+    await waitFor(
+      () => listDecomposeBatches(project.db, started.jobId).every((batch) => batch.status === "done"),
+      "预算批全 done",
+    );
+    expect(listDecomposeBatches(project.db, started.jobId).map((batch) => batch.chapter_ids.length)).toEqual([
+      chaptersPerBatch,
+      chaptersPerBatch,
+      chaptersPerBatch,
+    ]);
+    expect((await pollJob(app, "收口")).progress).toMatchObject({ done: 3, failed: 0, total: 3 });
+  });
+
+  it("执行期预检：单章超窗 → 该批不发调用即 failed（文案明确），其他批照跑、job 收口 done", async () => {
+    // 窗口取「安全余量 + 单章输出预留 + 余量」量级：小章批过、超长单章批不过（落批守卫也不切章）
+    const model = await fakeModel({ contextWindow: DECOMPOSE_INPUT_SAFETY_TOKENS + DECOMPOSE_OUTPUT_TOKENS_PER_CHAPTER + 2_000 });
+    contentAwareScript(model, 14); // 小章批（10）+ 归并 + 报告（多排无妨）
+    const app = buildApp(model.deps);
+
+    const started = await startTextOk(app, "超长章", novelWithHugeChapter(10, 60_000));
+    const project = getCurrentProject()!;
+    await waitFor(
+      () => listDecomposeBatches(project.db, started.jobId).every((batch) => batch.status === "done" || batch.status === "failed"),
+      "全部批收口",
+    );
+
+    const batches = listDecomposeBatches(project.db, started.jobId);
+    expect(batches).toHaveLength(11); // 超长章保持单章成批（落批守卫不切章，交给预检显式失败）
+    expect(batches.slice(0, 10).map((batch) => [batch.status, batch.attempts])).toEqual(
+      Array.from({ length: 10 }, () => ["done", 1]),
+    );
+    expect(batches[10]).toMatchObject({ status: "failed", attempts: 0 }); // 预检在发调用之前 ⇒ 不算尝试
+    expect(batches[10].error).toContain("批输入超出模型上下文预算");
+    expect(batches[10].error).toContain("单章");
+    expect(getDecomposeBatch(project.db, started.jobId, 11)!.result).toBeNull(); // 失败批不留残余结果
+
+    // 预检失败不阻塞其他批：job 照常收口（失败批可单批重跑）
+    expect((await pollJob(app, "job 收口")).progress).toMatchObject({ done: 10, failed: 1, total: 11 });
+    // 超长章正文从未发给模型（拦在调用之前）
+    expect(model.calls.every((call) => !promptTextOf(call).includes(HUGE_CHAPTER_MARKER))).toBe(true);
+    // 时间线留有据：预算预检未通过（未发调用）
+    const logs = sessionLogsOf(project.root, decomposeWorkerSessionId(started.jobId, 1));
+    expect(logs.some((log) => log.kind === "attempt_failed" && log.text.includes("预算预检未通过"))).toBe(true);
   });
 });
 

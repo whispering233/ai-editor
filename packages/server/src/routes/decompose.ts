@@ -9,9 +9,10 @@
 // - 请求体是**小说文件原始字节**（`application/octet-stream`），`file_name` / 书名 / 范围走 query；
 // - 切分唯一实现 = `decompose/split.ts` 的 `splitNovelWithSlices`（analyze 与 start 同一份，确定性）；
 // - **章列表全量返回**，范围**只影响批规划与预估**（正文始终全量导入，见 §4「范围」）；
-// - estimate：批数走 `decompose/batching.ts` 的组批实现（与落批同一份）、`llmCalls = 批数 + 归并 + 报告`、
-//   token 按字数与章数粗估；费率读 pi 模型目录 `Model.cost`（`getModelRuntime()` 唯一入口，**不自建定价表**），
-//   未配置模型/凭据（或模型目录不可读）→ `costApprox = null`，预览照常返回。
+// - estimate：批数走 `decompose/batching.ts` 组批 + `decompose/budget.ts` 预算守卫（与落批同一份）、
+//   `llmCalls = 批数 + 归并 + 报告`、token 按字数与章数粗估；费率读 pi 模型目录 `Model.cost`
+//   （`getModelRuntime()` 唯一入口，**不自建定价表**），未配置模型/凭据（或模型目录不可读）→
+//   `costApprox = null`（批预算同源缺席 → 退回结构组批），预览照常返回。
 // - **续拆两端点（plan / continue）不吃文件字节**：章与正文已在库（S1 全量导入），范围缺省 = 未拆章最小
 //   覆盖区间（`decompose/job.ts` 的 `readDecomposeProjectPlan`）；两端的范围解析与估算走同一实现
 //   （预览说拆哪些，启动就必须拆哪些），continue 的 S1' **只落 job 与批规划**。
@@ -48,6 +49,13 @@ import {
 import { writeLastProject } from "../last-project.js";
 import { BOOKS_DIR_NAME, getProjectRoot, resolveProjectDir } from "./project.js";
 import { planBatches } from "../decompose/batching.js";
+import {
+  DECOMPOSE_CHARS_PER_TOKEN,
+  DECOMPOSE_OUTPUT_TOKENS_PER_CHAPTER,
+  planBatchesWithinBudget,
+  type DecomposeBatchBudget,
+  type ModelTokenLimits,
+} from "../decompose/budget.js";
 import { readDecomposeConcurrency } from "../decompose/config.js";
 import { buildJobResponse, ingestDecomposeContinue, ingestDecomposeProject, readDecomposeProjectPlan, type DecomposeProjectPlan } from "../decompose/job.js";
 import { pauseDecomposeJob, startDecomposeJob, DECOMPOSE_SNAPSHOT_MAX_CHARS, type DecomposeRunnerDeps } from "../decompose/runner.js";
@@ -61,19 +69,19 @@ import { splitNovelWithSlices, statsOf, type SplitChapter } from "../decompose/s
 /** 上传体积上限（原始字节；超限 400 DECOMPOSE_FILE_TOO_LARGE）。analyze 与 start 共用——同文件。 */
 export const DECOMPOSE_MAX_FILE_BYTES = 16 * 1024 * 1024;
 
-/** 每 token 的汉字数（中文粗估；换 tokenizer 只调这一处——预估本就是量级参考） */
-export const DECOMPOSE_CHARS_PER_TOKEN = 1.5;
+/** 每 token 的汉字数（中文粗估）与每章输出预算：**单一定义已移至 `decompose/budget.ts`**
+ * （落批守卫与预估共用同一份）；此处的 re-export 保持既有消费面（路由测试 / 预估推导）不变。 */
+export { DECOMPOSE_CHARS_PER_TOKEN, DECOMPOSE_OUTPUT_TOKENS_PER_CHAPTER };
 /** 每批固定开销里与快照无关的那部分（系统提示 + 输出契约 + 各上限说明）token 粗估 */
 export const DECOMPOSE_PROMPT_OVERHEAD_TOKENS = 500;
 /**
  * 每批固定开销 token 粗估（系统提示 + 指令 + 项目数据快照）——**由快照预算派生**，不手写：
  * 快照是量级主导项（§4.1 的 `DECOMPOSE_SNAPSHOT_MAX_CHARS`），写死数字会在改预算时静默失真
  * （预估与实际脱钩、无人报错）；批处理省的是这份开销，省不了正文与输出。
+ * 落批守卫（§4）把它当「每批固定开销」传进 `decompose/budget.ts`——两处同一个数。
  */
 export const DECOMPOSE_BATCH_OVERHEAD_TOKENS =
   Math.ceil(DECOMPOSE_SNAPSHOT_MAX_CHARS / DECOMPOSE_CHARS_PER_TOKEN) + DECOMPOSE_PROMPT_OVERHEAD_TOKENS;
-/** 每章输出 token 粗估（一条摘要（受 `DECOMPOSE_CHAPTER_SUMMARY_MAX_CHARS` 约束）+ 若干实体线索） */
-export const DECOMPOSE_OUTPUT_TOKENS_PER_CHAPTER = 400;
 
 /** 费率口径：pi `Model.cost` 是**每百万 token** 单价（同 `calculateCost` 的除法口径） */
 const TOKENS_PER_MILLION = 1_000_000;
@@ -92,20 +100,37 @@ interface ModelCostRates {
  */
 export type DecomposeRouteDeps = DecomposeRunnerDeps;
 
+/** 模型两侧上限投影（结构类型，不引入 pi 的 `Model` 泛型；模型目录查不到 → null） */
+function modelLimitsOf(model: { contextWindow: number; maxTokens: number } | undefined): ModelTokenLimits | null {
+  return model === undefined ? null : { contextWindow: model.contextWindow, maxTokens: model.maxTokens };
+}
+
+/** 批预算组装（单一来源）：模型两侧上限 + 每批固定开销；上限缺失 → null（落批退回结构组批） */
+function batchBudgetOf(limits: ModelTokenLimits | null): DecomposeBatchBudget | null {
+  return limits === null ? null : { limits, fixedOverheadTokens: DECOMPOSE_BATCH_OVERHEAD_TOKENS };
+}
+
 /**
- * 激活模型的费率——`resolveActiveSelection` 的口径与 chat / 设置页一致：
- * pi settings 的默认模型优先 → 首个有凭据的可用模型 → null（什么都没配）。
- * 任何失败（模型目录不可读、坏 models.json）只让金额缺席，不阻断预览。
+ * 激活模型的预估输入（analyze / plan 的预估用）——`resolveActiveSelection` 的口径与 chat / 设置页一致：
+ * pi settings 的默认模型优先 → 首个有凭据的可用模型 → 缺失（什么都没配）。
+ * 任何失败（模型目录不可读、坏 models.json）只让金额与批预算缺席，不阻断预览。
+ * 批预算与落批同源（`decompose/budget.ts`）：预览的批数/调用数套同一套守卫，不出现「预览 N 批、实际 M 批」。
  */
-async function activeCostRates(deps: DecomposeRouteDeps): Promise<ModelCostRates | null> {
+async function activeEstimateInputs(
+  deps: DecomposeRouteDeps,
+): Promise<{ rates: ModelCostRates | null; budget: DecomposeBatchBudget | null }> {
   try {
     const runtime = deps.runtime ?? (await getModelRuntime());
     const selection = await resolveActiveSelection(runtime, deps.settings ?? getSettingsManager());
-    if (selection === null) return null;
+    if (selection === null) return { rates: null, budget: null };
     const model = runtime.getModel(selection.provider, selection.modelId);
-    return model === undefined ? null : { input: model.cost.input, output: model.cost.output };
+    if (model === undefined) return { rates: null, budget: null };
+    return {
+      rates: { input: model.cost.input, output: model.cost.output },
+      budget: batchBudgetOf(modelLimitsOf(model)),
+    };
   } catch {
-    return null;
+    return { rates: null, budget: null };
   }
 }
 
@@ -131,9 +156,14 @@ function chaptersInScope(chapters: readonly SplitChapter[], scopeStart?: number,
  * 范围预估（docs/design/60-decompose.md §4）：
  * 输入 ∝ 范围正文 + 每批固定开销（归并只看候选清单、报告只看章摘要，相对正文可忽略）；
  * 输出 ∝ 章数（成本杠杆是范围，不是批大小）。
+ * 批规划与落批走**同一份预算守卫**（`budget` 为 null 时才退回结构组批）——预览的批数/调用数是落批的镜像。
  */
-function buildEstimate(chapters: readonly SplitChapter[], rates: ModelCostRates | null): DecomposeAnalyzeRes["estimate"] {
-  const batches = planBatches(chapters);
+function buildEstimate(
+  chapters: readonly SplitChapter[],
+  rates: ModelCostRates | null,
+  budget: DecomposeBatchBudget | null,
+): DecomposeAnalyzeRes["estimate"] {
+  const batches = budget === null ? planBatches(chapters) : planBatchesWithinBudget(chapters, budget);
   const scopeChars = chapters.reduce((sum, chapter) => sum + chapter.charCount, 0);
   const inputTokensApprox =
     Math.ceil(scopeChars / DECOMPOSE_CHARS_PER_TOKEN) + batches.length * DECOMPOSE_BATCH_OVERHEAD_TOKENS;
@@ -201,9 +231,12 @@ function assertBookName(name: string): void {
 /**
  * 激活模型 + 凭据校验（与 chat 开流前预检同口径）：未配置模型或缺凭据 → 400 `LLM_API_KEY_MISSING`。
  * start 在建项目**之前**调用——缺凭据不留半成品项目（api/120-api-decompose.md §start）。
- * @returns 审计用的模型标识 `provider/modelId`
+ * @returns 审计用的模型标识 `provider/modelId` + 落批预算（模型两侧上限 + 每批固定开销；
+ * 模型目录里查不到该模型 → `budget = null`，落批退回结构组批）
  */
-async function requireActiveModel(deps: DecomposeRouteDeps): Promise<string> {
+async function requireActiveModel(
+  deps: DecomposeRouteDeps,
+): Promise<{ label: string; budget: DecomposeBatchBudget | null }> {
   const runtime = deps.runtime ?? (await getModelRuntime());
   const selection = await resolveActiveSelection(runtime, deps.settings ?? getSettingsManager());
   if (selection === null) {
@@ -216,7 +249,11 @@ async function requireActiveModel(deps: DecomposeRouteDeps): Promise<string> {
       `未配置 ${selection.provider} 的凭据：请在设置页填写 API key，或设置对应环境变量`,
     );
   }
-  return `${selection.provider}/${selection.modelId}`;
+  const model = runtime.getModel(selection.provider, selection.modelId);
+  return {
+    label: `${selection.provider}/${selection.modelId}`,
+    budget: batchBudgetOf(modelLimitsOf(model)),
+  };
 }
 
 /**
@@ -250,7 +287,8 @@ export function createDecomposeRoutes(deps: DecomposeRouteDeps = {}): Hono {
       throw new HttpError(400, "DECOMPOSE_FILE_INVALID", "文件没有可解析的文本（空文件或非文本内容）");
     }
     const scoped = chaptersInScope(preview.chapters, query.scope_start, query.scope_end);
-    const estimate = buildEstimate(scoped, await activeCostRates(deps));
+    const estimateInputs = await activeEstimateInputs(deps);
+    const estimate = buildEstimate(scoped, estimateInputs.rates, estimateInputs.budget);
     return c.json(
       ok({
         ...preview, // encoding / totalChars / chapters（全量）/ volumes / stats / warnings
@@ -265,7 +303,7 @@ export function createDecomposeRoutes(deps: DecomposeRouteDeps = {}): Hono {
     const query = decomposeStartQuerySchema.parse(c.req.query()); // 缺 file_name / name / 范围非法 → 400 VALIDATION_ERROR
     const bytes = await readNovelBody(c);
     // 建项目之前的三道校验（缺一道就会留下半成品项目 / 越权目录）：凭据 → 切分文本 → 书名与目标路径
-    const model = await requireActiveModel(deps);
+    const { label: model, budget } = await requireActiveModel(deps);
     const split = splitNovelWithSlices(bytes);
     if (split.result.totalChars === 0) {
       throw new HttpError(400, "DECOMPOSE_FILE_INVALID", "文件没有可解析的文本（空文件或非文本内容）");
@@ -302,6 +340,7 @@ export function createDecomposeRoutes(deps: DecomposeRouteDeps = {}): Hono {
       scopeStart: scope.start,
       scopeEnd: scope.end,
       model,
+      budget, // 批大小预算（§4 守卫）：按本模型两侧上限落批
       concurrency: readDecomposeConcurrency(getProjectRoot()),
       now: nowIso(),
     });
@@ -329,6 +368,7 @@ export function createDecomposeRoutes(deps: DecomposeRouteDeps = {}): Hono {
     }
     const scope = resolveContinueScope(plan, query);
     const scoped = planChaptersInScope(plan, scope.scopeStart, scope.scopeEnd);
+    const estimateInputs = await activeEstimateInputs(deps);
     return c.json(
       ok({
         scopeStart: scope.scopeStart,
@@ -339,7 +379,7 @@ export function createDecomposeRoutes(deps: DecomposeRouteDeps = {}): Hono {
         chapters: plan.chapters, // 全书章列表（含已拆标注）——与 analyze 同为全量口径
         stats: statsOf(plan.chapters.map((chapter) => chapter.charCount)),
         // 估算与 analyze **同一实现**（`buildEstimate`）：只换输入章集（库内章而非切分结果）
-        estimate: buildEstimate(scoped, await activeCostRates(deps)),
+        estimate: buildEstimate(scoped, estimateInputs.rates, estimateInputs.budget),
       } satisfies DecomposePlanRes),
     );
   });
@@ -350,7 +390,7 @@ export function createDecomposeRoutes(deps: DecomposeRouteDeps = {}): Hono {
     const project = requireCurrentProject();
     // 顺序 = 模型/凭据 → 活跃 job 互斥 → 范围解析：缺凭据不先落 job 行（同 start 的「不留半成品」口径）；
     // 互斥拦在范围解析前——已有 running / paused job 时范围解析无意义（只有终态 done / failed 可开新 job，§7.1）
-    const model = await requireActiveModel(deps);
+    const { label: model, budget } = await requireActiveModel(deps);
     const current = getDecomposeJob(project.db); // 一项目取最新 job（db helper 口径）
     if (current !== null && current.status !== "done" && current.status !== "failed") {
       throw new HttpError(
@@ -372,6 +412,7 @@ export function createDecomposeRoutes(deps: DecomposeRouteDeps = {}): Hono {
       scopeStart: scope.scopeStart,
       scopeEnd: scope.scopeEnd,
       model,
+      budget, // 批大小预算（§4 守卫）：与 start 同口径（按本模型两侧上限落批）
       concurrency: readDecomposeConcurrency(getProjectRoot()), // 建 job 时读创作根配置一次（同 start）
       now: nowIso(),
     });

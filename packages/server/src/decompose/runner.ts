@@ -23,6 +23,8 @@
 // 建会话前先按 `DECOMPOSE_KEPT_SESSIONS` 清理超限的更早拆解会话（§7.2，告知不静默）。
 // 暂停 / 切书 = 置 abort：**每段当前批跑完即停**（在途 ≤ 段数），已发出的模型调用不 abort
 // （结果不浪费，批级幂等靠 `done` 跳过）。并发下补限流兜底：批级 429 / 限流按指数退避 + 抖动再试（§2.2）。
+// **批预算预检**（§4 批大小守卫，`budget.ts`）：发调用之前按会话解析出的模型两侧上限判一次，超限的批
+// 显式失败并写明确文案（不落进 pi `clampMaxTokensToContext` 把输出压到 1 → provider 报错的路径）。
 // 模型调用只经 pi 的 `ModelRuntime`（`getModelRuntime()` / `getSettingsManager()` 唯一入口）——
 // 业务代码不自建 fetch / HTTP agent（出站行为统一由启动时装的全局 undici dispatcher 承担）。
 // 阈值与提示词里的数字一律取自常量（提示词按常量插值生成，散文不复述数字）。
@@ -65,6 +67,13 @@ import {
 } from "./extract.js";
 import { doneBatchResults } from "./job.js";
 import { planSegments } from "./batching.js";
+import {
+  batchBudgetErrorText,
+  checkBatchBudget,
+  DECOMPOSE_CHARS_PER_TOKEN,
+  type BatchBudgetVerdict,
+  type ModelTokenLimits,
+} from "./budget.js";
 import {
   decomposeSessionId,
   decomposeWorkerSessionPrefix,
@@ -422,6 +431,7 @@ interface BatchRunInput {
  * 重试代价 = 一批 token，而缺章的产出本来就不完整；超上限 → 标 `failed` 并继续后续批。
  * 取消（暂停 / 切书）时不再重试：批留在未完成状态，由续拆承接（`schema.md`「状态归一」不变式）。
  * 并发下另补一层：错误判定为 429 / 限流时，重试之前按指数退避 + 抖动等一段（§2.2；慢比失败好）。
+ * **发调用之前先做一次批预算预检**（§4 批大小守卫）：超限的批属「注定失败」，显式失败并写明确文案。
  */
 async function runBatch(input: BatchRunInput): Promise<BatchOutcome> {
   let lastError = "批未完成";
@@ -430,15 +440,32 @@ async function runBatch(input: BatchRunInput): Promise<BatchOutcome> {
     batchSeq: input.batch.seq,
     text: `批 ${input.batch.seq} 开始（段 ${input.segment.index}/${input.segment.total}；${input.chapters.length} 章；快照 ${input.snapshotSize}）`,
   });
+  // 本轮提示词只建一次（重试 = 同一份请求；预检判定的输入与实际发出的输入同源）
+  const prompt = buildBatchPrompt({ chapters: input.chapters, snapshotText: input.snapshotText });
+  // 暂停 / 切书：未开跑的批不判预算（不把「没跑」写成失败；批留在未完成状态由续拆承接）
+  if (input.signal.aborted) return { result: null, failed: false };
+  // 预算预检（§4）：按本 run **实际使用的模型**（会话解析点给出）在发调用之前判一次——超限时
+  // 不落进 pi `clampMaxTokensToContext` 把输出压到 1 → provider 报错的路径（那种失败整批重试也过不去，
+  // 还把额度烧在注定失败的请求上）。批级失败语义不变：不阻塞其他批（job 收口仍由全批收口度决定）。
+  const budgetIssue = batchBudgetVerdictOf(input.chapters, prompt, input.session.modelLimits);
+  if (budgetIssue.issue !== null) {
+    const message = batchBudgetErrorText(budgetIssue);
+    input.session.log({
+      kind: "attempt_failed",
+      batchSeq: input.batch.seq,
+      text: `批 ${input.batch.seq} 预算预检未通过（未发调用）：${message}`,
+    });
+    console.warn(`[decompose] job ${input.jobId} 批 ${input.batch.seq} 预算预检未通过（未发调用）：${message}`);
+    failBatch(input.project.db, { jobId: input.jobId, seq: input.batch.seq, error: message, now: nowIso() });
+    return { result: null, failed: true };
+  }
   for (let attempt = 1; attempt <= DECOMPOSE_BATCH_MAX_ATTEMPTS; attempt++) {
     if (input.signal.aborted) return { result: null, failed: false };
     if (startBatchAttempt(input.project.db, input.jobId, input.batch.seq, nowIso()) === null) {
       throw new Error(`拆解批不存在：job ${input.jobId} 批 ${input.batch.seq}`);
     }
     try {
-      const completion = await input.session.complete(
-        buildBatchPrompt({ chapters: input.chapters, snapshotText: input.snapshotText }),
-      );
+      const completion = await input.session.complete(prompt);
       const normalized = normalizeExtraction(
         parseModelJson(completion.text),
         input.chapters.map((chapter) => chapter.index),
@@ -473,6 +500,26 @@ async function runBatch(input: BatchRunInput): Promise<BatchOutcome> {
   }
   failBatch(input.project.db, { jobId: input.jobId, seq: input.batch.seq, error: lastError, now: nowIso() });
   return { result: null, failed: true };
+}
+
+/**
+ * 批预算判定（§4 预检，纯函数）：正文取**实际要发的章文字数**，固定开销取**本轮提示词里正文之外的
+ * 渲染长度**（系统提示 + 快照 + 框架）按同一换算率折成 token——预检判的就是即将发出的那份请求，
+ * 不是规划期的上界估算（两者共用 `checkBatchBudget` 的判据与常量）。
+ */
+function batchBudgetVerdictOf(
+  chapters: readonly BatchChapter[],
+  prompt: ModelRequest,
+  limits: ModelTokenLimits,
+): BatchBudgetVerdict {
+  const chapterChars = chapters.map((chapter) => chapter.text.length);
+  const bodyChars = chapterChars.reduce((sum, chars) => sum + chars, 0);
+  const framingChars = prompt.system.length + prompt.user.length - bodyChars;
+  return checkBatchBudget({
+    chapterChars,
+    fixedOverheadTokens: Math.ceil(framingChars / DECOMPOSE_CHARS_PER_TOKEN),
+    limits,
+  });
 }
 
 /**

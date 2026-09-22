@@ -15,6 +15,8 @@
 // - 大纲**一次读 + 一次写**（`readOutlineFile` / `writeOutlineFile`）：节点形状与 db `createOutlineNode`
 //   同构，但逐节点调用会让 N 章 × 原子写 fsync 变成 N+1 次落盘（导入一本数百章的书不可接受）；
 // - 并发段数快照（`concurrency`）由调用方**建 job 时读创作根配置一次**并传入（§2.2；本模块不读配置）；
+// - 批大小预算（`budget` = 模型两侧上限 + 每批固定开销）同样由调用方在建 job 时解析后传入；
+//   缺省 = 只有结构组批（`planBatches`），给定 = 经 `planBatchesWithinBudget` 按预算拆批（§4 守卫）；
 // - 时间（`now`）由调用方传入，本模块不生成时间。
 
 import type { DecomposeBatchResult, DecomposeJobRes, OutlineFileChapter, OutlineFileVolume } from "@whispering233/ai-editor-shared";
@@ -38,6 +40,7 @@ import {
   type DecomposeJobRow,
 } from "@whispering233/ai-editor-db";
 import { DECOMPOSE_BATCH_TARGET_CHARS, planBatches } from "./batching.js";
+import { planBatchesWithinBudget, type DecomposeBatchBudget } from "./budget.js";
 import { DECOMPOSE_REPORT_ENTITY_TYPE } from "./report.js";
 import type { SplitChapter, SplitWithSlices } from "./split.js";
 import type { ProjectContext } from "../middleware/project.js";
@@ -54,6 +57,11 @@ export interface IngestDecomposeProjectInput {
   model: string | null;
   /** 并发段数快照（建 job 时由调用方读创作根配置一次，见 `decompose/config.ts`） */
   concurrency: number;
+  /**
+   * 批大小预算（模型两侧上限 + 每批固定开销）：落批时按它拆批（§4 预算守卫）；
+   * 缺省 / null = 不设预算（只有结构组批）——模型元数据不可用的退化形态与直接建档的调用方。
+   */
+  budget?: DecomposeBatchBudget | null;
   now: string;
 }
 
@@ -131,15 +139,15 @@ function importChapterDocuments(
  * S1 建档（同步、不调 LLM）：建大纲 → 导入正文 → 落 job 与批规划行 → job 置 `running`
  *（契约：S1 完成后才返回，返回时 job 已进入 `running`；批执行归 S2 runner）。
  *
- * 批规划 = `planBatches(scopedChapters)`（与 analyze 预估同一实现，确定性）；批行 `chapter_ids`
- * 按章序映射为章节点 id。
+ * 批规划 = `planBatches(scopedChapters)`（与 analyze 预估同一实现，确定性）**再经预算守卫**
+ * （`budget` 给定时按模型两侧上限拆批，§4）；批行 `chapter_ids` 按章序映射为章节点 id。
  */
 export function ingestDecomposeProject(input: IngestDecomposeProjectInput): IngestDecomposeProjectResult {
   const { project, split, now } = input;
   const chapterIdByIndex = writeOutlineFromSplit(project.root, split, now);
   importChapterDocuments(project.db, split, chapterIdByIndex, now);
   return createRunningJob(project, {
-    batches: planBatchRows(input.scopedChapters, chapterIdByIndex),
+    batches: planBatchRows(input.scopedChapters, chapterIdByIndex, input.budget ?? null),
     scopeStart: input.scopeStart,
     scopeEnd: input.scopeEnd,
     concurrency: input.concurrency,
@@ -159,6 +167,8 @@ export interface ContinueDecomposeInput {
   model: string | null;
   /** 并发段数快照（建 job 时由调用方读创作根配置一次，见 `decompose/config.ts`） */
   concurrency: number;
+  /** 批大小预算（同 `IngestDecomposeProjectInput.budget`；缺省 = 只有结构组批） */
+  budget?: DecomposeBatchBudget | null;
   now: string;
 }
 
@@ -171,7 +181,7 @@ export function ingestDecomposeContinue(input: ContinueDecomposeInput): IngestDe
     deriveChapterOrder(input.project.root).map((entry) => [entry.chapterNumber, entry.chapterId]),
   );
   return createRunningJob(input.project, {
-    batches: planBatchRows(input.scopedChapters, chapterIdByIndex),
+    batches: planBatchRows(input.scopedChapters, chapterIdByIndex, input.budget ?? null),
     scopeStart: input.scopeStart,
     scopeEnd: input.scopeEnd,
     concurrency: input.concurrency,
@@ -180,12 +190,18 @@ export function ingestDecomposeContinue(input: ContinueDecomposeInput): IngestDe
   });
 }
 
-/** 批规划行（章序 → 批行 `chapter_ids`）：缺映射 = 调用方传错（静默跳过会丢章） */
+/**
+ * 批规划行（章序 → 批行 `chapter_ids`）：缺映射 = 调用方传错（静默跳过会丢章）。
+ * 预算给定时走 `planBatchesWithinBudget`（结构组批后再按预算细分，章为最小单位）；
+ * 未给定（模型元数据不可用 / 直接建档的调用方）→ 结构组批，与预览预估同一实现。
+ */
 function planBatchRows(
   scopedChapters: readonly SplitChapter[],
   chapterIdByIndex: ReadonlyMap<number, string>,
+  budget: DecomposeBatchBudget | null,
 ): Array<{ seq: number; chapterIds: string[] }> {
-  return planBatches(scopedChapters).map((plan, position) => ({
+  const plans = budget === null ? planBatches(scopedChapters) : planBatchesWithinBudget(scopedChapters, budget);
+  return plans.map((plan, position) => ({
     seq: position + 1,
     chapterIds: plan.chapterIndexes.map((chapterIndex) => {
       const chapterId = chapterIdByIndex.get(chapterIndex);

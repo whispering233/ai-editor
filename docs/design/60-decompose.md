@@ -155,7 +155,7 @@ createAgentSessionServices({ noExtensions, noSkills, noPromptTemplates, noContex
 
 | 口径 | 内容 |
 | :--- | :--- |
-| 组批 | **自适应**：目标 `DECOMPOSE_BATCH_TARGET_CHARS` 字/批，贪心装箱；单批章数 ≤ `DECOMPOSE_BATCH_MAX_CHAPTERS`；单章超目标字数 → 单独成批 |
+| 组批 | **自适应**：目标 `DECOMPOSE_BATCH_TARGET_CHARS` 字/批，贪心装箱；单批章数 ≤ `DECOMPOSE_BATCH_MAX_CHAPTERS`；单章超目标字数 → 单独成批。**双向预算守卫**：按激活模型的 `contextWindow` / `maxTokens` 预检——估算输入（正文 + 每批固定开销 + 输出预留 + `DECOMPOSE_INPUT_SAFETY_TOKENS`）不超窗、输出（章数 × `DECOMPOSE_OUTPUT_TOKENS_PER_CHAPTER`）不超 `maxTokens`，超限按章拆批（章为最小单位，永不切开单章）；**单章自身超限**→ 保持单章成批，由执行期在**发调用之前**显式失败并给出明确文案（不落进 pi `clampMaxTokensToContext` 压输出的路径） |
 | 对齐护栏 | 抽取 schema 强制「每章一个条目」；服务端校验批次覆盖的章集合齐全。缺章 → 整批重试（≤ `DECOMPOSE_BATCH_MAX_ATTEMPTS`）→ 仍失败标 `failed` 并**继续后续批**（不阻塞整个 job） |
 | 并发 | **N 段并行、段内串行**（§2.2）；N 来自创作根配置、建 job 时快照。理由：串行墙钟 ≈ 总输出 ÷ 解码速度、与批大小无关 ⇒ 并发是唯一数量级杠杆；限流风险用退避兜 |
 | 范围 | 起止章（默认全书）+ 开始前**预估**（批次数、调用次数、粗估 token/费用）。费率读 pi 模型目录的 `Model.cost`（`getModelRuntime()` 是唯一入口），**不自建定价表** |
