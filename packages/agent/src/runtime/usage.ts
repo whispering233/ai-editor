@@ -11,7 +11,9 @@ import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import type { ChatUsage } from "@whispering233/ai-editor-shared";
 
 /**
- * 订阅制 provider（走 API-key 认证但按订阅计费，pi footer 同款判定）。
+ * 订阅型 provider 的补充字面量：`kimi-coding` 用 API-key 凭据时 `isUsingOAuth()` 为 false
+ * ⇒ pi 的 `isUsingSubscription()`（= 用 OAuth + provider 的 oauth 配置标 `isSubscription`）也判 false，
+ * 但它实际按订阅计费，故单独补一条（pi footer 同款兜底）。
  * 该字面量只在此处出现一次——别处要判订阅一律复用 `sessionUsage()` 的结论。
  */
 const SUBSCRIPTION_PROVIDER = "kimi-coding";
@@ -26,8 +28,12 @@ interface UsageTotals {
 }
 
 export interface SessionUsageOptions {
-  /** 该 provider 是否用 OAuth 凭据（= pi `ModelRuntime.isUsingOAuth()`） */
-  isUsingOAuth: (provider: string) => boolean;
+  /**
+   * 该 provider 是否**按订阅计费**（= pi `ModelRuntime.isUsingSubscription()`）。
+   * **不要**传 `isUsingOAuth()`：OAuth 登录 ≠ 订阅（openrouter / radius 这类 OAuth 但按量计费
+   * 的家会被标成「订阅 · 估算」，与实际账单不符）。
+   */
+  isUsingSubscription: (provider: string) => boolean;
 }
 
 /** 单条 entry 计入账目的 usage（user / 状态类 entry 不产生费用） */
@@ -76,6 +82,7 @@ export function sessionUsage(entries: readonly SessionEntry[], options: SessionU
     cost: totals.cost,
     ...(promptTokens > 0 ? { cacheHitRate: totals.cacheRead / promptTokens } : {}),
     subscription:
-      lastProvider !== undefined && (options.isUsingOAuth(lastProvider) || lastProvider === SUBSCRIPTION_PROVIDER),
+      lastProvider !== undefined &&
+      (options.isUsingSubscription(lastProvider) || lastProvider === SUBSCRIPTION_PROVIDER),
   };
 }

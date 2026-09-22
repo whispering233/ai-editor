@@ -4,7 +4,8 @@
 // - 计入的三类 = assistant 消息 / toolResult.usage / compaction · branch_summary 的 usage
 // - total = input + output + cacheRead + cacheWrite
 // - 命中率分母 = input + cacheRead + cacheWrite；分母 0 → 省略键（不报 0%）
-// - 订阅判定取**末条 assistant 消息的 provider**
+// - 订阅判定取**末条 assistant 消息的 provider**，按 `isUsingSubscription` 口径（非 `isUsingOAuth`）
+//   + `kimi-coding` 字面量兜底（API-key 订阅家）
 
 import { describe, expect, it } from "vitest";
 import type { Usage } from "@earendil-works/pi-ai";
@@ -79,7 +80,7 @@ function bareCompactionEntry(id: string): SessionEntry {
   return { ...BASE, id, type: "compaction", summary: "摘要", firstKeptEntryId: "e0", tokensBefore: 100 };
 }
 
-const NO_OAUTH: SessionUsageOptions = { isUsingOAuth: () => false };
+const NO_SUBSCRIPTION: SessionUsageOptions = { isUsingSubscription: () => false };
 
 // ============ 累加口径 ============
 
@@ -111,7 +112,7 @@ describe("sessionUsage 累加", () => {
           makeUsage({ cacheRead: 20, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0.25 } }),
         ),
       ],
-      NO_OAUTH,
+      NO_SUBSCRIPTION,
     );
 
     expect(result).toMatchObject({
@@ -133,14 +134,14 @@ describe("sessionUsage 累加", () => {
           makeUsage({ input: 10, output: 20, cacheRead: 30, cacheWrite: 40, totalTokens: 999 }),
         ),
       ],
-      NO_OAUTH,
+      NO_SUBSCRIPTION,
     );
 
     expect(result.total).toBe(100);
   });
 
   it("空会话 → 全零且订阅为 false", () => {
-    expect(sessionUsage([], NO_OAUTH)).toEqual({
+    expect(sessionUsage([], NO_SUBSCRIPTION)).toEqual({
       input: 0,
       output: 0,
       cacheRead: 0,
@@ -160,20 +161,20 @@ describe("sessionUsage 命中率", () => {
       [
         assistantEntry("e1", "anthropic", makeUsage({ input: 1_000, cacheRead: 3_000, cacheWrite: 0, output: 50 })),
       ],
-      NO_OAUTH,
+      NO_SUBSCRIPTION,
     );
 
     expect(result.cacheHitRate).toBe(0.75);
   });
 
   it("分母为 0（只有输出、无任何输入类 token）→ 省略该键", () => {
-    const result = sessionUsage([assistantEntry("e1", "anthropic", makeUsage({ output: 120 }))], NO_OAUTH);
+    const result = sessionUsage([assistantEntry("e1", "anthropic", makeUsage({ output: 120 }))], NO_SUBSCRIPTION);
 
     expect(Object.hasOwn(result, "cacheHitRate")).toBe(false);
   });
 
   it("有分母但 cacheRead 为 0 → 键存在且为 0（省略口径只认分母）", () => {
-    const result = sessionUsage([assistantEntry("e1", "anthropic", makeUsage({ input: 500 }))], NO_OAUTH);
+    const result = sessionUsage([assistantEntry("e1", "anthropic", makeUsage({ input: 500 }))], NO_SUBSCRIPTION);
 
     expect(result.cacheHitRate).toBe(0);
   });
@@ -182,24 +183,32 @@ describe("sessionUsage 命中率", () => {
 // ============ 订阅判定 ============
 
 describe("sessionUsage 订阅判定", () => {
-  it("末条 assistant 的 provider 走 OAuth → true", () => {
+  it("末条 assistant 的 provider 按订阅计费 → true", () => {
     const result = sessionUsage(
       [assistantEntry("e1", "anthropic", makeUsage({ output: 1 }))],
-      { isUsingOAuth: (provider) => provider === "anthropic" },
+      { isUsingSubscription: (provider) => provider === "anthropic" },
     );
 
     expect(result.subscription).toBe(true);
   });
 
-  it("订阅型 provider 字面量（无 OAuth 凭据）→ true", () => {
-    const result = sessionUsage([assistantEntry("e1", "kimi-coding", makeUsage({ output: 1 }))], NO_OAUTH);
+  it("订阅型 provider 字面量（API-key 凭据，isUsingSubscription 判 false）→ true", () => {
+    const result = sessionUsage([assistantEntry("e1", "kimi-coding", makeUsage({ output: 1 }))], NO_SUBSCRIPTION);
 
     expect(result.subscription).toBe(true);
   });
 
-  it("既非 OAuth 也非订阅型 provider → false", () => {
+  it("OAuth 但按量计费的家（openrouter / radius）→ false（有意不用 isUsingOAuth）", () => {
+    const result = sessionUsage([assistantEntry("e1", "openrouter", makeUsage({ output: 1 }))], {
+      isUsingSubscription: (provider) => provider === "anthropic",
+    });
+
+    expect(result.subscription).toBe(false);
+  });
+
+  it("既非订阅计费也非订阅型 provider → false", () => {
     const result = sessionUsage([assistantEntry("e1", "openai", makeUsage({ output: 1 }))], {
-      isUsingOAuth: (provider) => provider === "anthropic",
+      isUsingSubscription: (provider) => provider === "anthropic",
     });
 
     expect(result.subscription).toBe(false);
@@ -211,7 +220,7 @@ describe("sessionUsage 订阅判定", () => {
         assistantEntry("e1", "kimi-coding", makeUsage({ output: 1 })),
         assistantEntry("e2", "openai", makeUsage({ output: 1 })),
       ],
-      NO_OAUTH,
+      NO_SUBSCRIPTION,
     );
 
     expect(result.subscription).toBe(false);
