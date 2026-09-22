@@ -278,10 +278,6 @@
   - 现状：`GET /chat/sessions/:id/messages` 为算 `subscription` 而 `await getModelRuntime()`；该方法创建失败（凭据/模型目录损坏）时这个**只读**端点会 500（此前它只依赖会话文件）。
   - 触发条件：出现「聊天记录打不开但其它页面正常」的反馈。
   - 最小修法：把模型侧查询包成 best-effort（失败 → `subscription: false`、`contextUsage` 省略），不让只读端点因模型运行时故障而不可用。
-- **`client/src/lib/api.ts` 的 `ChatSessionMessagesRes` 未镜像 shared 新增的必填 `usage`**（卡 4 oracle 登记）
-  - 现状：client 不引 zod 运行时、手写响应接口；卡 4 在 `loadMessages` 里用 `(res as { usage?: unknown })` 收窄绕开。
-  - 触发条件：下次改 `GET /chat/sessions/:id/messages` 的响应形状时（两处容易漂移）。
-  - 最小修法：把该 interface 改为镜像 shared 的 `ChatUsage` / `ChatContextUsage`（类型 import，不引运行时）。
 
 - **拆解 job 级成本 / 耗时汇总**
   - 现状：状态栏只报「当前会话」口径，而一个拆解 job = 主会话 + 多个 worker 会话（每段一条）⇒ 单会话 usage 只是局部，页面上看不到一次拆解总共花了多少。
