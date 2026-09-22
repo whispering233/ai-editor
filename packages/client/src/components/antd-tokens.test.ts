@@ -71,6 +71,16 @@ describe("选中面 token（全局派生 alias 覆盖）", () => {
       expect(token.colorInfo, `${name} colorInfo`).toBe(token.colorPrimary);
     });
 
+    it(`${name}：Alert info 面（colorInfoBg）与 colorText 对比度 ≥ 4.5:1（WCAG AA）`, () => {
+      // 为什么需要它：本仓为让 Progress 描边走主色把 `colorInfo` 设成深墨，antd 由它派生的
+      // `colorInfoBg` 是**中深灰**（浅色实测 `#787771`，压 `colorText` 2.7:1）——设置页「AI 模型」
+      // 底部常驻说明 Alert 因此文字不清（2026-09 用户实测）。
+      const token = theme.getDesignToken(config);
+      const base = over(token.colorBgContainer, [255, 255, 255]);
+      const ratio = contrast(token.colorText, token.colorInfoBg, base);
+      expect(ratio, `${name} colorInfoBg=${token.colorInfoBg} 压 colorText=${token.colorText}`).toBeGreaterThanOrEqual(4.5);
+    });
+
     it(`${name}：选中/选中+hover 面与字色对比度 ≥ 4.5:1（WCAG AA）`, () => {
       const token = theme.getDesignToken(config);
       const base = over(token.colorBgContainer, [255, 255, 255]); // 该模式的面板底色

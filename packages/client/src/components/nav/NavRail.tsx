@@ -136,7 +136,9 @@ export function NavRail({
           className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1.5"
         >
           <span className="text-primary">◈</span>
-          <span className="truncate text-base italic">书架</span>
+          {/* 不挂 `truncate`：合成斜体的墨迹会越出字宽（实测右 2px / 左 1px），`overflow: hidden`
+              会把「架」右缘切掉——固定两字标签无需省略号，只留 `whitespace-nowrap` 防折行 */}
+          <span className="whitespace-nowrap text-base italic">书架</span>
         </a>
         {onToggleCollapse && (
           <Button

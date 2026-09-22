@@ -32,6 +32,8 @@
 
 ### Fixed
 
+- **设置页「AI 模型」底部常驻说明看不清**：antd 的 Alert info 面（`colorInfoBg` / `colorInfoBorder`）由 `colorInfo` 派生，而 `colorInfo` 被设为主色（为让 `Progress` 描边走深墨）⇒ 浅色态派生出中深灰面 `#787771`，压深墨说明文字 2.7:1。现在浅色态显式覆盖为已登记的次级面 / 描边档（深色态派生值本身可读，不覆盖），并把该面的对比度纳入 `antd-tokens.test.ts` 守卫。
+- **左栏顶部「书架」二字右缘被切**：合成斜体的墨迹会越出字宽，而标签挂着 `truncate`（`overflow: hidden`）——改为 `whitespace-nowrap`（固定两字标签无需省略号）。
 - **历史会话的占用段整段消失**：`GET /chat/sessions/:id/messages` 补 `contextUsage`（只带窗口，`tokens`/`percent` 为 `null` = 占用不重建；窗口取当前激活模型、与 `/settings/llm` 同一条解析；无模型则省略该键）——历史会话的占用段从「无」变为契约要求的 `? · 窗口` 且不画条。
 - **压缩后占用段凭空消失**：`contextUsage` 的 `tokens` / `percent` 为 `null`（压缩后到下一次模型响应之间占用未知）时改为**帧照发**、UI 渲染 `? · 窗口`——「未知」与「空」不再混为一谈（旧实现把未知当非法值丢帧，占用段静默消失）。
 - **订阅制成本误标**：`cost` 的「订阅 · 估算」判定从 `isUsingOAuth` 收窄为 `ModelRuntime.isUsingSubscription()`（= OAuth 且该家 `auth.oauth.isSubscription`）+ API-key 认证的订阅家 `kimi-coding`——openrouter / radius 等「OAuth 但按量计费」的家不再被误标为估算（实证：pi-ai 目录里 `isSubscription: true` 的家仅 anthropic / github-copilot / openai-codex / xai / kimi-coding）。

@@ -136,8 +136,18 @@ const TABS_DARK = { horizontalMargin: "0", itemColor: DARK_SEED.colorTextSeconda
 const SELECTION_FACE_LIGHT = { controlItemBgActive: "#f0eeec", controlItemBgActiveHover: "#f0eeec" };
 const SELECTION_FACE_DARK = { controlItemBgActive: "#373737", controlItemBgActiveHover: "#373737" };
 
+/**
+ * Alert `type="info"` 的面（浅色）：同一类「同色相浅底」陷阱——`colorInfoBg` / `colorInfoBorder` 由
+ * `colorInfo` 派生（`theme/themes/shared/genColorMapToken.js` 的 `infoColors[1]/[3]`），而本仓为让 `Progress`
+ * 描边走主色把 `colorInfo` 设成了深墨 `#37352f` ⇒ 派生出的 info 面实测 `#787771`（中深灰），与 12px 深墨说明
+ * 文字对比 **2.7:1**，设置页「AI 模型」底部那段常驻说明因此看不清（2026-09 用户实测）。
+ * 面取已登记的次级面 `{colors.surface-muted}`、描边取 `{colors.hairline}`——与 Tag 默认面同档。
+ * 深色态不覆盖：那里派生值本身就是深面板上的浅一档面（`#2c2c2c` 叠 `#202020`），可读。
+ */
+const INFO_SURFACE_LIGHT = { colorInfoBg: "#f0eeec", colorInfoBorder: "#e5e3df" };
+
 /** 浅色 token（DESIGN.md §Colors 映射表「浅色值」列逐行对应；已含选中面覆盖） */
-export const LIGHT_TOKEN = { ...LIGHT_SEED, ...SELECTION_FACE_LIGHT };
+export const LIGHT_TOKEN = { ...LIGHT_SEED, ...SELECTION_FACE_LIGHT, ...INFO_SURFACE_LIGHT };
 /** 深色 token（同上，深色列 + 选中面覆盖） */
 export const DARK_TOKEN = { ...DARK_SEED, ...SELECTION_FACE_DARK };
 
