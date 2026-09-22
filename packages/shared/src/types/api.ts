@@ -1413,7 +1413,7 @@ export type DecomposeLogEntry = z.infer<typeof decomposeLogEntrySchema>;
 // GET /api/v1/decompose/job/log（Res: 200；**会话记录被删除时 entries 为空数组**，不回 404）
 export const decomposeJobLogResSchema = z.object({
   sessionId: z.string(), // decompose-<jobId>（服务端组装）
-  entries: z.array(decomposeLogEntrySchema), // 顺序 = 会话文件顺序
+  entries: z.array(decomposeLogEntrySchema), // 合并后按时间排序（主会话 + 各段 worker 会话；同刻保持来源顺序）
 });
 export type DecomposeJobLogRes = z.infer<typeof decomposeJobLogResSchema>;
 

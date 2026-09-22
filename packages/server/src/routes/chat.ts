@@ -48,7 +48,7 @@ import {
 } from "@whispering233/ai-editor-shared/schemas";
 import { HttpError, ok } from "../middleware/error.js";
 import { requireCurrentProject, type ProjectContext } from "../middleware/project.js";
-import { decomposeSessionId } from "../decompose/llm.js";
+import { decomposeSessionId, decomposeWorkerSessionPrefix } from "../decompose/llm.js";
 import { isDecomposeJobActive } from "../decompose/runner.js";
 import { debugLog, isCategoryEnabled } from "../debug.js";
 import {
@@ -500,13 +500,19 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
 // ============ 会话端点辅助 ============
 
 /**
- * 拆解会话删除守卫（§7.2「有在途 job 时禁删」）：会话 id 与 job 用**同一纯函数**组装，故直接比对。
+ * 拆解会话删除守卫（§7.2「有在途 job 时禁删」）：**主会话按精确 id、worker 会话（`decompose-<jobId>-w<k>`）
+ * 按 `-w` 前缀**命中同一 job（同一组装函数，见 `llm.ts`）——worker 同样会被在途轮次原地重建（缺 header
+ * 的坏文件），不守就是 resume / 重跑永久抛「不是有效 pi 会话」；其余 `decompose-` 前缀记录维持现行为
+ * （保守口径：前缀只多拦、不漏放）。
  * 三种「仍在跑」都算：job 行 `pending` / `running`，或**进程内有在跑轮次**——暂停后当前批仍在飞
  * （job 行已是 `paused`），此时删文件会被这轮原地重建。历史 job 的会话（job 行已不是它）可直接删。
  */
 function assertDecomposeSessionDeletable(project: ProjectContext, sessionId: string): void {
   const job = getDecomposeJob(project.db); // 一项目一 job：最新一行（db helper 口径）
-  if (job === null || decomposeSessionId(job.id) !== sessionId) return;
+  if (job === null) return;
+  const belongsToJob =
+    decomposeSessionId(job.id) === sessionId || sessionId.startsWith(decomposeWorkerSessionPrefix(job.id));
+  if (!belongsToJob) return;
   const running = job.status === "pending" || job.status === "running" || isDecomposeJobActive(job.id);
   if (!running) return;
   throw new HttpError(409, "DECOMPOSE_JOB_RUNNING", `拆解任务仍在跑，会话文件会被原地重建，暂不可删: ${sessionId}`);

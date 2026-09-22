@@ -559,7 +559,9 @@ async function executeRun(input: ExecuteRunInput): Promise<void> {
   // 起始快照：一轮开头读库一次（不随批刷新）；**各段共用这一份**（§4.1 起始快照层）；
   // 前置章摘要取本 job 范围起点之前的连续若干章
   const startSnapshot = readStartSnapshot({ project, scopeStart: job.scope_start, chapterOrder, tree });
-  // 段划分：字数取正文投影长度（与进度页 / 快照同口径）；批被物理删章后字数按剩余章算，不影响可重算性
+  // 段划分：字数取正文投影长度（与进度页 / 快照同口径）；批被物理删章后字数按剩余章算，不影响可重算性。
+  // 注意：字数取自**当时的**正文投影 ⇒ 正文被用户编辑后，段边界可漂移，不承诺与上一轮同构
+  // （resume / 重跑一律按当时字数重算；段身份只在「正文未变」时稳定，见 §2.2）
   const textLengthById = getDocumentTextLengths(project.db, "chapter", batches.flatMap((batch) => batch.chapter_ids));
   const segments = planSegments(
     batches.map((batch) => ({
@@ -584,7 +586,10 @@ async function executeRun(input: ExecuteRunInput): Promise<void> {
 
   let executed = 0;
   let failed = 0;
-  await Promise.all(
+  // 段间并行但**全部段落定后才上报错误**（`allSettled` 而非 `all`）：任一段 rejection 时兄弟段仍在写库，
+  // 提前抛出会让调用方的 catch 立刻 `failJob` + 注销 `activeRuns` ⇒ job 已 `failed` 仍被残留段写、
+  // 删除守卫与单批重跑也可能与残留段重叠。取消走既有 `signal`（暂停 / 切书），不为此另加机制。
+  const settled = await Promise.allSettled(
     activeSegments.map(async ({ segment, batches: rows }, position) => {
       const session = workerSessions[position]!;
       // 段内滚动累积：按段内已完成批重建（续拆 / 单批重跑；单批重跑的旧结果不入累积）
@@ -618,6 +623,9 @@ async function executeRun(input: ExecuteRunInput): Promise<void> {
       }
     }),
   );
+  // 全部段落定后才上报第一个 rejection（错误不吞：保留原错误对象与消息）
+  const failure = settled.find((result): result is PromiseRejectedResult => result.status === "rejected");
+  if (failure !== undefined) throw failure.reason;
   console.log(
     `[decompose] job ${job.id} 批执行收尾：段 ${segments.length}（在跑 ${activeSegments.length}）/ 执行 ${executed} 批 / 失败 ${failed} 批${signal.aborted ? "（已暂停）" : ""}`,
   );

@@ -842,7 +842,53 @@ describe("分段并发", () => {
     expect(decomposeRateLimitDelayMs(1, 0)).toBe(Math.round(DECOMPOSE_RATE_LIMIT_BASE_DELAY_MS * DECOMPOSE_RATE_LIMIT_JITTER_MIN));
     expect(decomposeRateLimitDelayMs(2, 0)).toBe(Math.round(DECOMPOSE_RATE_LIMIT_BASE_DELAY_MS * 2 * DECOMPOSE_RATE_LIMIT_JITTER_MIN));
     expect(decomposeRateLimitDelayMs(99, 0.999)).toBeLessThanOrEqual(DECOMPOSE_RATE_LIMIT_MAX_DELAY_MS);
-    expect(decomposeRateLimitDelayMs(99, 0)).toBe(decomposeRateLimitDelayMs(99, 0));
+    // 封顶后仍带抖动：随机源取下界 ⇒ 等待 = 封顶值 × 抖动下界（严格小于封顶值，不会被退化成恒等）
+    expect(decomposeRateLimitDelayMs(99, 0)).toBe(Math.round(DECOMPOSE_RATE_LIMIT_MAX_DELAY_MS * DECOMPOSE_RATE_LIMIT_JITTER_MIN));
+  });
+
+  it("一段抛错：全体段落定后才上报（兄弟段被等待，job 不在残留段在飞时置 failed）", async () => {
+    const model = await fakeModel();
+    let releaseSibling!: () => void;
+    const siblingGate = new Promise<void>((resolve) => {
+      releaseSibling = resolve;
+    });
+    let siblingInFlight = false;
+    // 段 1 的批调用限流（触发退避 → 注入的 sleep 抛错 ⇒ 段 1 reject）；段 2 的批调用挂起（保持在途）
+    contentAwareScript(model, 6, (context) => {
+      const prompt = promptTextOf(context);
+      if (/^### 第11章/m.test(prompt)) {
+        siblingInFlight = true;
+        return siblingGate.then(() => fauxAssistantMessage(batchJsonFromPrompt(prompt)));
+      }
+      if (/^### 第1章/m.test(prompt)) return new Error("429 Too Many Requests: rate limit exceeded");
+      return null;
+    });
+    const app = buildApp({
+      ...model.deps,
+      settings: SettingsManager.inMemory({ retry: { enabled: false } }),
+      sleep: () => Promise.reject(new Error("退避等待被打断")),
+    });
+    writeConcurrencyConfig(2);
+
+    const started = await startTextOk(app, "段异常收口", uniformNovelText(12)); // 2 批 ⇒ 2 段（各 1 批）
+    const project = getCurrentProject()!;
+    await waitFor(() => siblingInFlight, "段 2 的批调用已在飞");
+    await new Promise((resolve) => setTimeout(resolve, 20)); // 段 1 的 rejection 链全是微任务：一个宏任务边界足够
+
+    // 兄弟段仍在写库 ⇒ 不提前上报 job 失败、轮次登记不注销（删除守卫 / 单批重跑不得与残留段重叠）
+    expect(getDecomposeJob(project.db)!.status).toBe("running");
+    expect(isDecomposeJobActive(started.jobId)).toBe(true);
+    expect(listDecomposeBatches(project.db, started.jobId).map((batch) => batch.status)).toEqual(["running", "running"]);
+
+    releaseSibling();
+    await pollJob(app, "段异常上报");
+    // 兄弟段跑完才上报：原错误消息保留、段 2 的批已 done、轮次登记已清（收尾语义与单段一致）
+    expect(getDecomposeJob(project.db)).toMatchObject({
+      status: "failed",
+      error: expect.stringContaining("退避等待被打断"),
+    });
+    expect(listDecomposeBatches(project.db, started.jobId).map((batch) => batch.status)).toEqual(["running", "done"]);
+    expect(isDecomposeJobActive(started.jobId)).toBe(false);
   });
 });
 
@@ -925,7 +971,7 @@ describe("拆解会话落盘", () => {
     expect(logs[1]).toMatchObject({ kind: "batch_start", batchSeq: 1, text: "批 1 开始（段 1/1；6 章；快照 名字 2 / 关系 1）" });
   });
 
-  it("DELETE /chat/sessions/<拆解会话>：暂停后当前批仍在飞 → 409；轮次收尾后可删", async () => {
+  it("DELETE /chat/sessions/<拆解会话>：暂停后当前批仍在飞 → 409（主 + 段 worker 都拦）；轮次收尾后可删", async () => {
     const model = await fakeModel();
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
@@ -951,12 +997,21 @@ describe("拆解会话落盘", () => {
     const busy = await app.request(`/api/v1/chat/sessions/${sessionId}`, { method: "DELETE", headers: HOST_HEADERS });
     expect(busy.status).toBe(409);
     expect((await busy.json()).error.code).toBe("DECOMPOSE_JOB_RUNNING");
+    // 段 worker 会话（`decompose-<jobId>-w<k>`）同样会被在途段原地重建 ⇒ 同受保护
+    const workerId = decomposeWorkerSessionId(started.jobId, 1);
+    const workerBusy = await app.request(`/api/v1/chat/sessions/${workerId}`, { method: "DELETE", headers: HOST_HEADERS });
+    expect(workerBusy.status).toBe(409);
+    expect((await workerBusy.json()).error.code).toBe("DECOMPOSE_JOB_RUNNING");
 
     release();
     await waitFor(() => !isDecomposeJobActive(started.jobId), "轮次收尾");
     const after = await app.request(`/api/v1/chat/sessions/${sessionId}`, { method: "DELETE", headers: HOST_HEADERS });
     expect(after.status).toBe(200);
-    expect(readdirSync(join(project.root, "sessions")).some((name) => name.endsWith(`_${sessionId}.jsonl`))).toBe(false);
+    expect(sessionIdsIn(project.root)).not.toContain(sessionId);
+    // 轮次收尾后 worker 会话也不再受保护（在飞批的 assistant 消息已让它落盘）
+    const workerAfter = await app.request(`/api/v1/chat/sessions/${workerId}`, { method: "DELETE", headers: HOST_HEADERS });
+    expect(workerAfter.status).toBe(200);
+    expect(sessionIdsIn(project.root)).not.toContain(workerId);
   });
 });
 

@@ -38,7 +38,7 @@ import {
 import { createDecomposeJob, createEntity, nowIso, SCHEMA_VERSION, updateJobStatus, upsertDocument, writeOutlineFile } from "@whispering233/ai-editor-db";
 import type { OutlineFileTree } from "@whispering233/ai-editor-shared";
 import type { RuntimeFactory } from "../chat-runtime.js";
-import { decomposeSessionId } from "../decompose/llm.js";
+import { decomposeSessionId, decomposeWorkerSessionId } from "../decompose/llm.js";
 import { errorHandler } from "../middleware/error.js";
 import {
   closeProject,
@@ -1077,17 +1077,21 @@ describe("项目切换清理", () => {
 // ============ 拆解会话守卫（docs/design/60-decompose.md §2.1 只读 / §7.2 在跑禁删） ============
 
 describe("拆解会话守卫（decompose- 前缀）", () => {
-  /** 落一枚真拆解会话文件（id = `decompose-<jobId>`，与 llm.ts 同一组装函数） */
-  function seedDecomposeSession(project: ProjectContext, jobId: string): { sessionId: string; file: string } {
-    const sessionId = decomposeSessionId(jobId);
+  /** 落一枚真会话文件（id 由调用方按 `decomposeSessionId` / `decomposeWorkerSessionId` 组装） */
+  function seedSessionFile(project: ProjectContext, sessionId: string, name: string): { sessionId: string; file: string } {
     const manager = SessionManager.create(project.root, projectSessionsDir(project.root), { id: sessionId });
-    manager.appendSessionInfo("《测试书》拆解");
+    manager.appendSessionInfo(name);
     // pi 要等 assistant 消息才落盘（`SessionManager._persist`）⇒ 夹具补一轮问答，文件才真的在磁盘上
     manager.appendMessage({ role: "user", content: [{ type: "text", text: "批 1 正文" }], timestamp: Date.now() });
     manager.appendMessage(fauxAssistantMessage("拆解产物"));
     const file = manager.getSessionFile();
     if (file === undefined) throw new Error("拆解会话未落盘");
     return { sessionId, file };
+  }
+
+  /** 主会话（id = `decompose-<jobId>`，与 llm.ts 同一组装函数） */
+  function seedDecomposeSession(project: ProjectContext, jobId: string): { sessionId: string; file: string } {
+    return seedSessionFile(project, decomposeSessionId(jobId), "《测试书》拆解");
   }
 
   /** 建一个 job 行（无批规划即可：守卫只看状态） */
@@ -1157,6 +1161,31 @@ describe("拆解会话守卫（decompose- 前缀）", () => {
 
     // 历史 job 的拆解会话（job 行已不是它）→ 无在跑轮次，同样可删
     const old = seedDecomposeSession(project, "job-old");
+    const removed = await app.request(`/api/v1/chat/sessions/${old.sessionId}`, { method: "DELETE", headers: HOST_HEADERS });
+    expect(removed.status).toBe(200);
+    expect(existsSync(old.file)).toBe(false);
+  });
+
+  it("DELETE /chat/sessions/:id：段 worker 会话（decompose-<jobId>-w<k>）与主会话同受「在跑禁删」保护", async () => {
+    const project = openProject();
+    const jobId = seedJob(project, "running");
+    const worker = seedSessionFile(project, decomposeWorkerSessionId(jobId, 2), "《测试书》拆解 · 段 2/2");
+    const app = buildApp(createChatRoutes());
+
+    // job 行 running ⇒ worker 会话同样拒删（不守的话在途段会把文件原地重建成无 header 版本）
+    const running = await app.request(`/api/v1/chat/sessions/${worker.sessionId}`, { method: "DELETE", headers: HOST_HEADERS });
+    expect(running.status).toBe(409);
+    expect((await running.json()).error.code).toBe("DECOMPOSE_JOB_RUNNING");
+    expect(existsSync(worker.file)).toBe(true);
+
+    // job 终态（不活跃）⇒ 放行
+    updateJobStatus(project.db, jobId, "done", nowIso());
+    const done = await app.request(`/api/v1/chat/sessions/${worker.sessionId}`, { method: "DELETE", headers: HOST_HEADERS });
+    expect(done.status).toBe(200);
+    expect(existsSync(worker.file)).toBe(false);
+
+    // 历史 job 的 worker 会话（job 行已不是它）→ 同样可删
+    const old = seedSessionFile(project, decomposeWorkerSessionId("job-old", 1), "《测试书》拆解 · 段 1/1");
     const removed = await app.request(`/api/v1/chat/sessions/${old.sessionId}`, { method: "DELETE", headers: HOST_HEADERS });
     expect(removed.status).toBe(200);
     expect(existsSync(old.file)).toBe(false);
