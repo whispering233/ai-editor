@@ -16,9 +16,13 @@
 //
 // 口径与 dev-only 简化（写进报告）：
 // - 「批大小」这个变量单独隔离：项目数据快照一律为空、不做跨批累积（无 db；快照是独立课题，§4.1）；
-// - 提示词复制自 runner.ts 的 `buildBatchPrompt`（未导出）——生产提示词一改，本 harness 即失真；
+// - 提示词与每批固定开销直接引用生产实现（`buildBatchPrompt` / `batchOverheadTokensUpperBound`）——单一来源，不复制措辞；
 // - 逐批串行、整批重试 ≤ `DECOMPOSE_BATCH_MAX_ATTEMPTS`（与生产同：缺章 → 重试 → 失败继续后续批）；
 // - 模型 = pi 设置里的默认模型（`resolveActiveSelection`，与生产同源），出站走生产同款 undici dispatcher。
+//
+// 存量工件的口径：`references/decompose-batch-experiment/*.json` 产生于**旧措辞 system 提示**（「source / target 必须是
+// 本章或上文出现过的名字」）+ 空快照；复测 = 重跑本 harness（自动改用生产措辞）。旧措辞压制跨批端点 ⇒
+// 实测落差对生产语义偏保守（判定不变）。
 //
 // 产物（gitignored）：`references/decompose-batch-experiment/` 各档原始 JSON + 对比报告 + 盲评材料；
 // 会话与临时文件：`/tmp/opencode/decompose-card3-run/<tier>/`。
@@ -33,29 +37,18 @@ import {
   DECOMPOSE_BATCH_TARGET_CHARS,
   planBatches,
 } from "../packages/server/dist/decompose/batching.js";
+import { normalizeExtraction } from "../packages/server/dist/decompose/extract.js";
 import {
-  DECOMPOSE_CHAPTER_MAX_CHARACTERS,
-  DECOMPOSE_CHAPTER_MAX_LOCATIONS,
-  DECOMPOSE_CHAPTER_MAX_RELATIONS,
-  DECOMPOSE_CHAPTER_MAX_SETTINGS,
-  DECOMPOSE_CHAPTER_SUMMARY_MAX_CHARS,
-  DECOMPOSE_DESCRIPTION_MAX_CHARS,
-  DECOMPOSE_MOTIVATION_MAX_CHARS,
-  DECOMPOSE_PERSONALITY_MAX_ITEMS,
-  DECOMPOSE_RELATION_TYPES,
-  normalizeExtraction,
-} from "../packages/server/dist/decompose/extract.js";
-import { DECOMPOSE_BATCH_MAX_ATTEMPTS, DECOMPOSE_ROLE_ORDER } from "../packages/server/dist/decompose/runner.js";
+  DECOMPOSE_BATCH_MAX_ATTEMPTS,
+  batchOverheadTokensUpperBound,
+  buildBatchPrompt,
+} from "../packages/server/dist/decompose/runner.js";
 import { DECOMPOSE_MENTION_MIN_CHAPTERS } from "../packages/server/dist/decompose/merge.js";
 import { decomposeSessionId, openDecomposeSession, parseModelJson } from "../packages/server/dist/decompose/llm.js";
 import { splitNovelWithSlices } from "../packages/server/dist/decompose/split.js";
 import { applyHttpProxySettings, configureHttpDispatcher } from "../packages/server/dist/http-dispatcher.js";
 import { getModelRuntime, getSettingsManager, resolveActiveSelection } from "../packages/server/dist/model-runtime.js";
-import {
-  DECOMPOSE_BATCH_OVERHEAD_TOKENS,
-  DECOMPOSE_CHARS_PER_TOKEN,
-  DECOMPOSE_OUTPUT_TOKENS_PER_CHAPTER,
-} from "../packages/server/dist/routes/decompose.js";
+import { DECOMPOSE_CHARS_PER_TOKEN, DECOMPOSE_OUTPUT_TOKENS_PER_CHAPTER } from "../packages/server/dist/routes/decompose.js";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const BOOK_PATH = join(repoRoot, "references", "三少爷的剑.txt");
@@ -109,32 +102,6 @@ function planForTier(chapters, tier) {
   return packBatches(chapters, spec.targetChars, spec.maxChapters);
 }
 
-// ── 提示词（来源 = runner.ts `buildBatchPrompt`，未导出 ⇒ dev-only 复制；此文件的数值一律由常量插值） ──
-
-function buildBatchPrompt(chapters, snapshotText) {
-  const snapshot = snapshotText === "" ? "（本批是首批，尚无上文）" : snapshotText;
-  const body = chapters.map((chapter) => `### 第${chapter.index}章 ${chapter.title}\n${chapter.text}`).join("\n\n");
-  const system = [
-    "你是小说拆解流水线的逐章抽取员。输入是长篇小说的其中若干章，输出必须是 JSON。",
-    "每章产出一个条目（chapterIndex = 输入里的章序），不得合并章节、不得遗漏——漏章会让整批重跑。",
-    "只输出 JSON（可以放 ```json 围栏），不要写解释文字。",
-    "",
-    '输出结构：{"chapters":[{"chapterIndex":1,"chapterTitle":"…","summary":"…","characters":[…],"settings":[…],"locations":[…],"relations":[…]}]}',
-    "",
-    "字段口径：",
-    `- summary：本章剧情摘要，不超过 ${DECOMPOSE_CHAPTER_SUMMARY_MAX_CHARS} 字；`,
-    "- characters[]：{name, role, description, alias, gender, age, race, personality, motivation}",
-    `- name 必填；role 建议用：${DECOMPOSE_ROLE_ORDER.join(" / ")}；`,
-    `- description 必填且不超过 ${DECOMPOSE_DESCRIPTION_MAX_CHARS} 字；alias 只填一个最常用的别称，其余别名写进 description 的「（又称：X、Y）」；`,
-    `- gender / age / race 只在文中明确时填；personality 不超过 ${DECOMPOSE_PERSONALITY_MAX_ITEMS} 条；motivation 不超过 ${DECOMPOSE_MOTIVATION_MAX_CHARS} 字；`,
-    `- 不要输出 ability_panel 与 custom_fields；每章人物不超过 ${DECOMPOSE_CHAPTER_MAX_CHARACTERS} 条；`,
-    `- settings[]：{name, description, tags, rules}——只抽对剧情有影响的设定；tags 写短标签、rules 写短句、description 不超过 ${DECOMPOSE_DESCRIPTION_MAX_CHARS} 字；每章不超过 ${DECOMPOSE_CHAPTER_MAX_SETTINGS} 条；`,
-    `- locations[]：{name, type, description}——不输出上级地点；description 不超过 ${DECOMPOSE_DESCRIPTION_MAX_CHARS} 字；每章不超过 ${DECOMPOSE_CHAPTER_MAX_LOCATIONS} 条；`,
-    `- relations[]：{source, target, type, evidence}——type 只能取 ${DECOMPOSE_RELATION_TYPES.join(" / ")}；source / target 必须是本章或上文出现过的名字；每章不超过 ${DECOMPOSE_CHAPTER_MAX_RELATIONS} 条。`,
-  ].join("\n");
-  return { system, user: [`【项目数据快照】${snapshot}`, "", "【本批正文】", body].join("\n") };
-}
-
 // ── 素材 ─────────────────────────────────────────────────────────────────────
 
 /** 读样本 → `split.ts` 真实现切章 → 章文本取归一化文本上的切片（不得拿 charCount 当偏移量） */
@@ -169,7 +136,7 @@ async function runBatch({ session, batch, chapters, seq, maxTokens }) {
   const startedMs = Date.now();
   const attempts = [];
   const chapterIndexes = batch.chapterIndexes;
-  const prompt = buildBatchPrompt(chapters, "");
+  const prompt = buildBatchPrompt({ chapters, snapshotText: "" });
   for (let attempt = 1; attempt <= DECOMPOSE_BATCH_MAX_ATTEMPTS; attempt++) {
     const attemptStartedMs = Date.now();
     try {
@@ -280,7 +247,7 @@ async function runTier({ tier, limit, runDir, dryRun }) {
       maxTokens: model.maxTokens,
       thinkingLevel,
     },
-    systemPrompt: buildBatchPrompt([], "").system,
+    systemPrompt: buildBatchPrompt({ chapters: [], snapshotText: "" }).system,
     snapshotPolicy: "empty（dev-only：无 db、不做跨批累积；只隔离批大小这一个变量）",
     jobId,
     sessionId: decomposeSessionId(jobId),
@@ -407,6 +374,22 @@ function chapterFacts(tierArtifact) {
   return map;
 }
 
+/**
+ * artifact 章集 → 标题行（估算每批固定开销用）：章序取规划批的并集，标题取结果里的章标题
+ * （失败批的章没有结果 → 空标题，只影响这个上界估算的几个 token，方向 = 轻微低估）。
+ * 开销本身**不在这里复述公式**——直接调生产 `batchOverheadTokensUpperBound`（与 `buildEstimate` 同源）。
+ */
+function artifactChapterHeadings(artifact) {
+  const titles = new Map();
+  for (const batch of artifact.batches) {
+    if (!batch.ok) continue;
+    for (const chapter of batch.result.chapters) titles.set(chapter.chapterIndex, chapter.chapterTitle ?? "");
+  }
+  return artifact.plannedBatches
+    .flatMap((batch) => batch.chapterIndexes)
+    .map((index) => ({ index, title: titles.get(index) ?? "" }));
+}
+
 function formatDuration(ms) {
   const totalSeconds = Math.round(ms / 1000);
   const minutes = Math.floor(totalSeconds / 60);
@@ -472,7 +455,8 @@ function buildReport() {
     const artifact = artifacts.get(tier);
     const u = artifact.totals.usage;
     const scopeChars = artifact.plannedBatches.reduce((sum, batch) => sum + batch.charCount, 0);
-    const estimatedInput = Math.ceil(scopeChars / DECOMPOSE_CHARS_PER_TOKEN) + artifact.plannedBatchCount * DECOMPOSE_BATCH_OVERHEAD_TOKENS;
+    const overheadTokens = batchOverheadTokensUpperBound(artifactChapterHeadings(artifact));
+    const estimatedInput = Math.ceil(scopeChars / DECOMPOSE_CHARS_PER_TOKEN) + artifact.plannedBatchCount * overheadTokens;
     const estimatedOutput = scopeChars > 0 ? artifact.chapterCount * DECOMPOSE_OUTPUT_TOKENS_PER_CHAPTER : 0;
     return [
       `${tier}（${artifact.tierLabel}）`,
@@ -481,6 +465,7 @@ function buildReport() {
       String(u.output),
       String(u.reasoning),
       `$${u.cost.toFixed(4)}`,
+      String(overheadTokens),
       String(estimatedInput),
       `${(u.input / estimatedInput).toFixed(2)}×`,
       String(estimatedOutput),
@@ -609,9 +594,15 @@ function buildReport() {
     "",
     mdTable(["档", "总墙钟", "批均墙钟", "最慢批", "批数", "调用次数", "重试批", "失败批", "失败分类", "输出打满上限批"], perfRows),
     "",
-    "## 3. Token 与成本（真实 usage；估算 = DECOMPOSE_CHARS_PER_TOKEN + 每批开销常量）",
+    "> 口径：批均墙钟 / 最慢批只统计**成功批**，失败尝试的墙钟未计入 ⇒ 失败档的每批耗时被低估（总量口径请对照上表「总墙钟」）。",
     "",
-    mdTable(["档", "输入 token", "缓存读", "输出 token", "思维 token", "成本", "估算输入", "真实/估算", "估算输出"], tokenRows),
+    "## 3. Token 与成本",
+    "",
+    `估算输入 = ⌈范围字数 / \`DECOMPOSE_CHARS_PER_TOKEN\`⌉ + 批数 × 每批固定开销；开销**不复刻公式**——取生产 \`batchOverheadTokensUpperBound\`（与路由 \`buildEstimate\` 同源，按 artifact 章集的上界）。`,
+    "",
+    mdTable(["档", "输入 token", "缓存读", "输出 token", "思维 token", "成本", "每批固定开销", "估算输入", "真实/估算", "估算输出"], tokenRows),
+    "",
+    "> 口径：token 汇总只累加**成功批**（失败尝试拿不到 usage）、每批均值同 §2 ⇒ 失败档的实际成本被低估；「思维 token」是「输出 token」的子集（同一 usage 的细分），不是额外一项。",
     "",
     "## 4. 抽取完整性（质量代理）",
     "",
