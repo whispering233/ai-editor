@@ -159,13 +159,25 @@ describe("会话状态栏（session-status-bar 契约：只读观测层 / 段无
     expect(out).toContain("输入 1000 · 输出 2000 · 缓存读 500 · 缓存写 0 · 合计 3500");
   });
 
-  it("视觉契约：一行 caption 字号 + tabular-nums，容器查询挂在行上（`@container` + 两级阈值）", () => {
+  it("视觉契约：一行 caption 字号 + tabular-nums，容器查询挂在行上；两级阈值**逐段**对应（累计 → 第一级、缓存 → 第二级）", () => {
     const out = html(<SessionStatusBarView view={fullView} />);
     expect(out).toContain("@container");
     expect(out).toContain("text-xs");
     expect(out).toContain("tabular-nums");
-    expect(out).toContain("@max-[420px]:hidden"); // 第一级：隐累计 tokens
-    expect(out).toContain("@max-[340px]:hidden"); // 第二级：再隐缓存
+    // 段 ↔ 阈值映射（互换两个字面量即红；常量值本身的断言在 lib 层）
+    expect(out).toMatch(/class="@max-\[420px\]:hidden">累计 3\.5k<\/span>/);
+    expect(out).toMatch(/class="@max-\[340px\]:hidden">缓存 25%<\/span>/);
+  });
+
+  it("占用未知（压缩后 tokens / percent 为 null）→ `? · 1M` 且不画条（三态中的第二态走真组件 SSR）", () => {
+    const view = sessionStatusView({
+      ...fullInput,
+      contextUsage: { percent: null, tokens: null, contextWindow: 1_000_000 },
+    })!;
+    const out = html(<SessionStatusBarView view={view} />);
+    expect(out).toContain("? · 1M");
+    expect(out).not.toContain("w-16"); // 无条（轨道元素不渲染）
+    expect(out).not.toContain("style="); // 也没有条填充
   });
 
   it("无 speed（历史会话）：速度段与速度明细行都不渲染", () => {

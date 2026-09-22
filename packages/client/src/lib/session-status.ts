@@ -41,7 +41,7 @@ export interface ContextBarView {
   text: string;
 }
 
-/** 状态栏整行视图（null = 无任何数据 → 整行不渲染） */
+/** 状态栏整行视图（null = 无任何可见内容 → 整行不渲染） */
 export interface SessionStatusView {
   /** 占用段（null = 连窗口都没有 → 整段隐藏） */
   context: ContextBarView | null;
@@ -112,11 +112,9 @@ export function usageBarView(usage: ChatContextUsage | null): ContextBarView | n
 
 // ============ 行内段文案（无数据 → null，段不渲染） ============
 
-/** 缓存段：有命中率报命中率，否则退「读 + 写」量；两者皆无 → 隐藏 */
+/** 缓存段：命中率（服务端分母为 0 时省略键——那时读/写量也必为 0，段随之隐藏；读/写量只走 hover） */
 function cacheSegmentText(usage: ChatUsage): string | null {
-  if (usage.cacheHitRate !== undefined) return `缓存 ${Math.round(usage.cacheHitRate * 100)}%`;
-  const volume = usage.cacheRead + usage.cacheWrite;
-  return volume > 0 ? `缓存 ${compactTokens(volume)}` : null;
+  return usage.cacheHitRate === undefined ? null : `缓存 ${Math.round(usage.cacheHitRate * 100)}%`;
 }
 
 /** 单段文案（null = 该段无数据）；成本为 0 = 模型无价格配置 → 隐藏（DESIGN + §2.1） */
@@ -169,14 +167,16 @@ function titleLines(input: SessionStatusInput): string[] {
 }
 
 /**
- * 状态栏整行视图：usage / 占用段 / speed 全为空 → null（整行不渲染，不常态白占消息区高度）。
+ * 状态栏整行视图：**无任何可见内容 → null**（整行不渲染，不常态白占消息区高度）。
+ * 「无内容」包括账目全零（无 usage 条目的会话 `sessionUsage()` 恒返回全零对象）——
+ * 那种情形只剩一段零账目 title，渲染出来就是一个只有 `mt-1` 的空行。
  * `speed` 只对进行中的会话有效（历史会话无样本）→ 速度段与明细一并消失。
  */
 export function sessionStatusView(input: SessionStatusInput): SessionStatusView | null {
-  const lines = titleLines(input);
-  if (lines.length === 0) return null;
+  const context = usageBarView(input.contextUsage);
   const segments = STATUS_SEGMENT_ORDER.map((key) => ({ key, text: segmentText(key, input) })).filter(
     (segment): segment is SessionStatusSegment => segment.text !== null,
   );
-  return { context: usageBarView(input.contextUsage), segments, title: lines.join("\n") };
+  if (context === null && segments.length === 0) return null;
+  return { context, segments, title: titleLines(input).join("\n") };
 }

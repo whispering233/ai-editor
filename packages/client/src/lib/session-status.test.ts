@@ -124,18 +124,29 @@ describe("sessionStatusView（段清单 / 无数据即隐藏 / title 组装）",
     ]);
   });
 
-  it("成本为 0（模型无价格配置）→ 费用段隐藏；无命中率时缓存段退「读 + 写」量；全为 0 → 缓存段也隐藏", () => {
-    const noPrice = sessionStatusView({
+  it("费用段：成本为 0（模型无价格配置）→ 隐藏；缓存段只报命中率（分母为 0 时服务端省略键 ⇒ 读/写量也必为 0 ⇒ 整段隐藏，读/写量只走 hover）", () => {
+    const noPriceNoCache = sessionStatusView({
       contextUsage: null,
-      usage: usage({ cost: 0, cacheHitRate: undefined, cacheRead: 1_200, cacheWrite: 300 }),
+      usage: usage({ cost: 0, cacheHitRate: undefined, cacheRead: 0, cacheWrite: 0 }),
       speed: null,
     });
-    expect(noPrice?.segments.map((s) => s.key)).toEqual(["cache", "total"]);
-    expect(noPrice?.segments[0].text).toBe("缓存 1.5k");
+    expect(noPriceNoCache?.segments.map((s) => s.key)).toEqual(["total"]);
 
-    const empty = sessionStatusView({ contextUsage: null, usage: usage({ cost: 0, cacheRead: 0, cacheWrite: 0, total: 0 }), speed: null });
-    expect(empty?.segments).toEqual([]);
-    expect(empty?.context).toBeNull();
+    const zeroRate = sessionStatusView({
+      contextUsage: null,
+      usage: usage({ cacheHitRate: 0 }),
+      speed: null,
+    });
+    expect(zeroRate?.segments.some((s) => s.text === "缓存 0%")).toBe(true); // 真实 0% 是有效值，不隐藏
+  });
+
+  it("账目全零（无 usage 条目的会话）+ 无占用 / 无速度 → null（不留只有 mt-1 的空行）", () => {
+    const empty = sessionStatusView({
+      contextUsage: null,
+      usage: usage({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0, cost: 0 }),
+      speed: null,
+    });
+    expect(empty).toBeNull();
   });
 
   it("未知占用 + 历史会话（无 speed）→ `? · 窗口` 段仍在，速度段不渲染", () => {
@@ -145,7 +156,7 @@ describe("sessionStatusView（段清单 / 无数据即隐藏 / title 组装）",
       speed: null,
     });
     expect(view?.context).toEqual({ percent: null, text: "? · 1M" });
-    expect(view?.segments.map((s) => s.key)).toEqual(["cost", "cache", "total"]);
+    expect(view?.segments.map((s) => s.key)).toEqual(["cost", "total"]); // 无命中率 ⇒ 缓存段隐藏
     expect(view?.title).not.toContain("tok/s");
   });
 
