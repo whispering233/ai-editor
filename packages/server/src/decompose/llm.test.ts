@@ -1,5 +1,5 @@
 // 拆解模型调用底座测试：**一律走 pi 的 Agent 路径**（不自建 fetch / 不直连 completeSimple）
-// + **每 job 一枚落盘会话、每 turn 独立成根**（卡 22.2，契约 = docs/design/60-decompose.md §2.1）。
+// + **每 job 主会话 + 每段 worker 会话、每 turn 独立成根**（卡 22.2，契约 = docs/design/60-decompose.md §2.1 / §2.2）。
 //
 // 钉住这几件事（都是 2026-09 实测踩过的坑）：
 // 1. provider 特化头由 **pi** 注入：opencode 系的 `x-opencode-session`（缺则 400 MissingSessionID）
