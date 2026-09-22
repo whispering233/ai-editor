@@ -241,12 +241,12 @@
 
 ### GET /api/v1/decompose/job/log
 
-拆解过程时间线（读拆解会话里的 `custom` 过程条目；进度页展示）。
+拆解过程时间线（读拆解会话里的 `custom` 过程条目；进度页展示）——**合并主会话与各 worker 会话**（分段并发，见设计 §2.2），按时间排序。
 
 ```typescript
 // Res: 200
 {
-  sessionId: string;           // decompose-<jobId>
+  sessionId: string;           // 主会话 id（decompose-<jobId>；worker 会话见设计 §2.2）
   entries: Array<{
     id: string;                // 会话文件里的 entry id
     at: string;                // ISO 8601
@@ -263,7 +263,7 @@
 
 ### POST /api/v1/decompose/job/pause
 
-中止当前 job（当前批跑完即停，结果不浪费）。
+中止当前 job（**每段**当前批跑完即停，结果不浪费）。
 
 ```typescript
 // Res: 200
@@ -275,7 +275,7 @@
 
 ### POST /api/v1/decompose/job/resume
 
-从第一个未完成批续拆（跳过 `done` 的批）。
+从第一个未完成批续拆（跳过 `done` 的批）；段划分取 job 快照（配置改动不影响已建 job）。
 
 ```typescript
 // Res: 200
