@@ -60,8 +60,9 @@ import {
   MENU_KEY_DELETE_SESSION,
   sessionItemMenu,
   sessionItems,
-  usageBarView,
 } from "./ChatPanel";
+import { SessionStatusBar, SessionStatusBarView } from "./session-status-bar";
+import { sessionStatusView } from "../../lib/session-status";
 import type { ChatMessageView } from "../../stores/chat";
 
 const mocked = {
@@ -129,21 +130,61 @@ afterEach(() => {
   });
 });
 
-describe("占用条（usage-bar 契约：口径 = pi getContextUsage 的 percent）", () => {
-  it("percent 直接用服务端值；tooltip 给 tokens / contextWindow 两个数值", () => {
-    const bar = usageBarView({ percent: 12, tokens: 1200, contextWindow: 10000 });
-    expect(bar?.percent).toBe(12);
-    expect(bar?.title).toContain("1200");
-    expect(bar?.title).toContain("10000");
+describe("会话状态栏（session-status-bar 契约：只读观测层 / 段无数据即隐藏 / 窄栏容器查询）", () => {
+  const html = (node: ReactNode) => renderToString(<div>{node}</div>).replace(/<!--[^>]*-->/g, "");
+
+  // 富数据视图：占用 42% · 1M + 账目 + 速度（无数据的段/明细行由 lib 层单测覆盖）
+  const fullInput = {
+    contextUsage: { percent: 42, tokens: 420_000, contextWindow: 1_000_000 },
+    usage: {
+      input: 1000,
+      output: 2000,
+      cacheRead: 500,
+      cacheWrite: 0,
+      total: 3500,
+      cost: 0.42,
+      cacheHitRate: 0.25,
+      subscription: false,
+    },
+    speed: { outputTokens: 2000, ms: 30_000, tps: 66.6 },
+  };
+  const fullView = sessionStatusView(fullInput)!;
+
+  it("有数据：占用段 + 费用 / 速度 / 缓存 / 累计 五段 compact 值齐渲染，hover 给精确账目（多行）", () => {
+    const out = html(<SessionStatusBarView view={fullView} />);
+    for (const text of ["42% · 1M", "$0.420", "67 tok/s", "缓存 25%", "累计 3.5k"]) {
+      expect(out).toContain(`>${text}</span>`);
+    }
+    expect(out).toContain("上下文占用：420000 / 1000000 tokens");
+    expect(out).toContain("输入 1000 · 输出 2000 · 缓存读 500 · 缓存写 0 · 合计 3500");
   });
 
-  it("percent 越界 clamp 到 0..100（四舍五入可能略微越界）", () => {
-    expect(usageBarView({ percent: 100.4, tokens: 1, contextWindow: 1 })?.percent).toBe(100);
-    expect(usageBarView({ percent: -0.2, tokens: 0, contextWindow: 10 })?.percent).toBe(0);
+  it("视觉契约：一行 caption 字号 + tabular-nums，容器查询挂在行上（`@container` + 两级阈值）", () => {
+    const out = html(<SessionStatusBarView view={fullView} />);
+    expect(out).toContain("@container");
+    expect(out).toContain("text-xs");
+    expect(out).toContain("tabular-nums");
+    expect(out).toContain("@max-[420px]:hidden"); // 第一级：隐累计 tokens
+    expect(out).toContain("@max-[340px]:hidden"); // 第二级：再隐缓存
   });
 
-  it("无数据 → null（整条隐藏）", () => {
-    expect(usageBarView(null)).toBeNull();
+  it("无 speed（历史会话）：速度段与速度明细行都不渲染", () => {
+    const noSpeed = sessionStatusView({ ...fullInput, speed: null })!;
+    const out = html(<SessionStatusBarView view={noSpeed} />);
+    expect(out).not.toContain("tok/s");
+    expect(out).toContain("42% · 1M");
+  });
+
+  it("整行无数据（SSR 初始态 = store 全 null）→ 整行不渲染", () => {
+    const out = html(<SessionStatusBar />);
+    expect(out).not.toContain("@container");
+    expect(out).not.toContain("上下文占用");
+  });
+
+  it("拆解只读会话：输入区整体不渲染（状态栏随之不渲染）", () => {
+    const out = html(<ComposerArea readonly />);
+    expect(out).not.toContain("@container");
+    expect(out).not.toContain("累计");
   });
 });
 

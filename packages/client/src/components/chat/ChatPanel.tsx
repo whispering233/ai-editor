@@ -48,10 +48,10 @@ import {
 import {
   useChatStore,
   type ChatMessageView,
-  type ContextUsage,
   type FocusContext,
   type ProposalCard,
 } from "../../stores/chat";
+import { SessionStatusBar } from "./session-status-bar";
 import type { ChatSessionSummary } from "@whispering233/ai-editor-shared";
 
 import { formatRelativeTime } from "@whispering233/ai-editor-shared";
@@ -136,8 +136,9 @@ export const asToolCall = (c: unknown): ToolCallShape => {
   return wire as ToolCallShape;
 };
 
-// ============ 输入区配置行（需求 3）：模型选择 + 上下文占用 + 思考强度 ============
+// ============ 输入区配置行：模型选择 + 思考强度 ============
 // 位置：输入框正下方（用户反馈 #1——原先占着标题行下方，白占消息流高度）；两端对齐（反馈 #2）
+// 回归纯配置：占用条已随会话状态栏下移一行（DESIGN.md `session-status-bar`——观测层与交互控件分层）
 
 /** 思考强度档位（参考 pi ThinkingLevel：off/minimal/low/medium/high/xhigh/max；显示英文原文） */
 const THINKING_LEVEL_OPTIONS: ThinkingLevel[] = [
@@ -150,28 +151,8 @@ const THINKING_LEVEL_OPTIONS: ThinkingLevel[] = [
   "max",
 ];
 
-/**
- * 占用条视图数据（导出供渲染走查测试）：口径 = pi `getContextUsage()`（`contextUsage` 随
- * turn_end / agent_end 帧下发，percent = tokens / 模型 contextWindow，见 `docs/ui/DESIGN.md` `usage-bar`）。
- * - 无数据 / 非法负载（parseContextUsage 已拦）→ null（调用方据此整条隐藏）
- * - **占用未知**（压缩后 `tokens` / `percent` 为 null）→ null（中间态：`? · 窗口` 由状态栏渲染，
- *   不在此凑 0%）；占比 clamp 到 0..100（服务端四舍五入可能略微越界）
- */
-export function usageBarView(
-  usage: ContextUsage | null,
-): { percent: number; title: string } | null {
-  if (usage === null || usage.percent === null || usage.tokens === null) return null;
-  const percent = Math.min(100, Math.max(0, Math.round(usage.percent)));
-  return {
-    percent,
-    title: `上下文占用：${usage.tokens} / ${usage.contextWindow} tokens`,
-  };
-}
-
 function ComposerConfigRow() {
   const [settings, setSettings] = useState<SettingsLlmConfig | null>(null);
-  const contextUsage = useChatStore((s) => s.contextUsage);
-  const { token } = theme.useToken();
 
   // 挂载后拉取 LLM 设置（激活 provider + 各家模型目录/key 状态 + 思考强度；失败静默——配置行降级隐藏）；
   // 无项目时本组件不渲染（父层 `!disabled`），故不需要 disabled 透传
@@ -192,9 +173,6 @@ function ComposerConfigRow() {
   const currentModel = activeProvider?.models.find((m) => m.id === settings?.model) ?? null;
   /** 激活 provider 无有效 key → 整条工具条禁用（提示去设置页配 key） */
   const activeKeyless = settings !== null && (activeProvider === null || !activeProvider.authConfigured);
-  // 上下文占用：最近一轮的真实占用（`contextUsage`——tokens / 模型 contextWindow，
-  // 见 docs/ui/DESIGN.md `usage-bar`）；无数据 → bar=null → 整条隐藏
-  const bar = usageBarView(contextUsage);
 
   /** 切换模型（选中即激活 provider+model 一对——跨 provider 选择时 key 来源同步切换） */
   function changeModel(composite: string): void {
@@ -212,14 +190,6 @@ function ComposerConfigRow() {
   }
 
   if (settings === null) return null; // 设置未拉取：不阻塞聊天
-
-  // 占用条填充色：≥90% error、≥70% warning、其余 primary（色值只经 antd token——旧实现写死 bg-amber-500）
-  const usageColor =
-    bar === null || bar.percent < 70
-      ? token.colorPrimary
-      : bar.percent >= 90
-        ? token.colorError
-        : token.colorWarning;
 
   return (
     <div className="mt-2 flex items-center justify-between gap-2">
@@ -256,17 +226,6 @@ function ComposerConfigRow() {
           })}
       />
       <div className="flex shrink-0 items-center gap-1.5">
-        {bar !== null && (
-          <div className="flex shrink-0 items-center gap-1" title={bar.title}>
-            <div className="h-1.5 w-16 overflow-hidden rounded-full bg-accent">
-              <div
-                className="h-full rounded-full"
-                style={{ width: `${bar.percent}%`, background: usageColor }}
-              />
-            </div>
-            <span className="text-xs text-muted-foreground">{bar.percent}%</span>
-          </div>
-        )}
         <Select
           size="small"
           className="w-max shrink-0"
@@ -1012,8 +971,9 @@ function InputArea() {
         placeholder={streaming ? "AI 思考中…" : "输入消息…"}
         loading={streaming}
       />
-      {/* 配置行：输入框下方（模型在左端、占用与思考强度在右端） */}
+      {/* 配置行：输入框下方（模型在左端、思考强度在右端）；状态栏另起一行（只读观测层） */}
       <ComposerConfigRow />
+      <SessionStatusBar />
     </div>
   );
 }
