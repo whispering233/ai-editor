@@ -957,6 +957,40 @@ export const chatSessionsResSchema = z.object({
   sessions: z.array(chatSessionSummarySchema),
 });
 
+// ============ 会话用量（docs/api/80-api-chat.md §会话用量字段；docs/design/20-context.md §2.1） ============
+
+/** 占用条字段（pi `getContextUsage()`；`tokens` / `percent` 为 `null` = 压缩后到下一次模型响应之间占用未知） */
+export const chatContextUsageSchema = z.object({
+  tokens: z.number().nonnegative().nullable(),
+  percent: z.number().nonnegative().nullable(),
+  contextWindow: z.number().int().positive(), // 正整数时必给
+});
+export type ChatContextUsage = z.infer<typeof chatContextUsageSchema>;
+
+/**
+ * 会话累计用量（`turn_end` / `agent_end` 帧与历史消息响应共用同一形状）。
+ * 口径 = pi `AgentSession.getSessionStats()`；服务端唯一实现点 = agent 包 `sessionUsage()`。
+ */
+export const chatUsageSchema = z.object({
+  input: z.number().nonnegative(),
+  output: z.number().nonnegative(),
+  cacheRead: z.number().nonnegative(),
+  cacheWrite: z.number().nonnegative(),
+  total: z.number().nonnegative(), // input + output + cacheRead + cacheWrite
+  cost: z.number().nonnegative(), // 美元；模型无价格配置时恒 0
+  cacheHitRate: z.number().min(0).max(1).optional(), // 命中率 = cacheRead / (input + cacheRead + cacheWrite)；分母为 0 时省略该键
+  subscription: z.boolean(), // 末条 assistant 消息的 provider 用订阅凭据 ⇒ cost 仅估算
+});
+export type ChatUsage = z.infer<typeof chatUsageSchema>;
+
+/** 解码速度（仅 assistant 的 `message_end` 帧；历史接口不带——时序不落盘） */
+export const chatSpeedSchema = z.object({
+  outputTokens: z.number().positive(), // 该条 assistant 消息的 `usage.output`
+  ms: z.number().nonnegative(), // 首个增量 → message_end（不含首字延迟）
+  tps: z.number().positive(),
+});
+export type ChatSpeed = z.infer<typeof chatSpeedSchema>;
+
 // GET /api/v1/chat/sessions/:id/messages（按时间升序；tool 消息经 toolCallId 关联 assistant 消息的 toolCalls[].id）
 
 /** 思维链投影（列表/历史只给预览 + 定位参数；全文走按需端点，见 docs/api/80-api-chat.md） */
@@ -988,6 +1022,7 @@ export const chatMessagesResSchema = z.object({
       createdAt: z.string(),
     }),
   ),
+  usage: chatUsageSchema, // 会话累计用量（与帧侧同一实现；形状见「会话用量」）
 });
 
 // GET /api/v1/chat/sessions/:id/messages/:messageId/thinking
