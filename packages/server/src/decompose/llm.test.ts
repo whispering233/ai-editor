@@ -27,6 +27,8 @@ import { DECOMPOSE_SESSION_ID_PREFIX } from "@whispering233/ai-editor-shared";
 import {
   DECOMPOSE_LOG_CUSTOM_TYPE,
   decomposeSessionId,
+  decomposeWorkerSessionId,
+  decomposeWorkerSessionPrefix,
   openDecomposeSession,
   type DecomposeSession,
 } from "./llm.js";
@@ -59,6 +61,28 @@ describe("decomposeSessionId（会话 id 的唯一组装点）", () => {
   it("清不出合法 id → 抛错（静默让 pi 自生成会得到不带前缀的会话文件，守卫认不出它）", () => {
     expect(() => decomposeSessionId("")).toThrow();
     expect(() => decomposeSessionId("---")).toThrow();
+  });
+});
+
+describe("decomposeWorkerSessionId / decomposeWorkerSessionPrefix（段 worker 会话 id）", () => {
+  it("主 id 经同一清洗函数组装，`-w<段号>` 追加在清洗结果之后", () => {
+    // job id 尾部带 '-'（nanoid 实测形态）：清洗在主 id 里完成，后缀不会撞清洗规则
+    expect(decomposeWorkerSessionId("job-L-3IBP5CGYWvbRKY3lzM-", 2)).toBe("decompose-job-L-3IBP5CGYWvbRKY3lzM-w2");
+    expect(decomposeWorkerSessionId("job/ab c", 1)).toBe("decompose-jobabc-w1");
+    expect(decomposeWorkerSessionId("job-x", 12)).toBe("decompose-job-x-w12");
+  });
+
+  it("前缀 = 主 id + `-w`（prune / 时间线合并按它命中一个 job 的全部 worker）", () => {
+    const prefix = decomposeWorkerSessionPrefix("job-abc");
+    expect(prefix).toBe(`${decomposeSessionId("job-abc")}-w`);
+    expect(decomposeWorkerSessionId("job-abc", 3).startsWith(prefix)).toBe(true);
+    // 主会话 id 不以该前缀开头（精确 id 命中，不会把主会话当 worker）
+    expect(decomposeSessionId("job-abc").startsWith(prefix)).toBe(false);
+  });
+
+  it("清不出合法 id → 抛错（与主 id 同口径）", () => {
+    expect(() => decomposeWorkerSessionId("---", 1)).toThrow();
+    expect(() => decomposeWorkerSessionPrefix("---")).toThrow();
   });
 });
 
@@ -194,6 +218,45 @@ describe("openDecomposeSession 经 pi 的 Agent 路径（无工具单轮会话�
     expect(sessionEntries(projectRoot, session.sessionId).find((entry) => entry.type === "session_info")?.name).toBe(
       "《测试书》拆解",
     );
+  });
+
+  it("段 worker 会话：id = 主 id + `-w<段号>`，会话名 = 「《书名》拆解 · 段 k/N」，与主会话各自一枚文件", async () => {
+    const { runtime, script } = await runtimeFor("deepseek");
+    script(["ok", "ok", "ok"]);
+    const projectRoot = tempDir();
+    const deps = { runtime, settings: settings("deepseek") };
+
+    const main = await openDecomposeSession(deps, { projectRoot, jobId: "job-seg", bookName: "测试书" });
+    const worker = await openDecomposeSession(deps, {
+      projectRoot,
+      jobId: "job-seg",
+      bookName: "测试书",
+      segment: { index: 2, total: 3 },
+    });
+    await main.complete({ system: "S", user: "主会话轮" });
+    await worker.complete({ system: "S", user: "段会话轮" });
+
+    expect(main.sessionId).toBe(decomposeSessionId("job-seg"));
+    expect(worker.sessionId).toBe(decomposeWorkerSessionId("job-seg", 2));
+    expect(worker.sessionId).toBe(`${main.sessionId}-w2`);
+    // 两枚文件各自存在（worker 不并进主会话：一次拆解 = 一个入口 + 每段完整回放）
+    for (const session of [main, worker]) {
+      expect(readdirSync(join(projectRoot, "sessions")).filter((name) => name.endsWith(`_${session.sessionId}.jsonl`))).toHaveLength(1);
+    }
+    expect(sessionEntries(projectRoot, main.sessionId).find((entry) => entry.type === "session_info")?.name).toBe("《测试书》拆解");
+    expect(sessionEntries(projectRoot, worker.sessionId).find((entry) => entry.type === "session_info")?.name).toBe(
+      "《测试书》拆解 · 段 2/3",
+    );
+    // worker 续写同一枚（resume 重算段 ⇒ 段号稳定 ⇒ 复用同一文件）
+    const again = await openDecomposeSession(deps, {
+      projectRoot,
+      jobId: "job-seg",
+      bookName: "测试书",
+      segment: { index: 2, total: 3 },
+    });
+    await again.complete({ system: "S", user: "段会话第二轮" });
+    expect(readdirSync(join(projectRoot, "sessions")).filter((name) => name.endsWith(`_${worker.sessionId}.jsonl`))).toHaveLength(1);
+    expect(sessionEntries(projectRoot, worker.sessionId).filter((entry) => entry.type === "session_info")).toHaveLength(1);
   });
 
   it("每 turn 新根：两轮 prompt 后两条 parentId: null 的 message，且第二轮请求体不含第一轮内容", async () => {

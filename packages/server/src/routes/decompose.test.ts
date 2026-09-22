@@ -5,7 +5,7 @@
 // 注入内存运行时 + faux 费率 → 按 pi 模型目录 `Model.cost` 算出）。
 // fixture 全部自造，不读 test-project/（该目录整体不入库）。
 
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -50,8 +50,9 @@ import {
 } from "../middleware/project.js";
 import { readLastProject } from "../last-project.js";
 import { DECOMPOSE_BATCH_TARGET_CHARS } from "../decompose/batching.js";
+import { DEFAULT_DECOMPOSE_CONCURRENCY } from "../decompose/config.js";
 import { ingestDecomposeProject } from "../decompose/job.js";
-import { DECOMPOSE_LOG_CUSTOM_TYPE, decomposeSessionId } from "../decompose/llm.js";
+import { DECOMPOSE_LOG_CUSTOM_TYPE, decomposeSessionId, decomposeWorkerSessionId } from "../decompose/llm.js";
 import { DECOMPOSE_SNAPSHOT_MAX_CHARS, isDecomposeJobActive } from "../decompose/runner.js";
 import { splitNovelWithSlices } from "../decompose/split.js";
 import { setProjectRoot } from "./project.js";
@@ -399,7 +400,12 @@ async function waitFor(predicate: () => boolean, label: string): Promise<void> {
  * 直接跑 S1（**不经 route**，因此不起 S2 批循环）：进度投影 / 单批结果 / 结果形状守卫这类
  * 「批执行前」的状态需要确定性夹具——经 route 建 job 的话，后台批循环会实时改写批行（赛跑）。
  */
-function ingestProject(name: string, chapterCount = 6, scope: { start?: number; end?: number } = {}): string {
+function ingestProject(
+  name: string,
+  chapterCount = 6,
+  scope: { start?: number; end?: number } = {},
+  concurrency = 1,
+): string {
   const project = initProject(bookDir(name), { name });
   setCurrentProject(project);
   const split = splitNovelWithSlices(bytesOf(novelText(chapterCount)));
@@ -411,6 +417,7 @@ function ingestProject(name: string, chapterCount = 6, scope: { start?: number; 
     scopedChapters: split.result.chapters.filter((chapter) => chapter.index >= start && chapter.index <= end),
     scopeStart: start,
     scopeEnd: end,
+    concurrency,
     model: null,
     now: nowIso(),
   });
@@ -480,6 +487,24 @@ describe("POST /decompose/start（S1 建档）", () => {
     // 批规划与 analyze 预估同源（同一 planBatches，确定性）
     const preview = await analyzeOk(app, bytesOf(novelText(6)), `file_name=a.txt`);
     expect(data.batchCount).toBe(preview.estimate.batchCount);
+  });
+
+  it("并发段数快照：start 建 job 时读创作根配置一次（缺配置 → 缺省）", async () => {
+    const deps = await runtimeWithCost(0.5, 1.5, [batchJsonOf([1, 2, 3, 4, 5, 6])]);
+    const app = buildApp(deps);
+
+    // 无配置 → 缺省
+    const bare = await startOk(app, bytesOf(novelText(6)), startQuery("缺配置并发"));
+    expect(getDecomposeJob(getCurrentProject()!.db)!.concurrency).toBe(DEFAULT_DECOMPOSE_CONCURRENCY);
+    await waitFor(() => !isDecomposeJobActive(bare.jobId), "首轮收尾");
+
+    // 写创作根配置 → 下一枚 job 快照配置值（改配置只影响新 job）
+    mkdirSync(join(tmpRoot, ".ai-editor"), { recursive: true });
+    writeFileSync(join(tmpRoot, ".ai-editor", "config.json"), JSON.stringify({ decompose: { concurrency: 3 } }));
+    const configured = await startOk(app, bytesOf(novelText(6)), startQuery("有配置并发"));
+    expect(getDecomposeJob(getCurrentProject()!.db)!.id).toBe(configured.jobId);
+    expect(getDecomposeJob(getCurrentProject()!.db)!.concurrency).toBe(3);
+    await waitFor(() => !isDecomposeJobActive(configured.jobId), "第二轮收尾");
   });
 
   it("多卷书：大纲按卷标记分卷（卷→章；卷标题 = 切分卷标题）", async () => {
@@ -671,6 +696,7 @@ describe("GET /decompose/job（进度轮询）", () => {
       scopeStart: 1,
       scopeEnd: 1,
       batchTargetChars: DECOMPOSE_BATCH_TARGET_CHARS,
+      concurrency: 1,
       model: null,
       batches: [{ seq: 1, chapterIds: [] }],
       now: "2026-08-01T10:00:00Z",
@@ -690,6 +716,7 @@ describe("GET /decompose/job（进度轮询）", () => {
         scopeStart: 1,
         scopeEnd: 1,
         batchTargetChars: DECOMPOSE_BATCH_TARGET_CHARS,
+        concurrency: 1,
         model: null,
         batches: [],
         now,
@@ -751,19 +778,25 @@ interface SeededLog {
   kind: string;
   text: string;
   batchSeq?: number;
+  /** 落盘时刻（缺省 = 现在；合并排序断言要可控的时间线） */
+  at?: string;
 }
 
 /**
- * 落一枚真拆解会话文件（会话 id = `decompose-<jobId>`，与 llm.ts 同一组装函数）并写入条目。
- * pi 只在文件里出现 assistant 消息后才落盘（`SessionManager._persist`）⇒ 夹具补一轮问答。
+ * 落一枚真拆解会话文件（会话 id 由调用方按 `decomposeSessionId` / `decomposeWorkerSessionId` 组装）
+ * 并写入条目。pi 只在文件里出现 assistant 消息后才落盘（`SessionManager._persist`）⇒ 夹具补一轮问答。
  * 同时混入非 decompose 条目（其它 customType / 原文消息 / 元数据），供「滤除」断言用。
  */
-function seedDecomposeSession(projectRoot: string, jobId: string, logs: readonly SeededLog[]): string {
-  const sessionId = decomposeSessionId(jobId);
+function seedSessionFile(
+  projectRoot: string,
+  sessionId: string,
+  logs: readonly SeededLog[],
+  sessionName = "《时间线》拆解",
+): string {
   const manager = SessionManager.create(projectRoot, projectSessionsDir(projectRoot), { id: sessionId });
-  manager.appendSessionInfo("《时间线》拆解");
+  manager.appendSessionInfo(sessionName);
   for (const log of logs) {
-    manager.appendCustomEntry(DECOMPOSE_LOG_CUSTOM_TYPE, { ...log, at: new Date().toISOString() });
+    manager.appendCustomEntry(DECOMPOSE_LOG_CUSTOM_TYPE, { ...log, at: log.at ?? new Date().toISOString() });
   }
   manager.appendCustomEntry("other-extension", { kind: "other", text: "别的扩展写的条目" });
   manager.appendMessage({
@@ -773,6 +806,11 @@ function seedDecomposeSession(projectRoot: string, jobId: string, logs: readonly
   });
   manager.appendMessage(fauxAssistantMessage("绝密摘要标记"));
   return sessionId;
+}
+
+/** 主会话夹具（会话 id = `decompose-<jobId>`） */
+function seedDecomposeSession(projectRoot: string, jobId: string, logs: readonly SeededLog[]): string {
+  return seedSessionFile(projectRoot, decomposeSessionId(jobId), logs);
 }
 
 async function logData(app: Hono): Promise<DecomposeJobLogRes> {
@@ -817,6 +855,44 @@ describe("GET /decompose/job/log（拆解记录时间线）", () => {
 
     const data = await logData(app);
     expect(data.entries).toEqual([]);
+  });
+
+  it("分段并发：合并主 + 各段 worker 的过程条目（按时间排序；batch_start 带段号）；别人的 job 不参与", async () => {
+    const app = buildApp(await runtimeWithCost(0.5, 1.5));
+    const jobId = ingestProject("合并时间线");
+    const project = getCurrentProject()!;
+    const mainId = seedDecomposeSession(project.root, jobId, [
+      { kind: "session_pruned", text: "已清理 1 份更早的拆解记录", at: "2026-09-01T10:00:04.000Z" },
+      { kind: "merge_done", text: "归并完成：实体 1 / 关系 0", at: "2026-09-01T10:00:05.000Z" },
+    ]);
+    // 段 2 worker（后落盘）：批次条目与主会话条目按 at 交错
+    seedSessionFile(project.root, decomposeWorkerSessionId(jobId, 2), [
+      { kind: "batch_start", batchSeq: 3, text: "批 3 开始（段 2/2；3 章；快照 名字 0 / 关系 0）", at: "2026-09-01T10:00:03.000Z" },
+      { kind: "batch_done", batchSeq: 3, text: "批 3 完成：人物 3 / 设定 0 / 地点 0 / 关系 0", at: "2026-09-01T10:00:06.000Z" },
+    ]);
+    // 段 1 worker（最早）
+    seedSessionFile(project.root, decomposeWorkerSessionId(jobId, 1), [
+      { kind: "batch_start", batchSeq: 1, text: "批 1 开始（段 1/2；3 章；快照 名字 0 / 关系 0）", at: "2026-09-01T10:00:01.000Z" },
+    ]);
+    // 另一个 job 的 worker（前缀不命中 ⇒ 不进本 job 的时间线）
+    seedSessionFile(project.root, decomposeWorkerSessionId("job-other", 1), [
+      { kind: "batch_start", batchSeq: 1, text: "别的 job 的批开始", at: "2026-09-01T10:00:02.000Z" },
+    ]);
+
+    const data = await logData(app);
+
+    expect(data.sessionId).toBe(mainId);
+    expect(data.entries.map((entry) => [entry.kind, entry.at, entry.batchSeq])).toEqual([
+      ["batch_start", "2026-09-01T10:00:01.000Z", 1],
+      ["batch_start", "2026-09-01T10:00:03.000Z", 3],
+      ["session_pruned", "2026-09-01T10:00:04.000Z", undefined],
+      ["merge_done", "2026-09-01T10:00:05.000Z", undefined],
+      ["batch_done", "2026-09-01T10:00:06.000Z", 3],
+    ]);
+    const raw = JSON.stringify(data);
+    expect(raw).not.toContain("绝不外泄标记"); // worker 会话里的原文同样不外泄
+    expect(raw).not.toContain("绝密摘要标记");
+    expect(raw).not.toContain("别的 job 的批开始"); // 只合并本 job 的会话
   });
 
   it("当前项目没有 job → 404 DECOMPOSE_JOB_NOT_FOUND", async () => {
@@ -1010,6 +1086,25 @@ describe("POST /decompose/continue（续拆启动）", () => {
     expect(readFileSync(join(project.root, OUTLINE_FILE_NAME), "utf8")).toBe(outlineBefore);
     expect(chapterIds.map((id) => getDocument(project.db, "chapter", id)?.content ?? null)).toEqual(documentsBefore);
     // S2 后台跑（不 await）：等这一轮收尾，避免用例结束后写库
+    await waitFor(() => !isDecomposeJobActive(data.jobId), "续拆轮次收尾");
+  });
+
+  it("并发段数快照：建 job 时读创作根配置一次（缺配置 → 缺省；配置改动只影响新 job）", async () => {
+    const app = buildApp(await runtimeWithCost(0.5, 1.5));
+    const firstJobId = decomposedJob("续拆并发", 6, { start: 1, end: 2 });
+    const project = getCurrentProject()!;
+    expect(getDecomposeJob(project.db)!.concurrency).toBe(DEFAULT_DECOMPOSE_CONCURRENCY); // 无配置 → 缺省
+
+    // 写创作根配置（续拆端点建 job 时读一次并快照）
+    mkdirSync(join(tmpRoot, ".ai-editor"), { recursive: true });
+    writeFileSync(join(tmpRoot, ".ai-editor", "config.json"), JSON.stringify({ decompose: { concurrency: 3 } }));
+    const res = await postContinue(app);
+    expect(res.status).toBe(200);
+    const data = (await res.json()).data as DecomposeContinueRes;
+    expect(getDecomposeJob(project.db)!.id).toBe(data.jobId);
+    expect(getDecomposeJob(project.db)!.concurrency).toBe(3);
+    // 历史 job 的快照不被改写（改配置只影响新 job）
+    expect(listDecomposeJobs(project.db).find((job) => job.id === firstJobId)!.concurrency).toBe(DEFAULT_DECOMPOSE_CONCURRENCY);
     await waitFor(() => !isDecomposeJobActive(data.jobId), "续拆轮次收尾");
   });
 });

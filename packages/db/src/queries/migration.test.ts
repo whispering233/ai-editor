@@ -285,9 +285,9 @@ describe("迁移 008（v7 → v8：document_records 块文档表）", () => {
     setUserVersion(db, 7);
 
     const { applied } = runMigrations(db, { dbPath });
-    expect(applied.map((m) => m.version)).toEqual([8, 9]); // v8 建块文档表 + v9 建拆解两表（链到 SCHEMA_VERSION）
+    expect(applied.map((m) => m.version)).toEqual([8, 9, 10]); // v8 建块文档表 + v9 拆解两表 + v10 并发快照列（链到 SCHEMA_VERSION）
     expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
-    expect(getUserVersion(db)).toBe(9);
+    expect(getUserVersion(db)).toBe(10);
  // 新表已建且可用（直插 + 计数，验证列齐全）
     insertDocument(db, "ch-1");
     expect(countDocuments(db)).toBe(1);
@@ -319,6 +319,7 @@ describe("ensureSchemaCompatible 旧版本有迁移路径", () => {
       { version: 7, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN seventh TEXT") },
       { version: 8, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN eighth TEXT") },
       { version: 9, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN ninth TEXT") },
+      { version: 10, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN tenth TEXT") },
     ];
     insertOldEntity(db, "char-1");
     writeOutlineFile(dir, oldTree());
@@ -376,6 +377,7 @@ describe("ensureSchemaCompatible 旧版本有迁移路径", () => {
       { version: 7, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN seventh TEXT") },
       { version: 8, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN eighth TEXT") },
       { version: 9, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN ninth TEXT") },
+      { version: 10, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN tenth TEXT") },
     ];
     insertOldEntity(db, "char-1");
 

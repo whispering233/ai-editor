@@ -162,12 +162,12 @@ describe("schema.ts 建表", () => {
     }
   });
 
-  it("user_version 读写往返（SCHEMA_VERSION = 9，v1→v9 走增量迁移 002→003→004→005→006→007→008→009）", () => {
+  it("user_version 读写往返（SCHEMA_VERSION = 10，v1→v10 走增量迁移 002→003→004→005→006→007→008→009→010）", () => {
  // 新库默认 0
     expect(getUserVersion(db)).toBe(0);
     setUserVersion(db, SCHEMA_VERSION);
     expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
-    expect(SCHEMA_VERSION).toBe(9);
+    expect(SCHEMA_VERSION).toBe(10);
   });
 
   it("entities 有 sort_order 列（时间轴事件全局线性序，仅 event 使用，其余类型 NULL）", () => {

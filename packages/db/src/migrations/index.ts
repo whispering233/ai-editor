@@ -16,14 +16,15 @@
 // - 失败 → 该迁移回滚 + 版本停在前一迁移后，下次 open 重试
 // - 无迁移路径的旧版本（如 v0 且无 0→1 条目）保持删库重建兜底
 //
-// **当前状态**：SCHEMA_VERSION = 9；真实迁移 002（v1→v2：entities 表 CHECK 扩为 5 种 +
+// **当前状态**：SCHEMA_VERSION = 10；真实迁移 002（v1→v2：entities 表 CHECK 扩为 5 种 +
 // sort_order 列，时间轴）、003（v2→v3：entities CHECK 扩 6 种含 timepoint +
 // event.data.time_label 迁移为 timepoint 实体 + occurs_at 挂载关系，G2）、
 // 004（v3→v4：setting 旧 rules 分类值 → data.tags，仅 data JSON）、005（v4→v5：CHECK 扩
 // 'reference'）、006（v5→v6：对话历史出库——chat_messages 导出为 sessions/<id>.jsonl 后 DROP 表）、
 // 007（v6→v7：character 旧 abilities[] → ability_panel，仅 data JSON）、
 // 008（v7→v8：新增 document_records 块文档表，纯 DDL）、
-// 009（v8→v9：新增 decompose_jobs / decompose_batches 拆解两表，纯 DDL）。
+// 009（v8→v9：新增 decompose_jobs / decompose_batches 拆解两表，纯 DDL）、
+// 010（v9→v10：decompose_jobs 新增 concurrency 列（并发段数快照），纯 DDL 且存量行回填 1）。
 // v0 库无 0→1 迁移条目，仍走删库重建兜底。
 
 import type { Db } from "../connection.js";
@@ -35,6 +36,7 @@ import migration006 from "./006_sessions_jsonl.js";
 import migration007 from "./007_character_ability_panel.js";
 import migration008 from "./008_document_records.js";
 import migration009 from "./009_decompose.js";
+import migration010 from "./010_decompose_concurrency.js";
 
 /** 迁移运行上下文（写文件类迁移需要项目目录：006 的会话 JSONL 导出） */
 export interface MigrationContext {
@@ -52,7 +54,7 @@ export interface Migration {
 /** 全量迁移集（按 version 升序：002 时间轴事件、003 时间标签点实体化（G2）、
  * 004 设定分类字段 tags（K2 修订）、005 参考资料 reference、006 对话历史出库、
  * 007 角色能力面板（旧 abilities 标签迁为 ability_panel）、008 块文档表（document_records）、
- * 009 拆解两表（decompose_jobs / decompose_batches）） */
+ * 009 拆解两表（decompose_jobs / decompose_batches）、010 拆解并发快照列（decompose_jobs.concurrency）） */
 export const MIGRATIONS: readonly Migration[] = [
   migration002,
   migration003,
@@ -62,4 +64,5 @@ export const MIGRATIONS: readonly Migration[] = [
   migration007,
   migration008,
   migration009,
+  migration010,
 ];

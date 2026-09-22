@@ -1096,6 +1096,7 @@ describe("拆解会话守卫（decompose- 前缀）", () => {
       scopeStart: 1,
       scopeEnd: 1,
       batchTargetChars: 6000,
+      concurrency: 1,
       model: null,
       batches: [],
       now: nowIso(),

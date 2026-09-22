@@ -56,6 +56,7 @@ function seedJob() {
     scopeStart: 1,
     scopeEnd: 3,
     batchTargetChars: 6000,
+    concurrency: 1,
     model: "faux/model",
     batches: [
       { seq: 2, chapterIds: ["ch-3"] },
@@ -86,6 +87,7 @@ describe("createDecomposeJob / getDecomposeJob", () => {
       scope_start: 1,
       scope_end: 3,
       batch_target_chars: 6000,
+      concurrency: 1,
       model: "faux/model",
       merge_written: [],
       error: null,
@@ -115,6 +117,7 @@ describe("createDecomposeJob / getDecomposeJob", () => {
         scopeStart: 1,
         scopeEnd: 2,
         batchTargetChars: 6000,
+        concurrency: 1,
         model: null,
         batches: [
           { seq: 1, chapterIds: ["ch-1"] },
@@ -202,12 +205,14 @@ describe("listDecomposeJobs（跨轮 baseline 的读取面）", () => {
       scopeStart: 4,
       scopeEnd: 6,
       batchTargetChars: 6000,
+      concurrency: 4,
       model: null,
       batches: [{ seq: 1, chapterIds: ["ch-4"] }],
       now: T2,
     });
 
     expect(listDecomposeJobs(db).map((job) => job.id)).toEqual([old.id, fresh.id]);
+    expect(fresh.concurrency).toBe(4); // 并发快照逐行读取（不落 db 缺省）
 
     const empty = openDatabase(join(dir, "empty.db"));
     try {

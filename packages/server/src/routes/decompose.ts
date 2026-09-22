@@ -34,7 +34,7 @@ import {
   decomposeLogEntrySchema,
   decomposeStartQuerySchema,
 } from "@whispering233/ai-editor-shared/schemas";
-import { readProjectSession, type SessionEntry } from "@whispering233/ai-editor-agent";
+import { readProjectSession, listProjectSessions, type SessionEntry } from "@whispering233/ai-editor-agent";
 import { getDecomposeBatch, getDecomposeJob, nowIso, setJobError, updateJobStatus } from "@whispering233/ai-editor-db";
 import { HttpError, ok } from "../middleware/error.js";
 import { getModelRuntime, getSettingsManager, resolveActiveSelection } from "../model-runtime.js";
@@ -48,9 +48,14 @@ import {
 import { writeLastProject } from "../last-project.js";
 import { BOOKS_DIR_NAME, getProjectRoot, resolveProjectDir } from "./project.js";
 import { planBatches } from "../decompose/batching.js";
+import { readDecomposeConcurrency } from "../decompose/config.js";
 import { buildJobResponse, ingestDecomposeContinue, ingestDecomposeProject, readDecomposeProjectPlan, type DecomposeProjectPlan } from "../decompose/job.js";
 import { pauseDecomposeJob, startDecomposeJob, DECOMPOSE_SNAPSHOT_MAX_CHARS, type DecomposeRunnerDeps } from "../decompose/runner.js";
-import { DECOMPOSE_LOG_CUSTOM_TYPE, decomposeSessionId } from "../decompose/llm.js";
+import {
+  DECOMPOSE_LOG_CUSTOM_TYPE,
+  decomposeSessionId,
+  decomposeWorkerSessionPrefix,
+} from "../decompose/llm.js";
 import { splitNovelWithSlices, statsOf, type SplitChapter } from "../decompose/split.js";
 
 /** 上传体积上限（原始字节；超限 400 DECOMPOSE_FILE_TOO_LARGE）。analyze 与 start 共用——同文件。 */
@@ -289,6 +294,7 @@ export function createDecomposeRoutes(deps: DecomposeRouteDeps = {}): Hono {
 
     const chapters = split.result.chapters;
     const scope = jobScope(query.scope_start, query.scope_end, chapters.length);
+    // 并发段数快照：**建 job 时读创作根配置一次**（§2.2；改配置只影响新 job，resume / 重跑读 job 行）
     const { jobId, batchCount } = ingestDecomposeProject({
       project,
       split,
@@ -296,6 +302,7 @@ export function createDecomposeRoutes(deps: DecomposeRouteDeps = {}): Hono {
       scopeStart: scope.start,
       scopeEnd: scope.end,
       model,
+      concurrency: readDecomposeConcurrency(getProjectRoot()),
       now: nowIso(),
     });
     // S2 批执行（**后台跑，不 await**）：S1 已同步完成，响应返回时批循环开跑（进度页轮询看状态）
@@ -365,6 +372,7 @@ export function createDecomposeRoutes(deps: DecomposeRouteDeps = {}): Hono {
       scopeStart: scope.scopeStart,
       scopeEnd: scope.scopeEnd,
       model,
+      concurrency: readDecomposeConcurrency(getProjectRoot()), // 建 job 时读创作根配置一次（同 start）
       now: nowIso(),
     });
     // S2 批执行（**后台跑，不 await**）：响应返回时 job 已 running（进度页轮询看状态，与 start 同款）
@@ -428,13 +436,21 @@ export function createDecomposeRoutes(deps: DecomposeRouteDeps = {}): Hono {
       throw new HttpError(404, "DECOMPOSE_JOB_NOT_FOUND", "当前项目没有拆解任务");
     }
     // 会话定位按**会话 id**（经 pi 的磁盘发现 + id 命中）——pi 落盘文件名带时间戳前缀，不得按文件名 glob；
-    // 会话文件被用户删掉 / 尚未落盘 ⇒ entries: []（契约：job 还在就回 200，不回 404）
+    // 分段并发下时间线 = 主会话（计划留档 + 汇总 + S3/S4）+ 各段 worker 会话（`decompose-<jobId>-w` 前缀）
+    // 的**过程条目合并**（§2.2 / §8），按时间排序；会话文件被用户删掉 / 尚未落盘 ⇒ 该枚不参与（不回 404）
     const sessionId = decomposeSessionId(job.id);
-    const opened = await readProjectSession(project.root, sessionId);
-    return jobLogResponse(c, {
-      sessionId,
-      entries: opened === null ? [] : projectLogEntries(opened.entries),
-    });
+    const workerPrefix = decomposeWorkerSessionPrefix(job.id);
+    const workerIds = (await listProjectSessions(project.root))
+      .map((info) => info.id)
+      .filter((id) => id.startsWith(workerPrefix))
+      .sort(); // 段号升序（同刻条目的稳定次序：主会话在前、段号小的在前）
+    const entries: DecomposeJobLogRes["entries"] = [];
+    for (const id of [sessionId, ...workerIds]) {
+      const opened = await readProjectSession(project.root, id);
+      if (opened !== null) entries.push(...projectLogEntries(opened.entries));
+    }
+    entries.sort((a, b) => Date.parse(a.at) - Date.parse(b.at)); // 合并后按时间排序（同刻保持来源顺序）
+    return jobLogResponse(c, { sessionId, entries });
   });
 
   // POST /api/v1/decompose/job/pause —— 中止当前 job（当前批跑完即停，结果不浪费）

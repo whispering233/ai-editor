@@ -326,6 +326,7 @@ function seedLegacyDecomposeProject(dir: string): void {
     scopeStart: 1,
     scopeEnd: 1,
     batchTargetChars: 6000,
+    concurrency: 1,
     model: null,
     batches: [{ seq: 1, chapterIds: ["ch-1"] }],
     now: T0,

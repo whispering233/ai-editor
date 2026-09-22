@@ -4,7 +4,7 @@
 // 全部经 **faux provider（内存运行时注册假模型）离线跑**，不触网、不调真实模型；
 // 批循环是后台任务（路由不 await）⇒ 断言前统一用 `waitFor` 轮询等服务端落库。
 
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -59,13 +59,17 @@ import {
   DECOMPOSE_RELATION_TYPES,
 } from "./extract.js";
 import { ingestDecomposeProject } from "./job.js";
-import { decomposeSessionId } from "./llm.js";
+import { decomposeSessionId, decomposeWorkerSessionId } from "./llm.js";
 import {
   DECOMPOSE_BATCH_MAX_ATTEMPTS,
   DECOMPOSE_KEPT_SESSIONS,
+  DECOMPOSE_RATE_LIMIT_BASE_DELAY_MS,
+  DECOMPOSE_RATE_LIMIT_JITTER_MIN,
+  DECOMPOSE_RATE_LIMIT_MAX_DELAY_MS,
   DECOMPOSE_ROLE_ORDER,
   DECOMPOSE_SNAPSHOT_MAX_CHARS,
   DECOMPOSE_SNAPSHOT_PREV_CHAPTERS,
+  decomposeRateLimitDelayMs,
   emptyStoryBible,
   extendStoryBible,
   isDecomposeJobActive,
@@ -154,6 +158,18 @@ function bookDir(name: string): string {
   return join(tmpRoot, "books", name);
 }
 
+/** 按给定文本启动拆解（等长章节样本要整份文本；`startOk` 的按章数样本字数递增） */
+async function startTextOk(
+  app: Hono,
+  name: string,
+  text: string,
+  extra = "",
+): Promise<{ jobId: string; batchCount: number }> {
+  const res = await postNovel(app, "/start", bytesOf(text), startQuery(name, extra));
+  expect(res.status).toBe(200);
+  return (await res.json()).data;
+}
+
 /** 启动拆解（断言 200），返回响应 data（extra = 追加的 query，如 scope） */
 async function startOk(
   app: Hono,
@@ -206,6 +222,7 @@ function ingestProject(name: string, chapterCount = 6): string {
     scopedChapters: split.result.chapters,
     scopeStart: 1,
     scopeEnd: chapterCount,
+    concurrency: 1,
     model: null,
     now: nowIso(),
   });
@@ -214,7 +231,7 @@ function ingestProject(name: string, chapterCount = 6): string {
 
 // ============ faux provider（离线假模型；记录每次调用的上下文） ============
 
-type ScriptedStep = string | (() => Promise<AssistantMessage>);
+type ScriptedStep = string | ((context: Context) => Promise<AssistantMessage>);
 
 interface FakeModel {
   deps: DecomposeRouteDeps;
@@ -241,16 +258,92 @@ async function fakeModel(): Promise<FakeModel> {
       faux.setResponses(
         steps.map((step) => async (context) => {
           calls.push(context);
-          return typeof step === "function" ? await step() : fauxAssistantMessage(step);
+          return typeof step === "function" ? await step(context) : fauxAssistantMessage(step);
         }),
       ),
   };
 }
 
+/** 一次调用（`Context`）的用户消息文本 */
+function promptTextOf(context: Context): string {
+  const content = context.messages[0].content;
+  return typeof content === "string" ? content : contentText(content);
+}
+
 /** 第 n 次调用的用户消息（项目数据快照 + 本批正文） */
 function promptOf(calls: readonly Context[], index: number): string {
-  const content = calls[index].messages[0].content;
-  return typeof content === "string" ? content : contentText(content);
+  return promptTextOf(calls[index]);
+}
+
+/**
+ * 批输出（内容应答版）：章号取自提示词里的 `### 第N章` 行——分段并发下各段调用交错，
+ * 按顺序排队的脚本会把批次与输出对错位（批 2 拿到批 3 的输出 ⇒ 缺章重试）。
+ */
+function batchJsonFromPrompt(prompt: string): string {
+  return batchJson({ indexes: [...prompt.matchAll(/^### 第(\d+)章/gm)].map((match) => Number(match[1])) });
+}
+
+/** 内容应答的拦截结果（`Error` = 让这次调用以模型错误收场，用来演练限流一类失败路径） */
+type ScriptedOutcome = AssistantMessage | Error | null | Promise<AssistantMessage | Error | null>;
+
+/**
+ * 内容应答脚本：批提示词 → 按提示词章号现造输出；别名归并 → 无组；报告 → 固定剧情摘要。
+ * `turns` = 预排步数（多排无妨，队列按调用顺序消费；排少了会拿到「No more faux responses」）。
+ * `intercept` 优先于内置路由（可挂起 / 抛错，用来构造暂停与限流场景）。
+ */
+function contentAwareScript(
+  model: FakeModel,
+  turns: number,
+  intercept?: (context: Context) => ScriptedOutcome,
+): void {
+  model.script(
+    Array.from({ length: turns }, () => async (context: Context) => {
+      const intercepted = await intercept?.(context);
+      if (intercepted instanceof Error) throw intercepted;
+      if (intercepted !== undefined && intercepted !== null) return intercepted;
+      const system = context.systemPrompt ?? "";
+      if (system.includes("逐章抽取员")) return fauxAssistantMessage(batchJsonFromPrompt(promptTextOf(context)));
+      return fauxAssistantMessage(system.includes("全书报告员") ? PLOT_SUMMARY : NO_ALIASES);
+    }),
+  );
+}
+
+/** 一次运行里各批的提示词（键 = 该批首个章号；按批定位，不依赖调用顺序） */
+function batchPromptsOf(calls: readonly Context[]): Map<number, string> {
+  const prompts = new Map<number, string>();
+  for (const call of calls) {
+    const text = promptTextOf(call);
+    const first = /^### 第(\d+)章/m.exec(text);
+    if (first !== null) prompts.set(Number(first[1]), text);
+  }
+  return prompts;
+}
+
+/**
+ * 等长章节的样本文本（每章字数相同 ⇒ 组批后的批字数相同 ⇒ 段划分按累计字数落在正中，
+ * 断言可以写死「段 k 含哪几批」）。
+ */
+function uniformNovelText(chapterCount: number): string {
+  return Array.from(
+    { length: chapterCount },
+    (_, position) => `第${position + 1}章 标题${position + 1}\n${"正文".repeat(200)}`,
+  ).join("\n");
+}
+
+/** 写创作根拆解配置（建 job 时读一次并快照；见 `decompose/config.ts`） */
+function writeConcurrencyConfig(concurrency: number): void {
+  mkdirSync(join(tmpRoot, ".ai-editor"), { recursive: true });
+  writeFileSync(join(tmpRoot, ".ai-editor", "config.json"), JSON.stringify({ decompose: { concurrency } }));
+}
+
+/** 快照名字命中（防 `人物1` 命中 `人物10` 一类前缀假阳） */
+function hasSnapshotName(prompt: string, index: number): boolean {
+  return new RegExp(`人物${index}(?![0-9])`).test(prompt);
+}
+
+/** 批结果形状（`batchJson` 的 JSON 文本 → 契约形状；夹具落库用） */
+function parsedBatch(options: { indexes: readonly number[]; summaryPrefix?: string }): DecomposeBatchResult {
+  return decomposeBatchResultSchema.parse(JSON.parse(batchJson(options)));
 }
 
 /** 拆解会话文件条目（`<项目根>/sessions/<时间戳>_<会话 id>.jsonl`；header 除外） */
@@ -453,6 +546,304 @@ describe("S2 批循环", () => {
     expect(job.report).toMatchObject({ name: "《零批》拆解报告" });
     expect(model.calls).toHaveLength(1); // 无章摘要 ⇒ 报告调用不发（输入为空）
   });
+
+  it("提示词与 §4.1 对齐：端点措辞不再说死「必须本章或上文出现」（分段下不阻止跨段关系）", async () => {
+    const model = await fakeModel();
+    model.script([batchJson({ indexes: range(1, 10) }), batchJson({ indexes: range(11, 12) }), NO_ALIASES, PLOT_SUMMARY]);
+    const app = buildApp(model.deps);
+
+    await startOk(app, "提示词对齐");
+    await pollJob(app, "收口");
+
+    const systemPrompt = model.calls[0].systemPrompt ?? "";
+    expect(systemPrompt).not.toContain("必须是本章或上文出现过的名字");
+    expect(systemPrompt).toContain("不必等它先在本段出现");
+    // 端点判据仍只在 S3：抽取层不因名字集合丢弃（跨段关系照落库）
+    const relation = { source: "段一人物", target: "段二人物", type: "ally" };
+    model.script([batchJson({ indexes: range(1, 10), relation }), batchJson({ indexes: range(11, 12) }), NO_ALIASES, PLOT_SUMMARY]);
+    const jobId = ingestProject("跨段端点", 12);
+    const project = getCurrentProject()!;
+    await startDecomposeJob(project, model.deps);
+    const batch = decomposeBatchResultSchema.parse(getDecomposeBatch(project.db, jobId, 1)!.result);
+    expect(batch.chapters[9].relations).toEqual([{ ...relation, evidence: "证据" }]);
+  });
+});
+
+// ============ 分段并发（§2.2：段间并行、段内串行；§4.1 起始快照各段共用） ============
+
+describe("分段并发", () => {
+  it("段内滚动、段间并集：各段只看到自己段内的累积；批次与输出按内容对齐；时间线带段号", async () => {
+    const model = await fakeModel();
+    contentAwareScript(model, 8);
+    const app = buildApp(model.deps);
+    writeConcurrencyConfig(2); // 建 job 时读创作根配置一次（快照进 job 行）
+
+    // 40 章等长 ⇒ 4 批（每批 10 章、字数相同）⇒ 并发 2 时分段 = [[1,2],[3,4]]
+    const started = await startTextOk(app, "分段", uniformNovelText(40));
+    const project = getCurrentProject()!;
+    expect(getDecomposeJob(project.db)!.concurrency).toBe(2); // 并发数快照
+    await waitFor(() => listDecomposeBatches(project.db, started.jobId).every((batch) => batch.status === "done"), "四批 done");
+    const job = await pollJob(app, "分段收口");
+    expect(job).toMatchObject({ status: "done", progress: { done: 4, failed: 0, total: 4 } });
+
+    const prompts = batchPromptsOf(model.calls);
+    // 按批定位提示词（不依赖交错顺序）：四批各自的快照以首个章号区分
+    expect([...prompts.keys()].sort((a, b) => a - b)).toEqual([1, 11, 21, 31]);
+    // 段 1 的批 2：看得到段 1 自己的产物（批 1 的名字与摘要）
+    expect(prompts.get(11)).toContain("名字：人物1、人物2");
+    expect(prompts.get(11)).toContain("上一批摘要：摘要1");
+    // 段 2 的批 3：段内尚无可累积 ⇒ 空快照（**段间不共享本轮产物**）
+    expect(prompts.get(21)).toContain("【项目数据快照】（本批是首批，尚无上文）");
+    // 段 2 的批 4：只看到段 2 的产物（批 3 的名字），看不到段 1 的
+    expect(hasSnapshotName(prompts.get(31)!, 21)).toBe(true);
+    expect(hasSnapshotName(prompts.get(31)!, 1)).toBe(false);
+
+    // 每段一枚 worker 会话；`batch_start` 带段号（§2.2 时间线口径）
+    const worker1 = decomposeWorkerSessionId(started.jobId, 1);
+    const worker2 = decomposeWorkerSessionId(started.jobId, 2);
+    const startsOf = (sessionId: string) =>
+      sessionLogsOf(project.root, sessionId)
+        .filter((log) => log.kind === "batch_start")
+        .map((log) => log.text);
+    expect(startsOf(worker1)).toEqual([
+      "批 1 开始（段 1/2；10 章；快照 名字 0 / 关系 0）",
+      "批 2 开始（段 1/2；10 章；快照 名字 10 / 关系 0）",
+    ]);
+    expect(startsOf(worker2)).toEqual([
+      "批 3 开始（段 2/2；10 章；快照 名字 0 / 关系 0）",
+      "批 4 开始（段 2/2；10 章；快照 名字 10 / 关系 0）",
+    ]);
+    // 每段一条快照组成条目（段起点规模）
+    for (const sessionId of [worker1, worker2]) {
+      expect(sessionLogsOf(project.root, sessionId)[0]).toMatchObject({
+        kind: "snapshot",
+        text: "快照：人物 0 / 设定 0 / 地点 0 / 关系 0 / 前置摘要 0 条",
+      });
+    }
+    // 段内串行 + 段间并集进 S3：四批产物都在报告里（S3/S4 写主会话）
+    expect(sessionLogsOf(project.root, decomposeSessionId(started.jobId)).map((log) => log.kind)).toEqual([
+      "merge_done",
+      "report_done",
+    ]);
+  });
+
+  it("批数少于并发数 → 段数 = 批数（不空转、不建空 worker 会话）", async () => {
+    const model = await fakeModel();
+    contentAwareScript(model, 6);
+    const app = buildApp(model.deps);
+    writeConcurrencyConfig(4);
+
+    const started = await startTextOk(app, "段数上限", uniformNovelText(12)); // 12 章 ⇒ 2 批
+    const project = getCurrentProject()!;
+    await waitFor(() => listDecomposeBatches(project.db, started.jobId).every((batch) => batch.status === "done"), "两批 done");
+    await pollJob(app, "收口");
+
+    expect(getDecomposeJob(project.db)!.concurrency).toBe(4); // 快照 = 配置值（段数在派生日才受批数限制）
+    const workers = sessionIdsIn(project.root)
+      .filter((id) => id.startsWith(`${decomposeSessionId(started.jobId)}-w`))
+      .sort();
+    expect(workers).toEqual([decomposeWorkerSessionId(started.jobId, 1), decomposeWorkerSessionId(started.jobId, 2)]);
+    const starts = workers.flatMap((id) =>
+      sessionLogsOf(project.root, id)
+        .filter((log) => log.kind === "batch_start")
+        .map((log) => log.text),
+    );
+    expect(starts.sort()).toEqual([
+      "批 1 开始（段 1/2；10 章；快照 名字 0 / 关系 0）",
+      "批 2 开始（段 2/2；2 章；快照 名字 0 / 关系 0）",
+    ]);
+  });
+
+  it("暂停按段：每段当前批跑完即停（在途 ≤ 段数），后续批不开跑", async () => {
+    const model = await fakeModel();
+    let releaseBatch!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseBatch = resolve;
+    });
+    let gated = 0;
+    contentAwareScript(model, 8, (context) => {
+      if (!(context.systemPrompt ?? "").includes("逐章抽取员") || gated++ >= 2) return null;
+      return (async () => {
+        await gate;
+        return fauxAssistantMessage(batchJsonFromPrompt(promptTextOf(context)));
+      })();
+    });
+    const app = buildApp(model.deps);
+    writeConcurrencyConfig(2);
+
+    const started = await startTextOk(app, "暂停按段", uniformNovelText(40)); // 4 批 ⇒ 2 段 × 2 批
+    const project = getCurrentProject()!;
+    // 段间并行的直接证据：两段各一批同时在飞（段内串行 ⇒ 每段至多一批）
+    await waitFor(
+      () => listDecomposeBatches(project.db, started.jobId).filter((batch) => batch.status === "running").length === 2,
+      "两段各一批在飞",
+    );
+    const paused = await post(app, "/job/pause");
+    expect(paused.status).toBe(200);
+    releaseBatch();
+    await waitFor(() => !isDecomposeJobActive(started.jobId), "轮次收尾");
+    await new Promise((resolve) => setTimeout(resolve, 20)); // 后续批窗口（应有而不发生）
+
+    expect(model.calls).toHaveLength(2); // 每段只跑完当前批；各段第二批判未开跑（在途 ≤ 段数）
+    expect(listDecomposeBatches(project.db, started.jobId).map((batch) => [batch.seq, batch.status])).toEqual([
+      [1, "done"],
+      [2, "pending"],
+      [3, "done"],
+      [4, "pending"],
+    ]);
+    expect(getDecomposeJob(project.db)!.status).toBe("paused");
+  });
+
+  it("续拆：段划分与并发数取 job 快照（改配置不影响），每段按段内已完成批重建累积（跨段不串）", async () => {
+    const model = await fakeModel();
+    // 40 章等长 ⇒ 4 批、并发 2 ⇒ 段 [[1,2],[3,4]]（直接 S1 建档：批执行前状态是确定性夹具）
+    const project = initProject(bookDir("续拆分段"), { name: "续拆分段" });
+    setCurrentProject(project);
+    const split = splitNovelWithSlices(bytesOf(uniformNovelText(40)));
+    const { jobId } = ingestDecomposeProject({
+      project,
+      split,
+      scopedChapters: split.result.chapters,
+      scopeStart: 1,
+      scopeEnd: 40,
+      concurrency: 2,
+      model: null,
+      now: nowIso(),
+    });
+    // 前置：段 1 的批 1 与段 2 的批 3 已完成（各自带独立摘要标记）
+    completeBatch(project.db, { jobId, seq: 1, result: parsedBatch({ indexes: range(1, 10), summaryPrefix: "段一摘要" }), now: nowIso() });
+    completeBatch(project.db, { jobId, seq: 3, result: parsedBatch({ indexes: range(21, 30), summaryPrefix: "段二摘要" }), now: nowIso() });
+    updateJobStatus(project.db, jobId, "paused", nowIso());
+    writeConcurrencyConfig(4); // 反向对照：resume 不读当前配置（段划分只认 job 快照）
+    contentAwareScript(model, 6);
+    const app = buildApp(model.deps);
+
+    const resumed = await post(app, "/job/resume");
+    expect(resumed.status).toBe(200);
+    await waitFor(() => listDecomposeBatches(project.db, jobId).every((batch) => batch.status === "done"), "续拆后四批 done");
+    await pollJob(app, "续拆收口");
+
+    const prompts = batchPromptsOf(model.calls);
+    // 段 1 的批 2：只看得到段 1 已完成批（批 1）的产物
+    expect(hasSnapshotName(prompts.get(11)!, 1)).toBe(true);
+    expect(prompts.get(11)).toContain("上一批摘要：段一摘要1");
+    expect(prompts.get(11)).not.toContain("段二摘要");
+    // 段 2 的批 4：只看得到段 2 已完成批（批 3）的产物
+    expect(hasSnapshotName(prompts.get(31)!, 21)).toBe(true);
+    expect(prompts.get(31)).toContain("上一批摘要：段二摘要21");
+    expect(prompts.get(31)).not.toContain("段一摘要");
+    // 已完成批不重跑（attempts 不变：批 1 / 3 由夹具直接置 done，从未 startBatchAttempt）
+    expect(listDecomposeBatches(project.db, jobId).map((batch) => [batch.seq, batch.attempts])).toEqual([
+      [1, 0],
+      [2, 1],
+      [3, 0],
+      [4, 1],
+    ]);
+    // 段号按快照重算（仍 2 段）：`batch_start` 的段号不是配置里的 4
+    const rerunStarts = sessionIdsIn(project.root)
+      .flatMap((id) => sessionLogsOf(project.root, id))
+      .filter((log) => log.kind === "batch_start")
+      .map((log) => log.text);
+    expect(rerunStarts.every((text) => text.includes("/2；"))).toBe(true);
+  });
+
+  it("单批重跑：只重跑该批、段不变，按段内已完成批重建累积，跑完重建 S3/S4", async () => {
+    const model = await fakeModel();
+    contentAwareScript(model, 8);
+    const app = buildApp(model.deps);
+    writeConcurrencyConfig(2);
+
+    const started = await startTextOk(app, "分段重跑", uniformNovelText(40)); // 4 批 ⇒ 段 [[1,2],[3,4]]
+    const project = getCurrentProject()!;
+    await waitFor(() => listDecomposeBatches(project.db, started.jobId).every((batch) => batch.status === "done"), "四批 done");
+    await pollJob(app, "首次收口");
+    const callsBefore = model.calls.length;
+
+    // 重跑段 2 的首批（批 3）：输出换一份摘要（重跑生效的证据）
+    contentAwareScript(model, 4, (context) => {
+      if (!(context.systemPrompt ?? "").includes("逐章抽取员")) return null;
+      const prompt = promptTextOf(context);
+      if (!/^### 第21章/m.test(prompt)) return null;
+      return fauxAssistantMessage(batchJson({ indexes: range(21, 30), summaryPrefix: "重跑段二" }));
+    });
+    const rerun = await post(app, "/job/batches/3/rerun");
+    expect(rerun.status).toBe(200);
+    const second = await pollJob(app, "重跑收口");
+    expect(second.status).toBe("done");
+
+    // 只重跑该批（attempts +1），其余批不动
+    expect(listDecomposeBatches(project.db, started.jobId).map((batch) => [batch.seq, batch.attempts])).toEqual([
+      [1, 1],
+      [2, 1],
+      [3, 2],
+      [4, 1],
+    ]);
+    expect(decomposeBatchResultSchema.parse(getDecomposeBatch(project.db, started.jobId, 3)!.result).chapters[0].summary).toBe("重跑段二21");
+    // 重跑批的提示词按**段内已完成批重建**（批 4 的产物进快照；段 1 的批 1/2 不进）
+    const rerunPrompts = model.calls.slice(callsBefore).filter((call) => /^### 第21章/m.test(promptTextOf(call)));
+    expect(rerunPrompts).toHaveLength(1);
+    expect(hasSnapshotName(promptTextOf(rerunPrompts[0]), 31)).toBe(true);
+    expect(hasSnapshotName(promptTextOf(rerunPrompts[0]), 1)).toBe(false);
+    // 时间线：段号不变（段 2/2），批开始条目追加一条（段内累积规模来自批 4）
+    const worker2Starts = sessionLogsOf(project.root, decomposeWorkerSessionId(started.jobId, 2))
+      .filter((log) => log.kind === "batch_start")
+      .map((log) => log.text);
+    expect(worker2Starts[2]).toBe("批 3 开始（段 2/2；10 章；快照 名字 10 / 关系 0）");
+    // 无事可做的段（段 1 全 done）不重开会话、不追加条目：worker 1 的时间线原样
+    expect(sessionLogsOf(project.root, decomposeWorkerSessionId(started.jobId, 1)).map((log) => log.kind)).toEqual([
+      "snapshot",
+      "batch_start",
+      "batch_done",
+      "batch_start",
+      "batch_done",
+    ]);
+  });
+
+  it("429 / 限流：批内重试之间指数退避 + 抖动（不改重试上限；退避时长可断言）", async () => {
+    const model = await fakeModel();
+    const sleeps: number[] = [];
+    let batchCalls = 0;
+    contentAwareScript(model, 6, (context) => {
+      if (!(context.systemPrompt ?? "").includes("逐章抽取员")) return null;
+      if (batchCalls++ > 0) return null; // 只有第一次批调用限流
+      return new Error("429 Too Many Requests: rate limit exceeded");
+    });
+    // pi 的 Agent 层默认自带重试（`retry.enabled`）：关掉才能让 429 落到本模块的退避路径
+    const app = buildApp({
+      ...model.deps,
+      settings: SettingsManager.inMemory({ retry: { enabled: false } }),
+      sleep: async (ms: number) => void sleeps.push(ms),
+    });
+    writeConcurrencyConfig(2);
+
+    const started = await startTextOk(app, "限流退避", uniformNovelText(12)); // 2 批 ⇒ 2 段（各 1 批）
+    const project = getCurrentProject()!;
+    await waitFor(
+      () => listDecomposeBatches(project.db, started.jobId).every((batch) => batch.status === "done"),
+      "两批 done（限流批重试后成功）",
+    );
+    await pollJob(app, "收口");
+    await pollJob(app, "收口");
+
+    // 退避一次：下界 = 起始 × 抖动下界，上界 = 起始（第 1 次失败）
+    expect(sleeps).toHaveLength(1);
+    expect(sleeps[0]).toBeGreaterThanOrEqual(DECOMPOSE_RATE_LIMIT_BASE_DELAY_MS * DECOMPOSE_RATE_LIMIT_JITTER_MIN);
+    expect(sleeps[0]).toBeLessThan(DECOMPOSE_RATE_LIMIT_BASE_DELAY_MS);
+    // 限流批重试一次后成功（attempts = 2；另一批 1），job 照常收口
+    expect(listDecomposeBatches(project.db, started.jobId).map((batch) => batch.attempts).sort()).toEqual([1, 2]);
+    // 时间线把退避写进失败条目（不静默）
+    const failedText = sessionIdsIn(project.root)
+      .flatMap((id) => sessionLogsOf(project.root, id))
+      .find((log) => log.kind === "attempt_failed")?.text ?? "";
+    expect(failedText).toContain("429");
+    expect(failedText).toMatch(/；限流退避 \d+ 毫秒后重试$/);
+
+    // 退避计算（纯函数）：指数上升、封顶、抖动区间 [下界, 1)
+    expect(decomposeRateLimitDelayMs(1, 0)).toBe(Math.round(DECOMPOSE_RATE_LIMIT_BASE_DELAY_MS * DECOMPOSE_RATE_LIMIT_JITTER_MIN));
+    expect(decomposeRateLimitDelayMs(2, 0)).toBe(Math.round(DECOMPOSE_RATE_LIMIT_BASE_DELAY_MS * 2 * DECOMPOSE_RATE_LIMIT_JITTER_MIN));
+    expect(decomposeRateLimitDelayMs(99, 0.999)).toBeLessThanOrEqual(DECOMPOSE_RATE_LIMIT_MAX_DELAY_MS);
+    expect(decomposeRateLimitDelayMs(99, 0)).toBe(decomposeRateLimitDelayMs(99, 0));
+  });
 });
 
 // ============ 拆解会话落盘与过程条目（§2.1 / §8 时间线口径；卡 22.2） ============
@@ -474,9 +865,17 @@ describe("拆解会话落盘", () => {
     const project = getCurrentProject()!;
     await pollJob(app, "job 收口");
 
-    const entries = sessionEntriesOf(project.root, decomposeSessionId(started.jobId));
+    // 主会话（计划留档 + 汇总 + S3/S4）与会话名
+    const mainId = decomposeSessionId(started.jobId);
+    const entries = sessionEntriesOf(project.root, mainId);
     expect(entries.find((entry) => entry.type === "session_info")?.name).toBe("《记录》拆解");
-    const logs = sessionLogsOf(project.root, decomposeSessionId(started.jobId));
+    expect(sessionLogsOf(project.root, mainId).map((log) => log.kind)).toEqual(["merge_done", "report_done"]);
+    // S2 各批写本段 worker 会话（默认并发 1 ⇒ 段 1/1 一枚），会话名带段号
+    const workerId = decomposeWorkerSessionId(started.jobId, 1);
+    expect(sessionEntriesOf(project.root, workerId).find((entry) => entry.type === "session_info")?.name).toBe(
+      "《记录》拆解 · 段 1/1",
+    );
+    const logs = sessionLogsOf(project.root, workerId);
     expect(logs.map((log) => log.kind)).toEqual([
       "snapshot",
       "batch_start",
@@ -484,19 +883,20 @@ describe("拆解会话落盘", () => {
       "batch_done",
       "batch_start",
       "batch_done",
-      "merge_done",
-      "report_done",
     ]);
-    // 快照组成条目（§8）：一轮一条，只有计数与省略告知（不带批锚）
+    // 快照组成条目（§8）：每段一条，只有计数与省略告知（不带批锚）
     expect(logs[0]).toMatchObject({ text: "快照：人物 0 / 设定 0 / 地点 0 / 关系 0 / 前置摘要 0 条" });
     expect(logs[0]?.batchSeq).toBeUndefined();
-    expect(logs[1]).toMatchObject({ batchSeq: 1, text: "批 1 开始（10 章；快照 名字 0 / 关系 0）" });
+    // `batch_start` 带段号（§2.2 时间线）
+    expect(logs[1]).toMatchObject({ batchSeq: 1, text: "批 1 开始（段 1/1；10 章；快照 名字 0 / 关系 0）" });
     expect(logs[2]?.text).toContain("批 1 第 1 次尝试失败：");
     expect(logs[3]?.text).toContain("批 1 完成：人物 10 / 设定 0 / 地点 0 / 关系 0；本次用量 输入 ");
-    expect(logs[4]).toMatchObject({ batchSeq: 2, text: "批 2 开始（2 章；快照 名字 10 / 关系 0）" }); // 本轮累积进批开始规模
-    expect(logs[6]?.text).toContain("归并完成：实体 ");
-    expect(logs[7]?.text).toMatch(/^报告完成：《记录》拆解报告（id=ref-.+）$/);
-    expect(logs.every((log) => !Number.isNaN(Date.parse(log.at)))).toBe(true);
+    expect(logs[4]).toMatchObject({ batchSeq: 2, text: "批 2 开始（段 1/1；2 章；快照 名字 10 / 关系 0）" }); // 段内累积进批开始规模
+    // S3/S4 写主会话
+    const mainLogs = sessionLogsOf(project.root, mainId);
+    expect(mainLogs[0]?.text).toContain("归并完成：实体 ");
+    expect(mainLogs[1]?.text).toMatch(/^报告完成：《记录》拆解报告（id=ref-.+）$/);
+    expect([...logs, ...mainLogs].every((log) => !Number.isNaN(Date.parse(log.at)))).toBe(true);
     // 过程条目**不进模型请求**（custom entry 不参与 LLM 上下文）
     for (const call of model.calls) expect(JSON.stringify(call.messages)).not.toContain("批 1 开始");
     for (const call of model.calls) expect(JSON.stringify(call.messages)).not.toContain("快照：人物");
@@ -519,9 +919,10 @@ describe("拆解会话落盘", () => {
 
     await startDecomposeJob(project, model.deps);
 
-    const logs = sessionLogsOf(project.root, decomposeSessionId(jobId));
+    // 段内累积（默认并发 1 ⇒ 段 1/1）：段起点快照组成 + 批开始规模都写在 worker 会话里
+    const logs = sessionLogsOf(project.root, decomposeWorkerSessionId(jobId, 1));
     expect(logs[0]).toMatchObject({ kind: "snapshot", text: "快照：人物 2 / 设定 1 / 地点 1 / 关系 1 / 前置摘要 0 条" });
-    expect(logs[1]).toMatchObject({ kind: "batch_start", batchSeq: 1, text: "批 1 开始（6 章；快照 名字 2 / 关系 1）" });
+    expect(logs[1]).toMatchObject({ kind: "batch_start", batchSeq: 1, text: "批 1 开始（段 1/1；6 章；快照 名字 2 / 关系 1）" });
   });
 
   it("DELETE /chat/sessions/<拆解会话>：暂停后当前批仍在飞 → 409；轮次收尾后可删", async () => {
@@ -574,6 +975,7 @@ function historicalJob(project: ProjectContext, createdAt: string): string {
     scopeStart: 1,
     scopeEnd: 1,
     batchTargetChars: DECOMPOSE_BATCH_TARGET_CHARS,
+    concurrency: 1,
     model: null,
     batches: [],
     now: createdAt,
@@ -595,29 +997,36 @@ describe("拆解会话保留上限（§7.2）", () => {
     model.script([NO_ALIASES]); // 空批 job 收口只发一次别名归并调用（无章摘要 ⇒ 报告不发请求）
     const project = initProject(bookDir("保留上限"), { name: "保留上限" });
     setCurrentProject(project);
-    // 六枚历史 job + 各自的会话文件；另造一枚 chat 会话（无前缀 ⇒ 永不参与）
+    // 六枚历史 job + 各自的会话文件（主 + 段 worker 各一枚）；另造一枚 chat 会话（无前缀 ⇒ 永不参与）
     const jobIds = [1, 2, 3, 4, 5, 6].map((n) => {
       const jobId = historicalJob(project, `2026-01-01T00:00:0${n}.000Z`);
       writeSessionFile(project.root, decomposeSessionId(jobId));
+      writeSessionFile(project.root, decomposeWorkerSessionId(jobId, 1));
       return jobId;
     });
     writeSessionFile(project.root, "chat-keep");
-    // 新一轮 = 第七枚 job（最新）⇒ 保留窗口 = 最近 5 枚，最旧两枚的会话该被清掉
+    // 新一轮 = 第七枚 job（最新）⇒ 保留窗口 = 最近 5 枚；最旧两枚 job 的**全部会话（主 + worker）**该被清掉
     const newJobId = historicalJob(project, "2026-02-01T00:00:00.000Z");
     updateJobStatus(project.db, newJobId, "running", nowIso());
 
     await startDecomposeJob(project, model.deps);
 
     const ids = sessionIdsIn(project.root);
-    expect(ids.filter((id) => id.startsWith(DECOMPOSE_SESSION_ID_PREFIX))).toHaveLength(DECOMPOSE_KEPT_SESSIONS);
+    // 保留窗口内 4 枚旧 job 各主 + worker（2 枚 × 4）+ 本轮主会话（空批 job ⇒ 无 worker）
+    expect(ids.filter((id) => id.startsWith(DECOMPOSE_SESSION_ID_PREFIX))).toHaveLength((DECOMPOSE_KEPT_SESSIONS - 1) * 2 + 1);
     expect(ids).toContain("chat-keep");
     const newest = decomposeSessionId(newJobId);
     expect(ids).toContain(newest);
-    for (const old of jobIds.slice(0, 2)) expect(ids).not.toContain(decomposeSessionId(old));
+    for (const old of jobIds.slice(0, 2)) {
+      expect(ids).not.toContain(decomposeSessionId(old)); // 主会话按精确 id 命中
+      expect(ids).not.toContain(decomposeWorkerSessionId(old, 1)); // worker 按 `-w` 前缀命中
+    }
+    // 窗口内 job 的 worker 会话不受影响
+    for (const kept of jobIds.slice(2)) expect(ids).toContain(decomposeWorkerSessionId(kept, 1));
     // 不静默：过程条目写在本轮会话里（枚数与上限都由常量插值，散文不复述数字）
     expect(sessionLogsOf(project.root, newest)[0]).toEqual({
       kind: "session_pruned",
-      text: `已清理 2 份更早的拆解记录（保留最近 ${DECOMPOSE_KEPT_SESSIONS} 份）`,
+      text: `已清理 4 份更早的拆解记录（保留最近 ${DECOMPOSE_KEPT_SESSIONS} 个 job 的全部会话）`,
       at: expect.any(String),
     });
   });
@@ -636,9 +1045,12 @@ describe("拆解会话保留上限（§7.2）", () => {
     ]);
     const project = initProject(bookDir("保留上限·在跑"), { name: "在跑" });
     setCurrentProject(project);
-    // 先起一枚 job 的轮次并卡在模型调用上（在跑轮次）；会话文件已在上一次轮次落盘（续拆形态）
+    // 先起一枚 job 的轮次并卡在模型调用上（在跑轮次）；会话文件（主 + worker）已在上一次轮次落盘（续拆形态）
     const runningJobId = historicalJob(project, "2026-01-01T00:00:01.000Z");
-    writeSessionFile(project.root, decomposeSessionId(runningJobId));
+    const runningSession = decomposeSessionId(runningJobId);
+    const runningWorker = decomposeWorkerSessionId(runningJobId, 1);
+    writeSessionFile(project.root, runningSession);
+    writeSessionFile(project.root, runningWorker);
     updateJobStatus(project.db, runningJobId, "running", nowIso());
     const run = startDecomposeJob(project, model.deps);
     await waitFor(() => model.calls.length >= 1, "本轮调用已发出");
@@ -648,21 +1060,22 @@ describe("拆解会话保留上限（§7.2）", () => {
     writeSessionFile(project.root, decomposeSessionId(olderJobId));
     for (const n of [3, 4, 5, 6, 7]) writeSessionFile(project.root, decomposeSessionId(historicalJob(project, `2026-01-01T00:00:0${n}.000Z`)));
 
-    // 超出保留窗口的两枚：旧 job 被删，在跑的那枚不动（job 行 paused ⇒ 只靠「有在跑轮次」守住）
+    // 超出保留窗口的两枚 job：旧 job 被删，在跑的 job 的主 + worker 都不动（job 行 paused ⇒ 只靠「有在跑轮次」守住）
     expect(await pruneDecomposeSessions(project)).toBe(1);
-    const runningSession = decomposeSessionId(runningJobId);
     expect(sessionIdsIn(project.root)).toContain(runningSession);
+    expect(sessionIdsIn(project.root)).toContain(runningWorker);
     expect(sessionIdsIn(project.root)).not.toContain(decomposeSessionId(olderJobId));
     // 幂等：再跑一次无副作用（同一批 job 仍然只剩同一枚可删）
     const afterFirst = sessionIdsIn(project.root).sort();
     expect(await pruneDecomposeSessions(project)).toBe(0);
     expect(sessionIdsIn(project.root).sort()).toEqual(afterFirst);
 
-    // 轮次收尾后不再受保护（清理不会把该 job 的会话永久钉住）
+    // 轮次收尾后不再受保护（清理不会把该 job 的会话永久钉住）：主 + worker 一并清
     release();
     await run;
-    expect(await pruneDecomposeSessions(project)).toBe(1);
+    expect(await pruneDecomposeSessions(project)).toBe(2);
     expect(sessionIdsIn(project.root)).not.toContain(runningSession);
+    expect(sessionIdsIn(project.root)).not.toContain(runningWorker);
   });
 
   it("开会话抛错（缺模型）也不静默：删除日志已落，job 走 failJob 且不 reject", async () => {
@@ -690,7 +1103,7 @@ describe("拆解会话保留上限（§7.2）", () => {
 
       // 删除不静默：开会话抛错时只剩这条日志，必须已经落下
       expect(logSpy.mock.calls.map((call) => call.join(" "))).toContain(
-        `[decompose] 已清理 2 份更早的拆解会话（保留最近 ${DECOMPOSE_KEPT_SESSIONS} 份）`,
+        `[decompose] 已清理 2 份更早的拆解会话（保留最近 ${DECOMPOSE_KEPT_SESSIONS} 个 job 的全部会话）`,
       );
       const ids = sessionIdsIn(project.root);
       for (const old of jobIds.slice(0, 2)) expect(ids).not.toContain(decomposeSessionId(old));
@@ -1063,6 +1476,7 @@ describe("切书与重启归一", () => {
       scopeStart: 1,
       scopeEnd: 1,
       batchTargetChars: DECOMPOSE_BATCH_TARGET_CHARS,
+      concurrency: 1,
       model: null,
       batches: [{ seq: 1, chapterIds: ["ch-none"] }],
       now: nowIso(),
@@ -1317,8 +1731,8 @@ describe("项目数据快照（起始快照 + 本轮累积）", () => {
 
     const batch = decomposeBatchResultSchema.parse(getDecomposeBatch(project.db, jobId, 1)!.result);
     expect(batch.chapters[5].relations).toEqual([{ source: beyondPage, target: "人物1", type: "ally", evidence: "证据" }]);
-    // 快照组成条目报的是全集计数（不是一页）+ 与渲染同源的省略告知
-    const logs = sessionLogsOf(project.root, decomposeSessionId(jobId));
+    // 快照组成条目报的是全集计数（不是一页）+ 与渲染同源的省略告知（写在段 worker 会话里）
+    const logs = sessionLogsOf(project.root, decomposeWorkerSessionId(jobId, 1));
     expect(logs[0]?.kind).toBe("snapshot");
     expect(logs[0]?.text).toContain(`人物 ${names.length} /`);
     expect(logs[0]?.text).toContain("（已省略 ");

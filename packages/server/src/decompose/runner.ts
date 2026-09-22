@@ -1,11 +1,18 @@
-// 拆解 S2 批执行器（卡 21.6）：串行批循环 + 项目数据快照 + 逐章对齐重试 + 取消通道（暂停 / 切书 / 重启归一）
-// + job 收口（卡 21.7：批全部收口后跑 S3 归并与 S4 报告，随后 job 置 `done`）与单批重跑入口。
+// 拆解 S2 批执行器（卡 21.6 / 分段并发）：段间并行、段内串行的批循环 + 项目数据快照 +
+// 逐章对齐重试 + 取消通道（暂停 / 切书 / 重启归一）+ job 收口（批全部收口后跑 S3 归并与 S4 报告，
+// 随后 job 置 `done`）与单批重跑入口。
 //
-// 契约：docs/design/60-decompose.md §2（S3/S4 在全部批完成后各跑一次）、§4（批调度：组批 / 重试 / 串行 /
-// 项目数据快照）、§4.1（两层快照：起始快照 + 本轮累积、预算与丢弃顺序、名字集合只服务提示词渲染）、
-// §5（抽取 schema 口径）、§7（状态机、续拆、单批重跑）；docs/api/120-api-decompose.md
-// §pause / §resume / §rerun；状态不变式见 docs/db/schema.md「decompose 两表」（状态归一**只归一 job 行**）。本模块的四条口径：
-// - **续跑取「第一个未完成批」**：`done` 之外的批（`pending` / `running` / `failed`）都算未完成——
+// 契约：docs/design/60-decompose.md §2（S3/S4 在全部批完成后各跑一次）、§2.2（分段并发）、
+// §4（批调度：组批 / 重试 / 并发快照 / 项目数据快照）、§4.1（两层快照：起始快照 + 段内滚动累积、
+// 预算与丢弃顺序、名字集合只服务提示词渲染）、§5（抽取 schema 口径）、§7（状态机、续拆、单批重跑）；
+// docs/api/120-api-decompose.md §pause / §resume / §rerun；状态不变式见 docs/db/schema.md「decompose 两表」
+// （状态归一**只归一 job 行**）。本模块的口径：
+// - **段划分 = 纯函数 `planSegments`（输入 = job 快照）**：段 = 沿批边界按累计字数均衡的连续批区间，
+//   段数 = min(`decompose_jobs.concurrency`, 批数)；resume / 单批重跑用同一份输入重算 ⇒ 段身份稳定，
+//   worker 会话（`decompose-<jobId>-w<k>`）跟着稳定；
+// - **段内滚动、段间并集**（§9 不变式 14）：每段一份独立滚动累积，起始快照**各段共用**（一轮读库一次）；
+//   续拆时每段按段内已完成批重建自己的累积；跨段一致性一律交 S3 全局归并；
+// - **续跑取「段内第一个未完成批」**：`done` 之外的批（`pending` / `running` / `failed`）都算未完成——
 //   服务端重启残留的 `running` 批由这里承接，不单独归一；
 // - **单批重跑只重跑该批**（§7）：重新抽取该批 → S3 重算（`merge_written` 三路比对保幂等）→ S4 重建报告；
 // - **S2 不写业务表**：批结果只落 `decompose_batches.result`（实体 / 关系 / 大纲 / 正文只由 S3/S4 写）；
@@ -14,20 +21,22 @@
 //
 // 调用路径：`start`（首次）/ `continue`（续拆）/ `resume`（续跑）/ 单批 `rerun` 各起一轮（路由**不 await**：长任务是后台跑）；
 // 建会话前先按 `DECOMPOSE_KEPT_SESSIONS` 清理超限的更早拆解会话（§7.2，告知不静默）。
-// 暂停 / 切书 = 置 abort：**当前批跑完即停**，已发出的模型调用不 abort（结果不浪费，批级幂等靠 `done` 跳过）。
+// 暂停 / 切书 = 置 abort：**每段当前批跑完即停**（在途 ≤ 段数），已发出的模型调用不 abort
+// （结果不浪费，批级幂等靠 `done` 跳过）。并发下补限流兜底：批级 429 / 限流按指数退避 + 抖动再试（§2.2）。
 // 模型调用只经 pi 的 `ModelRuntime`（`getModelRuntime()` / `getSettingsManager()` 唯一入口）——
 // 业务代码不自建 fetch / HTTP agent（出站行为统一由启动时装的全局 undici dispatcher 承担）。
 // 阈值与提示词里的数字一律取自常量（提示词按常量插值生成，散文不复述数字）。
 
 import { unlinkSync } from "node:fs";
 import type { DecomposeBatchResult, OutlineFileTree } from "@whispering233/ai-editor-shared";
-import { findProjectSession } from "@whispering233/ai-editor-agent";
+import { listProjectSessions } from "@whispering233/ai-editor-agent";
 import {
   completeBatch,
   deriveChapterOrder,
   failBatch,
   findOutlineNode,
   getDecomposeJob,
+  getDocumentTextLengths,
   getDocumentTexts,
   listDecomposeBatches,
   listDecomposeJobs,
@@ -55,22 +64,30 @@ import {
   normalizeExtraction,
 } from "./extract.js";
 import { doneBatchResults } from "./job.js";
+import { planSegments } from "./batching.js";
 import {
   decomposeSessionId,
+  decomposeWorkerSessionPrefix,
   openDecomposeSession,
   parseModelJson,
   type DecomposeLlmDeps,
+  type DecomposeSegmentRef,
   type DecomposeSession,
   type ModelRequest,
 } from "./llm.js";
 import { normalizeEntityName } from "./merge.js";
 import { listAllLiveEntities, runDecomposeMerge } from "./merge-write.js";
 
-/** 批并发度：串行是既定口径（§4——不在 pi 的重试链里，429 / 限流要自己兜，后台任务慢比失败好）。
- * 单点可调：改成 N 即按 N 批一组并发跑；同组共用一份项目数据快照（组内后批看不到同组前批的产出）。 */
-export const DECOMPOSE_CONCURRENCY = 1;
 /** 单批尝试上限（含首次）：缺章 → 整批重试；超上限标 `failed` 并继续后续批（不阻塞整个 job） */
 export const DECOMPOSE_BATCH_MAX_ATTEMPTS = 3;
+/** 限流退避的起始等待（§2.2 并发布补：429 / 限流指数退避 + 抖动；后台任务慢比失败好） */
+export const DECOMPOSE_RATE_LIMIT_BASE_DELAY_MS = 2_000;
+/** 限流退避的等待上限（封顶；退避只发生在批内重试之间，不增加 `DECOMPOSE_BATCH_MAX_ATTEMPTS`） */
+export const DECOMPOSE_RATE_LIMIT_MAX_DELAY_MS = 30_000;
+/** 限流退避倍率：第 k 次尝试失败后等待 = 起始 × 倍率^(k-1)（封顶后仍带抖动） */
+export const DECOMPOSE_RATE_LIMIT_FACTOR = 2;
+/** 抖动下界：实际等待 ∈ [下界 × 计算值, 计算值)（多段同时退避不齐步重试） */
+export const DECOMPOSE_RATE_LIMIT_JITTER_MIN = 0.5;
 /** 起始快照回溯的章数（§4.1：只取紧邻范围起点的连续若干章——续拆 / 有范围时的前置连续性） */
 export const DECOMPOSE_SNAPSHOT_PREV_CHAPTERS = 3;
 /** 项目数据快照长度上限（§4.1：起始快照 + 本轮累积的总预算）——`routes/decompose.ts` 的每批固定开销
@@ -78,11 +95,15 @@ export const DECOMPOSE_SNAPSHOT_PREV_CHAPTERS = 3;
 export const DECOMPOSE_SNAPSHOT_MAX_CHARS = 2000;
 /** 人物 `role` 的展示权重（§4.1：主角 → … → 龙套，词表外的 role 归末位）——同时是批提示词的建议词表 */
 export const DECOMPOSE_ROLE_ORDER = ["主角", "主要配角", "配角", "反派", "龙套"] as const;
-/** 拆解会话保留上限（§7.2）：按 job `created_at` 保留最近这么多枚，超出的在新一轮拆解创建会话之前清掉 */
+/** 拆解会话保留上限（§7.2）：按 job `created_at` 保留最近这么多**个 job 的全部拆解会话**
+ * （主 + worker 合计），超出的在新一轮拆解创建会话之前清掉 */
 export const DECOMPOSE_KEPT_SESSIONS = 5;
 
 /** 拆解 runner 可注入依赖（测试注入内存运行时 + faux provider 离线跑通；缺省走 pi 单例） */
-export type DecomposeRunnerDeps = DecomposeLlmDeps;
+export type DecomposeRunnerDeps = DecomposeLlmDeps & {
+  /** 限流退避的等待实现（测试注入 no-op / 记录时长；缺省 = 真 `setTimeout`） */
+  sleep?: (ms: number) => Promise<void>;
+};
 
 /** 一批里的单章素材（章序 = 1-based 文件位置序；正文 = 服务端派生的 `content_text` 投影） */
 interface BatchChapter {
@@ -359,7 +380,9 @@ function buildBatchPrompt(input: { chapters: readonly BatchChapter[]; snapshotTe
       `- 不要输出 ability_panel 与 custom_fields；每章人物不超过 ${DECOMPOSE_CHAPTER_MAX_CHARACTERS} 条；`,
       `- settings[]：{name, description, tags, rules}——只抽对剧情有影响的设定；tags 写短标签、rules 写短句、description 不超过 ${DECOMPOSE_DESCRIPTION_MAX_CHARS} 字；每章不超过 ${DECOMPOSE_CHAPTER_MAX_SETTINGS} 条；`,
       `- locations[]：{name, type, description}——不输出上级地点；description 不超过 ${DECOMPOSE_DESCRIPTION_MAX_CHARS} 字；每章不超过 ${DECOMPOSE_CHAPTER_MAX_LOCATIONS} 条；`,
-      `- relations[]：{source, target, type, evidence}——type 只能取 ${DECOMPOSE_RELATION_TYPES.join(" / ")}；source / target 必须是本章或上文出现过的名字；每章不超过 ${DECOMPOSE_CHAPTER_MAX_RELATIONS} 条。`,
+      // 端点措辞与 §4.1 对齐（**不设端点白名单**）：分段并发下「上文」只含本段，说死「必须是上文出现过的名字」
+      // 会让模型主动丢掉跨段关系；端点存在性不在 S2 判定（唯一判据 = S3 悬空过滤）
+      `- relations[]：{source, target, type, evidence}——type 只能取 ${DECOMPOSE_RELATION_TYPES.join(" / ")}；source / target 用文中（本章或更早章节）出现过的名字，跨章 / 跨段的人物设定照写、不必等它先在本段出现；每章不超过 ${DECOMPOSE_CHAPTER_MAX_RELATIONS} 条。`,
     ].join("\n"),
     user: [`【项目数据快照】${snapshot}`, "", "【本批正文】", body].join("\n"),
   };
@@ -381,12 +404,16 @@ interface BatchRunInput {
   jobId: string;
   batch: DecomposeBatchRow;
   chapters: readonly BatchChapter[];
-  /** 项目数据快照文本（起始快照 + 本轮累积；受 `DECOMPOSE_SNAPSHOT_MAX_CHARS` 约束） */
+  /** 项目数据快照文本（起始快照 + 段内滚动累积；受 `DECOMPOSE_SNAPSHOT_MAX_CHARS` 约束） */
   snapshotText: string;
   /** 当轮快照规模（§8 批开始条目的「名字 N / 关系 M」；与 `snapshotText` 同源，不塞全文） */
   snapshotSize: string;
-  /** 本 job 的拆解会话（S2 各批 + S3 归并 + S4 报告同写这一枚） */
+  /** 本段（或主会话）的拆解会话：S2 各批写本段 worker、S3 归并 + S4 报告写主会话 */
   session: DecomposeSession;
+  /** 段身份（§8 时间线：`batch_start` 条目带段号） */
+  segment: DecomposeSegmentRef;
+  /** 限流退避的等待实现（注入点，见 `DecomposeRunnerDeps.sleep`） */
+  sleep: (ms: number) => Promise<void>;
   signal: AbortSignal;
 }
 
@@ -394,13 +421,14 @@ interface BatchRunInput {
  * 一批的执行：整批重试（≤ `DECOMPOSE_BATCH_MAX_ATTEMPTS`，含首次）——缺章是最常见的败因，
  * 重试代价 = 一批 token，而缺章的产出本来就不完整；超上限 → 标 `failed` 并继续后续批。
  * 取消（暂停 / 切书）时不再重试：批留在未完成状态，由续拆承接（`schema.md`「状态归一」不变式）。
+ * 并发下另补一层：错误判定为 429 / 限流时，重试之前按指数退避 + 抖动等一段（§2.2；慢比失败好）。
  */
 async function runBatch(input: BatchRunInput): Promise<BatchOutcome> {
   let lastError = "批未完成";
   input.session.log({
     kind: "batch_start",
     batchSeq: input.batch.seq,
-    text: `批 ${input.batch.seq} 开始（${input.chapters.length} 章；快照 ${input.snapshotSize}）`,
+    text: `批 ${input.batch.seq} 开始（段 ${input.segment.index}/${input.segment.total}；${input.chapters.length} 章；快照 ${input.snapshotSize}）`,
   });
   for (let attempt = 1; attempt <= DECOMPOSE_BATCH_MAX_ATTEMPTS; attempt++) {
     if (input.signal.aborted) return { result: null, failed: false };
@@ -427,16 +455,45 @@ async function runBatch(input: BatchRunInput): Promise<BatchOutcome> {
       return { result: normalized.result, failed: false };
     } catch (err) {
       lastError = errorMessage(err);
+      // 退避只在还有下一次尝试、且错因像限流时发生（缺章一类失败立即重试，退避对它没有意义）
+      const backoffMs =
+        isRateLimitError(err) && attempt < DECOMPOSE_BATCH_MAX_ATTEMPTS
+          ? decomposeRateLimitDelayMs(attempt, Math.random())
+          : 0;
       input.session.log({
         kind: "attempt_failed",
         batchSeq: input.batch.seq,
-        text: `批 ${input.batch.seq} 第 ${attempt} 次尝试失败：${lastError}`,
+        text: `批 ${input.batch.seq} 第 ${attempt} 次尝试失败：${lastError}${backoffMs === 0 ? "" : `；限流退避 ${backoffMs} 毫秒后重试`}`,
       });
-      console.warn(`[decompose] job ${input.jobId} 批 ${input.batch.seq} 第 ${attempt} 次尝试失败：${lastError}`);
+      console.warn(
+        `[decompose] job ${input.jobId} 批 ${input.batch.seq} 第 ${attempt} 次尝试失败：${lastError}${backoffMs === 0 ? "" : `（限流退避 ${backoffMs} 毫秒后重试）`}`,
+      );
+      if (backoffMs > 0) await input.sleep(backoffMs);
     }
   }
   failBatch(input.project.db, { jobId: input.jobId, seq: input.batch.seq, error: lastError, now: nowIso() });
   return { result: null, failed: true };
+}
+
+/**
+ * 429 / 限流判定（错误文案跨 provider 不一，只看关键字）：判定为真只影响**退避**，
+ * 不改重试上限（真·持续限流的批仍会在用满 `DECOMPOSE_BATCH_MAX_ATTEMPTS` 后标 `failed`）。
+ */
+export function isRateLimitError(err: unknown): boolean {
+  const message = errorMessage(err).toLowerCase();
+  return /\b429\b|rate[ _-]?limit|too many requests|限流|请求(过于)?频繁/.test(message);
+}
+
+/**
+ * 限流退避时长（纯函数，便于断言边界）：`attempt` = 第几次尝试失败（1-based），
+ * `random` ∈ [0, 1) 为抖动源（生产传 `Math.random()`；测试传固定值）。
+ */
+export function decomposeRateLimitDelayMs(attempt: number, random: number): number {
+  const capped = Math.min(
+    DECOMPOSE_RATE_LIMIT_BASE_DELAY_MS * DECOMPOSE_RATE_LIMIT_FACTOR ** (attempt - 1),
+    DECOMPOSE_RATE_LIMIT_MAX_DELAY_MS,
+  );
+  return Math.round(capped * (DECOMPOSE_RATE_LIMIT_JITTER_MIN + random * (1 - DECOMPOSE_RATE_LIMIT_JITTER_MIN)));
 }
 
 /** 一批的抽取计数（过程条目的「批完成」文案：各分组条数，不含原文与批结果本身） */
@@ -479,39 +536,71 @@ function batchChapters(
 interface ExecuteRunInput {
   project: ProjectContext;
   job: DecomposeJobRow;
-  session: DecomposeSession;
   signal: AbortSignal;
   /** 单批重跑：该批即使已 `done` 也重跑一次（其余 `done` 批不动）；其旧结果不入本轮累积（已知的过期输入） */
   rerunSeq?: number;
+  /** 开一段的 worker 会话（该段的批次与快照条目都写它）；段数由本函数按 job 快照算出 */
+  openWorkerSession: (segment: DecomposeSegmentRef) => Promise<DecomposeSession>;
+  /** 限流退避的等待实现（注入点，见 `DecomposeRunnerDeps.sleep`） */
+  sleep: (ms: number) => Promise<void>;
 }
 
-/** 一轮批执行（S2）：串行逐批调模型，结果只写 `decompose_batches.result` */
+/**
+ * 一轮批执行（S2）：**段间并行、段内串行**（§2.2），结果只写 `decompose_batches.result`。
+ * 段划分与段数取 job 快照（批规划 + `concurrency`）⇒ resume / 重跑重算结果一致、worker 会话稳定。
+ * 每段一份独立滚动累积（起始快照同源 = 一轮读库一次）；段首按段内已完成批重建累积（续拆 / 重跑）。
+ */
 async function executeRun(input: ExecuteRunInput): Promise<void> {
-  const { project, job, session, signal } = input;
+  const { project, job, signal } = input;
   const batches = listDecomposeBatches(project.db, job.id);
-  const pending = batches.filter((batch) => batch.status !== "done" || batch.seq === input.rerunSeq);
   const tree = readOutlineFile(project.root); // 一轮一份大纲快照（长任务里用户可能改标题）
   const chapterOrder = deriveChapterOrder(project.root);
   const chapterNumberById = new Map(chapterOrder.map((entry) => [entry.chapterId, entry.chapterNumber]));
-  // 起始快照：一轮开头读库一次（不随批刷新）；前置章摘要取本 job 范围起点之前的连续若干章
+  // 起始快照：一轮开头读库一次（不随批刷新）；**各段共用这一份**（§4.1 起始快照层）；
+  // 前置章摘要取本 job 范围起点之前的连续若干章
   const startSnapshot = readStartSnapshot({ project, scopeStart: job.scope_start, chapterOrder, tree });
-  let bible = doneBatchResults(
-    project.db,
-    job.id,
-    batches
-      .filter((batch) => batch.status === "done" && batch.seq !== input.rerunSeq)
-      .map((batch) => batch.seq),
-  ).reduce(extendStoryBible, emptyStoryBible());
-  // 快照组成条目（§8）：一轮一条，报本次读库的规模与预算省略（不塞全文；模型看不到这行）
-  session.log({ kind: "snapshot", text: snapshotLogText(snapshotComposition(startSnapshot, bible)) });
+  // 段划分：字数取正文投影长度（与进度页 / 快照同口径）；批被物理删章后字数按剩余章算，不影响可重算性
+  const textLengthById = getDocumentTextLengths(project.db, "chapter", batches.flatMap((batch) => batch.chapter_ids));
+  const segments = planSegments(
+    batches.map((batch) => ({
+      seq: batch.seq,
+      charCount: batch.chapter_ids.reduce((sum, chapterId) => sum + (textLengthById.get(chapterId) ?? 0), 0),
+    })),
+    job.concurrency,
+  );
+  const segmentRefs: DecomposeSegmentRef[] = segments.map((_, position) => ({
+    index: position + 1,
+    total: segments.length,
+  }));
+  const segmentBatches = (batchSeqs: readonly number[]): DecomposeBatchRow[] =>
+    batchSeqs.map((seq) => batches.find((batch) => batch.seq === seq) as DecomposeBatchRow); // 段由 batches 派生 ⇒ 必命中
+  // 段内串行：`done` 批跳过（单批重跑时该批例外）⇒ 无事可做的段（resume / 重跑后批已全完成）
+  // 不开 worker 会话、也不记快照条目（省一次开会话，且不产生空会话文件）
+  const activeSegments = segments
+    .map((batchSeqs, position) => ({ segment: segmentRefs[position]!, batches: segmentBatches(batchSeqs) }))
+    .filter(({ batches: rows }) => rows.some((batch) => batch.status !== "done" || batch.seq === input.rerunSeq));
+  // worker 会话先全部开好再开跑：任一段开会话失败（缺模型 / 凭据 / 目录不可写）不留「前几段已跑」的半成品
+  const workerSessions = await Promise.all(activeSegments.map(({ segment }) => input.openWorkerSession(segment)));
 
   let executed = 0;
   let failed = 0;
-  for (let start = 0; start < pending.length && !signal.aborted; start += DECOMPOSE_CONCURRENCY) {
-    const outcomes = await Promise.all(
-      pending.slice(start, start + DECOMPOSE_CONCURRENCY).map((batch) => {
-        const composition = snapshotComposition(startSnapshot, bible); // 每批重算：本轮累积随批增长
-        return runBatch({
+  await Promise.all(
+    activeSegments.map(async ({ segment, batches: rows }, position) => {
+      const session = workerSessions[position]!;
+      // 段内滚动累积：按段内已完成批重建（续拆 / 单批重跑；单批重跑的旧结果不入累积）
+      let bible = doneBatchResults(
+        project.db,
+        job.id,
+        rows.filter((batch) => batch.status === "done" && batch.seq !== input.rerunSeq).map((batch) => batch.seq),
+      ).reduce(extendStoryBible, emptyStoryBible());
+      // 快照组成条目（§8）：每段一条，报该段起点的规模与预算省略（不塞全文；模型看不到这行）
+      session.log({ kind: "snapshot", text: snapshotLogText(snapshotComposition(startSnapshot, bible)) });
+      for (const batch of rows) {
+        // 暂停 / 切书：每段当前批跑完即停（在途 ≤ 段数；已发出的调用不 abort，结果不浪费）
+        if (signal.aborted) return;
+        if (batch.status === "done" && batch.seq !== input.rerunSeq) continue; // 段内串行：done 批跳过
+        const composition = snapshotComposition(startSnapshot, bible); // 每批重算：段内累积随批增长
+        const outcome = await runBatch({
           project,
           jobId: job.id,
           batch,
@@ -519,18 +608,18 @@ async function executeRun(input: ExecuteRunInput): Promise<void> {
           snapshotText: snapshotText(startSnapshot, bible),
           snapshotSize: `名字 ${composition.merged.names} / 关系 ${composition.merged.relations}`,
           session,
+          segment,
+          sleep: input.sleep,
           signal,
         });
-      }),
-    );
-    for (const outcome of outcomes) {
-      executed++;
-      if (outcome.failed) failed++;
-      if (outcome.result !== null) bible = extendStoryBible(bible, outcome.result);
-    }
-  }
+        executed++;
+        if (outcome.failed) failed++;
+        if (outcome.result !== null) bible = extendStoryBible(bible, outcome.result);
+      }
+    }),
+  );
   console.log(
-    `[decompose] job ${job.id} 批执行收尾：执行 ${executed} 批 / 失败 ${failed} 批${signal.aborted ? "（已暂停）" : ""}`,
+    `[decompose] job ${job.id} 批执行收尾：段 ${segments.length}（在跑 ${activeSegments.length}）/ 执行 ${executed} 批 / 失败 ${failed} 批${signal.aborted ? "（已暂停）" : ""}`,
   );
 }
 
@@ -573,34 +662,39 @@ export function isDecomposeJobActive(jobId: string): boolean {
 }
 
 /**
- * 清理超出保留上限的拆解会话（§7.2）：按 job `created_at` 保留最近 `DECOMPOSE_KEPT_SESSIONS` 枚
- * （`job-<nanoid>` 里没有可解析时间 ⇒ 排序依据只能是 job 行，不是文件名），更早的会话文件物理删除
- * （与 `DELETE /chat/sessions/:id` 同款：pi 磁盘发现拿路径 → `unlinkSync`）。
+ * 清理超出保留上限的拆解会话（§7.2）：按 job `created_at` 保留最近 `DECOMPOSE_KEPT_SESSIONS` 个 job 的
+ * **全部会话（主 + worker）**（`job-<nanoid>` 里没有可解析时间 ⇒ 排序依据只能是 job 行，不是文件名），
+ * 更早的会话文件物理删除（与 `DELETE /chat/sessions/:id` 同款：pi 磁盘发现拿路径 → `unlinkSync`）。
  *
- * - **只碰会话 id 为 `decompose-` 前缀的记录**：候选集 = 历史 job 行，会话 id 由 `decomposeSessionId`
- *   组装、查找走 pi 的磁盘发现 + 会话 id 命中（文件名带时间戳前缀，**不得**按文件名 glob）
- *   ⇒ chat 会话结构上不可能参与（用户资产）；
+ * - **只碰会话 id 为 `decompose-` 前缀的记录**：候选集 = 历史 job 行；主会话按**精确 id**
+ *   （`decompose-<jobId>`）、worker 按 **`decompose-<jobId>-w` 前缀**命中，查找走 pi 的磁盘发现
+ *   （文件名带时间戳前缀，**不得**按文件名 glob）⇒ chat 会话结构上不可能参与（用户资产）；
  * - **在跑的一律不删**：job 行 `pending` / `running`，或进程内有在跑轮次（暂停后当前批仍在飞，
  *   删了会被这轮原地重建）；
  * - 单个文件删不掉只记日志（同 `pruneBackups` 口径），整段失败也不阻塞拆解。
  *
- * @returns 实际删除的会话枚数（无需清理 / 失败 → 0）
+ * @returns 实际删除的会话枚数（主 + worker 合计；无需清理 / 失败 → 0）
  */
 export async function pruneDecomposeSessions(project: ProjectContext): Promise<number> {
   try {
     const jobs = listDecomposeJobs(project.db); // created_at 升序
     const extras = jobs.slice(0, Math.max(0, jobs.length - DECOMPOSE_KEPT_SESSIONS));
+    if (extras.length === 0) return 0;
+    // 磁盘发现一次（按会话 id 命中路径；主 + worker 共用同一份清单，避免逐 job 重扫会话目录）
+    const sessions = await listProjectSessions(project.root);
     let pruned = 0;
     for (const job of extras) {
       if (job.status === "pending" || job.status === "running" || isDecomposeJobActive(job.id)) continue;
-      const sessionId = decomposeSessionId(job.id);
-      const info = await findProjectSession(project.root, sessionId);
-      if (info === null) continue; // 从未落盘 / 已被删 ⇒ 无事可做（清理幂等）
-      try {
-        unlinkSync(info.path);
-        pruned++;
-      } catch (err) {
-        console.error(`[decompose] 清理旧拆解会话失败（跳过，不阻塞）: ${sessionId}`, err);
+      const mainId = decomposeSessionId(job.id);
+      const workerPrefix = decomposeWorkerSessionPrefix(job.id);
+      for (const info of sessions) {
+        if (info.id !== mainId && !info.id.startsWith(workerPrefix)) continue;
+        try {
+          unlinkSync(info.path);
+          pruned++;
+        } catch (err) {
+          console.error(`[decompose] 清理旧拆解会话失败（跳过，不阻塞）: ${info.id}`, err);
+        }
       }
     }
     return pruned;
@@ -631,6 +725,7 @@ export function startDecomposeJob(
   const previous = activeRuns.get(job.id);
   const run: ActiveRun = { controller, done: Promise.resolve() };
   activeRuns.set(job.id, run);
+  const sleep = deps.sleep ?? defaultSleep;
   run.done = (async () => {
     try {
       await previous?.done; // 上一轮先收尾（含它正在飞的批落库）
@@ -640,9 +735,10 @@ export function startDecomposeJob(
       if (pruned > 0) {
         // 删除不静默（§9 不变式 9）：日志必须赶在开会话**之前**——开会话抛错（缺模型 / 凭据 / 会话目录不可写）
         // 时只有这条落得下；下面的过程条目依赖新会话，只能留在原地。枚数由常量插值，散文不复述数字
-        console.log(`[decompose] 已清理 ${pruned} 份更早的拆解会话（保留最近 ${DECOMPOSE_KEPT_SESSIONS} 份）`);
+        console.log(`[decompose] 已清理 ${pruned} 份更早的拆解会话（保留最近 ${DECOMPOSE_KEPT_SESSIONS} 个 job 的全部会话）`);
       }
-      // 会话（落盘 + 过程条目）一轮一枚：S2 各批 + S3 归并 + S4 报告都写进它（deps 缺模型/凭据 → 抛错 → job 标失败）
+      // 主会话（落盘 + 过程条目）一轮一枚：计划留档 + 汇总 + S3 归并 + S4 报告都写进它
+      // （deps 缺模型/凭据 → 抛错 → job 标失败）；S2 各段另开 worker 会话（executeRun 内按段数开）
       const session = await openDecomposeSession(deps, {
         projectRoot: project.root,
         jobId: job.id,
@@ -652,10 +748,18 @@ export function startDecomposeJob(
         // 删除不静默：本轮会话的过程条目（`#/decompose` 时间线可见）
         session.log({
           kind: "session_pruned",
-          text: `已清理 ${pruned} 份更早的拆解记录（保留最近 ${DECOMPOSE_KEPT_SESSIONS} 份）`,
+          text: `已清理 ${pruned} 份更早的拆解记录（保留最近 ${DECOMPOSE_KEPT_SESSIONS} 个 job 的全部会话）`,
         });
       }
-      await executeRun({ project, job, session, signal: controller.signal, rerunSeq: options.rerunSeq });
+      await executeRun({
+        project,
+        job,
+        signal: controller.signal,
+        rerunSeq: options.rerunSeq,
+        openWorkerSession: (segment) =>
+          openDecomposeSession(deps, { projectRoot: project.root, jobId: job.id, bookName: project.config.name, segment }),
+        sleep,
+      });
       if (controller.signal.aborted) return; // 暂停 / 切书：不跑 S3/S4（状态归暂停与续拆路径）
       await finishJob(project, job, session);
     } catch (err) {
@@ -665,6 +769,11 @@ export function startDecomposeJob(
     }
   })();
   return run.done;
+}
+
+/** 缺省等待实现（限流退避用；测试经 `DecomposeRunnerDeps.sleep` 注入） */
+function defaultSleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**

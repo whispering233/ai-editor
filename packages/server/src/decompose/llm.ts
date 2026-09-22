@@ -6,10 +6,12 @@
 // （`pi-coding-agent` core/sdk.js 的 streamFn → `transformHeaders` → `mergeProviderAttributionHeaders`），
 // 自己补一遍等于「无限期跟随上游」。
 //
-// 形态 = **每 job 一枚落盘会话，每 turn 独立成根**（docs/design/60-decompose.md §2.1）：
-// - 落点：`<项目根>/sessions/<时间戳>_decompose-<jobId>.jsonl`（与 chat 会话同目录 ⇒ 纯本地目录，不进任何 zip；
-//   换机器/换创作根后拆解过程记录不跟随，job 状态与批结果在 data.db 内、随三文件走）；
-// - 会话 id：`decompose-<清洗后的 jobId>`（清洗与组装同一纯函数 `decomposeSessionId`；前缀常量在 shared）；
+// 形态 = **每 job 1 + N 枚落盘会话（主 + 每段 worker），每 turn 独立成根**（docs/design/60-decompose.md §2.1）：
+// - 落点：`<项目根>/sessions/<时间戳>_decompose-<jobId>[-w<段号>].jsonl`（与 chat 会话同目录 ⇒ 纯本地目录，
+//   不进任何 zip；换机器/换创作根后拆解过程记录不跟随，job 状态与批结果在 data.db 内、随三文件走）；
+// - 会话 id：主 `decompose-<清洗后的 jobId>`、worker 主 id + `-w<段号>`（清洗与组装同一纯函数
+//   `decomposeSessionId` / `decomposeWorkerSessionId`；前缀常量在 shared）；
+// - 分期：主会话 = 计划留档 + 汇总 + S3 归并 + S4 报告；worker = 各写本段批次（§2.2 段间并行、段内串行）；
 // - 每 turn：`resetLeaf()` 后再 prompt ⇒ 本轮用户消息是**新根**（`parentId: null`），模型上下文只含本轮
 //   ——累积历史是 O(N²) 重复付费（一本 757 章的书差两个数量级），故每轮必须新根；
 // - 自动压缩关闭（一轮一上下文，没有可压缩的东西）；
@@ -93,14 +95,22 @@ export type DecomposeLogInput = Omit<DecomposeLogEntry, "at">;
 /** custom entry 的 `customType`（读侧按它过滤出过程条目） */
 export const DECOMPOSE_LOG_CUSTOM_TYPE = "decompose";
 
-/** 一枚拆解会话（= 一个 job 的过程记录）：S2 / S3 / S4 的所有调用与过程条目都写进它 */
+/** 一枚拆解会话（主会话 = 一个 job 的汇总与 S3/S4；worker = 该段的批次与快照条目） */
 export interface DecomposeSession {
-  /** pi 会话 id（= `decompose-<清洗后 jobId>`） */
+  /** pi 会话 id（主 = `decompose-<清洗后 jobId>`；worker = 主 id + `-w<段号>`） */
   sessionId: string;
   /** 单轮补全：本轮 system + 本轮素材 → 末条 assistant 文本（每轮独立成根，上下文只含本轮） */
   complete(request: ModelRequest): Promise<DecomposeCompletion>;
   /** 记一条过程条目（不参与 LLM 上下文） */
   log(entry: DecomposeLogInput): void;
+}
+
+/** 段身份（分段并发 §2.2；主会话无段身份） */
+export interface DecomposeSegmentRef {
+  /** 段号（1-based，段数由 job 快照的批数与并发数派生） */
+  index: number;
+  /** 总段数（会话名渲染成「段 k/N」） */
+  total: number;
 }
 
 /** 开会话的入参（`projectRoot` 必填：会话 cwd 与 `sessions/` 落点都由它定，避免落到进程 cwd） */
@@ -109,8 +119,10 @@ export interface OpenDecomposeSessionInput {
   projectRoot: string;
   /** job id（`decomposeSessionId` 清洗后拼进会话 id） */
   jobId: string;
-  /** 书名（会话名 = 「《书名》拆解」）；缺省回退项目目录名 */
+  /** 书名（会话名 = 「《书名》拆解」，worker = 「《书名》拆解 · 段 k/N」）；缺省回退项目目录名 */
   bookName?: string;
+  /** 段身份（分段并发）：缺省 = 主会话（计划留档 + 汇总 + S3 归并 + S4 报告）；给定 = 该段的 worker 会话 */
+  segment?: DecomposeSegmentRef;
 }
 
 /**
@@ -127,6 +139,19 @@ export function decomposeSessionId(jobId: string): string {
     .replace(/[^A-Za-z0-9]+$/, "");
   if (cleaned === "") throw new Error(`job id 无法适配 pi 的会话 id 约束: ${jobId}`);
   return `${DECOMPOSE_SESSION_ID_PREFIX}${cleaned}`;
+}
+
+/**
+ * 段 worker 会话 id：**同一清洗函数**组装的主 id + `-w<段号>` 后缀（§2.1——`-w<k>` 追加在清洗结果之后，
+ * 故 id 必然合法且前缀即 kind）。保留上限的清理与时间线合并都按 `decompose-<jobId>-w` 前缀命中。
+ */
+export function decomposeWorkerSessionId(jobId: string, segment: number): string {
+  return `${decomposeSessionId(jobId)}-w${segment}`;
+}
+
+/** 段 worker 会话 id 前缀（磁盘发现侧按它命中一个 job 的全部 worker 会话） */
+export function decomposeWorkerSessionPrefix(jobId: string): string {
+  return `${decomposeSessionId(jobId)}-w`;
 }
 
 /** pi 资源加载选项（cwd / agentDir / settingsManager 由 SDK 填充，此处只给行为开关） */
@@ -169,7 +194,10 @@ export async function openDecomposeSession(
   // 本项目设置的内存副本：拆解要关自动压缩，而 `setAutoCompactionEnabled` 写的是 settingsManager（会落盘）
   // ⇒ 用副本，用户全局设置与 chat 会话的自动压缩都不受影响（重试/超时/思考档位照旧来自用户设置）
   const sessionSettings = SettingsManager.inMemory(settings.getGlobalSettings());
-  const sessionId = decomposeSessionId(input.jobId);
+  const sessionId =
+    input.segment === undefined
+      ? decomposeSessionId(input.jobId)
+      : decomposeWorkerSessionId(input.jobId, input.segment.index);
   const sessionsDir = projectSessionsDir(input.projectRoot);
   const existing = existingSessionFile(sessionsDir, sessionId);
   const sessionManager =
@@ -178,7 +206,9 @@ export async function openDecomposeSession(
       : SessionManager.open(existing, sessionsDir);
   if (existing === null) {
     // 会话名（列表里显示正经名字，而不是被截断的原文）；续写既有文件不重复追加
-    sessionManager.appendSessionInfo(`《${input.bookName ?? basename(input.projectRoot)}》拆解`);
+    const book = input.bookName ?? basename(input.projectRoot);
+    const name = input.segment === undefined ? `《${book}》拆解` : `《${book}》拆解 · 段 ${input.segment.index}/${input.segment.total}`;
+    sessionManager.appendSessionInfo(name);
   }
 
   return {

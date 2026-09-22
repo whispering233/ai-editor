@@ -81,11 +81,11 @@ describe("009_decompose 迁移（v8 → v9，拆解两表）", () => {
     expect(tableNames(db)).not.toContain("decompose_jobs"); // 前置：v8 结构确实缺两表
 
     const { applied } = runMigrations(db, { migrations: MIGRATIONS, dbPath });
-    expect(applied.map((m) => m.version)).toEqual([9]); // 009 已聚合进 MIGRATIONS
+    expect(applied.map((m) => m.version)).toEqual([9, 10]); // 009 已聚合进 MIGRATIONS（010 顺带推进）
     expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
-    expect(SCHEMA_VERSION).toBe(9);
+    expect(SCHEMA_VERSION).toBe(10);
 
- // 两表列齐全（DDL 逐列核对，防漏列）
+    // 列齐（concurrency 由后续 010 补上；列序 = ALTER 追加在表末，按列名访问、顺序无语义）
     expect(columnNames(db, "decompose_jobs")).toEqual([
       "id",
       "status",
@@ -97,6 +97,7 @@ describe("009_decompose 迁移（v8 → v9，拆解两表）", () => {
       "error",
       "created_at",
       "updated_at",
+      "concurrency",
     ]);
     expect(columnNames(db, "decompose_batches")).toEqual([
       "job_id",

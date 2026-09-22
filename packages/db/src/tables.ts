@@ -109,6 +109,7 @@ export const decomposeJobs = sqliteTable("decompose_jobs", {
   scope_start: integer("scope_start").notNull(), // 分析范围起始章序（1-based，文件位置序）
   scope_end: integer("scope_end").notNull(),
   batch_target_chars: integer("batch_target_chars").notNull(), // 组批目标字数快照
+  concurrency: integer("concurrency").notNull(), // 并发段数快照（建 job 时读创作根配置；resume/重跑按它重算段，不读当前配置）
   model: text("model"), // 本次使用的模型（provider/id），审计用
   merge_written: text("merge_written"), // JSON: 上次归并写入清单（幂等/重跑三路比对；text 模式）
   error: text("error"), // job 级失败摘要
@@ -205,6 +206,7 @@ CREATE TABLE IF NOT EXISTS decompose_jobs (
   scope_start        INTEGER NOT NULL,   -- 分析范围起始章序（1-based，文件位置序）
   scope_end          INTEGER NOT NULL,
   batch_target_chars INTEGER NOT NULL,   -- 组批目标字数快照（续拆/重跑按同一口径重算批次）
+  concurrency        INTEGER NOT NULL,   -- 并发段数快照（建 job 时读取创作根配置；resume/重跑按它重算段，不读当前配置）
   model              TEXT,               -- 本次使用的模型（provider/id），审计用
   merge_written      TEXT,               -- JSON: 上次归并写入清单（幂等/重跑三路比对）
   error              TEXT,               -- job 级失败摘要

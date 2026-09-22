@@ -26,8 +26,10 @@ import { CREATE_TABLES_SQL } from "./tables.js";
  * 纯 DDL 无数据搬移，migrations/008_document_records.ts）。
  * v8 → v9（拆解小说，2026-09）：新增 `decompose_jobs` / `decompose_batches` 两表
  * （job 状态与批结果暂存，纯 DDL 无数据搬移，migrations/009_decompose.ts）。
+ * v9 → v10（拆解并发快照，2026-09）：`decompose_jobs` 新增 `concurrency` 列（建 job 时读取
+ * 创作根配置的快照；纯 DDL 无数据搬移，存量行回填 1，migrations/010_decompose_concurrency.ts）。
  */
-export const SCHEMA_VERSION = 9; // +拆解两表 decompose_jobs / decompose_batches（009_decompose.ts 纯 DDL）
+export const SCHEMA_VERSION = 10; // +拆解并发段数快照 decompose_jobs.concurrency（010 纯 DDL + 存量行回填）
 
 /**
  * 建表：执行全部 DDL（CREATE TABLE/INDEX IF NOT EXISTS，定义于 tables.ts），幂等，可重复调用。

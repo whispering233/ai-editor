@@ -78,6 +78,7 @@ function projectFixture(chapterCount = 6): { project: ProjectContext; jobId: str
     scopedChapters: split.result.chapters,
     scopeStart: 1,
     scopeEnd: chapterCount,
+    concurrency: 1,
     model: null,
     now: nowIso(),
   });
@@ -653,6 +654,7 @@ function continueJob(project: ProjectContext, start: number, end: number): strin
     scopeStart: start,
     scopeEnd: end,
     batchTargetChars: 6000,
+    concurrency: 1,
     model: null,
     batches: [{ seq: 1, chapterIds }],
     now: nowIso(),

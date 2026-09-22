@@ -334,6 +334,7 @@ describe("POST /project/delete —— 当前书收尾", () => {
       scopeStart: 1,
       scopeEnd: 1,
       batchTargetChars: 1000,
+      concurrency: 1,
       model: null,
       batches: [],
       now: "2026-08-01T10:00:00Z",

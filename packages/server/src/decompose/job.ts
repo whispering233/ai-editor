@@ -14,6 +14,7 @@
 //   从块重算（投影单一写入人，见 docs/db/schema.md「document_records」）；
 // - 大纲**一次读 + 一次写**（`readOutlineFile` / `writeOutlineFile`）：节点形状与 db `createOutlineNode`
 //   同构，但逐节点调用会让 N 章 × 原子写 fsync 变成 N+1 次落盘（导入一本数百章的书不可接受）；
+// - 并发段数快照（`concurrency`）由调用方**建 job 时读创作根配置一次**并传入（§2.2；本模块不读配置）；
 // - 时间（`now`）由调用方传入，本模块不生成时间。
 
 import type { DecomposeBatchResult, DecomposeJobRes, OutlineFileChapter, OutlineFileVolume } from "@whispering233/ai-editor-shared";
@@ -51,6 +52,8 @@ export interface IngestDecomposeProjectInput {
   scopeEnd: number;
   /** 本次使用的模型（`provider/id`，审计用）；未配置 → null */
   model: string | null;
+  /** 并发段数快照（建 job 时由调用方读创作根配置一次，见 `decompose/config.ts`） */
+  concurrency: number;
   now: string;
 }
 
@@ -139,6 +142,7 @@ export function ingestDecomposeProject(input: IngestDecomposeProjectInput): Inge
     batches: planBatchRows(input.scopedChapters, chapterIdByIndex),
     scopeStart: input.scopeStart,
     scopeEnd: input.scopeEnd,
+    concurrency: input.concurrency,
     model: input.model,
     now,
   });
@@ -153,6 +157,8 @@ export interface ContinueDecomposeInput {
   scopeEnd: number;
   /** 本次使用的模型（`provider/id`，审计用）；未配置 → null */
   model: string | null;
+  /** 并发段数快照（建 job 时由调用方读创作根配置一次，见 `decompose/config.ts`） */
+  concurrency: number;
   now: string;
 }
 
@@ -168,6 +174,7 @@ export function ingestDecomposeContinue(input: ContinueDecomposeInput): IngestDe
     batches: planBatchRows(input.scopedChapters, chapterIdByIndex),
     scopeStart: input.scopeStart,
     scopeEnd: input.scopeEnd,
+    concurrency: input.concurrency,
     model: input.model,
     now: input.now,
   });
@@ -198,6 +205,7 @@ function createRunningJob(
     batches: Array<{ seq: number; chapterIds: string[] }>;
     scopeStart: number;
     scopeEnd: number;
+    concurrency: number;
     model: string | null;
     now: string;
   },
@@ -206,6 +214,7 @@ function createRunningJob(
     scopeStart: input.scopeStart,
     scopeEnd: input.scopeEnd,
     batchTargetChars: DECOMPOSE_BATCH_TARGET_CHARS,
+    concurrency: input.concurrency,
     model: input.model,
     batches: input.batches,
     now: input.now,

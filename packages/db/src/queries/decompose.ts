@@ -40,6 +40,8 @@ export interface DecomposeJobRow {
   scope_start: number;
   scope_end: number;
   batch_target_chars: number;
+  /** 并发段数快照（建 job 时读取创作根配置；resume / 重跑按它重算段，不读当前配置） */
+  concurrency: number;
   model: string | null;
   merge_written: DecomposeMergeWrittenEntry[];
   error: string | null;
@@ -72,6 +74,8 @@ export interface CreateDecomposeJobInput {
   scopeEnd: number;
   /** 组批目标字数快照（续拆/重跑按同一口径重算批次） */
   batchTargetChars: number;
+  /** 并发段数快照（建 job 时读取创作根配置；缺省 / 钳制口径在 server 拆解模块，本包只落值） */
+  concurrency: number;
   /** 本次使用的模型（provider/id，审计用）；未配置 → null */
   model: string | null;
   /** 批规划（seq 升序，各批的章 id 列表按文件序） */
@@ -132,6 +136,7 @@ function toJobRow(row: Record<string, unknown>): DecomposeJobRow {
     scope_start: row.scope_start as number,
     scope_end: row.scope_end as number,
     batch_target_chars: row.batch_target_chars as number,
+    concurrency: row.concurrency as number,
     model: (row.model as string | null) ?? null,
     merge_written: parseMergeWritten(row.merge_written),
     error: (row.error as string | null) ?? null,
@@ -173,6 +178,7 @@ export function createDecomposeJob(db: Db, input: CreateDecomposeJobInput): Deco
         scope_start: input.scopeStart,
         scope_end: input.scopeEnd,
         batch_target_chars: input.batchTargetChars,
+        concurrency: input.concurrency,
         model: input.model,
         merge_written: null,
         error: null,
