@@ -10,21 +10,10 @@
 
 ## 会话状态栏（输入区底行观测层）
 
-> 契约依据：`docs/api/80-api-chat.md` §会话用量字段、`docs/ui/DESIGN.md` `session-status-bar`、`docs/design/20-context.md` §2 / §2.1。依赖链 1 → 2 → 3 → 4 → 5 → 6，**不并行**（后卡吃前卡的字段名）。
+> 契约依据：`docs/api/80-api-chat.md` §会话用量字段、`docs/ui/DESIGN.md` `session-status-bar`、`docs/design/20-context.md` §2 / §2.1。卡 1–6（契约定稿 → schema/agent 模块 → 帧与历史下发 → client store → 状态栏组件 → 端到端验收）已完成并进 CHANGELOG。
 
-- [ ] **卡 1｜契约文档更新**：把口径落成文档（`docs/api/80-api-chat.md` 帧表 + §会话用量字段 + 历史响应 + `contextUsage` 允许 `null`；`docs/ui/DESIGN.md` `usage-bar` → `session-status-bar`；`docs/design/20-context.md` §2 占用 `null` 语义 + §2.1 用量口径；`docs/design/backlog.md` 延期项）。
-  - 判据：文档间互不矛盾；无「卡 N / 批次 N」编号；阈值/上限一律引用常量名、**不复述数字**；`git log` 含新 commit 且 `git status` 干净。
-- [ ] **卡 2｜shared schema + agent 模块**：`chatContextUsageSchema`（`tokens`/`percent` 容许 `null`）、`chatUsageSchema`（6 字段 + `cacheHitRate?` + `subscription`）、`chatSpeedSchema`；新增 `agent/src/runtime/usage.ts`（`sessionUsage(entries, { isUsingSubscription })`——pi 0.85.1 的 `ModelRuntime.isUsingSubscription()` = OAuth 且该家 `auth.oauth.isSubscription`；**禁用 `isUsingOAuth`**（openrouter / radius 等 OAuth 但按量计费的家会被误标），另保留 API-key 认证的订阅家 `kimi-coding` 字面量）与 `agent/src/runtime/speed.ts`（`createSpeedMeter({ now })`）+ 单测。**纯新增，无消费方**。
-  - 边界：`chatMessagesResSchema` 的 `usage` 字段声明因「本卡不动 server」而**移交卡 3**（声明与其填充同卡落地，避免卡 2 把 server 测试改红）。
-  - 判据：`pnpm -r build` 绿；`pnpm --filter @whispering233/ai-editor-agent test` 绿（守卫分支逐条有用例：命中率分母 0 / 订阅判定 / 无增量 / `output<=0` / 时长低于常量 / `error`·`aborted`）；汇报附 commit hash 与命令输出。
-- [ ] **卡 3｜帧与历史端点下发**：`agent/src/runtime/events.ts` 增 `getSessionUsage` / `speedMeter` 选项并在 `turn_end` / `agent_end` 附 `usage`、assistant `message_end` 附 `speed`（含「纯函数」注释不变式修订）；`server/src/routes/chat.ts` 每流建 meter + 历史响应填 `usage`，`contextUsageField` 与帧同源；**`shared/src/types/api.ts`：把 `chatMessagesResSchema` 的 `usage` 字段声明加回并设为必填**（卡 2 因边界移交过来，声明与填充必须同卡）。
-  - 判据：`pnpm --filter @whispering233/ai-editor-server test` 绿（断言帧含 `usage`/`speed`、历史含 `usage`、`tokens=null` **不丢帧**）；`pnpm typecheck` / `pnpm lint` 绿。
-- [ ] **卡 4｜client store 状态与解析**：`stores/chat.ts` 增 `usage` / `speed` 状态 + 解析（非法即 `null`；`contextUsage` 的 `tokens`/`percent` 放宽为可 `null`）+ 帧处理（`turn_end` / `agent_end` / `message_end`）+ 四处清零点（切会话 / 新会话 / 切项目；流开始**不**清）。
-  - 判据：`pnpm --filter @whispering233/ai-editor-client test` 绿（含 `tokens=null` 三态用例与清零点用例）。
-- [ ] **卡 5｜状态栏组件 + 配置行剥离**：新增 `client/src/lib/session-status.ts`（格式化 / 阈值常量 / 三态视图 / 项清单与优先级 / title 组装，`usageBarView` 迁入）与 `components/chat/session-status-bar.tsx`；`ChatPanel.tsx` 把占用条从配置行移出、输入区末尾渲染状态栏、`usageBarView` 导出迁走。**含容器查询最小验证**（Tailwind v4 `@container` + 两级阈值；不通则回退 `index.css` 手写 CSS——面板宽 ≠ 视口，media query 不可替代）。
-  - 判据：`pnpm typecheck` / `lint` / client 测试绿；SSR 走查覆盖三态 / 整行无数据不渲染 / 拆解只读不渲染；浏览器像素核窄栏两级隐藏与一行几何。
-- [ ] **卡 6｜端到端验收（真实数据）**：真实会话跑一轮，数字与 pi 侧对账（TUI footer 或 `/session`）；压缩后 `? · 窗口` 态；历史会话（有账目、无速度、占用 `?`）；拆解只读会话无状态栏；切项目清零；窄栏两级隐藏。
-  - 判据：实拍证据 + 数字与上游一致；**不以单测代替**；新发现的问题进 `backlog.md`。
+- [ ] **卡 7｜历史会话的占用段窗口**（端到端验收发现）：`docs/design/20-context.md` §2.1 承诺历史会话的占用段渲染 `? · 窗口`，但历史响应不带 `contextUsage` ⇒ 实际整段隐藏（与契约不符）。修法 = 历史端点只补「窗口」不重建占用：`server/src/routes/chat.ts` 历史响应填 `contextUsage: { tokens: null, percent: null, contextWindow }`（窗口取当前激活模型目录；无模型 / 无窗口 → **省略该键**）；`shared/src/types/api.ts` 的 `chatMessagesResSchema` 增**可选** `contextUsage`；`client/src/stores/chat.ts` 的 `loadMessages` 解析进 `contextUsage`（缺省 / 非法 → `null`，与 usage 同一 `seq` 守卫内）；`docs/api/80-api-chat.md` 历史响应注记改写（「不承诺 `contextUsage`」→「只带窗口、不重建占用」）。
+  - 判据：`pnpm -r build` 绿；server 测试断言「有模型 → 响应带 `tokens`/`percent` 为 `null` 的 `contextUsage`」「无模型 → 省略键」；client 测试断言 `loadMessages` 写入该值 / 缺省置 `null`；`pnpm typecheck` / `pnpm lint` 绿；浏览器复验历史会话占用段显示 `? · 1M` 且不画条。
 
 ---
 
