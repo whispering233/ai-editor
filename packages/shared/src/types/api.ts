@@ -1022,7 +1022,6 @@ export const chatMessagesResSchema = z.object({
       createdAt: z.string(),
     }),
   ),
-  usage: chatUsageSchema, // 会话累计用量（与帧侧同一实现；形状见「会话用量」）
 });
 
 // GET /api/v1/chat/sessions/:id/messages/:messageId/thinking
