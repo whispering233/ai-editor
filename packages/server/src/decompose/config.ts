@@ -15,8 +15,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-/** 拆解并发段数缺省（未配置 / 配置非法）：串行 = 既有行为，也是最小风险档 */
-export const DEFAULT_DECOMPOSE_CONCURRENCY = 1;
+/** 拆解并发段数下限（显式配置到下限 = 退回串行；低于此值判非法） */
+export const MIN_DECOMPOSE_CONCURRENCY = 1;
+/** 拆解并发段数缺省（未配置 / 配置非法）：并发是拆解提速的主杠杆，缺省即启用 */
+export const DEFAULT_DECOMPOSE_CONCURRENCY = 4;
 /** 拆解并发段数上限（超限钳制，不判非法）：再大只会多撞 provider 限流，墙钟不再变短 */
 export const MAX_DECOMPOSE_CONCURRENCY = 8;
 
@@ -25,7 +27,7 @@ const DECOMPOSE_CONFIG_RELATIVE_PATH = join(".ai-editor", "config.json");
 
 /** 钳制到合法区间（纯函数；非整数 / 非有限值先归位到缺省——调用方只在解析出数值后用它） */
 export function clampDecomposeConcurrency(value: number): number {
-  return Math.min(Math.max(Math.floor(value), DEFAULT_DECOMPOSE_CONCURRENCY), MAX_DECOMPOSE_CONCURRENCY);
+  return Math.min(Math.max(Math.floor(value), MIN_DECOMPOSE_CONCURRENCY), MAX_DECOMPOSE_CONCURRENCY);
 }
 
 /**
@@ -51,7 +53,7 @@ export function readDecomposeConcurrency(projectRoot: string | null | undefined)
   if (typeof decompose !== "object" || decompose === null) return DEFAULT_DECOMPOSE_CONCURRENCY; // 段缺失 / 非对象
   const value = (decompose as { concurrency?: unknown }).concurrency;
   // 值非法（缺失 / 非 number / 非整数 / < 最小值）→ 缺省；超上限 → 钳制
-  if (typeof value !== "number" || !Number.isInteger(value) || value < DEFAULT_DECOMPOSE_CONCURRENCY) {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < MIN_DECOMPOSE_CONCURRENCY) {
     return DEFAULT_DECOMPOSE_CONCURRENCY;
   }
   return clampDecomposeConcurrency(value);

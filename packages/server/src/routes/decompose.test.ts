@@ -50,7 +50,7 @@ import {
 } from "../middleware/project.js";
 import { readLastProject } from "../last-project.js";
 import { DECOMPOSE_BATCH_TARGET_CHARS } from "../decompose/batching.js";
-import { DEFAULT_DECOMPOSE_CONCURRENCY } from "../decompose/config.js";
+import { DEFAULT_DECOMPOSE_CONCURRENCY, MIN_DECOMPOSE_CONCURRENCY } from "../decompose/config.js";
 import { ingestDecomposeProject } from "../decompose/job.js";
 import { DECOMPOSE_LOG_CUSTOM_TYPE, decomposeSessionId, decomposeWorkerSessionId } from "../decompose/llm.js";
 import {
@@ -1094,11 +1094,12 @@ describe("POST /decompose/continue（续拆启动）", () => {
     await waitFor(() => !isDecomposeJobActive(data.jobId), "续拆轮次收尾");
   });
 
-  it("并发段数快照：建 job 时读创作根配置一次（缺配置 → 缺省；配置改动只影响新 job）", async () => {
+  it("并发段数快照：续拆建 job 时读创作根配置一次（配置改动只影响新 job）", async () => {
     const app = buildApp(await runtimeWithCost(0.5, 1.5));
     const firstJobId = decomposedJob("续拆并发", 6, { start: 1, end: 2 });
     const project = getCurrentProject()!;
-    expect(getDecomposeJob(project.db)!.concurrency).toBe(DEFAULT_DECOMPOSE_CONCURRENCY); // 无配置 → 缺省
+    // 夹具直连 ingest 时显式串行（`ingestProject` 的缺省参数）；「缺配置 → 缺省」的读配置口径由 start 用例覆盖
+    expect(getDecomposeJob(project.db)!.concurrency).toBe(MIN_DECOMPOSE_CONCURRENCY);
 
     // 写创作根配置（续拆端点建 job 时读一次并快照）
     mkdirSync(join(tmpRoot, ".ai-editor"), { recursive: true });
@@ -1109,7 +1110,7 @@ describe("POST /decompose/continue（续拆启动）", () => {
     expect(getDecomposeJob(project.db)!.id).toBe(data.jobId);
     expect(getDecomposeJob(project.db)!.concurrency).toBe(3);
     // 历史 job 的快照不被改写（改配置只影响新 job）
-    expect(listDecomposeJobs(project.db).find((job) => job.id === firstJobId)!.concurrency).toBe(DEFAULT_DECOMPOSE_CONCURRENCY);
+    expect(listDecomposeJobs(project.db).find((job) => job.id === firstJobId)!.concurrency).toBe(MIN_DECOMPOSE_CONCURRENCY);
     await waitFor(() => !isDecomposeJobActive(data.jobId), "续拆轮次收尾");
   });
 });

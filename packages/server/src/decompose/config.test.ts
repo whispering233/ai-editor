@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   DEFAULT_DECOMPOSE_CONCURRENCY,
   MAX_DECOMPOSE_CONCURRENCY,
+  MIN_DECOMPOSE_CONCURRENCY,
   clampDecomposeConcurrency,
   readDecomposeConcurrency,
 } from "./config.js";
@@ -69,9 +70,15 @@ describe("readDecomposeConcurrency（创作根 decompose.concurrency）", () => 
     expect(readDecomposeConcurrency(root)).toBe(MAX_DECOMPOSE_CONCURRENCY);
   });
 
-  it("clampDecomposeConcurrency：下界缺省值、上界上限（纯函数）", () => {
-    expect(clampDecomposeConcurrency(1)).toBe(1);
+  it("clampDecomposeConcurrency：下界下限值、上界上限（纯函数）", () => {
+    expect(clampDecomposeConcurrency(MIN_DECOMPOSE_CONCURRENCY - 1)).toBe(MIN_DECOMPOSE_CONCURRENCY);
+    expect(clampDecomposeConcurrency(MIN_DECOMPOSE_CONCURRENCY)).toBe(MIN_DECOMPOSE_CONCURRENCY);
     expect(clampDecomposeConcurrency(DEFAULT_DECOMPOSE_CONCURRENCY)).toBe(DEFAULT_DECOMPOSE_CONCURRENCY);
     expect(clampDecomposeConcurrency(MAX_DECOMPOSE_CONCURRENCY + 100)).toBe(MAX_DECOMPOSE_CONCURRENCY);
+  });
+
+  it("显式小于缺省（≥ 下限）原样保留：可手动退回更小并发", () => {
+    writeConfig(JSON.stringify({ decompose: { concurrency: MIN_DECOMPOSE_CONCURRENCY } }));
+    expect(readDecomposeConcurrency(root)).toBe(MIN_DECOMPOSE_CONCURRENCY);
   });
 });

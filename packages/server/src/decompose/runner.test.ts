@@ -399,6 +399,8 @@ beforeEach(() => {
   tmpRoot = mkdtempSync(join(tmpdir(), "ai-editor-decompose-runner-"));
   setCurrentProject(null);
   setProjectRoot(tmpRoot);
+  // 夹具缺省 = 串行（历史用例语义不变；「缺配置 → 缺省」口径由 routes 侧用例覆盖），分段用例各自 writeConcurrencyConfig 覆盖本值
+  writeConcurrencyConfig(1);
   originalHome = process.env.HOME;
   process.env.HOME = tmpRoot;
   for (const key of Object.keys(process.env)) {
