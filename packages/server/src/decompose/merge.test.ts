@@ -207,6 +207,18 @@ describe("四步有序纯管线（去重 → 别名 → 阈值 → 悬空过滤�
     expect(outcome.filtered.relations).toEqual([{ source: "乙", target: "甲", type: "ally", chapters: [1, 2] }]);
   });
 
+  it("第 4 步 · 两端都不存在的幻觉端点 ⇒ 跨章达阈值也丢进 filtered（S2 不预丢的唯一兜底）", () => {
+    const outcome = mergeCandidates([
+      batch(
+        chapter(1, { characters: named("甲"), relations: [relation("甲", "幻影", "mentor")] }),
+        chapter(2, { characters: named("甲"), relations: [relation("甲", "幻影", "mentor")] }),
+      ),
+    ]);
+    expect(outcome.entities.map((entity) => entity.name)).toEqual(["甲"]);
+    expect(outcome.relations).toEqual([]);
+    expect(outcome.filtered.relations).toEqual([{ source: "甲", target: "幻影", type: "mentor", chapters: [1, 2] }]);
+  });
+
   it("第 2 步 · 别名组：实体合并（章节集并集）+ 关系端点重映射并重新去重", () => {
     const outcome = mergeCandidates(
       [

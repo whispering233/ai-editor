@@ -43,6 +43,7 @@
 - **runner**：`executeRun` 改「段间并行、段内串行」，每段独立滚动累积（起始快照同源）；暂停 / 切书 / 中止 = 每段当前批跑完即停（在途 ≤ N）；resume / 单批重跑按 job 快照重算段、按段内已完成批重建累积；429 / 限流指数退避 + 抖动；`pruneDecomposeSessions` 按 job 删主 + worker（worker 用 `decompose-<jobId>-w` 前缀命中 pi 磁盘发现）。
 - **job**：建 job（首拆 / 续拆）读取并发并快照。
 - **routes**：`GET /decompose/job/log` 合并主 + worker 会话（按时间排序；响应形状不变；`batch_start` 带段号）。
+- **提示词对齐**：批提示词里「source / target 必须是本章或上文出现过的名字」的措辞要与 §4.1「跨段一致性交 S3」对齐——分段并发下「上文」只含本段，避免该措辞阻止模型产出跨段关系（落库判据仍只在 S3，S2 不预丢）。
 - **测试**：batching（段划分边界）、runner（段累积 / 暂停 / 续拆 / 重跑 / 清理）、db（迁移 + 行映射）、routes（log 合并）。
 
 **风险**：pi N 会话的进程内并发安全（真跑冒烟证明）；数据库写并发（单连接 + JS 单线程，需用例覆盖）。

@@ -72,7 +72,7 @@ export interface AliasValidation {
 
 /**
  * 名字归一化（**单一来源**）：trim + 折叠空白（含全角空格 U+3000）为单个半角空格。
- * 这是「同名同类型 → 同一实体」的比较基准，S2 的关系端点存在性校验与 S3 的实体去重必须同口径。
+ * 这是「同名同类型 → 同一实体」的比较基准，S3 的实体去重与关系端点比较必须同口径（S2 抽取层不判端点）。
  */
 export function normalizeEntityName(name: string): string {
   return name.replace(/[\s\u3000]+/gu, " ").trim();
