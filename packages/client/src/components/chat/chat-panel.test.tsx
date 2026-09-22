@@ -98,7 +98,11 @@ const windowStub = {
 beforeEach(() => {
   vi.stubGlobal("window", windowStub);
   mocked.listSessions.mockResolvedValue([sampleSession]);
-  mocked.getSessionMessages.mockResolvedValue({ sessionId: "sess-1", messages: [] });
+  mocked.getSessionMessages.mockResolvedValue({
+    sessionId: "sess-1",
+    messages: [],
+    usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0, cost: 0, subscription: false },
+  });
   // 打开项目：触发 chat store 订阅联动（clearSessions + loadSessions——问题 2 行为自动激活最近会话）
   useProjectStore.setState({ config: makeConfig("proj-a"), configLoading: false });
 });

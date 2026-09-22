@@ -11,8 +11,10 @@ import type {
   CloudRemoteBooksResult,
   CloudStatus,
   CloudTestResult,
+  ChatContextUsage,
   ChatSessionSummary,
   ChatThinkingPreview,
+  ChatUsage,
   ComputeStateResult,
   DeltaChange,
   DeltaRecord,
@@ -1092,10 +1094,14 @@ export function listSessions(): Promise<ChatSessionSummary[]> {
  */
 export type { ChatSessionMessage, ChatThinkingPreview };
 
-/** GET /api/v1/chat/sessions/:id/messages 响应（U5 恢复聊天记录用） */
+/** GET /api/v1/chat/sessions/:id/messages 响应（U5 恢复聊天记录用）
+ * `usage` / `contextUsage` 镜像 shared（`chatMessagesResSchema`）：账目与会话累计口径同源；
+ * `contextUsage` 只带窗口（`tokens`/`percent` 为 `null` = 占用未知，见 docs/api/80-api-chat.md） */
 export interface ChatSessionMessagesRes {
   sessionId: string;
   messages: ChatSessionMessage[];
+  usage: ChatUsage;
+  contextUsage?: ChatContextUsage;
 }
 
 /** 获取会话消息历史（按 created_at 升序；仅当前项目会话） */

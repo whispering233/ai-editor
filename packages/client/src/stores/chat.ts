@@ -565,11 +565,9 @@ export const useChatStore = create<ChatState>((set, get) => {
         }));
  // 历史账目：整会话视图重载 ⇒ 本次响应为准（非法/缺失 → null，不保留上一个会话的值）；
  // 占用只带窗口（服务端不重建占用 ⇒ tokens/percent 为 null = 未知态，UI 渲染 `? · 窗口`）；
- // 速度无历史样本（时序不落盘）⇒ 恒 null。取键与写入都待在 `seq` 守卫内（旧响应不得污染新视图）；
- // client 的响应类型（`lib/api.ts` 的 `ChatSessionMessagesRes`）未镜像 shared 新增的 `usage` /
- // `contextUsage` ⇒ 按 unknown 取键走同一防御解析（字段补齐后可去掉该收窄）
-        const usage = parseChatUsage((res as { usage?: unknown }).usage);
-        const contextUsage = parseContextUsage((res as { contextUsage?: unknown }).contextUsage);
+ // 速度无历史样本（时序不落盘）⇒ 恒 null。取键与写入都待在 `seq` 守卫内（旧响应不得污染新视图）
+        const usage = parseChatUsage(res.usage);
+        const contextUsage = parseContextUsage(res.contextUsage);
         set({ messages, contextUsage, usage, speed: null });
       } catch {
         if (seq !== msgSeq) return;
