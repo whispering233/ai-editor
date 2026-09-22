@@ -72,7 +72,6 @@ import {
   pruneDecomposeSessions,
   readStartSnapshot,
   snapshotComposition,
-  snapshotKnownNames,
   snapshotText,
   startDecomposeJob,
   type DecomposeStartSnapshot,
@@ -360,9 +359,9 @@ describe("S2 批循环", () => {
     for (const relationType of DECOMPOSE_RELATION_TYPES) expect(systemPrompt).toContain(relationType);
   });
 
-  it("本轮累积进下一批：名字与上批摘要进提示词，且跨批关系端点不被当幻觉丢弃", async () => {
+  it("本轮累积进下一批：名字与上批摘要进提示词；跨批关系端点保留（S2 不再预丢）", async () => {
     const model = await fakeModel();
-    // 第二批的关系端点「人物1」只在第一批出现过 ⇒ 靠圣经的 knownNames 才留得下来
+    // 第二批的关系端点「人物1」只在第一批出现过（本批实体是人物11 / 人物12）⇒ 仍保留，交 S3 悬空过滤
     model.script([
       batchJson({ indexes: range(1, 10) }),
       batchJson({ indexes: range(11, 12), relation: { source: "人物1", target: "人物11", type: "ally" } }),
@@ -1260,7 +1259,7 @@ describe("项目数据快照（起始快照 + 本轮累积）", () => {
     expect(text).toContain("已有关系：药老→萧炎（mentor）");
   });
 
-  it("预算裁掉名字渲染时，关系端点校验仍用全集（库里已有名字不被当幻觉丢弃）", async () => {
+  it("预算裁掉名字渲染时，端点名不在提示词里（提示词快照受预算裁剪，抽取结果不受影响）", async () => {
     const model = await fakeModel();
     const jobId = ingestProject("快照全集"); // 默认 6 章 = 一批
     const project = getCurrentProject()!;
@@ -1284,7 +1283,7 @@ describe("项目数据快照（起始快照 + 本轮累积）", () => {
     expect(batch.chapters[5].relations).toEqual([{ source: droppedName, target: "人物1", type: "ally", evidence: "证据" }]);
   });
 
-  it("起始快照分页取全：同类型实体超过一页时，超出页的名字仍在全集里——引用它的关系端点不被丢弃", async () => {
+  it("起始快照分页取全：同类型实体超过一页时，超出页的名字仍进快照（提示词渲染受预算裁剪，端点保留不依赖它）", async () => {
     const model = await fakeModel();
     const jobId = ingestProject("分页取全"); // 默认 6 章 = 一批
     const project = getCurrentProject()!;
@@ -1306,8 +1305,7 @@ describe("项目数据快照（起始快照 + 本轮累积）", () => {
       tree: readOutlineFile(project.root),
     });
     expect(snapshot.characters).toHaveLength(names.length); // 分页取全（只取首页 = 少 50 个）
-    expect(snapshotKnownNames(snapshot, emptyStoryBible())).toContain(beyondPage);
-    // 渲染预算装不下这么多名字 ⇒ 提示词里被裁；**校验全集不受影响**（两套东西，见 `snapshotKnownNames`）
+    // 渲染预算装不下这么多名字 ⇒ 提示词里被裁；端点保留与名字集合无关（S2 不判端点，交 S3 悬空过滤）
     expect(snapshotText(snapshot, emptyStoryBible())).toMatch(/（已省略 \d+ 个名字）/);
 
     model.script([

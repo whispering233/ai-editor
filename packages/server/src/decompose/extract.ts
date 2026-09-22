@@ -3,8 +3,10 @@
 // 契约：docs/design/60-decompose.md §5（抽取 schema 口径表）与 §4（逐章对齐护栏）。
 // 分工：模型原始 JSON（`unknown`，不信任）进 → 干净结果出。**唯一整批失败条件是缺章**
 // （runner 捕获后整批重试：重试代价 = 一批 token，而缺章的产出本来就不完整）；
-// 其余问题（超条数 / 白名单外关系 / 端点不存在 / 字段超长）一律就地截断或丢弃，记入 `discarded`
+// 其余问题（超条数 / 白名单外关系 / 缺字段 / 字段超长）一律就地截断或丢弃，记入 `discarded`
 // 供调用方写日志——纯函数不做 IO，也不因坏字段整批失败。
+// **关系端点存在性不在此判定**：唯一判据是 S3 的悬空过滤（§4.1 / §6 第 1 层第 4 步）——
+// 并发 / 分段下「已知名字集合」本就不全，按它预丢会把跨批 / 跨段关系误判成幻觉。
 //
 // 上限、白名单与归一规则单一定义在本模块并导出；散文与注释只引用常量名，不复述数字。
 
@@ -18,7 +20,6 @@ import type {
   RelationType,
 } from "@whispering233/ai-editor-shared";
 import { normalizeRelationType } from "@whispering233/ai-editor-shared";
-import { normalizeEntityName } from "./merge.js";
 
 /** 章摘要长度上限（写入 outline 节点 `summary`，会被聚焦章注入使用——见 20-context.md §2） */
 export const DECOMPOSE_CHAPTER_SUMMARY_MAX_CHARS = 200;
@@ -70,14 +71,8 @@ export interface ExtractionNormalization {
  *
  * - `expectedChapterIndexes` = 本批应覆盖的章序（1-based 文件位置序），来自 `decompose_batches.chapter_ids` 的映射；
  *   结果**按该顺序**输出，缺章抛错（runner 捕获后整批重试），批外章条目丢弃。
- * - `knownNames` = 本批之外的累计候选名字（项目数据快照里已出现过的人物 / 设定 / 地点名）；
- *   关系端点必须落在「本批 ∪ 累计」集合内，否则丢弃（§6 第 1 层：防模型幻觉出不存在的人物）。
  */
-export function normalizeExtraction(
-  raw: unknown,
-  expectedChapterIndexes: readonly number[],
-  knownNames: readonly string[] = [],
-): ExtractionNormalization {
+export function normalizeExtraction(raw: unknown, expectedChapterIndexes: readonly number[]): ExtractionNormalization {
   const discarded: string[] = [];
   const chaptersByIndex = new Map<number, JsonRecord>();
   for (const item of asArray(asRecord(raw)?.chapters)) {
@@ -103,25 +98,14 @@ export function normalizeExtraction(
     if (!expected.has(chapterIndex)) discarded.push(`第${chapterIndex}章不在本批范围内，已丢弃`);
   }
 
-  // 关系端点的存在性判据：本批全部章的名字 ∪ 累计候选集合（同口径归一化后再比较）
-  const known = new Set<string>([...knownNames.map(normalizeEntityName)]);
-  for (const chapter of chaptersByIndex.values()) {
-    for (const name of entityNamesOf(chapter)) known.add(name);
-  }
-
   const chapters = expectedChapterIndexes.map((chapterIndex) =>
-    normalizeChapter(chaptersByIndex.get(chapterIndex) as JsonRecord, chapterIndex, known, discarded),
+    normalizeChapter(chaptersByIndex.get(chapterIndex) as JsonRecord, chapterIndex, discarded),
   );
   return { result: { chapters }, discarded };
 }
 
 /** 单章归一：条数上限截断 + 字段收窄；丢弃项（含原因）追加进 `discarded` */
-function normalizeChapter(
-  raw: JsonRecord,
-  chapterIndex: number,
-  known: ReadonlySet<string>,
-  discarded: string[],
-): DecomposeExtractedChapter {
+function normalizeChapter(raw: JsonRecord, chapterIndex: number, discarded: string[]): DecomposeExtractedChapter {
   const label = `第${chapterIndex}章`;
   const summary = asText(raw.summary) ?? "";
 
@@ -146,7 +130,7 @@ function normalizeChapter(
 
   const relations: DecomposeRelation[] = [];
   for (const item of asArray(raw.relations)) {
-    const { relation, reason } = filterRelation(item, known);
+    const { relation, reason } = filterRelation(item);
     if (relation === null) {
       discarded.push(`${label}：${reason}`);
       continue;
@@ -218,8 +202,11 @@ function normalizeLocation(value: unknown): DecomposeLocation | null {
   return location;
 }
 
-/** 关系过滤：白名单外 / 端点不在候选集合 / 缺字段 → 丢弃并给原因（`relation === null` ⇔ `reason !== null`） */
-function filterRelation(value: unknown, known: ReadonlySet<string>): { relation: DecomposeRelation | null; reason: string | null } {
+/**
+ * 关系过滤：白名单外 / 缺字段 → 丢弃并给原因（`relation === null` ⇔ `reason !== null`）。
+ * **不判端点存在性**——那是 S3 的悬空过滤的唯一职责（§4.1 / §6 第 1 层第 4 步）。
+ */
+function filterRelation(value: unknown): { relation: DecomposeRelation | null; reason: string | null } {
   const raw = asRecord(value);
   const source = asText(raw?.source);
   const target = asText(raw?.target);
@@ -230,24 +217,9 @@ function filterRelation(value: unknown, known: ReadonlySet<string>): { relation:
   if (!(DECOMPOSE_RELATION_TYPES as readonly string[]).includes(type)) {
     return { relation: null, reason: `关系「${source}→${target}（${type}）」的类型不在 DECOMPOSE_RELATION_TYPES，已丢弃` };
   }
-  if (!known.has(normalizeEntityName(source)) || !known.has(normalizeEntityName(target))) {
-    return { relation: null, reason: `关系「${source}→${target}（${type}）」的端点不在候选集合，已丢弃` };
-  }
   const relation: DecomposeRelation = { source, target, type };
   assign(relation, "evidence", asText(raw?.evidence));
   return { relation, reason: null };
-}
-
-/** 本批某章里出现过的实体名（归一化；关系端点存在性判据的「本批」一半） */
-function entityNamesOf(chapter: JsonRecord): string[] {
-  const names: string[] = [];
-  for (const key of ["characters", "settings", "locations"] as const) {
-    for (const item of asArray(chapter[key])) {
-      const name = asText(asRecord(item)?.name);
-      if (name !== null) names.push(normalizeEntityName(name));
-    }
-  }
-  return names;
 }
 
 // ── 小工具（模块私有） ────────────────────────────────────────────────────────

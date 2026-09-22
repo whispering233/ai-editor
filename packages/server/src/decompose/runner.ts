@@ -2,7 +2,7 @@
 // + job 收口（卡 21.7：批全部收口后跑 S3 归并与 S4 报告，随后 job 置 `done`）与单批重跑入口。
 //
 // 契约：docs/design/60-decompose.md §2（S3/S4 在全部批完成后各跑一次）、§4（批调度：组批 / 重试 / 串行 /
-// 项目数据快照）、§4.1（两层快照：起始快照 + 本轮累积、预算与丢弃顺序、knownNames 全集）、
+// 项目数据快照）、§4.1（两层快照：起始快照 + 本轮累积、预算与丢弃顺序、名字集合只服务提示词渲染）、
 // §5（抽取 schema 口径）、§7（状态机、续拆、单批重跑）；docs/api/120-api-decompose.md
 // §pause / §resume / §rerun；状态不变式见 docs/db/schema.md「decompose 两表」（状态归一**只归一 job 行**）。本模块的四条口径：
 // - **续跑取「第一个未完成批」**：`done` 之外的批（`pending` / `running` / `failed`）都算未完成——
@@ -109,7 +109,7 @@ export function emptyStoryBible(): StoryBible {
 
 /**
  * 归并一批抽取结果进本轮累积（纯函数，返回新对象）：名字与关系累计去重，摘要整批替换。
- * 名字集合同时是 `normalizeExtraction` 的 `knownNames`——跨批关系端点靠它才不被当成幻觉丢弃。
+ * 名字 / 关系集合只服务提示词渲染（§4.1）——关系端点判据唯一在 S3 悬空过滤，抽取层不预丢。
  */
 export function extendStoryBible(bible: StoryBible, result: DecomposeBatchResult): StoryBible {
   const seenNames = new Set(bible.names.map(normalizeEntityName));
@@ -142,7 +142,7 @@ export function extendStoryBible(bible: StoryBible, result: DecomposeBatchResult
 export interface DecomposeStartSnapshot {
   /** 已有的人物（带 `role`；顺序 = `DECOMPOSE_ROLE_ORDER` 权重） */
   characters: Array<{ name: string; role: string }>;
-  /** 已有的设定名（§4.1：只给名字——这两类没有关系端点判据要保） */
+  /** 已有的设定名（§4.1：只给名字） */
   settings: string[];
   /** 已有的地点名（与设定同款只给名字；分列存是为了「快照组成」条目能报各自计数，渲染时仍合成一块） */
   locations: string[];
@@ -165,8 +165,8 @@ export function readStartSnapshot(input: {
   const { project, scopeStart, chapterOrder, tree } = input;
   // 实体**分页取全**（`listAllLiveEntities`，与 S3 同名复用同一实现）：实体列表每页上限
   // `MAX_ENTITY_LIST_LIMIT`，早先按「单类型 ≤ 一页够用」这个刻度读首页——尺度失效点很明确：
-  // 一旦某类型实体超过一页，`snapshotKnownNames` 就不再是全集，超出的名字每轮被当成幻觉，
-  // 连带把引用它的关系整条丢掉（§4.1 / §9 不变式 13）。故该刻度被移除：取全，不按页猜。
+  // 快照是提示词里实体名的唯一来源，只取首页会让模型看不到超出的角色与设定 / 地点名（§4.1）。
+  // 故该刻度被移除：取全，不按页猜。
   // 关系无此问题：`listRelations` 不分页、单查询返回全部可见关系（不得为它另加 limit）。
   const characters = listAllLiveEntities(project.db, "character")
     .map((item) => ({ name: item.name, role: typeof item.summary.role === "string" ? item.summary.role : "" }))
@@ -193,22 +193,6 @@ export function readStartSnapshot(input: {
 function roleRank(role: string): number {
   const index = (DECOMPOSE_ROLE_ORDER as readonly string[]).indexOf(role.trim());
   return index === -1 ? DECOMPOSE_ROLE_ORDER.length : index;
-}
-
-/**
- * 快照里的全部名字（**校验用全集**：起始快照 + 本轮累积）——`normalizeExtraction` 的 `knownNames` 输入。
- *
- * **不变式（§4.1）：这里必须是未裁剪的全集，预算只作用于提示词渲染。**
- * 反向改（拿渲染后的文本当校验集合）会把「本批没重提、但库里 / 前几批已存在」的角色误判成幻觉，
- * 连带把它的关系整条丢掉——名字数组与渲染文本是两套东西，不得合并。
- */
-export function snapshotKnownNames(start: DecomposeStartSnapshot, bible: StoryBible): string[] {
-  return [
-    ...start.characters.map((character) => character.name),
-    ...start.settings,
-    ...start.locations,
-    ...bible.names,
-  ];
 }
 
 /**
@@ -401,8 +385,6 @@ interface BatchRunInput {
   snapshotText: string;
   /** 当轮快照规模（§8 批开始条目的「名字 N / 关系 M」；与 `snapshotText` 同源，不塞全文） */
   snapshotSize: string;
-  /** 关系端点校验的候选名字全集（**未受预算裁剪**，见 `snapshotKnownNames`） */
-  knownNames: readonly string[];
   /** 本 job 的拆解会话（S2 各批 + S3 归并 + S4 报告同写这一枚） */
   session: DecomposeSession;
   signal: AbortSignal;
@@ -432,7 +414,6 @@ async function runBatch(input: BatchRunInput): Promise<BatchOutcome> {
       const normalized = normalizeExtraction(
         parseModelJson(completion.text),
         input.chapters.map((chapter) => chapter.index),
-        input.knownNames,
       );
       if (normalized.discarded.length > 0) {
         console.warn(`[decompose] job ${input.jobId} 批 ${input.batch.seq} 归一丢弃：${normalized.discarded.join("；")}`);
@@ -491,7 +472,7 @@ function batchChapters(
 
 /**
  * 已完成批的抽取结果读取（续拆 / 单批重跑时重建**本轮累积**）：实现在 `job.ts`——S3 归并读同一份
- * （不重建的话上文的名字与关系全丢，跨批关系端点会被当成幻觉丢弃）。
+ * （不重建的话上文的名字与关系全丢）。
  */
 
 /** 一轮批执行的入参（对象字段，便于后续扩展不破签名） */
@@ -535,10 +516,8 @@ async function executeRun(input: ExecuteRunInput): Promise<void> {
           jobId: job.id,
           batch,
           chapters: batchChapters(project, batch, tree, chapterNumberById),
-          // 提示词受预算裁剪，校验用全集不裁（两套东西，见 `snapshotKnownNames`）
           snapshotText: snapshotText(startSnapshot, bible),
           snapshotSize: `名字 ${composition.merged.names} / 关系 ${composition.merged.relations}`,
-          knownNames: snapshotKnownNames(startSnapshot, bible),
           session,
           signal,
         });

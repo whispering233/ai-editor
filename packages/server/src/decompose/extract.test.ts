@@ -1,7 +1,7 @@
 // 拆解 S2 抽取结果的校验与归一（纯函数）测试。契约：docs/design/60-decompose.md §5 + §4。
 // 覆盖：逐章对齐（缺章抛错 / 批外章丢弃 / 输出按批序）/ 条数上限截断（人物·设定·地点·关系）/
-// 关系白名单（8 类通过、白名单外丢弃）/ 端点存在性（本批 ∪ 累计；归一化后比较）/ 字段长度与
-// personality 条数 / 契约禁止字段不落（ability_panel · custom_fields · location.parent_id）/
+// 关系白名单（8 类通过、白名单外丢弃）/ 端点存在性不在 S2 判定（未知端点保留，唯一判据 = S3 悬空过滤）/
+// 字段长度与 personality 条数 / 契约禁止字段不落（ability_panel · custom_fields · location.parent_id）/
 // 空名与坏形状容忍（不整批失败）/ role 自由文本不校验。
 import { describe, expect, it } from "vitest";
 import {
@@ -173,44 +173,29 @@ describe("关系类型白名单（收窄到 AI 可产出的 8 类）", () => {
   });
 });
 
-describe("关系端点必须存在于本批或累计候选集合（防幻觉）", () => {
-  it("端点不在集合 → 丢弃", () => {
+describe("关系端点不在 S2 判定（唯一判据 = S3 悬空过滤）", () => {
+  it("端点在本批实体里查无此人 → 保留，且不记 discarded（不再预丢）", () => {
     const relations = [{ source: "人物1", target: "查无此人", type: "ally" }];
     const { result, discarded } = normalizeExtraction(rawBatch([rawChapter(1, { characters: characters(1), relations })]), [1]);
-    expect(result.chapters[0]?.relations).toEqual([]);
-    expect(discarded.join("\n")).toContain("端点不在候选集合");
+    expect(result.chapters[0]?.relations).toEqual([{ source: "人物1", target: "查无此人", type: "ally" }]);
+    expect(discarded).toEqual([]);
   });
 
-  it("端点由累计候选集合（前几批已出现）提供 → 保留", () => {
+  it("跨批端点（只在更早批次出现过）→ 保留：S2 不看任何名字集合", () => {
     const relations = [{ source: "前批人物", target: "人物1", type: "ally" }];
     const raw = rawBatch([rawChapter(2, { characters: characters(1), relations })]);
-    const { result } = normalizeExtraction(raw, [2], ["前批人物"]);
-    expect(result.chapters[0]?.relations).toHaveLength(1);
+    const { result, discarded } = normalizeExtraction(raw, [2]);
+    expect(result.chapters[0]?.relations).toEqual([{ source: "前批人物", target: "人物1", type: "ally" }]);
+    expect(discarded).toEqual([]);
   });
 
-  it("端点可与设定 / 地点名匹配（belongs_to / owns 的结构关系端点不限于人物）", () => {
+  it("结构关系（belongs_to / owns）端点可以是设定 / 地点名——不限于人物", () => {
     const relations = [{ source: "人物1", target: "青云门", type: "belongs_to" }];
     const raw = rawBatch([
       rawChapter(1, { characters: characters(1), settings: [{ name: "青云门" }], locations: [{ name: "后山" }], relations }),
     ]);
     const { result } = normalizeExtraction(raw, [1]);
     expect(result.chapters[0]?.relations).toHaveLength(1);
-  });
-
-  it("端点比较先归一化（全角空格 / 多空白不构成两个人）", () => {
-    const relations = [{ source: "人\u3000物\u30001", target: "人物2", type: "ally" }];
-    const characters = [{ name: "人 物 1" }, { name: "人物2" }];
-    const { result } = normalizeExtraction(rawBatch([rawChapter(1, { characters, relations })]), [1]);
-    expect(result.chapters[0]?.relations).toHaveLength(1);
-  });
-
-  it("本批的端点集合跨章共享（后章的端点可由前章提供）", () => {
-    const raw = rawBatch([
-      rawChapter(1, { characters: [{ name: "甲" }] }),
-      rawChapter(2, { characters: [{ name: "乙" }], relations: [{ source: "甲", target: "乙", type: "mentor" }] }),
-    ]);
-    const { result } = normalizeExtraction(raw, [1, 2]);
-    expect(result.chapters[1]?.relations).toHaveLength(1);
   });
 });
 
