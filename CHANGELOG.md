@@ -9,7 +9,7 @@
 
 > **拆解提速 / 批大小实测版本**：拆解 S2 改为「N 段并行、段内串行」（创作根配置 `decompose.concurrency`，缺省段数在代码常量），样本书（48 章 / 25 万字）真跑 25/25 批、零失败、墙钟 981s；关系端点判据唯一化（S2 不再预丢，交 S3 悬空过滤）；批大小加双向预算守卫；批大小四档实测判定「保持」（全文一批仅作小体量「快速概览」）。回归：build / typecheck / lint / `-r test` 全绿（199 文件 / 3021 测试）+ 样本书并发真跑 + 批大小四档实测 + 每卡独立验证与最终集成复核。
 
-> **会话状态栏（chat 右栏观测层）**：输入区底部新增一行只读状态栏——上下文占用 / 费用 / 解码速度 / 缓存命中率 / 累计 tokens；配置行回归纯配置（只留模型与思考强度）。数字全部由服务端算好下发（占用 = pi `getContextUsage()`；账目 = agent 包 `sessionUsage()`；速度 = agent 包 `createSpeedMeter()`），UI 不累加、不计时、不复算分母。回归：build / typecheck / lint / `-r test` 全绿（202 文件 / 3082 测试）+ 真实会话端到端核对（数字与独立重算逐位一致、窄栏两级隐藏、切项目清零、历史会话无速度）。
+> **会话状态栏（chat 右栏观测层）**：输入区底部新增一行只读状态栏——上下文占用 / 费用 / 解码速度 / 缓存命中率 / 累计 tokens；配置行回归纯配置（只留模型与思考强度）。数字全部由服务端算好下发（占用 = pi `getContextUsage()`；账目 = agent 包 `sessionUsage()`；速度 = agent 包 `createSpeedMeter()`），UI 不累加、不计时、不复算分母。回归：build / typecheck / lint / `-r test` 全绿（202 文件 / 3086 测试）+ 真实会话端到端核对（数字与独立重算逐位一致、窄栏两级隐藏、切项目清零、历史会话无速度 + 占用段 `? · 窗口`）。
 
 ### Added
 
@@ -32,6 +32,7 @@
 
 ### Fixed
 
+- **历史会话的占用段整段消失**：`GET /chat/sessions/:id/messages` 补 `contextUsage`（只带窗口，`tokens`/`percent` 为 `null` = 占用不重建；窗口取当前激活模型、与 `/settings/llm` 同一条解析；无模型则省略该键）——历史会话的占用段从「无」变为契约要求的 `? · 窗口` 且不画条。
 - **压缩后占用段凭空消失**：`contextUsage` 的 `tokens` / `percent` 为 `null`（压缩后到下一次模型响应之间占用未知）时改为**帧照发**、UI 渲染 `? · 窗口`——「未知」与「空」不再混为一谈（旧实现把未知当非法值丢帧，占用段静默消失）。
 - **订阅制成本误标**：`cost` 的「订阅 · 估算」判定从 `isUsingOAuth` 收窄为 `ModelRuntime.isUsingSubscription()`（= OAuth 且该家 `auth.oauth.isSubscription`）+ API-key 认证的订阅家 `kimi-coding`——openrouter / radius 等「OAuth 但按量计费」的家不再被误标为估算（实证：pi-ai 目录里 `isSubscription: true` 的家仅 anthropic / github-copilot / openai-codex / xai / kimi-coding）。
 - **worker 会话在跑时可被删除**：删除后被在途写入重建成无头文件，会导致该 job 续拆 / 重跑永久失败（且坏文件在 UI 不可见）——守卫改为「主会话精确 id 或 worker 前缀」同判。

@@ -8,12 +8,7 @@
 
 ---
 
-## 会话状态栏（输入区底行观测层）
-
-> 契约依据：`docs/api/80-api-chat.md` §会话用量字段、`docs/ui/DESIGN.md` `session-status-bar`、`docs/design/20-context.md` §2 / §2.1。卡 1–6（契约定稿 → schema/agent 模块 → 帧与历史下发 → client store → 状态栏组件 → 端到端验收）已完成并进 CHANGELOG。
-
-- [ ] **卡 7｜历史会话的占用段窗口**（端到端验收发现）：`docs/design/20-context.md` §2.1 承诺历史会话的占用段渲染 `? · 窗口`，但历史响应不带 `contextUsage` ⇒ 实际整段隐藏（与契约不符）。修法 = 历史端点只补「窗口」不重建占用：`server/src/routes/chat.ts` 历史响应填 `contextUsage: { tokens: null, percent: null, contextWindow }`（窗口取当前激活模型目录；无模型 / 无窗口 → **省略该键**）；`shared/src/types/api.ts` 的 `chatMessagesResSchema` 增**可选** `contextUsage`；`client/src/stores/chat.ts` 的 `loadMessages` 解析进 `contextUsage`（缺省 / 非法 → `null`，与 usage 同一 `seq` 守卫内）；`docs/api/80-api-chat.md` 历史响应注记改写（「不承诺 `contextUsage`」→「只带窗口、不重建占用」）。
-  - 判据：`pnpm -r build` 绿；server 测试断言「有模型 → 响应带 `tokens`/`percent` 为 `null` 的 `contextUsage`」「无模型 → 省略键」；client 测试断言 `loadMessages` 写入该值 / 缺省置 `null`；`pnpm typecheck` / `pnpm lint` 绿；浏览器复验历史会话占用段显示 `? · 1M` 且不画条。
+## 当前无进行中任务卡
 
 ---
 
