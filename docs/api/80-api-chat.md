@@ -43,15 +43,44 @@
 | `ping` | `{}` | 心跳（按 `DEFAULT_HEARTBEAT_MS` 的随机区间）：探活 + 断开检测 |
 | `agent_start` | `{}` | 本轮开始 |
 | `turn_start` | `{}` | 一次模型请求（含其触发的整批工具执行）开始 |
-| `message_start` / `message_end` | `{ message: {...} }` | 消息生命周期（user / assistant / tool 三类均发） |
+| `message_start` / `message_end` | `{ message: {...}, speed? }` | 消息生命周期（user / assistant / tool 三类均发）；`speed` **仅 assistant 的 `message_end`** 且可用时下发（见 §会话用量字段） |
 | `message_update` | `{ assistantMessageEvent: {...} }` | assistant 流式增量：`text_delta` / `thinking_delta` / `toolcall_delta` 等（**已剥离 `partial` 全文对象**；`toolcall_*` 附带 `id` / `toolName` 便于前端提前渲染）。`thinking_end` 的 `content` 降为 `THINKING_PREVIEW_MAX_CHARS` 字预览并附 `contentLength`（全文走按需端点，客户端已从 `thinking_delta` 拿到增量） |
 | `tool_execution_start` | `{ toolCallId, toolName, args }` | 工具开始执行 |
 | `tool_execution_update` | `{ toolCallId, toolName, partialResult }` | 工具流式进度（可选） |
 | `tool_execution_end` | `{ toolCallId, toolName, result: { content, details? }, isError }` | 工具结束；**AUTO 工具的 `details` 不下发**（与 `content` 重复且可能极大）；**PROPOSAL 工具的 `details` 携带提案载荷**（见 §提案确认） |
-| `turn_end` | `{ toolResults: [...], contextUsage?: { percent, tokens, contextWindow } }` | 轮次结束；`contextUsage` 供占用条（见 `../design/20-context.md` §2） |
+| `turn_end` | `{ toolResults: [...], contextUsage?: { percent, tokens, contextWindow }, usage? }` | 轮次结束（= 一次模型请求 + 其工具执行全部完成）；`contextUsage` 供占用段、`usage` 供状态栏账目（见 §会话用量字段 + `../design/20-context.md` §2） |
 | `compaction_start` / `compaction_end` | `{ reason }` / `{ reason, result?, aborted, willRetry, errorMessage? }` | 上下文自动压缩状态（可展示提示） |
 | `auto_retry_start` / `auto_retry_end` | `{ attempt, maxAttempts, delayMs, errorMessage }` / `{ success, attempt, finalError? }` | 自动重试状态（可展示提示） |
-| `agent_end` | `{ contextUsage?: {...}, stopReason?, errorMessage? }` | 本轮最终事件；错误/中止时带 `stopReason`（`error` / `aborted`）与 `errorMessage` |
+| `agent_end` | `{ contextUsage?: {...}, usage?, stopReason?, errorMessage? }` | 本轮最终事件；错误/中止时带 `stopReason`（`error` / `aborted`）与 `errorMessage` |
+
+### 会话用量字段（`usage` / `speed`）
+
+`turn_end` / `agent_end` 帧与 `GET /chat/sessions/:id/messages` 响应**共用同一形状**（服务端唯一实现点 = agent 包 `sessionUsage()`；口径 = pi `AgentSession.getSessionStats()`：assistant 消息 + `toolResult.usage` + `compaction` / `branch_summary` 的 usage 累计）。
+
+`usage`：
+
+| 字段 | 是否必选 | 数据类型 | 取值范围 | 备注 |
+| :--- | :--- | :--- | :--- | :--- |
+| input | 是 | number | ≥ 0 | 非缓存输入 token 累计 |
+| output | 是 | number | ≥ 0 | 输出 token 累计（含思考 token） |
+| cacheRead | 是 | number | ≥ 0 | 缓存读 token 累计 |
+| cacheWrite | 是 | number | ≥ 0 | 缓存写 token 累计（部分 provider 不上报 ⇒ 恒 0） |
+| total | 是 | number | ≥ 0 | `input + output + cacheRead + cacheWrite` |
+| cost | 是 | number | ≥ 0 | 美元；pi 按模型目录价格累加，**模型无价格配置时恒 0** |
+| cacheHitRate | 否 | number | 0..1 | 命中率 = `cacheRead / (input + cacheRead + cacheWrite)`；**分母为 0 时省略该键**；服务端预算（客户端不复算分母口径） |
+| subscription | 是 | boolean | | true = 末条 assistant 消息的 provider 用订阅凭据（OAuth / `kimi-coding`）⇒ `cost` 仅估算，UI 须标明 |
+
+`speed`（**仅 assistant 的 `message_end`**；历史接口不带——时序不落盘，无法重建）：
+
+| 字段 | 是否必选 | 数据类型 | 取值范围 | 备注 |
+| :--- | :--- | :--- | :--- | :--- |
+| outputTokens | 是 | number | > 0 | 该条 assistant 消息的 `usage.output` |
+| ms | 是 | number | ≥ 最小时长常量 | **首个增量 → `message_end`**（解码期，不含首字延迟） |
+| tps | 是 | number | > 0 | `outputTokens / (ms / 1000)` |
+
+**`speed` 不下发的情形**（服务端守卫，四项）：无增量到达（非流式回退）/ `output <= 0` / 生成时长小于最小时长常量 / `stopReason` 为 `error` · `aborted`。
+
+**`contextUsage` 的 `tokens` / `percent` 允许 `null`**（pi 语义：压缩后到下一次模型响应之间占用未知）——该帧照发不丢，客户端按「未知」渲染（占用段显示 `? · 窗口`），**不得因未知而整段静默消失**；`contextWindow` 为正整数时必给。
 
 **过滤约定**（服务端唯一实现点）：
 
@@ -111,8 +140,10 @@ id: string;                  // 会话 ID（不透明值；服务端经磁盘发
     toolCallId?: string | null; // tool 消息关联的调用 id
     createdAt: string;
   }[];
+  usage: { ... };              // 会话累计用量（形状见 §会话用量字段；与帧侧同一实现）
 }
 // 按时间升序；仅当前项目的会话；未知 id → 404 SESSION_NOT_FOUND
+// 历史回看不带 speed（时序不落盘，无法重建）；注意本响应**不承诺 contextUsage**（历史会话的占用百分比不重建，见 ../design/20-context.md §2.1）
 ```
 
 ### GET /api/v1/chat/sessions/:id/messages/:messageId/thinking

@@ -1,6 +1,6 @@
 # 上下文与提示词详细设计
 
-> **本文档职责**：回答「提示词分几层、项目规则从哪来、上下文预算归谁管、占用条口径是什么」——注入分层、压缩与截断、AGENTS.md 通道的约束与理由。
+> **本文档职责**：回答「提示词分几层、项目规则从哪来、上下文预算归谁管、占用条与会话用量口径是什么」——注入分层、压缩与截断、AGENTS.md 通道的约束与理由。
 > 端点契约见 `docs/api/10-api-project.md`（AGENTS.md 读写）与 `docs/api/80-api-chat.md`（SSE）；循环语义见 `30-agent-loop.md`。
 
 ## 1. 提示词三层注入
@@ -36,7 +36,18 @@
 - **压缩落盘**：压缩摘要作为会话文件的 compaction entry 持久化，恢复时按「摘要 + 保留起点」重建——压缩结果可审计、可回溯。
 - **截断必须显式告知**：工具结果截断时返回内容注明「已截断 + 提示缩小范围」；静默截断会让模型基于残缺数据继续推理。
 - **正文只读、按需拉取（2026-09）**：聚焦章时只注入「章标题 + 摘要 + 正文前 `FOCUS_CHAPTER_EXCERPT_CHARS` 字符（显式标注「节选」）」，完整正文由模型调只读工具按 `offset`/`max_chars`（缺省 `DEFAULT_CHAPTER_TEXT_CHARS`、上限 `MAX_CHAPTER_TEXT_CHARS`）分页拉取，截断时告知续读起点。**不做整章自动入上下文、不做全书正文预载**——正文预算与对话历史共享同一个上下文窗口，预载会挤掉推理空间。
-- **占用条口径**：前端占用条数据 = pi `getContextUsage()`（`percent` / `tokens` / `contextWindow`），随 `turn_end` / `agent_end` 帧下发；**不再是「历史预算 + 各层之和」的自算分母**（旧口径下 1M 窗口占比永远是假指标）。
+- **占用条口径**：前端占用段数据 = pi `getContextUsage()`（`percent` / `tokens` / `contextWindow`），随 `turn_end` / `agent_end` 帧下发；**不再是「历史预算 + 各层之和」的自算分母**（旧口径下 1M 窗口占比永远是假指标）。**`tokens` / `percent` 可为 `null`**（压缩后到下一次模型响应之间占用未知）：帧照发，UI 渲染为 `? · 窗口` ——「未知」与「空」必须可区分。账目类指标（累计 tokens / 缓存 / 成本 / 速度）的口径见 §2.1。
+
+## 2.1 会话用量观测口径（状态栏）
+
+状态栏（`docs/ui/DESIGN.md` `session-status-bar`）的数字**全部由服务端算好下发**：
+
+- **服务端唯一实现点**：累计用量 = agent 包 `sessionUsage(entries)`（口径 = pi `AgentSession.getSessionStats()`：assistant 消息 + `toolResult.usage` + `compaction` / `branch_summary` 的 usage 三类累加），命中率与订阅布尔同在此处算；速度 = agent 包 `createSpeedMeter()`。**客户端不累加、不计时、不复算分母**（UI 只做格式化与优先级隐藏）。
+- **下发面**：`turn_end` / `agent_end` 帧带 `usage`；assistant 的 `message_end` 帧带 `speed`；`GET /chat/sessions/:id/messages` 带 `usage`（形状见 `docs/api/80-api-chat.md` §会话用量字段）。
+- **命中率 = `cacheRead / (input + cacheRead + cacheWrite)`**：会话累计口径（不是「最近一条」），分母为 0 时省略该字段而**不是**报 0%。
+- **成本是账目不是账单**：pi 按模型目录价格累加；模型无价格配置 → 恒 0（UI 隐藏该项）；订阅凭据（OAuth / `kimi-coding`）→ 数值仅为估算，UI 标「订阅 · 估算」；订阅判定用**末条 assistant 消息的 provider**（历史会话中途换过模型也按当时那家算，不用「当前设置里的模型」）。
+- **速度 = 解码速度**：首个流式增量 → `message_end`；区间起点**刻意避开首字延迟与排队**（否则同一模型的速度会随网络抖动）；分子 = 该条消息的 `usage.output`（含思考 token）。守卫（任一命中即不下发）：无增量到达（非流式回退）/ `output <= 0` / 时长小于最小时长常量 / `stopReason` 为 `error` · `aborted`。**只报最近一轮**：不做实时估算（需自建 chars→token 估算 = 第二套口径）、不做会话平均。
+- **历史会话只回账目，不回占用百分比**：pi 的 `getContextUsage()` 建在 `estimateContextTokens(当前上下文消息)` 上，而该函数**未导出** ⇒ 历史重建等于复刻一套估算口径，故不做。历史会话的占用段按「窗口已知 / 占用未知」渲染（`? · 窗口`，窗口取出当前激活模型目录）；速度同理无值（时序不落盘）。
 
 ## 3. 提示词落点
 
