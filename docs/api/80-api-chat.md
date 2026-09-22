@@ -143,7 +143,7 @@ id: string;                  // 会话 ID（不透明值；服务端经磁盘发
   usage: { ... };              // 会话累计用量（形状见 §会话用量字段；与帧侧同一实现）
 }
 // 按时间升序；仅当前项目的会话；未知 id → 404 SESSION_NOT_FOUND
-// 历史回看不带 speed（时序不落盘，无法重建）；注意本响应**不承诺 contextUsage**（历史会话的占用百分比不重建，见 ../design/20-context.md §2.1）
+// 历史回看不带 speed（时序不落盘，无法重建）；`contextUsage` **只带窗口**（`tokens` / `percent` 为 `null` = 占用未知，不重建；UI 渲染 `? · 窗口`），**无模型时省略该键**（见 ../design/20-context.md §2.1）
 ```
 
 ### GET /api/v1/chat/sessions/:id/messages/:messageId/thinking

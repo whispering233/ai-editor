@@ -1023,6 +1023,8 @@ export const chatMessagesResSchema = z.object({
     }),
   ),
   usage: chatUsageSchema, // 会话累计用量（与帧侧同一实现；形状见「会话用量」）
+  // 历史会话只回窗口（`tokens` / `percent` 为 `null` = 占用未知，**不重建**）；无模型 / 无窗口 → 省略该键
+  contextUsage: chatContextUsageSchema.optional(),
 });
 
 // GET /api/v1/chat/sessions/:id/messages/:messageId/thinking

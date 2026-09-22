@@ -5,7 +5,7 @@
 //
 // 覆盖：
 // - 会话列表：空 / 落盘后可列 / 倒序 + 50 字截断 / 项目隔离 / 旧 v1 文件被 pi 跳过
-// - 消息历史：角色顺序与 toolCalls/toolCallId、思维链只给预览、未知 id → 404
+// - 消息历史：角色顺序与 toolCalls/toolCallId、思维链只给预览、未知 id → 404、历史占用只回窗口（无模型省该键）
 // - 思维链端点：全文 / blockIndex 非法 400 / 非 thinking 块 404 / 未知会话 404
 // - 删除会话：未知 404 / 在途 409 SESSION_BUSY / 删除后列表消失 + 重复删 404
 // - POST /chat：开流前校验（400/404/409/LLM_API_KEY_MISSING）、首帧 session、事件集与
@@ -52,6 +52,7 @@ import {
   type ProjectContext,
 } from "../middleware/project.js";
 import { buildFocusText, createChatRoutes, FOCUS_CHAPTER_EXCERPT_CHARS } from "./chat.js";
+import { getModelRuntime, resetModelRuntime } from "../model-runtime.js";
 import { initDebugConfig } from "../debug.js";
 
 const HOST_HEADERS = { host: "127.0.0.1:3456" };
@@ -345,6 +346,7 @@ afterEach(() => {
   else delete process.env.DEEPSEEK_API_KEY;
   if (originalOpencodeKey !== undefined) process.env.OPENCODE_API_KEY = originalOpencodeKey;
   else delete process.env.OPENCODE_API_KEY;
+  resetModelRuntime(); // 单例随环境重建：避免上一个用例的凭据/目录快照漏进下一个（见 model-runtime.ts）
   for (const dir of tmpDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
   rmSync(tmpRoot, { recursive: true, force: true });
 });
@@ -489,6 +491,42 @@ describe("GET /chat/sessions/:id/messages 消息历史", () => {
       blockIndex: expect.any(Number),
       length: "先看大纲".length,
     });
+  });
+
+  // 历史会话只回窗口、不重建占用（docs/design/20-context.md §2.1）：窗口取**当前激活模型**目录
+  // （与 GET /settings/llm 同一条解析）。测试里进程级单例读隔离 HOME，激活模型由 provider env key 摆上。
+  it("有激活模型 → 历史响应带 contextUsage（tokens/percent 为 null + 正数窗口）", async () => {
+    openProject();
+    const env = await createFauxEnv();
+    scripted(env, [() => fauxAssistantMessage("收到")]);
+    const app = buildApp(createChatRoutes({ runtimeFactory: env.factory }));
+    const frames = await readSseFrames(await app.request("/api/v1/chat", postChat({ message: "你好" })));
+    const sessionId = (frames.find((f) => f.event === "session")!.data as { session_id: string }).session_id;
+
+    process.env.DEEPSEEK_API_KEY = "chat-test-key"; // 内置目录里唯一的可用模型来源（本机同名 key 已被 beforeEach 清掉）
+    resetModelRuntime(); // 单例重建：新 HOME / 新 env 后必须重新建目录快照
+    const res = await app.request(`/api/v1/chat/sessions/${sessionId}/messages`, { headers: HOST_HEADERS });
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    expect(data.contextUsage.tokens).toBeNull();
+    expect(data.contextUsage.percent).toBeNull();
+    expect(data.contextUsage.contextWindow).toBeGreaterThan(0);
+  });
+
+  it("无激活模型 → 历史响应不含 contextUsage 键（不给 0）", async () => {
+    openProject();
+    const env = await createFauxEnv();
+    scripted(env, [() => fauxAssistantMessage("收到")]);
+    const app = buildApp(createChatRoutes({ runtimeFactory: env.factory }));
+    const frames = await readSseFrames(await app.request("/api/v1/chat", postChat({ message: "你好" })));
+    const sessionId = (frames.find((f) => f.event === "session")!.data as { session_id: string }).session_id;
+
+    // 前置：隔离 HOME + 无 provider env key ⇒ 进程级单例里没有任何可用模型（本机 key 请一并清理）
+    expect(await (await getModelRuntime()).getAvailable()).toHaveLength(0);
+    const res = await app.request(`/api/v1/chat/sessions/${sessionId}/messages`, { headers: HOST_HEADERS });
+    expect(res.status).toBe(200);
+    const { data } = await res.json();
+    expect("contextUsage" in data).toBe(false);
   });
 });
 

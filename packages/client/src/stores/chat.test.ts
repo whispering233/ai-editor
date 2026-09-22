@@ -313,6 +313,33 @@ describe("loadMessages（U5：会话历史恢复）", () => {
     expect(useChatStore.getState().usage).toBeNull();
   });
 
+  it("历史响应带 contextUsage（只带窗口）→ 写入占用（未知态：tokens/percent 为 null）", async () => {
+    useChatStore.setState({ contextUsage: { percent: 12, tokens: 1200, contextWindow: 10000 } }); // 旧会话残留
+    mocked.getSessionMessages.mockResolvedValue({
+      sessionId: "sess-1",
+      messages: [{ id: "m1", role: "user", content: "历史", createdAt: "t" }],
+      contextUsage: { tokens: null, percent: null, contextWindow: 1_000_000 },
+    });
+    await useChatStore.getState().loadMessages("sess-1");
+    expect(useChatStore.getState().contextUsage).toEqual({ tokens: null, percent: null, contextWindow: 1_000_000 });
+  });
+
+  it("历史响应 contextUsage 缺省/非法 → null（不保留上一会话占用）", async () => {
+    useChatStore.setState({ contextUsage: { percent: 12, tokens: 1200, contextWindow: 10000 } });
+    mocked.getSessionMessages.mockResolvedValue({ sessionId: "sess-1", messages: [] }); // 无模型：服务端省略该键
+    await useChatStore.getState().loadMessages("sess-1");
+    expect(useChatStore.getState().contextUsage).toBeNull();
+
+    useChatStore.setState({ contextUsage: { percent: 12, tokens: 1200, contextWindow: 10000 } });
+    mocked.getSessionMessages.mockResolvedValue({
+      sessionId: "sess-1",
+      messages: [],
+      contextUsage: { tokens: null, percent: null, contextWindow: 0 }, // 窗口非正 ⇒ 整帧非法
+    });
+    await useChatStore.getState().loadMessages("sess-1");
+    expect(useChatStore.getState().contextUsage).toBeNull();
+  });
+
   it("历史加载失败 → usage / speed 一并清（空态不留脏账目）", async () => {
     useChatStore.setState({ usage: sampleUsage, speed: sampleSpeed });
     mocked.getSessionMessages.mockRejectedValue(new ApiError("CLIENT_NETWORK_ERROR", "网络请求失败"));

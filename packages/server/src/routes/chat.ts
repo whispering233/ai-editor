@@ -20,6 +20,7 @@
 import { unlinkSync } from "node:fs";
 import { Hono, type Context } from "hono";
 import { streamSSE } from "hono/streaming";
+import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import {
   contextUsageField,
   createPingFrame,
@@ -42,7 +43,7 @@ import {
   type SseProjectionOptions,
 } from "@whispering233/ai-editor-agent";
 import { findOutlineNode, getDocument, getDecomposeJob, getEntity, readOutlineFile } from "@whispering233/ai-editor-db";
-import { DECOMPOSE_SESSION_ID_PREFIX, truncate, type ChatUsage } from "@whispering233/ai-editor-shared";
+import { DECOMPOSE_SESSION_ID_PREFIX, truncate, type ChatContextUsage, type ChatUsage } from "@whispering233/ai-editor-shared";
 import {
   chatMessagesResSchema,
   chatSendReqSchema,
@@ -52,7 +53,7 @@ import {
 } from "@whispering233/ai-editor-shared/schemas";
 import { HttpError, ok } from "../middleware/error.js";
 import { requireCurrentProject, type ProjectContext } from "../middleware/project.js";
-import { getModelRuntime } from "../model-runtime.js";
+import { getModelRuntime, getSettingsManager, resolveActiveSelection } from "../model-runtime.js";
 import { decomposeSessionId, decomposeWorkerSessionPrefix } from "../decompose/llm.js";
 import { isDecomposeJobActive } from "../decompose/runner.js";
 import { debugLog, isCategoryEnabled } from "../debug.js";
@@ -539,6 +540,19 @@ async function lastVisibleText(target: ChatProjectTarget, sessionId: string): Pr
   return opened === null ? "" : lastVisibleSessionText(opened.entries);
 }
 
+/**
+ * 历史响应的 `contextUsage`：**只带窗口，不重建占用**（占用建在 pi 未导出的估算函数上，见
+ * `docs/design/20-context.md` §2.1）。窗口取**当前激活模型**目录——与 GET /settings/llm 同一条解析
+ * （`resolveActiveSelection` + 模型目录）。无模型 / 窗口非正 → 返回 undefined（响应省该键，不给 0）。
+ */
+async function historyContextUsage(modelRuntime: ModelRuntime): Promise<ChatContextUsage | undefined> {
+  const selection = await resolveActiveSelection(modelRuntime, getSettingsManager());
+  const contextWindow =
+    selection === null ? undefined : modelRuntime.getModel(selection.provider, selection.modelId)?.contextWindow;
+  if (contextWindow === undefined || !Number.isFinite(contextWindow) || contextWindow <= 0) return undefined;
+  return { tokens: null, percent: null, contextWindow };
+}
+
 // ============ 路由装配 ============
 
 /**
@@ -573,11 +587,12 @@ export function createChatRoutes(deps: ChatRouteDeps = {}): Hono {
     if (opened === null) {
       throw new HttpError(404, "SESSION_NOT_FOUND", `会话不存在: ${sessionId}`);
     }
-    const modelRuntime = await getModelRuntime(); // 历史响应侧无会话运行时：订阅判定从进程级模型运行时取
+    const modelRuntime = await getModelRuntime(); // 历史响应侧无会话运行时：订阅判定与窗口都从进程级模型运行时取
     const usage: ChatUsage = sessionUsage(opened.entries, {
       isUsingSubscription: subscriptionPredicate(modelRuntime),
     });
-    return messagesResponse(c, sessionId, projectSessionMessages(opened.entries), usage);
+    const contextUsage = await historyContextUsage(modelRuntime);
+    return messagesResponse(c, sessionId, projectSessionMessages(opened.entries), usage, contextUsage);
   });
 
   // GET /api/v1/chat/sessions/:id/messages/:messageId/thinking —— 思维链全文（按块按需拉取）
@@ -646,9 +661,24 @@ function sessionsResponse(c: Context, sessions: unknown[]): Response {
   }
 }
 
-function messagesResponse(c: Context, sessionId: string, messages: unknown[], usage: ChatUsage): Response {
+function messagesResponse(
+  c: Context,
+  sessionId: string,
+  messages: unknown[],
+  usage: ChatUsage,
+  contextUsage: ChatContextUsage | undefined,
+): Response {
   try {
-    return c.json(ok(chatMessagesResSchema.parse({ sessionId, messages, usage })));
+    return c.json(
+      ok(
+        chatMessagesResSchema.parse({
+          sessionId,
+          messages,
+          usage,
+          ...(contextUsage === undefined ? {} : { contextUsage }),
+        }),
+      ),
+    );
   } catch (err) {
     throw new HttpError(500, "INTERNAL_ERROR", `messages 响应不符合契约: ${err instanceof Error ? err.message : String(err)}`);
   }
