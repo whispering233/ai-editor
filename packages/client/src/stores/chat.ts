@@ -5,11 +5,12 @@
 // 映射（帧 → 状态）：
 //   session            → currentSessionId（首帧；新会话续聊身份）
 //   ping               → 忽略（fetchSSE 内部据其重置 60s 超时）
-//   message_start/end  → message_end 的 assistant 投影为**权威终态**（正文/工具调用/思维链预览）
+//   message_start/end  → message_end 的 assistant 投影为**权威终态**（正文/工具调用/思维链预览）；
+//                        assistant 帧的 speed → 解码速度（服务端算好，客户端不计时）
 //   message_update     → text_delta 累积正文；thinking_delta 累积思维链（流式展开）；
 //                        toolcall_* 只服务工具卡片元数据（执行卡片由 tool_execution_start 建）
 //   tool_execution_*   → 运行时工具卡（start 建行 / end 定终态 + 提案载荷）
-//   turn_end/agent_end → contextUsage（占用条口径 = getContextUsage，不是「预算分母」）
+//   turn_end/agent_end → contextUsage（占用条口径 = getContextUsage，不是「预算分母」）+ usage（会话累计账目）
 //   compaction_*/auto_retry_* → statusNote（轻量提示，不引入新视觉）
 //   agent_end          → 终止（stopReason=error/aborted → 错误条；成功 → 刷新会话列表）
 //   error              → HTTP 级错误（非 2xx REST 包裹 / 网络失败）：按 code 映射文案
@@ -20,7 +21,14 @@
 // 3. 流身份守卫（streamMsgId）：旧流的 onTimeout/onEnd 不得复位新流的 streaming
 // 4. 发送中禁止并发发送（streaming / messagesLoading 期间 sendMessage 直接返回）
 import { create } from "zustand";
-import type { ChatSessionMessage, ChatSessionSummary, ChatThinkingPreview } from "@whispering233/ai-editor-shared";
+import type {
+  ChatContextUsage,
+  ChatSessionMessage,
+  ChatSessionSummary,
+  ChatSpeed,
+  ChatThinkingPreview,
+  ChatUsage,
+} from "@whispering233/ai-editor-shared";
 import {
   ApiError,
   CLIENT_NETWORK_ERROR,
@@ -84,17 +92,27 @@ export interface ProposalCard {
   processing?: boolean;
 }
 
-/** 上下文占用（占用条口径 = pi `getContextUsage()`，随 turn_end / agent_end 帧下发） */
-export interface ContextUsage {
-  /** tokens / contextWindow（服务端算好的百分比；越界 clamp 见 usageBarView） */
-  percent: number;
-  tokens: number;
-  contextWindow: number;
+/** 上下文占用（占用条口径 = pi `getContextUsage()`，随 turn_end / agent_end 帧下发）
+ * 形状归 shared（`tokens` / `percent` 可为 null = 压缩后到下一次模型响应之间占用未知） */
+export type ContextUsage = ChatContextUsage;
+
+/** 帧字段数值守卫：有限且 ≥ 0（拒绝 NaN / Infinity / 负数 / 非数字类型） */
+function isNonNegative(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+/** 同上但要求 > 0（速度的 token 数 / tps；`ms` 用非负口径） */
+function isPositive(value: unknown): value is number {
+  return isNonNegative(value) && value > 0;
 }
 
 /**
- * 解析帧里的 `contextUsage`：**只接受结构完整且数值可用**的负载，其余一律 null——
- * 调用方据此隐藏占用条；绝不把 0 / NaN / 负窗口写进 store（那会渲染出 Infinity% 或假指标）。
+ * 解析帧里的 `contextUsage`（三态归一；口径见 `docs/design/20-context.md` §2）：
+ * - `contextWindow` 必须为正有限数——否则整帧丢弃（调用方保留旧值，绝不写假指标）
+ * - `tokens` 与 `percent` 同为有效数 → 有值态
+ * - 二者**同为 `null`**（压缩后占用未知）→ 未知态（照收，UI 渲染 `? · 窗口`）
+ * - 二者**只有一个**有值（服务端不一致负载）→ 一并归为未知态，**保留 `contextWindow`**
+ * - 其余（类型错 / NaN / 负数 / 缺键）→ 整帧丢弃
  */
 export function parseContextUsage(raw: unknown): ContextUsage | null {
   if (typeof raw !== "object" || raw === null) return null;
@@ -103,12 +121,54 @@ export function parseContextUsage(raw: unknown): ContextUsage | null {
     tokens?: unknown;
     contextWindow?: unknown;
   };
-  if (typeof percent !== "number" || typeof tokens !== "number" || typeof contextWindow !== "number") {
+  if (!isPositive(contextWindow)) return null;
+  const known = { percent: null, tokens: null, contextWindow };
+  if (tokens === null && percent === null) return known;
+  if (isNonNegative(tokens) && isNonNegative(percent)) return { percent, tokens, contextWindow };
+  if ((tokens === null && isNonNegative(percent)) || (percent === null && isNonNegative(tokens))) return known;
+  return null;
+}
+
+/**
+ * 解析帧/历史响应里的 `usage`（会话累计账目；口径见 `docs/api/80-api-chat.md` §会话用量字段）：
+ * 六个必选字段必须是非负有限数、`subscription` 必须是布尔；`cacheHitRate` 为可选键
+ * （分母为 0 时服务端省略），出现时必须是 0..1 的有限数。任一处非法 → 整帧丢弃（调用方保留旧值）。
+ */
+export function parseChatUsage(raw: unknown): ChatUsage | null {
+  const record = asRecord(raw);
+  if (record === null) return null;
+  const { input, output, cacheRead, cacheWrite, total, cost, subscription } = record;
+  if (!isNonNegative(input) || !isNonNegative(output) || !isNonNegative(cacheRead) || !isNonNegative(cacheWrite)) {
     return null;
   }
-  if (!Number.isFinite(percent) || !Number.isFinite(tokens) || !Number.isFinite(contextWindow)) return null;
-  if (contextWindow <= 0 || tokens < 0) return null;
-  return { percent, tokens, contextWindow };
+  if (!isNonNegative(total) || !isNonNegative(cost) || typeof subscription !== "boolean") return null;
+  const cacheHitRate = record.cacheHitRate;
+  if (cacheHitRate !== undefined) {
+    if (!isNonNegative(cacheHitRate) || cacheHitRate > 1) return null;
+  }
+  return {
+    input,
+    output,
+    cacheRead,
+    cacheWrite,
+    total,
+    cost,
+    subscription,
+    ...(cacheHitRate === undefined ? {} : { cacheHitRate }),
+  };
+}
+
+/**
+ * 解析 assistant `message_end` 帧里的 `speed`（解码速度；口径见 `docs/api/80-api-chat.md` §会话用量字段）：
+ * `outputTokens` / `tps` 必须 > 0、`ms` 必须 ≥ 0（均须有限）——否则 null（调用方保留旧值）。
+ * 历史接口不带该字段（时序不落盘）：历史会话下 speed 恒为 null。
+ */
+export function parseSpeed(raw: unknown): ChatSpeed | null {
+  const record = asRecord(raw);
+  if (record === null) return null;
+  const { outputTokens, ms, tps } = record;
+  if (!isPositive(outputTokens) || !isNonNegative(ms) || !isPositive(tps)) return null;
+  return { outputTokens, ms, tps };
 }
 
 interface ChatState {
@@ -154,8 +214,12 @@ interface ChatState {
   focusContext: FocusContext | null;
   setFocusContext: (ctx: FocusContext | null) => void;
 
- /** 上下文占用（turn_end / agent_end 帧的 contextUsage；null = 未收到/非法 → 占用条隐藏） */
+ /** 上下文占用（turn_end / agent_end 帧的 contextUsage；null = 未收到/非法 → 占用段隐藏） */
   contextUsage: ContextUsage | null;
+ /** 会话累计用量（turn_end / agent_end 帧的 usage；null = 未收到/非法 → 账目段隐藏） */
+  usage: ChatUsage | null;
+ /** 解码速度（assistant 的 message_end 帧的 speed；null = 未收到/非法/历史会话 → 速度段隐藏） */
+  speed: ChatSpeed | null;
 
  /** 「问 AI」聚焦输入框信号：中栏右下悬浮按钮点击后 +1，InputArea 监听后聚焦 textarea——
  * 无页面焦点（currentFocus=null）时用户仍可直接打字提问，按钮不「无反应」 */
@@ -412,8 +476,10 @@ export const useChatStore = create<ChatState>((set, get) => {
         focusContext: null,
         proposals: [],
         streamTools: [],
- // 瞬时运行态：旧会话的占用数据不得残留到新视图
+ // 瞬时运行态：旧会话的占用 / 账目 / 速度不得残留到新视图
         contextUsage: null,
+        usage: null,
+        speed: null,
       });
       if (id !== null) void get().loadMessages(id); // 恢复历史（fire-and-forget，失败静默 → 空态）
     },
@@ -446,6 +512,8 @@ export const useChatStore = create<ChatState>((set, get) => {
         proposals: [],
         streamTools: [],
         contextUsage: null,
+        usage: null,
+        speed: null,
       });
     },
 
@@ -495,10 +563,15 @@ export const useChatStore = create<ChatState>((set, get) => {
           ...m,
           sessionId: res.sessionId,
         }));
-        set({ messages });
+ // 历史账目：整会话视图重载 ⇒ 本次响应为准（非法/缺失 → null，不保留上一个会话的值）；
+ // 速度无历史样本（时序不落盘）⇒ 恒 null。取键与写入都待在 `seq` 守卫内（旧响应不得污染新视图）；
+ // client 的响应类型（`lib/api.ts` 的 `ChatSessionMessagesRes`）未镜像 shared 新增的必填 `usage`
+ // ⇒ 按 unknown 取键走同一防御解析（字段补齐后可去掉该收窄）
+        const usage = parseChatUsage((res as { usage?: unknown }).usage);
+        set({ messages, usage, speed: null });
       } catch {
         if (seq !== msgSeq) return;
-        set({ messages: [] }); // 加载失败静默 → 空态引导语
+        set({ messages: [], usage: null, speed: null }); // 加载失败静默 → 空态引导语（账目一并清）
       } finally {
         if (seq === msgSeq) set({ messagesLoading: false });
       }
@@ -513,6 +586,8 @@ export const useChatStore = create<ChatState>((set, get) => {
     setFocusContext: (ctx) => set({ focusContext: ctx }),
     clearFocusContext: () => set({ focusContext: null }),
     contextUsage: null,
+    usage: null,
+    speed: null,
     focusInputSeq: 0,
     requestFocusInput: () => set((s) => ({ focusInputSeq: s.focusInputSeq + 1 })),
 
@@ -621,7 +696,8 @@ export const useChatStore = create<ChatState>((set, get) => {
 
             case "message_end": {
  // assistant 终态投影为权威（正文拼接、工具调用、思维链预览）；保留本轮累积的 thinkingText
-              const message = asRecord(asRecord(data)?.message);
+              const frame = asRecord(data);
+              const message = asRecord(frame?.message);
               if (message === null || message.role !== "assistant") break;
               const content = typeof message.content === "string" ? message.content : "";
               const thinking = Array.isArray(message.thinking)
@@ -635,6 +711,9 @@ export const useChatStore = create<ChatState>((set, get) => {
                 ...(toolCalls === undefined ? {} : { toolCalls }),
                 thinkingStreaming: false,
               }));
+ // 解码速度（仅 assistant 帧下发；本轮未下发/非法 ⇒ 保留旧值）
+              const speed = parseSpeed(frame?.speed);
+              if (speed !== null) set({ speed });
               break;
             }
 
@@ -678,9 +757,14 @@ export const useChatStore = create<ChatState>((set, get) => {
             }
 
             case "turn_end": {
- // 轮次结束：占用条数据（口径 = getContextUsage）
-              const usage = parseContextUsage(asRecord(data)?.contextUsage);
-              if (usage !== null) set({ contextUsage: usage });
+ // 轮次结束：占用条数据（口径 = getContextUsage）+ 会话累计账目（口径 = sessionUsage）
+              const frame = asRecord(data);
+              const contextUsage = parseContextUsage(frame?.contextUsage);
+              const usage = parseChatUsage(frame?.usage);
+              set({
+                ...(contextUsage === null ? {} : { contextUsage }),
+                ...(usage === null ? {} : { usage }),
+              });
               break;
             }
 
@@ -713,7 +797,8 @@ export const useChatStore = create<ChatState>((set, get) => {
             case "agent_end": {
               if (currentStreamMsgId !== streamMsgId) break; // 流已作废：不污染新流状态
               const frame = asRecord(data);
-              const usage = parseContextUsage(frame?.contextUsage);
+              const contextUsage = parseContextUsage(frame?.contextUsage);
+              const usage = parseChatUsage(frame?.usage);
               const stopReason = frame?.stopReason;
               const errorMessage = typeof frame?.errorMessage === "string" ? frame.errorMessage : "";
               // 思维链未收到 thinking_end 就结束（模型/传输边界）：同样收尾折叠
@@ -724,7 +809,8 @@ export const useChatStore = create<ChatState>((set, get) => {
               set({
                 streaming: false,
                 statusNote: null,
-                ...(usage === null ? {} : { contextUsage: usage }),
+                ...(contextUsage === null ? {} : { contextUsage }),
+                ...(usage === null ? {} : { usage }),
                 // 失败/中止：错误条提示（aborted 由断连横幅/主动停止表达，不重复报错）
                 ...(stopReason === "error"
                   ? { streamError: describeStreamError("AGENT_ERROR", errorMessage || "模型调用失败") }

@@ -37,7 +37,9 @@ import { fetchSSE } from "../hooks/use-sse";
 import {
   describeProposalActionError,
   describeStreamError,
+  parseChatUsage,
   parseContextUsage,
+  parseSpeed,
   useChatStore,
   type ProposalCard,
 } from "./chat";
@@ -93,6 +95,20 @@ const makeProposal = (over: Partial<ProposalCard> & { proposalId: string }): Pro
   ...over,
 });
 
+/** 会话累计用量 fixture（形状 = shared `chatUsageSchema`；docs/api/80-api-chat.md §会话用量字段） */
+const sampleUsage = {
+  input: 1200,
+  output: 300,
+  cacheRead: 800,
+  cacheWrite: 100,
+  total: 2400,
+  cost: 0.012,
+  subscription: false,
+};
+
+/** 解码速度 fixture（assistant `message_end` 帧） */
+const sampleSpeed = { outputTokens: 300, ms: 6000, tps: 50 };
+
 beforeEach(() => {
  // 默认 mock：历史为空、fetchSSE 返回空 abort 函数（用例内按需覆盖）
   mocked.getSessionMessages.mockResolvedValue({ sessionId: "sess-x", messages: [] });
@@ -123,6 +139,8 @@ afterEach(() => {
     streamError: null,
     focusContext: null,
     contextUsage: null,
+    usage: null,
+    speed: null,
     statusNote: null,
     disconnected: false,
     proposals: [],
@@ -265,6 +283,64 @@ describe("loadMessages（U5：会话历史恢复）", () => {
     expect(s.messages[0].id).toBe("mb");
     expect(s.messagesLoading).toBe(false);
   });
+
+  it("历史响应带 usage → 写入账目且 speed 置 null（时序不落盘）", async () => {
+    useChatStore.setState({ usage: sampleUsage, speed: sampleSpeed }); // 旧会话残留：整会话重载应覆盖
+    mocked.getSessionMessages.mockResolvedValue({
+      sessionId: "sess-1",
+      messages: [{ id: "m1", role: "user", content: "历史", createdAt: "t" }],
+      usage: { ...sampleUsage, cost: 0.5, cacheHitRate: 0.4 },
+    });
+    await useChatStore.getState().loadMessages("sess-1");
+    const s = useChatStore.getState();
+    expect(s.usage).toEqual({ ...sampleUsage, cost: 0.5, cacheHitRate: 0.4 });
+    expect(s.speed).toBeNull();
+  });
+
+  it("历史响应 usage 非法/缺失 → usage=null（不保留上一会话账目）", async () => {
+    useChatStore.setState({ usage: sampleUsage });
+    mocked.getSessionMessages.mockResolvedValue({
+      sessionId: "sess-1",
+      messages: [],
+      usage: { ...sampleUsage, total: Number.NaN },
+    });
+    await useChatStore.getState().loadMessages("sess-1");
+    expect(useChatStore.getState().usage).toBeNull();
+
+    useChatStore.setState({ usage: sampleUsage });
+    mocked.getSessionMessages.mockResolvedValue({ sessionId: "sess-1", messages: [] }); // 旧服务端：无 usage 字段
+    await useChatStore.getState().loadMessages("sess-1");
+    expect(useChatStore.getState().usage).toBeNull();
+  });
+
+  it("历史加载失败 → usage / speed 一并清（空态不留脏账目）", async () => {
+    useChatStore.setState({ usage: sampleUsage, speed: sampleSpeed });
+    mocked.getSessionMessages.mockRejectedValue(new ApiError("CLIENT_NETWORK_ERROR", "网络请求失败"));
+    await useChatStore.getState().loadMessages("sess-1");
+    const s = useChatStore.getState();
+    expect(s.messages).toEqual([]);
+    expect(s.usage).toBeNull();
+    expect(s.speed).toBeNull();
+  });
+
+  it("历史加载竞态：旧响应（seq 已作废）不写入 usage", async () => {
+    let resolveA: (v: unknown) => void = () => {};
+    mocked.getSessionMessages.mockImplementationOnce(
+      () => new Promise((r) => (resolveA = r as typeof resolveA)),
+    );
+    const pA = useChatStore.getState().loadMessages("sess-a");
+    mocked.getSessionMessages.mockResolvedValueOnce({
+      sessionId: "sess-b",
+      messages: [{ id: "mb", role: "user", content: "B 的", createdAt: "t" }],
+      usage: { ...sampleUsage, cost: 1 },
+    });
+    await useChatStore.getState().loadMessages("sess-b");
+    expect(useChatStore.getState().usage).toEqual({ ...sampleUsage, cost: 1 });
+
+    resolveA({ sessionId: "sess-a", messages: [], usage: { ...sampleUsage, cost: 9 } });
+    await pA;
+    expect(useChatStore.getState().usage).toEqual({ ...sampleUsage, cost: 1 });
+  });
 });
 
 describe("setCurrentSession / newSession / clearSessions（U5：选择即恢复历史）", () => {
@@ -286,6 +362,8 @@ describe("setCurrentSession / newSession / clearSessions（U5：选择即恢复�
       proposals: [{ proposalId: "prop-1", type: "propose_create_entity", status: "pending" }],
  // 瞬时占用也属「旧会话视图」，必须一并清零（占用条不得显示上一会话的数值）
       contextUsage: { percent: 12, tokens: 1200, contextWindow: 10000 },
+      usage: sampleUsage,
+      speed: sampleSpeed,
     });
     useChatStore.getState().newSession();
     const s = useChatStore.getState();
@@ -296,18 +374,33 @@ describe("setCurrentSession / newSession / clearSessions（U5：选择即恢复�
     expect(s.focusContext).toBeNull();
     expect(s.proposals).toEqual([]);
     expect(s.contextUsage).toBeNull();
+    expect(s.usage).toBeNull();
+    expect(s.speed).toBeNull();
   });
 
-  it("切换会话清零瞬时占用（旧会话数值不得残留到新视图）", () => {
+  it("切换会话清零瞬时读数（占用 / 账目 / 速度；旧会话数值不得残留到新视图）", () => {
     mocked.getSessionMessages.mockResolvedValue({ sessionId: "sess-2", messages: [] });
     useChatStore.setState({
       currentSessionId: "sess-1",
       contextUsage: { percent: 12, tokens: 1200, contextWindow: 10000 },
+      usage: sampleUsage,
+      speed: sampleSpeed,
       statusNote: "上下文已压缩",
     });
     useChatStore.getState().setCurrentSession("sess-2");
     expect(useChatStore.getState().contextUsage).toBeNull();
+    expect(useChatStore.getState().usage).toBeNull();
+    expect(useChatStore.getState().speed).toBeNull();
     expect(useChatStore.getState().statusNote).toBeNull();
+  });
+
+  it("流开始（sendMessage）不清零 usage / speed（旧值留到新值到达，避免闪烁）", () => {
+    useChatStore.setState({ usage: sampleUsage, speed: sampleSpeed });
+    useChatStore.getState().sendMessage("你好");
+    const s = useChatStore.getState();
+    expect(s.streaming).toBe(true);
+    expect(s.usage).toEqual(sampleUsage);
+    expect(s.speed).toEqual(sampleSpeed);
   });
 
   it("切换会话中止在途 SSE 流（旧流事件不得污染新会话视图）", () => {
@@ -342,6 +435,8 @@ describe("setCurrentSession / newSession / clearSessions（U5：选择即恢复�
       currentSessionId: "sess-1",
       messages: [makeMsg({ id: "m1" })],
       contextUsage: { percent: 6, tokens: 12, contextWindow: 200 },
+      usage: sampleUsage,
+      speed: sampleSpeed,
     });
 
     await useChatStore.getState().deleteSession("sess-1");
@@ -352,6 +447,8 @@ describe("setCurrentSession / newSession / clearSessions（U5：选择即恢复�
     expect(s.currentSessionId).toBeNull(); // 当前会话被删 → 新会话
     expect(s.messages).toEqual([]);
     expect(s.contextUsage).toBeNull();
+    expect(s.usage).toBeNull();
+    expect(s.speed).toBeNull();
     expect(useUiStore.getState().toast?.text).toBe("会话已删除");
   });
 
@@ -424,10 +521,14 @@ describe("setCurrentSession / newSession / clearSessions（U5：选择即恢复�
       currentSessionId: "sess-1",
       disconnected: true,
       contextUsage: { percent: 12, tokens: 1200, contextWindow: 10000 },
+      usage: sampleUsage,
+      speed: sampleSpeed,
     });
     useChatStore.getState().clearSessions();
     const s = useChatStore.getState();
     expect(s.contextUsage).toBeNull();
+    expect(s.usage).toBeNull();
+    expect(s.speed).toBeNull();
     expect(s.sessions).toBeNull();
     expect(s.currentSessionId).toBeNull();
     expect(s.sessionsError).toBeNull();
@@ -716,6 +817,101 @@ describe("sendMessage（POST /chat + SSE 事件映射，契约 = docs/api/80-api
       tokens: 1,
       contextWindow: 10,
     });
+  });
+
+  it("parseContextUsage：tokens / percent 同为 null → 未知态（保留窗口，不丢帧）", () => {
+    expect(parseContextUsage({ percent: null, tokens: null, contextWindow: 10000 })).toEqual({
+      percent: null,
+      tokens: null,
+      contextWindow: 10000,
+    });
+  });
+
+  it("parseContextUsage：tokens / percent 不一致组合 → 归为未知态并保留窗口；窗口非法仍整帧丢弃", () => {
+    const unknown = { percent: null, tokens: null, contextWindow: 10000 };
+    // 压缩后 tokens=null 但服务端仍给了 percent（或反之）——两种不一致负载都归为未知态
+    expect(parseContextUsage({ percent: 12, tokens: null, contextWindow: 10000 })).toEqual(unknown);
+    expect(parseContextUsage({ percent: null, tokens: 1200, contextWindow: 10000 })).toEqual(unknown);
+    // 未知态也要有可用窗口（UI 据窗口渲染 `? · 窗口`）——窗口非法/缺失 ⇒ 整帧丢弃
+    expect(parseContextUsage({ percent: null, tokens: null, contextWindow: 0 })).toBeNull();
+    expect(parseContextUsage({ percent: null, tokens: null, contextWindow: Number.NaN })).toBeNull();
+    expect(parseContextUsage({ percent: null, tokens: null })).toBeNull();
+  });
+
+  it("agent_end 的 contextUsage 为未知态（tokens=null）→ 照收不丢帧（不得整段消失）", () => {
+    useChatStore.getState().sendMessage("你好");
+    const { onEvent } = sseOptions();
+    onEvent("turn_end", { contextUsage: { percent: 12, tokens: 1200, contextWindow: 10000 } });
+    onEvent("agent_end", { contextUsage: { percent: null, tokens: null, contextWindow: 10000 } });
+    expect(useChatStore.getState().contextUsage).toEqual({
+      percent: null,
+      tokens: null,
+      contextWindow: 10000,
+    });
+  });
+
+  it("turn_end / agent_end 的 usage → 会话累计账目（非法/缺失帧不动旧值）", () => {
+    useChatStore.getState().sendMessage("你好");
+    const { onEvent } = sseOptions();
+    onEvent("turn_end", { toolResults: [], contextUsage: { percent: 12, tokens: 1200, contextWindow: 10000 }, usage: sampleUsage });
+    expect(useChatStore.getState().usage).toEqual(sampleUsage);
+    const second = { ...sampleUsage, cost: 0.5, subscription: true };
+    onEvent("agent_end", { usage: second });
+    expect(useChatStore.getState().usage).toEqual(second);
+    // 非法（NaN） / 缺 usage 键：保留上一轮账目
+    onEvent("agent_end", { usage: { ...sampleUsage, total: Number.NaN } });
+    onEvent("turn_end", { toolResults: [] });
+    expect(useChatStore.getState().usage).toEqual(second);
+  });
+
+  it("assistant message_end 的 speed → 解码速度；缺 speed 键 / 非 assistant 帧不动旧值", () => {
+    useChatStore.getState().sendMessage("你好");
+    const { onEvent } = sseOptions();
+    onEvent("message_end", { message: { role: "assistant", content: "答", createdAt: "t" }, speed: sampleSpeed });
+    expect(useChatStore.getState().speed).toEqual(sampleSpeed);
+    // 无增量到达（非流式回退）⇒ 帧里没有 speed 键
+    onEvent("message_end", { message: { role: "assistant", content: "答二", createdAt: "t" } });
+    expect(useChatStore.getState().speed).toEqual(sampleSpeed);
+    // 非法速度（tps 非正）同样不写
+    onEvent("message_end", {
+      message: { role: "assistant", content: "答三", createdAt: "t" },
+      speed: { ...sampleSpeed, tps: 0 },
+    });
+    expect(useChatStore.getState().speed).toEqual(sampleSpeed);
+    // 非 assistant 帧：即使带 speed 也不采（速度只属 assistant 终态）
+    const bogus = { outputTokens: 9, ms: 1, tps: 9 };
+    onEvent("message_end", { message: { role: "user", content: "问", createdAt: "t" }, speed: bogus });
+    onEvent("message_end", { message: { role: "tool", content: "结果", createdAt: "t" }, speed: bogus });
+    expect(useChatStore.getState().speed).toEqual(sampleSpeed);
+  });
+
+  it("parseChatUsage：合法（含/不含 cacheHitRate）/ 缺键 / 非法值 → null", () => {
+    expect(parseChatUsage({ ...sampleUsage, cacheHitRate: 0.4 })).toEqual({ ...sampleUsage, cacheHitRate: 0.4 });
+    // 分母为 0 ⇒ 服务端省略 cacheHitRate（可选键，不写 0%）
+    expect(parseChatUsage(sampleUsage)).toEqual(sampleUsage);
+    expect(parseChatUsage(undefined)).toBeNull();
+    expect(parseChatUsage(null)).toBeNull();
+    expect(parseChatUsage("usage")).toBeNull();
+    const missingCost: Record<string, unknown> = { ...sampleUsage };
+    delete missingCost.cost;
+    expect(parseChatUsage(missingCost)).toBeNull(); // 缺必选键
+    expect(parseChatUsage({ ...sampleUsage, total: Number.NaN })).toBeNull();
+    expect(parseChatUsage({ ...sampleUsage, cacheRead: -1 })).toBeNull();
+    expect(parseChatUsage({ ...sampleUsage, input: "1200" })).toBeNull();
+    expect(parseChatUsage({ ...sampleUsage, subscription: "false" })).toBeNull();
+    expect(parseChatUsage({ ...sampleUsage, cacheHitRate: 1.2 })).toBeNull();
+  });
+
+  it("parseSpeed：合法 / 非正 / 缺键 → null", () => {
+    expect(parseSpeed(sampleSpeed)).toEqual(sampleSpeed);
+    expect(parseSpeed({ outputTokens: 1, ms: 0, tps: 1 })).toEqual({ outputTokens: 1, ms: 0, tps: 1 });
+    expect(parseSpeed(undefined)).toBeNull();
+    expect(parseSpeed([1, 2])).toBeNull();
+    expect(parseSpeed({ ms: 6000, tps: 50 })).toBeNull(); // 缺 outputTokens
+    expect(parseSpeed({ outputTokens: 0, ms: 6000, tps: 50 })).toBeNull();
+    expect(parseSpeed({ outputTokens: 300, ms: -1, tps: 50 })).toBeNull();
+    expect(parseSpeed({ outputTokens: 300, ms: 6000, tps: 0 })).toBeNull();
+    expect(parseSpeed({ outputTokens: 300, ms: Number.NaN, tps: 50 })).toBeNull();
   });
 
   it("agent_end stopReason=error → 错误条（透传 errorMessage）+ streaming 收尾", () => {

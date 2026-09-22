@@ -154,12 +154,13 @@ const THINKING_LEVEL_OPTIONS: ThinkingLevel[] = [
  * 占用条视图数据（导出供渲染走查测试）：口径 = pi `getContextUsage()`（`contextUsage` 随
  * turn_end / agent_end 帧下发，percent = tokens / 模型 contextWindow，见 `docs/ui/DESIGN.md` `usage-bar`）。
  * - 无数据 / 非法负载（parseContextUsage 已拦）→ null（调用方据此整条隐藏）
- * - 占比 clamp 到 0..100（服务端四舍五入可能略微越界）
+ * - **占用未知**（压缩后 `tokens` / `percent` 为 null）→ null（中间态：`? · 窗口` 由状态栏渲染，
+ *   不在此凑 0%）；占比 clamp 到 0..100（服务端四舍五入可能略微越界）
  */
 export function usageBarView(
   usage: ContextUsage | null,
 ): { percent: number; title: string } | null {
-  if (usage === null) return null;
+  if (usage === null || usage.percent === null || usage.tokens === null) return null;
   const percent = Math.min(100, Math.max(0, Math.round(usage.percent)));
   return {
     percent,
