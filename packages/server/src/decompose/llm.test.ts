@@ -282,6 +282,16 @@ describe("openDecomposeSession 经 pi 的 Agent 路径（无工具单轮会话�
     expect(second).not.toContain("第一轮回答");
   });
 
+  it("modelLimits = 本会话实际使用模型的两侧上限（执行期批预算预检读它，不另走一遍模型目录）", async () => {
+    const { runtime, script } = await runtimeFor("deepseek");
+    script(["ok"]);
+    const session = await openSession({ runtime, settings: settings("deepseek") }, tempDir(), "job-limits");
+
+    const model = runtime.getModel("deepseek", "m");
+    expect(model).toBeDefined();
+    expect(session.modelLimits).toEqual({ contextWindow: model!.contextWindow, maxTokens: model!.maxTokens });
+  });
+
   it("自动压缩关闭（且不改用户全局设置）；同一 job 复用同一枚会话文件", async () => {
     const { runtime, script } = await runtimeFor("deepseek");
     script(["ok", "ok"]);

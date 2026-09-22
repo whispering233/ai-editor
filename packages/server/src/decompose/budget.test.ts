@@ -115,6 +115,25 @@ describe("checkBatchBudget（§4 两侧判据）", () => {
     }
   });
 
+  it("单轴缺失：一侧合法一侧非法时只关对应侧（窗口合法 + maxTokens 非法 → 只输出侧不设限，反之亦然）", () => {
+    const outputUnlimited = checkBatchBudget({
+      chapterChars: [CHAPTER_CHARS],
+      fixedOverheadTokens: OVERHEAD_TOKENS,
+      limits: { contextWindow: HUGE_WINDOW, maxTokens: 0 },
+    });
+    expect(outputUnlimited.outputLimitTokens).toBeNull();
+    expect(outputUnlimited.inputLimitTokens).not.toBeNull();
+
+    const inputUnlimited = checkBatchBudget({
+      chapterChars: [1, 1],
+      fixedOverheadTokens: OVERHEAD_TOKENS,
+      limits: { contextWindow: 0, maxTokens: 2 * DECOMPOSE_OUTPUT_TOKENS_PER_CHAPTER },
+    });
+    expect(inputUnlimited.inputLimitTokens).toBeNull();
+    expect(inputUnlimited.outputLimitTokens).toBe(2 * DECOMPOSE_OUTPUT_TOKENS_PER_CHAPTER); // 输出侧照判，两章恰在上限内
+    expect(inputUnlimited.issue).toBeNull();
+  });
+
   it("空批（零章）不超限；判定结果带规模数字（文案与断言共用）", () => {
     const verdict = checkBatchBudget({ chapterChars: [], fixedOverheadTokens: OVERHEAD_TOKENS, limits: { contextWindow: HUGE_WINDOW, maxTokens: HUGE_WINDOW } });
     expect(verdict).toMatchObject({ issue: null, chapterCount: 0, textChars: 0, outputTokens: 0 });
@@ -202,6 +221,35 @@ describe("batchBudgetErrorText（§4 预检失败文案的唯一组装点）", (
     expect(text).toContain(`每章预算 ${DECOMPOSE_OUTPUT_TOKENS_PER_CHAPTER} token`);
     expect(text).toContain(`上限 ${maxTokens} token`);
     expect(text).toContain("请减小批内章数或改用输出上限更大的模型");
+  });
+
+  it("窗口小于输出预留 + 安全余量：可用上限为负 → 改报「窗口不足以容纳…」（不展示负数上限）", () => {
+    const verdict = checkBatchBudget({
+      chapterChars: [1],
+      fixedOverheadTokens: OVERHEAD_TOKENS,
+      limits: { contextWindow: DECOMPOSE_INPUT_SAFETY_TOKENS + DECOMPOSE_OUTPUT_TOKENS_PER_CHAPTER - 1, maxTokens: HUGE_WINDOW },
+    });
+    expect(verdict.issue).toBe("input");
+    expect(verdict.inputLimitTokens).toBeLessThan(0);
+    const text = batchBudgetErrorText(verdict);
+    expect(text).toContain("批输入超出模型上下文预算");
+    expect(text).toContain("窗口不足以容纳输出预留");
+    expect(text).toContain(`安全余量（${DECOMPOSE_INPUT_SAFETY_TOKENS} token）`);
+    expect(text).not.toContain("可用上限");
+  });
+
+  it("单章超 maxTokens：章是最小单位 → 不劝「减小批内章数」（换成改用输出上限更大的模型）", () => {
+    const maxTokens = DECOMPOSE_OUTPUT_TOKENS_PER_CHAPTER - 1;
+    const verdict = checkBatchBudget({
+      chapterChars: [1],
+      fixedOverheadTokens: OVERHEAD_TOKENS,
+      limits: { contextWindow: HUGE_WINDOW, maxTokens },
+    });
+    expect(verdict.issue).toBe("output");
+    const text = batchBudgetErrorText(verdict);
+    expect(text).toContain("单章输出预留");
+    expect(text).toContain(`上限 ${maxTokens} token`);
+    expect(text).not.toContain("请减小批内章数");
   });
 
   it("未超限却取文案 = 调用方判据错 → 抛错（不返回空串把错误静默掉）", () => {

@@ -53,16 +53,19 @@ import { DECOMPOSE_BATCH_TARGET_CHARS } from "../decompose/batching.js";
 import { DEFAULT_DECOMPOSE_CONCURRENCY } from "../decompose/config.js";
 import { ingestDecomposeProject } from "../decompose/job.js";
 import { DECOMPOSE_LOG_CUSTOM_TYPE, decomposeSessionId, decomposeWorkerSessionId } from "../decompose/llm.js";
-import { DECOMPOSE_SNAPSHOT_MAX_CHARS, isDecomposeJobActive } from "../decompose/runner.js";
+import {
+  DECOMPOSE_SNAPSHOT_MAX_CHARS,
+  batchOverheadTokensUpperBound,
+  batchSystemPrompt,
+  isDecomposeJobActive,
+} from "../decompose/runner.js";
 import { splitNovelWithSlices } from "../decompose/split.js";
 import { setProjectRoot } from "./project.js";
 import { resetModelRuntime } from "../model-runtime.js";
 import {
-  DECOMPOSE_BATCH_OVERHEAD_TOKENS,
   DECOMPOSE_CHARS_PER_TOKEN,
   DECOMPOSE_MAX_FILE_BYTES,
   DECOMPOSE_OUTPUT_TOKENS_PER_CHAPTER,
-  DECOMPOSE_PROMPT_OVERHEAD_TOKENS,
   createDecomposeRoutes,
   type DecomposeRouteDeps,
 } from "./decompose.js";
@@ -203,20 +206,21 @@ describe("POST /decompose/analyze（切分预览）", () => {
     expect(data.estimate.llmCalls).toBe(data.estimate.batchCount + 2);
     const scopeChars = data.chapters.reduce((total, chapter) => total + chapter.charCount, 0);
     expect(data.estimate.inputTokensApprox).toBe(
-      Math.ceil(scopeChars / DECOMPOSE_CHARS_PER_TOKEN) + data.estimate.batchCount * DECOMPOSE_BATCH_OVERHEAD_TOKENS,
+      Math.ceil(scopeChars / DECOMPOSE_CHARS_PER_TOKEN) +
+        data.estimate.batchCount * batchOverheadTokensUpperBound(data.chapters),
     );
     expect(data.estimate.outputTokensApprox).toBe(data.chapters.length * DECOMPOSE_OUTPUT_TOKENS_PER_CHAPTER);
     expect(data.estimate.costApprox).toBeNull(); // 无凭据（见下方 costApprox 用例）
   });
 
-  it("每批固定开销从快照预算派生（回退成手写数字 ⇒ 改预算时预估静默失真）", () => {
-    // 快照预算是固定开销的量级主导项：开销必须 ≥ 它的 token 换算（手写 800 这类小数字会当场报红）
-    expect(DECOMPOSE_BATCH_OVERHEAD_TOKENS).toBeGreaterThanOrEqual(
-      Math.ceil(DECOMPOSE_SNAPSHOT_MAX_CHARS / DECOMPOSE_CHARS_PER_TOKEN),
-    );
-    expect(DECOMPOSE_BATCH_OVERHEAD_TOKENS).toBe(
-      Math.ceil(DECOMPOSE_SNAPSHOT_MAX_CHARS / DECOMPOSE_CHARS_PER_TOKEN) + DECOMPOSE_PROMPT_OVERHEAD_TOKENS,
-    );
+  it("每批固定开销派生自真实提示词 framing（手写数字 / 只看快照 ⇒ 规划低估、批被预检判死）", async () => {
+    const app = buildApp();
+    const data = await analyzeOk(app, bytesOf(novelText(6)), "file_name=a.txt");
+    const overhead = batchOverheadTokensUpperBound(data.chapters);
+    const snapshotTokens = Math.ceil(DECOMPOSE_SNAPSHOT_MAX_CHARS / DECOMPOSE_CHARS_PER_TOKEN);
+
+    // 上界至少覆盖「快照预算 + 真实 system 提示」（旧口径的手写余量正是漏了 system 与逐章标题行才低估）
+    expect(overhead).toBeGreaterThanOrEqual(snapshotTokens + Math.ceil(batchSystemPrompt().length / DECOMPOSE_CHARS_PER_TOKEN));
   });
 
   it("范围只影响 estimate：章列表仍全量返回；越界范围 → 零批但归并/报告照跑", async () => {
@@ -959,9 +963,10 @@ describe("GET /decompose/plan（续拆预览）", () => {
     const plan = await planData(app, "scope_start=1&scope_end=4");
 
     expect(plan).toMatchObject({ scopeStart: 1, scopeEnd: 4, defaulted: false, remainingCount: 4, decomposedInScope: 2 });
-    // 公式单源：输入 = 范围正文 / 每字 token 数 + 每批固定开销；输出 = 章数 × 每章输出；调用 = 批数 + 归并 + 报告
+    // 公式单源：输入 = 范围正文 / 每字 token 数 + 每批固定开销（提示词 framing 上界，按范围章集取）；输出 = 章数 × 每章输出；调用 = 批数 + 归并 + 报告
     const chars = [1, 2, 3, 4].reduce((sum, index) => sum + (lengths.get(chapterIds[index - 1]) ?? 0), 0);
-    const inputTokens = Math.ceil(chars / DECOMPOSE_CHARS_PER_TOKEN) + plan.estimate.batchCount * DECOMPOSE_BATCH_OVERHEAD_TOKENS;
+    const overhead = batchOverheadTokensUpperBound(plan.chapters.filter((chapter) => chapter.index <= 4));
+    const inputTokens = Math.ceil(chars / DECOMPOSE_CHARS_PER_TOKEN) + plan.estimate.batchCount * overhead;
     const outputTokens = 4 * DECOMPOSE_OUTPUT_TOKENS_PER_CHAPTER;
     expect(plan.estimate).toEqual({
       batchCount: plan.estimate.batchCount,

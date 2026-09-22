@@ -25,6 +25,8 @@
 // （结果不浪费，批级幂等靠 `done` 跳过）。并发下补限流兜底：批级 429 / 限流按指数退避 + 抖动再试（§2.2）。
 // **批预算预检**（§4 批大小守卫，`budget.ts`）：发调用之前按会话解析出的模型两侧上限判一次，超限的批
 // 显式失败并写明确文案（不落进 pi `clampMaxTokensToContext` 把输出压到 1 → provider 报错的路径）。
+// **规划期的「每批固定开销」由本模块的提示词组装派生**（`batchOverheadTokensUpperBound` = 真实
+// system + 快照 + 框架 + 逐章标题行的上界）——规划放行的批不许在执行期预检被判死（守卫自洽性）。
 // 模型调用只经 pi 的 `ModelRuntime`（`getModelRuntime()` / `getSettingsManager()` 唯一入口）——
 // 业务代码不自建 fetch / HTTP agent（出站行为统一由启动时装的全局 undici dispatcher 承担）。
 // 阈值与提示词里的数字一律取自常量（提示词按常量插值生成，散文不复述数字）。
@@ -66,7 +68,7 @@ import {
   normalizeExtraction,
 } from "./extract.js";
 import { doneBatchResults } from "./job.js";
-import { planSegments } from "./batching.js";
+import { DECOMPOSE_BATCH_MAX_CHAPTERS, planSegments } from "./batching.js";
 import {
   batchBudgetErrorText,
   checkBatchBudget,
@@ -99,8 +101,8 @@ export const DECOMPOSE_RATE_LIMIT_FACTOR = 2;
 export const DECOMPOSE_RATE_LIMIT_JITTER_MIN = 0.5;
 /** 起始快照回溯的章数（§4.1：只取紧邻范围起点的连续若干章——续拆 / 有范围时的前置连续性） */
 export const DECOMPOSE_SNAPSHOT_PREV_CHAPTERS = 3;
-/** 项目数据快照长度上限（§4.1：起始快照 + 本轮累积的总预算）——`routes/decompose.ts` 的每批固定开销
- * 预估由它派生（改这里预估跟着变） */
+/** 项目数据快照长度上限（§4.1：起始快照 + 本轮累积的总预算）——每批固定开销的上界
+ * （`batchOverheadTokensUpperBound`）由它派生（改这里规划与预估跟着变） */
 export const DECOMPOSE_SNAPSHOT_MAX_CHARS = 2000;
 /** 人物 `role` 的展示权重（§4.1：主角 → … → 龙套，词表外的 role 归末位）——同时是批提示词的建议词表 */
 export const DECOMPOSE_ROLE_ORDER = ["主角", "主要配角", "配角", "反派", "龙套"] as const;
@@ -364,37 +366,101 @@ function renderSnapshot(blocks: readonly SnapshotBlock[], keep: readonly number[
 }
 
 // ============ 提示词（数值一律由常量插值，不在散文里复述） ============
+//
+// 本节的组装函数是**单一来源**：真实请求（`buildBatchPrompt`）与规划期的「每批固定开销」
+// （`batchOverheadTokensUpperBound`）都从同一份 system / 框架 / 标题行派生——两处各写一份必然漂移，
+// 且方向性错误（规划低估）会把规划放行的批在执行期判死。
+
+/** 章号 / 标题引用（规划期开销估算只需这两项；正文与框架无关） */
+export interface BatchChapterHeading {
+  index: number;
+  title: string;
+}
+
+/** 单章的标题行（`### 第N章 标题`；正文外的 framing 一部分） */
+export function batchChapterHeading(index: number, title: string): string {
+  return `### 第${index}章 ${title}`;
+}
+
+/** 批系统提示（角色 + 输出契约 + 各上限；**唯一组装点**，数值由常量插值） */
+export function batchSystemPrompt(): string {
+  return [
+    "你是小说拆解流水线的逐章抽取员。输入是长篇小说的其中若干章，输出必须是 JSON。",
+    "每章产出一个条目（chapterIndex = 输入里的章序），不得合并章节、不得遗漏——漏章会让整批重跑。",
+    "只输出 JSON（可以放 ```json 围栏），不要写解释文字。",
+    "",
+    '输出结构：{"chapters":[{"chapterIndex":1,"chapterTitle":"…","summary":"…","characters":[…],"settings":[…],"locations":[…],"relations":[…]}]}',
+    "",
+    "字段口径：",
+    `- summary：本章剧情摘要，不超过 ${DECOMPOSE_CHAPTER_SUMMARY_MAX_CHARS} 字；`,
+    "- characters[]：{name, role, description, alias, gender, age, race, personality, motivation}",
+    `- name 必填；role 建议用：${DECOMPOSE_ROLE_ORDER.join(" / ")}；`,
+    `- description 必填且不超过 ${DECOMPOSE_DESCRIPTION_MAX_CHARS} 字；alias 只填一个最常用的别称，其余别名写进 description 的「（又称：X、Y）」；`,
+    `- gender / age / race 只在文中明确时填；personality 不超过 ${DECOMPOSE_PERSONALITY_MAX_ITEMS} 条；motivation 不超过 ${DECOMPOSE_MOTIVATION_MAX_CHARS} 字；`,
+    `- 不要输出 ability_panel 与 custom_fields；每章人物不超过 ${DECOMPOSE_CHAPTER_MAX_CHARACTERS} 条；`,
+    `- settings[]：{name, description, tags, rules}——只抽对剧情有影响的设定；tags 写短标签、rules 写短句、description 不超过 ${DECOMPOSE_DESCRIPTION_MAX_CHARS} 字；每章不超过 ${DECOMPOSE_CHAPTER_MAX_SETTINGS} 条；`,
+    `- locations[]：{name, type, description}——不输出上级地点；description 不超过 ${DECOMPOSE_DESCRIPTION_MAX_CHARS} 字；每章不超过 ${DECOMPOSE_CHAPTER_MAX_LOCATIONS} 条；`,
+    // 端点措辞与 §4.1 对齐（**不设端点白名单**）：分段并发下「上文」只含本段，说死「必须是上文出现过的名字」
+    // 会让模型主动丢掉跨段关系；端点存在性不在 S2 判定（唯一判据 = S3 悬空过滤）
+    `- relations[]：{source, target, type, evidence}——type 只能取 ${DECOMPOSE_RELATION_TYPES.join(" / ")}；source / target 用文中（本章或更早章节）出现过的名字，跨章 / 跨段的人物设定照写、不必等它先在本段出现；每章不超过 ${DECOMPOSE_CHAPTER_MAX_RELATIONS} 条。`,
+  ].join("\n");
+}
+
+/** 批用户消息（快照 + 本批正文；**唯一组装点**） */
+export function batchUserMessage(snapshotText: string, body: string): string {
+  const snapshot = snapshotText === "" ? "（本批是首批，尚无上文）" : snapshotText;
+  return [`【项目数据快照】${snapshot}`, "", "【本批正文】", body].join("\n");
+}
 
 /**
  * 批提示词：系统提示 = 角色 + 输出契约 + 各上限；用户消息 = 项目数据快照 + 本批各章正文。
  * 输出契约即 `normalizeExtraction` 的输入形状（逐章对齐；缺章 → 整批重试）。
  */
-function buildBatchPrompt(input: { chapters: readonly BatchChapter[]; snapshotText: string }): ModelRequest {
-  const snapshot = input.snapshotText === "" ? "（本批是首批，尚无上文）" : input.snapshotText;
-  const body = input.chapters.map((chapter) => `### 第${chapter.index}章 ${chapter.title}\n${chapter.text}`).join("\n\n");
-  return {
-    system: [
-      "你是小说拆解流水线的逐章抽取员。输入是长篇小说的其中若干章，输出必须是 JSON。",
-      "每章产出一个条目（chapterIndex = 输入里的章序），不得合并章节、不得遗漏——漏章会让整批重跑。",
-      "只输出 JSON（可以放 ```json 围栏），不要写解释文字。",
-      "",
-      '输出结构：{"chapters":[{"chapterIndex":1,"chapterTitle":"…","summary":"…","characters":[…],"settings":[…],"locations":[…],"relations":[…]}]}',
-      "",
-      "字段口径：",
-      `- summary：本章剧情摘要，不超过 ${DECOMPOSE_CHAPTER_SUMMARY_MAX_CHARS} 字；`,
-      "- characters[]：{name, role, description, alias, gender, age, race, personality, motivation}",
-      `- name 必填；role 建议用：${DECOMPOSE_ROLE_ORDER.join(" / ")}；`,
-      `- description 必填且不超过 ${DECOMPOSE_DESCRIPTION_MAX_CHARS} 字；alias 只填一个最常用的别称，其余别名写进 description 的「（又称：X、Y）」；`,
-      `- gender / age / race 只在文中明确时填；personality 不超过 ${DECOMPOSE_PERSONALITY_MAX_ITEMS} 条；motivation 不超过 ${DECOMPOSE_MOTIVATION_MAX_CHARS} 字；`,
-      `- 不要输出 ability_panel 与 custom_fields；每章人物不超过 ${DECOMPOSE_CHAPTER_MAX_CHARACTERS} 条；`,
-      `- settings[]：{name, description, tags, rules}——只抽对剧情有影响的设定；tags 写短标签、rules 写短句、description 不超过 ${DECOMPOSE_DESCRIPTION_MAX_CHARS} 字；每章不超过 ${DECOMPOSE_CHAPTER_MAX_SETTINGS} 条；`,
-      `- locations[]：{name, type, description}——不输出上级地点；description 不超过 ${DECOMPOSE_DESCRIPTION_MAX_CHARS} 字；每章不超过 ${DECOMPOSE_CHAPTER_MAX_LOCATIONS} 条；`,
-      // 端点措辞与 §4.1 对齐（**不设端点白名单**）：分段并发下「上文」只含本段，说死「必须是上文出现过的名字」
-      // 会让模型主动丢掉跨段关系；端点存在性不在 S2 判定（唯一判据 = S3 悬空过滤）
-      `- relations[]：{source, target, type, evidence}——type 只能取 ${DECOMPOSE_RELATION_TYPES.join(" / ")}；source / target 用文中（本章或更早章节）出现过的名字，跨章 / 跨段的人物设定照写、不必等它先在本段出现；每章不超过 ${DECOMPOSE_CHAPTER_MAX_RELATIONS} 条。`,
-    ].join("\n"),
-    user: [`【项目数据快照】${snapshot}`, "", "【本批正文】", body].join("\n"),
-  };
+export function buildBatchPrompt(input: { chapters: readonly BatchChapter[]; snapshotText: string }): ModelRequest {
+  const body = input.chapters
+    .map((chapter) => `${batchChapterHeading(chapter.index, chapter.title)}\n${chapter.text}`)
+    .join("\n\n");
+  return { system: batchSystemPrompt(), user: batchUserMessage(input.snapshotText, body) };
+}
+
+/**
+ * 提示词里**正文之外**的渲染字符数（system + 快照 + 框架 + 逐章标题行）——单一公式：
+ * 「按真实组装量全长、减正文本体」。执行期预检传真实提示词与本批正文字数；规划期经
+ * `batchFramingChars` 传上界（把正文置空后走同一公式，故两侧不可能各算一套）。
+ */
+function framingCharsOf(prompt: ModelRequest, bodyChars: number): number {
+  return prompt.system.length + prompt.user.length - bodyChars;
+}
+
+/** 给定快照与章集时正文外的渲染字符数（正文置空 ⇒ 结果 = system + 快照 + 框架 + 标题行） */
+export function batchFramingChars(input: {
+  snapshotText: string;
+  chapters: readonly BatchChapterHeading[];
+}): number {
+  const prompt = buildBatchPrompt({
+    chapters: input.chapters.map((chapter) => ({ ...chapter, text: "" })),
+    snapshotText: input.snapshotText,
+  });
+  return framingCharsOf(prompt, 0);
+}
+
+/**
+ * 规划期每批固定开销（token 上界，§4 守卫的规划侧口径）：取「快照给满 `DECOMPOSE_SNAPSHOT_MAX_CHARS`
+ * + 批内章数给上限 + 章号与标题取范围内最大」的最坏批，按同一条 framing 公式折算。
+ * 为什么是上界：规划用它放行批、执行期用真实 framing 复核（`runBatch` 预检）——规划口径一旦低于
+ * 真实 framing，贴着规划上限的批就会在发调用前被判死（守卫自相矛盾）。上界按**规划时的**章集取；
+ * 标题被用户改长 / 正文被编辑后超出上界时，执行期预检仍显式失败（不静默，但不承诺无感）。
+ */
+export function batchOverheadTokensUpperBound(chapters: readonly BatchChapterHeading[]): number {
+  const worstBatch = Array.from({ length: Math.min(DECOMPOSE_BATCH_MAX_CHAPTERS, chapters.length) }, () => ({
+    index: chapters.reduce((max, chapter) => Math.max(max, chapter.index), 0),
+    title: "预".repeat(chapters.reduce((max, chapter) => Math.max(max, chapter.title.length), 0)),
+  }));
+  const framingChars = batchFramingChars({
+    snapshotText: "预".repeat(DECOMPOSE_SNAPSHOT_MAX_CHARS),
+    chapters: worstBatch,
+  });
+  return Math.ceil(framingChars / DECOMPOSE_CHARS_PER_TOKEN);
 }
 
 // ============ 模型调用（唯一入口 = pi ModelRuntime 单例；实现在 llm.ts） ============
@@ -504,8 +570,9 @@ async function runBatch(input: BatchRunInput): Promise<BatchOutcome> {
 
 /**
  * 批预算判定（§4 预检，纯函数）：正文取**实际要发的章文字数**，固定开销取**本轮提示词里正文之外的
- * 渲染长度**（系统提示 + 快照 + 框架）按同一换算率折成 token——预检判的就是即将发出的那份请求，
- * 不是规划期的上界估算（两者共用 `checkBatchBudget` 的判据与常量）。
+ * 渲染长度**（系统提示 + 快照 + 框架 + 逐章标题行，`framingCharsOf`——与规划期上界同一公式）按同一
+ * 换算率折成 token——预检判的就是即将发出的那份请求，不是规划期的上界估算（两者共用 `checkBatchBudget`
+ * 的判据与常量）。
  */
 function batchBudgetVerdictOf(
   chapters: readonly BatchChapter[],
@@ -514,10 +581,9 @@ function batchBudgetVerdictOf(
 ): BatchBudgetVerdict {
   const chapterChars = chapters.map((chapter) => chapter.text.length);
   const bodyChars = chapterChars.reduce((sum, chars) => sum + chars, 0);
-  const framingChars = prompt.system.length + prompt.user.length - bodyChars;
   return checkBatchBudget({
     chapterChars,
-    fixedOverheadTokens: Math.ceil(framingChars / DECOMPOSE_CHARS_PER_TOKEN),
+    fixedOverheadTokens: Math.ceil(framingCharsOf(prompt, bodyChars) / DECOMPOSE_CHARS_PER_TOKEN),
     limits,
   });
 }

@@ -16,7 +16,12 @@
 
 import { planBatches, type BatchChapterInput, type DecomposeBatchPlan } from "./batching.js";
 
-/** 每 token 的汉字数（中文粗估；换 tokenizer 只调这一处——预估本就是量级参考） */
+/**
+ * 每 token 的汉字数（中文粗估；换 tokenizer 只调这一处——预估本就是量级参考）。
+ * **与 pi 的估算口径是两套**：pi `clampMaxTokensToContext` 的上下文估算按 4 chars/token
+ * （`pi-ai` `utils/estimate.js`，常量未导出；对中文偏乐观），本仓守卫按每字一档的保守口径拦
+ * 「注定会被 clamp 的批」。升级 pi（exact pin 抬版）时核对这处口径与 `DECOMPOSE_INPUT_SAFETY_TOKENS`。
+ */
 export const DECOMPOSE_CHARS_PER_TOKEN = 1.5;
 /** 每章输出 token 粗估（一条摘要（受 `DECOMPOSE_CHAPTER_SUMMARY_MAX_CHARS` 约束）+ 若干实体线索） */
 export const DECOMPOSE_OUTPUT_TOKENS_PER_CHAPTER = 400;
@@ -24,6 +29,11 @@ export const DECOMPOSE_OUTPUT_TOKENS_PER_CHAPTER = 400;
  * 输入侧安全余量（token）：估算输入 ≤ 窗口 − 输出预留 − 该值。
  * 覆盖「字数 → token」的估算误差与提示词渲染里未计入的部分（`DECOMPOSE_CHARS_PER_TOKEN` 是量级参考，
  * 中文实际每字可能到 1 token）——没有它，「估算刚好不超」的批在真实 tokenizer 下仍会超。
+ *
+ * **与 pi 的隐式耦合**：pi 的 `clampMaxTokensToContext` 同名留一枚私有余量 `CONTEXT_SAFETY_TOKENS`
+ * （`pi-ai` `api/simple-options.js`，**未导出**，本仓读不到）——两边数值同源但各自独立维护：pi 用它把
+ * `maxTokens` 压进窗口，本仓用它把批输入挡在窗口外。升级 pi 时核对这枚余量与 pi 的输入估算口径
+ * （见 `DECOMPOSE_CHARS_PER_TOKEN`）。
  */
 export const DECOMPOSE_INPUT_SAFETY_TOKENS = 4096;
 
@@ -60,7 +70,8 @@ export interface BatchBudgetVerdict {
   inputTokens: number;
   /** 输出预留 token（章数 × `DECOMPOSE_OUTPUT_TOKENS_PER_CHAPTER`） */
   outputTokens: number;
-  /** 输入侧上限 token（窗口 − 输出预留 − 安全余量；窗口缺失 / 非法 → null = 不设限） */
+  /** 输入侧上限 token（窗口 − 输出预留 − 安全余量；窗口缺失 / 非法 → null = 不设限；
+   * **可为负**——窗口本身小于输出预留 + 安全余量时，文案走 `batchBudgetErrorText` 的专门分支） */
   inputLimitTokens: number | null;
   /** 输出侧上限 token（`maxTokens`；缺失 / 非法 → null = 不设限） */
   outputLimitTokens: number | null;
@@ -94,6 +105,8 @@ export function checkBatchBudget(input: BatchBudgetCheckInput): BatchBudgetVerdi
  * 预检失败文案（**唯一组装点**：执行期预检与单测读同一份，避免两处各写一份格式）。
  * 数字一律由常量与判定结果插值（散文不复述数值）；调用方只在 `issue !== null` 时取文案，
  * 空判据取文案属调用方判据错 → 抛错（不返回空串让错误静默丢失）。
+ * 两条分流口径：输入侧「可用上限为负」（窗口本身装不下输出预留与安全余量）与输出侧「单章超限」
+ * （章已是最小单位）——这两种场景下通用文案会给出负数上限 / 劝人去减已经不能再减的章数。
  */
 export function batchBudgetErrorText(verdict: BatchBudgetVerdict): string {
   if (verdict.issue === "input") {
@@ -101,12 +114,26 @@ export function batchBudgetErrorText(verdict: BatchBudgetVerdict): string {
       verdict.chapterCount === 1
         ? `单章 ${verdict.textChars} 字`
         : `本批 ${verdict.chapterCount} 章 / 合计 ${verdict.textChars} 字`;
+    // 可用上限为负 = 窗口连「输出预留 + 安全余量」都装不下：展示负数上限只会让人困惑，改报窗口本身
+    if (verdict.inputLimitTokens !== null && verdict.inputLimitTokens < 0) {
+      return (
+        `批输入超出模型上下文预算：${scope}；模型上下文窗口不足以容纳输出预留（${verdict.outputTokens} token）与安全余量（${DECOMPOSE_INPUT_SAFETY_TOKENS} token），` +
+        `请改用更大窗口的模型`
+      );
+    }
     return (
       `批输入超出模型上下文预算：${scope}（估算输入 ${verdict.inputTokens} token / 可用上限 ${verdict.inputLimitTokens} token）；` +
       `请改用更大窗口模型或缩小范围`
     );
   }
   if (verdict.issue === "output") {
+    // 单章超输出上限：章是最小单位（不切开单章）⇒ 通用文案的「减小批内章数」在这里无路可走
+    if (verdict.chapterCount === 1) {
+      return (
+        `批输出超出模型输出预算：单章输出预留 ${verdict.outputTokens} token（每章预算 ${DECOMPOSE_OUTPUT_TOKENS_PER_CHAPTER} token）/ 上限 ${verdict.outputLimitTokens} token；` +
+        `章是最小单位（不切开单章），请改用输出上限更大的模型`
+      );
+    }
     return (
       `批输出超出模型输出预算：${verdict.chapterCount} 章 × 每章预算 ${DECOMPOSE_OUTPUT_TOKENS_PER_CHAPTER} token = ${verdict.outputTokens} token / 上限 ${verdict.outputLimitTokens} token；` +
       `请减小批内章数或改用输出上限更大的模型`

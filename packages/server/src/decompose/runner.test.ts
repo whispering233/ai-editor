@@ -52,8 +52,9 @@ import { resetModelRuntime } from "../model-runtime.js";
 import { setProjectRoot } from "../routes/project.js";
 import { createDecomposeRoutes, type DecomposeRouteDeps } from "../routes/decompose.js";
 import { createChatRoutes } from "../routes/chat.js";
-import { DECOMPOSE_BATCH_TARGET_CHARS } from "./batching.js";
+import { DECOMPOSE_BATCH_MAX_CHAPTERS, DECOMPOSE_BATCH_TARGET_CHARS } from "./batching.js";
 import {
+  DECOMPOSE_CHARS_PER_TOKEN,
   DECOMPOSE_INPUT_SAFETY_TOKENS,
   DECOMPOSE_OUTPUT_TOKENS_PER_CHAPTER,
 } from "./budget.js";
@@ -62,7 +63,7 @@ import {
   DECOMPOSE_CHAPTER_SUMMARY_MAX_CHARS,
   DECOMPOSE_RELATION_TYPES,
 } from "./extract.js";
-import { ingestDecomposeProject } from "./job.js";
+import { ingestDecomposeProject, readDecomposeProjectPlan } from "./job.js";
 import { decomposeSessionId, decomposeWorkerSessionId } from "./llm.js";
 import {
   DECOMPOSE_BATCH_MAX_ATTEMPTS,
@@ -73,6 +74,9 @@ import {
   DECOMPOSE_ROLE_ORDER,
   DECOMPOSE_SNAPSHOT_MAX_CHARS,
   DECOMPOSE_SNAPSHOT_PREV_CHAPTERS,
+  batchFramingChars,
+  batchOverheadTokensUpperBound,
+  buildBatchPrompt,
   decomposeRateLimitDelayMs,
   emptyStoryBible,
   extendStoryBible,
@@ -655,6 +659,63 @@ describe("批大小守卫（§4）", () => {
     // 时间线留有据：预算预检未通过（未发调用）
     const logs = sessionLogsOf(project.root, decomposeWorkerSessionId(started.jobId, 1));
     expect(logs.some((log) => log.kind === "attempt_failed" && log.text.includes("预算预检未通过"))).toBe(true);
+  });
+
+  it("规划开销上界 ≥ 真实提示词 framing（同一公式；快照取满、章数取上限的最坏批）", () => {
+    const chapters = Array.from({ length: 12 }, (_, position) => ({ index: position + 1, title: `标题${position + 1}` }));
+    const worstBatch = chapters
+      .slice(0, DECOMPOSE_BATCH_MAX_CHAPTERS)
+      .map((chapter) => ({ ...chapter, text: "正文".repeat(150) }));
+    const snapshot = "预".repeat(DECOMPOSE_SNAPSHOT_MAX_CHARS);
+    const prompt = buildBatchPrompt({ chapters: worstBatch, snapshotText: snapshot });
+    const bodyChars = worstBatch.reduce((sum, chapter) => sum + chapter.text.length, 0);
+    const framingTokens = Math.ceil((prompt.system.length + prompt.user.length - bodyChars) / DECOMPOSE_CHARS_PER_TOKEN);
+
+    expect(batchOverheadTokensUpperBound(chapters)).toBeGreaterThanOrEqual(framingTokens);
+    // 规划期与执行期读同一条公式（正文置空后量长度 = 真实提示词的正文外 framing）
+    expect(Math.ceil(batchFramingChars({ chapters: worstBatch, snapshotText: snapshot }) / DECOMPOSE_CHARS_PER_TOKEN)).toBe(framingTokens);
+  });
+
+  it("贴边窗口：规划放行的整批在执行期预检不被判死（快照顶格；上界口径一旦低估即回归失败）", async () => {
+    // 续拆路径最省事：库内章与库内实体都在建 job 之前就位（start 路径要先建项目、没法预置实体）
+    const firstJob = ingestProject("规划自洽", 10);
+    const project = getCurrentProject()!;
+    updateJobStatus(project.db, firstJob, "done", nowIso()); // 首 job 收口（continue 只从终态开新 job）
+    // 快照顶格：一批 30+ 字的设定名把快照预算吃满（运行时 framing 主要就是 system + 快照）
+    for (let index = 0; index < 60; index++) {
+      createEntity(project.db, { type: "setting", name: `设定${index + 1}${"长".repeat(30)}` });
+    }
+    const plan = readDecomposeProjectPlan(project);
+    const overhead = batchOverheadTokensUpperBound(plan.chapters);
+    const bodyTokens = Math.ceil(
+      plan.chapters.reduce((sum, chapter) => sum + chapter.charCount, 0) / DECOMPOSE_CHARS_PER_TOKEN,
+    );
+    // 窗口恰好 = 规划开销 + 正文 + 输出预留 + 安全余量 ⇒ 规划刚好放行整批（10 章一批，不提前拆）
+    const contextWindow =
+      bodyTokens + overhead + plan.chapters.length * DECOMPOSE_OUTPUT_TOKENS_PER_CHAPTER + DECOMPOSE_INPUT_SAFETY_TOKENS;
+    const model = await fakeModel({ contextWindow });
+    contentAwareScript(model, 3); // 一批 + 归并 + 报告
+    const app = buildApp(model.deps);
+
+    const res = await post(app, "/continue");
+    expect(res.status).toBe(200);
+    const started = (await res.json()).data as { jobId: string; batchCount: number };
+    expect(started.batchCount).toBe(1);
+    await waitFor(
+      () => listDecomposeBatches(project.db, started.jobId).every((batch) => batch.status === "done" || batch.status === "failed"),
+      "规划自洽批收口",
+    );
+    // 预检按真实 framing 复核：规划口径一旦低于真实 framing，这里会落一条「批输入超出模型上下文预算」的 failed
+    expect(listDecomposeBatches(project.db, started.jobId).map((batch) => [batch.status, batch.attempts])).toEqual([
+      ["done", 1],
+    ]);
+    expect((await pollJob(app, "规划自洽收口")).progress).toMatchObject({ done: 1, failed: 0, total: 1 });
+
+    // 夹具自检：快照确实顶格（预算被裁 + 渲染接近上限），否则本用例的 framing 压力是假的
+    const firstPrompt = promptTextOf(model.calls[0]);
+    expect(firstPrompt).toMatch(/（已省略 \d+ 个设定 \/ 地点名）/);
+    const snapshotPart = firstPrompt.slice(firstPrompt.indexOf("【项目数据快照】"), firstPrompt.indexOf("【本批正文】"));
+    expect(snapshotPart.length).toBeGreaterThan(DECOMPOSE_SNAPSHOT_MAX_CHARS * 0.9);
   });
 });
 
