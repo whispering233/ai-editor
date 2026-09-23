@@ -4,7 +4,9 @@
 // （拖拽修复后已覆盖）；拖拽上下半判定 + 插入指示线（同级排序可用）；摘要移到标题下方独立行（默认显示）；
 // 删除底部回收站折叠区（Trash tab 已覆盖）；「设为阅读进度」入口迁往详情页（S13.2）；阅读进度徽标 token 化；
 // S9.2 伏笔标记：title 行尾紧凑徽标（plants/advances/resolves 图标 + title tooltip 伏笔名），
-// 数据 = GET /relation（source_type=outline_node）三类并行拉取聚合（lib/outline-hooks）
+// 数据 = GET /relation（source_type=outline_node）三类并行拉取聚合（lib/outline-hooks）；
+// 2026-09：徽标改为**导航链接**——点击跳该伏笔详情 #/hooks/:id（行 click/dblclick 守卫排除 `a`，
+// 点徽标不选中行、不进节点详情；两视图共用 components/outline/node-hook-badge）
 // 交互收敛：行级「详情」「＋ 新建」按钮移除（只留删除 + 阅读进度徽标）——单击行选中、
 // 选中后 Enter 新建子级（类型由父层级推导）、双击行跳详情、单击标题/摘要行内编辑、拖拽排序保留；
 // 行级 AskAiButton 已移除——右键菜单替代（RowContextMenu：注入会话上下文 + 建立关联
@@ -696,7 +698,7 @@ export default function Outline() {
   }
 
   /** 整树渲染（内部递归函数，闭包共享页面 state；S13.1 两行结构：
-   * 第一行 = 折叠箭头 | 类型徽标（w-7 固定宽）| 标题 | 伏笔标记 | 右端操作区（阅读进度徽标在前、删除按钮贴尾）；
+   * 第一行 = 折叠箭头 | 类型/编号徽标（卷章 `min-w-14`、场 `w-7`）| 标题 | 伏笔标记 | 右端操作区（阅读进度徽标在前、删除按钮贴尾）；
    * 第二行 = 摘要（缩进对齐标题下方，默认显示、空不渲染、点击就地编辑）；
    * 拖拽：整节点块可拖，目标行上半/下半 → 插入指示线（accent 2px 绝对定位层，pointer-events-none 不拦截事件）；
    * 行可聚焦（tabIndex=-1）承载选中/Enter/双击；单击行选中、双击行跳详情、选中后 Enter 新建子级 */
@@ -803,8 +805,10 @@ export default function Outline() {
               </span>
             )}
             {/* 伏笔标记（S9.2）：title 行尾紧凑徽标——plants/advances/resolves 图标 + title tooltip
-                伏笔名（多标记按 lib/outline-hooks 排序排列）；标记随行渲染：折叠父行自身标记仍显示、
-                子树标记随展开可见（数据为节点自身关系，不聚合后代）；加载失败 hookMarks=null 不渲染 */}
+                伏笔名（多标记按 lib/outline-hooks 排序排列）；**徽标 = 导航链接**（点击跳该伏笔详情
+                `#/hooks/:id`，行 click/dblclick 守卫排除 `a` ⇒ 不选中行、不进节点详情）；
+                标记随行渲染：折叠父行自身标记仍显示、子树标记随展开可见（数据为节点自身关系，
+                不聚合后代）；加载失败 hookMarks=null 不渲染 */}
             {hookMarks !== null && (hookMarks.get(node.id)?.length ?? 0) > 0 && (
               <span className="flex shrink-0 items-center gap-0.5">
                 {(hookMarks.get(node.id) ?? []).map((mark) => (
