@@ -22,6 +22,7 @@
 - **章序编号单源化**：新增 shared `orderVisibleChapters`（可见章先序，**唯一编号口径**）与 `buildDeductionMarks`（角色/文案/章号派生）；`client/lib/outline-tree` 的 `numberOutline` 改为消费前者（UI 徽标、注入文本、AI 工具三处同源，与服务端 `deriveChapterOrder` 仍不同源）。
 - 人物页左栏排序默认档 = **角色优先级**（旧的最近更新 / 名称 / 创建时间五档全部保留，手动切档行为不变）
 - `character` 不可变层（不参与 Delta）新增 `priority`；`propose_create_entity` 的角色字段示例 `role/status` → `role/priority`（`status` 是已移除字段，旧文案会把模型引向必然失败的提案）
+- **大纲节点伏笔标记可点跳转**：大纲树与章视图行内的伏笔标记徽标（埋设 / 推进 / 回收）由纯展示改为导航链接，点击跳该伏笔详情 `#/hooks/:id`（hover 转主色 + 下划线）；行点击 / 双击手势与行拖拽均不受影响。
 
 ### Fixed
 

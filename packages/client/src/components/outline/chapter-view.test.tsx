@@ -85,11 +85,13 @@ describe("ChapterView（章视图平铺列表）", () => {
     expect(html({ currentPositionId: null })).not.toContain("阅读进度");
   });
 
-  it("伏笔标记：按节点渲染徽标（埋设/推进/回收 + 伏笔名）", () => {
+  it("伏笔标记：按节点渲染徽标（埋设/推进/回收 + 伏笔名），且徽标是跳伏笔详情的导航链接", () => {
     const hookMarks = new Map([
       ["ch-1", [{ relationType: "plants" as const, hookId: "hk-1", hookName: "青铜钥匙" }]],
     ]);
     expect(html({ hookMarks })).toContain("埋设伏笔：青铜钥匙");
+    // 徽标 = 导航链接（hash 路由，href 必须带 `#`）——点击跳该伏笔详情
+    expect(html({ hookMarks })).toContain('href="#/hooks/hk-1"');
     expect(html({ hookMarks: null })).not.toContain("埋设伏笔");
   });
 
