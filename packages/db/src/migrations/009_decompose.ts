@@ -1,15 +1,14 @@
 // 迁移 009：拆解小说两表——新增 decompose_jobs / decompose_batches（2026-09）
 //
+// **历史迁移（拆解功能已整功能移除，见 CHANGELOG）**：本迁移与 010 保留只为旧库升级链
+// 连续（v8 → v9 → v10 → v11；011 再把两表 DROP）；新库不再建这两张表（tables.ts 已删声明）。
+//
 // 纯 DDL 迁移（无数据搬移）：v8 库补建两张新表，既有表与数据一概不动。
-// 拆解是新增能力，旧项目没有 job 行，**无需回填**（见 docs/db/schema.md
-// 「decompose_jobs / decompose_batches」段）。
+// 拆解是新增能力，旧项目没有 job 行，**无需回填**。
 //
 // 幂等：CREATE TABLE IF NOT EXISTS——手工回退版本号后重跑（异常重试路径）不报错；
 // 正常路径由 user_version 门控（版本已到 9 不再执行）。事务由 runMigrations 保证
 // （up + setUserVersion 原子提交）。
-//
-// DDL 与 tables.ts 的 CREATE_TABLES_SQL 中的同名段必须逐字同形——新库走 createTables、
-// 旧库走本迁移，两条路径建出的表结构需一致（schema.test.ts 的 DDL 对齐断言锁住声明层）。
 
 import type { Db } from "../connection.js";
 import type { Migration } from "./index.js";

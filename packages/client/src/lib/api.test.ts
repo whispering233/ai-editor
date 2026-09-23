@@ -289,7 +289,7 @@ describe("closeProject（POST /api/v1/project/close）", () => {
 });
 
 describe("listProjects（GET /api/v1/project/list，S1.5 书架）", () => {
-  it("请求路径与方法；响应解析 rootPath + books（id/name/path/origin/updatedAt）", async () => {
+  it("请求路径与方法；响应解析 rootPath + books（id/name/path/updatedAt）", async () => {
     const calls = mockFetchOnce({
       body: {
         success: true,
@@ -300,14 +300,12 @@ describe("listProjects（GET /api/v1/project/list，S1.5 书架）", () => {
               id: "proj-1",
               name: "我的小说",
               path: "/home/me/novels/books/我的小说",
-              origin: "book",
               updatedAt: "2026-08-01T22:30:00Z",
             },
             {
               id: "proj-2",
               name: "第二本",
               path: "/home/me/novels/books/第二本",
-              origin: "book",
               updatedAt: "2026-07-30T10:12:00Z",
             },
           ],
@@ -321,7 +319,6 @@ describe("listProjects（GET /api/v1/project/list，S1.5 书架）", () => {
       id: "proj-1",
       name: "我的小说",
       path: "/home/me/novels/books/我的小说",
-      origin: "book",
       updatedAt: "2026-08-01T22:30:00Z",
     });
     expect(calls[0].url).toBe("/api/v1/project/list");

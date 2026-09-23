@@ -8,6 +8,8 @@ import { join } from "node:path";
 import type { OutlineFileTree } from "@whispering233/ai-editor-shared";
 import { closeDatabase, openDatabase, type Db } from "../connection";
 import { getUserVersion, SCHEMA_VERSION, setUserVersion } from "../schema";
+import migration009 from "../migrations/009_decompose.js";
+import migration010 from "../migrations/010_decompose_concurrency.js";
 import { OUTLINE_FILE_NAME, readOutlineFile, writeOutlineFile } from "../storage/outline";
 import { DATA_DB_FILE_NAME, ensureSchemaCompatible, runMigrations, SchemaVersionError } from "./migration";
 
@@ -45,6 +47,14 @@ function insertOldEntity(d: Db, id: string): void {
 /** 查 entities 行数 */
 function countEntities(d: Db): number {
   return (d.prepare("SELECT COUNT(*) AS c FROM entities").get() as { c: number }).c;
+}
+
+/** 业务表名清单（升序；sqlite_* 内部表排除） */
+function tableNames(d: Db): string[] {
+  const rows = d
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+    .all() as Array<{ name: string }>;
+  return rows.map((r) => r.name);
 }
 
 /** 查 document_records 行数（迁移 008 建表验证） */
@@ -285,9 +295,9 @@ describe("迁移 008（v7 → v8：document_records 块文档表）", () => {
     setUserVersion(db, 7);
 
     const { applied } = runMigrations(db, { dbPath });
-    expect(applied.map((m) => m.version)).toEqual([8, 9, 10]); // v8 建块文档表 + v9 拆解两表 + v10 并发快照列（链到 SCHEMA_VERSION）
+    expect(applied.map((m) => m.version)).toEqual([8, 9, 10, 11]); // v8 建块文档表 + v9/v10 拆解两表与并发列 + v11 移除两表（链到 SCHEMA_VERSION）
     expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
-    expect(getUserVersion(db)).toBe(10);
+    expect(getUserVersion(db)).toBe(11);
  // 新表已建且可用（直插 + 计数，验证列齐全）
     insertDocument(db, "ch-1");
     expect(countDocuments(db)).toBe(1);
@@ -302,6 +312,53 @@ describe("迁移 008（v7 → v8：document_records 块文档表）", () => {
     expect(() => runMigrations(db, { dbPath })).not.toThrow();
     expect(countDocuments(db)).toBe(1);
     expect(countEntities(db)).toBe(1);
+  });
+});
+
+describe("迁移 011（v10 → v11：移除拆解两表）", () => {
+ /** 造 v10 存量库：注入历史迁移 009+010 建出两表与并发列（当前 DDL 已不含它们）+ 两表各一行存量数据 */
+  function seedV10(db: Db): void {
+    runMigrations(db, { migrations: [migration009, migration010], dbPath });
+    expect(getUserVersion(db)).toBe(10);
+    db.prepare(
+      `INSERT INTO decompose_jobs (id, status, scope_start, scope_end, batch_target_chars, concurrency, model, merge_written, error, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run("job-legacy", "paused", 1, 2, 12000, 4, null, null, null, "2026-09-01T00:00:00Z", "2026-09-01T00:00:00Z");
+    db.prepare("INSERT INTO decompose_batches (job_id, seq, chapter_ids, status, updated_at) VALUES (?, ?, ?, ?, ?)").run(
+      "job-legacy", 1, '["ch-1"]', "done", "2026-09-01T00:00:00Z",
+    );
+    insertOldEntity(db, "char-1");
+  }
+
+  it("v10 存量库前向迁移：两表被 DROP、user_version = 11、既有表数据完好、重复执行幂等", () => {
+    seedV10(db);
+    expect(tableNames(db)).toEqual(expect.arrayContaining(["decompose_jobs", "decompose_batches"])); // 前置：v10 结构确实有两表
+
+    const { applied } = runMigrations(db, { dbPath });
+    expect(applied.map((m) => m.version)).toEqual([11]); // 009/010 已由 seedV10 跑过
+    expect(getUserVersion(db)).toBe(11);
+    expect(tableNames(db)).not.toContain("decompose_jobs");
+    expect(tableNames(db)).not.toContain("decompose_batches");
+ // 既有表数据完好（纯 DDL 只 DROP 两表）
+    expect(countEntities(db)).toBe(1);
+
+ // 幂等：版本已对齐 → 无 pending；手工回退版本重跑 → DROP IF EXISTS 不报错
+    const again = runMigrations(db, { dbPath });
+    expect(again.applied).toEqual([]);
+    setUserVersion(db, 10);
+    expect(() => runMigrations(db, { dbPath })).not.toThrow();
+    expect(getUserVersion(db)).toBe(11);
+    expect(countEntities(db)).toBe(1);
+  });
+
+  it("全新空库（createTables 路径）：两表不存在，删表迁移无对象可删", () => {
+ // 新库只走 createTables（当前 DDL 已不含拆解两表）——结构即全新空库，对齐版本号不建任何表
+    expect(tableNames(db)).toEqual(["delta_records", "document_records", "entities", "relation_records"]);
+    const { db: active, result } = ensureSchemaCompatible(db, dir, dbPath);
+    expect(result.rebuilt).toBe(false);
+    expect(getUserVersion(active)).toBe(SCHEMA_VERSION);
+    expect(tableNames(active)).not.toContain("decompose_jobs");
+    expect(tableNames(active)).not.toContain("decompose_batches");
   });
 });
 
@@ -320,6 +377,7 @@ describe("ensureSchemaCompatible 旧版本有迁移路径", () => {
       { version: 8, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN eighth TEXT") },
       { version: 9, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN ninth TEXT") },
       { version: 10, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN tenth TEXT") },
+      { version: 11, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN eleventh TEXT") },
     ];
     insertOldEntity(db, "char-1");
     writeOutlineFile(dir, oldTree());
@@ -378,6 +436,7 @@ describe("ensureSchemaCompatible 旧版本有迁移路径", () => {
       { version: 8, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN eighth TEXT") },
       { version: 9, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN ninth TEXT") },
       { version: 10, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN tenth TEXT") },
+      { version: 11, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN eleventh TEXT") },
     ];
     insertOldEntity(db, "char-1");
 

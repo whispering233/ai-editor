@@ -1,17 +1,15 @@
 // 迁移 010：decompose_jobs 新增 concurrency 列（拆解并发段数快照，2026-09）
 //
+// **历史迁移（拆解功能已整功能移除，见 CHANGELOG）**：本迁移与 009 保留只为旧库升级链
+// 连续（v8 → v9 → v10 → v11；011 再把两表 DROP）。
+//
 // 纯 DDL（无数据搬移）：v9 库补一列，既有表与数据一概不动。
-// 存量 job 行由 `DEFAULT 1` 回填——历史 job 本就是串行执行，回填 1 是事实口径而不是近似
-// （见 docs/db/schema.md「decompose_jobs / decompose_batches」不变式表「并发快照」）。
+// 存量 job 行由 `DEFAULT 1` 回填——历史 job 本就是串行执行，回填 1 是事实口径而不是近似。
 //
 // 幂等：`ALTER TABLE ADD COLUMN` 没有 `IF NOT EXISTS`，手工回退版本号后重跑会撞
 // `duplicate column name` ⇒ 写前先查 `PRAGMA table_info`，列已在即跳过（迁移语义幂等：
 // 正常路径由 user_version 门控，重复执行只可能来自异常重试）。
 // 事务由 runMigrations 保证（up + setUserVersion 原子提交）。
-//
-// DDL 与 tables.ts 的 CREATE_TABLES_SQL 中 decompose_jobs 段保持同形（新库走 createTables、
-// 旧库走本迁移）：本迁移带 DEFAULT（存量行要回填），新库 DDL 不带（写入侧恒显式给值）；
-// 两条路径建出的列类型 / NOT NULL 一致，schema.test.ts 的 DDL 对齐断言锁住声明层。
 
 import type { Db } from "../connection.js";
 import type { Migration } from "./index.js";

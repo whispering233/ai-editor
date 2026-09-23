@@ -270,7 +270,6 @@ describe("书架 loadBookshelf（S1.5）", () => {
           id: "proj-1",
           name: "我的小说",
           path: "/home/me/novels/books/我的小说",
-          origin: "book",
           updatedAt: "2026-08-01T22:30:00Z",
         },
       ],
