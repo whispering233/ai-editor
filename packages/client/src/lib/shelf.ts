@@ -2,7 +2,7 @@
 // 「小说拆解」（拆解建档）。口径出处：docs/ui/DESIGN.md §书架主页（两组小标题、空组不渲染）。
 //
 // 为什么落在 lib/ 的纯函数里而不是页面组件里：client 无 jsdom，zustand 的 SSR 快照读不到
-// 预置的书架 state（pages/dashboard-decompose.test.ts 已踩过），分组逻辑必须可单测。
+// 预置的书架 state（预置值只能在纯函数层测），分组逻辑必须可单测。
 import type { ProjectListBook, ProjectOrigin } from "@whispering233/ai-editor-shared";
 
 /** 分组展示顺序 + 组标题（**单一定义**：组序与文案只在此处；空组由 groupShelfBooks 丢弃） */

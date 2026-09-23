@@ -1,6 +1,6 @@
 // 书架分组渲染守卫（卡 23.2）：组小标题 + 「当前书按 id 判定」两处收窄。
 //
-// 为什么扫源码不 SSR：同 dashboard-decompose.test.ts——Dashboard 的书架数据来自 zustand store，
+// 为什么扫源码不 SSR：Dashboard 的书架数据来自 zustand store，
 // SSR 走 getServerSnapshot（初始 state），预置的书架在 renderToString 里不可见。
 // 组序 / 组文案的取值断言在 lib/shelf.test.ts（单一定义就在那里）。
 import { readFileSync } from "node:fs";
@@ -19,8 +19,7 @@ describe("书架两类分组（卡 23.2）", () => {
     expect(dashboard).not.toMatch(/book\.name\s*===\s*config\??\.name/);
   });
 
-  it("行尾徽标 / 打开语义仍挂在 isCurrent 上（分组只服务识别，不改变打开行为）", () => {
-    expect(dashboard).toMatch(/isCurrent && decomposeJob !== null/);
+  it("打开语义仍挂在 isCurrent 上（分组只服务识别，不改变打开行为）", () => {
     expect(dashboard).toMatch(/if \(isCurrent\) navigate\("\/overview"\)/);
   });
 });

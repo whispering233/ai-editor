@@ -29,8 +29,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { SectionCard } from "@/components/ui/section-card";
-import { TypeChip } from "@/components/ui/tag-chip";
-import { DecomposeDialog } from "@/components/decompose/decompose-dialog";
 import { BookDeleteDialog } from "@/components/shelf/book-delete-dialog";
 import type { BookDeleteTarget } from "@/components/shelf/book-delete-dialog";
 import { CloudRemoteBooksDialog } from "@/components/shelf/cloud-remote-books-dialog";
@@ -46,7 +44,6 @@ import {
   renameProject,
 } from "../lib/api";
 import { describeExportError, describeImportError } from "../lib/error-messages";
-import { describeJobStatus, formatShelfBadge, isTerminalJobStatus } from "../lib/decompose";
 import { validateBookName } from "../lib/book-name";
 import { groupShelfBooks, isCurrentBook } from "../lib/shelf";
 import { entityListHost } from "../lib/entity-paths";
@@ -58,7 +55,6 @@ import { buildBookPath, findOutlineNodeTitle, useProjectStore } from "../stores/
 import { useChatStore } from "../stores/chat";
 import { useCloudStore } from "../stores/cloud";
 import { useDataRefresh } from "../hooks/use-data-refresh";
-import { useDecomposeJob } from "../hooks/use-decompose-job";
 import { useUiStore } from "../stores/ui";
 
 /** 创作要素卡类型中文名（与 EntityList 本地映射一致；四卡顺序 = 统计请求顺序） */
@@ -132,9 +128,6 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
   const currentSessionId = useChatStore((s) => s.currentSessionId);
   // 跨页定位（方案 A）：点击阅读进度/去大纲 → 设置 transient 目标后跳 #/outline，Outline 页消费
   const setFocusOutlineNode = useUiStore((s) => s.setFocusOutlineNode);
-  // 当前项目的拆解 job（卡 21.9）：概览卡「拆解任务」+ 书架当前书行「拆解中 N/M」徽标共用同一份轮询
-  // （参数 = 项目 id：未打开书不发请求，切书立即重拉并清掉上一本的状态；终态停止轮询见 use-decompose-job）
-  const { job: decomposeJob } = useDecomposeJob(config?.id ?? null);
 
   // 引导表单状态
   const [bookName, setBookName] = useState("");
@@ -153,8 +146,6 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
   const [importOpen, setImportOpen] = useState(false);
   // 从云端恢复（卡 23.7）：列云端书目录 → 导入为本机新书（新机器路径，入口在页头「导入备份」旁）
   const [cloudRestoreOpen, setCloudRestoreOpen] = useState(false);
-  // 拆解小说（卡 21.8）：三态对话框（选文件 → 预览 → 填名开始），入口在「新建一本…」行
-  const [decomposeOpen, setDecomposeOpen] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importName, setImportName] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
@@ -518,7 +509,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     if (config === null || target.id !== config.id) return; // 删非当前书：只刷新书架
     // 删的是当前书：服务端已关连接 + 清 currentProject + 抹 lastProject，这里再走一次 store 的
     // closeProject 是幂等调用（无项目时服务端仍回 saved:true），作用 = **清空客户端镜像**
-    //（config / outline / agents → null，下游 AppShell 的云端状态与拆解轮询随之收敛）
+    //（config / outline / agents → null，下游 AppShell 的云端状态随之收敛）
     useCloudStore.getState().clearStatus();
     try {
       await useProjectStore.getState().closeProject();
@@ -712,7 +703,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
             </div>
           ) : shelfHasBooks ? (
             <>
-              {/* 两组小标题（小说项目 / 小说拆解，卡 23.2）：组序 / 文案 = lib/shelf.ts 单一定义；
+              {/* 两组小标题：组序 / 文案 = lib/shelf.ts 单一定义；
                   空组由 groupShelfBooks 丢弃（只有一类书时就是一张列表）；标题档 = DESIGN.md §书架主页 的 `section-title` */}
               {groupShelfBooks(bookshelf!.books).map((group) => (
                 <div key={group.origin} className="mt-4 first:mt-0">
@@ -750,12 +741,6 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                               <span className="min-w-0 flex-1 truncate text-sm text-foreground">
                                 {book.name}
                               </span>
-                              {isCurrent && decomposeJob !== null && !isTerminalJobStatus(decomposeJob.status) && (
-                                /* 书架行徽标（卡 21.9）：只服务**当前书**那行——GET /project/list 不含 job 状态，
-                                   逐本开 data.db 不值得，且切书即暂停（DESIGN.md §拆解小说）。文案按状态：
-                                   运行/待运行「拆解中 N/M」、已暂停「已暂停 N/M」（同一函数口径）。*/
-                                <TypeChip className="shrink-0">{formatShelfBadge(decomposeJob)}</TypeChip>
-                              )}
                               {isCurrent && (
                                 <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground">
                                   已打开
@@ -795,8 +780,6 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                   >
                     {showCreateForm ? "收起" : "新建一本…"}
                   </button>
-                  {/* 拆解小说入口（卡 21.8）：导入式批量管线，不新增一级导航、不改左栏 */}
-                  <Button onClick={() => setDecomposeOpen(true)}>拆解小说</Button>
                 </div>
                 {showCreateForm && renderCreateBookForm("mt-2 flex flex-col gap-2 text-left")}
               </div>
@@ -936,9 +919,6 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
           </DialogContent>
         </Dialog>
 
-        {/* 拆解小说对话框（三态：选文件 → 预览 → 填名开始） */}
-        <DecomposeDialog open={decomposeOpen} onOpenChange={setDecomposeOpen} />
-
         {/* 删书确认框（行尾垃圾桶与当前书条「删除」共用同一实例；受控：deleteTarget） */}
         <BookDeleteDialog
           book={deleteTarget}
@@ -983,17 +963,6 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
       <PageHeader title="项目概览" />
 
       <div className="grid gap-4 lg:grid-cols-2">
-        {/* 区块 0：拆解任务（卡 21.9）——**有 job 时才渲染**（无 job 不渲染，不占位）；
-            一行状态 + 进 #/decompose 的入口；状态文案与进度页同源（describeJobStatus） */}
-        {decomposeJob !== null && (
-          <SectionCard title="拆解任务" className="lg:col-span-2">
-            <p className="text-sm text-foreground">{describeJobStatus(decomposeJob)}</p>
-            <div className="mt-3">
-              <Button href="#/decompose">查看进度</Button>
-            </div>
-          </SectionCard>
-        )}
-
         {/* 区块 1：项目信息（数据 config，无失败态——项目已打开） */}
         <SectionCard title="项目信息">
           <dl className="mt-3 space-y-2 text-sm">

@@ -55,7 +55,7 @@ export function SessionStatusBarView({ view }: { view: SessionStatusView }) {
   );
 }
 
-/** 状态栏：usage / 占用段 / speed 全为空 → 不渲染（拆解只读会话不渲染输入区，因而天然不渲染状态栏） */
+/** 状态栏：usage / 占用段 / speed 全为空 → 不渲染 */
 export function SessionStatusBar() {
   const contextUsage = useChatStore((s) => s.contextUsage);
   const usage = useChatStore((s) => s.usage);

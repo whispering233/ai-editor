@@ -1,6 +1,6 @@
 // 书架「从云端恢复」入口守卫（卡 23.7）：入口是否还在、是否仍在书架页，就是这张卡的判据本身。
 //
-// 为什么扫源码不 SSR：同 dashboard-decompose.test.ts——Dashboard 的书架数据来自 zustand store，
+// 为什么扫源码不 SSR：Dashboard 的书架数据来自 zustand store，
 // SSR 走 `getServerSnapshot`（初始 state），预置的书架在 `renderToString` 里不可见。
 // 行状态三分支与框内形态另由 `lib/cloud-books.test.ts` 与
 // `components/shelf/cloud-remote-books-dialog.test.tsx` 断言（presenter 走 react-dom/server）。

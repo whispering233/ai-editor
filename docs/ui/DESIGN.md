@@ -442,7 +442,7 @@ components:
 - **有 tab 时不再另画分割线**：antd line 型 `Tabs` 的横向导航条**自带** 1px `{colors.hairline}` 底线（`antd/es/tabs/style/index.js` 的 `&-nav-list::before { borderBottom }`），该底线即分割线；配套 `horizontalMargin: 0`（antd 默认 `0 0 16px 0` 会在 tab 与内容间留 16px 空档，压在分割线上就是双线）。
 - **间距**：页头与内容区块之间 `{spacing.md}`（16px）；页头内部三段之间 `{spacing.sm}`（12px）。
 - **覆盖范围 = 全部中栏页面**：列表/富页、概览、书架、回收站、设置，以及各详情页——详情页的页头 = 标题行 + 操作按钮 + 元信息行，分割线落在元信息行**之下**。加载态/空态/错误态同样保留（分割线属于页头，不随数据变）。
-- **页头常驻（2026-09 口径）**：页头（标题行 + 操作 + 元信息 + 分割线）**固定在内容区上方，只有内容区滚动**——避免滚动后找不到标题与页面级操作（章正文页原先跟着正文滚走，与参考资料页不一致）。**实现 = 页面 `section` 用 `flex h-full min-h-0 flex-col`，内容（含各自的错误条之下的部分）放进内层 `flex min-h-0 flex-1 flex-col overflow-y-auto`**；`h-full` 让 section 恰好等于中栏滚动容器的内容区 ⇒ 外壳不滚、内层滚（参考资料详情 / 参考资料列表 / 人物工作台 / 时间轴 / **章正文页** / **拆解进度页** 采用）。
+- **页头常驻（2026-09 口径）**：页头（标题行 + 操作 + 元信息 + 分割线）**固定在内容区上方，只有内容区滚动**——避免滚动后找不到标题与页面级操作（章正文页原先跟着正文滚走，与参考资料页不一致）。**实现 = 页面 `section` 用 `flex h-full min-h-0 flex-col`，内容（含各自的错误条之下的部分）放进内层 `flex min-h-0 flex-1 flex-col overflow-y-auto`**；`h-full` 让 section 恰好等于中栏滚动容器的内容区 ⇒ 外壳不滚、内层滚（参考资料详情 / 参考资料列表 / 人物工作台 / 时间轴 / **章正文页** 采用）。
   - **写作面的高度链在内层滚动容器里续接**：章正文页 = section（`h-full`）→ 内层滚动容器（`flex min-h-0 flex-1 flex-col overflow-y-auto`）→ `.bn-container`（`flex: 1 1 auto`，blocknote.css）⇒ 写作面仍铺满剩余高度，工具条 `sticky` 贴的是**内层**滚动容器顶（页头之下）。
   - **尚未统一**：概览 / 大纲 / 实体列表 / 设置 / 回收站等仍走外壳滚动（页头随内容离开）——列入 `backlog.md`，逐页改造时按上面同一条实现口径。
 - **实现唯一入口 = `components/ui/page-header.tsx`**（标题行 / tab 行 / 控件行 / 分割线一次给全）：页面不自画页头分割线（表格行、分组头等区块内部的 `border-b border-border` 不属此列）。
@@ -605,7 +605,6 @@ components:
 **`chat-bubble-assistant`** — assistant 消息：无底透明 + 正文排版（长文本可读性优先，不用气泡包）。
 **`focus-strip`** — 「正在讨论：{类型} {名称}」小条：`{colors.surface-soft}` 底 + 1px 描边 + caption。
 **`chat-session-item-menu`** — 会话列表项操作菜单（antd x `Conversations` 的 `menu`）：仅一项「删除会话」——**危险操作走 danger 样式 + `ConfirmDialog` 二次确认**（文案含「删除后无法恢复」），与回收站 purge 同款交互；流式生成中该项禁用（服务端以 409 `SESSION_BUSY` 兜底）。菜单浮层面复用 `dropdown-panel` 契约（canvas 面 + 1px hairline + 阴影）。**已知边界**：操作入口（ellipsis）由 x `Conversations` 内部渲染且**恒显不随 hover**——改它需覆盖 x 内部样式，代价大于收益（窄右栏多占 ~20px，已接受）。
-**`chat-session-decompose`** — 拆解会话（`decompose-` 前缀）的**只读态**：列表项显示会话名（`name` = 「《书名》拆解」，经 `appendSessionInfo` 写入、`GET /chat/sessions` 回传）而不是被截断的原文；正文区按普通消息渲染（真实 user / assistant——含本批原文与模型 JSON 产出，完整回放），**输入框整体不渲染**（不是禁用——不留「换个会话就能发」的错觉）；顶部一行 `caption-text`「拆解过程记录 · 只读 + 类型徽标「拆解」。删除入口保留（同款 danger + `ConfirmDialog` 二次确认，文案注明「删除只影响过程记录，拆解数据不受影响」）；该会话所属 job 在跑时删除项禁用（服务端 409 `DECOMPOSE_JOB_RUNNING` 兜底）。**不引入新色值/字号/圆角。**
 **`session-status-bar`** — 会话状态栏（输入区最底另起一行：`Sender` → 配置行 → 状态行；**配置行回归纯配置**，只留模型与思考强度两个下拉）。**只读观测层**：数字全部由服务端算好下发（占用 = pi `getContextUsage()`；累计用量 / 缓存 / 成本 = `sessionUsage()` 产出的 `usage` 字段；速度 = `createSpeedMeter()` 产出的 `speed` 字段），UI **不自己累加、不自己测时序**（口径见 `docs/design/20-context.md` §2.1）。行内顺序 = 占用段 → 费用 → 速度 → 缓存 → 累计 tokens；某段无数据即隐藏，**整行无任何数据 → 整行不渲染**（不常态白占消息区高度）。
 
 - **占用段三态**：① `percent` + `tokens` 有值 → 2px 圆角条 + `42% · 1M`；② 只有 `contextWindow`（压缩后 / 历史会话，`tokens` 为 `null`）→ `? · 1M` 且**不画条**；③ 连窗口都没有（无模型 / 设置未加载 / 服务端省略该键）→ 整段隐藏。条填充色按占比经 antd token 取色（`CONTEXT_ERROR_PERCENT` 以上 `colorError`、`CONTEXT_WARN_PERCENT` 以上 `colorWarning`、其余 `colorPrimary`），**禁硬编码色值**。
@@ -613,7 +612,7 @@ components:
 - **hover 走原生 `title`**（多行；与 `node-hook-badge` 同口径，**不引 antd Tooltip**）：上下文 tokens / 窗口、输入 · 输出 · 缓存读 · 缓存写 · 合计、命中率分母说明、成本小数位（订阅制标「订阅 · 估算」）、速度样本（tokens / 秒）。
 - **窄栏自适应 = 容器查询声明式隐藏**（`@container` + 两级阈值常量），**不折行、不 JS 测宽**：宽度不足时先隐累计 tokens、再隐缓存段；交互控件（配置行两个下拉）永不被隐藏。
 - **速度只对进行中的会话有效**：历史会话加载后无速度样本（时序不落盘）→ 该项隐藏。
-- **生命周期**：切会话 / 新会话 / 切项目清零（与占用条同一清零点）；新一轮流开始**不清零**（旧值留到新值到达，避免闪烁）；拆解只读会话不渲染（状态栏在输入区内，而该会话输入区整体不渲染）。
+- **生命周期**：切会话 / 新会话 / 切项目清零（与占用条同一清零点）；新一轮流开始**不清零**（旧值留到新值到达，避免闪烁）。
 **`thinking-block`** — 思维链（assistant 消息内的 thinking 内容）：**默认折叠为一行摘要**（`思考过程 · N 字` + 左侧 chevron，`{colors.tertiary}` 字色、无底色、无描边）；展开后 `{colors.surface-soft}` 底 + 左侧 2px `{colors.hairline-strong}` 竖线 + caption 字号 + `{colors.secondary}` 字色 + `pre-wrap`（长文可滚动，限高约 200px；展开态正文字色以 `colorText` 80% 实现——Tailwind 主题未暴露 `colorTextSecondary` utility，属近似 secondary 的登记值，非新色）。**流式生成期间自动展开、本轮结束后自动折叠为摘要行**。历史回看：消息接口只回 `THINKING_PREVIEW_MAX_CHARS` 字预览（`docs/api/80-api-chat.md`），点「展开全文」按需拉取全文（带 loading 态）。同一消息同时持有本轮累积全量与服务端预览时**只渲染一个块**（渲染优先级：有流式累积文本则不渲染预览块）。实现优先用 `@ant-design/x` 的 `Thought` 组件；其外观不满足本契约时自绘，但**不得引入新色或新字号**。
 **`proposal-card`** — 提案卡：1px 描边卡片 + 确认/拒绝按钮（确认按钮用 `button-primary`，禁用态由 antd 派发）。
 **`toast`** — 全局提示走 antd `message`（`App.useApp()`），顶部居中；`success/error/info` 对应 store 的 `ToastKind`，时长由 store 的 3s 定时器决定（`duration: 3` 对齐）。**命令式反馈的上下文入口**：`AntdProvider` 在 `ConfigProvider` 内部包 `<App component={false}>`（`component={false}` 不渲染包裹 div，不插进三栏 flex 链）——`message`/`notification`/`modal` 需经 `App.useApp()` 取实例才能继承本 Provider 的主题与 locale，不要用静态方法。
@@ -668,7 +667,7 @@ components:
 
 **两组小标题**：书架行按项目 `origin` 分两组——**「小说项目」**（手建 / 导入）与**「小说拆解」**（拆解建档），各挂一行 `section-title` 档小标题（带条数）；**空组不渲染**（只有一类书时就是一张列表）。分组只服务识别，不改变打开 / 导出 / 删除任何行为。
 
-**当前态按项目 id 判定**（不是书名）：当前打开那行仍走 `bg-primary/10 ring-1 ring-primary/30 ring-inset` 淡染面 + 「已打开」徽标（`GET /project/list` 已回传 `id`）；行尾徽标区依次是拆解进度徽标（仅当前书的在跑 job，见 §拆解小说）与相对时间。
+**当前态按项目 id 判定**（不是书名）：当前打开那行仍走 `bg-primary/10 ring-1 ring-primary/30 ring-inset` 淡染面 + 「已打开」徽标（`GET /project/list` 已回传 `id`）；行尾徽标区依次是相对时间。
 
 **行内行动作（不得嵌套在整行按钮里）**：行容器由整行 `<button>` 改为 `div`——**内层「打开」区**（书名 + 徽标 + 时间，可点 = 打开 / 继续创作）+ **行尾 `icon-button` 垃圾桶**（`title` / `aria-label` = 删除书籍，恒贴行尾，同其余列表行）；当前书条（导出 / 重命名那行）并列第三个 `button-default`「删除」。**为什么必须拆**：HTML 不允许按钮嵌按钮，整行按钮 + 行尾图标按钮是无效结构（点击冒泡成「打开」）。
 
@@ -677,34 +676,6 @@ components:
 **`cloud-remote-books-dialog`（从云端恢复，新机器路径）** — 书架「导入备份」旁并列 `button-default`「从云端恢复…」（打开即拉 `GET /cloud/remote-books`；未配置云盘由服务端 409 引导去设置页云端面板，复用跨页意图）：可滚动行列表（`data-row`）= 书名（解析不出回退目录名）+ `caption-text` 元信息（最近备份时间 · 份数 · 大小）+ 行尾状态——「本机已有」置灰（`type-badge`）/ 该目录无备份置灰 / 可导入行给 `button-default`「导入」；导入成功关框 + toast + 刷新书架（**不自动打开**，与导入备份一致）。
 
 > 本小节**不新增色值 / 字号 / 圆角**：沿用 `button-default` / `button-primary` / `card` / `data-row` / `icon-button` / `type-badge` / `caption-text` / `section-title` / 受控 Dialog（复选项沿用 antd `Checkbox` 走全局 seed 派生）。
-
-### 拆解小说（书架入口 + 进度页，2026-09）
-
-**入口** — 书架页「新建一本…」行内并列一个 `button-default`「拆解小说」（`dashboard-decompose`）；点击开**受控 Dialog**（三态：选文件 → 预览 → 填名开始），不新增一级导航、不改左栏。
-
-**开始后会发生的界面变化**（契约，不可省）：服务端已把当前项目切到新书 → 客户端**收敛项目镜像**（重拉 config / outline + 刷新书架）再跳 `#/decompose`；新书落地在书架「小说拆解」组，当行变成「已打开」。不收敛的话会出现「书架仍高亮旧书、点旧书看到新项目的数据」（2026-09 实测）。
-
-- 选文件：`<input type="file" accept=".txt">`（浏览器/桌面同一路径，**不加 preload 能力**）。
-- 预览：统计行（编码探测结果 / 总字数 / 章数 / 卷数 / 字数分布）+ 警告行（编号重启 / 疑似合并章 / 目录页丢弃 / 退化等分，用 `{colors.warning}` 文案）+ **可滚动章列表**（`data-row`，列 = 序号 / 标题 / 字数；数百行直接全量渲染，不引入虚拟滚动）+ 范围选择（起止章）+ 预估行（批次数 / 调用次数 / 粗估费用）+ 书名输入（默认取文件名，校验复用书名校验）。
-- 确认 = `button-primary`「开始拆解」；失败/警告均框内文案，不另开提示。
-
-**进度页 `#/decompose`** — 遵守§Layout「中栏页头结构」与**页头常驻**模板（section `h-full min-h-0 flex flex-col` + 内层滚动容器）：
-
-- 页头：`page-title`「拆解小说」+ 元信息行（书名 · 范围 · 模型）+ 操作按钮（`button-default`「中止」/「续拆」，按状态显示其一）。
-- 阶段条：5 段（解析 / 建档 / 逐章抽取 / 归并 / 报告）——当前段 = `{colors.primary}` 加粗，已完成段 = `{colors.success}` 圆点，未开始 = `{colors.tertiary}`。
-- 进度条：antd `Progress`（描边取全局 `colorInfo`，本仓已把 `colorInfo` 设为主色同值 ⇒ 视觉为深墨；**无组件级 token 覆盖**）+ 右侧「已完成 N/M 批」文案（`caption-text`）。
-- 批次列表：`data-row` 行，列 = 批序号 / 覆盖章范围 / 字数 / 状态徽标（`type-badge`，中性）/ 展开按钮 / 「重跑」按钮；展开区 = 该批抽取结果的**只读摘要**（人物 / 设定 / 地点 / 关系分组的文字列表，不倾倒原始 JSON）——展开是「核查后重跑」的前提，**不是可选装饰**；分组为空 → 渲染「—」（与页面既有空值口径一致）。
-- 失败批：行内 `{colors.error}` 文案 + 「重跑」（`done` 与 `failed` 行都有该按钮）；重跑 `done` 行需二次确认（受控 Dialog，文案写明「将重新生成该批抽取结果，并重建归并与报告」）。
-- 完成态：本页**总结卡在上 + 批列表在下**（`section-title`「拆解完成」+ 拆出 人物 / 设定 / 地点 / 关系 计数 + 三个跳转：拆解报告 / 大纲 / 人物，**不自动跳转**）——**完成态不得藏掉批列表**：「核查后重跑」是本功能的核心能力，`done` 批的重跑仍走二次确认。
-- **拆解记录时间线**（任何状态都渲染，可折叠）：数据 = `GET /decompose/job/log`；每行 `data-row`（时刻 + 单行文案 + 可选批徽标）；空态 `caption-text`「暂无过程记录」；会话被删后仍渲染空态（不回 404）。
-- **续拆入口**（完成态）：`button-default`「继续拆解」→ 受控 Dialog（**跳过「选文件」段**，直接统计行 + 章列表 + 范围 + 预估行，全部来自 `GET /decompose/plan`）；章列表里已拆章带「已拆」`type-badge`；无未拆章时按钮禁用 + `caption-text` 说明。启动走 `POST /decompose/continue`，返回后刷新轮询状态。
-- 状态文案：`已暂停 · 可续拆` / `上次拆解中断，可续拆`（服务端重启归一后）。
-
-**概览页卡片** — `#/overview` 在有 job 时多一张 `card`：`section-title`「拆解任务」+ 一行状态（运行中 N/M 批 / 已暂停 / 已完成）+ 进入 `#/decompose` 的 `button-default`；无 job 不渲染。
-
-**书架行徽标** — 仅**当前打开的书**那行显示：运行/待运行 → 「拆解中 N/M」；已暂停 → 「已暂停 N/M」（`type-badge`）；其他书不显示（`GET /project/list` 不含 job 状态，逐本开 `data.db` 不值得；且切书即暂停）。
-
-> 本小节**不新增色值/字号/圆角**：沿用 `button-default` / `button-primary` / `card` / `data-row` / `type-badge` / `caption-text` / 受控 Dialog。新增 antd 组件仅 `Progress`（走全局 seed 派生，**不进组件覆盖表**）。
 
 ### antd 组件 token 覆盖（全部覆盖项就这些）
 

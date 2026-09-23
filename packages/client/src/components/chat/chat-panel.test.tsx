@@ -51,7 +51,6 @@ import {
   asToolCall,
   ChatPanel,
   ComposerArea,
-  DecomposeReadonlyBar,
   focusLabel,
   MessageItem,
   ProposalCardView,
@@ -196,12 +195,6 @@ describe("会话状态栏（session-status-bar 契约：只读观测层 / 段无
     expect(out).not.toContain("@container");
     expect(out).not.toContain("上下文占用");
   });
-
-  it("拆解只读会话：输入区整体不渲染（状态栏随之不渲染）", () => {
-    const out = html(<ComposerArea readonly />);
-    expect(out).not.toContain("@container");
-    expect(out).not.toContain("累计");
-  });
 });
 
 describe("thinking-block 契约（默认折叠摘要 / 展开正文 / 流式自动展开-结束自动折叠 / 按需拉全文）", () => {
@@ -321,41 +314,31 @@ describe("ChatPanel 挂载渲染冒烟（SSR 初始态：zustand v5 getServerSna
     expect(textOf((blank[0] as { label: ReactNode }).label)).toContain("（空会话）");
   });
 
-  // chat-session-decompose（拆解会话只读态）：列表项标题优先级 + 「拆解」徽标
+  // 列表项标题优先级（chat-session-item-menu）：会话名 / 摘要 / 空态兜底
   it("sessionItems：有 name 时显示会话名（不回退被截断的原文）；无 name 仍显示摘要", () => {
     const textOf = (node: ReactNode) =>
       renderToString(<div>{node}</div>).replace(/<!--[^>]*-->/g, "");
-    const named = sessionItems([{ ...sampleSession, name: "《测试书》拆解" }]);
+    const named = sessionItems([{ ...sampleSession, name: "《测试书》讨论" }]);
     const namedHtml = textOf((named[0] as { label: ReactNode }).label);
-    expect(namedHtml).toContain("《测试书》拆解");
+    expect(namedHtml).toContain("《测试书》讨论");
     expect(namedHtml).not.toContain("帮我梳理第三章的冲突");
     // 空 name 不得渲染成空标题（退 lastMessage，再退「（空会话）」）
     const emptyName = sessionItems([{ ...sampleSession, name: "", lastMessage: "" }]);
     expect(textOf((emptyName[0] as { label: ReactNode }).label)).toContain("（空会话）");
   });
 
-  it("sessionItems：拆解会话（decompose- 前缀）带中性 type-badge「拆解」；普通会话没有", () => {
+  it("sessionItems：每项只有标题 + 元信息两行（不挂类型徽标）", () => {
     const textOf = (node: ReactNode) =>
       renderToString(<div>{node}</div>).replace(/<!--[^>]*-->/g, "");
-    const decompose = sessionItems([{ ...sampleSession, id: "decompose-job-abc" }]);
-    const decomposeHtml = textOf((decompose[0] as { label: ReactNode }).label);
-    expect(decomposeHtml).toContain("拆解");
-    expect(decomposeHtml).toContain("border-type-badge-border"); // TypeChip（描边式类型徽标）
-
-    const normalHtml = textOf((sessionItems([sampleSession])[0] as { label: ReactNode }).label);
-    expect(normalHtml).not.toContain("border-type-badge-border");
-    // 只是「名字里含 decompose」不算拆解会话（前缀判定）
-    const lookalike = textOf(
-      (sessionItems([{ ...sampleSession, id: "my-decompose-1" }])[0] as { label: ReactNode }).label,
-    );
-    expect(lookalike).not.toContain("border-type-badge-border");
+    const out = textOf((sessionItems([sampleSession])[0] as { label: ReactNode }).label);
+    expect(out).not.toContain("border-type-badge-border"); // 无 TypeChip（描边式类型徽标）
   });
 });
 
-describe("会话项操作菜单（chat-session-item-menu 契约：唯一项「删除会话」+ streaming / 在跑 job 禁用）", () => {
+describe("会话项操作菜单（chat-session-item-menu 契约：唯一项「删除会话」+ streaming 禁用）", () => {
   it("菜单唯一项 = 删除会话（danger），点击回调带该项会话 id 且阻止冒泡", () => {
     const onDelete = vi.fn();
-    const menu = sessionItemMenu(false, false, onDelete)({ key: "sess-7" });
+    const menu = sessionItemMenu(false, onDelete)({ key: "sess-7" });
     expect(menu.items).toHaveLength(1);
     // items 为联合类型（含 MenuDividerType），按 toMatchObject 断言而非属性访问
     expect(menu.items?.[0]).toMatchObject({ key: MENU_KEY_DELETE_SESSION, danger: true });
@@ -369,44 +352,20 @@ describe("会话项操作菜单（chat-session-item-menu 契约：唯一项「�
 
   it("streaming 中禁用该项（在途生成不得删；服务端 409 兜底）；其它 key 不触发删除", () => {
     const onDelete = vi.fn();
-    const menu = sessionItemMenu(true, false, onDelete)({ key: "sess-7" });
+    const menu = sessionItemMenu(true, onDelete)({ key: "sess-7" });
     expect(menu.items?.[0]).toMatchObject({ key: MENU_KEY_DELETE_SESSION, disabled: true });
 
     menu.onClick?.({ key: "other", domEvent: { stopPropagation: vi.fn() } } as never);
     expect(onDelete).not.toHaveBeenCalled();
   });
-
-  it("拆解 job 在跑：拆解会话的删除项禁用（服务端 409 DECOMPOSE_JOB_RUNNING 兜底）", () => {
-    const decompose = sessionItemMenu(false, true, vi.fn())({ key: "decompose-job-abc" });
-    expect(decompose.items?.[0]).toMatchObject({ disabled: true });
-    // 普通 chat 会话不受 job 状态影响（「普通会话行为逐字不变」）
-    const normal = sessionItemMenu(false, true, vi.fn())({ key: "sess-7" });
-    expect(normal.items?.[0]).not.toMatchObject({ disabled: true });
-    // job 已停：拆解会话照常可删
-    const settled = sessionItemMenu(false, false, vi.fn())({ key: "decompose-job-abc" });
-    expect(settled.items?.[0]).not.toMatchObject({ disabled: true });
-  });
 });
 
-describe("chat-session-decompose 只读态（只读说明条 + 输入区整体不渲染）", () => {
+describe("ComposerArea（底部区：focus 小条 + 输入区）", () => {
   const html = (node: ReactNode) => renderToString(<div>{node}</div>);
 
-  it("只读说明条：一行 caption 文案 + 类型徽标「拆解」（不引入新色/字号/圆角）", () => {
-    const out = html(<DecomposeReadonlyBar />);
-    expect(out).toContain("拆解过程记录 · 只读");
-    expect(out).toContain("拆解");
-    expect(out).toContain("border-type-badge-border");
-    expect(out).toContain("text-xs");
-  });
-
-  it("拆解会话（readonly）不渲染输入框——不是禁用；普通会话照常渲染输入区", () => {
-    const readonly = html(<ComposerArea readonly />);
-    expect(readonly).toBe("<div></div>");
-    expect(readonly).not.toContain("输入消息…");
-
-    // 反证：非只读时同一断言命中输入框（否则上一条是空跑）
-    const normal = html(<ComposerArea readonly={false} />);
-    expect(normal).toContain("输入消息…");
+  it("渲染输入框（无 focus 上下文 → focus 小条不渲染）", () => {
+    const out = html(<ComposerArea />);
+    expect(out).toContain("输入消息…");
   });
 });
 

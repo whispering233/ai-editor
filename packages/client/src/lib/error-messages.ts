@@ -88,28 +88,3 @@ export function describeDeleteBookError(code: string | null, message: string): s
       return message === "" ? "删除失败，请稍后重试" : message;
   }
 }
-
-/**
- * 拆解小说错误码 → 框内引导文案（拆解对话框；失败与警告一律落框内，不另开提示）。
- * - 体积 / 文本 / 校验类**透传服务端 message**：上限值、空文本判定都由服务端单一实现，
- *   客户端不复述数字（同一数值两处出现必然漂移）。
- * - `PROJECT_ALREADY_EXISTS` 本地映射换书名引导（框内可立即改名重试）。
- * - `LLM_API_KEY_MISSING` 本地映射设置页引导：服务端 message 分「模型未选」「凭据缺失」两种，
- *   框内一句话盖住两态（用户动作都是去设置页）。
- */
-export function describeDecomposeError(code: string | null, message: string): string {
-  switch (code) {
-    case "PROJECT_ALREADY_EXISTS":
-      return "同名书籍已存在，请换一个书名";
-    case "LLM_API_KEY_MISSING":
-      return "未配置可用模型或 API key，请到设置页配置后再试";
-    case "CLIENT_NETWORK_ERROR":
-      return "无法连接服务，请确认 ai-editor 服务已启动";
-    case "VALIDATION_ERROR":
-    case "DECOMPOSE_FILE_TOO_LARGE":
-    case "DECOMPOSE_FILE_INVALID":
-      return message;
-    default:
-      return message === "" ? "拆解失败，请稍后重试" : message;
-  }
-}

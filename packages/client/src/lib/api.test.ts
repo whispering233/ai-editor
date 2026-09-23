@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ApiError,
   CLIENT_NETWORK_ERROR,
-  analyzeDecompose,
   closeProject,
   computeDeltaState,
   confirmProposal,
@@ -22,9 +21,6 @@ import {
   exportProjectZip,
   getCloudRemoteBooks,
   getDeltasByNode,
-  getDecomposeBatch,
-  getDecomposeJob,
-  getDecomposeJobLog,
   getEntityDetail,
   getOutlinePath,
   getProjectBackups,
@@ -41,17 +37,13 @@ import {
   getOutline,
   openProject,
   parseContentDispositionFilename,
-  pauseDecomposeJob,
   purgeOutlineNode,
   rejectProposal,
   renameProject,
   renameProjectBackup,
-  rerunDecomposeBatch,
   restoreOutlineNode,
   restoreProjectBackup,
-  resumeDecomposeJob,
   saveManuscript,
-  startDecompose,
   updateEntity,
   updateOutlineNode,
   updateRelationMeta,
@@ -315,7 +307,7 @@ describe("listProjects（GET /api/v1/project/list，S1.5 书架）", () => {
               id: "proj-2",
               name: "第二本",
               path: "/home/me/novels/books/第二本",
-              origin: "decompose",
+              origin: "book",
               updatedAt: "2026-07-30T10:12:00Z",
             },
           ],
@@ -1424,151 +1416,6 @@ describe("备份管理", () => {
       },
     });
     await expect(renameProject("新名")).rejects.toMatchObject({ code: "PROJECT_ALREADY_EXISTS" });
-  });
-});
-
-// ============ 拆解小说端点（原始字节上传；docs/api/120-api-decompose.md §analyze / §start） ============
-//
-// 请求侧原始字节是通用「JSON 请求 / {success,data} 响应」约定的显式例外（docs/api/api-public.md）：
-// body = 文件原始字节 + `application/octet-stream`，文件名 / 书名 / 范围走 query。
-describe("拆解小说端点（上传原始字节）", () => {
-  const FILE = new File(["第一章 雪夜\n正文"], "斗破苍穹.txt", { type: "text/plain" });
-
-  it("analyzeDecompose：POST /decompose/analyze，body 原样传 File、Content-Type = application/octet-stream", async () => {
-    const calls = mockFetchOnce({ body: { success: true, data: { encoding: "utf-8" } } });
-    await analyzeDecompose(FILE);
-    expect(calls[0].url).toBe("/api/v1/decompose/analyze?file_name=%E6%96%97%E7%A0%B4%E8%8B%8D%E7%A9%B9.txt");
-    expect(calls[0].init?.method).toBe("POST");
-    expect(calls[0].init?.body).toBe(FILE); // 不 base64 / 不 multipart：原样字节
-    expect((calls[0].init?.headers as Record<string, string>)["Content-Type"]).toBe(
-      "application/octet-stream",
-    );
-  });
-
-  it("analyzeDecompose：范围走 query（缺省不落参数）", async () => {
-    const calls = mockFetchOnce({ body: { success: true, data: {} } });
-    await analyzeDecompose(FILE, { scopeStart: 3, scopeEnd: 9 });
-    expect(calls[0].url).toBe(
-      "/api/v1/decompose/analyze?file_name=%E6%96%97%E7%A0%B4%E8%8B%8D%E7%A9%B9.txt&scope_start=3&scope_end=9",
-    );
-  });
-
-  it("startDecompose：POST /decompose/start，书名 + 范围走 query、body 仍是原始字节", async () => {
-    const calls = mockFetchOnce({
-      body: {
-        success: true,
-        data: {
-          projectId: "p1",
-          projectPath: "/root/books/斗破",
-          name: "斗破",
-          jobId: "j1",
-          status: "running",
-          batchCount: 12,
-        },
-      },
-    });
-    const res = await startDecompose(FILE, { name: "斗破", scopeStart: 1, scopeEnd: 5 });
-    expect(calls[0].url).toBe(
-      "/api/v1/decompose/start?file_name=%E6%96%97%E7%A0%B4%E8%8B%8D%E7%A9%B9.txt&name=%E6%96%97%E7%A0%B4&scope_start=1&scope_end=5",
-    );
-    expect((calls[0].init?.headers as Record<string, string>)["Content-Type"]).toBe(
-      "application/octet-stream",
-    );
-    expect(res.jobId).toBe("j1");
-  });
-
-  it("startDecompose：409 PROJECT_ALREADY_EXISTS → ApiError code 透传（对话框内换书名）", async () => {
-    mockFetchOnce({
-      status: 409,
-      body: { success: false, error: { code: "PROJECT_ALREADY_EXISTS", message: "同名书籍已存在" } },
-    });
-    const err = await startDecompose(FILE, { name: "斗破" }).catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(ApiError);
-    expect((err as ApiError).code).toBe("PROJECT_ALREADY_EXISTS");
-  });
-
-  it("analyzeDecompose：400 DECOMPOSE_FILE_TOO_LARGE → ApiError code 透传", async () => {
-    mockFetchOnce({
-      status: 400,
-      body: {
-        success: false,
-        error: { code: "DECOMPOSE_FILE_TOO_LARGE", message: "文件超过体积上限 16MB" },
-      },
-    });
-    const err = await analyzeDecompose(FILE).catch((e: unknown) => e);
-    expect((err as ApiError).code).toBe("DECOMPOSE_FILE_TOO_LARGE");
-  });
-});
-
-// 拆解进度面（卡 21.9；docs/api/120-api-decompose.md §job … §rerun）——轮询 / 展开 / 中止续拆 / 重跑的 URL 形状。
-describe("拆解进度面端点", () => {
-  it("getDecomposeJob：GET /decompose/job；signal 透传（离开页面时中止在途轮询）", async () => {
-    const calls = mockFetchOnce({ body: { success: true, data: { status: "running" } } });
-    const controller = new AbortController();
-    const res = await getDecomposeJob(controller.signal);
-    expect(calls[0].url).toBe("/api/v1/decompose/job");
-    expect(calls[0].init?.method).toBe("GET");
-    expect(calls[0].init?.signal).toBe(controller.signal);
-    expect(res).toEqual({ status: "running" });
-  });
-
-  it("getDecomposeJob：404 DECOMPOSE_JOB_NOT_FOUND → ApiError code 透传（调用方据此停止轮询）", async () => {
-    mockFetchOnce({
-      status: 404,
-      body: {
-        success: false,
-        error: { code: "DECOMPOSE_JOB_NOT_FOUND", message: "当前项目没有拆解任务" },
-      },
-    });
-    const err = await getDecomposeJob().catch((e: unknown) => e);
-    expect((err as ApiError).code).toBe("DECOMPOSE_JOB_NOT_FOUND");
-  });
-
-  it("getDecomposeBatch：GET /decompose/job/batches/:seq（未完成 → result: null）", async () => {
-    const calls = mockFetchOnce({
-      body: { success: true, data: { seq: 3, status: "pending", attempts: 0, error: null, result: null } },
-    });
-    const res = await getDecomposeBatch(3);
-    expect(calls[0].url).toBe("/api/v1/decompose/job/batches/3");
-    expect(res.result).toBeNull();
-  });
-
-  it("getDecomposeJobLog：GET /decompose/job/log；signal 透传（条目空数组 = 会话记录已删）", async () => {
-    const calls = mockFetchOnce({
-      body: { success: true, data: { sessionId: "decompose-job-1", entries: [] } },
-    });
-    const controller = new AbortController();
-    const res = await getDecomposeJobLog(controller.signal);
-    expect(calls[0].url).toBe("/api/v1/decompose/job/log");
-    expect(calls[0].init?.method).toBe("GET");
-    expect(calls[0].init?.signal).toBe(controller.signal);
-    expect(res.entries).toEqual([]);
-  });
-
-  it("pause / resume / rerun：POST 到各自路径，无请求体", async () => {
-    const pauseCalls = mockFetchOnce({ body: { success: true, data: { status: "paused" } } });
-    await pauseDecomposeJob();
-    expect(pauseCalls[0].url).toBe("/api/v1/decompose/job/pause");
-    expect(pauseCalls[0].init?.method).toBe("POST");
-    expect(pauseCalls[0].init?.body).toBeUndefined();
-
-    const resumeCalls = mockFetchOnce({ body: { success: true, data: { status: "running" } } });
-    await resumeDecomposeJob();
-    expect(resumeCalls[0].url).toBe("/api/v1/decompose/job/resume");
-
-    const rerunCalls = mockFetchOnce({ body: { success: true, data: { status: "running", seq: 2 } } });
-    const res = await rerunDecomposeBatch(2);
-    expect(rerunCalls[0].url).toBe("/api/v1/decompose/job/batches/2/rerun");
-    expect(res.seq).toBe(2);
-  });
-
-  it("resume：400 LLM_API_KEY_MISSING → ApiError code 透传（缺凭据不动状态）", async () => {
-    mockFetchOnce({
-      status: 400,
-      body: { success: false, error: { code: "LLM_API_KEY_MISSING", message: "未配置 API key" } },
-    });
-    const err = await resumeDecomposeJob().catch((e: unknown) => e);
-    expect((err as ApiError).code).toBe("LLM_API_KEY_MISSING");
   });
 });
 

@@ -3,7 +3,7 @@
 // 路由表见 （10 路由，一级化）：#/、#/overview、#/outline、#/outline/:nodeId、
 // #/characters[/:id]、#/setting[/:id]、#/locations[/:id]、#/relations、#/hooks[/:id]、
 // #/timeline、#/timeline/:id、#/timepoints/:id、#/references[/:id]、#/manuscript/:chapterId、
-// #/decompose（拆解进度）、#/trash、#/preferences
+// #/trash、#/preferences
 // （#/chat、#/canvas 已移除；#/entities/* 与 #/settings 仅作旧址重定向；未知 hash 回退 #/ 兜底）
 import { useEffect, useState } from "react";
 
@@ -21,7 +21,6 @@ export interface Route {
 export const KNOWN_ROUTE_SEGMENTS = [
   "outline",
   "overview",
-  "decompose",
   "entities",
   "characters",
   "setting",
