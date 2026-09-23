@@ -5,9 +5,9 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [v0.0.55] - 2026-09-23
 
-> **会话状态栏（chat 右栏观测层）**：输入区底部新增一行只读状态栏——上下文占用 / 费用 / 解码速度 / 缓存命中率 / 累计 tokens；配置行回归纯配置（只留模型与思考强度）。数字全部由服务端算好下发（占用 = pi `getContextUsage()`；账目 = agent 包 `sessionUsage()`；速度 = agent 包 `createSpeedMeter()`），UI 不累加、不计时、不复算分母。回归：build / typecheck / lint / `-r test` 全绿（202 文件 / 3086 测试）+ 真实会话端到端核对（数字与独立重算逐位一致、窄栏两级隐藏、切项目清零、历史会话无速度 + 占用段 `? · 窗口`）。
+> **会话状态栏 + 「小说拆解」移除版本**：chat 输入区底部新增只读状态栏（上下文占用 / 费用 / 解码速度 / 缓存命中率 / 累计 tokens），配置行回归纯配置；同时**整功能移除「小说拆解」**——端点 / 进度页 / 书架入口 / 拆解会话守卫 / 服务端管线与 shared 契约全删，数据层加迁移 v11 DROP 两表（`SCHEMA_VERSION` → 11），`project.json` 的 `origin` 与创作根 `decompose` 段废止（存量键读侧容忍）。设计文档保留边界声明：不做超长小说正文生成、也不做批量拆解导入（超长文本绕不开上下文窗口爆满 / 腐化 / 漂移，产出物可信度无法自证）。回归：build / typecheck / lint / `-r test` 全绿（183 文件 / 2674 测试）+ 迁移双路径实证（v10 库两表消失且 `user_version=11`、v8 老库链路连通、全新库无两表）+ 全仓残留 `rg` 归零核验。
 
 ### Added
 
