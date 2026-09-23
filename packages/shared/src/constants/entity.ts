@@ -113,16 +113,6 @@ export const CHARACTER_PRIORITY_LABELS: Record<CharacterPriority, string> = {
   extra: "龙套",
 };
 
-/**
- * 档位 rank（0 起，= `CHARACTER_PRIORITIES` 下标）：未分级（缺键 / `null` / 非字符串 / 未知串）→ `null`。
- * 排序消费方（db 的 SQL CASE 由同一数组顺序生成）按「有档位者在前、`null` 沉底」处理。
- */
-export function characterPriorityRank(value: unknown): number | null {
-  if (typeof value !== "string") return null;
-  const rank = CHARACTER_PRIORITIES.indexOf(value as CharacterPriority);
-  return rank < 0 ? null : rank;
-}
-
 /** 伏笔管理关系（伏笔关系约定：大纲节点 → hook） */
 export const HOOK_RELATION_TYPES = ["plants", "advances", "resolves"] as const;
 

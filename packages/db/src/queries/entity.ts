@@ -16,7 +16,7 @@
 // 语义逐句对照改造（git show 52c7c13^:packages/db/src/queries/entity.ts）：
 // - deleted_at IS NULL ↔ isNull；软删过滤语义不变
 // - name LIKE ? ↔ like(entities.name, `%${q}%`)——通配符 %/_ 原样透传（模糊搜索语义）
-// - 排序白名单（name/created_at/updated_at/priority × asc/desc）↔ 动态选列对象 desc/asc（无字符串拼接）
+// - 排序白名单（name/created_at/updated_at × asc/desc；`priority` 为固定升序档，`order` 不参与）↔ 动态选列对象 desc/asc（无字符串拼接）
 // - sort=priority 排 rank（2026-09）↔ json_extract + shared `CHARACTER_PRIORITIES` 顺序派生的 CASE 模板
 // - event/timepoint 固定排序 `sort_order IS NULL, sort_order ASC, id ASC` ↔ orderBy(sql 模板)（NULL 沉底）
 // - COUNT(*) ↔ count；IN 占位符 ↔ inArray（空集生成恒假 SQL，原生 IN (NULL) 语义等价）

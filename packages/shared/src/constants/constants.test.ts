@@ -8,7 +8,6 @@ import {
   BACKUP_FREQUENCIES,
   CHARACTER_PRIORITIES,
   CHARACTER_PRIORITY_LABELS,
-  characterPriorityRank,
   CONFLICT_LEVELS,
   DEFAULT_BACKUP_FREQUENCY_MINUTES,
   DEFAULT_HALF_LIFE,
@@ -109,13 +108,6 @@ describe("角色优先级常量（2026-09）", () => {
       "配角",
       "龙套",
     ]);
-  });
-
-  it("characterPriorityRank：下标即 rank；未分级（缺键 / null / 空串 / 未知值 / 非字符串）→ null", () => {
-    expect(CHARACTER_PRIORITIES.map((k) => characterPriorityRank(k))).toEqual([0, 1, 2, 3]);
-    for (const ungraded of [undefined, null, "", "主要角色", "protagonists", 0, {}, []]) {
-      expect(characterPriorityRank(ungraded)).toBeNull();
-    }
   });
 });
 

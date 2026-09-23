@@ -24,7 +24,7 @@ export interface Entity {
 
 /**
  * 实体列表摘要（GET /api/v1/entity/:type 列表项）
- * summary 为从 data 提取的关键摘要字段（如 character → role/status、hook → status/payoff_timing）
+ * summary 为从 data 提取的关键摘要字段（如 character → role/description/motivation/personality/ability_panel、hook → status/payoff_timing）
  */
 export interface EntitySummary {
   id: string;

@@ -1,6 +1,6 @@
 // S6.3 查询工具测试：get_entity / search_entities / get_entity_summary
 // 覆盖：详情返回（data 解析）/ type 不一致 → null / 软删不可见/
-// search filters（status/tags）/ 摘要结构（character→role/status）/ 聚合统计分布与软删不计入
+// search filters（status/tags）/ 摘要结构（character→role/description/motivation…）/ 聚合统计分布与软删不计入
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
