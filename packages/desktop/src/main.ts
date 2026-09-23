@@ -8,6 +8,7 @@ import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { startServer, type ServerHandle } from "@whispering233/ai-editor-server";
+import { PORT_RANGES } from "@whispering233/ai-editor-shared";
 import {
   desktopConfigPath,
   libraryRootCandidates,
@@ -183,7 +184,14 @@ async function openWindow(): Promise<void> {
 
   try {
     // openBrowser:false —— 桌面版自带窗口，不再拉起系统浏览器
-    handle = await startServer(root, { openBrowser: false });
+    // 端口：显式取 desktop 分段（与 web 生产 / dev 分段互不相交，见 `docs/design/build.md` §端口策略）；
+    // `dev: false` 显式钉住——防 shell 里的 NODE_ENV=development 把桌面端误判成 dev 严格模式
+    handle = await startServer(root, {
+      openBrowser: false,
+      dev: false,
+      port: PORT_RANGES.desktop.base,
+      maxAttempts: PORT_RANGES.desktop.attempts,
+    });
   } catch (err) {
     console.error("[desktop] 服务启动失败", err);
     dialog.showErrorBox("AI Editor 启动失败", err instanceof Error ? err.message : String(err));

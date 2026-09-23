@@ -8,8 +8,8 @@
 | :--- | :--- | :--- |
 | 服务形态 | 主进程内 **in-process** 调用 `startServer()`，不开子进程 | 渲染进程天然独立，主进程的同步阻塞（sqlite/zip）只延迟 HTTP 响应、不冻结窗口；上 `utilityProcess` 是无人需要的崩溃隔离 |
 | 窗口加载 | `http://127.0.0.1:<实际端口>` | 前端 API 用相对路径 `API_BASE="/api/v1"`，必须与 server 同源；`file://` 下相对路径会打空 |
-| 端口策略 | **固定优先**：先试 3456，被占才 +1（沿用 server 既有策略） | `localStorage` 按 origin 隔离，端口变化 = 主题/面板偏好重置。偏好存 `<创作根>/.ai-editor/config.json` 是错的（那不是展示层偏好）；自定义协议 `app://` 反代能彻底解决但要写协议层 + 验证 SSE 透传，当前不值得 |
-| 单实例 | `requestSingleInstanceLock()`，第二实例唤起已有窗口 | 顺带把「3456 被自己占用」的概率压到接近零 |
+| 端口策略 | **分段独占**：显式传入 shared `PORT_RANGES.desktop`（与 web 生产 / dev 分段互不相交，见 `build.md` §端口策略），被占才在窗口内 +1 | `localStorage` 按 origin 隔离，端口变化 = 主题/面板偏好重置 ⇒ 本分段刻意不动（改基端口 = 已发布用户偏好全量重置）。偏好存 `<创作根>/.ai-editor/config.json` 是错的（那不是展示层偏好）；自定义协议 `app://` 反代能彻底解决但要写协议层 + 验证 SSE 透传，当前不值得 |
+| 单实例 | `requestSingleInstanceLock()`，第二实例唤起已有窗口 | 顺带把「本分段起点被自己占用」的概率压到接近零 |
 | 退出 | 关窗即退出，复用 `ServerHandle.close()`（停自动备份调度 + 关 HTTP + 释放项目连接） | 灭掉「进程退出但 WAL 未收敛」的风险；无托盘、不驻留 |
 | 开发形态 | 主进程内 in-process 起 server，窗口加载 `http://127.0.0.1:<实际端口>`（`pnpm --filter ai-editor-desktop start`） | 与生产同形态（同一段启动代码），不在 Electron 里另起子进程；代价是**无 HMR**——改前端要重建 client，需要 HMR 时用浏览器形态（`pnpm dev` + :5173） |
 

@@ -3,14 +3,14 @@
 //
 // 职责（第 307-336 行「构建与部署」）：
 // - startServer(projectRoot, opts?)：检测/初始化项目→ 装配 Hono（错误中间件 +
-// 来源校验 + 项目上下文 + /api/v1/health 探活）→ 端口策略监听（dev 被占报错 / 生产 +1）→
+// 来源校验 + 项目上下文 + /api/v1/health 探活）→ 端口策略监听（按形态分段，见 `PORT_RANGES`）→
 // 可选打开浏览器（127.0.0.1，禁 localhost）
 // - SPA 静态托管：client/dist 静态文件 + 非 /api GET fallback 到 index.html（单进程架构）
 // - 直接执行（node packages/server/dist/index.js [projectRoot]）时自动启动；业务路由（routes/）
 // 留到切片 1 挂载（结构预留：health 旁并列注册即可）
 // - bin 入口（打包安装）：package.json "bin": {"ai-editor": "dist/index.js"}——
 // shebang 必须是文件首行（tsc 构建保留），npm 全局/本地安装后生成 ai-editor 命令；
-// argv[2] 为项目根（缺省 cwd），NODE_ENV 非 development 即生产态（端口占用自动 +1）
+// argv[2] 为项目根（缺省 cwd），NODE_ENV 非 development 即生产态（端口在 web 分段内自动 +1）
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { existsSync, realpathSync } from "node:fs";
@@ -20,6 +20,7 @@ import { Hono } from "hono";
 import { logger } from "hono/logger";
 import { createAdaptorServer, type ServerType } from "@hono/node-server";
 import type { AddressInfo } from "node:net";
+import { PORT_RANGES } from "@whispering233/ai-editor-shared";
 import { errorHandler, fail, ok } from "./middleware/error.js";
 import { stopAutoBackup } from "./backup.js";
 import { initDebugConfig, isCategoryEnabled } from "./debug.js";
@@ -50,12 +51,6 @@ import { trashRoutes } from "./routes/trash.js";
 import { relationRoutes } from "./routes/relation.js";
 import { logSoftDeleteReconcile, reconcileSoftDelete } from "./consistency.js";
 
-/** 默认端口（dev 态 Vite proxy 写死 3456） */
-export const DEFAULT_PORT = 3456;
-
-/** 生产态端口 +1 重试上限（占用自动 +1） */
-const MAX_PORT_ATTEMPTS = 20;
-
 /** 静态文件 MIME（client/dist 产物类型） */
 const CONTENT_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -75,11 +70,13 @@ const CONTENT_TYPES: Record<string, string> = {
 };
 
 export interface StartServerOptions {
- /** 监听端口（默认 3456；0 = 系统分配，测试用） */
+ /** 监听端口（默认取形态分段起点：dev → `PORT_RANGES.dev`，否则 `PORT_RANGES.web`；0 = 系统分配，测试用） */
   port?: number;
+ /** 端口被占时的 +1 重试次数（默认取形态分段的 `attempts`；1 = 严格单端口，被占直接报错） */
+  maxAttempts?: number;
  /**
- * dev 态：端口被占直接报错（Vite proxy 写死 3456，自动 +1 会造成 proxy 与实际监听不一致，
- *）；默认取 NODE_ENV === "development"
+ * dev 态：端口被占直接报错（dev 分段为严格单端口：Vite proxy 固定指向其起点，自动 +1 会造成
+ * proxy 与实际监听不一致）；默认取 NODE_ENV === "development"
  */
   dev?: boolean;
  /** 启动后打开浏览器（默认非 dev 态开启；测试传 false） */
@@ -159,7 +156,9 @@ async function readFileSafe(filePath: string): Promise<Buffer | null> {
  */
 export async function startServer(projectRoot: string, options: StartServerOptions = {}): Promise<ServerHandle> {
   const dev = options.dev ?? process.env.NODE_ENV === "development";
-  const port = options.port ?? DEFAULT_PORT;
+  const range = dev ? PORT_RANGES.dev : PORT_RANGES.web;
+  const port = options.port ?? range.base;
+  const attempts = options.maxAttempts ?? range.attempts;
   const openBrowser = options.openBrowser ?? !dev;
   const clientDist = options.clientDist ?? defaultClientDist();
 
@@ -286,8 +285,8 @@ export async function startServer(projectRoot: string, options: StartServerOptio
     return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
   });
 
- // 端口策略：dev 单次尝试（被占报错）；生产 EADDRINUSE 自动 +1
-  const maxPort = dev ? port : port + MAX_PORT_ATTEMPTS - 1;
+ // 端口策略：在形态分段内 +1 重试（`attempts` = 1 即严格单端口，被占直接报错）
+  const maxPort = port + attempts - 1;
   let server: ServerType | null = null;
   let actualPort = port;
   for (let p = port; p <= maxPort; p++) {
@@ -360,7 +359,7 @@ export async function openBrowserUrl(url: string): Promise<void> {
 /**
  * 解析 AI_EDITOR_PORT 环境变量（bin 入口用，防御非法输入）：
  * 合法范围 = 1-65535 的整数端口；未设置/空串/NaN/越界/非整数 → undefined，
- * 调用方回退默认端口 DEFAULT_PORT（3456）。此前 `Number("abc")` → NaN 会传入
+ * 调用方回退当前形态的分段起点（`PORT_RANGES`）。此前 `Number("abc")` → NaN 会传入
  * 端口逻辑导致监听行为未定义；回退默认是文档声明端口，启动日志会打印实际端口，
  * 无歧义且不中断启动（与生产态端口容错精神一致，不升级为启动失败）。
  */
@@ -396,7 +395,8 @@ if (isDirectRun) {
   const projectRoot = process.argv[2] ?? process.cwd();
   const dev = process.env.NODE_ENV === "development";
  // AI_EDITOR_PORT 环境变量可覆盖默认端口（端口策略；测试/多实例场景用，
- // 如打包安装冒烟与 dev server 并存时指定独立端口）；非法值（NaN/越界）回退默认 3456
+ // 如打包安装冒烟与 dev server 并存时指定独立端口）——覆盖即绕过分段隔离；
+ // 非法值（NaN/越界）回退当前形态的分段起点
   const port = parsePortEnv(process.env.AI_EDITOR_PORT);
   const handle = await startServer(projectRoot, { dev, ...(port !== undefined ? { port } : {}) });
   console.log(

@@ -1,12 +1,13 @@
 // startServer 集成测试（T6.1）：
 // health 探活 / SPA fallback（fixture clientDist）/ 静态文件 / 未知 API 404 /
-// clientDist 缺失优雅降级 / 端口策略（生产 +1、dev 报错）/ close 释放
+// clientDist 缺失优雅降级 / 端口策略（分段起点默认、窗口内 +1、严格单端口报错）/ close 释放
 import { createServer, type Server } from "node:http";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { SCHEMA_VERSION } from "@whispering233/ai-editor-db";
+import { PORT_RANGES } from "@whispering233/ai-editor-shared";
 import { parsePortEnv, resolveClientDist, startServer } from "./index.js";
 import { closeProject, getCurrentProject, setCurrentProject } from "./middleware/project.js";
 import { setProjectRoot } from "./routes/project.js";
@@ -32,11 +33,11 @@ function makeClientDist(root: string): string {
   return dist;
 }
 
-/** 占用一个真实端口（EADDRINUSE 触发用） */
-function occupyPort(): Promise<number> {
+/** 占用一个真实端口（EADDRINUSE 触发用；不传端口 = 系统随机分配） */
+function occupyPort(port = 0): Promise<number> {
   return new Promise((resolve) => {
     const server = createServer();
-    server.listen(0, "127.0.0.1", () => {
+    server.listen(port, "127.0.0.1", () => {
       occupiedServers.push(server);
       resolve((server.address() as { port: number }).port);
     });
@@ -190,7 +191,7 @@ describe("defaultClientDist 双路径探测（resolveClientDist 纯函数）", (
 });
 
 describe("AI_EDITOR_PORT 解析（parsePortEnv）", () => {
-  it("非法值（NaN/越界/非整数/空串/未设置）→ undefined（bin 入口回退默认 3456）", () => {
+  it("非法值（NaN/越界/非整数/空串/未设置）→ undefined（bin 入口回退当前形态的分段起点）", () => {
     expect(parsePortEnv("abc")).toBeUndefined();
     expect(parsePortEnv("0")).toBeUndefined();
     expect(parsePortEnv("65536")).toBeUndefined();
@@ -225,6 +226,25 @@ describe("端口策略", () => {
     await expect(
       startServer(makeTmpDir(), { port: occupiedPort, openBrowser: false, dev: true }),
     ).rejects.toThrow(/已被占用/);
+  });
+
+  it("maxAttempts = 1（非 dev）也严格单端口：被占直接报错", async () => {
+    const occupiedPort = await occupyPort();
+    await expect(
+      startServer(makeTmpDir(), { port: occupiedPort, maxAttempts: 1, openBrowser: false }),
+    ).rejects.toThrow(/已被占用/);
+  });
+
+  it("未指定 port 时默认从 web 分段起点开始（起点与下一端口被占 → 落起点 + 2）", async () => {
+    const base = PORT_RANGES.web.base;
+    await occupyPort(base);
+    await occupyPort(base + 1);
+    const handle = await startServer(makeTmpDir(), { openBrowser: false });
+    try {
+      expect(handle.port).toBe(base + 2);
+    } finally {
+      await handle.close();
+    }
   });
 });
 

@@ -47,12 +47,12 @@ shared → db → tools → agent → server    （依赖方向；client 只依�
 
 ## 快速开始
 
-**用户安装（CLI）**：`npm install -g @whispering233/ai-editor-server` → `ai-editor <项目目录>`（启动服务并打开浏览器 `http://127.0.0.1:3456`）；发布链路与 npmjs 一次性前置见 `docs/design/build.md`。
+**用户安装（CLI）**：`npm install -g @whispering233/ai-editor-server` → `ai-editor <项目目录>`（启动服务并打开浏览器 `http://127.0.0.1:3500`，web 生产分段起点；被占时在分段内 +1，实际端口以启动日志/打开的地址为准）；发布链路与 npmjs 一次性前置见 `docs/design/build.md`。
 
 ```bash
 pnpm install
 pnpm -r build              # 按依赖序构建 7 包
-pnpm dev                   # 开发态：client :5173 + server :3456（proxy /api）
+pnpm dev                   # 开发态：client :5173 + server :3520（dev 分段起点，proxy /api）
 pnpm start:test-project    # 测试项目（数据落 test-project/books/，该目录整体不入库）
 pnpm typecheck && pnpm lint && pnpm -r test   # 验证
 ```

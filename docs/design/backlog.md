@@ -362,7 +362,7 @@
 - **`await closeServer()` 之后 `quitAndInstall` 失败的窗口期**（应用活着但后端已关）— 现状：同步失败只可能在 `installerPath == null`（与 `update-downloaded` 事件矛盾，几乎不可达）；真实失败是 spawn 的**异步**错误（EACCES/ENOENT，杀软拦截同列），那时应用照常退出、只是没装上，兜底也拦不到。触发条件：真机日志出现 `Cannot run installer: error code: …`。最小修法：`quitAndInstall` 前 `autoUpdater.once("error", …)` 弹一次错误框（3 行）；当前不做（YAGNI）。
 - **更新灰度 / 预发布通道** — 现状：所有安装态都从 `/releases/latest` 拿最新正式版。触发条件：需要先给部分人验版本。**口径（必须遵守）**：将来若发 `vX.Y.Z-beta.1` 这类 tag，Release **必须勾 prerelease**——否则 `/releases/latest` 会把 beta 推给所有正式用户（`50-desktop.md` §5.2）。
 - **macOS / Linux 自动更新** — 现状：更新器有 win32 守卫，只对 Windows 安装态生效。触发条件：相应平台恢复出包（macOS 另需签名/公证——那是 electron-updater 的硬前置）。
-- **端口 +1 时的偏好丢失** — 现状：3456 被别的程序占用时落到 3457，`localStorage` 按 origin 隔离 → 主题/面板偏好重置（一次）。触发条件：真实反馈重复出现。升级路径：自定义协议 `app://` + protocol handler 反代 `/api/*`（需验证 SSE 流透传）；或偏好转经服务端配置持久化。
+- **端口 +1 时的偏好丢失** — 现状：端口分段隔离已把 web 生产 / dev 挪出桌面端分段（见 `build.md` §端口策略），桌面端只在**起点被无关进程占用**时才在窗口内 +1，`localStorage` 按 origin 隔离 → 主题/面板偏好重置（一次）。触发条件：真实反馈重复出现。升级路径：自定义协议 `app://` + protocol handler 反代 `/api/*`（需验证 SSE 流透传）；或偏好转经服务端配置持久化。
 - **Linux deb/rpm 包** — 现状：只有 AppImage。触发条件：Linux 用户量起来。
 - **开机自启** — 现状：不做。触发条件：用户要求（与「自动备份需要进程活着的」的期待相关）。
 - **`pnpm deploy` 失效时的 esbuild 兜底** — 现状：主路径未验证通过前不预先实现兜底。触发条件：打包主路径（`pnpm deploy` + electron-builder）被实测证伪（collect 不到 workspace 依赖或原生模块 load 失败）。

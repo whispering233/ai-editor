@@ -8,7 +8,25 @@
 
 ---
 
-## 当前无进行中任务卡
+## 卡：服务端口分段隔离（web 生产 / web 开发 / 桌面端互不相交）
+
+**目标**：三形态各自独占端口窗口，任何形态被占用后的 +1 兜底都出不了自己窗口（消除「Vite proxy 静默打到桌面端 server」的串数据路径）；桌面端分段刻意不动（偏好锚）。
+
+**改动范围**
+
+- `shared`：新增 `constants/ports.ts`（`PORT_RANGES` = 三段 base + attempts，唯一定义）+ 聚合出口 + 守卫测试（窗口两两不相交、落在合法端口区间）
+- `server`：删 `DEFAULT_PORT` / `MAX_PORT_ATTEMPTS` 字面量 → 由 `PORT_RANGES` 派生（dev 段 = 严格单端口，保持既有「dev 不 +1」）；`StartServerOptions` 新增 `maxAttempts`
+- `client`：`vite.config.ts` 的 proxy 目标由 `PORT_RANGES.dev.base` 派生
+- `desktop`：显式传 desktop 段的 `port` / `maxAttempts` + `dev: false`（防 shell 的 `NODE_ENV` 误判为 dev 严格模式）；新增 shared 依赖
+- `scripts`：`start-test-install.mjs` 文案去掉写死的端口号
+
+**文档**：`build.md`（本地开发 + 端口策略表）/ `50-desktop.md` §1 / `config.md` / `api-public.md` / `README.md` / `AGENTS.md` / `CHANGELOG.md` / `backlog.md`
+
+**硬完成判据**：`pnpm -r build` → `typecheck` → `lint` → `-r test` 全绿；dev 态占用仍直接报错、生产态仍在**自身窗口内** +1；`pnpm dev` 与桌面端可同时起且端口互不干扰；独立 oracle（fresh）复验并附命令输出。
+
+- [ ] 文档同步（已完成）
+- [ ] 实现
+- [ ] 独立验证（fresh oracle）
 
 ---
 

@@ -14,12 +14,12 @@ Node ≥ 22.12（engines 声明；CI 用 22）、**全仓 ESM**、pnpm 由根 pa
 
 ```
 pnpm dev            # pnpm -r --parallel run dev
-  packages/client:  Vite dev server (port 5173) → proxy /api → :3456
-  packages/server:  NODE_ENV=development tsx watch src/index.ts（默认 :3456）
+  packages/client:  Vite dev server (port 5173) → proxy /api → dev 分段起点（shared `PORT_RANGES.dev`）
+  packages/server:  NODE_ENV=development tsx watch src/index.ts（默认 = dev 分段起点）
   shared/db/tools/agent: tsc --watch
 ```
 
-- dev 态端口被占**直接报错**（不自动 +1）——Vite proxy 写死 3456，自动 +1 会造成 proxy 与实际监听不一致（与生产态行为不同）。
+- dev 态端口被占**直接报错**（不自动 +1：dev 分段 `attempts` = 严格单端口）——Vite proxy 固定指向 dev 分段起点，自动 +1 会造成 proxy 与实际监听不一致（与生产态行为不同）。
 - Vite proxy 无需 changeOrigin（转发后 Origin/Host 端口为 5173；来源校验不校验端口，见 api-public.md）。
 - 质量门：`pnpm typecheck` / `pnpm lint`（ESLint 9 flat config + typescript-eslint）/ `pnpm test`（vitest；单包 `pnpm --filter <包> test`）。
 - ⚠ **跨包测试的 dist 陷阱（2026-09 实测踩坑）**：`server` 测试经 `@whispering233/ai-editor-tools` 的 **dist** 消费、`tools` 经 `db` 的 dist 消费——改了上游包的 `src` 而不重建，下游套件会**对着旧实现给出假绿灯**（曾导致一张卡的「锚点仅章」守卫在 tools 测试里绿、server 里实际 2 条 fixture 已废却未暴露）。**约定**：凡改动 shared/db/tools 的 `src`，跑下游测试前先 `pnpm --filter @whispering233/ai-editor-db build && pnpm --filter @whispering233/ai-editor-tools build`（或直接用 `pnpm test:packed` 级别的全量重建）。
@@ -45,7 +45,17 @@ node packages/server/dist/index.js [projectRoot]   # 或安装态 npx ai-editor 
 - `projectRoot` = 创作根（缺省 process.cwd()）。
 - `detectProject`：根自身有 `project.json` → 打开（旧单项目部署兼容）；**无 → 读 `<创作根>/.ai-editor/config.json` 的 `lastProject`**（上次 open 成功的目录绝对路径）→ 该目录仍含 `project.json` 则直接打开（「开机回到上次那本书」）；路径已被删除/移动、`project.json` 损坏不可读 → **静默回待命**（书架页）。**打开/迁移失败（含未来版本库、data.db 损坏）→ 记日志 + 回待命**（与「宁回书架也不让坏数据把服务起不起来」语义一致；未来版本另有明确文案）——**绝不静默重建/删库**。开始/显式 open 均走**同一条开放管道**（迁移前快照、无路径删库重建、未来版本拒绝三态一致）。两者皆空 → 待命（不初始化、不建任何文件，前端引导 create/open）。
 - 书架模式：创建书 = `创作根/books/<书名>/` 子目录（三数据文件）；`GET /api/v1/project/list` 扫描列书（待命态可用）。
-- 端口：默认 **3456**，占用时生产态自动 +1 递增（上限 20 次，3456→3475）并打开实际端口；可用环境变量 `AI_EDITOR_PORT` 覆盖（仅 bin 直接执行入口读取，测试/多实例场景用）。
+- **端口策略 = 分段隔离**：分段唯一定义 = shared `PORT_RANGES`（守卫测试 = shared `constants.test.ts`，断言窗口两两不相交且落在合法端口区间）；三形态各自独占窗口，任何形态被占用后的 +1 兜底都出不了自己窗口：
+
+| 形态 | 分段 | 被占时 |
+| :--- | :--- | :--- |
+| 桌面端（`packages/desktop` 显式传入） | `PORT_RANGES.desktop` | 窗口内 +1 |
+| web 生产（bin / `npx ai-editor`） | `PORT_RANGES.web` | 窗口内 +1，并打开实际端口 |
+| web 开发态（`pnpm dev` 的 server） | `PORT_RANGES.dev` | **严格单端口**（报错；Vite proxy 固定指向它） |
+
+  - 为什么分段：三形态共用同一份 server 代码，兜底若跨形态游走会出现「Vite proxy 打到别的形态的 server」的**静默串数据**（dev proxy 是固定目标，无法跟随 +1）。桌面端分段刻意不动——已发布用户的 `localStorage` 偏好锚在其起点上。
+  - 窗口选址（2026-09 核对 IANA 注册表）：三段都落在 IANA 已废弃登记项区间（`vat` / `rtmp-port` 一类无实现的遗留协议），真实数据库与中间件端口（MySQL 3306 / PostgreSQL 5432 / Redis 6379 / MongoDB 27017…）与系统临时端口区（Linux ≥ 32768 / Windows·macOS ≥ 49152）均在外；邻近**真在用**的协议（NVIDIA nppmp 3476 / STUN·TURN 3478 / NUT 3493）都落在桌面端窗口之外。服务只绑 `127.0.0.1`，跨机服务不构成冲突。
+  - 环境变量 `AI_EDITOR_PORT` 仍可覆盖默认端口（仅 bin 直接执行入口读取，测试/多实例场景用）——**覆盖即绕过分段隔离**（有意保留的逃生口）。
 - **绑定与访问**：默认绑定 `127.0.0.1`（不对外网开放）；提示 URL / 打开浏览器一律用 `127.0.0.1` 而非 `localhost`（IPv6 优先系统上 localhost 可能解析为 `::1` 导致连接被拒）。
 - SPA：`defaultClientDist` 双路径（monorepo 开发态 `../../client/dist` / 打包安装态包内 `client-dist`）挂载为 fallback；单进程 Hono 同时服务 `/api/v1` 与静态文件。
 - 本地看界面：`pnpm start:test-project`（= `pnpm -r build` + 生产态启动 test-project，自动打开浏览器）。

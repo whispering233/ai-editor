@@ -4,7 +4,7 @@
 
 ## 基础
 
-- 前缀 `/api/v1`，REST 风格，由 Hono 实现（dev 态 Vite proxy 转发 `/api` → `:3456`）。
+- 前缀 `/api/v1`，REST 风格，由 Hono 实现（dev 态 Vite proxy 转发 `/api` → dev 分段起点，即 shared `PORT_RANGES.dev`；分段语义见 `../design/build.md` §端口策略）。
 - 请求体 JSON；成功响应 `{ success: true, data: T }`；错误响应 `{ success: false, error: { code, message } }`。
 - HTTP 状态码约定：200 成功 / 201 创建 / 400 参数错误（`VALIDATION_ERROR` 等）/ 404 不存在 / 409 冲突 / 500 服务端错误。
 - 错误码统一枚举 `ErrorCode`（见 [error-code.md](./error-code.md)），REST 响应与工具结果使用；SSE 流内错误以 `agent_end` 帧表达（不再发 `error` 事件）。

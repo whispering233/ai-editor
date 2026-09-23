@@ -22,6 +22,7 @@ import {
   MAX_BACKUPS_PER_PROJECT,
   OUTLINE_NODE_TYPE_LABELS,
   PAYOFF_TIMING,
+  PORT_RANGES,
   PROPOSAL_TOOLS,
   QUERY_TOOLS,
   RELATION_TYPES,
@@ -279,5 +280,29 @@ describe("自动备份常量（B2.1）", () => {
 
   it("手动备份自定义名称最大长度 = 30", () => {
     expect(MAX_BACKUP_NAME_LENGTH).toBe(30);
+  });
+});
+
+describe("端口分段（PORT_RANGES）", () => {
+  it("各形态窗口两两不相交（含端点；升序相邻不重叠）", () => {
+    const windows = Object.values(PORT_RANGES)
+      .map((range) => ({ start: range.base, end: range.base + range.attempts - 1 }))
+      .sort((a, b) => a.start - b.start);
+    for (let i = 1; i < windows.length; i++) {
+      expect(windows[i]!.start).toBeGreaterThan(windows[i - 1]!.end);
+    }
+  });
+
+  it("每段都落在合法端口区间（1-65535）", () => {
+    for (const range of Object.values(PORT_RANGES)) {
+      expect(Number.isInteger(range.base)).toBe(true);
+      expect(range.base).toBeGreaterThanOrEqual(1);
+      expect(range.attempts).toBeGreaterThanOrEqual(1);
+      expect(range.base + range.attempts - 1).toBeLessThanOrEqual(65535);
+    }
+  });
+
+  it("dev 段为严格单端口（attempts = 1，Vite proxy 固定指向它）", () => {
+    expect(PORT_RANGES.dev.attempts).toBe(1);
   });
 });
