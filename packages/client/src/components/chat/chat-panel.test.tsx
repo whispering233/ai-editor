@@ -16,7 +16,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import { renderToString } from "react-dom/server";
-import type { ChatSessionSummary, ProjectConfig } from "@whispering233/ai-editor-shared";
+import type { ChatSessionSummary, OutlineTree, ProjectConfig } from "@whispering233/ai-editor-shared";
 import { ErrorBoundary } from "../feedback/ErrorBoundary";
 
 vi.mock("../../lib/api", async (importOriginal) => {
@@ -368,6 +368,53 @@ describe("ComposerArea（底部区：focus 小条 + 输入区）", () => {
     const out = html(<ComposerArea />);
     expect(out).toContain("输入消息…");
   });
+
+  // SSR 预置 store：zustand 的服务端快照取 getInitialState()（setState 对 renderToString 无效）
+  /** 卷1[ch-1, ch-2] + 卷2[ch-3]（推演标记数测试用） */
+  const DEDUCTION_OUTLINE: OutlineTree = {
+    id: "root",
+    type: "root",
+    schemaVersion: 1,
+    children: [
+      {
+        id: "vol-1",
+        type: "volume",
+        title: "第一卷",
+        updatedAt: "t",
+        children: [
+          { id: "ch-1", type: "chapter", title: "雪夜出走", updatedAt: "t" },
+          { id: "ch-2", type: "chapter", title: "旧盟友", updatedAt: "t" },
+        ],
+      },
+      {
+        id: "vol-2",
+        type: "volume",
+        title: "第二卷",
+        updatedAt: "t",
+        children: [{ id: "ch-3", type: "chapter", title: "入城", updatedAt: "t" }],
+      },
+    ],
+  };
+
+  it("推演形态（D3）：小条显「推演节点 · N 个」，N = 项目**可见**标记数（失效 id 不计）", () => {
+    Object.assign(useChatStore.getInitialState(), { focusContext: { focus_deduction: true } });
+    Object.assign(useProjectStore.getInitialState(), {
+      config: { ...makeConfig("p-1"), deductionNodes: ["ch-1", "ch-404"] },
+      outline: DEDUCTION_OUTLINE,
+    });
+    const out = html(<ComposerArea />);
+    // SSR 在静态文本与插值之间插 `<!-- -->` 注释 → 只断言插值段自身
+    expect(out).toContain("正在讨论：");
+    expect(out).toContain("推演节点 · 1 个");
+  });
+
+  it("推演形态：大纲/配置未加载（N 缺失）→ 省略数字，不显「0 个」假值", () => {
+    Object.assign(useChatStore.getInitialState(), { focusContext: { focus_deduction: true } });
+    Object.assign(useProjectStore.getInitialState(), { config: null, outline: null });
+    const out = html(<ComposerArea />);
+    expect(out).toContain("推演节点");
+    expect(out).not.toContain("推演节点 ·");
+  });
 });
 
 describe("新会话路径叶子组件富数据渲染走查（问题 3：任务侦察标注的 ToolCallRow/MessageItem 未读路径）", () => {
@@ -617,5 +664,12 @@ describe("focus 小条文案（C2：不再直显裸 entity id）", () => {
     expect(focusLabel({ focus_node_id: "ch-1" }, "第一章")).toBe("大纲节点 第一章"); // 节点默认标签
     expect(focusLabel({}, "孤立名称")).toBe("孤立名称");
     expect(focusLabel({})).toBe("当前内容");
+  });
+
+  it("推演形态（D3）：文案 = 「推演节点 · N 个」；集合无名称位；N 缺失 → 省略数字", () => {
+    expect(focusLabel({ focus_deduction: true }, undefined, 2)).toBe("推演节点 · 2 个");
+    // 无名称可解析（名称参数不参与）；N 缺失（大纲/配置未加载）→ 不显「0 个」假值
+    expect(focusLabel({ focus_deduction: true }, "不该出现", 2)).toBe("推演节点 · 2 个");
+    expect(focusLabel({ focus_deduction: true })).toBe("推演节点");
   });
 });

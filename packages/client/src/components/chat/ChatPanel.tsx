@@ -51,7 +51,7 @@ import {
 import { SessionStatusBar } from "./session-status-bar";
 import type { ChatSessionSummary } from "@whispering233/ai-editor-shared";
 
-import { formatRelativeTime } from "@whispering233/ai-editor-shared";
+import { buildDeductionMarks, formatRelativeTime } from "@whispering233/ai-editor-shared";
 import { cn } from "../../lib/utils";
 import { skeletonClass } from "../../lib/styles";
 import { ConfirmDialog } from "../outline/dialogs";
@@ -85,8 +85,14 @@ const FOCUS_TYPE_LABELS: Record<string, string> = {
  * focus 小条文案（C2，用户反馈 #2：不再直显裸 entity id）。
  * name 三态：string = names/resolve 解析出的名称；null = 解析失败（退 id，信息不丢）；
  * undefined = 解析中（只显示类型名，不闪 id）。无类型时仅显示名称，皆空 → 「当前内容」。
+ * 推演形态（D3）：注入的是标记**集合**而非单条对象（无名称可解析）⇒ 只显标记数
+ * （`deductionCount` = 项目**可见**标记数，与门控/服务端注入同口径）；未加载 → 省略数字
+ * （不显「0 个」这种假值），也不走 names/resolve。
  */
-export function focusLabel(ctx: FocusContext, name?: string | null): string {
+export function focusLabel(ctx: FocusContext, name?: string | null, deductionCount?: number): string {
+  if (ctx.focus_deduction === true) {
+    return deductionCount === undefined ? "推演节点" : `推演节点 · ${deductionCount} 个`;
+  }
   const raw = ctx.focus_entity_id ?? ctx.focus_node_id ?? "";
   const typeLabel = ctx.focus_entity_type
     ? (FOCUS_TYPE_LABELS[ctx.focus_entity_type] ?? ctx.focus_entity_type)
@@ -840,8 +846,20 @@ export function ProposalCardView({ proposal }: { proposal: ProposalCard }) {
 function FocusBar() {
   const focusContext = useChatStore((s) => s.focusContext);
   const clearFocusContext = useChatStore((s) => s.clearFocusContext);
+  const outline = useProjectStore((s) => s.outline);
+  const config = useProjectStore((s) => s.config);
   /** 名称解析结果：undefined = 解析中（只显类型名）/ string = 命中 / null = 失败（退 id） */
   const [resolvedName, setResolvedName] = useState<string | null | undefined>(undefined);
+  /** 推演形态的标记数（D3）：项目**可见**标记数（shared 派生，与门控/服务端注入同口径）；
+   * 大纲或配置未加载 → undefined（文案省略数字）。非推演形态不参与（focusLabel 不看该值） */
+  const deductionCount = useMemo(
+    () =>
+      outline === null || config === null
+        ? undefined
+        : buildDeductionMarks(outline, config.deductionNodes).length,
+    [outline, config],
+  );
+  // 推演形态无 targetId（只发布尔标记）⇒ 下面对 names/resolve 的解析自然跳过（不请求、不闪 id）
   const targetId = focusContext?.focus_entity_id ?? focusContext?.focus_node_id ?? null;
 
   // 焦点变化 → names/resolve 批量解析（单个 id；失败静默退 id 显示，不阻塞小条）
@@ -873,7 +891,7 @@ function FocusBar() {
         }}
         style={{ marginInlineEnd: 0 }}
       >
-        正在讨论：{focusLabel(focusContext, resolvedName)}
+        正在讨论：{focusLabel(focusContext, resolvedName, deductionCount)}
       </Tag>
     </div>
   );

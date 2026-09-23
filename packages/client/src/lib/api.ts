@@ -1155,6 +1155,8 @@ export interface SendChatMessageBody {
     focus_entity_type?: string;
     focus_entity_id?: string;
     focus_node_id?: string;
+    /** 推演节点集合（大纲组页面）：只发布尔，服务端现读 `project.json` 展开 */
+    focus_deduction?: boolean;
   };
 }
 

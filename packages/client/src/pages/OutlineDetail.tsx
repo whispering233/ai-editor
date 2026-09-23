@@ -101,6 +101,18 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
     [outline, config?.deductionNodes],
   );
   const deductionMark = deduction.find((mark) => mark.nodeId === nodeId);
+
+  // 悬浮「问 AI」的页面焦点（D3）：项目**有可见推演标记** → 注入推演节点集合（只发布尔，服务端现读
+  // 配置展开）；无标记 / 标记全部失效 → null（按钮回普通语义，不注入空段）。
+  // 判据用 shared 派生结果而非裸 `config.deductionNodes.length`：失效 id 在读侧原样保留，按长度门控
+  // 会在「标记全失效」时留下「按钮带上下文但服务端无段可注入」。
+  // 依赖 `outline` 与 `config`（两者异步加载 → 加载完成后必须重跑，否则「有标记但按钮不带上下文」）
+  const setCurrentFocus = useUiStore((s) => s.setCurrentFocus);
+  const deductionVisible = deduction.length > 0;
+  useEffect(() => {
+    setCurrentFocus(deductionVisible ? { focus_deduction: true } : null);
+  }, [deductionVisible, setCurrentFocus]);
+
   /** 本页节点是否可标记（§15 不变式 1：仅章；卷/场景不渲染入口——不留必定 400 的按钮） */
   const deductionHost = node !== null && isDeductionMarkHost(node.type);
   /** 本章正文字数文案（卡 12.5；卷/场景无正文，0 或未写 → null 不显示）——

@@ -40,8 +40,20 @@ import {
   type SseFrame,
   type SseProjectionOptions,
 } from "@whispering233/ai-editor-agent";
-import { findOutlineNode, getDocument, getEntity, readOutlineFile } from "@whispering233/ai-editor-db";
-import { truncate, type ChatContextUsage, type ChatUsage } from "@whispering233/ai-editor-shared";
+import {
+  findOutlineNode,
+  getDocument,
+  getDocumentTextLengths,
+  getEntity,
+  readOutlineFile,
+} from "@whispering233/ai-editor-db";
+import {
+  buildDeductionMarks,
+  orderVisibleChapters,
+  truncate,
+  type ChatContextUsage,
+  type ChatUsage,
+} from "@whispering233/ai-editor-shared";
 import {
   chatMessagesResSchema,
   chatSendReqSchema,
@@ -93,15 +105,23 @@ export interface ChatRouteDeps {
 export const FOCUS_CHAPTER_EXCERPT_CHARS = 2000;
 
 /**
- * 聚焦上下文文本：focus_entity_id → 实体、focus_node_id → 大纲节点，拼成结构化文本。
+ * 聚焦上下文文本：focus_entity_id → 实体、focus_node_id → 大纲节点、focus_deduction → 推演节点集合，
+ * 拼成结构化文本。
  * 查询不到（已软删/不存在/跨项目）→ 跳过该项（不报错）：客户端可能携带过期 focus。
- * 两项皆无 → undefined（不注入，消息原文保持干净）。
+ * 各项皆无（或均无效）→ undefined（不注入，消息原文保持干净）。
  * 聚焦**章**：另注入正文前 `FOCUS_CHAPTER_EXCERPT_CHARS` 字符节选（带「节选」标注）——
  * **不做整章自动入上下文**（正文预算与对话历史共享同一窗口，见 docs/design/20-context.md §2）。
  */
 export function buildFocusText(
   project: ProjectContext,
-  context: { focus_entity_type?: string; focus_entity_id?: string; focus_node_id?: string } | undefined,
+  context:
+    | {
+        focus_entity_type?: string;
+        focus_entity_id?: string;
+        focus_node_id?: string;
+        focus_deduction?: boolean;
+      }
+    | undefined,
 ): string | undefined {
   const parts: string[] = [];
   if (context?.focus_entity_id !== undefined) {
@@ -119,7 +139,49 @@ export function buildFocusText(
       );
     }
   }
+  if (context?.focus_deduction === true) {
+    const deduction = deductionFocusText(project);
+    if (deduction !== undefined) parts.push(deduction); // 无标记 / 全部失效 → 不注入该段（不影响其余项）
+  }
   return parts.length > 0 ? parts.join("\n\n") : undefined;
+}
+
+/**
+ * 推演节点集合段（`context.focus_deduction`，见 `docs/design/20-context.md` §2）：
+ * 三段短文本——① 口径说明 ② 有序标记清单（角色 · 章号 · 标题）③ 相邻区间摘要（跨越章数 · 已写章数）。
+ * 标记的角色 / 顺序 / 章号一律来自 shared `buildDeductionMarks`（唯一编号口径），本函数不手抄文案与章号；
+ * 标记源是**服务端现读**的 `project.json` `deduction_nodes`（客户端只发布尔，见 `docs/api/80-api-chat.md`）。
+ * **不注入**章摘要 / 区间内中间章清单 / 正文（区间明细与章清单走 `get_deduction_marks` 工具）。
+ * 无标记 / 标记全部失效（软删、非章、已 purge）→ undefined（静默省略，不报错）。
+ */
+function deductionFocusText(project: ProjectContext): string | undefined {
+  const tree = readOutlineFile(project.root);
+  const marks = buildDeductionMarks(tree, project.config.deduction_nodes ?? []);
+  if (marks.length === 0) return undefined;
+
+  const lines = [
+    "推演节点集合（作者标定的推演边界）：单标记 = 开放式剧情发散；多标记 = 相邻标记之间的剧情线探讨；" +
+      "明细可用 get_deduction_marks 获取。",
+    "标记（按章序）：",
+    ...marks.map((mark) => `${mark.index}. ${mark.label} · 第${mark.chapterNumber}章 · ${mark.title}`),
+  ];
+  if (marks.length > 1) {
+    // 区间 = 相邻标记之间（**不含两端标记**，与 get_deduction_marks 的 spans 同口径）：只给骨架，不给中间章清单
+    const order = orderVisibleChapters(tree);
+    lines.push("相邻区间：");
+    for (let i = 1; i < marks.length; i++) {
+      const from = marks[i - 1];
+      const to = marks[i];
+      const middle = order.slice(order.indexOf(from.nodeId) + 1, order.indexOf(to.nodeId));
+      const textLengths = getDocumentTextLengths(project.db, "chapter", middle);
+      const written = middle.filter((id) => (textLengths.get(id) ?? 0) > 0).length;
+      lines.push(
+        `${from.label}（第${from.chapterNumber}章）→ ${to.label}（第${to.chapterNumber}章）：` +
+          `跨越 ${middle.length} 章 · 已写 ${written} 章`,
+      );
+    }
+  }
+  return lines.join("\n");
 }
 
 /** 聚焦章的正文节选段：非章 / 未写过正文 → 空串（维持现状）；只取前 N 字符，完整正文由工具拉取 */

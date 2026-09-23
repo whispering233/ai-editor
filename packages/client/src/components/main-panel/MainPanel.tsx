@@ -80,9 +80,11 @@ export function MainPanel({
           tooltip={{
             title: !config
               ? "打开项目后可用"
-              : currentFocus
-                ? "带着当前页面上下文去问 AI"
-                : "去问 AI",
+              : currentFocus?.focus_deduction === true
+                ? "带着推演节点去问 AI"
+                : currentFocus
+                  ? "带着当前页面上下文去问 AI"
+                  : "去问 AI",
             placement: "left",
           }}
           onClick={() => {

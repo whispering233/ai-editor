@@ -36,7 +36,16 @@ import {
   SPEED_MIN_DURATION_MS,
   type Proposal,
 } from "@whispering233/ai-editor-agent";
-import { createEntity, SCHEMA_VERSION, upsertDocument, writeOutlineFile } from "@whispering233/ai-editor-db";
+import {
+  createEntity,
+  findOutlineNode,
+  readOutlineFile,
+  readProjectFile,
+  SCHEMA_VERSION,
+  upsertDocument,
+  writeOutlineFile,
+  writeProjectFile,
+} from "@whispering233/ai-editor-db";
 import type { ChatSpeed, ChatUsage, OutlineFileTree } from "@whispering233/ai-editor-shared";
 import type { RuntimeFactory } from "../chat-runtime.js";
 import { errorHandler } from "../middleware/error.js";
@@ -903,6 +912,114 @@ describe("POST /chat SSE 事件集与过滤", () => {
     const empty = buildFocusText(project, { focus_node_id: "ch-2" })!;
     expect(empty).toContain("大纲节点：chapter「第二章」");
     expect(empty).not.toContain("节选");
+  });
+
+  // ============ 推演节点集合注入（D3，契约 docs/design/20-context.md §2） ============
+
+  /** 推演注入测试用大纲树：卷一[血夜 ch-1, 晨曦 ch-2, 归途 ch-3] + 卷二[远行 ch-4, 尾声 ch-5] */
+  function deductionOutline(): OutlineFileTree {
+    const chapter = (id: string, title: string, summary?: string) => ({
+      id,
+      type: "chapter" as const,
+      title,
+      updated_at: "2026-08-01T10:00:00Z",
+      ...(summary === undefined ? {} : { summary }),
+      children: [],
+    });
+    return {
+      id: "root",
+      type: "root",
+      schema_version: SCHEMA_VERSION,
+      children: [
+        {
+          id: "vol-1",
+          type: "volume",
+          title: "第一卷",
+          updated_at: "2026-08-01T10:00:00Z",
+          children: [chapter("ch-1", "血夜"), chapter("ch-2", "晨曦", "摘要不该被注入"), chapter("ch-3", "归途")],
+        },
+        {
+          id: "vol-2",
+          type: "volume",
+          title: "第二卷",
+          updated_at: "2026-08-01T10:00:00Z",
+          children: [chapter("ch-4", "远行"), chapter("ch-5", "尾声")],
+        },
+      ],
+    };
+  }
+
+  /** 推演注入测试项目：写盘 project.json（deduction_nodes）→ 重读入内存 config（与真实打开流程同口径） */
+  function deductionProject(nodeIds: string[]): ProjectContext {
+    const project = openProject();
+    writeOutlineFile(project.root, deductionOutline());
+    writeProjectFile(project.root, { ...readProjectFile(project.root)!, deduction_nodes: nodeIds });
+    project.config = readProjectFile(project.root)!;
+    return project;
+  }
+
+  /** 软删大纲节点（测试直写 outline.json；读侧过滤口径 = 不变式 6） */
+  function softDeleteOutlineNode(root: string, nodeId: string): void {
+    const tree = readOutlineFile(root);
+    const node = findOutlineNode(tree, nodeId);
+    expect(node).toBeDefined();
+    node!.deleted = true;
+    writeOutlineFile(root, tree);
+  }
+
+  it("推演注入：无标记（project.json 缺字段）/ 未带 focus_deduction → 不注入该段", () => {
+    const project = deductionProject([]);
+    expect(buildFocusText(project, { focus_deduction: true })).toBeUndefined(); // 仅此一项且无标记 → 整段不注入
+    expect(buildFocusText(project, { focus_node_id: "ch-1" })!).not.toContain("推演"); // 不带布尔标记 → 维持现状
+  });
+
+  it("推演注入：单标记 → 口径说明 + 一行标记（角色 · 章号 · 标题）；无区间段", () => {
+    const project = deductionProject(["ch-3"]);
+    const text = buildFocusText(project, { focus_deduction: true })!;
+    expect(text).toContain("推演节点集合");
+    expect(text).toContain("单标记 = 开放式剧情发散");
+    expect(text).toContain("get_deduction_marks");
+    expect(text).toContain("1. 推演节点 · 第3章 · 归途"); // 角色/章号来自 shared 派生，不手抄
+    expect(text).not.toContain("相邻区间："); // 开放式发散没有区间
+  });
+
+  it("推演注入：多标记 → start/node/end 三行 + 相邻区间（跨越章数 · 已写章数）；不注入章摘要与正文", () => {
+    const project = deductionProject(["ch-5", "ch-1", "ch-4"]); // 乱序入参 → 树序输出
+    upsertDocument(project.db, {
+      ownerKind: "chapter",
+      ownerId: "ch-2",
+      content: "[]",
+      contentText: "正文不该被注入",
+      now: "2026-08-01T10:00:00Z",
+    });
+    const text = buildFocusText(project, { focus_deduction: true })!;
+    expect(text).toContain("1. 推演起点 · 第1章 · 血夜");
+    expect(text).toContain("2. 推演节点 2 · 第4章 · 远行");
+    expect(text).toContain("3. 推演终点 · 第5章 · 尾声");
+    // 区间 = 相邻标记之间（不含两端）：1→2 跨 ch-2 / ch-3（ch-2 已写正文）
+    expect(text).toContain("推演起点（第1章）→ 推演节点 2（第4章）：跨越 2 章 · 已写 1 章");
+    expect(text).toContain("推演节点 2（第4章）→ 推演终点（第5章）：跨越 0 章 · 已写 0 章");
+    // 不注入章摘要 / 区间内中间章清单 / 正文（区间明细走工具）
+    expect(text).not.toContain("摘要不该被注入");
+    expect(text).not.toContain("正文不该被注入");
+    expect(text).not.toContain("晨曦");
+  });
+
+  it("推演注入：标记全部失效（不存在 id / 场景 / 软删章）→ 静默省略，不影响其余 focus 项", () => {
+    const project = deductionProject(["ch-404", "ch-3"]);
+    softDeleteOutlineNode(project.root, "ch-3");
+    expect(buildFocusText(project, { focus_deduction: true })).toBeUndefined();
+  });
+
+  it("推演注入：与 focus_node_id 并存 → 两段都在（无效 focus 项只跳过自身）", () => {
+    const project = deductionProject(["ch-1"]);
+    const both = buildFocusText(project, { focus_node_id: "ch-2", focus_deduction: true })!;
+    expect(both).toContain("大纲节点：chapter「晨曦」");
+    expect(both).toContain("1. 推演节点 · 第1章 · 血夜");
+    // 节点项失效（不存在）时推演段照旧注入
+    const onlyDeduction = buildFocusText(project, { focus_node_id: "ch-404", focus_deduction: true })!;
+    expect(onlyDeduction).not.toContain("大纲节点：");
+    expect(onlyDeduction).toContain("1. 推演节点 · 第1章 · 血夜");
   });
 
   it("续聊：携带 session_id → 历史喂回模型（第二轮请求含首轮消息）", async () => {

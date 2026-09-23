@@ -6,4 +6,8 @@ export interface FocusContext {
   focus_entity_type?: string;
   focus_entity_id?: string;
   focus_node_id?: string;
+  /** 推演节点集合（大纲组页面悬浮「问 AI」，见 `docs/design/10-data-model.md` §15）：
+   * **只发布尔**——服务端现读 `project.json` 的 `deduction_nodes` 展开，客户端不传 id 数组
+   * （避免第二份可漂移的事实源；客户端过期/伪造 id 不进来，见 `docs/api/80-api-chat.md`） */
+  focus_deduction?: boolean;
 }

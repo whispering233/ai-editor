@@ -160,6 +160,7 @@ export default function Outline() {
   // 设置后跳转本页；本页消费（展开祖先+滚动+高亮）后清除，不侵入 hash 路由
   const focusOutlineNodeId = useUiStore((s) => s.focusOutlineNodeId);
   const clearFocusOutlineNode = useUiStore((s) => s.clearFocusOutlineNode);
+  const setCurrentFocus = useUiStore((s) => s.setCurrentFocus);
 
   // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉整树；
   // 伏笔标记 effect 依赖 outline 对象，树重拉后自动联动刷新（见该 effect 注释）
@@ -201,6 +202,16 @@ export default function Outline() {
     const marks = buildDeductionMarks(outline, config?.deductionNodes ?? []);
     return { marks, byNode: new Map(marks.map((mark) => [mark.nodeId, mark])) };
   }, [outline, config?.deductionNodes]);
+
+  // 悬浮「问 AI」的页面焦点（D3）：项目**有可见推演标记** → 注入推演节点集合（只发布尔，服务端现读
+  // 配置展开）；无标记 / 标记全部失效 → null（按钮回普通语义，不注入空段）。
+  // 判据用 shared 派生结果而非裸 `config.deductionNodes.length`：失效 id 在读侧原样保留，按长度门控
+  // 会在「标记全失效」时留下「按钮带上下文但服务端无段可注入」。
+  // 依赖 `outline` 与 `config`（两者异步加载 → 加载完成后必须重跑，否则「有标记但按钮不带上下文」）
+  const deductionVisible = deduction.marks.length > 0;
+  useEffect(() => {
+    setCurrentFocus(deductionVisible ? { focus_deduction: true } : null);
+  }, [deductionVisible, setCurrentFocus]);
 
   // 伏笔标记（S9.2，数据流 API → 映射 → 渲染）：大纲树就绪后并行拉取三类标记关系
   // （GET /relation，source_type=outline_node，relation_type 单值过滤，depth=1——「关系」）→
