@@ -272,15 +272,18 @@ export function listEntities(db: Db, query: EntityListQuery): EntityListResult {
  // 角色优先级档（`sort=priority`，2026-09）：rank 由 shared `CHARACTER_PRIORITIES` 顺序派生——
  // data JSON 提取（`json_extract`，**不是列**）+ CASE；未分级（缺键 / null / 未知值）取档位数 →
  // 排在有档位者之后（沉底，脏值不打挂排序）；同级 updated_at 降序 → id 稳定次序。
+ // 外层 `json_valid` 守卫（**不是 `OR` 组合**）：值非合法 JSON 时 `json_extract` 直接抛
+ // `malformed JSON` 打挂整表查询（单条坏行不得打挂整表，同 parseDataColumn 防御）——
+ // CASE 懒求值 ⇒ 只有合法 JSON 才求值内层 rank；坏行 / NULL 走外层 ELSE（沉底）。
  // 档位升序为固定口径（同 event/timepoint，order 参数不参与）；仅 character 有档位，
  // 其余类型退化为「最近更新降序」（无档位不报错）。
   const priorityOrderBy =
     query.type === "character"
       ? [
-          sql`CASE json_extract(${entities.data}, '$.priority') ${sql.join(
+          sql`CASE WHEN json_valid(${entities.data}) THEN (CASE json_extract(${entities.data}, '$.priority') ${sql.join(
             CHARACTER_PRIORITIES.map((key, rank) => sql`WHEN ${key} THEN ${rank}`),
             sql` `,
-          )} ELSE ${CHARACTER_PRIORITIES.length} END`,
+          )} ELSE ${CHARACTER_PRIORITIES.length} END) ELSE ${CHARACTER_PRIORITIES.length} END`,
           desc(entities.updated_at),
           asc(entities.id),
         ]

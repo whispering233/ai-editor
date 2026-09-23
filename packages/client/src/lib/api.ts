@@ -413,7 +413,7 @@ export interface ListEntitiesQuery {
   q?: string;
   offset?: number;
   limit?: number;
-  sort?: "name" | "created_at" | "updated_at";
+  sort?: "name" | "created_at" | "updated_at" | "priority";
   order?: "asc" | "desc";
   tag?: string;
   parent_id?: string;

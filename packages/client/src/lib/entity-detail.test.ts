@@ -236,4 +236,11 @@ describe("diffData（表单 partial 提交——只返回变更字段）", () =>
       diffData({ expected_resolve_node_id: "" }, { expected_resolve_node_id: null }),
     ).toBeNull();
   });
+
+  it("priority（角色优先级）：已分级 → null 进 PUT 载荷；原本未分级 + null → 不产生字段", () => {
+ // 清回未分级 = 提交 null（服务端枚举字段例外，见 docs/api/30-api-entity.md）
+    expect(diffData({ priority: "protagonist" }, { priority: null })).toEqual({ priority: null });
+ // 未分级（键缺失）本就不下发该键：null 不再产生无意义提交
+    expect(diffData({}, { priority: null })).toBeNull();
+  });
 });

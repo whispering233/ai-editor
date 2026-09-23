@@ -268,12 +268,13 @@ function FieldControl({
       );
     // 枚举下拉（人物 `priority` 等）：选项与标签由字段配置给出（单一定义 = shared 常量）。
     // 清除 → `null`（= 未分级；空串不是合法档位，服务端 schema 会 400），故 allowClear 的
-    // undefined 统一归一为 null
+    // undefined 统一归一为 null；缺省占位文案 = DESIGN.md 契约「未分级」
     case "select":
       return (
         <Select
           className="w-full"
           allowClear
+          placeholder="未分级"
           value={fieldValue(value) || undefined}
           onChange={(v: string | undefined) => onChange(v ?? null)}
           options={(field.options ?? []).map((opt) => ({

@@ -232,6 +232,20 @@ describe("listEntities", () => {
     }
   });
 
+  it("sort=priority：data 非法 JSON 的坏行沉底且不打挂整表（json_valid 守卫）", () => {
+ // 预插一条 data 为非法 JSON 的坏行（模拟手改库/异常写入）：无守卫时 `json_extract` 抛
+ // `malformed JSON` → 整表查询 500
+    db.prepare(
+      "INSERT INTO entities (id, type, name, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+    ).run("char-bad-priority", "character", "优先坏行", "{", "2026-09-09T00:00:00Z", "2026-09-09T00:00:00Z");
+    createEntity(db, { type: "character", name: "优先有档", data: { priority: "protagonist" } });
+    const stamped = listEntities(db, { type: "character", q: "优先", sort: "priority" }); // 不抛错
+    expect(stamped.items.map((i) => i.name)).toEqual(["优先有档", "优先坏行"]); // 坏行走外层 ELSE 沉底
+    expect(stamped.total).toBe(2);
+ // 回归对照：坏行在常规排序档下同样正常（本改动不影响其他档）
+    expect(listEntities(db, { type: "character", q: "优先", sort: "updated_at" }).total).toBe(2);
+  });
+
   it("sort=priority：非 character 类型无档位——退化为最近更新降序（不抛错）", () => {
  // setting 的 data 里即使被人为塞入 priority 也不参与（档位仅 character 有语义）
     createEntity(db, { type: "setting", name: "优先级设定旧", data: { priority: "protagonist" } });

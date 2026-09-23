@@ -152,6 +152,21 @@ describe("GET /api/v1/entity/:type 列表", () => {
     expect(bad.status).toBe(400);
   });
 
+  it("sort=priority：data 非法 JSON 的坏行不打挂整表（json_valid 守卫 → 200，非 500）", async () => {
+    openProject();
+    const app = buildApp();
+    await createCharacter(app, "乙主角", { priority: "protagonist" });
+ // 预插一条 data 为非法 JSON 的坏行（模拟手改库/异常写入）
+    getCurrentProject()!
+      .db.prepare("INSERT INTO entities (id, type, name, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .run("char-bad", "character", "坏行", "{", "2026-09-01T00:00:00Z", "2026-09-01T00:00:00Z");
+    const res = await app.request("/api/v1/entity/character?sort=priority", { headers: HOST_HEADERS });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { data: { items: Array<{ name: string }>; total: number } };
+    expect(body.data.total).toBe(2);
+    expect(body.data.items.map((i) => i.name)).toEqual(["乙主角", "坏行"]); // 坏行沉底
+  });
+
   it("priority 清空语义：PUT data.priority = null 回到「未分级」；空串 400（枚举字段例外）", async () => {
     openProject();
     const app = buildApp();
