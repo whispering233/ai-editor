@@ -271,6 +271,10 @@
   - 现状：① 结构化页的「保存中」重入门禁（`if (saving)` 类）直接返回 undefined ⇒ 在途保存未落定时按 Ctrl+S 会不等它落盘就进存档阶段（备份可能缺这一次改动；窗口 ≈ 一次 PUT RTT，Manuscript 已用 `saveNow` 串行链避开）；② `keydown` 的 `e.repeat` 早退帧不做 `preventDefault`（长按是否会重开浏览器原生保存对话框**未证实**）；③ 同步抛错的保存动作会绕过存档阶段（现注册点均 async/返回 promise，无现实路径）。
   - 触发条件：出现「快速连按保存 + Ctrl+S 后备份内容陈旧」的真实反馈；或在真机验证长按 Ctrl+S 的原生行为。
   - 最小修法：门禁分支改成「返回在途保存的 promise」（需各页持有在途引用）或返回 `false`（本次按键未产生保存 → 不存档）；② 把 `preventDefault` 提到 `e.repeat` 判断之前；③ `triggerSaveShortcut` 用 `try/catch` 包住同步调用。
+- **时间轴「未挂载」组标题 = 斜体 + `truncate`（同类裁字风险，未复现）**（2026-09 全站扫描登记，低危）
+  - 现状：`components/timeline/TimelineGroup.tsx` 的组标题是 `min-w-0 truncate …`，未挂载态另加 `italic`——与左栏「◈ 书架」同款组合（合成斜体墨迹越出字宽 ⇒ `overflow: hidden` 切右缘）。该 span 宽度取决于兄弟节点，且本机样本（`test-project`）无未挂载时间点 ⇒ 元素未渲染（8 页扫描 `overflow-x: hidden` + `font-style: italic` 零命中，故未修）。
+  - 触发条件：有未挂载时间点的样本上看到「未挂载」右缘被切，或该行被压到文本宽度时。
+  - 最小修法：只给未挂载分支补 `pr-0.5`（把斜体越界量让给 padding）——`truncate` 不能去掉，同一 span 也服务长名组标题（非斜体，确实需要省略号）。
 
 ## 会话状态栏的延期项（状态栏设计定稿时登记，未排期）
 

@@ -191,6 +191,18 @@ propose_move_node(node_id, parent_id, order)
 propose_delete_node(node_id)
   → 同上，展示在大纲树上的位置变化
 
+// 伏笔五件套（参数与返回结构以 packages/tools/src/index.ts 的工具描述为单一来源）
+propose_create_hook(name, data?, plant_at_node_id?)
+propose_update_hook(hook_id, patches)
+propose_advance_hook(hook_id, node_id, description)
+propose_resolve_hook(hook_id, node_id, description)
+propose_abandon_hook(hook_id, description)
+  注：推进 / 回收 / 废弃为**复合写**——确认后一次提交「Delta 记 status + 关系插入」
+     （推进插 advances、回收插 resolves、废弃只记 Delta）；plant_at_node_id 与
+     advance / resolve 的 node_id **仅章**（2026-09 章级锚点口径）
+  注：`propose_create_hook` / `propose_update_hook` 的**执行侧**复用 `create_entity` /
+     `update_entity`（hook 即 type=hook 的实体，适配器在 `executor/index.ts`）
+
 propose_reorder_timepoints(timepoint_ids)
   → 按时间标签语义先后重排时间轴时间点（2026-08 G2 修订；
     取代 F9 的 propose_reorder_events——G2 后事件不再带 time_label，语义序的载体

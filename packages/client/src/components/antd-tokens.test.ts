@@ -1,4 +1,4 @@
-// 选中面 token 守卫：用 antd 自己的派生管线（`theme.getDesignToken`）算出真实 token，断言选中面可读。
+// 派生 alias 守卫：用 antd 自己的派生管线（`theme.getDesignToken`）算出真实 token，断言**人为覆盖过的面**可读。
 //
 // 为什么需要它（2026-09 用户实测：「所有下拉选择列表的选中条目文字看不清」）：
 // antd 的 `controlItemBgActive` / `controlItemBgActiveHover` 由 `colorPrimary` 派生
@@ -9,6 +9,7 @@
 // 于是逐组件覆盖 `Select.optionSelectedBg` 完全无效（登记了灰面、像素是深灰）。
 // 这类「测试全绿但像素全错」的 token 派生坑和 `cssvar-scope` / `button-variant-color` 同类，
 // 必须在 token 层（而非元素层）拦——故断言派生后的**对比度**而不是某个具体色值。
+// 第二个同源坑（Alert info 面，`colorInfoBg`）见下面第一条用例：坑形一样、面不同。
 import { describe, expect, it } from "vitest";
 import { theme } from "antd";
 import { COMPONENT_TOKENS_DARK, COMPONENT_TOKENS_LIGHT, DARK_TOKEN, LIGHT_TOKEN } from "./AntdProvider";
@@ -56,7 +57,7 @@ function contrast(fg: string, bg: string, base: [number, number, number]): numbe
   return (hi + 0.05) / (lo + 0.05);
 }
 
-describe("选中面 token（全局派生 alias 覆盖）", () => {
+describe("派生 alias 覆盖（选中面 / Alert info 面）", () => {
   const cases = [
     { name: "浅色", config: { algorithm: theme.defaultAlgorithm, token: LIGHT_TOKEN } },
     { name: "深色", config: { algorithm: theme.darkAlgorithm, token: DARK_TOKEN } },
