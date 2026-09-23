@@ -1,10 +1,10 @@
 // 章视图 presenter 渲染走查（2026-09 大纲页双视图）：仓内无 jsdom，用 react-dom/server `renderToString`
 // 直渲染展示层（数据与副作用在容器 `pages/Outline.tsx`）。
 // 覆盖：两枚编号徽标 + 标题 + 摘要（卷号按行重复）/ 存量根级章无卷号 / 「阅读进度」徽标 /
-//       伏笔标记 / 「写正文」入口 + 正文字数（卡 12.5）/ 单击改名输入态 / 空态（有卷无章）。
+//       伏笔标记 / 推演节点徽标（只读，D2）/ 「写正文」入口 + 正文字数（卡 12.5）/ 单击改名输入态 / 空态（有卷无章）。
 import { describe, expect, it } from "vitest";
 import { renderToString } from "react-dom/server";
-import type { OutlineChapter } from "@whispering233/ai-editor-shared";
+import { buildDeductionMarks, type OutlineChapter } from "@whispering233/ai-editor-shared";
 import { ChapterView, type ChapterViewHandlers } from "./chapter-view";
 import type { OutlineChapterRow } from "../../lib/outline-tree";
 
@@ -111,6 +111,19 @@ describe("ChapterView（章视图平铺列表）", () => {
     expect(out).not.toContain("0 字"); // 无 metadata 的章不落「0 字」占位
     expect(html({ rows: [ROWS[1]] })).toContain("1.2 千字");
     expect(html({ rows: [ROWS[0]] })).not.toContain("字"); // 无正文 → 整处文案不渲染
+  });
+
+  it("推演节点徽标（卡片 D2）：只读 chip，排在「阅读进度」左侧——不引入任何操作按钮", () => {
+    const deductionMarks = buildDeductionMarks(
+      { children: ROWS.map((row) => row.chapter) },
+      ["ch-1"],
+    );
+    const out = html({ deductionMarks, currentPositionId: "ch-1" });
+    expect(out).toContain('title="推演节点（第1章）"'); // 文案/章号来自 shared 派生
+    expect(out).toContain(">推演节点<");
+    expect(out.indexOf("推演节点（第1章）")).toBeLessThan(out.indexOf("阅读进度"));
+    expect(out).not.toContain("<button"); // 收窄不变：本视图行内仍无操作按钮
+    expect(html({ deductionMarks: [] })).not.toContain("推演节点");
   });
 
   it("改名态：该行渲染输入框（带当前值），标题不再是可点文本", () => {

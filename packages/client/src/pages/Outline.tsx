@@ -8,7 +8,8 @@
 // 交互收敛：行级「详情」「＋ 新建」按钮移除（只留删除 + 阅读进度徽标）——单击行选中、
 // 选中后 Enter 新建子级（类型由父层级推导）、双击行跳详情、单击标题/摘要行内编辑、拖拽排序保留；
 // 行级 AskAiButton 已移除——右键菜单替代（RowContextMenu：注入会话上下文 + 建立关联
-// + 「设为阅读进度」——卡片 1.1：仅章节点行传入，卷/场景行不出现；已是阅读进度则禁用）
+// + 「设为阅读进度」/「标记为推演节点」——卡片 1.1/D2：仅章节点行传入，卷/场景行不出现；
+// 已是阅读进度则禁用，推演标记项不置灰、按当前状态切换文案）
 // 路由：#/outline；数据：GET /api/v1/outline?with_metadata=true（整树 + 章的字数统计；
 // 本页章视图行展示 metadata.textLength，按页开启见 hooks/use-outline-loader）+ GET /api/v1/relation（伏笔标记，S9.2）；操作：POST/PUT/DELETE /outline、PUT /project/config（设阅读进度）
 // 2026-09：卷/章行的类型徽标改为**编号徽标**（`第N卷` / `第N章`，展示口径——只计可见节点、删后重排，
@@ -23,8 +24,14 @@
 import { useEffect, useMemo, useState } from "react";
 import type { DragEvent, KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { Button } from "antd";
-import type { OutlineNode } from "@whispering233/ai-editor-shared";
-import { DeleteOutlined, PlusOutlined, RightOutlined, AimOutlined } from "@ant-design/icons";
+import { buildDeductionMarks, type OutlineNode } from "@whispering233/ai-editor-shared";
+import {
+  DeleteOutlined,
+  PlusOutlined,
+  RightOutlined,
+  AimOutlined,
+  BranchesOutlined,
+} from "@ant-design/icons";
 import { CHILD_TYPE, TYPE_LABEL } from "../components/outline/dialogs";
 import { ChapterView } from "../components/outline/chapter-view";
 import { InlineInput } from "../components/outline/inline-input";
@@ -46,7 +53,14 @@ import {
   type OutlineNodeType,
 } from "../lib/api";
 import { buildNodeHookMarks, HOOK_MARK_TYPES, type NodeHookMark } from "../lib/outline-hooks";
-import { isCurrentPositionHost, setCurrentPosition } from "../lib/current-position";
+import { setCurrentPosition } from "../lib/current-position";
+import {
+  deductionMarkTitle,
+  deductionMenuLabel,
+  isDeductionMarkHost,
+  nextDeductionNodes,
+  submitDeductionMarks,
+} from "../lib/deduction";
 import {
   canMoveTo,
   dropInsertOrder,
@@ -180,6 +194,13 @@ export default function Outline() {
    * `docs/design/10-data-model.md` §4 的服务端章序不同源）——树视图行为徽标查 `labels`，
    * 章视图直接读 `chapterRows` */
   const numbering = useMemo(() => numberOutline(outline), [outline]);
+
+  /** 推演节点标记（§15）：**唯一来源 = shared `buildDeductionMarks`**（过滤失效/非章 → 树序排序 →
+   * 角色与文案），本页不自己算文案/章号；`config.deductionNodes` 由 store 重拉驱动刷新 */
+  const deduction = useMemo(() => {
+    const marks = buildDeductionMarks(outline, config?.deductionNodes ?? []);
+    return { marks, byNode: new Map(marks.map((mark) => [mark.nodeId, mark])) };
+  }, [outline, config?.deductionNodes]);
 
   // 伏笔标记（S9.2，数据流 API → 映射 → 渲染）：大纲树就绪后并行拉取三类标记关系
   // （GET /relation，source_type=outline_node，relation_type 单值过滤，depth=1——「关系」）→
@@ -613,6 +634,15 @@ export default function Outline() {
     await setCurrentPosition(node.id);
   }
 
+  /**
+   * 行级「标记为推演节点 / 移出推演节点」（卡片 D2）：仅章行给入口（`isDeductionMarkHost`，
+   * 与服务端 `PUT /project/config` 同口径）——提交实现与详情页共用（lib/deduction.ts），
+   * 全量数组一次提交，成功后 store 重拉 config ⇒ 本页徽标与章视图/详情页同步收敛（无需重拉树）。
+   */
+  async function handleToggleDeduction(node: OutlineNode) {
+    await submitDeductionMarks(nextDeductionNodes(config?.deductionNodes ?? [], node.id));
+  }
+
   /** 软删直接执行（H2：不再弹二次确认）；OUTLINE_NODE_NOT_FOUND（已被 purge）→ 横幅 + 刷新树；其余错误 toast */
   async function handleDelete(node: OutlineNode) {
     if (selectedNodeId === node.id) setSelectedNodeId(null); // 删除选中节点即清除选中
@@ -673,6 +703,8 @@ export default function Outline() {
       const selected = selectedNodeId === node.id;
       // 编号徽标文案（卷/章 = `第N卷` / `第N章`；场景不编号 → undefined，徽标回落到枚举文案）
       const numberLabel = numbering.labels.get(node.id);
+      // 推演标记（§15；非章 / 未标记 → undefined，不渲染徽标）
+      const deductionMark = deduction.byNode.get(node.id);
       // 行级新建子级：子类型由本行层级推导；null = 叶子（场），无按钮
       const childType = CHILD_TYPE[node.type];
       // 行根元素 props（右键菜单 trigger 与普通 div 共用；编辑态退化为普通 div）
@@ -772,6 +804,17 @@ export default function Outline() {
                 详情/＋ 就地新建按钮已移除——详情改双击、新建改选中后 Enter；AskAiButton 移除。
                 徽标排在删除按钮**左侧**：删除按钮恒贴行尾（徽标出现不得把它往左推——跨行操作列才能对齐） */}
             <span className="ml-auto flex shrink-0 items-center gap-1">
+              {/* 推演节点徽标（卡片 D2；DESIGN.md「`推演节点` 徽标」）：排「阅读进度」**左侧**
+                  （阅读进度是单值固定标记、恒贴右；推演标记可能多个，从左侧依次排开）——
+                  文案与章号均来自 shared 派生，本页只拼 title */}
+              {deductionMark !== undefined && (
+                <TypeChip
+                  className="shrink-0"
+                  title={deductionMarkTitle(deductionMark, deduction.marks.length)}
+                >
+                  {deductionMark.label}
+                </TypeChip>
+              )}
               {isCurrent && <TypeChip className="shrink-0">阅读进度</TypeChip>}
               {/* 行级建子级（卡 3，DESIGN.md `data-row`）：卷 → 新建章、章 → 新建场；插在删除左侧
                   （删除恒贴行尾）；场无合法子层级 → 不渲染。与 Enter 建子级同一路径
@@ -847,14 +890,20 @@ export default function Outline() {
               source={{ type: "outline_node", id: node.id, name: node.title, nodeType: node.type }}
               onCreated={() => useUiStore.getState().notifyDataChanged()}
               extraItems={
-                isCurrentPositionHost(node.type) ? (
-                  <ContextMenuItem
-                    disabled={isCurrent}
-                    onClick={() => void handleSetCurrentPosition(node)}
-                  >
-                    <AimOutlined className="text-sm" />
-                    设为阅读进度
-                  </ContextMenuItem>
+                isDeductionMarkHost(node.type) ? (
+                  <>
+                    <ContextMenuItem onClick={() => void handleToggleDeduction(node)}>
+                      <BranchesOutlined className="text-sm" />
+                      {deductionMenuLabel(deductionMark !== undefined)}
+                    </ContextMenuItem>
+                    <ContextMenuItem
+                      disabled={isCurrent}
+                      onClick={() => void handleSetCurrentPosition(node)}
+                    >
+                      <AimOutlined className="text-sm" />
+                      设为阅读进度
+                    </ContextMenuItem>
+                  </>
                 ) : undefined
               }
               trigger={<div {...rowProps} />}
@@ -1005,6 +1054,7 @@ export default function Outline() {
           rows={numbering.chapterRows}
           currentPositionId={config?.currentPosition ?? null}
           hookMarks={hookMarks}
+          deductionMarks={deduction.marks}
           editing={
             editing?.field === "title"
               ? { nodeId: editing.nodeId, value: editingValue }

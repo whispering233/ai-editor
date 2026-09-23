@@ -1,22 +1,24 @@
 // 章视图（大纲页第二形态，2026-09）：平铺章列表——阅读序 = 卷序 → 卷内章序，行 = `第N卷` + `第N章`
-// 两枚编号徽标 + 标题 + 摘要 + 伏笔标记 + 正文字数 + 「写正文」入口 + 「阅读进度」徽标。
+// 两枚编号徽标 + 标题 + 摘要 + 伏笔标记 + 推演节点徽标（只读）+ 正文字数 + 「写正文」入口 + 「阅读进度」徽标。
 // 「写正文」= 指向 #/manuscript/:id 的**导航链接**（卡 12.5；2026-09 卡 18.2 由下划线文字改为行尾
 // 图标按钮——给 antd `Button` 传 `href`，它渲染成 `<a>`：拿 `icon-button` 表皮的同时保住链接语义，
 // 也不破「本视图行内无操作按钮」的收窄）。
 // 交互有意收窄（契约见 `docs/ui/DESIGN.md`「大纲页双视图」）：**单击标题就地改名 + 双击行进详情**，
 // 不做删除 / 新建 / 拖拽——结构编辑与排序的唯一入口仍是大纲树，且「在章视图里新建出的场景不显示」
-// 会带来「建了却看不见」的困惑。
+// 会带来「建了却看不见」的困惑。**推演节点徽标也是只读 chip**（标记操作只在树视图右键菜单与
+// 节点详情页——本视图「行内无操作按钮」这条收窄不变）。
 // 纯 presenter：数据与副作用（提交改名 / 重拉树 / 路由）都在容器 `pages/Outline.tsx`，
 // 故 SSR `renderToString` 可直接渲染（仓内无 jsdom）——行结构断言见 `chapter-view.test.tsx`。
 import type { KeyboardEvent } from "react";
 import { Button } from "antd";
 import { EditOutlined } from "@ant-design/icons";
-import type { OutlineChapter } from "@whispering233/ai-editor-shared";
+import type { DeductionMark, OutlineChapter } from "@whispering233/ai-editor-shared";
 import { TypeChip } from "@/components/ui/tag-chip";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NodeHookMarkBadge } from "./node-hook-badge";
 import { InlineInput } from "./inline-input";
 import type { NodeHookMark } from "@/lib/outline-hooks";
+import { deductionMarkTitle } from "@/lib/deduction";
 import { formatTextLength } from "@/lib/manuscript";
 import type { OutlineChapterRow } from "@/lib/outline-tree";
 import { cn } from "@/lib/utils";
@@ -45,6 +47,8 @@ export interface ChapterViewProps {
   currentPositionId?: string | null;
   /** 伏笔标记（null = 未加载 / 加载失败 → 标记列隐藏，不阻塞列表） */
   hookMarks?: Map<string, NodeHookMark[]> | null;
+  /** 推演节点标记（shared `buildDeductionMarks` 产出；行尾**只读**徽标，排在「阅读进度」左侧） */
+  deductionMarks?: DeductionMark[];
   /** 正在改名的章（**只含标题编辑**；null = 无） */
   editing?: { nodeId: string; value: string } | null;
   /** 临时聚焦高亮节点 id（跨页定位/新建聚焦用，同树视图） */
@@ -56,10 +60,14 @@ export function ChapterView({
   rows,
   currentPositionId = null,
   hookMarks = null,
+  deductionMarks = [],
   editing = null,
   focusedNodeId = null,
   handlers,
 }: ChapterViewProps) {
+  /** 节点 id → 推演标记（行内查表；文案/章号由 shared 派生，本组件只拼 title） */
+  const deductionByNode = new Map(deductionMarks.map((mark) => [mark.nodeId, mark]));
+
   // 空态：有卷无章（整树为空的情形由页面自己的空态承接——那里带「新建第一卷」入口）
   if (rows.length === 0) {
     return <EmptyState padding="sm">还没有章，去大纲树里给卷加章</EmptyState>;
@@ -70,6 +78,7 @@ export function ChapterView({
       {rows.map((row) => {
         const node = row.chapter;
         const marks = hookMarks?.get(node.id) ?? [];
+        const deductionMark = deductionByNode.get(node.id);
         const editingHere = editing?.nodeId === node.id;
         /** 本章正文字数文案（metadata.textLength；未写/0 → null 不显示） */
         const textLengthLabel = formatTextLength(node.metadata?.textLength ?? 0);
@@ -143,6 +152,14 @@ export function ChapterView({
                   <span className="tabular-nums text-xs text-muted-foreground">
                     {textLengthLabel}
                   </span>
+                )}
+                {deductionMark !== undefined && (
+                  <TypeChip
+                    className="shrink-0"
+                    title={deductionMarkTitle(deductionMark, deductionMarks.length)}
+                  >
+                    {deductionMark.label}
+                  </TypeChip>
                 )}
                 {currentPositionId === node.id && <TypeChip className="shrink-0">阅读进度</TypeChip>}
                 <Button

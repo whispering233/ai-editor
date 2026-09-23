@@ -1,6 +1,8 @@
 // 大纲节点详情页（S12.2；麦基字段集；「节点详情页」；
 // S13.2：header 加「设为阅读进度」——入口自大纲页迁入，PUT /project/config { current_position }，
 // 已是阅读进度禁用；store updateConfig 自动重拉 config 联动 InfoBar/行尾徽标/compute 默认节点）
+// D2：header 加「标记为推演节点 / 移出推演节点」（仅章节点渲染）+ 元信息行推演徽标
+// （提交实现与大纲行右键菜单共用 = lib/deduction.ts）
 // 路由：#/outline/:nodeId（中栏大纲 tab 二级路由，main.tsx outline 分支拦截第二段，仿实体详情）
 // 数据：节点本体来自 project store 的 outline 树（GET /outline 已含 data）——findNode 按 id 查找，
 // 软删/缺失 → 404 态；**变更记录仅章**（卡片 1.2：卷/场景不渲染该区块，也不留必定 400 的入口）——
@@ -14,8 +16,8 @@
 // VALIDATION_ERROR → 结构化信息卡底部行内错误；「+ 新建变更」（S12.3）→ 内联表单（目标/字段/op/值/
 // 描述，update 自动取旧值）→ 成功后 toast + 重拉变更记录列表
 // 样式 token 类（oracle 红线：禁止硬编码色类）
-import { useEffect, useState } from "react";
-import { formatTimestamp } from "@whispering233/ai-editor-shared";
+import { useEffect, useMemo, useState } from "react";
+import { buildDeductionMarks, formatTimestamp } from "@whispering233/ai-editor-shared";
 import { CreateRelationDialog } from "../components/entity/create-relation-dialog";
 import { RelationsView } from "../components/entity/relations-view";
 import { NodeDeltaList } from "../components/delta/node-delta-list";
@@ -42,6 +44,13 @@ import { useSaveShortcut } from "../lib/save-shortcut";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useOutlineLoader } from "../hooks/use-outline-loader";
 import { isCurrentPositionHost, setCurrentPosition } from "../lib/current-position";
+import {
+  deductionMarkTitle,
+  deductionMenuLabel,
+  isDeductionMarkHost,
+  nextDeductionNodes,
+  submitDeductionMarks,
+} from "../lib/deduction";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
 
@@ -61,6 +70,8 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
   const [saveError, setSaveError] = useState<string | null>(null);
   // 设为阅读进度提交态（防重复提交）
   const [settingCurrent, setSettingCurrent] = useState(false);
+  // 推演标记提交态（防重复提交；卡片 D2）
+  const [markingDeduction, setMarkingDeduction] = useState(false);
   // 相关实体：新建关系对话框 + 重载信号
   const [relationDialogOpen, setRelationDialogOpen] = useState(false);
   const [relKey, setRelKey] = useState(0);
@@ -81,8 +92,17 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
   const fields = node ? detailFieldsForNodeType(node.type) : [];
   const sceneOptions = sceneNodeOptions(outline?.children ?? []);
   const isCurrent = config?.currentPosition === nodeId;
-  /** 本页节点是否可承载「阅读进度」（卡片 1.1 章级收窄：仅章；节点未加载时不置灰按钮由 node===null 分支承担） */
+  /** 本节点是否可承载「阅读进度」（卡片 1.1 章级收窄：仅章；节点未加载时不置灰按钮由 node===null 分支承担） */
   const currentPositionHost = node !== null && isCurrentPositionHost(node.type);
+  /** 本页节点的推演标记（卡片 D2；未标记 / 非章 / 失效 id → undefined）：标记集合由 shared
+   * `buildDeductionMarks` 现算（文案与章号同源），`config.deductionNodes` 由 store 重拉驱动刷新 */
+  const deduction = useMemo(
+    () => buildDeductionMarks(outline, config?.deductionNodes ?? []),
+    [outline, config?.deductionNodes],
+  );
+  const deductionMark = deduction.find((mark) => mark.nodeId === nodeId);
+  /** 本页节点是否可标记（§15 不变式 1：仅章；卷/场景不渲染入口——不留必定 400 的按钮） */
+  const deductionHost = node !== null && isDeductionMarkHost(node.type);
   /** 本章正文字数文案（卡 12.5；卷/场景无正文，0 或未写 → null 不显示）——
    *  数据来自 GET /outline?with_metadata=true 的 metadata.textLength（不读正文全文） */
   const textLengthLabel = formatTextLength(
@@ -156,6 +176,22 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
     }
   }
 
+  /**
+   * 标记 / 移出推演节点（卡片 D2）：提交实现 = lib/deduction.ts 唯一入口（大纲行右键菜单共用）——
+   * PUT /project/config { deduction_nodes } 全量替换，store 成功后重拉 config，联动本页元信息行徽标 /
+   * 大纲树与章视图行尾徽标。已标记 → 按钮文案变「移出推演节点」（点即切换，不置灰）；
+   * 在途防重入由 markingDeduction 承担。
+   */
+  async function handleToggleDeduction() {
+    if (node === null || markingDeduction || !deductionHost) return;
+    setMarkingDeduction(true);
+    try {
+      await submitDeductionMarks(nextDeductionNodes(config?.deductionNodes ?? [], node.id));
+    } finally {
+      setMarkingDeduction(false);
+    }
+  }
+
   // Ctrl/Cmd+S 保存（B2）：仅节点就绪时注册（notFound/无项目/加载失败时不抢快捷键）
   useSaveShortcut(() => handleSave(), node !== null);
 
@@ -215,6 +251,21 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
             >
               {isCurrent ? "阅读进度" : "设为阅读进度"}
             </Button>
+            {/* D2 推演节点标记（动作入口；状态徽标在元信息行）：仅章节点渲染（§15 不变式 1——
+                卷/场景服务端 400，不留必定失败的入口），文案按当前状态切换（已标记 → 移出） */}
+            {deductionHost && (
+              <Button
+                disabled={markingDeduction}
+                title={
+                  deductionMark !== undefined
+                    ? "从推演节点集合中移出（剧情推演不再以本章为边界）"
+                    : "标记为推演节点（剧情推演以本章为边界）"
+                }
+                onClick={() => void handleToggleDeduction()}
+              >
+                {deductionMenuLabel(deductionMark !== undefined)}
+              </Button>
+            )}
             <Button
               type="primary"
               onClick={() => void handleSave()}
@@ -225,12 +276,20 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
           </>
         }
         description={
-          /* 元信息行：类型徽标 + 更新时间 + 阅读进度（文字与大纲列表页徽标语义一致） */
+          /* 元信息行：类型徽标 + 更新时间 + 推演标记（排在「阅读进度」左侧，同大纲行）+ 阅读进度 */
           node ? (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <TypeChip>{TYPE_LABEL[node.type]}</TypeChip>
               <span>更新于 {formatTimestamp(node.updatedAt)}</span>
               {textLengthLabel !== null && <span className="tabular-nums">{textLengthLabel}</span>}
+              {deductionMark !== undefined && (
+                <TypeChip
+                  className="shrink-0"
+                  title={deductionMarkTitle(deductionMark, deduction.length)}
+                >
+                  {deductionMark.label}
+                </TypeChip>
+              )}
               {isCurrent && <TypeChip className="shrink-0">阅读进度</TypeChip>}
             </div>
           ) : undefined

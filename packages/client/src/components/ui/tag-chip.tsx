@@ -46,13 +46,18 @@ export interface TypeChipProps {
   children: ReactNode;
   /** 上下文附加类（截断 / 伸缩 / 外边距由调用点给） */
   className?: string;
+  /** hover 提示（完整语义；如推演标记的「推演起点（第3章）」——徽标文案本身是缩写） */
+  title?: string;
 }
 
 /** 类型/分类徽标（**描边式**：浅底 + 1px 红褐边框 + 随主题翻转的墨字——强调靠轮廓）：
  * 卷/章/场、实体类型、端点类型、关系类型、回收站类型 */
-export function TypeChip({ children, className }: TypeChipProps) {
+export function TypeChip({ children, className, title }: TypeChipProps) {
   return (
-    <span className={cn(CHIP_BASE, "border border-type-badge-border bg-accent text-foreground", className)}>
+    <span
+      title={title}
+      className={cn(CHIP_BASE, "border border-type-badge-border bg-accent text-foreground", className)}
+    >
       {children}
     </span>
   );

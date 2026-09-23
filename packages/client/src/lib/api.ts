@@ -149,6 +149,9 @@ export interface UpdateProjectConfigBody {
   current_position?: string | null; // 须指向存在的非软删 **chapter** 节点（服务端校验；非章 → 400）
  /** 自动备份频率（修订）：null = 关闭；仅枚举 1/5/10/15/30/60（BACKUP_FREQUENCIES），其他 → 400 */
   backup_frequency_minutes?: number | null;
+ /** 推演节点标记（**全量替换**）：须为可见的 **chapter** 节点 id（非章/不可见 → 400）；
+  *  [] = 清空全部标记；省略 = 不动。服务端去重 + 按可见章先序归一（见 docs/api/10-api-project.md） */
+  deduction_nodes?: string[];
 }
 
 export interface UpdateProjectConfigRes {
