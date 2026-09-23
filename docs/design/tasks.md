@@ -92,7 +92,9 @@
 
 - `pnpm -r build` → `pnpm typecheck` → `pnpm lint` → `pnpm -r test` 全绿；`db` 单包 `pnpm --filter @whispering233/ai-editor-db test` 绿。
 - 迁移双路径实证：v10 存量库跑迁移后两表消失且 `user_version = 11`；全新库建表后**不存在**这两张表。
-- `rg -n 'decompose|Decompose|拆解|origin' packages/client/src packages/db/src packages/shared/src packages/server/src` 只允许 `sessions/` 相关零命中之外的预期残留（如 `db/schema.md` 之外的迁移 009/010 文件与其测试）。
+- `rg -n 'decompose|Decompose|DECOMPOSE|拆解' packages/client/src packages/db/src packages/shared/src packages/server/src` —— **白名单 = 迁移链文件**（`migrations/009_decompose*.ts` / `010_decompose_concurrency*.ts` / `011_drop_decompose.ts` 及其测试 + `migrations/index.ts` + `schema.ts` 版本史注释 + `queries/migration.test.ts`；2026-09 裁定：011 的 DDL 必须点名两张表、`index.ts` 必须 import 它、版本史与实证用例必须写表名，结构上不可消除）；白名单外**零命中**。
+- `rg -n '60-decompose|120-api-decompose' packages docs --glob '!docs/design/tasks.md'`：2026-09 裁定按可达口径判定 = `packages/**` 零命中 + `docs/**` 仅余 `docs/design/backlog.md:457`（登记为卡 4 待清项，卡 3 **不改** backlog.md）。
+- 卡 1/2 实测发现的连带边界修正（已批准，非越界）：`migrations/009_decompose.ts` / `010_decompose_concurrency.ts` 的**注释**换掉指向已删 `schema.md` 段的引用与失效的「与 tables.ts DDL 同形」断言段（`up` 逻辑与 DDL 一字不动）；`docs/design/10-data-model.md:16` 的 project.json 字段枚举去掉 `origin`。
 - 汇报附 commit hash + 命令输出 + `git status` 干净。
 
 ### 卡 4：收尾与残留归零
