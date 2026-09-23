@@ -18,6 +18,7 @@ const DETAIL: EntityDetailRes = {
   name: "张三",
   data: {
     role: "主角",
+    priority: "major", // 角色优先级档（未分级 = 值缺失；只读展示走中文标签）
     description: "青云门弟子",
     alias: "张铁柱",
     gender: "男",
@@ -184,15 +185,16 @@ describe("CharacterDetailView（档案字段网格：单一 card、无分区标�
   it("两列网格 + 全部字段按单一清单顺序出现", () => {
     const html = render("initial");
     expect(html).toContain("md:grid-cols-2");
-    const [name, role, alias, gender, age, race, description, personality, motivation] = orderOf(
+    const [name, role, priority, alias, gender, age, race, description, personality, motivation] = orderOf(
       html,
-      ["姓名", "角色定位", "假名", "性别", "年龄", "种族", "描述", "性格", "动机"],
+      ["姓名", "角色定位", "优先级", "假名", "性别", "年龄", "种族", "描述", "性格", "动机"],
     );
-    for (const pos of [name, role, alias, gender, age, race, description, personality, motivation]) {
+    for (const pos of [name, role, priority, alias, gender, age, race, description, personality, motivation]) {
       expect(pos).toBeGreaterThan(-1);
     }
     expect(name).toBeLessThan(role);
-    expect(role).toBeLessThan(alias);
+    expect(role).toBeLessThan(priority);
+    expect(priority).toBeLessThan(alias);
     expect(alias).toBeLessThan(gender);
     expect(gender).toBeLessThan(age);
     expect(age).toBeLessThan(race);
@@ -320,7 +322,7 @@ describe("CharacterDetailView（阅读进度 tab 只读：纯文本值）", () =
     const html = render("current", { currentPosition: "ch-1" });
     expect(html).toContain("由变更记录累积，只读");
     expect(html).toContain("md:grid-cols-2");
-    for (const label of ["姓名", "角色定位", "假名", "性别", "年龄", "种族", "描述", "性格", "动机"]) {
+    for (const label of ["姓名", "角色定位", "优先级", "假名", "性别", "年龄", "种族", "描述", "性格", "动机"]) {
       expect(html).toContain(label);
     }
     // 只读画的是文本值（不再是灰底 disabled 输入框）：字段区无禁用控件
@@ -336,6 +338,12 @@ describe("CharacterDetailView（阅读进度 tab 只读：纯文本值）", () =
     expect(html).toContain(">18<"); // 数字字段
     const empty = renderWithEmptyRace();
     expect(empty).toContain(">—<");
+  });
+
+  it("枚举字段（priority）只读值 = 中文标签，不显原始 key", () => {
+    const html = render("current", { currentPosition: "ch-1" });
+    expect(html).toContain("主要配角"); // 档位标签（单一定义 = shared 常量）
+    expect(html).not.toContain("major"); // 原始档位 key 不得进只读视图
   });
 
   it("阅读进度 tab：面板树只读（无输入框/工具条/行操作/拖拽，但名称与值文本仍在）", () => {

@@ -16,7 +16,8 @@
 // 语义逐句对照改造（git show 52c7c13^:packages/db/src/queries/entity.ts）：
 // - deleted_at IS NULL ↔ isNull；软删过滤语义不变
 // - name LIKE ? ↔ like(entities.name, `%${q}%`)——通配符 %/_ 原样透传（模糊搜索语义）
-// - 排序白名单（name/created_at/updated_at × asc/desc）↔ 动态选列对象 desc/asc（无字符串拼接）
+// - 排序白名单（name/created_at/updated_at/priority × asc/desc）↔ 动态选列对象 desc/asc（无字符串拼接）
+// - sort=priority 排 rank（2026-09）↔ json_extract + shared `CHARACTER_PRIORITIES` 顺序派生的 CASE 模板
 // - event/timepoint 固定排序 `sort_order IS NULL, sort_order ASC, id ASC` ↔ orderBy(sql 模板)（NULL 沉底）
 // - COUNT(*) ↔ count；IN 占位符 ↔ inArray（空集生成恒假 SQL，原生 IN (NULL) 语义等价）
 // - EXISTS 子查询（eventOccursAt）↔ sql 模板（跨表互引，builder 难表达，4A 允许）
@@ -28,7 +29,7 @@
 // 事务沿用 withTransaction（native db.transaction），连接级共享已验证（15.2 验证记录①）。
 
 import type { EntityRow, EntitySummary, EntityType, RelationRow } from "@whispering233/ai-editor-shared";
-import { DEFAULT_ENTITY_LIST_LIMIT, ENTITY_TYPES, MAX_ENTITY_LIST_LIMIT, generateEntityId, panelTopLevelNames } from "@whispering233/ai-editor-shared";
+import { CHARACTER_PRIORITIES, DEFAULT_ENTITY_LIST_LIMIT, ENTITY_TYPES, MAX_ENTITY_LIST_LIMIT, generateEntityId, panelTopLevelNames } from "@whispering233/ai-editor-shared";
 import { and, asc, count, desc, eq, inArray, isNull, like, or, sql, type SQLWrapper } from "drizzle-orm";
 import { nowIso } from "../storage/atomic.js";
 import { withTransaction, type Db } from "../connection.js";
@@ -62,7 +63,7 @@ export interface EntityListQuery {
   offset?: number;
  /** 每页条数，缺省 `DEFAULT_ENTITY_LIST_LIMIT`，上限 `MAX_ENTITY_LIST_LIMIT`（超限 clamp，防恶意大页） */
   limit?: number;
-  sort?: "name" | "created_at" | "updated_at";
+  sort?: "name" | "created_at" | "updated_at" | "priority";
   order?: "asc" | "desc";
  /**
  * 上级设定筛选（2026-08，仅 setting）：匹配 = 实体在设定层级树（belongs_to）中
@@ -231,7 +232,7 @@ function collectSettingDescendants(db: Db, rootId: string): Set<string> {
 
 /**
  * 实体列表（GET /api/v1/entity/:type）：
- * type 过滤 + q 模糊搜索（name LIKE）+ 排序（name/created_at/updated_at × asc/desc，
+ * type 过滤 + q 模糊搜索（name LIKE）+ 排序（name/created_at/updated_at/priority × asc/desc，
  * 白名单防注入）+ 分页（limit clamp 1..`MAX_ENTITY_LIST_LIMIT`）+ **默认过滤软删**。
  * total 为过滤后总数（不含分页）。
  * filters 语义（S6.3 下沉）：data 字段 JS 过滤（列表摘要不含 data），此时 SQL 只做
@@ -241,7 +242,7 @@ function collectSettingDescendants(db: Db, rootId: string): Set<string> {
  *
  * drizzle 改造：where 动态条件 and 组合（顺序与旧 where.join 一致：
  * 软删过滤恒为首条）；排序白名单映射为**列对象**（asc/desc 包装，禁止字符串拼接；
- * event/timepoint 固定 sql 模板排序 NULL 沉底）。
+ * event/timepoint 固定 sql 模板排序 NULL 沉底；`sort=priority` 的 rank CASE 模板见下）。
  */
 export function listEntities(db: Db, query: EntityListQuery): EntityListResult {
   /**
@@ -268,13 +269,31 @@ export function listEntities(db: Db, query: EntityListQuery): EntityListResult {
     query.sort === "name" ? entities.name : query.sort === "created_at" ? entities.created_at : entities.updated_at;
  // 默认降序（query.order === "asc" 才升序，与旧 `"ASC" : "DESC"` 语义一致）
   const orderAsc = query.order === "asc";
+ // 角色优先级档（`sort=priority`，2026-09）：rank 由 shared `CHARACTER_PRIORITIES` 顺序派生——
+ // data JSON 提取（`json_extract`，**不是列**）+ CASE；未分级（缺键 / null / 未知值）取档位数 →
+ // 排在有档位者之后（沉底，脏值不打挂排序）；同级 updated_at 降序 → id 稳定次序。
+ // 档位升序为固定口径（同 event/timepoint，order 参数不参与）；仅 character 有档位，
+ // 其余类型退化为「最近更新降序」（无档位不报错）。
+  const priorityOrderBy =
+    query.type === "character"
+      ? [
+          sql`CASE json_extract(${entities.data}, '$.priority') ${sql.join(
+            CHARACTER_PRIORITIES.map((key, rank) => sql`WHEN ${key} THEN ${rank}`),
+            sql` `,
+          )} ELSE ${CHARACTER_PRIORITIES.length} END`,
+          desc(entities.updated_at),
+          asc(entities.id),
+        ]
+      : [desc(entities.updated_at), asc(entities.id)];
  // event / timepoint（时间轴，G2）固定按 sort_order 升序、NULL 沉底（
  // 列表恒按 sort_order 升序，sort/order 参数不参与排序）——`sort_order IS NULL` 为 1 的排最后
  //（SQLite 布尔序），实现 NULL 沉底；id 作稳定次序
   const orderByExpr =
     query.type === "event" || query.type === "timepoint"
       ? [sql`${entities.sort_order} IS NULL`, asc(entities.sort_order), asc(entities.id)]
-      : [orderAsc ? asc(sortCol) : desc(sortCol), asc(entities.id)];
+      : query.sort === "priority"
+        ? priorityOrderBy
+        : [orderAsc ? asc(sortCol) : desc(sortCol), asc(entities.id)];
   const offset = Math.max(0, Math.trunc(query.offset ?? 0));
   const limit = Math.min(MAX_ENTITY_LIST_LIMIT, Math.max(1, Math.trunc(query.limit ?? DEFAULT_ENTITY_LIST_LIMIT)));
 

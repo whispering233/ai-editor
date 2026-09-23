@@ -266,6 +266,22 @@ function FieldControl({
           placeholder="输入后回车添加下一项"
         />
       );
+    // 枚举下拉（人物 `priority` 等）：选项与标签由字段配置给出（单一定义 = shared 常量）。
+    // 清除 → `null`（= 未分级；空串不是合法档位，服务端 schema 会 400），故 allowClear 的
+    // undefined 统一归一为 null
+    case "select":
+      return (
+        <Select
+          className="w-full"
+          allowClear
+          value={fieldValue(value) || undefined}
+          onChange={(v: string | undefined) => onChange(v ?? null)}
+          options={(field.options ?? []).map((opt) => ({
+            value: opt,
+            label: field.optionsLabels?.[opt] ?? opt,
+          }))}
+        />
+      );
     default:
       return <Input value={fieldValue(value)} onChange={(e) => onChange(e.target.value)} />;
   }
@@ -331,7 +347,15 @@ function ProfileField({
   return (
     <ProfileRow label={field.label} fullWidth={fullWidth}>
       {readOnly ? (
-        <ReadOnlyCell value={value} multiline={fullWidth} />
+        <ReadOnlyCell
+          value={
+            // 枚举字段只读展示中文标签（`priority` → 「主角」），不显原始 key
+            typeof value === "string" && field.optionsLabels !== undefined
+              ? (field.optionsLabels[value] ?? value)
+              : value
+          }
+          multiline={fullWidth}
+        />
       ) : (
         <FieldControl field={field} value={value} onChange={onChange} />
       )}

@@ -60,9 +60,10 @@ describe("characterDetailFields（详情页字段：单一顺序清单）", () =
   const fields = characterDetailFields();
   const byKey = new Map(fields.map((f) => [f.key, f]));
 
-  it("顺序 = 角色定位 / 假名 / 性别 / 年龄 / 种族 / 描述 / 性格 / 动机（档案式阅读顺序）", () => {
+  it("顺序 = 角色定位 / 优先级 / 假名 / 性别 / 年龄 / 种族 / 描述 / 性格 / 动机（档案式阅读顺序）", () => {
     expect(fields.map((f) => f.key)).toEqual([
       "role",
+      "priority",
       "alias",
       "gender",
       "age",
@@ -84,8 +85,8 @@ describe("characterDetailFields（详情页字段：单一顺序清单）", () =
     }
   });
 
-  it("单行字段判据：text/number → 网格单元；textarea/tags → 整行", () => {
-    for (const key of ["role", "alias", "gender", "age", "race"]) {
+  it("单行字段判据：text/number/select → 网格单元；textarea/tags → 整行", () => {
+    for (const key of ["role", "priority", "alias", "gender", "age", "race"]) {
       expect(isSingleLineField(byKey.get(key)!)).toBe(true);
     }
     for (const key of ["description", "personality", "motivation"]) {

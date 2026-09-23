@@ -1,5 +1,6 @@
 // API schema 测试（T1.4）：按 示例做 parse 通过与拒绝用例
 import { describe, expect, it } from "vitest";
+import { CHARACTER_PRIORITIES } from "../constants/entity.js";
 import {
   ENTITY_DATA_SCHEMAS,
   ERROR_CODES,
@@ -245,6 +246,14 @@ describe("entity 端点", () => {
     expect(entityListQuerySchema.safeParse({ limit: 201 }).success).toBe(false);
   });
 
+  it("列表查询：sort 含 priority 档（2026-09，排序语义在 db 层）；其余档位不变、未知档位拒绝", () => {
+    expect(entityListQuerySchema.parse({ sort: "priority" }).sort).toBe("priority");
+    for (const s of ["name", "created_at", "updated_at"] as const) {
+      expect(entityListQuerySchema.parse({ sort: s }).sort).toBe(s);
+    }
+    expect(entityListQuerySchema.safeParse({ sort: "relevance" }).success).toBe(false);
+  });
+
   it("EntitySummary 响应 parse（camelCase）", () => {
     expect(
       entitySummarySchema.parse({
@@ -374,6 +383,17 @@ describe("event 时间轴", () => {
       role: "主角",
       status: "活跃",
     });
+  });
+
+  it("characterDataSchema：priority 档位枚举——合法档位 / null（= 未分级，PUT 清除语义）通过，缺失可选，非法字符串拒绝", () => {
+    for (const priority of CHARACTER_PRIORITIES) {
+      expect(characterDataSchema.parse({ priority }).priority).toBe(priority);
+    }
+    expect(characterDataSchema.parse({ priority: null }).priority).toBeNull();
+    expect(characterDataSchema.parse({}).priority).toBeUndefined();
+    expect(characterDataSchema.safeParse({ priority: "" }).success).toBe(false); // 空串不是档位
+    expect(characterDataSchema.safeParse({ priority: "主角色" }).success).toBe(false); // 中文标签不是存储值
+    expect(characterDataSchema.safeParse({ priority: "主角" }).success).toBe(false);
   });
 
   it("entityMoveReqSchema：order 必填非负整数；负数/小数/缺字段拒绝；strict 拒绝未知键", () => {

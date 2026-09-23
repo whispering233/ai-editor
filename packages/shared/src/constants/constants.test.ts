@@ -6,6 +6,9 @@ import {
   ANALYSIS_TOOLS,
   AUTO_TOOLS,
   BACKUP_FREQUENCIES,
+  CHARACTER_PRIORITIES,
+  CHARACTER_PRIORITY_LABELS,
+  characterPriorityRank,
   CONFLICT_LEVELS,
   DEFAULT_BACKUP_FREQUENCY_MINUTES,
   DEFAULT_HALF_LIFE,
@@ -95,6 +98,27 @@ describe("实体 / 关系常量", () => {
   });
 });
 
+describe("角色优先级常量（2026-09）", () => {
+  it("CHARACTER_PRIORITIES 四档有序（主角 → 龙套）；标签映射一一对应且与顺序同口径", () => {
+ // 顺序即排序 rank（db 的 CASE 与 UI 下拉同源）；单一定义见 `docs/db/schema.md`「人物 data 分层」
+    expect(CHARACTER_PRIORITIES).toEqual(["protagonist", "major", "minor", "extra"]);
+    expect(Object.keys(CHARACTER_PRIORITY_LABELS).sort()).toEqual([...CHARACTER_PRIORITIES].sort());
+    expect(CHARACTER_PRIORITIES.map((k) => CHARACTER_PRIORITY_LABELS[k])).toEqual([
+      "主角",
+      "主要配角",
+      "配角",
+      "龙套",
+    ]);
+  });
+
+  it("characterPriorityRank：下标即 rank；未分级（缺键 / null / 空串 / 未知值 / 非字符串）→ null", () => {
+    expect(CHARACTER_PRIORITIES.map((k) => characterPriorityRank(k))).toEqual([0, 1, 2, 3]);
+    for (const ungraded of [undefined, null, "", "主要角色", "protagonists", 0, {}, []]) {
+      expect(characterPriorityRank(ungraded)).toBeNull();
+    }
+  });
+});
+
 describe("大纲节点常量（麦基字段集）", () => {
   it("CONFLICT_LEVELS 为麦基冲突三层次（inner/personal/extra_personal）", () => {
     expect(CONFLICT_LEVELS).toEqual(["inner", "personal", "extra_personal"]);
@@ -120,10 +144,11 @@ describe("伏笔常量", () => {
     expect(REMOVED_CHARACTER_FIELDS).toEqual(["status", "abilities"]);
   });
 
-  it("不可变字段白名单（卡片 5.6）：character 仅 role/description——单一定义供 client 与 tools 消费", () => {
+  it("不可变字段白名单（卡片 5.6）：character 为 role/description/priority——单一定义供 client 与 tools 消费", () => {
  // `docs/db/schema.md`「人物 data 分层」/`docs/design/10-data-model.md` §14 不变式 1
  //（client：字段下拉排除 + 基础信息区字段集；tools：`proposal/delta` 提案层守卫）
-    expect(IMMUTABLE_FIELDS).toEqual({ character: ["role", "description"] });
+ // priority（2026-09）：作者视角档位分类，不随阅读进度变化 → 同归不可变层
+    expect(IMMUTABLE_FIELDS).toEqual({ character: ["role", "description", "priority"] });
  // 与「已移除字段」互斥：同一字段不得同时是不可变与已移除（否则消费方语义互诉）
     expect(IMMUTABLE_FIELDS.character.filter((f) => REMOVED_CHARACTER_FIELDS.includes(f))).toEqual([]);
   });

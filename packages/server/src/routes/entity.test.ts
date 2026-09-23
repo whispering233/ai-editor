@@ -135,6 +135,43 @@ describe("GET /api/v1/entity/:type 列表", () => {
     expect(lBody.data.limit).toBe(1);
   });
 
+  it("sort=priority：档位升序（主角 → 龙套）+ 未分级沉底（服务端透传 data.priority）；未知档位仍 400", async () => {
+    openProject();
+    const app = buildApp();
+ // 创建序不影响断言：三档 rank 唯一（0 < 3 < 未分级沉底）
+    await createCharacter(app, "甲无档");
+    await createCharacter(app, "乙主角", { priority: "protagonist" });
+    await createCharacter(app, "丙龙套", { priority: "extra" });
+    const res = await app.request("/api/v1/entity/character?sort=priority", { headers: HOST_HEADERS });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { data: { items: Array<{ name: string }>; total: number } };
+    expect(body.data.total).toBe(3);
+    expect(body.data.items.map((i) => i.name)).toEqual(["乙主角", "丙龙套", "甲无档"]);
+ // sort 白名单由 shared `entityListQuerySchema` 钉住（priority 之外未列入的值一律 400）
+    const bad = await app.request("/api/v1/entity/character?sort=relevance", { headers: HOST_HEADERS });
+    expect(bad.status).toBe(400);
+  });
+
+  it("priority 清空语义：PUT data.priority = null 回到「未分级」；空串 400（枚举字段例外）", async () => {
+    openProject();
+    const app = buildApp();
+    const { id } = await createCharacter(app, "清档角色", { priority: "protagonist" });
+    const cleared = await app.request(
+      `/api/v1/entity/character/${id}`,
+      jsonRequest("PUT", "", { data: { priority: null } }),
+    );
+    expect(cleared.status).toBe(200);
+    const detail = await app.request(`/api/v1/entity/character/${id}`, { headers: HOST_HEADERS });
+    const body = (await detail.json()) as { data: { data: Record<string, unknown> } };
+    expect(body.data.data.priority).toBeNull(); // 未分级（不是删除键、也不是空串）
+ // 枚举字段例外：`""` 不是合法档位（schema 拒）
+    const bad = await app.request(
+      `/api/v1/entity/character/${id}`,
+      jsonRequest("PUT", "", { data: { priority: "" } }),
+    );
+    expect(bad.status).toBe(400);
+  });
+
   it("软删对象默认过滤", async () => {
     openProject();
     const app = buildApp();

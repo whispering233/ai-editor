@@ -182,6 +182,70 @@ describe("listEntities", () => {
     expect(first.items[0].name).toBe("李四"); // 最后创建
   });
 
+ // 角色优先级排序（2026-09，卡 1）：rank 由 shared 常量顺序派生（json_extract data.priority）
+  it("sort=priority：档位序（主角 → 龙套）→ 同级 updated_at 降序；未分级（缺键 / null / 脏值）沉底", () => {
+ // 名字统一前缀 + q 过滤：与 beforeEach 的种子数据隔离，断言可写全序
+    const seed = (name: string, data?: Record<string, unknown>): void => {
+      createEntity(db, { type: "character", name, ...(data ? { data } : {}) });
+    };
+    seed("优先主角", { priority: "protagonist" });
+    seed("优先主角2", { priority: "protagonist" }); // 同级 rank → 靠 updated_at 降序分先后
+    seed("优先主要", { priority: "major" });
+    seed("优先配角", { priority: "minor" });
+    seed("优先龙套", { priority: "extra" });
+    seed("优先无档"); // 缺键
+    seed("优先空值", { priority: null }); // null = 未分级
+    seed("优先脏值", { priority: "幽灵档位" }); // 未知值（schema 外脏数据）不得抛错
+    const stamp = (name: string, t: string): void => {
+      db.prepare("UPDATE entities SET created_at = ?, updated_at = ? WHERE name = ?").run(t, t, name);
+    };
+    stamp("优先主角", "2026-09-01T00:00:00Z");
+    stamp("优先主角2", "2026-09-08T00:00:00Z"); // 同级里更新 → 排在「优先主角」前
+    stamp("优先主要", "2026-09-03T00:00:00Z");
+    stamp("优先配角", "2026-09-04T00:00:00Z");
+    stamp("优先龙套", "2026-09-02T00:00:00Z"); // 更新但档位靠后 → 仍排主角/主要/配角之后
+    stamp("优先无档", "2026-09-05T00:00:00Z");
+    stamp("优先空值", "2026-09-07T00:00:00Z");
+    stamp("优先脏值", "2026-09-06T00:00:00Z");
+    const items = listEntities(db, { type: "character", q: "优先", sort: "priority" }).items;
+    expect(items.map((i) => i.name)).toEqual([
+      "优先主角2", // protagonist（updated_at 更新）
+      "优先主角", // protagonist
+      "优先主要", // major
+      "优先配角", // minor
+      "优先龙套", // extra（updated_at 最旧无意义——档位优先）
+ // 未分级区：沉底（缺键 / null / 脏值），内部按 updated_at 降序
+      "优先空值",
+      "优先脏值",
+      "优先无档",
+    ]);
+    expect(items).toHaveLength(8);
+  });
+
+  it("sort=priority：档位升序为固定口径（order=desc 不反转）；未分级仍沉底", () => {
+    createEntity(db, { type: "character", name: "序主角", data: { priority: "protagonist" } });
+    createEntity(db, { type: "character", name: "序龙套", data: { priority: "extra" } });
+    createEntity(db, { type: "character", name: "序无档" });
+    for (const order of ["asc", "desc"] as const) {
+      const items = listEntities(db, { type: "character", q: "序", sort: "priority", order }).items;
+      expect(items.map((i) => i.name)).toEqual(["序主角", "序龙套", "序无档"]);
+    }
+  });
+
+  it("sort=priority：非 character 类型无档位——退化为最近更新降序（不抛错）", () => {
+ // setting 的 data 里即使被人为塞入 priority 也不参与（档位仅 character 有语义）
+    createEntity(db, { type: "setting", name: "优先级设定旧", data: { priority: "protagonist" } });
+    createEntity(db, { type: "setting", name: "优先级设定新", data: { priority: "extra" } });
+    const stamp = (name: string, t: string): void => {
+      db.prepare("UPDATE entities SET created_at = ?, updated_at = ? WHERE name = ?").run(t, t, name);
+    };
+    stamp("优先级设定旧", "2026-09-01T00:00:00Z");
+    stamp("优先级设定新", "2026-09-02T00:00:00Z");
+    // 修仙界（beforeEach 种子）时间戳最旧
+    const items = listEntities(db, { type: "setting", sort: "priority" }).items;
+    expect(items.map((i) => i.name)).toEqual(["优先级设定新", "优先级设定旧", "修仙界"]);
+  });
+
   it("软删过滤：软删后列表不可见，total 减少", () => {
     const target = listEntities(db, { type: "character", q: "阿强" }).items[0];
     softDeleteEntity(db, target.id, "2026-08-02T00:00:00Z");

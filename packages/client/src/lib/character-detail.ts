@@ -48,6 +48,7 @@ export const CHARACTER_MUTABLE_DATA_KEYS = [
  */
 export const CHARACTER_DETAIL_FIELD_KEYS = [
   "role",
+  "priority",
   "alias",
   "gender",
   "age",
@@ -91,7 +92,7 @@ export function characterDetailFields(): DetailFieldConfig[] {
 
 /** 单行字段判据（`text`/`number` → 档案网格单元；`textarea`/`tags` → 整行铺满） */
 export function isSingleLineField(field: DetailFieldConfig): boolean {
-  return field.control === "text" || field.control === "number";
+  return field.control === "text" || field.control === "number" || field.control === "select";
 }
 
 /** 必填判据结果（`name` / `description` 两个错误位各自独立；`null` = 无错） */

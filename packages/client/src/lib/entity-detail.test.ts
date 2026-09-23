@@ -1,7 +1,7 @@
 // entity-detail 纯函数与配置测试（S3.6 + I3b）：按类型字段配置、关系类型中文映射、表单 diff、
 // 设定层级分区（parent_id 废弃改为 belongs_to 关系表达）
 import { describe, expect, it } from "vitest";
-import { RELATION_TYPES } from "@whispering233/ai-editor-shared";
+import { CHARACTER_PRIORITIES, CHARACTER_PRIORITY_LABELS, RELATION_TYPES } from "@whispering233/ai-editor-shared";
 import {
   detailFieldsForType,
   diffData,
@@ -10,10 +10,11 @@ import {
 } from "./entity-detail";
 
 describe("detailFieldsForType", () => {
-  it("character：role/description/alias/gender/age/race/personality/motivation（2026-09：abilities 与 status 均已移除）", () => {
+  it("character：role/priority/description/alias/gender/age/race/personality/motivation（2026-09：abilities 与 status 均已移除）", () => {
     const fields = detailFieldsForType("character");
     expect(fields.map((f) => f.key)).toEqual([
       "role",
+      "priority",
       "description",
       "alias",
       "gender",
@@ -22,6 +23,11 @@ describe("detailFieldsForType", () => {
       "personality",
       "motivation",
     ]);
+ // 优先级档：选项/标签与 shared 常量同源（禁止手抄），未分级 = 值缺失（清除 = null）
+    const priority = fields.find((f) => f.key === "priority")!;
+    expect(priority.control).toBe("select");
+    expect(priority.options).toEqual([...CHARACTER_PRIORITIES]);
+    expect(priority.optionsLabels).toEqual(CHARACTER_PRIORITY_LABELS);
     expect(fields.find((f) => f.key === "age")?.control).toBe("number");
     expect(fields.find((f) => f.key === "personality")?.control).toBe("tags");
     expect(fields.find((f) => f.key === "motivation")?.control).toBe("textarea");

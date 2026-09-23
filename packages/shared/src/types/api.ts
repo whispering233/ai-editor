@@ -6,7 +6,7 @@
 // zod 版本：^4（注意 v4 API：z.record 必须两参、z.enum 接受 readonly 数组）
 
 import { z } from "zod";
-import { DEFAULT_ENTITY_LIST_LIMIT, ENTITY_TYPES, MAX_ENTITY_LIST_LIMIT } from "../constants/entity.js";
+import { CHARACTER_PRIORITIES, DEFAULT_ENTITY_LIST_LIMIT, ENTITY_TYPES, MAX_ENTITY_LIST_LIMIT } from "../constants/entity.js";
 import { normalizeRelationType, relationTypeSyntaxError } from "../utils/relation-type.js";
 import { HOOK_STATUSES, PAYOFF_TIMING } from "../constants/hook.js";
 import { CONFLICT_LEVELS } from "../constants/outline.js";
@@ -95,7 +95,8 @@ export type ApiError = z.infer<typeof apiErrorSchema>;
  *
  * **2026-09 修订**：`status` 彻底移除（旧残留由 `.passthrough()` 容错，不再解析/展示）；
  * `abilities[]` → `ability_panel`（007 迁移）；`description` 为必填（**仅前端校验**——服务端不硬校验，
- * 保护 AI 提案/旧数据/备份导入三条路径）。
+ * 保护 AI 提案/旧数据/备份导入三条路径）；`priority` = 角色优先级档（**有序枚举**，
+ * 取值单一定义 = shared `CHARACTER_PRIORITIES`；缺省 = 未分级，清除 = `null`）。
  * `ability_panel` 为**宽校验**声明（`z.unknown()`，不约束结构）：面板是用户自定义字段树，
  * 结构防御在读取端（shared `parseAbilityPanel`）——服务端绝不因面板结构问题拒绝写入。
  */
@@ -111,6 +112,7 @@ export const characterDataSchema = z
     motivation: z.string().optional(),
     ability_panel: z.unknown().optional(), // 能力面板树（宽校验；解析见 shared parseAbilityPanel）
     custom_fields: z.record(z.string(), z.unknown()).optional(),
+    priority: z.enum(CHARACTER_PRIORITIES).nullable().optional(), // 角色优先级档（null = 未分级；见 docs/db/schema.md）
   })
   .passthrough(); // 允许未知字段（创作工具，用户自定义字段自由）
 
@@ -445,7 +447,10 @@ export const entityListQuerySchema = z.object({
   q: z.string().optional(), // 模糊匹配 name
   offset: z.coerce.number().int().min(0).default(0),
   limit: z.coerce.number().int().min(1).max(MAX_ENTITY_LIST_LIMIT).default(DEFAULT_ENTITY_LIST_LIMIT),
-  sort: z.enum(["name", "created_at", "updated_at"]).optional(),
+  // sort=priority（2026-09）：角色优先级档——档位升序（主角在前）→ 未分级沉底 → 同级 updated_at 降序
+  // → id 升序（rank 由 shared `CHARACTER_PRIORITIES` 顺序派生）；仅 character 有档位，
+  // 其余类型退化为「最近更新降序」。语义见 docs/api/30-api-entity.md
+  sort: z.enum(["name", "created_at", "updated_at", "priority"]).optional(),
   order: z.enum(["asc", "desc"]).optional(),
  // 标签包含筛选（2026-08）：data 数组字段（setting.rules / event.tags）包含该标签即命中
   tag: z.string().optional(),

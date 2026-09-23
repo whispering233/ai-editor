@@ -94,6 +94,35 @@ export const MAX_ENTITY_LIST_LIMIT = 200;
 /** 实体列表 `limit` 缺省（**单一定义**）：REST schema 的 `.default()` 与 db 查询层 `??` 兜底同源。 */
 export const DEFAULT_ENTITY_LIST_LIMIT = 50;
 
+/**
+ * 角色优先级档（character 专属，**有序**）：作者视角的档位分类。
+ * **单一定义**（`docs/db/schema.md`「人物 data 分层」）——档位取值、顺序、中文标签只在此处出现：
+ * UI 下拉、AI 工具说明、列表 `sort=priority` 的 rank 一律由此派生，禁止手抄第二份表。
+ * 数组顺序 = 排序 rank（主角在前）。**未分级 = 键缺失 / `null` / 未知值**，不是第五档。
+ */
+export const CHARACTER_PRIORITIES = ["protagonist", "major", "minor", "extra"] as const;
+
+/** 角色优先级档（从 CHARACTER_PRIORITIES 派生） */
+export type CharacterPriority = (typeof CHARACTER_PRIORITIES)[number];
+
+/** 角色优先级档 → 中文标签（`Record<CharacterPriority, …>` ⇒ 增删档位必须同步补标签，否则编译失败） */
+export const CHARACTER_PRIORITY_LABELS: Record<CharacterPriority, string> = {
+  protagonist: "主角",
+  major: "主要配角",
+  minor: "配角",
+  extra: "龙套",
+};
+
+/**
+ * 档位 rank（0 起，= `CHARACTER_PRIORITIES` 下标）：未分级（缺键 / `null` / 非字符串 / 未知串）→ `null`。
+ * 排序消费方（db 的 SQL CASE 由同一数组顺序生成）按「有档位者在前、`null` 沉底」处理。
+ */
+export function characterPriorityRank(value: unknown): number | null {
+  if (typeof value !== "string") return null;
+  const rank = CHARACTER_PRIORITIES.indexOf(value as CharacterPriority);
+  return rank < 0 ? null : rank;
+}
+
 /** 伏笔管理关系（伏笔关系约定：大纲节点 → hook） */
 export const HOOK_RELATION_TYPES = ["plants", "advances", "resolves"] as const;
 

@@ -1,5 +1,5 @@
 // 实体详情页辅助纯函数与配置（S3.6）
-import { RELATION_TYPE_META } from "@whispering233/ai-editor-shared";
+import { CHARACTER_PRIORITIES, CHARACTER_PRIORITY_LABELS, RELATION_TYPE_META } from "@whispering233/ai-editor-shared";
 import type { EntityType, RelationType } from "@whispering233/ai-editor-shared";
 import { HOOK_STATUS_LABEL, HOOK_TIMING_LABEL } from "./entity-list";
 
@@ -25,6 +25,14 @@ export function detailFieldsForType(type: EntityType): DetailFieldConfig[] {
     case "character":
       return [
         { key: "role", label: "角色定位", control: "text" },
+ // 优先级（2026-09）：档位与中文标签**从 shared 常量派生一行不手抄**；未分级 = 值缺失（清除 = null）
+        {
+          key: "priority",
+          label: "优先级",
+          control: "select",
+          options: [...CHARACTER_PRIORITIES],
+          optionsLabels: CHARACTER_PRIORITY_LABELS,
+        },
         { key: "description", label: "描述", control: "textarea" },
         { key: "alias", label: "假名", control: "text" },
         { key: "gender", label: "性别", control: "text" },
