@@ -62,6 +62,22 @@ get_outline_path(node_id)
   → 从根到该节点的路径 ID 列表
   用途：AI 说"从卷1第3章到结局有哪几条路径"
 
+// === 推演节点（2026-09）===
+get_deduction_marks()
+  → { marks: [...], spans: [...] }
+  用途：剧情推演——作者在大纲树上标定的推演边界。**单标记 = 开放式剧情发散**（唯一锚点）；
+       **多标记 = 相邻标记之间的剧情线探讨**（"从起点到终点这段是否成立"）
+  marks[]：{ index, role: "single" | "start" | "node" | "end", node_id, chapter_number, path, title, summary }
+      index = 树序位置（1-based）；role 与 UI 徽标文案同源（单标记 → single；首位 start、末位 end、中间 node）
+      chapter_number = **可见章先序**编号（只计未软删章——UI 徽标同口径，**不是**服务端 deriveChapterOrder 的章序）
+      path = 卷 → 章 的标题链（如 ["第一卷", "血夜"]）
+  口径：无标记 → { marks: [], spans: [] }（不报错）；软删 / 已失效标记一律不出现在结果中
+  spans[]：相邻标记之间的区间骨架
+      { from_index, to_index, chapter_count, written_chapters, middle: [{ node_id, chapter_number, title }] }
+      middle = 区间内的**中间章**（不含两端标记）；written_chapters = 区间内已写正文的章数
+      超大区间靠单条工具结果上限截断 + 显式告知（不另设分页）；细节再按需走 get_outline / get_chapter_text / compute_state
+  注：AI **不能**增删推演节点（无对应提案工具）——推演边界是作者的判断
+
 // === 正文只读查询（2026-09）===
 get_chapter_text(node_id, offset?, max_chars?)
   → { chapter_id, chapter_number, title, char_count, offset, returned_chars, text, truncated }
@@ -132,6 +148,8 @@ detect_conflicts(opts: {
 trace_plot_paths(from_node_id, to_node_id)
   → { paths: [{ nodes: [], description, risk_factors: [] }] }
   用途：从节点A到节点B推演可能的剧情路径
+  注：只覆盖**树路径**（祖先后裔）与 **plot_edge** k 跳——跨卷的两章之间既非祖先后裔、
+      通常也无 plot_edge ⇒ 返回空。推演节点之间的**区间骨架**走 get_deduction_marks（2026-09）
 
 find_orphan_elements()
   → { unused_characters: [], unresolved_deltas: [], dangling_relations: [], inconsistent_soft_deletes: [] }

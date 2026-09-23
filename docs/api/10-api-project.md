@@ -156,6 +156,9 @@
   schemaVersion: number;     // schema 版本（对应 project.json 的 schema_version）
   currentPosition: string | null;  // 大纲「阅读进度」节点 id（**UI 文案 = 阅读进度；字段名不变**；project.json，伏笔健康指标/双视图依赖）——**仅章**：
                                    //   必须指向存在的非软删 chapter 节点（卷/场景不承载写作进度）
+  deductionNodes: string[];  // 推演节点标记（章节点 id 数组；**顺序 = 可见章先序**，由写入侧归一）；
+                             //   字段缺失 = []；**读侧原样返回**（磁盘事实保真）——软删/已失效 id 的过滤
+                             //   发生在渲染、注入、AI 工具三处（见 ../design/10-data-model.md §15）
   backupFrequencyMinutes: number | null;  // 自动备份频率（分钟；null = 关闭；缺省 10）
   createdAt: string;         // ISO datetime
   updatedAt: string;
@@ -178,6 +181,9 @@
                                     //   project 路由用 400 而非 404——参数语义错误）；
                                     //   非章（volume/scene）→ 400 VALIDATION_ERROR
   backup_frequency_minutes?: number | null;  // 自动备份频率；null = 关闭；仅接受枚举值 1/5/10/15/30/60（BACKUP_FREQUENCIES），其他（含 0）→ 400 VALIDATION_ERROR——0 仅读侧兼容旧数据，写侧不接受
+  deduction_nodes?: string[];  // 推演节点标记（**全量替换**）：服务端去重 + 按可见章先序归一后写入；
+                               //   每个 id 须存在 + 未软删 + 是 chapter——不存在/已软删 → 400 OUTLINE_NODE_NOT_FOUND（同 current_position 口径），
+                               //   非章 → 400 VALIDATION_ERROR；[] = 清空全部标记；省略 = 不动
 }
 
 // Res: 200

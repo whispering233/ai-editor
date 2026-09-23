@@ -18,8 +18,14 @@
     focus_entity_type?: string;  // 当前聚焦的实体类型（注入本轮上下文）
     focus_entity_id?: string;    // 当前聚焦的实体 ID
     focus_node_id?: string;      // 当前聚焦的大纲节点 ID
+    focus_deduction?: boolean;   // true = 注入「推演节点集合」段（2026-09；大纲组页面悬浮「问 AI」触发）：
+                                 //   服务端**现读** project.json 的 deduction_nodes 展开（客户端不传 id 数组——避免第二份可漂移的事实源）；
+                                 //   无标记 / 标记全部失效 → 该段静默省略（不报错）；注入形状见 ../design/20-context.md §2
   };
 }
+
+// 聚焦上下文展开：服务端把 context 逐项展开为结构化文本、拼在本轮消息之前（查询不到/已软删 → 跳过该项，
+// 不报错——客户端可能携带过期 focus）；两项皆无时不注入，消息原文保持干净。
 
 // 对话历史持久化：本会话的消息写入项目目录 sessions/（格式 = pi session v3，见 docs/db/schema.md）；
 // 服务重启后携带同一 session_id 即可继续上次对话。
