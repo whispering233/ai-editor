@@ -17,7 +17,7 @@ import {
 } from "node:fs";
 import { Hono, type Context } from "hono";
 import type { ProjectFileConfig, ProjectListBook } from "@whispering233/ai-editor-shared";
-import { mapProjectFileToConfig } from "@whispering233/ai-editor-shared";
+import { mapProjectFileToConfig, orderVisibleChapters } from "@whispering233/ai-editor-shared";
 import { SchemaVersionError, type MigrationResult, type Db } from "@whispering233/ai-editor-db";
 import { closeDatabase, openDatabase } from "@whispering233/ai-editor-db";
 import { OUTLINE_FILE_NAME } from "@whispering233/ai-editor-db";
@@ -571,7 +571,7 @@ projectRoutes.put("/config", async (c) => {
   if (!parsed.success) {
     throw parsed.error;
   }
-  const { name, language, current_position, backup_frequency_minutes } = parsed.data;
+  const { name, language, current_position, backup_frequency_minutes, deduction_nodes } = parsed.data;
 
  // current_position 校验：须指向存在的**非软删**大纲节点；
  // 400 + OUTLINE_NODE_NOT_FOUND（参数语义错误用 400，非资源访问 404）
@@ -596,6 +596,44 @@ projectRoutes.put("/config", async (c) => {
     }
   }
 
+ // deduction_nodes 校验（同 current_position 口径）：逐 id 须存在 + 未软删 + 是 **章**，且落在**可见章序**内；
+ // 不存在 / 不可见（自身软删，或所属卷被软删 ⇒ 整棵子树软删）→ 400 OUTLINE_NODE_NOT_FOUND；
+ // 非章（卷/场景）→ 400 VALIDATION_ERROR
+  let normalizedDeductionNodes: string[] | undefined;
+  if (deduction_nodes !== undefined) {
+    const tree = readOutlineFile(project.root);
+    const visibleChapters = orderVisibleChapters(tree); // 唯一编号口径（shared）
+    const visible = new Set(visibleChapters);
+    for (const nodeId of deduction_nodes) {
+      const node = findOutlineNode(tree, nodeId);
+      if (node === undefined || node.deleted === true) {
+        throw new HttpError(
+          400,
+          "OUTLINE_NODE_NOT_FOUND",
+          `deduction_nodes 指向的大纲节点不存在或已软删: ${nodeId}`,
+        );
+      }
+      if (node.type !== "chapter") {
+        throw new HttpError(
+          400,
+          "VALIDATION_ERROR",
+          `deduction_nodes 须指向章节点（卷/场景不承载推演标记）: ${nodeId}`,
+        );
+      }
+ // 章但不可见（所属卷被软删 ⇒ 整棵子树软删）：同样视为已失效
+      if (!visible.has(nodeId)) {
+        throw new HttpError(
+          400,
+          "OUTLINE_NODE_NOT_FOUND",
+          `deduction_nodes 指向的大纲节点不可见（所属卷已软删）: ${nodeId}`,
+        );
+      }
+    }
+ // 归一：去重 + 按可见章先序（库里不表达标记先后）——可见章序上过滤，天然去重且保序
+    const marked = new Set(deduction_nodes);
+    normalizedDeductionNodes = visibleChapters.filter((id) => marked.has(id));
+  }
+
  // 合并更新 + 刷新 updated_at（时间 ISO 8601 应用层写入），写盘并同步内存
  // backup_frequency_minutes 写侧「只写显式」：未在 patch 中出现不写盘——
  // 旧项目文件缺字段时不因无关更新被补写成缺省值（读侧兜底 10 不落盘，避免污染旧数据）；
@@ -606,6 +644,7 @@ projectRoutes.put("/config", async (c) => {
     ...(language !== undefined ? { language } : {}),
     ...(current_position !== undefined ? { current_position } : {}),
     ...(backup_frequency_minutes !== undefined ? { backup_frequency_minutes } : {}),
+    ...(normalizedDeductionNodes !== undefined ? { deduction_nodes: normalizedDeductionNodes } : {}),
     updated_at: nowIso(),
   };
   writeProjectFile(project.root, next);

@@ -342,6 +342,7 @@ describe("POST /project/open", () => {
       language: "zh",
       schemaVersion: SCHEMA_VERSION,
       currentPosition: "sc-1",
+      deductionNodes: [], // 旧文件缺字段 → 读侧兜底空数组
       backupFrequencyMinutes: 10, // 旧文件缺字段 → 读侧缺省兜底 10
       createdAt: T0,
       updatedAt: T0,
@@ -668,7 +669,7 @@ describe("GET/PUT /project/config", () => {
     });
   });
 
-  it("GET 读回全量配置（camelCase 映射：schemaVersion/currentPosition/backupFrequencyMinutes/createdAt/updatedAt；prompt 已废弃 不再返回）", async () => {
+  it("GET 读回全量配置（camelCase 映射：schemaVersion/currentPosition/deductionNodes/backupFrequencyMinutes/createdAt/updatedAt；prompt 已废弃 不再返回）", async () => {
     const dir = makeTmpDir();
     const app = await openProject(dir);
     const res = await app.request("/api/v1/project/config", { headers: HOST_HEADERS });
@@ -681,6 +682,7 @@ describe("GET/PUT /project/config", () => {
         language: "zh",
         schemaVersion: SCHEMA_VERSION,
         currentPosition: null,
+        deductionNodes: [], // makeConfig 缺字段 → 读侧兜底空数组
         backupFrequencyMinutes: 10, // makeConfig 缺字段 → 读侧缺省兜底 10
         createdAt: T0,
         updatedAt: T0,
@@ -912,6 +914,194 @@ describe("GET/PUT /project/config", () => {
       body: JSON.stringify({ name: "x" }),
     });
     expect(res.status).toBe(409);
+  });
+
+ // ============ deduction_nodes（推演节点标记，D1） ============
+
+ /** 推演标记用例树：vol-1 → ch-1（含场景 sc-1）/ ch-2；vol-2 → ch-3；软删章 ch-9（直挂 root）+ 软删卷 vol-3（含 ch-4） */
+  function deductionTree(): OutlineFileTree {
+    return {
+      id: "root",
+      type: "root",
+      schema_version: SCHEMA_VERSION,
+      children: [
+        {
+          id: "vol-1",
+          type: "volume",
+          title: "第一卷",
+          updated_at: T0,
+          children: [
+            {
+              id: "ch-1",
+              type: "chapter",
+              title: "第一章",
+              updated_at: T0,
+              children: [{ id: "sc-1", type: "scene", title: "场景一", updated_at: T0 }],
+            },
+            { id: "ch-2", type: "chapter", title: "第二章", updated_at: T0 },
+          ],
+        },
+        {
+          id: "vol-2",
+          type: "volume",
+          title: "第二卷",
+          updated_at: T0,
+          children: [{ id: "ch-3", type: "chapter", title: "第三章", updated_at: T0 }],
+        },
+        { id: "ch-9", type: "chapter", title: "已删章", updated_at: T0, deleted: true, deleted_at: T0 },
+        {
+          id: "vol-3",
+          type: "volume",
+          title: "软删卷",
+          updated_at: T0,
+          deleted: true,
+          deleted_at: T0,
+          children: [{ id: "ch-4", type: "chapter", title: "第四章", updated_at: T0 }],
+        },
+      ],
+    };
+  }
+
+ /** 打开带推演用例树的项目 */
+  async function openDeductionProject(dir: string): Promise<Hono> {
+    initProjectDir(dir, makeConfig("proj-ded", "推演项目"), deductionTree());
+    const app = buildApp();
+    const res = await app.request("/api/v1/project/open", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: dir }),
+    });
+    expect(res.status).toBe(200);
+    return app;
+  }
+
+  it("PUT deduction_nodes 乱序 + 重复 → 去重并按可见章先序归一（GET 与盘上一致）", async () => {
+    const dir = makeTmpDir();
+    const app = await openDeductionProject(dir);
+    const res = await app.request("/api/v1/project/config", {
+      method: "PUT",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ deduction_nodes: ["ch-3", "ch-1", "ch-1"] }),
+    });
+    expect(res.status).toBe(200);
+    const getRes = await app.request("/api/v1/project/config", { headers: HOST_HEADERS });
+    expect((await getRes.json()).data.deductionNodes).toEqual(["ch-1", "ch-3"]);
+    expect(readProjectFile(dir)?.deduction_nodes).toEqual(["ch-1", "ch-3"]);
+  });
+
+  it("PUT deduction_nodes: [] → 清空全部标记（盘上写空数组）", async () => {
+    const dir = makeTmpDir();
+    const app = await openDeductionProject(dir);
+    await app.request("/api/v1/project/config", {
+      method: "PUT",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ deduction_nodes: ["ch-1", "ch-2"] }),
+    });
+    const res = await app.request("/api/v1/project/config", {
+      method: "PUT",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ deduction_nodes: [] }),
+    });
+    expect(res.status).toBe(200);
+    const getRes = await app.request("/api/v1/project/config", { headers: HOST_HEADERS });
+    expect((await getRes.json()).data.deductionNodes).toEqual([]);
+    expect(readProjectFile(dir)?.deduction_nodes).toEqual([]);
+  });
+
+  it("省略 deduction_nodes → 不动现有标记（PUT 其他字段后仍在）", async () => {
+    const dir = makeTmpDir();
+    const app = await openDeductionProject(dir);
+    await app.request("/api/v1/project/config", {
+      method: "PUT",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ deduction_nodes: ["ch-2"] }),
+    });
+    const res = await app.request("/api/v1/project/config", {
+      method: "PUT",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ name: "改名不动标记" }),
+    });
+    expect(res.status).toBe(200);
+    const getRes = await app.request("/api/v1/project/config", { headers: HOST_HEADERS });
+    expect((await getRes.json()).data.deductionNodes).toEqual(["ch-2"]);
+  });
+
+  it("PUT deduction_nodes 含不存在 id → 400 OUTLINE_NODE_NOT_FOUND", async () => {
+    const dir = makeTmpDir();
+    const app = await openDeductionProject(dir);
+    const res = await app.request("/api/v1/project/config", {
+      method: "PUT",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ deduction_nodes: ["ch-1", "ch-999"] }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      success: false,
+      error: { code: "OUTLINE_NODE_NOT_FOUND", message: expect.stringContaining("ch-999") },
+    });
+    expect(readProjectFile(dir)?.deduction_nodes).toBeUndefined(); // 校验失败不写盘
+  });
+
+  it("PUT deduction_nodes 含已软删章（根级软删章 / 软删卷内章）→ 400 OUTLINE_NODE_NOT_FOUND", async () => {
+    const dir = makeTmpDir();
+    const app = await openDeductionProject(dir);
+    for (const nodeId of ["ch-9", "ch-4"]) {
+      const res = await app.request("/api/v1/project/config", {
+        method: "PUT",
+        headers: HOST_HEADERS,
+        body: JSON.stringify({ deduction_nodes: [nodeId] }),
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        success: false,
+        error: { code: "OUTLINE_NODE_NOT_FOUND", message: expect.stringContaining("软删") },
+      });
+    }
+  });
+
+  it("PUT deduction_nodes 含非章（卷 / 场景）→ 400 VALIDATION_ERROR", async () => {
+    const dir = makeTmpDir();
+    const app = await openDeductionProject(dir);
+    for (const nodeId of ["vol-1", "sc-1"]) {
+      const res = await app.request("/api/v1/project/config", {
+        method: "PUT",
+        headers: HOST_HEADERS,
+        body: JSON.stringify({ deduction_nodes: [nodeId] }),
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        success: false,
+        error: { code: "VALIDATION_ERROR", message: expect.stringContaining("须指向章节点") },
+      });
+    }
+  });
+
+  it("旧 project.json 缺 deduction_nodes → GET 兜底 []，且 PUT 无关字段不把空数组写盘（写只写显式）", async () => {
+    const dir = makeTmpDir();
+    const app = await openProject(dir); // makeConfig 缺字段
+    const getRes = await app.request("/api/v1/project/config", { headers: HOST_HEADERS });
+    expect((await getRes.json()).data.deductionNodes).toEqual([]);
+    await app.request("/api/v1/project/config", {
+      method: "PUT",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ name: "改名不写标记" }),
+    });
+    expect(readProjectFile(dir)).not.toHaveProperty("deduction_nodes");
+  });
+
+  it("读侧原样返回（不过滤失效 id）：盘上带软删章 id → GET 仍返回（过滤在渲染/注入/工具三处）", async () => {
+    const dir = makeTmpDir();
+ // 直接以盘上值 seed（open 前）模拟「标记后章被软删」的存量状态（PUT 侧不允许写入这类值）
+    initProjectDir(dir, { ...makeConfig("proj-ded", "推演项目"), deduction_nodes: ["ch-9", "ch-1"] }, deductionTree());
+    const app = buildApp();
+    const openRes = await app.request("/api/v1/project/open", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: dir }),
+    });
+    expect(openRes.status).toBe(200);
+    const res = await app.request("/api/v1/project/config", { headers: HOST_HEADERS });
+    expect((await res.json()).data.deductionNodes).toEqual(["ch-9", "ch-1"]);
   });
 });
 

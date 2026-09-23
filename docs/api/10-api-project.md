@@ -182,7 +182,7 @@
                                     //   非章（volume/scene）→ 400 VALIDATION_ERROR
   backup_frequency_minutes?: number | null;  // 自动备份频率；null = 关闭；仅接受枚举值 1/5/10/15/30/60（BACKUP_FREQUENCIES），其他（含 0）→ 400 VALIDATION_ERROR——0 仅读侧兼容旧数据，写侧不接受
   deduction_nodes?: string[];  // 推演节点标记（**全量替换**）：服务端去重 + 按可见章先序归一后写入；
-                               //   每个 id 须存在 + 未软删 + 是 chapter——不存在/已软删 → 400 OUTLINE_NODE_NOT_FOUND（同 current_position 口径），
+                               //   每个 id 须**可见**（自身与祖先链均未软删）+ 是 chapter——不存在/已软删/不可见 → 400 OUTLINE_NODE_NOT_FOUND（同 current_position 口径），
                                //   非章 → 400 VALIDATION_ERROR；[] = 清空全部标记；省略 = 不动
 }
 

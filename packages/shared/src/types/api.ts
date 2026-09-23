@@ -205,6 +205,7 @@ export const projectConfigSchema: z.ZodType<ProjectConfig> = z.object({
   language: projectLanguageSchema,
   schemaVersion: z.number().int(), //
   currentPosition: z.string().nullable(), // 「当前位置」节点 id；null = 未设置
+  deductionNodes: z.array(z.string()), // 推演节点标记（章节点 id 数组；顺序 = 可见章先序；缺字段 = [] 由读侧兜底）
   backupFrequencyMinutes: z.number().int().nullable(), // 自动备份频率；null = 关闭；缺省 10 由读侧兜底
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -309,6 +310,12 @@ export const projectConfigUpdateReqSchema = z
  // prompt 已废弃：不再接受（strict schema 传入 → 400 VALIDATION_ERROR）；
  // 项目规则改由 PUT /api/v1/project/agents 写入 
     current_position: z.string().nullable().optional(), // 须指向存在的非软删大纲节点（服务端校验）
+ /**
+ * 推演节点标记（**全量替换**；服务端去重 + 按可见章先序归一后写入）：
+ * 逐 id 须存在 + 未软删 + 是 chapter（不存在/已软删 → 400 OUTLINE_NODE_NOT_FOUND，
+ * 非章 → 400 VALIDATION_ERROR）；[] = 清空全部标记；省略 = 不动
+ */
+    deduction_nodes: z.array(z.string()).optional(),
  /**
  * 自动备份频率（修订）：仅接受枚举 1/5/10/15/30/60（BACKUP_FREQUENCIES），其他（含 0）→ 400
  * VALIDATION_ERROR；null = 关闭（写入 null）——0 仅读侧兼容旧数据语义，写侧一律用 null 表示关闭
@@ -938,6 +945,8 @@ export const chatSendReqSchema = z
         focus_entity_type: entityTypeSchema.optional(),
         focus_entity_id: z.string().optional(),
         focus_node_id: z.string().optional(),
+ /** true = 注入「推演节点集合」段（服务端现读 project.json 的 deduction_nodes 展开；无标记/全失效 → 静默省略） */
+        focus_deduction: z.boolean().optional(),
       })
       .optional(),
   })

@@ -94,6 +94,7 @@ describe("project 端点", () => {
       language: "zh",
       schemaVersion: 1,
       currentPosition: "sc-42",
+      deductionNodes: [],
       backupFrequencyMinutes: 10,
       createdAt: "2026-08-01T10:00:00Z",
       updatedAt: "2026-08-01T10:00:00Z",
@@ -142,6 +143,35 @@ describe("project 端点", () => {
     expect(projectConfigSchema.safeParse({ ...validConfig(), language: "fr" }).success).toBe(false);
     expect(projectConfigSchema.parse({ ...validConfig(), currentPosition: null }).currentPosition).toBeNull();
     expect(projectConfigSchema.parse({ ...validConfig(), backupFrequencyMinutes: null }).backupFrequencyMinutes).toBeNull();
+  });
+
+  it("projectConfigSchema：deductionNodes 必填字符串数组（缺失/非数组拒绝）", () => {
+    expect(projectConfigSchema.parse(validConfig()).deductionNodes).toEqual([]);
+    expect(
+      projectConfigSchema.safeParse({
+        id: "proj-1",
+        name: "我的小说",
+        language: "zh",
+        schemaVersion: 1,
+        currentPosition: null,
+        backupFrequencyMinutes: 10,
+        createdAt: "2026-08-01T10:00:00Z",
+        updatedAt: "2026-08-01T10:00:00Z",
+      }).success,
+    ).toBe(false); // 缺 deductionNodes（响应形态必填）
+    expect(projectConfigSchema.safeParse({ ...validConfig(), deductionNodes: "ch-1" }).success).toBe(false);
+    expect(projectConfigSchema.parse({ ...validConfig(), deductionNodes: ["ch-1", "ch-3"] }).deductionNodes).toEqual([
+      "ch-1",
+      "ch-3",
+    ]);
+  });
+
+  it("projectConfigUpdateReqSchema：deduction_nodes 可选字符串数组（省略 = 不动；非数组/元素非字符串拒绝）", () => {
+    expect(projectConfigUpdateReqSchema.parse({ deduction_nodes: ["ch-3", "ch-1"] }).deduction_nodes).toEqual(["ch-3", "ch-1"]);
+    expect(projectConfigUpdateReqSchema.parse({ deduction_nodes: [] }).deduction_nodes).toEqual([]); // 空 = 清空
+    expect(projectConfigUpdateReqSchema.parse({ name: "x" }).deduction_nodes).toBeUndefined(); // 省略 = 不动
+    expect(projectConfigUpdateReqSchema.safeParse({ deduction_nodes: "ch-1" }).success).toBe(false);
+    expect(projectConfigUpdateReqSchema.safeParse({ deduction_nodes: ["ch-1", 2] }).success).toBe(false);
   });
 
   it("projectConfigUpdateReqSchema：backup_frequency_minutes 接受枚举值/null/省略，拒绝其他（修订加 1 分钟档）", () => {
@@ -646,6 +676,13 @@ describe("chat 端点", () => {
       }).message,
     ).toBe("张三在第30章战力如何");
   });
+
+  it("POST /chat：context.focus_deduction 可选布尔（非布尔拒绝）——客户端只发布尔标记，不传 id 数组", () => {
+    expect(chatSendReqSchema.parse({ message: "推演一下", context: { focus_deduction: true } }).context?.focus_deduction).toBe(true);
+    expect(chatSendReqSchema.parse({ message: "推演一下" }).context?.focus_deduction).toBeUndefined();
+    expect(chatSendReqSchema.safeParse({ message: "x", context: { focus_deduction: "yes" } }).success).toBe(false);
+    expect(chatSendReqSchema.safeParse({ message: "x", context: { focus_deduction: ["ch-1"] } }).success).toBe(false);
+  });
 });
 
 describe("导出/导入", () => {
@@ -735,6 +772,7 @@ function validConfig() {
     language: "zh" as const,
     schemaVersion: 1,
     currentPosition: "sc-42",
+    deductionNodes: [], // （D1 新增字段）
     backupFrequencyMinutes: 10,
     createdAt: "2026-08-01T10:00:00Z",
     updatedAt: "2026-08-01T10:00:00Z",

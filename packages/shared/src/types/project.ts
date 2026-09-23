@@ -16,6 +16,8 @@ export interface ProjectConfig {
   schemaVersion: number;
  /** 大纲「当前位置」节点 id（伏笔健康指标依赖）；null = 未设置 */
   currentPosition: string | null;
+ /** 推演节点标记（**章**节点 id 数组；顺序 = 可见章先序，由写入侧归一；字段缺失 = []） */
+  deductionNodes: string[];
  /** 自动备份频率（分钟）；null = 关闭；缺省 10（新项目默认开启，读侧兜底） */
   backupFrequencyMinutes: number | null;
   createdAt: string; // ISO 8601
@@ -37,6 +39,11 @@ export interface ProjectFileConfig {
   prompt?: string;
   schema_version: number;
   current_position: string | null;
+ /**
+ * 推演节点标记（**可选字段**，2026-09）：章节点 id 数组；顺序 = 可见章先序（写入侧去重 + 归一）；
+ * 缺失 = 空数组（旧文件兜底）；软删 / 已失效 id 由渲染、注入、工具三处过滤，不自动清理
+ */
+  deduction_nodes?: string[];
  /**
  * 自动备份频率（**可选字段**——旧项目文件可缺失，读侧兜底缺省 10；
  * 写侧「只写显式值」：未在 patch 中出现则不写盘，避免污染旧数据）

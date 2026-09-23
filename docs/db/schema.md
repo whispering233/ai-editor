@@ -329,7 +329,7 @@ CREATE TABLE document_records (
 | `schema_version` | number | JSON 结构版本（与 outline.json 顶层同步写入） |
 | `current_position` | string \| null | 大纲「阅读进度」节点 id（**UI 文案 = 阅读进度；字段名不变**；伏笔健康指标/双视图依赖；null = 未设置；**须指向存在的非软删 `chapter` 节点**——卷/场景不承载写作进度，非章 → `PUT /project/config` 400）。**读侧宽松**：存量指向非章节点的值由 `ChapterIndex.chapterOf` 沿父链推导兜底，不报错 |
 | `backup_frequency_minutes` | number \| null | **自动备份频率（可选字段）**：分钟数，仅接受枚举 1/5/10/15/30/60；`null` / `0` = 关闭；**缺省 = 10**（新项目默认开启）；随书籍（每项目独立）；不参与 schema_version 判定（宽松读取，缺省兜底） |
-| `deduction_nodes` | string[] | **推演节点标记（可选字段，2026-09）**：被作者标为「推演节点」的**章**节点 id 数组（标记语义与不变式见 `../design/10-data-model.md` §15）。**顺序 = 可见章先序**：写入时服务端去重 + 树序归一，库里不表达标记先后；元素须存在 + 未软删 + 是 `chapter`（`PUT /project/config` 校验，否则 400）。**读侧宽松**：字段缺失 = 空数组；软删 / 已失效 id 由**渲染、注入、工具**三处过滤，**不自动清理**（软删可还原 ⇒ 标记自动回来；purge 后下次全量写入自然收敛）。角色文案（`推演起点` / `推演节点 k` / `推演终点` / 单标记的 `推演节点`）是派生物，不落库 |
+| `deduction_nodes` | string[] | **推演节点标记（可选字段，2026-09）**：被作者标为「推演节点」的**章**节点 id 数组（标记语义与不变式见 `../design/10-data-model.md` §15）。**顺序 = 可见章先序**：写入时服务端去重 + 树序归一，库里不表达标记先后；元素须存在 + 可见（自身与祖先链均未软删）+ 是 `chapter`（`PUT /project/config` 校验，否则 400）。**读侧宽松**：字段缺失 = 空数组；软删 / 已失效 id 由**渲染、注入、工具**三处过滤，**不自动清理**（软删可还原 ⇒ 标记自动回来；purge 后下次全量写入自然收敛）。角色文案（`推演起点` / `推演节点 k` / `推演终点` / 单标记的 `推演节点`）是派生物，不落库 |
 | `created_at` / `updated_at` | string | ISO 8601，应用层写入；首次初始化写 `created_at`，配置变更更新 `updated_at` |
 
 > **云盘凭据不在本文件**（铁律）：云端存档的 WebDAV 地址/用户名/密码与同步状态落**创作根** `<创作根>/.ai-editor/cloud.json`（明文 + 权限 0600），与模型 API key 同等对待——**绝不进项目文件、不进备份 zip**。见 `../design/40-cloud-sync.md` 与 `../api/100-api-cloud.md`。

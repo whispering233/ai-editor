@@ -83,6 +83,7 @@ const makeConfig = (id: string): ProjectConfig => ({
   language: "zh",
   schemaVersion: 1,
   currentPosition: null,
+  deductionNodes: [], // （D1 新增字段）
   backupFrequencyMinutes: 10, // （B2.1 新增字段）
   createdAt: "2026-08-01T10:00:00Z",
   updatedAt: "2026-08-01T10:00:00Z",

@@ -255,6 +255,7 @@ export function mapProjectFileToConfig(file: ProjectFileConfig): ProjectConfig {
     language: file.language,
     schemaVersion: file.schema_version,
     currentPosition: file.current_position,
+    deductionNodes: file.deduction_nodes ?? [], // 旧文件缺字段 → 空数组（读侧兜底，不落盘）
     backupFrequencyMinutes: resolveBackupFrequencyMinutes(file.backup_frequency_minutes),
     createdAt: file.created_at,
     updatedAt: file.updated_at,
