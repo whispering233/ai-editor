@@ -8,19 +8,26 @@
 ## [Unreleased]
 
 > **角色优先级版本**：人物新增作者视角的**角色优先级**（`data.priority`，四档有序枚举：主角 / 主要配角 / 配角 / 龙套；**未分级 = 键缺失 / `null` / 未知值**）——新建弹窗与人物档案网格可设、AI 经 `propose_create_entity`/`propose_update_entity` 可自行判定；人物页左栏排序默认档改为**角色优先级**（档位升序 → 未分级沉底 → 同级最近更新在前），列表接口新增 `sort=priority`。档位、顺序与中文标签的单一定义 = shared 常量（UI 下拉 / AI 工具说明 / 排序 rank 全部派生）；归**不可变层**（不进变更记录字段下拉、不参与 `computeState`），无 DDL 与数据迁移（存量角色一律未分级）。回归：build / typecheck / lint / `-r test` 全绿（183 文件 / 2687 测试）+ 每卡独立 oracle 复验（含变异验证）与浏览器逐项取证 + 新增坏行回归。
+>
+> **剧情推演版本**：作者可在**大纲树**上把若干**章**标为**推演节点**（`project.json` 的 `deduction_nodes`；顺序 = 可见章先序），随后用悬浮「问 AI」把标记集合注入上下文，或让 AI 自行调 `get_deduction_marks` 取推演骨架——单标记 = 开放式剧情发散，多标记 = 相邻标记之间的剧情线探讨；AI 只能读标记、出提案（工具面无任何改标记能力）。回归：build / typecheck / lint / `-r test` 全绿（240 shared / 304 db / 311 tools / 1119 client / 110 agent / 641 server / 21 desktop）+ 独立 oracle 复核（含变异验证与自造 HTTP 探针）+ 浏览器逐项取证（含真实 LLM 往返与落盘注入文本核对）。
 
 ### Added
 
-- **角色优先级**：`character.data.priority`（四档有序枚举 + 未分级语义）、`GET /api/v1/entity/:type?sort=priority` 排序档（固定升序、未分级沉底、同级 `updated_at` 降序 → `id`）、新建弹窗与人物档案网格的优先级下拉（可清回未分级；清除下发 `null`）、AI 工具说明中的档位清单（由 shared 常量插值生成）
+- **推演节点标记（剧情推演）**：`project.json` 新增 `deduction_nodes`（章节点 id 数组；写侧全量替换 + 去重 + 按可见章先序归一；不存在/已软删/祖先软删 → 400 `OUTLINE_NODE_NOT_FOUND`，非章 → 400 `VALIDATION_ERROR`）；大纲树右键菜单与节点详情页可标记/移出（仅章），大纲树、章视图（只读）与节点详情页元信息行显示中性徽标（单标记 `推演节点`；多标记首位 `推演起点`、末位 `推演终点`、中间 `推演节点 k`，k = 标记序号）。
+- **推演节点集合注入**：`POST /chat` 的 `context.focus_deduction`（客户端只发布尔，服务端现读 `project.json` 展开）——大纲组页面存在可见标记时，悬浮「问 AI」注入三段短文本（口径说明 + 有序标记清单 + 相邻区间摘要；不注入章摘要/中间章清单/正文），focus 小条显示「推演节点 · N 个」。
+- **AI 查询工具 `get_deduction_marks`**（自动权限）：返回标记（角色 / 章号 / 标题 / 卷→章路径）与相邻区间骨架（跨越章数 / 已写章数 / 中间章清单），供剧情推演与合理性分析。
 
 ### Changed
 
+- **章序编号单源化**：新增 shared `orderVisibleChapters`（可见章先序，**唯一编号口径**）与 `buildDeductionMarks`（角色/文案/章号派生）；`client/lib/outline-tree` 的 `numberOutline` 改为消费前者（UI 徽标、注入文本、AI 工具三处同源，与服务端 `deriveChapterOrder` 仍不同源）。
 - 人物页左栏排序默认档 = **角色优先级**（旧的最近更新 / 名称 / 创建时间五档全部保留，手动切档行为不变）
 - `character` 不可变层（不参与 Delta）新增 `priority`；`propose_create_entity` 的角色字段示例 `role/status` → `role/priority`（`status` 是已移除字段，旧文案会把模型引向必然失败的提案）
 
 ### Fixed
 
 - `sort=priority` 的排序 SQL 对 `data` 为非法 JSON 的坏行不再抛 `malformed JSON` 打挂整个 character 列表（`json_valid` 守卫；坏行与未分级同档沉底）
+- **标记提交基底改为可见标记**：软删/purge 后的失效 id 会留在 `deduction_nodes` 里（读侧原样返回、不自动清理），而写侧对任一失效 id 严格 400——客户端若拿 raw 数组回传，该书任何标记操作将永久失败；基底改用 shared 派生可见标记后，下一次全量写入只含可见 id，盘上自然收敛（`toggledDeductionNodes` + 回归测试）
+- shared `buildDeductionMarks` 对非数组脏值（手编 `project.json` 的 `deduction_nodes: 5` 之类）视为空集合，不再 `new Set(5)` 抛错打挂大纲页与 AI 工具
 
 ## [v0.0.55] - 2026-09-23
 
