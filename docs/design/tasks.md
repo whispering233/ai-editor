@@ -8,14 +8,7 @@
 
 ---
 
-
-## 卡 3：角色优先级——AI 工具说明（单源插值）
-
-**依赖**：卡 1（常量就位）。
-
-- **tools**（`packages/tools/src/index.ts` 的 `proposalToolDefs`）：`propose_create_entity` / `propose_update_entity` 的 `description` 按 shared 常量**插值**列出档位取值与「未分级 = 省略或 `null`」（**禁止在 description 里复述字面量**——改常量一处即可跟随）。
-- **顺带修正（同字符串、已登记，非卡外顺手改）**：`propose_create_entity` 现有示例文案里的 `status` 是**已移除字段**（`REMOVED_CHARACTER_FIELDS` 会拒），会把模型引向必然失败的字段——改为 `priority` 示例。
-- **验收**：单测断言两处 `description` 包含由常量派生的档位片段（期望值由常量现算，不手抄中文）；证据同上。
+## 当前无进行中任务卡
 
 ---
 

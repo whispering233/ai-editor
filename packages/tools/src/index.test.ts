@@ -55,6 +55,8 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
     }
  // 已移除字段（REMOVED_CHARACTER_FIELDS 会拒）不得作为角色 data 示例：旧文案会把模型引向必然失败
     expect(m.getTool("propose_create_entity")!.description).not.toContain("role/status");
+ // 正向钉住「已分级字段示例」本身（防整段示例被删而无感）：create 侧必须给出可用的角色字段示例
+    expect(m.getTool("propose_create_entity")!.description).toContain("角色 role/priority");
  // 提案类工具权限为 PROPOSAL（「提案类（需确认）」）
     expect(m.getTool("propose_create_entity")!.permission).toBe("proposal");
     expect(m.getTool("propose_abandon_hook")!.permission).toBe("proposal");
