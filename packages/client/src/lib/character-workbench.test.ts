@@ -120,16 +120,28 @@ describe("resolveListRouteSelection（#/characters 无 id 时的选中推导）"
 });
 
 describe("排序档", () => {
-  it("默认档 = updated_at 降序（后端列表默认）", () => {
-    expect(RAIL_DEFAULT_SORT).toBe("updated_at:desc");
-    expect(resolveRailSort(RAIL_DEFAULT_SORT)).toEqual({ sort: "updated_at", order: "desc" });
+  it("默认档 = 角色优先级升序（首项）", () => {
+    expect(RAIL_DEFAULT_SORT).toBe("priority:asc");
+    expect(RAIL_SORT_OPTIONS[0].value).toBe(RAIL_DEFAULT_SORT);
+    expect(resolveRailSort(RAIL_DEFAULT_SORT)).toEqual({ sort: "priority", order: "asc" });
+  });
+
+  it("旧三档（最近更新 / 名称 / 创建时间）仍在清单里，且优先级居首", () => {
+    expect(RAIL_SORT_OPTIONS.map((o) => o.value)).toEqual([
+      "priority:asc",
+      "updated_at:desc",
+      "name:asc",
+      "name:desc",
+      "created_at:desc",
+      "created_at:asc",
+    ]);
   });
 
   it("每档都能解析出对应 sort/order；未知值回落默认档", () => {
     for (const option of RAIL_SORT_OPTIONS) {
       expect(resolveRailSort(option.value)).toEqual({ sort: option.sort, order: option.order });
     }
-    expect(resolveRailSort("脏值")).toEqual({ sort: "updated_at", order: "desc" });
+    expect(resolveRailSort("脏值")).toEqual({ sort: "priority", order: "asc" });
   });
 });
 

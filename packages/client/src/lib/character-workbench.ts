@@ -53,15 +53,17 @@ export function resolveListRouteSelection(input: {
   return items[0].id;
 }
 
-/** 左栏排序档（默认 `updated_at` 降序 = 后端列表默认；与列表页 SORT_OPTIONS 同构，额外含 updated_at） */
+/** 左栏排序档（首项 = 默认档；与列表页 SORT_OPTIONS 同构，额外含 updated_at 与 priority） */
 export interface RailSortOption {
   value: string;
   label: string;
-  sort: "updated_at" | "name" | "created_at";
+  sort: "updated_at" | "name" | "created_at" | "priority";
   order: "asc" | "desc";
 }
 
 export const RAIL_SORT_OPTIONS: readonly RailSortOption[] = [
+  // 角色优先级固定升序（主角在前、未分级沉底、同级最近更新——服务端 `priority` 档忽略 order 参数）
+  { value: "priority:asc", label: "角色优先级", sort: "priority", order: "asc" },
   { value: "updated_at:desc", label: "最近更新", sort: "updated_at", order: "desc" },
   { value: "name:asc", label: "名称（A→Z）", sort: "name", order: "asc" },
   { value: "name:desc", label: "名称（Z→A）", sort: "name", order: "desc" },
