@@ -5,6 +5,23 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+> **角色优先级版本**：人物新增作者视角的**角色优先级**（`data.priority`，四档有序枚举：主角 / 主要配角 / 配角 / 龙套；**未分级 = 键缺失 / `null` / 未知值**）——新建弹窗与人物档案网格可设、AI 经 `propose_create_entity`/`propose_update_entity` 可自行判定；人物页左栏排序默认档改为**角色优先级**（档位升序 → 未分级沉底 → 同级最近更新在前），列表接口新增 `sort=priority`。档位、顺序与中文标签的单一定义 = shared 常量（UI 下拉 / AI 工具说明 / 排序 rank 全部派生）；归**不可变层**（不进变更记录字段下拉、不参与 `computeState`），无 DDL 与数据迁移（存量角色一律未分级）。回归：build / typecheck / lint / `-r test` 全绿（183 文件 / 2687 测试）+ 每卡独立 oracle 复验（含变异验证）与浏览器逐项取证 + 新增坏行回归。
+
+### Added
+
+- **角色优先级**：`character.data.priority`（四档有序枚举 + 未分级语义）、`GET /api/v1/entity/:type?sort=priority` 排序档（固定升序、未分级沉底、同级 `updated_at` 降序 → `id`）、新建弹窗与人物档案网格的优先级下拉（可清回未分级；清除下发 `null`）、AI 工具说明中的档位清单（由 shared 常量插值生成）
+
+### Changed
+
+- 人物页左栏排序默认档 = **角色优先级**（旧的最近更新 / 名称 / 创建时间五档全部保留，手动切档行为不变）
+- `character` 不可变层（不参与 Delta）新增 `priority`；`propose_create_entity` 的角色字段示例 `role/status` → `role/priority`（`status` 是已移除字段，旧文案会把模型引向必然失败的提案）
+
+### Fixed
+
+- `sort=priority` 的排序 SQL 对 `data` 为非法 JSON 的坏行不再抛 `malformed JSON` 打挂整个 character 列表（`json_valid` 守卫；坏行与未分级同档沉底）
+
 ## [v0.0.55] - 2026-09-23
 
 > **会话状态栏 + 「小说拆解」移除版本**：chat 输入区底部新增只读状态栏（上下文占用 / 费用 / 解码速度 / 缓存命中率 / 累计 tokens），配置行回归纯配置；同时**整功能移除「小说拆解」**——端点 / 进度页 / 书架入口 / 拆解会话守卫 / 服务端管线与 shared 契约全删，数据层加迁移 v11 DROP 两表（`SCHEMA_VERSION` → 11），`project.json` 的 `origin` 与创作根 `decompose` 段废止（存量键读侧容忍）。设计文档保留边界声明：不做超长小说正文生成、也不做批量拆解导入（超长文本绕不开上下文窗口爆满 / 腐化 / 漂移，产出物可信度无法自证）。回归：build / typecheck / lint / `-r test` 全绿（183 文件 / 2674 测试）+ 迁移双路径实证（v10 库两表消失且 `user_version=11`、v8 老库链路连通、全新库无两表）+ 全仓残留 `rg` 归零核验。
