@@ -203,7 +203,7 @@ export default function Outline() {
     return { marks, byNode: new Map(marks.map((mark) => [mark.nodeId, mark])) };
   }, [outline, config?.deductionNodes]);
 
-  // 悬浮「问 AI」的页面焦点（D3）：项目**有可见推演标记** → 注入推演节点集合（只发布尔，服务端现读
+  // 悬浮「问 AI」的页面焦点：项目**有可见推演标记** → 注入推演节点集合（只发布尔，服务端现读
   // 配置展开）；无标记 / 标记全部失效 → null（按钮回普通语义，不注入空段）。
   // 判据用 shared 派生结果而非裸 `config.deductionNodes.length`：失效 id 在读侧原样保留，按长度门控
   // 会在「标记全失效」时留下「按钮带上下文但服务端无段可注入」。
@@ -646,7 +646,7 @@ export default function Outline() {
   }
 
   /**
-   * 行级「标记为推演节点 / 移出推演节点」（卡片 D2）：仅章行给入口（`isDeductionMarkHost`，
+   * 行级「标记为推演节点 / 移出推演节点」：仅章行给入口（`isDeductionMarkHost`，
    * 与服务端 `PUT /project/config` 同口径）——提交实现与详情页共用（lib/deduction.ts），
    * 全量数组一次提交，成功后 store 重拉 config ⇒ 本页徽标与章视图/详情页同步收敛（无需重拉树）。
    */
@@ -816,7 +816,7 @@ export default function Outline() {
                 详情/＋ 就地新建按钮已移除——详情改双击、新建改选中后 Enter；AskAiButton 移除。
                 徽标排在删除按钮**左侧**：删除按钮恒贴行尾（徽标出现不得把它往左推——跨行操作列才能对齐） */}
             <span className="ml-auto flex shrink-0 items-center gap-1">
-              {/* 推演节点徽标（卡片 D2；DESIGN.md「`推演节点` 徽标」）：排「阅读进度」**左侧**
+              {/* 推演节点徽标（DESIGN.md「`推演节点` 徽标」）：排「阅读进度」**左侧**
                   （阅读进度是单值固定标记、恒贴右；推演标记可能多个，从左侧依次排开）——
                   文案与章号均来自 shared 派生，本页只拼 title */}
               {deductionMark !== undefined && (

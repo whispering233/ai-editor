@@ -209,14 +209,20 @@ describe("项目映射", () => {
     expect(mapProjectFileToConfig({ ...file, backup_frequency_minutes: 30 }).backupFrequencyMinutes).toBe(30);
   });
 
-  it("往返一致：显式字段的文件往返不丢（含 null 关闭与枚举值）", () => {
-    const withFreq = { ...file, backup_frequency_minutes: null };
+  it("往返一致：显式字段的文件往返不丢（含 null 关闭 / 枚举值 / 推演标记）", () => {
+    const withFreq = { ...file, backup_frequency_minutes: null, deduction_nodes: [] };
     expect(mapConfigToProjectFile(mapProjectFileToConfig(withFreq))).toEqual(withFreq);
-    const withEnum = { ...file, backup_frequency_minutes: 30 };
+    const withEnum = { ...file, backup_frequency_minutes: 30, deduction_nodes: [] };
     expect(mapConfigToProjectFile(mapProjectFileToConfig(withEnum))).toEqual(withEnum);
+    const withMarks = { ...file, backup_frequency_minutes: null, deduction_nodes: ["ch-3", "ch-7"] };
+    expect(mapConfigToProjectFile(mapProjectFileToConfig(withMarks))).toEqual(withMarks);
   });
 
-  it("旧文件（缺字段）往返：mapConfigToProjectFile 全量映射写出缺省 10（写侧规范化，非 patch 路径）", () => {
-    expect(mapConfigToProjectFile(mapProjectFileToConfig(file))).toEqual({ ...file, backup_frequency_minutes: 10 });
+  it("旧文件（缺字段）往返：mapConfigToProjectFile 全量映射写出缺省值（备份频率 10 / 推演标记空数组；写侧规范化，非 patch 路径）", () => {
+    expect(mapConfigToProjectFile(mapProjectFileToConfig(file))).toEqual({
+      ...file,
+      backup_frequency_minutes: 10,
+      deduction_nodes: [],
+    });
   });
 });

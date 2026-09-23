@@ -1,4 +1,4 @@
-// 查询类工具：推演节点标记只读（卡 D4）
+// 查询类工具：推演节点标记只读
 // get_deduction_marks——作者在大纲树上标定的「推演边界」（project.json `deduction_nodes`）。
 //
 // 口径（docs/api/tool-calling.md「推演节点」、docs/design/10-data-model.md §15）：

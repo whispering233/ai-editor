@@ -113,7 +113,7 @@ describe("ChapterView（章视图平铺列表）", () => {
     expect(html({ rows: [ROWS[0]] })).not.toContain("字"); // 无正文 → 整处文案不渲染
   });
 
-  it("推演节点徽标（卡片 D2）：只读 chip，排在「阅读进度」左侧——不引入任何操作按钮", () => {
+  it("推演节点徽标：只读 chip，排在「阅读进度」左侧——不引入任何操作按钮", () => {
     const deductionMarks = buildDeductionMarks(
       { children: ROWS.map((row) => row.chapter) },
       ["ch-1"],

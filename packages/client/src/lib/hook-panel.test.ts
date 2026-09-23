@@ -116,7 +116,7 @@ const makeConfig = (currentPosition: string | null): ProjectConfig => ({
   language: "zh",
   schemaVersion: 1,
   currentPosition,
-  deductionNodes: [], // （D1 新增字段）
+  deductionNodes: [], // （推演标记字段）
   createdAt: "2026-08-01T10:00:00Z",
   updatedAt: "2026-08-01T10:00:00Z",
 });

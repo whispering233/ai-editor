@@ -70,7 +70,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
   const [saveError, setSaveError] = useState<string | null>(null);
   // 设为阅读进度提交态（防重复提交）
   const [settingCurrent, setSettingCurrent] = useState(false);
-  // 推演标记提交态（防重复提交；卡片 D2）
+  // 推演标记提交态（防重复提交）
   const [markingDeduction, setMarkingDeduction] = useState(false);
   // 相关实体：新建关系对话框 + 重载信号
   const [relationDialogOpen, setRelationDialogOpen] = useState(false);
@@ -94,7 +94,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
   const isCurrent = config?.currentPosition === nodeId;
   /** 本节点是否可承载「阅读进度」（卡片 1.1 章级收窄：仅章；节点未加载时不置灰按钮由 node===null 分支承担） */
   const currentPositionHost = node !== null && isCurrentPositionHost(node.type);
-  /** 本页节点的推演标记（卡片 D2；未标记 / 非章 / 失效 id → undefined）：标记集合由 shared
+  /** 本页节点的推演标记（未标记 / 非章 / 失效 id → undefined）：标记集合由 shared
    * `buildDeductionMarks` 现算（文案与章号同源），`config.deductionNodes` 由 store 重拉驱动刷新 */
   const deduction = useMemo(
     () => buildDeductionMarks(outline, config?.deductionNodes ?? []),
@@ -102,7 +102,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
   );
   const deductionMark = deduction.find((mark) => mark.nodeId === nodeId);
 
-  // 悬浮「问 AI」的页面焦点（D3）：项目**有可见推演标记** → 注入推演节点集合（只发布尔，服务端现读
+  // 悬浮「问 AI」的页面焦点：项目**有可见推演标记** → 注入推演节点集合（只发布尔，服务端现读
   // 配置展开）；无标记 / 标记全部失效 → null（按钮回普通语义，不注入空段）。
   // 判据用 shared 派生结果而非裸 `config.deductionNodes.length`：失效 id 在读侧原样保留，按长度门控
   // 会在「标记全失效」时留下「按钮带上下文但服务端无段可注入」。
@@ -189,7 +189,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
   }
 
   /**
-   * 标记 / 移出推演节点（卡片 D2）：提交实现 = lib/deduction.ts 唯一入口（大纲行右键菜单共用）——
+   * 标记 / 移出推演节点：提交实现 = lib/deduction.ts 唯一入口（大纲行右键菜单共用）——
    * PUT /project/config { deduction_nodes } 全量替换，store 成功后重拉 config，联动本页元信息行徽标 /
    * 大纲树与章视图行尾徽标。已标记 → 按钮文案变「移出推演节点」（点即切换，不置灰）；
    * 在途防重入由 markingDeduction 承担。

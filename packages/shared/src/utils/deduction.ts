@@ -1,4 +1,4 @@
-// 推演节点标记纯函数（卡片 D1）：语义与不变式见 `docs/design/10-data-model.md` §15，
+// 推演节点标记纯函数：语义与不变式见 `docs/design/10-data-model.md` §15，
 // 字段契约见 `docs/db/schema.md`（project.json `deduction_nodes`）、`docs/api/10-api-project.md`（PUT /config）。
 //
 // **唯一编号口径** = 本模块的 `orderVisibleChapters`（可见章先序：只计未软删章、含存量直挂 root 的章、

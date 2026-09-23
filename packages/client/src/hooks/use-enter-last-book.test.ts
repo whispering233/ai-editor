@@ -11,7 +11,7 @@ const config: ProjectConfig = {
   language: "zh",
   schemaVersion: 1,
   currentPosition: null,
-  deductionNodes: [], // （D1 新增字段）
+  deductionNodes: [], // （推演标记字段）
   backupFrequencyMinutes: 10,
   createdAt: "2026-08-01T10:00:00Z",
   updatedAt: "2026-08-01T10:00:00Z",

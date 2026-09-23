@@ -1,4 +1,4 @@
-// 推演节点标记的切换与派生文案测试（卡片 D2）：徽标文案 / 章号一律来自 shared
+// 推演节点标记的切换与派生文案测试：徽标文案 / 章号一律来自 shared
 // `buildDeductionMarks`（唯一编号口径，§15 不变式 2/3）——本测试也经 shared 派生，防止两处手抄。
 // `submitDeductionMarks` 只在调用点触发 store action + toast（无纯逻辑），服务端契约由
 // packages/server/src/routes/project.test.ts 覆盖（非章 / 不可见 → 400）。

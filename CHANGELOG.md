@@ -28,6 +28,7 @@
 - `sort=priority` 的排序 SQL 对 `data` 为非法 JSON 的坏行不再抛 `malformed JSON` 打挂整个 character 列表（`json_valid` 守卫；坏行与未分级同档沉底）
 - **标记提交基底改为可见标记**：软删/purge 后的失效 id 会留在 `deduction_nodes` 里（读侧原样返回、不自动清理），而写侧对任一失效 id 严格 400——客户端若拿 raw 数组回传，该书任何标记操作将永久失败；基底改用 shared 派生可见标记后，下一次全量写入只含可见 id，盘上自然收敛（`toggledDeductionNodes` + 回归测试）
 - shared `buildDeductionMarks` 对非数组脏值（手编 `project.json` 的 `deduction_nodes: 5` 之类）视为空集合，不再 `new Set(5)` 抛错打挂大纲页与 AI 工具
+- `mapConfigToProjectFile`（API 形态 → 文件形态全量映射）补上 `deduction_nodes`——此前漏映射，任何调用方都会静默丢掉推演标记（与备份频率同口径：全量映射恒写出缺省值）
 
 ## [v0.0.55] - 2026-09-23
 

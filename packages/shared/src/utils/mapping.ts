@@ -262,8 +262,8 @@ export function mapProjectFileToConfig(file: ProjectFileConfig): ProjectConfig {
   };
 }
 
-/** ProjectConfig → ProjectFileConfig（全量映射：backup_frequency_minutes 恒写入——本函数非 patch 路径，写全对象即显式；
- * `prompt` 已废弃不再写出——新写入不再产生该字段） */
+/** ProjectConfig → ProjectFileConfig（全量映射：backup_frequency_minutes / deduction_nodes 恒写入——本函数非 patch 路径，
+ * 写全对象即显式；`prompt` 已废弃不再写出——新写入不再产生该字段） */
 export function mapConfigToProjectFile(config: ProjectConfig): ProjectFileConfig {
   return {
     id: config.id,
@@ -271,6 +271,7 @@ export function mapConfigToProjectFile(config: ProjectConfig): ProjectFileConfig
     language: config.language,
     schema_version: config.schemaVersion,
     current_position: config.currentPosition,
+    deduction_nodes: config.deductionNodes,
     backup_frequency_minutes: config.backupFrequencyMinutes,
     created_at: config.createdAt,
     updated_at: config.updatedAt,

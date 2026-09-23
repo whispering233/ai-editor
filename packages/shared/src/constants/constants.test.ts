@@ -252,7 +252,7 @@ describe("工具常量", () => {
   });
 
   it("分组无重叠且全量 50 个", () => {
-    expect(AUTO_TOOLS).toHaveLength(21); // +get_chapter_text（卡 12.9）、get_deduction_marks（D4）
+    expect(AUTO_TOOLS).toHaveLength(21); // +get_chapter_text（卡 12.9）、get_deduction_marks（剧情推演）
     expect(TOOL_NAMES).toHaveLength(50); // 48 + get_chapter_text + get_deduction_marks（均自动、只读）
  // 各分组互不重叠
     const all = [...QUERY_TOOLS, ...ANALYSIS_TOOLS, ...HOOK_ANALYSIS_TOOLS, ...PROPOSAL_TOOLS, ...EXECUTOR_TOOLS];

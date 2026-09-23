@@ -914,7 +914,7 @@ describe("POST /chat SSE 事件集与过滤", () => {
     expect(empty).not.toContain("节选");
   });
 
-  // ============ 推演节点集合注入（D3，契约 docs/design/20-context.md §2） ============
+  // ============ 推演节点集合注入（契约 docs/design/20-context.md §2） ============
 
   /** 推演注入测试用大纲树：卷一[血夜 ch-1, 晨曦 ch-2, 归途 ch-3] + 卷二[远行 ch-4, 尾声 ch-5] */
   function deductionOutline(): OutlineFileTree {

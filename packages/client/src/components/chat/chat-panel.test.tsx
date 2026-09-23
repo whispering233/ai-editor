@@ -83,7 +83,7 @@ const makeConfig = (id: string): ProjectConfig => ({
   language: "zh",
   schemaVersion: 1,
   currentPosition: null,
-  deductionNodes: [], // （D1 新增字段）
+  deductionNodes: [], // （推演标记字段）
   backupFrequencyMinutes: 10, // （B2.1 新增字段）
   createdAt: "2026-08-01T10:00:00Z",
   updatedAt: "2026-08-01T10:00:00Z",
@@ -396,7 +396,7 @@ describe("ComposerArea（底部区：focus 小条 + 输入区）", () => {
     ],
   };
 
-  it("推演形态（D3）：小条显「推演节点 · N 个」，N = 项目**可见**标记数（失效 id 不计）", () => {
+  it("推演形态：小条显「推演节点 · N 个」，N = 项目**可见**标记数（失效 id 不计）", () => {
     Object.assign(useChatStore.getInitialState(), { focusContext: { focus_deduction: true } });
     Object.assign(useProjectStore.getInitialState(), {
       config: { ...makeConfig("p-1"), deductionNodes: ["ch-1", "ch-404"] },
@@ -666,7 +666,7 @@ describe("focus 小条文案（C2：不再直显裸 entity id）", () => {
     expect(focusLabel({})).toBe("当前内容");
   });
 
-  it("推演形态（D3）：文案 = 「推演节点 · N 个」；集合无名称位；N 缺失 → 省略数字", () => {
+  it("推演形态：文案 = 「推演节点 · N 个」；集合无名称位；N 缺失 → 省略数字", () => {
     expect(focusLabel({ focus_deduction: true }, undefined, 2)).toBe("推演节点 · 2 个");
     // 无名称可解析（名称参数不参与）；N 缺失（大纲/配置未加载）→ 不显「0 个」假值
     expect(focusLabel({ focus_deduction: true }, "不该出现", 2)).toBe("推演节点 · 2 个");

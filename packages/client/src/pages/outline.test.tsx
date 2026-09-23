@@ -1,4 +1,4 @@
-// 大纲页树视图的推演节点徽标走查（卡片 D2）：仓内无 jsdom，用 react-dom/server 直渲染页面
+// 大纲页树视图的推演节点徽标走查：仓内无 jsdom，用 react-dom/server 直渲染页面
 // （同 pages/reference-list.test.tsx 惯例）。
 // 覆盖：章行徽标文案 / title（含章号与 k / N）/ 位置（「阅读进度」左侧）/ 卷与场景行无徽标。
 // 右键菜单项活在 portal 里、关闭态不渲染 ⇒ 菜单文案由 lib/deduction.test.ts 的纯函数覆盖，
@@ -78,7 +78,7 @@ function rowHtml(html: string, nodeId: string): string {
   return html.slice(start, end === -1 ? undefined : end);
 }
 
-describe("大纲页树视图：推演节点徽标（卡片 D2）", () => {
+describe("大纲页树视图：推演节点徽标", () => {
   it("多标记：首位「推演起点」/ 末位「推演终点」，title = 文案（第N章）· 第 k / 共 N 个推演节点", () => {
     const html = render({ deductionNodes: ["ch-1", "ch-3"] });
     expect(rowHtml(html, "ch-1")).toContain('title="推演起点（第1章） · 第 1 / 共 2 个推演节点"');

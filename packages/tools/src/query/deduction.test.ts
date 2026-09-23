@@ -1,4 +1,4 @@
-// 查询类工具测试：推演节点标记只读（get_deduction_marks，卡 D4）
+// 查询类工具测试：推演节点标记只读（get_deduction_marks）
 // 覆盖：无标记 / 标记全部失效（不存在、场景、软删章、软删卷下的章）/ 单标记（role+章号+path）/
 // 多标记（树序排序、role start·node·end、跨卷）/ 区间骨架（chapter_count / middle 清单 /
 // written_chapters 只数中间章）/ path 含存量根级章 / summary 缺失不写键

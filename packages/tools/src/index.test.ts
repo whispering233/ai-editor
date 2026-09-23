@@ -69,7 +69,7 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
   });
 
  // 跨包单源守卫：shared 的工具目录常量（AUTO_TOOLS + PROPOSAL_TOOLS）与 registry 事实源必须**同集**——
- // 新增工具只改 registry 不改 shared 常量（或反之）时，此处报红（D4 前两者无同步守卫，目录常量曾静默漂移）。
+ // 新增工具只改 registry 不改 shared 常量（或反之）时，此处报红（此前两者无同步守卫，目录常量曾静默漂移）。
  // EXECUTOR_TOOLS 不参与：执行类工具**不注册 registry**（LLM 不可见，见 ./index.js 头注释）。
  // 断言放本文件而非 registry.test.ts：后者会注册 4 个测试辅助工具，listTools 并非纯目录。
   it("shared 工具目录常量与 registry 注册表同集（无遗漏 / 无多余）", () => {
