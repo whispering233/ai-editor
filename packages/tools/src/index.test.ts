@@ -3,7 +3,7 @@
 // S6.5 伏笔 5 + S6.6 提案 16 + S6.7 卡 12.9（get_chapter_text）1 = 36 个；执行 13 个不暴露）；
 // workspace 依赖 @whispering233/ai-editor-db / @whispering233/ai-editor-shared 解析由 import 在编译/运行期验证
 import { describe, expect, it } from "vitest";
-import { DEFAULT_HALF_LIFE, PROPOSAL_TOOLS } from "@whispering233/ai-editor-shared";
+import { CHARACTER_PRIORITIES, CHARACTER_PRIORITY_LABELS, DEFAULT_HALF_LIFE, PROPOSAL_TOOLS } from "@whispering233/ai-editor-shared";
 import * as m from "./index";
 
 describe("@whispering233/ai-editor-tools 入口冒烟", () => {
@@ -45,6 +45,16 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
     for (const [timing, chapters] of Object.entries(DEFAULT_HALF_LIFE)) {
       expect(hookHealthDescription).toContain(`${timing}=${chapters}`);
     }
+ // 角色优先级档防漂移：两处实体提案 description 的档位片段由 shared 常量插值生成——
+ // 期望值现算于常量（不手抄中文 / 不复述清单）；改成手写、漏一档、顺序漂移，逐项比对即报红
+    const priorityPairs = CHARACTER_PRIORITIES.map((key) => `${key}(${CHARACTER_PRIORITY_LABELS[key]})`).join("/");
+    for (const name of ["propose_create_entity", "propose_update_entity"]) {
+      const description = m.getTool(name)!.description;
+      expect(description).toContain(`priority=${priorityPairs}`);
+      expect(description).toContain("省略或 null = 未分级");
+    }
+ // 已移除字段（REMOVED_CHARACTER_FIELDS 会拒）不得作为角色 data 示例：旧文案会把模型引向必然失败
+    expect(m.getTool("propose_create_entity")!.description).not.toContain("role/status");
  // 提案类工具权限为 PROPOSAL（「提案类（需确认）」）
     expect(m.getTool("propose_create_entity")!.permission).toBe("proposal");
     expect(m.getTool("propose_abandon_hook")!.permission).toBe("proposal");

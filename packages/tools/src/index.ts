@@ -38,7 +38,13 @@ export * from "./proposal/reference.js";
 // S6.7 执行层：导出 executor 门面与执行函数（不注册工具——见文件头注释）
 export * from "./executor/index.js";
 
-import { DEFAULT_HALF_LIFE, RELATION_TYPES, TOOL_PERMISSION } from "@whispering233/ai-editor-shared";
+import {
+  CHARACTER_PRIORITIES,
+  CHARACTER_PRIORITY_LABELS,
+  DEFAULT_HALF_LIFE,
+  RELATION_TYPES,
+  TOOL_PERMISSION,
+} from "@whispering233/ai-editor-shared";
 import {
   computeStateArgsSchema,
   getChapterTextArgsSchema,
@@ -263,6 +269,14 @@ const halfLifeDefaultsText = Object.entries(DEFAULT_HALF_LIFE)
   .map(([timing, chapters]) => `${timing}=${chapters}`)
   .join("/");
 
+// 角色优先级档的模型可见文案（两处实体提案 description 共用）：档位取值 / 顺序 / 中文标签插值自
+// shared `CHARACTER_PRIORITIES` / `CHARACTER_PRIORITY_LABELS`（单源，禁止在 description 里复述字面量）——
+// 回归断言见 index.test.ts「角色优先级档文案 = 常量插值」
+const characterPriorityText =
+  "角色 priority=" +
+  CHARACTER_PRIORITIES.map((key) => `${key}(${CHARACTER_PRIORITY_LABELS[key]})`).join("/") +
+  "，省略或 null = 未分级";
+
 /** 伏笔分析工具定义（S6.5，「工具扩展」+；权限全为 AUTO） */
 const hookToolDefs: ToolDefinition[] = [
   {
@@ -371,7 +385,9 @@ const proposalToolDefs: ToolDefinition[] = [
     name: "propose_create_entity",
     description:
       "创建实体提案：向用户提议新建实体。type 取值 character|setting|location|hook，name 必填，" +
-      "data 可选（自定义字段，如角色 role/status、伏笔 payoff_timing）。" +
+      "data 可选（自定义字段，如角色 role/priority、伏笔 payoff_timing；" +
+      characterPriorityText +
+      "）。" +
       "仅生成提案（返回 proposal_id + 一句话摘要），需用户在界面确认后才生效——请勿重复提案或视为已创建。",
     parameters: proposeCreateEntityArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,
@@ -380,7 +396,9 @@ const proposalToolDefs: ToolDefinition[] = [
   {
     name: "propose_update_entity",
     description:
-      "更新实体提案：entity_id 指定实体，patches 为要修改的 data 字段（至少一项，浅合并——未传字段保留）。" +
+      "更新实体提案：entity_id 指定实体，patches 为要修改的 data 字段（至少一项，浅合并——未传字段保留；" +
+      characterPriorityText +
+      "）。" +
       "仅生成提案，需用户确认后生效；确认时服务端校验实体未被他人改动（updated_at 快照比对），" +
       "实体不存在或已软删返回错误。",
     parameters: proposeUpdateEntityArgsSchema,
