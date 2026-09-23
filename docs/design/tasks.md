@@ -71,7 +71,7 @@
 **硬完成判据**：
 
 - `pnpm -r build` → `pnpm typecheck` → `pnpm lint` → `pnpm -r test` 全绿（本卡不删 shared 契约 ⇒ 全仓绿是可达的，不接受「分卡验收」）。
-- `rg -n 'decompose|Decompose|拆解' packages/server/src` 只允许预期残留（逐条列出、附理由）：`middleware/project.ts` 的 `getDecomposeJob` / `pauseRunningJobs` import 与拆解注释（卡 3）、`middleware/error.ts` 的 `SESSION_READONLY`（卡 3）、`routes/chat.ts` 对 shared 前缀常量的引用（若有，卡 3）。shared / db / client 不在本卡 rg 范围。`git diff --stat` 只允许含 `packages/server/**`、`packages/shared/src/types/api.ts`（仅 name 注释行）、`scripts/**`、`docs/**`。
+- `rg -n 'decompose|Decompose|拆解' packages/server/src` 只允许预期残留（逐条列出、附理由）：`middleware/project.ts` 的 `getDecomposeJob` / `pauseRunningJobs` import 与拆解注释（卡 3）、三个 project 类测试文件里用 db `createDecomposeJob` 造 job 行验保留行为（卡 3）、`routes/chat.ts` 对 shared 前缀常量的引用（若有，卡 3）。⚠ 修正：`SESSION_READONLY` 定义在 **shared 枚举**（`types/api.ts` 的 `ERROR_CODES`），不在 `middleware/error.ts` 的 `SERVER_ERROR_CODES`（卡 2 判据原文笔误）。shared / db / client 不在本卡 rg 范围。`git diff --stat` 只允许含 `packages/server/**`、`packages/shared/src/types/api.ts`（仅 name 注释行）、`scripts/**`、`docs/**`。
 - `rg -n 'api/v1/decompose'` 零命中；`docs/design/60-decompose.md` 与 `docs/api/120-api-decompose.md` 已不存在。
 - 汇报附 commit hash + 命令输出 + `git status` 干净。
 
@@ -84,7 +84,9 @@
 - `packages/shared`：删 `types/api.ts` 的**拆解端点 schema 整段**（analyze/start/plan/continue/job/batches/log/pause/resume/rerun + 14 个 `Decompose*` 类型）与 `ERROR_CODES.SESSION_READONLY`（`types/api.test.ts` 的拆解用例同步删）；删 `constants/decompose.ts` 整文件 + `constants/index.ts` 导出行；删 `constants/project.ts` 整文件（`PROJECT_ORIGINS` / `ProjectOrigin`）；`types/project.ts` 的 `origin?` 字段；`types/api.ts` 的 `projectListResSchema.origin`。
 - `packages/client/src/lib/shelf.ts`：删 `SHELF_GROUPS` / `ShelfGroup` / `groupShelfBooks`（**保留 `isCurrentBook`**）；`pages/Dashboard.tsx` 直接渲染 `bookshelf.books`（删组小标题与空组逻辑）；测试同步（`lib/shelf.test.ts` / `dashboard-shelf.test.ts` / `dashboard-cloud-restore.test.ts` / `api.test.ts` / `project.test.ts`）。
 
-**文档**：`db/schema.md`（迁移链 + 011、§两表整段、`origin` 行）、`design/config.md`（`decompose` 段三处 → 「键已废止，读侧忽略」）、`10-data-model.md:135`、`30-agent-loop.md:51`、`api/10-api-project.md`（111 / 131 / 139）、`api/error-code.md`（`SESSION_READONLY` 行）、`ui/DESIGN.md`（两组小标题段 + 删书后果一句）。
+**文档**：`db/schema.md`（迁移链 + 011、§两表整段、`origin` 行）、`design/config.md`（`decompose` 段三处 → 「键已废止，读侧忽略」）、`10-data-model.md:135`、`30-agent-loop.md:51`、`api/10-api-project.md`（111 / 131 / 139）、`api/error-code.md`（`SESSION_READONLY` 行 + 8 个 `DECOMPOSE_*` 行 + 第 3 行「拆解小说八码」+ 第 45 行 `/decompose/job` 说明）、`ui/DESIGN.md`（两组小标题段 + 删书后果一句——后者仍写「在跑的拆解任务会被取消」而代码已改，属卡 1 遗留漂移）。
+
+**源码注释里的悬空引用**（卡 1/2 实测清单，本卡清）：`shared/src/constants/decompose.ts:3`、`shared/src/types/api.ts`（1214 / 1331 / 1437）、`shared/src/types/api.test.ts:720`、`db/src/tables.ts:102`、`db/src/queries/decompose.ts`（整文件删）、`db/src/queries/decompose.test.ts:31`——全部指向已删的 `60-decompose.md` / `120-api-decompose.md`；删文件即消，只余 shared/db 保留段的注释需改写。
 
 **硬完成判据**：
 
@@ -100,7 +102,7 @@
 - `README.md`：书架描述、AI 运行时行、功能清单里的拆解条目、仓库结构里的 `references/` 说明。
 - `backlog.md`：拆解相关 35 处全删（含「拆解小说（已交付，未排期项）」整节）。
 - `docs/ui/DESIGN.md` 与其余文档兜底清扫。
-- **残留归零核验**：全仓 `rg -n 'decompose|Decompose|拆解'` 只允许命中——CHANGELOG 已发布版本段、`migrations/009_decompose.ts` / `010_decompose_concurrency.ts` 及其测试（历史迁移链，注释里注明「拆解功能已在 v0.0.55 移除，本迁移仅服务旧库路径」）、`00-master-design.md` 的边界声明。
+- **残留归零核验**：全仓 `rg -n 'decompose|Decompose|拆解'` 只允许命中——CHANGELOG 已发布版本段、`migrations/009_decompose.ts` / `010_decompose_concurrency.ts` 及其测试（历史迁移链，注释里注明「拆解功能已移除（见 CHANGELOG），本迁移仅服务旧库升级路径」）、`00-master-design.md` 的边界声明。
 - 判据：`pnpm -r build` + `pnpm typecheck` + `pnpm lint` + `pnpm -r test` 全绿 + 上述 `rg` 清单逐条核对 + commit hash。
 
 ---
