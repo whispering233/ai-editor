@@ -215,6 +215,7 @@ describe("openProject（POST /api/v1/project/open）", () => {
       language: "zh",
       schemaVersion: 1,
       currentPosition: null,
+      deductionNodes: [],
       createdAt: "2026-08-01T10:00:00Z",
       updatedAt: "2026-08-01T10:00:00Z",
     };
@@ -247,6 +248,7 @@ describe("openProject（POST /api/v1/project/open）", () => {
       language: "zh",
       schemaVersion: 1,
       currentPosition: null,
+      deductionNodes: [],
       createdAt: "2026-08-01T10:00:00Z",
       updatedAt: "2026-08-01T10:00:00Z",
     };

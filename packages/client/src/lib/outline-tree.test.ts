@@ -591,6 +591,41 @@ describe("numberOutline（展示口径编号：卷序 + 全局章序）", () => 
     expect(labels.get("ch-2")).toBe("第2章");
   });
 
+  it("畸形树（场景直挂卷 / 卷下套卷）：非章不编号、嵌套章不建行（严格三层前提回归锁）", () => {
+    // 历史实现把「卷下的任意子节点」一律当章编号（sc-x → 第1章）；shared 可见章序只认 type === "chapter"。
+    // **前提**：严格三层（卷→章）是数据契约（`assertCanHold` 写入侧单点）——本条只锁「手改 outline.json 的
+    // 防御面」下客户端不产出错误编号（嵌套卷下的章不建行：shared 可见章序会递归、客户端行归属卷只认一层，
+    // 两者在畸形树上刻意不同——客户端宁可不出行，也不给出无卷归属的错行）。
+    const tree = {
+      id: "root",
+      type: "root",
+      schemaVersion: 1,
+      children: [
+        {
+          id: "vol-1",
+          type: "volume",
+          title: "第一卷",
+          updatedAt: "t",
+          children: [
+            { id: "sc-x", type: "scene", title: "直挂卷的场景", updatedAt: "t" },
+            {
+              id: "vol-nested",
+              type: "volume",
+              title: "卷下套卷",
+              updatedAt: "t",
+              children: [{ id: "ch-1", type: "chapter", title: "第一章", updatedAt: "t" }],
+            },
+          ],
+        },
+      ],
+    } as unknown as OutlineTree;
+    const { labels, chapterRows } = numberOutline(tree);
+    expect(labels.has("sc-x")).toBe(false);
+    expect(labels.has("vol-nested")).toBe(false);
+    expect(labels.has("ch-1")).toBe(false);
+    expect(chapterRows).toEqual([]);
+  });
+
   it("null 树 / 空树 → 空编号", () => {
     expect(numberOutline(null)).toEqual({ labels: new Map(), chapterRows: [] });
     expect(numberOutline({ id: "root", type: "root", schemaVersion: 1, children: [] })).toEqual({
