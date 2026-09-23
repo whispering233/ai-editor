@@ -239,11 +239,22 @@ describe("listEntities", () => {
       "INSERT INTO entities (id, type, name, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
     ).run("char-bad-priority", "character", "优先坏行", "{", "2026-09-09T00:00:00Z", "2026-09-09T00:00:00Z");
     createEntity(db, { type: "character", name: "优先有档", data: { priority: "protagonist" } });
+    createEntity(db, { type: "character", name: "优先龙套", data: { priority: "extra" } });
+    createEntity(db, { type: "character", name: "优先无档" });
+ // 固定时间戳：坏行（09-09）新于「无档」（09-01）——证明二者同档、组内按 updated_at 降序；
+ // 「龙套」取最老——证明坏行排在**最低已分级档之后**（断言 rank 分组，不只是「不抛错」）
+    const stamp = (name: string, t: string): void => {
+      db.prepare("UPDATE entities SET created_at = ?, updated_at = ? WHERE name = ?").run(t, t, name);
+    };
+    stamp("优先龙套", "2026-09-01T00:00:00Z");
+    stamp("优先无档", "2026-09-01T00:00:00Z");
     const stamped = listEntities(db, { type: "character", q: "优先", sort: "priority" }); // 不抛错
-    expect(stamped.items.map((i) => i.name)).toEqual(["优先有档", "优先坏行"]); // 坏行走外层 ELSE 沉底
-    expect(stamped.total).toBe(2);
+ // 内外层 ELSE 都取档位数 ⇒ 坏行与未分级同档（最低档之后）；若 ELSE 被误写成 0（浮进主角档）
+ // 或坏行被当成其他档，本断言即报红——只断言「不抛错」防不住这类回归
+    expect(stamped.items.map((i) => i.name)).toEqual(["优先有档", "优先龙套", "优先坏行", "优先无档"]);
+    expect(stamped.total).toBe(4);
  // 回归对照：坏行在常规排序档下同样正常（本改动不影响其他档）
-    expect(listEntities(db, { type: "character", q: "优先", sort: "updated_at" }).total).toBe(2);
+    expect(listEntities(db, { type: "character", q: "优先", sort: "updated_at" }).total).toBe(4);
   });
 
   it("sort=priority：非 character 类型无档位——退化为最近更新降序（不抛错）", () => {
