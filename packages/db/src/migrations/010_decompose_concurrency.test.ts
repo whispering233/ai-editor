@@ -1,5 +1,7 @@
 // 010 迁移测试（decompose_jobs 新增 concurrency 列：拆解并发段数快照，纯 DDL + 存量行回填）
-// 覆盖：v9 库（decompose_jobs 缺 concurrency 列）经迁移链升到 v10——列建出且存量行回填 1、
+// **历史迁移测试**（拆解功能已整功能移除，见 CHANGELOG；009/010 保留仅为旧库升级链连续）——
+// 本文件只测 009/010 两步自身：当前 DDL 已不含两表，完整链的终点 011 会把它们 DROP。
+// 覆盖：v9 库（decompose_jobs 缺 concurrency 列）跑 010——列建出且存量行回填 1、
 // 既有批行数据完好；重复执行幂等（版本已对齐无 pending；手工回退版本重跑不撞 duplicate column）；
 // 全新空库短路（user_version=0 + 当前 DDL 空库 → 只对齐版本号，不重建、不备份、不碰 outline.json）。
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -12,7 +14,11 @@ import { getUserVersion, SCHEMA_VERSION, setUserVersion } from "../schema.js";
 import { ensureSchemaCompatible, runMigrations } from "../queries/migration.js";
 import { OUTLINE_FILE_NAME, readOutlineFile, writeOutlineFile } from "../storage/outline.js";
 import type { OutlineFileTree } from "@whispering233/ai-editor-shared";
-import { MIGRATIONS } from "./index.js";
+import migration009 from "./009_decompose.js";
+import migration010 from "./010_decompose_concurrency.js";
+
+/** 只跑历史链路里的拆解两步（完整链 011 会把两表 DROP，本文件不覆盖那一步） */
+const DECOMPOSE_STEPS = [migration009, migration010];
 
 const T1 = "2026-09-01T10:00:00Z";
 
@@ -39,13 +45,12 @@ function columnNames(d: Db, table: string): string[] {
 }
 
 /**
- * 造 v9 库：当前 DDL 库删掉 010 新增的 concurrency 列（纯 DDL 迁移的结构差异即这一列）
+ * 造 v9 库：注入历史迁移 009 建出两表（当前 DDL 已不含它们，无 concurrency 列 = v9 形状）
  * + 补一行 job 与一行批（存量行 = 回填对象）+ user_version=9。
- * SQLite ≥ 3.35 支持 DROP COLUMN（本仓 better-sqlite3 实测 3.53）。
  */
 function createV9Db(): Db {
   const d = openDatabase(dbPath);
-  d.exec("ALTER TABLE decompose_jobs DROP COLUMN concurrency");
+  migration009.up(d, { projectRoot: dir });
   d.prepare(
     `INSERT INTO decompose_jobs (id, status, scope_start, scope_end, batch_target_chars, model, merge_written, error, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -68,14 +73,14 @@ afterEach(() => {
 });
 
 describe("010_decompose_concurrency 迁移（v9 → v10，decompose_jobs.concurrency）", () => {
-  it("v9 库升级：列建出（列序与声明一致）且存量行回填 1、既有批行数据完好、版本推进到 SCHEMA_VERSION", () => {
+  it("v9 库升级：列建出（列序与声明一致）且存量行回填 1、既有批行数据完好、版本推进到 v10", () => {
     db = createV9Db();
     expect(columnNames(db, "decompose_jobs")).not.toContain("concurrency"); // 前置：v9 结构确实缺列
 
-    const { applied } = runMigrations(db, { migrations: MIGRATIONS, dbPath });
-    expect(applied.map((m) => m.version)).toEqual([10]); // 010 已聚合进 MIGRATIONS
-    expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
-    expect(SCHEMA_VERSION).toBe(10);
+    const { applied } = runMigrations(db, { migrations: DECOMPOSE_STEPS, dbPath });
+    expect(applied.map((m) => m.version)).toEqual([10]); // 009 已由 createV9Db 跑过，010 在此推进
+    expect(getUserVersion(db)).toBe(10);
+    expect(SCHEMA_VERSION).toBe(11); // 当前版本号已越过两步（完整链终点 = 011 移除两表）
 
     // 列序 = ALTER 追加在表末（新库 DDL 把该列放在 batch_target_chars 之后——顺序对查询无语义，
     // 两处都按列名访问；类型 / NOT NULL 一致由 schema.test.ts 的声明层断言锁住）
@@ -109,22 +114,22 @@ describe("010_decompose_concurrency 迁移（v9 → v10，decompose_jobs.concurr
 
   it("迁移幂等：版本已对齐 → 无 pending；手工回退版本重跑 → 不撞 duplicate column、旧行不丢", () => {
     db = createV9Db();
-    runMigrations(db, { migrations: MIGRATIONS, dbPath });
+    runMigrations(db, { migrations: DECOMPOSE_STEPS, dbPath });
 
     // 版本已对齐：无 pending、不再执行
-    const again = runMigrations(db, { migrations: MIGRATIONS, dbPath });
+    const again = runMigrations(db, { migrations: DECOMPOSE_STEPS, dbPath });
     expect(again.applied).toEqual([]);
     expect(again.snapshot).toBeNull();
 
     // 手工回退版本号后重跑（异常重试路径）：列已在 ⇒ 跳过 ALTER（ALTER TABLE ADD COLUMN 无 IF NOT EXISTS）
     setUserVersion(db, 9);
-    expect(() => runMigrations(db, { migrations: MIGRATIONS, dbPath })).not.toThrow();
-    expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
+    expect(() => runMigrations(db, { migrations: DECOMPOSE_STEPS, dbPath })).not.toThrow();
+    expect(getUserVersion(db)).toBe(10);
     expect(columnNames(db, "decompose_jobs").filter((name) => name === "concurrency")).toHaveLength(1);
     expect(db.prepare("SELECT concurrency FROM decompose_jobs WHERE id = ?").get("job-legacy")).toEqual({ concurrency: 1 });
   });
 
-  it("全新空库短路：v0 + 当前 DDL（含 concurrency 列）→ 只对齐版本号，不重建、不备份、不碰 outline.json", () => {
+  it("全新空库短路：v0 + 当前 DDL（已无两表）→ 只对齐版本号，不重建、不备份、不碰 outline.json", () => {
     db = openDatabase(dbPath); // 缺 data.db 的书：就地建出当前 DDL 空库，user_version=0
     writeOutlineFile(dir, dirtyTree());
     const outlineRawBefore = readFileSync(join(dir, OUTLINE_FILE_NAME), "utf8");
@@ -138,6 +143,9 @@ describe("010_decompose_concurrency 迁移（v9 → v10，decompose_jobs.concurr
     expect(readFileSync(join(dir, OUTLINE_FILE_NAME), "utf8")).toBe(outlineRawBefore);
     expect(readOutlineFile(dir)).toEqual(dirtyTree());
     expect(readdirSync(dir).filter((f) => f.endsWith(".bak"))).toEqual([]); // 无任何备份产物
-    expect(columnNames(active, "decompose_jobs")).toContain("concurrency"); // 当前 DDL 本就含该列
+    const legacy = active
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('decompose_jobs', 'decompose_batches')")
+      .all() as Array<{ name: string }>;
+    expect(legacy).toEqual([]); // 两表已随 011 从 DDL 移除（新库不建）
   });
 });

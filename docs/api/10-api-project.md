@@ -108,7 +108,7 @@
 
 1. **删除前推送（纯本地判据，不碰网络）**：`cloud.json` 已配置**且**该书有 book state（推过/拉过）→ 先打包本机最新状态并推送一次（未打开的书临时开 data.db，同覆盖前快照管道）；其余情况（云盘未配置 / 该书从未上云 = 「一个云端备份都没有」）→ 直接删，不发任何云端请求。
 2. **推送链路失败 → 不删**，按原错误码返回（云错误：不可达 / 认证 / 配额 → 502 `CLOUD_*`；冲突 → 409 `CLOUD_CONFLICT`；备份包超云盘单文件上限 → 400 `CLOUD_BACKUP_TOO_LARGE`；打包或统计失败等本机错误 → 500 `INTERNAL_ERROR`）；`force: true` 才继续删（最新改动不会上云，风险由用户确认时承担）。**前置推送对未打开的书用裸连接打开 `data.db`（不走 open 的版本对齐管道）**——删书不应触发迁移/重建；版本更高导致的读取失败按 500 处理（可 `force` 越过）。
-3. **删除动作顺序**：取消在跑拆解 job（若该书有）→ 若删的是当前打开的书：`closeProject` + 清空 `currentProject` + 抹掉 `<创作根>/.ai-editor/config.json` 的 `lastProject` 键（下次启动回书架，不指向已删目录）→ 物理删目录。
+3. **删除动作顺序**：若删的是当前打开的书：`closeProject` + 清空 `currentProject` + 抹掉 `<创作根>/.ai-editor/config.json` 的 `lastProject` 键（下次启动回书架，不指向已删目录）→ 物理删目录。
 4. **`deleteRemote` 是 best-effort**：在本地删除**之后**执行（WebDAV 集合删除 = 尾斜杠 + `Depth: infinity` + 清 `cloud.json` state）；失败不改变「本地已删」的结果，以 `remoteError` 返回，UI 提示可去云盘网页手动清理。
 5. 目标已是当前书时，删完客户端应回书架并发刷新书架/项目配置/云端状态。
 
@@ -128,7 +128,6 @@
     id: string;        // project.json 的 id（**项目身份**：当前书高亮/打开判定一律按它，不按 name）
     name: string;      // 目录名（书名）
     path: string;      // 书目录绝对路径（创作根/books/<书名>/）
-    origin: "book" | "decompose";  // 出处：book = 手建/导入（缺省；project.json 无该字段即归此类），decompose = 由「拆解小说」建档
     updatedAt: string; // project.json 的 updated_at（ISO 8601）
   }>;
 }
@@ -136,7 +135,7 @@
 
 **语义**：
 - **不依赖当前项目**——书架模式待命（无 currentProject）时同样可用；`books/` 不存在返回空数组（不报错）。
-- 排序按 `updatedAt` 倒序（最近更新在前）；书架按 `origin` 分「小说项目 / 小说拆解」两组展示（空组不渲染）。
+- 排序按 `updatedAt` 倒序（最近更新在前）；书架按此顺序平铺展示（无分组）。
 - 过滤规则：仅目录 + 含 `project.json`（`readProjectFile` 探测）；`books/` 下无 project.json 的目录（如草稿箱）与普通文件不列出。
 - 兼容旧语义：创作根自身若有 `project.json`（旧部署模式）仍按 `detectProject` 打开，`list` 只列 `books/` 子目录（根自身不是书）。
 

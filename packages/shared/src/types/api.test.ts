@@ -9,15 +9,6 @@ import {
   characterDataSchema,
   chatSendReqSchema,
   chatSessionSummarySchema,
-  decomposeAnalyzeQuerySchema,
-  decomposeAnalyzeResSchema,
-  decomposeBatchResSchema,
-  decomposeJobResSchema,
-  decomposePauseResSchema,
-  decomposeRerunResSchema,
-  decomposeResumeResSchema,
-  decomposeStartQuerySchema,
-  decomposeStartResSchema,
   deltaChangeSchema,
   deltaComputeReqSchema,
   deltaCreateReqSchema,
@@ -80,7 +71,6 @@ describe("ErrorCode 完整性", () => {
     expect(ERROR_CODES).toContain("TOOL_RESULT_TOO_LARGE");
     expect(ERROR_CODES).toContain("SESSION_NOT_FOUND");
     expect(ERROR_CODES).toContain("SESSION_BUSY");
-    expect(ERROR_CODES).toContain("SESSION_READONLY"); // 拆解会话只读（decompose- 前缀）
     expect(ERROR_CODES).toContain("CHAT_BUSY");
     expect(ERROR_CODES).toContain("THINKING_NOT_FOUND");
     expect(ERROR_CODES).toContain("DOCUMENT_STALE"); // 块文档版本戳冲突（仅携带 base_updated_at 时校验）
@@ -186,42 +176,42 @@ describe("project 端点", () => {
     expect(projectBackupReqSchema.safeParse({ name: "x", extra: 1 }).success).toBe(false);
   });
 
-  it("projectListResSchema：合法响应 parse 通过（books 数组、id/origin 必填、倒序语义由服务端保证）", () => {
+  it("projectListResSchema：合法响应 parse 通过（books 数组、id 必填、倒序语义由服务端保证）", () => {
     const res = projectListResSchema.parse({
       rootPath: "/home/me/bookshelf",
       books: [
-        { id: "proj-2", name: "第二本", path: "/home/me/bookshelf/books/第二本", origin: "decompose", updatedAt: "2026-08-02T10:00:00Z" },
-        { id: "proj-1", name: "第一本", path: "/home/me/bookshelf/books/第一本", origin: "book", updatedAt: "2026-08-01T10:00:00Z" },
+        { id: "proj-2", name: "第二本", path: "/home/me/bookshelf/books/第二本", updatedAt: "2026-08-02T10:00:00Z" },
+        { id: "proj-1", name: "第一本", path: "/home/me/bookshelf/books/第一本", updatedAt: "2026-08-01T10:00:00Z" },
       ],
     });
     expect(res.rootPath).toBe("/home/me/bookshelf");
     expect(res.books).toHaveLength(2);
     expect(res.books[0].name).toBe("第二本");
-    expect(res.books[0].origin).toBe("decompose");
+    expect(res.books[0].id).toBe("proj-2");
   });
 
-  it("projectListResSchema：books 为空数组合法；缺字段（id / origin）/ 未知 origin / 类型不符拒绝", () => {
+  it("projectListResSchema：books 为空数组合法；缺字段（id / name / path / updatedAt）/ 类型不符拒绝", () => {
  // 空书架合法
     expect(projectListResSchema.parse({ rootPath: "/x", books: [] }).books).toEqual([]);
  // 书缺 updatedAt → 拒绝
     expect(
       projectListResSchema.safeParse({
         rootPath: "/x",
-        books: [{ id: "proj-1", name: "书", path: "/x/books/书", origin: "book" }],
+        books: [{ id: "proj-1", name: "书", path: "/x/books/书" }],
       }).success,
     ).toBe(false);
- // 书缺 origin（服务端必须归一，不得缺失）→ 拒绝
+ // 书缺 id（项目身份，不得缺失）→ 拒绝
     expect(
       projectListResSchema.safeParse({
         rootPath: "/x",
-        books: [{ id: "proj-1", name: "书", path: "/x/books/书", updatedAt: "2026-08-01T10:00:00Z" }],
+        books: [{ name: "书", path: "/x/books/书", updatedAt: "2026-08-01T10:00:00Z" }],
       }).success,
     ).toBe(false);
- // origin 枚举外取值 → 拒绝
+ // id 非 string → 拒绝
     expect(
       projectListResSchema.safeParse({
         rootPath: "/x",
-        books: [{ id: "proj-1", name: "书", path: "/x/books/书", origin: "imported", updatedAt: "2026-08-01T10:00:00Z" }],
+        books: [{ id: 1, name: "书", path: "/x/books/书", updatedAt: "2026-08-01T10:00:00Z" }],
       }).success,
     ).toBe(false);
  // rootPath 非 string → 拒绝
@@ -613,7 +603,7 @@ describe("OUTLINE_NODE_DATA_SCHEMAS", () => {
 });
 
 describe("chat 端点", () => {
-  it("会话列表项：name（会话名）可选——拆解会话回传；普通会话缺省", () => {
+  it("会话列表项：name（会话名）可选——有名字时回传，缺省省略", () => {
     const base = {
       id: "sess-1",
       lastMessage: "帮我梳理第三章的冲突",
@@ -621,8 +611,8 @@ describe("chat 端点", () => {
       createdAt: "2026-08-01T10:00:00Z",
       updatedAt: "2026-08-01T11:00:00Z",
     };
-    expect(chatSessionSummarySchema.safeParse(base).success).toBe(true); // 无 name（普通 chat 会话）
-    expect(chatSessionSummarySchema.parse({ ...base, name: "《测试书》拆解" }).name).toBe("《测试书》拆解");
+    expect(chatSessionSummarySchema.safeParse(base).success).toBe(true); // 无 name（缺省会话名）
+    expect(chatSessionSummarySchema.parse({ ...base, name: "《测试书》写作笔记" }).name).toBe("《测试书》写作笔记");
     expect(chatSessionSummarySchema.safeParse({ ...base, name: 42 }).success).toBe(false);
   });
 
@@ -714,111 +704,6 @@ describe("settings/llm 端点 schema（pi provider 目录契约）", () => {
     expect(settingsLlmPutReqSchema.safeParse({ api_key: { provider: "deepseek" } }).success).toBe(false);
     expect(settingsLlmPutReqSchema.safeParse({ thinking_level: "bogus" }).success).toBe(false);
     expect(settingsLlmPutReqSchema.safeParse({ model: 42 }).success).toBe(false);
-  });
-});
-
-describe("decompose 端点 schema（docs/api/120-api-decompose.md）", () => {
-  it("analyze query：file_name 必填，范围可选且为 1-based 整数", () => {
-    expect(decomposeAnalyzeQuerySchema.parse({ file_name: "斗破.txt" })).toEqual({ file_name: "斗破.txt" });
-    expect(decomposeAnalyzeQuerySchema.parse({ file_name: "斗破.txt", scope_start: "2", scope_end: "5" })).toEqual({
-      file_name: "斗破.txt",
-      scope_start: 2,
-      scope_end: 5,
-    });
-    expect(decomposeAnalyzeQuerySchema.safeParse({}).success).toBe(false);
-    expect(decomposeAnalyzeQuerySchema.safeParse({ file_name: "a.txt", scope_start: 0 }).success).toBe(false);
-  });
-
-  it("analyze Res：编码枚举 + 章列表全量 + 统计 + 警告 + 预估（costApprox 可为 null）", () => {
-    const valid = {
-      encoding: "gb18030" as const,
-      totalChars: 1000,
-      chapters: [{ index: 1, title: "第一章 起", charCount: 500, volumeIndex: 0 }],
-      volumes: [{ index: 0, title: "全书" }],
-      stats: { min: 500, median: 500, max: 500 },
-      warnings: [{ code: "FALLBACK_EQUAL_SPLIT", message: "未检测到章节结构" }],
-      estimate: { batchCount: 1, llmCalls: 3, inputTokensApprox: 1000, outputTokensApprox: 500, costApprox: null },
-      defaultName: "斗破",
-    };
-    const parsed = decomposeAnalyzeResSchema.parse(valid);
-    expect(parsed.estimate.costApprox).toBeNull();
-    expect(decomposeAnalyzeResSchema.safeParse({ ...valid, encoding: "latin1" }).success).toBe(false);
-    // median 可能是 x.5（偶数章取中位均值），不是整数
-    expect(decomposeAnalyzeResSchema.safeParse({ ...valid, stats: { min: 100, median: 150.5, max: 200 } }).success).toBe(true);
-  });
-
-  it("start query/Res：书名必填；status 只允许 pending / running", () => {
-    expect(decomposeStartQuerySchema.parse({ file_name: "a.txt", name: "斗破" })).toEqual({ file_name: "a.txt", name: "斗破" });
-    expect(decomposeStartQuerySchema.safeParse({ file_name: "a.txt" }).success).toBe(false);
-    const valid = {
-      projectId: "proj-1",
-      projectPath: "/books/斗破/",
-      name: "斗破",
-      jobId: "job-1",
-      status: "running" as const,
-      batchCount: 3,
-    };
-    expect(decomposeStartResSchema.parse(valid).jobId).toBe("job-1");
-    expect(decomposeStartResSchema.safeParse({ ...valid, status: "done" }).success).toBe(false);
-  });
-
-  it("job Res：状态机 / 阶段 / 进度 / 批列表（不含批结果正文）/ report 可为 null", () => {
-    const valid = {
-      jobId: "job-1",
-      status: "paused" as const,
-      stage: "extract" as const,
-      scopeStart: 1,
-      scopeEnd: 10,
-      createdAt: "2026-09-01T00:00:00Z",
-      updatedAt: "2026-09-01T00:10:00Z",
-      progress: { done: 1, failed: 0, total: 3 },
-      batches: [
-        {
-          seq: 1,
-          chapterIndexes: [1, 2],
-          chapterTitles: ["第一章", "第二章"],
-          charCount: 8000,
-          status: "done" as const,
-          attempts: 1,
-          error: null,
-        },
-      ],
-      error: null,
-      report: null,
-    };
-    const parsed = decomposeJobResSchema.parse(valid);
-    expect(parsed.batches[0].status).toBe("done");
-    expect(decomposeJobResSchema.safeParse({ ...valid, status: "cancelled" }).success).toBe(false);
-    expect(decomposeJobResSchema.safeParse({ ...valid, stage: "analyze" }).success).toBe(false);
-    expect(decomposeJobResSchema.safeParse({ ...valid, batches: [{ ...valid.batches[0], status: "cancelled" }] }).success).toBe(false);
-  });
-
-  it("batches Res：result 未完成 = null；抽取结果逐章对齐且必填字段逐项把门", () => {
-    expect(decomposeBatchResSchema.parse({ seq: 1, status: "pending", attempts: 0, error: null, result: null }).result).toBeNull();
-    const chapter = {
-      chapterIndex: 1,
-      chapterTitle: "第一章",
-      summary: "摘要",
-      characters: [{ name: "萧炎", role: "主角", description: "少年", personality: ["坚毅"], motivation: "变强" }],
-      settings: [{ name: "斗气", tags: ["体系"] }],
-      locations: [{ name: "乌坦城", type: "城池" }],
-      relations: [{ source: "萧炎", target: "纳兰嫣然", type: "rival", evidence: "退婚" }],
-    };
-    const withChapters = (chapters: unknown[]) =>
-      decomposeBatchResSchema.safeParse({ seq: 1, status: "done", attempts: 1, error: null, result: { chapters } });
-    expect(withChapters([chapter]).success).toBe(true);
-    for (const field of ["chapterIndex", "summary", "characters", "settings", "locations", "relations"] as const) {
-      const dropped = { ...chapter } as Record<string, unknown>;
-      delete dropped[field];
-      expect(withChapters([dropped]).success).toBe(false);
-    }
-  });
-
-  it("pause / resume / rerun Res：状态字面量与批序号", () => {
-    expect(decomposePauseResSchema.parse({ status: "paused" })).toEqual({ status: "paused" });
-    expect(decomposeResumeResSchema.parse({ status: "running" })).toEqual({ status: "running" });
-    expect(decomposeRerunResSchema.parse({ status: "running", seq: 2 })).toEqual({ status: "running", seq: 2 });
-    expect(decomposePauseResSchema.safeParse({ status: "running" }).success).toBe(false);
   });
 });
 

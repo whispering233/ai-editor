@@ -1,7 +1,5 @@
 // 项目配置类型：API 形态（camelCase）+ project.json 存储形态（snake_case）两套
 
-import type { ProjectOrigin } from "../constants/project.js";
-
 /** 项目语言 */
 export type ProjectLanguage = "zh" | "en";
 
@@ -38,12 +36,6 @@ export interface ProjectFileConfig {
  */
   prompt?: string;
   schema_version: number;
- /**
- * **项目出处（可选字段）**：`book` = 手建 / 导入的普通书籍（缺省，读侧缺失即按此值）、
- * `decompose` = 由「拆解小说」建档。**只增不改**（一本书一旦由拆解产生就恒为 decompose）；
- * 不参与 schema_version 判定（宽松读取，缺省兜底）——见 docs/db/schema.md「project.json」
- */
-  origin?: ProjectOrigin;
   current_position: string | null;
  /**
  * 自动备份频率（**可选字段**——旧项目文件可缺失，读侧兜底缺省 10；

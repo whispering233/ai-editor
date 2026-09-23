@@ -1,6 +1,6 @@
 // 删书端点测试（卡 23.4）：路径校验 / 云端前置推送（零请求 · 顺序 · 失败中止与 force）/
 // 当前书收尾（连接 + currentProject + lastProject）/ delete_remote（成功、best-effort 失败、推送后取目录名）/
-// 跨书 state 隔离 / 删非当前书不影响当前书的在跑拆解 job。
+// 跨书 state 隔离 / 删非当前书不影响当前项目的运行态。
 //
 // 契约：docs/api/10-api-project.md §POST /project/delete、docs/design/40-cloud-sync.md §4 / §8.5。
 // 云端用**内存版最小 WebDAV**（stub 全局 fetch）：既能断言请求序列与「推送发生在本地删除之前」，
@@ -10,12 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
-import {
-  createDecomposeJob,
-  getDecomposeJob,
-  readProjectFile,
-  updateJobStatus,
-} from "@whispering233/ai-editor-db";
+import { readProjectFile } from "@whispering233/ai-editor-db";
 import { errorHandler } from "../middleware/error.js";
 import {
   closeProject,
@@ -324,22 +319,12 @@ describe("POST /project/delete —— 当前书收尾", () => {
     expect(rootConfig.debug).toEqual({ enabled: true }); // 同文件其他键原样保留
   });
 
-  it("删非当前书：当前项目保持打开，其上的在跑拆解 job 不被暂停（零云端请求）", async () => {
-    const dirA = await createBook("跑拆解的书");
+  it("删非当前书：当前项目保持打开、连接不动（零云端请求）", async () => {
+    const dirA = await createBook("打开的书");
     const dirB = await createBook("被删的书");
     expect((await openBook(dirA)).status).toBe(200);
     const projectA = getCurrentProject();
     if (projectA === null) throw new Error("open 后应有当前项目");
-    const job = createDecomposeJob(projectA.db, {
-      scopeStart: 1,
-      scopeEnd: 1,
-      batchTargetChars: 1000,
-      concurrency: 1,
-      model: null,
-      batches: [],
-      now: "2026-08-01T10:00:00Z",
-    });
-    updateJobStatus(projectA.db, job.id, "running", "2026-08-01T10:00:01Z");
     const dirBSpy = stubDav(dirB).spy;
 
     const res = await request("/api/v1/project/delete", { path: dirB });
@@ -348,7 +333,6 @@ describe("POST /project/delete —— 当前书收尾", () => {
     expect(existsSync(dirB)).toBe(false);
     expect(getCurrentProject()).toBe(projectA);
     expect(projectA.db.open).toBe(true);
-    expect(getDecomposeJob(projectA.db)?.status).toBe("running"); // 未被 pauseRunningJobs 归一为 paused
     expect((await buildApp().request("/api/v1/project/config", { headers: HOST_HEADERS })).status).toBe(200);
     expect(dirBSpy).not.toHaveBeenCalled();
   });

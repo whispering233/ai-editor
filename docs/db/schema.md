@@ -37,8 +37,8 @@
   - `user_version > SCHEMA_VERSION`（未来版本）→ **拒绝打开** 409 `PROJECT_VERSION_NEWER`（数据原封不动，提示升级程序）；
   - `user_version < SCHEMA_VERSION`（旧版本）→ **有迁移路径**（`packages/db/src/migrations/` 存在从当前版本到目标版本的连续迁移链）→ `runMigrations` 前向迁移；**无迁移路径** → 删库重建兜底（备份 `data.db.v{n}.bak` + `outline.json.v{n}.bak`）。
 - **迁移机制**：`migrations/` 目录每个文件导出一个 `Migration = { version, up }`（`001_xxx.ts` → version 1），`index.ts` 按 version 升序聚合导出 `MIGRATIONS`（tsc 编译进 dist 随包分发，无运行时目录读取）。`runMigrations` 对缺失版本逐个执行：**每个迁移一个事务（`up(db)` + `setUserVersion(version)` 原子提交——成功 ⇒ 版本已写入；失败 ⇒ 版本未变）**；**整批迁移前自动快照** data.db → `data.db.v{n}.{YYYYMMDDHHmmssSSSZ}.bak`（checkpoint 后复制主文件，时间戳命名，失败重试现场保留）。迁移失败 → 该迁移回滚 + 版本停在前一迁移后，下次 open 重试。（**粒度注**：迁移侧快照为毫秒时间戳且**无去重循环**——同一毫秒的两次批量迁移会后者覆盖前者；真实升级路径不可达，与备份侧 backup 的 +1ms 去重口径不同但已接受。）
-- 当前 `SCHEMA_VERSION = 10`；迁移链：`002_event_timeline.ts`（version 2：entities 表 CHECK 扩入 `'event'` + 新增 `sort_order` 列）、`003_timepoint.ts`（version 3，G2 修订：entities 表 CHECK 扩入 `'timepoint'` + `event.data.time_label` 迁移为 timepoint 实体 + occurs_at 关系，同名 time_label 合并为同一 timepoint）、`004_setting_tags.ts`（version 4，K2 修订：**无 DDL**——setting 旧 `data.rules` 分类值复制到 `data.tags` 并移除 rules，仅 data JSON 数据迁移）、`005_reference.ts`（version 5：entities 表 CHECK 扩入 `'reference'`，无数据搬移仅 DDL）、`006_sessions_jsonl.ts`（version 6：**对话历史出库**——`chat_messages` 全量导出为旧格式 `sessions/<session_id>.jsonl` 后 `DROP TABLE`；产物为旧 v1 格式，现已被 pi session 格式取代、不再被读取（数据保留在磁盘）；**id 不合法的旧会话以 `sess_legacy_<sha256 前 16 位>` 文件名导出**）、`007_character_ability_panel.ts`（version 7，2026-09：**无 DDL**——`character.data.abilities[]` 迁为 `ability_panel` 叶子并移除旧字段，幂等且不覆盖已有 `ability_panel`，仅 data JSON 数据迁移，同 004 先例）、`008_document_records.ts`（version 8，2026-09：新增 `document_records` 表（块文档），纯 DDL 无数据搬移——开发阶段，旧 `references/` 目录与旧参考资料行不作兼容读取）、`009_decompose.ts`（version 9：新增 `decompose_jobs` / `decompose_batches` 两表（拆解小说的 job 状态与批结果暂存），纯 DDL 无数据搬移——拆解是新增能力，旧项目没有 job 行，无需回填）、`010_decompose_concurrency.ts`（version 10：`decompose_jobs` 新增 `concurrency` 列（拆解并发段数快照），纯 DDL 无数据搬移——存量行回填 `DEFAULT 1`，语义 = 历史 job 本就是串行）。**SQLite 无法直接修改 CHECK 约束**，迁移走「建新表（新 CHECK）→ 拷贝数据 → drop 旧表 → rename」四步（`relation_records`/`delta_records` 无外键指向 entities，迁移只动 entities 表）；v1 → v10 迁移链存在 ⇒ 旧库 open 时自动前向迁移，不再走删库重建兜底。
-- **import 侧联动**：导入备份时 `user_version < SCHEMA_VERSION` 且**有迁移路径** → 接受（搬入后 open 自动迁移，v5 及更早备份经增量迁移升到 **v10**，含对话历史出库、能力面板迁移、块文档表与拆解两表创建、并发列）；无路径 → 409 `SCHEMA_VERSION_MISMATCH`；`>` 当前 → 409（未来版本语义）。
+- 当前 `SCHEMA_VERSION = 11`；迁移链：`002_event_timeline.ts`（version 2：entities 表 CHECK 扩入 `'event'` + 新增 `sort_order` 列）、`003_timepoint.ts`（version 3，G2 修订：entities 表 CHECK 扩入 `'timepoint'` + `event.data.time_label` 迁移为 timepoint 实体 + occurs_at 关系，同名 time_label 合并为同一 timepoint）、`004_setting_tags.ts`（version 4，K2 修订：**无 DDL**——setting 旧 `data.rules` 分类值复制到 `data.tags` 并移除 rules，仅 data JSON 数据迁移）、`005_reference.ts`（version 5：entities 表 CHECK 扩入 `'reference'`，无数据搬移仅 DDL）、`006_sessions_jsonl.ts`（version 6：**对话历史出库**——`chat_messages` 全量导出为旧格式 `sessions/<session_id>.jsonl` 后 `DROP TABLE`；产物为旧 v1 格式，现已被 pi session 格式取代、不再被读取（数据保留在磁盘）；**id 不合法的旧会话以 `sess_legacy_<sha256 前 16 位>` 文件名导出**）、`007_character_ability_panel.ts`（version 7，2026-09：**无 DDL**——`character.data.abilities[]` 迁为 `ability_panel` 叶子并移除旧字段，幂等且不覆盖已有 `ability_panel`，仅 data JSON 数据迁移，同 004 先例）、`008_document_records.ts`（version 8，2026-09：新增 `document_records` 表（块文档），纯 DDL 无数据搬移——开发阶段，旧 `references/` 目录与旧参考资料行不作兼容读取）、`009_decompose.ts`（version 9：新增 `decompose_jobs` / `decompose_batches` 两表，纯 DDL 无数据搬移——旧项目没有 job 行，无需回填）、`010_decompose_concurrency.ts`（version 10：`decompose_jobs` 新增 `concurrency` 列，纯 DDL 无数据搬移——存量行回填 `DEFAULT 1`）、`011_drop_decompose.ts`（version 11：`DROP TABLE` 上述两表，纯 DDL——「拆解小说」功能已整功能移除（见 CHANGELOG），009/010 保留只为旧库升级链连续）。**SQLite 无法直接修改 CHECK 约束**，迁移走「建新表（新 CHECK）→ 拷贝数据 → drop 旧表 → rename」四步（`relation_records`/`delta_records` 无外键指向 entities，迁移只动 entities 表）；v1 → v11 迁移链存在 ⇒ 旧库 open 时自动前向迁移，不再走删库重建兜底。
+- **import 侧联动**：导入备份时 `user_version < SCHEMA_VERSION` 且**有迁移路径** → 接受（搬入后 open 自动迁移，v5 及更早备份经增量迁移升到 **v11**，含对话历史出库、能力面板迁移、块文档表创建与已下线功能的表清理）；无路径 → 409 `SCHEMA_VERSION_MISMATCH`；`>` 当前 → 409（未来版本语义）。
 - **全新空库短路（2026-09）**：`user_version = 0` 且**表结构与当前 DDL 一致**且**业务表无行** → 直接写入 `SCHEMA_VERSION`（**不重建、不备份、不碰 `outline.json`**）——覆盖“书目录有 project.json/outline.json 但缺 data.db”的场景（否则会走无路径重建兼重置大纲）。**反向守住**：结构陈旧（旧 CHECK / 残留表）或有数据的 v0 库仍走既有重建兑底。**已知不对称（已登记）**：备份包内的 v0 空库仍在导入侧被 409 拒绝（`validateBackupPackage` 复用 `hasMigrationPath`），而盘上同内容文件现在会被接受——偏差方向只宽松、无数据风险。
 
 ## entities — 实体表
@@ -222,50 +222,6 @@ CREATE TABLE document_records (
 
 **读取投影的两个消费面**：① AI 工具（单章只读拉取 / 参考资料全文）——只拿 `content_text`，绝不拿块 JSON；② 列表与摘要（参考资料列表的 `content` 摘要定长截断（长度单一定义 = db `toSummary`）、`GET /outline?with_metadata=true` 的章 `charCount`）——用 `length(content_text)` 与切片，不解析块体。
 
-## decompose_jobs / decompose_batches — 拆解小说（2026-09）
-
-拆解小说（导入式批量管线，设计见 [`../design/60-decompose.md`](../design/60-decompose.md)）的**job 状态与批结果暂存**。两表同库、同项目——job 属于它所在项目的 `data.db`，随三文件进入备份/导出/云端；**不新增项目目录**（`sessions/` 是纯本地目录，不进任何 zip）。
-
-```sql
-CREATE TABLE decompose_jobs (
-  id                 TEXT PRIMARY KEY,   -- 'job-*'
-  status             TEXT NOT NULL,      -- pending | running | paused | done | failed（枚举值少且稳定，不加 CHECK）
-  scope_start        INTEGER NOT NULL,   -- 分析范围起始章序（1-based，文件位置序）
-  scope_end          INTEGER NOT NULL,   -- 分析范围结束章序
-  batch_target_chars INTEGER NOT NULL,   -- 组批目标字数快照（续拆/重跑按同一口径重算批次）
-  concurrency        INTEGER NOT NULL,   -- 并发段数快照（建 job 时读取创作根配置；resume/重跑按它重算段，不读当前配置）
-  model              TEXT,               -- 本次使用的模型（provider/id），审计用
-  merge_written      TEXT,               -- JSON: 上次归并写入清单 [{ id, type, updated_at }]（幂等/重跑三路比对）
-  error              TEXT,               -- job 级失败摘要
-  created_at         TEXT NOT NULL,      -- ISO 8601，应用层写入
-  updated_at         TEXT NOT NULL       -- ISO 8601，应用层写入
-);
-
-CREATE TABLE decompose_batches (
-  job_id      TEXT NOT NULL,             -- → decompose_jobs.id
-  seq         INTEGER NOT NULL,          -- 1-based 批序号（文件位置序）
-  chapter_ids TEXT NOT NULL,             -- JSON: 本批覆盖的章节点 id 列表（顺序 = 文件序）
-  status      TEXT NOT NULL,             -- pending | running | done | failed
-  result      TEXT,                      -- JSON: 该批抽取结果（逐章对齐；未完成 = NULL）
-  attempts    INTEGER NOT NULL DEFAULT 0,-- 已尝试次数（重试上限见设计文档）
-  error       TEXT,                      -- 该批失败摘要
-  updated_at  TEXT NOT NULL,
-  PRIMARY KEY (job_id, seq)
-);
-```
-
-| 不变式 | 口径 |
-| :--- | :--- |
-| **一项目一活跃 job** | 首次拆解（基于文件建项目）与续拆（同项目开新 job）都只落 job 行；不设唯一约束，历史 job 全保留（进度面只显最新：`getDecomposeJob` 按 `created_at desc` 取）。互斥由业务层保证（存在 running / paused job 时不建新 job） |
-| **范围是单区间** | `scope_start` / `scope_end` = 本 job 要拆的章区间（文件位置序）；**已拆** = 历史上所有 job 的 `done` 批覆盖的章并集（`decompose_batches.status='done'`）；续拆缺省范围 = 未拆章的**最小覆盖区间** |
-| **并发快照** | `concurrency` = 建 job 时读取的创作根配置（缺省 / 钳制数值单源在 server 常量）；resume / 重跑按快照重算段，改配置只影响新 job；迁移存量行回填 1（历史 job 本就是串行） |
-| **S2 不写业务表** | 批抽取结果只落 `decompose_batches.result`（暂存）；业务数据（`entities` / `relation_records` / `outline.json` / `document_records`）只由 S3/S4 写 |
-| **暂存 ≠ 草稿** | 批结果不是待用户确认的草稿，而是管线的中间产物（崩溃恢复 + 归并可重跑的依据）；对用户可见面只有「单批结果」只读展示 |
-| **幂等靠清单不靠 provenance** | 归并的「上次写了什么」存在 `merge_written`（id + 写入时 `updated_at`），**不给 `entities` 加来源列**；`updated_at` 变化过的实体视为用户手工编辑 → 不覆盖、不软删。**跨轮 baseline = 历史全部 job 的 `merge_written` 并集**（同一 id 取最新一次记录的时间戳）——同名实体/关系复用同一行，跨轮未重现的产物**不软删**（软删只归本 job 重跑） |
-| **JSON 列一律 text 模式** | 与 `entities.data` / `delta_records.changes` 同口径（坏 JSON 由行映射层防御解析，禁用 drizzle `mode:'json'`） |
-| **不进回收站** | job 与批结果无 `deleted_at`：拆解是导入类操作，撤销 = 删书目录或恢复拆解前的自动备份 zip（设计文档 §1） |
-| **状态归一** | 服务端重启后残留的 `running` 由打开项目时的归一逻辑改为 `paused`（进程内已无在跑 job），UI 提示可续拆。**只归一 job 行**：残留的 `running` **批**行由续拆时的取批逻辑承接（续拆取「第一个未完成批」，含 `running`）⇒ 进度页必须容忍「`paused` job + `running` 批」这个组合 |
-
 ## sessions/*.jsonl — 对话历史（文件存储）
 
 对话消息**不存 data.db**，一 session 一个 JSONL 文件，落在项目目录 `sessions/`。会话随书目录移动/整体删除自然跟随，不依赖 db；但**不进任何 zip（备份 / 导出 / 云端）**——它不会跨机器搬运，本机删书即随之消失。
@@ -346,7 +302,6 @@ CREATE TABLE decompose_batches (
   "name": "我的小说",
   "language": "zh",
   "schema_version": 1,
-  "origin": "book",
   "current_position": "ch-12",
   "backup_frequency_minutes": 10,
   "created_at": "2026-08-01T10:00:00Z",
@@ -361,7 +316,7 @@ CREATE TABLE decompose_batches (
 | `id` | string | 项目唯一 id，首次初始化时生成（前缀 `proj-` + nanoid），**跨启动稳定**；**备份/恢复的唯一 key**——导入/加载备份时以 zip 内 id 与书架比对，匹配 → 覆盖恢复，不匹配 → 导入为新书 |
 | `name` | string | 项目名称，默认取目录名；**与目录名绑定**（「目录名 = 书名」不变式：同名并存时目录与 name 同步去重为 `<书名> (N)`） |
 | `language` | `"zh"` \| `"en"` | 语言 |
-| `origin` | `"book"` \| `"decompose"` | **项目出处（可选字段，2026-09）**：`"book"` = 手建/导入的普通书籍（缺省，读侧缺失即按此值），`"decompose"` = 由「拆解小说」建档。**只描述出处、不参与 schema_version 判定**（宽松读取，缺省兜底）；书架按它分「小说项目 / 小说拆解」两组。**只增不改**：一本书一旦由拆解产生就恒为 `"decompose"`（后续继续写作不改写）。存量补标：打开项目时若字段缺失且库内存在拆解 job → 写一次 `"decompose"`（幂等） |
+| `origin` | string | **已废止（2026-09）**：项目出处字段（原用于书架分组）随「拆解小说」移除而废止——**读侧容忍残留键、不再写**（旧文件里的值一律忽略，不参与任何判定与展示） |
 | `prompt` | string | **已废弃**：项目级提示词——不再读写；项目规则改由项目目录 `AGENTS.md` 承载（见下节）。旧文件中的残留字段宽松读取（不参与 schema_version 判定），新写入不再产生该字段 |
 | `schema_version` | number | JSON 结构版本（与 outline.json 顶层同步写入） |
 | `current_position` | string \| null | 大纲「阅读进度」节点 id（**UI 文案 = 阅读进度；字段名不变**；伏笔健康指标/双视图依赖；null = 未设置；**须指向存在的非软删 `chapter` 节点**——卷/场景不承载写作进度，非章 → `PUT /project/config` 400）。**读侧宽松**：存量指向非章节点的值由 `ChapterIndex.chapterOf` 沿父链推导兜底，不报错 |
