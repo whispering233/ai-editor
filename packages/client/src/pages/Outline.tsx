@@ -58,8 +58,8 @@ import {
   deductionMarkTitle,
   deductionMenuLabel,
   isDeductionMarkHost,
-  nextDeductionNodes,
   submitDeductionMarks,
+  toggledDeductionNodes,
 } from "../lib/deduction";
 import {
   canMoveTo,
@@ -640,7 +640,8 @@ export default function Outline() {
    * 全量数组一次提交，成功后 store 重拉 config ⇒ 本页徽标与章视图/详情页同步收敛（无需重拉树）。
    */
   async function handleToggleDeduction(node: OutlineNode) {
-    await submitDeductionMarks(nextDeductionNodes(config?.deductionNodes ?? [], node.id));
+    // 基底 = **可见标记**（不是 raw config——失效 id 回传会被服务端 400 锁死，见 lib/deduction.ts 注释）
+    await submitDeductionMarks(toggledDeductionNodes(deduction.marks, node.id));
   }
 
   /** 软删直接执行（H2：不再弹二次确认）；OUTLINE_NODE_NOT_FOUND（已被 purge）→ 横幅 + 刷新树；其余错误 toast */

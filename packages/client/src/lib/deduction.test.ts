@@ -9,6 +9,7 @@ import {
   deductionMenuLabel,
   isDeductionMarkHost,
   nextDeductionNodes,
+  toggledDeductionNodes,
 } from "./deduction";
 
 /** 卷1（ch-1、ch-2）+ 卷2（ch-3） */
@@ -31,6 +32,49 @@ const TREE: DeductionTreeLike = {
     },
   ],
 };
+
+describe("toggledDeductionNodes（提交基底 = 可见标记，防失效 id 锁死——oracle F1 回归）", () => {
+  // 盘上 raw 含失效 id（软删章 ch-1）：读侧原样返回、不自动清理；若拿 raw 当基底回传，
+  // 服务端对任一失效 id 严格 400 ⇒ 该书任何标记操作永久失败。基底取可见标记后，
+  // 下一次全量写入只含可见 id，盘上自然收敛（§15 不变式 6）。
+  const RAW_WITH_STALE = ["ch-1", "ch-2"]; // ch-1 已软删（见 TREE_WITH_DELETED）
+  const TREE_WITH_DELETED: DeductionTreeLike = {
+    children: [
+      {
+        id: "vol-1",
+        type: "volume",
+        title: "第一卷",
+        children: [
+          { id: "ch-1", type: "chapter", title: "软删章", deleted: true },
+          { id: "ch-2", type: "chapter", title: "旧盟友" },
+        ],
+      },
+      {
+        id: "vol-2",
+        type: "volume",
+        title: "第二卷",
+        children: [{ id: "ch-3", type: "chapter", title: "入城" }],
+      },
+    ],
+  };
+
+  it("新增标记：输出不含失效 id（盘上收敛为可见标记 + 新标记）", () => {
+    const marks = buildDeductionMarks(TREE_WITH_DELETED, RAW_WITH_STALE);
+    expect(marks.map((m) => m.nodeId)).toEqual(["ch-2"]); // 派生侧已过滤 ch-1
+    expect(toggledDeductionNodes(marks, "ch-3")).toEqual(["ch-2", "ch-3"]);
+  });
+
+  it("移出标记：同样不含失效 id（软删章自身无入口，只可能从可见标记移出）", () => {
+    const marks = buildDeductionMarks(TREE_WITH_DELETED, RAW_WITH_STALE);
+    expect(toggledDeductionNodes(marks, "ch-2")).toEqual([]);
+  });
+
+  it("全部标记失效 → 基底为空（首次标记即把盘上失效 id 收敛掉）", () => {
+    const marks = buildDeductionMarks(TREE_WITH_DELETED, ["ch-1", "ghost", "sc-x"]);
+    expect(marks).toEqual([]);
+    expect(toggledDeductionNodes(marks, "ch-3")).toEqual(["ch-3"]);
+  });
+});
 
 describe("nextDeductionNodes（切换标记）", () => {
   it("未标记 → 追加（已标记元素的相对顺序不变）", () => {

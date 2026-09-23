@@ -162,4 +162,10 @@ describe("buildDeductionMarks（标记集合 → 有序派生标记）", () => {
       ["ch-3", "推演终点", 2],
     ]);
   });
+
+  it("非数组脏数据（手编 project.json）→ 视为空集合，不抛错", () => {
+    // `deduction_nodes: 5` 这类手编脏值会一路传到本函数；直接 new Set(5) 会打挂大纲页与 AI 工具
+    expect(buildDeductionMarks(tree(), 5 as unknown as string[])).toEqual([]);
+    expect(buildDeductionMarks(tree(), null as unknown as string[])).toEqual([]);
+  });
 });

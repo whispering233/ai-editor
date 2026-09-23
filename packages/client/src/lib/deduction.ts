@@ -31,6 +31,24 @@ export function nextDeductionNodes(current: readonly string[], nodeId: string): 
     : [...current, nodeId];
 }
 
+/**
+ * 切换提交的**基底** = **可见标记 id**（由 shared `buildDeductionMarks` 派生），不是 raw `config.deductionNodes`。
+ *
+ * 为什么不能拿 raw 当基底：软删 / purge 后失效 id 会**留在盘上**（读侧原样返回、不自动清理，§15 不变式 6），
+ * 而 `PUT /project/config` 对任一失效 id 严格 400 ⇒ 拿 raw 回传会让该书**任何标记操作永久 400**
+ * （失效章无徽标也无入口，用户无从把 id 移出数组）。基底换成可见标记后，下一次全量写入只含可见 id，
+ * 盘上自然收敛——这正是不变式 6 「全量写入自然收敛」的实现前提。
+ */
+export function toggledDeductionNodes(
+  marks: readonly DeductionMark[],
+  nodeId: string,
+): string[] {
+  return nextDeductionNodes(
+    marks.map((mark) => mark.nodeId),
+    nodeId,
+  );
+}
+
 /** 标记入口文案（未标记 = 标记为推演节点 / 已标记 = 移出推演节点；**不置灰**，点即切换） */
 export function deductionMenuLabel(marked: boolean): string {
   return marked ? "移出推演节点" : "标记为推演节点";

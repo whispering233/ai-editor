@@ -48,8 +48,8 @@ import {
   deductionMarkTitle,
   deductionMenuLabel,
   isDeductionMarkHost,
-  nextDeductionNodes,
   submitDeductionMarks,
+  toggledDeductionNodes,
 } from "../lib/deduction";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
@@ -186,7 +186,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
     if (node === null || markingDeduction || !deductionHost) return;
     setMarkingDeduction(true);
     try {
-      await submitDeductionMarks(nextDeductionNodes(config?.deductionNodes ?? [], node.id));
+      await submitDeductionMarks(toggledDeductionNodes(deduction, node.id));
     } finally {
       setMarkingDeduction(false);
     }

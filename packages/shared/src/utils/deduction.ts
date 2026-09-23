@@ -68,7 +68,9 @@ export function buildDeductionMarks(
   tree: DeductionTreeLike | null,
   nodeIds: readonly string[],
 ): DeductionMark[] {
-  const wanted = new Set(nodeIds);
+  // 脏数据防御：`project.json` 是用户可手编文件，`deduction_nodes` 可能是非数组（如数字）——
+  // 直接 `new Set(5)` 会抛 TypeError 打挂大纲页 / AI 工具；非数组一律视为空集合（同 JSON 列防御口径）
+  const wanted = new Set(Array.isArray(nodeIds) ? nodeIds : []);
  // 章号随可见章序一起带上（下标 + 1），filter 后仍是升序、天然去重
   const marked = visibleChapters(tree)
     .map((chapter, i) => ({ ...chapter, chapterNumber: i + 1 }))
