@@ -8,14 +8,6 @@
 
 ---
 
-## 卡 1：角色优先级——数据与契约层（实现完成，待 oracle 验证）
-
-**实现**：commit `d99056b`（含 supervisor 批准的范围追加：`IMMUTABLE_FIELDS` 与 client 字段注册耦合——只加常量会让 client 穷尽断言与新建弹窗硬红，故 card 内一并落 `FieldControl` 的 `select` 分支、`isSingleLineField` 纳入 select、character 字段行与 `CHARACTER_DETAIL_FIELD_KEYS` 登记，避免渲染成文本框的坏中间态）。
-
-**已交付**：`CHARACTER_PRIORITIES`（4 档有序）+ 标签映射 + rank 派生、`characterDataSchema.priority`、`IMMUTABLE_FIELDS.character += priority`、`entityListQuerySchema.sort += priority`、db `listEntities` 的 `priority` 排序档（JSON 提取 + 常量派生 CASE、未分级/脏值沉底、固定升序）、detail 字段行与 select 控件分支。
-
-**待验证（oracle）**：单源无第二份表 / 排序四条语义（已分级、未分级与脏值沉底、同级 updated_at 降序、非 character 不报错）/ 清空走 `null` 且 `""` 被 400 / 卡内无越界改动 / 全套命令真跑过。
-
 ## 卡 2：角色优先级——rail 默认排序档
 
 **依赖**：卡 1（服务端排序就绪）。
