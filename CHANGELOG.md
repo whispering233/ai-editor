@@ -7,8 +7,6 @@
 
 ## [Unreleased]
 
-> **拆解提速 / 批大小实测版本**：拆解 S2 改为「N 段并行、段内串行」（创作根配置 `decompose.concurrency`，缺省段数在代码常量），样本书（48 章 / 25 万字）真跑 25/25 批、零失败、墙钟 981s；关系端点判据唯一化（S2 不再预丢，交 S3 悬空过滤）；批大小加双向预算守卫；批大小四档实测判定「保持」（全文一批仅作小体量「快速概览」）。回归：build / typecheck / lint / `-r test` 全绿（199 文件 / 3021 测试）+ 样本书并发真跑 + 批大小四档实测 + 每卡独立验证与最终集成复核。
-
 > **会话状态栏（chat 右栏观测层）**：输入区底部新增一行只读状态栏——上下文占用 / 费用 / 解码速度 / 缓存命中率 / 累计 tokens；配置行回归纯配置（只留模型与思考强度）。数字全部由服务端算好下发（占用 = pi `getContextUsage()`；账目 = agent 包 `sessionUsage()`；速度 = agent 包 `createSpeedMeter()`），UI 不累加、不计时、不复算分母。回归：build / typecheck / lint / `-r test` 全绿（202 文件 / 3086 测试）+ 真实会话端到端核对（数字与独立重算逐位一致、窄栏两级隐藏、切项目清零、历史会话无速度 + 占用段 `? · 窗口`）。
 
 ### Added
@@ -16,19 +14,16 @@
 - **会话状态栏（`session-status-bar`）**：输入区最底一行只读观测层——占用段（2px 条 + `42% · 1M`；占用未知时 `? · 窗口` 且不画条）+ 费用 + 解码速度 + 缓存命中率 + 累计 tokens；行内只放 compact 值（k / M / 美元 / tok·s⁻¹），精确账目与样本细节走原生 `title`（不引 antd Tooltip）；窄栏按两级阈值**声明式**隐藏（先累计、后缓存，交互控件永不被隐）、**不折行**；整行无数据不渲染（不常态白占消息区高度）。
 - **会话用量与速度下发**：`turn_end` / `agent_end` 帧带 `usage`（`input`/`output`/`cacheRead`/`cacheWrite`/`total`/`cost` + 可选 `cacheHitRate` + `subscription`），assistant 的 `message_end` 帧带 `speed`（`outputTokens`/`ms`/`tps`），`GET /chat/sessions/:id/messages` 带 `usage`。口径 = pi `AgentSession.getSessionStats()`（assistant + `toolResult.usage` + `compaction` / `branch_summary` 三类累加），命中率 = `cacheRead / (input + cacheRead + cacheWrite)` 且分母为 0 时省略该键。
 - **解码速度测量**：`createSpeedMeter()` 区间 = **首个流式增量 → `message_end`**（刻意避开首字延迟与排队），分子 = 该条消息 `usage.output`；四项守卫（无增量 / `output <= 0` / 时长低于常量 / `stopReason` 为 `error`·`aborted`）任一命中即不下发；只报最近一轮，不做实时估算与会话平均。
-- **拆解分段并发**：S2 从串行改为「N 段并行、段内串行」——批序沿批边界按累计字数均衡切成 `min(并发数, 批数)` 段，每段独立滚动累积（起始快照同源），跨段一致性交 S3 全局归并；暂停 / 切书 = 每段当前批跑完即停；resume / 单批重跑按 job 快照重算段；429 / 限流指数退避 + 抖动。
-- **拆解并发配置**：创作根 `.ai-editor/config.json` 新增 `decompose` 段（`concurrency`，缺省与钳制范围在代码常量）；建 job 时读取一次并快照（`decompose_jobs.concurrency`，迁移 v10，存量回填 1），改配置只影响新 job。
-- **批大小双向守卫**：组批按激活模型的 `contextWindow` / `maxTokens` 预检——输入（正文 + 逐批固定开销 + 输出预留 + 安全余量）不超窗、输出（章数 × 每章预算）不超 `maxTokens`，超限按章拆批；单章自身超限在执行期**发调用之前**显式失败并给明确文案（不再落进 pi 的 clamp 压输出 → provider 报错路径）；每批固定开销由提示词组装派生（与执行期预检同源）。
-- **批大小实测工具（dev-only）**：`scripts/decompose-batch-experiment.mjs`——四档对照（当前值 / 2× / 4× / 全文一批）+ 对比报告 + 人工盲评材料（工件落 `references/`，不入库）。
-- **拆解会话形态扩展**：每 job 主会话 + 每段 worker 会话（`decompose-<jobId>-w<k>`，会话名「《书名》拆解 · 段 k/N」），保留口径 = 最近 5 个 job 的全部会话；进度页时间线合并主 + worker 条目（同一响应形状，`batch_start` 带段号）。
 
 ### Changed
 
 - **配置行回归纯配置**：占用条从「模型 / 思考强度」配置行迁入新增的状态行（结构 = 输入框 → 配置行 → 状态行），配置（可写、全局）与状态（只读、每会话一份）不再混排；占用条的颜色阈值与 compact 格式化收口到 `client/src/lib/session-status.ts`（不再散在组件里）。
-- **关系端点判据唯一化**：S2 抽取层不再因「端点不在已知名字集合」丢弃关系（并发下该集合本就不全，会把跨批 / 跨段关系误判成幻觉）；端点存在性只由 S3 悬空过滤按落库实体集合判定。
-- **批大小口径（实测判定：保持）**：批越大抽取密度越低（关系 377 → 141、设定 228 → 108、地点 143 → 86）、欠章失败代价越大，而上调只换成本与墙钟 ⇒ 目标字数与章数上限不上调；成本结构口径修正：思考开启时每次调用重复付推理 token，批数是一阶成本项；全文一批仅在小体量装得进窗口时作「快速概览」，不作默认。
-- **拆解会话删除守卫扩到 worker 会话**：在跑（含暂停但仍有在途批）时主会话与各段 worker 会话同口径禁删。
-- **拆解并发缺省启用**：未配置即按缺省段数并发（可显式配置到下限档退回串行）；低于下限判非法、超上限按上限钳制（下限 / 缺省 / 上限的单源在代码常量）。
+
+### Removed
+
+- **「小说拆解」整功能移除**：删掉 `/api/v1/decompose/*` 全部端点、`#/decompose` 进度页与书架「拆解小说」入口、拆解会话的只读态与在跑禁删守卫；server 侧的拆解管线（切分 / 批执行 / 归并 / 报告）与 shared 拆解契约（端点 schema、`Decompose*` 类型、`ERROR_CODES.SESSION_READONLY`、会话 id 前缀常量）一并删除；`scripts/decompose-batch-experiment.mjs` 实测工具与 server 侧「LLM 调用只走 pi Agent 路径」的源码扫描守卫同批移除（该纪律本身保留为文字约定）。
+- **拆解数据层回退**：`decompose_jobs` / `decompose_batches` 两表随迁移 v11 **DROP**（`SCHEMA_VERSION` 10 → 11，幂等、纯 DDL）；`project.json` 的 `origin` 字段废止（存量键读侧容忍、不再写；书架不再分组，当前书仍按 id 判定）；创作根 `.ai-editor/config.json` 的 `decompose` 段废止（存量键读侧忽略）。
+- **理由与路径消失**：超长文本无论怎么工程优化都绕不开上下文窗口爆满 / 腐化 / 漂移，产出物的可信度无法自证；「拿 txt 导入既有小说并自动分章建书」这条路径随功能一起消失，**无替代**。
 
 ### Fixed
 
@@ -37,9 +32,6 @@
 - **历史会话的占用段整段消失**：`GET /chat/sessions/:id/messages` 补 `contextUsage`（只带窗口，`tokens`/`percent` 为 `null` = 占用不重建；窗口取当前激活模型、与 `/settings/llm` 同一条解析；无模型则省略该键）——历史会话的占用段从「无」变为契约要求的 `? · 窗口` 且不画条。
 - **压缩后占用段凭空消失**：`contextUsage` 的 `tokens` / `percent` 为 `null`（压缩后到下一次模型响应之间占用未知）时改为**帧照发**、UI 渲染 `? · 窗口`——「未知」与「空」不再混为一谈（旧实现把未知当非法值丢帧，占用段静默消失）。
 - **订阅制成本误标**：`cost` 的「订阅 · 估算」判定从 `isUsingOAuth` 收窄为 `ModelRuntime.isUsingSubscription()`（= OAuth 且该家 `auth.oauth.isSubscription`）+ API-key 认证的订阅家 `kimi-coding`——openrouter / radius 等「OAuth 但按量计费」的家不再被误标为估算（实证：pi-ai 目录里 `isSubscription: true` 的家仅 anthropic / github-copilot / openai-codex / xai / kimi-coding）。
-- **worker 会话在跑时可被删除**：删除后被在途写入重建成无头文件，会导致该 job 续拆 / 重跑永久失败（且坏文件在 UI 不可见）——守卫改为「主会话精确 id 或 worker 前缀」同判。
-- **段异常收口**：一段抛错时改为等待全部段落定再上报（不再出现 job 已 failed 仍有段在写、单批重跑与残留段重叠）。
-- **批预算边界文案**：窗口不足以容纳输出预留与安全余量、单章超输出上限等情形各有明确文案（不再展示负数「可用上限」）。
 
 ## [v0.0.54] - 2026-09-21
 
