@@ -52,14 +52,17 @@ import {
   ChatPanel,
   ComposerArea,
   focusLabel,
+  isNearBottom,
   MessageItem,
   ProposalCardView,
+  STICK_BOTTOM_THRESHOLD_PX,
   ThinkingBlock,
   ToolCallRow,
   MENU_KEY_DELETE_SESSION,
   sessionItemMenu,
   sessionItems,
 } from "./ChatPanel";
+import type { StreamToolRecord } from "../../stores/chat";
 import { SessionStatusBar, SessionStatusBarView } from "./session-status-bar";
 import { sessionStatusView } from "../../lib/session-status";
 import type { ChatMessageView } from "../../stores/chat";
@@ -417,6 +420,97 @@ describe("ComposerArea（底部区：focus 小条 + 输入区）", () => {
   });
 });
 
+describe("消息流顺序与滚动跟随（DESIGN.md `chat-message-stream`）", () => {
+  it("isNearBottom：贴底 / 差一像素 / 超出阈值 / 内容未溢出恒为贴底", () => {
+    // 内容未溢出（scrollHeight = clientHeight = scrollTop 0）
+    expect(isNearBottom({ scrollTop: 0, scrollHeight: 300, clientHeight: 300 })).toBe(true);
+    // 正好在阈值边界上（含等号）
+    expect(
+      isNearBottom({
+        scrollTop: 700 - STICK_BOTTOM_THRESHOLD_PX,
+        scrollHeight: 1000,
+        clientHeight: 300,
+      }),
+    ).toBe(true);
+    // 差一像素即视为已脱离
+    expect(
+      isNearBottom({
+        scrollTop: 700 - STICK_BOTTOM_THRESHOLD_PX - 1,
+        scrollHeight: 1000,
+        clientHeight: 300,
+      }),
+    ).toBe(false);
+    // 已在底部
+    expect(isNearBottom({ scrollTop: 700, scrollHeight: 1000, clientHeight: 300 })).toBe(true);
+  });
+
+  it("MessageItem：运行态工具行落在消息内——顺序 = 思考 → 工具行 → 正文（与重载后同序）", () => {
+    const streaming: ChatMessageView = {
+      id: "m4",
+      sessionId: "sess-1",
+      role: "assistant",
+      content: "最终答案",
+      thinkingText: "先看大纲再回答",
+      thinkingStreaming: true,
+      toolCalls: [{ id: "call-9", tool: "get_entity", args: { id: "char-1" } }],
+      createdAt: "t3",
+    };
+    const liveTools = new Map<string, StreamToolRecord>([
+      ["call-9", { id: "call-9", tool: "get_entity", args: { id: "char-1" }, status: "running" }],
+    ]);
+    // 同 id 的历史结果也存在（不该发生的组合）：运行态优先 ⇒ 仍为「调用中」，而不是被历史结果盖成 ✓
+    const toolResults = new Map<string, ChatMessageView>([
+      [
+        "call-9",
+        {
+          id: "t9",
+          sessionId: "sess-1",
+          role: "tool",
+          toolCallId: "call-9",
+          content: '{"name":"张三"}',
+          createdAt: "t3",
+        },
+      ],
+    ]);
+    const html = renderToString(
+      <MessageItem message={streaming} toolResults={toolResults} liveTools={liveTools} />,
+    );
+    const iThinking = html.indexOf("思考过程");
+    const iTool = html.indexOf("调用了");
+    const iText = html.indexOf("最终答案");
+    expect(iThinking).toBeGreaterThanOrEqual(0);
+    expect(iThinking).toBeLessThan(iTool);
+    expect(iTool).toBeLessThan(iText);
+    // 运行态优先于历史结果（Badge status 型不渲染 title，故按状态点类名断言）
+    expect(html).toContain("ant-badge-status-processing");
+    expect(html).not.toContain("ant-badge-status-success");
+  });
+
+  it("MessageItem：liveTools 的完成态与失败态映射到 ✓ / ✗（与历史 toolResults 同口径）", () => {
+    const calls: unknown[] = [
+      { id: "call-ok", tool: "get_entity", args: {} },
+      { id: "call-err", tool: "get_outline", args: {} },
+    ];
+    const message: ChatMessageView = {
+      id: "m5",
+      sessionId: "sess-1",
+      role: "assistant",
+      content: "答",
+      toolCalls: calls,
+      createdAt: "t4",
+    };
+    const liveTools = new Map<string, StreamToolRecord>([
+      ["call-ok", { id: "call-ok", tool: "get_entity", result: "{}", status: "ok" }],
+      ["call-err", { id: "call-err", tool: "get_outline", isError: true, status: "error" }],
+    ]);
+    const html = renderToString(
+      <MessageItem message={message} toolResults={new Map()} liveTools={liveTools} />,
+    );
+    expect(html).toContain("ant-badge-status-success");
+    expect(html).toContain("ant-badge-status-error");
+  });
+});
+
 describe("新会话路径叶子组件富数据渲染走查（问题 3：任务侦察标注的 ToolCallRow/MessageItem 未读路径）", () => {
   it("MessageItem：user 气泡 / assistant 正文 + 历史工具调用行（含 tool result 成对挂载）不抛异常", () => {
     const userMsg: ChatMessageView = {
@@ -491,7 +585,14 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3：任务�
     });
   });
 
-  it("asToolCall 双形态归一：wire（function.name/arguments JSON 串）与内部形态（tool/args）", () => {
+  it("asToolCall 多形态归一：服务端投影（name/arguments）、wire（function.name/arguments JSON 串）、内部形态（tool/args）", () => {
+    // 服务端投影形状（SSE message_end 帧与历史接口共用；真实数据见 test-project 会话文件）
+    expect(asToolCall({ id: "a0", name: "get_entity", arguments: { id: "char-1" } })).toEqual({
+      id: "a0",
+      tool: "get_entity",
+      name: "get_entity",
+      args: { id: "char-1" },
+    });
     expect(
       asToolCall({ id: "a", type: "function", function: { name: "x", arguments: '{"k":1}' } }),
     ).toEqual({ id: "a", tool: "x", name: "x", args: { k: 1 } });
@@ -505,6 +606,22 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3：任务�
     expect(
       asToolCall({ id: "c", type: "function", function: { name: "z", arguments: "not-json{" } }),
     ).toEqual({ id: "c", tool: "z", name: "z", args: "not-json{" });
+  });
+
+  it("asToolCall：投影形状（{id,name,arguments}）args 不丢——展开态摘要能拿到 id 字段（oracle F1 回归护栏）", () => {
+    const message: ChatMessageView = {
+      id: "m6",
+      sessionId: "sess-1",
+      role: "assistant",
+      content: "答",
+      // 真实帧序（pi：message_end 先、tool_execution_start 后）下保留的就是这条投影形状
+      toolCalls: [{ id: "call-p1", name: "get_entity", arguments: { id: "char-1" } }],
+      createdAt: "t5",
+    };
+    const call = asToolCall(message.toolCalls![0]);
+    expect(call.args).toEqual({ id: "char-1" }); // 非 undefined：展开态摘要能渲染「查询实体：实体「…」」
+    expect(call.tool).toBe("get_entity");
+    // 展开态渲染由 summarizeToolCall 单测覆盖（ToolCallRow 展开为 client state，SSR 不可达）
   });
 
   it("MessageItem：tool 消息本身返回 null（成对渲染，不单独出现）", () => {

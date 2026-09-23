@@ -692,7 +692,7 @@ describe("sendMessage（POST /chat + SSE 事件映射，契约 = docs/api/80-api
     expect(useChatStore.getState().messages[1]).toMatchObject({ role: "assistant", content: "我好" });
   });
 
-  it("message_update 的 thinking 事件 → 全量累积 + 流式标记（thinking_end 收尾）", () => {
+  it("message_update 的 thinking 事件 → 全量累积；thinking_end 不折叠（轮级口径，收尾在 agent_end）", () => {
     useChatStore.getState().sendMessage("你好");
     const { onEvent } = sseOptions();
     onEvent("message_update", { assistantMessageEvent: { type: "thinking_start", contentIndex: 0 } });
@@ -700,13 +700,23 @@ describe("sendMessage（POST /chat + SSE 事件映射，契约 = docs/api/80-api
     onEvent("message_update", { assistantMessageEvent: { type: "thinking_delta", contentIndex: 0, delta: "先看" } });
     onEvent("message_update", { assistantMessageEvent: { type: "thinking_delta", contentIndex: 0, delta: "大纲" } });
     expect(useChatStore.getState().messages[1].thinkingText).toBe("先看大纲");
-    // thinking_end：帧里只有 240 字预览，客户端保留已累积的全量并收尾折叠
+    // thinking_end：帧里只有 240 字预览，客户端保留已累积的全量；**不折叠**
+    // （逐次调用折叠 = 思考块高度反复跳变、下方工具行跟着上下窜）
     onEvent("message_update", {
       assistantMessageEvent: { type: "thinking_end", contentIndex: 0, content: "先看大纲", contentLength: 4 },
     });
     const m = useChatStore.getState().messages[1];
     expect(m.thinkingText).toBe("先看大纲");
-    expect(m.thinkingStreaming).toBe(false);
+    expect(m.thinkingStreaming).toBe(true);
+    // 同一轮内第二次调用（工具之后）继续追加到同一块，标记不变
+    onEvent("message_update", { assistantMessageEvent: { type: "thinking_delta", contentIndex: 0, delta: "再想" } });
+    expect(useChatStore.getState().messages[1]).toMatchObject({
+      thinkingText: "先看大纲再想",
+      thinkingStreaming: true,
+    });
+    // 本轮结束才收尾折叠
+    onEvent("agent_end", {});
+    expect(useChatStore.getState().messages[1].thinkingStreaming).toBe(false);
   });
 
   it("message_end（assistant）→ 终态投影为权威（正文/工具调用/思维链预览）+ 保留全量思维链", () => {
@@ -728,6 +738,63 @@ describe("sendMessage（POST /chat + SSE 事件映射，契约 = docs/api/80-api
     expect(m.thinkingText).toBe("推理全文");
     expect(m.thinking).toEqual([{ preview: "推理全文", deferred: true, blockIndex: 0, length: 4 }]);
     expect(m.toolCalls).toEqual([{ id: "call-1", name: "get_entity", arguments: { id: "char-1" } }]);
+    expect(m.thinkingStreaming).toBe(true); // message_end 不收尾（轮级口径，收尾在 agent_end）
+  });
+
+  it("工具行并入流式消息：tool_execution_start 追加（按 id 防重）、message_end 按 id 合并（不覆盖）", () => {
+    useChatStore.getState().sendMessage("你好");
+    const { onEvent } = sseOptions();
+    const idsIn = (): unknown[] =>
+      ((useChatStore.getState().messages[1].toolCalls ?? []) as { id?: string }[]).map((c) => c.id);
+    // 第一次调用：message_end 先到（wire 形状）→ tool_execution_start 同 id 不得重复追加
+    onEvent("message_end", {
+      message: {
+        role: "assistant",
+        content: "",
+        toolCalls: [{ id: "call-1", name: "get_entity", arguments: { id: "char-1" } }],
+        createdAt: "t",
+      },
+    });
+    onEvent("tool_execution_start", { toolCallId: "call-1", toolName: "get_entity", args: { id: "char-1" } });
+    expect(idsIn()).toEqual(["call-1"]);
+    // 保留的是 message_end 那条（服务端投影形状：args 在 `arguments` 键上——渲染层 asToolCall 归一）
+    expect(useChatStore.getState().messages[1].toolCalls?.[0]).toEqual({
+      id: "call-1",
+      name: "get_entity",
+      arguments: { id: "char-1" },
+    });
+    expect(useChatStore.getState().streamTools).toHaveLength(1); // 状态表不受影响（结果/状态来源）
+    // 第二次调用的 message_end 只带自己的 toolCalls → 与已有条目合并（旧实现在此抹掉 call-1）
+    onEvent("message_end", {
+      message: {
+        role: "assistant",
+        content: "",
+        toolCalls: [{ id: "call-2", name: "get_chapter_text", arguments: { chapter_id: "ch-1" } }],
+        createdAt: "t",
+      },
+    });
+    expect(idsIn()).toEqual(["call-1", "call-2"]);
+    // 正常顺序（start 先到）：内部形状进消息，供渲染层双形态归一
+    onEvent("tool_execution_start", { toolCallId: "call-3", toolName: "get_outline", args: {} });
+    expect(idsIn()).toEqual(["call-1", "call-2", "call-3"]);
+    expect(useChatStore.getState().messages[1].toolCalls?.[2]).toEqual({
+      id: "call-3",
+      tool: "get_outline",
+      args: {},
+    });
+    // 同一批内重复 id（模型重放/续聊重写块）也只留一条
+    onEvent("message_end", {
+      message: {
+        role: "assistant",
+        content: "",
+        toolCalls: [
+          { id: "call-4", name: "get_entity", arguments: {} },
+          { id: "call-4", name: "get_entity", arguments: {} },
+        ],
+        createdAt: "t",
+      },
+    });
+    expect(idsIn()).toEqual(["call-1", "call-2", "call-3", "call-4"]);
   });
 
   it("tool_execution_start/end（AUTO 工具）→ 工具卡 running→ok；无 details 不入提案", () => {

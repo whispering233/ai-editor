@@ -2,7 +2,8 @@
 // 常驻右栏（桌面态宽度 = clamp(视口×40%, 240, 960)，中栏吸收剩余——1:5:4 在 1600-2400 视口精确成立，
 // 见 DESIGN.md §Layout），<1024px 折叠为抽屉（fixed + 遮罩，开关在信息条右侧）
 // 结构（自上而下）：会话标题行（下拉切换同项目会话 + 新会话）→ 断连横幅 → 错误条 →
-// 消息流（user 气泡 / assistant 无气泡宋体排版 / 历史工具折叠记录 / 运行时工具行 / 提案卡）→
+// 消息流（user 气泡 / assistant 无气泡宋体排版 / 历史工具折叠记录与运行时工具行同位置——
+// 消息内 思考 → 工具行 → 正文，见 DESIGN.md `chat-message-stream` / 提案卡）→
 // focus 小条 → 输入区（Enter 发送 / Shift+Enter 换行）
 // 无项目打开时整体禁用（灰显 + 「打开项目后可用」，不请求会话数据，「位置与形态」）
 // S7 数据源已接入（S8.1 联调完成）：proposals（提案卡）/ streamTools（运行时工具行）
@@ -47,6 +48,7 @@ import {
   type ChatMessageView,
   type FocusContext,
   type ProposalCard,
+  type StreamToolRecord,
 } from "../../stores/chat";
 import { SessionStatusBar } from "./session-status-bar";
 import type { ChatSessionSummary } from "@whispering233/ai-editor-shared";
@@ -112,29 +114,36 @@ interface ToolCallShape {
   args?: unknown;
 }
 /**
- * 渲染层双形态归一（修历史行展开显示 `{}`）：
- * - 落库/续聊重建形态 = LLM wire 形状 { id, type: "function", function: { name, arguments: string } }
- *   （server chat.ts 直存 agent 输出，存储不动——续聊重建依赖该形状回喂模型）
- * - 运行时 SSE tool_call 事件 = 内部形状 { id, tool, args }
- * 归一输出内部形状；wire.arguments 为 JSON 串 → parse 失败保留原文（原始渲染兜底）
+ * 渲染层多形态归一（修历史行展开显示 `{}`）。三种输入，同一输出（内部形状）：
+ * - **服务端投影形状** `{ id, name, arguments }`：SSE `message_end` 帧与历史接口的**同一份投影**
+ *   （`agent/src/runtime/message-projection.ts` 的 `projectAssistantMessage`——pi 原生 toolCall 块
+ *   `{ type: "toolCall", id, name, arguments }` 只去掉 `type`，`arguments` 已是对象）；
+ * - **运行态内部形状** `{ id, tool, args }`：`tool_execution_start` 帧并入流式消息的条目；
+ * - LLM wire 形状 `{ id, type: "function", function: { name, arguments } }`（arguments 为 JSON 串，
+ *   parse 失败保留原文——原始渲染兜底）。
  */
 export const asToolCall = (c: unknown): ToolCallShape => {
   if (typeof c !== "object" || c === null) return {};
   const wire = c as {
     id?: string;
     type?: string;
+    name?: string;
+    arguments?: unknown;
     function?: { name?: string; arguments?: unknown };
   };
-  if (wire.type === "function" && wire.function) {
-    let args: unknown = wire.function.arguments;
-    if (typeof args === "string") {
+  // 投影形状与 wire 形状都以 `name` + `arguments`（而非 `tool` + `args`）为名
+  if (wire.function !== undefined || typeof wire.name === "string") {
+    const raw = wire.function === undefined ? wire.arguments : wire.function.arguments;
+    let args: unknown = raw;
+    if (typeof raw === "string") {
       try {
-        args = JSON.parse(args);
+        args = JSON.parse(raw);
       } catch {
         // parse 失败（非常规 JSON）保留原串，渲染兜底展示原文
       }
     }
-    return { id: wire.id, tool: wire.function.name, name: wire.function.name, args };
+    const name = wire.function === undefined ? wire.name : wire.function.name;
+    return { id: wire.id, tool: name, name, args };
   }
   return wire as ToolCallShape;
 };
@@ -497,9 +506,10 @@ export function ToolCallRow({
   /** id 批量解析结果（null = 未展开/解析中）；解析请求失败 → resolveFailed → 回退原始 JSON */
   const [names, setNames] = useState<ResolvedNames | null>(null);
   const [resolveFailed, setResolveFailed] = useState(false);
-  // 结果状态：成功 ✓（result 挂载即成功）/ 失败 ✗ / 进行中（Badge processing）
-  const ok = status === "ok" || result !== undefined;
+  // 结果状态：显式 `status` 优先（运行态来自本轮事件；历史行由 MessageItem 从 tool 消息推导）；
+  // 无 `status` 时以「result 挂载即成功」兜底（供直接使用本组件的场景）
   const err = status === "error";
+  const ok = status === undefined ? result !== undefined : status === "ok";
 
   // 展开时收集 args 中的 id 候选 → names/resolve 批量解析（历史回放/流式同路径）；
   // 无候选不发请求；折叠/参数变化 → 重置（重新展开再解析）
@@ -658,13 +668,20 @@ export function ThinkingBlock({
 
 // ============ 消息条目：user 气泡 / assistant 无气泡排版 + 思维链 + 历史工具折叠记录 ============
 
-/** 历史 tool 消息按 toolCallId 挂到 assistant.toolCalls 行（成对；孤儿半对不渲染；导出供渲染走查测试） */
+/** 历史 tool 消息按 toolCallId 挂到 assistant.toolCalls 行（成对；孤儿半对不渲染；导出供渲染走查测试）
+ *
+ * 工具行的结果/状态有**两个来源**（同一条消息两种时期）：
+ * - 运行态 `liveTools`（本轮 streamTools：`tool_execution_*` 事件，未落库）；
+ * - 历史 `toolResults`（`role === "tool"` 消息成对重组，重载后才有）。
+ * 运行态优先（本轮无 tool 消息，落库后 liveTools 已清空）。 */
 export function MessageItem({
   message,
   toolResults,
+  liveTools,
 }: {
   message: ChatMessageView;
   toolResults: Map<string, ChatMessageView>;
+  liveTools?: Map<string, StreamToolRecord>;
 }) {
   const { token } = theme.useToken();
   if (message.role === "user") {
@@ -715,14 +732,18 @@ export function MessageItem({
       {toolCalls.map((c, i) => {
         const call = asToolCall(c);
         const callId = call.id ?? `hist-${i}`;
+        const live = liveTools?.get(callId);
         const resultMsg = callId ? toolResults.get(callId) : undefined;
+        const result = live?.result ?? resultMsg?.content;
+        const status =
+          live?.status ?? (resultMsg?.isError === true ? "error" : resultMsg ? "ok" : undefined);
         return (
           <ToolCallRow
             key={callId}
             toolName={call.tool ?? call.name ?? "工具"}
             args={call.args}
-            result={resultMsg?.content}
-            status={resultMsg?.isError === true ? "error" : resultMsg ? "ok" : undefined}
+            result={result}
+            status={status}
           />
         );
       })}
@@ -950,7 +971,19 @@ function InputArea() {
   );
 }
 
-// ============ 消息流：历史消息 + 运行时工具行 + 提案卡 ============
+// ============ 消息流：历史消息（含运行态工具行，见 MessageItem）+ 提案卡 ============
+
+/** 贴底阈值（px）：内容增长只在此距离内跟随（口径见 DESIGN.md `chat-message-stream`） */
+export const STICK_BOTTOM_THRESHOLD_PX = 32;
+
+/** 是否贴底（距底 ≤ 阈值；内容未溢出时 `scrollHeight - clientHeight = scrollTop` ⇒ 恒为贴底） */
+export function isNearBottom(el: {
+  scrollTop: number;
+  scrollHeight: number;
+  clientHeight: number;
+}): boolean {
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= STICK_BOTTOM_THRESHOLD_PX;
+}
 
 function MessageList({ disabled }: { disabled: boolean }) {
   const messages = useChatStore((s) => s.messages);
@@ -960,6 +993,10 @@ function MessageList({ disabled }: { disabled: boolean }) {
   const streamTools = useChatStore((s) => s.streamTools);
   const proposals = useChatStore((s) => s.proposals);
   const scrollRef = useRef<HTMLDivElement>(null);
+  /** 是否跟随底部（流式期间每帧强拉到底会把正在上读的用户拽回 = 页面抖动，故仅在贴底时跟随） */
+  const stickRef = useRef(true);
+  const prevStreamingRef = useRef(streaming);
+  const prevLoadingRef = useRef(messagesLoading);
 
   // 历史 tool 消息按 toolCallId 索引（成对：assistant.toolCalls ↔ tool.tool_call_id）
   const toolResults = useMemo(() => {
@@ -970,11 +1007,25 @@ function MessageList({ disabled }: { disabled: boolean }) {
     return map;
   }, [messages]);
 
-  // 新消息/加载完成自动滚动到底部（messages 引用每次 delta 追加都变 → 流式期间持续跟随）
+  // 本轮运行态工具记录按 id 索引（结果/状态来源之一；渲染位置在消息内，见 MessageItem）
+  const liveTools = useMemo(() => new Map(streamTools.map((t) => [t.id, t])), [streamTools]);
+
+  // 强制恢复跟随：新发一轮 / 历史加载开始（切会话）——上滚脱离的状态不延续到新语境
+  // （注意声明顺序：必须在本组件下方的贴底 effect 之前，同一提交内先复位再滚动）
+  useEffect(() => {
+    if ((streaming && !prevStreamingRef.current) || (messagesLoading && !prevLoadingRef.current)) {
+      stickRef.current = true;
+    }
+    prevStreamingRef.current = streaming;
+    prevLoadingRef.current = messagesLoading;
+  }, [streaming, messagesLoading]);
+
+  // 新消息/加载完成自动滚动到底部（messages 引用每次 delta 追加都变 → 流式期间持续跟随，
+  // 但**仅在贴底时**——用户上滚即脱离，见 DESIGN.md `chat-message-stream`）
   const tail = messages.length;
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el && stickRef.current) el.scrollTop = el.scrollHeight;
   }, [tail, messages, messagesLoading, streamTools.length, proposals.length, statusNote]);
 
   /** 流式思考指示：正在流 & 尾条 assistant 且尚无正文（首段 delta 前/工具等待期） */
@@ -1011,7 +1062,14 @@ function MessageList({ disabled }: { disabled: boolean }) {
 
   const empty = messages.length === 0 && streamTools.length === 0 && proposals.length === 0;
   return (
-    <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+    <div
+      ref={scrollRef}
+      // 滚动事件（含程序性滚动）实时同步跟随意图：贴底 = 跟随，离开底部 = 停止抢滚动条
+      onScroll={(e) => {
+        stickRef.current = isNearBottom(e.currentTarget);
+      }}
+      className="min-h-0 flex-1 overflow-y-auto px-3 py-3"
+    >
       {empty ? (
         // 空态引导语（「空态」）
         <div className="flex h-full flex-col items-center justify-center gap-1.5 p-4 text-center">
@@ -1022,23 +1080,22 @@ function MessageList({ disabled }: { disabled: boolean }) {
       ) : (
         <div className="flex flex-col gap-3">
           {messages.map((m) => (
-            <MessageItem key={m.id} message={m} toolResults={toolResults} />
+            <MessageItem
+              key={m.id}
+              message={m}
+              toolResults={toolResults}
+              // 运行态状态只对**尾条**消息生效：工具 id 全局唯一，但状态表是「本轮」的，
+              // 下发给历史消息只会在 id 复用时错误改写旧行的 ✓/✗
+              liveTools={m.id === messages[messages.length - 1]?.id ? liveTools : undefined}
+            />
           ))}
           {showThinking && <Bubble loading content="" />}
           {/* 状态提示（上下文压缩 / 自动重试）：caption 字色，不占视觉重心 */}
           {statusNote !== null && streaming && (
             <p className="text-xs text-muted-foreground">{statusNote}</p>
           )}
-          {/* 运行时工具记录（tool_execution_* 事件填充；折叠渲染同历史） */}
-          {streamTools.map((t) => (
-            <ToolCallRow
-              key={t.id}
-              toolName={t.tool}
-              args={t.args}
-              result={t.result}
-              status={t.status}
-            />
-          ))}
+          {/* 运行时工具行**不在此处**：已并入尾条 assistant 消息的 toolCalls（渲染位置 = 消息内
+              思考之后、正文之前，与重载后同序，见 DESIGN.md `chat-message-stream`） */}
           {/* 提案卡片（tool_execution_end 的 result.details 填充；瞬态，流断开即清空） */}
           {proposals.map((p) => (
             <ProposalCardView key={p.proposalId} proposal={p} />

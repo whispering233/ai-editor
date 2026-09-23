@@ -54,8 +54,10 @@ export type ThinkingPreview = ChatThinkingPreview;
 /**
  * 消息视图模型（client 侧扩展，不改 shared 的 API 契约类型）：
  * - thinking：历史回看的思维链预览（全文按需拉）
- * - thinkingText/thinkingStreaming：**当前流式轮次**的思维链全量 + 是否仍在流式
- *   （流式期间服务端只推 delta，终态帧里只有 240 字预览，故全量在客户端侧累积）
+ * - thinkingText/thinkingStreaming：**当前流式轮次**的思维链全量 + 是否仍在流式（流式期间服务端只推
+ *   delta，终态帧里只有 240 字预览，故全量在客户端侧累积）。`thinkingStreaming` 是**轮级**布尔量
+ *   （首次 `thinking_start` 置位，至 `agent_end` / 中断帧收尾）：中途的工具调用与后续 LLM 调用
+ *   **不折叠**——逐次调用折/展会让消息上方高度反复跳变（DESIGN.md `thinking-block`）
  * - isError：tool 消息是否失败（服务端投影字段）
  */
 export interface ChatMessageView extends ChatSessionMessage {
@@ -104,6 +106,38 @@ function isNonNegative(value: unknown): value is number {
 /** 同上但要求 > 0（速度的 token 数 / tps；`ms` 用非负口径） */
 function isPositive(value: unknown): value is number {
   return isNonNegative(value) && value > 0;
+}
+
+/** 工具调用 id（两种形状的顶层 `id` 同键：服务端投影形状 `{ id, name, arguments }` / 内部形状 `{ id, tool, args }`） */
+function toolCallIdOf(call: unknown): string | undefined {
+  if (typeof call !== "object" || call === null) return undefined;
+  const id = (call as { id?: unknown }).id;
+  return typeof id === "string" ? id : undefined;
+}
+
+/**
+ * 按 id 合并工具调用（**合并而非覆盖**）。
+ * 为什么必须合并：每次 LLM 调用的 `message_end` 只带**本条消息自己的** toolCalls，
+ * 而一次对话轮可有多次调用——覆盖会把前几次调用行抹掉；运行时行由 `tool_execution_start`
+ * 并入（内部形状），故同 id 已有条目保留（顺序即调用顺序）。
+ * 两边皆空 → undefined（不写空数组：渲染层与历史同口径判 `Array.isArray`）。
+ */
+function mergeToolCalls(existing: unknown, incoming: unknown): unknown[] | undefined {
+  const base = Array.isArray(existing) ? existing : [];
+  const add = Array.isArray(incoming) ? incoming : [];
+  if (base.length === 0 && add.length === 0) return undefined;
+  const merged = [...base];
+  const seen = new Set(merged.map(toolCallIdOf).filter((id): id is string => id !== undefined));
+  // 无 id 的条目无法判重（保序追加，不丢信息）；`seen` 随追加同步增长（同批内重复也去）
+  for (const call of add) {
+    const id = toolCallIdOf(call);
+    if (id !== undefined) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+    }
+    merged.push(call);
+  }
+  return merged;
 }
 
 /**
@@ -672,8 +706,8 @@ export const useChatStore = create<ChatState>((set, get) => {
                 break;
               }
               if (deltaEvent.type === "thinking_end") {
-                // 终态帧的 content 已是 240 字预览（全文由本轮 thinking_delta 累积），只需收尾折叠
-                patchStreamMessage(streamMsgId, (m) => ({ ...m, thinkingStreaming: false }));
+                // 不折叠：折叠发生在本轮结束（thinking_end 是「每次 LLM 调用」的末尾，逐次折叠 =
+                // 思考块高度反复跳变、下方工具行跟着上下窜；DESIGN.md `thinking-block` 轮级口径）
                 break;
               }
               if (deltaEvent.type === "text_delta") {
@@ -699,13 +733,16 @@ export const useChatStore = create<ChatState>((set, get) => {
                 ? (message.thinking as ThinkingPreview[])
                 : undefined;
               const toolCalls = Array.isArray(message.toolCalls) ? message.toolCalls : undefined;
-              patchStreamMessage(streamMsgId, (m) => ({
-                ...m,
-                content,
-                ...(thinking === undefined ? {} : { thinking }),
-                ...(toolCalls === undefined ? {} : { toolCalls }),
-                thinkingStreaming: false,
-              }));
+              patchStreamMessage(streamMsgId, (m) => {
+                const merged = mergeToolCalls(m.toolCalls, toolCalls);
+                return {
+                  ...m,
+                  content,
+                  ...(thinking === undefined ? {} : { thinking }),
+                  ...(merged === undefined ? {} : { toolCalls: merged }),
+                  // 不收尾折叠：thinkingStreaming 保持到本轮结束（见上「thinking_end」注）
+                };
+              });
  // 解码速度（仅 assistant 帧下发；本轮未下发/非法 ⇒ 保留旧值）
               const speed = parseSpeed(frame?.speed);
               if (speed !== null) set({ speed });
@@ -713,7 +750,8 @@ export const useChatStore = create<ChatState>((set, get) => {
             }
 
             case "tool_execution_start": {
- // 运行时工具卡（折叠行「调用了 {tool}」）
+ // 运行时工具卡（折叠行「调用了 {tool}」）：状态表 + 并入流式消息的 toolCalls
+ // （渲染位置 = 消息内、思维链之后正文之前——运行态与重载后同序，见 DESIGN.md `chat-message-stream`）
               const frame = asRecord(data);
               const id = frame?.toolCallId;
               const tool = frame?.toolName;
@@ -721,6 +759,11 @@ export const useChatStore = create<ChatState>((set, get) => {
               set((s) => ({
                 streamTools: [...s.streamTools, { id, tool, args: frame?.args, status: "running" }],
               }));
+              patchStreamMessage(streamMsgId, (m) => {
+                // 同 id 已有（message_end 先到）→ 保留已有条目，仅补未到达过的调用
+                const merged = mergeToolCalls(m.toolCalls, [{ id, tool, args: frame?.args }]);
+                return merged === undefined ? m : { ...m, toolCalls: merged };
+              });
               break;
             }
 
