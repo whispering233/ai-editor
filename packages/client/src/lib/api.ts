@@ -18,13 +18,6 @@ import type {
   ComputeStateResult,
   DeltaChange,
   DeltaRecord,
-  DecomposeAnalyzeRes,
-  DecomposeBatchRes,
-  DecomposeContinueRes,
-  DecomposeJobLogRes,
-  DecomposeJobRes,
-  DecomposePlanRes,
-  DecomposeStartRes,
   EntitySummary,
   ErrorCode,
   OutlineTree,
@@ -107,13 +100,11 @@ function isErrorEnvelope(
 }
 
 /**
- * 非 JSON 请求体：FormData（multipart 上传，浏览器自动带 boundary）、Blob/File（拆解小说的
- * 文件原始字节——请求侧显式例外，见 docs/api/api-public.md）、undefined（GET / DELETE 无体）。
- * 前两者都不得由本函数设 Content-Type：multipart 的 boundary 由浏览器生成；原始字节的类型
- * 由调用点显式声明（不借用 File.type——用户机上的 .txt 可能带 text/plain）。
+ * 非 JSON 请求体：FormData（multipart 上传，浏览器自动带 boundary）、undefined（GET / DELETE 无体）。
+ * FormData 不得由本函数设 Content-Type（boundary 由浏览器生成）。
  */
-function isRawBody(body: unknown): body is FormData | Blob | undefined {
-  return body === undefined || body instanceof FormData || body instanceof Blob;
+function isRawBody(body: unknown): body is FormData | undefined {
+  return body === undefined || body instanceof FormData;
 }
 
 /**
@@ -1289,135 +1280,4 @@ export function importCloudBook(options: {
       ...(options.fileName !== undefined ? { file_name: options.fileName } : {}),
     },
   });
-}
-
-// ============ 拆解小说（请求体 = 小说文件原始字节，不走 JSON） ============
-//
-// 契约 = docs/api/120-api-decompose.md §analyze / §start；**请求侧原始字节**是通用约定
-//「成功 {success,data} JSON 包裹 / 请求 JSON」的显式例外，登记于 docs/api/api-public.md：
-// 编码探测（UTF-8 → GB18030 回退）与切分由服务端单一实现，**客户端不解码文件**（也不 base64 膨胀）。
-// 故 body = 文件原始字节 + `Content-Type: application/octet-stream`，文件名 / 书名 / 范围走 query。
-
-/** 拆解范围（1-based 文件位置序；缺省 = 起始 1 / 结束到末章）。范围只影响 AI 抽取批规划与预估——
- * 正文始终全量导入，故缺省与越界都不报错（服务端夹取语义）。 */
-export interface DecomposeScope {
-  scopeStart?: number;
-  scopeEnd?: number;
-}
-
-/**
- * POST /api/v1/decompose/analyze —— 切分预览（无状态、不落库、不要求已打开项目）。
- * **改范围 = 重新调用**（服务端不留临时文件 / token）：客户端重传同一份原始字节。
- * 失败：400 DECOMPOSE_FILE_TOO_LARGE / DECOMPOSE_FILE_INVALID / VALIDATION_ERROR（ApiError.code 透传）。
- */
-export function analyzeDecompose(file: File, scope: DecomposeScope = {}): Promise<DecomposeAnalyzeRes> {
-  return apiFetch<DecomposeAnalyzeRes>("/decompose/analyze", {
-    method: "POST",
-    body: file,
-    headers: { "Content-Type": "application/octet-stream" },
-    query: { file_name: file.name, scope_start: scope.scopeStart, scope_end: scope.scopeEnd },
-  });
-}
-
-/**
- * POST /api/v1/decompose/start —— 建档并启动拆解。
- * **副作用**：新建并打开该项目（等价 POST /project/open 的切换语义）；S1（建项目 / 建大纲 /
- * 导入正文 / 落批规划）同步完成后才返回，返回时 job 已 `running` → 调用方跳 `#/decompose` 看进度。
- * 失败：400 VALIDATION_ERROR / DECOMPOSE_FILE_TOO_LARGE / DECOMPOSE_FILE_INVALID / LLM_API_KEY_MISSING、
- *      409 PROJECT_ALREADY_EXISTS（书名对应目录已存在）。
- */
-export function startDecompose(
-  file: File,
-  options: { name: string } & DecomposeScope,
-): Promise<DecomposeStartRes> {
-  return apiFetch<DecomposeStartRes>("/decompose/start", {
-    method: "POST",
-    body: file,
-    headers: { "Content-Type": "application/octet-stream" },
-    query: {
-      file_name: file.name,
-      name: options.name,
-      scope_start: options.scopeStart,
-      scope_end: options.scopeEnd,
-    },
-  });
-}
-
-// ============ 拆解小说续拆面（docs/api/120-api-decompose.md §plan / §continue） ============
-//
-// 续拆**不吃文件字节**：S1 已把全书正文导入，章与正文都在库。范围同样走 query，语义与 analyze 不同：
-// 缺省 = 未拆章**最小覆盖区间**（历史所有 job 的 done 批覆盖的并集之外那一段，服务端推导）；
-// 显式范围包含已拆章 = 有意重拆。失败码：404 DECOMPOSE_NO_CHAPTERS（没有章）、
-// 400 DECOMPOSE_NOTHING_TO_DO（范围里没有章）、409 DECOMPOSE_JOB_STATE（已有未收尾 job）。
-
-/** GET /api/v1/decompose/plan —— 续拆预览（不落库、无状态；缺省范围 = 未拆章最小覆盖区间） */
-export function getDecomposePlan(scope: DecomposeScope = {}, signal?: AbortSignal): Promise<DecomposePlanRes> {
-  return apiFetch<DecomposePlanRes>("/decompose/plan", {
-    query: { scope_start: scope.scopeStart, scope_end: scope.scopeEnd },
-    signal,
-  });
-}
-
-/**
- * POST /api/v1/decompose/continue —— 在当前项目内开新 job（S1' 只落 job 与批规划：不建项目、不导正文）。
- * 返回时 job 已 `running` → 调用方刷新 job 轮询（**不新增定时器**）。
- */
-export function continueDecompose(scope: DecomposeScope = {}): Promise<DecomposeContinueRes> {
-  return apiFetch<DecomposeContinueRes>("/decompose/continue", {
-    method: "POST",
-    query: { scope_start: scope.scopeStart, scope_end: scope.scopeEnd },
-  });
-}
-
-// ============ 拆解小说进度面（进度页 / 概览卡片；docs/api/120-api-decompose.md §job … §rerun） ============
-//
-// 进度投影**不含批结果正文**（数百批 × 每条千级 token 会撑爆响应）：轮询只取 job，
-// 展开某批时按需另取 `batches/:seq`。错误码：404 DECOMPOSE_JOB_NOT_FOUND（当前项目没有 job，
-// 调用方据此停止轮询）、409 DECOMPOSE_JOB_STATE（状态不允许该操作）、400 LLM_API_KEY_MISSING。
-
-/** GET /api/v1/decompose/job（进度轮询；`signal` 用于离开页面时中止在途请求） */
-export function getDecomposeJob(signal?: AbortSignal): Promise<DecomposeJobRes> {
-  return apiFetch<DecomposeJobRes>("/decompose/job", { signal });
-}
-
-/** GET /api/v1/decompose/job/batches/:seq（展开行按需拉取；未完成 → `result: null`） */
-export function getDecomposeBatch(seq: number, signal?: AbortSignal): Promise<DecomposeBatchRes> {
-  return apiFetch<DecomposeBatchRes>(`/decompose/job/batches/${seq}`, { signal });
-}
-
-/** GET /api/v1/decompose/job/log（拆解记录时间线；会话被删 → `entries: []`，无 job → 404） */
-export function getDecomposeJobLog(signal?: AbortSignal): Promise<DecomposeJobLogRes> {
-  return apiFetch<DecomposeJobLogRes>("/decompose/job/log", { signal });
-}
-
-/** POST /api/v1/decompose/job/pause 响应（形状同 shared `decomposePauseResSchema`） */
-export interface DecomposePauseRes {
-  status: "paused";
-}
-
-/** POST /api/v1/decompose/job/pause —— 中止当前 job（当前批跑完即停，结果不浪费） */
-export function pauseDecomposeJob(): Promise<DecomposePauseRes> {
-  return apiFetch<DecomposePauseRes>("/decompose/job/pause", { method: "POST" });
-}
-
-/** POST /api/v1/decompose/job/resume 响应（形状同 shared `decomposeResumeResSchema`） */
-export interface DecomposeResumeRes {
-  status: "running";
-}
-
-/** POST /api/v1/decompose/job/resume —— 从第一个未完成批续拆（跳过 done 的批） */
-export function resumeDecomposeJob(): Promise<DecomposeResumeRes> {
-  return apiFetch<DecomposeResumeRes>("/decompose/job/resume", { method: "POST" });
-}
-
-/** POST /api/v1/decompose/job/batches/:seq/rerun 响应（形状同 shared `decomposeRerunResSchema`） */
-export interface DecomposeRerunRes {
-  status: "running";
-  seq: number;
-}
-
-/** POST /api/v1/decompose/job/batches/:seq/rerun —— 重跑单批（重算该批 → 重建归并与报告；
- * 仅 `done` / `failed` job 上的 `done` / `failed` 批可重跑，否则 409） */
-export function rerunDecomposeBatch(seq: number): Promise<DecomposeRerunRes> {
-  return apiFetch<DecomposeRerunRes>(`/decompose/job/batches/${seq}/rerun`, { method: "POST" });
 }

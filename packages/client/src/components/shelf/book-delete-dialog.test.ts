@@ -13,13 +13,12 @@ import {
 } from "./book-delete-dialog";
 
 describe("book-delete-dialog 框内文案", () => {
-  it("三行后果：本地目录含 .backups/ 一并删且不可恢复 / 删前推送云端 / 取消在跑拆解", () => {
-    expect(BOOK_DELETE_CONSEQUENCES).toHaveLength(3);
+  it("两行后果：本地目录含 .backups/ 一并删且不可恢复 / 删前推送云端", () => {
+    expect(BOOK_DELETE_CONSEQUENCES).toHaveLength(2);
     const text = BOOK_DELETE_CONSEQUENCES.join("\n");
     expect(text).toContain(".backups/");
     expect(text).toContain("不可恢复");
     expect(text).toContain("推送到云端");
-    expect(text).toContain("拆解任务");
   });
 
   it("复选项「同时删除云端备份」默认不勾（云端那份是唯一不在本机的副本）", () => {

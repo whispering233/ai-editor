@@ -30,11 +30,10 @@ export interface BookDeleteTarget {
 /** 复选项初始值：**默认不勾**——云端那份是唯一不在本机的副本，删它必须是显式选择 */
 export const BOOK_DELETE_REMOTE_DEFAULT = false;
 
-/** 框内三行后果（文案单一定义） */
+/** 框内两行后果（文案单一定义） */
 export const BOOK_DELETE_CONSEQUENCES = [
   "本地目录连同 .backups/ 里的全部备份一并删除，不可恢复",
   "已启用云备份时，会先把当前状态推送到云端（云端不会停在旧状态）",
-  "在跑的拆解任务会被取消",
 ] as const;
 
 /** 确认按钮视图：有错误 → 换「仍要删除」（force）并写明最新改动不上云 */

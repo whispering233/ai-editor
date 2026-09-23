@@ -20,7 +20,6 @@ import TimelineDetail from "./pages/TimelineDetail";
 import ReferenceList from "./pages/ReferenceList";
 import ReferenceDetail from "./pages/ReferenceDetail";
 import Manuscript from "./pages/Manuscript";
-import Decompose from "./pages/Decompose";
 import Trash from "./pages/Trash";
 import Settings from "./pages/Settings";
 import "./index.css";
@@ -133,10 +132,6 @@ function renderPage(route: Route): ReactNode {
       ) : (
         <RedirectTo to="/outline" />
       );
-    case "decompose":
-      // 拆解进度页（卡 21.9）：#/decompose——拆解对话框 start 成功后落在这里；
-      // 更深段归一回本页（进度页无子路由）
-      return second === undefined ? <Decompose /> : <RedirectTo to="/decompose" />;
     case "trash":
       return <Trash />;
     case "preferences":

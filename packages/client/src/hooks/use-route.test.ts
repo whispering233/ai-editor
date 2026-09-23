@@ -53,7 +53,6 @@ describe("parseHashRoute", () => {
     ["#/timepoints/tp-abc", ["timepoints", "tp-abc"]],
     ["#/preferences", ["preferences"]],
     ["#/overview", ["overview"]],
-    ["#/decompose", ["decompose"]], // 拆解进度页（卡 21.9）
     ["#/entities/character", ["entities", "character"]], // 旧址：已知段，redirect 兜底
     ["#/settings", ["settings"]],
   ])("一级化新段解析 %s", (hash, segments) => {
