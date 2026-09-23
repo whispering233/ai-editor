@@ -35,7 +35,10 @@ type: "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "r
   q?: string;           // 搜索关键词（模糊匹配 name）
   offset?: number;      // 分页偏移，默认 0
   limit?: number;       // 每页条数，缺省/上限 = shared `DEFAULT_ENTITY_LIST_LIMIT` / `MAX_ENTITY_LIST_LIMIT`
-  sort?: "name" | "created_at" | "updated_at";
+  sort?: "name" | "created_at" | "updated_at" | "priority";
+  // priority（2026-09）：**角色优先级档**（档位升序：主角 → 龙套；未分级沉底；同级 updated_at 降序 → id 升序）。
+  //   档位取值/顺序/中文标签单一定义 = shared 常量（见 ../db/schema.md「人物 data 分层」）；
+  //   该档仅 character 有语义：其余类型全部无 priority ⇒ 退化为「最近更新降序」
   order?: "asc" | "desc";
   tag?: string;         // 标签包含筛选（2026-08）：data.tags 数组字段包含该标签即命中
                         // （setting 与 event 同字段语义；单标签精确匹配；不传 = 不过滤）
@@ -133,9 +136,10 @@ type: "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "r
 }
 
 // 各 type 的 data 字段说明：
-// character: { role?, description?, alias?, gender?, age?, race?, personality?: string[], motivation?, ability_panel?, custom_fields? }
+// character: { role?, description?, alias?, gender?, age?, race?, personality?: string[], motivation?, ability_panel?, custom_fields?, priority? }
 //            （2026-09：description 必填（**仅前端校验** + AI 工具约定；**校验落地 = 前端人物表单**，
 //             服务端不硬校验，保护提案/旧数据/备份导入三条路径）；status 已移除；abilities 经 007 迁为 ability_panel；
+//             priority = 角色优先级档（shared 常量枚举，缺省 = 未分级；清除 = `null`）；
 //             分层与面板结构见 ../db/schema.md「人物 data 分层」）
 // setting:   { description?, tags?: string[], rules?: string[], custom_fields? }（category/parent_id 已废弃，由 passthrough 容错）
 // location:  { type?, parent_id?, description?, custom_fields? }
@@ -167,7 +171,7 @@ type: "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "r
 
 更新实体。使用 partial update（仅修改传入字段）。
 
-**清空语义（2026-08 用户反馈 F1 修复）**：data 字段提交**空值即清除**——`""`（字符串字段）/ `[]`（数组字段）经浅合并覆盖原值；未传入的字段不受影响（partial）。event 字段（`description`/`tags`）支持此语义（`time_label` 已随 G2 移除）。
+**清空语义（2026-08 用户反馈 F1 修复）**：data 字段提交**空值即清除**——`""`（字符串字段）/ `[]`（数组字段）经浅合并覆盖原值；未传入的字段不受影响（partial）。event 字段（`description`/`tags`）支持此语义（`time_label` 已随 G2 移除）。**枚举字段例外**：`character.data.priority` 用 `null` 清除（回到「未分级」）——`""` 不是合法档位，schema 拒绝。
 
 ```typescript
 // Path

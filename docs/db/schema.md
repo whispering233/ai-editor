@@ -49,7 +49,7 @@ CREATE TABLE entities (
   type        TEXT NOT NULL CHECK(type IN ('character', 'setting', 'location', 'hook', 'event', 'timepoint', 'reference')),
   name        TEXT NOT NULL,
   data        TEXT NOT NULL DEFAULT '{}',  -- JSON: 各类型的专属字段
-  sort_order  INTEGER,                     -- 线性序：event/timepoint 各类型内线性（各自 0..n-1）；setting 为**同级组内线性序**（同父/同根组内 0..n-1，NULL = 未参与手动排序）；其余类型恒为 NULL
+  sort_order  INTEGER,                     -- 线性序：event/timepoint 各类型内线性（各自 0..n-1）；setting 为**同级组内线性序**（同父/同根组内 0..n-1，NULL = 未参与手动排序）；其余类型恒为 NULL——**character 的展示排序不走本列**（走 `data.priority`，见下方「人物 data 分层」）
   created_at  TEXT NOT NULL,               -- ISO 8601，应用层写入
   updated_at  TEXT NOT NULL,               -- ISO 8601，应用层写入（提案快照比对）
   deleted_at  TEXT             -- 软删标记，NULL 表示未删除；非 NULL 时该实体进入回收站，本体保留可还原
@@ -60,7 +60,7 @@ CREATE TABLE entities (
 
 | type | data 关键字段 |
 |------|-------------|
-| `character` | **不可变**：`role`（角色定位——**新建弹窗必填；详情页允许为空**，两者口径有意不同）, `description`（**必填**——人物概述：这个人物是谁；**校验落地 = 前端人物表单 + AI 工具约定，服务端不硬校验**）；**可变**：`alias`（假名/化名——**单值**：阅读进度时这个人的化名是什么；Delta `set`/`update` 标量而非数组）, `gender`, `age`, `race`, `motivation`, `personality[]`, `ability_panel`（能力面板树）；`custom_fields`。（**2026-09 修订**：`status` 彻底移除——详情表单/列表/AI 摘要三处早已无展示，旧残留由 `.passthrough()` 容错；`abilities[]` 经 007 迁移为 `ability_panel`，见下方「人物 data 分层」） |
+| `character` | **不可变**：`role`（角色定位——**新建弹窗必填；详情页允许为空**，两者口径有意不同）, `description`（**必填**——人物概述：这个人物是谁；**校验落地 = 前端人物表单 + AI 工具约定，服务端不硬校验**）, `priority`（角色优先级——枚举档位，缺键/`null` = 未分级，见下方「人物 data 分层」）；**可变**：`alias`（假名/化名——**单值**：阅读进度时这个人的化名是什么；Delta `set`/`update` 标量而非数组）, `gender`, `age`, `race`, `motivation`, `personality[]`, `ability_panel`（能力面板树）；`custom_fields`。（**2026-09 修订**：`status` 彻底移除——详情表单/列表/AI 摘要三处早已无展示，旧残留由 `.passthrough()` 容错；`abilities[]` 经 007 迁移为 `ability_panel`，见下方「人物 data 分层」） |
 | `setting` | `description`, `tags[]`（**分类标签，统一字段**）, `rules[]`（**规则条款，仅详情页编辑**）, `custom_fields` —— **`parent_id` 与 `category` 均已废弃**：层级由 belongs_to 关系表达、分类由 tags 承接；旧字段残留由 `.passthrough()` 容错；旧 rules 分类值经 004 迁移（SCHEMA_VERSION 4）复制到 tags |
 | `location` | `type`, `parent_id`, `description`, `custom_fields` |
 | `hook` | 伏笔（关系生命周期见下方 `plants`/`advances`/`resolves` 等）；data 字段集见 shared `hookDataSchema`（status/category/expected_payoff/payoff_timing/half_life/is_core/notes/expected_resolve_node_id），服务端按 schema 校验 |
@@ -76,9 +76,16 @@ CREATE TABLE entities (
 
 | 分层 | 字段 | 是否参与 Delta |
 |------|------|----------------|
-| **不可变** | `entities.name`（姓名，**列**不是 data 字段）、`data.role`（角色定位）、`data.description`（描述，必填） | **否**——不出现在变更记录的字段下拉；人工经 `PUT` 直接编辑 |
+| **不可变** | `entities.name`（姓名，**列**不是 data 字段）、`data.role`（角色定位）、`data.description`（描述，必填）、`data.priority`（角色优先级——作者视角档位，列表默认排序档的依据） | **否**——不出现在变更记录的字段下拉；人工经 `PUT` 直接编辑 |
 | **可变** | `data.alias` / `gender` / `age` / `race` / `motivation` / `personality[]` / `ability_panel` 叶子值 / **`custom_fields`**（可被点分路径 Delta 命中，故与不可变区语义互诉；MVP 只在已有该键时渲染、不可新增键） | **是**——沿大纲树父链（章序前缀）累积，构成「阅读进度」视图 |
 | **关系网** | `relation_records`（人↔人 5 类 + `appears_in` / `belongs_to` / `owns` / `masters`） | 否——关系不参与 `computeState` |
+
+**`priority` 角色优先级（2026-09）**：四档**有序**枚举 `protagonist` 主角 / `major` 主要配角 / `minor` 配角 / `extra` 龙套——**档位取值、顺序与中文标签的单一定义 = shared 常量**（增删档位 = 改常量一处；UI 下拉、AI 工具说明、排序 rank 全部派生，禁止手抄）。**未分级 = 键缺失 / `null` / 未知值**，不是第五个枚举值（脏值不得打挂排序）。
+
+- **归不可变层**：它是**作者视角**的分类（谁是主角由作者判断），不随阅读进度变化 ⇒ 不进变更记录字段下拉、不参与 `computeState`；AI 提案层沿 `IMMUTABLE_FIELDS` 一并拒绝该字段的 Delta。
+- **写入面**：新建弹窗 / 详情页下拉（缺省「未分级」= 不下发该键；清除 = 下发 `null`）；AI 经 `data`（`propose_create_entity` / `propose_update_entity`）可写并可自行判定，**不做文本/统计猜测回填**。
+- **排序口径**（`GET /api/v1/entity/:type?sort=priority`）：档位升序 → **未分级沉底** → 同级 `updated_at` 降序 → `id` 升序；rank 由常量顺序派生，实现走 data JSON 提取（**不是列**）。该档仅 character 有语义，其余类型退化为「最近更新降序」。
+- **无迁移**：存量角色一律未分级，无 DDL，`SCHEMA_VERSION` 不变。
 
 **`ability_panel` 能力面板结构**（用户自定义字段树，递归）：
 
