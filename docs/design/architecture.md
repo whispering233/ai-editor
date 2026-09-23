@@ -61,7 +61,7 @@ packages/
 | `db` | 存储语义：表/查询/迁移/软删级联/状态计算 + 块文档读写（`document_records`）+ 项目目录文件存储（原子写） | `(db: Db)` 签名查询函数；`SCHEMA_VERSION` 与迁移目录；事务辅助 |
 | `tools` | 把模型意图映射到写操作：查询/分析工具（自动执行）+ 提案工具（确认后执行）；读写经 db | 工具定义（TypeBox schema + 权限级别）、提案仓、执行器 |
 | `agent` | pi 运行时装配：模型/凭据/会话/循环接入、系统提示词、事件映射、工具注册 | `AgentSession` 生命周期 API 与事件流；写操作一律走工具提案 |
-| `server` | HTTP/路由/请求校验/项目生命周期（书架）/自动备份/静态托管/**拆解小说管线**（切分 / 批执行 / 归并 / 报告） | `/api/v1` REST + `POST /chat` SSE（契约见 shared schema + api 文档） |
+| `server` | HTTP/路由/请求校验/项目生命周期（书架）/自动备份/静态托管 | `/api/v1` REST + `POST /chat` SSE（契约见 shared schema + api 文档） |
 | `client` | UI：页面、组件、状态、hash 路由；只消费 shared 类型/常量（编译期消失） | 无对外 API |
 | `desktop` | 桌面外壳：窗口/菜单/preload 目录选择/书库位置配置/日志落盘/electron-builder 打包；**不承载业务逻辑** | 无对外 API |
 

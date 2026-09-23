@@ -28,7 +28,6 @@ import { ensureParseableBackup, migratePromptToAgents, setProjectTick, startAuto
 import { AUTO_PUSH_THROTTLE_MS, maybeAutoPush } from "../cloud/auto-push.js";
 import { readAutoPush } from "../cloud/state.js";
 import { disposeProjectRuntime } from "../chat-runtime.js";
-import { cancelRunningDecomposeJobs } from "../decompose/runner.js";
 
 /** data.db 文件名（项目根目录） */
 export const DATA_DB_FILE_NAME = "data.db";
@@ -86,12 +85,10 @@ setProjectTick({
  * 调度器 tick 内重读 config 自行跟随。
  */
 export function setCurrentProject(project: ProjectContext | null): void {
-  // 拆解 job（设计 §7）：切书 / 关项目**不做跨书后台跑** —— 旧项目上的在跑 job 在此暂停：
-  // ① 通知进程内那一轮停在批间（当前批跑完即停，结果不浪费）；② job 行归一为 `paused`。
+  // 拆解 job（设计 §7）：切书 / 关项目**不做跨书后台跑** —— 旧项目上的在跑 job 行在此归一为 `paused`。
   // `db.open` 守卫：切换路径可能已先关旧连接（start / open 路由的「新就绪再关旧的」顺序），
   // 写不进去时由「下次打开这本书时的归一」接管（下面 open 分支）。
   const previous = currentProject;
-  cancelRunningDecomposeJobs();
   if (previous !== null && previous.db.open) pauseRunningJobs(previous.db, nowIso());
   // 旧项目的对话运行时在此释放：中止在途流 → dispose 会话订阅 → 清空提案仓
   //（单点覆盖 create/open/close/restore 全部切换路径，见 chat-runtime.ts）
