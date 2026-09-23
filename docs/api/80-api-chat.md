@@ -139,7 +139,11 @@ id: string;                  // 会话 ID（不透明值；服务端经磁盘发
       blockIndex: number;       // 取全文时的块下标
       length: number;           // 原文字符数（前端展示「已折叠」提示）
     }[];
-    toolCalls?: unknown[];      // assistant 消息的工具调用数组
+    toolCalls?: {               // assistant 消息的工具调用数组（元素 = 服务端投影形状 `{ id, name, arguments }`，
+      id: string;               // 与 SSE `message_end` 帧**同一份**投影：pi 原生 toolCall 块 `{type:"toolCall",id,name,arguments}` 只去掉 `type`；
+      name: string;             // `arguments` 已是对象，**不是** LLM wire 的 JSON 串（客户端渲染走同一归一入口）
+      arguments: unknown;
+    }[];
     toolCallId?: string | null; // tool 消息关联的调用 id
     createdAt: string;
   }[];

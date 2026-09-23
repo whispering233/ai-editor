@@ -774,7 +774,7 @@ describe("sendMessage（POST /chat + SSE 事件映射，契约 = docs/api/80-api
       },
     });
     expect(idsIn()).toEqual(["call-1", "call-2"]);
-    // 正常顺序（start 先到）：内部形状进消息，供渲染层双形态归一
+    // 正常顺序（start 先到）：内部形状进消息，供渲染层多形态归一
     onEvent("tool_execution_start", { toolCallId: "call-3", toolName: "get_outline", args: {} });
     expect(idsIn()).toEqual(["call-1", "call-2", "call-3"]);
     expect(useChatStore.getState().messages[1].toolCalls?.[2]).toEqual({

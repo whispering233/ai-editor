@@ -7,9 +7,11 @@
 //   ping               → 忽略（fetchSSE 内部据其重置 60s 超时）
 //   message_start/end  → message_end 的 assistant 投影为**权威终态**（正文/工具调用/思维链预览）；
 //                        assistant 帧的 speed → 解码速度（服务端算好，客户端不计时）
-//   message_update     → text_delta 累积正文；thinking_delta 累积思维链（流式展开）；
+//   message_update     → text_delta 累积正文；thinking_delta 累积思维链（流式展开，**轮级**：
+//                        本轮首次 thinking_start 置位、至 agent_end/中断帧收尾，中途不折叠）
 //                        toolcall_* 只服务工具卡片元数据（执行卡片由 tool_execution_start 建）
-//   tool_execution_*   → 运行时工具卡（start 建行 / end 定终态 + 提案载荷）
+//   tool_execution_*   → 运行态工具表（start 建行 / end 定终态 + 提案载荷），
+//                        并**并入流式消息的 toolCalls**（渲染位置在消息内，见 DESIGN.md `chat-message-stream`）
 //   turn_end/agent_end → contextUsage（占用条口径 = getContextUsage，不是「预算分母」）+ usage（会话累计账目）
 //   compaction_*/auto_retry_* → statusNote（轻量提示，不引入新视觉）
 //   agent_end          → 终止（stopReason=error/aborted → 错误条；成功 → 刷新会话列表）
@@ -69,7 +71,8 @@ export interface ChatMessageView extends ChatSessionMessage {
   thinkingStreaming?: boolean;
 }
 
-/** 运行时工具调用记录（SSE tool_execution_* 事件，瞬态；历史消息走 messages 的 toolCalls/toolCallId 成对渲染） */
+/** 运行时工具调用记录（SSE tool_execution_* 事件，瞬态；**结果/状态来源**——行本身由流式消息的
+ * toolCalls 承载，见 DESIGN.md `chat-message-stream`；历史消息走 messages 的 toolCalls/toolCallId 成对渲染） */
 export interface StreamToolRecord {
   id: string; // toolCallId（成对重组依据）
   tool: string; // 工具名（get_entity 等）
@@ -839,7 +842,7 @@ export const useChatStore = create<ChatState>((set, get) => {
               const usage = parseChatUsage(frame?.usage);
               const stopReason = frame?.stopReason;
               const errorMessage = typeof frame?.errorMessage === "string" ? frame.errorMessage : "";
-              // 思维链未收到 thinking_end 就结束（模型/传输边界）：同样收尾折叠
+              // 本轮结束：思维链收尾折叠（轮级口径——无论是否收到 thinking_end，折叠都发生在这里）
               patchStreamMessage(streamMsgId, (m) =>
                 m.thinkingStreaming === true ? { ...m, thinkingStreaming: false } : m,
               );

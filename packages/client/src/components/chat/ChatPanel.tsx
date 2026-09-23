@@ -6,7 +6,7 @@
 // 消息内 思考 → 工具行 → 正文，见 DESIGN.md `chat-message-stream` / 提案卡）→
 // focus 小条 → 输入区（Enter 发送 / Shift+Enter 换行）
 // 无项目打开时整体禁用（灰显 + 「打开项目后可用」，不请求会话数据，「位置与形态」）
-// S7 数据源已接入（S8.1 联调完成）：proposals（提案卡）/ streamTools（运行时工具行）
+// S7 数据源已接入（S8.1 联调完成）：proposals（提案卡）/ streamTools（运行态工具结果与状态）
 // 由 SSE 事件经 store 瞬态字段自动填充渲染；提案确认/拒绝已接 S7.5 真实 API（S8.2 解锁，
 // store 驱动状态迁移：confirmed/rejected/stale 终态 + 404 移除卡片）
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -589,11 +589,12 @@ export function ToolCallRow({
   );
 }
 
-// ============ 思维链（DESIGN.md `thinking-block`：默认折叠为一行摘要，流式期间自动展开） ============
+// ============ 思维链（DESIGN.md `thinking-block`：默认折叠为一行摘要，本轮流式期间自动展开） ============
 
 /**
  * 思维链块（导出供渲染走查测试）。两种数据形态共用一套渲染：
- * - **流式轮**（`live`）：文本由 `thinking_delta` 在客户端累积（全量），流式期间自动展开、结束后自动折叠；
+ * - **流式轮**（`live`）：文本由 `thinking_delta` 在客户端累积（全量），本轮流式期间自动展开、
+ *   本轮结束自动折叠（轮级：中途的工具调用/后续 LLM 调用不折叠，见 `chat.ts` 的 thinkingStreaming）；
  * - **历史回看**（`deferred`）：只有 240 字预览（`docs/api/80-api-chat.md` 按需端点契约），
  *   点展开才拉全文（带加载/失败态）。
  * 视觉：折叠 = 一行 caption + chevron（tertiary 字色，无底色无描边）；

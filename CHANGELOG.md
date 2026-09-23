@@ -29,6 +29,10 @@
 - **标记提交基底改为可见标记**：软删/purge 后的失效 id 会留在 `deduction_nodes` 里（读侧原样返回、不自动清理），而写侧对任一失效 id 严格 400——客户端若拿 raw 数组回传，该书任何标记操作将永久失败；基底改用 shared 派生可见标记后，下一次全量写入只含可见 id，盘上自然收敛（`toggledDeductionNodes` + 回归测试）
 - shared `buildDeductionMarks` 对非数组脏值（手编 `project.json` 的 `deduction_nodes: 5` 之类）视为空集合，不再 `new Set(5)` 抛错打挂大纲页与 AI 工具
 - `mapConfigToProjectFile`（API 形态 → 文件形态全量映射）补上 `deduction_nodes`——此前漏映射，任何调用方都会静默丢掉推演标记（与备份频率同口径：全量映射恒写出缺省值）
+- **思考过程块被往上推 / 滚动条停不住 / 页面抖动**：自动滚动改为「**仅在用户贴底时跟随**」（距底 `STICK_BOTTOM_THRESHOLD_PX` 内；上滚即脱离、滚回底部自动恢复；发送新一轮与历史加载强制恢复跟随）——原先每个 delta 都无条件拉到底，用户上滚会被逐帧拽回
+- **流式期「答案在工具行上方」**：运行态工具行原挂在所有消息之后，而正文长在消息内 ⇒ 流式期顺序错乱、重载后又翻转；工具行并入消息后两侧同序（同 id 的重复行一并消失）
+- **工具行展开态丢失参数**：`asToolCall` 只认 LLM wire 形状 `{type:"function",function:{…}}`（全仓无生产者），真实形状是服务端投影的 `{id,name,arguments}`（SSE `message_end` 帧与历史接口的**同一份**投影）⇒ 展开只显示动词短语、看不到查询对象（历史回看一直如此）；补真实形状分支后运行态与历史回看都恢复，同一批内重复 id 也去重
+- **工具行状态点把「进行中」显示成成功**：`ToolCallRow` 的 `ok = status === "ok" || result !== undefined` 会让已挂 result 的行盖掉显式 `running`；改为显式 `status` 优先
 
 ## [v0.0.55] - 2026-09-23
 
