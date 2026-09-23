@@ -945,7 +945,7 @@ export const chatSendReqSchema = z
 // GET /api/v1/chat/sessions（按最后活动时间倒序，仅当前项目会话）
 export const chatSessionSummarySchema = z.object({
   id: z.string(),
-  // 会话显示名（pi `session_info` 条目）：拆解会话 = 「《书名》拆解」，普通 chat 会话 pi 不写 ⇒ 缺省
+  // 会话显示名（pi `session_info` 条目；普通 chat 会话 pi 不写 ⇒ 缺省）
   name: z.string().optional(),
   lastMessage: z.string(), // 截断摘要
   messageCount: z.number().int(),

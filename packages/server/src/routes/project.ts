@@ -78,7 +78,7 @@ export function setProjectRoot(root: string | null): void {
   projectRoot = root;
 }
 
-/** 读创作根（拆解 start 在 `books/<书名>/` 下建书目录用；未初始化 → null） */
+/** 读创作根（书架模式：创作根 / `books/<书名>/`；未初始化 → null） */
 export function getProjectRoot(): string | null {
   return projectRoot;
 }
@@ -826,7 +826,7 @@ async function pushLatestBackupBeforeDelete(
 // 契约 = `docs/api/10-api-project.md` §POST /project/delete、`docs/design/40-cloud-sync.md` §4 / §8.5。
 // **删除不可恢复**：该书 `.backups/` 在书目录内，随目录一并消失 → 有云同步记录的书删前必
 // 推一份最新副本（不变式：删书前必有一份**不在同一磁盘上**的副本，或用户明确的 `force`）。
-// 删除顺序（当前书先收尾）：closeProject + setCurrentProject(null)（该单点负责取消在跑拆解 job、
+// 删除顺序（当前书先收尾）：closeProject + setCurrentProject(null)（该单点负责归一在跑 job 状态、
 // 释放会话运行时与定时器）+ 抹 lastProject → rm；非当前书直接 rm（不碰当前项目的任何运行态）。
 // `delete_remote` 在本地删除**之后**执行，best-effort（失败只回 `remoteError`，本地已删不回退）。
 projectRoutes.post("/delete", async (c) => {
@@ -860,7 +860,7 @@ projectRoutes.post("/delete", async (c) => {
     }
   }
 
- // 删除：当前书先收尾（关连接 + 清单例 → 取消在跑拆解 job、释放会话运行时、停定时器）
+ // 删除：当前书先收尾（关连接 + 清单例 → 归一在跑 job 状态、释放会话运行时、停定时器）
   const current = getCurrentProject();
   if (current !== null && current.root === dir) {
     closeProject(current);
