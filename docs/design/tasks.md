@@ -8,31 +8,22 @@
 
 ---
 
-## 卡 1：角色优先级——数据与契约层
+## 卡 1：角色优先级——数据与契约层（实现完成，待 oracle 验证）
 
-**目标**：`data.priority` 档位落在 shared 单源，列表接口 `sort=priority` 在服务端可用（未分级沉底）。
+**实现**：commit `d99056b`（含 supervisor 批准的范围追加：`IMMUTABLE_FIELDS` 与 client 字段注册耦合——只加常量会让 client 穷尽断言与新建弹窗硬红，故 card 内一并落 `FieldControl` 的 `select` 分支、`isSingleLineField` 纳入 select、character 字段行与 `CHARACTER_DETAIL_FIELD_KEYS` 登记，避免渲染成文本框的坏中间态）。
 
-- **shared**：新增**有序**档位常量（4 档 key + 中文标签；派生 keys / 标签映射 / rank 查询——禁手抄第二份）；`characterDataSchema.priority` = 档位枚举 `.nullable().optional()`；`IMMUTABLE_FIELDS.character` 追加 `priority`；`entityListQuerySchema.sort` 加 `"priority"`；单测钉住档位顺序/中文标签/rank 派生、schema 接受合法档位与 `null`/缺失、拒绝非法字符串。
-- **db**：`listEntities` 的 sort 类型加 `priority`；排序表达式 = data JSON 提取（`json_extract`）+ 由常量顺序生成的 rank CASE → 未分级/脏值沉底 → `updated_at` 降序 → `id` 升序（非 character 类型全无档位 ⇒ 退化为最近更新降序，不得抛错）；单测覆盖上述四条。
-- **server**：路由透传（若注释列举 sort 档位需同步）；补一条 HTTP 层排序断言。
-- **验收**：`pnpm -r build` → `pnpm typecheck` → `pnpm lint` → 相关包 `test`（filter 与 package.json `name` 逐字一致）；证据 = `git log` 新 commit hash + 命令输出摘录 + `git status` 干净。
+**已交付**：`CHARACTER_PRIORITIES`（4 档有序）+ 标签映射 + rank 派生、`characterDataSchema.priority`、`IMMUTABLE_FIELDS.character += priority`、`entityListQuerySchema.sort += priority`、db `listEntities` 的 `priority` 排序档（JSON 提取 + 常量派生 CASE、未分级/脏值沉底、固定升序）、detail 字段行与 select 控件分支。
 
-## 卡 2：角色优先级——写入面（新建弹窗 + 详情页）
+**待验证（oracle）**：单源无第二份表 / 排序四条语义（已分级、未分级与脏值沉底、同级 updated_at 降序、非 character 不报错）/ 清空走 `null` 且 `""` 被 400 / 卡内无越界改动 / 全套命令真跑过。
 
-**依赖**：卡 1（先 `pnpm -r build`）。
-
-- **client**：`FieldControl` 补 `select` 分支（选项/标签来自 shared 常量，缺省「未分级」）；`isSingleLineField` 纳入 `select`（否则整行两列破网格）；`detailFieldsForType("character")` 加「优先级」行（`role` 之后）；`CHARACTER_DETAIL_FIELD_KEYS` 同步登记（穷尽断言强制）；清除 = 选「未分级」下发 `null`（确认 `diffData` 链路不吞 null）。
-- **口径**：新建弹窗基础段自动带出该控件（`IMMUTABLE_FIELDS` 派生），但**必填仍只有姓名/角色定位/描述**。
-- **验收**：单测（字段清单与顺序、select 选项与 shared 常量同值、清除提交形状）+ 浏览器像素核对（详情页档案网格对齐、新建弹窗）；证据同上（commit hash + 命令输出 + `git status`）。
-
-## 卡 3：角色优先级——rail 默认排序档
+## 卡 2：角色优先级——rail 默认排序档
 
 **依赖**：卡 1（服务端排序就绪）。
 
 - **client**：`RAIL_SORT_OPTIONS` 加「角色优先级」（`priority:asc`）并置**默认档**；`RAIL_DEFAULT_SORT` / `resolveRailSort` 脏值回落随第一项；旧三档（最近更新 / 名称 / 创建时间）保留、手动切档行为不变；不新增排序持久化。
-- **验收**：单测（默认档值、resolveRailSort 映射、旧档仍在）+ 浏览器核对默认排序表现（主角在前、未分级沉底）；证据同上。
+- **验收**：单测（默认档值、resolveRailSort 映射、旧档仍在）+ 浏览器核对默认排序表现（主角在前、未分级沉底）；证据 = commit hash + 命令输出摘录 + `git status` 干净。
 
-## 卡 4：角色优先级——AI 工具说明（单源插值）
+## 卡 3：角色优先级——AI 工具说明（单源插值）
 
 **依赖**：卡 1（常量就位）。
 

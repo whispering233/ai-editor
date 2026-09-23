@@ -38,6 +38,7 @@ type: "character" | "setting" | "location" | "hook" | "event" | "timepoint" | "r
   sort?: "name" | "created_at" | "updated_at" | "priority";
   // priority（2026-09）：**角色优先级档**（档位升序：主角 → 龙套；未分级沉底；同级 updated_at 降序 → id 升序）。
   //   档位取值/顺序/中文标签单一定义 = shared 常量（见 ../db/schema.md「人物 data 分层」）；
+  //   **固定升序——order 参数不参与**（同 event/timepoint 先例）；
   //   该档仅 character 有语义：其余类型全部无 priority ⇒ 退化为「最近更新降序」
   order?: "asc" | "desc";
   tag?: string;         // 标签包含筛选（2026-08）：data.tags 数组字段包含该标签即命中

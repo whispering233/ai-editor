@@ -84,7 +84,7 @@ CREATE TABLE entities (
 
 - **归不可变层**：它是**作者视角**的分类（谁是主角由作者判断），不随阅读进度变化 ⇒ 不进变更记录字段下拉、不参与 `computeState`；AI 提案层沿 `IMMUTABLE_FIELDS` 一并拒绝该字段的 Delta。
 - **写入面**：新建弹窗 / 详情页下拉（缺省「未分级」= 不下发该键；清除 = 下发 `null`）；AI 经 `data`（`propose_create_entity` / `propose_update_entity`）可写并可自行判定，**不做文本/统计猜测回填**。
-- **排序口径**（`GET /api/v1/entity/:type?sort=priority`）：档位升序 → **未分级沉底** → 同级 `updated_at` 降序 → `id` 升序；rank 由常量顺序派生，实现走 data JSON 提取（**不是列**）。该档仅 character 有语义，其余类型退化为「最近更新降序」。
+- **排序口径**（`GET /api/v1/entity/:type?sort=priority`）：档位升序 → **未分级沉底** → 同级 `updated_at` 降序 → `id` 升序；rank 由常量顺序派生，实现走 data JSON 提取（**不是列**）。该档**固定升序——`order` 参数不参与**（同 event/timepoint 先例，`desc` 不会把龙套排到前面）；仅 character 有语义，其余类型退化为「最近更新降序」。
 - **无迁移**：存量角色一律未分级，无 DDL，`SCHEMA_VERSION` 不变。
 
 **`ability_panel` 能力面板结构**（用户自定义字段树，递归）：

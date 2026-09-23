@@ -271,6 +271,10 @@
   - 现状：`components/timeline/TimelineGroup.tsx` 的组标题是 `min-w-0 truncate …`，未挂载态另加 `italic`——与左栏「◈ 书架」同款组合（合成斜体墨迹越出字宽 ⇒ `overflow: hidden` 切右缘）。该 span 宽度取决于兄弟节点，且本机样本（`test-project`）无未挂载时间点 ⇒ 元素未渲染（8 页扫描 `overflow-x: hidden` + `font-style: italic` 零命中，故未修）。
   - 触发条件：有未挂载时间点的样本上看到「未挂载」右缘被切，或该行被压到文本宽度时。
   - 最小修法：只给未挂载分支补 `pr-0.5`（把斜体越界量让给 padding）——`truncate` 不能去掉，同一 span 也服务长名组标题（非斜体，确实需要省略号）。
+- **泛型详情页的 select 只读值不走 `optionsLabels`**（2026-09 角色优先级卡登记，非阻塞）
+  - 现状：人物页（档案网格 / 阅读进度 tab）的枚举字段只读值已渲染中文标签（角色优先级）；泛型 `EntityDetail`（hook 详情的 `status` / `payoff_timing`）仍显示原始 key（`planted` / `progressive` 一类）。两套控件实现是原因（见上一条「人物页 vs 泛型详情页抽公共层」）。
+  - 触发条件：hook 详情页被反馈“状态列看不懂”；或真的上提公共字段控件时一并收口。
+  - 最小修法：泛型只读渲染路径按 `optionsLabels` 映射（单点），与人物页同口径。
 
 ## 会话状态栏的延期项（状态栏设计定稿时登记，未排期）
 
