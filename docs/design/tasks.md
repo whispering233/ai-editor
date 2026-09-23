@@ -104,7 +104,12 @@
 - `README.md`：书架描述、AI 运行时行、功能清单里的拆解条目、仓库结构里的 `references/` 说明。
 - `backlog.md`：拆解相关 35 处全删（含「拆解小说（已交付，未排期项）」整节）。
 - `docs/ui/DESIGN.md` 与其余文档兜底清扫。
-- **残留归零核验**：全仓 `rg -n 'decompose|Decompose|拆解'` 只允许命中——CHANGELOG 已发布版本段、`migrations/009_decompose.ts` / `010_decompose_concurrency.ts` 及其测试（历史迁移链，注释里注明「拆解功能已移除（见 CHANGELOG），本迁移仅服务旧库升级路径」）、`00-master-design.md` 的边界声明。
+- **残留归零核验（2026-09 裁定口径，逐条核）**：全仓 `rg -n 'decompose|Decompose|DECOMPOSE|拆解'` 的**允许命中集**仅限：
+  - `CHANGELOG.md` 的已发布版本段（历史事实）+ 本次新增的 `Unreleased → Removed` 条目；
+  - 迁移链：`packages/db/src/migrations/009_decompose.ts` / `010_decompose_concurrency.ts` / `011_drop_decompose.ts` 及其测试、`migrations/index.ts`、`db/src/schema.ts`（版本史注释）、`db/src/queries/migration.test.ts`；
+  - `docs/db/schema.md` 的 011 条目与 `origin` 已废止说明、`docs/design/config.md` 的 `decompose` 键已废止说明、`docs/design/00-master-design.md` 的边界声明；
+  - 本卡自身改写后的 `AGENTS.md` / `README.md` / `backlog.md` **不得**留有引用（这三个文件要真清零）。
+  - 当时不被允许的命中还有：`docs/design/tasks.md`（卡清单自身，收尾时由父代理清卡而不是本卡改）。
 - 判据：`pnpm -r build` + `pnpm typecheck` + `pnpm lint` + `pnpm -r test` 全绿 + 上述 `rg` 清单逐条核对 + commit hash。
 
 ---
