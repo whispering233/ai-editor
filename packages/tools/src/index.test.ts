@@ -1,9 +1,9 @@
 // 冒烟测试：验证 @whispering233/ai-editor-tools 入口可正常导入（T0.3 语义）
-// 冒烟断言为新入口形态：注册表 API + 工具副作用注册（查询 10 + 分析 5 +
-// S6.5 伏笔 5 + S6.6 提案 16 + S6.7 卡 12.9（get_chapter_text）1 = 36 个；执行 13 个不暴露）；
+// 冒烟断言为新入口形态：注册表 API + 工具副作用注册（查询 11 + 分析 5 +
+// S6.5 伏笔 5 + S6.6 提案 16 + S6.7 卡 12.9（get_chapter_text）1 + D4（get_deduction_marks）1 = 37 个；执行 13 个不暴露）；
 // workspace 依赖 @whispering233/ai-editor-db / @whispering233/ai-editor-shared 解析由 import 在编译/运行期验证
 import { describe, expect, it } from "vitest";
-import { CHARACTER_PRIORITIES, CHARACTER_PRIORITY_LABELS, DEFAULT_HALF_LIFE, PROPOSAL_TOOLS } from "@whispering233/ai-editor-shared";
+import { AUTO_TOOLS, CHARACTER_PRIORITIES, CHARACTER_PRIORITY_LABELS, DEFAULT_HALF_LIFE, PROPOSAL_TOOLS } from "@whispering233/ai-editor-shared";
 import * as m from "./index";
 
 describe("@whispering233/ai-editor-tools 入口冒烟", () => {
@@ -27,8 +27,8 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
     expect(typeof m.runProposeCreateEntity).toBe("function");
     expect(typeof m.runProposeAddDelta).toBe("function");
     expect(typeof m.runProposeAdvanceHook).toBe("function");
- // 入口副作用注册：查询 10 + 分析 5 + 伏笔 5 + 提案 16 = 36 个（+get_chapter_text 正文只读）
-    expect(m.toolCount()).toBe(36);
+ // 入口副作用注册：查询 11 + 分析 5 + 伏笔 5 + 提案 16 = 37 个（含 get_chapter_text 正文只读 + get_deduction_marks 推演标记）
+    expect(m.toolCount()).toBe(37);
     expect(m.getTool("get_entity")).toBeDefined();
     expect(m.getTool("get_chapter_text")!.permission).toBe("auto"); // 正文只读：自动权限
  // 分页数值防漂移：description 由 query/manuscript.ts 的常量插值生成
@@ -66,5 +66,14 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
     for (const name of PROPOSAL_TOOLS) {
       expect(m.getTool(name)).toBeDefined();
     }
+  });
+
+ // 跨包单源守卫：shared 的工具目录常量（AUTO_TOOLS + PROPOSAL_TOOLS）与 registry 事实源必须**同集**——
+ // 新增工具只改 registry 不改 shared 常量（或反之）时，此处报红（D4 前两者无同步守卫，目录常量曾静默漂移）。
+ // EXECUTOR_TOOLS 不参与：执行类工具**不注册 registry**（LLM 不可见，见 ./index.js 头注释）。
+ // 断言放本文件而非 registry.test.ts：后者会注册 4 个测试辅助工具，listTools 并非纯目录。
+  it("shared 工具目录常量与 registry 注册表同集（无遗漏 / 无多余）", () => {
+    const registered = new Set(m.listTools().map((tool) => tool.name));
+    expect(registered).toEqual(new Set([...AUTO_TOOLS, ...PROPOSAL_TOOLS]));
   });
 });

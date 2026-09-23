@@ -5,7 +5,7 @@
 // 2. AGENTS.md 只注入项目根那一个文件（祖先目录与 agent dir 都不注入）
 // 3. 项目 `.pi/settings.json` 不参与配置（项目可能来自他人）
 // 4. 会话文件落 `<项目根>/sessions` 且可被 SessionManager 读回
-// 5. 36 个领域工具装配进会话、builtin 全关、faux 工具调用可真正执行
+// 5. 37 个领域工具装配进会话、builtin 全关、faux 工具调用可真正执行
 // 6. 系统提示词 = 内核提示词（不含 pi 默认编码 agent 工具说明）
 // 7. 未配置凭据/模型时装配失败要显式报错（不静默兜底到某个模型）
 
@@ -233,7 +233,7 @@ describe("会话文件位置", () => {
 // ============ 5. 工具装配与执行 ============
 
 describe("领域工具装配", () => {
-  it("36 个工具全部可用、builtin 全关，faux 的工具调用真正执行", async () => {
+  it("37 个工具全部可用、builtin 全关，faux 的工具调用真正执行", async () => {
     const env = await createFauxEnv();
     const projectRoot = mkTempDir("ai-editor-k2-tools-");
     const agentDir = mkTempDir("ai-editor-k2-agentdir4-");
@@ -259,7 +259,7 @@ describe("领域工具装配", () => {
       const expectedNames = listTools().map((tool) => tool.name);
       const activeNames = runtime.session.getActiveToolNames();
       expect(new Set(activeNames)).toEqual(new Set(expectedNames));
-      expect(expectedNames).toHaveLength(36);
+      expect(expectedNames).toHaveLength(37);
       for (const builtin of ["read", "bash", "edit", "write"]) {
         expect(activeNames).not.toContain(builtin);
       }

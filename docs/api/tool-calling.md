@@ -75,6 +75,7 @@ get_deduction_marks()
   spans[]：相邻标记之间的区间骨架
       { from_index, to_index, chapter_count, written_chapters, middle: [{ node_id, chapter_number, title }] }
       middle = 区间内的**中间章**（不含两端标记）；written_chapters = 区间内已写正文的章数
+      （`middle` 与 `written_chapters` **均不含两端标记**）
       超大区间靠单条工具结果上限截断 + 显式告知（不另设分页）；细节再按需走 get_outline / get_chapter_text / compute_state
   注：AI **不能**增删推演节点（无对应提案工具）——推演边界是作者的判断
 

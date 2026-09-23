@@ -246,12 +246,12 @@ describe("executeProposal（proposal.type → 执行函数映射）", () => {
 });
 
 describe("执行类不注册 registry", () => {
-  it("LLM 可见工具表（listTools）不包含任何 EXECUTOR_TOOLS 名；入口冒烟 36 个注册数不变", () => {
+  it("LLM 可见工具表（listTools）不包含任何 EXECUTOR_TOOLS 名；入口冒烟 37 个注册数不变", () => {
     const names = new Set(listTools().map((t) => t.name));
     for (const name of EXECUTOR_TOOLS) {
       expect(names.has(name)).toBe(false);
     }
-    expect(toolsEntry.toolCount()).toBe(36); // 查询 10 + 分析 5 + 伏笔 5 + 提案 16（执行 13 不注册）
+    expect(toolsEntry.toolCount()).toBe(37); // 查询 11 + 分析 5 + 伏笔 5 + 提案 16（执行 13 不注册）
   });
 
   it("executeProposal 导出存在（S7.5 确认路由的消费入口）", () => {

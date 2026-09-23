@@ -1,5 +1,5 @@
 // @whispering233/ai-editor-tools 入口：导出工具上下文 / 注册表 / 查询类与分析类工具实现
-// S6.3 查询类工具（自动权限，10 个）+ S6.4 分析类工具（自动权限，5 个）在此注册；
+// S6.3 查询类工具（自动权限，11 个）+ S6.4 分析类工具（自动权限，5 个）在此注册；
 // S6.5 伏笔 / S6.6 提案通过 registry.registerTool(s) 继续挂载（注册表是唯一事实来源）。
 // S6.7 执行类 13 个**不注册 registry**（LLM 不可见，「核心设计原则」）——
 // 仅经 executor 门面（executeProposal）导出，S7.5 提案确认后调用。
@@ -18,6 +18,7 @@ export * from "./query/entity.js";
 export * from "./query/relation.js";
 export * from "./query/outline.js";
 export * from "./query/manuscript.js";
+export * from "./query/deduction.js";
 export * from "./query/delta.js";
 export * from "./query/reference.js";
 export * from "./analysis/utils.js";
@@ -48,6 +49,7 @@ import {
 import {
   computeStateArgsSchema,
   getChapterTextArgsSchema,
+  getDeductionMarksArgsSchema,
   getDeltaHistoryArgsSchema,
   getEntityArgsSchema,
   getEntitySummaryArgsSchema,
@@ -63,9 +65,10 @@ import { runSearchReferences } from "./query/reference.js";
 import { runQueryRelationships } from "./query/relation.js";
 import { runGetOutline, runGetOutlinePath } from "./query/outline.js";
 import { runGetChapterText, DEFAULT_CHAPTER_TEXT_CHARS, MAX_CHAPTER_TEXT_CHARS } from "./query/manuscript.js";
+import { runGetDeductionMarks } from "./query/deduction.js";
 import { runComputeState, runGetDeltaHistory } from "./query/delta.js";
 
-/** 查询类工具定义（S6.3 + 卡 12.9，「查询类（自动）」10 个；权限全为 AUTO） */
+/** 查询类工具定义（S6.3 + 卡 12.9 + D4，「查询类（自动）」11 个；权限全为 AUTO） */
 const queryToolDefs: ToolDefinition[] = [
   {
     name: "get_entity",
@@ -137,6 +140,19 @@ const queryToolDefs: ToolDefinition[] = [
     parameters: getChapterTextArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
     run: runGetChapterText,
+  },
+  {
+    name: "get_deduction_marks",
+    description:
+      "推演节点查询（无参）：返回作者在大纲树上标定的推演边界。marks 为有序标记（index/role/node_id/" +
+      "chapter_number/path/title/summary——role 与 UI 徽标文案同源）；spans 为相邻标记之间的区间骨架" +
+      "（区间内中间章清单 middle、章数 chapter_count、其中已写正文的章数 written_chapters）。" +
+      "语义：**单标记 = 开放式剧情发散**（唯一锚点）；**多标记 = 相邻标记之间的剧情线探讨**" +
+      "（「从起点到终点这段是否成立」）。无标记或标记全部失效返回空 marks/spans（不报错）；" +
+      "软删或已失效的标记不出现。AI **不能**增删推演节点——推演边界是作者的判断。",
+    parameters: getDeductionMarksArgsSchema,
+    permission: TOOL_PERMISSION.AUTO,
+    run: runGetDeductionMarks,
   },
   {
     name: "compute_state",

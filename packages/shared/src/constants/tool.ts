@@ -20,6 +20,7 @@ export const QUERY_TOOLS = [
   "query_relationships",
   "get_outline",
   "get_outline_path",
+  "get_deduction_marks", // 推演节点标记（剧情推演）
   "get_chapter_text", // 章正文只读（卡 12.9：分页拉取 content_text 投影）
   "compute_state",
   "get_delta_history",
@@ -90,10 +91,10 @@ export const EXECUTOR_TOOLS = [
   "reorder_timepoints",
 ] as const;
 
-/** 自动级工具（查询 10 + 分析 5 + 伏笔分析 5，共 20 个） */
+/** 自动级工具（查询 11 + 分析 5 + 伏笔分析 5，共 21 个） */
 export const AUTO_TOOLS = [...QUERY_TOOLS, ...ANALYSIS_TOOLS, ...HOOK_ANALYSIS_TOOLS] as const;
 
-/** 全部工具名（自动 20 + 提案 16 + 执行 13 = 49 个） */
+/** 全部工具名（自动 21 + 提案 16 + 执行 13 = 50 个） */
 export const TOOL_NAMES = [...AUTO_TOOLS, ...PROPOSAL_TOOLS, ...EXECUTOR_TOOLS] as const;
 
 /** 工具名（从 TOOL_NAMES 派生） */

@@ -171,7 +171,7 @@ describe("工具常量", () => {
     expect(TOOL_PERMISSION).toEqual({ AUTO: "auto", PROPOSAL: "proposal" });
   });
 
-  it("查询类 10 个", () => {
+  it("查询类 11 个", () => {
     expect(QUERY_TOOLS).toEqual([
       "get_entity",
       "search_entities",
@@ -179,12 +179,13 @@ describe("工具常量", () => {
       "query_relationships",
       "get_outline",
       "get_outline_path",
+      "get_deduction_marks", // 推演节点标记（剧情推演）
       "get_chapter_text", // 章正文只读（卡 12.9）
       "compute_state",
       "get_delta_history",
       "get_entity_summary",
     ]);
-    expect(QUERY_TOOLS).toHaveLength(10);
+    expect(QUERY_TOOLS).toHaveLength(11);
   });
 
   it("分析类 5 个", () => {
@@ -250,9 +251,9 @@ describe("工具常量", () => {
     expect(EXECUTOR_TOOLS).toHaveLength(13);
   });
 
-  it("分组无重叠且全量 49 个", () => {
-    expect(AUTO_TOOLS).toHaveLength(20); // +get_chapter_text（卡 12.9）
-    expect(TOOL_NAMES).toHaveLength(49); // 48 + get_chapter_text(自动、正文只读)
+  it("分组无重叠且全量 50 个", () => {
+    expect(AUTO_TOOLS).toHaveLength(21); // +get_chapter_text（卡 12.9）、get_deduction_marks（D4）
+    expect(TOOL_NAMES).toHaveLength(50); // 48 + get_chapter_text + get_deduction_marks（均自动、只读）
  // 各分组互不重叠
     const all = [...QUERY_TOOLS, ...ANALYSIS_TOOLS, ...HOOK_ANALYSIS_TOOLS, ...PROPOSAL_TOOLS, ...EXECUTOR_TOOLS];
     expect(new Set(all).size).toBe(all.length);
