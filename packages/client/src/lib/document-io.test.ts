@@ -1,5 +1,6 @@
-// 正文导入导出通用件（卡 12.6）走查：文件名 sanitize、md 往返有损判定、块 JSON 浅校验 / 空文档分支、
+// 正文导入导出通用件（卡 12.6）走查：md 往返有损判定、块 JSON 浅校验 / 空文档分支、
 // 导入分派（坏 JSON → 可见错误 / md 有损 → 先确认 / 无差异 → 直接覆盖）。契约 docs/api/110-api-manuscript.md「导入导出（无端点）」。
+// （文件名 sanitize 的用例已随实现搬到 shared `utils/file-name.test.ts`）
 // 「块 JSON ↔ md」由持有编辑器实例的一侧以函数参数传入，本文件用 stub 替代（仓内无 jsdom，真实互转
 // 与下载的系统文件行为由浏览器走查承担——同 tasks.md 卡 12.5 口径）。
 import { describe, expect, it } from "vitest";
@@ -12,39 +13,7 @@ import {
   parseDocumentJson,
   planDocumentImport,
   readTextFile,
-  sanitizeDocumentFileName,
 } from "./document-io";
-
-describe("sanitizeDocumentFileName（章标题 → 文件名基名）", () => {
-  it("中文标题原样保留；内部点保留（「1.2 节」不是路径穿越）", () => {
-    expect(sanitizeDocumentFileName("第一章 起点")).toBe("第一章 起点");
-    expect(sanitizeDocumentFileName("1.2 节")).toBe("1.2 节");
-  });
-
-  it("路径分隔符与 Windows 保留字符 → 空格并折叠（导出到 Windows 必需）", () => {
-    expect(sanitizeDocumentFileName('第一章/起点: a*b?c"d<e>f|g\\h')).toBe(
-      "第一章 起点 a b c d e f g h",
-    );
-  });
-
-  it("控制字符清除；首尾空白与首尾点清理", () => {
-    expect(sanitizeDocumentFileName("a\u0000b\u001fc")).toBe("a b c");
-    expect(sanitizeDocumentFileName("  .隐藏.标题.  ")).toBe("隐藏.标题");
-  });
-
-  it("空 / 纯空白 / 纯点 → 「未命名」（不能落到空文件名或 . / ..）", () => {
-    expect(sanitizeDocumentFileName("")).toBe("未命名");
-    expect(sanitizeDocumentFileName("   ")).toBe("未命名");
-    expect(sanitizeDocumentFileName("...")).toBe("未命名");
-    expect(sanitizeDocumentFileName(" . ")).toBe("未命名");
-  });
-
-  it("超长截断到 100 字符", () => {
-    const cleaned = sanitizeDocumentFileName(`超长${"标".repeat(150)}`);
-    expect(cleaned).toHaveLength(100);
-    expect(cleaned).toBe(`超长${"标".repeat(98)}`);
-  });
-});
 
 describe("exportDocumentJson（无损，可再导入）", () => {
   it('空文档（空串 / 纯空白）→ body 用 "[]"（空串不是合法 JSON，导回去会被浅校验拒）', () => {

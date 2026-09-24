@@ -8,3 +8,5 @@ export * from "./relation-type.js"; // 关系类型自定义值语法校验（�
 export * from "./block-document.js"; // 块文档浅校验 + 轻量 md 投影（卡片 12.3）
 export * from "./deduction.js"; // 推演节点标记纯函数（唯一编号口径 + 标记派生）
 export * from "./outline-numbering.js"; // 大纲展示编号派生（卷号 + 章号；消费 orderVisibleChapters）
+export * from "./file-name.js"; // 文件名 sanitize（唯一实现；正文导入导出 + 小说文档导出）
+export * from "./novel-export.js"; // 小说文档导出（zip 条目 / 章正文组装 / 下载文件名）

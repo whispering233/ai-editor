@@ -4,34 +4,17 @@
 //
 // 分层：本文件**不 import 任何 @blocknote 模块**——「块 JSON ↔ markdown」只能由持有编辑器实例的一侧做
 // （components/blocknote/document-editor.tsx 的 `DocumentEditorApi`），以函数参数传进来；
-// 本文件只负责文件名 sanitize、有损判定与提示文案，故 node 环境可测（仓内无 jsdom，编辑器本体不参与单测）。
-// 对话框/下载的**渲染**部分（confirm 弹层、真实文件对话框）由页面接线 + 浏览器走查承担。
-import { isBlockArray } from "@whispering233/ai-editor-shared";
+// 本文件只负责文件名拼接（sanitize 已收口到 shared）、有损判定与提示文案，故 node 环境可测（仓内无 jsdom，
+// 编辑器本体不参与单测）。对话框/下载的**渲染**部分（confirm 弹层、真实文件对话框）由页面接线 + 浏览器走查承担。
+import { isBlockArray, sanitizeDocumentFileName } from "@whispering233/ai-editor-shared";
+
+// 文件名 sanitize 的唯一实现 = shared `utils/file-name.ts`（客户端导入导出与小说文档导出共用），此处只转出
+export { sanitizeDocumentFileName };
 
 /** 导出/导入载荷（文件名 + 文本） */
 export interface DocumentFile {
   fileName: string;
   body: string;
-}
-
-/** 文件名基名长度上限 */
-const FILE_NAME_LIMIT = 100;
-
-/**
- * 文件名 sanitize（章标题 → 文件名基名）：
- * 控制字符与 Windows 保留字符 `\ / : * ? " < > |` → 空格；折叠空白、去首尾空白与首尾点（保留内部点，
- * 如「1.2 节」）；截断 100 字符；空结果 → "未命名"。
- * 规则 = 路径分隔符/保留字符/控制字符 → 空格 + 首尾点去除 + 截断 `FILE_NAME_LIMIT`。
- */
-export function sanitizeDocumentFileName(name: string): string {
-  const cleaned = name
-    .replace(/[\u0000-\u001f\u007f\\/:*?"<>|]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/^\.+|\.+$/g, "")
-    .slice(0, FILE_NAME_LIMIT)
-    .trim();
-  return cleaned === "" ? "未命名" : cleaned;
 }
 
 /** 导出块 JSON（**无损**：原样导出，可再导入）；空串 = 空文档 → `"[]"`（空串不是合法 JSON，导回去会报错） */
