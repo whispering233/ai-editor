@@ -5,11 +5,15 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [v0.0.56] - 2026-09-24
 
-> **角色优先级版本**：人物新增作者视角的**角色优先级**（`data.priority`，四档有序枚举：主角 / 主要配角 / 配角 / 龙套；**未分级 = 键缺失 / `null` / 未知值**）——新建弹窗与人物档案网格可设、AI 经 `propose_create_entity`/`propose_update_entity` 可自行判定；人物页左栏排序默认档改为**角色优先级**（档位升序 → 未分级沉底 → 同级最近更新在前），列表接口新增 `sort=priority`。档位、顺序与中文标签的单一定义 = shared 常量（UI 下拉 / AI 工具说明 / 排序 rank 全部派生）；归**不可变层**（不进变更记录字段下拉、不参与 `computeState`），无 DDL 与数据迁移（存量角色一律未分级）。回归：build / typecheck / lint / `-r test` 全绿（183 文件 / 2687 测试）+ 每卡独立 oracle 复验（含变异验证）与浏览器逐项取证 + 新增坏行回归。
+> **角色优先级 + 剧情推演版本**
 >
-> **剧情推演版本**：作者可在**大纲树**上把若干**章**标为**推演节点**（`project.json` 的 `deduction_nodes`；顺序 = 可见章先序），随后用悬浮「问 AI」把标记集合注入上下文，或让 AI 自行调 `get_deduction_marks` 取推演骨架——单标记 = 开放式剧情发散，多标记 = 相邻标记之间的剧情线探讨；AI 只能读标记、出提案（工具面无任何改标记能力）。回归：build / typecheck / lint / `-r test` 全绿（240 shared / 304 db / 311 tools / 1119 client / 110 agent / 641 server / 21 desktop）+ 独立 oracle 复核（含变异验证与自造 HTTP 探针）+ 浏览器逐项取证（含真实 LLM 往返与落盘注入文本核对）。
+> **角色优先级**：人物新增作者视角的**角色优先级**（`data.priority`，四档有序枚举：主角 / 主要配角 / 配角 / 龙套；**未分级 = 键缺失 / `null` / 未知值**）——新建弹窗与人物档案网格可设、AI 经 `propose_create_entity`/`propose_update_entity` 可自行判定；人物页左栏排序默认档改为**角色优先级**（档位升序 → 未分级沉底 → 同级最近更新在前），列表接口新增 `sort=priority`。档位、顺序与中文标签的单一定义 = shared 常量（UI 下拉 / AI 工具说明 / 排序 rank 全部派生）；归**不可变层**（不进变更记录字段下拉、不参与 `computeState`），无 DDL 与数据迁移（存量角色一律未分级）。回归：build / typecheck / lint / `-r test` 全绿（187 文件 / 2756 测试）+ 每卡独立 oracle 复验（含变异验证）与浏览器逐项取证 + 新增坏行回归。
+>
+> **剧情推演**：作者可在**大纲树**上把若干**章**标为**推演节点**（`project.json` 的 `deduction_nodes`；顺序 = 可见章先序），随后用悬浮「问 AI」把标记集合注入上下文，或让 AI 自行调 `get_deduction_marks` 取推演骨架——单标记 = 开放式剧情发散，多标记 = 相邻标记之间的剧情线探讨；AI 只能读标记、出提案（工具面无任何改标记能力）。回归：build / typecheck / lint / `-r test` 全绿（243 shared / 304 db / 311 tools / 1124 client / 110 agent / 643 server / 21 desktop）+ 独立 oracle 复核（含变异验证与自造 HTTP 探针）+ 浏览器逐项取证（含真实 LLM 往返与落盘注入文本核对）。
+>
+> **其余变更**：服务端口分段隔离（⚠ web 生产默认端口变更，旧书签需更新，浏览器偏好重置一次；桌面端不受影响）+ 大纲节点伏笔标记可点跳转伏笔详情 + 聊天消息流三处修复（仅贴底跟随 / 流式期工具行与正文同序 / 工具行参数与状态点）。
 
 ### Added
 
