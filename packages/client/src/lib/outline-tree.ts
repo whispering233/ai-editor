@@ -1,6 +1,6 @@
 // 大纲树辅助纯函数（S2.3）：父节点按类型过滤（严格三层）+ 子节点查找（move order 计算）
 import type { OutlineChapter, OutlineNode, OutlineTree } from "@whispering233/ai-editor-shared";
-import { orderVisibleChapters } from "@whispering233/ai-editor-shared";
+import { numberVisibleOutline } from "@whispering233/ai-editor-shared";
 import type { OutlineNodeType } from "./api";
 
 /** 大纲根（虚拟）id——**卷**挂 root 时使用的 parent_id（章只挂卷，2026-09） */
@@ -306,37 +306,24 @@ export interface OutlineNumbering {
  * - **只计可见节点**（`deleted === true` 的节点及其子树跳过）⇒ 删章后编号重排
  * - `null` / 空树 → 空结果
  *
- * 章序来源 = shared `orderVisibleChapters`（**唯一编号口径**，与大纲页徽标之外的消费面同源）；
- * 本函数只负责补卷号与「章行 → 所属卷」归属。
+ * 编号派生（含章序）全部来自 shared `numberVisibleOutline`（**唯一编号口径**）；本函数只做
+ * 「节点 id → 徽标文案」与「章行 → 树节点」两处形态转换（含 root 直挂章 → `ROOT_NODE_ID`）。
  */
 export function numberOutline(tree: OutlineTree | null): OutlineNumbering {
+  const { volumes, chapters } = numberVisibleOutline(tree);
   const labels = new Map<string, string>();
+  for (const volume of volumes) labels.set(volume.volumeId, volume.volumeLabel);
   const chapterRows: OutlineChapterRow[] = [];
-  const chapters = new Map<
-    string,
-    { chapter: OutlineChapter; volumeId: string; volumeLabel: string }
-  >();
-  let volumeNumber = 0;
-  for (const child of tree?.children ?? []) {
-    if (child.deleted === true) continue;
-    if (child.type === "chapter") {
-      chapters.set(child.id, { chapter: child, volumeId: ROOT_NODE_ID, volumeLabel: "" }); // 存量根级章（读容忍）：参与章序，无卷号
-      continue;
-    }
-    volumeNumber += 1;
-    const volumeLabel = `第${volumeNumber}卷`;
-    labels.set(child.id, volumeLabel);
-    for (const chapter of child.children ?? []) {
-      if (chapter.deleted === true) continue;
-      chapters.set(chapter.id, { chapter, volumeId: child.id, volumeLabel });
-    }
+  for (const chapter of chapters) {
+    const node = findNode(tree?.children ?? [], chapter.chapterId);
+    if (node === null || node.type !== "chapter") continue; // 类型上不可达（章序来自同一棵树）；防御：不留半行
+    labels.set(node.id, chapter.chapterLabel);
+    chapterRows.push({
+      chapter: node,
+      volumeId: chapter.volumeId === "" ? ROOT_NODE_ID : chapter.volumeId,
+      volumeLabel: chapter.volumeLabel,
+      chapterLabel: chapter.chapterLabel,
+    });
   }
-  orderVisibleChapters(tree).forEach((id, i) => {
-    const row = chapters.get(id);
-    if (row === undefined) return; // 类型上不可达（严格三层）；防御：不留半行
-    const chapterLabel = `第${i + 1}章`;
-    labels.set(id, chapterLabel);
-    chapterRows.push({ ...row, chapterLabel });
-  });
   return { labels, chapterRows };
 }
