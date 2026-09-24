@@ -265,6 +265,47 @@
 - 三文件缺失任一 → 500 `INTERNAL_ERROR`（打开的项目三文件必然齐全，缺失即损坏，不导出半成品包）。
 - **`sessions/` 目录不在包内**（2026-09）：会话是纯本地目录，不进导出 zip（也不进备份/云端）——导出包只剩三文件；正文与参考资料随 `data.db` 走，无额外目录。
 
+### GET /api/v1/project/export-novel
+
+导出当前项目**正文**为 markdown 小说文档包（卷/章目录树；用户侧入口与 `/project/export` 并列，见 [`../ui/DESIGN.md`](../ui/DESIGN.md) §书架主页 `export-book-dialog`）。
+
+> **同 `/project/export`：响应为二进制 zip（`application/zip`），不走 `{success, data}` 包裹**；`Content-Disposition: attachment; filename="book.zip"; filename*=UTF-8''<书名>-小说文档.zip`（RFC 5987）。
+
+```typescript
+// Query: (none)
+
+// Res: 200 —— application/zip 二进制
+//  Body: zip 内条目（目录由条目名隐含）
+//   <书名>/第N卷 <卷名>/第M章 <章名>.md
+//   注：N = 卷序、M = **全书连续**的章序；每一段都经文件名 sanitize 后才拼接（无 `..`/分隔符逃逸）
+//
+// 章文件内容：
+//   # 第M章 章名
+//   <空行>
+//   <该章正文投影 document_records.content_text>
+```
+
+**命名与编号口径**（展示口径，与大纲页徽标同源）：
+
+- 顶层目录 = 当前项目 `name`；卷目录 = `第N卷 {卷名}`；章文件 = `第M章 {章名}.md`；名字为空 → 退化为 `第1卷` / `第1章.md`
+- 卷号 = **可见卷先序**（`deleted === true` 的卷及其整棵子树跳过）；章号 = **可见章先序、跨卷连续**（shared `orderVisibleChapters`——唯一编号口径）
+- 存量**直挂 root 的章**（旧数据读容忍）不进任何卷目录，直接放书名目录下（章号照常参与连续编号）
+- 场景（scene）不产出文件（正文只能挂章）
+- 名字段 sanitize = shared `sanitizeDocumentFileName`（控制字符与 `\ / : * ? " < > |` → 空格、折叠空白、去首尾点、截断 100 字符）
+
+**章文件内容**：标题行 = `# 第M章 章名` + 空行 + 投影（`content_text`，派生函数 = shared `blocksToPlainMd`，与 AI 读取 / 字数统计同源）。
+
+- **有损**：颜色 / 对齐 / 块嵌套 / 媒体**以及内联样式（粗体 / 斜体 / 下划线 / 高亮）**在 md 中无表达——投影不看 inline styles（见 [`../design/backlog.md`](../design/backlog.md)「小说文档导出的 md 保真度」）。
+- **空章仍产出文件**（从未写正文 / 投影为空 ⇒ 只有标题行）——保证编号连续、结构完整。
+
+**语义**：
+- 导出**当前打开项目**（无项目 → 409 `NO_PROJECT_OPEN`，与 `/config` 一致）。
+- **无可见章 → 400 `VALIDATION_ERROR`**（不产出空包）。
+- 只读 `data.db` 行（一次批量取 `content_text` 投影，不读块 JSON），**不做 wal_checkpoint**、不写项目目录任何文件。
+- 只含**正文**：参考资料 / 人物 / 设定 / 伏笔 / 时间轴 / 对话历史都不进包（`sessions/` 从不进任何 zip）。
+- **产物不可再导入**：`POST /project/import` 只认 `/project/export` 的三文件包。
+- 客户端落盘 = 与 `/project/export` 同一条 `<a download>` 管道（默认下载目录；**zip 内才是目录树**，不解压不是磁盘目录树）。
+
 ### POST /api/v1/project/import
 
 导入备份 zip（校验 + 原子搬入；分流：**id 匹配书架已有项目 → 覆盖恢复，不匹配 → 导入为新书**）。

@@ -24,6 +24,7 @@
 | GET | `/api/v1/project/agents` | 项目管理 |
 | PUT | `/api/v1/project/agents` | 项目管理 |
 | GET | `/api/v1/project/export` | 项目管理 |
+| GET | `/api/v1/project/export-novel` | 项目管理 |
 | POST | `/api/v1/project/import` | 项目管理 |
 
 ### 备份管理（[20-api-backup.md](./20-api-backup.md)）

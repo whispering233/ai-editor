@@ -680,7 +680,19 @@ components:
 
 **`cloud-remote-books-dialog`（从云端恢复，新机器路径）** — 书架「导入备份」旁并列 `button-default`「从云端恢复…」（打开即拉 `GET /cloud/remote-books`；未配置云盘由服务端 409 引导去设置页云端面板，复用跨页意图）：可滚动行列表（`data-row`）= 书名（解析不出回退目录名）+ `caption-text` 元信息（最近备份时间 · 份数 · 大小）+ 行尾状态——「本机已有」置灰（`type-badge`）/ 该目录无备份置灰 / 可导入行给 `button-default`「导入」；导入成功关框 + toast + 刷新书架（**不自动打开**，与导入备份一致）。
 
+**`export-book-dialog`（导出类型二选一，2026-09）** — 当前书条「导出」不再直接下载，先弹受控 Dialog：标题 `导出《书名》` + **竖排两个单选项**（antd `Radio.Group`，默认选中第一项）+ Footer `[取消]` + `[导出]`（primary；在途 disabled + loading，沿用导出防连点）。
+
+| 选项 | caption（`caption-text`） | 产物 |
+| :--- | :--- | :--- |
+| `项目压缩文件`（默认） | `{书名}.zip · 三文件 · 可再导入（无损）` | `GET /project/export` |
+| `小说文档` | `{书名}-小说文档.zip · 卷/章 markdown 目录树 · 有损` | `GET /project/export-novel` |
+
+**落盘 = 默认下载目录**（两条都走同一 `<a download>` 管道，**框内无目录选择控件**；桌面版直写目录树属未排期项，见 `../design/backlog.md`）。有损提示写在第二项的 caption 里，**不另弹二次确认**（选项本身就是用户的选择；单章页头「导出 markdown」那次确认是另一条路径）。无可见章时服务端 400，框内 toast 报错（「本书还没有章节」）。
+
+> 本小节**不新增色值 / 字号 / 圆角**：沿用 `button-default` / `button-primary` / `card` / `data-row` / `icon-button` / `type-badge` / `caption-text` / `section-title` / 受控 Dialog（单选项沿用 antd `Radio` 走全局 seed 派生，同 `Checkbox` 先例）。
+
 > 本小节**不新增色值 / 字号 / 圆角**：沿用 `button-default` / `button-primary` / `card` / `data-row` / `icon-button` / `type-badge` / `caption-text` / `section-title` / 受控 Dialog（复选项沿用 antd `Checkbox` 走全局 seed 派生）。
+> 导出类型选择框（`export-book-dialog`）同口径：antd `Radio` 走全局 seed 派生，不引 Tooltip、不写死样式。
 
 ### antd 组件 token 覆盖（全部覆盖项就这些）
 
