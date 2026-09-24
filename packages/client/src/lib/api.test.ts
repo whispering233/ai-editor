@@ -18,6 +18,7 @@ import {
   deleteEntity,
   deleteOutlineNode,
   deleteProject,
+  exportNovelZip,
   exportProjectZip,
   getCloudRemoteBooks,
   getDeltasByNode,
@@ -1077,6 +1078,56 @@ describe("exportProjectZip（GET /project/export：二进制 zip 与 JSON 错误
       throw new TypeError("Failed to fetch");
     }) as unknown as typeof fetch;
     await expect(exportProjectZip()).rejects.toMatchObject({ code: CLIENT_NETWORK_ERROR });
+  });
+});
+
+describe("exportNovelZip（GET /project/export-novel：与 exportProjectZip 同分流口径）", () => {
+  it("application/zip 响应 → blob + `{书名}-小说文档.zip` 文件名；请求 GET /api/v1/project/export-novel", async () => {
+    const zipBytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00]);
+    mockRawResponse(new Blob([zipBytes]), 200, {
+      "Content-Type": "application/zip",
+      "Content-Disposition": `attachment; filename="book.zip"; filename*=UTF-8''${encodeURIComponent("血与火-小说文档.zip")}`,
+    });
+    const res = await exportNovelZip();
+    expect(res.filename).toBe("血与火-小说文档.zip");
+    expect(new Uint8Array(await res.blob.arrayBuffer())).toEqual(zipBytes);
+    expect(globalThis.fetch).toHaveBeenCalledWith("/api/v1/project/export-novel");
+  });
+
+  it("400 VALIDATION_ERROR（本书还没有章节）→ ApiError code 与 message 透传", async () => {
+    mockRawResponse(
+      JSON.stringify({
+        success: false,
+        error: { code: "VALIDATION_ERROR", message: "本书还没有章节" },
+      }),
+      400,
+      { "Content-Type": "application/json" },
+    );
+    await expect(exportNovelZip()).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      message: "本书还没有章节",
+    });
+  });
+
+  it("409 NO_PROJECT_OPEN（JSON 错误包裹）→ ApiError code 透传", async () => {
+    mockRawResponse(
+      JSON.stringify({ success: false, error: { code: "NO_PROJECT_OPEN", message: "未打开项目" } }),
+      409,
+      { "Content-Type": "application/json" },
+    );
+    await expect(exportNovelZip()).rejects.toMatchObject({ code: "NO_PROJECT_OPEN" });
+  });
+
+  it("2xx 非 zip（200 text/html，中间层兜底页）→ 抛 CLIENT_NETWORK_ERROR，不把 HTML 当 zip 下载", async () => {
+    mockRawResponse("<html>not found</html>", 200, { "Content-Type": "text/html" });
+    await expect(exportNovelZip()).rejects.toMatchObject({ code: CLIENT_NETWORK_ERROR });
+  });
+
+  it("网络失败 → CLIENT_NETWORK_ERROR", async () => {
+    globalThis.fetch = vi.fn(async () => {
+      throw new TypeError("Failed to fetch");
+    }) as unknown as typeof fetch;
+    await expect(exportNovelZip()).rejects.toMatchObject({ code: CLIENT_NETWORK_ERROR });
   });
 });
 

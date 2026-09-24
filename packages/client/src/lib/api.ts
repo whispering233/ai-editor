@@ -834,7 +834,8 @@ export function parseContentDispositionFilename(header: string | null): string {
   return "project.zip";
 }
 
-/** GET /api/v1/project/export 响应（二进制 zip 例外：不走 apiFetch 的 JSON 解析） */
+/** 二进制 zip 下载端点（/project/export 备份包 / /project/export-novel 小说文档）共用响应形态
+ * （二进制例外：不走 apiFetch 的 JSON 解析） */
 export interface ExportProjectZipRes {
   blob: Blob;
  /** 下载文件名（Content-Disposition 解析；缺失回退 "project.zip"） */
@@ -842,19 +843,19 @@ export interface ExportProjectZipRes {
 }
 
 /**
- * 导出当前项目为 zip 备份包（/ 「GET /project/export」）。
+ * 下载类端点的响应分流主体（`exportProjectZip` / `exportNovelZip` 共用）。
  * **不走 apiFetch**——成功响应是 application/zip **二进制**（通用约定「成功 {success,data}
- * JSON 包裹」的显式例外），错误响应仍是 JSON 包裹（409 NO_PROJECT_OPEN / 500 INTERNAL_ERROR）。
+ * JSON 包裹」的显式例外），错误响应仍是 JSON 包裹（409 NO_PROJECT_OPEN / 400 VALIDATION_ERROR 等）。
  * 响应分流（ora-1 守卫收紧）：
  * - **白名单式判定二进制**：仅 2xx 且 Content-Type 含 zip/octet-stream 才当 zip 返回
  * （服务端恒发 application/zip，octet-stream 为中间层改写兼容；守卫零误伤）——
  * 其余 2xx（如中间层 200 text/html）抛 CLIENT_NETWORK_ERROR，不把 HTML 当 zip 下载
  * - JSON（或非 2xx）：复用统一错误包裹解析抛 ApiError（错误码透传）
  */
-export async function exportProjectZip(): Promise<ExportProjectZipRes> {
+async function fetchZipDownload(path: string): Promise<ExportProjectZipRes> {
   let res: Response;
   try {
-    res = await fetch(buildUrl("/project/export"));
+    res = await fetch(buildUrl(path));
   } catch (err) {
     throw new ApiError(CLIENT_NETWORK_ERROR, err instanceof Error ? err.message : "网络请求失败");
   }
@@ -872,6 +873,19 @@ export async function exportProjectZip(): Promise<ExportProjectZipRes> {
   }
  // 非预期响应（2xx 非 zip / 非 JSON 错误响应）：不当作 zip 下载
   throw new ApiError(CLIENT_NETWORK_ERROR, `非预期响应（HTTP ${res.status}）`);
+}
+
+/** 导出当前项目为 zip 备份包（「GET /project/export」：三文件 project.json/outline.json/data.db） */
+export function exportProjectZip(): Promise<ExportProjectZipRes> {
+  return fetchZipDownload("/project/export");
+}
+
+/**
+ * 导出当前项目正文为 markdown 小说文档 zip（「GET /project/export-novel」：卷/章目录树 +
+ * 章正文投影，`{书名}-小说文档.zip`）。响应契约与 `/project/export` 同口径（二进制 + JSON 错误）。
+ */
+export function exportNovelZip(): Promise<ExportProjectZipRes> {
+  return fetchZipDownload("/project/export-novel");
 }
 
 /** POST /api/v1/project/import 响应（类型同 shared projectImportResSchema，含 mode 分流字段） */
