@@ -1,5 +1,5 @@
 // 项目路由（S1.2）：POST /create、POST /open、POST /close、GET/PUT /config、GET /export、
-// POST /import、GET /backups + POST /backup + POST /backup/rename + POST /backup/restore
+// GET /export-novel、POST /import、GET /backups + POST /backup + POST /backup/rename + POST /backup/restore
 // （B2.2 + B2.6）
 //
 // 校验失败统一 400 INVALID_PROJECT_PATH（shared ErrorCode）。

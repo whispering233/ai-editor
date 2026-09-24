@@ -8,7 +8,7 @@
 - 请求体 JSON；成功响应 `{ success: true, data: T }`；错误响应 `{ success: false, error: { code, message } }`。
 - HTTP 状态码约定：200 成功 / 201 创建 / 400 参数错误（`VALIDATION_ERROR` 等）/ 404 不存在 / 409 冲突 / 500 服务端错误。
 - 错误码统一枚举 `ErrorCode`（见 [error-code.md](./error-code.md)），REST 响应与工具结果使用；SSE 流内错误以 `agent_end` 帧表达（不再发 `error` 事件）。
-- 显式例外：导出 zip（`GET /project/export`）响应二进制 `application/zip`，不走 `{ success, data }` 包裹。
+- 显式例外：导出 zip（`GET /project/export` 三文件包 / `GET /project/export-novel` 小说文档）响应二进制 `application/zip`，不走 `{ success, data }` 包裹。
 - **探活**：`GET /api/v1/health` → `{ success: true, data: { status: "ok" } }`（不依赖项目上下文，供启动/就绪探测）。
 
 ## 命名约定

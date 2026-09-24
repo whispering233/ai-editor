@@ -138,7 +138,7 @@ shared（纯类型/常量/工具，零 Node 依赖，可被 client 安全 tree-s
     "@earendil-works/pi-ai": "0.85.1",         // 模型目录与凭据（运行时 import，必须进 dependencies）
     "@hono/node-server": "^2.0.12",
     "hono": "^4.7.0",
-    "fflate": "^0.8.3",          // 备份导出/导入的 zip 打包（无 Node 原生依赖）
+    "fflate": "^0.8.3",          // 备份导出/导入 + 小说文档导出的 zip 打包（无 Node 原生依赖）
     "undici": "8.5.0",           // 出站 HTTP dispatcher（与 pi CLI 同款，见 http-dispatcher.ts）
     "zod": "^4.4.3"              // 仅服务端执行校验（client 不打包）
   }
