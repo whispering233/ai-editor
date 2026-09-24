@@ -16,8 +16,16 @@ import {
   type Dirent,
 } from "node:fs";
 import { Hono, type Context } from "hono";
+import { strToU8, zipSync } from "fflate";
 import type { ProjectFileConfig, ProjectListBook } from "@whispering233/ai-editor-shared";
-import { mapProjectFileToConfig, orderVisibleChapters } from "@whispering233/ai-editor-shared";
+import {
+  buildNovelChapterMarkdown,
+  buildNovelExportEntries,
+  mapProjectFileToConfig,
+  novelExportZipFileName,
+  numberVisibleOutline,
+  orderVisibleChapters,
+} from "@whispering233/ai-editor-shared";
 import { SchemaVersionError, type MigrationResult, type Db } from "@whispering233/ai-editor-db";
 import { closeDatabase, openDatabase } from "@whispering233/ai-editor-db";
 import { OUTLINE_FILE_NAME } from "@whispering233/ai-editor-db";
@@ -26,6 +34,7 @@ import { DATA_DB_FILE_NAME } from "@whispering233/ai-editor-db";
 import {
   agentsFileMtimeIso,
   findOutlineNode,
+  getDocumentTexts,
   readAgentsFile,
   readOutlineFile,
   readProjectFile,
@@ -358,6 +367,46 @@ projectRoutes.get("/export", (c) => {
 
  // Content-Disposition：ASCII fallback + RFC 5987 filename*（中文/空格书名编码安全）
   const fileName = `${project.config.name}.zip`;
+  c.header("Content-Type", "application/zip");
+  c.header("Content-Disposition", `attachment; filename="book.zip"; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+  return c.body(zipData);
+});
+
+// GET /api/v1/project/export-novel —— 导出当前项目正文为 markdown 小说文档 zip
+//
+// 契约：`docs/api/10-api-project.md` §GET /api/v1/project/export-novel。编号 / 命名 / 章正文组装
+// **一律走 shared 纯函数**（`numberVisibleOutline` / `buildNovelExportEntries` /
+// `buildNovelChapterMarkdown` / `novelExportZipFileName`）——服务端不复刻任何规则。
+// 流程：requireCurrentProject（无项目 → 409，与 /config 一致）→ 读 outline.json 派生展示编号 →
+// 无可见章 → 400（不产空包）→ 一次 IN 查询取 `content_text` 投影（不读块 JSON）→ zipSync。
+// 只读 data.db：**不做 wal_checkpoint**、不写项目目录任何文件（投影已在库内，无需合并 WAL）。
+projectRoutes.get("/export-novel", (c) => {
+  const project = requireCurrentProject();
+  const numbering = numberVisibleOutline(readOutlineFile(project.root));
+  if (numbering.chapters.length === 0) {
+    throw new HttpError(400, "VALIDATION_ERROR", "本书还没有章节");
+  }
+  const texts = getDocumentTexts(
+    project.db,
+    "chapter",
+    numbering.chapters.map((chapter) => chapter.chapterId),
+  );
+  const zipEntries: Record<string, Uint8Array> = {};
+  for (const entry of buildNovelExportEntries(project.config.name, numbering)) {
+    zipEntries[entry.path] =
+      entry.kind === "dir"
+        ? new Uint8Array(0) // 无可见章的卷：显式空目录条目（条目名隐含目录）
+        : strToU8(
+            buildNovelChapterMarkdown(
+              entry.chapterLabel,
+              entry.chapterTitle,
+              texts.get(entry.chapterId) ?? "",
+            ),
+          );
+  }
+  const zipData = zipSync(zipEntries, { level: 6 });
+ // Content-Disposition：ASCII fallback + RFC 5987 filename*（中文/空格书名编码安全，同 /export）
+  const fileName = novelExportZipFileName(project.config.name);
   c.header("Content-Type", "application/zip");
   c.header("Content-Disposition", `attachment; filename="book.zip"; filename*=UTF-8''${encodeURIComponent(fileName)}`);
   return c.body(zipData);
