@@ -47,3 +47,21 @@ describe("书架行结构（卡 23.5）", () => {
     expect(dashboard).toMatch(/重命名\s*<\/Button>[\s\S]{0,600}?删除/);
   });
 });
+
+// 导出入口（卡 E5）：点「导出」不再直接下载，先弹类型选择框（两条产物两条端点 + 同一落盘管道）。
+describe("当前书条导出入口（卡 E5）", () => {
+  it("「导出」按钮开弹窗（不再直接发起下载）", () => {
+    expect(dashboard).toMatch(/导出\s*<\/Button>/);
+    expect(dashboard).toMatch(/onClick=\{\(\) => setExportOpen\(true\)\}/);
+    expect(dashboard).toContain("<ExportBookDialog");
+  });
+
+  it("弹窗只上报所选类型（onExport(kind)），不自己下载", () => {
+    expect(dashboard).toMatch(/<ExportBookDialog[\s\S]{0,360}?onExport=\{\(kind\) => void handleExportBook\(/);
+  });
+
+  it("handleExportBook 按 kind 分派端点，成功关框、失败留框", () => {
+    expect(dashboard).toMatch(/kind === "novel" \? await exportNovelZip\(\) : await exportProjectZip\(\)/);
+    expect(dashboard).toContain("setExportOpen(false)");
+  });
+});

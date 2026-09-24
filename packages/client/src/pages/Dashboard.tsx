@@ -15,7 +15,6 @@ import {
   DeleteOutlined,
   DownloadOutlined,
   EditOutlined,
-  LoadingOutlined,
   UploadOutlined,
 } from "@ant-design/icons";
 import { Button, Input } from "antd";
@@ -32,12 +31,15 @@ import { SectionCard } from "@/components/ui/section-card";
 import { BookDeleteDialog } from "@/components/shelf/book-delete-dialog";
 import type { BookDeleteTarget } from "@/components/shelf/book-delete-dialog";
 import { CloudRemoteBooksDialog } from "@/components/shelf/cloud-remote-books-dialog";
+import { ExportBookDialog, exportBookToast } from "@/components/shelf/export-book-dialog";
+import type { ExportBookKind } from "@/components/shelf/export-book-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
 import { skeletonClass } from "@/lib/styles";
 import {
   ApiError,
   CLIENT_NETWORK_ERROR,
+  exportNovelZip,
   exportProjectZip,
   importProjectZip,
   listEntities,
@@ -152,7 +154,9 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
   const [importing, setImporting] = useState(false);
   const [importConflict, setImportConflict] = useState(false);
   const [importConflictBase, setImportConflictBase] = useState("");
-  // 导出当前项目备份进行态（防连点）
+  // 导出清单选类型框（卡 E5：先弹框选「项目压缩文件 / 小说文档」，不再点一下直接下载）
+  const [exportOpen, setExportOpen] = useState(false);
+  // 导出进行态（防连点）
   const [exporting, setExporting] = useState(false);
   // 删书确认框（卡 23.5）：非 null = 打开；目标恒带项目 id（删的是不是当前书按 id 判定）
   const [deleteTarget, setDeleteTarget] = useState<BookDeleteTarget | null>(null);
@@ -339,12 +343,13 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
 
   // ============ 书架行能力（Sidebar 迁入） ============
 
-  /** 导出当前项目备份（GET /project/export zip → 临时 <a> 下载）；exporting 防连点 */
-  async function handleExportBook(name: string) {
+  /** 导出当前项目（zip → 临时 <a> 下载）；两条产物按 kind 分派端点，落盘管道与错误分流共用 */
+  async function handleExportBook(name: string, kind: ExportBookKind) {
     if (exporting) return;
     setExporting(true);
     try {
-      const { blob, filename } = await exportProjectZip();
+      const { blob, filename } =
+        kind === "novel" ? await exportNovelZip() : await exportProjectZip();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -354,7 +359,8 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
       a.remove();
       // 延迟到下一帧 revoke（ora-1：旧版 Safari 下载前 revoke 中断竞态防御）
       setTimeout(() => URL.revokeObjectURL(url), 0);
-      useUiStore.getState().showToast(`已导出《${name}》备份`);
+      useUiStore.getState().showToast(exportBookToast(kind, name));
+      setExportOpen(false); // 成功关框；失败留框（下面的 catch 不改 exportOpen）
     } catch (err) {
       useUiStore
         .getState()
@@ -650,14 +656,9 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                     <Button
                       size="small"
                       className="shrink-0"
-                      onClick={() => void handleExportBook(config.name)}
-                      disabled={exporting}
+                      onClick={() => setExportOpen(true)}
                     >
-                      {exporting ? (
-                        <LoadingOutlined className="text-sm" spin />
-                      ) : (
-                        <DownloadOutlined className="text-sm" />
-                      )}
+                      <DownloadOutlined className="text-sm" />
                       导出
                     </Button>
                     <Button size="small" className="shrink-0" onClick={startRename}>
@@ -909,6 +910,15 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* 导出类型框（受控）：两种产物共用同一 <a download> 管道；成功关框、失败留框 */}
+        <ExportBookDialog
+          open={exportOpen}
+          name={config?.name ?? ""}
+          exporting={exporting}
+          onExport={(kind) => void handleExportBook(config?.name ?? "", kind)}
+          onOpenChange={setExportOpen}
+        />
 
         {/* 删书确认框（行尾垃圾桶与当前书条「删除」共用同一实例；受控：deleteTarget） */}
         <BookDeleteDialog
