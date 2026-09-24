@@ -1,8 +1,10 @@
 // 大纲页树视图的推演节点徽标走查：仓内无 jsdom，用 react-dom/server 直渲染页面
 // （同 pages/reference-list.test.tsx 惯例）。
-// 覆盖：章行徽标文案 / title（含章号与 k / N）/ 位置（「阅读进度」左侧）/ 卷与场景行无徽标。
+// 覆盖：章行徽标文案 / title（含章号与 k / N）/ 位置（「阅读进度」左侧）/ 卷与场景行无徽标 /
+// 页头「清除推演标记」按钮的可见性（有可见标记才渲染）。
 // 右键菜单项活在 portal 里、关闭态不渲染 ⇒ 菜单文案由 lib/deduction.test.ts 的纯函数覆盖，
 // 「点菜单项 → 徽标即时刷新」走浏览器人工核对（无 jsdom 无法派发右键事件）。
+// `clearDeductionMarks` 碰 store action + 请求，同 `submitDeductionMarks` 不进单测。
 import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type {
@@ -96,6 +98,18 @@ describe("大纲页树视图：推演节点徽标", () => {
 
   it("无标记：整页不出现推演徽标", () => {
     expect(render({ deductionNodes: [] })).not.toContain("推演");
+  });
+
+  // 页头一键清空入口（DESIGN.md「`推演节点` 徽标」）：可见性判据与徽标同源
+  // （`deduction.marks.length > 0` ⇒ 无可见标记时按钮不渲染，不给「点了没反应」的入口）。
+  it("有可见标记：页头渲染「清除推演标记」按钮", () => {
+    expect(render({ deductionNodes: ["ch-1"] })).toContain("清除推演标记");
+  });
+
+  it("无可见标记：页头不渲染「清除推演标记」按钮", () => {
+    expect(render({ deductionNodes: [] })).not.toContain("清除推演标记");
+    // 盘上有 id 但全部失效（章被软删）⇒ 无可见标记，按钮同样不渲染
+    expect(render({ deductionNodes: ["ghost"] })).not.toContain("清除推演标记");
   });
 
   it("卷行 / 场景行不给徽标（仅章行）", () => {

@@ -57,6 +57,7 @@ import {
 import { buildNodeHookMarks, HOOK_MARK_TYPES, type NodeHookMark } from "../lib/outline-hooks";
 import { setCurrentPosition } from "../lib/current-position";
 import {
+  clearDeductionMarks,
   deductionMarkTitle,
   deductionMenuLabel,
   isDeductionMarkHost,
@@ -973,13 +974,17 @@ export default function Outline() {
       <PageHeader
         title="大纲"
         controls={
-          <>
+          /* 右端组：ml-auto 挂**容器**（不是某个按钮）——组内按钮可能不渲染（清除按钮无标记时不出现、
+             「全部折叠」章视图下不出现），挂单个按钮会让整组在它缺席时丢掉右对齐 */
+          <div className="ml-auto flex items-center gap-3">
+            {/* 一键清空推演标记（DESIGN.md「`推演节点` 徽标」）：仅**有可见标记**时渲染
+                （无标记时清空无意义，也不给一个点了没反应的按钮）；两视图共用；无二次确认 */}
+            {deduction.marks.length > 0 && (
+              <Button onClick={() => void clearDeductionMarks()}>清除推演标记</Button>
+            )}
             {/* 视图切换（DESIGN.md「大纲页双视图」）：文案 = **目标视图**——单按钮写「点它会去哪」
-                比写「现在在哪」少一次解读；位置 = 「全部折叠」左侧（ml-auto 挂本按钮） */}
-            <Button
-              className="ml-auto"
-              onClick={() => setView(view === "tree" ? "chapters" : "tree")}
-            >
+                比写「现在在哪」少一次解读；位置 = 右端组内、清除按钮之后 */}
+            <Button onClick={() => setView(view === "tree" ? "chapters" : "tree")}>
               {view === "tree" ? "章视图" : "大纲树"}
             </Button>
             {/* 「全部折叠」只在树视图出现（平铺章列表无折叠语义） */}
@@ -994,7 +999,7 @@ export default function Outline() {
             <Button type="primary" onClick={() => startCreate(ROOT_NODE_ID, "volume")}>
               + 新建卷
             </Button>
-          </>
+          </div>
         }
       />
 

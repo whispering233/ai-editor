@@ -1,6 +1,6 @@
 // 推演节点标记的提交实现与派生文案——形态对齐 lib/current-position.ts：
-// 纯函数（可单测）+ 一个收敛 toast 的提交入口，供三处入口共用（大纲树右键菜单 / 章视图只读徽标 /
-// 节点详情页页头按钮）。
+// 纯函数（可单测）+ 收敛 toast 的提交入口，供各入口共用（大纲树右键菜单 / 节点详情页页头按钮 /
+// 大纲页页头「清除推演标记」）。
 //
 // 语义：PUT /project/config { deduction_nodes }——**全量替换**（服务端去重 + 按可见章先序归一），
 // store updateConfig 成功后自动重拉 config，联动大纲树与章视图行尾徽标、详情页元信息行。
@@ -61,6 +61,27 @@ export function deductionMenuLabel(marked: boolean): string {
 export function deductionMarkTitle(mark: DeductionMark, total: number): string {
   const base = `${mark.label}（第${mark.chapterNumber}章）`;
   return total > 1 ? `${base} · 第 ${mark.index} / 共 ${total} 个推演节点` : base;
+}
+
+/**
+ * 一键清空全部推演标记（大纲页页头入口，两视图共用）。
+ *
+ * **写 `[]`（不是「当前可见标记数组」）**：`PUT /project/config` 是**全量替换**，`[]` 是唯一能同时
+ * 收敛「全部可见标记」与「盘上失效 id」的写法——传可见标记数组等于什么都没清，且软删 / purge 后
+ * 留在盘上的失效 id 仍在（§15 不变式 6：读侧过滤、不自动清理，靠下一次全量写入自然收敛）。
+ *
+ * 不复用 `submitDeductionMarks`：其失败文案（「该节点可能已删除或不可见」）对清空是假话。
+ * 返回 boolean 供调用方决定后续。
+ */
+export async function clearDeductionMarks(): Promise<boolean> {
+  try {
+    await useProjectStore.getState().updateConfig({ deduction_nodes: [] });
+    useUiStore.getState().showToast("已清除全部推演节点标记");
+    return true;
+  } catch {
+    useUiStore.getState().showToast("清除失败，请重试", "error");
+    return false;
+  }
 }
 
 /**
