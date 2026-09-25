@@ -2,8 +2,9 @@
 //
 // 契约 = docs/api/80-api-chat.md「会话用量字段」+ docs/design/20-context.md §2.1：
 // 本模块是 `usage` 的唯一实现点，口径逐条对齐 pi `AgentSession.getSessionStats()`——
-// 只有三类计入：assistant 消息、`toolResult.usage`（工具自身开销）、
-// `compaction` / `branch_summary` 的 usage（压缩与分支摘要同样要付费，账目不能漏）。
+// 四类计入：assistant 消息、`toolResult.usage`（工具自身开销）、
+// `compaction` / `branch_summary` 的 usage（压缩与分支摘要同样要付费，账目不能漏）、
+// 独立 `usage` 条目（cache warming 的 `kind: "cache_warm"`）。
 // 命中率与订阅布尔同在此处算：客户端只格式化，不复算分母。
 
 import type { Usage } from "@earendil-works/pi-ai";
@@ -38,6 +39,9 @@ export interface SessionUsageOptions {
 
 /** 单条 entry 计入账目的 usage（user / 状态类 entry 不产生费用） */
 function entryUsage(entry: SessionEntry): Usage | undefined {
+  // pi 0.86 起新增独立的 `usage` 条目（cache warming 的 `kind: "cache_warm"`）：
+  // pi 的 `getSessionStats()` 把它计入总量，本模块同口径——漏掉会让状态栏费用低于实际
+  if (entry.type === "usage") return entry.usage;
   if (entry.type === "branch_summary" || entry.type === "compaction") return entry.usage;
   if (entry.type !== "message") return undefined;
   if (entry.message.role === "assistant") return entry.message.usage;

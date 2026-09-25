@@ -43,7 +43,7 @@
 
 状态栏（`docs/ui/DESIGN.md` `session-status-bar`）的数字**全部由服务端算好下发**：
 
-- **服务端唯一实现点**：累计用量 = agent 包 `sessionUsage(entries)`（口径 = pi `AgentSession.getSessionStats()`：assistant 消息 + `toolResult.usage` + `compaction` / `branch_summary` 的 usage 三类累加），命中率与订阅布尔同在此处算；速度 = agent 包 `createSpeedMeter()`。**客户端不累加、不计时、不复算分母**（UI 只做格式化与优先级隐藏）。
+- **服务端唯一实现点**：累计用量 = agent 包 `sessionUsage(entries)`（口径 = pi `AgentSession.getSessionStats()`：assistant 消息 + `toolResult.usage` + `compaction` / `branch_summary` 的 usage + 独立 `usage` 条目（cache warming）四类累加），命中率与订阅布尔同在此处算；速度 = agent 包 `createSpeedMeter()`。**客户端不累加、不计时、不复算分母**（UI 只做格式化与优先级隐藏）。
 - **下发面**：`turn_end` / `agent_end` 帧带 `usage`；assistant 的 `message_end` 帧带 `speed`；`GET /chat/sessions/:id/messages` 带 `usage`（形状见 `docs/api/80-api-chat.md` §会话用量字段）。
 - **命中率 = `cacheRead / (input + cacheRead + cacheWrite)`**：会话累计口径（不是「最近一条」），分母为 0 时省略该字段而**不是**报 0%。
 - **成本是账目不是账单**：pi 按模型目录价格累加；模型无价格配置 → 恒 0（UI 隐藏该项）；订阅制凭据 → 数值仅为估算，UI 标「订阅 · 估算」。订阅判定用**末条 assistant 消息的 provider**（历史会话中途换过模型也按当时那家算，不用「当前设置里的模型」），谓词 = pi `ModelRuntime.isUsingSubscription()`（OAuth 且该家 `auth.oauth.isSubscription`）**或** API-key 认证的订阅家 `kimi-coding`；**不用 `isUsingOAuth`**（它把 openrouter / radius 这类「OAuth 但按量计费」的家也算进来，会把真实账单标成估算）。

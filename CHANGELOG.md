@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+> **AI 内核升级 pi 0.85.1 → 0.87.1**（`@earendil-works/pi-ai` / `pi-coding-agent` 精确版本齐抬）：提示词与工具声明改由 pi 随会话落盘（模型请求入参变为 `TranscriptContext`，顶层 `systemPrompt` 不复存在）⇒ 续聊 / 分支导航可重放；会话文件相应地多出一条 system 消息条目。随之收口两处对外口径：会话列表 `messageCount` 改「可见消息数」（与历史接口同源，不再直接取 pi `SessionInfo.messageCount`——它会把那条 system 条目也算进去）、状态栏账目补计 pi 新增的独立 `usage` 条目（cache warming 开销）。回归：build / typecheck / lint / `-r test` 全绿（192 文件 / 2792 测试）+ `pnpm pack:test` 安装态起服务（health / 书架 / SPA 全通）+ 真 provider 单轮冒烟（opencode-go `deepseek-v4.1-flash`：帧序列完整、正文与 usage 正常）。
+
 > **推演标记一键清空**：大纲页页头右端组新增「清除推演标记」按钮——项目存在**可见**推演标记时渲染，点击即清空全部标记（写 `deduction_nodes: []`，全量替换下顺带收敛盘上失效 id）并提示「已清除全部推演节点标记」；两视图共用、无二次确认，清空后悬浮「问 AI」的推演上下文由既有派生逻辑自动收敛。回归：typecheck / lint / `-r test` 全绿（187 文件 / 2758 测试）+ 独立 oracle 复核（含变异验证）+ 浏览器逐项取证（按钮可见性 / 点击后徽标消失 / toast 文案 / 章视图可用）。
 >
 > **小说文档导出（markdown 卷/章目录树）**：书架当前书条「导出」改为弹窗二选一——「项目压缩文件」（原三文件 zip，行为不变）或「小说文档」（新增 `GET /api/v1/project/export-novel`，产物 `{书名}/第N卷 {卷名}/第M章 {章名}.md`，章号跨卷连续、每个章文件带 `# 第M章 章名` 标题头）。md 文本用既有 shared `blocksToPlainMd` 投影（= AI 读取 / 字数同源）⇒ **内联样式（粗体/斜体/高亮）有损**，与「导出只落默认下载目录、目录树在 zip 内」两条残差已登记 `backlog.md`；导入仍只认三文件项目包。回归：build / typecheck / lint / `-r test` 全绿（192 文件 / 2791 测试）+ 每卡独立 oracle 复验（含变异与 fuzz）+ 浏览器逐项取证（浅/深两态弹窗、默认项、真实导出 toast 与下载文件名、真实解压目录树核对）。
@@ -17,6 +19,18 @@
 - **导出类型弹窗**（书架当前书条「导出」）：单选「项目压缩文件」（默认，`{书名}.zip`，可再导入）/「小说文档」（`{书名}-小说文档.zip`，卷/章 md 目录树，**有损**）；两条都走默认下载目录（`<a download>`），成功关框 + toast（`已导出《书名》备份` / `已导出《书名》小说文档`）、失败留框并保留错误提示。
 - **shared 收口**：新增 `numberVisibleOutline`（卷/章展示编号与归属的单一来源，大纲页徽标改由它派生）+ `sanitizeDocumentFileName`（从 client 挪入，client re-export）+ `novel-export` 纯函数（zip 条目路径与章文件正文组装）。
 - **大纲页「清除推演标记」按钮**（页头右端组，位于视图切换左侧）：一键清空当前项目的全部推演节点标记（`PUT /api/v1/project/config` 写 `deduction_nodes: []`）；**仅存在可见标记时渲染**（失效 id 不构成入口），两视图共用——行级标记操作仍只在树视图右键菜单与节点详情页，本按钮是**集合级**入口
+
+### Changed
+
+- **升级 AI 内核 pi `0.85.1` → `0.87.1`**（`pi-ai` / `pi-coding-agent` 精确版本齐抬，含 `pi-agent-core` / `pi-tui` 与传递依赖）：
+  - **提示词与工具声明随会话落盘**（pi 0.86 起）：模型请求入参从 `Context` 变为 `TranscriptContext`——提示词在 `messages` 的首条 system 消息里，顶层 `systemPrompt` 不复存在；pi 会把该状态写进会话文件（每个会话首条请求落一条 system 消息条目），续聊 / 分支导航按 transcript 重放（系统提示词与项目 AGENTS.md 注入实测不变，工具集仍为 37 个）。
+  - **会话列表 `messageCount` 改「可见消息数」**：直接取 pi 的 `SessionInfo.messageCount`（含上述 system 条目）会让界面文案「N 条消息」比历史面板多 1 条；改为复用列表本来就要读的 entries、数投影后的可见消息（与 `GET /chat/sessions/:id/messages` 同源）。
+  - **状态栏账目补计 cache warming**：pi 0.86 起新增独立 `usage` 条目（默认开启的缓存预热记账），pi 的 `getSessionStats()` 会累计它；`sessionUsage()` 同步计入，口径保持一致。
+  - **pi 目录数据变更**：deepseek 家 `deepseek-v4-flash` 改名为 `deepseek-flash`（显示名 `DeepSeek V4.1 Flash`）——模型下拉与激活模型解析随目录自动跟随；新增的模型家（如 meta / 新版 frontier 模型）同样自动出现在设置页。
+
+### Fixed
+
+- **pi `ToolCall.arguments` 收紧适配**：0.86 起该字段为 `JsonObject`（工具参数与结果 details 限 JSON 可序列化值），工具参数校验入参断言同步收窄。
 
 ## [v0.0.56] - 2026-09-24
 

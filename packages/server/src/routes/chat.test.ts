@@ -23,10 +23,11 @@ import {
   fauxText,
   fauxThinking,
   fauxToolCall,
+  getCurrentSystemPrompt,
   InMemoryCredentialStore,
-  type Context,
   type Model,
   type SimpleStreamOptions,
+  type TranscriptContext,
 } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import {
@@ -129,13 +130,13 @@ interface FauxEnv {
   factory: RuntimeFactory;
   faux: ReturnType<typeof fauxProvider>;
   model: Model<string>;
-  /** 每次模型请求的 Context（断言系统提示词/历史/工具注入用） */
-  requests: Context[];
+  /** 每次模型请求的 TranscriptContext（断言系统提示词/历史/工具注入用） */
+  requests: TranscriptContext[];
 }
 
 /** 单次 provider 请求的自定义响应：可挂起（gate）、可捕获 options.signal */
 type FauxStep = (
-  context: Context,
+  context: TranscriptContext,
   options: SimpleStreamOptions | undefined,
 ) => ReturnType<typeof fauxAssistantMessage> | Promise<ReturnType<typeof fauxAssistantMessage>>;
 
@@ -153,7 +154,7 @@ async function createFauxEnv(options: { tokensPerSecond?: number } = {}): Promis
   const model = modelRuntime.getModel(faux.provider.id, "faux-1");
   if (model === undefined) throw new Error("faux 模型未注册进 ModelRuntime");
 
-  const requests: Context[] = [];
+  const requests: TranscriptContext[] = [];
   // 与生产 defaultRuntimeFactory 同款：项目 sessions/ + 真实 SessionManager（续聊打开既有文件）
   const factory: RuntimeFactory = ({ target, sessionFile }) =>
     createProjectRuntime({
@@ -189,7 +190,7 @@ function appendScripted(env: FauxEnv, steps: FauxStep[]): void {
 function wrapSteps(env: FauxEnv, steps: FauxStep[]) {
   return steps.map(
     (step) =>
-      (context: Context, options?: SimpleStreamOptions) => {
+      (context: TranscriptContext, options?: SimpleStreamOptions) => {
         env.requests.push(context);
         return step(context, options);
       },
@@ -848,8 +849,10 @@ describe("POST /chat SSE 事件集与过滤", () => {
     );
 
     const request = env.requests[0]!;
-    expect(request.systemPrompt).toContain("创作顾问"); // 内核提示词
-    expect(request.systemPrompt).toContain("PROJECT_RULE_TOKEN"); // 项目规则（<project_instructions>）
+    // pi 0.86 起提供商入参是 TranscriptContext：提示词在 messages 的 system 消息里（不再有顶层 systemPrompt）
+    const systemPrompt = getCurrentSystemPrompt(request.messages);
+    expect(systemPrompt).toContain("创作顾问"); // 内核提示词
+    expect(systemPrompt).toContain("PROJECT_RULE_TOKEN"); // 项目规则（<project_instructions>）
     const userTexts = request.messages
       .filter((m) => m.role === "user")
       .map((m) => JSON.stringify(m.content))
@@ -860,8 +863,8 @@ describe("POST /chat SSE 事件集与过滤", () => {
     expect(userTexts).toContain("阿强");
     expect(userTexts).toContain("灵根测试失败");
     // 聚焦内容只能在本轮消息（内核提示词里的「当前聚焦」字样是行为准则第 6 条，不代表注入）
-    expect(request.systemPrompt).not.toContain("阿强");
-    expect(request.systemPrompt).not.toContain("灵根测试失败");
+    expect(systemPrompt).not.toContain("阿强");
+    expect(systemPrompt).not.toContain("灵根测试失败");
   });
 
   it("聚焦上下文：两项皆无效（已删除/未知）时不注入聚焦段", async () => {

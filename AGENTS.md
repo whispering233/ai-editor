@@ -7,7 +7,7 @@
 `docs/design/00-master-design.md`（产品定位与设计原则）→ `architecture.md`（技术栈 + 分包与依赖方向 + pi 嵌入形态）→ 详细设计（`10-data-model.md` → `20-context.md` → `30-agent-loop.md`，只讲「为什么 + 不变式」）→ 按职责读 `docs/api/`（先 `00-api-index.md` + `api-public.md`）与 `docs/db/schema.md`（字段/端点契约的「是什么」）→ 前端改动必读 `docs/ui/DESIGN.md`（**视觉与布局唯一契约**；改样式先改它）。
 
 - 任何改动前先读对应文档；发现文档之间或文档与代码矛盾，先停下提问，不要自行发明。
-- 涉及 pi 的行为以 `node_modules` 里实际安装的 `@earendil-works/*`（0.85.1）代码/类型为准，**禁止凭记忆写接口**。
+- 涉及 pi 的行为以 `node_modules` 里实际安装的 `@earendil-works/*`（0.87.1）代码/类型为准，**禁止凭记忆写接口**。
 - 状态与演进：根 `CHANGELOG.md`（逐版本事实）+ `tasks.md`（当前任务卡）+ `backlog.md`（未排期遗留项与有意口径）。云端存档另见 `docs/design/40-cloud-sync.md` 与 `docs/api/100-api-cloud.md`。
 - 运行/构建/发布：`build.md`；配置载体与读写边界：`config.md`；桌面版（Electron 外壳）设计：`50-desktop.md`。
 
@@ -26,7 +26,7 @@
 
 ## 代码级硬约束（设计文档不承载实现细节，仅此处登记）
 
-- **pi 依赖 exact pin**：`@earendil-works/*` 一律写精确版本（当前 `0.85.1`），禁止 `^`/`~`；升级 = 一个显式 commit 齐抬版本（`pi-ai`/`pi-agent-core`/`pi-coding-agent`）+ 全量测试。typebox 的 `Type`/`Static` 经 `pi-ai` 重导出，不单独装 typebox。**声明位置按 import 性质**：运行时 import 必须进 `dependencies`（`server` 曾把 `pi-ai`/`pi-coding-agent` 放进 `devDependencies`——靠 `agent` 包的传递依赖 hoist 才跑得起来，pnpm 严格布局下会解析失败）。
+- **pi 依赖 exact pin**：`@earendil-works/*` 一律写精确版本（当前 `0.87.1`），禁止 `^`/`~`；升级 = 一个显式 commit 齐抬版本（`pi-ai`/`pi-agent-core`/`pi-coding-agent`）+ 全量测试。typebox 的 `Type`/`Static` 经 `pi-ai` 重导出，不单独装 typebox。**声明位置按 import 性质**：运行时 import 必须进 `dependencies`（`server` 曾把 `pi-ai`/`pi-coding-agent` 放进 `devDependencies`——靠 `agent` 包的传递依赖 hoist 才跑得起来，pnpm 严格布局下会解析失败）。
 - **pi 配置/凭据的唯一读写入口** = `packages/server/src/model-runtime.ts` 的 `getModelRuntime()` / `getSettingsManager()`；业务代码不得直读 `~/.pi/agent/auth.json`/`settings.json`（会话 id、模型目录、凭据状态一律经 pi API）。
 - **凡调 LLM 一律走 pi 的 Agent 路径**：`createAgentSessionServices` + `createAgentSessionFromServices` + `SessionManager`，**禁止直连 `ModelRuntime.completeSimple`、禁止自建 fetch/agent/请求头**——provider 特化头（opencode 系 `x-opencode-session`，缺则 400 MissingSessionID）、重试/超时设置、思考档位只在 pi 的 Agent 包装层生效，自己补等于无限期跟随上游。
 - **出站 HTTP**：服务启动时安装全局 undici dispatcher（`packages/server/src/http-dispatcher.ts`，与 pi CLI 同款：连接族退避 + 环境代理 + 空闲超时）。**不要在业务代码里另建 fetch/agent**——否则丢失代理与连接行为（真实故障场景见 v0.0.32 CHANGELOG）。云端存档的 WebDAV 请求同样走它。

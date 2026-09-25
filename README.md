@@ -9,7 +9,7 @@
 | 工程 | pnpm workspace（7 包：5 发布包 + 私有 client / desktop）；Node ≥ 22.12；全仓 ESM；TypeScript strict；测试 vitest（各包独立 `test` script） |
 | 服务端 | Hono 4 + `@hono/node-server`；Zod 4（仅服务端校验）；better-sqlite3 ^13（WAL，N-API 预编译）+ drizzle-orm 0.45 |
 | 前端 | React 19 + Vite 7 + Zustand 5 + **antd v6**（主题 = Notion 工作区暖灰 token 覆盖）+ `@ant-design/icons` + `@ant-design/x`（Bubble/Sender）+ `@ant-design/x-markdown`（流式）+ Tailwind 4（仅布局）+ **@blocknote/core·react·ariakit**（块编辑器，exact pin）；自制 hash 路由 |
-| AI 运行时 | 嵌入 `@earendil-works/pi-coding-agent` 0.85.1（**exact pin**）：模型目录、凭据、会话文件、重试、上下文压缩、工具派发全由 pi 承担，**凡调 LLM 一律走 pi 的 Agent 路径**；本仓只提供领域工具、内核提示词与 HTTP/SSE 契约 |
+| AI 运行时 | 嵌入 `@earendil-works/pi-coding-agent` 0.87.1（**exact pin**）：模型目录、凭据、会话文件、重试、上下文压缩、工具派发全由 pi 承担，**凡调 LLM 一律走 pi 的 Agent 路径**；本仓只提供领域工具、内核提示词与 HTTP/SSE 契约 |
 | 桌面版 | Electron 44.3.0（**exact pin**）+ electron-builder；主进程内嵌 server，与 CLI 版共用同一份数据 |
 
 ## 界面与布局

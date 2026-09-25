@@ -569,10 +569,22 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
 
 // ============ 会话端点辅助 ============
 
-/** 会话末条可见文本（列表摘要用）+ 50 字截断 */
-async function lastVisibleText(target: ChatProjectTarget, sessionId: string): Promise<string> {
+/**
+ * 会话列表投影：末条可见文本（列表摘要，50 字截断）+ **可见消息数**。
+ * 计数**不用** pi `SessionInfo.messageCount`——它把 pi 自己写入的首条 system 消息 entry 也算进去，
+ * 而列表是给用户看的（界面文案「N 条消息」）⇒ 与历史接口同源，数 `projectSessionMessages` 的长度。
+ * 两个值共用同一次 `readProjectSession`（列表本来就要读全量 entries 取末条文本）。
+ */
+async function sessionListFields(
+  target: ChatProjectTarget,
+  sessionId: string,
+): Promise<{ lastMessage: string; messageCount: number }> {
   const opened = await readProjectSession(target.root, sessionId);
-  return opened === null ? "" : lastVisibleSessionText(opened.entries);
+  if (opened === null) return { lastMessage: "", messageCount: 0 };
+  return {
+    lastMessage: truncate(lastVisibleSessionText(opened.entries), SESSION_LAST_MESSAGE_MAX_LEN),
+    messageCount: projectSessionMessages(opened.entries).length,
+  };
 }
 
 /**
@@ -605,8 +617,7 @@ export function createChatRoutes(deps: ChatRouteDeps = {}): Hono {
       sessions.map(async (info) => ({
         id: info.id,
         name: info.name, // pi `session_info` 条目（普通 chat 会话没有 ⇒ undefined 被 JSON 序列化丢掉）
-        lastMessage: truncate(await lastVisibleText(target, info.id), SESSION_LAST_MESSAGE_MAX_LEN),
-        messageCount: info.messageCount,
+        ...(await sessionListFields(target, info.id)),
         createdAt: info.created.toISOString(),
         updatedAt: info.modified.toISOString(),
       })),

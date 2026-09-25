@@ -134,15 +134,15 @@ describe("GET /api/v1/settings/llm（pi 数据源）", () => {
     expect(deep.displayName).toBe("DeepSeek");
     expect(deep.authConfigured).toBe(false);
     expect(deep.authSource).toBeUndefined();
-    expect(deep.models.map((m) => m.id)).toContain("deepseek-v4-flash");
+    expect(deep.models.map((m) => m.id)).toContain("deepseek-flash");
     expect(deep.models.every((m) => m.provider === "deepseek")).toBe(true);
   });
 
   it("provider 目录来自 pi：模型条目带 contextWindow/displayName（前端下拉与占用分母）", async () => {
     const data = await getData();
-    const flash = providerOf(data, "deepseek").models.find((m) => m.id === "deepseek-v4-flash");
+    const flash = providerOf(data, "deepseek").models.find((m) => m.id === "deepseek-flash");
     expect(flash).toBeDefined();
-    expect(flash!.displayName).toBe("DeepSeek V4 Flash");
+    expect(flash!.displayName).toBe("DeepSeek V4.1 Flash");
     expect(typeof flash!.contextWindow).toBe("number");
     expect(flash!.contextWindow).toBeGreaterThan(0);
   });
@@ -156,7 +156,7 @@ describe("GET /api/v1/settings/llm（pi 数据源）", () => {
     expect(deep.authSource).toBe("environment");
     // 无 pi settings defaultModel → 首个有凭据的可用模型
     expect(data.provider).toBe("deepseek");
-    expect(data.model).toBe("deepseek-v4-flash");
+    expect(data.model).toBe("deepseek-flash");
     expect(providerOf(data, "opencode-go").authConfigured).toBe(false);
   });
 

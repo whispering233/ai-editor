@@ -9,7 +9,7 @@
 //
 // 注册语义：重复注册同名工具抛错（防后续切片扩展时撞名；注册表是唯一事实来源）。
 
-import { validateToolArguments, type Static, type TSchema } from "@earendil-works/pi-ai";
+import { validateToolArguments, type JsonObject, type Static, type TSchema } from "@earendil-works/pi-ai";
 import type { ToolPermission } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "./context.js";
 
@@ -50,7 +50,8 @@ export function validateToolArgs(def: ToolDefinition, args: unknown): unknown {
       type: "toolCall",
       id: `validate_${def.name}`,
       name: def.name,
-      arguments: (args ?? {}) as Record<string, unknown>,
+      // pi 0.86 起 `ToolCall.arguments` 收紧为 JsonObject（调用方只会传 LLM 解析出的 JSON）
+      arguments: (args ?? {}) as JsonObject,
     },
   );
 }

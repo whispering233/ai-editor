@@ -416,6 +416,7 @@
 
 - **REST 校验范围在 api 文档与 zod schema 两处出现（有意保留的契约镜像）** — 现状：`docs/api/*.md` 的请求体注释写明「1-100 字符」这类范围，单一来源 = shared `types/api.ts` 的 zod schema，文档是契约说明视图。触发条件：改任一校验范围时（schema 与文档同改）。**不**做「文档插值常量」——api 文档是给人读的契约，插值会降低可读性。
 - **代码注释里的历史阶段编号（`卡 N` / `S1.2` / `G2` / `F9`）** — 现状：约 300 处，作为 provenance 记号保留（不指向可变契约）；**合同文档的编号引用已在 v0.0.51 清掉**（`docs/api`、`docs/db`、`docs/ui`、`docs/design` 正文），`backlog.md` 保留（登记来源）。触发条件：若将来要求注释零历史编号，再做一次机械替换（无技术风险，纯 churn）。
+- **`dist/` 永不清理 ⇒ 已删模块的编译产物会随 tarball 发布** — 现状：`pnpm -r build` 只覆写不删除（`tsc -p tsconfig.json` 无 `--build`/clean），删除源文件后旧 `dist/**` 成了孤儿；实例：`packages/server/src/decompose` 已随拆除管线删除，但 `packages/server/dist/decompose/**` 仍在，而 `server` 的 `files: ["dist", "client-dist"]` ⇒ **陈旧且不可达的代码会进入 npm 包**（oracle 审计发现，非某次改动引入）。触发条件：下次动构建/发布链路时；最小修法 = 各包 build script 前置 `rm -rf dist`（本地 `rm -rf packages/server/dist/decompose` 只能治一次，不防复发）。
 
 ## MVP 明确不做（勿顺手实现）
 

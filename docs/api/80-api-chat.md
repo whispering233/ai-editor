@@ -60,7 +60,7 @@
 
 ### 会话用量字段（`usage` / `speed`）
 
-`turn_end` / `agent_end` 帧与 `GET /chat/sessions/:id/messages` 响应**共用同一形状**（服务端唯一实现点 = agent 包 `sessionUsage()`；口径 = pi `AgentSession.getSessionStats()`：assistant 消息 + `toolResult.usage` + `compaction` / `branch_summary` 的 usage 累计）。
+`turn_end` / `agent_end` 帧与 `GET /chat/sessions/:id/messages` 响应**共用同一形状**（服务端唯一实现点 = agent 包 `sessionUsage()`；口径 = pi `AgentSession.getSessionStats()`：assistant 消息 + `toolResult.usage` + `compaction` / `branch_summary` 的 usage + 独立 `usage` 条目（cache warming）四类累计）。
 
 `usage`：
 
@@ -110,7 +110,7 @@
     id: string;              // 会话 ID（pi session id）
     name?: string;           // 会话显示名（pi session_info 条目）
     lastMessage: string;     // 最后一条可见文本摘要（截断）
-    messageCount: number;
+    messageCount: number;    // 可见消息数（user/assistant/tool 投影条目数；不含 pi 写入的首条 system 消息条目）
     createdAt: string;       // ISO 8601（会话 header 时间戳）
     updatedAt: string;       // 最后活动时间
   }[];

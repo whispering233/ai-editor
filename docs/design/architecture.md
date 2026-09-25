@@ -11,7 +11,7 @@
 | **语言** | TypeScript (strict mode) | 全栈统一类型，减少运行时错误 |
 | **API 服务端** | Hono 4 + `@hono/node-server` | 轻量、TypeScript 友好、SSE 原生支持 |
 | **数据库** | better-sqlite3 ^13 (WAL mode) + drizzle-orm | N-API 重写（v13），全局安装无 ABI 失配；同步 API 简单可靠，零配置，内嵌；drizzle-orm 查询构建层（不引入 drizzle-kit） |
-| **AI 运行时** | `@earendil-works/pi-coding-agent` `0.85.1`（**exact pin**，含 `pi-ai` 模型层 / `pi-agent-core` 循环 / `pi-tui`） | 传输、流式、usage、重试、压缩、工具派发、会话文件格式全部由 pi 接管；本仓只提供领域工具、系统提示词、事件映射与 HTTP/SSE 契约 |
+| **AI 运行时** | `@earendil-works/pi-coding-agent` `0.87.1`（**exact pin**，含 `pi-ai` 模型层 / `pi-agent-core` 循环 / `pi-tui`） | 传输、流式、usage、重试、压缩、工具派发、会话文件格式全部由 pi 接管；本仓只提供领域工具、系统提示词、事件映射与 HTTP/SSE 契约 |
 | **工具参数 schema** | TypeBox（经 `pi-ai` 重导出 `Type`/`Static`） | schema 运行时即 JSON Schema：一份定义同时给模型（tool parameters）、给 TS（`Static<>`）、给校验（pi `validateToolArguments`）；不做 zod→JSON Schema 转换 |
 | **前端框架** | React 19 | 生态成熟，组件化 |
 | **前端构建** | Vite 7 | 快速 HMR，Tree-shaking |
@@ -111,7 +111,7 @@ shared（纯类型/常量/工具，零 Node 依赖，可被 client 安全 tree-s
   "dependencies": {
     "@whispering233/ai-editor-shared": "workspace:*",
     "@whispering233/ai-editor-db": "workspace:*",
-    "@earendil-works/pi-ai": "0.85.1"        // Type/Static（TypeBox 经 pi-ai 重导出，不单独装 typebox）
+    "@earendil-works/pi-ai": "0.87.1"        // Type/Static（TypeBox 经 pi-ai 重导出，不单独装 typebox）
   }
 }
 
@@ -121,8 +121,8 @@ shared（纯类型/常量/工具，零 Node 依赖，可被 client 安全 tree-s
   "dependencies": {
     "@whispering233/ai-editor-shared": "workspace:*",
     "@whispering233/ai-editor-tools": "workspace:*",
-    "@earendil-works/pi-coding-agent": "0.85.1",   // 含 pi-ai / pi-agent-core / pi-tui（exact pin）
-    "@earendil-works/pi-ai": "0.85.1"
+    "@earendil-works/pi-coding-agent": "0.87.1",   // 含 pi-ai / pi-agent-core / pi-tui（exact pin）
+    "@earendil-works/pi-ai": "0.87.1"
   }
 }
 
@@ -134,8 +134,8 @@ shared（纯类型/常量/工具，零 Node 依赖，可被 client 安全 tree-s
     "@whispering233/ai-editor-db": "workspace:*",
     "@whispering233/ai-editor-tools": "workspace:*",
     "@whispering233/ai-editor-agent": "workspace:*",
-    "@earendil-works/pi-coding-agent": "0.85.1", // 会话/工具派发（exact pin）
-    "@earendil-works/pi-ai": "0.85.1",         // 模型目录与凭据（运行时 import，必须进 dependencies）
+    "@earendil-works/pi-coding-agent": "0.87.1", // 会话/工具派发（exact pin）
+    "@earendil-works/pi-ai": "0.87.1",         // 模型目录与凭据（运行时 import，必须进 dependencies）
     "@hono/node-server": "^2.0.12",
     "hono": "^4.7.0",
     "fflate": "^0.8.3",          // 备份导出/导入 + 小说文档导出的 zip 打包（无 Node 原生依赖）

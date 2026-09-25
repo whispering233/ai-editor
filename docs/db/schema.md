@@ -243,11 +243,11 @@ CREATE TABLE document_records (
 | session_id | pi 生成的不透明 id；**客户端传入值只能经磁盘发现 + header id 映射解析为路径，禁止拼接** |
 | 消息投影 | 每条 entry 投影为 `{ id, role, content, toolCalls?, toolCallId?, createdAt }`；`role` ∈ `user` / `assistant` / `tool`（pi 的 `toolResult` 投影为 `tool`） |
 | 思维链 | assistant 消息的 thinking 内容随消息投影下发（列表投影只给预览，见 `docs/api/80-api-chat.md`） |
-| 会话列表投影 | `id` / `createdAt` / `updatedAt` / `messageCount` / `lastMessage`（末条可见文本截断） |
+| 会话列表投影 | `id` / `createdAt` / `updatedAt` / `messageCount` / `lastMessage`（末条可见文本截断）；`messageCount` = **可见消息数**（同消息投影口径，**不用** pi `SessionInfo.messageCount`——后者把 pi 写入的首条 system 消息条目也算进去） |
 | 删除 | 物理删文件（无回收站、无软删）；有在途 SSE 的会话拒删（409 `SESSION_BUSY`） |
 | 旧格式 | v1 扁平行历史文件留在磁盘但**不被 pi 发现**（无效 header）——不出现在列表、不可续聊 |
 
-**其他 entry**：压缩摘要、模型/思考强度变更都是 pi 的 entry，不进入消息投影（前端不展示，但影响重建后的上下文）。
+**其他 entry**：首条 system 消息（pi 0.86 起把「系统提示词 + 工具声明」随会话落盘，续聊/分支导航可重放）、压缩摘要、模型/思考强度变更、cache warming 的 `usage` 条目都是 pi 的 entry，不进入消息投影（前端不展示）；前三类只影响重建后的上下文，`usage` 条目计入状态栏账目（见 `docs/design/20-context.md` §2.1）。
 
 ## outline.json — 大纲树
 

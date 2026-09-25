@@ -4,7 +4,7 @@
 //
 // **本模块不持有任何配置**：模型目录 / 凭据 / 运行参数全部来自 pi（`ModelRuntime` +
 // `~/.pi/agent` 的 auth.json / models.json / settings.json），本端点只做「读快照 + 写 pi」。
-// 凭据解析顺序（pi 0.85.1，`pi-ai` auth/resolve.js）——**auth.json 存量凭据优先**（一家一条，值可
+// 凭据解析顺序（pi 0.87.1，`pi-ai` auth/resolve.js）——**auth.json 存量凭据优先**（一家一条，值可
 // 为字面 key / `$ENV_VAR` 引用 / `!命令`）→ 该家无条目时才回落到 provider 内置环境变量
 // （`DEEPSEEK_API_KEY` 等）——环境变量是兜底，不是与凭据并存的第二个来源。
 //

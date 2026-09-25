@@ -8,7 +8,7 @@
 // 2. 环境代理支持（`EnvHttpProxyAgent`，配合 `httpProxy` 设置/`HTTP(S)_PROXY`）。
 // 不装 dispatcher 时 pi 的 SDK 走 Node 自带 fetch/连接策略，于是「pi CLI 能连、本仓不能连」。
 //
-// 实现与 pi 0.85.1 的同名模块保持同构（pi-web 也以拷贝方式复用该模块），差异仅：
+// 实现与 pi 0.87.1 的同名模块保持同构（pi-web 也以拷贝方式复用该模块），差异仅：
 // 不做一次性守卫（允许设置热更新后重新安装），注释指向本仓语境。
 
 import { EventEmitter } from "node:events";
