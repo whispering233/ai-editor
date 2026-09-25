@@ -23,7 +23,7 @@
 ### Changed
 
 - **升级 AI 内核 pi `0.85.1` → `0.87.1`**（`pi-ai` / `pi-coding-agent` 精确版本齐抬，含 `pi-agent-core` / `pi-tui` 与传递依赖）：
-  - **提示词与工具声明随会话落盘**（pi 0.86 起）：模型请求入参从 `Context` 变为 `TranscriptContext`——提示词在 `messages` 的首条 system 消息里，顶层 `systemPrompt` 不复存在；pi 会把该状态写进会话文件（每个会话首条请求落一条 system 消息条目），续聊 / 分支导航按 transcript 重放（系统提示词与项目 AGENTS.md 注入实测不变，工具集仍为 37 个）。
+  - **提示词与工具声明随会话落盘**（pi 0.86 起）：模型请求入参从 `Context` 变为 `TranscriptContext`——提示词在 `messages` 的首条 system 消息里，顶层 `systemPrompt` 不复存在；pi 会把该状态写进会话文件（每个会话首条请求落一条 system 消息条目：结构化 `sections` = `preamble` / `project_context` / `cwd` ＋ `toolsAdded` 的 37 条工具声明，**仅用于 transcript 重放，不是提示词编辑通道**），续聊 / 分支导航按 transcript 重放（系统提示词与项目 AGENTS.md 注入实测不变，工具集仍为 37 个）。
   - **会话列表 `messageCount` 改「可见消息数」**：直接取 pi 的 `SessionInfo.messageCount`（含上述 system 条目）会让界面文案「N 条消息」比历史面板多 1 条；改为复用列表本来就要读的 entries、数投影后的可见消息（与 `GET /chat/sessions/:id/messages` 同源）。
   - **状态栏账目补计 cache warming**：pi 0.86 起新增独立 `usage` 条目（默认开启的缓存预热记账），pi 的 `getSessionStats()` 会累计它；`sessionUsage()` 同步计入，口径保持一致。
   - **pi 目录数据变更**：deepseek 家 `deepseek-v4-flash` 改名为 `deepseek-flash`（显示名 `DeepSeek V4.1 Flash`）——模型下拉与激活模型解析随目录自动跟随；新增的模型家（如 meta / 新版 frontier 模型）同样自动出现在设置页。

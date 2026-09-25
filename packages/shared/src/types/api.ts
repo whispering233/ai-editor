@@ -958,7 +958,7 @@ export const chatSessionSummarySchema = z.object({
   // 会话显示名（pi `session_info` 条目；普通 chat 会话 pi 不写 ⇒ 缺省）
   name: z.string().optional(),
   lastMessage: z.string(), // 截断摘要
-  messageCount: z.number().int(),
+  messageCount: z.number().int(), // 可见消息数（同 GET /chat/sessions/:id/messages 的投影口径；不是 pi SessionInfo.messageCount）
   createdAt: z.string(),
   updatedAt: z.string(), // 最后活动时间
 });
