@@ -420,7 +420,7 @@ components:
 
 **无衬线 = 界面 chrome 的规则（唯一例外 = 正文书写面）**：标题、导航、按钮、表格、书封一律禁衬线——旧 `--font-serif` / `--font-heading` 与书封取色模块 `lib/book-cover.ts` 均已删除（T10）。**唯一例外 = 用户在写作面自选的字体**（宋/楷/仿宋/等宽，见 §Colors 写作面偏好）：那是「稿纸」而不是界面，且**默认仍是无衬线栈**；「不下载 web 字体」这条对例外同样成立。
 
-**斜体 = 合成倾斜，不是独立字面（2026-09）**：系统栈里的中文没有真斜体，浏览器对 CJK 做合成倾斜（shear）——墨迹会**越出字宽**（16px 两字实测右 2px / 左 1px）。所以斜体标签**不得**挂 `truncate` / `overflow: hidden`（会把最后一字的右缘切掉，实例：§导航与外壳 的「◈ 书架」）；要防溢出用 `whitespace-nowrap`，确实需要截断的（动态长文本）则补 `pr-0.5` 把 padding 让出来。斜体只用于「占位/非正式」语义（左栏顶部标识、时间轴「未挂载」组标题），正文与按钮不用。
+**斜体 = 合成倾斜，不是独立字面（2026-09）**：系统栈里的中文没有真斜体，浏览器对 CJK 做合成倾斜（shear）——墨迹会**越出字宽**（16px 两字实测右 2px / 左 1px）。所以斜体标签**不得**挂 `truncate` / `overflow: hidden`（会把最后一字的右缘切掉，实例：§导航与外壳 的「书架」标签）；要防溢出用 `whitespace-nowrap`，确实需要截断的（动态长文本）则补 `pr-0.5` 把 padding 让出来。斜体只用于「占位/非正式」语义（左栏顶部标识、时间轴「未挂载」组标题），正文与按钮不用。
 
 ## Layout
 
@@ -540,7 +540,7 @@ components:
 
 ### 导航与外壳
 
-**`sidebar`** — 左栏底 `{colors.surface}`（比内容面板暗一档），右侧 1px `{colors.hairline}`；**顶部标识 = 「◈ 书架」（书架主页入口，`#/`）**（固定两字、**不挂 `truncate`**——合成斜体（`italic` 无真斜体字面可用）的墨迹会越出字宽，`overflow: hidden` 会切掉「架」右缘）、其下**书名按钮**（`#/overview` 项目概览入口）、八项一级导航、工具区（回收站）、底部四快捷入口（立即备份 / 同步云端 / 设置 / 主题）。**「概览」不再占一级导航位**（入口收敛到书名按钮，`#/overview` 时书名按钮用选中面；书架路由 `#/` 下左栏无选中面——书架自身就是当前页）。
+**`sidebar`** — 左栏底 `{colors.surface}`（比内容面板暗一档），右侧 1px `{colors.hairline}`；**顶部标识 = `app-mark` 品牌标记 + 「书架」（书架主页入口，`#/`）**（固定两字、**不挂 `truncate`**——合成斜体（`italic` 无真斜体字面可用）的墨迹会越出字宽，`overflow: hidden` 会切掉「架」右缘）、其下**书名按钮**（`#/overview` 项目概览入口）、八项一级导航、工具区（回收站）、底部四快捷入口（立即备份 / 同步云端 / 设置 / 主题）。**「概览」不再占一级导航位**（入口收敛到书名按钮，`#/overview` 时书名按钮用选中面；书架路由 `#/` 下左栏无选中面——书架自身就是当前页）。
 **导航入口不受「文字按钮必须带边框」约束**：左栏导航项（Menu 八项 + 书名 / 设置 / 主题三个入口）与 Menu 项同级——无边框、选中态用 `{colors.surface-muted}` 灰面（Tailwind `bg-accent` = `colorFillTertiary`）、文字不变色，禁用 H4 只约束操作按钮（新建/重命名/重试/删除等）。**左栏底部区形态单一**：立即备份 / 同步云端 / 设置 / 主题四入口同为 `block` + `color="default" variant="text"` 的无边框文字按钮（**四行固定顺序**，「同步云端」在「立即备份」与「设置」之间）；「立即备份」「同步云端」是动作而非导航，形态随底部区（**H4 登记例外，仅此两处**）；禁用/加载态由 antd Button 派发（无项目 → 禁用；在途 → `loading` 防连点），失败经 `message` 提示。**`menu-item`** / **`menu-item-selected`** — 菜单项 32px 高、`{rounded.sm}`；**选中 = `{colors.surface-muted}` 灰面 + 文字不变色**（antd 默认的彩色选中项要显式覆盖：`itemSelectedBg` / `itemSelectedColor`）。**`info-bar`** — 中栏顶部 1px 底线；项目名（点击进 `#/overview` 项目概览）+ 阅读进度 + 语言 + 小屏聊天开关。字号 `{typography.caption}`。
 
 **`tabs`（二级 tab）** — 页面内分区导航（设置页二级 tab / 人物页四 tab）：antd `Tabs` line 型（`items` 数组，`activeKey` 受控）。未选中 `{colors.secondary}`，选中与悬浮 `{colors.primary}`（`itemSelectedColor` / `itemHoverColor` / `inkBarColor` 的 antd 默认值就是 `colorPrimary`，**不重复覆盖**），选中指示条 2px `{colors.primary}`，底线 1px `{colors.hairline}` = 页头分割线（见 §Layout「中栏页头结构」）。**页内 tab 不进 URL、不参与左栏导航高亮**，选中态是页面 state（刷新回落默认 tab）。
@@ -553,6 +553,7 @@ components:
 - **关闭语义（四条路径等价）**：右上角 X（`DialogContent` 默认 `showCloseButton`）/ `Esc` / 遮罩点击 / `[取消]`——**关窗即不落任何状态**；该家只有**保存 key 成功后**才进入三级导航并被选中（失败留在窗内显示错误，不关窗）。
 - 搜索无命中 / 已全部配置各给一行 `caption-text` 说明；当前无任何已配置家时，右栏给「点左侧 [添加] 选择要接入的 provider」空态。
 
+**`app-mark`（品牌标记，2026-09 定稿）** — 产品品牌标记，**全站唯一的自持矢量图形**（其余图标一律 `@ant-design/icons`）：几何 = **书脊 + 三条递减条目线**（竖脊 = 书 / 主干，右侧三条左对齐、长度递减的圆头线 = 卷 / 章 / 场三层）——语义是「有层级结构的书稿」，即本产品与「聊天框式 AI 写作」的分界；**无外围容器**（左栏此前的 `◈` 只是一个历史遗留字符，无含义，已删）。**色 = `currentColor`**（浅色态即 `{colors.primary}`，深色态随 seed；本产品本来就品牌色与文本色同值）——**不新增色值、不给标记上彩色**。**尺寸随字号类**（行内 14 `text-sm` / 16 `text-base`），**不做 Filled 变体**（界面内只有描边态）。**落点两处、同款**：左栏顶部标识（`[标记] 书架`，`#/` 入口）与 `info-bar` 项目名左侧（`[标记] 书名`）——**只换图形、不动文案**（那两处是导航入口与书名，不是招牌）。**系统面形态 = 同一图形的负形版**（墨底 + 纸白挖空）：`public/brand-icon.svg` 一个文件同时承担 favicon 与桌面应用图标源，描边态与负形态是**同一图形的两档量感**、不是两个符号；打包口径见 `50-desktop.md` §5.3。
 **`provider-icon`** — 供应商品牌 logo（三级导航项 + 添加列表 + 聊天模型下拉的分组标签）：`public/provider-icons.svg` 精灵（`<symbol>` + `<use href="/provider-icons.svg#id">`，派生自 @lobehub/icons，MIT 许可头内嵌于该文件、不引包）按 pi provider id 取图，尺寸 16px；无对应 symbol 的自定义 provider 回退 `@ant-design/icons` 的 `ApiOutlined`。品牌 logo **自带品牌色**（DeepSeek 蓝、Google 四色等）——**这是「颜色只经 antd token」的登记例外**：第三方品牌资产，只在图标内部出现，不参与界面取色；无品牌色的 logo 用 `currentColor`（`{colors.tertiary}` 档 = `text-muted-foreground`）。
 
 
@@ -730,7 +731,7 @@ components:
 - 选中态用 `{colors.surface-muted}` 灰面，不用彩色底
 - tint 底色只给**用户标签** chip（`data.tags`）；枚举类型/分类徽标一律中性 `type-badge`（不给类型上彩色）
 - 字号只用四档（20 / 16 / 14 / 12）；标题一律 `Typography.Title level={4|5}`
-- 图标一律 `@ant-design/icons`；尺寸随字号类（14 `text-sm` / 16 `text-base` / 20 `text-xl` / 空态 24 `text-2xl`）；状态用 Filled、操作与导航用 Outlined；面板收起/展开 = `DoubleLeft/RightOutlined` 镜像对（禁 `Border*` / `MenuFold*` / `Vertical*`）。**唯一例外 = `provider-icon`**（供应商品牌 logo，走自持 svg 精灵 + 品牌自带色，见 §Components）
+- 图标一律 `@ant-design/icons`；尺寸随字号类（14 `text-sm` / 16 `text-base` / 20 `text-xl` / 空态 24 `text-2xl`）；状态用 Filled、操作与导航用 Outlined；面板收起/展开 = `DoubleLeft/RightOutlined` 镜像对（禁 `Border*` / `MenuFold*` / `Vertical*`）。**例外两处 = `provider-icon` 与 `app-mark`**（供应商品牌 logo 走自持 svg 精灵 + 品牌自带色；本产品品牌标记走自持内联 SVG + `currentColor`，无形色语汇、不新增色值——两者均见 §Components）
 - 文字型**操作**按钮带边框（H4 红线）；操作按钮一律直接展示，不收进 `⋯` 菜单。导航入口（左栏 Navigation/Menu 项）不属此列
 - 思维链默认折叠（流式期间临时展开），不占正文视线
 - 中文排版靠系统字体栈；不引入 web 字体
@@ -740,12 +741,12 @@ components:
 
 - 不用营销站那套：紫 CTA、深蓝 hero 带、马卡龙大面积功能卡、胶囊按钮、80px 展示字
 - 不用衬线做界面 chrome 与标题（书封同）；**唯一例外 = 写作面的用户字体偏好**（宋/楷/仿宋/等宽，见 §Colors 写作面偏好）
-- 不硬编码色值/色类（`text-blue-500`、`#1677ff`、`rgba(...)` 手写值）——**唯一例外**：`html.dark body` 的首帧 FOUC 兜底色（`index.html` 内联脚本，防深色模式闪白）
+- 不硬编码色值/色类（`text-blue-500`、`#1677ff`、`rgba(...)` 手写值）——**例外两处**：`html.dark body` 的首帧 FOUC 兜底色（`index.html` 内联脚本，防深色模式闪白）；品牌资产静态文件（`public/brand-icon.svg`——字面色值即 `{colors.primary}` 的浅色值，不经运行时取色，也不被源码扫描替身）
 - 不用 `!` 前缀类压 antd 组件样式
 - **不要用 Tailwind 类去覆盖 antd 组件根元素上 antd 自己声明的属性**（`width` / `height` / `padding` / `margin` / `font-size` / `color` / `background` / `border` / `border-radius` / `display`）：antd 样式是运行时注入的**无层 CSS**，而 Tailwind 工具类在 `@layer utilities`——按 CSS 级联规范**无层胜出**，此类覆盖会静默失效（历史上满仓 `!` 就是这么来的）。正确做法：宽度/伸缩用**外层容器**承载；具体尺寸用组件 `size`；状态面用组件 `variant`（如 `variant="filled"` = `colorFillTertiary` = `{colors.surface-muted}`）或组件 token
 - **不要让 `:root` 的语义变量失去 `--ant-*` 来源**：`cssVar.key` 与 `index.html` 的 `<html class>` 必须同值（见 §Colors 踩坑段），否则全站语义色集体失效
 - 不用阴影、渐变、彩色 focus 环、卡片 hover 抬升
-- 不引入第二套组件系统（图标只有 `@ant-design/icons`、提示只有 antd `message`、按钮/输入只有 antd）；自绘只限 antd 无对应语义的浮层与业务组件
+- 不引入第二套组件系统（图标只有 `@ant-design/icons`、提示只有 antd `message`、按钮/输入只有 antd）；自绘只限 antd 无对应语义的浮层、业务组件与 `app-mark`（品牌标记是全站唯一的自持矢量图形）
 - 不用胶囊形按钮；不把彩色用于大面背景或正文（**唯一例外 = 用户自选的写作面纸张**：2 档低饱和纸色，默认仍为 `{colors.canvas}`）
 
 ## Known Gaps

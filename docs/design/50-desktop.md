@@ -124,6 +124,19 @@ macOS 无卸载器（拖废纸篓即卸）→ 本机制只对 Windows 生效；�
 
 **不做**（有意）：设置页内嵌更新面板（要扩 `DesktopBridge` + client UI）、灰度 staging、macOS/Linux 自动更新、静默自动安装。延期项与触发条件见 `backlog.md`。
 
+### 5.3 应用图标（2026-09 起有品牌图标）
+
+**单源 = `packages/client/public/brand-icon.svg`**（与 favicon 同一个文件——有意不复制第二份：图标迭代时两处必须一致，双份必然漂移）。它由 client 侧服务，桌面侧在 `electron-builder.yml` 里以 `icon: "../client/public/brand-icon.svg"` 引用；`resolveIcon` 的查找根包含 `projectDir`（= `packages/desktop`，`pack.mjs` 就是在该目录调 electron-builder），因此该相对路径可解析。
+
+**转换是自动的**：Windows → `icon.ico`、macOS → `icon.icns`、Linux → **SVG 直接进 scalable 目录**（`app-builder-lib/out/util/iconConverter.js` 的 `doConvertIcon` 对 `set` 格式的 `.svg` 有直通分支，不栅格化）。
+
+约束与坑（读 `app-builder-lib` 26.15.3 源码确认，不是推测）：
+
+- **SVG 源由外部工具集栅格化（1024px）**；尺寸校验只对 PNG 源生效（win ≥ 256 / mac ≥ 512）。因此**不需要**在仓里存预生成的 PNG/ICO/ICNS——`buildSourceCandidates` 收 `.svg`。
+- **首次打包需联网**：工具集 `icons@1.1.0` 按需从 `electron-builder-binaries` 下载（`out/toolsets/icons.js` 的 `downloadBuilderToolset`）；离线构建会失败。
+- **改图标后必须重新打包并肉眼核对产物**（AppImage / `linux-unpacked` / Windows 安装包）：`typecheck` 与「构建成功」都不代表图标被采纳（图标缺失时 builder 只打一条 warn 日志、照用 Electron 默认图标——这正是 v0.0.56 及之前的状态）。
+- **图形口径**（负形、无滤镜/渐变、圆角与安全区、favicon 同一形态）见 `docs/ui/DESIGN.md` 的 `app-mark` 条目；本文件只管资产位置与打包链路。
+
 ## 6. 客户端契约增量（唯一改动）
 
 - 设置页新增二级 tab「**通用**」（位置最前：通用 → AI 模型 → 项目规则 → 备份），首项「书库位置」= 当前创作根路径（只读文本）+「更改…」按钮（`button-default`）+ 一句说明（更改后需重启应用）。**仅桌面版渲染**（能力检测），浏览器形态该 tab 不出现。
