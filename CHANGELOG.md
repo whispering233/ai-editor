@@ -13,8 +13,11 @@
 >
 > **小说文档导出（markdown 卷/章目录树）**：书架当前书条「导出」改为弹窗二选一——「项目压缩文件」（原三文件 zip，行为不变）或「小说文档」（新增 `GET /api/v1/project/export-novel`，产物 `{书名}/第N卷 {卷名}/第M章 {章名}.md`，章号跨卷连续、每个章文件带 `# 第M章 章名` 标题头）。md 文本用既有 shared `blocksToPlainMd` 投影（= AI 读取 / 字数同源）⇒ **内联样式（粗体/斜体/高亮）有损**，与「导出只落默认下载目录、目录树在 zip 内」两条残差已登记 `backlog.md`；导入仍只认三文件项目包。回归：build / typecheck / lint / `-r test` 全绿（192 文件 / 2791 测试）+ 每卡独立 oracle 复验（含变异与 fuzz）+ 浏览器逐项取证（浅/深两态弹窗、默认项、真实导出 toast 与下载文件名、真实解压目录树核对）。
 
+> **产品品牌标记与应用图标（首个品牌资产）**：左栏顶部标识与信息条项目名前的 `◈` 字符换成自绘品牌标记——书脊 + 三条递减条目线（层次 = 卷/章/场，语义取自产品内核：有层级的书稿，而不是「聊天框式 AI 写作」），色走 `currentColor`（无新增色值、不动品牌名与 `productName`）；同一图形的**负形版**（墨底 + 纸白挖空）落成 `client/public/brand-icon.svg`，**一个文件同时承担 favicon 与桌面应用图标源**（`electron-builder.yml` 的三平台 `icon:` 指向它，不存副本）。此前桌面应用图标是 Electron 默认图标、浏览器标签页无图标。回归：build / typecheck / lint / `-r test` 全绿（192 文件 / 2792 测试）+ 每卡独立 oracle（卡 1 7/7、卡 2 8/8、卡 3 含负控制）+ 浏览器浅/深两态与 16px 真实尺寸取证 + `pnpm desktop:dist` 解包核对（AppImage 内图标与源文件逐字节相同、去掉 `icon:` 后复现 Electron 默认图标）。遗留：Linux 包只带 SVG 图标、Windows/macOS 的 ico/icns 转换与 `desktopName` 关联两项验证债已登记 `backlog.md`。
+
 ### Added
 
+- **产品品牌标记 `app-mark` + 应用图标资产**：`components/brand/app-mark.tsx`（内联 SVG、色走 `currentColor`、无尺寸 API）+ `client/public/brand-icon.svg`（负形版；favicon 与桌面应用图标同一个文件）+ 桌面三平台 `icon:` 接线；左栏顶部与信息条两处 `◈` 字符退役。
 - **小说文档导出（`GET /api/v1/project/export-novel`）**：把当前项目的**正文**导出为 markdown 卷/章目录树 zip（`{书名}/第N卷 {卷名}/第M章 {章名}.md`）；卷号 = 可见卷先序（无可见章的卷产空目录条目、卷号照占）、章号 = 可见章先序且**跨卷连续**（shared `orderVisibleChapters`），存量直挂 root 的章落在书名目录下，软删节点不导出，名字段走文件名 sanitize；章文件 = `# 第M章 章名` + 空行 + `document_records.content_text` 投影（空章仍产文件）；无可见章 → 400 `VALIDATION_ERROR`；只读 `data.db`、不做 wal_checkpoint、不写项目目录。产物**不可再导入**（导入仍只认三文件包）。
 - **导出类型弹窗**（书架当前书条「导出」）：单选「项目压缩文件」（默认，`{书名}.zip`，可再导入）/「小说文档」（`{书名}-小说文档.zip`，卷/章 md 目录树，**有损**）；两条都走默认下载目录（`<a download>`），成功关框 + toast（`已导出《书名》备份` / `已导出《书名》小说文档`）、失败留框并保留错误提示。
 - **shared 收口**：新增 `numberVisibleOutline`（卷/章展示编号与归属的单一来源，大纲页徽标改由它派生）+ `sanitizeDocumentFileName`（从 client 挪入，client re-export）+ `novel-export` 纯函数（zip 条目路径与章文件正文组装）。
