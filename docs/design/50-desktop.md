@@ -126,16 +126,20 @@ macOS 无卸载器（拖废纸篓即卸）→ 本机制只对 Windows 生效；�
 
 ### 5.3 应用图标（2026-09 起有品牌图标）
 
-**单源 = `packages/client/public/brand-icon.svg`**（与 favicon 同一个文件——有意不复制第二份：图标迭代时两处必须一致，双份必然漂移）。它由 client 侧服务，桌面侧在 `electron-builder.yml` 里以 `icon: "../client/public/brand-icon.svg"` 引用；`resolveIcon` 的查找根包含 `projectDir`（= `packages/desktop`，`pack.mjs` 就是在该目录调 electron-builder），因此该相对路径可解析。
+**单源 = `packages/client/public/brand-icon.svg`**（与 favicon 同一个文件——有意不复制第二份：图标迭代时两处必须一致，双份必然漂移）。它由 client 侧服务，桌面侧在 `electron-builder.yml` 的 `linux` / `win` / `mac` **三段里各写一行** `icon: "../client/public/brand-icon.svg"`；`resolveIcon` 的查找根包含 `projectDir`（= `packages/desktop`，`pack.mjs` 就是在该目录调 electron-builder），因此该相对路径可解析。
 
-**转换是自动的**：Windows → `icon.ico`、macOS → `icon.icns`、Linux → **SVG 直接进 scalable 目录**（`app-builder-lib/out/util/iconConverter.js` 的 `doConvertIcon` 对 `set` 格式的 `.svg` 有直通分支，不栅格化）。
+（顶层 `icon` 也可用——`PlatformSpecificBuildOptions` 里有 `readonly icon?: string | null`，`Configuration` 继承它，`config.icon` 确实是 Linux 取值链的末位；本仓选按平台写只是为了三平台意图一目了然，不代表顶层写法无效。）
 
-约束与坑（读 `app-builder-lib` 26.15.3 源码确认，不是推测）：
+**转换是自动的**：Windows → `icon.ico`、macOS → `icon.icns`、Linux → **SVG 直接进 scalable 目录**（`app-builder-lib/out/util/iconConverter.js` 的 `doConvertIcon` 对 `set` 格式的 `.svg` 有直通分支，不栅格化）。实测（2026-09，AppImage）：包内只有 `usr/share/icons/hicolor/scalable/apps/ai-editor.svg`（逐字节 = 源文件）、`.DirIcon` 是指向它的符号链接，**不再有任何 PNG 尺寸集**；`.desktop` 的 `Icon=ai-editor` 经 XDG 解析到该 SVG。
 
-- **SVG 源由外部工具集栅格化（1024px）**；尺寸校验只对 PNG 源生效（win ≥ 256 / mac ≥ 512）。因此**不需要**在仓里存预生成的 PNG/ICO/ICNS——`buildSourceCandidates` 收 `.svg`。
-- **首次打包需联网**：工具集 `icons@1.1.0` 按需从 `electron-builder-binaries` 下载（`out/toolsets/icons.js` 的 `downloadBuilderToolset`）；离线构建会失败。
-- **改图标后必须重新打包并肉眼核对产物**（AppImage / `linux-unpacked` / Windows 安装包）：`typecheck` 与「构建成功」都不代表图标被采纳（图标缺失时 builder 只打一条 warn 日志、照用 Electron 默认图标——这正是 v0.0.56 及之前的状态）。
+约束与坑（读 `app-builder-lib` 26.15.3 源码 + 实际打包确认，不是推测）：
+
+- **SVG 源仅在做 ico/icns 时经外部工具集栅格化（1024px）**；尺寸校验只对 PNG 源生效（win ≥ 256 / mac ≥ 512）。因此**不需要**在仓里存预生成的 PNG/ICO/ICNS——`buildSourceCandidates` 收 `.svg`。
+- **联网只发生在 win/mac 转换**：工具集 `icons@1.1.0` 按需从 `electron-builder-binaries` 下载（`out/toolsets/icons.js` 的 `downloadBuilderToolset`）；**Linux 打包不触发它**（SVG 对 `set` 格式直通），所以本地 Linux 冒烟与 CI 出 Windows 包的风险面不同——**ico/icns 转换的真实产物只能在 CI 出包时复核**。
+- **负控制不能只删一段**：Linux 的图标源取值链是 `linux.icon ?? mac.icon ?? config.icon`（`out/targets/LinuxTargetHelper.js` 的 `computeDesktopIcons`）⇒ 只删 `linux.icon` 而留另外两处，包内依然是品牌图，会得出「接不接都一样」的错误结论。有效负控制 = 三处全删（或让 `linux.icon` 指向哨兵文件）。
+- **改图标后必须重新打包并核对产物**（AppImage 解包看 `hicolor/` 与 `.DirIcon` / Windows 安装包）：`typecheck` 与「构建成功」都不代表图标被采纳（图标缺失时 builder 只打一条 warn `reason=application icon is not set`、照用 Electron 默认图标——这正是 v0.0.56 及之前的状态）。
 - **图形口径**（负形、无滤镜/渐变、圆角与安全区、favicon 同一形态）见 `docs/ui/DESIGN.md` 的 `app-mark` 条目；本文件只管资产位置与打包链路。
+- **已知兼容性口径（有意接受）**：Linux 包只带 SVG 图标；不支持 `hicolor/scalable` 的老 launcher / 第三方 AppImage 集成可能不显示品牌图标（回落默认）。**触发再处理的条件** = 真有 Linux 用户报图标不显示，那时才补一份栅格 PNG（而不是现在预先维护两套资产）。
 
 ## 6. 客户端契约增量（唯一改动）
 
