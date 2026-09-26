@@ -43,6 +43,11 @@ linux:
   # 应用目录 package.json 的 name 含 scope（@whispering233/...）——executableName 会推导出含 `@`
   # 的名字，AppImage 工具链拒收（仅允许字母/数字/`-`/`_`/`.`/空格），必须显式指定
   executableName: ai-editor
+  # Linux 桌面身份链对齐（见 50-desktop.md §5.3）：`.desktop` 文件名默认取 executableName
+  # （= ai-editor），而 Electron 的 app_id / WM_CLASS 取应用 package.json 的 desktopName，
+  # builder 的 StartupWMClass 缺失时又回退 productName——三处各自取值。
+  # syncDesktopName: true ⇒ `.desktop` 文件名 = desktopName，三处同值（builder 27 起默认开启）。
+  syncDesktopName: true
   # ⚠ **artifactName 不得含空格**（`${productName}` = `AI Editor` 含空格）：自动更新要求
   # 「磁盘文件名 = 上传后的资产名 = latest.yml 里的 url」逐字一致。含空格时 GitHub 上传会把空格
   # 换成**点**（实测 v0.0.43 资产名 = `AI.Editor-0.0.43-win-x64.exe`），而 electron-builder 写进

@@ -132,12 +132,14 @@ macOS 无卸载器（拖废纸篓即卸）→ 本机制只对 Windows 生效；�
 
 **转换是自动的**：Windows → `icon.ico`、macOS → `icon.icns`、Linux → **SVG 直接进 scalable 目录**（`app-builder-lib/out/util/iconConverter.js` 的 `doConvertIcon` 对 `set` 格式的 `.svg` 有直通分支，不栅格化）。实测（2026-09，AppImage）：包内只有 `usr/share/icons/hicolor/scalable/apps/ai-editor.svg`（逐字节 = 源文件）、`.DirIcon` 是指向它的符号链接，**不再有任何 PNG 尺寸集**；`.desktop` 的 `Icon=ai-editor` 经 XDG 解析到该 SVG。
 
+**Linux 桌面身份（`desktopName` + `linux.syncDesktopName`，2026-09）**：图标之外，`.desktop` 还带着「这个包是哪只应用」的身份值——`app_id`（Wayland）/ `WM_CLASS`（X11）取自**应用 package.json 的 `desktopName`**（Electron 44 起支持 `app.setDesktopName()` 同名 package.json 字段），而 `electron-builder` 的 `.desktop` **文件名**默认取 `executableName`、`StartupWMClass` 在 `desktopName` 缺失时回退 `productName`——三处各自取值会分叉（旧状态：文件名/真实 WM_CLASS = `ai-editor`、`StartupWMClass` = `AI Editor`）。现取值：`desktopName: "com.whispering233.ai-editor"`（与 `appId` 同值）+ `linux.syncDesktopName: true`（`.desktop` 文件名改为 `desktopName`，builder 27 起默认开启）⇒ **文件名 / `StartupWMClass` / 真实 WM_CLASS 三处同值**。实测（2026-09，AppImage 解包 + WSLg 上 `xprop WM_CLASS`）：包内 `com.whispering233.ai-editor.desktop`（`StartupWMClass=com.whispering233.ai-editor`、`Icon=ai-editor`）与窗口 `("com.whispering233.ai-editor" "com.whispering233.ai-editor")` 一致。**为什么必须设**：`xdg-desktop-portal` 1.21+ 与 GNOME 50 用该身份把 app 解析到 `.desktop` 文件，解析不到就**静默**拒 portal 请求（`globalShortcut` 一类）——`appId` 只覆盖 Windows / macOS 的应用标识，Linux 侧没有替代品。⚠ `desktopName` 必须随应用 package.json 进包（`pnpm deploy` 落 `.deploy/app`，再进 `app.asar`）——改完要在解包里核一遍该字段（`typecheck` 看不到）。
+
 约束与坑（读 `app-builder-lib` 26.15.3 源码 + 实际打包确认，不是推测）：
 
 - **SVG 源仅在做 ico/icns 时经外部工具集栅格化（1024px）**；尺寸校验只对 PNG 源生效（win ≥ 256 / mac ≥ 512）。因此**不需要**在仓里存预生成的 PNG/ICO/ICNS——`buildSourceCandidates` 收 `.svg`。
 - **联网只发生在 win/mac 转换**：工具集 `icons@1.1.0` 按需从 `electron-builder-binaries` 下载（`out/toolsets/icons.js` 的 `downloadBuilderToolset`）；**Linux 打包不触发它**（SVG 对 `set` 格式直通），所以本地 Linux 冒烟与 CI 出 Windows 包的风险面不同——**ico/icns 转换的真实产物只能在 CI 出包时复核**。
 - **负控制不能只删一段**：Linux 的图标源取值链是 `linux.icon ?? mac.icon ?? config.icon`（`out/targets/LinuxTargetHelper.js` 的 `computeDesktopIcons`）⇒ 只删 `linux.icon` 而留另外两处，包内依然是品牌图，会得出「接不接都一样」的错误结论。有效负控制 = 三处全删（或让 `linux.icon` 指向哨兵文件）。
-- **改图标后必须重新打包并核对产物**（AppImage 解包看 `hicolor/` 与 `.DirIcon` / Windows 安装包）：`typecheck` 与「构建成功」都不代表图标被采纳（图标缺失时 builder 只打一条 warn `reason=application icon is not set`、照用 Electron 默认图标——这正是 v0.0.56 及之前的状态）。
+- **改图标 / 打包身份后必须重新打包并核对产物**（AppImage 解包看 `hicolor/` 与 `.DirIcon`、`.desktop` 的文件名与 `StartupWMClass`、`app.asar` 里的 `desktopName`、真实窗口 WM_CLASS / Windows 安装包）：`typecheck` 与「构建成功」都不代表图标被采纳（图标缺失时 builder 只打一条 warn `reason=application icon is not set`、照用 Electron 默认图标——这正是 v0.0.56 及之前的状态；`desktopName` 缺失同样只打一条 warn、`.desktop` 照生成）。
 - **图形口径**（负形、无滤镜/渐变、圆角与安全区、favicon 同一形态）见 `docs/ui/DESIGN.md` 的 `app-mark` 条目；本文件只管资产位置与打包链路。
 - **已知兼容性口径（有意接受）**：Linux 包只带 SVG 图标；不支持 `hicolor/scalable` 的老 launcher / 第三方 AppImage 集成可能不显示品牌图标（回落默认）。**触发再处理的条件** = 真有 Linux 用户报图标不显示，那时才补一份栅格 PNG（而不是现在预先维护两套资产）。
 

@@ -7,6 +7,12 @@
 
 版本头可带一行主题后缀（`## [vX.Y.Z] - <日期> — <主题>`）。正文只写条目：标准节（`### Added` / `### Changed` / `### Fixed` …）加少量说明节（`### Note`、`### 过渡注意`、`### Breaking`），**不写引用块摘要段**——它只会重述条目，并夹带回归证据（测试计数 / 取证过程）这类不进本文件的内容。本文件同时是 `release.yml` 建 GitHub Release 的正文来源，升级 / 迁移提醒要写进条目或说明节，别只出现在摘要里。
 
+## [Unreleased]
+
+### Fixed
+
+- **Linux 桌面身份三处对齐**：桌面包 `package.json` 新增 `desktopName`（`com.whispering233.ai-editor`，与 `appId` 同值）+ `linux.syncDesktopName: true`。此前 `.desktop` 文件名取 `executableName`（`ai-editor`）、`StartupWMClass` 回退 `productName`（`AI Editor`）、Electron 的 `app_id` / `WM_CLASS` 取应用名 slug——三处各自取值；现包内 `.desktop` 文件名、`StartupWMClass` 与真实窗口 WM_CLASS 同为 `com.whispering233.ai-editor`，并满足 `xdg-desktop-portal` 1.21+ 对 app 身份须可解析到 `.desktop` 文件的要求。（Linux 未发布，无用户影响；Windows 包未变。）
+
 ## [v0.0.57] - 2026-09-26 — 品牌标记 + 小说文档导出
 
 ### Added
