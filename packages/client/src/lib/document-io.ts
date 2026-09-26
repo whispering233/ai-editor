@@ -4,12 +4,10 @@
 //
 // 分层：本文件**不 import 任何 @blocknote 模块**——「块 JSON ↔ markdown」只能由持有编辑器实例的一侧做
 // （components/blocknote/document-editor.tsx 的 `DocumentEditorApi`），以函数参数传进来；
-// 本文件只负责文件名拼接（sanitize 已收口到 shared）、有损判定与提示文案，故 node 环境可测（仓内无 jsdom，
-// 编辑器本体不参与单测）。对话框/下载的**渲染**部分（confirm 弹层、真实文件对话框）由页面接线 + 浏览器走查承担。
+// 本文件只负责文件名拼接（sanitize 实现 = shared `utils/file-name.ts`，客户端导入导出与小说文档导出共用）、
+// 有损判定与提示文案，故 node 环境可测（仓内无 jsdom，编辑器本体不参与单测）。对话框/下载的**渲染**部分
+// （confirm 弹层、真实文件对话框）由页面接线 + 浏览器走查承担。
 import { isBlockArray, sanitizeDocumentFileName } from "@whispering233/ai-editor-shared";
-
-// 文件名 sanitize 的唯一实现 = shared `utils/file-name.ts`（客户端导入导出与小说文档导出共用），此处只转出
-export { sanitizeDocumentFileName };
 
 /** 导出/导入载荷（文件名 + 文本） */
 export interface DocumentFile {

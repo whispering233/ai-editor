@@ -570,7 +570,7 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
 // ============ 会话端点辅助 ============
 
 /**
- * 会话列表投影：末条可见文本（列表摘要，50 字截断）+ **可见消息数**。
+ * 会话列表投影：末条可见文本（列表摘要，截断到 `SESSION_LAST_MESSAGE_MAX_LEN`）+ **可见消息数**。
  * 计数**不用** pi `SessionInfo.messageCount`——它把 pi 自己写入的首条 system 消息 entry 也算进去，
  * 而列表是给用户看的（界面文案「N 条消息」）⇒ 与历史接口同源，数 `projectSessionMessages` 的长度。
  * 两个值共用同一次 `readProjectSession`（列表本来就要读全量 entries 取末条文本）。

@@ -7,15 +7,15 @@
 
 版本头可带一行主题后缀（`## [vX.Y.Z] - <日期> — <主题>`）。正文只写条目：标准节（`### Added` / `### Changed` / `### Fixed` …）加少量说明节（`### Note`、`### 过渡注意`、`### Breaking`），**不写引用块摘要段**——它只会重述条目，并夹带回归证据（测试计数 / 取证过程）这类不进本文件的内容。本文件同时是 `release.yml` 建 GitHub Release 的正文来源，升级 / 迁移提醒要写进条目或说明节，别只出现在摘要里。
 
-## [Unreleased]
+## [v0.0.57] - 2026-09-26 — 品牌标记 + 小说文档导出
 
 ### Added
 
 - **产品品牌标记 `app-mark` + 应用图标资产**：`components/brand/app-mark.tsx`（内联 SVG、色走 `currentColor`、无尺寸 API）+ `client/public/brand-icon.svg`（负形版；favicon 与桌面应用图标同一个文件）+ 桌面三平台 `icon:` 接线；左栏顶部与信息条两处 `◈` 字符退役。
 - **小说文档导出（`GET /api/v1/project/export-novel`）**：把当前项目的**正文**导出为 markdown 卷/章目录树 zip（`{书名}/第N卷 {卷名}/第M章 {章名}.md`）；卷号 = 可见卷先序（无可见章的卷产空目录条目、卷号照占）、章号 = 可见章先序且**跨卷连续**（shared `orderVisibleChapters`），存量直挂 root 的章落在书名目录下，软删节点不导出，名字段走文件名 sanitize；章文件 = `# 第M章 章名` + 空行 + `document_records.content_text` 投影（空章仍产文件）；无可见章 → 400 `VALIDATION_ERROR`；只读 `data.db`、不做 wal_checkpoint、不写项目目录。产物**不可再导入**（导入仍只认三文件包）。
 - **导出类型弹窗**（书架当前书条「导出」）：单选「项目压缩文件」（默认，`{书名}.zip`，可再导入）/「小说文档」（`{书名}-小说文档.zip`，卷/章 md 目录树，**有损**）；两条都走默认下载目录（`<a download>`），成功关框 + toast（`已导出《书名》备份` / `已导出《书名》小说文档`）、失败留框并保留错误提示。
-- **shared 收口**：新增 `numberVisibleOutline`（卷/章展示编号与归属的单一来源，大纲页徽标改由它派生）+ `sanitizeDocumentFileName`（从 client 挪入，client re-export）+ `novel-export` 纯函数（zip 条目路径与章文件正文组装）。
-- **大纲页「清除推演标记」按钮**（页头右端组，位于视图切换左侧）：一键清空当前项目的全部推演节点标记（`PUT /api/v1/project/config` 写 `deduction_nodes: []`）；**仅存在可见标记时渲染**（失效 id 不构成入口），两视图共用——行级标记操作仍只在树视图右键菜单与节点详情页，本按钮是**集合级**入口
+- **shared 收口**：新增 `numberVisibleOutline`（卷/章展示编号与归属的单一来源，大纲页徽标改由它派生）+ `sanitizeDocumentFileName`（从 client 挪入）+ `novel-export` 纯函数（zip 条目路径与章文件正文组装）。
+- **大纲页「清除推演标记」按钮**（页头右端组，位于视图切换左侧）：一键清空当前项目的全部推演节点标记（`PUT /api/v1/project/config` 写 `deduction_nodes: []`）；**仅存在可见标记时渲染**（失效 id 不构成入口），两视图共用——行级标记操作仍只在树视图右键菜单与节点详情页，本按钮是**集合级**入口。
 
 ### Changed
 

@@ -690,10 +690,7 @@ components:
 
 **落盘 = 默认下载目录**（两条都走同一 `<a download>` 管道，**框内无目录选择控件**；桌面版直写目录树属未排期项，见 `../design/backlog.md`）。有损提示写在第二项的 caption 里，**不另弹二次确认**（选项本身就是用户的选择；单章页头「导出 markdown」那次确认是另一条路径）。无可见章时服务端 400，框内 toast 报错（「本书还没有章节」）。
 
-> 本小节**不新增色值 / 字号 / 圆角**：沿用 `button-default` / `button-primary` / `card` / `data-row` / `icon-button` / `type-badge` / `caption-text` / `section-title` / 受控 Dialog（单选项沿用 antd `Radio` 走全局 seed 派生，同 `Checkbox` 先例）。
-
-> 本小节**不新增色值 / 字号 / 圆角**：沿用 `button-default` / `button-primary` / `card` / `data-row` / `icon-button` / `type-badge` / `caption-text` / `section-title` / 受控 Dialog（复选项沿用 antd `Checkbox` 走全局 seed 派生）。
-> 导出类型选择框（`export-book-dialog`）同口径：antd `Radio` 走全局 seed 派生，不引 Tooltip、不写死样式。
+> 本小节**不新增色值 / 字号 / 圆角**：沿用 `button-default` / `button-primary` / `card` / `data-row` / `icon-button` / `type-badge` / `caption-text` / `section-title` / 受控 Dialog（复选项与单选组都沿用 antd `Checkbox` / `Radio` 走全局 seed 派生；导出类型框不引 Tooltip、不写死样式）。
 
 ### antd 组件 token 覆盖（全部覆盖项就这些）
 
