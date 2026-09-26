@@ -34,6 +34,9 @@ publish:
   repo: ai-editor
 
 linux:
+  # 应用图标**单源** = client 的 favicon 同一文件（不存副本，迭代时天然一致）；
+  # 相对路径按 projectDir（= packages/desktop，pack.mjs 在此调 electron-builder）解析。
+  icon: "../client/public/brand-icon.svg"
   target:
     - AppImage
   category: Office
@@ -48,6 +51,8 @@ linux:
   artifactName: AI-Editor-${version}-linux-${arch}.${ext}
 
 mac:
+  # 图标单源 = client 的 favicon 同一文件（见 linux 段注释）。
+  icon: "../client/public/brand-icon.svg"
   target:
     - dmg
   category: public.app-category.productivity
@@ -58,6 +63,8 @@ mac:
   artifactName: AI-Editor-${version}-mac-${arch}.${ext}
 
 win:
+  # 图标单源 = client 的 favicon 同一文件（见 linux 段注释）。
+  icon: "../client/public/brand-icon.svg"
   target:
     - nsis
   # 同 linux：executableName 会从含 scope 的包名推导出非法文件名（`@`），必须显式指定
