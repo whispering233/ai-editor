@@ -10,15 +10,6 @@
 
 ## 进行中任务卡
 
-### 卡 1 · 界内品牌标记（`app-mark` + 两处替换）
-
-- [ ] 新增品牌标记组件（内联 SVG，色走 `currentColor`，尺寸随字号类 14 / 16）
-- [ ] 左栏顶部标识的 `◈` 字符 → 标记（文案、斜体、`whitespace-nowrap` 不动）
-- [ ] `info-bar` 项目名左侧的 `◈` 字符 → 同一标记（两处同款）
-- **依据**：`docs/ui/DESIGN.md` 的 `app-mark` / `sidebar` / §Typography 斜体条
-- **验收**：`pnpm typecheck` + `pnpm lint` + `pnpm --filter @whispering233/ai-editor-client test`（`design-discipline` 守卫不得红：不写死色值）；浏览器核对浅/深两态、14 / 16 两档、与文字基线对齐
-- **判据**：新 commit + `git status` 干净；两处 `◈` 字面量在 `client/src` 内零命中
-
 ### 卡 2 · 品牌图标资产 + favicon
 
 - [ ] 新增 `packages/client/public/brand-icon.svg`（负形版：墨底 + 纸白挖空，纯 path，无滤镜/渐变）
