@@ -8,7 +8,32 @@
 
 ---
 
-## 当前无进行中任务卡
+## 进行中任务卡
+
+### 卡 1 · 界内品牌标记（`app-mark` + 两处替换）
+
+- [ ] 新增品牌标记组件（内联 SVG，色走 `currentColor`，尺寸随字号类 14 / 16）
+- [ ] 左栏顶部标识的 `◈` 字符 → 标记（文案、斜体、`whitespace-nowrap` 不动）
+- [ ] `info-bar` 项目名左侧的 `◈` 字符 → 同一标记（两处同款）
+- **依据**：`docs/ui/DESIGN.md` 的 `app-mark` / `sidebar` / §Typography 斜体条
+- **验收**：`pnpm typecheck` + `pnpm lint` + `pnpm --filter @whispering233/ai-editor-client test`（`design-discipline` 守卫不得红：不写死色值）；浏览器核对浅/深两态、14 / 16 两档、与文字基线对齐
+- **判据**：新 commit + `git status` 干净；两处 `◈` 字面量在 `client/src` 内零命中
+
+### 卡 2 · 品牌图标资产 + favicon
+
+- [ ] 新增 `packages/client/public/brand-icon.svg`（负形版：墨底 + 纸白挖空，纯 path，无滤镜/渐变）
+- [ ] `index.html` 加 `<link rel="icon" type="image/svg+xml" href="/brand-icon.svg">`
+- **依据**：`docs/ui/DESIGN.md` 的 `app-mark`（系统面形态）；该文件同时是卡 3 的打包源，**不另存副本**
+- **验收**：浏览器标签页显示品牌图（浅/深主题各一次，含 16px 真实尺寸）、无 `/favicon.ico` 404；SPA 生产路径（server 托管 `client-dist`）能取到该文件；`design-discipline` 守卫扫描范围确认不误报
+- **判据**：新 commit + `git status` 干净；`curl` 生产路径返回 200
+
+### 卡 3 · 桌面应用图标接线（依赖卡 2 的资产）
+
+- [ ] `electron-builder.yml` 加 `icon: "../client/public/brand-icon.svg"`（路径解析依据 = `50-desktop.md` §5.3）
+- [ ] 本地 `pnpm desktop:dist` 出 Linux 包，核对 `release/linux-unpacked` 与 AppImage 已用品牌图标（不再是 Electron 默认图标）
+- **依据**：`docs/design/50-desktop.md` §5.3
+- **验收**：打包日志里不再出现「application icon is not set」；产物内图标集/SVG 为品牌图；**改图标属打包资源配置改动，但不动主进程 import** ⇒ 只需 Linux 打包冒烟（Windows 包等下次 CI 出包时复核）
+- **判据**：新 commit + `git status` 干净；打包命令输出与产物核对结果贴在汇报里
 
 ---
 
