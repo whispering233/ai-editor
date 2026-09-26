@@ -10,6 +10,7 @@
 // 与全局刷新不构成重复（不同状态上下文、不同语义）
 import { Button } from "antd";
 import { MessageOutlined, ReloadOutlined } from "@ant-design/icons";
+import { AppMark } from "../brand/app-mark";
 import { useMediaQuery } from "../../hooks/use-media-query";
 import { findOutlineNodeTitle, useProjectStore } from "../../stores/project";
 import { useUiStore } from "../../stores/ui";
@@ -45,7 +46,7 @@ export function InfoBar({
         title="打开项目概览"
         className="flex min-w-0 items-center gap-1.5 text-base font-medium text-foreground hover:text-primary"
       >
-        <span className="text-primary">◈</span>
+        <AppMark />
         <span className="truncate">{projectTitle}</span>
       </a>
 

@@ -34,6 +34,7 @@ import {
   TeamOutlined,
   TagsOutlined,
 } from "@ant-design/icons";
+import { AppMark } from "../brand/app-mark";
 import { ApiError, CLIENT_NETWORK_ERROR, createProjectBackup } from "../../lib/api";
 import { cloudBadgeTone, useCloudStore } from "../../stores/cloud";
 import type { Route } from "../../hooks/use-route";
@@ -135,7 +136,7 @@ export function NavRail({
           title="回到书架主页"
           className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1.5"
         >
-          <span className="text-primary">◈</span>
+          <AppMark />
           {/* 不挂 `truncate`：合成斜体的墨迹会越出字宽，`overflow: hidden` 会切掉「架」右缘
               （见 DESIGN.md §Typography）——固定两字标签只需防折行 */}
           <span className="whitespace-nowrap text-base italic">书架</span>
