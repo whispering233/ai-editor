@@ -286,7 +286,7 @@
   - 触发条件：出现「快速连按保存 + Ctrl+S 后备份内容陈旧」的真实反馈；或在真机验证长按 Ctrl+S 的原生行为。
   - 最小修法：门禁分支改成「返回在途保存的 promise」（需各页持有在途引用）或返回 `false`（本次按键未产生保存 → 不存档）；② 把 `preventDefault` 提到 `e.repeat` 判断之前；③ `triggerSaveShortcut` 用 `try/catch` 包住同步调用。
 - **时间轴「未挂载」组标题 = 斜体 + `truncate`（同类裁字风险，未复现）**（2026-09 全站扫描登记，低危）
-  - 现状：`components/timeline/TimelineGroup.tsx` 的组标题是 `min-w-0 truncate …`，未挂载态另加 `italic`——与左栏「◈ 书架」同款组合（合成斜体墨迹越出字宽 ⇒ `overflow: hidden` 切右缘）。该 span 宽度取决于兄弟节点，且本机样本（`test-project`）无未挂载时间点 ⇒ 元素未渲染（8 页扫描 `overflow-x: hidden` + `font-style: italic` 零命中，故未修）。
+  - 现状：`components/timeline/TimelineGroup.tsx` 的组标题是 `min-w-0 truncate …`，未挂载态另加 `italic`——与左栏顶部「书架」标识（斜体标签）同款组合（合成斜体墨迹越出字宽 ⇒ `overflow: hidden` 切右缘）。该 span 宽度取决于兄弟节点，且本机样本（`test-project`）无未挂载时间点 ⇒ 元素未渲染（8 页扫描 `overflow-x: hidden` + `font-style: italic` 零命中，故未修）。
   - 触发条件：有未挂载时间点的样本上看到「未挂载」右缘被切，或该行被压到文本宽度时。
   - 最小修法：只给未挂载分支补 `pr-0.5`（把斜体越界量让给 padding）——`truncate` 不能去掉，同一 span 也服务长名组标题（非斜体，确实需要省略号）。
 - **泛型详情页的 select 只读值不走 `optionsLabels`**（2026-09 角色优先级卡登记，非阻塞）
