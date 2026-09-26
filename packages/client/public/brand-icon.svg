@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!--
+    品牌标记（app-mark）的系统面负形版：墨底 + 纸白挖空。
+    登记于 docs/ui/DESIGN.md 的 app-mark 条目（字面色值 #37352f / #ffffff 在该条目豁免清单内）。
+    同一文件既是 favicon，也是桌面应用图标的打包源（docs/design/50-desktop.md §5.3）。
+  -->
+  <rect width="64" height="64" rx="14.5" fill="#37352f" />
+  <g fill="none" stroke="#ffffff" stroke-linecap="round">
+    <path d="M15 12.5 V51.5" stroke-width="6.5" />
+    <path d="M28 20.5 H53" stroke-width="5.75" />
+    <path d="M28 32 H45" stroke-width="5.75" />
+    <path d="M28 43.5 H37.5" stroke-width="5.75" />
+  </g>
+</svg>
