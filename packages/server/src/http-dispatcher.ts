@@ -8,9 +8,10 @@
 // 2. 环境代理支持（`EnvHttpProxyAgent`，配合 `httpProxy` 设置/`HTTP(S)_PROXY`）。
 // 不装 dispatcher 时 pi 的 SDK 走 Node 自带 fetch/连接策略，于是「pi CLI 能连、本仓不能连」。
 //
-// 实现与 pi 的 `core/http-dispatcher.ts` 保持同构（pi-web 也以拷贝方式复用该模块；**升级 pi 时必须复查**，
-// 清单见根 `AGENTS.md`），差异仅：
-// 不做一次性守卫（允许设置热更新后重新安装），注释指向本仓语境。
+// 实现取自 pi 的 `core/http-dispatcher.ts`（pi-web 也以拷贝方式复用该模块；**升级 pi 时必须复查**，
+// 清单见根 `AGENTS.md`）。**已知差异只有一处**：本仓不跟踪 `installedGlobalFetch`——首装之后重复调用
+// 只 `setGlobalDispatcher` 换 dispatcher、不重跑 `undici.install()`（pi 在 fetch 仍是自己装的那个时会再装
+// 一次，实际等价：undici 的 fetch 每次请求现读全局 dispatcher，此时 install 已是 no-op）。
 
 import { EventEmitter } from "node:events";
 import * as undici from "undici";
