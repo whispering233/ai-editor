@@ -9,6 +9,14 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **升级 AI 内核 pi `0.87.1` → `1.0.4`**（`pi-ai` / `pi-coding-agent` 精确版本齐抬，`pi-agent-core` / `pi-tui` 与传递依赖随之更新；新增 `pi-codemode` / `pi-mcp` / `quickjs-wasi` 等传递包——它们是 pi 的内置扩展依赖，本仓嵌入形态从不启用，运行时不加载其 wasm）：
+  - **会话文件格式不变**：`CURRENT_SESSION_VERSION` 仍为 `3`，`SessionInfo` 字段逐个未变 ⇒ 存量会话与项目无需迁移（0.99.0 起的「首条用户消息才落盘」行为只影响「开窗未发消息」的空会话，本仓流程发首条消息即落盘）。
+  - **provider 改名 `azure-openai-responses` → `azure`**（pi 1.0.3）：设置页图标表键名同步改名（旧键在 1.0.4 目录里已不存在；不改就是 Azure 掉回通用图标）。在 pi 侧配置过旧名的用户，其 `settings.json` 里该键随 pi 语义失效。
+  - **pi 目录数据变更**：`opencode-go` 下架 `qwen3.7-max`（现有 `qwen3.7-plus` / `qwen3.8-max`）；模型下拉与激活模型解析随目录自动跟随，无代码改动。
+  - **设置页测试的「撞名模型」fixture 改为现算**：不再写死某个模型 id，而是从 pi 目录现场挑「属 opencode-go / 跨家撞名 / 不在 deepseek」的模型；同类漂移已两次让测试变红（0.85.1→0.87.1 的 `deepseek-v4-flash` 改名、本次的 `qwen3.7-max` 下架），前提消失时 helper 直接抛错而不是静默换一个模型。
+
 ### Fixed
 
 - **Linux 桌面身份三处对齐**：桌面包 `package.json` 新增 `desktopName`（`com.whispering233.ai-editor`，与 `appId` 同值）+ `linux.syncDesktopName: true`。此前 `.desktop` 文件名取 `executableName`（`ai-editor`）、`StartupWMClass` 回退 `productName`（`AI Editor`）、Electron 的 `app_id` / `WM_CLASS` 取应用名 slug——三处各自取值；现包内 `.desktop` 文件名、`StartupWMClass` 与真实窗口 WM_CLASS 同为 `com.whispering233.ai-editor`，并满足 `xdg-desktop-portal` 1.21+ 对 app 身份须可解析到 `.desktop` 文件的要求。（Linux 未发布，无用户影响；Windows 包未变。）

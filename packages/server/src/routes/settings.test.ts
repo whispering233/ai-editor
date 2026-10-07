@@ -123,6 +123,33 @@ function providerOf(data: GetData, id: string): ProviderEntry {
   return found!;
 }
 
+/**
+ * 现算一个满足本文件断言前提的模型 id：属 opencode-go、跨家撞名（≥2 家）、且不在 deepseek 目录。
+ *
+ * 为什么不写死：pi 目录会改名 / 下架（0.87.1 改过 deepseek 家，1.0.4 下架了 qwen3.7-max），写死等于
+ * 每次升级 pi 都红一次；而这里断言的是「跨 provider 撞名」这种**集合性质**，不依赖某个具体名字。
+ * 前提消失（目录结构变了）→ 直接抛，而不是静默换成别的模型。
+ *
+ * 读目录要经 `getData()`（与路由同一读路径），而这会创建 pi 运行时单例（SettingsManager 当场快照沙箱状态）
+ * ⇒ 返回前必须重置：否则调用方随后的 `seedPiSettings` 写了也白写（单例手里的还是旧配置）。
+ */
+async function pickAmbiguousOpencodeModel(): Promise<string> {
+  const owners = new Map<string, Set<string>>();
+  for (const provider of (await getData()).providers) {
+    for (const model of provider.models) {
+      const ids = owners.get(model.id) ?? new Set<string>();
+      ids.add(provider.id);
+      owners.set(model.id, ids);
+    }
+  }
+  resetModelRuntime();
+  const hit = [...owners].find(([, ids]) => ids.has("opencode-go") && ids.size >= 2 && !ids.has("deepseek"));
+  if (hit === undefined) {
+    throw new Error("pi 目录里没有「属 opencode-go / 跨家撞名 / 不在 deepseek」的模型——前提变了，检查本文件断言");
+  }
+  return hit[0];
+}
+
 describe("GET /api/v1/settings/llm（pi 数据源）", () => {
   it("无任何凭据 → provider/model 空串 + thinkingLevel 取 pi 缺省 + 全量 provider 均未配置", async () => {
     const data = await getData();
@@ -169,11 +196,12 @@ describe("GET /api/v1/settings/llm（pi 数据源）", () => {
   });
 
   it("pi settings 的 defaultProvider+defaultModel 被读回（激活模型来自 pi，不来自自建配置）", async () => {
-    seedPiSettings({ defaultProvider: "opencode-go", defaultModel: "qwen3.7-max" });
+    const model = await pickAmbiguousOpencodeModel();
+    seedPiSettings({ defaultProvider: "opencode-go", defaultModel: model });
     seedPiAuth({ "opencode-go": { type: "api_key", key: "oc-stored-123456" } });
     const data = await getData();
     expect(data.provider).toBe("opencode-go");
-    expect(data.model).toBe("qwen3.7-max");
+    expect(data.model).toBe(model);
   });
 
   it("pi settings 的 defaultThinkingLevel 被读回", async () => {
@@ -185,7 +213,7 @@ describe("GET /api/v1/settings/llm（pi 数据源）", () => {
     seedLegacyConfig({
       schema_version: 2,
       provider: "opencode-go",
-      model: "qwen3.7-max",
+      model: await pickAmbiguousOpencodeModel(), // 目录内的真实 id 也一样被忽略
       thinking_level: "low",
       api_keys: { deepseek: "sk-legacy-123456" },
     });
@@ -200,19 +228,20 @@ describe("GET /api/v1/settings/llm（pi 数据源）", () => {
 describe("PUT /api/v1/settings/llm（写 pi settings）", () => {
   it("provider+model 成对写入 → GET 读回 + 落盘 ~/.pi/agent/settings.json", async () => {
     seedPiAuth({ "opencode-go": { type: "api_key", key: "oc-stored-123456" } });
-    const res = await put({ provider: "opencode-go", model: "qwen3.7-max" });
+    const model = await pickAmbiguousOpencodeModel();
+    const res = await put({ provider: "opencode-go", model });
     expect(res.status).toBe(200);
 
     const data = await getData();
     expect(data.provider).toBe("opencode-go");
-    expect(data.model).toBe("qwen3.7-max");
+    expect(data.model).toBe(model);
 
     const onDisk = JSON.parse(readFileSync(settingsPath(), "utf8")) as {
       defaultProvider: string;
       defaultModel: string;
     };
     expect(onDisk.defaultProvider).toBe("opencode-go");
-    expect(onDisk.defaultModel).toBe("qwen3.7-max");
+    expect(onDisk.defaultModel).toBe(model);
     // 自建配置文件绝不产生（配置所有权在 pi）
     expect(existsSync(join(homeDir, ".ai-editor", "config.json"))).toBe(false);
   });
@@ -222,7 +251,7 @@ describe("PUT /api/v1/settings/llm（写 pi settings）", () => {
     expect((await put({ model: "amazon.nova-2-lite-v1:0" })).status).toBe(200);
     expect((await getData()).provider).toBe("amazon-bedrock");
 
-    const ambiguous = await put({ model: "qwen3.7-max" }); // opencode-go / qwen-token-plan(-cn/-individual)
+    const ambiguous = await put({ model: await pickAmbiguousOpencodeModel() }); // 跨家撞名（现算，见 helper）
     expect(ambiguous.status).toBe(400);
     expect(ambiguous.body.error?.message).toContain("撞名");
 
@@ -243,11 +272,12 @@ describe("PUT /api/v1/settings/llm（写 pi settings）", () => {
 
   it("只给 provider：当前模型不在其目录 → 400（须显式 model）；当前无激活模型同样 400", async () => {
     // 激活模型属 opencode-go；切到 deepseek 而不指定 model → 当前模型不在目标目录 → 400
-    seedPiSettings({ defaultProvider: "opencode-go", defaultModel: "qwen3.7-max" });
+    const model = await pickAmbiguousOpencodeModel();
+    seedPiSettings({ defaultProvider: "opencode-go", defaultModel: model });
     seedPiAuth({ "opencode-go": { type: "api_key", key: "oc-stored-123456" } });
     const res = await put({ provider: "deepseek" });
     expect(res.status).toBe(400);
-    expect(res.body.error?.message).toContain("qwen3.7-max");
+    expect(res.body.error?.message).toContain(model);
 
     // 无任何凭据 / 无激活模型 → 切 provider 无从消歧
     resetModelRuntime();
@@ -282,11 +312,12 @@ describe("PUT /api/v1/settings/llm（api_key → pi credential store）", () => 
 
   it("保存 key 不改动激活模型（两个入口互不影响）", async () => {
     seedPiAuth({ "opencode-go": { type: "api_key", key: "oc-stored-123456" } });
-    await put({ provider: "opencode-go", model: "qwen3.7-max" });
+    const model = await pickAmbiguousOpencodeModel();
+    await put({ provider: "opencode-go", model });
     await put({ api_key: { provider: "deepseek", key: "sk-typed-123456" } });
     const data = await getData();
     expect(data.provider).toBe("opencode-go");
-    expect(data.model).toBe("qwen3.7-max");
+    expect(data.model).toBe(model);
     expect(providerOf(data, "deepseek").authConfigured).toBe(true);
   });
 

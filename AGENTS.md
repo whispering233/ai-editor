@@ -7,7 +7,7 @@
 `docs/design/00-master-design.md`（产品定位与设计原则）→ `architecture.md`（技术栈 + 分包与依赖方向 + pi 嵌入形态）→ 详细设计（`10-data-model.md` → `20-context.md` → `30-agent-loop.md`，只讲「为什么 + 不变式」）→ 按职责读 `docs/api/`（先 `00-api-index.md` + `api-public.md`）与 `docs/db/schema.md`（字段/端点契约的「是什么」）→ 前端改动必读 `docs/ui/DESIGN.md`（**视觉与布局唯一契约**；改样式先改它）。
 
 - 任何改动前先读对应文档；发现文档之间或文档与代码矛盾，先停下提问，不要自行发明。
-- 涉及 pi 的行为以 `node_modules` 里实际安装的 `@earendil-works/*`（0.87.1）代码/类型为准，**禁止凭记忆写接口**。
+- 涉及 pi 的行为以 `node_modules` 里实际安装的 `@earendil-works/*`（1.0.4）代码/类型为准，**禁止凭记忆写接口**。
 - 状态与演进：根 `CHANGELOG.md`（逐版本事实）+ `tasks.md`（当前任务卡）+ `backlog.md`（未排期遗留项与有意口径）。云端存档另见 `docs/design/40-cloud-sync.md` 与 `docs/api/100-api-cloud.md`。
 - 运行/构建/发布：`build.md`；配置载体与读写边界：`config.md`；桌面版（Electron 外壳）设计：`50-desktop.md`。
 
@@ -26,7 +26,7 @@
 
 ## 代码级硬约束（设计文档不承载实现细节，仅此处登记）
 
-- **pi 依赖 exact pin**：`@earendil-works/*` 一律写精确版本（当前 `0.87.1`），禁止 `^`/`~`；升级 = 一个显式 commit 齐抬版本（`pi-ai`/`pi-agent-core`/`pi-coding-agent`）+ 全量测试。typebox 的 `Type`/`Static` 经 `pi-ai` 重导出，不单独装 typebox。**声明位置按 import 性质**：运行时 import 必须进 `dependencies`（`server` 曾把 `pi-ai`/`pi-coding-agent` 放进 `devDependencies`——靠 `agent` 包的传递依赖 hoist 才跑得起来，pnpm 严格布局下会解析失败）。
+- **pi 依赖 exact pin**：`@earendil-works/*` 一律写精确版本（当前 `1.0.4`），禁止 `^`/`~`；升级 = 一个显式 commit 齐抬版本（`pi-ai`/`pi-agent-core`/`pi-coding-agent`）+ 全量测试，并复查三处「与 pi 同构」断言（`server/src/http-dispatcher.ts` ↔ pi `core/http-dispatcher.ts`、凭据解析顺序 = pi-ai `auth/resolve.js`、会话格式与 `SessionInfo` 字段 = `CURRENT_SESSION_VERSION` 仍为 3；最近验证 = 1.0.4 时三处逐字节/逐行一致）。typebox 的 `Type`/`Static` 经 `pi-ai` 重导出，不单独装 typebox。**声明位置按 import 性质**：运行时 import 必须进 `dependencies`（`server` 曾把 `pi-ai`/`pi-coding-agent` 放进 `devDependencies`——靠 `agent` 包的传递依赖 hoist 才跑得起来，pnpm 严格布局下会解析失败）。
 - **pi 配置/凭据的唯一读写入口** = `packages/server/src/model-runtime.ts` 的 `getModelRuntime()` / `getSettingsManager()`；业务代码不得直读 `~/.pi/agent/auth.json`/`settings.json`（会话 id、模型目录、凭据状态一律经 pi API）。
 - **凡调 LLM 一律走 pi 的 Agent 路径**：`createAgentSessionServices` + `createAgentSessionFromServices` + `SessionManager`，**禁止直连 `ModelRuntime.completeSimple`、禁止自建 fetch/agent/请求头**——provider 特化头（opencode 系 `x-opencode-session`，缺则 400 MissingSessionID）、重试/超时设置、思考档位只在 pi 的 Agent 包装层生效，自己补等于无限期跟随上游。
 - **出站 HTTP**：服务启动时安装全局 undici dispatcher（`packages/server/src/http-dispatcher.ts`，与 pi CLI 同款：连接族退避 + 环境代理 + 空闲超时）。**不要在业务代码里另建 fetch/agent**——否则丢失代理与连接行为（真实故障场景见 v0.0.32 CHANGELOG）。云端存档的 WebDAV 请求同样走它。
@@ -43,7 +43,7 @@
   - **并集语义已废止（2026-09）**：会话不进包 ⇒ pull 不再做目录合并；`overwriteProjectFiles` 只做**纯覆盖**（若仍带合并参数随本口径一并移除），restore/import/pull 都不得写或删本机 `sessions/`。
 - `db` 查询层统一经 `queryDb` 取 drizzle 实例，**禁止绕过直接 `prepare`**（迁移管线除外）；JSON 列（data/changes/metadata）一律 text 模式 + 行映射防御解析，**禁用 drizzle `mode:'json'`**（坏 JSON 会打挂整表查询）。
 - **对话历史唯一存储 = 项目目录 `sessions/`，文件格式与命名归 pi（session v3）**：会话 id 是**不透明值**，服务端只能经「磁盘发现 + header id 映射」解析为路径，**禁止用客户端传入值拼接路径**；旧 v1 扁平文件留在磁盘但不读取。写文件类迁移（`up(db, ctx)`）必须幂等（整文件重写），崩溃后重跑收敛。
-- **pi 0.87 的两处会话侧口径（换版时实测，别按记忆写）**：① 模型请求入参是 `TranscriptContext`——提示词与工具声明在 `messages` 首条 system 消息里（结构化 `sections` + `toolsAdded`），**顶层 `systemPrompt` 不存在**；断言提示词要走 pi-ai 的 `getCurrentSystemPrompt(messages)`，不要读 `request.systemPrompt`。② 会话列表 `messageCount` **必须**是可见消息数（`projectSessionMessages(entries).length`），**禁用** pi `SessionInfo.messageCount`（它含 pi 写入的首条 system 条目，会让界面「N 条消息」比历史面板多 1）。
+- **pi 的两处会话侧口径（换版时实测，别按记忆写）**：① 模型请求入参是 `TranscriptContext`——提示词与工具声明在 `messages` 首条 system 消息里（结构化 `sections` + `toolsAdded`），**顶层 `systemPrompt` 不存在**；断言提示词要走 pi-ai 的 `getCurrentSystemPrompt(messages)`，不要读 `request.systemPrompt`。② 会话列表 `messageCount` **必须**是可见消息数（`projectSessionMessages(entries).length`），**禁用** pi `SessionInfo.messageCount`（它含 pi 写入的首条 system 条目，会让界面「N 条消息」比历史面板多 1）。
 - **导出两条出口（2026-09）**：`GET /project/export`（三文件 zip，**导入侧唯一认的包**）与 `GET /project/export-novel`（正文 markdown 卷/章目录树 zip：`{书名}/第N卷 {卷名}/第M章 {章名}.md`）。novel 出口**只读 `data.db`、不产 Delta、不做 wal_checkpoint、不写项目目录、不可再导入**；编号/命名/正文组装**一律消费 shared**（`numberVisibleOutline` 卷号 + `orderVisibleChapters` 章号 + `sanitizeDocumentFileName` 文件名 + `novel-export` 条目/正文）——**卷号规则只活在 shared `outline-numbering.ts`**（大纲页徽标与导出同源），服务端/客户端都不得复刻；章文件正文 = `content_text` 投影（`blocksToPlainMd`，内联样式有损，见 `backlog.md`）。弹窗文案与默认项契约 = `docs/ui/DESIGN.md` §书架主页 `export-book-dialog`（两条都走 `<a download>`，落默认下载目录）。
 - **项目目录内的 `sessions/` = 纯本地目录（2026-09 起，唯一随包目录已废止）**：不进任何 zip（备份 / 导出 / 云端），不参与备份与云端的变更判定，恢复类操作（restore / import / 云 pull）对它**不写不删**；import / pull 侧继续**接受并忽略**存量包内的 `sessions/**` 条目（否则用户自己的旧备份全变废包）。`createBackupZip` 只出三文件这一条路径。**正文与参考资料不是目录**：它们在 `data.db` 的 `document_records` 里（随三文件自动继承备份/导出/云/恢复），项目目录下**不得**再引入 `references/`、`manuscript/` 一类文档目录。
 - **任何切换当前项目的端点后，客户端必须收敛项目镜像**（重拉 config + outline + 书架）：服务端 `currentProject` 是单例事实源，客户端只是镜像——镜像过期会出现「书架高亮旧书、点开看到新项目数据、云端状态不重查」。
