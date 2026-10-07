@@ -240,6 +240,7 @@ CREATE TABLE document_records (
 | 契约 | 说明 |
 | :--- | :--- |
 | 目录 | `<项目目录>/sessions/`（缺失则创建；不入 git；**纯本地目录**——不进备份 zip / 导出 zip / 云端，恢复类操作（restore / import / 云 pull）不写也不删它） |
+| 文件创建时机 | **首条 user 消息**落盘（pi 1.0.4 起；0.87.1 及更早 = 首条 **assistant** 消息）⇒ `SessionManager.create()` 之后、首条消息之前**盘上没有文件**；首轮中止（无 assistant 回复）或进程被杀也会留一条只含 user 消息的会话，历史面板照常列出（`messageCount` = 1） |
 | session_id | pi 生成的不透明 id；**客户端传入值只能经磁盘发现 + header id 映射解析为路径，禁止拼接** |
 | 消息投影 | 每条 entry 投影为 `{ id, role, content, toolCalls?, toolCallId?, createdAt }`；`role` ∈ `user` / `assistant` / `tool`（pi 的 `toolResult` 投影为 `tool`） |
 | 思维链 | assistant 消息的 thinking 内容随消息投影下发（列表投影只给预览，见 `docs/api/80-api-chat.md`） |

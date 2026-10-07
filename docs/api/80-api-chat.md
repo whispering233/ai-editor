@@ -28,6 +28,7 @@
 // 不报错——客户端可能携带过期 focus）；两项皆无时不注入，消息原文保持干净。
 
 // 对话历史持久化：本会话的消息写入项目目录 sessions/（格式 = pi session v3，见 docs/db/schema.md）；
+// **文件在首条用户消息落盘**（pi 1.0.4 起；此前为首条 assistant 消息）⇒ 开窗未发消息不产文件；
 // 服务重启后携带同一 session_id 即可继续上次对话。
 
 // Res: 404 SESSION_NOT_FOUND —— session_id 已给出但磁盘上不存在（客户端应改为新会话重试）

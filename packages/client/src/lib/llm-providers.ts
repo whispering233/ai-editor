@@ -1,6 +1,7 @@
 // LLM provider 面板的纯逻辑（设置页「AI 模型」三级导航 + 「添加」选择区）：
 // 导航只列**已配置**的家（authConfigured = env / OAuth / auth.json 任一来源）——pi 的 provider
-// 目录有 40 家，全列会让 160px 的三级导航不可用；未配置的家走「添加」列表按需选择。
+// 目录家数多（几十家，随 pi 版本变，**不在此复述数字**），全列会让 160px 的三级导航不可用；
+// 未配置的家走「添加」列表按需选择。
 //
 // 品牌 logo：`public/provider-icons.svg` 精灵（`<symbol>` + `<use>`），取自 pi-web
 // （派生自 @lobehub/icons，MIT，许可头内嵌于该 svg）；pi provider id → symbol id 的映射见下表，

@@ -26,7 +26,7 @@ const providers: SettingsProviderInfo[] = [
 ];
 
 describe("navProviderIds", () => {
-  it("只列已配置的家（未配置的 40 家不进导航）", () => {
+  it("只列已配置的家（未配置的家不进导航）", () => {
     expect(navProviderIds(providers, "deepseek", null)).toEqual(["deepseek", "openai-codex"]);
   });
 

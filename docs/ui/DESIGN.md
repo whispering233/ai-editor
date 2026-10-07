@@ -547,7 +547,7 @@ components:
 
 **`sub-nav`（三级导航）** — 带子内容区块的页内分区导航（**两处**：设置页「AI 模型」= provider 列表；设置页「备份」= 固定的「自动备份 / 云端备份」两项）：竖向 antd `Menu` inline，宽 160px（= `sidebar` 登记的宽度档），**契约完全复用 `menu-item` / `menu-item-selected`**（32px 行高、`{rounded.sm}`、选中 = `{colors.surface-muted}` 灰面 + 文字不变色），不新增设计语言；项文案超宽截断（`title` 给全文）；项前置图标只在有图标语义的场景出现（AI 模型页的 `provider-icon`、导航下方「添加」项）——备份页两项不带图标。
 
-**`sub-nav` 的「添加」弹窗（设置页 AI 模型，2026-09）** — 三级导航**只列已配置的家**（`authConfigured`：env / OAuth / auth.json 任一来源）+ 当前激活家 + 刚配置成功的家（**「配置了多少显示多少」**，40 家全列会让导航不可用）；导航下方 `button-default`（`size="small"` + `block`）「添加」→ **打开受控 `Dialog`**（复用 `components/ui/dialog.tsx`，不新造浮层）：
+**`sub-nav` 的「添加」弹窗（设置页 AI 模型，2026-09）** — 三级导航**只列已配置的家**（`authConfigured`：env / OAuth / auth.json 任一来源）+ 当前激活家 + 刚配置成功的家（**「配置了多少显示多少」**，pi 全量家数全列会让导航不可用）；导航下方 `button-default`（`size="small"` + `block`）「添加」→ **打开受控 `Dialog`**（复用 `components/ui/dialog.tsx`，不新造浮层）：
 - **选择步**（标题「添加 provider」+ 一句说明）：搜索框（antd `Input` + `SearchOutlined` + `allowClear` + `autoFocus`，宽度随弹窗而非列表页 `search-input` 的 192px 档）+ 可滚动紧凑行列表（`provider-icon` + 名称，行高 28px、hover = `bg-muted`（`colorFillAlter` 档，与书架行同款）、整行可点）。
 - **配置步**（选中一家后同窗切步）：标题行 = `provider-icon` + 家名；凭证状态行（`credential-label` 同款 caption）+ key `Input`（`autoFocus`）+ 内联错误；Footer = `[取消]` + 主操作 `[保存]`（`button-primary`，`loading` 防连点）。
 - **关闭语义（四条路径等价）**：右上角 X（`DialogContent` 默认 `showCloseButton`）/ `Esc` / 遮罩点击 / `[取消]`——**关窗即不落任何状态**；该家只有**保存 key 成功后**才进入三级导航并被选中（失败留在窗内显示错误，不关窗）。

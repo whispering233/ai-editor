@@ -220,7 +220,7 @@ function ComposerConfigRow() {
         }
         aria-label="选择模型"
         options={settings.providers
-          // pi 全量 provider（40 家、近千个模型）：下拉只列**已配置认证**的组 + 当前激活组
+          // pi 全量 provider（家数与模型数都很大，随 pi 版本变）：下拉只列**已配置认证**的组 + 当前激活组
           // （未配置的组整组不可选，列出来只会把下拉撑成不可用；设置页负责引导录入 key）
           .filter((p) => p.authConfigured || p.id === settings.provider)
           .map((p) => {
