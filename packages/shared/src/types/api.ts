@@ -12,6 +12,12 @@ import { HOOK_STATUSES, PAYOFF_TIMING } from "../constants/hook.js";
 import { CONFLICT_LEVELS } from "../constants/outline.js";
 import { BACKUP_FREQUENCIES } from "../constants/backup.js";
 import { WORKSPACE_KINDS } from "../constants/workspace.js";
+import {
+  MAX_PRACTICE_DRAFT_CHARS,
+  MAX_PRACTICE_OBSERVATION_CHARS,
+  MAX_PRACTICE_SAMPLE_CHARS,
+  MAX_PRACTICE_SOURCE_LABEL_CHARS,
+} from "../constants/practice.js";
 import type { ComputeStateResult, DeltaRecord, EntitySummary, ProjectAgents, ProjectConfig, RelationRecord } from "./index.js";
 import type { CloudBackupEntry, CloudImportBookResult, CloudRemoteBooksResult } from "./cloud.js";
 
@@ -1139,6 +1145,154 @@ export const namesResolveResSchema = z.object({
 });
 
 export type NamesResolveResult = z.infer<typeof namesResolveResSchema>;
+
+// ============ practice 端点（「文风仿写练习」，docs/api/120-api-practice.md） ============
+//
+// 全部端点要求当前工作区 kind = "practice"（反向守卫 requireKind("practice") 的挂载点只在
+// server/src/index.ts，且在该组 app.route 之前）；无当前工作区 → 409 NO_PROJECT_OPEN。
+// 请求字段 snake_case、响应字段 camelCase；**长度上限一律取 shared 常量**
+// （constants/practice.ts，schema 里不复述数字）⇒ 超限 400 VALIDATION_ERROR；
+// 目标 / 样本不存在 → 404 PRACTICE_NOT_FOUND。点评链路（触发 / 落库 / 渲染）不在本模块。
+
+/** 范文来源种类：MVP 唯一值 `paste`（跨工作区快照导入为升级路径，见 backlog） */
+export const practiceSourceKindSchema = z.literal("paste");
+export type PracticeSourceKind = z.infer<typeof practiceSourceKindSchema>;
+
+/**
+ * 点评卡（`GET /practice/samples/:id` 的 `feedback`；写入侧形状同此，见 docs/design/60-practice.md §4）。
+ * **只描述形状、不做语义校验**：引用子串校验在提交点评工具（卡 6），坏 JSON 的防御解析在 db 层
+ * （非对象 / 非法 JSON 一律按 null）——两处都不在本 schema 职责内。
+ * `dimensions[]` 由 AI 从范文提炼（非固定清单，上限 = `MAX_FEEDBACK_DIMENSIONS`，写入侧约束）。
+ */
+export const practiceFeedbackSchema = z.object({
+  dimensions: z.array(
+    z.object({
+      name: z.string(), // 维度名（如「句长节奏」）
+      sampleTrait: z.string(), // 范文在该维度上的表现
+      draftTrait: z.string(), // 用户稿在该维度上的表现
+      sampleQuotes: z.array(z.string()), // 范文原句（服务端已校验 = 范文子串）
+      draftQuotes: z.array(z.string()), // 用户稿原句（= 稿件子串）
+      advice: z.string(), // 可执行建议
+    }),
+  ),
+  summary: z.string().optional(), // 一句话总评
+});
+export type PracticeFeedbackCard = z.infer<typeof practiceFeedbackSchema>;
+
+/** 文风目标（`GET /practice/targets` 列表项 = `PUT /practice/targets/:id` 响应的单项目形态：含样本数） */
+export const practiceTargetSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  observation: z.string().nullable(), // 用户自己观察到的文风特点（未写 = null）
+  sampleCount: z.number().int(), // 该目标下的样本数（练习数据物理删，无软删概念）
+  createdAt: z.string(), // ISO 8601
+  updatedAt: z.string(),
+});
+export type PracticeTargetItem = z.infer<typeof practiceTargetSchema>;
+
+// GET /api/v1/practice/targets（按 updatedAt 倒序）
+export const practiceTargetsResSchema = z.object({ targets: z.array(practiceTargetSchema) });
+export type PracticeTargetsRes = z.infer<typeof practiceTargetsResSchema>;
+
+// POST /api/v1/practice/targets
+export const practiceTargetCreateReqSchema = z
+  .object({
+    name: z.string().trim().min(1), // 必填，trim 非空
+    observation: z.string().max(MAX_PRACTICE_OBSERVATION_CHARS).optional(),
+  })
+  .strict();
+
+// 响应对照文档：**不含 sampleCount**（新建目标下恒为 0，文档未列该字段）
+export const practiceTargetCreateResSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  observation: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type PracticeTargetCreated = z.infer<typeof practiceTargetCreateResSchema>;
+
+// PUT /api/v1/practice/targets/:id（部分更新：**至少给一项**；省略 = 不动，observation 空串 = 清空写 null）
+export const practiceTargetUpdateReqSchema = z
+  .object({
+    name: z.string().trim().min(1).optional(),
+    observation: z.string().max(MAX_PRACTICE_OBSERVATION_CHARS).optional(),
+  })
+  .strict()
+  .refine((value) => value.name !== undefined || value.observation !== undefined, {
+    message: "至少提供 name 或 observation",
+    // 错误提示挂在可修复字段上（否则 fields 会是空串路径）
+    path: ["name"],
+  });
+export type PracticeTargetUpdateReq = z.infer<typeof practiceTargetUpdateReqSchema>;
+
+// DELETE /api/v1/practice/targets/:id（物理删 + 级联删该目标下全部样本）
+export const practiceTargetDeleteResSchema = z.object({
+  deleted: z.literal(true),
+  deletedSamples: z.number().int(),
+});
+export type PracticeTargetDeleted = z.infer<typeof practiceTargetDeleteResSchema>;
+
+/** 练习样本列表项（`GET /practice/targets/:id/samples`；**列表不回范文正文与稿件 / 卡体**） */
+export const practiceSampleSummarySchema = z.object({
+  id: z.string(),
+  sourceKind: practiceSourceKindSchema,
+  sourceLabel: z.string(), // 快照来源说明（用户手填）
+  charCount: z.number().int(), // 范文快照字符数（列表展示用）
+  hasDraft: z.boolean(), // 是否已写稿
+  hasFeedback: z.boolean(), // 是否已有点评卡
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type PracticeSampleItem = z.infer<typeof practiceSampleSummarySchema>;
+
+// GET /api/v1/practice/targets/:id/samples（按 updatedAt 倒序）
+export const practiceSamplesResSchema = z.object({ samples: z.array(practiceSampleSummarySchema) });
+export type PracticeSamplesRes = z.infer<typeof practiceSamplesResSchema>;
+
+// POST /api/v1/practice/targets/:id/samples（粘贴范文）
+export const practiceSampleCreateReqSchema = z
+  .object({
+    source_kind: practiceSourceKindSchema.optional(), // 省略 = "paste"
+    source_label: z.string().min(1).max(MAX_PRACTICE_SOURCE_LABEL_CHARS),
+    text: z.string().trim().min(1).max(MAX_PRACTICE_SAMPLE_CHARS), // 范文快照（落库后不可变）
+  })
+  .strict();
+
+/**
+ * 样本详情（`GET /practice/samples/:id`；**唯一返回范文全文与点评卡的读端点**）——
+ * 也是 `POST /practice/targets/:id/samples` 的响应形状（新建时 draft = ""、feedback = null）。
+ * `targetName` / `observation` 由路由层拼（db helper 返回存储形态，见 tasks 卡 5 承接事实②）。
+ */
+export const practiceSampleDetailResSchema = z.object({
+  id: z.string(),
+  targetId: z.string(),
+  targetName: z.string(), // 便于页面标题（少一次请求）
+  observation: z.string().nullable(), // 目标的用户观察（同屏展示）
+  sourceKind: practiceSourceKindSchema,
+  sourceLabel: z.string(),
+  text: z.string(), // 范文快照全文
+  draft: z.string(), // 用户仿写稿（未写 = ""）
+  feedback: practiceFeedbackSchema.nullable(), // 未点评 = null（坏 JSON 由 db 层按 null）
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type PracticeSampleDetail = z.infer<typeof practiceSampleDetailResSchema>;
+
+// PUT /api/v1/practice/samples/:id（**全系统唯一的用户写稿入口**；strict 单字段，多字段 → 400）
+export const practiceSampleDraftPutReqSchema = z
+  .object({
+    draft: z.string().max(MAX_PRACTICE_DRAFT_CHARS), // 允许空串 = 清空稿件
+  })
+  .strict();
+
+// 版本戳（客户端据此判断保存结果；并发口径 = 后写覆盖，不带版本戳）
+export const practiceSampleDraftPutResSchema = z.object({ updatedAt: z.string() });
+export type PracticeSampleDraftPutRes = z.infer<typeof practiceSampleDraftPutResSchema>;
+
+// DELETE /api/v1/practice/samples/:id（物理删）
+export const practiceSampleDeleteResSchema = z.object({ deleted: z.literal(true) });
+export type PracticeSampleDeleted = z.infer<typeof practiceSampleDeleteResSchema>;
 
 // ============ 云端存档（卡 2：账号配置段） ============
 //

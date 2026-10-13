@@ -44,7 +44,15 @@ import {
   relationUpdateMetaReqSchema,
   settingsLlmGetResSchema,
   settingsLlmPutReqSchema,
+  practiceSampleCreateReqSchema,
+  practiceSampleDetailResSchema,
+  practiceSampleDraftPutReqSchema,
+  practiceTargetCreateResSchema,
+  practiceTargetDeleteResSchema,
+  practiceTargetUpdateReqSchema,
+  practiceTargetSchema,
 } from "./api.js";
+import { MAX_PRACTICE_SAMPLE_CHARS, MAX_PRACTICE_SOURCE_LABEL_CHARS } from "../constants/practice.js";
 
 describe("ErrorCode 完整性", () => {
   it("包含全部 10 个现行错误码", () => {
@@ -820,6 +828,92 @@ describe("settings/llm 端点 schema（pi provider 目录契约）", () => {
     expect(settingsLlmPutReqSchema.safeParse({ api_key: { provider: "deepseek" } }).success).toBe(false);
     expect(settingsLlmPutReqSchema.safeParse({ thinking_level: "bogus" }).success).toBe(false);
     expect(settingsLlmPutReqSchema.safeParse({ model: 42 }).success).toBe(false);
+  });
+});
+
+describe("practice 端点 schema（docs/api/120-api-practice.md）", () => {
+  it("请求 schema 消费 shared 上限常量：恰好上限通过、超 1 字符拒绝（不复述数字）", () => {
+    const label = "d".repeat(MAX_PRACTICE_SOURCE_LABEL_CHARS);
+    expect(practiceSampleCreateReqSchema.safeParse({ source_label: label, text: "范文" }).success).toBe(true);
+    expect(practiceSampleCreateReqSchema.safeParse({ source_label: label + "d", text: "范文" }).success).toBe(false);
+    const text = "d".repeat(MAX_PRACTICE_SAMPLE_CHARS);
+    expect(practiceSampleCreateReqSchema.safeParse({ source_label: "来源", text }).success).toBe(true);
+    expect(practiceSampleCreateReqSchema.safeParse({ source_label: "来源", text: text + "d" }).success).toBe(false);
+  });
+
+  it('source_kind 收窄为 "paste"；请求字段名 snake_case（strict 拒绝 camelCase）', () => {
+    expect(
+      practiceSampleCreateReqSchema.safeParse({ source_kind: "paste", source_label: "来源", text: "范文" }).success,
+    ).toBe(true);
+    // 省略 = "paste"（不传 source_kind 也合法）
+    expect(practiceSampleCreateReqSchema.safeParse({ source_label: "来源", text: "范文" }).success).toBe(true);
+    expect(
+      practiceSampleCreateReqSchema.safeParse({ source_kind: "file", source_label: "来源", text: "范文" }).success,
+    ).toBe(false);
+    expect(
+      practiceSampleCreateReqSchema.safeParse({ sourceKind: "paste", sourceLabel: "来源", text: "范文" }).success,
+    ).toBe(false);
+    expect(practiceSampleDraftPutReqSchema.safeParse({ draft: "" }).success).toBe(true); // 空串 = 清空稿件
+    expect(practiceSampleDraftPutReqSchema.safeParse({ draft: "稿", extra: 1 }).success).toBe(false); // strict 单字段
+  });
+
+  it("响应 schema 与文档字段形状一致（目标项含 sampleCount / 详情含 targetName+observation / 删除计数）", () => {
+    const T = "2026-10-01T10:00:00Z";
+    const item = practiceTargetSchema.parse({
+      id: "pt-1",
+      name: "目标",
+      observation: null,
+      sampleCount: 2,
+      createdAt: T,
+      updatedAt: T,
+    });
+    expect(item.sampleCount).toBe(2);
+    // POST 响应的文档形状不含 sampleCount（响应 schema 非 strict：多出的键被剥离）
+    const created = practiceTargetCreateResSchema.parse({
+      id: "pt-1",
+      name: "目标",
+      observation: null,
+      sampleCount: 0,
+      createdAt: T,
+      updatedAt: T,
+    });
+    expect("sampleCount" in created).toBe(false);
+    const detail = practiceSampleDetailResSchema.parse({
+      id: "ps-1",
+      targetId: "pt-1",
+      targetName: "目标",
+      observation: "短句、白描",
+      sourceKind: "paste",
+      sourceLabel: "《受戒》节选",
+      text: "明海出家已经四年了。",
+      draft: "",
+      feedback: {
+        dimensions: [
+          {
+            name: "句长节奏",
+            sampleTrait: "短句",
+            draftTrait: "长句",
+            sampleQuotes: ["明海出家已经四年了。"],
+            draftQuotes: [],
+            advice: "切短",
+          },
+        ],
+        summary: "总评",
+      },
+      createdAt: T,
+      updatedAt: T,
+    });
+    expect(detail.feedback?.dimensions[0].sampleTrait).toBe("短句");
+    expect(practiceTargetDeleteResSchema.parse({ deleted: true, deletedSamples: 3 })).toEqual({
+      deleted: true,
+      deletedSamples: 3,
+    });
+  });
+
+  it("PUT /targets/:id 请求要求至少给一项（空对象拒绝；observation 空串 = 清空合法）", () => {
+    expect(practiceTargetUpdateReqSchema.safeParse({ name: "改名" }).success).toBe(true);
+    expect(practiceTargetUpdateReqSchema.safeParse({ observation: "" }).success).toBe(true);
+    expect(practiceTargetUpdateReqSchema.safeParse({}).success).toBe(false);
   });
 });
 
