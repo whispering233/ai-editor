@@ -2,6 +2,7 @@
 // 备份管道（有变更才备份/同毫秒去重/保留策略）、备份管理端点（列表/立即备份/restore）、
 // 定时器生命周期（open 启/close 停/无变更跳过）；自定义名称/命名唯一化（旧命名不解析 + 开项目兜底备份）
 import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -13,7 +14,11 @@ import {
   AGENTS_FILE_NAME,
   closeDatabase,
   createEntity,
+  createPracticeSample,
+  createPracticeTarget,
   DATA_DB_FILE_NAME,
+  listPracticeSamples,
+  listPracticeTargets,
   openDatabase,
   OUTLINE_FILE_NAME,
   PROJECT_FILE_NAME,
@@ -144,6 +149,25 @@ function initProjectDir(dir: string, config: ProjectFileConfig, outline: Outline
   const db = openDatabase(join(dir, DATA_DB_FILE_NAME));
   setUserVersion(db, SCHEMA_VERSION);
   closeDatabase(db);
+}
+
+/** 手工打包一本书目录三文件为 zip（造「包内 kind ≠ 目标工作区」等异构恢复场景用） */
+function bookZipBytes(dir: string): Uint8Array {
+  return zipSync({
+    [PROJECT_FILE_NAME]: readFileSync(join(dir, PROJECT_FILE_NAME)),
+    [OUTLINE_FILE_NAME]: readFileSync(join(dir, OUTLINE_FILE_NAME)),
+    [DATA_DB_FILE_NAME]: readFileSync(join(dir, DATA_DB_FILE_NAME)),
+  });
+}
+
+/** 三文件 sha256（判据「三文件字节不变」的比对口径：逐文件字节指纹） */
+function threeFileSha256(dir: string): Record<string, string> {
+  const digest = (file: string): string => createHash("sha256").update(readFileSync(join(dir, file))).digest("hex");
+  return {
+    [PROJECT_FILE_NAME]: digest(PROJECT_FILE_NAME),
+    [OUTLINE_FILE_NAME]: digest(OUTLINE_FILE_NAME),
+    [DATA_DB_FILE_NAME]: digest(DATA_DB_FILE_NAME),
+  };
 }
 
 /** open 一个项目并返回测试 app（setCurrentProject 联动启动自动备份调度） */
@@ -905,6 +929,102 @@ describe("POST /project/backup/restore", () => {
     expect(cfg.status).toBe(200);
     const again = await app.request("/api/v1/project/backup", { method: "POST", headers: HOST_HEADERS });
     expect(again.status).toBe(200);
+  });
+
+  it("包内 kind ≠ 当前工作区 kind（novel 包 → 练习工作区）→ 400 KIND_MISMATCH，三文件 sha256 不变 + 练习数据行数不变", async () => {
+    const dir = join(makeTmpDir(), "practice", "仿写练习");
+    initProjectDir(
+      dir,
+      { ...makeConfig("proj-kind-target", "仿写练习"), kind: "practice" },
+      { id: "root", type: "root", schema_version: SCHEMA_VERSION, children: [] },
+    );
+ // 练习数据（专属两表；恢复被拒后行数必须不变）
+    const seedDb = openDatabase(join(dir, DATA_DB_FILE_NAME));
+    const target = createPracticeTarget(seedDb, { name: "范文目标" });
+    expect(
+      createPracticeSample(seedDb, { targetId: target.id, sourceLabel: "范文一", text: "范文正文" }),
+    ).not.toBeNull();
+    closeDatabase(seedDb);
+
+    const app = await openProject(dir);
+
+ // 包 = novel 工作区的备份（显式 kind: novel），手工放进本工作区 .backups/
+    const srcDir = makeTmpDir();
+    initProjectDir(srcDir, { ...makeConfig("proj-kind-src", "小说包"), kind: "novel" });
+    const fileName = "20260813-101500000-自动-设备-人物0-设定0-章0.zip";
+    writeRawBackupFile(dir, fileName, bookZipBytes(srcDir));
+
+    const before = threeFileSha256(dir);
+    const res = await app.request("/api/v1/project/backup/restore", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ fileName }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.code).toBe("KIND_MISMATCH");
+    expect(body.error.message).toBe("备份包的工作区类型（novel）与当前工作区（practice）不符");
+ // 判据 1：三文件字节不变（sha256 逐文件比对——类型校验在覆盖前快照之后，快照只可能 checkpoint data.db）
+    expect(threeFileSha256(dir)).toEqual(before);
+ // 练习数据行数不变（专属表直查）
+    const checkDb = openDatabase(join(dir, DATA_DB_FILE_NAME));
+    try {
+      expect(listPracticeTargets(checkDb)).toHaveLength(1);
+      expect(listPracticeSamples(checkDb, target.id)).toHaveLength(1);
+    } finally {
+      closeDatabase(checkDb);
+    }
+ // 被拒后连接仍可用（未被关闭/悬挂）
+    expect((await app.request("/api/v1/project/config", { headers: HOST_HEADERS })).status).toBe(200);
+  });
+
+  it("旧包（缺 kind）→ 小说工作区：正常恢复，且盘上被**补写** kind: \"novel\"（kind 引入前只存在小说工作区）", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, { ...makeConfig("proj-legacy-kind", "旧包恢复"), prompt: "旧提示词" });
+    expect(readProjectFile(dir)?.kind).toBeUndefined(); // 前置：目标自身也是旧形态
+    const app = await openProject(dir);
+    const project = getCurrentProject() as NonNullable<ReturnType<typeof getCurrentProject>>;
+    const bkp = writeBackup(project); // 包内 project.json 同样缺 kind（旧包）
+    writeProjectFile(dir, { ...(readProjectFile(dir) as ProjectFileConfig), prompt: "新提示词" });
+
+    const res = await app.request("/api/v1/project/backup/restore", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ fileName: bkp.fileName }),
+    });
+    expect(res.status).toBe(200);
+    expect(readProjectFile(dir)?.prompt).toBe("旧提示词"); // 数据回滚（恢复真发生）
+    expect(readProjectFile(dir)?.kind).toBe("novel"); // 旧包被补写显式 kind（写侧只写显式值）
+    expect(readProjectFile(dir)?.id).toBe("proj-legacy-kind"); // id 保留（身份不变）
+    expect(getCurrentProject()?.config.kind).toBe("novel"); // 内存 config 同步为盘上值
+  });
+
+  it("旧包（缺 kind）→ 练习工作区：400 KIND_MISMATCH（缺字段即小说包，异类型不受理）", async () => {
+    const dir = join(makeTmpDir(), "practice", "旧包练习");
+    initProjectDir(
+      dir,
+      { ...makeConfig("proj-legacy-practice", "旧包练习"), kind: "practice" },
+      { id: "root", type: "root", schema_version: SCHEMA_VERSION, children: [] },
+    );
+    const app = await openProject(dir);
+
+    const srcDir = makeTmpDir();
+    initProjectDir(srcDir, makeConfig("proj-legacy-src", "旧包源")); // 无 kind 键
+    expect(readProjectFile(srcDir)?.kind).toBeUndefined();
+    const fileName = "20260813-101500000-自动-设备-人物0-设定0-章0.zip";
+    writeRawBackupFile(dir, fileName, bookZipBytes(srcDir));
+
+    const before = threeFileSha256(dir);
+    const res = await app.request("/api/v1/project/backup/restore", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ fileName }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.code).toBe("KIND_MISMATCH");
+    expect(body.error.message).toBe("备份包的工作区类型（novel）与当前工作区（practice）不符");
+    expect(threeFileSha256(dir)).toEqual(before);
   });
 
   it("覆盖时保留当前项目 id（id 是书的身份）；name 归一为目录名、prompt 随备份替换", async () => {

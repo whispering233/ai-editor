@@ -317,13 +317,14 @@ export interface PullOptions {
  * 从云端拉取一份备份应用到当前项目（`POST /cloud/pull` 的实现）。
  *
  * 流程：定位书目录 → 列目录取目标（缺省 head）→ 下载 → 原样落进本地 `.backups/`（校验失败则回收）→
- * 走 **restore 管道**（覆盖前自动快照 + 校验 + **三文件覆盖** + db 重连 + 重启备份定时器；
+ * 走 **restore 管道**（覆盖前自动快照 + 校验 + **工作区类型校验**（包内 kind ≠ 当前工作区 kind →
+ * 400 `KIND_MISMATCH`，不写三文件）+ **三文件覆盖** + db 重连 + 重启备份定时器；
  * 本机 `sessions/` **不写不删**）→ 更新同步状态
  *（`lastPushedFileName` = 拉到的这份，既是新的冲突判定基准，也是「本机已基于该版本」的标记；
  * `lastSeenCloudFiles` = 当前云端集合 → 立刻复查不会判「云端有更新」）。
  *
  * @throws HttpError 409 CLOUD_NOT_CONFIGURED、404 CLOUD_FILE_NOT_FOUND、400 VALIDATION_ERROR（坏包/文件名非法）、
- *   409 SCHEMA_VERSION_MISMATCH（备份来自更高版本）、502 三码
+ *   400 KIND_MISMATCH（包内工作区类型与当前工作区不符）、409 SCHEMA_VERSION_MISMATCH（备份来自更高版本）、502 三码
  */
 export async function pullBackup(project: ProjectContext, options: PullOptions = {}): Promise<CloudPullResult> {
   const webdav = readWebdavConfig();

@@ -638,6 +638,26 @@ export function validateBackupPackage(zipData: Uint8Array): {
   }
 }
 
+/**
+ * 覆盖类写包入口的工作区类型校验（2026-10 裁定 d）：包内 kind（`validateBackupPackage`
+ * 已经 shared 兜底：缺失/未知 → `novel`）必须等于**目标工作区**的 kind。
+ *
+ * 不等 → 400 `KIND_MISMATCH`（文案与 `docs/api/error-code.md` 逐字一致），**调用方不得写任何三文件**
+ *（异类型包的数据形状在目标工作区没有消费面，静默成功比明确报错更糟）。
+ *
+ * 三处消费（`docs/design/60-practice.md`「周边管道零新增」的唯一例外）：
+ * `restoreBackup`（= `POST /project/backup/restore` 与 `POST /cloud/pull` 共用）与
+ * `POST /project/import` 的 id 命中覆盖恢复分支。**新建入口不校验**（无目标可比，按包内 kind 落目录）。
+ */
+export function assertBackupKindMatches(packageKind: WorkspaceKind, targetKind: WorkspaceKind): void {
+  if (packageKind === targetKind) return;
+  throw new HttpError(
+    400,
+    "KIND_MISMATCH",
+    `备份包的工作区类型（${packageKind}）与当前工作区（${targetKind}）不符`,
+  );
+}
+
 // ============ 自动定时器（有变更才备份，跟随项目生命周期） ============
 
 /** 备份频率读侧语义（与 shared 读映射一致 + B2.1 疑问裁决 2）：缺失 → 缺省 10；null/0/非枚举 → 关闭（null） */
@@ -977,7 +997,7 @@ export function migratePromptToAgents(project: ProjectContext): void {
  *
  * 1. 释放当前 data.db 连接（替换 data.db 前必须；顺带清理陈旧 WAL/SHM 残留——
  * 替换后新库不得复用旧 WAL）
- * 2. writeProjectFilesFromBackup 原子替换三文件（保留当前项目 id；**传入 `opts.name` / `opts.kind` 时才归一**——restore 与云端 pull 不传 `kind`，包内值原样保留，见 `docs/design/backlog.md`「restore 路径的 kind 来源」）
+ * 2. writeProjectFilesFromBackup 原子替换三文件（保留当前项目 id；**传入 `opts.name` / `opts.kind` 时才归一**——覆盖类入口的 kind 已由 `assertBackupKindMatches` 先校验相等，故归一只是把旧包缺的 `kind` 补写为目标值）
  * 3. 重连 + 版本对齐（v < 当前且有迁移路径 → 前向迁移，v === 当前 → 原样。
  * 校验阶段已拒绝 v > 当前与无路径旧版，此处不会触发重建/拒绝）
  * 4. 同步内存 config（刚原子写入，readProjectFile 必非 null；损坏抛错由 catch 恢复连接）
@@ -1115,13 +1135,15 @@ function writeFileAtomic(filePath: string, data: Uint8Array): void {
  * 就是普通备份文件，自然参与保留策略——后悔药）
  * 3. 备份包校验（validateBackupPackage：zip/白名单//user_version 三态，
  * 拒绝时数据零触碰——校验通过前不触碰任何数据文件）
- * 4. **原子替换**：closeDatabase（释放当前连接）→ 三文件逐文件原子写
+ * 4. **工作区类型校验**（assertBackupKindMatches：包内 kind ≠ 当前工作区 kind → 400
+ * `KIND_MISMATCH`，不写任何三文件；顺序在覆盖前快照之后，见 `docs/api/20-api-backup.md`）
+ * 5. **原子替换**：closeDatabase（释放当前连接）→ 三文件逐文件原子写
  * （临时文件 + rename；data.db 顺带清理 -wal/-shm 残留）→ 重新 openDatabase
  * + ensureSchemaCompatible（校验阶段已保证 v ≤ 当前且有迁移路径或匹配——
  * v < 有路径时此处前向迁移）→ project.config 同步新 project.json
- * 5. 项目 id 保留（当前项目引用不变）；重启定时器（频率可能随备份变化）
+ * 6. 项目 id 保留（当前项目引用不变）；重启定时器（频率可能随备份变化）
  *
- * @throws HttpError 400（文件名非法/坏包）、404（备份不存在）、409 SCHEMA_VERSION_MISMATCH
+ * @throws HttpError 400（文件名非法/坏包/kind 不符）、404（备份不存在）、409 SCHEMA_VERSION_MISMATCH
  */
 export function restoreBackup(
   project: ProjectContext,
@@ -1140,18 +1162,27 @@ export function restoreBackup(
 
  // 3. 备份包校验（零触碰：通过前不写任何数据文件）
   const zip = readFileSync(backupPath);
-  const { entries } = validateBackupPackage(zip);
+  const { entries, kind } = validateBackupPackage(zip);
 
- // 4. 覆盖管道（B2.3 提取，import 覆盖复用）：原子替换三文件（保留当前 id）+
+ // 4. 工作区类型校验（覆盖类写包入口，2026-10 裁定 d）：包内 kind ≠ 当前工作区 kind →
+ // 400 KIND_MISMATCH 且不写任何三文件。目标 kind 与端点/requireKind 同一来源
+ //（project.config.kind 经 shared 兜底）；校验在覆盖前快照之后，与既有「校验失败也留快照」
+ // 顺序一致（docs/api/20-api-backup.md §顺序说明）。
+  const currentKind = resolveWorkspaceKind(project.config.kind);
+  assertBackupKindMatches(kind, currentKind);
+
+ // 5. 覆盖管道（B2.3 提取，import 覆盖复用）：原子替换三文件（保留当前 id）+
  // 重连 data.db + 同步 config + 重启定时器。
  // name 归一为当前目录名（审核裁决：与 import 覆盖一致，维持「目录名 = 书名」
- // 不变式——id 是身份、name 是展示名；改名需求走 /project/rename）
+ // 不变式——id 是身份、name 是展示名；改名需求走 /project/rename）；
+ // kind 归一为当前工作区（上面已校验相等 ⇒ 实际效果 = 旧包被补写显式 kind）。
   overwriteProjectFiles(project, entries, {
     name: basename(project.root),
+    kind: currentKind,
     snapshotFileName: snapshot.fileName,
   });
 
- // 5. `sessions/` 不碰：对话历史是纯本地目录（不进任何 zip）——本机会话在恢复里不写不删；
+ // 6. `sessions/` 不碰：对话历史是纯本地目录（不进任何 zip）——本机会话在恢复里不写不删；
  // 存量旧包内的 `sessions/**` 条目接受但忽略（见 writeProjectFilesFromBackup）。
 
   // snapshot 仅含 fileName/createdAt（size 属内部信息不暴露）

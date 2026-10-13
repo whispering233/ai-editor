@@ -3,7 +3,8 @@
 // 策略：**内存版最小 WebDAV**（stub 全局 fetch）——精确控制目录内容（含带标签份、非本程序命名的
 // 文件、`.tmp-` 残留），覆盖本地 WebDAV 服务难以构造的组合；协议本身由 `webdav.test.ts` 与
 // `webdav.integration.test.ts`（真 HTTP）覆盖。
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync, existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,6 +12,7 @@ import { unzipSync, zipSync } from "fflate";
 import {
   DATA_DB_FILE_NAME,
   OUTLINE_FILE_NAME,
+  PROJECT_FILE_NAME,
   openDatabase,
   closeDatabase,
   readProjectFile,
@@ -217,6 +219,16 @@ afterEach(() => {
   initCloudState(null);
   vi.unstubAllGlobals();
 });
+
+/** 三文件 sha256（判据「三文件字节不变」的比对口径：逐文件字节指纹） */
+function threeFileSha256(dir: string): Record<string, string> {
+  const digest = (file: string): string => createHash("sha256").update(readFileSync(join(dir, file))).digest("hex");
+  return {
+    [PROJECT_FILE_NAME]: digest(PROJECT_FILE_NAME),
+    [OUTLINE_FILE_NAME]: digest(OUTLINE_FILE_NAME),
+    [DATA_DB_FILE_NAME]: digest(DATA_DB_FILE_NAME),
+  };
+}
 
 /** 通过备份管道造一份真备份（三文件——`sessions/` 不进包） */
 function makeBackup(name?: string, kind: "auto" | "manual" = "manual"): string {
@@ -620,6 +632,32 @@ describe("pullBackup：三文件覆盖（sessions/ 是纯本地目录，不写�
 
     writeCloudConfig({ url: null, username: null, password: null });
     await expect(pullBackup(project)).rejects.toMatchObject({ code: "CLOUD_NOT_CONFIGURED", status: 409 });
+  });
+
+  it("云端那份 kind ≠ 当前工作区 kind → 400 KIND_MISMATCH，三文件字节不变、同步状态不推进、本地不留那份包", async () => {
+    // 当前工作区改成练习（practice）：云端那份 makeCloudZip 是小说包（project.json 无 kind → novel）
+    writeProjectFile(project.root, { ...project.config, kind: "practice" });
+    project.config = readProjectFile(project.root) as ProjectFileConfig;
+
+    const cloud = makeCloudZip();
+    const dirName = `测试书-${project.config.id}`;
+    store.set(dirName, { isDir: true, bytes: new Uint8Array(), mtime: Date.now() });
+    seedCloudFile(`${dirName}/${cloud.fileName}`, cloud.bytes);
+    writeBookState(project.config.id, { dirName, lastPushedFileName: "旧基准.zip" });
+
+    const before = threeFileSha256(project.root);
+    await expect(pullBackup(project, { fileName: cloud.fileName })).rejects.toMatchObject({
+      code: "KIND_MISMATCH",
+      status: 400,
+      message: "备份包的工作区类型（novel）与当前工作区（practice）不符",
+    });
+
+    // 三文件字节不变（sha256 逐文件比对——与本地 restore 同一函数同一口径）
+    expect(threeFileSha256(project.root)).toEqual(before);
+    // 那份包未被留在本地 .backups/（校验失败回收，同坏包口径）
+    expect(existsSync(join(project.root, BACKUPS_DIR_NAME, cloud.fileName))).toBe(false);
+    // 同步状态不推进（writeBookState 在 restore 之后，被拒即未执行）
+    expect(readBookState(project.config.id)?.lastPushedFileName).toBe("旧基准.zip");
   });
 
   it("云端那份版本过高（SCHEMA_VERSION_MISMATCH）→ 409 且不留坏包、数据零触碰", async () => {

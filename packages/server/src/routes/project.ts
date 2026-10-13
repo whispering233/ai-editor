@@ -57,7 +57,7 @@ import {
   projectListResSchema,
   projectOpenReqSchema,
 } from "@whispering233/ai-editor-shared/schemas";
-import { createBackupZip, listBackups, migratePromptToAgents, overwriteProjectFiles, renameBackup, restoreBackup, snapshotBookDir, validateBackupPackage, writeBackup, writeProjectFilesFromBackup } from "../backup.js";
+import { assertBackupKindMatches, createBackupZip, listBackups, migratePromptToAgents, overwriteProjectFiles, renameBackup, restoreBackup, snapshotBookDir, validateBackupPackage, writeBackup, writeProjectFilesFromBackup } from "../backup.js";
 import { HttpError, ok } from "../middleware/error.js";
 import { assertWorkspaceKind } from "../middleware/kind.js";
 import {
@@ -514,7 +514,9 @@ export function uniqueBookDir(root: string, name: string, kind: WorkspaceKind): 
 // 逐名比对天然防 zip 路径穿越）→ 三文件齐全 → project.json/outline.json 顶层
 // → data.db 校验（**大小 > 0 → 打开成功 → user_version === SCHEMA_VERSION**；
 // 0 字节/非 SQLite → 400 坏包；版本不匹配 409 SCHEMA_VERSION_MISMATCH 按相对版本
-// 分流文案，拒绝导入不静默重建——与 open 的删库重建语义刻意区分）→ 目标
+// 分流文案，拒绝导入不静默重建——与 open 的删库重建语义刻意区分）→ **分流**：
+// id 命中已有工作区 → 覆盖恢复（写盘前先 `assertBackupKindMatches`：包内 kind ≠ 目标工作区
+// kind → 400 `KIND_MISMATCH` 且不写任何文件；通过后走 restore 同款管道），id 不命中 → 目标
 // `<kind 目录>/<name>/`（kind 取自包内 project.json，缺 kind → novel）同名不再 409，
 // 目录自动去重 → mkdir + copy 原子搬入（任一失败清理半成品目录）→ 不打开
 // （与 create 一致，前端刷新书架）。
@@ -584,10 +586,13 @@ projectRoutes.post("/import", async (c) => {
  // —— 覆盖恢复（restore 同款管道）——
  // 覆盖目标按 id 定位目录（不是按 name，请求体 name 在覆盖场景不生效）；
  // 覆盖时 project.json 内 name 与 kind **都归一到目标目录**（目录是事实：
- // name → 「目录名 = 书名」不变式（修正 f4424b7）；kind → 目标目录所属工作区目录
- // （包内 kind 手工改过时不得写回，否则产出「目录与 kind 不符」的工作区——delete/rename
- // 按 kind 目录约束判定，这种工作区既删不掉也改不了名）；数据随备份替换。
+ // name → 「目录名 = 书名」不变式（修正 f4424b7）；kind → 目标目录所属工作区目录，
+ // 不会产出「目录与 kind 不符」的工作区（该类包已在下面被校验拒掉）；数据随备份替换。
     const dirKind = matched.kind;
+ // 工作区类型校验（覆盖类写包入口，2026-10 裁定 d）：包内 kind（缺失/未知 → novel，
+ // validateBackupPackage 已 shared 兜底）≠ 目标工作区 kind（目录推出）→ 400 KIND_MISMATCH，
+ // **不写任何文件**（含覆盖前快照）；相等则照旧覆盖（kind 归一为目标目录侧）。
+    assertBackupKindMatches(packageKind, dirKind);
     const cur = getCurrentProject();
     if (cur !== null && cur.root === matchedDir) {
  // 目标是当前打开的书：复用现有连接快照 + 覆盖管道（重连 data.db + 定时器重启）
