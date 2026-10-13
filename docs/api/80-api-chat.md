@@ -22,7 +22,8 @@
                                  //   服务端**现读** project.json 的 deduction_nodes 展开（客户端不传 id 数组——避免第二份可漂移的事实源）；
                                  //   无标记 / 标记全部失效 → 该段静默省略（不报错）；注入形状见 ../design/20-context.md §2
     practice_sample_id?: string; // 练习工作区：触发一次点评（2026-10）
-                                 //   服务端**现读**样本与目标（不信任客户端传入的观察文本），注入目标名 + 用户观察 + 「必须提交点评卡」指令；
+                                 //   服务端**现读**样本与目标（不信任客户端传入的观察文本），注入**只给事实**：样本 id + 目标名 + 用户观察；
+                                 //   「必须提交点评卡」这类**指令语义唯一出处 = 练习内核提示词常量**（注入段不复述——否则 = 第二事实源）；
                                  //   范文与稿件**不进 prompt**（由只读工具分页拉取）；样本不存在 → 静默省略该段；
                                  //   设计见 ../design/60-practice.md §6，端点见 120-api-practice.md
   };
@@ -30,8 +31,9 @@
 
 // 聚焦上下文展开：服务端把 context 逐项展开为结构化文本、拼在本轮消息之前（查询不到/已软删 → 跳过该项，
 // 不报错——客户端可能携带过期 focus）；两项皆无时不注入，消息原文保持干净。
-// **练习点评（2026-10）**：`practice_sample_id` 存在时本轮注入「目标名 + 用户观察 + 必须提交点评卡」；
-// 范文与用户稿不进 prompt（只读工具分页拉取）。触发消息是**普通用户消息**（透明可回溯，不引入隐藏语义）。
+// **练习点评（2026-10）**：`practice_sample_id` 存在时本轮注入**只给事实**（样本 id + 目标名 + 用户观察）；
+// 「必须提交点评卡」这类指令语义唯一出处 = 练习内核提示词常量（注入段不复述）；范文与用户稿不进 prompt
+// （只读工具分页拉取）。触发消息是**普通用户消息**（透明可回溯，不引入隐藏语义）。
 
 // 对话历史持久化：本会话的消息写入项目目录 sessions/（格式 = pi session v3，见 docs/db/schema.md）；
 // **文件在首条用户消息落盘**（pi 1.0.4 起；此前为首条 assistant 消息）⇒ 开窗未发消息不产文件；
@@ -59,7 +61,7 @@
 | `message_update` | `{ assistantMessageEvent: {...} }` | assistant 流式增量：`text_delta` / `thinking_delta` / `toolcall_delta` 等（**已剥离 `partial` 全文对象**；`toolcall_*` 附带 `id` / `toolName` 便于前端提前渲染）。`thinking_end` 的 `content` 降为 `THINKING_PREVIEW_MAX_CHARS` 字预览并附 `contentLength`（全文走按需端点，客户端已从 `thinking_delta` 拿到增量） |
 | `tool_execution_start` | `{ toolCallId, toolName, args }` | 工具开始执行 |
 | `tool_execution_update` | `{ toolCallId, toolName, partialResult }` | 工具流式进度（可选） |
-| `tool_execution_end` | `{ toolCallId, toolName, result: { content, details? }, isError }` | 工具结束；**AUTO 工具的 `details` 不下发**（与 `content` 重复且可能极大）；**PROPOSAL 工具的 `details` 携带提案载荷**（见 §提案确认） |
+| `tool_execution_end` | `{ toolCallId, toolName, result: { content, details? }, isError }` | 工具结束；**AUTO 工具的 `details` 不下发**（与 `content` 重复且可能极大）；**PROPOSAL 工具的 `details` 携带提案载荷**（见 §提案确认）；**例外：练习点评工具（`submit_style_feedback`）的 `details` 随帧下发**（写库结果，前端据此即时刷新点评卡——清单唯一出处 = shared `TOOL_DETAILS_TO_CLIENT`，不是「全放行」） |
 | `turn_end` | `{ toolResults: [...], contextUsage?: { percent, tokens, contextWindow }, usage? }` | 轮次结束（= 一次模型请求 + 其工具执行全部完成）；`contextUsage` 供占用段、`usage` 供状态栏账目（见 §会话用量字段 + `../design/20-context.md` §2） |
 | `compaction_start` / `compaction_end` | `{ reason }` / `{ reason, result?, aborted, willRetry, errorMessage? }` | 上下文自动压缩状态（可展示提示） |
 | `auto_retry_start` / `auto_retry_end` | `{ attempt, maxAttempts, delayMs, errorMessage }` / `{ success, attempt, finalError? }` | 自动重试状态（可展示提示） |
@@ -98,7 +100,7 @@
 
 - 所有 `partial` 字段剥离（含完整消息大对象），只转发增量与元数据——否则单帧可达数百 KB。
 - 不转发事件表之外的内部状态事件：`entry_appended` / `queue_update` / `session_info_changed` / `thinking_level_changed` / `agent_settled` / `summarization_retry_*` / `bash_execution_update`（UI 无消费方）。
-- AUTO 工具的 `result.details` 不下发（内容与 `content` 重复、可能达数百 KB）；仅 PROPOSAL 工具的 `details`（提案载荷）随帧下发。
+- AUTO 工具的 `result.details` 不下发（内容与 `content` 重复、可能达数百 KB）；仅 PROPOSAL 工具的 `details`（提案载荷）与 shared `TOOL_DETAILS_TO_CLIENT` 列出的工具（练习点评工具：写库结果，前端据此即时刷新卡片）随帧下发——其它 AUTO 工具仍不下发，**不得放宽成「全放行」**。
 
 **客户端解析约束**：本端点返回 POST + SSE，浏览器原生 `EventSource` 只支持 GET，客户端必须用 `fetch` + `ReadableStream` 自写 SSE 解析（client），并处理：跨 chunk 的 `data:` 行拼接、注释行（`:` 开头）跳过、多行 data 合并。
 

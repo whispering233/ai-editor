@@ -964,6 +964,12 @@ export const chatSendReqSchema = z
         focus_node_id: z.string().optional(),
  /** true = 注入「推演节点集合」段（服务端现读 project.json 的 deduction_nodes 展开；无标记/全失效 → 静默省略） */
         focus_deduction: z.boolean().optional(),
+        /**
+         * 练习样本 id（`ps-*`）= 触发一次点评：服务端**现读**样本与目标，注入「样本 id + 目标名 + 用户观察」
+         * 的事实段（**范文与用户稿绝不进 prompt**，走只读工具分页拉取；观察文本不接受客户端传入）；
+         * 样本不存在 / 目标行缺失 → 静默省略该段。口径见 docs/design/60-practice.md §6。
+         */
+        practice_sample_id: z.string().optional(),
       })
       .optional(),
   })

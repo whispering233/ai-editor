@@ -5,7 +5,7 @@
 // - `partial` 剥离（含 done/error 挂的完整消息）——帧的任意层级都不含大对象
 // - message_update 的 toolcall_* 附带 id/toolName（前端提前渲染用）
 // - thinking 降预览（全文不进帧）
-// - tool_execution_end 的 details 门控（PROPOSAL 才下发）
+// - tool_execution_end 的 details 门控（提案工具 ∪ shared `TOOL_DETAILS_TO_CLIENT` 才下发；其它 AUTO 工具仍不下发）
 // - turn_end / agent_end 的 contextUsage（含 tokens/percent 为 null）与失败信息、usage
 // - assistant 的 message_end 的 speed（meter 喂入 / 无 meter / 非 assistant 三种情形）
 
@@ -345,6 +345,36 @@ describe("工具执行帧", () => {
     const data = frame?.data as { result: Record<string, unknown>; isError: boolean };
     expect(data.isError).toBe(false);
     expect(data.result).toEqual({ content: [{ type: "text", text: "{}" }] });
+    expect(Object.keys(data.result)).toEqual(["content"]);
+  });
+
+  it("练习点评工具（shared TOOL_DETAILS_TO_CLIENT）的 details 下发——AUTO 工具的唯一例外", () => {
+    const payload = { saved: true, dimension_count: 2, dropped_quotes: 0 };
+    const frame = toSseFrame(
+      asEvent({
+        type: "tool_execution_end",
+        toolCallId: "c4",
+        toolName: "submit_style_feedback",
+        result: { content: [{ type: "text", text: "{\"saved\":true}" }], details: payload },
+        isError: false,
+      }),
+    );
+    const data = frame?.data as { result: { content: unknown; details?: unknown } };
+    expect(data.result.details).toEqual(payload);
+    expect(Object.keys(data.result)).toEqual(["content", "details"]);
+  });
+
+  it("其它 AUTO 工具（练习只读工具）的 details 仍不下发——不得放宽成全放行", () => {
+    const frame = toSseFrame(
+      asEvent({
+        type: "tool_execution_end",
+        toolCallId: "c5",
+        toolName: "get_practice_sample",
+        result: { content: [{ type: "text", text: "范文片段" }], details: { text: "范文全文", char_count: 20000 } },
+        isError: false,
+      }),
+    );
+    const data = frame?.data as { result: Record<string, unknown> };
     expect(Object.keys(data.result)).toEqual(["content"]);
   });
 

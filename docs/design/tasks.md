@@ -15,9 +15,9 @@
 ## 批次 1（练习业务面）
 
 - [ ] **卡 7 · 点评链路（`/chat` 注入 + 卡片下发 + 落库）**
-  - 范围：`chatRequestSchema.context.practice_sample_id`；服务端现读目标名 + `observation` 注入本轮（**不接受客户端传入观察文本**）；样本不存在静默省略；卡片随 `tool_execution_end` 的 `details` 下发；前端即时渲染 + 刷新从 `GET /practice/samples/:id` 读。
+  - 范围：`chatRequestSchema.context.practice_sample_id`；服务端现读目标名 + `observation` 注入本轮（**不接受客户端传入观察文本**）；样本不存在静默省略；卡片随 `tool_execution_end` 的 `details` 下发（**本卡不含 UI**：前端即时渲染与刷新从 `GET /practice/samples/:id` 读归卡 10）。
   - 依赖：卡 5、6。
-  - 硬完成判据：**SSE 帧集零新增**（与 `docs/api/80-api-chat.md` 一致）；一轮后 `feedback` 已落库；重载页面卡片仍在；注入文本含目标名与观察、**不含范文/稿件全文**（断言）。
+  - 硬完成判据：**SSE 帧集零新增**（与 `docs/api/80-api-chat.md` 一致）；一轮后 `feedback` 已落库；重载后卡片仍在（服务端口径：`GET /practice/samples/:id` 回该卡；渲染归卡 10）；注入文本含目标名与观察、**不含范文/稿件全文**（断言）。
   - 承接事实（卡 4 oracle 登记）：注入段**只给事实**（目标名 / `observation` / 样本 id），「必须提交点评卡」这类指令语义留在**练习内核提示词常量**里——两处各写一份口径 = 第二事实源。
   - 承接事实（卡 5 oracle 登记）：`feedback` 在响应里**原样透传**（内层 snake_case 不转换、合法 JSON 对象连 `{}` 也照发）——`practiceSampleDetailResSchema` **只作类型用，禁止对它调 `.parse()`**（`{}` 会被必填字段判失败、未知键会被剥）。
 
@@ -32,7 +32,8 @@
   - 依赖：卡 5、8。
   - 硬完成判据：浏览器核对：建目标 → 建样本 → 列表出现且状态徽标随稿/点评变化；空态文案可见。
 - [ ] **卡 10 · 练习页（`#/practice/:sampleId`）**
-  - 范围：范文（只读）→ 我的稿（`TextArea`，间接引用 `--writing-*`，不引 `--paper-bg`）→ 点评卡；保存按钮 + `Ctrl/Cmd+S`（接入既有注册栈，失败 `return false`）；「让 AI 点评」按钮。
+  - 范围：范文（只读）→ 我的稿（`TextArea`，间接引用 `--writing-*`，不引 `--paper-bg`）→ 点评卡；保存按钮 + `Ctrl/Cmd+S`（接入既有注册栈，失败 `return false`）；「让 AI 点评」按钮（`POST /chat` + `context.practice_sample_id`）。
+  - 点评卡的数据面：**消费 `tool_execution_end` 帧的 `details`**（`submit_style_feedback` 的写库结果，AUTO 工具的唯一非提案例外）即时刷新；**刷新/重载从 `GET /practice/samples/:id` 读卡体**（帧里只有写库结果，没有卡体）。
   - 依赖：卡 7、9。
   - 硬完成判据：浏览器核对：三段几何（页头常驻、正文区可滚）；`Ctrl+S` 触发保存（失败路径阻断存档）；点评后卡片即时出现且重载仍在；窄幅下不溢出。
 

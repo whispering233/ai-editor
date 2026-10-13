@@ -4,15 +4,15 @@
 // 三件必须做的事（每件都有「不做就会出事」的理由）：
 // 1. **剥离 `partial`/完整消息大对象**：pi 的增量事件都挂一份完整消息快照，原样转发单帧可达数百 KB。
 // 2. **thinking 降预览**：全文走按需端点，帧里只给预览 + 定位参数（流式期间已由 thinking_delta 下发增量）。
-// 3. **AUTO 工具的 `details` 不下发**：与 `content` 重复且可能极大；只有 PROPOSAL 工具的
-//    details（提案载荷）是 UI 的真实消费面。
+// 3. **AUTO 工具的 `details` 不下发**：与 `content` 重复且可能极大；只有「details 是 UI 真实消费面」的
+//    工具放行（提案工具 + shared `TOOL_DETAILS_TO_CLIENT`，如练习点评卡）。
 //
 // 丢弃 pi 的内部状态事件（entry_appended / queue_update / session_info_changed /
 // thinking_level_changed / agent_settled / summarization_retry_* / bash_execution_update）：
 // 事件表没有登记 = UI 没有消费方，转发只会变成无人接的噪声。
 
 import type { AgentSessionEvent, ContextUsage } from "@earendil-works/pi-coding-agent";
-import { PROPOSAL_TOOLS, type ChatUsage } from "@whispering233/ai-editor-shared";
+import { PROPOSAL_TOOLS, TOOL_DETAILS_TO_CLIENT, type ChatUsage } from "@whispering233/ai-editor-shared";
 import { getThinkingPreview, projectMessageForWire, type WireMessage } from "./message-projection.js";
 import type { SpeedMeter } from "./speed.js";
 
@@ -35,8 +35,14 @@ export interface SseProjectionOptions {
 type MessageUpdateEvent = Extract<AgentSessionEvent, { type: "message_update" }>;
 type AssistantMessageEventOf = MessageUpdateEvent["assistantMessageEvent"];
 
-/** 提案工具名集合（details 门控依据；shared 常量是工具名的唯一事实来源） */
-const PROPOSAL_TOOL_NAME_SET: ReadonlySet<string> = new Set<string>(PROPOSAL_TOOLS);
+/**
+ * details 随帧下发的工具名集合（门控依据）：提案工具（提案载荷）∪ shared `TOOL_DETAILS_TO_CLIENT`
+ * （details 是 UI 真实数据面的 AUTO 工具，如练习点评卡）——两份工具名清单都来自 shared，此处只做并集。
+ */
+const DETAILS_TO_CLIENT_TOOL_NAME_SET: ReadonlySet<string> = new Set<string>([
+  ...PROPOSAL_TOOLS,
+  ...TOOL_DETAILS_TO_CLIENT,
+]);
 
 /** 丢弃的事件类型（未登记进事件表的内部状态） */
 const DROPPED_EVENT_TYPES: ReadonlySet<string> = new Set<string>([
@@ -287,12 +293,14 @@ export function toSseFrame(event: AgentSessionEvent, options: SseProjectionOptio
 
 /**
  * 工具结果 projection：
- * - AUTO 工具：只给 `content`（details 与 content 重复，且可能是整棵大纲/全图）
- * - PROPOSAL 工具：附带 `details`（提案载荷 `{ proposal_id, type, preview }`，前端提案卡的唯一数据面）
+ * - details 不在放行集合（`DETAILS_TO_CLIENT_TOOL_NAME_SET`）的工具：只给 `content`
+ *   （details 与 content 重复，且可能是整棵大纲/全图）
+ * - 放行的工具：附带 `details`——提案工具为提案载荷 `{ proposal_id, type, preview }`
+ *   （前端提案卡的唯一数据面），AUTO 工具为它自己的产出载荷（练习点评卡，见 shared `TOOL_DETAILS_TO_CLIENT`）
  */
 function projectToolResult(toolName: string, result: unknown): Record<string, unknown> {
   const record = (typeof result === "object" && result !== null ? result : {}) as Record<string, unknown>;
   const content = record.content ?? [];
-  if (!PROPOSAL_TOOL_NAME_SET.has(toolName)) return { content };
+  if (!DETAILS_TO_CLIENT_TOOL_NAME_SET.has(toolName)) return { content };
   return record.details === undefined ? { content } : { content, details: record.details };
 }

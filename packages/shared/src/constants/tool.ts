@@ -146,3 +146,14 @@ export const TOOL_NAMES = [...AUTO_TOOLS, ...PRACTICE_TOOLS, ...PROPOSAL_TOOLS, 
 
 /** 工具名（从 TOOL_NAMES 派生） */
 export type ToolName = (typeof TOOL_NAMES)[number];
+
+/**
+ * `details` **随 SSE 帧下发**的工具（提案工具之外的部分）——**唯一定义处**（2026-10）。
+ * 契约 = docs/api/80-api-chat.md「过滤约定」：AUTO 工具的 `details` 一般不下发（与 `content` 重复、可能极大），
+ * 例外只给「details 是前端真实数据面」的工具；提案工具的 details（提案载荷）不在本集合里，
+ * 由 `PROPOSAL_TOOLS` 单独表达（投影层按两者并集放行，见 agent 包 `runtime/events.ts`）。
+ */
+export const TOOL_DETAILS_TO_CLIENT = [
+  // 点评卡：写库结果随帧下发，前端据此即时刷新卡片（卡片正体从 GET /practice/samples/:id 读）
+  "submit_style_feedback",
+] as const satisfies readonly ToolName[];

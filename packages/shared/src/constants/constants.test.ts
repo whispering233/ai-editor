@@ -42,6 +42,7 @@ import {
   SET_ONLY_FIELDS,
   IMMUTABLE_FIELDS,
   TOOL_NAMES,
+  TOOL_DETAILS_TO_CLIENT,
   TOOL_PERMISSION,
   TOOL_SCOPES,
   WORKSPACE_DIRS,
@@ -271,6 +272,15 @@ describe("工具常量", () => {
   it("练习工具 3 个（仅 practice 工作区注册；两个只读 + 一个提交）", () => {
     expect(PRACTICE_TOOLS).toEqual(["get_practice_sample", "get_practice_draft", "submit_style_feedback"]);
     expect(PRACTICE_TOOLS).toHaveLength(3);
+  });
+
+  it("TOOL_DETAILS_TO_CLIENT 只列「details 随帧下发」的练习提交工具（唯一非提案例外；名字都在 TOOL_NAMES 里）", () => {
+    expect(TOOL_DETAILS_TO_CLIENT).toEqual(["submit_style_feedback"]);
+    // 提案工具的 details 另行由 PROPOSAL_TOOLS 表达（投影层取并集）：两份清单不重叠
+    expect(TOOL_DETAILS_TO_CLIENT.filter((name) => (PROPOSAL_TOOLS as readonly string[]).includes(name))).toEqual(
+      [],
+    );
+    expect(TOOL_DETAILS_TO_CLIENT.every((name) => (TOOL_NAMES as readonly string[]).includes(name))).toBe(true);
   });
 
   it("分组无重叠且全量 53 个", () => {

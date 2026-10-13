@@ -114,7 +114,10 @@ submit_style_feedback(sample_id, dimensions[], summary?)
        不匹配即丢弃（不阻断、不重试）并计入 dropped_quotes；空串 / 纯空白引用走同一条丢弃路径
        （否则 `includes("")` 恒真，无意义的引用会进卡片）；
        卡片**没有「示范」字段**——模型没有位置放成段文字（诊断，不代笔）
-  注：这是**唯一**能写练习数据的工具，且只写 AI 自己的产出字段（feedback），不碰用户稿
+  注：这是**唯一**能写练习数据的工具，且只写 AI 自己的产出字段（feedback），不碰用户稿；
+      它的 `details`（写库结果）**随 `tool_execution_end` 帧下发**（AUTO 工具的唯一非提案例外，
+      清单 = shared `TOOL_DETAILS_TO_CLIENT`）——前端据此即时刷新点评卡（卡正体仍从
+      `GET /practice/samples/:id` 读，见 120 文档「点评链路」）
 
 // === 状态查询（Delta 相关）===
 compute_state(target_type, target_id, at_node_id)

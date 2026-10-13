@@ -11,6 +11,8 @@
 // - POST /chat：开流前校验（400/404/409/LLM_API_KEY_MISSING）、首帧 session、事件集与
 //   `partial` 剥离、AUTO 工具 details 不下发、提案 details 下发、AGENTS.md 与聚焦注入、
 //   续聊历史喂回、单项目单流 409 CHAT_BUSY、断开取消（provider signal aborted + 提案作废）
+// - 练习点评链路：`context.practice_sample_id` 注入只给事实（范文/稿件零命中、未写观察不给该行）、
+//   样本或目标行缺失 → 静默省略、提交工具 details 随帧下发（同类只读工具不下发）、落库与帧一致、帧集零新增
 // - 会话用量：turn_end / agent_end 的 usage、assistant message_end 的 speed、历史响应 usage 同源同值
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -39,10 +41,14 @@ import {
 } from "@whispering233/ai-editor-agent";
 import {
   createEntity,
+  createPracticeSample,
+  createPracticeTarget,
   findOutlineNode,
+  getPracticeSample,
   readOutlineFile,
   readProjectFile,
   SCHEMA_VERSION,
+  updatePracticeDraft,
   upsertDocument,
   writeOutlineFile,
   writeProjectFile,
@@ -1082,6 +1088,254 @@ describe("POST /chat SSE 事件集与过滤", () => {
     const again = await app.request("/api/v1/chat", postChat({ message: "再来" }));
     expect(again.status).toBe(200);
     await readSseFrames(again);
+  });
+});
+
+// ============ 练习点评链路（注入 + 卡片 details 下发 + 落库） ============
+//
+// 契约：`docs/design/60-practice.md` §6（注入只给事实）、`docs/api/80-api-chat.md`
+// （context.practice_sample_id / tool_execution_end 的 details 例外）、`docs/api/120-api-practice.md`「点评链路」。
+
+/**
+ * `docs/api/80-api-chat.md` 事件表登记的全部帧名——**帧集零新增**的断言基准
+ * （新增帧名必须同步事件表，此处报红）。
+ */
+const DOCUMENTED_SSE_EVENTS = new Set([
+  "session",
+  "ping",
+  "agent_start",
+  "turn_start",
+  "message_start",
+  "message_end",
+  "message_update",
+  "tool_execution_start",
+  "tool_execution_update",
+  "tool_execution_end",
+  "turn_end",
+  "compaction_start",
+  "compaction_end",
+  "auto_retry_start",
+  "auto_retry_end",
+  "agent_end",
+]);
+
+/** 打开新的练习工作区（`kind = "practice"`）并设为当前工作区（chat 组不挂 kind 守卫） */
+function openPracticeProject(): ProjectContext {
+  const prev = getCurrentProject();
+  if (prev) closeProject(prev);
+  const project = initProject(makeTmpDir(), { kind: "practice" });
+  setCurrentProject(project);
+  return project;
+}
+
+/** 本轮模型请求里的全部文本（正/负向断言同一个口径） */
+function requestText(request: TranscriptContext): string {
+  return JSON.stringify(request.messages);
+}
+
+describe("练习点评链路：注入与卡片下发", () => {
+  /** 范文 / 稿件里的独特长标记（断言「正文一字不进 prompt」用） */
+  const SAMPLE_TEXT_MARK = "范文独有标记9c1f";
+  const DRAFT_TEXT_MARK = "稿件独有标记7b2e";
+  const SAMPLE_QUOTE = "范文原句。";
+  const DRAFT_QUOTE = "我的仿写句。";
+
+  /** 建一个目标 + 一份样本（含范文与用户稿），返回样本 id 与目标 */
+  function seedPractice(project: ProjectContext): { sampleId: string; targetId: string } {
+    const target = createPracticeTarget(project.db, {
+      name: "汪曾祺式白描",
+      observation: "短句多、动词密，少用形容词",
+    });
+    const sample = createPracticeSample(project.db, {
+      targetId: target.id,
+      sourceLabel: "汪曾祺《受戒》节选",
+      text: `${SAMPLE_QUOTE}${SAMPLE_TEXT_MARK}${SAMPLE_TEXT_MARK.repeat(40)}`,
+    });
+    if (sample === null) throw new Error("前置：样本未建立");
+    updatePracticeDraft(project.db, sample.id, `${DRAFT_QUOTE}${DRAFT_TEXT_MARK}${DRAFT_TEXT_MARK.repeat(40)}`);
+    return { sampleId: sample.id, targetId: target.id };
+  }
+
+  it("注入：现读样本 id + 目标名 + 用户观察进本轮消息；范文与稿件零命中；指令语义不复述", async () => {
+    const project = openPracticeProject();
+    const { sampleId } = seedPractice(project);
+    const env = await createFauxEnv();
+    scripted(env, [() => fauxAssistantMessage("收到")]);
+    const app = buildApp(createChatRoutes({ runtimeFactory: env.factory }));
+
+    await readSseFrames(
+      await app.request(
+        "/api/v1/chat",
+        postChat({ message: "请点评我的仿写稿", context: { practice_sample_id: sampleId } }),
+      ),
+    );
+
+    const request = env.requests[0]!;
+    const whole = requestText(request);
+    // 事实进本轮消息（样本 id / 目标名 / 用户观察）
+    expect(whole).toContain(`练习样本：id=${sampleId}`);
+    expect(whole).toContain("汪曾祺式白描");
+    expect(whole).toContain("短句多、动词密，少用形容词");
+    // 范文与用户稿正文零命中（它们走只读工具分页拉取，不进 prompt）
+    expect(whole).not.toContain(SAMPLE_TEXT_MARK);
+    expect(whole).not.toContain(DRAFT_TEXT_MARK);
+    // 「必须提交点评卡」这类指令语义只活在练习内核提示词（system）里，注入段不复述
+    const systemPrompt = getCurrentSystemPrompt(request.messages);
+    expect(systemPrompt).toContain("点评必须走提交工具");
+    const userTexts = request.messages
+      .filter((m) => m.role === "user")
+      .map((m) => JSON.stringify(m.content))
+      .join("\n");
+    expect(userTexts).toContain("请点评我的仿写稿");
+    expect(userTexts).toContain("当前聚焦"); // 注入是本轮用户消息的一部分
+    expect(userTexts).not.toContain("点评必须走提交工具");
+    expect(userTexts).not.toContain("必须提交点评卡");
+  });
+
+  it("注入：样本不存在 → 该段静默省略（无空段标题残留），本轮照常完成", async () => {
+    openPracticeProject();
+    const env = await createFauxEnv();
+    scripted(env, [() => fauxAssistantMessage("收到")]);
+    const app = buildApp(createChatRoutes({ runtimeFactory: env.factory }));
+
+    const frames = await readSseFrames(
+      await app.request(
+        "/api/v1/chat",
+        postChat({ message: "本轮问题", context: { practice_sample_id: "ps-missing" } }),
+      ),
+    );
+    const last = frames.at(-1)!;
+    expect(last.event).toBe("agent_end");
+    expect((last.data as { stopReason?: string; errorMessage?: string }).stopReason).toBeUndefined();
+
+    const userTexts = env.requests[0]!.messages
+      .filter((m) => m.role === "user")
+      .map((m) => JSON.stringify(m.content))
+      .join("\n");
+    expect(userTexts).toContain("本轮问题");
+    expect(userTexts).not.toContain("当前聚焦"); // 唯一注入项被跳过 → 段标题不残留
+    expect(userTexts).not.toContain("练习样本：");
+  });
+
+  it("注入：目标行缺失（绕过级联删的外部改库）→ 同样静默省略，不编造空目标名", async () => {
+    const project = openPracticeProject();
+    const { sampleId, targetId } = seedPractice(project);
+    project.db.prepare("DELETE FROM practice_targets WHERE id = ?").run(targetId); // 直改库：样本变孤儿行
+    expect(getPracticeSample(project.db, sampleId)).not.toBeNull();
+
+    const env = await createFauxEnv();
+    scripted(env, [() => fauxAssistantMessage("收到")]);
+    const app = buildApp(createChatRoutes({ runtimeFactory: env.factory }));
+    await readSseFrames(
+      await app.request(
+        "/api/v1/chat",
+        postChat({ message: "本轮问题", context: { practice_sample_id: sampleId } }),
+      ),
+    );
+    const userTexts = env.requests[0]!.messages
+      .filter((m) => m.role === "user")
+      .map((m) => JSON.stringify(m.content))
+      .join("\n");
+    expect(userTexts).toContain("本轮问题");
+    expect(userTexts).not.toContain("当前聚焦");
+    expect(userTexts).not.toContain("文风目标：");
+  });
+
+  it("注入：目标未写观察 → 不给「用户观察」行（不塞空值；口径见 60-practice.md §6）", async () => {
+    const project = openPracticeProject();
+    const target = createPracticeTarget(project.db, { name: "海明威式硬白描" });
+    const sample = createPracticeSample(project.db, {
+      targetId: target.id,
+      sourceLabel: "《老人与海》节选",
+      text: "范文快照",
+    });
+    if (sample === null) throw new Error("前置：样本未建立");
+    const env = await createFauxEnv();
+    scripted(env, [() => fauxAssistantMessage("收到")]);
+    const app = buildApp(createChatRoutes({ runtimeFactory: env.factory }));
+
+    await readSseFrames(
+      await app.request(
+        "/api/v1/chat",
+        postChat({ message: "请点评我的仿写稿", context: { practice_sample_id: sample.id } }),
+      ),
+    );
+    const injected = requestText(env.requests[0]!);
+    expect(injected).toContain(`练习样本：id=${sample.id}`);
+    expect(injected).toContain("海明威式硬白描");
+    expect(injected).not.toContain("用户观察");
+  });
+
+  it("点评一轮：提交工具 details 随帧下发 + 落库一致；只读工具 details 仍不下发；帧集零新增", async () => {
+    const project = openPracticeProject();
+    const { sampleId } = seedPractice(project);
+    const env = await createFauxEnv();
+    scripted(env, [
+      // 第一轮：先读范文与稿件（AUTO 只读工具，details 不下发）
+      () =>
+        fauxAssistantMessage([
+          fauxToolCall("get_practice_sample", { sample_id: sampleId }),
+          fauxToolCall("get_practice_draft", { sample_id: sampleId }),
+        ]),
+      // 第二轮：提交点评卡（AUTO 提交工具，details 随帧下发）
+      () =>
+        fauxAssistantMessage([
+          fauxToolCall("submit_style_feedback", {
+            sample_id: sampleId,
+            dimensions: [
+              {
+                name: "句长节奏",
+                sample_trait: "以短句推进",
+                draft_trait: "长句偏多",
+                sample_quotes: [SAMPLE_QUOTE],
+                draft_quotes: [DRAFT_QUOTE],
+                advice: "把超过三行的句子拆开",
+              },
+            ],
+            summary: "语感已接近，节奏还需收紧",
+          }),
+        ]),
+      () => fauxAssistantMessage("点评卡已提交。"),
+    ]);
+    const app = buildApp(createChatRoutes({ runtimeFactory: env.factory }));
+
+    const frames = await readSseFrames(
+      await app.request(
+        "/api/v1/chat",
+        postChat({ message: "请点评我的仿写稿", context: { practice_sample_id: sampleId } }),
+      ),
+    );
+
+    // 帧集零新增：全部帧名都在 docs/api/80-api-chat.md 的事件表里
+    expect(frames.filter((f) => !DOCUMENTED_SSE_EVENTS.has(f.event))).toEqual([]);
+
+    const ends = frames.filter((f) => f.event === "tool_execution_end");
+    const sampleEnd = ends.find((f) => (f.data as { toolName: string }).toolName === "get_practice_sample")!;
+    const submitEnd = ends.find((f) => (f.data as { toolName: string }).toolName === "submit_style_feedback")!;
+
+    // 负控制：同类只读 AUTO 工具的 details 仍不下发（门控没收宽成「全放行」）
+    const sampleResult = (sampleEnd.data as { result: Record<string, unknown> }).result;
+    expect(Object.keys(sampleResult)).toEqual(["content"]);
+
+    // 提交工具的 details 随帧下发（前端即时数据面）
+    const submitResult = (submitEnd.data as { result: { details?: { saved: boolean; dimension_count: number; dropped_quotes: number } } })
+      .result;
+    expect(submitResult.details).toEqual({ saved: true, dimension_count: 1, dropped_quotes: 0 });
+
+    // 落库（经卡 6 工具写 feedback）+ 帧里 details 与库内容一致；范文与稿件一字未动
+    const stored = getPracticeSample(project.db, sampleId)!;
+    const card = stored.feedback as {
+      dimensions: { name: string; sample_quotes: string[]; draft_quotes: string[] }[];
+      summary?: string;
+    };
+    expect(card.dimensions.map((d) => d.name)).toEqual(["句长节奏"]);
+    expect(card.dimensions[0]!.sample_quotes).toEqual([SAMPLE_QUOTE]); // 引用逐字命中，未被丢弃
+    expect(card.dimensions[0]!.draft_quotes).toEqual([DRAFT_QUOTE]);
+    expect(card.summary).toBe("语感已接近，节奏还需收紧");
+    expect(submitResult.details!.dimension_count).toBe(card.dimensions.length);
+    expect(submitResult.details!.dropped_quotes).toBe(0);
+    expect(stored.text).toContain(SAMPLE_TEXT_MARK);
+    expect(stored.draft).toContain(DRAFT_TEXT_MARK);
   });
 });
 

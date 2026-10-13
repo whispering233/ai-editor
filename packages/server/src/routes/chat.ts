@@ -45,6 +45,8 @@ import {
   getDocument,
   getDocumentTextLengths,
   getEntity,
+  getPracticeSample,
+  getPracticeTarget,
   readOutlineFile,
 } from "@whispering233/ai-editor-db";
 import {
@@ -107,8 +109,8 @@ export const FOCUS_CHAPTER_EXCERPT_CHARS = 2000;
 
 /**
  * 聚焦上下文文本：focus_entity_id → 实体、focus_node_id → 大纲节点、focus_deduction → 推演节点集合，
- * 拼成结构化文本。
- * 查询不到（已软删/不存在/跨项目）→ 跳过该项（不报错）：客户端可能携带过期 focus。
+ * practice_sample_id → 练习样本，拼成结构化文本。
+ * 查询不到（已软删/不存在/跨项目/练习目标行缺失）→ 跳过该项（不报错）：客户端可能携带过期 focus。
  * 各项皆无（或均无效）→ undefined（不注入，消息原文保持干净）。
  * 聚焦**章**：另注入正文前 `FOCUS_CHAPTER_EXCERPT_CHARS` 字符节选（带「节选」标注）——
  * **不做整章自动入上下文**（正文预算与对话历史共享同一窗口，见 docs/design/20-context.md §2）。
@@ -121,6 +123,7 @@ export function buildFocusText(
         focus_entity_id?: string;
         focus_node_id?: string;
         focus_deduction?: boolean;
+        practice_sample_id?: string;
       }
     | undefined,
 ): string | undefined {
@@ -144,7 +147,30 @@ export function buildFocusText(
     const deduction = deductionFocusText(project);
     if (deduction !== undefined) parts.push(deduction); // 无标记 / 全部失效 → 不注入该段（不影响其余项）
   }
+  if (context?.practice_sample_id !== undefined) {
+    const practice = practiceSampleFocusText(project, context.practice_sample_id);
+    if (practice !== undefined) parts.push(practice); // 样本不存在 / 目标行缺失 → 不注入该段（不影响其余项）
+  }
   return parts.length > 0 ? parts.join("\n\n") : undefined;
+}
+
+/**
+ * 练习样本段（`context.practice_sample_id`，见 `docs/design/60-practice.md` §6）：
+ * **只给事实**——样本 id、目标名、用户观察（`observation` 未写则不给该行）。
+ * 范文 `text` 与用户稿 `draft` **绝不注入**（它们走两个只读工具分页拉取）；
+ * 「必须提交点评卡」这类**指令语义只活在练习内核提示词常量**（agent 包 `PRACTICE_KERNEL_PROMPT`）
+ * ——注入段再写一份 = 第二事实源。
+ * 样本不存在 / 目标行缺失（绕过级联删的外部改库）→ undefined（静默省略，不报错）；
+ * 目标缺失时**不编造空目标名**（同样本详情端点口径）。
+ */
+function practiceSampleFocusText(project: ProjectContext, sampleId: string): string | undefined {
+  const sample = getPracticeSample(project.db, sampleId);
+  if (sample === null) return undefined;
+  const target = getPracticeTarget(project.db, sample.target_id);
+  if (target === null) return undefined;
+  const lines = [`练习样本：id=${sample.id}`, `文风目标：${target.name}`];
+  if (target.observation !== null && target.observation !== "") lines.push(`用户观察：${target.observation}`);
+  return lines.join("\n");
 }
 
 /**

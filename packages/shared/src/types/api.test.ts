@@ -751,6 +751,24 @@ describe("chat 端点", () => {
     expect(chatSendReqSchema.safeParse({ message: "x", context: { focus_deduction: "yes" } }).success).toBe(false);
     expect(chatSendReqSchema.safeParse({ message: "x", context: { focus_deduction: ["ch-1"] } }).success).toBe(false);
   });
+
+  it("POST /chat：context.practice_sample_id 可选字符串（客户端只发样本 id，观察文本由服务端现读）", () => {
+    expect(
+      chatSendReqSchema.parse({ message: "请点评我的仿写稿", context: { practice_sample_id: "ps-1" } }).context
+        ?.practice_sample_id,
+    ).toBe("ps-1");
+    expect(chatSendReqSchema.parse({ message: "请点评我的仿写稿" }).context?.practice_sample_id).toBeUndefined();
+    expect(chatSendReqSchema.safeParse({ message: "x", context: { practice_sample_id: 1 } }).success).toBe(false);
+    // 客户端自带的观察文本被剥掉（注入的观察只来自库，见 docs/design/60-practice.md §6）——非错误、也传不到服务端
+    const stripped = chatSendReqSchema.parse({
+      message: "x",
+      context: { practice_sample_id: "ps-1", observation: "客户端自造观察" },
+    });
+    expect(stripped.context).toEqual({ practice_sample_id: "ps-1" });
+    expect(JSON.stringify(stripped)).not.toContain("客户端自造观察");
+    // 顶层 strict 未破坏：未知字段仍拒绝（服务端 400 VALIDATION_ERROR）
+    expect(chatSendReqSchema.safeParse({ message: "x", practice_sample_id: "ps-1" }).success).toBe(false);
+  });
 });
 
 describe("导出/导入", () => {

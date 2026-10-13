@@ -187,7 +187,7 @@
 | 步 | 契约 |
 | :--- | :--- |
 | 触发 | `POST /api/v1/chat`，`context.practice_sample_id = <ps-*>`，`message` = 用户可见的触发文案（如「请点评我的仿写稿」） |
-| 服务端 | 现读目标名与 `observation` 注入本轮；范文与稿件**不进 prompt**，由只读工具分页拉取 |
+| 服务端 | 现读样本与目标注入本轮，**只给事实**（样本 id + 目标名 + `observation`）；**「必须提交点评卡」这类指令语义唯一出处 = 练习内核提示词常量**（注入段不复述）；范文与稿件**不进 prompt**，由只读工具分页拉取 |
 | AI 产出 | 经提交工具写 `practice_samples.feedback`（引用逐条校验子串，不匹配即丢弃；空串 / 纯空白同口径） |
-| 前端 | 卡片随 `tool_execution_end` 帧的 `details` 即时渲染；刷新/重载从 `GET /practice/samples/:id` 读 |
+| 前端 | `tool_execution_end` 帧的 `details`（该工具的写库结果 `{ saved, dimension_count, dropped_quotes }`）= **即时刷新信号**；**卡体从 `GET /practice/samples/:id` 读**（刷新/重载同此——帧里没有卡体） |
 | 留痕 | 触发消息与整轮对话落在该工作区的 `sessions/`（点评可回溯、可追问） |
