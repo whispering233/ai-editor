@@ -890,9 +890,11 @@ function scheduleNext(project: ProjectContext): void {
  * 用备份包内容替换目录三文件（restore 与 import 分流共用，B2.3 提取）：
  *
  * - project.json：JSON 解析后按 opts 覆盖——`keepId`（id 是书的身份，覆盖恢复以它为
- * 唯一 key；备份包可能来自异项目，防御性强制保留）与 `name`（「目录名 = 书名」
+ * 唯一 key；备份包可能来自异项目，防御性强制保留）、`name`（「目录名 = 书名」
  * 不变式：import 覆盖归一为目录名、
- * 新书导入同步为去重名）；其余字段随备份替换。序列化走 2 空格缩进 + 尾换行
+ * 新书导入同步为去重名）、`kind`（「目录是事实」不变式：覆盖恢复归一为目标目录所在
+ * 工作区目录的 kind——包内 kind 手工改过时不得写回，否则产出「目录与 kind 不符」的工作区）；
+ * 其余字段随备份替换。序列化走 2 空格缩进 + 尾换行
  * （与 db 包 writeJsonAtomic 同款格式惯例）
  * - outline.json / data.db：原样字节原子写
  *
@@ -906,6 +908,8 @@ export function writeProjectFilesFromBackup(
   opts: {
     keepId?: string;
     name?: string;
+    /** 覆盖恢复传目标目录的 kind（新书导入不传——落目录已由包内 kind 决定） */
+    kind?: WorkspaceKind;
     snapshotFileName?: string;
   } = {},
 ): void {
@@ -919,6 +923,7 @@ export function writeProjectFilesFromBackup(
       ...parsedProject,
       ...(opts.keepId !== undefined ? { id: opts.keepId } : {}),
       ...(opts.name !== undefined ? { name: opts.name } : {}),
+      ...(opts.kind !== undefined ? { kind: opts.kind } : {}),
     };
     writeFileAtomic(join(dir, PROJECT_FILE_NAME), new TextEncoder().encode(`${JSON.stringify(nextProject, null, 2)}\n`));
     replaced.push(PROJECT_FILE_NAME);
@@ -972,7 +977,7 @@ export function migratePromptToAgents(project: ProjectContext): void {
  *
  * 1. 释放当前 data.db 连接（替换 data.db 前必须；顺带清理陈旧 WAL/SHM 残留——
  * 替换后新库不得复用旧 WAL）
- * 2. writeProjectFilesFromBackup 原子替换三文件（保留当前项目 id；opts.name 归一）
+ * 2. writeProjectFilesFromBackup 原子替换三文件（保留当前项目 id；opts.name/opts.kind 归一）
  * 3. 重连 + 版本对齐（v < 当前且有迁移路径 → 前向迁移，v === 当前 → 原样。
  * 校验阶段已拒绝 v > 当前与无路径旧版，此处不会触发重建/拒绝）
  * 4. 同步内存 config（刚原子写入，readProjectFile 必非 null；损坏抛错由 catch 恢复连接）
@@ -990,6 +995,7 @@ export function overwriteProjectFiles(
   entries: Record<string, Uint8Array>,
   opts: {
     name?: string;
+    kind?: WorkspaceKind;
     snapshotFileName?: string;
   } = {},
 ): void {
@@ -1007,6 +1013,7 @@ export function overwriteProjectFiles(
     writeProjectFilesFromBackup(project.root, entries, {
       keepId: project.config.id,
       ...(opts.name !== undefined ? { name: opts.name } : {}),
+      ...(opts.kind !== undefined ? { kind: opts.kind } : {}),
       ...(opts.snapshotFileName !== undefined ? { snapshotFileName: opts.snapshotFileName } : {}),
     });
  // 重连 + 版本对齐

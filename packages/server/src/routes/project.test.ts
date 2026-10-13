@@ -2285,15 +2285,17 @@ describe("POST /project/import（zip 导入新书）", () => {
     expect(readProjectFile(join(root, "books", "同名区"))?.id).toBe("proj-novel-same"); // 小说同名未被覆盖
   });
 
-  it("id 匹配时覆盖恢复按 id 定位目录（练习工作区在 practice/ 下 → 不按 books/<名> 找）", async () => {
+  it("id 匹配时覆盖恢复按 id 定位目录（练习工作区在 practice/ 下 → 不按 books/<名> 找）+ kind 归一为目录侧；改名/删除均可用", async () => {
     const root = makeTmpDir();
     setProjectRoot(root);
     const practiceDir = join(root, "practice", "练习区");
-    initProjectDir(practiceDir, { ...makeConfig("proj-imp-practice", "练习区"), kind: "practice", prompt: "旧数据" });
+    initProjectDir(practiceDir, { ...makeConfig("proj-imp-practice", "练习区"), kind: "practice", prompt: "新数据" });
     const app = buildApp();
-    const zip = bookZip(practiceDir);
- // 改数据（prompt）后导入同一 id 的包 → 应回滚到包内数据
-    writeProjectFile(practiceDir, { ...makeConfig("proj-imp-practice", "练习区"), kind: "practice", prompt: "新数据" });
+ // 包：同 id 但 kind 手工改成 novel（≠ 目标目录 practice/）——覆盖恢复必须归一为**目录侧**
+ //（包内 kind 原样写回就会产出「目录与 kind 不符」的工作区，delete/rename 全被目录约束拒掉）
+    const srcDir = makeTmpDir();
+    initProjectDir(srcDir, { ...makeConfig("proj-imp-practice", "练习区"), kind: "novel", prompt: "旧数据" });
+    const zip = bookZip(srcDir);
 
     const res = await app.request("/api/v1/project/import", {
       method: "POST",
@@ -2308,9 +2310,117 @@ describe("POST /project/import（zip 导入新书）", () => {
       name: "练习区",
       mode: "restored",
     });
-    expect(readProjectFile(practiceDir)?.prompt).toBe("旧数据");
-    expect(readProjectFile(practiceDir)?.kind).toBe("practice"); // 覆盖不改 kind
+    expect(readProjectFile(practiceDir)?.prompt).toBe("旧数据"); // 数据照常随包替换
+    expect(readProjectFile(practiceDir)?.kind).toBe("practice"); // kind 归一为目录侧（不是包内 novel）
     expect(existsSync(join(root, "books", "练习区"))).toBe(false);
+
+ // 收敛验证：该工作区可改名（包内 kind 写回时 rename 会因目录约束 400）
+    const openRes = await app.request("/api/v1/project/open", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: practiceDir }),
+    });
+    expect(openRes.status).toBe(200);
+    const renamed = await app.request("/api/v1/project/rename", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ name: "练习区改" }),
+    });
+    expect(renamed.status).toBe(200);
+    const renamedDir = join(root, "practice", "练习区改");
+    expect((await renamed.json()).data).toEqual({ renamed: true, path: renamedDir, name: "练习区改" });
+    expect(readProjectFile(renamedDir)?.kind).toBe("practice"); // 改名后 kind 仍是目录侧值
+
+ // 收敛验证：该工作区可删（包内 kind 写回时 delete 会因目录约束 400）
+    const deleted = await app.request("/api/v1/project/delete", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: renamedDir }),
+    });
+    expect(deleted.status).toBe(200);
+    expect((await deleted.json()).data).toMatchObject({ deleted: true, path: renamedDir });
+    expect(existsSync(renamedDir)).toBe(false);
+  });
+
+  it("覆盖恢复：包内 kind = practice 但 id 命中 books/ 下的书 → 盘上 kind 归一为 novel（目录侧）；该书可改名可删", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    const bookDir = join(root, "books", "小说书");
+    initProjectDir(bookDir, { ...makeConfig("proj-imp-kind-books", "小说书"), kind: "novel", prompt: "当前数据" });
+    const app = buildApp();
+    const openRes = await app.request("/api/v1/project/open", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: bookDir }),
+    });
+    expect(openRes.status).toBe(200);
+ // 包：同 id 但 kind = practice（手工改坏/错放目录的包）→ 覆盖恢复后不得把 practice 写进 books/
+    const srcDir = makeTmpDir();
+    initProjectDir(srcDir, { ...makeConfig("proj-imp-kind-books", "别的名字"), kind: "practice", prompt: "包内数据" });
+
+    const res = await app.request("/api/v1/project/import", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: importForm(bookZip(srcDir), "随便什么名"),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toEqual({
+      imported: true,
+      id: "proj-imp-kind-books",
+      path: bookDir,
+      name: "小说书", // name 与 kind 都归一为目录侧
+      mode: "restored",
+    });
+    expect(readProjectFile(bookDir)?.prompt).toBe("包内数据");
+    expect(readProjectFile(bookDir)?.kind).toBe("novel"); // 目录侧值（不是包内 practice）
+    expect(getCurrentProject()?.config.kind).toBe("novel"); // 内存 config 同步为盘上值
+
+ // 收敛验证：可改名（包内 kind 写回时 rename 会因 books/ 目录约束 400）
+    const renamed = await app.request("/api/v1/project/rename", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ name: "小说书改" }),
+    });
+    expect(renamed.status).toBe(200);
+    const renamedDir = join(root, "books", "小说书改");
+    expect(existsSync(renamedDir)).toBe(true);
+    expect(readProjectFile(renamedDir)?.kind).toBe("novel");
+
+ // 收敛验证：可删（包内 kind 写回时 delete 会因 books/ 目录约束 400）
+    const deleted = await app.request("/api/v1/project/delete", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: renamedDir }),
+    });
+    expect(deleted.status).toBe(200);
+    expect(existsSync(renamedDir)).toBe(false);
+    expect(existsSync(join(root, "practice", "小说书"))).toBe(false); // 从未落到 practice/
+  });
+
+  it("对照（id 不匹配的新建导入）：同一份 practice 包仍按包内 kind 落 practice/<名>/，不归一到已有 books/ 目录", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    const app = buildApp();
+ // 盘上已有小说工作区（对照：新建导入不去凑已有目录的 kind）
+    initProjectDir(join(root, "books", "已有小说"), makeConfig("proj-imp-contrast-other", "已有小说"));
+    const srcDir = makeTmpDir();
+    initProjectDir(srcDir, { ...makeConfig("proj-imp-contrast-practice", "对照练习"), kind: "practice" });
+
+    const res = await app.request("/api/v1/project/import", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: importForm(bookZip(srcDir), "对照练习"),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toEqual({
+      imported: true,
+      id: "proj-imp-contrast-practice",
+      path: join(root, "practice", "对照练习"),
+      name: "对照练习",
+      mode: "new",
+    });
+    expect(readProjectFile(join(root, "practice", "对照练习"))?.kind).toBe("practice");
+    expect(existsSync(join(root, "books", "对照练习"))).toBe(false);
   });
 });
 

@@ -423,6 +423,16 @@
   - 触发条件：控制台噪音被当成故障线索时（或该 400 出现在用户可见的报错路径上时）。
   - 最小修法：切换工作区时中止/丢弃在途查询（store 已有 loadSeq 竞态守卫，可扩成「按 kind 丢弃」）——**不要**为它加全局 loading 门。
 
+## 工作区路由（delete / rename / import）遗留项（2026-10）
+
+- **`POST /project/delete` 的错误码顺序：`project.json` 损坏时先撞 500**（卡 11 oracle 登记，非某次改动引入，可达性极低）
+  - 现状：`readProjectFile` 对损坏 JSON 是**抛错**（不是返回 null）⇒ 「不在该 kind 目录下」那条 400 `INVALID_PROJECT_PATH` 判定够不到，响应变成 500 `INTERNAL_ERROR`（实测：`books/` 之外 + 损坏 `project.json` → 500；同目录 + 合法文件 → 400）。仅错误码差异，不删任何东西。
+  - 触发条件：有人要求「坏 `project.json` 一律 400」时；最小修法 = delete 内把读取抛错映射为 400 `INVALID_PROJECT_PATH`（与 open 的「不存在/损坏」口径一并定）。
+- **`POST /project/rename` 后 `lastProject` 不更新**（卡 11 oracle 登记，两种 kind 同况）
+  - 现状：`writeLastProject` 只在 `POST /project/open` 成功时调用（`routes/project.ts`）；rename 只改 `project.root` 与目录名 ⇒ 创作根 `.ai-editor/config.json` 的 `lastProject` 仍指旧路径。
+  - 影响：重启后 `detectLastProject` 找不到目录 → 落回书架/待命，不直达刚改名的那个工作区（数据无损，只多一步手工打开）。
+  - 最小修法：rename 成功后 `writeLastProject(projectRoot, targetDir)`（一行，同 open 语义）。
+
 ## 发布前审计登记（2026-09，v0.0.52）
 
 - **REST 校验范围在 api 文档与 zod schema 两处出现（有意保留的契约镜像）** — 现状：`docs/api/*.md` 的请求体注释写明「1-100 字符」这类范围，单一来源 = shared `types/api.ts` 的 zod schema，文档是契约说明视图。触发条件：改任一校验范围时（schema 与文档同改）。**不**做「文档插值常量」——api 文档是给人读的契约，插值会降低可读性。

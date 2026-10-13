@@ -462,10 +462,12 @@ function validateBookName(name: string): void {
  * 按 project_id 在创作根下定位工作区目录（唯一 key = project_id）：
  * 遍历**各工作区目录**（`WORKSPACE_KINDS` 全量，不只 books/——练习工作区同在书架列表里）
  * 下各子目录的 project.json 读 id 比对；无匹配返回 null。
+ * 命中时一并返回**目录位置推出的 kind**（命中路径就是该 kind 目录的直接子目录）——
+ * 覆盖恢复的 kind 归一用它（目录是事实，不读包内 kind）。
  * 损坏的 project.json 抛错向上传播（与 list/open 语义一致：坏数据不静默吞）。
  * 导出供 `/cloud/remote-books`（`localExists`）与 `/cloud/import-book`（同 id 拒重复导入）复用。
  */
-export function findBookDirById(root: string, id: string): string | null {
+export function findBookDirById(root: string, id: string): { dir: string; kind: WorkspaceKind } | null {
   for (const kind of WORKSPACE_KINDS) {
     const kindDir = join(root, WORKSPACE_DIRS[kind]);
     let entries: Dirent[];
@@ -478,7 +480,7 @@ export function findBookDirById(root: string, id: string): string | null {
       if (!e.isDirectory()) continue;
       const dir = join(kindDir, e.name);
       const config = readProjectFile(dir);
-      if (config !== null && config.id === id) return dir;
+      if (config !== null && config.id === id) return { dir, kind };
     }
   }
   return null;
@@ -576,18 +578,26 @@ projectRoutes.post("/import", async (c) => {
 
  // 5. 分流（import 节）：id 匹配书架已有项目 → 覆盖恢复；
  // 不匹配 → 导入为新书（同名不再 409，目录自动去重）
-  const matchedDir = findBookDirById(projectRoot, projectId);
-  if (matchedDir !== null) {
+  const matched = findBookDirById(projectRoot, projectId);
+  if (matched !== null) {
+    const matchedDir = matched.dir;
  // —— 覆盖恢复（restore 同款管道）——
  // 覆盖目标按 id 定位目录（不是按 name，请求体 name 在覆盖场景不生效）；
- // 覆盖时 project.json 内 name 归一为当前目录名（「目录名 = 书名」不变式，
- // id 是身份、name 是展示名——修正 f4424b7）；数据随备份替换。
+ // 覆盖时 project.json 内 name 与 kind **都归一到目标目录**（目录是事实：
+ // name → 「目录名 = 书名」不变式（修正 f4424b7）；kind → 目标目录所属工作区目录
+ // （包内 kind 手工改过时不得写回，否则产出「目录与 kind 不符」的工作区——delete/rename
+ // 按 kind 目录约束判定，这种工作区既删不掉也改不了名）；数据随备份替换。
+    const dirKind = matched.kind;
     const cur = getCurrentProject();
     if (cur !== null && cur.root === matchedDir) {
  // 目标是当前打开的书：复用现有连接快照 + 覆盖管道（重连 data.db + 定时器重启）
       try {
         const snapshot = writeBackup(cur); // 覆盖前自动快照（后悔药）
-        overwriteProjectFiles(cur, entries, { name: basename(matchedDir), snapshotFileName: snapshot.fileName });
+        overwriteProjectFiles(cur, entries, {
+          name: basename(matchedDir),
+          kind: dirKind,
+          snapshotFileName: snapshot.fileName,
+        });
       } catch (err) {
  // P1-2：覆盖失败——overwriteProjectFiles 已尝试恢复连接；重连失败时连接悬挂，
  // 此处清空单例（与 open 路由同款防御），后续请求 409 NO_PROJECT_OPEN 而非 500
@@ -602,6 +612,7 @@ projectRoutes.post("/import", async (c) => {
       writeProjectFilesFromBackup(matchedDir, entries, {
         keepId: projectId,
         name: basename(matchedDir),
+        kind: dirKind,
         snapshotFileName: snapshot.fileName,
       });
     }
