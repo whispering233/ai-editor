@@ -138,7 +138,7 @@ function renderPage(route: Route): ReactNode {
     case "trash":
       return <Trash />;
     case "practice":
-      // 文风练习工作区段：1 段 = 列表页（卡 8 占位壳，卡 9 替换）；2 段 = 练习页（卡 10）
+      // 文风练习工作区段：1 段 = 列表页（卡 9）；2 段 = 练习页（卡 10，尚未分流——现由列表页兜底渲染）
       return <Practice />;
     case "preferences":
       return <Settings />;

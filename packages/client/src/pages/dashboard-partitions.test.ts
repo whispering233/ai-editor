@@ -77,7 +77,7 @@ describe("练习工作区的入口落点（不开项目概览）", () => {
     expect(dashboard).toContain("handleOpenBook(workspace.path, workspace.kind)");
   });
 
-  it("practice 段进已知路由表，main.tsx 渲染练习占位页", () => {
+  it("practice 段进已知路由表，main.tsx 渲染练习列表页", () => {
     expect(route).toMatch(/"practice",\n\] as const;/);
     expect(main).toContain('case "practice":');
     expect(main).toContain("<Practice />");
@@ -94,9 +94,8 @@ describe("练习工作区的入口落点（不开项目概览）", () => {
     expect(routeGuard).not.toMatch(/export function use[A-Z]/);
   });
 
-  it("占位页不调练习业务端点（/practice 的调用归卡 9）", () => {
-    expect(practicePage).not.toContain("../lib/api");
-    expect(practicePage).not.toMatch(/practice\/(targets|samples)/);
+  it("练习列表页走 lib/api 的封装（不自建 fetch；`/practice/*` 调用属卡 9，端点契约在 lib/api.ts）", () => {
+    expect(practicePage).toContain('from "../lib/api"');
     expect(practicePage).not.toContain("fetch(");
   });
 });

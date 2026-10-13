@@ -21,6 +21,10 @@ import type {
   EntitySummary,
   ErrorCode,
   OutlineTree,
+  PracticeSampleDetail,
+  PracticeSamplesRes,
+  PracticeTargetCreated,
+  PracticeTargetsRes,
   ProjectAgents,
   ProjectConfig,
   ProjectDeleteRes,
@@ -1301,5 +1305,54 @@ export function importCloudBook(options: {
       dir_name: options.dirName,
       ...(options.fileName !== undefined ? { file_name: options.fileName } : {}),
     },
+  });
+}
+
+// ============ 文风仿写练习（卡 9；docs/api/120-api-practice.md） ============
+// 请求字段 snake_case / 响应顶层 camelCase；全部端点要求当前工作区 `kind = "practice"`
+// （小说工作区 → 400 KIND_MISMATCH，无当前工作区 → 409 NO_PROJECT_OPEN）。
+
+/**
+ * GET /api/v1/practice/targets —— 文风目标列表（按 `updatedAt` 倒序，含各目标样本数）。
+ * 失败：409 NO_PROJECT_OPEN、400 KIND_MISMATCH。
+ */
+export function getPracticeTargets(): Promise<PracticeTargetsRes> {
+  return apiFetch<PracticeTargetsRes>("/practice/targets");
+}
+
+/**
+ * POST /api/v1/practice/targets —— 新建文风目标。
+ * `observation` 省略 = 不写观察（空串由服务端归一为 null）。
+ * 失败：400 VALIDATION_ERROR（名字 trim 空 / 超上限）、409 NO_PROJECT_OPEN、400 KIND_MISMATCH。
+ */
+export function createPracticeTarget(body: {
+  name: string;
+  observation?: string;
+}): Promise<PracticeTargetCreated> {
+  return apiFetch<PracticeTargetCreated>("/practice/targets", { method: "POST", body });
+}
+
+/**
+ * GET /api/v1/practice/targets/:id/samples —— 某目标下的样本列表（按 `updatedAt` 倒序）。
+ * 列表不回范文正文与点评卡（只有 `charCount` / `hasDraft` / `hasFeedback`）。
+ * 失败：404 PRACTICE_NOT_FOUND（目标不存在）、409 NO_PROJECT_OPEN、400 KIND_MISMATCH。
+ */
+export function getPracticeSamples(targetId: string): Promise<PracticeSamplesRes> {
+  return apiFetch<PracticeSamplesRes>(`/practice/targets/${targetId}/samples`);
+}
+
+/**
+ * POST /api/v1/practice/targets/:id/samples —— 新建练习样本（粘贴范文，落库后不可变）。
+ * 响应 = 样本详情形状（新建时 `draft` 为空串、`feedback` 为 null）。
+ * 失败：400 VALIDATION_ERROR（来源说明 / 范文 trim 空或超上限）、404 PRACTICE_NOT_FOUND、
+ *      409 NO_PROJECT_OPEN、400 KIND_MISMATCH。
+ */
+export function createPracticeSample(
+  targetId: string,
+  body: { source_label: string; text: string },
+): Promise<PracticeSampleDetail> {
+  return apiFetch<PracticeSampleDetail>(`/practice/targets/${targetId}/samples`, {
+    method: "POST",
+    body,
   });
 }
