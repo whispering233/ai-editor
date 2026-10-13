@@ -1012,10 +1012,12 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
           </DialogContent>
         </Dialog>
 
-        {/* 导出类型框（受控）：两种产物共用同一 <a download> 管道；成功关框、失败留框 */}
+        {/* 导出类型框（受控）：两种产物共用同一 <a download> 管道；成功关框、失败留框；
+            可选导出项按当前工作区 kind（练习工作区无「小说文档」） */}
         <ExportBookDialog
           open={exportOpen}
           name={config?.name ?? ""}
+          workspaceKind={config?.kind ?? "novel"}
           exporting={exporting}
           onExport={(kind) => void handleExportBook(config?.name ?? "", kind)}
           onOpenChange={setExportOpen}

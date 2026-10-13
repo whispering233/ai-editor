@@ -24,7 +24,7 @@ import { closeSync, existsSync, fsyncSync, mkdirSync, mkdtempSync, openSync, rea
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { Unzip, UnzipInflate, zipSync } from "fflate";
-import { BACKUP_FREQUENCIES, DEFAULT_BACKUP_FREQUENCY_MINUTES, formatBackupFileName, MAX_BACKUPS_PER_PROJECT, MAX_BACKUP_NAME_LENGTH, parseBackupFileName, sanitizeBackupName, type BackupKind, type BackupStats } from "@whispering233/ai-editor-shared";
+import { BACKUP_FREQUENCIES, DEFAULT_BACKUP_FREQUENCY_MINUTES, formatBackupFileName, MAX_BACKUPS_PER_PROJECT, MAX_BACKUP_NAME_LENGTH, parseBackupFileName, resolveWorkspaceKind, sanitizeBackupName, type BackupKind, type BackupStats, type WorkspaceKind } from "@whispering233/ai-editor-shared";
 import { PROJECT_EXPORT_FILE_NAMES } from "@whispering233/ai-editor-shared/schemas";
 import {
   AGENTS_FILE_NAME,
@@ -497,7 +497,9 @@ function unzipWithBudget(zipData: Uint8Array, budget: number): { entries: Record
 }
 
 /** project.json 顶层最小校验（shared 无文件形态 schema，不扩范围） */
-function isValidProjectFile(parsed: unknown): parsed is { id: string; name: string; schema_version: number } {
+function isValidProjectFile(
+  parsed: unknown,
+): parsed is { id: string; name: string; schema_version: number; kind?: unknown } {
   if (typeof parsed !== "object" || parsed === null) return false;
   const p = parsed as Record<string, unknown>;
   return typeof p.id === "string" && p.id.length > 0 && typeof p.name === "string" && typeof p.schema_version === "number";
@@ -536,6 +538,9 @@ export function validateBackupPackage(zipData: Uint8Array): {
   projectId: string;
   /** 备份内的书名（project.json 的 name，已校验为非空字符串）——导入时未指定书名则用它 */
   projectName: string;
+  /** 备份内的工作区类型（project.json 的 kind，经 shared 兜底：缺失/未知 → novel）——
+   * **导入/云端导入按它落 `<kind 目录>/<名字>/`**（备份是权威，见 `docs/api/10-api-project.md` §import） */
+  kind: WorkspaceKind;
 } {
  // 1/2. 解压 + 白名单（严格拒绝）：三数据文件名 + 遗留的 sessions/ 前缀
   let entries: Record<string, Uint8Array>;
@@ -622,7 +627,12 @@ export function validateBackupPackage(zipData: Uint8Array): {
       if (db !== null) closeDatabase(db);
     }
 
-    return { entries, projectId: projectConfig.id, projectName: projectConfig.name };
+    return {
+      entries,
+      projectId: projectConfig.id,
+      projectName: projectConfig.name,
+      kind: resolveWorkspaceKind(projectConfig.kind),
+    };
   } finally {
     rmSync(tmpDir, { recursive: true, force: true });
   }

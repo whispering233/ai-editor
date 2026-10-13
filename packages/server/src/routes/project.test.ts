@@ -1704,6 +1704,34 @@ describe("GET /project/export（zip 导出三文件）", () => {
     });
   });
 
+  it("练习工作区：/export 照常出三文件包；/export-novel → 400 KIND_MISMATCH（小说语义）", async () => {
+    const dir = join(makeTmpDir(), "practice", "仿写练习");
+    initProjectDir(
+      dir,
+      { ...makeConfig("proj-exp-practice", "仿写练习"), kind: "practice" },
+      { id: "root", type: "root", schema_version: SCHEMA_VERSION, children: [] },
+    );
+    const app = buildApp();
+    const openRes = await app.request("/api/v1/project/open", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: dir }),
+    });
+    expect(openRes.status).toBe(200);
+
+ // 三文件包对两种 kind 都可用（与小说侧同一条管道）
+    const res = await app.request("/api/v1/project/export", { headers: HOST_HEADERS });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("application/zip");
+    const unzipped = unzipSync(new Uint8Array(await res.arrayBuffer()));
+    expect(Object.keys(unzipped).sort()).toEqual(["data.db", "outline.json", "project.json"]);
+
+ // 小说文档导出是小说语义：练习工作区 → 400 KIND_MISMATCH（不产包）
+    const novelRes = await app.request("/api/v1/project/export-novel", { headers: HOST_HEADERS });
+    expect(novelRes.status).toBe(400);
+    expect((await novelRes.json()).error.code).toBe("KIND_MISMATCH");
+  });
+
   it("data.db 缺失（损坏）→ 500 INTERNAL_ERROR，不导出半成品包", async () => {
     const dir = makeTmpDir();
     initProjectDir(dir, makeConfig("proj-exp2", "损坏项目"));
@@ -2181,6 +2209,109 @@ describe("POST /project/import（zip 导入新书）", () => {
     expect((await cfg.json()).data.name).toBe("书A");
     expect(getCurrentProject()?.root).toBe(dirA);
   });
+
+ // ============ 工作区类型：导入目标目录按**包内 kind** ============
+
+  it("包内 kind = practice → 落 practice/<名>/（不落 books/）；缺 kind → 落 books/<名>/（旧包兜底）", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    const app = buildApp();
+
+ // 练习包（project.json 显式 kind: practice）
+    const practiceSrc = makeTmpDir();
+    initProjectDir(practiceSrc, { ...makeConfig("proj-practice-src", "仿写练习源"), kind: "practice" });
+    const practiceRes = await app.request("/api/v1/project/import", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: importForm(bookZip(practiceSrc), "仿写练习"),
+    });
+    expect(practiceRes.status).toBe(200);
+    expect((await practiceRes.json()).data).toEqual({
+      imported: true,
+      id: "proj-practice-src",
+      path: join(root, "practice", "仿写练习"),
+      name: "仿写练习",
+      mode: "new",
+    });
+    expect(readProjectFile(join(root, "practice", "仿写练习"))?.kind).toBe("practice");
+    expect(existsSync(join(root, "books", "仿写练习"))).toBe(false); // 不落小说目录
+
+ // 旧包（project.json 无 kind 键）→ 按 novel 兜底落 books/
+    const legacySrc = makeTmpDir();
+    initProjectDir(legacySrc, makeConfig("proj-legacy-src", "旧包书"));
+    expect(readProjectFile(legacySrc)?.kind).toBeUndefined(); // 前置：源包确实缺 kind
+    const legacyRes = await app.request("/api/v1/project/import", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: importForm(bookZip(legacySrc), "旧包书"),
+    });
+    expect(legacyRes.status).toBe(200);
+    expect((await legacyRes.json()).data.path).toBe(join(root, "books", "旧包书"));
+    expect(existsSync(join(root, "practice", "旧包书"))).toBe(false);
+  });
+
+  it("练习包同名：去重在 practice/ 内递增（practice/<名> (2)/），与 books/ 同名互不影响", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    const app = buildApp();
+ // 本机已有同名小说（不同 id）→ 不得干扰练习包的落点
+    initProjectDir(join(root, "books", "同名区"), makeConfig("proj-novel-same", "同名区"));
+
+    const srcA = makeTmpDir();
+    initProjectDir(srcA, { ...makeConfig("proj-practice-dup-a", "源A"), kind: "practice" });
+    const first = await app.request("/api/v1/project/import", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: importForm(bookZip(srcA), "同名区"),
+    });
+    expect(first.status).toBe(200);
+    expect((await first.json()).data.path).toBe(join(root, "practice", "同名区"));
+
+    const srcB = makeTmpDir();
+    initProjectDir(srcB, { ...makeConfig("proj-practice-dup-b", "源B"), kind: "practice" });
+    const second = await app.request("/api/v1/project/import", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: importForm(bookZip(srcB), "同名区"),
+    });
+    expect(second.status).toBe(200);
+    expect((await second.json()).data).toEqual({
+      imported: true,
+      id: "proj-practice-dup-b",
+      path: join(root, "practice", "同名区 (2)"),
+      name: "同名区 (2)",
+      mode: "new",
+    });
+    expect(readProjectFile(join(root, "books", "同名区"))?.id).toBe("proj-novel-same"); // 小说同名未被覆盖
+  });
+
+  it("id 匹配时覆盖恢复按 id 定位目录（练习工作区在 practice/ 下 → 不按 books/<名> 找）", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    const practiceDir = join(root, "practice", "练习区");
+    initProjectDir(practiceDir, { ...makeConfig("proj-imp-practice", "练习区"), kind: "practice", prompt: "旧数据" });
+    const app = buildApp();
+    const zip = bookZip(practiceDir);
+ // 改数据（prompt）后导入同一 id 的包 → 应回滚到包内数据
+    writeProjectFile(practiceDir, { ...makeConfig("proj-imp-practice", "练习区"), kind: "practice", prompt: "新数据" });
+
+    const res = await app.request("/api/v1/project/import", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: importForm(zip, "随便什么名"),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toEqual({
+      imported: true,
+      id: "proj-imp-practice",
+      path: practiceDir, // 按 id 定位到的 practice/ 目录（不是 books/练习区）
+      name: "练习区",
+      mode: "restored",
+    });
+    expect(readProjectFile(practiceDir)?.prompt).toBe("旧数据");
+    expect(readProjectFile(practiceDir)?.kind).toBe("practice"); // 覆盖不改 kind
+    expect(existsSync(join(root, "books", "练习区"))).toBe(false);
+  });
 });
 
 // ============ POST /api/v1/project/rename（重命名当前书籍） ============
@@ -2300,6 +2431,62 @@ describe("POST /project/rename（重命名当前书籍）", () => {
     expect((await res.json()).data).toEqual({ renamed: true, path: join(root, "books", "旧名字"), name: "旧名字" });
     expect(existsSync(join(root, "books", "旧名字"))).toBe(true);
     expect(readProjectFile(join(root, "books", "旧名字"))?.name).toBe("旧名字");
+  });
+
+  it("练习工作区：practice/<旧> → practice/<新>（目录移动 + project.json name 同步 + kind 不变）", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    const oldDir = join(root, "practice", "旧练习区");
+    initProjectDir(oldDir, { ...makeConfig("proj-rn-practice", "旧练习区"), kind: "practice" });
+    const app = buildApp();
+    const openRes = await app.request("/api/v1/project/open", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: oldDir }),
+    });
+    expect(openRes.status).toBe(200);
+
+    const res = await app.request("/api/v1/project/rename", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ name: "新练习区" }),
+    });
+    expect(res.status).toBe(200);
+    const newDir = join(root, "practice", "新练习区");
+    expect((await res.json()).data).toEqual({ renamed: true, path: newDir, name: "新练习区" });
+    expect(existsSync(oldDir)).toBe(false); // 旧目录消失
+    expect(existsSync(newDir)).toBe(true);
+    expect(existsSync(join(root, "books", "新练习区"))).toBe(false); // 不落到小说目录
+ // project.json name 同步（目录名 = 名字不变式）+ kind 不变
+    expect(readProjectFile(newDir)?.name).toBe("新练习区");
+    expect(readProjectFile(newDir)?.kind).toBe("practice");
+ // 当前工作区引用同步（定时器/备份管道跟随同一引用）
+    expect(getCurrentProject()?.root).toBe(newDir);
+    const cfg = await app.request("/api/v1/project/config", { headers: HOST_HEADERS });
+    expect((await cfg.json()).data).toEqual(expect.objectContaining({ name: "新练习区", kind: "practice" }));
+  });
+
+  it("kind 与目录不一致（practice 文件放在 books/ 下）→ 400 VALIDATION_ERROR（目录约束按 kind）", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    const misplaced = join(root, "books", "错位练习区");
+    initProjectDir(misplaced, { ...makeConfig("proj-rn-misplaced", "错位练习区"), kind: "practice" });
+    const app = buildApp();
+    const openRes = await app.request("/api/v1/project/open", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: misplaced }),
+    });
+    expect(openRes.status).toBe(200);
+
+    const res = await app.request("/api/v1/project/rename", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ name: "改名" }),
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error.code).toBe("VALIDATION_ERROR");
+    expect(existsSync(misplaced)).toBe(true); // 目录未动
   });
 });
 

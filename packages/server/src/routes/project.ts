@@ -92,13 +92,10 @@ export function setProjectRoot(root: string | null): void {
   projectRoot = root;
 }
 
-/** 读创作根（书架模式：创作根 / `books/<书名>/`；未初始化 → null） */
+/** 读创作根（工作区模式：创作根 / `<kind 目录>/<名字>/`；未初始化 → null） */
 export function getProjectRoot(): string | null {
   return projectRoot;
 }
-
-/** books/ 子目录名（novel 工作区目录；取 shared 常量表，本文件不手抄字面量） */
-export const BOOKS_DIR_NAME = WORKSPACE_DIRS.novel;
 
 /**
  * 规范化并校验项目路径（create/open 通用）：
@@ -462,46 +459,51 @@ function validateBookName(name: string): void {
 // import 共用，import 校验顺序 3-7 语义）；本文件只保留 import 专属的分流与搬入逻辑。
 
 /**
- * 按 project_id 在书架 books/ 下定位书目录（唯一 key = project_id）：
- * 遍历 books/ 下各书目录的 project.json 读 id 比对；无匹配返回 null。
+ * 按 project_id 在创作根下定位工作区目录（唯一 key = project_id）：
+ * 遍历**各工作区目录**（`WORKSPACE_KINDS` 全量，不只 books/——练习工作区同在书架列表里）
+ * 下各子目录的 project.json 读 id 比对；无匹配返回 null。
  * 损坏的 project.json 抛错向上传播（与 list/open 语义一致：坏数据不静默吞）。
  * 导出供 `/cloud/remote-books`（`localExists`）与 `/cloud/import-book`（同 id 拒重复导入）复用。
  */
 export function findBookDirById(root: string, id: string): string | null {
-  const booksDir = join(root, BOOKS_DIR_NAME);
-  let entries: Dirent[];
-  try {
-    entries = readdirSync(booksDir, { withFileTypes: true });
-  } catch {
-    return null; // books/ 不存在 → 无匹配
-  }
-  for (const e of entries) {
-    if (!e.isDirectory()) continue;
-    const dir = join(booksDir, e.name);
-    const config = readProjectFile(dir);
-    if (config !== null && config.id === id) return dir;
+  for (const kind of WORKSPACE_KINDS) {
+    const kindDir = join(root, WORKSPACE_DIRS[kind]);
+    let entries: Dirent[];
+    try {
+      entries = readdirSync(kindDir, { withFileTypes: true });
+    } catch {
+      continue; // 该工作区目录不存在 → 此类无工作区（新建创作根的常态）
+    }
+    for (const e of entries) {
+      if (!e.isDirectory()) continue;
+      const dir = join(kindDir, e.name);
+      const config = readProjectFile(dir);
+      if (config !== null && config.id === id) return dir;
+    }
   }
   return null;
 }
 
 /**
- * 新书目标目录去重（import 节）：`books/<name>/` 已存在 →
- * `books/<name> (N)/`（N 为最小正整数，从 2 起，避免与去重命名惯例冲突）；
+ * 新工作区目标目录去重（import / 云端导入节）：`<kind 目录>/<name>/` 已存在 →
+ * `<kind 目录>/<name> (N)/`（N 为最小正整数，从 2 起，避免与去重命名惯例冲突）；
  * 返回去重后的目录绝对路径。project.json 内部 name 由调用方同步为去重名
- * （「目录名 = 书名」不变式）。
+ * （「目录名 = 名字」不变式）。
+ *
+ * `kind` 取**包内 project.json** 的值（备份是权威）——目录名一律取 shared `WORKSPACE_DIRS`。
  */
-export function uniqueBookDir(root: string, name: string): string {
-  const booksDir = join(root, BOOKS_DIR_NAME);
-  let candidate = join(booksDir, name);
+export function uniqueBookDir(root: string, name: string, kind: WorkspaceKind): string {
+  const kindDir = join(root, WORKSPACE_DIRS[kind]);
+  let candidate = join(kindDir, name);
   for (let n = 2; existsSync(candidate); n++) {
-    candidate = join(booksDir, `${name} (${n})`);
+    candidate = join(kindDir, `${name} (${n})`);
   }
   return candidate;
 }
 
-// POST /api/v1/project/import —— 导入备份 zip 为新书
+// POST /api/v1/project/import —— 导入备份 zip 为新工作区
 //
-// 流程（全部校验通过才搬入，校验失败不触碰 books/）：
+// 流程（全部校验通过才搬入，校验失败不触碰任何工作区目录）：
 // content-length 预检（>50MB 快速拒绝，防超大请求先缓冲）→ multipart 解析
 // （file=zip + name=书名）→ 书名校验（防路径逃逸）→ file.size 上限复核 →
 // fflate Unzip 流式解压（**解压总字节预算 200MB**——zip 炸弹防御；未知条目仅记名
@@ -511,9 +513,10 @@ export function uniqueBookDir(root: string, name: string): string {
 // → data.db 校验（**大小 > 0 → 打开成功 → user_version === SCHEMA_VERSION**；
 // 0 字节/非 SQLite → 400 坏包；版本不匹配 409 SCHEMA_VERSION_MISMATCH 按相对版本
 // 分流文案，拒绝导入不静默重建——与 open 的删库重建语义刻意区分）→ 目标
-// books/<name>/ 冲突（409 PROJECT_ALREADY_EXISTS，与 create 同语义）→ mkdir + copy
-// 原子搬入（任一失败清理半成品目录）→ 不打开（与 create 一致，前端刷新书架）。
-// 校验在 mkdtemp 临时目录完成（finally 清理）；目标目录由服务端拼 books/<name>/，
+// `<kind 目录>/<name>/`（kind 取自包内 project.json，缺 kind → novel）同名不再 409，
+// 目录自动去重 → mkdir + copy 原子搬入（任一失败清理半成品目录）→ 不打开
+// （与 create 一致，前端刷新书架）。
+// 校验在 mkdtemp 临时目录完成（finally 清理）；目标目录由服务端拼 `<kind 目录>/<name>/`，
 // 客户端不可指定路径（防越权）。
 projectRoutes.post("/import", async (c) => {
   if (projectRoot === null) {
@@ -548,11 +551,13 @@ projectRoutes.post("/import", async (c) => {
   let entries: Record<string, Uint8Array>;
   let projectId: string;
   let projectName: string;
+  let packageKind: WorkspaceKind;
   try {
     const validated = validateBackupPackage(new Uint8Array(await file.arrayBuffer()));
     entries = validated.entries;
     projectId = validated.projectId;
     projectName = validated.projectName;
+    packageKind = validated.kind;
   } catch (err) {
     if (err instanceof HttpError) throw err;
     throw new HttpError(400, "VALIDATION_ERROR", "不是有效的项目备份包（zip 解析失败）");
@@ -603,10 +608,11 @@ projectRoutes.post("/import", async (c) => {
     return c.json(ok({ imported: true as const, id: projectId, path: matchedDir, name: basename(matchedDir), mode: "restored" as const }));
   }
 
- // —— 导入为新书（原 同名不再 409）——
- // 目标目录 books/<name>/ 冲突 → 自动去重 books/<书名> (N)/（N 最小正整数，从 2 起）；
- // project.json 内部 name 同步为去重名（维持「目录名 = 书名」不变式）
-  const bookDir = uniqueBookDir(projectRoot, name);
+ // —— 导入为新工作区（原 同名不再 409）——
+ // 目标目录 `<kind 目录>/<name>/`（kind 取自**包内 project.json**，备份是权威）冲突 →
+ // 自动去重 `<kind 目录>/<名字> (N)/`（N 最小正整数，从 2 起）；project.json 内部 name
+ // 同步为去重名（维持「目录名 = 名字」不变式）
+  const bookDir = uniqueBookDir(projectRoot, name, packageKind);
   try {
     mkdirSync(bookDir, { recursive: true });
  // zip id 沿用（keepId 不传）；name 归一为最终目录名
@@ -859,19 +865,24 @@ projectRoutes.post("/rename", async (c) => {
       : "";
   validateBookName(name); // 400（缺字段/非法字符）
 
- // 仅支持移动 books/ 下的书（创作根自身是项目时不可改名——移动创作根会破坏书架语义）
-  const booksDir = join(projectRoot, BOOKS_DIR_NAME);
-  if (dirname(project.root) !== booksDir) {
-    throw new HttpError(400, "VALIDATION_ERROR", "仅支持重命名书架 books/ 下的书");
+ // 仅支持移动「该工作区 kind 对应目录」下的直接子目录（创作根自身是项目时不可改名——
+ // 移动创作根会破坏书架语义；目录名一律取 shared WORKSPACE_DIRS，本文件不手抄字面量）
+  const kindDir = join(projectRoot, WORKSPACE_DIRS[resolveWorkspaceKind(project.config.kind)]);
+  if (dirname(project.root) !== kindDir) {
+    throw new HttpError(
+      400,
+      "VALIDATION_ERROR",
+      `仅支持重命名创作根工作区目录下的工作区: ${project.root}`,
+    );
   }
   const oldDir = project.root;
-  const targetDir = join(booksDir, name);
+  const targetDir = join(kindDir, name);
   if (targetDir === oldDir) {
  // 目录名未变（自身）→ 幂等成功（name 已是目录名，无需写盘）
     return c.json(ok({ renamed: true as const, path: oldDir, name }));
   }
   if (existsSync(targetDir)) {
-    throw new HttpError(409, "PROJECT_ALREADY_EXISTS", `书架已存在同名书: ${name}`);
+    throw new HttpError(409, "PROJECT_ALREADY_EXISTS", `同名工作区已存在: ${name}`);
   }
 
  // 原子移动：先写新 name 到原目录 → rename 移动目录；移动失败还原 name
@@ -930,11 +941,12 @@ async function pushLatestBackupBeforeDelete(
   }
 }
 
-// POST /api/v1/project/delete —— 删除书架中的一本书（本地目录；可选云端目录）
+// POST /api/v1/project/delete —— 删除书架中的一个工作区（本地目录；可选云端目录）；
+// 两种 kind 同口径（目录约束按该工作区 kind 对应的 `WORKSPACE_DIRS` 目录）。
 //
 // 契约 = `docs/api/10-api-project.md` §POST /project/delete、`docs/design/40-cloud-sync.md` §4 / §8.5。
-// **删除不可恢复**：该书 `.backups/` 在书目录内，随目录一并消失 → 有云同步记录的书删前必
-// 推一份最新副本（不变式：删书前必有一份**不在同一磁盘上**的副本，或用户明确的 `force`）。
+// **删除不可恢复**：该工作区 `.backups/` 在工作区目录内，随目录一并消失 → 有云同步记录的
+// 工作区删前必推一份最新副本（不变式：删前必有一份**不在同一磁盘上**的副本，或用户明确的 `force`）。
 // 删除顺序（当前书先收尾）：closeProject + setCurrentProject(null)（该单点释放会话运行时与定时器）
 // + 抹 lastProject → rm；非当前书直接 rm（不碰当前项目的任何运行态）。
 // `delete_remote` 在本地删除**之后**执行，best-effort（失败只回 `remoteError`，本地已删不回退）。
@@ -947,13 +959,15 @@ projectRoutes.post("/delete", async (c) => {
     throw parsed.error; // → 400 VALIDATION_ERROR（含 fields）
   }
   const dir = resolveProjectDir(parsed.data.path); // 绝对路径 + 规范化 + 链接校验（不存在/链接跳转 → 400）
- // 只删 books/ 的**直接子目录**（创作根自身、嵌套目录、books/ 之外一律拒——路径归一后比较，不再拼用户输入）
-  if (dirname(dir) !== join(projectRoot, BOOKS_DIR_NAME)) {
-    throw new HttpError(400, "INVALID_PROJECT_PATH", `仅支持删除书架 books/ 下的书: ${dir}`);
-  }
   const config = readProjectFile(dir); // 目录不含 project.json → 400（同 open 口径）
   if (config === null) {
-    throw new HttpError(400, "INVALID_PROJECT_PATH", `目标目录不含 project.json，不是项目: ${dir}`);
+    throw new HttpError(400, "INVALID_PROJECT_PATH", `目标目录不含 project.json，不是工作区: ${dir}`);
+  }
+ // 只删「该工作区 kind 对应目录」的**直接子目录**（创作根自身、嵌套目录、工作区目录之外一律拒——
+ // 路径归一后比较，不再拼用户输入）；kind 取 project.json 的 kind 经 shared 兜底（缺 kind → novel），
+ // 目录名取 shared WORKSPACE_DIRS——两处都不手抄字面量
+  if (dirname(dir) !== join(projectRoot, WORKSPACE_DIRS[resolveWorkspaceKind(config.kind)])) {
+    throw new HttpError(400, "INVALID_PROJECT_PATH", `仅支持删除创作根工作区目录下的工作区: ${dir}`);
   }
 
  // 前置推送（判据**纯本地**：云盘已配置 **且** 该书有同步记录（推过/拉过）；其余情况零云端请求）

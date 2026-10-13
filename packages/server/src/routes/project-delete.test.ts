@@ -67,6 +67,22 @@ async function createBook(name: string): Promise<string> {
   return dir;
 }
 
+/** 建一个练习工作区（kind: practice）；目录 = <创作根>/practice/<名> */
+async function createPractice(name: string): Promise<string> {
+  const dir = join(root, "practice", name);
+  expect(
+    (await request("/api/v1/project/create", { path: dir, config: { name, kind: "practice" } })).status,
+  ).toBe(200);
+  return dir;
+}
+
+/** 书架列表（GET /project/list）里的工作区路径 */
+async function listedPaths(): Promise<string[]> {
+  const res = await buildApp().request("/api/v1/project/list", { headers: HOST_HEADERS });
+  expect(res.status).toBe(200);
+  return (await responseData<{ books: Array<{ path: string }> }>(res)).books.map((b) => b.path);
+}
+
 async function openBook(dir: string): Promise<Response> {
   return request("/api/v1/project/open", { path: dir });
 }
@@ -338,6 +354,38 @@ describe("POST /project/delete —— 当前书收尾", () => {
   });
 });
 
+// 工作区类型（kind）：练习工作区走**同一条**删书管道，只把目录约束换成该 kind 对应的目录。
+describe("POST /project/delete —— 练习工作区（kind = practice）", () => {
+  it("练习工作区可删：目录消失 + 书架刷新不再列出；小说侧不受影响", async () => {
+    const novelDir = await createBook("保留小说");
+    const practiceDir = await createPractice("删掉的练习区");
+    expect(await listedPaths()).toContain(practiceDir); // 前置：删除前在书架里
+
+    const res = await request("/api/v1/project/delete", { path: practiceDir });
+
+    expect(res.status).toBe(200);
+    expect(await responseData(res)).toEqual({ deleted: true, path: practiceDir });
+    expect(existsSync(practiceDir)).toBe(false);
+    expect(await listedPaths()).toEqual([novelDir]); // 练习区消失，小说还在
+    expect(existsSync(novelDir)).toBe(true);
+  });
+
+  it("删当前练习工作区：关连接 + 清 currentProject + 抹 lastProject（同小说口径）", async () => {
+    const dir = await createPractice("当前练习区");
+    expect((await openBook(dir)).status).toBe(200);
+    expect(readLastProject(root)).toBe(dir); // 前置：open 成功即记住
+
+    const res = await request("/api/v1/project/delete", { path: dir });
+
+    expect(res.status).toBe(200);
+    expect(existsSync(dir)).toBe(false);
+    expect(getCurrentProject()).toBeNull();
+    expect(readLastProject(root)).toBeNull(); // 下次启动回书架，不指向已删目录
+    expect((await buildApp().request("/api/v1/project/config", { headers: HOST_HEADERS })).status).toBe(409);
+    expect(await listedPaths()).toEqual([]);
+  });
+});
+
 describe("POST /project/delete —— delete_remote（best-effort）", () => {
   it("删除云端目录成功：本地删完后 DELETE 集合（Depth: infinity），并清掉该书 state", async () => {
     const dir = await createBook("删云端");
@@ -460,6 +508,16 @@ describe("POST /project/delete —— 路径与入参校验", () => {
     const link = join(root, "books", "链接书");
     symlinkSync(outside, link);
     expect(await errorCode(await request("/api/v1/project/delete", { path: link }))).toBe("INVALID_PROJECT_PATH");
+
+ // kind 与目录不一致（practice 文件放在 books/ 下）→ 400（目录约束按**该工作区的 kind**）
+    const misplaced = join(root, "books", "错位练习区");
+    expect(
+      (await request("/api/v1/project/create", { path: misplaced, config: { name: "错位练习区", kind: "practice" } })).status,
+    ).toBe(200);
+    const misplacedRes = await request("/api/v1/project/delete", { path: misplaced });
+    expect(misplacedRes.status).toBe(400);
+    expect(await errorCode(misplacedRes)).toBe("INVALID_PROJECT_PATH");
+    expect(existsSync(misplaced)).toBe(true); // 目录未动
 
  // 正常删除一次后重复删除 → 目录已不存在 → 400
     expect((await request("/api/v1/project/delete", { path: dir })).status).toBe(200);

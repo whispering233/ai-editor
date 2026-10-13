@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { unzipSync, zipSync } from "fflate";
-import { formatBackupFileName, generateProjectId, type ProjectFileConfig } from "@whispering233/ai-editor-shared";
+import { formatBackupFileName, generateProjectId, WORKSPACE_DIRS, type ProjectFileConfig, type WorkspaceKind } from "@whispering233/ai-editor-shared";
 // 三文件名单单源（与备份管道逐字同一常量；根入口是 type-only barrel，运行时常量只在 schemas 子路径）
 import { PROJECT_EXPORT_FILE_NAMES } from "@whispering233/ai-editor-shared/schemas";
 import {
@@ -181,7 +181,20 @@ function seedForeignFile(dav: FakeDav, dirName: string, name: string): void {
 
 /** 造一本本地书（真三文件 + 真 data.db，user_version = SCHEMA_VERSION）；返回 id 与目录 */
 function makeLocalBook(name: string, id = generateProjectId()): { dir: string; id: string } {
-  const dir = join(root, "books", name);
+  return makeLocalWorkspace("novel", name, id);
+}
+
+/** 造一个本地练习工作区（`practice/<名>`，project.json 显式 `kind: practice`） */
+function makeLocalPractice(name: string, id = generateProjectId()): { dir: string; id: string } {
+  return makeLocalWorkspace("practice", name, id);
+}
+
+/**
+ * 造一个本地工作区（目录 = 创作根/`WORKSPACE_DIRS[kind]`/<名>）：真三文件 + 真 data.db。
+ * novel 不写 `kind` 键（存量文件形态），practice 显式写（导入落目录的判据就是它）。
+ */
+function makeLocalWorkspace(kind: WorkspaceKind, name: string, id: string): { dir: string; id: string } {
+  const dir = join(root, WORKSPACE_DIRS[kind], name);
   mkdirSync(dir, { recursive: true });
   writeProjectFile(dir, {
     id,
@@ -191,6 +204,7 @@ function makeLocalBook(name: string, id = generateProjectId()): { dir: string; i
     current_position: null,
     created_at: T0,
     updated_at: T0,
+    ...(kind === "practice" ? { kind } : {}),
   });
   writeOutlineFile(dir, { id: "root", type: "root", schema_version: SCHEMA_VERSION, children: [] });
   const db = openDatabase(join(dir, DATA_DB_FILE_NAME));
@@ -227,6 +241,11 @@ function configureCloud(): void {
 
 function importedBookDir(name: string): string {
   return join(root, "books", name);
+}
+
+/** 云端导入的练习工作区落点 */
+function importedPracticeDir(name: string): string {
+  return join(root, "practice", name);
 }
 
 beforeEach(() => {
@@ -536,6 +555,35 @@ describe("POST /api/v1/cloud/import-book", () => {
     expect(again.status).toBe(409);
     expect((await errorBody(again)).code).toBe("PROJECT_ALREADY_EXISTS");
     expect(readdirSync(join(root, "books")).sort()).toEqual(["重名书", "重名书 (2)"]); // 没有第三本
+  });
+
+  it("包内 kind = practice → 落 practice/<名>/（kind 取自包内 project.json）；同 id 在 practice/ 下也算「本机已有」", async () => {
+    configureCloud();
+    const dav = stubDav();
+ // 云端那本 = 练习工作区（practice/ 下的三文件，project.json 显式 kind: practice）
+    const local = makeLocalPractice("云里的练习区");
+    const zip = makeBackupZip(local.dir);
+    const dirName = `云里的练习区-${local.id}`;
+    seedCloudBook(dav, dirName, [zip]);
+    rmSync(local.dir, { recursive: true, force: true });
+
+    const res = await request("/api/v1/cloud/import-book", "POST", { dir_name: dirName });
+
+    expect(res.status).toBe(200);
+    expect(await responseData(res)).toMatchObject({ id: local.id, name: "云里的练习区" });
+    expect(readProjectFile(importedPracticeDir("云里的练习区"))?.kind).toBe("practice");
+    expect(existsSync(importedBookDir("云里的练习区"))).toBe(false); // 不落小说目录
+    expect(readBookState(local.id)?.dirName).toBe(dirName);
+
+ // findBookDirById 扫两个工作区目录：刚导进 practice/ 的书也算「本机已有」（不可重复导入）
+    const listed = await responseData<{ books: Array<{ dirName: string; localExists: boolean }> }>(
+      await request("/api/v1/cloud/remote-books", "GET"),
+    );
+    expect(listed.books.find((b) => b.dirName === dirName)?.localExists).toBe(true);
+
+    const again = await request("/api/v1/cloud/import-book", "POST", { dir_name: dirName });
+    expect(again.status).toBe(409);
+    expect((await errorBody(again)).code).toBe("PROJECT_ALREADY_EXISTS");
   });
 
   it("坏包 → 400 VALIDATION_ERROR，books/ 无残留", async () => {

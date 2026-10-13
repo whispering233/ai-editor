@@ -1,8 +1,10 @@
-// `export-book-dialog`（DESIGN.md §书架主页 `export-book-dialog`）：导出类型二选一——受控 `Dialog`，
+// `export-book-dialog`（DESIGN.md §书架主页 `export-book-dialog`）：导出类型选择——受控 `Dialog`，
 // 复用 `components/ui/dialog.tsx`，不新造浮层。
 //
-// 形态：标题 `导出《书名》` + **竖排两个单选项**（antd `Radio.Group`，默认 `项目压缩文件`；
-// caption 排在选项下方，文案照 DESIGN.md 表格逐字）+ Footer `[取消]` / `[导出]`（primary；
+// 形态：标题 `导出《书名》` + **竖排单选项**（antd `Radio.Group`，默认 `项目压缩文件`；
+// 小说工作区两项，练习工作区只一项——`小说文档` 是小说语义，服务端 `export-novel` 对练习
+// 工作区返 400 `KIND_MISMATCH`，故 UI 按 kind 隐藏该项）；caption 排在选项下方，
+// 文案照 DESIGN.md 表格逐字）+ Footer `[取消]` / `[导出]`（primary；
 // 在途 `loading`（第一项）与 `disabled`（防连点））。
 // **本组件只上报所选类型**（`onExport(kind)`）：落盘下载、错误分流、toast、关框都归调用方
 // （书架页把两条产物接到同一 `<a download>` 管道）。
@@ -10,6 +12,7 @@
 // 渲染，仓内无 jsdom ⇒ 拆出本层供 `renderToString` 走查，同 `character-create-dialog` 先例）。
 import { useEffect, useState } from "react";
 import { Button, Radio } from "antd";
+import type { WorkspaceKind } from "@whispering233/ai-editor-shared";
 import {
   Dialog,
   DialogContent,
@@ -24,7 +27,8 @@ export type ExportBookKind = "project" | "novel";
 /** 默认选中项 = 项目压缩文件（**无损**的那条不作默认是相反的错误——有损产物必须是用户的显式选择） */
 export const DEFAULT_EXPORT_BOOK_KIND: ExportBookKind = "project";
 
-/** 单选项（顺序 = 展示顺序，首项即默认）：label + caption 文案（`{书名}` 由调用方传入） */
+/** 单选项（顺序 = 展示顺序，首项即默认）：label + caption 文案（`{书名}` 由调用方传入）；
+ * `novel` 项只对小说工作区可见（见 `exportBookOptions`） */
 export const EXPORT_BOOK_OPTIONS: readonly {
   kind: ExportBookKind;
   label: string;
@@ -42,6 +46,14 @@ export const EXPORT_BOOK_OPTIONS: readonly {
   },
 ];
 
+/**
+ * 该工作区可用的导出项：练习工作区只给 `项目压缩文件`——`小说文档` 是小说语义
+ * （服务端 `/project/export-novel` 对练习工作区 400 `KIND_MISMATCH`，故 UI 不给这个选项）。
+ */
+export function exportBookOptions(workspaceKind: WorkspaceKind) {
+  return EXPORT_BOOK_OPTIONS.filter((option) => option.kind === "project" || workspaceKind === "novel");
+}
+
 /** 导出成功 toast（两种产物两句话；文案单一定义，调用点不手抄） */
 export function exportBookToast(kind: ExportBookKind, name: string): string {
   return kind === "novel" ? `已导出《${name}》小说文档` : `已导出《${name}》备份`;
@@ -50,6 +62,8 @@ export function exportBookToast(kind: ExportBookKind, name: string): string {
 export interface ExportBookFormBodyProps {
   /** 书名（进标题与两条 caption） */
   name: string;
+  /** 当前工作区类型（决定可选导出项：练习工作区无「小说文档」） */
+  workspaceKind: WorkspaceKind;
   /** 所选导出类型（受控） */
   kind: ExportBookKind;
   onKindChange: (kind: ExportBookKind) => void;
@@ -62,6 +76,7 @@ export interface ExportBookFormBodyProps {
 /** 导出类型框内容体（纯展示：无 effect、无请求——SSR 可直渲染） */
 export function ExportBookFormBody({
   name,
+  workspaceKind,
   kind,
   onKindChange,
   exporting,
@@ -79,7 +94,7 @@ export function ExportBookFormBody({
         disabled={exporting}
         aria-label="导出类型"
       >
-        {EXPORT_BOOK_OPTIONS.map((option) => (
+        {exportBookOptions(workspaceKind).map((option) => (
           /* 每项独占一行 ⇒ 竖排（不在 `Radio.Group` 根元素上写布局类：antd 无层 CSS 会压掉） */
           <div key={option.kind} className="flex flex-col gap-0.5 py-1">
             <Radio value={option.kind}>{option.label}</Radio>
@@ -104,6 +119,8 @@ export interface ExportBookDialogProps {
   open: boolean;
   /** 当前书名 */
   name: string;
+  /** 当前工作区类型（决定可选导出项：练习工作区无「小说文档」） */
+  workspaceKind: WorkspaceKind;
   /** 导出在途（调用方持有） */
   exporting: boolean;
   /** 只上报所选类型——下载/错误提示由调用方负责 */
@@ -115,6 +132,7 @@ export interface ExportBookDialogProps {
 export function ExportBookDialog({
   open,
   name,
+  workspaceKind,
   exporting,
   onExport,
   onOpenChange,
@@ -142,6 +160,7 @@ export function ExportBookDialog({
       <DialogContent className="sm:max-w-md">
         <ExportBookFormBody
           name={name}
+          workspaceKind={workspaceKind}
           kind={kind}
           onKindChange={setKind}
           exporting={exporting}

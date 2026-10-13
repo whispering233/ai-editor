@@ -325,9 +325,10 @@ cloudRoutes.get("/remote-books", async (c) => {
 //
 // 流程：目录/文件存在性（404）→ 下载 → **既有导入校验管道** `validateBackupPackage`
 // （与 `POST /project/import` 同一实现：坏包 400 / 版本 409）→ **目录名一致性守卫**
-// （目录名能解析出 id 且 ≠ 包内 id → 400；必读包内 id 故此时才能比对；从未触碰 `books/`）
+// （目录名能解析出 id 且 ≠ 包内 id → 400；必读包内 id 故此时才能比对；从未触碰任何工作区目录）
 // → 本机已有同 id → 409（不静默覆盖：
-// 那本书应在应用内自己同步）→ `uniqueBookDir` 建档（**id 沿用**、name 归一为目录名）→
+// 那本书应在应用内自己同步）→ `uniqueBookDir` 按**包内 kind** 建档（`<kind 目录>/<名字>/`；
+// **id 沿用**、name 归一为目录名）→
 // 那份 zip **原样**落新书 `.backups/`（新机器立刻有一份「最新本地备份」）→ 写 `cloud.json` book state
 // （`lastPushedFileName` = 导入的那份 / `lastSeenCloudFiles` = 当时云端集合 / `lastSyncAt` = 见
 // `importSyncBaseline`）——不写则新机器一打开就是 `conflict`（云端有份 + 本机无同步记录），
@@ -340,7 +341,7 @@ cloudRoutes.post("/import-book", async (c) => {
     throw new HttpError(500, "INTERNAL_ERROR", "创作根未初始化（startServer 未调用 setProjectRoot）");
   }
   // dir_name 进云盘路径拼接，也作书名兜底 → 只接受**单段目录名**（不含路径分隔符与 `..`，
-  // 且通过书名规则：纯点/控制字符同样拒——`books/` 下目标目录名就从它派生）
+  // 且通过书名规则：纯点/控制字符同样拒——目标目录名（`<kind 目录>/<名字>`）就从它派生）
   if (parsed.dir_name.trim() === "" || /[/\\]|\.\./.test(parsed.dir_name) || !isBookNameValid(parsed.dir_name)) {
     throw new HttpError(
       400,
@@ -375,7 +376,7 @@ cloudRoutes.post("/import-book", async (c) => {
     throw new HttpError(404, "CLOUD_FILE_NOT_FOUND", `云端那份备份已不存在: ${target.fileName}`);
   }
 
-  // 校验通过前不触碰 books/（与 import 同管道同语义）；版本过高/坏包直接抛出，不落半成品
+  // 校验通过前不触碰任何工作区目录（与 import 同管道同语义）；版本过高/坏包直接抛出，不落半成品
   const validated = validateBackupPackage(new Uint8Array(bytes));
   // 目录名解析出的 id ≠ 包内 id → 拒绝（设计文档 §10 表）。危害不是「导入错书」而是 state.dirName 取自目录名：
   // 之后推送会把这本书写进**别人的书的云端目录**（跨书污染）。解析不出 id（用户手工命名目录）无 id 声明，不算冲突。
@@ -398,7 +399,8 @@ cloudRoutes.post("/import-book", async (c) => {
   // 书名：目录名解析出的优先（云端目录名就是书名来源）；回退命名解析不出 → 包内 project.json 的书名；
   // 两者都不合法（包内书名只经「非空字符串」校验，拼目录前必须过同一道规则）→ 用目录名（已验单段）
   const candidate = parseCloudBookDirName(parsed.dir_name)?.name ?? validated.projectName.trim();
-  const bookDir = uniqueBookDir(root, isBookNameValid(candidate) ? candidate : parsed.dir_name);
+ // 落目录按**包内 kind**（备份是权威，与 `POST /project/import` 同一口径）
+  const bookDir = uniqueBookDir(root, isBookNameValid(candidate) ? candidate : parsed.dir_name, validated.kind);
   try {
     mkdirSync(bookDir, { recursive: true });
     writeProjectFilesFromBackup(bookDir, validated.entries, { name: basename(bookDir) }); // id 沿用（keepId 不传）

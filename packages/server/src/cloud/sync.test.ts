@@ -24,7 +24,7 @@ import { BACKUPS_DIR_NAME, writeBackup } from "../backup.js";
 import type { ProjectContext } from "../middleware/project.js";
 import { HttpError } from "../middleware/error.js";
 import { initCloudState, writeBookState, writeCloudConfig, readBookState } from "./state.js";
-import { MAX_CLOUD_BACKUPS, computeCloudSync, pullBackup, pushBackup } from "./sync.js";
+import { MAX_CLOUD_BACKUPS, computeCloudSync, pullBackup, pushBackup, renameCloudDir } from "./sync.js";
 
 const BASE = "https://dav.example.com/dav"; // 云盘根（配置值）；客户端会拼上工作根 `ai-editor`
 const USER = "u@example.com";
@@ -463,6 +463,43 @@ describe("pushBackup：状态更新（cloud.json 的 books 段）", () => {
     await pushBackup(project);
     expect(readBookState("proj-other")?.dirName).toBe("别的书-proj-other");
     expect(readBookState(project.config.id)?.lastPushedFileName).toBe(readBookState(project.config.id)?.lastSeenHeadFileName);
+  });
+});
+
+describe("renameCloudDir：改名后 MOVE 云端目录名", () => {
+  it("练习工作区改名：MOVE <旧名>-<id> → <新名>-<id>，回写 book state 的 dirName", async () => {
+ // 把项目改成练习工作区 + 新名（renameCloudDir 只读 config 的 id/name，与 kind 无关）
+    writeProjectFile(project.root, { ...project.config, name: "新练习区", kind: "practice" });
+    project.config = readProjectFile(project.root) as ProjectFileConfig;
+    const dirName = `旧练习区-${project.config.id}`;
+    store.set(dirName, { isDir: true, bytes: new Uint8Array(), mtime: Date.now() });
+    store.set(`${dirName}/20260813-120000000-自动-设备-人物0-设定0-章0.zip`, {
+      isDir: false,
+      bytes: new TextEncoder().encode("zip"),
+      mtime: Date.now(),
+    });
+    writeBookState(project.config.id, { dirName });
+
+    await renameCloudDir(project);
+
+    const move = calls.find((call) => call.method === "MOVE");
+    expect(move?.path).toBe(dirName);
+    expect(move?.destination).toBe(`新练习区-${project.config.id}`);
+    expect(store.has(`新练习区-${project.config.id}`)).toBe(true); // 目录（含份）随之搬到新名
+    expect(store.has(dirName)).toBe(false);
+    expect(readBookState(project.config.id)?.dirName).toBe(`新练习区-${project.config.id}`); // state 跟上
+  });
+
+  it("云端不可达（MOVE 403）→ 抛错（路由侧 catch 记日志，不阻塞本地改名）", async () => {
+    writeProjectFile(project.root, { ...project.config, name: "新练习区", kind: "practice" });
+    project.config = readProjectFile(project.root) as ProjectFileConfig;
+    const dirName = `旧练习区-${project.config.id}`;
+    store.set(dirName, { isDir: true, bytes: new Uint8Array(), mtime: Date.now() });
+    writeBookState(project.config.id, { dirName });
+    moveFailure = () => true;
+
+    await expect(renameCloudDir(project)).rejects.toThrow();
+    expect(readBookState(project.config.id)?.dirName).toBe(dirName); // 失败不推进 state（下轮按 id 回退扫描重定位）
   });
 });
 

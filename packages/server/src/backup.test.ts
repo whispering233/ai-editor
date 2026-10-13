@@ -524,6 +524,31 @@ describe("GET /project/backups 与 POST /project/backup", () => {
     expect(existsSync(join(dir, BACKUPS_DIR_NAME, backup.fileName))).toBe(true);
   });
 
+  it("练习工作区：备份文件名统计段自然为 人物0-设定0-章0（空大纲 + 无实体，不加特殊分支）", async () => {
+    const dir = join(makeTmpDir(), "practice", "仿写练习"); // 目录映射 = practice/（open 直接给路径，目录语义同其他用例）
+    initProjectDir(
+      dir,
+      { ...makeConfig("proj-practice-bk", "仿写练习"), kind: "practice" },
+      { id: "root", type: "root", schema_version: SCHEMA_VERSION, children: [] },
+    );
+    const app = await openProject(dir);
+
+ // 手动备份（端点）：统计段恒有，且为全零——练习数据在专属表（不参与人物/设定/章计数）
+    const res = await app.request("/api/v1/project/backup", { method: "POST", headers: HOST_HEADERS });
+    expect(res.status).toBe(200);
+    const manual = (await res.json()).data.backup;
+    expect(manual.stats).toEqual({ characters: 0, settings: 0, chapters: 0 });
+    expect(manual.fileName).toMatch(/^\d{8}-\d{9}-手动-.+-人物0-设定0-章0\.zip$/);
+    expect(parseBackupFileName(manual.fileName)).not.toBeNull(); // 可被解析（格式未变）
+    expect(existsSync(join(dir, BACKUPS_DIR_NAME, manual.fileName))).toBe(true);
+
+ // 自动备份（同一管道）：类型段换「自动」，统计段同样全零
+    const auto = writeBackup(getCurrentProject()!, { kind: "auto" });
+    expect(auto.fileName).toMatch(/^\d{8}-\d{9}-自动-.+-人物0-设定0-章0\.zip$/);
+    expect(parseBackupFileName(auto.fileName)?.stats).toEqual({ characters: 0, settings: 0, chapters: 0 });
+    expect(readProjectFile(dir)?.kind).toBe("practice"); // 备份不改 project.json
+  });
+
   it("POST /backup 带自定义名称：文件名带标签段 + 响应 name 字段", async () => {
     const dir = makeTmpDir();
     initProjectDir(dir, makeConfig("proj-named-ep", "端点自定义名"));

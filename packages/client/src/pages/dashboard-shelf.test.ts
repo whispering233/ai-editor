@@ -60,6 +60,10 @@ describe("当前书条导出入口（卡 E5）", () => {
     expect(dashboard).toMatch(/<ExportBookDialog[\s\S]{0,360}?onExport=\{\(kind\) => void handleExportBook\(/);
   });
 
+  it("弹窗拿到当前工作区 kind（练习工作区只给三文件包一项）", () => {
+    expect(dashboard).toMatch(/<ExportBookDialog[\s\S]{0,360}?workspaceKind=\{config\?\.kind \?\? "novel"\}/);
+  });
+
   it("handleExportBook 按 kind 分派端点，成功关框、失败留框", () => {
     expect(dashboard).toMatch(/kind === "novel" \? await exportNovelZip\(\) : await exportProjectZip\(\)/);
     expect(dashboard).toContain("setExportOpen(false)");
