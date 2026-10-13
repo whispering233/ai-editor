@@ -2,7 +2,7 @@
 //
 // **形态：经 `startServer` 装配真实 app**（不是手搭 Hono）——守卫的挂载点只在 `index.ts` 一处，
 // 手搭 app 会把「index.ts 少挂一组」这类缺陷漏掉（本卡的核心风险正是漏挂/顺序挂错）。
-// 断言逐组进行（七个小说语义组各取一条代表端点），并在**小说工作区**上跑同一批端点对照，
+// 断言逐组进行（本清单各小说语义组各取一条代表端点），并在**小说工作区**上跑同一批端点对照，
 // 证明 400 KIND_MISMATCH 来自守卫而非「端点本身 404」。
 //
 // 隔离：临时 HOME（pi agent dir 不出沙箱，同 settings.test.ts）+ 每个用例独立的 tmp 工作区目录；
@@ -123,7 +123,7 @@ async function probe(
 }
 
 /**
- * 七个**小说语义**路由组各一条代表端点（含组根路径：`/outline`、`/trash`、`/relation` 就挂在组根上，
+ * 各**小说语义**路由组各一条代表端点（含组根路径：`/outline`、`/trash`、`/relation` 就挂在组根上，
  * 守卫用 `"/api/v1/<组>/*"` 通配——这条清单同时验证「组根与子路径都被覆盖」）。
  * `novelStatus` = 小说工作区上的既有状态码（守卫不得改写）。
  */
@@ -160,7 +160,7 @@ afterEach(async () => {
 });
 
 describe("工作区类型守卫（requireKind）", () => {
-  it("练习工作区访问七个小说语义路由组 → 每组一条端点均 400 KIND_MISMATCH（固定文案）", async () => {
+  it("练习工作区访问小说语义路由组 → 每组一条端点均 400 KIND_MISMATCH（固定文案）", async () => {
     const practice = await startWorkspace("practice");
     for (const item of NOVEL_GROUP_PROBES) {
       const res = await probe(practice, item);

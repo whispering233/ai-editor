@@ -12,33 +12,24 @@
 
 > 契约依据：`docs/design/60-practice.md`、`docs/design/00-master-design.md`（工作区抽象）、`docs/design/architecture.md`（kind 与能力收窄）、`docs/db/schema.md`（两张练习表）、`docs/api/120-api-practice.md`、`docs/ui/DESIGN.md`（根首页分区 / 文风练习区）。**契约已先行更新——卡内不再自行发明口径，发现矛盾先停下提问。**
 
-- [ ] **卡 1 · `kind` 贯通（shared + server）**
-  - 范围：`ProjectFileConfig.kind?` / `ProjectConfig.kind`（恒下发）；shared 常量表 `WORKSPACE_DIRS`（`novel → books`、`practice → practice`）；`POST /project/create` 接受 `config.kind`（缺省 novel）；`GET /project/list` 扫两个目录 + 每项带 `kind`（字段名保留 `books`）。
-  - 依赖：无（可与卡 2 并行）。
-  - 硬完成判据：旧 `project.json`（无 kind）读为 `novel`；`create` 带 `kind: "practice"` 后 `project.json` 有该键；`list` 同时列出两个目录且带 `kind`；`pnpm typecheck` / `pnpm lint` / 单包测试绿。
-- [ ] **卡 2 · 迁移 012 + 两张练习表 + db helper**
-  - 范围：`CREATE_TABLES_SQL` 加两表 + 索引（与迁移 DDL **逐字同形**）；`migrations/012_practice.ts`；`SCHEMA_VERSION` 11 → 12；db 包练习 helper（列表 / 详情 / 建 / 改 / 物理删 + 删目标级联删样本；`feedback` JSON 列**防御解析**，禁用 drizzle `mode:'json'`）。
-  - 依赖：无（可与卡 1 并行）。
-  - 硬完成判据：空库建表结构快照与迁移路径建出的结构一致（既有对齐断言）；迁移幂等（重跑不报错）；坏 JSON 的 `feedback` 不抛错且列表照常返回；级联删计数正确。
-- [ ] **卡 3 · `requireKind` 守卫 + 两个新错误码**
-  - 范围：中间件按路由组校验当前工作区 `kind`（novel 语义组：entity / outline / manuscript / relation / delta / trash / names；practice 组：practice；通用组不挂：project / chat / backup / cloud / settings）；shared `ERROR_CODES` 加 `KIND_MISMATCH`（400）与 `PRACTICE_NOT_FOUND`（404）；`export-novel` 与 `PUT /project/config` 的 `current_position` / `deduction_nodes` 按 kind 拒绝。
-  - 依赖：卡 1。
-  - 硬完成判据：练习工作区访问小说端点 → 400 `KIND_MISMATCH`（含 `export-novel`、含写 `current_position`）；小说工作区访问 `/practice/*` → 400；通用端点两种工作区均正常。
 - [ ] **卡 4 · AI 侧按 kind 收窄（工具 scope + 提示词分叉）**
   - 范围：`ToolDefinition` 加 `scope`（`novel` / `practice` / `common`）并**逐个盘点全部既有工具**；装配层按当前工作区 `kind` 过滤（`createCustomTools` 加过滤参数）；练习版内核提示词常量（只做诊断、必须提交点评卡、不改写稿件）并在装配处按 kind 选提示词。
   - 依赖：卡 1。
   - 硬完成判据：练习工作区装配出的工具名集合 = 卡 6 的三个工具（且**无** `propose_*`）；小说工作区工具集合与本卡前一致（数量与名称逐个断言）；两种提示词各自断言关键段落存在/不存在。
+  - 承接事实（卡 3 oracle 实测）：当前练习工作区装配出 **37 个工具、含 16 个 `propose_*`**（`scope` 未落地前的基线）——本卡必须把「练习工作区工具数 = 3」写成硬断言；**漏标任一既有工具的 scope = 结构性边界失效**。
 
 ## 批次 1（练习业务面）
 
 - [ ] **卡 5 · practice REST 端点**
-  - 范围：`/practice/targets`（列表 / 建 / 改 / 删）与 `/practice/samples`（列表 / 建 / 详情 / 改稿 / 删）；请求 snake_case、响应 camelCase；长度上限常量（建议 `MAX_PRACTICE_OBSERVATION_CHARS = 500`、`MAX_PRACTICE_SOURCE_LABEL_CHARS = 100`、`MAX_PRACTICE_SAMPLE_CHARS = 20000`、`MAX_PRACTICE_DRAFT_CHARS = 20000`）；`PUT` 稿件为 **strict 单字段**。
+  - 范围：`/practice/targets`（列表 / 建 / 改 / 删）与 `/practice/samples`（列表 / 建 / 详情 / 改稿 / 删）；请求 snake_case、响应 camelCase；长度上限常量**消费 shared**（`MAX_PRACTICE_OBSERVATION_CHARS` / `MAX_PRACTICE_SOURCE_LABEL_CHARS` / `MAX_PRACTICE_SAMPLE_CHARS` / `MAX_PRACTICE_DRAFT_CHARS`，卡 2 已定义）；`PUT` 稿件为 **strict 单字段**；`source_kind` zod 收窄为 `"paste"`；挂 `/practice/*` 反向守卫（`app.use` 必须在 `app.route("/api/v1/practice", …)` **之前**，覆盖组根与子路径）。
   - 依赖：卡 1、2、3。
-  - 硬完成判据：目标/样本 CRUD 全绿；超限 → 400 `VALIDATION_ERROR`；不存在 → 404 `PRACTICE_NOT_FOUND`；删目标级联删样本且返回计数；稿件端点拒绝额外字段；请求字段名 snake_case（断言非法 camelCase 字段被拒）。
+  - 硬完成判据：目标/样本 CRUD 全绿；超限 → 400 `VALIDATION_ERROR`；不存在 → 404 `PRACTICE_NOT_FOUND`；删目标级联删样本且返回计数；稿件端点拒绝额外字段；请求字段名 snake_case（断言非法 camelCase 字段被拒）；小说工作区访问 `/practice/*` → 400 `KIND_MISMATCH`。
+  - 承接事实（卡 2/3 oracle 登记）：① `PUT /practice/targets/:id` 响应**须含 `sampleCount`**（db helper 返回存储形态，无该字段——路由层拼，或改文档口径）；② 详情须拼 `targetName` + `observation`（db 层不拼）；③ 长度上限校验落**路由层**（db 层有意不校验）。
 - [ ] **卡 6 · 三个练习工具（2 只读 + 1 提交）**
   - 范围：`get_practice_sample` / `get_practice_draft`（`offset` / `max_chars` 分页 + `truncated` 续读提示）/ `submit_style_feedback`（写 `feedback`）；**分页常量语义提升**：`DEFAULT_CHAPTER_TEXT_CHARS` / `MAX_CHAPTER_TEXT_CHARS` 改名（如 `DEFAULT_TEXT_PAGE_CHARS` / `MAX_TEXT_PAGE_CHARS`），两处引用（工具描述插值与实现 clamp）同改；`MAX_FEEDBACK_DIMENSIONS = 6`（描述由常量插值）；引用子串校验（范文 / 稿件）。
   - 依赖：卡 2、4。
   - 硬完成判据：分页截断时**显式告知**且续读提示不被外层截断切掉（实测 `stringifyToolResult` → `truncateToolResultText` 路径，留白 ≥10%）；无效引用被丢弃并计入 `dropped_quotes`；维度超上限被拒；改上游 `shared` / `tools` 后先 `pnpm -r build` 再跑测试。
+  - 承接事实（卡 2 oracle 登记）：`feedback` 写入口**必须新增在 db 包**（`queries/practice.ts` 一类，如 `updatePracticeFeedback`）——**禁止**在 tools 包直写表（破「库写入唯一入口」）；引用子串校验需要范文/稿件全文，分页留在 tools 层。
 - [ ] **卡 7 · 点评链路（`/chat` 注入 + 卡片下发 + 落库）**
   - 范围：`chatRequestSchema.context.practice_sample_id`；服务端现读目标名 + `observation` 注入本轮（**不接受客户端传入观察文本**）；样本不存在静默省略；卡片随 `tool_execution_end` 的 `details` 下发；前端即时渲染 + 刷新从 `GET /practice/samples/:id` 读。
   - 依赖：卡 5、6。
