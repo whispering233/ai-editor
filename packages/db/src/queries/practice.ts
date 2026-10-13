@@ -76,7 +76,8 @@ export interface PracticeSampleSummary {
 
 /**
  * 解析 `feedback` 列（防御解析，同 entity.ts parseDataColumn 先例）：
- * 非法 JSON / 非对象（含数组） / `null` 一律按 null——否则单条坏行会打挂详情读取。
+ * 非法 JSON / 非对象（含数组 / JSON `null`）一律按 null——否则单条坏行会打挂详情读取；
+ * **合法 JSON 对象一律原样返回**（含 `{}`——**卡内形状校验在写入侧**，读侧不做形状特判）。
  * 坏值不静默写回（修复入口 = 重跑点评，见 docs/api/120-api-practice.md）。
  */
 function parseFeedbackColumn(value: unknown): PracticeFeedback | null {

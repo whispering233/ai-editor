@@ -9,8 +9,10 @@
 //   响应由本层按文档逐字段拼出）；schema 全 `.strict()` ⇒ camelCase 字段名与多余字段一律被拒
 // - **长度上限校验落本层**（db 层有意不校验）：由 shared schema 消费 shared 常量完成，
 //   超限 → 400 `VALIDATION_ERROR`
-// - 路由层组装三件（db 层不做，卡 5 承接事实）：① `PUT /practice/targets/:id` 响应含 `sampleCount`；
-//   ② 详情（含新建样本的响应）拼 `targetName` + `observation`；③ 不存在 → 404 `PRACTICE_NOT_FOUND`
+// - 路由层组装三件（db 层不做，卡 5 承接事实）：① `POST` / `PUT /practice/targets*` 响应含 `sampleCount`
+//   （与列表项同形）；② 详情（含新建样本的响应）拼 `targetName` + `observation`；
+//   ③ 不存在 → 404 `PRACTICE_NOT_FOUND`（**文案按端点语义**：目标端点「文风目标不存在」、
+//   样本端点「练习样本不存在」）
 //
 // 反向守卫（`requireKind("practice")`，小说工作区访问 → 400 `KIND_MISMATCH`）的挂载点**只在
 // `index.ts`**，且必须在本组 `app.route` 之前（Hono 按注册序组合中间件与 handler）。
@@ -59,7 +61,7 @@ async function readJson(c: Context): Promise<unknown> {
 }
 
 /**
- * 目标行的单项目投影（camelCase）：**含 `sampleCount`**——`PUT /practice/targets/:id` 的响应形状
+ * 目标行的单项目投影（camelCase）：**含 `sampleCount`**——`POST` / `PUT /practice/targets/:id` 的响应形状
  * 与列表项同形（承接事实①），而 db helper 返回存储形态（snake_case、无计数）⇒ 本层拼。
  */
 function toTargetItem(row: PracticeTargetRow, sampleCount: number): PracticeTargetItem {
@@ -81,14 +83,15 @@ function countSamples(db: Db, targetId: string): number {
 /**
  * 样本详情的 API 投影：**拼目标名与观察**（承接事实②，db 层不拼）——详情与新建样本的响应共用一个形状
  * （新建时 `draft` = ""、`feedback` = null，由 db helper 保证）。
- * `feedback` 只透传：写入侧唯一入口是提交点评工具（卡 6），读取侧的坏 JSON 防御解析在 db 层
- * （非对象 → null）——本层不重复校验、也不做键名转换。
+ * `feedback` 只透传：写入侧唯一入口是提交点评工具，读取侧的坏 JSON 防御解析在 db 层
+ * （**非对象** → null，合法 JSON 对象一律透传）——本层不重复校验、也不做键名转换。
  */
 function toSampleDetail(db: Db, row: PracticeSampleRow): PracticeSampleDetail {
   const target = getPracticeTarget(db, row.target_id);
   if (target === null) {
-    // 级联删应已带走样本；目标缺失 = 外部直接改库，按不存在处理（不编造空目标名）
-    throw targetNotFound();
+    // 级联删应已带走样本；目标缺失 = 外部直接改库：**按本组端点语义**报「练习样本不存在」
+    // （调用方都是样本端点；目标缺失时详情拼不出 targetName，按资源不可用处理，不编造空目标名）
+    throw sampleNotFound();
   }
   return {
     id: row.id,
@@ -120,16 +123,8 @@ practiceRoutes.post("/targets", async (c) => {
     name: parsed.data.name,
     observation: parsed.data.observation,
   });
-  // 新建目标的响应不含 sampleCount（对照文档 POST 的 Res 形状）
-  return c.json(
-    ok({
-      id: row.id,
-      name: row.name,
-      observation: row.observation,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    }),
-  );
+  // 响应与列表项同形：新建目标的样本数恒为 0（UI 两种形状不用分流）
+  return c.json(ok(toTargetItem(row, 0)));
 });
 
 // PUT /api/v1/practice/targets/:id —— 改名 / 改观察（部分更新；observation 空串 = 清空）

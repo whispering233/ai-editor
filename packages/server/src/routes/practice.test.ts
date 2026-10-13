@@ -7,7 +7,9 @@
 //
 // 判据覆盖：① 九端点端到端（逐端点 200）② 小说工作区反向守卫 400 KIND_MISMATCH（组根 + 子路径）
 // ③ 四个长度上限（含边界）/ `source_kind` 收窄 / camelCase 字段名 ④ 404 PRACTICE_NOT_FOUND
-// ⑤ 删目标级联删样本并计数 + 样本列表不含正文与稿/卡 ⑥ strict 单字段改稿 + observation 清空语义。
+// ⑤ 删目标级联删样本并计数 + 样本列表不含正文与稿/卡 ⑥ strict 单字段改稿 + observation 清空语义
+// ⑦ 收尾修正：`source_label` trim 非空 / POST 目标响应含 `sampleCount`（与列表项同形）/ 孤儿样本行
+//（目标行缺失）404 文案按样本端点语义 / 点评卡内层 snake_case 原样透传（含 `{}`）/ 列表同值按 id 升序。
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -48,8 +50,7 @@ const T0 = "2026-10-01T10:00:00Z";
 const PRACTICE_ONLY_MESSAGE = "该端点仅适用于练习工作区";
 
 /** 文档逐字给定的字段名键集（升序比较用；判据 = 响应字段名与文档一字不差） */
-const TARGET_ITEM_KEYS = ["createdAt", "id", "name", "observation", "sampleCount", "updatedAt"]; // 列表项 = PUT 单项目形态
-const TARGET_CREATED_KEYS = ["createdAt", "id", "name", "observation", "updatedAt"]; // POST 响应（文档未列 sampleCount）
+const TARGET_ITEM_KEYS = ["createdAt", "id", "name", "observation", "sampleCount", "updatedAt"]; // 列表项 = POST / PUT 单项目形态
 const SAMPLE_SUMMARY_KEYS = [
   "charCount",
   "createdAt",
@@ -215,7 +216,8 @@ describe("practice 端点（练习工作区，端到端）", () => {
       observation: "短句、白描",
     });
     expect(created.status).toBe(200);
-    expectKeys(created.data, TARGET_CREATED_KEYS);
+    expectKeys(created.data, TARGET_ITEM_KEYS, "POST 响应与列表项同形");
+    expect(created.data.sampleCount).toBe(0); // 新建目标下恒为 0
     expect(created.data.name).toBe("汪曾祺");
     expect(created.data.observation).toBe("短句、白描");
     expect(created.data.id.startsWith("pt-")).toBe(true);
@@ -505,31 +507,155 @@ describe("请求校验（长度上限 / 枚举 / 字段名）", () => {
     expect(createdBlank.status).toBe(400);
     expect(createdBlank.error?.code).toBe("VALIDATION_ERROR");
   });
+
+  it("source_label 与 name / text 同口径（trim 非空）：纯空白 label → 400；带空白值落库前 trim", async () => {
+    const h = await startWorkspace("practice");
+    const target = await createTarget(h, "目标");
+
+    const blank = await api(h, "POST", `/api/v1/practice/targets/${target.id}/samples`, {
+      source_label: "   ",
+      text: "范文",
+    });
+    expect(blank.status).toBe(400);
+    expect(blank.error?.code).toBe("VALIDATION_ERROR");
+    expect(blank.error?.fields).toContain("source_label");
+
+    const trimmed = await api<PracticeSampleDetail>(h, "POST", `/api/v1/practice/targets/${target.id}/samples`, {
+      source_label: "  《受戒》节选  ",
+      text: "  明海出家已经四年了。  ",
+    });
+    expect(trimmed.status).toBe(200);
+    expect(trimmed.data.sourceLabel).toBe("《受戒》节选");
+    expect(trimmed.data.text).toBe("明海出家已经四年了。");
+  });
 });
 
 describe("不存在 → 404 PRACTICE_NOT_FOUND", () => {
   it("改目标 / 删目标 / 不存在目标下建样本 / 列样本 / 查样本详情 / 保存稿件 / 删样本", async () => {
     const h = await startWorkspace("practice");
-    const cases: { note: string; run: () => Promise<ApiResult<unknown>> }[] = [
+    // 每例带上文档口径的预期文案（目标端点 = 文风目标不存在；样本端点 = 练习样本不存在）
+    const targetMsg = "文风目标不存在";
+    const sampleMsg = "练习样本不存在";
+    const cases: { note: string; message: string; run: () => Promise<ApiResult<unknown>> }[] = [
       {
         note: "PUT /targets/:id（目标不存在）",
+        message: targetMsg,
         run: () => api(h, "PUT", "/api/v1/practice/targets/pt-missing", { name: "改名" }),
       },
-      { note: "DELETE /targets/:id", run: () => api(h, "DELETE", "/api/v1/practice/targets/pt-missing") },
+      {
+        note: "DELETE /targets/:id",
+        message: targetMsg,
+        run: () => api(h, "DELETE", "/api/v1/practice/targets/pt-missing"),
+      },
       {
         note: "POST /targets/:id/samples（目标不存在）",
+        message: targetMsg,
         run: () =>
           api(h, "POST", "/api/v1/practice/targets/pt-missing/samples", { source_label: "来源", text: "范文" }),
       },
-      { note: "GET /targets/:id/samples", run: () => api(h, "GET", "/api/v1/practice/targets/pt-missing/samples") },
-      { note: "GET /samples/:id", run: () => api(h, "GET", "/api/v1/practice/samples/ps-missing") },
-      { note: "PUT /samples/:id", run: () => api(h, "PUT", "/api/v1/practice/samples/ps-missing", { draft: "稿件" }) },
-      { note: "DELETE /samples/:id", run: () => api(h, "DELETE", "/api/v1/practice/samples/ps-missing") },
+      {
+        note: "GET /targets/:id/samples",
+        message: targetMsg,
+        run: () => api(h, "GET", "/api/v1/practice/targets/pt-missing/samples"),
+      },
+      { note: "GET /samples/:id", message: sampleMsg, run: () => api(h, "GET", "/api/v1/practice/samples/ps-missing") },
+      {
+        note: "PUT /samples/:id",
+        message: sampleMsg,
+        run: () => api(h, "PUT", "/api/v1/practice/samples/ps-missing", { draft: "稿件" }),
+      },
+      {
+        note: "DELETE /samples/:id",
+        message: sampleMsg,
+        run: () => api(h, "DELETE", "/api/v1/practice/samples/ps-missing"),
+      },
     ];
     for (const item of cases) {
       const res = await item.run();
       expect(res.status, item.note).toBe(404);
       expect(res.error?.code, item.note).toBe("PRACTICE_NOT_FOUND");
+      expect(res.error?.message, item.note).toBe(item.message);
+    }
+  });
+
+  it("404 文案按端点语义：样本端点的孤儿行（目标行缺失）= 「练习样本不存在」，目标端点仍 = 「文风目标不存在」", async () => {
+    const h = await startWorkspace("practice");
+    const target = await createTarget(h, "目标");
+    const sample = await createSample(h, target.id, { source_label: "来源", text: "范文" });
+
+    // 直删目标行造出孤儿样本（生产路径不可达——级联删在 db helper 里；测试需要「目标缺而样本在」）
+    h.project!.db.prepare("DELETE FROM practice_targets WHERE id = ?").run(target.id);
+
+    const detail = await api(h, "GET", `/api/v1/practice/samples/${sample.id}`);
+    expect(detail.status).toBe(404);
+    expect(detail.error?.code).toBe("PRACTICE_NOT_FOUND");
+    expect(detail.error?.message).toBe("练习样本不存在");
+
+    // 对照：目标端点（目标不存在）文案不变
+    const targetSide = await api(h, "GET", `/api/v1/practice/targets/${target.id}/samples`);
+    expect(targetSide.status).toBe(404);
+    expect(targetSide.error?.code).toBe("PRACTICE_NOT_FOUND");
+    expect(targetSide.error?.message).toBe("文风目标不存在");
+  });
+});
+
+describe("点评卡读取（feedback 透传 / 防御解析）", () => {
+  /** 直写 feedback 列（本卡无写入端点；生产唯一写入方 = 提交点评工具） */
+  function writeFeedback(handle: ServerHandle, sampleId: string, raw: string | null): void {
+    handle.project!.db.prepare("UPDATE practice_samples SET feedback = ? WHERE id = ?").run(raw, sampleId);
+  }
+
+  it("合法 JSON 对象原样透传：卡内层键名 snake_case 不转换（`{}` 也照原样返回且 hasFeedback = true）", async () => {
+    const h = await startWorkspace("practice");
+    const target = await createTarget(h, "目标");
+    const sample = await createSample(h, target.id, { source_label: "来源", text: "范文" });
+    const card = {
+      dimensions: [
+        {
+          name: "句长节奏",
+          sample_trait: "短句",
+          draft_trait: "长句",
+          sample_quotes: ["范文"],
+          draft_quotes: ["稿"],
+          advice: "切短",
+        },
+      ],
+      summary: "总评",
+    };
+    writeFeedback(h, sample.id, JSON.stringify(card));
+
+    const detail = await api<PracticeSampleDetail>(h, "GET", `/api/v1/practice/samples/${sample.id}`);
+    expect(detail.data.feedback).toEqual(card);
+    expect(Object.keys(detail.data.feedback!.dimensions[0]!).sort()).toEqual([
+      "advice",
+      "draft_quotes",
+      "draft_trait",
+      "name",
+      "sample_quotes",
+      "sample_trait",
+    ]);
+    const listed = await api<PracticeSamplesRes>(h, "GET", `/api/v1/practice/targets/${target.id}/samples`);
+    expect(listed.data.samples[0].hasFeedback).toBe(true);
+
+    // 空对象不做特判（形状校验在写入侧）：照原样返回，且仍算「已点评」
+    writeFeedback(h, sample.id, "{}");
+    const empty = await api<PracticeSampleDetail>(h, "GET", `/api/v1/practice/samples/${sample.id}`);
+    expect(empty.data.feedback).toEqual({});
+    const listedEmpty = await api<PracticeSamplesRes>(h, "GET", `/api/v1/practice/targets/${target.id}/samples`);
+    expect(listedEmpty.data.samples[0].hasFeedback).toBe(true);
+  });
+
+  it("非对象（非法 JSON / 数组 / 字符串 / JSON null）→ null：详情与列表同口径（hasFeedback = false）", async () => {
+    const h = await startWorkspace("practice");
+    const target = await createTarget(h, "目标");
+    const sample = await createSample(h, target.id, { source_label: "来源", text: "范文" });
+
+    for (const raw of ["{ 这不是 JSON", "[1,2,3]", '"就一段字符串"', "null"]) {
+      writeFeedback(h, sample.id, raw);
+      const detail = await api<PracticeSampleDetail>(h, "GET", `/api/v1/practice/samples/${sample.id}`);
+      expect(detail.data.feedback, raw).toBeNull();
+      const listed = await api<PracticeSamplesRes>(h, "GET", `/api/v1/practice/targets/${target.id}/samples`);
+      expect(listed.data.samples[0].hasFeedback, raw).toBe(false);
     }
   });
 });

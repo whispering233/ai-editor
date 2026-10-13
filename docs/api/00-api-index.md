@@ -58,7 +58,7 @@
 | GET | `/api/v1/manuscript/:chapterNodeId` | 章正文（块文档） |
 | PUT | `/api/v1/manuscript/:chapterNodeId` | 章正文（块文档） |
 
-### 文风仿写练习（[120-api-practice.md](./120-api-practice.md）)
+### 文风仿写练习（[120-api-practice.md](./120-api-practice.md)）
 
 | 方法 | 路径 | 文档 |
 | :--- | :--- | :--- |

@@ -47,6 +47,7 @@ import {
   practiceSampleCreateReqSchema,
   practiceSampleDetailResSchema,
   practiceSampleDraftPutReqSchema,
+  practiceTargetCreateReqSchema,
   practiceTargetCreateResSchema,
   practiceTargetDeleteResSchema,
   practiceTargetUpdateReqSchema,
@@ -857,6 +858,16 @@ describe("practice 端点 schema（docs/api/120-api-practice.md）", () => {
     expect(practiceSampleDraftPutReqSchema.safeParse({ draft: "稿", extra: 1 }).success).toBe(false); // strict 单字段
   });
 
+  it("名称/文本类字段 trim 非空：纯空白 label 与 text 一律拒绝，带空白值落库前 trim", () => {
+    expect(practiceSampleCreateReqSchema.safeParse({ source_label: "   ", text: "范文" }).success).toBe(false);
+    expect(practiceSampleCreateReqSchema.safeParse({ source_label: "来源", text: "   " }).success).toBe(false);
+    expect(practiceSampleCreateReqSchema.safeParse({ source_label: "来源", text: "\n\t " }).success).toBe(false);
+    expect(
+      practiceSampleCreateReqSchema.parse({ source_label: "  《受戒》节选  ", text: "  明海出家已经四年了。  " }),
+    ).toEqual({ source_label: "《受戒》节选", text: "明海出家已经四年了。" });
+    expect(practiceTargetCreateReqSchema.parse({ name: "  汪曾祺  " }).name).toBe("汪曾祺"); // 同一口径，目标名
+  });
+
   it("响应 schema 与文档字段形状一致（目标项含 sampleCount / 详情含 targetName+observation / 删除计数）", () => {
     const T = "2026-10-01T10:00:00Z";
     const item = practiceTargetSchema.parse({
@@ -868,7 +879,7 @@ describe("practice 端点 schema（docs/api/120-api-practice.md）", () => {
       updatedAt: T,
     });
     expect(item.sampleCount).toBe(2);
-    // POST 响应的文档形状不含 sampleCount（响应 schema 非 strict：多出的键被剥离）
+    // POST 响应与列表项**同形**：含 sampleCount（新建目标下恒为 0）
     const created = practiceTargetCreateResSchema.parse({
       id: "pt-1",
       name: "目标",
@@ -877,7 +888,8 @@ describe("practice 端点 schema（docs/api/120-api-practice.md）", () => {
       createdAt: T,
       updatedAt: T,
     });
-    expect("sampleCount" in created).toBe(false);
+    expect(created.sampleCount).toBe(0);
+    expect(Object.keys(created).sort()).toEqual(Object.keys(item).sort());
     const detail = practiceSampleDetailResSchema.parse({
       id: "ps-1",
       targetId: "pt-1",
@@ -891,10 +903,10 @@ describe("practice 端点 schema（docs/api/120-api-practice.md）", () => {
         dimensions: [
           {
             name: "句长节奏",
-            sampleTrait: "短句",
-            draftTrait: "长句",
-            sampleQuotes: ["明海出家已经四年了。"],
-            draftQuotes: [],
+            sample_trait: "短句",
+            draft_trait: "长句",
+            sample_quotes: ["明海出家已经四年了。"],
+            draft_quotes: [],
             advice: "切短",
           },
         ],
@@ -903,7 +915,7 @@ describe("practice 端点 schema（docs/api/120-api-practice.md）", () => {
       createdAt: T,
       updatedAt: T,
     });
-    expect(detail.feedback?.dimensions[0].sampleTrait).toBe("短句");
+    expect(detail.feedback?.dimensions[0].sample_trait).toBe("短句"); // 卡内层 snake_case（嵌套透传）
     expect(practiceTargetDeleteResSchema.parse({ deleted: true, deletedSamples: 3 })).toEqual({
       deleted: true,
       deletedSamples: 3,

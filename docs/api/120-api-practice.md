@@ -6,13 +6,15 @@
 
 **前置条件**：全部端点要求当前工作区 `kind = "practice"`（小说工作区访问 → 400 `KIND_MISMATCH`；反向同理，小说语义端点由练习工作区访问同样 400）。无当前工作区 → 409 `NO_PROJECT_OPEN`。
 
-**请求字段 snake_case、响应字段 camelCase**（全站约定，同 `project` 模块）。
+**请求字段 snake_case、响应字段 camelCase**（全站约定，同 `project` 模块）——**例外**：嵌套对象内部字段按公共约定原样透传（点评卡内层恒 snake_case，见 [api-public.md](./api-public.md)「命名约定」）。
+
+**404 文案按端点语义**：目标端点（目标不存在）→ 「文风目标不存在」，样本端点（样本行在、目标行缺失的孤儿行同样）→ 「练习样本不存在」；码同为 `PRACTICE_NOT_FOUND`。
 
 **长度上限**一律取 shared 常量（`MAX_PRACTICE_OBSERVATION_CHARS` / `MAX_PRACTICE_SOURCE_LABEL_CHARS` / `MAX_PRACTICE_SAMPLE_CHARS` / `MAX_PRACTICE_DRAFT_CHARS`）——UI 提示与 REST schema 同源，超限 → 400 `VALIDATION_ERROR`。
 
 ### GET /api/v1/practice/targets
 
-文风目标列表（按 `updatedAt` 倒序）。
+文风目标列表（按 `updatedAt` 倒序；同值按 `id` 升序作稳定次序）。
 
 ```typescript
 // Query: (none)
@@ -41,8 +43,8 @@
   observation?: string;         // 可选：用户自己观察到的文风特点
 }
 
-// Res: 200
-{ id: string; name: string; observation: string | null; createdAt: string; updatedAt: string; }
+// Res: 200 —— 与列表项**同形**（含 `sampleCount`，新建目标下恒为 0）
+{ id: string; name: string; observation: string | null; sampleCount: 0; createdAt: string; updatedAt: string; }
 ```
 
 ### PUT /api/v1/practice/targets/:id
@@ -74,7 +76,7 @@
 
 ### GET /api/v1/practice/targets/:id/samples
 
-某目标下的样本列表（按 `updatedAt` 倒序）。
+某目标下的样本列表（按 `updatedAt` 倒序；同值按 `id` 升序作稳定次序）。
 
 ```typescript
 // Query: (none)
@@ -103,7 +105,7 @@
 // Req
 {
   source_kind?: "paste";        // 省略 = "paste"
-  source_label: string;         // 必填：来源说明（如「汪曾祺《受戒》节选」）
+  source_label: string;         // 必填：来源说明（如「汪曾祺《受戒》节选」；trim 非空）
   text: string;                 // 必填：范文快照（trim 非空，上限 MAX_PRACTICE_SAMPLE_CHARS）
 }
 
@@ -128,19 +130,21 @@
   sourceLabel: string;
   text: string;                 // 范文快照全文
   draft: string;                // 用户仿写稿（未写 = 空串）
-  feedback: FeedbackCard | null; // 点评卡（未点评 = null）；**服务端已防御解析**，坏 JSON 按 null 处理
+  feedback: FeedbackCard | null; // 点评卡（未点评 = null）；**读取侧只防「非对象」**：非法 JSON / 数组 / 字符串 / null → null，
+                                 // 合法 JSON 对象一律透传（`{}` 也照原样返回）；**卡内形状校验在写入侧**（提交点评工具的 schema）
   createdAt: string;
   updatedAt: string;
 }
 
 // FeedbackCard（点评卡；写入侧形状见 ../design/60-practice.md §4）
+// **卡内层字段遵循公共约定的嵌套透传（snake_case）**——camelCase 映射只作用于 API 顶层字段
 {
   dimensions: Array<{
     name: string;
-    sampleTrait: string;
-    draftTrait: string;
-    sampleQuotes: string[];     // 证据引用（服务端已校验：必为范文或稿件的子串）
-    draftQuotes: string[];
+    sample_trait: string;
+    draft_trait: string;
+    sample_quotes: string[];    // 证据引用（写入侧已校验：必为范文或稿件的子串）
+    draft_quotes: string[];
     advice: string;
   }>;
   summary?: string;

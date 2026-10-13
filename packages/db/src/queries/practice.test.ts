@@ -89,6 +89,11 @@ describe("文风目标（practice_targets）", () => {
       { id: b.id, name: "乙", observation: null, sampleCount: 0, createdAt: "2026-10-01T00:00:00Z", updatedAt: "2026-10-01T00:00:00Z" },
     ]);
 
+    // 同值（同毫秒写入）时按 id 升序作稳定次序：次序确定且可复现
+    setTargetUpdatedAt(b.id, "2026-10-02T00:00:00Z");
+    const tied = [a.id, b.id].sort();
+    expect(listPracticeTargets(db).map((t) => t.id)).toEqual(tied);
+
     // 样本删光后 sampleCount 回落（列表计数走同一查询，不留缓存）
     deletePracticeSample(db, listPracticeSamples(db, a.id)![0]!.id);
     deletePracticeSample(db, listPracticeSamples(db, a.id)![0]!.id);
@@ -201,7 +206,15 @@ describe("练习样本（practice_samples）", () => {
 
     expect(listPracticeSamples(db, target.id)!.map((s) => s.id)).toEqual([newer.id, older.id]);
 
-    const card = { dimensions: [{ name: "句长节奏", sampleTrait: "短句", draftTrait: "长句", sampleQuotes: [], draftQuotes: [], advice: "切短" }], summary: "总评" };
+    // 同值（同毫秒写入）时按 id 升序作稳定次序——两行 updated_at 逐字相同，次序仍确定（可复现）
+    const tieA = createPracticeSample(db, { targetId: target.id, sourceLabel: "平一", text: "范文平一" })!;
+    const tieB = createPracticeSample(db, { targetId: target.id, sourceLabel: "平二", text: "范文平二" })!;
+    setSampleUpdatedAt(tieA.id, "2026-10-03T00:00:00Z");
+    setSampleUpdatedAt(tieB.id, "2026-10-03T00:00:00Z");
+    const tied = [tieA.id, tieB.id].sort();
+    expect(listPracticeSamples(db, target.id)!.slice(0, 2).map((s) => s.id)).toEqual(tied);
+
+    const card = { dimensions: [{ name: "句长节奏", sample_trait: "短句", draft_trait: "长句", sample_quotes: [], draft_quotes: [], advice: "切短" }], summary: "总评" };
     updatePracticeDraft(db, newer.id, "我的仿写稿");
     setFeedback(newer.id, JSON.stringify(card));
 
@@ -250,7 +263,31 @@ describe("练习样本（practice_samples）", () => {
   });
 });
 
-describe("feedback 坏 JSON 防御解析", () => {
+describe("feedback 防御解析与卡内层命名", () => {
+  it("卡体按行原样解析：内存卡体键名与落库 JSON 逐字相同（内层 snake_case，无 camelCase 转换）", () => {
+    const target = createPracticeTarget(db, { name: "目标" });
+    const sample = createPracticeSample(db, { targetId: target.id, sourceLabel: "节选", text: "范文" })!;
+    const card = {
+      dimensions: [
+        { name: "叙述距离", sample_trait: "远", draft_trait: "近", sample_quotes: ["范文"], draft_quotes: ["稿"], advice: "拉远" },
+      ],
+      summary: "总评",
+    };
+    setFeedback(sample.id, JSON.stringify(card));
+
+    const stored = getPracticeSample(db, sample.id)!.feedback!;
+    expect(stored).toEqual(card);
+    const dimensions = stored.dimensions as Record<string, unknown>[];
+    expect(Object.keys(dimensions[0]!).sort()).toEqual([
+      "advice",
+      "draft_quotes",
+      "draft_trait",
+      "name",
+      "sample_quotes",
+      "sample_trait",
+    ]);
+  });
+
   it("坏 JSON（非法文本 / 非对象 / 数组 / JSON null）行不抛错：详情按 null、列表 hasFeedback = false，同表其他行照常返回", () => {
     const target = createPracticeTarget(db, { name: "目标" });
     const card = { dimensions: [{ name: "叙述距离" }], summary: "总评" };
@@ -259,6 +296,7 @@ describe("feedback 坏 JSON 防御解析", () => {
       { label: "JSON 字符串", raw: '"就一段字符串"', expectCard: null },
       { label: "JSON 数组", raw: "[1,2,3]", expectCard: null },
       { label: "JSON null", raw: "null", expectCard: null },
+      { label: "空对象", raw: "{}", expectCard: {} }, // 合法 JSON 对象一律透传（形状校验在写入侧）
       { label: "合法卡", raw: JSON.stringify(card), expectCard: card },
       { label: "未点评", raw: null, expectCard: null },
     ];

@@ -1150,7 +1150,8 @@ export type NamesResolveResult = z.infer<typeof namesResolveResSchema>;
 //
 // 全部端点要求当前工作区 kind = "practice"（反向守卫 requireKind("practice") 的挂载点只在
 // server/src/index.ts，且在该组 app.route 之前）；无当前工作区 → 409 NO_PROJECT_OPEN。
-// 请求字段 snake_case、响应字段 camelCase；**长度上限一律取 shared 常量**
+// 请求字段 snake_case、响应顶层字段 camelCase（**嵌套对象内部字段按公共约定原样透传**，
+// 即点评卡内层恒 snake_case，见 `practiceFeedbackSchema`）；**长度上限一律取 shared 常量**
 // （constants/practice.ts，schema 里不复述数字）⇒ 超限 400 VALIDATION_ERROR；
 // 目标 / 样本不存在 → 404 PRACTICE_NOT_FOUND。点评链路（触发 / 落库 / 渲染）不在本模块。
 
@@ -1160,18 +1161,20 @@ export type PracticeSourceKind = z.infer<typeof practiceSourceKindSchema>;
 
 /**
  * 点评卡（`GET /practice/samples/:id` 的 `feedback`；写入侧形状同此，见 docs/design/60-practice.md §4）。
- * **只描述形状、不做语义校验**：引用子串校验在提交点评工具（卡 6），坏 JSON 的防御解析在 db 层
- * （非对象 / 非法 JSON 一律按 null）——两处都不在本 schema 职责内。
+ * **卡内层字段恒 snake_case**——遵循公共约定的「嵌套对象内部字段原样透传」（docs/api/api-public.md），
+ * camelCase 映射只作用于 API 顶层契约字段。
+ * **只描述形状、不做语义校验**：卡内形状校验在**写入侧**（提交点评工具），读取侧只做「非对象 → null」
+ * 的防御解析（db 层：非法 JSON / 数组 / 字符串 / `null` → null；**合法 JSON 对象一律透传**，`{}` 亦然）。
  * `dimensions[]` 由 AI 从范文提炼（非固定清单，上限 = `MAX_FEEDBACK_DIMENSIONS`，写入侧约束）。
  */
 export const practiceFeedbackSchema = z.object({
   dimensions: z.array(
     z.object({
       name: z.string(), // 维度名（如「句长节奏」）
-      sampleTrait: z.string(), // 范文在该维度上的表现
-      draftTrait: z.string(), // 用户稿在该维度上的表现
-      sampleQuotes: z.array(z.string()), // 范文原句（服务端已校验 = 范文子串）
-      draftQuotes: z.array(z.string()), // 用户稿原句（= 稿件子串）
+      sample_trait: z.string(), // 范文在该维度上的表现
+      draft_trait: z.string(), // 用户稿在该维度上的表现
+      sample_quotes: z.array(z.string()), // 范文原句（写入侧已校验 = 范文子串）
+      draft_quotes: z.array(z.string()), // 用户稿原句（= 稿件子串）
       advice: z.string(), // 可执行建议
     }),
   ),
@@ -1179,7 +1182,7 @@ export const practiceFeedbackSchema = z.object({
 });
 export type PracticeFeedbackCard = z.infer<typeof practiceFeedbackSchema>;
 
-/** 文风目标（`GET /practice/targets` 列表项 = `PUT /practice/targets/:id` 响应的单项目形态：含样本数） */
+/** 文风目标（`GET /practice/targets` 列表项 = `POST` / `PUT /practice/targets/:id` 响应：**四端点同形**，含样本数） */
 export const practiceTargetSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -1190,7 +1193,7 @@ export const practiceTargetSchema = z.object({
 });
 export type PracticeTargetItem = z.infer<typeof practiceTargetSchema>;
 
-// GET /api/v1/practice/targets（按 updatedAt 倒序）
+// GET /api/v1/practice/targets（按 updatedAt 倒序，同值按 id 升序）
 export const practiceTargetsResSchema = z.object({ targets: z.array(practiceTargetSchema) });
 export type PracticeTargetsRes = z.infer<typeof practiceTargetsResSchema>;
 
@@ -1202,15 +1205,9 @@ export const practiceTargetCreateReqSchema = z
   })
   .strict();
 
-// 响应对照文档：**不含 sampleCount**（新建目标下恒为 0，文档未列该字段）
-export const practiceTargetCreateResSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  observation: z.string().nullable(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
-export type PracticeTargetCreated = z.infer<typeof practiceTargetCreateResSchema>;
+// 响应与列表项**同形**（含 `sampleCount`——新建目标下恒为 0；两种形状对 UI 无差别，不必分流）
+export const practiceTargetCreateResSchema = practiceTargetSchema;
+export type PracticeTargetCreated = PracticeTargetItem;
 
 // PUT /api/v1/practice/targets/:id（部分更新：**至少给一项**；省略 = 不动，observation 空串 = 清空写 null）
 export const practiceTargetUpdateReqSchema = z
@@ -1246,7 +1243,7 @@ export const practiceSampleSummarySchema = z.object({
 });
 export type PracticeSampleItem = z.infer<typeof practiceSampleSummarySchema>;
 
-// GET /api/v1/practice/targets/:id/samples（按 updatedAt 倒序）
+// GET /api/v1/practice/targets/:id/samples（按 updatedAt 倒序，同值按 id 升序）
 export const practiceSamplesResSchema = z.object({ samples: z.array(practiceSampleSummarySchema) });
 export type PracticeSamplesRes = z.infer<typeof practiceSamplesResSchema>;
 
@@ -1254,7 +1251,7 @@ export type PracticeSamplesRes = z.infer<typeof practiceSamplesResSchema>;
 export const practiceSampleCreateReqSchema = z
   .object({
     source_kind: practiceSourceKindSchema.optional(), // 省略 = "paste"
-    source_label: z.string().min(1).max(MAX_PRACTICE_SOURCE_LABEL_CHARS),
+    source_label: z.string().trim().min(1).max(MAX_PRACTICE_SOURCE_LABEL_CHARS), // 来源说明（trim 非空）
     text: z.string().trim().min(1).max(MAX_PRACTICE_SAMPLE_CHARS), // 范文快照（落库后不可变）
   })
   .strict();
@@ -1273,7 +1270,7 @@ export const practiceSampleDetailResSchema = z.object({
   sourceLabel: z.string(),
   text: z.string(), // 范文快照全文
   draft: z.string(), // 用户仿写稿（未写 = ""）
-  feedback: practiceFeedbackSchema.nullable(), // 未点评 = null（坏 JSON 由 db 层按 null）
+  feedback: practiceFeedbackSchema.nullable(), // 未点评 = null（db 层只把「非对象」按 null，合法 JSON 对象一律透传）
   createdAt: z.string(),
   updatedAt: z.string(),
 });
