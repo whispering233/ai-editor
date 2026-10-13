@@ -1,7 +1,9 @@
-// 书架主页 + 项目概览两形态（拆分；mode prop 路由分发，main.tsx：`#/` → home、`#/overview` → overview）
-// - home（书架主页 `#/`）：书架卡——书籍列表（行点击打开/当前书高亮；当前书「继续创作」跳概览）+
-//   新建（折叠/空书架主表单）+ 打开其他路径（折叠）+ 错误/加载/空态四态；打开/新建成功 → 跳 #/overview
-// - overview（`#/overview`）：项目概览四区块——项目信息（config）/ 创作要素（×4 并行 total）/
+// 根首页（工作区聚合）+ 项目概览两形态（拆分；mode prop 路由分发，main.tsx：`#/` → home、`#/overview` → overview）
+// - home（根首页 `#/`）：**按 kind 分区**——小说（书籍列表：行点击打开/当前工作区高亮按项目 id；
+//   当前工作区「继续创作」按 kind 落点）+ 文风练习（工作区卡列表；空分区给一行引导文案）；
+//   每分区各带一个新建入口（同一份表单实现，kind 决定目录与是否自动打开）+
+//   打开其他路径（折叠，小说卡内）+ 错误/加载/空态四态；打开落点 = lib/workspace 的 WORKSPACE_ENTRY_PATH
+// - overview（`#/overview`，仅小说工作区）：项目概览四区块——项目信息（config）/ 创作要素（×4 并行 total）/
 //   大纲概览（递归统计卷章场 + 最近更新）/ 最近会话（chat store 前 5 条）；无项目 → 回书架引导卡
 // 交互：阅读进度/去大纲 → #/outline 并定位节点（ui store focusOutlineNodeId 跨页传参）；
 // 会话行 → chat store setCurrentSession(id)（右栏恢复会话）；[开始新对话] → setCurrentSession(null)
@@ -9,15 +11,16 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { formatRelativeTime } from "@whispering233/ai-editor-shared";
-import type { EntityType, OutlineNode } from "@whispering233/ai-editor-shared";
+import type { EntityType, OutlineNode, WorkspaceKind } from "@whispering233/ai-editor-shared";
 import {
   BookOutlined,
   DeleteOutlined,
   DownloadOutlined,
   EditOutlined,
+  FormOutlined,
   UploadOutlined,
 } from "@ant-design/icons";
-import { Button, Input } from "antd";
+import { Button, Input, Typography } from "antd";
 import type { InputRef } from "antd";
 import {
   Dialog,
@@ -48,12 +51,22 @@ import {
 import { describeExportError, describeImportError } from "../lib/error-messages";
 import { validateBookName } from "../lib/book-name";
 import { isCurrentBook } from "../lib/shelf";
+import {
+  PRACTICE_EMPTY_HINT,
+  partitionWorkspaces,
+  WORKSPACE_ENTRY_PATH,
+  WORKSPACE_SECTION_TITLE,
+} from "../lib/workspace";
 import { entityListHost } from "../lib/entity-paths";
 import { describeOpenError } from "../lib/error-messages";
 import { desktopBridge } from "../lib/desktop";
 import { cn } from "../lib/utils";
 import { navigate } from "../hooks/use-route";
-import { buildBookPath, findOutlineNodeTitle, useProjectStore } from "../stores/project";
+import {
+  buildWorkspacePath,
+  findOutlineNodeTitle,
+  useProjectStore,
+} from "../stores/project";
 import { useChatStore } from "../stores/chat";
 import { useCloudStore } from "../stores/cloud";
 import { useDataRefresh } from "../hooks/use-data-refresh";
@@ -113,8 +126,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
   const outline = useProjectStore((s) => s.outline);
   const outlineLoading = useProjectStore((s) => s.outlineLoading);
   const loadOutline = useProjectStore((s) => s.loadOutline);
-  // 书架用于 rootPath（buildBookPath）+ 引导卡书籍列表（S13.4：有书时列出可打开）；
-  // 左栏 Sidebar 书架树与左栏 store 同源数据
+  // 列表用于 rootPath（buildWorkspacePath 拼新建目录）+ 根首页两分区的行数据（S13.4：有书时列出可打开）
   const bookshelf = useProjectStore((s) => s.bookshelf);
   const bookshelfLoading = useProjectStore((s) => s.bookshelfLoading);
   const bookshelfError = useProjectStore((s) => s.bookshelfError);
@@ -136,8 +148,8 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
   const [bookError, setBookError] = useState<string | null>(null);
   /** 有书形态下书籍点击打开失败的行内错误（S13.4；describeOpenError 映射，同 pathError 模式） */
   const [bookOpenError, setBookOpenError] = useState<string | null>(null);
-  /** 有书形态「新建一本…」折叠表单展开态 */
-  const [showCreateForm, setShowCreateForm] = useState(false);
+  /** 当前展开的新建表单属于哪个分区（null = 都收起；名称/错误/提交态由页面持有，两分区共用一份） */
+  const [createKind, setCreateKind] = useState<WorkspaceKind | null>(null);
   const [showPathForm, setShowPathForm] = useState(false);
   const [path, setPath] = useState("");
   // 桌面版能力桥（浏览器形态为 null → 「浏览…」按钮不渲染；每次渲染取值，桥是无状态对象）
@@ -262,11 +274,13 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     }
   }, [mode, config, sessions, sessionsLoading, sessionsError, loadSessions]);
 
-  /** 新建书籍：书名 → 创作根/books/<书名>/，create（不打开）→ open 进入新书（config 就绪后本页切概览形态） */
-  async function handleCreateBook(e: FormEvent) {
+  /** 新建工作区（小说分区「新建一本…」与练习分区「新建练习区」共用）：
+   * 目录 = 创作根/<kind 目录>/<名字>（目录映射单源 = shared `WORKSPACE_DIRS`，经 buildWorkspacePath 拼）；
+   * 小说 = 创建后直接进入（原书架行为不变），练习 = 只创建 + 刷新列表（不切当前工作区） */
+  async function handleCreateWorkspace(e: FormEvent, kind: WorkspaceKind) {
     e.preventDefault();
     const name = bookName.trim();
-    // 书名校验复用 lib/book-name（与 Sidebar 新建/导入同款规则——L3 防路径逃逸，错误文案直接用于内联提示）
+    // 书名校验复用 lib/book-name（与导入同款规则——L3 防路径逃逸，错误文案直接用于内联提示）
     const nameError = validateBookName(name);
     if (nameError !== null) {
       setBookError(nameError);
@@ -279,18 +293,34 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     setSubmitting(true);
     setBookError(null);
     try {
-      await createProjectAt(buildBookPath(bookshelf.rootPath, name), { name, language: "zh" });
-      // 成功后刷新书架（新书出现在左栏树）；config 已由 openProjectAt 刷新 → 本页切概览形态
+      const openAfterCreate = kind === "novel";
+      await createProjectAt(
+        buildWorkspacePath(bookshelf.rootPath, kind, name),
+        { name, language: "zh", kind },
+        { open: openAfterCreate },
+      );
+      // 成功后刷新列表（新工作区出现在对应分区）；config 已由 openProjectAt 刷新 → 小说侧切概览形态
       await loadBookshelf();
-      // L4（oracle U4 审核）：与 Sidebar 新建同款提示
-      useUiStore.getState().showToast(`已创建并打开《${name}》`);
       setBookName("");
-      navigate("/overview");
+      setCreateKind(null);
+      if (openAfterCreate) {
+        useUiStore.getState().showToast(`已创建并打开《${name}》`);
+        navigate(WORKSPACE_ENTRY_PATH[kind]);
+      } else {
+        useUiStore.getState().showToast(`已创建练习区「${name}」`);
+      }
     } catch (err) {
       setBookError(describeOpenError(openErrorCode(err)));
     } finally {
       setSubmitting(false);
     }
+  }
+
+  /** 切换某分区的新建表单展开态（同时只开一个；切换即清空上次的名称与错误） */
+  function toggleCreateForm(kind: WorkspaceKind) {
+    setCreateKind((current) => (current === kind ? null : kind));
+    setBookName("");
+    setBookError(null);
   }
 
   /** 打开其他路径（S1.4 保留能力；绝对路径 openProjectAt） */
@@ -312,12 +342,13 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     }
   }
 
-  /** 打开书籍（书架行；openProjectAt → 成功跳概览；失败行内展示 describeOpenError（页内行内文案） */
-  async function handleOpenBook(path: string) {
+  /** 打开根首页某一行的工作区（两分区共用；成功落点按 kind —— 单源 = WORKSPACE_ENTRY_PATH；
+   * 失败行内展示 describeOpenError（页内行内文案） */
+  async function handleOpenBook(path: string, kind: WorkspaceKind) {
     setBookOpenError(null);
     try {
       await openProjectAt(path);
-      navigate("/overview");
+      navigate(WORKSPACE_ENTRY_PATH[kind]);
     } catch (err) {
       setBookOpenError(describeOpenError(openErrorCode(err)));
     }
@@ -547,24 +578,28 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     );
   }
 
-  // ============ 书架主页（mode=home，路由 #/） ============
+  // ============ 根首页（mode=home，路由 #/）：工作区聚合入口，按 kind 分区 ============
+  // 分区与标题口径 = lib/workspace.ts（服务端 list 不分组）；当前工作区高亮仍按**项目 id**（isCurrentBook）
   if (mode === "home") {
     const shelfLoading = bookshelf === null && bookshelfLoading;
     const shelfError = bookshelfError !== null;
-    const shelfHasBooks = bookshelf !== null && bookshelf.books.length > 0;
-    // 当前书在书架里的那一条（删除入口需要书目录绝对路径，走 isCurrentBook 同一判据）：
-    // 用「打开其他路径」打开的项目不在 books/ 下，而删书只支持 books/ 直接子目录 → 这类项目不给
-    // 删除入口（不给必然会 400 的死路按钮）；书架未加载时也拿不到路径（加载完即出现）
+    // 分区（只分组、不重排：服务端已按 updatedAt 倒序跨目录统一排序）
+    const partitions = partitionWorkspaces(bookshelf?.books ?? null);
+    // 当前工作区在列表里的那一条（删除入口需要目录绝对路径，走 isCurrentBook 同一判据）：
+    // 用「打开其他路径」打开的项目不在任何工作区目录下，而删除只支持对应目录的直接子目录 → 这类项目不给
+    // 删除入口（不给必然会 400 的死路按钮）；列表未加载时也拿不到路径（加载完即出现）
     const currentShelfBook = bookshelf?.books.find((b) => isCurrentBook(b, config)) ?? null;
-    /** 新建表单（空书架主操作 / 有书折叠次级共用；错误与提交态由页面持有） */
-    function renderCreateBookForm(className: string) {
+
+    /** 新建工作区表单（小说 / 练习两分区**共用同一实现**，不新造第二套；kind 决定目录与创建后的落点）。
+     *  名称/错误/提交态由页面持有 ⇒ 同一时刻只有展开的那个分区渲染它 */
+    function renderCreateWorkspaceForm(kind: WorkspaceKind, className: string) {
       return (
-        <form onSubmit={handleCreateBook} className={className}>
+        <form onSubmit={(e) => void handleCreateWorkspace(e, kind)} className={className}>
           <div className="flex gap-2">
             <Input
               value={bookName}
               onChange={(e) => setBookName(e.target.value)}
-              placeholder="书名"
+              placeholder={kind === "novel" ? "书名" : "练习区名字"}
               maxLength={60}
               disabled={submitting}
             />
@@ -585,8 +620,8 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
           description={
             <p className="text-sm text-muted-foreground">
               {config !== null
-                ? `当前打开《${config.name}》，切换书籍或继续创作`
-                : "选择一本书打开，或新建一本"}
+                ? `当前打开《${config.name}》，切换工作区或继续创作`
+                : "选择一本小说或练习区打开，或新建一个"}
             </p>
           }
           action={
@@ -618,220 +653,286 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
           </div>
         )}
 
-        <div className="mt-4 rounded-lg border border-dashed border-border bg-card px-6 py-6">
-          {/* 当前打开书条：继续创作跳 #/overview；行内导出/重命名直显（红线） */}
-          {config !== null && (
-            <div className="mb-4 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
-              <div className="flex items-center gap-3">
-                <BookOutlined className="shrink-0 text-xl text-primary" />
-                {renaming ? (
-                  /* 重命名输入态：Enter/失焦提交、Esc 取消（div 而非 button——输入不可嵌交互元素） */
-                  <div className="flex min-w-0 flex-1 items-center gap-2">
-                    <Input
-                      ref={renameInputRef}
-                      value={renameValue}
-                      onChange={(e) => setRenameValue(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          void handleRenameSubmit();
-                        } else if (e.key === "Escape") {
-                          cancelRename();
-                        }
-                      }}
-                      onBlur={() => void handleRenameSubmit()}
-                      maxLength={60}
-                      disabled={renamingSubmitting}
-                      aria-label="重命名书名"
-                    />
-                  </div>
-                ) : (
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-foreground">{config.name}</p>
-                    <p className="text-xs text-muted-foreground">已打开</p>
-                  </div>
-                )}
-                {!renaming && (
-                  <>
-                    <Button
-                      size="small"
-                      className="shrink-0"
-                      onClick={() => setExportOpen(true)}
-                    >
-                      <DownloadOutlined className="text-sm" />
-                      导出
-                    </Button>
-                    <Button size="small" className="shrink-0" onClick={startRename}>
-                      <EditOutlined className="text-sm" />
-                      重命名
-                    </Button>
-                    {currentShelfBook !== null && (
-                      <Button
-                        size="small"
-                        className="shrink-0"
-                        onClick={() => setDeleteTarget(currentShelfBook)}
-                      >
-                        <DeleteOutlined className="text-sm" />
-                        删除
-                      </Button>
-                    )}
-                    <Button
-                      type="primary"
-                      size="small"
-                      className="shrink-0"
-                      onClick={() => navigate("/overview")}
-                    >
-                      继续创作
-                    </Button>
-                  </>
-                )}
-              </div>
-              {renaming && renameError && (
-                <p className="mt-1 text-sm text-destructive">{renameError}</p>
-              )}
-            </div>
-          )}
-
-          {shelfLoading ? (
-            /* 加载中骨架（防「还没有书」误闪——bookshelf 未就绪前不渲染任何文案分支） */
-            <div className="py-2">
-              <div className={cn(skeletonClass, "mx-auto h-6 w-2/3")} />
-              <div className={cn(skeletonClass, "mx-auto mt-2 h-4 w-1/2")} />
-              <div className="mt-5 space-y-2">
-                <div className={cn(skeletonClass, "h-10 rounded-lg")} />
-                <div className={cn(skeletonClass, "h-10 rounded-lg")} />
-              </div>
-            </div>
-          ) : shelfHasBooks ? (
-            <>
-              <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
-                {bookshelf!.books.map((book) => {
-                  // 当前书判定按**项目 id**（不是书名）：同名不同 id 并存时按 name 会高亮错书
-                  //（纯函数 isCurrentBook，卡 23.5 收口；行为级用例见 lib/shelf.test.ts）
-                  const isCurrent = isCurrentBook(book, config);
-                  // 行容器 = div：行内既要有「打开」又要行尾垃圾桶，而 HTML 不允许按钮嵌套
-                  // ——整行 <button> 包图标按钮是无效结构（点击冒泡成「打开」）
-                  return (
-                    <li key={book.path}>
-                      <div
-                        className={cn(
-                          "flex w-full items-center gap-1 px-3 py-2.5 transition-colors hover:bg-muted",
-                          // 当前打开的书：primary 淡染面（近白的 surface-muted 面在卡片白底上不可见）
-                          isCurrent && "bg-primary/10 ring-1 ring-primary/30 ring-inset",
-                        )}
-                      >
-                        <button
-                          type="button"
-                          title={
-                            isCurrent ? `继续创作《${book.name}》` : `打开《${book.name}》`
-                          }
-                          onClick={() => {
-                            if (isCurrent) navigate("/overview");
-                            else void handleOpenBook(book.path);
-                          }}
-                          className="flex min-w-0 flex-1 items-center gap-3 text-left"
-                        >
-                          <BookOutlined className="shrink-0 text-base text-muted-foreground/60" />
-                          <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-                            {book.name}
-                          </span>
-                          {isCurrent && (
-                            <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground">
-                              已打开
-                            </span>
-                          )}
-                          <span className="shrink-0 text-xs text-muted-foreground">
-                            {formatRelativeTime(book.updatedAt)}
-                          </span>
-                        </button>
-                        {/* 行尾垃圾桶（恒贴行尾；删除书不可恢复 → color="danger"，**不能**用 danger 糖：与 color+variant 同给时被忽略） */}
-                        <Button
-                          color="danger"
-                          variant="text"
-                          size="small"
-                          className="shrink-0"
-                          title="删除书籍"
-                          aria-label="删除书籍"
-                          icon={<DeleteOutlined />}
-                          onClick={() => setDeleteTarget(book)}
-                        />
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-              {bookOpenError !== null && (
-                <p className="mt-3 text-sm text-destructive">{bookOpenError}</p>
-              )}
-              <div className="mt-4 border-t border-border pt-3">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    className="rounded-md border border-border px-2.5 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                    onClick={() => setShowCreateForm((v) => !v)}
-                  >
-                    {showCreateForm ? "收起" : "新建一本…"}
-                  </button>
+        {/* 当前打开的工作区条（页级：根首页是聚合入口，两种 kind 都可能处于打开态）：
+            继续创作按 kind 落点（WORKSPACE_ENTRY_PATH）；行内导出/重命名/删除直显（红线） */}
+        {config !== null && (
+          <div className="mt-4 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
+            <div className="flex items-center gap-3">
+              <BookOutlined className="shrink-0 text-xl text-primary" />
+              {renaming ? (
+                /* 重命名输入态：Enter/失焦提交、Esc 取消（div 而非 button——输入不可嵌交互元素） */
+                <div className="flex min-w-0 flex-1 items-center gap-2">
+                  <Input
+                    ref={renameInputRef}
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void handleRenameSubmit();
+                      } else if (e.key === "Escape") {
+                        cancelRename();
+                      }
+                    }}
+                    onBlur={() => void handleRenameSubmit()}
+                    maxLength={60}
+                    disabled={renamingSubmitting}
+                    aria-label="重命名书名"
+                  />
                 </div>
-                {showCreateForm && renderCreateBookForm("mt-2 flex flex-col gap-2 text-left")}
-              </div>
-            </>
-          ) : shelfError ? (
-            /* 书架加载失败：卡内中性占位（错误块在上方提供重试；不显示「还没有书」误导） */
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              书架加载失败，重试后可查看书籍或新建
-            </p>
-          ) : (
-            /* 空书架：创建引导（「还没有书」仅此分支） */
-            <>
-              <p className="text-base font-semibold text-foreground">还没有书，先创建一本</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                每本书一个独立目录（books/书名/），写作数据互不干扰
-              </p>
-              {renderCreateBookForm("mx-auto mt-5 flex max-w-xs flex-col gap-2")}
-              <p className="mt-2 text-center text-xs text-muted-foreground">
-                创建于 创作根/books/书名/ 目录
-              </p>
-            </>
-          )}
-
-          {/* 打开其他路径（S1.4 保留能力，折叠；次级操作；不依赖书架，错误形态同样可用） */}
-          <div className="mt-4 border-t border-border pt-3">
-            <button
-              type="button"
-              className="rounded-md border border-border px-2.5 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              onClick={() => setShowPathForm((v) => !v)}
-            >
-              {showPathForm ? "收起" : "打开其他路径…"}
-            </button>
-            {showPathForm && (
-              <form onSubmit={handleOpenPath} className="mt-2 flex flex-col gap-2 text-left">
-                <div className="flex items-center gap-2">
-                  <div className="flex-1">
-                    <Input
-                      value={path}
-                      onChange={(e) => setPath(e.target.value)}
-                      placeholder="/absolute/path/to/project（须含 project.json）"
-                      disabled={submitting}
-                    />
-                  </div>
-                  {/* 桌面版专属：原生目录选择框直接打开所选项目；浏览器形态无桥 → 不渲染 */}
-                  {bridge !== null && (
-                    <Button disabled={submitting} onClick={() => void handleBrowse()}>
-                      浏览…
+              ) : (
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-foreground">{config.name}</p>
+                  <p className="text-xs text-muted-foreground">已打开</p>
+                </div>
+              )}
+              {!renaming && (
+                <>
+                  <Button size="small" className="shrink-0" onClick={() => setExportOpen(true)}>
+                    <DownloadOutlined className="text-sm" />
+                    导出
+                  </Button>
+                  <Button size="small" className="shrink-0" onClick={startRename}>
+                    <EditOutlined className="text-sm" />
+                    重命名
+                  </Button>
+                  {currentShelfBook !== null && (
+                    <Button
+                      size="small"
+                      className="shrink-0"
+                      onClick={() => setDeleteTarget(currentShelfBook)}
+                    >
+                      <DeleteOutlined className="text-sm" />
+                      删除
                     </Button>
                   )}
-                </div>
-                <div>
-                  <Button htmlType="submit" disabled={submitting}>
-                    打开
+                  <Button
+                    type="primary"
+                    size="small"
+                    className="shrink-0"
+                    onClick={() => navigate(WORKSPACE_ENTRY_PATH[config.kind])}
+                  >
+                    继续创作
                   </Button>
-                </div>
-                {pathError && <p className="text-sm text-destructive">{pathError}</p>}
-              </form>
+                </>
+              )}
+            </div>
+            {renaming && renameError && (
+              <p className="mt-1 text-sm text-destructive">{renameError}</p>
             )}
           </div>
-        </div>
+        )}
+
+        {/* 打开失败：两分区的行共用同一反馈位（点练习区的行失败也显示在这里） */}
+        {bookOpenError !== null && <p className="mt-3 text-sm text-destructive">{bookOpenError}</p>}
+
+        {/* 分区 1：小说（原书架主页内容与行为不变） */}
+        <section className="mt-6">
+          <Typography.Title level={5}>{WORKSPACE_SECTION_TITLE.novel}</Typography.Title>
+          <div className="mt-3 rounded-lg border border-dashed border-border bg-card px-6 py-6">
+            {shelfLoading ? (
+              /* 加载中骨架（防「还没有书」误闪——bookshelf 未就绪前不渲染任何文案分支） */
+              <div className="py-2">
+                <div className={cn(skeletonClass, "mx-auto h-6 w-2/3")} />
+                <div className={cn(skeletonClass, "mx-auto mt-2 h-4 w-1/2")} />
+                <div className="mt-5 space-y-2">
+                  <div className={cn(skeletonClass, "h-10 rounded-lg")} />
+                  <div className={cn(skeletonClass, "h-10 rounded-lg")} />
+                </div>
+              </div>
+            ) : partitions.novel.length > 0 ? (
+              <>
+                <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border">
+                  {partitions.novel.map((book) => {
+                    // 当前书判定按**项目 id**（不是书名）：同名不同 id 并存时按 name 会高亮错书
+                    //（纯函数 isCurrentBook，卡 23.5 收口；行为级用例见 lib/shelf.test.ts）
+                    const isCurrent = isCurrentBook(book, config);
+                    // 行容器 = div：行内既要有「打开」又要行尾垃圾桶，而 HTML 不允许按钮嵌套
+                    // ——整行 <button> 包图标按钮是无效结构（点击冒泡成「打开」）
+                    return (
+                      <li key={book.path}>
+                        <div
+                          className={cn(
+                            "flex w-full items-center gap-1 px-3 py-2.5 transition-colors hover:bg-muted",
+                            // 当前打开的书：primary 淡染面（近白的 surface-muted 面在卡片白底上不可见）
+                            isCurrent && "bg-primary/10 ring-1 ring-primary/30 ring-inset",
+                          )}
+                        >
+                          <button
+                            type="button"
+                            title={
+                              isCurrent ? `继续创作《${book.name}》` : `打开《${book.name}》`
+                            }
+                            onClick={() => {
+                              // 落点按 kind（单源 = lib/workspace 的 WORKSPACE_ENTRY_PATH）
+                              if (isCurrent) navigate(WORKSPACE_ENTRY_PATH[book.kind]);
+                              else void handleOpenBook(book.path, book.kind);
+                            }}
+                            className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                          >
+                            <BookOutlined className="shrink-0 text-base text-muted-foreground/60" />
+                            <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                              {book.name}
+                            </span>
+                            {isCurrent && (
+                              <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground">
+                                已打开
+                              </span>
+                            )}
+                            <span className="shrink-0 text-xs text-muted-foreground">
+                              {formatRelativeTime(book.updatedAt)}
+                            </span>
+                          </button>
+                          {/* 行尾垃圾桶（恒贴行尾；删除书不可恢复 → color="danger"，**不能**用 danger 糖：与 color+variant 同给时被忽略） */}
+                          <Button
+                            color="danger"
+                            variant="text"
+                            size="small"
+                            className="shrink-0"
+                            title="删除书籍"
+                            aria-label="删除书籍"
+                            icon={<DeleteOutlined />}
+                            onClick={() => setDeleteTarget(book)}
+                          />
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <div className="mt-4 border-t border-border pt-3">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="rounded-md border border-border px-2.5 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      onClick={() => toggleCreateForm("novel")}
+                    >
+                      {createKind === "novel" ? "收起" : "新建一本…"}
+                    </button>
+                  </div>
+                  {createKind === "novel" &&
+                    renderCreateWorkspaceForm("novel", "mt-2 flex flex-col gap-2 text-left")}
+                </div>
+              </>
+            ) : shelfError ? (
+              /* 书架加载失败：卡内中性占位（错误块在上方提供重试；不显示「还没有书」误导） */
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                书架加载失败，重试后可查看书籍或新建
+              </p>
+            ) : (
+              /* 空书架：创建引导（「还没有书」仅此分支） */
+              <>
+                <p className="text-base font-semibold text-foreground">还没有书，先创建一本</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  每本书一个独立目录（books/书名/），写作数据互不干扰
+                </p>
+                {renderCreateWorkspaceForm("novel", "mx-auto mt-5 flex max-w-xs flex-col gap-2")}
+                <p className="mt-2 text-center text-xs text-muted-foreground">
+                  创建于 创作根/books/书名/ 目录
+                </p>
+              </>
+            )}
+
+            {/* 打开其他路径（S1.4 保留能力，折叠；次级操作；不依赖列表，错误形态同样可用） */}
+            <div className="mt-4 border-t border-border pt-3">
+              <button
+                type="button"
+                className="rounded-md border border-border px-2.5 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                onClick={() => setShowPathForm((v) => !v)}
+              >
+                {showPathForm ? "收起" : "打开其他路径…"}
+              </button>
+              {showPathForm && (
+                <form onSubmit={handleOpenPath} className="mt-2 flex flex-col gap-2 text-left">
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1">
+                      <Input
+                        value={path}
+                        onChange={(e) => setPath(e.target.value)}
+                        placeholder="/absolute/path/to/project（须含 project.json）"
+                        disabled={submitting}
+                      />
+                    </div>
+                    {/* 桌面版专属：原生目录选择框直接打开所选项目；浏览器形态无桥 → 不渲染 */}
+                    {bridge !== null && (
+                      <Button disabled={submitting} onClick={() => void handleBrowse()}>
+                        浏览…
+                      </Button>
+                    )}
+                  </div>
+                  <div>
+                    <Button htmlType="submit" disabled={submitting}>
+                      打开
+                    </Button>
+                  </div>
+                  {pathError && <p className="text-sm text-destructive">{pathError}</p>}
+                </form>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* 分区 2：文风练习（工作区卡列表 = 名字 + 最近更新 + 「已打开」徽标；样本数待卡 9 加列表接口） */}
+        <section className="mt-6">
+          <div className="flex items-center justify-between gap-2">
+            <Typography.Title level={5}>{WORKSPACE_SECTION_TITLE.practice}</Typography.Title>
+            <Button size="small" className="shrink-0" onClick={() => toggleCreateForm("practice")}>
+              {createKind === "practice" ? "收起" : "新建练习区"}
+            </Button>
+          </div>
+          {createKind === "practice" &&
+            renderCreateWorkspaceForm("practice", "mt-3 flex flex-col gap-2 text-left")}
+          {shelfLoading ? (
+            <div className="mt-3">
+              <div className={cn(skeletonClass, "h-10 rounded-lg")} />
+            </div>
+          ) : partitions.practice.length > 0 ? (
+            <ul className="mt-3 divide-y divide-border overflow-hidden rounded-lg border border-border">
+              {partitions.practice.map((workspace) => {
+                // 当前工作区同样只按**项目 id** 判定（与小说分区同一判据、同一淡染面）
+                const isCurrent = isCurrentBook(workspace, config);
+                return (
+                  <li key={workspace.path}>
+                    <button
+                      type="button"
+                      title={
+                        isCurrent
+                          ? `继续练习「${workspace.name}」`
+                          : `打开「${workspace.name}」`
+                      }
+                      onClick={() => {
+                        if (isCurrent) navigate(WORKSPACE_ENTRY_PATH[workspace.kind]);
+                        else void handleOpenBook(workspace.path, workspace.kind);
+                      }}
+                      className={cn(
+                        "flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted",
+                        isCurrent && "bg-primary/10 ring-1 ring-primary/30 ring-inset",
+                      )}
+                    >
+                      <FormOutlined className="shrink-0 text-base text-muted-foreground/60" />
+                      <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                        {workspace.name}
+                      </span>
+                      {isCurrent && (
+                        <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground">
+                          已打开
+                        </span>
+                      )}
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        {formatRelativeTime(workspace.updatedAt)}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : shelfError ? (
+            /* 加载失败：与小说分区同一错误块提供重试，这里只说「重试后可看到什么」 */
+            <p className="mt-3 text-sm text-muted-foreground">加载失败，重试后可查看练习区</p>
+          ) : (
+            /* 空分区：一行引导文案（不渲染空卡片） */
+            <p className="mt-3 text-xs text-muted-foreground">{PRACTICE_EMPTY_HINT}</p>
+          )}
+        </section>
 
         {/* 导入备份 Dialog（zip + 书名；同名二选一冲突态） */}
         <Dialog

@@ -3,7 +3,8 @@
 // 路由表见 （10 路由，一级化）：#/、#/overview、#/outline、#/outline/:nodeId、
 // #/characters[/:id]、#/setting[/:id]、#/locations[/:id]、#/relations、#/hooks[/:id]、
 // #/timeline、#/timeline/:id、#/timepoints/:id、#/references[/:id]、#/manuscript/:chapterId、
-// #/trash、#/preferences
+// #/trash、#/preferences、#/practice[/...]（练习工作区；工作区类型路由守卫见
+// hooks/use-workspace-route-guard.ts）
 // （#/chat、#/canvas 已移除；#/entities/* 与 #/settings 仅作旧址重定向；未知 hash 回退 #/ 兜底）
 import { useEffect, useState } from "react";
 
@@ -17,6 +18,7 @@ export interface Route {
 
 /** 已知路由首段（路由表；根路由 "" 由空 segments 表达；#/chat 已移除不再属已知段）
  * 一级化后：characters/setting/locations/relations/timepoints/preferences 为新段；
+ * practice = 练习工作区段（`#/practice` 列表 + `#/practice/:sampleId` 练习页）；
  * entities/settings 仍属已知段——仅作旧址重定向（main.tsx 处理），避免老书签被误判回退 */
 export const KNOWN_ROUTE_SEGMENTS = [
   "outline",
@@ -34,6 +36,7 @@ export const KNOWN_ROUTE_SEGMENTS = [
   "trash",
   "settings",
   "preferences",
+  "practice",
 ] as const;
 
 /**

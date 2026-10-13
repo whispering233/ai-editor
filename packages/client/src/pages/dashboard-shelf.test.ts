@@ -8,8 +8,8 @@ import { describe, expect, it } from "vitest";
 const dashboard = readFileSync(new URL("./Dashboard.tsx", import.meta.url), "utf8");
 
 describe("书架行渲染", () => {
-  it("书架行直接渲染 bookshelf.books（无分组小标题）", () => {
-    expect(dashboard).toContain("bookshelf!.books.map((book)");
+  it("小说分区直接渲染该书分区的行（分组只看 kind，不再有二级小标题）", () => {
+    expect(dashboard).toContain("partitions.novel.map((book)");
     expect(dashboard).not.toContain("groupShelfBooks");
   });
 
@@ -19,7 +19,7 @@ describe("书架行渲染", () => {
   });
 
   it("打开语义仍挂在 isCurrent 上（判定只服务识别，不改变打开行为）", () => {
-    expect(dashboard).toMatch(/if \(isCurrent\) navigate\("\/overview"\)/);
+    expect(dashboard).toMatch(/if \(isCurrent\) navigate\(WORKSPACE_ENTRY_PATH\[book\.kind\]\)/);
   });
 });
 

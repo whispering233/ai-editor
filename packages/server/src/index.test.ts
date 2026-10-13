@@ -82,7 +82,7 @@ describe("startServer 基础路由", () => {
   it("相对路径创作根 → list 返回绝对 rootPath（2026-08 修复：前端拼路径可过 isAbsolute 校验）", async () => {
  // 模拟 CLI 相对路径启动（node dist/index.js test-project）：startServer 内部须归一化为
  // 绝对路径（基于 process.cwd resolve），否则 list 返回相对 rootPath → 前端
- // buildBookPath 拼出相对路径 → POST /project/create 的 resolveProjectDir 400 拒绝
+ // buildWorkspacePath 拼出相对路径 → POST /project/create 的 resolveProjectDir 400 拒绝
     const dir = makeTmpDir();
     const handle = await startServer(relative(process.cwd(), dir), { port: 0, openBrowser: false });
     try {

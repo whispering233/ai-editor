@@ -1,5 +1,5 @@
 // project store 测试（S1.4：openProjectAt 的 rebuilt toast、loadConfig 的 loadError 区分）
-// + S1.5：书架 loadBookshelf 成功/失败、buildBookPath 路径拼接
+// + S1.5：书架 loadBookshelf 成功/失败、buildWorkspacePath 路径拼接（卡 8 起按 kind 拼）
 // + loadAgents/saveAgents（加载/保存 + 外部修改检测）
 // mock lib/api 模块（保留 ApiError 类真实实现）
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -33,7 +33,7 @@ import {
   openProject as apiOpenProject,
   saveProjectAgents as apiSaveProjectAgents,
 } from "../lib/api";
-import { buildBookPath, useProjectStore } from "./project";
+import { buildWorkspacePath, useProjectStore } from "./project";
 import { useUiStore } from "./ui";
 
 const mocked = {
@@ -51,6 +51,7 @@ const sampleConfig: ProjectConfig = {
   id: "proj-1",
   name: "我的小说",
   language: "zh",
+  kind: "novel", // 工作区类型（恒下发字段）
   schemaVersion: 1,
   currentPosition: null,
   deductionNodes: [], // （推演标记字段）
@@ -248,6 +249,24 @@ describe("createProjectAt / closeProject", () => {
     expect(useProjectStore.getState().config).toEqual(sampleConfig);
   });
 
+  it("options.open = false：只创建不打开（练习区新建不切当前工作区）", async () => {
+    mocked.createProject.mockResolvedValue({ id: "proj-p", path: "/root/practice/仿写", created: true });
+    await useProjectStore
+      .getState()
+      .createProjectAt(
+        "/root/practice/仿写",
+        { name: "仿写", language: "zh", kind: "practice" },
+        { open: false },
+      );
+    expect(mocked.createProject).toHaveBeenCalledWith("/root/practice/仿写", {
+      name: "仿写",
+      language: "zh",
+      kind: "practice",
+    });
+    expect(mocked.openProject).not.toHaveBeenCalled();
+    expect(useProjectStore.getState().config).toBeNull();
+  });
+
   it("close → 清空 config/outline", async () => {
     useProjectStore.setState({
       config: sampleConfig,
@@ -371,17 +390,31 @@ describe("AGENTS.md loadAgents/saveAgents", () => {
   });
 });
 
-describe("buildBookPath（S1.5 书架路径拼接）", () => {
-  it("{rootPath}/books/{书名}（中文书名原样）", () => {
-    expect(buildBookPath("/home/me/novels", "我的小说")).toBe("/home/me/novels/books/我的小说");
+describe("buildWorkspacePath（工作区目录拼接；目录映射单源 = shared WORKSPACE_DIRS）", () => {
+  it("{rootPath}/books/{书名}（小说；中文书名原样）", () => {
+    expect(buildWorkspacePath("/home/me/novels", "novel", "我的小说")).toBe(
+      "/home/me/novels/books/我的小说",
+    );
+  });
+
+  it("{rootPath}/practice/{名字}（练习区）", () => {
+    expect(buildWorkspacePath("/home/me/novels", "practice", "汪曾祺仿写")).toBe(
+      "/home/me/novels/practice/汪曾祺仿写",
+    );
   });
 
   it("rootPath 尾斜杠归一化", () => {
-    expect(buildBookPath("/home/me/novels/", "修仙")).toBe("/home/me/novels/books/修仙");
-    expect(buildBookPath("/home/me/novels///", "修仙")).toBe("/home/me/novels/books/修仙");
+    expect(buildWorkspacePath("/home/me/novels/", "novel", "修仙")).toBe(
+      "/home/me/novels/books/修仙",
+    );
+    expect(buildWorkspacePath("/home/me/novels///", "novel", "修仙")).toBe(
+      "/home/me/novels/books/修仙",
+    );
   });
 
   it("书名去首尾空白", () => {
-    expect(buildBookPath("/home/me/novels", "  我的小说  ")).toBe("/home/me/novels/books/我的小说");
+    expect(buildWorkspacePath("/home/me/novels", "novel", "  我的小说  ")).toBe(
+      "/home/me/novels/books/我的小说",
+    );
   });
 });

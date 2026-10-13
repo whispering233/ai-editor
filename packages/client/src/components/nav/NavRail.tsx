@@ -1,6 +1,10 @@
-// 左栏 NavRail（重构，替代原书架树 Sidebar）：
-// 顶部标识「书架」（书架主页入口 #/）+ 收起按钮 + 书名按钮（项目概览入口 #/overview）+ 一级导航
-// （antd Menu 八项）+ 工具区（回收站）+ 底部设置/主题。书架树/新建/导入/导出/重命名已由书架主页 #/ 承接（1-3/1-3b），
+// 左栏 NavRail（重构，替代原书架树 Sidebar），**形态按当前工作区类型（`kind`）取**：
+// 顶部标识（根首页 `#/` 入口）+ 收起按钮 + [书名按钮（项目概览入口 `#/overview`）] + 一级导航
+// （antd Menu）+ [工具区（回收站）] + 底部四入口。项集 / 标识文案 / 是否渲染回收站与书名按钮一律取自
+// `./nav-items.tsx` 的 `NAV_RAIL_BY_KIND`（kind → 形态的唯一定义处，见 DESIGN.md §导航与外壳
+// 「左栏按工作区类型渲染」）——小说 = 八项 + 回收站 + 书名按钮；练习 = 仅「文风练习」（`#/practice`）、
+// 无回收站、无书名按钮（练习工作区没有项目概览页）。
+// 书架树/新建/导入/导出/重命名已由书架主页 #/ 承接（1-3/1-3b），
 // 会话切换由右栏会话下拉承担——本组件不再持有任何书架数据。
 // 无项目打开：书名按钮与业务导航项禁用（引导回顶部「书架」进书架主页，行为平移自旧 TabBar noProject guard）。
 // 高亮：路由首段 → Menu key（timepoints 宿主时间轴；**overview 无 Menu 项**——它由书名按钮用选中面表达）；
@@ -17,24 +21,17 @@
 import { Badge, Button, Menu } from "antd";
 import { useState } from "react";
 import {
-  ApartmentOutlined,
   BookOutlined,
   CloudSyncOutlined,
-  DeleteOutlined,
   DoubleLeftOutlined,
-  EnvironmentOutlined,
-  FieldTimeOutlined,
   MoonOutlined,
-  PushpinOutlined,
-  ReadOutlined,
   SaveOutlined,
   SettingOutlined,
-  ShareAltOutlined,
   SunOutlined,
-  TeamOutlined,
-  TagsOutlined,
 } from "@ant-design/icons";
+import { resolveWorkspaceKind } from "@whispering233/ai-editor-shared";
 import { AppMark } from "../brand/app-mark";
+import { NAV_RAIL_BY_KIND, TRASH_ITEM } from "./nav-items";
 import { ApiError, CLIENT_NETWORK_ERROR, createProjectBackup } from "../../lib/api";
 import { cloudBadgeTone, useCloudStore } from "../../stores/cloud";
 import type { Route } from "../../hooks/use-route";
@@ -43,18 +40,6 @@ import { useTheme } from "../../hooks/use-theme";
 import { SIDEBAR_MIN_WIDTH } from "../../hooks/use-panels";
 import { useProjectStore } from "../../stores/project";
 import { useUiStore } from "../../stores/ui";
-
-/** Menu key = 导航目标 path（onClick 直接 navigate(key)）；**「概览」不在列**（入口 = 书名按钮，#/overview） */
-const NAV_ITEMS = [
-  { key: "/outline", icon: <ApartmentOutlined />, label: "大纲" },
-  { key: "/characters", icon: <TeamOutlined />, label: "人物" },
-  { key: "/setting", icon: <TagsOutlined />, label: "设定" },
-  { key: "/locations", icon: <EnvironmentOutlined />, label: "地点" },
-  { key: "/hooks", icon: <PushpinOutlined />, label: "伏笔" },
-  { key: "/timeline", icon: <FieldTimeOutlined />, label: "时间轴" },
-  { key: "/relations", icon: <ShareAltOutlined />, label: "关联" },
-  { key: "/references", icon: <ReadOutlined />, label: "参考资料" },
-] as const;
 
 /** 路由 → 导航高亮 key（详情路由同宿主高亮；timepoints 宿主时间轴；#/ 与 #/overview 均无 Menu 项） */
 function navKey(route: Route): string | null {
@@ -113,8 +98,11 @@ export function NavRail({
   const selectedKey = navKey(route);
   /** 当前在项目概览页（书名按钮用选中面——概览不再占一级导航位） */
   const atOverview = route.segments[0] === "overview";
+  // 左栏形态按**当前工作区类型**取（唯一常量表）；未打开项目时 config 为 null，按缺省 novel 形态渲染
+  // （导航项全禁用——用户要去根首页挑一个工作区）
+  const spec = NAV_RAIL_BY_KIND[resolveWorkspaceKind(config?.kind)];
 
-  const items = NAV_ITEMS.map((item) => ({
+  const items = spec.items.map((item) => ({
     ...item,
     disabled: noProject,
     // 当前项与项目无关（回收站/概览/大纲等均需项目）——统一禁用
@@ -138,8 +126,8 @@ export function NavRail({
         >
           <AppMark />
           {/* 不挂 `truncate`：合成斜体的墨迹会越出字宽，`overflow: hidden` 会切掉「架」右缘
-              （见 DESIGN.md §Typography）——固定两字标签只需防折行 */}
-          <span className="whitespace-nowrap text-base italic">书架</span>
+              （见 DESIGN.md §Typography）——固定标签只需防折行。文案按 kind（书架 / 文风练习） */}
+          <span className="whitespace-nowrap text-base italic">{spec.brandLabel}</span>
         </a>
         {onToggleCollapse && (
           <Button
@@ -156,29 +144,36 @@ export function NavRail({
 
       {/* 导航区 */}
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
-        {/* 书名按钮（项目概览入口，旁显当前书名；#/overview 路由高亮为选中面——DESIGN.md menu-item-selected） */}
-        <Button
-          color="default" variant={atOverview ? "filled" : "text"}
-          block
-          className="mb-1"
-          icon={<BookOutlined />}
-          disabled={noProject}
-          title={noProject ? "先在书架打开一本书" : `打开《${config?.name ?? ""}》概览`}
-          onClick={() => navigate("/overview")}
-        >
-          <span className="min-w-0 flex-1 truncate text-left text-sm">
-            {config?.name ?? "概览"}
-          </span>
-        </Button>
+        {/* 书名按钮（项目概览入口，旁显当前书名；#/overview 路由高亮为选中面——DESIGN.md menu-item-selected）
+            练习工作区没有项目概览页（`WORKSPACE_ENTRY_PATH`），故按 kind 不渲染（否则是死按钮） */}
+        {spec.projectOverview && (
+          <Button
+            color="default" variant={atOverview ? "filled" : "text"}
+            block
+            className="mb-1"
+            icon={<BookOutlined />}
+            disabled={noProject}
+            title={noProject ? "先在书架打开一本书" : `打开《${config?.name ?? ""}》概览`}
+            onClick={() => navigate("/overview")}
+          >
+            <span className="min-w-0 flex-1 truncate text-left text-sm">
+              {config?.name ?? "概览"}
+            </span>
+          </Button>
+        )}
 
         <Menu
           mode="inline"
           selectedKeys={selectedKey !== null ? [selectedKey] : []}
           items={[
             ...items,
-            { type: "divider", key: "divider" },
-            // 回收站与创作导航分开（视觉分组，仍为一级项）——两者均需项目，统一禁用
-            { key: "/trash", icon: <DeleteOutlined />, label: "回收站", disabled: noProject },
+            // 工具区（回收站）只属小说工作区（`spec.trash`）——与创作导航分开（视觉分组，仍为一级项）
+            ...(spec.trash
+              ? [
+                  { type: "divider" as const, key: "divider" },
+                  { ...TRASH_ITEM, disabled: noProject },
+                ]
+              : []),
           ]}
           onClick={({ key }) => navigate(key)}
         />

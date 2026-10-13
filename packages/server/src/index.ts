@@ -166,7 +166,7 @@ export async function startServer(projectRoot: string, options: StartServerOptio
 
  // 创作根归一化（2026-08 修复）：CLI 以相对路径启动（node packages/server/dist/index.js
  // test-project）时，原值直接注入会导致 GET /api/v1/project/list 返回相对 rootPath，
- // 前端 buildBookPath(rootPath, name) 拼出相对路径后，POST /project/create 的
+ // 前端 buildWorkspacePath(rootPath, kind, name) 拼出相对路径后，POST /project/create 的
  // resolveProjectDir 中 isAbsolute 校验失败 → 400 INVALID_PROJECT_PATH。此处统一基于
  // process.cwd resolve 为绝对路径（对绝对输入幂等），detectProject/setProjectRoot
  // 及其下游消费方全部使用归一化值；create/open 请求体 path 仍要求绝对（安全校验不变）。

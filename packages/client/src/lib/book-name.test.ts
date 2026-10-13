@@ -13,7 +13,7 @@ describe("validateBookName（书名校验——防路径逃逸 + 非空）", () 
     expect(validateBookName("   ")).toBe("请输入书名");
   });
 
-  it("路径分隔符 / 或 \\ → 拒绝（buildBookPath 拼目录名，防逃出 books/）", () => {
+  it("路径分隔符 / 或 \\ → 拒绝（buildWorkspacePath 拼目录名，防逃出工作区目录）", () => {
     expect(validateBookName("a/b")).toBe("书名不能包含 /、\\ 或为 . / ..");
     expect(validateBookName("a\\b")).toBe("书名不能包含 /、\\ 或为 . / ..");
   });

@@ -55,6 +55,8 @@ describe("parseHashRoute", () => {
     ["#/overview", ["overview"]],
     ["#/entities/character", ["entities", "character"]], // 旧址：已知段，redirect 兜底
     ["#/settings", ["settings"]],
+    ["#/practice", ["practice"]],
+    ["#/practice/sample-1", ["practice", "sample-1"]],
   ])("一级化新段解析 %s", (hash, segments) => {
     expect(parseHashRoute(hash)).toEqual({
       path: `/${(segments as string[]).join("/")}`,

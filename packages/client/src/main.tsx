@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import { useEffect } from "react";
 import { navigate, useHashRoute, type Route } from "./hooks/use-route";
 import { useEnterLastBook } from "./hooks/use-enter-last-book";
+import { useWorkspaceRouteGuard } from "./hooks/use-workspace-route-guard";
 import { AppShell } from "./components/AppShell";
 import { AntdProvider } from "./components/AntdProvider";
 import { ErrorBoundary } from "./components/feedback/ErrorBoundary";
@@ -20,6 +21,7 @@ import TimelineDetail from "./pages/TimelineDetail";
 import ReferenceList from "./pages/ReferenceList";
 import ReferenceDetail from "./pages/ReferenceDetail";
 import Manuscript from "./pages/Manuscript";
+import Practice from "./pages/Practice";
 import Trash from "./pages/Trash";
 import Settings from "./pages/Settings";
 import "./index.css";
@@ -134,6 +136,9 @@ function renderPage(route: Route): ReactNode {
       );
     case "trash":
       return <Trash />;
+    case "practice":
+      // 文风练习工作区段：1 段 = 列表页（卡 8 占位壳，卡 9 替换）；2 段 = 练习页（卡 10）
+      return <Practice />;
     case "preferences":
       return <Settings />;
     case "settings":
@@ -146,7 +151,11 @@ function renderPage(route: Route): ReactNode {
 
 function App() {
   const route = useHashRoute();
-  // 首帧直达上次书籍：服务端启动已按创作根 lastProject 打开上次那本书 → 书架路由直接进概览
+  // 工作区类型路由守卫（练习工作区只允许自己的页面；UX 守卫，服务端 `requireKind` 才是边界）：
+  // 挂在外壳层 = 任意入口（左栏 / 手输 hash / 旧书签）都过同一个判定，页面内不再各判一遍
+  useWorkspaceRouteGuard(route);
+  // 首帧直达上次工作区：服务端启动已按创作根 lastProject 打开了上次那个工作区
+  //（落点按 kind：小说 → #/overview、练习 → #/practice）
   useEnterLastBook();
   return <AppShell route={route}>{renderPage(route)}</AppShell>;
 }

@@ -1,12 +1,13 @@
 // 项目状态（config + outline 树——顶栏标题映射、多页共用，避免重复请求）
 // S1.4 扩展：loadError（区分「未打开项目」与网络失败）、openProjectAt/createProjectAt/closeProject
 import { create } from "zustand";
+import { WORKSPACE_DIRS } from "@whispering233/ai-editor-shared";
 import type {
   OutlineNode,
   OutlineTree,
   ProjectAgents,
   ProjectConfig,
-  ProjectLanguage,
+  WorkspaceKind,
 } from "@whispering233/ai-editor-shared";
 import {
   ApiError,
@@ -19,6 +20,7 @@ import {
   openProject as apiOpenProject,
   saveProjectAgents as apiSaveProjectAgents,
   updateProjectConfig as apiUpdateConfig,
+  type CreateProjectBody,
   type ProjectList,
   type UpdateProjectConfigBody,
 } from "../lib/api";
@@ -57,10 +59,12 @@ interface ProjectState {
   loadBookshelf: () => Promise<void>;
  /** 打开项目（POST /project/open）：成功刷新 config/outline；rebuilt 时 toast 提示 */
   openProjectAt: (path: string) => Promise<void>;
- /** 创建项目（POST /project/create）后打开；config 可选（名称/语言） */
+ /** 创建项目（POST /project/create）后打开；`config.kind` 落工作区类型
+  *（缺省 novel），`options.open === false` 只创建不打开（练习区新建不切当前工作区） */
   createProjectAt: (
     path: string,
-    config?: { name?: string; language?: ProjectLanguage },
+    config?: CreateProjectBody["config"],
+    options?: { open?: boolean },
   ) => Promise<void>;
  /** 关闭当前项目（POST /project/close）：清空本地 config/outline */
   closeProject: () => Promise<void>;
@@ -176,9 +180,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     await get().loadOutline();
   },
 
-  createProjectAt: async (path, config) => {
- // create 不打开项目（S1.2：open 才打开）；创建成功 → open 进入项目
+  createProjectAt: async (path, config, options) => {
+ // create 不打开项目（S1.2：open 才打开）；创建成功 → open 进入项目（除非显式要求只创建）
     await apiCreateProject(path, config);
+    if (options?.open === false) return;
     await get().openProjectAt(path);
   },
 
@@ -258,10 +263,11 @@ export function findOutlineNodeTitle(tree: OutlineTree | null, id: string | null
 }
 
 /**
- * 书籍目录路径：{rootPath}/books/{书名}（S1.5 书架约定：每本书 = 创作根/books/<书名>/）
- * 书名去首尾空白后直接作为目录名（中文/空格均可，服务端 create 支持任意目录名）；
- * rootPath 尾斜杠归一化
+ * 工作区目录路径：`{rootPath}/{WORKSPACE_DIRS[kind]}/{名字}`
+ *（小说 = 创作根/books/<书名>/、练习 = 创作根/practice/<名字>/；目录名映射唯一定义 = shared
+ * `WORKSPACE_DIRS`，客户端不得复述 `books` / `practice` 字面量）。
+ * 名字去首尾空白后直接作目录名（中文/空格均可，服务端 create 接受任意目录名）；rootPath 尾斜杠归一化。
  */
-export function buildBookPath(rootPath: string, name: string): string {
-  return `${rootPath.replace(/\/+$/, "")}/books/${name.trim()}`;
+export function buildWorkspacePath(rootPath: string, kind: WorkspaceKind, name: string): string {
+  return `${rootPath.replace(/\/+$/, "")}/${WORKSPACE_DIRS[kind]}/${name.trim()}`;
 }

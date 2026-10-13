@@ -27,6 +27,7 @@ import type {
   ProjectImportRes,
   ProjectLanguage,
   ProjectListBook,
+  WorkspaceKind,
 } from "@whispering233/ai-editor-shared";
 import type { EntityType } from "@whispering233/ai-editor-shared";
 
@@ -734,6 +735,8 @@ export interface CreateProjectBody {
   config?: {
     name?: string;
     language?: ProjectLanguage;
+    /** 工作区类型（缺省 novel）：落 project.json，决定目录约定之外的工具集/提示词/导航 */
+    kind?: WorkspaceKind;
   };
 }
 
