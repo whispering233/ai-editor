@@ -3,7 +3,7 @@
 // 为什么落在 lib/ 的纯函数里：client 无 jsdom，zustand 的 SSR 快照读不到预置的书架 state，
 // 分区与落点判定必须在纯函数层才测得到（同 lib/shelf.ts 的理由）。
 // 左栏项集（含 JSX 图标）不在这里：见 `components/nav/nav-items.tsx`；路由守卫见
-// `hooks/use-workspace-route-guard.ts`。
+// `lib/workspace-route-guard.ts`。
 import type { ProjectListBook, WorkspaceKind } from "@whispering233/ai-editor-shared";
 
 /**

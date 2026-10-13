@@ -11,6 +11,7 @@ const store = readFileSync(new URL("../stores/project.ts", import.meta.url), "ut
 const route = readFileSync(new URL("../hooks/use-route.ts", import.meta.url), "utf8");
 const main = readFileSync(new URL("../main.tsx", import.meta.url), "utf8");
 const practicePage = readFileSync(new URL("./Practice.tsx", import.meta.url), "utf8");
+const routeGuard = readFileSync(new URL("../lib/workspace-route-guard.ts", import.meta.url), "utf8");
 
 describe("根首页分区（#/：小说 / 文风练习）", () => {
   it("分区口径只有一处：partitionWorkspaces（不按 kind 各写一遍 filter）", () => {
@@ -80,7 +81,17 @@ describe("练习工作区的入口落点（不开项目概览）", () => {
     expect(route).toMatch(/"practice",\n\] as const;/);
     expect(main).toContain('case "practice":');
     expect(main).toContain("<Practice />");
-    expect(main).toContain("useWorkspaceRouteGuard(route)");
+  });
+
+  it("工作区类型守卫在**渲染前**判定：被挡下的 hash 只渲染 RedirectTo，不挂载目标页面", () => {
+    expect(main).toContain("workspaceRedirectPath(kind, route)");
+    // 页面渲染器只有一处调用（另一处是它的定义）：放行分支渲染页面、被挡分支渲染 RedirectTo
+    expect(main.match(/renderPage\(/g)).toHaveLength(2);
+    expect(main).toContain("{redirect === null ? renderPage(route) : <RedirectTo to={redirect} />}");
+    // 旧写法（挂载后 effect 补跳）不得回退：被挡下的页面会先打出对面工作区的请求（400）
+    expect(main).not.toContain("useWorkspaceRouteGuard");
+    expect(routeGuard).not.toContain("useEffect");
+    expect(routeGuard).not.toMatch(/export function use[A-Z]/);
   });
 
   it("占位页不调练习业务端点（/practice 的调用归卡 9）", () => {

@@ -9,11 +9,15 @@
 //     / `#/practice` 及其子路径 / `#/preferences`（设置）；其余一律重定向 `#/practice`。
 //   - 小说工作区（`kind = "novel"`）= **默认放行小说路由，只挡练习专属段**：首段是 `practice` → 重定向 `#/`
 //     （它没有小说语义的页面，留着就是死页）。
-// 单一实现处 = 本模块的 `workspaceRedirectPath`；调用点只有 `main.tsx`（不要在各页面各判一遍）。
-import { useEffect } from "react";
+//
+// **判定发生在「选择渲染哪个页面之前」**——这正是本模块没有 hook 的原因：`main.tsx` 拿本函数的返回值
+// 直接决定渲染目标页面还是渲染 `RedirectTo`，被挡下的 hash **不挂载目标页面**。旧写法（挂在外壳的
+// effect 里挂载后再补跳）会让被挡下的页面先打出对面工作区的请求（400）——练习页（卡 9/10）接上自己的
+// 端点后，同一模式会反向放大，故不再保留第二处判定。
+// 单一实现处 = `workspaceRedirectPath`；纯函数放 `lib/`（同 `lib/workspace.ts` 的理由：client 无 jsdom，
+// 判定要在纯函数层才测得到）。
 import type { WorkspaceKind } from "@whispering233/ai-editor-shared";
-import { navigate, type Route } from "./use-route";
-import { useProjectStore } from "../stores/project";
+import type { Route } from "../hooks/use-route";
 
 /** 练习工作区的 hash 首段（小说侧守卫只挡这一段） */
 const PRACTICE_SEGMENT = "practice";
@@ -28,27 +32,17 @@ export const PRACTICE_REDIRECT_PATH = "/practice";
 export const NOVEL_REDIRECT_PATH = "/";
 
 /**
- * 该路由是否需要在当前工作区类型下重定向（纯函数，供单测）：
+ * 该路由是否需要在当前工作区类型下重定向（纯函数，供单测与 `main.tsx` 的渲染分支）：
  * 返回目标 path，或 null = 允许通行。小说侧默认放行、练习侧走允许清单（见文件头）。
+ *
+ * `kind = null`（配置未加载 / 未打开工作区）时**不判定**：这一帧由首帧落点（`useEnterLastBook`）负责。
  */
-export function workspaceRedirectPath(kind: WorkspaceKind, route: Route): string | null {
+export function workspaceRedirectPath(kind: WorkspaceKind | null, route: Route): string | null {
+  if (kind === null) return null;
   const first = route.segments[0];
   if (kind === "practice") {
     if (first === undefined || PRACTICE_ALLOWED_SEGMENTS.includes(first)) return null;
     return PRACTICE_REDIRECT_PATH;
   }
   return first === PRACTICE_SEGMENT ? NOVEL_REDIRECT_PATH : null;
-}
-
-/**
- * 挂载在工作区外壳（`main.tsx` 的 `App`）：hash 落在当前工作区类型之外 → 重定向到该类型的落点。
- * 依赖 `config.kind`（未打开项目 / 配置未落地时不判定——首帧落点由 `useEnterLastBook` 负责）。
- */
-export function useWorkspaceRouteGuard(route: Route): void {
-  const kind = useProjectStore((s) => s.config?.kind ?? null);
-  useEffect(() => {
-    if (kind === null) return;
-    const target = workspaceRedirectPath(kind, route);
-    if (target !== null) navigate(target);
-  }, [kind, route]);
 }

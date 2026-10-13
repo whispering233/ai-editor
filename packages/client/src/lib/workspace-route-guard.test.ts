@@ -4,14 +4,19 @@
 // 其余 hash 一律重定向 `#/practice`；小说工作区**默认放行小说路由**，只有练习专属段 `practice`
 // 重定向 `#/`（它没有小说语义的页面；反方向不挡就会出现「小说左栏 + 练习占位页」的错配）。
 // 这是 **UX 守卫**——边界仍是服务端 `requireKind`（400 KIND_MISMATCH）。
+//
+// 判定时机（卡 8 收尾修复）：本函数是 `main.tsx` **渲染分支**的判据——返回非 null 时渲染 `RedirectTo`，
+// **不挂载目标页面**（挂载后再补跳会先打出对面工作区的请求：400）。故这里既测落点，也测给出落点的
+// 那组 hash（= 渲染分支的输入）。挂载断言本身由 `pages/dashboard-partitions.test.ts` 扫 `main.tsx`
+// 源码钉住（client 无 jsdom，App 整树渲不出来）。
 import { describe, expect, it } from "vitest";
-import { parseHashRoute } from "./use-route";
+import { parseHashRoute } from "../hooks/use-route";
 import {
   NOVEL_REDIRECT_PATH,
   PRACTICE_ALLOWED_SEGMENTS,
   PRACTICE_REDIRECT_PATH,
   workspaceRedirectPath,
-} from "./use-workspace-route-guard";
+} from "./workspace-route-guard";
 
 const route = (hash: string) => parseHashRoute(hash);
 
@@ -62,17 +67,28 @@ describe("小说工作区的反向守卫（kind = novel）", () => {
     }
   });
 
-  it("小说路由与两个 kind 共有的路由都放行（不误伤：`#/`、`#/preferences`、`#/overview` 等）", () => {
+  it("小说路由与两个 kind 共有的路由都放行（不误伤：八项一级导航 + `#/`、`#/preferences`、`#/overview`）", () => {
     for (const hash of [
       "",
       "#/",
       "#/preferences",
       "#/overview",
+      // 左栏小说态八项一级导航（components/nav/nav-items.tsx）+ 各详情段
       "#/outline",
       "#/outline/ch-1",
       "#/characters",
-      "#/trash",
+      "#/characters/char-1",
+      "#/setting",
+      "#/setting/set-1",
+      "#/locations",
+      "#/locations/loc-1",
+      "#/hooks",
+      "#/hooks/hook-1",
+      "#/timeline",
+      "#/timeline/ev-1",
+      "#/relations",
       "#/references",
+      "#/trash",
       "#/manuscript/ch-1",
     ]) {
       expect(workspaceRedirectPath("novel", route(hash)), hash).toBeNull();
@@ -87,5 +103,25 @@ describe("小说工作区的反向守卫（kind = novel）", () => {
         isFallback: false,
       }),
     ).toBeNull();
+  });
+});
+
+describe("渲染前判定的输入（卡 8 收尾：被挡下的 hash 不挂载目标页面）", () => {
+  it("练习态手输 `#/outline` / `#/characters` / `#/trash` / `#/overview` → 全部指向 `#/practice`", () => {
+    for (const hash of ["#/outline", "#/characters", "#/trash", "#/overview"]) {
+      expect(workspaceRedirectPath("practice", route(hash)), hash).toBe(PRACTICE_REDIRECT_PATH);
+    }
+  });
+
+  it("小说态手输 `#/practice` / `#/practice/x` → 全部指向 `#/`", () => {
+    for (const hash of ["#/practice", "#/practice/x"]) {
+      expect(workspaceRedirectPath("novel", route(hash)), hash).toBe(NOVEL_REDIRECT_PATH);
+    }
+  });
+
+  it("`kind = null`（config 未落地）不判定：这一帧照常渲染，落点交给 useEnterLastBook", () => {
+    for (const hash of ["#/outline", "#/practice", "#/overview", "#/"]) {
+      expect(workspaceRedirectPath(null, route(hash)), hash).toBeNull();
+    }
   });
 });

@@ -4,7 +4,7 @@
 // #/characters[/:id]、#/setting[/:id]、#/locations[/:id]、#/relations、#/hooks[/:id]、
 // #/timeline、#/timeline/:id、#/timepoints/:id、#/references[/:id]、#/manuscript/:chapterId、
 // #/trash、#/preferences、#/practice[/...]（练习工作区；工作区类型路由守卫见
-// hooks/use-workspace-route-guard.ts）
+// lib/workspace-route-guard.ts——它由 main.tsx 在渲染前判定）
 // （#/chat、#/canvas 已移除；#/entities/* 与 #/settings 仅作旧址重定向；未知 hash 回退 #/ 兜底）
 import { useEffect, useState } from "react";
 

@@ -5,7 +5,8 @@ import { createRoot } from "react-dom/client";
 import { useEffect } from "react";
 import { navigate, useHashRoute, type Route } from "./hooks/use-route";
 import { useEnterLastBook } from "./hooks/use-enter-last-book";
-import { useWorkspaceRouteGuard } from "./hooks/use-workspace-route-guard";
+import { workspaceRedirectPath } from "./lib/workspace-route-guard";
+import { useProjectStore } from "./stores/project";
 import { AppShell } from "./components/AppShell";
 import { AntdProvider } from "./components/AntdProvider";
 import { ErrorBoundary } from "./components/feedback/ErrorBoundary";
@@ -152,12 +153,19 @@ function renderPage(route: Route): ReactNode {
 function App() {
   const route = useHashRoute();
   // 工作区类型路由守卫（练习工作区只允许自己的页面；UX 守卫，服务端 `requireKind` 才是边界）：
-  // 挂在外壳层 = 任意入口（左栏 / 手输 hash / 旧书签）都过同一个判定，页面内不再各判一遍
-  useWorkspaceRouteGuard(route);
+  // **渲染前判定**——被挡下的 hash 只渲染 RedirectTo（它 navigate 后返回 null），**不挂载目标页面**；
+  // 挂载后再由 effect 补跳（旧写法，已废止）会让被挡下的页面先打出对面工作区的请求（400）。
+  // kind 取自既有项目 store（无第二份状态）：config 未落地时不判定（`workspaceRedirectPath` 收 null）。
+  const kind = useProjectStore((s) => s.config?.kind ?? null);
+  const redirect = workspaceRedirectPath(kind, route);
   // 首帧直达上次工作区：服务端启动已按创作根 lastProject 打开了上次那个工作区
   //（落点按 kind：小说 → #/overview、练习 → #/practice）
   useEnterLastBook();
-  return <AppShell route={route}>{renderPage(route)}</AppShell>;
+  return (
+    <AppShell route={route}>
+      {redirect === null ? renderPage(route) : <RedirectTo to={redirect} />}
+    </AppShell>
+  );
 }
 
 const rootEl = document.getElementById("root");
