@@ -12,12 +12,6 @@
 
 > 契约依据：`docs/design/60-practice.md`、`docs/design/00-master-design.md`（工作区抽象）、`docs/design/architecture.md`（kind 与能力收窄）、`docs/db/schema.md`（两张练习表）、`docs/api/120-api-practice.md`、`docs/ui/DESIGN.md`（根首页分区 / 文风练习区）。**契约已先行更新——卡内不再自行发明口径，发现矛盾先停下提问。**
 
-- [ ] **卡 4 · AI 侧按 kind 收窄（工具 scope + 提示词分叉）**
-  - 范围：`ToolDefinition` 加 `scope`（`novel` / `practice` / `common`）并**逐个盘点全部既有工具**；装配层按当前工作区 `kind` 过滤（`createCustomTools` 加过滤参数）；练习版内核提示词常量（只做诊断、必须提交点评卡、不改写稿件）并在装配处按 kind 选提示词。
-  - 依赖：卡 1。
-  - 硬完成判据：练习工作区装配出的工具名集合 = **空集**（本卡；卡 6 落地后为三个练习工具）；小说工作区工具集合与本卡前一致（数量与名称逐个断言）；两种提示词各自断言关键段落存在/不存在。
-  - 承接事实（卡 3 oracle 实测）：当前练习工作区装配出 **37 个工具、含 16 个 `propose_*`**（`scope` 未落地前的基线）——本卡必须把「练习工作区工具集 = 空集」写成硬断言（卡 6 落地后改为三个练习工具）；**漏标任一既有工具的 scope = 结构性边界失效**。
-
 ## 批次 1（练习业务面）
 
 - [ ] **卡 5 · practice REST 端点**
@@ -30,10 +24,12 @@
   - 依赖：卡 2、4。
   - 硬完成判据：分页截断时**显式告知**且续读提示不被外层截断切掉（实测 `stringifyToolResult` → `truncateToolResultText` 路径，留白 ≥10%）；无效引用被丢弃并计入 `dropped_quotes`；维度超上限被拒；改上游 `shared` / `tools` 后先 `pnpm -r build` 再跑测试。
   - 承接事实（卡 2 oracle 登记）：`feedback` 写入口**必须新增在 db 包**（`queries/practice.ts` 一类，如 `updatePracticeFeedback`）——**禁止**在 tools 包直写表（破「库写入唯一入口」）；引用子串校验需要范文/稿件全文，分页留在 tools 层。
+  - 承接事实（卡 4 oracle 登记）：三个练习工具必须标 `scope: "practice"`（误标 `common` ⇒ novel 变 40，硬清单断言炸；误标 `novel` ⇒ novel 集合逐名相等断言炸）；同步改三处「practice = 空集」断言（`agent/src/runtime/tools.test.ts`、`agent/src/runtime/project-runtime.test.ts`、本卡文案）；分页常量改名时**同改**练习提示词与工具描述里的口径文本（数值单源：不复述数字）。
 - [ ] **卡 7 · 点评链路（`/chat` 注入 + 卡片下发 + 落库）**
   - 范围：`chatRequestSchema.context.practice_sample_id`；服务端现读目标名 + `observation` 注入本轮（**不接受客户端传入观察文本**）；样本不存在静默省略；卡片随 `tool_execution_end` 的 `details` 下发；前端即时渲染 + 刷新从 `GET /practice/samples/:id` 读。
   - 依赖：卡 5、6。
   - 硬完成判据：**SSE 帧集零新增**（与 `docs/api/80-api-chat.md` 一致）；一轮后 `feedback` 已落库；重载页面卡片仍在；注入文本含目标名与观察、**不含范文/稿件全文**（断言）。
+  - 承接事实（卡 4 oracle 登记）：注入段**只给事实**（目标名 / `observation` / 样本 id），「必须提交点评卡」这类指令语义留在**练习内核提示词常量**里——两处各写一份口径 = 第二事实源。
 
 ## 批次 2（UI）
 
