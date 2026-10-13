@@ -59,6 +59,7 @@ import {
 } from "@whispering233/ai-editor-shared/schemas";
 import { createBackupZip, listBackups, migratePromptToAgents, overwriteProjectFiles, renameBackup, restoreBackup, snapshotBookDir, validateBackupPackage, writeBackup, writeProjectFilesFromBackup } from "../backup.js";
 import { HttpError, ok } from "../middleware/error.js";
+import { assertWorkspaceKind } from "../middleware/kind.js";
 import {
   closeProject,
   getCurrentProject,
@@ -395,6 +396,8 @@ projectRoutes.get("/export", (c) => {
 // 只读 data.db：**不做 wal_checkpoint**、不写项目目录任何文件（投影已在库内，无需合并 WAL）。
 projectRoutes.get("/export-novel", (c) => {
   const project = requireCurrentProject();
+ // 仅小说工作区（同组的 /export 对两种 kind 都放行，因此不能整组挂 → handler 内断言）
+  assertWorkspaceKind(project, "novel");
   const numbering = numberVisibleOutline(readOutlineFile(project.root));
   if (numbering.chapters.length === 0) {
     throw new HttpError(400, "VALIDATION_ERROR", "本书还没有章节");
@@ -634,6 +637,13 @@ projectRoutes.put("/config", async (c) => {
     throw parsed.error;
   }
   const { name, language, current_position, backup_frequency_minutes, deduction_nodes } = parsed.data;
+
+ // 工作区类型约束（卡 3）：`current_position` / `deduction_nodes` 是**小说工作区**语义 —— 练习工作区上
+ // 出现即 400 KIND_MISMATCH；`null` / `[]` 同样算「出现」（全量替换语义的显式写，不是「不动」）。
+ // name / language / backup_frequency_minutes 对所有工作区通用，照常放行。
+  if (current_position !== undefined || deduction_nodes !== undefined) {
+    assertWorkspaceKind(project, "novel");
+  }
 
  // current_position 校验：须指向存在的**非软删**大纲节点；
  // 400 + OUTLINE_NODE_NOT_FOUND（参数语义错误用 400，非资源访问 404）

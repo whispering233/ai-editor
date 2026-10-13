@@ -25,6 +25,7 @@ import { errorHandler, fail, ok } from "./middleware/error.js";
 import { stopAutoBackup } from "./backup.js";
 import { initDebugConfig, isCategoryEnabled } from "./debug.js";
 import { applyHttpProxySettings, configureHttpDispatcher } from "./http-dispatcher.js";
+import { requireKind } from "./middleware/kind.js";
 import { getSettingsManager } from "./model-runtime.js";
 import { chatRoutes } from "./routes/chat.js";
 import { deltaRoutes } from "./routes/delta.js";
@@ -221,33 +222,46 @@ export async function startServer(projectRoot: string, options: StartServerOptio
  // 探活路由（本卡基础路由；切片 1 起在下方并列挂载 routes/ 业务路由）
   app.get("/api/v1/health", (c) => c.json(ok({ status: "ok" })));
 
+ // 工作区类型守卫（卡 3）：**小说语义路由组**——练习工作区（kind = "practice"）访问 → 400 KIND_MISMATCH；
+ // 通用组（settings / project / cloud / chat）不挂。每组一行，且**必须在同名 app.route 之前**
+ // ——Hono 按注册序组合中间件与 handler，写在后面守卫不生效（middleware/kind.ts 有完整清单）。
+ // `proposal` 组本卡不动：提案只由小说侧的 `propose_*` 工具产生（练习工作区不注册）；
+ // 反向守卫（requireKind("practice")）随练习路由组一起挂载。
+
  // 设置路由（S1.3）：GET/PUT /api/v1/settings/llm（用户级配置）
   app.route("/api/v1/settings", settingsRoutes);
 
  // 实体路由（S3.3）：GET/POST /api/v1/entity/:type、GET/PUT/DELETE /:type/:id
+  app.use("/api/v1/entity/*", requireKind("novel"));
   app.route("/api/v1/entity", entityRoutes);
 
  // 项目路由（S1.2）：create/open/close/config（项目管理）
   app.route("/api/v1/project", projectRoutes);
 
  // 大纲路由（S2.2）：整树/创建/更新/移动/软删/路径（严格三层）
+  app.use("/api/v1/outline/*", requireKind("novel"));
   app.route("/api/v1/outline", outlineRoutes);
 
  // 章正文路由（卡 12.4）：GET/PUT /api/v1/manuscript/:chapterNodeId（块文档进 data.db）
+  app.use("/api/v1/manuscript/*", requireKind("novel"));
   app.route("/api/v1/manuscript", manuscriptRoutes);
 
  // 名称解析路由：POST /api/v1/names/resolve 批量名称解析（工具调用展示人类可读化）
+  app.use("/api/v1/names/*", requireKind("novel"));
   app.route("/api/v1/names", namesRoutes);
 
  // 回收站路由（S2.2 大纲侧；实体侧 S4 扩展）：列表/还原/物理清除
+  app.use("/api/v1/trash/*", requireKind("novel"));
   app.route("/api/v1/trash", trashRoutes);
 
  // 关系路由（S3.4）：查询（k 跳）/创建（判重）/物理删
+  app.use("/api/v1/relation/*", requireKind("novel"));
   app.route("/api/v1/relation", relationRoutes);
  // 云端存档路由（卡 2）：账号配置 + 连通性测试（不要求项目已打开）
   app.route("/api/v1/cloud", cloudRoutes);
 
  // Delta 路由（S5.3）：追加 / 按节点查询 / compute 状态计算
+  app.use("/api/v1/delta/*", requireKind("novel"));
   app.route("/api/v1/delta", deltaRoutes);
 
  // 对话路由（U3）：会话列表 / 消息历史（按项目隔离；POST SSE 端点属后续切片）

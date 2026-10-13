@@ -57,6 +57,8 @@ describe("ErrorCode 完整性", () => {
       "OUTLINE_NODE_NOT_FOUND",
       "OUTLINE_ANCESTOR_DELETED",
       "INVALID_PROJECT_PATH",
+      "KIND_MISMATCH", // 工作区类型不匹配（400）：小说语义端点/字段被练习工作区（或反向）访问
+      "PRACTICE_NOT_FOUND", // 文风目标 / 练习样本不存在（404）
       "PROPOSAL_STALE",
       "PROPOSAL_NOT_FOUND",
       "PROPOSAL_PROJECT_MISMATCH",
@@ -76,6 +78,13 @@ describe("ErrorCode 完整性", () => {
     expect(ERROR_CODES).toContain("CHAT_BUSY");
     expect(ERROR_CODES).toContain("THINKING_NOT_FOUND");
     expect(ERROR_CODES).toContain("DOCUMENT_STALE"); // 块文档版本戳冲突（仅携带 base_updated_at 时校验）
+  });
+
+  it("workspace kind 两码：KIND_MISMATCH 400 / PRACTICE_NOT_FOUND 404 经 errorCodeSchema 可解析", () => {
+    expect(ERROR_CODES).toContain("KIND_MISMATCH");
+    expect(ERROR_CODES).toContain("PRACTICE_NOT_FOUND");
+    expect(errorCodeSchema.parse("KIND_MISMATCH")).toBe("KIND_MISMATCH");
+    expect(errorCodeSchema.parse("PRACTICE_NOT_FOUND")).toBe("PRACTICE_NOT_FOUND");
   });
 
   it("errorCodeSchema 拒绝未知错误码；apiErrorSchema 形状正确", () => {

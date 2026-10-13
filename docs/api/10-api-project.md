@@ -201,7 +201,7 @@
 }
 ```
 
-**工作区类型约束（2026-10）**：`current_position` 与 `deduction_nodes` 是**小说工作区**语义——练习工作区（`kind = "practice"`）上写入这两项 → 400 `KIND_MISMATCH`（读侧不下发这两项，恒为 `null` / `[]`）；`name` / `language` / `backup_frequency_minutes` 对所有工作区通用。
+**工作区类型约束（2026-10）**：`current_position` 与 `deduction_nodes` 是**小说工作区**语义——练习工作区（`kind = "practice"`）上写入这两项 → 400 `KIND_MISMATCH`（**`null` / `[]` 也算写入**：两者都是全量替换语义的显式写；读侧不特殊处理：字段仍在响应中，未写入即自然为 `null` / `[]`）；`name` / `language` / `backup_frequency_minutes` 对所有工作区通用。
 
 ### GET /api/v1/project/agents
 
