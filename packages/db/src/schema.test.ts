@@ -8,7 +8,7 @@ import { getTableConfig, type SQLiteTable } from "drizzle-orm/sqlite-core";
 
 import { openDatabase, closeDatabase, type Db } from "./connection.js";
 import { createTables, getUserVersion, SCHEMA_VERSION, setUserVersion } from "./schema.js";
-import { CREATE_TABLES_SQL, deltaRecords, documentRecords, entities, relationRecords } from "./tables.js";
+import { CREATE_TABLES_SQL, deltaRecords, documentRecords, entities, practiceSamples, practiceTargets, relationRecords } from "./tables.js";
 
 let dir: string;
 let dbPath: string;
@@ -56,6 +56,8 @@ describe("tables.ts 双份声明对齐", () => {
     relation_records: relationRecords,
     delta_records: deltaRecords,
     document_records: documentRecords,
+    practice_targets: practiceTargets,
+    practice_samples: practiceSamples,
   };
 
   it("DDL 常量与 sqliteTable 定义列级对齐（列名/类型/notNull/主键）", () => {
@@ -124,9 +126,9 @@ function parseDdlColumns(
 }
 
 describe("schema.ts 建表", () => {
-  it("打开后自动创建 4 张业务表（对话历史已出库为 sessions/*.jsonl）", () => {
+  it("打开后自动创建 6 张业务表（对话历史已出库为 sessions/*.jsonl；练习两表为 2026-10 新增）", () => {
     expect(listTables(db).sort()).toEqual(
-      ["delta_records", "document_records", "entities", "relation_records"].sort(),
+      ["delta_records", "document_records", "entities", "practice_samples", "practice_targets", "relation_records"].sort(),
     );
   });
 
@@ -142,7 +144,7 @@ describe("schema.ts 建表", () => {
 
   it("createTables 幂等：重复执行不报错、不重复建表", () => {
     expect(() => createTables(db)).not.toThrow();
-    expect(listTables(db)).toHaveLength(4);
+    expect(listTables(db)).toHaveLength(6);
   });
 
   it("entities.type CHECK 约束生效：非法 type 插入报错，合法 type 可插入（含 event、timepoint G2）", () => {
@@ -160,12 +162,12 @@ describe("schema.ts 建表", () => {
     }
   });
 
-  it("user_version 读写往返（SCHEMA_VERSION = 11，v1→v11 走增量迁移 002→003→004→005→006→007→008→009→010→011）", () => {
+  it("user_version 读写往返（SCHEMA_VERSION = 12，v1→v12 走增量迁移 002→003→004→005→006→007→008→009→010→011→012）", () => {
  // 新库默认 0
     expect(getUserVersion(db)).toBe(0);
     setUserVersion(db, SCHEMA_VERSION);
     expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
-    expect(SCHEMA_VERSION).toBe(11);
+    expect(SCHEMA_VERSION).toBe(12);
   });
 
   it("entities 有 sort_order 列（时间轴事件全局线性序，仅 event 使用，其余类型 NULL）", () => {

@@ -1,5 +1,5 @@
 // 常量聚合出口
-// 文件划分见 （constants/：entity.ts / hook.ts / tool.ts / outline.ts / backup.ts / delta.ts / ports.ts）
+// 文件划分见 （constants/：entity.ts / hook.ts / tool.ts / outline.ts / backup.ts / delta.ts / ports.ts / workspace.ts / practice.ts）
 export * from "./entity.js";
 export * from "./hook.js";
 export * from "./tool.js";
@@ -8,3 +8,4 @@ export * from "./backup.js";
 export * from "./delta.js";
 export * from "./ports.js";
 export * from "./workspace.js";
+export * from "./practice.js";

@@ -99,6 +99,39 @@ export const documentRecords = sqliteTable(
 );
 
 /**
+ * practice_targets：文风目标（练习工作区专属，2026-10）——`kind = "practice"` 的数据，
+ * 与小说语义表互不混装（不进 Delta / 关系表 / 回收站）。
+ */
+export const practiceTargets = sqliteTable("practice_targets", {
+  id: text("id").primaryKey(), // 'pt-*'
+  name: text("name").notNull(), // 文风目标名
+  observation: text("observation"), // 用户自己观察到的文风特点（可选；上限 = MAX_PRACTICE_OBSERVATION_CHARS）
+  created_at: text("created_at").notNull(), // ISO 8601，应用层写入
+  updated_at: text("updated_at").notNull(),
+});
+
+/**
+ * practice_samples：练习样本（范文快照 + 用户稿 + 点评卡，2026-10）——一目标挂 N 个样本。
+ * `target_id` 无外键（存在性由写入侧守卫）；无 deleted_at（删除 = 物理删，目标删除级联删样本）。
+ * `feedback` JSON 列保持 **text 模式**（坏 JSON 防御在行映射层，见 queries/practice.ts parseFeedbackColumn）。
+ */
+export const practiceSamples = sqliteTable(
+  "practice_samples",
+  {
+    id: text("id").primaryKey(), // 'ps-*'
+    target_id: text("target_id").notNull(), // 'pt-*'（无 FK，存在性由写入侧守卫）
+    source_kind: text("source_kind").notNull(), // 'paste'（MVP 唯一值；枚举值少且稳定，不加 CHECK）
+    source_label: text("source_label").notNull(), // 快照来源说明（用户手填）
+    text: text("text").notNull(), // 范文快照（不可变）
+    draft: text("draft").notNull().default(""), // 用户仿写稿（只有用户能写）
+    feedback: text("feedback"), // 点评卡 JSON（AI 产出；NULL = 未点评）
+    created_at: text("created_at").notNull(),
+    updated_at: text("updated_at").notNull(),
+  },
+  (t) => [index("idx_practice_samples_target").on(t.target_id)],
+);
+
+/**
  * 全部业务表 + 索引的建表 SQL（幂等：CREATE TABLE/INDEX IF NOT EXISTS）——建表执行的事实来源。
  * 与上方 sqliteTable 定义必须同步（schema.test.ts 对齐断言覆盖）。
  */
@@ -160,5 +193,29 @@ CREATE TABLE IF NOT EXISTS document_records (
   updated_at   TEXT NOT NULL,   -- ISO 8601，应用层写入（版本戳：多标签页防覆盖）
   PRIMARY KEY (owner_kind, owner_id)   -- 一 owner 一行（upsert 覆盖，行随 owner 生命周期）
 );
+
+-- practice_targets：文风目标（练习工作区专属，2026-10）
+CREATE TABLE IF NOT EXISTS practice_targets (
+  id          TEXT PRIMARY KEY,   -- 'pt-*'
+  name        TEXT NOT NULL,      -- 文风目标名
+  observation TEXT,               -- 用户自己观察到的文风特点（可选；上限 = 常量 MAX_PRACTICE_OBSERVATION_CHARS）
+  created_at  TEXT NOT NULL,      -- ISO 8601，应用层写入
+  updated_at  TEXT NOT NULL
+);
+
+-- practice_samples：练习样本（范文快照 + 用户稿 + 点评卡）
+CREATE TABLE IF NOT EXISTS practice_samples (
+  id           TEXT PRIMARY KEY,          -- 'ps-*'
+  target_id    TEXT NOT NULL,             -- 'pt-*'（无 FK，存在性由写入侧守卫）
+  source_kind  TEXT NOT NULL,             -- 'paste'（MVP 唯一值，不加 CHECK）
+  source_label TEXT NOT NULL,             -- 快照来源说明（用户手填）
+  text         TEXT NOT NULL,             -- 范文快照（不可变）
+  draft        TEXT NOT NULL DEFAULT '',  -- 用户仿写稿（只有用户能写）
+  feedback     TEXT,                      -- 点评卡 JSON（AI 产出；NULL = 未点评）
+  created_at   TEXT NOT NULL,
+  updated_at   TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_practice_samples_target ON practice_samples(target_id);
 
 `;

@@ -80,7 +80,7 @@ describe("010_decompose_concurrency 迁移（v9 → v10，decompose_jobs.concurr
     const { applied } = runMigrations(db, { migrations: DECOMPOSE_STEPS, dbPath });
     expect(applied.map((m) => m.version)).toEqual([10]); // 009 已由 createV9Db 跑过，010 在此推进
     expect(getUserVersion(db)).toBe(10);
-    expect(SCHEMA_VERSION).toBe(11); // 当前版本号已越过两步（完整链终点 = 011 移除两表）
+    expect(SCHEMA_VERSION).toBe(12); // 当前版本号已越过三步（完整链终点 = 012 练习两表）
 
     // 列序 = ALTER 追加在表末（新库 DDL 把该列放在 batch_target_chars 之后——顺序对查询无语义，
     // 两处都按列名访问；类型 / NOT NULL 一致由 schema.test.ts 的声明层断言锁住）

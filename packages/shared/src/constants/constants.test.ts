@@ -22,6 +22,11 @@ import {
   HOOK_STATUSES,
   MAX_BACKUP_NAME_LENGTH,
   MAX_BACKUPS_PER_PROJECT,
+  MAX_FEEDBACK_DIMENSIONS,
+  MAX_PRACTICE_DRAFT_CHARS,
+  MAX_PRACTICE_OBSERVATION_CHARS,
+  MAX_PRACTICE_SAMPLE_CHARS,
+  MAX_PRACTICE_SOURCE_LABEL_CHARS,
   OUTLINE_NODE_TYPE_LABELS,
   PAYOFF_TIMING,
   PORT_RANGES,
@@ -287,6 +292,16 @@ describe("工作区类型常量（kind，2026-10）", () => {
     expect(resolveWorkspaceKind(42)).toBe("novel");
     expect(resolveWorkspaceKind({ kind: "practice" })).toBe("novel");
     expect(resolveWorkspaceKind("__proto__")).toBe("novel"); // 原型链键不得被认作合法类型
+  });
+});
+
+describe("文风仿写练习上限常量（2026-10）", () => {
+  it("五个上限与 docs/db/schema.md / docs/api/120-api-practice.md 同值（唯一定义处）", () => {
+    expect(MAX_PRACTICE_OBSERVATION_CHARS).toBe(500);
+    expect(MAX_PRACTICE_SOURCE_LABEL_CHARS).toBe(100);
+    expect(MAX_PRACTICE_SAMPLE_CHARS).toBe(20000);
+    expect(MAX_PRACTICE_DRAFT_CHARS).toBe(20000);
+    expect(MAX_FEEDBACK_DIMENSIONS).toBe(6);
   });
 });
 

@@ -30,8 +30,10 @@ import { CREATE_TABLES_SQL } from "./tables.js";
  * 创作根配置的快照；纯 DDL 无数据搬移，存量行回填 1，migrations/010_decompose_concurrency.ts）。
  * v10 → v11（拆解功能移除，2026-09）：DROP 上述两表（拆解整功能已移除，见 CHANGELOG——
  * 009/010 保留只为旧库升级链连续；纯 DDL 无数据搬移，migrations/011_drop_decompose.ts）。
+ * v11 → v12（文风仿写练习，2026-10）：新增 `practice_targets` / `practice_samples` 两表
+ * （练习工作区专属，纯 DDL 无数据搬移——旧项目没有练习行，migrations/012_practice.ts）。
  */
-export const SCHEMA_VERSION = 11; // +移除拆解两表（011 纯 DDL DROP；009/010 保留服务旧库升级链）
+export const SCHEMA_VERSION = 12; // +练习两表（012 纯 DDL；练习工作区专属，旧库无数据可迁）
 
 /**
  * 建表：执行全部 DDL（CREATE TABLE/INDEX IF NOT EXISTS，定义于 tables.ts），幂等，可重复调用。

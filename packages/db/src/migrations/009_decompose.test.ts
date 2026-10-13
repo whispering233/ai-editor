@@ -87,7 +87,7 @@ describe("009_decompose 迁移（v8 → v9，拆解两表）", () => {
     const { applied } = runMigrations(db, { migrations: DECOMPOSE_STEPS, dbPath });
     expect(applied.map((m) => m.version)).toEqual([9, 10]); // 009 建两表 + 010 补 concurrency 列（两者都跑在本测试的临时库上）
     expect(getUserVersion(db)).toBe(10);
-    expect(SCHEMA_VERSION).toBe(11); // 当前版本号已越过两步（完整链终点 = 011 移除两表）
+    expect(SCHEMA_VERSION).toBe(12); // 当前版本号已越过三步（完整链终点 = 012 练习两表）
 
     // 列齐（concurrency 由后续 010 补上；列序 = ALTER 追加在表末，按列名访问、顺序无语义）
     expect(columnNames(db, "decompose_jobs")).toEqual([

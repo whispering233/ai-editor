@@ -295,9 +295,9 @@ describe("迁移 008（v7 → v8：document_records 块文档表）", () => {
     setUserVersion(db, 7);
 
     const { applied } = runMigrations(db, { dbPath });
-    expect(applied.map((m) => m.version)).toEqual([8, 9, 10, 11]); // v8 建块文档表 + v9/v10 拆解两表与并发列 + v11 移除两表（链到 SCHEMA_VERSION）
+    expect(applied.map((m) => m.version)).toEqual([8, 9, 10, 11, 12]); // v8 建块文档表 + v9/v10 拆解两表与并发列 + v11 移除两表 + v12 练习两表（链到 SCHEMA_VERSION）
     expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
-    expect(getUserVersion(db)).toBe(11);
+    expect(getUserVersion(db)).toBe(12);
  // 新表已建且可用（直插 + 计数，验证列齐全）
     insertDocument(db, "ch-1");
     expect(countDocuments(db)).toBe(1);
@@ -330,30 +330,32 @@ describe("迁移 011（v10 → v11：移除拆解两表）", () => {
     insertOldEntity(db, "char-1");
   }
 
-  it("v10 存量库前向迁移：两表被 DROP、user_version = 11、既有表数据完好、重复执行幂等", () => {
+  it("v10 存量库前向迁移：两表被 DROP、user_version 对齐当前版本、既有表数据完好、重复执行幂等", () => {
     seedV10(db);
     expect(tableNames(db)).toEqual(expect.arrayContaining(["decompose_jobs", "decompose_batches"])); // 前置：v10 结构确实有两表
 
     const { applied } = runMigrations(db, { dbPath });
-    expect(applied.map((m) => m.version)).toEqual([11]); // 009/010 已由 seedV10 跑过
-    expect(getUserVersion(db)).toBe(11);
+    expect(applied.map((m) => m.version)).toEqual([11, 12]); // 009/010 已由 seedV10 跑过（011 移除两表后继续 012 练习两表：链到 SCHEMA_VERSION）
+    expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
     expect(tableNames(db)).not.toContain("decompose_jobs");
     expect(tableNames(db)).not.toContain("decompose_batches");
  // 既有表数据完好（纯 DDL 只 DROP 两表）
     expect(countEntities(db)).toBe(1);
 
- // 幂等：版本已对齐 → 无 pending；手工回退版本重跑 → DROP IF EXISTS 不报错
+ // 幂等：版本已对齐 → 无 pending；手工回退版本重跑 → DROP/CREATE IF EXISTS 不报错
     const again = runMigrations(db, { dbPath });
     expect(again.applied).toEqual([]);
     setUserVersion(db, 10);
     expect(() => runMigrations(db, { dbPath })).not.toThrow();
-    expect(getUserVersion(db)).toBe(11);
+    expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
     expect(countEntities(db)).toBe(1);
   });
 
   it("全新空库（createTables 路径）：两表不存在，删表迁移无对象可删", () => {
  // 新库只走 createTables（当前 DDL 已不含拆解两表）——结构即全新空库，对齐版本号不建任何表
-    expect(tableNames(db)).toEqual(["delta_records", "document_records", "entities", "relation_records"]);
+    expect(tableNames(db)).toEqual(
+      ["delta_records", "document_records", "entities", "practice_samples", "practice_targets", "relation_records"],
+    );
     const { db: active, result } = ensureSchemaCompatible(db, dir, dbPath);
     expect(result.rebuilt).toBe(false);
     expect(getUserVersion(active)).toBe(SCHEMA_VERSION);
@@ -378,6 +380,7 @@ describe("ensureSchemaCompatible 旧版本有迁移路径", () => {
       { version: 9, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN ninth TEXT") },
       { version: 10, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN tenth TEXT") },
       { version: 11, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN eleventh TEXT") },
+      { version: 12, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN twelfth TEXT") },
     ];
     insertOldEntity(db, "char-1");
     writeOutlineFile(dir, oldTree());
@@ -437,6 +440,7 @@ describe("ensureSchemaCompatible 旧版本有迁移路径", () => {
       { version: 9, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN ninth TEXT") },
       { version: 10, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN tenth TEXT") },
       { version: 11, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN eleventh TEXT") },
+      { version: 12, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN twelfth TEXT") },
     ];
     insertOldEntity(db, "char-1");
 
