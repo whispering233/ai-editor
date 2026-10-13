@@ -32,6 +32,7 @@ import {
   OUTLINE_NODE_TYPE_LABELS,
   PAYOFF_TIMING,
   PORT_RANGES,
+  PRACTICE_TOOLS,
   PROPOSAL_TOOLS,
   QUERY_TOOLS,
   RELATION_TYPES,
@@ -266,11 +267,16 @@ describe("工具常量", () => {
     expect(EXECUTOR_TOOLS).toHaveLength(13);
   });
 
-  it("分组无重叠且全量 50 个", () => {
+  it("练习工具 3 个（仅 practice 工作区注册；两个只读 + 一个提交）", () => {
+    expect(PRACTICE_TOOLS).toEqual(["get_practice_sample", "get_practice_draft", "submit_style_feedback"]);
+    expect(PRACTICE_TOOLS).toHaveLength(3);
+  });
+
+  it("分组无重叠且全量 53 个", () => {
     expect(AUTO_TOOLS).toHaveLength(21); // +get_chapter_text（卡 12.9）、get_deduction_marks（剧情推演）
-    expect(TOOL_NAMES).toHaveLength(50); // 48 + get_chapter_text + get_deduction_marks（均自动、只读）
+    expect(TOOL_NAMES).toHaveLength(53); // 50 + 练习三个（get_practice_sample / get_practice_draft / submit_style_feedback，均自动）
  // 各分组互不重叠
-    const all = [...QUERY_TOOLS, ...ANALYSIS_TOOLS, ...HOOK_ANALYSIS_TOOLS, ...PROPOSAL_TOOLS, ...EXECUTOR_TOOLS];
+    const all = [...QUERY_TOOLS, ...ANALYSIS_TOOLS, ...HOOK_ANALYSIS_TOOLS, ...PRACTICE_TOOLS, ...PROPOSAL_TOOLS, ...EXECUTOR_TOOLS];
     expect(new Set(all).size).toBe(all.length);
  // 全量集合 = 各分组之和
     expect(new Set(TOOL_NAMES)).toEqual(new Set(all));

@@ -8,9 +8,9 @@
 // 工具定义集中在本入口（name/description/parameters/permission/scope/run），
 // 参数 TypeBox schema 统一从 ./schemas 出口取（见 docs/api/tool-calling.md）。
 //
-// scope（工作区作用域，2026-10）：本入口的 37 个工具都是**小说语义**（实体/大纲/伏笔/Delta/参考资料），
-// 一律 `scope: "novel"`——练习工作区不注册它们（含全部 propose_*）；练习工具（两个只读 + 一个提交）
-// 排在后续切片，标 `scope: "practice"`（装配过滤见 agent `createCustomTools`）。
+// scope（工作区作用域，2026-10）：本入口的 37 个小说语义工具（实体/大纲/伏笔/Delta/参考资料）
+// 一律 `scope: "novel"`——练习工作区不注册它们（含全部 propose_*）；三个练习工具
+// （两个只读 + 一个提交）标 `scope: "practice"`（装配过滤见 agent `createCustomTools`）。
 
 // 包标识常量（与 shared 包风格一致：SHARED_PKG_NAME；agent 冒烟依赖）
 export const TOOLS_PKG_NAME = "@whispering233/ai-editor-tools";
@@ -25,6 +25,7 @@ export * from "./query/manuscript.js";
 export * from "./query/deduction.js";
 export * from "./query/delta.js";
 export * from "./query/reference.js";
+export * from "./query/practice.js";
 export * from "./analysis/utils.js";
 export * from "./analysis/consistency.js";
 export * from "./analysis/conflict.js";
@@ -68,7 +69,7 @@ import { runGetEntity, runGetEntitySummary, runSearchEntities } from "./query/en
 import { runSearchReferences } from "./query/reference.js";
 import { runQueryRelationships } from "./query/relation.js";
 import { runGetOutline, runGetOutlinePath } from "./query/outline.js";
-import { runGetChapterText, DEFAULT_CHAPTER_TEXT_CHARS, MAX_CHAPTER_TEXT_CHARS } from "./query/manuscript.js";
+import { runGetChapterText, DEFAULT_TEXT_PAGE_CHARS, MAX_TEXT_PAGE_CHARS } from "./query/manuscript.js";
 import { runGetDeductionMarks } from "./query/deduction.js";
 import { runComputeState, runGetDeltaHistory } from "./query/delta.js";
 
@@ -139,9 +140,9 @@ const queryToolDefs: ToolDefinition[] = [
       "章正文只读查询：按 node_id 分页读取某章正文的轻量 md 投影（服务端派生，保块级结构、弃行内样式）——" +
       "用于分析节奏、核对与设定的冲突、评价具体段落。node_id **必须是章节点**（卷/场景报错；不存在或已软删报错）。" +
       "offset 为起始字符下标（缺省 0），max_chars 为本次最多返回字符数（缺省 " +
-      DEFAULT_CHAPTER_TEXT_CHARS +
+      DEFAULT_TEXT_PAGE_CHARS +
       "、上限 " +
-      MAX_CHAPTER_TEXT_CHARS +
+      MAX_TEXT_PAGE_CHARS +
       "）；" +
       "text 末尾出现「已截断」提示时，用其中给出的 offset 继续读取（长章分段读完）。" +
       "未写过正文的章返回 char_count=0、text=\"\"。" +
@@ -615,3 +616,77 @@ const proposalToolDefs: ToolDefinition[] = [
 ];
 
 registerTools(proposalToolDefs);
+
+import { MAX_FEEDBACK_DIMENSIONS } from "@whispering233/ai-editor-shared";
+import { practiceTextPageArgsSchema, submitStyleFeedbackArgsSchema } from "./schemas/index.js";
+import {
+  runGetPracticeDraft,
+  runGetPracticeSample,
+  runSubmitStyleFeedback,
+} from "./query/practice.js";
+
+/**
+ * 练习工具定义（文风仿写练习（2026-10）；**仅 `kind = "practice"` 工作区注册**——`scope: "practice"`，
+ * 两个只读 + 一个提交，权限全为 AUTO）。语义：AI 能读范文与用户稿、能写自己的点评产出，
+ * **不能写用户的稿**（工具面根本没有写稿工具，结构性边界见 docs/design/60-practice.md §5）。
+ * 分页数值插值自 `query/manuscript.ts` 的常量（与 get_chapter_text 同一对，模型可见上限的单源）；
+ * 维度上限插值自 shared `MAX_FEEDBACK_DIMENSIONS`（禁止复述数字）——回归断言见 index.test.ts。
+ */
+const practiceToolDefs: ToolDefinition[] = [
+  {
+    name: "get_practice_sample",
+    description:
+      "范文只读查询（文风练习）：按 sample_id 分页读取练习样本的范文快照——点评前用它逐字核对原文" +
+      "（范文不进本轮上下文，必须自己拉取）。" +
+      "offset 为起始字符下标（缺省 0），max_chars 为本次最多返回字符数（缺省 " +
+      DEFAULT_TEXT_PAGE_CHARS +
+      "、上限 " +
+      MAX_TEXT_PAGE_CHARS +
+      "）；" +
+      "text 末尾出现「已截断」提示时，用其中给出的 offset 继续读取（长范文分段读完）。" +
+      "返回 sample_id / target_name / observation / source_label / char_count / offset / returned_chars / text / truncated。" +
+      "**只读**：工具面不存在任何写工具——范文快照落库后不可变。",
+    parameters: practiceTextPageArgsSchema,
+    permission: TOOL_PERMISSION.AUTO,
+    scope: "practice",
+    run: runGetPracticeSample,
+  },
+  {
+    name: "get_practice_draft",
+    description:
+      "用户仿写稿只读查询（文风练习）：按 sample_id 分页读取用户自己的仿写稿（未写稿返回 char_count=0、text=\"\"）——" +
+      "点评必须基于稿件原文，不要凭目标名或观察文本下结论。" +
+      "offset 为起始字符下标（缺省 0），max_chars 为本次最多返回字符数（缺省 " +
+      DEFAULT_TEXT_PAGE_CHARS +
+      "、上限 " +
+      MAX_TEXT_PAGE_CHARS +
+      "）；" +
+      "text 末尾出现「已截断」提示时，用其中给出的 offset 继续读取。" +
+      "返回形状与 get_practice_sample 同形（text = 用户稿）。" +
+      "**只读**：工具面不存在写稿工具——用户的稿只有用户能写，你只能就它提出建议。",
+    parameters: practiceTextPageArgsSchema,
+    permission: TOOL_PERMISSION.AUTO,
+    scope: "practice",
+    run: runGetPracticeDraft,
+  },
+  {
+    name: "submit_style_feedback",
+    description:
+      "提交点评卡（文风练习，写 practice_samples.feedback）：这是本次点评的**正式产出**（不要只用聊天文字给结论）。" +
+      "dimensions 最多 " +
+      MAX_FEEDBACK_DIMENSIONS +
+      " 个维度（超出即失败）；每项 = name 维度名 / sample_trait 范文特征 / draft_trait 你的写法 / " +
+      "sample_quotes 范文原句数组 / draft_quotes 稿件原句数组 / advice 可执行建议（引用数组可省 = 无证据）。" +
+      "每条引用必须能在范文或稿件里**逐字找到**（子串）：请照抄原文，不要改写、拼接或凭印象复述——" +
+      "找不到的引用会被服务端丢弃并计入返回的 dropped_quotes（不阻断提交）；" +
+      "所以提交前先用两个只读工具读到原文，引用以读到的文本为准。" +
+      "summary 为可选一句话总评。卡片**没有「示范」字段**：只做诊断与建议，不代笔。" +
+      "返回 { saved, dimension_count, dropped_quotes }；本工具**只写你自己的点评产出**，不改动用户稿。",
+    parameters: submitStyleFeedbackArgsSchema,
+    permission: TOOL_PERMISSION.AUTO,
+    scope: "practice",
+    run: runSubmitStyleFeedback,
+  },
+];
+
+registerTools(practiceToolDefs);

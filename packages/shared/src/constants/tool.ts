@@ -129,8 +129,20 @@ export const EXECUTOR_TOOLS = [
 /** 自动级工具（查询 11 + 分析 5 + 伏笔分析 5，共 21 个） */
 export const AUTO_TOOLS = [...QUERY_TOOLS, ...ANALYSIS_TOOLS, ...HOOK_ANALYSIS_TOOLS] as const;
 
-/** 全部工具名（自动 21 + 提案 16 + 执行 13 = 50 个） */
-export const TOOL_NAMES = [...AUTO_TOOLS, ...PROPOSAL_TOOLS, ...EXECUTOR_TOOLS] as const;
+/**
+ * 练习工具（自动级，「文风仿写练习」，共 3 个）——**仅 `kind = "practice"` 工作区注册**
+ * （`scope = "practice"`，见 docs/api/tool-calling.md「按工作区类型收窄」）：两个只读
+ * （范文 / 用户稿分页拉取）与一个提交（点评卡写 `feedback`）。
+ * 工具面**不存在任何写用户稿的工具**——用户的稿只有用户能写（结构性边界）。
+ */
+export const PRACTICE_TOOLS = [
+  "get_practice_sample", // 范文快照只读（分页）
+  "get_practice_draft", // 用户仿写稿只读（分页）
+  "submit_style_feedback", // 提交点评卡（唯一能写练习数据的工具，只写 feedback）
+] as const;
+
+/** 全部工具名（自动 21 + 练习 3 + 提案 16 + 执行 13 = 53 个） */
+export const TOOL_NAMES = [...AUTO_TOOLS, ...PRACTICE_TOOLS, ...PROPOSAL_TOOLS, ...EXECUTOR_TOOLS] as const;
 
 /** 工具名（从 TOOL_NAMES 派生） */
 export type ToolName = (typeof TOOL_NAMES)[number];

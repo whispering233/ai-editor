@@ -18,10 +18,12 @@ import { requireChapterNode } from "../proposal/types.js";
 import type { GetChapterTextArgs } from "../schemas/index.js";
 
 /**
- * 缺省单次返回字符数（≈ 一段中等篇幅；长章分段读完，不炸上下文）。
+ * 缺省单次返回字符数（≈ 一段中等篇幅；长文分段读完，不炸上下文）。
+ * **文本分页预算单源**：章正文（get_chapter_text）与练习文本（get_practice_sample /
+ * get_practice_draft）共用这一对常量（语义提升，见 docs/api/tool-calling.md）。
  * 实测（真实截断函数走一遍工具结果，纯 CJK）：缺省页 + 续读提示 = 6055 tokens，余量 24.3%。
  */
-export const DEFAULT_CHAPTER_TEXT_CHARS = 6000;
+export const DEFAULT_TEXT_PAGE_CHARS = 6000;
 
 /**
  * 单次返回字符数上限（clamp 上限）——必须连 JSON 信封与续读提示一起压进单条工具结果预算：
@@ -34,9 +36,10 @@ export const DEFAULT_CHAPTER_TEXT_CHARS = 6000;
  * = **11.8%**（≥10% 留白，给标题/章号更长与提示文案变动）。取 8000 字时同法实测 8055 tokens
  * > 8000 ⇒ 外层截断会连「可用 offset=N 继续读取」与 `truncated` 一起切掉，「截断必须显式告知」失效。
  *
- * 改这个值前先按同一条实测路径（工具 → stringifyToolResult → truncateToolResultText）重量一遍。
+ * 改这个值前先按同一条实测路径（工具 → stringifyToolResult → truncateToolResultText）重量一遍；
+ * 练习工具的同一对常量实测另见 packages/tools/src/query/practice.ts。
  */
-export const MAX_CHAPTER_TEXT_CHARS = 7000;
+export const MAX_TEXT_PAGE_CHARS = 7000;
 
 /** get_chapter_text 结果（工具目录逐字对齐：docs/api/tool-calling.md「正文只读查询」） */
 export interface ChapterTextResult {
@@ -65,8 +68,8 @@ export function runGetChapterText(ctx: ToolContext, args: GetChapterTextArgs): C
     throw new Error(`offset 必须为非负整数: ${String(args.offset)}`);
   }
   const maxChars = Math.min(
-    MAX_CHAPTER_TEXT_CHARS,
-    Math.max(1, Math.trunc(args.max_chars ?? DEFAULT_CHAPTER_TEXT_CHARS)),
+    MAX_TEXT_PAGE_CHARS,
+    Math.max(1, Math.trunc(args.max_chars ?? DEFAULT_TEXT_PAGE_CHARS)),
   );
 
   const documentText = getDocument(ctx.db, "chapter", node.id)?.content_text ?? "";

@@ -1,9 +1,10 @@
 // 冒烟测试：验证 @whispering233/ai-editor-tools 入口可正常导入（T0.3 语义）
 // 冒烟断言为新入口形态：注册表 API + 工具副作用注册（查询 11 + 分析 5 +
-// S6.5 伏笔 5 + S6.6 提案 16 + S6.7 卡 12.9（get_chapter_text）1 + D4（get_deduction_marks）1 = 37 个；执行 13 个不暴露）；
+// S6.5 伏笔 5 + S6.6 提案 16 + S6.7 卡 12.9（get_chapter_text）1 + D4（get_deduction_marks）1
+// + 练习 3（两读一提交，scope = practice）= 40 个；执行 13 个不暴露）；
 // workspace 依赖 @whispering233/ai-editor-db / @whispering233/ai-editor-shared 解析由 import 在编译/运行期验证
 import { describe, expect, it } from "vitest";
-import { AUTO_TOOLS, CHARACTER_PRIORITIES, CHARACTER_PRIORITY_LABELS, DEFAULT_HALF_LIFE, PROPOSAL_TOOLS, TOOL_SCOPES } from "@whispering233/ai-editor-shared";
+import { AUTO_TOOLS, CHARACTER_PRIORITIES, CHARACTER_PRIORITY_LABELS, DEFAULT_HALF_LIFE, MAX_FEEDBACK_DIMENSIONS, PRACTICE_TOOLS, PROPOSAL_TOOLS, TOOL_SCOPES } from "@whispering233/ai-editor-shared";
 import * as m from "./index";
 
 describe("@whispering233/ai-editor-tools 入口冒烟", () => {
@@ -27,8 +28,8 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
     expect(typeof m.runProposeCreateEntity).toBe("function");
     expect(typeof m.runProposeAddDelta).toBe("function");
     expect(typeof m.runProposeAdvanceHook).toBe("function");
- // 入口副作用注册：查询 11 + 分析 5 + 伏笔 5 + 提案 16 = 37 个（含 get_chapter_text 正文只读 + get_deduction_marks 推演标记）
-    expect(m.toolCount()).toBe(37);
+ // 入口副作用注册：查询 11 + 分析 5 + 伏笔 5 + 提案 16 + 练习 3 = 40 个（含 get_chapter_text 正文只读 + get_deduction_marks 推演标记）
+    expect(m.toolCount()).toBe(40);
     expect(m.getTool("get_entity")).toBeDefined();
     expect(m.getTool("get_chapter_text")!.permission).toBe("auto"); // 正文只读：自动权限
  // 分页数值防漂移：description 由 query/manuscript.ts 的常量插值生成
@@ -37,7 +38,18 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
     // 描述里 4 位以上的数字集合必须恰好 = {缺省, 上限}：既证两个常量真的进了描述，
     // 也挡住任何手写数值（如残留的「上限 20000」）——改为硬编码 / 改了值没同步，此处报红
     expect(new Set(descriptionNumbers)).toEqual(
-      new Set([String(m.DEFAULT_CHAPTER_TEXT_CHARS), String(m.MAX_CHAPTER_TEXT_CHARS)]),
+      new Set([String(m.DEFAULT_TEXT_PAGE_CHARS), String(m.MAX_TEXT_PAGE_CHARS)]),
+    );
+ // 练习工具分页描述同源：同两个常量（文本分页预算单源），同样挡住手写数字与值改了没同步
+    for (const name of ["get_practice_sample", "get_practice_draft"]) {
+      const practiceDescription = m.getTool(name)!.description;
+      expect(new Set(practiceDescription.match(/\d{4,}/g) ?? [])).toEqual(
+        new Set([String(m.DEFAULT_TEXT_PAGE_CHARS), String(m.MAX_TEXT_PAGE_CHARS)]),
+      );
+    }
+ // 维度上限防漂移：submit_style_feedback 的 description 由 shared MAX_FEEDBACK_DIMENSIONS 插值生成
+    expect(m.getTool("submit_style_feedback")!.description).toContain(
+      `dimensions 最多 ${MAX_FEEDBACK_DIMENSIONS} 个维度`,
     );
  // 半衰期缺省映射防漂移：description 由 shared DEFAULT_HALF_LIFE 插值生成——
  // 改成手写数字 / 值改了没同步，逐项比对即报红
@@ -68,18 +80,18 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
     }
   });
 
- // 跨包单源守卫：shared 的工具目录常量（AUTO_TOOLS + PROPOSAL_TOOLS）与 registry 事实源必须**同集**——
+ // 跨包单源守卫：shared 的工具目录常量（AUTO_TOOLS + PRACTICE_TOOLS + PROPOSAL_TOOLS）与 registry 事实源必须**同集**——
  // 新增工具只改 registry 不改 shared 常量（或反之）时，此处报红（此前两者无同步守卫，目录常量曾静默漂移）。
  // EXECUTOR_TOOLS 不参与：执行类工具**不注册 registry**（LLM 不可见，见 ./index.js 头注释）。
  // 断言放本文件而非 registry.test.ts：后者会注册 4 个测试辅助工具，listTools 并非纯目录。
   it("shared 工具目录常量与 registry 注册表同集（无遗漏 / 无多余）", () => {
     const registered = new Set(m.listTools().map((tool) => tool.name));
-    expect(registered).toEqual(new Set([...AUTO_TOOLS, ...PROPOSAL_TOOLS]));
+    expect(registered).toEqual(new Set([...AUTO_TOOLS, ...PRACTICE_TOOLS, ...PROPOSAL_TOOLS]));
   });
 
- // 工具 scope（工作区作用域，2026-10）：本卡把全部 37 个既有工具标为 novel（练习工具留给后续切片）。
- // 漏标任一工具 = 它在按 kind 过滤时归属未定（结构性边界失效）⇒ 这里逐名对账，不用「长度相等」代替。
-  it("scope 无遗漏：每个已注册工具的 scope 合法，且 novel 集合 = 既有 37 个工具（逐名相等）", () => {
+ // 工具 scope（工作区作用域，2026-10）：既有 37 个工具全为 novel（逐名对账，不用「长度相等」代替）
+ // + 练习三个为 practice（**误标 common ⇒ 小说侧变 40；误标 novel ⇒ 小说集合逐名相等报红**）。
+  it("scope 无遗漏：每个已注册工具的 scope 合法，novel 集合 = 既有 37 个、practice 集合 = 练习三个（逐名相等）", () => {
     const legacyToolNames = [
       "analyze_consistency",
       "analyze_hook_health",
@@ -124,5 +136,7 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
       expect(TOOL_SCOPES, `工具 ${tool.name} 的 scope 非法`).toContain(tool.scope);
     }
     expect(tools.filter((tool) => tool.scope === "novel").map((tool) => tool.name)).toEqual(legacyToolNames);
+    expect(tools.filter((tool) => tool.scope === "practice").map((tool) => tool.name)).toEqual([...PRACTICE_TOOLS].sort());
+    expect(tools).toHaveLength(legacyToolNames.length + PRACTICE_TOOLS.length);
   });
 });

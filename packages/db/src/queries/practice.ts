@@ -7,7 +7,8 @@
 // 口径（与文档逐条对应）：
 // - **物理删**：练习数据无回收站（无 deleted_at）；删目标**级联删该目标下全部样本**
 // - **范文不可变**：`text` 只在建样本时落库，无更新入口
-// - **用户稿唯一写入口** = updatePracticeDraft；**点评只由工具写**（本卡不提供 `feedback` 写入口）
+// - **用户稿唯一写入口** = updatePracticeDraft；**点评卡唯一写入口** = updatePracticeFeedback
+//  （AI 工具 `submit_style_feedback` 调它；卡内引用校验与形状校验在写入侧 = 该工具）
 // - **无外键**：`target_id` 的存在性由本层守卫（建样本/列样本时目标不存在 → 返回 null）
 // - **列表只出投影**：样本列表不回正文与卡体（`charCount` 走 SQL `length(text)`，不把范文拉进内存；
 //   `feedback` 只读出用于判定 `hasFeedback`，不进返回值）
@@ -338,6 +339,25 @@ export function updatePracticeDraft(db: Db, id: string, draft: string): { update
     if (getPracticeSample(db, id) === null) return null;
     const updatedAt = nowIso();
     queryDb(db).update(practiceSamples).set({ draft, updated_at: updatedAt }).where(eq(practiceSamples.id, id)).run();
+    return { updatedAt };
+  });
+}
+
+/**
+ * 写入点评卡（`submit_style_feedback` 工具的唯一落库入口）——**只写 `feedback`**（JSON 序列化写入），
+ * 推进 `updated_at`；范文 `text` 与用户稿 `draft` 一概不动（**AI 能写它自己的产出，不能写用户的产出**）。
+ * 卡内形状（字段/引用子串校验）在写入侧 = 提交点评工具，本层只序列化（同 document 先例：库层不校验块体）。
+ * @returns `{ updatedAt }`（版本戳）；样本不存在返回 null
+ */
+export function updatePracticeFeedback(db: Db, id: string, feedback: PracticeFeedback): { updatedAt: string } | null {
+  return withTransaction(db, () => {
+    if (getPracticeSample(db, id) === null) return null;
+    const updatedAt = nowIso();
+    queryDb(db)
+      .update(practiceSamples)
+      .set({ feedback: JSON.stringify(feedback), updated_at: updatedAt })
+      .where(eq(practiceSamples.id, id))
+      .run();
     return { updatedAt };
   });
 }

@@ -1,8 +1,10 @@
 // 卡 2 练习 helper 读写测试（文风仿写练习两表，2026-10）
 // 覆盖：目标 CRUD（含列表 sampleCount）/ 样本 CRUD（列表只出投影、详情含全文与点评卡）/
-// 删目标级联删样本与计数 / 目标存在性守卫 / feedback 坏 JSON 防御解析（坏行不抛错、同表其他行照常）
+// 删目标级联删样本与计数 / 目标存在性守卫 / 点评卡写入口（只写 feedback）/
+// feedback 坏 JSON 防御解析（坏行不抛错、同表其他行照常）
 //
-// 注：`feedback` 的唯一**写**入口是 AI 工具（卡 6）——本卡 helper 只读，测试用直写构造点评卡。
+// 注：`feedback` 的唯一**写**入口 = updatePracticeFeedback（由 AI 工具 `submit_style_feedback` 调）；
+// 坏 JSON 防御解析用例仍用直写构造（写入口只会序列化出合法 JSON）。
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -19,6 +21,7 @@ import {
   listPracticeSamples,
   listPracticeTargets,
   updatePracticeDraft,
+  updatePracticeFeedback,
   updatePracticeTarget,
 } from "./practice.js";
 
@@ -41,9 +44,14 @@ function setSampleUpdatedAt(id: string, t: string): void {
   db.prepare("UPDATE practice_samples SET created_at = ?, updated_at = ? WHERE id = ?").run(t, t, id);
 }
 
-/** 直写点评卡（本卡无 feedback 写入口，见文件头注释） */
+/** 直写点评卡（只为构造坏 JSON 行；合法写入走 updatePracticeFeedback） */
 function setFeedback(id: string, raw: string | null): void {
   db.prepare("UPDATE practice_samples SET feedback = ? WHERE id = ?").run(raw, id);
+}
+
+/** 直查某行的范本 / 稿件原文（验证写入口没碰它们——不靠 helper 自说自话） */
+function readVerbatim(id: string): { text: string; draft: string } {
+  return db.prepare("SELECT text, draft FROM practice_samples WHERE id = ?").get(id) as { text: string; draft: string };
 }
 
 beforeEach(() => {
@@ -246,6 +254,33 @@ describe("练习样本（practice_samples）", () => {
     });
 
     expect(updatePracticeDraft(db, "ps-missing", "无")).toBeNull();
+  });
+
+  it("写点评卡：只写 feedback（JSON 序列化写入）、updated_at 推进、范文与稿件一字不动；不存在 → null", () => {
+    const target = createPracticeTarget(db, { name: "目标" });
+    const sample = createPracticeSample(db, { targetId: target.id, sourceLabel: "节选", text: "范文原样" })!;
+    updatePracticeDraft(db, sample.id, "我的稿原样");
+    setSampleUpdatedAt(sample.id, "2026-10-01T00:00:00Z");
+
+    const card = {
+      dimensions: [
+        { name: "句长节奏", sample_trait: "短促", draft_trait: "绵长", sample_quotes: ["范文原样"], draft_quotes: ["我的稿原样"], advice: "收短" },
+      ],
+      summary: "总评",
+    };
+    const written = updatePracticeFeedback(db, sample.id, card);
+    expect(written!.updatedAt > "2026-10-01T00:00:00Z").toBe(true);
+    expect(getPracticeSample(db, sample.id)!.feedback).toEqual(card);
+    expect(readVerbatim(sample.id)).toEqual({ text: "范文原样", draft: "我的稿原样" });
+    expect(getPracticeSample(db, sample.id)!.updated_at).toBe(written!.updatedAt);
+
+    // 覆盖同一张卡（重写 = 覆盖，不留历史）
+    const rewritten = { dimensions: [] };
+    updatePracticeFeedback(db, sample.id, rewritten);
+    expect(getPracticeSample(db, sample.id)!.feedback).toEqual(rewritten);
+    expect(readVerbatim(sample.id)).toEqual({ text: "范文原样", draft: "我的稿原样" });
+
+    expect(updatePracticeFeedback(db, "ps-missing", card)).toBeNull();
   });
 
   it("删样本：物理删且只删自身；不存在 → false", () => {

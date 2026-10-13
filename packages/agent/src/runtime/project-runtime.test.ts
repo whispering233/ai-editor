@@ -22,7 +22,7 @@ import {
   type Model,
 } from "@earendil-works/pi-ai";
 import { ModelRuntime, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
-import type { WorkspaceKind } from "@whispering233/ai-editor-shared";
+import { PRACTICE_TOOLS, type WorkspaceKind } from "@whispering233/ai-editor-shared";
 import { type ToolContext } from "@whispering233/ai-editor-tools";
 import { projectSessionsDir } from "./paths.js";
 import {
@@ -324,7 +324,7 @@ describe("领域工具装配", () => {
 // 提示词同层按 kind 分叉（两份内核常量）。
 
 describe("练习工作区装配", () => {
-  it("工具集 = 空集（无小说工具、无 propose_*），且内核提示词为练习版", async () => {
+  it("工具集 = 恰好三个练习工具（无小说工具、无 propose_*），且内核提示词为练习版", async () => {
     const env = await createFauxEnv();
     const projectRoot = mkTempDir("ai-editor-k4-practice-");
     const agentDir = mkTempDir("ai-editor-k4-agentdir-");
@@ -333,7 +333,9 @@ describe("练习工作区装配", () => {
     const runtime = await setupRuntime({ projectRoot, env, agentDir, kind: "practice" });
     try {
       const activeNames = runtime.session.getActiveToolNames();
-      expect(activeNames).toEqual([]); // 本卡 = 空集；卡 6 落地后为三个练习工具
+      // 恰好两个只读 + 一个提交（shared PRACTICE_TOOLS = 同一份清单）
+      expect([...activeNames].sort()).toEqual([...PRACTICE_TOOLS].sort());
+      expect(activeNames).toHaveLength(PRACTICE_TOOLS.length);
       expect(activeNames.some((name) => name.startsWith("propose_"))).toBe(false);
       // 点名否定：小说侧最常见的读写工具在练习工具面根本不存在
       expect(activeNames).not.toContain("get_outline");

@@ -9,7 +9,7 @@ import { join } from "node:path";
 import type { OutlineFileTree } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
 import { closeDatabase, findOutlineNode, openDatabase, readOutlineFile, upsertDocument, writeOutlineFile, type Db } from "@whispering233/ai-editor-db";
-import { MAX_CHAPTER_TEXT_CHARS, runGetChapterText } from "./manuscript.js";
+import { MAX_TEXT_PAGE_CHARS, runGetChapterText } from "./manuscript.js";
 
 let dir: string;
 let db: Db;
@@ -124,15 +124,15 @@ describe("get_chapter_text", () => {
     expect(result.char_count).toBe(text.length); // 全长与 offset 无关
   });
 
-  it("max_chars 缺省 6000；超上限按 MAX_CHAPTER_TEXT_CHARS clamp（压进外层 8000 token 预算 + ≥10% 余量）", () => {
+  it("max_chars 缺省 6000；超上限按 MAX_TEXT_PAGE_CHARS clamp（压进外层 8000 token 预算 + ≥10% 余量）", () => {
     // 数值与实测绑定：外层单条上限 8000 tokens（agent/src/runtime/tool-result.ts），CJK 约 1 token/字，
     // 上限页 + JSON 信封 + 续读提示实测 7055 tokens（余量 11.8%）——超了就丢「可用 offset 续读」提示
-    expect(MAX_CHAPTER_TEXT_CHARS).toBe(7000);
-    const long = "甲".repeat(MAX_CHAPTER_TEXT_CHARS + 1000);
+    expect(MAX_TEXT_PAGE_CHARS).toBe(7000);
+    const long = "甲".repeat(MAX_TEXT_PAGE_CHARS + 1000);
     seedChapterText("ch-1", long);
     const ctx = makeCtx();
     const clamped = runGetChapterText(ctx, { node_id: "ch-1", max_chars: 999999 });
-    expect(clamped.returned_chars).toBe(MAX_CHAPTER_TEXT_CHARS);
+    expect(clamped.returned_chars).toBe(MAX_TEXT_PAGE_CHARS);
     expect(clamped.truncated).toBe(true);
     // 缺省值一次读完 6000 字符以内文本（超长文本才有截断，此处用中等长度验缺省不报错）
     seedChapterText("ch-2", "乙".repeat(6000));
