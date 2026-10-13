@@ -16,12 +16,6 @@
 
 ## 批次 2（UI）
 
-- [ ] **卡 10 · 练习页（`#/practice/:sampleId`）**
-  - 范围：范文（只读）→ 我的稿（`TextArea`，间接引用 `--writing-*`，不引 `--paper-bg`）→ 点评卡；保存按钮 + `Ctrl/Cmd+S`（接入既有注册栈，失败 `return false`）；「让 AI 点评」按钮（`POST /chat` + `context.practice_sample_id`）。
-  - 点评卡的数据面：**消费 `tool_execution_end` 帧的 `details`**（`submit_style_feedback` 的写库结果，AUTO 工具的唯一非提案例外）即时刷新；**刷新/重载从 `GET /practice/samples/:id` 读卡体**（帧里只有写库结果，没有卡体）。
-  - 依赖：卡 7、9。
-  - 硬完成判据：浏览器核对：三段几何（页头常驻、正文区可滚）；`Ctrl+S` 触发保存（失败路径阻断存档）；点评后卡片即时出现且重载仍在；窄幅下不溢出。
-
 ## 批次 3（收尾）
 
 - [ ] **卡 11 · 导出 / 删除 / 备份在练习工作区上的口径 + 冒烟**
