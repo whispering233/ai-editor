@@ -16,10 +16,6 @@
 
 ## 批次 2（UI）
 
-- [ ] **卡 9 · 练习列表页（`#/practice`）**
-  - 范围：目标分组 + 样本行（来源说明 / 状态徽标 / 相对时间）+ 新建目标 / 新建样本弹窗 + 空态；页头常驻模板。
-  - 依赖：卡 5、8。
-  - 硬完成判据：浏览器核对：建目标 → 建样本 → 列表出现且状态徽标随稿/点评变化；空态文案可见。
 - [ ] **卡 10 · 练习页（`#/practice/:sampleId`）**
   - 范围：范文（只读）→ 我的稿（`TextArea`，间接引用 `--writing-*`，不引 `--paper-bg`）→ 点评卡；保存按钮 + `Ctrl/Cmd+S`（接入既有注册栈，失败 `return false`）；「让 AI 点评」按钮（`POST /chat` + `context.practice_sample_id`）。
   - 点评卡的数据面：**消费 `tool_execution_end` 帧的 `details`**（`submit_style_feedback` 的写库结果，AUTO 工具的唯一非提案例外）即时刷新；**刷新/重载从 `GET /practice/samples/:id` 读卡体**（帧里只有写库结果，没有卡体）。
