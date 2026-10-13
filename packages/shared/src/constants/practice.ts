@@ -6,6 +6,12 @@
 // `docs/design/60-practice.md` §3。
 // 长度口径 = JS 字符串长度（UTF-16 code unit），与既有文本分页常量同源。
 
+/**
+ * 文风目标名（`practice_targets.name`）长度上限——工具结果里 `target_name` 是信封字段，
+ * 不设上限时超长名会把内层续读提示挤出单条工具结果预算（`tools/query/practice.ts` 头注释实测）。
+ */
+export const MAX_PRACTICE_TARGET_NAME_CHARS = 100;
+
 /** 用户观察到的文风特点（`practice_targets.observation`）长度上限 */
 export const MAX_PRACTICE_OBSERVATION_CHARS = 500;
 

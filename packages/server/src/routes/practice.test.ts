@@ -6,7 +6,7 @@
 // 状态码 + **与 `docs/api/120-api-practice.md` 逐字对齐的字段名键集**。
 //
 // 判据覆盖：① 九端点端到端（逐端点 200）② 小说工作区反向守卫 400 KIND_MISMATCH（组根 + 子路径）
-// ③ 四个长度上限（含边界）/ `source_kind` 收窄 / camelCase 字段名 ④ 404 PRACTICE_NOT_FOUND
+// ③ 五个长度上限（含边界）/ `source_kind` 收窄 / camelCase 字段名 ④ 404 PRACTICE_NOT_FOUND
 // ⑤ 删目标级联删样本并计数 + 样本列表不含正文与稿/卡 ⑥ strict 单字段改稿 + observation 清空语义
 // ⑦ 收尾修正：`source_label` trim 非空 / POST 目标响应含 `sampleCount`（与列表项同形）/ 孤儿样本行
 //（目标行缺失）404 文案按样本端点语义 / 点评卡内层 snake_case 原样透传（含 `{}`）/ 列表同值按 id 升序。
@@ -30,6 +30,7 @@ import {
   MAX_PRACTICE_OBSERVATION_CHARS,
   MAX_PRACTICE_SAMPLE_CHARS,
   MAX_PRACTICE_SOURCE_LABEL_CHARS,
+  MAX_PRACTICE_TARGET_NAME_CHARS,
 } from "@whispering233/ai-editor-shared";
 import {
   SCHEMA_VERSION,
@@ -344,12 +345,28 @@ describe("反向守卫（小说工作区访问练习端点）", () => {
 });
 
 describe("请求校验（长度上限 / 枚举 / 字段名）", () => {
-  it("四个长度上限各超 1 字符 → 400 VALIDATION_ERROR（fields 指出出错字段）", async () => {
+  it("五个长度上限各超 1 字符 → 400 VALIDATION_ERROR（fields 指出出错字段）", async () => {
     const h = await startWorkspace("practice");
     const target = await createTarget(h, "目标");
     const sample = await createSample(h, target.id, { source_label: "来源", text: "范文" });
 
     const cases: { field: string; note: string; run: () => Promise<ApiResult<unknown>> }[] = [
+      {
+        field: "name",
+        note: "POST /targets 的 name",
+        run: () =>
+          api(h, "POST", "/api/v1/practice/targets", {
+            name: "d".repeat(MAX_PRACTICE_TARGET_NAME_CHARS + 1),
+          }),
+      },
+      {
+        field: "name",
+        note: "PUT /targets/:id 的 name",
+        run: () =>
+          api(h, "PUT", `/api/v1/practice/targets/${target.id}`, {
+            name: "d".repeat(MAX_PRACTICE_TARGET_NAME_CHARS + 1),
+          }),
+      },
       {
         field: "observation",
         note: "POST /targets 的 observation",
@@ -402,11 +419,20 @@ describe("请求校验（长度上限 / 枚举 / 字段名）", () => {
 
   it("长度上限是含端（恰好等于上限 → 200；范文不被截断，charCount 同值）", async () => {
     const h = await startWorkspace("practice");
+    const atLimit = "d".repeat(MAX_PRACTICE_TARGET_NAME_CHARS);
     const target = await api<PracticeTargetCreated>(h, "POST", "/api/v1/practice/targets", {
-      name: "目标",
+      name: atLimit,
       observation: "d".repeat(MAX_PRACTICE_OBSERVATION_CHARS),
     });
     expect(target.status).toBe(200);
+    expect(target.data.name).toBe(atLimit);
+
+    // 改名端点同口径（上限来自同一个 shared 常量）
+    const renamed = await api<PracticeTargetItem>(h, "PUT", `/api/v1/practice/targets/${target.data.id}`, {
+      name: `${atLimit.slice(0, -1)}e`,
+    });
+    expect(renamed.status).toBe(200);
+    expect(renamed.data.name).toHaveLength(MAX_PRACTICE_TARGET_NAME_CHARS);
 
     const sample = await api<PracticeSampleDetail>(h, "POST", `/api/v1/practice/targets/${target.data.id}/samples`, {
       source_label: "d".repeat(MAX_PRACTICE_SOURCE_LABEL_CHARS),

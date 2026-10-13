@@ -15,7 +15,7 @@
 ## 批次 1（练习业务面）
 
 - [ ] **卡 6 · 三个练习工具（2 只读 + 1 提交）**
-  - 范围：`get_practice_sample` / `get_practice_draft`（`offset` / `max_chars` 分页 + `truncated` 续读提示）/ `submit_style_feedback`（写 `feedback`）；**分页常量语义提升**：`DEFAULT_CHAPTER_TEXT_CHARS` / `MAX_CHAPTER_TEXT_CHARS` 改名（如 `DEFAULT_TEXT_PAGE_CHARS` / `MAX_TEXT_PAGE_CHARS`），两处引用（工具描述插值与实现 clamp）同改；`MAX_FEEDBACK_DIMENSIONS = 6`（描述由常量插值）；引用子串校验（范文 / 稿件）。
+  - 范围：`get_practice_sample` / `get_practice_draft`（`offset` / `max_chars` 分页 + `truncated` 续读提示）/ `submit_style_feedback`（写 `feedback`）；**分页常量语义提升**：`DEFAULT_CHAPTER_TEXT_CHARS` / `MAX_CHAPTER_TEXT_CHARS` 改名（如 `DEFAULT_TEXT_PAGE_CHARS` / `MAX_TEXT_PAGE_CHARS`），两处引用（工具描述插值与实现 clamp）同改；`MAX_FEEDBACK_DIMENSIONS = 6`（描述由常量插值）；引用子串校验（范文 / 稿件；空串与纯空白同样丢弃）。收尾：`MAX_PRACTICE_TARGET_NAME_CHARS = 100`（目标名曾无上限 ⇒ 超长名把续读提示挤出工具结果预算）+ REST `name` 挂上限。
   - 依赖：卡 2、4。
   - 硬完成判据：分页截断时**显式告知**且续读提示不被外层截断切掉（实测 `stringifyToolResult` → `truncateToolResultText` 路径，留白 ≥10%）；无效引用被丢弃并计入 `dropped_quotes`；维度超上限被拒；改上游 `shared` / `tools` 后先 `pnpm -r build` 再跑测试。
   - 承接事实（卡 2 oracle 登记）：`feedback` 写入口**必须新增在 db 包**（`queries/practice.ts` 一类，如 `updatePracticeFeedback`）——**禁止**在 tools 包直写表（破「库写入唯一入口」）；引用子串校验需要范文/稿件全文，分页留在 tools 层。

@@ -10,7 +10,7 @@
 
 **404 文案按端点语义**：目标端点（目标不存在）→ 「文风目标不存在」；样本详情（需目标信息才能成形，样本行在而目标行缺失的孤儿行同样）→ 「练习样本不存在」；码同为 `PRACTICE_NOT_FOUND`。**改稿 / 删样本不查目标行**（行存在即可改/删，不因目标缺失而 404）。
 
-**长度上限**一律取 shared 常量（`MAX_PRACTICE_OBSERVATION_CHARS` / `MAX_PRACTICE_SOURCE_LABEL_CHARS` / `MAX_PRACTICE_SAMPLE_CHARS` / `MAX_PRACTICE_DRAFT_CHARS`）——UI 提示与 REST schema 同源，超限 → 400 `VALIDATION_ERROR`。
+**长度上限**一律取 shared 常量（`MAX_PRACTICE_TARGET_NAME_CHARS` / `MAX_PRACTICE_OBSERVATION_CHARS` / `MAX_PRACTICE_SOURCE_LABEL_CHARS` / `MAX_PRACTICE_SAMPLE_CHARS` / `MAX_PRACTICE_DRAFT_CHARS`）——UI 提示与 REST schema 同源，超限 → 400 `VALIDATION_ERROR`。
 
 ### GET /api/v1/practice/targets
 
@@ -39,7 +39,7 @@
 ```typescript
 // Req
 {
-  name: string;                 // 必填，trim 非空
+  name: string;                 // 必填，trim 非空 + 长度上限 = 常量 MAX_PRACTICE_TARGET_NAME_CHARS
   observation?: string;         // 可选：用户自己观察到的文风特点
 }
 
@@ -54,7 +54,7 @@
 ```typescript
 // Req（至少给一项）
 {
-  name?: string;                // 省略 = 不动
+  name?: string;                // 省略 = 不动（给了则 trim 非空 + 上限同 POST）
   observation?: string;         // 省略 = 不动；空串 = 清空（写 null）
 }
 
@@ -143,7 +143,7 @@
     name: string;
     sample_trait: string;
     draft_trait: string;
-    sample_quotes: string[];    // 证据引用（写入侧已校验：必为范文或稿件的子串）
+    sample_quotes: string[];    // 证据引用（写入侧已校验：必为范文或稿件的子串；空串 / 纯空白视为不匹配 → 丢弃）
     draft_quotes: string[];
     advice: string;
   }>;
@@ -188,6 +188,6 @@
 | :--- | :--- |
 | 触发 | `POST /api/v1/chat`，`context.practice_sample_id = <ps-*>`，`message` = 用户可见的触发文案（如「请点评我的仿写稿」） |
 | 服务端 | 现读目标名与 `observation` 注入本轮；范文与稿件**不进 prompt**，由只读工具分页拉取 |
-| AI 产出 | 经提交工具写 `practice_samples.feedback`（引用逐条校验子串，不匹配即丢弃） |
+| AI 产出 | 经提交工具写 `practice_samples.feedback`（引用逐条校验子串，不匹配即丢弃；空串 / 纯空白同口径） |
 | 前端 | 卡片随 `tool_execution_end` 帧的 `details` 即时渲染；刷新/重载从 `GET /practice/samples/:id` 读 |
 | 留痕 | 触发消息与整轮对话落在该工作区的 `sessions/`（点评可回溯、可追问） |

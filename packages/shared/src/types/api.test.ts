@@ -53,7 +53,7 @@ import {
   practiceTargetUpdateReqSchema,
   practiceTargetSchema,
 } from "./api.js";
-import { MAX_PRACTICE_SAMPLE_CHARS, MAX_PRACTICE_SOURCE_LABEL_CHARS } from "../constants/practice.js";
+import { MAX_PRACTICE_SAMPLE_CHARS, MAX_PRACTICE_SOURCE_LABEL_CHARS, MAX_PRACTICE_TARGET_NAME_CHARS } from "../constants/practice.js";
 
 describe("ErrorCode 完整性", () => {
   it("包含全部 10 个现行错误码", () => {
@@ -840,6 +840,12 @@ describe("practice 端点 schema（docs/api/120-api-practice.md）", () => {
     const text = "d".repeat(MAX_PRACTICE_SAMPLE_CHARS);
     expect(practiceSampleCreateReqSchema.safeParse({ source_label: "来源", text }).success).toBe(true);
     expect(practiceSampleCreateReqSchema.safeParse({ source_label: "来源", text: text + "d" }).success).toBe(false);
+    // 目标名（上限是工具结果信封预算的一部分，见 tools `query/practice.ts` 头注释实测）
+    const name = "d".repeat(MAX_PRACTICE_TARGET_NAME_CHARS);
+    expect(practiceTargetCreateReqSchema.safeParse({ name }).success).toBe(true);
+    expect(practiceTargetCreateReqSchema.safeParse({ name: name + "d" }).success).toBe(false);
+    expect(practiceTargetUpdateReqSchema.safeParse({ name }).success).toBe(true);
+    expect(practiceTargetUpdateReqSchema.safeParse({ name: name + "d" }).success).toBe(false);
   });
 
   it('source_kind 收窄为 "paste"；请求字段名 snake_case（strict 拒绝 camelCase）', () => {
@@ -920,6 +926,12 @@ describe("practice 端点 schema（docs/api/120-api-practice.md）", () => {
       deleted: true,
       deletedSamples: 3,
     });
+  });
+
+  it("目标名上限含端 = 常量，且按 trim 后的长度计（带空白的上限串仍通过）", () => {
+    const name = "d".repeat(MAX_PRACTICE_TARGET_NAME_CHARS);
+    expect(practiceTargetCreateReqSchema.parse({ name: `  ${name}  ` }).name).toBe(name);
+    expect(practiceTargetCreateReqSchema.safeParse({ name: `  ${name}d  ` }).success).toBe(false);
   });
 
   it("PUT /targets/:id 请求要求至少给一项（空对象拒绝；observation 空串 = 清空合法）", () => {

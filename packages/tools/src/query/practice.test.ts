@@ -1,7 +1,8 @@
 // 查询类工具测试：文风仿写练习（get_practice_sample / get_practice_draft / submit_style_feedback，2026-10）
 // 覆盖：两个只读工具的形状与分页（截断显式告知 + 两页拼回原文 + clamp 上限 + 越界与负 offset）/
 // 未写稿空态 / 样本不存在报错 / 提交点评卡的引用子串校验（范文侧与稿件侧：合法保留、非法丢弃计数、
-// 全部非法仍写卡）/ 维度超上限报错 / 只读与只写 feedback 的边界（直查行验证其他列一字不动）
+// 空串与纯空白丢弃计数、全部非法仍写卡）/ 维度超上限报错 / 只读与只写 feedback 的边界
+//（直查行验证其他列一字不动）
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -192,6 +193,37 @@ describe("submit_style_feedback（点评卡写入）", () => {
         },
       ],
       summary: "整体靠得住，节奏再收一点",
+    });
+  });
+
+  it("空引用丢弃：trim 后为空的串（空串 / 纯空白）与逐字找不到同一条路径——计入 dropped_quotes、不进卡片", () => {
+    const id = seedSample({ draft: DRAFT_TEXT });
+    const result = runSubmitStyleFeedback(makeCtx(), {
+      sample_id: id,
+      dimensions: [
+        {
+          name: "句长节奏",
+          sample_trait: "短句为主",
+          draft_trait: "句子偏长",
+          // 空串与纯空白都进不得卡片（否则 includes("") 恒真，卡片里会出现无意义空引用）
+          sample_quotes: ["", "   ", "范文第一段。"],
+          draft_quotes: ["\n\t ", "我的仿写稿第一段。"],
+          advice: "把长句拆成短句",
+        },
+      ],
+    });
+    expect(result).toEqual({ saved: true, dimension_count: 1, dropped_quotes: 3 });
+    expect(getPracticeSample(db, id)!.feedback).toEqual({
+      dimensions: [
+        {
+          name: "句长节奏",
+          sample_trait: "短句为主",
+          draft_trait: "句子偏长",
+          sample_quotes: ["范文第一段。"],
+          draft_quotes: ["我的仿写稿第一段。"],
+          advice: "把长句拆成短句",
+        },
+      ],
     });
   });
 

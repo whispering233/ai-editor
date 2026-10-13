@@ -241,7 +241,7 @@ CREATE TABLE document_records (
 ```sql
 CREATE TABLE IF NOT EXISTS practice_targets (
   id          TEXT PRIMARY KEY,   -- 'pt-*'
-  name        TEXT NOT NULL,      -- 文风目标名
+  name        TEXT NOT NULL,      -- 文风目标名（上限 = 常量 MAX_PRACTICE_TARGET_NAME_CHARS）
   observation TEXT,               -- 用户自己观察到的文风特点（可选；上限 = 常量 MAX_PRACTICE_OBSERVATION_CHARS）
   created_at  TEXT NOT NULL,      -- ISO 8601，应用层写入
   updated_at  TEXT NOT NULL

@@ -111,7 +111,8 @@ submit_style_feedback(sample_id, dimensions[], summary?)
   用途：提交点评卡（写 practice_samples.feedback）
   口径：dimensions 上限 = 常量 `MAX_FEEDBACK_DIMENSIONS`（工具描述由该常量**插值生成**）；
        每条引用（sample_quotes / draft_quotes）必须是范文或稿件的**子串**，服务端逐条校验，
-       不匹配即丢弃（不阻断、不重试）并计入 dropped_quotes；
+       不匹配即丢弃（不阻断、不重试）并计入 dropped_quotes；空串 / 纯空白引用走同一条丢弃路径
+       （否则 `includes("")` 恒真，无意义的引用会进卡片）；
        卡片**没有「示范」字段**——模型没有位置放成段文字（诊断，不代笔）
   注：这是**唯一**能写练习数据的工具，且只写 AI 自己的产出字段（feedback），不碰用户稿
 

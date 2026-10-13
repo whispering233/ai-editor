@@ -7,17 +7,19 @@
 //   实现层 clamp）；截断时 text 末尾附续读提示（「截断必须显式告知」，docs/design/20-context.md §2）
 // - submit_style_feedback：**唯一**能写练习数据的工具，且只写 AI 自己的产出字段 `feedback`
 //   （用户稿 `draft` 工具面不可写——结构性边界，不是提示词约束）；引用逐条校验子串，
-//   不匹配即丢弃并计入 dropped_quotes（不阻断、不重试）
+//   不匹配即丢弃并计入 dropped_quotes（不阻断、不重试）；空串 / 纯空白引用同样丢弃
+//   （否则 `includes("")` 恒真，无意义的空引用会进卡片）
 // - 写库一律经 db helper（`updatePracticeFeedback`）——禁止在工具层直写表（库写入唯一入口）
 //
-// **分页预算实测**（真路径 `truncateToolResultText(stringifyToolResult(工具结果))`，纯 CJK 页、
-// 正文 = 上限 + 1 字，metadata 取实际长度）：
-// - 缺省页（`DEFAULT_TEXT_PAGE_CHARS`）+ 续读提示 = **6081 tokens**（余量 24.0%）
-// - 上限页（`MAX_TEXT_PAGE_CHARS`）+ 续读提示 = **7081 tokens**（余量 **11.5%**，≥10% 留白）
-// - metadata 取满（目标名 50 + `observation` 上限 500 + `source_label` 上限 100）= **7709 tokens**
-//   （余量 3.6%）——仍在单条上限 8000 以内，续读提示不被外层截断切掉；练习信封比
-//   get_chapter_text 多 target_name / observation / source_label 三个字段，故这是本工具的最坏情形。
-//   改上限前必须重走同一条路径（同 manuscript.ts 的测量口径）。
+// **分页预算实测**（真路径 `truncateToolResultText(stringifyToolResult(工具结果))`，纯 CJK 文本、
+// 正文 = 页上限 + 1 字；元数据只给各行写明的字段，其余为空）：
+// - 缺省页（`DEFAULT_TEXT_PAGE_CHARS`）+ 续读提示 + 目标名取满 = **6160 tokens**（余量 23.0%）
+// - 上限页（`MAX_TEXT_PAGE_CHARS`）+ 续读提示 + 目标名取满 = **7160 tokens**（余量 **10.5%**，≥10% 留白）
+// - 上限页 + 目标名 / `observation` / `source_label` 三项全取满 = **7759 tokens**（余量 3.0%）——仍在
+//   单条上限 8000 以内，续读提示与 `truncated` 标记不被外层截断切掉；练习信封比 get_chapter_text
+//   多 target_name / observation / source_label 三个字段，故这是本工具的最坏情形。**目标名必须有上限**
+//   （shared `MAX_PRACTICE_TARGET_NAME_CHARS`）：不设上限时 ≳350 字即可把续读提示挤出 8000 预算。
+//   改任一上限前必须重走同一条路径（同 manuscript.ts 的测量口径）。
 
 import {
   getPracticeSample,
@@ -54,7 +56,7 @@ export interface SubmitStyleFeedbackResult {
   saved: true;
   /** 落库的维度数 */
   dimension_count: number;
-  /** 被丢弃的引用条数（范文侧 + 稿件侧合计；逐字找不到的引用） */
+  /** 被丢弃的引用条数（范文侧 + 稿件侧合计；逐字找不到的引用，以及空串 / 纯空白引用） */
   dropped_quotes: number;
 }
 
@@ -144,13 +146,14 @@ export function runGetPracticeDraft(ctx: ToolContext, args: PracticeTextPageArgs
 }
 
 /**
- * 逐条子串校验：保留能在 `source` 里逐字找到的引用，其余丢弃并累加计数
- * （docs/design/60-practice.md §4 硬规则①：不匹配直接丢弃，不阻断卡片、不重试）。
+ * 逐条子串校验：保留能在 `source` 里逐字找到的引用，其余（含 trim 后为空的串）丢弃并累加计数
+ * （docs/design/60-practice.md §4 硬规则①：不匹配直接丢弃，不阻断卡片、不重试——空引用走**同一条**
+ * 丢弃路径，不另立分支语义）。
  */
 function keepVerbatimQuotes(quotes: readonly string[], source: string, dropped: { count: number }): string[] {
   const kept: string[] = [];
   for (const quote of quotes) {
-    if (source.includes(quote)) kept.push(quote);
+    if (quote.trim() !== "" && source.includes(quote)) kept.push(quote);
     else dropped.count++;
   }
   return kept;
@@ -160,8 +163,8 @@ function keepVerbatimQuotes(quotes: readonly string[], source: string, dropped: 
  * 提交点评卡（submit_style_feedback(sample_id, dimensions[], summary?)）——写 `practice_samples.feedback`。
  *
  * 口径：维度数超 `MAX_FEEDBACK_DIMENSIONS` **抛错即失败**（不编码进 content）；引用逐条校验
- * （范文侧对 `text`、稿件侧对 `draft`），丢弃数计入 dropped_quotes；**全部引用非法时仍成功写卡**
- * （卡片可以没有引用——诊断不依赖引用数）。只写 `feedback`：范文与用户稿一字不动。
+ * （范文侧对 `text`、稿件侧对 `draft`；空串 / 纯空白与逐字找不到一律丢弃并计入 dropped_quotes）；
+ * **全部引用非法时仍成功写卡**（卡片可以没有引用——诊断不依赖引用数）。只写 `feedback`：范文与用户稿一字不动。
  * @throws Error 维度超上限；样本不存在（含目标行缺失）
  */
 export function runSubmitStyleFeedback(

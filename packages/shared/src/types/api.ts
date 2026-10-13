@@ -17,6 +17,7 @@ import {
   MAX_PRACTICE_OBSERVATION_CHARS,
   MAX_PRACTICE_SAMPLE_CHARS,
   MAX_PRACTICE_SOURCE_LABEL_CHARS,
+  MAX_PRACTICE_TARGET_NAME_CHARS,
 } from "../constants/practice.js";
 import type { ComputeStateResult, DeltaRecord, EntitySummary, ProjectAgents, ProjectConfig, RelationRecord } from "./index.js";
 import type { CloudBackupEntry, CloudImportBookResult, CloudRemoteBooksResult } from "./cloud.js";
@@ -1200,7 +1201,7 @@ export type PracticeTargetsRes = z.infer<typeof practiceTargetsResSchema>;
 // POST /api/v1/practice/targets
 export const practiceTargetCreateReqSchema = z
   .object({
-    name: z.string().trim().min(1), // 必填，trim 非空
+    name: z.string().trim().min(1).max(MAX_PRACTICE_TARGET_NAME_CHARS), // 必填，trim 非空 + 长度上限
     observation: z.string().max(MAX_PRACTICE_OBSERVATION_CHARS).optional(),
   })
   .strict();
@@ -1212,7 +1213,7 @@ export type PracticeTargetCreated = PracticeTargetItem;
 // PUT /api/v1/practice/targets/:id（部分更新：**至少给一项**；省略 = 不动，observation 空串 = 清空写 null）
 export const practiceTargetUpdateReqSchema = z
   .object({
-    name: z.string().trim().min(1).optional(),
+    name: z.string().trim().min(1).max(MAX_PRACTICE_TARGET_NAME_CHARS).optional(),
     observation: z.string().max(MAX_PRACTICE_OBSERVATION_CHARS).optional(),
   })
   .strict()
