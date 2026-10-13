@@ -318,7 +318,7 @@ export interface PullOptions {
  *
  * 流程：定位书目录 → 列目录取目标（缺省 head）→ 下载 → 原样落进本地 `.backups/`（校验失败则回收）→
  * 走 **restore 管道**（覆盖前自动快照 + 校验 + **工作区类型校验**（包内 kind ≠ 当前工作区 kind →
- * 400 `KIND_MISMATCH`，不写三文件）+ **三文件覆盖** + db 重连 + 重启备份定时器；
+ * 400 `KIND_MISMATCH`，不动三文件内容）+ **三文件覆盖** + db 重连 + 重启备份定时器；
  * 本机 `sessions/` **不写不删**）→ 更新同步状态
  *（`lastPushedFileName` = 拉到的这份，既是新的冲突判定基准，也是「本机已基于该版本」的标记；
  * `lastSeenCloudFiles` = 当前云端集合 → 立刻复查不会判「云端有更新」）。

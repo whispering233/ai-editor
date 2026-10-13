@@ -1138,7 +1138,7 @@ function writeFileAtomic(filePath: string, data: Uint8Array): void {
  * 3. 备份包校验（validateBackupPackage：zip/白名单//user_version 三态，
  * 拒绝时数据零触碰——校验通过前不触碰任何数据文件）
  * 4. **工作区类型校验**（assertBackupKindMatches：包内 kind ≠ 当前工作区 kind → 400
- * `KIND_MISMATCH`，不写任何三文件；顺序在覆盖前快照之后，见 `docs/api/20-api-backup.md`）
+ * `KIND_MISMATCH`，不动三文件内容；顺序在覆盖前快照之后，见 `docs/api/20-api-backup.md`）
  * 5. **原子替换**：closeDatabase（释放当前连接）→ 三文件逐文件原子写
  * （临时文件 + rename；data.db 顺带清理 -wal/-shm 残留）→ 重新 openDatabase
  * + ensureSchemaCompatible（校验阶段已保证 v ≤ 当前且有迁移路径或匹配——
@@ -1167,7 +1167,7 @@ export function restoreBackup(
   const { entries, kind } = validateBackupPackage(zip);
 
  // 4. 工作区类型校验（覆盖类写包入口，2026-10 裁定 d）：包内 kind ≠ 当前工作区 kind →
- // 400 KIND_MISMATCH 且不写任何三文件。目标 kind 与端点/requireKind 同一来源
+ // 400 KIND_MISMATCH 且不动三文件内容。目标 kind 与端点/requireKind 同一来源
  //（project.config.kind 经 shared 兜底）；校验在覆盖前快照之后，与既有「校验失败也留快照」
  // 顺序一致（docs/api/20-api-backup.md §顺序说明）。
   const currentKind = resolveWorkspaceKind(project.config.kind);
