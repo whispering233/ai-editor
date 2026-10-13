@@ -2324,7 +2324,7 @@ describe("POST /project/import（zip 导入新书）", () => {
       code: "KIND_MISMATCH",
       message: "备份包的工作区类型（小说）与当前工作区（文风练习）不符",
     });
- // 零触碰：三文件字节不变、盘上数据未回滚（覆盖前快照也未生成）
+ // 零触碰：三文件内容不变、盘上数据未回滚（覆盖前快照也未生成）
     expect(diskState(practiceDir)).toEqual(before);
     expect(readProjectFile(practiceDir)?.prompt).toBe("当前数据");
     expect(existsSync(join(root, "books", "练习区"))).toBe(false); // 包内 kind 未被用来新建小说目录

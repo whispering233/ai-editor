@@ -160,7 +160,7 @@ function bookZipBytes(dir: string): Uint8Array {
   });
 }
 
-/** 三文件 sha256（判据「三文件字节不变」的比对口径：逐文件字节指纹） */
+/** 三文件 sha256（判据「三文件内容不变」的比对口径：逐文件字节指纹；**不比字节绝对性**——类型校验在覆盖前快照之后，快照的 wal_checkpoint 会重写 data.db 字节） */
 function threeFileSha256(dir: string): Record<string, string> {
   const digest = (file: string): string => createHash("sha256").update(readFileSync(join(dir, file))).digest("hex");
   return {
@@ -964,7 +964,7 @@ describe("POST /project/backup/restore", () => {
     const body = await res.json();
     expect(body.error.code).toBe("KIND_MISMATCH");
     expect(body.error.message).toBe("备份包的工作区类型（小说）与当前工作区（文风练习）不符");
- // 判据 1：三文件字节不变（sha256 逐文件比对——类型校验在覆盖前快照之后，快照只可能 checkpoint data.db）
+ // 判据 1：三文件内容不变（sha256 逐文件比对——类型校验在覆盖前快照之后，快照只可能 checkpoint data.db）
     expect(threeFileSha256(dir)).toEqual(before);
  // 练习数据行数不变（专属表直查）
     const checkDb = openDatabase(join(dir, DATA_DB_FILE_NAME));

@@ -55,7 +55,7 @@ shared → db → tools → agent → server    （依赖方向；client 只依�
 pnpm install
 pnpm -r build              # 按依赖序构建 7 包
 pnpm dev                   # 开发态：client :5173 + server :3520（dev 分段起点，proxy /api）
-pnpm start:test-project    # 测试项目（数据落 test-project/books/，该目录整体不入库）
+pnpm start:test-project    # 测试项目（数据落 test-project/books/ 与 practice/，该目录整体不入库）
 pnpm typecheck && pnpm lint && pnpm -r test   # 验证
 ```
 
@@ -81,7 +81,7 @@ pnpm typecheck && pnpm lint && pnpm -r test   # 验证
 
 | 目录 | 内容 |
 |------|------|
-| `docs/design/` | 总体设计、架构与分包、详细设计（数据模型 / 上下文 / agent 循环 / 云端存档 / 桌面版）、任务清单、配置、构建发布、遗留项 |
+| `docs/design/` | 总体设计、架构与分包、详细设计（数据模型 / 上下文 / agent 循环 / 云端存档 / 桌面版 / 文风仿写练习）、任务清单、配置、构建发布、遗留项 |
 | `docs/api/` | 公共约定、错误码、接口索引、各模块端点契约、AI 工具目录 |
 | `docs/db/` | 表结构 / outline.json / project.json 契约 |
 | `docs/ui/` | **视觉与布局唯一契约**（`DESIGN.md`：色 / 字号 / 圆角 / 间距 / 三栏布局与页头结构 + antd token 登记表与守卫） |
@@ -92,6 +92,7 @@ pnpm typecheck && pnpm lint && pnpm -r test   # 验证
 ## 设计原则
 
 - **本地优先**：数据全存本地（project.json + outline.json + data.db + sessions/），本地是唯一事实源；云端存档只是备份的另一块磁盘，随时可停用（对话历史为纯本地目录，不进备份/导出/云端）
+- **工作区抽象**：创作根下的顶层单位是**工作区**（`kind`：小说 / 文风练习）——异质场景用**独立工作区 + 专属表**，共用同一套持久化管道（备份 / 云端 / 会话 / 恢复 / 原子写）；**AI 能力面按工作区类型收窄**（练习工作区不注册小说工具与提案工具，是结构性边界）
 - **结构体先行**：创作要素结构化（人物 / 设定 / 地点 / 伏笔），AI 在结构上做语义分析与建议
 - **AI 只提案不写入**：结构化数据写操作一律走「提案确认」；正文与参考资料 AI 只有只读工具
 - **软删 + 回收站**：误删可还原，purge 才物理清除

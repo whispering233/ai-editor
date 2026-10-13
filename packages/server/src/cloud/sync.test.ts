@@ -220,7 +220,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/** 三文件 sha256（判据「三文件字节不变」的比对口径：逐文件字节指纹） */
+/** 三文件 sha256（判据「三文件内容不变」的比对口径：逐文件字节指纹；**不比字节绝对性**——类型校验在覆盖前快照之后，快照的 wal_checkpoint 会重写 data.db 字节） */
 function threeFileSha256(dir: string): Record<string, string> {
   const digest = (file: string): string => createHash("sha256").update(readFileSync(join(dir, file))).digest("hex");
   return {
@@ -634,7 +634,7 @@ describe("pullBackup：三文件覆盖（sessions/ 是纯本地目录，不写�
     await expect(pullBackup(project)).rejects.toMatchObject({ code: "CLOUD_NOT_CONFIGURED", status: 409 });
   });
 
-  it("云端那份 kind ≠ 当前工作区 kind → 400 KIND_MISMATCH，三文件字节不变、同步状态不推进、本地不留那份包", async () => {
+  it("云端那份 kind ≠ 当前工作区 kind → 400 KIND_MISMATCH，三文件内容不变、同步状态不推进、本地不留那份包", async () => {
     // 当前工作区改成练习（practice）：云端那份 makeCloudZip 是小说包（project.json 无 kind → novel）
     writeProjectFile(project.root, { ...project.config, kind: "practice" });
     project.config = readProjectFile(project.root) as ProjectFileConfig;
@@ -652,7 +652,7 @@ describe("pullBackup：三文件覆盖（sessions/ 是纯本地目录，不写�
       message: "备份包的工作区类型（小说）与当前工作区（文风练习）不符",
     });
 
-    // 三文件字节不变（sha256 逐文件比对——与本地 restore 同一函数同一口径）
+    // 三文件内容不变（sha256 逐文件比对——与本地 restore 同一函数同一口径）
     expect(threeFileSha256(project.root)).toEqual(before);
     // 那份包未被留在本地 .backups/（校验失败回收，同坏包口径）
     expect(existsSync(join(project.root, BACKUPS_DIR_NAME, cloud.fileName))).toBe(false);

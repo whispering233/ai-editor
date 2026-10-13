@@ -23,8 +23,7 @@
   - **点评链路**：练习页发一条普通用户消息 + `context.practice_sample_id`；服务端**现读**目标名与观察注入（范文与稿件**不进 prompt**，由只读工具按 `offset`/`max_chars` 分页拉取）；卡片随 `tool_execution_end` 的 `details` 下发（`TOOL_DETAILS_TO_CLIENT` 是「details 随帧下发」的唯一事实来源），卡体从 `GET /practice/samples/:id` 读；点评留痕在会话历史里。
   - **练习页**：范文（只读）→ 我的稿（纯文本，排版经 `--writing-*` 间接引用、不引纸张底色）→ 点评卡；保存走页内按钮与全站 `Ctrl/Cmd+S`（失败阻断存档）。
   - **周边管道零新增**：备份 / 恢复 / 云端 / 重命名 / 导入导出沿用既有管道（备份文件名格式不变，统计段在练习工作区自然为 `人物0-设定0-章0`）；导出弹窗在练习工作区只给三文件包一项（`export-novel` 仅小说，服务端 400）。
-  - **导入的落目录口径**：新建导入按**包内 `kind`** 落 `books/` 或 `practice/`；**覆盖恢复时 `name` 与 `kind` 都归一到目标目录**（目录是事实，防「目录与 kind 不符」的工作区）。
-  - **覆盖类写包入口的 kind 校验**：`POST /project/backup/restore`、`POST /cloud/pull`、`POST /project/import` 的 id 命中覆盖恢复在写盘前比较包内 `kind`（缺失/未知 → `novel`）与目标工作区 `kind`，不符 → 400 `KIND_MISMATCH`（**不动三文件内容**，文案用中文名：「备份包的工作区类型（小说）与当前工作区（文风练习）不符」）——旧包（`kind` 引入前只存在小说工作区）在小说工作区正常恢复并补写 `kind`，在练习工作区被拒；**新建入口不校验**（无目标），仍按包内 `kind` 落目录。
+  - **导入 / 恢复的 kind 口径**：**新建**导入按**包内 `kind`** 落 `books/` 或 `practice/`；**覆盖类写包入口**（`POST /project/backup/restore`、`POST /cloud/pull`、`POST /project/import` 的 id 命中覆盖恢复）在写盘前比较包内 `kind`（缺失/未知 → `novel`）与目标工作区 `kind`，不符 → 400 `KIND_MISMATCH`（**不动三文件内容**，文案用中文名：「备份包的工作区类型（小说）与当前工作区（文风练习）不符」）；相符时 `name` 与 `kind` 都归一到目标工作区——旧包（`kind` 引入前只存在小说工作区）在小说工作区正常恢复并补写 `kind`，在练习工作区被拒；**新建入口不校验**（无目标）。
 
 ### Changed
 
