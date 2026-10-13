@@ -6,9 +6,9 @@
 
 ```
 创作根（书架，启动目录）/
-├── books/                    # 书架子目录（S1.5 起）
+├── books/                    # 小说工作区子目录（S1.5 起）
 │   └── <书名>/               # 每本书一个目录（创建书 = 新建子目录）
-│       ├── project.json       # 项目配置（id/schema_version/current_position 等，见下文契约）
+│       ├── project.json       # 项目配置（kind/id/schema_version/current_position 等，见下文契约）
 │       ├── outline.json       # 大纲树（卷 → 章 → 场景，严格三层，无游离节点；2026-09：章只挂卷）
 │       ├── AGENTS.md          # 项目规则文件（项目规则唯一事实源，可选文件，见下文）
 │       ├── sessions/          # 对话历史（一 session 一 JSONL，格式 = pi session v3）
@@ -20,10 +20,15 @@
 │           └── document_records # 块文档（章正文 / 参考资料正文，2026-09）
 │       # 注：项目目录下**不再有** references/ 目录（2026-09 废弃：参考资料正文进 document_records，
 │       #     外部编辑能力改为单文件导入导出；历史遗留的同名目录不被读取、不被打包）
+├── practice/                 # 文风仿写练习工作区（kind = "practice"，2026-10）
+│   └── <名字>/               # 结构与书完全同构（project.json + outline.json + data.db + sessions/）
+│       └── data.db            #   └── practice_targets / practice_samples（见下文两张练习表）
 
 # 兼容：启动目录本身含 project.json 时按旧语义打开；
-# 无 project.json 时进入书架模式——Dashboard 引导创建（自动建 books/<书名>/）或打开
+# 无 project.json 时进入书架模式——Dashboard 引导创建（按 kind 自动建 books/<书名>/ 或 practice/<名字>/）或打开
 ```
+
+**工作区类型与表集**：所有工作区的 `data.db` 含**全部**表（表结构声明单源，不按 `kind` 建表）——非本类型的表是空表，零成本。目录映射（`books/` ↔ `practice/`）与能力面（工具集 / 提示词 / 导航）由 `project.json` 的 `kind` 决定，见 `../design/00-master-design.md` 与 `../design/architecture.md`。
 
 **时间约定**：所有时间列/字段统一 ISO 8601 字符串（如 `2026-08-01T10:00:00Z`），由应用层写入，不使用 SQLite 内置 `datetime('now')`——回收站按 `deleted_at` 排序需跨 SQLite 与 outline.json 统一格式。
 
@@ -37,7 +42,7 @@
   - `user_version > SCHEMA_VERSION`（未来版本）→ **拒绝打开** 409 `PROJECT_VERSION_NEWER`（数据原封不动，提示升级程序）；
   - `user_version < SCHEMA_VERSION`（旧版本）→ **有迁移路径**（`packages/db/src/migrations/` 存在从当前版本到目标版本的连续迁移链）→ `runMigrations` 前向迁移；**无迁移路径** → 删库重建兜底（备份 `data.db.v{n}.bak` + `outline.json.v{n}.bak`）。
 - **迁移机制**：`migrations/` 目录每个文件导出一个 `Migration = { version, up }`（`001_xxx.ts` → version 1），`index.ts` 按 version 升序聚合导出 `MIGRATIONS`（tsc 编译进 dist 随包分发，无运行时目录读取）。`runMigrations` 对缺失版本逐个执行：**每个迁移一个事务（`up(db)` + `setUserVersion(version)` 原子提交——成功 ⇒ 版本已写入；失败 ⇒ 版本未变）**；**整批迁移前自动快照** data.db → `data.db.v{n}.{YYYYMMDDHHmmssSSSZ}.bak`（checkpoint 后复制主文件，时间戳命名，失败重试现场保留）。迁移失败 → 该迁移回滚 + 版本停在前一迁移后，下次 open 重试。（**粒度注**：迁移侧快照为毫秒时间戳且**无去重循环**——同一毫秒的两次批量迁移会后者覆盖前者；真实升级路径不可达，与备份侧 backup 的 +1ms 去重口径不同但已接受。）
-- 当前 `SCHEMA_VERSION = 11`；迁移链：`002_event_timeline.ts`（version 2：entities 表 CHECK 扩入 `'event'` + 新增 `sort_order` 列）、`003_timepoint.ts`（version 3，G2 修订：entities 表 CHECK 扩入 `'timepoint'` + `event.data.time_label` 迁移为 timepoint 实体 + occurs_at 关系，同名 time_label 合并为同一 timepoint）、`004_setting_tags.ts`（version 4，K2 修订：**无 DDL**——setting 旧 `data.rules` 分类值复制到 `data.tags` 并移除 rules，仅 data JSON 数据迁移）、`005_reference.ts`（version 5：entities 表 CHECK 扩入 `'reference'`，无数据搬移仅 DDL）、`006_sessions_jsonl.ts`（version 6：**对话历史出库**——`chat_messages` 全量导出为旧格式 `sessions/<session_id>.jsonl` 后 `DROP TABLE`；产物为旧 v1 格式，现已被 pi session 格式取代、不再被读取（数据保留在磁盘）；**id 不合法的旧会话以 `sess_legacy_<sha256 前 16 位>` 文件名导出**）、`007_character_ability_panel.ts`（version 7，2026-09：**无 DDL**——`character.data.abilities[]` 迁为 `ability_panel` 叶子并移除旧字段，幂等且不覆盖已有 `ability_panel`，仅 data JSON 数据迁移，同 004 先例）、`008_document_records.ts`（version 8，2026-09：新增 `document_records` 表（块文档），纯 DDL 无数据搬移——开发阶段，旧 `references/` 目录与旧参考资料行不作兼容读取）、`009_decompose.ts`（version 9：新增 `decompose_jobs` / `decompose_batches` 两表，纯 DDL 无数据搬移——旧项目没有 job 行，无需回填）、`010_decompose_concurrency.ts`（version 10：`decompose_jobs` 新增 `concurrency` 列，纯 DDL 无数据搬移——存量行回填 `DEFAULT 1`）、`011_drop_decompose.ts`（version 11：`DROP TABLE` 上述两表，纯 DDL——「拆解小说」功能已整功能移除（见 CHANGELOG），009/010 保留只为旧库升级链连续）。**SQLite 无法直接修改 CHECK 约束**，迁移走「建新表（新 CHECK）→ 拷贝数据 → drop 旧表 → rename」四步（`relation_records`/`delta_records` 无外键指向 entities，迁移只动 entities 表）；v1 → v11 迁移链存在 ⇒ 旧库 open 时自动前向迁移，不再走删库重建兜底。
+- 当前 `SCHEMA_VERSION = 11`；迁移链：`002_event_timeline.ts`（version 2：entities 表 CHECK 扩入 `'event'` + 新增 `sort_order` 列）、`003_timepoint.ts`（version 3，G2 修订：entities 表 CHECK 扩入 `'timepoint'` + `event.data.time_label` 迁移为 timepoint 实体 + occurs_at 关系，同名 time_label 合并为同一 timepoint）、`004_setting_tags.ts`（version 4，K2 修订：**无 DDL**——setting 旧 `data.rules` 分类值复制到 `data.tags` 并移除 rules，仅 data JSON 数据迁移）、`005_reference.ts`（version 5：entities 表 CHECK 扩入 `'reference'`，无数据搬移仅 DDL）、`006_sessions_jsonl.ts`（version 6：**对话历史出库**——`chat_messages` 全量导出为旧格式 `sessions/<session_id>.jsonl` 后 `DROP TABLE`；产物为旧 v1 格式，现已被 pi session 格式取代、不再被读取（数据保留在磁盘）；**id 不合法的旧会话以 `sess_legacy_<sha256 前 16 位>` 文件名导出**）、`007_character_ability_panel.ts`（version 7，2026-09：**无 DDL**——`character.data.abilities[]` 迁为 `ability_panel` 叶子并移除旧字段，幂等且不覆盖已有 `ability_panel`，仅 data JSON 数据迁移，同 004 先例）、`008_document_records.ts`（version 8，2026-09：新增 `document_records` 表（块文档），纯 DDL 无数据搬移——开发阶段，旧 `references/` 目录与旧参考资料行不作兼容读取）、`009_decompose.ts`（version 9：新增 `decompose_jobs` / `decompose_batches` 两表，纯 DDL 无数据搬移——旧项目没有 job 行，无需回填）、`010_decompose_concurrency.ts`（version 10：`decompose_jobs` 新增 `concurrency` 列，纯 DDL 无数据搬移——存量行回填 `DEFAULT 1`）、`011_drop_decompose.ts`（version 11：`DROP TABLE` 上述两表，纯 DDL——「拆解小说」功能已整功能移除（见 CHANGELOG），009/010 保留只为旧库升级链连续）、`012_practice.ts`（version 12，2026-10：新增 `practice_targets` / `practice_samples` 两张练习表，纯 DDL 无数据搬移——旧项目没有练习行，无需回填）。**SQLite 无法直接修改 CHECK 约束**，迁移走「建新表（新 CHECK）→ 拷贝数据 → drop 旧表 → rename」四步（`relation_records`/`delta_records` 无外键指向 entities，迁移只动 entities 表）；v1 → v11 迁移链存在 ⇒ 旧库 open 时自动前向迁移，不再走删库重建兜底。
 - **import 侧联动**：导入备份时 `user_version < SCHEMA_VERSION` 且**有迁移路径** → 接受（搬入后 open 自动迁移，v5 及更早备份经增量迁移升到 **v11**，含对话历史出库、能力面板迁移、块文档表创建与已下线功能的表清理）；无路径 → 409 `SCHEMA_VERSION_MISMATCH`；`>` 当前 → 409（未来版本语义）。
 - **全新空库短路（2026-09）**：`user_version = 0` 且**表结构与当前 DDL 一致**且**业务表无行** → 直接写入 `SCHEMA_VERSION`（**不重建、不备份、不碰 `outline.json`**）——覆盖“书目录有 project.json/outline.json 但缺 data.db”的场景（否则会走无路径重建兼重置大纲）。**反向守住**：结构陈旧（旧 CHECK / 残留表）或有数据的 v0 库仍走既有重建兑底。**已知不对称（已登记）**：备份包内的 v0 空库仍在导入侧被 409 拒绝（`validateBackupPackage` 复用 `hasMigrationPath`），而盘上同内容文件现在会被接受——偏差方向只宽松、无数据风险。
 
@@ -229,6 +234,44 @@ CREATE TABLE document_records (
 
 **读取投影的两个消费面**：① AI 工具（单章只读拉取 / 参考资料全文）——只拿 `content_text`，绝不拿块 JSON；② 列表与摘要（参考资料列表的 `content` 摘要定长截断（长度单一定义 = db `toSummary`）、`GET /outline?with_metadata=true` 的章 `charCount`）——用 `length(content_text)` 与切片，不解析块体。
 
+## practice_targets / practice_samples — 练习表（2026-10）
+
+文风仿写练习的数据（**独立工作区** `kind = "practice"` 专属；设计见 `../design/60-practice.md`）：
+
+```sql
+CREATE TABLE IF NOT EXISTS practice_targets (
+  id          TEXT PRIMARY KEY,   -- 'pt-*'
+  name        TEXT NOT NULL,      -- 文风目标名
+  observation TEXT,               -- 用户自己观察到的文风特点（可选；上限 = 常量 MAX_PRACTICE_OBSERVATION_CHARS）
+  created_at  TEXT NOT NULL,      -- ISO 8601，应用层写入
+  updated_at  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS practice_samples (
+  id           TEXT PRIMARY KEY,          -- 'ps-*'
+  target_id    TEXT NOT NULL,             -- 'pt-*'（无 FK，存在性由写入侧守卫）
+  source_kind  TEXT NOT NULL,             -- 'paste'（MVP 唯一值；跨工作区快照导入为升级路径，见 backlog）
+  source_label TEXT NOT NULL,             -- 快照来源说明（用户手填，如「汪曾祺《受戒》节选」）
+  text         TEXT NOT NULL,             -- 范文快照（不可变）
+  draft        TEXT NOT NULL DEFAULT '',  -- 用户仿写稿（**只有用户能写**）
+  feedback     TEXT,                      -- 点评卡 JSON（AI 产出；NULL = 未点评）
+  created_at   TEXT NOT NULL,
+  updated_at   TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_practice_samples_target ON practice_samples(target_id);
+```
+
+| 不变式 | 口径 |
+| :--- | :--- |
+| **无外键** | `target_id` 的存在性由写入侧守卫（同 `document_records` 先例） |
+| **无软删** | 删除 = **物理删**（回收站是小说语义：联动大纲节点与实体级联）；删目标**级联删样本** |
+| **范文不可变** | `text` 落库后不更新——练习工作区独立于书，实时引用做不到也不该做 |
+| **用户稿唯一写入口** | `draft` 只由用户经 REST 写；AI 工具面**不存在**写稿工具 |
+| **点评只由工具写** | `feedback` 由提交点评的工具写入（AI 能写自己的产出，不能写用户的产出） |
+| **JSON 列防御解析** | `feedback` 读取一律防御解析（坏 JSON 不得打挂列表查询）——与既有 JSON 列同款 |
+| **不进小说语义** | 不参与 Delta / 关系表 / 回收站；表集与小说语义表互不混装 |
+
 ## sessions/*.jsonl — 对话历史（文件存储）
 
 对话消息**不存 data.db**，一 session 一个 JSONL 文件，落在项目目录 `sessions/`。会话随书目录移动/整体删除自然跟随，不依赖 db；但**不进任何 zip（备份 / 导出 / 云端）**——它不会跨机器搬运，本机删书即随之消失。
@@ -309,6 +352,7 @@ CREATE TABLE document_records (
   "id": "proj-abc123",
   "name": "我的小说",
   "language": "zh",
+  "kind": "novel",
   "schema_version": 1,
   "current_position": "ch-12",
   "deduction_nodes": ["ch-3", "ch-7"],
@@ -325,6 +369,7 @@ CREATE TABLE document_records (
 | `id` | string | 项目唯一 id，首次初始化时生成（前缀 `proj-` + nanoid），**跨启动稳定**；**备份/恢复的唯一 key**——导入/加载备份时以 zip 内 id 与书架比对，匹配 → 覆盖恢复，不匹配 → 导入为新书 |
 | `name` | string | 项目名称，默认取目录名；**与目录名绑定**（「目录名 = 书名」不变式：同名并存时目录与 name 同步去重为 `<书名> (N)`） |
 | `language` | `"zh"` \| `"en"` | 语言 |
+| `kind` | `"novel"` \| `"practice"` | **工作区类型（可选字段，2026-10）**：缺省 `novel`（旧文件兜底）。它决定目录映射（`books/` / `practice/`）、AI 工具集与内核提示词、路由守卫与左栏导航；**不参与 schema_version 判定**（宽松读取）。**API 恒下发**（服务端兜底后输出，客户端不二次兜底） |
 | `origin` | string | **已废止（2026-09）**：项目出处字段（原用于书架分组）随「拆解小说」移除而废止——**读侧容忍残留键、不再写**（旧文件里的值一律忽略，不参与任何判定与展示） |
 | `prompt` | string | **已废弃**：项目级提示词——不再读写；项目规则改由项目目录 `AGENTS.md` 承载（见下节）。旧文件中的残留字段宽松读取（不参与 schema_version 判定），新写入不再产生该字段 |
 | `schema_version` | number | JSON 结构版本（与 outline.json 顶层同步写入） |
@@ -337,6 +382,7 @@ CREATE TABLE document_records (
 
 **约束**：
 - 模型 API key **绝不写入本文件**——凭据归 pi 的 agent dir（`~/.pi/agent/auth.json`，一家一条且存量凭据优先，环境变量仅在该家无条目时兜底；写入只在设置页经 pi credential store），见 `docs/design/config.md`。
+- **小说语义字段在练习工作区上不写**：`current_position` / `deduction_nodes` 属小说工作区（写入侧按 `kind` 拒绝，400 `KIND_MISMATCH`）；`backup_frequency_minutes` 与 `kind` 对所有工作区通用。
 - 文件写入遵循原子写流程（outline.json 同款：临时文件 + fsync + rename）。
 - **自动备份目录**：项目目录内 `.backups/` 子目录存放备份 zip。命名格式：`<YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip`——毫秒时间戳（本地时区，字典序 = 时间序，`parseBackupFileName` 解析为列表项的 `createdAt` 与保留策略排序依据）＋类型段（`自动` = 定时器 / 覆盖前快照，`手动` = 立即备份）＋设备段（必填：来源机器，缺省 = 简化 hostname；禁 `-`）＋可选用户标签（1-30 字符）＋**尾部固定三段统计**（人物/设定/章 = 生成时点的未软删存量；固定尾部使解析可从尾部倒切）。**写入 = 解析 = 唯一格式**（2026-09 收敛）：早期三类旧命名（秒级 / 带标签无类型段 / 单字母 `-m`/`-a` 段）**不再解析**（文件留盘但不列表、不可恢复、不参与保留策略），也不做重命名迁移；`device`/`stats` 恒有（API 契约必填）。**升级兜底**：打开项目时若 `.backups/` 有文件但无一可解析 → 立即生成一份新格式备份。包内容 = 导出包：**project.json + outline.json + data.db**（**含正文与参考资料**）——2026-09 起不再含 `references/**`，**也不再含 `sessions/**`**（会话是纯本地目录，见下节；存量旧包内的 `sessions/**` 条目读取时接受并忽略）。**每项目保留最近 20 份**（超出删除最旧，含覆盖前自动快照；清理失败不阻塞备份主流程）；备份文件不入 git、不算数据文件（可随时删除）。**实现细节（2026-08 实测）**：同毫秒冲突用「时间戳 +1 毫秒循环去重」（保持文件名格式契约可解析）；「有变更才备份」的 mtime 判定加 1s 容差（备份管道内 wal_checkpoint 会把 data.db mtime 刷新到备份时刻，严格 `mtime > 上次备份时刻` 会自激误判——毫秒精度下文件名截断误差已消除，但粗粒度 mtime 文件系统（如 FAT/exFAT 2s 粒度）下容差仍是必要防御，`BACKUP_CHANGE_TOLERANCE_MS` 保留 1s）；变更判定只看三文件 + `data.db-wal`（**不含 `sessions/`**：会话不进备份，纯聊天不应触发备份/推送；正文/参考资料写 `data.db`，由 `-wal` 判定涵盖）；重命名备份只改标签段（时间戳/类型/设备/统计保持，同目录 rename 原子）。
 

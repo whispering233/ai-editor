@@ -243,7 +243,7 @@
 {
   imported: true;
   id: string;        // 沿用 zip 内 project.json 的 id（跨机器身份，后续同步按它匹配）
-  path: string;      // <创作根>/books/<书名>/（同名自动去重）
+  path: string;      // <创作根>/<kind 目录>/<书名>/（同名自动去重；kind 取自包内 project.json）
   name: string;
   fileName: string;  // 导入的那份云端文件名
   size: number;

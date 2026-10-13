@@ -154,15 +154,15 @@
 // Res: 200
 {
   renamed: true;
-  path: string;  // 新书目录绝对路径（创作根/books/<新名>/）
+  path: string;  // 新工作区目录绝对路径（创作根/<kind 目录>/<新名>/）
   name: string;  // 新书名
 }
 ```
 
 **语义**：
-- 校验新名 → 目标目录 `books/<新名>/` 已存在（且不是当前书自身目录）→ 409 `PROJECT_ALREADY_EXISTS`；
-- **仅支持重命名书架 `books/` 下的书**：创作根自身是项目（旧单项目部署兼容语义）时 → 400 `VALIDATION_ERROR`（移动创作根会破坏书架结构）；
-- **原子移动**：`books/<旧名>/` → `books/<新名>/` + 更新 project.json 内 name（任一失败回滚，不留下半成品）；`.backups/` 随目录移动自然携带；
+- 校验新名 → 目标目录 `<kind 目录>/<新名>/` 已存在（且不是当前工作区自身目录）→ 409 `PROJECT_ALREADY_EXISTS`；
+- **仅支持重命名工作区目录下的工作区**（小说 → `books/`、练习 → `practice/`）：创作根自身是项目（旧单项目部署兼容语义）时 → 400 `VALIDATION_ERROR`（移动创作根会破坏书架结构）；
+- **原子移动**：`<kind 目录>/<旧名>/` → `<kind 目录>/<新名>/` + 更新 project.json 内 name（任一失败回滚，不留下半成品）；`.backups/` 随目录移动自然携带；
 - 当前打开的书改名：服务端**同步更新内部项目路径引用**（会话/历史按 id 不受影响）；前端刷新书架与 config（`GET /project/config` 的 name 变化）。**启用云存档时额外 `MOVE` 云端书目录**（`<旧名>-<projectId>` → `<新名>-<projectId>`，WebDAV `MOVE` 原子改名、目录内备份随之）；`MOVE` 失败不阻塞本地改名（下一轮同步按 id 回退扫描自动修正缓存）。
 - 未打开项目时 → 409 `NO_PROJECT_OPEN`。
 

@@ -51,12 +51,28 @@
 | PUT | `/api/v1/entity/setting/:id/move` | 实体 CRUD |
 | POST | `/api/v1/entity/event/:id/move_to` | 实体 CRUD |
 
-### 章正文（[110-api-manuscript.md](./110-api-manuscript.md)）
+### 章正文（[110-api-manuscript.md](./110-api-manuscript.md）)
 
 | 方法 | 路径 | 文档 |
 | :--- | :--- | :--- |
 | GET | `/api/v1/manuscript/:chapterNodeId` | 章正文（块文档） |
 | PUT | `/api/v1/manuscript/:chapterNodeId` | 章正文（块文档） |
+
+### 文风仿写练习（[120-api-practice.md](./120-api-practice.md）)
+
+| 方法 | 路径 | 文档 |
+| :--- | :--- | :--- |
+| GET | `/api/v1/practice/targets` | 文风仿写练习 |
+| POST | `/api/v1/practice/targets` | 文风仿写练习 |
+| PUT | `/api/v1/practice/targets/:id` | 文风仿写练习 |
+| DELETE | `/api/v1/practice/targets/:id` | 文风仿写练习 |
+| GET | `/api/v1/practice/targets/:id/samples` | 文风仿写练习 |
+| POST | `/api/v1/practice/targets/:id/samples` | 文风仿写练习 |
+| GET | `/api/v1/practice/samples/:id` | 文风仿写练习 |
+| PUT | `/api/v1/practice/samples/:id` | 文风仿写练习 |
+| DELETE | `/api/v1/practice/samples/:id` | 文风仿写练习 |
+
+> 点评不在本模块：触发走 `POST /api/v1/chat` + `context.practice_sample_id`（见 120 文档「点评链路」）。
 
 ### 关系管理（[40-api-relation.md](./40-api-relation.md)）
 
@@ -109,7 +125,7 @@
 | POST | `/api/v1/proposal/:proposalId/confirm` | AI 对话与提案确认 |
 | POST | `/api/v1/proposal/:proposalId/reject` | AI 对话与提案确认 |
 
-### 云端存档（[100-api-cloud.md](./100-api-cloud.md)）
+### 云端存档（[100-api-cloud.md](./100-api-cloud.md））
 
 | 方法 | 路径 | 文档 |
 | :--- | :--- | :--- |

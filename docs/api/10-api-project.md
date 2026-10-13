@@ -1,5 +1,7 @@
 # 项目管理
 
+> **项目 = 工作区**（2026-10）：创作根下的顶层单位，类型由 `project.json` 的 `kind` 决定（缺省 `novel`；`practice` = 文风仿写练习工作区，目录 `practice/`）。工作区抽象见 [`../design/00-master-design.md`](../design/00-master-design.md)；练习端点见 [120-api-practice.md](./120-api-practice.md)。
+>
 > 项目（书）创建/打开/关闭/书架列表/配置/项目规则文件（AGENTS.md）/导出/导入。公共约定/命名/响应结构见 [api-public.md](./api-public.md)，错误码见 [error-code.md](./error-code.md)；
 > 请求/响应 schema 单一来源：`@whispering233/ai-editor-shared` `types/api.ts`；接口索引见 [00-api-index.md](./00-api-index.md)。
 
@@ -10,10 +12,11 @@
 ```typescript
 // Req
 {
-  path: string;          // 项目目录路径（绝对路径）
+  path: string;          // 项目目录路径（绝对路径）——客户端按 shared 常量表的 kind→目录映射拼（novel = books/、practice = practice/）
   config?: {
     name?: string;       // 项目名称，默认取目录名
     language?: "zh" | "en";
+    kind?: "novel" | "practice";  // 工作区类型（缺省 novel）；落 project.json，决定目录约定之外的 AI 工具集/提示词/导航
     // prompt 已废弃：不再接受（strict schema 传入 → 400 VALIDATION_ERROR）；
     // 项目规则改由 PUT /api/v1/project/agents 写入 AGENTS.md
   };
@@ -26,6 +29,8 @@
   created: true;
 }
 ```
+
+**工作区类型语义（2026-10）**：`kind` 只影响后续能力面（工具集 / 内核提示词 / 路由守卫 / 导航）与**删除时的目录约束**（见 `/project/delete`）；create 仍只校验路径合法性（与既有行为一致），不强制 `path` 落在对应目录下。`kind` 不影响响应体。
 
 ### POST /api/v1/project/open
 
@@ -87,8 +92,9 @@
 ```typescript
 // Req
 {
-  path: string;           // 书目录绝对路径；须是 <创作根>/books/ 的**直接子目录**且含 project.json
-                          //   （不存在/链接跳转/不在 books/ 下 → 400 INVALID_PROJECT_PATH）
+  path: string;           // 工作区目录绝对路径；须是「该 kind 对应目录」的直接子目录且含 project.json
+                          //   （novel → <创作根>/books/、practice → <创作根>/practice/；
+                          //    不存在/链接跳转/不在对应目录下 → 400 INVALID_PROJECT_PATH）
   force?: boolean;        // true = 云端前置推送失败时仍然删除本机（缺省 false = 中止、不删任何东西）
   delete_remote?: boolean;// true = 同时删除该书云端目录并清掉 cloud.json 的该书 state；
                           //   缺省 false = 云端备份原样保留（用户可在云盘网页自行删除）
@@ -112,11 +118,11 @@
 4. **`deleteRemote` 是 best-effort**：在本地删除**之后**执行（WebDAV 集合删除 = 尾斜杠 + `Depth: infinity` + 清 `cloud.json` state）；失败不改变「本地已删」的结果，以 `remoteError` 返回，UI 提示可去云盘网页手动清理。
 5. 目标已是当前书时，删完客户端应回书架并发刷新书架/项目配置/云端状态。
 
-**错误码**：400 `INVALID_PROJECT_PATH`（路径非法/已不存在/不在 `books/` 下/目录不含 `project.json`）、400 `CLOUD_BACKUP_TOO_LARGE` / 502 `CLOUD_*` / 409 `CLOUD_CONFLICT` / 500 `INTERNAL_ERROR`（前置推送链路失败且未 `force`）。
+**错误码**：400 `INVALID_PROJECT_PATH`（路径非法/已不存在/不在该 kind 对应的工作区目录下/目录不含 `project.json`）、400 `CLOUD_BACKUP_TOO_LARGE` / 502 `CLOUD_*` / 409 `CLOUD_CONFLICT` / 500 `INTERNAL_ERROR`（前置推送链路失败且未 `force`）。
 
 ### GET /api/v1/project/list
 
-书架列表（S1.5 书架模式）：扫描创作根 `books/` 下含 `project.json` 的子目录，供 Dashboard 书架展示。
+书架列表：扫描创作根下**各工作区目录**（`books/` 与 `practice/`）中含 `project.json` 的直接子目录，供根首页按 `kind` 分区展示。
 
 ```typescript
 // Query: (none)
@@ -124,20 +130,21 @@
 // Res: 200
 {
   rootPath: string;   // 创作根（server 启动参数 projectRoot）
-  books: Array<{
-    id: string;        // project.json 的 id（**项目身份**：当前书高亮/打开判定一律按它，不按 name）
-    name: string;      // 目录名（书名）
-    path: string;      // 书目录绝对路径（创作根/books/<书名>/）
+  books: Array<{      // 字段名保留 books（历史命名）：内容 = **全部工作区**，按 kind 区分
+    id: string;        // project.json 的 id（**项目身份**：当前工作区高亮/打开判定一律按它，不按 name）
+    name: string;      // 目录名（书名 / 练习区名）
+    path: string;      // 工作区目录绝对路径（创作根/<kind 目录>/<名字>/）
+    kind: "novel" | "practice";  // 工作区类型（旧文件缺 kind → 服务端兜底 novel 后输出）
     updatedAt: string; // project.json 的 updated_at（ISO 8601）
   }>;
 }
 ```
 
 **语义**：
-- **不依赖当前项目**——书架模式待命（无 currentProject）时同样可用；`books/` 不存在返回空数组（不报错）。
-- 排序按 `updatedAt` 倒序（最近更新在前）；书架按此顺序平铺展示（无分组）。
-- 过滤规则：仅目录 + 含 `project.json`（`readProjectFile` 探测）；`books/` 下无 project.json 的目录（如草稿箱）与普通文件不列出。
-- 兼容旧语义：创作根自身若有 `project.json`（旧部署模式）仍按 `detectProject` 打开，`list` 只列 `books/` 子目录（根自身不是书）。
+- **不依赖当前项目**——待命（无 currentProject）时同样可用；目录不存在返回空数组（不报错）。
+- 排序按 `updatedAt` 倒序（最近更新在前）；**分区渲染由客户端做**（服务端不做分组逻辑）。
+- 过滤规则：仅目录 + 含 `project.json`（`readProjectFile` 探测）；无 project.json 的目录（如草稿箱）与普通文件不列出。
+- 兼容旧语义：创作根自身若有 `project.json`（旧部署模式）仍按 `detectProject` 打开，`list` 只列工作区子目录（根自身不是工作区）。
 
 ### GET /api/v1/project/config
 
@@ -191,6 +198,8 @@
   updated: true;
 }
 ```
+
+**工作区类型约束（2026-10）**：`current_position` 与 `deduction_nodes` 是**小说工作区**语义——练习工作区（`kind = "practice"`）上写入这两项 → 400 `KIND_MISMATCH`（读侧不下发这两项，恒为 `null` / `[]`）；`name` / `language` / `backup_frequency_minutes` 对所有工作区通用。
 
 ### GET /api/v1/project/agents
 
@@ -302,6 +311,7 @@
 
 **语义**：
 - 导出**当前打开项目**（无项目 → 409 `NO_PROJECT_OPEN`，与 `/config` 一致）。
+- **仅小说工作区**（`kind = "novel"`）：练习工作区无大纲/正文概念 → 400 `KIND_MISMATCH`（客户端据此在根首页按 kind 隐藏该导出项）。
 - **无可见章 → 400 `VALIDATION_ERROR`**（不产出空包）。
 - 只读 `data.db` 行（一次批量取 `content_text` 投影，不读块 JSON），**不做 wal_checkpoint**、不写项目目录任何文件。
 - 只含**正文**：参考资料 / 人物 / 设定 / 伏笔 / 时间轴 / 对话历史都不进包（`sessions/` 从不进任何 zip）。
@@ -319,23 +329,24 @@
 //         备份文件名是 `<时间戳>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N`，
 //         拿它当书名会把元信息写进目录名）。显式传入时严格校验：禁路径分隔符 / \、
 //         纯点 . / ..、控制字符——同 client 新建项目规则（非法 → 400）
-//         目标目录为服务端决定的 创作根/books/<name>/（客户端不可指定路径，防越权）
+//         目标目录为服务端决定的 创作根/<kind 目录>/<name>/（客户端不可指定路径，防越权）；
+//         kind 取自**包内 project.json**（备份是权威）——练习工作区的备份导回 `practice/`
 //   注：备份内书名若为空串/含非法字符（手工改坏的包）→ 兑底「导入的书籍」（同名自动去重）
 
 // Res: 200
 {
   imported: true;
   id: string;     // 项目 project_id（覆盖恢复 = 书架目标项目原 id；导入新书 = 沿用 zip 内 project.json 的 id）
-  path: string;   // 书目录绝对路径（创作根/books/<name>/ 或去重名）
+  path: string;   // 工作区目录绝对路径（创作根/<kind 目录>/<name>/ 或去重名）
   name: string;   // 书名（新书目录名；project.json 内部 name 同此）
   mode: "restored" | "new";  // restored = id 匹配覆盖恢复；new = 导入为新书（前端按此提示 toast）
 }
 ```
 
 **分流逻辑（在校验通过后）**：
-1. 解压校验完成后读取 zip 内 `project.json` 的 `id`；
-2. **id 与书架已有项目匹配**（遍历 `books/*/project.json` 比对）→ **覆盖恢复**：走 restore 同款管道（覆盖前自动快照当前状态 → 原子替换三文件 → 返回 `mode: "restored"`）；覆盖目标按 id 定位目录（不是按 name）；**覆盖时 project.json 内 `name` 归一为当前目录名**（id 是身份、name 是展示名——维持「目录名 = 书名」不变式，恢复的是数据不是身份；改名需求走 `/project/rename`）；覆盖目标是当前打开的书 → data.db 重连 + 定时器重启（同 restore 语义），未打开的书无连接无需重连；
-3. **id 不匹配** → 导入为新书：目标 `books/<name>/` 冲突时**不再 409**——若前端已选择重命名（name 为新名）则无冲突；若保持原样（name 与书架冲突）则**目录自动去重为 `books/<书名> (N)/`**（N 为最小正整数，project.json 内部 name 同步为去重名，维持「目录名 = 书名」不变式）。
+1. 解压校验完成后读取 zip 内 `project.json` 的 `id` 与 `kind`（缺省 `novel`）；
+2. **id 与已有工作区匹配**（遍历各工作区目录的 `project.json` 比对）→ **覆盖恢复**：走 restore 同款管道（覆盖前自动快照当前状态 → 原子替换三文件 → 返回 `mode: "restored"`）；覆盖目标按 id 定位目录（不是按 name）；**覆盖时 project.json 内 `name` 归一为当前目录名**（id 是身份、name 是展示名——维持「目录名 = 书名」不变式，恢复的是数据不是身份；改名需求走 `/project/rename`）；覆盖目标是当前打开的书 → data.db 重连 + 定时器重启（同 restore 语义），未打开的书无连接无需重连；
+3. **id 不匹配** → 导入为新工作区：目标 `<kind 目录>/<name>/` 冲突时**不再 409**——若前端已选择重命名（name 为新名）则无冲突；若保持原样（name 与已有工作区冲突）则**目录自动去重为 `<kind 目录>/<书名> (N)/`**（N 为最小正整数，project.json 内部 name 同步为去重名，维持「目录名 = 书名」不变式）。
 
 **校验顺序**（任一步失败即拒绝，不触发删库重建逻辑）：
 1. `content-length` 预检（> 50MB 快速拒绝，防超大请求先缓冲）+ `file.size` 复核
@@ -350,6 +361,6 @@
 - 400 `VALIDATION_ERROR`：坏包/缺文件/未知条目/契约不符/书名非法/超大小上限
 - 409 `SCHEMA_VERSION_MISMATCH`：data.db `user_version` 与当前程序版本不匹配且**无迁移路径**（`v > 当前` → 「备份来自更高版本程序」，零触碰；`v < 当前` 但有迁移路径 → 放行，搬入后 open 自动前向迁移）；**一律不静默重建**
 
-**原子搬入/覆盖**：校验在 `mkdtemp` 临时目录完成（无论成败清理）；通过后 `mkdir` + 复制三文件到 `books/<name>/`（或覆盖目标目录，覆盖前先快照），任一失败清理半成品（不留下残缺书）。导入**不自动打开**（与 create 一致，前端刷新书架）。**覆盖恢复分支与 restore 同口径：只覆盖三文件，不触碰本机 `sessions/`**（会话是纯本地目录；存量旧包内的 `sessions/**` 条目接受但搬入时忽略）。
+**原子搬入/覆盖**：校验在 `mkdtemp` 临时目录完成（无论成败清理）；通过后 `mkdir` + 复制三文件到 `<kind 目录>/<name>/`（或覆盖目标目录，覆盖前先快照），任一失败清理半成品（不留下残缺书）。导入**不自动打开**（与 create 一致，前端刷新书架）。**覆盖恢复分支与 restore 同口径：只覆盖三文件，不触碰本机 `sessions/`**（会话是纯本地目录；存量旧包内的 `sessions/**` 条目接受但搬入时忽略）。
 
 ---

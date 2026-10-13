@@ -23,6 +23,8 @@ InkOS 按 sessionKind 切换工具集（chat/play/write 各有不同工具），
 
 （2026-08 修订：原「二次确认」级无任何工具挂靠，删除。删除操作由提案确认 + 回收站软删兜底覆盖——软删可还原、提案确认，用户始终是最终决策者。）
 
+**按工作区类型收窄（2026-10）**：工具定义带 `scope`（`"novel"` / `"practice"` / `"common"`），装配 AgentSession 时**按当前工作区 `kind` 过滤**——小说工作区注册小说工具与提案工具，练习工作区只注册它的两个只读工具与一个提交工具。这是**结构性边界**（靠注册过滤，不靠提示词）：非小说工作区里 `get_outline` / `propose_*` 一类**根本不存在**。
+
 ## 工具目录
 
 ### 查询类（自动）
@@ -92,6 +94,26 @@ get_chapter_text(node_id, offset?, max_chars?)
 // === 参考资料全文（只读）===
 // get_entity('reference', id) 的 reference 分支返回 data.content 的**投影文本**（content_text），
 // 不是块 JSON 原文——列表摘要定长截断与详情全文分离，防长文撑爆响应（见下 search_references）
+
+// === 练习（2026-10；**仅 kind = "practice" 工作区注册**，设计见 ../design/60-practice.md）===
+get_practice_sample(sample_id, offset?, max_chars?)
+  → { sample_id, target_name, observation, source_label, char_count, offset, returned_chars, text, truncated }
+  用途：读范文快照（点评与追问时按需拉取）
+  口径：默认/上限 max_chars = `DEFAULT_TEXT_PAGE_CHARS` / `MAX_TEXT_PAGE_CHARS`（**与 get_chapter_text 同一对常量**——文本分页预算单源）；
+       truncated = true 时提示用 offset 续读
+
+get_practice_draft(sample_id, offset?, max_chars?)
+  → 同形状（text = 用户仿写稿；未写稿 → char_count=0、text=""）
+  注：**只读**——工具面不存在写稿工具（用户的稿只有用户能写）
+
+submit_style_feedback(sample_id, dimensions[], summary?)
+  → { saved: true, dimension_count, dropped_quotes }
+  用途：提交点评卡（写 practice_samples.feedback）
+  口径：dimensions 上限 = 常量 `MAX_FEEDBACK_DIMENSIONS`（工具描述由该常量**插值生成**）；
+       每条引用（sample_quotes / draft_quotes）必须是范文或稿件的**子串**，服务端逐条校验，
+       不匹配即丢弃（不阻断、不重试）并计入 dropped_quotes；
+       卡片**没有「示范」字段**——模型没有位置放成段文字（诊断，不代笔）
+  注：这是**唯一**能写练习数据的工具，且只写 AI 自己的产出字段（feedback），不碰用户稿
 
 // === 状态查询（Delta 相关）===
 compute_state(target_type, target_id, at_node_id)

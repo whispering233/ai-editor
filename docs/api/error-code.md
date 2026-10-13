@@ -11,7 +11,9 @@
 | `RELATION_NOT_FOUND` | 404 | 404 关系不存在 |
 | `OUTLINE_NODE_NOT_FOUND` | 404 | 404 大纲节点不存在（compute / path / restore / purge）；**例外**：`PUT /project/config` 写侧同码用 **400**（参数语义错误而非资源访问，见 `10-api-project.md`） |
 | `OUTLINE_ANCESTOR_DELETED` | 409 | 409 restore 时存在软删祖先 |
-| `INVALID_PROJECT_PATH` | 400 | 400 create/open 路径校验失败 |
+| `INVALID_PROJECT_PATH` | 400 | 400 create/open/delete 路径校验失败（含「不在该工作区类型的目录下」） |
+| `KIND_MISMATCH` | 400 | 400 工作区类型不匹配：小说语义端点/字段被练习工作区（或反向）访问（如练习工作区写 `current_position` / 调 `export-novel` / 调小说实体端点）；文案固定为「该端点仅适用于小说工作区」/「该端点仅适用于练习工作区」 |
+| `PRACTICE_NOT_FOUND` | 404 | 404 文风目标或练习样本不存在（详情/更新/删除/新建样本时目标不存在） |
 | `PROPOSAL_STALE` | 409 | 409 确认时引用快照不一致 |
 | `PROPOSAL_NOT_FOUND` | 404 | 404 proposal_id 不存在 |
 | `PROPOSAL_PROJECT_MISMATCH` | 409 | 409 提案所属项目 ≠ 当前项目 |
