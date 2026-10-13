@@ -185,7 +185,7 @@
 }
 ```
 
-**流程**：`GET` 云端那份 → **覆盖前自动快照本机当前状态**（restore 管道既有）→ `validateBackupPackage`（zip 结构/白名单/三文件齐全/data.db `user_version` 三态分流）→ **三文件覆盖**（`project.json` 的 `name` 归一为当前目录名、`id` 保留——与 restore 同口径；**正文与参考资料在 `data.db` 内，随覆盖走**；**不触碰 `sessions/`**——不写不删，存量旧包内的 `sessions/**` 条目接受并忽略）→ 重连 data.db + 版本对齐 + 重启备份定时器 → 更新 `lastSeenHeadFileName` / `lastSyncAt` / `lastSeenCloudFiles`。
+**流程**：`GET` 云端那份 → **覆盖前自动快照本机当前状态**（restore 管道既有）→ `validateBackupPackage`（zip 结构/白名单/三文件齐全/data.db `user_version` 三态分流）→ **工作区类型校验（2026-10）**：包内 `kind`（缺失/未知 → `novel`）必须等于当前工作区的 `kind`，不等 → **400 `KIND_MISMATCH`**（不写三文件；口径与本地 restore 同源，见 [20-api-backup.md](./20-api-backup.md)）→ **三文件覆盖**（`project.json` 的 `name` 与 `kind` 都归一为当前工作区、`id` 保留——与 restore 同口径；**正文与参考资料在 `data.db` 内，随覆盖走**；**不触碰 `sessions/`**——不写不删，存量旧包内的 `sessions/**` 条目接受并忽略）→ 重连 data.db + 版本对齐 + 重启备份定时器 → 更新 `lastSeenHeadFileName` / `lastSyncAt` / `lastSeenCloudFiles`。
 
 **同步状态更新**：`lastPushedFileName` = **拉到的这份**（既是新的冲突判定基准，也是「本机已基于该版本」的标记——拉取后立刻推送不会被判冲突）；`lastSeenHeadFileName` = 云端 head；`lastSeenCloudFiles` = 拉取时的云端文件集合。
 
@@ -193,7 +193,7 @@
 
 **删除如何真正生效**：本机删书（`POST /project/delete`）可勾选同时删云端目录；会话不进云端，删书不涉云端传播。正文/参考资料属 `data.db` 覆盖组，随三文件覆盖自然传播（但另一台未推送的结构化改动会被覆盖，见 [`../design/40-cloud-sync.md`](../design/40-cloud-sync.md) §4）。
 
-**错误码**：409 `NO_PROJECT_OPEN` / `CLOUD_NOT_CONFIGURED` / `SCHEMA_VERSION_MISMATCH`、404 `CLOUD_FILE_NOT_FOUND`、400 `VALIDATION_ERROR`（坏包/文件名非法）、502 `CLOUD_AUTH_FAILED` / `CLOUD_UNREACHABLE` / `CLOUD_QUOTA_EXCEEDED`。
+**错误码**：409 `NO_PROJECT_OPEN` / `CLOUD_NOT_CONFIGURED` / `SCHEMA_VERSION_MISMATCH`、404 `CLOUD_FILE_NOT_FOUND`、400 `VALIDATION_ERROR`（坏包/文件名非法）、**400 `KIND_MISMATCH`（包内工作区类型与当前工作区不符）**、502 `CLOUD_AUTH_FAILED` / `CLOUD_UNREACHABLE` / `CLOUD_QUOTA_EXCEEDED`。
 
 ### GET /api/v1/cloud/remote-books
 
