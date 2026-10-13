@@ -14,11 +14,6 @@
 
 ## 批次 1（练习业务面）
 
-- [ ] **卡 5 · practice REST 端点**
-  - 范围：`/practice/targets`（列表 / 建 / 改 / 删）与 `/practice/samples`（列表 / 建 / 详情 / 改稿 / 删）；请求 snake_case、响应 camelCase；长度上限常量**消费 shared**（`MAX_PRACTICE_OBSERVATION_CHARS` / `MAX_PRACTICE_SOURCE_LABEL_CHARS` / `MAX_PRACTICE_SAMPLE_CHARS` / `MAX_PRACTICE_DRAFT_CHARS`，卡 2 已定义）；`PUT` 稿件为 **strict 单字段**；`source_kind` zod 收窄为 `"paste"`；挂 `/practice/*` 反向守卫（`app.use` 必须在 `app.route("/api/v1/practice", …)` **之前**，覆盖组根与子路径）。
-  - 依赖：卡 1、2、3。
-  - 硬完成判据：目标/样本 CRUD 全绿；超限 → 400 `VALIDATION_ERROR`；不存在 → 404 `PRACTICE_NOT_FOUND`；删目标级联删样本且返回计数；稿件端点拒绝额外字段；请求字段名 snake_case（断言非法 camelCase 字段被拒）；小说工作区访问 `/practice/*` → 400 `KIND_MISMATCH`。
-  - 承接事实（卡 2/3 oracle 登记）：① `PUT /practice/targets/:id` 响应**须含 `sampleCount`**（db helper 返回存储形态，无该字段——路由层拼，或改文档口径）；② 详情须拼 `targetName` + `observation`（db 层不拼）；③ 长度上限校验落**路由层**（db 层有意不校验）。
 - [ ] **卡 6 · 三个练习工具（2 只读 + 1 提交）**
   - 范围：`get_practice_sample` / `get_practice_draft`（`offset` / `max_chars` 分页 + `truncated` 续读提示）/ `submit_style_feedback`（写 `feedback`）；**分页常量语义提升**：`DEFAULT_CHAPTER_TEXT_CHARS` / `MAX_CHAPTER_TEXT_CHARS` 改名（如 `DEFAULT_TEXT_PAGE_CHARS` / `MAX_TEXT_PAGE_CHARS`），两处引用（工具描述插值与实现 clamp）同改；`MAX_FEEDBACK_DIMENSIONS = 6`（描述由常量插值）；引用子串校验（范文 / 稿件）。
   - 依赖：卡 2、4。
@@ -30,6 +25,7 @@
   - 依赖：卡 5、6。
   - 硬完成判据：**SSE 帧集零新增**（与 `docs/api/80-api-chat.md` 一致）；一轮后 `feedback` 已落库；重载页面卡片仍在；注入文本含目标名与观察、**不含范文/稿件全文**（断言）。
   - 承接事实（卡 4 oracle 登记）：注入段**只给事实**（目标名 / `observation` / 样本 id），「必须提交点评卡」这类指令语义留在**练习内核提示词常量**里——两处各写一份口径 = 第二事实源。
+  - 承接事实（卡 5 oracle 登记）：`feedback` 在响应里**原样透传**（内层 snake_case 不转换、合法 JSON 对象连 `{}` 也照发）——`practiceSampleDetailResSchema` **只作类型用，禁止对它调 `.parse()`**（`{}` 会被必填字段判失败、未知键会被剥）。
 
 ## 批次 2（UI）
 

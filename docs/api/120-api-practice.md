@@ -8,7 +8,7 @@
 
 **请求字段 snake_case、响应字段 camelCase**（全站约定，同 `project` 模块）——**例外**：嵌套对象内部字段按公共约定原样透传（点评卡内层恒 snake_case，见 [api-public.md](./api-public.md)「命名约定」）。
 
-**404 文案按端点语义**：目标端点（目标不存在）→ 「文风目标不存在」，样本端点（样本行在、目标行缺失的孤儿行同样）→ 「练习样本不存在」；码同为 `PRACTICE_NOT_FOUND`。
+**404 文案按端点语义**：目标端点（目标不存在）→ 「文风目标不存在」；样本详情（需目标信息才能成形，样本行在而目标行缺失的孤儿行同样）→ 「练习样本不存在」；码同为 `PRACTICE_NOT_FOUND`。**改稿 / 删样本不查目标行**（行存在即可改/删，不因目标缺失而 404）。
 
 **长度上限**一律取 shared 常量（`MAX_PRACTICE_OBSERVATION_CHARS` / `MAX_PRACTICE_SOURCE_LABEL_CHARS` / `MAX_PRACTICE_SAMPLE_CHARS` / `MAX_PRACTICE_DRAFT_CHARS`）——UI 提示与 REST schema 同源，超限 → 400 `VALIDATION_ERROR`。
 
