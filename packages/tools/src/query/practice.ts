@@ -17,7 +17,8 @@
 // - 上限页（`MAX_TEXT_PAGE_CHARS`）+ 续读提示 + 目标名取满 = **7160 tokens**（余量 **10.5%**，≥10% 留白）
 // - 上限页 + 目标名 / `observation` / `source_label` 三项全取满 = **7759 tokens**（余量 3.0%）——仍在
 //   单条上限 8000 以内，续读提示与 `truncated` 标记不被外层截断切掉；练习信封比 get_chapter_text
-//   多 target_name / observation / source_label 三个字段，故这是本工具的最坏情形。**目标名必须有上限**
+//   多 target_name / observation / source_label 三个字段，而 `get_practice_draft` 的本情形（稿深页、
+//   元数据取满）更高一档（7760 tokens）——两者都在预算内。**目标名必须有上限**
 //   （shared `MAX_PRACTICE_TARGET_NAME_CHARS`）：不设上限时 ≳350 字即可把续读提示挤出 8000 预算。
 //   改任一上限前必须重走同一条路径（同 manuscript.ts 的测量口径）。
 

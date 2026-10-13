@@ -14,12 +14,6 @@
 
 ## 批次 1（练习业务面）
 
-- [ ] **卡 6 · 三个练习工具（2 只读 + 1 提交）**
-  - 范围：`get_practice_sample` / `get_practice_draft`（`offset` / `max_chars` 分页 + `truncated` 续读提示）/ `submit_style_feedback`（写 `feedback`）；**分页常量语义提升**：`DEFAULT_CHAPTER_TEXT_CHARS` / `MAX_CHAPTER_TEXT_CHARS` 改名（如 `DEFAULT_TEXT_PAGE_CHARS` / `MAX_TEXT_PAGE_CHARS`），两处引用（工具描述插值与实现 clamp）同改；`MAX_FEEDBACK_DIMENSIONS = 6`（描述由常量插值）；引用子串校验（范文 / 稿件；空串与纯空白同样丢弃）。收尾：`MAX_PRACTICE_TARGET_NAME_CHARS = 100`（目标名曾无上限 ⇒ 超长名把续读提示挤出工具结果预算）+ REST `name` 挂上限。
-  - 依赖：卡 2、4。
-  - 硬完成判据：分页截断时**显式告知**且续读提示不被外层截断切掉（实测 `stringifyToolResult` → `truncateToolResultText` 路径，留白 ≥10%）；无效引用被丢弃并计入 `dropped_quotes`；维度超上限被拒；改上游 `shared` / `tools` 后先 `pnpm -r build` 再跑测试。
-  - 承接事实（卡 2 oracle 登记）：`feedback` 写入口**必须新增在 db 包**（`queries/practice.ts` 一类，如 `updatePracticeFeedback`）——**禁止**在 tools 包直写表（破「库写入唯一入口」）；引用子串校验需要范文/稿件全文，分页留在 tools 层。
-  - 承接事实（卡 4 oracle 登记）：三个练习工具必须标 `scope: "practice"`（误标 `common` ⇒ novel 变 40，硬清单断言炸；误标 `novel` ⇒ novel 集合逐名相等断言炸）；同步改三处「practice = 空集」断言（`agent/src/runtime/tools.test.ts`、`agent/src/runtime/project-runtime.test.ts`、本卡文案）；分页常量改名时**同改**练习提示词与工具描述里的口径文本（数值单源：不复述数字）。
 - [ ] **卡 7 · 点评链路（`/chat` 注入 + 卡片下发 + 落库）**
   - 范围：`chatRequestSchema.context.practice_sample_id`；服务端现读目标名 + `observation` 注入本轮（**不接受客户端传入观察文本**）；样本不存在静默省略；卡片随 `tool_execution_end` 的 `details` 下发；前端即时渲染 + 刷新从 `GET /practice/samples/:id` 读。
   - 依赖：卡 5、6。
@@ -45,7 +39,7 @@
 ## 批次 3（收尾）
 
 - [ ] **卡 11 · 导出 / 删除 / 备份在练习工作区上的口径 + 冒烟**
-  - 范围：根首页导出弹窗按 kind 隐藏「小说文档」项（服务端已有 `KIND_MISMATCH`）；删练习工作区走既有 `/project/delete`（含云前置推送与目录约束）；确认备份文件名统计段在练习工作区自然为 `0-0-0`（`getBackupStats` 空库口径）且不做特殊分支；启动冒烟；**同步 `README.md` 的根首页 / 左栏描述**（README 描述产品当前状态，不提前改）。
+  - 范围：根首页导出弹窗按 kind 隐藏「小说文档」项（服务端已有 `KIND_MISMATCH`）；删练习工作区走既有 `/project/delete`（含云前置推送与目录约束）；确认备份文件名统计段在练习工作区自然为 `0-0-0`（`getBackupStats` 空库口径）且不做特殊分支；启动冒烟；**同步 `README.md` 的根首页 / 左栏描述 + 工具条数复述**（README 描述产品当前状态，不提前改；「37 个 LLM 可见工具」已不等于 registry 实数）。
   - 依赖：卡 3、8。
   - 硬完成判据：练习工作区导出三文件包成功、`export-novel` → 400；删练习工作区后书架/根首页刷新正确；练习工作区自动备份产出的文件名可被解析（格式未变）；`pnpm -r test` 全绿。
 
