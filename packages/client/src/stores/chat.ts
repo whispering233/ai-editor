@@ -10,8 +10,10 @@
 //   message_update     → text_delta 累积正文；thinking_delta 累积思维链（流式展开，**轮级**：
 //                        本轮首次 thinking_start 置位、至 agent_end/中断帧收尾，中途不折叠）
 //                        toolcall_* 只服务工具卡片元数据（执行卡片由 tool_execution_start 建）
-//   tool_execution_*   → 运行态工具表（start 建行 / end 定终态 + 提案载荷），
-//                        并**并入流式消息的 toolCalls**（渲染位置在消息内，见 DESIGN.md `chat-message-stream`）
+//   tool_execution_*   → 运行态工具表（start 建行 / end 定终态 + 提案载荷 + `details` 帧），
+//                        并**并入流式消息的 toolCalls**（渲染位置在消息内，见 DESIGN.md `chat-message-stream`）；
+//                        end 帧的 `result.details` → `lastToolDetails`（提案载荷 ∪ shared `TOOL_DETAILS_TO_CLIENT`，
+//                        后者的唯一消费方 = 练习页的点评卡刷新信号）
 //   turn_end/agent_end → contextUsage（占用条口径 = getContextUsage，不是「预算分母」）+ usage（会话累计账目）
 //   compaction_*/auto_retry_* → statusNote（轻量提示，不引入新视觉）
 //   agent_end          → 终止（stopReason=error/aborted → 错误条；成功 → 刷新会话列表）
@@ -81,6 +83,24 @@ export interface StreamToolRecord {
   isError?: boolean;
  /** running = 已调用未返回；ok = 成功返回；error = 返回错误 */
   status: "running" | "ok" | "error";
+}
+
+/**
+ * 随帧下发的工具 `details`（`tool_execution_end` 的 `result.details`；与提案载荷走同一条投影通路，
+ * 但**不是**提案——放行集合 = 提案工具 ∪ shared `TOOL_DETAILS_TO_CLIENT`）。
+ * **唯一消费方 = 练习页的点评卡刷新信号**：帧里只有工具的写库结果、没有卡体
+ *（卡体一律从 `GET /practice/samples/:id` 读，见 `docs/api/120-api-practice.md`「点评链路」）。
+ * 帧本身不带对象 id ⇒ 把同 id 的 `tool_execution_start` 帧的 `args` 并进来，供消费方认领（只此用途）。
+ */
+export interface ToolDetailsFrame {
+  /** 工具名（消费方按 shared 工具名单过滤） */
+  tool: string;
+  /** 该次调用的入参（同 id 的 start 帧；未收到则为 undefined） */
+  args?: unknown;
+  details: unknown;
+  /** 到达序号（**模块级单调递增**：切会话 / 切项目清空本字段时不归零——序号回退会让「已消费过一次的页」
+   *  把新帧误判成旧帧而漏刷）：消费方只需比大小即可判定「是不是新帧」 */
+  seq: number;
 }
 
 /** 运行时提案卡片（SSE tool_execution_end 的 result.details，瞬态；历史消息中不保留） */
@@ -272,9 +292,14 @@ interface ChatState {
  // ---- 瞬态渲染数据（SSE 事件填充） ----
   proposals: ProposalCard[];
   streamTools: StreamToolRecord[];
+  /** 最后一个随帧下发的工具 details（`tool_execution_end`；练习页「点评卡即时刷新」的数据面） */
+  lastToolDetails: ToolDetailsFrame | null;
 
- /** 发送消息（POST /chat + SSE 流式）：乐观追加 user 消息 + AI 占位；带 focus context 时携带 context */
-  sendMessage: (text: string) => void;
+ /** 发送消息（POST /chat + SSE 流式）：乐观追加 user 消息 + AI 占位。
+ * `context` 省略 = 用 focus 小条的 `focusContext`；显式传入 = 本**次**发送的一次性上下文
+ * （练习页「让 AI 点评」用——它不写 focus 小条，只在这一条消息上带 `practice_sample_id`）。
+ * 请求体形状见 `lib/api.ts` 的 `SendChatMessageBody`（字段 snake_case）。 */
+  sendMessage: (text: string, context?: FocusContext) => void;
  /** 断连横幅 [重新发送]：移除断连残留的重复消息后重发上一条用户消息 */
   resendLast: () => void;
 
@@ -392,6 +417,9 @@ let abortCurrentStream: (() => void) | null = null;
 let currentStreamMsgId: string | null = null;
 /** 上一条发送的用户文本（断连横幅 [重新发送] 用；切会话/项目时清空） */
 let lastSentText: string | null = null;
+/** 工具 details 帧的到达序号（**模块级单调递增**：切会话 / 切项目清空 `lastToolDetails` 时**不归零**
+ * ——消费方（练习页）拿序号判「是不是新帧」，序号回退会让旧帧变「新」而重复触发或漏刷） */
+let toolDetailsSeq = 0;
 
 export const useChatStore = create<ChatState>((set, get) => {
  /**
@@ -513,6 +541,7 @@ export const useChatStore = create<ChatState>((set, get) => {
         focusContext: null,
         proposals: [],
         streamTools: [],
+        lastToolDetails: null,
  // 瞬时运行态：旧会话的占用 / 账目 / 速度不得残留到新视图
         contextUsage: null,
         usage: null,
@@ -548,6 +577,7 @@ export const useChatStore = create<ChatState>((set, get) => {
         focusContext: null,
         proposals: [],
         streamTools: [],
+        lastToolDetails: null,
         contextUsage: null,
         usage: null,
         speed: null,
@@ -628,8 +658,9 @@ export const useChatStore = create<ChatState>((set, get) => {
 
     proposals: [],
     streamTools: [],
+    lastToolDetails: null,
 
-    sendMessage: (text) => {
+    sendMessage: (text, sentContext) => {
       const { streaming, messagesLoading, currentSessionId, focusContext } = get();
       const trimmed = text.trim();
  // 空文本 / 已在生成中 / 历史加载中：忽略（输入区与按钮在 UI 层已禁用，此处为状态层防御；
@@ -665,10 +696,12 @@ export const useChatStore = create<ChatState>((set, get) => {
         streamTools: [],
       }));
 
- // 请求体（POST /chat）：新会话不带 session_id；focus 小条存在时携带 context
+ // 请求体（POST /chat）：新会话不带 session_id；本次显式给的 context 优先于 focus 小条的
+ //（两者不同时携带：显式 context 只描述「这一次发送的对象」）
+      const context = sentContext ?? focusContext ?? null;
       const body: SendChatMessageBody = { message: trimmed };
       if (currentSessionId) body.session_id = currentSessionId;
-      if (focusContext) body.context = focusContext;
+      if (context) body.context = context;
 
       abortCurrentStream = fetchSSE("/api/v1/chat", {
         body,
@@ -777,6 +810,7 @@ export const useChatStore = create<ChatState>((set, get) => {
               const frame = asRecord(data);
               const id = frame?.toolCallId;
               if (typeof id !== "string") break;
+              const tool = typeof frame?.toolName === "string" ? frame.toolName : "";
               const isError = frame?.isError === true;
               const result = toolResultText(frame?.result);
               set((s) => ({
@@ -792,6 +826,19 @@ export const useChatStore = create<ChatState>((set, get) => {
                     ...s.proposals,
                     { proposalId: proposal.proposalId, type: proposal.type, preview: proposal.preview, status: "pending" as const },
                   ],
+                }));
+              }
+ // 随帧下发的工具 details（提案工具 ∪ shared TOOL_DETAILS_TO_CLIENT，如练习点评卡）→ 写入
+ // `lastToolDetails` 供页面消费（练习页据此重拉卡体）；args 从同 id 的 start 帧取（details 里没有对象 id）
+              const details = asRecord(frame?.result)?.details;
+              if (details !== undefined) {
+                set((s) => ({
+                  lastToolDetails: {
+                    tool,
+                    args: s.streamTools.find((t) => t.id === id)?.args,
+                    details,
+                    seq: ++toolDetailsSeq,
+                  },
                 }));
               }
               break;

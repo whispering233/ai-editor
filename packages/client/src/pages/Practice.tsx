@@ -39,10 +39,14 @@ export interface PracticeSampleRowProps {
   sample: PracticeSampleItem;
 }
 
-/** 样本行（`data-row` 行语言）：来源说明（`truncate`）+ 状态徽标 + 相对时间 */
+/** 样本行（`data-row` 行语言）：来源说明（`truncate`）+ 状态徽标 + 相对时间；
+ * 整行 = 进练习页（`#/practice/:sampleId`）的链接——hash 导航不另接 onClick，键盘/中键也照常工作 */
 export function PracticeSampleRow({ sample }: PracticeSampleRowProps) {
   return (
-    <div className="flex items-center gap-3 border-b border-border/50 py-2 last:border-b-0">
+    <a
+      href={`#/practice/${sample.id}`}
+      className="flex items-center gap-3 border-b border-border/50 py-2 transition-colors last:border-b-0 hover:bg-muted"
+    >
       <span className="min-w-0 flex-1 truncate text-sm text-foreground" title={sample.sourceLabel}>
         {sample.sourceLabel}
       </span>
@@ -50,7 +54,7 @@ export function PracticeSampleRow({ sample }: PracticeSampleRowProps) {
       <span className="shrink-0 text-xs text-muted-foreground">
         {formatRelativeTime(sample.updatedAt)}
       </span>
-    </div>
+    </a>
   );
 }
 

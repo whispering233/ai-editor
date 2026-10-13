@@ -146,6 +146,7 @@ afterEach(() => {
     disconnected: false,
     proposals: [],
     streamTools: [],
+    lastToolDetails: null,
   });
  // 全局反馈状态复位（提案动作 toast 断言用；ui store 的 toast 定时器按 id 守卫，旧定时器不污染新 toast）
   useUiStore.setState({ error: null, toast: null, confirmState: null, dataVersion: 0 });
@@ -653,6 +654,24 @@ describe("sendMessage（POST /chat + SSE 事件映射，契约 = docs/api/80-api
     });
   });
 
+  it("本次显式 context（练习页「让 AI 点评」）→ body.context 带 practice_sample_id，且优先于 focus 小条", () => {
+    useChatStore.setState({
+      currentSessionId: "sess-1",
+      focusContext: { focus_entity_type: "character", focus_entity_id: "char-1" },
+    });
+    useChatStore.getState().sendMessage("请点评我的仿写稿", { practice_sample_id: "ps-1" });
+    expect(sseOptions().body).toEqual({
+      message: "请点评我的仿写稿",
+      session_id: "sess-1",
+      context: { practice_sample_id: "ps-1" },
+    });
+    // focus 小条的上下文不被清掉（本次只换了这一条消息的 context）
+    expect(useChatStore.getState().focusContext).toEqual({
+      focus_entity_type: "character",
+      focus_entity_id: "char-1",
+    });
+  });
+
   it("空文本 / 纯空白 → 不发送", () => {
     useChatStore.getState().sendMessage("");
     useChatStore.getState().sendMessage("   ");
@@ -864,6 +883,72 @@ describe("sendMessage（POST /chat + SSE 事件映射，契约 = docs/api/80-api
         status: "pending",
       },
     ]);
+  });
+
+  it("tool_execution_end 的 details（练习点评工具）→ lastToolDetails（args 取自同 id 的 start 帧，序号递增）", () => {
+    useChatStore.getState().sendMessage("请点评我的仿写稿");
+    const { onEvent } = sseOptions();
+    onEvent("tool_execution_start", {
+      toolCallId: "call-9",
+      toolName: "submit_style_feedback",
+      args: { sample_id: "ps-1", dimensions: [] },
+    });
+    onEvent("tool_execution_end", {
+      toolCallId: "call-9",
+      toolName: "submit_style_feedback",
+      result: {
+        content: [{ type: "text", text: "点评卡已提交" }],
+        details: { saved: true, dimension_count: 2, dropped_quotes: 1 },
+      },
+      isError: false,
+    });
+    const first = useChatStore.getState().lastToolDetails;
+    // details 帧本身不带对象 id ⇒ args 必须从同 id 的 start 帧并进来（练习页据此认领「本样本」）
+    expect(first).toMatchObject({
+      tool: "submit_style_feedback",
+      args: { sample_id: "ps-1", dimensions: [] },
+      details: { saved: true, dimension_count: 2, dropped_quotes: 1 },
+    });
+    expect(first?.seq).toBeGreaterThan(0);
+    // 第二帧：序号前进（消费方靠它判「是不是新帧」，同一值不得重复触发）
+    onEvent("tool_execution_start", {
+      toolCallId: "call-10",
+      toolName: "submit_style_feedback",
+      args: { sample_id: "ps-2" },
+    });
+    onEvent("tool_execution_end", {
+      toolCallId: "call-10",
+      toolName: "submit_style_feedback",
+      result: { content: [], details: { saved: true } },
+      isError: false,
+    });
+    const second = useChatStore.getState().lastToolDetails;
+    expect(second?.seq).toBe((first?.seq ?? 0) + 1);
+    expect(second?.args).toEqual({ sample_id: "ps-2" });
+  });
+
+  it("无 details 的 AUTO 工具帧不写 lastToolDetails（只走工具行终态）", () => {
+    useChatStore.getState().sendMessage("你好");
+    const { onEvent } = sseOptions();
+    onEvent("tool_execution_start", { toolCallId: "call-1", toolName: "get_entity", args: { id: "char-1" } });
+    onEvent("tool_execution_end", {
+      toolCallId: "call-1",
+      toolName: "get_entity",
+      result: { content: [{ type: "text", text: "{}" }] },
+      isError: false,
+    });
+    expect(useChatStore.getState().lastToolDetails).toBeNull();
+    expect(useChatStore.getState().streamTools[0]).toMatchObject({ status: "ok" });
+  });
+
+  it("切会话 / 关项目清空 lastToolDetails（瞬时运行态不得残留到新视图）", () => {
+    useChatStore.setState({ lastToolDetails: { tool: "submit_style_feedback", details: {}, seq: 1 } });
+    useChatStore.getState().setCurrentSession("sess-1");
+    expect(useChatStore.getState().lastToolDetails).toBeNull();
+
+    useChatStore.setState({ lastToolDetails: { tool: "submit_style_feedback", details: {}, seq: 2 } });
+    useChatStore.getState().clearSessions();
+    expect(useChatStore.getState().lastToolDetails).toBeNull();
   });
 
   it("turn_end / agent_end 的 contextUsage → 占用条数据（agent_end 同时收尾 + 刷新列表）", async () => {

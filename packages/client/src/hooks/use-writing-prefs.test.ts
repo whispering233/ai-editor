@@ -15,6 +15,7 @@ import {
   parseWritingPrefs,
   serializeWritingPrefs,
   toWritingCssVars,
+  toWritingTypeCssVars,
   writingFontCss,
   writingPaperCss,
   type WritingPrefs,
@@ -224,5 +225,30 @@ describe("toWritingCssVars", () => {
     expect(toWritingCssVars({ ...DEFAULT_WRITING_PREFS, lineHeight: 2 })["--writing-line-height"]).toBe(
       "2",
     );
+  });
+
+  it("toWritingTypeCssVars：只给排版三变量，即使纸张档非默认也不给 `--paper-bg`（练习页「我的稿」口径）", () => {
+    expect(toWritingTypeCssVars({ ...DEFAULT_WRITING_PREFS, paper: "cream" })).toEqual({
+      "--writing-font": "var(--font-sans)",
+      "--writing-font-size": "16px",
+      "--writing-line-height": "1.5",
+    });
+    const vars = toWritingTypeCssVars({
+      ...DEFAULT_WRITING_PREFS,
+      font: "song",
+      fontSize: 20,
+      lineHeight: 1.8,
+      paper: "warm",
+    });
+    expect(vars).toEqual({
+      "--writing-font": writingFontCss("song"),
+      "--writing-font-size": "20px",
+      "--writing-line-height": "1.8",
+    });
+    expect("--paper-bg" in vars).toBe(false);
+    // 与完整变量的唯一差异就是纸张那一项（页面换用哪个入口不会出现另一套值）
+    const full: Record<string, unknown> = toWritingCssVars({ ...DEFAULT_WRITING_PREFS, paper: "warm" });
+    delete full["--paper-bg"];
+    expect(full).toEqual(toWritingTypeCssVars(DEFAULT_WRITING_PREFS));
   });
 });

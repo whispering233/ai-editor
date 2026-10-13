@@ -23,6 +23,7 @@ import ReferenceList from "./pages/ReferenceList";
 import ReferenceDetail from "./pages/ReferenceDetail";
 import Manuscript from "./pages/Manuscript";
 import Practice from "./pages/Practice";
+import PracticeDetail from "./pages/PracticeDetail";
 import Trash from "./pages/Trash";
 import Settings from "./pages/Settings";
 import "./index.css";
@@ -138,8 +139,14 @@ function renderPage(route: Route): ReactNode {
     case "trash":
       return <Trash />;
     case "practice":
-      // 文风练习工作区段：1 段 = 列表页（卡 9）；2 段 = 练习页（卡 10，尚未分流——现由列表页兜底渲染）
-      return <Practice />;
+      // 文风练习工作区段，按段数分流：1 段 = 列表页（卡 9）；2 段 = 练习页（卡 10，
+      // key = sampleId 变化强制卸载重挂：稿件 / 保存态 / 点评帧消费序号按样本重置）；更深段归回列表
+      if (second === undefined) return <Practice />;
+      return third === undefined ? (
+        <PracticeDetail key={second} sampleId={second} />
+      ) : (
+        <RedirectTo to="/practice" />
+      );
     case "preferences":
       return <Settings />;
     case "settings":

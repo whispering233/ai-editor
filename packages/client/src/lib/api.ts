@@ -22,6 +22,7 @@ import type {
   ErrorCode,
   OutlineTree,
   PracticeSampleDetail,
+  PracticeSampleDraftPutRes,
   PracticeSamplesRes,
   PracticeTargetCreated,
   PracticeTargetsRes,
@@ -1178,6 +1179,8 @@ export interface SendChatMessageBody {
     focus_node_id?: string;
     /** 推演节点集合（大纲组页面）：只发布尔，服务端现读 `project.json` 展开 */
     focus_deduction?: boolean;
+    /** 练习样本 id（练习页「让 AI 点评」的一次性上下文；服务端现读展开注入） */
+    practice_sample_id?: string;
   };
 }
 
@@ -1354,5 +1357,32 @@ export function createPracticeSample(
   return apiFetch<PracticeSampleDetail>(`/practice/targets/${targetId}/samples`, {
     method: "POST",
     body,
+  });
+}
+
+/**
+ * GET /api/v1/practice/samples/:id —— 样本详情（**唯一**返回范文全文与点评卡的读端点）。
+ * `feedback` **原样透传**（读取侧只防「非对象」：非法 JSON / 数组 / 字符串 / null → null，合法 JSON 对象
+ * 一律照原样返回，`{}` 亦然）⇒ 调用方**不得**对它做 schema 校验（可渲染视图见 `lib/practice.ts`）。
+ * 失败：404 PRACTICE_NOT_FOUND、409 NO_PROJECT_OPEN、400 KIND_MISMATCH。
+ */
+export function getPracticeSample(id: string): Promise<PracticeSampleDetail> {
+  return apiFetch<PracticeSampleDetail>(`/practice/samples/${id}`);
+}
+
+/**
+ * PUT /api/v1/practice/samples/:id —— 保存仿写稿（**全系统唯一的用户写稿入口**）。
+ * 整体覆盖 `draft`（空串 = 清空稿件）；返回本次写入后的版本戳 `updatedAt`。
+ * 并发口径 = 后写覆盖（不带版本戳——多标签页防覆盖是已登记的延期项）。
+ * 失败：400 VALIDATION_ERROR（超 `MAX_PRACTICE_DRAFT_CHARS`）、404 PRACTICE_NOT_FOUND、
+ *      409 NO_PROJECT_OPEN、400 KIND_MISMATCH。
+ */
+export function updatePracticeSampleDraft(
+  id: string,
+  draft: string,
+): Promise<PracticeSampleDraftPutRes> {
+  return apiFetch<PracticeSampleDraftPutRes>(`/practice/samples/${id}`, {
+    method: "PUT",
+    body: { draft },
   });
 }

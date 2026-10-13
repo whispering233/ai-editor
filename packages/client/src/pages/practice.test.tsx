@@ -151,4 +151,10 @@ describe("样本行（data-row：来源说明 + 状态徽标 + 相对时间）",
     expect(html).toContain("border-type-badge-border"); // type-badge 形态（TypeChip）
     expect(html).toContain("5 分钟前");
   });
+
+  it("整行 = 进练习页的链接（`#/practice/:sampleId`，卡 10 入口）", () => {
+    const html = renderHtml(<PracticeSampleRow sample={makeSample({ id: "ps-7" })} />);
+    expect(html).toContain('<a href="#/practice/ps-7"');
+    expect(html).toContain("hover:bg-muted"); // data-row 行 hover（surface-soft）
+  });
 });

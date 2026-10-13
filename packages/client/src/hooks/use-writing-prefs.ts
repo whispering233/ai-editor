@@ -154,27 +154,43 @@ export function writingPaperCss(paper: WritingPaper): string | null {
   return option.css;
 }
 
-/** 容器上要设的写作面变量（声明 = blocknote.css 间接引用的输入端） */
-interface WritingCssVars extends CSSProperties {
+/** 容器上要设的写作面**排版**变量（字体 / 字号 / 行高；**不含 `--paper-bg`**）：
+ * 纯文本书写面（练习页「我的稿」）只要这三个——纸张是块编辑器写作面的语义（正文底），练习稿不着纸。 */
+interface WritingTypeCssVars extends CSSProperties {
   "--writing-font": string;
   "--writing-font-size": string;
   "--writing-line-height": string;
+}
+
+/** 容器上要设的写作面变量（= 排版三变量 + 可选 `--paper-bg`） */
+interface WritingCssVars extends WritingTypeCssVars {
   /** 纸张档**非默认**时才给值（默认档不给 ⇒ blocknote.css 里 `var(--paper-bg, …)` 兜到库默认） */
   "--paper-bg"?: string;
 }
 
 /**
- * 偏好 → 容器上的 CSS 变量（`DocumentEditor` 设在 `BlockNoteView` 的 `style` 上，
- * 落到 `.bn-root.bn-container`）：blocknote.css 里的间接引用据此生效。
- * 字号带 px 单位；行高是无单位倍数（库的 `line-height: 1.5` 同形态）；纸张值 = `var(--paper-*)`
- * （色值仍只在 index.css 定义，这里只给间接引用）。
+ * 偏好 → 写作面**排版**变量（字体 / 字号 / 行高），**不含 `--paper-bg`**：
+ * 供不引块编辑器的纯文本书写面（练习页「我的稿」）使用——它同样要跟着字体 / 字号 / 行高偏好，
+ * 但不着纸（DESIGN.md §文风练习区「我的稿」：间接引用 `--writing-*`、不引 `--paper-bg`）。
+ * 字号带 px 单位；行高是无单位倍数；字体值仍只查 `WRITING_FONT_OPTIONS` 表。
  */
-export function toWritingCssVars(prefs: WritingPrefs): WritingCssVars {
-  const paperBg = writingPaperCss(prefs.paper);
+export function toWritingTypeCssVars(prefs: WritingPrefs): WritingTypeCssVars {
   return {
     "--writing-font": writingFontCss(prefs.font),
     "--writing-font-size": `${prefs.fontSize}px`,
     "--writing-line-height": String(prefs.lineHeight),
+  };
+}
+
+/**
+ * 偏好 → 容器上的 CSS 变量（`DocumentEditor` 设在 `BlockNoteView` 的 `style` 上，
+ * 落到 `.bn-root.bn-container`）：blocknote.css 里的间接引用据此生效。
+ * 纸张值 = `var(--paper-*)`（色值仍只在 index.css 定义，这里只给间接引用）。
+ */
+export function toWritingCssVars(prefs: WritingPrefs): WritingCssVars {
+  const paperBg = writingPaperCss(prefs.paper);
+  return {
+    ...toWritingTypeCssVars(prefs),
     ...(paperBg === null ? {} : { "--paper-bg": paperBg }),
   };
 }
