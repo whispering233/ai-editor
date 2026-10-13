@@ -3,11 +3,18 @@
 // 适配面很薄：name/label/description/parameters 直通；execute 注入 ToolContext（db/outlineDir/projectId），
 // 把 tools 包的返回值文本化回填并做截断；PROPOSAL 权限工具的提案载荷走 `details`（K3 接提案仓）。
 //
+// 工作区过滤（2026-10）：只装配属于当前工作区 `kind` 的工具（shared `isToolScopeRegistered`）——
+// 练习工作区根本没有小说工具与 `propose_*`，这是**结构性边界**（靠注册过滤，不靠提示词）。
+//
 // 契约见 docs/api/tool-calling.md：抛错即失败（不把失败编码进 content）；提案 content 只给
 // 「提案已发出」提示，预览细节在 details 里随 SSE 推给 GUI。
 
 import type { ToolDefinition as PiToolDefinition } from "@earendil-works/pi-coding-agent";
-import { TOOL_PERMISSION } from "@whispering233/ai-editor-shared";
+import {
+  isToolScopeRegistered,
+  TOOL_PERMISSION,
+  type WorkspaceKind,
+} from "@whispering233/ai-editor-shared";
 import { listTools, type ToolContext, type ToolDefinition as EditorToolDefinition } from "@whispering233/ai-editor-tools";
 import { stringifyToolResult, truncateToolResultText } from "./tool-result.js";
 
@@ -34,7 +41,31 @@ export type ProposalSink = (input: ProposalSinkInput) => ProposalPayload | undef
 
 export interface CreateCustomToolsOptions {
   toolContext: ToolContext;
+  /**
+   * 当前工作区类型（**必填**）：决定装配哪些工具（`scope` 过滤）。
+   * 刻意不给缺省值——「忘了传 = 注册全量」会让收窄静默失效。
+   */
+  kind: WorkspaceKind;
   proposalSink?: ProposalSink;
+}
+
+/** 装配入参的必填键（同一份清单做两件事：下面的编译期断言 + 运行时守卫） */
+const requiredOptionKeys = ["toolContext", "kind"] as const satisfies readonly RequiredKeys<CreateCustomToolsOptions>[];
+
+/** 必填键 = 类型上不接纳 `undefined` 的键 */
+type RequiredKeys<T> = { [K in keyof T]-?: undefined extends T[K] ? never : K }[keyof T];
+
+/**
+ * 编译期防回归（本仓约定：编译期断言写 src，`*.test.ts` 不进 `pnpm typecheck`）：
+ * `requiredOptionKeys` 必须恰好是入参的必填键——把 `kind` 改成可选 / 加缺省值，上面那行即报红。
+ * 运行时同一份清单再拦一次：缺必填项直接抛错，**不退化为「注册全量」**。
+ */
+function assertRequiredOptions(options: CreateCustomToolsOptions): void {
+  const provided: Partial<CreateCustomToolsOptions> = options;
+  const missing = requiredOptionKeys.filter((key) => provided[key] === undefined);
+  if (missing.length > 0) {
+    throw new Error(`createCustomTools: 缺少必填入参 ${missing.join(" / ")}（工具集按工作区类型收窄，不接受缺省）`);
+  }
 }
 
 /** 提案已发出提示（content 不含预览细节——避免模型误以为提案已生效）
@@ -79,9 +110,12 @@ function toPiTool(tool: EditorToolDefinition, options: CreateCustomToolsOptions)
   };
 }
 
-/** registry 全部工具 → pi 工具定义（顺序 = listTools 的稳定序） */
+/** registry 中属于该工作区的工具 → pi 工具定义（顺序 = listTools 的稳定序） */
 export function createCustomTools(options: CreateCustomToolsOptions): PiToolDefinition[] {
-  return listTools().map((tool) => toPiTool(tool, options));
+  assertRequiredOptions(options);
+  return listTools()
+    .filter((tool) => isToolScopeRegistered(options.kind, tool.scope))
+    .map((tool) => toPiTool(tool, options));
 }
 
 /** 工具参数 schema 类型（测试/调用方按需引用） */

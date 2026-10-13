@@ -31,6 +31,7 @@ describe("registry 注册/查询 API", () => {
       description: "注册表测试工具",
       parameters: emptyArgs(),
       permission: TOOL_PERMISSION.AUTO,
+      scope: "novel",
       run: () => "ok",
     };
     registerTool(def);
@@ -47,6 +48,7 @@ describe("registry 注册/查询 API", () => {
       description: "重复注册测试",
       parameters: emptyArgs(),
       permission: TOOL_PERMISSION.AUTO,
+      scope: "novel",
       run: () => "ok",
     };
     registerTool(def);
@@ -55,11 +57,25 @@ describe("registry 注册/查询 API", () => {
 
   it("注册防呆：name 非空字符串（空串/空白/缺失抛错）", () => {
     expect(() =>
-      registerTool({ name: "", description: "x", parameters: emptyArgs(), permission: TOOL_PERMISSION.AUTO, run: () => "ok" }),
+      registerTool({ name: "", description: "x", parameters: emptyArgs(), permission: TOOL_PERMISSION.AUTO, scope: "novel", run: () => "ok" }),
     ).toThrow(/工具名必须为非空字符串/);
     expect(() =>
-      registerTool({ name: "   ", description: "x", parameters: emptyArgs(), permission: TOOL_PERMISSION.AUTO, run: () => "ok" }),
+      registerTool({ name: "   ", description: "x", parameters: emptyArgs(), permission: TOOL_PERMISSION.AUTO, scope: "novel", run: () => "ok" }),
     ).toThrow(/工具名必须为非空字符串/);
+  });
+
+  it("注册防呆：scope 必须为合法工作区作用域（漏标 / 拼错抛错，且不入注册表）", () => {
+    const base = {
+      name: "scope_guard_test_tool",
+      description: "scope 防呆测试",
+      parameters: emptyArgs(),
+      permission: TOOL_PERMISSION.AUTO,
+      run: () => "ok",
+    };
+ // 类型层 scope 必填，故漏标场景只能用断言绕过类型（模拟 JS 侧调用）——运行时同样不静默
+    expect(() => registerTool({ ...base, scope: undefined } as unknown as ToolDefinition)).toThrow(/scope 非法/);
+    expect(() => registerTool({ ...base, scope: "novel2" } as unknown as ToolDefinition)).toThrow(/scope 非法/);
+    expect(getTool(base.name)).toBeUndefined();
   });
 
   it("run 通过 ctx 注入上下文执行（db/outlineDir/projectId 透传）", () => {
@@ -68,6 +84,7 @@ describe("registry 注册/查询 API", () => {
       description: "上下文透传测试",
       parameters: emptyArgs(),
       permission: TOOL_PERMISSION.AUTO,
+      scope: "novel",
       run: (ctx) => ctx.projectId,
     };
     registerTool(def);
@@ -79,6 +96,7 @@ describe("registry 注册/查询 API", () => {
       description: "signal 透传测试",
       parameters: emptyArgs(),
       permission: TOOL_PERMISSION.AUTO,
+      scope: "novel",
       run: (_ctx, _args, signal) => (signal?.aborted === true ? "aborted" : "done"),
     };
     registerTool(def);

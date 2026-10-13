@@ -2,6 +2,7 @@
 // 文档来源：关系类型表、hook 字段、half_life 映射、工具目录
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { EntityType } from "../types/entity.js";
+import type { ToolScope } from "./tool.js";
 import type { WorkspaceKind } from "./workspace.js";
 import {
   ANALYSIS_TOOLS,
@@ -20,6 +21,7 @@ import {
   HOOK_CATEGORIES,
   HOOK_RELATION_TYPES,
   HOOK_STATUSES,
+  isToolScopeRegistered,
   MAX_BACKUP_NAME_LENGTH,
   MAX_BACKUPS_PER_PROJECT,
   MAX_FEEDBACK_DIMENSIONS,
@@ -39,8 +41,10 @@ import {
   IMMUTABLE_FIELDS,
   TOOL_NAMES,
   TOOL_PERMISSION,
+  TOOL_SCOPES,
   WORKSPACE_DIRS,
   WORKSPACE_KINDS,
+  WORKSPACE_TOOL_SCOPES,
   resolveWorkspaceKind,
 } from "./index.js";
 
@@ -292,6 +296,26 @@ describe("工作区类型常量（kind，2026-10）", () => {
     expect(resolveWorkspaceKind(42)).toBe("novel");
     expect(resolveWorkspaceKind({ kind: "practice" })).toBe("novel");
     expect(resolveWorkspaceKind("__proto__")).toBe("novel"); // 原型链键不得被认作合法类型
+  });
+});
+
+describe("工具 scope 与工作区映射（2026-10）", () => {
+  it("TOOL_SCOPES 三值；WORKSPACE_TOOL_SCOPES 是「kind → 允许 scope」的唯一定义处", () => {
+    expect(TOOL_SCOPES).toEqual(["novel", "practice", "common"]);
+    expectTypeOf<ToolScope>().toEqualTypeOf<"novel" | "practice" | "common">();
+    expect(WORKSPACE_TOOL_SCOPES).toEqual({ novel: ["novel", "common"], practice: ["practice", "common"] });
+ // 覆盖全部工作区类型（新增 kind 而不定义 scope 集合 = 装配层取不到映射）
+    expect(Object.keys(WORKSPACE_TOOL_SCOPES).sort()).toEqual([...WORKSPACE_KINDS].sort());
+  });
+
+  it("isToolScopeRegistered：专属 scope 仅本工作区；common 两边都注册；未知 kind 报错（不退化为全量）", () => {
+    expect(isToolScopeRegistered("novel", "novel")).toBe(true);
+    expect(isToolScopeRegistered("novel", "practice")).toBe(false);
+    expect(isToolScopeRegistered("practice", "practice")).toBe(true);
+    expect(isToolScopeRegistered("practice", "novel")).toBe(false);
+    expect(isToolScopeRegistered("novel", "common")).toBe(true);
+    expect(isToolScopeRegistered("practice", "common")).toBe(true);
+    expect(() => isToolScopeRegistered("x" as WorkspaceKind, "novel")).toThrow(/未知工作区类型/);
   });
 });
 

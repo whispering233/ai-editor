@@ -276,6 +276,7 @@ describe("sink × 真实提案工具", () => {
     description: "K3 测试用提案工具（复用 build 层，验证 sink 与真实工具的协作）",
     parameters: getEntityArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,
+    scope: "novel",
     run: () => ({ proposal_id: "prop_k3", summary: "K3 测试提案" }),
   });
 

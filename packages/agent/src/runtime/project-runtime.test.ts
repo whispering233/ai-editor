@@ -22,7 +22,8 @@ import {
   type Model,
 } from "@earendil-works/pi-ai";
 import { ModelRuntime, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
-import { listTools, type ToolContext } from "@whispering233/ai-editor-tools";
+import type { WorkspaceKind } from "@whispering233/ai-editor-shared";
+import { type ToolContext } from "@whispering233/ai-editor-tools";
 import { projectSessionsDir } from "./paths.js";
 import {
   createProjectRuntime,
@@ -103,9 +104,11 @@ async function setupRuntime(options: {
   projectRoot: string;
   env: FauxEnv;
   agentDir: string;
+  kind?: WorkspaceKind;
 }): Promise<ProjectRuntime> {
   return createProjectRuntime({
     projectRoot: options.projectRoot,
+    kind: options.kind ?? "novel",
     toolContext: toolContextFor(options.projectRoot),
     agentDir: options.agentDir,
     modelRuntime: options.env.modelRuntime,
@@ -232,8 +235,49 @@ describe("会话文件位置", () => {
 
 // ============ 5. 工具装配与执行 ============
 
+/** 小说工作区应当装配的 37 个工具（**写死清单**：逐名对账，不用「长度相等」代替） */
+const NOVEL_TOOLS = [
+  "analyze_consistency",
+  "analyze_hook_health",
+  "compute_state",
+  "detect_conflicts",
+  "detect_hook_conflicts",
+  "find_hook_opportunities",
+  "find_orphan_elements",
+  "get_chapter_text",
+  "get_deduction_marks",
+  "get_delta_history",
+  "get_entity",
+  "get_entity_summary",
+  "get_outline",
+  "get_outline_path",
+  "propose_abandon_hook",
+  "propose_add_delta",
+  "propose_add_relation",
+  "propose_advance_hook",
+  "propose_create_entity",
+  "propose_create_hook",
+  "propose_create_reference",
+  "propose_delete_entity",
+  "propose_delete_node",
+  "propose_move_node",
+  "propose_outline_node",
+  "propose_remove_relation",
+  "propose_reorder_timepoints",
+  "propose_resolve_hook",
+  "propose_update_entity",
+  "propose_update_hook",
+  "query_relationships",
+  "search_entities",
+  "search_references",
+  "suggest_connections",
+  "suggest_hook_payoff",
+  "trace_hook_lifecycle",
+  "trace_plot_paths",
+];
+
 describe("领域工具装配", () => {
-  it("37 个工具全部可用、builtin 全关，faux 的工具调用真正执行", async () => {
+  it("小说工作区：37 个工具全部可用（逐名相等）、builtin 全关，faux 的工具调用真正执行", async () => {
     const env = await createFauxEnv();
     const projectRoot = mkTempDir("ai-editor-k2-tools-");
     const agentDir = mkTempDir("ai-editor-k2-agentdir4-");
@@ -256,10 +300,9 @@ describe("领域工具装配", () => {
         }
       });
 
-      const expectedNames = listTools().map((tool) => tool.name);
       const activeNames = runtime.session.getActiveToolNames();
-      expect(new Set(activeNames)).toEqual(new Set(expectedNames));
-      expect(expectedNames).toHaveLength(37);
+      expect([...activeNames].sort()).toEqual(NOVEL_TOOLS);
+      expect(activeNames).toHaveLength(37);
       for (const builtin of ["read", "bash", "edit", "write"]) {
         expect(activeNames).not.toContain(builtin);
       }
@@ -276,10 +319,47 @@ describe("领域工具装配", () => {
   });
 });
 
-// ============ 6. 系统提示词 ============
+// ============ 6. 练习工作区（kind = practice）============
+// 2026-10 卡 4：AI 能力面按 kind 收窄——工具集是**结构性边界**（注册过滤，不靠提示词），
+// 提示词同层按 kind 分叉（两份内核常量）。
+
+describe("练习工作区装配", () => {
+  it("工具集 = 空集（无小说工具、无 propose_*），且内核提示词为练习版", async () => {
+    const env = await createFauxEnv();
+    const projectRoot = mkTempDir("ai-editor-k4-practice-");
+    const agentDir = mkTempDir("ai-editor-k4-agentdir-");
+    writeOutlineFixture(projectRoot); // 就算盘上有小说数据，练习工作区也不注册小说工具
+
+    const runtime = await setupRuntime({ projectRoot, env, agentDir, kind: "practice" });
+    try {
+      const activeNames = runtime.session.getActiveToolNames();
+      expect(activeNames).toEqual([]); // 本卡 = 空集；卡 6 落地后为三个练习工具
+      expect(activeNames.some((name) => name.startsWith("propose_"))).toBe(false);
+      // 点名否定：小说侧最常见的读写工具在练习工具面根本不存在
+      expect(activeNames).not.toContain("get_outline");
+      expect(activeNames).not.toContain("get_chapter_text");
+      expect(activeNames).not.toContain("propose_create_entity");
+
+      const prompt = runtime.session.systemPrompt;
+      expect(prompt).toContain("写作陪练");
+      expect(prompt).toContain("只诊断、不代写");
+      expect(prompt).toContain("submit_style_feedback");
+      expect(prompt).toContain("不改写用户的稿件");
+      // 小说版要点不得泄漏到练习版（两份常量是分叉的，不是叠加的）
+      expect(prompt).not.toContain("创作顾问");
+      expect(prompt).not.toContain("不生成正文");
+      expect(prompt).not.toContain("get_chapter_text");
+      expect(prompt).not.toContain("propose_");
+    } finally {
+      runtime.dispose();
+    }
+  });
+});
+
+// ============ 7. 系统提示词 ============
 
 describe("系统提示词", () => {
-  it("内核提示词为主，且不含 pi 默认编码 agent 的工具说明", async () => {
+  it("小说工作区：内核提示词为主，不含练习版要点，也不含 pi 默认编码 agent 的工具说明", async () => {
     const env = await createFauxEnv();
     const projectRoot = mkTempDir("ai-editor-k2-prompt-");
     const agentDir = mkTempDir("ai-editor-k2-agentdir5-");
@@ -289,9 +369,13 @@ describe("系统提示词", () => {
       const prompt = runtime.session.systemPrompt;
       expect(prompt).toContain("创作顾问");
       expect(prompt).toContain("不生成正文");
- // 卡 12.9：正文可读、绝不改写（工具面无线工具——提示词只是双层证据的一层）
+      // 卡 12.9：正文可读、绝不改写（工具面无线工具——提示词只是双层证据的一层）
       expect(prompt).toContain("绝不改写正文");
       expect(prompt).toContain("get_chapter_text");
+      // 练习版要点不得出现在小说工作区（提示词按 kind 分叉）
+      expect(prompt).not.toContain("写作陪练");
+      expect(prompt).not.toContain("submit_style_feedback");
+      expect(prompt).not.toContain("不改写用户的稿件");
       expect(prompt).not.toContain("Available tools");
       expect(prompt).not.toContain("bash");
     } finally {
@@ -300,7 +384,7 @@ describe("系统提示词", () => {
   });
 });
 
-// ============ 7. 无模型/无凭据 → 显式失败 ============
+// ============ 8. 无模型/无凭据 → 显式失败 ============
 
 describe("模型解析", () => {
   it("未配置凭据且无显式模型时抛 NoModelConfiguredError", async () => {

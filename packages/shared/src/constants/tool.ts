@@ -1,4 +1,6 @@
-// AI 工具常量：分级权限 + 全量工具名
+// AI 工具常量：分级权限 + 工作区作用域 + 全量工具名
+
+import type { WorkspaceKind } from "./workspace.js";
 
 /**
  * 工具权限级别（「工具分级」两级：自动 / 提案确认）
@@ -11,6 +13,39 @@ export const TOOL_PERMISSION = {
 
 /** 工具权限级别 */
 export type ToolPermission = (typeof TOOL_PERMISSION)[keyof typeof TOOL_PERMISSION];
+
+/**
+ * 工具作用域（2026-10）：工具归哪个工作区类型可用——`novel` / `practice` 为各自专属，
+ * `common` = 两种工作区都注册。装配层按当前工作区 `kind` 过滤（见 `isToolScopeRegistered`），
+ * 语义与不变式见 `docs/design/architecture.md`「工作区类型（kind）与能力收窄」。
+ */
+export const TOOL_SCOPES = ["novel", "practice", "common"] as const;
+
+/** 工具作用域 */
+export type ToolScope = (typeof TOOL_SCOPES)[number];
+
+/**
+ * 工作区类型 → 允许注册的工具 `scope` 集合（**唯一定义处**）：装配层只经
+ * `isToolScopeRegistered` 判定，任何消费方（agent / tools / server）不得复写这份映射。
+ * 不变式：非小说工作区不注册小说工具与提案工具（结构性边界，靠注册过滤，不靠提示词）。
+ */
+export const WORKSPACE_TOOL_SCOPES: Record<WorkspaceKind, readonly ToolScope[]> = {
+  novel: ["novel", "common"],
+  practice: ["practice", "common"],
+};
+
+/**
+ * 该 `scope` 的工具在指定工作区是否注册——**装配层唯一判定入口**。
+ * 未知 `kind`（类型层之外的值，如漏传参数）直接抛错：**不退化为「注册全量」**，
+ * 否则收窄会静默失效（工具集按 kind 收窄是结构性边界）。
+ */
+export function isToolScopeRegistered(kind: WorkspaceKind, scope: ToolScope): boolean {
+  const allowed: readonly ToolScope[] | undefined = WORKSPACE_TOOL_SCOPES[kind];
+  if (allowed === undefined) {
+    throw new Error(`未知工作区类型: ${String(kind)}`);
+  }
+  return allowed.includes(scope);
+}
 
 /** 查询类工具（自动，「查询类」）：默认过滤软删对象 */
 export const QUERY_TOOLS = [

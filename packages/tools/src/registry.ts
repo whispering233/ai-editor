@@ -1,16 +1,18 @@
 // 工具注册表：统一工具定义结构 + 注册/查询 API + 参数校验入口
 // registerTool 挂载新工具；executor 通过 getTool(name) 按名调度。
 //
-// 定义结构 { name, description, parameters, permission, run }：
+// 定义结构 { name, description, parameters, permission, scope, run }：
 // - parameters：TypeBox 参数 schema（运行时即 JSON Schema；执行前 preflight 校验，
 //   批量 tool_call 先全部校验再执行）；校验失败即抛错（executor 统一转结构化 tool_result 喂回 LLM）
 // - permission：TOOL_PERMISSION.AUTO（自动）/ PROPOSAL（提案确认）两级（「工具分级」）
+// - scope：ToolScope（工作区作用域）——装配层按当前工作区 `kind` 过滤（shared `isToolScopeRegistered`）；
+//   **必填**：漏标 = 该工具的工作区归属未定，工具集按 kind 收窄即失效
 // - run(ctx, args)：同步执行，返回 JSON 可序列化结果；抛错即失败（不把失败编码进正常 content）
 //
 // 注册语义：重复注册同名工具抛错（防后续切片扩展时撞名；注册表是唯一事实来源）。
 
 import { validateToolArguments, type JsonObject, type Static, type TSchema } from "@earendil-works/pi-ai";
-import type { ToolPermission } from "@whispering233/ai-editor-shared";
+import { TOOL_SCOPES, type ToolPermission, type ToolScope } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "./context.js";
 
 /**
@@ -29,6 +31,8 @@ export interface ToolDefinition<TSchema_ extends TSchema = TSchema> {
   parameters: TSchema_;
  /** 权限级别（TOOL_PERMISSION.AUTO / PROPOSAL） */
   permission: ToolPermission;
+ /** 工作区作用域（novel / practice / common）：装配层按当前工作区 `kind` 过滤，决定该工具是否注册 */
+  scope: ToolScope;
  /**
  * 执行函数：注入 ToolContext（db/outlineDir/projectId），返回可序列化结果或抛错。
  * signal：可选取消通道（「长工具执行中检查 signal」）——分析类长任务在 executor
@@ -62,11 +66,15 @@ const registry = new Map<string, ToolDefinition>();
 /**
  * 注册单个工具：重复注册同名工具抛错——防后续切片扩展时撞名，
  * 保证「注册表 = 工具目录唯一事实来源」。
- * 防呆：name 必须为非空字符串（拼错名不应静默注册新工具）。
+ * 防呆：name 必须为非空字符串（拼错名不应静默注册新工具）；scope 必须是合法作用域
+ *（漏标 / 拼错会让「按 kind 过滤」行为不可预期，故在此拦下）。
  */
 export function registerTool(def: ToolDefinition): void {
   if (typeof def.name !== "string" || def.name.trim() === "") {
     throw new Error("registerTool: 工具名必须为非空字符串");
+  }
+  if (!(TOOL_SCOPES as readonly unknown[]).includes(def.scope)) {
+    throw new Error(`registerTool: 工具 ${def.name} 的 scope 非法（${String(def.scope)}）——取值见 shared TOOL_SCOPES`);
   }
   if (registry.has(def.name)) {
     throw new Error(`registerTool: 工具 ${def.name} 已注册（重复注册禁止）`);

@@ -5,8 +5,12 @@
 // 仅经 executor 门面（executeProposal）导出，S7.5 提案确认后调用。
 //
 // 注册语义：模块副作用注册（import 即挂载）——executor 直接 getTool(name) 调度；
-// 工具定义集中在本入口（name/description/parameters/permission/run），
+// 工具定义集中在本入口（name/description/parameters/permission/scope/run），
 // 参数 TypeBox schema 统一从 ./schemas 出口取（见 docs/api/tool-calling.md）。
+//
+// scope（工作区作用域，2026-10）：本入口的 37 个工具都是**小说语义**（实体/大纲/伏笔/Delta/参考资料），
+// 一律 `scope: "novel"`——练习工作区不注册它们（含全部 propose_*）；练习工具（两个只读 + 一个提交）
+// 排在后续切片，标 `scope: "practice"`（装配过滤见 agent `createCustomTools`）。
 
 // 包标识常量（与 shared 包风格一致：SHARED_PKG_NAME；agent 冒烟依赖）
 export const TOOLS_PKG_NAME = "@whispering233/ai-editor-tools";
@@ -79,6 +83,7 @@ const queryToolDefs: ToolDefinition[] = [
       "reference（参考资料）另附 content = 正文的轻量 md 投影（非块 JSON；未写过正文为空串）。",
     parameters: getEntityArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
+    scope: "novel",
     run: runGetEntity,
   },
   {
@@ -89,6 +94,7 @@ const queryToolDefs: ToolDefinition[] = [
       "tags 要求 data.tags 数组包含全部指定标签）。返回匹配实体列表（名称 + 类型 + 关键字段摘要）。",
     parameters: searchEntitiesArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
+    scope: "novel",
     run: runSearchEntities,
   },
   {
@@ -102,6 +108,7 @@ const queryToolDefs: ToolDefinition[] = [
       "；端点软删的关系不可见。",
     parameters: queryRelationshipsArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
+    scope: "novel",
     run: runQueryRelationships,
   },
   {
@@ -111,6 +118,7 @@ const queryToolDefs: ToolDefinition[] = [
       "软删节点不返回。用于了解作品整体结构。",
     parameters: getOutlineArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
+    scope: "novel",
     run: runGetOutline,
   },
   {
@@ -120,6 +128,7 @@ const queryToolDefs: ToolDefinition[] = [
       "节点不存在或已软删返回 null。",
     parameters: getOutlinePathArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
+    scope: "novel",
     run: runGetOutlinePath,
   },
   {
@@ -139,6 +148,7 @@ const queryToolDefs: ToolDefinition[] = [
       "**只读**：工具面不存在任何正文写工具——正文只读、只评论、只建议，落笔由作者完成。",
     parameters: getChapterTextArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
+    scope: "novel",
     run: runGetChapterText,
   },
   {
@@ -152,6 +162,7 @@ const queryToolDefs: ToolDefinition[] = [
       "软删或已失效的标记不出现。AI **不能**增删推演节点——推演边界是作者的判断。",
     parameters: getDeductionMarksArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
+    scope: "novel",
     run: runGetDeductionMarks,
   },
   {
@@ -164,6 +175,7 @@ const queryToolDefs: ToolDefinition[] = [
       "结果在 conflicts 字段标注 { field, expected, actual }，请据此向用户提示修复。",
     parameters: computeStateArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
+    scope: "novel",
     run: runComputeState,
   },
   {
@@ -173,6 +185,7 @@ const queryToolDefs: ToolDefinition[] = [
       "target_type 为实体类型或 outline_node；软删相关记录自动过滤。",
     parameters: getDeltaHistoryArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
+    scope: "novel",
     run: runGetDeltaHistory,
   },
   {
@@ -182,6 +195,7 @@ const queryToolDefs: ToolDefinition[] = [
       "setting→分类分布、location→类型分布）。用于全局概览。",
     parameters: getEntitySummaryArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
+    scope: "novel",
     run: runGetEntitySummary,
   },
   {
@@ -193,6 +207,7 @@ const queryToolDefs: ToolDefinition[] = [
       "用于 AI 不知道书里有哪些参考资料时先检索。",
     parameters: searchReferencesArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
+    scope: "novel",
     run: runSearchReferences,
   },
 ];
@@ -222,6 +237,7 @@ const analysisToolDefs: ToolDefinition[] = [
       "返回 issues: [{ severity: error|warning, field, description }]；实体不存在或已软删返回 null。",
     parameters: analyzeConsistencyArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
+    scope: "novel",
     run: runAnalyzeConsistency,
   },
   {
@@ -233,6 +249,7 @@ const analysisToolDefs: ToolDefinition[] = [
       "返回 conflicts: [{ entity_a, entity_b, field, description }]。",
     parameters: detectConflictsArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
+    scope: "novel",
     run: runDetectConflicts,
   },
   {
@@ -243,6 +260,7 @@ const analysisToolDefs: ToolDefinition[] = [
       "（过长路径、场景缺目标、章节缺反转等风险）。节点不存在或已软删返回 null。",
     parameters: tracePlotPathsArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
+    scope: "novel",
     run: runTracePlotPaths,
   },
   {
@@ -254,6 +272,7 @@ const analysisToolDefs: ToolDefinition[] = [
       "inconsistent_soft_deletes（大纲节点已软删但关联 relation/delta 未级联软删的跨存储不一致，诊断用途）。",
     parameters: findOrphanElementsArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
+    scope: "novel",
     run: runFindOrphanElements,
   },
   {
@@ -264,6 +283,7 @@ const analysisToolDefs: ToolDefinition[] = [
       "（已有直接关系的候选跳过）。实体不存在或已软删返回 null。",
     parameters: suggestConnectionsArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
+    scope: "novel",
     run: runSuggestConnections,
   },
 ];
@@ -304,6 +324,7 @@ const hookToolDefs: ToolDefinition[] = [
       "半衰期显式 half_life 优先、缺省按 payoff_timing 映射（" + halfLifeDefaultsText + "）。",
     parameters: analyzeHookHealthArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
+    scope: "novel",
     run: runAnalyzeHookHealth,
   },
   {
@@ -314,6 +335,7 @@ const hookToolDefs: ToolDefinition[] = [
       "hook 不存在或已软删返回 null。",
     parameters: traceHookLifecycleArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
+    scope: "novel",
     run: runTraceHookLifecycle,
   },
   {
@@ -324,6 +346,7 @@ const hookToolDefs: ToolDefinition[] = [
       "hook 不存在/已软删返回 null，无埋设记录或大纲无候选章返回空建议。",
     parameters: suggestHookPayoffArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
+    scope: "novel",
     run: runSuggestHookPayoff,
   },
   {
@@ -334,6 +357,7 @@ const hookToolDefs: ToolDefinition[] = [
       "返回 { opportunities: [{ category, reason }] }；输入为卷/场景报错（仅章），章不存在或已软删返回 null。",
     parameters: findHookOpportunitiesArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
+    scope: "novel",
     run: runFindHookOpportunities,
   },
   {
@@ -343,6 +367,7 @@ const hookToolDefs: ToolDefinition[] = [
       "时间悖论（推进/回收节点章节早于埋设节点章节）。返回 { conflicts: [{ hook_a, hook_b, field, description }] }。",
     parameters: detectHookConflictsArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
+    scope: "novel",
     run: runDetectHookConflicts,
   },
 ];
@@ -407,6 +432,7 @@ const proposalToolDefs: ToolDefinition[] = [
       "仅生成提案（返回 proposal_id + 一句话摘要），需用户在界面确认后才生效——请勿重复提案或视为已创建。",
     parameters: proposeCreateEntityArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,
+    scope: "novel",
     run: runProposeCreateEntity,
   },
   {
@@ -419,6 +445,7 @@ const proposalToolDefs: ToolDefinition[] = [
       "实体不存在或已软删返回错误。",
     parameters: proposeUpdateEntityArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,
+    scope: "novel",
     run: runProposeUpdateEntity,
   },
   {
@@ -428,6 +455,7 @@ const proposalToolDefs: ToolDefinition[] = [
       "仅生成提案，需用户确认后生效；实体不存在或已软删返回错误。",
     parameters: proposeDeleteEntityArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,
+    scope: "novel",
     run: runProposeDeleteEntity,
   },
   {
@@ -444,6 +472,7 @@ const proposalToolDefs: ToolDefinition[] = [
       "仅生成提案，需用户确认后生效；端点不存在或已软删返回错误。",
     parameters: proposeAddRelationArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,
+    scope: "novel",
     run: runProposeAddRelation,
   },
   {
@@ -453,6 +482,7 @@ const proposalToolDefs: ToolDefinition[] = [
       "仅生成提案，需用户确认后生效；关系不存在或端点已软删返回错误。",
     parameters: proposeRemoveRelationArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,
+    scope: "novel",
     run: runProposeRemoveRelation,
   },
   {
@@ -467,6 +497,7 @@ const proposalToolDefs: ToolDefinition[] = [
       "触发节点或目标不存在/已软删返回错误。",
     parameters: proposeAddDeltaArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,
+    scope: "novel",
     run: runProposeAddDelta,
   },
   {
@@ -477,6 +508,7 @@ const proposalToolDefs: ToolDefinition[] = [
       "仅生成提案，需用户确认后生效；父节点不存在/已软删或层级非法返回错误。",
     parameters: proposeOutlineNodeArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,
+    scope: "novel",
     run: runProposeOutlineNode,
   },
   {
@@ -487,6 +519,7 @@ const proposalToolDefs: ToolDefinition[] = [
       "节点或父不存在/已软删返回错误。",
     parameters: proposeMoveNodeArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,
+    scope: "novel",
     run: runProposeMoveNode,
   },
   {
@@ -496,6 +529,7 @@ const proposalToolDefs: ToolDefinition[] = [
       "仅生成提案，需用户确认后生效；节点不存在或已软删返回错误。",
     parameters: proposeDeleteNodeArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,
+    scope: "novel",
     run: runProposeDeleteNode,
   },
   {
@@ -506,6 +540,7 @@ const proposalToolDefs: ToolDefinition[] = [
       "仅生成提案，需用户确认后生效；埋设节点非章/不存在/已软删返回错误。",
     parameters: proposeCreateHookArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,
+    scope: "novel",
     run: runProposeCreateHook,
   },
   {
@@ -516,6 +551,7 @@ const proposalToolDefs: ToolDefinition[] = [
       "伏笔不存在或已软删返回错误。",
     parameters: proposeUpdateHookArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,
+    scope: "novel",
     run: runProposeUpdateHook,
   },
   {
@@ -526,6 +562,7 @@ const proposalToolDefs: ToolDefinition[] = [
       "仅生成提案，需用户确认后生效；伏笔或节点不存在/已软删/非章返回错误。",
     parameters: proposeAdvanceHookArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,
+    scope: "novel",
     run: runProposeAdvanceHook,
   },
   {
@@ -536,6 +573,7 @@ const proposalToolDefs: ToolDefinition[] = [
       "仅生成提案，需用户确认后生效；伏笔或节点不存在/已软删/非章返回错误。",
     parameters: proposeResolveHookArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,
+    scope: "novel",
     run: runProposeResolveHook,
   },
   {
@@ -546,6 +584,7 @@ const proposalToolDefs: ToolDefinition[] = [
       "仅生成提案，需用户确认后生效；伏笔不存在或已软删返回错误。",
     parameters: proposeAbandonHookArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,
+    scope: "novel",
     run: runProposeAbandonHook,
   },
   {
@@ -558,6 +597,7 @@ const proposalToolDefs: ToolDefinition[] = [
       "仅生成提案（返回 proposal_id + 一句话摘要），需用户在界面确认后才生效——请勿重复提案或视为已重排。",
     parameters: proposeReorderTimepointsArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,
+    scope: "novel",
     run: runProposeReorderTimepoints,
   },
   {
@@ -569,6 +609,7 @@ const proposalToolDefs: ToolDefinition[] = [
       "仅生成提案（返回 proposal_id + 一句话摘要），需用户在界面确认后才写入——请勿重复提案或视为已保存。",
     parameters: proposeCreateReferenceArgsSchema,
     permission: TOOL_PERMISSION.PROPOSAL,
+    scope: "novel",
     run: runProposeCreateReference,
   },
 ];

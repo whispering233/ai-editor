@@ -159,6 +159,7 @@ async function createFauxEnv(options: { tokensPerSecond?: number } = {}): Promis
   const factory: RuntimeFactory = ({ target, sessionFile }) =>
     createProjectRuntime({
       projectRoot: target.root,
+      kind: target.kind,
       toolContext: { db: target.db, outlineDir: target.root, projectId: target.projectId },
       modelRuntime,
       model,
@@ -211,6 +212,7 @@ async function createUncredentialedFactory(): Promise<RuntimeFactory> {
   return ({ target, sessionFile }) =>
     createProjectRuntime({
       projectRoot: target.root,
+      kind: target.kind,
       toolContext: { db: target.db, outlineDir: target.root, projectId: target.projectId },
       modelRuntime,
       sessionManager: openProjectSessionManager(target.root, sessionFile),

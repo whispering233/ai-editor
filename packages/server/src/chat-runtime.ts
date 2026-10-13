@@ -16,6 +16,7 @@ import {
   type ProjectRuntimeInput,
 } from "@whispering233/ai-editor-agent";
 import type { Db } from "@whispering233/ai-editor-db";
+import type { WorkspaceKind } from "@whispering233/ai-editor-shared";
 import { applyActiveSettings, getModelRuntime, getSettingsManager } from "./model-runtime.js";
 
 /** 对话链路需要的最小项目上下文（不依赖 middleware，避免与 project.ts 形成运行时环） */
@@ -23,6 +24,8 @@ export interface ChatProjectTarget {
   root: string;
   projectId: string;
   db: Db;
+  /** 工作区类型（已经 shared `resolveWorkspaceKind` 归一）：决定 AI 工具集与内核提示词 */
+  kind: WorkspaceKind;
 }
 
 // ============ 运行时池 ============
@@ -34,6 +37,7 @@ export type RuntimeFactory = (request: { target: ChatProjectTarget; sessionFile?
 export const defaultRuntimeFactory: RuntimeFactory = async ({ target, sessionFile }) => {
   const input: ProjectRuntimeInput = {
     projectRoot: target.root,
+    kind: target.kind,
     toolContext: { db: target.db, outlineDir: target.root, projectId: target.projectId },
     sessionManager: openProjectSessionManager(target.root, sessionFile),
     modelRuntime: await getModelRuntime(),

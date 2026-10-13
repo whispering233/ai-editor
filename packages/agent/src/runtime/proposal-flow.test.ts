@@ -61,6 +61,7 @@ describe("提案链路（模型工具调用 → 仓 + SSE）", () => {
     };
     const runtime: ProjectRuntime = await createProjectRuntime({
       projectRoot,
+      kind: "novel",
       agentDir,
       toolContext,
       modelRuntime,

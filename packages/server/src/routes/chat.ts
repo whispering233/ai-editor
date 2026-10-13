@@ -50,6 +50,7 @@ import {
 import {
   buildDeductionMarks,
   orderVisibleChapters,
+  resolveWorkspaceKind,
   truncate,
   type ChatContextUsage,
   type ChatUsage,
@@ -407,7 +408,12 @@ export function chatSendHandler(deps: ChatRouteDeps = {}): (c: Context) => Promi
     };
 
     try {
-      const target: ChatProjectTarget = { root: project.root, projectId: project.config.id, db: project.db };
+      const target: ChatProjectTarget = {
+        root: project.root,
+        projectId: project.config.id,
+        db: project.db,
+        kind: resolveWorkspaceKind(project.config.kind),
+      };
 
       // ---- 目标会话：session_id 只经磁盘发现映射（未命中 → 404） ----
       let sessionFile: string | undefined;
@@ -611,7 +617,12 @@ export function createChatRoutes(deps: ChatRouteDeps = {}): Hono {
   // GET /api/v1/chat/sessions —— 会话列表（按最后活动倒序）
   routes.get("/sessions", async (c) => {
     const project = requireCurrentProject();
-    const target: ChatProjectTarget = { root: project.root, projectId: project.config.id, db: project.db };
+    const target: ChatProjectTarget = {
+      root: project.root,
+      projectId: project.config.id,
+      db: project.db,
+      kind: resolveWorkspaceKind(project.config.kind),
+    };
     const sessions = await listProjectSessions(target.root);
     const items = await Promise.all(
       sessions.map(async (info) => ({

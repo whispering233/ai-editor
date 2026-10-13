@@ -8,8 +8,9 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import type { CreateAgentSessionServicesOptions } from "@earendil-works/pi-coding-agent";
+import type { WorkspaceKind } from "@whispering233/ai-editor-shared";
 import { projectAgentsFilePath } from "./paths.js";
-import { KERNEL_PROMPT } from "./system-prompt.js";
+import { KERNEL_PROMPTS } from "./system-prompt.js";
 
 /** pi 资源加载选项（cwd/agentDir/settingsManager 由 SDK 填充，此处只给行为开关） */
 export type ResourceLoaderOptions = NonNullable<CreateAgentSessionServicesOptions["resourceLoaderOptions"]>;
@@ -26,15 +27,16 @@ export function readProjectAgentsFile(projectRoot: string): { path: string; cont
 }
 
 /**
- * 资源加载选项：内核提示词作 system prompt 主体 + 只注入项目根 AGENTS.md。
+ * 资源加载选项：内核提示词（按工作区类型取小说版 / 练习版）作 system prompt 主体
+ * + 只注入项目根 AGENTS.md。
  * `agentsFilesOverride` 忽略 pi 的发现结果（祖先目录 + agent dir），只回项目根文件。
  */
-export function buildResourceLoaderOptions(projectRoot: string): ResourceLoaderOptions {
+export function buildResourceLoaderOptions(projectRoot: string, kind: WorkspaceKind): ResourceLoaderOptions {
   return {
     noExtensions: true,
     noSkills: true,
     noPromptTemplates: true,
-    systemPrompt: KERNEL_PROMPT,
+    systemPrompt: KERNEL_PROMPTS[kind],
     agentsFilesOverride: () => {
       const agentsFile = readProjectAgentsFile(projectRoot);
       return { agentsFiles: agentsFile === null ? [] : [agentsFile] };

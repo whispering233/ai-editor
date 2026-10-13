@@ -10,30 +10,50 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { listTools, type ToolContext } from "@whispering233/ai-editor-tools";
-import { createCustomTools, type ProposalPayload } from "./tools.js";
+import { createCustomTools, type CreateCustomToolsOptions, type ProposalPayload } from "./tools.js";
 
 function stubContext(overrides: Partial<ToolContext> = {}): ToolContext {
   return { db: {} as ToolContext["db"], outlineDir: "/nonexistent-project", projectId: "proj-tools-test", ...overrides };
 }
 
 function findTool(name: string) {
-  const tools = createCustomTools({ toolContext: stubContext() });
+  const tools = createCustomTools({ toolContext: stubContext(), kind: "novel" });
   const tool = tools.find((candidate) => candidate.name === name);
   if (tool === undefined) throw new Error(`工具未装配: ${name}`);
   return tool;
 }
 
 describe("createCustomTools", () => {
-  it("转发 registry 全部工具（名称/描述/参数 schema 同一对象）", () => {
-    const defs = listTools();
-    const tools = createCustomTools({ toolContext: stubContext() });
-    expect(tools).toHaveLength(defs.length);
+  it("只装配属于该工作区的工具（novel + common；本卡 = 注册表全部 37 个都是 novel）", () => {
+    const defs = listTools().filter((def) => def.scope === "novel" || def.scope === "common");
+    const tools = createCustomTools({ toolContext: stubContext(), kind: "novel" });
     expect(tools.map((tool) => tool.name)).toEqual(defs.map((def) => def.name));
+    expect(tools).toHaveLength(37);
     for (const def of defs) {
       const tool = tools.find((candidate) => candidate.name === def.name);
       expect(tool?.description).toBe(def.description);
       expect(tool?.parameters).toBe(def.parameters);
     }
+  });
+
+  it("练习工作区：小说工具与提案工具一律不装配（本卡 = 空集；卡 6 落地三个练习工具）", () => {
+    const tools = createCustomTools({ toolContext: stubContext(), kind: "practice" });
+    const practiceScoped = listTools().filter((def) => def.scope === "practice" || def.scope === "common");
+    expect(tools.map((tool) => tool.name)).toEqual(practiceScoped.map((def) => def.name));
+    expect(tools.map((tool) => tool.name)).toEqual([]);
+    expect(tools.some((tool) => tool.name.startsWith("propose_"))).toBe(false);
+    // 具体点名：小说侧最常见的两类工具在练习工具面**根本不存在**
+    expect(tools.find((tool) => tool.name === "get_outline")).toBeUndefined();
+    expect(tools.find((tool) => tool.name === "propose_create_entity")).toBeUndefined();
+  });
+
+  it("缺 kind 即报错（不退化为「注册全量」；类型层已必填，此处只能用断言绕过）", () => {
+    expect(() =>
+      createCustomTools({ toolContext: stubContext() } as unknown as CreateCustomToolsOptions),
+    ).toThrow(/缺少必填入参 kind|未知工作区类型/);
+    expect(() =>
+      createCustomTools({ toolContext: stubContext(), kind: "x" } as unknown as CreateCustomToolsOptions),
+    ).toThrow(/未知工作区类型/);
   });
 });
 
@@ -45,7 +65,7 @@ describe("AUTO 工具", () => {
         join(dir, "outline.json"),
         JSON.stringify({ id: "root", type: "root", schema_version: 1, children: [] }),
       );
-      const tools = createCustomTools({ toolContext: stubContext({ outlineDir: dir }) });
+      const tools = createCustomTools({ toolContext: stubContext({ outlineDir: dir }), kind: "novel" });
       const tool = tools.find((candidate) => candidate.name === "get_outline");
       const result = await tool!.execute("call-1", {} as never, undefined, undefined, {} as never);
       const text = result.content.map((block) => (block.type === "text" ? block.text : "")).join("");
@@ -80,6 +100,7 @@ describe("PROPOSAL 工具", () => {
     const seen: Array<{ toolName: string; params: unknown; result: unknown }> = [];
     const tools = createCustomTools({
       toolContext: stubContext(),
+      kind: "novel",
       proposalSink: (input) => {
         seen.push({ toolName: input.toolName, params: input.params, result: input.result });
         return payload;

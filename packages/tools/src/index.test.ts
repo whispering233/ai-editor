@@ -3,7 +3,7 @@
 // S6.5 伏笔 5 + S6.6 提案 16 + S6.7 卡 12.9（get_chapter_text）1 + D4（get_deduction_marks）1 = 37 个；执行 13 个不暴露）；
 // workspace 依赖 @whispering233/ai-editor-db / @whispering233/ai-editor-shared 解析由 import 在编译/运行期验证
 import { describe, expect, it } from "vitest";
-import { AUTO_TOOLS, CHARACTER_PRIORITIES, CHARACTER_PRIORITY_LABELS, DEFAULT_HALF_LIFE, PROPOSAL_TOOLS } from "@whispering233/ai-editor-shared";
+import { AUTO_TOOLS, CHARACTER_PRIORITIES, CHARACTER_PRIORITY_LABELS, DEFAULT_HALF_LIFE, PROPOSAL_TOOLS, TOOL_SCOPES } from "@whispering233/ai-editor-shared";
 import * as m from "./index";
 
 describe("@whispering233/ai-editor-tools 入口冒烟", () => {
@@ -75,5 +75,54 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
   it("shared 工具目录常量与 registry 注册表同集（无遗漏 / 无多余）", () => {
     const registered = new Set(m.listTools().map((tool) => tool.name));
     expect(registered).toEqual(new Set([...AUTO_TOOLS, ...PROPOSAL_TOOLS]));
+  });
+
+ // 工具 scope（工作区作用域，2026-10）：本卡把全部 37 个既有工具标为 novel（练习工具留给后续切片）。
+ // 漏标任一工具 = 它在按 kind 过滤时归属未定（结构性边界失效）⇒ 这里逐名对账，不用「长度相等」代替。
+  it("scope 无遗漏：每个已注册工具的 scope 合法，且 novel 集合 = 既有 37 个工具（逐名相等）", () => {
+    const legacyToolNames = [
+      "analyze_consistency",
+      "analyze_hook_health",
+      "compute_state",
+      "detect_conflicts",
+      "detect_hook_conflicts",
+      "find_hook_opportunities",
+      "find_orphan_elements",
+      "get_chapter_text",
+      "get_deduction_marks",
+      "get_delta_history",
+      "get_entity",
+      "get_entity_summary",
+      "get_outline",
+      "get_outline_path",
+      "propose_abandon_hook",
+      "propose_add_delta",
+      "propose_add_relation",
+      "propose_advance_hook",
+      "propose_create_entity",
+      "propose_create_hook",
+      "propose_create_reference",
+      "propose_delete_entity",
+      "propose_delete_node",
+      "propose_move_node",
+      "propose_outline_node",
+      "propose_remove_relation",
+      "propose_reorder_timepoints",
+      "propose_resolve_hook",
+      "propose_update_entity",
+      "propose_update_hook",
+      "query_relationships",
+      "search_entities",
+      "search_references",
+      "suggest_connections",
+      "suggest_hook_payoff",
+      "trace_hook_lifecycle",
+      "trace_plot_paths",
+    ];
+    const tools = m.listTools();
+    for (const tool of tools) {
+      expect(TOOL_SCOPES, `工具 ${tool.name} 的 scope 非法`).toContain(tool.scope);
+    }
+    expect(tools.filter((tool) => tool.scope === "novel").map((tool) => tool.name)).toEqual(legacyToolNames);
   });
 });

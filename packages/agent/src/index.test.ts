@@ -22,6 +22,12 @@ describe("@whispering233/ai-editor-agent 入口冒烟", () => {
     expect(m.KERNEL_PROMPT).toContain("创作顾问");
   });
 
+  it("内核提示词按工作区类型分叉：KERNEL_PROMPTS 是唯一映射（两份常量并列维护）", () => {
+    expect(m.KERNEL_PROMPTS).toEqual({ novel: m.KERNEL_PROMPT, practice: m.PRACTICE_KERNEL_PROMPT });
+    expect(m.PRACTICE_KERNEL_PROMPT).toContain("写作陪练");
+    expect(m.PRACTICE_KERNEL_PROMPT).not.toContain("创作顾问");
+  });
+
   it("提案仓：模块级单例 + 常量（confirm/reject 路由与对话链路同仓消费）", () => {
     expect(typeof m.defaultProposalStore.clear).toBe("function");
     expect(m.PROPOSAL_TTL_MS).toBe(10 * 60_000);

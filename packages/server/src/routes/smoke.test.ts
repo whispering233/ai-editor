@@ -100,6 +100,7 @@ async function createFauxChat(): Promise<{ factory: RuntimeFactory; faux: Return
   const factory: RuntimeFactory = ({ target, sessionFile }) =>
     createProjectRuntime({
       projectRoot: target.root,
+      kind: target.kind,
       toolContext: { db: target.db, outlineDir: target.root, projectId: target.projectId },
       modelRuntime,
       model,

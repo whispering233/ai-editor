@@ -18,6 +18,7 @@ import {
   type AgentSessionServices,
 } from "@earendil-works/pi-coding-agent";
 import type { ToolContext } from "@whispering233/ai-editor-tools";
+import type { WorkspaceKind } from "@whispering233/ai-editor-shared";
 import { projectSessionsDir, resolveAgentDir } from "./paths.js";
 import { createProposalSink, defaultProposalStore, type ProposalStore } from "./proposals.js";
 import { buildResourceLoaderOptions } from "./resources.js";
@@ -37,6 +38,11 @@ export class NoModelConfiguredError extends Error {
 export interface ProjectRuntimeInput {
   /** 项目根目录（AGENTS.md 与 sessions/ 都在这里） */
   projectRoot: string;
+  /**
+   * 工作区类型（**必填**）：决定内核提示词与工具集（`docs/design/architecture.md`
+   * 「工作区类型（kind）与能力收窄」）；调用方（server）经 shared `resolveWorkspaceKind` 归一后传入。
+   */
+  kind: WorkspaceKind;
   /** 工具执行上下文（db / outlineDir / projectId） */
   toolContext: ToolContext;
   /** pi agent dir 覆盖（缺省 `~/.pi/agent`；测试隔离用） */
@@ -109,7 +115,7 @@ export async function createProjectRuntime(input: ProjectRuntimeInput): Promise<
     agentDir,
     settingsManager,
     ...(input.modelRuntime === undefined ? {} : { modelRuntime: input.modelRuntime }),
-    resourceLoaderOptions: buildResourceLoaderOptions(projectRoot),
+    resourceLoaderOptions: buildResourceLoaderOptions(projectRoot, input.kind),
   });
 
   const model = input.model ?? (await resolveDefaultModel(services.modelRuntime, settingsManager));
@@ -124,7 +130,7 @@ export async function createProjectRuntime(input: ProjectRuntimeInput): Promise<
     ...(input.thinkingLevel === undefined ? {} : { thinkingLevel: input.thinkingLevel }),
     // builtin（read/bash/edit/write…）全关：本项目不是编码 agent；领域工具是自定义工具，不受此开关影响
     noTools: "builtin",
-    customTools: createCustomTools({ toolContext: input.toolContext, proposalSink }),
+    customTools: createCustomTools({ toolContext: input.toolContext, proposalSink, kind: input.kind }),
   });
 
   return {
