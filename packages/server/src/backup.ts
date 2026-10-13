@@ -977,7 +977,7 @@ export function migratePromptToAgents(project: ProjectContext): void {
  *
  * 1. 释放当前 data.db 连接（替换 data.db 前必须；顺带清理陈旧 WAL/SHM 残留——
  * 替换后新库不得复用旧 WAL）
- * 2. writeProjectFilesFromBackup 原子替换三文件（保留当前项目 id；opts.name/opts.kind 归一）
+ * 2. writeProjectFilesFromBackup 原子替换三文件（保留当前项目 id；**传入 `opts.name` / `opts.kind` 时才归一**——restore 与云端 pull 不传 `kind`，包内值原样保留，见 `docs/design/backlog.md`「restore 路径的 kind 来源」）
  * 3. 重连 + 版本对齐（v < 当前且有迁移路径 → 前向迁移，v === 当前 → 原样。
  * 校验阶段已拒绝 v > 当前与无路径旧版，此处不会触发重建/拒绝）
  * 4. 同步内存 config（刚原子写入，readProjectFile 必非 null；损坏抛错由 catch 恢复连接）
