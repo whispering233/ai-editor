@@ -16,10 +16,10 @@
   - 范围：**两处**（只有这两处会把包写进已存在的工作区）：
     ① `restoreBackup`（`packages/server/src/backup.ts`，`POST /project/backup/restore` 与 `POST /cloud/pull` 共用）——目标 kind = `project.config.kind`；
     ② `POST /project/import` 的 **id 命中覆盖恢复**分支（`packages/server/src/routes/project.ts` 的两个子分支：命中当前打开的书 / 命中未打开的书）——目标 kind = 已拿到的 `dirKind`。
-  - 规则：写盘前比较包内 `kind`（`validateBackupPackage` **已返回**该字段，经 shared `resolveWorkspaceKind` 兜底：缺失/未知 → `novel`）与目标 kind；不等 → **400 `KIND_MISMATCH`**（文案「备份包的工作区类型（X）与当前工作区（Y）不符」）且**不写任何三文件**；相等 → 照旧（写回目标 kind）。
+  - 规则：写盘前比较包内 `kind`（`validateBackupPackage` **已返回**该字段，经 shared `resolveWorkspaceKind` 兜底：缺失/未知 → `novel`）与目标 kind；不等 → **400 `KIND_MISMATCH`**（文案「备份包的工作区类型（中文名）与当前工作区（中文名）不符」，中文名取 shared `WORKSPACE_KIND_LABELS`）且**不动三文件内容**；相等 → 照旧（写回目标 kind）。
   - 依赖：无。
   - 硬完成判据：
-    1. **restore**：包内 kind ≠ 当前 kind → 400 `KIND_MISMATCH`，三文件**字节不变**（`sha256` 比对）、练习数据行数不变；
+    1. **restore**：包内 kind ≠ 当前 kind → 400 `KIND_MISMATCH`，**三文件内容不变**（语义零触碰：不覆盖、内容与行数不变。不比字节——WAL pending 时覆盖前快照的 `wal_checkpoint` 会重写 `data.db` 字节）、练习数据行数不变；
     2. **cloud pull** 同口径（同一函数，至少一条用例，可 mock WebDAV）；
     3. **import id 命中**：两个子分支（命中当前打开 / 命中未打开）各一条 400 用例；相等 → 照旧覆盖且 kind 归一到目标目录；
     4. **旧包（缺 kind）**：→ 小说工作区正常恢复，且盘上**被补写** `kind: "novel"`；→ 练习工作区 → 400；

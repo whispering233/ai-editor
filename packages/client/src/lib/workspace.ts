@@ -4,7 +4,7 @@
 // 分区与落点判定必须在纯函数层才测得到（同 lib/shelf.ts 的理由）。
 // 左栏项集（含 JSX 图标）不在这里：见 `components/nav/nav-items.tsx`；路由守卫见
 // `lib/workspace-route-guard.ts`。
-import type { ProjectListBook, WorkspaceKind } from "@whispering233/ai-editor-shared";
+import { WORKSPACE_KIND_LABELS, type ProjectListBook, type WorkspaceKind } from "@whispering233/ai-editor-shared";
 
 /**
  * 打开工作区后的默认落点（根首页行点击 / 开机直达共用）。
@@ -17,11 +17,9 @@ export const WORKSPACE_ENTRY_PATH: Record<WorkspaceKind, string> = {
   practice: "/practice",
 };
 
-/** 根首页分区标题（服务端 `GET /project/list` 不分组，分区标题口径的唯一实现处） */
-export const WORKSPACE_SECTION_TITLE: Record<WorkspaceKind, string> = {
-  novel: "小说",
-  practice: "文风练习",
-};
+/** 根首页分区标题（取 shared `WORKSPACE_KIND_LABELS`——与服务端 `KIND_MISMATCH` 文案同一份中文名，
+ * 禁止在此手抄字面量） */
+export const WORKSPACE_SECTION_TITLE: Record<WorkspaceKind, string> = WORKSPACE_KIND_LABELS;
 
 /** 练习分区空的引导文案（DESIGN.md §根首页：空分区给一行 caption-text，不渲染空卡片） */
 export const PRACTICE_EMPTY_HINT = "还没有练习区，先新建一个";

@@ -24,7 +24,7 @@ import { closeSync, existsSync, fsyncSync, mkdirSync, mkdtempSync, openSync, rea
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { Unzip, UnzipInflate, zipSync } from "fflate";
-import { BACKUP_FREQUENCIES, DEFAULT_BACKUP_FREQUENCY_MINUTES, formatBackupFileName, MAX_BACKUPS_PER_PROJECT, MAX_BACKUP_NAME_LENGTH, parseBackupFileName, resolveWorkspaceKind, sanitizeBackupName, type BackupKind, type BackupStats, type WorkspaceKind } from "@whispering233/ai-editor-shared";
+import { BACKUP_FREQUENCIES, DEFAULT_BACKUP_FREQUENCY_MINUTES, formatBackupFileName, MAX_BACKUPS_PER_PROJECT, MAX_BACKUP_NAME_LENGTH, parseBackupFileName, resolveWorkspaceKind, sanitizeBackupName, WORKSPACE_KIND_LABELS, type BackupKind, type BackupStats, type WorkspaceKind } from "@whispering233/ai-editor-shared";
 import { PROJECT_EXPORT_FILE_NAMES } from "@whispering233/ai-editor-shared/schemas";
 import {
   AGENTS_FILE_NAME,
@@ -642,7 +642,9 @@ export function validateBackupPackage(zipData: Uint8Array): {
  * 覆盖类写包入口的工作区类型校验（2026-10 裁定 d）：包内 kind（`validateBackupPackage`
  * 已经 shared 兜底：缺失/未知 → `novel`）必须等于**目标工作区**的 kind。
  *
- * 不等 → 400 `KIND_MISMATCH`（文案与 `docs/api/error-code.md` 逐字一致），**调用方不得写任何三文件**
+ * 不等 → 400 `KIND_MISMATCH`（文案与 `docs/api/error-code.md` 逐字一致；中文名取 shared
+ * `WORKSPACE_KIND_LABELS`——`novel` / `practice` 是程序设计侧词，不出现在用户可见文案里），
+ * **调用方不得改动三文件内容**
  *（异类型包的数据形状在目标工作区没有消费面，静默成功比明确报错更糟）。
  *
  * 三处消费（`docs/design/60-practice.md`「周边管道零新增」的唯一例外）：
@@ -654,7 +656,7 @@ export function assertBackupKindMatches(packageKind: WorkspaceKind, targetKind: 
   throw new HttpError(
     400,
     "KIND_MISMATCH",
-    `备份包的工作区类型（${packageKind}）与当前工作区（${targetKind}）不符`,
+    `备份包的工作区类型（${WORKSPACE_KIND_LABELS[packageKind]}）与当前工作区（${WORKSPACE_KIND_LABELS[targetKind]}）不符`,
   );
 }
 

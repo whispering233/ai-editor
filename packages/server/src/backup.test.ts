@@ -963,7 +963,7 @@ describe("POST /project/backup/restore", () => {
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error.code).toBe("KIND_MISMATCH");
-    expect(body.error.message).toBe("备份包的工作区类型（novel）与当前工作区（practice）不符");
+    expect(body.error.message).toBe("备份包的工作区类型（小说）与当前工作区（文风练习）不符");
  // 判据 1：三文件字节不变（sha256 逐文件比对——类型校验在覆盖前快照之后，快照只可能 checkpoint data.db）
     expect(threeFileSha256(dir)).toEqual(before);
  // 练习数据行数不变（专属表直查）
@@ -1023,7 +1023,7 @@ describe("POST /project/backup/restore", () => {
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error.code).toBe("KIND_MISMATCH");
-    expect(body.error.message).toBe("备份包的工作区类型（novel）与当前工作区（practice）不符");
+    expect(body.error.message).toBe("备份包的工作区类型（小说）与当前工作区（文风练习）不符");
     expect(threeFileSha256(dir)).toEqual(before);
   });
 

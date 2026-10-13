@@ -2322,7 +2322,7 @@ describe("POST /project/import（zip 导入新书）", () => {
     expect(res.status).toBe(400);
     expect((await res.json()).error).toEqual({
       code: "KIND_MISMATCH",
-      message: "备份包的工作区类型（novel）与当前工作区（practice）不符",
+      message: "备份包的工作区类型（小说）与当前工作区（文风练习）不符",
     });
  // 零触碰：三文件字节不变、盘上数据未回滚（覆盖前快照也未生成）
     expect(diskState(practiceDir)).toEqual(before);
@@ -2385,6 +2385,35 @@ describe("POST /project/import（zip 导入新书）", () => {
     expect(existsSync(renamedDir)).toBe(false);
   });
 
+  it("id 命中未打开的书 + kind 相符：包内 name ≠ 目标目录名 → 覆盖后盘上 name 归一为目录名（目录名 = 书名不变式）", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    const bookDir = join(root, "books", "目录名");
+    initProjectDir(bookDir, { ...makeConfig("proj-imp-name-norm", "目录名"), prompt: "当前数据" });
+    const app = buildApp();
+ // 包：同 id、kind 相符（缺省 novel），但包内 name = 「包内旧名」≠ 目标目录名「目录名」
+ // ——判别「归一为目录名」与「照抄包内 name」的**唯一判别点**（既有用例的包内 name 与目录名相同，无法区分）
+    const srcDir = makeTmpDir();
+    initProjectDir(srcDir, { ...makeConfig("proj-imp-name-norm", "包内旧名"), prompt: "包内数据" });
+
+    const res = await app.request("/api/v1/project/import", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: importForm(bookZip(srcDir), "随便什么名"),
+    });
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toEqual({
+      imported: true,
+      id: "proj-imp-name-norm",
+      path: bookDir, // 按 id 定位到的目录（不是 books/包内旧名）
+      name: "目录名",
+      mode: "restored",
+    });
+ // 盘上 project.json 的 name = 目录名（包内旧名未被写回）
+    expect(readProjectFile(bookDir)?.name).toBe("目录名");
+    expect(readProjectFile(bookDir)?.prompt).toBe("包内数据"); // 数据确实随包替换（用例非空转）
+  });
+
   it("旧包（缺 kind）id 命中未打开的练习工作区 → 400 KIND_MISMATCH（缺字段即小说包）", async () => {
     const root = makeTmpDir();
     setProjectRoot(root);
@@ -2404,7 +2433,7 @@ describe("POST /project/import（zip 导入新书）", () => {
     expect(res.status).toBe(400);
     expect((await res.json()).error).toEqual({
       code: "KIND_MISMATCH",
-      message: "备份包的工作区类型（novel）与当前工作区（practice）不符",
+      message: "备份包的工作区类型（小说）与当前工作区（文风练习）不符",
     });
     expect(diskState(practiceDir)).toEqual(before);
     expect(readProjectFile(practiceDir)?.prompt).toBe("当前数据");
@@ -2435,7 +2464,7 @@ describe("POST /project/import（zip 导入新书）", () => {
     expect(res.status).toBe(400);
     expect((await res.json()).error).toEqual({
       code: "KIND_MISMATCH",
-      message: "备份包的工作区类型（practice）与当前工作区（novel）不符",
+      message: "备份包的工作区类型（文风练习）与当前工作区（小说）不符",
     });
  // 零触碰：三文件字节 + .backups/ 清单（当时打开的书不因被拒而替换/快照）
     expect(diskState(bookDir)).toEqual(before);

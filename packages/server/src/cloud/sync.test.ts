@@ -649,7 +649,7 @@ describe("pullBackup：三文件覆盖（sessions/ 是纯本地目录，不写�
     await expect(pullBackup(project, { fileName: cloud.fileName })).rejects.toMatchObject({
       code: "KIND_MISMATCH",
       status: 400,
-      message: "备份包的工作区类型（novel）与当前工作区（practice）不符",
+      message: "备份包的工作区类型（小说）与当前工作区（文风练习）不符",
     });
 
     // 三文件字节不变（sha256 逐文件比对——与本地 restore 同一函数同一口径）
