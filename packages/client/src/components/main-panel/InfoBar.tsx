@@ -1,4 +1,7 @@
 // 中栏信息条：项目名（点击进 #/overview 项目概览）+ 阅读进度（outline 树映射，点击跳 #/outline 并定位）+ 语言
+// **形态按工作区类型（`kind`）**：小说工作区 = 上面两句；练习工作区 = 项目名**纯文本（无 href）** + **无阅读进度**
+// （它没有项目概览页，`#/overview` 与 `#/outline` 都被路由守卫挡回 `#/practice`——留着就是「点了没反应」的死链），
+// 语言与小屏聊天开关两种 kind 都保留。
 // 数据源 stores/project.ts（GET /api/v1/project/config）；加载失败保持 null 显示「书架」不阻塞；
 // 阅读进度标题由 outline 树 id→title 映射（findOutlineNodeTitle）
 // 定位实现（U4 方案 A）：点击阅读进度 → ui store 设置 focusOutlineNodeId（transient）→ 跳 #/outline，
@@ -37,32 +40,50 @@ export function InfoBar({
 
   // 项目名：加载中 → 「加载中…」；未打开/加载失败 → 「书架」（无项目时所在即书架形态）
   const projectTitle = configLoading ? "加载中…" : (config?.name ?? "书架");
+  const isPractice = config?.kind === "practice";
+
+  // 项目名内容两种 kind 逐字相同（只有外层的链接形态分叉）
+  const projectName = (
+    <>
+      <AppMark />
+      <span className="truncate">{projectTitle}</span>
+    </>
+  );
 
   return (
     <div className="flex h-12 shrink-0 items-center gap-3 border-b border-border px-4">
-      {/* 项目名：点击进项目概览（与左栏书名按钮同一目标；书架入口在左栏顶部「书架」） */}
-      <a
-        href="#/overview"
-        title="打开项目概览"
-        className="flex min-w-0 items-center gap-1.5 text-base font-medium text-foreground hover:text-primary"
-      >
-        <AppMark />
-        <span className="truncate">{projectTitle}</span>
-      </a>
+      {/* 项目名：小说工作区 = 链接进项目概览（与左栏书名按钮同一目标；书架入口在左栏顶部「书架」）；
+       * 练习工作区没有概览页 ⇒ 纯文本，不挂 href（否则是死链） */}
+      {isPractice ? (
+        <span className="flex min-w-0 items-center gap-1.5 text-base font-medium text-foreground">
+          {projectName}
+        </span>
+      ) : (
+        <a
+          href="#/overview"
+          title="打开项目概览"
+          className="flex min-w-0 items-center gap-1.5 text-base font-medium text-foreground hover:text-primary"
+        >
+          {projectName}
+        </a>
+      )}
 
-      {/* 阅读进度：点击跳 #/outline 并定位该节点（U4：ui store transient focusOutlineNodeId，
+      {/* 阅读进度（小说语义：练习工作区没有 `current_position`）⇒ 仅小说工作区渲染；
+       * 点击跳 #/outline 并定位该节点（U4：ui store transient focusOutlineNodeId，
        * Outline 页消费后清除；未设置阅读进度时仅跳转不定） */}
-      <a
-        href="#/outline"
-        onClick={() => {
-          if (config?.currentPosition != null) setFocusOutlineNode(config.currentPosition);
-        }}
-        title={config?.currentPosition != null ? "跳转大纲并定位该节点" : undefined}
-        className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
-      >
-        <span className="shrink-0">阅读进度:</span>
-        <span className="truncate text-foreground">{positionTitle ?? "未设置"}</span>
-      </a>
+      {!isPractice && (
+        <a
+          href="#/outline"
+          onClick={() => {
+            if (config?.currentPosition != null) setFocusOutlineNode(config.currentPosition);
+          }}
+          title={config?.currentPosition != null ? "跳转大纲并定位该节点" : undefined}
+          className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <span className="shrink-0">阅读进度:</span>
+          <span className="truncate text-foreground">{positionTitle ?? "未设置"}</span>
+        </a>
+      )}
 
       {/* 右侧：刷新 + 语言 + 小屏聊天开关（问 AI 入口已迁至中栏右下悬浮按钮——C1） */}
       <Button
