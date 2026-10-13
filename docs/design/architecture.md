@@ -191,7 +191,7 @@ shared（纯类型/常量/工具，零 Node 依赖，可被 client 安全 tree-s
 | 表集 | 小说语义表 vs 工作区专属表 | `db` 表结构声明（单源） |
 | 工具集 | 注册进 AgentSession 的工具白名单（按工具定义的 `scope` 过滤） | `tools` 注册表 + `agent` 装配 |
 | 内核提示词 | 小说版 / 练习版 | `agent` 提示词常量 |
-| 路由守卫 | 小说语义端点 vs 练习端点（不匹配 → 400 `KIND_MISMATCH`） | `server` 中间件 |
+| 路由守卫 | 小说语义端点（entity / outline / manuscript / relation / delta / trash / names / proposal）vs 练习端点（不匹配 → 400 `KIND_MISMATCH`） | `server` 中间件 |
 | 导航与页面 | 左栏项集与路由表 | `client` 常量表 |
 
 **不变式**：

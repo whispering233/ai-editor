@@ -26,7 +26,9 @@ import { startServer, type ServerHandle } from "../index.js";
 import { errorHandler, ok } from "../middleware/error.js";
 import { requireKind } from "../middleware/kind.js";
 import { resetModelRuntime } from "../model-runtime.js";
-import { setCurrentProject } from "../middleware/project.js";
+import { getCurrentProject, setCurrentProject } from "../middleware/project.js";
+import { defaultProposalStore } from "@whispering233/ai-editor-agent";
+import { buildProposal } from "@whispering233/ai-editor-tools";
 
 const HOST_HEADERS = { host: "127.0.0.1" };
 const JSON_HEADERS = { ...HOST_HEADERS, "content-type": "application/json" };
@@ -143,6 +145,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  defaultProposalStore.clear(); // 仓为模块级单例（与调度同仓），测试间隔离
   for (const handle of handles.splice(0)) {
     await handle.close(); // 关监听 + 释放 data.db；再清单例（避免留下已关闭的连接）
   }
@@ -225,6 +228,45 @@ describe("工作区类型守卫（requireKind）", () => {
     await startWorkspace("practice"); // 切到练习工作区（单例更新）→ 同一请求放行
     const allowed = await app.request("/api/v1/practice/targets", { headers: HOST_HEADERS });
     expect(allowed.status, "练习工作区访问练习端点").toBe(200);
+  });
+});
+
+describe("proposal 路由组的工作区类型约束", () => {
+  // 端到端闭合：练习工作区上真造提案（工具面尚未按 kind 收窄，属卡 4）→ confirm 必须被守卫
+  // 挡在 handler 之前（不落 character 行、不消费提案），而非 404 PROPOSAL_NOT_FOUND。
+  it("练习工作区：真造提案 + confirm → 400 KIND_MISMATCH（不是 404，提案未被消费）", async () => {
+    const practice = await startWorkspace("practice");
+    const project = getCurrentProject()!;
+    const proposal = buildProposal(
+      { db: project.db, outlineDir: project.root, projectId: project.config.id },
+      "propose_create_entity",
+      { type: "character", name: "越权角色" },
+      [],
+      "创建实体「越权角色」（character）",
+    );
+    defaultProposalStore.set(proposal);
+
+    const res = await probe(practice, { method: "POST", path: `/api/v1/proposal/${proposal.proposal_id}/confirm` });
+    expect(res.status, "守卫先于 handler：不是 404 PROPOSAL_NOT_FOUND").toBe(400);
+    expect(res.code).toBe("KIND_MISMATCH");
+    expect(res.message).toBe(NOVEL_ONLY_MESSAGE);
+    // 提案未被消费（守卫拦在 resolveProposal / executeProposal 之前）
+    expect(defaultProposalStore.peek(proposal.proposal_id)).not.toBeNull();
+  });
+
+  it("练习工作区：不存在的 id 同样 400 KIND_MISMATCH（不是 404）", async () => {
+    const practice = await startWorkspace("practice");
+    const res = await probe(practice, { method: "POST", path: "/api/v1/proposal/nonexistent/confirm" });
+    expect(res.status).toBe(400);
+    expect(res.code).toBe("KIND_MISMATCH");
+    expect(res.message).toBe(NOVEL_ONLY_MESSAGE);
+  });
+
+  it("小说工作区：同请求保持既有 404 PROPOSAL_NOT_FOUND（守卫不改写小说侧语义）", async () => {
+    const novel = await startWorkspace("novel", novelOutline());
+    const res = await probe(novel, { method: "POST", path: "/api/v1/proposal/nonexistent/confirm" });
+    expect(res.status).toBe(404);
+    expect(res.code).toBe("PROPOSAL_NOT_FOUND");
   });
 });
 

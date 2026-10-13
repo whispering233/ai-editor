@@ -5,7 +5,7 @@
 // 1. 整组中间件 `requireKind(kind)`：挂载点**只在 `index.ts`**（每组一行
 //    `app.use("/api/v1/<组>/*", requireKind(...))`，且**必须注册在该组 `app.route` 之前**——
 //    Hono 的中间件与 handler 按注册序组合，registration 顺序错了守卫不生效）。
-//    小说语义组 = entity / outline / manuscript / relation / delta / trash / names；
+//    小说语义组 = entity / outline / manuscript / relation / delta / trash / names / proposal；
 //    通用组（project / chat / backup / cloud / settings）不挂。
 // 2. handler 内 `assertWorkspaceKind(project, kind)`：端点级粒度不够时用——目前两处：
 //    `PUT /project/config`（`current_position` / `deduction_nodes` 是小说语义**字段**，

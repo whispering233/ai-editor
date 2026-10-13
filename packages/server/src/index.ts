@@ -225,7 +225,6 @@ export async function startServer(projectRoot: string, options: StartServerOptio
  // 工作区类型守卫（卡 3）：**小说语义路由组**——练习工作区（kind = "practice"）访问 → 400 KIND_MISMATCH；
  // 通用组（settings / project / cloud / chat）不挂。每组一行，且**必须在同名 app.route 之前**
  // ——Hono 按注册序组合中间件与 handler，写在后面守卫不生效（middleware/kind.ts 有完整清单）。
- // `proposal` 组本卡不动：提案只由小说侧的 `propose_*` 工具产生（练习工作区不注册）；
  // 反向守卫（requireKind("practice")）随练习路由组一起挂载。
 
  // 设置路由（S1.3）：GET/PUT /api/v1/settings/llm（用户级配置）
@@ -268,6 +267,7 @@ export async function startServer(projectRoot: string, options: StartServerOptio
   app.route("/api/v1/chat", chatRoutes);
 
  // 提案路由（S7.5）：confirm/reject（仅内存提案 + 快照重校验 + 项目绑定）
+  app.use("/api/v1/proposal/*", requireKind("novel"));
   app.route("/api/v1/proposal", proposalRoutes);
 
  // 兜底：/api/* → JSON 404；其他 GET/HEAD → 静态文件 → SPA fallback index.html
