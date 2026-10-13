@@ -413,6 +413,11 @@
 - **块编辑器接线无自动化回归钉（卡 12.12/12.5 修复轮登记）** — 现状：`initialContent: []` 崩页与 `dictionary: zh` 两个缺陷都只有浏览器走查证据；仓内无 jsdom，组件不参与单测。触发条件：重现「改一行传参把编辑器搞崩」。可选最小修法：按 `design-discipline.test.ts` 的源码扫描风格加一条断言（如 `document-editor.tsx` 必须包含 `dictionary: zh` 且不得出现 `initialContent: []`），或引入 jsdom 只测封装组件的挂载。
 - **`document_records` 的两份 DDL 文本差一行行尾注释**（卡 12.2 oracle 登记，P3 无功能影响） — 现状：`packages/db/src/tables.ts` 的声明 DDL 在 `PRIMARY KEY (owner_kind, owner_id)` 后带 `-- 一 owner 一行（…）` 注释，`migrations/008_document_records.ts` 的迁移 DDL 无该注释；去注释后逐字相等。唯一消费该文本的是「v0 空库结构快照」（只对 `user_version === 0` 生效，已到 v8 的库不参与）。触发条件：有人想加「迁移 DDL 文本 == 声明 DDL 文本」的断言时。最小修法：把注释挪到行首或去掉（同步改两处）。
 
+- **`/chat` 请求体的 `context` 是 strip 模式（未知键静默剥离，非 400）**（卡 7 oracle 登记，低）
+  - 现状：`chatSendReqSchema` 顶层 `.strict()`，但嵌套 `context` 是普通 `z.object` ⇒ `{practice_sample_id, zzz}` 会被剥掉 `zzz` 而非拒绝。**本卡未改动该语义**（只往 `context` 加字段）；文档从未要求 `context` 拒绝未知键。
+  - 影响：无安全面问题（剥离反而保证客户端自造字段到不了注入逻辑）；仅「严格性」口径不统一。
+  - 触发条件：有人要求「未知 context 键必须 400」时；最小修法 = `context` 收紧为 `.strict()` + 同步 `docs/api/80-api-chat.md`（**不要**在别的卡里顺手改）。
+
 ## 发布前审计登记（2026-09，v0.0.52）
 
 - **REST 校验范围在 api 文档与 zod schema 两处出现（有意保留的契约镜像）** — 现状：`docs/api/*.md` 的请求体注释写明「1-100 字符」这类范围，单一来源 = shared `types/api.ts` 的 zod schema，文档是契约说明视图。触发条件：改任一校验范围时（schema 与文档同改）。**不**做「文档插值常量」——api 文档是给人读的契约，插值会降低可读性。
