@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { ProjectFileConfig } from "@whispering233/ai-editor-shared";
+import { resolveWorkspaceKind } from "@whispering233/ai-editor-shared";
 import {
   AGENTS_FILE_NAME,
   PROJECT_FILE_NAME,
@@ -68,6 +69,52 @@ describe("readProjectFile", () => {
       writeFileSync(join(dir, PROJECT_FILE_NAME), c.json, "utf8");
       expect(() => readProjectFile(dir)).toThrow(/顶层结构不符/);
     }
+  });
+});
+
+describe("readProjectFile：工作区类型（kind）读侧容忍（2026-10）", () => {
+ /** 直接写原始 project.json（绕过 ProjectFileConfig 类型，模拟存量/脏值文件） */
+  function writeRawProjectFile(json: Record<string, unknown>): void {
+    writeFileSync(
+      join(dir, PROJECT_FILE_NAME),
+      JSON.stringify({
+        id: "proj-kind",
+        name: "工作区",
+        language: "zh",
+        schema_version: 1,
+        current_position: null,
+        created_at: "2026-08-01T10:00:00Z",
+        updated_at: "2026-08-01T10:00:00Z",
+        ...json,
+      }),
+      "utf8",
+    );
+  }
+
+  it("缺 kind（旧文件）/ 非字符串 / 未知值 → 不抛错、不补键（消费点兜底 novel）", () => {
+    for (const kind of [undefined, "x", 42, null] as const) {
+      writeRawProjectFile(kind === undefined ? {} : { kind });
+      const config = readProjectFile(dir);
+      expect(config).not.toBeNull();
+ // 不补键：读侧兜底不得变成写回（补键会被 PUT /config 的 config 展开写回盘上）
+      expect(config).not.toHaveProperty("kind");
+ // 归一口径 = shared 唯一兜底函数
+      expect(resolveWorkspaceKind(config?.kind)).toBe("novel");
+    }
+  });
+
+  it("kind: \"practice\" 原样读出（合法值不被归一掉）", () => {
+    writeRawProjectFile({ kind: "practice" });
+    expect(readProjectFile(dir)?.kind).toBe("practice");
+  });
+
+  it("读回对象写回（PUT /config 展开路径）不凭空添加 kind 键", () => {
+    writeRawProjectFile({});
+    const config = readProjectFile(dir);
+    writeProjectFile(dir, { ...config!, name: "改名" });
+    const written = JSON.parse(readFileSync(join(dir, PROJECT_FILE_NAME), "utf8"));
+    expect(written.name).toBe("改名");
+    expect(written).not.toHaveProperty("kind");
   });
 });
 

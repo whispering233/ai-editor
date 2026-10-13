@@ -50,6 +50,7 @@ const CONFIG: ProjectConfig = {
   id: "p-1",
   name: "测试书",
   language: "zh",
+  kind: "novel", // 工作区类型（恒下发字段，API 形态必填）
   schemaVersion: 1,
   currentPosition: null,
   deductionNodes: [],

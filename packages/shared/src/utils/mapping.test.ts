@@ -203,6 +203,15 @@ describe("项目映射", () => {
     expect(config.backupFrequencyMinutes).toBe(10);
   });
 
+  it("kind 读侧兜底三态：缺 kind → novel；合法值原样；非字符串 / 未知值 → novel（读侧不落盘）", () => {
+    expect(mapProjectFileToConfig(file).kind).toBe("novel"); // 旧文件（无该键）
+    expect(mapProjectFileToConfig({ ...file, kind: "practice" }).kind).toBe("practice");
+    expect(mapProjectFileToConfig({ ...file, kind: "x" as never }).kind).toBe("novel");
+    expect(mapProjectFileToConfig({ ...file, kind: 42 as never }).kind).toBe("novel");
+ // 写回不因读侧兜底而凭空添加 kind 键（写侧只写显式值）
+    expect(mapConfigToProjectFile(mapProjectFileToConfig(file))).not.toHaveProperty("kind");
+  });
+
   it("backup 频率读侧语义：显式 null/0 → null（关闭）；缺失 → 10（读映射宽松、写只写显式）", () => {
     expect(mapProjectFileToConfig({ ...file, backup_frequency_minutes: null }).backupFrequencyMinutes).toBeNull();
     expect(mapProjectFileToConfig({ ...file, backup_frequency_minutes: 0 }).backupFrequencyMinutes).toBeNull();

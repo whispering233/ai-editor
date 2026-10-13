@@ -11,6 +11,7 @@ import { normalizeRelationType, relationTypeSyntaxError } from "../utils/relatio
 import { HOOK_STATUSES, PAYOFF_TIMING } from "../constants/hook.js";
 import { CONFLICT_LEVELS } from "../constants/outline.js";
 import { BACKUP_FREQUENCIES } from "../constants/backup.js";
+import { WORKSPACE_KINDS } from "../constants/workspace.js";
 import type { ComputeStateResult, DeltaRecord, EntitySummary, ProjectAgents, ProjectConfig, RelationRecord } from "./index.js";
 import type { CloudBackupEntry, CloudImportBookResult, CloudRemoteBooksResult } from "./cloud.js";
 
@@ -21,6 +22,9 @@ export const entityTypeSchema = z.enum(ENTITY_TYPES);
 
 /** 项目语言（project.json） */
 export const projectLanguageSchema = z.enum(["zh", "en"]);
+
+/** 工作区类型（project.json `kind`；枚举取值 = shared WORKSPACE_DIRS 键集） */
+export const workspaceKindSchema = z.enum(WORKSPACE_KINDS);
 
 // ============ ErrorCode（单一来源：REST / SSE / 工具共用，「错误码」） ============
 
@@ -203,6 +207,7 @@ export const projectConfigSchema: z.ZodType<ProjectConfig> = z.object({
   id: z.string(),
   name: z.string(),
   language: projectLanguageSchema,
+  kind: workspaceKindSchema, // 工作区类型（恒下发；服务端兜底后输出，旧文件缺 kind → novel）
   schemaVersion: z.number().int(), //
   currentPosition: z.string().nullable(), // 「当前位置」节点 id；null = 未设置
   deductionNodes: z.array(z.string()), // 推演节点标记（章节点 id 数组；顺序 = 可见章先序；缺字段 = [] 由读侧兜底）
@@ -219,6 +224,7 @@ export const projectCreateReqSchema = z
       .object({
         name: z.string().optional(),
         language: projectLanguageSchema.optional(),
+        kind: workspaceKindSchema.optional(), // 工作区类型（缺省 novel）；落 project.json，决定目录约定之外的工具集/提示词/导航
  // prompt 已废弃：不再接受（strict schema 传入 → 400 VALIDATION_ERROR）；
  // 项目规则改由 PUT /api/v1/project/agents 写入 
       })
@@ -279,11 +285,11 @@ export const projectDeleteResSchema = z.object({
 export type ProjectDeleteReq = z.infer<typeof projectDeleteReqSchema>;
 export type ProjectDeleteRes = z.infer<typeof projectDeleteResSchema>;
 
-// GET /api/v1/project/list（书架模式 S1.5：列出创作根 books/ 下的书，供 Dashboard 书架展示）
+// GET /api/v1/project/list（书架模式 S1.5：列出创作根各工作区目录下的工作区，供根首页书架展示）
 export const projectListResSchema = z.object({
  /** 创作根（server 启动参数 projectRoot） */
   rootPath: z.string(),
- /** books/ 下含 project.json 的书，按 updatedAt 倒序（最近更新在前） */
+ /** 各工作区目录（books/ + practice/）下含 project.json 的工作区，按 updatedAt 倒序（跨目录统一排序） */
   books: z.array(
     z.object({
  /** project.json 的 id——**项目身份**：当前书高亮 / 已打开判定一律按它，不按 name */
@@ -292,6 +298,8 @@ export const projectListResSchema = z.object({
       name: z.string(),
  /** 书目录绝对路径（books/<name>） */
       path: z.string(),
+ /** 工作区类型（旧文件缺 kind → 服务端经 shared 兜底 novel 后输出） */
+      kind: workspaceKindSchema,
  /** project.json 的 updated_at（ISO 8601，应用层写入） */
       updatedAt: z.string(),
     }),

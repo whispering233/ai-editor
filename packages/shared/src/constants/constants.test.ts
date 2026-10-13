@@ -2,6 +2,7 @@
 // 文档来源：关系类型表、hook 字段、half_life 映射、工具目录
 import { describe, expect, expectTypeOf, it } from "vitest";
 import type { EntityType } from "../types/entity.js";
+import type { WorkspaceKind } from "./workspace.js";
 import {
   ANALYSIS_TOOLS,
   AUTO_TOOLS,
@@ -11,6 +12,7 @@ import {
   CONFLICT_LEVELS,
   DEFAULT_BACKUP_FREQUENCY_MINUTES,
   DEFAULT_HALF_LIFE,
+  DEFAULT_WORKSPACE_KIND,
   ENTITY_TYPES,
   ENTITY_TYPE_LABELS,
   EXECUTOR_TOOLS,
@@ -32,6 +34,9 @@ import {
   IMMUTABLE_FIELDS,
   TOOL_NAMES,
   TOOL_PERMISSION,
+  WORKSPACE_DIRS,
+  WORKSPACE_KINDS,
+  resolveWorkspaceKind,
 } from "./index.js";
 
 describe("实体 / 关系常量", () => {
@@ -260,6 +265,28 @@ describe("工具常量", () => {
     expect(new Set(all).size).toBe(all.length);
  // 全量集合 = 各分组之和
     expect(new Set(TOOL_NAMES)).toEqual(new Set(all));
+  });
+});
+
+describe("工作区类型常量（kind，2026-10）", () => {
+  it("WORKSPACE_DIRS 为目录映射唯一定义处：novel → books、practice → practice", () => {
+    expect(WORKSPACE_DIRS).toEqual({ novel: "books", practice: "practice" });
+    expect(WORKSPACE_KINDS).toEqual(["novel", "practice"]);
+    expect(DEFAULT_WORKSPACE_KIND).toBe("novel");
+    expect(DEFAULT_WORKSPACE_KIND).toBe(WORKSPACE_KINDS[0]); // 缺省 = 目录表首键（同一份定义）
+    expectTypeOf<WorkspaceKind>().toEqualTypeOf<"novel" | "practice">();
+  });
+
+  it("resolveWorkspaceKind 唯一兜底函数：合法值原样；缺值 / 非字符串 / 未知值 → novel", () => {
+    expect(resolveWorkspaceKind("novel")).toBe("novel");
+    expect(resolveWorkspaceKind("practice")).toBe("practice");
+ // 三态兜底（旧文件缺 kind / 非法值）
+    expect(resolveWorkspaceKind(undefined)).toBe("novel");
+    expect(resolveWorkspaceKind(null)).toBe("novel");
+    expect(resolveWorkspaceKind("x")).toBe("novel");
+    expect(resolveWorkspaceKind(42)).toBe("novel");
+    expect(resolveWorkspaceKind({ kind: "practice" })).toBe("novel");
+    expect(resolveWorkspaceKind("__proto__")).toBe("novel"); // 原型链键不得被认作合法类型
   });
 });
 

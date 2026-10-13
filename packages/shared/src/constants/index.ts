@@ -7,3 +7,4 @@ export * from "./outline.js";
 export * from "./backup.js";
 export * from "./delta.js";
 export * from "./ports.js";
+export * from "./workspace.js";

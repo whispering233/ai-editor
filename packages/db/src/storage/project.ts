@@ -8,6 +8,7 @@
 import { join } from "node:path";
 import { statSync } from "node:fs";
 import type { ProjectFileConfig } from "@whispering233/ai-editor-shared";
+import { resolveWorkspaceKind } from "@whispering233/ai-editor-shared";
 import { readTextFileOrNull, writeJsonAtomic, writeTextAtomic } from "./atomic.js";
 
 /** project.json 文件名（项目根目录） */
@@ -25,6 +26,8 @@ export const AGENTS_FILE_NAME = "AGENTS.md";
  * 不存在则无法合成默认值（id 需生成、name 需取目录名，属初始化逻辑）。
  *
  * 文件存在但 JSON 损坏：**抛错**，不静默重建（同 readOutlineFile 的取舍）。
+ * 工作区类型（kind）读侧容忍：缺失 / 非字符串 / 未知值均不视为有效类型（缺失不在返回对象上补键，
+ * 避免被写回盘上），有效类型由 shared `resolveWorkspaceKind()` 在消费点兜底。
  *
  * @param dir 项目根目录
  * @returns 项目配置；文件不存在返回 null
@@ -54,7 +57,14 @@ function validateProjectFile(parsed: unknown): ProjectFileConfig {
   ) {
     throw new Error("project.json 顶层结构不符（需 {id:string, name:string, schema_version:number, ...}）");
   }
-  return parsed as ProjectFileConfig;
+  const config = parsed as ProjectFileConfig;
+ // 工作区类型（kind）读侧容忍：非字符串 / 未知值 → 剔出（不在此补缺省值）——补键会被
+ // PUT /project/config 的 config 展开写回盘上，把「只读兜底」变成静默迁移；
+ // 有效类型由 shared 的 resolveWorkspaceKind() 在各消费点（API 输出 / 目录映射 / 守卫）唯一兜底
+  if (config.kind !== undefined && resolveWorkspaceKind(config.kind) !== config.kind) {
+    delete config.kind;
+  }
+  return config;
 }
 
 /**

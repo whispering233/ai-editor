@@ -84,6 +84,7 @@ const makeConfig = (id: string): ProjectConfig => ({
   id,
   name: "我的小说",
   language: "zh",
+  kind: "novel", // 工作区类型（恒下发字段，API 形态必填）
   schemaVersion: 1,
   currentPosition: null,
   deductionNodes: [], // （推演标记字段）

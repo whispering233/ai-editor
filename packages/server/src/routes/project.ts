@@ -17,7 +17,7 @@ import {
 } from "node:fs";
 import { Hono, type Context } from "hono";
 import { strToU8, zipSync } from "fflate";
-import type { ProjectFileConfig, ProjectListBook } from "@whispering233/ai-editor-shared";
+import type { ProjectFileConfig, ProjectListBook, WorkspaceKind } from "@whispering233/ai-editor-shared";
 import {
   buildNovelChapterMarkdown,
   buildNovelExportEntries,
@@ -25,6 +25,9 @@ import {
   novelExportZipFileName,
   numberVisibleOutline,
   orderVisibleChapters,
+  resolveWorkspaceKind,
+  WORKSPACE_DIRS,
+  WORKSPACE_KINDS,
 } from "@whispering233/ai-editor-shared";
 import { SchemaVersionError, type MigrationResult, type Db } from "@whispering233/ai-editor-db";
 import { closeDatabase, openDatabase } from "@whispering233/ai-editor-db";
@@ -74,7 +77,8 @@ import { clearLastProject, writeLastProject } from "../last-project.js";
 
 // ============ 创作根（书架模式 S1.5） ============
 //
-// 语义：启动目录 = 创作根（书架），每本书 = 创作根/books/<书名>/（含 project.json 等三文件）。
+// 语义：启动目录 = 创作根（书架），每个工作区 = 创作根/<kind 目录>/<名字>/（含 project.json 等三文件）；
+// kind 目录名（novel = books/、practice = practice/）唯一定义 = shared 常量表 WORKSPACE_DIRS。
 // 创作根是 server 启动参数（index.ts startServer 的 projectRoot），与 currentProject（运行态）
 // 不同维度——list 端点**不依赖 currentProject**（书架模式待命时无当前项目也要能列书），
 // 因此以模块级状态持有，startServer 挂载路由前经 setProjectRoot 注入。
@@ -92,8 +96,8 @@ export function getProjectRoot(): string | null {
   return projectRoot;
 }
 
-/** books/ 子目录名（书架模式：创作根/books/<书名>/） */
-export const BOOKS_DIR_NAME = "books";
+/** books/ 子目录名（novel 工作区目录；取 shared 常量表，本文件不手抄字面量） */
+export const BOOKS_DIR_NAME = WORKSPACE_DIRS.novel;
 
 /**
  * 规范化并校验项目路径（create/open 通用）：
@@ -266,27 +270,38 @@ projectRoutes.post("/open", async (c) => {
   }
 });
 
-// GET /api/v1/project/list —— 书架列表（S1.5）：扫描创作根 books/ 下含 project.json 的书
+// GET /api/v1/project/list —— 书架列表（S1.5）：扫描创作根各工作区目录下含 project.json 的工作区
 projectRoutes.get("/list", (c) => {
   if (projectRoot === null) {
     throw new HttpError(500, "INTERNAL_ERROR", "创作根未初始化（startServer 未调用 setProjectRoot）");
   }
-  const booksDir = join(projectRoot, BOOKS_DIR_NAME);
- // books/ 不存在 → 空书架（不报错——新创作根首次启动的正常状态）
+  const root = projectRoot; // 局部常量：闭包内保持非空窄化
+ // 目录不存在 → 该类型暂无工作区（不报错——新建创作根首次启动的正常状态）
+  const books = WORKSPACE_KINDS.flatMap((kind) => listWorkspaceDir(kind, root))
+ // 倒序：最近更新在前（ISO 8601 字符串字典序 = 时间序）——跨两个目录统一排序
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return listResponse(c, { rootPath: root, books });
+});
+
+/**
+ * 扫描某工作区目录（创作根/<kind 目录>/）下含 project.json 的直接子目录。
+ * 目录名一律取 shared 常量表（WORKSPACE_DIRS）；`kind` 取 file 内 kind 经 shared 兜底后的值
+ *（旧文件缺 kind → novel），不取目录名——目录只决定扫描范围。
+ * 损坏的 project.json 抛错向上传播，与 open 语义一致：坏数据不静默吞。
+ */
+function listWorkspaceDir(kind: WorkspaceKind, root: string): ProjectListBook[] {
+  const kindDir = join(root, WORKSPACE_DIRS[kind]);
   let entries: Dirent[];
   try {
-    entries = readdirSync(booksDir, { withFileTypes: true });
+    entries = readdirSync(kindDir, { withFileTypes: true });
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      return listResponse(c, { rootPath: projectRoot, books: [] });
-    }
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw err;
   }
- // 过滤：仅目录 + 含 project.json（readProjectFile 探测——损坏的 project.json 抛错向上传播，
- // 与 open 语义一致：坏数据不静默吞）
-  const books = entries
+ // 过滤：仅目录 + 含 project.json（readProjectFile 探测）
+  return entries
     .filter((e) => e.isDirectory())
-    .map((e) => ({ name: e.name, dir: join(booksDir, e.name) }))
+    .map((e) => ({ name: e.name, dir: join(kindDir, e.name) }))
     .map((b) => {
       const config = readProjectFile(b.dir);
       return config === null
@@ -295,14 +310,12 @@ projectRoutes.get("/list", (c) => {
             id: config.id,
             name: b.name,
             path: b.dir,
+            kind: resolveWorkspaceKind(config.kind),
             updatedAt: config.updated_at,
           };
     })
-    .filter((b): b is ProjectListBook => b !== null)
- // 倒序：最近更新在前（ISO 8601 字符串字典序 = 时间序）
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  return listResponse(c, { rootPath: projectRoot, books });
-});
+    .filter((b): b is ProjectListBook => b !== null);
+}
 
 /**
  * list 响应统一出口：经 projectListResSchema 自检后返回（oracle 审核建议 1——

@@ -1,5 +1,7 @@
 // 项目配置类型：API 形态（camelCase）+ project.json 存储形态（snake_case）两套
 
+import type { WorkspaceKind } from "../constants/workspace.js";
+
 /** 项目语言 */
 export type ProjectLanguage = "zh" | "en";
 
@@ -12,6 +14,11 @@ export interface ProjectConfig {
   id: string;
   name: string;
   language: ProjectLanguage;
+ /**
+ * 工作区类型（**恒下发**，2026-10）：服务端经 shared `resolveWorkspaceKind` 兜底后输出，
+ * 客户端不二次兜底。决定目录映射（`books/` / `practice/`）、AI 工具集与提示词、导航
+ */
+  kind: WorkspaceKind;
  /** schema 版本（对应 project.json 的 schema_version） */
   schemaVersion: number;
  /** 大纲「当前位置」节点 id（伏笔健康指标依赖）；null = 未设置 */
@@ -32,6 +39,13 @@ export interface ProjectFileConfig {
   id: string;
   name: string;
   language: ProjectLanguage;
+ /**
+ * 工作区类型（**可选字段**，2026-10）：存量文件缺该键 / 值为未知值 → 读侧兜底 `novel`
+ *（shared `resolveWorkspaceKind`，非本字段的消费点各自兜底 = 多处口径）。
+ * 写侧：仅创建时显式写入；`PUT /project/config` 不接受修改（改 kind 会破坏目录语义），
+ * 读侧兜底**不落盘**（不因读取把缺省值补进存量文件）
+ */
+  kind?: WorkspaceKind;
  /**
  * **已废弃**：项目级提示词——不再读写；项目规则改由项目目录 承载。
  * 旧文件中的残留字段宽松读取（不参与 schema_version 判定），新写入不再产生该字段

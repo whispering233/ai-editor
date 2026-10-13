@@ -20,6 +20,7 @@ import type {
 } from "../types/outline.js";
 import type { ProjectConfig, ProjectFileConfig } from "../types/project.js";
 import { DEFAULT_BACKUP_FREQUENCY_MINUTES } from "../constants/backup.js";
+import { resolveWorkspaceKind } from "../constants/workspace.js";
 
 /** 单层键映射：snake_case → camelCase（仅用于顶层字段，不递归 data） */
 export function snakeToCamelKey(key: string): string {
@@ -246,13 +247,14 @@ function resolveBackupFrequencyMinutes(value: number | null | undefined): number
   return value;
 }
 
-/** ProjectFileConfig → ProjectConfig（schema_version → schemaVersion、current_position → currentPosition、backup 频率读侧兜底；
+/** ProjectFileConfig → ProjectConfig（schema_version → schemaVersion、current_position → currentPosition、backup 频率读侧兜底、kind 读侧兜底；
  * `prompt` 已废弃不再映射——项目规则唯一事实源改为项目目录） */
 export function mapProjectFileToConfig(file: ProjectFileConfig): ProjectConfig {
   return {
     id: file.id,
     name: file.name,
     language: file.language,
+    kind: resolveWorkspaceKind(file.kind), // 缺 kind / 未知值 → 缺省 novel（读侧兜底，不落盘）
     schemaVersion: file.schema_version,
     currentPosition: file.current_position,
     deductionNodes: file.deduction_nodes ?? [], // 旧文件缺字段 → 空数组（读侧兜底，不落盘）
@@ -263,7 +265,8 @@ export function mapProjectFileToConfig(file: ProjectFileConfig): ProjectConfig {
 }
 
 /** ProjectConfig → ProjectFileConfig（全量映射：backup_frequency_minutes / deduction_nodes 恒写入——本函数非 patch 路径，
- * 写全对象即显式；`prompt` 已废弃不再写出——新写入不再产生该字段） */
+ * 写全对象即显式；`prompt` 已废弃不再写出——新写入不再产生该字段）。
+ * **`kind` 不在此映射**：工作区类型只在创建时显式写入，读侧兜底不回写（见 ProjectFileConfig.kind） */
 export function mapConfigToProjectFile(config: ProjectConfig): ProjectFileConfig {
   return {
     id: config.id,

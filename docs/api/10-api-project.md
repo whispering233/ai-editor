@@ -158,6 +158,8 @@
   id: string;
   name: string;
   language: "zh" | "en";
+  kind: "novel" | "practice";  // 工作区类型（**恒下发**）：服务端经 shared resolveWorkspaceKind 兜底后输出——
+                               //   旧 project.json 缺 kind / 未知值 → "novel"（客户端不二次兜底）
   // prompt 字段已废弃：不再返回——项目规则唯一事实源改为项目目录 AGENTS.md
   // （见 GET /api/v1/project/agents）；旧 project.json 中的 prompt 残留字段不再读取
   schemaVersion: number;     // schema 版本（对应 project.json 的 schema_version）

@@ -262,6 +262,65 @@ describe("POST /project/create", () => {
     expect((await res.json()).error.code).toBe("VALIDATION_ERROR");
   });
 
+  it("工作区类型（kind）：不传 → project.json 显式写 novel；GET /config 读回 novel", async () => {
+    const dir = makeTmpDir();
+    const app = buildApp();
+    const res = await app.request("/api/v1/project/create", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: dir }),
+    });
+    expect(res.status).toBe(200);
+ // 新文件恒带 kind 键（创建时显式写入，不是读侧兜底落盘）
+    expect(JSON.parse(readFileSync(join(dir, "project.json"), "utf8")).kind).toBe("novel");
+
+    await app.request("/api/v1/project/open", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: dir }),
+    });
+    const cfg = await app.request("/api/v1/project/config", { headers: HOST_HEADERS });
+    expect((await cfg.json()).data.kind).toBe("novel");
+  });
+
+  it("工作区类型（kind）：config.kind = practice → project.json 写 practice；GET /config 读回 practice", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    const dir = join(root, "practice", "仿写练习");
+    const app = buildApp();
+    const res = await app.request("/api/v1/project/create", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: dir, config: { name: "仿写练习", kind: "practice" } }),
+    });
+    expect(res.status).toBe(200);
+    expect(readProjectFile(dir)?.kind).toBe("practice");
+
+    const openRes = await app.request("/api/v1/project/open", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: dir }),
+    });
+ // open 响应内的 config 也带 kind
+    expect((await openRes.json()).data.config.kind).toBe("practice");
+    const cfg = await app.request("/api/v1/project/config", { headers: HOST_HEADERS });
+    expect((await cfg.json()).data.kind).toBe("practice");
+  });
+
+  it("create config 传非法 kind → 400 VALIDATION_ERROR（枚举限 novel / practice）", async () => {
+    const dir = makeTmpDir();
+    const res = await buildApp().request("/api/v1/project/create", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: dir, config: { kind: "x" } }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      success: false,
+      error: { code: "VALIDATION_ERROR", message: expect.any(String), fields: ["config.kind"] },
+    });
+  });
+
   it("目录已是项目（含 project.json）→ 409 PROJECT_ALREADY_EXISTS（create 不幂等复用）", async () => {
     const dir = makeTmpDir();
     writeProjectFile(dir, makeConfig("proj-1", "已有"));
@@ -340,6 +399,7 @@ describe("POST /project/open", () => {
       id: "proj-9",
       name: "我的小说",
       language: "zh",
+      kind: "novel", // 旧文件缺 kind → 读侧兜底缺省
       schemaVersion: SCHEMA_VERSION,
       currentPosition: "sc-1",
       deductionNodes: [], // 旧文件缺字段 → 读侧兜底空数组
@@ -680,6 +740,7 @@ describe("GET/PUT /project/config", () => {
         id: "proj-cfg",
         name: "配置项目",
         language: "zh",
+        kind: "novel", // makeConfig 缺 kind → 读侧兜底缺省
         schemaVersion: SCHEMA_VERSION,
         currentPosition: null,
         deductionNodes: [], // makeConfig 缺字段 → 读侧兜底空数组
@@ -688,6 +749,62 @@ describe("GET/PUT /project/config", () => {
         updatedAt: T0,
       },
     });
+  });
+
+  it("kind 读侧兜底：存量文件缺 kind → novel；非法值（\"x\" / 数字）同样 novel；PUT 无关字段不把 kind 写盘", async () => {
+    const cases: Array<{ label: string; raw?: unknown }> = [
+      { label: "缺 kind（旧文件）" },
+      { label: "kind 未知值", raw: "x" },
+      { label: "kind 非字符串", raw: 42 },
+    ];
+    for (const c of cases) {
+      const dir = makeTmpDir();
+      initProjectDir(dir, makeConfig("proj-kind-fb", "兜底项目"));
+ // 绕过 ProjectFileConfig 类型直接写盘：模拟存量（无该键）/ 脏值 project.json
+      writeFileSync(
+        join(dir, PROJECT_FILE_NAME),
+        JSON.stringify({ ...makeConfig("proj-kind-fb", "兜底项目"), ...(c.raw === undefined ? {} : { kind: c.raw }) }),
+        "utf8",
+      );
+      const app = buildApp();
+      const opened = await app.request("/api/v1/project/open", {
+        method: "POST",
+        headers: HOST_HEADERS,
+        body: JSON.stringify({ path: dir }),
+      });
+      expect(opened.status).toBe(200);
+      expect((await opened.json()).data.config.kind, c.label).toBe("novel");
+      const getRes = await app.request("/api/v1/project/config", { headers: HOST_HEADERS });
+      expect((await getRes.json()).data.kind, c.label).toBe("novel");
+ // 写侧只写显式：PUT 无关字段不把兜底值（或脏值）写回盘
+      const putRes = await app.request("/api/v1/project/config", {
+        method: "PUT",
+        headers: HOST_HEADERS,
+        body: JSON.stringify({ name: "改名不动 kind" }),
+      });
+      expect(putRes.status).toBe(200);
+      const file = readProjectFile(dir);
+      expect(file?.name, c.label).toBe("改名不动 kind");
+ // kind 不被凭空添加，也不把脏值写回
+      expect(file, c.label).not.toHaveProperty("kind");
+    }
+  });
+
+  it("PUT /config 传 kind → 400 VALIDATION_ERROR（strict 拒绝：改 kind 会破坏目录语义）", async () => {
+    const dir = makeTmpDir();
+    const app = await openProject(dir);
+    const res = await app.request("/api/v1/project/config", {
+      method: "PUT",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ kind: "practice" }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      success: false,
+      error: { code: "VALIDATION_ERROR", message: expect.stringContaining("kind"), fields: expect.any(Array) },
+    });
+ // 盘上 kind 不被写入（无当前项目 kind 变更，拒绝的 PUT 不留痕）
+    expect(readProjectFile(dir)).not.toHaveProperty("kind");
   });
 
   it("PUT 更新 name/language → updated:true，GET 读回新值，project.json updated_at 刷新", async () => {
@@ -1272,16 +1389,27 @@ describe(" 自动迁移", () => {
 
 // ============ GET /api/v1/project/list（书架模式 S1.5） ============
 
-describe("GET /project/list（书架：创作根 books/ 扫描）", () => {
- /** 在创作根下造一本书（books/<name>/ 含 project.json，updated_at 可控） */
-  function seedBook(root: string, name: string, updatedAt: string): string {
-    const dir = join(root, "books", name);
+describe("GET /project/list（书架：创作根各工作区目录扫描）", () => {
+ /** 在创作根下造一个工作区（<目录>/<name>/ 含 project.json，updated_at 可控；kind 可显式给） */
+  function seedWorkspace(
+    root: string,
+    dirName: string,
+    name: string,
+    updatedAt: string,
+    kind?: ProjectFileConfig["kind"],
+  ): string {
+    const dir = join(root, dirName, name);
     mkdirSync(dir, { recursive: true });
-    writeProjectFile(dir, { ...makeConfig(`proj-${name}`, name), updated_at: updatedAt });
+    writeProjectFile(dir, { ...makeConfig(`proj-${name}`, name), ...(kind === undefined ? {} : { kind }), updated_at: updatedAt });
     return dir;
   }
 
-  it("books/ 下两本书 → 返回两条（id/name/path/updatedAt），按 updatedAt 倒序", async () => {
+ /** 小说工作区（books/<name>/） */
+  function seedBook(root: string, name: string, updatedAt: string): string {
+    return seedWorkspace(root, "books", name, updatedAt);
+  }
+
+  it("books/ 下两本书 → 返回两条（id/name/path/kind/updatedAt），按 updatedAt 倒序", async () => {
     const root = makeTmpDir();
     setProjectRoot(root);
     seedBook(root, "第一本", "2026-08-01T10:00:00Z");
@@ -1293,12 +1421,66 @@ describe("GET /project/list（书架：创作根 books/ 扫描）", () => {
     expect(body.success).toBe(true);
     expect(body.data.rootPath).toBe(root);
     expect(body.data.books).toEqual([
-      { id: "proj-第二本", name: "第二本", path: join(root, "books", "第二本"), updatedAt: "2026-08-02T10:00:00Z" },
-      { id: "proj-第一本", name: "第一本", path: join(root, "books", "第一本"), updatedAt: "2026-08-01T10:00:00Z" },
+      {
+        id: "proj-第二本",
+        name: "第二本",
+        path: join(root, "books", "第二本"),
+        kind: "novel",
+        updatedAt: "2026-08-02T10:00:00Z",
+      },
+      {
+        id: "proj-第一本",
+        name: "第一本",
+        path: join(root, "books", "第一本"),
+        kind: "novel",
+        updatedAt: "2026-08-01T10:00:00Z",
+      },
     ]);
   });
 
-  it("books/ 不存在 → 空数组（不报错），rootPath 仍返回创作根", async () => {
+  it("两个工作区目录各一个 → 都列出且各带 kind，跨目录按 updatedAt 统一倒序", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+ // 小说区旧、练习区新 → 练习区排前（跨目录统一排序，服务端不分组）
+    seedWorkspace(root, "books", "旧小说", "2026-08-01T10:00:00Z");
+    seedWorkspace(root, "practice", "仿写练习", "2026-08-03T10:00:00Z", "practice");
+
+    const res = await buildApp().request("/api/v1/project/list", { headers: HOST_HEADERS });
+    expect(res.status).toBe(200);
+    expect((await res.json()).data.books).toEqual([
+      {
+        id: "proj-仿写练习",
+        name: "仿写练习",
+        path: join(root, "practice", "仿写练习"),
+        kind: "practice",
+        updatedAt: "2026-08-03T10:00:00Z",
+      },
+      {
+        id: "proj-旧小说",
+        name: "旧小说",
+        path: join(root, "books", "旧小说"),
+        kind: "novel",
+        updatedAt: "2026-08-01T10:00:00Z",
+      },
+    ]);
+  });
+
+  it("practice/ 下存量文件缺 kind → 服务端兜底按 novel 输出（读侧口径）", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    seedWorkspace(root, "practice", "无 kind 练习", "2026-08-01T10:00:00Z"); // 不传 kind
+
+    const res = await buildApp().request("/api/v1/project/list", { headers: HOST_HEADERS });
+    expect((await res.json()).data.books[0]).toEqual({
+      id: "proj-无 kind 练习",
+      name: "无 kind 练习",
+      path: join(root, "practice", "无 kind 练习"),
+      kind: "novel",
+      updatedAt: "2026-08-01T10:00:00Z",
+    });
+  });
+
+  it("两目录均不存在 → 空数组（不报错），rootPath 仍返回创作根", async () => {
     const root = makeTmpDir();
     setProjectRoot(root);
     const res = await buildApp().request("/api/v1/project/list", { headers: HOST_HEADERS });
@@ -1306,17 +1488,24 @@ describe("GET /project/list（书架：创作根 books/ 扫描）", () => {
     expect(await res.json()).toEqual({ success: true, data: { rootPath: root, books: [] } });
   });
 
-  it("非书目录（无 project.json）与普通文件被过滤", async () => {
+  it("非工作区目录（无 project.json）与普通文件被过滤（两个目录同口径）", async () => {
     const root = makeTmpDir();
     setProjectRoot(root);
     seedBook(root, "真书", "2026-08-01T10:00:00Z");
     mkdirSync(join(root, "books", "草稿箱"), { recursive: true }); // 无 project.json
     writeFileSync(join(root, "books", "笔记.txt"), "不是书", "utf8"); // 非目录
+    mkdirSync(join(root, "practice", "空练习区"), { recursive: true }); // 无 project.json
 
     const res = await buildApp().request("/api/v1/project/list", { headers: HOST_HEADERS });
     const body = await res.json();
     expect(body.data.books).toEqual([
-      { id: "proj-真书", name: "真书", path: join(root, "books", "真书"), updatedAt: "2026-08-01T10:00:00Z" },
+      {
+        id: "proj-真书",
+        name: "真书",
+        path: join(root, "books", "真书"),
+        kind: "novel",
+        updatedAt: "2026-08-01T10:00:00Z",
+      },
     ]);
   });
 
@@ -1330,7 +1519,7 @@ describe("GET /project/list（书架：创作根 books/ 扫描）", () => {
     expect((await res.json()).data.books).toHaveLength(1);
   });
 
-  it("创作根自身有 project.json 时，list 仍只列 books/（根自身不是书，兼容旧语义）", async () => {
+  it("创作根自身有 project.json 时，list 仍只列工作区目录（根自身不是工作区，兼容旧语义）", async () => {
     const root = makeTmpDir();
     setProjectRoot(root);
  // 根自身是旧语义项目（含 project.json）
@@ -1339,9 +1528,15 @@ describe("GET /project/list（书架：创作根 books/ 扫描）", () => {
 
     const res = await buildApp().request("/api/v1/project/list", { headers: HOST_HEADERS });
     const body = await res.json();
- // 根自身不出现在 books 列表（books 只列 books/ 子目录）
+ // 根自身不出现在 books 列表（books 只列工作区子目录）
     expect(body.data.books).toEqual([
-      { id: "proj-书架上的书", name: "书架上的书", path: join(root, "books", "书架上的书"), updatedAt: "2026-08-01T10:00:00Z" },
+      {
+        id: "proj-书架上的书",
+        name: "书架上的书",
+        path: join(root, "books", "书架上的书"),
+        kind: "novel",
+        updatedAt: "2026-08-01T10:00:00Z",
+      },
     ]);
   });
 
@@ -1368,14 +1563,20 @@ describe("GET /project/list（书架：创作根 books/ 扫描）", () => {
  // 三文件已创建（create 语义不回归）
     expect(readProjectFile(bookDir)?.name).toBe("联动书");
 
- // list 扫到该书：id/name/path/updatedAt 与盘上 project.json 一致（不依赖 open/currentProject）
+ // list 扫到该书：id/name/path/kind/updatedAt 与盘上 project.json 一致（不依赖 open/currentProject）
     const listRes = await app.request("/api/v1/project/list", { headers: HOST_HEADERS });
     expect(listRes.status).toBe(200);
     const body = await listRes.json();
     expect(body.data.rootPath).toBe(root);
- // 项目身份按 id 回传（不按 name）
+ // 项目身份按 id 回传（不按 name）；kind = 创建时写入的缺省 novel
     expect(body.data.books).toEqual([
-      { id: readProjectFile(bookDir)?.id, name: "联动书", path: bookDir, updatedAt: readProjectFile(bookDir)?.updated_at },
+      {
+        id: readProjectFile(bookDir)?.id,
+        name: "联动书",
+        path: bookDir,
+        kind: "novel",
+        updatedAt: readProjectFile(bookDir)?.updated_at,
+      },
     ]);
 
  // 再建一本 → 仍可扫到（两本）

@@ -15,7 +15,7 @@ import { basename, join } from "node:path";
 import { mkdirSync } from "node:fs";
 import type { Context, MiddlewareHandler } from "hono";
 import type { ProjectFileConfig } from "@whispering233/ai-editor-shared";
-import { generateProjectId, DEFAULT_BACKUP_FREQUENCY_MINUTES } from "@whispering233/ai-editor-shared";
+import { generateProjectId, DEFAULT_BACKUP_FREQUENCY_MINUTES, resolveWorkspaceKind } from "@whispering233/ai-editor-shared";
 import { closeDatabase, openDatabase, setUserVersion, type Db } from "@whispering233/ai-editor-db";
 import { ensureSchemaCompatible, SchemaVersionError, type MigrationResult } from "@whispering233/ai-editor-db";
 import { readProjectFile, writeProjectFile } from "@whispering233/ai-editor-db";
@@ -200,7 +200,7 @@ function logStartupOpenFailure(root: string, err: unknown): void {
  */
 export function initProject(
   root: string,
-  configOverride?: Partial<Pick<ProjectFileConfig, "name" | "language">>,
+  configOverride?: Partial<Pick<ProjectFileConfig, "name" | "language" | "kind">>,
 ): ProjectContext {
   mkdirSync(root, { recursive: true });
   const now = nowIso();
@@ -214,7 +214,10 @@ export function initProject(
     backup_frequency_minutes: DEFAULT_BACKUP_FREQUENCY_MINUTES,
     created_at: now,
     updated_at: now,
-    ...configOverride, // 覆盖参数（若有）；updated_at 已含当前时间
+    ...configOverride, // 覆盖参数 name / language（若有）；updated_at 已含当前时间
+ // 工作区类型：创建时**显式写入**（缺省 novel）——存量文件缺 kind 的读侧兜底不落盘，
+ // 新文件恒带该键；归一唯一入口 = shared resolveWorkspaceKind
+    kind: resolveWorkspaceKind(configOverride?.kind),
   };
   writeProjectFile(root, config);
   writeOutlineFile(root, { id: "root", type: "root", schema_version: SCHEMA_VERSION, children: [] });

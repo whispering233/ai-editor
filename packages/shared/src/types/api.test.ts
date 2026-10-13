@@ -36,6 +36,7 @@ import {
   projectAgentsPutResSchema,
   projectConfigSchema,
   projectConfigUpdateReqSchema,
+  projectCreateReqSchema,
   projectImportResSchema,
   projectListResSchema,
   relationCreateReqSchema,
@@ -92,6 +93,7 @@ describe("project 端点", () => {
       id: "proj-1",
       name: "我的小说",
       language: "zh",
+      kind: "novel",
       schemaVersion: 1,
       currentPosition: "sc-42",
       deductionNodes: [],
@@ -100,6 +102,30 @@ describe("project 端点", () => {
       updatedAt: "2026-08-01T10:00:00Z",
     });
     expect(config.currentPosition).toBe("sc-42");
+  });
+
+  it("projectConfigSchema：kind 必填且限枚举（恒下发；两值均合法，缺值 / 未知值拒绝）", () => {
+    expect(projectConfigSchema.parse(validConfig()).kind).toBe("novel");
+    expect(projectConfigSchema.parse({ ...validConfig(), kind: "practice" }).kind).toBe("practice");
+    expect(projectConfigSchema.safeParse({ ...validConfig(), kind: "x" }).success).toBe(false);
+    const withoutKind = { ...validConfig() } as Record<string, unknown>;
+    delete withoutKind.kind;
+    expect(projectConfigSchema.safeParse(withoutKind).success).toBe(false); // 缺 kind（响应形态必填）
+  });
+
+  it("projectConfigUpdateReqSchema：不接受 kind（strict 拒绝——改 kind 会破坏目录语义）", () => {
+    expect(projectConfigUpdateReqSchema.safeParse({ kind: "practice" }).success).toBe(false);
+    expect(projectConfigUpdateReqSchema.safeParse({ name: "x", kind: "novel" }).success).toBe(false);
+  });
+
+  it("projectCreateReqSchema：config 可选，config.kind 可选且限枚举（缺省 novel）；未知字段 strict 拒绝", () => {
+    expect(projectCreateReqSchema.parse({ path: "/x" }).config).toBeUndefined();
+    expect(projectCreateReqSchema.parse({ path: "/x", config: { name: "练习区", kind: "practice" } })).toEqual({
+      path: "/x",
+      config: { name: "练习区", kind: "practice" },
+    });
+    expect(projectCreateReqSchema.safeParse({ path: "/x", config: { kind: "x" } }).success).toBe(false);
+    expect(projectCreateReqSchema.safeParse({ path: "/x", config: { kind: "novel", extra: 1 } }).success).toBe(false);
   });
 
   it("projectConfigUpdateReqSchema：prompt 已废弃strict 拒绝", () => {
@@ -211,38 +237,62 @@ describe("project 端点", () => {
     const res = projectListResSchema.parse({
       rootPath: "/home/me/bookshelf",
       books: [
-        { id: "proj-2", name: "第二本", path: "/home/me/bookshelf/books/第二本", updatedAt: "2026-08-02T10:00:00Z" },
-        { id: "proj-1", name: "第一本", path: "/home/me/bookshelf/books/第一本", updatedAt: "2026-08-01T10:00:00Z" },
+        { id: "proj-2", name: "第二本", path: "/home/me/bookshelf/books/第二本", kind: "novel", updatedAt: "2026-08-02T10:00:00Z" },
+        { id: "proj-1", name: "第一本", path: "/home/me/bookshelf/books/第一本", kind: "novel", updatedAt: "2026-08-01T10:00:00Z" },
       ],
     });
     expect(res.rootPath).toBe("/home/me/bookshelf");
     expect(res.books).toHaveLength(2);
     expect(res.books[0].name).toBe("第二本");
     expect(res.books[0].id).toBe("proj-2");
+    expect(res.books[0].kind).toBe("novel");
   });
 
-  it("projectListResSchema：books 为空数组合法；缺字段（id / name / path / updatedAt）/ 类型不符拒绝", () => {
+  it("projectListResSchema：books 为空数组合法；缺字段（id / name / path / kind / updatedAt）/ 类型不符拒绝", () => {
  // 空书架合法
     expect(projectListResSchema.parse({ rootPath: "/x", books: [] }).books).toEqual([]);
+ // 工作区类型（kind）必填：练习工作区原样过（分区渲染由客户端做）
+    expect(
+      projectListResSchema.parse({
+        rootPath: "/x",
+        books: [
+          { id: "proj-p", name: "练习区", path: "/x/practice/练习区", kind: "practice", updatedAt: "2026-08-01T10:00:00Z" },
+        ],
+      }).books[0].kind,
+    ).toBe("practice");
+ // 书缺 kind → 拒绝（服务端兜底后恒下发；缺值 = 服务端 bug）
+    expect(
+      projectListResSchema.safeParse({
+        rootPath: "/x",
+        books: [{ id: "proj-1", name: "书", path: "/x/books/书", updatedAt: "2026-08-01T10:00:00Z" }],
+      }).success,
+    ).toBe(false);
+ // kind 未知值 → 拒绝
+    expect(
+      projectListResSchema.safeParse({
+        rootPath: "/x",
+        books: [{ id: "proj-1", name: "书", path: "/x/books/书", kind: "x", updatedAt: "2026-08-01T10:00:00Z" }],
+      }).success,
+    ).toBe(false);
  // 书缺 updatedAt → 拒绝
     expect(
       projectListResSchema.safeParse({
         rootPath: "/x",
-        books: [{ id: "proj-1", name: "书", path: "/x/books/书" }],
+        books: [{ id: "proj-1", name: "书", path: "/x/books/书", kind: "novel" }],
       }).success,
     ).toBe(false);
  // 书缺 id（项目身份，不得缺失）→ 拒绝
     expect(
       projectListResSchema.safeParse({
         rootPath: "/x",
-        books: [{ name: "书", path: "/x/books/书", updatedAt: "2026-08-01T10:00:00Z" }],
+        books: [{ name: "书", path: "/x/books/书", kind: "novel", updatedAt: "2026-08-01T10:00:00Z" }],
       }).success,
     ).toBe(false);
  // id 非 string → 拒绝
     expect(
       projectListResSchema.safeParse({
         rootPath: "/x",
-        books: [{ id: 1, name: "书", path: "/x/books/书", updatedAt: "2026-08-01T10:00:00Z" }],
+        books: [{ id: 1, name: "书", path: "/x/books/书", kind: "novel", updatedAt: "2026-08-01T10:00:00Z" }],
       }).success,
     ).toBe(false);
  // rootPath 非 string → 拒绝
@@ -770,6 +820,7 @@ function validConfig() {
     id: "proj-1",
     name: "我的小说",
     language: "zh" as const,
+    kind: "novel" as const, // 工作区类型（恒下发字段）
     schemaVersion: 1,
     currentPosition: "sc-42",
     deductionNodes: [], // （推演标记字段）
