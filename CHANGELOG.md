@@ -9,7 +9,13 @@
 
 ## [Unreleased]
 
-## [v0.0.58] - 2026-10-16 — 作家文风练习（一位作家一个工作区）
+## [v0.0.59] - 2026-10-16 — 安装态修复（pi 传递依赖解析锁 + 发布冒烟脚本竞态）
+
+### Fixed
+
+- **安装态无法启动：pin 住 pi 的传递依赖 `pi-codemode`**（`packages/agent` 新增直接依赖 `@earendil-works/pi-codemode: "1.0.4"`）。上游在 `pi-codemode@1.2.0` 移除了 `MCP_TYPESCRIPT_PREAMBLE` 导出，而 `pi-coding-agent@1.0.4` 对它的声明是 `^1.0.4` ⇒ **无锁的 `npm install` 会解到 1.3.0，server 一启动即 `SyntaxError: ... does not provide an export named 'MCP_TYPESCRIPT_PREAMBLE'`**。本仓因 `pnpm-lock.yaml` 锁在 1.0.4 而本地全绿——这类破坏只在「消费者全新安装」里显现，故验收只能靠无锁安装冒烟（`pnpm pack:test` + `pnpm start:test` / CI `verify-installed`）。**v0.0.58 的 5 个 npm 包因此不可用**（已 `npm deprecate` 指向本版；同时发布的 Windows 安装包不受影响——桌面打包走 `pnpm deploy`，用的是锁文件里的 1.0.4）。
+- **`scripts/verify-installed.mjs` 的退出竞态把整条 Publish 判成失败**：等待子进程退出用的是裸 `await new Promise((r) => child.once("exit", r))`——若子进程在注册监听前就已退出，事件被错过 ⇒ top-level await 永不 settle，Node 以退出码 13 结束（v0.0.58 实录：五包已成功发布、安装态已验，却因这一步红）。现改为「先判 `exitCode` / `signalCode` 已退出则直接放行 + SIGTERM 后 `SMOKE_KILL_TIMEOUT_MS` 内未退则 SIGKILL 兜底」；`readServerVersion()` 的 `readFile` / `JSON.parse` 也补了带路径的可读错误。
+
 
 ### Added
 
