@@ -33,16 +33,29 @@ const READY_MARKER = "服务已启动";
 /** 冒烟等待超时（毫秒）；启动含 better-sqlite3 原生加载，给足余量 */
 const SMOKE_TIMEOUT_MS = 20_000;
 
+/** SIGTERM 后等待子进程退出的上限；超时则 SIGKILL 并放行（不让 CI 卡死） */
+const SMOKE_KILL_TIMEOUT_MS = 5_000;
+
 /** 发布包名后缀（server 依赖其余 4 包，install 需全部可见；与 publish-packages.mjs 同序） */
 const PUBLISHED_PACKAGES = ["shared", "db", "tools", "agent", "server"];
 /** 可见性轮询：最多 20 次 × 30s = 10 分钟窗口（v0.0.6 实录：传播最慢超 5 分钟） */
 const VISIBILITY_POLLS = 20;
 const VISIBILITY_POLL_INTERVAL_MS = 30_000;
 
-/** 读取 server 包版本（spec：ESM 下 readFile + JSON.parse） */
+/** 读取 server 包版本（spec：ESM 下 readFile + JSON.parse）；读不出 / JSON 坏了 → 抛带路径的错误 */
 function readServerVersion() {
-  const raw = readFileSync(join(workspaceRoot, "packages", "server", "package.json"), "utf-8");
-  return JSON.parse(raw).version;
+  const path = join(workspaceRoot, "packages", "server", "package.json");
+  let raw;
+  try {
+    raw = readFileSync(path, "utf-8");
+  } catch (error) {
+    throw new Error(`读不到 server 包 package.json（${path}）：${String(error)}`);
+  }
+  try {
+    return JSON.parse(raw).version;
+  } catch (error) {
+    throw new Error(`server 包 package.json 不是合法 JSON（${path}）：${String(error)}`);
+  }
 }
 
 function assert(cond, message) {
@@ -166,7 +179,23 @@ try {
   });
 
   child.kill("SIGTERM");
-  await new Promise((r) => child.once("exit", r));
+  // 等子进程退出：**先判已退出**——若它在注册监听前就已退出（如打印就绪标记后立即退出），
+  // `once("exit")` 会永远收不到事件 ⇒ top-level await 永不 settle（Node 以退出码 13 结束，
+  // 2026-10 CI 实撞：五包已发布、安装态已验，却因这一步把整个 Publish 跑成失败）。
+  await new Promise((resolveExit) => {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      resolveExit(undefined);
+      return;
+    }
+    const killer = setTimeout(() => {
+      child.kill("SIGKILL");
+      resolveExit(undefined);
+    }, SMOKE_KILL_TIMEOUT_MS);
+    child.once("exit", () => {
+      clearTimeout(killer);
+      resolveExit(undefined);
+    });
+  });
   assert(ready, `服务未在 ${SMOKE_TIMEOUT_MS}ms 内输出「${READY_MARKER}」。进程输出:\n${output}`);
   console.log(`[verify] OK: 冒烟启动成功（输出含「${READY_MARKER}」）`);
   console.log(`[verify] 全部通过：@whispering233/ai-editor-server@${version} 安装态可用`);

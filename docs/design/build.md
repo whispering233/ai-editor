@@ -157,6 +157,8 @@ pnpm desktop:dist                                      # 全仓构建 + pnpm dep
 
 ## 发布管道坑记录（供后续发布参考）
 
+- **传递依赖的上游破坏只能靠「无锁安装」发现**（2026-10 实录）：`pi-coding-agent@1.0.4` 对 `pi-codemode` 声明 `^1.0.4`，而上游 `1.2.0` 移除了 `MCP_TYPESCRIPT_PREAMBLE` 导出 ⇒ 消费者全新 `npm install` 解到 `1.3.0`，server 启动即 `SyntaxError`。本仓 `pnpm-lock.yaml` 锁在 1.0.4（`pnpm test` / `typecheck` 全绿），**根本看不到**。修法 = 把该包写成发布包的直接依赖 + 精确版本（解析锁，见 `packages/agent/package.json`）；验收 = `pnpm pack:test` + `pnpm start:test`（或 CI `verify-installed`）——**发布前必须跑一次**。
+- **`verify-installed.mjs` 的等待子进程退出有竞态**（2026-10）：裸 `await once("exit")` 在子进程**已退出**时永不 settle ⇒ Node 退出码 13，把「包已发布成功」误报成 Publish 失败。修法 = 先判 `exitCode`/`signalCode`，再加 SIGKILL 兜底超时。
 - npm 12 publish 在 postpack 恢复后生成 registry manifest → prepack 替换只影响 tarball（manifest 残留 `workspace:*`，`npm install` 报 EUNSUPPORTEDPROTOCOL）→ 发布前主动替换 + `--ignore-scripts`
 - CI node 22 自带 npm 10.9.8 **不支持 OIDC 发布认证** → CI `npm install -g npm@latest`
 - npm 12 发布自动生成 sigstore provenance，npmjs 校验 manifest `repository.url` 一致（E422）→ 各包补 `repository` 字段
