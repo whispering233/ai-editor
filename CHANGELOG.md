@@ -9,6 +9,12 @@
 
 ## [Unreleased]
 
+## [v0.0.60] - 2026-10-16 — 安装态修复（pin 落在安装根包 `server`）
+
+### Fixed
+
+- **`pi-codemode` 的解析锁必须落在消费者直接安装的包（`server`）**：v0.0.59 把 pin 只写在中间层 `agent`，实测 npm 会把 `pi-coding-agent` 的范围最大值（1.3.0）挂到安装根、把我们的精确版本嵌回 `agent/node_modules` ⇒ `pi-coding-agent` 仍拿到不兼容版本，server 启动照旧 `SyntaxError`。现 `server` 与 `agent` 都声明 `@earendil-works/pi-codemode: "1.0.4"`（前者决定无锁安装的解析形状，后者保证单独消费 `agent` 时同理安全）；本地 `pnpm pack:test` + 启动冒烟通过。**v0.0.58 / v0.0.59 的 5 个 npm 包均不可用**（都已 `npm deprecate` 指向本版；两个版本的 Windows 安装包不受影响——桌面打包走 `pnpm deploy`，用的是锁文件里的 1.0.4）。
+
 ## [v0.0.59] - 2026-10-16 — 安装态修复（pi 传递依赖解析锁 + 发布冒烟脚本竞态）
 
 ### Fixed
