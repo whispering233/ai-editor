@@ -9,6 +9,10 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const styleNotes = readFileSync(new URL("./StyleNotes.tsx", import.meta.url), "utf8");
+const createSampleDialog = readFileSync(
+  new URL("../components/practice/create-sample-dialog.tsx", import.meta.url),
+  "utf8",
+);
 
 describe("作家风格说明页（#/style）的破坏性动作", () => {
   it("导入与恢复预置都先过受控确认框（复用 components/ui/dialog.tsx，不新造浮层）", () => {
@@ -49,5 +53,13 @@ describe("作家风格说明页的保存契约", () => {
   it("端点调用全部经 lib/api 封装（不自建 fetch）", () => {
     expect(styleNotes).toContain('from "../lib/api"');
     expect(styleNotes).not.toContain("fetch(");
+  });
+});
+
+describe("新建样本弹窗的导入预填（#/practice）", () => {
+  it("文件名预填片段说明时**仅在该字段还为空**的场合（不静默覆盖用户已输入）", () => {
+    expect(createSampleDialog).toContain(
+      'setExcerptLabel((current) => (current === "" ? plan.excerptLabel : current))',
+    );
   });
 });

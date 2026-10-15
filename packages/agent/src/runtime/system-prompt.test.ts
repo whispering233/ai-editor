@@ -18,10 +18,10 @@ function mentionedIdentifiers(prompt: string): string[] {
 }
 
 describe("内核提示词 ↔ 工具名一致", () => {
-  it("练习提示词提到的工具名必须 ⊆ 已注册的练习工具名（且三个练习工具都被点名）", () => {
+  it("练习提示词提到的工具名必须 ⊆ 已注册的练习工具名（且全部练习工具都被点名）", () => {
     const mentioned = mentionedIdentifiers(PRACTICE_KERNEL_PROMPT);
     expect(mentioned.length).toBeGreaterThan(0); // 提示词必须点名工具，否则本断言空转
     expect(mentioned.filter((name) => !(PRACTICE_TOOLS as readonly string[]).includes(name))).toEqual([]);
-    expect([...mentioned].sort()).toEqual([...PRACTICE_TOOLS].sort()); // 三个练习工具恰好都被点名（不重不漏，与出现顺序无关）
+    expect([...mentioned].sort()).toEqual([...PRACTICE_TOOLS].sort()); // 练习工具恰好都被点名（不重不漏，清单 = shared `PRACTICE_TOOLS`）
   });
 });

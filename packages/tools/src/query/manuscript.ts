@@ -19,8 +19,8 @@ import type { GetChapterTextArgs } from "../schemas/index.js";
 
 /**
  * 缺省单次返回字符数（≈ 一段中等篇幅；长文分段读完，不炸上下文）。
- * **文本分页预算单源**：章正文（get_chapter_text）与练习文本（get_practice_sample /
- * get_practice_draft）共用这一对常量（语义提升，见 docs/api/tool-calling.md）。
+ * **文本分页预算单源**：章正文（get_chapter_text）与练习**四只读工具**（get_practice_sample /
+ * get_practice_draft / get_free_draft / get_style_notes）共用这一对常量（语义提升，见 docs/api/tool-calling.md）。
  * 实测（真实截断函数走一遍工具结果，纯 CJK）：缺省页 + 续读提示 = 6055 tokens，余量 24.3%。
  */
 export const DEFAULT_TEXT_PAGE_CHARS = 6000;

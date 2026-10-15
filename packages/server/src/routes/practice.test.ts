@@ -437,7 +437,9 @@ describe("前置守卫（kind / author_id）", () => {
     const h = await startWorkspace("practice");
     for (const ep of PRACTICE_ENDPOINTS) {
       const res = await api(h, ep.method, ep.path, ep.body);
-      expect([200, 404], `${ep.method} ${ep.path}`).toContain(res.status);
+      // 带 id 的端点指向不存在的行 ⇒ 404；集合 / 单例端点（samples 集合、style-pack）⇒ 200
+      const expected = ep.path.includes(":id") || /\/(ps|pf)-1$/.test(ep.path) ? 404 : 200;
+      expect(res.status, `${ep.method} ${ep.path}`).toBe(expected);
     }
   });
 

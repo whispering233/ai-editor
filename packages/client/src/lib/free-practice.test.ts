@@ -81,8 +81,8 @@ describe("题目文案（空题的唯一字面量来源）", () => {
 });
 
 // 「让 AI 点评」可点性 = `lib/practice.ts` 的 `canRequestPracticeReview`（两形态共用同一谓词）；
-// 自由练习侧只断言组件三态（`free-detail.test.tsx` 显式传 canReview）与谓词本身（`practice.test.ts`）；
-// `FreeDetail.tsx` 的接线本身无测试（已登记）。
+// 自由练习侧：组件三态在 `free-detail.test.tsx`（显式传 canReview）、谓词本身在 `practice.test.ts`、
+// `FreeDetail.tsx` 的接线在 `pages/free-pages.test.ts`（源码级扫描）。
 
 describe("saveFreeDraft（稿件保存动作）", () => {
   it("成功：`updatedAt` 交给 onSaved 并返回 true（快捷键据此继续存档）", async () => {

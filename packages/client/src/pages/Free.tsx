@@ -15,7 +15,7 @@
 //
 // 分层：`FreeList` / `FreePieceRow` = 纯展示（无 effect、无请求，导出供 SSR 走查——仓内无 jsdom）；
 // 默认导出 = 容器（取数 + 弹窗开关 + 建空题行并触发出题）。
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PracticePieceSummary } from "@whispering233/ai-editor-shared";
 import { formatRelativeTime, resolveAuthor } from "@whispering233/ai-editor-shared";
 import { Alert, Button, Skeleton } from "antd";
@@ -105,17 +105,21 @@ export default function Free() {
   const [createOpen, setCreateOpen] = useState(false);
   /** 「让 AI 出题」在途（建行 + 跳转）：防连点 */
   const [creatingTopic, setCreatingTopic] = useState(false);
+  /** 重拉时**仅首帧**置 `null`（后续保留旧列表，避免提案确认 / InfoBar 刷新时整页骨架闪） */
+  const loadedOnceRef = useRef(false);
 
   // AI 提案确认 / InfoBar 刷新后重拉（列表数据统一订阅 dataVersion）
   useDataRefresh(() => setReloadTick((t) => t + 1));
 
   useEffect(() => {
     let cancelled = false;
-    setPieces(null);
+    if (!loadedOnceRef.current) setPieces(null);
     setError(null);
     getPracticePieces()
       .then((res) => {
-        if (!cancelled) setPieces(res.pieces);
+        if (cancelled) return;
+        loadedOnceRef.current = true;
+        setPieces(res.pieces);
       })
       .catch((e) => {
         if (!cancelled) setError(e instanceof ApiError ? e.message : "加载失败，请重试");
