@@ -14,7 +14,7 @@
 
 **链内红窗（有意，已登记）**：这是同一功能的**模型重建**——旧常量、旧端点（`/practice/targets*`）与旧练习表被删，消费方在后续卡里跟上。**中间卡允许全仓 `pnpm typecheck` 变红**；每卡判据 = **本包 build + 本包测试 + 本卡改动范围**；全仓 `typecheck` / `lint` / `pnpm -r test` 由**卡 8 收口**。
 
-**卡序重切（2026-10，文件冲突驱动的调整）**：原 3–6 拆分会让多张卡同时写 `shared/types/api.ts`、`server/routes/practice.ts`、`client/lib/api.ts`（同一批文件），worktree 并行反而要人工解冲突 ⇒ 收成「一张端点卡 + 三张客户端卡」并改为顺序推进（**不并行 worktree**）。已完成并通过独立验证的卡：卡 1（`6955d833`）、卡 2（`387f72f5`，含偏离裁定：`012_practice.ts` 不再建旧索引，口径已落 `docs/db/schema.md`）、卡 3（`163095d2`，含裁定 A：chat 样本侧注入本卡改完；被删的 details 用例归卡 7 恢复）、卡 4（`38d4654d`，P2 打磨归卡 8）、卡 5（`738cf28b` + 修复 `09d5a895`：oracle 判 FAIL 的「可点评判定重复实现」已单源化，复核接受；P2 归卡 8）。
+**卡序重切（2026-10，文件冲突驱动的调整）**：原 3–6 拆分会让多张卡同时写 `shared/types/api.ts`、`server/routes/practice.ts`、`client/lib/api.ts`（同一批文件），worktree 并行反而要人工解冲突 ⇒ 收成「一张端点卡 + 三张客户端卡」并改为顺序推进（**不并行 worktree**）。已完成并通过独立验证的卡：卡 1（`6955d833`）、卡 2（`387f72f5`，含偏离裁定：`012_practice.ts` 不再建旧索引，口径已落 `docs/db/schema.md`）、卡 3（`163095d2`，含裁定 A：chat 样本侧注入本卡改完；被删的 details 用例归卡 7 恢复）、卡 4（`38d4654d`）、卡 5（`738cf28b` + 修复 `09d5a895`：oracle 判 FAIL 的「可点评判定重复实现」已单源化，复核接受）、卡 6（`139f3509`）。各卡 oracle 的 P2 打磨统一归卡 8。
 
 **每卡硬完成判据（缺一不可，汇报必附原始输出）**：
 1. `git log --oneline -1` 含**本卡的新 commit**（无 commit 不许报 PASS），`git status --porcelain` 干净；
@@ -22,22 +22,6 @@
 3. 汇报写明改动的文件清单 + 与卡内任一条不对应的实现说明（如有）。
 
 **环境备注（2026-10，影响 server 测试判据）**：端口 `3500` 被一个**外部先占进程**（`node packages/server/dist/index.js test-project`）占用 ⇒ `packages/server/src/index.test.ts` 的「端口策略」用例会 `EADDRINUSE` 超时。该用例与练习改版无关：server 判据 = **除该用例外全绿 + 附占用证据（进程 cmdline / 监听端口命令输出）**；若该进程已停，完整全绿。
-
----
-
-### 卡 6：客户端 C — 根首页分区 + 左栏五项 + 路由守卫 + 三素材页
-
-**改动范围**：`packages/client/src/pages/Dashboard.tsx`、`packages/client/src/stores/project.ts`、`packages/client/src/lib/workspace.ts`、`packages/client/src/components/nav/nav-items.tsx`、`packages/client/src/main.tsx`、`packages/client/src/hooks/use-route.ts`、`packages/client/src/lib/workspace-route-guard.ts`、`packages/client/src/pages/AuthorIntro.tsx`（新建）、`packages/client/src/pages/Works.tsx`（新建）、`packages/client/src/pages/StyleNotes.tsx`（新建，若卡 3 未建）+ 各自测试。
-
-**实现**（契约 = `DESIGN.md`「根首页」「导航与外壳」「作家介绍 / 作品介绍 / 作家风格说明」、`60-practice.md` §9）：
-1. 根首页练习分区：**预置作家卡**（全部预置作者；名字 + 一行介绍摘录 + 状态行 [未开始 / `N 篇范文 · 最近更新 …`]；排序 = 有数据 `updatedAt` 倒序在前、未开始按清单顺序垫后）；未识别 `authorId` 的练习项**不列出**（客户端过滤，服务端照列）；点未开始卡 = 懒创建（`name` = 作家名 + `author_id` + `kind: "practice"`，落 `#/practice`）；点已有卡 = 打开；**删「新建练习区」入口**。
-2. 左栏练习态五项（作家介绍 `#/author` / 作品介绍 `#/works` / 作家风格说明 `#/style` / 文风练习 `#/practice` / 自由练习 `#/free`；图标走 `@ant-design/icons`）；路由注册五页 + `#/practice/:sampleId` / `#/free/:pieceId`。
-3. 守卫：**练习专属首段清单单一定义**（上述五段）；练习工作区按允许清单放行（+ `#/` + `preferences`），小说工作区挡任一段 → `#/`；落点仍是 `#/practice`。
-4. 三素材页：作家介绍（markdown 只读 `card`）、作品介绍（每部作品一卡）、作家风格说明（渲染 + 编辑 + 导入 `.md` + 恢复预置；导入 / 恢复走 danger 确认框；有覆盖时一行「当前为自定义版本」），编辑态 `TextArea` + 保存失败 `return false` 阻断存档。
-
-**验收命令**：`pnpm -r build` → `pnpm --filter @whispering233/ai-editor-client test`。
-
-**Commit**：`feat(practice): 根首页预置作家卡、左栏五项与素材三页`
 
 ---
 
@@ -80,8 +64,12 @@
    - 列表重拉时**仅首帧**置 `null`（后续保留旧列表，避免提案确认后整页骨架闪）；
    - 补一条 SSR 断言：默认「其他」真被 `Select` 选中 / 组内按钮把该组 `workId` 传入对话框（卡 4 oracle 的弱断言项）。
 6. **打磨卡 5 oracle 的 P2**：`lib/free-practice.ts` 的 `topic` 非字符串时抛 `TypeError`（服务端 shape 漂移才可达）——加 `typeof` 守卫；`pages/free-detail.test.tsx` 的用例名「输入框有未保存改动」与断言不符（实际只传 `canReview:false`）——改名或补真实场景；**补缺口**：容器路径（「让 AI 出题」链路 / 新建题目提交 / `PRACTICE_NOT_FOUND` → 404 态）与 `FreeDetail.tsx` 的 `canReview` 接线各最少一条测试。
-7. **浏览器像素走查委托 `ui-verifier`**（核验项：根首页练习分区预置卡与懒创建 / 左栏五项 / 风格说明渲染与编辑 / 文风练习分组列表与新建样本（含导入文件）/ 自由练习出题与点评 / 详情页排版）；发现问题回到对应卡修完再复验。
-8. 清空本批卡片；确认 `CHANGELOG.md` Unreleased 段与最终实现一致（含迁移 013 说明）。
+7. **打磨卡 6 oracle 的 P2（均为数行小修）**：
+   - `Dashboard.tsx`：练习卡按钮 `disabled` 加 `|| bookshelf === null`（首帧书库未到时点击现在会静默 `return`，用户看不出为何没反应）；
+   - 懒创建 catch 里对 409 `PROJECT_ALREADY_EXISTS` 兼底改为「直接打开该路径」（用户曾手建 `practice/<作家名>/` 时，现在会走进死路）；
+   - 补强化几句**源码扫描式空断言**：`dashboard-partitions.test.ts` 的 `toContain("await loadBookshelf();")`（文件内多处命中，删任一处仍绿）、`not.toMatch(/kind === "novel"\s*\)/)`、`toContain("card.workspace === null")`，以及 `workspace.test.ts` 的「未开始按清单顺序垫后」（`AUTHOR_IDS.length === 1` 时恒真）——改为可证伪的断言或注明前提。
+8. **浏览器像素走查委托 `ui-verifier`**（核验项：根首页练习分区预置卡与懒创建 / 左栏五项 / 风格说明渲染与编辑（含确认框）/ 文风练习分组列表与新建样本（含导入文件）/ 自由练习出题与点评 / 详情页排版）；发现问题回到对应卡修完再复验。
+9. 清空本批卡片；确认 `CHANGELOG.md` Unreleased 段与最终实现一致（含迁移 013 说明）。
 
 **验收命令**：上列四条 + ui-verifier 报告（无未 proven 项）。
 
