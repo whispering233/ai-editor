@@ -99,37 +99,46 @@ export const documentRecords = sqliteTable(
 );
 
 /**
- * practice_targets：文风目标（练习工作区专属，2026-10）——`kind = "practice"` 的数据，
- * 与小说语义表互不混装（不进 Delta / 关系表 / 回收站）。
+ * practice_samples：范文样本（练习工作区专属，2026-10）——`kind = "practice"` 的数据，
+ * 与小说语义表互不混装（不进 Delta / 关系表 / 回收站）；一工作区 = 一位预置作家，故无归属列。
+ * `work_id` 无外键（存在性由写入侧按 shared 预置作品清单守卫）；无 deleted_at（删除 = 物理删）。
+ * `feedback` JSON 列保持 **text 模式**（坏 JSON 防御在行映射层，见 queries/practice.ts parseFeedbackColumn）。
  */
-export const practiceTargets = sqliteTable("practice_targets", {
-  id: text("id").primaryKey(), // 'pt-*'
-  name: text("name").notNull(), // 文风目标名（上限 = MAX_PRACTICE_TARGET_NAME_CHARS）
-  observation: text("observation"), // 用户自己观察到的文风特点（可选；上限 = MAX_PRACTICE_OBSERVATION_CHARS）
+export const practiceSamples = sqliteTable("practice_samples", {
+  id: text("id").primaryKey(), // 'ps-*'
+  work_id: text("work_id"), // 关联预置作品 id（NULL = 「其他」）
+  excerpt_label: text("excerpt_label").notNull().default(""), // 片段说明（空串 = 未填）
+  text: text("text").notNull(), // 范文快照（不可变）
+  draft: text("draft").notNull().default(""), // 用户仿写稿（只有用户能写）
+  feedback: text("feedback"), // 点评卡 JSON（AI 产出；NULL = 未点评）
   created_at: text("created_at").notNull(), // ISO 8601，应用层写入
   updated_at: text("updated_at").notNull(),
 });
 
 /**
- * practice_samples：练习样本（范文快照 + 用户稿 + 点评卡，2026-10）——一目标挂 N 个样本。
- * `target_id` 无外键（存在性由写入侧守卫）；无 deleted_at（删除 = 物理删，目标删除级联删样本）。
- * `feedback` JSON 列保持 **text 模式**（坏 JSON 防御在行映射层，见 queries/practice.ts parseFeedbackColumn）。
+ * practice_free_pieces：自由练习篇（练习工作区专属，2026-10）——题目 + 写作要求 + 用户稿 + 点评卡。
+ * 空题目（`topic = ''`）正是「待出题」状态（由出题工具写入）；无 deleted_at（删除 = 物理删）。
  */
-export const practiceSamples = sqliteTable(
-  "practice_samples",
-  {
-    id: text("id").primaryKey(), // 'ps-*'
-    target_id: text("target_id").notNull(), // 'pt-*'（无 FK，存在性由写入侧守卫）
-    source_kind: text("source_kind").notNull(), // 'paste'（MVP 唯一值；枚举值少且稳定，不加 CHECK）
-    source_label: text("source_label").notNull(), // 快照来源说明（用户手填）
-    text: text("text").notNull(), // 范文快照（不可变）
-    draft: text("draft").notNull().default(""), // 用户仿写稿（只有用户能写）
-    feedback: text("feedback"), // 点评卡 JSON（AI 产出；NULL = 未点评）
-    created_at: text("created_at").notNull(),
-    updated_at: text("updated_at").notNull(),
-  },
-  (t) => [index("idx_practice_samples_target").on(t.target_id)],
-);
+export const practiceFreePieces = sqliteTable("practice_free_pieces", {
+  id: text("id").primaryKey(), // 'pf-*'
+  topic: text("topic").notNull().default(""), // 题目（空串 = 待出题）
+  brief: text("brief").notNull().default(""), // 写作要求（空串 = 无）
+  topic_source: text("topic_source").notNull(), // 'user' | 'ai'（出题来源；枚举值少且稳定，不加 CHECK）
+  draft: text("draft").notNull().default(""), // 用户稿件（只有用户能写）
+  feedback: text("feedback"), // 点评卡 JSON（AI 产出；NULL = 未点评）
+  created_at: text("created_at").notNull(), // ISO 8601，应用层写入
+  updated_at: text("updated_at").notNull(),
+});
+
+/**
+ * practice_style_packs：风格说明素材包（2026-10）——只存**用户对作家风格说明的覆盖**；
+ * 无覆盖 = 无行（读侧回退 shared 预置常量），删除行 = 恢复预置。主键 = shared `AUTHOR_CATALOG` 的键。
+ */
+export const practiceStylePacks = sqliteTable("practice_style_packs", {
+  author_id: text("author_id").primaryKey(), // 预置作家 id
+  content: text("content").notNull(), // 用户覆盖内容
+  updated_at: text("updated_at").notNull(), // ISO 8601，应用层写入
+});
 
 /**
  * 全部业务表 + 索引的建表 SQL（幂等：CREATE TABLE/INDEX IF NOT EXISTS）——建表执行的事实来源。
@@ -194,28 +203,35 @@ CREATE TABLE IF NOT EXISTS document_records (
   PRIMARY KEY (owner_kind, owner_id)   -- 一 owner 一行（upsert 覆盖，行随 owner 生命周期）
 );
 
--- practice_targets：文风目标（练习工作区专属，2026-10）
-CREATE TABLE IF NOT EXISTS practice_targets (
-  id          TEXT PRIMARY KEY,   -- 'pt-*'
-  name        TEXT NOT NULL,      -- 文风目标名（上限 = 常量 MAX_PRACTICE_TARGET_NAME_CHARS）
-  observation TEXT,               -- 用户自己观察到的文风特点（可选；上限 = 常量 MAX_PRACTICE_OBSERVATION_CHARS）
-  created_at  TEXT NOT NULL,      -- ISO 8601，应用层写入
-  updated_at  TEXT NOT NULL
+-- practice_samples：范文样本（练习工作区专属，2026-10）
+CREATE TABLE IF NOT EXISTS practice_samples (
+  id            TEXT PRIMARY KEY,          -- 'ps-*'
+  work_id       TEXT,                      -- 关联预置作品 id（NULL = 「其他」；无 FK，存在性由写入侧守卫）
+  excerpt_label TEXT NOT NULL DEFAULT '',  -- 片段说明（空串 = 未填；上限 = 常量 MAX_PRACTICE_EXCERPT_LABEL_CHARS）
+  text          TEXT NOT NULL,             -- 范文快照（不可变；上限 = 常量 MAX_PRACTICE_SAMPLE_CHARS）
+  draft         TEXT NOT NULL DEFAULT '',  -- 用户仿写稿（**只有用户能写**）
+  feedback      TEXT,                      -- 点评卡 JSON（AI 产出；NULL = 未点评）
+  created_at    TEXT NOT NULL,
+  updated_at    TEXT NOT NULL
 );
 
--- practice_samples：练习样本（范文快照 + 用户稿 + 点评卡）
-CREATE TABLE IF NOT EXISTS practice_samples (
-  id           TEXT PRIMARY KEY,          -- 'ps-*'
-  target_id    TEXT NOT NULL,             -- 'pt-*'（无 FK，存在性由写入侧守卫）
-  source_kind  TEXT NOT NULL,             -- 'paste'（MVP 唯一值，不加 CHECK）
-  source_label TEXT NOT NULL,             -- 快照来源说明（用户手填）
-  text         TEXT NOT NULL,             -- 范文快照（不可变）
-  draft        TEXT NOT NULL DEFAULT '',  -- 用户仿写稿（只有用户能写）
+-- practice_free_pieces：自由练习篇（练习工作区专属，2026-10）
+CREATE TABLE IF NOT EXISTS practice_free_pieces (
+  id           TEXT PRIMARY KEY,          -- 'pf-*'
+  topic        TEXT NOT NULL DEFAULT '',  -- 题目（空串 = 待出题；上限 = 常量 MAX_PRACTICE_TOPIC_CHARS）
+  brief        TEXT NOT NULL DEFAULT '',  -- 写作要求（空串 = 无；上限 = 常量 MAX_PRACTICE_BRIEF_CHARS）
+  topic_source TEXT NOT NULL,             -- 'user' | 'ai'（出题来源；也是「待出题」状态的判据）
+  draft        TEXT NOT NULL DEFAULT '',  -- 用户稿件（**只有用户能写**；上限同仿写稿常量）
   feedback     TEXT,                      -- 点评卡 JSON（AI 产出；NULL = 未点评）
   created_at   TEXT NOT NULL,
   updated_at   TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_practice_samples_target ON practice_samples(target_id);
+-- practice_style_packs：风格说明素材包（2026-10）
+CREATE TABLE IF NOT EXISTS practice_style_packs (
+  author_id  TEXT PRIMARY KEY,            -- 预置作家 id（shared AUTHOR_CATALOG 的键）
+  content    TEXT NOT NULL,               -- 用户对作家风格说明的覆盖（上限 = 常量 MAX_PRACTICE_STYLE_PACK_CHARS）
+  updated_at TEXT NOT NULL                -- 无覆盖 = 无行（读侧回退 shared 常量里的预置文本）
+);
 
 `;

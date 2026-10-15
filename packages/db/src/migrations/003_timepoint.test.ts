@@ -117,9 +117,9 @@ describe("003_timepoint 迁移（v2 → v3，G2 时间标签点实体化）", ()
     ]);
 
     const { applied } = runMigrations(db, { migrations: MIGRATIONS });
-    expect(applied.map((m) => m.version)).toEqual([3, 4, 5, 6, 7, 8, 9, 10, 11, 12]); // v2 → v12 跑 003→012
+    expect(applied.map((m) => m.version)).toEqual([3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]); // v2 → v13 跑 003→013
     expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
-    expect(SCHEMA_VERSION).toBe(12);
+    expect(SCHEMA_VERSION).toBe(13);
 
  // ---- timepoint：同名合并为 1 个，sort_order 按各组首个事件出现序 0..n-1 ----
     const tps = timepointRows(db);
@@ -183,7 +183,7 @@ describe("003_timepoint 迁移（v2 → v3，G2 时间标签点实体化）", ()
     ]);
 
     const { applied } = runMigrations(db, { migrations: MIGRATIONS });
-    expect(applied.map((m) => m.version)).toEqual([3, 4, 5, 6, 7, 8, 9, 10, 11, 12]); // v2 → v12 跑 003→012
+    expect(applied.map((m) => m.version)).toEqual([3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]); // v2 → v13 跑 003→013
     expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
     expect(timepointRows(db)).toHaveLength(0);
     expect(occursAtRows(db)).toHaveLength(0);

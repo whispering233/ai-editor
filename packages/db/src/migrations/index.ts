@@ -16,7 +16,7 @@
 // - 失败 → 该迁移回滚 + 版本停在前一迁移后，下次 open 重试
 // - 无迁移路径的旧版本（如 v0 且无 0→1 条目）保持删库重建兜底
 //
-// **当前状态**：SCHEMA_VERSION = 12；真实迁移 002（v1→v2：entities 表 CHECK 扩为 5 种 +
+// **当前状态**：SCHEMA_VERSION = 13；真实迁移 002（v1→v2：entities 表 CHECK 扩为 5 种 +
 // sort_order 列，时间轴）、003（v2→v3：entities CHECK 扩 6 种含 timepoint +
 // event.data.time_label 迁移为 timepoint 实体 + occurs_at 挂载关系，G2）、
 // 004（v3→v4：setting 旧 rules 分类值 → data.tags，仅 data JSON）、005（v4→v5：CHECK 扩
@@ -28,7 +28,10 @@
 // 011（v10→v11：DROP 拆解两表——拆解功能已整功能移除，见 CHANGELOG；009/010 保留仅为
 // 旧库升级链连续，纯 DDL）、
 // 012（v11→v12：新增 practice_targets / practice_samples 练习两表，纯 DDL——旧项目没有
-// 练习行，无需回填）。
+// 练习行，无需回填）、
+// 013（v12→v13：作家文风练习模型重建——DROP 旧 practice_targets / 旧 practice_samples
+// （含 idx_practice_samples_target），建 practice_samples 新形状 / practice_free_pieces /
+// practice_style_packs 三表；纯 DDL，无数据搬移）。
 // v0 库无 0→1 迁移条目，仍走删库重建兜底。
 
 import type { Db } from "../connection.js";
@@ -43,6 +46,7 @@ import migration009 from "./009_decompose.js";
 import migration010 from "./010_decompose_concurrency.js";
 import migration011 from "./011_drop_decompose.js";
 import migration012 from "./012_practice.js";
+import migration013 from "./013_author_practice.js";
 
 /** 迁移运行上下文（写文件类迁移需要项目目录：006 的会话 JSONL 导出） */
 export interface MigrationContext {
@@ -62,7 +66,8 @@ export interface Migration {
  * 007 角色能力面板（旧 abilities 标签迁为 ability_panel）、008 块文档表（document_records）、
  * 009 拆解两表（decompose_jobs / decompose_batches）、010 拆解并发快照列（decompose_jobs.concurrency）、
  * 011 移除拆解两表（拆解功能已整功能移除；009/010 保留仅为旧库升级链连续）、
- * 012 练习两表（practice_targets / practice_samples，2026-10）） */
+ * 012 练习两表（practice_targets / practice_samples，2026-10）、
+ * 013 练习模型重建（旧两表 → practice_samples / practice_free_pieces / practice_style_packs 三表，2026-10）） */
 export const MIGRATIONS: readonly Migration[] = [
   migration002,
   migration003,
@@ -75,4 +80,5 @@ export const MIGRATIONS: readonly Migration[] = [
   migration010,
   migration011,
   migration012,
+  migration013,
 ];

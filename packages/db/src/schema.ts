@@ -32,8 +32,12 @@ import { CREATE_TABLES_SQL } from "./tables.js";
  * 009/010 保留只为旧库升级链连续；纯 DDL 无数据搬移，migrations/011_drop_decompose.ts）。
  * v11 → v12（文风仿写练习，2026-10）：新增 `practice_targets` / `practice_samples` 两表
  * （练习工作区专属，纯 DDL 无数据搬移——旧项目没有练习行，migrations/012_practice.ts）。
+ * v12 → v13（作家文风练习改版，2026-10）：DROP 旧 `practice_targets` / 旧 `practice_samples`
+ * （含 `idx_practice_samples_target`）→ 建 `practice_samples` 新形状 / `practice_free_pieces` /
+ * `practice_style_packs` 三表（一位预置作家 = 一个工作区，旧目标模型被整体替换；
+ * 纯 DDL 无数据搬移，migrations/013_author_practice.ts）。
  */
-export const SCHEMA_VERSION = 12; // +练习两表（012 纯 DDL；练习工作区专属，旧库无数据可迁）
+export const SCHEMA_VERSION = 13; // +练习三表（013 重建：旧两表 DROP，纯 DDL）
 
 /**
  * 建表：执行全部 DDL（CREATE TABLE/INDEX IF NOT EXISTS，定义于 tables.ts），幂等，可重复调用。

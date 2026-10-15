@@ -7,9 +7,14 @@
 // 既有表与数据一概不动——旧项目没有练习行，**无需回填**。表结构与建库路径共用同一份声明
 // （tables.ts 的 CREATE_TABLES_SQL），本文件的 DDL 与之**逐字同形**。
 //
-// 幂等：CREATE TABLE/INDEX IF NOT EXISTS——手工回退版本号后重跑（异常重试路径）不报错；
+// 幂等：CREATE TABLE IF NOT EXISTS——手工回退版本号后重跑（异常重试路径）不报错；
 // 正常路径由 user_version 门控（版本已到 12 不再执行）。事务由 runMigrations 保证
 // （up + setUserVersion 原子提交）。
+//
+// **不再建 `idx_practice_samples_target`**（2026-10 修订）：该索引服务于旧的按目标列样本，
+// 而 013 已整表拆除旧模型（建索引语句会先于 013 执行）。保留它会与「回退版本号后重跑」冲突：
+// v13 库（新形状的 `practice_samples`）重跑 012 时 `CREATE INDEX ... (target_id)` 报
+// “no such column: target_id”——而索引的存在对升级链终态没有影响（013 反正要删），故直接不建。
 
 import type { Db } from "../connection.js";
 import type { Migration } from "./index.js";
@@ -35,8 +40,6 @@ CREATE TABLE IF NOT EXISTS practice_samples (
   created_at   TEXT NOT NULL,
   updated_at   TEXT NOT NULL
 );
-
-CREATE INDEX IF NOT EXISTS idx_practice_samples_target ON practice_samples(target_id);
 `;
 
 const migration012: Migration = {
