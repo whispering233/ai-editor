@@ -9,7 +9,7 @@
 //
 // 与仿写（`lib/practice.ts`）的关系：口径同形、**各自一份实现**（两页的状态集合不同——自由练习多
 // 「待出题」一态、少作品分组），故不合并成一个多态入口；但「让 AI 点评」可点性**共用**
-// `lib/practice.ts` 的 `canRequestPracticeReview`（逐字相同的谓词不敷两份）。
+// `lib/practice.ts` 的 `canRequestPracticeReview`（逐字相同的谓词只留一份）。
 
 import {
   TOOL_DETAILS_TO_CLIENT,
