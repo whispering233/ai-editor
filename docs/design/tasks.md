@@ -25,7 +25,7 @@
 
 ### 卡 1：预置作家素材目录 + 练习常量改版（shared）
 
-**改动范围**：`packages/shared/src/authors/`（新建：`types.ts` / `jiangnan.ts` / `catalog.ts` / `index.ts` / `authors.test.ts`）、`packages/shared/src/index.ts`（barrel 导出）、`packages/shared/src/constants/practice.ts`、`packages/shared/src/constants/constants.test.ts`。**不得改下游包**。
+**改动范围**：`packages/shared/src/authors/`（新建：`types.ts` / `jiangnan.ts` / `catalog.ts` / `index.ts` / `authors.test.ts`）、`packages/shared/src/index.ts`（barrel 导出）、`packages/shared/src/constants/practice.ts`、`packages/shared/src/constants/constants.test.ts`、`packages/shared/src/types/api.ts` 与 `types/api.test.ts`（**仅删除引用被删常量的旧 schema 与旧断言**：targets 相关 schema、样本 `source_label` / `targetName` / `observation` 一类旧字段；**不实现新契约 schema**——新样本 / style-pack / free 端点 schema 由卡 3 / 4 / 6 重写）。**不得改下游包**（db / tools / agent / server / client）。
 
 **实现**（契约 = `60-practice.md` §3、`120-api-practice.md` 顶部「长度上限」）：
 1. 类型：`PracticeWork = { id: string; name: string; intro: string }`；`AuthorEntry = { id: string; name: string; intro: string; works: readonly PracticeWork[]; styleNotes: string }`；`AuthorId = keyof typeof AUTHOR_CATALOG`。
