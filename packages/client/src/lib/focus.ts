@@ -14,4 +14,8 @@ export interface FocusContext {
    * 服务端**现读**样本与目标展开注入（只给事实，范文与稿件走只读工具拉取）。
    * **不是**常驻 focus 小条的形态——它只描述「这一次发送的对象」，由调用方按次传入 */
   practice_sample_id?: string;
+  /** 自由练习篇 id（自由练习页「让 AI 点评」/「让 AI 出题」随该次发送携带；
+   * 见 `docs/api/120-api-practice.md`「点评 / 出题链路」）：与样本同款——服务端**现读**篇与作家名
+   * 展开注入（只给事实，稿件与风格说明走只读工具拉取），客户端不传任何内容 */
+  practice_free_piece_id?: string;
 }

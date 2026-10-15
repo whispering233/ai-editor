@@ -109,10 +109,14 @@ function quotesNode(dimension: PracticeFeedbackDimension): ReactNode {
 export interface FeedbackCardViewProps {
   /** 卡体（`GET` 响应的 `feedback`；未点评 = `null`）。**原样传入**，本层不做 schema 校验 */
   feedback: PracticeFeedbackCard | null;
+  /** 依据侧特征那一行的标签：仿写 = 「范文特征」（`docs/ui/DESIGN.md` §作家文风练习区「点评卡」）、
+   * 自由练习 = 「风格特征」——两形态卡体同形，差别只在**引用校验源**（仿写 = 范文、自由练习 = 风格说明，
+   * 见 `docs/design/60-practice.md` §6）⇒ 只有这一行随调用方变 */
+  traitLabel?: string;
 }
 
 /** 点评卡卡面：`summary`（caption）+ 每维度一组（维度名 + 四行）；无卡 / 无可展示内容 → 一行空态 */
-export function FeedbackCardView({ feedback }: FeedbackCardViewProps) {
+export function FeedbackCardView({ feedback, traitLabel = "范文特征" }: FeedbackCardViewProps) {
   const card = practiceFeedbackView(feedback);
   if (card === null) {
     return <Typography.Text type="secondary">还没点评</Typography.Text>;
@@ -126,7 +130,7 @@ export function FeedbackCardView({ feedback }: FeedbackCardViewProps) {
           <Typography.Title level={5}>
             {dimension.name === "" ? `维度 ${index + 1}` : dimension.name}
           </Typography.Title>
-          <FeedbackRow label="范文特征">{orDash(dimension.sample_trait)}</FeedbackRow>
+          <FeedbackRow label={traitLabel}>{orDash(dimension.sample_trait)}</FeedbackRow>
           <FeedbackRow label="你的写法">{orDash(dimension.draft_trait)}</FeedbackRow>
           <FeedbackRow label="引用">{quotesNode(dimension) ?? orDash("")}</FeedbackRow>
           <FeedbackRow label="建议">{orDash(dimension.advice)}</FeedbackRow>
