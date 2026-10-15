@@ -43,7 +43,7 @@
 
 ### 卡 5：客户端 B — 自由练习两页 + 让 AI 出题
 
-**改动范围**：`packages/client/src/pages/Free.tsx`（新建）、`packages/client/src/pages/FreeDetail.tsx`（新建）、`packages/client/src/components/practice/create-piece-dialog.tsx`（新建）、`packages/client/src/lib/free-practice.ts`（新建）+ 各自测试。**不碰 `main.tsx`（路由注册在卡 6）**；**不改** `lib/practice.ts`（卡面组件与判定从它导入）。
+**改动范围**：`packages/client/src/pages/Free.tsx`（新建）、`packages/client/src/pages/FreeDetail.tsx`（新建）、`packages/client/src/components/practice/create-piece-dialog.tsx`（新建）、`packages/client/src/lib/free-practice.ts`（新建）+ 各自测试；**`packages/client/src/pages/PracticeDetail.tsx` 仅一处加法**（给导出的 `FeedbackCardView` 加可选 props `traitLabel?: string`，缺省「范文特征」——自由练习要显示「风格特征」，见 `DESIGN.md`；**该文件其它内容一律不动**）。**不碰 `main.tsx`（路由注册在卡 6）**；**不改** `lib/practice.ts`（判定与保存动作从它导入）。
 
 **实现**（契约 = `DESIGN.md`「自由练习列表 / 详情 / 新建题目弹窗」、`60-practice.md` §4）：
 1. 列表：平铺 `data-row`（题目 / 「（待出题）」+ 四态徽标 + 相对时间）；页头右端 `[+ 新建题目]` + `[让 AI 出题]`。
