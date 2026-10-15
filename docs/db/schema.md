@@ -294,7 +294,7 @@ CREATE TABLE IF NOT EXISTS practice_style_packs (
 | session_id | pi 生成的不透明 id；**客户端传入值只能经磁盘发现 + header id 映射解析为路径，禁止拼接** |
 | 消息投影 | 每条 entry 投影为 `{ id, role, content, toolCalls?, toolCallId?, createdAt }`；`role` ∈ `user` / `assistant` / `tool`（pi 的 `toolResult` 投影为 `tool`） |
 | 思维链 | assistant 消息的 thinking 内容随消息投影下发（列表投影只给预览，见 `docs/api/80-api-chat.md`） |
-| 会话列表投影 | `id` / `createdAt` / `updatedAt` / `messageCount` / `lastMessage`（末条可见文本截断）；`messageCount` = **可见消息数**（同消息投影口径，**不用** pi `SessionInfo.messageCount`——后者把 pi 写入的首条 system 消息条目也算进去） |
+| 会话列表投影 | `id` / `createdAt` / `updatedAt` / `messageCount` / `lastMessage`（末条**非工具**可见文本截断——工具结果不进摘要，否则以工具调用收尾的轮次会把工具 JSON 当标题）；`messageCount` = **可见消息数**（同消息投影口径，**不用** pi `SessionInfo.messageCount`——后者把 pi 写入的首条 system 消息条目也算进去） |
 | 删除 | 物理删文件（无回收站、无软删）；有在途 SSE 的会话拒删（409 `SESSION_BUSY`） |
 | 旧格式 | v1 扁平行历史文件留在磁盘但**不被 pi 发现**（无效 header）——不出现在列表、不可续聊 |
 

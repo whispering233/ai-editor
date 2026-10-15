@@ -40,6 +40,7 @@
 
 ### Fixed
 
+- **会话标题不再被工具结果 JSON 污染**：会话列表的 `lastMessage`（客户端在会话未命名时的标题回落值）改为「最后一条**非工具**可见文本」——此前工具结果也算「有内容的可见文本」，凡以工具调用收尾的一轮（练习点评 / 出题、小说侧提案类工具同样）都会把工具输出 JSON 当作会话标题显示。
 - **Linux 桌面身份三处对齐**：桌面包 `package.json` 新增 `desktopName`（`com.whispering233.ai-editor`，与 `appId` 同值）+ `linux.syncDesktopName: true`。此前 `.desktop` 文件名取 `executableName`（`ai-editor`）、`StartupWMClass` 回退 `productName`（`AI Editor`）、Electron 的 `app_id` / `WM_CLASS` 取应用名 slug——三处各自取值；现包内 `.desktop` 文件名、`StartupWMClass` 与真实窗口 WM_CLASS 同为 `com.whispering233.ai-editor`，并满足 `xdg-desktop-portal` 1.21+ 对 app 身份须可解析到 `.desktop` 文件的要求。（Linux 未发布，无用户影响；Windows 包未变。）
 
 ## [v0.0.57] - 2026-09-26 — 品牌标记 + 小说文档导出

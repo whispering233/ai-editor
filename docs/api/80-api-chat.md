@@ -121,7 +121,8 @@
   sessions: {
     id: string;              // 会话 ID（pi session id）
     name?: string;           // 会话显示名（pi session_info 条目）
-    lastMessage: string;     // 最后一条可见文本摘要（截断）
+    lastMessage: string;     // 最后一条**非工具**可见文本摘要（截断）——工具结果不算「可见文本」：
+                             //   以工具调用收尾的轮次若把工具 JSON 当摘要，会话标题会变成 `{"author_id":…}`
     messageCount: number;    // 可见消息数（user/assistant/tool 投影条目数；不含 pi 写入的首条 system 消息条目）
     createdAt: string;       // ISO 8601（会话 header 时间戳）
     updatedAt: string;       // 最后活动时间

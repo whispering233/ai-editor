@@ -71,13 +71,20 @@ export function projectSessionMessages(entries: readonly SessionEntry[]): WireSe
   return messages;
 }
 
-/** 末条可见文本（列表摘要用；全为空 → 空串） */
+/**
+ * 末条可见文本（会话列表摘要用；全为空 → 空串）。
+ *
+ * **工具结果不算「可见文本」**（`role === "tool"` 跳过）：工具结果是一大段 JSON，
+ * 以工具调用收尾的轮次（如练习点评 / 出题、小说侧提案类工具）会把工具输出当会话标题显示
+ * （ui-verifier 像素走查实录：标题栏出现 `{"author_id":"jiangnan",…}`）。
+ */
 export function lastVisibleSessionText(entries: readonly SessionEntry[]): string {
   for (let index = entries.length - 1; index >= 0; index -= 1) {
     const entry = entries[index]!;
     if (entry.type !== "message") continue;
     const projected = projectMessageForWire(entry.message);
-    if (projected !== null && projected.content.trim() !== "") return projected.content;
+    if (projected === null || projected.role === "tool") continue;
+    if (projected.content.trim() !== "") return projected.content;
   }
   return "";
 }
